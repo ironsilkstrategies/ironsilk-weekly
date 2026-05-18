@@ -11,13 +11,12 @@
 body{font-family:Georgia,serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .3s,color .3s;}
 button{cursor:pointer;font-family:sans-serif;}
 input,textarea,select{font-family:sans-serif;}
+
+/* HEADER */
 header{background:var(--navy);border-bottom:3px solid var(--gold);position:sticky;top:0;z-index:50;}
 .hdr-inner{max-width:1100px;margin:0 auto;padding:0 1.2rem;display:flex;align-items:center;justify-content:space-between;height:68px;gap:.8rem;}
 .logo-wrap{display:flex;align-items:center;gap:.75rem;flex-shrink:0;}
-.logo-img{height:52px;width:auto;object-fit:contain;display:none;}
-.logo-text{display:flex;flex-direction:column;line-height:1;}
-.logo-name{font-size:1.25rem;font-weight:700;color:#fff;letter-spacing:.02em;}
-.logo-tag{font-size:.58rem;color:var(--gold);letter-spacing:.15em;text-transform:uppercase;margin-top:3px;}
+.logo-img{height:52px;width:auto;object-fit:contain;}
 .hdr-right{display:flex;align-items:center;gap:.5rem;flex-wrap:nowrap;}
 .search-wrap{display:flex;align-items:center;background:var(--navy-light);border:1px solid rgba(201,168,76,.3);border-radius:6px;overflow:hidden;}
 .search-wrap input{background:none;border:none;outline:none;color:#e8ecf2;padding:.38rem .65rem;font-size:.8rem;width:130px;}
@@ -27,23 +26,32 @@ header{background:var(--navy);border-bottom:3px solid var(--gold);position:stick
 .hbtn:hover{background:rgba(201,168,76,.24);}
 .hbtn.on{background:var(--gold);color:var(--navy);font-weight:700;border-color:var(--gold);}
 .user-badge{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:.28rem .65rem;border-radius:20px;font-size:.7rem;font-weight:700;border:none;white-space:nowrap;}
+
+/* NAV */
 nav{background:var(--navy-mid);border-bottom:1px solid rgba(201,168,76,.18);}
 .nav-inner{max-width:1100px;margin:0 auto;padding:0 1.2rem;display:flex;overflow-x:auto;scrollbar-width:none;}
 .nav-inner::-webkit-scrollbar{display:none;}
 .nbtn{background:none;border:none;border-bottom:2px solid transparent;color:rgba(232,236,242,.7);padding:.58rem .95rem;font-size:.78rem;white-space:nowrap;transition:color .2s,border-color .2s;}
 .nbtn:hover,.nbtn.active{color:var(--gold);border-bottom-color:var(--gold);}
+
+/* BREAKING */
 .breaking{background:var(--red);padding:.4rem 0;}
 .breaking-inner{max-width:1100px;margin:0 auto;padding:0 1.2rem;display:flex;align-items:center;gap:.65rem;}
 .blabel{background:#fff;color:var(--red);font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:.12rem .4rem;border-radius:3px;white-space:nowrap;}
 .btext{color:#fff;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* MAIN */
 main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;}
 .slabel{font-size:.66rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);padding-bottom:.35rem;border-bottom:2px solid var(--gold);display:inline-block;margin-bottom:.7rem;}
 .feat-grid{display:grid;grid-template-columns:2fr 1fr;gap:1.1rem;margin-bottom:1.8rem;}
 .sec-row{display:grid;grid-template-columns:2fr 1fr;gap:1.4rem;}
 .art-list{display:flex;flex-direction:column;gap:.75rem;}
+
+/* CARDS */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;transition:box-shadow .2s;}
 .card:hover{box-shadow:0 4px 16px rgba(15,31,61,.12);}
-.card-img{width:100%;background:linear-gradient(135deg,var(--navy-light),var(--navy));display:flex;align-items:center;justify-content:center;color:rgba(201,168,76,.25);font-size:1.8rem;}
+.card-img{width:100%;background:linear-gradient(135deg,var(--navy-light),var(--navy));display:flex;align-items:center;justify-content:center;color:rgba(201,168,76,.25);font-size:1.8rem;overflow:hidden;}
+.card-img img{width:100%;height:100%;object-fit:cover;}
 .card-img.tall{height:220px;}.card-img.short{height:120px;}
 .card-body{padding:.85rem .95rem .95rem;}
 .ctag{display:inline-block;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;border-radius:4px;padding:.11rem .38rem;margin-bottom:.38rem;margin-right:.25rem;font-family:sans-serif;}
@@ -56,12 +64,17 @@ main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;}
 .card-excerpt{font-size:.79rem;color:var(--text-muted);line-height:1.6;margin-bottom:.5rem;}
 .card-meta{font-size:.68rem;color:var(--text-muted);display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;}
 .dot{width:3px;height:3px;border-radius:50%;background:var(--text-muted);}
+
+/* ARTICLE ITEMS */
 .aitem{display:flex;gap:.8rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:pointer;transition:box-shadow .2s;}
 .aitem:hover{box-shadow:0 3px 10px rgba(15,31,61,.09);}
-.athumb{width:72px;min-width:72px;height:62px;border-radius:5px;background:linear-gradient(135deg,var(--navy-light),var(--navy));display:flex;align-items:center;justify-content:center;color:rgba(201,168,76,.25);font-size:1rem;}
+.athumb{width:72px;min-width:72px;height:62px;border-radius:5px;background:linear-gradient(135deg,var(--navy-light),var(--navy));display:flex;align-items:center;justify-content:center;color:rgba(201,168,76,.25);font-size:1rem;overflow:hidden;flex-shrink:0;}
+.athumb img{width:100%;height:100%;object-fit:cover;}
 .ainfo{flex:1;min-width:0;}
 .atitle{font-size:.86rem;font-weight:700;line-height:1.3;margin-bottom:.25rem;color:var(--text);}
 .ameta{font-size:.67rem;color:var(--text-muted);display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;}
+
+/* SIDEBAR */
 .sw{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;margin-bottom:1.1rem;}
 .wtitle{font-size:.66rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem;}
 .catlist{list-style:none;display:flex;flex-direction:column;gap:.4rem;}
@@ -69,6 +82,8 @@ main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;}
 .catlist li:last-child{border:none;padding:0;}
 .catlist li:hover{color:var(--gold);}
 .ccount{background:var(--tag-bg);color:var(--text-muted);font-size:.63rem;padding:.06rem .35rem;border-radius:10px;}
+
+/* SUBSCRIBE PAGE */
 #subPage{display:none;max-width:680px;margin:0 auto;padding:1.5rem 1.2rem 3rem;}
 .sub-hero{text-align:center;padding:2rem 1rem 1.5rem;}
 .sub-hero h1{font-size:1.6rem;margin-bottom:.6rem;}
@@ -91,13 +106,17 @@ main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;}
 .pbtn.free:hover{border-color:var(--gold);color:var(--gold);}
 .pbtn.paid{background:var(--gold);color:var(--navy);}
 .pbtn.paid:hover{background:var(--gold-light);}
+
+/* MODALS */
 .overlay{display:none;position:fixed;inset:0;background:rgba(8,15,30,.6);z-index:100;align-items:center;justify-content:center;}
 .overlay.open{display:flex;}
-.amodal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:95%;max-width:660px;max-height:88vh;display:flex;flex-direction:column;}
-.amodal-hdr{padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;gap:1rem;align-items:flex-start;}
+.amodal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:95%;max-width:680px;max-height:90vh;display:flex;flex-direction:column;}
+.amodal-hdr{padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;gap:1rem;align-items:flex-start;flex-shrink:0;}
 .amodal-title{font-size:1rem;font-weight:700;line-height:1.35;flex:1;}
-.xbtn{background:none;border:none;color:var(--text-muted);font-size:1.15rem;line-height:1;padding:0;}
-.amodal-body{padding:1rem 1.2rem;overflow-y:auto;flex:1;}
+.xbtn{background:none;border:none;color:var(--text-muted);font-size:1.15rem;line-height:1;padding:0;flex-shrink:0;}
+.amodal-body{overflow-y:auto;flex:1;}
+.art-hero{width:100%;max-height:320px;object-fit:cover;display:block;}
+.art-content{padding:1rem 1.2rem;}
 .art-byline{font-size:.72rem;color:var(--text-muted);margin-bottom:.9rem;padding-bottom:.7rem;border-bottom:1px solid var(--border);}
 .art-text{font-size:.88rem;line-height:1.8;white-space:pre-wrap;color:var(--text);}
 .paywall-box{background:linear-gradient(135deg,var(--navy),var(--navy-mid));border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:1.8rem 1.4rem;text-align:center;margin:1rem 0;}
@@ -108,6 +127,8 @@ main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;}
 .btn-gold:hover{background:var(--gold-light);}
 .btn-og{background:none;color:var(--gold);border:1px solid var(--gold);border-radius:6px;padding:.5rem 1rem;font-size:.82rem;}
 .btn-og:hover{background:rgba(201,168,76,.12);}
+
+/* COMMENTS */
 .cmts{border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem;}
 .cmts h4{font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.8rem;}
 .cmt{border-bottom:1px solid var(--border);padding-bottom:.7rem;margin-bottom:.7rem;}
@@ -115,13 +136,16 @@ main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;}
 .cmt-author{font-size:.73rem;font-weight:700;color:var(--gold);margin-bottom:.15rem;}
 .cmt-text{font-size:.79rem;line-height:1.55;color:var(--text);}
 .cmt-date{font-size:.63rem;color:var(--text-muted);margin-top:.18rem;}
+.cmt-pending{background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:6px;padding:.35rem .6rem;font-size:.7rem;color:var(--gold);font-family:sans-serif;margin-top:.5rem;display:inline-block;}
 .cmt-form{display:flex;gap:.5rem;margin-top:.75rem;}
 .cmt-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.48rem .7rem;font-size:.79rem;color:var(--text);outline:none;resize:none;}
 .cmt-input:focus{border-color:var(--gold);}
 .cmt-sub{background:var(--navy);color:var(--gold);border:1px solid var(--gold);border-radius:6px;padding:.48rem .85rem;font-size:.76rem;}
 .cmt-sub:hover{background:var(--gold);color:var(--navy);}
-.smodal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:92%;max-width:400px;}
-.smodal-hdr{padding:.85rem 1.15rem;border-bottom:2px solid var(--gold);display:flex;justify-content:space-between;align-items:center;}
+
+/* SMALL MODALS */
+.smodal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:92%;max-width:480px;max-height:90vh;overflow-y:auto;}
+.smodal-hdr{padding:.85rem 1.15rem;border-bottom:2px solid var(--gold);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--surface);z-index:1;}
 .smodal-title{font-size:.92rem;font-weight:700;}
 .smodal-body{padding:1.1rem 1.15rem 0;}
 .smodal-foot{padding:.9rem 1.15rem 1.15rem;display:flex;gap:.6rem;}
@@ -144,6 +168,16 @@ main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;}
 .btn-s:hover{border-color:var(--gold);color:var(--gold);}
 .btn-d{background:rgba(185,28,28,.07);color:#c53030;border:1px solid rgba(185,28,28,.22);border-radius:6px;padding:.5rem .95rem;font-size:.8rem;}
 .btn-d:hover{background:rgba(185,28,28,.16);}
+
+/* IMAGE UPLOAD */
+.img-upload-area{border:2px dashed var(--border);border-radius:8px;padding:1.2rem;text-align:center;cursor:pointer;transition:border-color .2s;position:relative;overflow:hidden;}
+.img-upload-area:hover{border-color:var(--gold);}
+.img-upload-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.img-preview{width:100%;max-height:180px;object-fit:cover;border-radius:6px;display:none;margin-top:.6rem;}
+.img-upload-label{font-size:.78rem;color:var(--text-muted);font-family:sans-serif;pointer-events:none;}
+.img-upload-label span{color:var(--gold);font-weight:700;}
+
+/* ADMIN */
 #adminPanel{display:none;max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;gap:1.4rem;}
 #adminPanel.open{display:flex;}
 .aside{width:195px;min-width:195px;display:flex;flex-direction:column;gap:.35rem;}
@@ -158,6 +192,7 @@ main{max-width:1100px;margin:0 auto;padding:1.4rem 1.2rem 3rem;}
 .acard h2{font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.95rem;display:flex;align-items:center;gap:.45rem;}
 .acard h2 em{color:var(--gold);font-style:normal;}
 .sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin-bottom:1.15rem;}
+.sgrid.s3{grid-template-columns:repeat(3,1fr);}
 .scard{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.85rem .95rem;}
 .snum{font-size:1.55rem;font-weight:700;color:var(--gold);line-height:1;}
 .slbl{font-size:.68rem;color:var(--text-muted);margin-top:.22rem;}
@@ -174,53 +209,57 @@ tr:hover td{background:var(--tag-bg);}
 [data-theme="dark"] .sp.brk{color:#fc8181;}
 .sp.exc{background:rgba(201,168,76,.13);color:#7a5c10;border:1px solid rgba(201,168,76,.35);}
 [data-theme="dark"] .sp.exc{color:var(--gold-light);}
+.sp.pend{background:rgba(234,179,8,.1);color:#854d0e;border:1px solid rgba(234,179,8,.3);}
+[data-theme="dark"] .sp.pend{color:#fde047;}
 .tbtn{background:none;border:none;color:var(--text-muted);font-size:.73rem;padding:.15rem .38rem;border-radius:4px;}
 .tbtn:hover{color:var(--gold);background:rgba(201,168,76,.09);}
+.tbtn.approve{color:#166534;}.tbtn.approve:hover{background:rgba(21,128,61,.1);}
+.tbtn.reject{color:#c53030;}.tbtn.reject:hover{background:rgba(185,28,28,.1);}
 .tno{color:var(--text-muted);font-size:.83rem;}
 .estate{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3.5rem 2rem;text-align:center;gap:.85rem;}
 .eico{font-size:2.2rem;color:rgba(201,168,76,.22);}
 .etitle{font-size:.95rem;font-weight:700;color:var(--text-muted);}
 .esub{font-size:.8rem;color:var(--text-muted);line-height:1.6;max-width:300px;}
-/* LOADING */
+
+/* LOADING / TOAST */
 .loading-bar{position:fixed;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold-light),var(--gold));background-size:200%;animation:shimmer 1.2s infinite;z-index:999;display:none;}
 .loading-bar.show{display:block;}
 @keyframes shimmer{0%{background-position:200%}100%{background-position:-200%}}
-.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(201,168,76,.3);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:.4rem;}
-@keyframes spin{to{transform:rotate(360deg)}}
 .toast{display:none;position:fixed;bottom:1.4rem;right:1.4rem;background:var(--navy);color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:.65rem 1.1rem;font-size:.8rem;z-index:600;box-shadow:0 4px 16px rgba(0,0,0,.2);}
 .toast.show{display:block;}
+
 footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.5rem;text-align:center;}
 .fn{color:var(--gold);font-size:.88rem;font-weight:700;}
 .fs{color:rgba(200,210,230,.38);font-size:.66rem;margin-top:.18rem;}
+
 @media(max-width:680px){
-  .feat-grid,.sec-row,.plan-grid,.f2,.sgrid{grid-template-columns:1fr;}
+  .feat-grid,.sec-row,.plan-grid,.f2,.sgrid,.sgrid.s3{grid-template-columns:1fr;}
   #adminPanel.open{flex-direction:column;}
   .aside{width:100%;flex-direction:row;flex-wrap:wrap;}
-  .search-wrap input{width:90px;}
-  .hdr-right{gap:.35rem;}
+  .search-wrap input{width:80px;}
+  .hdr-right{gap:.3rem;}
 }
 </style>
 </head>
 <body>
-
 <div class="loading-bar" id="loadingBar"></div>
 
+<!-- ═══ HEADER ═══ -->
 <header>
   <div class="hdr-inner">
     <div class="logo-wrap">
-      <img class="logo-img" id="logoImg" alt="IronSilk Weekly">
-      <div class="logo-text" id="logoText">
-        <span class="logo-name">IronSilk Weekly</span>
-        <span class="logo-tag">Local. Relentless. Daily.</span>
+      <img class="logo-img" id="logoImg" alt="IronSilk Weekly"
+        src="data:image/png;base64,LOGO_BASE64_HERE"
+        onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex'">
+      <div id="logoFallback" style="display:flex;flex-direction:column;line-height:1;">
+        <span style="font-size:1.25rem;font-weight:700;color:#fff;font-family:Georgia,serif;">IronSilk Weekly</span>
+        <span style="font-size:.58rem;color:var(--gold);letter-spacing:.15em;text-transform:uppercase;margin-top:3px;">Local. Relentless. Daily.</span>
       </div>
     </div>
     <div class="hdr-right">
-      <div class="search-wrap">
-        <input type="text" id="searchInput" placeholder="Search…" oninput="doSearch()">
-        <button>⌕</button>
-      </div>
+      <div class="search-wrap"><input type="text" id="searchInput" placeholder="Search…" oninput="doSearch()"><button>⌕</button></div>
       <button class="hbtn" id="darkBtn" onclick="toggleDark()">☾</button>
-      <button class="hbtn" id="subBtn" onclick="goSub()">★ Subscribe</button>
+      <button class="hbtn" onclick="goSub()">★ Subscribe</button>
       <span class="user-badge" id="userBadge" style="display:none"></span>
       <button class="hbtn" id="loginBtn" onclick="openReaderLogin()">Sign in</button>
       <button class="hbtn" id="logoutBtn" style="display:none" onclick="doLogout()">Sign out</button>
@@ -242,28 +281,20 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
 </nav>
 
 <div class="breaking" id="breakingBar" style="display:none">
-  <div class="breaking-inner">
-    <span class="blabel">Breaking</span>
-    <span class="btext" id="breakingTxt"></span>
-  </div>
+  <div class="breaking-inner"><span class="blabel">Breaking</span><span class="btext" id="breakingTxt"></span></div>
 </div>
 
+<!-- ═══ READER ═══ -->
 <main id="readerView">
   <div id="searchBox" style="display:none;margin-bottom:1.4rem;">
     <div class="slabel">Search results</div>
     <div class="art-list" id="searchList"></div>
   </div>
   <div id="mainContent">
-    <div id="featSec" style="display:none">
-      <div class="slabel">Featured stories</div>
-      <div class="feat-grid" id="featGrid"></div>
-    </div>
+    <div id="featSec" style="display:none"><div class="slabel">Featured stories</div><div class="feat-grid" id="featGrid"></div></div>
     <div id="latestSec" style="display:none">
       <div class="sec-row">
-        <div>
-          <div class="slabel">Latest news</div>
-          <div class="art-list" id="artList"></div>
-        </div>
+        <div><div class="slabel">Latest news</div><div class="art-list" id="artList"></div></div>
         <div>
           <div class="sw">
             <div class="wtitle">Categories</div>
@@ -293,6 +324,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
   </div>
 </main>
 
+<!-- ═══ SUBSCRIBE PAGE ═══ -->
 <div id="subPage">
   <div class="sub-hero">
     <div class="slabel" style="margin-bottom:.9rem">Membership</div>
@@ -305,7 +337,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
       <div class="pprice">$0<span>/mo</span></div>
       <div class="pdesc">Stay connected with our weekly free stories.</div>
       <ul class="pfeat">
-        <li>Free articles every week</li><li>Breaking news ticker</li><li>Comment on free stories</li>
+        <li>Free articles every week</li><li>Breaking news alerts</li><li>Comment on free stories</li>
         <li class="no">Exclusive investigations</li><li class="no">Subscriber-only deep dives</li>
       </ul>
       <button class="pbtn free" onclick="openRegister('free')">Create free account</button>
@@ -325,23 +357,32 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
   <p style="text-align:center;font-size:.78rem;color:var(--text-muted)">Already have an account? <button onclick="openReaderLogin()" style="background:none;border:none;color:var(--gold);font-size:.78rem;text-decoration:underline;cursor:pointer">Sign in</button></p>
 </div>
 
+<!-- ═══ ADMIN PANEL ═══ -->
 <div id="adminPanel">
   <div class="aside">
     <div class="aside-label">Editor panel</div>
     <button class="ambtn active" onclick="showSec('dashboard',this)">▪ Dashboard</button>
     <button class="ambtn" onclick="showSec('write',this)">✎ Write article</button>
     <button class="ambtn" onclick="showSec('manage',this)">☰ Manage articles</button>
+    <button class="ambtn" onclick="showSec('comments',this)">💬 Comments</button>
     <button class="ambtn" onclick="showSec('subs',this)">★ Subscribers</button>
     <button class="ambtn" onclick="showSec('breaking',this)">⚠ Breaking news</button>
     <button class="ambtn" onclick="showSec('settings',this)">⚙ Settings</button>
   </div>
   <div class="acontent">
+
+    <!-- DASHBOARD -->
     <div class="asec open" id="sec-dashboard">
       <div class="sgrid">
         <div class="scard"><div class="snum" id="st-total">0</div><div class="slbl">Total articles</div></div>
         <div class="scard"><div class="snum" id="st-pub">0</div><div class="slbl">Published</div></div>
         <div class="scard"><div class="snum" id="st-draft">0</div><div class="slbl">Drafts</div></div>
-        <div class="scard"><div class="snum" id="st-subs">0</div><div class="slbl">Subscribers</div></div>
+        <div class="scard"><div class="snum" id="st-subs">0</div><div class="slbl">Paid subscribers</div></div>
+      </div>
+      <div class="sgrid s3">
+        <div class="scard"><div class="snum" id="st-free">0</div><div class="slbl">Free readers</div></div>
+        <div class="scard"><div class="snum" id="st-pending">0</div><div class="slbl">Pending comments</div></div>
+        <div class="scard"><div class="snum" id="st-approved">0</div><div class="slbl">Approved comments</div></div>
       </div>
       <div class="acard">
         <h2><em>▪</em> Recent articles</h2>
@@ -349,6 +390,8 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
         <table id="dash-table" style="display:none"><thead><tr><th>Title</th><th>Category</th><th>Access</th><th>Status</th><th>Date</th></tr></thead><tbody id="dash-body"></tbody></table>
       </div>
     </div>
+
+    <!-- WRITE -->
     <div class="asec" id="sec-write">
       <div class="acard">
         <h2><em>✎</em> Write article</h2>
@@ -356,14 +399,33 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
         <div class="frow"><label>Headline</label><input class="finput" id="w-headline" type="text" placeholder="Enter headline…"></div>
         <div class="f2">
           <div class="frow" style="margin:0"><label>Author</label><input class="finput" id="w-author" type="text" placeholder="Reporter name"></div>
-          <div class="frow" style="margin:0"><label>Category</label><select class="fsel" id="w-cat"><option>Local</option><option>Civics</option><option>Community</option><option>Business</option><option>Opinion</option><option>Events</option></select></div>
+          <div class="frow" style="margin:0"><label>Category</label>
+            <select class="fsel" id="w-cat"><option>Local</option><option>Civics</option><option>Community</option><option>Business</option><option>Opinion</option><option>Events</option></select>
+          </div>
         </div>
-        <div class="frow" style="margin-top:.8rem"><label>Access</label><select class="fsel" id="w-access"><option value="free">Free — visible to everyone</option><option value="subscriber">Exclusive — subscribers only</option></select></div>
+        <div class="frow" style="margin-top:.8rem"><label>Access level</label>
+          <select class="fsel" id="w-access"><option value="free">Free — visible to everyone</option><option value="subscriber">Exclusive — subscribers only</option></select>
+        </div>
         <div class="frow" style="margin-top:.8rem"><label>Tags</label>
-          <div class="tagrow"><span class="tpill" onclick="toggleTag(this)">Breaking</span><span class="tpill" onclick="toggleTag(this)">Featured</span><span class="tpill" onclick="toggleTag(this)">Developing</span><span class="tpill" onclick="toggleTag(this)">Exclusive</span><span class="tpill" onclick="toggleTag(this)">Investigation</span><span class="tpill" onclick="toggleTag(this)">Opinion</span></div>
+          <div class="tagrow">
+            <span class="tpill" onclick="toggleTag(this)">Breaking</span>
+            <span class="tpill" onclick="toggleTag(this)">Featured</span>
+            <span class="tpill" onclick="toggleTag(this)">Developing</span>
+            <span class="tpill" onclick="toggleTag(this)">Exclusive</span>
+            <span class="tpill" onclick="toggleTag(this)">Investigation</span>
+            <span class="tpill" onclick="toggleTag(this)">Opinion</span>
+          </div>
+        </div>
+        <div class="frow" style="margin-top:.8rem"><label>Article image (optional — max 1.5MB)</label>
+          <div class="img-upload-area" id="imgUploadArea">
+            <input type="file" accept="image/*" id="w-img" onchange="previewArticleImg(this)">
+            <div class="img-upload-label" id="imgUploadLabel">📷 <span>Click or tap</span> to upload a photo</div>
+            <img class="img-preview" id="w-img-preview" alt="Preview">
+          </div>
+          <button class="btn-s" style="margin-top:.4rem;font-size:.72rem;padding:.3rem .7rem" onclick="clearArticleImg()">✕ Remove image</button>
         </div>
         <div class="frow" style="margin-top:.8rem"><label>Excerpt</label><input class="finput" id="w-excerpt" type="text" placeholder="Short preview shown to all readers…"></div>
-        <div class="frow" style="margin-top:.8rem"><label>Body</label><textarea class="ftxt" id="w-body" style="min-height:200px" placeholder="Write the full article here…"></textarea></div>
+        <div class="frow" style="margin-top:.8rem"><label>Body</label><textarea class="ftxt" id="w-body" style="min-height:220px" placeholder="Write the full article here…"></textarea></div>
         <div style="display:flex;gap:.6rem;margin-top:1rem;flex-wrap:wrap">
           <button class="btn-p" onclick="publishArt()">✓ Publish</button>
           <button class="btn-s" onclick="saveDraft()">Save draft</button>
@@ -371,20 +433,54 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
         </div>
       </div>
     </div>
+
+    <!-- MANAGE -->
     <div class="asec" id="sec-manage">
       <div class="acard">
         <h2><em>☰</em> Manage articles</h2>
         <p class="tno" id="manage-empty">Loading…</p>
-        <table id="manage-table" style="display:none"><thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Access</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody id="manage-body"></tbody></table>
+        <div style="overflow-x:auto">
+          <table id="manage-table" style="display:none"><thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Access</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody id="manage-body"></tbody></table>
+        </div>
       </div>
     </div>
+
+    <!-- COMMENTS -->
+    <div class="asec" id="sec-comments">
+      <div class="acard">
+        <h2><em>💬</em> Comment moderation</h2>
+        <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+          <button id="cfPending" class="btn-p" onclick="loadComments('pending')">⏳ Pending</button>
+          <button id="cfApproved" class="btn-s" onclick="loadComments('approved')">✓ Approved</button>
+          <button id="cfAll" class="btn-s" onclick="loadComments('all')">All</button>
+        </div>
+        <p class="tno" id="cmt-empty">No comments yet.</p>
+        <div style="overflow-x:auto">
+          <table id="cmt-table" style="display:none"><thead><tr><th>Article</th><th>Author</th><th>Comment</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody id="cmt-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBSCRIBERS -->
     <div class="asec" id="sec-subs">
       <div class="acard">
-        <h2><em>★</em> Subscriber list</h2>
-        <p class="tno" id="subs-empty">Loading…</p>
-        <table id="subs-table" style="display:none"><thead><tr><th>Name</th><th>Email</th><th>Plan</th><th>Joined</th><th>Actions</th></tr></thead><tbody id="subs-body"></tbody></table>
+        <h2><em>★</em> Subscriber database</h2>
+        <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+          <button id="sfAll" class="btn-p" onclick="filterSubs('all')">All</button>
+          <button id="sfPaid" class="btn-s" onclick="filterSubs('subscriber')">★ Paid</button>
+          <button id="sfFree" class="btn-s" onclick="filterSubs('free')">Free</button>
+        </div>
+        <p class="tno" id="subs-empty">No registered users yet.</p>
+        <div style="overflow-x:auto">
+          <table id="subs-table" style="display:none;min-width:900px">
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>City</th><th>State</th><th>Zip</th><th>Age</th><th>Source</th><th>Plan</th><th>Joined</th><th>Actions</th></tr></thead>
+            <tbody id="subs-body"></tbody>
+          </table>
+        </div>
       </div>
     </div>
+
+    <!-- BREAKING -->
     <div class="asec" id="sec-breaking">
       <div class="acard">
         <h2><em>⚠</em> Breaking news ticker</h2>
@@ -396,6 +492,8 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
         </div>
       </div>
     </div>
+
+    <!-- SETTINGS -->
     <div class="asec" id="sec-settings">
       <div class="acard">
         <h2><em>⚙</em> Site settings</h2>
@@ -405,10 +503,16 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
           <div class="frow" style="margin:0"><label>Parent company</label><input class="finput" type="text" value="IronSilk Strategies"></div>
           <div class="frow" style="margin:0"><label>Founded</label><input class="finput" type="text" value="2025"></div>
         </div>
-        <div class="frow" style="margin-top:.8rem"><label>Upload logo</label><input type="file" accept="image/*" class="finput" style="padding:.35rem .5rem" onchange="previewLogo(this)"></div>
-        <div style="margin-top:.9rem"><button class="btn-p" onclick="toast('Settings saved!')">Save settings</button></div>
+        <div class="frow" style="margin-top:.8rem"><label>Comment approval</label>
+          <select class="fsel" id="cmtGateDefault">
+            <option value="1">Require approval before comments go live</option>
+            <option value="0">Post comments immediately</option>
+          </select>
+        </div>
+        <div style="margin-top:.9rem"><button class="btn-p" onclick="saveSettings()">Save settings</button></div>
       </div>
     </div>
+
   </div>
 </div>
 
@@ -417,7 +521,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
   <div class="fs">© 2025 IronSilk Strategies · Local. Relentless. Daily.</div>
 </footer>
 
-<!-- ARTICLE MODAL -->
+<!-- ═══ ARTICLE MODAL ═══ -->
 <div class="overlay" id="artOverlay" onclick="if(event.target===this)closeArt()">
   <div class="amodal">
     <div class="amodal-hdr"><span class="amodal-title" id="artTitle"></span><button class="xbtn" onclick="closeArt()">✕</button></div>
@@ -425,7 +529,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
   </div>
 </div>
 
-<!-- EDITOR LOGIN -->
+<!-- ═══ EDITOR LOGIN ═══ -->
 <div class="overlay" id="editorOverlay" style="z-index:300" onclick="if(event.target===this)closeEditorLogin()">
   <div class="smodal">
     <div class="smodal-hdr"><span class="smodal-title">🔒 Editor access</span><button class="xbtn" onclick="closeEditorLogin()">✕</button></div>
@@ -435,14 +539,11 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
       <div class="frow"><label>Password</label><input class="finput" id="ePass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')tryEditorLogin()"></div>
       <div class="errmsg" id="eErr">⚠ Incorrect username or password.</div>
     </div>
-    <div class="smodal-foot">
-      <button class="btn-p" style="flex:1" onclick="tryEditorLogin()">Sign in</button>
-      <button class="btn-s" onclick="closeEditorLogin()">Cancel</button>
-    </div>
+    <div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="tryEditorLogin()">Sign in</button><button class="btn-s" onclick="closeEditorLogin()">Cancel</button></div>
   </div>
 </div>
 
-<!-- READER LOGIN -->
+<!-- ═══ READER LOGIN ═══ -->
 <div class="overlay" id="readerOverlay" style="z-index:300" onclick="if(event.target===this)closeReaderLogin()">
   <div class="smodal">
     <div class="smodal-hdr"><span class="smodal-title">Sign in to IronSilk Weekly</span><button class="xbtn" onclick="closeReaderLogin()">✕</button></div>
@@ -458,64 +559,77 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1.1rem 1.
   </div>
 </div>
 
-<!-- REGISTER -->
+<!-- ═══ REGISTER ═══ -->
 <div class="overlay" id="regOverlay" style="z-index:300" onclick="if(event.target===this)closeRegister()">
   <div class="smodal">
     <div class="smodal-hdr"><span class="smodal-title" id="regTitle">Create account</span><button class="xbtn" onclick="closeRegister()">✕</button></div>
     <div class="smodal-body">
       <input type="hidden" id="regPlan" value="free">
-      <div class="frow"><label>Full name</label><input class="finput" id="rName" type="text" placeholder="Your name"></div>
-      <div class="frow"><label>Email</label><input class="finput" id="rRegEmail" type="email" placeholder="your@email.com"></div>
-      <div class="frow"><label>Password</label><input class="finput" id="rRegPass" type="password" placeholder="Choose a password" onkeydown="if(event.key==='Enter')doRegister()"></div>
+      <div class="f2">
+        <div class="frow" style="margin:0"><label>First name *</label><input class="finput" id="rFirstName" type="text" placeholder="First"></div>
+        <div class="frow" style="margin:0"><label>Last name *</label><input class="finput" id="rLastName" type="text" placeholder="Last"></div>
+      </div>
+      <div class="frow" style="margin-top:.8rem"><label>Email *</label><input class="finput" id="rRegEmail" type="email" placeholder="your@email.com"></div>
+      <div class="frow"><label>Phone number</label><input class="finput" id="rPhone" type="tel" placeholder="(555) 000-0000"></div>
+      <div class="f2">
+        <div class="frow" style="margin:0"><label>City</label><input class="finput" id="rCity" type="text" placeholder="City"></div>
+        <div class="frow" style="margin:0"><label>State</label><input class="finput" id="rState" type="text" placeholder="State"></div>
+      </div>
+      <div class="f2" style="margin-top:.8rem">
+        <div class="frow" style="margin:0"><label>Zip code</label><input class="finput" id="rZip" type="text" placeholder="00000"></div>
+        <div class="frow" style="margin:0"><label>Age</label><input class="finput" id="rAge" type="number" placeholder="Age" min="13" max="120"></div>
+      </div>
+      <div class="frow" style="margin-top:.8rem"><label>How did you hear about us?</label>
+        <select class="fsel" id="rSource">
+          <option value="">Select one…</option>
+          <option>Word of mouth</option><option>Social media</option><option>Search engine</option>
+          <option>Local event</option><option>Friend or family</option><option>Other</option>
+        </select>
+      </div>
+      <div class="frow"><label>Password *</label><input class="finput" id="rRegPass" type="password" placeholder="Choose a password" onkeydown="if(event.key==='Enter')doRegister()"></div>
       <div class="errmsg" id="regErr"></div>
-      <div class="subnote" id="subNote">★ <strong style="color:var(--gold)">Subscriber plan selected.</strong> In a live deployment, payment is collected via Stripe. Subscriber access is granted automatically for now.</div>
+      <div class="subnote" id="subNote">★ <strong style="color:var(--gold)">Subscriber plan selected.</strong> In a live deployment, payment is collected via your payment provider. Access is granted automatically for now.</div>
     </div>
-    <div class="smodal-foot">
-      <button class="btn-p" style="flex:1" onclick="doRegister()">Create account</button>
-      <button class="btn-s" onclick="closeRegister()">Cancel</button>
-    </div>
+    <div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="doRegister()">Create account</button><button class="btn-s" onclick="closeRegister()">Cancel</button></div>
   </div>
 </div>
 
 <div class="toast" id="toastEl"></div>
 
-<!-- FIREBASE -->
+<!-- ═══ FIREBASE ═══ -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, orderBy, query, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98",
-  authDomain: "ironsilk-weekly.firebaseapp.com",
-  projectId: "ironsilk-weekly",
-  storageBucket: "ironsilk-weekly.firebasestorage.app",
-  messagingSenderId: "627827860074",
-  appId: "1:627827860074:web:118c36251452835bc26013"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const db = getFirestore(initializeApp({
+  apiKey:"AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98",
+  authDomain:"ironsilk-weekly.firebaseapp.com",
+  projectId:"ironsilk-weekly",
+  storageBucket:"ironsilk-weekly.firebasestorage.app",
+  messagingSenderId:"627827860074",
+  appId:"1:627827860074:web:118c36251452835bc26013"
+}));
 
 // ── STATE ──
-var dark=false, adminOpen=false, editorUnlocked=false;
-var currentUser=null;
-var articles=[];
-var subscribers=[];
-var currentArtId=null;
-var currentNavCat='all';
+var dark=false,adminOpen=false,editorUnlocked=false;
+var currentUser=null,articles=[],subscribers=[];
+var currentArtId=null,currentNavCat='all';
+var cmtRequireApproval=true;
+var currentImgBase64='';
+var subsFilter='all';
 
 // ── HELPERS ──
-function $(id){return document.getElementById(id);}
-function today(){return new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
-function loading(on){$('loadingBar').classList.toggle('show',on);}
-function toast(msg){var t=$('toastEl');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2800);}
-function toggleTag(el){el.classList.toggle('on');}
-function getTags(){return Array.from(document.querySelectorAll('.tpill.on')).map(function(p){return p.textContent;});}
-function canRead(a){return a.access==='free'||(currentUser&&currentUser.plan==='subscriber');}
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+const $=id=>document.getElementById(id);
+const today=()=>new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const loading=on=>$('loadingBar').classList.toggle('show',on);
+const toast=msg=>{let t=$('toastEl');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);};
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const canRead=a=>a.access==='free'||(currentUser&&currentUser.plan==='subscriber');
+const getTags=()=>Array.from(document.querySelectorAll('.tpill.on')).map(p=>p.textContent);
+window.toggleTag=el=>el.classList.toggle('on');
 
 // ── DARK MODE ──
-window.toggleDark=function(){dark=!dark;document.body.setAttribute('data-theme',dark?'dark':'');$('darkBtn').textContent=dark?'☀':'☾';};
+window.toggleDark=()=>{dark=!dark;document.body.setAttribute('data-theme',dark?'dark':'');$('darkBtn').textContent=dark?'☀':'☾';};
 
 // ── VIEWS ──
 function showReader(){
@@ -524,379 +638,495 @@ function showReader(){
   $('adminPanel').classList.remove('open');
   $('siteNav').style.display='block';
 }
-window.goSub=function(){
-  $('readerView').style.display='none';$('subPage').style.display='block';
-  $('adminPanel').classList.remove('open');adminOpen=false;updateEditorBtn();
+window.goSub=()=>{
+  $('readerView').style.display='none';
+  $('subPage').style.display='block';
+  $('adminPanel').classList.remove('open');
+  adminOpen=false;updateEditorBtn();
 };
 
 // ── EDITOR AUTH ──
-window.toggleAdmin=function(){
+window.toggleAdmin=()=>{
   if(!adminOpen&&!editorUnlocked){$('editorOverlay').classList.add('open');return;}
   adminOpen=!adminOpen;
-  if(adminOpen){$('readerView').style.display='none';$('subPage').style.display='none';$('siteNav').style.display='none';$('breakingBar').style.display='none';$('adminPanel').classList.add('open');}
-  else{$('adminPanel').classList.remove('open');showReader();}
+  if(adminOpen){
+    ['readerView','subPage'].forEach(id=>$(id).style.display='none');
+    $('siteNav').style.display='none';
+    $('breakingBar').style.display='none';
+    $('adminPanel').classList.add('open');
+  } else {
+    $('adminPanel').classList.remove('open');
+    showReader();
+  }
   updateEditorBtn();
 };
-function updateEditorBtn(){var b=$('editorBtn');b.textContent=adminOpen?'← Reader':'⚙ Editor';b.classList.toggle('on',adminOpen);}
-window.closeEditorLogin=function(){$('editorOverlay').classList.remove('open');$('eUser').value='';$('ePass').value='';$('eErr').style.display='none';};
-window.tryEditorLogin=function(){
-  if($('eUser').value.trim()==='ISW'&&$('ePass').value==='Dead$3me'){editorUnlocked=true;window.closeEditorLogin();adminOpen=false;window.toggleAdmin();}
-  else{$('eErr').style.display='block';$('ePass').value='';}
+const updateEditorBtn=()=>{let b=$('editorBtn');b.textContent=adminOpen?'← Reader':'⚙ Editor';b.classList.toggle('on',adminOpen);};
+window.closeEditorLogin=()=>{$('editorOverlay').classList.remove('open');$('eUser').value='';$('ePass').value='';$('eErr').style.display='none';};
+window.tryEditorLogin=()=>{
+  if($('eUser').value.trim()==='ISW'&&$('ePass').value==='Dead$3me'){
+    editorUnlocked=true;window.closeEditorLogin();adminOpen=false;window.toggleAdmin();
+  } else {$('eErr').style.display='block';$('ePass').value='';}
 };
 
 // ── READER AUTH ──
-window.openReaderLogin=function(){$('readerOverlay').classList.add('open');};
-window.closeReaderLogin=function(){$('readerOverlay').classList.remove('open');$('rEmail').value='';$('rPass').value='';$('rErr').style.display='none';};
-window.tryReaderLogin=async function(){
-  var email=$('rEmail').value.trim().toLowerCase();
-  var pass=$('rPass').value;
+window.openReaderLogin=()=>$('readerOverlay').classList.add('open');
+window.closeReaderLogin=()=>{$('readerOverlay').classList.remove('open');$('rEmail').value='';$('rPass').value='';$('rErr').style.display='none';};
+window.tryReaderLogin=async()=>{
+  const email=$('rEmail').value.trim().toLowerCase(),pass=$('rPass').value;
   loading(true);
   try{
-    var snap=await getDocs(collection(db,'subscribers'));
-    var u=null;
-    snap.forEach(function(d){var s=d.data();if(s.email&&s.email.toLowerCase()===email&&s.password===pass){u={...s,id:d.id};}});
-    if(u){currentUser=u;window.closeReaderLogin();updateUserUI();renderReader(currentNavCat);toast('Welcome back, '+u.name+'!');}
-    else{$('rErr').style.display='block';}
-  }catch(e){toast('Error signing in. Try again.');}
+    const snap=await getDocs(collection(db,'subscribers'));
+    let u=null;
+    snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email&&s.password===pass)u={...s,id:d.id};});
+    if(u){currentUser=u;window.closeReaderLogin();updateUserUI();renderReader(currentNavCat);toast('Welcome back, '+u.firstName+'!');}
+    else $('rErr').style.display='block';
+  }catch(e){toast('Sign in error. Try again.');}
   loading(false);
 };
-window.openRegister=function(plan){
+window.openRegister=plan=>{
   $('regPlan').value=plan;
   $('regTitle').textContent=plan==='subscriber'?'Subscribe — $5/month':'Create free account';
   $('subNote').style.display=plan==='subscriber'?'block':'none';
-  $('rName').value='';$('rRegEmail').value='';$('rRegPass').value='';$('regErr').style.display='none';
+  ['rFirstName','rLastName','rRegEmail','rPhone','rCity','rState','rZip','rAge','rRegPass'].forEach(id=>$(id).value='');
+  $('rSource').value='';$('regErr').style.display='none';
   $('regOverlay').classList.add('open');
 };
-window.closeRegister=function(){$('regOverlay').classList.remove('open');};
-window.doRegister=async function(){
-  var name=$('rName').value.trim();
-  var email=$('rRegEmail').value.trim().toLowerCase();
-  var pass=$('rRegPass').value;
-  var plan=$('regPlan').value;
-  if(!name||!email||!pass){$('regErr').textContent='⚠ Please fill in all fields.';$('regErr').style.display='block';return;}
+window.closeRegister=()=>$('regOverlay').classList.remove('open');
+window.doRegister=async()=>{
+  const fn=$('rFirstName').value.trim(),ln=$('rLastName').value.trim();
+  const email=$('rRegEmail').value.trim().toLowerCase(),pass=$('rRegPass').value;
+  const plan=$('regPlan').value;
+  if(!fn||!ln||!email||!pass){$('regErr').textContent='⚠ First name, last name, email and password are required.';$('regErr').style.display='block';return;}
   loading(true);
   try{
-    var snap=await getDocs(collection(db,'subscribers'));
-    var exists=false;snap.forEach(function(d){if(d.data().email&&d.data().email.toLowerCase()===email)exists=true;});
+    const snap=await getDocs(collection(db,'subscribers'));
+    let exists=false;
+    snap.forEach(d=>{if(d.data().email?.toLowerCase()===email)exists=true;});
     if(exists){$('regErr').textContent='⚠ An account with this email already exists.';$('regErr').style.display='block';loading(false);return;}
-    var u={name:name,email:email,password:pass,plan:plan,joined:today()};
-    var ref=await addDoc(collection(db,'subscribers'),u);
+    const u={firstName:fn,lastName:ln,name:fn+' '+ln,email,phone:$('rPhone').value.trim(),city:$('rCity').value.trim(),state:$('rState').value.trim(),zip:$('rZip').value.trim(),age:$('rAge').value.trim(),source:$('rSource').value,password:pass,plan,joined:today(),ts:Date.now()};
+    const ref=await addDoc(collection(db,'subscribers'),u);
     currentUser={...u,id:ref.id};
-    window.closeRegister();updateUserUI();
-    showReader();renderReader(currentNavCat);
-    toast('Welcome to IronSilk Weekly, '+name+'!');
-  }catch(e){toast('Error creating account. Try again.');}
+    window.closeRegister();updateUserUI();showReader();renderReader(currentNavCat);
+    toast('Welcome to IronSilk Weekly, '+fn+'!');
+  }catch(e){toast('Error creating account.');}
   loading(false);
 };
-window.doLogout=function(){currentUser=null;updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
-function updateUserUI(){
-  var li=!!currentUser;
-  $('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';
-  var b=$('userBadge');
-  if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'★ '+currentUser.name:currentUser.name;}
+window.doLogout=()=>{currentUser=null;updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
+const updateUserUI=()=>{
+  const li=!!currentUser;
+  $('loginBtn').style.display=li?'none':'';
+  $('logoutBtn').style.display=li?'':'none';
+  const b=$('userBadge');
+  if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'★ '+currentUser.firstName:currentUser.firstName;}
   else b.style.display='none';
-}
+};
 
 // ── ADMIN SECTIONS ──
-window.showSec=function(id,btn){
-  document.querySelectorAll('.asec').forEach(function(s){s.classList.remove('open');});
+window.showSec=(id,btn)=>{
+  document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));
   $('sec-'+id).classList.add('open');
-  document.querySelectorAll('.ambtn').forEach(function(b){b.classList.remove('active');});
+  document.querySelectorAll('.ambtn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+  if(id==='comments')loadComments('pending');
 };
 
 // ── NAV ──
-window.setNav=function(btn,cat){
-  document.querySelectorAll('.nbtn').forEach(function(b){b.classList.remove('active');});
+window.setNav=(btn,cat)=>{
+  document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');currentNavCat=cat;
   showReader();$('searchInput').value='';$('searchBox').style.display='none';$('mainContent').style.display='';
   renderReader(cat);
 };
-window.setNavByName=function(cat){
-  document.querySelectorAll('.nbtn').forEach(function(b){b.classList.toggle('active',b.textContent.trim().toLowerCase()===cat);});
+window.setNavByName=cat=>{
+  document.querySelectorAll('.nbtn').forEach(b=>b.classList.toggle('active',b.textContent.trim().toLowerCase()===cat));
   currentNavCat=cat;renderReader(cat);
 };
 
 // ── RENDER READER ──
 function renderReader(cat){
-  var pub=articles.filter(function(a){return a.status==='published';});
-  var filtered=pub.filter(function(a){return cat==='all'||a.category.toLowerCase()===cat;});
-  var empty=$('emptyState'),feat=$('featSec'),latest=$('latestSec');
+  const pub=articles.filter(a=>a.status==='published');
+  const filtered=pub.filter(a=>cat==='all'||a.category.toLowerCase()===cat);
+  const empty=$('emptyState'),feat=$('featSec'),latest=$('latestSec');
   if(!pub.length){empty.style.display='flex';feat.style.display='none';latest.style.display='none';return;}
   empty.style.display='none';
-  var featured=filtered.filter(function(a){return a.tags&&(a.tags.includes('Featured')||a.tags.includes('Breaking'));});
-  var rest=filtered.filter(function(a){return !featured.includes(a);});
+  const featured=filtered.filter(a=>a.tags&&(a.tags.includes('Featured')||a.tags.includes('Breaking')));
+  const rest=filtered.filter(a=>!featured.includes(a));
+
   if(featured.length){
     feat.style.display='block';
-    var lead=featured[0],lr=canRead(lead);
-    var html='<div class="card" onclick="openArt(\''+lead.id+'\')">';
-    html+='<div class="card-img tall">'+(lr?'◉':'🔒')+'</div><div class="card-body">';
-    html+='<span class="ctag cat">'+esc(lead.category)+'</span>';
-    if(lead.tags.includes('Breaking'))html+='<span class="ctag brk">Breaking</span>';
-    if(lead.access==='subscriber')html+='<span class="ctag exc">★ Exclusive</span>';
-    html+='<div class="card-title">'+esc(lead.headline)+'</div>';
-    if(lead.excerpt)html+='<div class="card-excerpt">'+esc(lead.excerpt)+(lr?'':' — <em>subscribers only</em>')+'</div>';
-    html+='<div class="card-meta"><span>'+esc(lead.author)+'</span><span class="dot"></span><span>'+esc(lead.date)+'</span></div>';
-    html+='</div></div>';
-    var side=featured.slice(1,3);
+    const lead=featured[0],lr=canRead(lead);
+    const leadImg=lead.image&&lr?`<img src="${lead.image}" style="width:100%;height:100%;object-fit:cover" alt="">`:'◉';
+    let html=`<div class="card" onclick="openArt('${lead.id}')">
+      <div class="card-img tall">${lr?leadImg:'🔒'}</div>
+      <div class="card-body">
+        <span class="ctag cat">${esc(lead.category)}</span>
+        ${lead.tags.includes('Breaking')?'<span class="ctag brk">Breaking</span>':''}
+        ${lead.access==='subscriber'?'<span class="ctag exc">★ Exclusive</span>':''}
+        <div class="card-title">${esc(lead.headline)}</div>
+        ${lead.excerpt?`<div class="card-excerpt">${esc(lead.excerpt)}${lr?'':' — <em>subscribers only</em>'}</div>`:''}
+        <div class="card-meta"><span>${esc(lead.author)}</span><span class="dot"></span><span>${esc(lead.date)}</span></div>
+      </div></div>`;
+    const side=featured.slice(1,3);
     if(side.length){
       html+='<div style="display:flex;flex-direction:column;gap:1rem">';
-      side.forEach(function(a){
-        var ar=canRead(a);
-        html+='<div class="card" onclick="openArt(\''+a.id+'\')">';
-        html+='<div class="card-img short">'+(ar?'◫':'🔒')+'</div><div class="card-body">';
-        html+='<span class="ctag cat">'+esc(a.category)+'</span>';
-        if(a.access==='subscriber')html+='<span class="ctag exc">★</span>';
-        html+='<div class="card-title sm">'+esc(a.headline)+'</div>';
-        html+='<div class="card-meta" style="margin-top:.32rem"><span>'+esc(a.author)+'</span><span class="dot"></span><span>'+esc(a.date)+'</span></div>';
-        html+='</div></div>';
+      side.forEach(a=>{
+        const ar=canRead(a);
+        const si=a.image&&ar?`<img src="${a.image}" style="width:100%;height:100%;object-fit:cover" alt="">`: '◫';
+        html+=`<div class="card" onclick="openArt('${a.id}')">
+          <div class="card-img short">${ar?si:'🔒'}</div>
+          <div class="card-body">
+            <span class="ctag cat">${esc(a.category)}</span>
+            ${a.access==='subscriber'?'<span class="ctag exc">★</span>':''}
+            <div class="card-title sm">${esc(a.headline)}</div>
+            <div class="card-meta" style="margin-top:.32rem"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span></div>
+          </div></div>`;
       });
       html+='</div>';
     }
     $('featGrid').innerHTML=html;
   } else feat.style.display='none';
-  var listItems=rest.length?rest:(featured.length?[]:filtered);
+
+  const listItems=rest.length?rest:(featured.length?[]:filtered);
   if(listItems.length){
     latest.style.display='block';
-    $('artList').innerHTML=listItems.map(function(a){
-      var ar=canRead(a);
-      return '<div class="aitem" onclick="openArt(\''+a.id+'\')">'
-        +'<div class="athumb">'+(ar?'◼':'🔒')+'</div>'
-        +'<div class="ainfo">'
-        +'<div style="display:flex;gap:.28rem;flex-wrap:wrap;margin-bottom:.28rem">'
-        +'<span class="ctag cat" style="font-size:.59rem">'+esc(a.category)+'</span>'
-        +(a.access==='subscriber'?'<span class="ctag exc" style="font-size:.59rem">★ Exclusive</span>':'')
-        +(a.tags&&a.tags.includes('Breaking')?'<span class="ctag brk" style="font-size:.59rem">Breaking</span>':'')
-        +'</div>'
-        +'<div class="atitle">'+esc(a.headline)+'</div>'
-        +'<div class="ameta"><span>'+esc(a.author)+'</span><span class="dot"></span><span>'+esc(a.date)+'</span>'
-        +(ar?'':'<span style="color:var(--gold);font-size:.67rem">🔒 Subscribers only</span>')
-        +'</div></div></div>';
+    $('artList').innerHTML=listItems.map(a=>{
+      const ar=canRead(a);
+      const ti=a.image&&ar?`<img src="${a.image}" alt="">`:'◼';
+      return `<div class="aitem" onclick="openArt('${a.id}')">
+        <div class="athumb">${ar?ti:'🔒'}</div>
+        <div class="ainfo">
+          <div style="display:flex;gap:.28rem;flex-wrap:wrap;margin-bottom:.28rem">
+            <span class="ctag cat" style="font-size:.59rem">${esc(a.category)}</span>
+            ${a.access==='subscriber'?'<span class="ctag exc" style="font-size:.59rem">★ Exclusive</span>':''}
+            ${a.tags&&a.tags.includes('Breaking')?'<span class="ctag brk" style="font-size:.59rem">Breaking</span>':''}
+          </div>
+          <div class="atitle">${esc(a.headline)}</div>
+          <div class="ameta">
+            <span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>
+            ${ar?'':'<span style="color:var(--gold);font-size:.67rem">🔒 Subscribers only</span>'}
+          </div>
+        </div></div>`;
     }).join('');
   } else if(!featured.length) latest.style.display='none';
   updateCatCounts();
 }
-function updateCatCounts(){
-  ['local','civics','community','business','opinion','events'].forEach(function(c){
-    var el=$('cc-'+c);if(el)el.textContent=articles.filter(function(a){return a.status==='published'&&a.category.toLowerCase()===c;}).length;
+const updateCatCounts=()=>{
+  ['local','civics','community','business','opinion','events'].forEach(c=>{
+    const el=$('cc-'+c);if(el)el.textContent=articles.filter(a=>a.status==='published'&&a.category.toLowerCase()===c).length;
   });
-}
+};
 
 // ── ARTICLE MODAL ──
-window.openArt=async function(id){
+window.openArt=async id=>{
   currentArtId=id;
-  var a=articles.find(function(x){return x.id===id;});
-  if(!a)return;
+  const a=articles.find(x=>x.id===id);if(!a)return;
   $('artTitle').textContent=a.headline;
-  var readable=canRead(a);
-  var html='<div class="art-byline">By '+esc(a.author)+' &bull; '+esc(a.category)+' &bull; '+esc(a.date)+'</div>';
+  const readable=canRead(a);
+  let html='';
+  if(a.image&&readable)html+=`<img src="${a.image}" class="art-hero" alt="${esc(a.headline)}">`;
+  html+=`<div class="art-content">
+    <div class="art-byline">By ${esc(a.author)} &bull; ${esc(a.category)} &bull; ${esc(a.date)}</div>`;
   if(readable){
-    html+='<div class="art-text">'+(a.body?esc(a.body):'<em style="color:var(--text-muted);font-family:sans-serif">No body text yet.</em>')+'</div>';
+    html+=`<div class="art-text">${a.body?esc(a.body):'<em style="color:var(--text-muted);font-family:sans-serif">No body text yet.</em>'}</div>`;
     html+='<div class="cmts"><h4>Comments</h4>';
     loading(true);
     try{
-      var csnap=await getDocs(query(collection(db,'articles',id,'comments'),orderBy('ts')));
-      var cl=[];csnap.forEach(function(d){cl.push(d.data());});
+      const csnap=await getDocs(query(collection(db,'articles',id,'comments'),orderBy('ts')));
+      const cl=[];
+      csnap.forEach(d=>{const cd=d.data();if(cd.status==='approved')cl.push({...cd,cid:d.id});});
       if(!cl.length)html+='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.8rem">No comments yet. Be the first!</p>';
-      else html+=cl.map(function(c){return '<div class="cmt"><div class="cmt-author">'+esc(c.author)+'</div><div class="cmt-text">'+esc(c.text)+'</div><div class="cmt-date">'+esc(c.date)+'</div></div>';}).join('');
+      else html+=cl.map(c=>`<div class="cmt"><div class="cmt-author">${esc(c.author)}</div><div class="cmt-text">${esc(c.text)}</div><div class="cmt-date">${esc(c.date)}</div></div>`).join('');
     }catch(e){html+='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.8rem">Could not load comments.</p>';}
     loading(false);
-    html+='<div class="cmt-form"><textarea class="cmt-input" id="cmtInput" rows="2" placeholder="Leave a comment…"></textarea><button class="cmt-sub" onclick="postComment()">Post</button></div></div>';
+    html+=`<div class="cmt-form"><textarea class="cmt-input" id="cmtInput" rows="2" placeholder="Leave a comment…"></textarea><button class="cmt-sub" onclick="postComment()">Post</button></div></div>`;
   } else {
-    if(a.excerpt)html+='<div class="art-text" style="margin-bottom:1rem;opacity:.7">'+esc(a.excerpt)+'…</div>';
-    html+='<div class="paywall-box"><h3>🔒 Exclusive story</h3><p>Subscribe to IronSilk Weekly for full access to this story and every subscriber-only investigation we publish.</p><div class="pw-btns"><button class="btn-gold" onclick="closeArt();openRegister(\'subscriber\')">Subscribe — $5/mo</button><button class="btn-og" onclick="closeArt();openReaderLogin()">Sign in</button></div></div>';
+    if(a.excerpt)html+=`<div class="art-text" style="margin-bottom:1rem;opacity:.7">${esc(a.excerpt)}…</div>`;
+    html+=`<div class="paywall-box"><h3>🔒 Exclusive story</h3><p>Subscribe to IronSilk Weekly for full access to this story and every subscriber-only investigation we publish.</p><div class="pw-btns"><button class="btn-gold" onclick="closeArt();openRegister('subscriber')">Subscribe — $5/mo</button><button class="btn-og" onclick="closeArt();openReaderLogin()">Sign in</button></div></div>`;
   }
+  html+='</div>';
   $('artBody').innerHTML=html;
   $('artOverlay').classList.add('open');
 };
-window.closeArt=function(){$('artOverlay').classList.remove('open');};
-window.postComment=async function(){
-  var inp=$('cmtInput');var txt=inp.value.trim();if(!txt)return;
-  var author=currentUser?currentUser.name:'Reader';
-  var c={author:author,text:txt,date:today(),ts:Date.now()};
+window.closeArt=()=>$('artOverlay').classList.remove('open');
+window.postComment=async()=>{
+  const inp=$('cmtInput'),txt=inp.value.trim();if(!txt)return;
+  const author=currentUser?(currentUser.firstName+' '+(currentUser.lastName||'')).trim():'Anonymous';
+  const status=cmtRequireApproval?'pending':'approved';
+  const artTitle=(articles.find(x=>x.id===currentArtId)||{}).headline||'';
+  const c={author,text:txt,date:today(),ts:Date.now(),status,articleId:currentArtId,articleTitle:artTitle};
   try{
     await addDoc(collection(db,'articles',currentArtId,'comments'),c);
-    var cmts=$('artBody').querySelector('.cmts');
-    var p=cmts.querySelector('p');if(p)p.remove();
-    var d=document.createElement('div');d.className='cmt';
-    d.innerHTML='<div class="cmt-author">'+esc(author)+'</div><div class="cmt-text">'+esc(txt)+'</div><div class="cmt-date">Just now</div>';
-    cmts.insertBefore(d,cmts.querySelector('.cmt-form'));
+    const cmts=$('artBody').querySelector('.cmts');
+    if(status==='approved'){
+      const p=cmts.querySelector('p');if(p)p.remove();
+      const d=document.createElement('div');d.className='cmt';
+      d.innerHTML=`<div class="cmt-author">${esc(author)}</div><div class="cmt-text">${esc(txt)}</div><div class="cmt-date">Just now</div>`;
+      cmts.insertBefore(d,cmts.querySelector('.cmt-form'));
+    } else {
+      const note=document.createElement('div');
+      note.innerHTML='<span class="cmt-pending">✓ Comment submitted — awaiting approval.</span>';
+      cmts.insertBefore(note,cmts.querySelector('.cmt-form'));
+    }
     inp.value='';
+    toast(status==='approved'?'Comment posted!':'Comment submitted — awaiting approval.');
   }catch(e){toast('Error posting comment.');}
 };
 
+// ── COMMENT MODERATION ──
+window.loadComments=async filter=>{
+  ['Pending','Approved','All'].forEach(f=>{
+    const b=$('cf'+f);if(b)b.className=f.toLowerCase()===filter?'btn-p':'btn-s';
+  });
+  loading(true);
+  try{
+    const allC=[];
+    for(const a of articles){
+      const snap=await getDocs(collection(db,'articles',a.id,'comments'));
+      snap.forEach(d=>allC.push({...d.data(),cid:d.id,artId:a.id,artTitle:a.headline}));
+    }
+    const filtered=filter==='all'?allC:allC.filter(c=>c.status===filter);
+    const empty=$('cmt-empty'),tbl=$('cmt-table');
+    $('st-pending').textContent=allC.filter(c=>c.status==='pending').length;
+    $('st-approved').textContent=allC.filter(c=>c.status==='approved').length;
+    if(!filtered.length){empty.style.display='';empty.textContent=`No ${filter==='all'?'':filter} comments.`;tbl.style.display='none';}
+    else{
+      empty.style.display='none';tbl.style.display='';
+      $('cmt-body').innerHTML=filtered.map(c=>`<tr>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.artTitle)}</td>
+        <td>${esc(c.author)}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.text)}</td>
+        <td>${esc(c.date)}</td>
+        <td><span class="sp ${c.status==='approved'?'pub':'pend'}">${c.status}</span></td>
+        <td>
+          ${c.status==='pending'?`<button class="tbtn approve" onclick="approveComment('${c.artId}','${c.cid}')">✓ Approve</button> `:''}
+          <button class="tbtn reject" onclick="deleteComment('${c.artId}','${c.cid}')">✕ Delete</button>
+        </td></tr>`).join('');
+    }
+  }catch(e){toast('Error loading comments.');}
+  loading(false);
+};
+window.approveComment=async(artId,cid)=>{
+  loading(true);
+  try{await updateDoc(doc(db,'articles',artId,'comments',cid),{status:'approved'});toast('Comment approved.');loadComments('pending');}
+  catch(e){toast('Error.');}
+  loading(false);
+};
+window.deleteComment=async(artId,cid)=>{
+  if(!confirm('Delete this comment?'))return;
+  loading(true);
+  try{await deleteDoc(doc(db,'articles',artId,'comments',cid));toast('Comment deleted.');loadComments('pending');}
+  catch(e){toast('Error.');}
+  loading(false);
+};
+
 // ── SEARCH ──
-window.doSearch=function(){
-  var q=$('searchInput').value.trim().toLowerCase();
+window.doSearch=()=>{
+  const q=$('searchInput').value.trim().toLowerCase();
   if(!q){$('searchBox').style.display='none';$('mainContent').style.display='';return;}
   $('mainContent').style.display='none';$('searchBox').style.display='block';
-  var hits=articles.filter(function(a){return a.status==='published'&&a.headline.toLowerCase().includes(q);});
+  const hits=articles.filter(a=>a.status==='published'&&a.headline.toLowerCase().includes(q));
   if(!hits.length){$('searchList').innerHTML='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.83rem">No articles found.</p>';return;}
-  $('searchList').innerHTML=hits.map(function(a){
-    return '<div class="aitem" onclick="openArt(\''+a.id+'\')">'
-      +'<div class="athumb">◼</div>'
-      +'<div class="ainfo"><div class="atitle">'+esc(a.headline)+'</div>'
-      +'<div class="ameta"><span>'+esc(a.author)+'</span><span class="dot"></span><span>'+esc(a.date)+'</span>'
-      +(a.access==='subscriber'?'<span style="color:var(--gold);font-size:.67rem">🔒 Exclusive</span>':'')
-      +'</div></div></div>';
-  }).join('');
+  $('searchList').innerHTML=hits.map(a=>`<div class="aitem" onclick="openArt('${a.id}')">
+    <div class="athumb">${a.image?`<img src="${a.image}" alt="">`:'◼'}</div>
+    <div class="ainfo"><div class="atitle">${esc(a.headline)}</div>
+    <div class="ameta"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>
+    ${a.access==='subscriber'?'<span style="color:var(--gold);font-size:.67rem">🔒 Exclusive</span>':''}
+    </div></div></div>`).join('');
+};
+
+// ── ARTICLE IMAGE ──
+window.previewArticleImg=input=>{
+  if(!input.files||!input.files[0])return;
+  const file=input.files[0];
+  if(file.size>1.8*1024*1024){toast('Image too large — please use under 1.5MB.');input.value='';return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    currentImgBase64=e.target.result;
+    const prev=$('w-img-preview');prev.src=currentImgBase64;prev.style.display='block';
+    $('imgUploadLabel').style.display='none';
+  };
+  r.readAsDataURL(file);
+};
+window.clearArticleImg=()=>{
+  currentImgBase64='';$('w-img').value='';
+  const prev=$('w-img-preview');prev.src='';prev.style.display='none';
+  $('imgUploadLabel').style.display='';
 };
 
 // ── WRITE / MANAGE ──
-window.publishArt=async function(){
-  var h=$('w-headline').value.trim(),a=$('w-author').value.trim();
+window.publishArt=async()=>{
+  const h=$('w-headline').value.trim(),a=$('w-author').value.trim();
   if(!h||!a){toast('Please fill in headline and author.');return;}
-  var art={headline:h,author:a,category:$('w-cat').value,access:$('w-access').value,tags:getTags(),excerpt:$('w-excerpt').value.trim(),body:$('w-body').value.trim(),status:'published',date:today(),ts:Date.now()};
+  const art={headline:h,author:a,category:$('w-cat').value,access:$('w-access').value,tags:getTags(),excerpt:$('w-excerpt').value.trim(),body:$('w-body').value.trim(),status:'published',date:today(),ts:Date.now(),image:currentImgBase64};
   loading(true);
   try{
-    var id=$('editIdx').value;
-    if(id){await setDoc(doc(db,'articles',id),art);art.id=id;var idx=articles.findIndex(function(x){return x.id===id;});if(idx>=0)articles[idx]=art;}
-    else{var ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}
+    const id=$('editIdx').value;
+    if(id){await setDoc(doc(db,'articles',id),art);art.id=id;const idx=articles.findIndex(x=>x.id===id);if(idx>=0)articles[idx]=art;}
+    else{const ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}
     clearEditor();refreshManage();renderReader(currentNavCat);toast('Article published!');
-  }catch(e){toast('Error saving article.');}
+  }catch(e){toast('Error saving. If image was attached, try a smaller file.');}
   loading(false);
 };
-window.saveDraft=async function(){
-  var h=$('w-headline').value.trim();if(!h){toast('Please enter a headline.');return;}
-  var art={headline:h,author:$('w-author').value.trim()||'—',category:$('w-cat').value,access:$('w-access').value,tags:getTags(),excerpt:$('w-excerpt').value.trim(),body:$('w-body').value.trim(),status:'draft',date:today(),ts:Date.now()};
+window.saveDraft=async()=>{
+  const h=$('w-headline').value.trim();if(!h){toast('Please enter a headline.');return;}
+  const art={headline:h,author:$('w-author').value.trim()||'—',category:$('w-cat').value,access:$('w-access').value,tags:getTags(),excerpt:$('w-excerpt').value.trim(),body:$('w-body').value.trim(),status:'draft',date:today(),ts:Date.now(),image:currentImgBase64};
   loading(true);
   try{
-    var id=$('editIdx').value;
-    if(id){await setDoc(doc(db,'articles',id),art);art.id=id;var idx=articles.findIndex(function(x){return x.id===id;});if(idx>=0)articles[idx]=art;}
-    else{var ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}
+    const id=$('editIdx').value;
+    if(id){await setDoc(doc(db,'articles',id),art);art.id=id;const idx=articles.findIndex(x=>x.id===id);if(idx>=0)articles[idx]=art;}
+    else{const ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}
     clearEditor();refreshManage();toast('Draft saved.');
   }catch(e){toast('Error saving draft.');}
   loading(false);
 };
-window.clearEditor=function(){
+window.clearEditor=()=>{
   $('editIdx').value='';
-  ['w-headline','w-author','w-excerpt','w-body'].forEach(function(id){$(id).value='';});
+  ['w-headline','w-author','w-excerpt','w-body'].forEach(id=>$(id).value='');
   $('w-cat').value='Local';$('w-access').value='free';
-  document.querySelectorAll('.tpill').forEach(function(p){p.classList.remove('on');});
+  document.querySelectorAll('.tpill').forEach(p=>p.classList.remove('on'));
+  window.clearArticleImg();
 };
-window.editArt=function(id){
-  var a=articles.find(function(x){return x.id===id;});if(!a)return;
+window.editArt=id=>{
+  const a=articles.find(x=>x.id===id);if(!a)return;
   $('editIdx').value=id;$('w-headline').value=a.headline;$('w-author').value=a.author;
   $('w-cat').value=a.category;$('w-access').value=a.access||'free';
   $('w-excerpt').value=a.excerpt||'';$('w-body').value=a.body||'';
-  document.querySelectorAll('.tpill').forEach(function(p){p.classList.toggle('on',a.tags&&a.tags.includes(p.textContent));});
+  document.querySelectorAll('.tpill').forEach(p=>p.classList.toggle('on',a.tags&&a.tags.includes(p.textContent)));
+  if(a.image){currentImgBase64=a.image;const prev=$('w-img-preview');prev.src=a.image;prev.style.display='block';$('imgUploadLabel').style.display='none';}
+  else window.clearArticleImg();
   window.showSec('write',document.querySelectorAll('.ambtn')[2]);
   toast('Loaded into editor.');
 };
-window.deleteArt=async function(id){
+window.deleteArt=async id=>{
   if(!confirm('Delete this article?'))return;
   loading(true);
-  try{
-    await deleteDoc(doc(db,'articles',id));
-    articles=articles.filter(function(a){return a.id!==id;});
-    refreshManage();renderReader(currentNavCat);toast('Deleted.');
-  }catch(e){toast('Error deleting article.');}
+  try{await deleteDoc(doc(db,'articles',id));articles=articles.filter(a=>a.id!==id);refreshManage();renderReader(currentNavCat);toast('Deleted.');}
+  catch(e){toast('Error deleting.');}
   loading(false);
 };
-
 function refreshManage(){
-  var me=$('manage-empty'),mt=$('manage-table'),de=$('dash-empty'),dt=$('dash-table');
+  const me=$('manage-empty'),mt=$('manage-table'),de=$('dash-empty'),dt=$('dash-table');
   if(!articles.length){me.style.display='';mt.style.display='none';de.style.display='';dt.style.display='none';updateStats();return;}
   me.style.display='none';mt.style.display='';de.style.display='none';dt.style.display='';
-  $('manage-body').innerHTML=articles.map(function(a){
-    var sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';
-    var ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';
-    return '<tr><td>'+esc(a.headline)+'</td><td>'+esc(a.author)+'</td><td>'+esc(a.category)+'</td><td>'+ac+'</td>'
-      +'<td><span class="sp '+sc+'">'+a.status+'</span></td><td>'+esc(a.date)+'</td>'
-      +'<td><button class="tbtn" onclick="editArt(\''+a.id+'\')">Edit</button> <button class="tbtn" onclick="deleteArt(\''+a.id+'\')">Delete</button></td></tr>';
+  $('manage-body').innerHTML=articles.map(a=>{
+    const sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';
+    const ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';
+    const imgBadge=a.image?'📷 ':'';
+    return `<tr><td>${imgBadge}${esc(a.headline)}</td><td>${esc(a.author)}</td><td>${esc(a.category)}</td><td>${ac}</td><td><span class="sp ${sc}">${a.status}</span></td><td>${esc(a.date)}</td><td><button class="tbtn" onclick="editArt('${a.id}')">Edit</button> <button class="tbtn reject" onclick="deleteArt('${a.id}')">Delete</button></td></tr>`;
   }).join('');
-  $('dash-body').innerHTML=articles.slice(0,5).map(function(a){
-    var sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';
-    var ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';
-    return '<tr><td>'+esc(a.headline)+'</td><td>'+esc(a.category)+'</td><td>'+ac+'</td><td><span class="sp '+sc+'">'+a.status+'</span></td><td>'+esc(a.date)+'</td></tr>';
+  $('dash-body').innerHTML=articles.slice(0,5).map(a=>{
+    const sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';
+    const ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';
+    return `<tr><td>${esc(a.headline)}</td><td>${esc(a.category)}</td><td>${ac}</td><td><span class="sp ${sc}">${a.status}</span></td><td>${esc(a.date)}</td></tr>`;
   }).join('');
   updateStats();
 }
 
+// ── SUBSCRIBERS ──
+window.filterSubs=f=>{
+  subsFilter=f;
+  $('sfAll').className=f==='all'?'btn-p':'btn-s';
+  $('sfPaid').className=f==='subscriber'?'btn-p':'btn-s';
+  $('sfFree').className=f==='free'?'btn-p':'btn-s';
+  refreshSubsTable();
+};
 function refreshSubsTable(){
-  var se=$('subs-empty'),st=$('subs-table');
-  if(!subscribers.length){se.style.display='';st.style.display='none';return;}
+  const se=$('subs-empty'),st=$('subs-table');
+  const filtered=subsFilter==='all'?subscribers:subscribers.filter(s=>s.plan===subsFilter);
+  if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';st.style.display='none';return;}
   se.style.display='none';st.style.display='';
-  $('subs-body').innerHTML=subscribers.map(function(s){
-    return '<tr><td>'+esc(s.name)+'</td><td>'+esc(s.email)+'</td>'
-      +'<td><span class="sp '+(s.plan==='subscriber'?'exc':'dft')+'">'+(s.plan==='subscriber'?'★ Subscriber':'Free')+'</span></td>'
-      +'<td>'+esc(s.joined)+'</td>'
-      +'<td><button class="tbtn" onclick="deleteSub(\''+s.id+'\')">Remove</button></td></tr>';
-  }).join('');
+  $('subs-body').innerHTML=filtered.map(s=>`<tr>
+    <td>${esc(s.firstName||'')} ${esc(s.lastName||s.name||'')}</td>
+    <td>${esc(s.email)}</td>
+    <td>${esc(s.phone||'—')}</td>
+    <td>${esc(s.city||'—')}</td>
+    <td>${esc(s.state||'—')}</td>
+    <td>${esc(s.zip||'—')}</td>
+    <td>${esc(s.age||'—')}</td>
+    <td>${esc(s.source||'—')}</td>
+    <td><span class="sp ${s.plan==='subscriber'?'exc':'dft'}">${s.plan==='subscriber'?'★ Paid':'Free'}</span></td>
+    <td>${esc(s.joined)}</td>
+    <td>
+      <button class="tbtn" onclick="upgradeSub('${s.id}')">${s.plan==='subscriber'?'→ Free':'→ Paid'}</button>
+      <button class="tbtn reject" onclick="deleteSub('${s.id}')">Remove</button>
+    </td></tr>`).join('');
 }
-window.deleteSub=async function(id){
-  if(!confirm('Remove subscriber?'))return;
+window.upgradeSub=async id=>{
+  const s=subscribers.find(x=>x.id===id);if(!s)return;
+  const newPlan=s.plan==='subscriber'?'free':'subscriber';
   loading(true);
-  try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(function(s){return s.id!==id;});refreshSubsTable();updateStats();toast('Removed.');}
-  catch(e){toast('Error removing subscriber.');}
+  try{await updateDoc(doc(db,'subscribers',id),{plan:newPlan});s.plan=newPlan;refreshSubsTable();updateStats();toast('Plan updated.');}
+  catch(e){toast('Error.');}
   loading(false);
 };
-
-function updateStats(){
+window.deleteSub=async id=>{
+  if(!confirm('Remove this subscriber?'))return;
+  loading(true);
+  try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(s=>s.id!==id);refreshSubsTable();updateStats();toast('Removed.');}
+  catch(e){toast('Error.');}
+  loading(false);
+};
+const updateStats=()=>{
   $('st-total').textContent=articles.length;
-  $('st-pub').textContent=articles.filter(function(a){return a.status==='published';}).length;
-  $('st-draft').textContent=articles.filter(function(a){return a.status==='draft';}).length;
-  $('st-subs').textContent=subscribers.filter(function(s){return s.plan==='subscriber';}).length;
-}
+  $('st-pub').textContent=articles.filter(a=>a.status==='published').length;
+  $('st-draft').textContent=articles.filter(a=>a.status==='draft').length;
+  $('st-subs').textContent=subscribers.filter(s=>s.plan==='subscriber').length;
+  $('st-free').textContent=subscribers.filter(s=>s.plan==='free').length;
+};
 
 // ── BREAKING ──
-window.showBreaking=async function(){
-  var txt=$('breakingEditor').value.trim();if(!txt){toast('Enter ticker text first.');return;}
+window.showBreaking=async()=>{
+  const txt=$('breakingEditor').value.trim();if(!txt){toast('Enter ticker text first.');return;}
   loading(true);
   try{
     await setDoc(doc(db,'settings','breaking'),{text:txt,active:true});
     $('breakingTxt').innerHTML=txt.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');
     $('breakingBar').style.display='block';toast('Ticker updated!');
-  }catch(e){toast('Error updating ticker.');}
+  }catch(e){toast('Error.');}
   loading(false);
 };
-window.hideBreaking=async function(){
+window.hideBreaking=async()=>{
   loading(true);
   try{await setDoc(doc(db,'settings','breaking'),{active:false});$('breakingBar').style.display='none';toast('Ticker hidden.');}
   catch(e){toast('Error.');}
   loading(false);
 };
 
-// ── LOGO ──
-window.previewLogo=function(input){
-  if(!input.files||!input.files[0])return;
-  var r=new FileReader();
-  r.onload=function(e){$('logoImg').src=e.target.result;$('logoImg').style.display='block';$('logoText').style.display='none';};
-  r.readAsDataURL(input.files[0]);
+// ── SETTINGS ──
+window.saveSettings=async()=>{
+  cmtRequireApproval=$('cmtGateDefault').value==='1';
+  try{await setDoc(doc(db,'settings','general'),{cmtRequireApproval});}catch(e){}
+  toast('Settings saved!');
 };
 
-// ── INIT: LOAD DATA ──
+// ── INIT ──
 async function init(){
   loading(true);
   try{
-    // Load breaking ticker
-    var bsnap=await getDoc(doc(db,'settings','breaking'));
-    if(bsnap.exists()){var bd=bsnap.data();if(bd.active&&bd.text){$('breakingTxt').innerHTML=bd.text.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingEditor').value=bd.text;}}
-
-    // Live listener for articles
-    onSnapshot(query(collection(db,'articles'),orderBy('ts','desc')),function(snap){
-      articles=[];snap.forEach(function(d){articles.push({...d.data(),id:d.id});});
+    // Settings
+    try{
+      const gs=await getDoc(doc(db,'settings','general'));
+      if(gs.exists()){const gd=gs.data();if(typeof gd.cmtRequireApproval!=='undefined'){cmtRequireApproval=gd.cmtRequireApproval;$('cmtGateDefault').value=cmtRequireApproval?'1':'0';}}
+    }catch(e){}
+    // Breaking ticker
+    try{
+      const bs=await getDoc(doc(db,'settings','breaking'));
+      if(bs.exists()){const bd=bs.data();if(bd.active&&bd.text){$('breakingTxt').innerHTML=bd.text.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingEditor').value=bd.text;}}
+    }catch(e){}
+    // Live articles
+    onSnapshot(query(collection(db,'articles'),orderBy('ts','desc')),snap=>{
+      articles=[];snap.forEach(d=>articles.push({...d.data(),id:d.id}));
       renderReader(currentNavCat);refreshManage();
     });
-
-    // Live listener for subscribers
-    onSnapshot(collection(db,'subscribers'),function(snap){
-      subscribers=[];snap.forEach(function(d){subscribers.push({...d.data(),id:d.id});});
+    // Live subscribers
+    onSnapshot(collection(db,'subscribers'),snap=>{
+      subscribers=[];snap.forEach(d=>subscribers.push({...d.data(),id:d.id}));
       refreshSubsTable();updateStats();
     });
-
-  }catch(e){
-    toast('Could not connect to database. Check Firestore rules.');
-    $('dash-empty').textContent='Could not load articles.';
-    $('manage-empty').textContent='Could not load articles.';
-    $('subs-empty').textContent='Could not load subscribers.';
-  }
+  }catch(e){toast('Database connection error. Check Firestore rules.');}
   loading(false);
   showReader();
 }
-
-// expose toggleTag globally
-window.toggleTag=toggleTag;
 
 init();
 </script>
