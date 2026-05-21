@@ -371,8 +371,13 @@ window.toggleTag=el=>el.classList.toggle('on');
 window.toggleDark=()=>{dark=!dark;document.body.setAttribute('data-theme',dark?'dark':'');$('darkBtn').textContent=dark?'☀':'☾';};
 
 // ── MANCAVE ──
-var mcLoaded=false;
-window.openManCave=()=>{$('mcOverlay').classList.add('open');document.body.style.overflow='hidden';if(!mcLoaded){const blob=new Blob([MANCAVE_SRC],{type:'text/html'});$('mcFrame').src=URL.createObjectURL(blob);mcLoaded=true;}};
+window.openManCave=()=>{
+  $('mcOverlay').classList.add('open');
+  document.body.style.overflow='hidden';
+  if($('mcFrame').src==='about:blank'||!$('mcFrame').src){
+    $('mcFrame').src='mancave.html';
+  }
+};
 window.closeManCave=()=>{$('mcOverlay').classList.remove('open');document.body.style.overflow='';};
 
 // ── VIEWS ──
