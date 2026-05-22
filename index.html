@@ -38,6 +38,16 @@ nav{background:var(--navy-mid);border-bottom:1px solid rgba(201,168,76,.18);}
 .nbtn:hover,.nbtn.active{color:var(--gold);border-bottom-color:var(--gold);}
 .nbtn.mc-tab{color:var(--gold-light);font-weight:700;}
 .nbtn.she-tab{color:#f9a8d4;font-weight:700;}
+.nbtn.live-tab{color:#f87171;font-weight:700;}
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#f87171;margin-right:3px;animation:livepulse 1.4s infinite;}
+@keyframes livepulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+/* STATS BAR */
+.stats-bar{background:var(--navy-mid);border-bottom:1px solid rgba(201,168,76,.15);padding:.38rem 0;}
+.stats-inner{max-width:1100px;margin:0 auto;padding:0 1rem;display:flex;align-items:center;gap:1.4rem;flex-wrap:wrap;}
+.stat-item{display:flex;align-items:center;gap:.35rem;font-size:.7rem;font-family:sans-serif;color:rgba(232,236,242,.65);}
+.stat-val{color:var(--gold);font-weight:700;font-size:.78rem;}
+.stat-sep{color:rgba(201,168,76,.25);font-size:.7rem;}
 
 /* BREAKING */
 .breaking{background:var(--red);padding:.38rem 0;}
@@ -69,6 +79,7 @@ main{max-width:1100px;margin:0 auto;padding:1.2rem 1rem 3rem;}
 .card-excerpt{font-size:.77rem;color:var(--text-muted);line-height:1.6;margin-bottom:.45rem;}
 .card-meta{font-size:.67rem;color:var(--text-muted);display:flex;align-items:center;gap:.38rem;flex-wrap:wrap;}
 .dot{width:3px;height:3px;border-radius:50%;background:var(--text-muted);}
+.view-count{font-size:.64rem;color:var(--text-muted);font-family:sans-serif;}
 
 /* ARTICLE LIST ITEMS */
 .aitem{display:flex;gap:.75rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.72rem;cursor:pointer;transition:box-shadow .2s;}
@@ -87,6 +98,19 @@ main{max-width:1100px;margin:0 auto;padding:1.2rem 1rem 3rem;}
 .catlist li:last-child{border:none;padding:0;}
 .catlist li:hover{color:var(--gold);}
 .ccount{background:var(--tag-bg);color:var(--text-muted);font-size:.62rem;padding:.05rem .32rem;border-radius:10px;}
+
+/* LIVE PAGE */
+#livePage{display:none;max-width:900px;margin:0 auto;padding:1.2rem 1rem 3rem;}
+.live-hero{background:linear-gradient(135deg,#1a0a0a,#3d0f0f);border:1px solid rgba(248,113,113,.2);border-radius:12px;padding:1.5rem;margin-bottom:1.2rem;text-align:center;}
+.live-hero.offline{background:linear-gradient(135deg,var(--navy),var(--navy-mid));border-color:rgba(201,168,76,.2);}
+.live-badge{display:inline-flex;align-items:center;gap:.35rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);color:#f87171;border-radius:20px;padding:.28rem .75rem;font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-family:sans-serif;margin-bottom:.75rem;}
+.live-badge .live-dot{margin-right:0;}
+.offline-badge{display:inline-block;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);color:var(--gold);border-radius:20px;padding:.28rem .75rem;font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-family:sans-serif;margin-bottom:.75rem;}
+.live-show-title{font-size:1.3rem;font-weight:700;color:#fff;margin-bottom:.4rem;}
+.live-next{font-size:.8rem;color:var(--silver);line-height:1.6;max-width:500px;margin:0 auto;}
+.live-player-wrap{position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:10px;margin-top:1rem;}
+.live-player-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none;border-radius:10px;}
+.live-offline-icon{font-size:2.5rem;margin-bottom:.7rem;opacity:.4;}
 
 /* SUBSCRIBE PAGE */
 #subPage{display:none;max-width:660px;margin:0 auto;padding:1.4rem 1rem 3rem;}
@@ -111,7 +135,7 @@ main{max-width:1100px;margin:0 auto;padding:1.2rem 1rem 3rem;}
 .pbtn.free:hover{border-color:var(--gold);color:var(--gold);}
 .pbtn.paid{background:var(--gold);color:var(--navy);}
 
-/* COMMUNITY SECTIONS (SheShed + Classifieds) */
+/* COMMUNITY SECTIONS */
 #sheShedPage,#classifiedsPage{display:none;max-width:900px;margin:0 auto;padding:1.2rem 1rem 3rem;}
 .section-hero{padding:1.5rem 1rem 1rem;text-align:center;margin-bottom:1.2rem;border-radius:12px;}
 .she-hero{background:linear-gradient(135deg,#831843,var(--rose));color:#fff;}
@@ -176,6 +200,7 @@ main{max-width:1100px;margin:0 auto;padding:1.2rem 1rem 3rem;}
 .amodal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:95%;max-width:660px;max-height:90vh;display:flex;flex-direction:column;}
 .amodal-hdr{padding:.85rem 1.1rem;border-bottom:1px solid var(--border);display:flex;gap:.9rem;align-items:flex-start;flex-shrink:0;}
 .amodal-title{font-size:.95rem;font-weight:700;line-height:1.35;flex:1;}
+.amodal-views{font-size:.68rem;color:var(--text-muted);font-family:sans-serif;white-space:nowrap;margin-top:.1rem;}
 .xbtn{background:none;border:none;color:var(--text-muted);font-size:1.1rem;line-height:1;padding:0;flex-shrink:0;}
 .amodal-body{overflow-y:auto;flex:1;}
 .art-hero{width:100%;max-height:300px;object-fit:cover;display:block;}
@@ -228,6 +253,16 @@ main{max-width:1100px;margin:0 auto;padding:1.2rem 1rem 3rem;}
 .btn-s{background:var(--tag-bg);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:.48rem .9rem;font-size:.78rem;}
 .btn-s:hover{border-color:var(--gold);color:var(--gold);}
 .btn-d{background:rgba(185,28,28,.07);color:#c53030;border:1px solid rgba(185,28,28,.22);border-radius:6px;padding:.48rem .9rem;font-size:.78rem;}
+
+/* LIVE TOGGLE */
+.live-toggle-row{display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;}
+.toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:24px;transition:.3s;}
+.toggle-slider:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;}
+.toggle-switch input:checked+.toggle-slider{background:#ef4444;}
+.toggle-switch input:checked+.toggle-slider:before{transform:translateX(20px);}
+.toggle-label{font-size:.78rem;color:var(--text);font-family:sans-serif;}
 
 /* IMAGE UPLOAD */
 .img-upload-area{border:2px dashed var(--border);border-radius:8px;padding:1.1rem;text-align:center;cursor:pointer;transition:border-color .2s;position:relative;overflow:hidden;}
@@ -303,6 +338,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
   .search-wrap input{width:80px;}
   .hdr-right{gap:.3rem;}
   .hdr-inner{padding:.5rem 1rem;}
+  .stats-inner{gap:.75rem;}
 }
 </style>
 </head>
@@ -344,8 +380,20 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="nbtn" onclick="showClassifieds(this)">📋 Classifieds</button>
     <button class="nbtn she-tab" onclick="showSheShed(this)">🌸 SheShed</button>
     <button class="nbtn mc-tab" onclick="openManCave()">⚔ ManCave</button>
+    <button class="nbtn live-tab" id="liveNavBtn" onclick="showLivePage(this)">📡 Live</button>
   </div>
 </nav>
+
+<!-- STATS BAR -->
+<div class="stats-bar" id="statsBar">
+  <div class="stats-inner">
+    <div class="stat-item">👁 <span class="stat-val" id="statVisits">—</span> <span>total visits</span></div>
+    <span class="stat-sep">|</span>
+    <div class="stat-item">★ <span class="stat-val" id="statSubs">—</span> <span>subscribers</span></div>
+    <span class="stat-sep">|</span>
+    <div class="stat-item">👤 <span class="stat-val" id="statReaders">—</span> <span>free readers</span></div>
+  </div>
+</div>
 
 <div class="breaking" id="breakingBar" style="display:none">
   <div class="breaking-inner"><span class="blabel">Breaking</span><span class="btext" id="breakingTxt"></span></div>
@@ -379,6 +427,11 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <div id="emptyState" class="estate"><div class="eico">◯</div><div class="etitle">No articles yet</div><div class="esub">Open the Editor panel to publish your first story.</div><button class="btn-p" onclick="toggleAdmin()">⚙ Open editor</button></div>
   </div>
 </main>
+
+<!-- LIVE PAGE -->
+<div id="livePage">
+  <div id="liveHeroWrap"></div>
+</div>
 
 <!-- SUBSCRIBE PAGE -->
 <div id="subPage">
@@ -463,6 +516,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="ambtn" onclick="showSec('community',this)">🌐 Community posts</button>
     <button class="ambtn" onclick="showSec('subs',this)">★ Subscribers</button>
     <button class="ambtn" onclick="showSec('breaking',this)">⚠ Breaking news</button>
+    <button class="ambtn" onclick="showSec('livestream',this)">📡 Livestream</button>
     <button class="ambtn" onclick="showSec('settings',this)">⚙ Settings</button>
   </div>
   <div class="acontent">
@@ -479,7 +533,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
         <div class="scard"><div class="snum" id="st-pending">0</div><div class="slbl">Pending comments</div></div>
         <div class="scard"><div class="snum" id="st-comm">0</div><div class="slbl">Pending community</div></div>
       </div>
-      <div class="acard"><h2><em>▪</em> Recent articles</h2><p class="tno" id="dash-empty">Loading…</p><table id="dash-table" style="display:none"><thead><tr><th>Title</th><th>Category</th><th>Access</th><th>Status</th><th>Date</th></tr></thead><tbody id="dash-body"></tbody></table></div>
+      <div class="acard"><h2><em>▪</em> Recent articles</h2><p class="tno" id="dash-empty">Loading…</p><table id="dash-table" style="display:none"><thead><tr><th>Title</th><th>Category</th><th>Access</th><th>Status</th><th>Views</th><th>Date</th></tr></thead><tbody id="dash-body"></tbody></table></div>
     </div>
 
     <!-- WRITE -->
@@ -505,7 +559,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
     <!-- MANAGE -->
     <div class="asec" id="sec-manage">
-      <div class="acard"><h2><em>☰</em> Manage articles</h2><p class="tno" id="manage-empty">Loading…</p><div style="overflow-x:auto"><table id="manage-table" style="display:none"><thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Access</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody id="manage-body"></tbody></table></div></div>
+      <div class="acard"><h2><em>☰</em> Manage articles</h2><p class="tno" id="manage-empty">Loading…</p><div style="overflow-x:auto"><table id="manage-table" style="display:none"><thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Access</th><th>Status</th><th>Views</th><th>Date</th><th>Actions</th></tr></thead><tbody id="manage-body"></tbody></table></div></div>
     </div>
 
     <!-- COMMENTS -->
@@ -541,6 +595,23 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
       </div>
     </div>
 
+    <!-- LIVESTREAM -->
+    <div class="asec" id="sec-livestream">
+      <div class="acard"><h2><em>📡</em> Livestream control</h2>
+        <div class="live-toggle-row">
+          <label class="toggle-switch"><input type="checkbox" id="liveToggle" onchange="updateLiveNavDot()"><span class="toggle-slider"></span></label>
+          <span class="toggle-label" id="liveToggleLabel">Stream is <strong>OFF</strong></span>
+        </div>
+        <div class="frow"><label>YouTube URL</label><input class="finput" id="ls-url" type="text" placeholder="https://www.youtube.com/watch?v=…"></div>
+        <div class="frow"><label>Show title</label><input class="finput" id="ls-title" type="text" placeholder="e.g. Hobart City Council — Live Coverage"></div>
+        <div class="frow"><label>Next broadcast (shown when offline)</label><input class="finput" id="ls-next" type="text" placeholder="e.g. Thursday 7:00 PM — Town Hall Meeting"></div>
+        <div style="display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.25rem">
+          <button class="btn-p" onclick="saveLivestream()">Save livestream settings</button>
+        </div>
+        <p style="font-size:.71rem;color:var(--text-muted);margin-top:.75rem">Toggle ON before going live. The 📡 Live tab will show a red pulse indicator to visitors.</p>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="asec" id="sec-settings">
       <div class="acard"><h2><em>⚙</em> Site settings</h2>
@@ -558,7 +629,16 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
 <!-- ARTICLE MODAL -->
 <div class="overlay" id="artOverlay" onclick="if(event.target===this)closeArt()">
-  <div class="amodal"><div class="amodal-hdr"><span class="amodal-title" id="artTitle"></span><button class="xbtn" onclick="closeArt()">✕</button></div><div class="amodal-body" id="artBody"></div></div>
+  <div class="amodal">
+    <div class="amodal-hdr">
+      <div style="flex:1;min-width:0;">
+        <div class="amodal-title" id="artTitle"></div>
+        <div class="amodal-views" id="artViewCount"></div>
+      </div>
+      <button class="xbtn" onclick="closeArt()">✕</button>
+    </div>
+    <div class="amodal-body" id="artBody"></div>
+  </div>
 </div>
 
 <!-- EDITOR LOGIN -->
@@ -612,7 +692,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import{getFirestore,collection,doc,addDoc,setDoc,getDoc,getDocs,deleteDoc,onSnapshot,orderBy,query,updateDoc,where}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import{getFirestore,collection,doc,addDoc,setDoc,getDoc,getDocs,deleteDoc,onSnapshot,orderBy,query,updateDoc,where,increment}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const db=getFirestore(initializeApp({
   apiKey:"AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98",
@@ -640,12 +720,47 @@ const getTags=()=>Array.from(document.querySelectorAll('.tpill.on')).map(p=>p.te
 window.toggleTag=el=>el.classList.toggle('on');
 window.toggleDark=()=>{dark=!dark;document.body.setAttribute('data-theme',dark?'dark':'');$('darkBtn').textContent=dark?'☀':'☾';};
 
+// ── VISITOR COUNTER ──
+async function incrementVisit(){
+  try{
+    await setDoc(doc(db,'settings','siteStats'),{totalVisits:increment(1)},{merge:true});
+  }catch(e){}
+}
+async function loadSiteStats(){
+  try{
+    const snap=await getDoc(doc(db,'settings','siteStats'));
+    if(snap.exists()){
+      const d=snap.data();
+      $('statVisits').textContent=Number(d.totalVisits||0).toLocaleString();
+    } else {
+      $('statVisits').textContent='1';
+    }
+  }catch(e){$('statVisits').textContent='—';}
+}
+function updateStatsBar(){
+  const paid=subscribers.filter(s=>s.plan==='subscriber').length;
+  const free=subscribers.filter(s=>s.plan==='free').length;
+  $('statSubs').textContent=paid.toLocaleString();
+  $('statReaders').textContent=free.toLocaleString();
+}
+
+// ── ARTICLE VIEWS ──
+async function incrementArticleViews(id){
+  try{
+    await updateDoc(doc(db,'articles',id),{views:increment(1)});
+    // update local cache
+    const a=articles.find(x=>x.id===id);
+    if(a)a.views=(a.views||0)+1;
+  }catch(e){}
+}
+
 // PAGE MANAGEMENT
 function hideAllPages(){
-  ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','adminPanel'].forEach(id=>{
+  ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','adminPanel','livePage'].forEach(id=>{
     const el=$(id);if(el){el.style.display='none';el.classList.remove('open');}
   });
   $('siteNav').style.display='block';
+  $('statsBar').style.display='block';
   $('breakingBar').style.display=$('breakingBar').dataset.active==='1'?'block':'none';
 }
 function showReader(){hideAllPages();$('readerView').style.display='block';}
@@ -670,6 +785,77 @@ window.showSheShed=btn=>{
   renderCommunity('sheshed');
 };
 
+// ── LIVE PAGE ──
+window.showLivePage=async btn=>{
+  hideAllPages();$('livePage').style.display='block';
+  document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  await renderLivePage();
+};
+
+async function renderLivePage(){
+  const wrap=$('liveHeroWrap');
+  wrap.innerHTML='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.82rem;padding:1rem">Loading…</p>';
+  try{
+    const snap=await getDoc(doc(db,'settings','livestream'));
+    const d=snap.exists()?snap.data():{active:false,url:'',title:'',nextBroadcast:''};
+    if(d.active&&d.url){
+      const embedUrl=ytEmbedUrl(d.url);
+      wrap.innerHTML=`
+        <div class="live-hero">
+          <div class="live-badge"><span class="live-dot"></span>LIVE NOW</div>
+          <div class="live-show-title">${esc(d.title||'IronSilk Weekly — Live')}</div>
+          ${embedUrl?`<div class="live-player-wrap"><iframe src="${embedUrl}" allowfullscreen allow="autoplay; encrypted-media"></iframe></div>`:'<p style="color:#f87171;font-family:sans-serif;font-size:.8rem;margin-top:.75rem">⚠ Could not load player. Check the YouTube URL in the editor.</p>'}
+        </div>`;
+    } else {
+      wrap.innerHTML=`
+        <div class="live-hero offline">
+          <div class="offline-badge">📡 Not currently live</div>
+          <div class="live-show-title" style="color:var(--silver)">${esc(d.title||'IronSilk Weekly')}</div>
+          ${d.nextBroadcast?`<div class="live-next">🗓 Next broadcast: <strong style="color:var(--gold)">${esc(d.nextBroadcast)}</strong></div>`:'<div class="live-next" style="margin-top:.4rem">Check back soon for our next live broadcast.</div>'}
+        </div>`;
+    }
+  }catch(e){
+    wrap.innerHTML='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.82rem;padding:1rem">Could not load livestream info.</p>';
+  }
+}
+
+function ytEmbedUrl(url){
+  try{
+    let vid='';
+    const u=new URL(url);
+    if(u.hostname.includes('youtu.be'))vid=u.pathname.slice(1);
+    else vid=u.searchParams.get('v')||'';
+    if(!vid)return '';
+    return `https://www.youtube.com/embed/${vid}?autoplay=1`;
+  }catch(e){return '';}
+}
+
+window.updateLiveNavDot=()=>{
+  const on=$('liveToggle').checked;
+  $('liveToggleLabel').innerHTML=`Stream is <strong>${on?'ON — LIVE':'OFF'}</strong>`;
+  updateLiveTabDot(on);
+};
+
+function updateLiveTabDot(on){
+  const btn=$('liveNavBtn');
+  btn.innerHTML=on?'<span class="live-dot"></span>📡 Live':'📡 Live';
+}
+
+window.saveLivestream=async()=>{
+  const active=$('liveToggle').checked;
+  const url=$('ls-url').value.trim();
+  const title=$('ls-title').value.trim();
+  const nextBroadcast=$('ls-next').value.trim();
+  loading(true);
+  try{
+    await setDoc(doc(db,'settings','livestream'),{active,url,title,nextBroadcast});
+    updateLiveTabDot(active);
+    toast('Livestream settings saved!');
+  }catch(e){toast('Error saving.');}
+  loading(false);
+};
+
 // MANCAVE
 window.openManCave=()=>{
   $('mcOverlay').classList.add('open');document.body.style.overflow='hidden';
@@ -681,7 +867,7 @@ window.closeManCave=()=>{$('mcOverlay').classList.remove('open');document.body.s
 window.toggleAdmin=()=>{
   if(!adminOpen&&!editorUnlocked){$('editorOverlay').classList.add('open');return;}
   adminOpen=!adminOpen;
-  if(adminOpen){hideAllPages();$('siteNav').style.display='none';$('breakingBar').style.display='none';$('adminPanel').classList.add('open');$('adminPanel').style.display='flex';}
+  if(adminOpen){hideAllPages();$('siteNav').style.display='none';$('statsBar').style.display='none';$('breakingBar').style.display='none';$('adminPanel').classList.add('open');$('adminPanel').style.display='flex';}
   else{$('adminPanel').classList.remove('open');$('adminPanel').style.display='none';showReader();}
   updateEditorBtn();
 };
@@ -725,7 +911,7 @@ const updateUserUI=()=>{
 };
 
 // ADMIN SECTIONS
-window.showSec=(id,btn)=>{document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));$('sec-'+id).classList.add('open');document.querySelectorAll('.ambtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='comments')loadComments('pending');if(id==='community')loadCommunityAdmin('pending');};
+window.showSec=(id,btn)=>{document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));$('sec-'+id).classList.add('open');document.querySelectorAll('.ambtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='comments')loadComments('pending');if(id==='community')loadCommunityAdmin('pending');if(id==='livestream')loadLivestreamAdmin();};
 
 // NAV
 window.setNav=(btn,cat)=>{
@@ -748,13 +934,14 @@ function renderReader(cat){
     feat.style.display='block';
     const lead=featured[0],lr=canRead(lead);
     const leadImg=lead.image&&lr?`<img src="${lead.image}" style="width:100%;height:100%;object-fit:cover" alt="">`:'◉';
-    let html=`<div class="card" onclick="openArt('${lead.id}')"><div class="card-img tall">${lr?leadImg:'🔒'}</div><div class="card-body"><span class="ctag cat">${esc(lead.category)}</span>${lead.tags.includes('Breaking')?'<span class="ctag brk">Breaking</span>':''}${lead.access==='subscriber'?'<span class="ctag exc">★ Exclusive</span>':''}<div class="card-title">${esc(lead.headline)}</div>${lead.excerpt?`<div class="card-excerpt">${esc(lead.excerpt)}${lr?'':' — <em>subscribers only</em>'}</div>`:''}<div class="card-meta"><span>${esc(lead.author)}</span><span class="dot"></span><span>${esc(lead.date)}</span></div></div></div>`;
+    const leadViews=lead.views?`<span class="view-count">👁 ${Number(lead.views).toLocaleString()}</span>`:'';
+    let html=`<div class="card" onclick="openArt('${lead.id}')"><div class="card-img tall">${lr?leadImg:'🔒'}</div><div class="card-body"><span class="ctag cat">${esc(lead.category)}</span>${lead.tags.includes('Breaking')?'<span class="ctag brk">Breaking</span>':''}${lead.access==='subscriber'?'<span class="ctag exc">★ Exclusive</span>':''}<div class="card-title">${esc(lead.headline)}</div>${lead.excerpt?`<div class="card-excerpt">${esc(lead.excerpt)}${lr?'':' — <em>subscribers only</em>'}</div>`:''}<div class="card-meta"><span>${esc(lead.author)}</span><span class="dot"></span><span>${esc(lead.date)}</span>${leadViews?'<span class="dot"></span>'+leadViews:''}</div></div></div>`;
     const side=featured.slice(1,3);
-    if(side.length){html+='<div style="display:flex;flex-direction:column;gap:.9rem">';side.forEach(a=>{const ar=canRead(a);const si=a.image&&ar?`<img src="${a.image}" style="width:100%;height:100%;object-fit:cover" alt="">`:'◫';html+=`<div class="card" onclick="openArt('${a.id}')"><div class="card-img short">${ar?si:'🔒'}</div><div class="card-body"><span class="ctag cat">${esc(a.category)}</span>${a.access==='subscriber'?'<span class="ctag exc">★</span>':''}<div class="card-title sm">${esc(a.headline)}</div><div class="card-meta" style="margin-top:.3rem"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span></div></div></div>`;});html+='</div>';}
+    if(side.length){html+='<div style="display:flex;flex-direction:column;gap:.9rem">';side.forEach(a=>{const ar=canRead(a);const si=a.image&&ar?`<img src="${a.image}" style="width:100%;height:100%;object-fit:cover" alt="">`:'◫';const sv=a.views?`<span class="view-count">👁 ${Number(a.views).toLocaleString()}</span>`:'';html+=`<div class="card" onclick="openArt('${a.id}')"><div class="card-img short">${ar?si:'🔒'}</div><div class="card-body"><span class="ctag cat">${esc(a.category)}</span>${a.access==='subscriber'?'<span class="ctag exc">★</span>':''}<div class="card-title sm">${esc(a.headline)}</div><div class="card-meta" style="margin-top:.3rem"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>${sv?'<span class="dot"></span>'+sv:''}</div></div></div>`;});html+='</div>';}
     $('featGrid').innerHTML=html;
   } else feat.style.display='none';
   const listItems=rest.length?rest:(featured.length?[]:filtered);
-  if(listItems.length){latest.style.display='block';$('artList').innerHTML=listItems.map(a=>{const ar=canRead(a);const ti=a.image&&ar?`<img src="${a.image}" alt="">`:'◼';return `<div class="aitem" onclick="openArt('${a.id}')"><div class="athumb">${ar?ti:'🔒'}</div><div class="ainfo"><div style="display:flex;gap:.25rem;flex-wrap:wrap;margin-bottom:.25rem"><span class="ctag cat" style="font-size:.57rem">${esc(a.category)}</span>${a.access==='subscriber'?'<span class="ctag exc" style="font-size:.57rem">★ Exclusive</span>':''}${a.tags&&a.tags.includes('Breaking')?'<span class="ctag brk" style="font-size:.57rem">Breaking</span>':''}</div><div class="atitle">${esc(a.headline)}</div><div class="ameta"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>${ar?'':'<span style="color:var(--gold);font-size:.64rem">🔒 Subscribers only</span>'}</div></div></div>`;}).join('');}
+  if(listItems.length){latest.style.display='block';$('artList').innerHTML=listItems.map(a=>{const ar=canRead(a);const ti=a.image&&ar?`<img src="${a.image}" alt="">`:'◼';const av=a.views?`<span class="view-count">👁 ${Number(a.views).toLocaleString()}</span>`:'';return `<div class="aitem" onclick="openArt('${a.id}')"><div class="athumb">${ar?ti:'🔒'}</div><div class="ainfo"><div style="display:flex;gap:.25rem;flex-wrap:wrap;margin-bottom:.25rem"><span class="ctag cat" style="font-size:.57rem">${esc(a.category)}</span>${a.access==='subscriber'?'<span class="ctag exc" style="font-size:.57rem">★ Exclusive</span>':''}${a.tags&&a.tags.includes('Breaking')?'<span class="ctag brk" style="font-size:.57rem">Breaking</span>':''}</div><div class="atitle">${esc(a.headline)}</div><div class="ameta"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>${av?'<span class="dot"></span>'+av:''}${ar?'':'<span style="color:var(--gold);font-size:.64rem">🔒 Subscribers only</span>'}</div></div></div>`;}).join('');}
   else if(!featured.length)latest.style.display='none';
   updateCatCounts();
 }
@@ -763,7 +950,12 @@ const updateCatCounts=()=>{['local','civics','community','business','opinion','e
 // ARTICLE MODAL
 window.openArt=async id=>{
   currentArtId=id;const a=articles.find(x=>x.id===id);if(!a)return;
-  $('artTitle').textContent=a.headline;const readable=canRead(a);
+  $('artTitle').textContent=a.headline;
+  // increment view count
+  await incrementArticleViews(id);
+  const viewNum=(a.views||0);
+  $('artViewCount').textContent=viewNum>0?`👁 ${Number(viewNum).toLocaleString()} views`:'';
+  const readable=canRead(a);
   let html='';if(a.image&&readable)html+=`<img src="${a.image}" class="art-hero" alt="${esc(a.headline)}">`;
   html+=`<div class="art-content"><div class="art-byline">By ${esc(a.author)} &bull; ${esc(a.category)} &bull; ${esc(a.date)}</div>`;
   if(readable){
@@ -855,7 +1047,7 @@ window.doSearch=()=>{
   $('mainContent').style.display='none';$('searchBox').style.display='block';
   const hits=articles.filter(a=>a.status==='published'&&a.headline.toLowerCase().includes(q));
   if(!hits.length){$('searchList').innerHTML='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.81rem">No articles found.</p>';return;}
-  $('searchList').innerHTML=hits.map(a=>`<div class="aitem" onclick="openArt('${a.id}')"><div class="athumb">${a.image?`<img src="${a.image}" alt="">`:'◼'}</div><div class="ainfo"><div class="atitle">${esc(a.headline)}</div><div class="ameta"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>${a.access==='subscriber'?'<span style="color:var(--gold);font-size:.64rem">🔒</span>':''}</div></div></div>`).join('');
+  $('searchList').innerHTML=hits.map(a=>{const av=a.views?`<span class="view-count">👁 ${Number(a.views).toLocaleString()}</span>`:'';return`<div class="aitem" onclick="openArt('${a.id}')"><div class="athumb">${a.image?`<img src="${a.image}" alt="">`:'◼'}</div><div class="ainfo"><div class="atitle">${esc(a.headline)}</div><div class="ameta"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>${av?'<span class="dot"></span>'+av:''}${a.access==='subscriber'?'<span style="color:var(--gold);font-size:.64rem">🔒</span>':''}</div></div></div>`;}).join('');
 };
 
 // IMAGE
@@ -868,12 +1060,12 @@ window.publishArt=async()=>{
   if(!h||!a){toast('Please fill in headline and author.');return;}
   const art={headline:h,author:a,category:$('w-cat').value,access:$('w-access').value,tags:getTags(),excerpt:$('w-excerpt').value.trim(),body:$('w-body').value.trim(),status:'published',date:today(),ts:Date.now(),image:currentImgBase64};
   loading(true);
-  try{const id=$('editIdx').value;if(id){await setDoc(doc(db,'articles',id),art);art.id=id;const idx=articles.findIndex(x=>x.id===id);if(idx>=0)articles[idx]=art;}else{const ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}clearEditor();refreshManage();renderReader(currentNavCat);toast('Article published!');}catch(e){toast('Error saving.');}loading(false);
+  try{const id=$('editIdx').value;if(id){await setDoc(doc(db,'articles',id),{...art,views:(articles.find(x=>x.id===id)||{}).views||0});art.id=id;art.views=(articles.find(x=>x.id===id)||{}).views||0;const idx=articles.findIndex(x=>x.id===id);if(idx>=0)articles[idx]=art;}else{art.views=0;const ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}clearEditor();refreshManage();renderReader(currentNavCat);toast('Article published!');}catch(e){toast('Error saving.');}loading(false);
 };
 window.saveDraft=async()=>{
   const h=$('w-headline').value.trim();if(!h){toast('Please enter a headline.');return;}
   const art={headline:h,author:$('w-author').value.trim()||'—',category:$('w-cat').value,access:$('w-access').value,tags:getTags(),excerpt:$('w-excerpt').value.trim(),body:$('w-body').value.trim(),status:'draft',date:today(),ts:Date.now(),image:currentImgBase64};
-  loading(true);try{const id=$('editIdx').value;if(id){await setDoc(doc(db,'articles',id),art);art.id=id;const idx=articles.findIndex(x=>x.id===id);if(idx>=0)articles[idx]=art;}else{const ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}clearEditor();refreshManage();toast('Draft saved.');}catch(e){toast('Error.');}loading(false);
+  loading(true);try{const id=$('editIdx').value;if(id){await setDoc(doc(db,'articles',id),{...art,views:(articles.find(x=>x.id===id)||{}).views||0});art.id=id;const idx=articles.findIndex(x=>x.id===id);if(idx>=0)articles[idx]=art;}else{art.views=0;const ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}clearEditor();refreshManage();toast('Draft saved.');}catch(e){toast('Error.');}loading(false);
 };
 window.clearEditor=()=>{$('editIdx').value='';['w-headline','w-author','w-excerpt','w-body'].forEach(id=>$(id).value='');$('w-cat').value='Local';$('w-access').value='free';document.querySelectorAll('.tpill').forEach(p=>p.classList.remove('on'));window.clearArticleImg();};
 window.editArt=id=>{const a=articles.find(x=>x.id===id);if(!a)return;$('editIdx').value=id;$('w-headline').value=a.headline;$('w-author').value=a.author;$('w-cat').value=a.category;$('w-access').value=a.access||'free';$('w-excerpt').value=a.excerpt||'';$('w-body').value=a.body||'';document.querySelectorAll('.tpill').forEach(p=>p.classList.toggle('on',a.tags&&a.tags.includes(p.textContent)));if(a.image){currentImgBase64=a.image;const prev=$('w-img-preview');prev.src=a.image;prev.style.display='block';$('imgUploadLabel').style.display='none';}else window.clearArticleImg();window.showSec('write',document.querySelectorAll('.ambtn')[2]);toast('Loaded into editor.');};
@@ -882,22 +1074,38 @@ function refreshManage(){
   const me=$('manage-empty'),mt=$('manage-table'),de=$('dash-empty'),dt=$('dash-table');
   if(!articles.length){me.style.display='';mt.style.display='none';de.style.display='';dt.style.display='none';updateStats();return;}
   me.style.display='none';mt.style.display='';de.style.display='none';dt.style.display='';
-  $('manage-body').innerHTML=articles.map(a=>{const sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';const ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';return `<tr><td>${a.image?'📷 ':''}${esc(a.headline)}</td><td>${esc(a.author)}</td><td>${esc(a.category)}</td><td>${ac}</td><td><span class="sp ${sc}">${a.status}</span></td><td>${esc(a.date)}</td><td><button class="tbtn" onclick="editArt('${a.id}')">Edit</button> <button class="tbtn reject" onclick="deleteArt('${a.id}')">Del</button></td></tr>`;}).join('');
-  $('dash-body').innerHTML=articles.slice(0,5).map(a=>{const sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';const ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';return `<tr><td>${esc(a.headline)}</td><td>${esc(a.category)}</td><td>${ac}</td><td><span class="sp ${sc}">${a.status}</span></td><td>${esc(a.date)}</td></tr>`;}).join('');
+  $('manage-body').innerHTML=articles.map(a=>{const sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';const ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';return `<tr><td>${a.image?'📷 ':''}${esc(a.headline)}</td><td>${esc(a.author)}</td><td>${esc(a.category)}</td><td>${ac}</td><td><span class="sp ${sc}">${a.status}</span></td><td>${Number(a.views||0).toLocaleString()}</td><td>${esc(a.date)}</td><td><button class="tbtn" onclick="editArt('${a.id}')">Edit</button> <button class="tbtn reject" onclick="deleteArt('${a.id}')">Del</button></td></tr>`;}).join('');
+  $('dash-body').innerHTML=articles.slice(0,5).map(a=>{const sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';const ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';return `<tr><td>${esc(a.headline)}</td><td>${esc(a.category)}</td><td>${ac}</td><td><span class="sp ${sc}">${a.status}</span></td><td>${Number(a.views||0).toLocaleString()}</td><td>${esc(a.date)}</td></tr>`;}).join('');
   updateStats();
 }
 
 // SUBSCRIBERS
 window.filterSubs=f=>{subsFilter=f;$('sfAll').className=f==='all'?'btn-p':'btn-s';$('sfPaid').className=f==='subscriber'?'btn-p':'btn-s';$('sfFree').className=f==='free'?'btn-p':'btn-s';refreshSubsTable();};
 function refreshSubsTable(){const se=$('subs-empty'),st=$('subs-table');const filtered=subsFilter==='all'?subscribers:subscribers.filter(s=>s.plan===subsFilter);if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';st.style.display='none';return;}se.style.display='none';st.style.display='';$('subs-body').innerHTML=filtered.map(s=>`<tr><td>${esc(s.firstName||'')} ${esc(s.lastName||s.name||'')}</td><td>${esc(s.email)}</td><td>${esc(s.phone||'—')}</td><td>${esc(s.city||'—')}</td><td>${esc(s.state||'—')}</td><td>${esc(s.zip||'—')}</td><td>${esc(s.age||'—')}</td><td>${esc(s.source||'—')}</td><td><span class="sp ${s.plan==='subscriber'?'exc':'dft'}">${s.plan==='subscriber'?'★ Paid':'Free'}</span></td><td>${esc(s.joined)}</td><td><button class="tbtn" onclick="upgradeSub('${s.id}')">${s.plan==='subscriber'?'→ Free':'→ Paid'}</button> <button class="tbtn reject" onclick="deleteSub('${s.id}')">✕</button></td></tr>`).join('');}
-window.upgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np});s.plan=np;refreshSubsTable();updateStats();toast('Plan updated.');}catch(e){toast('Error.');}loading(false);};
-window.deleteSub=async id=>{if(!confirm('Remove?'))return;loading(true);try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(s=>s.id!==id);refreshSubsTable();updateStats();toast('Removed.');}catch(e){toast('Error.');}loading(false);};
+window.upgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated.');}catch(e){toast('Error.');}loading(false);};
+window.deleteSub=async id=>{if(!confirm('Remove?'))return;loading(true);try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(s=>s.id!==id);refreshSubsTable();updateStats();updateStatsBar();toast('Removed.');}catch(e){toast('Error.');}loading(false);};
 const updateStats=()=>{$('st-total').textContent=articles.length;$('st-pub').textContent=articles.filter(a=>a.status==='published').length;$('st-draft').textContent=articles.filter(a=>a.status==='draft').length;$('st-subs').textContent=subscribers.filter(s=>s.plan==='subscriber').length;$('st-free').textContent=subscribers.filter(s=>s.plan==='free').length;};
 
 // BREAKING
 window.showBreaking=async()=>{const txt=$('breakingEditor').value.trim();if(!txt){toast('Enter ticker text first.');return;}loading(true);try{await setDoc(doc(db,'settings','breaking'),{text:txt,active:true});$('breakingTxt').innerHTML=txt.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';toast('Ticker updated!');}catch(e){toast('Error.');}loading(false);};
 window.hideBreaking=async()=>{loading(true);try{await setDoc(doc(db,'settings','breaking'),{active:false});$('breakingBar').style.display='none';$('breakingBar').dataset.active='0';toast('Ticker hidden.');}catch(e){toast('Error.');}loading(false);};
 window.saveSettings=async()=>{cmtRequireApproval=$('cmtGateDefault').value==='1';try{await setDoc(doc(db,'settings','general'),{cmtRequireApproval});}catch(e){}toast('Settings saved!');};
+
+// LIVESTREAM ADMIN LOAD
+async function loadLivestreamAdmin(){
+  try{
+    const snap=await getDoc(doc(db,'settings','livestream'));
+    if(snap.exists()){
+      const d=snap.data();
+      $('liveToggle').checked=!!d.active;
+      $('ls-url').value=d.url||'';
+      $('ls-title').value=d.title||'';
+      $('ls-next').value=d.nextBroadcast||'';
+      $('liveToggleLabel').innerHTML=`Stream is <strong>${d.active?'ON — LIVE':'OFF'}</strong>`;
+      updateLiveTabDot(!!d.active);
+    }
+  }catch(e){}
+}
 
 // ── WORD SCRAMBLE ──
 const SCR_WORDS=[
@@ -959,10 +1167,17 @@ async function init(){
   const logoImg=$('logoImg');
   if(!logoImg.src||logoImg.src.includes('LOGO_BASE64_HERE')||logoImg.src==='about:blank'){logoImg.style.display='none';$('logoFallback').style.display='flex';}
   try{
+    // increment and load visit count
+    await incrementVisit();
+    await loadSiteStats();
+
     try{const gs=await getDoc(doc(db,'settings','general'));if(gs.exists()){const gd=gs.data();if(typeof gd.cmtRequireApproval!=='undefined'){cmtRequireApproval=gd.cmtRequireApproval;$('cmtGateDefault').value=cmtRequireApproval?'1':'0';}}}catch(e){}
     try{const bs=await getDoc(doc(db,'settings','breaking'));if(bs.exists()){const bd=bs.data();if(bd.active&&bd.text){$('breakingTxt').innerHTML=bd.text.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';$('breakingEditor').value=bd.text;}}}catch(e){}
+    // load livestream state for nav dot
+    try{const ls=await getDoc(doc(db,'settings','livestream'));if(ls.exists()&&ls.data().active)updateLiveTabDot(true);}catch(e){}
+
     onSnapshot(query(collection(db,'articles'),orderBy('ts','desc')),snap=>{articles=[];snap.forEach(d=>articles.push({...d.data(),id:d.id}));renderReader(currentNavCat);refreshManage();});
-    onSnapshot(collection(db,'subscribers'),snap=>{subscribers=[];snap.forEach(d=>subscribers.push({...d.data(),id:d.id}));refreshSubsTable();updateStats();});
+    onSnapshot(collection(db,'subscribers'),snap=>{subscribers=[];snap.forEach(d=>subscribers.push({...d.data(),id:d.id}));refreshSubsTable();updateStats();updateStatsBar();});
     onSnapshot(query(collection(db,'communityPosts'),orderBy('ts','desc')),snap=>{communityPosts=[];snap.forEach(d=>communityPosts.push({...d.data(),id:d.id}));});
   }catch(e){toast('Database connection error.');}
   loading(false);showReader();
