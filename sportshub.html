@@ -379,7 +379,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="nbtn" onclick="showScramble(this)">🎮 Word Scramble</button>
     <button class="nbtn" onclick="showClassifieds(this)">📋 Classifieds</button>
     <button class="nbtn she-tab" onclick="showSheShed(this)">🌸 SheShed</button>
-    <button class="nbtn mc-tab" onclick="openManCave()">🏆 SportsHub</button>
+    <button class="nbtn mc-tab" onclick="openManCave()">⚔ ManCave</button>
     <button class="nbtn live-tab" id="liveNavBtn" onclick="showLivePage(this)">📡 Live</button>
   </div>
 </nav>
@@ -684,7 +684,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
 <!-- MANCAVE OVERLAY -->
 <div id="mcOverlay">
-  <div class="mc-topbar"><button class="mc-back" onclick="closeManCave()">←</button><span class="mc-title">Iron<em>Silk</em> SportsHub</span><span class="mc-badge">⚔ Live</span></div>
+  <div class="mc-topbar"><button class="mc-back" onclick="closeManCave()">←</button><span class="mc-title">Iron<em>Silk</em> ManCave</span><span class="mc-badge">⚔ Live</span></div>
   <iframe id="mcFrame" src="about:blank" loading="lazy"></iframe>
 </div>
 
@@ -859,7 +859,7 @@ window.saveLivestream=async()=>{
 // MANCAVE
 window.openManCave=()=>{
   $('mcOverlay').classList.add('open');document.body.style.overflow='hidden';
-  if(!$('mcFrame').getAttribute('data-loaded')){$('mcFrame').src='sportshub.html';$('mcFrame').setAttribute('data-loaded','1');}
+  if(!$('mcFrame').getAttribute('data-loaded')){$('mcFrame').src='mancave.html';$('mcFrame').setAttribute('data-loaded','1');}
 };
 window.closeManCave=()=>{$('mcOverlay').classList.remove('open');document.body.style.overflow='';};
 
