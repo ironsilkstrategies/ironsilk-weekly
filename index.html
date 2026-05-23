@@ -1187,6 +1187,28 @@ async function init(){
   loading(false);showReader();
 }
 init();
+function openManCave(){
+  document.getElementById('mcOverlay').classList.add('open');
+  document.getElementById('mcFrame').src='/ironsilk-weekly/sportshub.html';
+}
+
+function closeManCave(){
+  document.getElementById('mcOverlay').classList.remove('open');
+  document.getElementById('mcFrame').src='';
+}
 </script>
+<div id="mcOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;">
+  
+  <button onclick="closeManCave()" 
+    style="position:absolute;top:10px;right:15px;z-index:10000;padding:10px 14px;font-size:18px;background:#D4AF37;border:none;border-radius:6px;cursor:pointer;">
+    ✕
+  </button>
+
+  <iframe 
+    id="mcFrame"
+    style="width:100%;height:100%;border:none;background:#000;">
+  </iframe>
+
+</div>
 </body>
 </html>
