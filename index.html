@@ -863,7 +863,7 @@ window.saveLivestream=async()=>{
 // MANCAVE
 window.openManCave=()=>{
   $('mcOverlay').classList.add('open');document.body.style.overflow='hidden';
-  if(!$('mcFrame').getAttribute('data-loaded')){$('mcFrame').src='sportshub.html';$('mcFrame').setAttribute('data-loaded','1');}
+  if(!$('mcFrame').getAttribute('data-loaded')){$('mcFrame').src='./sportshub.html';$('mcFrame').setAttribute('data-loaded','1');}
 };
 window.closeManCave=()=>{$('mcOverlay').classList.remove('open');document.body.style.overflow='';};
 
