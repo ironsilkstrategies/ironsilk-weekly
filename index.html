@@ -389,12 +389,42 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 <div id="livePage"><div id="liveHeroWrap"></div></div>
 
 <div id="subPage">
-  <div class="sub-hero"><div class="slabel" style="margin-bottom:.85rem">Membership</div><h1>Independent journalism worth supporting</h1><p>IronSilk Weekly covers Ironfield's civic life, community stories, and local power — relentlessly.</p></div>
+  <div class="sub-hero">
+    <div class="slabel" style="margin-bottom:.85rem">Membership</div>
+    <h1>Independent journalism worth supporting</h1>
+    <p>IronSilk Weekly covers Ironfield's civic life, community stories, and local power — relentlessly.</p>
+  </div>
   <div class="plan-grid">
-    <div class="pcard"><div class="pname">Free reader</div><div class="pprice">$0<span>/mo</span></div><div class="pdesc">Stay connected with our weekly free stories.</div><ul class="pfeat"><li>Free articles every week</li><li>Breaking news alerts</li><li>Comment on free stories</li><li class="no">Exclusive investigations</li><li class="no">Subscriber-only deep dives</li></ul><button class="pbtn free" onclick="openRegister('free')">Create free account</button></div>
-    <div class="pcard top"><div class="pbadge">Most popular</div><div class="pname">Subscriber</div><div class="pprice">$5<span>/mo</span></div><div class="pdesc">Full access to every story we publish.</div><ul class="pfeat"><li>Everything in Free</li><li>All exclusive stories</li><li>Subscriber-only deep dives</li><li>Early access to stories</li><li>Support local journalism</li></ul><button class="pbtn paid" onclick="openRegister('subscriber')">Subscribe — $5/mo</button></div>
+    <div class="pcard">
+      <div class="pname">Free reader</div>
+      <div class="pprice">$0<span>/mo</span></div>
+      <div class="pdesc">Stay connected with our weekly free stories.</div>
+      <ul class="pfeat">
+        <li>Free articles every week</li>
+        <li>Breaking news alerts</li>
+        <li>Comment on free stories</li>
+        <li class="no">Exclusive investigations</li>
+        <li class="no">Subscriber-only deep dives</li>
+      </ul>
+      <button class="pbtn free" onclick="openRegister('free')">Create free account</button>
+    </div>
+    <div class="pcard top">
+      <div class="pbadge">Most popular</div>
+      <div class="pname">Subscriber</div>
+      <div class="pprice">$6<span>/mo</span></div>
+      <div class="pdesc">Full access to every story we publish.</div>
+      <ul class="pfeat">
+        <li>Everything in Free</li>
+        <li>All exclusive stories</li>
+        <li>Subscriber-only deep dives</li>
+        <li>Early access to stories</li>
+        <li>Support local journalism</li>
+      </ul>
+      <button class="pbtn paid" onclick="openStripeCheckout()">Subscribe — $6/mo</button>
+    </div>
   </div>
   <p style="text-align:center;font-size:.76rem;color:var(--text-muted)">Already have an account? <button onclick="openReaderLogin()" style="background:none;border:none;color:var(--gold);font-size:.76rem;text-decoration:underline;cursor:pointer">Sign in</button></p>
+  <p style="text-align:center;font-size:.68rem;color:var(--text-muted);margin-top:.5rem">🔒 Secure payment via Stripe · Cancel anytime</p>
 </div>
 
 <div id="scramblePage">
@@ -665,6 +695,66 @@ window.updateLiveNavDot=()=>{const on=$('liveToggle').checked;$('liveToggleLabel
 function updateLiveTabDot(on){const btn=$('liveNavBtn');btn.innerHTML=on?'<span class="live-dot"></span>📡 Live':'📡 Live';}
 window.saveLivestream=async()=>{const active=$('liveToggle').checked,url=$('ls-url').value.trim(),title=$('ls-title').value.trim(),nextBroadcast=$('ls-next').value.trim();loading(true);try{await setDoc(doc(db,'settings','livestream'),{active,url,title,nextBroadcast});updateLiveTabDot(active);toast('Livestream settings saved!');}catch(e){toast('Error saving.');}loading(false);};
 
+// ── STRIPE SUBSCRIPTION ──
+const STRIPE_PAYMENT_LINK='https://buy.stripe.com/dRmeV6e277UzfsldcYao802';
+const STRIPE_PK='pk_live_51SjWVW2MEexOZh7euJTiaQ89TEHfbtHHriZDaIQRIylYd9q9d4Bm00qqqjrZm62Vv4eePr47B80f5CPaXlnOFDM500oGKjdtDS';
+
+window.openStripeCheckout=()=>{
+  // append email prefill if user is logged in
+  let url=STRIPE_PAYMENT_LINK;
+  if(currentUser&&currentUser.email){
+    url+='?prefilled_email='+encodeURIComponent(currentUser.email);
+  }
+  window.open(url,'_blank');
+};
+
+async function checkStripeReturn(){
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('subscribed')!=='true')return;
+  // clean URL
+  window.history.replaceState({},'',window.location.pathname);
+  // prompt for email to match account
+  const email=prompt('Payment successful! 🎉\n\nEnter the email address on your account to activate your subscription:');
+  if(!email)return;
+  loading(true);
+  try{
+    const snap=await getDocs(collection(db,'subscribers'));
+    let matched=null;
+    snap.forEach(d=>{
+      const s=d.data();
+      if(s.email?.toLowerCase()===email.trim().toLowerCase())matched={...s,id:d.id};
+    });
+    if(matched){
+      await updateDoc(doc(db,'subscribers',matched.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});
+      if(currentUser&&currentUser.email?.toLowerCase()===email.trim().toLowerCase()){
+        currentUser.plan='subscriber';
+        updateUserUI();
+        renderReader(currentNavCat);
+      }
+      toast('🎉 Subscription activated! Welcome to IronSilk Weekly.');
+    } else {
+      // no account yet — open register with subscriber plan
+      toast('Almost there! Create your account to finish activating.');
+      setTimeout(()=>openRegister('subscriber'),1000);
+    }
+  }catch(e){toast('Error activating. Please contact support.');}
+  loading(false);
+}
+
+// ── MANUAL UPGRADE IN EDITOR (called from admin panel) ──
+window.manualUpgradeSub=async id=>{
+  const s=subscribers.find(x=>x.id===id);if(!s)return;
+  const np=s.plan==='subscriber'?'free':'subscriber';
+  if(!confirm(`Change ${s.firstName} ${s.lastName} to ${np}?`))return;
+  loading(true);
+  try{
+    await updateDoc(doc(db,'subscribers',id),{plan:np,manuallyUpdated:true,updatedAt:new Date().toISOString()});
+    s.plan=np;refreshSubsTable();updateStats();updateStatsBar();
+    toast('Plan updated to '+np+'.');
+  }catch(e){toast('Error.');}
+  loading(false);
+};
+
 // SPORTSHUB — single clean implementation
 window.openSportsHub=()=>{
   const ov=$('shOverlay');
@@ -777,7 +867,23 @@ function refreshManage(){const me=$('manage-empty'),mt=$('manage-table'),de=$('d
 
 // SUBSCRIBERS
 window.filterSubs=f=>{subsFilter=f;$('sfAll').className=f==='all'?'btn-p':'btn-s';$('sfPaid').className=f==='subscriber'?'btn-p':'btn-s';$('sfFree').className=f==='free'?'btn-p':'btn-s';refreshSubsTable();};
-function refreshSubsTable(){const se=$('subs-empty'),st=$('subs-table');const filtered=subsFilter==='all'?subscribers:subscribers.filter(s=>s.plan===subsFilter);if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';st.style.display='none';return;}se.style.display='none';st.style.display='';$('subs-body').innerHTML=filtered.map(s=>`<tr><td>${esc(s.firstName||'')} ${esc(s.lastName||s.name||'')}</td><td>${esc(s.email)}</td><td>${esc(s.phone||'—')}</td><td>${esc(s.city||'—')}</td><td>${esc(s.state||'—')}</td><td>${esc(s.zip||'—')}</td><td>${esc(s.age||'—')}</td><td>${esc(s.source||'—')}</td><td><span class="sp ${s.plan==='subscriber'?'exc':'dft'}">${s.plan==='subscriber'?'★ Paid':'Free'}</span></td><td>${esc(s.joined)}</td><td><button class="tbtn" onclick="upgradeSub('${s.id}')">${s.plan==='subscriber'?'→ Free':'→ Paid'}</button> <button class="tbtn reject" onclick="deleteSub('${s.id}')">✕</button></td></tr>`).join('');}
+function refreshSubsTable(){const se=$('subs-empty'),st=$('subs-table');const filtered=subsFilter==='all'?subscribers:subscribers.filter(s=>s.plan===subsFilter);    if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';st.style.display='none';return;}se.style.display='none';st.style.display='';
+  $('subs-body').innerHTML=filtered.map(s=>`<tr>
+    <td>${esc(s.firstName||'')} ${esc(s.lastName||s.name||'')}</td>
+    <td>${esc(s.email)}</td>
+    <td>${esc(s.phone||'—')}</td>
+    <td>${esc(s.city||'—')}</td>
+    <td>${esc(s.state||'—')}</td>
+    <td>${esc(s.zip||'—')}</td>
+    <td>${esc(s.age||'—')}</td>
+    <td>${esc(s.source||'—')}</td>
+    <td><span class="sp ${s.plan==='subscriber'?'exc':'dft'}">${s.plan==='subscriber'?'★ Paid':'Free'}</span></td>
+    <td>${esc(s.joined)}</td>
+    <td>
+      <button class="tbtn" onclick="manualUpgradeSub('${s.id}')">${s.plan==='subscriber'?'→ Free':'→ Paid'}</button>
+      <button class="tbtn reject" onclick="deleteSub('${s.id}')">✕</button>
+    </td>
+  </tr>`).join('');}
 window.upgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated.');}catch(e){toast('Error.');}loading(false);};
 window.deleteSub=async id=>{if(!confirm('Remove?'))return;loading(true);try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(s=>s.id!==id);refreshSubsTable();updateStats();updateStatsBar();toast('Removed.');}catch(e){toast('Error.');}loading(false);};
 const updateStats=()=>{$('st-total').textContent=articles.length;$('st-pub').textContent=articles.filter(a=>a.status==='published').length;$('st-draft').textContent=articles.filter(a=>a.status==='draft').length;$('st-subs').textContent=subscribers.filter(s=>s.plan==='subscriber').length;$('st-free').textContent=subscribers.filter(s=>s.plan==='free').length;};
@@ -822,6 +928,7 @@ async function init(){
     onSnapshot(query(collection(db,'communityPosts'),orderBy('ts','desc')),snap=>{communityPosts=[];snap.forEach(d=>communityPosts.push({...d.data(),id:d.id}));});
   }catch(e){toast('Database connection error.');}
   loading(false);showReader();
+  checkStripeReturn();
 }
 init();
 </script>
