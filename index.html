@@ -686,8 +686,11 @@ async function incrementArticleViews(id){try{await updateDoc(doc(db,'articles',i
 
 // PAGE MANAGEMENT
 function hideAllPages(){
-  ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','adminPanel','livePage','eventsPage'].forEach(id=>{const el=$(id);if(el){el.style.display='none';el.classList.remove('open');}});
-  $('siteNav').style.display='block';$('statsBar').style.display='block';
+  ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','adminPanel','livePage','eventsPage'].forEach(id=>{
+    try{const el=$(id);if(el){el.style.display='none';el.classList.remove('open');}}catch(e){}
+  });
+  $('siteNav').style.display='block';
+  $('statsBar').style.display='block';
   $('breakingBar').style.display=$('breakingBar').dataset.active==='1'?'block':'none';
 }
 function showReader(){hideAllPages();$('readerView').style.display='block';}
@@ -1211,6 +1214,8 @@ async function init(){
   loading(true);
   const logoImg=$('logoImg');
   if(!logoImg.src||logoImg.src.includes('LOGO_BASE64_HERE')||logoImg.src==='about:blank'){logoImg.style.display='none';$('logoFallback').style.display='flex';}
+  // make sure everything starts hidden
+  document.querySelectorAll('main, #subPage, #scramblePage, #classifiedsPage, #sheShedPage, #livePage, #eventsPage').forEach(el=>{if(el)el.style.display='none';});
   try{
     await incrementVisit();await loadSiteStats();
     try{const gs=await getDoc(doc(db,'settings','general'));if(gs.exists()){const gd=gs.data();if(typeof gd.cmtRequireApproval!=='undefined'){cmtRequireApproval=gd.cmtRequireApproval;$('cmtGateDefault').value=cmtRequireApproval?'1':'0';}}}catch(e){}
@@ -1220,7 +1225,9 @@ async function init(){
     onSnapshot(collection(db,'subscribers'),snap=>{subscribers=[];snap.forEach(d=>subscribers.push({...d.data(),id:d.id}));refreshSubsTable();updateStats();updateStatsBar();});
     onSnapshot(query(collection(db,'communityPosts'),orderBy('ts','desc')),snap=>{communityPosts=[];snap.forEach(d=>communityPosts.push({...d.data(),id:d.id}));});
   }catch(e){toast('Database connection error.');}
-  loading(false);showReader();
+  loading(false);
+  // always land on reader
+  showReader();
   checkStripeReturn();
 }
 init();
