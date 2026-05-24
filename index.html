@@ -1101,24 +1101,26 @@ async function loadEventsAdmin(){
 }
 function renderEventsAdminList(){
   const el=$('eventsAdminList');if(!el)return;
-  if(!allEvents.length){el.innerHTML='<p class="tno">No events yet.</p>';return;}
+  if(!allEvents.length){el.innerHTML='<p class="tno">No events yet. Use the form above to add one.</p>';return;}
   const sorted=[...allEvents].sort((a,b)=>a.date>b.date?1:-1);
   el.innerHTML=sorted.map(ev=>`
-    <div class="event-admin-row">
-      <div class="event-admin-info">
-        <div class="event-admin-title">${esc(ev.title)}${ev.recurring?' 🔄':''}</div>
-        <div class="event-admin-meta">${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.location)}</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;background:var(--tag-bg);border:1px solid var(--border);border-radius:7px;padding:.65rem .8rem;margin-bottom:.5rem;gap:.5rem;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text);">${esc(ev.title)}${ev.recurring?' <span style="font-size:.62rem;color:var(--gold);">🔄</span>':''}</div>
+        <div style="font-size:.68rem;color:var(--text-muted);margin-top:.15rem;">${esc(ev.date)}${ev.time?' · '+esc(ev.time):''}${ev.endTime?' – '+esc(ev.endTime):''}${ev.location?' · '+esc(ev.location):''}</div>
       </div>
-      <div style="display:flex;gap:.3rem;flex-shrink:0">
+      <div style="display:flex;gap:.3rem;flex-shrink:0;">
         <button class="tbtn" onclick="editEvent('${ev.id}')">Edit</button>
         <button class="tbtn reject" onclick="deleteEvent('${ev.id}')">Del</button>
       </div>
     </div>`).join('');
 }
+
 window.saveEvent=async()=>{
   const title=$('ev-title').value.trim();
   const date=$('ev-date').value;
-  if(!title||!date){toast('Title and date are required.');return;}
+  if(!title){toast('Event title is required.');return;}
+  if(!date){toast('Event date is required.');return;}
   const ev={
     title,date,
     time:$('ev-time').value.trim(),
@@ -1133,11 +1135,12 @@ window.saveEvent=async()=>{
   };
   loading(true);
   try{
-    const editId=$('ev-edit-id').value;
+    const editId=$('ev-edit-id').value.trim();
     if(editId){
       await setDoc(doc(db,'events',editId),ev);
       const idx=allEvents.findIndex(x=>x.id===editId);
       if(idx>=0)allEvents[idx]={...ev,id:editId};
+      else allEvents.push({...ev,id:editId});
       toast('Event updated!');
     } else {
       const ref=await addDoc(collection(db,'events'),ev);
@@ -1146,9 +1149,10 @@ window.saveEvent=async()=>{
     }
     clearEventForm();
     renderEventsAdminList();
-  }catch(e){toast('Error saving event.');}
+  }catch(e){toast('Error saving event: '+e.message);}
   loading(false);
 };
+
 window.editEvent=id=>{
   const ev=allEvents.find(x=>x.id===id);if(!ev)return;
   $('ev-title').value=ev.title||'';
@@ -1162,11 +1166,13 @@ window.editEvent=id=>{
   $('ev-interested').value=ev.interested||0;
   $('ev-recurring').checked=!!ev.recurring;
   $('ev-edit-id').value=id;
-  // update button label
-  const btns=$('sec-events').querySelectorAll('.btn-p');
-  if(btns.length)btns[0].textContent='Update Event';
-  toast('Loaded into editor — scroll up to edit.');
+  $('ev-save-btn').textContent='✓ Update Event';
+  // scroll form into view
+  $('ev-title').scrollIntoView({behavior:'smooth',block:'center'});
+  $('ev-title').focus();
+  toast('Event loaded — edit and click Update Event.');
 };
+
 window.deleteEvent=async id=>{
   if(!confirm('Delete this event?'))return;
   loading(true);
@@ -1175,15 +1181,17 @@ window.deleteEvent=async id=>{
     allEvents=allEvents.filter(x=>x.id!==id);
     renderEventsAdminList();
     toast('Event deleted.');
-  }catch(e){toast('Error.');}
+  }catch(e){toast('Error deleting: '+e.message);}
   loading(false);
 };
+
 window.clearEventForm=()=>{
-  ['ev-title','ev-date','ev-time','ev-endtime','ev-location','ev-host','ev-desc','ev-going','ev-interested'].forEach(id=>$(id).value='');
+  ['ev-title','ev-date','ev-time','ev-endtime','ev-location','ev-host','ev-desc'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  const going=$(  'ev-going');if(going)going.value='';
+  const int=$('ev-interested');if(int)int.value='';
   $('ev-recurring').checked=false;
   $('ev-edit-id').value='';
-  const btns=$('sec-events').querySelectorAll('.btn-p');
-  if(btns.length)btns[0].textContent='+ Add Event';
+  $('ev-save-btn').textContent='+ Add Event';
 };
 window.showBreaking=async()=>{const txt=$('breakingEditor').value.trim();if(!txt){toast('Enter ticker text first.');return;}loading(true);try{await setDoc(doc(db,'settings','breaking'),{text:txt,active:true});$('breakingTxt').innerHTML=txt.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';toast('Ticker updated!');}catch(e){toast('Error.');}loading(false);};
 window.hideBreaking=async()=>{loading(true);try{await setDoc(doc(db,'settings','breaking'),{active:false});$('breakingBar').style.display='none';$('breakingBar').dataset.active='0';toast('Ticker hidden.');}catch(e){toast('Error.');}loading(false);};
