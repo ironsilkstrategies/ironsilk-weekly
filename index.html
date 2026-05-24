@@ -246,7 +246,7 @@ main{max-width:1100px;margin:0 auto;padding:1.2rem 1rem 3rem;}
 .ambtn:hover{background:var(--tag-bg);color:var(--text);}
 .ambtn.active{background:rgba(201,168,76,.1);color:var(--gold);font-weight:700;border-left:3px solid var(--gold);border-radius:0 6px 6px 0;}
 .acontent{flex:1;min-width:0;}
-.asec{display:none;}.asec.open{display:block;}
+.asec{display:none;}.asec.open{display:block !important;}
 .acard{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.25rem;margin-bottom:1.1rem;}
 .acard h2{font-size:.92rem;font-weight:700;color:var(--text);margin-bottom:.9rem;display:flex;align-items:center;gap:.42rem;}
 .acard h2 em{color:var(--gold);font-style:normal;}
@@ -985,7 +985,21 @@ window.doLogout=()=>{currentUser=null;updateUserUI();renderReader(currentNavCat)
 const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';const b=$('userBadge');if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'★ '+currentUser.firstName:currentUser.firstName;}else b.style.display='none';};
 
 // ADMIN SECTIONS
-window.showSec=(id,btn)=>{document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));$('sec-'+id).classList.add('open');document.querySelectorAll('.ambtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='comments')loadComments('pending');if(id==='community')loadCommunityAdmin('pending');if(id==='livestream')loadLivestreamAdmin();if(id==='events')loadEventsAdmin();};
+window.showSec=(id,btn)=>{
+  document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));
+  const sec=$('sec-'+id);
+  if(sec){sec.classList.add('open');}
+  document.querySelectorAll('.ambtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(id==='comments')loadComments('pending');
+  if(id==='community')loadCommunityAdmin('pending');
+  if(id==='livestream')loadLivestreamAdmin();
+  if(id==='events'){
+    // force the section visible then load
+    if(sec){sec.style.display='block';}
+    loadEventsAdmin();
+  }
+};
 
 // NAV
 window.setNav=(btn,cat)=>{document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentNavCat=cat;showReader();$('searchInput').value='';$('searchBox').style.display='none';$('mainContent').style.display='';renderReader(cat);};
@@ -1088,14 +1102,19 @@ const updateStats=()=>{$('st-total').textContent=articles.length;$('st-pub').tex
 
 // ── EVENTS ADMIN ──
 async function loadEventsAdmin(){
+  // show loading state immediately
+  const listEl=$('eventsAdminList');
+  if(listEl)listEl.innerHTML='<p class="tno">Loading events…</p>';
   try{
     const snap=await getDocs(collection(db,'events'));
     allEvents=[];
     snap.forEach(d=>allEvents.push({...d.data(),id:d.id}));
     allEvents.sort((a,b)=>a.date>b.date?1:-1);
   }catch(e){
-    console.error('loadEventsAdmin error',e);
     allEvents=[];
+    const listEl=$('eventsAdminList');
+    if(listEl)listEl.innerHTML=`<p class="tno" style="color:#c53030">Error loading events: ${e.message}</p>`;
+    return;
   }
   renderEventsAdminList();
 }
