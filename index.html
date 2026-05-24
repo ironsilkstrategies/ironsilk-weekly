@@ -821,6 +821,10 @@ window.openDayEvents=dateStr=>{
   $('eventModalDate').textContent=label;
   const modal=$('eventModal');
   modal.style.display='flex';
+  // close on X
+  modal.querySelector('button.xbtn').onclick=()=>{modal.style.display='none';};
+  // close on backdrop
+  modal.onclick=e=>{if(e.target===modal)modal.style.display='none';};
 };
 
 function renderEventArticles(){
@@ -1039,7 +1043,10 @@ const updateStats=()=>{$('st-total').textContent=articles.length;$('st-pub').tex
 
 // ── EVENTS ADMIN ──
 async function loadEventsAdmin(){
-  await loadEvents();
+  try{
+    const snap=await getDocs(query(collection(db,'events'),orderBy('date')));
+    allEvents=[];snap.forEach(d=>allEvents.push({...d.data(),id:d.id}));
+  }catch(e){allEvents=[];}
   renderEventsAdminList();
 }
 function renderEventsAdminList(){
@@ -1105,8 +1112,10 @@ window.editEvent=id=>{
   $('ev-interested').value=ev.interested||0;
   $('ev-recurring').checked=!!ev.recurring;
   $('ev-edit-id').value=id;
-  const btn=$('.acard .btn-p');if(btn)btn.textContent='Update Event';
-  toast('Loaded into editor.');
+  // update button label
+  const btns=$('sec-events').querySelectorAll('.btn-p');
+  if(btns.length)btns[0].textContent='Update Event';
+  toast('Loaded into editor — scroll up to edit.');
 };
 window.deleteEvent=async id=>{
   if(!confirm('Delete this event?'))return;
@@ -1123,6 +1132,8 @@ window.clearEventForm=()=>{
   ['ev-title','ev-date','ev-time','ev-endtime','ev-location','ev-host','ev-desc','ev-going','ev-interested'].forEach(id=>$(id).value='');
   $('ev-recurring').checked=false;
   $('ev-edit-id').value='';
+  const btns=$('sec-events').querySelectorAll('.btn-p');
+  if(btns.length)btns[0].textContent='+ Add Event';
 };
 window.showBreaking=async()=>{const txt=$('breakingEditor').value.trim();if(!txt){toast('Enter ticker text first.');return;}loading(true);try{await setDoc(doc(db,'settings','breaking'),{text:txt,active:true});$('breakingTxt').innerHTML=txt.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';toast('Ticker updated!');}catch(e){toast('Error.');}loading(false);};
 window.hideBreaking=async()=>{loading(true);try{await setDoc(doc(db,'settings','breaking'),{active:false});$('breakingBar').style.display='none';$('breakingBar').dataset.active='0';toast('Ticker hidden.');}catch(e){toast('Error.');}loading(false);};
