@@ -335,7 +335,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="nbtn" onclick="setNav(this,'community')">Community</button>
     <button class="nbtn" onclick="setNav(this,'business')">Business</button>
     <button class="nbtn" onclick="setNav(this,'opinion')">Opinion</button>
-    <button class="nbtn" onclick="setNav(this,'events')">Events</button>
+    <button class="nbtn" onclick="showEvents(this)">Events</button>
     <button class="nbtn" onclick="showScramble(this)">🎮 Word Scramble</button>
     <button class="nbtn" onclick="showClassifieds(this)">📋 Classifieds</button>
     <button class="nbtn she-tab" onclick="showSheShed(this)">🌸 SheShed</button>
@@ -386,7 +386,22 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
   </div>
 </main>
 
-<div id="livePage"><div id="liveHeroWrap"></div></div>
+<div id="eventsPage">
+  <div id="calendarWrap" style="margin-bottom:1.8rem;"></div>
+  <div class="slabel">Event Coverage</div>
+  <div class="art-list" id="eventArticlesList"></div>
+</div>
+
+<!-- EVENT DETAIL MODAL -->
+<div id="eventModal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="event-modal-inner">
+    <div class="event-modal-hdr">
+      <span class="event-modal-date" id="eventModalDate"></span>
+      <button class="xbtn" onclick="document.getElementById('eventModal').classList.remove('open')">✕</button>
+    </div>
+    <div class="event-modal-body" id="eventModalBody"></div>
+  </div>
+</div>
 
 <div id="subPage">
   <div class="sub-hero">
@@ -484,6 +499,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="ambtn" onclick="showSec('subs',this)">★ Subscribers</button>
     <button class="ambtn" onclick="showSec('breaking',this)">⚠ Breaking news</button>
     <button class="ambtn" onclick="showSec('livestream',this)">📡 Livestream</button>
+    <button class="ambtn" onclick="showSec('events',this)">📅 Events</button>
     <button class="ambtn" onclick="showSec('settings',this)">⚙ Settings</button>
   </div>
   <div class="acontent">
@@ -670,7 +686,7 @@ async function incrementArticleViews(id){try{await updateDoc(doc(db,'articles',i
 
 // PAGE MANAGEMENT
 function hideAllPages(){
-  ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','adminPanel','livePage'].forEach(id=>{const el=$(id);if(el){el.style.display='none';el.classList.remove('open');}});
+  ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','adminPanel','livePage','eventsPage'].forEach(id=>{const el=$(id);if(el){el.style.display='none';el.classList.remove('open');}});
   $('siteNav').style.display='block';$('statsBar').style.display='block';
   $('breakingBar').style.display=$('breakingBar').dataset.active==='1'?'block':'none';
 }
@@ -680,6 +696,115 @@ window.goSub=()=>{hideAllPages();$('subPage').style.display='block';};
 window.showScramble=btn=>{hideAllPages();$('scramblePage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');if(!scrStarted)startScramble();};
 window.showClassifieds=btn=>{hideAllPages();$('classifiedsPage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderCommunity('classified');};
 window.showSheShed=btn=>{hideAllPages();$('sheShedPage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderCommunity('sheshed');};
+
+// ── EVENTS PAGE ──
+window.showEvents=async btn=>{
+  hideAllPages();$('eventsPage').style.display='block';
+  document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  await seedEventsIfEmpty();
+  renderCalendar();
+  renderEventArticles();
+};
+
+let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
+let allEvents=[];
+
+const SEED_EVENTS=[
+  {title:'Naturalist Program 50th Anniversary Party',date:'2026-06-06',time:'9:00 AM',endTime:'11:00 AM',location:'Shelter 1, Quartz Mountain State Park (near Granite)',host:'Quartz Mountain State Park + Wichita Mountains Life',description:'Free activities, food/refreshments, raffle, nature journaling, photos with Park Pal.',going:4,interested:63,recurring:false},
+  {title:'Gotebo Trade Day (7th Annual)',date:'2026-06-06',time:'10:00 AM',endTime:'5:00 PM',location:'Penn Park, 220 Commercial Ave, Gotebo, OK',host:'Gotebo Trade Days + Wichita Mountains Life',description:'100+ vendors (garage sale, flea market, antiques, crafts), food trucks, snow cones, bounce houses, face painting, horseshoe/cornhole tournaments, live DJ.',going:155,interested:1200,recurring:true},
+  {title:'Mountain View Farmers Market',date:'2026-06-13',time:'8:00 AM',endTime:'12:00 PM',location:'Mountain View, OK (next to Dollar General)',host:'Mountain View Farmers Market',description:'Local produce, baked goods, crafts, handmade items, food vendors. Still accepting vendors.',going:6,interested:0,recurring:true},
+  {title:'Cordell Town-Wide Garage Sale',date:'2026-06-13',time:'9:00 AM',endTime:'5:00 PM',location:'Town-wide, New Cordell, OK',host:'Cordell Chamber of Commerce',description:'Community-wide yard/garage sales with maps released closer to date.',going:35,interested:866,recurring:false},
+  {title:'Elk City 2026 Route 66 Festival (Centennial)',date:'2026-06-12',time:'5:00 PM',endTime:'',location:'Ackley Park, Elk City, OK',host:'Elk City Chamber of Commerce + Visit Elk City',description:'Classic/custom car show, cruise night, live music, food vendors, family fun. Big 100th anniversary celebration of Route 66. Runs June 12–13.',going:52,interested:670,recurring:false},
+  {title:'Hobart First Saturday Market',date:'2026-06-06',time:'9:00 AM',endTime:'',location:'207 W 4th St, Hobart, OK',host:'Hobart First Saturday Market',description:'Monthly local market in downtown Hobart.',going:2,interested:8,recurring:true},
+  {title:'Hilltop Drone Show',date:'2026-06-19',time:'1:00 PM',endTime:'',location:'Hobart Municipal Golf Course, Hobart, OK',host:'Hobart Chamber of Commerce',description:'Family activities, food trucks, raffle, live music, major drone light show at dark.',going:28,interested:283,recurring:false},
+  {title:'Whey Jennings Live (with Casey Chesnutt)',date:'2026-06-20',time:'7:00 PM',endTime:'',location:'Sugar Creek Casino, Hinton, OK',host:'Sugar Creek Casino',description:'Casey Chesnutt 7 PM · Whey Jennings 8 PM. Ticketed concert.',going:19,interested:594,recurring:false},
+  {title:'Fall Market at Elysium Acres',date:'2026-09-19',time:'10:00 AM',endTime:'4:00 PM',location:'20602 E County Road 1576, Altus, OK',host:'Elysium Acres Altus',description:'30+ vendors, shaded path, fall minis photography, food stall.',going:24,interested:316,recurring:false},
+];
+
+async function seedEventsIfEmpty(){
+  try{
+    const snap=await getDocs(collection(db,'events'));
+    if(!snap.empty){allEvents=[];snap.forEach(d=>allEvents.push({...d.data(),id:d.id}));return;}
+    for(const ev of SEED_EVENTS){
+      const ref=await addDoc(collection(db,'events'),{...ev,ts:Date.now()});
+      allEvents.push({...ev,id:ref.id});
+    }
+  }catch(e){allEvents=[];}
+}
+
+async function loadEvents(){
+  try{const snap=await getDocs(query(collection(db,'events'),orderBy('date')));allEvents=[];snap.forEach(d=>allEvents.push({...d.data(),id:d.id}));}catch(e){allEvents=[];}
+}
+
+function renderCalendar(){
+  const el=$('calendarWrap');if(!el)return;
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const firstDay=new Date(calYear,calMonth,1).getDay();
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const today=new Date();
+  // build event map: date string -> events
+  const evMap={};
+  allEvents.forEach(ev=>{
+    const d=ev.date;if(!d)return;
+    const evDate=new Date(d+'T12:00:00');
+    if(evDate.getFullYear()===calYear&&evDate.getMonth()===calMonth){
+      if(!evMap[d])evMap[d]=[];
+      evMap[d].push(ev);
+    }
+  });
+  let html=`
+  <div class="cal-nav">
+    <button class="cal-nav-btn" onclick="calPrev()">‹</button>
+    <span class="cal-month-label">${months[calMonth]} ${calYear}</span>
+    <button class="cal-nav-btn" onclick="calNext()">›</button>
+  </div>
+  <div class="cal-grid">
+    ${days.map(d=>`<div class="cal-day-header">${d}</div>`).join('')}
+    ${Array(firstDay).fill('<div class="cal-cell empty"></div>').join('')}
+    ${Array.from({length:daysInMonth},(_,i)=>{
+      const dayNum=i+1;
+      const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
+      const isToday=today.getFullYear()===calYear&&today.getMonth()===calMonth&&today.getDate()===dayNum;
+      const hasEvents=evMap[dateStr];
+      return`<div class="cal-cell${isToday?' today':''}${hasEvents?' has-events':''}" onclick="openDayEvents('${dateStr}')">
+        <span class="cal-day-num">${dayNum}</span>
+        ${hasEvents?`<div class="cal-dots">${hasEvents.slice(0,3).map(()=>'<span class="cal-dot"></span>').join('')}</div>`:''}
+      </div>`;
+    }).join('')}
+  </div>`;
+  el.innerHTML=html;
+}
+
+function calPrev(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
+function calNext(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderCalendar();}
+window.calPrev=calPrev;window.calNext=calNext;
+
+window.openDayEvents=dateStr=>{
+  const evs=allEvents.filter(ev=>ev.date===dateStr);
+  if(!evs.length)return;
+  const d=new Date(dateStr+'T12:00:00');
+  const label=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  $('eventModalBody').innerHTML=evs.map(ev=>`
+    <div class="event-detail-card">
+      <div class="event-detail-title">${esc(ev.title)}${ev.recurring?'<span class="ev-badge recurring">🔄 Recurring</span>':''}</div>
+      <div class="event-detail-row">🕐 ${esc(ev.time)}${ev.endTime?' – '+esc(ev.endTime):''}</div>
+      <div class="event-detail-row">📍 ${esc(ev.location)}</div>
+      ${ev.host?`<div class="event-detail-row">👤 ${esc(ev.host)}</div>`:''}
+      ${ev.description?`<div class="event-detail-desc">${esc(ev.description)}</div>`:''}
+      ${(ev.going||ev.interested)?`<div class="event-detail-interest">${ev.going?`<span>✅ ${ev.going} going</span>`:''} ${ev.interested?`<span>⭐ ${Number(ev.interested).toLocaleString()} interested</span>`:''}</div>`:''}
+    </div>`).join('');
+  $('eventModalDate').textContent=label;
+  $('eventModal').classList.add('open');
+};
+
+function renderEventArticles(){
+  const pub=articles.filter(a=>a.status==='published'&&a.category.toLowerCase()==='events');
+  const el=$('eventArticlesList');if(!el)return;
+  if(!pub.length){el.innerHTML='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.82rem">No event articles yet.</p>';return;}
+  el.innerHTML=pub.map(a=>{const ar=canRead(a);const ti=a.image&&ar?`<img src="${a.image}" alt="">`:'◼';const av=a.views?`<span class="view-count">👁 ${Number(a.views).toLocaleString()}</span>`:'';return`<div class="aitem" onclick="openArt('${a.id}')"><div class="athumb">${ar?ti:'🔒'}</div><div class="ainfo"><div class="atitle">${esc(a.headline)}</div><div class="ameta"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>${av?'<span class="dot"></span>'+av:''}${ar?'':'<span style="color:var(--gold);font-size:.64rem">🔒 Subscribers only</span>'}</div></div></div>`;}).join('');
+}
 
 // LIVE PAGE
 window.showLivePage=async btn=>{hideAllPages();$('livePage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');await renderLivePage();};
@@ -787,7 +912,7 @@ window.doLogout=()=>{currentUser=null;updateUserUI();renderReader(currentNavCat)
 const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';const b=$('userBadge');if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'★ '+currentUser.firstName:currentUser.firstName;}else b.style.display='none';};
 
 // ADMIN SECTIONS
-window.showSec=(id,btn)=>{document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));$('sec-'+id).classList.add('open');document.querySelectorAll('.ambtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='comments')loadComments('pending');if(id==='community')loadCommunityAdmin('pending');if(id==='livestream')loadLivestreamAdmin();};
+window.showSec=(id,btn)=>{document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));$('sec-'+id).classList.add('open');document.querySelectorAll('.ambtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='comments')loadComments('pending');if(id==='community')loadCommunityAdmin('pending');if(id==='livestream')loadLivestreamAdmin();if(id==='events')loadEventsAdmin();};
 
 // NAV
 window.setNav=(btn,cat)=>{document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentNavCat=cat;showReader();$('searchInput').value='';$('searchBox').style.display='none';$('mainContent').style.display='';renderReader(cat);};
@@ -888,7 +1013,93 @@ window.upgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return
 window.deleteSub=async id=>{if(!confirm('Remove?'))return;loading(true);try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(s=>s.id!==id);refreshSubsTable();updateStats();updateStatsBar();toast('Removed.');}catch(e){toast('Error.');}loading(false);};
 const updateStats=()=>{$('st-total').textContent=articles.length;$('st-pub').textContent=articles.filter(a=>a.status==='published').length;$('st-draft').textContent=articles.filter(a=>a.status==='draft').length;$('st-subs').textContent=subscribers.filter(s=>s.plan==='subscriber').length;$('st-free').textContent=subscribers.filter(s=>s.plan==='free').length;};
 
-// BREAKING
+// ── EVENTS ADMIN ──
+async function loadEventsAdmin(){
+  await loadEvents();
+  renderEventsAdminList();
+}
+function renderEventsAdminList(){
+  const el=$('eventsAdminList');if(!el)return;
+  if(!allEvents.length){el.innerHTML='<p class="tno">No events yet.</p>';return;}
+  const sorted=[...allEvents].sort((a,b)=>a.date>b.date?1:-1);
+  el.innerHTML=sorted.map(ev=>`
+    <div class="event-admin-row">
+      <div class="event-admin-info">
+        <div class="event-admin-title">${esc(ev.title)}${ev.recurring?' 🔄':''}</div>
+        <div class="event-admin-meta">${esc(ev.date)} · ${esc(ev.time)} · ${esc(ev.location)}</div>
+      </div>
+      <div style="display:flex;gap:.3rem;flex-shrink:0">
+        <button class="tbtn" onclick="editEvent('${ev.id}')">Edit</button>
+        <button class="tbtn reject" onclick="deleteEvent('${ev.id}')">Del</button>
+      </div>
+    </div>`).join('');
+}
+window.saveEvent=async()=>{
+  const title=$('ev-title').value.trim();
+  const date=$('ev-date').value;
+  if(!title||!date){toast('Title and date are required.');return;}
+  const ev={
+    title,date,
+    time:$('ev-time').value.trim(),
+    endTime:$('ev-endtime').value.trim(),
+    location:$('ev-location').value.trim(),
+    host:$('ev-host').value.trim(),
+    description:$('ev-desc').value.trim(),
+    going:parseInt($('ev-going').value)||0,
+    interested:parseInt($('ev-interested').value)||0,
+    recurring:$('ev-recurring').checked,
+    ts:Date.now()
+  };
+  loading(true);
+  try{
+    const editId=$('ev-edit-id').value;
+    if(editId){
+      await setDoc(doc(db,'events',editId),ev);
+      const idx=allEvents.findIndex(x=>x.id===editId);
+      if(idx>=0)allEvents[idx]={...ev,id:editId};
+      toast('Event updated!');
+    } else {
+      const ref=await addDoc(collection(db,'events'),ev);
+      allEvents.push({...ev,id:ref.id});
+      toast('Event added!');
+    }
+    clearEventForm();
+    renderEventsAdminList();
+  }catch(e){toast('Error saving event.');}
+  loading(false);
+};
+window.editEvent=id=>{
+  const ev=allEvents.find(x=>x.id===id);if(!ev)return;
+  $('ev-title').value=ev.title||'';
+  $('ev-date').value=ev.date||'';
+  $('ev-time').value=ev.time||'';
+  $('ev-endtime').value=ev.endTime||'';
+  $('ev-location').value=ev.location||'';
+  $('ev-host').value=ev.host||'';
+  $('ev-desc').value=ev.description||'';
+  $('ev-going').value=ev.going||0;
+  $('ev-interested').value=ev.interested||0;
+  $('ev-recurring').checked=!!ev.recurring;
+  $('ev-edit-id').value=id;
+  const btn=$('.acard .btn-p');if(btn)btn.textContent='Update Event';
+  toast('Loaded into editor.');
+};
+window.deleteEvent=async id=>{
+  if(!confirm('Delete this event?'))return;
+  loading(true);
+  try{
+    await deleteDoc(doc(db,'events',id));
+    allEvents=allEvents.filter(x=>x.id!==id);
+    renderEventsAdminList();
+    toast('Event deleted.');
+  }catch(e){toast('Error.');}
+  loading(false);
+};
+window.clearEventForm=()=>{
+  ['ev-title','ev-date','ev-time','ev-endtime','ev-location','ev-host','ev-desc','ev-going','ev-interested'].forEach(id=>$(id).value='');
+  $('ev-recurring').checked=false;
+  $('ev-edit-id').value='';
+};
 window.showBreaking=async()=>{const txt=$('breakingEditor').value.trim();if(!txt){toast('Enter ticker text first.');return;}loading(true);try{await setDoc(doc(db,'settings','breaking'),{text:txt,active:true});$('breakingTxt').innerHTML=txt.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';toast('Ticker updated!');}catch(e){toast('Error.');}loading(false);};
 window.hideBreaking=async()=>{loading(true);try{await setDoc(doc(db,'settings','breaking'),{active:false});$('breakingBar').style.display='none';$('breakingBar').dataset.active='0';toast('Ticker hidden.');}catch(e){toast('Error.');}loading(false);};
 window.saveSettings=async()=>{cmtRequireApproval=$('cmtGateDefault').value==='1';try{await setDoc(doc(db,'settings','general'),{cmtRequireApproval});}catch(e){}toast('Settings saved!');};
