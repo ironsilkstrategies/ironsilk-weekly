@@ -386,20 +386,20 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
   </div>
 </main>
 
-<div id="eventsPage">
-  <div id="calendarWrap" style="margin-bottom:1.8rem;"></div>
+<div id="eventsPage" style="display:none;max-width:900px;margin:0 auto;padding:1.2rem 1rem 3rem;">
+  <div id="calendarWrap" style="margin-bottom:1.8rem;font-family:sans-serif;"></div>
   <div class="slabel">Event Coverage</div>
   <div class="art-list" id="eventArticlesList"></div>
 </div>
 
 <!-- EVENT DETAIL MODAL -->
-<div id="eventModal" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="event-modal-inner">
-    <div class="event-modal-hdr">
-      <span class="event-modal-date" id="eventModalDate"></span>
+<div id="eventModal" onclick="if(event.target===this)this.classList.remove('open')" style="display:none;position:fixed;inset:0;background:rgba(8,15,30,.7);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:94%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;">
+    <div style="padding:.8rem 1rem;border-bottom:2px solid var(--gold);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <span id="eventModalDate" style="font-size:.82rem;font-weight:700;color:var(--gold);font-family:sans-serif;"></span>
       <button class="xbtn" onclick="document.getElementById('eventModal').classList.remove('open')">✕</button>
     </div>
-    <div class="event-modal-body" id="eventModalBody"></div>
+    <div id="eventModalBody" style="overflow-y:auto;padding:.8rem 1rem;"></div>
   </div>
 </div>
 
@@ -744,37 +744,60 @@ function renderCalendar(){
   const firstDay=new Date(calYear,calMonth,1).getDay();
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
   const today=new Date();
-  // build event map: date string -> events
   const evMap={};
   allEvents.forEach(ev=>{
     const d=ev.date;if(!d)return;
     const evDate=new Date(d+'T12:00:00');
     if(evDate.getFullYear()===calYear&&evDate.getMonth()===calMonth){
-      if(!evMap[d])evMap[d]=[];
-      evMap[d].push(ev);
+      if(!evMap[d])evMap[d]=[];evMap[d].push(ev);
     }
   });
-  let html=`
-  <div class="cal-nav">
-    <button class="cal-nav-btn" onclick="calPrev()">‹</button>
-    <span class="cal-month-label">${months[calMonth]} ${calYear}</span>
-    <button class="cal-nav-btn" onclick="calNext()">›</button>
-  </div>
-  <div class="cal-grid">
-    ${days.map(d=>`<div class="cal-day-header">${d}</div>`).join('')}
-    ${Array(firstDay).fill('<div class="cal-cell empty"></div>').join('')}
-    ${Array.from({length:daysInMonth},(_,i)=>{
-      const dayNum=i+1;
-      const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
-      const isToday=today.getFullYear()===calYear&&today.getMonth()===calMonth&&today.getDate()===dayNum;
-      const hasEvents=evMap[dateStr];
-      return`<div class="cal-cell${isToday?' today':''}${hasEvents?' has-events':''}" onclick="openDayEvents('${dateStr}')">
-        <span class="cal-day-num">${dayNum}</span>
-        ${hasEvents?`<div class="cal-dots">${hasEvents.slice(0,3).map(()=>'<span class="cal-dot"></span>').join('')}</div>`:''}
-      </div>`;
-    }).join('')}
+
+  const css=`
+    <style>
+    .cal-wrap{background:var(--surface,#fff);border:1px solid var(--border,#d0d8e8);border-radius:10px;overflow:hidden;font-family:sans-serif;}
+    .cal-nav-row{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;background:var(--navy,#0f1f3d);border-bottom:2px solid var(--gold,#c9a84c);}
+    .cal-nav-arrow{background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);color:var(--gold,#c9a84c);border-radius:6px;padding:.25rem .7rem;font-size:1rem;cursor:pointer;line-height:1;}
+    .cal-nav-arrow:hover{background:var(--gold,#c9a84c);color:var(--navy,#0f1f3d);}
+    .cal-month-title{font-size:1rem;font-weight:700;color:#fff;}
+    .cal-days-header{display:grid;grid-template-columns:repeat(7,1fr);background:var(--navy-mid,#1a3260);}
+    .cal-dh{text-align:center;padding:.4rem 0;font-size:.65rem;font-weight:700;color:var(--gold,#c9a84c);text-transform:uppercase;letter-spacing:.06em;}
+    .cal-body{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border,#d0d8e8);}
+    .cal-cell{background:var(--surface,#fff);min-height:60px;padding:.35rem .4rem;position:relative;}
+    .cal-cell.empty{background:var(--bg,#f4f6fa);opacity:.5;}
+    .cal-cell.has-ev{cursor:pointer;}
+    .cal-cell.has-ev:hover{background:rgba(201,168,76,.06);}
+    .cal-cell.is-today{outline:2px solid var(--gold,#c9a84c);outline-offset:-2px;background:rgba(201,168,76,.07);}
+    .cal-dn{font-size:.75rem;font-weight:600;color:var(--text-muted,#5a6a85);}
+    .cal-cell.is-today .cal-dn{color:var(--gold,#c9a84c);font-weight:700;}
+    .cal-cell.has-ev .cal-dn{color:var(--text,#0f1f3d);}
+    .cal-ev-dots{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;}
+    .cal-ev-dot{width:7px;height:7px;border-radius:50%;background:var(--gold,#c9a84c);}
+    .cal-ev-label{font-size:.6rem;color:var(--gold,#c9a84c);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-top:2px;line-height:1.3;}
+    </style>`;
+
+  const emptyCells=Array(firstDay).fill('<div class="cal-cell empty"></div>').join('');
+  const dayCells=Array.from({length:daysInMonth},(_,i)=>{
+    const dayNum=i+1;
+    const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
+    const isToday=today.getFullYear()===calYear&&today.getMonth()===calMonth&&today.getDate()===dayNum;
+    const evs=evMap[dateStr];
+    return`<div class="cal-cell${isToday?' is-today':''}${evs?' has-ev':''}" ${evs?`onclick="openDayEvents('${dateStr}')"`:''}>
+      <span class="cal-dn">${dayNum}</span>
+      ${evs?`<div class="cal-ev-dots">${evs.slice(0,3).map(()=>'<span class="cal-ev-dot"></span>').join('')}</div><div class="cal-ev-label">${esc(evs[0].title)}${evs.length>1?' +more':''}</div>`:''}
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`${css}
+  <div class="cal-wrap">
+    <div class="cal-nav-row">
+      <button class="cal-nav-arrow" onclick="calPrev()">‹</button>
+      <span class="cal-month-title">${months[calMonth]} ${calYear}</span>
+      <button class="cal-nav-arrow" onclick="calNext()">›</button>
+    </div>
+    <div class="cal-days-header">${days.map(d=>`<div class="cal-dh">${d}</div>`).join('')}</div>
+    <div class="cal-body">${emptyCells}${dayCells}</div>
   </div>`;
-  el.innerHTML=html;
 }
 
 function calPrev(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
@@ -787,16 +810,17 @@ window.openDayEvents=dateStr=>{
   const d=new Date(dateStr+'T12:00:00');
   const label=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   $('eventModalBody').innerHTML=evs.map(ev=>`
-    <div class="event-detail-card">
-      <div class="event-detail-title">${esc(ev.title)}${ev.recurring?'<span class="ev-badge recurring">🔄 Recurring</span>':''}</div>
-      <div class="event-detail-row">🕐 ${esc(ev.time)}${ev.endTime?' – '+esc(ev.endTime):''}</div>
-      <div class="event-detail-row">📍 ${esc(ev.location)}</div>
-      ${ev.host?`<div class="event-detail-row">👤 ${esc(ev.host)}</div>`:''}
-      ${ev.description?`<div class="event-detail-desc">${esc(ev.description)}</div>`:''}
-      ${(ev.going||ev.interested)?`<div class="event-detail-interest">${ev.going?`<span>✅ ${ev.going} going</span>`:''} ${ev.interested?`<span>⭐ ${Number(ev.interested).toLocaleString()} interested</span>`:''}</div>`:''}
+    <div style="background:var(--tag-bg);border:1px solid var(--border);border-radius:8px;padding:.9rem;margin-bottom:.75rem;font-family:sans-serif;">
+      <div style="font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.55rem;">${esc(ev.title)}${ev.recurring?' <span style="font-size:.6rem;font-weight:700;padding:.1rem .38rem;border-radius:20px;background:rgba(201,168,76,.12);color:var(--gold);border:1px solid rgba(201,168,76,.25);">🔄 Recurring</span>':''}</div>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.3rem;">🕐 ${esc(ev.time)}${ev.endTime?' – '+esc(ev.endTime):''}</div>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.3rem;">📍 ${esc(ev.location)}</div>
+      ${ev.host?`<div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.3rem;">👤 ${esc(ev.host)}</div>`:''}
+      ${ev.description?`<div style="font-size:.78rem;color:var(--text);line-height:1.6;margin:.5rem 0;padding:.5rem;background:var(--surface);border-radius:6px;">${esc(ev.description)}</div>`:''}
+      ${(ev.going||ev.interested)?`<div style="display:flex;gap:.75rem;margin-top:.5rem;font-size:.72rem;color:var(--text-muted);">${ev.going?`<span>✅ ${ev.going} going</span>`:''} ${ev.interested?`<span>⭐ ${Number(ev.interested).toLocaleString()} interested</span>`:''}</div>`:''}
     </div>`).join('');
   $('eventModalDate').textContent=label;
-  $('eventModal').classList.add('open');
+  const modal=$('eventModal');
+  modal.style.display='flex';
 };
 
 function renderEventArticles(){
