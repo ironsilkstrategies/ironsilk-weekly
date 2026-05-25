@@ -246,7 +246,7 @@ main{max-width:1100px;margin:0 auto;padding:1.2rem 1rem 3rem;}
 .ambtn:hover{background:var(--tag-bg);color:var(--text);}
 .ambtn.active{background:rgba(201,168,76,.1);color:var(--gold);font-weight:700;border-left:3px solid var(--gold);border-radius:0 6px 6px 0;}
 .acontent{flex:1;min-width:0;}
-.asec{display:none;}.asec.open{display:block !important;}
+.asec{display:none;}.asec.open{display:block;}
 .acard{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.25rem;margin-bottom:1.1rem;}
 .acard h2{font-size:.92rem;font-weight:700;color:var(--text);margin-bottom:.9rem;display:flex;align-items:center;gap:.42rem;}
 .acard h2 em{color:var(--gold);font-style:normal;}
@@ -274,7 +274,6 @@ tr:hover td{background:var(--tag-bg);}
 .eico{font-size:2rem;color:rgba(201,168,76,.22);}
 .etitle{font-size:.92rem;font-weight:700;color:var(--text-muted);}
 .esub{font-size:.78rem;color:var(--text-muted);line-height:1.6;max-width:280px;}
-/* SPORTSHUB OVERLAY */
 #shOverlay{display:none;position:fixed;inset:0;z-index:500;flex-direction:column;background:#0B1622;}
 #shOverlay.open{display:flex;}
 .sh-topbar{display:flex;align-items:center;gap:.7rem;padding:.6rem .95rem;background:#132035;border-bottom:2px solid #D4AF37;flex-shrink:0;}
@@ -393,11 +392,11 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 </div>
 
 <!-- EVENT DETAIL MODAL -->
-<div id="eventModal" onclick="if(event.target===this)this.classList.remove('open')" style="display:none;position:fixed;inset:0;background:rgba(8,15,30,.7);z-index:200;align-items:center;justify-content:center;">
+<div id="eventModal" style="display:none;position:fixed;inset:0;background:rgba(8,15,30,.7);z-index:200;align-items:center;justify-content:center;">
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:94%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;">
     <div style="padding:.8rem 1rem;border-bottom:2px solid var(--gold);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
       <span id="eventModalDate" style="font-size:.82rem;font-weight:700;color:var(--gold);font-family:sans-serif;"></span>
-      <button class="xbtn" onclick="document.getElementById('eventModal').classList.remove('open')">✕</button>
+      <button class="xbtn" onclick="document.getElementById('eventModal').style.display='none'">✕</button>
     </div>
     <div id="eventModalBody" style="overflow-y:auto;padding:.8rem 1rem;"></div>
   </div>
@@ -415,11 +414,8 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
       <div class="pprice">$0<span>/mo</span></div>
       <div class="pdesc">Stay connected with our weekly free stories.</div>
       <ul class="pfeat">
-        <li>Free articles every week</li>
-        <li>Breaking news alerts</li>
-        <li>Comment on free stories</li>
-        <li class="no">Exclusive investigations</li>
-        <li class="no">Subscriber-only deep dives</li>
+        <li>Free articles every week</li><li>Breaking news alerts</li><li>Comment on free stories</li>
+        <li class="no">Exclusive investigations</li><li class="no">Subscriber-only deep dives</li>
       </ul>
       <button class="pbtn free" onclick="openRegister('free')">Create free account</button>
     </div>
@@ -429,11 +425,8 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
       <div class="pprice">$6<span>/mo</span></div>
       <div class="pdesc">Full access to every story we publish.</div>
       <ul class="pfeat">
-        <li>Everything in Free</li>
-        <li>All exclusive stories</li>
-        <li>Subscriber-only deep dives</li>
-        <li>Early access to stories</li>
-        <li>Support local journalism</li>
+        <li>Everything in Free</li><li>All exclusive stories</li><li>Subscriber-only deep dives</li>
+        <li>Early access to stories</li><li>Support local journalism</li>
       </ul>
       <button class="pbtn paid" onclick="openStripeCheckout()">Subscribe — $6/mo</button>
     </div>
@@ -503,6 +496,8 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="ambtn" onclick="showSec('settings',this)">⚙ Settings</button>
   </div>
   <div class="acontent">
+
+    <!-- DASHBOARD -->
     <div class="asec open" id="sec-dashboard">
       <div class="sgrid">
         <div class="scard"><div class="snum" id="st-total">0</div><div class="slbl">Total articles</div></div>
@@ -517,6 +512,8 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
       </div>
       <div class="acard"><h2><em>▪</em> Recent articles</h2><p class="tno" id="dash-empty">Loading…</p><table id="dash-table" style="display:none"><thead><tr><th>Title</th><th>Category</th><th>Access</th><th>Status</th><th>Views</th><th>Date</th></tr></thead><tbody id="dash-body"></tbody></table></div>
     </div>
+
+    <!-- WRITE -->
     <div class="asec" id="sec-write">
       <div class="acard"><h2><em>✎</em> Write article</h2>
         <input type="hidden" id="editIdx" value="">
@@ -536,27 +533,37 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
         <div style="display:flex;gap:.55rem;margin-top:.9rem;flex-wrap:wrap"><button class="btn-p" onclick="publishArt()">✓ Publish</button><button class="btn-s" onclick="saveDraft()">Save draft</button><button class="btn-s" onclick="clearEditor()">Clear</button></div>
       </div>
     </div>
+
+    <!-- MANAGE -->
     <div class="asec" id="sec-manage">
       <div class="acard"><h2><em>☰</em> Manage articles</h2><p class="tno" id="manage-empty">Loading…</p><div style="overflow-x:auto"><table id="manage-table" style="display:none"><thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Access</th><th>Status</th><th>Views</th><th>Date</th><th>Actions</th></tr></thead><tbody id="manage-body"></tbody></table></div></div>
     </div>
+
+    <!-- COMMENTS -->
     <div class="asec" id="sec-comments">
       <div class="acard"><h2><em>💬</em> Comment moderation</h2>
         <div style="display:flex;gap:.45rem;margin-bottom:.9rem;flex-wrap:wrap"><button id="cfPending" class="btn-p" onclick="loadComments('pending')">⏳ Pending</button><button id="cfApproved" class="btn-s" onclick="loadComments('approved')">✓ Approved</button><button id="cfAll" class="btn-s" onclick="loadComments('all')">All</button></div>
         <p class="tno" id="cmt-empty">No comments yet.</p><div style="overflow-x:auto"><table id="cmt-table" style="display:none"><thead><tr><th>Article</th><th>Author</th><th>Comment</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody id="cmt-body"></tbody></table></div>
       </div>
     </div>
+
+    <!-- COMMUNITY -->
     <div class="asec" id="sec-community">
       <div class="acard"><h2><em>🌐</em> Community posts moderation</h2>
         <div style="display:flex;gap:.45rem;margin-bottom:.9rem;flex-wrap:wrap"><button class="btn-p" id="cpPending" onclick="loadCommunityAdmin('pending')">⏳ Pending</button><button class="btn-s" id="cpApproved" onclick="loadCommunityAdmin('approved')">✓ Approved</button><button class="btn-s" id="cpAll" onclick="loadCommunityAdmin('all')">All</button></div>
         <p class="tno" id="comm-admin-empty">No community posts yet.</p><div style="overflow-x:auto"><table id="comm-admin-table" style="display:none"><thead><tr><th>Section</th><th>Title</th><th>Author</th><th>Category</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody id="comm-admin-body"></tbody></table></div>
       </div>
     </div>
+
+    <!-- SUBSCRIBERS -->
     <div class="asec" id="sec-subs">
       <div class="acard"><h2><em>★</em> Subscriber database</h2>
         <div style="display:flex;gap:.45rem;margin-bottom:.9rem;flex-wrap:wrap"><button id="sfAll" class="btn-p" onclick="filterSubs('all')">All</button><button id="sfPaid" class="btn-s" onclick="filterSubs('subscriber')">★ Paid</button><button id="sfFree" class="btn-s" onclick="filterSubs('free')">Free</button></div>
         <p class="tno" id="subs-empty">No registered users yet.</p><div style="overflow-x:auto"><table id="subs-table" style="display:none;min-width:860px"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>City</th><th>State</th><th>Zip</th><th>Age</th><th>Source</th><th>Plan</th><th>Joined</th><th>Actions</th></tr></thead><tbody id="subs-body"></tbody></table></div>
       </div>
     </div>
+
+    <!-- BREAKING NEWS -->
     <div class="asec" id="sec-breaking">
       <div class="acard"><h2><em>⚠</em> Breaking news ticker</h2>
         <div class="frow"><label>Ticker text</label><textarea class="ftxt" id="breakingEditor" style="min-height:75px" placeholder="Breaking news… Use | to separate multiple items"></textarea></div>
@@ -564,6 +571,8 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
         <div style="display:flex;gap:.55rem;flex-wrap:wrap"><button class="btn-p" onclick="showBreaking()">✓ Show ticker</button><button class="btn-d" onclick="hideBreaking()">Hide ticker</button></div>
       </div>
     </div>
+
+    <!-- LIVESTREAM -->
     <div class="asec" id="sec-livestream">
       <div class="acard"><h2><em>📡</em> Livestream control</h2>
         <div class="live-toggle-row"><label class="toggle-switch"><input type="checkbox" id="liveToggle" onchange="updateLiveNavDot()"><span class="toggle-slider"></span></label><span class="toggle-label" id="liveToggleLabel">Stream is <strong>OFF</strong></span></div>
@@ -574,6 +583,47 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
         <p style="font-size:.71rem;color:var(--text-muted);margin-top:.75rem">Toggle ON before going live. The 📡 Live tab will show a red pulse indicator to visitors.</p>
       </div>
     </div>
+
+    <!-- ═══════════════════════════════════════════════════
+         EVENTS ADMIN — THIS WAS THE MISSING SECTION
+         ═══════════════════════════════════════════════════ -->
+    <div class="asec" id="sec-events">
+      <div class="acard">
+        <h2><em>📅</em> Add / Edit Event</h2>
+        <input type="hidden" id="ev-edit-id" value="">
+        <div class="frow"><label>Event title *</label><input class="finput" id="ev-title" type="text" placeholder="e.g. Hobart Trade Day"></div>
+        <div class="f2">
+          <div class="frow" style="margin:0"><label>Date *</label><input class="finput" id="ev-date" type="date"></div>
+          <div class="frow" style="margin:0"><label>Start time</label><input class="finput" id="ev-time" type="text" placeholder="e.g. 9:00 AM"></div>
+        </div>
+        <div class="f2" style="margin-top:.75rem">
+          <div class="frow" style="margin:0"><label>End time</label><input class="finput" id="ev-endtime" type="text" placeholder="e.g. 5:00 PM"></div>
+          <div class="frow" style="margin:0"><label>Location</label><input class="finput" id="ev-location" type="text" placeholder="Venue, city, state"></div>
+        </div>
+        <div class="frow" style="margin-top:.75rem"><label>Host / Organizer</label><input class="finput" id="ev-host" type="text" placeholder="Who's putting it on?"></div>
+        <div class="frow"><label>Description</label><textarea class="ftxt" id="ev-desc" style="min-height:90px" placeholder="Details, activities, admission info…"></textarea></div>
+        <div class="f2">
+          <div class="frow" style="margin:0"><label>Going count</label><input class="finput" id="ev-going" type="number" placeholder="0" min="0"></div>
+          <div class="frow" style="margin:0"><label>Interested count</label><input class="finput" id="ev-interested" type="number" placeholder="0" min="0"></div>
+        </div>
+        <div class="live-toggle-row" style="margin-top:.75rem">
+          <label class="toggle-switch"><input type="checkbox" id="ev-recurring"><span class="toggle-slider"></span></label>
+          <span class="toggle-label">Recurring event 🔄</span>
+        </div>
+        <div style="display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.5rem">
+          <button class="btn-p" id="ev-save-btn" onclick="saveEvent()">+ Add Event</button>
+          <button class="btn-s" onclick="clearEventForm()">Clear form</button>
+        </div>
+      </div>
+
+      <div class="acard">
+        <h2><em>📋</em> All Events</h2>
+        <div id="eventsAdminList"><p class="tno">Loading…</p></div>
+      </div>
+    </div>
+    <!-- END EVENTS ADMIN -->
+
+    <!-- SETTINGS -->
     <div class="asec" id="sec-settings">
       <div class="acard"><h2><em>⚙</em> Site settings</h2>
         <div class="frow"><label>Publication name</label><input class="finput" type="text" value="IronSilk Weekly"></div>
@@ -583,8 +633,9 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
         <div style="margin-top:.85rem"><button class="btn-p" onclick="saveSettings()">Save settings</button></div>
       </div>
     </div>
-  </div>
-</div>
+
+  </div><!-- /acontent -->
+</div><!-- /adminPanel -->
 
 <footer><div class="fn">IronSilk Weekly</div><div class="fs">© 2025 IronSilk Strategies · Local. Relentless. Daily.</div></footer>
 
@@ -636,7 +687,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
   </div>
 </div>
 
-<!-- SPORTSHUB OVERLAY — single clean instance -->
+<!-- SPORTSHUB OVERLAY -->
 <div id="shOverlay">
   <div class="sh-topbar">
     <button class="sh-back" onclick="closeSportsHub()">←</button>
@@ -681,7 +732,6 @@ async function incrementVisit(){try{await setDoc(doc(db,'settings','siteStats'),
 async function loadSiteStats(){try{const snap=await getDoc(doc(db,'settings','siteStats'));if(snap.exists()){$('statVisits').textContent=Number(snap.data().totalVisits||0).toLocaleString();}else{$('statVisits').textContent='1';}}catch(e){$('statVisits').textContent='—';}}
 function updateStatsBar(){const paid=subscribers.filter(s=>s.plan==='subscriber').length;const free=subscribers.filter(s=>s.plan==='free').length;$('statSubs').textContent=paid.toLocaleString();$('statReaders').textContent=free.toLocaleString();}
 
-// ARTICLE VIEWS
 async function incrementArticleViews(id){try{await updateDoc(doc(db,'articles',id),{views:increment(1)});const a=articles.find(x=>x.id===id);if(a)a.views=(a.views||0)+1;}catch(e){}}
 
 // PAGE MANAGEMENT
@@ -695,12 +745,11 @@ function hideAllPages(){
 }
 function showReader(){hideAllPages();$('readerView').style.display='block';}
 window.goSub=()=>{hideAllPages();$('subPage').style.display='block';};
-
 window.showScramble=btn=>{hideAllPages();$('scramblePage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');if(!scrStarted)startScramble();};
 window.showClassifieds=btn=>{hideAllPages();$('classifiedsPage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderCommunity('classified');};
 window.showSheShed=btn=>{hideAllPages();$('sheShedPage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderCommunity('sheshed');};
 
-// ── EVENTS PAGE ──
+// EVENTS PAGE
 window.showEvents=async btn=>{
   hideAllPages();$('eventsPage').style.display='block';
   document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));
@@ -746,7 +795,7 @@ function renderCalendar(){
   const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const firstDay=new Date(calYear,calMonth,1).getDay();
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
-  const today=new Date();
+  const todayDate=new Date();
   const evMap={};
   allEvents.forEach(ev=>{
     const d=ev.date;if(!d)return;
@@ -756,8 +805,7 @@ function renderCalendar(){
     }
   });
 
-  const css=`
-    <style>
+  const css=`<style>
     .cal-wrap{background:var(--surface,#fff);border:1px solid var(--border,#d0d8e8);border-radius:10px;overflow:hidden;font-family:sans-serif;}
     .cal-nav-row{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;background:var(--navy,#0f1f3d);border-bottom:2px solid var(--gold,#c9a84c);}
     .cal-nav-arrow{background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);color:var(--gold,#c9a84c);border-radius:6px;padding:.25rem .7rem;font-size:1rem;cursor:pointer;line-height:1;}
@@ -783,7 +831,7 @@ function renderCalendar(){
   const dayCells=Array.from({length:daysInMonth},(_,i)=>{
     const dayNum=i+1;
     const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
-    const isToday=today.getFullYear()===calYear&&today.getMonth()===calMonth&&today.getDate()===dayNum;
+    const isToday=todayDate.getFullYear()===calYear&&todayDate.getMonth()===calMonth&&todayDate.getDate()===dayNum;
     const evs=evMap[dateStr];
     return`<div class="cal-cell${isToday?' is-today':''}${evs?' has-ev':''}" ${evs?`onclick="openDayEvents('${dateStr}')"`:''}>
       <span class="cal-dn">${dayNum}</span>
@@ -824,9 +872,6 @@ window.openDayEvents=dateStr=>{
   $('eventModalDate').textContent=label;
   const modal=$('eventModal');
   modal.style.display='flex';
-  // close on X
-  modal.querySelector('button.xbtn').onclick=()=>{modal.style.display='none';};
-  // close on backdrop
   modal.onclick=e=>{if(e.target===modal)modal.style.display='none';};
 };
 
@@ -840,13 +885,11 @@ function renderEventArticles(){
 // LIVE PAGE
 window.showLivePage=async btn=>{hideAllPages();$('livePage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');await renderLivePage();};
 async function renderLivePage(){
-  const wrap=$('liveHeroWrap');
-  if(!wrap)return;
+  const wrap=$('liveHeroWrap');if(!wrap)return;
   wrap.innerHTML='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.82rem;padding:1rem">Loading…</p>';
   try{
     const snap=await getDoc(doc(db,'settings','livestream'));
     const d=snap.exists()?snap.data():{active:false,url:'',title:'',nextBroadcast:''};
-    // Use saved URL or fall back to test video
     const videoUrl=d.url||'https://www.youtube.com/watch?v=PY4cjoUfXXU';
     const embedUrl=ytEmbedUrl(videoUrl);
     const isLive=d.active&&d.url;
@@ -854,38 +897,18 @@ async function renderLivePage(){
       <div style="background:linear-gradient(135deg,#0d1b2e,#1a2d4a);border:1px solid rgba(201,168,76,.25);border-radius:12px;overflow:hidden;margin-bottom:1.2rem;">
         <div style="padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(201,168,76,.15);">
           <div style="display:flex;align-items:center;gap:.6rem;">
-            ${isLive
-              ?`<span style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#f87171;border-radius:20px;padding:.2rem .65rem;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-family:sans-serif;"><span class="live-dot"></span>LIVE</span>`
-              :`<span style="background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);color:var(--gold);border-radius:20px;padding:.2rem .65rem;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-family:sans-serif;">📡 Test Broadcast</span>`}
+            ${isLive?`<span style="display:inline-flex;align-items:center;gap:.3rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#f87171;border-radius:20px;padding:.2rem .65rem;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-family:sans-serif;"><span class="live-dot"></span>LIVE</span>`:`<span style="background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);color:var(--gold);border-radius:20px;padding:.2rem .65rem;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-family:sans-serif;">📡 Test Broadcast</span>`}
             <span style="font-size:.85rem;font-weight:700;color:#fff;font-family:sans-serif;">${esc(d.title||'IronSilk Weekly')}</span>
           </div>
           ${d.nextBroadcast&&!isLive?`<span style="font-size:.68rem;color:var(--silver);font-family:sans-serif;">🗓 Next: ${esc(d.nextBroadcast)}</span>`:''}
         </div>
         <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;background:#000;">
-          <iframe
-            src="${embedUrl}"
-            style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
-            allowfullscreen
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            loading="lazy">
-          </iframe>
+          <iframe src="${embedUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" loading="lazy"></iframe>
         </div>
         ${!isLive?`<div style="padding:.65rem 1.1rem;background:rgba(0,0,0,.2);font-size:.7rem;color:var(--text-muted);font-family:sans-serif;text-align:center;">Test video — go to Editor → 📡 Livestream to set a live stream URL</div>`:''}
       </div>`;
   }catch(e){
-    wrap.innerHTML=`
-      <div style="background:linear-gradient(135deg,#0d1b2e,#1a2d4a);border:1px solid rgba(201,168,76,.25);border-radius:12px;overflow:hidden;margin-bottom:1.2rem;">
-        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;background:#000;">
-          <iframe
-            src="https://www.youtube.com/embed/PY4cjoUfXXU"
-            style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
-            allowfullscreen
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            loading="lazy">
-          </iframe>
-        </div>
-        <div style="padding:.65rem 1.1rem;background:rgba(0,0,0,.2);font-size:.7rem;color:var(--text-muted);font-family:sans-serif;text-align:center;">Test video</div>
-      </div>`;
+    wrap.innerHTML=`<div style="background:linear-gradient(135deg,#0d1b2e,#1a2d4a);border:1px solid rgba(201,168,76,.25);border-radius:12px;overflow:hidden;margin-bottom:1.2rem;"><div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;background:#000;"><iframe src="https://www.youtube.com/embed/PY4cjoUfXXU" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" loading="lazy"></iframe></div><div style="padding:.65rem 1.1rem;background:rgba(0,0,0,.2);font-size:.7rem;color:var(--text-muted);font-family:sans-serif;text-align:center;">Test video</div></div>`;
   }
 }
 function ytEmbedUrl(url){try{let vid='';const u=new URL(url);if(u.hostname.includes('youtu.be'))vid=u.pathname.slice(1);else vid=u.searchParams.get('v')||'';if(!vid)return '';return `https://www.youtube.com/embed/${vid}?autoplay=1`;}catch(e){return '';}}
@@ -893,80 +916,15 @@ window.updateLiveNavDot=()=>{const on=$('liveToggle').checked;$('liveToggleLabel
 function updateLiveTabDot(on){const btn=$('liveNavBtn');btn.innerHTML=on?'<span class="live-dot"></span>📡 Live':'📡 Live';}
 window.saveLivestream=async()=>{const active=$('liveToggle').checked,url=$('ls-url').value.trim(),title=$('ls-title').value.trim(),nextBroadcast=$('ls-next').value.trim();loading(true);try{await setDoc(doc(db,'settings','livestream'),{active,url,title,nextBroadcast});updateLiveTabDot(active);toast('Livestream settings saved!');}catch(e){toast('Error saving.');}loading(false);};
 
-// ── STRIPE SUBSCRIPTION ──
+// STRIPE
 const STRIPE_PAYMENT_LINK='https://buy.stripe.com/dRmeV6e277UzfsldcYao802';
-const STRIPE_PK='pk_live_51SjWVW2MEexOZh7euJTiaQ89TEHfbtHHriZDaIQRIylYd9q9d4Bm00qqqjrZm62Vv4eePr47B80f5CPaXlnOFDM500oGKjdtDS';
+window.openStripeCheckout=()=>{let url=STRIPE_PAYMENT_LINK;if(currentUser&&currentUser.email)url+='?prefilled_email='+encodeURIComponent(currentUser.email);window.open(url,'_blank');};
+async function checkStripeReturn(){const params=new URLSearchParams(window.location.search);if(params.get('subscribed')!=='true')return;window.history.replaceState({},'',window.location.pathname);const email=prompt('Payment successful! 🎉\n\nEnter the email address on your account to activate your subscription:');if(!email)return;loading(true);try{const snap=await getDocs(collection(db,'subscribers'));let matched=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email.trim().toLowerCase())matched={...s,id:d.id};});if(matched){await updateDoc(doc(db,'subscribers',matched.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});if(currentUser&&currentUser.email?.toLowerCase()===email.trim().toLowerCase()){currentUser.plan='subscriber';updateUserUI();renderReader(currentNavCat);}toast('🎉 Subscription activated! Welcome to IronSilk Weekly.');}else{toast('Almost there! Create your account to finish activating.');setTimeout(()=>openRegister('subscriber'),1000);}}catch(e){toast('Error activating. Please contact support.');}loading(false);}
+window.manualUpgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';if(!confirm(`Change ${s.firstName} ${s.lastName} to ${np}?`))return;loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np,manuallyUpdated:true,updatedAt:new Date().toISOString()});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated to '+np+'.');}catch(e){toast('Error.');}loading(false);};
 
-window.openStripeCheckout=()=>{
-  // append email prefill if user is logged in
-  let url=STRIPE_PAYMENT_LINK;
-  if(currentUser&&currentUser.email){
-    url+='?prefilled_email='+encodeURIComponent(currentUser.email);
-  }
-  window.open(url,'_blank');
-};
-
-async function checkStripeReturn(){
-  const params=new URLSearchParams(window.location.search);
-  if(params.get('subscribed')!=='true')return;
-  // clean URL
-  window.history.replaceState({},'',window.location.pathname);
-  // prompt for email to match account
-  const email=prompt('Payment successful! 🎉\n\nEnter the email address on your account to activate your subscription:');
-  if(!email)return;
-  loading(true);
-  try{
-    const snap=await getDocs(collection(db,'subscribers'));
-    let matched=null;
-    snap.forEach(d=>{
-      const s=d.data();
-      if(s.email?.toLowerCase()===email.trim().toLowerCase())matched={...s,id:d.id};
-    });
-    if(matched){
-      await updateDoc(doc(db,'subscribers',matched.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});
-      if(currentUser&&currentUser.email?.toLowerCase()===email.trim().toLowerCase()){
-        currentUser.plan='subscriber';
-        updateUserUI();
-        renderReader(currentNavCat);
-      }
-      toast('🎉 Subscription activated! Welcome to IronSilk Weekly.');
-    } else {
-      // no account yet — open register with subscriber plan
-      toast('Almost there! Create your account to finish activating.');
-      setTimeout(()=>openRegister('subscriber'),1000);
-    }
-  }catch(e){toast('Error activating. Please contact support.');}
-  loading(false);
-}
-
-// ── MANUAL UPGRADE IN EDITOR (called from admin panel) ──
-window.manualUpgradeSub=async id=>{
-  const s=subscribers.find(x=>x.id===id);if(!s)return;
-  const np=s.plan==='subscriber'?'free':'subscriber';
-  if(!confirm(`Change ${s.firstName} ${s.lastName} to ${np}?`))return;
-  loading(true);
-  try{
-    await updateDoc(doc(db,'subscribers',id),{plan:np,manuallyUpdated:true,updatedAt:new Date().toISOString()});
-    s.plan=np;refreshSubsTable();updateStats();updateStatsBar();
-    toast('Plan updated to '+np+'.');
-  }catch(e){toast('Error.');}
-  loading(false);
-};
-
-// SPORTSHUB — single clean implementation
-window.openSportsHub=()=>{
-  const ov=$('shOverlay');
-  ov.style.display='flex';
-  document.body.style.overflow='hidden';
-  if(!$('shFrame').getAttribute('data-loaded')){
-    $('shFrame').src='sportshub.html';
-    $('shFrame').setAttribute('data-loaded','1');
-  }
-};
-window.closeSportsHub=()=>{
-  $('shOverlay').style.display='none';
-  document.body.style.overflow='';
-};
+// SPORTSHUB
+window.openSportsHub=()=>{const ov=$('shOverlay');ov.style.display='flex';document.body.style.overflow='hidden';if(!$('shFrame').getAttribute('data-loaded')){$('shFrame').src='sportshub.html';$('shFrame').setAttribute('data-loaded','1');}};
+window.closeSportsHub=()=>{$('shOverlay').style.display='none';document.body.style.overflow='';};
 
 // EDITOR AUTH
 window.toggleAdmin=()=>{if(!adminOpen&&!editorUnlocked){$('editorOverlay').classList.add('open');return;}adminOpen=!adminOpen;if(adminOpen){hideAllPages();$('siteNav').style.display='none';$('statsBar').style.display='none';$('breakingBar').style.display='none';$('adminPanel').classList.add('open');$('adminPanel').style.display='flex';}else{$('adminPanel').classList.remove('open');$('adminPanel').style.display='none';showReader();}updateEditorBtn();};
@@ -988,24 +946,19 @@ const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'n
 window.showSec=(id,btn)=>{
   document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));
   const sec=$('sec-'+id);
-  if(sec){sec.classList.add('open');}
+  if(sec)sec.classList.add('open');
   document.querySelectorAll('.ambtn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(id==='comments')loadComments('pending');
   if(id==='community')loadCommunityAdmin('pending');
   if(id==='livestream')loadLivestreamAdmin();
-  if(id==='events'){
-    // force the section visible then load
-    if(sec){sec.style.display='block';}
-    loadEventsAdmin();
-  }
+  if(id==='events')loadEventsAdmin();
 };
 
 // NAV
 window.setNav=(btn,cat)=>{document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentNavCat=cat;showReader();$('searchInput').value='';$('searchBox').style.display='none';$('mainContent').style.display='';renderReader(cat);};
 window.setNavByName=cat=>{document.querySelectorAll('.nbtn').forEach(b=>b.classList.toggle('active',b.textContent.trim().toLowerCase()===cat));currentNavCat=cat;renderReader(cat);};
 
-// RENDER READER
 function renderReader(cat){
   const pub=articles.filter(a=>a.status==='published');const filtered=pub.filter(a=>cat==='all'||a.category.toLowerCase()===cat);
   const empty=$('emptyState'),feat=$('featSec'),latest=$('latestSec');
@@ -1079,30 +1032,13 @@ function refreshManage(){const me=$('manage-empty'),mt=$('manage-table'),de=$('d
 
 // SUBSCRIBERS
 window.filterSubs=f=>{subsFilter=f;$('sfAll').className=f==='all'?'btn-p':'btn-s';$('sfPaid').className=f==='subscriber'?'btn-p':'btn-s';$('sfFree').className=f==='free'?'btn-p':'btn-s';refreshSubsTable();};
-function refreshSubsTable(){const se=$('subs-empty'),st=$('subs-table');const filtered=subsFilter==='all'?subscribers:subscribers.filter(s=>s.plan===subsFilter);    if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';st.style.display='none';return;}se.style.display='none';st.style.display='';
-  $('subs-body').innerHTML=filtered.map(s=>`<tr>
-    <td>${esc(s.firstName||'')} ${esc(s.lastName||s.name||'')}</td>
-    <td>${esc(s.email)}</td>
-    <td>${esc(s.phone||'—')}</td>
-    <td>${esc(s.city||'—')}</td>
-    <td>${esc(s.state||'—')}</td>
-    <td>${esc(s.zip||'—')}</td>
-    <td>${esc(s.age||'—')}</td>
-    <td>${esc(s.source||'—')}</td>
-    <td><span class="sp ${s.plan==='subscriber'?'exc':'dft'}">${s.plan==='subscriber'?'★ Paid':'Free'}</span></td>
-    <td>${esc(s.joined)}</td>
-    <td>
-      <button class="tbtn" onclick="manualUpgradeSub('${s.id}')">${s.plan==='subscriber'?'→ Free':'→ Paid'}</button>
-      <button class="tbtn reject" onclick="deleteSub('${s.id}')">✕</button>
-    </td>
-  </tr>`).join('');}
+function refreshSubsTable(){const se=$('subs-empty'),st=$('subs-table');const filtered=subsFilter==='all'?subscribers:subscribers.filter(s=>s.plan===subsFilter);if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';st.style.display='none';return;}se.style.display='none';st.style.display='';$('subs-body').innerHTML=filtered.map(s=>`<tr><td>${esc(s.firstName||'')} ${esc(s.lastName||s.name||'')}</td><td>${esc(s.email)}</td><td>${esc(s.phone||'—')}</td><td>${esc(s.city||'—')}</td><td>${esc(s.state||'—')}</td><td>${esc(s.zip||'—')}</td><td>${esc(s.age||'—')}</td><td>${esc(s.source||'—')}</td><td><span class="sp ${s.plan==='subscriber'?'exc':'dft'}">${s.plan==='subscriber'?'★ Paid':'Free'}</span></td><td>${esc(s.joined)}</td><td><button class="tbtn" onclick="manualUpgradeSub('${s.id}')">${s.plan==='subscriber'?'→ Free':'→ Paid'}</button> <button class="tbtn reject" onclick="deleteSub('${s.id}')">✕</button></td></tr>`).join('');}
 window.upgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated.');}catch(e){toast('Error.');}loading(false);};
 window.deleteSub=async id=>{if(!confirm('Remove?'))return;loading(true);try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(s=>s.id!==id);refreshSubsTable();updateStats();updateStatsBar();toast('Removed.');}catch(e){toast('Error.');}loading(false);};
 const updateStats=()=>{$('st-total').textContent=articles.length;$('st-pub').textContent=articles.filter(a=>a.status==='published').length;$('st-draft').textContent=articles.filter(a=>a.status==='draft').length;$('st-subs').textContent=subscribers.filter(s=>s.plan==='subscriber').length;$('st-free').textContent=subscribers.filter(s=>s.plan==='free').length;};
 
-// ── EVENTS ADMIN ──
+// EVENTS ADMIN
 async function loadEventsAdmin(){
-  // show loading state immediately
   const listEl=$('eventsAdminList');
   if(listEl)listEl.innerHTML='<p class="tno">Loading events…</p>';
   try{
@@ -1111,8 +1047,6 @@ async function loadEventsAdmin(){
     snap.forEach(d=>allEvents.push({...d.data(),id:d.id}));
     allEvents.sort((a,b)=>a.date>b.date?1:-1);
   }catch(e){
-    allEvents=[];
-    const listEl=$('eventsAdminList');
     if(listEl)listEl.innerHTML=`<p class="tno" style="color:#c53030">Error loading events: ${e.message}</p>`;
     return;
   }
@@ -1121,8 +1055,7 @@ async function loadEventsAdmin(){
 function renderEventsAdminList(){
   const el=$('eventsAdminList');if(!el)return;
   if(!allEvents.length){el.innerHTML='<p class="tno">No events yet. Use the form above to add one.</p>';return;}
-  const sorted=[...allEvents].sort((a,b)=>a.date>b.date?1:-1);
-  el.innerHTML=sorted.map(ev=>`
+  el.innerHTML=allEvents.map(ev=>`
     <div style="display:flex;align-items:flex-start;justify-content:space-between;background:var(--tag-bg);border:1px solid var(--border);border-radius:7px;padding:.65rem .8rem;margin-bottom:.5rem;gap:.5rem;">
       <div style="flex:1;min-width:0;">
         <div style="font-size:.82rem;font-weight:700;color:var(--text);">${esc(ev.title)}${ev.recurring?' <span style="font-size:.62rem;color:var(--gold);">🔄</span>':''}</div>
@@ -1158,10 +1091,9 @@ window.saveEvent=async()=>{
     if(editId){
       await setDoc(doc(db,'events',editId),ev);
       const idx=allEvents.findIndex(x=>x.id===editId);
-      if(idx>=0)allEvents[idx]={...ev,id:editId};
-      else allEvents.push({...ev,id:editId});
+      if(idx>=0)allEvents[idx]={...ev,id:editId};else allEvents.push({...ev,id:editId});
       toast('Event updated!');
-    } else {
+    }else{
       const ref=await addDoc(collection(db,'events'),ev);
       allEvents.push({...ev,id:ref.id});
       toast('Event added!');
@@ -1186,7 +1118,6 @@ window.editEvent=id=>{
   $('ev-recurring').checked=!!ev.recurring;
   $('ev-edit-id').value=id;
   $('ev-save-btn').textContent='✓ Update Event';
-  // scroll form into view
   $('ev-title').scrollIntoView({behavior:'smooth',block:'center'});
   $('ev-title').focus();
   toast('Event loaded — edit and click Update Event.');
@@ -1205,18 +1136,16 @@ window.deleteEvent=async id=>{
 };
 
 window.clearEventForm=()=>{
-  ['ev-title','ev-date','ev-time','ev-endtime','ev-location','ev-host','ev-desc'].forEach(id=>{const el=$(id);if(el)el.value='';});
-  const going=$(  'ev-going');if(going)going.value='';
-  const int=$('ev-interested');if(int)int.value='';
+  ['ev-title','ev-date','ev-time','ev-endtime','ev-location','ev-host','ev-desc','ev-going','ev-interested'].forEach(id=>{const el=$(id);if(el)el.value='';});
   $('ev-recurring').checked=false;
   $('ev-edit-id').value='';
   $('ev-save-btn').textContent='+ Add Event';
 };
+
 window.showBreaking=async()=>{const txt=$('breakingEditor').value.trim();if(!txt){toast('Enter ticker text first.');return;}loading(true);try{await setDoc(doc(db,'settings','breaking'),{text:txt,active:true});$('breakingTxt').innerHTML=txt.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';toast('Ticker updated!');}catch(e){toast('Error.');}loading(false);};
 window.hideBreaking=async()=>{loading(true);try{await setDoc(doc(db,'settings','breaking'),{active:false});$('breakingBar').style.display='none';$('breakingBar').dataset.active='0';toast('Ticker hidden.');}catch(e){toast('Error.');}loading(false);};
 window.saveSettings=async()=>{cmtRequireApproval=$('cmtGateDefault').value==='1';try{await setDoc(doc(db,'settings','general'),{cmtRequireApproval});}catch(e){}toast('Settings saved!');};
 
-// LIVESTREAM ADMIN LOAD
 async function loadLivestreamAdmin(){try{const snap=await getDoc(doc(db,'settings','livestream'));if(snap.exists()){const d=snap.data();$('liveToggle').checked=!!d.active;$('ls-url').value=d.url||'';$('ls-title').value=d.title||'';$('ls-next').value=d.nextBroadcast||'';$('liveToggleLabel').innerHTML=`Stream is <strong>${d.active?'ON — LIVE':'OFF'}</strong>`;updateLiveTabDot(!!d.active);}}catch(e){}}
 
 // WORD SCRAMBLE
@@ -1229,7 +1158,7 @@ function loadScrQuestion(){scrRevealed=false;const q=scrQuestions[scrIdx];$('scr
 function checkScrAnswer(){if(scrRevealed){advanceScr();return;}const q=scrQuestions[scrIdx];const ans=$('scr-input').value.trim().toUpperCase().replace(/\s/g,'');const correct=q.word.toUpperCase();const fb=$('scr-feedback');if(ans===correct){scrScore+=10+(scrStreak>=2?5:0);scrStreak++;fb.textContent=scrStreak>=3?'🔥 Correct! '+scrStreak+'-streak bonus!':'✓ Correct!';fb.className='scramble-feedback correct';$('scr-input').disabled=true;$('scr-submit').disabled=true;setTimeout(advanceScr,900);}else{scrStreak=0;fb.textContent='Not quite — try again.';fb.className='scramble-feedback wrong';$('scr-input').value='';}}
 function scrReveal(){const q=scrQuestions[scrIdx];$('scr-feedback').textContent='Answer: '+q.word;$('scr-feedback').className='scramble-feedback skip';scrRevealed=true;scrStreak=0;$('scr-input').disabled=true;$('scr-submit').disabled=true;}
 function advanceScr(){scrIdx++;if(scrIdx>=scrQuestions.length)showScrResult();else loadScrQuestion();}
-function showScrResult(){$('scrPlayScreen').style.display='none';$('scrResultScreen').style.display='block';$('scr-final-score').textContent=scrScore;let h,s;if(scrScore>=120){h='County expert!';s='You know Kiowa County inside and out. IronSilk Weekly approves.';}else if(scrScore>=80){h='Solid local knowledge!';s='A real Kiowa County regular. Keep reading IronSilk Weekly.';}else if(scrScore>=40){h='Getting there!';s='A few more issues of IronSilk Weekly and you\'ll have it.';}else{h='Room to grow!';s='Hobart\'s full of stories — start with IronSilk Weekly.';}$('scr-result-headline').textContent=h;$('scr-result-sub').textContent=s;}
+function showScrResult(){$('scrPlayScreen').style.display='none';$('scrResultScreen').style.display='block';$('scr-final-score').textContent=scrScore;let h,s;if(scrScore>=120){h='County expert!';s='You know Kiowa County inside and out. IronSilk Weekly approves.';}else if(scrScore>=80){h='Solid local knowledge!';s='A real Kiowa County regular. Keep reading IronSilk Weekly.';}else if(scrScore>=40){h='Getting there!';s="A few more issues of IronSilk Weekly and you'll have it.";}else{h='Room to grow!';s="Hobart's full of stories — start with IronSilk Weekly.";}$('scr-result-headline').textContent=h;$('scr-result-sub').textContent=s;}
 $('scr-submit').addEventListener('click',checkScrAnswer);
 $('scr-input').addEventListener('keydown',e=>{if(e.key==='Enter')checkScrAnswer();});
 $('scr-reveal').addEventListener('click',scrReveal);
@@ -1241,7 +1170,6 @@ async function init(){
   loading(true);
   const logoImg=$('logoImg');
   if(!logoImg.src||logoImg.src.includes('LOGO_BASE64_HERE')||logoImg.src==='about:blank'){logoImg.style.display='none';$('logoFallback').style.display='flex';}
-  // make sure everything starts hidden
   document.querySelectorAll('main, #subPage, #scramblePage, #classifiedsPage, #sheShedPage, #livePage, #eventsPage').forEach(el=>{if(el)el.style.display='none';});
   try{
     await incrementVisit();await loadSiteStats();
@@ -1253,7 +1181,6 @@ async function init(){
     onSnapshot(query(collection(db,'communityPosts'),orderBy('ts','desc')),snap=>{communityPosts=[];snap.forEach(d=>communityPosts.push({...d.data(),id:d.id}));});
   }catch(e){toast('Database connection error.');}
   loading(false);
-  // always land on reader
   showReader();
   checkStripeReturn();
 }
