@@ -716,6 +716,7 @@ const db=getFirestore(initializeApp({
 let dark=false,adminOpen=false,editorUnlocked=false;
 let currentUser=null,articles=[],subscribers=[],communityPosts=[];
 let currentArtId=null,currentNavCat='all';
+  let currentArtData=null;const listenBtn=document.getElementById('listenBtn');function ttsStop(){window.speechSynthesis.cancel();listenBtn.textContent='▶ Listen to this article';listenBtn.style.background='#c9a84c';listenBtn.style.color='#0f1f3d';}listenBtn.addEventListener('click',function(){if(window.speechSynthesis.speaking){ttsStop();return;}if(!currentArtData)return;const utt=new SpeechSynthesisUtterance(currentArtData.headline+'. By '+currentArtData.author+'. '+(currentArtData.body||''));utt.onend=utt.onerror=ttsStop;window.speechSynthesis.speak(utt);listenBtn.textContent='⏹ Stop';listenBtn.style.background='#0f1f3d';listenBtn.style.color='#c9a84c';});
 let cmtRequireApproval=true,currentImgBase64='',subsFilter='all';
 
 const $=id=>document.getElementById(id);
@@ -988,7 +989,7 @@ window.openArt=async id=>{
   currentArtId=id;const a=articles.find(x=>x.id===id);if(!a)return;
   $('artTitle').textContent=a.headline;await incrementArticleViews(id);
   $('artViewCount').textContent=(a.views||0)>0?`👁 ${Number(a.views).toLocaleString()} views`:'';
-  const readable=canRead(a);let html='';
+  const readable=canRead(a);ttsStop();currentArtData=readable?a:null;listenBtn.style.display=readable?'block':'none';
   if(a.image&&readable)html+=`<img src="${a.image}" class="art-hero" alt="${esc(a.headline)}">`;
   html+=`<div class="art-content"><div class="art-byline">By ${esc(a.author)} &bull; ${esc(a.category)} &bull; ${esc(a.date)}</div>`;
   if(readable){
@@ -999,7 +1000,7 @@ window.openArt=async id=>{
   }else{if(a.excerpt)html+=`<div class="art-text" style="margin-bottom:.9rem;opacity:.7">${esc(a.excerpt)}…</div>`;html+=`<div class="paywall-box"><h3>🔒 Exclusive story</h3><p>Subscribe to IronSilk Weekly for full access.</p><div class="pw-btns"><button class="btn-gold" onclick="closeArt();openRegister('subscriber')">Subscribe — $5/mo</button><button class="btn-og" onclick="closeArt();openReaderLogin()">Sign in</button></div></div>`;}
   html+='</div>';$('artBody').innerHTML=html;$('artOverlay').classList.add('open');
 };
-window.closeArt=()=>$('artOverlay').classList.remove('open');
+window.closeArt=()=>{ttsStop();currentArtData=null;listenBtn.style.display='none';$('artOverlay').classList.remove('open');};
 window.postComment=async()=>{const inp=$('cmtInput'),txt=inp.value.trim();if(!txt)return;const author=currentUser?(currentUser.firstName+' '+(currentUser.lastName||'')).trim():'Anonymous';const status=cmtRequireApproval?'pending':'approved';const artTitle=(articles.find(x=>x.id===currentArtId)||{}).headline||'';try{await addDoc(collection(db,'articles',currentArtId,'comments'),{author,text:txt,date:today(),ts:Date.now(),status,articleId:currentArtId,articleTitle:artTitle});const cmts=$('artBody').querySelector('.cmts');if(status==='approved'){const p=cmts.querySelector('p');if(p)p.remove();const d=document.createElement('div');d.className='cmt';d.innerHTML=`<div class="cmt-author">${esc(author)}</div><div class="cmt-text">${esc(txt)}</div><div class="cmt-date">Just now</div>`;cmts.insertBefore(d,cmts.querySelector('.cmt-form'));}else{const note=document.createElement('div');note.innerHTML='<span class="cmt-pending">✓ Comment submitted — awaiting approval.</span>';cmts.insertBefore(note,cmts.querySelector('.cmt-form'));}inp.value='';toast(status==='approved'?'Comment posted!':'Awaiting approval.');}catch(e){toast('Error posting comment.');}};
 
 // COMMENT MODERATION
