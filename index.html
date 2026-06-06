@@ -698,7 +698,33 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 </div>
 
 <div class="toast" id="toastEl"></div>
-
+<script>
+document.addEventListener('click',function(e){
+  if(e.target&&e.target.id==='listenBtn'){
+    var b=e.target;
+    if(window.speechSynthesis.speaking){
+      window.speechSynthesis.cancel();
+      b.textContent='▶ Listen to this article';
+      b.style.background='#c9a84c';b.style.color='#0f1f3d';
+      return;
+    }
+    var a=(window._articles||[]).find(function(x){return x.id===window._currentArtId;});
+    if(!a)return;
+    var utt=new SpeechSynthesisUtterance(a.headline+'. By '+a.author+'. '+(a.body||''));
+    utt.onend=utt.onerror=function(){
+      var btn=document.getElementById('listenBtn');
+      if(btn){btn.textContent='▶ Listen to this article';btn.style.background='#c9a84c';btn.style.color='#0f1f3d';}
+    };
+    window.speechSynthesis.speak(utt);
+    b.textContent='⏹ Stop';b.style.background='#0f1f3d';b.style.color='#c9a84c';
+  }
+});
+window.stopListen=function(){
+  window.speechSynthesis.cancel();
+  var b=document.getElementById('listenBtn');
+  if(b){b.textContent='▶ Listen to this article';b.style.background='#c9a84c';b.style.color='#0f1f3d';}
+};
+</script>
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import{getFirestore,collection,doc,addDoc,setDoc,getDoc,getDocs,deleteDoc,onSnapshot,orderBy,query,updateDoc,increment}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -990,7 +1016,7 @@ window.openArt=async id=>{
   const readable=canRead(a);let html='';
   if(a.image&&readable)html+=`<img src="${a.image}" class="art-hero" alt="${esc(a.headline)}">`;
   html+=`<div class="art-content"><div class="art-byline">By ${esc(a.author)} &bull; ${esc(a.category)} &bull; ${esc(a.date)}</div>`;
-  if(readable){
+  if(readable){window._currentArtId=id;window._articles=articles;
     html+=`<div class="art-text">${a.body?esc(a.body):'<em style="color:var(--text-muted);font-family:sans-serif">No body text yet.</em>'}</div>`;
     html+='<div class="cmts"><h4>Comments</h4>';loading(true);
     try{const csnap=await getDocs(query(collection(db,'articles',id,'comments'),orderBy('ts')));const cl=[];csnap.forEach(d=>{const cd=d.data();if(cd.status==='approved')cl.push({...cd,cid:d.id});});if(!cl.length)html+='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">No comments yet. Be the first!</p>';else html+=cl.map(c=>`<div class="cmt"><div class="cmt-author">${esc(c.author)}</div><div class="cmt-text">${esc(c.text)}</div><div class="cmt-date">${esc(c.date)}</div></div>`).join('');}catch(e){html+='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">Could not load comments.</p>';}
