@@ -989,7 +989,8 @@ window.openArt=async id=>{
   currentArtId=id;const a=articles.find(x=>x.id===id);if(!a)return;
   $('artTitle').textContent=a.headline;await incrementArticleViews(id);
   $('artViewCount').textContent=(a.views||0)>0?`👁 ${Number(a.views).toLocaleString()} views`:'';
-  const readable=canRead(a);if(typeof ttsStop==='function')ttsStop();currentArtData=readable?a:null;if(listenBtn)listenBtn.style.display=readable?'block':'none';
+ const readable=canRead(a);
+  currentArtData=readable?a:null;if(listenBtn){listenBtn.style.display=readable?'block':'none';}
   if(a.image&&readable)html+=`<img src="${a.image}" class="art-hero" alt="${esc(a.headline)}">`;
   html+=`<div class="art-content"><div class="art-byline">By ${esc(a.author)} &bull; ${esc(a.category)} &bull; ${esc(a.date)}</div>`;
   if(readable){
