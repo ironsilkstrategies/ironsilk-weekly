@@ -308,7 +308,14 @@ tr:hover td{background:var(--tag-bg);}
 .loading-bar{position:fixed;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold-light),var(--gold));background-size:200%;animation:shimmer 1.2s infinite;z-index:999;display:none;}
 .loading-bar.show{display:block;}
 @keyframes shimmer{0%{background-position:200%}100%{background-position:-200%}}
-.toast{display:none;position:fixed;bottom:1.3rem;right:1.3rem;background:var(--navy);color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:.6rem 1rem;font-size:.78rem;z-index:600;box-shadow:0 4px 14px rgba(0,0,0,.2);}
+.donor-hero{background:linear-gradient(135deg,var(--navy),var(--navy-mid));color:#fff;}
+.donor-hero .post-submit-btn{background:var(--gold);color:var(--navy);}
+.nbtn.donor-tab{color:var(--gold-light);font-weight:700;}
+.plaque-card{background:linear-gradient(135deg,var(--navy),var(--navy-mid));border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:1.1rem 1rem;text-align:center;}
+.plaque-star{color:var(--gold);font-size:1rem;margin-bottom:.4rem;}
+.plaque-name{font-size:.95rem;font-weight:700;color:var(--gold-light);font-family:Georgia,serif;margin-bottom:.3rem;}
+.plaque-msg{font-size:.74rem;color:var(--silver);font-style:italic;line-height:1.5;margin-bottom:.4rem;}
+.plaque-date{font-size:.62rem;color:rgba(200,210,230,.5);font-family:sans-serif;}.toast{display:none;position:fixed;bottom:1.3rem;right:1.3rem;background:var(--navy);color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:.6rem 1rem;font-size:.78rem;z-index:600;box-shadow:0 4px 14px rgba(0,0,0,.2);}
 .toast.show{display:block;}
 footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5rem;text-align:center;}
 .fn{color:var(--gold);font-size:.86rem;font-weight:700;}
@@ -362,6 +369,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="nbtn she-tab" onclick="showSheShed(this)">🌸 SheShed</button>
     <button class="nbtn mc-tab" onclick="openSportsHub()">🏆 SportsHub</button>
     <button class="nbtn live-tab" id="liveNavBtn" onclick="showLivePage(this)">📡 Live</button>
+    <button class="nbtn donor-tab" onclick="showDonorWall(this)">🏛 Donor Wall</button>
   </div>
 </nav>
 
@@ -516,6 +524,14 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="post-submit-btn" onclick="openCommunityPost('sheshed')">+ Share something</button>
   </div>
   <div class="community-grid" id="sheShedList"><div class="empty-community"><div class="eico">🌸</div><p>Nothing shared yet. Start the conversation.</p></div></div>
+  <div id="donorWallPage" style="display:none;max-width:900px;margin:0 auto;padding:1.2rem 1rem 3rem;">
+  <div class="section-hero donor-hero">
+    <h1>🏛 Donor Wall</h1>
+    <p>Independent journalism survives on community support. Become a donor for just $20 and we'll dedicate a plaque to you on this wall.</p>
+    <button class="post-submit-btn" onclick="openDonorCheckout()">💛 Become a Donor — $20</button>
+  </div>
+  <div class="community-grid" id="donorWallList"><div class="empty-community"><div class="eico">🏛</div><p>Be our first donor — your name could be the first plaque on this wall.</p></div></div>
+</div>
 </div>
 
 <div id="adminPanel">
@@ -531,6 +547,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="ambtn" onclick="showSec('breaking',this)">⚠ Breaking news</button>
     <button class="ambtn" onclick="showSec('livestream',this)">📡 Livestream</button>
     <button class="ambtn" onclick="showSec('events',this)">📅 Events</button>
+    <button class="ambtn" onclick="showSec('donors',this)">🏛 Donor Wall</button>
     <button class="ambtn" onclick="showSec('settings',this)">⚙ Settings</button>
   </div>
   <div class="acontent">
@@ -658,6 +675,28 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
       </div>
     </div>
     <!-- END EVENTS ADMIN -->
+    <div class="asec" id="sec-donors">
+  <div class="acard">
+    <h2><em>🏛</em> Add / Edit Donor Plaque</h2>
+    <input type="hidden" id="dn-edit-id" value="">
+    <div class="frow"><label>Donor name *</label><input class="finput" id="dn-name" type="text" placeholder="e.g. The Smith Family"></div>
+    <div class="frow"><label>Dedication message (optional)</label><input class="finput" id="dn-msg" type="text" placeholder="e.g. In support of local journalism"></div>
+    <div class="frow"><label>Amount</label><input class="finput" id="dn-amount" type="text" placeholder="e.g. $20" value="$20"></div>
+    <div style="display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.5rem">
+      <button class="btn-p" id="dn-save-btn" onclick="saveDonor()">+ Add Donor</button>
+      <button class="btn-s" onclick="clearDonorForm()">Clear form</button>
+    </div>
+  </div>
+  <div class="acard">
+    <h2><em>📋</em> All Donors</h2>
+    <div id="donorsAdminList"><p class="tno">Loading…</p></div>
+  </div>
+  <div class="acard">
+    <h2><em>🔗</em> Donor checkout link</h2>
+    <p style="font-size:.74rem;color:var(--text-muted)">Once your $20 donor product exists in Stripe, copy its Payment Link and paste it into the <code>DONOR_STRIPE_LINK</code> constant near the top of the module script in index.html. Until that's set, the "Become a Donor" button on the public page shows a friendly "not set up yet" message instead of breaking.</p>
+  </div>
+</div>
+<!-- END DONOR WALL ADMIN -->
 
     <!-- SETTINGS -->
     <div class="asec" id="sec-settings">
@@ -867,7 +906,7 @@ async function incrementArticleViews(id){try{await updateDoc(doc(db,'articles',i
 
 // PAGE MANAGEMENT
 function hideAllPages(){
-  ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','adminPanel','livePage','eventsPage'].forEach(id=>{
+  ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','donorWallPage','adminPanel','livePage','eventsPage'].forEach(id=>{
     try{const el=$(id);if(el){el.style.display='none';el.classList.remove('open');}}catch(e){}
   });
   $('siteNav').style.display='block';
@@ -892,6 +931,7 @@ window.showEvents=async btn=>{
 
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let allEvents=[];
+  let allDonors=[];
 
 const SEED_EVENTS=[
   {title:'Naturalist Program 50th Anniversary Party',date:'2026-06-06',time:'9:00 AM',endTime:'11:00 AM',location:'Shelter 1, Quartz Mountain State Park (near Granite)',host:'Quartz Mountain State Park + Wichita Mountains Life',description:'Free activities, food/refreshments, raffle, nature journaling, photos with Park Pal.',going:4,interested:63,recurring:false},
@@ -1052,6 +1092,108 @@ const STRIPE_PAYMENT_LINK='https://buy.stripe.com/dRmeV6e277UzfsldcYao802';
 window.openStripeCheckout=()=>{let url=STRIPE_PAYMENT_LINK;if(currentUser&&currentUser.email)url+='?prefilled_email='+encodeURIComponent(currentUser.email);window.open(url,'_blank');};
 async function checkStripeReturn(){const params=new URLSearchParams(window.location.search);if(params.get('subscribed')!=='true')return;window.history.replaceState({},'',window.location.pathname);const email=prompt('Payment successful! 🎉\n\nEnter the email address on your account to activate your subscription:');if(!email)return;loading(true);try{const snap=await getDocs(collection(db,'subscribers'));let matched=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email.trim().toLowerCase())matched={...s,id:d.id};});if(matched){await updateDoc(doc(db,'subscribers',matched.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});if(currentUser&&currentUser.email?.toLowerCase()===email.trim().toLowerCase()){currentUser.plan='subscriber';updateUserUI();renderReader(currentNavCat);}toast('🎉 Subscription activated! Welcome to IronSilk Weekly.');}else{toast('Almost there! Create your account below with the same email to finish activating.');pendingStripeEmail=email.trim().toLowerCase();setTimeout(()=>openRegister(),1000);}}catch(e){toast('Error activating. Please contact support.');}loading(false);}
 window.manualUpgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';if(!confirm(`Change ${s.firstName} ${s.lastName} to ${np}?`))return;loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np,manuallyUpdated:true,updatedAt:new Date().toISOString()});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated to '+np+'.');}catch(e){toast('Error.');}loading(false);};
+  // DONOR WALL
+const DONOR_STRIPE_LINK='https://buy.stripe.com/REPLACE_WITH_YOUR_DONOR_LINK';
+window.openDonorCheckout=()=>{
+  if(!DONOR_STRIPE_LINK||DONOR_STRIPE_LINK.includes('REPLACE_WITH')){toast('Donor checkout isn\'t set up yet — check back soon!');return;}
+  let url=DONOR_STRIPE_LINK;
+  if(currentUser&&currentUser.email)url+='?prefilled_email='+encodeURIComponent(currentUser.email);
+  window.open(url,'_blank');
+};
+window.showDonorWall=async btn=>{
+  hideAllPages();$('donorWallPage').style.display='block';
+  document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  await loadDonors();
+  renderDonorWall();
+};
+async function loadDonors(){
+  try{const snap=await getDocs(query(collection(db,'donors'),orderBy('ts','desc')));allDonors=[];snap.forEach(d=>allDonors.push({...d.data(),id:d.id}));}catch(e){allDonors=[];}
+}
+function renderDonorWall(){
+  const el=$('donorWallList');if(!el)return;
+  if(!allDonors.length){el.innerHTML='<div class="empty-community"><div class="eico">🏛</div><p>Be our first donor — your name could be the first plaque on this wall.</p></div>';return;}
+  el.innerHTML=allDonors.map(d=>`<div class="plaque-card"><div class="plaque-star">★</div><div class="plaque-name">${esc(d.name)}</div>${d.message?`<div class="plaque-msg">"${esc(d.message)}"</div>`:''}<div class="plaque-date">${esc(d.date)}</div></div>`).join('');
+}
+async function loadDonorsAdmin(){
+  const listEl=$('donorsAdminList');
+  if(listEl)listEl.innerHTML='<p class="tno">Loading donors…</p>';
+  try{
+    const snap=await getDocs(collection(db,'donors'));
+    allDonors=[];snap.forEach(d=>allDonors.push({...d.data(),id:d.id}));
+    allDonors.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  }catch(e){
+    if(listEl)listEl.innerHTML=`<p class="tno" style="color:#c53030">Error loading donors: ${e.message}</p>`;
+    return;
+  }
+  renderDonorsAdminList();
+}
+function renderDonorsAdminList(){
+  const el=$('donorsAdminList');if(!el)return;
+  if(!allDonors.length){el.innerHTML='<p class="tno">No donors yet. Use the form above to add one.</p>';return;}
+  el.innerHTML=allDonors.map(d=>`
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;background:var(--tag-bg);border:1px solid var(--border);border-radius:7px;padding:.65rem .8rem;margin-bottom:.5rem;gap:.5rem;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text);">${esc(d.name)} <span style="color:var(--gold);font-size:.7rem">${esc(d.amount||'')}</span></div>
+        ${d.message?`<div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;font-style:italic;">"${esc(d.message)}"</div>`:''}
+        <div style="font-size:.66rem;color:var(--text-muted);margin-top:.15rem;">${esc(d.date)}</div>
+      </div>
+      <div style="display:flex;gap:.3rem;flex-shrink:0;">
+        <button class="tbtn" onclick="editDonor('${d.id}')">Edit</button>
+        <button class="tbtn reject" onclick="deleteDonor('${d.id}')">Del</button>
+      </div>
+    </div>`).join('');
+}
+window.saveDonor=async()=>{
+  const name=$('dn-name').value.trim();
+  if(!name){toast('Donor name is required.');return;}
+  const dn={name,message:$('dn-msg').value.trim(),amount:$('dn-amount').value.trim()||'$20',date:today(),ts:Date.now()};
+  loading(true);
+  try{
+    const editId=$('dn-edit-id').value.trim();
+    if(editId){
+      await setDoc(doc(db,'donors',editId),dn);
+      const idx=allDonors.findIndex(x=>x.id===editId);
+      if(idx>=0)allDonors[idx]={...dn,id:editId};else allDonors.push({...dn,id:editId});
+      toast('Donor updated!');
+    }else{
+      const ref=await addDoc(collection(db,'donors'),dn);
+      allDonors.unshift({...dn,id:ref.id});
+      toast('Donor added!');
+    }
+    clearDonorForm();
+    renderDonorsAdminList();
+  }catch(e){toast('Error saving donor: '+e.message);}
+  loading(false);
+};
+window.editDonor=id=>{
+  const d=allDonors.find(x=>x.id===id);if(!d)return;
+  $('dn-name').value=d.name||'';
+  $('dn-msg').value=d.message||'';
+  $('dn-amount').value=d.amount||'$20';
+  $('dn-edit-id').value=id;
+  $('dn-save-btn').textContent='✓ Update Donor';
+  $('dn-name').scrollIntoView({behavior:'smooth',block:'center'});
+  $('dn-name').focus();
+  toast('Donor loaded — edit and click Update Donor.');
+};
+window.deleteDonor=async id=>{
+  if(!confirm('Delete this donor plaque?'))return;
+  loading(true);
+  try{
+    await deleteDoc(doc(db,'donors',id));
+    allDonors=allDonors.filter(x=>x.id!==id);
+    renderDonorsAdminList();
+    toast('Donor deleted.');
+  }catch(e){toast('Error deleting: '+e.message);}
+  loading(false);
+};
+window.clearDonorForm=()=>{
+  ['dn-name','dn-msg'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  $('dn-amount').value='$20';
+  $('dn-edit-id').value='';
+  $('dn-save-btn').textContent='+ Add Donor';
+};
 
 // SPORTSHUB
 window.openSportsHub=()=>{const ov=$('shOverlay');ov.style.display='flex';document.body.style.overflow='hidden';if(!$('shFrame').getAttribute('data-loaded')){$('shFrame').src='sportshub.html';$('shFrame').setAttribute('data-loaded','1');}};
@@ -1114,6 +1256,7 @@ window.showSec=(id,btn)=>{
   if(id==='community')loadCommunityAdmin('pending');
   if(id==='livestream')loadLivestreamAdmin();
   if(id==='events')loadEventsAdmin();
+  if(id==='donors')loadDonorsAdmin();
 };
 
 // NAV
