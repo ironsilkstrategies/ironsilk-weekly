@@ -757,37 +757,76 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 <div class="toast" id="toastEl"></div>
 
 <script>
-// Event delegation — catches clicks inside artBody regardless of how HTML was injected
+var TTS_WORKER_URL = 'https://ironsilk-tts.ironsilkstrategies.workers.dev';
+var _ttsAudio = null;
+
+function _ttsSetIdle(btn) {
+  btn.disabled = false;
+  btn.textContent = '▶ Listen to this article';
+  btn.style.background = '#c9a84c';
+  btn.style.color = '#0f1f3d';
+}
+
 document.addEventListener('click', function(e) {
-  if (e.target && e.target.id === 'listenBtn') {
-    var b = e.target;
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-      b.textContent = '▶ Listen to this article';
-      b.style.background = '#c9a84c';
-      b.style.color = '#0f1f3d';
-      return;
-    }
-    var id = window._currentArtId;
-    var arts = window._articles || [];
-    var a = arts.find(function(x){ return x.id === id; });
-    if (!a) return;
-    var text = a.headline + '. By ' + a.author + '. ' + (a.body || '');
-    var utt = new SpeechSynthesisUtterance(text);
-    utt.onend = utt.onerror = function() {
-      var btn = document.getElementById('listenBtn');
-      if (btn) { btn.textContent = '▶ Listen to this article'; btn.style.background = '#c9a84c'; btn.style.color = '#0f1f3d'; }
-    };
-    window.speechSynthesis.speak(utt);
+  if (!(e.target && e.target.id === 'listenBtn')) return;
+  var b = e.target;
+
+  // If audio is currently playing, clicking again stops it
+  if (_ttsAudio && !_ttsAudio.paused) {
+    _ttsAudio.pause();
+    _ttsAudio.currentTime = 0;
+    _ttsSetIdle(b);
+    return;
+  }
+
+  var id = window._currentArtId;
+  var arts = window._articles || [];
+  var a = arts.find(function(x){ return x.id === id; });
+  if (!a) return;
+
+  var text = (a.headline + '. By ' + a.author + '. ' + (a.body || '')).slice(0, 4000);
+
+  b.disabled = true;
+  b.textContent = '⏳ Loading…';
+  b.style.background = '#0f1f3d';
+  b.style.color = '#c9a84c';
+
+  fetch(TTS_WORKER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articleId: id, text: text })
+  })
+  .then(function(res) {
+    if (!res.ok) throw new Error('TTS request failed');
+    return res.blob();
+  })
+  .then(function(blob) {
+    var url = URL.createObjectURL(blob);
+    _ttsAudio = new Audio(url);
+    _ttsAudio.play();
+    b.disabled = false;
     b.textContent = '⏹ Stop';
     b.style.background = '#0f1f3d';
     b.style.color = '#c9a84c';
-  }
+    _ttsAudio.onended = function() {
+      var btn = document.getElementById('listenBtn');
+      if (btn) _ttsSetIdle(btn);
+    };
+  })
+  .catch(function(err) {
+    console.error('TTS error:', err);
+    var btn = document.getElementById('listenBtn');
+    if (btn) _ttsSetIdle(btn);
+  });
 });
+
 window.stopListen = function() {
-  window.speechSynthesis.cancel();
+  if (_ttsAudio) {
+    _ttsAudio.pause();
+    _ttsAudio.currentTime = 0;
+  }
   var b = document.getElementById('listenBtn');
-  if (b) { b.textContent = '▶ Listen to this article'; b.style.background = '#c9a84c'; b.style.color = '#0f1f3d'; }
+  if (b) _ttsSetIdle(b);
 };
 </script>
 <script type="module">
