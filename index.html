@@ -273,10 +273,15 @@ tr:hover td{background:var(--tag-bg);}
 .tbtn:hover{color:var(--gold);background:rgba(201,168,76,.09);}
 .tbtn.approve{color:#166534;}.tbtn.reject{color:#c53030;}
 .tno{color:var(--text-muted);font-size:.81rem;}
-.estate{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2rem;text-align:center;gap:.8rem;}
+.estate{display:none;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2rem;text-align:center;gap:.8rem;}
 .eico{font-size:2rem;color:rgba(201,168,76,.22);}
 .etitle{font-size:.92rem;font-weight:700;color:var(--text-muted);}
 .esub{font-size:.78rem;color:var(--text-muted);line-height:1.6;max-width:280px;}
+.site-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;text-align:center;gap:.9rem;}
+.site-loading img{height:60px;width:auto;object-fit:contain;opacity:.95;}
+.site-loading .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:slspin .85s linear infinite;}
+@keyframes slspin{to{transform:rotate(360deg);}}
+.site-loading .sl-text{font-size:.8rem;color:var(--text-muted);font-family:sans-serif;letter-spacing:.02em;}
 #shOverlay{display:none;position:fixed;inset:0;z-index:500;flex-direction:column;background:#0B1622;}
 #shOverlay.open{display:flex;}
 .sh-topbar{display:flex;align-items:center;gap:.7rem;padding:.6rem .95rem;background:#132035;border-bottom:2px solid #D4AF37;flex-shrink:0;}
@@ -304,13 +309,13 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 }
 </style>
 </head>
-<body>
+<body data-theme="dark">
 <div class="loading-bar" id="loadingBar"></div>
 
 <header>
   <div class="hdr-inner">
     <div class="logo-wrap">
-      <img class="logo-img" id="logoImg" alt="IronSilk Weekly" src="LOGO_BASE64_HERE"
+      <img class="logo-img" id="logoImg" alt="IronSilk Weekly" src="logo.png"
         onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex'">
       <div class="logo-fallback" id="logoFallback" style="display:none">
         <span class="logo-name">IronSilk Weekly</span>
@@ -319,12 +324,11 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     </div>
     <div class="hdr-right">
       <div class="search-wrap"><input type="text" id="searchInput" placeholder="Search…" oninput="doSearch()"><button>⌕</button></div>
-      <button class="hbtn" id="darkBtn" onclick="toggleDark()">☾</button>
+      <button class="hbtn" id="darkBtn" onclick="toggleDark()">☀</button>
       <button class="hbtn" onclick="goSub()">★ Subscribe</button>
       <span class="user-badge" id="userBadge" style="display:none"></span>
       <button class="hbtn" id="loginBtn" onclick="openReaderLogin()">Sign in</button>
       <button class="hbtn" id="logoutBtn" style="display:none" onclick="doLogout()">Sign out</button>
-      <button class="hbtn" id="editorBtn" onclick="toggleAdmin()">⚙ Editor</button>
     </div>
   </div>
 </header>
@@ -361,6 +365,11 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 </div>
 
 <main id="readerView">
+  <div id="siteLoadingState" class="site-loading">
+    <img src="logo.png" alt="IronSilk Weekly" onerror="this.style.display='none'">
+    <div class="spinner"></div>
+    <div class="sl-text">Loading IronSilk Weekly…</div>
+  </div>
   <div id="searchBox" style="display:none;margin-bottom:1.3rem;"><div class="slabel">Search results</div><div class="art-list" id="searchList"></div></div>
   <div id="mainContent">
     <div id="featSec" style="display:none"><div class="slabel">Featured stories</div><div class="feat-grid" id="featGrid"></div></div>
@@ -384,7 +393,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
         </div>
       </div>
     </div>
-    <div id="emptyState" class="estate"><div class="eico">◯</div><div class="etitle">No articles yet</div><div class="esub">Open the Editor panel to publish your first story.</div><button class="btn-p" onclick="toggleAdmin()">⚙ Open editor</button></div>
+    <div id="emptyState" class="estate"><div class="eico">◯</div><div class="etitle">No articles yet</div><div class="esub">New stories are on the way — check back soon.</div></div>
   </div>
 </main>
 
@@ -487,6 +496,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 <div id="adminPanel">
   <div class="aside">
     <div class="aside-label">Editor panel</div>
+    <button class="ambtn" onclick="toggleAdmin()" style="color:var(--text-muted);margin-bottom:.45rem;border-bottom:1px solid var(--border);border-radius:0;padding-bottom:.75rem;">← Exit to site</button>
     <button class="ambtn active" onclick="showSec('dashboard',this)">▪ Dashboard</button>
     <button class="ambtn" onclick="showSec('write',this)">✎ Write article</button>
     <button class="ambtn" onclick="showSec('manage',this)">☰ Manage articles</button>
@@ -588,7 +598,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     </div>
 
     <!-- ═══════════════════════════════════════════════════
-         EVENTS ADMIN — THIS WAS THE MISSING SECTION
+         EVENTS ADMIN
          ═══════════════════════════════════════════════════ -->
     <div class="asec" id="sec-events">
       <div class="acard">
@@ -640,7 +650,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
   </div><!-- /acontent -->
 </div><!-- /adminPanel -->
 
-<footer><div class="fn">IronSilk Weekly</div><div class="fs">© 2025 IronSilk Strategies · Local. Relentless. Daily.</div></footer>
+<footer><div class="fn" onclick="secretEditorTap()" style="cursor:default;">IronSilk Weekly</div><div class="fs">© 2025 IronSilk Strategies · Local. Relentless. Daily.</div></footer>
 
 <!-- ARTICLE MODAL -->
 <div class="overlay" id="artOverlay" onclick="if(event.target===this)closeArt()">
@@ -670,7 +680,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
 <!-- REGISTER -->
 <div class="overlay" id="regOverlay" style="z-index:300" onclick="if(event.target===this)closeRegister()">
-  <div class="smodal"><div class="smodal-hdr"><span class="smodal-title" id="regTitle">Create account</span><button class="xbtn" onclick="closeRegister()">✕</button></div><div class="smodal-body"><input type="hidden" id="regPlan" value="free"><div class="f2"><div class="frow" style="margin:0"><label>First name *</label><input class="finput" id="rFirstName" type="text" placeholder="First"></div><div class="frow" style="margin:0"><label>Last name *</label><input class="finput" id="rLastName" type="text" placeholder="Last"></div></div><div class="frow" style="margin-top:.75rem"><label>Email *</label><input class="finput" id="rRegEmail" type="email" placeholder="your@email.com"></div><div class="frow"><label>Phone</label><input class="finput" id="rPhone" type="tel" placeholder="(555) 000-0000"></div><div class="f2"><div class="frow" style="margin:0"><label>City</label><input class="finput" id="rCity" type="text" placeholder="City"></div><div class="frow" style="margin:0"><label>State</label><input class="finput" id="rState" type="text" placeholder="State"></div></div><div class="f2" style="margin-top:.75rem"><div class="frow" style="margin:0"><label>Zip</label><input class="finput" id="rZip" type="text" placeholder="00000"></div><div class="frow" style="margin:0"><label>Age</label><input class="finput" id="rAge" type="number" placeholder="Age" min="13" max="120"></div></div><div class="frow" style="margin-top:.75rem"><label>How did you hear about us?</label><select class="fsel" id="rSource"><option value="">Select one…</option><option>Word of mouth</option><option>Social media</option><option>Search engine</option><option>Local event</option><option>Friend or family</option><option>Other</option></select></div><div class="frow"><label>Password *</label><input class="finput" id="rRegPass" type="password" placeholder="Choose a password" onkeydown="if(event.key==='Enter')doRegister()"></div><div class="errmsg" id="regErr"></div><div class="subnote" id="subNote">★ <strong style="color:var(--gold)">Subscriber plan selected.</strong> Access granted automatically for now.</div></div><div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="doRegister()">Create account</button><button class="btn-s" onclick="closeRegister()">Cancel</button></div></div>
+  <div class="smodal"><div class="smodal-hdr"><span class="smodal-title" id="regTitle">Create account</span><button class="xbtn" onclick="closeRegister()">✕</button></div><div class="smodal-body"><input type="hidden" id="regPlan" value="free"><div class="f2"><div class="frow" style="margin:0"><label>First name *</label><input class="finput" id="rFirstName" type="text" placeholder="First"></div><div class="frow" style="margin:0"><label>Last name *</label><input class="finput" id="rLastName" type="text" placeholder="Last"></div></div><div class="frow" style="margin-top:.75rem"><label>Email *</label><input class="finput" id="rRegEmail" type="email" placeholder="your@email.com"></div><div class="frow"><label>Phone</label><input class="finput" id="rPhone" type="tel" placeholder="(555) 000-0000"></div><div class="f2"><div class="frow" style="margin:0"><label>City</label><input class="finput" id="rCity" type="text" placeholder="City"></div><div class="frow" style="margin:0"><label>State</label><input class="finput" id="rState" type="text" placeholder="State"></div></div><div class="f2" style="margin-top:.75rem"><div class="frow" style="margin:0"><label>Zip</label><input class="finput" id="rZip" type="text" placeholder="00000"></div><div class="frow" style="margin:0"><label>Age</label><input class="finput" id="rAge" type="number" placeholder="Age" min="13" max="120"></div></div><div class="frow" style="margin-top:.75rem"><label>How did you hear about us?</label><select class="fsel" id="rSource"><option value="">Select one…</option><option>Word of mouth</option><option>Social media</option><option>Search engine</option><option>Local event</option><option>Friend or family</option><option>Other</option></select></div><div class="frow" style="margin-top:.75rem"><label>Password *</label><input class="finput" id="rRegPass" type="password" placeholder="Choose a password" onkeydown="if(event.key==='Enter')doRegister()"></div><div class="errmsg" id="regErr"></div><div class="subnote" id="subNote">★ <strong style="color:var(--gold)">Subscriber plan selected.</strong> Access granted automatically for now.</div></div><div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="doRegister()">Create account</button><button class="btn-s" onclick="closeRegister()">Cancel</button></div></div>
 </div>
 
 <!-- COMMUNITY POST MODAL -->
@@ -754,7 +764,7 @@ const db=getFirestore(initializeApp({
   appId:"1:627827860074:web:118c36251452835bc26013"
 }));
 
-let dark=false,adminOpen=false,editorUnlocked=false;
+let dark=true,adminOpen=false,editorUnlocked=false;
 let currentUser=null,articles=[],subscribers=[],communityPosts=[];
 let currentArtId=null,currentNavCat='all';
 let cmtRequireApproval=true,currentImgBase64='',subsFilter='all';
@@ -970,9 +980,21 @@ window.closeSportsHub=()=>{$('shOverlay').style.display='none';document.body.sty
 
 // EDITOR AUTH
 window.toggleAdmin=()=>{if(!adminOpen&&!editorUnlocked){$('editorOverlay').classList.add('open');return;}adminOpen=!adminOpen;if(adminOpen){hideAllPages();$('siteNav').style.display='none';$('statsBar').style.display='none';$('breakingBar').style.display='none';$('adminPanel').classList.add('open');$('adminPanel').style.display='flex';}else{$('adminPanel').classList.remove('open');$('adminPanel').style.display='none';showReader();}updateEditorBtn();};
-const updateEditorBtn=()=>{let b=$('editorBtn');b.textContent=adminOpen?'← Reader':'⚙ Editor';b.classList.toggle('on',adminOpen);};
+const updateEditorBtn=()=>{let b=$('editorBtn');if(!b)return;b.textContent=adminOpen?'← Reader':'⚙ Editor';b.classList.toggle('on',adminOpen);};
 window.closeEditorLogin=()=>{$('editorOverlay').classList.remove('open');$('eUser').value='';$('ePass').value='';$('eErr').style.display='none';};
 window.tryEditorLogin=()=>{if($('eUser').value.trim()==='ISW'&&$('ePass').value==='Dead$3me'){editorUnlocked=true;window.closeEditorLogin();adminOpen=false;window.toggleAdmin();}else{$('eErr').style.display='block';$('ePass').value='';}};
+
+// HIDDEN EDITOR ACCESS — tap the footer brand name 5x quickly, or press Ctrl+Alt+E
+let _tapCount=0,_tapTimer=null;
+window.secretEditorTap=()=>{
+  _tapCount++;
+  clearTimeout(_tapTimer);
+  _tapTimer=setTimeout(()=>{_tapCount=0;},1800);
+  if(_tapCount>=5){_tapCount=0;window.toggleAdmin();}
+};
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.altKey&&(e.key==='e'||e.key==='E')){e.preventDefault();window.toggleAdmin();}
+});
 
 // READER AUTH
 window.openReaderLogin=()=>$('readerOverlay').classList.add('open');
@@ -1002,6 +1024,7 @@ window.setNav=(btn,cat)=>{document.querySelectorAll('.nbtn').forEach(b=>b.classL
 window.setNavByName=cat=>{document.querySelectorAll('.nbtn').forEach(b=>b.classList.toggle('active',b.textContent.trim().toLowerCase()===cat));currentNavCat=cat;renderReader(cat);};
 
 function renderReader(cat){
+  const sl=$('siteLoadingState');if(sl)sl.style.display='none';
   const pub=articles.filter(a=>a.status==='published');const filtered=pub.filter(a=>cat==='all'||a.category.toLowerCase()===cat);
   const empty=$('emptyState'),feat=$('featSec'),latest=$('latestSec');
   if(!pub.length){empty.style.display='flex';feat.style.display='none';latest.style.display='none';return;}
