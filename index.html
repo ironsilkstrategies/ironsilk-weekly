@@ -4,6 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IronSilk Weekly</title>
+<meta name="description" content="Independent civic journalism covering Kiowa County, Oklahoma — Hobart, Snyder, Gotebo, Lone Wolf, Mountain View, and beyond. Local. Relentless. Daily.">
+<link rel="canonical" href="https://www.ironsilkweekly.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="IronSilk Weekly">
+<meta property="og:title" content="IronSilk Weekly — Local. Relentless. Daily.">
+<meta property="og:description" content="Independent civic journalism covering Kiowa County, Oklahoma.">
+<meta property="og:url" content="https://www.ironsilkweekly.com/">
+<meta property="og:image" content="https://www.ironsilkweekly.com/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="IronSilk Weekly — Local. Relentless. Daily.">
+<meta name="twitter:description" content="Independent civic journalism covering Kiowa County, Oklahoma.">
+<meta name="twitter:image" content="https://www.ironsilkweekly.com/logo.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"NewsMediaOrganization","name":"IronSilk Weekly","url":"https://www.ironsilkweekly.com","logo":"https://www.ironsilkweekly.com/logo.png","description":"Independent civic journalism covering Kiowa County, Oklahoma.","parentOrganization":{"@type":"Organization","name":"IronSilk Strategies"},"areaServed":"Kiowa County, Oklahoma"}
+</script>
 <style>
 :root{--navy:#0f1f3d;--navy-mid:#1a3260;--navy-light:#1e3a72;--silver:#c0c8d8;--gold:#c9a84c;--gold-light:#e2c97e;--bg:#f4f6fa;--surface:#fff;--text:#0f1f3d;--text-muted:#5a6a85;--border:#d0d8e8;--tag-bg:#e8ecf2;--red:#b91c1c;--rose:#be185d;--rose-light:#fce7f3;}
 [data-theme="dark"]{--bg:#080f1e;--surface:#0f1f3d;--text:#e8ecf2;--text-muted:#8899b8;--border:#1e3a72;--tag-bg:#1a3260;--red:#991b1b;--rose-light:#4a0d2e;}
@@ -390,6 +405,16 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
             <p style="font-size:.72rem;color:var(--silver);line-height:1.55;margin-bottom:.75rem">Unlock every IronSilk Weekly story.</p>
             <button class="btn-gold" style="width:100%" onclick="goSub()">★ Subscribe now</button>
           </div>
+          <div class="sw">
+            <div class="wtitle">Get involved</div>
+            <p style="font-size:.74rem;color:var(--text-muted);line-height:1.6;margin-bottom:.65rem">Have an Opinion piece, a story tip, or a correction? We want to hear from you.</p>
+            <p style="font-size:.74rem;color:var(--text);line-height:1.75;margin:0">
+              <strong style="color:var(--gold)">Submit an Opinion column</strong><br>
+              <a href="mailto:editor@ironsilkweekly.com" style="color:var(--text);text-decoration:none">editor@ironsilkweekly.com</a><br><br>
+              <strong style="color:var(--gold)">Tips, corrections &amp; questions</strong><br>
+              <a href="mailto:staff@ironsilkweekly.com" style="color:var(--text);text-decoration:none">staff@ironsilkweekly.com</a>
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -429,7 +454,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
         <li>Free articles every week</li><li>Breaking news alerts</li><li>Comment on free stories</li>
         <li class="no">Exclusive investigations</li><li class="no">Subscriber-only deep dives</li>
       </ul>
-      <button class="pbtn free" onclick="openRegister('free')">Create free account</button>
+      <button class="pbtn free" onclick="openRegister()">Create free account</button>
     </div>
     <div class="pcard top">
       <div class="pbadge">Most popular</div>
@@ -597,9 +622,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════
-         EVENTS ADMIN
-         ═══════════════════════════════════════════════════ -->
+    <!-- EVENTS ADMIN -->
     <div class="asec" id="sec-events">
       <div class="acard">
         <h2><em>📅</em> Add / Edit Event</h2>
@@ -652,6 +675,22 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
 <footer><div class="fn" onclick="secretEditorTap()" style="cursor:default;">IronSilk Weekly</div><div class="fs">© 2025 IronSilk Strategies · Local. Relentless. Daily.</div></footer>
 
+<!-- WELCOME POPUP -->
+<div class="overlay" id="welcomeOverlay" style="z-index:260" onclick="if(event.target===this)closeWelcomePopup()">
+  <div class="smodal">
+    <div class="smodal-hdr"><span class="smodal-title">Welcome to IronSilk Weekly</span><button class="xbtn" onclick="closeWelcomePopup()">✕</button></div>
+    <div class="smodal-body">
+      <p style="font-size:.82rem;color:var(--text-muted);line-height:1.7;margin-bottom:.3rem">Independent, relentless coverage of Kiowa County — Hobart, Snyder, Gotebo, Lone Wolf, and beyond.</p>
+      <p style="font-size:.82rem;color:var(--text-muted);line-height:1.7">Create a free account to read our stories, or subscribe for full access to everything we publish.</p>
+    </div>
+    <div class="smodal-foot" style="flex-direction:column;gap:.55rem">
+      <button class="btn-gold" style="width:100%" onclick="closeWelcomePopup();goSub()">★ See plans &amp; subscribe</button>
+      <button class="btn-og" style="width:100%" onclick="closeWelcomePopup();openReaderLogin()">Sign in</button>
+      <button class="btn-s" style="width:100%" onclick="closeWelcomePopup();openRegister()">Create free account</button>
+    </div>
+  </div>
+</div>
+
 <!-- ARTICLE MODAL -->
 <div class="overlay" id="artOverlay" onclick="if(event.target===this)closeArt()">
   <div class="amodal">
@@ -675,7 +714,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
 <!-- READER LOGIN -->
 <div class="overlay" id="readerOverlay" style="z-index:300" onclick="if(event.target===this)closeReaderLogin()">
-  <div class="smodal"><div class="smodal-hdr"><span class="smodal-title">Sign in to IronSilk Weekly</span><button class="xbtn" onclick="closeReaderLogin()">✕</button></div><div class="smodal-body"><div class="frow"><label>Email</label><input class="finput" id="rEmail" type="email" placeholder="your@email.com"></div><div class="frow"><label>Password</label><input class="finput" id="rPass" type="password" onkeydown="if(event.key==='Enter')tryReaderLogin()"></div><div class="errmsg" id="rErr">⚠ Email or password not found.</div></div><div class="smodal-foot" style="flex-direction:column;gap:.45rem"><button class="btn-p" onclick="tryReaderLogin()">Sign in</button><p style="font-size:.74rem;color:var(--text-muted);text-align:center">No account? <button onclick="closeReaderLogin();openRegister('free')" style="background:none;border:none;color:var(--gold);font-size:.74rem;text-decoration:underline;cursor:pointer">Sign up free</button></p></div></div>
+  <div class="smodal"><div class="smodal-hdr"><span class="smodal-title">Sign in to IronSilk Weekly</span><button class="xbtn" onclick="closeReaderLogin()">✕</button></div><div class="smodal-body"><div class="frow"><label>Email</label><input class="finput" id="rEmail" type="email" placeholder="your@email.com"></div><div class="frow"><label>Password</label><input class="finput" id="rPass" type="password" onkeydown="if(event.key==='Enter')tryReaderLogin()"></div><div class="errmsg" id="rErr">⚠ Email or password not found.</div></div><div class="smodal-foot" style="flex-direction:column;gap:.45rem"><button class="btn-p" onclick="tryReaderLogin()">Sign in</button><p style="font-size:.74rem;color:var(--text-muted);text-align:center">No account? <button onclick="closeReaderLogin();openRegister()" style="background:none;border:none;color:var(--gold);font-size:.74rem;text-decoration:underline;cursor:pointer">Sign up free</button></p></div></div>
 </div>
 
 <!-- REGISTER -->
@@ -765,6 +804,7 @@ const db=getFirestore(initializeApp({
 }));
 
 let dark=true,adminOpen=false,editorUnlocked=false,pendingStripeEmail=null;
+let pendingArticleId=new URLSearchParams(window.location.search).get('article');
 let currentUser=null,articles=[],subscribers=[],communityPosts=[];
 let currentArtId=null,currentNavCat='all';
 let cmtRequireApproval=true,currentImgBase64='',subsFilter='all';
@@ -996,6 +1036,24 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.altKey&&(e.key==='e'||e.key==='E')){e.preventDefault();window.toggleAdmin();}
 });
 
+// WELCOME POPUP
+window.closeWelcomePopup=()=>{$('welcomeOverlay').classList.remove('open');};
+function maybeShowWelcomePopup(){
+  if(currentUser)return;
+  if(new URLSearchParams(window.location.search).get('subscribed')==='true')return;
+  setTimeout(()=>{if(!currentUser)$('welcomeOverlay').classList.add('open');},1800);
+}
+
+// SHARE / DEEP LINKING
+window.copyArticleLink=()=>{
+  const url=window.location.origin+window.location.pathname+'?article='+currentArtId;
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(()=>toast('Link copied!')).catch(()=>toast('Could not copy link.'));}else toast('Copy not supported on this browser.');
+};
+window.addEventListener('popstate',()=>{
+  const id=new URLSearchParams(window.location.search).get('article');
+  if(id){renderArticleModal(id);}else{window.stopListen();$('artOverlay').classList.remove('open');}
+});
+
 // READER AUTH
 window.openReaderLogin=()=>$('readerOverlay').classList.add('open');
 window.closeReaderLogin=()=>{$('readerOverlay').classList.remove('open');$('rEmail').value='';$('rPass').value='';$('rErr').style.display='none';};
@@ -1049,6 +1107,10 @@ const updateCatCounts=()=>{['local','civics','community','business','opinion','e
 
 // ARTICLE MODAL
 window.openArt=async id=>{
+  history.pushState({articleId:id},'','?article='+id);
+  await renderArticleModal(id);
+};
+async function renderArticleModal(id){
   currentArtId=id;const a=articles.find(x=>x.id===id);if(!a)return;
   $('artTitle').textContent=a.headline;await incrementArticleViews(id);
   $('artViewCount').textContent=(a.views||0)>0?`👁 ${Number(a.views).toLocaleString()} views`:'';
@@ -1056,7 +1118,7 @@ window.openArt=async id=>{
   if(a.image&&readable)html+=`<img src="${a.image}" class="art-hero" alt="${esc(a.headline)}">`;
   html+=`<div class="art-content"><div class="art-byline">By ${esc(a.author)} &bull; ${esc(a.category)} &bull; ${esc(a.date)}</div>`;
       if(readable){
-    html+=`<div style="margin-bottom:.7rem"><button id="listenBtn" style="background:#c9a84c;color:#0f1f3d;border:none;border-radius:6px;padding:.32rem .85rem;font-size:.75rem;font-weight:700;cursor:pointer;">▶ Listen to this article</button></div>`;
+    html+=`<div style="margin-bottom:.7rem;display:flex;gap:.5rem;flex-wrap:wrap"><button id="listenBtn" style="background:#c9a84c;color:#0f1f3d;border:none;border-radius:6px;padding:.32rem .85rem;font-size:.75rem;font-weight:700;cursor:pointer;">▶ Listen to this article</button><button onclick="copyArticleLink()" style="background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.28);color:var(--gold);padding:.32rem .65rem;border-radius:6px;font-size:.75rem;font-family:sans-serif;cursor:pointer;">🔗 Copy link</button></div>`;
     html+=`<div class="art-text">${a.body?esc(a.body):'<em style="color:var(--text-muted);font-family:sans-serif">No body text yet.</em>'}</div>`;
     html+='<div class="cmts"><h4>Comments</h4>';loading(true);
     try{const csnap=await getDocs(query(collection(db,'articles',id,'comments'),orderBy('ts')));const cl=[];csnap.forEach(d=>{const cd=d.data();if(cd.status==='approved')cl.push({...cd,cid:d.id});});if(!cl.length)html+='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">No comments yet. Be the first!</p>';else html+=cl.map(c=>`<div class="cmt"><div class="cmt-author">${esc(c.author)}</div><div class="cmt-text">${esc(c.text)}</div><div class="cmt-date">${esc(c.date)}</div></div>`).join('');}catch(e){html+='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">Could not load comments.</p>';}
@@ -1074,8 +1136,12 @@ window.openArt=async id=>{
     }
   }
   html+='</div>';$('artBody').innerHTML=html;$('artOverlay').classList.add('open');
+}
+window.closeArt=()=>{
+  window.stopListen();
+  $('artOverlay').classList.remove('open');
+  if(new URLSearchParams(window.location.search).get('article')){history.pushState({},'',window.location.pathname);}
 };
-window.closeArt=()=>{window.stopListen();$('artOverlay').classList.remove('open');};
 
 // TTS helpers aliased from plain script above
 function stopListen(){window.stopListen();}
@@ -1256,13 +1322,14 @@ async function init(){
     try{const gs=await getDoc(doc(db,'settings','general'));if(gs.exists()){const gd=gs.data();if(typeof gd.cmtRequireApproval!=='undefined'){cmtRequireApproval=gd.cmtRequireApproval;$('cmtGateDefault').value=cmtRequireApproval?'1':'0';}}}catch(e){}
     try{const bs=await getDoc(doc(db,'settings','breaking'));if(bs.exists()){const bd=bs.data();if(bd.active&&bd.text){$('breakingTxt').innerHTML=bd.text.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';$('breakingEditor').value=bd.text;}}}catch(e){}
     try{const ls=await getDoc(doc(db,'settings','livestream'));if(ls.exists()&&ls.data().active)updateLiveTabDot(true);}catch(e){}
-    onSnapshot(query(collection(db,'articles'),orderBy('ts','desc')),snap=>{articles=[];snap.forEach(d=>articles.push({...d.data(),id:d.id}));renderReader(currentNavCat);refreshManage();});
+    onSnapshot(query(collection(db,'articles'),orderBy('ts','desc')),snap=>{articles=[];snap.forEach(d=>articles.push({...d.data(),id:d.id}));renderReader(currentNavCat);refreshManage();if(pendingArticleId){const aid=pendingArticleId;pendingArticleId=null;renderArticleModal(aid);}});
     onSnapshot(collection(db,'subscribers'),snap=>{subscribers=[];snap.forEach(d=>subscribers.push({...d.data(),id:d.id}));refreshSubsTable();updateStats();updateStatsBar();});
     onSnapshot(query(collection(db,'communityPosts'),orderBy('ts','desc')),snap=>{communityPosts=[];snap.forEach(d=>communityPosts.push({...d.data(),id:d.id}));});
   }catch(e){toast('Database connection error.');}
   loading(false);
   showReader();
   checkStripeReturn();
+  maybeShowWelcomePopup();
 }
 init();
 </script>
