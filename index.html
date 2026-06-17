@@ -716,7 +716,7 @@ window.toggleDark=()=>{dark=!dark;document.body.setAttribute('data-theme',dark?'
 const listenBtn=$('listenBtn');
 
 function ttsStop(){
-  window.speechSynthesis.cancel();
+  try{if(window.speechSynthesis)window.speechSynthesis.cancel();}catch(e){}
   listenBtn.textContent='▶ Listen to this article';
   listenBtn.style.background='#c9a84c';
   listenBtn.style.color='#0f1f3d';
