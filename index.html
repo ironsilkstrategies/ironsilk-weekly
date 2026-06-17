@@ -723,6 +723,7 @@ function ttsStop(){
 }
 
 listenBtn.addEventListener('click',function(){
+  if(!window.speechSynthesis){toast('Audio playback is not supported in this browser.');return;}
   if(window.speechSynthesis.speaking){ttsStop();return;}
   if(!currentArtData)return;
   const text=currentArtData.headline+'. By '+currentArtData.author+'. '+(currentArtData.body||'');
@@ -948,17 +949,18 @@ function renderReader(cat){
 const updateCatCounts=()=>{['local','civics','community','business','opinion','events'].forEach(c=>{const el=$('cc-'+c);if(el)el.textContent=articles.filter(a=>a.status==='published'&&a.category.toLowerCase()===c).length;});};
 
 window.openArt=async id=>{
+ try{
   currentArtId=id;
   const a=articles.find(x=>x.id===id);
   if(!a)return;
   $('artTitle').textContent=a.headline;
-  await incrementArticleViews(id);
+  incrementArticleViews(id);
   $('artViewCount').textContent=(a.views||0)>0?`👁 ${Number(a.views).toLocaleString()} views`:'';
   const readable=canRead(a);
 
   ttsStop();
   currentArtData=readable?a:null;
-  listenBtn.style.display=readable?'block':'none';
+  listenBtn.style.display=(readable&&window.speechSynthesis)?'block':'none';
   listenBtn.textContent='▶ Listen to this article';
   listenBtn.style.background='#c9a84c';
   listenBtn.style.color='#0f1f3d';
@@ -968,17 +970,7 @@ window.openArt=async id=>{
   html+=`<div class="art-content"><div class="art-byline">By ${esc(a.author)} &bull; ${esc(a.category)} &bull; ${esc(a.date)}</div>`;
   if(readable){
     html+=`<div class="art-text">${a.body?esc(a.body):'<em style="color:var(--text-muted);font-family:sans-serif">No body text yet.</em>'}</div>`;
-    html+='<div class="cmts"><h4>Comments</h4>';
-    loading(true);
-    try{
-      const csnap=await getDocs(query(collection(db,'articles',id,'comments'),orderBy('ts')));
-      const cl=[];
-      csnap.forEach(d=>{const cd=d.data();if(cd.status==='approved')cl.push({...cd,cid:d.id});});
-      if(!cl.length)html+='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">No comments yet. Be the first!</p>';
-      else html+=cl.map(c=>`<div class="cmt"><div class="cmt-author">${esc(c.author)}</div><div class="cmt-text">${esc(c.text)}</div><div class="cmt-date">${esc(c.date)}</div></div>`).join('');
-    }catch(e){html+='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">Could not load comments.</p>';}
-    loading(false);
-    html+=`<div class="cmt-form"><textarea class="cmt-input" id="cmtInput" rows="2" placeholder="Leave a comment…"></textarea><button class="cmt-sub" onclick="postComment()">Post</button></div></div>`;
+    html+='<div class="cmts"><h4>Comments</h4><p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">Loading comments…</p></div>';
   }else{
     if(a.excerpt)html+=`<div class="art-text" style="margin-bottom:.9rem;opacity:.7">${esc(a.excerpt)}…</div>`;
     html+=`<div class="paywall-box"><h3>🔒 Exclusive story</h3><p>Subscribe to IronSilk Weekly for full access.</p><div class="pw-btns"><button class="btn-gold" onclick="closeArt();openRegister('subscriber')">Subscribe — $6/mo</button><button class="btn-og" onclick="closeArt();openReaderLogin()">Sign in</button></div></div>`;
@@ -986,6 +978,25 @@ window.openArt=async id=>{
   html+='</div>';
   $('artBody').innerHTML=html;
   $('artOverlay').classList.add('open');
+
+  if(readable){
+    try{
+      const csnap=await getDocs(query(collection(db,'articles',id,'comments'),orderBy('ts')));
+      const cl=[];
+      csnap.forEach(d=>{const cd=d.data();if(cd.status==='approved')cl.push({...cd,cid:d.id});});
+      const cmtsEl=$('artBody').querySelector('.cmts');
+      if(cmtsEl){
+        let cHtml='<h4>Comments</h4>';
+        cHtml+=cl.length?cl.map(c=>`<div class="cmt"><div class="cmt-author">${esc(c.author)}</div><div class="cmt-text">${esc(c.text)}</div><div class="cmt-date">${esc(c.date)}</div></div>`).join(''):'<p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">No comments yet. Be the first!</p>';
+        cHtml+='<div class="cmt-form"><textarea class="cmt-input" id="cmtInput" rows="2" placeholder="Leave a comment…"></textarea><button class="cmt-sub" onclick="postComment()">Post</button></div>';
+        cmtsEl.innerHTML=cHtml;
+      }
+    }catch(e){
+      const cmtsEl=$('artBody').querySelector('.cmts');
+      if(cmtsEl)cmtsEl.innerHTML='<h4>Comments</h4><p style="color:var(--text-muted);font-family:sans-serif;font-size:.78rem">Could not load comments.</p><div class="cmt-form"><textarea class="cmt-input" id="cmtInput" rows="2" placeholder="Leave a comment…"></textarea><button class="cmt-sub" onclick="postComment()">Post</button></div>';
+    }
+  }
+ }catch(err){console.error('openArt error:',err);toast('Could not open this article.');}
 };
 
 window.closeArt=()=>{
