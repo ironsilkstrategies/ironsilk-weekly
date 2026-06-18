@@ -308,15 +308,61 @@ tr:hover td{background:var(--tag-bg);}
 .loading-bar{position:fixed;top:0;left:0;width:100%;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold-light),var(--gold));background-size:200%;animation:shimmer 1.2s infinite;z-index:999;display:none;}
 .loading-bar.show{display:block;}
 @keyframes shimmer{0%{background-position:200%}100%{background-position:-200%}}
-.donor-hero{background:linear-gradient(135deg,var(--navy),var(--navy-mid));color:#fff;}
-.donor-hero .post-submit-btn{background:var(--gold);color:var(--navy);}
 .nbtn.donor-tab{color:var(--gold-light);font-weight:700;}
-.plaque-card{background:linear-gradient(135deg,var(--navy),var(--navy-mid));border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:1.1rem 1rem;text-align:center;}
-.plaque-star{color:var(--gold);font-size:1rem;margin-bottom:.4rem;}
-.plaque-name{font-size:.95rem;font-weight:700;color:var(--gold-light);font-family:Georgia,serif;margin-bottom:.3rem;}
-.plaque-msg{font-size:.74rem;color:var(--silver);font-style:italic;line-height:1.5;margin-bottom:.4rem;}
-.plaque-date{font-size:.62rem;color:rgba(200,210,230,.5);font-family:sans-serif;}.toast{display:none;position:fixed;bottom:1.3rem;right:1.3rem;background:var(--navy);color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:.6rem 1rem;font-size:.78rem;z-index:600;box-shadow:0 4px 14px rgba(0,0,0,.2);}
+.donor-grand-banner{background:linear-gradient(180deg,#030912 0%,#060e1c 50%,#080f1e 100%);border:1px solid rgba(201,168,76,.15);border-radius:12px;padding:2.8rem 2rem 2.2rem;margin-bottom:2rem;text-align:center;position:relative;overflow:hidden;}
+.donor-grand-banner::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,transparent 0%,rgba(201,168,76,.3) 15%,#c9a84c 40%,#e2c97e 50%,#c9a84c 60%,rgba(201,168,76,.3) 85%,transparent 100%);}
+.donor-grand-banner::after{content:'';position:absolute;bottom:0;left:0;right:0;height:4px;background:linear-gradient(90deg,transparent 0%,rgba(201,168,76,.3) 15%,#c9a84c 40%,#e2c97e 50%,#c9a84c 60%,rgba(201,168,76,.3) 85%,transparent 100%);}
+.dgb-orn{display:flex;align-items:center;justify-content:center;gap:.45rem;margin-bottom:1.4rem;}
+.dgb-orn span{color:rgba(201,168,76,.45);font-size:.72rem;} .dgb-orn .lg{color:rgba(201,168,76,.65);font-size:1rem;}
+.dgb-pub{font-size:.58rem;font-weight:700;letter-spacing:.25em;text-transform:uppercase;color:rgba(201,168,76,.45);margin-bottom:1.1rem;font-family:sans-serif;}
+.dgb-crest{width:90px;height:90px;border-radius:50%;background:radial-gradient(circle at 35% 35%,rgba(201,168,76,.16),rgba(201,168,76,.05) 65%,transparent);border:2px solid rgba(201,168,76,.38);display:flex;align-items:center;justify-content:center;margin:0 auto 1.1rem;position:relative;box-shadow:0 0 50px rgba(201,168,76,.14),0 0 100px rgba(201,168,76,.05),inset 0 0 20px rgba(201,168,76,.04);}
+.dgb-crest::before{content:'';position:absolute;inset:5px;border-radius:50%;border:1px solid rgba(201,168,76,.2);}
+.dgb-crest::after{content:'';position:absolute;inset:11px;border-radius:50%;border:1px dashed rgba(201,168,76,.11);}
+.dgb-crest-ico{font-size:2.4rem;line-height:1;filter:drop-shadow(0 0 10px rgba(201,168,76,.45));}
+.dgb-headline{font-size:1.65rem;font-weight:700;font-family:Georgia,serif;color:#fff;letter-spacing:.06em;margin-bottom:.5rem;text-shadow:0 0 50px rgba(201,168,76,.22),0 2px 4px rgba(0,0,0,.6);}
+.dgb-div{display:flex;align-items:center;justify-content:center;gap:.7rem;margin:.7rem auto;max-width:300px;}
+.dgb-div::before,.dgb-div::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,76,.4));}
+.dgb-div::after{background:linear-gradient(270deg,transparent,rgba(201,168,76,.4));}
+.dgb-diamond{width:7px;height:7px;background:var(--gold);transform:rotate(45deg);flex-shrink:0;box-shadow:0 0 6px rgba(201,168,76,.5);}
+.dgb-dedication{font-size:.88rem;color:rgba(201,168,76,.68);font-style:italic;font-family:Georgia,serif;line-height:1.8;max-width:500px;margin:0 auto 1.5rem;}
+.dgb-stats{display:flex;align-items:center;justify-content:center;margin-bottom:1.6rem;}
+.dgb-stat{text-align:center;padding:0 2.2rem;}
+.dgb-stat-num{font-size:1.9rem;font-weight:700;color:var(--gold);font-family:sans-serif;line-height:1;text-shadow:0 0 24px rgba(201,168,76,.35);}
+.dgb-stat-lbl{font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(201,168,76,.42);margin-top:.3rem;font-family:sans-serif;}
+.dgb-sep{width:1px;height:46px;background:linear-gradient(180deg,transparent,rgba(201,168,76,.22),transparent);}
+.dgb-btn{background:linear-gradient(135deg,#b8922a,#e2c97e,#c9a84c,#a8812a);color:#1a0d00;border:none;border-radius:5px;padding:.65rem 2.4rem;font-size:.85rem;font-weight:700;cursor:pointer;letter-spacing:.07em;font-family:sans-serif;box-shadow:0 4px 22px rgba(201,168,76,.32),inset 0 1px 0 rgba(255,255,255,.22);transition:all .2s;}
+.dgb-btn:hover{box-shadow:0 7px 30px rgba(201,168,76,.5),inset 0 1px 0 rgba(255,255,255,.3);transform:translateY(-1px);}
+.plaque-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1.3rem;}
+.plaque-lead{grid-column:span 2;}
+@media(max-width:680px){.plaque-lead{grid-column:span 1;}}
+.plaque-card{background:linear-gradient(145deg,#bf9b2e 0%,#ead475 22%,#d4aa48 50%,#c08f2e 78%,#dab84e 100%);border-radius:5px;padding:1.5rem 1.2rem;text-align:center;position:relative;box-shadow:0 8px 32px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.22);border:1px solid rgba(155,115,15,.4);}
+.plaque-card::before{content:'';position:absolute;inset:7px;border:1px solid rgba(90,55,0,.18);border-radius:2px;pointer-events:none;}
+.plaque-lead{padding:2rem 1.5rem;}
+.plaque-corner{position:absolute;color:rgba(80,45,0,.28);font-size:.6rem;line-height:1;}
+.plaque-corner.tl{top:11px;left:12px;} .plaque-corner.tr{top:11px;right:12px;}
+.plaque-corner.bl{bottom:11px;left:12px;} .plaque-corner.br{bottom:11px;right:12px;}
+.plaque-star{color:rgba(90,50,0,.45);font-size:.72rem;letter-spacing:.22em;margin-bottom:.5rem;}
+.plaque-name{font-size:1.05rem;font-weight:700;color:#2a1200;font-family:Georgia,serif;margin-bottom:.38rem;text-shadow:0 1px 0 rgba(255,255,255,.32),0 -1px 0 rgba(0,0,0,.08);letter-spacing:.03em;line-height:1.3;}
+.plaque-lead .plaque-name{font-size:1.28rem;}
+.plaque-msg{font-size:.72rem;color:rgba(45,20,0,.62);font-style:italic;line-height:1.6;margin-bottom:.45rem;font-family:Georgia,serif;}
+.plaque-date{font-size:.57rem;color:rgba(65,35,0,.42);font-family:sans-serif;letter-spacing:.09em;text-transform:uppercase;}.toast{display:none;position:fixed;bottom:1.3rem;right:1.3rem;background:var(--navy);color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:.6rem 1rem;font-size:.78rem;z-index:600;box-shadow:0 4px 14px rgba(0,0,0,.2);}
 .toast.show{display:block;}
+.hap-banner{background:linear-gradient(135deg,var(--navy),var(--navy-mid));border:1px solid rgba(201,168,76,.22);border-radius:10px;padding:.9rem 1rem;margin-bottom:1rem;}
+.hap-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;}
+.hap-lbl{font-size:.65rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);}
+.hap-week{font-size:.62rem;color:var(--text-muted);font-family:sans-serif;}
+.hap-list{display:flex;flex-direction:column;gap:.5rem;}
+.hap-item{display:flex;gap:.55rem;align-items:flex-start;padding-bottom:.5rem;border-bottom:1px solid rgba(201,168,76,.09);}
+.hap-item:last-child{border:none;padding:0;}
+.hap-ico{font-size:.95rem;flex-shrink:0;line-height:1.5;}
+.hap-content{flex:1;min-width:0;}
+.hap-item-title{font-size:.8rem;font-weight:700;color:var(--text);line-height:1.3;}
+.hap-item-desc{font-size:.73rem;color:var(--text-muted);line-height:1.55;margin-top:.12rem;}
+.ann-bar{border:1px solid rgba(201,168,76,.3);border-left:4px solid var(--gold);border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem;display:flex;align-items:flex-start;gap:.6rem;background:rgba(201,168,76,.07);}
+.ann-ico{font-size:.95rem;flex-shrink:0;margin-top:.1rem;}
+.ann-inner{flex:1;min-width:0;}
+.ann-label{font-size:.58rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:.15rem;}
+.ann-text{font-size:.8rem;color:var(--text);line-height:1.6;}
 footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5rem;text-align:center;}
 .fn{color:var(--gold);font-size:.86rem;font-weight:700;}
 .fs{color:rgba(200,210,230,.38);font-size:.65rem;margin-top:.18rem;}
@@ -526,13 +572,22 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
   </div>
   <div class="community-grid" id="sheShedList"><div class="empty-community"><div class="eico">🌸</div><p>Nothing shared yet. Start the conversation.</p></div></div>
   </div>
-  <div id="donorWallPage" style="display:none;max-width:900px;margin:0 auto;padding:1.2rem 1rem 3rem;">
-  <div class="section-hero donor-hero">
-    <h1>🏛 Donor Wall</h1>
-    <p>Independent journalism survives on community support. Become a donor for just $20 and we'll dedicate a plaque to you on this wall.</p>
-    <button class="post-submit-btn" onclick="openDonorCheckout()">💛 Become a Donor — $20</button>
+  <div id="donorWallPage" style="display:none;max-width:960px;margin:0 auto;padding:1.2rem 1rem 3rem;">
+  <div class="donor-grand-banner">
+    <div class="dgb-orn"><span>✦</span><span>─ ─</span><span class="lg">⬥</span><span>─ ─</span><span>✦</span></div>
+    <div class="dgb-pub">IronSilk Weekly · Kiowa County, Oklahoma</div>
+    <div class="dgb-crest"><span class="dgb-crest-ico">⚖</span></div>
+    <h1 class="dgb-headline" id="dwHeadline">Champions of Local Journalism</h1>
+    <div class="dgb-div"><span class="dgb-diamond"></span></div>
+    <p class="dgb-dedication" id="dwDedication">This wall honors those who invest in the truth — and in the community that deserves it.</p>
+    <div class="dgb-stats">
+      <div class="dgb-stat"><div class="dgb-stat-num" id="dwDonorCount">0</div><div class="dgb-stat-lbl">Donors</div></div>
+      <div class="dgb-sep"></div>
+      <div class="dgb-stat"><div class="dgb-stat-num" id="dwTotalRaised">$0</div><div class="dgb-stat-lbl">Contributed</div></div>
+    </div>
+    <button class="dgb-btn" onclick="openDonorCheckout()">✦ Claim Your Plaque — $20</button>
   </div>
-  <div class="community-grid" id="donorWallList"><div class="empty-community"><div class="eico">🏛</div><p>Be our first donor — your name could be the first plaque on this wall.</p></div></div>
+  <div class="plaque-grid" id="donorWallList"><div class="empty-community" style="grid-column:1/-1"><div class="eico">🏛</div><p>Be our first donor — your name could be the first plaque on this wall.</p></div></div>
 </div>
 
 <div id="adminPanel">
@@ -549,6 +604,8 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="ambtn" onclick="showSec('livestream',this)">📡 Livestream</button>
     <button class="ambtn" onclick="showSec('events',this)">📅 Events</button>
     <button class="ambtn" onclick="showSec('donors',this)">🏛 Donor Wall</button>
+    <button class="ambtn" onclick="showSec('happenings',this)">📅 Happenings</button>
+    <button class="ambtn" onclick="showSec('announce',this)">📢 Announcements</button>
     <button class="ambtn" onclick="showSec('settings',this)">⚙ Settings</button>
     <button class="ambtn" onclick="signOutEditor()" style="color:#c53030;margin-top:.5rem;border-top:1px solid var(--border);border-radius:0;padding-top:.75rem;">🚪 Sign out</button>
   </div>
@@ -678,6 +735,11 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     </div>
     <!-- END EVENTS ADMIN -->
     <div class="asec" id="sec-donors">
+  <div class="acard"><h2><em>🎨</em> Wall Settings</h2>
+    <div class="frow"><label>Banner headline</label><input class="finput" id="dw-headline" type="text" placeholder="Champions of Local Journalism"></div>
+    <div class="frow"><label>Dedication line</label><textarea class="ftxt" id="dw-dedication" style="min-height:65px" placeholder="This wall honors those who invest in the truth…"></textarea></div>
+    <div style="margin-top:.5rem"><button class="btn-p" onclick="saveDonorWallSettings()">Save wall settings</button></div>
+  </div>
   <div class="acard">
     <h2><em>🏛</em> Add / Edit Donor Plaque</h2>
     <input type="hidden" id="dn-edit-id" value="">
@@ -700,6 +762,45 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 </div>
 <!-- END DONOR WALL ADMIN -->
 
+<!-- HAPPENINGS ADMIN -->
+    <div class="asec" id="sec-happenings">
+      <div class="acard"><h2><em>📅</em> Weekly Happenings</h2>
+        <div class="frow"><label>Week label (shown in header)</label><input class="finput" id="hap-week" type="text" placeholder="e.g. June 15–21, 2026"></div>
+        <div class="f2">
+          <div class="frow" style="margin:0"><label>Icon / Emoji</label><input class="finput" id="hap-ico" type="text" placeholder="🎉"></div>
+          <div class="frow" style="margin:0"><label>Item title *</label><input class="finput" id="hap-ititle" type="text" placeholder="Farmers Market returns…"></div>
+        </div>
+        <div class="frow" style="margin-top:.75rem"><label>Description</label><input class="finput" id="hap-idesc" type="text" placeholder="Short detail line…"></div>
+        <input type="hidden" id="hap-edit-id" value="">
+        <div style="display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.5rem">
+          <button class="btn-p" id="hap-save-btn" onclick="saveHapItem()">+ Add Item</button>
+          <button class="btn-s" onclick="clearHapForm()">Clear</button>
+        </div>
+      </div>
+      <div class="acard"><h2><em>📋</em> Current Items</h2><div id="hapAdminList"><p class="tno">Loading…</p></div></div>
+      <div class="acard"><h2><em>👁</em> Visibility</h2>
+        <div class="live-toggle-row">
+          <label class="toggle-switch"><input type="checkbox" id="hap-visible"><span class="toggle-slider"></span></label>
+          <span class="toggle-label">Show Happenings section to readers</span>
+        </div>
+        <button class="btn-p" onclick="saveHapSettings()" style="margin-top:.4rem">Save visibility</button>
+      </div>
+    </div>
+    <!-- ANNOUNCEMENTS ADMIN -->
+    <div class="asec" id="sec-announce">
+      <div class="acard"><h2><em>📢</em> Site Announcement</h2>
+        <div class="live-toggle-row">
+          <label class="toggle-switch"><input type="checkbox" id="ann-active" onchange="$('ann-active-label').innerHTML='Announcement is <strong>'+(this.checked?'ON':'OFF')+'</strong>'"><span class="toggle-slider"></span></label>
+          <span class="toggle-label" id="ann-active-label">Announcement is <strong>OFF</strong></span>
+        </div>
+        <div class="f2" style="margin-top:.75rem">
+          <div class="frow" style="margin:0"><label>Icon / Emoji</label><input class="finput" id="ann-ico" type="text" placeholder="📢" value="📢"></div>
+          <div class="frow" style="margin:0"><label>Label (small caps text)</label><input class="finput" id="ann-lbl" type="text" placeholder="Notice · Update"></div>
+        </div>
+        <div class="frow" style="margin-top:.75rem"><label>Announcement text *</label><textarea class="ftxt" id="ann-body" style="min-height:90px" placeholder="Write your announcement here…"></textarea></div>
+        <div style="display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.5rem"><button class="btn-p" onclick="saveAnnouncement()">Save announcement</button></div>
+      </div>
+    </div>
     <!-- SETTINGS -->
     <div class="asec" id="sec-settings">
       <div class="acard"><h2><em>⚙</em> Site settings</h2>
@@ -1501,6 +1602,126 @@ $('scr-input').addEventListener('keydown',e=>{if(e.key==='Enter')checkScrAnswer(
 $('scr-reveal').addEventListener('click',scrReveal);
 $('scr-skip').addEventListener('click',()=>{scrStreak=0;advanceScr();});
 $('scr-replay').addEventListener('click',startScramble);
+
+// ===== WEEKLY HAPPENINGS =====
+let hapItems=[],hapVisible=false,hapWeekLabel='';
+async function loadHappeningsAdmin(){
+  try{
+    const snap=await getDocs(collection(db,'happeningsItems'));
+    hapItems=[];snap.forEach(d=>hapItems.push({...d.data(),id:d.id}));
+    hapItems.sort((a,b)=>(a.order||a.ts||0)-(b.order||b.ts||0));
+    const cfg=await getDoc(doc(db,'settings','happenings'));
+    if(cfg.exists()){hapVisible=!!cfg.data().visible;hapWeekLabel=cfg.data().weekLabel||'';}
+    if($('hap-visible'))$('hap-visible').checked=hapVisible;
+    if($('hap-week'))$('hap-week').value=hapWeekLabel;
+  }catch(e){}
+  renderHapAdminList();
+}
+function renderHapAdminList(){
+  const el=$('hapAdminList');if(!el)return;
+  if(!hapItems.length){el.innerHTML='<p class="tno">No items yet. Use the form above to add some.</p>';return;}
+  el.innerHTML=hapItems.map(h=>`<div style="display:flex;align-items:flex-start;justify-content:space-between;background:var(--tag-bg);border:1px solid var(--border);border-radius:7px;padding:.65rem .8rem;margin-bottom:.5rem;gap:.5rem;"><span style="font-size:1rem;flex-shrink:0">${esc(h.ico||'•')}</span><div style="flex:1;min-width:0"><div style="font-size:.82rem;font-weight:700;color:var(--text)">${esc(h.title)}</div>${h.desc?`<div style="font-size:.7rem;color:var(--text-muted);margin-top:.1rem">${esc(h.desc)}</div>`:''}</div><div style="display:flex;gap:.3rem;flex-shrink:0"><button class="tbtn" onclick="editHapItem('${h.id}')">Edit</button><button class="tbtn reject" onclick="deleteHapItem('${h.id}')">Del</button></div></div>`).join('');
+}
+window.saveHapItem=async()=>{
+  const title=$('hap-ititle').value.trim();
+  if(!title){toast('Item title is required.');return;}
+  const item={ico:$('hap-ico').value.trim()||'•',title,desc:$('hap-idesc').value.trim(),ts:Date.now(),order:hapItems.length};
+  loading(true);
+  try{
+    const editId=$('hap-edit-id').value.trim();
+    if(editId){await setDoc(doc(db,'happeningsItems',editId),item);const idx=hapItems.findIndex(x=>x.id===editId);if(idx>=0)hapItems[idx]={...item,id:editId};toast('Item updated!');}
+    else{const ref=await addDoc(collection(db,'happeningsItems'),item);hapItems.push({...item,id:ref.id});toast('Item added!');}
+    clearHapForm();renderHapAdminList();renderHappeningsReader();
+  }catch(e){toast('Error: '+e.message);}
+  loading(false);
+};
+window.editHapItem=id=>{
+  const h=hapItems.find(x=>x.id===id);if(!h)return;
+  $('hap-ico').value=h.ico||'';$('hap-ititle').value=h.title||'';$('hap-idesc').value=h.desc||'';
+  $('hap-edit-id').value=id;$('hap-save-btn').textContent='✓ Update Item';$('hap-ititle').focus();
+  toast('Loaded — edit and click Update Item.');
+};
+window.deleteHapItem=async id=>{
+  if(!confirm('Delete this item?'))return;
+  loading(true);
+  try{await deleteDoc(doc(db,'happeningsItems',id));hapItems=hapItems.filter(x=>x.id!==id);renderHapAdminList();renderHappeningsReader();toast('Deleted.');}catch(e){toast('Error: '+e.message);}
+  loading(false);
+};
+window.clearHapForm=()=>{
+  ['hap-ico','hap-ititle','hap-idesc'].forEach(id=>{const el=$(id);if(el)el.value='';});
+  if($('hap-edit-id'))$('hap-edit-id').value='';
+  if($('hap-save-btn'))$('hap-save-btn').textContent='+ Add Item';
+};
+window.saveHapSettings=async()=>{
+  hapVisible=!!$('hap-visible').checked;hapWeekLabel=$('hap-week').value.trim();
+  loading(true);
+  try{await setDoc(doc(db,'settings','happenings'),{visible:hapVisible,weekLabel:hapWeekLabel});renderHappeningsReader();toast('Happenings settings saved!');}catch(e){toast('Error: '+e.message);}
+  loading(false);
+};
+function renderHappeningsReader(){
+  let s=$('happeningsSec');
+  if(!s){
+    s=document.createElement('div');s.id='happeningsSec';
+    const al=$('artList');
+    if(al)al.parentNode.insertBefore(s,al.parentNode.firstChild);else return;
+  }
+  if(!hapVisible||!hapItems.length){s.style.display='none';s.innerHTML='';return;}
+  s.style.cssText='display:block;margin-bottom:.9rem';
+  s.innerHTML=`<div class="hap-banner"><div class="hap-hdr"><span class="hap-lbl">📅 Weekly Happenings</span>${hapWeekLabel?`<span class="hap-week">${esc(hapWeekLabel)}</span>`:''}</div><div class="hap-list">${hapItems.map(h=>`<div class="hap-item"><span class="hap-ico">${esc(h.ico||'•')}</span><div class="hap-content"><div class="hap-item-title">${esc(h.title)}</div>${h.desc?`<div class="hap-item-desc">${esc(h.desc)}</div>`:''}</div></div>`).join('')}</div></div>`;
+}
+
+// ===== ANNOUNCEMENTS =====
+let annData={active:false,ico:'📢',label:'',body:''};
+async function loadAnnouncementAdmin(){
+  try{const snap=await getDoc(doc(db,'settings','announcement'));if(snap.exists())annData={...annData,...snap.data()};}catch(e){}
+  if($('ann-active')){$('ann-active').checked=annData.active;$('ann-active-label').innerHTML=`Announcement is <strong>${annData.active?'ON':'OFF'}</strong>`;}
+  if($('ann-ico'))$('ann-ico').value=annData.ico||'📢';
+  if($('ann-lbl'))$('ann-lbl').value=annData.label||'';
+  if($('ann-body'))$('ann-body').value=annData.body||'';
+}
+window.saveAnnouncement=async()=>{
+  const body=$('ann-body').value.trim();
+  if(!body){toast('Announcement text is required.');return;}
+  annData={active:!!$('ann-active').checked,ico:$('ann-ico').value.trim()||'📢',label:$('ann-lbl').value.trim(),body};
+  loading(true);
+  try{await setDoc(doc(db,'settings','announcement'),annData);renderAnnouncementReader();toast('Announcement saved!');}catch(e){toast('Error: '+e.message);}
+  loading(false);
+};
+function renderAnnouncementReader(){
+  let b=$('announceBanner');
+  if(!b){
+    b=document.createElement('div');b.id='announceBanner';
+    const mc=$('mainContent');if(mc)mc.insertBefore(b,mc.firstChild);else return;
+  }
+  if(!annData.active||!annData.body){b.style.display='none';b.innerHTML='';return;}
+  b.style.display='block';
+  b.innerHTML=`<div class="ann-bar"><span class="ann-ico">${esc(annData.ico||'📢')}</span><div class="ann-inner">${annData.label?`<div class="ann-label">${esc(annData.label)}</div>`:''}<div class="ann-text">${esc(annData.body)}</div></div></div>`;
+}
+
+// patch showSec to handle new admin sections
+const _origShowSec=window.showSec;
+window.showSec=(id,btn)=>{
+  _origShowSec(id,btn);
+  if(id==='happenings')loadHappeningsAdmin();
+  if(id==='announce')loadAnnouncementAdmin();
+};
+
+// load happenings + announcements at startup
+(async()=>{
+  try{
+    const hcfg=await getDoc(doc(db,'settings','happenings'));
+    if(hcfg.exists()){hapVisible=!!hcfg.data().visible;hapWeekLabel=hcfg.data().weekLabel||'';}
+    const hsnap=await getDocs(collection(db,'happeningsItems'));
+    hapItems=[];hsnap.forEach(d=>hapItems.push({...d.data(),id:d.id}));
+    hapItems.sort((a,b)=>(a.order||a.ts||0)-(b.order||b.ts||0));
+    renderHappeningsReader();
+  }catch(e){}
+  try{
+    const asnap=await getDoc(doc(db,'settings','announcement'));
+    if(asnap.exists())annData={...annData,...asnap.data()};
+    renderAnnouncementReader();
+  }catch(e){}
+})();
 
 // INIT
 async function init(){
