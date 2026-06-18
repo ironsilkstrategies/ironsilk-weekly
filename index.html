@@ -550,6 +550,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
     <button class="ambtn" onclick="showSec('events',this)">📅 Events</button>
     <button class="ambtn" onclick="showSec('donors',this)">🏛 Donor Wall</button>
     <button class="ambtn" onclick="showSec('settings',this)">⚙ Settings</button>
+    <button class="ambtn" onclick="signOutEditor()" style="color:#c53030;margin-top:.5rem;border-top:1px solid var(--border);border-radius:0;padding-top:.75rem;">🚪 Sign out</button>
   </div>
   <div class="acontent">
 
@@ -749,7 +750,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
 <!-- EDITOR LOGIN -->
 <div class="overlay" id="editorOverlay" style="z-index:300" onclick="if(event.target===this)closeEditorLogin()">
-  <div class="smodal"><div class="smodal-hdr"><span class="smodal-title">🔒 Editor access</span><button class="xbtn" onclick="closeEditorLogin()">✕</button></div><div class="smodal-body"><p style="font-size:.76rem;color:var(--text-muted);margin-bottom:.85rem">Restricted to IronSilk Weekly staff.</p><div class="frow"><label>Username</label><input class="finput" id="eUser" type="text" autocomplete="username"></div><div class="frow"><label>Password</label><input class="finput" id="ePass" type="password" onkeydown="if(event.key==='Enter')tryEditorLogin()"></div><div class="errmsg" id="eErr">⚠ Incorrect username or password.</div></div><div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="tryEditorLogin()">Sign in</button><button class="btn-s" onclick="closeEditorLogin()">Cancel</button></div></div>
+  <div class="smodal"><div class="smodal-hdr"><span class="smodal-title">🔒 Editor access</span><button class="xbtn" onclick="closeEditorLogin()">✕</button></div><div class="smodal-body"><p style="font-size:.76rem;color:var(--text-muted);margin-bottom:.85rem">Restricted to IronSilk Weekly staff.</p><div class="frow"><label>Editor email</label><input class="finput" id="eUser" type="email" autocomplete="username" placeholder="you@ironsilkweekly.com"></div><div class="frow"><label>Password</label><input class="finput" id="ePass" type="password" onkeydown="if(event.key==='Enter')tryEditorLogin()"></div><div class="errmsg" id="eErr">⚠ Incorrect username or password.</div></div><div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="tryEditorLogin()">Sign in</button><button class="btn-s" onclick="closeEditorLogin()">Cancel</button></div></div>
 </div>
 
 <!-- READER LOGIN -->
@@ -811,7 +812,6 @@ document.addEventListener('click', function(e) {
   if (!(e.target && e.target.id === 'listenBtn')) return;
   var b = e.target;
 
-  // If audio is currently playing, clicking again stops it
   if (_ttsAudio && !_ttsAudio.paused) {
     _ttsAudio.pause();
     _ttsAudio.currentTime = 0;
@@ -872,15 +872,18 @@ window.stopListen = function() {
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import{getFirestore,collection,doc,addDoc,setDoc,getDoc,getDocs,deleteDoc,onSnapshot,orderBy,query,updateDoc,increment}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import{getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-const db=getFirestore(initializeApp({
+const fbApp=initializeApp({
   apiKey:"AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98",
   authDomain:"ironsilk-weekly.firebaseapp.com",
   projectId:"ironsilk-weekly",
   storageBucket:"ironsilk-weekly.firebasestorage.app",
   messagingSenderId:"627827860074",
   appId:"1:627827860074:web:118c36251452835bc26013"
-}));
+});
+const db=getFirestore(fbApp);
+const auth=getAuth(fbApp);
 
 let dark=true,adminOpen=false,editorUnlocked=false,pendingStripeEmail=null;
 let pendingArticleId=new URLSearchParams(window.location.search).get('article');
@@ -898,14 +901,12 @@ const getTags=()=>Array.from(document.querySelectorAll('.tpill.on')).map(p=>p.te
 window.toggleTag=el=>el.classList.toggle('on');
 window.toggleDark=()=>{dark=!dark;document.body.setAttribute('data-theme',dark?'dark':'');$('darkBtn').textContent=dark?'☀':'☾';};
 
-// VISITOR COUNTER
 async function incrementVisit(){try{await setDoc(doc(db,'settings','siteStats'),{totalVisits:increment(1)},{merge:true});}catch(e){}}
 async function loadSiteStats(){try{const snap=await getDoc(doc(db,'settings','siteStats'));if(snap.exists()){$('statVisits').textContent=Number(snap.data().totalVisits||0).toLocaleString();}else{$('statVisits').textContent='1';}}catch(e){$('statVisits').textContent='—';}}
 function updateStatsBar(){const paid=subscribers.filter(s=>s.plan==='subscriber').length;const free=subscribers.filter(s=>s.plan==='free').length;$('statSubs').textContent=paid.toLocaleString();$('statReaders').textContent=free.toLocaleString();}
 
 async function incrementArticleViews(id){try{await updateDoc(doc(db,'articles',id),{views:increment(1)});const a=articles.find(x=>x.id===id);if(a)a.views=(a.views||0)+1;}catch(e){}}
 
-// PAGE MANAGEMENT
 function hideAllPages(){
   ['readerView','subPage','scramblePage','classifiedsPage','sheShedPage','donorWallPage','adminPanel','livePage','eventsPage'].forEach(id=>{
     try{const el=$(id);if(el){el.style.display='none';el.classList.remove('open');}}catch(e){}
@@ -920,7 +921,6 @@ window.showScramble=btn=>{hideAllPages();$('scramblePage').style.display='block'
 window.showClassifieds=btn=>{hideAllPages();$('classifiedsPage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderCommunity('classified');};
 window.showSheShed=btn=>{hideAllPages();$('sheShedPage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderCommunity('sheshed');};
 
-// EVENTS PAGE
 window.showEvents=async btn=>{
   hideAllPages();$('eventsPage').style.display='block';
   document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));
@@ -932,7 +932,7 @@ window.showEvents=async btn=>{
 
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 let allEvents=[];
-  let allDonors=[];
+let allDonors=[];
 
 const SEED_EVENTS=[
   {title:'Naturalist Program 50th Anniversary Party',date:'2026-06-06',time:'9:00 AM',endTime:'11:00 AM',location:'Shelter 1, Quartz Mountain State Park (near Granite)',host:'Quartz Mountain State Park + Wichita Mountains Life',description:'Free activities, food/refreshments, raffle, nature journaling, photos with Park Pal.',going:4,interested:63,recurring:false},
@@ -986,17 +986,17 @@ function renderCalendar(){
     .cal-days-header{display:grid;grid-template-columns:repeat(7,1fr);background:var(--navy-mid,#1a3260);}
     .cal-dh{text-align:center;padding:.4rem 0;font-size:.65rem;font-weight:700;color:var(--gold,#c9a84c);text-transform:uppercase;letter-spacing:.06em;}
     .cal-body{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border,#d0d8e8);}
-    .cal-cell{background:var(--surface,#fff);min-height:60px;padding:.35rem .4rem;position:relative;}
+    .cal-cell{background:var(--surface,#fff);height:86px;padding:.32rem .36rem;position:relative;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;}
     .cal-cell.empty{background:var(--bg,#f4f6fa);opacity:.5;}
     .cal-cell.has-ev{cursor:pointer;}
-    .cal-cell.has-ev:hover{background:rgba(201,168,76,.06);}
-    .cal-cell.is-today{outline:2px solid var(--gold,#c9a84c);outline-offset:-2px;background:rgba(201,168,76,.07);}
-    .cal-dn{font-size:.75rem;font-weight:600;color:var(--text-muted,#5a6a85);}
+    .cal-cell.has-ev:hover{background:rgba(201,168,76,.08);}
+    .cal-cell.is-today{box-shadow:inset 0 0 0 2px var(--gold,#c9a84c);background:rgba(201,168,76,.07);}
+    .cal-dn{font-size:.74rem;font-weight:600;color:var(--text-muted,#5a6a85);flex-shrink:0;line-height:1.2;}
     .cal-cell.is-today .cal-dn{color:var(--gold,#c9a84c);font-weight:700;}
     .cal-cell.has-ev .cal-dn{color:var(--text,#0f1f3d);}
-    .cal-ev-dots{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;}
-    .cal-ev-dot{width:7px;height:7px;border-radius:50%;background:var(--gold,#c9a84c);}
-    .cal-ev-label{font-size:.6rem;color:var(--gold,#c9a84c);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-top:2px;line-height:1.3;}
+    .cal-ev-wrap{margin-top:3px;flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:2px;}
+    .cal-ev-chip{font-size:.56rem;line-height:1.3;padding:1px 4px;border-radius:3px;background:rgba(201,168,76,.16);color:var(--gold,#c9a84c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
+    .cal-ev-more{font-size:.55rem;color:var(--text-muted,#5a6a85);flex-shrink:0;line-height:1.2;}
     </style>`;
 
   const emptyCells=Array(firstDay).fill('<div class="cal-cell empty"></div>').join('');
@@ -1004,10 +1004,12 @@ function renderCalendar(){
     const dayNum=i+1;
     const dateStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
     const isToday=todayDate.getFullYear()===calYear&&todayDate.getMonth()===calMonth&&todayDate.getDate()===dayNum;
-    const evs=evMap[dateStr];
+    const evs=evMap[dateStr]||null;
+    const shown=evs?evs.slice(0,2):[];
+    const extra=evs?evs.length-shown.length:0;
     return`<div class="cal-cell${isToday?' is-today':''}${evs?' has-ev':''}" ${evs?`onclick="openDayEvents('${dateStr}')"`:''}>
       <span class="cal-dn">${dayNum}</span>
-      ${evs?`<div class="cal-ev-dots">${evs.slice(0,3).map(()=>'<span class="cal-ev-dot"></span>').join('')}</div><div class="cal-ev-label">${esc(evs[0].title)}${evs.length>1?' +more':''}</div>`:''}
+      ${evs?`<div class="cal-ev-wrap">${shown.map(ev=>`<span class="cal-ev-chip">${esc(ev.title)}</span>`).join('')}${extra>0?`<span class="cal-ev-more">+${extra} more</span>`:''}</div>`:''}
     </div>`;
   }).join('');
 
@@ -1054,7 +1056,6 @@ function renderEventArticles(){
   el.innerHTML=pub.map(a=>{const ar=canRead(a);const ti=a.image&&ar?`<img src="${a.image}" alt="">`:'◼';const av=a.views?`<span class="view-count">👁 ${Number(a.views).toLocaleString()}</span>`:'';return`<div class="aitem" onclick="openArt('${a.id}')"><div class="athumb">${ar?ti:'🔒'}</div><div class="ainfo"><div class="atitle">${esc(a.headline)}</div><div class="ameta"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>${av?'<span class="dot"></span>'+av:''}${ar?'':'<span style="color:var(--gold);font-size:.64rem">🔒 Subscribers only</span>'}</div></div></div>`;}).join('');
 }
 
-// LIVE PAGE
 window.showLivePage=async btn=>{hideAllPages();$('livePage').style.display='block';document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');await renderLivePage();};
 async function renderLivePage(){
   const wrap=$('liveHeroWrap');if(!wrap)return;
@@ -1088,12 +1089,11 @@ window.updateLiveNavDot=()=>{const on=$('liveToggle').checked;$('liveToggleLabel
 function updateLiveTabDot(on){const btn=$('liveNavBtn');btn.innerHTML=on?'<span class="live-dot"></span>📡 Live':'📡 Live';}
 window.saveLivestream=async()=>{const active=$('liveToggle').checked,url=$('ls-url').value.trim(),title=$('ls-title').value.trim(),nextBroadcast=$('ls-next').value.trim();loading(true);try{await setDoc(doc(db,'settings','livestream'),{active,url,title,nextBroadcast});updateLiveTabDot(active);toast('Livestream settings saved!');}catch(e){toast('Error saving.');}loading(false);};
 
-// STRIPE
 const STRIPE_PAYMENT_LINK='https://buy.stripe.com/dRmeV6e277UzfsldcYao802';
 window.openStripeCheckout=()=>{let url=STRIPE_PAYMENT_LINK;if(currentUser&&currentUser.email)url+='?prefilled_email='+encodeURIComponent(currentUser.email);window.open(url,'_blank');};
 async function checkStripeReturn(){const params=new URLSearchParams(window.location.search);if(params.get('subscribed')!=='true')return;window.history.replaceState({},'',window.location.pathname);const email=prompt('Payment successful! 🎉\n\nEnter the email address on your account to activate your subscription:');if(!email)return;loading(true);try{const snap=await getDocs(collection(db,'subscribers'));let matched=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email.trim().toLowerCase())matched={...s,id:d.id};});if(matched){await updateDoc(doc(db,'subscribers',matched.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});if(currentUser&&currentUser.email?.toLowerCase()===email.trim().toLowerCase()){currentUser.plan='subscriber';updateUserUI();renderReader(currentNavCat);}toast('🎉 Subscription activated! Welcome to IronSilk Weekly.');}else{toast('Almost there! Create your account below with the same email to finish activating.');pendingStripeEmail=email.trim().toLowerCase();setTimeout(()=>openRegister(),1000);}}catch(e){toast('Error activating. Please contact support.');}loading(false);}
 window.manualUpgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';if(!confirm(`Change ${s.firstName} ${s.lastName} to ${np}?`))return;loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np,manuallyUpdated:true,updatedAt:new Date().toISOString()});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated to '+np+'.');}catch(e){toast('Error.');}loading(false);};
-  // DONOR WALL
+
 const DONOR_STRIPE_LINK='https://buy.stripe.com/4gMdR26zFdeT4NH1ugao803';
 window.openDonorCheckout=()=>{
   if(!DONOR_STRIPE_LINK||DONOR_STRIPE_LINK.includes('REPLACE_WITH')){toast('Donor checkout isn\'t set up yet — check back soon!');return;}
@@ -1196,17 +1196,40 @@ window.clearDonorForm=()=>{
   $('dn-save-btn').textContent='+ Add Donor';
 };
 
-// SPORTSHUB
 window.openSportsHub=()=>{const ov=$('shOverlay');ov.style.display='flex';document.body.style.overflow='hidden';if(!$('shFrame').getAttribute('data-loaded')){$('shFrame').src='sportshub.html';$('shFrame').setAttribute('data-loaded','1');}};
 window.closeSportsHub=()=>{$('shOverlay').style.display='none';document.body.style.overflow='';};
 
-// EDITOR AUTH
 window.toggleAdmin=()=>{if(!adminOpen&&!editorUnlocked){$('editorOverlay').classList.add('open');return;}adminOpen=!adminOpen;if(adminOpen){hideAllPages();$('siteNav').style.display='none';$('statsBar').style.display='none';$('breakingBar').style.display='none';$('adminPanel').classList.add('open');$('adminPanel').style.display='flex';}else{$('adminPanel').classList.remove('open');$('adminPanel').style.display='none';showReader();}updateEditorBtn();};
 const updateEditorBtn=()=>{let b=$('editorBtn');if(!b)return;b.textContent=adminOpen?'← Reader':'⚙ Editor';b.classList.toggle('on',adminOpen);};
 window.closeEditorLogin=()=>{$('editorOverlay').classList.remove('open');$('eUser').value='';$('ePass').value='';$('eErr').style.display='none';};
-window.tryEditorLogin=()=>{if($('eUser').value.trim()==='ISW'&&$('ePass').value==='Dead$3me'){editorUnlocked=true;window.closeEditorLogin();adminOpen=false;window.toggleAdmin();}else{$('eErr').style.display='block';$('ePass').value='';}};
+window.tryEditorLogin=async()=>{
+  const email=$('eUser').value.trim(),pass=$('ePass').value;
+  if(!email||!pass){$('eErr').textContent='⚠ Enter your editor email and password.';$('eErr').style.display='block';return;}
+  loading(true);
+  try{
+    await signInWithEmailAndPassword(auth,email,pass);
+    editorUnlocked=true;
+    window.closeEditorLogin();
+    adminOpen=false;
+    window.toggleAdmin();
+  }catch(e){
+    $('eErr').textContent='⚠ Incorrect email or password.';
+    $('eErr').style.display='block';
+    $('ePass').value='';
+  }
+  loading(false);
+};
+window.signOutEditor=async()=>{
+  if(!confirm('Sign out of the editor panel?'))return;
+  try{await signOut(auth);}catch(e){}
+  editorUnlocked=false;
+  adminOpen=false;
+  $('adminPanel').classList.remove('open');$('adminPanel').style.display='none';
+  showReader();
+  toast('Signed out of editor.');
+};
+onAuthStateChanged(auth,user=>{editorUnlocked=!!user;});
 
-// HIDDEN EDITOR ACCESS — tap the footer brand name 5x quickly, or press Ctrl+Alt+E
 let _tapCount=0,_tapTimer=null;
 window.secretEditorTap=()=>{
   _tapCount++;
@@ -1218,7 +1241,6 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.altKey&&(e.key==='e'||e.key==='E')){e.preventDefault();window.toggleAdmin();}
 });
 
-// WELCOME POPUP
 window.closeWelcomePopup=()=>{$('welcomeOverlay').classList.remove('open');};
 function maybeShowWelcomePopup(){
   if(currentUser)return;
@@ -1226,7 +1248,6 @@ function maybeShowWelcomePopup(){
   setTimeout(()=>{if(!currentUser)$('welcomeOverlay').classList.add('open');},1800);
 }
 
-// SHARE / DEEP LINKING
 window.copyArticleLink=()=>{
   const url=window.location.origin+window.location.pathname+'?article='+currentArtId;
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(()=>toast('Link copied!')).catch(()=>toast('Could not copy link.'));}else toast('Copy not supported on this browser.');
@@ -1236,7 +1257,6 @@ window.addEventListener('popstate',()=>{
   if(id){renderArticleModal(id);}else{window.stopListen();$('artOverlay').classList.remove('open');}
 });
 
-// READER AUTH
 window.openReaderLogin=()=>$('readerOverlay').classList.add('open');
 window.closeReaderLogin=()=>{$('readerOverlay').classList.remove('open');$('rEmail').value='';$('rPass').value='';$('rErr').style.display='none';};
 window.tryReaderLogin=async()=>{const email=$('rEmail').value.trim().toLowerCase(),pass=$('rPass').value;loading(true);try{const snap=await getDocs(collection(db,'subscribers'));let u=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email&&s.password===pass)u={...s,id:d.id};});if(u){currentUser=u;window.closeReaderLogin();updateUserUI();renderReader(currentNavCat);toast('Welcome back, '+u.firstName+'!');}else $('rErr').style.display='block';}catch(e){toast('Sign in error.');}loading(false);};
@@ -1246,7 +1266,6 @@ window.doRegister=async()=>{const fn=$('rFirstName').value.trim(),ln=$('rLastNam
 window.doLogout=()=>{currentUser=null;updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
 const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';const b=$('userBadge');if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'★ '+currentUser.firstName:currentUser.firstName;}else b.style.display='none';};
 
-// ADMIN SECTIONS
 window.showSec=(id,btn)=>{
   document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));
   const sec=$('sec-'+id);
@@ -1260,7 +1279,6 @@ window.showSec=(id,btn)=>{
   if(id==='donors')loadDonorsAdmin();
 };
 
-// NAV
 window.setNav=(btn,cat)=>{document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentNavCat=cat;showReader();$('searchInput').value='';$('searchBox').style.display='none';$('mainContent').style.display='';renderReader(cat);};
 window.setNavByName=cat=>{document.querySelectorAll('.nbtn').forEach(b=>b.classList.toggle('active',b.textContent.trim().toLowerCase()===cat));currentNavCat=cat;renderReader(cat);};
 
@@ -1288,7 +1306,6 @@ function renderReader(cat){
 }
 const updateCatCounts=()=>{['local','civics','community','business','opinion','events'].forEach(c=>{const el=$('cc-'+c);if(el)el.textContent=articles.filter(a=>a.status==='published'&&a.category.toLowerCase()===c).length;});};
 
-// ARTICLE MODAL
 window.openArt=async id=>{
   history.pushState({articleId:id},'','?article='+id);
   await renderArticleModal(id);
@@ -1300,7 +1317,7 @@ async function renderArticleModal(id){
   const readable=canRead(a);window._currentArtId=id;window._articles=articles;window.stopListen();let html='';
   if(a.image&&readable)html+=`<img src="${a.image}" class="art-hero" alt="${esc(a.headline)}">`;
   html+=`<div class="art-content"><div class="art-byline">By ${esc(a.author)} &bull; ${esc(a.category)} &bull; ${esc(a.date)}</div>`;
-      if(readable){
+  if(readable){
     html+=`<div style="margin-bottom:.7rem;display:flex;gap:.5rem;flex-wrap:wrap"><button id="listenBtn" style="background:#c9a84c;color:#0f1f3d;border:none;border-radius:6px;padding:.32rem .85rem;font-size:.75rem;font-weight:700;cursor:pointer;">▶ Listen to this article</button><button onclick="copyArticleLink()" style="background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.28);color:var(--gold);padding:.32rem .65rem;border-radius:6px;font-size:.75rem;font-family:sans-serif;cursor:pointer;">🔗 Copy link</button></div>`;
     html+=`<div class="art-text">${a.body?esc(a.body):'<em style="color:var(--text-muted);font-family:sans-serif">No body text yet.</em>'}</div>`;
     html+='<div class="cmts"><h4>Comments</h4>';loading(true);
@@ -1326,16 +1343,13 @@ window.closeArt=()=>{
   if(new URLSearchParams(window.location.search).get('article')){history.pushState({},'',window.location.pathname);}
 };
 
-// TTS helpers aliased from plain script above
 function stopListen(){window.stopListen();}
 window.postComment=async()=>{const inp=$('cmtInput'),txt=inp.value.trim();if(!txt)return;const author=currentUser?(currentUser.firstName+' '+(currentUser.lastName||'')).trim():'Anonymous';const status=cmtRequireApproval?'pending':'approved';const artTitle=(articles.find(x=>x.id===currentArtId)||{}).headline||'';try{await addDoc(collection(db,'articles',currentArtId,'comments'),{author,text:txt,date:today(),ts:Date.now(),status,articleId:currentArtId,articleTitle:artTitle});const cmts=$('artBody').querySelector('.cmts');if(status==='approved'){const p=cmts.querySelector('p');if(p)p.remove();const d=document.createElement('div');d.className='cmt';d.innerHTML=`<div class="cmt-author">${esc(author)}</div><div class="cmt-text">${esc(txt)}</div><div class="cmt-date">Just now</div>`;cmts.insertBefore(d,cmts.querySelector('.cmt-form'));}else{const note=document.createElement('div');note.innerHTML='<span class="cmt-pending">✓ Comment submitted — awaiting approval.</span>';cmts.insertBefore(note,cmts.querySelector('.cmt-form'));}inp.value='';toast(status==='approved'?'Comment posted!':'Awaiting approval.');}catch(e){toast('Error posting comment.');}};
 
-// COMMENT MODERATION
 window.loadComments=async filter=>{['Pending','Approved','All'].forEach(f=>{const b=$('cf'+f);if(b)b.className=f.toLowerCase()===filter?'btn-p':'btn-s';});loading(true);try{const allC=[];for(const a of articles){const snap=await getDocs(collection(db,'articles',a.id,'comments'));snap.forEach(d=>allC.push({...d.data(),cid:d.id,artId:a.id,artTitle:a.headline}));}const filtered=filter==='all'?allC:allC.filter(c=>c.status===filter);$('st-pending').textContent=allC.filter(c=>c.status==='pending').length;const empty=$('cmt-empty'),tbl=$('cmt-table');if(!filtered.length){empty.style.display='';empty.textContent=`No ${filter==='all'?'':filter} comments.`;tbl.style.display='none';}else{empty.style.display='none';tbl.style.display='';$('cmt-body').innerHTML=filtered.map(c=>`<tr><td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.artTitle)}</td><td>${esc(c.author)}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.text)}</td><td>${esc(c.date)}</td><td><span class="sp ${c.status==='approved'?'pub':'pend'}">${c.status}</span></td><td>${c.status==='pending'?`<button class="tbtn approve" onclick="approveComment('${c.artId}','${c.cid}')">✓</button> `:''}<button class="tbtn reject" onclick="deleteComment('${c.artId}','${c.cid}')">✕</button></td></tr>`).join('');}}catch(e){toast('Error loading comments.');}loading(false);};
 window.approveComment=async(artId,cid)=>{loading(true);try{await updateDoc(doc(db,'articles',artId,'comments',cid),{status:'approved'});toast('Approved.');loadComments('pending');}catch(e){toast('Error.');}loading(false);};
 window.deleteComment=async(artId,cid)=>{if(!confirm('Delete?'))return;loading(true);try{await deleteDoc(doc(db,'articles',artId,'comments',cid));toast('Deleted.');loadComments('pending');}catch(e){toast('Error.');}loading(false);};
 
-// COMMUNITY POSTS
 window.openCommunityPost=type=>{$('commPostType').value=type;const isShe=type==='sheshed';$('commPostTitle').textContent=isShe?'Share to SheShed':'Post a listing';$('commPostHdr').className='smodal-hdr'+(isShe?' rose':'');$('cp-submit-btn').className=isShe?'btn-rose':'btn-p';document.getElementById('cp-cls-group').style.display=isShe?'none':'';document.getElementById('cp-she-group').style.display=isShe?'':'none';$('cp-contact-row').style.display=isShe?'none':'';$('cp-cat').value='';['cp-title','cp-author','cp-contact','cp-body'].forEach(id=>$(id).value='');$('cp-err').style.display='none';$('commPostOverlay').classList.add('open');};
 window.closeCommPost=()=>$('commPostOverlay').classList.remove('open');
 window.submitCommPost=async()=>{const type=$('commPostType').value,title=$('cp-title').value.trim(),author=$('cp-author').value.trim(),body=$('cp-body').value.trim(),cat=$('cp-cat').value;if(!title||!author||!body){$('cp-err').textContent='⚠ Title, your name, and description are required.';$('cp-err').style.display='block';return;}loading(true);try{await addDoc(collection(db,'communityPosts'),{type,title,author,body,category:cat,contact:$('cp-contact').value.trim()||null,status:'pending',date:today(),ts:Date.now()});window.closeCommPost();toast('Submitted for review — thank you!');}catch(e){toast('Error submitting.');}loading(false);};
@@ -1344,14 +1358,11 @@ window.loadCommunityAdmin=async filter=>{['Pending','Approved','All'].forEach(f=
 window.approveCommPost=async id=>{loading(true);try{await updateDoc(doc(db,'communityPosts',id),{status:'approved'});toast('Post approved.');loadCommunityAdmin('pending');}catch(e){toast('Error.');}loading(false);};
 window.deleteCommPost=async id=>{if(!confirm('Delete this post?'))return;loading(true);try{await deleteDoc(doc(db,'communityPosts',id));toast('Deleted.');loadCommunityAdmin('pending');}catch(e){toast('Error.');}loading(false);};
 
-// SEARCH
 window.doSearch=()=>{const q=$('searchInput').value.trim().toLowerCase();if(!q){$('searchBox').style.display='none';$('mainContent').style.display='';return;}$('mainContent').style.display='none';$('searchBox').style.display='block';const hits=articles.filter(a=>a.status==='published'&&a.headline.toLowerCase().includes(q));if(!hits.length){$('searchList').innerHTML='<p style="color:var(--text-muted);font-family:sans-serif;font-size:.81rem">No articles found.</p>';return;}$('searchList').innerHTML=hits.map(a=>{const av=a.views?`<span class="view-count">👁 ${Number(a.views).toLocaleString()}</span>`:'';return`<div class="aitem" onclick="openArt('${a.id}')"><div class="athumb">${a.image?`<img src="${a.image}" alt="">`:'◼'}</div><div class="ainfo"><div class="atitle">${esc(a.headline)}</div><div class="ameta"><span>${esc(a.author)}</span><span class="dot"></span><span>${esc(a.date)}</span>${av?'<span class="dot"></span>'+av:''}${a.access==='subscriber'?'<span style="color:var(--gold);font-size:.64rem">🔒</span>':''}</div></div></div>`;}).join('');};
 
-// IMAGE
 window.previewArticleImg=input=>{if(!input.files||!input.files[0])return;const file=input.files[0];if(file.size>1.8*1024*1024){toast('Image too large — under 1.5MB please.');input.value='';return;}const r=new FileReader();r.onload=e=>{currentImgBase64=e.target.result;const prev=$('w-img-preview');prev.src=currentImgBase64;prev.style.display='block';$('imgUploadLabel').style.display='none';};r.readAsDataURL(file);};
 window.clearArticleImg=()=>{currentImgBase64='';$('w-img').value='';const prev=$('w-img-preview');prev.src='';prev.style.display='none';$('imgUploadLabel').style.display='';};
 
-// WRITE / MANAGE
 window.publishArt=async()=>{const h=$('w-headline').value.trim(),a=$('w-author').value.trim();if(!h||!a){toast('Please fill in headline and author.');return;}const art={headline:h,author:a,category:$('w-cat').value,access:$('w-access').value,tags:getTags(),excerpt:$('w-excerpt').value.trim(),body:$('w-body').value.trim(),status:'published',date:today(),ts:Date.now(),image:currentImgBase64};loading(true);try{const id=$('editIdx').value;if(id){await setDoc(doc(db,'articles',id),{...art,views:(articles.find(x=>x.id===id)||{}).views||0});art.id=id;art.views=(articles.find(x=>x.id===id)||{}).views||0;const idx=articles.findIndex(x=>x.id===id);if(idx>=0)articles[idx]=art;}else{art.views=0;const ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}clearEditor();refreshManage();renderReader(currentNavCat);toast('Article published!');}catch(e){toast('Error saving.');}loading(false);};
 window.saveDraft=async()=>{const h=$('w-headline').value.trim();if(!h){toast('Please enter a headline.');return;}const art={headline:h,author:$('w-author').value.trim()||'—',category:$('w-cat').value,access:$('w-access').value,tags:getTags(),excerpt:$('w-excerpt').value.trim(),body:$('w-body').value.trim(),status:'draft',date:today(),ts:Date.now(),image:currentImgBase64};loading(true);try{const id=$('editIdx').value;if(id){await setDoc(doc(db,'articles',id),{...art,views:(articles.find(x=>x.id===id)||{}).views||0});art.id=id;const idx=articles.findIndex(x=>x.id===id);if(idx>=0)articles[idx]=art;}else{art.views=0;const ref=await addDoc(collection(db,'articles'),art);art.id=ref.id;articles.unshift(art);}clearEditor();refreshManage();toast('Draft saved.');}catch(e){toast('Error.');}loading(false);};
 window.clearEditor=()=>{$('editIdx').value='';['w-headline','w-author','w-excerpt','w-body'].forEach(id=>$(id).value='');$('w-cat').value='Local';$('w-access').value='free';document.querySelectorAll('.tpill').forEach(p=>p.classList.remove('on'));window.clearArticleImg();};
@@ -1359,14 +1370,12 @@ window.editArt=id=>{const a=articles.find(x=>x.id===id);if(!a)return;$('editIdx'
 window.deleteArt=async id=>{if(!confirm('Delete this article?'))return;loading(true);try{await deleteDoc(doc(db,'articles',id));articles=articles.filter(a=>a.id!==id);refreshManage();renderReader(currentNavCat);toast('Deleted.');}catch(e){toast('Error.');}loading(false);};
 function refreshManage(){const me=$('manage-empty'),mt=$('manage-table'),de=$('dash-empty'),dt=$('dash-table');if(!articles.length){me.style.display='';mt.style.display='none';de.style.display='';dt.style.display='none';updateStats();return;}me.style.display='none';mt.style.display='';de.style.display='none';dt.style.display='';$('manage-body').innerHTML=articles.map(a=>{const sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';const ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';return `<tr><td>${a.image?'📷 ':''}${esc(a.headline)}</td><td>${esc(a.author)}</td><td>${esc(a.category)}</td><td>${ac}</td><td><span class="sp ${sc}">${a.status}</span></td><td>${Number(a.views||0).toLocaleString()}</td><td>${esc(a.date)}</td><td><button class="tbtn" onclick="editArt('${a.id}')">Edit</button> <button class="tbtn reject" onclick="deleteArt('${a.id}')">Del</button></td></tr>`;}).join('');$('dash-body').innerHTML=articles.slice(0,5).map(a=>{const sc=a.status==='published'?(a.tags&&a.tags.includes('Breaking')?'brk':'pub'):'dft';const ac=a.access==='subscriber'?'<span class="sp exc">★ Excl.</span>':'Free';return `<tr><td>${esc(a.headline)}</td><td>${esc(a.category)}</td><td>${ac}</td><td><span class="sp ${sc}">${a.status}</span></td><td>${Number(a.views||0).toLocaleString()}</td><td>${esc(a.date)}</td></tr>`;}).join('');updateStats();}
 
-// SUBSCRIBERS
 window.filterSubs=f=>{subsFilter=f;$('sfAll').className=f==='all'?'btn-p':'btn-s';$('sfPaid').className=f==='subscriber'?'btn-p':'btn-s';$('sfFree').className=f==='free'?'btn-p':'btn-s';refreshSubsTable();};
 function refreshSubsTable(){const se=$('subs-empty'),st=$('subs-table');const filtered=subsFilter==='all'?subscribers:subscribers.filter(s=>s.plan===subsFilter);if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';st.style.display='none';return;}se.style.display='none';st.style.display='';$('subs-body').innerHTML=filtered.map(s=>`<tr><td>${esc(s.firstName||'')} ${esc(s.lastName||s.name||'')}</td><td>${esc(s.email)}</td><td>${esc(s.phone||'—')}</td><td>${esc(s.city||'—')}</td><td>${esc(s.state||'—')}</td><td>${esc(s.zip||'—')}</td><td>${esc(s.age||'—')}</td><td>${esc(s.source||'—')}</td><td><span class="sp ${s.plan==='subscriber'?'exc':'dft'}">${s.plan==='subscriber'?'★ Paid':'Free'}</span></td><td>${esc(s.joined)}</td><td><button class="tbtn" onclick="manualUpgradeSub('${s.id}')">${s.plan==='subscriber'?'→ Free':'→ Paid'}</button> <button class="tbtn reject" onclick="deleteSub('${s.id}')">✕</button></td></tr>`).join('');}
 window.upgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated.');}catch(e){toast('Error.');}loading(false);};
 window.deleteSub=async id=>{if(!confirm('Remove?'))return;loading(true);try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(s=>s.id!==id);refreshSubsTable();updateStats();updateStatsBar();toast('Removed.');}catch(e){toast('Error.');}loading(false);};
 const updateStats=()=>{$('st-total').textContent=articles.length;$('st-pub').textContent=articles.filter(a=>a.status==='published').length;$('st-draft').textContent=articles.filter(a=>a.status==='draft').length;$('st-subs').textContent=subscribers.filter(s=>s.plan==='subscriber').length;$('st-free').textContent=subscribers.filter(s=>s.plan==='free').length;};
 
-// EVENTS ADMIN
 async function loadEventsAdmin(){
   const listEl=$('eventsAdminList');
   if(listEl)listEl.innerHTML='<p class="tno">Loading events…</p>';
@@ -1477,7 +1486,6 @@ window.saveSettings=async()=>{cmtRequireApproval=$('cmtGateDefault').value==='1'
 
 async function loadLivestreamAdmin(){try{const snap=await getDoc(doc(db,'settings','livestream'));if(snap.exists()){const d=snap.data();$('liveToggle').checked=!!d.active;$('ls-url').value=d.url||'';$('ls-title').value=d.title||'';$('ls-next').value=d.nextBroadcast||'';$('liveToggleLabel').innerHTML=`Stream is <strong>${d.active?'ON — LIVE':'OFF'}</strong>`;updateLiveTabDot(!!d.active);}}catch(e){}}
 
-// WORD SCRAMBLE
 const SCR_WORDS=[{word:"HOBART",clue:"Kiowa County's seat, named for U.S. Vice President Garrett A. Hobart",category:"Towns & Founding"},{word:"SNYDER",clue:"Town that clashed with Mountain Park over the seat of the short-lived 'Swanson County'",category:"Towns & Founding"},{word:"GOTEBO",clue:"Town named for a respected Kiowa chief, though first platted in 1901 as 'Harrison'",category:"Towns & Founding"},{word:"LONEWOLF",clue:"Town that produced both an NFL All-Pro linebacker and a U.S. Army general",category:"Towns & Founding"},{word:"MOUNTAINVIEW",clue:"Birthplace of Pulitzer Prize-winning novelist N. Scott Momaday",category:"Towns & Founding"},{word:"MOUNTAINPARK",clue:"Briefly the seat of the short-lived 'Swanson County' in 1910",category:"Towns & Founding"},{word:"ROOSEVELT",clue:"Kiowa County town named for a U.S. president",category:"Towns & Founding"},{word:"COOPERTON",clue:"One of Kiowa County's smallest incorporated towns",category:"Towns & Founding"},{word:"LUGERT",clue:"Community largely vacated when Lake Altus-Lugert was built nearby",category:"Towns & Founding"},{word:"SADDLEMOUNTAIN",clue:"Community named for a peak considered sacred in Kiowa tradition",category:"Towns & Founding"},{word:"BABBS",clue:"Community south of Hobart whose 1924 Christmas Eve schoolhouse fire helped reshape U.S. fire-safety codes",category:"History"},{word:"KIOWA",clue:"The Plains nation the county is named for",category:"History"},{word:"LOTTERY",clue:"Method used in August 1901 to open former reservation land to settlers — seen as fairer than a land run",category:"History"},{word:"SWANSON",clue:"Short-lived county carved from Kiowa and Comanche counties in 1910, dissolved by the courts a year later",category:"History"},{word:"RADZIMINSKI",clue:"1858 frontier Army camp near Mountain Park, now a National Register site",category:"History"},{word:"COURTHOUSE",clue:"Hobart landmark added to the National Register of Historic Places in 1984",category:"History"},{word:"MOMADAY",clue:"Mountain View-born novelist who won the 1969 Pulitzer Prize for 'House Made of Dawn'",category:"Notable People"},{word:"TREADWELL",clue:"Snyder-born WWII soldier awarded the Congressional Medal of Honor",category:"Notable People"},{word:"MEINERT",clue:"Lone Wolf-born NFL All-Pro linebacker for the St. Louis Cardinals",category:"Notable People"},{word:"WEBER",clue:"Lone Wolf-born U.S. Army general who led the National Guard Bureau",category:"Notable People"},{word:"ROCKISLAND",clue:"Railway that linked Hobart with Chickasha and Mangum starting in 1900",category:"Railroads & Industry"},{word:"FRISCO",clue:"Nickname for the rail system whose north-south line reached Hobart by 1902",category:"Railroads & Industry"},{word:"SANTAFE",clue:"Railway system that absorbed the 1908 rail line running through Lone Wolf",category:"Railroads & Industry"},{word:"WASHITA",clue:"River that helps define Kiowa County's landscape",category:"Geography & Nature"},{word:"ELKCREEK",clue:"Stream running through Kiowa County",category:"Geography & Nature"},{word:"OTTERCREEK",clue:"Creek dammed to form Tom Steed Reservoir",category:"Geography & Nature"},{word:"TOMSTEED",clue:"Reservoir named for a longtime Oklahoma congressman",category:"Geography & Nature"},{word:"REDBEDS",clue:"Reddish sandstone formations common across western Oklahoma, including Kiowa County",category:"Geography & Nature"},{word:"RAINYMOUNTAIN",clue:"Sacred Kiowa landmark made famous by N. Scott Momaday's celebrated memoir",category:"Culture & Heritage"},{word:"COTTON",clue:"Historic cash crop grown across Kiowa County's farmland",category:"Agriculture"},{word:"SORGHUM",clue:"Grain crop widely grown alongside wheat in Kiowa County",category:"Agriculture"},{word:"WHEATGROWERS",clue:"Type of cooperative serving Kiowa County's grain farmers",category:"Agriculture"},{word:"BEARCATS",clue:"Hobart High School's athletic nickname",category:"Schools & Sports"},{word:"CYCLONES",clue:"Snyder High School's athletic nickname",category:"Schools & Sports"},{word:"ANADARKO",clue:"Caddo County city and Native American cultural hub near Kiowa County",category:"Neighbors"},{word:"ALTUS",clue:"Jackson County seat and regional hub south of Kiowa County",category:"Neighbors"},{word:"CARNEGIE",clue:"Small city just across Kiowa County's eastern border",category:"Neighbors"}];
 let scrQuestions=[],scrIdx=0,scrScore=0,scrStreak=0,scrRevealed=false,scrStarted=false;
 function scrShuffle(arr){return[...arr].sort(()=>Math.random()-.5);}
