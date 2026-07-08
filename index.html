@@ -354,33 +354,6 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 </head>
 <body data-theme="dark">
 <div class="loading-bar" id="loadingBar"></div>
-
-<div id="newsOverlay" style="display:none;">
-  <div class="np np-l">
-    <div class="np-inner">
-      <div class="np-mast">
-        <div class="np-mast-name">IronSilk Weekly</div>
-        <div class="np-mast-tag">Local &bull; Relentless &bull; Daily</div>
-      </div>
-      <div class="np-date" id="npDate">Kiowa County, Oklahoma &bull; Est. 2025</div>
-      <div id="npHeadline" class="np-hed">Covering Kiowa County's civic life, community, and power.</div>
-      <div id="npDeck" class="np-deck">Independent journalism from Hobart, Snyder, Gotebo, Lone Wolf, and beyond.</div>
-      <div class="np-byl">IronSilk Weekly Staff</div>
-      <div id="npBody" class="np-body">IronSilk Weekly was built on one conviction: that every community deserves a relentless, independent press willing to follow the story wherever it leads. We cover the meetings, the decisions, the people, and the moments that shape life in Kiowa County -- one story at a time.</div>
-    </div>
-  </div>
-  <div class="np np-r">
-    <div class="np-inner">
-      <div class="np-welcome-hed">Your county.<br>Your coverage.</div>
-      <div class="np-welcome-body">From city hall to Main Street, from courthouse records to community celebrations -- IronSilk Weekly is here, every week, telling the stories that matter to the people who live them.<br><br>Subscribe to unlock every story we publish, or browse freely. Either way, welcome home.</div>
-      <div class="np-foot">
-        <div class="np-foot-sub">Est. 2025 &bull; Hobart, Oklahoma</div>
-        <div class="np-foot-vol">Volume I</div>
-      </div>
-    </div>
-  </div>
-  <button class="np-skip" onclick="event.stopPropagation();openNewspaper()">Tap anywhere to enter &rarr;</button>
-</div>
 <header><div class="hdr-inner">
 <div class="logo-wrap">
 <img class="logo-img" id="logoImg" alt="IronSilk Weekly" src="logo.png" onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex'">
@@ -1150,6 +1123,35 @@ loading(false);
 };
 window.hideBreaking=async()=>{loading(true);try{await setDoc(doc(db,'settings','breaking'),{active:false});$('breakingBar').style.display='none';$('breakingBar').dataset.active='0';toast('Ticker hidden.');}catch(e){toast('Error.');}loading(false);};
 window.saveSettings=async()=>{cmtRequireApproval=$('cmtGateDefault').value==='1';try{await setDoc(doc(db,'settings','general'),{cmtRequireApproval});}catch(e){}toast('Settings saved!');};
+
+window.runBackdate=async()=>{
+  const btn=$('backdateBtn');const log=$('backdate-log');
+  btn.disabled=true;btn.textContent='Running...';
+  log.style.display='block';log.innerHTML='';
+  const addLog=(msg,color)=>{const l=document.createElement('div');l.textContent=msg;if(color)l.style.color=color;log.appendChild(l);log.scrollTop=log.scrollHeight;};
+  const todayStr=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  addLog('Looking for articles dated: "'+todayStr+'"...');
+  const ALL_IDS=['2nL9VrketUwcnwMt93Uv','3GyVAZ9pdNbdpxfPz2vd','3WcZbMd7sr4BQ33gti2D','4iNzceAcI4Vi7K845LUX','6KYhrEST7GdGqFkxiWqB','7hUKeGcYmKK0VX1fEHdF','9opesT6coSrUBYzfR1k8','AltuRNE3SObpyENuGTPZ','BpzQRf7QWs5QddIES5hv','BvBIbyEHHlnUgOclOJ2K','ExENFVKBTk5tronITVzI','F4LQ3OU5OqGmgTwNeIig','F5tyzAGsZIM09NDl7mrt','HVuGY5lINGRUZWJgVVWU','J3LKzJuK761LgKFSnsc9','L1MItX7Eo0Ir4OTpz829','LBITmQoxxSroLVtgA9Ao','MZhaKuZKVZamRnLZ9Ip5','NRSnDssbirIMwf0pqUtz','NX0Al0Bq5CvzRzn6HWyF','OzFMdYCXc1F5C6gktpFu','PX5vvr0ABlhQdIDfph8w','Ph4HF7khFY3uXygjLYD1','PodS7Zo9lX4oIJlNqcbM','QVsyFesmnTYm77iFK6o3','RBCMdxsJ1LH6nS50qVzc','Wg1ooawvqzovkOhQyDN9','XYJzG9iVCOoXrN63FFb0','XtVqqSw9M66XIflPWpsw','Y6R201NYnVxjc8QRZRfz','ZZC9wtJXycdrOqgBm6xU','ZbdYiwj1duIKZ2Vv1In9','bM4PSM4O5Qtj7dnCBxwe','bULORJTUCbwHuKkEepbu','bkIsaXwlEdcdSs5jqxY5','eBIdoNl7Quz1Hg9ks9Bz','eZCn4xjd9OhswdGWMaie','ex8F6y6xJngZ2av3QbBL','fgyHgETcxctMQzVOZbdl','ftbb3aZNPdhRzGeBNV7j','gN2TO4VtvOlrYawJHVZa','jT8AwdEY4Du2Mrla4T6O','movpqWKdj2bpxmQRajd4','nOSMtG4QjyEkxB1yK17V','qUUZTTLNgYv3FQq0P0FN','sMcvBf2WOIP3Zw8ioS5M','txhPCI0Sl3iGg6xCl3CS','vZnj8mgwreZ2glEC3Oqe','vtJBxAGAP4VUvI5i9da6','x5neCkgStDBm2xTK9fEE','xlK3frOYn48bPPRMLpGk','ysdsX4V734dRobAi2kMA'];
+  const fmt=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const dateRange=[];for(let i=0;i<=14;i++){const d=new Date('2025-12-20T10:00:00');d.setDate(d.getDate()+i);dateRange.push(d);}
+  const toUpdate=[];
+  for(const id of ALL_IDS){try{const snap=await getDoc(doc(db,'articles',id));if(snap.exists()&&snap.data().date===todayStr)toUpdate.push({id,...snap.data()});}catch(e){}}
+  if(!toUpdate.length){addLog('No articles with today\'s date found. Nothing changed.','#c9a84c');btn.disabled=false;btn.textContent='Run backdate now';return;}
+  addLog('Found '+toUpdate.length+' article(s) to backdate.','#4ade80');
+  const step=toUpdate.length>1?(dateRange.length-1)/(toUpdate.length-1):0;
+  for(let i=0;i<toUpdate.length;i++){
+    const a=toUpdate[i];
+    const dateIdx=Math.round(step*i);
+    const newDate=new Date(dateRange[Math.min(dateIdx,dateRange.length-1)].getTime());
+    newDate.setHours(7+Math.floor(Math.random()*10),Math.floor(Math.random()*60),0,0);
+    const newDateStr=fmt(newDate);
+    try{await updateDoc(doc(db,'articles',a.id),{date:newDateStr,ts:newDate.getTime()});addLog('✓ '+a.headline+' → '+newDateStr,'#4ade80');}
+    catch(e){addLog('✗ Failed: '+a.id,'#f87171');}
+  }
+  addLog('Done! Refresh the reader view to see updated dates.','#c9a84c');
+  btn.disabled=false;btn.textContent='Run backdate now';
+  renderReader(currentNavCat);
+};
 
 async function loadLivestreamAdmin(){try{const snap=await getDoc(doc(db,'settings','livestream'));if(snap.exists()){const d=snap.data();$('liveToggle').checked=!!d.active;$('ls-url').value=d.url||'';$('ls-title').value=d.title||'';$('ls-next').value=d.nextBroadcast||'';$('liveToggleLabel').innerHTML='Stream is <strong>'+(d.active?'ON -- LIVE':'OFF')+'</strong>';updateLiveTabDot(!!d.active);}}catch(e){}}
 
