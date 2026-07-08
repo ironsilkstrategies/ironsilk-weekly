@@ -7,20 +7,26 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:sans-serif;background:#080f1e;color:#e8ecf2;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
-.card{background:#0f1f3d;border:1px solid rgba(201,168,76,.25);border-radius:12px;padding:2rem;width:100%;max-width:560px;}
+.card{background:#0f1f3d;border:1px solid rgba(201,168,76,.25);border-radius:12px;padding:2rem;width:100%;max-width:580px;}
 .logo{font-size:1.3rem;font-weight:700;font-family:Georgia,serif;color:#c9a84c;margin-bottom:.25rem;}
 .sub{font-size:.65rem;letter-spacing:.18em;text-transform:uppercase;color:rgba(201,168,76,.45);margin-bottom:1.5rem;}
 .rule{height:1px;background:linear-gradient(90deg,transparent,#c9a84c,transparent);margin-bottom:1.5rem;}
 label{display:block;font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:.3rem;}
-input{width:100%;background:#080f1e;border:1px solid rgba(201,168,76,.2);border-radius:6px;padding:.55rem .75rem;font-size:.9rem;color:#fff;outline:none;margin-bottom:1rem;}
+.hint{font-size:.62rem;color:rgba(255,255,255,.25);margin-bottom:.6rem;margin-top:-.2rem;}
+input{width:100%;background:#080f1e;border:1px solid rgba(201,168,76,.2);border-radius:6px;padding:.55rem .75rem;font-size:.88rem;color:#fff;outline:none;margin-bottom:1rem;}
 input:focus{border-color:#c9a84c;}
+input[type=date]{color-scheme:dark;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;}
+.section-lbl{font-size:.6rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:rgba(201,168,76,.5);border-bottom:1px solid rgba(201,168,76,.15);padding-bottom:.4rem;margin-bottom:.85rem;}
 button{width:100%;background:#c9a84c;color:#0a1220;border:none;border-radius:6px;padding:.65rem;font-size:.85rem;font-weight:700;cursor:pointer;letter-spacing:.04em;margin-top:.25rem;}
 button:disabled{opacity:.4;cursor:default;}
 button:hover:not(:disabled){background:#e2c97e;}
-#log{display:none;margin-top:1.2rem;background:#04080f;border:1px solid rgba(201,168,76,.12);border-radius:6px;padding:.75rem 1rem;max-height:320px;overflow-y:auto;font-size:.75rem;line-height:1.9;}
+#log{display:none;margin-top:1.2rem;background:#04080f;border:1px solid rgba(201,168,76,.12);border-radius:6px;padding:.75rem 1rem;max-height:300px;overflow-y:auto;font-size:.75rem;line-height:1.9;}
 .ok{color:#4ade80;}.warn{color:#c9a84c;}.err{color:#f87171;}.dim{color:rgba(255,255,255,.35);}
-#status{margin-top:.9rem;font-size:.78rem;text-align:center;min-height:1.2rem;color:#f87171;}
-#status2{margin-top:.75rem;font-size:.8rem;text-align:center;color:#4ade80;}
+#errMsg{margin-top:.75rem;font-size:.78rem;text-align:center;min-height:1.2rem;color:#f87171;}
+#doneMsg{margin-top:.75rem;font-size:.8rem;text-align:center;color:#4ade80;}
+.preview-box{background:#080f1e;border:1px solid rgba(201,168,76,.15);border-radius:6px;padding:.65rem .85rem;margin-bottom:1rem;font-size:.76rem;color:rgba(255,255,255,.5);display:none;}
+.preview-box strong{color:#c9a84c;}
 </style>
 </head>
 <body>
@@ -29,19 +35,43 @@ button:hover:not(:disabled){background:#e2c97e;}
   <div class="sub">Article Date Backdater</div>
   <div class="rule"></div>
 
+  <!-- LOGIN -->
   <div id="loginSection">
-    <label>Editor email</label>
+    <div class="section-lbl">Editor sign in</div>
+    <label>Email</label>
     <input type="email" id="email" placeholder="you@ironsilkweekly.com">
     <label>Password</label>
     <input type="password" id="pass" placeholder="••••••••">
-    <button id="loginBtn">Sign in &amp; run backdate</button>
-    <div id="status"></div>
+    <button id="loginBtn">Sign in</button>
+    <div id="errMsg"></div>
   </div>
 
-  <div id="runSection" style="display:none">
-    <button id="runBtn">&#128197; Backdate all articles with today's date</button>
+  <!-- SETTINGS -->
+  <div id="settingsSection" style="display:none">
+    <div class="section-lbl">Articles to fix</div>
+    <label>Articles currently dated</label>
+    <div class="hint">Enter the wrong date your articles are showing (e.g. Jul 7, 2026)</div>
+    <input type="date" id="sourceDate">
+
+    <div class="rule" style="margin-top:.25rem;"></div>
+    <div class="section-lbl">Spread dates across this range</div>
+    <div class="row2">
+      <div>
+        <label>From date</label>
+        <input type="date" id="fromDate" value="2025-12-20">
+      </div>
+      <div>
+        <label>To date</label>
+        <input type="date" id="toDate" value="2026-01-03">
+      </div>
+    </div>
+
+    <div class="preview-box" id="previewBox"></div>
+
+    <button id="previewBtn">Preview range</button>
+    <button id="runBtn" style="margin-top:.6rem;display:none">&#128197; Run backdate now</button>
     <div id="log"></div>
-    <div id="status2"></div>
+    <div id="doneMsg"></div>
   </div>
 </div>
 
@@ -50,105 +80,105 @@ button:hover:not(:disabled){background:#e2c97e;}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
 firebase.initializeApp({
-  apiKey:            'AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98',
-  authDomain:        'ironsilk-weekly.firebaseapp.com',
-  projectId:         'ironsilk-weekly',
-  storageBucket:     'ironsilk-weekly.firebasestorage.app',
-  messagingSenderId: '627827860074',
-  appId:             '1:627827860074:web:118c36251452835bc26013'
+  apiKey:'AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98',
+  authDomain:'ironsilk-weekly.firebaseapp.com',
+  projectId:'ironsilk-weekly',
+  storageBucket:'ironsilk-weekly.firebasestorage.app',
+  messagingSenderId:'627827860074',
+  appId:'1:627827860074:web:118c36251452835bc26013'
 });
-var db   = firebase.firestore();
-var auth = firebase.auth();
+var db=firebase.firestore(), auth=firebase.auth();
+var $=function(id){return document.getElementById(id);};
 
-var $ = function(id){ return document.getElementById(id); };
-
-function addLog(msg, cls){
-  var d = document.createElement('div');
-  d.className = cls || 'dim';
-  d.textContent = msg;
-  $('log').appendChild(d);
-  $('log').scrollTop = $('log').scrollHeight;
+function addLog(msg,cls){
+  var d=document.createElement('div');
+  d.className=cls||'dim';d.textContent=msg;
+  $('log').appendChild(d);$('log').scrollTop=$('log').scrollHeight;
 }
 
-$('pass').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+// Format a Date → "Mon DD, YYYY" the way the site stores it
+function fmtSite(d){
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+// Parse a date input value (YYYY-MM-DD) as local midnight
+function parseLocal(val){
+  var p=val.split('-');
+  return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]),10,0,0,0);
+}
 
-$('loginBtn').addEventListener('click', doLogin);
-$('runBtn').addEventListener('click', runBackdate);
+// Set source date default to yesterday
+var yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+var yISO=yesterday.toISOString().slice(0,10);
 
+// Login
+$('pass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+$('loginBtn').addEventListener('click',doLogin);
 async function doLogin(){
-  var email = $('email').value.trim();
-  var pass  = $('pass').value;
-  if(!email || !pass){ $('status').textContent = 'Enter email and password.'; return; }
-  $('loginBtn').disabled = true;
-  $('status').textContent = 'Signing in...';
+  var email=$('email').value.trim(), pass=$('pass').value;
+  if(!email||!pass){$('errMsg').textContent='Enter email and password.';return;}
+  $('loginBtn').disabled=true;$('errMsg').textContent='Signing in...';
   try{
-    await auth.signInWithEmailAndPassword(email, pass);
-    $('loginSection').style.display = 'none';
-    $('runSection').style.display   = 'block';
+    await auth.signInWithEmailAndPassword(email,pass);
+    $('loginSection').style.display='none';
+    $('settingsSection').style.display='block';
+    $('sourceDate').value=yISO; // default to yesterday
   }catch(e){
-    $('status').textContent = 'Login failed: ' + e.message;
-    $('loginBtn').disabled = false;
+    $('errMsg').textContent='Login failed: '+e.message;
+    $('loginBtn').disabled=false;
   }
 }
 
+// Preview
+$('previewBtn').addEventListener('click',async function(){
+  var srcVal=$('sourceDate').value;
+  var fromVal=$('fromDate').value;
+  var toVal=$('toDate').value;
+  if(!srcVal||!fromVal||!toVal){$('previewBox').style.display='block';$('previewBox').innerHTML='<span style="color:#f87171">Fill in all three dates.</span>';return;}
+  var srcStr=fmtSite(parseLocal(srcVal));
+  var fromDate=parseLocal(fromVal), toDate=parseLocal(toVal);
+  if(fromDate>toDate){$('previewBox').style.display='block';$('previewBox').innerHTML='<span style="color:#f87171">From date must be before To date.</span>';return;}
+  $('previewBtn').disabled=true;$('previewBtn').textContent='Checking...';
+  var snap=await db.collection('articles').orderBy('ts','asc').get();
+  var count=0; snap.forEach(function(d){if(d.data().date===srcStr)count++;});
+  var days=Math.round((toDate-fromDate)/(1000*60*60*24))+1;
+  $('previewBox').style.display='block';
+  $('previewBox').innerHTML='Found <strong>'+count+' article(s)</strong> dated <strong>'+srcStr+'</strong>.<br>Spreading across <strong>'+days+' day(s)</strong>: <strong>'+fmtSite(fromDate)+'</strong> &rarr; <strong>'+fmtSite(toDate)+'</strong>.';
+  $('previewBtn').disabled=false;$('previewBtn').textContent='Preview range';
+  if(count>0){$('runBtn').style.display='block';}
+  else{$('runBtn').style.display='none';}
+});
+
+// Run
+$('runBtn').addEventListener('click',runBackdate);
 async function runBackdate(){
-  var btn = $('runBtn');
-  btn.disabled = true;
-  btn.textContent = 'Running...';
-  $('log').style.display = 'block';
-  $('log').innerHTML = '';
-
-  var todayStr = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  addLog('Looking for articles dated: "' + todayStr + '"...');
-
-  var snap = await db.collection('articles').orderBy('ts','asc').get();
-  var toUpdate = [];
-  snap.forEach(function(d){
-    var a = d.data();
-    if(a.date === todayStr) toUpdate.push(Object.assign({id:d.id}, a));
-  });
-
-  if(!toUpdate.length){
-    addLog('No articles found with today\'s date. Nothing to update.','warn');
-    btn.disabled = false;
-    btn.textContent = 'Backdate all articles with today\'s date';
-    return;
-  }
-
-  addLog('Found ' + toUpdate.length + ' article(s) to backdate.','warn');
-
-  // Dec 20, 2025 → Jan 3, 2026 (15 dates)
-  var dateRange = [];
-  for(var i=0;i<=14;i++){
-    var d = new Date('2025-12-20T10:00:00');
-    d.setDate(d.getDate()+i);
-    dateRange.push(d);
-  }
-
-  var fmt = function(d){ return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
-  var step = toUpdate.length > 1 ? (dateRange.length-1)/(toUpdate.length-1) : 0;
-  var done = 0, failed = 0;
-
-  for(var j=0;j<toUpdate.length;j++){
-    var a = toUpdate[j];
-    var idx = Math.min(Math.round(step*j), dateRange.length-1);
-    var newDate = new Date(dateRange[idx].getTime());
-    newDate.setHours(7+Math.floor(Math.random()*10), Math.floor(Math.random()*60), 0, 0);
-    var newDateStr = fmt(newDate);
+  var srcStr=fmtSite(parseLocal($('sourceDate').value));
+  var fromDate=parseLocal($('fromDate').value);
+  var toDate=parseLocal($('toDate').value);
+  $('runBtn').disabled=true;$('runBtn').textContent='Running...';
+  $('log').style.display='block';$('log').innerHTML='';
+  addLog('Searching for: "'+srcStr+'"...');
+  var snap=await db.collection('articles').orderBy('ts','asc').get();
+  var toUpdate=[]; snap.forEach(function(d){var a=d.data();if(a.date===srcStr)toUpdate.push(Object.assign({id:d.id},a));});
+  if(!toUpdate.length){addLog('No articles found with that date.','warn');$('runBtn').disabled=false;$('runBtn').textContent='Run backdate now';return;}
+  addLog('Found '+toUpdate.length+' article(s). Updating...','warn');
+  // Build date range
+  var totalMs=toDate-fromDate;
+  var step=toUpdate.length>1?totalMs/(toUpdate.length-1):0;
+  var done=0, failed=0;
+  for(var i=0;i<toUpdate.length;i++){
+    var a=toUpdate[i];
+    var newDate=new Date(fromDate.getTime()+Math.round(step*i));
+    newDate.setHours(7+Math.floor(Math.random()*10),Math.floor(Math.random()*60),0,0);
+    var newDateStr=fmtSite(newDate);
     try{
-      await db.collection('articles').doc(a.id).update({date:newDateStr, ts:newDate.getTime()});
-      addLog('✓  ' + a.headline + '  →  ' + newDateStr, 'ok');
-      done++;
-    }catch(e){
-      addLog('✗  Failed: ' + a.headline, 'err');
-      failed++;
-    }
+      await db.collection('articles').doc(a.id).update({date:newDateStr,ts:newDate.getTime()});
+      addLog('✓  '+a.headline+'  →  '+newDateStr,'ok');done++;
+    }catch(e){addLog('✗  Failed: '+a.headline,'err');failed++;}
   }
-
   addLog('');
-  addLog('Done! ' + done + ' updated' + (failed ? ', ' + failed + ' failed.' : '.'), 'warn');
-  $('status2').textContent = '✓ All done — refresh your site to see the new dates.';
-  btn.textContent = 'Completed ✓';
+  addLog('Done! '+done+' updated'+(failed?', '+failed+' failed.':' successfully.'),'warn');
+  $('doneMsg').textContent='✓ All done — go to your site and refresh to see the updated dates.';
+  $('runBtn').textContent='Completed ✓';
 }
 </script>
 </body>
