@@ -20,7 +20,8 @@ header{background:var(--navy);border-bottom:3px solid var(--gold);position:stick
 .logo-tag{font-size:.55rem;color:var(--gold);letter-spacing:.14em;text-transform:uppercase;margin-top:2px;}
 .hdr-right{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;}
 .search-wrap{display:flex;align-items:center;background:var(--navy-light);border:1px solid rgba(201,168,76,.3);border-radius:6px;overflow:hidden;}
-.search-wrap input{background:none;border:none;outline:none;color:#e8ecf2;padding:.35rem .6rem;font-size:.78rem;width:120px;}
+.search-wrap input{background:none;border:none;outline:none;color:#e8ecf2;padding:.35rem .6rem;font-size:.78rem;width:120px;-webkit-appearance:none;appearance:none;}
+.search-wrap input::-webkit-search-decoration,.search-wrap input::-webkit-search-cancel-button,.search-wrap input::-webkit-search-results-button,.search-wrap input::-webkit-search-results-decoration{-webkit-appearance:none;}
 .search-wrap button{background:none;border:none;color:var(--gold);padding:.35rem .55rem;font-size:.88rem;}
 .hbtn{background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.28);color:var(--gold);padding:.32rem .65rem;border-radius:6px;font-size:.74rem;white-space:nowrap;}
 .hbtn:hover{background:rgba(201,168,76,.24);}
@@ -360,7 +361,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 <div class="logo-fallback" id="logoFallback" style="display:none"><span class="logo-name">IronSilk Weekly</span><span class="logo-tag">Local. Relentless. Daily.</span></div>
 </div>
 <div class="hdr-right">
-<div class="search-wrap"><input type="text" id="searchInput" placeholder="Search..." oninput="doSearch()"><button>Go</button></div>
+<div class="search-wrap"><input type="search" id="searchInput" name="site-search" placeholder="Search..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" oninput="doSearch()"><button>Go</button></div>
 <button class="hbtn" id="darkBtn" onclick="toggleDark()">Light</button>
 <button class="hbtn" onclick="goSub()">Subscribe</button>
 <span class="user-badge" id="userBadge" style="display:none"></span>
@@ -561,7 +562,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 <div class="smodal"><div class="smodal-hdr"><span class="smodal-title">Editor access</span><button class="xbtn" onclick="closeEditorLogin()">X</button></div><div class="smodal-body"><p style="font-size:.76rem;color:var(--text-muted);margin-bottom:.85rem">Restricted to IronSilk Weekly staff.</p><div class="frow"><label>Editor email</label><input class="finput" id="eUser" type="email" autocomplete="username" placeholder="you@ironsilkweekly.com"></div><div class="frow"><label>Password</label><input class="finput" id="ePass" type="password" onkeydown="if(event.key==='Enter')tryEditorLogin()"></div><div class="errmsg" id="eErr">Incorrect email or password.</div></div><div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="tryEditorLogin()">Sign in</button><button class="btn-s" onclick="closeEditorLogin()">Cancel</button></div></div></div>
 
 <div class="overlay" id="readerOverlay" style="z-index:300" onclick="if(event.target===this)closeReaderLogin()">
-<div class="smodal"><div class="smodal-hdr"><span class="smodal-title">Sign in to IronSilk Weekly</span><button class="xbtn" onclick="closeReaderLogin()">X</button></div><div class="smodal-body"><div class="frow"><label>Username</label><input class="finput" id="rUsername" type="text" placeholder="yourusername" autocapitalize="off" autocomplete="username"></div><div class="frow"><label>Password</label><input class="finput" id="rPass" type="password" onkeydown="if(event.key==='Enter')tryReaderLogin()"></div><div class="errmsg" id="rErr">Username or password not found.</div></div><div class="smodal-foot" style="flex-direction:column;gap:.45rem"><button class="btn-p" onclick="tryReaderLogin()">Sign in</button><p style="font-size:.74rem;color:var(--text-muted);text-align:center">No account? <button onclick="closeReaderLogin();openRegister()" style="background:none;border:none;color:var(--gold);font-size:.74rem;text-decoration:underline;cursor:pointer">Sign up free</button></p></div></div></div>
+<div class="smodal"><div class="smodal-hdr"><span class="smodal-title">Sign in to IronSilk Weekly</span><button class="xbtn" onclick="closeReaderLogin()">X</button></div><div class="smodal-body"><div class="frow"><label>Username</label><input class="finput" id="rUsername" type="text" placeholder="yourusername" autocapitalize="off" autocomplete="username"></div><div class="frow"><label>Password</label><input class="finput" id="rPass" type="password" onkeydown="if(event.key==='Enter')tryReaderLogin()"></div><p style="text-align:right;margin:.3rem 0 0"><button onclick="openForgotPassword()" style="background:none;border:none;color:var(--text-muted);font-size:.71rem;text-decoration:underline;cursor:pointer">Forgot password?</button></p><div class="errmsg" id="rErr">Username or password not found.</div></div><div class="smodal-foot" style="flex-direction:column;gap:.45rem"><button class="btn-p" onclick="tryReaderLogin()">Sign in</button><p style="font-size:.74rem;color:var(--text-muted);text-align:center">No account? <button onclick="closeReaderLogin();openRegister()" style="background:none;border:none;color:var(--gold);font-size:.74rem;text-decoration:underline;cursor:pointer">Sign up free</button></p></div></div></div>
 
 <div class="overlay" id="regOverlay" style="z-index:300" onclick="if(event.target===this)closeRegister()">
 <div class="smodal"><div class="smodal-hdr"><span class="smodal-title" id="regTitle">Create account</span><button class="xbtn" onclick="closeRegister()">X</button></div><div class="smodal-body"><input type="hidden" id="regPlan" value="free">
@@ -612,25 +613,36 @@ window.stopListen=function(){if(_ttsAudio){_ttsAudio.pause();_ttsAudio.currentTi
 </script>
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import{getFirestore,collection,doc,addDoc,setDoc,getDoc,getDocs,deleteDoc,onSnapshot,orderBy,query,updateDoc,increment}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import{getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import{getFirestore,collection,doc,addDoc,setDoc,getDoc,getDocs,deleteDoc,onSnapshot,orderBy,query,updateDoc,increment,deleteField}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import{getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendPasswordResetEmail,onAuthStateChanged,signOut}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const fbApp=initializeApp({apiKey:"AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98",authDomain:"ironsilk-weekly.firebaseapp.com",projectId:"ironsilk-weekly",storageBucket:"ironsilk-weekly.firebasestorage.app",messagingSenderId:"627827860074",appId:"1:627827860074:web:118c36251452835bc26013"});
 const db=getFirestore(fbApp);
 const auth=getAuth(fbApp);
+// Separate named app instance for reader auth so reader sign-in/out never interferes with the editor's own Firebase Auth session in the same tab.
+const fbReaderApp=initializeApp({apiKey:"AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98",authDomain:"ironsilk-weekly.firebaseapp.com",projectId:"ironsilk-weekly",storageBucket:"ironsilk-weekly.firebasestorage.app",messagingSenderId:"627827860074",appId:"1:627827860074:web:118c36251452835bc26013"},'readerAuth');
+const readerAuth=getAuth(fbReaderApp);
 
 let dark=true,adminOpen=false,editorUnlocked=false,pendingStripeEmail=null,pendingCheckoutIntent=false;
-const SESSION_KEY='isw_reader_session';
-function saveSession(email){try{localStorage.setItem(SESSION_KEY,email.toLowerCase());}catch(e){}}
-function clearSession(){try{localStorage.removeItem(SESSION_KEY);}catch(e){}}
-async function restoreSession(){
+let readerAuthReady=false;
+// Finds the Firestore subscriber profile doc matching a signed-in Firebase Auth reader user.
+async function loadSubscriberProfileForUser(user){
 try{
-const email=localStorage.getItem(SESSION_KEY);
-if(!email)return;
 const snap=await getDocs(collection(db,'subscribers'));
-let u=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email)u={...s,id:d.id};});
-if(u){currentUser=u;updateUserUI();}else{clearSession();}
-}catch(e){}
+let match=null;
+snap.forEach(d=>{const s=d.data();if(s.uid===user.uid||s.email?.toLowerCase()===user.email?.toLowerCase())match={...s,id:d.id};});
+if(match){currentUser=match;updateUserUI();}
+else{currentUser=null;updateUserUI();}
+}catch(e){currentUser=null;}
+}
+function waitForReaderAuthState(){
+return new Promise(resolve=>{
+onAuthStateChanged(readerAuth,async user=>{
+if(user)await loadSubscriberProfileForUser(user);
+else{currentUser=null;updateUserUI();}
+if(!readerAuthReady){readerAuthReady=true;resolve();}
+});
+});
 }
 let pendingArticleId=new URLSearchParams(window.location.search).get('article');
 let currentUser=null,articles=[],subscribers=[],communityPosts=[];
@@ -753,7 +765,6 @@ if(!currentUser)return false;
 try{
 await updateDoc(doc(db,'subscribers',currentUser.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});
 currentUser.plan='subscriber';currentUser.stripeActivated=true;
-saveSession(currentUser.email);
 updateUserUI();renderReader(currentNavCat);
 toast('Subscription activated -- welcome aboard, '+currentUser.firstName+'!');
 return true;
@@ -866,30 +877,93 @@ window.addEventListener('popstate',()=>{const id=new URLSearchParams(window.loca
 
 window.openReaderLogin=()=>$('readerOverlay').classList.add('open');
 window.closeReaderLogin=()=>{$('readerOverlay').classList.remove('open');$('rUsername').value='';$('rPass').value='';$('rErr').style.display='none';};
-window.tryReaderLogin=async()=>{const login=$('rUsername').value.trim().toLowerCase(),pass=$('rPass').value;loading(true);try{const snap=await getDocs(collection(db,'subscribers'));let u=null;snap.forEach(d=>{const s=d.data();const matchesUsername=s.username&&s.username.toLowerCase()===login;const matchesEmail=!s.username&&s.email?.toLowerCase()===login;if((matchesUsername||matchesEmail)&&s.password===pass)u={...s,id:d.id};});if(u){currentUser=u;saveSession(u.email);window.closeReaderLogin();updateUserUI();renderReader(currentNavCat);toast('Welcome back, '+u.firstName+'!');if(pendingCheckoutIntent){pendingCheckoutIntent=false;setTimeout(()=>openStripeCheckout(),300);}}else $('rErr').style.display='block';}catch(e){toast('Sign in error.');}loading(false);};
+window.tryReaderLogin=async()=>{
+const login=$('rUsername').value.trim().toLowerCase(),pass=$('rPass').value;
+if(!login||!pass){$('rErr').textContent='Enter your username and password.';$('rErr').style.display='block';return;}
+loading(true);
+try{
+const snap=await getDocs(collection(db,'subscribers'));
+let match=null;
+snap.forEach(d=>{const s=d.data();const matchesUsername=s.username&&s.username.toLowerCase()===login;const matchesEmail=!s.username&&s.email?.toLowerCase()===login;if(matchesUsername||matchesEmail)match={...s,id:d.id};});
+if(!match){$('rErr').textContent='Username or password not found.';$('rErr').style.display='block';loading(false);return;}
+if(match.uid){
+// Already migrated to Firebase Auth -- verify with it directly.
+try{
+const cred=await signInWithEmailAndPassword(readerAuth,match.email,pass);
+await loadSubscriberProfileForUser(cred.user);
+onReaderLoginSuccess();
+}catch(e){$('rErr').textContent='Username or password not found.';$('rErr').style.display='block';}
+}else{
+// Legacy account -- verify against the stored plaintext password one last time, then silently migrate to Firebase Auth.
+if(match.password!==pass){$('rErr').textContent='Username or password not found.';$('rErr').style.display='block';loading(false);return;}
+try{
+const cred=await createUserWithEmailAndPassword(readerAuth,match.email,pass);
+await updateDoc(doc(db,'subscribers',match.id),{uid:cred.user.uid,password:null});
+currentUser={...match,uid:cred.user.uid};delete currentUser.password;
+onReaderLoginSuccess();
+}catch(e){
+if(e.code==='auth/email-already-in-use'){
+// A Firebase Auth account already exists for this email from a partial prior migration -- sign in with it instead.
+try{const cred=await signInWithEmailAndPassword(readerAuth,match.email,pass);await updateDoc(doc(db,'subscribers',match.id),{uid:cred.user.uid,password:deleteField()});await loadSubscriberProfileForUser(cred.user);onReaderLoginSuccess();}
+catch(e2){$('rErr').textContent='Username or password not found.';$('rErr').style.display='block';}
+}else{toast('Sign in error -- please try again.');}
+}
+}
+}catch(e){toast('Sign in error.');}
+loading(false);
+};
+function onReaderLoginSuccess(){
+window.closeReaderLogin();updateUserUI();renderReader(currentNavCat);
+toast('Welcome back, '+(currentUser?.firstName||'')+'!');
+if(pendingCheckoutIntent){pendingCheckoutIntent=false;setTimeout(()=>openStripeCheckout(),300);}
+}
+window.openForgotPassword=async()=>{
+const login=$('rUsername').value.trim().toLowerCase();
+if(!login){toast('Enter your username above first, then tap "Forgot password?" again.');return;}
+loading(true);
+try{
+const snap=await getDocs(collection(db,'subscribers'));
+let match=null;
+snap.forEach(d=>{const s=d.data();const matchesUsername=s.username&&s.username.toLowerCase()===login;const matchesEmail=s.email?.toLowerCase()===login;if(matchesUsername||matchesEmail)match={...s,id:d.id};});
+if(!match){toast('No account found for that username.');loading(false);return;}
+if(!match.uid){toast('This account needs one more sign-in with your current password before password reset is available. Contact us if you\'ve forgotten it.');loading(false);return;}
+await sendPasswordResetEmail(readerAuth,match.email);
+toast('Password reset email sent to your inbox.');
+}catch(e){toast('Could not send reset email -- please try again.');}
+loading(false);
+};
 window.openRegister=()=>{$('regPlan').value='free';$('regTitle').textContent='Create your free account';$('subNote').style.display='none';['rFirstName','rLastName','rRegUsername','rRegEmail','rPhone','rCity','rState','rZip','rAge','rRegPass'].forEach(id=>$(id).value='');$('rSource').value='';$('regErr').style.display='none';$('regOverlay').classList.add('open');};
 window.closeRegister=()=>$('regOverlay').classList.remove('open');
 window.doRegister=async()=>{
 const fn=$('rFirstName').value.trim(),ln=$('rLastName').value.trim(),username=$('rRegUsername').value.trim().toLowerCase(),email=$('rRegEmail').value.trim().toLowerCase(),pass=$('rRegPass').value;
 if(!fn||!ln||!username||!email||!pass){$('regErr').textContent='First name, last name, username, email and password are required.';$('regErr').style.display='block';return;}
 if(!/^[a-z0-9_.]{3,20}$/.test(username)){$('regErr').textContent='Username must be 3-20 characters: letters, numbers, underscores, or periods only.';$('regErr').style.display='block';return;}
+if(pass.length<6){$('regErr').textContent='Password must be at least 6 characters.';$('regErr').style.display='block';return;}
 loading(true);
 try{
 const snap=await getDocs(collection(db,'subscribers'));let exists=false,usernameTaken=false;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email)exists=true;if(s.username&&s.username.toLowerCase()===username)usernameTaken=true;});
 if(exists){$('regErr').textContent='An account with this email already exists.';$('regErr').style.display='block';loading(false);return;}
 if(usernameTaken){$('regErr').textContent='That username is already taken.';$('regErr').style.display='block';loading(false);return;}
 let plan='free';if(pendingStripeEmail&&pendingStripeEmail===email){plan='subscriber';}
-const u={firstName:fn,lastName:ln,name:fn+' '+ln,username,email,phone:$('rPhone').value.trim(),city:$('rCity').value.trim(),state:$('rState').value.trim(),zip:$('rZip').value.trim(),age:$('rAge').value.trim(),source:$('rSource').value,password:pass,plan,joined:today(),ts:Date.now()};
+let cred;
+try{cred=await createUserWithEmailAndPassword(readerAuth,email,pass);}
+catch(e){
+if(e.code==='auth/email-already-in-use')$('regErr').textContent='An account with this email already exists.';
+else if(e.code==='auth/weak-password')$('regErr').textContent='Password must be at least 6 characters.';
+else if(e.code==='auth/invalid-email')$('regErr').textContent='Enter a valid email address.';
+else $('regErr').textContent='Error creating account.';
+$('regErr').style.display='block';loading(false);return;
+}
+const u={firstName:fn,lastName:ln,name:fn+' '+ln,username,email,uid:cred.user.uid,phone:$('rPhone').value.trim(),city:$('rCity').value.trim(),state:$('rState').value.trim(),zip:$('rZip').value.trim(),age:$('rAge').value.trim(),source:$('rSource').value,plan,joined:today(),ts:Date.now()};
 if(plan==='subscriber'){u.stripeActivated=true;pendingStripeEmail=null;}
 const ref=await addDoc(collection(db,'subscribers'),u);currentUser={...u,id:ref.id};
-saveSession(currentUser.email);
 window.closeRegister();updateUserUI();showReader();renderReader(currentNavCat);
 toast(plan==='subscriber'?'Subscription activated! Welcome.':'Welcome to IronSilk Weekly, '+fn+'!');
 if(plan!=='subscriber'&&pendingCheckoutIntent){pendingCheckoutIntent=false;setTimeout(()=>openStripeCheckout(),300);}
 }catch(e){toast('Error creating account.');}
 loading(false);
 };
-window.doLogout=()=>{currentUser=null;clearSession();updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
+window.doLogout=async()=>{try{await signOut(readerAuth);}catch(e){}currentUser=null;updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
 const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';const b=$('userBadge');if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'* '+currentUser.firstName:currentUser.firstName;}else b.style.display='none';};
 
 window.showSec=(id,btn)=>{
@@ -1119,6 +1193,10 @@ if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';
 se.style.display='none';st.style.display='';
 $('subs-body').innerHTML=filtered.map(s=>'<tr><td>'+esc(s.firstName||'')+' '+esc(s.lastName||s.name||'')+'</td><td>'+esc(s.username||'-')+'</td><td>'+esc(s.email)+'</td><td>'+esc(s.phone||'-')+'</td><td>'+esc(s.city||'-')+'</td><td>'+esc(s.state||'-')+'</td><td>'+esc(s.zip||'-')+'</td><td>'+esc(s.age||'-')+'</td><td>'+esc(s.source||'-')+'</td><td><span class="sp '+(s.plan==='subscriber'?'exc':'dft')+'">'+(s.plan==='subscriber'?'Paid':'Free')+'</span></td><td>'+esc(s.joined)+'</td><td><button class="tbtn" onclick="manualUpgradeSub(\''+s.id+'\')">'+(s.plan==='subscriber'?'-> Free':'-> Paid')+'</button> <button class="tbtn reject" onclick="deleteSub(\''+s.id+'\')">X</button></td></tr>').join('');
 }
+// NOTE: this removes the subscriber's Firestore profile only. Their underlying Firebase Auth
+// login credential (if migrated) still exists -- fully deleting it requires a server-side call
+// with the Firebase Admin SDK, which this static site doesn't have. Not a security hole (they'd
+// just have no profile to log into), but a known gap if you ever build a backend for this.
 window.deleteSub=async id=>{if(!confirm('Remove?'))return;loading(true);try{await deleteDoc(doc(db,'subscribers',id));subscribers=subscribers.filter(s=>s.id!==id);refreshSubsTable();updateStats();updateStatsBar();toast('Removed.');}catch(e){toast('Error.');}loading(false);};
 const updateStats=()=>{$('st-total').textContent=articles.length;$('st-pub').textContent=articles.filter(a=>a.status==='published').length;$('st-draft').textContent=articles.filter(a=>a.status==='draft').length;$('st-subs').textContent=subscribers.filter(s=>s.plan==='subscriber').length;$('st-free').textContent=subscribers.filter(s=>s.plan==='free').length;};
 
@@ -1327,7 +1405,7 @@ const logoImg=$('logoImg');
 if(!logoImg.src||logoImg.src==='about:blank'){logoImg.style.display='none';$('logoFallback').style.display='flex';}
 document.querySelectorAll('main, #subPage, #scramblePage, #classifiedsPage, #sheShedPage, #livePage, #eventsPage').forEach(el=>{if(el)el.style.display='none';});
 try{
-await restoreSession();
+await waitForReaderAuthState();
 await incrementVisit();await loadSiteStats();
 try{const gs=await getDoc(doc(db,'settings','general'));if(gs.exists()){const gd=gs.data();if(typeof gd.cmtRequireApproval!=='undefined'){cmtRequireApproval=gd.cmtRequireApproval;$('cmtGateDefault').value=cmtRequireApproval?'1':'0';}}}catch(e){}
 try{const bs=await getDoc(doc(db,'settings','breaking'));if(bs.exists()){const bd=bs.data();if(bd.active&&bd.text){$('breakingTxt').innerHTML=bd.text.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';$('breakingEditor').value=bd.text;}}}catch(e){}
