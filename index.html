@@ -618,7 +618,19 @@ const fbApp=initializeApp({apiKey:"AIzaSyALLxWsZ7VEXGXAZYvrS6uoPObJXqrap98",auth
 const db=getFirestore(fbApp);
 const auth=getAuth(fbApp);
 
-let dark=true,adminOpen=false,editorUnlocked=false,pendingStripeEmail=null;
+let dark=true,adminOpen=false,editorUnlocked=false,pendingStripeEmail=null,pendingCheckoutIntent=false;
+const SESSION_KEY='isw_reader_session';
+function saveSession(email){try{localStorage.setItem(SESSION_KEY,email.toLowerCase());}catch(e){}}
+function clearSession(){try{localStorage.removeItem(SESSION_KEY);}catch(e){}}
+async function restoreSession(){
+try{
+const email=localStorage.getItem(SESSION_KEY);
+if(!email)return;
+const snap=await getDocs(collection(db,'subscribers'));
+let u=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email)u={...s,id:d.id};});
+if(u){currentUser=u;updateUserUI();}else{clearSession();}
+}catch(e){}
+}
 let pendingArticleId=new URLSearchParams(window.location.search).get('article');
 let currentUser=null,articles=[],subscribers=[],communityPosts=[];
 let currentArtId=null,currentNavCat='all';
@@ -729,9 +741,32 @@ window.updateLiveNavDot=()=>{const on=$('liveToggle').checked;$('liveToggleLabel
 function updateLiveTabDot(on){const btn=$('liveNavBtn');btn.textContent=on?'LIVE Now - Live':'Live';}
 window.saveLivestream=async()=>{const active=$('liveToggle').checked,url=$('ls-url').value.trim(),title=$('ls-title').value.trim(),nextBroadcast=$('ls-next').value.trim();loading(true);try{await setDoc(doc(db,'settings','livestream'),{active,url,title,nextBroadcast});updateLiveTabDot(active);toast('Livestream settings saved!');}catch(e){toast('Error saving.');}loading(false);};
 
-const STRIPE_PAYMENT_LINK='https://buy.stripe.com/dRmeV6e277UzfsldcYao802';
-window.openStripeCheckout=()=>{let url=STRIPE_PAYMENT_LINK;if(currentUser&&currentUser.email)url+='?prefilled_email='+encodeURIComponent(currentUser.email);window.open(url,'_blank');};
-async function checkStripeReturn(){const params=new URLSearchParams(window.location.search);if(params.get('subscribed')!=='true')return;window.history.replaceState({},'',window.location.pathname);const email=prompt('Payment successful! Enter the email on your account to activate:');if(!email)return;loading(true);try{const snap=await getDocs(collection(db,'subscribers'));let matched=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email.trim().toLowerCase())matched={...s,id:d.id};});if(matched){await updateDoc(doc(db,'subscribers',matched.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});if(currentUser&&currentUser.email?.toLowerCase()===email.trim().toLowerCase()){currentUser.plan='subscriber';updateUserUI();renderReader(currentNavCat);}toast('Subscription activated!');}else{pendingStripeEmail=email.trim().toLowerCase();setTimeout(()=>openRegister(),1000);}}catch(e){toast('Error activating.');}loading(false);}
+const STRIPE_PAYMENT_LINK='https://buy.stripe.com/00w4gs2jp7Uza813Coao804';
+window.openStripeCheckout=()=>{
+if(!currentUser){pendingCheckoutIntent=true;toast('Create a free account first -- then we\'ll take you to checkout.');openRegister();return;}
+let url=STRIPE_PAYMENT_LINK;if(currentUser&&currentUser.email)url+='?prefilled_email='+encodeURIComponent(currentUser.email);
+window.location.href=url;
+};
+async function activateCurrentUserSubscription(){
+if(!currentUser)return false;
+try{
+await updateDoc(doc(db,'subscribers',currentUser.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});
+currentUser.plan='subscriber';currentUser.stripeActivated=true;
+saveSession(currentUser.email);
+updateUserUI();renderReader(currentNavCat);
+toast('Subscription activated -- welcome aboard, '+currentUser.firstName+'!');
+return true;
+}catch(e){toast('Payment received, but activation failed -- contact us and we\'ll fix it.');return false;}
+}
+async function checkStripeReturn(){
+const params=new URLSearchParams(window.location.search);
+if(params.get('subscribed')!=='true')return;
+window.history.replaceState({},'',window.location.pathname);
+loading(true);
+if(currentUser){await activateCurrentUserSubscription();loading(false);return;}
+const email=prompt('Payment successful! Enter the email on your account to activate:');
+if(!email){loading(false);return;}
+try{const snap=await getDocs(collection(db,'subscribers'));let matched=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email.trim().toLowerCase())matched={...s,id:d.id};});if(matched){await updateDoc(doc(db,'subscribers',matched.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});if(currentUser&&currentUser.email?.toLowerCase()===email.trim().toLowerCase()){currentUser.plan='subscriber';updateUserUI();renderReader(currentNavCat);}toast('Subscription activated!');}else{pendingStripeEmail=email.trim().toLowerCase();setTimeout(()=>openRegister(),1000);}}catch(e){toast('Error activating.');}loading(false);}
 window.manualUpgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';if(!confirm('Change '+s.firstName+' '+s.lastName+' to '+np+'?'))return;loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated.');}catch(e){toast('Error.');}loading(false);};
 
 const DONOR_STRIPE_LINK='https://buy.stripe.com/4gMdR26zFdeT4NH1ugao803';
@@ -830,7 +865,7 @@ window.addEventListener('popstate',()=>{const id=new URLSearchParams(window.loca
 
 window.openReaderLogin=()=>$('readerOverlay').classList.add('open');
 window.closeReaderLogin=()=>{$('readerOverlay').classList.remove('open');$('rEmail').value='';$('rPass').value='';$('rErr').style.display='none';};
-window.tryReaderLogin=async()=>{const email=$('rEmail').value.trim().toLowerCase(),pass=$('rPass').value;loading(true);try{const snap=await getDocs(collection(db,'subscribers'));let u=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email&&s.password===pass)u={...s,id:d.id};});if(u){currentUser=u;window.closeReaderLogin();updateUserUI();renderReader(currentNavCat);toast('Welcome back, '+u.firstName+'!');}else $('rErr').style.display='block';}catch(e){toast('Sign in error.');}loading(false);};
+window.tryReaderLogin=async()=>{const email=$('rEmail').value.trim().toLowerCase(),pass=$('rPass').value;loading(true);try{const snap=await getDocs(collection(db,'subscribers'));let u=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email&&s.password===pass)u={...s,id:d.id};});if(u){currentUser=u;saveSession(u.email);window.closeReaderLogin();updateUserUI();renderReader(currentNavCat);toast('Welcome back, '+u.firstName+'!');if(pendingCheckoutIntent){pendingCheckoutIntent=false;setTimeout(()=>openStripeCheckout(),300);}}else $('rErr').style.display='block';}catch(e){toast('Sign in error.');}loading(false);};
 window.openRegister=()=>{$('regPlan').value='free';$('regTitle').textContent='Create your free account';$('subNote').style.display='none';['rFirstName','rLastName','rRegEmail','rPhone','rCity','rState','rZip','rAge','rRegPass'].forEach(id=>$(id).value='');$('rSource').value='';$('regErr').style.display='none';$('regOverlay').classList.add('open');};
 window.closeRegister=()=>$('regOverlay').classList.remove('open');
 window.doRegister=async()=>{
@@ -844,12 +879,14 @@ let plan='free';if(pendingStripeEmail&&pendingStripeEmail===email){plan='subscri
 const u={firstName:fn,lastName:ln,name:fn+' '+ln,email,phone:$('rPhone').value.trim(),city:$('rCity').value.trim(),state:$('rState').value.trim(),zip:$('rZip').value.trim(),age:$('rAge').value.trim(),source:$('rSource').value,password:pass,plan,joined:today(),ts:Date.now()};
 if(plan==='subscriber'){u.stripeActivated=true;pendingStripeEmail=null;}
 const ref=await addDoc(collection(db,'subscribers'),u);currentUser={...u,id:ref.id};
+saveSession(currentUser.email);
 window.closeRegister();updateUserUI();showReader();renderReader(currentNavCat);
 toast(plan==='subscriber'?'Subscription activated! Welcome.':'Welcome to IronSilk Weekly, '+fn+'!');
+if(plan!=='subscriber'&&pendingCheckoutIntent){pendingCheckoutIntent=false;setTimeout(()=>openStripeCheckout(),300);}
 }catch(e){toast('Error creating account.');}
 loading(false);
 };
-window.doLogout=()=>{currentUser=null;updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
+window.doLogout=()=>{currentUser=null;clearSession();updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
 const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';const b=$('userBadge');if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'* '+currentUser.firstName:currentUser.firstName;}else b.style.display='none';};
 
 window.showSec=(id,btn)=>{
@@ -1287,6 +1324,7 @@ const logoImg=$('logoImg');
 if(!logoImg.src||logoImg.src==='about:blank'){logoImg.style.display='none';$('logoFallback').style.display='flex';}
 document.querySelectorAll('main, #subPage, #scramblePage, #classifiedsPage, #sheShedPage, #livePage, #eventsPage').forEach(el=>{if(el)el.style.display='none';});
 try{
+await restoreSession();
 await incrementVisit();await loadSiteStats();
 try{const gs=await getDoc(doc(db,'settings','general'));if(gs.exists()){const gd=gs.data();if(typeof gd.cmtRequireApproval!=='undefined'){cmtRequireApproval=gd.cmtRequireApproval;$('cmtGateDefault').value=cmtRequireApproval?'1':'0';}}}catch(e){}
 try{const bs=await getDoc(doc(db,'settings','breaking'));if(bs.exists()){const bd=bs.data();if(bd.active&&bd.text){$('breakingTxt').innerHTML=bd.text.replace(/\|/g,'&nbsp;&nbsp;|&nbsp;&nbsp;');$('breakingBar').style.display='block';$('breakingBar').dataset.active='1';$('breakingEditor').value=bd.text;}}}catch(e){}
