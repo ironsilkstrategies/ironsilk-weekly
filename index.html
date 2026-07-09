@@ -791,6 +791,14 @@ function revealLiveOverlayPortal() {
 function executeSiteEntry(intent) {
   sessionStorage.setItem('isw_welcome_seen', '1');
   document.body.style.overflow = '';
+
+  // Open the sign-in/subscribe gate right away, so whatever it shows is already
+  // layered on top before the newspaper finishes fading -- no flash of the bare
+  // site behind it first.
+  if (typeof window.onWelcomeAnimationComplete === 'function') {
+    window.onWelcomeAnimationComplete(intent || null);
+  }
+
   const stage = document.getElementById('stage');
   stage.style.transition = "opacity 0.65s cubic-bezier(0.25, 1, 0.5, 1)";
   stage.style.opacity = "0";
@@ -798,10 +806,6 @@ function executeSiteEntry(intent) {
   setTimeout(() => {
     stage.style.display = "none";
     document.getElementById('btn-skip').style.display = "none";
-    
-    if (typeof window.onWelcomeAnimationComplete === 'function') {
-      window.onWelcomeAnimationComplete(intent || null);
-    }
   }, 650);
 }
 
@@ -1158,9 +1162,9 @@ window.setNPFeatured(lead.headline,lead.excerpt||'',lead.author||'IronSilk Weekl
 window.onWelcomeAnimationComplete=intent=>{
 if(intent==='subscribe'){goSub();return;}
 if(intent==='signin'){if(!currentUser)openReaderLogin();return;}
-// Enter Platform: soft gate -- offer sign-in only if they aren't already logged in.
-// (Skip Intro never triggers this -- that's a deliberate bypass, not a full visit.)
-if(intent===null&&!currentUser)openReaderLogin();
+// Enter Platform: one consolidated sign-in/sign-up choice screen -- only if not
+// already logged in. (Skip Intro never triggers this -- that's a deliberate bypass.)
+if(intent===null&&!currentUser)$('welcomeOverlay').classList.add('open');
 };
 let pendingArticleId=new URLSearchParams(window.location.search).get('article');
 let currentUser=null,articles=[],subscribers=[],communityPosts=[];
@@ -1389,7 +1393,15 @@ window.secretEditorTap=()=>{_tapCount++;clearTimeout(_tapTimer);_tapTimer=setTim
 document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.altKey&&(e.key==='e'||e.key==='E')){e.preventDefault();window.toggleAdmin();}});
 
 window.closeWelcomePopup=()=>{$('welcomeOverlay').classList.remove('open');};
-function maybeShowWelcomePopup(){if(currentUser)return;if(new URLSearchParams(window.location.search).get('subscribed')==='true')return;setTimeout(()=>{if(!currentUser)$('welcomeOverlay').classList.add('open');},1800);}
+function maybeShowWelcomePopup(){
+if(currentUser)return;
+if(new URLSearchParams(window.location.search).get('subscribed')==='true')return;
+// If the welcome animation is (or was just) on screen this pageview, its own
+// gate already covers this job -- don't stack a second popup on top of it.
+const waStage=document.getElementById('stage');
+if(waStage&&waStage.style.display!=='none')return;
+setTimeout(()=>{if(!currentUser)$('welcomeOverlay').classList.add('open');},1800);
+}
 
 window.copyArticleLink=()=>{const url=window.location.origin+window.location.pathname+'?article='+currentArtId;if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(()=>toast('Link copied!')).catch(()=>toast('Could not copy link.'));}else toast('Copy not supported.');};
 window.addEventListener('popstate',()=>{const id=new URLSearchParams(window.location.search).get('article');if(id){renderArticleModal(id);}else{window.stopListen();$('artOverlay').classList.remove('open');}});
