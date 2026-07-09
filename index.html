@@ -361,7 +361,7 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 <div class="logo-fallback" id="logoFallback" style="display:none"><span class="logo-name">IronSilk Weekly</span><span class="logo-tag">Local. Relentless. Daily.</span></div>
 </div>
 <div class="hdr-right">
-<div class="search-wrap"><input type="search" id="searchInput" name="site-search" placeholder="Search..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" oninput="doSearch()"><button>Go</button></div>
+<div class="search-wrap"><input type="search" id="searchInput" name="site-search" placeholder="Search..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" readonly onfocus="this.removeAttribute('readonly')" oninput="doSearch()"><button>Go</button></div>
 <button class="hbtn" id="darkBtn" onclick="toggleDark()">Light</button>
 <button class="hbtn" onclick="goSub()">Subscribe</button>
 <span class="user-badge" id="userBadge" style="display:none"></span>
@@ -1401,6 +1401,7 @@ b.innerHTML='<div class="ann-bar"><span class="ann-ico">'+esc(annData.ico||'!')+
 
 async function init(){
 loading(true);
+const searchEl=$('searchInput');if(searchEl)searchEl.name='q_'+Math.random().toString(36).slice(2,10);
 const logoImg=$('logoImg');
 if(!logoImg.src||logoImg.src==='about:blank'){logoImg.style.display='none';$('logoFallback').style.display='flex';}
 document.querySelectorAll('main, #subPage, #scramblePage, #classifiedsPage, #sheShedPage, #livePage, #eventsPage').forEach(el=>{if(el)el.style.display='none';});
