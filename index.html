@@ -25,7 +25,19 @@ header{background:var(--navy);border-bottom:3px solid var(--gold);position:stick
 .search-wrap button{background:none;border:none;color:var(--gold);padding:.35rem .55rem;font-size:.88rem;}
 .hbtn{background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.28);color:var(--gold);padding:.32rem .65rem;border-radius:6px;font-size:.74rem;white-space:nowrap;}
 .hbtn:hover{background:rgba(201,168,76,.24);}
-.user-badge{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:.25rem .6rem;border-radius:20px;font-size:.68rem;font-weight:700;white-space:nowrap;}
+.user-badge{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:.25rem .6rem;border-radius:20px;font-size:.68rem;font-weight:700;white-space:nowrap;border:none;font-family:sans-serif;}
+.user-menu-wrap{position:relative;}
+.user-menu{position:absolute;top:calc(100% + 8px);right:0;background:var(--navy);border:1px solid rgba(201,168,76,.3);border-radius:8px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:80;overflow:hidden;}
+.um-head{padding:.65rem .8rem;border-bottom:1px solid rgba(201,168,76,.15);}
+.um-name{font-size:.8rem;font-weight:700;color:#fff;font-family:Georgia,serif;}
+.um-email{font-size:.65rem;color:rgba(255,255,255,.4);margin-top:.1rem;word-break:break-all;}
+.um-plan{display:inline-block;margin-top:.35rem;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;padding:.15rem .45rem;border-radius:4px;font-family:sans-serif;}
+.um-plan.free{background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);}
+.um-plan.paid{background:rgba(201,168,76,.15);color:var(--gold);}
+.um-item{display:block;width:100%;text-align:left;background:none;border:none;padding:.55rem .8rem;font-size:.75rem;color:rgba(255,255,255,.75);font-family:sans-serif;border-bottom:1px solid rgba(255,255,255,.04);}
+.um-item:hover{background:rgba(201,168,76,.08);color:var(--gold);}
+.um-item:last-child{border-bottom:none;}
+.um-item.danger:hover{background:rgba(185,28,28,.12);color:#f87171;}
 nav{background:var(--navy-mid);border-bottom:1px solid rgba(201,168,76,.18);}
 .nav-inner{max-width:1100px;margin:0 auto;padding:0 1rem;display:flex;overflow-x:auto;scrollbar-width:none;}
 .nav-inner::-webkit-scrollbar{display:none;}
@@ -364,9 +376,18 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 <div class="search-wrap"><input type="search" id="searchInput" name="site-search" placeholder="Search..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-form-type="other" readonly onfocus="this.removeAttribute('readonly')" oninput="doSearch()"><button>Go</button></div>
 <button class="hbtn" id="darkBtn" onclick="toggleDark()">Light</button>
 <button class="hbtn" onclick="goSub()">Subscribe</button>
-<span class="user-badge" id="userBadge" style="display:none"></span>
+<div class="user-menu-wrap" id="userMenuWrap" style="display:none">
+<button class="user-badge" id="userBadge" onclick="toggleUserMenu(event)"></button>
+<div class="user-menu" id="userMenuPanel" style="display:none">
+<div class="um-head"><div class="um-name" id="umName"></div><div class="um-email" id="umEmail"></div><div class="um-plan" id="umPlan"></div></div>
+<button class="um-item" id="umSetUsername" style="display:none" onclick="closeUserMenu();openSetUsername()">Choose a username</button>
+<button class="um-item" onclick="closeUserMenu();openEditProfile()">Account settings</button>
+<button class="um-item" onclick="closeUserMenu();requestPasswordReset()">Change password</button>
+<button class="um-item" id="umManageSub" style="display:none" onclick="closeUserMenu();openManageSubscription()">Manage subscription</button>
+<button class="um-item danger" onclick="closeUserMenu();doLogout()">Sign out</button>
+</div>
+</div>
 <button class="hbtn" id="loginBtn" onclick="openReaderLogin()">Sign in</button>
-<button class="hbtn" id="logoutBtn" style="display:none" onclick="doLogout()">Sign out</button>
 </div></div></header>
 <nav id="siteNav"><div class="nav-inner">
 <button class="nbtn active" onclick="setNav(this,'all')">All</button>
@@ -496,16 +517,17 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 </div>
 <div class="asec" id="sec-write"><div class="acard"><h2>Write article</h2>
 <input type="hidden" id="editIdx" value="">
-<div class="frow"><label>Headline</label><input class="finput" id="w-headline" type="text" placeholder="Enter headline..."></div>
+<div class="frow"><label>Headline</label><input class="finput" id="w-headline" type="text" placeholder="Enter headline..." oninput="suggestForWriteForm()"></div>
 <div class="f2"><div class="frow" style="margin:0"><label>Author</label><input class="finput" id="w-author" type="text" placeholder="Reporter name"></div><div class="frow" style="margin:0"><label>Category</label><select class="fsel" id="w-cat"><option>Local</option><option>Civics</option><option>Community</option><option>Business</option><option>Opinion</option><option>Events</option></select></div></div>
+<div id="w-suggest" style="display:none;margin-top:.5rem;padding:.5rem .65rem;border:1px solid rgba(201,168,76,.3);border-radius:6px;background:rgba(201,168,76,.06);font-size:.72rem;font-family:sans-serif;color:var(--text)"></div>
 <div class="frow" style="margin-top:.75rem"><label>Access level</label><select class="fsel" id="w-access"><option value="free">Free -- visible to everyone</option><option value="subscriber">Exclusive -- subscribers only</option></select></div>
 <div class="frow" style="margin-top:.75rem"><label>Tags</label><div class="tagrow"><span class="tpill" onclick="toggleTag(this)">Breaking</span><span class="tpill" onclick="toggleTag(this)">Featured</span><span class="tpill" onclick="toggleTag(this)">Developing</span><span class="tpill" onclick="toggleTag(this)">Exclusive</span><span class="tpill" onclick="toggleTag(this)">Investigation</span><span class="tpill" onclick="toggleTag(this)">Opinion</span></div></div>
 <div class="frow" style="margin-top:.75rem"><label>Article image (optional -- max 1.5MB)</label><div class="img-upload-area" id="imgUploadArea"><input type="file" accept="image/*" id="w-img" onchange="previewArticleImg(this)"><div class="img-upload-label" id="imgUploadLabel">Click or tap to upload</div><img class="img-preview" id="w-img-preview" alt="Preview"></div><button class="btn-s" style="margin-top:.38rem;font-size:.7rem;padding:.28rem .65rem" onclick="clearArticleImg()">Remove image</button></div>
-<div class="frow" style="margin-top:.75rem"><label>Excerpt</label><input class="finput" id="w-excerpt" type="text" placeholder="Short preview..."></div>
-<div class="frow" style="margin-top:.75rem"><label>Body</label><textarea class="ftxt" id="w-body" style="min-height:200px" placeholder="Write the full article here..."></textarea></div>
+<div class="frow" style="margin-top:.75rem"><label>Excerpt</label><input class="finput" id="w-excerpt" type="text" placeholder="Short preview..." oninput="suggestForWriteForm()"></div>
+<div class="frow" style="margin-top:.75rem"><label>Body</label><textarea class="ftxt" id="w-body" style="min-height:200px" placeholder="Write the full article here..." oninput="suggestForWriteForm()"></textarea></div>
 <div style="display:flex;gap:.55rem;margin-top:.9rem;flex-wrap:wrap"><button class="btn-p" onclick="publishArt()">Publish</button><button class="btn-s" onclick="saveDraft()">Save draft</button><button class="btn-s" onclick="clearEditor()">Clear</button></div>
 </div></div>
-<div class="asec" id="sec-manage"><div class="acard"><h2>Manage articles</h2><p class="tno" id="manage-empty">Loading...</p><div style="overflow-x:auto"><table id="manage-table" style="display:none"><thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Access</th><th>Status</th><th>Views</th><th>Date</th><th>Actions</th></tr></thead><tbody id="manage-body"></tbody></table></div></div></div>
+<div class="asec" id="sec-manage"><div class="acard"><h2>Manage articles</h2><div style="display:flex;gap:.55rem;flex-wrap:wrap;margin-bottom:.9rem"><button class="btn-s" onclick="runJulyCleanup()">Run July 9 cleanup (dedupe + recategorize)</button><button class="btn-s" onclick="moveRecipeToSheShed()">Move recipe article to SheShed</button></div><p class="tno" id="manage-empty">Loading...</p><div style="overflow-x:auto"><table id="manage-table" style="display:none"><thead><tr><th>Title</th><th>Author</th><th>Category</th><th>Access</th><th>Status</th><th>Views</th><th>Date</th><th>Actions</th></tr></thead><tbody id="manage-body"></tbody></table></div></div></div>
 <div class="asec" id="sec-comments"><div class="acard"><h2>Comment moderation</h2><div style="display:flex;gap:.45rem;margin-bottom:.9rem;flex-wrap:wrap"><button id="cfPending" class="btn-p" onclick="loadComments('pending')">Pending</button><button id="cfApproved" class="btn-s" onclick="loadComments('approved')">Approved</button><button id="cfAll" class="btn-s" onclick="loadComments('all')">All</button></div><p class="tno" id="cmt-empty">No comments yet.</p><div style="overflow-x:auto"><table id="cmt-table" style="display:none"><thead><tr><th>Article</th><th>Author</th><th>Comment</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody id="cmt-body"></tbody></table></div></div></div>
 <div class="asec" id="sec-community"><div class="acard"><h2>Community posts moderation</h2><div style="display:flex;gap:.45rem;margin-bottom:.9rem;flex-wrap:wrap"><button class="btn-p" id="cpPending" onclick="loadCommunityAdmin('pending')">Pending</button><button class="btn-s" id="cpApproved" onclick="loadCommunityAdmin('approved')">Approved</button><button class="btn-s" id="cpAll" onclick="loadCommunityAdmin('all')">All</button></div><p class="tno" id="comm-admin-empty">No community posts yet.</p><div style="overflow-x:auto"><table id="comm-admin-table" style="display:none"><thead><tr><th>Section</th><th>Title</th><th>Author</th><th>Category</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody id="comm-admin-body"></tbody></table></div></div></div>
 <div class="asec" id="sec-subs"><div class="acard"><h2>Subscriber database</h2><div style="display:flex;gap:.45rem;margin-bottom:.9rem;flex-wrap:wrap"><button id="sfAll" class="btn-p" onclick="filterSubs('all')">All</button><button id="sfPaid" class="btn-s" onclick="filterSubs('subscriber')">Paid</button><button id="sfFree" class="btn-s" onclick="filterSubs('free')">Free</button></div><p class="tno" id="subs-empty">No registered users yet.</p><div style="overflow-x:auto"><table id="subs-table" style="display:none;min-width:860px"><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Phone</th><th>City</th><th>State</th><th>Zip</th><th>Age</th><th>Source</th><th>Plan</th><th>Joined</th><th>Actions</th></tr></thead><tbody id="subs-body"></tbody></table></div></div></div>
@@ -579,6 +601,16 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 
 <div class="overlay" id="setUsernameOverlay" style="z-index:300" onclick="if(event.target===this)closeSetUsername()">
 <div class="smodal"><div class="smodal-hdr"><span class="smodal-title">Choose a username</span><button class="xbtn" onclick="closeSetUsername()">X</button></div><div class="smodal-body"><p style="font-size:.76rem;color:var(--text-muted);margin-bottom:.85rem">Your account was created before usernames existed. Pick one now to sign in faster next time -- you can still use your email until you do.</p><div class="frow"><label>Username *</label><input class="finput" id="su-username" type="text" placeholder="Choose a username" autocapitalize="off" onkeydown="if(event.key==='Enter')saveUsername()"></div><div class="errmsg" id="su-err"></div></div><div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="saveUsername()">Save username</button><button class="btn-s" onclick="closeSetUsername()">Maybe later</button></div></div></div>
+
+<div class="overlay" id="editProfileOverlay" style="z-index:300" onclick="if(event.target===this)closeEditProfile()">
+<div class="smodal"><div class="smodal-hdr"><span class="smodal-title">Account settings</span><button class="xbtn" onclick="closeEditProfile()">X</button></div><div class="smodal-body">
+<div class="f2"><div class="frow" style="margin:0"><label>First name *</label><input class="finput" id="ep-firstName" type="text"></div><div class="frow" style="margin:0"><label>Last name *</label><input class="finput" id="ep-lastName" type="text"></div></div>
+<div class="frow" style="margin-top:.75rem"><label>Phone</label><input class="finput" id="ep-phone" type="tel"></div>
+<div class="f2" style="margin-top:.75rem"><div class="frow" style="margin:0"><label>City</label><input class="finput" id="ep-city" type="text"></div><div class="frow" style="margin:0"><label>State</label><input class="finput" id="ep-state" type="text"></div></div>
+<div class="frow" style="margin-top:.75rem"><label>Zip</label><input class="finput" id="ep-zip" type="text"></div>
+<p style="font-size:.68rem;color:var(--text-muted);margin-top:.75rem">Username and email can't be changed here. Need to update those? Just reach out to us.</p>
+<div class="errmsg" id="ep-err"></div></div>
+<div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="saveEditProfile()">Save changes</button><button class="btn-s" onclick="closeEditProfile()">Cancel</button></div></div></div>
 
 <div class="overlay" id="commPostOverlay" style="z-index:300" onclick="if(event.target===this)closeCommPost()">
 <div class="smodal"><div class="smodal-hdr" id="commPostHdr"><span class="smodal-title" id="commPostTitle">Post a listing</span><button class="xbtn" onclick="closeCommPost()">X</button></div>
@@ -783,6 +815,7 @@ const email=prompt('Payment successful! Enter the email on your account to activ
 if(!email){loading(false);return;}
 try{const snap=await getDocs(collection(db,'subscribers'));let matched=null;snap.forEach(d=>{const s=d.data();if(s.email?.toLowerCase()===email.trim().toLowerCase())matched={...s,id:d.id};});if(matched){await updateDoc(doc(db,'subscribers',matched.id),{plan:'subscriber',stripeActivated:true,activatedAt:new Date().toISOString()});if(currentUser&&currentUser.email?.toLowerCase()===email.trim().toLowerCase()){currentUser.plan='subscriber';updateUserUI();renderReader(currentNavCat);}toast('Subscription activated!');}else{pendingStripeEmail=email.trim().toLowerCase();setTimeout(()=>openRegister(),1000);}}catch(e){toast('Error activating.');}loading(false);}
 window.manualUpgradeSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;const np=s.plan==='subscriber'?'free':'subscriber';if(!confirm('Change '+s.firstName+' '+s.lastName+' to '+np+'?'))return;loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:np});s.plan=np;refreshSubsTable();updateStats();updateStatsBar();toast('Plan updated.');}catch(e){toast('Error.');}loading(false);};
+window.confirmCancelSub=async id=>{const s=subscribers.find(x=>x.id===id);if(!s)return;if(!confirm('Confirm '+s.firstName+' '+s.lastName+' cancelled in Stripe and move them to Free?'))return;loading(true);try{await updateDoc(doc(db,'subscribers',id),{plan:'free',cancelRequested:deleteField()});s.plan='free';s.cancelRequested=false;refreshSubsTable();updateStats();updateStatsBar();toast('Subscription cancelled.');}catch(e){toast('Error.');}loading(false);};
 
 const DONOR_STRIPE_LINK='https://buy.stripe.com/4gMdR26zFdeT4NH1ugao803';
 window.openDonorCheckout=()=>{let url=DONOR_STRIPE_LINK;if(currentUser&&currentUser.email)url+='?prefilled_email='+encodeURIComponent(currentUser.email);window.open(url,'_blank');};
@@ -937,6 +970,45 @@ window.closeSetUsername();toast('Username saved -- use it to sign in next time!'
 }catch(e){$('su-err').textContent='Error saving username -- try again.';$('su-err').style.display='block';}
 loading(false);
 };
+window.openEditProfile=()=>{
+if(!currentUser)return;
+$('ep-firstName').value=currentUser.firstName||'';$('ep-lastName').value=currentUser.lastName||'';
+$('ep-phone').value=currentUser.phone||'';$('ep-city').value=currentUser.city||'';$('ep-state').value=currentUser.state||'';$('ep-zip').value=currentUser.zip||'';
+$('ep-err').style.display='none';
+$('editProfileOverlay').classList.add('open');
+};
+window.closeEditProfile=()=>$('editProfileOverlay').classList.remove('open');
+window.saveEditProfile=async()=>{
+if(!currentUser)return;
+const fn=$('ep-firstName').value.trim(),ln=$('ep-lastName').value.trim();
+if(!fn||!ln){$('ep-err').textContent='First and last name are required.';$('ep-err').style.display='block';return;}
+loading(true);
+try{
+const updates={firstName:fn,lastName:ln,name:fn+' '+ln,phone:$('ep-phone').value.trim(),city:$('ep-city').value.trim(),state:$('ep-state').value.trim(),zip:$('ep-zip').value.trim()};
+await updateDoc(doc(db,'subscribers',currentUser.id),updates);
+Object.assign(currentUser,updates);
+updateUserUI();window.closeEditProfile();toast('Account updated.');
+}catch(e){$('ep-err').textContent='Error saving changes -- try again.';$('ep-err').style.display='block';}
+loading(false);
+};
+window.requestPasswordReset=async()=>{
+if(!currentUser)return;
+if(!currentUser.uid){toast('Sign out and back in once with your current password first -- that finishes setting up secure login for this account.');return;}
+loading(true);
+try{await sendPasswordResetEmail(readerAuth,currentUser.email);toast('Password reset email sent to '+currentUser.email+'.');}
+catch(e){toast('Could not send reset email -- please try again.');}
+loading(false);
+};
+// STRIPE_PORTAL_LINK: set this to your Stripe Customer Portal login link
+// (Stripe Dashboard -> Settings -> Billing -> Customer portal -> "Login page" link).
+// It lets subscribers view invoices and cancel their own subscription without a backend.
+const STRIPE_PORTAL_LINK='https://billing.stripe.com/p/login/REPLACE_ME';
+window.openManageSubscription=async()=>{
+if(!currentUser)return;
+try{await updateDoc(doc(db,'subscribers',currentUser.id),{cancelRequested:true,cancelRequestedAt:new Date().toISOString()});}catch(e){}
+window.open(STRIPE_PORTAL_LINK,'_blank');
+toast('Opening Stripe billing portal -- we have also flagged your account for us to confirm once you cancel.');
+};
 window.openForgotPassword=async()=>{
 const login=$('rUsername').value.trim().toLowerCase();
 if(!login){toast('Enter your username above first, then tap "Forgot password?" again.');return;}
@@ -984,7 +1056,23 @@ if(plan!=='subscriber'&&pendingCheckoutIntent){pendingCheckoutIntent=false;setTi
 loading(false);
 };
 window.doLogout=async()=>{try{await signOut(readerAuth);}catch(e){}currentUser=null;updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
-const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';const b=$('userBadge');if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'* '+currentUser.firstName:currentUser.firstName;b.style.cursor=currentUser.username?'default':'pointer';b.title=currentUser.username?'':'Click to choose a username';b.onclick=currentUser.username?null:openSetUsername;}else b.style.display='none';};
+const updateUserUI=()=>{
+const li=!!currentUser;
+$('loginBtn').style.display=li?'none':'';
+$('userMenuWrap').style.display=li?'':'none';
+if(!li){$('userMenuPanel').style.display='none';return;}
+const isPaid=currentUser.plan==='subscriber';
+$('userBadge').textContent=isPaid?'* '+currentUser.firstName:currentUser.firstName;
+$('umName').textContent=currentUser.name||(currentUser.firstName+' '+(currentUser.lastName||''));
+$('umEmail').textContent=currentUser.email||'';
+$('umPlan').textContent=isPaid?'Subscriber -- $6/mo':'Free reader';
+$('umPlan').className='um-plan '+(isPaid?'paid':'free');
+$('umSetUsername').style.display=currentUser.username?'none':'';
+$('umManageSub').style.display=isPaid?'':'none';
+};
+window.toggleUserMenu=e=>{if(e)e.stopPropagation();const p=$('userMenuPanel');p.style.display=p.style.display==='none'?'block':'none';};
+window.closeUserMenu=()=>{$('userMenuPanel').style.display='none';};
+document.addEventListener('click',e=>{const wrap=$('userMenuWrap');if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target))closeUserMenu();});
 
 window.showSec=(id,btn)=>{
 document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));
@@ -1191,11 +1279,106 @@ window.clearEditor=()=>{$('editIdx').value='';['w-headline','w-author','w-excerp
 window.editArt=id=>{
 const a=articles.find(x=>x.id===id);if(!a)return;
 $('editIdx').value=id;$('w-headline').value=a.headline;$('w-author').value=a.author;$('w-cat').value=a.category;$('w-access').value=a.access||'free';$('w-excerpt').value=a.excerpt||'';$('w-body').value=a.body||'';
+suggestForWriteForm();
 document.querySelectorAll('.tpill').forEach(p=>p.classList.toggle('on',a.tags&&a.tags.includes(p.textContent)));
 if(a.image){currentImgBase64=a.image;const prev=$('w-img-preview');prev.src=a.image;prev.style.display='block';$('imgUploadLabel').style.display='none';}else window.clearArticleImg();
 window.showSec('write',document.querySelectorAll('.ambtn')[2]);toast('Loaded into editor.');
 };
 window.deleteArt=async id=>{if(!confirm('Delete this article?'))return;loading(true);try{await deleteDoc(doc(db,'articles',id));articles=articles.filter(a=>a.id!==id);refreshManage();renderReader(currentNavCat);toast('Deleted.');}catch(e){toast('Error.');}loading(false);};
+// Moves "When Dessert Meets the Fryer..." from the articles collection into
+// communityPosts as an approved SheShed Recipe post, then removes the original article.
+window.moveRecipeToSheShed=async()=>{
+const norm=s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+const target='When Dessert Meets the Fryer: Sweet Potato Cheesecake and Peach Cobbler Fried Wings';
+const match=articles.find(a=>norm(a.headline)===norm(target));
+if(!match){toast('Could not find that article -- it may have already been moved.');return;}
+if(!confirm('Move "'+match.headline+'" to SheShed as a Recipe post and remove it from Articles?'))return;
+loading(true);
+try{
+await addDoc(collection(db,'communityPosts'),{type:'sheshed',title:match.headline,author:match.author||'IronSilk Weekly',body:(match.excerpt?match.excerpt+'\n\n':'')+(match.body||''),category:'Recipe',contact:null,status:'approved',date:match.date||today(),ts:match.ts||Date.now()});
+await deleteDoc(doc(db,'articles',match.id));
+toast('Moved to SheShed as a Recipe post.');
+}catch(e){toast('Error moving article -- nothing was deleted.');}
+loading(false);
+};
+// ══ Smart category/section suggester ══
+// Lightweight keyword scoring -- runs entirely in the browser, no API calls, no cost.
+// Flags both the six article categories AND whether content sounds like it belongs in
+// SheShed or Classifieds instead of a news article.
+const CAT_KEYWORDS={
+Civics:['council','councilman','councilwoman','mayor','vice mayor','city manager','budget','ordinance','ballot','election','candidate','commission','commissioner','board vote','public comment','city hall','resign','resignation','appointed','appointment','hearing','records request','transparency','audit','policy','legislation','statute','county commissioner','vote','voted','voting'],
+Local:['road','roads','pothole','water line','sewer','utility','utilities','power line','transmission','storm','weather','flood','housing','rent','grocery store','infrastructure','neighborhood','residents','streetlight','traffic','intersection','school district','school building','police chief','fire department','ambulance','911','scanner'],
+Community:['volunteer','volunteers','nonprofit','church','food drive','blood drive','fundraiser','festival','tradition','spotlight','feature story','youth program','families','neighbors','community center','food bank','charity','gathering','potluck'],
+Business:['revenue','economy','economic','jobs','employment','downtown','storefront','entrepreneur','small business','sales tax','industry','retail','commercial real estate','investment','market','startup','franchise'],
+Opinion:['i believe','in my view','i think','editorial board','this column','my take','opinion piece','commentary','should be','ought to','argue that','it is my opinion'],
+Events:['rsvp','admission','tickets','this weekend','schedule of events','tournament bracket','parade route','join us for','save the date','registration opens','kickoff at']
+};
+const SECTION_KEYWORDS={
+'SheShed (Recipe/Craft/Lifestyle)':['recipe','ingredients','cup of','tablespoon','teaspoon','preheat','oven','bake','baking','simmer','skillet','casserole','cobbler','frosting','diy','craft project','skincare','self-care','home decor'],
+'Classifieds (Help Wanted/For Sale)':['help wanted','now hiring','for sale','apply in person','position available','lease','for rent','services offered','lost dog','found cat','estate sale','asking price','obo']
+};
+function scoreText(text,dict){
+const t=' '+text.toLowerCase()+' ';
+let best=null,bestScore=0;
+for(const key in dict){
+let score=0;
+dict[key].forEach(kw=>{const re=new RegExp('\\b'+kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','gi');const m=t.match(re);if(m)score+=m.length;});
+if(score>bestScore){bestScore=score;best=key;}
+}
+return {best,score:bestScore};
+}
+let _suggestTimer=null;
+window.suggestForWriteForm=()=>{
+clearTimeout(_suggestTimer);
+_suggestTimer=setTimeout(()=>{
+const text=($('w-headline').value+' '+$('w-excerpt').value+' '+$('w-body').value).trim();
+const box=$('w-suggest');
+if(text.length<25){box.style.display='none';return;}
+const sec=scoreText(text,SECTION_KEYWORDS);
+const cat=scoreText(text,CAT_KEYWORDS);
+box.style.display='block';
+if(sec.best&&sec.score>=2&&sec.score>cat.score){
+box.innerHTML='<strong style="color:var(--gold)">This reads like it belongs in '+sec.best+'</strong>, not a news article. Consider posting it there instead of publishing it here.';
+}else if(cat.best&&cat.score>=2){
+box.innerHTML='Suggested category: <strong style="color:var(--gold)">'+cat.best+'</strong> <button type="button" class="btn-s" style="margin-left:.5rem;padding:.15rem .5rem;font-size:.68rem" onclick="$(\'w-cat\').value=\''+cat.best+'\'">Use this</button>';
+}else{
+box.innerHTML='Not enough distinctive wording yet to suggest a category -- pick one manually or add a bit more detail.';
+}
+},400);
+};
+// One-time cleanup approved July 9, 2026: dedupe two accidental double-published articles
+// (keeping the newer copy of each) and re-tag four borderline-categorized articles.
+window.runJulyCleanup=async()=>{
+if(!confirm('Delete 2 duplicate articles and re-tag 4 articles as discussed? This cannot be undone.'))return;
+loading(true);
+const dupeGroups=[
+'When the Camera Turns On: What Hobart\u2019s Body-Worn Cameras Signal About Trust and Policing',
+'The Software Deciding More Than You Think: How One System Touches Courts, Records, and Daily Life'
+];
+const recats=[
+{title:'When the Chase Starts Here',category:'Local'},
+{title:'Ninety Minutes From the Olympics',category:'Community'},
+{title:'Built From Pressure | Inside the room with Christopher Fleming',category:'Community'},
+{title:'Christmas in Kiowa County: The Quiet Infrastructure That Holds a Town Together',category:'Community'}
+];
+const norm=s=>String(s||'').toLowerCase().replace(/[\u2018\u2019']/g,"'").replace(/\s+/g,' ').trim();
+let deleted=0,recatted=0,notFound=[];
+try{
+for(const title of dupeGroups){
+const matches=articles.filter(a=>norm(a.headline)===norm(title));
+if(matches.length<2){if(matches.length===0)notFound.push('(dupe) '+title);continue;}
+matches.sort((a,b)=>(b.ts||0)-(a.ts||0));
+for(let i=1;i<matches.length;i++){await deleteDoc(doc(db,'articles',matches[i].id));deleted++;}
+}
+for(const r of recats){
+const match=articles.find(a=>norm(a.headline)===norm(r.title));
+if(!match){notFound.push('(recat) '+r.title);continue;}
+if(match.category!==r.category){await updateDoc(doc(db,'articles',match.id),{category:r.category});recatted++;}
+}
+toast('Cleanup done: '+deleted+' duplicate(s) removed, '+recatted+' recategorized.'+(notFound.length?' Could not find: '+notFound.join('; '):''));
+}catch(e){toast('Cleanup hit an error partway through -- check Manage articles to see what went through.');}
+loading(false);
+};
 function refreshManage(){
 const me=$('manage-empty'),mt=$('manage-table'),de=$('dash-empty'),dt=$('dash-table');
 if(!articles.length){me.style.display='';mt.style.display='none';de.style.display='';dt.style.display='none';updateStats();return;}
@@ -1211,7 +1394,7 @@ const se=$('subs-empty'),st=$('subs-table');
 const filtered=subsFilter==='all'?subscribers:subscribers.filter(s=>s.plan===subsFilter);
 if(!filtered.length){se.style.display='';se.textContent='No subscribers found.';st.style.display='none';return;}
 se.style.display='none';st.style.display='';
-$('subs-body').innerHTML=filtered.map(s=>'<tr><td>'+esc(s.firstName||'')+' '+esc(s.lastName||s.name||'')+'</td><td>'+esc(s.username||'-')+'</td><td>'+esc(s.email)+'</td><td>'+esc(s.phone||'-')+'</td><td>'+esc(s.city||'-')+'</td><td>'+esc(s.state||'-')+'</td><td>'+esc(s.zip||'-')+'</td><td>'+esc(s.age||'-')+'</td><td>'+esc(s.source||'-')+'</td><td><span class="sp '+(s.plan==='subscriber'?'exc':'dft')+'">'+(s.plan==='subscriber'?'Paid':'Free')+'</span></td><td>'+esc(s.joined)+'</td><td><button class="tbtn" onclick="manualUpgradeSub(\''+s.id+'\')">'+(s.plan==='subscriber'?'-> Free':'-> Paid')+'</button> <button class="tbtn reject" onclick="deleteSub(\''+s.id+'\')">X</button></td></tr>').join('');
+$('subs-body').innerHTML=filtered.map(s=>'<tr><td>'+esc(s.firstName||'')+' '+esc(s.lastName||s.name||'')+'</td><td>'+esc(s.username||'-')+'</td><td>'+esc(s.email)+'</td><td>'+esc(s.phone||'-')+'</td><td>'+esc(s.city||'-')+'</td><td>'+esc(s.state||'-')+'</td><td>'+esc(s.zip||'-')+'</td><td>'+esc(s.age||'-')+'</td><td>'+esc(s.source||'-')+'</td><td><span class="sp '+(s.plan==='subscriber'?'exc':'dft')+'">'+(s.plan==='subscriber'?'Paid':'Free')+'</span>'+(s.cancelRequested?'<div style="color:#f87171;font-size:.62rem;font-family:sans-serif;margin-top:.2rem;white-space:nowrap">Cancel requested</div>':'')+'</td><td>'+esc(s.joined)+'</td><td><button class="tbtn" onclick="manualUpgradeSub(\''+s.id+'\')">'+(s.plan==='subscriber'?'-> Free':'-> Paid')+'</button> '+(s.cancelRequested?'<button class="tbtn" onclick="confirmCancelSub(\''+s.id+'\')">Confirm cancel</button> ':'')+'<button class="tbtn reject" onclick="deleteSub(\''+s.id+'\')">X</button></td></tr>').join('');
 }
 // NOTE: this removes the subscriber's Firestore profile only. Their underlying Firebase Auth
 // login credential (if migrated) still exists -- fully deleting it requires a server-side call
