@@ -577,6 +577,9 @@ footer{background:var(--navy);border-top:3px solid var(--gold);padding:1rem 1.5r
 <div class="errmsg" id="regErr"></div><div class="subnote" id="subNote">Subscriber plan selected. Access granted automatically for now.</div></div>
 <div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="doRegister()">Create account</button><button class="btn-s" onclick="closeRegister()">Cancel</button></div></div></div>
 
+<div class="overlay" id="setUsernameOverlay" style="z-index:300" onclick="if(event.target===this)closeSetUsername()">
+<div class="smodal"><div class="smodal-hdr"><span class="smodal-title">Choose a username</span><button class="xbtn" onclick="closeSetUsername()">X</button></div><div class="smodal-body"><p style="font-size:.76rem;color:var(--text-muted);margin-bottom:.85rem">Your account was created before usernames existed. Pick one now to sign in faster next time -- you can still use your email until you do.</p><div class="frow"><label>Username *</label><input class="finput" id="su-username" type="text" placeholder="Choose a username" autocapitalize="off" onkeydown="if(event.key==='Enter')saveUsername()"></div><div class="errmsg" id="su-err"></div></div><div class="smodal-foot"><button class="btn-p" style="flex:1" onclick="saveUsername()">Save username</button><button class="btn-s" onclick="closeSetUsername()">Maybe later</button></div></div></div>
+
 <div class="overlay" id="commPostOverlay" style="z-index:300" onclick="if(event.target===this)closeCommPost()">
 <div class="smodal"><div class="smodal-hdr" id="commPostHdr"><span class="smodal-title" id="commPostTitle">Post a listing</span><button class="xbtn" onclick="closeCommPost()">X</button></div>
 <div class="smodal-body"><input type="hidden" id="commPostType" value="classified">
@@ -916,7 +919,24 @@ function onReaderLoginSuccess(){
 window.closeReaderLogin();updateUserUI();renderReader(currentNavCat);
 toast('Welcome back, '+(currentUser?.firstName||'')+'!');
 if(pendingCheckoutIntent){pendingCheckoutIntent=false;setTimeout(()=>openStripeCheckout(),300);}
+else if(currentUser&&!currentUser.username){setTimeout(()=>openSetUsername(),500);}
 }
+window.openSetUsername=()=>{if(!currentUser)return;$('su-username').value='';$('su-err').style.display='none';$('setUsernameOverlay').classList.add('open');};
+window.closeSetUsername=()=>$('setUsernameOverlay').classList.remove('open');
+window.saveUsername=async()=>{
+if(!currentUser)return;
+const username=$('su-username').value.trim().toLowerCase();
+if(!/^[a-z0-9_.]{3,20}$/.test(username)){$('su-err').textContent='Username must be 3-20 characters: letters, numbers, underscores, or periods only.';$('su-err').style.display='block';return;}
+loading(true);
+try{
+const snap=await getDocs(collection(db,'subscribers'));let taken=false;snap.forEach(d=>{if(d.id!==currentUser.id&&d.data().username&&d.data().username.toLowerCase()===username)taken=true;});
+if(taken){$('su-err').textContent='That username is already taken.';$('su-err').style.display='block';loading(false);return;}
+await updateDoc(doc(db,'subscribers',currentUser.id),{username});
+currentUser.username=username;
+window.closeSetUsername();toast('Username saved -- use it to sign in next time!');
+}catch(e){$('su-err').textContent='Error saving username -- try again.';$('su-err').style.display='block';}
+loading(false);
+};
 window.openForgotPassword=async()=>{
 const login=$('rUsername').value.trim().toLowerCase();
 if(!login){toast('Enter your username above first, then tap "Forgot password?" again.');return;}
@@ -964,7 +984,7 @@ if(plan!=='subscriber'&&pendingCheckoutIntent){pendingCheckoutIntent=false;setTi
 loading(false);
 };
 window.doLogout=async()=>{try{await signOut(readerAuth);}catch(e){}currentUser=null;updateUserUI();renderReader(currentNavCat);toast('Signed out.');};
-const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';const b=$('userBadge');if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'* '+currentUser.firstName:currentUser.firstName;}else b.style.display='none';};
+const updateUserUI=()=>{const li=!!currentUser;$('loginBtn').style.display=li?'none':'';$('logoutBtn').style.display=li?'':'none';const b=$('userBadge');if(li){b.style.display='';b.textContent=currentUser.plan==='subscriber'?'* '+currentUser.firstName:currentUser.firstName;b.style.cursor=currentUser.username?'default':'pointer';b.title=currentUser.username?'':'Click to choose a username';b.onclick=currentUser.username?null:openSetUsername;}else b.style.display='none';};
 
 window.showSec=(id,btn)=>{
 document.querySelectorAll('.asec').forEach(s=>s.classList.remove('open'));
