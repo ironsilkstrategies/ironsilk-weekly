@@ -733,6 +733,9 @@ function buildProps(){
   PROPS.forEach(p=>{
     const f=calibFactor(p.type)*playerPropAdj(p.name);
     if(f!==1)p.p=Math.max(.03,Math.min(.97,p.p*f));
+    if(p.type==='hr'||p.type==='hits'){
+      p.p=Math.max(.03,Math.min(.97,sharpPropBlend(p.gid,p.name,p.type,p.thr,p.p)));
+    }
   });
   PROPS.sort((a,b)=>b.p-a.p);
 }
@@ -1081,6 +1084,22 @@ function sharpTotalFor(gid){
   return{line:(over||under).line,overProb:over?over.prob:null,underProb:under?under.prob:null,
     overAmerican:over?over.american:null,underAmerican:under?under.american:null,book:(over||under).book};
 }
+// blends the sim's own total probability with SharpAPI's real market probability —
+// this changes what gets predicted, not just what gets displayed next to it. Only
+// blends when the book's line is within half a run of the line being asked about,
+// since a total two runs off the one being priced isn't informative for it.
+function sharpTotalBlend(g,line,simProb){
+  const st=sharpTotalFor(g.id);
+  if(!st||st.overProb===null||Math.abs(st.line-line)>0.5)return simProb;
+  return simProb*0.55+st.overProb*0.45;
+}
+// same idea for a single player prop — blends sim probability with SharpAPI's real
+// price at the SAME threshold only, never across mismatched lines
+function sharpPropBlend(gid,name,type,thr,simProb){
+  const sp=sharpPropFor(gid,name,type);
+  if(!sp||Math.floor(sp.line)+1!==thr)return simProb;
+  return simProb*0.55+sp.prob*0.45;
+}
 
 async function diagnoseSharp(){
   const el=document.getElementById('sharpDiag');
@@ -1269,33 +1288,48 @@ function card(g){
 
 function betGrid(g,s,M){
   const gl=g.away.abbr+'@'+g.home.abbr;
-  const b=(label,pick,prob,sub)=>{
+  const b=(label,pick,prob,pairPct)=>{
     const id=gl+'|'+pick;
     const on=SLIP.some(x=>x.id===id);
+    const pct=pairPct!==undefined?pairPct:Math.round(prob*100);
     return `<div class="bet ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
-      <div class="bl">${label}</div><div class="bo">${amer(prob)}</div><div class="bs">${sub||(prob*100).toFixed(0)+'%'}</div></div>`;
+      <div class="bl">${label}</div><div class="bo">${amer(prob)}</div><div class="bs">${pct}%</div></div>`;
   };
+  // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
+  // always sum to exactly 100 instead of each rounding independently, which can silently
+  // produce 101% (or 99%) whenever the true probability lands near a half-percent boundary
+  const pair=p=>{const a=Math.round(p*100);return [a,100-a]};
   const favSide=s.hw>=s.aw?'home':'away';
   const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
   const favCover=rlProb(g,s,favSide,1.5),dogCover=favCover===null?null:1-favCover;
   const t1=Math.floor(s.mean)+.5;
   const f5t=Math.floor(s.f5tot)+.5;
   const f5over=Math.min(.9,Math.max(.1,.5+(s.f5tot-f5t)*.16));
+  const [hwPct,awPct]=pair(s.hw);
+  const t1Blend=sharpTotalBlend(g,t1,s.over(t1));
+  const t2Blend=sharpTotalBlend(g,t1+1,s.over(t1+1));
+  const [t1oPct,t1uPct]=pair(t1Blend);
+  const [t2oPct,t2uPct]=pair(t2Blend);
+  const [f5oPct,f5uPct]=pair(f5over);
+  const stMatch=sharpTotalFor(g.id);
+  const blendTag=(line)=>stMatch&&Math.abs(stMatch.line-line)<=0.5?` <span class="flag cool">+sharp</span>`:'';
+  let rlPair=[null,null];
+  if(favCover!==null)rlPair=pair(favCover);
   return `<div class="mktblock">
     <div class="mktlab">Moneyline</div>
-    <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',s.aw)}${b(g.home.abbr,g.home.abbr+' ML',s.hw)}</div>
+    <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',s.aw,awPct)}${b(g.home.abbr,g.home.abbr+' ML',s.hw,hwPct)}</div>
     <div class="mktlab">Run line</div>
-    <div class="betgrid">${favCover!==null?b(favAb+' -1.5',favAb+' -1.5',favCover):''}${dogCover!==null?b(dogAb+' +1.5',dogAb+' +1.5',dogCover):''}</div>
-    <div class="mktlab">Total runs · ${t1}</div>
-    <div class="betgrid">${b('Over '+t1,'Over '+t1,s.over(t1))}${b('Under '+t1,'Under '+t1,1-s.over(t1))}</div>
-    <div class="mktlab">Total runs · ${t1+1}</div>
-    <div class="betgrid">${b('Over '+(t1+1),'Over '+(t1+1),s.over(t1+1))}${b('Under '+(t1+1),'Under '+(t1+1),1-s.over(t1+1))}</div>
+    <div class="betgrid">${favCover!==null?b(favAb+' -1.5',favAb+' -1.5',favCover,rlPair[0]):''}${dogCover!==null?b(dogAb+' +1.5',dogAb+' +1.5',dogCover,rlPair[1]):''}</div>
+    <div class="mktlab">Total runs · ${t1}${blendTag(t1)}</div>
+    <div class="betgrid">${b('Over '+t1,'Over '+t1,t1Blend,t1oPct)}${b('Under '+t1,'Under '+t1,1-t1Blend,t1uPct)}</div>
+    <div class="mktlab">Total runs · ${t1+1}${blendTag(t1+1)}</div>
+    <div class="betgrid">${b('Over '+(t1+1),'Over '+(t1+1),t2Blend,t2oPct)}${b('Under '+(t1+1),'Under '+(t1+1),1-t2Blend,t2uPct)}</div>
     <div class="mktlab">First 5 innings</div>
     <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a)}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h)}</div>
     <div class="mktlab">First 5 total · ${f5t}</div>
-    <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over)}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over)}</div>
+    <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct)}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct)}</div>
   </div>`;
 }
 
@@ -1324,9 +1358,9 @@ function agPanel(g,s,M){
      · 9.5 <span class="mono">${(s.over(9.5)*100).toFixed(0)}/${((1-s.over(9.5))*100).toFixed(0)}</span>
      · 10.5 <span class="mono">${(s.over(10.5)*100).toFixed(0)}/${((1-s.over(10.5))*100).toFixed(0)}</span></div></div>
    ${(()=>{const st=sharpTotalFor(g.id);if(!st)return '';
-     return `<div class="row"><div class="lb">E2</div><div class="tx" style="color:var(--cold)">SharpAPI ${st.book}: line ${st.line}
-       ${st.overProb?' · over '+(st.overProb*100).toFixed(0)+'% ('+(st.overAmerican>0?'+':'')+st.overAmerican+')':''}
-       ${st.underProb?' · under '+(st.underProb*100).toFixed(0)+'% ('+(st.underAmerican>0?'+':'')+st.underAmerican+')':''}</div></div>`;
+     return `<div class="row"><div class="lb">E2</div><div class="tx" style="color:var(--cold)">SharpAPI ${st.book} line ${st.line} — blended into the Total runs prediction above when within half a run of it
+       ${st.overProb?' · book over '+(st.overProb*100).toFixed(0)+'% ('+(st.overAmerican>0?'+':'')+st.overAmerican+')':''}
+       ${st.underProb?' · book under '+(st.underProb*100).toFixed(0)+'% ('+(st.underAmerican>0?'+':'')+st.underAmerican+')':''}</div></div>`;
    })()}
    <div class="row"><div class="lb">F5</div><div class="tx">${g.home.abbr} <span class="mono">${(s.f5h*100).toFixed(0)}%</span>
      · ${g.away.abbr} <span class="mono">${(s.f5a*100).toFixed(0)}%</span>
@@ -1351,7 +1385,7 @@ function propPanel(g){
       const on=SLIP.some(x=>x.id===id);
       const sp=(p.type==='hr'||p.type==='hits')?sharpPropFor(g.id,p.name,p.type):null;
       const spMatch=sp&&Math.floor(sp.line)+1===p.thr;
-      const cmp=spMatch?`<div class="pm" style="color:var(--cold)">${sp.book} o${sp.line}: ${(sp.prob*100).toFixed(0)}% (${sp.american>0?'+':''}${sp.american}) · sim ${sp.prob<p.p?'higher':sp.prob>p.p?'lower':'matches'}</div>`:'';
+      const cmp=spMatch?`<div class="pm" style="color:var(--cold)">${sp.book} o${sp.line}: ${(sp.prob*100).toFixed(0)}% (${sp.american>0?'+':''}${sp.american}) — blended into the % above</div>`:'';
       return `<div class="prop ${on?'on':''}" onclick="tog('${esc(id)}','${esc(gl)}','${esc(p.name+' '+p.mkt)}',${p.p},${g.id},'${esc(p.type)}','${esc(p.name)}','${esc(p.mkt)}')">
         <div class="pc mono ${c}">${(p.p*100).toFixed(0)}%</div>
         <div class="pw"><div class="pn">${p.name}${p.proj?' <span class="flag cool">proj</span>':''}</div>
@@ -1541,7 +1575,7 @@ function marketPool(){
       if(dogCover>=.60)pool.push({p:dogCover,pick:dogAb+' +1.5',game:gl,kind:'rl'});
     }
     [7.5,8.5,9.5,10.5].forEach(t=>{
-      const o=s.over(t);
+      const o=sharpTotalBlend(g,t,s.over(t));
       if(o>=.5)pool.push({p:o,pick:'Over '+t,game:gl,kind:'total'});
       else if((1-o)>=.5)pool.push({p:1-o,pick:'Under '+t,game:gl,kind:'total'});
     });
@@ -2249,7 +2283,7 @@ function bestTotals(n){
   GAMES.forEach(g=>{
     if(g.abstract==='Final')return;
     const s=SIMS[g.id];if(!s)return;
-    const t1=Math.floor(s.mean)+.5,o=s.over(t1);
+    const t1=Math.floor(s.mean)+.5,o=sharpTotalBlend(g,t1,s.over(t1));
     out.push({pick:(o>=.5?'Over ':'Under ')+t1,game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob:Math.max(o,1-o)});
   });
   return out.sort((a,b)=>b.prob-a.prob).slice(0,n);
@@ -2283,7 +2317,7 @@ function buildBestCard(){
       <div class="lab">Best home run chance on the board · ${hr.game}</div></div>`
       :`<div class="rc-hero"><div class="lab">No home run data yet</div></div>`}
     ${rows('Best 5 sides',sides,'Ranked by edge vs. market where pulled, else by sim win probability','pick','prob')}
-    ${rows('Best 5 totals',totals,'Ranked by sim probability — no market total feed on the free tier','pick','prob')}
+    ${rows('Best 5 totals',totals,'Blended with SharpAPI\'s real total line when one is posted for that game','pick','prob')}
     ${rows('Best 5 props',props,'Ranked by sim probability, self-calibrated against graded history','_',null)}
     <div class="rc-foot">
       <div class="cal">Built from lineups, park, weather, H2H — never from book odds</div>
