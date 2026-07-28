@@ -297,6 +297,19 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   </div>
 
   <div class="view" id="v-tickets">
+    <div class="sbar"><h2>Build to a target</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="betgrid">
+        <div><input id="targetStake" type="number" placeholder="stake $" min="1" step="1"></div>
+        <div><input id="targetProfit" type="number" placeholder="target profit $" min="1" step="1"></div>
+      </div>
+      <div class="bar" style="margin-top:8px"><button class="primary" onclick="buildTargetTicket()">Build ticket</button></div>
+      <div class="sub" style="margin-top:6px">Searches only the same 60%/70%/25% pool used in Best Bets — real lines only,
+      no synthetic F5. Picks the safest combination of legs that reaches your target, stacking highest-probability
+      legs first. Almost never lands on your number exactly — it'll land at or just past it.</div>
+    </div>
+    <div id="targetResult"></div>
+    <div class="sbar"><h2>Generated tickets</h2><div class="ln"></div></div>
     <div id="tickets"><div class="empty">Tickets generate once lineups post.</div></div>
     <div class="bar"><button class="primary" onclick="genTickets()">Regenerate</button></div>
     <div class="note"><b>Game tickets carry sides, run lines, totals and F5 — overs and unders both.</b>
@@ -439,6 +452,16 @@ function blendPA(f,pa){const lo=Math.floor(pa),w=pa-lo;return f(lo)*(1-w)+f(lo+1
 function comb(n,k){if(k>n)return 0;let r=1;for(let i=0;i<k;i++)r=r*(n-i)/(i+1);return r}
 function imp(a){return a>0?100/(a+100):(-a)/((-a)+100)}
 function amer(p){if(!p||p<=0||p>=1)return '—';return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p)}
+// display-only: real books never mirror -133/+133. This applies a standard ~4.5% overround
+// (typical MLB moneyline vig) so the shown price looks like an actual board — both sides
+// priced slightly worse than fair. The probability that drives picks, edges, and every
+// prediction underneath stays the untouched fair number; only this rendered price changes.
+function vigAmer(p){
+  if(!p||p<=0||p>=1)return '—';
+  const OVERROUND=0.045;
+  const pv=Math.min(.98,Math.max(.02,p+OVERROUND/2));
+  return amer(pv);
+}
 
 /* ================= PARK + ENV ================= */
 const PARK={COL:[112,118],CIN:[106,114],BOS:[105,101],KC:[104,94],PHI:[104,109],ARI:[103,102],
@@ -1076,6 +1099,16 @@ function sharpPropFor(gid,name,type){
   return SHARP_PROPS.find(p=>p.key===k&&p.type===type&&
     ((p.home===g.home.abbr&&p.away===g.away.abbr))) || null;
 }
+// Neither confirmed data source currently returns a real numeric F5 line — SharpAPI's
+// innings-segment markets came back as binary Yes/No with line:null, and neither h2h
+// market covers F5 at all. This checks for real backing rather than assuming it, so F5
+// picks stay off the board (not tappable, not in tickets) until an actual line exists —
+// and it activates automatically the moment one does, without needing this rewritten.
+function hasRealF5(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return false;
+  const has=SHARP_TOTALS.some(t=>t.home===g.home.abbr&&t.away===g.away.abbr&&t.segment==='1st_5_innings');
+  return has;
+}
 function sharpTotalFor(gid){
   const g=GAMES.find(x=>x.id===gid);if(!g)return null;
   const rows=SHARP_TOTALS.filter(t=>t.home===g.home.abbr&&t.away===g.away.abbr);
@@ -1216,6 +1249,35 @@ function sbar(t,n){return `<div class="sbar"><h2>${t}</h2><div class="ln"></div>
 
 function card(g){
   const s=SIMS[g.id],M=marketOf(g),done=g.abstract==='Final';
+  // plain-language read of the model against whatever REAL line exists — not the model's
+  // own synthetic total, the actual posted number. This is what answers "the model has
+  // 11.5 but the book has 9.5 — is 9 a good bet or is 11 the safer one."
+  function realLineRead(){
+    if(!s)return [];
+    const out=[];
+    if(M){
+      const favSide=s.hw>=s.aw?'home':'away';
+      const favAb=g[favSide].abbr;
+      const modelP=favSide==='home'?s.hw:s.aw;
+      const mktP=favSide==='home'?M.fh:M.fa;
+      const gap=(modelP-mktP)*100;
+      let text;
+      if(Math.abs(gap)<3)text=`${favAb} moneyline is priced about where the model has it — no real edge either way.`;
+      else if(gap>=3)text=`Model likes ${favAb} more than the real line does — model ${(modelP*100).toFixed(0)}% vs market ${(mktP*100).toFixed(0)}%. Reads as value on ${favAb}.`;
+      else text=`Real moneyline is shorter than the model would price it — market ${(mktP*100).toFixed(0)}% vs model ${(modelP*100).toFixed(0)}%. Book likes ${favAb} more than the sim does.`;
+      out.push({label:'Side',text});
+    }
+    const st=sharpTotalFor(g.id);
+    if(st&&st.overProb!==null){
+      const atReal=s.over(st.line);
+      let text;
+      if(atReal>=.65)text=`Real total is ${st.line} — model clears it ${(atReal*100).toFixed(0)}% of the time. Reads as a solid Over.`;
+      else if(atReal<=.35)text=`Real total is ${st.line} — model stays under it ${((1-atReal)*100).toFixed(0)}% of the time. Reads as a solid Under.`;
+      else text=`Real total is ${st.line} — model has it at ${(atReal*100).toFixed(0)}% to clear it, close to a coinflip by the model's own math.`;
+      out.push({label:'Total',text});
+    }
+    return out;
+  }
   let edge=null,side=null;
   if(s&&M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
     if(eh>=ea){edge=eh;side=g.home.abbr}else{edge=ea;side=g.away.abbr}}
@@ -1269,6 +1331,9 @@ function card(g){
     <div class="env">Park <span class="pf">${pf[0]}</span>r / <span class="pf">${pf[1]}</span>hr${w?` · <b>${w.temp}°</b> ${w.cond||''} ${w.wind||''}`:DOME[g.home.abbr]?' · dome':''}${s&&s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}</div>
     <div class="arms">${arm('away')}</div><div class="arms">${arm('home')}</div>
     ${finalLine}${projLine}
+    ${(()=>{const rr=realLineRead();return rr.length?`<div style="display:flex;flex-direction:column;gap:4px;margin:2px 0 4px">${rr.map(r=>
+      `<div style="font-size:11.5px;line-height:1.5;background:var(--panel2);border:1px solid var(--rule);border-radius:7px;padding:7px 9px">
+        <b style="color:var(--gold);font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${r.label}</b> — ${r.text}</div>`).join('')}</div>`:'';})()}
     ${sig?`<div class="sig">${sig}</div>`:''}
     ${badges}
    </div>
@@ -1295,7 +1360,7 @@ function betGrid(g,s,M){
     return `<div class="bet ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
-      <div class="bl">${label}</div><div class="bo">${amer(prob)}</div><div class="bs">${pct}%</div></div>`;
+      <div class="bl">${label}</div><div class="bo">${vigAmer(prob)}</div><div class="bs">${pct}%</div></div>`;
   };
   // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
   // always sum to exactly 100 instead of each rounding independently, which can silently
@@ -1326,10 +1391,17 @@ function betGrid(g,s,M){
     <div class="betgrid">${b('Over '+t1,'Over '+t1,t1Blend,t1oPct)}${b('Under '+t1,'Under '+t1,1-t1Blend,t1uPct)}</div>
     <div class="mktlab">Total runs · ${t1+1}${blendTag(t1+1)}</div>
     <div class="betgrid">${b('Over '+(t1+1),'Over '+(t1+1),t2Blend,t2oPct)}${b('Under '+(t1+1),'Under '+(t1+1),1-t2Blend,t2uPct)}</div>
-    <div class="mktlab">First 5 innings</div>
-    <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a)}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h)}</div>
-    <div class="mktlab">First 5 total · ${f5t}</div>
-    <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct)}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct)}</div>
+    ${(()=>{
+      const realF5=hasRealF5(g.id);
+      if(realF5){
+        return `<div class="mktlab">First 5 innings</div>
+          <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a)}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h)}</div>
+          <div class="mktlab">First 5 total · ${f5t}</div>
+          <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct)}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct)}</div>`;
+      }
+      return `<div class="mktlab">First 5 innings — no real line posted</div>
+        <div class="sigchip" style="display:inline-block">Sim read only: ${g.away.abbr} ${(s.f5a*100).toFixed(0)}% · ${g.home.abbr} ${(s.f5h*100).toFixed(0)}% · total ${s.f5tot.toFixed(1)} — not tappable, no book to check it against yet</div>`;
+    })()}
   </div>`;
 }
 
@@ -1558,6 +1630,57 @@ function delLocked(id){
   set(LS.locked,get(LS.locked,[]).filter(x=>x.id!==id));genTickets();
 }
 
+/* ================= TARGET TICKET BUILDER ================= */
+// Same 60/70/25 qualifying pool as Best Bets — real lines only, no synthetic F5.
+// Greedy safest-first: sorts by probability descending, adds legs until the combined
+// payout clears the target, skipping a second leg from any game already used.
+function qualifyingPool(){
+  const pool=[];
+  bestSides(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'side'}));
+  bestTotals(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
+  PROPS.filter(p=>p.type!=='hr'&&p.p>=PUBLIC_THRESH.prop).forEach(p=>
+    pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop'}));
+  PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).forEach(p=>
+    pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr'}));
+  return pool.sort((a,b)=>b.p-a.p);
+}
+function buildTargetTicket(){
+  const stake=parseFloat(document.getElementById('targetStake').value);
+  const profit=parseFloat(document.getElementById('targetProfit').value);
+  const resEl=document.getElementById('targetResult');
+  if(!stake||!profit||stake<=0||profit<=0){
+    resEl.innerHTML='<div class="empty">Enter both a stake and a target profit.</div>';return;
+  }
+  const neededMult=1+(profit/stake);
+  const pool=qualifyingPool();
+  if(!pool.length){
+    resEl.innerHTML='<div class="empty">Nothing currently clears the 60/70/25 bar — no qualifying legs to build from right now.</div>';
+    return;
+  }
+  const usedGames=new Set(),combo=[];
+  let mult=1;
+  for(const leg of pool){
+    if(usedGames.has(leg.game))continue;
+    combo.push(leg);usedGames.add(leg.game);
+    mult*=1/leg.p;
+    if(mult>=neededMult)break;
+  }
+  const achievedProfit=stake*(mult-1);
+  const combinedProb=combo.reduce((a,l)=>a*l.p,1);
+  if(mult<neededMult){
+    resEl.innerHTML=`<div class="tkt hi"><h3>Can't reach that target today</h3>
+      <div class="sub">Using every qualifying leg available (${combo.length}), the max reachable is about
+      <b>$${achievedProfit.toFixed(0)} profit</b> on a $${stake} stake — short of the $${profit} target.
+      Lower the target, raise the stake, or try again once more games clear the bar.</div>
+      <ol>${combo.map(l=>`<li>${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol></div>`;
+  }else{
+    resEl.innerHTML=`<div class="tkt hi"><h3>$${stake} → ~$${achievedProfit.toFixed(0)} profit</h3>
+      <div class="sub"><b>${(combinedProb*100).toFixed(combinedProb<.01?3:1)}%</b> combined · ${combo.length} legs ·
+      target was $${profit}, this lands at $${achievedProfit.toFixed(0)}</div>
+      <ol>${combo.map(l=>`<li>${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol></div>`;
+  }
+}
+
 /* ================= TICKETS ================= */
 function marketPool(){
   const pool=[];
@@ -1579,12 +1702,16 @@ function marketPool(){
       if(o>=.5)pool.push({p:o,pick:'Over '+t,game:gl,kind:'total'});
       else if((1-o)>=.5)pool.push({p:1-o,pick:'Under '+t,game:gl,kind:'total'});
     });
-    pool.push({p:Math.max(s.f5h,s.f5a),pick:'F5 '+(s.f5h>s.f5a?g.home.abbr:g.away.abbr),game:gl,kind:'f5'});
-    [3.5,4.5].forEach(t=>{
-      const o=Math.min(.82,Math.max(.18,.5+(s.f5tot-t)*.14));
-      if(o>=.52)pool.push({p:o,pick:'F5 over '+t,game:gl,kind:'f5t'});
-      else if((1-o)>=.52)pool.push({p:1-o,pick:'F5 under '+t,game:gl,kind:'f5t'});
-    });
+    // F5 stays out of every ticket/pick pool until a real posted line backs it —
+    // see hasRealF5() for why nothing currently qualifies
+    if(hasRealF5(g.id)){
+      pool.push({p:Math.max(s.f5h,s.f5a),pick:'F5 '+(s.f5h>s.f5a?g.home.abbr:g.away.abbr),game:gl,kind:'f5'});
+      [3.5,4.5].forEach(t=>{
+        const o=Math.min(.82,Math.max(.18,.5+(s.f5tot-t)*.14));
+        if(o>=.52)pool.push({p:o,pick:'F5 over '+t,game:gl,kind:'f5t'});
+        else if((1-o)>=.52)pool.push({p:1-o,pick:'F5 under '+t,game:gl,kind:'f5t'});
+      });
+    }
   });
   return pool.sort((a,b)=>b.p-a.p);
 }
@@ -2261,6 +2388,10 @@ function bestTab(t){
   document.getElementById('best-recap').classList.toggle('on',t==='recap');
   if(t==='today')renderBest();else renderBestRecap();
 }
+// public-facing floor: Best Bets and Recap never show a pick below this bar, even if it
+// means showing fewer than 5. Everything below still gets tracked in Grades internally —
+// this only controls what's public.
+const PUBLIC_THRESH={side:0.60,total:0.70,f5:0.70,hr:0.25,prop:0.70};
 function bestSides(n){
   const out=[];
   GAMES.forEach(g=>{
@@ -2269,6 +2400,7 @@ function bestSides(n){
     const M=marketOf(g);
     const favSide=s.hw>=s.aw?'home':'away';
     const ab=g[favSide].abbr,prob=Math.max(s.hw,s.aw);
+    if(prob<PUBLIC_THRESH.side)return;
     let edge=null;
     if(M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;edge=favSide==='home'?eh:ea}
     out.push({pick:ab+' ML',game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob,edge});
@@ -2284,16 +2416,18 @@ function bestTotals(n){
     if(g.abstract==='Final')return;
     const s=SIMS[g.id];if(!s)return;
     const t1=Math.floor(s.mean)+.5,o=sharpTotalBlend(g,t1,s.over(t1));
-    out.push({pick:(o>=.5?'Over ':'Under ')+t1,game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob:Math.max(o,1-o)});
+    const prob=Math.max(o,1-o);
+    if(prob<PUBLIC_THRESH.total)return;
+    out.push({pick:(o>=.5?'Over ':'Under ')+t1,game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob});
   });
   return out.sort((a,b)=>b.prob-a.prob).slice(0,n);
 }
 function bestPropsRaw(n){
-  return PROPS.filter(p=>p.type!=='hr').slice(0,n)
+  return PROPS.filter(p=>p.type!=='hr'&&p.p>=PUBLIC_THRESH.prop).slice(0,n)
     .map(p=>({name:p.name,mkt:p.mkt,type:p.type,thr:p.thr,pid:p.pid,gid:p.gid,game:p.game,p:p.p}));
 }
 function bestHRRaw(){
-  const hrs=PROPS.filter(p=>p.type==='hr').sort((a,b)=>b.p-a.p);
+  const hrs=PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).sort((a,b)=>b.p-a.p);
   if(!hrs.length)return null;
   const h=hrs[0];
   return{name:h.name,mkt:h.mkt,type:'hr',thr:1,pid:h.pid,gid:h.gid,game:h.game,p:h.p};
