@@ -248,6 +248,12 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 </head>
 <body>
 
+<div class="setup" id="gate" style="z-index:100;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
+  <div style="font-family:'Archivo';font-weight:900;font-size:22px;text-transform:uppercase;letter-spacing:-.02em;margin-bottom:18px">THE<span style="color:var(--gold)">DESK</span></div>
+  <input id="gateIn" type="password" placeholder="passphrase" autocomplete="off" style="max-width:280px;text-align:center" onkeydown="if(event.key==='Enter')tryGate()">
+  <div class="bar" style="max-width:280px"><button class="primary" onclick="tryGate()" style="width:100%">Unlock</button></div>
+  <div id="gateErr" style="color:var(--rust);font-family:'IBM Plex Mono';font-size:11px;margin-top:10px;min-height:16px"></div>
+</div>
 <div class="setup" id="setup">
   <h2>Set up the desk</h2>
   <p>The simulator runs entirely free and never uses bookmaker odds to form a projection.</p>
