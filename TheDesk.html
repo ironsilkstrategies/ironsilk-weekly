@@ -248,12 +248,6 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 </head>
 <body>
 
-<div class="setup" id="gate" style="z-index:100;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
-  <div style="font-family:'Archivo';font-weight:900;font-size:22px;text-transform:uppercase;letter-spacing:-.02em;margin-bottom:18px">THE<span style="color:var(--gold)">DESK</span></div>
-  <input id="gateIn" type="password" placeholder="passphrase" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="max-width:280px;text-align:center" onkeydown="if(event.key==='Enter')tryGate()">
-  <div class="bar" style="max-width:280px"><button class="primary" onclick="tryGate()" style="width:100%">Unlock</button></div>
-  <div id="gateErr" style="color:var(--rust);font-family:'IBM Plex Mono';font-size:11px;margin-top:10px;min-height:16px"></div>
-</div>
 <div class="setup" id="setup">
   <h2>Set up the desk</h2>
   <p>The simulator runs entirely free and never uses bookmaker odds to form a projection.</p>
@@ -389,13 +383,6 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 </div>
 
 <script>
-window.addEventListener('error',function(e){
-  const gEl=document.getElementById('gate');
-  const errEl=document.getElementById('gateErr');
-  if(gEl&&!gEl.classList.contains('hide')&&errEl){
-    errEl.textContent='Script error: '+(e.message||'unknown')+' (line '+(e.lineno||'?')+')';
-  }
-});
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp'};
@@ -2456,42 +2443,8 @@ async function boot(){
       set(LS.slip,SLIP);await loadAll();await loadOdds(false);snapshot();snapshotBest();paintSlip();paintMeter()}
   },3e4);
 }
-// change PASSHASH to swap the passphrase: run in any browser console —
-// crypto.subtle.digest('SHA-256',new TextEncoder().encode('newphrase')).then(b=>console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
-const PASSHASH='89d19d63941a517f4921ec8496fbf07c4b444537352cc585461a1b4de469fde5';
-const GATE_KEY='d4.gateok';
-async function sha256(s){
-  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
-  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-async function tryGate(){
-  try{
-    if(!(window.crypto&&window.crypto.subtle)){
-      document.getElementById('gateErr').textContent='This page needs HTTPS to unlock — check the address bar shows a padlock, not http://.';
-      return;
-    }
-    const v=document.getElementById('gateIn').value.trim();
-    const h=await sha256(v);
-    if(h===PASSHASH){
-      localStorage.setItem(GATE_KEY,'1');
-      document.getElementById('gate').classList.add('hide');
-      afterGate();
-    }else{
-      document.getElementById('gateErr').textContent='Wrong passphrase.';
-      document.getElementById('gateIn').value='';
-    }
-  }catch(e){
-    document.getElementById('gateErr').textContent='Error: '+(e&&e.message?e.message:e);
-  }
-}
-function afterGate(){
-  if(get(LS.key,null)===null)document.getElementById('setup').classList.remove('hide');
-  else{document.getElementById('setup').classList.add('hide');boot()}
-}
-if(localStorage.getItem(GATE_KEY)==='1'){
-  document.getElementById('gate').classList.add('hide');
-  afterGate();
-}
+if(get(LS.key,null)===null)document.getElementById('setup').classList.remove('hide');
+else{document.getElementById('setup').classList.add('hide');boot()}
 </script>
 </body>
 </html>
