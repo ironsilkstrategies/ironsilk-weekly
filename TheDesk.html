@@ -271,7 +271,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <div style="display:flex;align-items:baseline;gap:8px">
       <button onclick="openSettings()" style="padding:5px 9px;font-size:9px;font-family:'Archivo',sans-serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;background:#F2A93B;color:#0B0F14;border:1px solid #F2A93B;cursor:pointer">Keys</button>
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v14</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v15</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1170,10 +1170,14 @@ function parseRundownPrices(pricesObj){
   return probs.reduce((a,b)=>a+b,0)/probs.length;
 }
 async function loadRundown(manual){
-  const key=get(LS.rundown,'');if(!key)return;
+  const key=get(LS.rundown,'');
+  if(!key)return{ok:false,reason:'no key saved'};
   try{
     const r=await fetch(`https://therundown.io/api/v2/sports/3/events/${today()}?key=${encodeURIComponent(key)}`);
-    if(!r.ok){if(manual)alert('TheRundown failed ('+r.status+').');return}
+    if(!r.ok){
+      let body='';try{body=(await r.text()).slice(0,200)}catch(e){}
+      return{ok:false,reason:`HTTP ${r.status}`,body};
+    }
     const j=await r.json();
     const events=j.events||[];
     const rl=[];
@@ -1195,9 +1199,11 @@ async function loadRundown(manual){
       });
     });
     RUNDOWN_RL=rl;
-    if(manual)alert(`Pulled ${rl.length} run-line prices from TheRundown.`);
     buildProps();render();
-  }catch(e){if(manual)alert('TheRundown network error.')}
+    return{ok:true,count:rl.length};
+  }catch(e){
+    return{ok:false,reason:'network error',body:(e&&e.message)||String(e)};
+  }
 }
 function hasRealRunLine(gid){
   const g=GAMES.find(x=>x.id===gid);if(!g)return false;
@@ -1269,8 +1275,9 @@ async function refreshEverything(){
   paint();
   if(get(LS.rundown,'')){
     steps.push('⏳ TheRundown…');paint();
-    try{await loadRundown(true);steps[steps.length-1]=`✅ TheRundown — ${RUNDOWN_RL.length} run-line prices`}
-    catch(e){steps[steps.length-1]='❌ TheRundown failed'}
+    const rdResult=await loadRundown(true);
+    if(rdResult.ok)steps[steps.length-1]=`✅ TheRundown — ${rdResult.count} run-line prices`;
+    else steps[steps.length-1]=`❌ TheRundown — ${rdResult.reason}${rdResult.body?': '+rdResult.body:''}`;
   }else{steps.push('⏭️ TheRundown — no key saved')}
   paint();
   render();buildProps();renderDayPicker();
