@@ -1209,10 +1209,17 @@ async function diagnoseRundown(){
     let h=`<div class="tkt hi"><h3>${events.length} events returned</h3>
       <div class="sub">sport_id=${guessSportId} (guessed) · ${JSON.stringify(j.meta||{})}</div></div>`;
     if(events.length){
+      // pick an event that actually has a non-empty markets array — a finished game or one
+      // with no market maker posted yet may return markets:[], which tells us nothing
+      const withMarkets=events.find(ev=>ev.markets&&ev.markets.length)||events[0];
       const marketTypes=new Set();
       events.forEach(ev=>(ev.markets||[]).forEach(m=>marketTypes.add(m.name||m.market_id)));
-      h+=`<div class="tkt"><h3>Market types present</h3><div class="sub">${[...marketTypes].join(', ')||'none found in markets array'}</div>
-        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(events[0],null,2).slice(0,2000)}</pre></div>`;
+      h+=`<div class="tkt"><h3>Market types present</h3><div class="sub">${[...marketTypes].join(', ')||'none found in any event\'s markets array'}</div></div>`;
+      h+=`<div class="tkt"><h3>Markets array — the actual odds structure</h3>
+        <div class="sub">Showing event: ${(withMarkets.teams||[]).map(t=>t.abbreviation).join(' @ ')} · ${withMarkets.markets?withMarkets.markets.length:0} market entries</div>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(withMarkets.markets||'no markets field on this event',null,2).slice(0,6000)}</pre></div>`;
+      h+=`<div class="tkt"><h3>Full first event (for reference, trimmed)</h3>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--mute);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(events[0],null,2).slice(0,1500)}</pre></div>`;
     }
     el.innerHTML=h;
   }catch(e){
