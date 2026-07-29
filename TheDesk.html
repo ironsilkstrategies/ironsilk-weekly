@@ -299,14 +299,23 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="view" id="v-tickets">
     <div class="sbar"><h2>Build to a target</h2><div class="ln"></div></div>
     <div class="tkt">
+      <div class="mktlab" style="margin-top:0">Markets to draw from</div>
+      <div class="filters">
+        <button id="mode-ml" class="on" onclick="toggleMode('ml',this)">Moneyline</button>
+        <button id="mode-rl" onclick="toggleMode('rl',this)">Run line</button>
+        <button id="mode-total" class="on" onclick="toggleMode('total',this)">Totals</button>
+        <button id="mode-prop" class="on" onclick="toggleMode('prop',this)">Props</button>
+      </div>
+      <div class="mktlab">Same-game combos</div>
+      <div class="filters"><button id="sgpToggle" onclick="this.classList.toggle('on')">SGP mode — allow run line + total together on one game (needs 2+ picks on it)</button></div>
       <div class="betgrid">
         <div><input id="targetStake" type="number" placeholder="stake $" min="1" step="1"></div>
         <div><input id="targetProfit" type="number" placeholder="target profit $" min="1" step="1"></div>
       </div>
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="buildTargetTicket()">Build ticket</button></div>
-      <div class="sub" style="margin-top:6px">Searches only the same 60%/70%/25% pool used in Best Bets — real lines only,
-      no synthetic F5. Picks the safest combination of legs that reaches your target, stacking highest-probability
-      legs first. Almost never lands on your number exactly — it'll land at or just past it.</div>
+      <div class="sub" style="margin-top:6px">Standard tickets follow real sportsbook rules: one side pick (ML or run line) per
+      game, and it can only pair with that game's total if it's a moneyline — run line + total together needs SGP mode.
+      Prop-only results group by game so you can see how many picks ride on each matchup.</div>
     </div>
     <div id="targetResult"></div>
     <div class="sbar"><h2>Generated tickets</h2><div class="ln"></div></div>
@@ -1634,50 +1643,121 @@ function delLocked(id){
 // Same 60/70/25 qualifying pool as Best Bets — real lines only, no synthetic F5.
 // Greedy safest-first: sorts by probability descending, adds legs until the combined
 // payout clears the target, skipping a second leg from any game already used.
-function qualifyingPool(){
+// Same-game legality, matching how an actual sportsbook ticket works:
+// standard ticket — one side-family pick (ML or RL) per game, and it MAY be paired with
+// that game's Total (ML+Total is fine on a real ticket). RL+Total together, or any second
+// side-family pick, is NOT legal on a standard multi-game parlay — that combination only
+// exists on an SGP, which itself needs 2+ picks from that same game to unlock alt lines.
+function legFamily(kind){
+  if(kind==='side')return 'ml';
+  if(kind==='rl')return 'rl';
+  if(kind==='total')return 'total';
+  if(kind==='f5'||kind==='f5t')return 'f5';
+  return 'prop';
+}
+function legalToAdd(combo,leg,sgpMode){
+  const sameGame=combo.filter(c=>c.game===leg.game);
+  if(!sameGame.length)return true;
+  if(sgpMode)return true;  // SGP unlocks any combo once 2+ legs share a game
+  if(sameGame.length>=2)return false;  // standard ticket caps at 2 legs from one game
+  const existingFam=legFamily(sameGame[0].kind),newFam=legFamily(leg.kind);
+  // the only legal same-game pair on a standard ticket is one ML + one Total
+  return (existingFam==='ml'&&newFam==='total')||(existingFam==='total'&&newFam==='ml');
+}
+function bestRunLines(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    const favSide=s.hw>=s.aw?'home':'away';
+    const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
+    const favCover=rlProb(g,s,favSide,1.5);
+    if(favCover===null)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    if(favCover>=PUBLIC_THRESH.side)out.push({p:favCover,pick:favAb+' -1.5',game:gl,kind:'rl'});
+    const dogCover=1-favCover;
+    if(dogCover>=PUBLIC_THRESH.side)out.push({p:dogCover,pick:dogAb+' +1.5',game:gl,kind:'rl'});
+  });
+  return out;
+}
+function qualifyingPool(modes){
   const pool=[];
-  bestSides(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'side'}));
-  bestTotals(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
-  PROPS.filter(p=>p.type!=='hr'&&p.p>=PUBLIC_THRESH.prop).forEach(p=>
-    pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop'}));
-  PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).forEach(p=>
-    pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr'}));
+  if(modes.has('ml'))bestSides(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'side'}));
+  if(modes.has('rl'))bestRunLines().forEach(x=>pool.push(x));
+  if(modes.has('total'))bestTotals(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
+  if(modes.has('prop')){
+    PROPS.filter(p=>p.type!=='hr'&&p.p>=PUBLIC_THRESH.prop).forEach(p=>
+      pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop'}));
+    PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).forEach(p=>
+      pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr'}));
+  }
   return pool.sort((a,b)=>b.p-a.p);
 }
+function selectedModes(){
+  const modes=new Set();
+  ['ml','rl','total','prop'].forEach(m=>{
+    const el=document.getElementById('mode-'+m);
+    if(el&&el.classList.contains('on'))modes.add(m);
+  });
+  return modes;
+}
+function toggleMode(m,btn){
+  btn.classList.toggle('on');
+}
+function isPropKind(k){return k==='prop'||k==='hr'}
 function buildTargetTicket(){
   const stake=parseFloat(document.getElementById('targetStake').value);
   const profit=parseFloat(document.getElementById('targetProfit').value);
+  const sgpMode=document.getElementById('sgpToggle').classList.contains('on');
   const resEl=document.getElementById('targetResult');
+  const modes=selectedModes();
+  if(!modes.size){resEl.innerHTML='<div class="empty">Pick at least one market type above.</div>';return}
   if(!stake||!profit||stake<=0||profit<=0){
     resEl.innerHTML='<div class="empty">Enter both a stake and a target profit.</div>';return;
   }
   const neededMult=1+(profit/stake);
-  const pool=qualifyingPool();
+  const pool=qualifyingPool(modes);
   if(!pool.length){
-    resEl.innerHTML='<div class="empty">Nothing currently clears the 60/70/25 bar — no qualifying legs to build from right now.</div>';
+    resEl.innerHTML='<div class="empty">Nothing in the selected market(s) clears the 60/70/25 bar right now.</div>';
     return;
   }
-  const usedGames=new Set(),combo=[];
+  const combo=[];
   let mult=1;
   for(const leg of pool){
-    if(usedGames.has(leg.game))continue;
-    combo.push(leg);usedGames.add(leg.game);
+    if(!legalToAdd(combo,leg,sgpMode))continue;
+    combo.push(leg);
     mult*=1/leg.p;
     if(mult>=neededMult)break;
   }
   const achievedProfit=stake*(mult-1);
   const combinedProb=combo.reduce((a,l)=>a*l.p,1);
+  const allProps=combo.every(l=>isPropKind(l.kind));
+  const gameCount=new Set(combo.map(l=>l.game)).size;
+  let listHtml;
+  if(allProps){
+    // group by game so it's clear how many picks are riding on each matchup, not a flat probability sort
+    const byGame={};
+    combo.forEach(l=>{(byGame[l.game]=byGame[l.game]||[]).push(l)});
+    listHtml=Object.keys(byGame).map(gm=>{
+      const legs=byGame[gm].sort((a,b)=>b.p-a.p);
+      return `<div style="margin:8px 0 4px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase">${gm} · ${legs.length} pick${legs.length>1?'s':''}</div>
+        <ol>${legs.map(l=>`<li>${l.pick} <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
+    }).join('');
+  }else{
+    listHtml=`<ol>${combo.map(l=>`<li>${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
+  }
+  const sgpNote=sgpMode?'<div class="sub" style="color:var(--cold)">SGP mode — same-game combos allowed. Confirm your book actually offers alt lines together on the specific games above before firing.</div>':'';
   if(mult<neededMult){
     resEl.innerHTML=`<div class="tkt hi"><h3>Can't reach that target today</h3>
-      <div class="sub">Using every qualifying leg available (${combo.length}), the max reachable is about
-      <b>$${achievedProfit.toFixed(0)} profit</b> on a $${stake} stake — short of the $${profit} target.
-      Lower the target, raise the stake, or try again once more games clear the bar.</div>
-      <ol>${combo.map(l=>`<li>${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol></div>`;
+      <div class="sub">Using every legal leg available in the selected market(s) (${combo.length} across ${gameCount} games),
+      the max reachable is about <b>$${achievedProfit.toFixed(0)} profit</b> on a $${stake} stake — short of the $${profit} target.
+      Lower the target, raise the stake, widen the market selection, or try again once more games clear the bar.</div>
+      ${sgpNote}${listHtml}</div>`;
   }else{
     resEl.innerHTML=`<div class="tkt hi"><h3>$${stake} → ~$${achievedProfit.toFixed(0)} profit</h3>
-      <div class="sub"><b>${(combinedProb*100).toFixed(combinedProb<.01?3:1)}%</b> combined · ${combo.length} legs ·
+      <div class="sub"><b>${(combinedProb*100).toFixed(combinedProb<.01?3:1)}%</b> combined · ${combo.length} legs across ${gameCount} games ·
       target was $${profit}, this lands at $${achievedProfit.toFixed(0)}</div>
-      <ol>${combo.map(l=>`<li>${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol></div>`;
+      ${sgpNote}${listHtml}</div>`;
   }
 }
 
@@ -1772,10 +1852,16 @@ function genTickets(){
     }
     if(!legs.length)return;
     const c=legs.reduce((a,x)=>a*x.p,1);
-    const gs=new Set(legs.map(x=>x.game));
+    const byGame={};
+    legs.forEach(x=>{(byGame[x.game]=byGame[x.game]||[]).push(x)});
+    const gameList=Object.keys(byGame).map(gm=>{
+      const gl=byGame[gm].sort((a,b)=>b.p-a.p);
+      return `<div style="margin:8px 0 4px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase">${gm} · ${gl.length} pick${gl.length>1?'s':''}</div>
+        <ol>${gl.map(x=>`<li>${x.name} <span class="m">${x.mkt}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
+    }).join('');
     h+=`<div class="tkt"><h3>${lab}</h3>
-      <div class="sub"><b>${(c*100).toFixed(4)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs · ${gs.size} games</div>
-      <ol>${legs.map(x=>`<li>${x.name} <span class="m">${x.mkt} · ${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol></div>`;
+      <div class="sub"><b>${(c*100).toFixed(4)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs · ${Object.keys(byGame).length} games</div>
+      ${gameList}</div>`;
   });
   el.innerHTML=h;
 }
