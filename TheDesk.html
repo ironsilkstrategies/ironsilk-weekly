@@ -1723,7 +1723,18 @@ function buildTargetTicket(){
   }
   const combo=[];
   let mult=1;
+  // reserve a seat for the best qualifying HR prop when props are in play — otherwise a
+  // 29% HR prop never wins a raw-probability sort against an 88% strikeout prop and
+  // silently never appears, even though it's genuinely elite within its own category
+  if(modes.has('prop')){
+    const bestHR=pool.filter(l=>l.kind==='hr').sort((a,b)=>b.p-a.p)[0];
+    if(bestHR&&legalToAdd(combo,bestHR,sgpMode)){
+      combo.push(bestHR);
+      mult*=1/bestHR.p;
+    }
+  }
   for(const leg of pool){
+    if(combo.includes(leg))continue;
     if(!legalToAdd(combo,leg,sgpMode))continue;
     combo.push(leg);
     mult*=1/leg.p;
@@ -1731,6 +1742,7 @@ function buildTargetTicket(){
   }
   const achievedProfit=stake*(mult-1);
   const combinedProb=combo.reduce((a,l)=>a*l.p,1);
+  const hrTag=l=>l.kind==='hr'?` <span class="flag cool">${hrTierLabel(l.p)}</span>`:'';
   const allProps=combo.every(l=>isPropKind(l.kind));
   const gameCount=new Set(combo.map(l=>l.game)).size;
   let listHtml;
@@ -1741,10 +1753,10 @@ function buildTargetTicket(){
     listHtml=Object.keys(byGame).map(gm=>{
       const legs=byGame[gm].sort((a,b)=>b.p-a.p);
       return `<div style="margin:8px 0 4px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase">${gm} · ${legs.length} pick${legs.length>1?'s':''}</div>
-        <ol>${legs.map(l=>`<li>${l.pick} <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
+        <ol>${legs.map(l=>`<li>${l.pick}${hrTag(l)} <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
     }).join('');
   }else{
-    listHtml=`<ol>${combo.map(l=>`<li>${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
+    listHtml=`<ol>${combo.map(l=>`<li>${l.pick}${hrTag(l)} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
   }
   const sgpNote=sgpMode?'<div class="sub" style="color:var(--cold)">SGP mode — same-game combos allowed. Confirm your book actually offers alt lines together on the specific games above before firing.</div>':'';
   if(mult<neededMult){
@@ -1843,6 +1855,13 @@ function genTickets(){
   h+='<div class="sbar"><h2>Prop cards only</h2><div class="ln"></div></div>';
   [['Props · A',22],['Props · B',22]].forEach(([lab,n])=>{
     const legs=[];
+    // reserve one seat for the best still-available qualifying HR prop — otherwise HR
+    // never wins a raw-probability walk against 85%+ hits/K props and never appears
+    const bestHR=PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr)
+      .filter(p=>!pu.has(p.name+'|'+p.mkt+'|'+p.game)).sort((a,b)=>b.p-a.p)[0];
+    if(bestHR){
+      legs.push(bestHR);pu.add(bestHR.name+'|'+bestHR.mkt+'|'+bestHR.game);
+    }
     for(const p of PROPS){
       const id=p.name+'|'+p.mkt+'|'+p.game;
       if(pu.has(id))continue;
@@ -1857,7 +1876,7 @@ function genTickets(){
     const gameList=Object.keys(byGame).map(gm=>{
       const gl=byGame[gm].sort((a,b)=>b.p-a.p);
       return `<div style="margin:8px 0 4px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase">${gm} · ${gl.length} pick${gl.length>1?'s':''}</div>
-        <ol>${gl.map(x=>`<li>${x.name} <span class="m">${x.mkt}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
+        <ol>${gl.map(x=>`<li>${x.name} <span class="m">${x.mkt}</span>${x.type==='hr'?` <span class="flag cool">${hrTierLabel(x.p)}</span>`:''} <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
     }).join('');
     h+=`<div class="tkt"><h3>${lab}</h3>
       <div class="sub"><b>${(c*100).toFixed(4)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs · ${Object.keys(byGame).length} games</div>
@@ -2478,6 +2497,17 @@ function bestTab(t){
 // means showing fewer than 5. Everything below still gets tracked in Grades internally —
 // this only controls what's public.
 const PUBLIC_THRESH={side:0.60,total:0.70,f5:0.70,hr:0.25,prop:0.70};
+// HR is structurally rarer than hits/Ks/walks, so a raw 29% HR prop is genuinely elite
+// within its own category even though it looks weak next to an 88% strikeout prop on a
+// flat sort. This tier is for INCLUSION/labeling only — the displayed % always stays the
+// true raw number, and this never touches how anything else gets sorted.
+function hrTierLabel(p){
+  if(p<0.25)return null;
+  if(p<0.27)return '60–70 tier';
+  if(p<0.29)return '70–80 tier';
+  if(p<0.30)return '80–90 tier';
+  return '90–95 tier';
+}
 function bestSides(n){
   const out=[];
   GAMES.forEach(g=>{
