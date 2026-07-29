@@ -271,7 +271,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <div style="display:flex;align-items:baseline;gap:8px">
       <button onclick="openSettings()" style="padding:5px 9px;font-size:9px;font-family:'Archivo',sans-serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;background:#F2A93B;color:#0B0F14;border:1px solid #F2A93B;cursor:pointer">Keys</button>
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v13</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v14</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -282,7 +282,6 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <button class="on" onclick="tab('games',this)">Games<span class="n" id="nG"></span></button>
     <button onclick="tab('tickets',this)">Tickets</button>
     <button onclick="tab('grades',this)">Grades<span class="n" id="nR"></span></button>
-    <button onclick="tab('mine',this)">Mine<span class="n" id="nM"></span></button>
     <button onclick="tab('recap',this)">Recap</button>
     <button onclick="tab('best',this)">Best<span class="n" id="nBest"></span></button>
     <button onclick="tab('chat',this)">Chat</button>
@@ -300,12 +299,6 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     </div>
     <div class="rc-picker" id="dayPicker"></div>
     <div id="slate"><div class="empty">Loading board…</div></div>
-    <div class="bar"><button onclick="loadAll()">Refresh</button><button id="oddsBtn" onclick="loadOdds(true)">Pull odds</button><button onclick="diagnoseOdds()">Diagnose</button></div>
-    <div id="oddsDiag"></div>
-    <div class="bar"><button onclick="diagnoseSharp()">Diagnose SharpAPI</button><button onclick="loadSharp(true)">Pull SharpAPI</button></div>
-    <div id="sharpDiag"></div>
-    <div class="bar"><button onclick="diagnoseRundown()">Diagnose TheRundown</button></div>
-    <div id="rundownDiag"></div>
     <div class="note">
       <b>The projection never touches bookmaker odds.</b> It runs 10,000 simulations off confirmed lineups,
       per-plate-appearance rates, opposing starter, park factor, live weather, home/away splits, two-year
@@ -349,29 +342,6 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <div class="subnav" id="gradeNav"></div>
     <div id="gradeBody"><div class="empty">Grading needs at least one completed slate.</div></div>
     <div class="bar"><button class="primary" onclick="renderGrades(true)">Regrade</button><button onclick="exportCSV()">Copy CSV</button></div>
-  </div>
-
-  <div class="view" id="v-mine">
-    <div class="sbar"><h2>Log a pick</h2><div class="ln"></div></div>
-    <div class="tkt">
-      <div class="bar" style="margin-top:0">
-        <button id="mtSide" class="primary" onclick="setMType('side')">Side/Total</button>
-        <button id="mtProp" onclick="setMType('prop')">Prop</button>
-      </div>
-      <input id="mGame" placeholder="Game — e.g. ARI@WSH" autocomplete="off">
-      <input id="mPick" placeholder="Pick — e.g. WSH ML, Over 8.5, F5 ARI">
-      <input id="mPlayer" placeholder="Player (props only)" style="display:none">
-      <input id="mNote" placeholder="Why you took it (optional)">
-      <div class="bar"><button class="primary" onclick="logMine()">Add</button></div>
-    </div>
-    <div class="sbar"><h2>Open today</h2><div class="ln"></div><div class="ct" id="cOpen">0</div></div>
-    <div id="mineOpen"></div>
-    <div class="sbar"><h2>My record</h2><div class="ln"></div></div>
-    <div id="mineRecord"></div>
-    <div class="sbar"><h2>You vs the model</h2><div class="ln"></div></div>
-    <div id="vsModel"></div>
-    <div class="sbar"><h2>History</h2><div class="ln"></div></div>
-    <div id="mineHistory"></div>
   </div>
 
   <div class="view" id="v-recap">
@@ -428,7 +398,7 @@ const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',p
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown'};
 const APP_TZ='America/Chicago';
-let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[];
+let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[];
 let GRADETAB='sides',PICKSDAY=null;
 
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -466,7 +436,6 @@ function tab(n,b){
   document.querySelectorAll('nav>button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
   if(n==='tickets')genTickets();
   if(n==='grades')renderGrades();
-  if(n==='mine')renderMine();
   if(n==='recap')renderRecap();
   if(n==='best'){bestTab(BESTTAB||'today');}
   window.scrollTo(0,0);
@@ -1191,6 +1160,55 @@ function sharpPropBlend(gid,name,type,thr,simProb){
 // tries the commonly-referenced legacy value (3) and shows the RAW response either way.
 // If it 404s or comes back empty, the response itself will say why — better than silently
 // guessing and building parsing logic against a schema that was never actually confirmed.
+// Confirmed live from your diagnostic pull: market name 'handicap' = run line, with real
+// alternates (+1.5/+2.5/+3.5, -1.5/-2.5/-3.5) priced across 3 books. This is the actual
+// gap neither Odds API nor SharpAPI could fill — wiring it in for real, not guessed.
+function parseRundownPrices(pricesObj){
+  const vals=Object.values(pricesObj||{}).map(p=>p.price).filter(x=>typeof x==='number');
+  if(!vals.length)return null;
+  const probs=vals.map(imp);
+  return probs.reduce((a,b)=>a+b,0)/probs.length;
+}
+async function loadRundown(manual){
+  const key=get(LS.rundown,'');if(!key)return;
+  try{
+    const r=await fetch(`https://therundown.io/api/v2/sports/3/events/${today()}?key=${encodeURIComponent(key)}`);
+    if(!r.ok){if(manual)alert('TheRundown failed ('+r.status+').');return}
+    const j=await r.json();
+    const events=j.events||[];
+    const rl=[];
+    events.forEach(ev=>{
+      const homeT=(ev.teams||[]).find(t=>t.is_home),awayT=(ev.teams||[]).find(t=>t.is_away);
+      if(!homeT||!awayT)return;
+      const teamMap={};(ev.teams||[]).forEach(t=>{teamMap[t.team_id]=t.abbreviation});
+      const gl=awayT.abbreviation+'@'+homeT.abbreviation;
+      (ev.markets||[]).forEach(mkt=>{
+        if(mkt.name!=='handicap')return;
+        (mkt.participants||[]).forEach(part=>{
+          const teamAbbr=teamMap[part.id];if(!teamAbbr)return;
+          (part.lines||[]).forEach(line=>{
+            const val=parseFloat(line.value),prob=parseRundownPrices(line.prices);
+            if(prob===null||isNaN(val))return;
+            rl.push({game:gl,team:teamAbbr,value:val,prob,book:'TheRundown'});
+          });
+        });
+      });
+    });
+    RUNDOWN_RL=rl;
+    if(manual)alert(`Pulled ${rl.length} run-line prices from TheRundown.`);
+    buildProps();render();
+  }catch(e){if(manual)alert('TheRundown network error.')}
+}
+function hasRealRunLine(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return false;
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  return RUNDOWN_RL.some(r=>r.game===gl);
+}
+function rundownRLFor(gid,teamAbbr,value){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return null;
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  return RUNDOWN_RL.find(r=>r.game===gl&&r.team===teamAbbr&&Math.abs(r.value-value)<0.01)||null;
+}
 async function diagnoseRundown(){
   const el=document.getElementById('rundownDiag');
   const key=get(LS.rundown,'');
@@ -1250,9 +1268,9 @@ async function refreshEverything(){
   }else{steps.push('⏭️ SharpAPI — no key saved')}
   paint();
   if(get(LS.rundown,'')){
-    steps.push('⏳ TheRundown (diagnostic — not wired into predictions yet)…');paint();
-    await diagnoseRundown();
-    steps[steps.length-1]='✅ TheRundown diagnostic ran — check the panel below for what came back';
+    steps.push('⏳ TheRundown…');paint();
+    try{await loadRundown(true);steps[steps.length-1]=`✅ TheRundown — ${RUNDOWN_RL.length} run-line prices`}
+    catch(e){steps[steps.length-1]='❌ TheRundown failed'}
   }else{steps.push('⏭️ TheRundown — no key saved')}
   paint();
   render();buildProps();renderDayPicker();
@@ -1524,12 +1542,27 @@ function betGrid(g,s,M){
   const synthTotalBlock=`<div class="mktlab" style="color:var(--mute)">Model's own total — comparison only, not a real line</div>
     <div class="sigchip" style="display:inline-block">${t1} · ${(s.over(t1)*100).toFixed(0)}%/${((1-s.over(t1))*100).toFixed(0)}% over/under</div>
     <div class="sigchip" style="display:inline-block">${(t1+1)} · ${(s.over(t1+1)*100).toFixed(0)}%/${((1-s.over(t1+1))*100).toFixed(0)}% over/under</div>`;
+  const realRLBlock=(()=>{
+    if(!hasRealRunLine(g.id))return '';
+    const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+    if(!favRD&&!dogRD)return '';
+    let favBlend=favCover;
+    if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+    else if(dogRD)favBlend=1-(dogCover*0.55+dogRD.prob*0.45);
+    const dogBlend=1-favBlend;
+    const [rfPct,rdPct]=pair(favBlend);
+    return `<div class="mktlab">Run line <span class="flag cool">real line — TheRundown</span></div>
+      <div class="betgrid">${b(favAb+' -1.5',favAb+' -1.5',favBlend,rfPct)}${b(dogAb+' +1.5',dogAb+' +1.5',dogBlend,rdPct)}</div>`;
+  })();
+  const synthRLBlock=favCover!==null?`<div class="mktlab" style="color:var(--mute)">Model's own run line — comparison only${hasRealRunLine(g.id)?', not what\'s bettable above':''}</div>
+    <div class="sigchip" style="display:inline-block">${favAb} -1.5 · ${(favCover*100).toFixed(0)}%</div>
+    <div class="sigchip" style="display:inline-block">${dogAb} +1.5 · ${(dogCover*100).toFixed(0)}%</div>`:'';
   let rlPair2=rlPair;
   return `<div class="mktblock">
     ${realMLBlock}
     ${synthMLBlock}
-    <div class="mktlab">Run line</div>
-    <div class="betgrid">${favCover!==null?b(favAb+' -1.5',favAb+' -1.5',favCover,rlPair2[0]):''}${dogCover!==null?b(dogAb+' +1.5',dogAb+' +1.5',dogCover,rlPair2[1]):''}</div>
+    ${realRLBlock}
+    ${synthRLBlock}
     ${realTotalBlock}
     ${synthTotalBlock}
     ${(()=>{
@@ -1801,14 +1834,19 @@ function bestRunLines(){
   GAMES.forEach(g=>{
     if(g.abstract==='Final')return;
     const s=SIMS[g.id];if(!s)return;
+    if(!hasRealRunLine(g.id))return;
     const favSide=s.hw>=s.aw?'home':'away';
     const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
     const favCover=rlProb(g,s,favSide,1.5);
     if(favCover===null)return;
     const gl=g.away.abbr+'@'+g.home.abbr;
-    if(favCover>=PUBLIC_THRESH.side)out.push({p:favCover,pick:favAb+' -1.5',game:gl,kind:'rl'});
-    const dogCover=1-favCover;
-    if(dogCover>=PUBLIC_THRESH.side)out.push({p:dogCover,pick:dogAb+' +1.5',game:gl,kind:'rl'});
+    const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+    let favBlend=favCover;
+    if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+    else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
+    const dogBlend=1-favBlend;
+    if(favBlend>=PUBLIC_THRESH.side)out.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl'});
+    if(dogBlend>=PUBLIC_THRESH.side)out.push({p:dogBlend,pick:dogAb+' +1.5',game:gl,kind:'rl'});
   });
   return out;
 }
@@ -1919,10 +1957,14 @@ function marketPool(){
     const favSide=s.hw>=s.aw?'home':'away';
     const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
     const favCover=rlProb(g,s,favSide,1.5);
-    if(favCover!==null){
-      if(favCover>=.40)pool.push({p:favCover,pick:favAb+' -1.5',game:gl,kind:'rl'});
-      const dogCover=1-favCover;
-      if(dogCover>=.60)pool.push({p:dogCover,pick:dogAb+' +1.5',game:gl,kind:'rl'});
+    if(favCover!==null&&hasRealRunLine(g.id)){
+      const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+      let favBlend=favCover;
+      if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+      else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
+      const dogBlend=1-favBlend;
+      if(favBlend>=.40)pool.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl'});
+      if(dogBlend>=.60)pool.push({p:dogBlend,pick:dogAb+' +1.5',game:gl,kind:'rl'});
     }
     // Totals only ever pick the real posted line, never the model's own synthetic
     // number — same rule as F5. No free alternate-line source is confirmed yet, so a
@@ -2857,11 +2899,10 @@ async function boot(){
   paintMeter();loadSlip();
   document.getElementById('nR').textContent=Object.keys(get(LS.arc,{})).length||'';
   document.getElementById('nBest').textContent=Object.keys(get(LS.bestlog,{})).length||'';
-  document.getElementById('nM').textContent=Object.values(get(LS.mine,{})).reduce((a,r)=>a+r.length,0)||'';
   const o=get(LS.open,{d:'',v:{}});if(o.d===today())OPENS=o.v;
   const c=get(LS.odds,{d:'',v:{}});if(c.d===today())ODDS=c.v;
   H2H=(get(LS.h2h,{}).pairs)||{};SPLITS=(get(LS.splits,{}).teams)||{};ODDS_BYDATE=get(LS.oddsdate,{});
-  await loadAll();await loadOdds(false);await loadSharp(false);snapshot();snapshotBest();paintSlip();setMType('side');renderDayPicker();
+  await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);snapshot();snapshotBest();paintSlip();renderDayPicker();
   if(BOOTED)return;  // settings can be reopened/resaved any number of times — background
                       // timers only ever get registered once, first boot, no matter how
                       // many times saveKeys() runs afterward
