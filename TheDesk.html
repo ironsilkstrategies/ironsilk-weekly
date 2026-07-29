@@ -259,6 +259,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <input id="keyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
   <input id="aiIn" placeholder="anthropic api key (optional)" autocomplete="off" spellcheck="false">
   <input id="sharpIn" placeholder="sharpapi.io key — totals &amp; props (optional)" autocomplete="off" spellcheck="false">
+  <input id="rundownIn" placeholder="therundown.io key — backup source (optional)" autocomplete="off" spellcheck="false">
   <div class="bar"><button class="primary" onclick="saveKeys()">Start</button></div>
 </div>
 
@@ -281,12 +282,20 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 
 <main>
   <div class="view on" id="v-games">
+    <div class="tkt hi">
+      <div class="bar" style="margin-top:0"><button class="primary" onclick="refreshEverything()" style="padding:13px">Refresh everything — one tap</button></div>
+      <div class="sub" style="margin-top:6px">Pulls MLB schedule/lineups, Odds API, SharpAPI, and TheRundown in sequence.
+      Uses one credit from each metered source — same as tapping every individual pull button once.</div>
+      <div id="refreshAllStatus"></div>
+    </div>
     <div class="rc-picker" id="dayPicker"></div>
     <div id="slate"><div class="empty">Loading board…</div></div>
     <div class="bar"><button onclick="loadAll()">Refresh</button><button id="oddsBtn" onclick="loadOdds(true)">Pull odds</button><button onclick="diagnoseOdds()">Diagnose</button></div>
     <div id="oddsDiag"></div>
     <div class="bar"><button onclick="diagnoseSharp()">Diagnose SharpAPI</button><button onclick="loadSharp(true)">Pull SharpAPI</button></div>
     <div id="sharpDiag"></div>
+    <div class="bar"><button onclick="diagnoseRundown()">Diagnose TheRundown</button></div>
+    <div id="rundownDiag"></div>
     <div class="note">
       <b>The projection never touches bookmaker odds.</b> It runs 10,000 simulations off confirmed lineups,
       per-plate-appearance rates, opposing starter, park factor, live weather, home/away splits, two-year
@@ -407,7 +416,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 <script>
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
-h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp'};
+h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[];
 let GRADETAB='sides',PICKSDAY=null;
@@ -432,6 +441,7 @@ function paintMeter(){
 function saveKeys(){set(LS.key,document.getElementById('keyIn').value.trim());
   set(LS.ai,document.getElementById('aiIn').value.trim());
   set(LS.sharp,document.getElementById('sharpIn').value.trim());
+  set(LS.rundown,document.getElementById('rundownIn').value.trim());
   document.getElementById('setup').classList.add('hide');boot()}
 function tab(n,b){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
@@ -588,6 +598,18 @@ function marketOf(g){
   if(mH===null||mA===null)return null;
   const t=mH+mA;
   return{fh:mH/t,fa:mA/t,oH,oA,rawH:mH};
+}
+function hasRealML(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return false;
+  return marketOf(g)!==null;
+}
+// blends the sim's own moneyline probability with the real Odds API price — same
+// pattern as totals. Home and away are blended from the same market call so they stay
+// true complements; this is what makes the button real-bettable instead of sim-only.
+function mlBlend(g,s){
+  const M=marketOf(g);
+  if(!M)return{home:s.hw,away:s.aw};
+  return{home:s.hw*0.55+M.fh*0.45,away:s.aw*0.55+M.fa*0.45};
 }
 
 /* ================= ENTITY LEARNING ================= */
@@ -1118,6 +1140,10 @@ function hasRealF5(gid){
   const has=SHARP_TOTALS.some(t=>t.home===g.home.abbr&&t.away===g.away.abbr&&t.segment==='1st_5_innings');
   return has;
 }
+function hasRealTotal(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return false;
+  return SHARP_TOTALS.some(t=>t.home===g.home.abbr&&t.away===g.away.abbr&&!t.segment);
+}
 function sharpTotalFor(gid){
   const g=GAMES.find(x=>x.id===gid);if(!g)return null;
   const rows=SHARP_TOTALS.filter(t=>t.home===g.home.abbr&&t.away===g.away.abbr);
@@ -1143,6 +1169,72 @@ function sharpPropBlend(gid,name,type,thr,simProb){
   return simProb*0.55+sp.prob*0.45;
 }
 
+// TheRundown's v2 API structure is only confirmed from their docs example, not a live
+// pull — MLB's sport_id specifically isn't documented anywhere I could verify, so this
+// tries the commonly-referenced legacy value (3) and shows the RAW response either way.
+// If it 404s or comes back empty, the response itself will say why — better than silently
+// guessing and building parsing logic against a schema that was never actually confirmed.
+async function diagnoseRundown(){
+  const el=document.getElementById('rundownDiag');
+  const key=get(LS.rundown,'');
+  if(!key){el.innerHTML='<div class="tkt"><h3>No key</h3><div class="sub">No therundown.io key saved in setup — nothing to diagnose.</div></div>';return}
+  el.innerHTML='<div class="empty">Fetching raw response…</div>';
+  const guessSportId=3;
+  try{
+    const r=await fetch(`https://therundown.io/api/v2/sports/${guessSportId}/events/${today()}?key=${encodeURIComponent(key)}`);
+    if(!r.ok){
+      const body=await r.text();
+      el.innerHTML=`<div class="tkt"><h3>HTTP ${r.status}</h3>
+        <div class="sub">Tried sport_id=${guessSportId} for MLB — unconfirmed guess. A 404 here likely means that's the wrong id;
+        the response body below may name the correct one.</div>
+        <div class="sub" style="word-break:break-all">${body.slice(0,400)}</div></div>`;
+      return;
+    }
+    const j=await r.json();
+    const events=j.events||[];
+    let h=`<div class="tkt hi"><h3>${events.length} events returned</h3>
+      <div class="sub">sport_id=${guessSportId} (guessed) · ${JSON.stringify(j.meta||{})}</div></div>`;
+    if(events.length){
+      const marketTypes=new Set();
+      events.forEach(ev=>(ev.markets||[]).forEach(m=>marketTypes.add(m.name||m.market_id)));
+      h+=`<div class="tkt"><h3>Market types present</h3><div class="sub">${[...marketTypes].join(', ')||'none found in markets array'}</div>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(events[0],null,2).slice(0,2000)}</pre></div>`;
+    }
+    el.innerHTML=h;
+  }catch(e){
+    el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${e.message||e}</div></div>`;
+  }
+}
+async function refreshEverything(){
+  const st=document.getElementById('refreshAllStatus');
+  const steps=[];
+  const paint=()=>{st.innerHTML=steps.map(s=>`<div class="sub">${s}</div>`).join('')};
+  steps.push('⏳ Schedule &amp; lineups…');paint();
+  try{await loadAll();steps[steps.length-1]=`✅ Schedule &amp; lineups — ${GAMES.length} games`}
+  catch(e){steps[steps.length-1]='❌ Schedule/lineups failed'}
+  paint();
+  if(get(LS.key,'')){
+    steps.push('⏳ Odds API…');paint();
+    try{await loadOdds(true);steps[steps.length-1]='✅ Odds API pulled'}
+    catch(e){steps[steps.length-1]='❌ Odds API failed'}
+  }else{steps.push('⏭️ Odds API — no key saved')}
+  paint();
+  if(get(LS.sharp,'')){
+    steps.push('⏳ SharpAPI…');paint();
+    try{await loadSharp(true);steps[steps.length-1]=`✅ SharpAPI — ${SHARP_PROPS.length} props, ${SHARP_TOTALS.length} totals`}
+    catch(e){steps[steps.length-1]='❌ SharpAPI failed'}
+  }else{steps.push('⏭️ SharpAPI — no key saved')}
+  paint();
+  if(get(LS.rundown,'')){
+    steps.push('⏳ TheRundown (diagnostic — not wired into predictions yet)…');paint();
+    await diagnoseRundown();
+    steps[steps.length-1]='✅ TheRundown diagnostic ran — check the panel below for what came back';
+  }else{steps.push('⏭️ TheRundown — no key saved')}
+  paint();
+  render();buildProps();renderDayPicker();
+  steps.push(`Done — ${new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}`);
+  paint();
+}
 async function diagnoseSharp(){
   const el=document.getElementById('sharpDiag');
   const key=get(LS.sharp,'');
@@ -1381,25 +1473,41 @@ function betGrid(g,s,M){
   const t1=Math.floor(s.mean)+.5;
   const f5t=Math.floor(s.f5tot)+.5;
   const f5over=Math.min(.9,Math.max(.1,.5+(s.f5tot-f5t)*.16));
-  const [hwPct,awPct]=pair(s.hw);
-  const t1Blend=sharpTotalBlend(g,t1,s.over(t1));
-  const t2Blend=sharpTotalBlend(g,t1+1,s.over(t1+1));
-  const [t1oPct,t1uPct]=pair(t1Blend);
-  const [t2oPct,t2uPct]=pair(t2Blend);
   const [f5oPct,f5uPct]=pair(f5over);
   const stMatch=sharpTotalFor(g.id);
-  const blendTag=(line)=>stMatch&&Math.abs(stMatch.line-line)<=0.5?` <span class="flag cool">+sharp</span>`:'';
+  const mM=marketOf(g);
   let rlPair=[null,null];
   if(favCover!==null)rlPair=pair(favCover);
+  const realMLBlock=(()=>{
+    if(!mM)return '';
+    const bl=mlBlend(g,s);
+    const [bhPct,baPct]=pair(bl.home);
+    return `<div class="mktlab">Moneyline <span class="flag cool">real line</span></div>
+      <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',bl.away,baPct)}${b(g.home.abbr,g.home.abbr+' ML',bl.home,bhPct)}</div>`;
+  })();
+  const synthMLBlock=(()=>{
+    const [shPct,saPct]=pair(s.hw);
+    return `<div class="mktlab" style="color:var(--mute)">Model's own moneyline — comparison only${mM?', not what\'s bettable above':''}</div>
+      <div class="sigchip" style="display:inline-block">${g.away.abbr} ${saPct}% · ${g.home.abbr} ${shPct}%</div>`;
+  })();
+  const realTotalBlock=(()=>{
+    if(!stMatch||stMatch.overProb===null)return '';
+    const blended=sharpTotalBlend(g,stMatch.line,s.over(stMatch.line));
+    const [roPct,ruPct]=pair(blended);
+    return `<div class="mktlab">Total runs · ${stMatch.line} <span class="flag cool">real line — ${stMatch.book}</span></div>
+      <div class="betgrid">${b('Over '+stMatch.line,'Over '+stMatch.line,blended,roPct)}${b('Under '+stMatch.line,'Under '+stMatch.line,1-blended,ruPct)}</div>`;
+  })();
+  const synthTotalBlock=`<div class="mktlab" style="color:var(--mute)">Model's own total — comparison only, not a real line</div>
+    <div class="sigchip" style="display:inline-block">${t1} · ${(s.over(t1)*100).toFixed(0)}%/${((1-s.over(t1))*100).toFixed(0)}% over/under</div>
+    <div class="sigchip" style="display:inline-block">${(t1+1)} · ${(s.over(t1+1)*100).toFixed(0)}%/${((1-s.over(t1+1))*100).toFixed(0)}% over/under</div>`;
+  let rlPair2=rlPair;
   return `<div class="mktblock">
-    <div class="mktlab">Moneyline</div>
-    <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',s.aw,awPct)}${b(g.home.abbr,g.home.abbr+' ML',s.hw,hwPct)}</div>
+    ${realMLBlock}
+    ${synthMLBlock}
     <div class="mktlab">Run line</div>
-    <div class="betgrid">${favCover!==null?b(favAb+' -1.5',favAb+' -1.5',favCover,rlPair[0]):''}${dogCover!==null?b(dogAb+' +1.5',dogAb+' +1.5',dogCover,rlPair[1]):''}</div>
-    <div class="mktlab">Total runs · ${t1}${blendTag(t1)}</div>
-    <div class="betgrid">${b('Over '+t1,'Over '+t1,t1Blend,t1oPct)}${b('Under '+t1,'Under '+t1,1-t1Blend,t1uPct)}</div>
-    <div class="mktlab">Total runs · ${t1+1}${blendTag(t1+1)}</div>
-    <div class="betgrid">${b('Over '+(t1+1),'Over '+(t1+1),t2Blend,t2oPct)}${b('Under '+(t1+1),'Under '+(t1+1),1-t2Blend,t2uPct)}</div>
+    <div class="betgrid">${favCover!==null?b(favAb+' -1.5',favAb+' -1.5',favCover,rlPair2[0]):''}${dogCover!==null?b(dogAb+' +1.5',dogAb+' +1.5',dogCover,rlPair2[1]):''}</div>
+    ${realTotalBlock}
+    ${synthTotalBlock}
     ${(()=>{
       const realF5=hasRealF5(g.id);
       if(realF5){
@@ -1780,7 +1888,10 @@ function marketPool(){
     if(g.abstract==='Final')return;
     const s=SIMS[g.id];if(!s)return;
     const gl=g.away.abbr+'@'+g.home.abbr;
-    pool.push({p:Math.max(s.hw,s.aw),pick:(s.hw>=.5?g.home.abbr:g.away.abbr)+' ML',game:gl,kind:'side'});
+    if(hasRealML(g.id)){
+      const bl=mlBlend(g,s);
+      pool.push({p:Math.max(bl.home,bl.away),pick:(bl.home>=bl.away?g.home.abbr:g.away.abbr)+' ML',game:gl,kind:'side'});
+    }
     const favSide=s.hw>=s.aw?'home':'away';
     const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
     const favCover=rlProb(g,s,favSide,1.5);
@@ -1789,11 +1900,15 @@ function marketPool(){
       const dogCover=1-favCover;
       if(dogCover>=.60)pool.push({p:dogCover,pick:dogAb+' +1.5',game:gl,kind:'rl'});
     }
-    [7.5,8.5,9.5,10.5].forEach(t=>{
-      const o=sharpTotalBlend(g,t,s.over(t));
-      if(o>=.5)pool.push({p:o,pick:'Over '+t,game:gl,kind:'total'});
-      else if((1-o)>=.5)pool.push({p:1-o,pick:'Under '+t,game:gl,kind:'total'});
-    });
+    // Totals only ever pick the real posted line, never the model's own synthetic
+    // number — same rule as F5. No free alternate-line source is confirmed yet, so a
+    // game with no SharpAPI total simply gets no total pick, full stop.
+    if(hasRealTotal(g.id)){
+      const st=sharpTotalFor(g.id);
+      const o=sharpTotalBlend(g,st.line,s.over(st.line));
+      if(o>=.5)pool.push({p:o,pick:'Over '+st.line,game:gl,kind:'total'});
+      else if((1-o)>=.5)pool.push({p:1-o,pick:'Under '+st.line,game:gl,kind:'total'});
+    }
     // F5 stays out of every ticket/pick pool until a real posted line backs it —
     // see hasRealF5() for why nothing currently qualifies
     if(hasRealF5(g.id)){
@@ -2513,12 +2628,14 @@ function bestSides(n){
   GAMES.forEach(g=>{
     if(g.abstract==='Final')return;
     const s=SIMS[g.id];if(!s)return;
+    if(!hasRealML(g.id))return;
     const M=marketOf(g);
-    const favSide=s.hw>=s.aw?'home':'away';
-    const ab=g[favSide].abbr,prob=Math.max(s.hw,s.aw);
+    const bl=mlBlend(g,s);
+    const favSide=bl.home>=bl.away?'home':'away';
+    const ab=g[favSide].abbr,prob=Math.max(bl.home,bl.away);
     if(prob<PUBLIC_THRESH.side)return;
-    let edge=null;
-    if(M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;edge=favSide==='home'?eh:ea}
+    const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
+    const edge=favSide==='home'?eh:ea;
     out.push({pick:ab+' ML',game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob,edge});
   });
   return out.sort((a,b)=>{
@@ -2531,10 +2648,12 @@ function bestTotals(n){
   GAMES.forEach(g=>{
     if(g.abstract==='Final')return;
     const s=SIMS[g.id];if(!s)return;
-    const t1=Math.floor(s.mean)+.5,o=sharpTotalBlend(g,t1,s.over(t1));
+    if(!hasRealTotal(g.id))return;
+    const st=sharpTotalFor(g.id);
+    const o=sharpTotalBlend(g,st.line,s.over(st.line));
     const prob=Math.max(o,1-o);
     if(prob<PUBLIC_THRESH.total)return;
-    out.push({pick:(o>=.5?'Over ':'Under ')+t1,game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob});
+    out.push({pick:(o>=.5?'Over ':'Under ')+st.line,game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob});
   });
   return out.sort((a,b)=>b.prob-a.prob).slice(0,n);
 }
