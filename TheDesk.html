@@ -300,14 +300,14 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <div class="sbar"><h2>Build to a target</h2><div class="ln"></div></div>
     <div class="tkt">
       <div class="mktlab" style="margin-top:0">Markets to draw from</div>
-      <div class="filters">
+      <div class="subnav">
         <button id="mode-ml" class="on" onclick="toggleMode('ml',this)">Moneyline</button>
         <button id="mode-rl" onclick="toggleMode('rl',this)">Run line</button>
         <button id="mode-total" class="on" onclick="toggleMode('total',this)">Totals</button>
         <button id="mode-prop" class="on" onclick="toggleMode('prop',this)">Props</button>
       </div>
       <div class="mktlab">Same-game combos</div>
-      <div class="filters"><button id="sgpToggle" onclick="this.classList.toggle('on')">SGP mode — allow run line + total together on one game (needs 2+ picks on it)</button></div>
+      <div class="subnav"><button id="sgpToggle" onclick="this.classList.toggle('on')">SGP mode — allow run line + total together on one game (needs 2+ picks on it)</button></div>
       <div class="betgrid">
         <div><input id="targetStake" type="number" placeholder="stake $" min="1" step="1"></div>
         <div><input id="targetProfit" type="number" placeholder="target profit $" min="1" step="1"></div>
