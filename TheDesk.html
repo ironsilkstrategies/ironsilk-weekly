@@ -308,7 +308,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v32</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v33</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -610,8 +610,10 @@ async function analyzeBookShots(){
       imgBlocks.push({type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}});
     }
     const prompt=`These are screenshots of a real sportsbook's MLB board. Extract every game/market you can
-      see into a JSON array — nothing else, no markdown fences, no commentary. Each entry:
-      {"away":"team abbr or name","home":"team abbr or name","market":"moneyline"|"runline"|"total",
+      see into a JSON array — nothing else, no markdown fences, no commentary. Include full-game moneyline,
+      run line, and total, AND first-5-innings ("F5", "1st 5", "5 inn") totals as a separate "f5total" market
+      if shown — don't confuse F5 with the full-game total. Each entry:
+      {"away":"team abbr or name","home":"team abbr or name","market":"moneyline"|"runline"|"total"|"f5total",
       "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -150 or 145)}.
       One entry per selection you can actually read clearly — skip anything blurry or cut off rather than guessing.`;
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
@@ -1599,6 +1601,13 @@ function bookLinesFor(gid){
   const all=get(LS.bookshots,{})[today()]||[];
   return all.filter(x=>x.game===gl);
 }
+// your uploaded screenshot outranks every API source — if you have a real line for a
+// market, that IS the real line, full stop, checked before SharpAPI/TheRundown/OddsAPI.
+// The probability shown comes purely from devigging YOUR price — the sim is never asked.
+function bookLineForMarket(gid,market,side){
+  return bookLinesFor(gid).find(x=>x.market===market&&(!side||x.side===side))||null;
+}
+function bookDevig(price){return imp(price)}
 function bookLineRead(g,s){
   if(!s)return[];
   const lines=bookLinesFor(g.id);
@@ -2066,16 +2075,6 @@ function card(g){
     <div class="env">Park <span class="pf">${pf[0]}</span>r / <span class="pf">${pf[1]}</span>hr${w?` · <b>${w.temp}°</b> ${w.cond||''} ${w.wind||''}`:DOME[g.home.abbr]?' · dome':''}${s&&s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}</div>
     <div class="arms">${arm('away')}</div><div class="arms">${arm('home')}</div>
     ${finalLine}${projLine}
-    ${(()=>{const tr=topReasons();return tr.length?`<div style="margin:2px 0 4px">
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Why this number</div>
-      <ol style="margin:0;padding-left:18px;font-size:11.5px;line-height:1.6">${tr.map(r=>`<li>${r.t}</li>`).join('')}</ol>
-    </div>`:'';})()}
-    ${(()=>{const rr=realLineRead();return rr.length?`<div style="display:flex;flex-direction:column;gap:4px;margin:2px 0 4px">${rr.map(r=>
-      `<div style="font-size:11.5px;line-height:1.5;background:var(--panel2);border:1px solid var(--rule);border-radius:7px;padding:7px 9px">
-        <b style="color:var(--gold);font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${r.label}</b> — ${r.text}</div>`).join('')}</div>`:'';})()}
-    ${(()=>{const br=bookLineRead(g,s);return br.length?`<div style="display:flex;flex-direction:column;gap:4px;margin:2px 0 4px">${br.map(r=>
-      `<div style="font-size:11.5px;line-height:1.5;background:var(--panel2);border:1px solid var(--cold);border-radius:7px;padding:7px 9px">
-        <b style="color:var(--cold);font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${r.label}</b> — ${r.text}</div>`).join('')}</div>`:'';})()}
     ${sig?`<div class="sig">${sig}</div>`:''}
     ${badges}
    </div>
@@ -2086,7 +2085,7 @@ function card(g){
     <button class="expbtn" onclick="pan(${g.id},'props',this)">Props</button>
     ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button>`:''}
    </div>
-   <div class="panel" id="p-ag-${g.id}">${agPanel(g,s,M)}</div>
+   <div class="panel" id="p-ag-${g.id}">${agPanel(g,s,M,topReasons(),realLineRead())}</div>
    <div class="panel" id="p-alt-${g.id}">${altPanel(g,s)}</div>
    <div class="panel" id="p-props-${g.id}">${propPanel(g)}</div>
    ${done?`<div class="panel" id="p-box-${g.id}">${boxPanel(g)}</div>`:''}
@@ -2119,36 +2118,54 @@ function betGrid(g,s,M){
   const mM=marketOf(g);
   let rlPair=[null,null];
   if(favCover!==null)rlPair=pair(favCover);
+  const bookML=bookLineForMarket(g.id,'moneyline');
   const realMLBlock=(()=>{
+    if(bookML){
+      const homeBook=bookLineForMarket(g.id,'moneyline','home'),awayBook=bookLineForMarket(g.id,'moneyline','away');
+      const hp=homeBook?bookDevig(homeBook.price):null,ap=awayBook?bookDevig(awayBook.price):null;
+      if(hp!==null&&ap!==null){
+        const sum=hp+ap,[bhPct,baPct]=[Math.round(hp/sum*100),Math.round(ap/sum*100)];
+        return `<div class="mktlab">Moneyline <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',ap/sum,baPct)}${b(g.home.abbr,g.home.abbr+' ML',hp/sum,bhPct)}</div>`;
+      }
+    }
     if(!mM)return '';
     const bl=mlBlend(g,s);
     const [bhPct,baPct]=pair(bl.home);
     return `<div class="mktlab">Moneyline <span class="flag cool">real line</span></div>
       <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',bl.away,baPct)}${b(g.home.abbr,g.home.abbr+' ML',bl.home,bhPct)}</div>`;
   })();
-  const synthMLBlock=(()=>{
-    const [shPct,saPct]=pair(s.hw);
-    return `<div class="mktlab" style="color:var(--mute)">Model's own moneyline — comparison only${mM?', not what\'s bettable above':''}</div>
-      <div class="betgrid">
-        <div class="cmpr"><div class="bl">${g.away.abbr}</div><div class="bo">${saPct}%</div><div class="bs">model only</div></div>
-        <div class="cmpr"><div class="bl">${g.home.abbr}</div><div class="bo">${shPct}%</div><div class="bs">model only</div></div>
-      </div>`;
-  })();
+  const bookTotal=bookLineForMarket(g.id,'total');
   const realTotalBlock=(()=>{
+    if(bookTotal&&bookTotal.line!==null){
+      const overBook=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTotal.line)<0.01);
+      const underBook=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTotal.line)<0.01);
+      if(overBook&&underBook){
+        const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
+        const [roPct,ruPct]=[Math.round(op/sum*100),Math.round(up/sum*100)];
+        return `<div class="mktlab">Total runs · ${bookTotal.line} <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b('Over '+bookTotal.line,'Over '+bookTotal.line,op/sum,roPct)}${b('Under '+bookTotal.line,'Under '+bookTotal.line,up/sum,ruPct)}</div>`;
+      }
+    }
     if(!stMatch||stMatch.overProb===null)return '';
     const blended=sharpTotalBlend(g,stMatch.line,s.over(stMatch.line));
     const [roPct,ruPct]=pair(blended);
     return `<div class="mktlab">Total runs · ${stMatch.line} <span class="flag cool">real line — ${stMatch.book}</span></div>
       <div class="betgrid">${b('Over '+stMatch.line,'Over '+stMatch.line,blended,roPct)}${b('Under '+stMatch.line,'Under '+stMatch.line,1-blended,ruPct)}</div>`;
   })();
-  const synthTotalBlock=`<div class="mktlab" style="color:var(--mute)">Model's own total — comparison only, not a real line</div>
-    <div class="betgrid">
-      <div class="cmpr"><div class="bl">Over ${t1}</div><div class="bo">${(s.over(t1)*100).toFixed(0)}%</div><div class="bs">model only</div></div>
-      <div class="cmpr"><div class="bl">Under ${t1}</div><div class="bo">${((1-s.over(t1))*100).toFixed(0)}%</div><div class="bs">model only</div></div>
-      <div class="cmpr"><div class="bl">Over ${t1+1}</div><div class="bo">${(s.over(t1+1)*100).toFixed(0)}%</div><div class="bs">model only</div></div>
-      <div class="cmpr"><div class="bl">Under ${t1+1}</div><div class="bo">${((1-s.over(t1+1))*100).toFixed(0)}%</div><div class="bs">model only</div></div>
-    </div>`;
+  const bookRL=bookLineForMarket(g.id,'runline');
   const realRLBlock=(()=>{
+    if(bookRL){
+      const favBook=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line<0);
+      const dogBook=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line>0);
+      if(favBook&&dogBook){
+        const fp=bookDevig(favBook.price),dp=bookDevig(dogBook.price),sum=fp+dp;
+        const fAb=favBook.side==='home'?g.home.abbr:g.away.abbr,dAb=dogBook.side==='home'?g.home.abbr:g.away.abbr;
+        const [rfPct,rdPct]=[Math.round(fp/sum*100),Math.round(dp/sum*100)];
+        return `<div class="mktlab">Run line <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b(fAb+' '+favBook.line,fAb+' '+favBook.line,fp/sum,rfPct)}${b(dAb+' +'+dogBook.line,dAb+' +'+dogBook.line,dp/sum,rdPct)}</div>`;
+      }
+    }
     if(!hasRealRunLine(g.id))return '';
     const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
     if(!favRD&&!dogRD)return '';
@@ -2160,21 +2177,22 @@ function betGrid(g,s,M){
     return `<div class="mktlab">Run line <span class="flag cool">real line — TheRundown</span></div>
       <div class="betgrid">${b(favAb+' -1.5',favAb+' -1.5',favBlend,rfPct)}${b(dogAb+' +1.5',dogAb+' +1.5',dogBlend,rdPct)}</div>`;
   })();
-  const synthRLBlock=favCover!==null?`<div class="mktlab" style="color:var(--mute)">Model's own run line — comparison only${hasRealRunLine(g.id)?', not what\'s bettable above':''}</div>
-    <div class="betgrid">
-      <div class="cmpr"><div class="bl">${favAb} -1.5</div><div class="bo">${(favCover*100).toFixed(0)}%</div><div class="bs">model only</div></div>
-      <div class="cmpr"><div class="bl">${dogAb} +1.5</div><div class="bo">${(dogCover*100).toFixed(0)}%</div><div class="bs">model only</div></div>
-    </div>`:'';
-  let rlPair2=rlPair;
   return `<div class="mktblock">
     ${realMLBlock}
-    ${synthMLBlock}
     ${realRLBlock}
-    ${synthRLBlock}
     ${realTotalBlock}
-    ${synthTotalBlock}
     ${(()=>{
+      const bookF5=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
       const realF5=hasRealF5(g.id);
+      if(bookF5){
+        const overBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='over');
+        const underBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='under');
+        if(overBook&&underBook){
+          const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
+          return `<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
+            <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100))}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100))}</div>`;
+        }
+      }
       if(realF5){
         return `<div class="mktlab">First 5 innings</div>
           <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a)}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h)}</div>
@@ -2185,14 +2203,19 @@ function betGrid(g,s,M){
         <div class="betgrid">
           <div class="cmpr"><div class="bl">${g.away.abbr}</div><div class="bo">${(s.f5a*100).toFixed(0)}%</div><div class="bs">sim only</div></div>
           <div class="cmpr"><div class="bl">${g.home.abbr}</div><div class="bo">${(s.f5h*100).toFixed(0)}%</div><div class="bs">sim only</div></div>
-        </div>
-        <div class="sub" style="margin:4px 0 0">Total ${s.f5tot.toFixed(1)} — not tappable, no book to check it against yet</div>`;
+        </div>`;
     })()}
   </div>`;
 }
 
-function agPanel(g,s,M){
+function agPanel(g,s,M,topR,realR){
   if(!s)return '<div class="empty">Needs a lineup — projected or confirmed — before it can simulate.</div>';
+  const bookR=bookLineRead(g,s);
+  let relocated='';
+  if(topR&&topR.length)relocated+=`<div class="tkt"><h3>Why this number</h3>
+    <ol style="margin:0;padding-left:18px;font-size:12px;line-height:1.7">${topR.map(r=>`<li>${r.t}</li>`).join('')}</ol></div>`;
+  if(realR&&realR.length)relocated+=`<div class="tkt">${realR.map(r=>`<div class="sub" style="margin-bottom:6px"><b style="color:var(--gold)">${r.label}</b> — ${r.text}</div>`).join('')}</div>`;
+  if(bookR&&bookR.length)relocated+=`<div class="tkt hi">${bookR.map(r=>`<div class="sub" style="margin-bottom:6px"><b style="color:var(--cold)">${r.label}</b> — ${r.text}</div>`).join('')}</div>`;
   let hist='';
   const mx=Math.max(...s.bins);
   hist=`<div class="hist">${s.bins.map((b,i)=>`<div class="hb ${i===s.modeTot?'md':''}" style="height:${Math.max(1,b/mx*32)}px"></div>`).join('')}</div>
@@ -2200,7 +2223,7 @@ function agPanel(g,s,M){
   let edge=null,side=null;
   if(M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
     if(eh>=ea){edge=eh;side=g.home.abbr}else{edge=ea;side=g.away.abbr}}
-  return `
+  return `${relocated}
    <div class="row"><div class="lb">A</div><div class="tx">Sim <span class="mono">${g.away.abbr} ${s.aR.toFixed(1)} – ${s.hR.toFixed(1)} ${g.home.abbr}</span>
      · rounded <span class="mono">${Math.round(s.aR)}–${Math.round(s.hR)}</span>
      · my line <span class="mono">${amer(s.hw)}</span> ${g.home.abbr}</div></div>
