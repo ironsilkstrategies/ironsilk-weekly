@@ -301,7 +301,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v30</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v31</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1581,6 +1581,48 @@ async function loadOddsPapi(manual){
     return{ok:false,reason:'network error',body:(e&&e.message)||String(e)};
   }
 }
+// your book's screenshot-extracted lines, matched to today's games — this is comparison
+// data ONLY. It never enters simGame/teamRuns, never blends into a displayed probability,
+// and is never tappable or picked. The model's own read at YOUR specific line is computed
+// fresh each time via s.over()/rlProb() — the real number is shown, the sim's own thinking
+// about it is shown right next to it, and the two are never merged into one number.
+function bookLinesFor(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return[];
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const all=get(LS.bookshots,{})[today()]||[];
+  return all.filter(x=>x.game===gl);
+}
+function bookLineRead(g,s){
+  if(!s)return[];
+  const lines=bookLinesFor(g.id);
+  if(!lines.length)return[];
+  const out=[];
+  lines.forEach(x=>{
+    if(x.market==='total'&&x.line!==null&&x.line!==undefined){
+      const p=s.over(x.line);
+      const verdict=p>=0.5?'Over':'Under';
+      out.push({label:'Your book — total',
+        text:`${x.line} (${x.side} ${x.price>0?'+':''}${x.price}) — model's own combined-score read clears it ${(p*100).toFixed(0)}% of the time, leaning ${verdict}.`});
+    }
+    if(x.market==='runline'&&x.line!==null&&x.line!==undefined){
+      const teamAb=x.side==='home'?g.home.abbr:x.side==='away'?g.away.abbr:null;
+      if(teamAb){
+        const p=rlProb(g,s,x.side,x.line);
+        if(p!==null)out.push({label:'Your book — run line',
+          text:`${teamAb} ${x.line>=0?'-':'+'}${Math.abs(x.line)} (${x.price>0?'+':''}${x.price}) — model's own read covers it ${(p*100).toFixed(0)}% of the time.`});
+      }
+    }
+    if(x.market==='moneyline'){
+      const teamAb=x.side==='home'?g.home.abbr:x.side==='away'?g.away.abbr:null;
+      if(teamAb){
+        const p=teamAb===g.home.abbr?s.hw:s.aw;
+        out.push({label:'Your book — moneyline',
+          text:`${teamAb} (${x.price>0?'+':''}${x.price}) — model's own sim has them winning ${(p*100).toFixed(0)}% of the time.`});
+      }
+    }
+  });
+  return out;
+}
 function oddsPapiSignal(gid){
   const g=GAMES.find(x=>x.id===gid);if(!g)return null;
   const gl=g.away.abbr+'@'+g.home.abbr;
@@ -2024,6 +2066,9 @@ function card(g){
     ${(()=>{const rr=realLineRead();return rr.length?`<div style="display:flex;flex-direction:column;gap:4px;margin:2px 0 4px">${rr.map(r=>
       `<div style="font-size:11.5px;line-height:1.5;background:var(--panel2);border:1px solid var(--rule);border-radius:7px;padding:7px 9px">
         <b style="color:var(--gold);font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${r.label}</b> — ${r.text}</div>`).join('')}</div>`:'';})()}
+    ${(()=>{const br=bookLineRead(g,s);return br.length?`<div style="display:flex;flex-direction:column;gap:4px;margin:2px 0 4px">${br.map(r=>
+      `<div style="font-size:11.5px;line-height:1.5;background:var(--panel2);border:1px solid var(--cold);border-radius:7px;padding:7px 9px">
+        <b style="color:var(--cold);font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${r.label}</b> — ${r.text}</div>`).join('')}</div>`:'';})()}
     ${sig?`<div class="sig">${sig}</div>`:''}
     ${badges}
    </div>
