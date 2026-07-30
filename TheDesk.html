@@ -2407,6 +2407,8 @@ function betGrid(g,s,M){
     ${realTotalBlock}
     ${(()=>{
       const bookF5=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
+      const bookF5Away=bookLineForMarket(g.id,'f5side','away')||bookLineForMarket(g.id,'f5ml','away');
+      const bookF5Home=bookLineForMarket(g.id,'f5side','home')||bookLineForMarket(g.id,'f5ml','home');
       const realF5=hasRealF5(g.id);
       if(bookF5){
         const overBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='over');
@@ -2414,9 +2416,19 @@ function betGrid(g,s,M){
         if(overBook&&underBook){
           const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
           const mO=f5OverAt(s,overBook.line);
-          return `<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
+          const f5SideBlock=(bookF5Away&&bookF5Home)?(()=>{
+            const ap=bookDevig(bookF5Away.price),hp=bookDevig(bookF5Home.price),s2=ap+hp;
+            return `<div class="mktlab">First 5 side <span class="flag cool book">your book</span></div>
+              <div class="betgrid">${b(g.away.abbr,'F5 '+g.away.abbr,ap/s2,Math.round(ap/s2*100),{realPrice:bookF5Away.price,modelP:s.f5a,marketP:ap/s2})}${b(g.home.abbr,'F5 '+g.home.abbr,hp/s2,Math.round(hp/s2*100),{realPrice:bookF5Home.price,modelP:s.f5h,marketP:hp/s2})}</div>`;
+          })():'';
+          return `${f5SideBlock}<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
             <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100),{realPrice:overBook.price,modelP:mO,marketP:op/sum})}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100),{realPrice:underBook.price,modelP:1-mO,marketP:up/sum})}</div>`;
         }
+      }
+      if(bookF5Away&&bookF5Home){
+        const ap=bookDevig(bookF5Away.price),hp=bookDevig(bookF5Home.price),s2=ap+hp;
+        return `<div class="mktlab">First 5 side <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b(g.away.abbr,'F5 '+g.away.abbr,ap/s2,Math.round(ap/s2*100),{realPrice:bookF5Away.price,modelP:s.f5a,marketP:ap/s2})}${b(g.home.abbr,'F5 '+g.home.abbr,hp/s2,Math.round(hp/s2*100),{realPrice:bookF5Home.price,modelP:s.f5h,marketP:hp/s2})}</div>`;
       }
       if(realF5){
         return `<div class="mktlab">First 5 innings</div>
@@ -2796,15 +2808,72 @@ function bestRunLines(){
   });
   return out;
 }
+// Unfiltered side pool for the ticket builder — no PUBLIC_THRESH gate, real lines only
+function allSidesForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    if(!hasRealML(g.id))return;
+    const M=marketOf(g);if(!M)return;
+    const bl=mlBlend(g,s);
+    const favSide=bl.home>=bl.away?'home':'away';
+    const ab=g[favSide].abbr,prob=Math.max(bl.home,bl.away);
+    const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
+    const edge=favSide==='home'?eh:ea;
+    out.push({pick:ab+' ML',game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob,edge});
+  });
+  return out.sort((a,b)=>b.prob-a.prob);
+}
+// Unfiltered total pool for the ticket builder
+function allTotalsForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    if(!hasRealTotal(g.id))return;
+    const st=sharpTotalFor(g.id);
+    const o=sharpTotalBlend(g,st.line,s.over(st.line));
+    const prob=Math.max(o,1-o);
+    out.push({pick:(o>=.5?'Over ':'Under ')+st.line,game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob});
+  });
+  return out.sort((a,b)=>b.prob-a.prob);
+}
+// Unfiltered run-line pool for the ticket builder
+function allRunLinesForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    if(!hasRealRunLine(g.id))return;
+    const favSide=s.hw>=s.aw?'home':'away';
+    const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
+    const favCover=rlProb(g,s,favSide,1.5);
+    if(favCover===null)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+    let favBlend=favCover;
+    if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+    else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
+    const dogBlend=1-favBlend;
+    // include both sides — builder picks the better one during greedy selection
+    out.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl'});
+    out.push({p:dogBlend,pick:dogAb+' +1.5',game:gl,kind:'rl'});
+  });
+  return out;
+}
 function qualifyingPool(modes){
   const pool=[];
-  if(modes.has('ml'))bestSides(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'side'}));
-  if(modes.has('rl'))bestRunLines().forEach(x=>pool.push(x));
-  if(modes.has('total'))bestTotals(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
+  // Builder pool is UNFILTERED — thresholds are for the scout/Best tab, not the builder.
+  // The builder's job is to find the best combination to hit a target odds, not to curate.
+  if(modes.has('ml'))allSidesForBuilder().forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'side'}));
+  if(modes.has('rl'))allRunLinesForBuilder().forEach(x=>pool.push(x));
+  if(modes.has('total'))allTotalsForBuilder().forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
   if(modes.has('prop')){
-    PROPS.filter(p=>p.type!=='hr'&&p.p>=propThreshFor(p.type)).forEach(p=>
+    // Props: include everything with any real probability — sorted by sim prob, builder picks best
+    PROPS.filter(p=>p.type!=='hr'&&p.p>0).forEach(p=>
       pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop'}));
-    PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).forEach(p=>
+    PROPS.filter(p=>p.type==='hr'&&p.p>0).forEach(p=>
       pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr'}));
   }
   return pool.sort((a,b)=>b.p-a.p);
@@ -2834,7 +2903,7 @@ function buildTargetTicket(){
   const neededMult=1+(profit/stake);
   const pool=qualifyingPool(modes);
   if(!pool.length){
-    resEl.innerHTML='<div class="empty">Nothing in the selected market(s) clears its bar right now — 60% sides, 70% totals, 75% RBI, 80% other props, 27% HR.</div>';
+    resEl.innerHTML='<div class="empty">No real lines posted yet for the selected market(s) — check that odds have been pulled and lineups are available.</div>';
     return;
   }
   const combo=[];
@@ -3610,7 +3679,7 @@ function buildBestCard(){
       :`<div class="rc-hero"><div class="lab">No home run data yet</div></div>`}
     ${rows('Best 5 sides',sides,'Ranked by edge vs. market where pulled, else by sim win probability','pick','prob')}
     ${rows('Best 5 totals',totals,'Blended with SharpAPI\'s real total line when one is posted for that game','pick','prob')}
-    ${rows('Best 5 props',props,'Ranked by sim probability, self-calibrated against graded history','_',null)}
+    ${rows('Best 5 props',props,'Ranked by sim probability, self-calibrated against graded history','_','p')}
     <div class="rc-foot">
       <div class="cal">Built from lineups, park, weather, H2H — never from book odds</div>
       <div class="cta">Follow <span>${get(LS.handle,'@YourHandle')}</span></div>
