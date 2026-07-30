@@ -2297,11 +2297,16 @@ function betGrid(g,s,M){
       else if(e<=-EDGE_MIN){cls=' avoid';badge=`<span class="eb dn">${e.toFixed(1)}</span>`}
       fair=`<div class="bf">model ${(mp*100).toFixed(0)}% · fair ${amer(mp)}</div>`;
     }
+    // sim handicap line — shows what the model's own number is for this market
+    // so you can instantly see the gap between book line and sim read
+    const simLine=opts.simVal!==undefined
+      ?`<div class="bf" style="color:var(--cold);margin-top:1px">sim ${opts.simVal}</div>`
+      :'';
     return `<div class="bet${cls} ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
       <div class="bl">${label}</div><div class="bo">${priceStr}</div>
-      <div class="bs">${badge||pct+'%'}</div>${fair}</div>`;
+      <div class="bs">${badge||pct+'%'}</div>${fair}${simLine}</div>`;
   };
   // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
   // always sum to exactly 100 instead of each rounding independently, which can silently
@@ -2318,6 +2323,23 @@ function betGrid(g,s,M){
   const mM=marketOf(g);
   let rlPair=[null,null];
   if(favCover!==null)rlPair=pair(favCover);
+  // sim handicap values — computed once, threaded into every bet square as simVal
+  // ML: sim win% for each side
+  const simAwML=Math.round(s.aw*100)+'%';
+  const simHmML=Math.round(s.hw*100)+'%';
+  // Total: sim projected total (same number shown on both over and under squares so
+  // you instantly see "book 8.5, sim 10.1" without any mental math)
+  const simTot=s.mean.toFixed(1);
+  // Run line: sim implied spread = hR - aR (positive = home favored by that many runs)
+  // Shown as a signed number matching the convention of a real spread (+3.2 / -3.2)
+  const simSpread=s.hR-s.aR;
+  const simFavSpread=(simSpread>=0?'-':'+')+(Math.abs(simSpread).toFixed(1));
+  const simDogSpread=(simSpread>=0?'+':'-')+(Math.abs(simSpread).toFixed(1));
+  // F5
+  const simF5Tot=s.f5tot.toFixed(1);
+  const simF5Aw=Math.round(s.f5a*100)+'%';
+  const simF5Hm=Math.round(s.f5h*100)+'%';
+
   const bookML=bookLineForMarket(g.id,'moneyline');
   const realMLBlock=(()=>{
     if(bookML){
@@ -2326,14 +2348,14 @@ function betGrid(g,s,M){
       if(hp!==null&&ap!==null){
         const sum=hp+ap,[bhPct,baPct]=[Math.round(hp/sum*100),Math.round(ap/sum*100)];
         return `<div class="mktlab">Moneyline <span class="flag cool book">your book</span></div>
-          <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',ap/sum,baPct,{realPrice:awayBook.price,modelP:s.aw,marketP:ap/sum})}${b(g.home.abbr,g.home.abbr+' ML',hp/sum,bhPct,{realPrice:homeBook.price,modelP:s.hw,marketP:hp/sum})}</div>`;
+          <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',ap/sum,baPct,{realPrice:awayBook.price,modelP:s.aw,marketP:ap/sum,simVal:simAwML})}${b(g.home.abbr,g.home.abbr+' ML',hp/sum,bhPct,{realPrice:homeBook.price,modelP:s.hw,marketP:hp/sum,simVal:simHmML})}</div>`;
       }
     }
     if(!mM)return '';
     const bl=mlBlend(g,s);
     const [bhPct,baPct]=pair(bl.home);
     return `<div class="mktlab">Moneyline <span class="flag cool">real line</span></div>
-      <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',bl.away,baPct,{modelP:s.aw,marketP:M.fa})}${b(g.home.abbr,g.home.abbr+' ML',bl.home,bhPct,{modelP:s.hw,marketP:M.fh})}</div>`;
+      <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',bl.away,baPct,{modelP:s.aw,marketP:M.fa,simVal:simAwML})}${b(g.home.abbr,g.home.abbr+' ML',bl.home,bhPct,{modelP:s.hw,marketP:M.fh,simVal:simHmML})}</div>`;
   })();
   const bookTotal=bookLineForMarket(g.id,'total');
   const realTotalBlock=(()=>{
@@ -2344,7 +2366,7 @@ function betGrid(g,s,M){
         const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
         const [roPct,ruPct]=[Math.round(op/sum*100),Math.round(up/sum*100)];
         return `<div class="mktlab">Total runs · ${bookTotal.line} <span class="flag cool book">your book</span></div>
-          <div class="betgrid">${b('Over '+bookTotal.line,'Over '+bookTotal.line,op/sum,roPct,{realPrice:overBook.price,modelP:s.over(bookTotal.line),marketP:op/sum})}${b('Under '+bookTotal.line,'Under '+bookTotal.line,up/sum,ruPct,{realPrice:underBook.price,modelP:1-s.over(bookTotal.line),marketP:up/sum})}</div>`;
+          <div class="betgrid">${b('Over '+bookTotal.line,'Over '+bookTotal.line,op/sum,roPct,{realPrice:overBook.price,modelP:s.over(bookTotal.line),marketP:op/sum,simVal:simTot})}${b('Under '+bookTotal.line,'Under '+bookTotal.line,up/sum,ruPct,{realPrice:underBook.price,modelP:1-s.over(bookTotal.line),marketP:up/sum,simVal:simTot})}</div>`;
       }
     }
     if(!stMatch||stMatch.overProb===null)return '';
@@ -2353,7 +2375,7 @@ function betGrid(g,s,M){
     const dvSum=(stMatch.overProb||0)+(stMatch.underProb||0);
     const mkO=dvSum>0?stMatch.overProb/dvSum:null;
     return `<div class="mktlab">Total runs · ${stMatch.line} <span class="flag cool">real line — ${stMatch.book}</span></div>
-      <div class="betgrid">${b('Over '+stMatch.line,'Over '+stMatch.line,blended,roPct,{realPrice:stMatch.overAmerican,modelP:s.over(stMatch.line),marketP:mkO})}${b('Under '+stMatch.line,'Under '+stMatch.line,1-blended,ruPct,{realPrice:stMatch.underAmerican,modelP:1-s.over(stMatch.line),marketP:mkO===null?null:1-mkO})}</div>`;
+      <div class="betgrid">${b('Over '+stMatch.line,'Over '+stMatch.line,blended,roPct,{realPrice:stMatch.overAmerican,modelP:s.over(stMatch.line),marketP:mkO,simVal:simTot})}${b('Under '+stMatch.line,'Under '+stMatch.line,1-blended,ruPct,{realPrice:stMatch.underAmerican,modelP:1-s.over(stMatch.line),marketP:mkO===null?null:1-mkO,simVal:simTot})}</div>`;
   })();
   const bookRL=bookLineForMarket(g.id,'runline');
   const realRLBlock=(()=>{
@@ -2366,15 +2388,15 @@ function betGrid(g,s,M){
         const [rfPct,rdPct]=[Math.round(fp/sum*100),Math.round(dp/sum*100)];
         const favModel=rlProb(g,s,favBook.side,-favBook.line);
         const dogModel=rlProb(g,s,dogBook.side,-dogBook.line);
-        // sanity guard: covering -1.5 is strictly harder than winning outright, so a market
-        // implying the -1.5 side covers MORE often than the model has anyone winning at all
-        // means the extracted team labels are almost certainly swapped. Suppress the edge
-        // signal rather than surface a large fake number off bad OCR.
         const favOutright=favBook.side==='home'?s.hw:s.aw;
         const suspect=(fp/sum)>favOutright+0.05;
         const warn=suspect?`<div class="sub" style="color:var(--rust);margin-top:4px">Check this one — the extracted sides look inverted against the model, so no edge is being shown here.</div>`:'';
+        // sim spread shown from each team's perspective — fav gets the negative side
+        const favIsHome=favBook.side==='home';
+        const favSimSpread=favIsHome?simFavSpread:(simSpread>=0?simDogSpread:simFavSpread);
+        const dogSimSpread=favIsHome?simDogSpread:(simSpread>=0?simFavSpread:simDogSpread);
         return `<div class="mktlab">Run line <span class="flag cool book">your book</span></div>
-          <div class="betgrid">${b(fAb+' '+favBook.line,fAb+' '+favBook.line,fp/sum,rfPct,{realPrice:favBook.price,modelP:suspect?null:favModel,marketP:suspect?null:fp/sum})}${b(dAb+' +'+dogBook.line,dAb+' +'+dogBook.line,dp/sum,rdPct,{realPrice:dogBook.price,modelP:suspect?null:dogModel,marketP:suspect?null:dp/sum})}</div>${warn}`;
+          <div class="betgrid">${b(fAb+' '+favBook.line,fAb+' '+favBook.line,fp/sum,rfPct,{realPrice:favBook.price,modelP:suspect?null:favModel,marketP:suspect?null:fp/sum,simVal:favSimSpread})}${b(dAb+' +'+dogBook.line,dAb+' +'+dogBook.line,dp/sum,rdPct,{realPrice:dogBook.price,modelP:suspect?null:dogModel,marketP:suspect?null:dp/sum,simVal:dogSimSpread})}</div>${warn}`;
       }
     }
     if(!hasRealRunLine(g.id))return '';
@@ -2386,8 +2408,9 @@ function betGrid(g,s,M){
     const dogBlend=1-favBlend;
     const [rfPct,rdPct]=pair(favBlend);
     const mkFav=favRD?favRD.prob:(dogRD?1-dogRD.prob:null);
+    // favSide is already the sim's own favorite — so favSimSpread is always negative
     return `<div class="mktlab">Run line <span class="flag cool">real line — TheRundown</span></div>
-      <div class="betgrid">${b(favAb+' -1.5',favAb+' -1.5',favBlend,rfPct,{modelP:favCover,marketP:mkFav})}${b(dogAb+' +1.5',dogAb+' +1.5',dogBlend,rdPct,{modelP:dogCover,marketP:mkFav===null?null:1-mkFav})}</div>`;
+      <div class="betgrid">${b(favAb+' -1.5',favAb+' -1.5',favBlend,rfPct,{modelP:favCover,marketP:mkFav,simVal:simFavSpread})}${b(dogAb+' +1.5',dogAb+' +1.5',dogBlend,rdPct,{modelP:dogCover,marketP:mkFav===null?null:1-mkFav,simVal:simDogSpread})}</div>`;
   })();
   return `<div class="mktblock">
     ${realMLBlock}
@@ -2402,23 +2425,23 @@ function betGrid(g,s,M){
         const ap=bookDevig(awayF5Side.price),hp=bookDevig(homeF5Side.price),sum=ap+hp;
         const [baPct,bhPct]=[Math.round(ap/sum*100),Math.round(hp/sum*100)];
         f5SideBlock=`<div class="mktlab">First 5 moneyline <span class="flag cool book">your book</span></div>
-          <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,ap/sum,baPct,{realPrice:awayF5Side.price,modelP:s.f5a,marketP:ap/sum})}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,hp/sum,bhPct,{realPrice:homeF5Side.price,modelP:s.f5h,marketP:hp/sum})}</div>`;
-      } else if(awayF5Side||homeF5Side) {
-        // only one side read — show sim-only for the missing side, real price for the found side
+          <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,ap/sum,baPct,{realPrice:awayF5Side.price,modelP:s.f5a,marketP:ap/sum,simVal:simF5Aw})}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,hp/sum,bhPct,{realPrice:homeF5Side.price,modelP:s.f5h,marketP:hp/sum,simVal:simF5Hm})}</div>`;
+      } else if(awayF5Side||homeF5Side){
         const found=awayF5Side||homeF5Side;
         const foundSide=awayF5Side?'away':'home';
-        const foundAb=g[foundSide].abbr,otherSide=foundSide==='away'?'home':'away',otherAb=g[otherSide].abbr;
-        const fp=bookDevig(found.price);
+        const otherSide=foundSide==='away'?'home':'away';
+        const foundAb=g[foundSide].abbr,otherAb=g[otherSide].abbr;
+        const foundSimVal=foundSide==='away'?simF5Aw:simF5Hm;
         f5SideBlock=`<div class="mktlab">First 5 moneyline <span class="flag cool book">your book</span></div>
           <div class="betgrid">${foundSide==='away'
-            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5a,Math.round(s.f5a*100),{realPrice:found.price,modelP:s.f5a})
-            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${(s.f5a*100).toFixed(0)}%</div><div class="bs">sim only</div></div>`}
+            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5a,Math.round(s.f5a*100),{realPrice:found.price,modelP:s.f5a,simVal:foundSimVal})
+            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${simF5Aw}</div><div class="bs">sim only</div></div>`}
           ${foundSide==='home'
-            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5h,Math.round(s.f5h*100),{realPrice:found.price,modelP:s.f5h})
-            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${(s.f5h*100).toFixed(0)}%</div><div class="bs">sim only</div></div>`}
+            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5h,Math.round(s.f5h*100),{realPrice:found.price,modelP:s.f5h,simVal:foundSimVal})
+            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${simF5Hm}</div><div class="bs">sim only</div></div>`}
           </div>`;
       }
-      // F5 total block — from book screenshots or hasRealF5()
+      // F5 total block
       const bookF5Total=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
       const realF5=hasRealF5(g.id);
       let f5TotalBlock='';
@@ -2429,18 +2452,16 @@ function betGrid(g,s,M){
           const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
           const mO=f5OverAt(s,overBook.line);
           f5TotalBlock=`<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
-            <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100),{realPrice:overBook.price,modelP:mO,marketP:op/sum})}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100),{realPrice:underBook.price,modelP:1-mO,marketP:up/sum})}</div>`;
+            <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100),{realPrice:overBook.price,modelP:mO,marketP:op/sum,simVal:simF5Tot})}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100),{realPrice:underBook.price,modelP:1-mO,marketP:up/sum,simVal:simF5Tot})}</div>`;
         }
       } else if(realF5){
         f5TotalBlock=`<div class="mktlab">First 5 total · ${f5t}</div>
-          <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct)}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct)}</div>`;
+          <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct,{simVal:simF5Tot})}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct,{simVal:simF5Tot})}</div>`;
       }
-      // If we have real F5 side lines from the book but no separate F5 side block yet,
-      // also surface the sim-driven side squares in a real-line context
-      const hasAnySideSquares=f5SideBlock!=='';
-      const f5SideSimBlock=(!hasAnySideSquares&&realF5)
+      // sim-only side squares when no book f5side but hasRealF5
+      const f5SideSimBlock=(!f5SideBlock&&realF5)
         ?`<div class="mktlab">First 5 innings <span class="flag cool">sim</span></div>
-           <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a)}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h)}</div>`
+           <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a,undefined,{simVal:simF5Aw})}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h,undefined,{simVal:simF5Hm})}</div>`
         :'';
       if(f5SideBlock||f5TotalBlock||f5SideSimBlock){
         return f5SideBlock+f5SideSimBlock+f5TotalBlock;
@@ -2448,8 +2469,8 @@ function betGrid(g,s,M){
       // no real line at all — sim-only display, not tappable
       return `<div class="mktlab" style="color:var(--mute)">First 5 innings — no real line posted</div>
         <div class="betgrid">
-          <div class="cmpr"><div class="bl">${g.away.abbr}</div><div class="bo">${(s.f5a*100).toFixed(0)}%</div><div class="bs">sim only</div></div>
-          <div class="cmpr"><div class="bl">${g.home.abbr}</div><div class="bo">${(s.f5h*100).toFixed(0)}%</div><div class="bs">sim only</div></div>
+          <div class="cmpr"><div class="bl">${g.away.abbr}</div><div class="bo">${simF5Aw}</div><div class="bs">sim only</div></div>
+          <div class="cmpr"><div class="bl">${g.home.abbr}</div><div class="bo">${simF5Hm}</div><div class="bs">sim only</div></div>
         </div>`;
     })()}
     <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
