@@ -209,6 +209,22 @@ border-radius:7px;padding:10px 12px;cursor:pointer;border:1px solid var(--rule)}
 .tkt ol{margin:0;padding-left:18px;font-size:12.5px;line-height:1.75}
 .tkt ol .m{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--mute)}
 .tkt ol .pp{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--moss)}
+/* ---------- WAGER ROW ---------- */
+.wager-row{display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:10px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.wager-pill{display:flex;flex-direction:column;align-items:center;background:var(--panel2);border:1px solid var(--rule);border-radius:50px;padding:8px 14px;min-width:80px;flex:1;position:relative}
+.wager-pill.stake-pill{border-color:var(--cold);background:rgba(95,211,232,.07)}
+.wager-pill.odds-pill{border-color:rgba(242,169,59,.3);background:rgba(242,169,59,.07)}
+.wager-pill.payout-pill{border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.07)}
+.wager-pill.payout-pill.neg{border-color:rgba(199,82,42,.35);background:rgba(199,82,42,.07)}
+.wager-pill .wp-label{font-family:"IBM Plex Mono";font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-bottom:3px}
+.wager-pill .wp-val{font-family:"Archivo";font-weight:900;font-size:16px;line-height:1;color:var(--chalk)}
+.wager-pill.stake-pill .wp-val{color:var(--cold)}
+.wager-pill.odds-pill .wp-val{color:var(--gold)}
+.wager-pill.payout-pill .wp-val{color:var(--win)}
+.wager-pill.payout-pill.neg .wp-val{color:var(--rust)}
+.wager-pill .wp-sub{font-family:"IBM Plex Mono";font-size:8.5px;color:var(--mute);margin-top:2px}
+.wager-input{position:absolute;inset:0;opacity:0;cursor:text;border-radius:50px}
+.wager-input-real{font-family:"Archivo";font-weight:900;font-size:16px;color:var(--cold);background:transparent;border:none;outline:none;width:100%;text-align:center;padding:0}
 .subnav{display:flex;gap:5px;margin-bottom:11px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .subnav::-webkit-scrollbar{display:none}
 .subnav button{white-space:nowrap;font-family:"IBM Plex Mono";font-size:10px;padding:7px 11px;border-radius:20px;
@@ -343,7 +359,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v34</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v35</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2649,6 +2665,90 @@ function delLocked(id){
   set(LS.locked,get(LS.locked,[]).filter(x=>x.id!==id));genTickets();
 }
 
+/* ================= WAGER / PAYOUT ================= */
+const LS_WAGERS='d4.wagers';
+function getWagers(){return get(LS_WAGERS,{})}
+function setWager(id,stake){
+  const w=getWagers();
+  if(stake===null||stake===''||isNaN(stake)){delete w[id]}
+  else{w[id]=parseFloat(stake)}
+  set(LS_WAGERS,w);
+}
+// Convert decimal probability to American odds (with vig already baked into model prob)
+function probToAmer(p){
+  if(!p||p<=0||p>=1)return '—';
+  return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p);
+}
+// Given American odds string and stake, return payout (profit + stake)
+function calcPayout(amerOdds,stake){
+  if(!stake||isNaN(stake)||stake<=0)return null;
+  const o=parseFloat(amerOdds.replace('+',''));
+  if(isNaN(o))return null;
+  const profit=o>0?(stake*o/100):(stake*100/Math.abs(o));
+  return stake+profit;
+}
+function onWagerInput(id,combinedP,inputEl){
+  const raw=inputEl.value.replace(/[^0-9.]/g,'');
+  const stake=parseFloat(raw)||0;
+  setWager(id,stake||null);
+  updatePayoutDisplay(id,combinedP,stake);
+}
+function updatePayoutDisplay(id,combinedP,stake){
+  const payEl=document.getElementById('payout-'+id);
+  const profEl=document.getElementById('profit-'+id);
+  const pillEl=document.getElementById('payout-pill-'+id);
+  if(!payEl||!profEl)return;
+  if(!stake||stake<=0){
+    payEl.textContent='$—';
+    profEl.textContent='profit';
+    if(pillEl){pillEl.classList.remove('neg')}
+    return;
+  }
+  const amerOdds=probToAmer(combinedP);
+  const payout=calcPayout(amerOdds,stake);
+  if(!payout){payEl.textContent='$—';profEl.textContent='profit';return}
+  const profit=payout-stake;
+  payEl.textContent='$'+payout.toFixed(2);
+  profEl.textContent='+$'+profit.toFixed(2)+' profit';
+  if(pillEl){pillEl.classList.toggle('neg',profit<0)}
+}
+function buildWagerRow(t){
+  const w=getWagers();
+  const stake=w[t.id]||'';
+  const amerOdds=probToAmer(t.p);
+  const payout=stake?calcPayout(amerOdds,stake):null;
+  const profit=payout?payout-stake:null;
+  return `<div class="wager-row">
+    <div class="wager-pill stake-pill" onclick="document.getElementById('stake-input-${t.id}').focus()">
+      <div class="wp-label">Stake</div>
+      <div class="wp-val" style="display:flex;align-items:center;gap:2px">
+        <span style="font-size:11px;color:var(--cold);opacity:.7">$</span><input
+          id="stake-input-${t.id}"
+          class="wager-input-real"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="0"
+          value="${stake}"
+          oninput="onWagerInput(${t.id},${t.p},this)"
+          style="max-width:70px"
+        >
+      </div>
+      <div class="wp-sub">tap to set</div>
+    </div>
+    <div class="wager-pill odds-pill">
+      <div class="wp-label">Parlay Odds</div>
+      <div class="wp-val">${amerOdds}</div>
+      <div class="wp-sub">${(t.p*100).toFixed(t.p<.01?3:1)}% implied</div>
+    </div>
+    <div class="wager-pill payout-pill${profit!==null&&profit<0?' neg':''}" id="payout-pill-${t.id}">
+      <div class="wp-label">To Win</div>
+      <div class="wp-val" id="payout-${t.id}">${payout?'$'+payout.toFixed(2):'$—'}</div>
+      <div class="wp-sub" id="profit-${t.id}">${profit!==null?'+$'+profit.toFixed(2)+' profit':'profit'}</div>
+    </div>
+  </div>`;
+}
+
 /* ================= TARGET TICKET BUILDER ================= */
 // Same qualifying pool as Best Bets — real lines only, no synthetic F5. Thresholds are
 // per-type now: 60% sides, 70% totals, 75% RBI, 80% other props, 27% HR.
@@ -2863,7 +2963,7 @@ function genTickets(){
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
       h+=`<div class="tkt hi"><h3>${t.date}</h3>
         <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
-        <ol>${rows}</ol><div class="bar"><button onclick="delLocked(${t.id})">Delete</button></div></div>`;
+        <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar"><button onclick="delLocked(${t.id})">Delete</button></div></div>`;
     });
   }
   const pool=marketPool();
