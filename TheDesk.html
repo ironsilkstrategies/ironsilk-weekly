@@ -269,9 +269,8 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 <header>
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
-      <button onclick="openSettings()" style="padding:5px 9px;font-size:9px;font-family:'Archivo',sans-serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;background:#F2A93B;color:#0B0F14;border:1px solid #F2A93B;cursor:pointer">Keys</button>
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v15</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v16</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -669,7 +668,7 @@ function playerPropAdj(name){
 // Book odds are never fed into the simulation — this is purely "here's my number,
 // go see if your book beats it."
 function altLines(g,s){
-  const out={rl:[],tot:[],f5:[]};
+  const out={rl:[],tot:[]};
   [1.5,2.5,3.5].forEach(ln=>{
     const ph=rlProb(g,s,'home',ln),pa=rlProb(g,s,'away',ln);
     if(ph!==null)out.rl.push({label:`${g.home.abbr} -${ln}`,p:ph});
@@ -684,11 +683,6 @@ function altLines(g,s){
     const o=s.over(t);
     out.tot.push({label:`Over ${t}`,p:o});
     out.tot.push({label:`Under ${t}`,p:1-o});
-  }
-  for(let t=2.5;t<=6.5;t+=1){
-    const o=Math.min(.95,Math.max(.05,.5+(s.f5tot-t)*.15));
-    out.f5.push({label:`F5 over ${t}`,p:o});
-    out.f5.push({label:`F5 under ${t}`,p:1-o});
   }
   return out;
 }
@@ -716,7 +710,7 @@ function altPanel(g,s){
       <div style="font-family:'IBM Plex Mono';font-size:10px;color:var(--gold);margin-top:5px">
         Safest here: <b>${safest.label}</b> at ${(safest.p*100).toFixed(1)}%</div></div>`;
   };
-  const all=[...A.rl,...A.tot,...A.f5].sort((a,b)=>b.p-a.p);
+  const all=[...A.rl,...A.tot].sort((a,b)=>b.p-a.p);
   const best=all[0];
   return `<div class="tkt hi" style="margin-bottom:11px">
       <h3>Safest on this game</h3>
@@ -727,8 +721,7 @@ function altPanel(g,s){
       price loses money long-term; a 58% leg at a generous one makes it. Use the right-hand column.</div>
     </div>
     ${sec('Alternate run lines',A.rl,'Margin of victory. Plus numbers are the cushion side.')}
-    ${sec('Alternate totals',A.tot,'Full-game runs, both directions.')}
-    ${sec('Alternate F5 totals',A.f5,'First five innings — starters only, no bullpen noise.')}`;
+    ${sec('Alternate totals',A.tot,'Full-game runs, both directions.')}`;
 }
 /* ================= PROPS ================= */
 function buildProps(){
@@ -2362,104 +2355,6 @@ function exportCSV(){
   navigator.clipboard.writeText(csv).then(()=>alert('CSV copied.'),()=>alert('Copy failed.'));
 }
 
-/* ================= MINE ================= */
-let MTYPE='side';
-function setMType(t){MTYPE=t;
-  document.getElementById('mtSide').className=t==='side'?'primary':'';
-  document.getElementById('mtProp').className=t==='prop'?'primary':'';
-  document.getElementById('mPlayer').style.display=t==='prop'?'':'none'}
-function mine(){return get(LS.mine,{})}
-function logMine(){
-  const game=document.getElementById('mGame').value.trim().toUpperCase();
-  const pick=document.getElementById('mPick').value.trim();
-  const player=document.getElementById('mPlayer').value.trim();
-  const note=document.getElementById('mNote').value.trim();
-  if(!game||!pick){alert('Need a game and a pick.');return}
-  if(MTYPE==='prop'&&!player){alert('Props need a player name.');return}
-  const m=mine(),d=today();m[d]=m[d]||[];
-  m[d].push({id:Date.now()+Math.random(),t:MTYPE,game,pick,player,note,result:null});
-  set(LS.mine,m);
-  ['mGame','mPick','mPlayer','mNote'].forEach(x=>document.getElementById(x).value='');
-  renderMine();
-}
-function mineAuto(e){
-  if(e.t==='side'){
-    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===e.game);
-    if(g&&g.abstract==='Final')return gradeSideFromScore(g,e.pick);
-    return null;
-  }
-  const arc=get(LS.arc,{});
-  for(const d of Object.keys(arc)){
-    const A=arc[d];if(!A.pgrades)continue;
-    const hit=A.pgrades.find(o=>o.n===e.player&&o.m.toLowerCase()===e.pick.toLowerCase());
-    if(hit)return hit.hit===1;
-  }
-  return null;
-}
-function setResult(d,id,v){const m=mine();const r=(m[d]||[]).find(x=>x.id===id);
-  if(r){r.result=v;set(LS.mine,m);renderMine()}}
-function delMine(d,id){const m=mine();m[d]=(m[d]||[]).filter(x=>x.id!==id);set(LS.mine,m);renderMine()}
-function renderMine(){
-  const m=mine(),dates=Object.keys(m).sort().reverse(),td=today();
-  const open=m[td]||[];
-  document.getElementById('cOpen').textContent=open.length||'';
-  document.getElementById('nM').textContent=Object.values(m).reduce((a,r)=>a+r.length,0)||'';
-  const rowH=(d,e)=>{
-    const auto=e.result===null?mineAuto(e):null;
-    const st=e.result!==null?(e.result?'W':'L'):(auto!==null?(auto?'W auto':'L auto'):'pending');
-    const col=st[0]==='W'?'var(--win)':st[0]==='L'?'var(--rust)':'var(--mute)';
-    return `<div class="prop" style="cursor:default">
-      <div class="pw"><div class="pn">${e.pick}${e.player?' — '+e.player:''}</div>
-      <div class="pm">${e.game}${e.note?' · '+e.note:''}</div></div>
-      <div class="pm" style="color:${col};min-width:58px;text-align:right">${st}</div>
-      ${e.result===null?`<div style="display:flex;gap:3px">
-        <button style="padding:5px 7px;font-size:9px;background:var(--panel3);color:var(--chalk);border:1px solid var(--rule);border-radius:5px" onclick="setResult('${d}',${e.id},true)">W</button>
-        <button style="padding:5px 7px;font-size:9px;background:var(--panel3);color:var(--chalk);border:1px solid var(--rule);border-radius:5px" onclick="setResult('${d}',${e.id},false)">L</button>
-        <button style="padding:5px 7px;font-size:9px;background:none;color:var(--rust);border:1px solid var(--rule);border-radius:5px" onclick="delMine('${d}',${e.id})">✕</button></div>`
-      :`<button style="padding:5px 7px;font-size:9px;background:var(--panel3);color:var(--chalk);border:1px solid var(--rule);border-radius:5px" onclick="setResult('${d}',${e.id},null)">reset</button>`}
-    </div>`;
-  };
-  document.getElementById('mineOpen').innerHTML=open.length?open.map(e=>rowH(td,e)).join('')
-    :'<div class="empty">Nothing logged today.</div>';
-  let sw=0,sl=0,pw=0,pl=0,pend=0;
-  dates.forEach(d=>(m[d]||[]).forEach(e=>{
-    const r=e.result!==null?e.result:mineAuto(e);
-    if(r===null){pend++;return}
-    if(e.t==='side'){r?sw++:sl++}else{r?pw++:pl++}}));
-  const pct=(w,l)=>w+l?((w/(w+l))*100).toFixed(1)+'%':'—';
-  document.getElementById('mineRecord').innerHTML=`<div class="tkt hi"><h3>${pct(sw+pw,sl+pl)}</h3>
-    <div class="sub">everything logged · <b>${sw+pw}-${sl+pl}</b>${pend?' · '+pend+' pending':''}</div>
-    <ol style="list-style:none;padding-left:0">
-    <li>Sides &amp; totals <span class="pp">${pct(sw,sl)}</span> <span class="m">${sw}-${sl}</span></li>
-    <li>Props <span class="pp">${pct(pw,pl)}</span> <span class="m">${pw}-${pl}</span></li></ol></div>`;
-  const arc=get(LS.arc,{});
-  let mSW=0,mSL=0,mPW=0,mPL=0;const dayRows=[];
-  dates.forEach(d=>{
-    const A=arc[d];let yW=0,yL=0,mW=0,mL=0;
-    (m[d]||[]).forEach(e=>{const r=e.result!==null?e.result:mineAuto(e);
-      if(r===true)yW++;else if(r===false)yL++});
-    if(A&&A.finals){A.rows.forEach(r=>{const F=A.finals[r.id];
-      if(!F||F.a===null||F.h===null)return;
-      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);if(!won)return;
-      const hit=won===r.side;hit?mSW++:mSL++;hit?mW++:mL++})}
-    if(A&&A.pgrades)A.pgrades.forEach(o=>{o.hit?mPW++:mPL++});
-    if((m[d]||[]).length)dayRows.push({d,yW,yL,mW,mL});
-  });
-  const lead=(sw+pw+sl+pl)&&(mSW+mSL)?(((sw+pw)/(sw+pw+sl+pl))-(mSW/(mSW+mSL)))*100:null;
-  document.getElementById('vsModel').innerHTML=`<div class="tkt hi">
-    <h3>${lead===null?'Not enough data':(lead>=0?'You +'+lead.toFixed(1):'Model +'+Math.abs(lead).toFixed(1))}</h3>
-    <div class="sub">compared only on days you logged something</div>
-    <div class="betgrid thirds" style="margin-top:6px">
-      <div class="bet" style="cursor:default"><div class="bs">You</div><div class="bo">${pct(sw+pw,sl+pl)}</div><div class="bs">${sw+pw}-${sl+pl}</div></div>
-      <div class="bet" style="cursor:default"><div class="bs">Model sides</div><div class="bo">${pct(mSW,mSL)}</div><div class="bs">${mSW}-${mSL}</div></div>
-      <div class="bet" style="cursor:default"><div class="bs">Model props</div><div class="bo">${pct(mPW,mPL)}</div><div class="bs">${mPW}-${mPL}</div></div>
-    </div></div>`;
-  document.getElementById('mineHistory').innerHTML=dayRows.length?dayRows.map(D=>
-    `<div class="tkt"><h3>${D.d}</h3><div class="sub">You <b>${D.yW}-${D.yL}</b> · model sides <b>${D.mW}-${D.mL}</b> that day</div>
-    <ol>${(m[D.d]||[]).map(e=>{const r=e.result!==null?e.result:mineAuto(e);
-      return `<li>${e.pick}${e.player?' — '+e.player:''} <span class="m">${e.game}</span> ${r===true?'✅':r===false?'❌':'pending'}</li>`}).join('')}</ol></div>`).join('')
-    :'<div class="empty">No history yet.</div>';
-}
 
 /* ================= CHAT ================= */
 function slateContext(){
@@ -2518,15 +2413,6 @@ function calibContext(){
     return o.n<MIN_N_CAL?`${t}: n=${o.n}, no correction`
       :`${t}: predicted ${o.predicted}% actual ${o.actual}%, now multiplied by ${o.f.toFixed(2)}`}).join('. ');
 }
-function mineContext(){
-  const m=get(LS.mine,{}),dates=Object.keys(m).sort();
-  if(!dates.length)return 'User has logged no picks.';
-  let sw=0,sl=0,pw=0,pl=0;
-  dates.forEach(d=>(m[d]||[]).forEach(e=>{const r=e.result!==null?e.result:mineAuto(e);
-    if(r===null)return;if(e.t==='side'){r?sw++:sl++}else{r?pw++:pl++}}));
-  return `Logged on ${dates.length} days. Sides ${sw}-${sl}. Props ${pw}-${pl}. `
-    +`Recent: ${dates.slice(-2).map(d=>`${d}: ${(m[d]||[]).map(e=>e.pick+' '+e.game).join(', ')}`).join(' | ')}`;
-}
 function entityContext(){
   const e=get(LS.ent,{});
   if(!e.teams)return 'No entity learning yet.';
@@ -2551,7 +2437,7 @@ async function send(){
     +`1) TONIGHT'S BOARD — 10,000 sims per game, built ONLY from player stats, lineups, park, weather, `
     +`home/away splits, two-year head-to-head and starter workload. Bookmaker odds are NEVER an input, only a comparison:\n${slateContext()}\n\n`
     +`2) TOP PROPS: ${top}\n\n3) GRADED HISTORY:\n${gradesContext()}\n\n`
-    +`4) ACTIVE SELF-CORRECTIONS:\n${calibContext()}\n\n4b) LEARNED PER-TEAM AND PER-PLAYER BIAS:\n${entityContext()}\n\n5) USER'S OWN PICKS:\n${mineContext()}\n\n`
+    +`4) ACTIVE SELF-CORRECTIONS:\n${calibContext()}\n\n4b) LEARNED PER-TEAM AND PER-PLAYER BIAS:\n${entityContext()}\n\n`
     +`6) LOCKED PARLAYS:\n${L.length?L.map(t=>`${t.date} (${(t.p*100).toFixed(2)}%): ${t.legs.map(x=>x.pick+' '+x.game).join(', ')}`).join('\n'):'none'}\n\n`
     +`Rules: PLAYER PROPS at the user's book are X+ ladders only — never recommend an under on a player prop. `
     +`Game totals, run lines and F5 totals DO offer both directions, so unders are fully in play there and you `
