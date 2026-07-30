@@ -209,22 +209,6 @@ border-radius:7px;padding:10px 12px;cursor:pointer;border:1px solid var(--rule)}
 .tkt ol{margin:0;padding-left:18px;font-size:12.5px;line-height:1.75}
 .tkt ol .m{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--mute)}
 .tkt ol .pp{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--moss)}
-/* ---------- WAGER ROW ---------- */
-.wager-row{display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:10px;border-top:1px solid var(--rule);flex-wrap:wrap}
-.wager-pill{display:flex;flex-direction:column;align-items:center;background:var(--panel2);border:1px solid var(--rule);border-radius:50px;padding:8px 14px;min-width:80px;flex:1;position:relative}
-.wager-pill.stake-pill{border-color:var(--cold);background:rgba(95,211,232,.07)}
-.wager-pill.odds-pill{border-color:rgba(242,169,59,.3);background:rgba(242,169,59,.07)}
-.wager-pill.payout-pill{border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.07)}
-.wager-pill.payout-pill.neg{border-color:rgba(199,82,42,.35);background:rgba(199,82,42,.07)}
-.wager-pill .wp-label{font-family:"IBM Plex Mono";font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-bottom:3px}
-.wager-pill .wp-val{font-family:"Archivo";font-weight:900;font-size:16px;line-height:1;color:var(--chalk)}
-.wager-pill.stake-pill .wp-val{color:var(--cold)}
-.wager-pill.odds-pill .wp-val{color:var(--gold)}
-.wager-pill.payout-pill .wp-val{color:var(--win)}
-.wager-pill.payout-pill.neg .wp-val{color:var(--rust)}
-.wager-pill .wp-sub{font-family:"IBM Plex Mono";font-size:8.5px;color:var(--mute);margin-top:2px}
-.wager-input{position:absolute;inset:0;opacity:0;cursor:text;border-radius:50px}
-.wager-input-real{font-family:"Archivo";font-weight:900;font-size:16px;color:var(--cold);background:transparent;border:none;outline:none;width:100%;text-align:center;padding:0}
 .subnav{display:flex;gap:5px;margin-bottom:11px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .subnav::-webkit-scrollbar{display:none}
 .subnav button{white-space:nowrap;font-family:"IBM Plex Mono";font-size:10px;padding:7px 11px;border-radius:20px;
@@ -359,7 +343,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v35</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v36</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -663,10 +647,14 @@ async function analyzeBookShots(){
       imgBlocks.push({type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}});
     }
     const prompt=`These are screenshots of a real sportsbook's MLB board. Extract every game/market you can
-      see into a JSON array — nothing else, no markdown fences, no commentary. Include full-game moneyline,
-      run line, and total, AND first-5-innings ("F5", "1st 5", "5 inn") totals as a separate "f5total" market
-      if shown — don't confuse F5 with the full-game total. Each entry:
-      {"away":"team abbr or name","home":"team abbr or name","market":"moneyline"|"runline"|"total"|"f5total",
+      see into a JSON array — nothing else, no markdown fences, no commentary. Include:
+      - Full-game moneyline → market:"moneyline", side:"away" or "home"
+      - Full-game run line → market:"runline", side:"away" or "home"
+      - Full-game total → market:"total", side:"over" or "under"
+      - First-5-innings TOTAL ("F5 total", "1st 5 O/U") → market:"f5total", side:"over" or "under"
+      - First-5-innings SIDES/MONEYLINE ("F5 ML", "F5 away", "F5 home", "1st 5 moneyline") → market:"f5side", side:"away" or "home"
+      Do NOT confuse F5 side moneylines with F5 totals — they are different markets.
+      Each entry: {"away":"team abbr or name","home":"team abbr or name","market":"moneyline"|"runline"|"total"|"f5total"|"f5side",
       "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -150 or 145)}.
       One entry per selection you can actually read clearly — skip anything blurry or cut off rather than guessing.`;
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
@@ -2406,36 +2394,58 @@ function betGrid(g,s,M){
     ${realRLBlock}
     ${realTotalBlock}
     ${(()=>{
-      const bookF5=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
-      const bookF5Away=bookLineForMarket(g.id,'f5side','away')||bookLineForMarket(g.id,'f5ml','away');
-      const bookF5Home=bookLineForMarket(g.id,'f5side','home')||bookLineForMarket(g.id,'f5ml','home');
+      // F5 side squares — from book screenshots (market:"f5side")
+      const awayF5Side=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='away');
+      const homeF5Side=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='home');
+      let f5SideBlock='';
+      if(awayF5Side&&homeF5Side){
+        const ap=bookDevig(awayF5Side.price),hp=bookDevig(homeF5Side.price),sum=ap+hp;
+        const [baPct,bhPct]=[Math.round(ap/sum*100),Math.round(hp/sum*100)];
+        f5SideBlock=`<div class="mktlab">First 5 moneyline <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,ap/sum,baPct,{realPrice:awayF5Side.price,modelP:s.f5a,marketP:ap/sum})}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,hp/sum,bhPct,{realPrice:homeF5Side.price,modelP:s.f5h,marketP:hp/sum})}</div>`;
+      } else if(awayF5Side||homeF5Side) {
+        // only one side read — show sim-only for the missing side, real price for the found side
+        const found=awayF5Side||homeF5Side;
+        const foundSide=awayF5Side?'away':'home';
+        const foundAb=g[foundSide].abbr,otherSide=foundSide==='away'?'home':'away',otherAb=g[otherSide].abbr;
+        const fp=bookDevig(found.price);
+        f5SideBlock=`<div class="mktlab">First 5 moneyline <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${foundSide==='away'
+            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5a,Math.round(s.f5a*100),{realPrice:found.price,modelP:s.f5a})
+            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${(s.f5a*100).toFixed(0)}%</div><div class="bs">sim only</div></div>`}
+          ${foundSide==='home'
+            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5h,Math.round(s.f5h*100),{realPrice:found.price,modelP:s.f5h})
+            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${(s.f5h*100).toFixed(0)}%</div><div class="bs">sim only</div></div>`}
+          </div>`;
+      }
+      // F5 total block — from book screenshots or hasRealF5()
+      const bookF5Total=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
       const realF5=hasRealF5(g.id);
-      if(bookF5){
+      let f5TotalBlock='';
+      if(bookF5Total){
         const overBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='over');
         const underBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='under');
         if(overBook&&underBook){
           const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
           const mO=f5OverAt(s,overBook.line);
-          const f5SideBlock=(bookF5Away&&bookF5Home)?(()=>{
-            const ap=bookDevig(bookF5Away.price),hp=bookDevig(bookF5Home.price),s2=ap+hp;
-            return `<div class="mktlab">First 5 side <span class="flag cool book">your book</span></div>
-              <div class="betgrid">${b(g.away.abbr,'F5 '+g.away.abbr,ap/s2,Math.round(ap/s2*100),{realPrice:bookF5Away.price,modelP:s.f5a,marketP:ap/s2})}${b(g.home.abbr,'F5 '+g.home.abbr,hp/s2,Math.round(hp/s2*100),{realPrice:bookF5Home.price,modelP:s.f5h,marketP:hp/s2})}</div>`;
-          })():'';
-          return `${f5SideBlock}<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
+          f5TotalBlock=`<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
             <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100),{realPrice:overBook.price,modelP:mO,marketP:op/sum})}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100),{realPrice:underBook.price,modelP:1-mO,marketP:up/sum})}</div>`;
         }
-      }
-      if(bookF5Away&&bookF5Home){
-        const ap=bookDevig(bookF5Away.price),hp=bookDevig(bookF5Home.price),s2=ap+hp;
-        return `<div class="mktlab">First 5 side <span class="flag cool book">your book</span></div>
-          <div class="betgrid">${b(g.away.abbr,'F5 '+g.away.abbr,ap/s2,Math.round(ap/s2*100),{realPrice:bookF5Away.price,modelP:s.f5a,marketP:ap/s2})}${b(g.home.abbr,'F5 '+g.home.abbr,hp/s2,Math.round(hp/s2*100),{realPrice:bookF5Home.price,modelP:s.f5h,marketP:hp/s2})}</div>`;
-      }
-      if(realF5){
-        return `<div class="mktlab">First 5 innings</div>
-          <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a)}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h)}</div>
-          <div class="mktlab">First 5 total · ${f5t}</div>
+      } else if(realF5){
+        f5TotalBlock=`<div class="mktlab">First 5 total · ${f5t}</div>
           <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct)}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct)}</div>`;
       }
+      // If we have real F5 side lines from the book but no separate F5 side block yet,
+      // also surface the sim-driven side squares in a real-line context
+      const hasAnySideSquares=f5SideBlock!=='';
+      const f5SideSimBlock=(!hasAnySideSquares&&realF5)
+        ?`<div class="mktlab">First 5 innings <span class="flag cool">sim</span></div>
+           <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a)}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h)}</div>`
+        :'';
+      if(f5SideBlock||f5TotalBlock||f5SideSimBlock){
+        return f5SideBlock+f5SideSimBlock+f5TotalBlock;
+      }
+      // no real line at all — sim-only display, not tappable
       return `<div class="mktlab" style="color:var(--mute)">First 5 innings — no real line posted</div>
         <div class="betgrid">
           <div class="cmpr"><div class="bl">${g.away.abbr}</div><div class="bo">${(s.f5a*100).toFixed(0)}%</div><div class="bs">sim only</div></div>
@@ -2677,90 +2687,6 @@ function delLocked(id){
   set(LS.locked,get(LS.locked,[]).filter(x=>x.id!==id));genTickets();
 }
 
-/* ================= WAGER / PAYOUT ================= */
-const LS_WAGERS='d4.wagers';
-function getWagers(){return get(LS_WAGERS,{})}
-function setWager(id,stake){
-  const w=getWagers();
-  if(stake===null||stake===''||isNaN(stake)){delete w[id]}
-  else{w[id]=parseFloat(stake)}
-  set(LS_WAGERS,w);
-}
-// Convert decimal probability to American odds (with vig already baked into model prob)
-function probToAmer(p){
-  if(!p||p<=0||p>=1)return '—';
-  return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p);
-}
-// Given American odds string and stake, return payout (profit + stake)
-function calcPayout(amerOdds,stake){
-  if(!stake||isNaN(stake)||stake<=0)return null;
-  const o=parseFloat(amerOdds.replace('+',''));
-  if(isNaN(o))return null;
-  const profit=o>0?(stake*o/100):(stake*100/Math.abs(o));
-  return stake+profit;
-}
-function onWagerInput(id,combinedP,inputEl){
-  const raw=inputEl.value.replace(/[^0-9.]/g,'');
-  const stake=parseFloat(raw)||0;
-  setWager(id,stake||null);
-  updatePayoutDisplay(id,combinedP,stake);
-}
-function updatePayoutDisplay(id,combinedP,stake){
-  const payEl=document.getElementById('payout-'+id);
-  const profEl=document.getElementById('profit-'+id);
-  const pillEl=document.getElementById('payout-pill-'+id);
-  if(!payEl||!profEl)return;
-  if(!stake||stake<=0){
-    payEl.textContent='$—';
-    profEl.textContent='profit';
-    if(pillEl){pillEl.classList.remove('neg')}
-    return;
-  }
-  const amerOdds=probToAmer(combinedP);
-  const payout=calcPayout(amerOdds,stake);
-  if(!payout){payEl.textContent='$—';profEl.textContent='profit';return}
-  const profit=payout-stake;
-  payEl.textContent='$'+payout.toFixed(2);
-  profEl.textContent='+$'+profit.toFixed(2)+' profit';
-  if(pillEl){pillEl.classList.toggle('neg',profit<0)}
-}
-function buildWagerRow(t){
-  const w=getWagers();
-  const stake=w[t.id]||'';
-  const amerOdds=probToAmer(t.p);
-  const payout=stake?calcPayout(amerOdds,stake):null;
-  const profit=payout?payout-stake:null;
-  return `<div class="wager-row">
-    <div class="wager-pill stake-pill" onclick="document.getElementById('stake-input-${t.id}').focus()">
-      <div class="wp-label">Stake</div>
-      <div class="wp-val" style="display:flex;align-items:center;gap:2px">
-        <span style="font-size:11px;color:var(--cold);opacity:.7">$</span><input
-          id="stake-input-${t.id}"
-          class="wager-input-real"
-          type="number"
-          min="0"
-          step="1"
-          placeholder="0"
-          value="${stake}"
-          oninput="onWagerInput(${t.id},${t.p},this)"
-          style="max-width:70px"
-        >
-      </div>
-      <div class="wp-sub">tap to set</div>
-    </div>
-    <div class="wager-pill odds-pill">
-      <div class="wp-label">Parlay Odds</div>
-      <div class="wp-val">${amerOdds}</div>
-      <div class="wp-sub">${(t.p*100).toFixed(t.p<.01?3:1)}% implied</div>
-    </div>
-    <div class="wager-pill payout-pill${profit!==null&&profit<0?' neg':''}" id="payout-pill-${t.id}">
-      <div class="wp-label">To Win</div>
-      <div class="wp-val" id="payout-${t.id}">${payout?'$'+payout.toFixed(2):'$—'}</div>
-      <div class="wp-sub" id="profit-${t.id}">${profit!==null?'+$'+profit.toFixed(2)+' profit':'profit'}</div>
-    </div>
-  </div>`;
-}
-
 /* ================= TARGET TICKET BUILDER ================= */
 // Same qualifying pool as Best Bets — real lines only, no synthetic F5. Thresholds are
 // per-type now: 60% sides, 70% totals, 75% RBI, 80% other props, 27% HR.
@@ -2808,72 +2734,15 @@ function bestRunLines(){
   });
   return out;
 }
-// Unfiltered side pool for the ticket builder — no PUBLIC_THRESH gate, real lines only
-function allSidesForBuilder(){
-  const out=[];
-  GAMES.forEach(g=>{
-    if(g.abstract==='Final')return;
-    const s=SIMS[g.id];if(!s)return;
-    if(!hasRealML(g.id))return;
-    const M=marketOf(g);if(!M)return;
-    const bl=mlBlend(g,s);
-    const favSide=bl.home>=bl.away?'home':'away';
-    const ab=g[favSide].abbr,prob=Math.max(bl.home,bl.away);
-    const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
-    const edge=favSide==='home'?eh:ea;
-    out.push({pick:ab+' ML',game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob,edge});
-  });
-  return out.sort((a,b)=>b.prob-a.prob);
-}
-// Unfiltered total pool for the ticket builder
-function allTotalsForBuilder(){
-  const out=[];
-  GAMES.forEach(g=>{
-    if(g.abstract==='Final')return;
-    const s=SIMS[g.id];if(!s)return;
-    if(!hasRealTotal(g.id))return;
-    const st=sharpTotalFor(g.id);
-    const o=sharpTotalBlend(g,st.line,s.over(st.line));
-    const prob=Math.max(o,1-o);
-    out.push({pick:(o>=.5?'Over ':'Under ')+st.line,game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob});
-  });
-  return out.sort((a,b)=>b.prob-a.prob);
-}
-// Unfiltered run-line pool for the ticket builder
-function allRunLinesForBuilder(){
-  const out=[];
-  GAMES.forEach(g=>{
-    if(g.abstract==='Final')return;
-    const s=SIMS[g.id];if(!s)return;
-    if(!hasRealRunLine(g.id))return;
-    const favSide=s.hw>=s.aw?'home':'away';
-    const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
-    const favCover=rlProb(g,s,favSide,1.5);
-    if(favCover===null)return;
-    const gl=g.away.abbr+'@'+g.home.abbr;
-    const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
-    let favBlend=favCover;
-    if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
-    else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
-    const dogBlend=1-favBlend;
-    // include both sides — builder picks the better one during greedy selection
-    out.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl'});
-    out.push({p:dogBlend,pick:dogAb+' +1.5',game:gl,kind:'rl'});
-  });
-  return out;
-}
 function qualifyingPool(modes){
   const pool=[];
-  // Builder pool is UNFILTERED — thresholds are for the scout/Best tab, not the builder.
-  // The builder's job is to find the best combination to hit a target odds, not to curate.
-  if(modes.has('ml'))allSidesForBuilder().forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'side'}));
-  if(modes.has('rl'))allRunLinesForBuilder().forEach(x=>pool.push(x));
-  if(modes.has('total'))allTotalsForBuilder().forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
+  if(modes.has('ml'))bestSides(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'side'}));
+  if(modes.has('rl'))bestRunLines().forEach(x=>pool.push(x));
+  if(modes.has('total'))bestTotals(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
   if(modes.has('prop')){
-    // Props: include everything with any real probability — sorted by sim prob, builder picks best
-    PROPS.filter(p=>p.type!=='hr'&&p.p>0).forEach(p=>
+    PROPS.filter(p=>p.type!=='hr'&&p.p>=propThreshFor(p.type)).forEach(p=>
       pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop'}));
-    PROPS.filter(p=>p.type==='hr'&&p.p>0).forEach(p=>
+    PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).forEach(p=>
       pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr'}));
   }
   return pool.sort((a,b)=>b.p-a.p);
@@ -2903,7 +2772,7 @@ function buildTargetTicket(){
   const neededMult=1+(profit/stake);
   const pool=qualifyingPool(modes);
   if(!pool.length){
-    resEl.innerHTML='<div class="empty">No real lines posted yet for the selected market(s) — check that odds have been pulled and lineups are available.</div>';
+    resEl.innerHTML='<div class="empty">Nothing in the selected market(s) clears its bar right now — 60% sides, 70% totals, 75% RBI, 80% other props, 27% HR.</div>';
     return;
   }
   const combo=[];
@@ -3032,7 +2901,7 @@ function genTickets(){
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
       h+=`<div class="tkt hi"><h3>${t.date}</h3>
         <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
-        <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar"><button onclick="delLocked(${t.id})">Delete</button></div></div>`;
+        <ol>${rows}</ol><div class="bar"><button onclick="delLocked(${t.id})">Delete</button></div></div>`;
     });
   }
   const pool=marketPool();
@@ -3679,7 +3548,7 @@ function buildBestCard(){
       :`<div class="rc-hero"><div class="lab">No home run data yet</div></div>`}
     ${rows('Best 5 sides',sides,'Ranked by edge vs. market where pulled, else by sim win probability','pick','prob')}
     ${rows('Best 5 totals',totals,'Blended with SharpAPI\'s real total line when one is posted for that game','pick','prob')}
-    ${rows('Best 5 props',props,'Ranked by sim probability, self-calibrated against graded history','_','p')}
+    ${rows('Best 5 props',props,'Ranked by sim probability, self-calibrated against graded history','_',null)}
     <div class="rc-foot">
       <div class="cal">Built from lineups, park, weather, H2H — never from book odds</div>
       <div class="cta">Follow <span>${get(LS.handle,'@YourHandle')}</span></div>
