@@ -205,6 +205,21 @@ border-radius:7px;padding:10px 12px;cursor:pointer;border:1px solid var(--rule)}
 .slip .c{background:var(--panel2);color:var(--chalk)}
 .slip .k{background:var(--gold);color:#0B0F14;border-color:var(--gold)}
 
+/* ---------- WAGER ROW ON LOCKED TICKETS ---------- */
+.wager-row{display:flex;align-items:stretch;gap:6px;margin-top:11px;padding-top:10px;border-top:1px solid var(--rule);flex-wrap:nowrap}
+.wager-pill{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--rule);border-radius:40px;padding:8px 10px;flex:1;min-width:0;text-align:center}
+.wager-pill.stake-pill{border-color:rgba(95,211,232,.4);background:rgba(95,211,232,.06)}
+.wager-pill.odds-pill{border-color:rgba(242,169,59,.3);background:rgba(242,169,59,.06)}
+.wager-pill.payout-pill{border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.06)}
+.wager-pill.payout-pill.neg{border-color:rgba(199,82,42,.35);background:rgba(199,82,42,.06)}
+.wp-label{font-family:"IBM Plex Mono";font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin-bottom:3px}
+.wp-val{font-family:"Archivo";font-weight:900;font-size:15px;line-height:1;color:var(--chalk)}
+.stake-pill .wp-val{color:var(--cold)}
+.odds-pill .wp-val{color:var(--gold)}
+.payout-pill .wp-val{color:var(--win)}
+.payout-pill.neg .wp-val{color:var(--rust)}
+.wp-sub{font-family:"IBM Plex Mono";font-size:7.5px;color:var(--mute);margin-top:2px}
+.stake-input{font-family:"Archivo";font-weight:900;font-size:15px;color:var(--cold);background:transparent;border:none;outline:none;width:100%;text-align:center;padding:0;max-width:72px}
 /* ---------- TICKETS / GRADES ---------- */
 .tkt{background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:12px;margin-bottom:9px}
 .tkt.hi{border-color:rgba(242,169,59,.4)}
@@ -348,7 +363,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v37</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v38</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2762,17 +2777,101 @@ function bestRunLines(){
   });
   return out;
 }
+// ---- unfiltered pools for the ticket builder ----
+// PUBLIC_THRESH gates stay in bestSides/bestTotals for the Scout/Best tabs.
+// The builder gets every real-line pick so it can hit any target the user sets.
+function allSidesForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookML=bookLineForMarket(g.id,'moneyline');
+    if(bookML){
+      const hB=bookLineForMarket(g.id,'moneyline','home'),aB=bookLineForMarket(g.id,'moneyline','away');
+      if(hB&&aB){
+        const hp=bookDevig(hB.price),ap=bookDevig(aB.price),sum=hp+ap;
+        out.push({p:hp/sum,pick:g.home.abbr+' ML',game:gl,kind:'side'});
+        out.push({p:ap/sum,pick:g.away.abbr+' ML',game:gl,kind:'side'});
+        return;
+      }
+    }
+    if(hasRealML(g.id)){
+      const bl=mlBlend(g,s);
+      out.push({p:bl.home,pick:g.home.abbr+' ML',game:gl,kind:'side'});
+      out.push({p:bl.away,pick:g.away.abbr+' ML',game:gl,kind:'side'});
+    }
+  });
+  return out;
+}
+function allRunLinesForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const favSide=s.hw>=s.aw?'home':'away';
+    const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
+    const bookRL=bookLineForMarket(g.id,'runline');
+    if(bookRL){
+      const favBook=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line<0);
+      const dogBook=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line>0);
+      if(favBook&&dogBook){
+        const fp=bookDevig(favBook.price),dp=bookDevig(dogBook.price),sum=fp+dp;
+        const fAb=favBook.side==='home'?g.home.abbr:g.away.abbr;
+        const dAb=dogBook.side==='home'?g.home.abbr:g.away.abbr;
+        out.push({p:fp/sum,pick:fAb+' '+favBook.line,game:gl,kind:'rl'});
+        out.push({p:dp/sum,pick:dAb+' +'+dogBook.line,game:gl,kind:'rl'});
+        return;
+      }
+    }
+    if(!hasRealRunLine(g.id))return;
+    const favCover=rlProb(g,s,favSide,1.5);if(favCover===null)return;
+    const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+    let favBlend=favCover;
+    if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+    else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
+    out.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl'});
+    out.push({p:1-favBlend,pick:dogAb+' +1.5',game:gl,kind:'rl'});
+  });
+  return out;
+}
+function allTotalsForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookTotal=bookLineForMarket(g.id,'total');
+    if(bookTotal&&bookTotal.line!==null){
+      const oB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTotal.line)<0.01);
+      const uB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTotal.line)<0.01);
+      if(oB&&uB){
+        const op=bookDevig(oB.price),up=bookDevig(uB.price),sum=op+up;
+        out.push({p:op/sum,pick:'Over '+bookTotal.line,game:gl,kind:'total'});
+        out.push({p:up/sum,pick:'Under '+bookTotal.line,game:gl,kind:'total'});
+        return;
+      }
+    }
+    const st=sharpTotalFor(g.id);if(!st||st.overProb===null)return;
+    const blended=sharpTotalBlend(g,st.line,s.over(st.line));
+    out.push({p:blended,pick:'Over '+st.line,game:gl,kind:'total'});
+    out.push({p:1-blended,pick:'Under '+st.line,game:gl,kind:'total'});
+  });
+  return out;
+}
 function qualifyingPool(modes){
   const pool=[];
-  if(modes.has('ml'))bestSides(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'side'}));
-  if(modes.has('rl'))bestRunLines().forEach(x=>pool.push(x));
-  if(modes.has('total'))bestTotals(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
+  if(modes.has('ml'))allSidesForBuilder().forEach(x=>pool.push(x));
+  if(modes.has('rl'))allRunLinesForBuilder().forEach(x=>pool.push(x));
+  if(modes.has('total'))allTotalsForBuilder().forEach(x=>pool.push(x));
   if(modes.has('prop')){
-    PROPS.filter(p=>p.type!=='hr'&&p.p>=propThreshFor(p.type)).forEach(p=>
+    PROPS.filter(p=>p.type!=='hr').forEach(p=>
       pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop'}));
-    PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).forEach(p=>
+    PROPS.filter(p=>p.type==='hr').forEach(p=>
       pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr'}));
   }
+  // sort best probability first — builder adds legs greedily until target odds are hit
   return pool.sort((a,b)=>b.p-a.p);
 }
 function selectedModes(){
@@ -2910,6 +3009,76 @@ function deal(pool,used,n){
   }
   return out;
 }
+/* ================= WAGER / PAYOUT ON LOCKED TICKETS ================= */
+const LS_WAGERS='d4.wagers';
+function getWagers(){return get(LS_WAGERS,{})}
+function saveWager(id,stake){
+  const w=getWagers();
+  if(!stake||isNaN(stake)||stake<=0){delete w[id]}else{w[id]=parseFloat(stake)}
+  set(LS_WAGERS,w);
+}
+function probToAmer(p){
+  if(!p||p<=0||p>=1)return '—';
+  return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p);
+}
+function amerPayout(amerStr,stake){
+  if(!stake||isNaN(stake)||stake<=0)return null;
+  const o=parseFloat((amerStr+'').replace('+',''));
+  if(isNaN(o))return null;
+  const profit=o>0?(stake*o/100):(stake*100/Math.abs(o));
+  return{total:stake+profit,profit};
+}
+function onWagerInput(id,combinedP,inputEl){
+  const stake=parseFloat(inputEl.value)||0;
+  saveWager(id,stake||null);
+  refreshPayout(id,combinedP,stake);
+}
+function refreshPayout(id,combinedP,stake){
+  const payEl=document.getElementById('wp-pay-'+id);
+  const subEl=document.getElementById('wp-sub-'+id);
+  const pillEl=document.getElementById('wp-pill-'+id);
+  if(!payEl)return;
+  if(!stake||stake<=0){
+    payEl.textContent='$—';if(subEl)subEl.textContent='profit';
+    if(pillEl){pillEl.classList.remove('neg')}return;
+  }
+  const odds=probToAmer(combinedP);
+  const res=amerPayout(odds,stake);
+  if(!res){payEl.textContent='$—';return}
+  payEl.textContent='$'+res.total.toFixed(2);
+  if(subEl)subEl.textContent='+$'+res.profit.toFixed(2)+' profit';
+  if(pillEl)pillEl.classList.toggle('neg',res.profit<0);
+}
+function buildWagerRow(t){
+  const w=getWagers();
+  const stake=w[t.id]||'';
+  const odds=probToAmer(t.p);
+  const res=stake?amerPayout(odds,stake):null;
+  const payTxt=res?'$'+res.total.toFixed(2):'$—';
+  const profTxt=res?'+$'+res.profit.toFixed(2)+' profit':'profit';
+  return `<div class="wager-row">
+    <div class="wager-pill stake-pill" onclick="document.getElementById('ws-${t.id}').focus()">
+      <div class="wp-label">Stake</div>
+      <div class="wp-val"><span style="font-size:10px;opacity:.6">$</span><input
+        id="ws-${t.id}" class="stake-input" type="number" min="0" step="1"
+        placeholder="0" value="${stake}"
+        oninput="onWagerInput(${t.id},${t.p},this)"
+      ></div>
+      <div class="wp-sub">tap to enter</div>
+    </div>
+    <div class="wager-pill odds-pill">
+      <div class="wp-label">Parlay odds</div>
+      <div class="wp-val">${odds}</div>
+      <div class="wp-sub">${(t.p*100).toFixed(t.p<.01?3:1)}% hit rate</div>
+    </div>
+    <div class="wager-pill payout-pill" id="wp-pill-${t.id}">
+      <div class="wp-label">To win</div>
+      <div class="wp-val" id="wp-pay-${t.id}">${payTxt}</div>
+      <div class="wp-sub" id="wp-sub-${t.id}">${profTxt}</div>
+    </div>
+  </div>`;
+}
+
 function genTickets(){
   const el=document.getElementById('tickets');
   const L=get(LS.locked,[]);
@@ -2929,7 +3098,7 @@ function genTickets(){
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
       h+=`<div class="tkt hi"><h3>${t.date}</h3>
         <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
-        <ol>${rows}</ol><div class="bar"><button onclick="delLocked(${t.id})">Delete</button></div></div>`;
+        <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar"><button onclick="delLocked(${t.id})">Delete</button></div></div>`;
     });
   }
   const pool=marketPool();
