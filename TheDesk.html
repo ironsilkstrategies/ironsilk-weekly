@@ -102,6 +102,41 @@ display:flex;flex-direction:column;justify-content:center;gap:3px}
 .bet.on{background:rgba(242,169,59,.16);border-color:var(--gold)}
 .bet.on .bl{color:#fff}
 .bet:focus-visible{outline:2px solid var(--cold);outline-offset:2px}
+/* ---- value signalling: green = model sees real edge, red = model says stay away ---- */
+.bet.value{border-color:var(--win);background:linear-gradient(180deg,rgba(74,222,128,.10),var(--panel2))}
+.bet.value .bl{color:var(--win)}
+.bet.avoid{border-color:var(--rust);opacity:.68}
+.bet.avoid .bl{color:var(--rust)}
+.bet.value.on{background:rgba(242,169,59,.16);border-color:var(--gold)}
+.eb{font-family:"IBM Plex Mono";font-size:8.5px;font-weight:600;padding:1px 5px;border-radius:9px;
+display:inline-block;letter-spacing:.02em}
+.eb.up{background:rgba(74,222,128,.18);color:var(--win)}
+.eb.dn{background:rgba(199,82,42,.18);color:var(--rust)}
+.bet .bf{font-family:"IBM Plex Mono";font-size:8.5px;color:var(--mute);line-height:1.3}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-family:"IBM Plex Mono";font-size:9.5px;
+color:var(--mute);margin:8px 0 2px;align-items:center}
+.legend i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:4px;vertical-align:-1px}
+.legend i.v{border:1.5px solid var(--win);background:rgba(74,222,128,.14)}
+.legend i.a{border:1.5px solid var(--rust);background:rgba(199,82,42,.10)}
+.legend i.n{border:1.5px solid var(--rule);background:var(--panel2)}
+/* ---- trends ---- */
+.trow{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border-radius:8px;
+border:1px solid var(--rule);background:var(--panel2);margin-bottom:6px}
+.trow.agree{border-color:rgba(74,222,128,.45);background:linear-gradient(180deg,rgba(74,222,128,.07),var(--panel2))}
+.trow.conflict{border-color:rgba(199,82,42,.45);background:linear-gradient(180deg,rgba(199,82,42,.07),var(--panel2))}
+.trow .tdot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;margin-top:6px;background:var(--mute)}
+.trow.agree .tdot{background:var(--win)}
+.trow.conflict .tdot{background:var(--rust)}
+.trow .tbody{flex:1}
+.trow .tname{font-family:"IBM Plex Mono";font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.trow .ttext{font-size:12px;line-height:1.5;margin-top:2px}
+.trow .tverdict{font-family:"IBM Plex Mono";font-size:9px;font-weight:600;margin-top:3px}
+.trow.agree .tverdict{color:var(--win)}
+.trow.conflict .tverdict{color:var(--rust)}
+.trow.neutral .tverdict{color:var(--mute)}
+.valbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-family:"IBM Plex Mono";font-size:11px}
+.valpill{background:rgba(74,222,128,.14);border:1px solid rgba(74,222,128,.4);color:var(--win);
+padding:4px 9px;border-radius:20px;font-size:10.5px;font-weight:600}
 .cmpr{background:var(--panel);border:1px dashed var(--rule);border-radius:9px;padding:11px 9px;
 text-align:center;min-height:60px;display:flex;flex-direction:column;justify-content:center;gap:3px}
 .cmpr .bl{font-family:"IBM Plex Sans";font-size:12.5px;font-weight:600;color:var(--mute);line-height:1.2}
@@ -308,7 +343,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v33</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v34</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -336,9 +371,11 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     </div>
     <div class="tkt">
       <div class="sbar" style="margin-top:0"><h2>Your book's real lines</h2><div class="ln"></div></div>
-      <div class="sub">Upload screenshots of your actual sportsbook — pick several at once if a slate takes a few.
-      Claude reads the teams, lines, and prices directly off the images. <b>Kept completely separate from the
-      simulator</b> — comparison and trend-tracking only, never blended into a prediction.</div>
+      <div class="sub">Upload screenshots of your actual sportsbook — several at once if a slate takes a few.
+      Claude reads the teams, lines, and prices off the images. <b>Whatever you upload outranks every API</b>
+      and becomes the real tappable line for that market, including First 5. Saved lines persist across
+      reloads and back up to GitHub — upload once per slate, not every visit.</div>
+      <div class="sub" id="bookStatus" style="margin-top:6px;font-family:'IBM Plex Mono';font-size:10.5px"></div>
       <input type="file" id="bookShots" accept="image/*" multiple style="margin-top:8px">
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="analyzeBookShots()">Analyze screenshots</button></div>
       <div id="bookShotResult"></div>
@@ -653,14 +690,39 @@ function saveBookShots(){
   const all=get(LS.bookshots,{});
   const d=today();
   all[d]=all[d]||[];
+  // dedupe on identity — re-uploading the same slate replaces those selections instead of
+  // stacking duplicates, so uploads are safe to repeat and stay locked in cleanly
+  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
   parsed.forEach(x=>{
     const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
-    all[d].push({...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,capturedAt:Date.now()});
+    const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,capturedAt:Date.now()};
+    const k=keyOf(rec);
+    const i=all[d].findIndex(y=>keyOf(y)===k);
+    if(i>=0)all[d][i]=rec;else all[d].push(rec);
   });
   set(LS.bookshots,all);
   window._pendingBookShots=null;
-  document.getElementById('bookShotResult').innerHTML=`<div class="tkt hi"><h3>Saved</h3><div class="sub">${parsed.length} selections added to today's comparison history.</div></div>`;
+  document.getElementById('bookShots').value='';
+  renderBookStatus();
+  document.getElementById('bookShotResult').innerHTML=`<div class="tkt hi"><h3>Locked in</h3><div class="sub">${parsed.length} selections saved for ${d}. These persist across reloads and back up to GitHub — you don't need to re-upload them.</div></div>`;
   render();
+}
+function renderBookStatus(){
+  const el=document.getElementById('bookStatus');if(!el)return;
+  const all=get(LS.bookshots,{})[today()]||[];
+  if(!all.length){el.innerHTML='<span style="color:var(--mute)">Nothing saved for today yet.</span>';return}
+  const games=new Set(all.map(x=>x.game)).size;
+  const mkts={};all.forEach(x=>mkts[x.market]=(mkts[x.market]||0)+1);
+  el.innerHTML=`<span style="color:var(--win)">✓ ${all.length} selections locked in across ${games} game${games>1?'s':''}</span>
+    <span style="color:var(--mute)"> — ${Object.keys(mkts).map(m=>m+' '+mkts[m]).join(', ')}</span>
+    <button onclick="clearBookShots()" style="margin-left:8px;padding:3px 8px;font-size:9px;background:none;border:1px solid var(--rule);color:var(--mute);border-radius:5px;cursor:pointer">clear today</button>`;
+}
+function clearBookShots(){
+  if(!confirm("Clear today's saved book lines? The app will fall back to API sources until you upload again."))return;
+  const all=get(LS.bookshots,{});
+  delete all[today()];
+  set(LS.bookshots,all);
+  renderBookStatus();render();
 }
 // answers "when this book sets a total at X, how has it actually gone" — purely
 // historical pattern lookup, entirely separate from the simulator's own math. Needs real
@@ -1595,6 +1657,121 @@ async function loadOddsPapi(manual){
 // and is never tappable or picked. The model's own read at YOUR specific line is computed
 // fresh each time via s.over()/rlProb() — the real number is shown, the sim's own thinking
 // about it is shown right next to it, and the two are never merged into one number.
+// 4 points is the signal floor — matches the app's existing "under 3 is noise" stance,
+// with a point of buffer so borderline cases don't flicker green/red between renders.
+const EDGE_MIN=4;
+function f5OverAt(s,line){return Math.min(.92,Math.max(.08,.5+(s.f5tot-line)*.16))}
+/* ================= TRENDS ================= */
+// Every trend here is computed from data the app already holds. Each one gets scored
+// against what the model independently concluded — green when the trend backs the model's
+// lean, red when it argues against it. A conflict isn't a bug; it's the most useful thing
+// on the card, because it's the model telling you where its own read is contested.
+function operativeTotal(g,s){
+  const bt=bookLineForMarket(g.id,'total');
+  if(bt&&bt.line!==null&&bt.line!==undefined)return{line:bt.line,src:'your book'};
+  const st=sharpTotalFor(g.id);
+  if(st&&st.line)return{line:st.line,src:st.book};
+  return{line:Math.floor(s.mean)+.5,src:'model'};
+}
+function trendPanel(g,s){
+  if(!s)return '<div class="empty">Needs a lineup before trends mean anything.</div>';
+  const ot=operativeTotal(g,s);
+  const modelOver=s.over(ot.line);
+  const modelTotalLean=modelOver>=.5?'over':'under';
+  const modelSide=s.hw>=s.aw?g.home.abbr:g.away.abbr;
+  const rows=[];
+  const add=(name,text,implies,relevant)=>{
+    let cls='neutral',verdict='Neutral — does not push either way';
+    if(implies&&relevant){
+      const agree=implies===relevant;
+      cls=agree?'agree':'conflict';
+      verdict=agree?`Backs the model — it also leans ${relevant}`:`Argues against the model, which leans ${relevant}`;
+    }
+    rows.push({name,text,cls,verdict});
+  };
+  // 1 — two-year head-to-head run environment
+  const hk=[g.away.id,g.home.id].sort().join('-'),hrec=H2H[hk];
+  if(hrec&&hrec.games>=5&&hrec.runs){
+    const rpg=hrec.runs/hrec.games;
+    const implies=rpg>ot.line+0.4?'over':rpg<ot.line-0.4?'under':null;
+    add('Head to head · 2yr',
+      `These two have averaged <b>${rpg.toFixed(1)} combined runs</b> across ${hrec.games} meetings, against tonight's ${ot.line} (${ot.src}).`,
+      implies,modelTotalLean);
+  }
+  // 2 — home/away split strength behind the model's side
+  const hs=SPLITS[g.home.id],as=SPLITS[g.away.id];
+  if(hs&&as){
+    const hw=hs.home.w/Math.max(1,hs.home.w+hs.home.l),aw=as.away.w/Math.max(1,as.away.w+as.away.l);
+    const splitSide=hw>=aw?g.home.abbr:g.away.abbr;
+    add('Venue splits',
+      `${g.home.abbr} are <b>${hs.home.w}-${hs.home.l}</b> at home, ${g.away.abbr} <b>${as.away.w}-${as.away.l}</b> on the road.`,
+      splitSide,modelSide);
+  }
+  // 3 — starter recent form vs their own season baseline
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.rEra&&q.era){
+      const d=parseFloat(q.rEra)-parseFloat(q.era);
+      if(Math.abs(d)>=0.75){
+        add(`${g[sd].abbr} starter form`,
+          `${q.name} has a <b>${q.rEra} ERA over his last 5</b> against a ${q.era} season mark — ${d<0?'sharper than his baseline':'worse than his baseline'}.`,
+          d<0?'under':'over',modelTotalLean);
+      }
+    }
+  });
+  // 4 — park run environment
+  const pf=PARK[g.home.abbr]||[100,100];
+  if(Math.abs(pf[0]-100)>=3){
+    add('Park factor',
+      `${g.home.abbr}'s park runs at <b>${pf[0]}</b> for scoring (100 is neutral)${Math.abs(pf[1]-100)>=5?`, and <b>${pf[1]}</b> for home runs`:''}.`,
+      pf[0]>100?'over':'under',modelTotalLean);
+  }
+  // 5 — weather
+  const w=g.weather;
+  if(w&&w.temp){
+    if(w.temp>=85||w.temp<=52){
+      add('Weather',`<b>${w.temp}°</b>${w.cond?', '+w.cond:''}${w.wind?' · '+w.wind:''} — ${w.temp>=85?'warm air carries':'cold air suppresses'}.`,
+        w.temp>=85?'over':'under',modelTotalLean);
+    }else if(/out/i.test(w.wind||'')){
+      add('Weather',`Wind <b>${w.wind}</b> at ${w.temp}° — blowing out helps the ball carry.`,'over',modelTotalLean);
+    }else if(/in\b/i.test(w.wind||'')){
+      add('Weather',`Wind <b>${w.wind}</b> at ${w.temp}° — blowing in knocks balls down.`,'under',modelTotalLean);
+    }
+  }
+  // 6 — the model's own learned bias on these teams, from graded history
+  const ent=get(LS.ent,{}).teams||{};
+  [[g.away.abbr,'away'],[g.home.abbr,'home']].forEach(([ab])=>{
+    const t=ent[ab];
+    if(t&&t.n>=MIN_SHOW&&Math.abs(t.rawBias)>=0.35){
+      rows.push({name:`Self-check · ${ab}`,
+        text:`Across ${t.n} graded games this model has <b>${t.rawBias>0?'over':'under'}-projected ${ab} by ${Math.abs(t.rawBias).toFixed(2)} runs</b> on average. That correction is already applied to tonight's number.`,
+        cls:'neutral',verdict:'Already corrected for — shown so you know it exists'});
+    }
+  });
+  // 7 — your own book's historical behaviour at this number
+  const bt=bookTrendForTotal(ot.line);
+  if(bt&&bt.ready){
+    add('Your book at this number',
+      `When your book has posted <b>${ot.line}</b>, it has gone over <b>${bt.overPct}%</b> of the time across ${bt.total} tracked games.`,
+      Number(bt.overPct)>=50?'over':'under',modelTotalLean);
+  }else if(bt){
+    rows.push({name:'Your book at this number',cls:'neutral',
+      text:`Only <b>${bt.total}</b> tracked ${bt.total===1?'game':'games'} at ${ot.line} so far — needs 8 before this says anything real.`,
+      verdict:'Building history — upload screenshots daily to grow it'});
+  }
+  if(!rows.length)return '<div class="empty">No trend strong enough to flag on this game.</div>';
+  const agree=rows.filter(r=>r.cls==='agree').length,conflict=rows.filter(r=>r.cls==='conflict').length;
+  return `<div class="tkt hi" style="margin-bottom:10px">
+      <h3>${agree} backing · ${conflict} contesting</h3>
+      <div class="sub">Model leans <b>${modelTotalLean.toUpperCase()} ${ot.line}</b> and <b>${modelSide}</b> on the side.
+      Green rows back that read, red rows argue with it. A stack of red is the model telling you its own number is contested.</div>
+    </div>
+    ${rows.map(r=>`<div class="trow ${r.cls}"><div class="tdot"></div><div class="tbody">
+      <div class="tname">${r.name}</div><div class="ttext">${r.text}</div>
+      <div class="tverdict">${r.verdict}</div></div></div>`).join('')}`;
+}
+
+/* ================= TRENDS END ================= */
 function bookLinesFor(gid){
   const g=GAMES.find(x=>x.id===gid);if(!g)return[];
   const gl=g.away.abbr+'@'+g.home.abbr;
@@ -2080,11 +2257,13 @@ function card(g){
    </div>
    ${!done&&s?betGrid(g,s,M):''}
    <div class="exprow">
+    <button class="expbtn" onclick="pan(${g.id},'trend',this)">Trends</button>
     <button class="expbtn" onclick="pan(${g.id},'ag',this)">A–G</button>
     <button class="expbtn" onclick="pan(${g.id},'alt',this)">Alt lines</button>
     <button class="expbtn" onclick="pan(${g.id},'props',this)">Props</button>
     ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button>`:''}
    </div>
+   <div class="panel" id="p-trend-${g.id}">${trendPanel(g,s)}</div>
    <div class="panel" id="p-ag-${g.id}">${agPanel(g,s,M,topReasons(),realLineRead())}</div>
    <div class="panel" id="p-alt-${g.id}">${altPanel(g,s)}</div>
    <div class="panel" id="p-props-${g.id}">${propPanel(g)}</div>
@@ -2094,14 +2273,31 @@ function card(g){
 
 function betGrid(g,s,M){
   const gl=g.away.abbr+'@'+g.home.abbr;
-  const b=(label,pick,prob,pairPct)=>{
+  // EV signalling. modelP = what the sim independently thinks of THIS exact line.
+  // marketP = the devigged probability actually priced in. Edge is the gap between them —
+  // positive means you're being paid more than the model thinks the risk is worth.
+  // 4 points is the floor for a signal; below that is noise and stays neutral on purpose.
+  const b=(label,pick,prob,pairPct,opts)=>{
+    opts=opts||{};
     const id=gl+'|'+pick;
     const on=SLIP.some(x=>x.id===id);
     const pct=pairPct!==undefined?pairPct:Math.round(prob*100);
-    return `<div class="bet ${on?'on':''}" role="button" tabindex="0"
+    const priceStr=(opts.realPrice!==undefined&&opts.realPrice!==null)
+      ? (opts.realPrice>0?'+'+opts.realPrice:''+opts.realPrice)
+      : vigAmer(prob);
+    let cls='',badge='',fair='';
+    const mp=opts.modelP,kp=opts.marketP;
+    if(typeof mp==='number'&&typeof kp==='number'&&isFinite(mp)&&isFinite(kp)){
+      const e=(mp-kp)*100;
+      if(e>=EDGE_MIN){cls=' value';badge=`<span class="eb up">+${e.toFixed(1)}</span>`}
+      else if(e<=-EDGE_MIN){cls=' avoid';badge=`<span class="eb dn">${e.toFixed(1)}</span>`}
+      fair=`<div class="bf">model ${(mp*100).toFixed(0)}% · fair ${amer(mp)}</div>`;
+    }
+    return `<div class="bet${cls} ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
-      <div class="bl">${label}</div><div class="bo">${vigAmer(prob)}</div><div class="bs">${pct}%</div></div>`;
+      <div class="bl">${label}</div><div class="bo">${priceStr}</div>
+      <div class="bs">${badge||pct+'%'}</div>${fair}</div>`;
   };
   // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
   // always sum to exactly 100 instead of each rounding independently, which can silently
@@ -2126,14 +2322,14 @@ function betGrid(g,s,M){
       if(hp!==null&&ap!==null){
         const sum=hp+ap,[bhPct,baPct]=[Math.round(hp/sum*100),Math.round(ap/sum*100)];
         return `<div class="mktlab">Moneyline <span class="flag cool book">your book</span></div>
-          <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',ap/sum,baPct)}${b(g.home.abbr,g.home.abbr+' ML',hp/sum,bhPct)}</div>`;
+          <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',ap/sum,baPct,{realPrice:awayBook.price,modelP:s.aw,marketP:ap/sum})}${b(g.home.abbr,g.home.abbr+' ML',hp/sum,bhPct,{realPrice:homeBook.price,modelP:s.hw,marketP:hp/sum})}</div>`;
       }
     }
     if(!mM)return '';
     const bl=mlBlend(g,s);
     const [bhPct,baPct]=pair(bl.home);
     return `<div class="mktlab">Moneyline <span class="flag cool">real line</span></div>
-      <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',bl.away,baPct)}${b(g.home.abbr,g.home.abbr+' ML',bl.home,bhPct)}</div>`;
+      <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',bl.away,baPct,{modelP:s.aw,marketP:M.fa})}${b(g.home.abbr,g.home.abbr+' ML',bl.home,bhPct,{modelP:s.hw,marketP:M.fh})}</div>`;
   })();
   const bookTotal=bookLineForMarket(g.id,'total');
   const realTotalBlock=(()=>{
@@ -2144,14 +2340,16 @@ function betGrid(g,s,M){
         const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
         const [roPct,ruPct]=[Math.round(op/sum*100),Math.round(up/sum*100)];
         return `<div class="mktlab">Total runs · ${bookTotal.line} <span class="flag cool book">your book</span></div>
-          <div class="betgrid">${b('Over '+bookTotal.line,'Over '+bookTotal.line,op/sum,roPct)}${b('Under '+bookTotal.line,'Under '+bookTotal.line,up/sum,ruPct)}</div>`;
+          <div class="betgrid">${b('Over '+bookTotal.line,'Over '+bookTotal.line,op/sum,roPct,{realPrice:overBook.price,modelP:s.over(bookTotal.line),marketP:op/sum})}${b('Under '+bookTotal.line,'Under '+bookTotal.line,up/sum,ruPct,{realPrice:underBook.price,modelP:1-s.over(bookTotal.line),marketP:up/sum})}</div>`;
       }
     }
     if(!stMatch||stMatch.overProb===null)return '';
     const blended=sharpTotalBlend(g,stMatch.line,s.over(stMatch.line));
     const [roPct,ruPct]=pair(blended);
+    const dvSum=(stMatch.overProb||0)+(stMatch.underProb||0);
+    const mkO=dvSum>0?stMatch.overProb/dvSum:null;
     return `<div class="mktlab">Total runs · ${stMatch.line} <span class="flag cool">real line — ${stMatch.book}</span></div>
-      <div class="betgrid">${b('Over '+stMatch.line,'Over '+stMatch.line,blended,roPct)}${b('Under '+stMatch.line,'Under '+stMatch.line,1-blended,ruPct)}</div>`;
+      <div class="betgrid">${b('Over '+stMatch.line,'Over '+stMatch.line,blended,roPct,{realPrice:stMatch.overAmerican,modelP:s.over(stMatch.line),marketP:mkO})}${b('Under '+stMatch.line,'Under '+stMatch.line,1-blended,ruPct,{realPrice:stMatch.underAmerican,modelP:1-s.over(stMatch.line),marketP:mkO===null?null:1-mkO})}</div>`;
   })();
   const bookRL=bookLineForMarket(g.id,'runline');
   const realRLBlock=(()=>{
@@ -2162,8 +2360,17 @@ function betGrid(g,s,M){
         const fp=bookDevig(favBook.price),dp=bookDevig(dogBook.price),sum=fp+dp;
         const fAb=favBook.side==='home'?g.home.abbr:g.away.abbr,dAb=dogBook.side==='home'?g.home.abbr:g.away.abbr;
         const [rfPct,rdPct]=[Math.round(fp/sum*100),Math.round(dp/sum*100)];
+        const favModel=rlProb(g,s,favBook.side,-favBook.line);
+        const dogModel=rlProb(g,s,dogBook.side,-dogBook.line);
+        // sanity guard: covering -1.5 is strictly harder than winning outright, so a market
+        // implying the -1.5 side covers MORE often than the model has anyone winning at all
+        // means the extracted team labels are almost certainly swapped. Suppress the edge
+        // signal rather than surface a large fake number off bad OCR.
+        const favOutright=favBook.side==='home'?s.hw:s.aw;
+        const suspect=(fp/sum)>favOutright+0.05;
+        const warn=suspect?`<div class="sub" style="color:var(--rust);margin-top:4px">Check this one — the extracted sides look inverted against the model, so no edge is being shown here.</div>`:'';
         return `<div class="mktlab">Run line <span class="flag cool book">your book</span></div>
-          <div class="betgrid">${b(fAb+' '+favBook.line,fAb+' '+favBook.line,fp/sum,rfPct)}${b(dAb+' +'+dogBook.line,dAb+' +'+dogBook.line,dp/sum,rdPct)}</div>`;
+          <div class="betgrid">${b(fAb+' '+favBook.line,fAb+' '+favBook.line,fp/sum,rfPct,{realPrice:favBook.price,modelP:suspect?null:favModel,marketP:suspect?null:fp/sum})}${b(dAb+' +'+dogBook.line,dAb+' +'+dogBook.line,dp/sum,rdPct,{realPrice:dogBook.price,modelP:suspect?null:dogModel,marketP:suspect?null:dp/sum})}</div>${warn}`;
       }
     }
     if(!hasRealRunLine(g.id))return '';
@@ -2174,8 +2381,9 @@ function betGrid(g,s,M){
     else if(dogRD)favBlend=1-(dogCover*0.55+dogRD.prob*0.45);
     const dogBlend=1-favBlend;
     const [rfPct,rdPct]=pair(favBlend);
+    const mkFav=favRD?favRD.prob:(dogRD?1-dogRD.prob:null);
     return `<div class="mktlab">Run line <span class="flag cool">real line — TheRundown</span></div>
-      <div class="betgrid">${b(favAb+' -1.5',favAb+' -1.5',favBlend,rfPct)}${b(dogAb+' +1.5',dogAb+' +1.5',dogBlend,rdPct)}</div>`;
+      <div class="betgrid">${b(favAb+' -1.5',favAb+' -1.5',favBlend,rfPct,{modelP:favCover,marketP:mkFav})}${b(dogAb+' +1.5',dogAb+' +1.5',dogBlend,rdPct,{modelP:dogCover,marketP:mkFav===null?null:1-mkFav})}</div>`;
   })();
   return `<div class="mktblock">
     ${realMLBlock}
@@ -2189,8 +2397,9 @@ function betGrid(g,s,M){
         const underBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='under');
         if(overBook&&underBook){
           const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
+          const mO=f5OverAt(s,overBook.line);
           return `<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
-            <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100))}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100))}</div>`;
+            <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100),{realPrice:overBook.price,modelP:mO,marketP:op/sum})}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100),{realPrice:underBook.price,modelP:1-mO,marketP:up/sum})}</div>`;
         }
       }
       if(realF5){
@@ -2205,6 +2414,7 @@ function betGrid(g,s,M){
           <div class="cmpr"><div class="bl">${g.home.abbr}</div><div class="bo">${(s.f5h*100).toFixed(0)}%</div><div class="bs">sim only</div></div>
         </div>`;
     })()}
+    <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
   </div>`;
 }
 
@@ -2390,7 +2600,7 @@ function gradePropFromBox(g,x){
   return null;
 }
 function pan(gid,which,btn){
-  ['ag','alt','props','box'].forEach(k=>{
+  ['trend','ag','alt','props','box'].forEach(k=>{
     const p=document.getElementById('p-'+k+'-'+gid);
     if(p&&k!==which)p.classList.remove('on');
   });
@@ -3450,7 +3660,7 @@ async function boot(){
   const o=get(LS.open,{d:'',v:{}});if(o.d===today())OPENS=o.v;
   const c=get(LS.odds,{d:'',v:{}});if(c.d===today())ODDS=c.v;
   H2H=(get(LS.h2h,{}).pairs)||{};SPLITS=(get(LS.splits,{}).teams)||{};ODDS_BYDATE=get(LS.oddsdate,{});
-  await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);snapshot();snapshotBest();paintSlip();renderDayPicker();
+  await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);snapshot();snapshotBest();paintSlip();renderDayPicker();renderBookStatus();
   if(BOOTED)return;  // settings can be reopened/resaved any number of times — background
                       // timers only ever get registered once, first boot, no matter how
                       // many times saveKeys() runs afterward
