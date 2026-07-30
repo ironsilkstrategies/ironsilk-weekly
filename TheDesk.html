@@ -102,6 +102,11 @@ display:flex;flex-direction:column;justify-content:center;gap:3px}
 .bet.on{background:rgba(242,169,59,.16);border-color:var(--gold)}
 .bet.on .bl{color:#fff}
 .bet:focus-visible{outline:2px solid var(--cold);outline-offset:2px}
+/* ---- sim handicap chip — shown on every bet square, above the price ---- */
+.bet .sim-chip{font-family:"IBM Plex Mono";font-size:8px;font-weight:600;letter-spacing:.06em;
+text-transform:uppercase;color:var(--cold);background:rgba(95,211,232,.10);
+border:1px solid rgba(95,211,232,.25);border-radius:4px;padding:1px 5px;
+display:inline-block;margin-bottom:2px}
 /* ---- value signalling: green = model sees real edge, red = model says stay away ---- */
 .bet.value{border-color:var(--win);background:linear-gradient(180deg,rgba(74,222,128,.10),var(--panel2))}
 .bet.value .bl{color:var(--win)}
@@ -343,7 +348,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v36</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v37</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2297,16 +2302,16 @@ function betGrid(g,s,M){
       else if(e<=-EDGE_MIN){cls=' avoid';badge=`<span class="eb dn">${e.toFixed(1)}</span>`}
       fair=`<div class="bf">model ${(mp*100).toFixed(0)}% · fair ${amer(mp)}</div>`;
     }
-    // sim handicap line — shows what the model's own number is for this market
-    // so you can instantly see the gap between book line and sim read
-    const simLine=opts.simVal!==undefined
-      ?`<div class="bf" style="color:var(--cold);margin-top:1px">sim ${opts.simVal}</div>`
+    // sim handicap chip — shown above the book price so the gap is unmissable:
+    // "sim 10.1" when book says 8.5, "sim -3.2" when book says -1.5, "sim 58%" for ML
+    const simChip=opts.simVal!==undefined
+      ?`<div class="sim-chip">sim ${opts.simVal}</div>`
       :'';
     return `<div class="bet${cls} ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
-      <div class="bl">${label}</div><div class="bo">${priceStr}</div>
-      <div class="bs">${badge||pct+'%'}</div>${fair}${simLine}</div>`;
+      <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
+      <div class="bs">${badge||pct+'%'}</div>${fair}</div>`;
   };
   // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
   // always sum to exactly 100 instead of each rounding independently, which can silently
@@ -2458,9 +2463,11 @@ function betGrid(g,s,M){
         f5TotalBlock=`<div class="mktlab">First 5 total · ${f5t}</div>
           <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct,{simVal:simF5Tot})}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct,{simVal:simF5Tot})}</div>`;
       }
-      // sim-only side squares when no book f5side but hasRealF5
-      const f5SideSimBlock=(!f5SideBlock&&realF5)
-        ?`<div class="mktlab">First 5 innings <span class="flag cool">sim</span></div>
+      // sim-only side squares when no book f5side but we have a real F5 total from the book
+      // (you uploaded F5 total lines so you definitely want the side squares too — sim drives them)
+      const bookF5AnyExists=bookF5Total||awayF5Side||homeF5Side;
+      const f5SideSimBlock=(!f5SideBlock&&(realF5||bookF5AnyExists))
+        ?`<div class="mktlab">First 5 moneyline <span class="flag cool">sim</span></div>
            <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a,undefined,{simVal:simF5Aw})}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h,undefined,{simVal:simF5Hm})}</div>`
         :'';
       if(f5SideBlock||f5TotalBlock||f5SideSimBlock){
