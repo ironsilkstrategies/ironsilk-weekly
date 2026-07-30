@@ -363,7 +363,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v38</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v38b</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3745,7 +3745,7 @@ function buildBestCard(){
       :`<div class="rc-hero"><div class="lab">No home run data yet</div></div>`}
     ${rows('Best 5 sides',sides,'Ranked by edge vs. market where pulled, else by sim win probability','pick','prob')}
     ${rows('Best 5 totals',totals,'Blended with SharpAPI\'s real total line when one is posted for that game','pick','prob')}
-    ${rows('Best 5 props',props,'Ranked by sim probability, self-calibrated against graded history','_',null)}
+    ${rows('Best 5 props',props,'Ranked by sim probability, self-calibrated against graded history','_','p')}
     <div class="rc-foot">
       <div class="cal">Built from lineups, park, weather, H2H — never from book odds</div>
       <div class="cta">Follow <span>${get(LS.handle,'@YourHandle')}</span></div>
