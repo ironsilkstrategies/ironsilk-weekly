@@ -368,7 +368,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v42</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v42b</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3873,10 +3873,14 @@ async function fetchFinals(d){
   const j=await r.json();const f={};
   (((j.dates||[])[0]||{}).games||[]).forEach(g=>{
     if(((g.status||{}).abstractGameState)!=='Final')return;
+    // scores come back as strings from the API — parse explicitly so "10">"9" works correctly
+    const aScore=parseInt(g.teams.away.score,10);
+    const hScore=parseInt(g.teams.home.score,10);
+    if(isNaN(aScore)||isNaN(hScore))return; // incomplete game data — skip rather than grade wrong
     let fa=0,fh=0,ok=false;
     const inn=((g.linescore||{}).innings)||[];
     if(inn.length>=5){ok=true;inn.slice(0,5).forEach(i=>{fa+=(i.away||{}).runs||0;fh+=(i.home||{}).runs||0})}
-    f[g.gamePk]={a:g.teams.away.score,h:g.teams.home.score,fa,fh,f5ok:ok};
+    f[g.gamePk]={a:aScore,h:hScore,fa,fh,f5ok:ok};
   });
   return f;
 }
