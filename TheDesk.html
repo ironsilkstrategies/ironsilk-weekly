@@ -107,6 +107,11 @@ display:flex;flex-direction:column;justify-content:center;gap:3px}
 text-transform:uppercase;color:var(--cold);background:rgba(95,211,232,.10);
 border:1px solid rgba(95,211,232,.25);border-radius:4px;padding:1px 5px;
 display:inline-block;margin-bottom:2px}
+/* ---- live score bar ---- */
+.live-bar{background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:8px;padding:9px 11px;margin:6px 0;display:flex;flex-direction:column;gap:4px}
+.live-score{display:flex;align-items:center;gap:8px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--win);animation:pulse 1.4s ease-in-out infinite;flex:0 0 auto}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 /* ---- value signalling: green = model sees real edge, red = model says stay away ---- */
 .bet.value{border-color:var(--win);background:linear-gradient(180deg,rgba(74,222,128,.10),var(--panel2))}
 .bet.value .bl{color:var(--win)}
@@ -363,7 +368,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v40c</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v41</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2563,13 +2568,15 @@ function card(g){
   const finalLine=done?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
     <div class="rd">final</div></div>`:'';
 
-  return `<div class="game ${edge>=3&&!done?'edge':''} ${done?'done':''}" id="g${g.id}">
+  const isLive=g.abstract==='Live';
+  return `<div class="game ${edge>=3&&!done?'edge':''} ${done?'done':''} ${isLive?'in-play':''}" id="g${g.id}">
    <div class="ghd">
     <div class="grow1"><div class="teams">${g.away.abbr}<span class="at">@</span>${g.home.abbr}</div>
      <div class="meta">${fmtTime(g.time)}<br>${g.away.w}-${g.away.l} · ${g.home.w}-${g.home.l}</div></div>
     <div class="env">Park <span class="pf">${pf[0]}</span>r / <span class="pf">${pf[1]}</span>hr${w?` · <b>${w.temp}°</b> ${w.cond||''} ${w.wind||''}`:DOME[g.home.abbr]?' · dome':''}${s&&s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}</div>
     <div class="arms">${arm('away')}</div><div class="arms">${arm('home')}</div>
-    ${finalLine}${projLine}
+    ${isLive?liveScoreBar(g.id):''}
+    ${finalLine}${!isLive?projLine:''}
     ${sig?`<div class="sig">${sig}</div>`:''}
     ${badges}
    </div>
@@ -2579,12 +2586,14 @@ function card(g){
     <button class="expbtn" onclick="pan(${g.id},'ag',this)">A–G</button>
     <button class="expbtn" onclick="pan(${g.id},'alt',this)">Alt lines</button>
     <button class="expbtn" onclick="pan(${g.id},'props',this)">Props</button>
+    ${isLive?`<button class="expbtn" onclick="pan(${g.id},'livebox',this)">Live box</button>`:''}
     ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button>`:''}
    </div>
    <div class="panel" id="p-trend-${g.id}">${trendPanel(g,s)}</div>
    <div class="panel" id="p-ag-${g.id}">${agPanel(g,s,M,topReasons(),realLineRead())}</div>
    <div class="panel" id="p-alt-${g.id}">${altPanel(g,s)}</div>
    <div class="panel" id="p-props-${g.id}">${propPanel(g)}</div>
+   ${isLive?`<div class="panel" id="p-livebox-${g.id}">${liveBoxPanel(g.id,g)}</div>`:''}
    ${done?`<div class="panel" id="p-box-${g.id}">${boxPanel(g)}</div>`:''}
   </div>`;
 }
@@ -2975,7 +2984,7 @@ function gradePropFromBox(g,x){
   return null;
 }
 function pan(gid,which,btn){
-  ['trend','ag','alt','props','box'].forEach(k=>{
+  ['trend','ag','alt','props','box','livebox'].forEach(k=>{
     const p=document.getElementById('p-'+k+'-'+gid);
     if(p&&k!==which)p.classList.remove('on');
   });
@@ -3510,7 +3519,174 @@ function genTickets(){
   el.innerHTML=h;
 }
 
-/* ================= SNAPSHOT + GRADING ================= */
+/* ================= ESPN LIVE SCOREBOARD ================= */
+// Free, no key. Updates every 90s while any game is live.
+// Bridges to GAMES[] by matching team abbreviations.
+const ESPN_BASE='https://site.api.espn.com/apis/site/v2/sports/baseball/mlb';
+let ESPN_LIVE={};   // keyed by our GAMES[].id after bridge
+let ESPN_RAW=[];    // raw ESPN events for the scoreboard tab
+let LIVE_POLL=null;
+
+// ESPN uses different abbreviations — map to ours
+const ESPN_ABBR_MAP={
+  'WSH':'WSH','WAS':'WSH','CHW':'CWS','KCR':'KC','TBR':'TB','SDP':'SD',
+  'SFG':'SF','NYY':'NYY','NYM':'NYM','LAD':'LAD','LAA':'LAA','ARI':'ARI',
+  'ATL':'ATL','BAL':'BAL','BOS':'BOS','CHC':'CHC','CIN':'CIN','CLE':'CLE',
+  'COL':'COL','DET':'DET','HOU':'HOU','MIA':'MIA','MIL':'MIL','MIN':'MIN',
+  'OAK':'OAK','PHI':'PHI','PIT':'PIT','SEA':'SEA','STL':'STL','TEX':'TEX',
+  'TOR':'TOR','ATH':'OAK'
+};
+
+async function loadESPN(){
+  try{
+    const r=await fetch(`${ESPN_BASE}/scoreboard?dates=${today().replace(/-/g,'')}`);
+    const j=await r.json();
+    ESPN_RAW=(j.events||[]);
+    bridgeESPN();
+    // if any game is live, start or keep the 90s poll
+    const anyLive=ESPN_RAW.some(e=>{
+      const s=(((e.competitions||[])[0]||{}).status||{}).type||{};
+      return s.state==='in';
+    });
+    if(anyLive&&!LIVE_POLL){
+      LIVE_POLL=setInterval(async()=>{
+        const stillLive=GAMES.some(g=>g.abstract==='Live');
+        if(!stillLive){clearInterval(LIVE_POLL);LIVE_POLL=null;return;}
+        await loadESPN();
+        if(document.getElementById('v-games').classList.contains('active')||
+           document.querySelector('.view.active')?.id==='v-games'){render();}
+      },90000);
+    }
+    if(!anyLive&&LIVE_POLL){clearInterval(LIVE_POLL);LIVE_POLL=null;}
+  }catch(e){console.warn('ESPN load failed',e);}
+}
+
+function bridgeESPN(){
+  ESPN_LIVE={};
+  if(!GAMES.length||!ESPN_RAW.length)return;
+  ESPN_RAW.forEach(ev=>{
+    const comp=(ev.competitions||[])[0];if(!comp)return;
+    const teams=comp.competitors||[];
+    const away=teams.find(t=>t.homeAway==='away');
+    const home=teams.find(t=>t.homeAway==='home');
+    if(!away||!home)return;
+    const awayAb=ESPN_ABBR_MAP[away.team.abbreviation]||away.team.abbreviation;
+    const homeAb=ESPN_ABBR_MAP[home.team.abbreviation]||home.team.abbreviation;
+    const game=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+    if(!game)return;
+    const status=comp.status||{};
+    const stype=status.type||{};
+    const situation=comp.situation||{};
+    const linescore=comp.linescores||[];
+    // parse innings from linescores
+    const awayInn=[],homeInn=[];
+    linescore.forEach((inn,i)=>{
+      if(i%2===0)awayInn.push(inn.value??'');
+      else homeInn.push(inn.value??'');
+    });
+    // current pitcher from situation
+    const pitcher=situation.pitcher||null;
+    const batter=situation.batter||null;
+    // live player stats from competitors
+    const awayStats=buildESPNRoster(away);
+    const homeStats=buildESPNRoster(home);
+    ESPN_LIVE[game.id]={
+      awayScore:parseInt(away.score)||0,
+      homeScore:parseInt(home.score)||0,
+      inning:status.period||0,
+      inningHalf:situation.isTopInning!==undefined?(situation.isTopInning?'Top':'Bot'):'',
+      outs:situation.outs??null,
+      onFirst:situation.onFirst||false,
+      onSecond:situation.onSecond||false,
+      onThird:situation.onThird||false,
+      state:stype.state||'pre', // pre / in / post
+      displayClock:status.displayClock||'',
+      pitcher:pitcher?{name:pitcher.athlete?.displayName||'',era:pitcher.era||''}:null,
+      batter:batter?{name:batter.athlete?.displayName||'',avg:batter.avg||''}:null,
+      awayInn,homeInn,
+      awayStats,homeStats,
+      lastPlay:situation.lastPlay?.text||null
+    };
+  });
+}
+
+function buildESPNRoster(competitor){
+  const stats={pitchers:[],batters:[]};
+  (competitor.statistics||[]).forEach(group=>{
+    (group.athletes||[]).forEach(a=>{
+      const name=a.athlete?.shortName||a.athlete?.displayName||'';
+      const vals={};
+      (group.labels||[]).forEach((lbl,i)=>{vals[lbl]=a.stats?.[i]||'';});
+      if(group.name==='pitching')stats.pitchers.push({name,...vals});
+      else if(group.name==='batting')stats.batters.push({name,...vals});
+    });
+  });
+  return stats;
+}
+
+/* ── Live score header shown on in-progress game cards ── */
+function liveScoreBar(gid){
+  const L=ESPN_LIVE[gid];
+  if(!L||L.state!=='in')return '';
+  const runners=[L.onFirst,L.onSecond,L.onThird];
+  const baseSvg=`<svg width="28" height="28" viewBox="0 0 28 28" style="vertical-align:middle;margin:0 3px">
+    <rect x="10" y="1" width="8" height="8" rx="1" fill="${L.onSecond?'var(--gold)':'var(--rule)'}"/>
+    <rect x="18" y="9" width="8" height="8" rx="1" fill="${L.onFirst?'var(--gold)':'var(--rule)'}"/>
+    <rect x="2" y="9" width="8" height="8" rx="1" fill="${L.onThird?'var(--gold)':'var(--rule)'}"/>
+  </svg>`;
+  const outsHtml=L.outs!==null?`<span style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${L.outs} out${L.outs!==1?'s':''}</span>`:'';
+  return `<div class="live-bar">
+    <div class="live-score">
+      <span class="live-dot"></span>
+      <span style="font-family:'Archivo';font-weight:900;font-size:18px">${L.awayScore} – ${L.homeScore}</span>
+      <span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--gold);margin-left:6px">${L.inningHalf} ${L.inning}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">${baseSvg}${outsHtml}</div>
+    ${L.pitcher?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">P: ${L.pitcher.name}${L.pitcher.era?' '+L.pitcher.era+' ERA':''}</div>`:''}
+    ${L.lastPlay?`<div style="font-size:11px;color:var(--chalk);padding-top:3px;border-top:1px solid var(--rule);margin-top:4px">${L.lastPlay}</div>`:''}
+  </div>`;
+}
+
+/* ── Live box score panel (replaces "Box & grades" when game is live) ── */
+function liveBoxPanel(gid,g){
+  const L=ESPN_LIVE[gid];
+  if(!L)return '<div class="empty">Live data loading…</div>';
+  // Linescore table
+  const maxInn=Math.max(L.awayInn.length,L.homeInn.length,9);
+  const innHeaders=Array.from({length:maxInn},(_,i)=>`<th>${i+1}</th>`).join('');
+  const awayRow=Array.from({length:maxInn},(_,i)=>`<td>${L.awayInn[i]??''}</td>`).join('');
+  const homeRow=Array.from({length:maxInn},(_,i)=>`<td>${L.homeInn[i]??''}</td>`).join('');
+  const lsTable=`<div style="overflow-x:auto;margin-bottom:10px"><table class="boxtbl" style="min-width:320px">
+    <tr><th>Team</th>${innHeaders}<th style="color:var(--gold)">R</th></tr>
+    <tr><td><b>${g.away.abbr}</b></td>${awayRow}<td style="color:var(--gold);font-weight:900">${L.awayScore}</td></tr>
+    <tr><td><b>${g.home.abbr}</b></td>${homeRow}<td style="color:var(--gold);font-weight:900">${L.homeScore}</td></tr>
+  </table></div>`;
+  // Pitching
+  const pitchTable=(stats,label)=>{
+    if(!stats.pitchers.length)return '';
+    const keys=['IP','H','R','ER','BB','K','P'];
+    return `<div class="mktlab" style="margin-top:8px">${label} pitching</div>
+    <div style="overflow-x:auto"><table class="boxtbl" style="min-width:300px">
+      <tr><th>Pitcher</th>${keys.map(k=>`<th>${k}</th>`).join('')}</tr>
+      ${stats.pitchers.map(p=>`<tr><td>${p.name}</td>${keys.map(k=>`<td>${p[k]??'—'}</td>`).join('')}</tr>`).join('')}
+    </table></div>`;
+  };
+  // Batting
+  const batTable=(stats,label)=>{
+    if(!stats.batters.length)return '';
+    const keys=['AB','R','H','RBI','HR','BB','K','AVG'];
+    return `<div class="mktlab" style="margin-top:8px">${label} batting</div>
+    <div style="overflow-x:auto"><table class="boxtbl" style="min-width:320px">
+      <tr><th>Batter</th>${keys.map(k=>`<th>${k}</th>`).join('')}</tr>
+      ${stats.batters.map(p=>`<tr><td>${p.name}</td>${keys.map(k=>`<td>${p[k]??'—'}</td>`).join('')}</tr>`).join('')}
+    </table></div>`;
+  };
+  return lsTable
+    +pitchTable(L.awayStats,g.away.abbr)+pitchTable(L.homeStats,g.home.abbr)
+    +batTable(L.awayStats,g.away.abbr)+batTable(L.homeStats,g.home.abbr)
+    +`<div class="bar" style="margin-top:8px"><button onclick="loadESPN().then(()=>render())">Refresh live data</button></div>`;
+}
+/* ================= ESPN LIVE END ================= */
 function snapshot(){
   const d=today(),arc=get(LS.arc,{});
   // Once Grades has pulled finals for today, never touch this entry again — a fresh
@@ -4440,7 +4616,9 @@ async function boot(){
   const o=get(LS.open,{d:'',v:{}});if(o.d===today())OPENS=o.v;
   const c=get(LS.odds,{d:'',v:{}});if(c.d===today())ODDS=c.v;
   H2H=(get(LS.h2h,{}).pairs)||{};SPLITS=(get(LS.splits,{}).teams)||{};ODDS_BYDATE=get(LS.oddsdate,{});
-  await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);snapshot();snapshotBest();paintSlip();renderDayPicker();renderBookStatus();
+  await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);
+  await loadESPN();
+  snapshot();snapshotBest();paintSlip();renderDayPicker();renderBookStatus();
   if(BOOTED)return;  // settings can be reopened/resaved any number of times — background
                       // timers only ever get registered once, first boot, no matter how
                       // many times saveKeys() runs afterward
@@ -4455,7 +4633,7 @@ async function boot(){
       if(Date.now()-l>20*36e5)pushToGitHub(false);
     },36e5);
   }
-  setInterval(()=>{loadAll().then(()=>{snapshot();snapshotBest()})},9e5);
+  setInterval(()=>{loadAll().then(()=>{loadESPN();snapshot();snapshotBest()})},9e5);
   let DAY=today();
   setInterval(async()=>{
     if(today()!==DAY){DAY=today();OPENS={};ODDS={};SLIP=[];BOX={};
