@@ -368,7 +368,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v41b</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v42</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3643,34 +3643,70 @@ function buildESPNRoster(competitor){
   return stats;
 }
 
-/* ── Live score header shown on in-progress game cards ── */
+/* ── Live score bar on the game card header ── */
 function liveScoreBar(gid){
   const L=ESPN_LIVE[gid];
   if(!L||L.state!=='in')return '';
-  const runners=[L.onFirst,L.onSecond,L.onThird];
-  const baseSvg=`<svg width="28" height="28" viewBox="0 0 28 28" style="vertical-align:middle;margin:0 3px">
-    <rect x="10" y="1" width="8" height="8" rx="1" fill="${L.onSecond?'var(--gold)':'var(--rule)'}"/>
-    <rect x="18" y="9" width="8" height="8" rx="1" fill="${L.onFirst?'var(--gold)':'var(--rule)'}"/>
-    <rect x="2" y="9" width="8" height="8" rx="1" fill="${L.onThird?'var(--gold)':'var(--rule)'}"/>
+
+  // Base diamond — rotated square, filled gold when occupied
+  const base=(on,x,y)=>`<rect x="${x}" y="${y}" width="10" height="10" rx="1"
+    transform="rotate(45 ${x+5} ${y+5})"
+    fill="${on?'var(--gold)':'rgba(255,255,255,.08)'}"
+    stroke="${on?'var(--gold)':'rgba(255,255,255,.15)'}" stroke-width="1"/>`;
+  const diamond=`<svg width="44" height="44" viewBox="0 0 44 44">
+    ${base(L.onSecond,17,3)}
+    ${base(L.onFirst,27,13)}
+    ${base(L.onThird,7,13)}
   </svg>`;
-  const outsHtml=L.outs!==null?`<span style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${L.outs} out${L.outs!==1?'s':''}</span>`:'';
+
+  const outDots=Array.from({length:3},(_,i)=>
+    `<div style="width:7px;height:7px;border-radius:50%;
+      background:${i<(L.outs||0)?'var(--rust)':'rgba(255,255,255,.12)'};
+      border:1px solid ${i<(L.outs||0)?'var(--rust)':'rgba(255,255,255,.2)'}"></div>`
+  ).join('');
+
+  const awayLead=L.awayScore>L.homeScore,homeLead=L.homeScore>L.awayScore;
+
   return `<div class="live-bar">
-    <div class="live-score">
-      <span class="live-dot"></span>
-      <span style="font-family:'Archivo';font-weight:900;font-size:18px">${L.awayScore} – ${L.homeScore}</span>
-      <span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--gold);margin-left:6px">${L.inningHalf} ${L.inning}</span>
+    <!-- score row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="live-dot"></span>
+        <span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+          color:var(--gold);text-transform:uppercase">${L.inningHalf||''} ${L.inning||''}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex:1;justify-content:center">
+        <span style="font-family:'Archivo';font-weight:900;font-size:26px;
+          color:${awayLead?'var(--chalk)':'var(--mute)'};min-width:28px;text-align:right">
+          ${L.awayScore}</span>
+        <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--mute)">–</span>
+        <span style="font-family:'Archivo';font-weight:900;font-size:26px;
+          color:${homeLead?'var(--chalk)':'var(--mute)'};min-width:28px;text-align:left">
+          ${L.homeScore}</span>
+      </div>
+      <!-- base diamond + outs -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        ${diamond}
+        <div style="display:flex;gap:3px">${outDots}</div>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:6px">${baseSvg}${outsHtml}</div>
-    ${L.pitcher?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">P: ${L.pitcher.name}${L.pitcher.era?' '+L.pitcher.era+' ERA':''}</div>`:''}
-    ${L.lastPlay?`<div style="font-size:11px;color:var(--chalk);padding-top:3px;border-top:1px solid var(--rule);margin-top:4px">${L.lastPlay}</div>`:''}
+    <!-- pitcher + last play -->
+    ${L.pitcher?`<div style="font-family:'IBM Plex Mono';font-size:9.5px;
+      color:var(--mute);margin-top:5px">
+      <span style="color:var(--chalk)">${L.pitcher.name}</span>
+      ${L.pitcher.era?`<span style="color:var(--mute)"> · ${L.pitcher.era} ERA</span>`:''}
+      ${L.batter?`<span style="color:var(--mute)"> · vs ${L.batter.name}</span>`:''}
+    </div>`:''}
+    ${L.lastPlay?`<div style="font-size:11px;color:var(--chalk);line-height:1.4;
+      padding-top:6px;border-top:1px solid var(--rule);margin-top:6px;
+      font-style:italic;opacity:.85">${L.lastPlay}</div>`:''}
   </div>`;
 }
 
-/* ── Live box score panel (replaces "Box & grades" when game is live) ── */
+/* ── Live box score panel ── */
 function liveBoxPanel(gid,g){
   const L=ESPN_LIVE[gid];
   if(!L){
-    // show what ESPN raw has so we can see the abbr mismatch
     const espnGames=ESPN_RAW.map(ev=>{
       const comp=(ev.competitions||[])[0]||{};
       const teams=comp.competitors||[];
@@ -3679,47 +3715,128 @@ function liveBoxPanel(gid,g){
       const st=(comp.status||{}).type||{};
       return `${aw?.team?.abbreviation||'?'} @ ${hm?.team?.abbreviation||'?'} [${st.state||'?'}]`;
     }).join(', ')||'none fetched yet';
-    return `<div class="tkt"><h3>Bridge miss</h3>
-      <div class="sub">ESPN returned data but couldn't match to <b>${g.away.abbr} @ ${g.home.abbr}</b>.<br>
-      ESPN games on board: <b>${espnGames}</b></div>
+    return `<div class="tkt"><h3>Waiting on ESPN bridge</h3>
+      <div class="sub">ESPN games visible: <b>${espnGames}</b><br>
+      Expected: <b>${g.away.abbr} @ ${g.home.abbr}</b></div>
       <div class="bar" style="margin-top:8px">
-        <button class="primary" onclick="loadESPN().then(()=>render())">Retry match</button>
+        <button class="primary" onclick="loadESPN().then(()=>render())">Retry</button>
       </div></div>`;
   }
-  // Linescore table
+
+  // ── Linescore ──────────────────────────────────────────────────────────
   const maxInn=Math.max(L.awayInn.length,L.homeInn.length,9);
-  const innHeaders=Array.from({length:maxInn},(_,i)=>`<th>${i+1}</th>`).join('');
-  const awayRow=Array.from({length:maxInn},(_,i)=>`<td>${L.awayInn[i]??''}</td>`).join('');
-  const homeRow=Array.from({length:maxInn},(_,i)=>`<td>${L.homeInn[i]??''}</td>`).join('');
-  const lsTable=`<div style="overflow-x:auto;margin-bottom:10px"><table class="boxtbl" style="min-width:320px">
-    <tr><th>Team</th>${innHeaders}<th style="color:var(--gold)">R</th></tr>
-    <tr><td><b>${g.away.abbr}</b></td>${awayRow}<td style="color:var(--gold);font-weight:900">${L.awayScore}</td></tr>
-    <tr><td><b>${g.home.abbr}</b></td>${homeRow}<td style="color:var(--gold);font-weight:900">${L.homeScore}</td></tr>
-  </table></div>`;
-  // Pitching
-  const pitchTable=(stats,label)=>{
+  const innNums=Array.from({length:maxInn},(_,i)=>i+1);
+  const currentInn=L.inning||0;
+
+  const innCell=(val,inn)=>{
+    const isCurrent=inn===currentInn;
+    const isEmpty=val===''||val===undefined||val===null;
+    return `<td style="text-align:center;padding:5px 4px;
+      font-family:'IBM Plex Mono';font-size:11px;
+      color:${isEmpty?'var(--mute)':isCurrent?'var(--gold)':'var(--chalk)'};
+      background:${isCurrent?'rgba(242,169,59,.08)':'transparent'};
+      border-bottom:1px solid var(--rule)">${isEmpty?'·':val}</td>`;
+  };
+
+  const linescore=`<div style="overflow-x:auto;margin:10px 0 4px">
+    <table style="width:100%;border-collapse:collapse;min-width:300px">
+      <thead><tr>
+        <th style="text-align:left;padding:4px 6px;font-family:'IBM Plex Mono';
+          font-size:9px;letter-spacing:.08em;color:var(--mute);text-transform:uppercase;
+          border-bottom:1px solid var(--rule)">TEAM</th>
+        ${innNums.map(i=>`<th style="text-align:center;padding:4px 3px;
+          font-family:'IBM Plex Mono';font-size:9px;color:${i===currentInn?'var(--gold)':'var(--mute)'};
+          border-bottom:1px solid var(--rule)">${i}</th>`).join('')}
+        <th style="text-align:center;padding:4px 6px;font-family:'IBM Plex Mono';
+          font-size:9px;color:var(--gold);letter-spacing:.06em;
+          border-bottom:1px solid var(--rule)">R</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="padding:6px 6px;font-family:'Archivo';font-weight:900;font-size:13px;
+            border-bottom:1px solid var(--rule)">${g.away.abbr}</td>
+          ${innNums.map(i=>innCell(L.awayInn[i-1],i)).join('')}
+          <td style="text-align:center;padding:6px;font-family:'Archivo';font-weight:900;
+            font-size:16px;color:${L.awayScore>L.homeScore?'var(--win)':'var(--chalk)'};
+            border-bottom:1px solid var(--rule)">${L.awayScore}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 6px;font-family:'Archivo';font-weight:900;font-size:13px">${g.home.abbr}</td>
+          ${innNums.map(i=>innCell(L.homeInn[i-1],i)).join('')}
+          <td style="text-align:center;padding:6px;font-family:'Archivo';font-weight:900;
+            font-size:16px;color:${L.homeScore>L.awayScore?'var(--win)':'var(--chalk)'}">${L.homeScore}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>`;
+
+  // ── Pitching lines ─────────────────────────────────────────────────────
+  const pitchKeys=['IP','H','R','ER','BB','K'];
+  const pitchSection=(stats,ab)=>{
     if(!stats.pitchers.length)return '';
-    const keys=['IP','H','R','ER','BB','K','P'];
-    return `<div class="mktlab" style="margin-top:8px">${label} pitching</div>
-    <div style="overflow-x:auto"><table class="boxtbl" style="min-width:300px">
-      <tr><th>Pitcher</th>${keys.map(k=>`<th>${k}</th>`).join('')}</tr>
-      ${stats.pitchers.map(p=>`<tr><td>${p.name}</td>${keys.map(k=>`<td>${p[k]??'—'}</td>`).join('')}</tr>`).join('')}
-    </table></div>`;
+    return `<div style="margin-top:14px">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin-bottom:6px">${ab} pitching</div>
+      ${stats.pitchers.map(p=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;
+          padding:7px 0;border-bottom:1px solid var(--rule)">
+          <span style="font-size:12px;font-weight:600;flex:1">${p.name}</span>
+          <div style="display:flex;gap:10px">
+            ${pitchKeys.map(k=>`<div style="text-align:center;min-width:22px">
+              <div style="font-family:'IBM Plex Mono';font-size:11px;
+                color:${k==='K'&&parseInt(p[k])>=6?'var(--win)':k==='ER'&&parseInt(p[k])>=3?'var(--rust)':'var(--chalk)'}">
+                ${p[k]||'—'}</div>
+              <div style="font-family:'IBM Plex Mono';font-size:7.5px;color:var(--mute);
+                margin-top:1px">${k}</div>
+            </div>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>`;
   };
-  // Batting
-  const batTable=(stats,label)=>{
+
+  // ── Batting lines ──────────────────────────────────────────────────────
+  const batKeys=['AB','R','H','RBI','HR','BB'];
+  const batSection=(stats,ab)=>{
     if(!stats.batters.length)return '';
-    const keys=['AB','R','H','RBI','HR','BB','K','AVG'];
-    return `<div class="mktlab" style="margin-top:8px">${label} batting</div>
-    <div style="overflow-x:auto"><table class="boxtbl" style="min-width:320px">
-      <tr><th>Batter</th>${keys.map(k=>`<th>${k}</th>`).join('')}</tr>
-      ${stats.batters.map(p=>`<tr><td>${p.name}</td>${keys.map(k=>`<td>${p[k]??'—'}</td>`).join('')}</tr>`).join('')}
-    </table></div>`;
+    return `<div style="margin-top:14px">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin-bottom:6px">${ab} batting</div>
+      ${stats.batters.map(p=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;
+          padding:6px 0;border-bottom:1px solid var(--rule)">
+          <span style="font-size:11.5px;flex:1">${p.name}</span>
+          <div style="display:flex;gap:8px">
+            ${batKeys.map(k=>`<div style="text-align:center;min-width:18px">
+              <div style="font-family:'IBM Plex Mono';font-size:11px;
+                color:${(k==='H'||k==='RBI'||k==='HR')&&parseInt(p[k])>=1?'var(--win)':'var(--chalk)'}">
+                ${p[k]||'0'}</div>
+              <div style="font-family:'IBM Plex Mono';font-size:7.5px;color:var(--mute);
+                margin-top:1px">${k}</div>
+            </div>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>`;
   };
-  return lsTable
-    +pitchTable(L.awayStats,g.away.abbr)+pitchTable(L.homeStats,g.home.abbr)
-    +batTable(L.awayStats,g.away.abbr)+batTable(L.homeStats,g.home.abbr)
-    +`<div class="bar" style="margin-top:8px"><button onclick="loadESPN().then(()=>render())">Refresh live data</button></div>`;
+
+  return `<div style="padding:2px 0">
+    ${linescore}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+      <div style="padding-right:10px;border-right:1px solid var(--rule)">
+        ${pitchSection(L.awayStats,g.away.abbr)}
+        ${batSection(L.awayStats,g.away.abbr)}
+      </div>
+      <div style="padding-left:10px">
+        ${pitchSection(L.homeStats,g.home.abbr)}
+        ${batSection(L.homeStats,g.home.abbr)}
+      </div>
+    </div>
+    <div style="margin-top:12px;text-align:center">
+      <button onclick="loadESPN().then(()=>render())" style="font-family:'IBM Plex Mono';
+        font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+        background:transparent;border:1px solid var(--rule);color:var(--mute);
+        border-radius:6px;padding:6px 14px;cursor:pointer">↻ Refresh</button>
+    </div>
+  </div>`;
 }
 /* ================= ESPN LIVE END ================= */
 function snapshot(){
