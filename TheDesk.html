@@ -273,7 +273,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v18</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v19</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1262,21 +1262,37 @@ async function diagnoseOddsPapi(){
         if(rm.ok){marketRef=await rm.json();marketRefSrc=path;break}
       }catch(e){}
     }
+    // the reference list is multi-sport (led with soccer, sportId 10, last time) — filter
+    // down to baseball's sportId specifically rather than showing the raw mixed dump
+    let bballMarkets=null;
+    if(marketRef){
+      const arr=Array.isArray(marketRef)?marketRef:(marketRef.markets||[]);
+      bballMarkets=arr.filter(m=>m.sportId===bball.sportId||m.sportId===Number(bball.sportId));
+    }
     el.innerHTML=`<div class="empty">Step 4 — pulling real MLB-only fixtures and odds…</div>`;
     const from=today(),to=new Date(Date.now()+2*864e5).toISOString().slice(0,10);
     const r4=await fetch(`${BASE}/fixtures?apiKey=${encodeURIComponent(key)}&sportId=${bball.sportId}&tournamentId=${mlbTourn.tournamentId}&from=${from}&to=${to}&hasOdds=true`);
     const fixtures=r4.ok?await r4.json():[];
     const list=Array.isArray(fixtures)?fixtures:(fixtures.fixtures||[]);
+    // pick whichever fixture starts furthest in the future — most likely still pregame,
+    // since the free tier apparently can't pull odds for a game that's already live
+    const pregame=[...list].filter(f=>f.startTime&&new Date(f.startTime)>new Date())
+      .sort((a,b)=>new Date(a.startTime)-new Date(b.startTime));
+    const pick=pregame[0]||list[0];
     let h=`<div class="tkt hi"><h3>MLB isolated — tournamentId ${mlbTourn.tournamentId}</h3>
-      <div class="sub">"${mlbTourn.tournamentName}" · ${list.length} real MLB fixtures with odds in range</div></div>`;
-    h+=marketRef?`<div class="tkt"><h3>Market reference — found at ${marketRefSrc}</h3>
-      <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(marketRef,null,2).slice(0,4000)}</pre></div>`
-      :`<div class="tkt"><h3>No market-name reference endpoint found</h3><div class="sub">Tried /markets, /market-types, /marketTypes — none responded. The numeric market IDs in the odds response below still can't be named with confidence.</div></div>`;
-    if(list.length){
-      const fid=list[0].fixtureId;
+      <div class="sub">"${mlbTourn.tournamentName}" · ${list.length} real MLB fixtures with odds in range · ${pregame.length} confirmed still pregame</div></div>`;
+    h+=bballMarkets&&bballMarkets.length?`<div class="tkt"><h3>Market reference — baseball only (sportId ${bball.sportId})</h3>
+      <div class="sub">${bballMarkets.length} baseball market definitions found, filtered from ${Array.isArray(marketRef)?marketRef.length:'?'} total across all sports</div>
+      <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(bballMarkets,null,2).slice(0,4500)}</pre></div>`
+      :marketRef?`<div class="tkt"><h3>Market reference found, but zero baseball entries</h3><div class="sub">${marketRefSrc} responded but nothing matched sportId=${bball.sportId} — every entry so far has been soccer. May need pagination or a different filter param.</div></div>`
+      :`<div class="tkt"><h3>No market-name reference endpoint found</h3><div class="sub">Tried /markets, /market-types, /marketTypes — none responded.</div></div>`;
+    if(pick){
+      const fid=pick.fixtureId;
       const r5=await fetch(`${BASE}/odds?apiKey=${encodeURIComponent(key)}&fixtureId=${fid}`);
       const oddsBody=r5.ok?await r5.json():await r5.text();
-      h+=`<div class="tkt"><h3>Raw odds — confirmed MLB fixture: ${list[0].participant1Name||'?'} vs ${list[0].participant2Name||'?'}</h3>
+      const isPregame=pregame.length>0;
+      h+=`<div class="tkt"><h3>Raw odds — ${isPregame?'confirmed pregame':'live, may hit access restriction'} MLB fixture: ${pick.participant1Name||'?'} vs ${pick.participant2Name||'?'}</h3>
+        <div class="sub">Starts ${pick.startTime}</div>
         <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(oddsBody,null,2).slice(0,5000)}</pre></div>`;
     }
     el.innerHTML=h;
