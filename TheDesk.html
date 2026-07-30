@@ -301,7 +301,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v25</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v26</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1808,6 +1808,35 @@ function card(g){
   if(s&&M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
     if(eh>=ea){edge=eh;side=g.home.abbr}else{edge=ea;side=g.away.abbr}}
   const pf=PARK[g.home.abbr]||[100,100],w=g.weather;
+  // ranks the strongest already-computed signals into plain language — reuses edge, H2H,
+  // park factor, and starter form rather than calculating anything new. Caps at 3 so it
+  // reads as "here's why," not a wall of every stat available.
+  function topReasons(){
+    if(!s)return [];
+    const reasons=[];
+    if(edge!==null&&Math.abs(edge)>=5)
+      reasons.push({w:Math.abs(edge),t:`Real market disagrees with the model by ${Math.abs(edge).toFixed(1)} points on ${side} — the largest single factor here.`});
+    const hk2=[g.away.id,g.home.id].sort().join('-'),hrec=H2H[hk2];
+    if(hrec&&hrec.games>=6){
+      const aWins=hrec.aId===g.away.id?hrec.aw:hrec.games-hrec.aw;
+      const pct=aWins/hrec.games;
+      if(pct>=0.7||pct<=0.3)
+        reasons.push({w:Math.abs(pct-0.5)*20,t:`${g.away.abbr} is ${aWins}-${hrec.games-aWins} against ${g.home.abbr} over the last two years — a real historical lean, not just this season.`});
+    }
+    ['away','home'].forEach(sd=>{
+      const q=g[sd].p;
+      if(q&&q.rEra&&q.era){
+        const d=parseFloat(q.rEra)-parseFloat(q.era);
+        if(Math.abs(d)>=1.3)
+          reasons.push({w:Math.abs(d),t:`${q.name} is running ${d<0?'well under':'well over'} their season ERA over the last 5 starts (${q.rEra} vs ${q.era} season) — real recent form, not just a name on the mound.`});
+      }
+    });
+    if(pf[1]>=110||pf[1]<=88)
+      reasons.push({w:Math.abs(pf[1]-100)/4,t:`${g.home.abbr}'s park plays ${pf[1]>=110?'well above':'well below'} average for home runs (${pf[1]}) — a real park effect, not noise.`});
+    if(w&&w.temp&&(w.temp>=88||w.temp<=45))
+      reasons.push({w:Math.abs(w.temp-68)/10,t:`${w.temp}° is a real weather factor tonight — ${w.temp>=88?'hot air carries the ball further':'cold air suppresses scoring'}.`});
+    return reasons.sort((a,b)=>b.w-a.w).slice(0,3);
+  }
   const arm=sd=>{const q=g[sd].p;if(!q)return '<b>TBD</b>';
     let f='';
     if(q.rEra&&q.era){const d=parseFloat(q.rEra)-parseFloat(q.era);
@@ -1859,6 +1888,10 @@ function card(g){
     <div class="env">Park <span class="pf">${pf[0]}</span>r / <span class="pf">${pf[1]}</span>hr${w?` · <b>${w.temp}°</b> ${w.cond||''} ${w.wind||''}`:DOME[g.home.abbr]?' · dome':''}${s&&s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}</div>
     <div class="arms">${arm('away')}</div><div class="arms">${arm('home')}</div>
     ${finalLine}${projLine}
+    ${(()=>{const tr=topReasons();return tr.length?`<div style="margin:2px 0 4px">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Why this number</div>
+      <ol style="margin:0;padding-left:18px;font-size:11.5px;line-height:1.6">${tr.map(r=>`<li>${r.t}</li>`).join('')}</ol>
+    </div>`:'';})()}
     ${(()=>{const rr=realLineRead();return rr.length?`<div style="display:flex;flex-direction:column;gap:4px;margin:2px 0 4px">${rr.map(r=>
       `<div style="font-size:11.5px;line-height:1.5;background:var(--panel2);border:1px solid var(--rule);border-radius:7px;padding:7px 9px">
         <b style="color:var(--gold);font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${r.label}</b> — ${r.text}</div>`).join('')}</div>`:'';})()}
@@ -2190,7 +2223,8 @@ function delLocked(id){
 }
 
 /* ================= TARGET TICKET BUILDER ================= */
-// Same 60/70/25 qualifying pool as Best Bets — real lines only, no synthetic F5.
+// Same qualifying pool as Best Bets — real lines only, no synthetic F5. Thresholds are
+// per-type now: 60% sides, 70% totals, 75% RBI, 80% other props, 27% HR.
 // Greedy safest-first: sorts by probability descending, adds legs until the combined
 // payout clears the target, skipping a second leg from any game already used.
 // Same-game legality, matching how an actual sportsbook ticket works:
@@ -2241,7 +2275,7 @@ function qualifyingPool(modes){
   if(modes.has('rl'))bestRunLines().forEach(x=>pool.push(x));
   if(modes.has('total'))bestTotals(999).forEach(x=>pool.push({p:x.prob,pick:x.pick,game:x.game,kind:'total'}));
   if(modes.has('prop')){
-    PROPS.filter(p=>p.type!=='hr'&&p.p>=PUBLIC_THRESH.prop).forEach(p=>
+    PROPS.filter(p=>p.type!=='hr'&&p.p>=propThreshFor(p.type)).forEach(p=>
       pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop'}));
     PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).forEach(p=>
       pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr'}));
@@ -2273,7 +2307,7 @@ function buildTargetTicket(){
   const neededMult=1+(profit/stake);
   const pool=qualifyingPool(modes);
   if(!pool.length){
-    resEl.innerHTML='<div class="empty">Nothing in the selected market(s) clears the 60/70/25 bar right now.</div>';
+    resEl.innerHTML='<div class="empty">Nothing in the selected market(s) clears its bar right now — 60% sides, 70% totals, 75% RBI, 80% other props, 27% HR.</div>';
     return;
   }
   const combo=[];
@@ -2955,7 +2989,16 @@ function bestTab(t){
 // public-facing floor: Best Bets and Recap never show a pick below this bar, even if it
 // means showing fewer than 5. Everything below still gets tracked in Grades internally —
 // this only controls what's public.
-const PUBLIC_THRESH={side:0.60,total:0.70,f5:0.70,hr:0.25,prop:0.70};
+const PUBLIC_THRESH={side:0.60,total:0.70,f5:0.70,hr:0.27,prop:0.80,rbi:0.75};
+// per-prop-type floor for anything public-facing — replaces the old flat 70% bar with
+// what was actually specified: RBI is a noisier, lower-signal stat so it gets its own
+// lower bar; everything else that behaves like a clean binary outcome (hits, total bases,
+// strikeouts, walks) holds the stricter 80%. HR keeps its own tiered system separately.
+function propThreshFor(type){
+  if(type==='rbi')return PUBLIC_THRESH.rbi;
+  if(type==='hr')return PUBLIC_THRESH.hr;
+  return PUBLIC_THRESH.prop;
+}
 // HR is structurally rarer than hits/Ks/walks, so a raw 29% HR prop is genuinely elite
 // within its own category even though it looks weak next to an 88% strikeout prop on a
 // flat sort. This tier is for INCLUSION/labeling only — the displayed % always stays the
@@ -3002,7 +3045,7 @@ function bestTotals(n){
   return out.sort((a,b)=>b.prob-a.prob).slice(0,n);
 }
 function bestPropsRaw(n){
-  return PROPS.filter(p=>p.type!=='hr'&&p.p>=PUBLIC_THRESH.prop).slice(0,n)
+  return PROPS.filter(p=>p.type!=='hr'&&p.p>=propThreshFor(p.type)).slice(0,n)
     .map(p=>({name:p.name,mkt:p.mkt,type:p.type,thr:p.thr,pid:p.pid,gid:p.gid,game:p.game,p:p.p}));
 }
 function bestHRRaw(){
