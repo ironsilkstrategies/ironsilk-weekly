@@ -301,7 +301,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v26</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v29</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -691,10 +691,20 @@ function envMult(g){
   }
   return Math.max(.85,Math.min(1.18,m));
 }
-function hRates(s){const pa=s.plateAppearances||0;if(pa<40)return null;
-  const h=s.hits||0,d=s.doubles||0,t=s.triples||0,hr=s.homeRuns||0;
+// recent hot/cold form — real signal, small weight, same philosophy as oppMult/venueAdj.
+// Needs a real recent sample before it does anything; a bounded, dampened nudge to a
+// batter's effective OPS, not a rewrite of who he is. This is data the app was already
+// fetching for every hitter and simply discarding — no new API calls involved.
+function formMult(s,rs){
+  if(!rs||!rs.plateAppearances||rs.plateAppearances<12)return 1;
+  const rOps=parseFloat(rs.ops||0)||0,sOps=parseFloat(s.ops||0)||0;
+  if(!rOps||!sOps)return 1;
+  return Math.max(.90,Math.min(1.12,Math.pow(rOps/sOps,.5)));
+}
+function hRates(s,rs){const pa=s.plateAppearances||0;if(pa<40)return null;
+  const h=s.hits||0,d=s.doubles||0,t=s.triples||0,hr=s.homeRuns||0,fm=formMult(s,rs);
   return{pa,p1:Math.max(0,h-d-t-hr)/pa,p2:d/pa,p3:t/pa,p4:hr/pa,pH:h/pa,
-    pRBI:Math.min(.32,(s.rbi||0)/pa),ops:parseFloat(s.ops||0)||0,hr:hr,hrRate:hr/pa}}
+    pRBI:Math.min(.32,(s.rbi||0)/pa),ops:(parseFloat(s.ops||0)||0)*fm,hr:hr,hrRate:hr/pa,formMult:fm}}
 function oppMult(p){if(!p||!p.whip)return 1;
   return Math.max(.80,Math.min(1.22,Math.pow(parseFloat(p.whip)/LG.whip,.62)))}
 function expIP(p){if(!p)return 5.2;const ip=parseFloat(p.ip||0),gs=p.gs||0;
@@ -719,7 +729,7 @@ function h2hAdj(g){
 }
 
 function teamRuns(lu,oppP,env,vAdj,hAdj){
-  const r=lu.map(x=>hRates(x.stat)).filter(Boolean);
+  const r=lu.map(x=>hRates(x.stat,x.rstat)).filter(Boolean);
   if(r.length<5)return null;
   const o=r.reduce((a,x)=>a+(x.ops||LG.ops),0)/r.length;
   return Math.max(1.5,Math.min(9,LG.runs*Math.pow(o/LG.ops,1.75)*oppMult(oppP)*env*vAdj*hAdj));
@@ -1090,7 +1100,7 @@ async function people(ids,grp){
           ?{id:p.id,name:short(p.fullName),hand:(p.pitchHand||{}).code||'',era:se.era,whip:se.whip,
             so:se.strikeOuts,bb:se.baseOnBalls,h:se.hits,ip:se.inningsPitched,gs:se.gamesStarted,
             pit:se.pitchesThrown,rEra:re.era||null}
-          :{stat:se};
+          :{stat:se,rstat:re};
       });
     }catch(e){}
   }
@@ -1128,7 +1138,7 @@ async function loadAll(){
           w:(t.leagueRecord||{}).wins,l:(t.leagueRecord||{}).losses,
           p:pp?(P[pp.id]||{name:pp.fullName}):null,
           lineupProj:proj&&(src||[]).length>0,
-          lineup:(src||[]).slice(0,9).map(x=>({id:x.id,name:short(x.fullName),stat:(H[x.id]||{}).stat||{}}))};
+          lineup:(src||[]).slice(0,9).map(x=>({id:x.id,name:short(x.fullName),stat:(H[x.id]||{}).stat||{},rstat:(H[x.id]||{}).rstat||{}}))};
       };
       return{id:g.gamePk,time:g.gameDate,
         status:(g.status||{}).detailedState||'',abstract:(g.status||{}).abstractGameState||'',
@@ -1757,10 +1767,26 @@ async function loadPreviewDay(d){
 }
 
 /* ================= RENDER GAMES ================= */
+function lineupSig(g){
+  // the ONE thing that should legitimately trigger a fresh simulation — if this string is
+  // identical to last time, nothing about the actual matchup changed, so the cached score
+  // should stay exactly as it was rather than re-rolling 10,000 random sims for no reason
+  const a=(g.away.lineup||[]).map(p=>p.id).join(',');
+  const h=(g.home.lineup||[]).map(p=>p.id).join(',');
+  return a+'|'+h+'|'+(g.away.p?g.away.p.id:'?')+'|'+(g.home.p?g.home.p.id:'?');
+}
 function render(){
   const el=document.getElementById('slate');
   if(!GAMES.length){el.innerHTML='<div class="empty">No games today.</div>';return}
-  SIMS={};GAMES.forEach(g=>SIMS[g.id]=simGame(g));
+  GAMES.forEach(g=>{
+    const sig=lineupSig(g);
+    const cached=SIMS[g.id];
+    if(!cached||cached._sig!==sig){
+      const s=simGame(g);
+      if(s)s._sig=sig;
+      SIMS[g.id]=s;
+    }
+  });
   const fin=GAMES.filter(g=>g.abstract==='Final');
   const live=GAMES.filter(g=>g.abstract==='Live');
   const up=GAMES.filter(g=>g.abstract!=='Final'&&g.abstract!=='Live');
@@ -2563,26 +2589,35 @@ async function gradePropsFor(A){
 const GTABS=[['sides','Sides'],['props','Props'],['picks','Picks'],['f5','First 5'],['calib','Calibration'],['learn','Learning'],['days','By day']];
 async function hardRecalibrate(){
   const el=document.getElementById('gradeBody');
-  el.innerHTML='<div class="empty">Regrading every stored slate, recomputing corrections…</div>';
+  el.innerHTML='<div class="empty">Recalibrating from graded history…</div>';
   const arc=get(LS.arc,{});
-  for(const d of Object.keys(arc).sort().reverse()){
+  const days=Object.keys(arc).sort().reverse();
+  const touched=[];
+  for(const d of days){
+    if(arc[d].locked){continue}  // already settled — never re-touch a day that's locked in
     try{
       const f=await fetchFinals(d);
       if(Object.keys(f).length){
         arc[d].finals=f;
-        delete arc[d].pgrades;              // force a clean prop regrade
+        delete arc[d].pgrades;              // force a clean prop regrade for THIS day only
         await gradePropsFor(arc[d]);
         if(d!==today())arc[d].locked=true;
+        touched.push(d);
       }
     }catch(e){}
   }
   set(LS.arc,arc);
   computeCalibration();
   computeEntities();
-  buildProps();
+  buildProps();   // new calibration applies to any game that hasn't started yet, immediately
   render();
   renderGrades();
-  alert('Recalibrated. Type-level factors, team run bias and player factors all rebuilt from every graded game on record.');
+  const c=get(LS.calib,{}),types=c.types||{};
+  const changed=Object.keys(types).filter(t=>types[t].n>=MIN_N_CAL&&Math.abs(types[t].f-1)>=0.03)
+    .map(t=>`${t}: your model was ${types[t].f>1?'underestimating':'overestimating'} it by about ${Math.abs((1-types[t].f)*100).toFixed(0)}% (${types[t].n} graded, actual ${types[t].actual}% vs predicted ${types[t].predicted}%)`);
+  alert(`Recalibrated using ${touched.length?touched.join(', ')+' ':''}already-graded history only — locked days from before today weren't touched.\n\n`
+    +(changed.length?'What changed and why:\n'+changed.join('\n'):'Not enough graded volume yet on any prop type to show a real adjustment breakdown.')
+    +'\n\nAny game that hasn\'t started yet already reflects this — anything already locked from a past day stays exactly as it was graded.');
 }
 async function renderGrades(force){
   document.getElementById('gradeNav').innerHTML=GTABS.map(([k,l])=>
