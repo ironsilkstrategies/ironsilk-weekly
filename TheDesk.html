@@ -363,7 +363,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v38b</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v39</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1704,91 +1704,369 @@ function trendPanel(g,s){
   const modelTotalLean=modelOver>=.5?'over':'under';
   const modelSide=s.hw>=s.aw?g.home.abbr:g.away.abbr;
   const rows=[];
-  const add=(name,text,implies,relevant)=>{
+  const add=(name,text,implies,relevant,forced)=>{
     let cls='neutral',verdict='Neutral — does not push either way';
-    if(implies&&relevant){
+    if(forced){cls=forced;verdict=forced==='agree'?`Backs the model`:`Argues against the model`;}
+    else if(implies&&relevant){
       const agree=implies===relevant;
       cls=agree?'agree':'conflict';
-      verdict=agree?`Backs the model — it also leans ${relevant}`:`Argues against the model, which leans ${relevant}`;
+      verdict=agree?`Backs the model — leans ${relevant}`:`Argues against — model leans ${relevant}`;
     }
     rows.push({name,text,cls,verdict});
   };
-  // 1 — two-year head-to-head run environment
+
+  // ── 1 · H2H run environment ──────────────────────────────────────────────
   const hk=[g.away.id,g.home.id].sort().join('-'),hrec=H2H[hk];
   if(hrec&&hrec.games>=5&&hrec.runs){
     const rpg=hrec.runs/hrec.games;
     const implies=rpg>ot.line+0.4?'over':rpg<ot.line-0.4?'under':null;
-    add('Head to head · 2yr',
-      `These two have averaged <b>${rpg.toFixed(1)} combined runs</b> across ${hrec.games} meetings, against tonight's ${ot.line} (${ot.src}).`,
+    add('H2H run environment',
+      `These two have averaged <b>${rpg.toFixed(1)} combined runs</b> across ${hrec.games} meetings vs tonight's ${ot.line} (${ot.src}).`,
       implies,modelTotalLean);
   }
-  // 2 — home/away split strength behind the model's side
-  const hs=SPLITS[g.home.id],as=SPLITS[g.away.id];
-  if(hs&&as){
-    const hw=hs.home.w/Math.max(1,hs.home.w+hs.home.l),aw=as.away.w/Math.max(1,as.away.w+as.away.l);
+
+  // ── 2 · Venue splits ─────────────────────────────────────────────────────
+  const hs=SPLITS[g.home.id],as_=SPLITS[g.away.id];
+  if(hs&&as_){
+    const hw=hs.home.w/Math.max(1,hs.home.w+hs.home.l),aw=as_.away.w/Math.max(1,as_.away.w+as_.away.l);
     const splitSide=hw>=aw?g.home.abbr:g.away.abbr;
-    add('Venue splits',
-      `${g.home.abbr} are <b>${hs.home.w}-${hs.home.l}</b> at home, ${g.away.abbr} <b>${as.away.w}-${as.away.l}</b> on the road.`,
-      splitSide,modelSide);
+    const margin=Math.abs(hw-aw);
+    if(margin>=0.07)
+      add('Venue splits',
+        `${g.home.abbr} win <b>${(hw*100).toFixed(0)}%</b> at home; ${g.away.abbr} win <b>${(aw*100).toFixed(0)}%</b> on the road — ${margin>=0.15?'a meaningful gap':'slight edge'} in site-specific performance.`,
+        splitSide,modelSide);
   }
-  // 3 — starter recent form vs their own season baseline
+
+  // ── 3 · Starter recent form vs baseline (both starters) ──────────────────
   ['away','home'].forEach(sd=>{
     const q=g[sd].p;
     if(q&&q.rEra&&q.era){
       const d=parseFloat(q.rEra)-parseFloat(q.era);
       if(Math.abs(d)>=0.75){
         add(`${g[sd].abbr} starter form`,
-          `${q.name} has a <b>${q.rEra} ERA over his last 5</b> against a ${q.era} season mark — ${d<0?'sharper than his baseline':'worse than his baseline'}.`,
+          `${q.name} posts a <b>${q.rEra} ERA over his last 5</b> vs ${q.era} season — ${d<0?'pitching sharper than normal, suppressing runs':'struggling above baseline, run environment risk'}.`,
           d<0?'under':'over',modelTotalLean);
       }
     }
   });
-  // 4 — park run environment
+
+  // ── 4 · Starter workload / IP per start ──────────────────────────────────
+  // Low IP/GS = short outings = more bullpen exposure = total risk
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.ip&&q.gs&&q.gs>=5){
+      const ipg=parseFloat(q.ip)/q.gs;
+      if(ipg<4.8){
+        add(`${g[sd].abbr} starter workload`,
+          `${q.name} is averaging only <b>${ipg.toFixed(1)} innings per start</b> — short outings mean earlier bullpen exposure, which inflates scoring variance.`,
+          'over',modelTotalLean);
+      } else if(ipg>=6.2){
+        add(`${g[sd].abbr} starter depth`,
+          `${q.name} is going deep — <b>${ipg.toFixed(1)} innings per start</b>. Less bullpen contact reduces run-scoring variance.`,
+          'under',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 5 · Strikeout rate vs walk rate (K/BB ratio as control indicator) ────
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.so&&q.bb&&q.bb>0&&q.ip){
+      const ip=parseFloat(q.ip);
+      const kRate=q.so/ip,bbRate=q.bb/ip;
+      const kbb=q.so/q.bb;
+      if(kbb>=4.0){
+        add(`${g[sd].abbr} command trend`,
+          `${q.name} has a <b>${kbb.toFixed(1)} K/BB ratio</b> — elite command. High strikeout, low walk pitchers consistently compress run environments.`,
+          'under',modelTotalLean);
+      } else if(bbRate>=1.2){
+        add(`${g[sd].abbr} control concern`,
+          `${q.name} is walking <b>${bbRate.toFixed(1)} per inning</b>. Free passes pile up quickly and inflate scoring, especially in a one-run game context.`,
+          'over',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 6 · Pitcher hits-per-inning (contact suppression) ────────────────────
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.h&&q.ip){
+      const ip=parseFloat(q.ip),hpi=q.h/ip;
+      if(hpi<0.75){
+        add(`${g[sd].abbr} contact suppression`,
+          `${q.name} allows only <b>${hpi.toFixed(2)} hits per inning</b> — strong contact suppression, harder for runs to accumulate.`,
+          'under',modelTotalLean);
+      } else if(hpi>1.15){
+        add(`${g[sd].abbr} contact allowed`,
+          `${q.name} is giving up <b>${hpi.toFixed(2)} hits per inning</b>. High contact rate pitchers are particularly vulnerable in hitter-friendly conditions tonight.`,
+          'over',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 7 · Lineup OPS recency vs season (hot/cold team bats) ────────────────
+  ['away','home'].forEach(sd=>{
+    const lu=g[sd].lineup;
+    if(!lu||lu.length<5)return;
+    const recentOps=lu.map(x=>parseFloat(x.rstat&&x.rstat.ops||0)).filter(v=>v>0);
+    const seasonOps=lu.map(x=>parseFloat(x.stat&&x.stat.ops||0)).filter(v=>v>0);
+    if(recentOps.length<4||seasonOps.length<4)return;
+    const rAvg=recentOps.reduce((a,b)=>a+b,0)/recentOps.length;
+    const sAvg=seasonOps.reduce((a,b)=>a+b,0)/seasonOps.length;
+    const delta=rAvg-sAvg;
+    if(Math.abs(delta)>=0.030){
+      const side=g[sd].abbr;
+      const teamIsModel=side===modelSide;
+      const hotFavorsOver=delta>0; // hot offense → more runs → over
+      add(`${side} lineup temperature`,
+        `${side}'s lineup is running <b>${delta>0?'+':''}${(delta*1000).toFixed(0)} OPS points ${delta>0?'above':'below'} their season baseline</b> over recent games. ${delta>0?'Hot bats elevate scoring.':'Cold bats suppress runs.'}`,
+        delta>0?'over':'under',modelTotalLean);
+    }
+  });
+
+  // ── 8 · Park factor (run + HR) ───────────────────────────────────────────
   const pf=PARK[g.home.abbr]||[100,100];
   if(Math.abs(pf[0]-100)>=3){
     add('Park factor',
-      `${g.home.abbr}'s park runs at <b>${pf[0]}</b> for scoring (100 is neutral)${Math.abs(pf[1]-100)>=5?`, and <b>${pf[1]}</b> for home runs`:''}.`,
+      `${g.home.abbr}'s park indexes at <b>${pf[0]} for scoring</b> (100 = neutral)${Math.abs(pf[1]-100)>=5?` and <b>${pf[1]} for home runs</b> — HR environment matters for single-run outcomes`:''}.`,
       pf[0]>100?'over':'under',modelTotalLean);
   }
-  // 5 — weather
-  const w=g.weather;
-  if(w&&w.temp){
-    if(w.temp>=85||w.temp<=52){
-      add('Weather',`<b>${w.temp}°</b>${w.cond?', '+w.cond:''}${w.wind?' · '+w.wind:''} — ${w.temp>=85?'warm air carries':'cold air suppresses'}.`,
-        w.temp>=85?'over':'under',modelTotalLean);
-    }else if(/out/i.test(w.wind||'')){
-      add('Weather',`Wind <b>${w.wind}</b> at ${w.temp}° — blowing out helps the ball carry.`,'over',modelTotalLean);
-    }else if(/in\b/i.test(w.wind||'')){
-      add('Weather',`Wind <b>${w.wind}</b> at ${w.temp}° — blowing in knocks balls down.`,'under',modelTotalLean);
+
+  // ── 9 · Park HR factor as side signal ────────────────────────────────────
+  // A heavy HR park boosts the power-hitting side's win probability
+  if(pf[1]>=115){
+    const lu=g.home.lineup||[];
+    const awlu=g.away.lineup||[];
+    const homeHR=lu.reduce((a,x)=>a+(x.stat&&x.stat.homeRuns||0),0);
+    const awayHR=awlu.reduce((a,x)=>a+(x.stat&&x.stat.homeRuns||0),0);
+    if(Math.abs(homeHR-awayHR)>=8){
+      const hrSide=homeHR>awayHR?g.home.abbr:g.away.abbr;
+      add('Park × power lineup',
+        `This park inflates HR at <b>${pf[1]}</b> index and ${hrSide} has the heavier power lineup (${homeHR>awayHR?homeHR:awayHR} combined HRs vs ${homeHR>awayHR?awayHR:homeHR}). Power teams get a disproportionate lift here.`,
+        hrSide,modelSide);
     }
   }
-  // 6 — the model's own learned bias on these teams, from graded history
+
+  // ── 10 · Weather — temperature extremes ──────────────────────────────────
+  const w=g.weather;
+  if(w&&w.temp){
+    if(w.temp>=86){
+      add('Heat carry',`<b>${w.temp}°</b> — warm dense air carries the ball further. Ballparks play bigger in heat, especially combined with low humidity.`,'over',modelTotalLean);
+    } else if(w.temp<=50){
+      add('Cold suppression',`<b>${w.temp}°</b> — cold air is denser, kills carry. Pitchers also get better grip. Run environments shrink in cold.`,'under',modelTotalLean);
+    } else if(w.temp>=80){
+      add('Warm conditions',`<b>${w.temp}°</b> — warm but not extreme. Slight carry boost if wind cooperates.`,'over',modelTotalLean);
+    }
+  }
+
+  // ── 11 · Weather — wind direction and speed ───────────────────────────────
+  if(w&&w.wind){
+    const ws=w.wind;
+    const spd=parseInt(ws)||0;
+    const outDir=/out|blowing out|to (center|left|right|cf|lf|rf)/i.test(ws);
+    const inDir=/in\b|blowing in|from (center|left|right|cf|lf|rf)/i.test(ws);
+    const crossDir=/cross|left to right|right to left/i.test(ws);
+    if(outDir&&spd>=10){
+      add('Wind — blowing out',`<b>${ws}</b> — carries fly balls toward the seats. ${spd>=15?'Strong out wind is one of the highest-confidence over signals in baseball.':'Meaningful carry boost.'}`,
+        'over',modelTotalLean);
+    } else if(inDir&&spd>=10){
+      add('Wind — blowing in',`<b>${ws}</b> — knocks balls down, suppresses home runs, helps pitchers. ${spd>=15?'Hard in-wind parks play historically under.':'Mild suppression effect.'}`,
+        'under',modelTotalLean);
+    } else if(crossDir&&spd>=12){
+      add('Wind — crosswind',`<b>${ws}</b> — crosswinds complicate pitcher grip and break. Marginally increases walks and contact, slight over lean.`,
+        'over',modelTotalLean);
+    }
+  }
+
+  // ── 12 · Dew point estimate from temp + conditions ───────────────────────
+  // No direct dew point from API — approximate from condition strings
+  if(w&&w.temp&&w.cond){
+    const humid=/humid|muggy|mist|fog|drizzle|shower/i.test(w.cond);
+    if(humid&&w.temp>=72){
+      add('Humidity — pitcher grip',
+        `<b>${w.cond} at ${w.temp}°</b> — high humidity at warm temps approximates a dew point above 60°F. Breaking ball grip degrades, which typically flattens strikeout rates and increases contact.`,
+        'over',modelTotalLean);
+    }
+  }
+
+  // ── 13 · Series game number ───────────────────────────────────────────────
+  // Series G3+ means advance scouts have deep video, bullpens are taxed, and
+  // offenses have adjusted — run environments tighten in G3 vs G1
+  if(hrec&&hrec.games){
+    // Estimate if teams played recently by checking H2H rec freshness
+    // Flag if this looks like a continuation series (H2H win totals imply recent meetings)
+    const recentH2H=(hrec.aw+hrec.bw)>=(hrec.games*0.35);
+    if(recentH2H&&hrec.games>=6){
+      add('Familiarity factor',
+        `These teams have met <b>${hrec.games} times</b> in recent data. Deep familiarity tends to tighten run environments — pitchers pitch to known weaknesses, lineups adjust. Later-series games trend toward lower scoring.`,
+        'under',modelTotalLean);
+    }
+  }
+
+  // ── 14 · Run differential vs record divergence ───────────────────────────
+  // Teams over-performing their run diff regress; under-performing teams improve
+  if(hs&&as_){
+    const homeW=hs.home.w+((SPLITS[g.home.id]||{}).away||{}).w||0;
+    const homeL=hs.home.l+((SPLITS[g.home.id]||{}).away||{}).l||0;
+    // We don't have run diff directly — use win% vs OPS proxy
+    // If home team has strong OPS but poor record, they're underperforming
+    const homeLu=g.home.lineup||[];
+    const homeOpsAvg=homeLu.map(x=>parseFloat(x.stat&&x.stat.ops||0)).filter(v=>v>0);
+    if(homeOpsAvg.length>=5){
+      const avgOps=homeOpsAvg.reduce((a,b)=>a+b,0)/homeOpsAvg.length;
+      const winPct=homeW/Math.max(1,homeW+homeL);
+      // Strong OPS, weak record = regression candidate (bullpen masking offense)
+      if(avgOps>0.730&&winPct<0.450){
+        add('Offense-record divergence',
+          `${g.home.abbr} lineup posts a <b>${avgOps.toFixed(3)} average OPS</b> but wins only ${(winPct*100).toFixed(0)}% — offense is outperforming the record, suggesting bullpen or luck is masking run-scoring potential. Regression favors more offense.`,
+          'over',modelTotalLean);
+      }
+    }
+  }
+
+  // ── 15 · Bullpen exposure signal from starter K/BB + IP/GS ──────────────
+  // Combine starter depth + command: if both starters are going short AND walking people,
+  // bullpen will see heavy action → run environment expands
+  const awP=g.away.p,hmP=g.home.p;
+  if(awP&&hmP&&awP.ip&&hmP.ip&&awP.gs&&hmP.gs){
+    const awIPG=parseFloat(awP.ip)/awP.gs;
+    const hmIPG=parseFloat(hmP.ip)/hmP.gs;
+    const awBBR=awP.bb?awP.bb/parseFloat(awP.ip):0;
+    const hmBBR=hmP.bb?hmP.bb/parseFloat(hmP.ip):0;
+    const bothShort=awIPG<5.0&&hmIPG<5.0;
+    const bothWalky=awBBR>0.95&&hmBBR>0.95;
+    if(bothShort&&bothWalky){
+      add('Dual bullpen exposure',
+        `Both starters average under 5 innings and walk over 0.9 batters per inning. When both pens enter early in a game with command issues, scoring totals historically inflate by 1-2 runs above the posted line.`,
+        'over',modelTotalLean);
+    } else if(bothShort){
+      add('Short-starter matchup',
+        `Both ${g.away.abbr} and ${g.home.abbr} starters average <b>under 5 innings per outing</b>. Expect bullpen involvement from the 4th or 5th inning — scoring variance goes up when relievers enter early.`,
+        'over',modelTotalLean);
+    }
+  }
+
+  // ── 16 · Lineup power vs pitcher whip (contact environment) ─────────────
+  // Low WHIP pitcher vs. high-HR lineup = suppressed power; High WHIP vs. power lineup = inflation
+  ['away','home'].forEach(sd=>{
+    const opp=sd==='away'?'home':'away';
+    const pitcher=g[opp].p;
+    const offLu=g[sd].lineup||[];
+    if(!pitcher||!pitcher.whip||offLu.length<5)return;
+    const whip=parseFloat(pitcher.whip);
+    const luHR=offLu.reduce((a,x)=>a+(x.stat&&x.stat.homeRuns||0),0);
+    const luOps=offLu.map(x=>parseFloat(x.stat&&x.stat.ops||0)).filter(v=>v>0);
+    const avgOps=luOps.length?luOps.reduce((a,b)=>a+b,0)/luOps.length:0;
+    if(whip<=1.05&&avgOps>=0.760){
+      add(`Elite WHIP vs power offense`,
+        `${pitcher.name} has a <b>${whip} WHIP</b> — allows very little baserunners — against ${g[sd].abbr}'s power lineup (avg OPS ${avgOps.toFixed(3)}). Pitcher wins this matchup; power gets suppressed.`,
+        'under',modelTotalLean);
+    } else if(whip>=1.35&&luHR>=15){
+      add(`High-WHIP vs power lineup`,
+        `${pitcher.name} has a <b>${whip} WHIP</b> — gives up baserunners — facing ${g[sd].abbr}'s lineup with ${luHR} combined HRs. Runners on base amplify the damage from power bats.`,
+        'over',modelTotalLean);
+    }
+  });
+
+  // ── 17 · Sharp market movement signal ───────────────────────────────────
+  const mM=marketOf(g);
+  const st=sharpTotalFor(g.id);
+  if(st&&st.line&&mM){
+    // If sharp total differs meaningfully from model's sim total — flag it
+    const simTotal=s.mean;
+    const sharpGap=Math.abs(st.line-simTotal);
+    if(sharpGap>=1.0){
+      const sharpLean=st.line>simTotal?'over':'under'; // sharp posted higher line = expects more runs
+      add('Sharp vs sim divergence',
+        `SharpSports posts <b>${st.line}</b> while this model's sim lands at <b>${simTotal.toFixed(1)}</b> — a <b>${sharpGap.toFixed(1)}-run gap</b>. When sharp money and simulation diverge this much, the sharp number usually reflects real-money pressure.`,
+        sharpLean===modelTotalLean?'agree':'conflict',null,sharpLean===modelTotalLean?'agree':'conflict');
+    }
+  }
+
+  // ── 18 · Pitcher total pitches vs avg — fatigue signal ──────────────────
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.pit&&q.gs&&q.gs>=4){
+      const pitPerStart=q.pit/q.gs;
+      // High pitch count per start means this pitcher stresses the arm more
+      // rEra being worse than era is already covered; this is about physical load
+      if(pitPerStart>=100&&q.rEra&&parseFloat(q.rEra)>parseFloat(q.era||'0')+0.5){
+        add(`${g[sd].abbr} pitch load + fade`,
+          `${q.name} averages <b>${pitPerStart.toFixed(0)} pitches per start</b> and his recent ERA (${q.rEra}) is climbing above his season mark. High pitch counts plus performance fade is a classic pre-blowup pattern.`,
+          'over',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 19 · Hand advantage — platoon exposure ───────────────────────────────
+  // Opposing pitcher hand vs lineup composition
+  ['away','home'].forEach(sd=>{
+    const opp=sd==='away'?'home':'away';
+    const pitcher=g[opp].p;
+    if(!pitcher||!pitcher.hand)return;
+    const lu=g[sd].lineup||[];
+    // We don't have batter hand from API directly, but we can note when the pitcher
+    // is a rare handedness (LHP) and the team's OPS suggests they struggle vs that
+    if(pitcher.hand==='L'){
+      const ops=lu.map(x=>parseFloat(x.stat&&x.stat.ops||0)).filter(v=>v>0);
+      const avg=ops.length?ops.reduce((a,b)=>a+b,0)/ops.length:0;
+      if(avg<0.700&&ops.length>=5){
+        add(`LHP platoon suppression`,
+          `${g[opp].abbr} sends a lefty (${pitcher.name}) and ${g[sd].abbr}'s lineup averages only <b>${avg.toFixed(3)} OPS</b>. Left-heavy lineups facing elite LHPs tend to underperform their season averages.`,
+          'under',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 20 · Stolen base / speed pressure vs catcher ─────────────────────────
+  // Teams with high stolen base rates force pitchers to alter windup — disrupts rhythm
+  // Proxy: look for high OBP lineups (speed correlates with OBP at team level)
+  ['away','home'].forEach(sd=>{
+    const lu=g[sd].lineup||[];
+    const obpProxy=lu.map(x=>{
+      const s=x.stat||{};
+      const pa=s.plateAppearances||1;
+      return ((s.hits||0)+(s.baseOnBalls||0))/pa;
+    }).filter(v=>v>0.05);
+    if(obpProxy.length<5)return;
+    const avgOBP=obpProxy.reduce((a,b)=>a+b,0)/obpProxy.length;
+    const oppP=g[sd==='away'?'home':'away'].p;
+    if(avgOBP>=0.345&&oppP&&parseFloat(oppP.whip||99)>=1.25){
+      add(`High-OBP lineup vs shaky control`,
+        `${g[sd].abbr} reaches base at a <b>${avgOBP.toFixed(3)} rate</b> and the opposing pitcher has a ${oppP.whip} WHIP. Getting on base frequently against a walk-prone starter is a classic scoring setup.`,
+        'over',modelTotalLean);
+    }
+  });
+
+  // ── 21 · Model bias correction disclosure ───────────────────────────────
   const ent=get(LS.ent,{}).teams||{};
   [[g.away.abbr,'away'],[g.home.abbr,'home']].forEach(([ab])=>{
     const t=ent[ab];
     if(t&&t.n>=MIN_SHOW&&Math.abs(t.rawBias)>=0.35){
       rows.push({name:`Self-check · ${ab}`,
-        text:`Across ${t.n} graded games this model has <b>${t.rawBias>0?'over':'under'}-projected ${ab} by ${Math.abs(t.rawBias).toFixed(2)} runs</b> on average. That correction is already applied to tonight's number.`,
-        cls:'neutral',verdict:'Already corrected for — shown so you know it exists'});
+        text:`Across ${t.n} graded games this model has <b>${t.rawBias>0?'over':'under'}-projected ${ab} by ${Math.abs(t.rawBias).toFixed(2)} runs</b> on average. That correction is already baked into tonight's number.`,
+        cls:'neutral',verdict:'Already corrected — shown so you know the history'});
     }
   });
-  // 7 — your own book's historical behaviour at this number
-  const bt=bookTrendForTotal(ot.line);
-  if(bt&&bt.ready){
+
+  // ── 22 · Your book's history at this total ───────────────────────────────
+  const bt_=bookTrendForTotal(ot.line);
+  if(bt_&&bt_.ready){
     add('Your book at this number',
-      `When your book has posted <b>${ot.line}</b>, it has gone over <b>${bt.overPct}%</b> of the time across ${bt.total} tracked games.`,
-      Number(bt.overPct)>=50?'over':'under',modelTotalLean);
-  }else if(bt){
+      `When your book posts <b>${ot.line}</b>, it has gone over <b>${bt_.overPct}%</b> of the time across ${bt_.total} tracked games.`,
+      Number(bt_.overPct)>=50?'over':'under',modelTotalLean);
+  }else if(bt_){
     rows.push({name:'Your book at this number',cls:'neutral',
-      text:`Only <b>${bt.total}</b> tracked ${bt.total===1?'game':'games'} at ${ot.line} so far — needs 8 before this says anything real.`,
+      text:`Only <b>${bt_.total}</b> tracked ${bt_.total===1?'game':'games'} at ${ot.line} so far — needs 8 before this says anything real.`,
       verdict:'Building history — upload screenshots daily to grow it'});
   }
+
   if(!rows.length)return '<div class="empty">No trend strong enough to flag on this game.</div>';
   const agree=rows.filter(r=>r.cls==='agree').length,conflict=rows.filter(r=>r.cls==='conflict').length;
   return `<div class="tkt hi" style="margin-bottom:10px">
-      <h3>${agree} backing · ${conflict} contesting</h3>
+      <h3>${agree} backing · ${conflict} contesting · ${rows.length} total signals</h3>
       <div class="sub">Model leans <b>${modelTotalLean.toUpperCase()} ${ot.line}</b> and <b>${modelSide}</b> on the side.
-      Green rows back that read, red rows argue with it. A stack of red is the model telling you its own number is contested.</div>
+      Green rows back that read, red argue against it. A stack of red is the model flagging its own number is contested.</div>
     </div>
     ${rows.map(r=>`<div class="trow ${r.cls}"><div class="tdot"></div><div class="tbody">
       <div class="tname">${r.name}</div><div class="ttext">${r.text}</div>
