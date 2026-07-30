@@ -262,7 +262,8 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <button onclick="document.getElementById('importFile').click()">Restore from a file</button>
   </div>
   <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importBackup(this)">
-  <div class="sub" style="margin-bottom:14px"><b>Do this before clearing Safari's site data, switching domains, or anything risky.</b>
+  <div class="sub" style="margin-bottom:14px"><b>API keys are never included in this file</b> — safe to upload to a GitHub repo or store anywhere.
+  Re-paste your keys in Settings after restoring. <b>Do this before clearing Safari's site data, switching domains, or anything risky.</b>
   Clearing your browser's site data for this domain deletes everything stored here — graded history, calibration,
   locked tickets, all of it — with no warning. A hard reload (below) never touches this; clearing site data does.
   Export regularly, not just when something's about to change.</div>
@@ -291,7 +292,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v23</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v24</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -440,8 +441,12 @@ function paintMeter(){
 }
 function exportBackup(){
   const data={};
+  // credentials never leave the browser in this file — a backup meant to potentially sit
+  // in a git repo should never carry live API keys. Re-paste them in Settings after a
+  // restore; that's a 10-second cost against a permanent plaintext leak in git history.
+  const EXCLUDE=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi]);
   Object.keys(localStorage).forEach(k=>{
-    if(k.startsWith('d4.'))data[k]=localStorage.getItem(k);
+    if(k.startsWith('d4.')&&!EXCLUDE.has(k))data[k]=localStorage.getItem(k);
   });
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
