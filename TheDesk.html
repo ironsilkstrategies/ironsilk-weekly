@@ -368,7 +368,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v41</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v41b</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3570,24 +3570,41 @@ function bridgeESPN(){
     const away=teams.find(t=>t.homeAway==='away');
     const home=teams.find(t=>t.homeAway==='home');
     if(!away||!home)return;
-    const awayAb=ESPN_ABBR_MAP[away.team.abbreviation]||away.team.abbreviation;
-    const homeAb=ESPN_ABBR_MAP[home.team.abbreviation]||home.team.abbreviation;
-    const game=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+    // Try mapped abbreviation first, then raw abbr, then name-based fuzzy match
+    const normalize=s=>(s||'').toUpperCase().replace(/\s+/g,'');
+    const espnAway=ESPN_ABBR_MAP[away.team.abbreviation]||away.team.abbreviation;
+    const espnHome=ESPN_ABBR_MAP[home.team.abbreviation]||home.team.abbreviation;
+    const awayName=normalize(away.team.displayName||'');
+    const homeName=normalize(home.team.displayName||'');
+    let game=GAMES.find(g=>g.away.abbr===espnAway&&g.home.abbr===espnHome);
+    // Fallback: match by team display name containing the abbr
+    if(!game){
+      game=GAMES.find(g=>{
+        const a=normalize(g.away.abbr),h=normalize(g.home.abbr);
+        const an=normalize(g.away.name||''),hn=normalize(g.home.name||'');
+        return (awayName.includes(a)||awayName.includes(an)||a===espnAway)
+            && (homeName.includes(h)||homeName.includes(hn)||h===espnHome);
+      });
+    }
+    // Fallback 2: just match both city/nickname parts of the ESPN display name
+    if(!game){
+      game=GAMES.find(g=>{
+        const ga=normalize(g.away.abbr),gh=normalize(g.home.abbr);
+        return awayName.includes(ga)&&homeName.includes(gh);
+      });
+    }
     if(!game)return;
     const status=comp.status||{};
     const stype=status.type||{};
     const situation=comp.situation||{};
     const linescore=comp.linescores||[];
-    // parse innings from linescores
     const awayInn=[],homeInn=[];
     linescore.forEach((inn,i)=>{
       if(i%2===0)awayInn.push(inn.value??'');
       else homeInn.push(inn.value??'');
     });
-    // current pitcher from situation
     const pitcher=situation.pitcher||null;
     const batter=situation.batter||null;
-    // live player stats from competitors
     const awayStats=buildESPNRoster(away);
     const homeStats=buildESPNRoster(home);
     ESPN_LIVE[game.id]={
@@ -3599,13 +3616,15 @@ function bridgeESPN(){
       onFirst:situation.onFirst||false,
       onSecond:situation.onSecond||false,
       onThird:situation.onThird||false,
-      state:stype.state||'pre', // pre / in / post
+      state:stype.state||'pre',
       displayClock:status.displayClock||'',
       pitcher:pitcher?{name:pitcher.athlete?.displayName||'',era:pitcher.era||''}:null,
       batter:batter?{name:batter.athlete?.displayName||'',avg:batter.avg||''}:null,
       awayInn,homeInn,
       awayStats,homeStats,
-      lastPlay:situation.lastPlay?.text||null
+      lastPlay:situation.lastPlay?.text||null,
+      espnAwayAbbr:away.team.abbreviation,
+      espnHomeAbbr:home.team.abbreviation
     };
   });
 }
@@ -3650,7 +3669,23 @@ function liveScoreBar(gid){
 /* ── Live box score panel (replaces "Box & grades" when game is live) ── */
 function liveBoxPanel(gid,g){
   const L=ESPN_LIVE[gid];
-  if(!L)return '<div class="empty">Live data loading…</div>';
+  if(!L){
+    // show what ESPN raw has so we can see the abbr mismatch
+    const espnGames=ESPN_RAW.map(ev=>{
+      const comp=(ev.competitions||[])[0]||{};
+      const teams=comp.competitors||[];
+      const aw=teams.find(t=>t.homeAway==='away');
+      const hm=teams.find(t=>t.homeAway==='home');
+      const st=(comp.status||{}).type||{};
+      return `${aw?.team?.abbreviation||'?'} @ ${hm?.team?.abbreviation||'?'} [${st.state||'?'}]`;
+    }).join(', ')||'none fetched yet';
+    return `<div class="tkt"><h3>Bridge miss</h3>
+      <div class="sub">ESPN returned data but couldn't match to <b>${g.away.abbr} @ ${g.home.abbr}</b>.<br>
+      ESPN games on board: <b>${espnGames}</b></div>
+      <div class="bar" style="margin-top:8px">
+        <button class="primary" onclick="loadESPN().then(()=>render())">Retry match</button>
+      </div></div>`;
+  }
   // Linescore table
   const maxInn=Math.max(L.awayInn.length,L.homeInn.length,9);
   const innHeaders=Array.from({length:maxInn},(_,i)=>`<th>${i+1}</th>`).join('');
