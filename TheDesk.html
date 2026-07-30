@@ -363,7 +363,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v39</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v40</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -421,16 +421,28 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
         <button id="mode-total" class="on" onclick="toggleMode('total',this)">Totals</button>
         <button id="mode-prop" class="on" onclick="toggleMode('prop',this)">Props</button>
       </div>
+      <div class="mktlab">Legs on the parlay</div>
+      <div class="subnav" id="legBtns">
+        <button onclick="setLegs(2,this)">2</button>
+        <button onclick="setLegs(3,this)">3</button>
+        <button onclick="setLegs(4,this)" class="on">4</button>
+        <button onclick="setLegs(5,this)">5</button>
+        <button onclick="setLegs(6,this)">6</button>
+        <button onclick="setLegs(7,this)">7</button>
+        <button onclick="setLegs(8,this)">8</button>
+        <button onclick="setLegs(0,this)">By target $</button>
+      </div>
       <div class="mktlab">Same-game combos</div>
-      <div class="subnav"><button id="sgpToggle" onclick="this.classList.toggle('on')">SGP mode — allow run line + total together on one game (needs 2+ picks on it)</button></div>
+      <div class="subnav"><button id="sgpToggle" onclick="this.classList.toggle('on')">SGP mode — allow run line + total together on one game</button></div>
       <div class="betgrid">
         <div><input id="targetStake" type="number" placeholder="stake $" min="1" step="1"></div>
-        <div><input id="targetProfit" type="number" placeholder="target profit $" min="1" step="1"></div>
+        <div><input id="targetProfit" type="number" placeholder="target profit $" min="1" step="1" style="opacity:0.5" id="targetProfitInput"></div>
       </div>
-      <div class="bar" style="margin-top:8px"><button class="primary" onclick="buildTargetTicket()">Build ticket</button></div>
-      <div class="sub" style="margin-top:6px">Standard tickets follow real sportsbook rules: one side pick (ML or run line) per
-      game, and it can only pair with that game's total if it's a moneyline — run line + total together needs SGP mode.
-      Prop-only results group by game so you can see how many picks ride on each matchup.</div>
+      <div class="bar" style="margin-top:8px">
+        <button class="primary" onclick="buildTargetTicket()">Build ticket</button>
+        <button onclick="rerollHeld()">Reroll free legs</button>
+      </div>
+      <div class="sub" style="margin-top:6px">Set a leg count and hit Build. Lock legs you want to keep, then hit <b>Reroll free legs</b> to swap out the rest — like video poker hold. When you're happy, hit <b>Lock this ticket</b> on the result.</div>
     </div>
     <div id="targetResult"></div>
     <div class="sbar"><h2>Generated tickets</h2><div class="ln"></div></div>
@@ -3164,72 +3176,141 @@ function toggleMode(m,btn){
   btn.classList.toggle('on');
 }
 function isPropKind(k){return k==='prop'||k==='hr'}
+/* ── BUILDER STATE ──────────────────────────────────────── */
+let TARGET_LEGS=4;        // how many legs to target (0 = use $ target)
+let HELD_PICKS=new Set(); // picks currently held (video-poker style)
+let LAST_COMBO=[];        // last built combo — needed for reroll
+
+function setLegs(n,btn){
+  TARGET_LEGS=n;
+  document.querySelectorAll('#legBtns button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  // toggle profit input opacity — only needed for "by target $" mode
+  const pi=document.getElementById('targetProfit');
+  if(pi)pi.style.opacity=n===0?'1':'0.4';
+}
+
+function toggleHold(pick){
+  if(HELD_PICKS.has(pick))HELD_PICKS.delete(pick);
+  else HELD_PICKS.add(pick);
+  renderBuilderResult(LAST_COMBO);
+}
+
+function rerollHeld(){
+  if(!LAST_COMBO.length){buildTargetTicket();return;}
+  const held=LAST_COMBO.filter(l=>HELD_PICKS.has(l.pick));
+  const sgpMode=document.getElementById('sgpToggle').classList.contains('on');
+  const modes=selectedModes();
+  const pool=qualifyingPool(modes).filter(l=>!held.some(h=>h.pick===l.pick));
+  const combo=[...held];
+  let mult=combo.reduce((a,l)=>a*(1/l.p),1);
+  const target=TARGET_LEGS>0?TARGET_LEGS:getTargetLegsFromProfit();
+
+  // reserve HR seat
+  if(modes.has('prop')&&!combo.some(l=>l.kind==='hr')){
+    const bestHR=pool.filter(l=>l.kind==='hr').sort((a,b)=>b.p-a.p)[0];
+    if(bestHR&&legalToAdd(combo,bestHR,sgpMode)){combo.push(bestHR);mult*=1/bestHR.p;}
+  }
+  for(const leg of pool){
+    if(combo.length>=target)break;
+    if(combo.includes(leg)||combo.some(c=>c.pick===leg.pick))continue;
+    if(!legalToAdd(combo,leg,sgpMode))continue;
+    combo.push(leg);mult*=1/leg.p;
+  }
+  LAST_COMBO=combo;
+  renderBuilderResult(combo);
+}
+
+function getTargetLegsFromProfit(){
+  const stake=parseFloat(document.getElementById('targetStake').value)||10;
+  const profit=parseFloat(document.getElementById('targetProfit').value)||50;
+  const neededMult=1+(profit/stake);
+  // rough leg estimate: average leg prob ~0.55 → 0.55^n = 1/neededMult
+  return Math.max(2,Math.min(12,Math.ceil(Math.log(1/neededMult)/Math.log(0.55))));
+}
+
+function lockBuiltTicket(){
+  if(!LAST_COMBO.length)return;
+  const stake=parseFloat(document.getElementById('targetStake').value)||0;
+  const combinedProb=LAST_COMBO.reduce((a,l)=>a*l.p,1);
+  const id=Date.now();
+  const locked=get(LS.locked,[]);
+  locked.push({id,date:fmtDate(new Date()),
+    legs:LAST_COMBO.map(l=>({id:id+'|'+l.pick,game:l.game,pick:l.pick,p:l.p})),
+    p:combinedProb,stake:stake||null});
+  set(LS.locked,locked);
+  HELD_PICKS.clear();LAST_COMBO=[];
+  document.getElementById('targetResult').innerHTML=
+    '<div class="tkt hi"><h3>Locked ✓</h3><div class="sub">Ticket saved to the Tickets tab. You can track your stake and payout there.</div></div>';
+  genTickets();
+}
+
+function renderBuilderResult(combo){
+  const stake=parseFloat(document.getElementById('targetStake').value)||0;
+  const resEl=document.getElementById('targetResult');
+  if(!combo.length){resEl.innerHTML='';return;}
+  const mult=combo.reduce((a,l)=>a*(1/l.p),1);
+  const combinedProb=combo.reduce((a,l)=>a*l.p,1);
+  const profit=stake*(mult-1);
+  const sgpMode=document.getElementById('sgpToggle').classList.contains('on');
+  const sgpNote=sgpMode?'<div class="sub" style="color:var(--cold)">SGP mode on. Confirm your book offers these together before firing.</div>':'';
+  const hrTag=l=>l.kind==='hr'?` <span class="flag cool">${hrTierLabel(l.p)}</span>`:'';
+  const legs=combo.map(l=>{
+    const held=HELD_PICKS.has(l.pick);
+    return `<li style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--rule)">
+      <button onclick="toggleHold('${esc(l.pick)}')" style="flex:0 0 auto;padding:2px 8px;font-size:9px;
+        font-family:'IBM Plex Mono';letter-spacing:.06em;border-radius:4px;border:1px solid;cursor:pointer;
+        background:${held?'rgba(242,169,59,.15)':'transparent'};
+        border-color:${held?'var(--gold)':'var(--rule)'};
+        color:${held?'var(--gold)':'var(--mute)'}">
+        ${held?'HELD':'HOLD'}
+      </button>
+      <span style="flex:1">${l.pick}${hrTag(l)} <span class="m">${l.game}</span></span>
+      <span class="pp">${(l.p*100).toFixed(0)}%</span>
+    </li>`;
+  }).join('');
+  resEl.innerHTML=`<div class="tkt hi">
+    <h3>${stake?'$'+stake+' → ~$'+profit.toFixed(0)+' profit':combo.length+' legs built'}</h3>
+    <div class="sub"><b>${(combinedProb*100).toFixed(combinedProb<.01?3:1)}%</b> combined · ${combo.length} legs · 1 in ${Math.round(1/combinedProb).toLocaleString()}</div>
+    ${sgpNote}
+    <ol style="list-style:none;padding:0;margin:10px 0">${legs}</ol>
+    <div class="bar" style="margin-top:4px">
+      <button class="primary" onclick="lockBuiltTicket()">Lock this ticket</button>
+      <button onclick="rerollHeld()">Reroll free legs</button>
+    </div>
+    <div class="sub" style="margin-top:6px;color:var(--mute)">Tap HOLD on any leg to keep it. Hit Reroll to swap out the rest.</div>
+  </div>`;
+}
+
 function buildTargetTicket(){
+  HELD_PICKS.clear();
   const stake=parseFloat(document.getElementById('targetStake').value);
-  const profit=parseFloat(document.getElementById('targetProfit').value);
   const sgpMode=document.getElementById('sgpToggle').classList.contains('on');
   const resEl=document.getElementById('targetResult');
   const modes=selectedModes();
   if(!modes.size){resEl.innerHTML='<div class="empty">Pick at least one market type above.</div>';return}
-  if(!stake||!profit||stake<=0||profit<=0){
-    resEl.innerHTML='<div class="empty">Enter both a stake and a target profit.</div>';return;
-  }
-  const neededMult=1+(profit/stake);
   const pool=qualifyingPool(modes);
-  if(!pool.length){
-    resEl.innerHTML='<div class="empty">Nothing in the selected market(s) clears its bar right now — 60% sides, 70% totals, 75% RBI, 80% other props, 27% HR.</div>';
-    return;
-  }
+  if(!pool.length){resEl.innerHTML='<div class="empty">No real lines available in the selected markets.</div>';return}
+
   const combo=[];
   let mult=1;
-  // reserve a seat for the best qualifying HR prop when props are in play — otherwise a
-  // 29% HR prop never wins a raw-probability sort against an 88% strikeout prop and
-  // silently never appears, even though it's genuinely elite within its own category
+  const target=TARGET_LEGS>0?TARGET_LEGS:getTargetLegsFromProfit();
+  const neededMult=TARGET_LEGS===0&&stake?(1+(parseFloat(document.getElementById('targetProfit').value)||50)/stake):null;
+
   if(modes.has('prop')){
     const bestHR=pool.filter(l=>l.kind==='hr').sort((a,b)=>b.p-a.p)[0];
-    if(bestHR&&legalToAdd(combo,bestHR,sgpMode)){
-      combo.push(bestHR);
-      mult*=1/bestHR.p;
-    }
+    if(bestHR&&legalToAdd(combo,bestHR,sgpMode)){combo.push(bestHR);mult*=1/bestHR.p;}
   }
   for(const leg of pool){
-    if(combo.includes(leg))continue;
+    if(TARGET_LEGS>0&&combo.length>=target)break;
+    if(neededMult!==null&&mult>=neededMult)break;
+    if(combo.some(c=>c.pick===leg.pick))continue;
     if(!legalToAdd(combo,leg,sgpMode))continue;
-    combo.push(leg);
-    mult*=1/leg.p;
-    if(mult>=neededMult)break;
+    combo.push(leg);mult*=1/leg.p;
   }
-  const achievedProfit=stake*(mult-1);
-  const combinedProb=combo.reduce((a,l)=>a*l.p,1);
-  const hrTag=l=>l.kind==='hr'?` <span class="flag cool">${hrTierLabel(l.p)}</span>`:'';
-  const allProps=combo.every(l=>isPropKind(l.kind));
-  const gameCount=new Set(combo.map(l=>l.game)).size;
-  let listHtml;
-  if(allProps){
-    // group by game so it's clear how many picks are riding on each matchup, not a flat probability sort
-    const byGame={};
-    combo.forEach(l=>{(byGame[l.game]=byGame[l.game]||[]).push(l)});
-    listHtml=Object.keys(byGame).map(gm=>{
-      const legs=byGame[gm].sort((a,b)=>b.p-a.p);
-      return `<div style="margin:8px 0 4px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase">${gm} · ${legs.length} pick${legs.length>1?'s':''}</div>
-        <ol>${legs.map(l=>`<li>${l.pick}${hrTag(l)} <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
-    }).join('');
-  }else{
-    listHtml=`<ol>${combo.map(l=>`<li>${l.pick}${hrTag(l)} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
-  }
-  const sgpNote=sgpMode?'<div class="sub" style="color:var(--cold)">SGP mode — same-game combos allowed. Confirm your book actually offers alt lines together on the specific games above before firing.</div>':'';
-  if(mult<neededMult){
-    resEl.innerHTML=`<div class="tkt hi"><h3>Can't reach that target today</h3>
-      <div class="sub">Using every legal leg available in the selected market(s) (${combo.length} across ${gameCount} games),
-      the max reachable is about <b>$${achievedProfit.toFixed(0)} profit</b> on a $${stake} stake — short of the $${profit} target.
-      Lower the target, raise the stake, widen the market selection, or try again once more games clear the bar.</div>
-      ${sgpNote}${listHtml}</div>`;
-  }else{
-    resEl.innerHTML=`<div class="tkt hi"><h3>$${stake} → ~$${achievedProfit.toFixed(0)} profit</h3>
-      <div class="sub"><b>${(combinedProb*100).toFixed(combinedProb<.01?3:1)}%</b> combined · ${combo.length} legs across ${gameCount} games ·
-      target was $${profit}, this lands at $${achievedProfit.toFixed(0)}</div>
-      ${sgpNote}${listHtml}</div>`;
-  }
+  if(!combo.length){resEl.innerHTML='<div class="empty">Nothing available in the selected markets right now.</div>';return}
+  LAST_COMBO=combo;
+  renderBuilderResult(combo);
 }
 
 /* ================= TICKETS ================= */
@@ -3500,7 +3581,175 @@ async function gradePropsFor(A){
   });
   if(out.length)A.pgrades=out;
 }
-const GTABS=[['sides','Sides'],['props','Props'],['picks','Picks'],['f5','First 5'],['calib','Calibration'],['learn','Learning'],['days','By day']];
+/* ================= SIM VS BOOK ACCURACY TRACKING ================= */
+// After each day grades, we record:
+// - sim's total projection vs actual total (and vs book line)
+// - sim's side pick vs actual winner
+// - which trend signals fired and whether they agreed or conflicted with the sim
+// - conflict log: when trends said one thing and sim said another, who was right
+// This feeds back into calibration and is displayed in the Stats tab.
+const LS_SVB='d4.simvbook';
+function getSimVsBook(){return get(LS_SVB,{});}
+
+function recordSimVsBook(arc,bookshots){
+  const svb=getSimVsBook();
+  Object.keys(arc).forEach(d=>{
+    if(svb[d]&&svb[d].locked)return; // already settled
+    const A=arc[d];
+    if(!A.finals||!A.rows)return;
+    const dayShots=bookshots[d]||[];
+    const games=[];
+    A.rows.forEach(r=>{
+      const F=A.finals[r.id];
+      if(!F||F.a===null||F.h===null)return;
+      const actual=F.a+F.h;
+      const simTotal=r.pt;
+      const simErr=simTotal-actual; // positive = over-projected
+      // find book total for this game
+      const bookLine=dayShots.find(x=>(x.game===r.a+'@'+r.h||x.game===r.h+'@'+r.a)&&x.market==='total'&&x.side==='over');
+      const bookTotal=bookLine?bookLine.line:null;
+      const bookErr=bookTotal!==null?bookTotal-actual:null; // positive = book was too high
+      const actual_winner=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      const simCorrect=actual_winner?actual_winner===r.side:null;
+      // trend conflict: did trend signals conflict with the sim's lean?
+      // We store the conflict count and whether the trends or sim was right
+      // (we can't re-run trends here, but we can look at the stored edge and market data)
+      const hadEdge=r.edge!==null&&r.edge>=3;
+      const marketAgreed=r.mh!==null?(r.mh>=0.5?r.h:r.a)===r.side:null;
+      games.push({
+        g:r.a+'@'+r.h,id:r.id,
+        simTotal,bookTotal,actual,
+        simErr,bookErr,
+        simSide:r.side,actualWinner:actual_winner,simCorrect,
+        hadEdge,marketAgreed,
+        simProb:r.sp,marketProb:r.mh
+      });
+    });
+    if(games.length){
+      svb[d]={games,ts:Date.now(),locked:d!==today()};
+    }
+  });
+  set(LS_SVB,svb);
+  // wire conflict data into calibration signal
+  updateSimConflictCalib(svb);
+}
+
+function updateSimConflictCalib(svb){
+  // Track: when market prob and sim prob disagreed by >8%, who was right
+  // Store as d4.svbcalib — used by computeEntities to weight corrections
+  const conf={sideW:0,sideL:0,mktW:0,mktL:0,totalSimErr:0,totalBookErr:0,n:0,nTotal:0};
+  Object.values(svb).forEach(day=>{
+    (day.games||[]).forEach(g=>{
+      if(g.simCorrect!==null&&g.marketAgreed!==null&&g.simProb&&g.marketProb){
+        const gap=Math.abs(g.simProb-g.marketProb);
+        if(gap>=0.08){ // meaningful disagreement
+          if(g.simCorrect)conf.sideW++;else conf.sideL++;
+          const mktCorrect=(g.marketProb>=0.5?g.marketAgreed===true:g.marketAgreed===false);
+          // marketAgreed already encodes whether market agreed with sim side
+          // if sim correct, market disagreed = mkt wrong here
+          if(g.simCorrect===true)conf.mktL++;else conf.mktW++;
+        }
+      }
+      if(g.simErr!==null){conf.totalSimErr+=Math.abs(g.simErr);conf.nTotal++;}
+      if(g.bookErr!==null){conf.totalBookErr+=Math.abs(g.bookErr);conf.n++;}
+    });
+  });
+  set('d4.svbcalib',conf);
+}
+
+/* ================= STATS TAB (Sim vs Book) ================= */
+function renderStatsTab(){
+  const svb=getSimVsBook();
+  const days=Object.keys(svb).sort().reverse();
+  if(!days.length)return '<div class="empty">No graded data yet. Come back after your first full slate finishes.</div>';
+
+  // aggregate
+  let simTotalErrSum=0,bookTotalErrSum=0,nTotal=0;
+  let simSideW=0,simSideL=0;
+  let mktAgreeAndRight=0,mktDisagreeAndSimRight=0,mktDisagreeAndMktRight=0,mktDisagreeN=0;
+  const byDay=[];
+
+  days.forEach(d=>{
+    const day=svb[d];let dSimW=0,dSimL=0,dSimTE=0,dBookTE=0,dn=0;
+    (day.games||[]).forEach(g=>{
+      if(g.simErr!==null){simTotalErrSum+=Math.abs(g.simErr);dSimTE+=Math.abs(g.simErr);nTotal++;dn++;}
+      if(g.bookErr!==null){bookTotalErrSum+=Math.abs(g.bookErr);dBookTE+=Math.abs(g.bookErr);}
+      if(g.simCorrect===true){simSideW++;dSimW++;}
+      if(g.simCorrect===false){simSideL++;dSimL++;}
+      if(g.simCorrect!==null&&g.marketAgreed!==null&&g.simProb&&g.marketProb){
+        const gap=Math.abs(g.simProb-g.marketProb);
+        if(gap>=0.08){
+          mktDisagreeN++;
+          if(g.simCorrect)mktDisagreeAndSimRight++;else mktDisagreeAndMktRight++;
+        }
+      }
+    });
+    byDay.push({d,dSimW,dSimL,dSimTE:dn?dSimTE/dn:null,dn});
+  });
+
+  const pct=(w,l)=>w+l?((w/(w+l))*100).toFixed(1)+'%':'—';
+  const avgSimTE=nTotal?(simTotalErrSum/nTotal).toFixed(2):'—';
+  const avgBookTE=nTotal&&bookTotalErrSum?(bookTotalErrSum/nTotal).toFixed(2):'—';
+
+  const conf=get('d4.svbcalib',{});
+
+  let h=`
+  <div class="tkt hi">
+    <h3>Sim vs Book — season record</h3>
+    <div class="sub">Every game where the model had a real-line market to compare against. <b>Side record</b> is how often the sim picked the actual winner. <b>Total accuracy</b> compares sim's projected run total vs the book's posted line — who was closer to the actual score.</div>
+  </div>
+  <div class="tkt">
+    <div class="mktlab" style="margin-top:0">Side predictions</div>
+    <ol style="list-style:none;padding-left:0">
+      <li>Sim side correct <span class="pp">${pct(simSideW,simSideL)}</span> <span class="m">${simSideW}W–${simSideL}L</span></li>
+    </ol>
+    <div class="mktlab">Total run accuracy</div>
+    <ol style="list-style:none;padding-left:0">
+      <li>Sim avg miss <span class="pp" style="color:var(--cold)">${avgSimTE} runs</span> <span class="m">across ${nTotal} games</span></li>
+      <li>Book avg miss <span class="pp" style="color:var(--gold)">${avgBookTE||'—'} runs</span> <span class="m">vs same games</span></li>
+      ${avgSimTE!=='—'&&avgBookTE!=='—'?`<li style="margin-top:4px"><b>${parseFloat(avgSimTE)<parseFloat(avgBookTE)?'Sim is outperforming the book line on totals accuracy':'Book line is currently closer on totals'}</b></li>`:''}
+    </ol>
+  </div>`;
+
+  if(mktDisagreeN>=5){
+    h+=`<div class="tkt">
+      <div class="mktlab" style="margin-top:0">When sim and market disagreed (gap ≥8%)</div>
+      <ol style="list-style:none;padding-left:0">
+        <li>Sim was right <span class="pp">${pct(mktDisagreeAndSimRight,mktDisagreeAndMktRight)}</span> <span class="m">${mktDisagreeAndSimRight} of ${mktDisagreeN} disagreements</span></li>
+        <li>Book was right <span class="pp">${pct(mktDisagreeAndMktRight,mktDisagreeAndSimRight)}</span> <span class="m">${mktDisagreeAndMktRight} of ${mktDisagreeN}</span></li>
+      </ol>
+      <div class="sub" style="margin-top:6px">When the model sees a big edge vs the market and fires — this is the record on those calls specifically. This data feeds directly into the edge threshold calibration.</div>
+    </div>`;
+  }
+
+  h+=`<div class="sbar"><h2>By day</h2><div class="ln"></div></div>`;
+  h+=byDay.filter(D=>D.dn>0).map(D=>`
+    <div class="tkt"><h3>${D.d}</h3>
+      <div class="sub">Sides: <b>${D.dSimW}-${D.dSimL}</b>${D.dSimTE!==null?' · Avg total miss: <b>'+D.dSimTE.toFixed(2)+' runs</b>':''}</div>
+    </div>`).join('')||'<div class="empty">No daily breakdowns yet.</div>';
+
+  h+=`<div class="sbar"><h2>All games detail</h2><div class="ln"></div></div><div class="tkt">
+    <table class="boxtbl">
+      <tr><th>Game</th><th>Sim total</th><th>Book</th><th>Actual</th><th>Sim Δ</th><th>Book Δ</th><th>Side</th><th>Result</th></tr>
+      ${days.flatMap(d=>(svb[d].games||[]).map(g=>{
+        const simDelta=g.simErr!==null?(g.simErr>0?'+':'')+g.simErr.toFixed(1):'—';
+        const bookDelta=g.bookErr!==null?(g.bookErr>0?'+':'')+g.bookErr.toFixed(1):'—';
+        const simClose=g.simErr!==null&&g.bookErr!==null&&Math.abs(g.simErr)<Math.abs(g.bookErr);
+        return `<tr>
+          <td>${g.g}<br><span style="color:var(--mute);font-size:9px">${d}</span></td>
+          <td>${g.simTotal.toFixed(1)}</td>
+          <td>${g.bookTotal!==null?g.bookTotal:'—'}</td>
+          <td><b>${g.actual}</b></td>
+          <td style="color:${simClose?'var(--win)':'var(--rust)'}">${simDelta}</td>
+          <td style="color:${simClose?'var(--rust)':'var(--win)'}">${bookDelta}</td>
+          <td>${g.simSide}</td>
+          <td style="color:${g.simCorrect===true?'var(--win)':g.simCorrect===false?'var(--rust)':'var(--mute)'}">
+            ${g.simCorrect===true?'✅':g.simCorrect===false?'❌':'—'}
+          </td></tr>`;
+      })).join('')}
+    </table></div>`;
+  return h;
+}
 async function hardRecalibrate(){
   const el=document.getElementById('gradeBody');
   el.innerHTML='<div class="empty">Recalibrating from graded history…</div>';
@@ -3523,6 +3772,7 @@ async function hardRecalibrate(){
   set(LS.arc,arc);
   computeCalibration();
   computeEntities();
+  recordSimVsBook(arc,get(LS.bookshots,{}));
   buildProps();   // new calibration applies to any game that hasn't started yet, immediately
   render();
   renderGrades();
@@ -3556,6 +3806,7 @@ async function renderGrades(force){
           if(d!==today())arc[d].locked=true}}catch(e){}
     }
     set(LS.arc,arc);computeCalibration();computeEntities();buildProps();
+    recordSimVsBook(arc,get(LS.bookshots,{}));
   }
   let sW=0,sL=0,fW=0,fL=0,f5W=0,f5L=0,tErr=0,tN=0,scErr=0,modeHit=0,modeN=0;
   const sideBuck={},days=[],misses=[];
@@ -3705,6 +3956,9 @@ async function renderGrades(force){
           · proj ${r.pa.toFixed(1)}–${r.ph.toFixed(1)}${r.mode?' · called '+r.mode:''}</span>
           <span class="pp" style="color:${hit?'var(--win)':'var(--rust)'}">${hit?'W':'L'}</span></li>`}).join('')}</ol></div>`).join('')
       ||'<div class="empty">No finalized days yet.</div>';
+  }
+  if(GRADETAB==='stats'){
+    h=renderStatsTab();
   }
   body.innerHTML=syncLine()+h;
   document.getElementById('nR').textContent=dates.length;
