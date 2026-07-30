@@ -254,6 +254,12 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 <div class="setup" id="setup">
   <h2>Set up the desk</h2>
   <p>The simulator runs entirely free and never uses bookmaker odds to form a projection.</p>
+  <div class="sbar"><h2>Usage</h2><div class="ln"></div></div>
+  <div id="usagePanel"></div>
+  <div class="bar" style="margin-top:0"><button onclick="hardReload()">Hard reload — clear cache &amp; force latest version</button></div>
+  <div class="sub" style="margin-bottom:14px">Clears everything this page cached and reloads fresh. On iPhone Home Screen apps this
+  usually works — if it still shows an old build number after this, force-quit the app (swipe it away in the
+  app switcher) and reopen from the icon.</div>
   <ol class="steps">
     <li><b>Games, lineups, stats, weather, head-to-head</b> — MLB Stats API. Free, no key.</li>
     <li><b>Odds</b> — optional, display only. Used to compare against the sim, never to build it.</li>
@@ -273,7 +279,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v19</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v21</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -398,7 +404,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 <script>
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
-h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi'};
+h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[];
 let GRADETAB='sides',PICKSDAY=null;
@@ -420,12 +426,28 @@ function paintMeter(){
   const lp=get(LS.pull,0);
   document.getElementById('lastPull').textContent=lp?fmtTime(lp):'no pull';
 }
+async function hardReload(){
+  try{
+    if('caches' in window){
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+  }catch(e){}
+  try{
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+  }catch(e){}
+  location.href=location.pathname+'?refresh='+Date.now();
+}
 function openSettings(){
   document.getElementById('keyIn').value=get(LS.key,'');
   document.getElementById('aiIn').value=get(LS.ai,'');
   document.getElementById('sharpIn').value=get(LS.sharp,'');
   document.getElementById('rundownIn').value=get(LS.rundown,'');
   document.getElementById('oddspapiIn').value=get(LS.oddspapi,'');
+  renderUsage();
   document.getElementById('setup').classList.remove('hide');
 }
 function saveKeys(){set(LS.key,document.getElementById('keyIn').value.trim());
@@ -460,6 +482,45 @@ function atLeast(d,k){let s=0;for(let i=k;i<d.length;i++)s+=d[i];return Math.min
 function blendPA(f,pa){const lo=Math.floor(pa),w=pa-lo;return f(lo)*(1-w)+f(lo+1)*w}
 function comb(n,k){if(k>n)return 0;let r=1;for(let i=0;i<k;i++)r=r*(n-i)/(i+1);return r}
 function imp(a){return a>0?100/(a+100):(-a)/((-a)+100)}
+/* ================= USAGE TRACKING ================= */
+// Every metered source gets a call counted here, whether it succeeded or not — the goal
+// is knowing how close to a real limit you are, not just celebrating successes.
+function usage(){
+  const d=get(LS.usage,{});
+  const dayKey=today(),monthKey=today().slice(0,7);
+  if(d.dayKey!==dayKey){d.odds_d=0;d.sharp_d=0;d.rundown_d=0;d.oddspapi_d=0;d.dayKey=dayKey}
+  if(d.monthKey!==monthKey){d.oddspapi_m=0;d.monthKey=monthKey}
+  return d;
+}
+function trackCall(platform){
+  const d=usage();
+  d[platform+'_d']=(d[platform+'_d']||0)+1;
+  if(platform==='oddspapi')d.oddspapi_m=(d.oddspapi_m||0)+1;
+  set(LS.usage,d);
+}
+function usageBar(label,used,limit,note){
+  const pct=limit?Math.min(100,(used/limit)*100):0;
+  const col=pct>=90?'var(--rust)':pct>=65?'var(--gold)':'var(--win)';
+  return `<div style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono';font-size:10.5px;margin-bottom:4px">
+      <span>${label}</span><span style="color:var(--mute)">${limit?used+' / '+limit:used+' calls today — no confirmed limit'}</span>
+    </div>
+    <div style="height:6px;background:var(--panel2);border-radius:3px;overflow:hidden">
+      <div style="height:100%;width:${limit?pct:Math.min(100,used*3)}%;background:${col};border-radius:3px"></div>
+    </div>
+    ${note?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);margin-top:3px">${note}</div>`:''}
+  </div>`;
+}
+function renderUsage(){
+  const u=usage(),c=credits();
+  const el=document.getElementById('usagePanel');
+  if(!el)return;
+  el.innerHTML=
+    usageBar('Odds API',c.n,24,'Resets midnight CT — confirmed 25/day free tier')+
+    usageBar('SharpAPI',u.sharp_d||0,null,'12 req/min cap confirmed, no daily cap stated — watch for 429s')+
+    usageBar('TheRundown',u.rundown_d||0,null,'Hit a 20,000/day data-point wall before — cost per call varies by slate size, not 1:1 with request count')+
+    usageBar('OddsPapi',u.oddspapi_m||0,250,'Monthly limit, not daily — resets on the 1st');
+}
 function amer(p){if(!p||p<=0||p>=1)return '—';return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p)}
 // display-only: real books never mirror -133/+133. This applies a standard ~4.5% overround
 // (typical MLB moneyline vig) so the shown price looks like an actual board — both sides
@@ -1081,6 +1142,7 @@ function nameKey(n){
 const SHARP_TYPE={home_runs:'hr',hits:'hits'};
 async function loadSharp(manual){
   const key=get(LS.sharp,'');if(!key)return;
+  trackCall('sharp');
   try{
     const r=await fetch('https://api.sharpapi.io/api/v1/odds?league=MLB',{headers:{'X-API-Key':key}});
     if(!r.ok){if(manual)alert(r.status===401||r.status===403?'SharpAPI key rejected.':r.status===429?'SharpAPI rate limited — free tier is 12 req/min.':'SharpAPI failed ('+r.status+').');return}
@@ -1170,6 +1232,7 @@ function parseRundownPrices(pricesObj){
 async function loadRundown(manual){
   const key=get(LS.rundown,'');
   if(!key)return{ok:false,reason:'no key saved'};
+  trackCall('rundown');
   try{
     const r=await fetch(`https://therundown.io/api/v2/sports/3/events/${today()}?key=${encodeURIComponent(key)}`);
     if(!r.ok){
@@ -1223,7 +1286,7 @@ async function diagnoseOddsPapi(){
   el.innerHTML='<div class="empty">Step 1 — finding baseball\'s sport ID…</div>';
   const BASE='https://api.oddspapi.io/v4';
   try{
-    const r1=await fetch(`${BASE}/sports?apiKey=${encodeURIComponent(key)}`);
+    const r1=await fetch(`${BASE}/sports?apiKey=${encodeURIComponent(key)}`);trackCall('oddspapi');
     if(!r1.ok){
       const body=await r1.text();
       el.innerHTML=`<div class="tkt"><h3>HTTP ${r1.status} on /sports</h3><div class="sub">${r1.status===401||r1.status===403?'Key rejected.':'Unexpected error.'}</div>
@@ -1238,7 +1301,7 @@ async function diagnoseOddsPapi(){
       return;
     }
     el.innerHTML=`<div class="empty">sportId=${bball.sportId} — step 2, finding the real MLB tournament (not minor leagues)…</div>`;
-    const r2=await fetch(`${BASE}/tournaments?apiKey=${encodeURIComponent(key)}&sportId=${bball.sportId}`);
+    const r2=await fetch(`${BASE}/tournaments?apiKey=${encodeURIComponent(key)}&sportId=${bball.sportId}`);trackCall('oddspapi');
     let mlbTourn=null,allTourns=[];
     if(r2.ok){
       const tourns=await r2.json();
@@ -1258,7 +1321,7 @@ async function diagnoseOddsPapi(){
     let marketRef=null,marketRefSrc='';
     for(const path of['/markets','/market-types','/marketTypes']){
       try{
-        const rm=await fetch(`${BASE}${path}?apiKey=${encodeURIComponent(key)}`);
+        const rm=await fetch(`${BASE}${path}?apiKey=${encodeURIComponent(key)}`);trackCall('oddspapi');
         if(rm.ok){marketRef=await rm.json();marketRefSrc=path;break}
       }catch(e){}
     }
@@ -1271,7 +1334,7 @@ async function diagnoseOddsPapi(){
     }
     el.innerHTML=`<div class="empty">Step 4 — pulling real MLB-only fixtures and odds…</div>`;
     const from=today(),to=new Date(Date.now()+2*864e5).toISOString().slice(0,10);
-    const r4=await fetch(`${BASE}/fixtures?apiKey=${encodeURIComponent(key)}&sportId=${bball.sportId}&tournamentId=${mlbTourn.tournamentId}&from=${from}&to=${to}&hasOdds=true`);
+    const r4=await fetch(`${BASE}/fixtures?apiKey=${encodeURIComponent(key)}&sportId=${bball.sportId}&tournamentId=${mlbTourn.tournamentId}&from=${from}&to=${to}&hasOdds=true`);trackCall('oddspapi');
     const fixtures=r4.ok?await r4.json():[];
     const list=Array.isArray(fixtures)?fixtures:(fixtures.fixtures||[]);
     // pick whichever fixture starts furthest in the future — most likely still pregame,
@@ -1288,12 +1351,39 @@ async function diagnoseOddsPapi(){
       :`<div class="tkt"><h3>No market-name reference endpoint found</h3><div class="sub">Tried /markets, /market-types, /marketTypes — none responded.</div></div>`;
     if(pick){
       const fid=pick.fixtureId;
-      const r5=await fetch(`${BASE}/odds?apiKey=${encodeURIComponent(key)}&fixtureId=${fid}`);
+      const r5=await fetch(`${BASE}/odds?apiKey=${encodeURIComponent(key)}&fixtureId=${fid}`);trackCall('oddspapi');
       const oddsBody=r5.ok?await r5.json():await r5.text();
       const isPregame=pregame.length>0;
       h+=`<div class="tkt"><h3>Raw odds — ${isPregame?'confirmed pregame':'live, may hit access restriction'} MLB fixture: ${pick.participant1Name||'?'} vs ${pick.participant2Name||'?'}</h3>
         <div class="sub">Starts ${pick.startTime}</div>
         <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(oddsBody,null,2).slice(0,5000)}</pre></div>`;
+      // isolate ONE near-even (total-shaped) market and print it completely, with nothing
+      // truncated — the previous pass may have cut off a line/handicap field before it
+      // ever appeared. Check every key on the object, not just the ones already known.
+      if(oddsBody&&oddsBody.bookmakerOdds){
+        let target=null,targetBook=null;
+        for(const bk of Object.keys(oddsBody.bookmakerOdds)){
+          const mkts=(oddsBody.bookmakerOdds[bk]||{}).markets||{};
+          for(const mid of Object.keys(mkts)){
+            const outcomes=mkts[mid].outcomes||{};
+            const prices=Object.values(outcomes).map(o=>((o.players||{})['0']||{}).price).filter(p=>typeof p==='number');
+            if(prices.length===2){
+              const implied=prices.map(p=>1/p);
+              const sum=implied[0]+implied[1];
+              const balance=Math.abs(implied[0]/sum-0.5);
+              if(balance<0.12){target=mkts[mid];targetBook=bk;break}
+            }
+          }
+          if(target)break;
+        }
+        if(target){
+          h+=`<div class="tkt hi"><h3>Isolated near-even market — checking every field for a line value</h3>
+            <div class="sub">Book: ${targetBook} — this is the FULL object, nothing cut off. Look for anything resembling a line, handicap, points, or spread value.</div>
+            <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(target,null,2)}</pre></div>`;
+        }else{
+          h+=`<div class="tkt"><h3>No near-even market found on this fixture</h3><div class="sub">Every market on this book looked skewed — try again on a different game, or a total-heavy matchup.</div></div>`;
+        }
+      }
     }
     el.innerHTML=h;
   }catch(e){
@@ -2901,7 +2991,7 @@ async function boot(){
       set(LS.slip,SLIP);await loadAll();await loadOdds(false);snapshot();snapshotBest();paintSlip();paintMeter()}
   },3e4);
 }
-if(get(LS.key,null)===null)document.getElementById('setup').classList.remove('hide');
+if(get(LS.key,null)===null){renderUsage();document.getElementById('setup').classList.remove('hide');}
 else{document.getElementById('setup').classList.add('hide');boot()}
 </script>
 </body>
