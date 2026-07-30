@@ -301,7 +301,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v29</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v30</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -326,6 +326,15 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       <div class="sub" style="margin-top:6px">Pulls MLB schedule/lineups, Odds API, SharpAPI, and TheRundown in sequence.
       Uses one credit from each metered source — same as tapping every individual pull button once.</div>
       <div id="refreshAllStatus"></div>
+    </div>
+    <div class="tkt">
+      <div class="sbar" style="margin-top:0"><h2>Your book's real lines</h2><div class="ln"></div></div>
+      <div class="sub">Upload screenshots of your actual sportsbook — pick several at once if a slate takes a few.
+      Claude reads the teams, lines, and prices directly off the images. <b>Kept completely separate from the
+      simulator</b> — comparison and trend-tracking only, never blended into a prediction.</div>
+      <input type="file" id="bookShots" accept="image/*" multiple style="margin-top:8px">
+      <div class="bar" style="margin-top:8px"><button class="primary" onclick="analyzeBookShots()">Analyze screenshots</button></div>
+      <div id="bookShotResult"></div>
     </div>
     <div class="rc-picker" id="dayPicker"></div>
     <div id="slate"><div class="empty">Loading board…</div></div>
@@ -426,7 +435,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 <script>
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
-h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo'};
+h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let GRADETAB='sides',PICKSDAY=null;
@@ -572,6 +581,100 @@ function saveGhSettings(){
   set(LS.ghrepo,document.getElementById('ghrepoIn').value.trim());
   set(LS.ghtoken,document.getElementById('ghtokenIn').value.trim());
 }
+function fileToB64(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+async function analyzeBookShots(){
+  const key=get(LS.ai,'');
+  const el=document.getElementById('bookShotResult');
+  if(!key){el.innerHTML='<div class="empty">Needs an Anthropic key in Settings first.</div>';return}
+  const files=document.getElementById('bookShots').files;
+  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot first.</div>';return}
+  el.innerHTML='<div class="empty">Reading '+files.length+' screenshot'+(files.length>1?'s':'')+'…</div>';
+  try{
+    const imgBlocks=[];
+    for(const f of files){
+      const b64=await fileToB64(f);
+      imgBlocks.push({type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}});
+    }
+    const prompt=`These are screenshots of a real sportsbook's MLB board. Extract every game/market you can
+      see into a JSON array — nothing else, no markdown fences, no commentary. Each entry:
+      {"away":"team abbr or name","home":"team abbr or name","market":"moneyline"|"runline"|"total",
+      "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -150 or 145)}.
+      One entry per selection you can actually read clearly — skip anything blurry or cut off rather than guessing.`;
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,
+        messages:[{role:'user',content:[...imgBlocks,{type:'text',text:prompt}]}]})});
+    const j=await r.json();
+    if(j.error){el.innerHTML=`<div class="tkt"><h3>API error</h3><div class="sub">${j.error.message||'unknown'}</div></div>`;return}
+    const raw=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    let parsed;
+    try{
+      const cleaned=raw.replace(/```json|```/g,'').trim();
+      parsed=JSON.parse(cleaned);
+    }catch(e){
+      el.innerHTML=`<div class="tkt"><h3>Couldn't parse a clean list</h3><div class="sub">Raw response below — the extraction didn't come back as valid JSON.</div>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${raw.slice(0,3000)}</pre></div>`;
+      return;
+    }
+    if(!Array.isArray(parsed)||!parsed.length){
+      el.innerHTML='<div class="empty">Nothing readable came back — try clearer or less cropped screenshots.</div>';
+      return;
+    }
+    window._pendingBookShots=parsed;
+    el.innerHTML=`<div class="tkt hi"><h3>${parsed.length} selections read</h3>
+      <div class="sub">Check these against the actual screenshots before saving — vision extraction isn't perfect.</div>
+      <ol>${parsed.map((x,i)=>`<li>${x.away} @ ${x.home} — ${x.market} ${x.line!==null&&x.line!==undefined?x.line:''} ${x.side} <span class="pp">${x.price>0?'+':''}${x.price}</span></li>`).join('')}</ol>
+      <div class="bar"><button class="primary" onclick="saveBookShots()">Looks right — save to comparison history</button></div>
+    </div>`;
+  }catch(e){
+    el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
+  }
+}
+function saveBookShots(){
+  const parsed=window._pendingBookShots;
+  if(!parsed)return;
+  const all=get(LS.bookshots,{});
+  const d=today();
+  all[d]=all[d]||[];
+  parsed.forEach(x=>{
+    const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
+    all[d].push({...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,capturedAt:Date.now()});
+  });
+  set(LS.bookshots,all);
+  window._pendingBookShots=null;
+  document.getElementById('bookShotResult').innerHTML=`<div class="tkt hi"><h3>Saved</h3><div class="sub">${parsed.length} selections added to today's comparison history.</div></div>`;
+  render();
+}
+// answers "when this book sets a total at X, how has it actually gone" — purely
+// historical pattern lookup, entirely separate from the simulator's own math. Needs real
+// accumulated history before it means anything; says so honestly if there isn't enough yet.
+function bookTrendForTotal(line,tolerance){
+  tolerance=tolerance||0.5;
+  const shots=get(LS.bookshots,{}),arc=get(LS.arc,{});
+  let overHits=0,total=0;
+  Object.keys(shots).forEach(d=>{
+    const finals=(arc[d]||{}).finals;if(!finals)return;
+    (shots[d]||[]).forEach(x=>{
+      if(x.market!=='total'||x.line===null||Math.abs(x.line-line)>tolerance)return;
+      const row=(arc[d].rows||[]).find(r=>r.a+'@'+r.h===x.game||awayHomeMatch(r,x.game));
+      if(!row)return;
+      const F=finals[row.id];if(!F||F.a===null||F.h===null)return;
+      total++;
+      if((F.a+F.h)>x.line)overHits++;
+    });
+  });
+  if(total<8)return{ready:false,total};
+  return{ready:true,total,overPct:(overHits/total*100).toFixed(0)};
+}
+function awayHomeMatch(r,gl){return (r.a+'@'+r.h)===gl}
 function openSettings(){
   document.getElementById('keyIn').value=get(LS.key,'');
   document.getElementById('aiIn').value=get(LS.ai,'');
