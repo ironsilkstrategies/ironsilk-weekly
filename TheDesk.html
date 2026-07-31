@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v46</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v47</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -358,6 +358,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <button onclick="tab('recap',this)">Recap</button>
     <button onclick="tab('best',this)">Best<span class="n" id="nBest"></span></button>
     <button onclick="tab('chat',this)">Chat</button>
+    <button onclick="tab('money',this)">Money</button>
     <button onclick="tab('settings',this)">Settings</button>
   </nav>
 </header>
@@ -445,6 +446,10 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       <div class="msgs" id="msgs"><div class="empty">Ask about the board. It has every sim, signal, prop, grade and record loaded.</div></div>
       <div class="chatin"><input id="chatIn" placeholder="Ask…" onkeydown="if(event.key==='Enter')send()"><button onclick="send()">Send</button></div>
     </div>
+  </div>
+
+  <div class="view" id="v-money">
+    <div id="moneyBody"></div>
   </div>
 
   <div class="view" id="v-settings">
@@ -824,6 +829,7 @@ function tab(n,b){
   if(n==='recap')renderRecap();
   if(n==='best'){bestTab(BESTTAB||'today');}
   if(n==='settings')fillSettingsTab();
+  if(n==='money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab();}
   window.scrollTo(0,0);
 }
 
@@ -3728,6 +3734,17 @@ function amerPayout(amerStr,stake){
 }
 function onWagerInput(id,combinedP,inputEl){
   const stake=parseFloat(inputEl.value)||0;
+  if(stake>0){
+    const check=checkStakeAllowed(id,stake);
+    if(!check.ok){
+      inputEl.style.color='var(--rust)';
+      const subEl=document.getElementById('wp-sub-'+id);
+      if(subEl){subEl.textContent=check.reason;subEl.style.color='var(--rust)'}
+      return; // don't save an over-cap stake
+    }
+  }
+  const inputElRef=document.getElementById('ws-'+id);
+  if(inputElRef)inputElRef.style.color='';
   saveWager(id,stake||null);
   refreshPayout(id,combinedP,stake);
 }
@@ -3754,15 +3771,16 @@ function buildWagerRow(t){
   const res=stake?amerPayout(odds,stake):null;
   const payTxt=res?'$'+res.total.toFixed(2):'$—';
   const profTxt=res?'+$'+res.profit.toFixed(2)+' profit':'profit';
+  const tl=ticketLimit();
   return `<div class="wager-row">
     <div class="wager-pill stake-pill" onclick="document.getElementById('ws-${t.id}').focus()">
       <div class="wp-label">Stake</div>
       <div class="wp-val"><span style="font-size:10px;opacity:.6">$</span><input
-        id="ws-${t.id}" class="stake-input" type="number" min="0" step="1"
+        id="ws-${t.id}" class="stake-input" type="number" min="0" max="${tl}" step="0.5"
         placeholder="0" value="${stake}"
         oninput="onWagerInput(${t.id},${t.p},this)"
       ></div>
-      <div class="wp-sub">tap to enter</div>
+      <div class="wp-sub" id="wp-sub-${t.id}-cap">cap $${tl.toFixed(2)}</div>
     </div>
     <div class="wager-pill odds-pill">
       <div class="wp-label">Parlay odds</div>
@@ -3776,6 +3794,216 @@ function buildWagerRow(t){
     </div>
   </div>`;
 }
+
+/* ================= BANKROLL ================= */
+// $100/month budget. Money already spent is burned — losses don't refund the limit.
+// Daily cap $5, per-ticket cap $1, until cumulative profit clears $100 for the month.
+// Once profit exceeds $100, every dollar of profit ABOVE $100 raises the limit
+// multiplier by that ticket's profit as a percentage of the $100 baseline — a $30
+// winning ticket landed after already clearing $100 raises the multiplier by 0.30.
+const BR_BASELINE=100;
+const BR_DAILY_BASE=5;
+const BR_TICKET_BASE=1;
+
+function currentMonth(){return today().slice(0,7)}
+
+function getBankroll(){
+  const b=get('d4.bankroll',null);
+  const m=currentMonth();
+  if(!b||b.month!==m){
+    // new month — budget resets, burned money stays burned (history is kept, not reset)
+    const fresh={month:m,profit:0,limitMult:1.0,history:b?b.history||[]:[]};
+    set('d4.bankroll',fresh);
+    return fresh;
+  }
+  return b;
+}
+function saveBankroll(b){set('d4.bankroll',b)}
+
+function dailyLimit(){return +(BR_DAILY_BASE*getBankroll().limitMult).toFixed(2)}
+function ticketLimit(){return +(BR_TICKET_BASE*getBankroll().limitMult).toFixed(2)}
+
+function stakedToday(){
+  const b=getBankroll();
+  const d=today();
+  return b.history.filter(h=>h.date===d).reduce((a,h)=>a+h.stake,0);
+}
+
+// Called whenever a stake is entered on a locked ticket — enforces the caps and
+// returns {ok:true} or {ok:false,reason:'...'} so the UI can block and explain.
+function checkStakeAllowed(ticketId,newStake){
+  const tl=ticketLimit();
+  if(newStake>tl+0.001)return{ok:false,reason:`Ticket cap right now is $${tl.toFixed(2)}.`};
+  const dl=dailyLimit();
+  const already=stakedToday();
+  // subtract this ticket's own existing stake if it was already counted today
+  const w=getWagers();
+  const existing=w[ticketId]||0;
+  const otherToday=already-existing;
+  if(otherToday+newStake>dl+0.001)return{ok:false,reason:`Daily cap right now is $${dl.toFixed(2)} — you've already staked $${otherToday.toFixed(2)} today.`};
+  return{ok:true};
+}
+
+function settleTicket(ticketId,stake,profit,won){
+  const b=getBankroll();
+  if(b.history.some(h=>h.id===ticketId))return; // already settled once
+  const beforeProfit=b.profit;
+  b.profit+=profit;
+  // limit scaling only fires on a WIN that pushes cumulative profit past the $100 baseline
+  if(won&&b.profit>BR_BASELINE){
+    const overBefore=Math.max(0,beforeProfit-BR_BASELINE);
+    const overAfter=b.profit-BR_BASELINE;
+    const gainedOver=overAfter-overBefore; // how much of THIS ticket's profit is "above baseline"
+    if(gainedOver>0){
+      const bump=gainedOver/BR_BASELINE; // e.g. $30 over baseline → +0.30 to the multiplier
+      b.limitMult=+(b.limitMult+bump).toFixed(4);
+    }
+  }
+  b.history.push({id:ticketId,date:today(),stake,profit,won,ts:Date.now()});
+  saveBankroll(b);
+}
+
+// Runs during grading — finds every locked ticket with a stake and a fully-decided
+// outcome (no pending legs) that hasn't been settled yet, and books it.
+function settleLockedTickets(){
+  const L=get(LS.locked,[]);
+  const w=getWagers();
+  L.forEach(t=>{
+    const stake=w[t.id];
+    if(!stake||stake<=0)return;
+    const b=getBankroll();
+    if(b.history.some(h=>h.id===t.id))return;
+    let allDecided=true,anyLoss=false;
+    t.legs.forEach(x=>{
+      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      if(!g||g.abstract!=='Final'){allDecided=false;return}
+      const r=x.isProp||x.ptype?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+      if(r===null){allDecided=false;return}
+      if(r===false)anyLoss=true;
+    });
+    if(!allDecided)return;
+    const won=!anyLoss;
+    const odds=probToAmer(t.p);
+    const res=won?amerPayout(odds,stake):null;
+    const profit=won?(res?res.profit:0):-stake;
+    settleTicket(t.id,stake,profit,won);
+    if(!won)recordLossPostMortem(t,stake);
+  });
+}
+
+/* ── loss post-mortem ── */
+// For a losing ticket, walks every leg back through that day's snapshot + final score
+// and compares what the 10,000-sim distribution actually predicted against what happened —
+// not just win/loss, but how far off the mean, median, and mode were from the real result.
+function recordLossPostMortem(ticket,stake){
+  const arc=get(LS.arc,{});
+  const d=ticket.date;
+  const A=arc[d];
+  const findings=[];
+  ticket.legs.forEach(x=>{
+    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+    if(!g)return;
+    const row=A&&A.rows?A.rows.find(r=>r.id===g.id):null;
+    const F=A&&A.finals?A.finals[g.id]:null;
+    if(!row||!F||F.a===null||F.h===null){
+      findings.push({leg:x.pick,game:x.game,note:'No snapshot data available for this game to compare against.'});
+      return;
+    }
+    const actualTotal=F.a+F.h;
+    const actualScore=`${F.a}-${F.h}`;
+    const actualWinner=F.h>F.a?g.home.abbr:(F.a>F.h?g.away.abbr:null);
+    const won=gradeSideFromScore(g,x.pick);
+    const totalMiss=+(actualTotal-row.pt).toFixed(2);
+    const sideMiss=won===false&&row.side!==actualWinner;
+    let note;
+    if(sideMiss){
+      note=`Model favored ${row.side} at ${(row.sp*100).toFixed(0)}% — ${actualWinner||'neither side'} actually won ${actualScore}. `+
+        `Most common simulated score was ${row.mode||'—'}; actual landed ${Math.abs(totalMiss)>=2?'well outside':'close to'} the predicted range.`;
+    }else if(Math.abs(totalMiss)>=2){
+      note=`Total missed by ${totalMiss>0?'+':''}${totalMiss} runs — model's mean projection was ${row.pt}, `+
+        `most common simulated total was ${row.modeTot}, actual was ${actualTotal}. `+
+        `${totalMiss>0?'Scoring ran well above what the sims expected.':'Scoring came in well under what the sims expected.'}`;
+    }else{
+      note=`Side/total were within the model's expected range (mean ${row.pt}, actual ${actualTotal}) — `+
+        `this leg lost on variance the model already knew was possible, not a systematic miss.`;
+    }
+    findings.push({leg:x.pick,game:x.game,predictedTotal:row.pt,predictedMode:row.mode,
+      predictedModeTot:row.modeTot,predictedSide:row.side,sidePct:row.sp,
+      actualScore,actualTotal,totalMiss,sideMiss,note});
+  });
+  const pm=get('d4.lossmortems',{});
+  pm[ticket.id]={ticketId:ticket.id,date:ticket.date,stake,findings,ts:Date.now()};
+  set('d4.lossmortems',pm);
+  // feed systematic misses into calibration signal — if totalMiss keeps trending the
+  // same direction across losses, that's a real bias, not noise, and computeCalibration
+  // already reads graded arc data, so this just ensures the loss is graded promptly
+  try{computeCalibration();}catch(e){}
+}
+
+function getLossMortems(){return get('d4.lossmortems',{})}
+
+/* ── Money tab UI ── */
+function renderMoneyTab(){
+  const b=getBankroll();
+  const pm=getLossMortems();
+  const dl=dailyLimit(),tl=ticketLimit(),staked=stakedToday();
+  const netColor=b.profit>=0?'var(--win)':'var(--rust)';
+  const wins=b.history.filter(h=>h.won),losses=b.history.filter(h=>!h.won);
+  const totalStaked=b.history.reduce((a,h)=>a+h.stake,0);
+
+  let h=`<div class="tkt hi">
+    <h3>${currentMonth()} · <span style="color:${netColor}">${b.profit>=0?'+':''}$${b.profit.toFixed(2)}</span></h3>
+    <div class="sub">Baseline budget <b>$${BR_BASELINE}</b> · burned once spent, no rollback on losses.
+    ${b.profit>BR_BASELINE?`Limits have scaled up <b>${((b.limitMult-1)*100).toFixed(0)}%</b> from clearing the baseline.`
+      :`Clear $${BR_BASELINE} in profit this month to start raising your limits.`}</div>
+  </div>
+  <div class="tkt">
+    <div class="mktlab" style="margin-top:0">Current limits</div>
+    <ol style="list-style:none;padding-left:0">
+      <li>Per ticket <span class="pp">$${tl.toFixed(2)}</span></li>
+      <li>Per day <span class="pp">$${dl.toFixed(2)}</span> <span class="m">$${staked.toFixed(2)} staked today</span></li>
+      <li>Multiplier <span class="pp">${b.limitMult.toFixed(2)}×</span></li>
+    </ol>
+  </div>
+  <div class="tkt">
+    <div class="mktlab" style="margin-top:0">Season record</div>
+    <ol style="list-style:none;padding-left:0">
+      <li>Record <span class="pp">${wins.length}-${losses.length}</span></li>
+      <li>Total staked <span class="pp">$${totalStaked.toFixed(2)}</span></li>
+      <li>Net <span class="pp" style="color:${netColor}">${b.profit>=0?'+':''}$${b.profit.toFixed(2)}</span></li>
+    </ol>
+  </div>`;
+
+  if(!b.history.length){
+    h+=`<div class="empty">No settled tickets yet. Stake a locked ticket and it'll book here automatically once every leg is graded final.</div>`;
+    return h;
+  }
+
+  h+=`<div class="sbar"><h2>Ticket history</h2><div class="ln"></div></div>`;
+  h+=b.history.slice().reverse().map(rec=>{
+    const mortem=pm[rec.id];
+    const color=rec.won?'var(--win)':'var(--rust)';
+    const mortemHtml=(!rec.won&&mortem)?`
+      <div class="mktlab" style="margin-top:8px;color:var(--rust)">What went wrong</div>
+      ${mortem.findings.map(f=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)">
+        <div style="font-size:12px;font-weight:600">${f.leg} <span class="m">${f.game}</span></div>
+        <div class="sub" style="margin-top:2px">${f.note||f.notes||''}</div>
+      </div>`).join('')}`:'';
+    return `<div class="tkt" style="border-left:3px solid ${color}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <h3 style="margin:0">${rec.date}</h3>
+        <div style="text-align:right">
+          <div style="font-family:'Archivo';font-weight:900;font-size:17px;color:${color}">
+            ${rec.profit>=0?'+':''}$${rec.profit.toFixed(2)}</div>
+          <div class="m" style="font-size:10px">$${rec.stake.toFixed(2)} staked</div>
+        </div>
+      </div>
+      ${mortemHtml}
+    </div>`;
+  }).join('');
+  return h;
+}
+/* ================= BANKROLL END ================= */
 
 /* ================= EXTERNAL PICKS (other platforms) ================= */
 // Screenshots from OddsShark, Covers, Picks & Parlays, Facebook tipsters etc.
@@ -4977,6 +5205,7 @@ async function hardRecalibrate(){
   computeEntities();
   try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
     try{gradeExtPicks();}catch(e){console.warn("ext",e)}
+    try{settleLockedTickets();}catch(e){console.warn("bankroll",e)}
   buildProps();   // new calibration applies to any game that hasn't started yet, immediately
   render();
   renderGrades();
@@ -5058,6 +5287,7 @@ async function renderGrades(force){
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
     try{gradeExtPicks();}catch(e){console.warn("ext",e)}
   }
+    try{settleLockedTickets();}catch(e){console.warn("bankroll",e)}
   let sW=0,sL=0,fW=0,fL=0,f5W=0,f5L=0,tErr=0,tN=0,scErr=0,modeHit=0,modeN=0;
   const sideBuck={},days=[],misses=[];
   dates.forEach(d=>{
