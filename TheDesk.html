@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v45</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v46</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1748,8 +1748,21 @@ function applyDupeFilter(pool){
   return pool.filter(l=>!used.has(l.pick+'|'+l.game));
 }
 
+let PRESET_MARKETS=new Set(['ml','rl','total','prop']);
+
 function buildPreset(mode){
   let pool=applyDupeFilter(fullPresetPool());
+  // market-type filter — combo and lucky10 have fixed shapes that don't respect this,
+  // every other preset only draws from the market types currently toggled on
+  if(mode!=='combo'&&mode!=='lucky10'){
+    pool=pool.filter(l=>{
+      if(l.kind==='side')return PRESET_MARKETS.has('ml');
+      if(l.kind==='rl')return PRESET_MARKETS.has('rl');
+      if(l.kind==='total')return PRESET_MARKETS.has('total');
+      if(l.kind==='prop'||l.kind==='hr')return PRESET_MARKETS.has('prop');
+      return true;
+    });
+  }
   const sides=pool.filter(l=>l.kind==='side');
   const rls=pool.filter(l=>l.kind==='rl');
   const totals=pool.filter(l=>l.kind==='total');
@@ -1842,10 +1855,16 @@ const PRESETS=[
   ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation.']
 ];
 
+function toggleWonMarket(m,btn){
+  btn.classList.toggle('on');
+  if(btn.classList.contains('on'))PRESET_MARKETS.add(m);else PRESET_MARKETS.delete(m);
+  renderTickets();
+}
 function presetTabHtml(){
   const buttons=PRESETS.map(([k,l])=>
     `<button class="${PRESET_MODE===k?'on':''}" onclick="PRESET_MODE='${k}';renderTickets()">${l}</button>`).join('');
   const active=PRESETS.find(x=>x[0]===PRESET_MODE);
+  const fixedShape=PRESET_MODE==='combo'||PRESET_MODE==='lucky10';
   const legs=buildPreset(PRESET_MODE);
   const combined=legs.reduce((a,l)=>a*l.p,1);
   const legRows=legs.map(l=>{
@@ -1855,9 +1874,17 @@ function presetTabHtml(){
       <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}</li>`;
   }).join('');
   const payload=encodeURIComponent(JSON.stringify(legs.map(l=>({game:l.game,pick:l.pick,p:l.p,isProp:l.kind==='prop'||l.kind==='hr'}))));
+  const marketToggles=`<div class="mktlab">Markets to draw from${fixedShape?' <span style="color:var(--mute);text-transform:none;letter-spacing:0">— this preset has a fixed shape and ignores this</span>':''}</div>
+    <div class="subnav" style="opacity:${fixedShape?0.4:1};pointer-events:${fixedShape?'none':'auto'}">
+      <button class="${PRESET_MARKETS.has('ml')?'on':''}" onclick="toggleWonMarket('ml',this)">Moneyline</button>
+      <button class="${PRESET_MARKETS.has('rl')?'on':''}" onclick="toggleWonMarket('rl',this)">Run line</button>
+      <button class="${PRESET_MARKETS.has('total')?'on':''}" onclick="toggleWonMarket('total',this)">Totals</button>
+      <button class="${PRESET_MARKETS.has('prop')?'on':''}" onclick="toggleWonMarket('prop',this)">Props</button>
+    </div>`;
   return `<div class="tkt">
     <div class="mktlab" style="margin-top:0">Preset</div>
     <div class="subnav" style="flex-wrap:wrap">${buttons}</div>
+    ${marketToggles}
     <div class="mktlab">Legs on the parlay</div>
     <div class="subnav" id="legBtns">
       ${[2,3,4,5,6,7,8].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="TARGET_LEGS=${n};renderTickets()">${n}</button>`).join('')}
