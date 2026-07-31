@@ -368,7 +368,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v42e</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v43</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3839,13 +3839,25 @@ function liveBoxPanel(gid,g){
   </div>`;
 }
 /* ================= ESPN LIVE END ================= */
+function allGamesFinalized(d){
+  // Returns true only when every game in today's snapshot has a confirmed final score.
+  // This is the gate for treating today as settled — not just "we fetched some finals."
+  const arc=get(LS.arc,{});
+  const entry=arc[d];
+  if(!entry||!entry.rows||!entry.finals)return false;
+  return entry.rows.every(r=>{
+    const F=entry.finals[r.id];
+    return F&&!isNaN(F.a)&&!isNaN(F.h)&&F.a!==null&&F.h!==null;
+  });
+}
+
 function snapshot(){
   const d=today(),arc=get(LS.arc,{});
-  // Once Grades has pulled finals for today, never touch this entry again — a fresh
-  // re-simulation (simGame is random every call) would silently overwrite the graded
-  // record with new, different numbers. Before grading starts, refreshing is fine and
-  // even useful, since it picks up lineups firming up through the day.
-  if(arc[d]&&(arc[d].locked||arc[d].finals))return;
+  // Block snapshot refresh only when explicitly locked (manual) OR when every
+  // game has a confirmed final. Partial finals mid-afternoon do NOT block this —
+  // new games starting later in the day still need their picks recorded.
+  if(arc[d]&&arc[d].locked)return;
+  if(arc[d]&&allGamesFinalized(d))return;
   const rows=[];
   GAMES.forEach(g=>{
     const s=SIMS[g.id];if(!s)return;
@@ -4098,9 +4110,10 @@ async function hardRecalibrate(){
       const f=await fetchFinals(d);
       if(Object.keys(f).length){
         arc[d].finals=f;
-        delete arc[d].pgrades;              // force a clean prop regrade for THIS day only
+        delete arc[d].pgrades;
         await gradePropsFor(arc[d]);
         if(d!==today())arc[d].locked=true;
+        else if(allGamesFinalized(d))arc[d].locked=true;
         touched.push(d);
       }
     }catch(e){}
@@ -4141,18 +4154,25 @@ async function renderGrades(force){
   const syncLine=()=>{
     const today_=arc[today()];
     const isLocked=today_&&today_.locked;
-    const status=!today_?'no snapshot yet today'
-      :isLocked?`today locked in at ${new Date(today_.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} — safe from reload`
-      :today_.finals?`today graded — ${new Date(today_.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}`
-      :`today still refreshing — captured ${new Date(today_.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}, not yet graded`;
+    const isAllFinal=today_&&allGamesFinalized(today());
+    const hasSome=today_&&today_.finals&&Object.keys(today_.finals).length>0;
+    const total=today_&&today_.rows?today_.rows.length:0;
+    const finalized=today_&&today_.finals?Object.keys(today_.finals).length:0;
+    const status=!today_?'No snapshot yet today — waiting for lineups'
+      :isLocked?`All ${total} games final · locked ${new Date(today_.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}`
+      :isAllFinal?`All ${total} games final · grades complete`
+      :hasSome?`${finalized} of ${total} games final — slate still live, picks stay open`
+      :`Snapshot taken ${new Date(today_.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} · waiting for first finals`;
     const unlockBtn=isLocked
       ?`<button onclick="unlockTodayAndRegrade()" style="margin-left:10px;padding:3px 10px;
           font-size:10px;font-family:'IBM Plex Mono';background:rgba(242,169,59,.15);
           border:1px solid var(--gold);color:var(--gold);border-radius:5px;cursor:pointer">
-          Force regrade today</button>`
+          Force regrade</button>`
       :'';
-    return `<div class="note" style="margin:0 0 12px;display:flex;align-items:center;flex-wrap:wrap;gap:4px">
-      <b>${status}</b>${unlockBtn}</div>`;
+    const color=isLocked?'var(--win)':hasSome?'var(--gold)':'var(--mute)';
+    return `<div class="note" style="margin:0 0 12px;display:flex;align-items:center;
+      flex-wrap:wrap;gap:4px;border-left:3px solid ${color};padding-left:10px">
+      <b style="color:${color}">${status}</b>${unlockBtn}</div>`;
   };
   if(force||!arc[dates[0]].finals){
     body.innerHTML=syncLine()+'<div class="empty">Pulling final scores…</div>';
@@ -4162,9 +4182,22 @@ async function renderGrades(force){
       const isToday=d===today();
       if(arc[d].locked&&!isToday)continue;
       if(arc[d].finals&&!force&&!isToday)continue;
+    for(const d of dates){
+      const isToday=d===today();
+      if(arc[d].locked&&!isToday)continue;
+      if(arc[d].finals&&!force&&!isToday)continue;
       try{const f=await fetchFinals(d);
-        if(Object.keys(f).length){arc[d].finals=f;await gradePropsFor(arc[d]);
-          if(!isToday)arc[d].locked=true}}catch(e){}
+        if(Object.keys(f).length){
+          arc[d].finals=f;
+          await gradePropsFor(arc[d]);
+          // Only lock a day when it's fully settled:
+          // - past days: always lock once we have any finals
+          // - today: only lock when every game in the snapshot has a confirmed final
+          if(!isToday)arc[d].locked=true;
+          else if(allGamesFinalized(d))arc[d].locked=true;
+        }
+      }catch(e){}
+    }
     }
     set(LS.arc,arc);computeCalibration();computeEntities();buildProps();
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn('svb',e)}
