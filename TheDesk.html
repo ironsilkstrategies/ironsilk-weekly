@@ -107,6 +107,11 @@ display:flex;flex-direction:column;justify-content:center;gap:3px}
 text-transform:uppercase;color:var(--cold);background:rgba(95,211,232,.10);
 border:1px solid rgba(95,211,232,.25);border-radius:4px;padding:1px 5px;
 display:inline-block;margin-bottom:2px}
+.bet.source-pick{border-color:#a78bfa!important;box-shadow:0 0 0 1px rgba(167,139,250,.3) inset}
+.bet.consensus-pick{border-color:#f472b6!important;box-shadow:0 0 0 1px rgba(244,114,182,.35) inset}
+.src-tag{font-family:"IBM Plex Mono";font-size:7.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:#a78bfa;margin-top:3px}
+.src-tag.unanimous{color:#f472b6}
 /* ---- live score bar ---- */
 .live-bar{background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:8px;padding:9px 11px;margin:6px 0;display:flex;flex-direction:column;gap:4px}
 .live-score{display:flex;align-items:center;gap:8px}
@@ -339,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v44</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v45</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -359,12 +364,10 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 
 <main>
   <div class="view on" id="v-games">
-    <div class="tkt hi">
-      <div class="bar" style="margin-top:0"><button class="primary" onclick="refreshEverything()" style="padding:13px">Refresh everything — one tap</button></div>
-      <div class="sub" style="margin-top:6px">Pulls MLB schedule/lineups, Odds API, SharpAPI, TheRundown, and ESPN live scores in sequence.
-      Uses one credit from each metered source — same as tapping every individual pull button once.</div>
-      <div id="refreshAllStatus"></div>
+    <div class="bar" style="margin:0 0 10px">
+      <button class="primary" onclick="refreshEverything()">↻ Refresh everything</button>
     </div>
+    <div id="refreshAllStatus"></div>
     <div class="tkt">
       <div class="sbar" style="margin-top:0"><h2>Your book's real lines</h2><div class="ln"></div></div>
       <div class="sub">Upload screenshots of your actual sportsbook — several at once if a slate takes a few.
@@ -515,7 +518,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 <script>
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
-h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats'};
+h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
@@ -1709,6 +1712,173 @@ async function loadOddsPapi(manual){
 // with a point of buffer so borderline cases don't flicker green/red between renders.
 const EDGE_MIN=4;
 function f5OverAt(s,line){return Math.min(.92,Math.max(.08,.5+(s.f5tot-line)*.16))}
+/* ================= TICKET PRESETS ================= */
+// Each preset picks legs from the same unfiltered pools the builder uses, but sorts
+// and filters by a different signal — probability, edge direction, or market-vs-model
+// disagreement — so "best" means something different depending on what you're after.
+let PRESET_MODE='easy';
+let ALLOW_DUPES=false;
+
+function currentLockedPickSet(){
+  // every pick string already sitting in a locked ticket, for duplicate filtering
+  const L=get(LS.locked,[]);
+  const s=new Set();
+  L.forEach(t=>t.legs.forEach(l=>s.add(l.pick+'|'+l.game)));
+  return s;
+}
+
+function edgeOf(leg){
+  if(typeof leg.modelP!=='number'||typeof leg.marketP!=='number')return 0;
+  return (leg.modelP-leg.marketP)*100;
+}
+
+function fullPresetPool(){
+  // pulls every market type regardless of BUILDMODES — presets decide their own mix
+  const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder()];
+  PROPS.filter(p=>p.type!=='hr').forEach(p=>
+    pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',modelP:p.p,marketP:p.p}));
+  PROPS.filter(p=>p.type==='hr').forEach(p=>
+    pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',modelP:p.p,marketP:p.p}));
+  return pool;
+}
+
+function applyDupeFilter(pool){
+  if(ALLOW_DUPES)return pool;
+  const used=currentLockedPickSet();
+  return pool.filter(l=>!used.has(l.pick+'|'+l.game));
+}
+
+function buildPreset(mode){
+  let pool=applyDupeFilter(fullPresetPool());
+  const sides=pool.filter(l=>l.kind==='side');
+  const rls=pool.filter(l=>l.kind==='rl');
+  const totals=pool.filter(l=>l.kind==='total');
+  const props=pool.filter(l=>l.kind==='prop'||l.kind==='hr');
+  const legalPush=(combo,leg,sgp)=>{if(legalToAdd(combo,leg,sgp))combo.push(leg)};
+
+  if(mode==='easy'){
+    // straight highest model probability, no edge requirement — the safest reads
+    return pool.filter(l=>l.modelP>=0.55).sort((a,b)=>b.modelP-a.modelP).slice(0,TARGET_LEGS||4);
+  }
+
+  if(mode==='tailbooks'){
+    // whatever side the market itself favors most — highest marketP, ignore the model entirely
+    return pool.filter(l=>l.marketP>=0.52).sort((a,b)=>b.marketP-a.marketP).slice(0,TARGET_LEGS||4);
+  }
+
+  if(mode==='fadebooks'){
+    // the side the market likes LEAST — true underdogs by market price, model unused
+    return pool.filter(l=>l.marketP<=0.48&&l.marketP>0).sort((a,b)=>a.marketP-b.marketP).slice(0,TARGET_LEGS||4);
+  }
+
+  if(mode==='tailsystem'){
+    // whatever side the SIM likes most, independent of what the market thinks
+    return pool.filter(l=>l.modelP>=0.52).sort((a,b)=>b.modelP-a.modelP).slice(0,TARGET_LEGS||4);
+  }
+
+  if(mode==='fadesystem'){
+    // the side the sim likes LEAST — deliberately taking the model's least favorite outcome
+    return pool.filter(l=>l.modelP<=0.48&&l.modelP>0).sort((a,b)=>a.modelP-b.modelP).slice(0,TARGET_LEGS||4);
+  }
+
+  if(mode==='combo'){
+    // ML + Total paired on the SAME game for as many games as needed — classic SGP shape
+    const byGame={};
+    sides.forEach(l=>{(byGame[l.game]=byGame[l.game]||{}).ml=l});
+    totals.forEach(l=>{
+      const b=byGame[l.game];if(!b)return;
+      const best=!b.total||l.p>b.total.p;
+      if(best)byGame[l.game].total=l;
+    });
+    const pairs=Object.values(byGame).filter(x=>x.ml&&x.total)
+      .sort((a,b)=>(b.ml.p*b.total.p)-(a.ml.p*a.total.p));
+    const n=Math.ceil((TARGET_LEGS||4)/2);
+    const out=[];
+    pairs.slice(0,n).forEach(x=>{out.push(x.ml);out.push(x.total)});
+    return out;
+  }
+
+  if(mode==='lucky10'){
+    // exactly 3 ML + 3 RL + 3 Total + 1 best-value underdog, best probability within each bucket
+    const combo=[];
+    const sgp=false;
+    sides.sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='side').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    rls.sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='rl').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    totals.sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='total').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    // best-value underdog: p<0.5 (a real dog) with the single highest edge available
+    const dogs=pool.filter(l=>l.p<0.48&&l.marketP&&l.marketP<0.48)
+      .sort((a,b)=>edgeOf(b)-edgeOf(a));
+    if(dogs.length&&!combo.some(c=>c.game===dogs[0].game))combo.push(dogs[0]);
+    return combo;
+  }
+
+  if(mode==='armageddon'){
+    // deliberately go against every positive-edge signal — take the picks with the
+    // WORST edge (model most disagrees with, in the market's favor) across the board.
+    // This is chaos mode, not a recommendation — labeled as such in the UI.
+    return pool.filter(l=>edgeOf(l)<=-4).sort((a,b)=>edgeOf(a)-edgeOf(b)).slice(0,TARGET_LEGS||4);
+  }
+
+  return [];
+}
+
+const PRESETS=[
+  ['easy','Easy wins','Highest model probability, no edge required — the safest available reads.'],
+  ['tailbooks','Tail the books','Whatever side the market itself favors most. Ignores the model entirely.'],
+  ['fadebooks','Fade the books','The side the market likes least — true underdogs by market price alone.'],
+  ['tailsystem','Tail the system','Whatever side the simulator likes most, independent of the market.'],
+  ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome.'],
+  ['combo','Combination+','Moneyline + Total paired together on the same game, for as many games as needed.'],
+  ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge.'],
+  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation.']
+];
+
+function presetTabHtml(){
+  const buttons=PRESETS.map(([k,l])=>
+    `<button class="${PRESET_MODE===k?'on':''}" onclick="PRESET_MODE='${k}';renderTickets()">${l}</button>`).join('');
+  const active=PRESETS.find(x=>x[0]===PRESET_MODE);
+  const legs=buildPreset(PRESET_MODE);
+  const combined=legs.reduce((a,l)=>a*l.p,1);
+  const legRows=legs.map(l=>{
+    const e=edgeOf(l);
+    const eTxt=e?` <span style="color:${e>=4?'var(--win)':e<=-4?'var(--rust)':'var(--mute)'}">${e>0?'+':''}${e.toFixed(1)} edge</span>`:'';
+    return `<li>${l.pick} <span class="m">${l.game}</span>
+      <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}</li>`;
+  }).join('');
+  const payload=encodeURIComponent(JSON.stringify(legs.map(l=>({game:l.game,pick:l.pick,p:l.p,isProp:l.kind==='prop'||l.kind==='hr'}))));
+  return `<div class="tkt">
+    <div class="mktlab" style="margin-top:0">Preset</div>
+    <div class="subnav" style="flex-wrap:wrap">${buttons}</div>
+    <div class="mktlab">Legs on the parlay</div>
+    <div class="subnav" id="legBtns">
+      ${[2,3,4,5,6,7,8].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="TARGET_LEGS=${n};renderTickets()">${n}</button>`).join('')}
+    </div>
+    <div class="mktlab">Duplicates</div>
+    <div class="subnav">
+      <button class="${!ALLOW_DUPES?'on':''}" onclick="ALLOW_DUPES=false;renderTickets()">No duplicates from current tickets</button>
+      <button class="${ALLOW_DUPES?'on':''}" onclick="ALLOW_DUPES=true;renderTickets()">Duplicates allowed</button>
+    </div>
+    <div class="sub" style="margin-top:8px">${active[2]}</div>
+  </div>
+  <div class="tkt hi">
+    <h3>${active[1]}${PRESET_MODE==='armageddon'?' ⚠️':''}</h3>
+    ${legs.length?`<div class="sub"><b>${(combined*100).toFixed(combined<.01?3:1)}%</b> combined ·
+      ${legs.length} legs · 1 in ${Math.round(1/combined).toLocaleString()}</div>
+      <ol style="list-style:none;padding:0;margin:10px 0">${legRows}</ol>
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}')">Confirm &amp; save</button></div>`
+      :'<div class="empty">Not enough qualifying legs on the board for this preset right now.</div>'}
+  </div>`;
+}
+
 /* ================= TRENDS ================= */
 // Every trend here is computed from data the app already holds. Each one gets scored
 // against what the model independently concluded — green when the trend backs the model's
@@ -2400,32 +2570,68 @@ async function loadPreviewDay(d){
   const el=document.getElementById('slate');
   el.innerHTML='<div class="empty">Loading preview…</div>';
   try{
-    const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}&hydrate=probablePitcher,team,venue`);
+    const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}`
+      +`&hydrate=probablePitcher,team,lineups,venue`);
     const j=await r.json();
     const gs=((j.dates||[])[0]||{}).games||[];
-    const oddsForDay=ODDS_BYDATE[d]||[];
-    const findOdds=(homeAb,awayAb)=>oddsForDay.find(o=>o.home===homeAb&&o.away===awayAb);
-    let h=`<div class="tkt hi"><h3>Preview · ${dayLabel(d)}</h3>
-      <div class="sub">Odds are posted; full simulation isn't yet — that needs confirmed lineups, which
-      MLB usually posts a few hours before first pitch. This is schedule, probable pitchers, and market
-      lines only. Come back once it's closer to game time for the full board.</div></div>`;
-    if(!gs.length)h+='<div class="empty">No games scheduled this date.</div>';
-    gs.sort((a,b)=>new Date(a.gameDate)-new Date(b.gameDate)).forEach(g=>{
-      const A=g.teams.away,B=g.teams.home,aAb=abbr(A.team.name),hAb=abbr(B.team.name);
-      const od=findOdds(hAb,aAb);
-      const armTxt=t=>t.probablePitcher?short(t.probablePitcher.fullName):'TBD';
-      h+=`<div class="game"><div class="ghd">
-        <div class="grow1"><div class="teams">${aAb}<span class="at">@</span>${hAb}</div>
-        <div class="meta">${fmtTime(g.gameDate)}<br>${(A.leagueRecord||{}).wins??'—'}-${(A.leagueRecord||{}).losses??'—'} · ${(B.leagueRecord||{}).wins??'—'}-${(B.leagueRecord||{}).losses??'—'}</div></div>
-        <div class="arms"><b>${armTxt(A)}</b> vs <b>${armTxt(B)}</b></div>
-        ${od?`<div class="simline" style="margin-top:8px">
-          <div class="cell"><div class="k">${aAb}</div><div class="v">${amer(1-od.fh)}</div><div class="d flat">market</div></div>
-          <div class="cell"><div class="k">${hAb}</div><div class="v">${amer(od.fh)}</div><div class="d flat">market</div></div>
-        </div>`:'<div class="badge pass">No market pulled for this game yet</div>'}
-      </div></div>`;
+    if(!gs.length){el.innerHTML='<div class="empty">No games scheduled this date.</div>';return}
+
+    await loadH2H(gs.map(g=>{
+      const a=g.teams.away.team.id,b=g.teams.home.team.id;
+      return{a,b,k:[a,b].sort().join('-')}}));
+
+    const pI=[],need=[];
+    gs.forEach(g=>['away','home'].forEach(s=>{
+      const p=g.teams[s].probablePitcher;if(p&&p.id)pI.push(p.id);
+      if(!((g.lineups||{})[s+'Players']||[]).length)need.push(g.teams[s].team.id)}));
+    const uq=[...new Set(need)];
+    const pr=await Promise.all(uq.map(id=>projectedLineupFor(id)));
+    const PROJ={};uq.forEach((id,i)=>PROJ[id]=pr[i]);
+    const hI=[];
+    gs.forEach(g=>['away','home'].forEach(s=>{
+      const real=((g.lineups||{})[s+'Players']||[]);
+      if(real.length)real.forEach(x=>x.id&&hI.push(x.id));
+      else (PROJ[g.teams[s].team.id]||[]).forEach(x=>x.id&&hI.push(x.id))}));
+    const P=pI.length?await people(pI,'pitching'):{},H=hI.length?await people(hI,'hitting'):{};
+
+    // Build the exact same GAMES shape loadAll() produces for today, so the same
+    // simGame + card() pipeline renders this preview identically to the live slate.
+    const previewGames=gs.map(g=>{
+      const A=g.teams.away,B=g.teams.home;
+      const mk=(t,pp,lu,fb)=>{
+        const proj=!lu||!lu.length,src=proj?fb:lu;
+        return{name:t.team.name,abbr:abbr(t.team.name),id:t.team.id,
+          w:(t.leagueRecord||{}).wins,l:(t.leagueRecord||{}).losses,
+          p:pp?(P[pp.id]||{name:pp.fullName}):null,
+          lineupProj:proj&&(src||[]).length>0,
+          lineup:(src||[]).slice(0,9).map(x=>({id:x.id,name:short(x.fullName),
+            stat:(H[x.id]||{}).stat||{},rstat:(H[x.id]||{}).rstat||{}}))};
+      };
+      return{id:g.gamePk,time:g.gameDate,
+        status:(g.status||{}).detailedState||'',abstract:'Preview',
+        venue:(g.venue||{}).name||'',weather:null,
+        awayScore:null,homeScore:null,
+        away:mk(A,A.probablePitcher,(g.lineups||{}).awayPlayers,PROJ[A.team.id]),
+        home:mk(B,B.probablePitcher,(g.lineups||{}).homePlayers,PROJ[B.team.id])};
+    }).sort((a,b)=>new Date(a.time)-new Date(b.time));
+
+    // Simulate every game exactly like the live board does
+    previewGames.forEach(g=>{
+      const s=simGame(g);
+      if(s)SIMS[g.id]=s;
     });
+
+    const anyLineups=previewGames.some(g=>!g.away.lineupProj||!g.home.lineupProj);
+    const noteHtml=`<div class="note">${anyLineups
+      ?'Some lineups here are official, some are projected from recent starts — same rule as the live board. Projected lineups are marked on each card.'
+      :'All lineups below are projected — MLB usually posts confirmed lineups a few hours before first pitch. This updates automatically as they firm up.'}</div>`;
+
+    let h=`<div class="sbar" style="margin-top:0"><h2>Preview · ${dayLabel(d)}</h2><div class="ln"></div>
+      <div class="ct mono">${previewGames.length}</div></div>${noteHtml}`;
+    h+=previewGames.map(g=>card(g)).join('');
     el.innerHTML=h;
   }catch(e){
+    console.error('preview day error',e);
     document.getElementById('slate').innerHTML='<div class="empty">Could not load the preview for this date.</div>';
   }
 }
@@ -2442,6 +2648,17 @@ function lineupSig(g){
 function render(){
   const el=document.getElementById('slate');
   if(!GAMES.length){el.innerHTML='<div class="empty">No games today.</div>';return}
+
+  // Preserve exact scroll position and which panel/tab was open per game card,
+  // since innerHTML replacement below destroys all of that and used to jump
+  // the page back to the top on every single pick tap.
+  const scrollY=window.scrollY;
+  const openPanels={};
+  document.querySelectorAll('.panel.on').forEach(p=>{
+    const m=p.id.match(/^p-([a-z]+)-(\d+)$/);
+    if(m)openPanels[m[2]]=m[1];
+  });
+
   GAMES.forEach(g=>{
     const sig=lineupSig(g);
     const cached=SIMS[g.id];
@@ -2460,6 +2677,24 @@ function render(){
   if(fin.length)h+=sbar('Final',fin.length)+fin.map(card).join('');
   el.innerHTML=h;
   document.getElementById('nG').textContent=GAMES.length;
+
+  // Reopen whatever panel was expanded per game, and re-highlight its tab button
+  Object.keys(openPanels).forEach(gid=>{
+    const which=openPanels[gid];
+    const p=document.getElementById('p-'+which+'-'+gid);
+    if(p){
+      p.classList.add('on');
+      const row=p.previousElementSibling;
+      if(row&&row.classList.contains('exprow')){
+        [...row.children].forEach(b=>{
+          if(b.getAttribute('onclick')&&b.getAttribute('onclick').includes(`'${which}'`))b.classList.add('on');
+        });
+      }
+    }
+  });
+
+  // Restore scroll position — innerHTML replacement resets it to 0 by default
+  window.scrollTo(0,scrollY);
 }
 function sbar(t,n){return `<div class="sbar"><h2>${t}</h2><div class="ln"></div><div class="ct mono">${n}</div></div>`}
 
@@ -2601,6 +2836,29 @@ function card(g){
   </div>`;
 }
 
+// Loose matching between an external pick record and a bet square's label/pick string —
+// external picks store side (away/home/over/under) and market type, bet squares are
+// built from team abbrs and formatted strings, so match on market family + side.
+function marketMatchesPick(ext,pick,label){
+  const p=(pick+' '+label).toLowerCase();
+  if(ext.market==='moneyline')return /ml| ml$/i.test(p)||!/[+-]?\d+\.5/.test(p);
+  if(ext.market==='runline')return /[+-]1\.5/.test(p);
+  if(ext.market==='total')return /^over|^under|^f5 over|^f5 under/i.test(pick);
+  if(ext.market==='f5total')return /f5.*(over|under)/i.test(p);
+  if(ext.market==='f5side')return /^f5 /i.test(pick)&&!/over|under/i.test(pick);
+  return false;
+}
+function pickMatchesSide(ext,pick,label){
+  const p=pick.toLowerCase();
+  if(ext.side==='over')return p.includes('over');
+  if(ext.side==='under')return p.includes('under');
+  if(ext.side==='away'||ext.side==='home'){
+    const ab=(ext.side==='away'?ext.away:ext.home||'').toLowerCase();
+    return ab&&p.includes(ab.toLowerCase());
+  }
+  return false;
+}
+
 function betGrid(g,s,M){
   const gl=g.away.abbr+'@'+g.home.abbr;
   // EV signalling. modelP = what the sim independently thinks of THIS exact line.
@@ -2628,11 +2886,26 @@ function betGrid(g,s,M){
     const simChip=opts.simVal!==undefined
       ?`<div class="sim-chip">sim ${opts.simVal}</div>`
       :'';
-    return `<div class="bet${cls} ${on?'on':''}" role="button" tabindex="0"
+    // external source overlay — purple border if any uploaded source picked this exact
+    // square, pink if every source that touched this market landed on this same side
+    let srcCls='',srcBadge='';
+    const extHere=extToday().filter(x=>x.gid===g.id);
+    if(extHere.length){
+      const sameMkt=extHere.filter(x=>marketMatchesPick(x,pick,label));
+      const onThis=sameMkt.filter(x=>pickMatchesSide(x,pick,label));
+      if(onThis.length){
+        const allSrcOnMkt=new Set(sameMkt.map(x=>x.src));
+        const allSrcOnThis=new Set(onThis.map(x=>x.src));
+        const unanimous=allSrcOnMkt.size>=2&&allSrcOnThis.size===allSrcOnMkt.size;
+        srcCls=unanimous?' consensus-pick':' source-pick';
+        srcBadge=`<div class="src-tag${unanimous?' unanimous':''}">${unanimous?'★ unanimous':onThis.length+' source'+(onThis.length>1?'s':'')}</div>`;
+      }
+    }
+    return `<div class="bet${cls}${srcCls} ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
-      <div class="bs">${badge||pct+'%'}</div>${fair}</div>`;
+      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}</div>`;
   };
   // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
   // always sum to exactly 100 instead of each rounding independently, which can silently
@@ -3033,7 +3306,21 @@ function lockSlip(){
   alert('Locked. See Tickets → My Parlays.');
 }
 function delLocked(id){
-  set(LS.locked,get(LS.locked,[]).filter(x=>x.id!==id));renderTickets();
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(t&&t.finalized){
+    if(!confirm("This ticket is locked in as final and shouldn't normally be deleted — it's part of your permanent record. Delete anyway?"))return;
+  }
+  set(LS.locked,L.filter(x=>x.id!==id));renderTickets();
+}
+function finalizeLocked(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  if(!confirm("Lock this ticket in as final? Once locked it's protected from accidental deletion — this is your permanent record for grading and calibration."))return;
+  t.finalized=true;
+  set(LS.locked,L);
+  renderTickets();
 }
 
 /* ================= TARGET TICKET BUILDER ================= */
@@ -3097,15 +3384,16 @@ function allSidesForBuilder(){
       const hB=bookLineForMarket(g.id,'moneyline','home'),aB=bookLineForMarket(g.id,'moneyline','away');
       if(hB&&aB){
         const hp=bookDevig(hB.price),ap=bookDevig(aB.price),sum=hp+ap;
-        out.push({p:hp/sum,pick:g.home.abbr+' ML',game:gl,kind:'side'});
-        out.push({p:ap/sum,pick:g.away.abbr+' ML',game:gl,kind:'side'});
+        out.push({p:(s.hw+hp/sum)/2,pick:g.home.abbr+' ML',game:gl,kind:'side',modelP:s.hw,marketP:hp/sum,price:hB.price});
+        out.push({p:(s.aw+ap/sum)/2,pick:g.away.abbr+' ML',game:gl,kind:'side',modelP:s.aw,marketP:ap/sum,price:aB.price});
         return;
       }
     }
     if(hasRealML(g.id)){
       const bl=mlBlend(g,s);
-      out.push({p:bl.home,pick:g.home.abbr+' ML',game:gl,kind:'side'});
-      out.push({p:bl.away,pick:g.away.abbr+' ML',game:gl,kind:'side'});
+      const M=marketOf(g);
+      out.push({p:bl.home,pick:g.home.abbr+' ML',game:gl,kind:'side',modelP:s.hw,marketP:M?M.fh:bl.home});
+      out.push({p:bl.away,pick:g.away.abbr+' ML',game:gl,kind:'side',modelP:s.aw,marketP:M?M.fa:bl.away});
     }
   });
   return out;
@@ -3126,8 +3414,10 @@ function allRunLinesForBuilder(){
         const fp=bookDevig(favBook.price),dp=bookDevig(dogBook.price),sum=fp+dp;
         const fAb=favBook.side==='home'?g.home.abbr:g.away.abbr;
         const dAb=dogBook.side==='home'?g.home.abbr:g.away.abbr;
-        out.push({p:fp/sum,pick:fAb+' '+favBook.line,game:gl,kind:'rl'});
-        out.push({p:dp/sum,pick:dAb+' +'+dogBook.line,game:gl,kind:'rl'});
+        const favModel=rlProb(g,s,favBook.side,-favBook.line);
+        const dogModel=rlProb(g,s,dogBook.side,-dogBook.line);
+        out.push({p:fp/sum,pick:fAb+' '+favBook.line,game:gl,kind:'rl',modelP:favModel,marketP:fp/sum,price:favBook.price});
+        out.push({p:dp/sum,pick:dAb+' +'+dogBook.line,game:gl,kind:'rl',modelP:dogModel,marketP:dp/sum,price:dogBook.price});
         return;
       }
     }
@@ -3137,8 +3427,8 @@ function allRunLinesForBuilder(){
     let favBlend=favCover;
     if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
     else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
-    out.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl'});
-    out.push({p:1-favBlend,pick:dogAb+' +1.5',game:gl,kind:'rl'});
+    out.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl',modelP:favCover,marketP:favBlend});
+    out.push({p:1-favBlend,pick:dogAb+' +1.5',game:gl,kind:'rl',modelP:1-favCover,marketP:1-favBlend});
   });
   return out;
 }
@@ -3154,15 +3444,16 @@ function allTotalsForBuilder(){
       const uB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTotal.line)<0.01);
       if(oB&&uB){
         const op=bookDevig(oB.price),up=bookDevig(uB.price),sum=op+up;
-        out.push({p:op/sum,pick:'Over '+bookTotal.line,game:gl,kind:'total'});
-        out.push({p:up/sum,pick:'Under '+bookTotal.line,game:gl,kind:'total'});
+        const mO=s.over(bookTotal.line);
+        out.push({p:op/sum,pick:'Over '+bookTotal.line,game:gl,kind:'total',modelP:mO,marketP:op/sum,price:oB.price});
+        out.push({p:up/sum,pick:'Under '+bookTotal.line,game:gl,kind:'total',modelP:1-mO,marketP:up/sum,price:uB.price});
         return;
       }
     }
     const st=sharpTotalFor(g.id);if(!st||st.overProb===null)return;
     const blended=sharpTotalBlend(g,st.line,s.over(st.line));
-    out.push({p:blended,pick:'Over '+st.line,game:gl,kind:'total'});
-    out.push({p:1-blended,pick:'Under '+st.line,game:gl,kind:'total'});
+    out.push({p:blended,pick:'Over '+st.line,game:gl,kind:'total',modelP:s.over(st.line),marketP:blended});
+    out.push({p:1-blended,pick:'Under '+st.line,game:gl,kind:'total',modelP:1-s.over(st.line),marketP:1-blended});
   });
   return out;
 }
@@ -3173,9 +3464,9 @@ function qualifyingPool(modes){
   if(modes.has('total'))allTotalsForBuilder().forEach(x=>pool.push(x));
   if(modes.has('prop')){
     PROPS.filter(p=>p.type!=='hr').forEach(p=>
-      pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop'}));
+      pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',modelP:p.p,marketP:p.p}));
     PROPS.filter(p=>p.type==='hr').forEach(p=>
-      pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr'}));
+      pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',modelP:p.p,marketP:p.p}));
   }
   // sort best probability first — builder adds legs greedily until target odds are hit
   return pool.sort((a,b)=>b.p-a.p);
@@ -3481,31 +3772,56 @@ async function analyzeExtPicks(){
       const b64=await fileToB64(f);
       imgBlocks.push({type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}});
     }
-    const prompt=`These are screenshots of MLB betting PICKS or PREDICTIONS published by a handicapping
-site, tipster, or social media account — not a sportsbook board. Extract every pick into a JSON array,
-nothing else, no markdown fences, no commentary.
+    const prompt=`These screenshots come from sports data/handicapping sites (Covers.com, OddsShark,
+Picks and Parlays, Action Network, VSiN, a Facebook tipster, etc). They come in several different
+formats — identify which format each screenshot is and extract accordingly. Return ONE JSON object,
+nothing else, no markdown fences, no commentary:
 
-${srcHint?`The user says these came from: "${srcHint}". Use that as the src value unless a different
-specific handicapper name is clearly visible on the image, in which case use that name.`
-:`Identify the source from any logo, watermark, username, or site name visible on the image
-(OddsShark, Covers, Picks and Parlays, Action Network, VSiN, Facebook group name, a handicapper's
-handle, etc). If you genuinely cannot tell, use "Unknown".`}
+{"picks":[...],"trends":[...],"consensus":[...]}
 
-Each entry:
-{"src":"platform or handicapper name",
- "away":"away team abbr or name","home":"home team abbr or name",
- "market":"moneyline"|"runline"|"total"|"f5total"|"f5side"|"prop",
- "pick":"the pick exactly as written on the image",
- "side":"away"|"home"|"over"|"under",
- "line":number or null,"price":number or null,
- "conf":"lock"|"best"|"lean"|null}
+═══ FORMAT 1 — CONSENSUS / PUBLIC MONEY TABLES ═══
+Rows showing two teams with bet% and money% split (e.g. "WAS 71% / ATL 29%", with prices and bet
+counts). This is public betting consensus, NOT a pick from the site — it shows what bettors are doing.
+Add one entry per game to "consensus":
+{"src":"site name (e.g. Covers)","away":"abbr","home":"abbr",
+ "awayPct":number,"homePct":number,"awayPrice":number or null,"homePrice":number or null,
+ "awayBets":number or null,"homeBets":number or null}
+The team with the HIGHER percentage is where the public money is — record both sides' percentages
+so we can see the split, not just the majority side.
 
-Rules:
-- side must be away/home for moneyline, runline and f5side; over/under for total and f5total.
-- conf: use "lock" for anything flagged as a lock/max/5-star, "best" for best bet/top play,
-  "lean" for a soft lean, null if no confidence level is shown.
-- Skip parlay legs you cannot attribute to a specific game.
-- Skip anything blurry or cut off rather than guessing.`;
+═══ FORMAT 2 — "COMPUTER PICKS" CARDS ═══
+A card with "Predicted Score" showing two teams and decimal run projections (e.g. "PHI 5.41 @ 5.25
+BAL"), then ML / Total / Run Line columns with price boxes. Boxes with a GREEN outline/highlight are
+the site's computer pick for that market; plain gray boxes are the other side, not picked.
+Add one entry per HIGHLIGHTED (green) box to "picks":
+{"src":"site name (e.g. Covers Computer Picks)","away":"abbr","home":"abbr",
+ "market":"moneyline"|"runline"|"total",
+ "pick":"exactly what the green box says, e.g. 'PHI +107' or 'o8.5' or 'BAL +1.5'",
+ "side":"away"|"home"|"over"|"under","line":number or null,"price":number,
+ "predictedAway":number,"predictedHome":number,"conf":null}
+Use the predicted score decimals for predictedAway/predictedHome on every pick from that card, even
+though the number itself doesn't change per market — it's the same projection driving all three.
+If NEITHER box in a pair is green/highlighted, do not add a pick for that market — the card is only
+showing you data, not making that specific call.
+
+═══ FORMAT 3 — "TRENDS" LISTS ═══
+Plain-language trend sentences under two team name pills, one of which may be highlighted/circled
+(that's the team the trend favors). Sentences look like "Over is 6-0 in Skenes' last 6 starts on
+grass" or "Under is 4-0 in Phillies last 4 when their opponent scores 5+". Add each sentence as one
+entry to "trends":
+{"src":"site name","away":"abbr","home":"abbr","team":"which team abbr the trend is about, or null
+if it's about the total/matchup rather than one side","text":"the trend sentence exactly as written",
+"implies":"over"|"under"|"away"|"home"|null}
+Set "implies" by reading the sentence: a trend stating "Over is X-Y" implies "over"; "Under is X-Y"
+implies "under"; a team-record trend like "Dodgers are 5-0 as a home underdog" implies that team
+("home" or "away" — whichever side they are in THIS game).
+
+═══ GENERAL RULES ═══
+- Team names: use standard 2-3 letter abbreviations (PHI, BAL, NYY, LAD, etc).
+- If a source name isn't visible anywhere, use "Unknown".
+${srcHint?`- The user suggests these are from: "${srcHint}" — use that unless a different name is clearly visible.`:''}
+- Skip anything blurry, cut off, or ambiguous rather than guessing.
+- A single upload batch may contain multiple formats — sort each screenshot into the right bucket.`;
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-access':'true'},
@@ -3521,34 +3837,78 @@ Rules:
         <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${raw.slice(0,2500)}</pre></div>`;
       return;
     }
-    if(!Array.isArray(parsed)||!parsed.length){
+    const picks=Array.isArray(parsed.picks)?parsed.picks:[];
+    const trends=Array.isArray(parsed.trends)?parsed.trends:[];
+    const consensus=Array.isArray(parsed.consensus)?parsed.consensus:[];
+    if(!picks.length&&!trends.length&&!consensus.length){
       el.innerHTML='<div class="empty">Nothing readable came back — try clearer screenshots.</div>';return;
     }
-    window._pendingExt=parsed;
-    el.innerHTML=`<div class="tkt hi"><h3>${parsed.length} picks read</h3>
+    window._pendingExt={picks,trends,consensus};
+    const rows=[];
+    if(picks.length)rows.push(`<div class="mktlab" style="margin-top:0">Picks (${picks.length})</div>
+      <ol>${picks.map(x=>`<li><b>${x.src}</b> — ${x.away} @ ${x.home} · ${x.pick}
+        ${x.conf?`<span class="flag cool">${x.conf}</span>`:''}
+        ${x.predictedAway!==undefined?`<span class="m"> proj ${x.predictedAway}-${x.predictedHome}</span>`:''}</li>`).join('')}</ol>`);
+    if(consensus.length)rows.push(`<div class="mktlab">Public consensus (${consensus.length})</div>
+      <ol>${consensus.map(x=>`<li><b>${x.src}</b> — ${x.away} ${x.awayPct}% / ${x.home} ${x.homePct}%</li>`).join('')}</ol>`);
+    if(trends.length)rows.push(`<div class="mktlab">Trends (${trends.length})</div>
+      <ol>${trends.map(x=>`<li><b>${x.src}</b> — ${x.away}@${x.home}${x.team?' · '+x.team:''}: ${x.text}
+        ${x.implies?`<span class="flag cool">${x.implies}</span>`:''}</li>`).join('')}</ol>`);
+    el.innerHTML=`<div class="tkt hi"><h3>${picks.length} picks · ${trends.length} trends · ${consensus.length} consensus rows</h3>
       <div class="sub">Check these before saving — vision extraction isn't perfect.</div>
-      <ol>${parsed.map(x=>`<li><b>${x.src}</b> — ${x.away} @ ${x.home} · ${x.pick}
-        ${x.conf?`<span class="flag cool">${x.conf}</span>`:''}</li>`).join('')}</ol>
-      <div class="bar"><button class="primary" onclick="saveExtPicks()">Save these picks</button></div></div>`;
+      ${rows.join('')}
+      <div class="bar"><button class="primary" onclick="saveExtPicks()">Save all</button></div></div>`;
   }catch(e){
     el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
   }
 }
 
 function saveExtPicks(){
-  const parsed=window._pendingExt;if(!parsed)return;
-  const all=getExt(),d=today();
-  all[d]=all[d]||[];
-  const keyOf=x=>[x.src,x.game,x.market,x.side,x.line].join('|');
-  parsed.forEach(x=>{
+  const bundle=window._pendingExt;if(!bundle)return;
+  const d=today();
+
+  // ── picks ──
+  const allP=getExt();
+  allP[d]=allP[d]||[];
+  const keyOfP=x=>[x.src,x.game,x.market,x.side,x.line].join('|');
+  (bundle.picks||[]).forEach(x=>{
     const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
     const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
     const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
       gid:gm?gm.id:null,capturedAt:Date.now(),hit:null};
-    const k=keyOf(rec),i=all[d].findIndex(y=>keyOf(y)===k);
-    if(i>=0)all[d][i]={...all[d][i],...rec};else all[d].push(rec);
+    const k=keyOfP(rec),i=allP[d].findIndex(y=>keyOfP(y)===k);
+    if(i>=0)allP[d][i]={...allP[d][i],...rec};else allP[d].push(rec);
   });
-  set(LS.extpicks,all);
+  set(LS.extpicks,allP);
+
+  // ── trends ──
+  const allT=get(LS.exttrends,{});
+  allT[d]=allT[d]||[];
+  const keyOfT=x=>[x.src,x.game,x.text].join('|');
+  (bundle.trends||[]).forEach(x=>{
+    const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
+    const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+    const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
+      gid:gm?gm.id:null,capturedAt:Date.now()};
+    const k=keyOfT(rec),i=allT[d].findIndex(y=>keyOfT(y)===k);
+    if(i>=0)allT[d][i]=rec;else allT[d].push(rec);
+  });
+  set(LS.exttrends,allT);
+
+  // ── consensus ──
+  const allC=get(LS.extconsensus,{});
+  allC[d]=allC[d]||[];
+  const keyOfC=x=>[x.src,x.game].join('|');
+  (bundle.consensus||[]).forEach(x=>{
+    const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
+    const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+    const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
+      gid:gm?gm.id:null,capturedAt:Date.now()};
+    const k=keyOfC(rec),i=allC[d].findIndex(y=>keyOfC(y)===k);
+    if(i>=0)allC[d][i]=rec;else allC[d].push(rec);
+  });
+  set(LS.extconsensus,allC);
+
   window._pendingExt=null;
   document.getElementById('extShots').value='';
   renderTickets();
@@ -3606,7 +3966,7 @@ function rebuildSrcStats(){
 }
 
 /* ================= TICKETS TABS ================= */
-const TTABS=[['build','Build'],['system','System'],['mine','Mine'],
+const TTABS=[['build','Build'],['presets','Presets'],['system','System'],['mine','Mine'],
   ['market','Market'],['consensus','Consensus'],['sources','Sources']];
 
 function renderTickets(){
@@ -3616,6 +3976,7 @@ function renderTickets(){
   nav.innerHTML=TTABS.map(([k,l])=>
     `<button class="${TICKETTAB===k?'on':''}" onclick="TICKETTAB='${k}';renderTickets()">${l}</button>`).join('');
   if(TICKETTAB==='build')  body.innerHTML=buildTabHtml();
+  if(TICKETTAB==='presets')body.innerHTML=presetTabHtml();
   if(TICKETTAB==='system'){body.innerHTML='<div id="tickets"><div class="empty">Building…</div></div>';setTimeout(()=>genTickets('system'),0)}
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
   if(TICKETTAB==='market') body.innerHTML=marketPicksHtml();
@@ -3840,6 +4201,21 @@ function sourcesHtml(){
   }).join('');
 }
 
+function confirmSystemTicket(payload){
+  let legs;
+  try{legs=JSON.parse(decodeURIComponent(payload))}catch(e){return}
+  if(!legs||!legs.length)return;
+  if(!confirm(`Save this ${legs.length}-leg system ticket to your real ticket list? You can still delete it later, or lock it as final once you're sure.`))return;
+  const L=get(LS.locked,[]);
+  const id=Date.now();
+  L.unshift({id,date:today(),
+    legs:legs.map(x=>({id:id+'|'+x.pick,...x})),
+    p:legs.reduce((a,x)=>a*x.p,1),source:'system'});
+  set(LS.locked,L);
+  renderTickets();
+  alert('Saved to your ticket list — find it under the Mine tab.');
+}
+
 function genTickets(mode){
   mode=mode||(TICKETTAB==='mine'?'mine':'system');
   const el=document.getElementById('tickets');
@@ -3859,9 +4235,17 @@ function genTickets(mode){
         return `<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span>${tag}</li>`;
       }).join('');
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
-      h+=`<div class="tkt hi"><h3>${t.date}</h3>
+      const lockBadge=t.finalized
+        ?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--win);border:1px solid var(--win);
+            border-radius:4px;padding:1px 6px;margin-left:6px">🔒 final</span>`:'';
+      const actionBtn=t.finalized
+        ?`<button onclick="delLocked(${t.id})">Delete</button>`
+        :`<button class="primary" onclick="finalizeLocked(${t.id})">Lock as final</button>
+          <button onclick="delLocked(${t.id})">Delete</button>`;
+      h+=`<div class="tkt hi"><h3>${t.date}${lockBadge}</h3>
         <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
-        <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar"><button onclick="delLocked(${t.id})">Delete</button></div></div>`;
+        <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
     });
     el.innerHTML=h;
     return;
@@ -3869,14 +4253,19 @@ function genTickets(mode){
   const pool=marketPool();
   if(!pool.length){el.innerHTML=h+'<div class="empty">Generated tickets appear once lineups post.</div>';return}
   const used=new Set();
+  h+=`<div class="note">These are auto-generated by the system, not locked-in picks.
+    Review a combination and hit <b>Confirm &amp; save</b> to move it to your real ticket
+    list — nothing here counts toward your record until you confirm it.</div>`;
   h+='<div class="sbar"><h2>Sides · run lines · totals · F5</h2><div class="ln"></div></div>';
   [[6,'Six · A'],[6,'Six · B'],[8,'Eight · A'],[8,'Eight · B'],[10,'Ten · A'],[10,'Ten · B']].forEach(([n,lab],i)=>{
     const legs=deal(pool,used,n);
     if(legs.length<n){h+=`<div class="tkt"><h3>${lab}</h3><div class="sub">Only ${legs.length} distinct markets left on this slate.</div></div>`;return}
     const c=legs.reduce((a,x)=>a*x.p,1);
+    const payload=encodeURIComponent(JSON.stringify(legs.map(x=>({game:x.game,pick:x.pick,p:x.p,isProp:x.isProp||false}))));
     h+=`<div class="tkt ${i<2?'hi':''}"><h3>${lab}</h3>
       <div class="sub"><b>${(c*100).toFixed(c<.01?3:1)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs</div>
-      <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol></div>`;
+      <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}')">Confirm &amp; save</button></div></div>`;
   });
   const pu=new Set();
   h+='<div class="sbar"><h2>Prop cards only</h2><div class="ln"></div></div>';
