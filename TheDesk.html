@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v49</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v49c</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -810,6 +810,7 @@ function saveSettingsTab(){
   const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
   set(LS.key,v('keyIn'));set(LS.ai,v('aiIn'));set(LS.sharp,v('sharpIn'));
   set(LS.rundown,v('rundownIn'));set(LS.oddspapi,v('oddspapiIn'));
+  localStorage.setItem('d4.setupDone','1');
   const el=document.getElementById('oddspapiDiag');
   if(el)el.innerHTML='<div class="tkt hi"><h3>Saved</h3><div class="sub">Keys stored locally. Hit Refresh everything on the Games tab to pull with them.</div></div>';
 }
@@ -817,6 +818,7 @@ function saveKeys(){
   const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
   set(LS.key,v('setupKeyIn'));set(LS.ai,v('setupAiIn'));
   set(LS.sharp,v('setupSharpIn'));set(LS.rundown,v('setupRundownIn'));
+  localStorage.setItem('d4.setupDone','1');
   document.getElementById('setup').classList.add('hide');boot();
 }
 function tab(n,b){
@@ -6008,7 +6010,7 @@ async function exportImage(targetId,btnId,filename,shareTitle){
   btn.textContent=orig;btn.disabled=false;
 }
 let BOOTED=false;
-async /* ── background auto-grading ──────────────────────────────────────────────
+/* ── background auto-grading ──────────────────────────────────────────────
    Grading used to only happen when the Grades tab was opened, so a slate could
    finish and everything downstream — records, calibration, bankroll settlement,
    external source stats — would sit stale until someone navigated there. This
@@ -6078,8 +6080,26 @@ async function boot(){
       set(LS.slip,SLIP);await loadAll();await loadOdds(false);snapshot();snapshotBest();paintSlip();paintMeter()}
   },3e4);
 }
-if(get(LS.key,null)===null){renderUsage();renderBackupStatus();document.getElementById('setup').classList.remove('hide');}
-else{document.getElementById('setup').classList.add('hide');boot()}
+// Setup gate. The odds key is OPTIONAL — gating on it alone meant a null there
+// would hide a fully-configured app behind the setup screen and look like data loss.
+// Gate on whether this install has ANY prior state instead: a key of any kind, or
+// any archived/graded history. Nothing in localStorage is ever cleared by this check.
+(function(){
+  const anyKey=[LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi]
+    .some(k=>{const v=get(k,'');return v!==null&&v!==undefined&&v!==''});
+  const anyHistory=Object.keys(get(LS.arc,{})).length>0
+    ||Object.keys(get(LS.bestlog,{})).length>0
+    ||(get(LS.locked,[])||[]).length>0;
+  const seenSetup=localStorage.getItem('d4.setupDone')==='1';
+  if(anyKey||anyHistory||seenSetup){
+    localStorage.setItem('d4.setupDone','1');
+    document.getElementById('setup').classList.add('hide');
+    boot();
+  }else{
+    renderUsage();renderBackupStatus();
+    document.getElementById('setup').classList.remove('hide');
+  }
+})();
 </script>
 </body>
 </html>
