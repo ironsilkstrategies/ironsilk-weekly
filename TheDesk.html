@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v54</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v55</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1008,9 +1008,12 @@ function simGame(g,N){
   let hR=teamRuns(g.home.lineup,g.away.p,env,venueAdj(g,'home'),hAdj);
   if(aR===null||hR===null)return null;
   hR*=1.035;
-  // learned bias correction — shrunk, capped, and only after enough games are on record
-  aR=Math.max(1.2,aR+teamRunAdj(g.away.abbr));
-  hR=Math.max(1.2,hR+teamRunAdj(g.home.abbr));
+  // learned bias correction — shrunk, capped, and only after enough games are on record.
+  // Per-team correction handles team-specific tendencies; global drift catches the model
+  // running hot/cold across every team combined — a structural miss, not a team one.
+  const drift=globalDriftAdj()/2; // split the correction across both teams' projections
+  aR=Math.max(1.2,aR+teamRunAdj(g.away.abbr)+drift);
+  hR=Math.max(1.2,hR+teamRunAdj(g.home.abbr)+drift);
   const aF=aR*.555,hF=hR*.555;
   let hw=0,as=0,hs=0,f5h=0,f5a=0,f5t=0,tot=[],bins=new Array(24).fill(0);
   const scoreFreq={};              // exact-score frequency -> most common outcome
@@ -1127,6 +1130,56 @@ function computeEntities(){
   });
   set(LS.ent,{teams:teamAdj,players:playerAdj,ts:Date.now()});
   return{teams:teamAdj,players:playerAdj};
+}
+// ── Global drift correction — the actual "how far off eternally" feedback loop ──
+// teamRunAdj corrects PER TEAM. This corrects the model's OVERALL tendency — if the
+// whole engine is running hot or cold across every team combined, that's a structural
+// calibration issue (dispersion, environment multiplier, etc), not a team-specific one,
+// and per-team shrinkage will never fully absorb it. This is computed from every graded
+// game ever, shrunk by sample size same as the team correction, and actually applied.
+function computeGlobalDrift(){
+  const arc=get(LS.arc,{});
+  let n=0,totalBias=0,sideCorrect=0,sideGraded=0;
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      const actualTotal=F.a+F.h;
+      totalBias+=(r.pt-actualTotal); // positive = model runs hot on totals overall
+      n++;
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      if(won){sideGraded++;if(won===r.side)sideCorrect++;}
+    });
+  });
+  if(n<MIN_N_CAL){
+    set('d4.drift',{n,totalDrift:0,ready:false});
+    return{totalDrift:0,ready:false};
+  }
+  const avgBias=totalBias/n;
+  const w=n/(n+SHRINK_TEAM); // same shrink curve as team-level, so small samples stay near 0
+  const totalDrift=+Math.max(-1.2,Math.min(1.2,-avgBias*w)).toFixed(3); // negative avgBias(over-proj) -> positive correction
+  const sidePct=sideGraded?+(sideCorrect/sideGraded*100).toFixed(1):null;
+  set('d4.drift',{n,avgBias:+avgBias.toFixed(3),totalDrift,sidePct,sideGraded,ready:true,ts:Date.now()});
+  return{totalDrift,ready:true};
+}
+function globalDriftAdj(){
+  const d=get('d4.drift',null);
+  return d&&d.ready?d.totalDrift:0;
+}
+// ── day-over-day trend — is yesterday's miss actually smaller today? ──
+function calibrationTrend(){
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).filter(d=>arc[d].finals).sort();
+  const out=[];
+  days.forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    let n=0,err=0;
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      err+=Math.abs(r.pt-(F.a+F.h));n++;
+    });
+    if(n)out.push({date:d,avgMiss:+(err/n).toFixed(2),n});
+  });
 }
 function teamRunAdj(ab){
   const e=get(LS.ent,{});
@@ -1415,7 +1468,7 @@ async function loadAll(){
         home:mk(B,B.probablePitcher,(g.lineups||{}).homePlayers,PROJ[B.team.id])};
     }).sort((a,b)=>new Date(a.time)-new Date(b.time));
     try{
-      computeCalibration();computeEntities();render();buildProps();render();
+      computeCalibration();computeEntities();computeGlobalDrift();render();buildProps();render();
     }catch(e){console.error('post-fetch processing error:',e);}
     loadWeather();loadBoxes();
   }catch(e){document.getElementById('slate').innerHTML=
@@ -4282,6 +4335,123 @@ function renderMoneyTab(){
 }
 /* ================= BANKROLL END ================= */
 
+/* ================= ALL-TIME RECORD ================= */
+// Every pick that's ever been made, from every source, decomposed down to individual
+// straight legs — a parlay counts as N separate record entries, not one. This is the
+// only honest way to answer "how am I actually doing" since a 3-1 parlay record hides
+// that three of those legs individually hit and one alone sank the whole ticket.
+function buildAllTimeRecord(){
+  const mine=[],system=[],outside=[];
+
+  // ── My picks + System picks — both live in LS.locked, split by t.source ──
+  get(LS.locked,[]).forEach(t=>{
+    const bucket=t.source==='system'?system:mine;
+    t.legs.forEach(x=>{
+      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      let hit=null,detail=null;
+      if(g&&g.abstract==='Final'){
+        hit=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+        detail=gradeDetail(g,x.pick,x.isProp?{ptype:x.ptype,thr:x.thr,pid:x.pid}:null).detail;
+      }
+      bucket.push({date:t.date,pick:x.pick,game:x.game,p:x.p,hit,detail,
+        ticketId:t.id,gid:g?g.id:null,fromParlay:t.legs.length>1});
+    });
+  });
+
+  // ── Outside picks — from every uploaded source screenshot ──
+  const ext=getExt();
+  Object.keys(ext).forEach(d=>{
+    ext[d].forEach(x=>{
+      outside.push({date:d,pick:x.pick||(x.side+' '+(x.line??'')),game:x.game,
+        src:x.src,hit:x.hit,conf:x.conf,gid:x.gid});
+    });
+  });
+
+  return{mine,system,outside};
+}
+
+function recordStats(list){
+  const graded=list.filter(x=>x.hit===true||x.hit===false);
+  const w=graded.filter(x=>x.hit===true).length,l=graded.filter(x=>x.hit===false).length;
+  const pending=list.length-graded.length;
+  return{w,l,pending,total:list.length,pct:w+l?((w/(w+l))*100).toFixed(1):'—'};
+}
+
+let ATR_TAB='mine';
+function renderAllTimeRecord(){
+  const R=buildAllTimeRecord();
+  const mineS=recordStats(R.mine),sysS=recordStats(R.system),outS=recordStats(R.outside);
+
+  const tabBtn=(k,l,s)=>`<button class="${ATR_TAB===k?'on':''}" onclick="ATR_TAB='${k}';renderAllTimeRecord()">
+    ${l} <span class="m">${s.w}-${s.l}</span></button>`;
+
+  let h=`<div class="tkt hi">
+    <h3>All-time record</h3>
+    <div class="sub">Every parlay broken down leg by leg — a 3-1 parlay record shows up here as
+    three separate wins and one loss, not one bundled result. This is the honest number.</div>
+  </div>
+  <div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:10px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${mineS.w>=mineS.l?'var(--win)':'var(--rust)'}">${mineS.pct}%</div>
+        <div class="m">Mine · ${mineS.w}-${mineS.l}</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${sysS.w>=sysS.l?'var(--win)':'var(--rust)'}">${sysS.pct}%</div>
+        <div class="m">System · ${sysS.w}-${sysS.l}</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${outS.w>=outS.l?'var(--win)':'var(--rust)'}">${outS.pct}%</div>
+        <div class="m">Outside · ${outS.w}-${outS.l}</div></div>
+    </div>
+  </div>
+  <div class="subnav">
+    ${tabBtn('mine','Mine',mineS)}
+    ${tabBtn('system','System',sysS)}
+    ${tabBtn('outside','Outside',outS)}
+  </div>`;
+
+  const active=ATR_TAB==='mine'?R.mine:ATR_TAB==='system'?R.system:R.outside;
+  const stats=ATR_TAB==='mine'?mineS:ATR_TAB==='system'?sysS:outS;
+
+  if(!active.length){
+    h+=`<div class="empty">Nothing here yet.</div>`;
+    return h;
+  }
+
+  h+=`<div class="note">${stats.pending} pick${stats.pending!==1?'s':''} still pending final grades.</div>`;
+
+  // group by source for Outside so each platform's picks are visually separated
+  if(ATR_TAB==='outside'){
+    const bySrc={};
+    active.forEach(x=>{(bySrc[x.src]=bySrc[x.src]||[]).push(x)});
+    h+=Object.keys(bySrc).sort().map(src=>{
+      const s=recordStats(bySrc[src]);
+      const rows=bySrc[src].slice().reverse().map(x=>legRowHtml(x,true)).join('');
+      return `<div class="tkt"><h3>${src} <span class="m">${s.w}-${s.l}</span></h3>${rows}</div>`;
+    }).join('');
+  }else{
+    const rows=active.slice().reverse().map(x=>legRowHtml(x,false)).join('');
+    h+=`<div class="tkt">${rows}</div>`;
+  }
+  return h;
+}
+
+function legRowHtml(x,isOutside){
+  const color=x.hit===true?'var(--win)':x.hit===false?'var(--rust)':'var(--mute)';
+  const icon=x.hit===true?'✅':x.hit===false?'❌':'⏳';
+  const jumpTo=x.gid?` onclick="jumpToGame(${x.gid})" style="cursor:pointer"`:'';
+  const detail=x.detail?`<span style="font-family:'IBM Plex Mono';font-size:9.5px;color:${color};margin-left:5px">${x.detail}</span>`:'';
+  const parlayTag=x.fromParlay?` <span class="m" style="opacity:.6">parlay leg</span>`:'';
+  const confTag=x.conf?` <span class="flag cool">${x.conf}</span>`:'';
+  return `<div${jumpTo} style="display:flex;justify-content:space-between;align-items:center;
+    padding:6px 0;border-bottom:1px solid var(--rule);gap:8px">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:12.5px;font-weight:600">${x.pick}${confTag}${parlayTag}</div>
+      <div class="m">${x.game} · ${x.date}${x.p?' · '+(x.p*100).toFixed(0)+'%':''}</div>
+    </div>
+    <div style="text-align:right;flex:0 0 auto">
+      <span style="color:${color}">${icon}</span>${detail}
+    </div>
+  </div>`;
+}
+/* ================= ALL-TIME RECORD END ================= */
+
 /* ================= EXTERNAL PICKS (other platforms) ================= */
 // Screenshots from OddsShark, Covers, Picks & Parlays, Facebook tipsters etc.
 // get read into d4.extpicks, graded on the same cycle as everything else, and
@@ -4499,7 +4669,7 @@ function rebuildSrcStats(){
 
 /* ================= TICKETS TABS ================= */
 const TTABS=[['build','Build'],['presets','Presets'],['system','System'],['mine','Mine'],
-  ['market','Market'],['consensus','Consensus'],['sources','Sources']];
+  ['record','Record'],['market','Market'],['consensus','Consensus'],['sources','Sources']];
 
 function renderTickets(){
   const nav=document.getElementById('ticketNav');
@@ -4511,6 +4681,7 @@ function renderTickets(){
   if(TICKETTAB==='presets')body.innerHTML=presetTabHtml();
   if(TICKETTAB==='system'){body.innerHTML='<div id="tickets"><div class="empty">Building…</div></div>';setTimeout(()=>genTickets('system'),0)}
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
+  if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
   if(TICKETTAB==='market') body.innerHTML=marketPicksHtml();
   if(TICKETTAB==='consensus')body.innerHTML=consensusHtml();
   if(TICKETTAB==='sources')body.innerHTML=sourcesHtml();
@@ -5695,7 +5866,7 @@ async function renderGrades(force){
       }catch(e){}
     }
     }
-    set(LS.arc,arc);computeCalibration();computeEntities();buildProps();
+    set(LS.arc,arc);computeCalibration();computeEntities();computeGlobalDrift();buildProps();
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
     try{gradeExtPicks();}catch(e){console.warn("ext",e)}
   }
@@ -5777,7 +5948,33 @@ async function renderGrades(force){
   }
   if(GRADETAB==='calib'){
     const c=get(LS.calib,{}),ty=c.types||{};
-    h=`<div class="sbar"><h2>Active corrections</h2><div class="ln"></div></div><div class="tkt hi">
+    const drift=get('d4.drift',null);
+    const trend=calibrationTrend();
+    const recentTrend=trend.slice(-10);
+    const driftHtml=drift&&drift.ready?`<div class="tkt hi">
+      <h3>Global drift · every graded game ever</h3>
+      <div class="sub">Across <b>${drift.n}</b> graded games, the model has averaged
+      <b>${drift.avgBias>0?'+':''}${drift.avgBias} runs ${drift.avgBias>0?'over':'under'}</b> per game on total runs —
+      not one team, the whole engine. A correction of <b>${drift.totalDrift>0?'+':''}${drift.totalDrift}</b> runs
+      is now baked into every new projection to pull that back toward zero.
+      ${drift.sidePct!==null?`Side picks are hitting <b>${drift.sidePct}%</b> across ${drift.sideGraded} decided games.`:''}</div>
+    </div>`:`<div class="tkt"><div class="sub">Need at least ${MIN_N_CAL} graded games before a global
+      correction activates. Currently at ${drift?drift.n:0}.</div></div>`;
+    const trendHtml=recentTrend.length?`<div class="tkt">
+      <div class="mktlab" style="margin-top:0">Daily average miss — is it shrinking?</div>
+      <ol style="list-style:none;padding-left:0">${recentTrend.map((d,i)=>{
+        const prev=recentTrend[i-1];
+        const arrow=prev?(d.avgMiss<prev.avgMiss?'↓':d.avgMiss>prev.avgMiss?'↑':'→'):'';
+        const arrowColor=prev?(d.avgMiss<prev.avgMiss?'var(--win)':d.avgMiss>prev.avgMiss?'var(--rust)':'var(--mute)'):'var(--mute)';
+        return `<li>${d.date} <span class="m">n=${d.n}</span>
+          <span class="pp">${d.avgMiss} runs avg miss</span>
+          <span style="color:${arrowColor}">${arrow}</span></li>`;
+      }).join('')}</ol>
+      <div class="sub" style="margin-top:6px">This is the actual test of whether calibration is working —
+      the average miss size should trend down over time, not just bounce around. A steady ↓ means
+      yesterday's correction is helping; a steady ↑ means something's fighting the correction.</div>
+    </div>`:'';
+    h=driftHtml+trendHtml+`<div class="sbar"><h2>Active corrections</h2><div class="ln"></div></div><div class="tkt hi">
       <div class="sub">Every prop probability is multiplied by its type's factor before display, computed from
       your own graded history. Recomputes each time grades refresh.</div>
       <ol style="list-style:none;padding-left:0">${Object.keys(ty).map(t=>{
@@ -5954,16 +6151,40 @@ async function send(){
   inp.value='';CHAT.push({role:'user',content:q});paintChat();
   const top=PROPS.slice(0,40).map(p=>`${p.name} ${p.mkt} ${(p.p*100).toFixed(0)}% (${p.game})`).join('; ');
   const L=get(LS.locked,[]);
+  const R=buildAllTimeRecord();
+  const mineS=recordStats(R.mine),sysS=recordStats(R.system),outS=recordStats(R.outside);
+  const drift=get('d4.drift',null);
+  const trend=calibrationTrend().slice(-7);
+  const srcStats=getSrcStats();
+  const b=getBankroll();
   const sys=`You are the analyst inside this user's own app, The Desk. Sections:\n\n`
     +`1) TONIGHT'S BOARD — 10,000 sims per game, built ONLY from player stats, lineups, park, weather, `
     +`home/away splits, two-year head-to-head and starter workload. Bookmaker odds are NEVER an input, only a comparison:\n${slateContext()}\n\n`
     +`2) TOP PROPS: ${top}\n\n3) GRADED HISTORY:\n${gradesContext()}\n\n`
     +`4) ACTIVE SELF-CORRECTIONS:\n${calibContext()}\n\n4b) LEARNED PER-TEAM AND PER-PLAYER BIAS:\n${entityContext()}\n\n`
+    +`4c) GLOBAL DRIFT — the model's overall (not per-team) bias across every graded game ever, and the `
+    +`correction currently applied to every new projection to counter it:\n`
+    +(drift&&drift.ready?`Across ${drift.n} graded games, average total-runs bias is ${drift.avgBias>0?'+':''}${drift.avgBias} `
+      +`(positive = model runs hot). Active correction: ${drift.totalDrift>0?'+':''}${drift.totalDrift} runs per game. `
+      +`Side picks hitting ${drift.sidePct}% across ${drift.sideGraded} decided games.`
+      :`Not enough graded games yet for a global correction (need ${MIN_N_CAL}).`)+'\n\n'
+    +`4d) LAST 7 DAYS' AVERAGE MISS SIZE (is calibration actually improving?): `
+    +(trend.length?trend.map(t=>`${t.date}: ${t.avgMiss} runs (n=${t.n})`).join('; '):'not enough graded days yet')+'\n\n'
+    +`5) ALL-TIME RECORD, decomposed to individual straight legs (a parlay's legs each count separately):\n`
+    +`Mine: ${mineS.w}-${mineS.l} (${mineS.pct}%, ${mineS.pending} pending)\n`
+    +`System (confirmed only): ${sysS.w}-${sysS.l} (${sysS.pct}%, ${sysS.pending} pending)\n`
+    +`Outside sources combined: ${outS.w}-${outS.l} (${outS.pct}%, ${outS.pending} pending)\n`
+    +`Per-source breakdown: ${Object.keys(srcStats).length?Object.keys(srcStats).map(s=>{
+      const o=srcStats[s];return `${s} ${o.w}-${o.l}`}).join('; '):'none uploaded yet'}\n\n`
     +`6) LOCKED PARLAYS:\n${L.length?L.map(t=>`${t.date} (${(t.p*100).toFixed(2)}%): ${t.legs.map(x=>x.pick+' '+x.game).join(', ')}`).join('\n'):'none'}\n\n`
+    +`7) BANKROLL: $${(BR_BASELINE+b.profit).toFixed(2)} balance this month, ${b.profit>=0?'+':''}$${b.profit.toFixed(2)} net, `
+    +`${b.history.length} tickets settled, limit multiplier ${b.limitMult.toFixed(2)}x.\n\n`
     +`Rules: PLAYER PROPS at the user's book are X+ ladders only — never recommend an under on a player prop. `
     +`Game totals, run lines and F5 totals DO offer both directions, so unders are fully in play there and you `
     +`should recommend whichever side the sim favors. Treat the most-common-exact-score as more informative than `
-    +`the median when discussing likely outcomes. Edge under 3 points is noise. `
+    +`the median when discussing likely outcomes. Edge under 3 points is noise. When asked how the system is `
+    +`performing or whether calibration is working, lead with the global drift and daily-miss trend in section 4c/4d — `
+    +`that's the real answer, not just win/loss record. `
     +`Be direct and concise. Never claim certainty. Say plainly when a sample is too small to trust.`;
   try{
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
@@ -6388,7 +6609,7 @@ async function forceGradeEverything(){
     }else{
       steps.push('No snapshot exists for today yet.');
     }
-    computeCalibration();computeEntities();
+    computeCalibration();computeEntities();computeGlobalDrift();
     steps.push('Calibration and entity bias recomputed.');
 
     try{recordSimVsBook(arc,get(LS.bookshots,{}));steps.push('Sim-vs-book accuracy updated.');}
@@ -6435,7 +6656,7 @@ async function autoGradeIfFinals(){
     await gradePropsFor(arc[d]);
     if(allGamesFinalized(d))arc[d].locked=true;
     set(LS.arc,arc);
-    computeCalibration();computeEntities();
+    computeCalibration();computeEntities();computeGlobalDrift();
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){}
     try{gradeExtPicks();}catch(e){}
     try{settleLockedTickets();}catch(e){}
