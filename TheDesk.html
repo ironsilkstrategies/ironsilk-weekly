@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v53</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v54</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -4547,11 +4547,89 @@ function buildTabHtml(){
   <div id="targetResult"></div>`;
 }
 
+// A ticket is "complete" only when every leg's game has actually gone final AND
+// graded to a definite true/false — not just that the game ended, since a leg can
+// end up null (push, incomplete box score, F5 data missing) and shouldn't be archived
+// as if it were decided.
+function ticketIsComplete(t){
+  return t.legs.every(x=>{
+    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+    if(!g||g.abstract!=='Final')return false;
+    const r=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+    return r===true||r===false;
+  });
+}
+function ticketRecord(t){
+  let w=0,l=0;
+  t.legs.forEach(x=>{
+    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+    if(!g||g.abstract!=='Final')return;
+    const r=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+    if(r===true)w++;else if(r===false)l++;
+  });
+  return{w,l,won:l===0&&w>0};
+}
+function archiveTicket(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  // force a fresh grade check right now — never trust a stale render. If any leg's
+  // game hasn't gone final yet, refuse and tell them exactly what's still pending.
+  if(!ticketIsComplete(t)){
+    const pending=t.legs.filter(x=>{
+      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      return !g||g.abstract!=='Final';
+    }).map(x=>x.game);
+    alert(`Can't archive yet — still waiting on: ${[...new Set(pending)].join(', ')}. Grade everything from Settings once those finish, then archive.`);
+    return;
+  }
+  t.archived=true;
+  t.archivedAt=Date.now();
+  const rec=ticketRecord(t);
+  t.finalRecord=rec;
+  set(LS.locked,L);
+  renderTickets();
+}
+function unarchiveTicket(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  t.archived=false;
+  set(LS.locked,L);
+  renderTickets();
+}
+function archiveAllComplete(){
+  const L=get(LS.locked,[]);
+  let n=0;
+  L.forEach(t=>{
+    if(t.archived)return;
+    if(ticketIsComplete(t)){
+      t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);n++;
+    }
+  });
+  set(LS.locked,L);
+  if(n===0)alert('Nothing to archive — no fully-decided tickets are still pending.');
+  renderTickets();
+}
+
+let MINE_VIEW='pending';
 function minePicksHtml(){
   const locked=get(LS.locked,[]);
   if(!locked.length)return `<div class="empty">No tickets locked yet. Build one on the Build tab, or tap picks on game cards and hit Lock In.</div>`;
+  const pending=locked.filter(t=>!t.archived);
+  const archived=locked.filter(t=>t.archived);
+  const readyToArchive=pending.filter(t=>ticketIsComplete(t)).length;
   setTimeout(()=>genTickets('mine'),0);
-  return `<div class="sbar" style="margin-top:0"><h2>Your locked tickets</h2><div class="ln"></div><div class="ct mono">${locked.length}</div></div>
+  return `<div class="sbar" style="margin-top:0"><h2>Your tickets</h2><div class="ln"></div></div>
+    <div class="subnav">
+      <button class="${MINE_VIEW==='pending'?'on':''}" onclick="MINE_VIEW='pending';renderTickets()">Pending <span class="m">${pending.length}</span></button>
+      <button class="${MINE_VIEW==='archived'?'on':''}" onclick="MINE_VIEW='archived';renderTickets()">Archived <span class="m">${archived.length}</span></button>
+    </div>
+    ${MINE_VIEW==='pending'&&readyToArchive>0?`<div class="note" style="display:flex;align-items:center;
+      justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span><b>${readyToArchive}</b> ticket${readyToArchive>1?'s are':' is'} fully graded and ready to archive.</span>
+      <button class="primary" onclick="archiveAllComplete()">Archive all complete</button>
+    </div>`:''}
     <div id="tickets"></div>`;
 }
 
@@ -4755,8 +4833,13 @@ function genTickets(mode){
   const L=get(LS.locked,[]);
   let h='';
   if(mode==='mine'){
-    if(!L.length){el.innerHTML='<div class="empty">No tickets locked yet.</div>';return}
-    L.forEach(t=>{
+    const view=(typeof MINE_VIEW!=='undefined')?MINE_VIEW:'pending';
+    const set_=view==='archived'?L.filter(t=>t.archived):L.filter(t=>!t.archived);
+    if(!set_.length){
+      el.innerHTML=`<div class="empty">${view==='archived'?'No archived tickets yet — finish grading a ticket and archive it to see it here.':'No pending tickets — everything is archived.'}</div>`;
+      return;
+    }
+    set_.forEach(t=>{
       let w=0,l=0,pd=0;
       const rows=t.legs.map(x=>{
         const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
@@ -4775,11 +4858,28 @@ function genTickets(mode){
         ?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
             text-transform:uppercase;color:var(--win);border:1px solid var(--win);
             border-radius:4px;padding:1px 6px;margin-left:6px">🔒 final</span>`:'';
-      const actionBtn=t.finalized
-        ?`<button onclick="delLocked(${t.id})">Delete</button>`
-        :`<button class="primary" onclick="finalizeLocked(${t.id})">Lock as final</button>
+      const complete=ticketIsComplete(t);
+      const archBadge=t.archived
+        ?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);
+            border-radius:4px;padding:1px 6px;margin-left:6px">📦 archived</span>`
+        :complete
+        ?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--cold);border:1px solid var(--cold);
+            border-radius:4px;padding:1px 6px;margin-left:6px">✓ ready to archive</span>`
+        :pd>0?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--mute);border:1px solid var(--rule);
+            border-radius:4px;padding:1px 6px;margin-left:6px">${pd} pending</span>`:'';
+      let actionBtn;
+      if(t.archived){
+        actionBtn=`<button onclick="unarchiveTicket(${t.id})">Move back to pending</button>
           <button onclick="delLocked(${t.id})">Delete</button>`;
-      h+=`<div class="tkt hi"><h3>${t.date}${lockBadge}</h3>
+      }else{
+        actionBtn=`${complete?`<button class="primary" onclick="archiveTicket(${t.id})">Archive</button>`:''}
+          ${t.finalized?'':`<button onclick="finalizeLocked(${t.id})">Lock as final</button>`}
+          <button onclick="delLocked(${t.id})">Delete</button>`;
+      }
+      h+=`<div class="tkt ${t.archived?'':'hi'}"><h3>${t.date}${lockBadge}${archBadge}</h3>
         <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
         <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
     });
