@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v49c</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v50</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -381,6 +381,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       <div id="bookShotResult"></div>
     </div>
     <div class="rc-picker" id="dayPicker"></div>
+    <div id="previewBanner"></div>
     <div id="slate"><div class="empty">Loading board…</div></div>
     <div class="note">
       <b>The projection never touches bookmaker odds.</b> It runs 10,000 simulations off confirmed lineups,
@@ -497,6 +498,19 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 
     <div class="sbar"><h2>Usage</h2><div class="ln"></div></div>
     <div class="tkt"><div id="usagePanel"></div></div>
+
+    <div class="sbar"><h2>Grading</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="bar" style="margin-top:0">
+        <button class="primary" id="forceGradeBtn" onclick="forceGradeEverything()">Grade everything now</button>
+      </div>
+      <div class="sub" style="margin-top:8px">Grading normally runs itself in the background the moment a game
+      goes final — you shouldn't need this. Use it if something looks stale: force-fetches today's final scores,
+      regrades every prop and side, recalculates calibration, grades every uploaded external pick, and settles
+      any staked ticket that's now fully decided. Nothing here is destructive — it only fills in or corrects,
+      never deletes.</div>
+      <div id="forceGradeStatus"></div>
+    </div>
 
     <div class="sbar"><h2>Maintenance</h2><div class="ln"></div></div>
     <div class="tkt">
@@ -2599,9 +2613,26 @@ function renderDayPicker(){
     return `<button class="${on?'on':''}" onclick="${d===today()?'backToToday()':`loadPreviewDay('${d}')`}">${label}</button>`;
   }).join('');
 }
-function backToToday(){PREVIEW_DAY=null;render();renderDayPicker()}
+let PREVIEW_STARTED=0;
+function renderPreviewBanner(){
+  const el=document.getElementById('previewBanner');
+  if(!el)return;
+  if(!PREVIEW_DAY||PREVIEW_DAY===today()){el.innerHTML='';return}
+  const mins=PREVIEW_STARTED?Math.floor((Date.now()-PREVIEW_STARTED)/60000):0;
+  el.innerHTML=`<div class="tkt" style="border-color:var(--gold);background:rgba(242,169,59,.08);
+    position:sticky;top:0;z-index:5;margin-bottom:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div><b style="color:var(--gold)">⚠️ Viewing ${dayLabel(PREVIEW_DAY)} — not today's live board</b>
+        <div class="sub" style="margin-top:2px">Live scores, grading, and bankroll settlement all still
+        run on today underneath this. This is a projection preview only.${mins>=15?` Been open ${mins} min.`:''}</div>
+      </div>
+      <button class="primary" onclick="backToToday()" style="flex:0 0 auto">Back to today</button>
+    </div>
+  </div>`;
+}
+function backToToday(){PREVIEW_DAY=null;PREVIEW_STARTED=0;render();renderDayPicker();renderPreviewBanner()}
 async function loadPreviewDay(d){
-  PREVIEW_DAY=d;renderDayPicker();
+  PREVIEW_DAY=d;PREVIEW_STARTED=Date.now();renderDayPicker();
   const el=document.getElementById('slate');
   el.innerHTML='<div class="empty">Loading preview…</div>';
   try{
@@ -2665,6 +2696,7 @@ async function loadPreviewDay(d){
       <div class="ct mono">${previewGames.length}</div></div>${noteHtml}`;
     h+=previewGames.map(g=>card(g)).join('');
     el.innerHTML=h;
+    renderPreviewBanner();
   }catch(e){
     console.error('preview day error',e);
     document.getElementById('slate').innerHTML='<div class="empty">Could not load the preview for this date.</div>';
@@ -6016,6 +6048,67 @@ let BOOTED=false;
    external source stats — would sit stale until someone navigated there. This
    watches for newly-final games and grades them the moment they land. */
 let LAST_FINAL_COUNT=-1;
+/* ── manual force-grade — Settings tab button ──────────────────────────────
+   Same pipeline as autoGradeIfFinals but never skipped by the change-detection
+   gate, and reports back exactly what it did instead of failing silently. This
+   is the "something looks stale, fix it now" button. */
+async function forceGradeEverything(){
+  const btn=document.getElementById('forceGradeBtn');
+  const status=document.getElementById('forceGradeStatus');
+  if(btn)btn.disabled=true;
+  if(status)status.innerHTML='<div class="empty">Grading everything…</div>';
+  const steps=[];
+  try{
+    const arc=get(LS.arc,{});
+    const d=today();
+    let gamesGraded=0;
+    if(arc[d]){
+      const f=await fetchFinals(d);
+      if(Object.keys(f).length){
+        arc[d].finals=f;
+        gamesGraded=Object.keys(f).length;
+        await gradePropsFor(arc[d]);
+        if(allGamesFinalized(d)){arc[d].locked=true;steps.push('Today fully finalized and locked.')}
+        else steps.push(`${gamesGraded} game(s) graded — slate not fully final yet.`);
+      }else{
+        steps.push('No final scores available from MLB yet for today.');
+      }
+      set(LS.arc,arc);
+    }else{
+      steps.push('No snapshot exists for today yet.');
+    }
+    computeCalibration();computeEntities();
+    steps.push('Calibration and entity bias recomputed.');
+
+    try{recordSimVsBook(arc,get(LS.bookshots,{}));steps.push('Sim-vs-book accuracy updated.');}
+    catch(e){steps.push('Sim-vs-book update skipped (error).');}
+
+    try{gradeExtPicks();steps.push('External source picks graded.');}
+    catch(e){steps.push('External pick grading skipped (error).');}
+
+    try{settleLockedTickets();steps.push('Bankroll settlement checked.');}
+    catch(e){steps.push('Bankroll settlement skipped (error).');}
+
+    LAST_FINAL_COUNT=GAMES.filter(g=>g.abstract==='Final').length;
+
+    if(status)status.innerHTML=`<div class="tkt hi"><h3>Done</h3>
+      <div class="sub">${steps.map(s=>'· '+s).join('<br>')}</div></div>`;
+
+    // refresh whatever's currently visible
+    const active=document.querySelector('.view.on');
+    if(active){
+      if(active.id==='v-tickets')renderTickets();
+      if(active.id==='v-money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab()}
+      if(active.id==='v-games')render();
+      if(active.id==='v-grades')renderGrades(true);
+    }
+  }catch(e){
+    if(status)status.innerHTML=`<div class="tkt"><h3>Error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
+  }finally{
+    if(btn)btn.disabled=false;
+  }
+}
+
 async function autoGradeIfFinals(){
   const finals=GAMES.filter(g=>g.abstract==='Final').length;
   if(finals===LAST_FINAL_COUNT)return;   // nothing changed since last pass
@@ -6070,7 +6163,13 @@ async function boot(){
       if(Date.now()-l>20*36e5)pushToGitHub(false);
     },36e5);
   }
-  setInterval(()=>{loadAll().then(()=>{loadESPN();snapshot();snapshotBest();autoGradeIfFinals()})},9e5);
+  setInterval(()=>{
+    // if a preview day's been sitting open 20+ minutes, pull back to today automatically —
+    // the live board and grading were never actually blocked, but leaving it visually
+    // parked on a future date this long risks someone thinking that's still today
+    if(PREVIEW_DAY&&PREVIEW_STARTED&&(Date.now()-PREVIEW_STARTED)>12e5)backToToday();
+    loadAll().then(()=>{loadESPN();snapshot();snapshotBest();autoGradeIfFinals()});
+  },9e5);
   // check every 3 minutes whether any game has gone final since the last pass, and if so
   // grade + settle immediately instead of waiting for someone to open the Grades tab
   setInterval(()=>autoGradeIfFinals(),18e4);
