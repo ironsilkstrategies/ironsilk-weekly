@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v50</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v51</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2920,7 +2920,7 @@ function card(g){
     </div>`:'';
 
   const finalLine=done?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
-    <div class="rd">final</div></div>`:'';
+    <div class="rd">final</div></div>${finalBetStrip(g)}`:'';
 
   const isLive=g.abstract==='Live';
   return `<div class="game ${edge>=3&&!done?'edge':''} ${done?'done':''} ${isLive?'in-play':''}" id="g${g.id}">
@@ -3317,6 +3317,128 @@ function boxPanel(g){
     <div class="mktlab">Every prop, individually graded</div>${allPropsHtml}
     <div class="mktlab">Box score</div>
     ${tbl('away',g.away.abbr)}${tbl('home',g.home.abbr)}`;
+}
+/* ── grade + show your work ──────────────────────────────────────────────
+   Every place a ✅/❌ shows should also show the actual number that decided
+   it — "Under 7.5 · final 4-2 (6)" or "3+ K · 2 K" — live or final, side or
+   prop. This is the single source of truth both paths route through so the
+   detail text can never drift from the boolean that graded it. */
+function gradeDetail(g,pick,propMeta){
+  // propMeta: {ptype,thr,pid} when grading a prop; omit/null for a side pick
+  const live=g.abstract==='Live',final=g.abstract==='Final';
+  if(propMeta&&(propMeta.ptype||propMeta.pid)){
+    const bx=BOX[g.id];
+    if(!bx||!propMeta.pid)return{hit:null,detail:live?'live box not loaded yet':null};
+    let pl=null;
+    for(const s of ['away','home']){
+      const P=((bx.teams||{})[s]||{}).players||{};
+      const cand=P['ID'+propMeta.pid];
+      if(cand){pl=cand;break}
+    }
+    if(!pl)return{hit:null,detail:null};
+    const b=(pl.stats||{}).batting||{},q=(pl.stats||{}).pitching||{};
+    const t=propMeta.ptype,thr=propMeta.thr;
+    const labelOf={k:'K',bb:'BB allowed',ha:'H allowed',hits:'hits',tb:'total bases',rbi:'RBI',hr:'HR'}[t]||t;
+    const isPitch=(t==='k'||t==='bb'||t==='ha');
+    if(isPitch&&!q.inningsPitched)return{hit:null,detail:live?'not in the game yet':null};
+    if(!isPitch&&!b.plateAppearances)return{hit:null,detail:live?'not in the game yet':null};
+    const actual=t==='k'?(q.strikeOuts||0):t==='bb'?(q.baseOnBalls||0):t==='ha'?(q.hits||0)
+      :t==='hits'?(b.hits||0):t==='tb'?(b.totalBases||0):t==='rbi'?(b.rbi||0):t==='hr'?(b.homeRuns||0):null;
+    if(actual===null)return{hit:null,detail:null};
+    const hit=actual>=thr;
+    return{hit,detail:`${actual} ${labelOf}${live?' so far':''}`,actual,threshold:thr};
+  }
+
+  // side / total / run line / F5 — need actual scores, live or final
+  const a=g.awayScore,h=g.homeScore;
+  if(a===null||h===null)return{hit:null,detail:null};
+  const scoreLine=`${g.away.abbr} ${a}–${h} ${g.home.abbr}${live?' (live)':''}`;
+  const tot=a+h;
+  if(/^Over /.test(pick)){
+    const ln=parseFloat(pick.slice(5));
+    const hit=final?tot>ln:null; // live total can't be graded final yet, but still show progress
+    return{hit,detail:`${scoreLine} · total ${tot}`,progress:tot,threshold:ln};
+  }
+  if(/^Under /.test(pick)){
+    const ln=parseFloat(pick.slice(6));
+    const hit=final?tot<ln:null;
+    return{hit,detail:`${scoreLine} · total ${tot}`,progress:tot,threshold:ln};
+  }
+  if(/ ML$/.test(pick)){
+    const who=pick.replace(/ ML$/,'');
+    if(!final)return{hit:null,detail:scoreLine};
+    if(a===h)return{hit:null,detail:scoreLine+' · push'};
+    const winner=h>a?g.home.abbr:g.away.abbr;
+    return{hit:winner===who,detail:scoreLine};
+  }
+  if(/ -\d+\.5$/.test(pick)){
+    const m=pick.match(/^(.+) -(\d+\.5)$/),who=m[1],ln=parseFloat(m[2]);
+    const margin=who===g.home.abbr?(h-a):(a-h);
+    return{hit:final?margin>ln:null,detail:`${scoreLine} · margin ${margin>0?'+':''}${margin}`};
+  }
+  if(/ \+\d+\.5$/.test(pick)){
+    const m=pick.match(/^(.+) \+(\d+\.5)$/),who=m[1],ln=parseFloat(m[2]);
+    const margin=who===g.home.abbr?(h-a):(a-h);
+    return{hit:final?margin>-ln:null,detail:`${scoreLine} · margin ${margin>0?'+':''}${margin}`};
+  }
+  const F=f5Of(g.id);
+  if(/^F5 over /.test(pick)){
+    if(!F)return{hit:null,detail:null};
+    const f5tot=F.fa+F.fh,ln=parseFloat(pick.slice(8));
+    return{hit:f5tot>ln,detail:`F5 ${F.fa}–${F.fh} · total ${f5tot}`};
+  }
+  if(/^F5 under /.test(pick)){
+    if(!F)return{hit:null,detail:null};
+    const f5tot=F.fa+F.fh,ln=parseFloat(pick.slice(9));
+    return{hit:f5tot<ln,detail:`F5 ${F.fa}–${F.fh} · total ${f5tot}`};
+  }
+  if(/^F5 /.test(pick)){
+    if(!F||F.fa===F.fh)return{hit:null,detail:F?`F5 ${F.fa}–${F.fh} · push`:null};
+    const who=pick.slice(3);
+    return{hit:(F.fh>F.fa?g.home.abbr:g.away.abbr)===who,detail:`F5 ${F.fa}–${F.fh}`};
+  }
+  return{hit:null,detail:null};
+}
+// Small inline HTML fragment: the ✅/❌/— tag PLUS the number that decided it, sized
+// to sit right next to a pick in a list without breaking the line.
+function gradeBadge(g,pick,propMeta){
+  const{hit,detail}=gradeDetail(g,pick,propMeta);
+  const icon=hit===true?'✅':hit===false?'❌':g&&g.abstract==='Live'?'⏳':'—';
+  const color=hit===true?'var(--win)':hit===false?'var(--rust)':'var(--mute)';
+  const detailHtml=detail?`<span style="font-family:'IBM Plex Mono';font-size:9.5px;color:${color};margin-left:5px">${detail}</span>`:'';
+  return`<span style="color:${color}">${icon}</span>${detailHtml}`;
+}
+function finalBetStrip(g){
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const myLegs=[];
+  get(LS.locked,[]).forEach(t=>t.legs.forEach(x=>{if(x.game===gl)myLegs.push(x)}));
+  if(!myLegs.length)return '';
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px 10px">
+    ${myLegs.map(x=>{
+      const badge=x.isProp?gradeBadge(g,x.pick,{ptype:x.ptype,thr:x.thr,pid:x.pid}):gradeBadge(g,x.pick,null);
+      return `<div style="font-size:11px"><span style="color:var(--chalk)">${x.pick}</span> ${badge}</div>`;
+    }).join('')}
+  </div>`;
+}
+function jumpToGame(gid){
+  // switch to Games tab, then scroll straight to that card once it's rendered
+  const navBtn=[...document.querySelectorAll('nav>button')].find(b=>b.textContent.trim()==='Games');
+  tab('games',navBtn);
+  setTimeout(()=>{
+    const card=document.getElementById('g'+gid);
+    if(card){
+      card.scrollIntoView({behavior:'smooth',block:'start'});
+      card.style.transition='box-shadow .3s';
+      card.style.boxShadow='0 0 0 2px var(--gold)';
+      setTimeout(()=>{card.style.boxShadow=''},1800);
+      // auto-open the box/livebox panel so the stats are right there
+      const g=GAMES.find(x=>x.id===gid);
+      const which=g&&g.abstract==='Final'?'box':g&&g.abstract==='Live'?'livebox':'ag';
+      const btn=[...card.querySelectorAll('.expbtn')].find(b=>
+        b.getAttribute('onclick')&&b.getAttribute('onclick').includes(`'${which}'`));
+      if(btn)pan(gid,which,btn);
+    }
+  },80);
 }
 function gradeLiveProp(g,p){
   const bx=BOX[g.id];if(!bx||!p.pid)return null;
@@ -4070,10 +4192,13 @@ function renderMoneyTab(){
     const color=rec.won?'var(--win)':'var(--rust)';
     const mortemHtml=(!rec.won&&mortem)?`
       <div class="mktlab" style="margin-top:8px;color:var(--rust)">What went wrong</div>
-      ${mortem.findings.map(f=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)">
-        <div style="font-size:12px;font-weight:600">${f.leg} <span class="m">${f.game}</span></div>
+      ${mortem.findings.map(f=>{
+        const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===f.game);
+        const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
+        return `<div${jumpTo} style="padding:6px 0;border-bottom:1px solid var(--rule)">
+        <div style="font-size:12px;font-weight:600">${f.leg} <span class="m">${f.game}</span>${g?' <span class="m" style="color:var(--gold)">↳ view game</span>':''}</div>
         <div class="sub" style="margin-top:2px">${f.note||f.notes||''}</div>
-      </div>`).join('')}`:'';
+      </div>`;}).join('')}`:'';
     return `<div class="tkt" style="border-left:3px solid ${color}">
       <div style="display:flex;justify-content:space-between;align-items:baseline">
         <h3 style="margin:0">${rec.date}</h3>
@@ -4568,11 +4693,15 @@ function genTickets(mode){
       let w=0,l=0,pd=0;
       const rows=t.legs.map(x=>{
         const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
-        let r=null;
-        if(g&&g.abstract==='Final')r=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+        let r=null,badgeHtml='';
+        if(g&&(g.abstract==='Final'||g.abstract==='Live')){
+          r=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+          if(g.abstract==='Live'&&r===null)r=null; // live legs stay pending until final
+          badgeHtml=gradeBadge(g,x.pick,x.isProp?{ptype:x.ptype,thr:x.thr,pid:x.pid}:null);
+        }
         if(r===true)w++;else if(r===false)l++;else pd++;
-        const tag=r===true?' ✅':r===false?' ❌':'';
-        return `<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span>${tag}</li>`;
+        const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
+        return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
       }).join('');
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
       const lockBadge=t.finalized
@@ -4634,17 +4763,19 @@ function genTickets(mode){
     let pw=0,pl=0,ppd=0;
     const gradeOfProp=(x)=>{
       const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
-      if(!g||g.abstract!=='Final')return null;
-      return gradePropFromBox(g,{name:x.name,ptype:x.type,thr:x.thr,mkt:x.mkt});
+      if(!g||(g.abstract!=='Final'&&g.abstract!=='Live'))return{r:null,g,badge:''};
+      const r=gradePropFromBox(g,{name:x.name,ptype:x.type,thr:x.thr,mkt:x.mkt});
+      const badge=gradeBadge(g,x.name+' '+x.mkt,{ptype:x.type,thr:x.thr,pid:x.pid});
+      return{r,g,badge};
     };
     const gameList=Object.keys(byGame).map(gm=>{
       const gl=byGame[gm].sort((a,b)=>b.p-a.p);
       return `<div style="margin:8px 0 4px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase">${gm} · ${gl.length} pick${gl.length>1?'s':''}</div>
         <ol>${gl.map(x=>{
-          const r=gradeOfProp(x);
+          const{r,g,badge}=gradeOfProp(x);
           if(r===true)pw++;else if(r===false)pl++;else ppd++;
-          const tag=r===true?' ✅':r===false?' ❌':'';
-          return `<li>${x.name} <span class="m">${x.mkt}</span>${x.type==='hr'?` <span class="flag cool">${hrTierLabel(x.p)}</span>`:''} <span class="pp">${(x.p*100).toFixed(0)}%</span>${tag}</li>`;
+          const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
+          return `<li${jumpTo}>${x.name} <span class="m">${x.mkt}</span>${x.type==='hr'?` <span class="flag cool">${hrTierLabel(x.p)}</span>`:''} <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badge}</li>`;
         }).join('')}</ol>`;
     }).join('');
     const prec=(pw+pl)?` · <b style="color:${pl>0?'var(--rust)':'var(--win)'}">${pw}-${pl}</b>${ppd?' · '+ppd+' live':''}`:'';
@@ -4828,6 +4959,18 @@ function liveScoreBar(gid,g){
         color:${lead?'var(--chalk)':'var(--mute)'}">${score}</span>
     </div>`;
 
+  // your bet's live progress, if you have one on this game — pulled from locked tickets
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const myLegs=[];
+  get(LS.locked,[]).forEach(t=>t.legs.forEach(x=>{if(x.game===gl)myLegs.push(x)}));
+  const betStrip=myLegs.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;
+    padding-top:7px;border-top:1px solid var(--rule)">
+    ${myLegs.map(x=>{
+      const badge=x.isProp?gradeBadge(g,x.pick,{ptype:x.ptype,thr:x.thr,pid:x.pid}):gradeBadge(g,x.pick,null);
+      return `<div style="font-size:11px"><span style="color:var(--chalk)">${x.pick}</span> ${badge}</div>`;
+    }).join('')}
+  </div>`:'';
+
   return `<div class="live-bar">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
       <div style="display:flex;align-items:center;gap:12px">
@@ -4870,6 +5013,7 @@ function liveScoreBar(gid,g){
     ${L.lastPlay?`<div style="font-size:11px;color:var(--chalk);line-height:1.4;
       padding-top:6px;border-top:1px solid var(--rule);margin-top:6px;
       font-style:italic;opacity:.8">${L.lastPlay}</div>`:''}
+    ${betStrip}
   </div>`;
 }
 
