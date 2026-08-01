@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v52</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v53</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -4174,58 +4174,105 @@ function renderMoneyTab(){
   const b=getBankroll();
   const pm=getLossMortems();
   const dl=dailyLimit(),tl=ticketLimit(),staked=stakedToday();
-  const netColor=b.profit>=0?'var(--win)':'var(--rust)';
   const wins=b.history.filter(h=>h.won),losses=b.history.filter(h=>!h.won);
   const totalStaked=b.history.reduce((a,h)=>a+h.stake,0);
 
-  let h=`<div class="tkt hi">
-    <h3>${currentMonth()} · <span style="color:${netColor}">${b.profit>=0?'+':''}$${b.profit.toFixed(2)}</span></h3>
-    <div class="sub">Baseline budget <b>$${BR_BASELINE}</b> · burned once spent, no rollback on losses.
-    ${b.profit>BR_BASELINE?`Limits have scaled up <b>${((b.limitMult-1)*100).toFixed(0)}%</b> from clearing the baseline.`
-      :`Clear $${BR_BASELINE} in profit this month to start raising your limits.`}</div>
-  </div>
-  <div class="tkt">
-    <div class="mktlab" style="margin-top:0">Current limits</div>
-    <ol style="list-style:none;padding-left:0">
-      <li>Per ticket <span class="pp">$${tl.toFixed(2)}</span></li>
-      <li>Per day <span class="pp">$${dl.toFixed(2)}</span> <span class="m">$${staked.toFixed(2)} staked today</span></li>
-      <li>Multiplier <span class="pp">${b.limitMult.toFixed(2)}×</span></li>
-    </ol>
-  </div>
-  <div class="tkt">
-    <div class="mktlab" style="margin-top:0">Season record</div>
-    <ol style="list-style:none;padding-left:0">
-      <li>Record <span class="pp">${wins.length}-${losses.length}</span></li>
-      <li>Total staked <span class="pp">$${totalStaked.toFixed(2)}</span></li>
-      <li>Net <span class="pp" style="color:${netColor}">${b.profit>=0?'+':''}$${b.profit.toFixed(2)}</span></li>
-    </ol>
+  // Balance = starting budget + everything won or lost so far this month.
+  // This is the one number that answers "how am I doing" at a glance.
+  const balance=BR_BASELINE+b.profit;
+  const balColor=b.profit>0?'var(--win)':b.profit<0?'var(--rust)':'var(--chalk)';
+  const sorted=b.history.slice().sort((x,y)=>x.ts-y.ts); // oldest first, to build running balance
+  let running=BR_BASELINE;
+  const withRunning=sorted.map(rec=>{running+=rec.profit;return{...rec,runningBalance:running}});
+  const latest=withRunning.length?withRunning[withRunning.length-1]:null;
+
+  // ── Balance card ──────────────────────────────────────────────────────
+  let h=`<div class="tkt hi" style="text-align:center;padding:22px 16px">
+    <div style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--mute)">Balance · ${currentMonth()}</div>
+    <div style="font-family:'Archivo';font-weight:900;font-size:44px;line-height:1.1;
+      color:${balColor};margin:4px 0">$${balance.toFixed(2)}</div>
+    <div style="font-family:'IBM Plex Mono';font-size:12px;color:${balColor}">
+      ${b.profit>0?'+':''}$${b.profit.toFixed(2)} this month
+    </div>
   </div>`;
 
-  if(!b.history.length){
-    h+=`<div class="empty">No settled tickets yet. Stake a locked ticket and it'll book here automatically once every leg is graded final.</div>`;
+  // ── Latest transaction — the single most recent thing that happened ────
+  if(latest){
+    const lc=latest.won?'var(--win)':'var(--rust)';
+    const lArrow=latest.won?'▲':'▼';
+    h+=`<div class="tkt" style="border-left:3px solid ${lc}">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin-bottom:4px">Latest</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700">${latest.won?'Ticket won':'Ticket lost'} · ${latest.date}</div>
+          <div class="m" style="margin-top:2px">$${latest.stake.toFixed(2)} staked → balance $${latest.runningBalance.toFixed(2)}</div>
+        </div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${lc}">
+          ${lArrow} ${latest.profit>=0?'+':''}$${latest.profit.toFixed(2)}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── Limits — condensed to one line ──────────────────────────────────────
+  h+=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:10px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${tl.toFixed(2)}</div>
+        <div class="m">per ticket</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${dl.toFixed(2)}</div>
+        <div class="m">per day · $${staked.toFixed(2)} used today</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">${b.limitMult.toFixed(2)}×</div>
+        <div class="m">multiplier</div></div>
+    </div>
+    <div class="sub" style="margin-top:10px;text-align:center">
+      ${b.profit>BR_BASELINE
+        ?`Limits scaled up <b>${((b.limitMult-1)*100).toFixed(0)}%</b> from clearing the $${BR_BASELINE} baseline.`
+        :`$${Math.max(0,BR_BASELINE-b.profit).toFixed(2)} more in profit unlocks higher limits.`}
+    </div>
+  </div>`;
+
+  if(!withRunning.length){
+    h+=`<div class="empty">No settled tickets yet. Stake a locked ticket and it'll show up here
+      the moment every leg grades final.</div>`;
     return h;
   }
 
-  h+=`<div class="sbar"><h2>Ticket history</h2><div class="ln"></div></div>`;
-  h+=b.history.slice().reverse().map(rec=>{
+  // ── Season snapshot — one line, not a wall ──────────────────────────────
+  h+=`<div class="note" style="text-align:center;display:flex;justify-content:center;gap:18px;flex-wrap:wrap">
+    <span><b style="color:var(--chalk)">${wins.length}-${losses.length}</b> record</span>
+    <span><b style="color:var(--chalk)">$${totalStaked.toFixed(2)}</b> total staked</span>
+  </div>`;
+
+  // ── Transaction feed — newest first, running balance on every line ─────
+  h+=`<div class="sbar"><h2>Transactions</h2><div class="ln"></div></div>`;
+  h+=withRunning.slice().reverse().map(rec=>{
     const mortem=pm[rec.id];
     const color=rec.won?'var(--win)':'var(--rust)';
+    const arrow=rec.won?'▲':'▼';
     const mortemHtml=(!rec.won&&mortem)?`
-      <div class="mktlab" style="margin-top:8px;color:var(--rust)">What went wrong</div>
-      ${mortem.findings.map(f=>{
-        const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===f.game);
-        const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
-        return `<div${jumpTo} style="padding:6px 0;border-bottom:1px solid var(--rule)">
-        <div style="font-size:12px;font-weight:600">${f.leg} <span class="m">${f.game}</span>${g?' <span class="m" style="color:var(--gold)">↳ view game</span>':''}</div>
-        <div class="sub" style="margin-top:2px">${f.note||f.notes||''}</div>
-      </div>`;}).join('')}`:'';
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--rule)">
+        <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+          text-transform:uppercase;color:var(--rust);margin-bottom:4px">What went wrong</div>
+        ${mortem.findings.map(f=>{
+          const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===f.game);
+          const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
+          return `<div${jumpTo} style="padding:5px 0;border-bottom:1px solid var(--rule)">
+          <div style="font-size:12px;font-weight:600">${f.leg} <span class="m">${f.game}</span>${g?' <span class="m" style="color:var(--gold)">↳ view game</span>':''}</div>
+          <div class="sub" style="margin-top:2px">${f.note||f.notes||''}</div>
+        </div>`;}).join('')}
+      </div>`:'';
     return `<div class="tkt" style="border-left:3px solid ${color}">
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <h3 style="margin:0">${rec.date}</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <div style="font-weight:700">${rec.won?'Won':'Lost'} · ${rec.date}</div>
+          <div class="m" style="margin-top:2px">$${rec.stake.toFixed(2)} staked</div>
+        </div>
         <div style="text-align:right">
-          <div style="font-family:'Archivo';font-weight:900;font-size:17px;color:${color}">
-            ${rec.profit>=0?'+':''}$${rec.profit.toFixed(2)}</div>
-          <div class="m" style="font-size:10px">$${rec.stake.toFixed(2)} staked</div>
+          <div style="font-family:'Archivo';font-weight:900;font-size:18px;color:${color}">
+            ${arrow} ${rec.profit>=0?'+':''}$${rec.profit.toFixed(2)}</div>
+          <div class="m" style="font-size:10px">balance $${rec.runningBalance.toFixed(2)}</div>
         </div>
       </div>
       ${mortemHtml}
