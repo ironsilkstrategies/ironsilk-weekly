@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v51</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v52</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -856,7 +856,27 @@ function poisSample(l){if(l<=0)return 0;
   if(l>25){const u=Math.random()||1e-9,v=Math.random();
     return Math.max(0,Math.round(l+Math.sqrt(l)*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)))}
   let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random()}while(p>L);return k-1}
-function gammaInt(k,t){let s=0;for(let i=0;i<k;i++)s+=-Math.log(Math.random()||1e-9);return s*t}
+// Was truncating k=3.6 to a full 4 exponential draws (for-loop with i<k runs i=0..3,
+// silently drawing Gamma(4,θ) instead of Gamma(3.6,θ)). That widened variance and
+// pushed the modal exact-score up a notch across nearly every game — part of why
+// 3-4/4-3 kept winning "most common score" regardless of which teams were playing.
+// Fixed with the standard integer-part-plus-fractional-remainder construction.
+function gammaInt(k,t){
+  const ik=Math.floor(k),frac=k-ik;
+  let s=0;
+  for(let i=0;i<ik;i++)s+=-Math.log(Math.random()||1e-9);
+  if(frac>1e-9){
+    // Johnk's algorithm for the Gamma(frac,1) remainder, frac in (0,1)
+    let x,y,u,v;
+    do{
+      u=Math.random()||1e-9;v=Math.random()||1e-9;
+      x=Math.pow(u,1/frac);y=Math.pow(v,1/(1-frac));
+    }while(x+y>1);
+    const e=-Math.log(Math.random()||1e-9);
+    s+=(x/(x+y))*e;
+  }
+  return s*t;
+}
 function nbRuns(m){const k=get(LS.calib,{}).dispK||3.6;return poisSample(gammaInt(k,Math.max(.15,m)/k))}
 function tbDist(pv,n){let d=[1];for(let i=0;i<n;i++){const nd=new Array(d.length+4).fill(0);
   for(let a=0;a<d.length;a++)for(let b=0;b<5;b++)nd[a+b]+=d[a]*pv[b];d=nd}return d}
