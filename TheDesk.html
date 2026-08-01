@@ -344,7 +344,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v47</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v49</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2731,6 +2731,55 @@ function render(){
 }
 function sbar(t,n){return `<div class="sbar"><h2>${t}</h2><div class="ln"></div><div class="ct mono">${n}</div></div>`}
 
+// Shows three things for one game, side by side: what the user personally locked in,
+// what the system committed to via a confirmed system ticket, and what the book's own
+// posted odds imply — three independent reads so they can be compared directly.
+function myBetsPanel(g,s,M){
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const L=get(LS.locked,[]);
+  const mineTickets=L.filter(t=>t.source!=='system'&&t.legs.some(x=>x.game===gl));
+  const sysTickets=L.filter(t=>t.source==='system'&&t.legs.some(x=>x.game===gl));
+
+  const legRow=(t,x)=>{
+    const w=getWagers();
+    const stake=w[t.id];
+    const stakeTxt=stake?` <span class="m">$${(+stake).toFixed(2)} staked</span>`:'';
+    return `<li>${x.pick} <span class="pp">${(x.p*100).toFixed(0)}%</span>${stakeTxt}
+      <span class="m">${t.date}${t.finalized?' · 🔒 final':''}</span></li>`;
+  };
+
+  const mineHtml=mineTickets.length
+    ?`<ol>${mineTickets.flatMap(t=>t.legs.filter(x=>x.game===gl).map(x=>legRow(t,x))).join('')}</ol>`
+    :`<div class="empty" style="padding:10px 0">You haven't locked a pick on this game.</div>`;
+
+  const sysHtml=sysTickets.length
+    ?`<ol>${sysTickets.flatMap(t=>t.legs.filter(x=>x.game===gl).map(x=>legRow(t,x))).join('')}</ol>`
+    :`<div class="empty" style="padding:10px 0">No confirmed system ticket includes this game.</div>`;
+
+  // book-implied read — straight from the devigged market price, no invented numbers
+  let bookHtml;
+  if(M){
+    const bookSide=M.fh>=M.fa?g.home.abbr:g.away.abbr;
+    const bookPct=Math.max(M.fh,M.fa);
+    const bookTotal=bookLineForMarket(g.id,'total');
+    const rlBook=bookLineForMarket(g.id,'runline');
+    bookHtml=`<ol style="list-style:none;padding-left:0">
+      <li>Moneyline favors <b>${bookSide}</b> <span class="pp">${(bookPct*100).toFixed(0)}%</span>
+        <span class="m">implied by ${M.rawH>0?'+':''}${M.rawH}</span></li>
+      ${bookTotal?`<li>Total posted at <b>${bookTotal.line}</b></li>`:''}
+      ${rlBook?`<li>Run line posted at <b>${rlBook.line>0?'+':''}${rlBook.line}</b></li>`:''}
+      ${s?`<li style="margin-top:4px;color:var(--cold)">Sim disagrees by
+        <b>${Math.abs((s.hw-M.fh)*100).toFixed(1)} pts</b> on the moneyline</li>`:''}
+    </ol>`;
+  }else{
+    bookHtml=`<div class="empty" style="padding:10px 0">No book line uploaded or pulled for this game yet.</div>`;
+  }
+
+  return `<div class="mktlab" style="margin-top:0">Your picks</div>${mineHtml}
+    <div class="mktlab">System picks</div>${sysHtml}
+    <div class="mktlab">What the book projects</div>${bookHtml}`;
+}
+
 function card(g){
   const s=SIMS[g.id],M=marketOf(g),done=g.abstract==='Final';
   // plain-language read of the model against whatever REAL line exists — not the model's
@@ -2857,6 +2906,7 @@ function card(g){
     <button class="expbtn" onclick="pan(${g.id},'ag',this)">A–G</button>
     <button class="expbtn" onclick="pan(${g.id},'alt',this)">Alt lines</button>
     <button class="expbtn" onclick="pan(${g.id},'props',this)">Props</button>
+    <button class="expbtn" onclick="pan(${g.id},'mybets',this)">My bets</button>
     ${isLive?`<button class="expbtn" onclick="pan(${g.id},'livebox',this)">Live box</button>`:''}
     ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button>`:''}
    </div>
@@ -2864,6 +2914,7 @@ function card(g){
    <div class="panel" id="p-ag-${g.id}">${agPanel(g,s,M,topReasons(),realLineRead())}</div>
    <div class="panel" id="p-alt-${g.id}">${altPanel(g,s)}</div>
    <div class="panel" id="p-props-${g.id}">${propPanel(g)}</div>
+   <div class="panel" id="p-mybets-${g.id}">${myBetsPanel(g,s,M)}</div>
    ${isLive?`<div class="panel" id="p-livebox-${g.id}">${liveBoxPanel(g.id,g)}</div>`:''}
    ${done?`<div class="panel" id="p-box-${g.id}">${boxPanel(g)}</div>`:''}
   </div>`;
@@ -3293,7 +3344,7 @@ function gradePropFromBox(g,x){
   return null;
 }
 function pan(gid,which,btn){
-  ['trend','ag','alt','props','box','livebox'].forEach(k=>{
+  ['trend','ag','alt','props','box','livebox','mybets'].forEach(k=>{
     const p=document.getElementById('p-'+k+'-'+gid);
     if(p&&k!==which)p.classList.remove('on');
   });
@@ -4544,14 +4595,30 @@ function genTickets(mode){
     const c=legs.reduce((a,x)=>a*x.p,1);
     const byGame={};
     legs.forEach(x=>{(byGame[x.game]=byGame[x.game]||[]).push(x)});
+    // grade every prop leg the same way ticket legs are graded, so prop cards
+    // carry a real record instead of showing raw probabilities forever
+    let pw=0,pl=0,ppd=0;
+    const gradeOfProp=(x)=>{
+      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      if(!g||g.abstract!=='Final')return null;
+      return gradePropFromBox(g,{name:x.name,ptype:x.type,thr:x.thr,mkt:x.mkt});
+    };
     const gameList=Object.keys(byGame).map(gm=>{
       const gl=byGame[gm].sort((a,b)=>b.p-a.p);
       return `<div style="margin:8px 0 4px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase">${gm} · ${gl.length} pick${gl.length>1?'s':''}</div>
-        <ol>${gl.map(x=>`<li>${x.name} <span class="m">${x.mkt}</span>${x.type==='hr'?` <span class="flag cool">${hrTierLabel(x.p)}</span>`:''} <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>`;
+        <ol>${gl.map(x=>{
+          const r=gradeOfProp(x);
+          if(r===true)pw++;else if(r===false)pl++;else ppd++;
+          const tag=r===true?' ✅':r===false?' ❌':'';
+          return `<li>${x.name} <span class="m">${x.mkt}</span>${x.type==='hr'?` <span class="flag cool">${hrTierLabel(x.p)}</span>`:''} <span class="pp">${(x.p*100).toFixed(0)}%</span>${tag}</li>`;
+        }).join('')}</ol>`;
     }).join('');
+    const prec=(pw+pl)?` · <b style="color:${pl>0?'var(--rust)':'var(--win)'}">${pw}-${pl}</b>${ppd?' · '+ppd+' live':''}`:'';
+    const propPayload=encodeURIComponent(JSON.stringify(legs.map(x=>({game:x.game,pick:x.name+' '+x.mkt,p:x.p,isProp:true,name:x.name,ptype:x.type,thr:x.thr,mkt:x.mkt}))));
     h+=`<div class="tkt"><h3>${lab}</h3>
-      <div class="sub"><b>${(c*100).toFixed(4)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs · ${Object.keys(byGame).length} games</div>
-      ${gameList}</div>`;
+      <div class="sub"><b>${(c*100).toFixed(4)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs · ${Object.keys(byGame).length} games${prec}</div>
+      ${gameList}
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${propPayload}')">Confirm &amp; save</button></div></div>`;
   });
   el.innerHTML=h;
 }
@@ -5772,10 +5839,45 @@ function buildBestCard(){
   </div></div>`;
 }
 function renderBest(){
-  document.getElementById('bestCard').innerHTML=GAMES.length?buildBestCard():'<div class="empty">Board not loaded yet.</div>';
+  const el=document.getElementById('bestCard');
+  if(!GAMES.length){el.innerHTML='<div class="empty">Board not loaded yet.</div>';return}
+  const d=today(),log=get(LS.bestlog,{}),entry=log[d];
+  const locked=entry&&entry.locked;
+  const lockBar=`<div class="note" style="margin:0 0 10px;display:flex;align-items:center;
+    flex-wrap:wrap;gap:8px;border-left:3px solid ${locked?'var(--win)':'var(--gold)'};padding-left:10px">
+    <b style="color:${locked?'var(--win)':'var(--gold)'}">${locked
+      ?`🔒 Locked at ${new Date(entry.lockedAt||entry.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} — this is what gets graded tonight`
+      :`Unlocked — still moving with lineups and odds`}</b>
+    ${locked
+      ?`<button onclick="unlockBestToday()" style="padding:3px 10px;font-size:10px;
+          font-family:'IBM Plex Mono';background:transparent;border:1px solid var(--rule);
+          color:var(--mute);border-radius:5px;cursor:pointer">Unlock</button>`
+      :`<button onclick="lockBestToday()" style="padding:3px 10px;font-size:10px;
+          font-family:'IBM Plex Mono';background:rgba(242,169,59,.15);border:1px solid var(--gold);
+          color:var(--gold);border-radius:5px;cursor:pointer">Lock today's picks</button>`}
+  </div>`;
+  el.innerHTML=lockBar+buildBestCard();
 }
 
 /* ---- snapshot + grade the day's Best Bets, separately from the main archive ---- */
+function lockBestToday(){
+  const d=today(),log=get(LS.bestlog,{});
+  if(!log[d]){alert("Nothing to lock yet — the Best card builds once lineups post.");return}
+  if(log[d].locked){alert("Today's Best picks are already locked.");return}
+  if(!confirm("Lock today's Best picks? They'll stop updating as lineups and odds move, and this is what gets graded tonight."))return;
+  log[d].locked=true;log[d].lockedAt=Date.now();
+  set(LS.bestlog,log);
+  bestTab(BESTTAB||'today');
+}
+function unlockBestToday(){
+  const d=today(),log=get(LS.bestlog,{});
+  if(!log[d]||!log[d].locked)return;
+  if(!confirm("Unlock today's Best picks so they refresh again? Only do this if you locked by mistake — the card will start moving with the board."))return;
+  log[d].locked=false;delete log[d].lockedAt;
+  set(LS.bestlog,log);
+  snapshotBest();
+  bestTab(BESTTAB||'today');
+}
 function snapshotBest(){
   const d=today(),log=get(LS.bestlog,{});
   if(log[d]&&(log[d].locked||log[d].pgradesDone))return;
@@ -5906,6 +6008,41 @@ async function exportImage(targetId,btnId,filename,shareTitle){
   btn.textContent=orig;btn.disabled=false;
 }
 let BOOTED=false;
+async /* ── background auto-grading ──────────────────────────────────────────────
+   Grading used to only happen when the Grades tab was opened, so a slate could
+   finish and everything downstream — records, calibration, bankroll settlement,
+   external source stats — would sit stale until someone navigated there. This
+   watches for newly-final games and grades them the moment they land. */
+let LAST_FINAL_COUNT=-1;
+async function autoGradeIfFinals(){
+  const finals=GAMES.filter(g=>g.abstract==='Final').length;
+  if(finals===LAST_FINAL_COUNT)return;   // nothing changed since last pass
+  LAST_FINAL_COUNT=finals;
+  if(!finals)return;
+  try{
+    const arc=get(LS.arc,{});
+    const d=today();
+    if(!arc[d])return;
+    const f=await fetchFinals(d);
+    if(!Object.keys(f).length)return;
+    arc[d].finals=f;
+    await gradePropsFor(arc[d]);
+    if(allGamesFinalized(d))arc[d].locked=true;
+    set(LS.arc,arc);
+    computeCalibration();computeEntities();
+    try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){}
+    try{gradeExtPicks();}catch(e){}
+    try{settleLockedTickets();}catch(e){}
+    // refresh whatever view is currently open so the new grades show immediately
+    const active=document.querySelector('.view.on');
+    if(active){
+      if(active.id==='v-tickets')renderTickets();
+      if(active.id==='v-money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab()}
+      if(active.id==='v-games')render();
+    }
+  }catch(e){console.warn('autoGrade',e)}
+}
+
 async function boot(){
   await pullFromGitHubIfEmpty();
   paintMeter();loadSlip();
@@ -5931,7 +6068,10 @@ async function boot(){
       if(Date.now()-l>20*36e5)pushToGitHub(false);
     },36e5);
   }
-  setInterval(()=>{loadAll().then(()=>{loadESPN();snapshot();snapshotBest()})},9e5);
+  setInterval(()=>{loadAll().then(()=>{loadESPN();snapshot();snapshotBest();autoGradeIfFinals()})},9e5);
+  // check every 3 minutes whether any game has gone final since the last pass, and if so
+  // grade + settle immediately instead of waiting for someone to open the Grades tab
+  setInterval(()=>autoGradeIfFinals(),18e4);
   let DAY=today();
   setInterval(async()=>{
     if(today()!==DAY){DAY=today();OPENS={};ODDS={};SLIP=[];BOX={};
