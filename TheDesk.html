@@ -13,19 +13,43 @@
 <meta http-equiv="Expires" content="0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--ink:#0B0F14;--panel:#141B23;--panel2:#1B242E;--panel3:#222D39;--rule:#2A3642;
---chalk:#E9E7E2;--mute:#7A8896;--gold:#F2A93B;--cold:#5FD3E8;--rust:#C7522A;--moss:#5FA35C;--win:#4ADE80}
+:root{
+--ink:#080B10;--panel:#111820;--panel2:#18212C;--panel3:#1F2A37;--rule:#26323F;
+--chalk:#F2F4F7;--mute:#8593A3;--gold:#FFB43D;--cold:#4DD8F0;--rust:#F0563C;--moss:#5FA35C;--win:#3DDC84;
+--violet:#A78BFA;--pink:#F472B6;
+/* depth */
+--sh-sm:0 1px 2px rgba(0,0,0,.4);
+--sh-md:0 4px 16px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.3);
+--sh-lg:0 12px 32px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.35);
+/* surfaces */
+--grad-card:linear-gradient(160deg,#161F29 0%,#111820 100%);
+--grad-card-hi:linear-gradient(160deg,#1B2836 0%,#131C26 100%);
+--grad-bet:linear-gradient(165deg,#1C2733 0%,#151E28 100%);
+--hair:rgba(255,255,255,.055);
+/* glows */
+--glow-gold:0 0 0 1px rgba(255,180,61,.5),0 0 20px rgba(255,180,61,.18);
+--glow-win:0 0 0 1px rgba(61,220,132,.45),0 0 18px rgba(61,220,132,.15);
+--glow-rust:0 0 0 1px rgba(240,86,60,.4),0 0 18px rgba(240,86,60,.12);
+--ease:cubic-bezier(.22,1,.36,1)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
-body{background:var(--ink);color:var(--chalk);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.45}
+body{background:var(--ink);color:var(--chalk);font-family:"Inter",system-ui,-apple-system,sans-serif;
+font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+letter-spacing:-.006em;
+background-image:radial-gradient(1100px 520px at 50% -8%,rgba(255,180,61,.055),transparent 62%);
+background-attachment:fixed}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 
-header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0B0F14 82%,rgba(11,15,20,.95));
-border-bottom:1px solid var(--rule);padding:calc(env(safe-area-inset-top) + 10px) 14px 0;backdrop-filter:blur(14px)}
+header{position:sticky;top:0;z-index:40;background:rgba(8,11,16,.72);
+border-bottom:1px solid var(--hair);padding:calc(env(safe-area-inset-top) + 10px) 14px 0;
+backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);
+box-shadow:0 1px 0 rgba(255,255,255,.03),0 8px 24px rgba(0,0,0,.4)}
 .brand{display:flex;align-items:baseline;justify-content:space-between}
-.brand h1{font-family:"Archivo";font-weight:900;font-size:19px;margin:0;text-transform:uppercase;letter-spacing:-.02em}
+.brand h1{font-family:"Archivo";font-weight:900;font-size:20px;margin:0;text-transform:uppercase;
+letter-spacing:-.03em;background:linear-gradient(135deg,#fff 30%,#B8C4D0 100%);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .brand h1 span{color:var(--gold)}
 .dateline{font-family:"IBM Plex Mono";font-size:10px;color:var(--mute);letter-spacing:.05em;text-transform:uppercase}
 .meterwrap{margin-top:7px}
@@ -38,25 +62,34 @@ letter-spacing:.09em;text-transform:uppercase;color:var(--mute);margin-bottom:3p
 nav{display:flex;margin-top:7px;overflow-x:auto;scrollbar-width:none}
 nav::-webkit-scrollbar{display:none}
 nav>button{flex:1;min-width:64px;background:none;border:none;border-bottom:2px solid transparent;color:var(--mute);
-font-family:"Archivo";font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:10px 3px 8px;cursor:pointer}
-nav>button.on{color:var(--gold);border-bottom-color:var(--gold)}
+font-family:"Inter";font-weight:700;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+padding:10px 3px 8px;cursor:pointer;transition:color .2s var(--ease),border-color .2s var(--ease);
+position:relative}
+nav>button:hover{color:#B8C4D0}
+nav>button.on{color:var(--gold);border-bottom-color:var(--gold);
+text-shadow:0 0 16px rgba(255,180,61,.5)}
 nav>button .n{font-family:"IBM Plex Mono";font-size:9px;opacity:.6;margin-left:2px}
 
 main{padding:12px 10px 110px;max-width:700px;margin:0 auto}
 .view{display:none}.view.on{display:block}
 .sbar{display:flex;align-items:center;gap:8px;margin:18px 3px 8px}
 .sbar:first-child{margin-top:2px}
-.sbar h2{font-family:"Archivo";font-weight:700;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--mute);margin:0;white-space:nowrap}
-.sbar .ln{flex:1;height:1px;background:var(--rule)}
+.sbar h2{font-family:"Inter";font-weight:700;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+color:var(--mute);margin:0;white-space:nowrap}
+.sbar .ln{flex:1;height:1px;background:linear-gradient(90deg,var(--rule),transparent)}
 .sbar .ct{font-family:"IBM Plex Mono";font-size:10px;color:var(--mute)}
 
 /* ---------- GAME CARD ---------- */
-.game{background:var(--panel);border:1px solid var(--rule);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.game{background:var(--grad-card);border:1px solid var(--hair);border-radius:16px;margin-bottom:12px;
+overflow:hidden;box-shadow:var(--sh-md);transition:transform .25s var(--ease),box-shadow .25s var(--ease)}
+.game:hover{box-shadow:var(--sh-lg)}
+.game.edge{border-color:rgba(255,180,61,.28);box-shadow:var(--sh-md),0 0 28px rgba(255,180,61,.07)}
+.game.in-play{border-color:rgba(61,220,132,.26);box-shadow:var(--sh-md),0 0 28px rgba(61,220,132,.07)}
 .game.edge{border-color:rgba(242,169,59,.4)}
 .game.done{border-color:rgba(90,110,130,.35)}
 .ghd{padding:12px 13px 0}
 .grow1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.teams{font-family:"Archivo";font-weight:900;font-size:17px;letter-spacing:-.01em}
+.teams{font-family:"Archivo";font-weight:900;font-size:19px;letter-spacing:-.025em}
 .teams .at{color:var(--mute);font-weight:500;margin:0 4px;font-size:14px}
 .meta{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);text-align:right;white-space:nowrap;line-height:1.4}
 .env{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);margin:4px 0 6px}
@@ -69,7 +102,7 @@ main{padding:12px 10px 110px;max-width:700px;margin:0 auto}
 .flag.cool{background:rgba(95,163,92,.18);color:var(--moss)}
 .flag.own{background:rgba(242,169,59,.16);color:var(--gold)}
 .proj{display:flex;align-items:baseline;gap:9px;margin:9px 0 3px;flex-wrap:wrap}
-.proj .sc{font-family:"Archivo";font-weight:900;font-size:21px;letter-spacing:-.01em}
+.proj .sc{font-family:"Archivo";font-weight:900;font-size:24px;letter-spacing:-.03em}
 .proj .rd{font-family:"IBM Plex Mono";font-size:12px;color:var(--mute)}
 .proj .md{font-family:"IBM Plex Mono";font-size:10px;color:var(--gold);background:rgba(242,169,59,.1);
 padding:2px 6px;border-radius:4px;border:1px solid rgba(242,169,59,.25)}
@@ -77,7 +110,7 @@ padding:2px 6px;border-radius:4px;border:1px solid rgba(242,169,59,.25)}
 .sigchip{font-family:"IBM Plex Mono";font-size:9px;padding:3px 7px;border-radius:4px;
 background:var(--panel2);border:1px solid var(--rule);color:var(--mute)}
 .sigchip b{color:var(--chalk);font-weight:500}
-.badge{display:inline-flex;font-family:"IBM Plex Mono";font-size:9px;font-weight:600;letter-spacing:.06em;
+.badge{display:inline-flex;font-family:"Inter";font-size:9.5px;font-weight:700;letter-spacing:.06em;
 text-transform:uppercase;padding:3px 7px;border-radius:20px;margin:7px 4px 0 0}
 .badge.play{background:rgba(242,169,59,.14);color:var(--gold);border:1px solid rgba(242,169,59,.35)}
 .badge.pass{background:rgba(122,136,150,.1);color:var(--mute);border:1px solid var(--rule)}
@@ -87,20 +120,30 @@ text-transform:uppercase;padding:3px 7px;border-radius:20px;margin:7px 4px 0 0}
 
 /* ---------- SPORTSBOOK BET GRID ---------- */
 .mktblock{padding:10px 13px 13px}
-.mktlab{font-family:"IBM Plex Mono";font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+.mktlab{font-family:"Inter";font-weight:600;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
 color:var(--mute);margin:10px 0 5px}
 .mktlab:first-child{margin-top:2px}
 .betgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .betgrid.thirds{grid-template-columns:1fr 1fr 1fr}
-.bet{background:var(--panel2);border:1px solid var(--rule);border-radius:9px;padding:11px 9px;
-cursor:pointer;text-align:center;transition:border-color .15s,background .15s;min-height:60px;
-display:flex;flex-direction:column;justify-content:center;gap:3px}
-.bet:active{transform:scale(.98)}
-.bet .bl{font-family:"IBM Plex Sans";font-size:12.5px;font-weight:600;color:var(--chalk);line-height:1.2}
-.bet .bo{font-family:"IBM Plex Mono";font-size:15px;font-weight:600;color:var(--gold);line-height:1}
-.bet .bs{font-family:"IBM Plex Mono";font-size:9px;color:var(--mute)}
-.bet.on{background:rgba(242,169,59,.16);border-color:var(--gold)}
+.bet{background:var(--grad-bet);border:1px solid var(--hair);border-radius:13px;padding:12px 9px;
+cursor:pointer;text-align:center;min-height:64px;position:relative;overflow:hidden;
+display:flex;flex-direction:column;justify-content:center;gap:4px;
+box-shadow:var(--sh-sm),inset 0 1px 0 rgba(255,255,255,.045);
+transition:transform .18s var(--ease),box-shadow .22s var(--ease),border-color .22s var(--ease)}
+/* top sheen — the thing that makes it read as a physical surface, not a div */
+.bet::before{content:'';position:absolute;inset:0 0 auto 0;height:42%;pointer-events:none;
+background:linear-gradient(180deg,rgba(255,255,255,.055),transparent)}
+.bet:active{transform:scale(.965)}
+.bet .bl{font-family:"Inter";font-size:13px;font-weight:700;color:var(--chalk);
+line-height:1.2;letter-spacing:-.01em}
+.bet .bo{font-family:"Archivo";font-size:19px;font-weight:800;color:var(--gold);
+line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.bet .bs{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);font-weight:500}
+.bet.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold);box-shadow:var(--glow-gold),inset 0 1px 0 rgba(255,255,255,.1);
+transform:translateY(-1px)}
 .bet.on .bl{color:#fff}
+.bet.on .bo{color:#FFD08A}
 .bet:focus-visible{outline:2px solid var(--cold);outline-offset:2px}
 /* ---- sim handicap chip — shown on every bet square, above the price ---- */
 .bet .sim-chip{font-family:"IBM Plex Mono";font-size:8px;font-weight:600;letter-spacing:.06em;
@@ -113,17 +156,27 @@ display:inline-block;margin-bottom:2px}
   color:#a78bfa;margin-top:3px}
 .src-tag.unanimous{color:#f472b6}
 /* ---- live score bar ---- */
-.live-bar{background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:8px;padding:9px 11px;margin:6px 0;display:flex;flex-direction:column;gap:4px}
+.live-bar{background:linear-gradient(160deg,rgba(61,220,132,.11),rgba(61,220,132,.03));
+border:1px solid rgba(61,220,132,.24);border-radius:13px;padding:11px 13px;margin:8px 0;
+display:flex;flex-direction:column;gap:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
 .live-score{display:flex;align-items:center;gap:8px}
-.live-dot{width:7px;height:7px;border-radius:50%;background:var(--win);animation:pulse 1.4s ease-in-out infinite;flex:0 0 auto}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--win);flex:0 0 auto;
+box-shadow:0 0 0 0 rgba(61,220,132,.7);animation:livePulse 1.8s var(--ease) infinite}
+@keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(61,220,132,.6)}
+70%{box-shadow:0 0 0 9px rgba(61,220,132,0)}100%{box-shadow:0 0 0 0 rgba(61,220,132,0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 /* ---- value signalling: green = model sees real edge, red = model says stay away ---- */
-.bet.value{border-color:var(--win);background:linear-gradient(180deg,rgba(74,222,128,.10),var(--panel2))}
+.bet.value{border-color:rgba(61,220,132,.5);
+background:linear-gradient(165deg,rgba(61,220,132,.14),rgba(21,30,40,.9));
+box-shadow:var(--glow-win),inset 0 1px 0 rgba(255,255,255,.05)}
 .bet.value .bl{color:var(--win)}
-.bet.avoid{border-color:var(--rust);opacity:.68}
+.bet.value .bo{color:#8BF0B5}
+.bet.avoid{border-color:rgba(240,86,60,.34);opacity:.58;
+background:linear-gradient(165deg,rgba(240,86,60,.07),rgba(21,30,40,.9))}
 .bet.avoid .bl{color:var(--rust)}
-.bet.value.on{background:rgba(242,169,59,.16);border-color:var(--gold)}
-.eb{font-family:"IBM Plex Mono";font-size:8.5px;font-weight:600;padding:1px 5px;border-radius:9px;
+.bet.value.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold);box-shadow:var(--glow-gold)}
+.eb{font-family:"Inter";font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;
 display:inline-block;letter-spacing:.02em}
 .eb.up{background:rgba(74,222,128,.18);color:var(--win)}
 .eb.dn{background:rgba(199,82,42,.18);color:var(--rust)}
@@ -162,12 +215,17 @@ text-align:center;min-height:60px;display:flex;flex-direction:column;justify-con
 
 /* ---------- EXPANDERS ---------- */
 .exprow{display:flex;border-top:1px solid var(--rule)}
-.expbtn{flex:1;background:none;border:none;border-right:1px solid var(--rule);color:var(--mute);
+.expbtn{flex:1;background:none;border:none;border-right:1px solid var(--hair);color:var(--mute);
+transition:background .2s var(--ease),color .2s var(--ease);
 font-family:"Archivo";font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
 padding:11px 4px;cursor:pointer}
 .expbtn:last-child{border-right:none}
-.expbtn.on{color:var(--gold);background:rgba(242,169,59,.06)}
-.panel{display:none;border-top:1px solid var(--rule);background:#101720;padding:12px 13px}
+.expbtn.on{color:var(--gold);background:rgba(255,180,61,.09);box-shadow:inset 0 -2px 0 var(--gold)}
+.panel{display:none;border-top:1px solid var(--hair);
+background:linear-gradient(180deg,#0C1218,#0E141B);padding:14px 14px;
+box-shadow:inset 0 6px 14px -8px rgba(0,0,0,.7)}
+.panel.on{animation:panelIn .3s var(--ease)}
+@keyframes panelIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 .panel.on{display:block}
 .row{display:flex;gap:9px;padding:6px 0;border-bottom:1px solid rgba(42,54,66,.5)}
 .row:last-child{border-bottom:0}
@@ -231,26 +289,37 @@ border-radius:7px;padding:10px 12px;cursor:pointer;border:1px solid var(--rule)}
 .wp-sub{font-family:"IBM Plex Mono";font-size:7.5px;color:var(--mute);margin-top:2px}
 .stake-input{font-family:"Archivo";font-weight:900;font-size:15px;color:var(--cold);background:transparent;border:none;outline:none;width:100%;text-align:center;padding:0;max-width:72px}
 /* ---------- TICKETS / GRADES ---------- */
-.tkt{background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:12px;margin-bottom:9px}
-.tkt.hi{border-color:rgba(242,169,59,.4)}
+.tkt{background:var(--grad-card);border:1px solid var(--hair);border-radius:15px;padding:14px;
+margin-bottom:11px;box-shadow:var(--sh-md)}
+.tkt.hi{border-color:rgba(255,180,61,.3);background:var(--grad-card-hi);
+box-shadow:var(--sh-md),0 0 30px rgba(255,180,61,.07)}
 .tkt h3{font-family:"Archivo";font-weight:900;font-size:15px;margin:0 0 2px;text-transform:uppercase}
 .tkt .sub{font-family:"IBM Plex Mono";font-size:10px;color:var(--mute);margin-bottom:8px;line-height:1.5}
 .tkt .sub b{color:var(--gold)}
 .tkt ol{margin:0;padding-left:18px;font-size:12.5px;line-height:1.75}
 .tkt ol .m{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--mute)}
 .tkt ol .pp{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--moss)}
-.subnav{display:flex;gap:5px;margin-bottom:11px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.subnav{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;padding-bottom:3px}
 .subnav::-webkit-scrollbar{display:none}
-.subnav button{white-space:nowrap;font-family:"IBM Plex Mono";font-size:10px;padding:7px 11px;border-radius:20px;
-background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:pointer;text-transform:uppercase;letter-spacing:.04em}
-.subnav button.on{background:var(--gold);color:#0B0F14;border-color:var(--gold);font-weight:600}
+.subnav button{white-space:nowrap;font-family:"Inter";font-size:11px;font-weight:600;padding:8px 14px;
+border-radius:999px;background:var(--panel2);border:1px solid var(--hair);color:var(--mute);cursor:pointer;
+text-transform:uppercase;letter-spacing:.05em;box-shadow:var(--sh-sm);
+transition:all .2s var(--ease)}
+.subnav button:hover{color:var(--chalk);border-color:rgba(255,255,255,.14)}
+.subnav button.on{background:linear-gradient(135deg,#FFC55A 0%,var(--gold) 100%);color:#0B0F14;
+border-color:var(--gold);font-weight:800;box-shadow:0 3px 14px rgba(255,180,61,.32)}
 .subview{display:none}.subview.on{display:block}
 
 /* ---------- FORMS / CHAT ---------- */
 .bar{display:flex;gap:6px;margin-top:10px}
-.bar button{flex:1;font-family:"Archivo";font-weight:700;font-size:10px;letter-spacing:.09em;text-transform:uppercase;
-background:var(--panel2);color:var(--chalk);border:1px solid var(--rule);border-radius:7px;padding:11px;cursor:pointer}
-.bar button.primary{background:var(--gold);color:#0B0F14;border-color:var(--gold)}
+.bar button{flex:1;font-family:"Inter";font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+background:var(--panel2);color:var(--chalk);border:1px solid var(--hair);border-radius:11px;padding:13px;
+cursor:pointer;box-shadow:var(--sh-sm);transition:all .2s var(--ease)}
+.bar button:hover{border-color:rgba(255,255,255,.16);transform:translateY(-1px)}
+.bar button:active{transform:translateY(0) scale(.985)}
+.bar button.primary{background:linear-gradient(135deg,#FFC55A 0%,#F09B22 100%);color:#0B0F14;
+border-color:transparent;font-weight:800;box-shadow:0 4px 18px rgba(255,180,61,.34)}
+.bar button.primary:hover{box-shadow:0 6px 24px rgba(255,180,61,.44)}
 .bar button:disabled{opacity:.4}
 input{width:100%;background:var(--panel);border:1px solid var(--rule);border-radius:7px;color:var(--chalk);
 font-family:"IBM Plex Mono";font-size:14px;padding:12px;margin:5px 0}
@@ -344,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v55</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v60</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -354,8 +423,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <nav>
     <button class="on" onclick="tab('games',this)">Games<span class="n" id="nG"></span></button>
     <button onclick="tab('tickets',this)">Tickets</button>
-    <button onclick="tab('grades',this)">Grades<span class="n" id="nR"></span></button>
-    <button onclick="tab('recap',this)">Recap</button>
+    <button onclick="tab('grades',this)">Record<span class="n" id="nR"></span></button>
     <button onclick="tab('best',this)">Best<span class="n" id="nBest"></span></button>
     <button onclick="tab('chat',this)">Chat</button>
     <button onclick="tab('money',this)">Money</button>
@@ -1180,6 +1248,7 @@ function calibrationTrend(){
     });
     if(n)out.push({date:d,avgMiss:+(err/n).toFixed(2),n});
   });
+  return out;
 }
 function teamRunAdj(ab){
   const e=get(LS.ent,{});
@@ -1486,7 +1555,7 @@ async function loadBoxes(){
   await Promise.all(fin.map(async g=>{
     if(BOX[g.id])return;
     try{const r=await fetch(`https://statsapi.mlb.com/api/v1/game/${g.id}/boxscore`);
-      BOX[g.id]=await r.json()}catch(e){}}));
+      const bx=await r.json();BOX[g.id]=bx;cacheBox(g.id,bx)}catch(e){}}));
   if(fin.length)render();
 }
 async function loadOdds(manual){
@@ -3396,91 +3465,8 @@ function boxPanel(g){
    it — "Under 7.5 · final 4-2 (6)" or "3+ K · 2 K" — live or final, side or
    prop. This is the single source of truth both paths route through so the
    detail text can never drift from the boolean that graded it. */
-function gradeDetail(g,pick,propMeta){
-  // propMeta: {ptype,thr,pid} when grading a prop; omit/null for a side pick
-  const live=g.abstract==='Live',final=g.abstract==='Final';
-  if(propMeta&&(propMeta.ptype||propMeta.pid)){
-    const bx=BOX[g.id];
-    if(!bx||!propMeta.pid)return{hit:null,detail:live?'live box not loaded yet':null};
-    let pl=null;
-    for(const s of ['away','home']){
-      const P=((bx.teams||{})[s]||{}).players||{};
-      const cand=P['ID'+propMeta.pid];
-      if(cand){pl=cand;break}
-    }
-    if(!pl)return{hit:null,detail:null};
-    const b=(pl.stats||{}).batting||{},q=(pl.stats||{}).pitching||{};
-    const t=propMeta.ptype,thr=propMeta.thr;
-    const labelOf={k:'K',bb:'BB allowed',ha:'H allowed',hits:'hits',tb:'total bases',rbi:'RBI',hr:'HR'}[t]||t;
-    const isPitch=(t==='k'||t==='bb'||t==='ha');
-    if(isPitch&&!q.inningsPitched)return{hit:null,detail:live?'not in the game yet':null};
-    if(!isPitch&&!b.plateAppearances)return{hit:null,detail:live?'not in the game yet':null};
-    const actual=t==='k'?(q.strikeOuts||0):t==='bb'?(q.baseOnBalls||0):t==='ha'?(q.hits||0)
-      :t==='hits'?(b.hits||0):t==='tb'?(b.totalBases||0):t==='rbi'?(b.rbi||0):t==='hr'?(b.homeRuns||0):null;
-    if(actual===null)return{hit:null,detail:null};
-    const hit=actual>=thr;
-    return{hit,detail:`${actual} ${labelOf}${live?' so far':''}`,actual,threshold:thr};
-  }
-
-  // side / total / run line / F5 — need actual scores, live or final
-  const a=g.awayScore,h=g.homeScore;
-  if(a===null||h===null)return{hit:null,detail:null};
-  const scoreLine=`${g.away.abbr} ${a}–${h} ${g.home.abbr}${live?' (live)':''}`;
-  const tot=a+h;
-  if(/^Over /.test(pick)){
-    const ln=parseFloat(pick.slice(5));
-    const hit=final?tot>ln:null; // live total can't be graded final yet, but still show progress
-    return{hit,detail:`${scoreLine} · total ${tot}`,progress:tot,threshold:ln};
-  }
-  if(/^Under /.test(pick)){
-    const ln=parseFloat(pick.slice(6));
-    const hit=final?tot<ln:null;
-    return{hit,detail:`${scoreLine} · total ${tot}`,progress:tot,threshold:ln};
-  }
-  if(/ ML$/.test(pick)){
-    const who=pick.replace(/ ML$/,'');
-    if(!final)return{hit:null,detail:scoreLine};
-    if(a===h)return{hit:null,detail:scoreLine+' · push'};
-    const winner=h>a?g.home.abbr:g.away.abbr;
-    return{hit:winner===who,detail:scoreLine};
-  }
-  if(/ -\d+\.5$/.test(pick)){
-    const m=pick.match(/^(.+) -(\d+\.5)$/),who=m[1],ln=parseFloat(m[2]);
-    const margin=who===g.home.abbr?(h-a):(a-h);
-    return{hit:final?margin>ln:null,detail:`${scoreLine} · margin ${margin>0?'+':''}${margin}`};
-  }
-  if(/ \+\d+\.5$/.test(pick)){
-    const m=pick.match(/^(.+) \+(\d+\.5)$/),who=m[1],ln=parseFloat(m[2]);
-    const margin=who===g.home.abbr?(h-a):(a-h);
-    return{hit:final?margin>-ln:null,detail:`${scoreLine} · margin ${margin>0?'+':''}${margin}`};
-  }
-  const F=f5Of(g.id);
-  if(/^F5 over /.test(pick)){
-    if(!F)return{hit:null,detail:null};
-    const f5tot=F.fa+F.fh,ln=parseFloat(pick.slice(8));
-    return{hit:f5tot>ln,detail:`F5 ${F.fa}–${F.fh} · total ${f5tot}`};
-  }
-  if(/^F5 under /.test(pick)){
-    if(!F)return{hit:null,detail:null};
-    const f5tot=F.fa+F.fh,ln=parseFloat(pick.slice(9));
-    return{hit:f5tot<ln,detail:`F5 ${F.fa}–${F.fh} · total ${f5tot}`};
-  }
-  if(/^F5 /.test(pick)){
-    if(!F||F.fa===F.fh)return{hit:null,detail:F?`F5 ${F.fa}–${F.fh} · push`:null};
-    const who=pick.slice(3);
-    return{hit:(F.fh>F.fa?g.home.abbr:g.away.abbr)===who,detail:`F5 ${F.fa}–${F.fh}`};
-  }
-  return{hit:null,detail:null};
-}
 // Small inline HTML fragment: the ✅/❌/— tag PLUS the number that decided it, sized
 // to sit right next to a pick in a list without breaking the line.
-function gradeBadge(g,pick,propMeta){
-  const{hit,detail}=gradeDetail(g,pick,propMeta);
-  const icon=hit===true?'✅':hit===false?'❌':g&&g.abstract==='Live'?'⏳':'—';
-  const color=hit===true?'var(--win)':hit===false?'var(--rust)':'var(--mute)';
-  const detailHtml=detail?`<span style="font-family:'IBM Plex Mono';font-size:9.5px;color:${color};margin-left:5px">${detail}</span>`:'';
-  return`<span style="color:${color}">${icon}</span>${detailHtml}`;
-}
 function finalBetStrip(g){
   const gl=g.away.abbr+'@'+g.home.abbr;
   const myLegs=[];
@@ -3488,7 +3474,7 @@ function finalBetStrip(g){
   if(!myLegs.length)return '';
   return `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px 10px">
     ${myLegs.map(x=>{
-      const badge=x.isProp?gradeBadge(g,x.pick,{ptype:x.ptype,thr:x.thr,pid:x.pid}):gradeBadge(g,x.pick,null);
+      const badge=gradeLegBadge(x,x.gameDate||today());
       return `<div style="font-size:11px"><span style="color:var(--chalk)">${x.pick}</span> ${badge}</div>`;
     }).join('')}
   </div>`;
@@ -3513,6 +3499,216 @@ function jumpToGame(gid){
     }
   },80);
 }
+/* ================= GRADING RESOLVER — the single source of truth =================
+   THE BUG THIS FIXES: every grading path used to look up games in the in-memory
+   GAMES array, which only ever holds TODAY'S slate. At midnight GAMES reloads and
+   yesterday's games vanish, so any ticket from yesterday could never grade — the
+   lookup silently returned "not final yet" forever and the ticket sat stuck.
+   Everything now resolves through here: live memory first, then the persistent
+   archive, so a leg can be graded on any day, forever, regardless of what's loaded. */
+
+const LS_BOXCACHE='d4.boxcache';
+function getBoxCache(){return get(LS_BOXCACHE,{})}
+function cacheBox(gid,box){
+  if(!gid||!box)return;
+  const c=getBoxCache();
+  c[gid]={box,ts:Date.now()};
+  // keep the cache bounded — 400 games is roughly two months of full slates
+  const keys=Object.keys(c);
+  if(keys.length>400){
+    keys.sort((a,b)=>(c[a].ts||0)-(c[b].ts||0)).slice(0,keys.length-400).forEach(k=>delete c[k]);
+  }
+  set(LS_BOXCACHE,c);
+}
+function boxFor(gid){
+  if(BOX[gid])return BOX[gid];
+  const c=getBoxCache();
+  return c[gid]?c[gid].box:null;
+}
+
+// Resolve a leg to its game's actual result, wherever that lives.
+// Returns {a,h,fa,fh,f5ok,gid,live,source} or null if genuinely unknown yet.
+function resolveLeg(leg,ticketDate){
+  // 1) in-memory GAMES — today's slate, and the only place with live in-progress scores
+  let g=null;
+  if(leg.gid)g=GAMES.find(z=>z.id===leg.gid);
+  if(!g)g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
+  if(g){
+    if(g.abstract==='Final'&&g.awayScore!==null&&g.awayScore!==undefined){
+      const f5=f5Of(g.id);
+      return{a:g.awayScore,h:g.homeScore,fa:f5?f5.fa:null,fh:f5?f5.fh:null,
+        f5ok:!!f5,gid:g.id,live:false,source:'memory',g};
+    }
+    if(g.abstract==='Live')return{a:g.awayScore,h:g.homeScore,gid:g.id,live:true,source:'memory',g};
+    return null; // scheduled, hasn't started
+  }
+  // 2) persistent archive — this is what makes yesterday's tickets gradeable
+  const arc=get(LS.arc,{});
+  const dates=[];
+  if(leg.gameDate)dates.push(leg.gameDate);
+  if(ticketDate&&ticketDate!==leg.gameDate)dates.push(ticketDate);
+  Object.keys(arc).sort().reverse().forEach(d=>{if(!dates.includes(d))dates.push(d)});
+  for(const d of dates){
+    const A=arc[d];
+    if(!A||!A.finals)continue;
+    // match on stored game id first — exact and doubleheader-safe
+    if(leg.gid&&A.finals[leg.gid]){
+      const F=A.finals[leg.gid];
+      if(F.a===null||F.h===null)continue;
+      return{...F,gid:leg.gid,live:false,source:'archive',date:d};
+    }
+    // fall back to matchup string via that day's snapshot rows
+    const row=(A.rows||[]).find(r=>(r.a+'@'+r.h)===leg.game);
+    if(row&&A.finals[row.id]){
+      const F=A.finals[row.id];
+      if(F.a===null||F.h===null)continue;
+      return{...F,gid:row.id,live:false,source:'archive',date:d};
+    }
+  }
+  return null;
+}
+
+// Grade any leg — side, total, run line, F5, or prop — from resolved data.
+// Returns {hit:true|false|null, detail:string|null}
+function gradeLeg(leg,ticketDate){
+  const R=resolveLeg(leg,ticketDate);
+  if(!R)return{hit:null,detail:null};
+  const isProp=leg.isProp||leg.ptype;
+  if(isProp){
+    const box=boxFor(R.gid);
+    if(!box)return{hit:null,detail:R.live?'live box not loaded':null};
+    let pl=null;
+    for(const s of ['away','home']){
+      const P=((box.teams||{})[s]||{}).players||{};
+      const c=P['ID'+leg.pid];
+      if(c){pl=c;break}
+    }
+    if(!pl)return{hit:null,detail:null};
+    const b=(pl.stats||{}).batting||{},q=(pl.stats||{}).pitching||{};
+    const t=leg.ptype,thr=leg.thr;
+    const label={k:'K',bb:'BB allowed',ha:'H allowed',hits:'hits',tb:'total bases',rbi:'RBI',hr:'HR'}[t]||t;
+    const isPitch=(t==='k'||t==='bb'||t==='ha');
+    if(isPitch&&!q.inningsPitched)return{hit:null,detail:R.live?'not in yet':null};
+    if(!isPitch&&!b.plateAppearances)return{hit:null,detail:R.live?'not in yet':null};
+    const actual=t==='k'?(q.strikeOuts||0):t==='bb'?(q.baseOnBalls||0):t==='ha'?(q.hits||0)
+      :t==='hits'?(b.hits||0):t==='tb'?(b.totalBases||0):t==='rbi'?(b.rbi||0):t==='hr'?(b.homeRuns||0):null;
+    if(actual===null)return{hit:null,detail:null};
+    return{hit:R.live?null:actual>=thr,detail:`${actual} ${label}${R.live?' so far':''}`};
+  }
+  const a=R.a,h=R.h,pick=leg.pick;
+  if(a===null||a===undefined||h===null||h===undefined)return{hit:null,detail:null};
+  const [awayAb,homeAb]=(leg.game||'@').split('@');
+  const line=`${awayAb} ${a}–${h} ${homeAb}${R.live?' (live)':''}`;
+  const tot=a+h;
+  if(/^Over /.test(pick)){const ln=parseFloat(pick.slice(5));
+    return{hit:R.live?null:tot>ln,detail:`${line} · total ${tot}`}}
+  if(/^Under /.test(pick)){const ln=parseFloat(pick.slice(6));
+    return{hit:R.live?null:tot<ln,detail:`${line} · total ${tot}`}}
+  if(/ ML$/.test(pick)){
+    const who=pick.replace(/ ML$/,'');
+    if(R.live)return{hit:null,detail:line};
+    if(a===h)return{hit:null,detail:line+' · push'};
+    return{hit:(h>a?homeAb:awayAb)===who,detail:line};
+  }
+  const rlm=pick.match(/^(.+) ([+-]\d+(?:\.\d+)?)$/);
+  if(rlm&&!/^F5 /.test(pick)){
+    const who=rlm[1],ln=parseFloat(rlm[2]);
+    const margin=who===homeAb?(h-a):(a-h);
+    return{hit:R.live?null:(margin+ln)>0,detail:`${line} · margin ${margin>0?'+':''}${margin}`};
+  }
+  if(/^F5 /.test(pick)){
+    if(!R.f5ok||R.fa===null||R.fa===undefined)return{hit:null,detail:null};
+    const f5tot=R.fa+R.fh;
+    if(/^F5 over /.test(pick))return{hit:f5tot>parseFloat(pick.slice(8)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`};
+    if(/^F5 under /.test(pick))return{hit:f5tot<parseFloat(pick.slice(9)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`};
+    const who=pick.slice(3);
+    if(R.fa===R.fh)return{hit:null,detail:`F5 ${R.fa}–${R.fh} · push`};
+    return{hit:(R.fh>R.fa?homeAb:awayAb)===who,detail:`F5 ${R.fa}–${R.fh}`};
+  }
+  return{hit:null,detail:line};
+}
+function gradeLegBadge(leg,ticketDate){
+  const{hit,detail}=gradeLeg(leg,ticketDate);
+  const R=resolveLeg(leg,ticketDate);
+  const icon=hit===true?'✅':hit===false?'❌':(R&&R.live)?'⏳':'—';
+  const color=hit===true?'var(--win)':hit===false?'var(--rust)':'var(--mute)';
+  const d=detail?`<span style="font-family:'IBM Plex Mono';font-size:9.5px;color:${color};margin-left:5px">${detail}</span>`:'';
+  return`<span style="color:${color}">${icon}</span>${d}`;
+}
+function legGameId(leg,ticketDate){
+  const R=resolveLeg(leg,ticketDate);
+  return R?R.gid:null;
+}
+
+/* ── Migration + backfill ────────────────────────────────────────────────
+   Existing tickets were saved without gid/gameDate on every leg. This walks
+   them once, fills in what it can from the archive, then fetches any missing
+   historical finals and box scores so stuck tickets can finally grade. */
+async function backfillGrading(silent){
+  const arc=get(LS.arc,{});
+  const L=get(LS.locked,[]);
+  let changed=false;
+
+  // 1) stamp gameDate on legs that don't have one, using the ticket's date
+  L.forEach(t=>t.legs.forEach(x=>{
+    if(!x.gameDate){x.gameDate=t.date;changed=true}
+  }));
+
+  // 2) figure out which dates still have ungraded legs
+  const needDates=new Set();
+  L.forEach(t=>t.legs.forEach(x=>{
+    const r=gradeLeg(x,t.date);
+    if(r.hit===null)needDates.add(x.gameDate||t.date);
+  }));
+
+  // 3) fetch finals for those dates into the archive if missing
+  for(const d of needDates){
+    if(d>today())continue;
+    try{
+      const f=await fetchFinals(d);
+      if(Object.keys(f).length){
+        arc[d]=arc[d]||{ts:Date.now(),rows:[]};
+        arc[d].finals={...(arc[d].finals||{}),...f};
+        changed=true;
+      }
+    }catch(e){}
+  }
+  if(changed)set(LS.arc,arc);
+
+  // 4) fetch + cache box scores for any prop leg that still can't grade
+  const needBoxes=new Set();
+  L.forEach(t=>t.legs.forEach(x=>{
+    if(!(x.isProp||x.ptype))return;
+    const r=gradeLeg(x,t.date);
+    if(r.hit!==null)return;
+    const gid=x.gid||legGameId(x,t.date);
+    if(gid&&!boxFor(gid))needBoxes.add(gid);
+  }));
+  for(const gid of needBoxes){
+    try{
+      const rr=await fetch(`https://statsapi.mlb.com/api/v1/game/${gid}/boxscore`);
+      const bj=await rr.json();
+      if(bj&&bj.teams)cacheBox(gid,bj);
+    }catch(e){}
+  }
+
+  // 5) re-stamp gid onto legs now that the archive can resolve them
+  L.forEach(t=>t.legs.forEach(x=>{
+    if(x.gid)return;
+    const gid=legGameId(x,t.date);
+    if(gid){x.gid=gid;changed=true}
+  }));
+  if(changed)set(LS.locked,L);
+
+  try{settleLockedTickets()}catch(e){}
+  if(!silent){
+    const still=L.reduce((n,t)=>n+t.legs.filter(x=>gradeLeg(x,t.date).hit===null).length,0);
+    return{dates:[...needDates],boxes:needBoxes.size,stillPending:still};
+  }
+  return null;
+}
+/* ================= RESOLVER END ================= */
+
 function gradeLiveProp(g,p){
   const bx=BOX[g.id];if(!bx||!p.pid)return null;
   for(const s of ['away','home']){
@@ -3613,7 +3809,10 @@ function lockSlip(){
   const gs=new Set(SLIP.map(x=>x.game));
   if(gs.size<SLIP.length&&!confirm('Multiple legs share a game — that\'s correlated. Lock anyway?'))return;
   const L=get(LS.locked,[]);
-  L.unshift({id:Date.now(),date:today(),legs:SLIP.slice(),p:SLIP.reduce((a,x)=>a*x.p,1)});
+  const d0=today();
+  L.unshift({id:Date.now(),date:d0,
+    legs:SLIP.map(x=>({...x,gameDate:d0})),
+    p:SLIP.reduce((a,x)=>a*x.p,1)});
   set(LS.locked,L);
   SLIP=[];set(LS.slip,SLIP);render();paintSlip();
   alert('Locked. See Tickets → My Parlays.');
@@ -3861,7 +4060,11 @@ function lockBuiltTicket(){
   const id=Date.now();
   const locked=get(LS.locked,[]);
   locked.push({id,date:fmtDate(new Date()),
-    legs:LAST_COMBO.map(l=>({id:id+'|'+l.pick,game:l.game,pick:l.pick,p:l.p})),
+    legs:LAST_COMBO.map(l=>{
+      const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
+      return{id:id+'|'+l.pick,game:l.game,pick:l.pick,p:l.p,
+        gid:gm?gm.id:null,gameDate:today()};
+    }),
     p:combinedProb,stake:stake||null});
   set(LS.locked,locked);
   HELD_PICKS.clear();LAST_COMBO=[];
@@ -4092,7 +4295,12 @@ function getBankroll(){
   const m=currentMonth();
   if(!b||b.month!==m){
     // new month — budget resets, burned money stays burned (history is kept, not reset)
-    const fresh={month:m,profit:0,limitMult:1.0,history:b?b.history||[]:[]};
+    // profit resets with the new month's budget, but the limit multiplier carries
+    // over — a month spent earning higher limits shouldn't be wiped by the calendar
+    const fresh={month:m,profit:0,
+      limitMult:b&&b.limitMult?Math.max(1,b.limitMult):1.0,
+      carriedMult:b&&b.limitMult>1?b.limitMult:null,
+      history:b?b.history||[]:[]};
     set('d4.bankroll',fresh);
     return fresh;
   }
@@ -4112,6 +4320,9 @@ function stakedToday(){
 // Called whenever a stake is entered on a locked ticket — enforces the caps and
 // returns {ok:true} or {ok:false,reason:'...'} so the UI can block and explain.
 function checkStakeAllowed(ticketId,newStake){
+  const bal=BR_BASELINE+getBankroll().profit;
+  if(bal<=0)return{ok:false,reason:`Balance is $${bal.toFixed(2)} — the month's budget is spent.`};
+  if(newStake>bal)return{ok:false,reason:`Only $${bal.toFixed(2)} left this month.`};
   const tl=ticketLimit();
   if(newStake>tl+0.001)return{ok:false,reason:`Ticket cap right now is $${tl.toFixed(2)}.`};
   const dl=dailyLimit();
@@ -4124,21 +4335,19 @@ function checkStakeAllowed(ticketId,newStake){
   return{ok:true};
 }
 
+const BR_MAX_MULT=10;   // hard ceiling — limits can grow 10x, never past it
 function settleTicket(ticketId,stake,profit,won){
   const b=getBankroll();
   if(b.history.some(h=>h.id===ticketId))return; // already settled once
-  const beforeProfit=b.profit;
   b.profit+=profit;
-  // limit scaling only fires on a WIN that pushes cumulative profit past the $100 baseline
-  if(won&&b.profit>BR_BASELINE){
-    const overBefore=Math.max(0,beforeProfit-BR_BASELINE);
-    const overAfter=b.profit-BR_BASELINE;
-    const gainedOver=overAfter-overBefore; // how much of THIS ticket's profit is "above baseline"
-    if(gainedOver>0){
-      const bump=gainedOver/BR_BASELINE; // e.g. $30 over baseline → +0.30 to the multiplier
-      b.limitMult=+(b.limitMult+bump).toFixed(4);
-    }
-  }
+  // Limits track profit ABOVE the baseline, in both directions. The old version only
+  // ever ratcheted up on wins, so a hot streak left limits inflated through an entire
+  // losing run — the exact opposite of what bankroll discipline should do. Now it's a
+  // pure function of where profit actually stands, so it falls back as profit falls.
+  const over=Math.max(0,b.profit-BR_BASELINE);
+  const earned=1+(over/BR_BASELINE);
+  const floor=b.carriedMult||1;   // never drop below what previous months earned
+  b.limitMult=+Math.min(BR_MAX_MULT,Math.max(floor,earned)).toFixed(4);
   b.history.push({id:ticketId,date:today(),stake,profit,won,ts:Date.now()});
   saveBankroll(b);
 }
@@ -4155,9 +4364,7 @@ function settleLockedTickets(){
     if(b.history.some(h=>h.id===t.id))return;
     let allDecided=true,anyLoss=false;
     t.legs.forEach(x=>{
-      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
-      if(!g||g.abstract!=='Final'){allDecided=false;return}
-      const r=x.isProp||x.ptype?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+      const r=gradeLeg(x,t.date).hit;
       if(r===null){allDecided=false;return}
       if(r===false)anyLoss=true;
     });
@@ -4335,6 +4542,254 @@ function renderMoneyTab(){
 }
 /* ================= BANKROLL END ================= */
 
+
+
+/* ================= CLOSING LINE VALUE =================
+   The single most predictive measure of whether a bettor is actually good. If the
+   line moves toward your pick after you take it, you beat the close — and beating
+   the close consistently predicts long-run profit far better than short-run W/L,
+   which is mostly variance. This captures the market price at snapshot time and
+   again once the game locks, then compares.
+   NOTE: this can only measure games from the moment it's installed forward —
+   closing prices for past days were never stored and can't be reconstructed. */
+const LS_CLV='d4.clv';
+function getCLV(){return get(LS_CLV,{})}
+
+// Called on every odds refresh. Records the earliest price seen for a game (the
+// "taken" reference) and keeps overwriting the latest until the game starts, at
+// which point the last value seen becomes the close.
+function captureCLV(){
+  const store=getCLV(),d=today();
+  store[d]=store[d]||{};
+  let changed=false;
+  GAMES.forEach(g=>{
+    const M=marketOf(g);
+    if(!M||M.fh===null||M.fh===undefined)return;
+    const key=g.away.abbr+'@'+g.home.abbr;
+    const rec=store[d][key]||{};
+    if(rec.openH===undefined){rec.openH=+M.fh.toFixed(4);rec.openTs=Date.now();changed=true}
+    // keep updating the close until the game is no longer pre-game
+    if(g.abstract!=='Final'&&g.abstract!=='Live'){
+      const nh=+M.fh.toFixed(4);
+      if(rec.closeH!==nh){rec.closeH=nh;rec.closeTs=Date.now();changed=true}
+    }else if(rec.locked!==true){
+      rec.locked=true;changed=true;   // freeze — this is the close
+    }
+    store[d][key]=rec;
+  });
+  if(changed)set(LS_CLV,store);
+}
+
+// CLV for one pick: how far the market moved toward or away from it after you took it.
+function clvFor(leg,dateStr){
+  const store=getCLV();
+  const d=dateStr||leg.gameDate||today();
+  const rec=(store[d]||{})[leg.game];
+  if(!rec||rec.openH===undefined||rec.closeH===undefined)return null;
+  const [awayAb,homeAb]=(leg.game||'@').split('@');
+  const m=(leg.pick||'').match(/^(.+) ML$/);
+  if(!m)return null;                        // moneyline only for now
+  const who=m[1];
+  const openP=who===homeAb?rec.openH:1-rec.openH;
+  const closeP=who===homeAb?rec.closeH:1-rec.closeH;
+  // market moving TOWARD your side (higher implied prob at close) = you got the better number
+  const move=+((closeP-openP)*100).toFixed(2);
+  return{openP,closeP,move,beat:move>0};
+}
+
+function clvSummary(){
+  const L=get(LS.locked,[]);
+  let n=0,beat=0,totalMove=0;
+  const rows=[];
+  L.forEach(t=>t.legs.forEach(x=>{
+    const c=clvFor(x,x.gameDate||t.date);
+    if(!c)return;
+    n++;if(c.beat)beat++;totalMove+=c.move;
+    rows.push({date:t.date,pick:x.pick,game:x.game,...c});
+  }));
+  return{n,beat,beatPct:n?+(beat/n*100).toFixed(1):null,
+    avgMove:n?+(totalMove/n).toFixed(2):null,rows};
+}
+
+/* ================= BACKTEST ENGINE =================
+   Replays every graded day in the archive against a filter set and reports what
+   would actually have happened. This is the difference between "my picks went 12-8"
+   and "picks at 5%+ edge went 12-8 for +14% ROI while everything under 3% lost money."
+   Uses only data captured at snapshot time — the pick, the model's probability, the
+   market's probability, and the final result — so it can't peek at the future. */
+
+// A realistic price to bet into. mh/sp are devigged fair probabilities; a real book
+// prices worse than fair. This applies half of a standard two-way hold to each side
+// so the ROI figures aren't fantasy numbers.
+const BT_HOLD=0.022;
+function btPrice(fairProb){
+  const p=Math.min(0.985,fairProb*(1+BT_HOLD));
+  return p>=.5?-(100*p/(1-p)):(100*(1-p)/p);
+}
+function btPayout(amer,stake){
+  return amer>0?stake*amer/100:stake*100/Math.abs(amer);
+}
+
+function runBacktest(opts){
+  const o=Object.assign({minEdge:0,maxEdge:99,minProb:0,maxProb:1,
+    markets:{sides:true,props:true},staking:'flat',kellyFrac:0.25,bankroll:100},opts||{});
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).filter(d=>arc[d].finals).sort();
+  const bets=[];
+
+  days.forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    if(o.markets.sides)(A.rows||[]).forEach(r=>{
+      const F=fin[r.id];
+      if(!F||F.a===null||F.h===null)return;
+      if(r.mh===null||r.mh===undefined||r.edge===null||r.edge===undefined)return;
+      const e=r.edge;
+      if(e<o.minEdge||e>o.maxEdge)return;
+      const modelP=r.sp;
+      if(modelP<o.minProb||modelP>o.maxProb)return;
+      const mktP=r.side===r.h?r.mh:(1-r.mh);
+      const price=btPrice(mktP);
+      if(F.a===F.h)return;                       // push, no action
+      const won=(F.h>F.a?r.h:r.a)===r.side;
+      bets.push({date:d,kind:'side',pick:r.side+' ML',game:r.a+'@'+r.h,
+        modelP,mktP,price,edge:e,won});
+    });
+    if(o.markets.props)(A.pgrades||[]).forEach(g=>{
+      const modelP=g.p;
+      if(modelP<o.minProb||modelP>o.maxProb)return;
+      // props carry no stored market price, so the model's own fair price is the
+      // reference — edge is unknowable here, so an edge filter can't apply
+      if(o.minEdge>0)return;
+      const price=btPrice(modelP);
+      bets.push({date:d,kind:'prop',pick:g.n+' '+g.m,game:'',
+        modelP,mktP:modelP,price,edge:null,won:!!g.hit});
+    });
+  });
+
+  bets.sort((a,b)=>a.date<b.date?-1:1);
+  let bank=o.bankroll,peak=o.bankroll,maxDD=0,staked=0,profit=0,w=0,l=0;
+  const curve=[],byDay={};
+  bets.forEach(b=>{
+    let stake=1;
+    if(o.staking==='kelly'){
+      const dec=b.price>0?(b.price/100+1):(100/Math.abs(b.price)+1);
+      const bOdds=dec-1;
+      const k=(b.modelP*bOdds-(1-b.modelP))/bOdds;
+      stake=Math.max(0,k*o.kellyFrac*bank);
+      stake=Math.min(stake,bank*0.1);          // never risk more than 10% on one bet
+    }
+    if(stake<=0)return;
+    staked+=stake;
+    const pl=b.won?btPayout(b.price,stake):-stake;
+    profit+=pl;bank+=pl;
+    b.won?w++:l++;
+    peak=Math.max(peak,bank);
+    maxDD=Math.max(maxDD,peak-bank);
+    byDay[b.date]=(byDay[b.date]||0)+pl;
+    curve.push({date:b.date,bank:+bank.toFixed(2)});
+  });
+  const n=w+l;
+  return{n,w,l,
+    winPct:n?+(w/n*100).toFixed(1):0,
+    staked:+staked.toFixed(2),
+    profit:+profit.toFixed(2),
+    roi:staked?+(profit/staked*100).toFixed(2):0,
+    endBank:+bank.toFixed(2),
+    maxDD:+maxDD.toFixed(2),
+    curve,byDay,bets,days:days.length};
+}
+
+// Sweep edge thresholds so the honest question — "where does my edge actually live?"
+// — gets a table instead of a guess.
+function backtestSweep(){
+  const bands=[[0,99],[2,99],[3,99],[4,99],[5,99],[6,99],[8,99],[10,99]];
+  return bands.map(([lo,hi])=>{
+    const r=runBacktest({minEdge:lo,maxEdge:hi,markets:{sides:true,props:false}});
+    return{label:lo===0?'All sides':`${lo}%+ edge`,...r};
+  }).filter(r=>r.n>0);
+}
+
+function sparkline(curve,w,h){
+  if(curve.length<2)return '';
+  const vals=curve.map(c=>c.bank);
+  const min=Math.min(...vals),max=Math.max(...vals),rng=(max-min)||1;
+  const pts=vals.map((v,i)=>`${(i/(vals.length-1))*w},${h-((v-min)/rng)*h}`).join(' ');
+  const up=vals[vals.length-1]>=vals[0];
+  const col=up?'var(--win)':'var(--rust)';
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none"
+    style="display:block;margin:8px 0">
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8"
+      stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+let BT_EDGE=0,BT_STAKE='flat',BT_MKT='sides';
+function renderBacktest(){
+  const arc=get(LS.arc,{});
+  const graded=Object.keys(arc).filter(d=>arc[d].finals).length;
+  if(graded<2)return `<div class="empty">Backtesting needs at least two graded days.
+    Currently have ${graded}.</div>`;
+
+  const markets=BT_MKT==='sides'?{sides:true,props:false}
+    :BT_MKT==='props'?{sides:false,props:true}:{sides:true,props:true};
+  const r=runBacktest({minEdge:BT_MKT==='props'?0:BT_EDGE,markets,staking:BT_STAKE});
+  const sweep=backtestSweep();
+  const pc=v=>v>0?'var(--win)':v<0?'var(--rust)':'var(--mute)';
+
+  const pills=(cur,opts,setter)=>`<div class="subnav">${opts.map(([k,l])=>
+    `<button class="${String(cur)===String(k)?'on':''}" onclick="${setter}=${typeof k==='number'?k:`'${k}'`};renderTickets()">${l}</button>`).join('')}</div>`;
+
+  let h=`<div class="tkt hi">
+    <h3>Backtest · ${graded} graded days</h3>
+    <div class="sub">Replays every pick the model actually made, at a realistic price
+    (fair odds plus ${(BT_HOLD*200).toFixed(1)}% two-way hold). Nothing here can see the
+    future — it only uses what was known when the pick was snapshotted.</div>
+  </div>
+  <div class="tkt">
+    <div class="mktlab" style="margin-top:0">Market</div>
+    ${pills(BT_MKT,[['sides','Sides'],['props','Props'],['both','Both']],'BT_MKT')}
+    ${BT_MKT!=='props'?`<div class="mktlab">Minimum edge</div>
+    ${pills(BT_EDGE,[[0,'Any'],[2,'2%+'],[3,'3%+'],[4,'4%+'],[5,'5%+'],[6,'6%+'],[8,'8%+']],'BT_EDGE')}`:''}
+    <div class="mktlab">Staking</div>
+    ${pills(BT_STAKE,[['flat','Flat $1'],['kelly','Quarter Kelly']],'BT_STAKE')}
+  </div>`;
+
+  if(!r.n)return h+`<div class="empty">No bets match that filter.</div>`;
+
+  h+=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:24px;color:${pc(r.roi)}">
+        ${r.roi>0?'+':''}${r.roi}%</div><div class="m">ROI</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:24px;color:${pc(r.profit)}">
+        ${r.profit>0?'+':''}$${r.profit}</div><div class="m">profit</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:24px">${r.winPct}%</div>
+        <div class="m">${r.w}-${r.l}</div></div>
+    </div>
+    ${sparkline(r.curve,300,54)}
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px;
+      font-size:11px;color:var(--mute);border-top:1px solid var(--hair);padding-top:9px">
+      <span>$${r.staked} staked</span>
+      <span>bank $${r.endBank}</span>
+      <span>max drawdown $${r.maxDD}</span>
+    </div>
+  </div>`;
+
+  if(sweep.length){
+    h+=`<div class="sbar"><h2>Where the edge actually lives</h2><div class="ln"></div></div>
+    <div class="tkt"><div class="sub" style="margin-bottom:8px">Sides only, flat stake.
+    If ROI climbs as the threshold rises, the edge signal is real. If it doesn't,
+    the model's edge number isn't telling you anything useful yet.</div>
+    ${sweep.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;
+      padding:7px 0;border-bottom:1px solid var(--hair)">
+      <span style="font-weight:600;font-size:12.5px">${x.label}</span>
+      <span style="text-align:right">
+        <span style="font-family:'Archivo';font-weight:800;color:${pc(x.roi)}">${x.roi>0?'+':''}${x.roi}%</span>
+        <span class="m" style="margin-left:8px">${x.w}-${x.l} · $${x.profit>0?'+':''}${x.profit}</span>
+      </span></div>`).join('')}</div>`;
+  }
+  return h;
+}
+
 /* ================= ALL-TIME RECORD ================= */
 // Every pick that's ever been made, from every source, decomposed down to individual
 // straight legs — a parlay counts as N separate record entries, not one. This is the
@@ -4347,14 +4802,10 @@ function buildAllTimeRecord(){
   get(LS.locked,[]).forEach(t=>{
     const bucket=t.source==='system'?system:mine;
     t.legs.forEach(x=>{
-      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
-      let hit=null,detail=null;
-      if(g&&g.abstract==='Final'){
-        hit=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
-        detail=gradeDetail(g,x.pick,x.isProp?{ptype:x.ptype,thr:x.thr,pid:x.pid}:null).detail;
-      }
+      const{hit,detail}=gradeLeg(x,t.date);
+      const gid=legGameId(x,t.date);
       bucket.push({date:t.date,pick:x.pick,game:x.game,p:x.p,hit,detail,
-        ticketId:t.id,gid:g?g.id:null,fromParlay:t.legs.length>1});
+        ticketId:t.id,gid:gid&&GAMES.some(z=>z.id===gid)?gid:null,fromParlay:t.legs.length>1});
     });
   });
 
@@ -4385,7 +4836,24 @@ function renderAllTimeRecord(){
   const tabBtn=(k,l,s)=>`<button class="${ATR_TAB===k?'on':''}" onclick="ATR_TAB='${k}';renderAllTimeRecord()">
     ${l} <span class="m">${s.w}-${s.l}</span></button>`;
 
-  let h=`<div class="tkt hi">
+  const clv=clvSummary();
+  const clvCard=clv.n>=5?`<div class="tkt" style="border-left:3px solid ${clv.avgMove>0?'var(--win)':'var(--rust)'}">
+    <div class="mktlab" style="margin-top:0">Closing line value · ${clv.n} picks</div>
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;
+        color:${clv.beatPct>=52?'var(--win)':'var(--rust)'}">${clv.beatPct}%</div>
+        <div class="m">beat the close</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;
+        color:${clv.avgMove>0?'var(--win)':'var(--rust)'}">${clv.avgMove>0?'+':''}${clv.avgMove}</div>
+        <div class="m">avg points moved</div></div>
+    </div>
+    <div class="sub" style="margin-top:8px">Beating the close on more than half your picks
+    predicts long-run profit better than win rate does. Under 50% means the market is
+    correcting against you after you bet.</div>
+  </div>`:(clv.n>0?`<div class="note">Closing line value: tracking started, ${clv.n} of 5 picks
+    needed before this means anything.</div>`:'');
+
+  let h=clvCard+`<div class="tkt hi">
     <h3>All-time record</h3>
     <div class="sub">Every parlay broken down leg by leg — a 3-1 parlay record shows up here as
     three separate wins and one loss, not one bundled result. This is the honest number.</div>
@@ -4668,8 +5136,10 @@ function rebuildSrcStats(){
 }
 
 /* ================= TICKETS TABS ================= */
-const TTABS=[['build','Build'],['presets','Presets'],['system','System'],['mine','Mine'],
-  ['record','Record'],['market','Market'],['consensus','Consensus'],['sources','Sources']];
+const TTABS=[['build','Build'],['mine','My picks'],['market','Market'],
+  ['outside','Outside'],['record','Record'],['backtest','Backtest']];
+let BUILD_MODE='custom';   // custom | presets | system
+let OUTSIDE_MODE='consensus';
 
 function renderTickets(){
   const nav=document.getElementById('ticketNav');
@@ -4677,14 +5147,23 @@ function renderTickets(){
   if(!nav||!body)return;
   nav.innerHTML=TTABS.map(([k,l])=>
     `<button class="${TICKETTAB===k?'on':''}" onclick="TICKETTAB='${k}';renderTickets()">${l}</button>`).join('');
-  if(TICKETTAB==='build')  body.innerHTML=buildTabHtml();
-  if(TICKETTAB==='presets')body.innerHTML=presetTabHtml();
-  if(TICKETTAB==='system'){body.innerHTML='<div id="tickets"><div class="empty">Building…</div></div>';setTimeout(()=>genTickets('system'),0)}
+  const modeRow=(cur,opts,setter)=>`<div class="subnav" style="margin-bottom:10px">${
+    opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
+  if(TICKETTAB==='build'){
+    const row=modeRow(BUILD_MODE,[['custom','Custom'],['presets','Presets'],['system','System']],'BUILD_MODE');
+    if(BUILD_MODE==='custom')  body.innerHTML=row+buildTabHtml();
+    if(BUILD_MODE==='presets') body.innerHTML=row+presetTabHtml();
+    if(BUILD_MODE==='system'){ body.innerHTML=row+'<div id="tickets"><div class="empty">Building…</div></div>';
+      setTimeout(()=>genTickets('system'),0)}
+  }
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
   if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
+  if(TICKETTAB==='backtest')body.innerHTML=renderBacktest();
   if(TICKETTAB==='market') body.innerHTML=marketPicksHtml();
-  if(TICKETTAB==='consensus')body.innerHTML=consensusHtml();
-  if(TICKETTAB==='sources')body.innerHTML=sourcesHtml();
+  if(TICKETTAB==='outside'){
+    const row=modeRow(OUTSIDE_MODE,[['consensus','Consensus'],['sources','Source records']],'OUTSIDE_MODE');
+    body.innerHTML=row+(OUTSIDE_MODE==='consensus'?consensusHtml():sourcesHtml());
+  }
   window.scrollTo(0,0);
 }
 
@@ -4724,18 +5203,14 @@ function buildTabHtml(){
 // as if it were decided.
 function ticketIsComplete(t){
   return t.legs.every(x=>{
-    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
-    if(!g||g.abstract!=='Final')return false;
-    const r=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+    const r=gradeLeg(x,t.date).hit;
     return r===true||r===false;
   });
 }
 function ticketRecord(t){
   let w=0,l=0;
   t.legs.forEach(x=>{
-    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
-    if(!g||g.abstract!=='Final')return;
-    const r=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+    const r=gradeLeg(x,t.date).hit;
     if(r===true)w++;else if(r===false)l++;
   });
   return{w,l,won:l===0&&w>0};
@@ -4744,20 +5219,14 @@ function archiveTicket(id){
   const L=get(LS.locked,[]);
   const t=L.find(x=>x.id===id);
   if(!t)return;
-  // force a fresh grade check right now — never trust a stale render. If any leg's
-  // game hasn't gone final yet, refuse and tell them exactly what's still pending.
   if(!ticketIsComplete(t)){
-    const pending=t.legs.filter(x=>{
-      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
-      return !g||g.abstract!=='Final';
-    }).map(x=>x.game);
-    alert(`Can't archive yet — still waiting on: ${[...new Set(pending)].join(', ')}. Grade everything from Settings once those finish, then archive.`);
+    const pending=t.legs.filter(x=>gradeLeg(x,t.date).hit===null).map(x=>x.game);
+    alert(`Can't archive yet — still waiting on: ${[...new Set(pending)].join(', ')}. Try "Grade everything now" in Settings first.`);
     return;
   }
   t.archived=true;
   t.archivedAt=Date.now();
-  const rec=ticketRecord(t);
-  t.finalRecord=rec;
+  t.finalRecord=ticketRecord(t);
   set(LS.locked,L);
   renderTickets();
 }
@@ -4990,7 +5459,10 @@ function confirmSystemTicket(payload){
   const L=get(LS.locked,[]);
   const id=Date.now();
   L.unshift({id,date:today(),
-    legs:legs.map(x=>({id:id+'|'+x.pick,...x})),
+    legs:legs.map(x=>{
+      const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      return{id:id+'|'+x.pick,...x,gid:x.gid||(gm?gm.id:null),gameDate:x.gameDate||today()};
+    }),
     p:legs.reduce((a,x)=>a*x.p,1),source:'system'});
   set(LS.locked,L);
   renderTickets();
@@ -5013,15 +5485,11 @@ function genTickets(mode){
     set_.forEach(t=>{
       let w=0,l=0,pd=0;
       const rows=t.legs.map(x=>{
-        const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
-        let r=null,badgeHtml='';
-        if(g&&(g.abstract==='Final'||g.abstract==='Live')){
-          r=x.isProp?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
-          if(g.abstract==='Live'&&r===null)r=null; // live legs stay pending until final
-          badgeHtml=gradeBadge(g,x.pick,x.isProp?{ptype:x.ptype,thr:x.thr,pid:x.pid}:null);
-        }
+        const{hit:r}=gradeLeg(x,t.date);
+        const badgeHtml=gradeLegBadge(x,t.date);
         if(r===true)w++;else if(r===false)l++;else pd++;
-        const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
+        const gid=legGameId(x,t.date);
+        const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
         return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
       }).join('');
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
@@ -5103,7 +5571,8 @@ function genTickets(mode){
       const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
       if(!g||(g.abstract!=='Final'&&g.abstract!=='Live'))return{r:null,g,badge:''};
       const r=gradePropFromBox(g,{name:x.name,ptype:x.type,thr:x.thr,mkt:x.mkt});
-      const badge=gradeBadge(g,x.name+' '+x.mkt,{ptype:x.type,thr:x.thr,pid:x.pid});
+      const badge=gradeLegBadge({game:x.game,pick:x.name+' '+x.mkt,isProp:1,
+        ptype:x.type,thr:x.thr,pid:x.pid,gid:g?g.id:null,gameDate:today()},today());
       return{r,g,badge};
     };
     const gameList=Object.keys(byGame).map(gm=>{
@@ -5304,7 +5773,7 @@ function liveScoreBar(gid,g){
   const betStrip=myLegs.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;
     padding-top:7px;border-top:1px solid var(--rule)">
     ${myLegs.map(x=>{
-      const badge=x.isProp?gradeBadge(g,x.pick,{ptype:x.ptype,thr:x.thr,pid:x.pid}):gradeBadge(g,x.pick,null);
+      const badge=gradeLegBadge(x,x.gameDate||today());
       return `<div style="font-size:11px"><span style="color:var(--chalk)">${x.pick}</span> ${badge}</div>`;
     }).join('')}
   </div>`:'';
@@ -5799,7 +6268,8 @@ async function hardRecalibrate(){
     +(changed.length?'What changed and why:\n'+changed.join('\n'):'Not enough graded volume yet on any prop type to show a real adjustment breakdown.')
     +'\n\nAny game that hasn\'t started yet already reflects this — anything already locked from a past day stays exactly as it was graded.');
 }
-const GTABS=[['sides','Sides'],['props','Props'],['picks','Picks'],['f5','First 5'],['calib','Calibration'],['learn','Learning'],['days','By day'],['stats','Sim vs Book']];
+const GTABS=[['results','Results'],['calib','Calibration'],['history','History'],['stats','Sim vs Book']];
+let RESULTS_MODE='sides',HIST_MODE='days',CALIB_MODE='calib';
 async function unlockTodayAndRegrade(){
   const arc=get(LS.arc,{});
   const d=today();
@@ -5901,8 +6371,19 @@ async function renderGrades(force){
   const pct=(w,l)=>w+l?((w/(w+l))*100).toFixed(1)+'%':'—';
   const TN={hits:'Hits',tb:'Total bases',rbi:'RBI',k:'Strikeouts',bb:'Walks allowed',ha:'Hits allowed',hr:'Home runs'};
   let h='';
-  if(GRADETAB==='sides'){
-    h=`<div class="tkt hi"><h3>${pct(sW,sL)}</h3><div class="sub">straight sides · <b>${sW}-${sL}</b></div>
+  const innerRow=(cur,opts,setter)=>`<div class="subnav">${opts.map(([k,l])=>
+    `<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderGrades()">${l}</button>`).join('')}</div>`;
+  if(GRADETAB==='results'){
+    h=innerRow(RESULTS_MODE,[['sides','Sides'],['props','Props'],['f5','First 5'],['picks','Every pick']],'RESULTS_MODE');
+  }
+  if(GRADETAB==='calib'){
+    h=innerRow(CALIB_MODE,[['calib','Corrections'],['learn','Learned bias']],'CALIB_MODE');
+  }
+  if(GRADETAB==='history'){
+    h=innerRow(HIST_MODE,[['days','By day'],['recap','Share card']],'HIST_MODE');
+  }
+  if(GRADETAB==='results'&&RESULTS_MODE==='sides'){
+    h+=`<div class="tkt hi"><h3>${pct(sW,sL)}</h3><div class="sub">straight sides · <b>${sW}-${sL}</b></div>
       <ol style="list-style:none;padding-left:0">
       <li>Flagged 3+ edge <span class="pp">${pct(fW,fL)}</span> <span class="m">${fW}-${fL}</span></li>
       <li>Total runs, avg miss <span class="pp">${tN?(tErr/tN).toFixed(2):'—'}</span> <span class="m">across ${tN} games</span></li>
@@ -5914,8 +6395,8 @@ async function renderGrades(force){
         .map(m=>`<li>${m.g} <span class="m">${m.d} · picked <b>${m.side}</b> · proj ${m.proj}, actual ${m.act}, off ${m.scErr.toFixed(1)}</span>
         ${m.hit?'<span class="pp">✅</span>':'<span style="color:var(--rust)">❌</span>'}</li>`).join('')}</ol></div>`;
   }
-  if(GRADETAB==='props'){
-    h=`<div class="tkt hi"><h3>${pct(pW,pL)}</h3><div class="sub">graded props · <b>${pW}-${pL}</b></div>
+  if(GRADETAB==='results'&&RESULTS_MODE==='props'){
+    h+=`<div class="tkt hi"><h3>${pct(pW,pL)}</h3><div class="sub">graded props · <b>${pW}-${pL}</b></div>
       <ol style="list-style:none;padding-left:0">${Object.keys(pType).sort((a,b)=>pType[b].n-pType[a].n).map(t=>{
       const o=pType[t],act=(o.w/o.n)*100,exp=(o.e/o.n)*100,off=act-exp;
       const cl=Math.abs(off)<=5?'p90':Math.abs(off)<=10?'p80':'plow';
@@ -5923,15 +6404,15 @@ async function renderGrades(force){
         actual <span class="pp ${cl}">${act.toFixed(0)}%</span> <span class="m">${off>0?'+':''}${off.toFixed(0)}</span></li>`}).join('')}
       </ol></div>`;
   }
-  if(GRADETAB==='picks'){
+  if(GRADETAB==='results'&&RESULTS_MODE==='picks'){
     const pickDays=dates.filter(d=>arc[d].pgrades&&arc[d].pgrades.length);
     if(!PICKSDAY||!pickDays.includes(PICKSDAY))PICKSDAY=pickDays[0]||null;
     if(!pickDays.length){
-      h='<div class="empty">No individual props graded yet. Open this tab after a slate finishes.</div>';
+      h+='<div class="empty">No individual props graded yet. Open this tab after a slate finishes.</div>';
     }else{
       const picks=arc[PICKSDAY].pgrades;
       const w=picks.filter(o=>o.hit).length,l=picks.length-w;
-      h=`<div class="subnav">${pickDays.slice(0,10).map(d=>
+      h+=`<div class="subnav">${pickDays.slice(0,10).map(d=>
         `<button class="${d===PICKSDAY?'on':''}" onclick="PICKSDAY='${d}';renderGrades()">${d}</button>`).join('')}</div>
       <div class="tkt hi"><h3>${w}-${l}</h3><div class="sub">every individual prop graded on ${PICKSDAY}</div></div>
       <div class="tkt"><ol style="list-style:none;padding-left:0">${picks.map(o=>
@@ -5940,13 +6421,13 @@ async function renderGrades(force){
       </ol></div>`;
     }
   }
-  if(GRADETAB==='f5'){
-    h=`<div class="tkt hi"><h3>${pct(f5W,f5L)}</h3><div class="sub">first five innings · <b>${f5W}-${f5L}</b></div>
+  if(GRADETAB==='results'&&RESULTS_MODE==='f5'){
+    h+=`<div class="tkt hi"><h3>${pct(f5W,f5L)}</h3><div class="sub">first five innings · <b>${f5W}-${f5L}</b></div>
       <div class="sub">F5 strips out bullpen variance, which is the single largest source of noise in a
       full-game projection. If this number runs meaningfully better than the straight-side number, the
       model reads starters well and relievers poorly.</div></div>`;
   }
-  if(GRADETAB==='calib'){
+  if(GRADETAB==='calib'&&CALIB_MODE==='calib'){
     const c=get(LS.calib,{}),ty=c.types||{};
     const drift=get('d4.drift',null);
     const trend=calibrationTrend();
@@ -5974,7 +6455,7 @@ async function renderGrades(force){
       the average miss size should trend down over time, not just bounce around. A steady ↓ means
       yesterday's correction is helping; a steady ↑ means something's fighting the correction.</div>
     </div>`:'';
-    h=driftHtml+trendHtml+`<div class="sbar"><h2>Active corrections</h2><div class="ln"></div></div><div class="tkt hi">
+    h+=driftHtml+trendHtml+`<div class="sbar"><h2>Active corrections</h2><div class="ln"></div></div><div class="tkt hi">
       <div class="sub">Every prop probability is multiplied by its type's factor before display, computed from
       your own graded history. Recomputes each time grades refresh.</div>
       <ol style="list-style:none;padding-left:0">${Object.keys(ty).map(t=>{
@@ -5998,13 +6479,13 @@ async function renderGrades(force){
           <span class="pp ${cl}">${act.toFixed(0)}%</span> <span class="m">${off>0?'+':''}${off.toFixed(0)}</span></li>`}).join('')||'<li class="m">Not enough graded props.</li>'}
       </ol></div>`;
   }
-  if(GRADETAB==='learn'){
+  if(GRADETAB==='calib'&&CALIB_MODE==='learn'){
     const E=computeEntities();
     const tk=Object.keys(E.teams).filter(t=>E.teams[t].n>=MIN_SHOW)
       .sort((a,b)=>Math.abs(E.teams[b].rawBias)-Math.abs(E.teams[a].rawBias));
     const pk=Object.keys(E.players).filter(p=>E.players[p].n>=6)
       .sort((a,b)=>Math.abs(E.players[b].f-1)-Math.abs(E.players[a].f-1)).slice(0,30);
-    h=`<div class="tkt hi"><h3>How it learns</h3>
+    h+=`<div class="tkt hi"><h3>How it learns</h3>
       <div class="sub">Each correction is shrunk by n/(n+k) — with a handful of games a team barely moves the
       projection, with dozens it moves most of the way. That's what keeps one blowout from rewriting the model.
       Team corrections are capped at ±0.85 runs and start at ${MIN_SHOW} games. Player prop corrections start at 6.</div>
@@ -6036,7 +6517,7 @@ async function renderGrades(force){
       player and his props are now discounted. Over 1.00 means it's been too pessimistic.</div></div>`
       :'<div class="empty">Need at least 6 graded props per player.</div>';
   }
-  if(GRADETAB==='days'){
+  if(GRADETAB==='history'&&HIST_MODE==='days'){
     h=days.map(D=>`<div class="tkt"><h3>${D.d}</h3><div class="sub"><b>${D.dW}-${D.dL}</b> on sides</div>
       <ol>${D.rows.map(r=>{const F=D.fin[r.id];
         if(!F)return `<li>${r.a}@${r.h} <span class="m">pending</span></li>`;
@@ -6048,6 +6529,19 @@ async function renderGrades(force){
   }
   if(GRADETAB==='stats'){
     h=renderStatsTab();
+  }
+  if(GRADETAB==='history'&&HIST_MODE==='recap'){
+    // Recap used to be its own top-level tab; it's the same backward-looking day
+    // review the rest of this screen does, so it lives here now.
+    body.innerHTML=syncLine()+h+'<div id="recapHost"></div>';
+    setTimeout(()=>{
+      const host=document.getElementById('recapHost');
+      const src=document.getElementById('v-recap');
+      if(host&&src)host.innerHTML=src.innerHTML;
+      try{renderRecap()}catch(e){}
+    },0);
+    document.getElementById('nR').textContent=dates.length;
+    return;
   }
   body.innerHTML=syncLine()+h;
   document.getElementById('nR').textContent=dates.length;
@@ -6621,6 +7115,10 @@ async function forceGradeEverything(){
     try{settleLockedTickets();steps.push('Bankroll settlement checked.');}
     catch(e){steps.push('Bankroll settlement skipped (error).');}
 
+    // walk every ungraded ticket leg across ALL past dates, fetch whatever finals and
+    // box scores are missing, and settle — this is what un-sticks yesterday's tickets
+    const bf=await backfillGrading(false);
+    if(bf)steps.push(`Backfill: checked ${bf.dates.length} date(s), fetched ${bf.boxes} box score(s), ${bf.stillPending} leg(s) still genuinely pending.`);
     LAST_FINAL_COUNT=GAMES.filter(g=>g.abstract==='Final').length;
 
     if(status)status.innerHTML=`<div class="tkt hi"><h3>Done</h3>
@@ -6660,6 +7158,7 @@ async function autoGradeIfFinals(){
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){}
     try{gradeExtPicks();}catch(e){}
     try{settleLockedTickets();}catch(e){}
+    try{await backfillGrading(true);}catch(e){}
     // refresh whatever view is currently open so the new grades show immediately
     const active=document.querySelector('.view.on');
     if(active){
@@ -6680,12 +7179,14 @@ async function boot(){
   H2H=(get(LS.h2h,{}).pairs)||{};SPLITS=(get(LS.splits,{}).teams)||{};ODDS_BYDATE=get(LS.oddsdate,{});
   await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);
   await loadESPN();
+  // catch up anything left ungraded from previous days before painting anything
+  try{await backfillGrading(true)}catch(e){console.warn('backfill',e)}
   snapshot();snapshotBest();paintSlip();renderDayPicker();renderBookStatus();
   if(BOOTED)return;  // settings can be reopened/resaved any number of times — background
                       // timers only ever get registered once, first boot, no matter how
                       // many times saveKeys() runs afterward
   BOOTED=true;
-  setInterval(()=>loadOdds(false),3e5);
+  setInterval(()=>{loadOdds(false).then(()=>{try{captureCLV()}catch(e){}})},3e5);
   setInterval(()=>loadSharp(false),3e5);
   if(get(LS.ghrepo,'')&&get(LS.ghtoken,'')){
     const last=Number(localStorage.getItem('d4.lastGhSync')||0);
