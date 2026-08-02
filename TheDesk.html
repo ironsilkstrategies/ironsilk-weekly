@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v62</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v63</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -4728,30 +4728,81 @@ function sourceSelfConflict(g){
 
 
 
+const LS_EVAL='d4.evalrun';
+// fingerprint of everything that feeds an evaluation — if this changes, the last
+// run is stale and the screen says so instead of quietly showing old conclusions
+function evalInputFingerprint(){
+  const d=today();
+  return JSON.stringify({
+    games:GAMES.length,
+    sims:GAMES.filter(g=>SIMS[g.id]).length,
+    book:(get(LS.bookshots,{})[d]||[]).length,
+    picks:(getExt()[d]||[]).length,
+    trends:(get(LS.exttrends,{})[d]||[]).length,
+    cons:(get(LS.extconsensus,{})[d]||[]).length,
+    calib:(get('d4.drift',{})||{}).n||0
+  });
+}
+function lastEvalRun(){
+  const r=get(LS_EVAL,null);
+  return r&&r.date===today()?r:null;
+}
+
 function renderMasterEval(){
-  const evals=masterEvaluation();
-  const nPicks=Object.keys(getExt()[today()]||{}).length?(getExt()[today()]||[]).length:0;
-  const nTrends=(get(LS.exttrends,{})[today()]||[]).length;
-  const nCons=(get(LS.extconsensus,{})[today()]||[]).length;
-  const nBook=(get(LS.bookshots,{})[today()]||[]).length;
+  const d=today();
+  const nPicks=(getExt()[d]||[]).length;
+  const nTrends=(get(LS.exttrends,{})[d]||[]).length;
+  const nCons=(get(LS.extconsensus,{})[d]||[]).length;
+  const nBook=(get(LS.bookshots,{})[d]||[]).length;
+  const nSim=GAMES.filter(g=>SIMS[g.id]).length;
+  const run=lastEvalRun();
+  const fp=evalInputFingerprint();
+  const stale=run&&run.fingerprint!==fp;
+
+  const chip=(ok,label,n)=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <span style="width:7px;height:7px;border-radius:50%;background:${ok?'var(--win)':'var(--rule)'};
+      flex:0 0 auto"></span>
+    <span style="color:${ok?'var(--chalk)':'var(--mute)'}">${label}</span>
+    <span class="m">${n}</span></div>`;
+
+  const status=!run
+    ?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">
+       <b style="color:var(--gold)">Not evaluated yet today.</b> Load what you've got below,
+       then hit Run evaluation.</div>`
+    :stale
+    ?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">
+       <b style="color:var(--gold)">Inputs changed since the last run.</b>
+       Last evaluated ${new Date(run.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} —
+       new data has come in since. Run it again for a current read.</div>`
+    :`<div class="note" style="border-left:3px solid var(--win);padding-left:10px">
+       <b style="color:var(--win)">✓ Evaluated ${new Date(run.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</b>
+       — ${run.evals.length} games scored against ${run.sourceCount} inputs. Nothing has changed since.</div>`;
 
   const feed=`<div class="tkt hi">
     <h3>Master evaluation</h3>
-    <div class="sub">Every independent read on tonight's board, weighed together.
-    Sources in play right now: <b>${GAMES.length}</b> games simulated ·
-    <b>${nBook}</b> book lines · <b>${nPicks}</b> outside picks ·
-    <b>${nTrends}</b> trends · <b>${nCons}</b> consensus rows.</div>
-    <div class="bar" style="margin-top:9px">
-      <button class="primary" onclick="runMasterEval()">Run evaluation</button>
+    <div class="sub" style="margin-bottom:9px">Weighs every independent read on tonight's board
+    against every other one. Green dots are loaded and feeding in.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 14px">
+      ${chip(nSim>0,'Simulations',nSim)}
+      ${chip(nBook>0,'Book lines',nBook)}
+      ${chip(nPicks>0,'Outside picks',nPicks)}
+      ${chip(nTrends>0,'Trends',nTrends)}
+      ${chip(nCons>0,'Public consensus',nCons)}
+      ${chip(((get('d4.drift',{})||{}).n||0)>0,'Calibration',(get('d4.drift',{})||{}).n||0)}
+    </div>
+    <div class="bar" style="margin-top:11px">
+      <button class="primary" id="evalRunBtn" onclick="runMasterEval()">
+        ${run&&!stale?'Re-run evaluation':'Run evaluation'}</button>
       <button onclick="forceGradeEverything()">Calibrate first</button>
     </div>
-  </div>`;
+  </div>${status}`;
 
-  if(!evals.length)return feed+'<div class="empty">No games to evaluate yet.</div>';
+  if(!run)return feed+`<div class="empty">Results appear here once you run it.</div>`;
+  const evals=run.evals;
+  if(!evals.length)return feed+'<div class="empty">No games were available to evaluate.</div>';
 
   const counts={strong:0,lean:0,split:0,away:0};
   evals.forEach(e=>counts[e.verdict]++);
-
   const summary=`<div class="tkt">
     <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
       ${['strong','lean','split','away'].map(k=>`<div>
@@ -4772,7 +4823,7 @@ function renderMasterEval(){
       <div class="mktlab" style="margin-top:0;color:var(--rust)">Conflicts</div>
       ${e.conflicts.map(c=>`<div class="sub" style="color:var(--rust)">${c.detail}</div>`).join('')}
     </div>`:'';
-    const droppedRows=e.trendsDropped.length?`<div style="margin-top:8px;padding-top:8px;
+    const droppedRows=(e.trendsDropped||[]).length?`<div style="margin-top:8px;padding-top:8px;
       border-top:1px solid var(--hair)">
       <div class="mktlab" style="margin-top:0">Trends that don't apply tonight</div>
       ${e.trendsDropped.slice(0,4).map(t=>`<div class="sub" style="opacity:.65">
@@ -4791,8 +4842,7 @@ function renderMasterEval(){
         </div>
       </div>
       <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap">
-        <span style="font-size:12.5px"><b style="color:${V.color}">${e.side}</b>
-          <span class="m">side</span></span>
+        <span style="font-size:12.5px"><b style="color:${V.color}">${e.side}</b> <span class="m">side</span></span>
         <span style="font-size:12.5px"><b>${e.totalLean.toUpperCase()} ${e.totalLine}</b>
           <span class="m">${e.totalAgreement}% agree</span></span>
       </div>
@@ -4804,13 +4854,23 @@ function renderMasterEval(){
     </div>`;
   }).join('');
 
-  return feed+summary+
-    `<div class="note">${VERDICT.strong.note} ${VERDICT.away.note}</div>`+cards;
+  return feed+summary+`<div class="note">${VERDICT.strong.note} ${VERDICT.away.note}</div>`+cards;
 }
 function runMasterEval(){
-  const b=document.getElementById('ticketBody');
-  if(b)b.innerHTML=renderMasterEval();
-  window.scrollTo(0,0);
+  const btn=document.getElementById('evalRunBtn');
+  if(btn){btn.disabled=true;btn.textContent='Evaluating…'}
+  // let the button paint before the work blocks the thread
+  setTimeout(()=>{
+    const evals=masterEvaluation();
+    const d=today();
+    set(LS_EVAL,{date:d,ts:Date.now(),fingerprint:evalInputFingerprint(),
+      evals,
+      sourceCount:(getExt()[d]||[]).length+(get(LS.exttrends,{})[d]||[]).length
+        +(get(LS.extconsensus,{})[d]||[]).length+(get(LS.bookshots,{})[d]||[]).length});
+    const b=document.getElementById('ticketBody');
+    if(b)b.innerHTML=renderMasterEval();
+    window.scrollTo(0,0);
+  },40);
 }
 
 /* ================= MASTER EVALUATION =================
