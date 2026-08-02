@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v60</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v62</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1880,7 +1880,7 @@ function f5OverAt(s,line){return Math.min(.92,Math.max(.08,.5+(s.f5tot-line)*.16
 // Each preset picks legs from the same unfiltered pools the builder uses, but sorts
 // and filters by a different signal — probability, edge direction, or market-vs-model
 // disagreement — so "best" means something different depending on what you're after.
-let PRESET_MODE='easy';
+let PRESET_MODE='sysbest';
 let ALLOW_DUPES=false;
 
 function currentLockedPickSet(){
@@ -1916,108 +1916,72 @@ let PRESET_MARKETS=new Set(['ml','rl','total','prop']);
 
 function buildPreset(mode){
   let pool=applyDupeFilter(fullPresetPool());
-  // market-type filter — combo and lucky10 have fixed shapes that don't respect this,
-  // every other preset only draws from the market types currently toggled on
-  if(mode!=='combo'&&mode!=='lucky10'){
-    pool=pool.filter(l=>{
-      if(l.kind==='side')return PRESET_MARKETS.has('ml');
-      if(l.kind==='rl')return PRESET_MARKETS.has('rl');
-      if(l.kind==='total')return PRESET_MARKETS.has('total');
-      if(l.kind==='prop'||l.kind==='hr')return PRESET_MARKETS.has('prop');
-      return true;
+  pool=pool.filter(l=>{
+    if(l.kind==='side')return PRESET_MARKETS.has('ml');
+    if(l.kind==='rl')return PRESET_MARKETS.has('rl');
+    if(l.kind==='total')return PRESET_MARKETS.has('total');
+    if(l.kind==='prop'||l.kind==='hr')return PRESET_MARKETS.has('prop');
+    return true;
+  });
+  const n=TARGET_LEGS||4;
+
+  if(mode==='sysbest'){
+    // purely the simulator's own conviction — market price is irrelevant here
+    return pool.filter(l=>l.modelP>=0.5).sort((a,b)=>b.modelP-a.modelP).slice(0,n);
+  }
+  if(mode==='booklean'){
+    // purely where the market's money is — the model gets no say
+    return pool.filter(l=>l.marketP>=0.5).sort((a,b)=>b.marketP-a.marketP).slice(0,n);
+  }
+  if(mode==='fucksystem'){
+    // exact inversion of sysbest: whatever the sim rates worst
+    return pool.filter(l=>l.modelP>0&&l.modelP<=0.5).sort((a,b)=>a.modelP-b.modelP).slice(0,n);
+  }
+  if(mode==='outside'){
+    // built from what other sites published, matched onto tonight's board.
+    // Consensus picks (more than one source on the same side) sort first, then
+    // by how many sources backed them.
+    const ext=extToday();
+    if(!ext.length)return [];
+    const groups={};
+    ext.forEach(x=>{
+      if(!x.gid)return;
+      const g=GAMES.find(z=>z.id===x.gid);
+      if(!g||g.abstract==='Final')return;
+      const s2=SIMS[g.id];
+      let pick=null,p=null;
+      if(x.market==='moneyline'){
+        const ab=x.side==='home'?g.home.abbr:g.away.abbr;
+        pick=ab+' ML';p=s2?(x.side==='home'?s2.hw:s2.aw):0.5;
+      }else if(x.market==='total'&&x.line!=null){
+        pick=(x.side==='over'?'Over ':'Under ')+x.line;
+        p=s2?(x.side==='over'?s2.over(x.line):1-s2.over(x.line)):0.5;
+      }else if(x.market==='runline'&&x.line!=null){
+        const ab=x.side==='home'?g.home.abbr:g.away.abbr;
+        pick=ab+' '+(x.line>0?'+':'')+x.line;
+        p=s2?rlProb(g,s2,x.side,-x.line):0.5;
+      }
+      if(!pick||p==null)return;
+      const k=x.game+'|'+pick;
+      groups[k]=groups[k]||{pick,game:x.game,p,kind:x.market==='total'?'total':x.market==='runline'?'rl':'side',srcs:new Set()};
+      groups[k].srcs.add(x.src);
     });
+    return Object.values(groups)
+      .map(g=>({...g,nSrc:g.srcs.size}))
+      .sort((a,b)=>b.nSrc-a.nSrc||b.p-a.p)
+      .slice(0,n);
   }
-  const sides=pool.filter(l=>l.kind==='side');
-  const rls=pool.filter(l=>l.kind==='rl');
-  const totals=pool.filter(l=>l.kind==='total');
-  const props=pool.filter(l=>l.kind==='prop'||l.kind==='hr');
-  const legalPush=(combo,leg,sgp)=>{if(legalToAdd(combo,leg,sgp))combo.push(leg)};
-
-  if(mode==='easy'){
-    // straight highest model probability, no edge requirement — the safest reads
-    return pool.filter(l=>l.modelP>=0.55).sort((a,b)=>b.modelP-a.modelP).slice(0,TARGET_LEGS||4);
-  }
-
-  if(mode==='tailbooks'){
-    // whatever side the market itself favors most — highest marketP, ignore the model entirely
-    return pool.filter(l=>l.marketP>=0.52).sort((a,b)=>b.marketP-a.marketP).slice(0,TARGET_LEGS||4);
-  }
-
-  if(mode==='fadebooks'){
-    // the side the market likes LEAST — true underdogs by market price, model unused
-    return pool.filter(l=>l.marketP<=0.48&&l.marketP>0).sort((a,b)=>a.marketP-b.marketP).slice(0,TARGET_LEGS||4);
-  }
-
-  if(mode==='tailsystem'){
-    // whatever side the SIM likes most, independent of what the market thinks
-    return pool.filter(l=>l.modelP>=0.52).sort((a,b)=>b.modelP-a.modelP).slice(0,TARGET_LEGS||4);
-  }
-
-  if(mode==='fadesystem'){
-    // the side the sim likes LEAST — deliberately taking the model's least favorite outcome
-    return pool.filter(l=>l.modelP<=0.48&&l.modelP>0).sort((a,b)=>a.modelP-b.modelP).slice(0,TARGET_LEGS||4);
-  }
-
-  if(mode==='combo'){
-    // ML + Total paired on the SAME game for as many games as needed — classic SGP shape
-    const byGame={};
-    sides.forEach(l=>{(byGame[l.game]=byGame[l.game]||{}).ml=l});
-    totals.forEach(l=>{
-      const b=byGame[l.game];if(!b)return;
-      const best=!b.total||l.p>b.total.p;
-      if(best)byGame[l.game].total=l;
-    });
-    const pairs=Object.values(byGame).filter(x=>x.ml&&x.total)
-      .sort((a,b)=>(b.ml.p*b.total.p)-(a.ml.p*a.total.p));
-    const n=Math.ceil((TARGET_LEGS||4)/2);
-    const out=[];
-    pairs.slice(0,n).forEach(x=>{out.push(x.ml);out.push(x.total)});
-    return out;
-  }
-
-  if(mode==='lucky10'){
-    // exactly 3 ML + 3 RL + 3 Total + 1 best-value underdog, best probability within each bucket
-    const combo=[];
-    const sgp=false;
-    sides.sort((a,b)=>b.p-a.p).forEach(l=>{
-      if(combo.filter(c=>c.kind==='side').length>=3)return;
-      legalPush(combo,l,sgp);
-    });
-    rls.sort((a,b)=>b.p-a.p).forEach(l=>{
-      if(combo.filter(c=>c.kind==='rl').length>=3)return;
-      legalPush(combo,l,sgp);
-    });
-    totals.sort((a,b)=>b.p-a.p).forEach(l=>{
-      if(combo.filter(c=>c.kind==='total').length>=3)return;
-      legalPush(combo,l,sgp);
-    });
-    // best-value underdog: p<0.5 (a real dog) with the single highest edge available
-    const dogs=pool.filter(l=>l.p<0.48&&l.marketP&&l.marketP<0.48)
-      .sort((a,b)=>edgeOf(b)-edgeOf(a));
-    if(dogs.length&&!combo.some(c=>c.game===dogs[0].game))combo.push(dogs[0]);
-    return combo;
-  }
-
-  if(mode==='armageddon'){
-    // deliberately go against every positive-edge signal — take the picks with the
-    // WORST edge (model most disagrees with, in the market's favor) across the board.
-    // This is chaos mode, not a recommendation — labeled as such in the UI.
-    return pool.filter(l=>edgeOf(l)<=-4).sort((a,b)=>edgeOf(a)-edgeOf(b)).slice(0,TARGET_LEGS||4);
-  }
-
   return [];
 }
 
 const PRESETS=[
-  ['easy','Easy wins','Highest model probability, no edge required — the safest available reads.'],
-  ['tailbooks','Tail the books','Whatever side the market itself favors most. Ignores the model entirely.'],
-  ['fadebooks','Fade the books','The side the market likes least — true underdogs by market price alone.'],
-  ['tailsystem','Tail the system','Whatever side the simulator likes most, independent of the market.'],
-  ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome.'],
-  ['combo','Combination+','Moneyline + Total paired together on the same game, for as many games as needed.'],
-  ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge.'],
-  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation.']
+  ['sysbest','Systems best','The picks the simulator rates highest, independent of what the market thinks. Files under System picks.'],
+  ['booklean','Books lean','Whatever side the market itself is pricing hardest. The model gets no vote here. Files under Book picks.'],
+  ['outside','Outside picks','Built from picks uploaded off other sites — OddsShark, Covers, Picks and Parlays. Files under Outside picks.'],
+  ['fucksystem','Fuck the system','Straight inversion of Systems best — every side the simulator likes least. Files under My picks.']
 ];
+// which bucket a ticket lands in when confirmed from each preset
+const PRESET_SOURCE={sysbest:'system',booklean:'book',outside:'outside',fucksystem:'mine'};
 
 function toggleWonMarket(m,btn){
   btn.classList.toggle('on');
@@ -2034,7 +1998,8 @@ function presetTabHtml(){
   const legRows=legs.map(l=>{
     const e=edgeOf(l);
     const eTxt=e?` <span style="color:${e>=4?'var(--win)':e<=-4?'var(--rust)':'var(--mute)'}">${e>0?'+':''}${e.toFixed(1)} edge</span>`:'';
-    return `<li>${l.pick} <span class="m">${l.game}</span>
+    const srcTag=l.nSrc?` <span class="flag cool">${l.nSrc} source${l.nSrc>1?'s':''}</span>`:'';
+    return `<li>${l.pick} <span class="m">${l.game}</span>${srcTag}
       <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}</li>`;
   }).join('');
   const payload=encodeURIComponent(JSON.stringify(legs.map(l=>({game:l.game,pick:l.pick,p:l.p,isProp:l.kind==='prop'||l.kind==='hr'}))));
@@ -2065,7 +2030,7 @@ function presetTabHtml(){
     ${legs.length?`<div class="sub"><b>${(combined*100).toFixed(combined<.01?3:1)}%</b> combined ·
       ${legs.length} legs · 1 in ${Math.round(1/combined).toLocaleString()}</div>
       <ol style="list-style:none;padding:0;margin:10px 0">${legRows}</ol>
-      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}')">Confirm &amp; save</button></div>`
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}')">Confirm &amp; save</button></div>`
       :'<div class="empty">Not enough qualifying legs on the board for this preset right now.</div>'}
   </div>`;
 }
@@ -4060,6 +4025,7 @@ function lockBuiltTicket(){
   const id=Date.now();
   const locked=get(LS.locked,[]);
   locked.push({id,date:fmtDate(new Date()),
+    source:'mine',
     legs:LAST_COMBO.map(l=>{
       const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
       return{id:id+'|'+l.pick,game:l.game,pick:l.pick,p:l.p,
@@ -4611,6 +4577,370 @@ function clvSummary(){
     avgMove:n?+(totalMove/n).toFixed(2):null,rows};
 }
 
+
+/* ================= SIGNAL LAYER =================
+   Everything uploaded from outside — picks, trends, public consensus — gets
+   validated, scored, and fed into one evaluation instead of sitting in storage
+   unused. Trends are checked against tonight's actual conditions before they're
+   allowed to count, because "5-1 as a favorite" is meaningless when tonight's
+   team is a dog. */
+
+/* ── is this trend actually applicable to tonight's game? ── */
+function trendApplies(tr,g,s){
+  if(!g)return{ok:false,why:'game not on the board'};
+  const t=(tr.text||'').toLowerCase();
+  const M=marketOf(g);
+  const teamAb=tr.team;
+  const isHome=teamAb===g.home.abbr;
+  const fails=[];
+
+  // favorite / underdog — check tonight's actual price
+  if(/as an underdog|as a home underdog|as a road underdog/.test(t)){
+    if(!M)fails.push('no price to check favorite status');
+    else{
+      const p=isHome?M.fh:M.fa;
+      if(p>=0.5)fails.push(`${teamAb} is favored tonight, not an underdog`);
+    }
+  }
+  if(/as a favorite|as a home favorite|as a road favorite/.test(t)){
+    if(!M)fails.push('no price to check favorite status');
+    else{
+      const p=isHome?M.fh:M.fa;
+      if(p<0.5)fails.push(`${teamAb} is an underdog tonight, not favored`);
+    }
+  }
+  // starter handedness — the trend is about the OPPOSING starter
+  const wantsL=/vs\.? a left-handed starter|against a lefty|vs\.? lhp/.test(t);
+  const wantsR=/vs\.? a right-handed starter|against a righty|vs\.? rhp/.test(t);
+  if(wantsL||wantsR){
+    const opp=isHome?g.away.p:g.home.p;
+    const hand=opp&&opp.hand;
+    if(!hand)fails.push('opposing starter handedness unknown');
+    else if(wantsL&&hand!=='L')fails.push(`opposing starter is ${hand}HP, not a lefty`);
+    else if(wantsR&&hand!=='R')fails.push(`opposing starter is ${hand}HP, not a righty`);
+  }
+  // home / road split
+  if(/home games?|at home/.test(t)&&!isHome)fails.push(`${teamAb} is on the road tonight`);
+  if(/road games?|away games?/.test(t)&&isHome)fails.push(`${teamAb} is at home tonight`);
+  // interleague
+  if(/interleague/.test(t)){
+    const AL=new Set(['BAL','BOS','NYY','TB','TOR','CWS','CLE','DET','KC','MIN','HOU','LAA','ATH','SEA','TEX']);
+    const a=AL.has(g.away.abbr),h=AL.has(g.home.abbr);
+    if(a===h)fails.push('not an interleague game tonight');
+  }
+  // opponent record
+  if(/vs\.? a team with a losing record/.test(t)){
+    const opp=isHome?g.away:g.home;
+    if(opp.w==null||opp.l==null)fails.push('opponent record unknown');
+    else if(opp.w>=opp.l)fails.push(`${opp.abbr} is not under .500`);
+  }
+  if(/vs\.? a team with a winning record|winning home record/.test(t)){
+    const opp=isHome?g.away:g.home;
+    if(opp.w==null||opp.l==null)fails.push('opponent record unknown');
+    else if(opp.w<opp.l)fails.push(`${opp.abbr} is not above .500`);
+  }
+  // series position is not knowable from our data — flag rather than silently pass
+  const seriesDep=/game \d of a series/.test(t);
+  return{ok:fails.length===0,why:fails[0]||null,unverified:seriesDep};
+}
+
+function applicableTrends(g,s){
+  const all=get(LS.exttrends,{})[today()]||[];
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  return all.filter(x=>x.game===gl).map(x=>{
+    const chk=trendApplies(x,g,s);
+    return{...x,applies:chk.ok,why:chk.why,unverified:chk.unverified};
+  });
+}
+
+/* ── public consensus, keeping bet% and money% distinct ──
+   Covers publishes both on separate views. They frequently disagree, and that
+   disagreement IS the signal — heavy ticket count one way with heavy money the
+   other is small money vs big money taking opposite sides. Merging them into one
+   number destroys exactly the information worth having. */
+function consensusFor(g){
+  const all=get(LS.extconsensus,{})[today()]||[];
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const rows=all.filter(x=>x.game===gl);
+  const out={ml:{},total:{}};
+  rows.forEach(r=>{
+    const bucket=r.market==='total'?out.total:out.ml;
+    const metric=r.metric==='money'?'money':'bets';
+    bucket[metric]={awayPct:r.awayPct,homePct:r.homePct,
+      overPct:r.overPct,underPct:r.underPct,line:r.line,
+      awayPrice:r.awayPrice,homePrice:r.homePrice,src:r.src};
+  });
+  // divergence: same market, opposite lean between ticket count and money
+  const div=[];
+  ['ml','total'].forEach(mk=>{
+    const b=out[mk].bets,m=out[mk].money;
+    if(!b||!m)return;
+    if(mk==='ml'&&b.homePct!=null&&m.homePct!=null){
+      const bSide=b.homePct>=50?'home':'away',mSide=m.homePct>=50?'home':'away';
+      if(bSide!==mSide){
+        const bp=bSide==='home'?b.homePct:100-b.homePct;
+        const mp=mSide==='home'?m.homePct:100-m.homePct;
+        div.push({market:'moneyline',bets:bSide,money:mSide,
+          detail:`${bp}% of tickets on the ${bSide} side, but ${mp}% of the money on ${mSide}`});
+      }
+    }
+    if(mk==='total'&&b.overPct!=null&&m.overPct!=null){
+      const bSide=b.overPct>=50?'over':'under',mSide=m.overPct>=50?'over':'under';
+      if(bSide!==mSide){
+        const bp=bSide==='over'?b.overPct:100-b.overPct;
+        const mp=mSide==='over'?m.overPct:100-m.overPct;
+        div.push({market:'total',bets:bSide,money:mSide,
+          detail:`${bp}% of tickets on the ${bSide}, but ${mp}% of the money on the ${mSide} — small bets and big money on opposite sides`});
+      }
+    }
+  });
+  return{...out,divergence:div,has:rows.length>0};
+}
+
+/* ── does a source contradict itself? model vs its own published trends ── */
+function sourceSelfConflict(g){
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const picks=(getExt()[today()]||[]).filter(x=>x.game===gl);
+  const trends=(get(LS.exttrends,{})[today()]||[]).filter(x=>x.game===gl);
+  const out=[];
+  const bySrc={};
+  picks.forEach(p=>{(bySrc[p.src]=bySrc[p.src]||{picks:[],trends:[]}).picks.push(p)});
+  trends.forEach(t=>{
+    const k=Object.keys(bySrc).find(s2=>t.src&&t.src.toLowerCase().includes(s2.toLowerCase().split(' ')[0]))||t.src;
+    (bySrc[k]=bySrc[k]||{picks:[],trends:[]}).trends.push(t);
+  });
+  Object.keys(bySrc).forEach(src=>{
+    const b=bySrc[src];
+    const totPick=b.picks.find(p=>p.market==='total');
+    if(!totPick)return;
+    const trendDir=b.trends.filter(t=>t.implies==='over'||t.implies==='under');
+    if(trendDir.length<2)return;
+    const over=trendDir.filter(t=>t.implies==='over').length;
+    const under=trendDir.length-over;
+    const trendLean=over>under?'over':under>over?'under':null;
+    if(trendLean&&trendLean!==totPick.side){
+      out.push({src,detail:`${src}'s model picks ${totPick.side.toUpperCase()} `+
+        `but its own trends lean ${trendLean.toUpperCase()} (${Math.max(over,under)} of ${trendDir.length})`});
+    }
+  });
+  return out;
+}
+
+
+
+function renderMasterEval(){
+  const evals=masterEvaluation();
+  const nPicks=Object.keys(getExt()[today()]||{}).length?(getExt()[today()]||[]).length:0;
+  const nTrends=(get(LS.exttrends,{})[today()]||[]).length;
+  const nCons=(get(LS.extconsensus,{})[today()]||[]).length;
+  const nBook=(get(LS.bookshots,{})[today()]||[]).length;
+
+  const feed=`<div class="tkt hi">
+    <h3>Master evaluation</h3>
+    <div class="sub">Every independent read on tonight's board, weighed together.
+    Sources in play right now: <b>${GAMES.length}</b> games simulated ·
+    <b>${nBook}</b> book lines · <b>${nPicks}</b> outside picks ·
+    <b>${nTrends}</b> trends · <b>${nCons}</b> consensus rows.</div>
+    <div class="bar" style="margin-top:9px">
+      <button class="primary" onclick="runMasterEval()">Run evaluation</button>
+      <button onclick="forceGradeEverything()">Calibrate first</button>
+    </div>
+  </div>`;
+
+  if(!evals.length)return feed+'<div class="empty">No games to evaluate yet.</div>';
+
+  const counts={strong:0,lean:0,split:0,away:0};
+  evals.forEach(e=>counts[e.verdict]++);
+
+  const summary=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      ${['strong','lean','split','away'].map(k=>`<div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:22px;color:${VERDICT[k].color}">${counts[k]}</div>
+        <div class="m">${VERDICT[k].label}</div></div>`).join('')}
+    </div>
+  </div>`;
+
+  const cards=evals.map(e=>{
+    const V=VERDICT[e.verdict];
+    const sigRows=e.sideSignals.map(x=>`<div style="display:flex;justify-content:space-between;
+      padding:3px 0;font-size:11.5px">
+      <span style="color:var(--mute)">${x.src}</span>
+      <span style="color:${x.side===e.side?'var(--chalk)':'var(--rust)'};font-weight:600">${x.detail||x.side}</span>
+    </div>`).join('');
+    const conflictRows=e.conflicts.length?`<div style="margin-top:8px;padding-top:8px;
+      border-top:1px solid var(--hair)">
+      <div class="mktlab" style="margin-top:0;color:var(--rust)">Conflicts</div>
+      ${e.conflicts.map(c=>`<div class="sub" style="color:var(--rust)">${c.detail}</div>`).join('')}
+    </div>`:'';
+    const droppedRows=e.trendsDropped.length?`<div style="margin-top:8px;padding-top:8px;
+      border-top:1px solid var(--hair)">
+      <div class="mktlab" style="margin-top:0">Trends that don't apply tonight</div>
+      ${e.trendsDropped.slice(0,4).map(t=>`<div class="sub" style="opacity:.65">
+        <s>${t.text}</s> <span style="color:var(--mute)">— ${t.why}</span></div>`).join('')}
+    </div>`:'';
+    return `<div class="tkt" style="border-left:3px solid ${V.color}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <div>
+          <div style="font-family:'Archivo';font-weight:900;font-size:16px">${e.game}</div>
+          <div class="m">${e.nSources} independent reads · ${e.trendsLive} live trend${e.trendsLive===1?'':'s'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Inter';font-weight:800;font-size:11px;letter-spacing:.08em;
+            color:${V.color}">${V.label}</div>
+          <div class="m">${e.agreement}% agree</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12.5px"><b style="color:${V.color}">${e.side}</b>
+          <span class="m">side</span></span>
+        <span style="font-size:12.5px"><b>${e.totalLean.toUpperCase()} ${e.totalLine}</b>
+          <span class="m">${e.totalAgreement}% agree</span></span>
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--hair)">${sigRows}</div>
+      ${conflictRows}${droppedRows}
+      <div class="bar" style="margin-top:8px">
+        <button onclick="jumpToGame(${e.gid})">Open game card</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return feed+summary+
+    `<div class="note">${VERDICT.strong.note} ${VERDICT.away.note}</div>`+cards;
+}
+function runMasterEval(){
+  const b=document.getElementById('ticketBody');
+  if(b)b.innerHTML=renderMasterEval();
+  window.scrollTo(0,0);
+}
+
+/* ================= MASTER EVALUATION =================
+   Takes every independent read on a game — the simulator, your book's price, what
+   outside sites picked, where the public's tickets and money are, and which of
+   their trends actually apply tonight — and scores how much they agree.
+   Agreement is the point. One source saying something is noise; five independent
+   sources landing on the same side is a signal. And heavy disagreement is its own
+   answer: when nobody agrees, the honest read is stay away. */
+
+const VERDICT={
+  strong:{label:'STRONG',color:'var(--win)',note:'Independent sources line up. This is as close to conviction as the board gets.'},
+  lean:{label:'LEAN',color:'var(--gold)',note:'More agreement than not, but not unanimous.'},
+  split:{label:'SPLIT',color:'var(--mute)',note:'Sources are genuinely divided. No edge either way.'},
+  away:{label:'STAY AWAY',color:'var(--rust)',note:'Signals actively contradict each other. Sitting this one out is a position.'}
+};
+
+function evaluateGame(g){
+  const s=SIMS[g.id];
+  if(!s)return null;
+  const M=marketOf(g);
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const sig=[];   // every independent read, normalized to a side
+
+  // 1 — the simulator
+  const simSide=s.hw>=.5?g.home.abbr:g.away.abbr;
+  const simConf=Math.max(s.hw,s.aw);
+  sig.push({src:'Simulator',kind:'model',side:simSide,strength:simConf,
+    detail:`${simSide} ${(simConf*100).toFixed(0)}%`});
+
+  // 2 — your book's own price
+  if(M){
+    const bookSide=M.fh>=M.fa?g.home.abbr:g.away.abbr;
+    sig.push({src:'Your book',kind:'market',side:bookSide,strength:Math.max(M.fh,M.fa),
+      detail:`${bookSide} ${(Math.max(M.fh,M.fa)*100).toFixed(0)}% implied`});
+  }
+
+  // 3 — outside sites' published picks
+  const picks=(getExt()[today()]||[]).filter(x=>x.game===gl&&x.market==='moneyline');
+  picks.forEach(p=>{
+    const side=p.side==='home'?g.home.abbr:g.away.abbr;
+    sig.push({src:p.src,kind:'outside',side,strength:.6,detail:side});
+  });
+
+  // 4 — public consensus, tickets and money counted separately
+  const cons=consensusFor(g);
+  if(cons.ml.bets&&cons.ml.homePct!=null){
+    const side=cons.ml.bets.homePct>=50?g.home.abbr:g.away.abbr;
+    sig.push({src:'Public tickets',kind:'public',side,
+      strength:Math.max(cons.ml.bets.homePct,100-cons.ml.bets.homePct)/100,
+      detail:`${Math.max(cons.ml.bets.homePct,100-cons.ml.bets.homePct)}% of bets`});
+  }
+  if(cons.ml.money&&cons.ml.money.homePct!=null){
+    const side=cons.ml.money.homePct>=50?g.home.abbr:g.away.abbr;
+    sig.push({src:'Public money',kind:'money',side,
+      strength:Math.max(cons.ml.money.homePct,100-cons.ml.money.homePct)/100,
+      detail:`${Math.max(cons.ml.money.homePct,100-cons.ml.money.homePct)}% of money`});
+  }
+
+  // 5 — trends that actually pass tonight's conditions
+  const trends=applicableTrends(g,s);
+  const live=trends.filter(t=>t.applies);
+  const dropped=trends.filter(t=>!t.applies);
+  const sideTrends=live.filter(t=>t.implies===g.home.abbr||t.implies===g.away.abbr
+    ||t.implies==='home'||t.implies==='away');
+  sideTrends.forEach(t=>{
+    const side=t.implies==='home'?g.home.abbr:t.implies==='away'?g.away.abbr:t.implies;
+    sig.push({src:'Trend · '+(t.src||'site'),kind:'trend',side,strength:.5,detail:t.text});
+  });
+
+  // ── agreement scoring, weighted so one loud source can't fake a consensus ──
+  const W={model:1.0,market:.9,outside:.7,public:.4,money:.6,trend:.5};
+  const tally={};
+  sig.forEach(x=>{
+    tally[x.side]=(tally[x.side]||0)+(W[x.kind]||.5)*x.strength;
+  });
+  const sides=Object.keys(tally).sort((a,b)=>tally[b]-tally[a]);
+  const top=sides[0],second=sides[1];
+  const topW=tally[top]||0,secW=tally[second]||0;
+  const total=topW+secW||1;
+  const agreement=topW/total;
+
+  // totals get their own read
+  const totalSigs=[];
+  const ot=operativeTotal(g,s);
+  const simOver=s.over(ot.line);
+  totalSigs.push({src:'Simulator',side:simOver>=.5?'over':'under',
+    strength:Math.max(simOver,1-simOver),kind:'model'});
+  const totPicks=(getExt()[today()]||[]).filter(x=>x.game===gl&&x.market==='total');
+  totPicks.forEach(p=>totalSigs.push({src:p.src,side:p.side,strength:.6,kind:'outside'}));
+  if(cons.total.bets&&cons.total.bets.overPct!=null)
+    totalSigs.push({src:'Public tickets',side:cons.total.bets.overPct>=50?'over':'under',
+      strength:Math.max(cons.total.bets.overPct,100-cons.total.bets.overPct)/100,kind:'public'});
+  if(cons.total.money&&cons.total.money.overPct!=null)
+    totalSigs.push({src:'Public money',side:cons.total.money.overPct>=50?'over':'under',
+      strength:Math.max(cons.total.money.overPct,100-cons.total.money.overPct)/100,kind:'money'});
+  live.filter(t=>t.implies==='over'||t.implies==='under')
+    .forEach(t=>totalSigs.push({src:'Trend',side:t.implies,strength:.5,kind:'trend',detail:t.text}));
+  const tTally={};
+  totalSigs.forEach(x=>{tTally[x.side]=(tTally[x.side]||0)+(W[x.kind]||.5)*x.strength});
+  const tOver=tTally.over||0,tUnder=tTally.under||0;
+  const tTop=tOver>=tUnder?'over':'under';
+  const tAgree=(Math.max(tOver,tUnder))/((tOver+tUnder)||1);
+
+  const conflicts=[...cons.divergence,...sourceSelfConflict(g)];
+  // verdict blends side agreement, total agreement, and how many hard conflicts fired
+  const nSrc=sig.length;
+  let verdict;
+  if(nSrc<3)verdict='split';
+  else if(conflicts.length>=2)verdict='away';
+  else if(agreement>=.78&&conflicts.length===0)verdict='strong';
+  else if(agreement>=.62)verdict='lean';
+  else if(agreement<.55)verdict='away';
+  else verdict='split';
+
+  return{game:gl,gid:g.id,verdict,agreement:+(agreement*100).toFixed(0),
+    side:top,sideSignals:sig,tally,
+    totalLean:tTop,totalLine:ot.line,totalAgreement:+(tAgree*100).toFixed(0),totalSignals:totalSigs,
+    conflicts,trendsLive:live.length,trendsDropped:dropped,consensus:cons,nSources:nSrc};
+}
+
+function masterEvaluation(){
+  return GAMES.filter(g=>g.abstract!=='Final')
+    .map(evaluateGame).filter(Boolean)
+    .sort((a,b)=>{
+      const rank={strong:0,lean:1,split:2,away:3};
+      return rank[a.verdict]-rank[b.verdict]||b.agreement-a.agreement;
+    });
+}
+
 /* ================= BACKTEST ENGINE =================
    Replays every graded day in the archive against a filter set and reports what
    would actually have happened. This is the difference between "my picks went 12-8"
@@ -4796,11 +5126,12 @@ function renderBacktest(){
 // only honest way to answer "how am I actually doing" since a 3-1 parlay record hides
 // that three of those legs individually hit and one alone sank the whole ticket.
 function buildAllTimeRecord(){
-  const mine=[],system=[],outside=[];
+  const mine=[],system=[],book=[],outside=[];
 
   // ── My picks + System picks — both live in LS.locked, split by t.source ──
   get(LS.locked,[]).forEach(t=>{
-    const bucket=t.source==='system'?system:mine;
+    const bucket=t.source==='system'?system:t.source==='book'?book
+      :t.source==='outside'?outside:mine;
     t.legs.forEach(x=>{
       const{hit,detail}=gradeLeg(x,t.date);
       const gid=legGameId(x,t.date);
@@ -4814,11 +5145,11 @@ function buildAllTimeRecord(){
   Object.keys(ext).forEach(d=>{
     ext[d].forEach(x=>{
       outside.push({date:d,pick:x.pick||(x.side+' '+(x.line??'')),game:x.game,
-        src:x.src,hit:x.hit,conf:x.conf,gid:x.gid});
+        src:x.src||'uploaded',hit:x.hit,conf:x.conf,gid:x.gid});
     });
   });
 
-  return{mine,system,outside};
+  return{mine,system,book,outside};
 }
 
 function recordStats(list){
@@ -4831,10 +5162,14 @@ function recordStats(list){
 let ATR_TAB='mine';
 function renderAllTimeRecord(){
   const R=buildAllTimeRecord();
-  const mineS=recordStats(R.mine),sysS=recordStats(R.system),outS=recordStats(R.outside);
+  const mineS=recordStats(R.mine),sysS=recordStats(R.system),
+        bookS=recordStats(R.book),outS=recordStats(R.outside);
 
   const tabBtn=(k,l,s)=>`<button class="${ATR_TAB===k?'on':''}" onclick="ATR_TAB='${k}';renderAllTimeRecord()">
     ${l} <span class="m">${s.w}-${s.l}</span></button>`;
+  const cell=(lbl,st)=>`<div><div style="font-family:'Archivo';font-weight:900;font-size:19px;
+    color:${st.w>=st.l&&st.w>0?'var(--win)':st.l>st.w?'var(--rust)':'var(--mute)'}">${st.pct}%</div>
+    <div class="m">${lbl} · ${st.w}-${st.l}</div></div>`;
 
   const clv=clvSummary();
   const clvCard=clv.n>=5?`<div class="tkt" style="border-left:3px solid ${clv.avgMove>0?'var(--win)':'var(--rust)'}">
@@ -4859,23 +5194,21 @@ function renderAllTimeRecord(){
     three separate wins and one loss, not one bundled result. This is the honest number.</div>
   </div>
   <div class="tkt">
-    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:10px">
-      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${mineS.w>=mineS.l?'var(--win)':'var(--rust)'}">${mineS.pct}%</div>
-        <div class="m">Mine · ${mineS.w}-${mineS.l}</div></div>
-      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${sysS.w>=sysS.l?'var(--win)':'var(--rust)'}">${sysS.pct}%</div>
-        <div class="m">System · ${sysS.w}-${sysS.l}</div></div>
-      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${outS.w>=outS.l?'var(--win)':'var(--rust)'}">${outS.pct}%</div>
-        <div class="m">Outside · ${outS.w}-${outS.l}</div></div>
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:14px">
+      ${cell('Mine',mineS)}${cell('System',sysS)}${cell('Book',bookS)}${cell('Outside',outS)}
     </div>
   </div>
   <div class="subnav">
     ${tabBtn('mine','Mine',mineS)}
     ${tabBtn('system','System',sysS)}
+    ${tabBtn('book','Book',bookS)}
     ${tabBtn('outside','Outside',outS)}
   </div>`;
 
-  const active=ATR_TAB==='mine'?R.mine:ATR_TAB==='system'?R.system:R.outside;
-  const stats=ATR_TAB==='mine'?mineS:ATR_TAB==='system'?sysS:outS;
+  const active=ATR_TAB==='mine'?R.mine:ATR_TAB==='system'?R.system
+    :ATR_TAB==='book'?R.book:R.outside;
+  const stats=ATR_TAB==='mine'?mineS:ATR_TAB==='system'?sysS
+    :ATR_TAB==='book'?bookS:outS;
 
   if(!active.length){
     h+=`<div class="empty">Nothing here yet.</div>`;
@@ -4952,9 +5285,23 @@ nothing else, no markdown fences, no commentary:
 ═══ FORMAT 1 — CONSENSUS / PUBLIC MONEY TABLES ═══
 Rows showing two teams with bet% and money% split (e.g. "WAS 71% / ATL 29%", with prices and bet
 counts). This is public betting consensus, NOT a pick from the site — it shows what bettors are doing.
-Add one entry per game to "consensus":
+IMPORTANT — these sites publish TWO different consensus views and they often disagree:
+  * "Consensus" tab = percentage of BETS (ticket count) -> metric:"bets"
+  * "Public Money" tab = percentage of MONEY wagered   -> metric:"money"
+Read the active tab label to decide. If you genuinely cannot tell, use metric:"bets".
+Never merge the two — a game with 82% of tickets on the under but 75% of the money on
+the over is the single most useful thing on the page, and averaging them destroys it.
+
+Also note whether the row is a MONEYLINE consensus (two team percentages, with prices
+like -110/+130) or a TOTAL consensus (Over/Under percentages with a number like 8.5).
+
+Add one entry per game per view to "consensus":
 {"src":"site name (e.g. Covers)","away":"abbr","home":"abbr",
- "awayPct":number,"homePct":number,"awayPrice":number or null,"homePrice":number or null,
+ "market":"moneyline" or "total","metric":"bets" or "money",
+ "awayPct":number or null,"homePct":number or null,
+ "overPct":number or null,"underPct":number or null,
+ "line":number or null,
+ "awayPrice":number or null,"homePrice":number or null,
  "awayBets":number or null,"homeBets":number or null}
 The team with the HIGHER percentage is where the public money is — record both sides' percentages
 so we can see the split, not just the majority side.
@@ -4985,6 +5332,13 @@ if it's about the total/matchup rather than one side","text":"the trend sentence
 Set "implies" by reading the sentence: a trend stating "Over is X-Y" implies "over"; "Under is X-Y"
 implies "under"; a team-record trend like "Dodgers are 5-0 as a home underdog" implies that team
 ("home" or "away" — whichever side they are in THIS game).
+
+═══ ALSO: "TOP PROJECTION" BLOCKS ═══
+Trends screenshots often carry a highlighted player prop ("Bryce Harper o0.5 Total RBIs
+(+155)"). Capture those into "picks" with market:"prop":
+{"src":"site name","away":"abbr","home":"abbr","market":"prop",
+ "pick":"exactly as written","player":"player name","statType":"rbi"|"hits"|"tb"|"hr"|"k"|"bb"|"ha",
+ "line":number,"side":"over","price":number,"conf":"best"}
 
 ═══ GENERAL RULES ═══
 - Team names: use standard 2-3 letter abbreviations (PHI, BAL, NYY, LAD, etc).
@@ -5111,6 +5465,18 @@ function gradeExtPicks(){
         hit=p.side==='over'?(F.fa+F.fh)>p.line:(F.fa+F.fh)<p.line;
       else if(p.market==='f5side'&&F.f5ok)
         hit=p.side==='home'?F.fh>F.fa:F.fa>F.fh;
+      else if(p.market==='prop'&&p.pid&&p.ptype&&p.thr!=null){
+        // outside props grade off the same cached box scores everything else uses
+        const box=boxFor(p.gid);
+        if(box){
+          let pl=null;
+          for(const sd of ['away','home']){
+            const P=((box.teams||{})[sd]||{}).players||{};
+            if(P['ID'+p.pid]){pl=P['ID'+p.pid];break}
+          }
+          if(pl)hit=gradePropRec(pl,p.ptype,p.thr);
+        }
+      }
       if(hit!==null){p.hit=hit;changed=true}
     });
   });
@@ -5136,9 +5502,9 @@ function rebuildSrcStats(){
 }
 
 /* ================= TICKETS TABS ================= */
-const TTABS=[['build','Build'],['mine','My picks'],['market','Market'],
+const TTABS=[['eval','Evaluate'],['build','Build'],['mine','My picks'],['market','Market'],
   ['outside','Outside'],['record','Record'],['backtest','Backtest']];
-let BUILD_MODE='custom';   // custom | presets | system
+let BUILD_MODE='presets';   // presets | custom
 let OUTSIDE_MODE='consensus';
 
 function renderTickets(){
@@ -5149,12 +5515,10 @@ function renderTickets(){
     `<button class="${TICKETTAB===k?'on':''}" onclick="TICKETTAB='${k}';renderTickets()">${l}</button>`).join('');
   const modeRow=(cur,opts,setter)=>`<div class="subnav" style="margin-bottom:10px">${
     opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
+  if(TICKETTAB==='eval')  body.innerHTML=renderMasterEval();
   if(TICKETTAB==='build'){
-    const row=modeRow(BUILD_MODE,[['custom','Custom'],['presets','Presets'],['system','System']],'BUILD_MODE');
-    if(BUILD_MODE==='custom')  body.innerHTML=row+buildTabHtml();
-    if(BUILD_MODE==='presets') body.innerHTML=row+presetTabHtml();
-    if(BUILD_MODE==='system'){ body.innerHTML=row+'<div id="tickets"><div class="empty">Building…</div></div>';
-      setTimeout(()=>genTickets('system'),0)}
+    const row=modeRow(BUILD_MODE,[['presets','Presets'],['custom','Custom']],'BUILD_MODE');
+    body.innerHTML=row+(BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
   }
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
   if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
@@ -5451,11 +5815,12 @@ function sourcesHtml(){
   }).join('');
 }
 
-function confirmSystemTicket(payload){
+function confirmSystemTicket(payload,src){
+  src=src||'mine';
   let legs;
   try{legs=JSON.parse(decodeURIComponent(payload))}catch(e){return}
   if(!legs||!legs.length)return;
-  if(!confirm(`Save this ${legs.length}-leg system ticket to your real ticket list? You can still delete it later, or lock it as final once you're sure.`))return;
+  if(!confirm(`Save this ${legs.length}-leg ticket? You can delete it later, or lock it as final once you're sure.`))return;
   const L=get(LS.locked,[]);
   const id=Date.now();
   L.unshift({id,date:today(),
@@ -5463,10 +5828,11 @@ function confirmSystemTicket(payload){
       const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
       return{id:id+'|'+x.pick,...x,gid:x.gid||(gm?gm.id:null),gameDate:x.gameDate||today()};
     }),
-    p:legs.reduce((a,x)=>a*x.p,1),source:'system'});
+    p:legs.reduce((a,x)=>a*x.p,1),source:src});
   set(LS.locked,L);
   renderTickets();
-  alert('Saved to your ticket list — find it under the Mine tab.');
+  const where={system:'System picks',book:'Book picks',outside:'Outside picks',mine:'My picks'}[src]||'My picks';
+  alert('Saved — filed under '+where+' in Tickets → Record.');
 }
 
 function genTickets(mode){
@@ -5540,7 +5906,7 @@ function genTickets(mode){
     h+=`<div class="tkt ${i<2?'hi':''}"><h3>${lab}</h3>
       <div class="sub"><b>${(c*100).toFixed(c<.01?3:1)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs</div>
       <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
-      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}')">Confirm &amp; save</button></div></div>`;
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}')">Confirm &amp; save</button></div></div>`;
   });
   const pu=new Set();
   h+='<div class="sbar"><h2>Prop cards only</h2><div class="ln"></div></div>';
