@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v63</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v65</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3504,7 +3504,14 @@ function resolveLeg(leg,ticketDate){
       return{a:g.awayScore,h:g.homeScore,fa:f5?f5.fa:null,fh:f5?f5.fh:null,
         f5ok:!!f5,gid:g.id,live:false,source:'memory',g};
     }
-    if(g.abstract==='Live')return{a:g.awayScore,h:g.homeScore,gid:g.id,live:true,source:'memory',g};
+    if(g.abstract==='Live'){
+      const L=ESPN_LIVE[g.id]||{};
+      // innings remaining: 9 - completed innings, floored at 0. Bottom of the 9th with
+      // the home team already ahead means the game can also end early (no bottom half).
+      const completed=Math.max(0,(L.inning||0)-(L.inningHalf==='Top'?1:0));
+      return{a:g.awayScore,h:g.homeScore,gid:g.id,live:true,source:'memory',g,
+        inning:L.inning||null,inningHalf:L.inningHalf||null,completed};
+    }
     return null; // scheduled, hasn't started
   }
   // 2) persistent archive — this is what makes yesterday's tickets gradeable
@@ -3565,15 +3572,58 @@ function gradeLeg(leg,ticketDate){
   const [awayAb,homeAb]=(leg.game||'@').split('@');
   const line=`${awayAb} ${a}–${h} ${homeAb}${R.live?' (live)':''}`;
   const tot=a+h;
-  if(/^Over /.test(pick)){const ln=parseFloat(pick.slice(5));
-    return{hit:R.live?null:tot>ln,detail:`${line} · total ${tot}`}}
-  if(/^Under /.test(pick)){const ln=parseFloat(pick.slice(6));
-    return{hit:R.live?null:tot<ln,detail:`${line} · total ${tot}`}}
+
+  // ── mathematical elimination while a game is still live ──────────────────
+  // An OVER is dead the moment the current total already clears the line — that's
+  // just arithmetic, no projection needed. An UNDER can only ever be dead once we
+  // know how many innings are left, since runs can still be added. We bound the
+  // realistic remaining scoring using this game's own simulated run environment
+  // (falling back to the league-average ~4.3 R/team/game if no sim exists), and
+  // call it dead when even a generous 2-standard-deviation ceiling can't reach the
+  // line anymore. This is intentionally conservative — it should never flip a leg
+  // that could still plausibly go the other way.
+  const remainingCeiling=()=>{
+    if(R.completed==null)return null;               // no inning data — can't bound it
+    const inningsLeft=Math.max(0,9-R.completed);
+    if(inningsLeft<=0)return 0;
+    const s=SIMS[R.gid];
+    const perTeamPerInning=s?((s.aR||4.3)+(s.hR||4.3))/2/9:4.3/9;
+    // generous ceiling: mean plus a wide buffer per remaining inning, both teams combined
+    return inningsLeft*2*(perTeamPerInning*2.3);
+  };
+
+  if(/^Over /.test(pick)){
+    const ln=parseFloat(pick.slice(5));
+    if(!R.live)return{hit:tot>ln,detail:`${line} · total ${tot}`};
+    if(tot>ln)return{hit:true,detail:`${line} · total ${tot} — already clinched`};
+    return{hit:null,detail:`${line} · total ${tot} so far`};
+  }
+  if(/^Under /.test(pick)){
+    const ln=parseFloat(pick.slice(6));
+    if(!R.live)return{hit:tot<ln,detail:`${line} · total ${tot}`};
+    if(tot>=ln)return{hit:false,detail:`${line} · total ${tot} — already over the line`};
+    const ceiling=remainingCeiling();
+    if(ceiling!==null&&(tot+ceiling)<ln)
+      return{hit:true,detail:`${line} · total ${tot}, ${R.completed} innings gone — mathematically out of reach`};
+    return{hit:null,detail:`${line} · total ${tot} so far`};
+  }
   if(/ ML$/.test(pick)){
     const who=pick.replace(/ ML$/,'');
-    if(R.live)return{hit:null,detail:line};
-    if(a===h)return{hit:null,detail:line+' · push'};
-    return{hit:(h>a?homeAb:awayAb)===who,detail:line};
+    if(!R.live){
+      if(a===h)return{hit:null,detail:line+' · push'};
+      return{hit:(h>a?homeAb:awayAb)===who,detail:line};
+    }
+    // a live ML lock is much riskier to call early — only settle it once the trailing
+    // team's deficit exceeds what's realistically reachable in the innings left
+    const margin=h-a;                    // positive = home leading
+    const whoIsHome=who===homeAb;
+    const backingMargin=whoIsHome?margin:-margin;   // positive = the picked side is ahead
+    const ceiling=remainingCeiling();
+    if(backingMargin>0&&ceiling!==null&&ceiling<backingMargin)
+      return{hit:true,detail:`${line} — lead is out of reach with ${R.completed} innings gone`};
+    if(backingMargin<0&&ceiling!==null&&ceiling<-backingMargin)
+      return{hit:false,detail:`${line} — deficit is out of reach with ${R.completed} innings gone`};
+    return{hit:null,detail:line};
   }
   const rlm=pick.match(/^(.+) ([+-]\d+(?:\.\d+)?)$/);
   if(rlm&&!/^F5 /.test(pick)){
@@ -4181,6 +4231,22 @@ function amerPayout(amerStr,stake){
   const profit=o>0?(stake*o/100):(stake*100/Math.abs(o));
   return{total:stake+profit,profit};
 }
+// Debits the balance the instant a stake is entered — a real book takes your money
+// when you place the bet, not when it settles. If the stake is cleared or changed
+// before settlement, the OLD debit is reversed first so re-typing never double-charges.
+function debitStake(id,newStake){
+  const b=getBankroll();
+  b.debited=b.debited||{};
+  const prior=b.debited[id]||0;
+  if(prior)b.profit+=prior;               // undo whatever was debited before
+  if(newStake>0){
+    b.profit-=newStake;
+    b.debited[id]=newStake;
+  }else{
+    delete b.debited[id];
+  }
+  saveBankroll(b);
+}
 function onWagerInput(id,combinedP,inputEl){
   const stake=parseFloat(inputEl.value)||0;
   if(stake>0){
@@ -4195,6 +4261,7 @@ function onWagerInput(id,combinedP,inputEl){
   const inputElRef=document.getElementById('ws-'+id);
   if(inputElRef)inputElRef.style.color='';
   saveWager(id,stake||null);
+  debitStake(id,stake);
   refreshPayout(id,combinedP,stake);
 }
 function refreshPayout(id,combinedP,stake){
@@ -4302,9 +4369,19 @@ function checkStakeAllowed(ticketId,newStake){
 }
 
 const BR_MAX_MULT=10;   // hard ceiling — limits can grow 10x, never past it
+// A ticket in this state already had its stake DEBITED at placement (see
+// onWagerInput). Settling a WIN credits back the stake plus profit; settling a
+// LOSS credits nothing further, because the stake is already gone from the balance.
 function settleTicket(ticketId,stake,profit,won){
   const b=getBankroll();
   if(b.history.some(h=>h.id===ticketId))return; // already settled once
+  const wasDebited=(b.debited||{})[ticketId];
+  if(wasDebited){
+    // undo the placeholder debit, then apply the real result — this way profit
+    // always ends up net-correct regardless of when settlement happens
+    b.profit+=stake;
+    delete b.debited[ticketId];
+  }
   b.profit+=profit;
   // Limits track profit ABOVE the baseline, in both directions. The old version only
   // ever ratcheted up on wins, so a hot streak left limits inflated through an entire
@@ -4334,6 +4411,14 @@ function settleLockedTickets(){
       if(r===null){allDecided=false;return}
       if(r===false)anyLoss=true;
     });
+    // A parlay is exactly as dead as any ONE of its legs losing — a single dead leg
+    // sinks the whole ticket regardless of what the other 9 legs do, so there's no
+    // reason to wait on them once one has been eliminated (gradeLeg already applies
+    // conservative in-game math elimination, not just final scores). Waiting for
+    // every leg to individually reach Final before archiving a ticket that already
+    // can't win was the exact bug being fixed here — a 10-leg parlay with one dead
+    // leg in the 6th inning is a settled loss right now, not six hours from now.
+    if(anyLoss)allDecided=true;
     if(!allDecided)return;
     const won=!anyLoss;
     const odds=probToAmer(t.p);
@@ -4341,6 +4426,10 @@ function settleLockedTickets(){
     const profit=won?(res?res.profit:0):-stake;
     settleTicket(t.id,stake,profit,won);
     if(!won)recordLossPostMortem(t,stake);
+    // auto-archive the instant it's decided — no manual step needed to see it
+    // move out of Pending once the outcome is locked in
+    t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);
+    set(LS.locked,L);
   });
 }
 
