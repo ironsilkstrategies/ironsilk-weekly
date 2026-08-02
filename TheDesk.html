@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v65</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v68</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1327,6 +1327,7 @@ function altPanel(g,s){
 function buildProps(){
   PROPS=[];
   GAMES.forEach(g=>{
+    if(g.abstract==='Final'||g.abstract==='Live')return; // no new prop lines once a game is underway
     try{
     const gl=g.away.abbr+'@'+g.home.abbr,env=envMult(g);
     const hrPF=((PARK[g.home.abbr]||[100,100])[1])/100;
@@ -1971,6 +1972,77 @@ function buildPreset(mode){
       .sort((a,b)=>b.nSrc-a.nSrc||b.p-a.p)
       .slice(0,n);
   }
+
+  // ── the original eight presets — restored alongside the four newer ones ──
+  const sides=pool.filter(l=>l.kind==='side');
+  const rls=pool.filter(l=>l.kind==='rl');
+  const totals=pool.filter(l=>l.kind==='total');
+  const legalPush=(combo,leg,sgp)=>{if(legalToAdd(combo,leg,sgp))combo.push(leg)};
+  const edgeOf2=(l)=>(typeof l.modelP==='number'&&typeof l.marketP==='number')?(l.modelP-l.marketP)*100:0;
+
+  if(mode==='easy'){
+    // straight highest model probability, no edge requirement — the safest reads
+    return pool.filter(l=>l.modelP>=0.55).sort((a,b)=>b.modelP-a.modelP).slice(0,n);
+  }
+  if(mode==='tailbooks'){
+    // whatever side the market itself favors most — highest marketP, ignore the model entirely
+    return pool.filter(l=>l.marketP>=0.52).sort((a,b)=>b.marketP-a.marketP).slice(0,n);
+  }
+  if(mode==='fadebooks'){
+    // the side the market likes LEAST — true underdogs by market price, model unused
+    return pool.filter(l=>l.marketP<=0.48&&l.marketP>0).sort((a,b)=>a.marketP-b.marketP).slice(0,n);
+  }
+  if(mode==='tailsystem'){
+    // whatever side the SIM likes most, independent of what the market thinks
+    return pool.filter(l=>l.modelP>=0.52).sort((a,b)=>b.modelP-a.modelP).slice(0,n);
+  }
+  if(mode==='fadesystem'){
+    // the side the sim likes LEAST — deliberately taking the model's least favorite outcome
+    return pool.filter(l=>l.modelP<=0.48&&l.modelP>0).sort((a,b)=>a.modelP-b.modelP).slice(0,n);
+  }
+  if(mode==='combo'){
+    // ML + Total paired on the SAME game for as many games as needed — classic SGP shape
+    const byGame={};
+    sides.forEach(l=>{(byGame[l.game]=byGame[l.game]||{}).ml=l});
+    totals.forEach(l=>{
+      const b=byGame[l.game];if(!b)return;
+      const best=!b.total||l.p>b.total.p;
+      if(best)byGame[l.game].total=l;
+    });
+    const pairs=Object.values(byGame).filter(x=>x.ml&&x.total)
+      .sort((a,b)=>(b.ml.p*b.total.p)-(a.ml.p*a.total.p));
+    const half=Math.ceil(n/2);
+    const out=[];
+    pairs.slice(0,half).forEach(x=>{out.push(x.ml);out.push(x.total)});
+    return out;
+  }
+  if(mode==='lucky10'){
+    // exactly 3 ML + 3 RL + 3 Total + 1 best-value underdog, best probability within each bucket
+    const combo=[];
+    const sgp=false;
+    sides.slice().sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='side').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    rls.slice().sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='rl').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    totals.slice().sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='total').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    const dogs=pool.filter(l=>l.p<0.48&&l.marketP&&l.marketP<0.48)
+      .sort((a,b)=>edgeOf2(b)-edgeOf2(a));
+    if(dogs.length&&!combo.some(c=>c.game===dogs[0].game))combo.push(dogs[0]);
+    return combo;
+  }
+  if(mode==='armageddon'){
+    // deliberately go against every positive-edge signal — take the picks with the
+    // WORST edge (model most disagrees with, in the market's favor) across the board.
+    // This is chaos mode, not a recommendation.
+    return pool.filter(l=>edgeOf2(l)<=-4).sort((a,b)=>edgeOf2(a)-edgeOf2(b)).slice(0,n);
+  }
   return [];
 }
 
@@ -1978,10 +2050,22 @@ const PRESETS=[
   ['sysbest','Systems best','The picks the simulator rates highest, independent of what the market thinks. Files under System picks.'],
   ['booklean','Books lean','Whatever side the market itself is pricing hardest. The model gets no vote here. Files under Book picks.'],
   ['outside','Outside picks','Built from picks uploaded off other sites — OddsShark, Covers, Picks and Parlays. Files under Outside picks.'],
-  ['fucksystem','Fuck the system','Straight inversion of Systems best — every side the simulator likes least. Files under My picks.']
+  ['fucksystem','Fuck the system','Straight inversion of Systems best — every side the simulator likes least. Files under My picks.'],
+  ['easy','Easy wins','Highest model probability, no edge required — the safest available reads. Files under My picks.'],
+  ['tailbooks','Tail the books','Whatever side the market itself favors most. Ignores the model entirely. Files under Book picks.'],
+  ['fadebooks','Fade the books','The side the market likes least — true underdogs by market price alone. Files under My picks.'],
+  ['tailsystem','Tail the system','Whatever side the simulator likes most, independent of the market. Files under System picks.'],
+  ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome. Files under My picks.'],
+  ['combo','Combination+','Moneyline + Total paired together on the same game, for as many games as needed. Files under My picks.'],
+  ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge. Files under My picks.'],
+  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under My picks.']
 ];
 // which bucket a ticket lands in when confirmed from each preset
-const PRESET_SOURCE={sysbest:'system',booklean:'book',outside:'outside',fucksystem:'mine'};
+const PRESET_SOURCE={
+  sysbest:'system',booklean:'book',outside:'outside',fucksystem:'mine',
+  easy:'mine',tailbooks:'book',fadebooks:'mine',tailsystem:'system',
+  fadesystem:'mine',combo:'mine',lucky10:'mine',armageddon:'mine'
+};
 
 function toggleWonMarket(m,btn){
   btn.classList.toggle('on');
@@ -2923,6 +3007,10 @@ function myBetsPanel(g,s,M){
 
 function card(g){
   const s=SIMS[g.id],M=marketOf(g),done=g.abstract==='Final';
+  // betting closes the moment a game goes live — pregame lines are stale the instant
+  // first pitch is thrown, so the tappable squares get replaced with a live scoreboard
+  // instead of letting anyone tap a pick on a game already in progress
+  const bettingClosed=done||g.abstract==='Live';
   // plain-language read of the model against whatever REAL line exists — not the model's
   // own synthetic total, the actual posted number. This is what answers "the model has
   // 11.5 but the book has 9.5 — is 9 a good bet or is 11 the safer one."
@@ -3041,7 +3129,7 @@ function card(g){
     ${sig?`<div class="sig">${sig}</div>`:''}
     ${badges}
    </div>
-   ${!done&&s?betGrid(g,s,M):''}
+   ${!bettingClosed&&s?betGrid(g,s,M):''}
    <div class="exprow">
     <button class="expbtn" onclick="pan(${g.id},'trend',this)">Trends</button>
     <button class="expbtn" onclick="pan(${g.id},'ag',this)">A–G</button>
@@ -3903,7 +3991,9 @@ function bestRunLines(){
 function allSidesForBuilder(){
   const out=[];
   GAMES.forEach(g=>{
-    if(g.abstract==='Final')return;
+    // once a game has started, betting on it is over — a real book would never
+    // honor a pregame line after first pitch, and neither should this
+    if(g.abstract==='Final'||g.abstract==='Live')return;
     const s=SIMS[g.id];if(!s)return;
     const gl=g.away.abbr+'@'+g.home.abbr;
     const bookML=bookLineForMarket(g.id,'moneyline');
@@ -3928,7 +4018,9 @@ function allSidesForBuilder(){
 function allRunLinesForBuilder(){
   const out=[];
   GAMES.forEach(g=>{
-    if(g.abstract==='Final')return;
+    // once a game has started, betting on it is over — a real book would never
+    // honor a pregame line after first pitch, and neither should this
+    if(g.abstract==='Final'||g.abstract==='Live')return;
     const s=SIMS[g.id];if(!s)return;
     const gl=g.away.abbr+'@'+g.home.abbr;
     const favSide=s.hw>=s.aw?'home':'away';
@@ -3962,7 +4054,9 @@ function allRunLinesForBuilder(){
 function allTotalsForBuilder(){
   const out=[];
   GAMES.forEach(g=>{
-    if(g.abstract==='Final')return;
+    // once a game has started, betting on it is over — a real book would never
+    // honor a pregame line after first pitch, and neither should this
+    if(g.abstract==='Final'||g.abstract==='Live')return;
     const s=SIMS[g.id];if(!s)return;
     const gl=g.away.abbr+'@'+g.home.abbr;
     const bookTotal=bookLineForMarket(g.id,'total');
@@ -5082,7 +5176,9 @@ function evaluateGame(g){
 }
 
 function masterEvaluation(){
-  return GAMES.filter(g=>g.abstract!=='Final')
+  // evaluation is for games you could still act on — once a game is live the
+  // window to bet it is already closed, so it shouldn't appear as an actionable read
+  return GAMES.filter(g=>g.abstract!=='Final'&&g.abstract!=='Live')
     .map(evaluateGame).filter(Boolean)
     .sort((a,b)=>{
       const rank={strong:0,lean:1,split:2,away:3};
@@ -6340,6 +6436,15 @@ function liveScoreBar(gid,g){
 }
 
 /* ── Live box score panel ── */
+function setLiveBoxTeam(gid,team){
+  window.__liveBoxTeam=window.__liveBoxTeam||{};
+  window.__liveBoxTeam[gid]=team;
+  const panel=document.getElementById('p-livebox-'+gid);
+  if(panel){
+    const g=GAMES.find(z=>z.id===gid);
+    if(g)panel.innerHTML=liveBoxPanel(gid,g);
+  }
+}
 function liveBoxPanel(gid,g){
   const L=ESPN_LIVE[gid];
   if(!L){
@@ -6419,66 +6524,89 @@ function liveBoxPanel(gid,g){
     </table>
   </div>`;
 
-  // ── Pitching lines ─────────────────────────────────────────────────────
-  const pitchKeys=['IP','H','R','ER','BB','K'];
+  // ── Pitching lines — full box score columns, matching the boxscore this
+  //    was built to mirror: PC, IP, H, R, ER, BB, K, ERA, WHIP ─────────────
+  const pitchKeys=['PC','IP','H','R','ER','BB','K','ERA','WHIP'];
   const pitchSection=(stats,ab)=>{
     if(!stats.pitchers.length)return '';
     return `<div style="margin-top:14px">
       <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
         text-transform:uppercase;color:var(--mute);margin-bottom:6px">${ab} pitching</div>
-      ${stats.pitchers.map(p=>`
-        <div style="display:flex;align-items:center;justify-content:space-between;
-          padding:7px 0;border-bottom:1px solid var(--rule)">
-          <span style="font-size:12px;font-weight:600;flex:1">${p.name}</span>
-          <div style="display:flex;gap:10px">
-            ${pitchKeys.map(k=>`<div style="text-align:center;min-width:22px">
-              <div style="font-family:'IBM Plex Mono';font-size:11px;
-                color:${k==='K'&&parseInt(p[k])>=6?'var(--win)':k==='ER'&&parseInt(p[k])>=3?'var(--rust)':'var(--chalk)'}">
-                ${p[k]||'—'}</div>
-              <div style="font-family:'IBM Plex Mono';font-size:7.5px;color:var(--mute);
-                margin-top:1px">${k}</div>
-            </div>`).join('')}
-          </div>
-        </div>`).join('')}
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:420px">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 6px;font-family:'IBM Plex Mono';
+            font-size:8.5px;color:var(--mute);border-bottom:1px solid var(--rule)">P</th>
+          ${pitchKeys.map(k=>`<th style="text-align:center;padding:4px 5px;
+            font-family:'IBM Plex Mono';font-size:8.5px;color:var(--mute);
+            border-bottom:1px solid var(--rule)">${k}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+        ${stats.pitchers.map(p=>`<tr>
+          <td style="padding:6px;font-size:11.5px;font-weight:600;border-bottom:1px solid var(--rule);
+            white-space:nowrap">${p.name}</td>
+          ${pitchKeys.map(k=>{
+            const v=p[k];
+            const hot=(k==='K'&&parseInt(v)>=6)||(k==='PC'&&parseInt(v)>=90);
+            const bad=(k==='ER'&&parseInt(v)>=3)||(k==='ERA'&&parseFloat(v)>=5)||(k==='WHIP'&&parseFloat(v)>=1.5);
+            return `<td style="text-align:center;padding:6px 5px;font-family:'IBM Plex Mono';
+              font-size:11px;color:${hot?'var(--win)':bad?'var(--rust)':'var(--chalk)'};
+              border-bottom:1px solid var(--rule)">${v||'—'}</td>`;
+          }).join('')}
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
     </div>`;
   };
 
-  // ── Batting lines ──────────────────────────────────────────────────────
-  const batKeys=['AB','R','H','RBI','HR','BB'];
+  // ── Batting lines — full lineup columns matching the boxscore, including
+  //    season AVG for context on the number ─────────────────────────────
+  const batKeys=['AB','R','H','RBI','HR','BB','K','SB','AVG'];
   const batSection=(stats,ab)=>{
     if(!stats.batters.length)return '';
     return `<div style="margin-top:14px">
       <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
         text-transform:uppercase;color:var(--mute);margin-bottom:6px">${ab} batting</div>
-      ${stats.batters.map(p=>`
-        <div style="display:flex;align-items:center;justify-content:space-between;
-          padding:6px 0;border-bottom:1px solid var(--rule)">
-          <span style="font-size:11.5px;flex:1">${p.name}</span>
-          <div style="display:flex;gap:8px">
-            ${batKeys.map(k=>`<div style="text-align:center;min-width:18px">
-              <div style="font-family:'IBM Plex Mono';font-size:11px;
-                color:${(k==='H'||k==='RBI'||k==='HR')&&parseInt(p[k])>=1?'var(--win)':'var(--chalk)'}">
-                ${p[k]||'0'}</div>
-              <div style="font-family:'IBM Plex Mono';font-size:7.5px;color:var(--mute);
-                margin-top:1px">${k}</div>
-            </div>`).join('')}
-          </div>
-        </div>`).join('')}
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:420px">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 6px;font-family:'IBM Plex Mono';
+            font-size:8.5px;color:var(--mute);border-bottom:1px solid var(--rule)">Hitter</th>
+          ${batKeys.map(k=>`<th style="text-align:center;padding:4px 4px;
+            font-family:'IBM Plex Mono';font-size:8.5px;color:var(--mute);
+            border-bottom:1px solid var(--rule)">${k}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+        ${stats.batters.map(p=>`<tr>
+          <td style="padding:6px;font-size:11.5px;border-bottom:1px solid var(--rule);
+            white-space:nowrap">${p.name}</td>
+          ${batKeys.map(k=>{
+            const v=p[k];
+            const hot=(k==='H'||k==='RBI'||k==='HR')&&parseInt(v)>=1;
+            return `<td style="text-align:center;padding:6px 4px;font-family:'IBM Plex Mono';
+              font-size:11px;color:${hot?'var(--win)':'var(--chalk)'};
+              border-bottom:1px solid var(--rule)">${v||(k==='AVG'?'—':'0')}</td>`;
+          }).join('')}
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
     </div>`;
   };
 
+  // ── Team toggle — same shape as the ESPN view: one team's full box at a
+  //    time instead of two half-width columns squeezed together ──────────
+  const activeTeam=(window.__liveBoxTeam&&window.__liveBoxTeam[gid])||'away';
+  const toggle=`<div class="subnav" style="margin-top:10px">
+    <button class="${activeTeam==='away'?'on':''}" onclick="setLiveBoxTeam(${gid},'away')">${g.away.abbr}</button>
+    <button class="${activeTeam==='home'?'on':''}" onclick="setLiveBoxTeam(${gid},'home')">${g.home.abbr}</button>
+  </div>`;
+
+  const oneTeam=activeTeam==='away'
+    ?pitchSection(L.awayStats,g.away.abbr)+batSection(L.awayStats,g.away.abbr)
+    :pitchSection(L.homeStats,g.home.abbr)+batSection(L.homeStats,g.home.abbr);
+
   return `<div style="padding:2px 0">
     ${linescore}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-      <div style="padding-right:10px;border-right:1px solid var(--rule)">
-        ${pitchSection(L.awayStats,g.away.abbr)}
-        ${batSection(L.awayStats,g.away.abbr)}
-      </div>
-      <div style="padding-left:10px">
-        ${pitchSection(L.homeStats,g.home.abbr)}
-        ${batSection(L.homeStats,g.home.abbr)}
-      </div>
-    </div>
+    ${toggle}
+    ${oneTeam}
     <div style="margin-top:12px;text-align:center">
       <button onclick="loadESPN().then(()=>render())" style="font-family:'IBM Plex Mono';
         font-size:9px;letter-spacing:.1em;text-transform:uppercase;
