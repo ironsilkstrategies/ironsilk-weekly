@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v70</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v73</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1100,11 +1100,38 @@ function simGame(g,N){
   Object.keys(scoreFreq).forEach(k=>{if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeKey=k}});
   let modeTot=0,modeTotN=0;
   bins.forEach((c,i)=>{if(c>modeTotN){modeTotN=c;modeTot=i}});
-  return{aR:as/N,hR:hs/N,hw:hw/N,aw:1-hw/N,env,hAdj,
+  // Apply the direct probability calibration correction here, at the single
+  // source every downstream consumer reads from — bet squares, presets, master
+  // evaluation, backtest all inherit the correction automatically instead of each
+  // needing their own patch. Situation is approximated pre-market as "favorite"
+  // if the raw sim itself has one side above 50% by a real margin — the market-
+  // relative version (favorite/underdog vs the BOOK) is used once a price exists,
+  // in situationOf(), for the archived-row segmented calibration above.
+  let rawHw=hw/N,rawAw=1-hw/N;
+  try{
+    const situation=rawHw>=0.5?'favorite':'underdog';
+    const calHw=sideCalibAdj(rawHw,situation);
+    const calAw=1-calHw;
+    if(!isNaN(calHw)&&calHw>0&&calHw<1){rawHw=calHw;rawAw=calAw}
+  }catch(e){/* calibration not loaded yet this session — fall back to raw sim */}
+  // same live calibration for the total, applied inside the over() closure so
+  // every caller (bet squares, presets, backtest, master evaluation) gets the
+  // corrected number automatically rather than needing its own patch
+  const rawOver=x=>tot.filter(v=>v>x).length/N;
+  const calibratedOver=x=>{
+    const raw=rawOver(x);
+    try{
+      const situation=rawHw>=0.5?'favorite':'underdog';
+      const cal=totalCalibAdj(raw,situation);
+      if(!isNaN(cal)&&cal>0&&cal<1)return cal;
+    }catch(e){/* calibration not loaded yet */}
+    return raw;
+  };
+  return{aR:as/N,hR:hs/N,hw:rawHw,aw:rawAw,env,hAdj,
     med:tot[Math.floor(N/2)],mean:(as+hs)/N,p10:tot[Math.floor(N*.1)],p90:tot[Math.floor(N*.9)],
     bins,N,modeScore:modeKey,modeScorePct:modeN/N,modeTot,modeTotPct:modeTotN/N,
     f5h:f5h/N,f5a:f5a/N,f5tie:1-(f5h+f5a)/N,f5tot:f5t/N,
-    over:x=>tot.filter(v=>v>x).length/N};
+    over:calibratedOver};
 }
 /* run-line probability from the same distribution, computed separately for clarity */
 function rlProb(g,s,side,line){
@@ -1121,7 +1148,15 @@ function rlProb(g,s,side,line){
     const m=side==='home'?h-a:a-h;
     if(m>line)c++;
   }
-  return c/N;
+  let raw=c/N;
+  try{
+    // this side is the one being ASKED about — line<0 means asking about the
+    // favorite covering, so use the raw win side as a rough favorite/underdog proxy
+    const situation=(side==='home'?(s?s.hw:0.5):(s?s.aw:0.5))>=0.5?'favorite':'underdog';
+    const cal=rlCalibAdj(raw,situation);
+    if(!isNaN(cal)&&cal>0&&cal<1)raw=cal;
+  }catch(e){/* calibration not loaded yet */}
+  return raw;
 }
 /* market comparison only — never feeds the projection */
 function marketOf(g){
@@ -1538,7 +1573,7 @@ async function loadAll(){
         home:mk(B,B.probablePitcher,(g.lineups||{}).homePlayers,PROJ[B.team.id])};
     }).sort((a,b)=>new Date(a.time)-new Date(b.time));
     try{
-      computeCalibration();computeEntities();computeGlobalDrift();render();buildProps();render();
+      computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();render();buildProps();render();
     }catch(e){console.error('post-fetch processing error:',e);}
     loadWeather();loadBoxes();
   }catch(e){document.getElementById('slate').innerHTML=
@@ -5211,6 +5246,429 @@ function masterEvaluation(){
     });
 }
 
+
+/* ================= DIRECT PROBABILITY CALIBRATION =================
+   Props already get a "did the model's stated probability match reality" check
+   (computeCalibration above). Sides, totals, and run lines never did — they only
+   improve indirectly, through run-projection nudges that flow into the win-prob
+   math one step removed from the actual claim being made. This closes that gap
+   directly, and segments it by market type AND situation instead of one blended
+   number, because an aggregate correction can hide a market- or situation-specific
+   blind spot by averaging it away with everything that IS well-calibrated. */
+
+// ── division map — fixed MLB structure, safe to hardcode, never changes mid-season ──
+const DIVISION={
+  NYY:'AL East',BOS:'AL East',TOR:'AL East',BAL:'AL East',TB:'AL East',
+  CWS:'AL Central',CLE:'AL Central',DET:'AL Central',KC:'AL Central',MIN:'AL Central',
+  HOU:'AL West',SEA:'AL West',TEX:'AL West',ATH:'AL West',LAA:'AL West',
+  NYM:'NL East',ATL:'NL East',PHI:'NL East',MIA:'NL East',WSH:'NL East',
+  CHC:'NL Central',STL:'NL Central',MIL:'NL Central',CIN:'NL Central',PIT:'NL Central',
+  LAD:'NL West',SD:'NL West',SF:'NL West',ARI:'NL West',COL:'NL West'
+};
+function isDivisionGame(g){
+  const da=DIVISION[g.away.abbr],dh=DIVISION[g.home.abbr];
+  return da&&dh&&da===dh;
+}
+function isInterleagueGame(g){
+  const da=DIVISION[g.away.abbr],dh=DIVISION[g.home.abbr];
+  if(!da||!dh)return null;
+  return da.slice(0,2)!==dh.slice(0,2);
+}
+
+// ── rest days — computed from the app's OWN archive, not invented. A team that
+// hasn't appeared in a graded/snapshotted game in the last N days is assumed to
+// be coming off a break; back-to-back days is the normal case and stays neutral.
+function restDaysFor(teamAbbr,beforeDate){
+  const arc=get(LS.arc,{});
+  const dates=Object.keys(arc).filter(d=>d<beforeDate).sort().reverse();
+  for(const d of dates.slice(0,10)){
+    const rows=(arc[d].rows||[]);
+    if(rows.some(r=>r.a===teamAbbr||r.h===teamAbbr)){
+      const gap=Math.round((new Date(beforeDate)-new Date(d))/86400000);
+      return gap; // 1 = played yesterday (normal), 2+ = had a break, 0 shouldn't happen
+    }
+  }
+  return null; // no record far enough back — unknown, not assumed
+}
+function restBucket(days){
+  if(days===null||days===undefined)return null;
+  if(days<=1)return 'normal-rest';
+  if(days===2)return 'one-day-break';
+  return 'extended-break';
+}
+
+// ── park factor bucket — high/neutral/low scoring environment, from the PARK table
+// that already drives the simulator itself, so this reuses real numbers not new ones ──
+function parkBucket(g){
+  const pf=PARK[g.home.abbr];
+  if(!pf)return 'neutral-park';
+  if(pf[0]>=108)return 'hitter-park';
+  if(pf[0]<=95)return 'pitcher-park';
+  return 'neutral-park';
+}
+
+const CAL_BANDS=[[0.50,0.60],[0.60,0.70],[0.70,0.80],[0.80,0.90],[0.90,1.00]];
+const CAL_MIN_N=12;          // per-bucket minimum before a correction activates
+const CAL_HALF_LIFE_DAYS=45; // recency weighting — a game 45 days old counts half
+
+function bandOf(p){
+  for(const[lo,hi]of CAL_BANDS)if(p>=lo&&p<hi)return`${(lo*100)|0}-${(hi*100)|0}`;
+  return p>=1?'90-100':'50-60';
+}
+function recencyWeight(dateStr){
+  const days=(Date.now()-new Date(dateStr).getTime())/86400000;
+  return Math.pow(0.5,Math.max(0,days)/CAL_HALF_LIFE_DAYS);
+}
+
+// situational bucket for a graded side/total row — home/away favorite status is
+// the one dimension we can reconstruct reliably from what's already archived;
+// park/rest/division splits would need extra fields stamped at snapshot time,
+// which the "Still to build" note below flags rather than faking.
+function situationOf(row){
+  if(row.mh===null||row.mh===undefined)return'no-market';
+  const favIsHome=row.mh>=0.5;
+  const pickedFav=(favIsHome&&row.side===row.h)||(!favIsHome&&row.side===row.a);
+  return pickedFav?'favorite':'underdog';
+}
+// Extended situation — folds in park/division/rest on top of favorite/underdog,
+// for the cross-market leakage check and the deeper breakdown. Kept SEPARATE from
+// situationOf() above rather than replacing it, because every existing segment key
+// and every correction factor already computed and applied live is keyed on the
+// single-dimension favorite/underdog string — changing that key format would
+// silently orphan every correction that's already active in simGame today.
+function extendedSituationOf(row,dateStr){
+  const base=situationOf(row);
+  if(base==='no-market')return[base];
+  const tags=[base];
+  const pf=PARK[row.h];
+  if(pf){
+    if(pf[0]>=108)tags.push('hitter-park');
+    else if(pf[0]<=95)tags.push('pitcher-park');
+  }
+  const div=DIVISION[row.a]&&DIVISION[row.h]&&DIVISION[row.a]===DIVISION[row.h];
+  if(div!==undefined&&DIVISION[row.a]&&DIVISION[row.h])tags.push(div?'division-game':'non-division-game');
+  if(dateStr){
+    const pickedHome=row.side===row.h;
+    const pickedAbbr=pickedHome?row.h:row.a;
+    const rest=restDaysFor(pickedAbbr,dateStr);
+    const rb=restBucket(rest);
+    if(rb)tags.push(rb);
+  }
+  return tags;
+}
+
+/* ── #1 + #2: segmented calibration — by market type AND situation ── */
+function computeSegmentedCalibration(){
+  const arc=get(LS.arc,{});
+  const buckets={}; // key: market|situation|band -> {n,w,e,wN} (wN = weighted n for recency)
+  const marketBuckets={}; // key: market -> same, for the market-only rollup
+  let touched=0;
+
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.mh===null||r.mh===undefined)return; // no market price, no probability claim to check
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      if(!won)return; // true tie, not a calibration data point
+      const hit=won===r.side?1:0;
+      const stated=r.sp; // the model's own stated probability for the side it picked
+      if(stated===null||stated===undefined)return;
+      const wt=recencyWeight(d);
+      const sit=situationOf(r);
+      const band=bandOf(stated);
+      const mk='moneyline';
+      [`${mk}|${sit}|${band}`].forEach(key=>{
+        const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+        b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      });
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+    // ── totals — now that totLine/totMktP/totModelP are captured at snapshot
+    // time, this activates for real instead of being a documented gap ──
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.totLine===null||r.totLine===undefined||r.totModelP===null||r.totModelP===undefined)return;
+      const actualTotal=F.a+F.h;
+      if(actualTotal===r.totLine)return; // push, not a calibration data point
+      const pickedOver=r.totModelP>=0.5;
+      const hit=(pickedOver&&actualTotal>r.totLine)||(!pickedOver&&actualTotal<r.totLine)?1:0;
+      const stated=pickedOver?r.totModelP:1-r.totModelP;
+      const wt=recencyWeight(d);
+      const sit=situationOf(r); // favorite/underdog still comes from the moneyline read
+      const band=bandOf(stated);
+      const mk='total';
+      const key=`${mk}|${sit}|${band}`;
+      const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+      b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+    // ── run line — same activation, using rlLine/rlMktP/rlModelP ──
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.rlLine===null||r.rlLine===undefined||r.rlModelP===null||r.rlModelP===undefined||!r.rlFavSide)return;
+      const favIsHome=r.rlFavSide===r.h;
+      const margin=favIsHome?(F.h-F.a):(F.a-F.h); // positive = favorite's margin of victory
+      if((margin+r.rlLine)===0)return; // push on the run line, not a data point
+      const favCovered=(margin+r.rlLine)>0;
+      const hit=favCovered?1:0; // rlModelP is stored as the favorite's cover probability
+      const stated=r.rlModelP;
+      const wt=recencyWeight(d);
+      const sit=situationOf(r);
+      const band=bandOf(stated);
+      const mk='runline';
+      const key=`${mk}|${sit}|${band}`;
+      const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+      b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+  });
+
+  const segFactors={};
+  Object.keys(buckets).forEach(key=>{
+    const b=buckets[key];
+    if(b.n<CAL_MIN_N){segFactors[key]={f:1,n:b.n,ready:false};return}
+    const actual=b.w/b.n;
+    const stated=b.e/b.n;
+    const raw=stated>0?actual/stated:1;
+    // shrink toward 1 by RAW sample size, but the "actual" and "stated" figures shown
+    // to the user are recency-weighted so a stale correction doesn't linger after
+    // the model's actually improved
+    const w=b.n/(b.n+CAL_MIN_N);
+    segFactors[key]={f:+Math.max(.6,Math.min(1.4,1+(raw-1)*w)).toFixed(3),
+      n:b.n,actual:+(actual*100).toFixed(1),predicted:+(stated*100).toFixed(1),ready:true};
+  });
+  const marketFactors={};
+  Object.keys(marketBuckets).forEach(mk=>{
+    const b=marketBuckets[mk];
+    if(b.n<CAL_MIN_N){marketFactors[mk]={f:1,n:b.n,ready:false};return}
+    const actual=b.w/b.n,stated=b.e/b.n,raw=stated>0?actual/stated:1;
+    const w=b.n/(b.n+CAL_MIN_N);
+    marketFactors[mk]={f:+Math.max(.6,Math.min(1.4,1+(raw-1)*w)).toFixed(3),
+      n:b.n,actual:+(actual*100).toFixed(1),predicted:+(stated*100).toFixed(1),ready:true};
+  });
+
+  set('d4.segcalib',{segments:segFactors,markets:marketFactors,touched,ts:Date.now()});
+  return{segments:segFactors,markets:marketFactors};
+}
+
+// The correction actually applied to a live side probability — segment-specific
+// first (market+situation+band), falling back to the market-wide number, falling
+// back to no correction. This is what makes the whole thing more than a display.
+// Total and run-line equivalents of sideCalibAdj — same shape, same reasoning:
+// correct the DISTANCE from 50% by the measured factor for that market+situation+
+// band, never letting a correction cross 50% and silently flip the recommended side.
+function totalCalibAdj(overP,situation){
+  const c=get('d4.segcalib',null);
+  if(!c)return overP;
+  const band=bandOf(overP);
+  const seg=c.segments[`total|${situation}|${band}`];
+  const factor=(seg&&seg.ready)?seg.f:((c.markets.total&&c.markets.total.ready)?c.markets.total.f:1);
+  const dist=overP-0.5;
+  return Math.max(0.01,Math.min(0.99,0.5+dist*factor));
+}
+function rlCalibAdj(favCoverP,situation){
+  const c=get('d4.segcalib',null);
+  if(!c)return favCoverP;
+  const band=bandOf(favCoverP);
+  const seg=c.segments[`runline|${situation}|${band}`];
+  const factor=(seg&&seg.ready)?seg.f:((c.markets.runline&&c.markets.runline.ready)?c.markets.runline.f:1);
+  const dist=favCoverP-0.5;
+  return Math.max(0.01,Math.min(0.99,0.5+dist*factor));
+}
+
+function sideCalibAdj(modelP,situation){
+  const c=get('d4.segcalib',null);
+  if(!c)return modelP;
+  // bandOf/situationOf are keyed off the STATED probability regardless of which
+  // side of 50% it's on — a picked underdog can legitimately carry modelP<0.5.
+  // The clamp below used to floor everything at 0.5, which silently rewrote
+  // a well-calibrated 30% claim into a wrong 50% one. Correcting toward reality
+  // must be allowed to land on EITHER side of 50%, bounded only by sane extremes.
+  const band=bandOf(modelP);
+  const segKey=`moneyline|${situation}|${band}`;
+  const seg=c.segments[segKey];
+  const factor=(seg&&seg.ready)?seg.f:((c.markets.moneyline&&c.markets.moneyline.ready)?c.markets.moneyline.f:1);
+  // factor scales the DISTANCE from 50%, not the raw probability — this is what
+  // keeps a correction from silently flipping which side gets recommended, while
+  // still allowing the corrected value to fall wherever the distance says it should
+  const dist=modelP-0.5;
+  const corrected=0.5+dist*factor;
+  return Math.max(0.01,Math.min(0.99,corrected));
+}
+
+/* ── #4: confidence-band-specific Kelly throttling ── */
+// If a band is shown to be overconfident, Kelly sizing in that exact band should
+// shrink automatically — not just the displayed probability, the actual stake math.
+function kellyBandThrottle(modelP,situation){
+  const c=get('d4.segcalib',null);
+  if(!c)return 1;
+  const band=bandOf(modelP);
+  const seg=c.segments[`moneyline|${situation}|${band}`];
+  if(!seg||!seg.ready)return 1;
+  // if the band is overconfident (actual < predicted), throttle stake sizing
+  // proportionally; if it's underconfident, leave sizing alone rather than
+  // rewarding it further — asymmetric on purpose, since the cost of being too
+  // aggressive on a bad band is worse than the cost of being slightly conservative
+  // on a good one
+  if(seg.actual>=seg.predicted)return 1;
+  const shortfall=(seg.predicted-seg.actual)/seg.predicted;
+  return Math.max(0.3,1-shortfall);
+}
+
+/* ── #5: cross-validate calibration against the backtest engine ── */
+// Proof, not faith: replay last month's picks with TODAY's calibration factors
+// applied retroactively, and compare ROI against the uncorrected baseline. If
+// applying calibration doesn't improve backtest ROI, the correction isn't real yet.
+function validateCalibrationAgainstBacktest(){
+  const baseline=runBacktest({minEdge:0,markets:{sides:true,props:false},staking:'flat'});
+  const c=get('d4.segcalib',null);
+  if(!c||!Object.keys(c.segments).length)return{ready:false};
+  // re-run with each bet's model probability passed through sideCalibAdj before
+  // pricing — this reuses runBacktest's own bet list rather than re-deriving one
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).filter(d=>arc[d].finals).sort();
+  const adjBets=[];
+  days.forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.mh===null||r.edge===null||r.edge===undefined)return;
+      if(F.a===F.h)return;
+      const won=(F.h>F.a?r.h:r.a)===r.side;
+      const sit=situationOf(r);
+      const adjP=sideCalibAdj(r.sp,sit);
+      const mktP=r.side===r.h?r.mh:(1-r.mh);
+      const price=btPrice(mktP);
+      adjBets.push({price,won,modelP:adjP});
+    });
+  });
+  let staked=0,profit=0,w=0,l=0;
+  adjBets.forEach(b=>{
+    const stake=1;staked+=stake;
+    const pl=b.won?btPayout(b.price,stake):-stake;
+    profit+=pl;b.won?w++:l++;
+  });
+  const adjROI=staked?+(profit/staked*100).toFixed(2):0;
+  return{ready:true,baselineROI:baseline.roi,adjustedROI:adjROI,
+    improved:adjROI>baseline.roi,delta:+(adjROI-baseline.roi).toFixed(2),
+    baselineN:baseline.n,adjN:adjBets.length};
+}
+
+/* ── #6: does the model's edge hold up specifically when it disagrees with the field? ── */
+// Reuses evaluateGame's own conflict/verdict machinery from the Master Evaluation —
+// this asks whether STRONG/LEAN calls that went AGAINST outside consensus actually
+// won at the rate their stated confidence implied, tracked separately from calls
+// where everyone agreed. This is where a real edge would show up if one exists.
+function disagreementCalibration(){
+  const arc=get(LS.arc,{});
+  const agree={n:0,w:0,e:0},disagree={n:0,w:0,e:0};
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.mh===null||r.sp===null||r.sp===undefined)return;
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);if(!won)return;
+      const hit=won===r.side?1:0;
+      const marketSide=r.mh>=0.5?r.h:r.a;
+      const bucket=(marketSide===r.side)?agree:disagree;
+      bucket.n++;bucket.w+=hit;bucket.e+=r.sp;
+    });
+  });
+  const summarize=b=>b.n?{n:b.n,actual:+(b.w/b.n*100).toFixed(1),predicted:+(b.e/b.n*100).toFixed(1)}:null;
+  return{agree:summarize(agree),disagree:summarize(disagree)};
+}
+
+/* ── #7: is the correction converging (healthy) or diverging (something's breaking)? ── */
+function calibrationDriftVelocity(){
+  const hist=get('d4.calibhistory',[]);
+  const c=get('d4.segcalib',null);
+  if(!c)return{trend:'no-data',points:hist};
+  // snapshot today's market-level factors, keep a rolling log so direction is visible
+  const today_=today();
+  const snapshot={date:today_,markets:{}};
+  Object.keys(c.markets).forEach(mk=>{snapshot.markets[mk]=c.markets[mk].f});
+  const filtered=hist.filter(h=>h.date!==today_);
+  filtered.push(snapshot);
+  const trimmed=filtered.slice(-30); // last 30 recorded days
+  set('d4.calibhistory',trimmed);
+  if(trimmed.length<3)return{trend:'building',points:trimmed};
+  const recent=trimmed.slice(-3),older=trimmed.slice(-6,-3);
+  if(!older.length)return{trend:'building',points:trimmed};
+  const avgDistFromOne=arr=>{
+    let sum=0,n=0;
+    arr.forEach(pt=>Object.values(pt.markets).forEach(f=>{sum+=Math.abs(f-1);n++}));
+    return n?sum/n:0;
+  };
+  const recentDist=avgDistFromOne(recent),olderDist=avgDistFromOne(older);
+  const trend=recentDist<olderDist-0.01?'converging':recentDist>olderDist+0.01?'diverging':'stable';
+  return{trend,recentDist:+recentDist.toFixed(3),olderDist:+olderDist.toFixed(3),points:trimmed};
+}
+
+/* ── #8: meta-calibration — does trusting a correction actually help? ── */
+// A correction built on 12-15 games could be real signal or noise that reverts.
+// This checks, after the fact, whether GAMES GRADED AFTER a correction was applied
+// actually calibrated better than the games used to build the correction did —
+// i.e. did applying it predict forward, or was it curve-fit to what already happened.
+function metaCalibrationCheck(){
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).filter(d=>arc[d].finals).sort();
+  if(days.length<CAL_MIN_N*2)return{ready:false,reason:`Need ${CAL_MIN_N*2} graded days, have ${days.length}.`};
+  const mid=Math.floor(days.length/2);
+  const buildOn=days.slice(0,mid),testOn=days.slice(mid);
+  const gather=(dateList)=>{
+    let n=0,w=0,e=0;
+    dateList.forEach(d=>{
+      const A=arc[d],fin=A.finals||{};
+      (A.rows||[]).forEach(r=>{
+        const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+        if(r.mh===null||r.sp===null||r.sp===undefined)return;
+        const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);if(!won)return;
+        n++;w+=(won===r.side?1:0);e+=r.sp;
+      });
+    });
+    return n?{n,actual:w/n,predicted:e/n}:null;
+  };
+  const build=gather(buildOn),test=gather(testOn);
+  if(!build||!test)return{ready:false,reason:'Not enough decided games in one half.'};
+  const buildGap=Math.abs(build.actual-build.predicted);
+  const testGap=Math.abs(test.actual-test.predicted);
+  // if a correction fit to the first half would have closed the gap, the SECOND
+  // half (which never saw that correction) should show a smaller gap than the
+  // first half did on its own raw numbers — if it doesn't, the "signal" was noise
+  const trustworthy=testGap<=buildGap*1.15; // small tolerance for natural variance
+  return{ready:true,buildGap:+buildGap.toFixed(3),testGap:+testGap.toFixed(3),
+    trustworthy,buildN:build.n,testN:test.n};
+}
+
+/* ── #9: cross-market leakage — one root cause corrupting several markets ── */
+// If the same situational bucket is miscalibrated across multiple markets, that's
+// one upstream bias (e.g. road-team run projections running cold) getting patched
+// three separate times instead of diagnosed once at the source.
+function crossMarketLeakage(){
+  const c=get('d4.segcalib',null);
+  if(!c)return[];
+  const bySituation={};
+  Object.keys(c.segments).forEach(key=>{
+    const[mk,sit,band]=key.split('|');
+    const seg=c.segments[key];
+    if(!seg.ready)return;
+    const gap=seg.actual-seg.predicted;
+    if(Math.abs(gap)<5)return; // small gaps aren't worth flagging as leakage
+    (bySituation[sit]=bySituation[sit]||[]).push({market:mk,band,gap:+gap.toFixed(1),n:seg.n});
+  });
+  return Object.keys(bySituation)
+    .map(sit=>({situation:sit,markets:bySituation[sit]}))
+    .filter(x=>x.markets.length>=2); // leakage = same situation, multiple markets affected
+}
+/* ================= DIRECT PROBABILITY CALIBRATION END ================= */
+
 /* ================= BACKTEST ENGINE =================
    Replays every graded day in the archive against a filter set and reports what
    would actually have happened. This is the difference between "my picks went 12-8"
@@ -5252,7 +5710,7 @@ function runBacktest(opts){
       if(F.a===F.h)return;                       // push, no action
       const won=(F.h>F.a?r.h:r.a)===r.side;
       bets.push({date:d,kind:'side',pick:r.side+' ML',game:r.a+'@'+r.h,
-        modelP,mktP,price,edge:e,won});
+        modelP,mktP,price,edge:e,won,situation:situationOf(r)});
     });
     if(o.markets.props)(A.pgrades||[]).forEach(g=>{
       const modelP=g.p;
@@ -5275,7 +5733,11 @@ function runBacktest(opts){
       const dec=b.price>0?(b.price/100+1):(100/Math.abs(b.price)+1);
       const bOdds=dec-1;
       const k=(b.modelP*bOdds-(1-b.modelP))/bOdds;
-      stake=Math.max(0,k*o.kellyFrac*bank);
+      // #4: throttle Kelly sizing down when this exact confidence band + situation
+      // has shown itself to be overconfident historically — the correction isn't
+      // just cosmetic, it actually reduces how much gets risked on a shaky band
+      const throttle=b.situation?kellyBandThrottle(b.modelP,b.situation):1;
+      stake=Math.max(0,k*o.kellyFrac*throttle*bank);
       stake=Math.min(stake,bank*0.1);          // never risk more than 10% on one bet
     }
     if(stake<=0)return;
@@ -6357,12 +6819,17 @@ function bridgeESPN(){
       awayStats,homeStats,
       lastPlay:situation.lastPlay?.text||null,
       espnAwayAbbr:away.team.abbreviation,
-      espnHomeAbbr:home.team.abbreviation
+      espnHomeAbbr:home.team.abbreviation,
+      espnEventId:ev.id||null
     };
   });
 }
 
 function buildESPNRoster(competitor){
+  // NOTE: this parses comp.statistics from the /scoreboard payload, which ESPN
+  // usually leaves empty or team-level-only during a live game — it is NOT the
+  // same object as the real per-player boxscore. Kept as a fallback only; the
+  // actual live pitching/batting tables now come from fetchESPNBoxscore below.
   const stats={pitchers:[],batters:[]};
   (competitor.statistics||[]).forEach(group=>{
     (group.athletes||[]).forEach(a=>{
@@ -6374,6 +6841,54 @@ function buildESPNRoster(competitor){
     });
   });
   return stats;
+}
+
+/* ── real per-player live boxscore — /summary, not /scoreboard ──────────────
+   The scoreboard endpoint (already polled every 90s for scores/situation) does
+   NOT reliably carry full per-athlete stat lines — that's a separate, heavier
+   payload at /summary?event={id}. This is why pitching/batting tables were
+   rendering empty even though the score, inning, and current batter/pitcher
+   all worked fine — those come from the scoreboard, this doesn't. Fetched lazily
+   (only for a game whose Live Box panel is actually open) and cached so it
+   isn't re-pulled on every re-render. */
+const ESPN_BOX_CACHE={};   // gid -> {stats, ts}
+const ESPN_BOX_INFLIGHT={}; // gid -> Promise, so a fast double-tap can't double-fetch
+async function fetchESPNBoxscore(gid){
+  const L=ESPN_LIVE[gid];
+  if(!L||!L.espnEventId)return null;
+  const cached=ESPN_BOX_CACHE[gid];
+  if(cached&&Date.now()-cached.ts<45000)return cached.stats; // live data goes stale fast — 45s cache
+  if(ESPN_BOX_INFLIGHT[gid])return ESPN_BOX_INFLIGHT[gid];
+  const p=(async()=>{
+    try{
+      const r=await fetch(`${ESPN_BASE}/summary?event=${L.espnEventId}`);
+      const j=await r.json();
+      const players=(j.boxscore||{}).players||[];
+      const parsed={}; // keyed by ESPN team abbreviation
+      players.forEach(teamBlock=>{
+        const ab=teamBlock.team?.abbreviation;
+        if(!ab)return;
+        const out={pitchers:[],batters:[]};
+        (teamBlock.statistics||[]).forEach(group=>{
+          const labels=group.labels||group.keys||[];
+          (group.athletes||[]).forEach(a=>{
+            const name=a.athlete?.shortName||a.athlete?.displayName||'';
+            const vals={};
+            (a.stats||[]).forEach((v,i)=>{if(labels[i])vals[labels[i]]=v});
+            const gname=(group.name||group.type||'').toLowerCase();
+            if(gname.includes('pitch'))out.pitchers.push({name,...vals});
+            else if(gname.includes('bat'))out.batters.push({name,...vals});
+          });
+        });
+        parsed[ab]=out;
+      });
+      ESPN_BOX_CACHE[gid]={stats:parsed,ts:Date.now()};
+      return parsed;
+    }catch(e){console.warn('ESPN boxscore fetch failed',e);return null}
+    finally{delete ESPN_BOX_INFLIGHT[gid]}
+  })();
+  ESPN_BOX_INFLIGHT[gid]=p;
+  return p;
 }
 
 /* ── Live score bar on the game card header ── */
@@ -6632,16 +7147,47 @@ function liveBoxPanel(gid,g){
     <button class="${activeTeam==='home'?'on':''}" onclick="setLiveBoxTeam(${gid},'home')">${g.home.abbr}</button>
   </div>`;
 
+  // Prefer the REAL per-player boxscore once it's loaded; fall back to the thin
+  // scoreboard-derived stats (usually empty) only until the real fetch resolves.
+  const boxCache=ESPN_BOX_CACHE[gid];
+  const realBox=boxCache?boxCache.stats:null;
+  const awayReal=realBox&&(realBox[L.espnAwayAbbr]||Object.values(realBox)[0]);
+  const homeReal=realBox&&(realBox[L.espnHomeAbbr]||Object.values(realBox)[1]);
+  const awayFinal=(awayReal&&(awayReal.pitchers.length||awayReal.batters.length))?awayReal:L.awayStats;
+  const homeFinal=(homeReal&&(homeReal.pitchers.length||homeReal.batters.length))?homeReal:L.homeStats;
+
   const oneTeam=activeTeam==='away'
-    ?pitchSection(L.awayStats,g.away.abbr)+batSection(L.awayStats,g.away.abbr)
-    :pitchSection(L.homeStats,g.home.abbr)+batSection(L.homeStats,g.home.abbr);
+    ?pitchSection(awayFinal,g.away.abbr)+batSection(awayFinal,g.away.abbr)
+    :pitchSection(homeFinal,g.home.abbr)+batSection(homeFinal,g.home.abbr);
+
+  const hasRealData=(awayFinal&&(awayFinal.pitchers.length||awayFinal.batters.length))
+    ||(homeFinal&&(homeFinal.pitchers.length||homeFinal.batters.length));
+
+  // Kick off the real boxscore fetch only when we don't already have fresh data —
+  // this is the only reliable "panel opened" trigger since there's no separate hook,
+  // but re-rendering on every cache hit would fight the user mid-tap (e.g. switching
+  // the team toggle) with a repaint that reverts nothing but wastes a frame. Only
+  // repaint when this call actually produced NEW data we didn't have a moment ago.
+  if(!hasRealData||Date.now()-((ESPN_BOX_CACHE[gid]||{}).ts||0)>=45000){
+    setTimeout(()=>{
+      const before=ESPN_BOX_CACHE[gid]?ESPN_BOX_CACHE[gid].ts:0;
+      fetchESPNBoxscore(gid).then(res=>{
+        if(!res)return;
+        const after=ESPN_BOX_CACHE[gid]?ESPN_BOX_CACHE[gid].ts:0;
+        if(after===before)return; // nothing new came back — don't repaint
+        const panel=document.getElementById('p-livebox-'+gid);
+        if(panel){const gg=GAMES.find(z=>z.id===gid);if(gg)panel.innerHTML=liveBoxPanel(gid,gg)}
+      });
+    },0);
+  }
 
   return `<div style="padding:2px 0">
     ${linescore}
     ${toggle}
+    ${!hasRealData?`<div class="empty" style="padding:14px 0">Loading player stats…</div>`:''}
     ${oneTeam}
     <div style="margin-top:12px;text-align:center">
-      <button onclick="loadESPN().then(()=>render())" style="font-family:'IBM Plex Mono';
+      <button onclick="delete ESPN_BOX_CACHE[${gid}];loadESPN().then(()=>render())" style="font-family:'IBM Plex Mono';
         font-size:9px;letter-spacing:.1em;text-transform:uppercase;
         background:transparent;border:1px solid var(--rule);color:var(--mute);
         border-radius:6px;padding:6px 14px;cursor:pointer">↻ Refresh</button>
@@ -6675,10 +7221,44 @@ function snapshot(){
     let side=s.hw>=.5?g.home.abbr:g.away.abbr,edge=null;
     if(M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
       edge=+Math.max(eh,ea).toFixed(1);side=eh>=ea?g.home.abbr:g.away.abbr}
+    // ── total & run-line market probability, captured at snapshot time ──
+    // Previously only the moneyline price (M.fh) was stored per row, which is why
+    // total/run-line segmented calibration couldn't activate — there was nothing
+    // to compare the model's total/RL claim against. Same book-first precedence
+    // as everywhere else: your uploaded screenshot outranks SharpAPI/TheRundown.
+    let totLine=null,totMktP=null,totModelP=null;
+    const bookTot=bookLineForMarket(g.id,'total');
+    if(bookTot&&bookTot.line!==null&&bookTot.line!==undefined){
+      const overB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTot.line)<0.01);
+      const underB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTot.line)<0.01);
+      if(overB&&underB){
+        const op=bookDevig(overB.price),up=bookDevig(underB.price),sum=op+up;
+        totLine=bookTot.line;totMktP=+(op/sum).toFixed(4);totModelP=+s.over(bookTot.line).toFixed(4);
+      }
+    }
+    if(totLine===null){
+      const st=sharpTotalFor(g.id);
+      if(st&&st.overProb!==null){
+        totLine=st.line;totMktP=+st.overProb.toFixed(4);totModelP=+s.over(st.line).toFixed(4);
+      }
+    }
+    let rlLine=null,rlMktP=null,rlModelP=null,rlFavSide=null;
+    const bookRL=bookLineForMarket(g.id,'runline');
+    if(bookRL){
+      const favB=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line<0);
+      const dogB=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line>0);
+      if(favB&&dogB){
+        const fp=bookDevig(favB.price),dp=bookDevig(dogB.price),sum=fp+dp;
+        rlLine=favB.line;rlFavSide=favB.side==='home'?g.home.abbr:g.away.abbr;
+        rlMktP=+(fp/sum).toFixed(4);
+        rlModelP=+rlProb(g,s,favB.side,-favB.line).toFixed(4);
+      }
+    }
     rows.push({id:g.id,a:g.away.abbr,h:g.home.abbr,pa:+s.aR.toFixed(2),ph:+s.hR.toFixed(2),
       pt:+s.mean.toFixed(2),mode:s.modeScore,modeTot:s.modeTot,hw:+s.hw.toFixed(4),
       mh:M?+M.fh.toFixed(4):null,edge,side,sp:+(side===g.home.abbr?s.hw:s.aw).toFixed(4),
-      f5:s.f5h>s.f5a?g.home.abbr:g.away.abbr,f5p:+Math.max(s.f5h,s.f5a).toFixed(4),f5t:+s.f5tot.toFixed(2)});
+      f5:s.f5h>s.f5a?g.home.abbr:g.away.abbr,f5p:+Math.max(s.f5h,s.f5a).toFixed(4),f5t:+s.f5tot.toFixed(2),
+      totLine,totMktP,totModelP,rlLine,rlMktP,rlModelP,rlFavSide});
   });
   if(!rows.length)return;
   const ps=[];
@@ -7012,7 +7592,7 @@ async function renderGrades(force){
       }catch(e){}
     }
     }
-    set(LS.arc,arc);computeCalibration();computeEntities();computeGlobalDrift();buildProps();
+    set(LS.arc,arc);computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();buildProps();
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
     try{gradeExtPicks();}catch(e){console.warn("ext",e)}
   }
@@ -7053,7 +7633,7 @@ async function renderGrades(force){
     h=innerRow(RESULTS_MODE,[['sides','Sides'],['props','Props'],['f5','First 5'],['picks','Every pick']],'RESULTS_MODE');
   }
   if(GRADETAB==='calib'){
-    h=innerRow(CALIB_MODE,[['calib','Corrections'],['learn','Learned bias']],'CALIB_MODE');
+    h=innerRow(CALIB_MODE,[['calib','Corrections'],['learn','Learned bias'],['deep','Deep dive']],'CALIB_MODE');
   }
   if(GRADETAB==='history'){
     h=innerRow(HIST_MODE,[['days','By day'],['recap','Share card']],'HIST_MODE');
@@ -7192,6 +7772,155 @@ async function renderGrades(force){
       <div class="sub" style="margin-top:6px">Factor under 1.00 means the model has been too optimistic on that
       player and his props are now discounted. Over 1.00 means it's been too pessimistic.</div></div>`
       :'<div class="empty">Need at least 6 graded props per player.</div>';
+  }
+  if(GRADETAB==='calib'&&CALIB_MODE==='deep'){
+    const seg=computeSegmentedCalibration();
+    const dc=disagreementCalibration();
+    const dv=calibrationDriftVelocity();
+    const meta=metaCalibrationCheck();
+    const leak=crossMarketLeakage();
+    const bt=validateCalibrationAgainstBacktest();
+
+    h+=`<div class="tkt hi"><h3>Direct probability calibration</h3>
+      <div class="sub">Props already get checked against reality. This does the same for sides — segmented
+      by market and by favorite/underdog situation, not one blended number, so a correction can't hide inside
+      an average that looks fine overall. Recomputes every time grades run.</div></div>`;
+
+    // #1/#2 — segmented corrections table
+    const segKeys=Object.keys(seg.segments).filter(k=>seg.segments[k].ready);
+    h+=`<div class="sbar"><h2>Segmented corrections</h2><div class="ln"></div><div class="ct mono">${segKeys.length}</div></div>`;
+    h+=segKeys.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Market</th><th>Situation</th><th>Band</th><th>N</th><th>Said</th><th>Actual</th><th>Factor</th></tr>
+      ${segKeys.map(k=>{
+        const[mk,sit,band]=k.split('|');const o=seg.segments[k];
+        const col=Math.abs(o.f-1)<0.05?'var(--mute)':o.f<1?'var(--rust)':'var(--win)';
+        return `<tr><td>${mk}</td><td>${sit}</td><td>${band}%</td><td>${o.n}</td>
+          <td>${o.predicted}%</td><td>${o.actual}%</td><td style="color:${col}">×${o.f}</td></tr>`;
+      }).join('')}</table>
+      <div class="sub" style="margin-top:6px">Factor scales how far a pick's stated probability sits from 50% —
+      under 1.00 pulls an overconfident pick back toward the coin flip, over 1.00 pushes an underconfident one
+      further out. This is applied live, inside the simulator itself, not just shown here.</div></div>`
+      :`<div class="empty">Need ${CAL_MIN_N}+ decided moneyline picks in a market/situation/band combo before
+      a correction activates. Keep grading.</div>`;
+
+    // #6 — disagreement calibration
+    h+=`<div class="sbar"><h2>When the model disagrees with the market</h2><div class="ln"></div></div>`;
+    if(dc.agree||dc.disagree){
+      h+=`<div class="tkt">
+        <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+          <div><div style="font-family:'Archivo';font-weight:900;font-size:19px">${dc.agree?dc.agree.actual+'%':'—'}</div>
+            <div class="m">agreed w/ market · said ${dc.agree?dc.agree.predicted+'%':'—'} · n=${dc.agree?dc.agree.n:0}</div></div>
+          <div><div style="font-family:'Archivo';font-weight:900;font-size:19px;color:var(--gold)">${dc.disagree?dc.disagree.actual+'%':'—'}</div>
+            <div class="m">disagreed w/ market · said ${dc.disagree?dc.disagree.predicted+'%':'—'} · n=${dc.disagree?dc.disagree.n:0}</div></div>
+        </div>
+        <div class="sub" style="margin-top:8px">If the disagree column beats its own stated probability, the
+        model has a real independent edge when it goes against the field. If it falls short worse than the
+        agree column does, going against consensus is where the model is weakest, not strongest.</div>
+      </div>`;
+    }else h+='<div class="empty">Not enough decided picks with a market price yet.</div>';
+
+    // #7 — drift velocity
+    h+=`<div class="sbar"><h2>Is calibration converging or diverging?</h2><div class="ln"></div></div>`;
+    const trendColor=dv.trend==='converging'?'var(--win)':dv.trend==='diverging'?'var(--rust)':'var(--mute)';
+    h+=`<div class="tkt" style="border-left:3px solid ${trendColor}">
+      <div style="font-family:'Archivo';font-weight:900;font-size:16px;color:${trendColor};
+        text-transform:uppercase">${dv.trend}</div>
+      <div class="sub" style="margin-top:4px">${dv.trend==='converging'
+        ?'Recent corrections are smaller than older ones — the model is getting more accurate on its own, less patching required.'
+        :dv.trend==='diverging'
+        ?'Recent corrections are LARGER than older ones — something is actively breaking. Worth checking for a data source change or a rule/environment shift.'
+        :dv.trend==='building'
+        ?'Not enough daily snapshots yet to call a direction — check back after a few more days of grading.'
+        :'No calibration data yet.'}</div>
+      ${dv.recentDist!==undefined?`<div class="m" style="margin-top:6px">recent avg |factor−1|: ${dv.recentDist} · older: ${dv.olderDist}</div>`:''}
+    </div>`;
+
+    // #8 — meta calibration
+    h+=`<div class="sbar"><h2>Is the correction itself trustworthy?</h2><div class="ln"></div></div>`;
+    if(meta.ready){
+      h+=`<div class="tkt" style="border-left:3px solid ${meta.trustworthy?'var(--win)':'var(--rust)'}">
+        <div style="font-family:'Archivo';font-weight:900;font-size:15px;color:${meta.trustworthy?'var(--win)':'var(--rust)'}">
+          ${meta.trustworthy?'Holds up out of sample':'Looks like noise, not signal'}</div>
+        <div class="sub" style="margin-top:4px">Splits your graded history in half. Builds a calibration gap on
+        the first half (n=${meta.buildN}, gap ${meta.buildGap}), then checks whether the SECOND half — which never
+        saw that correction — shows a similar or smaller gap (n=${meta.testN}, gap ${meta.testGap}).
+        ${meta.trustworthy?'It does — the pattern generalized forward instead of just describing what already happened.'
+          :'It got worse instead — this looks like it was curve-fit to the first half rather than a real, repeating pattern.'}</div>
+      </div>`;
+    }else h+=`<div class="empty">${meta.reason||'Not enough graded days yet.'}</div>`;
+
+    // #9 — cross-market leakage
+    h+=`<div class="sbar"><h2>Cross-market leakage</h2><div class="ln"></div></div>`;
+    if(leak.length){
+      h+=leak.map(l=>`<div class="tkt" style="border-left:3px solid var(--gold)">
+        <div style="font-weight:700">${l.situation}</div>
+        <div class="sub">Miscalibrated across ${l.markets.length} markets at once —
+        ${l.markets.map(m=>`${m.market} ${m.band}% (${m.gap>0?'+':''}${m.gap})`).join(', ')}.
+        Same situation breaking in more than one market usually means one upstream cause, not several
+        unrelated ones — check the underlying run/win projection for that situation before trusting
+        each market's own correction independently.</div>
+      </div>`).join('');
+    }else h+='<div class="empty">No shared miscalibration detected across markets right now — good sign.</div>';
+
+    // #5 — cross-validation against the backtest
+    h+=`<div class="sbar"><h2>Does calibration actually improve backtest ROI?</h2><div class="ln"></div></div>`;
+    if(bt.ready){
+      const better=bt.improved;
+      h+=`<div class="tkt" style="border-left:3px solid ${better?'var(--win)':'var(--rust)'}">
+        <div style="display:flex;justify-content:space-around;text-align:center">
+          <div><div style="font-family:'Archivo';font-weight:900;font-size:19px">${bt.baselineROI}%</div>
+            <div class="m">raw ROI · n=${bt.baselineN}</div></div>
+          <div><div style="font-family:'Archivo';font-weight:900;font-size:19px;color:${better?'var(--win)':'var(--rust)'}">${bt.adjustedROI}%</div>
+            <div class="m">calibrated ROI · n=${bt.adjN}</div></div>
+        </div>
+        <div class="sub" style="margin-top:8px">${better
+          ?`Applying today's calibration retroactively improves ROI by ${bt.delta>0?'+':''}${bt.delta} points — this is real evidence, not just a display change.`
+          :`Applying today's calibration retroactively does NOT improve ROI (${bt.delta} points). The segmented corrections may need more data, or may be overfitting to recent noise.`}</div>
+      </div>`;
+    }else h+='<div class="empty">Not enough segmented data yet to cross-validate.</div>';
+
+    // ── extended situational breakdown — park / division / rest, now that all
+    // three are captured (park from the same table simGame uses, division from a
+    // fixed MLB structure, rest computed from the archive itself) ──
+    const arcAll=get(LS.arc,{});
+    const extBuckets={};
+    Object.keys(arcAll).forEach(d=>{
+      const A=arcAll[d],fin=A.finals||{};
+      (A.rows||[]).forEach(r=>{
+        const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+        if(r.mh===null||r.mh===undefined||r.sp===null||r.sp===undefined)return;
+        const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);if(!won)return;
+        const hit=won===r.side?1:0;
+        extendedSituationOf(r,d).slice(1).forEach(tag=>{ // slice(1) skips the base favorite/underdog tag, already shown above
+          const b=extBuckets[tag]=extBuckets[tag]||{n:0,w:0,e:0};
+          b.n++;b.w+=hit;b.e+=r.sp;
+        });
+      });
+    });
+    const extReady=Object.keys(extBuckets).filter(k=>extBuckets[k].n>=CAL_MIN_N);
+    h+=`<div class="sbar"><h2>Park · division · rest breakdown</h2><div class="ln"></div>
+      <div class="ct mono">${extReady.length}</div></div>`;
+    h+=extReady.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Situation</th><th>N</th><th>Said</th><th>Actual</th><th>Gap</th></tr>
+      ${extReady.sort((a,b)=>extBuckets[b].n-extBuckets[a].n).map(tag=>{
+        const b=extBuckets[tag],actual=+(b.w/b.n*100).toFixed(1),said=+(b.e/b.n*100).toFixed(1);
+        const gap=+(actual-said).toFixed(1);
+        const col=Math.abs(gap)<5?'var(--mute)':gap<0?'var(--rust)':'var(--win)';
+        return `<tr><td>${tag}</td><td>${b.n}</td><td>${said}%</td><td>${actual}%</td>
+          <td style="color:${col}">${gap>0?'+':''}${gap}</td></tr>`;
+      }).join('')}</table>
+      <div class="sub" style="margin-top:6px">Not yet fed back into the simulator directly — this is diagnostic,
+      showing whether the model has a specific park, division, or rest-day blind spot worth investigating.
+      Rest days are computed from your own graded history (a team with no record 10+ days back shows as
+      unknown rather than a guess). Division splits use fixed MLB alignment.</div></div>`
+      :`<div class="empty">Need ${CAL_MIN_N}+ decided picks in a park/division/rest bucket before this shows anything —
+      keep grading and it'll fill in.</div>`;
+
+    h+=`<div class="note"><b>Now live:</b> total-market and run-line segmentation are active — both now store
+    their own market probability at snapshot time and apply a correction inside the simulator itself, the same
+    way sides already did. Park/division/rest splits above are diagnostic only for now; feeding them back into
+    the live sim the way favorite/underdog already is would be the natural next step once there's enough volume
+    in each bucket to trust it.</div>`;
   }
   if(GRADETAB==='history'&&HIST_MODE==='days'){
     h=days.map(D=>`<div class="tkt"><h3>${D.d}</h3><div class="sub"><b>${D.dW}-${D.dL}</b> on sides</div>
@@ -7779,7 +8508,7 @@ async function forceGradeEverything(){
     }else{
       steps.push('No snapshot exists for today yet.');
     }
-    computeCalibration();computeEntities();computeGlobalDrift();
+    computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();
     steps.push('Calibration and entity bias recomputed.');
 
     try{recordSimVsBook(arc,get(LS.bookshots,{}));steps.push('Sim-vs-book accuracy updated.');}
@@ -7830,7 +8559,7 @@ async function autoGradeIfFinals(){
     await gradePropsFor(arc[d]);
     if(allGamesFinalized(d))arc[d].locked=true;
     set(LS.arc,arc);
-    computeCalibration();computeEntities();computeGlobalDrift();
+    computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){}
     try{gradeExtPicks();}catch(e){}
     try{settleLockedTickets();}catch(e){}
