@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v69</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v70</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3698,7 +3698,7 @@ function gradeLeg(leg,ticketDate){
   if(/ ML$/.test(pick)){
     const who=pick.replace(/ ML$/,'');
     if(!R.live){
-      if(a===h)return{hit:null,detail:line+' · push'};
+      if(a===h)return{hit:null,push:true,detail:line+' · push — refunded, not counted as a loss'};
       return{hit:(h>a?homeAb:awayAb)===who,detail:line};
     }
     // a live ML lock is much riskier to call early — only settle it once the trailing
@@ -3725,7 +3725,7 @@ function gradeLeg(leg,ticketDate){
     if(/^F5 over /.test(pick))return{hit:f5tot>parseFloat(pick.slice(8)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`};
     if(/^F5 under /.test(pick))return{hit:f5tot<parseFloat(pick.slice(9)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`};
     const who=pick.slice(3);
-    if(R.fa===R.fh)return{hit:null,detail:`F5 ${R.fa}–${R.fh} · push`};
+    if(R.fa===R.fh)return{hit:null,push:true,detail:`F5 ${R.fa}–${R.fh} · push — refunded, not counted as a loss`};
     return{hit:(R.fh>R.fa?homeAb:awayAb)===who,detail:`F5 ${R.fa}–${R.fh}`};
   }
   return{hit:null,detail:line};
@@ -4499,27 +4499,44 @@ function settleLockedTickets(){
     if(!stake||stake<=0)return;
     const b=getBankroll();
     if(b.history.some(h=>h.id===t.id))return;
-    let allDecided=true,anyLoss=false;
+    let allDecided=true,anyLoss=false,pushCount=0;
+    // standard sportsbook rule: a PUSHED leg is removed from the parlay and the
+    // payout recalculates on whatever's left (a 2-team parlay with 1 push becomes
+    // a straight bet on the surviving leg, at that leg's own odds) — a push never
+    // costs you the ticket and never inflates it either
+    const survivingP=[]; // combined probability of the legs that actually settled live
     t.legs.forEach(x=>{
-      const r=gradeLeg(x,t.date).hit;
-      if(r===null){allDecided=false;return}
-      if(r===false)anyLoss=true;
+      const g=gradeLeg(x,t.date);
+      if(g.push){pushCount++;return} // pushed legs don't block settlement or count as a loss
+      if(g.hit===null){allDecided=false;return}
+      if(g.hit===false)anyLoss=true;
+      survivingP.push(x.p);
     });
-    // A parlay is exactly as dead as any ONE of its legs losing — a single dead leg
-    // sinks the whole ticket regardless of what the other 9 legs do, so there's no
+    // A parlay is exactly as dead as any ONE of its remaining legs losing — a single
+    // dead leg sinks the ticket regardless of what other legs do, so there's no
     // reason to wait on them once one has been eliminated (gradeLeg already applies
-    // conservative in-game math elimination, not just final scores). Waiting for
-    // every leg to individually reach Final before archiving a ticket that already
-    // can't win was the exact bug being fixed here — a 10-leg parlay with one dead
-    // leg in the 6th inning is a settled loss right now, not six hours from now.
+    // conservative in-game math elimination, not just final scores).
     if(anyLoss)allDecided=true;
     if(!allDecided)return;
     const won=!anyLoss;
-    const odds=probToAmer(t.p);
-    const res=won?amerPayout(odds,stake):null;
-    const profit=won?(res?res.profit:0):-stake;
-    settleTicket(t.id,stake,profit,won);
-    if(!won)recordLossPostMortem(t,stake);
+    let profit;
+    if(pushCount===t.legs.length){
+      // every leg pushed — the whole ticket refunds, no win, no loss, no profit
+      profit=0;
+    }else if(won){
+      // recompute odds from only the legs that actually decided a real outcome —
+      // pushed legs are excluded from the combined probability entirely, exactly
+      // like a real book strips a push out and prices the rest on its own
+      const combinedP=survivingP.length?survivingP.reduce((a,x)=>a*x,1):t.p;
+      const odds=probToAmer(combinedP);
+      const res=amerPayout(odds,stake);
+      profit=res?res.profit:0;
+    }else{
+      profit=-stake;
+    }
+    const outcome=pushCount===t.legs.length?'push':(won?true:false);
+    settleTicket(t.id,stake,profit,outcome);
+    if(outcome===false)recordLossPostMortem(t,stake);
     // auto-archive the instant it's decided — no manual step needed to see it
     // move out of Pending once the outcome is locked in
     t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);
@@ -4583,7 +4600,10 @@ function renderMoneyTab(){
   const b=getBankroll();
   const pm=getLossMortems();
   const dl=dailyLimit(),tl=ticketLimit(),staked=stakedToday();
-  const wins=b.history.filter(h=>h.won),losses=b.history.filter(h=>!h.won);
+  // three real outcomes now, not two — a push is neither a win nor a loss
+  const wins=b.history.filter(h=>h.won===true);
+  const losses=b.history.filter(h=>h.won===false);
+  const pushes=b.history.filter(h=>h.won==='push');
   const totalStaked=b.history.reduce((a,h)=>a+h.stake,0);
 
   // Balance = starting budget + everything won or lost so far this month.
@@ -4608,14 +4628,16 @@ function renderMoneyTab(){
 
   // ── Latest transaction — the single most recent thing that happened ────
   if(latest){
-    const lc=latest.won?'var(--win)':'var(--rust)';
-    const lArrow=latest.won?'▲':'▼';
+    const latestIsPush=latest.won==='push';
+    const lc=latestIsPush?'var(--mute)':latest.won?'var(--win)':'var(--rust)';
+    const lArrow=latestIsPush?'—':latest.won?'▲':'▼';
+    const lLabel=latestIsPush?'Ticket pushed':latest.won?'Ticket won':'Ticket lost';
     h+=`<div class="tkt" style="border-left:3px solid ${lc}">
       <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
         text-transform:uppercase;color:var(--mute);margin-bottom:4px">Latest</div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-weight:700">${latest.won?'Ticket won':'Ticket lost'} · ${latest.date}</div>
+          <div style="font-weight:700">${lLabel} · ${latest.date}</div>
           <div class="m" style="margin-top:2px">$${latest.stake.toFixed(2)} staked → balance $${latest.runningBalance.toFixed(2)}</div>
         </div>
         <div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${lc}">
@@ -4650,7 +4672,7 @@ function renderMoneyTab(){
 
   // ── Season snapshot — one line, not a wall ──────────────────────────────
   h+=`<div class="note" style="text-align:center;display:flex;justify-content:center;gap:18px;flex-wrap:wrap">
-    <span><b style="color:var(--chalk)">${wins.length}-${losses.length}</b> record</span>
+    <span><b style="color:var(--chalk)">${wins.length}-${losses.length}${pushes.length?'-'+pushes.length:''}</b> record${pushes.length?' (W-L-Push)':''}</span>
     <span><b style="color:var(--chalk)">$${totalStaked.toFixed(2)}</b> total staked</span>
   </div>`;
 
@@ -4658,9 +4680,12 @@ function renderMoneyTab(){
   h+=`<div class="sbar"><h2>Transactions</h2><div class="ln"></div></div>`;
   h+=withRunning.slice().reverse().map(rec=>{
     const mortem=pm[rec.id];
-    const color=rec.won?'var(--win)':'var(--rust)';
-    const arrow=rec.won?'▲':'▼';
-    const mortemHtml=(!rec.won&&mortem)?`
+    const isPush=rec.won==='push';
+    const color=isPush?'var(--mute)':rec.won?'var(--win)':'var(--rust)';
+    const arrow=isPush?'—':rec.won?'▲':'▼';
+    const label=isPush?'Push':rec.won?'Won':'Lost';
+    // a push is never a loss — no post-mortem, nothing "went wrong"
+    const mortemHtml=(rec.won===false&&mortem)?`
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--rule)">
         <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
           text-transform:uppercase;color:var(--rust);margin-bottom:4px">What went wrong</div>
@@ -4675,7 +4700,7 @@ function renderMoneyTab(){
     return `<div class="tkt" style="border-left:3px solid ${color}">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div>
-          <div style="font-weight:700">${rec.won?'Won':'Lost'} · ${rec.date}</div>
+          <div style="font-weight:700">${label} · ${rec.date}</div>
           <div class="m" style="margin-top:2px">$${rec.stake.toFixed(2)} staked</div>
         </div>
         <div style="text-align:right">
@@ -5378,9 +5403,9 @@ function buildAllTimeRecord(){
     const bucket=t.source==='system'?system:t.source==='book'?book
       :t.source==='outside'?outside:mine;
     t.legs.forEach(x=>{
-      const{hit,detail}=gradeLeg(x,t.date);
+      const{hit,push,detail}=gradeLeg(x,t.date);
       const gid=legGameId(x,t.date);
-      bucket.push({date:t.date,pick:x.pick,game:x.game,p:x.p,hit,detail,
+      bucket.push({date:t.date,pick:x.pick,game:x.game,p:x.p,hit,push,detail,
         ticketId:t.id,gid:gid&&GAMES.some(z=>z.id===gid)?gid:null,fromParlay:t.legs.length>1});
     });
   });
@@ -5398,10 +5423,11 @@ function buildAllTimeRecord(){
 }
 
 function recordStats(list){
-  const graded=list.filter(x=>x.hit===true||x.hit===false);
-  const w=graded.filter(x=>x.hit===true).length,l=graded.filter(x=>x.hit===false).length;
-  const pending=list.length-graded.length;
-  return{w,l,pending,total:list.length,pct:w+l?((w/(w+l))*100).toFixed(1):'—'};
+  const w=list.filter(x=>x.hit===true).length;
+  const l=list.filter(x=>x.hit===false).length;
+  const p=list.filter(x=>x.push===true).length;
+  const pending=list.length-w-l-p;
+  return{w,l,p,pending,total:list.length,pct:w+l?((w/(w+l))*100).toFixed(1):'—'};
 }
 
 let ATR_TAB='mine';
@@ -5483,7 +5509,7 @@ function renderAllTimeRecord(){
 
 function legRowHtml(x,isOutside){
   const color=x.hit===true?'var(--win)':x.hit===false?'var(--rust)':'var(--mute)';
-  const icon=x.hit===true?'✅':x.hit===false?'❌':'⏳';
+  const icon=x.hit===true?'✅':x.hit===false?'❌':x.push?'➖':'⏳';
   const jumpTo=x.gid?` onclick="jumpToGame(${x.gid})" style="cursor:pointer"`:'';
   const detail=x.detail?`<span style="font-family:'IBM Plex Mono';font-size:9.5px;color:${color};margin-left:5px">${x.detail}</span>`:'';
   const parlayTag=x.fromParlay?` <span class="m" style="opacity:.6">parlay leg</span>`:'';
@@ -5815,17 +5841,21 @@ function buildTabHtml(){
 // as if it were decided.
 function ticketIsComplete(t){
   return t.legs.every(x=>{
-    const r=gradeLeg(x,t.date).hit;
-    return r===true||r===false;
+    const g=gradeLeg(x,t.date);
+    // a push is a DECIDED outcome (neutral), not a still-pending one — only a
+    // genuine null with no push flag means we're still waiting on this leg
+    return g.hit===true||g.hit===false||g.push===true;
   });
 }
 function ticketRecord(t){
-  let w=0,l=0;
+  let w=0,l=0,p=0;
   t.legs.forEach(x=>{
-    const r=gradeLeg(x,t.date).hit;
-    if(r===true)w++;else if(r===false)l++;
+    const g=gradeLeg(x,t.date);
+    if(g.hit===true)w++;
+    else if(g.hit===false)l++;
+    else if(g.push===true)p++;
   });
-  return{w,l,won:l===0&&w>0};
+  return{w,l,p,won:l===0&&w>0};
 }
 function archiveTicket(id){
   const L=get(LS.locked,[]);
