@@ -2109,31 +2109,47 @@ function buildPreset(mode){
 }
 
 const PRESETS=[
-  ['sysbest','Systems best','The picks the simulator rates highest, independent of what the market thinks. Files under My picks — counts against your bankroll.'],
+  ['sysbest','Systems best','The picks the simulator rates highest, independent of what the market thinks. Files under System — tracked daily at a flat $1, no bankroll impact.'],
   ['booklean','Books lean','Whatever side the market itself is pricing hardest. The model gets no vote here. Files under Market picks — tracked daily at a flat $1, no bankroll impact.'],
   ['outside','Outside picks','Built from picks uploaded off other sites — OddsShark, Covers, Picks and Parlays. Files under Outside picks — tracked daily at a flat $1, no bankroll impact.'],
-  ['fucksystem','Fuck the system','Straight inversion of Systems best — every side the simulator likes least. Files under My picks — counts against your bankroll.'],
+  ['fucksystem','Fuck the system','Straight inversion of Systems best — every side the simulator likes least. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
   ['easy','Easy wins','Highest model probability, no edge required — the safest available reads. Files under My picks — counts against your bankroll.'],
   ['tailbooks','Tail the books','Whatever side the market itself favors most. Ignores the model entirely. Files under Market picks — tracked daily at a flat $1, no bankroll impact.'],
-  ['fadebooks','Fade the books','The side the market likes least — true underdogs by market price alone. Files under My picks — counts against your bankroll.'],
-  ['tailsystem','Tail the system','Whatever side the simulator likes most, independent of the market. Files under My picks — counts against your bankroll.'],
-  ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome. Files under My picks — counts against your bankroll.'],
+  ['fadebooks','Fade the books','The side the market likes least — true underdogs by market price alone. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
+  ['tailsystem','Tail the system','Whatever side the simulator likes most, independent of the market. Files under System — tracked daily at a flat $1, no bankroll impact.'],
+  ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
   ['combo','Combination+','Moneyline + Total paired together on the same game, for as many games as needed. Files under My picks — counts against your bankroll.'],
   ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge. Files under My picks — counts against your bankroll.'],
-  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under My picks — counts against your bankroll.']
+  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under Specialty — tracked daily at a flat $1, no bankroll impact.']
 ];
-// ── Every preset routes to exactly ONE of three buckets — no more per-preset
-// mixing of "book"/"system"/"mine"/"outside". Only 'mine' ever touches the
-// bankroll; 'market' and 'outside' are tracked-for-the-record only, always
-// staked at a flat $1, never debited/credited against real money.
+// ── Every preset routes to exactly ONE of four buckets. Only 'mine' ever
+// touches the bankroll — that's reserved for picks YOU built by hand (Easy
+// wins, Combination+, Lucky 10 — anything that isn't the system betting
+// against or independently of itself). 'system'/'market'/'specialty' are
+// tracked-for-the-record only, always staked at a flat $1, never debited or
+// credited against real money. This map used to send almost everything to
+// 'mine' regardless of what it conceptually was — sysbest and tailsystem are
+// literally "the system's own picks" and belong under System, not Mine;
+// Armageddon/fade-the-books/fade-the-system are their own weird animal and
+// get a fourth bucket, Specialty, rather than being crammed into Mine.
 const PRESET_SOURCE={
-  sysbest:'mine',booklean:'market',outside:'outside',fucksystem:'mine',
-  easy:'mine',tailbooks:'market',fadebooks:'mine',tailsystem:'mine',
-  fadesystem:'mine',combo:'mine',lucky10:'mine',armageddon:'mine'
+  sysbest:'system',booklean:'market',outside:'outside',fucksystem:'specialty',
+  easy:'mine',tailbooks:'market',fadebooks:'specialty',tailsystem:'system',
+  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty'
+};
+// Human-readable ticket name per preset — stamped onto the saved ticket so it
+// shows up labeled in the UI instead of a bare date, which was the whole
+// reason "some presets aren't going to their designated location" was hard to
+// even notice: nothing distinguished one saved ticket from another.
+const PRESET_DISPLAY_NAME={
+  sysbest:'Systems best',booklean:'Books lean',outside:'Outside picks',
+  fucksystem:'Fuck the system',easy:'Easy wins',tailbooks:'Tail the books',
+  fadebooks:'Fade the books',tailsystem:'Tail the system',fadesystem:'Fade the system',
+  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon'
 };
 // which sources are tracked-only (flat $1, never touch the bankroll) — checked
 // everywhere staking and settlement happen so this is the single source of truth
-const TRACKED_ONLY_SOURCES=new Set(['market','outside','system']);
+const TRACKED_ONLY_SOURCES=new Set(['market','outside','system','specialty']);
 
 function toggleWonMarket(m,btn){
   btn.classList.toggle('on');
@@ -2182,7 +2198,7 @@ function presetTabHtml(){
     ${legs.length?`<div class="sub"><b>${(combined*100).toFixed(combined<.01?3:1)}%</b> combined ·
       ${legs.length} legs · 1 in ${Math.round(1/combined).toLocaleString()}</div>
       <ol style="list-style:none;padding:0;margin:10px 0">${legRows}</ol>
-      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}')">Confirm &amp; save</button></div>`
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}','${PRESET_MODE}')">Confirm &amp; save</button></div>`
       :'<div class="empty">Not enough qualifying legs on the board for this preset right now.</div>'}
   </div>`;
 }
@@ -5961,17 +5977,22 @@ function renderBacktest(){
 // only honest way to answer "how am I actually doing" since a 3-1 parlay record hides
 // that three of those legs individually hit and one alone sank the whole ticket.
 function buildAllTimeRecord(){
-  const mine=[],system=[],book=[],outside=[];
+  // Was: mine/system/book/outside, with 'book' dead — nothing has assigned that
+  // source since Market/Outside became their own real buckets. Replaced with the
+  // actual four LS.locked buckets that exist now: mine/system/market/specialty,
+  // plus outside (which draws from uploaded picks, not LS.locked, same as before).
+  const mine=[],system=[],market=[],specialty=[],outside=[];
 
-  // ── My picks + System picks — both live in LS.locked, split by t.source ──
+  // ── every LS.locked ticket, split by its real t.source ──
   get(LS.locked,[]).forEach(t=>{
-    const bucket=t.source==='system'?system:t.source==='book'?book
-      :t.source==='outside'?outside:mine;
+    const bucket=t.source==='system'?system:t.source==='market'?market
+      :t.source==='specialty'?specialty:t.source==='outside'?outside:mine;
     t.legs.forEach(x=>{
       const{hit,push,detail}=gradeLeg(x,t.date);
       const gid=legGameId(x,t.date);
       bucket.push({date:t.date,pick:x.pick,game:x.game,p:x.p,hit,push,detail,
-        ticketId:t.id,gid:gid&&GAMES.some(z=>z.id===gid)?gid:null,fromParlay:t.legs.length>1});
+        ticketId:t.id,ticketName:t.name||null,
+        gid:gid&&GAMES.some(z=>z.id===gid)?gid:null,fromParlay:t.legs.length>1});
     });
   });
 
@@ -5984,7 +6005,7 @@ function buildAllTimeRecord(){
     });
   });
 
-  return{mine,system,book,outside};
+  return{mine,system,market,specialty,outside};
 }
 
 function recordStats(list){
@@ -5999,7 +6020,7 @@ let ATR_TAB='mine';
 function renderAllTimeRecord(){
   const R=buildAllTimeRecord();
   const mineS=recordStats(R.mine),sysS=recordStats(R.system),
-        bookS=recordStats(R.book),outS=recordStats(R.outside);
+        marketS=recordStats(R.market),specS=recordStats(R.specialty),outS=recordStats(R.outside);
 
   // renderAllTimeRecord() only RETURNS html — it never writes to the page itself.
   // The one place that paints it is renderTickets(), so the buttons need to call
@@ -6034,20 +6055,21 @@ function renderAllTimeRecord(){
   </div>
   <div class="tkt">
     <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:14px">
-      ${cell('Mine',mineS)}${cell('System',sysS)}${cell('Book',bookS)}${cell('Outside',outS)}
+      ${cell('Mine',mineS)}${cell('System',sysS)}${cell('Market',marketS)}${cell('Specialty',specS)}${cell('Outside',outS)}
     </div>
   </div>
   <div class="subnav">
     ${tabBtn('mine','Mine',mineS)}
     ${tabBtn('system','System',sysS)}
-    ${tabBtn('book','Book',bookS)}
+    ${tabBtn('market','Market',marketS)}
+    ${tabBtn('specialty','Specialty',specS)}
     ${tabBtn('outside','Outside',outS)}
   </div>`;
 
   const active=ATR_TAB==='mine'?R.mine:ATR_TAB==='system'?R.system
-    :ATR_TAB==='book'?R.book:R.outside;
+    :ATR_TAB==='market'?R.market:ATR_TAB==='specialty'?R.specialty:R.outside;
   const stats=ATR_TAB==='mine'?mineS:ATR_TAB==='system'?sysS
-    :ATR_TAB==='book'?bookS:outS;
+    :ATR_TAB==='market'?marketS:ATR_TAB==='specialty'?specS:outS;
 
   if(!active.length){
     h+=`<div class="empty">Nothing here yet.</div>`;
@@ -6066,8 +6088,19 @@ function renderAllTimeRecord(){
       return `<div class="tkt"><h3>${src} <span class="m">${s.w}-${s.l}</span></h3>${rows}</div>`;
     }).join('');
   }else{
-    const rows=active.slice().reverse().map(x=>legRowHtml(x,false)).join('');
-    h+=`<div class="tkt">${rows}</div>`;
+    // group by ticket NAME within the bucket so mis-routed or oddly-named tickets
+    // stand out immediately instead of blending into one flat list — this is the
+    // actual fix for "keeping track since some presets aren't going to their
+    // designated location": you can now see, right in the bucket you're checking,
+    // every distinctly-named ticket that landed there.
+    const byName={};
+    active.forEach(x=>{const k=x.ticketName||'(unnamed)';(byName[k]=byName[k]||[]).push(x)});
+    const names=Object.keys(byName).sort((a,b)=>a==='(unnamed)'?1:b==='(unnamed)'?-1:a.localeCompare(b));
+    h+=names.map(nm=>{
+      const s=recordStats(byName[nm]);
+      const rows=byName[nm].slice().reverse().map(x=>legRowHtml(x,false)).join('');
+      return `<div class="tkt"><h3>${nm} <span class="m">${s.w}-${s.l}</span></h3>${rows}</div>`;
+    }).join('');
   }
   return h;
 }
@@ -6386,7 +6419,7 @@ function rebuildSrcStats(){
 
 /* ================= TICKETS TABS ================= */
 const TTABS=[['eval','Evaluate'],['build','Build'],['mine','My picks'],['system','System'],
-  ['market','Market'],['outside','Outside'],['record','Record'],['backtest','Backtest']];
+  ['market','Market'],['specialty','Specialty'],['outside','Outside'],['record','Record'],['backtest','Backtest']];
 let BUILD_MODE='presets';   // presets | custom
 let OUTSIDE_MODE='consensus';
 
@@ -6405,6 +6438,7 @@ function renderTickets(){
   }
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
   if(TICKETTAB==='system') body.innerHTML=systemPicksHtml();
+  if(TICKETTAB==='specialty')body.innerHTML=specialtyPicksHtml();
   if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
   if(TICKETTAB==='backtest')body.innerHTML=renderBacktest();
   if(TICKETTAB==='market') body.innerHTML=marketPicksHtml();
@@ -6525,6 +6559,36 @@ function minePicksHtml(){
     <div id="tickets"></div>`;
 }
 
+function specialtyPicksHtml(){
+  // Armageddon, Fade the books, Fade the system, Fuck the system — the presets
+  // that are deliberately going against the model or the market, not "your own"
+  // picks and not the model's own top-conviction reads either. Tracked-only,
+  // flat $1, never touches the bankroll — same as System/Market/Outside.
+  const locked=get(LS.locked,[]).filter(t=>t.source==='specialty');
+  if(!locked.length)return `<div class="tkt hi"><h3>Specialty</h3>
+    <div class="sub">Armageddon, Fade the books, Fade the system, Fuck the system — the presets that
+    deliberately go against the model or the market. Confirm one from Build → Presets and it'll show up
+    here, named, tracked daily at a flat $1, never touching your bankroll.</div></div>
+    <div class="empty">No specialty tickets saved yet.</div>`;
+  const pending=locked.filter(t=>!t.archived);
+  const archived=locked.filter(t=>t.archived);
+  const readyToArchive=pending.filter(t=>ticketIsComplete(t)).length;
+  setTimeout(()=>genTickets('specialty'),0);
+  return `<div class="tkt hi"><h3>Specialty</h3>
+    <div class="sub">Armageddon, Fade the books, Fade the system, Fuck the system. Tracked daily at a
+    flat $1, never touches your bankroll.</div></div>
+    <div class="subnav">
+      <button class="${MINE_VIEW==='pending'?'on':''}" onclick="MINE_VIEW='pending';renderTickets()">Pending <span class="m">${pending.length}</span></button>
+      <button class="${MINE_VIEW==='archived'?'on':''}" onclick="MINE_VIEW='archived';renderTickets()">Archived <span class="m">${archived.length}</span></button>
+    </div>
+    ${MINE_VIEW==='pending'&&readyToArchive>0?`<div class="note" style="display:flex;align-items:center;
+      justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span><b>${readyToArchive}</b> ticket${readyToArchive>1?'s are':' is'} fully graded and ready to archive.</span>
+      <button class="primary" onclick="archiveAllComplete()">Archive all complete</button>
+    </div>`:''}
+    <div id="tickets"></div>`;
+}
+
 // ── Shared unanimous-consensus rule — used by both the display list and the
 // auto-parlay builder below, so "unanimous" always means the exact same thing
 // everywhere in the app rather than two slightly different definitions drifting
@@ -6619,18 +6683,18 @@ function rebuildOutsideAutoParlay(){
 // if one already exists for today, its legs are replaced in place rather than
 // spawning a duplicate ticket — safe to call repeatedly as new data comes in.
 function rebuildSystemTop10AutoParlay(){
-  // "System top 10" = the simulator's own ten highest-conviction picks across the
-  // whole board right now, independent of what the market or any outside source
-  // thinks — same scoring rule sysbest already uses (rank by modelP desc), just
-  // fixed at exactly 10 legs and pinned to its own tracked-only auto-parlay
-  // instead of a manual one-off Confirm & save.
-  // IMPORTANT: exclude already-started/final games BEFORE ranking+slicing, not
-  // after — filtering post-slice let a started game eat one of the 10 ranked
-  // slots and then get silently dropped, shrinking the parlay below 10 instead
-  // of correctly promoting the next-best still-live leg into that spot.
+  // "System top 10" = the simulator's own ten highest-conviction SIDE/TOTAL/RUN-LINE
+  // picks across the whole board right now, independent of what the market or any
+  // outside source thinks. Props are HARD-EXCLUDED here, always, regardless of the
+  // global PRESET_MARKETS toggle — this used to draw from fullPresetPool() with no
+  // market filter at all, so a single 85%+ prop could crowd out real game-level
+  // picks from the ranking; that's exactly the behavior this preset should never
+  // have. If props-in-System is ever wanted, that should be a deliberate opt-in
+  // toggle on this specific ticket, not the silent default.
   const pool=applyDupeFilter(fullPresetPool()).filter(l=>{
+    if(l.kind==='prop'||l.kind==='hr')return false; // no props in System, ever
     const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
-    return !(g&&g.abstract==='Final');
+    return !(g&&g.abstract==='Final'); // don't parlay a game that's already started
   });
   return pool.filter(l=>l.modelP>=0.5).sort((a,b)=>b.modelP-a.modelP).slice(0,10)
     .map(l=>{
@@ -6877,24 +6941,37 @@ function sourcesHtml(){
   }).join('');
 }
 
-function confirmSystemTicket(payload,src){
+function confirmSystemTicket(payload,src,presetKey){
   src=src||'mine';
+  // Name the ticket after the preset that built it — before this, every saved
+  // ticket showed only a bare date, which is exactly why misrouted tickets went
+  // unnoticed: nothing on the card told you which preset it came from or whether
+  // it landed where it should have. Falls back to a generic label only when this
+  // wasn't built from a named preset at all (e.g. the older prop-card flow).
+  const name=presetKey&&PRESET_DISPLAY_NAME[presetKey]?PRESET_DISPLAY_NAME[presetKey]:null;
   let legs;
   try{legs=JSON.parse(decodeURIComponent(payload))}catch(e){return}
   if(!legs||!legs.length)return;
-  if(!confirm(`Save this ${legs.length}-leg ticket? You can delete it later, or lock it as final once you're sure.`))return;
+  if(!confirm(`Save this ${legs.length}-leg ${name?'"'+name+'" ':''}ticket? You can delete it later, or lock it as final once you're sure.`))return;
   const L=get(LS.locked,[]);
   const id=Date.now();
-  L.unshift({id,date:today(),
+  L.unshift({id,date:today(),name,presetKey:presetKey||null,
     legs:legs.map(x=>{
       const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
       return{id:id+'|'+x.pick,...x,gid:x.gid||(gm?gm.id:null),gameDate:x.gameDate||today()};
     }),
     p:legs.reduce((a,x)=>a*x.p,1),source:src});
   set(LS.locked,L);
+  // Tracked-only tickets (system/market/specialty/outside) settle by reading a
+  // stake from getWagers() — but nothing was ever writing one for a manually
+  // confirmed preset ticket (only the auto-parlay builders did that). Without
+  // this, settleLockedTickets() would bail out on `if(!stake) return` forever
+  // and this ticket would never grade, never archive, never show a result —
+  // silently stuck as pending regardless of how the games actually went.
+  if(TRACKED_ONLY_SOURCES.has(src))saveWager(id,1);
   renderTickets();
-  const where={system:'System picks',book:'Book picks',outside:'Outside picks',mine:'My picks'}[src]||'My picks';
-  alert('Saved — filed under '+where+' in Tickets → Record.');
+  const where={system:'System',market:'Market picks',specialty:'Specialty',outside:'Outside picks',mine:'My picks'}[src]||'My picks';
+  alert(`Saved${name?' — "'+name+'"':''} — filed under ${where} in Tickets → Record.`);
 }
 
 function genTickets(mode){
@@ -6903,9 +6980,14 @@ function genTickets(mode){
   if(!el)return;
   const L=get(LS.locked,[]);
   let h='';
-  if(mode==='mine'){
+  // 'specialty' reuses the exact same card rendering as 'mine' — the markup
+  // already reads t.name/t.source generically — just scoped to tickets whose
+  // source is specialty (Armageddon, Fade the books, Fade the system, Fuck the
+  // system) instead of the mine bucket.
+  if(mode==='mine'||mode==='specialty'){
+    const base=mode==='specialty'?L.filter(t=>t.source==='specialty'):L;
     const view=(typeof MINE_VIEW!=='undefined')?MINE_VIEW:'pending';
-    const set_=view==='archived'?L.filter(t=>t.archived):L.filter(t=>!t.archived);
+    const set_=view==='archived'?base.filter(t=>t.archived):base.filter(t=>!t.archived);
     if(!set_.length){
       el.innerHTML=`<div class="empty">${view==='archived'?'No archived tickets yet — finish grading a ticket and archive it to see it here.':'No pending tickets — everything is archived.'}</div>`;
       return;
@@ -6946,7 +7028,15 @@ function genTickets(mode){
           ${t.finalized?'':`<button onclick="finalizeLocked(${t.id})">Lock as final</button>`}
           <button onclick="delLocked(${t.id})">Delete</button>`;
       }
-      h+=`<div class="tkt ${t.archived?'':'hi'}"><h3>${t.date}${lockBadge}${archBadge}</h3>
+      // Named tickets (built from a preset) show their preset name first, with
+      // the date demoted to a subtitle — this is the fix for "some presets
+      // aren't going to their designated location": now every card visibly
+      // says which preset built it, and which bucket (source badge) it landed
+      // in, right next to each other, instead of an anonymous date.
+      const nameLine=t.name
+        ?`<h3>${t.name}${lockBadge}${archBadge}</h3><div class="m" style="margin-top:-4px;margin-bottom:6px">${t.date}${t.source&&t.source!=='mine'?' · '+({system:'System',market:'Market',specialty:'Specialty',outside:'Outside'}[t.source]||t.source):''}</div>`
+        :`<h3>${t.date}${lockBadge}${archBadge}</h3>`;
+      h+=`<div class="tkt ${t.archived?'':'hi'}">${nameLine}
         <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
         <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
     });
@@ -6968,7 +7058,7 @@ function genTickets(mode){
     h+=`<div class="tkt ${i<2?'hi':''}"><h3>${lab}</h3>
       <div class="sub"><b>${(c*100).toFixed(c<.01?3:1)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs</div>
       <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
-      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}')">Confirm &amp; save</button></div></div>`;
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}','${PRESET_MODE}')">Confirm &amp; save</button></div></div>`;
   });
   const pu=new Set();
   h+='<div class="sbar"><h2>Prop cards only</h2><div class="ln"></div></div>';
