@@ -2109,25 +2109,31 @@ function buildPreset(mode){
 }
 
 const PRESETS=[
-  ['sysbest','Systems best','The picks the simulator rates highest, independent of what the market thinks. Files under System picks.'],
-  ['booklean','Books lean','Whatever side the market itself is pricing hardest. The model gets no vote here. Files under Book picks.'],
-  ['outside','Outside picks','Built from picks uploaded off other sites — OddsShark, Covers, Picks and Parlays. Files under Outside picks.'],
-  ['fucksystem','Fuck the system','Straight inversion of Systems best — every side the simulator likes least. Files under My picks.'],
-  ['easy','Easy wins','Highest model probability, no edge required — the safest available reads. Files under My picks.'],
-  ['tailbooks','Tail the books','Whatever side the market itself favors most. Ignores the model entirely. Files under Book picks.'],
-  ['fadebooks','Fade the books','The side the market likes least — true underdogs by market price alone. Files under My picks.'],
-  ['tailsystem','Tail the system','Whatever side the simulator likes most, independent of the market. Files under System picks.'],
-  ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome. Files under My picks.'],
-  ['combo','Combination+','Moneyline + Total paired together on the same game, for as many games as needed. Files under My picks.'],
-  ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge. Files under My picks.'],
-  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under My picks.']
+  ['sysbest','Systems best','The picks the simulator rates highest, independent of what the market thinks. Files under My picks — counts against your bankroll.'],
+  ['booklean','Books lean','Whatever side the market itself is pricing hardest. The model gets no vote here. Files under Market picks — tracked daily at a flat $1, no bankroll impact.'],
+  ['outside','Outside picks','Built from picks uploaded off other sites — OddsShark, Covers, Picks and Parlays. Files under Outside picks — tracked daily at a flat $1, no bankroll impact.'],
+  ['fucksystem','Fuck the system','Straight inversion of Systems best — every side the simulator likes least. Files under My picks — counts against your bankroll.'],
+  ['easy','Easy wins','Highest model probability, no edge required — the safest available reads. Files under My picks — counts against your bankroll.'],
+  ['tailbooks','Tail the books','Whatever side the market itself favors most. Ignores the model entirely. Files under Market picks — tracked daily at a flat $1, no bankroll impact.'],
+  ['fadebooks','Fade the books','The side the market likes least — true underdogs by market price alone. Files under My picks — counts against your bankroll.'],
+  ['tailsystem','Tail the system','Whatever side the simulator likes most, independent of the market. Files under My picks — counts against your bankroll.'],
+  ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome. Files under My picks — counts against your bankroll.'],
+  ['combo','Combination+','Moneyline + Total paired together on the same game, for as many games as needed. Files under My picks — counts against your bankroll.'],
+  ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge. Files under My picks — counts against your bankroll.'],
+  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under My picks — counts against your bankroll.']
 ];
-// which bucket a ticket lands in when confirmed from each preset
+// ── Every preset routes to exactly ONE of three buckets — no more per-preset
+// mixing of "book"/"system"/"mine"/"outside". Only 'mine' ever touches the
+// bankroll; 'market' and 'outside' are tracked-for-the-record only, always
+// staked at a flat $1, never debited/credited against real money.
 const PRESET_SOURCE={
-  sysbest:'system',booklean:'book',outside:'outside',fucksystem:'mine',
-  easy:'mine',tailbooks:'book',fadebooks:'mine',tailsystem:'system',
+  sysbest:'mine',booklean:'market',outside:'outside',fucksystem:'mine',
+  easy:'mine',tailbooks:'market',fadebooks:'mine',tailsystem:'mine',
   fadesystem:'mine',combo:'mine',lucky10:'mine',armageddon:'mine'
 };
+// which sources are tracked-only (flat $1, never touch the bankroll) — checked
+// everywhere staking and settlement happen so this is the single source of truth
+const TRACKED_ONLY_SOURCES=new Set(['market','outside','system']);
 
 function toggleWonMarket(m,btn){
   btn.classList.toggle('on');
@@ -2808,6 +2814,10 @@ async function refreshEverything(){
   }else{steps.push('⏭️ OddsPapi — no key saved')}
   paint();
   render();buildProps();renderDayPicker();
+  // rebuild today's three tracked-only auto-parlays (Market picks, Outside picks,
+  // System top 10) now that fresh book lines / outside uploads / sims may have
+  // changed what qualifies for each
+  try{syncTrackedAutoParlay('market');syncTrackedAutoParlay('outside');syncTrackedAutoParlay('system');}catch(e){}
   steps.push(`Done — ${new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}`);
   paint();
 }
@@ -4459,22 +4469,33 @@ function refreshPayout(id,combinedP,stake){
 }
 function buildWagerRow(t){
   const w=getWagers();
-  const stake=w[t.id]||'';
+  const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+  const stake=trackedOnly?1:(w[t.id]||'');
   const odds=probToAmer(t.p);
   const res=stake?amerPayout(odds,stake):null;
   const payTxt=res?'$'+res.total.toFixed(2):'$—';
   const profTxt=res?'+$'+res.profit.toFixed(2)+' profit':'profit';
   const tl=ticketLimit();
+  // Market/Outside tickets are tracked-only — fixed $1, no input, no bankroll
+  // interaction. The stake pill still shows the number (so the payout math reads
+  // the same as any other ticket) but isn't editable and never calls debitStake.
+  const stakeCell=trackedOnly
+    ?`<div class="wager-pill stake-pill" style="opacity:.85">
+        <div class="wp-label">Stake</div>
+        <div class="wp-val">$1.00</div>
+        <div class="wp-sub">tracked only</div>
+      </div>`
+    :`<div class="wager-pill stake-pill" onclick="document.getElementById('ws-${t.id}').focus()">
+        <div class="wp-label">Stake</div>
+        <div class="wp-val"><span style="font-size:10px;opacity:.6">$</span><input
+          id="ws-${t.id}" class="stake-input" type="number" min="0" max="${tl}" step="0.5"
+          placeholder="0" value="${stake}"
+          oninput="onWagerInput(${t.id},${t.p},this)"
+        ></div>
+        <div class="wp-sub" id="wp-sub-${t.id}-cap">cap $${tl.toFixed(2)}</div>
+      </div>`;
   return `<div class="wager-row">
-    <div class="wager-pill stake-pill" onclick="document.getElementById('ws-${t.id}').focus()">
-      <div class="wp-label">Stake</div>
-      <div class="wp-val"><span style="font-size:10px;opacity:.6">$</span><input
-        id="ws-${t.id}" class="stake-input" type="number" min="0" max="${tl}" step="0.5"
-        placeholder="0" value="${stake}"
-        oninput="onWagerInput(${t.id},${t.p},this)"
-      ></div>
-      <div class="wp-sub" id="wp-sub-${t.id}-cap">cap $${tl.toFixed(2)}</div>
-    </div>
+    ${stakeCell}
     <div class="wager-pill odds-pill">
       <div class="wp-label">Parlay odds</div>
       <div class="wp-val">${odds}</div>
@@ -4574,14 +4595,38 @@ function settleTicket(ticketId,stake,profit,won){
 
 // Runs during grading — finds every locked ticket with a stake and a fully-decided
 // outcome (no pending legs) that hasn't been settled yet, and books it.
+// Records a tracked-only outcome (market/outside buckets) without touching the
+// bankroll at all — same win/loss/push logic as settleTicket, but writes to its
+// own history list instead of d4.bankroll, since these were never real money.
+function recordTrackedOutcome(ticketId,stake,profit,won,source){
+  const key='d4.trackedhistory';
+  const h=get(key,{});
+  h[source]=h[source]||[];
+  if(h[source].some(r=>r.id===ticketId))return; // already recorded once
+  h[source].push({id:ticketId,date:today(),stake,profit,won,ts:Date.now()});
+  set(key,h);
+}
+function getTrackedHistory(source){
+  const h=get('d4.trackedhistory',{});
+  return source?(h[source]||[]):h;
+}
+
 function settleLockedTickets(){
   const L=get(LS.locked,[]);
   const w=getWagers();
   L.forEach(t=>{
     const stake=w[t.id];
     if(!stake||stake<=0)return;
-    const b=getBankroll();
-    if(b.history.some(h=>h.id===t.id))return;
+    const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+    // 'mine' tickets settle against the real bankroll; market/outside settle for
+    // the record only — same grading, same math, but no money actually moves.
+    if(!trackedOnly){
+      const b=getBankroll();
+      if(b.history.some(h=>h.id===t.id))return;
+    }else{
+      const already=getTrackedHistory(t.source);
+      if(already.some(h=>h.id===t.id))return;
+    }
     let allDecided=true,anyLoss=false,pushCount=0;
     // standard sportsbook rule: a PUSHED leg is removed from the parlay and the
     // payout recalculates on whatever's left (a 2-team parlay with 1 push becomes
@@ -4618,7 +4663,17 @@ function settleLockedTickets(){
       profit=-stake;
     }
     const outcome=pushCount===t.legs.length?'push':(won?true:false);
-    settleTicket(t.id,stake,profit,outcome);
+    if(trackedOnly){
+      // record-only path — win/loss/push is tracked for that source's daily
+      // history, but the bankroll (d4.bankroll) is never touched. Also skip the
+      // per-ticket dollar debit reversal that settleTicket() does for real money,
+      // since a tracked-only ticket was never debited from the bankroll in the
+      // first place (see syncTrackedAutoParlay — it saves the wager but that's
+      // purely a display/UI value here, not a real charge).
+      recordTrackedOutcome(t.id,stake,profit,outcome,t.source);
+    }else{
+      settleTicket(t.id,stake,profit,outcome);
+    }
     if(outcome===false)recordLossPostMortem(t,stake);
     // auto-archive the instant it's decided — no manual step needed to see it
     // move out of Pending once the outcome is locked in
@@ -6257,12 +6312,18 @@ function saveExtPicks(){
 
   window._pendingExt=null;
   document.getElementById('extShots').value='';
+  // fresh outside picks may change which games now have unanimous agreement —
+  // rebuild the tracked Outside parlay immediately rather than waiting for the
+  // next full refresh
+  try{syncTrackedAutoParlay('outside');}catch(e){}
   renderTickets();
 }
 
 function clearExtToday(){
   if(!confirm("Clear all external picks saved for today?"))return;
-  const all=getExt();delete all[today()];set(LS.extpicks,all);renderTickets();
+  const all=getExt();delete all[today()];set(LS.extpicks,all);
+  try{syncTrackedAutoParlay('outside');}catch(e){}
+  renderTickets();
 }
 
 /* Grade every external pick that has a final score available */
@@ -6324,8 +6385,8 @@ function rebuildSrcStats(){
 }
 
 /* ================= TICKETS TABS ================= */
-const TTABS=[['eval','Evaluate'],['build','Build'],['mine','My picks'],['market','Market'],
-  ['outside','Outside'],['record','Record'],['backtest','Backtest']];
+const TTABS=[['eval','Evaluate'],['build','Build'],['mine','My picks'],['system','System'],
+  ['market','Market'],['outside','Outside'],['record','Record'],['backtest','Backtest']];
 let BUILD_MODE='presets';   // presets | custom
 let OUTSIDE_MODE='consensus';
 
@@ -6343,6 +6404,7 @@ function renderTickets(){
     body.innerHTML=row+(BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
   }
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
+  if(TICKETTAB==='system') body.innerHTML=systemPicksHtml();
   if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
   if(TICKETTAB==='backtest')body.innerHTML=renderBacktest();
   if(TICKETTAB==='market') body.innerHTML=marketPicksHtml();
@@ -6461,6 +6523,180 @@ function minePicksHtml(){
       <button class="primary" onclick="archiveAllComplete()">Archive all complete</button>
     </div>`:''}
     <div id="tickets"></div>`;
+}
+
+// ── Shared unanimous-consensus rule — used by both the display list and the
+// auto-parlay builder below, so "unanimous" always means the exact same thing
+// everywhere in the app rather than two slightly different definitions drifting
+// apart over time. ──
+function extConsensusGroups(){
+  const picks=extToday();
+  const groups={};
+  picks.forEach(p=>{
+    const k=[p.game,p.market,p.line??''].join('|');
+    (groups[k]=groups[k]||{game:p.game,market:p.market,line:p.line,gid:p.gid,picks:[]}).picks.push(p);
+  });
+  return Object.values(groups).map(G=>{
+    const sides={};
+    G.picks.forEach(p=>{(sides[p.side]=sides[p.side]||[]).push(p)});
+    const sideKeys=Object.keys(sides);
+    return{...G,sideKeys,sides,unanimous:sideKeys.length===1&&G.picks.length>1};
+  });
+}
+
+// ── Auto-parlay builders for the two tracked-only buckets ──────────────────
+// These run once per day (idempotent — re-running just rebuilds today's single
+// tracked parlay for that bucket rather than creating duplicates), combining
+// every confirmed pick in that source into ONE parlay, staked flat $1, filed
+// under the tracked-only bucket so it never touches the bankroll.
+function findTodaysAutoParlay(source){
+  const L=get(LS.locked,[]);
+  return L.find(t=>t.source===source&&t.date===today()&&t.autoParlay);
+}
+function rebuildMarketAutoParlay(){
+  // "Market picks" = every real book-line edge currently on the board — the same
+  // pool marketPicksHtml() already displays, just turned into one tracked ticket
+  // instead of a read-only top-12 list.
+  const picks=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookML=bookLineForMarket(g.id,'moneyline');
+    if(bookML){
+      const hB=bookLineForMarket(g.id,'moneyline','home'),aB=bookLineForMarket(g.id,'moneyline','away');
+      if(hB&&aB){
+        const hp=bookDevig(hB.price),ap=bookDevig(aB.price),sum=hp+ap;
+        const hEdge=(s.hw-hp/sum)*100,aEdge=(s.aw-ap/sum)*100;
+        if(hEdge>=3)picks.push({game:gl,pick:g.home.abbr+' ML',p:hp/sum,gid:g.id,gameDate:today()});
+        if(aEdge>=3)picks.push({game:gl,pick:g.away.abbr+' ML',p:ap/sum,gid:g.id,gameDate:today()});
+      }
+    }
+    const bookTotal=bookLineForMarket(g.id,'total');
+    if(bookTotal&&bookTotal.line!==null){
+      const oB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTotal.line)<0.01);
+      const uB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTotal.line)<0.01);
+      if(oB&&uB){
+        const op=bookDevig(oB.price),up=bookDevig(uB.price),sum=op+up;
+        const mO=s.over(bookTotal.line);
+        const oEdge=(mO-op/sum)*100,uEdge=((1-mO)-up/sum)*100;
+        if(oEdge>=3)picks.push({game:gl,pick:'Over '+bookTotal.line,p:op/sum,gid:g.id,gameDate:today()});
+        if(uEdge>=3)picks.push({game:gl,pick:'Under '+bookTotal.line,p:up/sum,gid:g.id,gameDate:today()});
+      }
+    }
+  });
+  return picks;
+}
+function rebuildOutsideAutoParlay(){
+  // "Outside picks" = only picks where every uploaded source that touched that
+  // exact game+market+line agreed on the same side — genuine unanimous consensus,
+  // not majority. Uses extConsensusGroups() so this can never drift from what
+  // the Consensus tab displays as "Unanimous."
+  const groups=extConsensusGroups().filter(G=>G.unanimous);
+  const picks=[];
+  groups.forEach(G=>{
+    const side=G.sideKeys[0];
+    const g=G.gid?GAMES.find(x=>x.id===G.gid):null;
+    if(!g||g.abstract==='Final')return; // don't parlay a game that's already started
+    const s=SIMS[g.id];
+    let pick=null,p=null;
+    if(G.market==='moneyline'){
+      const ab=side==='home'?g.home.abbr:g.away.abbr;
+      pick=ab+' ML';p=s?(side==='home'?s.hw:s.aw):0.5;
+    }else if(G.market==='total'&&G.line!=null){
+      pick=(side==='over'?'Over ':'Under ')+G.line;
+      p=s?(side==='over'?s.over(G.line):1-s.over(G.line)):0.5;
+    }else if(G.market==='runline'&&G.line!=null){
+      const ab=side==='home'?g.home.abbr:g.away.abbr;
+      pick=ab+' '+(G.line>0?'+':'')+G.line;
+      p=s?rlProb(g,s,side,-G.line):0.5;
+    }
+    if(pick&&p!=null)picks.push({game:G.game,pick,p,gid:g.id,gameDate:today()});
+  });
+  return picks;
+}
+// Rebuilds (or creates) today's single tracked parlay for a bucket. Idempotent:
+// if one already exists for today, its legs are replaced in place rather than
+// spawning a duplicate ticket — safe to call repeatedly as new data comes in.
+function rebuildSystemTop10AutoParlay(){
+  // "System top 10" = the simulator's own ten highest-conviction picks across the
+  // whole board right now, independent of what the market or any outside source
+  // thinks — same scoring rule sysbest already uses (rank by modelP desc), just
+  // fixed at exactly 10 legs and pinned to its own tracked-only auto-parlay
+  // instead of a manual one-off Confirm & save.
+  // IMPORTANT: exclude already-started/final games BEFORE ranking+slicing, not
+  // after — filtering post-slice let a started game eat one of the 10 ranked
+  // slots and then get silently dropped, shrinking the parlay below 10 instead
+  // of correctly promoting the next-best still-live leg into that spot.
+  const pool=applyDupeFilter(fullPresetPool()).filter(l=>{
+    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
+    return !(g&&g.abstract==='Final');
+  });
+  return pool.filter(l=>l.modelP>=0.5).sort((a,b)=>b.modelP-a.modelP).slice(0,10)
+    .map(l=>{
+      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
+      return{game:l.game,pick:l.pick,p:l.p,gid:g?g.id:null,gameDate:today()};
+    });
+}
+function syncTrackedAutoParlay(source){
+  const builder=source==='market'?rebuildMarketAutoParlay
+    :source==='outside'?rebuildOutsideAutoParlay
+    :source==='system'?rebuildSystemTop10AutoParlay
+    :null;
+  if(!builder)return null;
+  const picks=builder();
+  const L=get(LS.locked,[]);
+  const existing=findTodaysAutoParlay(source);
+  if(!picks.length){
+    // nothing qualifies right now — remove a stale auto-parlay rather than leave
+    // an empty or outdated one sitting in the record
+    if(existing){
+      const idx=L.findIndex(t=>t.id===existing.id);
+      if(idx>=0){L.splice(idx,1);set(LS.locked,L)}
+    }
+    return null;
+  }
+  const legs=picks.map(x=>({id:(existing?existing.id:Date.now())+'|'+x.pick,...x}));
+  const combinedP=legs.reduce((a,x)=>a*x.p,1);
+  if(existing){
+    existing.legs=legs;existing.p=combinedP;
+    set(LS.locked,L);
+    saveWager(existing.id,1); // tracked-only buckets are always exactly $1, never bankroll-debited
+    return existing;
+  }
+  const id=Date.now();
+  const ticket={id,date:today(),legs,p:combinedP,source,autoParlay:true};
+  L.unshift(ticket);
+  set(LS.locked,L);
+  saveWager(id,1);
+  return ticket;
+}
+
+function systemPicksHtml(){
+  // Shows today's single auto-built System top-10 ticket — same wager-row/grading
+  // treatment as any locked ticket, just always exactly this one, always rebuilt
+  // from the model's own current top-10 conviction picks, tracked-only (no bankroll).
+  syncTrackedAutoParlay('system'); // idempotent — rebuilds in place if one exists
+  const t=findTodaysAutoParlay('system');
+  const head=`<div class="tkt hi"><h3>System top 10</h3>
+    <div class="sub">The simulator's ten highest-conviction picks on today's board, right now —
+    independent of what the market or any outside source thinks. Rebuilds automatically as lineups,
+    odds, and sims update through the day. Tracked at a flat $1, never touches your bankroll.</div></div>`;
+  if(!t||!t.legs.length)return head+`<div class="empty">Nothing qualifies yet — needs lineups and sims
+    loaded for today's games first.</div>`;
+  let w=0,l=0,pd=0;
+  const rows=t.legs.map(x=>{
+    const{hit:r}=gradeLeg(x,t.date);
+    const badgeHtml=gradeLegBadge(x,t.date);
+    if(r===true)w++;else if(r===false)l++;else pd++;
+    const gid=legGameId(x,t.date);
+    const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
+    return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
+  }).join('');
+  const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
+  return head+`<div class="tkt hi"><h3>${t.date}</h3>
+    <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
+    <ol>${rows}</ol>${buildWagerRow(t)}</div>`;
 }
 
 function marketPicksHtml(){
