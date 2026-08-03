@@ -788,19 +788,33 @@ async function analyzeBookShots(){
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,
         messages:[{role:'user',content:[...imgBlocks,{type:'text',text:prompt}]}]})});
     const j=await r.json();
     if(j.error){el.innerHTML=`<div class="tkt"><h3>API error</h3><div class="sub">${j.error.message||'unknown'}</div></div>`;return}
     const raw=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
     let parsed;
+    const cleaned=raw.replace(/```json|```/g,'').trim();
     try{
-      const cleaned=raw.replace(/```json|```/g,'').trim();
       parsed=JSON.parse(cleaned);
-    }catch(e){
-      el.innerHTML=`<div class="tkt"><h3>Couldn't parse a clean list</h3><div class="sub">Raw response below — the extraction didn't come back as valid JSON.</div>
-        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${raw.slice(0,3000)}</pre></div>`;
-      return;
+    }catch(e1){
+      // Recovery pass: grab the outermost [...] span in case the model added a
+      // stray sentence before/after the array despite being told not to.
+      try{
+        const start=cleaned.indexOf('[');
+        const end=cleaned.lastIndexOf(']');
+        if(start!==-1&&end>start){
+          parsed=JSON.parse(cleaned.slice(start,end+1));
+        }else{
+          throw e1;
+        }
+      }catch(e2){
+        el.innerHTML=`<div class="tkt"><h3>Couldn't parse a clean list</h3><div class="sub">This can happen with a
+          very large upload (try fewer screenshots per batch) or if the response got cut off. Raw response below —
+          check whether it looks truncated at the end.</div>
+          <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${raw.slice(0,3500)}</pre></div>`;
+        return;
+      }
     }
     if(!Array.isArray(parsed)||!parsed.length){
       el.innerHTML='<div class="empty">Nothing readable came back — try clearer or less cropped screenshots.</div>';
@@ -6110,6 +6124,27 @@ Trends screenshots often carry a highlighted player prop ("Bryce Harper o0.5 Tot
  "pick":"exactly as written","player":"player name","statType":"rbi"|"hits"|"tb"|"hr"|"k"|"bb"|"ha",
  "line":number,"side":"over","price":number,"conf":"best"}
 
+═══ FORMAT 4 — A COMPILED TEXT/MARKDOWN DOCUMENT (not a live-site screenshot) ═══
+Sometimes the screenshot is of a plain compiled document instead of the original site UI —
+dark or white headers per game, bullet-point trend lists, markdown-style tables, lines like
+"ML: PHI -150 (pick) | WAS +147" or "**Computer Picks — Predicted Score: WAS 5.01 @ PHI 5.64**".
+Treat this exactly like Formats 1-3 combined, just read from plain text instead of colored boxes:
+- A line ending in "(pick)" is the site's selection -> goes to "picks", same schema as Format 2.
+  Use the "Predicted Score" line for predictedAway/predictedHome.
+- Bullet points describing a team's record (e.g. "Under is 4-0 in Nationals last 4 games vs. a
+  right-handed starter.") are trend sentences -> goes to "trends", same schema as Format 3.
+- A markdown table headed "Consensus" / "Sides" / "Totals" with % splits is Format 1 -> goes to
+  "consensus". If the doc explicitly labels a table "Sharp"/"Top 10%"/"Team Money Leaders", set
+  metric:"money"; a plain "Overall" or unlabeled bet-count table is metric:"bets".
+- A section titled "Outside Sources" / individual named posters with picks like "Yankees ML" or
+  a parlay leg list — extract each distinct pick as its own entry in "picks", with "src" set to
+  the poster's name exactly as written (e.g. "Corey Gilcher", "Kyle Ramsey"). If two sources have
+  word-for-word identical leg lists, still record both — do not silently merge or drop one; the
+  app dedupes on its own if that's ever wanted.
+- Ignore any narrative commentary in the doc (e.g. a "Notes" section explaining how to read the
+  doc) — that's meta-instruction, not a pick, trend, or consensus row, and should not become an
+  entry in any of the three arrays.
+
 ═══ GENERAL RULES ═══
 - Team names: use standard 2-3 letter abbreviations (PHI, BAL, NYY, LAD, etc).
 - If a source name isn't visible anywhere, use "Unknown".
@@ -6119,17 +6154,34 @@ ${srcHint?`- The user suggests these are from: "${srcHint}" — use that unless 
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:4000,
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,
         messages:[{role:'user',content:[...imgBlocks,{type:'text',text:prompt}]}]})});
     const j=await r.json();
     if(j.error){el.innerHTML=`<div class="tkt"><h3>API error</h3><div class="sub">${j.error.message||'unknown'}</div></div>`;return}
     const raw=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
     let parsed;
-    try{parsed=JSON.parse(raw.replace(/```json|```/g,'').trim())}
-    catch(e){
-      el.innerHTML=`<div class="tkt"><h3>Couldn't parse a clean list</h3>
-        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${raw.slice(0,2500)}</pre></div>`;
-      return;
+    const cleaned=raw.replace(/```json|```/g,'').trim();
+    try{
+      parsed=JSON.parse(cleaned);
+    }catch(e1){
+      // Recovery pass: the model sometimes wraps valid JSON in a stray sentence
+      // ("Here's the extraction:" before, or a trailing note after) even when told
+      // not to — rather than fail outright, grab the outermost {...} span and retry.
+      try{
+        const start=cleaned.indexOf('{');
+        const end=cleaned.lastIndexOf('}');
+        if(start!==-1&&end>start){
+          parsed=JSON.parse(cleaned.slice(start,end+1));
+        }else{
+          throw e1;
+        }
+      }catch(e2){
+        el.innerHTML=`<div class="tkt"><h3>Couldn't parse a clean list</h3>
+          <div class="sub">This can happen with a very large upload (try fewer screenshots per batch) or
+          if the response got cut off. Raw response below — check whether it looks truncated at the end.</div>
+          <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${raw.slice(0,3500)}</pre></div>`;
+        return;
+      }
     }
     const picks=Array.isArray(parsed.picks)?parsed.picks:[];
     const trends=Array.isArray(parsed.trends)?parsed.trends:[];
