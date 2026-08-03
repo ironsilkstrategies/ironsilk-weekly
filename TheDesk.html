@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v73</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v74</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -444,6 +444,8 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       and becomes the real tappable line for that market, including First 5. Saved lines persist across
       reloads and back up to GitHub — upload once per slate, not every visit.</div>
       <div class="sub" id="bookStatus" style="margin-top:6px;font-family:'IBM Plex Mono';font-size:10.5px"></div>
+      <div class="mktlab" style="margin-top:8px">Which slate are these for?</div>
+      <div class="subnav" id="bookUploadDateRow"></div>
       <input type="file" id="bookShots" accept="image/*" multiple style="margin-top:8px">
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="analyzeBookShots()">Analyze screenshots</button></div>
       <div id="bookShotResult"></div>
@@ -818,7 +820,11 @@ function saveBookShots(){
   const parsed=window._pendingBookShots;
   if(!parsed)return;
   const all=get(LS.bookshots,{});
-  const d=today();
+  // File under whichever date was actually selected on the upload panel — this is
+  // the fix for screenshots of tomorrow's lines silently filing under today and
+  // never showing up on the preview board. Falls back sensibly if nothing was
+  // explicitly picked: whatever day is currently being previewed, else today.
+  const d=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
   all[d]=all[d]||[];
   // dedupe on identity — re-uploading the same slate replaces those selections instead of
   // stacking duplicates, so uploads are safe to repeat and stay locked in cleanly
@@ -839,18 +845,25 @@ function saveBookShots(){
 }
 function renderBookStatus(){
   const el=document.getElementById('bookStatus');if(!el)return;
-  const all=get(LS.bookshots,{})[today()]||[];
-  if(!all.length){el.innerHTML='<span style="color:var(--mute)">Nothing saved for today yet.</span>';return}
+  // Reflects the date currently selected on the upload panel, not always "today" —
+  // otherwise uploading tomorrow's screenshots looked like it silently failed here
+  // even though it correctly saved, because this status line kept checking today().
+  const d=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
+  const dLabel=d===today()?'today':dayLabel(d);
+  const all=get(LS.bookshots,{})[d]||[];
+  if(!all.length){el.innerHTML=`<span style="color:var(--mute)">Nothing saved for ${dLabel} yet.</span>`;return}
   const games=new Set(all.map(x=>x.game)).size;
   const mkts={};all.forEach(x=>mkts[x.market]=(mkts[x.market]||0)+1);
-  el.innerHTML=`<span style="color:var(--win)">✓ ${all.length} selections locked in across ${games} game${games>1?'s':''}</span>
+  el.innerHTML=`<span style="color:var(--win)">✓ ${all.length} selections locked in for ${dLabel} across ${games} game${games>1?'s':''}</span>
     <span style="color:var(--mute)"> — ${Object.keys(mkts).map(m=>m+' '+mkts[m]).join(', ')}</span>
-    <button onclick="clearBookShots()" style="margin-left:8px;padding:3px 8px;font-size:9px;background:none;border:1px solid var(--rule);color:var(--mute);border-radius:5px;cursor:pointer">clear today</button>`;
+    <button onclick="clearBookShots()" style="margin-left:8px;padding:3px 8px;font-size:9px;background:none;border:1px solid var(--rule);color:var(--mute);border-radius:5px;cursor:pointer">clear ${dLabel}</button>`;
 }
 function clearBookShots(){
-  if(!confirm("Clear today's saved book lines? The app will fall back to API sources until you upload again."))return;
+  const d=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
+  const dLabel=d===today()?"today's":dayLabel(d)+"'s";
+  if(!confirm(`Clear ${dLabel} saved book lines? The app will fall back to API sources until you upload again.`))return;
   const all=get(LS.bookshots,{});
-  delete all[today()];
+  delete all[d];
   set(LS.bookshots,all);
   renderBookStatus();render();
 }
@@ -2546,7 +2559,12 @@ function trendPanel(g,s){
 function bookLinesFor(gid){
   const g=GAMES.find(x=>x.id===gid);if(!g)return[];
   const gl=g.away.abbr+'@'+g.home.abbr;
-  const all=get(LS.bookshots,{})[today()]||[];
+  // Reads by whichever day is actually being viewed — PREVIEW_DAY when browsing
+  // tomorrow's board, today() otherwise. Every other book-line lookup in the app
+  // (props, trends, master evaluation) chains through this one function, so fixing
+  // it here fixes the read side everywhere at once.
+  const d=PREVIEW_DAY||today();
+  const all=get(LS.bookshots,{})[d]||[];
   return all.filter(x=>x.game===gl);
 }
 // your uploaded screenshot outranks every API source — if you have a real line for a
@@ -2818,7 +2836,23 @@ async function diagnoseSharp(){
 // doesn't post lineups until a few hours before first pitch. This surfaces whichever
 // future days the odds API actually has data for — schedule, probables, and market
 // lines only, clearly separated from the fully-simulated live board.
+let BOOKSHOT_UPLOAD_DATE=null; // null = "use whatever day is currently open" at analyze time
+function renderBookUploadDateRow(){
+  const el=document.getElementById('bookUploadDateRow');
+  if(!el)return;
+  // Same source renderDayPicker already uses for which future dates actually have
+  // games on the board — no separate lookup, no risk of drifting out of sync with it.
+  const future=Object.keys(ODDS_BYDATE).filter(d=>d>=today()).sort();
+  const dates=future.length?future:[today()];
+  const active=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
+  el.innerHTML=dates.map(d=>{
+    const label=d===today()?'Today':dayLabel(d);
+    const on=active===d;
+    return `<button class="${on?'on':''}" onclick="BOOKSHOT_UPLOAD_DATE='${d}';renderBookUploadDateRow();renderBookStatus()">${label}</button>`;
+  }).join('');
+}
 function renderDayPicker(){
+  renderBookUploadDateRow(); // kept in lockstep with the day picker — same data source
   const el=document.getElementById('dayPicker');
   const hasKey=!!get(LS.key,'');
   const future=Object.keys(ODDS_BYDATE).filter(d=>d>=today()).sort();
