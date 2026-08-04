@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v81</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v82</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -5925,6 +5925,49 @@ function computeSegmentedCalibration(){
       mb.n++;mb.w+=hit;mb.e+=stated;
       touched++;
     });
+    // ── F5 moneyline — was entirely missing; now that f5MlSide/f5MlMktP/
+    // f5MlModelP are captured at snapshot time, this activates for real.
+    // Finals store F5 score as F.fa/F.fh (away/home first-5 runs), guarded by
+    // F.f5ok — the linescore didn't always have 5+ innings recorded, and
+    // grading off an incomplete/absent F5 linescore would be worse than not
+    // grading it at all.
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||!F.f5ok||F.fa===undefined||F.fh===undefined||F.fa===null||F.fh===null)return;
+      if(!r.f5MlSide||r.f5MlModelP===null||r.f5MlModelP===undefined)return;
+      if(F.fa===F.fh)return; // F5 tie, not a calibration data point
+      const hit=(F.fh>F.fa?r.h:r.a)===r.f5MlSide?1:0;
+      const stated=r.f5MlModelP;
+      const wt=recencyWeight(d);
+      const sit=stated>=0.5?'favorite':'underdog';
+      const band=bandOf(stated);
+      const mk='f5moneyline';
+      const key=`${mk}|${sit}|${band}`;
+      const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+      b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+    // ── F5 total — same F.fa/F.fh + f5ok guard ──
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||!F.f5ok||F.fa===undefined||F.fh===undefined||F.fa===null||F.fh===null)return;
+      if(r.f5TotLine===null||r.f5TotLine===undefined||r.f5TotModelP===null||r.f5TotModelP===undefined)return;
+      const actualF5Tot=F.fa+F.fh;
+      if(actualF5Tot===r.f5TotLine)return; // push
+      const pickedOver=r.f5TotModelP>=0.5;
+      const hit=(pickedOver&&actualF5Tot>r.f5TotLine)||(!pickedOver&&actualF5Tot<r.f5TotLine)?1:0;
+      const stated=pickedOver?r.f5TotModelP:1-r.f5TotModelP;
+      const wt=recencyWeight(d);
+      const sit=situationOf(r); // borrow the full-game favorite/underdog read — F5 doesn't have its own independent one
+      const band=bandOf(stated);
+      const mk='f5total';
+      const key=`${mk}|${sit}|${band}`;
+      const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+      b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
   });
 
   const segFactors={};
@@ -5999,16 +6042,51 @@ function calibRecordFor(leg){
     // historically overpromised relative to what actually happened
     return{ready:true,n:rec.n,actual:rec.actual,predicted:rec.predicted,f:rec.f,passes:rec.f>=1};
   }
-  const mk=leg.kind==='rl'?'runline':leg.kind==='total'?'total':leg.kind==='side'?'moneyline':null;
-  if(!mk)return{ready:false,n:0}; // F5 and anything else without its own segmented history — no claim to make either way
-  const c=get('d4.segcalib',null);
-  if(!c)return{ready:false,n:0};
-  if(typeof leg.modelP!=='number')return{ready:false,n:0};
-  const situation=leg.modelP>=0.5?'favorite':'underdog';
-  const band=bandOf(leg.modelP);
-  const seg=c.segments[`${mk}|${situation}|${band}`];
-  if(!seg||!seg.ready)return{ready:false,n:seg?seg.n:0};
-  return{ready:true,n:seg.n,actual:seg.actual,predicted:seg.predicted,f:seg.f,passes:seg.actual>=seg.predicted};
+  // mk now covers F5 too — was returning {ready:false} unconditionally for
+  // f5side/f5total, meaning an F5 leg could NEVER pass this filter no matter
+  // how good its real record was. F5 has its own segmented history in
+  // d4.segcalib under the 'f5moneyline'/'f5total' market keys once
+  // computeSegmentedCalibration's F5 tracking has run — same lookup shape as
+  // every other market, just a different key.
+  const mk=leg.kind==='rl'?'runline':leg.kind==='total'?'total':leg.kind==='side'?'moneyline'
+    :leg.kind==='f5side'?'f5moneyline':leg.kind==='f5total'?'f5total':null;
+  if(mk){
+    const c=get('d4.segcalib',null);
+    if(c&&typeof leg.modelP==='number'){
+      const situation=leg.modelP>=0.5?'favorite':'underdog';
+      const band=bandOf(leg.modelP);
+      const seg=c.segments[`${mk}|${situation}|${band}`];
+      if(seg&&seg.ready)return{ready:true,n:seg.n,actual:seg.actual,predicted:seg.predicted,f:seg.f,passes:seg.actual>=seg.predicted};
+    }
+  }
+  // ── team record fallback ──────────────────────────────────────────────
+  // Was entirely missing: a side/total/F5 pick on a specific TEAM that's
+  // proven itself — real win rate when that team was actually picked, not
+  // just projection accuracy — never fed into "doesn't lose" at all. Uses
+  // LS.ent.teams (already computed by computeEntities: sw/sl = side-picks
+  // won/lost when this exact team was the pick), same MIN_SHOW floor the
+  // rest of the app already uses before trusting a team's number.
+  const teamAb=teamAbbrFor(leg);
+  if(teamAb){
+    const e=get(LS.ent,{}).teams||{};
+    const t=e[teamAb];
+    const picked=t?(t.sw+t.sl):0;
+    if(t&&picked>=MIN_SHOW){
+      const actual=picked?t.sw/picked:0;
+      return{ready:true,n:picked,actual:+(actual*100).toFixed(1),predicted:null,
+        f:null,passes:actual>=0.5,bySource:'team'};
+    }
+  }
+  return{ready:false,n:0};
+}
+// Pull the team abbreviation a leg is actually picking, so calibRecordFor can
+// check that team's real side-pick record — works for every market shape a
+// pick's text can take (ML, run line, F5 side; totals have no team to check).
+function teamAbbrFor(leg){
+  if(!leg.pick)return null;
+  const m=leg.pick.match(/^F5\s+([A-Z]{2,3})$/)||leg.pick.match(/^([A-Z]{2,3})\s+ML$/)
+    ||leg.pick.match(/^([A-Z]{2,3})\s+[+-]\d/);
+  return m?m[1]:null;
 }
 function sideCalibAdj(modelP,situation){
   const c=get('d4.segcalib',null);
@@ -8119,11 +8197,35 @@ function snapshot(){
         rlModelP=+rlProb(g,s,favB.side,-favB.line).toFixed(4);
       }
     }
+    // ── F5 market price, captured at snapshot the same way total/runline
+    // already are — was entirely missing before, which is exactly why F5
+    // could never build a real calibration bucket: f5/f5p/f5t below only ever
+    // recorded the SIM's own read, with nothing to check it against.
+    let f5MlSide=null,f5MlMktP=null,f5MlModelP=null;
+    const awayF5=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='away');
+    const homeF5=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='home');
+    if(awayF5&&homeF5){
+      const ap=bookDevig(awayF5.price),hp=bookDevig(homeF5.price),sum=ap+hp;
+      f5MlSide=hp>=ap?g.home.abbr:g.away.abbr;
+      f5MlMktP=+((hp>=ap?hp:ap)/sum).toFixed(4);
+      f5MlModelP=+(hp>=ap?s.f5h:s.f5a).toFixed(4);
+    }
+    let f5TotLine=null,f5TotMktP=null,f5TotModelP=null;
+    const bookF5Tot=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
+    if(bookF5Tot&&bookF5Tot.line!==null&&bookF5Tot.line!==undefined){
+      const overB=bookLinesFor(g.id).find(x=>x.market==='f5total'&&x.side==='over'&&Math.abs(x.line-bookF5Tot.line)<0.01);
+      const underB=bookLinesFor(g.id).find(x=>x.market==='f5total'&&x.side==='under'&&Math.abs(x.line-bookF5Tot.line)<0.01);
+      if(overB&&underB){
+        const op=bookDevig(overB.price),up=bookDevig(underB.price),sum=op+up;
+        f5TotLine=bookF5Tot.line;f5TotMktP=+(op/sum).toFixed(4);f5TotModelP=+f5OverAt(s,bookF5Tot.line).toFixed(4);
+      }
+    }
     rows.push({id:g.id,a:g.away.abbr,h:g.home.abbr,pa:+s.aR.toFixed(2),ph:+s.hR.toFixed(2),
       pt:+s.mean.toFixed(2),mode:s.modeScore,modeTot:s.modeTot,hw:+s.hw.toFixed(4),
       mh:M?+M.fh.toFixed(4):null,edge,side,sp:+(side===g.home.abbr?s.hw:s.aw).toFixed(4),
       f5:s.f5h>s.f5a?g.home.abbr:g.away.abbr,f5p:+Math.max(s.f5h,s.f5a).toFixed(4),f5t:+s.f5tot.toFixed(2),
-      totLine,totMktP,totModelP,rlLine,rlMktP,rlModelP,rlFavSide});
+      totLine,totMktP,totModelP,rlLine,rlMktP,rlModelP,rlFavSide,
+      f5MlSide,f5MlMktP,f5MlModelP,f5TotLine,f5TotMktP,f5TotModelP});
   });
   if(!rows.length)return;
   const ps=[];
