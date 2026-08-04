@@ -2188,7 +2188,19 @@ function clearPresetHolds(){
 // elsewhere in the app — no two legs sharing a game unless they're a legal
 // ML+Total pair — kept simple here since presets don't have an SGP toggle.
 function presetLegCollides(held,leg){
-  return held.some(h=>h.pick===leg.pick||(h.game===leg.game&&h.kind===leg.kind));
+  // Legs created via tog() on the game board (older custom-ticket legs) never
+  // got a `kind` field stamped at all — only the preset/builder pool functions
+  // do that. Requiring `h.kind===leg.kind` for those would compare undefined to
+  // undefined and silently treat two totally different markets on the same game
+  // as "matching kind" by coincidence, or fail to flag a real collision if only
+  // one side has a kind. Only enforce the kind check when BOTH sides actually
+  // have one; otherwise game+pick equality alone is the safe fallback.
+  return held.some(h=>{
+    if(h.pick===leg.pick)return true;
+    if(h.game!==leg.game)return false;
+    if(h.kind&&leg.kind)return h.kind===leg.kind;
+    return false; // can't confirm same-market collision without kind on both sides — don't false-positive
+  });
 }
 function presetLegsWithHolds(mode){
   const full=buildPreset(mode);
@@ -4114,6 +4126,60 @@ function lockSlip(){
   SLIP=[];set(LS.slip,SLIP);render();paintSlip();
   alert(`Locked${name?' — "'+name+'"':''}. See Tickets → My Parlays.`);
 }
+// ── Modify a pending ticket — add or remove legs before it's locked in ──
+// Available on any ticket that is NOT finalized and NOT archived. A finalized
+// ticket ("Lock as final") is explicitly your permanent record for grading and
+// calibration and stays immutable; an archived ticket is already graded/settled
+// so editing it after the fact would corrupt the record it just became. Anything
+// short of that is fair game to change your mind on.
+let TICKET_EDIT_ID=null; // which ticket (if any) is currently expanded into edit mode
+function canModifyTicket(t){
+  return !t.finalized&&!t.archived;
+}
+function toggleModifyTicket(id){
+  TICKET_EDIT_ID=(TICKET_EDIT_ID===id)?null:id;
+  renderTickets();
+}
+function removeLegFromTicket(ticketId,legId){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===ticketId);
+  if(!t||!canModifyTicket(t))return;
+  if(t.legs.length<=1){
+    if(!confirm('This is the only leg on the ticket — removing it deletes the whole ticket. Continue?'))return;
+    set(LS.locked,L.filter(x=>x.id!==ticketId));
+    TICKET_EDIT_ID=null;
+    renderTickets();
+    return;
+  }
+  t.legs=t.legs.filter(x=>x.id!==legId);
+  t.p=t.legs.reduce((a,x)=>a*x.p,1);
+  set(LS.locked,L);
+  renderTickets();
+}
+// Pool of addable legs for the edit view — same real sources every builder
+// already draws from, filtered down to markets not already on this ticket so
+// you can't accidentally add a second, colliding pick from a game you're
+// already on (same rule legalToAdd enforces elsewhere).
+function addableLegsFor(t){
+  const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder()];
+  PROPS.forEach(p=>{
+    if(p.type==='hr')pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',gid:p.gid,pid:p.pid,ptype:'hr',isProp:1});
+    else pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',gid:p.gid,pid:p.pid,ptype:p.type,thr:p.thr,isProp:1});
+  });
+  return pool.filter(l=>!presetLegCollides(t.legs,l)).sort((a,b)=>b.p-a.p).slice(0,25);
+}
+function addLegToTicket(ticketId,pick,game,p,gid,isProp,ptype,pid,thr){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===ticketId);
+  if(!t||!canModifyTicket(t))return;
+  if(t.legs.some(x=>x.pick===pick&&x.game===game))return; // already on the ticket
+  const leg={id:ticketId+'|'+pick,game,pick,p,gid:gid||null,gameDate:t.date};
+  if(isProp){leg.isProp=1;leg.ptype=ptype;if(pid)leg.pid=pid;if(thr!=null)leg.thr=thr}
+  t.legs.push(leg);
+  t.p=t.legs.reduce((a,x)=>a*x.p,1);
+  set(LS.locked,L);
+  renderTickets();
+}
 function delLocked(id){
   const L=get(LS.locked,[]);
   const t=L.find(x=>x.id===id);
@@ -4136,6 +4202,78 @@ function renameTicket(id){
   t.name=next.trim()||null;      // blank clears the name back to date-only display
   set(LS.locked,L);
   renderTickets();
+}
+// ── Move a ticket to a different tracking bucket — the fix for "if something
+// from books or system goes to my picks I can move it to where it needs to
+// go." Handles the money implications correctly rather than just flipping a
+// label: if the ticket was already settled (graded and recorded, win/loss/push
+// booked somewhere), that settlement gets reversed first so nothing ends up
+// double-counted in two buckets or silently vanishes from both. A still-pending
+// ticket just changes bucket outright — nothing to reconcile yet.
+const BUCKET_LABEL={mine:'My picks',system:'System',market:'Market',specialty:'Specialty',outside:'Outside'};
+function reverseTicketSettlement(t){
+  const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+  if(!trackedOnly){
+    const b=getBankroll();
+    const rec=b.history.find(h=>h.id===t.id);
+    if(rec){
+      b.profit-=rec.profit; // undo the profit/loss this ticket contributed
+      // recompute the limit multiplier off the corrected profit, same formula
+      // settleTicket uses, so undoing a settlement doesn't leave a stale limit
+      const over=Math.max(0,b.profit-BR_BASELINE);
+      const earned=1+(over/BR_BASELINE);
+      const floor=b.carriedMult||1;
+      b.limitMult=+Math.min(BR_MAX_MULT,Math.max(floor,earned)).toFixed(4);
+      b.history=b.history.filter(h=>h.id!==t.id);
+      saveBankroll(b);
+    }
+  }else{
+    const h=get('d4.trackedhistory',{});
+    if(h[t.source]&&h[t.source].some(r=>r.id===t.id)){
+      h[t.source]=h[t.source].filter(r=>r.id!==t.id);
+      set('d4.trackedhistory',h);
+    }
+  }
+}
+function moveTicket(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  if(t.finalized){
+    if(!confirm('This ticket is locked in as final — that\'s meant to be your permanent, unchanging '+
+      'record. Moving it overrides that. Only do this to fix a genuine routing mistake. Continue?'))return;
+  }
+  const current=t.source||'mine';
+  const options=Object.keys(BUCKET_LABEL).filter(k=>k!==current);
+  const list=options.map((k,i)=>`${i+1}. ${BUCKET_LABEL[k]}`).join('\n');
+  const choice=prompt(`Move "${t.name||t.date}" from ${BUCKET_LABEL[current]} to:\n${list}\n\nEnter a number:`);
+  if(choice===null)return;
+  const idx=parseInt(choice,10)-1;
+  if(isNaN(idx)||idx<0||idx>=options.length){alert('Not a valid option — nothing moved.');return}
+  const target=options[idx];
+  const wasSettled=t.archived&&(t.finalRecord!==undefined);
+  if(wasSettled){
+    if(!confirm(`This ticket was already graded and settled under ${BUCKET_LABEL[current]}. Moving it to `+
+      `${BUCKET_LABEL[target]} will reverse that settlement (undo any profit/loss it booked) so it can `+
+      `re-settle correctly in its new bucket. Continue?`))return;
+    // reverseTicketSettlement already removes this ticket's id from wherever it
+    // was recorded (b.history or trackedhistory[source]) — that alone is what
+    // clears settleLockedTickets' dedupe check. The wager itself must NOT be
+    // deleted here: it's the actual dollar amount that needs to carry over and
+    // get recorded again under the NEW bucket. An earlier version of this wiped
+    // the wager to "force a fresh re-grade," which worked for archiving but
+    // silently threw away the stake, so the ticket re-settled with $0 and never
+    // produced a tracked-history/bankroll entry in its new home at all.
+    reverseTicketSettlement(t);
+    t.archived=false;
+    t.archivedAt=null;
+    t.finalRecord=null;
+  }
+  t.source=target;
+  set(LS.locked,L);
+  renderTickets();
+  if(wasSettled)settleLockedTickets(); // immediately re-settle under the new bucket rather than waiting for the next grading pass
+  alert(`Moved to ${BUCKET_LABEL[target]}.`);
 }
 function finalizeLocked(id){
   const L=get(LS.locked,[]);
@@ -4732,20 +4870,36 @@ function getTrackedHistory(source){
 }
 
 function settleLockedTickets(){
+  // BUG THIS FIXES: this used to bail out immediately (`if(!stake) return`) for
+  // any ticket with no recorded wager — which meant a "My picks" ticket you
+  // locked in without ever typing a dollar amount into the stake box was
+  // completely invisible to the entire overnight grading cycle, forever. The
+  // games would finish, the correct result was fully computable the whole time,
+  // and this function would just skip the ticket every single run because it
+  // was gated on a UI interaction (typing a stake) that has nothing to do with
+  // whether the games are actually over. Manually tapping Archive/Archive-all
+  // worked fine because THOSE call ticketIsComplete()/gradeLeg() directly with
+  // no stake requirement at all — the bug was specific to the unattended path.
+  // Fix: grading and archiving now happen for every ticket regardless of stake.
+  // Only the MONEY side (bankroll debit/credit, tracked-source history) is
+  // skipped when there's truly no stake to record — grading itself never is.
   const L=get(LS.locked,[]);
   const w=getWagers();
   L.forEach(t=>{
-    const stake=w[t.id];
-    if(!stake||stake<=0)return;
+    if(t.archived)return; // already settled/archived — nothing left to do
+    const stake=w[t.id]||0;
+    const hasStake=stake>0;
     const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
-    // 'mine' tickets settle against the real bankroll; market/outside settle for
-    // the record only — same grading, same math, but no money actually moves.
-    if(!trackedOnly){
-      const b=getBankroll();
-      if(b.history.some(h=>h.id===t.id))return;
-    }else{
-      const already=getTrackedHistory(t.source);
-      if(already.some(h=>h.id===t.id))return;
+    if(hasStake){
+      // only check "already recorded" when there's actually money/tracking to
+      // dedupe against — an unstaked ticket has no history entry to collide with
+      if(!trackedOnly){
+        const b=getBankroll();
+        if(b.history.some(h=>h.id===t.id))return;
+      }else{
+        const already=getTrackedHistory(t.source);
+        if(already.some(h=>h.id===t.id))return;
+      }
     }
     let allDecided=true,anyLoss=false,pushCount=0;
     // standard sportsbook rule: a PUSHED leg is removed from the parlay and the
@@ -4767,36 +4921,32 @@ function settleLockedTickets(){
     if(anyLoss)allDecided=true;
     if(!allDecided)return;
     const won=!anyLoss;
-    let profit;
-    if(pushCount===t.legs.length){
-      // every leg pushed — the whole ticket refunds, no win, no loss, no profit
-      profit=0;
-    }else if(won){
-      // recompute odds from only the legs that actually decided a real outcome —
-      // pushed legs are excluded from the combined probability entirely, exactly
-      // like a real book strips a push out and prices the rest on its own
-      const combinedP=survivingP.length?survivingP.reduce((a,x)=>a*x,1):t.p;
-      const odds=probToAmer(combinedP);
-      const res=amerPayout(odds,stake);
-      profit=res?res.profit:0;
-    }else{
-      profit=-stake;
-    }
     const outcome=pushCount===t.legs.length?'push':(won?true:false);
-    if(trackedOnly){
-      // record-only path — win/loss/push is tracked for that source's daily
-      // history, but the bankroll (d4.bankroll) is never touched. Also skip the
-      // per-ticket dollar debit reversal that settleTicket() does for real money,
-      // since a tracked-only ticket was never debited from the bankroll in the
-      // first place (see syncTrackedAutoParlay — it saves the wager but that's
-      // purely a display/UI value here, not a real charge).
-      recordTrackedOutcome(t.id,stake,profit,outcome,t.source);
-    }else{
-      settleTicket(t.id,stake,profit,outcome);
+    if(hasStake){
+      let profit;
+      if(pushCount===t.legs.length){
+        profit=0; // every leg pushed — the whole ticket refunds, no win, no loss
+      }else if(won){
+        // recompute odds from only the legs that actually decided a real outcome —
+        // pushed legs are excluded from the combined probability entirely, exactly
+        // like a real book strips a push out and prices the rest on its own
+        const combinedP=survivingP.length?survivingP.reduce((a,x)=>a*x,1):t.p;
+        const odds=probToAmer(combinedP);
+        const res=amerPayout(odds,stake);
+        profit=res?res.profit:0;
+      }else{
+        profit=-stake;
+      }
+      if(trackedOnly){
+        // record-only path — win/loss/push is tracked for that source's daily
+        // history, but the bankroll (d4.bankroll) is never touched.
+        recordTrackedOutcome(t.id,stake,profit,outcome,t.source);
+      }else{
+        settleTicket(t.id,stake,profit,outcome);
+      }
+      if(outcome===false)recordLossPostMortem(t,stake);
     }
-    if(outcome===false)recordLossPostMortem(t,stake);
-    // auto-archive the instant it's decided — no manual step needed to see it
-    // move out of Pending once the outcome is locked in
+    // grading + archiving happens regardless of whether there was a stake to settle
     t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);
     set(LS.locked,L);
   });
@@ -7099,11 +7249,24 @@ function genTickets(mode){
     }
     set_.forEach(t=>{
       let w=0,l=0,pd=0;
+      const editing=TICKET_EDIT_ID===t.id&&canModifyTicket(t);
       const rows=t.legs.map(x=>{
         const{hit:r}=gradeLeg(x,t.date);
         const badgeHtml=gradeLegBadge(x,t.date);
         if(r===true)w++;else if(r===false)l++;else pd++;
         const gid=legGameId(x,t.date);
+        // in edit mode, a ✕ replaces the jump-to-game tap (both would fight over
+        // the same click target) — removing a leg is the only action available
+        // on a row while editing, viewing stats happens outside edit mode
+        if(editing){
+          return `<li style="display:flex;align-items:center;gap:8px">
+            <button onclick="removeLegFromTicket(${t.id},'${esc(x.id)}')" title="Remove"
+              style="flex:0 0 auto;background:none;border:1px solid var(--rust);color:var(--rust);
+              border-radius:4px;padding:1px 7px;cursor:pointer;font-size:11px">✕</button>
+            <span style="flex:1">${x.pick} <span class="m">${x.game}</span></span>
+            <span class="pp">${(x.p*100).toFixed(0)}%</span>
+          </li>`;
+        }
         const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
         return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
       }).join('');
@@ -7125,11 +7288,20 @@ function genTickets(mode){
             text-transform:uppercase;color:var(--mute);border:1px solid var(--rule);
             border-radius:4px;padding:1px 6px;margin-left:6px">${pd} pending</span>`:'';
       let actionBtn;
+      const moveBtn=`<button onclick="moveTicket(${t.id})" title="Move to a different tracking bucket">Move</button>`;
       if(t.archived){
         actionBtn=`<button onclick="unarchiveTicket(${t.id})">Move back to pending</button>
+          ${moveBtn}
           <button onclick="delLocked(${t.id})">Delete</button>`;
       }else{
+        // Modify only shows while the ticket is neither finalized nor archived —
+        // "Lock as final" is the explicit point where a ticket becomes permanent
+        // record and stops being editable; archiving means it's already graded.
+        const modifyBtn=canModifyTicket(t)
+          ?`<button onclick="toggleModifyTicket(${t.id})">${editing?'Done editing':'Modify'}</button>`:'';
         actionBtn=`${complete?`<button class="primary" onclick="archiveTicket(${t.id})">Archive</button>`:''}
+          ${modifyBtn}
+          ${moveBtn}
           ${t.finalized?'':`<button onclick="finalizeLocked(${t.id})">Lock as final</button>`}
           <button onclick="delLocked(${t.id})">Delete</button>`;
       }
@@ -7148,6 +7320,23 @@ function genTickets(mode){
       h+=`<div class="tkt ${t.archived?'':'hi'}">${nameLine}
         <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
         <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
+      // addable-legs picker — only rendered for the one ticket currently being
+      // edited, right below its card. Same pool every builder already draws
+      // from, filtered to exclude anything that would collide with what's
+      // already on this ticket.
+      if(editing){
+        const addable=addableLegsFor(t);
+        const addRows=addable.length?addable.map(l=>{
+          const propArgs=l.isProp?`,1,'${esc(l.ptype||'')}',${l.pid!=null?`'${esc(l.pid)}'`:'null'},${l.thr!=null?l.thr:'null'}`:',0,null,null,null';
+          return `<li onclick="addLegToTicket(${t.id},'${esc(l.pick)}','${esc(l.game)}',${l.p},${l.gid!=null?l.gid:'null'}${propArgs})"
+            style="cursor:pointer">${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`;
+        }).join(''):'<li class="m">Nothing available to add right now.</li>';
+        h+=`<div class="tkt" style="border-color:var(--gold);border-style:dashed">
+          <div class="mktlab" style="margin-top:0">Add a leg to "${t.name||t.date}"</div>
+          <div class="sub">Tap any pick below to add it to this ticket. Highest probability first.</div>
+          <ol style="max-height:280px;overflow-y:auto">${addRows}</ol>
+        </div>`;
+      }
     });
     el.innerHTML=h;
     return;
