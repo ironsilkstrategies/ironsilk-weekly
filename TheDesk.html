@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v78</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v81</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1963,10 +1963,19 @@ function fullPresetPool(){
   // pulls every market type regardless of BUILDMODES — presets decide their own mix
   const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder(),
     ...allF5SidesForBuilder(),...allF5TotalsForBuilder()];
+  // ptype was missing here before — every prop leg in THIS pool (the one every
+  // preset actually draws from) carried no way to tell a strikeout prop from an
+  // RBI prop from a hits prop. calibFactor()/computeCalibration() key their
+  // per-prop-type track record on exactly this field, so without it no preset
+  // could ever look up a prop leg's real calibration history. addableLegsFor()
+  // (the Modify feature's pool) already stamped this correctly — this brings
+  // the preset pool in line with it.
   PROPS.filter(p=>p.type!=='hr').forEach(p=>
-    pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',modelP:p.p,marketP:p.p}));
+    pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',modelP:p.p,marketP:p.p,
+      ptype:p.type,pid:p.pid,thr:p.thr}));
   PROPS.filter(p=>p.type==='hr').forEach(p=>
-    pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',modelP:p.p,marketP:p.p}));
+    pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',modelP:p.p,marketP:p.p,
+      ptype:'hr',pid:p.pid,thr:p.thr}));
   return pool;
 }
 
@@ -2115,6 +2124,27 @@ function buildPreset(mode){
     // This is chaos mode, not a recommendation.
     return pool.filter(l=>edgeOf2(l)<=-4).sort((a,b)=>edgeOf2(a)-edgeOf2(b)).slice(0,n);
   }
+  if(mode==='edgeplus'){
+    // straight mirror of Armageddon: instead of the worst edges, take the BEST —
+    // the picks where the model most disagrees with the market IN THE MODEL'S
+    // favor. Same edgeOf2 math everything else on this screen already uses
+    // (modelP - marketP, in percentage points), same +/-4 floor as the rest of
+    // the app treats as "not noise," just sorted the opposite direction.
+    return pool.filter(l=>edgeOf2(l)>=4).sort((a,b)=>edgeOf2(b)-edgeOf2(a)).slice(0,n);
+  }
+  if(mode==='calibchamp'){
+    // Only picks whose EXACT segment — same market, same favorite/underdog
+    // situation, same confidence band (props: same prop type) — has a real,
+    // sample-backed track record of NOT underperforming what it claimed.
+    // calibRecordFor() is the single source of truth for that; nothing here
+    // re-derives the pass/fail logic, it just filters and ranks by it. Ranked
+    // by best ODDS within the passing set — the highest model probability
+    // first, since "best odds" from a set that's already proven itself is the
+    // actual ask, not best edge (that's EDGE+'s job) or worst edge (Armageddon's).
+    const scored=pool.map(l=>({leg:l,rec:calibRecordFor(l)}))
+      .filter(x=>x.rec.ready&&x.rec.passes);
+    return scored.sort((a,b)=>b.leg.p-a.leg.p).slice(0,n).map(x=>x.leg);
+  }
   return [];
 }
 
@@ -2130,7 +2160,9 @@ const PRESETS=[
   ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
   ['combo','Combination+','Moneyline + Total paired together on the same game, for as many games as needed. Files under My picks — counts against your bankroll.'],
   ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge. Files under My picks — counts against your bankroll.'],
-  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under Specialty — tracked daily at a flat $1, no bankroll impact.']
+  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
+  ['edgeplus','EDGE+','The picks where the model disagrees with the market hardest IN THE MODEL\'S favor — highest edge on the board, mirror image of Armageddon. Files under System — tracked daily at a flat $1, no bankroll impact.'],
+  ['calibchamp','Calibration Champ','Only picks from a market/situation/confidence-band (or prop type) with a real, sample-backed record of NOT underperforming what it claimed — best odds within that proven set. Files under System — tracked daily at a flat $1, no bankroll impact.']
 ];
 // ── Every preset routes to exactly ONE of four buckets. Only 'mine' ever
 // touches the bankroll — that's reserved for picks YOU built by hand (Easy
@@ -2145,7 +2177,7 @@ const PRESETS=[
 const PRESET_SOURCE={
   sysbest:'system',booklean:'market',outside:'outside',fucksystem:'specialty',
   easy:'mine',tailbooks:'market',fadebooks:'specialty',tailsystem:'system',
-  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty'
+  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty',edgeplus:'system',calibchamp:'system'
 };
 // Human-readable ticket name per preset — stamped onto the saved ticket so it
 // shows up labeled in the UI instead of a bare date, which was the whole
@@ -2155,7 +2187,7 @@ const PRESET_DISPLAY_NAME={
   sysbest:'Systems best',booklean:'Books lean',outside:'Outside picks',
   fucksystem:'Fuck the system',easy:'Easy wins',tailbooks:'Tail the books',
   fadebooks:'Fade the books',tailsystem:'Tail the system',fadesystem:'Fade the system',
-  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon'
+  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon',edgeplus:'EDGE+',calibchamp:'Calibration Champ'
 };
 // which sources are tracked-only (flat $1, never touch the bankroll) — checked
 // everywhere staking and settlement happen so this is the single source of truth
@@ -5759,13 +5791,26 @@ function parkBucket(g){
   return 'neutral-park';
 }
 
-const CAL_BANDS=[[0.50,0.60],[0.60,0.70],[0.70,0.80],[0.80,0.90],[0.90,1.00]];
+// Was only [0.50,1.00] — anything under 50% (the entire underdog side of every
+// pick) fell through the loop and silently landed in bandOf's fallback, which
+// hard-coded '50-60' regardless of how far under 50% the real probability was.
+// That's not a display-only bug: sideCalibAdj/totalCalibAdj/rlCalibAdj all call
+// bandOf() to look up which segment's correction factor to apply, and they're
+// called LIVE inside simGame on every underdog probability the sim produces —
+// so a genuine 25% underdog pick was being corrected using whatever factor the
+// 50-60% favorite band happened to have, which has no relationship to it at
+// all. Extended to cover the full 0-100% range symmetrically.
+const CAL_BANDS=[[0,0.10],[0.10,0.20],[0.20,0.30],[0.30,0.40],[0.40,0.50],
+  [0.50,0.60],[0.60,0.70],[0.70,0.80],[0.80,0.90],[0.90,1.00]];
 const CAL_MIN_N=12;          // per-bucket minimum before a correction activates
 const CAL_HALF_LIFE_DAYS=45; // recency weighting — a game 45 days old counts half
 
 function bandOf(p){
   for(const[lo,hi]of CAL_BANDS)if(p>=lo&&p<hi)return`${(lo*100)|0}-${(hi*100)|0}`;
-  return p>=1?'90-100':'50-60';
+  // only reachable for p<=0 or p>=1 now that CAL_BANDS covers the full range —
+  // clamp to the nearest real band instead of hard-coding '50-60' for every
+  // out-of-range value regardless of which end it came from
+  return p>=1?'90-100':'0-10';
 }
 function recencyWeight(dateStr){
   const days=(Date.now()-new Date(dateStr).getTime())/86400000;
@@ -5935,6 +5980,36 @@ function rlCalibAdj(favCoverP,situation){
   return Math.max(0.01,Math.min(0.99,0.5+dist*factor));
 }
 
+// ── does THIS exact leg have a proven, non-losing calibration record? ──
+// The real thing "Calibration Champ" needs: not just today's model probability,
+// but whether that probability's specific slice of history — same market,
+// same favorite/underdog situation, same confidence band (for sides/totals/
+// run lines), or same prop type (for props) — has ACTUALLY hit at or above
+// its stated rate often enough to trust, with enough sample size to mean
+// anything. This is read-only — it never applies a correction, it just
+// reports whether the segment clears the bar.
+function calibRecordFor(leg){
+  if(leg.kind==='prop'||leg.kind==='hr'){
+    const c=get(LS.calib,{}),ty=c.types||{};
+    const rec=leg.ptype?ty[leg.ptype]:null;
+    if(!rec||rec.n===undefined||rec.n<MIN_N_CAL)return{ready:false,n:rec?rec.n:0};
+    // calibFactor()'s own definition of "doesn't lose": the actual hit rate is
+    // at or above what was predicted (f>=1 means actual outperformed or matched
+    // the stated probability) — anything under 1 means this prop type has
+    // historically overpromised relative to what actually happened
+    return{ready:true,n:rec.n,actual:rec.actual,predicted:rec.predicted,f:rec.f,passes:rec.f>=1};
+  }
+  const mk=leg.kind==='rl'?'runline':leg.kind==='total'?'total':leg.kind==='side'?'moneyline':null;
+  if(!mk)return{ready:false,n:0}; // F5 and anything else without its own segmented history — no claim to make either way
+  const c=get('d4.segcalib',null);
+  if(!c)return{ready:false,n:0};
+  if(typeof leg.modelP!=='number')return{ready:false,n:0};
+  const situation=leg.modelP>=0.5?'favorite':'underdog';
+  const band=bandOf(leg.modelP);
+  const seg=c.segments[`${mk}|${situation}|${band}`];
+  if(!seg||!seg.ready)return{ready:false,n:seg?seg.n:0};
+  return{ready:true,n:seg.n,actual:seg.actual,predicted:seg.predicted,f:seg.f,passes:seg.actual>=seg.predicted};
+}
 function sideCalibAdj(modelP,situation){
   const c=get('d4.segcalib',null);
   if(!c)return modelP;
