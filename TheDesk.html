@@ -263,15 +263,51 @@ border-radius:7px;padding:8px 10px;margin-bottom:4px;cursor:pointer}
 /* ---------- SLIP ---------- */
 .slip{position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(20,27,35,.98);
 border-top:2px solid var(--gold);padding:11px 14px calc(env(safe-area-inset-bottom) + 11px);
-backdrop-filter:blur(14px);display:none;align-items:center;gap:10px}
+backdrop-filter:blur(14px);display:none;align-items:center;gap:10px;cursor:pointer}
 .slip.on{display:flex}
 .slip .si{flex:1;min-width:0}
-.slip .sl{font-family:"IBM Plex Mono";font-size:9px;color:var(--mute);letter-spacing:.07em;text-transform:uppercase}
+.slip .sl{font-family:"IBM Plex Mono";font-size:9px;color:var(--mute);letter-spacing:.07em;text-transform:uppercase;
+display:flex;align-items:center;gap:5px}
+.slip .sl .chev{transition:transform .25s var(--ease,ease);display:inline-block}
+.slip.expanded .sl .chev{transform:rotate(180deg)}
 .slip .so{font-family:"Archivo";font-weight:900;font-size:17px}
 .slip button{font-family:"Archivo";font-weight:700;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
 border-radius:7px;padding:10px 12px;cursor:pointer;border:1px solid var(--rule)}
 .slip .c{background:var(--panel2);color:var(--chalk)}
 .slip .k{background:var(--gold);color:#0B0F14;border-color:var(--gold)}
+
+/* ── expandable slip sheet — tap the bar to raise it, review/remove legs,
+   tap again (or the scrim) to lower it back down before locking in ── */
+.slip-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:49;
+  opacity:0;pointer-events:none;transition:opacity .25s var(--ease,ease)}
+.slip-scrim.on{opacity:1;pointer-events:auto}
+.slip-sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;
+  background:var(--panel,#141b23);border-top:2px solid var(--gold);
+  border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.5);
+  max-height:72vh;display:flex;flex-direction:column;
+  transform:translateY(100%);transition:transform .3s var(--ease,cubic-bezier(.2,.9,.3,1));
+  padding-bottom:env(safe-area-inset-bottom)}
+.slip-sheet.on{transform:translateY(0)}
+.slip-sheet-handle{width:40px;height:4px;background:var(--rule);border-radius:3px;
+  margin:9px auto 4px;flex:0 0 auto}
+.slip-sheet-head{padding:6px 16px 10px;flex:0 0 auto;display:flex;justify-content:space-between;
+  align-items:baseline;border-bottom:1px solid var(--rule)}
+.slip-sheet-body{overflow-y:auto;padding:8px 14px;flex:1 1 auto;-webkit-overflow-scrolling:touch}
+.slip-leg{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--rule)}
+.slip-leg:last-child{border-bottom:none}
+.slip-leg-info{flex:1;min-width:0}
+.slip-leg-pick{font-family:"Archivo";font-weight:800;font-size:14px}
+.slip-leg-game{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);letter-spacing:.05em;margin-top:1px}
+.slip-leg-prob{font-family:"IBM Plex Mono";font-size:12px;color:var(--gold);flex:0 0 auto}
+.slip-leg-rm{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:1px solid var(--rust,#c0392b);
+  background:transparent;color:var(--rust,#c0392b);font-size:14px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.slip-sheet-foot{flex:0 0 auto;padding:10px 14px calc(env(safe-area-inset-bottom) + 10px);
+  border-top:1px solid var(--rule);display:flex;gap:10px}
+.slip-sheet-foot button{flex:1;font-family:"Archivo";font-weight:700;font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;border-radius:8px;padding:12px;cursor:pointer;border:1px solid var(--rule)}
+.slip-sheet-foot .c{background:var(--panel2);color:var(--chalk)}
+.slip-sheet-foot .k{background:var(--gold);color:#0B0F14;border-color:var(--gold)}
 
 /* ---------- WAGER ROW ON LOCKED TICKETS ---------- */
 .wager-row{display:flex;align-items:stretch;gap:6px;margin-top:11px;padding-top:10px;border-top:1px solid var(--rule);flex-wrap:nowrap}
@@ -413,7 +449,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v84</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v85</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -598,10 +634,24 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   </div>
 </main>
 
-<div class="slip" id="slip">
-  <div class="si"><div class="sl" id="slN">0 legs</div><div class="so" id="slO">—</div></div>
-  <button class="c" onclick="clearSlip()">Clear</button>
-  <button class="k" onclick="lockSlip()">Lock in</button>
+<div class="slip-scrim" id="slipScrim" onclick="closeSlipSheet()"></div>
+<div class="slip-sheet" id="slipSheet">
+  <div class="slip-sheet-handle"></div>
+  <div class="slip-sheet-head">
+    <div style="font-family:'Archivo';font-weight:900;font-size:15px">Review ticket</div>
+    <div class="m" id="slipSheetSummary">—</div>
+  </div>
+  <div class="slip-sheet-body" id="slipSheetBody"></div>
+  <div class="slip-sheet-foot">
+    <button class="c" onclick="clearSlip()">Clear all</button>
+    <button class="k" onclick="lockSlip()">Lock in</button>
+  </div>
+</div>
+
+<div class="slip" id="slip" onclick="toggleSlipSheet(event)">
+  <div class="si"><div class="sl" id="slN"><span class="chev">▲</span> 0 legs</div><div class="so" id="slO">—</div></div>
+  <button class="c" onclick="event.stopPropagation();clearSlip()">Clear</button>
+  <button class="k" onclick="event.stopPropagation();lockSlip()">Lock in</button>
 </div>
 
 <script>
@@ -4362,14 +4412,75 @@ function tog(id,game,pick,prob,gid,ptype,pname,pmkt){
   set(LS.slip,SLIP);render();paintSlip();
 }
 function clearSlip(){SLIP=[];set(LS.slip,SLIP);render();paintSlip()}
+let SLIP_SHEET_OPEN=false;
 function paintSlip(){
   const el=document.getElementById('slip');
-  if(!SLIP.length){el.classList.remove('on');return}
+  if(!SLIP.length){
+    el.classList.remove('on');
+    closeSlipSheet(); // no legs left — the sheet has nothing to show, so drop it too
+    return;
+  }
   el.classList.add('on');
   const c=SLIP.reduce((a,x)=>a*x.p,1);
   const gs=new Set(SLIP.map(x=>x.game));
-  document.getElementById('slN').textContent=SLIP.length+' legs · '+gs.size+' games';
+  document.getElementById('slN').innerHTML='<span class="chev">▲</span> '+SLIP.length+' legs · '+gs.size+' games';
   document.getElementById('slO').textContent=(c*100).toFixed(c<.01?3:1)+'% · 1 in '+Math.round(1/c).toLocaleString();
+  // keep the sheet's own contents in sync any time paintSlip runs — covers the
+  // case where a leg gets removed from inside the sheet itself and the summary/
+  // list both need to reflect that immediately, not just on next open
+  if(SLIP_SHEET_OPEN)renderSlipSheetBody();
+}
+// Tapping the collapsed bar raises the sheet; tapping it again (or the scrim,
+// or a leg's own ✕) can lower it — this is the "click it and review or remove
+// games before I lock it in" flow. The bar's own Clear/Lock-in buttons still
+// work directly without opening the sheet at all, via stopPropagation above.
+function toggleSlipSheet(e){
+  if(e)e.stopPropagation();
+  if(SLIP_SHEET_OPEN)closeSlipSheet();else openSlipSheet();
+}
+function openSlipSheet(){
+  if(!SLIP.length)return;
+  SLIP_SHEET_OPEN=true;
+  document.getElementById('slip').classList.add('expanded');
+  document.getElementById('slipScrim').classList.add('on');
+  document.getElementById('slipSheet').classList.add('on');
+  renderSlipSheetBody();
+}
+function closeSlipSheet(){
+  SLIP_SHEET_OPEN=false;
+  const bar=document.getElementById('slip');
+  if(bar)bar.classList.remove('expanded');
+  const scrim=document.getElementById('slipScrim');
+  if(scrim)scrim.classList.remove('on');
+  const sheet=document.getElementById('slipSheet');
+  if(sheet)sheet.classList.remove('on');
+}
+function renderSlipSheetBody(){
+  const body=document.getElementById('slipSheetBody');
+  const summary=document.getElementById('slipSheetSummary');
+  if(!body||!summary)return;
+  if(!SLIP.length){closeSlipSheet();return}
+  const c=SLIP.reduce((a,x)=>a*x.p,1);
+  const gs=new Set(SLIP.map(x=>x.game));
+  summary.textContent=(c*100).toFixed(c<.01?3:1)+'% · 1 in '+Math.round(1/c).toLocaleString();
+  body.innerHTML=SLIP.map(x=>{
+    return `<div class="slip-leg">
+      <div class="slip-leg-info">
+        <div class="slip-leg-pick">${x.pick}</div>
+        <div class="slip-leg-game">${x.game}${x.pname?' · '+x.pname:''}</div>
+      </div>
+      <div class="slip-leg-prob">${(x.p*100).toFixed(0)}%</div>
+      <button class="slip-leg-rm" onclick="removeSlipLeg('${esc(x.id)}')" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
+// Removing a leg from inside the sheet reuses tog()'s own removal branch —
+// tog(id) with no other args still correctly removes, since the removal path
+// only ever checks whether the id already exists in SLIP, same as tapping the
+// same pick again on the game card would do.
+function removeSlipLeg(id){
+  tog(id);
+  if(SLIP.length)renderSlipSheetBody();
 }
 function lockSlip(){
   if(!SLIP.length)return;
