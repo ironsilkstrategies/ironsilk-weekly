@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v82</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v84</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2079,6 +2079,69 @@ function concentrationReport(){
     ?games[0]:null; // the single biggest concentration, if it clears the bar — the "kill all my tickets" game
   return{games,picks,flagged,surplus,
     totalPendingTickets:new Set(pendingLegExposure().map(r=>r.ticketId)).size};
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ELIMINATION MAP — per-ticket "how close to winning or dying right now"
+// Every leg already has a real, computable status via gradeLeg (dead, alive
+// and clinched, alive and uncertain, not started). A ticket's status is NOT
+// a percentage — one dead leg kills the whole ticket regardless of how many
+// other legs already won, so the honest representation is a state machine,
+// not an average. This is that state machine, per pending ticket, feeding
+// the bubble map.
+// ═══════════════════════════════════════════════════════════════════════
+function ticketEliminationStatus(t){
+  let dead=false,wins=0,decided=0,pending=0,total=t.legs.length;
+  const legStates=t.legs.map(x=>{
+    const g=gradeLeg(x,t.date);
+    let state;
+    if(g.push===true){state='push';decided++;}
+    else if(g.hit===true){state='won';wins++;decided++;}
+    else if(g.hit===false){state='dead';dead=true;decided++;}
+    else{state='pending';pending++;}
+    return{pick:x.pick,game:x.game,state,detail:g.detail};
+  });
+  // status: dead (any leg lost) > won (every leg decided, none lost) >
+  // live (some pending, none dead yet — this is the "still alive" state
+  // that actually matters, the tension point) > scheduled (nothing started)
+  let status;
+  if(dead)status='dead';
+  else if(pending===0&&decided>0)status='won';
+  else if(decided>0&&pending>0)status='live';
+  else status='scheduled';
+  return{status,legStates,wins,dead,decided,pending,total,
+    legsFromElimination:dead?0:(pending>0?pending:0)}; // how many still-live legs stand between this ticket and being fully decided
+}
+
+// Real payout magnitude for bubble sizing — flat $1 for tracked-only sources,
+// actual staked amount for 'mine'. Falls back to combined probability's
+// implied payout if no stake was ever recorded, so a bubble always has SOME
+// real size to draw rather than defaulting to a fixed circle for everyone.
+function ticketPayoutMagnitude(t){
+  const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+  const w=getWagers();
+  const stake=trackedOnly?1:(w[t.id]||1);
+  const odds=probToAmer(t.p);
+  const res=amerPayout(odds,stake);
+  return{stake,toWin:res?res.profit:0,payout:stake+(res?res.profit:0)};
+}
+
+function eliminationMapData(){
+  const L=get(LS.locked,[]).filter(t=>!t.archived);
+  const conc=concentrationReport();
+  const gameRisk={};
+  conc.games.forEach(g=>{gameRisk[g.game]=g.ticketCount});
+  const bubbles=L.map(t=>{
+    const es=ticketEliminationStatus(t);
+    const pay=ticketPayoutMagnitude(t);
+    const games=[...new Set(t.legs.map(x=>x.game))];
+    const maxSharedRisk=Math.max(0,...games.map(g=>gameRisk[g]||0));
+    return{id:t.id,name:t.name||t.date,source:t.source||'mine',
+      status:es.status,legsFromElimination:es.legsFromElimination,
+      wins:es.wins,total:es.total,decided:es.decided,legStates:es.legStates,
+      payout:pay.payout,stake:pay.stake,games,sharedRisk:maxSharedRisk};
+  });
+  return{bubbles,conc};
 }
 
 function applyDupeFilter(pool){
@@ -7067,7 +7130,7 @@ function rebuildSrcStats(){
 /* ================= TICKETS TABS ================= */
 const TTABS=[['eval','Evaluate'],['build','Build'],['mine','My picks'],['system','System'],
   ['market','Market'],['specialty','Specialty'],['outside','Outside'],['duplicates','⚠ Duplicates'],
-  ['record','Record'],['backtest','Backtest']];
+  ['elimmap','🫧 Map'],['record','Record'],['backtest','Backtest']];
 let BUILD_MODE='presets';   // presets | custom
 let OUTSIDE_MODE='consensus';
 
@@ -7088,6 +7151,7 @@ function renderTickets(){
   if(TICKETTAB==='system') body.innerHTML=systemPicksHtml();
   if(TICKETTAB==='specialty')body.innerHTML=specialtyPicksHtml();
   if(TICKETTAB==='duplicates')body.innerHTML=duplicatesPicksHtml();
+  if(TICKETTAB==='elimmap')body.innerHTML=eliminationMapHtml();
   if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
   if(TICKETTAB==='backtest')body.innerHTML=renderBacktest();
   if(TICKETTAB==='market') body.innerHTML=marketPicksHtml();
@@ -7210,6 +7274,152 @@ function minePicksHtml(){
     <div id="tickets"></div>`;
 }
 
+// ── Elimination Map — bubble chart of every pending ticket ──────────────
+// Position: simple force-free grid-jitter layout, clustered by shared-game
+// risk so tickets riding on the same game visually group together (the same
+// concentration signal as the Duplicates tab, made spatial). Size: sqrt-scaled
+// by real payout so AREA (not radius) is proportional to what's actually on
+// the line — a $50 payout bubble is 5x the AREA of a $10 one, not 5x the
+// width, which is what a human eye actually reads as "5x bigger."
+// Color: real live status. Ring thickness: how many legs stand between this
+// ticket and elimination RIGHT NOW — a thin ring means one bad result away
+// from dead, a thick ring means still several legs from being decided either way.
+function eliminationMapSvg(bubbles,w,h){
+  if(!bubbles.length)return '';
+  const STATUS_COLOR={dead:'#F0563C',won:'#3DDC84',live:'#FFB43D',scheduled:'#5B6B7A'};
+  const maxPayout=Math.max(1,...bubbles.map(b=>b.payout));
+  const minR=14,maxR=44;
+  const sized=bubbles.map(b=>({...b,
+    r:minR+(maxR-minR)*Math.sqrt(b.payout/maxPayout)}));
+  // cluster by shared game — tickets that share ANY game get pulled toward a
+  // common anchor point so overlapping risk reads as physical proximity
+  const clusters={};
+  sized.forEach(b=>{
+    const key=b.games.slice().sort().join('|')||'none';
+    (clusters[key]=clusters[key]||[]).push(b);
+  });
+  const clusterKeys=Object.keys(clusters);
+  const cols=Math.max(1,Math.ceil(Math.sqrt(clusterKeys.length)));
+  const cellW=w/cols,cellH=h/Math.ceil(clusterKeys.length/cols);
+  let seed=42;const rnd=()=>{seed=(seed*1103515245+12345)%2147483648;return seed/2147483648};
+  const positioned=[];
+  clusterKeys.forEach((key,ci)=>{
+    const cx=(ci%cols+0.5)*cellW,cy=(Math.floor(ci/cols)+0.5)*cellH;
+    const members=clusters[key];
+    members.forEach((b,mi)=>{
+      const angle=(mi/Math.max(1,members.length))*Math.PI*2;
+      const spread=members.length>1?Math.min(cellW,cellH)*0.22:0;
+      const jx=(rnd()-0.5)*10,jy=(rnd()-0.5)*10;
+      positioned.push({...b,
+        x:Math.max(b.r+4,Math.min(w-b.r-4,cx+Math.cos(angle)*spread+jx)),
+        y:Math.max(b.r+4,Math.min(h-b.r-4,cy+Math.sin(angle)*spread+jy))});
+    });
+  });
+  const circles=positioned.map(b=>{
+    const col=STATUS_COLOR[b.status];
+    // ring thickness communicates "distance from elimination" — thin ring
+    // (1.5px) when one leg from dead, thick ring (5px) when several legs
+    // still have to resolve before anything is decided
+    const ringW=b.status==='dead'||b.status==='won'?2:
+      Math.max(1.5,Math.min(5,1.5+(b.legsFromElimination/Math.max(1,b.total))*4));
+    const glow=b.status==='live'&&b.legsFromElimination<=1
+      ?`<circle cx="${b.x}" cy="${b.y}" r="${b.r+5}" fill="none" stroke="${col}" stroke-width="1"
+          opacity="0.5"><animate attributeName="r" values="${b.r+3};${b.r+9};${b.r+3}"
+          dur="1.8s" repeatCount="indefinite"/><animate attributeName="opacity"
+          values="0.6;0.05;0.6" dur="1.8s" repeatCount="indefinite"/></circle>`:'';
+    const label=b.total>1?`${b.wins}/${b.decided||b.total}`:(b.status==='dead'?'✕':b.status==='won'?'✓':'…');
+    return `${glow}<g style="cursor:pointer" onclick="showBubbleDetail(${b.id})">
+      <circle cx="${b.x}" cy="${b.y}" r="${b.r}" fill="${col}" fill-opacity="0.22"
+        stroke="${col}" stroke-width="${ringW}"/>
+      <text x="${b.x}" y="${b.y+4}" text-anchor="middle" font-family="Archivo" font-weight="800"
+        font-size="${Math.max(10,b.r*0.4)}" fill="${col}">${label}</text>
+    </g>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="display:block">
+    ${circles}
+  </svg>`;
+}
+let BUBBLE_DETAIL_ID=null;
+function showBubbleDetail(id){
+  BUBBLE_DETAIL_ID=(BUBBLE_DETAIL_ID===id)?null:id;
+  renderTickets();
+}
+function eliminationMapHtml(){
+  const{bubbles,conc}=eliminationMapData();
+  const counts={dead:0,won:0,live:0,scheduled:0};
+  bubbles.forEach(b=>counts[b.status]++);
+  const totalPayout=bubbles.filter(b=>b.status!=='dead').reduce((a,b)=>a+b.payout,0);
+  const atRiskPayout=bubbles.filter(b=>b.status==='live').reduce((a,b)=>a+b.payout,0);
+  const oneAway=bubbles.filter(b=>b.status==='live'&&b.legsFromElimination<=1);
+
+  let h=`<div class="tkt hi"><h3>Elimination Map</h3>
+    <div class="sub">Every pending ticket, sized by real payout, colored by what's actually happening right
+    now. <b style="color:var(--rust)">Red</b> = already dead, one leg lost. <b style="color:var(--win)">Green</b>
+    = fully won. <b style="color:var(--gold)">Amber</b> = still alive, at least one leg undecided. Grey = nothing's
+    started. Ring thickness = how many legs stand between that ticket and being fully decided — thin ring pulsing
+    means one result away from dead or won. Tickets clustered together share a game — a bad result there hits
+    the whole cluster at once. Tap any bubble for the leg-by-leg breakdown.</div></div>`;
+
+  h+=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--rust)">${counts.dead}</div>
+        <div class="m">dead</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold)">${counts.live}</div>
+        <div class="m">still alive</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--win)">${counts.won}</div>
+        <div class="m">won</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--mute)">${counts.scheduled}</div>
+        <div class="m">not started</div></div>
+    </div>
+  </div>`;
+
+  if(oneAway.length){
+    h+=`<div class="tkt" style="border-left:3px solid var(--gold)">
+      <div class="mktlab" style="margin-top:0;color:var(--gold)">⚡ One leg from deciding</div>
+      ${oneAway.map(b=>{
+        const shakyLeg=b.legStates.find(l=>l.state==='pending');
+        return `<div style="padding:4px 0;cursor:pointer" onclick="showBubbleDetail(${b.id})">
+          <b>${b.name}</b> <span class="m">$${b.payout.toFixed(2)} on the line</span>
+          ${shakyLeg?`<div class="sub">Comes down to: ${shakyLeg.pick} <span class="m">${shakyLeg.game}</span>${shakyLeg.detail?' · '+shakyLeg.detail:''}</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  h+=`<div class="tkt">${eliminationMapSvg(bubbles,340,Math.max(220,Math.ceil(bubbles.length/4)*90))}</div>`;
+
+  h+=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px">$${totalPayout.toFixed(2)}</div>
+        <div class="m">total payout still possible</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${atRiskPayout.toFixed(2)}</div>
+        <div class="m">riding on still-live tickets</div></div>
+    </div>
+  </div>`;
+
+  if(BUBBLE_DETAIL_ID){
+    const b=bubbles.find(x=>x.id===BUBBLE_DETAIL_ID);
+    if(b){
+      h+=`<div class="tkt hi" style="border-color:var(--gold)">
+        <h3>${b.name} <span class="m" style="text-transform:uppercase">${b.status}</span></h3>
+        <div class="sub">$${b.stake.toFixed(2)} staked → $${b.payout.toFixed(2)} to win · ${b.source}</div>
+        <ol style="list-style:none;padding:0;margin-top:8px">
+        ${b.legStates.map(l=>{
+          const col=l.state==='won'?'var(--win)':l.state==='dead'?'var(--rust)':l.state==='push'?'var(--mute)':'var(--gold)';
+          const icon=l.state==='won'?'✓':l.state==='dead'?'✕':l.state==='push'?'—':'…';
+          return `<li style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--hair)">
+            <span><span style="color:${col};font-weight:800">${icon}</span> ${l.pick}
+              <span class="m">${l.game}</span></span>
+            <span class="m" style="color:${col}">${l.detail||l.state}</span>
+          </li>`;
+        }).join('')}
+        </ol>
+        <div class="bar"><button onclick="showBubbleDetail(${b.id})">Close</button></div>
+      </div>`;
+    }
+  }
+  return h;
+}
 function duplicatesPicksHtml(){
   const r=concentrationReport();
   const pop=popularityReport();
