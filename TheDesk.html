@@ -1979,6 +1979,108 @@ function fullPresetPool(){
   return pool;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// CONCENTRATION / DUPLICATE RISK ENGINE
+// The real danger isn't "the exact same pick string appears twice" — it's
+// "how many of my currently-pending tickets have ANY leg riding on this one
+// game." One bad final score on a heavily-repeated game can wipe out several
+// tracked tickets at once, correlated, in a single result. This treats that
+// as the actual thing to measure, with exact-pick duplication as a specific,
+// worse case of the same risk (not a separate concept).
+// ═══════════════════════════════════════════════════════════════════════
+
+// Every leg across every currently-PENDING locked ticket, tagged with which
+// ticket/bucket it came from — the raw material every function below works from.
+function pendingLegExposure(){
+  const L=get(LS.locked,[]).filter(t=>!t.archived);
+  const rows=[];
+  L.forEach(t=>t.legs.forEach(l=>{
+    rows.push({game:l.game,pick:l.pick,kind:legKindOf(l),ticketId:t.id,
+      ticketName:t.name||null,source:t.source||'mine',gid:l.gid||null});
+  }));
+  return rows;
+}
+// Legs on locked tickets don't reliably carry a `kind` field the way pool legs
+// do (tog()-created legs on the game board never got one) — infer it from the
+// pick text itself so exposure analysis and the sub-out advisory both work
+// on real historical tickets, not just freshly-built ones.
+function legKindOf(l){
+  if(l.kind)return l.kind;
+  if(l.isProp||l.ptype)return l.ptype==='hr'?'hr':'prop';
+  const pk=l.pick||'';
+  if(/^F5 (over|under) /.test(pk))return 'f5total';
+  if(/^F5 /.test(pk))return 'f5side';
+  if(/^(Over|Under) /.test(pk))return 'total';
+  if(/ ML$/.test(pk))return 'side';
+  if(/[+-]\d+(\.\d+)?$/.test(pk))return 'rl';
+  return 'other';
+}
+
+// Game-level concentration — how many PENDING tickets have any leg at all on
+// this game, regardless of which specific market or pick. This is the number
+// that actually answers "what single result could hurt me the most."
+function gameConcentration(){
+  const rows=pendingLegExposure();
+  const byGame={};
+  rows.forEach(r=>{
+    const b=byGame[r.game]=byGame[r.game]||{game:r.game,tickets:new Set(),legs:[]};
+    b.tickets.add(r.ticketId);
+    b.legs.push(r);
+  });
+  return Object.values(byGame)
+    .map(b=>({game:b.game,ticketCount:b.tickets.size,legCount:b.legs.length,legs:b.legs}))
+    .sort((a,b)=>b.ticketCount-a.ticketCount||b.legCount-a.legCount);
+}
+
+// Exact-pick concentration — the stricter, worse case: not just the same game,
+// the literal same bet showing up on multiple tickets. Rank matters here
+// (asked for explicitly) so a "how many times, by rank" view is possible.
+function pickConcentration(){
+  const rows=pendingLegExposure();
+  const byPick={};
+  rows.forEach(r=>{
+    const key=r.pick+'|'+r.game;
+    const b=byPick[key]=byPick[key]||{pick:r.pick,game:r.game,kind:r.kind,tickets:new Set(),sources:new Set()};
+    b.tickets.add(r.ticketId);
+    b.sources.add(r.source);
+  });
+  return Object.values(byPick)
+    .map(b=>({pick:b.pick,game:b.game,kind:b.kind,ticketCount:b.tickets.size,sourceCount:b.sources.size}))
+    .filter(b=>b.ticketCount>1) // a "duplicate" by definition needs to appear more than once
+    .sort((a,b)=>b.ticketCount-a.ticketCount)
+    .map((b,i)=>({...b,rank:i+1}));
+}
+
+// The sub-out advisory: for a game with heavy concentration, suggest swapping
+// ONE leg family out for a different one on the SAME game, so the ticket keeps
+// its position on that game without doubling down on the exact same market
+// that's already overexposed everywhere else. Doesn't invent new picks — pulls
+// the real alternative from whatever's currently on the board for that game.
+function suggestSubOut(game,avoidKind){
+  const pool=applyDupeFilter(fullPresetPool()).filter(l=>l.game===game);
+  const families=['side','rl','total','f5side','f5total'];
+  const avoidFam=legFamily(avoidKind);
+  const alt=families.find(fam=>fam!==avoidFam&&pool.some(l=>legFamily(l.kind)===fam));
+  if(!alt)return null;
+  const candidates=pool.filter(l=>legFamily(l.kind)===alt).sort((a,b)=>b.p-a.p);
+  return candidates[0]||null;
+}
+
+// The red-flag threshold: how many pending tickets on one game before it's
+// worth surfacing as a warning. 3+ tickets sharing a single game's result
+// means that one final score decides at least 3 tracked outcomes at once.
+const CONCENTRATION_WARN_AT=3;
+
+function concentrationReport(){
+  const games=gameConcentration();
+  const picks=pickConcentration();
+  const flagged=games.filter(g=>g.ticketCount>=CONCENTRATION_WARN_AT);
+  const surplus=games.length&&games[0].ticketCount>=CONCENTRATION_WARN_AT
+    ?games[0]:null; // the single biggest concentration, if it clears the bar — the "kill all my tickets" game
+  return{games,picks,flagged,surplus,
+    totalPendingTickets:new Set(pendingLegExposure().map(r=>r.ticketId)).size};
+}
+
 function applyDupeFilter(pool){
   if(ALLOW_DUPES)return pool;
   const used=currentLockedPickSet();
@@ -2145,7 +2247,65 @@ function buildPreset(mode){
       .filter(x=>x.rec.ready&&x.rec.passes);
     return scored.sort((a,b)=>b.leg.p-a.leg.p).slice(0,n).map(x=>x.leg);
   }
+  if(mode==='popular'){
+    return buildPopularPreset(n);
+  }
   return [];
+}
+
+// ── POPULAR — the same game/pick showing up across many INDEPENDENT presets
+// at once is a stronger signal than any one preset's own confidence, and it's
+// also exactly the concentration risk the duplicate-analysis engine warns
+// about — this preset turns that cross-agreement into something buildable,
+// and doubles as the answer to "which games are most likely to cause
+// duplicates across my tickets" (a game that wins on 6 presets independently
+// is a game you will almost certainly end up with several tickets on).
+// Only counts presets that express a real directional opinion on a SPECIFIC
+// pick — Combo/Lucky10 build fixed SHAPES rather than voting for one side,
+// so including them would count "this preset always returns something" as a
+// vote rather than "this preset agrees with this pick," which is the actual
+// question being asked.
+const POPULAR_VOTERS=['sysbest','booklean','fucksystem','easy','tailbooks',
+  'fadebooks','tailsystem','fadesystem','armageddon','edgeplus','calibchamp'];
+function buildPopularPreset(n){
+  const votes={}; // key: pick|game -> {leg, voters:Set}
+  POPULAR_VOTERS.forEach(voterMode=>{
+    let picks;
+    try{picks=buildPreset(voterMode);}catch(e){picks=[];}
+    picks.forEach(l=>{
+      const key=l.pick+'|'+l.game;
+      const v=votes[key]=votes[key]||{leg:l,voters:new Set()};
+      v.voters.add(voterMode);
+    });
+  });
+  const ranked=Object.values(votes)
+    .filter(v=>v.voters.size>=2) // "popular" requires actual agreement, not one preset alone
+    .sort((a,b)=>b.voters.size-a.voters.size||b.leg.p-a.leg.p);
+  return ranked.slice(0,n===undefined?ranked.length:n).map(v=>({...v.leg,popularVotes:v.voters.size,popularSources:[...v.voters]}));
+}
+// Read-only version for the concentration report and the "which games are
+// likely to duplicate across my tickets" advisory — same vote-counting, but
+// returns EVERY pick with 2+ votes rather than capping at a leg count, since
+// this is meant to be inspected, not locked as a ticket.
+function popularityReport(){
+  const votes={};
+  POPULAR_VOTERS.forEach(voterMode=>{
+    let picks;
+    try{picks=buildPreset(voterMode);}catch(e){picks=[];}
+    picks.forEach(l=>{
+      const key=l.pick+'|'+l.game;
+      const v=votes[key]=votes[key]||{leg:l,voters:new Set(),games:new Set()};
+      v.voters.add(voterMode);
+    });
+  });
+  const byGame={};
+  Object.values(votes).forEach(v=>{
+    if(v.voters.size<2)return;
+    const g=byGame[v.leg.game]=byGame[v.leg.game]||{game:v.leg.game,picks:[],maxVotes:0};
+    g.picks.push({pick:v.leg.pick,votes:v.voters.size,sources:[...v.voters]});
+    g.maxVotes=Math.max(g.maxVotes,v.voters.size);
+  });
+  return Object.values(byGame).sort((a,b)=>b.maxVotes-a.maxVotes);
 }
 
 const PRESETS=[
@@ -2162,7 +2322,8 @@ const PRESETS=[
   ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge. Files under My picks — counts against your bankroll.'],
   ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
   ['edgeplus','EDGE+','The picks where the model disagrees with the market hardest IN THE MODEL\'S favor — highest edge on the board, mirror image of Armageddon. Files under System — tracked daily at a flat $1, no bankroll impact.'],
-  ['calibchamp','Calibration Champ','Only picks from a market/situation/confidence-band (or prop type) with a real, sample-backed record of NOT underperforming what it claimed — best odds within that proven set. Files under System — tracked daily at a flat $1, no bankroll impact.']
+  ['calibchamp','Calibration Champ','Only picks from a market/situation/confidence-band (or prop type) with a real, sample-backed record of NOT underperforming what it claimed — best odds within that proven set. Files under System — tracked daily at a flat $1, no bankroll impact.'],
+  ['popular','Popular','Picks that independently show up across multiple OTHER presets at once — the strongest cross-agreement on the board, and the same signal that flags which games are most likely to duplicate across your tickets. Files under System — tracked daily at a flat $1, no bankroll impact.']
 ];
 // ── Every preset routes to exactly ONE of four buckets. Only 'mine' ever
 // touches the bankroll — that's reserved for picks YOU built by hand (Easy
@@ -2177,7 +2338,7 @@ const PRESETS=[
 const PRESET_SOURCE={
   sysbest:'system',booklean:'market',outside:'outside',fucksystem:'specialty',
   easy:'mine',tailbooks:'market',fadebooks:'specialty',tailsystem:'system',
-  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty',edgeplus:'system',calibchamp:'system'
+  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty',edgeplus:'system',calibchamp:'system',popular:'system'
 };
 // Human-readable ticket name per preset — stamped onto the saved ticket so it
 // shows up labeled in the UI instead of a bare date, which was the whole
@@ -2187,7 +2348,7 @@ const PRESET_DISPLAY_NAME={
   sysbest:'Systems best',booklean:'Books lean',outside:'Outside picks',
   fucksystem:'Fuck the system',easy:'Easy wins',tailbooks:'Tail the books',
   fadebooks:'Fade the books',tailsystem:'Tail the system',fadesystem:'Fade the system',
-  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon',edgeplus:'EDGE+',calibchamp:'Calibration Champ'
+  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon',edgeplus:'EDGE+',calibchamp:'Calibration Champ',popular:'Popular'
 };
 // which sources are tracked-only (flat $1, never touch the bankroll) — checked
 // everywhere staking and settlement happen so this is the single source of truth
@@ -6905,7 +7066,8 @@ function rebuildSrcStats(){
 
 /* ================= TICKETS TABS ================= */
 const TTABS=[['eval','Evaluate'],['build','Build'],['mine','My picks'],['system','System'],
-  ['market','Market'],['specialty','Specialty'],['outside','Outside'],['record','Record'],['backtest','Backtest']];
+  ['market','Market'],['specialty','Specialty'],['outside','Outside'],['duplicates','⚠ Duplicates'],
+  ['record','Record'],['backtest','Backtest']];
 let BUILD_MODE='presets';   // presets | custom
 let OUTSIDE_MODE='consensus';
 
@@ -6925,6 +7087,7 @@ function renderTickets(){
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
   if(TICKETTAB==='system') body.innerHTML=systemPicksHtml();
   if(TICKETTAB==='specialty')body.innerHTML=specialtyPicksHtml();
+  if(TICKETTAB==='duplicates')body.innerHTML=duplicatesPicksHtml();
   if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
   if(TICKETTAB==='backtest')body.innerHTML=renderBacktest();
   if(TICKETTAB==='market') body.innerHTML=marketPicksHtml();
@@ -7047,6 +7210,66 @@ function minePicksHtml(){
     <div id="tickets"></div>`;
 }
 
+function duplicatesPicksHtml(){
+  const r=concentrationReport();
+  const pop=popularityReport();
+
+  let h=`<div class="tkt hi"><h3>Duplicate &amp; concentration risk</h3>
+    <div class="sub">Not "the same pick appears twice" — the real question: how many of your
+    ${r.totalPendingTickets} pending tickets would be decided, correlated, by ONE game's result.
+    Threshold for a red flag is ${CONCENTRATION_WARN_AT}+ tickets on the same game.</div></div>`;
+
+  if(r.surplus){
+    const sub=suggestSubOut(r.surplus.game,r.surplus.legs[0].kind);
+    h+=`<div class="tkt" style="border-left:3px solid var(--rust)">
+      <div class="mktlab" style="margin-top:0;color:var(--rust)">⚠ Biggest single-game exposure</div>
+      <div style="font-family:'Archivo';font-weight:900;font-size:18px">${r.surplus.game}</div>
+      <div class="sub"><b>${r.surplus.ticketCount}</b> pending tickets have a leg on this game
+      (${r.surplus.legCount} legs total). One final score here affects all of them at once.</div>
+      ${sub?`<div class="sub" style="margin-top:6px">Suggested sub-out: swap a leg on this game for
+        <b>${sub.pick}</b> (${legFamily(sub.kind)}, ${(sub.p*100).toFixed(0)}%) instead of stacking
+        another ${legFamily(r.surplus.legs[0].kind)} pick here.</div>`:''}
+    </div>`;
+  }else{
+    h+=`<div class="note">No single game currently clears the ${CONCENTRATION_WARN_AT}-ticket red-flag threshold. Good spread.</div>`;
+  }
+
+  if(r.flagged.length>1){
+    h+=`<div class="sbar"><h2>All flagged games</h2><div class="ln"></div>
+      <div class="ct mono">${r.flagged.length}</div></div>`;
+    h+=r.flagged.map(g=>{
+      const kindCounts={};
+      g.legs.forEach(l=>{kindCounts[legFamily(l.kind)]=(kindCounts[legFamily(l.kind)]||0)+1});
+      const kindTxt=Object.keys(kindCounts).map(k=>`${k} ×${kindCounts[k]}`).join(', ');
+      return `<div class="tkt"><div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700">${g.game}</span>
+        <span class="pp">${g.ticketCount} tickets</span></div>
+        <div class="m" style="margin-top:2px">${kindTxt}</div></div>`;
+    }).join('');
+  }
+
+  const dupPicks=r.picks;
+  h+=`<div class="sbar"><h2>Exact-pick duplicates, ranked</h2><div class="ln"></div>
+    <div class="ct mono">${dupPicks.length}</div></div>`;
+  h+=dupPicks.length?dupPicks.map(p=>`<div class="tkt">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span><b>#${p.rank}</b> ${p.pick} <span class="m">${p.game}</span></span>
+        <span class="pp">${p.ticketCount}× · ${p.sourceCount} bucket${p.sourceCount>1?'s':''}</span>
+      </div></div>`).join(''):'<div class="empty">No exact pick appears on more than one pending ticket right now.</div>';
+
+  h+=`<div class="sbar"><h2>Cross-preset agreement — likely duplicate sources</h2><div class="ln"></div></div>
+    <div class="sub" style="margin:0 0 8px">Games where multiple independent presets landed on the same pick —
+    this is what tends to CAUSE duplicates before you've even built tickets. High agreement here means expect
+    overlap once System/Market/Specialty all build their daily parlays.</div>`;
+  h+=pop.length?pop.slice(0,10).map(g=>`<div class="tkt">
+      <div style="font-weight:700">${g.game}</div>
+      ${g.picks.sort((a,b)=>b.votes-a.votes).map(p=>`<div style="display:flex;justify-content:space-between;
+        padding:3px 0"><span class="m">${p.pick}</span>
+        <span class="pp">${p.votes} presets</span></div>`).join('')}
+    </div>`).join(''):'<div class="empty">No cross-preset agreement above 2 presets right now.</div>';
+
+  return h;
+}
 function specialtyPicksHtml(){
   // Armageddon, Fade the books, Fade the system, Fuck the system — the presets
   // that are deliberately going against the model or the market, not "your own"
