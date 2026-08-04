@@ -1986,7 +1986,12 @@ function buildPreset(mode){
     if(l.kind==='prop'||l.kind==='hr')return PRESET_MARKETS.has('prop');
     return true;
   });
-  const n=TARGET_LEGS||4;
+  // TARGET_LEGS===-1 means "No limit" — every .slice(0,n) below needs n to be
+  // `undefined` (not a number) to mean "take everything," since slice(0,-1)
+  // means "drop the last element," the opposite of what's wanted here. -1 was
+  // picked as the UI sentinel specifically because 0 is already used elsewhere
+  // (the custom Build tab's "By target $" mode) and can't be reused here.
+  const n=TARGET_LEGS===-1?undefined:(TARGET_LEGS||4);
 
   if(mode==='sysbest'){
     // purely the simulator's own conviction — market price is irrelevant here
@@ -2073,7 +2078,10 @@ function buildPreset(mode){
     });
     const pairs=Object.values(byGame).filter(x=>x.ml&&x.total)
       .sort((a,b)=>(b.ml.p*b.total.p)-(a.ml.p*a.total.p));
-    const half=Math.ceil(n/2);
+    // n===undefined means No limit — take every paired game on the board instead
+    // of computing Math.ceil(undefined/2), which is NaN and would silently
+    // slice to an empty array
+    const half=n===undefined?pairs.length:Math.ceil(n/2);
     const out=[];
     pairs.slice(0,half).forEach(x=>{out.push(x.ml);out.push(x.total)});
     return out;
@@ -2160,7 +2168,12 @@ function presetTabHtml(){
   const buttons=PRESETS.map(([k,l])=>
     `<button class="${PRESET_MODE===k?'on':''}" onclick="PRESET_MODE='${k}';renderTickets()">${l}</button>`).join('');
   const active=PRESETS.find(x=>x[0]===PRESET_MODE);
-  const fixedShape=PRESET_MODE==='combo'||PRESET_MODE==='lucky10';
+  // Combo now genuinely respects the leg-count control (including No limit) —
+  // only Lucky 10 is truly fixed-shape (always exactly 3+3+3+1=10 regardless
+  // of what's picked), so it's the only one whose leg-count row gets disabled.
+  // The market-toggle row still disables for both, since neither reads that.
+  const fixedMarkets=PRESET_MODE==='combo'||PRESET_MODE==='lucky10';
+  const fixedLegs=PRESET_MODE==='lucky10';
   const legs=buildPreset(PRESET_MODE);
   const combined=legs.reduce((a,l)=>a*l.p,1);
   const legRows=legs.map(l=>{
@@ -2171,8 +2184,8 @@ function presetTabHtml(){
       <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}</li>`;
   }).join('');
   const payload=encodeURIComponent(JSON.stringify(legs.map(l=>({game:l.game,pick:l.pick,p:l.p,isProp:l.kind==='prop'||l.kind==='hr'}))));
-  const marketToggles=`<div class="mktlab">Markets to draw from${fixedShape?' <span style="color:var(--mute);text-transform:none;letter-spacing:0">— this preset has a fixed shape and ignores this</span>':''}</div>
-    <div class="subnav" style="opacity:${fixedShape?0.4:1};pointer-events:${fixedShape?'none':'auto'}">
+  const marketToggles=`<div class="mktlab">Markets to draw from${fixedMarkets?' <span style="color:var(--mute);text-transform:none;letter-spacing:0">— this preset has a fixed shape and ignores this</span>':''}</div>
+    <div class="subnav" style="opacity:${fixedMarkets?0.4:1};pointer-events:${fixedMarkets?'none':'auto'}">
       <button class="${PRESET_MARKETS.has('ml')?'on':''}" onclick="toggleWonMarket('ml',this)">Moneyline</button>
       <button class="${PRESET_MARKETS.has('rl')?'on':''}" onclick="toggleWonMarket('rl',this)">Run line</button>
       <button class="${PRESET_MARKETS.has('total')?'on':''}" onclick="toggleWonMarket('total',this)">Totals</button>
@@ -2182,9 +2195,10 @@ function presetTabHtml(){
     <div class="mktlab" style="margin-top:0">Preset</div>
     <div class="subnav" style="flex-wrap:wrap">${buttons}</div>
     ${marketToggles}
-    <div class="mktlab">Legs on the parlay</div>
-    <div class="subnav" id="legBtns">
-      ${[2,3,4,5,6,7,8].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="TARGET_LEGS=${n};renderTickets()">${n}</button>`).join('')}
+    <div class="mktlab">Legs on the parlay${fixedLegs?' <span style="color:var(--mute);text-transform:none;letter-spacing:0">— Lucky 10 is always exactly 10 legs</span>':''}</div>
+    <div class="subnav" id="legBtns" style="flex-wrap:wrap;opacity:${fixedLegs?0.4:1};pointer-events:${fixedLegs?'none':'auto'}">
+      ${[2,3,4,5,6,7,8,9,10].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="TARGET_LEGS=${n};renderTickets()">${n}</button>`).join('')}
+      <button class="${TARGET_LEGS===-1?'on':''}" onclick="TARGET_LEGS=-1;renderTickets()">No limit</button>
     </div>
     <div class="mktlab">Duplicates</div>
     <div class="subnav">
@@ -4020,14 +4034,18 @@ function lockSlip(){
   if(!SLIP.length)return;
   const gs=new Set(SLIP.map(x=>x.game));
   if(gs.size<SLIP.length&&!confirm('Multiple legs share a game — that\'s correlated. Lock anyway?'))return;
+  // custom Build-tab tickets never had a name at all before — optional prompt,
+  // blank/cancel just leaves it unnamed (falls back to date-only display, same
+  // as always), nothing forces a name on a quick lock-in
+  const name=(prompt('Name this ticket? (optional — leave blank to skip)','')||'').trim()||null;
   const L=get(LS.locked,[]);
   const d0=today();
-  L.unshift({id:Date.now(),date:d0,
+  L.unshift({id:Date.now(),date:d0,name,source:'mine',
     legs:SLIP.map(x=>({...x,gameDate:d0})),
     p:SLIP.reduce((a,x)=>a*x.p,1)});
   set(LS.locked,L);
   SLIP=[];set(LS.slip,SLIP);render();paintSlip();
-  alert('Locked. See Tickets → My Parlays.');
+  alert(`Locked${name?' — "'+name+'"':''}. See Tickets → My Parlays.`);
 }
 function delLocked(id){
   const L=get(LS.locked,[]);
@@ -4036,6 +4054,21 @@ function delLocked(id){
     if(!confirm("This ticket is locked in as final and shouldn't normally be deleted — it's part of your permanent record. Delete anyway?"))return;
   }
   set(LS.locked,L.filter(x=>x.id!==id));renderTickets();
+}
+// Manual rename — works on ANY ticket regardless of source or how it was built.
+// A preset-confirmed ticket starts with its preset's name (e.g. "Armageddon")
+// but that's just a starting point, not a lock; this lets you override it,
+// and also gives custom Build-tab tickets (which never had a name at all) a
+// way to get one after the fact.
+function renameTicket(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  const next=prompt('Name this ticket:',t.name||'');
+  if(next===null)return;         // cancelled
+  t.name=next.trim()||null;      // blank clears the name back to date-only display
+  set(LS.locked,L);
+  renderTickets();
 }
 function finalizeLocked(id){
   const L=get(LS.locked,[]);
@@ -4341,7 +4374,11 @@ function buildTargetTicket(){
 
   const combo=[];
   let mult=1;
-  const target=TARGET_LEGS>0?TARGET_LEGS:getTargetLegsFromProfit();
+  // TARGET_LEGS>0: fixed leg count. TARGET_LEGS===0: "by target $" (uses the
+  // profit-target estimate below). TARGET_LEGS===-1: "No limit" — target isn't
+  // used at all in that case (the loop guard below only checks TARGET_LEGS>0),
+  // so avoid the wasted/misleading getTargetLegsFromProfit() DOM read for it.
+  const target=TARGET_LEGS>0?TARGET_LEGS:(TARGET_LEGS===0?getTargetLegsFromProfit():null);
   const neededMult=TARGET_LEGS===0&&stake?(1+(parseFloat(document.getElementById('targetProfit').value)||50)/stake):null;
 
   if(modes.has('prop')){
@@ -6459,8 +6496,9 @@ function buildTabHtml(){
       <button id="mode-prop" class="${BUILDMODES.has('prop')?'on':''}" onclick="toggleMode('prop',this)">Props</button>
     </div>
     <div class="mktlab">Legs on the parlay</div>
-    <div class="subnav" id="legBtns">
-      ${[2,3,4,5,6,7,8].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="setLegs(${n},this)">${n}</button>`).join('')}
+    <div class="subnav" id="legBtns" style="flex-wrap:wrap">
+      ${[2,3,4,5,6,7,8,9,10].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="setLegs(${n},this)">${n}</button>`).join('')}
+      <button class="${TARGET_LEGS===-1?'on':''}" onclick="setLegs(-1,this)">No limit</button>
       <button class="${TARGET_LEGS===0?'on':''}" onclick="setLegs(0,this)">By target $</button>
     </div>
     <div class="mktlab">Same-game combos</div>
@@ -7028,14 +7066,18 @@ function genTickets(mode){
           ${t.finalized?'':`<button onclick="finalizeLocked(${t.id})">Lock as final</button>`}
           <button onclick="delLocked(${t.id})">Delete</button>`;
       }
-      // Named tickets (built from a preset) show their preset name first, with
-      // the date demoted to a subtitle — this is the fix for "some presets
-      // aren't going to their designated location": now every card visibly
-      // says which preset built it, and which bucket (source badge) it landed
-      // in, right next to each other, instead of an anonymous date.
+      // Named tickets (built from a preset, or manually renamed) show that name
+      // first, with the date demoted to a subtitle. Every ticket — named or not,
+      // preset or custom — gets a ✏️ rename button, since the manual "name your
+      // ticket" ability disappeared when preset auto-naming was added and needs
+      // to exist independently of it: auto-naming sets a starting name, renaming
+      // lets you override it on ANY ticket regardless of how it was built.
+      const renameBtn=`<button onclick="renameTicket(${t.id})" title="Rename"
+        style="background:none;border:none;color:var(--mute);cursor:pointer;padding:0 0 0 6px;
+        font-size:12px;vertical-align:middle" aria-label="Rename ticket">✏️</button>`;
       const nameLine=t.name
-        ?`<h3>${t.name}${lockBadge}${archBadge}</h3><div class="m" style="margin-top:-4px;margin-bottom:6px">${t.date}${t.source&&t.source!=='mine'?' · '+({system:'System',market:'Market',specialty:'Specialty',outside:'Outside'}[t.source]||t.source):''}</div>`
-        :`<h3>${t.date}${lockBadge}${archBadge}</h3>`;
+        ?`<h3>${t.name}${renameBtn}${lockBadge}${archBadge}</h3><div class="m" style="margin-top:-4px;margin-bottom:6px">${t.date}${t.source&&t.source!=='mine'?' · '+({system:'System',market:'Market',specialty:'Specialty',outside:'Outside'}[t.source]||t.source):''}</div>`
+        :`<h3>${t.date}${renameBtn}${lockBadge}${archBadge}</h3>`;
       h+=`<div class="tkt ${t.archived?'':'hi'}">${nameLine}
         <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
         <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
