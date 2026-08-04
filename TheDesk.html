@@ -413,7 +413,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v74</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v78</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1961,7 +1961,8 @@ function edgeOf(leg){
 
 function fullPresetPool(){
   // pulls every market type regardless of BUILDMODES — presets decide their own mix
-  const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder()];
+  const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder(),
+    ...allF5SidesForBuilder(),...allF5TotalsForBuilder()];
   PROPS.filter(p=>p.type!=='hr').forEach(p=>
     pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',modelP:p.p,marketP:p.p}));
   PROPS.filter(p=>p.type==='hr').forEach(p=>
@@ -1975,7 +1976,7 @@ function applyDupeFilter(pool){
   return pool.filter(l=>!used.has(l.pick+'|'+l.game));
 }
 
-let PRESET_MARKETS=new Set(['ml','rl','total','prop']);
+let PRESET_MARKETS=new Set(['ml','rl','total','prop']); // f5 off by default — new market type, opt in explicitly
 
 function buildPreset(mode){
   let pool=applyDupeFilter(fullPresetPool());
@@ -1983,6 +1984,7 @@ function buildPreset(mode){
     if(l.kind==='side')return PRESET_MARKETS.has('ml');
     if(l.kind==='rl')return PRESET_MARKETS.has('rl');
     if(l.kind==='total')return PRESET_MARKETS.has('total');
+    if(l.kind==='f5side'||l.kind==='f5total')return PRESET_MARKETS.has('f5');
     if(l.kind==='prop'||l.kind==='hr')return PRESET_MARKETS.has('prop');
     return true;
   });
@@ -2188,18 +2190,21 @@ function clearPresetHolds(){
 // elsewhere in the app — no two legs sharing a game unless they're a legal
 // ML+Total pair — kept simple here since presets don't have an SGP toggle.
 function presetLegCollides(held,leg){
-  // Legs created via tog() on the game board (older custom-ticket legs) never
-  // got a `kind` field stamped at all — only the preset/builder pool functions
-  // do that. Requiring `h.kind===leg.kind` for those would compare undefined to
-  // undefined and silently treat two totally different markets on the same game
-  // as "matching kind" by coincidence, or fail to flag a real collision if only
-  // one side has a kind. Only enforce the kind check when BOTH sides actually
-  // have one; otherwise game+pick equality alone is the safe fallback.
+  // Was checking "same kind" for a same-game collision, which is the WRONG
+  // rule and let a held F5-side leg sit alongside a full-game ML on the same
+  // game (different kinds, so no match) — exactly the kind of correlated same-
+  // game pairing that isn't allowed anywhere else in the app. This now routes
+  // through legalToAdd, the single real source of truth for which same-game
+  // pairs are actually legal (only full-game ML+Total, everything else needs
+  // SGP), instead of maintaining a second, looser rule that could disagree
+  // with it. Legs created via tog() on the game board (older custom-ticket
+  // legs) never got a `kind` stamped at all — legalToAdd's own legFamily()
+  // already treats an unset kind as 'prop', which correctly blocks it from
+  // pairing with anything else on the same game, same as any other prop.
   return held.some(h=>{
     if(h.pick===leg.pick)return true;
     if(h.game!==leg.game)return false;
-    if(h.kind&&leg.kind)return h.kind===leg.kind;
-    return false; // can't confirm same-market collision without kind on both sides — don't false-positive
+    return !legalToAdd([h],leg,false); // false = never allow SGP-only pairings through a hold/modify collision check
   });
 }
 function presetLegsWithHolds(mode){
@@ -2260,6 +2265,7 @@ function presetTabHtml(){
       <button class="${PRESET_MARKETS.has('ml')?'on':''}" onclick="toggleWonMarket('ml',this)">Moneyline</button>
       <button class="${PRESET_MARKETS.has('rl')?'on':''}" onclick="toggleWonMarket('rl',this)">Run line</button>
       <button class="${PRESET_MARKETS.has('total')?'on':''}" onclick="toggleWonMarket('total',this)">Totals</button>
+      <button class="${PRESET_MARKETS.has('f5')?'on':''}" onclick="toggleWonMarket('f5',this)">First 5</button>
       <button class="${PRESET_MARKETS.has('prop')?'on':''}" onclick="toggleWonMarket('prop',this)">Props</button>
     </div>`;
   return `<div class="tkt">
@@ -4161,7 +4167,8 @@ function removeLegFromTicket(ticketId,legId){
 // you can't accidentally add a second, colliding pick from a game you're
 // already on (same rule legalToAdd enforces elsewhere).
 function addableLegsFor(t){
-  const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder()];
+  const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder(),
+    ...allF5SidesForBuilder(),...allF5TotalsForBuilder()];
   PROPS.forEach(p=>{
     if(p.type==='hr')pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',gid:p.gid,pid:p.pid,ptype:'hr',isProp:1});
     else pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',gid:p.gid,pid:p.pid,ptype:p.type,thr:p.thr,isProp:1});
@@ -4299,7 +4306,13 @@ function legFamily(kind){
   if(kind==='side')return 'ml';
   if(kind==='rl')return 'rl';
   if(kind==='total')return 'total';
-  if(kind==='f5'||kind==='f5t')return 'f5';
+  // was checking kind==='f5'/'f5t', which nothing has ever actually produced —
+  // allF5SidesForBuilder/allF5TotalsForBuilder (the only real source of F5 legs
+  // in any pool) stamp kind:'f5side' and kind:'f5total'. Fixed to match, since
+  // the mismatch meant every F5 leg silently fell through to the 'prop' bucket
+  // below, which blocks ANY same-game pairing at all — including the completely
+  // legal F5-side + F5-total combination this fix now allows correctly.
+  if(kind==='f5side'||kind==='f5total')return 'f5';
   return 'prop';
 }
 function legalToAdd(combo,leg,sgpMode){
@@ -4308,7 +4321,14 @@ function legalToAdd(combo,leg,sgpMode){
   if(sgpMode)return true;  // SGP unlocks any combo once 2+ legs share a game
   if(sameGame.length>=2)return false;  // standard ticket caps at 2 legs from one game
   const existingFam=legFamily(sameGame[0].kind),newFam=legFamily(leg.kind);
-  // the only legal same-game pair on a standard ticket is one ML + one Total
+  // The ONLY legal same-game pair on a standard (non-SGP) ticket is one full-game
+  // ML + one full-game Total — that's the one pairing close enough to independent
+  // to allow outside SGP mode. Everything else on the same game is correlated and
+  // needs SGP: F5 markets against full-game markets (same underlying innings
+  // feeding both), and F5 side against F5 total just as much as full-game side
+  // against full-game total is. A previous version of this incorrectly carved out
+  // F5+F5 as if it were as independent as ML+Total — it isn't, same reasoning
+  // applies to the F5 segment as the full game.
   return (existingFam==='ml'&&newFam==='total')||(existingFam==='total'&&newFam==='ml');
 }
 function bestRunLines(){
@@ -4425,11 +4445,70 @@ function allTotalsForBuilder(){
   });
   return out;
 }
+// ── First 5 innings sides + totals for the builders ──────────────────────
+// F5 has always graded correctly (gradeLeg/f5Of) and always showed up on the
+// game card itself (real book f5side/f5total prices when uploaded, sim fallback
+// otherwise) — it just never fed into the preset/custom-builder POOLS, so it
+// could never actually end up on a parlay. Same precedence chain as every other
+// market here: your uploaded book screenshot first, then a sim-only fallback.
+// F5 total intentionally does NOT blend in SharpAPI's segment total the way the
+// full-game total does — the game card's own F5 block doesn't either (hasRealF5
+// only gates whether the "real F5 total" label shows, the number itself is pure
+// sim), so this matches existing, already-correct behavior rather than
+// introducing a new blend that doesn't exist anywhere else in the app.
+function allF5SidesForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final'||g.abstract==='Live')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const awayF5=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='away');
+    const homeF5=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='home');
+    if(awayF5&&homeF5){
+      const ap=bookDevig(awayF5.price),hp=bookDevig(homeF5.price),sum=ap+hp;
+      out.push({p:hp/sum,pick:'F5 '+g.home.abbr,game:gl,kind:'f5side',modelP:s.f5h,marketP:hp/sum,price:homeF5.price});
+      out.push({p:ap/sum,pick:'F5 '+g.away.abbr,game:gl,kind:'f5side',modelP:s.f5a,marketP:ap/sum,price:awayF5.price});
+      return;
+    }
+    // no real F5 side price on the board — sim-only, same numbers already
+    // shown on the game card's "sim only" F5 comparison chip
+    out.push({p:s.f5h,pick:'F5 '+g.home.abbr,game:gl,kind:'f5side',modelP:s.f5h,marketP:s.f5h});
+    out.push({p:s.f5a,pick:'F5 '+g.away.abbr,game:gl,kind:'f5side',modelP:s.f5a,marketP:s.f5a});
+  });
+  return out;
+}
+function allF5TotalsForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final'||g.abstract==='Live')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookF5Total=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
+    if(bookF5Total&&bookF5Total.line!==null&&bookF5Total.line!==undefined){
+      const overB=bookLinesFor(g.id).find(x=>x.market==='f5total'&&x.side==='over'&&Math.abs(x.line-bookF5Total.line)<0.01);
+      const underB=bookLinesFor(g.id).find(x=>x.market==='f5total'&&x.side==='under'&&Math.abs(x.line-bookF5Total.line)<0.01);
+      if(overB&&underB){
+        const op=bookDevig(overB.price),up=bookDevig(underB.price),sum=op+up;
+        const mO=f5OverAt(s,bookF5Total.line);
+        out.push({p:op/sum,pick:'F5 over '+bookF5Total.line,game:gl,kind:'f5total',modelP:mO,marketP:op/sum,price:overB.price});
+        out.push({p:up/sum,pick:'F5 under '+bookF5Total.line,game:gl,kind:'f5total',modelP:1-mO,marketP:up/sum,price:underB.price});
+        return;
+      }
+    }
+    if(!hasRealF5(g.id))return; // no real F5 total posted anywhere — don't invent a sim-only line with no market reference at all
+    const f5Line=Math.floor(s.f5tot)+.5;
+    const f5Over=f5OverAt(s,f5Line);
+    out.push({p:f5Over,pick:'F5 over '+f5Line,game:gl,kind:'f5total',modelP:f5Over,marketP:f5Over});
+    out.push({p:1-f5Over,pick:'F5 under '+f5Line,game:gl,kind:'f5total',modelP:1-f5Over,marketP:1-f5Over});
+  });
+  return out;
+}
 function qualifyingPool(modes){
   const pool=[];
   if(modes.has('ml'))allSidesForBuilder().forEach(x=>pool.push(x));
   if(modes.has('rl'))allRunLinesForBuilder().forEach(x=>pool.push(x));
   if(modes.has('total'))allTotalsForBuilder().forEach(x=>pool.push(x));
+  if(modes.has('f5')){allF5SidesForBuilder().forEach(x=>pool.push(x));allF5TotalsForBuilder().forEach(x=>pool.push(x));}
   if(modes.has('prop')){
     PROPS.filter(p=>p.type!=='hr').forEach(p=>
       pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',modelP:p.p,marketP:p.p}));
@@ -4439,12 +4518,12 @@ function qualifyingPool(modes){
   // sort best probability first — builder adds legs greedily until target odds are hit
   return pool.sort((a,b)=>b.p-a.p);
 }
-let BUILDMODES=new Set(['ml','total','prop']);
+let BUILDMODES=new Set(['ml','total','prop']); // f5 off by default here too — same reasoning as PRESET_MARKETS
 function selectedModes(){
   // read the DOM if the build tab is mounted, otherwise fall back to stored state
   const modes=new Set();
   let found=false;
-  ['ml','rl','total','prop'].forEach(m=>{
+  ['ml','rl','total','f5','prop'].forEach(m=>{
     const el=document.getElementById('mode-'+m);
     if(el){found=true;if(el.classList.contains('on'))modes.add(m)}
   });
@@ -6710,6 +6789,7 @@ function buildTabHtml(){
       <button id="mode-ml" class="${BUILDMODES.has('ml')?'on':''}" onclick="toggleMode('ml',this)">Moneyline</button>
       <button id="mode-rl" class="${BUILDMODES.has('rl')?'on':''}" onclick="toggleMode('rl',this)">Run line</button>
       <button id="mode-total" class="${BUILDMODES.has('total')?'on':''}" onclick="toggleMode('total',this)">Totals</button>
+      <button id="mode-f5" class="${BUILDMODES.has('f5')?'on':''}" onclick="toggleMode('f5',this)">First 5</button>
       <button id="mode-prop" class="${BUILDMODES.has('prop')?'on':''}" onclick="toggleMode('prop',this)">Props</button>
     </div>
     <div class="mktlab">Legs on the parlay</div>
