@@ -2164,9 +2164,58 @@ function toggleWonMarket(m,btn){
   if(btn.classList.contains('on'))PRESET_MARKETS.add(m);else PRESET_MARKETS.delete(m);
   renderTickets();
 }
+// ── Preset holds — same video-poker idea as the custom builder's HOLD/Reroll,
+// but its OWN state and rebuild path. Presets recompute buildPreset() fresh on
+// every render (there's no persisted LAST_COMBO the way the custom builder has),
+// so "holding" a preset leg means: keep it pinned across a rebuild, drop every
+// other leg, and refill the remaining slots from the preset's own ranking logic
+// while skipping anything that collides with a held pick (same game+market, or
+// same pick text). Deliberately separate from HELD_PICKS/rerollHeld() — those
+// are wired tightly to custom-builder-only state (selectedModes(), sgpToggle,
+// qualifyingPool()) that presets don't use, and sharing one Set would mean a
+// hold in one builder silently bleeds into the other.
+let PRESET_HELD=new Set();
+function togglePresetHold(pick){
+  if(PRESET_HELD.has(pick))PRESET_HELD.delete(pick);
+  else PRESET_HELD.add(pick);
+  renderTickets();
+}
+function clearPresetHolds(){
+  PRESET_HELD.clear();
+  renderTickets();
+}
+// Same collision rule buildPreset's own pool already respects via legalToAdd
+// elsewhere in the app — no two legs sharing a game unless they're a legal
+// ML+Total pair — kept simple here since presets don't have an SGP toggle.
+function presetLegCollides(held,leg){
+  return held.some(h=>h.pick===leg.pick||(h.game===leg.game&&h.kind===leg.kind));
+}
+function presetLegsWithHolds(mode){
+  const full=buildPreset(mode);
+  if(!PRESET_HELD.size)return full;
+  // held legs might not be in THIS render's ranked pool at all (e.g. you held
+  // a leg, then flipped a market toggle that excludes it) — pull each held pick
+  // from the full unfiltered pool by exact match so it survives regardless
+  const pool=applyDupeFilter(fullPresetPool());
+  const held=[];
+  PRESET_HELD.forEach(pick=>{
+    const found=pool.find(l=>l.pick===pick);
+    if(found)held.push(found);
+    else PRESET_HELD.delete(pick); // the leg is gone entirely (game started, etc) — drop the stale hold
+  });
+  const n=TARGET_LEGS===-1?undefined:(TARGET_LEGS||4);
+  const remaining=n===undefined?undefined:Math.max(0,n-held.length);
+  const fill=full.filter(l=>!presetLegCollides(held,l)).slice(0,remaining);
+  return[...held,...fill];
+}
+
 function presetTabHtml(){
+  // holds don't carry over between different presets — a leg held while looking
+  // at "Systems best" doesn't mean anything inside "Fade the system", which is
+  // built on the opposite logic; switching presets clears the hold set so a
+  // stale hold can't quietly survive into a preset it was never chosen for
   const buttons=PRESETS.map(([k,l])=>
-    `<button class="${PRESET_MODE===k?'on':''}" onclick="PRESET_MODE='${k}';renderTickets()">${l}</button>`).join('');
+    `<button class="${PRESET_MODE===k?'on':''}" onclick="if(PRESET_MODE!=='${k}')PRESET_HELD.clear();PRESET_MODE='${k}';renderTickets()">${l}</button>`).join('');
   const active=PRESETS.find(x=>x[0]===PRESET_MODE);
   // Combo now genuinely respects the leg-count control (including No limit) —
   // only Lucky 10 is truly fixed-shape (always exactly 3+3+3+1=10 regardless
@@ -2174,14 +2223,24 @@ function presetTabHtml(){
   // The market-toggle row still disables for both, since neither reads that.
   const fixedMarkets=PRESET_MODE==='combo'||PRESET_MODE==='lucky10';
   const fixedLegs=PRESET_MODE==='lucky10';
-  const legs=buildPreset(PRESET_MODE);
+  const legs=presetLegsWithHolds(PRESET_MODE);
   const combined=legs.reduce((a,l)=>a*l.p,1);
   const legRows=legs.map(l=>{
     const e=edgeOf(l);
     const eTxt=e?` <span style="color:${e>=4?'var(--win)':e<=-4?'var(--rust)':'var(--mute)'}">${e>0?'+':''}${e.toFixed(1)} edge</span>`:'';
     const srcTag=l.nSrc?` <span class="flag cool">${l.nSrc} source${l.nSrc>1?'s':''}</span>`:'';
-    return `<li>${l.pick} <span class="m">${l.game}</span>${srcTag}
-      <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}</li>`;
+    const held=PRESET_HELD.has(l.pick);
+    return `<li style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--rule)">
+      <button onclick="togglePresetHold('${esc(l.pick)}')" style="flex:0 0 auto;padding:2px 8px;font-size:9px;
+        font-family:'IBM Plex Mono';letter-spacing:.06em;border-radius:4px;border:1px solid;cursor:pointer;
+        background:${held?'rgba(242,169,59,.15)':'transparent'};
+        border-color:${held?'var(--gold)':'var(--rule)'};
+        color:${held?'var(--gold)':'var(--mute)'}">
+        ${held?'HELD':'HOLD'}
+      </button>
+      <span style="flex:1">${l.pick} <span class="m">${l.game}</span>${srcTag}</span>
+      <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}
+    </li>`;
   }).join('');
   const payload=encodeURIComponent(JSON.stringify(legs.map(l=>({game:l.game,pick:l.pick,p:l.p,isProp:l.kind==='prop'||l.kind==='hr'}))));
   const marketToggles=`<div class="mktlab">Markets to draw from${fixedMarkets?' <span style="color:var(--mute);text-transform:none;letter-spacing:0">— this preset has a fixed shape and ignores this</span>':''}</div>
@@ -2210,10 +2269,18 @@ function presetTabHtml(){
   <div class="tkt hi">
     <h3>${active[1]}${PRESET_MODE==='armageddon'?' ⚠️':''}</h3>
     ${legs.length?`<div class="sub"><b>${(combined*100).toFixed(combined<.01?3:1)}%</b> combined ·
-      ${legs.length} legs · 1 in ${Math.round(1/combined).toLocaleString()}</div>
+      ${legs.length} legs · 1 in ${Math.round(1/combined).toLocaleString()}${PRESET_HELD.size?` · ${PRESET_HELD.size} held`:''}</div>
       <ol style="list-style:none;padding:0;margin:10px 0">${legRows}</ol>
-      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}','${PRESET_MODE}')">Confirm &amp; save</button></div>`
-      :'<div class="empty">Not enough qualifying legs on the board for this preset right now.</div>'}
+      <div class="bar">
+        <button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}','${PRESET_MODE}')">Confirm &amp; save</button>
+        <button onclick="renderTickets()">Reroll free legs</button>
+        ${PRESET_HELD.size?`<button onclick="clearPresetHolds()">Clear holds</button>`:''}
+      </div>
+      <div class="sub" style="margin-top:6px;color:var(--mute)">Tap HOLD on any leg to keep it. Hit Reroll to swap out the rest.</div>`
+      :(PRESET_HELD.size
+        ?`<div class="empty">Every held leg is still valid, but no other picks currently qualify for this preset.
+           <button onclick="clearPresetHolds()" style="margin-top:8px">Clear holds</button></div>`
+        :'<div class="empty">Not enough qualifying legs on the board for this preset right now.</div>')}
   </div>`;
 }
 
