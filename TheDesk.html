@@ -449,7 +449,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v85</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v86</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2141,25 +2141,36 @@ function concentrationReport(){
 // the bubble map.
 // ═══════════════════════════════════════════════════════════════════════
 function ticketEliminationStatus(t){
-  let dead=false,wins=0,decided=0,pending=0,total=t.legs.length;
+  // THE BUG THIS FIXES: status used to fall back to 'scheduled' any time
+  // decided===0, with no way to tell "nothing has started yet" apart from
+  // "a live game in progress where nothing on this ticket has resolved yet."
+  // A 12-leg ticket sitting through a live game with 0 legs decided (the
+  // exact screenshot reported — 12 games loaded, everything reading as "not
+  // started") is genuinely LIVE and tense, not scheduled — gradeLeg just
+  // never surfaced the live signal before, so this function had no way to
+  // know. Now tracking anyLegLive separately from decided/pending.
+  let dead=false,wins=0,decided=0,pending=0,anyLegLive=false,total=t.legs.length;
   const legStates=t.legs.map(x=>{
     const g=gradeLeg(x,t.date);
+    if(g.live)anyLegLive=true;
     let state;
     if(g.push===true){state='push';decided++;}
     else if(g.hit===true){state='won';wins++;decided++;}
     else if(g.hit===false){state='dead';dead=true;decided++;}
-    else{state='pending';pending++;}
-    return{pick:x.pick,game:x.game,state,detail:g.detail};
+    else{state=g.live?'live':'pending';pending++;}
+    return{pick:x.pick,game:x.game,state,detail:g.detail,live:!!g.live};
   });
   // status: dead (any leg lost) > won (every leg decided, none lost) >
-  // live (some pending, none dead yet — this is the "still alive" state
-  // that actually matters, the tension point) > scheduled (nothing started)
+  // live (some pending, none dead yet — this is the "still alive" state that
+  // actually matters, the tension point — now correctly includes "a game on
+  // this ticket is live even though nothing's decided yet") > scheduled
+  // (truly nothing has started across the whole ticket)
   let status;
   if(dead)status='dead';
   else if(pending===0&&decided>0)status='won';
-  else if(decided>0&&pending>0)status='live';
+  else if((decided>0&&pending>0)||anyLegLive)status='live';
   else status='scheduled';
-  return{status,legStates,wins,dead,decided,pending,total,
+  return{status,legStates,wins,dead,decided,pending,total,anyLegLive,
     legsFromElimination:dead?0:(pending>0?pending:0)}; // how many still-live legs stand between this ticket and being fully decided
 }
 
@@ -2181,17 +2192,87 @@ function eliminationMapData(){
   const conc=concentrationReport();
   const gameRisk={};
   conc.games.forEach(g=>{gameRisk[g.game]=g.ticketCount});
+
+  // ── team webs — the actual "webbed together by certain picks" ask ──
+  // A shared GAME is one connection; a shared TEAM is a stronger, more
+  // specific one (two tickets both riding the same team's moneyline, even
+  // across different props/markets, are correlated on that team's outcome
+  // specifically). teamAbbrFor already exists and extracts the real team a
+  // pick is riding on — this builds the actual graph edges between tickets.
+  const teamTickets={}; // team abbr -> Set of ticket ids riding on it
+  L.forEach(t=>t.legs.forEach(x=>{
+    const team=teamAbbrFor(x);
+    if(!team)return;
+    (teamTickets[team]=teamTickets[team]||new Set()).add(t.id);
+  }));
+  const edges=[]; // {a:ticketId,b:ticketId,team,strength}
+  Object.keys(teamTickets).forEach(team=>{
+    const ids=[...teamTickets[team]];
+    if(ids.length<2)return;
+    for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){
+      edges.push({a:ids[i],b:ids[j],team});
+    }
+  });
+
   const bubbles=L.map(t=>{
     const es=ticketEliminationStatus(t);
     const pay=ticketPayoutMagnitude(t);
     const games=[...new Set(t.legs.map(x=>x.game))];
+    const teams=[...new Set(t.legs.map(x=>teamAbbrFor(x)).filter(Boolean))];
     const maxSharedRisk=Math.max(0,...games.map(g=>gameRisk[g]||0));
     return{id:t.id,name:t.name||t.date,source:t.source||'mine',
       status:es.status,legsFromElimination:es.legsFromElimination,
       wins:es.wins,total:es.total,decided:es.decided,legStates:es.legStates,
-      payout:pay.payout,stake:pay.stake,games,sharedRisk:maxSharedRisk};
+      payout:pay.payout,stake:pay.stake,games,teams,sharedRisk:maxSharedRisk,
+      anyLegLive:es.anyLegLive};
   });
-  return{bubbles,conc};
+  return{bubbles,conc,edges,teamTickets};
+}
+
+// ── the "which teams are going to break me / cruise me" message feed ──
+// Entirely real data, phrased with personality — never invents a stat. Ranks
+// teams by how many PENDING tickets ride on them (the actual danger/reward
+// concentration), and reports their current live state honestly.
+function eliminationFeed(){
+  const{bubbles,teamTickets}=eliminationMapData();
+  const msgs=[];
+  const teamStates={}; // team -> {tickets, dead, live, won}
+  Object.keys(teamTickets).forEach(team=>{
+    teamStates[team]={tickets:teamTickets[team].size,dead:0,live:0,won:0,pending:0};
+  });
+  bubbles.forEach(b=>{
+    b.teams.forEach(team=>{
+      const ts=teamStates[team];if(!ts)return;
+      if(b.status==='dead')ts.dead++;
+      else if(b.status==='won')ts.won++;
+      else if(b.status==='live')ts.live++;
+      else ts.pending++;
+    });
+  });
+  const ranked=Object.keys(teamStates).map(team=>({team,...teamStates[team]}))
+    .filter(t=>t.tickets>=2).sort((a,b)=>b.tickets-a.tickets);
+
+  ranked.forEach(t=>{
+    if(t.dead>0){
+      msgs.push({tone:'bad',text:`${t.team} just tanked ${t.dead} of your ${t.tickets} tickets riding on them.`});
+    }else if(t.live>0){
+      msgs.push({tone:'tense',text:`${t.team} is live and holding up ${t.live} ticket${t.live>1?'s':''} — ${t.tickets} total riding on them tonight.`});
+    }else if(t.won===t.tickets&&t.tickets>0){
+      msgs.push({tone:'good',text:`${t.team} delivered clean — ${t.won} ticket${t.won>1?'s':''} cruising because of them.`});
+    }
+  });
+  // biggest single point of failure, regardless of team webs
+  const liveOneAway=bubbles.filter(b=>b.status==='live'&&b.legsFromElimination<=1);
+  if(liveOneAway.length){
+    const biggest=liveOneAway.sort((a,b)=>b.payout-a.payout)[0];
+    msgs.push({tone:'tense',text:`"${biggest.name}" is one result from done — $${biggest.payout.toFixed(2)} on the line right now.`});
+  }
+  const deadCount=bubbles.filter(b=>b.status==='dead').length;
+  const liveCount=bubbles.filter(b=>b.status==='live').length;
+  if(deadCount===0&&liveCount===0&&bubbles.length>0){
+    msgs.push({tone:'good',text:`Nothing's died yet. ${bubbles.length} ticket${bubbles.length>1?'s':''} still standing.`});
+  }
+  return msgs;
 }
 
 function applyDupeFilter(pool){
@@ -4146,31 +4227,40 @@ function resolveLeg(leg,ticketDate){
 // Returns {hit:true|false|null, detail:string|null}
 function gradeLeg(leg,ticketDate){
   const R=resolveLeg(leg,ticketDate);
-  if(!R)return{hit:null,detail:null};
+  // `live` is stamped onto EVERY return below now — this is the actual fix for
+  // the elimination map showing every in-progress ticket as "not started."
+  // resolveLeg always knew whether the underlying game was live; gradeLeg just
+  // never surfaced that back out, so a leg sitting through a live, undecided
+  // game and a leg that genuinely hadn't started yet both collapsed to the
+  // exact same {hit:null} — indistinguishable to any caller, including the
+  // elimination map's own status logic. gradeLegBadge was independently
+  // re-resolving the leg a second time just to get this same signal for its
+  // ⏳ icon; now it can read it straight off this return instead.
+  if(!R)return{hit:null,detail:null,live:false};
   const isProp=leg.isProp||leg.ptype;
   if(isProp){
     const box=boxFor(R.gid);
-    if(!box)return{hit:null,detail:R.live?'live box not loaded':null};
+    if(!box)return{hit:null,detail:R.live?'live box not loaded':null,live:!!R.live};
     let pl=null;
     for(const s of ['away','home']){
       const P=((box.teams||{})[s]||{}).players||{};
       const c=P['ID'+leg.pid];
       if(c){pl=c;break}
     }
-    if(!pl)return{hit:null,detail:null};
+    if(!pl)return{hit:null,detail:null,live:!!R.live};
     const b=(pl.stats||{}).batting||{},q=(pl.stats||{}).pitching||{};
     const t=leg.ptype,thr=leg.thr;
     const label={k:'K',bb:'BB allowed',ha:'H allowed',hits:'hits',tb:'total bases',rbi:'RBI',hr:'HR'}[t]||t;
     const isPitch=(t==='k'||t==='bb'||t==='ha');
-    if(isPitch&&!q.inningsPitched)return{hit:null,detail:R.live?'not in yet':null};
-    if(!isPitch&&!b.plateAppearances)return{hit:null,detail:R.live?'not in yet':null};
+    if(isPitch&&!q.inningsPitched)return{hit:null,detail:R.live?'not in yet':null,live:!!R.live};
+    if(!isPitch&&!b.plateAppearances)return{hit:null,detail:R.live?'not in yet':null,live:!!R.live};
     const actual=t==='k'?(q.strikeOuts||0):t==='bb'?(q.baseOnBalls||0):t==='ha'?(q.hits||0)
       :t==='hits'?(b.hits||0):t==='tb'?(b.totalBases||0):t==='rbi'?(b.rbi||0):t==='hr'?(b.homeRuns||0):null;
-    if(actual===null)return{hit:null,detail:null};
-    return{hit:R.live?null:actual>=thr,detail:`${actual} ${label}${R.live?' so far':''}`};
+    if(actual===null)return{hit:null,detail:null,live:!!R.live};
+    return{hit:R.live?null:actual>=thr,detail:`${actual} ${label}${R.live?' so far':''}`,live:!!R.live};
   }
   const a=R.a,h=R.h,pick=leg.pick;
-  if(a===null||a===undefined||h===null||h===undefined)return{hit:null,detail:null};
+  if(a===null||a===undefined||h===null||h===undefined)return{hit:null,detail:null,live:!!R.live};
   const [awayAb,homeAb]=(leg.game||'@').split('@');
   const line=`${awayAb} ${a}–${h} ${homeAb}${R.live?' (live)':''}`;
   const tot=a+h;
@@ -4194,60 +4284,73 @@ function gradeLeg(leg,ticketDate){
     return inningsLeft*2*(perTeamPerInning*2.3);
   };
 
-  if(/^Over /.test(pick)){
-    const ln=parseFloat(pick.slice(5));
-    if(!R.live)return{hit:tot>ln,detail:`${line} · total ${tot}`};
-    if(tot>ln)return{hit:true,detail:`${line} · total ${tot} — already clinched`};
-    return{hit:null,detail:`${line} · total ${tot} so far`};
-  }
-  if(/^Under /.test(pick)){
-    const ln=parseFloat(pick.slice(6));
-    if(!R.live)return{hit:tot<ln,detail:`${line} · total ${tot}`};
-    if(tot>=ln)return{hit:false,detail:`${line} · total ${tot} — already over the line`};
-    const ceiling=remainingCeiling();
-    if(ceiling!==null&&(tot+ceiling)<ln)
-      return{hit:true,detail:`${line} · total ${tot}, ${R.completed} innings gone — mathematically out of reach`};
-    return{hit:null,detail:`${line} · total ${tot} so far`};
-  }
-  if(/ ML$/.test(pick)){
-    const who=pick.replace(/ ML$/,'');
-    if(!R.live){
-      if(a===h)return{hit:null,push:true,detail:line+' · push — refunded, not counted as a loss'};
-      return{hit:(h>a?homeAb:awayAb)===who,detail:line};
+  // Everything below used to return bare {hit,detail} objects with no `live`
+  // flag at all — wrapped in this inner function so `live:!!R.live` gets
+  // stamped on the result exactly ONCE at the call site below, instead of
+  // needing every one of these ~12 return statements edited individually
+  // (error-prone, easy to miss one and silently reintroduce the same bug
+  // this whole change exists to fix).
+  const gradeSideOrTotal=()=>{
+    if(/^Over /.test(pick)){
+      const ln=parseFloat(pick.slice(5));
+      if(!R.live)return{hit:tot>ln,detail:`${line} · total ${tot}`};
+      if(tot>ln)return{hit:true,detail:`${line} · total ${tot} — already clinched`};
+      return{hit:null,detail:`${line} · total ${tot} so far`};
     }
-    // a live ML lock is much riskier to call early — only settle it once the trailing
-    // team's deficit exceeds what's realistically reachable in the innings left
-    const margin=h-a;                    // positive = home leading
-    const whoIsHome=who===homeAb;
-    const backingMargin=whoIsHome?margin:-margin;   // positive = the picked side is ahead
-    const ceiling=remainingCeiling();
-    if(backingMargin>0&&ceiling!==null&&ceiling<backingMargin)
-      return{hit:true,detail:`${line} — lead is out of reach with ${R.completed} innings gone`};
-    if(backingMargin<0&&ceiling!==null&&ceiling<-backingMargin)
-      return{hit:false,detail:`${line} — deficit is out of reach with ${R.completed} innings gone`};
-    return{hit:null,detail:line};
-  }
+    if(/^Under /.test(pick)){
+      const ln=parseFloat(pick.slice(6));
+      if(!R.live)return{hit:tot<ln,detail:`${line} · total ${tot}`};
+      if(tot>=ln)return{hit:false,detail:`${line} · total ${tot} — already over the line`};
+      const ceiling=remainingCeiling();
+      if(ceiling!==null&&(tot+ceiling)<ln)
+        return{hit:true,detail:`${line} · total ${tot}, ${R.completed} innings gone — mathematically out of reach`};
+      return{hit:null,detail:`${line} · total ${tot} so far`};
+    }
+    if(/ ML$/.test(pick)){
+      const who=pick.replace(/ ML$/,'');
+      if(!R.live){
+        if(a===h)return{hit:null,push:true,detail:line+' · push — refunded, not counted as a loss'};
+        return{hit:(h>a?homeAb:awayAb)===who,detail:line};
+      }
+      // a live ML lock is much riskier to call early — only settle it once the trailing
+      // team's deficit exceeds what's realistically reachable in the innings left
+      const margin=h-a;                    // positive = home leading
+      const whoIsHome=who===homeAb;
+      const backingMargin=whoIsHome?margin:-margin;   // positive = the picked side is ahead
+      const ceiling=remainingCeiling();
+      if(backingMargin>0&&ceiling!==null&&ceiling<backingMargin)
+        return{hit:true,detail:`${line} — lead is out of reach with ${R.completed} innings gone`};
+      if(backingMargin<0&&ceiling!==null&&ceiling<-backingMargin)
+        return{hit:false,detail:`${line} — deficit is out of reach with ${R.completed} innings gone`};
+      return{hit:null,detail:line};
+    }
+    return null; // falls through to run line / F5 handling below
+  };
+  const sideResult=gradeSideOrTotal();
+  if(sideResult)return{...sideResult,live:!!R.live};
   const rlm=pick.match(/^(.+) ([+-]\d+(?:\.\d+)?)$/);
   if(rlm&&!/^F5 /.test(pick)){
     const who=rlm[1],ln=parseFloat(rlm[2]);
     const margin=who===homeAb?(h-a):(a-h);
-    return{hit:R.live?null:(margin+ln)>0,detail:`${line} · margin ${margin>0?'+':''}${margin}`};
+    return{hit:R.live?null:(margin+ln)>0,detail:`${line} · margin ${margin>0?'+':''}${margin}`,live:!!R.live};
   }
   if(/^F5 /.test(pick)){
-    if(!R.f5ok||R.fa===null||R.fa===undefined)return{hit:null,detail:null};
+    if(!R.f5ok||R.fa===null||R.fa===undefined)return{hit:null,detail:null,live:!!R.live};
     const f5tot=R.fa+R.fh;
-    if(/^F5 over /.test(pick))return{hit:f5tot>parseFloat(pick.slice(8)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`};
-    if(/^F5 under /.test(pick))return{hit:f5tot<parseFloat(pick.slice(9)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`};
+    if(/^F5 over /.test(pick))return{hit:f5tot>parseFloat(pick.slice(8)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`,live:!!R.live};
+    if(/^F5 under /.test(pick))return{hit:f5tot<parseFloat(pick.slice(9)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`,live:!!R.live};
     const who=pick.slice(3);
-    if(R.fa===R.fh)return{hit:null,push:true,detail:`F5 ${R.fa}–${R.fh} · push — refunded, not counted as a loss`};
-    return{hit:(R.fh>R.fa?homeAb:awayAb)===who,detail:`F5 ${R.fa}–${R.fh}`};
+    if(R.fa===R.fh)return{hit:null,push:true,detail:`F5 ${R.fa}–${R.fh} · push — refunded, not counted as a loss`,live:!!R.live};
+    return{hit:(R.fh>R.fa?homeAb:awayAb)===who,detail:`F5 ${R.fa}–${R.fh}`,live:!!R.live};
   }
-  return{hit:null,detail:line};
+  return{hit:null,detail:line,live:!!R.live};
 }
 function gradeLegBadge(leg,ticketDate){
-  const{hit,detail}=gradeLeg(leg,ticketDate);
-  const R=resolveLeg(leg,ticketDate);
-  const icon=hit===true?'✅':hit===false?'❌':(R&&R.live)?'⏳':'—';
+  // was independently re-resolving the leg a second time (resolveLeg call
+  // below) purely to get the same live/not-live signal gradeLeg now already
+  // returns directly — one fewer redundant resolve per badge render
+  const{hit,detail,live}=gradeLeg(leg,ticketDate);
+  const icon=hit===true?'✅':hit===false?'❌':live?'⏳':'—';
   const color=hit===true?'var(--win)':hit===false?'var(--rust)':'var(--mute)';
   const d=detail?`<span style="font-family:'IBM Plex Mono';font-size:9.5px;color:${color};margin-left:5px">${detail}</span>`:'';
   return`<span style="color:${color}">${icon}</span>${d}`;
@@ -7395,42 +7498,75 @@ function minePicksHtml(){
 // Color: real live status. Ring thickness: how many legs stand between this
 // ticket and elimination RIGHT NOW — a thin ring means one bad result away
 // from dead, a thick ring means still several legs from being decided either way.
-function eliminationMapSvg(bubbles,w,h){
+// Real force-directed layout — mutual repulsion keeps bubbles from overlapping,
+// attraction along team-web EDGES pulls tickets riding the same team toward
+// each other, so the actual correlation structure ("webbed together by
+// certain picks") becomes the physical shape of the graph instead of a grid.
+// Deterministic seeded start positions (so it doesn't jump on every render)
+// relaxed through a small fixed number of simulation steps — enough to settle
+// into a stable, readable layout without needing a persistent animation loop.
+function forceLayout(bubbles,edges,w,h){
+  let seed=42;const rnd=()=>{seed=(seed*1103515245+12345)%2147483648;return seed/2147483648};
+  const nodes=bubbles.map((b,i)=>({...b,
+    x:w*0.15+rnd()*w*0.7,y:h*0.15+rnd()*h*0.7}));
+  const byId={};nodes.forEach(n=>byId[n.id]=n);
+  const realEdges=edges.filter(e=>byId[e.a]&&byId[e.b]);
+  for(let iter=0;iter<80;iter++){
+    // repulsion — every pair pushes apart, stronger the closer they are
+    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+      const a=nodes[i],b=nodes[j];
+      let dx=a.x-b.x,dy=a.y-b.y;
+      let dist=Math.sqrt(dx*dx+dy*dy)||0.01;
+      const minDist=a.r+b.r+18;
+      if(dist<minDist*2.2){
+        const force=(minDist*2.2-dist)/dist*0.06;
+        dx*=force;dy*=force;
+        a.x+=dx;a.y+=dy;b.x-=dx;b.y-=dy;
+      }
+    }
+    // attraction along team-web edges — pulls webbed tickets toward each other
+    realEdges.forEach(e=>{
+      const a=byId[e.a],b=byId[e.b];
+      let dx=b.x-a.x,dy=b.y-a.y;
+      const dist=Math.sqrt(dx*dx+dy*dy)||0.01;
+      const targetDist=(a.r+b.r)*1.6;
+      const force=(dist-targetDist)/dist*0.025;
+      dx*=force;dy*=force;
+      a.x+=dx;a.y+=dy;b.x-=dx;b.y-=dy;
+    });
+    // gentle pull toward center so the whole graph doesn't drift off-canvas
+    nodes.forEach(n=>{
+      n.x+=(w/2-n.x)*0.004;n.y+=(h/2-n.y)*0.004;
+      n.x=Math.max(n.r+6,Math.min(w-n.r-6,n.x));
+      n.y=Math.max(n.r+6,Math.min(h-n.r-6,n.y));
+    });
+  }
+  return{nodes,byId,realEdges};
+}
+function eliminationMapSvg(bubbles,edges,w,h){
   if(!bubbles.length)return '';
   const STATUS_COLOR={dead:'#F0563C',won:'#3DDC84',live:'#FFB43D',scheduled:'#5B6B7A'};
   const maxPayout=Math.max(1,...bubbles.map(b=>b.payout));
   const minR=14,maxR=44;
-  const sized=bubbles.map(b=>({...b,
-    r:minR+(maxR-minR)*Math.sqrt(b.payout/maxPayout)}));
-  // cluster by shared game — tickets that share ANY game get pulled toward a
-  // common anchor point so overlapping risk reads as physical proximity
-  const clusters={};
-  sized.forEach(b=>{
-    const key=b.games.slice().sort().join('|')||'none';
-    (clusters[key]=clusters[key]||[]).push(b);
-  });
-  const clusterKeys=Object.keys(clusters);
-  const cols=Math.max(1,Math.ceil(Math.sqrt(clusterKeys.length)));
-  const cellW=w/cols,cellH=h/Math.ceil(clusterKeys.length/cols);
-  let seed=42;const rnd=()=>{seed=(seed*1103515245+12345)%2147483648;return seed/2147483648};
-  const positioned=[];
-  clusterKeys.forEach((key,ci)=>{
-    const cx=(ci%cols+0.5)*cellW,cy=(Math.floor(ci/cols)+0.5)*cellH;
-    const members=clusters[key];
-    members.forEach((b,mi)=>{
-      const angle=(mi/Math.max(1,members.length))*Math.PI*2;
-      const spread=members.length>1?Math.min(cellW,cellH)*0.22:0;
-      const jx=(rnd()-0.5)*10,jy=(rnd()-0.5)*10;
-      positioned.push({...b,
-        x:Math.max(b.r+4,Math.min(w-b.r-4,cx+Math.cos(angle)*spread+jx)),
-        y:Math.max(b.r+4,Math.min(h-b.r-4,cy+Math.sin(angle)*spread+jy))});
-    });
-  });
-  const circles=positioned.map(b=>{
+  const sized=bubbles.map(b=>({...b,r:minR+(maxR-minR)*Math.sqrt(b.payout/maxPayout)}));
+  const{nodes,byId,realEdges}=forceLayout(sized,edges,w,h);
+
+  // web strands — drawn first so bubbles render on top. Opacity/width scale
+  // with how many tickets that team ties together system-wide, so a team
+  // webbing 5 tickets together reads as visibly thicker than one webbing 2.
+  const teamEdgeCounts={};
+  realEdges.forEach(e=>{teamEdgeCounts[e.team]=(teamEdgeCounts[e.team]||0)+1});
+  const strands=realEdges.map(e=>{
+    const a=byId[e.a],b=byId[e.b];
+    const weight=Math.min(3,1+teamEdgeCounts[e.team]*0.3);
+    const anyDead=a.status==='dead'||b.status==='dead';
+    const col=anyDead?'#F0563C':'#5FD3E8';
+    return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"
+      stroke="${col}" stroke-width="${weight}" stroke-opacity="${anyDead?0.35:0.28}"/>`;
+  }).join('');
+
+  const circles=nodes.map(b=>{
     const col=STATUS_COLOR[b.status];
-    // ring thickness communicates "distance from elimination" — thin ring
-    // (1.5px) when one leg from dead, thick ring (5px) when several legs
-    // still have to resolve before anything is decided
     const ringW=b.status==='dead'||b.status==='won'?2:
       Math.max(1.5,Math.min(5,1.5+(b.legsFromElimination/Math.max(1,b.total))*4));
     const glow=b.status==='live'&&b.legsFromElimination<=1
@@ -7438,16 +7574,20 @@ function eliminationMapSvg(bubbles,w,h){
           opacity="0.5"><animate attributeName="r" values="${b.r+3};${b.r+9};${b.r+3}"
           dur="1.8s" repeatCount="indefinite"/><animate attributeName="opacity"
           values="0.6;0.05;0.6" dur="1.8s" repeatCount="indefinite"/></circle>`:'';
+    // a genuinely live bubble gets a slow breathing pulse on its own fill —
+    // real motion tied to real state, not decoration on dead/scheduled ones
+    const breathe=b.status==='live'?`<animate attributeName="fill-opacity" values="0.18;0.32;0.18"
+        dur="2.4s" repeatCount="indefinite"/>`:'';
     const label=b.total>1?`${b.wins}/${b.decided||b.total}`:(b.status==='dead'?'✕':b.status==='won'?'✓':'…');
     return `${glow}<g style="cursor:pointer" onclick="showBubbleDetail(${b.id})">
       <circle cx="${b.x}" cy="${b.y}" r="${b.r}" fill="${col}" fill-opacity="0.22"
-        stroke="${col}" stroke-width="${ringW}"/>
+        stroke="${col}" stroke-width="${ringW}">${breathe}</circle>
       <text x="${b.x}" y="${b.y+4}" text-anchor="middle" font-family="Archivo" font-weight="800"
         font-size="${Math.max(10,b.r*0.4)}" fill="${col}">${label}</text>
     </g>`;
   }).join('');
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="display:block">
-    ${circles}
+    ${strands}${circles}
   </svg>`;
 }
 let BUBBLE_DETAIL_ID=null;
@@ -7456,7 +7596,8 @@ function showBubbleDetail(id){
   renderTickets();
 }
 function eliminationMapHtml(){
-  const{bubbles,conc}=eliminationMapData();
+  const{bubbles,conc,edges}=eliminationMapData();
+  const feed=eliminationFeed();
   const counts={dead:0,won:0,live:0,scheduled:0};
   bubbles.forEach(b=>counts[b.status]++);
   const totalPayout=bubbles.filter(b=>b.status!=='dead').reduce((a,b)=>a+b.payout,0);
@@ -7468,8 +7609,28 @@ function eliminationMapHtml(){
     now. <b style="color:var(--rust)">Red</b> = already dead, one leg lost. <b style="color:var(--win)">Green</b>
     = fully won. <b style="color:var(--gold)">Amber</b> = still alive, at least one leg undecided. Grey = nothing's
     started. Ring thickness = how many legs stand between that ticket and being fully decided — thin ring pulsing
-    means one result away from dead or won. Tickets clustered together share a game — a bad result there hits
-    the whole cluster at once. Tap any bubble for the leg-by-leg breakdown.</div></div>`;
+    means one result away from dead or won. <b style="color:#5FD3E8">Cyan strands</b> connect tickets riding on the
+    SAME team — thicker strand means more tickets tied to that one team's result. Tap any bubble for the leg-by-leg
+    breakdown. Refreshes automatically while any game is live.</div></div>`;
+
+  // ── receive-only message feed — real events, phrased with personality,
+  // never invents a stat that isn't backed by real ticket/team data above ──
+  if(feed.length){
+    const toneColor={bad:'var(--rust)',tense:'var(--gold)',good:'var(--win)'};
+    const toneIcon={bad:'💀',tense:'⚡',good:'🔥'};
+    h+=`<div class="tkt" style="background:#0a0e13;border:1px solid var(--rule);
+      font-family:'IBM Plex Mono';padding:0;overflow:hidden">
+      <div style="padding:8px 12px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:6px">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--win);
+          box-shadow:0 0 6px var(--win)"></span>
+        <span style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)">Live feed · receive only</span>
+      </div>
+      <div style="max-height:180px;overflow-y:auto;padding:4px 0">
+        ${feed.map(m=>`<div style="padding:7px 12px;font-size:12px;color:${toneColor[m.tone]};
+          border-bottom:1px solid rgba(255,255,255,.04)">${toneIcon[m.tone]} ${m.text}</div>`).join('')}
+      </div>
+    </div>`;
+  }
 
   h+=`<div class="tkt">
     <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
@@ -7488,7 +7649,7 @@ function eliminationMapHtml(){
     h+=`<div class="tkt" style="border-left:3px solid var(--gold)">
       <div class="mktlab" style="margin-top:0;color:var(--gold)">⚡ One leg from deciding</div>
       ${oneAway.map(b=>{
-        const shakyLeg=b.legStates.find(l=>l.state==='pending');
+        const shakyLeg=b.legStates.find(l=>l.state==='pending'||l.state==='live');
         return `<div style="padding:4px 0;cursor:pointer" onclick="showBubbleDetail(${b.id})">
           <b>${b.name}</b> <span class="m">$${b.payout.toFixed(2)} on the line</span>
           ${shakyLeg?`<div class="sub">Comes down to: ${shakyLeg.pick} <span class="m">${shakyLeg.game}</span>${shakyLeg.detail?' · '+shakyLeg.detail:''}</div>`:''}
@@ -7497,7 +7658,7 @@ function eliminationMapHtml(){
     </div>`;
   }
 
-  h+=`<div class="tkt">${eliminationMapSvg(bubbles,340,Math.max(220,Math.ceil(bubbles.length/4)*90))}</div>`;
+  h+=`<div class="tkt" id="elimMapCanvas">${eliminationMapSvg(bubbles,edges,340,Math.max(240,Math.ceil(bubbles.length/3)*100))}</div>`;
 
   h+=`<div class="tkt">
     <div style="display:flex;justify-content:space-around;text-align:center">
@@ -8224,6 +8385,16 @@ async function loadESPN(){
         await loadESPN();
         if(document.getElementById('v-games').classList.contains('active')||
            document.querySelector('.view.active')?.id==='v-games'){render();}
+        // the Elimination Map's bubbles are only as alive as the real score
+        // data behind them — this is what makes them actually MOVE when a
+        // real game updates, instead of only refreshing on next manual open.
+        // Re-runs the force layout with fresh gradeLeg() results every real
+        // live-score poll, so motion is tied to real events, not a fake timer.
+        if(TICKETTAB==='elimmap'){
+          const canvas=document.getElementById('elimMapCanvas');
+          const body=document.getElementById('ticketBody');
+          if(canvas&&body)body.innerHTML=eliminationMapHtml();
+        }
       },90000);
     }
     if(!anyLive&&LIVE_POLL){clearInterval(LIVE_POLL);LIVE_POLL=null;}
