@@ -197,6 +197,33 @@ border-color:var(--gold);box-shadow:var(--glow-gold)}
 border-color:var(--gold)!important;box-shadow:var(--glow-gold)}
 .bet.consensus-pick.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
 border-color:var(--gold)!important;box-shadow:var(--glow-gold)}
+
+/* ═══ ALIGNMENT TIERS — how many independent signals (book lean, model edge,
+   outside consensus) point the same way. A real hierarchy, not just more
+   colors: thicker border + visible glow scale UP with agreement, so Supreme
+   is unmistakably the strongest square on the card at a glance, not just
+   "a different color from Strong." ═══ */
+.bet.lean{border-width:1.5px;border-color:rgba(95,211,232,.45)}
+.bet.strong{border-width:2px;border-color:#5FD3E8;
+  box-shadow:0 0 10px rgba(95,211,232,.28),inset 0 1px 0 rgba(255,255,255,.05)}
+.bet.supreme{border-width:2.5px;border-color:#FFD75E;
+  background:linear-gradient(165deg,rgba(255,215,94,.16),rgba(21,30,40,.9));
+  box-shadow:0 0 16px rgba(255,215,94,.4),inset 0 1px 0 rgba(255,255,255,.08)}
+.bet.supreme .bl{color:#FFD75E}
+.bet.conflict{border-width:2px;border-style:dashed;border-color:var(--rust);
+  background:linear-gradient(165deg,rgba(240,86,60,.1),rgba(21,30,40,.9))}
+.tier-tag{font-family:"IBM Plex Mono";font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:800;margin-top:3px}
+.tier-tag.supreme{color:#FFD75E}
+.tier-tag.strong{color:#5FD3E8}
+.tier-tag.conflict{color:var(--rust)}
+/* selected + tiered — the checkmark badge stays gold/unmissable regardless of
+   tier, but the tier's own border/glow shows through underneath it so you can
+   still tell "this Supreme pick is the one I've selected" apart from a
+   Supreme pick you haven't tapped yet */
+.bet.supreme.on{border-color:#FFD75E!important;box-shadow:0 0 16px rgba(255,215,94,.5),var(--glow-gold)}
+.bet.strong.on{border-color:#5FD3E8!important;box-shadow:0 0 10px rgba(95,211,232,.35),var(--glow-gold)}
+.bet.conflict.on{border-color:var(--rust)!important;box-shadow:var(--glow-gold)}
 .eb{font-family:"Inter";font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;
 display:inline-block;letter-spacing:.02em}
 .eb.up{background:rgba(74,222,128,.18);color:var(--win)}
@@ -470,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v94</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v96</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -503,7 +530,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       <div class="sub" id="bookStatus" style="margin-top:6px;font-family:'IBM Plex Mono';font-size:10.5px"></div>
       <div class="mktlab" style="margin-top:8px">Which slate are these for?</div>
       <div class="subnav" id="bookUploadDateRow"></div>
-      <input type="file" id="bookShots" accept="image/*,application/pdf" multiple style="margin-top:8px">
+      <input type="file" id="bookShots" accept="image/*,application/pdf,.doc,.docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="margin-top:8px">
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="analyzeBookShots()">Analyze screenshots</button></div>
       <div id="bookShotResult"></div>
     </div>
@@ -871,7 +898,58 @@ function fileToB64(file){
 // this is NOT an image block with PDF bytes stuffed into it, which the API
 // would reject). Anything else falls back to image and lets the API's own
 // error surface rather than silently mis-sending it.
-function fileToContentBlock(f,b64){
+// ── real text-file support (item 10, corrected) ──────────────────────────
+// .txt/.md are plain text — reading them AS TEXT (not base64/vision) is both
+// simpler and more reliable than any image route, since there's zero OCR
+// risk on something that was never a picture to begin with. .docx is a
+// zipped-XML binary format that genuinely can't be handed to the API
+// directly — it needs real extraction, done here with Mammoth.js, loaded
+// on demand only when a .docx actually shows up (no dead weight on every
+// page load for a library most uploads will never need). Legacy .doc
+// (pre-2007 binary format) has no reliable client-side extraction path at
+// all — rather than silently mangle it, this says so plainly and asks for
+// .docx/.txt/.md instead.
+let MAMMOTH_LOADED=false;
+function loadMammoth(){
+  if(MAMMOTH_LOADED)return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+    s.onload=()=>{MAMMOTH_LOADED=true;res()};
+    s.onerror=()=>rej(new Error('Could not load the .docx reader — check your connection.'));
+    document.head.appendChild(s);
+  });
+}
+function isPlainTextFile(f){
+  const n=f.name.toLowerCase();
+  return n.endsWith('.txt')||n.endsWith('.md')||(f.type||'').startsWith('text/');
+}
+function isDocxFile(f){
+  const n=f.name.toLowerCase();
+  return n.endsWith('.docx')||f.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+}
+function isLegacyDocFile(f){
+  const n=f.name.toLowerCase();
+  return n.endsWith('.doc')&&!n.endsWith('.docx');
+}
+// Returns either an API content block ({type:'image'|'document'|'text',...})
+// OR throws a real, readable error for the one format that genuinely can't
+// be handled (.doc) — callers should catch and surface that message plainly
+// rather than let it fail silently.
+async function fileToContentBlock(f,b64){
+  if(isLegacyDocFile(f)){
+    throw new Error(`"${f.name}" is an old-format .doc file — that format can't be read reliably. Save it as .docx or .txt and upload that instead.`);
+  }
+  if(isPlainTextFile(f)){
+    const text=await f.text(); // real UTF-8 text, no base64 round-trip needed
+    return{type:'text',text};
+  }
+  if(isDocxFile(f)){
+    await loadMammoth();
+    const arrayBuffer=await f.arrayBuffer();
+    const result=await window.mammoth.extractRawText({arrayBuffer});
+    return{type:'text',text:result.value};
+  }
   const mt=(f.type||'').toLowerCase();
   if(mt==='application/pdf'||f.name.toLowerCase().endsWith('.pdf')){
     return{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}};
@@ -883,16 +961,19 @@ async function analyzeBookShots(){
   const el=document.getElementById('bookShotResult');
   if(!key){el.innerHTML='<div class="empty">Needs an Anthropic key in Settings first.</div>';return}
   const files=document.getElementById('bookShots').files;
-  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot or PDF first.</div>';return}
+  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot, PDF, or text file first.</div>';return}
   el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
   try{
     const imgBlocks=[];
     for(const f of files){
-      const b64=await fileToB64(f);
-      imgBlocks.push(fileToContentBlock(f,b64));
+      // base64 is only needed for image/PDF — text/.docx read as real text
+      // directly and skip that step entirely, both faster and no wasted work
+      const needsB64=!isPlainTextFile(f)&&!isDocxFile(f)&&!isLegacyDocFile(f);
+      const b64=needsB64?await fileToB64(f):null;
+      imgBlocks.push(await fileToContentBlock(f,b64));
     }
-    const prompt=`These are screenshots of a real sportsbook's MLB board. Extract every game/market you can
-      see into a JSON array — nothing else, no markdown fences, no commentary. Include:
+    const prompt=`These are screenshots (or text/document exports) of a real sportsbook's MLB board. Extract
+      every game/market you can see into a JSON array — nothing else, no markdown fences, no commentary. Include:
       - Full-game moneyline → market:"moneyline", side:"away" or "home"
       - Full-game run line → market:"runline", side:"away" or "home"
       - Full-game total → market:"total", side:"over" or "under"
@@ -944,7 +1025,11 @@ async function analyzeBookShots(){
       <div class="bar"><button class="primary" onclick="saveBookShots()">Looks right — save to comparison history</button></div>
     </div>`;
   }catch(e){
-    el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
+    // could be a real network failure OR a thrown file-format rejection
+    // (e.g. a legacy .doc upload) — the message itself already says which,
+    // so the title stays generic rather than mislabeling a format error as
+    // a connectivity problem
+    el.innerHTML=`<div class="tkt"><h3>Couldn't read that</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
   }
 }
 function saveBookShots(){
@@ -1138,12 +1223,18 @@ function renderColorLegend(){
   const section=(title)=>`<div class="mktlab" style="margin-top:14px">${title}</div>`;
 
   el.innerHTML=
-    section('Game card — bet squares')+
+    section('Game card — bet squares — single signals')+
     swatch('var(--gold)','Selected (gold + ✓ badge)','This is one of YOUR picks right now — the checkmark is the real signal, color is backup.')+
     swatch('var(--win)','Green border','Model sees real edge here — the number is worth a second look.')+
     swatch('var(--rust)','Red border, dimmed','Model says stay away — priced against the model\'s own read.')+
     swatch('#a78bfa','Purple border','An outside source (uploaded pick/trend) also has this exact side.')+
     swatch('#f472b6','Pink border','UNANIMOUS — every outside source you\'ve uploaded agrees on this side.')+
+
+    section('Game card — ALIGNMENT TIERS (how many things agree)')+
+    swatch('#FFD75E','◆ SUPREME — thick gold glow','Book price leans this way, model has real edge, AND outside sources are unanimous. All three independent reads agree — this is as strong as the card gets.',' <span class="m">(rare)</span>')+
+    swatch('#5FD3E8','STRONG — cyan glow','Any two of the three signals (book lean, model edge, outside consensus) align.')+
+    swatch('rgba(95,211,232,.6)','Lean — thin cyan border','Exactly one signal present — worth noting, not yet a real convergence.')+
+    swatch('var(--rust)','⚠ CONFLICT — dashed red border','Signals actively disagree — e.g. the model likes this side but outside sources are unanimous on the OTHER side. Worth a second look specifically because something doesn\'t line up.')+
 
     section('Elite stat badges (⭐ gold)')+
     swatch('var(--gold)','⭐ Top N% badge','Real league-wide percentile — pitcher ERA/K-9, team record, or park HR factor. Threshold is tunable above.')+
@@ -4275,9 +4366,30 @@ function betGrid(g,s,M){
     const simChip=opts.simVal!==undefined
       ?`<div class="sim-chip">sim ${opts.simVal}</div>`
       :'';
-    // external source overlay — purple border if any uploaded source picked this exact
-    // square, pink if every source that touched this market landed on this same side
-    let srcCls='',srcBadge='';
+
+    // ═══ ALIGNMENT TIER — three INDEPENDENT signals, checked separately, then
+    // combined into one tier. This is the real fix: before, only "does an
+    // outside source agree" ever became a color — the book's own real price
+    // and the model's edge never got checked TOGETHER with outside consensus
+    // to answer "how many independent things point the same way here."
+    //   Signal 1 — BOOK LEAN: does the real book price itself already favor
+    //     this side strongly (marketP alone, not edge — the book's own view).
+    //   Signal 2 — MODEL EDGE: does the model disagree with the market in
+    //     THIS side's favor (the existing value/avoid computation above).
+    //   Signal 3 — OUTSIDE CONSENSUS: do uploaded sources agree, and how many.
+    // Tiers, highest to lowest:
+    //   SUPREME  — book leans this way AND model has real edge AND outside
+    //              sources are unanimous. All three independent reads agree.
+    //   STRONG   — any two of the three signals align.
+    //   LEAN     — exactly one signal present.
+    //   CONFLICT — signals actively point different directions (e.g. model
+    //              likes it but outside sources are unanimous on the OTHER
+    //              side) — this is worth seeing, not just staying neutral.
+    //   (none)   — no real signal either way, plain square.
+    const bookLeans=typeof kp==='number'&&kp>=0.58; // book's own price implies ≥58% on this exact side
+    const modelEdgeHere=cls===' value';
+    const modelAgainstHere=cls===' avoid';
+    let srcCls='',srcBadge='',outsideAgrees=false,outsideUnanimous=false,outsideAgainst=false;
     const extHere=extToday().filter(x=>x.gid===g.id);
     if(extHere.length){
       const sameMkt=extHere.filter(x=>marketMatchesPick(x,pick,label));
@@ -4285,16 +4397,31 @@ function betGrid(g,s,M){
       if(onThis.length){
         const allSrcOnMkt=new Set(sameMkt.map(x=>x.src));
         const allSrcOnThis=new Set(onThis.map(x=>x.src));
-        const unanimous=allSrcOnMkt.size>=2&&allSrcOnThis.size===allSrcOnMkt.size;
-        srcCls=unanimous?' consensus-pick':' source-pick';
-        srcBadge=`<div class="src-tag${unanimous?' unanimous':''}">${unanimous?'★ unanimous':onThis.length+' source'+(onThis.length>1?'s':'')}</div>`;
+        outsideUnanimous=allSrcOnMkt.size>=2&&allSrcOnThis.size===allSrcOnMkt.size;
+        outsideAgrees=true;
+        srcBadge=`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':onThis.length+' source'+(onThis.length>1?'s':'')}</div>`;
+      }else if(sameMkt.length){
+        // outside sources exist for this MARKET but none of them picked THIS
+        // side — meaning they're on the other side, a real disagreement
+        outsideAgainst=true;
       }
     }
-    return `<div class="bet${cls}${srcCls} ${on?'on':''}" role="button" tabindex="0"
+    const signalsFor=[bookLeans,modelEdgeHere,outsideAgrees].filter(Boolean).length;
+    const hasConflict=(modelAgainstHere&&(bookLeans||outsideAgrees))||(outsideAgainst&&(bookLeans||modelEdgeHere));
+    let tierCls='';
+    if(hasConflict)tierCls=' conflict';
+    else if(signalsFor>=3||(signalsFor>=2&&outsideUnanimous))tierCls=' supreme';
+    else if(signalsFor>=2)tierCls=' strong';
+    else if(signalsFor>=1)tierCls=' lean';
+    if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
+    const tierBadge=tierCls===' supreme'?`<div class="tier-tag supreme">◆ SUPREME</div>`
+      :tierCls===' strong'?`<div class="tier-tag strong">STRONG</div>`
+      :tierCls===' conflict'?`<div class="tier-tag conflict">⚠ CONFLICT</div>`:'';
+    return `<div class="bet${cls}${srcCls}${tierCls} ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
-      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}</div>`;
+      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${tierBadge}</div>`;
   };
   // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
   // always sum to exactly 100 instead of each rounding independently, which can silently
@@ -7588,14 +7715,17 @@ async function analyzeExtPicks(){
   const el=document.getElementById('extResult');
   if(!key){el.innerHTML='<div class="empty">Needs an Anthropic key in Settings first.</div>';return}
   const files=document.getElementById('extShots').files;
-  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot or PDF first.</div>';return}
+  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot, PDF, or text file first.</div>';return}
   // srcHint input removed as part of the item-6 fix — source is now confirmed/corrected POST-upload via extSrcOverride on the results screen, not requested up front
   el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
   try{
     const imgBlocks=[];
     for(const f of files){
-      const b64=await fileToB64(f);
-      imgBlocks.push(fileToContentBlock(f,b64)); // same real image-vs-PDF branch analyzeBookShots uses
+      // same real image/PDF/text/.docx branch analyzeBookShots uses — base64
+      // is only computed when the file actually needs it
+      const needsB64=!isPlainTextFile(f)&&!isDocxFile(f)&&!isLegacyDocFile(f);
+      const b64=needsB64?await fileToB64(f):null;
+      imgBlocks.push(await fileToContentBlock(f,b64));
     }
     const prompt=`These screenshots come from sports data/handicapping sites (Covers.com, OddsShark,
 Picks and Parlays, Action Network, VSiN, a Facebook tipster, etc). They come in several different
@@ -7755,7 +7885,9 @@ Treat this exactly like Formats 1-3 combined, just read from plain text instead 
         background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="saveExtPicks()">Save all</button></div></div>`;
   }catch(e){
-    el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
+    // could be a real network failure OR a thrown file-format rejection
+    // (legacy .doc) — message already says which
+    el.innerHTML=`<div class="tkt"><h3>Couldn't read that</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
   }
 }
 
@@ -8696,7 +8828,7 @@ function consensusHtml(){
     <div class="sub">Screenshots from OddsShark, Covers, Picks &amp; Parlays, Facebook tipsters, Action
     Network — anything. Claude reads the source name and every pick off the image automatically; you'll
     get a chance to confirm or correct the detected source AFTER it's read, not before.</div>
-    <input type="file" id="extShots" accept="image/*,application/pdf" multiple style="margin-top:8px">
+    <input type="file" id="extShots" accept="image/*,application/pdf,.doc,.docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="margin-top:8px">
     <div class="bar" style="margin-top:8px">
       <button class="primary" onclick="analyzeExtPicks()">Read screenshots</button>
       ${picks.length?`<button onclick="clearExtToday()">Clear today</button>`:''}
