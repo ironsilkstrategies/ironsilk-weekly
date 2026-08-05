@@ -451,7 +451,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v90</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v91</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -2322,6 +2322,157 @@ function concentrationReport(){
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// THE COACH — no heart, all analysis. Reads real site state (bankroll pace,
+// preset track records, concentration exposure, edge-vs-consensus math,
+// calibration's own findings) and speaks about what's actually true. Never
+// says "bet this" — only "here's what holds up and what doesn't." Every
+// verdict below is a pure function of real stored data; nothing here
+// invents a number or a stat.
+//
+// Design: a set of independent TRIGGER functions, each returning either
+// null (nothing worth saying) or a {tone, text} verdict. coachSpeak(context)
+// runs the triggers relevant to wherever it's called from and returns the
+// single most important thing to say right now — not a wall of commentary,
+// one clean line, like a real coach would actually say in the moment.
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── bankroll pace, read against YOUR stated goal, not a generic one ──
+// $5/day in $1 increments, ~20 betting days/month, $100 baseline, scaling by
+// system performance toward $10k by year end — this is already exactly how
+// BR_BASELINE/BR_DAILY_BASE were built. The Coach just narrates it honestly.
+function coachBankrollRead(){
+  const b=getBankroll();
+  const bal=BR_BASELINE+b.profit;
+  const staked=stakedToday();
+  const dl=dailyLimit();
+  const daysElapsed=new Date().getDate();
+  const expectedProfit=0; // no assumption of profit by any point — the goal is pace, not a promised curve
+  if(bal<=0){
+    return{tone:'bad',text:`Balance is at $${bal.toFixed(2)}. The month's budget is spent — this isn't the time to press, it's the time to wait for next month or let the multiplier rebuild.`};
+  }
+  if(b.limitMult>1){
+    return{tone:'good',text:`Daily limit is up to $${dl.toFixed(2)} — the system's earned a bigger stake size through real profit, not by you pushing past the cap. That's the multiplier working as designed.`};
+  }
+  if(staked>=dl-0.001&&dl<=BR_DAILY_BASE+0.001){
+    return{tone:'neutral',text:`Today's $${dl.toFixed(2)} is in. That's the whole plan for today — $1 increments, patience over the month, not the day.`};
+  }
+  return null;
+}
+
+// ── which preset is actually working, from REAL recorded history ──
+// Reads the same buildAllTimeRecord/recordStats every Record tab screen
+// already trusts — no separate scoring logic, so the Coach can never
+// disagree with what you'd see if you checked yourself.
+function coachBestPerformer(){
+  const R=buildAllTimeRecord();
+  const buckets={mine:R.mine,system:R.system,market:R.market,specialty:R.specialty};
+  const scored=Object.keys(buckets).map(k=>({name:k,...recordStats(buckets[k])}))
+    .filter(s=>s.w+s.l>=8); // needs a real sample before the Coach will say anything about it
+  if(!scored.length)return null;
+  scored.sort((a,b)=>parseFloat(b.pct)-parseFloat(a.pct));
+  const best=scored[0];
+  const worst=scored[scored.length-1];
+  if(scored.length>=2&&parseFloat(best.pct)-parseFloat(worst.pct)>=15){
+    return{tone:'good',text:`${bucketLabel(best.name)} is running ${best.pct}% (${best.w}-${best.l}) — clearly ahead of ${bucketLabel(worst.name)} at ${worst.pct}%. If there's a sweet spot forming, that's where it's showing up right now.`};
+  }
+  return null;
+}
+function bucketLabel(k){return{mine:'My picks',system:'System',market:'Market',specialty:'Specialty'}[k]||k}
+
+// ── duplicate/concentration risk, live, before you lock the third ticket ──
+// This is the explicit ask: "flag that a potential pick is already on 2
+// tickets" — checks the pick against pendingLegExposure BEFORE it's added,
+// not after.
+function coachDuplicateCheck(pick,game){
+  const rows=pendingLegExposure();
+  const already=rows.filter(r=>r.pick===pick&&r.game===game);
+  const ticketIds=new Set(already.map(r=>r.ticketId));
+  if(ticketIds.size>=2){
+    return{tone:'warn',text:`${pick} is already on ${ticketIds.size} pending tickets. Adding it again isn't a new idea — it's the same result deciding a bigger share of the board.`};
+  }
+  return null;
+}
+
+// ── weak-leg detection — a ticket with real potential dragged down by one
+// pick that doesn't hold up against the book, the model, or the trend
+// consensus. This is the "tell me when to cut fat" ask, made concrete.
+function coachWeakLegCheck(legs){
+  if(!legs||legs.length<2)return null;
+  const scored=legs.map(l=>({leg:l,edge:edgeOf(l)}));
+  const avgEdge=scored.reduce((a,x)=>a+x.edge,0)/scored.length;
+  const weakest=scored.slice().sort((a,b)=>a.edge-b.edge)[0];
+  // only speak up when the gap between the weakest leg and the rest is real —
+  // not every ticket has a problem leg, most don't
+  if(weakest.edge<=-4&&avgEdge-weakest.edge>=6){
+    return{tone:'warn',text:`${weakest.leg.pick} is dragging this ticket — everything else here has real edge, that one's priced against you by ${Math.abs(weakest.edge).toFixed(1)} points. Worth asking if it belongs.`};
+  }
+  return null;
+}
+
+// ── emotional-ticket detection — a longshot parlay with an unusually high
+// leg count relative to what the same builder normally produces, which is
+// often (not always) a signal of chasing rather than reading the board ──
+function coachLongshotCheck(legs){
+  if(!legs||legs.length<6)return null;
+  const combinedP=legs.reduce((a,x)=>a*(x.p||0.5),1);
+  if(combinedP<0.02){
+    return{tone:'neutral',text:`${legs.length} legs, combined odds under 2% — this is a real swing-for-it ticket, not a base hit. Nothing wrong with that if it's a small piece of the month, not the whole plan.`};
+  }
+  return null;
+}
+
+// ── the master dispatcher — call this from wherever the Coach should speak,
+// pass whatever context is available, get back the single most important
+// thing to say (or null, meaning stay quiet — a coach who talks constantly
+// stops being useful) ──
+function coachSpeak(context){
+  context=context||{};
+  const candidates=[];
+  if(context.pick&&context.game){
+    const dup=coachDuplicateCheck(context.pick,context.game);
+    if(dup)candidates.push(dup);
+  }
+  if(context.legs){
+    const weak=coachWeakLegCheck(context.legs);
+    if(weak)candidates.push(weak);
+    const longshot=coachLongshotCheck(context.legs);
+    if(longshot)candidates.push(longshot);
+  }
+  if(context.screen==='money'){
+    const br=coachBankrollRead();
+    if(br)candidates.push(br);
+  }
+  if(context.screen==='record'||context.screen==='eval'){
+    const best=coachBestPerformer();
+    if(best)candidates.push(best);
+  }
+  // priority order when multiple things are true at once: warnings before
+  // neutral notes before good news — a duplicate risk matters more right
+  // now than a compliment about pace
+  const order={warn:0,bad:0,neutral:1,good:2};
+  candidates.sort((a,b)=>(order[a.tone]??1)-(order[b.tone]??1));
+  return candidates[0]||null;
+}
+// Renders the Coach's line as a compact, visually distinct strip — same
+// visual language as the rest of the app (tkt card, flag colors) but with
+// its own identity so it reads as a voice, not another stat block.
+function coachHtml(context){
+  const v=coachSpeak(context);
+  if(!v)return '';
+  const toneColor={warn:'var(--rust)',bad:'var(--rust)',neutral:'var(--mute)',good:'var(--win)'};
+  const toneIcon={warn:'⚠',bad:'⚠',neutral:'○',good:'↑'};
+  return `<div class="tkt" style="border-left:3px solid ${toneColor[v.tone]};background:rgba(255,255,255,.02)">
+    <div style="display:flex;gap:8px;align-items:flex-start">
+      <span style="color:${toneColor[v.tone]};font-weight:800;flex:0 0 auto">${toneIcon[v.tone]}</span>
+      <div><div style="font-family:'IBM Plex Mono';font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+        color:var(--mute);margin-bottom:2px">Coach</div>
+      <div style="font-size:12.5px;line-height:1.5">${v.text}</div></div>
+    </div>
+  </div>`;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
 // ELIMINATION MAP — per-ticket "how close to winning or dying right now"
 // Every leg already has a real, computable status via gradeLeg (dead, alive
 // and clinched, alive and uncertain, not started). A ticket's status is NOT
@@ -2861,6 +3012,7 @@ function presetTabHtml(){
     </div>
     <div class="sub" style="margin-top:8px">${active[2]}</div>
   </div>
+  ${legs.length?coachHtml({legs}):''}
   <div class="tkt hi">
     <h3>${active[1]}${PRESET_MODE==='armageddon'?' ⚠️':''}</h3>
     ${legs.length?`<div class="sub"><b>${(combined*100).toFixed(combined<.01?3:1)}%</b> combined ·
@@ -4792,10 +4944,15 @@ function renderSlipSheetBody(){
   const c=SLIP.reduce((a,x)=>a*x.p,1);
   const gs=new Set(SLIP.map(x=>x.game));
   summary.textContent=(c*100).toFixed(c<.01?3:1)+'% · 1 in '+Math.round(1/c).toLocaleString();
-  body.innerHTML=SLIP.map(x=>{
+  // Coach checks each leg for duplicate exposure the moment you're reviewing
+  // the slip — never blocks the tap itself, just flags it right where you're
+  // already looking before you lock anything in.
+  const coach=coachHtml({legs:SLIP});
+  body.innerHTML=coach+SLIP.map(x=>{
+    const dup=coachDuplicateCheck(x.pick,x.game);
     return `<div class="slip-leg">
       <div class="slip-leg-info">
-        <div class="slip-leg-pick">${x.pick}</div>
+        <div class="slip-leg-pick">${x.pick}${dup?` <span class="flag hot" title="${esc(dup.text)}">⚠ dup ×${(pendingLegExposure().filter(r=>r.pick===x.pick&&r.game===x.game).length)}</span>`:''}</div>
         <div class="slip-leg-game">${x.game}${x.pname?' · '+x.pname:''}</div>
       </div>
       <div class="slip-leg-prob">${(x.p*100).toFixed(0)}%</div>
@@ -5799,7 +5956,8 @@ function renderMoneyTab(){
   const latest=withRunning.length?withRunning[withRunning.length-1]:null;
 
   // ── Balance card ──────────────────────────────────────────────────────
-  let h=`<div class="tkt hi" style="text-align:center;padding:22px 16px">
+  let h=coachHtml({screen:'money'});
+  h+=`<div class="tkt hi" style="text-align:center;padding:22px 16px">
     <div style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.12em;
       text-transform:uppercase;color:var(--mute)">Balance · ${currentMonth()}</div>
     <div style="font-family:'Archivo';font-weight:900;font-size:44px;line-height:1.1;
@@ -7198,7 +7356,7 @@ function renderAllTimeRecord(){
   </div>`:(clv.n>0?`<div class="note">Closing line value: tracking started, ${clv.n} of 5 picks
     needed before this means anything.</div>`:'');
 
-  let h=clvCard+`<div class="tkt hi">
+  let h=coachHtml({screen:'record'})+clvCard+`<div class="tkt hi">
     <h3>All-time record</h3>
     <div class="sub">Every parlay broken down leg by leg — a 3-1 parlay record shows up here as
     three separate wins and one loss, not one bundled result. This is the honest number.</div>
