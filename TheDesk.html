@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v96</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v97</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -8823,6 +8823,9 @@ function marketPicksHtml(){
 
 function consensusHtml(){
   const picks=extToday();
+  const consRows=get(LS.extconsensus,{})[today()]||[];
+  const trendRows=get(LS.exttrends,{})[today()]||[];
+  const hasAny=picks.length||consRows.length||trendRows.length;
   const upload=`<div class="tkt">
     <div class="sbar" style="margin-top:0"><h2>Upload picks from anywhere</h2><div class="ln"></div></div>
     <div class="sub">Screenshots from OddsShark, Covers, Picks &amp; Parlays, Facebook tipsters, Action
@@ -8831,11 +8834,30 @@ function consensusHtml(){
     <input type="file" id="extShots" accept="image/*,application/pdf,.doc,.docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="margin-top:8px">
     <div class="bar" style="margin-top:8px">
       <button class="primary" onclick="analyzeExtPicks()">Read screenshots</button>
-      ${picks.length?`<button onclick="clearExtToday()">Clear today</button>`:''}
+      ${hasAny?`<button onclick="clearExtToday()">Clear today</button>`:''}
     </div>
     <div id="extResult"></div>
   </div>`;
-  if(!picks.length)return upload+`<div class="empty">No external picks saved for today yet.</div>`;
+  if(!hasAny)return upload+`<div class="empty">No external picks saved for today yet.</div>`;
+  // show saved consensus rows if no picks but consensus exists
+  if(!picks.length&&(consRows.length||trendRows.length)){
+    let html=upload;
+    if(consRows.length){
+      html+=`<div class="tkt"><div class="mktlab" style="margin-top:0">Saved Consensus (${consRows.length})</div><ol>`;
+      consRows.forEach(x=>{
+        html+=`<li><b>${x.src||'Covers'}</b> — ${x.away} ${x.awayPct??'?'}% / ${x.home} ${x.homePct??'?'}%</li>`;
+      });
+      html+=`</ol></div>`;
+    }
+    if(trendRows.length){
+      html+=`<div class="tkt"><div class="mktlab" style="margin-top:0">Saved Trends (${trendRows.length})</div><ol>`;
+      trendRows.forEach(x=>{
+        html+=`<li><b>${x.src||'Covers'}</b> — ${x.game||''}${x.team?' '+x.team:''}: ${x.text||''}</li>`;
+      });
+      html+=`</ol></div>`;
+    }
+    return html;
+  }
 
   // group by game+market+line
   const groups={};
