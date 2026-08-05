@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v97</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v98</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -742,6 +742,7 @@ h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.best
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
+let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
 
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
@@ -6091,15 +6092,19 @@ function settleLockedTickets(){
     const stake=w[t.id]||0;
     const hasStake=stake>0;
     const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+    // Check whether money/tracking has already been recorded — but only use this
+    // to skip the MONEY step, never to skip grading and archiving. A ticket that
+    // was already paid out but not archived (e.g. confirmed preset that fired
+    // saveWager at confirm time) was previously returned here entirely, leaving
+    // it stuck as pending forever even though all games finished.
+    let alreadyRecorded=false;
     if(hasStake){
-      // only check "already recorded" when there's actually money/tracking to
-      // dedupe against — an unstaked ticket has no history entry to collide with
       if(!trackedOnly){
         const b=getBankroll();
-        if(b.history.some(h=>h.id===t.id))return;
+        alreadyRecorded=b.history.some(h=>h.id===t.id);
       }else{
         const already=getTrackedHistory(t.source);
-        if(already.some(h=>h.id===t.id))return;
+        alreadyRecorded=already.some(h=>h.id===t.id);
       }
     }
     let allDecided=true,anyLoss=false,pushCount=0;
@@ -6123,7 +6128,7 @@ function settleLockedTickets(){
     if(!allDecided)return;
     const won=!anyLoss;
     const outcome=pushCount===t.legs.length?'push':(won?true:false);
-    if(hasStake){
+    if(hasStake&&!alreadyRecorded){
       let profit;
       if(pushCount===t.legs.length){
         profit=0; // every leg pushed — the whole ticket refunds, no win, no loss
@@ -6147,7 +6152,8 @@ function settleLockedTickets(){
       }
       if(outcome===false)recordLossPostMortem(t,stake);
     }
-    // grading + archiving happens regardless of whether there was a stake to settle
+    // grading + archiving always happens once all legs are decided —
+    // never blocked by whether money was already recorded
     t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);
     set(LS.locked,L);
   });
@@ -8022,9 +8028,7 @@ function rebuildSrcStats(){
 }
 
 /* ================= TICKETS TABS ================= */
-const TTABS=[['eval','Evaluate'],['build','Build'],['mine','My picks'],['system','System'],
-  ['market','Market'],['specialty','Specialty'],['outside','Outside'],['duplicates','⚠ Duplicates'],
-  ['elimmap','🫧 Map'],['record','Record'],['backtest','Backtest']];
+const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['outside','Outside'],['elimmap','🫧 Map'],['record','Record'],['backtest','Backtest']];
 let BUILD_MODE='presets';   // presets | custom
 let OUTSIDE_MODE='consensus';
 
@@ -8036,19 +8040,15 @@ function renderTickets(){
     `<button class="${TICKETTAB===k?'on':''}" onclick="TICKETTAB='${k}';renderTickets()">${l}</button>`).join('');
   const modeRow=(cur,opts,setter)=>`<div class="subnav" style="margin-bottom:10px">${
     opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
-  if(TICKETTAB==='eval')  body.innerHTML=renderMasterEval();
   if(TICKETTAB==='build'){
     const row=modeRow(BUILD_MODE,[['presets','Presets'],['custom','Custom']],'BUILD_MODE');
     body.innerHTML=row+(BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
   }
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
-  if(TICKETTAB==='system') body.innerHTML=systemPicksHtml();
-  if(TICKETTAB==='specialty')body.innerHTML=specialtyPicksHtml();
-  if(TICKETTAB==='duplicates')body.innerHTML=duplicatesPicksHtml();
+  if(TICKETTAB==='tracked')body.innerHTML=trackedPicksHtml();
   if(TICKETTAB==='elimmap')body.innerHTML=eliminationMapHtml();
   if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
   if(TICKETTAB==='backtest')body.innerHTML=renderBacktest();
-  if(TICKETTAB==='market') body.innerHTML=marketPicksHtml();
   if(TICKETTAB==='outside'){
     const row=modeRow(OUTSIDE_MODE,[['consensus','Consensus'],['sources','Source records']],'OUTSIDE_MODE');
     body.innerHTML=row+(OUTSIDE_MODE==='consensus'?consensusHtml():sourcesHtml());
@@ -8539,6 +8539,114 @@ function duplicatesPicksHtml(){
 
   return h;
 }
+// ── Tracked tab — unified view of ALL system/market/specialty tickets ────────
+// This replaces the three separate System/Market/Specialty tabs that were
+// silently swallowing confirmed preset tickets (Popular, Books lean, etc.) with
+// no visible display. Every ticket with source in TRACKED_ONLY_SOURCES lands
+// here — flat $1, never touches bankroll — filterable by source sub-tab.
+function trackedPicksHtml(){
+  // force settle anything that's gradeable right now before rendering
+  try{settleLockedTickets();}catch(e){}
+  const all=get(LS.locked,[]).filter(t=>TRACKED_ONLY_SOURCES.has(t.source));
+  const srcLabels={system:'System',market:'Market',specialty:'Specialty',outside:'Outside'};
+  const sources=['all','system','market','specialty','outside'];
+  const srcCounts={all:all.length};
+  sources.slice(1).forEach(s=>{srcCounts[s]=all.filter(t=>t.source===s).length;});
+  const filtered=TRACKED_SOURCE==='all'?all:all.filter(t=>t.source===TRACKED_SOURCE);
+  const pending=filtered.filter(t=>!t.archived);
+  const archived=filtered.filter(t=>t.archived);
+  const view=TRACKED_VIEW;
+  const viewSet=view==='archived'?archived:pending;
+  const readyToArchive=pending.filter(t=>ticketIsComplete(t)).length;
+
+  const srcNav=sources.map(s=>`<button class="${TRACKED_SOURCE===s?'on':''}"
+    onclick="TRACKED_SOURCE='${s}';renderTickets()">${s==='all'?'All':srcLabels[s]||s}
+    <span class="m">${srcCounts[s]}</span></button>`).join('');
+  const viewNav=`<button class="${view==='pending'?'on':''}" onclick="TRACKED_VIEW='pending';renderTickets()">
+    Pending <span class="m">${pending.length}</span></button>
+    <button class="${view==='archived'?'on':''}" onclick="TRACKED_VIEW='archived';renderTickets()">
+    Archived <span class="m">${archived.length}</span></button>`;
+
+  let html=`<div class="tkt hi"><h3>Tracked Tickets</h3>
+    <div class="sub">All preset tickets — system, market, specialty. Flat $1 each, never touches your bankroll.
+    Every confirmed preset lands here regardless of type.</div></div>
+    <div class="subnav" style="flex-wrap:wrap">${srcNav}</div>
+    <div class="subnav">${viewNav}</div>`;
+
+  if(view==='pending'&&readyToArchive>0){
+    html+=`<div class="note" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span><b>${readyToArchive}</b> ticket${readyToArchive>1?'s are':' is'} fully graded — ready to archive.</span>
+      <button class="primary" onclick="archiveAllTracked()">Archive all complete</button></div>`;
+  }
+
+  if(!viewSet.length){
+    html+=`<div class="empty">${view==='archived'
+      ?'No archived tracked tickets yet.'
+      :'No pending tracked tickets. Build one from Presets on the Build tab — Popular, Books lean, Edge+, etc.'}</div>`;
+    return html;
+  }
+
+  viewSet.forEach(t=>{
+    let w=0,l=0,pd=0;
+    const rows=t.legs.map(x=>{
+      const{hit:r}=gradeLeg(x,t.date);
+      const badgeHtml=gradeLegBadge(x,t.date);
+      if(r===true)w++;else if(r===false)l++;else pd++;
+      const gid=legGameId(x,t.date);
+      const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
+      return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span>
+        <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
+    }).join('');
+    const rec=(w+l||pd===0)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' pending':''}`:' · pending';
+    const srcBadge=`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);
+      border-radius:4px;padding:1px 6px;margin-left:6px">${srcLabels[t.source]||t.source}</span>`;
+    const complete=ticketIsComplete(t);
+    const statusBadge=t.archived
+      ?`<span style="font-family:'IBM Plex Mono';font-size:9px;text-transform:uppercase;
+          color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 6px;margin-left:6px">📦 archived</span>`
+      :complete
+      ?`<span style="font-family:'IBM Plex Mono';font-size:9px;text-transform:uppercase;
+          color:var(--cold);border:1px solid var(--cold);border-radius:4px;padding:1px 6px;margin-left:6px">✓ ready</span>`
+      :'';
+    const deleteBtn=`<button onclick="if(confirm('Delete this ticket?')){const L=get(LS.locked,[]);set(LS.locked,L.filter(x=>x.id!==${t.id}));renderTickets();}"
+      style="background:none;border:1px solid var(--rust);color:var(--rust);border-radius:4px;
+      padding:2px 8px;font-size:11px;cursor:pointer;margin-left:8px">✕</button>`;
+    const archBtn=!t.archived&&complete?`<button onclick="archiveSingle(${t.id})"
+      style="background:none;border:1px solid var(--cold);color:var(--cold);border-radius:4px;
+      padding:2px 8px;font-size:11px;cursor:pointer;margin-left:4px">Archive</button>`:'';
+    html+=`<div class="tkt${t.archived?' archived':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
+        <h3 style="margin:0">${t.name||t.date}${srcBadge}${statusBadge}</h3>
+        <div>${archBtn}${deleteBtn}</div>
+      </div>
+      <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · ${t.legs.length} legs${rec}</div>
+      <ol>${rows}</ol>
+      ${buildWagerRow(t)}
+    </div>`;
+  });
+  return html;
+}
+
+function archiveAllTracked(){
+  const L=get(LS.locked,[]);
+  let count=0;
+  L.forEach(t=>{
+    if(!t.archived&&TRACKED_ONLY_SOURCES.has(t.source)&&ticketIsComplete(t)){
+      t.archived=true;count++;
+    }
+  });
+  if(count)set(LS.locked,L);
+  renderTickets();
+}
+
+function archiveSingle(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(t){t.archived=true;set(LS.locked,L);}
+  renderTickets();
+}
+
 function specialtyPicksHtml(){
   // Armageddon, Fade the books, Fade the system, Fuck the system — the presets
   // that are deliberately going against the model or the market, not "your own"
@@ -8997,8 +9105,11 @@ function confirmSystemTicket(payload,src,presetKey){
   // silently stuck as pending regardless of how the games actually went.
   if(TRACKED_ONLY_SOURCES.has(src))saveWager(id,1);
   renderTickets();
-  const where={system:'System',market:'Market picks',specialty:'Specialty',outside:'Outside picks',mine:'My picks'}[src]||'My picks';
-  alert(`Saved${name?' — "'+name+'"':''} — filed under ${where} in Tickets → Record.`);
+  const where={system:'Tracked',market:'Tracked',specialty:'Tracked',outside:'Tracked',mine:'My Picks'}[src]||'My Picks';
+  // Switch to the right tab immediately so the user sees the ticket
+  TICKETTAB=src==='mine'?'mine':'tracked';
+  if(TRACKED_ONLY_SOURCES.has(src))TRACKED_SOURCE=src;
+  alert(`Saved${name?' — "'+name+'"':''} — now showing in Tickets → ${where}.`);
 }
 
 function genTickets(mode){
