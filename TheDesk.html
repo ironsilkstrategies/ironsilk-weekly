@@ -101,6 +101,8 @@ overflow:hidden;box-shadow:var(--sh-md);transition:transform .25s var(--ease),bo
 .flag.hot{background:rgba(199,82,42,.2);color:var(--rust)}
 .flag.cool{background:rgba(95,163,92,.18);color:var(--moss)}
 .flag.own{background:rgba(242,169,59,.16);color:var(--gold)}
+.flag.elite{background:rgba(242,169,59,.28);color:var(--gold);border:1px solid rgba(242,169,59,.5);
+  font-weight:800;box-shadow:0 0 6px rgba(242,169,59,.35)}
 .proj{display:flex;align-items:baseline;gap:9px;margin:9px 0 3px;flex-wrap:wrap}
 .proj .sc{font-family:"Archivo";font-weight:900;font-size:24px;letter-spacing:-.03em}
 .proj .rd{font-family:"IBM Plex Mono";font-size:12px;color:var(--mute)}
@@ -449,7 +451,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v87</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v90</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -616,6 +618,24 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       any staked ticket that's now fully decided. Nothing here is destructive — it only fills in or corrects,
       never deletes.</div>
       <div id="forceGradeStatus"></div>
+    </div>
+
+    <div class="tkt">
+      <div class="bar" style="margin-top:0">
+        <button onclick="runPushBugRepairManually()">Re-check for the push/tie bug</button>
+      </div>
+      <div class="sub" style="margin-top:8px">Run lines and whole-number totals could tie — a real push — but
+      were being graded as a straight loss. Fixed now, and it auto-corrected every already-settled ticket once
+      automatically. Use this button to force it to check again (e.g. if you restore an older backup).</div>
+      <div id="pushRepairStatus"></div>
+    </div>
+
+    <div class="sbar"><h2>Elite stat threshold</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="sub" style="margin-top:0">Any real league-wide stat inside this percentile gets a gold ⭐ badge
+      on the game card — pitcher ERA, K/9, team record, park HR factor. Real data only, from MLB's own leaderboards
+      and standings, never guessed.</div>
+      <div id="pctThresholdBtns" class="subnav" style="margin-top:10px"></div>
     </div>
 
     <div class="sbar"><h2>Maintenance</h2><div class="ln"></div></div>
@@ -963,7 +983,7 @@ function fillSettingsTab(){
   v('keyIn',get(LS.key,''));v('aiIn',get(LS.ai,''));v('sharpIn',get(LS.sharp,''));
   v('rundownIn',get(LS.rundown,''));v('oddspapiIn',get(LS.oddspapi,''));
   v('ghrepoIn',get(LS.ghrepo,''));v('ghtokenIn',get(LS.ghtoken,''));
-  renderUsage();renderBackupStatus();
+  renderUsage();renderBackupStatus();renderPctThresholdBtns();
 }
 function saveSettingsTab(){
   const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
@@ -1058,6 +1078,14 @@ function usageBar(label,used,limit,note){
     ${note?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);margin-top:3px">${note}</div>`:''}
   </div>`;
 }
+function renderPctThresholdBtns(){
+  const el=document.getElementById('pctThresholdBtns');
+  if(!el)return;
+  const current=getPercentileThreshold();
+  el.innerHTML=[3,5,10,15,20].map(n=>
+    `<button class="${current===n?'on':''}" onclick="setPercentileThreshold(${n});renderPctThresholdBtns();render()">Top ${n}%</button>`
+  ).join('');
+}
 function renderUsage(){
   const u=usage(),c=credits();
   const el=document.getElementById('usagePanel');
@@ -1081,6 +1109,156 @@ function vigAmer(p){
 }
 
 /* ================= PARK + ENV ================= */
+// ═══════════════════════════════════════════════════════════════════════
+// LEAGUE-WIDE PERCENTILE ENGINE — "top 5% of what" answered honestly: league
+// wide, this season, real numbers, tunable threshold (default 5% but you can
+// loosen/tighten it in Settings). Everything below only ranks against REAL
+// MLB StatsAPI data pulled once and cached for the day — nothing invented.
+// ═══════════════════════════════════════════════════════════════════════
+let PERCENTILE_THRESHOLD=5; // tunable — "top N%" cutoff, adjustable in Settings
+function getPercentileThreshold(){
+  const stored=get('d4.pctThreshold',null);
+  return stored!==null?stored:PERCENTILE_THRESHOLD;
+}
+function setPercentileThreshold(n){
+  PERCENTILE_THRESHOLD=n;
+  set('d4.pctThreshold',n);
+}
+
+// Park factors are already a real, complete, 30-team league-wide dataset —
+// no fetch needed, just rank what's already there. Two separate rankings:
+// hitter-friendly (high HR factor) and pitcher-friendly (low run factor).
+function parkPercentiles(){
+  const teams=Object.keys(PARK);
+  const byHR=teams.slice().sort((a,b)=>PARK[b][1]-PARK[a][1]);
+  const byRunSuppress=teams.slice().sort((a,b)=>PARK[a][0]-PARK[b][0]); // lowest run factor = best pitcher's park
+  const n=teams.length;
+  const cutoff=Math.max(1,Math.ceil(n*getPercentileThreshold()/100));
+  return{
+    topHRParks:new Set(byHR.slice(0,cutoff)),
+    topPitcherParks:new Set(byRunSuppress.slice(0,cutoff))
+  };
+}
+
+// Real league-wide qualified-pitcher leaderboards, fetched once per day from
+// MLB's own stats/leaders endpoint and cached — this is what makes "top 5% of
+// ERA league-wide this season" an honest, provable claim instead of a guess
+// based on only the two starters in tonight's game.
+const LS_LEAGUE_LEADERS='d4.leagueLeaders';
+async function fetchLeaguePitchingLeaders(){
+  const cached=get(LS_LEAGUE_LEADERS,null);
+  if(cached&&cached.date===today())return cached;
+  const season=new Date().getFullYear();
+  try{
+    const [eraR,soR]=await Promise.all([
+      fetch(`https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=earnedRunAverage&season=${season}&sportId=1&limit=300&statGroup=pitching`),
+      fetch(`https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=strikeoutsPer9Inn&season=${season}&sportId=1&limit=300&statGroup=pitching`)
+    ]);
+    const eraJ=await eraR.json(),soJ=await soR.json();
+    const eraLeaders=((eraJ.leagueLeaders||[])[0]||{}).leaders||[];
+    const soLeaders=((soJ.leagueLeaders||[])[0]||{}).leaders||[];
+    // ERA: LOWER is better, so the leaderboard is already sorted best-first.
+    // K/9: HIGHER is better, same — already sorted best-first by the API.
+    const result={date:today(),
+      era:eraLeaders.map(l=>({id:l.person.id,name:l.person.fullName,value:parseFloat(l.value)})),
+      k9:soLeaders.map(l=>({id:l.person.id,name:l.person.fullName,value:parseFloat(l.value)}))};
+    set(LS_LEAGUE_LEADERS,result);
+    return result;
+  }catch(e){
+    console.warn('league leaders fetch failed',e);
+    return cached||{date:today(),era:[],k9:[]};
+  }
+}
+// Where does THIS pitcher rank against the real league-wide leaderboard —
+// returns a percentile position (0 = literal best in the league) or null if
+// he's not in the qualified sample (too few innings to qualify, most likely).
+function pitcherPercentile(pitcherId,leaders){
+  if(!pitcherId||!leaders||!leaders.length)return null;
+  const idx=leaders.findIndex(l=>l.id===pitcherId);
+  if(idx===-1)return null;
+  return(idx/leaders.length)*100; // 0 = best, 100 = worst, within the qualified sample
+}
+// Sync version — reads the module-level cache populated once per loadAll()
+// cycle by loadPercentileData(), rather than fetching. This is what card()
+// actually calls, since card() is synchronous. The async version above stays
+// for any future caller that genuinely wants a fresh fetch on demand.
+function pitcherEliteBadgesSync(pitcherId){
+  if(!pitcherId||!LEAGUE_PITCH_LEADERS.era.length)return[];
+  const threshold=getPercentileThreshold();
+  const badges=[];
+  const eraPct=pitcherPercentile(pitcherId,LEAGUE_PITCH_LEADERS.era);
+  if(eraPct!==null&&eraPct<=threshold)badges.push({stat:'ERA',pct:+eraPct.toFixed(1)});
+  const k9Pct=pitcherPercentile(pitcherId,LEAGUE_PITCH_LEADERS.k9);
+  if(k9Pct!==null&&k9Pct<=threshold)badges.push({stat:'K/9',pct:+k9Pct.toFixed(1)});
+  return badges;
+}
+// A single, real, honest badge for a probable starter — checked against BOTH
+// ERA and K/9 league leaderboards independently, since a pitcher can be
+// elite in one and merely average in the other.
+async function pitcherEliteBadges(pitcherId){
+  if(!pitcherId)return[];
+  const leaders=await fetchLeaguePitchingLeaders();
+  const threshold=getPercentileThreshold();
+  const badges=[];
+  const eraPct=pitcherPercentile(pitcherId,leaders.era);
+  if(eraPct!==null&&eraPct<=threshold)badges.push({stat:'ERA',pct:+eraPct.toFixed(1)});
+  const k9Pct=pitcherPercentile(pitcherId,leaders.k9);
+  if(k9Pct!==null&&k9Pct<=threshold)badges.push({stat:'K/9',pct:+k9Pct.toFixed(1)});
+  return badges;
+}
+
+// Real, all-30-team overall win% standings — fetched once per day, cached,
+// separate from the existing home/away splits fetch (that one only pulls
+// split records, not the overall record every team's percentile rank needs).
+const LS_LEAGUE_STANDINGS='d4.leagueStandings';
+async function fetchLeagueStandings(){
+  const cached=get(LS_LEAGUE_STANDINGS,null);
+  if(cached&&cached.date===today())return cached;
+  try{
+    const r=await fetch('https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season='+new Date().getFullYear());
+    const j=await r.json();
+    const teams=[];
+    (j.records||[]).forEach(rec=>(rec.teamRecords||[]).forEach(t=>{
+      const w=t.wins,l=t.losses;
+      if(w==null||l==null||(w+l)===0)return;
+      teams.push({id:t.team.id,abbr:(t.team.abbreviation||'').toUpperCase(),pct:w/(w+l),w,l});
+    }));
+    teams.sort((a,b)=>b.pct-a.pct); // best record first
+    const result={date:today(),teams};
+    set(LS_LEAGUE_STANDINGS,result);
+    return result;
+  }catch(e){
+    console.warn('league standings fetch failed',e);
+    return cached||{date:today(),teams:[]};
+  }
+}
+function teamRecordPercentile(teamAbbr,standings){
+  if(!teamAbbr||!standings||!standings.teams.length)return null;
+  const idx=standings.teams.findIndex(t=>t.abbr===teamAbbr);
+  if(idx===-1)return null;
+  return(idx/standings.teams.length)*100;
+}
+// Elite badge for a team's overall record — top-N% by real win percentage,
+// same tunable threshold as everything else in this engine.
+async function teamRecordBadge(teamAbbr){
+  if(!teamAbbr)return null;
+  const standings=await fetchLeagueStandings();
+  const pct=teamRecordPercentile(teamAbbr,standings);
+  const threshold=getPercentileThreshold();
+  if(pct===null||pct>threshold)return null;
+  const t=standings.teams.find(x=>x.abbr===teamAbbr);
+  return{pct:+pct.toFixed(1),record:t?`${t.w}-${t.l}`:null};
+}
+// Sync version for card() — same cache-reading pattern as pitcherEliteBadgesSync.
+function teamRecordBadgeSync(teamAbbr){
+  if(!teamAbbr||!LEAGUE_STANDINGS.teams.length)return null;
+  const pct=teamRecordPercentile(teamAbbr,LEAGUE_STANDINGS);
+  const threshold=getPercentileThreshold();
+  if(pct===null||pct>threshold)return null;
+  const t=LEAGUE_STANDINGS.teams.find(x=>x.abbr===teamAbbr);
+  return{pct:+pct.toFixed(1),record:t?`${t.w}-${t.l}`:null};
+}
+
 const PARK={COL:[112,118],CIN:[106,114],BOS:[105,101],KC:[104,94],PHI:[104,109],ARI:[103,102],
 TEX:[103,102],ATH:[103,99],ATL:[102,103],BAL:[102,100],WSH:[102,101],LAA:[102,104],TOR:[101,103],
 CHC:[101,101],MIN:[100,101],HOU:[100,104],CWS:[100,103],PIT:[99,92],MIL:[99,104],STL:[98,95],
@@ -1608,6 +1786,17 @@ async function people(ids,grp){
   }
   return out;
 }
+// module-level cache — populated once per loadAll() cycle, read SYNCHRONOUSLY
+// by card() below. card() itself can't be async (it returns an HTML string
+// directly into template literals all over the render pipeline), so the real
+// network fetches happen once here, up front, and every card just reads the
+// already-resolved result for the rest of this render cycle.
+let LEAGUE_PITCH_LEADERS={date:null,era:[],k9:[]};
+let LEAGUE_STANDINGS={date:null,teams:[]};
+async function loadPercentileData(){
+  try{LEAGUE_PITCH_LEADERS=await fetchLeaguePitchingLeaders();}catch(e){}
+  try{LEAGUE_STANDINGS=await fetchLeagueStandings();}catch(e){}
+}
 async function loadAll(){
   document.getElementById('dateline').textContent=fmtDate(new Date()).toUpperCase()+' CT';
   try{
@@ -1616,6 +1805,7 @@ async function loadAll(){
     const j=await r.json();
     const gs=(j.dates&&j.dates[0]&&j.dates[0].games)||[];
     await loadSplits();
+    loadPercentileData(); // don't await — badges can pop in a beat after the rest of the board loads, not worth blocking on
     await loadH2H(gs.map(g=>{
       const a=g.teams.away.team.id,b=g.teams.home.team.id;
       return{a,b,k:[a,b].sort().join('-')}}));
@@ -3674,7 +3864,14 @@ function card(g){
       if(d>=1)f=`<span class="flag hot">L5 ${parseFloat(q.rEra).toFixed(2)}</span>`;
       else if(d<=-1)f=`<span class="flag cool">L5 ${parseFloat(q.rEra).toFixed(2)}</span>`}
     const ipg=q.ip&&q.gs?(parseFloat(q.ip)/q.gs).toFixed(1):null;
-    return `<b>${q.name}</b>${q.hand?' ('+q.hand+')':''} <span class="st">${q.era||'—'}${q.whip?' / '+q.whip:''}${q.so?' / '+q.so+'K':''}${ipg?' / '+ipg+'ip':''}</span>${f}`};
+    // real league-wide top-N% badge — gold glow, distinct from the L5 hot/cool
+    // flag above (that's short-term form; this is a season-long, league-wide
+    // ranking against every qualified starter, cached once per load)
+    const elite=pitcherEliteBadgesSync(q.id);
+    const eliteBadges=elite.map(e=>
+      `<span class="flag elite" title="Top ${e.pct}% league-wide in ${e.stat} this season">⭐ Top ${Math.ceil(e.pct)}% ${e.stat}</span>`
+    ).join('');
+    return `<b>${q.name}</b>${q.hand?' ('+q.hand+')':''} <span class="st">${q.era||'—'}${q.whip?' / '+q.whip:''}${q.so?' / '+q.so+'K':''}${ipg?' / '+ipg+'ip':''}</span>${f}${eliteBadges}`};
 
   let badges='';
   if(done)badges+='<div class="badge fin">Final</div>';
@@ -3713,11 +3910,20 @@ function card(g){
     <div class="rd">final</div></div>${finalBetStrip(g)}`:'';
 
   const isLive=g.abstract==='Live';
+  // real league-wide top-N% badges — team record (win%) and park (HR factor)
+  // both read from the same synchronous caches as the pitcher badges above
+  const awayRecBadge=teamRecordBadgeSync(g.away.abbr);
+  const homeRecBadge=teamRecordBadgeSync(g.home.abbr);
+  const recBadgeHtml=(b,label)=>b?`<span class="flag elite" title="Top ${b.pct}% league-wide by record (${b.record})">⭐ ${label} top ${Math.ceil(b.pct)}%</span>`:'';
+  const parkPcts=parkPercentiles();
+  const parkBadge=parkPcts.topHRParks.has(g.home.abbr)
+    ?`<span class="flag elite" title="Top ${getPercentileThreshold()}% league-wide HR park factor">⭐ HR park</span>`:'';
   return `<div class="game ${edge>=3&&!done?'edge':''} ${done?'done':''} ${isLive?'in-play':''}" id="g${g.id}">
    <div class="ghd">
-    <div class="grow1"><div class="teams">${g.away.abbr}<span class="at">@</span>${g.home.abbr}</div>
+    <div class="grow1"><div class="teams">${g.away.abbr}<span class="at">@</span>${g.home.abbr}
+      ${recBadgeHtml(awayRecBadge,g.away.abbr)}${recBadgeHtml(homeRecBadge,g.home.abbr)}</div>
      <div class="meta">${fmtTime(g.time)}<br>${g.away.w}-${g.away.l} · ${g.home.w}-${g.home.l}</div></div>
-    <div class="env">Park <span class="pf">${pf[0]}</span>r / <span class="pf">${pf[1]}</span>hr${w?` · <b>${w.temp}°</b> ${w.cond||''} ${w.wind||''}`:DOME[g.home.abbr]?' · dome':''}${s&&s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}</div>
+    <div class="env">Park <span class="pf">${pf[0]}</span>r / <span class="pf">${pf[1]}</span>hr${parkBadge}${w?` · <b>${w.temp}°</b> ${w.cond||''} ${w.wind||''}`:DOME[g.home.abbr]?' · dome':''}${s&&s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}</div>
     <div class="arms">${arm('away')}</div><div class="arms">${arm('home')}</div>
     ${isLive?liveScoreBar(g.id,g):""}
     ${finalLine}${!isLive?projLine:''}
@@ -4291,16 +4497,30 @@ function gradeLeg(leg,ticketDate){
   // (error-prone, easy to miss one and silently reintroduce the same bug
   // this whole change exists to fix).
   const gradeSideOrTotal=()=>{
+    // THE PUSH BUG: a whole-number total line (e.g. "Over 8" instead of "Over
+    // 8.5") CAN tie exactly — tot===ln — and this used to just evaluate
+    // tot>ln as false, silently grading a real push as a straight loss. Same
+    // rule as ML/F5 pushes elsewhere in this function: a push is a decided,
+    // NEUTRAL outcome, never a loss.
     if(/^Over /.test(pick)){
       const ln=parseFloat(pick.slice(5));
-      if(!R.live)return{hit:tot>ln,detail:`${line} · total ${tot}`};
+      if(!R.live){
+        if(tot===ln)return{hit:null,push:true,detail:`${line} · total ${tot} — push, refunded, not counted as a loss`};
+        return{hit:tot>ln,detail:`${line} · total ${tot}`};
+      }
       if(tot>ln)return{hit:true,detail:`${line} · total ${tot} — already clinched`};
       return{hit:null,detail:`${line} · total ${tot} so far`};
     }
     if(/^Under /.test(pick)){
       const ln=parseFloat(pick.slice(6));
-      if(!R.live)return{hit:tot<ln,detail:`${line} · total ${tot}`};
-      if(tot>=ln)return{hit:false,detail:`${line} · total ${tot} — already over the line`};
+      if(!R.live){
+        if(tot===ln)return{hit:null,push:true,detail:`${line} · total ${tot} — push, refunded, not counted as a loss`};
+        return{hit:tot<ln,detail:`${line} · total ${tot}`};
+      }
+      if(tot>=ln){
+        if(tot===ln)return{hit:null,push:true,detail:`${line} · total ${tot} — push, refunded, not counted as a loss`};
+        return{hit:false,detail:`${line} · total ${tot} — already over the line`};
+      }
       const ceiling=remainingCeiling();
       if(ceiling!==null&&(tot+ceiling)<ln)
         return{hit:true,detail:`${line} · total ${tot}, ${R.completed} innings gone — mathematically out of reach`};
@@ -4332,6 +4552,12 @@ function gradeLeg(leg,ticketDate){
   if(rlm&&!/^F5 /.test(pick)){
     const who=rlm[1],ln=parseFloat(rlm[2]);
     const margin=who===homeAb?(h-a):(a-h);
+    // THE PUSH BUG, run-line version: an integer run line (e.g. "+2" instead
+    // of "+1.5") can land EXACTLY on the number — margin+ln===0 — and this
+    // used to evaluate that as false (a loss) instead of checking for the
+    // tie first. Real push, same treatment as everywhere else.
+    if(!R.live&&(margin+ln)===0)
+      return{hit:null,push:true,detail:`${line} · margin ${margin>0?'+':''}${margin} — push, refunded, not counted as a loss`,live:false};
     return{hit:R.live?null:(margin+ln)>0,detail:`${line} · margin ${margin>0?'+':''}${margin}`,live:!!R.live};
   }
   if(/^F5 /.test(pick)){
@@ -7430,6 +7656,74 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
+// ── PUSH BUG REPAIR — one-time correction pass ────────────────────────────
+// Run lines and whole-number totals could tie (a real push) but the old
+// gradeLeg logic graded that as a straight loss. This walks every ticket that
+// was ALREADY archived/settled under the old bug, re-grades every leg with
+// the fixed logic, and — only for tickets where the record actually changes —
+// corrects both the stored finalRecord AND the real money: reverses whatever
+// was booked (bankroll or tracked history) and re-books it correctly. Nothing
+// is touched for a ticket that regrades identically; this only fixes what was
+// actually wrong.
+function runPushBugRepairManually(){
+  const status=document.getElementById('pushRepairStatus');
+  if(status)status.innerHTML='<div class="empty">Checking…</div>';
+  setTimeout(()=>{
+    const result=repairPushBug();
+    localStorage.setItem('d4.pushBugRepaired','1');
+    if(status){
+      status.innerHTML=result.fixed>0
+        ?`<div class="tkt hi" style="margin-top:8px"><h3>Fixed ${result.fixed} ticket${result.fixed>1?'s':''}</h3>
+          <div class="sub">Checked ${result.checked} archived tickets. ${result.fixedDetails.map(d=>
+            `<br>· "${d.name}" — was ${d.before.w}-${d.before.l}${d.before.p?'-'+d.before.p+'p':''},
+             now ${d.after.w}-${d.after.l}${d.after.p?'-'+d.after.p+'p':''}`).join('')}</div></div>`
+        :`<div class="note" style="margin-top:8px">Checked ${result.checked} archived tickets — nothing needed fixing.</div>`;
+    }
+  },30);
+}
+function repairPushBug(){
+  const L=get(LS.locked,[]);
+  let checked=0,fixed=0;
+  const fixedDetails=[];
+  L.forEach(t=>{
+    if(!t.archived)return; // only already-settled tickets can be wrong — pending ones grade fresh every time anyway
+    checked++;
+    const oldRecord=t.finalRecord||{w:0,l:0,p:0,won:false};
+    const newRecord=ticketRecord(t); // re-derives from the NOW-FIXED gradeLeg
+    const changed=oldRecord.w!==newRecord.w||oldRecord.l!==newRecord.l||
+      oldRecord.p!==newRecord.p||oldRecord.won!==newRecord.won;
+    if(!changed)return;
+    fixed++;
+    fixedDetails.push({name:t.name||t.date,id:t.id,before:oldRecord,after:newRecord});
+    // reverse whatever money was booked under the wrong record, then rebook
+    // correctly — same reversal logic moveTicket already uses for this exact
+    // situation (undo a settlement, then let it re-settle)
+    reverseTicketSettlement(t);
+    t.finalRecord=newRecord;
+    const w=getWagers();
+    const stake=w[t.id];
+    if(stake&&stake>0){
+      const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+      let profit;
+      if(newRecord.l===0&&newRecord.w===0){
+        profit=0; // every leg pushed
+      }else if(newRecord.won){
+        const survivingP=t.legs.map(x=>gradeLeg(x,t.date)).filter(g=>g.hit!==null&&!g.push)
+          .length?t.legs.filter(x=>{const g=gradeLeg(x,t.date);return g.hit===true}).reduce((a,x)=>a*x.p,1):t.p;
+        const odds=probToAmer(survivingP);
+        const res=amerPayout(odds,stake);
+        profit=res?res.profit:0;
+      }else{
+        profit=-stake;
+      }
+      const outcome=(newRecord.l===0&&newRecord.w===0)?'push':newRecord.won;
+      if(trackedOnly)recordTrackedOutcome(t.id,stake,profit,outcome,t.source);
+      else settleTicket(t.id,stake,profit,outcome);
+    }
+  });
+  set(LS.locked,L);
+  return{checked,fixed,fixedDetails};
+}
 function archiveTicket(id){
   const L=get(LS.locked,[]);
   const t=L.find(x=>x.id===id);
@@ -10056,10 +10350,28 @@ function unlockBestToday(){
   snapshotBest();
   bestTab(BESTTAB||'today');
 }
+// THE BUG THIS FIXES: the Best card had no reliable auto-lock, so it silently
+// rewrote itself on every ~15-minute refresh all day unless YOU remembered to
+// manually tap Lock — which is exactly "the Best section keeps switching up."
+// Manual lock still works and still takes priority, but now there's also a
+// real, automatic deadline: the moment the FIRST game of today's slate goes
+// live, lineups have genuinely stopped moving, so the card freezes itself
+// right there instead of depending on you catching it in time.
+function shouldAutoLockBest(){
+  return GAMES.some(g=>g.abstract==='Live'||g.abstract==='Final');
+}
 function snapshotBest(){
   const d=today(),log=get(LS.bestlog,{});
   if(log[d]&&(log[d].locked||log[d].pgradesDone))return;
   if(!GAMES.length)return;
+  // auto-lock check happens BEFORE writing a new snapshot — if any game has
+  // already gone live, whatever was captured last is what freezes, rather
+  // than sneaking in one more overwrite first
+  if(log[d]&&shouldAutoLockBest()){
+    log[d].locked=true;log[d].lockedAt=Date.now();log[d].autoLocked=true;
+    set(LS.bestlog,log);
+    return;
+  }
   const sides=bestSides(5),totals=bestTotals(5),props=bestPropsRaw(5),hr=bestHRRaw();
   if(!sides.length&&!totals.length&&!props.length)return;
   log[d]={sides,totals,props,hr,ts:Date.now(),locked:false};
@@ -10079,11 +10391,18 @@ async function gradeBestLog(d){
   if(!entry)return null;
   let finals=(get(LS.arc,{})[d]||{}).finals;
   if(!finals){try{finals=await fetchFinals(d)}catch(e){finals={}}}
+  // THE THIRD BEST-SECTION BUG: sideResults/totalResults were computed fresh
+  // every call but NEVER WRITTEN BACK to storage — only props/HR got persisted
+  // (inside the pgradesDone block below). Anything that read log[d].sides
+  // directly instead of calling gradeBestLog() again saw ungraded picks
+  // forever, even after the games were long final. Now sides/totals get saved
+  // back into the entry every time this runs, same as props/HR always did.
   const sideResults=entry.sides.map(x=>({...x,hit:gradeSideRaw(x.pick,finals[x.gid],x.game)}));
   const totalResults=entry.totals.map(x=>({...x,hit:gradeSideRaw(x.pick,finals[x.gid],x.game)}));
   let propResults=entry.props,hrResult=entry.hr;
   const neededGids=[...new Set([...entry.props.map(p=>p.gid),entry.hr?entry.hr.gid:null].filter(Boolean))];
   const allFinal=neededGids.length>0&&neededGids.every(gid=>finals[gid]);
+  let wroteBack=false;
   if(!entry.pgradesDone&&allFinal){
     const boxes={};
     for(const gid of neededGids){
@@ -10100,10 +10419,20 @@ async function gradeBestLog(d){
     hrResult=entry.hr?{...entry.hr,hit:gradeOne(entry.hr)}:null;
     if(Object.keys(boxes).length){
       entry.props=propResults;entry.hr=hrResult;entry.pgradesDone=true;
-      if(d!==today())entry.locked=true;
-      log[d]=entry;set(LS.bestlog,log);
+      entry.locked=true;entry.lockedAt=entry.lockedAt||Date.now();
+      wroteBack=true;
     }
   }
+  // sides/totals are considered "done" once every game they reference is
+  // final — independent of the props/pgradesDone gate above, since a card
+  // can have sides graded while props are still waiting on box scores
+  const sideGids=[...new Set([...entry.sides.map(x=>x.gid),...entry.totals.map(x=>x.gid)])];
+  const sidesAllFinal=sideGids.length>0&&sideGids.every(gid=>finals[gid]);
+  if(sidesAllFinal&&(!entry.sidesGradesDone)){
+    entry.sides=sideResults;entry.totals=totalResults;entry.sidesGradesDone=true;
+    wroteBack=true;
+  }
+  if(wroteBack){log[d]=entry;set(LS.bestlog,log)}
   const allGraded=[...sideResults,...totalResults,...propResults,hrResult].filter(x=>x&&x.hit!==null);
   const w=allGraded.filter(x=>x.hit===true).length,l=allGraded.filter(x=>x.hit===false).length;
   return{sides:sideResults,totals:totalResults,props:propResults,hr:hrResult,w,l};
@@ -10258,6 +10587,18 @@ async function forceGradeEverything(){
 }
 
 async function autoGradeIfFinals(){
+  // one-time repair for the run-line/total push bug — runs once ever, then
+  // never again, flagged in localStorage so it doesn't re-scan every ticket
+  // on every grading pass forever
+  if(!localStorage.getItem('d4.pushBugRepaired')){
+    try{
+      const result=repairPushBug();
+      localStorage.setItem('d4.pushBugRepaired','1');
+      if(result.fixed>0){
+        console.log(`Push bug repair: corrected ${result.fixed} of ${result.checked} archived tickets.`,result.fixedDetails);
+      }
+    }catch(e){console.warn('push bug repair failed',e)}
+  }
   const finals=GAMES.filter(g=>g.abstract==='Final').length;
   if(finals===LAST_FINAL_COUNT)return;   // nothing changed since last pass
   LAST_FINAL_COUNT=finals;
@@ -10277,14 +10618,33 @@ async function autoGradeIfFinals(){
     try{gradeExtPicks();}catch(e){}
     try{settleLockedTickets();}catch(e){}
     try{await backfillGrading(true);}catch(e){}
+    // Best card grading was the second half of item 2 — gradeBestLog() existed
+    // but was only ever called manually from Recap, so a card could sit
+    // ungraded/unarchived indefinitely unless you happened to open that tab.
+    // Now it rides the same real "finals changed" trigger everything else
+    // uses, for both today AND any recent day that never got graded.
+    try{await gradeBestLog(d)}catch(e){}
+    try{await backfillUngradedBestDays()}catch(e){}
     // refresh whatever view is currently open so the new grades show immediately
     const active=document.querySelector('.view.on');
     if(active){
       if(active.id==='v-tickets')renderTickets();
       if(active.id==='v-money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab()}
       if(active.id==='v-games')render();
+      if(active.id==='v-best')renderBest();
     }
   }catch(e){console.warn('autoGrade',e)}
+}
+// Walks every day in bestlog that isn't graded+archived yet and grades it —
+// this is what makes a Best card from three days ago that never got looked
+// at eventually settle on its own instead of sitting stuck forever.
+async function backfillUngradedBestDays(){
+  const log=get(LS.bestlog,{});
+  const today_=today();
+  const stuck=Object.keys(log).filter(d=>d!==today_&&log[d]&&!log[d].pgradesDone);
+  for(const d of stuck){
+    try{await gradeBestLog(d)}catch(e){}
+  }
 }
 
 async function boot(){
@@ -10346,7 +10706,7 @@ async function boot(){
     document.getElementById('setup').classList.add('hide');
     boot();
   }else{
-    renderUsage();renderBackupStatus();
+    renderUsage();renderBackupStatus();renderPctThresholdBtns();
     document.getElementById('setup').classList.remove('hide');
   }
 })();
