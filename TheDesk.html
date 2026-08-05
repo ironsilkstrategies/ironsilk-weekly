@@ -449,7 +449,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v86</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v87</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -7597,6 +7597,17 @@ function showBubbleDetail(id){
 }
 function eliminationMapHtml(){
   const{bubbles,conc,edges}=eliminationMapData();
+  // ── real diagnostic, not a guess ──────────────────────────────────────
+  // Built after a report of "only 2 bubbles when there should be more" that
+  // couldn't be verified without seeing the actual stored data. Rather than
+  // guess again, this surfaces the real counts at every filtering step so
+  // any future discrepancy is immediately visible and provable instead of
+  // requiring a screenshot-and-speculate cycle.
+  const allLocked=get(LS.locked,[]);
+  const archivedCount=allLocked.filter(t=>t.archived).length;
+  const pendingCount=allLocked.filter(t=>!t.archived).length;
+  const bySource={};
+  allLocked.forEach(t=>{const src=t.source||'mine';bySource[src]=(bySource[src]||0)+1});
   const feed=eliminationFeed();
   const counts={dead:0,won:0,live:0,scheduled:0};
   bubbles.forEach(b=>counts[b.status]++);
@@ -7658,8 +7669,24 @@ function eliminationMapHtml(){
     </div>`;
   }
 
+  // only show the diagnostic when the counts actually disagree with what's
+  // rendered, or when something's archived — no reason to clutter the screen
+  // with a breakdown that matches expectations
+  if(pendingCount!==bubbles.length||archivedCount>0){
+    h+=`<div class="tkt" style="border-left:3px solid var(--cold,#5FD3E8)">
+      <div class="mktlab" style="margin-top:0;color:var(--cold,#5FD3E8)">🔍 What's actually in storage</div>
+      <div class="sub">
+        <b>${allLocked.length}</b> total tickets ever locked · <b>${pendingCount}</b> pending · <b>${archivedCount}</b> archived (already graded/settled, not shown on the map)<br>
+        By bucket: ${Object.keys(bySource).map(s2=>`${s2} ×${bySource[s2]}`).join(', ')||'none'}<br>
+        Bubbles actually drawn: <b>${bubbles.length}</b>
+        ${pendingCount!==bubbles.length?` <span style="color:var(--rust)">— MISMATCH, this shouldn't happen, tell me if you see this</span>`:''}
+      </div>
+    </div>`;
+  }
+
   h+=`<div class="tkt" id="elimMapCanvas">${eliminationMapSvg(bubbles,edges,340,Math.max(240,Math.ceil(bubbles.length/3)*100))}</div>`;
 
+  const anyLongshot=bubbles.some(b=>b.total>=6);
   h+=`<div class="tkt">
     <div style="display:flex;justify-content:space-around;text-align:center">
       <div><div style="font-family:'Archivo';font-weight:900;font-size:18px">$${totalPayout.toFixed(2)}</div>
@@ -7667,6 +7694,10 @@ function eliminationMapHtml(){
       <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${atRiskPayout.toFixed(2)}</div>
         <div class="m">riding on still-live tickets</div></div>
     </div>
+    ${anyLongshot?`<div class="sub" style="margin-top:8px;text-align:center">These are fair, de-vigged payouts
+      computed straight from each leg's real win probability — not inflated sportsbook marketing odds. A long
+      parlay's combined win chance drops fast (12 legs at even 85% each is only ~14% to hit all of them), so its
+      honest payout is smaller than a book's rounded/juiced number would show for the same legs.</div>`:''}
   </div>`;
 
   if(BUBBLE_DETAIL_ID){
