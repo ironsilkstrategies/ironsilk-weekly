@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v99</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v100</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -8136,17 +8136,18 @@ function ticketRecord(t){
 // is touched for a ticket that regrades identically; this only fixes what was
 // actually wrong.
 function correctBankrollBalance(targetBalance,dailySpent){
-  // Sets bankroll to exact known-good state.
-  // balance = BR_BASELINE + profit  →  profit = balance - BR_BASELINE
   const b=getBankroll();
-  b.profit=targetBalance-BR_BASELINE; // e.g. 80-100 = -20
-  // clear all pending debits so stakedToday() reads correctly
+  b.profit=targetBalance-BR_BASELINE;
   b.debited={};
-  // if daily spent > 0, we'd re-enter those — but user says $0 spent
-  if(dailySpent&&dailySpent>0){
-    // nothing to log — placeholder for future use
-  }
   saveBankroll(b);
+  // also clear wager records for any pending (non-archived) tickets dated today
+  // so stakedToday() doesn't double-count them against the daily cap
+  const d=today();
+  const L=get(LS.locked,[]);
+  const todayPendingIds=new Set(L.filter(t=>t.date===d&&!t.archived).map(t=>t.id));
+  const wagers=getWagers();
+  todayPendingIds.forEach(id=>{ delete wagers[id]; });
+  set(LS_WAGERS,wagers);
 }
 
 function runBankrollCorrection(){
