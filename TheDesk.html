@@ -176,8 +176,27 @@ box-shadow:var(--glow-win),inset 0 1px 0 rgba(255,255,255,.05)}
 .bet.avoid{border-color:rgba(240,86,60,.34);opacity:.58;
 background:linear-gradient(165deg,rgba(240,86,60,.07),rgba(21,30,40,.9))}
 .bet.avoid .bl{color:var(--rust)}
+/* THE ITEM: "when you push them you can't visually tell" — .value.on already
+   had an explicit override, but .avoid/.source-pick/.consensus-pick.on never
+   did, so selecting one of THOSE left it ambiguous which color was actually
+   winning the cascade. Every combined state now gets its own explicit
+   selected-look, AND (more importantly) a real checkmark badge that doesn't
+   depend on subtle border/glow differences at all — that's the actually
+   unmissable signal, the color coordination is just polish on top of it. */
+.bet.on{position:relative}
+.bet.on::after{content:'✓';position:absolute;top:5px;right:7px;width:18px;height:18px;
+  border-radius:50%;background:var(--gold);color:#0B0F14;font-size:11px;font-weight:900;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.4);
+  z-index:2}
 .bet.value.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
 border-color:var(--gold);box-shadow:var(--glow-gold)}
+.bet.avoid.on{opacity:1;background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold);box-shadow:var(--glow-gold)}
+.bet.avoid.on .bl{color:#fff}
+.bet.source-pick.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold)!important;box-shadow:var(--glow-gold)}
+.bet.consensus-pick.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold)!important;box-shadow:var(--glow-gold)}
 .eb{font-family:"Inter";font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;
 display:inline-block;letter-spacing:.02em}
 .eb.up{background:rgba(74,222,128,.18);color:var(--win)}
@@ -451,7 +470,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v91</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v94</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -484,7 +503,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       <div class="sub" id="bookStatus" style="margin-top:6px;font-family:'IBM Plex Mono';font-size:10.5px"></div>
       <div class="mktlab" style="margin-top:8px">Which slate are these for?</div>
       <div class="subnav" id="bookUploadDateRow"></div>
-      <input type="file" id="bookShots" accept="image/*" multiple style="margin-top:8px">
+      <input type="file" id="bookShots" accept="image/*,application/pdf" multiple style="margin-top:8px">
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="analyzeBookShots()">Analyze screenshots</button></div>
       <div id="bookShotResult"></div>
     </div>
@@ -636,6 +655,21 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       on the game card — pitcher ERA, K/9, team record, park HR factor. Real data only, from MLB's own leaderboards
       and standings, never guessed.</div>
       <div id="pctThresholdBtns" class="subnav" style="margin-top:10px"></div>
+    </div>
+
+    <div class="sbar"><h2>Auto-built tickets</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="sub" style="margin-top:0">Off by default. When ON, that bucket silently builds its own daily
+      ticket the moment the app loads — with real presets doing this work on purpose, most people don't want
+      the extra noise. Turning one off also removes today's already-built auto-ticket for it, if there is one.</div>
+      <div id="autoParlayToggles" style="margin-top:10px"></div>
+    </div>
+
+    <div class="sbar"><h2>Color legend</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="sub" style="margin-top:0">Every color used across the app, and exactly what it means. This is
+      the complete list — nothing here is decorative, every color is a real signal.</div>
+      <div id="colorLegend" style="margin-top:10px"></div>
     </div>
 
     <div class="sbar"><h2>Maintenance</h2><div class="ln"></div></div>
@@ -831,18 +865,31 @@ function fileToB64(file){
     r.readAsDataURL(file);
   });
 }
+// THE ITEM-10 FIX: builds the right Claude API content block for whatever
+// file type was actually uploaded — real image types (jpeg/png/gif/webp) as
+// type:'image', PDFs as type:'document' (Claude's API reads PDFs natively —
+// this is NOT an image block with PDF bytes stuffed into it, which the API
+// would reject). Anything else falls back to image and lets the API's own
+// error surface rather than silently mis-sending it.
+function fileToContentBlock(f,b64){
+  const mt=(f.type||'').toLowerCase();
+  if(mt==='application/pdf'||f.name.toLowerCase().endsWith('.pdf')){
+    return{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}};
+  }
+  return{type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}};
+}
 async function analyzeBookShots(){
   const key=get(LS.ai,'');
   const el=document.getElementById('bookShotResult');
   if(!key){el.innerHTML='<div class="empty">Needs an Anthropic key in Settings first.</div>';return}
   const files=document.getElementById('bookShots').files;
-  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot first.</div>';return}
-  el.innerHTML='<div class="empty">Reading '+files.length+' screenshot'+(files.length>1?'s':'')+'…</div>';
+  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot or PDF first.</div>';return}
+  el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
   try{
     const imgBlocks=[];
     for(const f of files){
       const b64=await fileToB64(f);
-      imgBlocks.push({type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}});
+      imgBlocks.push(fileToContentBlock(f,b64));
     }
     const prompt=`These are screenshots of a real sportsbook's MLB board. Extract every game/market you can
       see into a JSON array — nothing else, no markdown fences, no commentary. Include:
@@ -983,7 +1030,7 @@ function fillSettingsTab(){
   v('keyIn',get(LS.key,''));v('aiIn',get(LS.ai,''));v('sharpIn',get(LS.sharp,''));
   v('rundownIn',get(LS.rundown,''));v('oddspapiIn',get(LS.oddspapi,''));
   v('ghrepoIn',get(LS.ghrepo,''));v('ghtokenIn',get(LS.ghtoken,''));
-  renderUsage();renderBackupStatus();renderPctThresholdBtns();
+  renderUsage();renderBackupStatus();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
 }
 function saveSettingsTab(){
   const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
@@ -1077,6 +1124,63 @@ function usageBar(label,used,limit,note){
     </div>
     ${note?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);margin-top:3px">${note}</div>`:''}
   </div>`;
+}
+function renderColorLegend(){
+  const el=document.getElementById('colorLegend');
+  if(!el)return;
+  const swatch=(color,label,desc,extra)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;
+    border-bottom:1px solid var(--rule)">
+    <div style="flex:0 0 auto;width:16px;height:16px;border-radius:5px;margin-top:1px;
+      background:${color};box-shadow:0 0 0 1px rgba(255,255,255,.08)"></div>
+    <div><div style="font-weight:700;font-size:12.5px">${label}${extra||''}</div>
+      <div class="m" style="margin-top:1px">${desc}</div></div>
+  </div>`;
+  const section=(title)=>`<div class="mktlab" style="margin-top:14px">${title}</div>`;
+
+  el.innerHTML=
+    section('Game card — bet squares')+
+    swatch('var(--gold)','Selected (gold + ✓ badge)','This is one of YOUR picks right now — the checkmark is the real signal, color is backup.')+
+    swatch('var(--win)','Green border','Model sees real edge here — the number is worth a second look.')+
+    swatch('var(--rust)','Red border, dimmed','Model says stay away — priced against the model\'s own read.')+
+    swatch('#a78bfa','Purple border','An outside source (uploaded pick/trend) also has this exact side.')+
+    swatch('#f472b6','Pink border','UNANIMOUS — every outside source you\'ve uploaded agrees on this side.')+
+
+    section('Elite stat badges (⭐ gold)')+
+    swatch('var(--gold)','⭐ Top N% badge','Real league-wide percentile — pitcher ERA/K-9, team record, or park HR factor. Threshold is tunable above.')+
+
+    section('Live game state')+
+    swatch('var(--win)','Pulsing green dot','Game is live right now.')+
+    swatch('var(--cold)','Cyan','A projected/simulated number, not yet a real result.')+
+
+    section('Elimination Map bubbles')+
+    swatch('var(--rust)','Red bubble','Ticket is dead — at least one leg already lost.')+
+    swatch('var(--win)','Green bubble','Ticket is fully won — every leg decided, none lost.')+
+    swatch('var(--gold)','Amber bubble','Still alive — at least one leg is undecided. Pulsing ring = one result from being fully decided.')+
+    swatch('var(--mute)','Grey bubble','Nothing on this ticket has started yet.')+
+    swatch('#5FD3E8','Cyan strand','Connects tickets riding on the same team — a web, not just a shared game.')+
+
+    section('The Coach')+
+    swatch('var(--rust)','Red / warning','Something worth stopping to look at — a duplicate, a weak leg, a bankroll issue.')+
+    swatch('var(--mute)','Grey / neutral','An observation, not a warning — e.g. noting a real longshot ticket.')+
+    swatch('var(--win)','Green / good','Real, verified good news — an earned bankroll multiplier, a performing bucket.')+
+
+    section('Ticket buckets')+
+    swatch('var(--gold)','Gold','My picks — the only bucket that touches your real bankroll.')+
+    swatch('#5FD3E8','Cyan','System, Market, Specialty, Outside — tracked daily, flat $1, never touches real money.');
+}
+function renderAutoParlayToggles(){
+  const el=document.getElementById('autoParlayToggles');
+  if(!el)return;
+  const labels={market:'Market picks',outside:'Outside picks',system:'System top 10'};
+  el.innerHTML=Object.keys(labels).map(src=>{
+    const on=autoParlayEnabled(src);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+      border-bottom:1px solid var(--rule)">
+      <span>${labels[src]}</span>
+      <button class="${on?'on':''}" onclick="setAutoParlayEnabled('${src}',${!on});renderAutoParlayToggles();renderTickets()"
+        style="min-width:52px">${on?'ON':'OFF'}</button>
+    </div>`;
+  }).join('');
 }
 function renderPctThresholdBtns(){
   const el=document.getElementById('pctThresholdBtns');
@@ -3005,6 +3109,14 @@ function presetTabHtml(){
       ${[2,3,4,5,6,7,8,9,10].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="TARGET_LEGS=${n};renderTickets()">${n}</button>`).join('')}
       <button class="${TARGET_LEGS===-1?'on':''}" onclick="TARGET_LEGS=-1;renderTickets()">No limit</button>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;opacity:${fixedLegs?0.4:1};pointer-events:${fixedLegs?'none':'auto'}">
+      <input type="number" min="1" max="30" placeholder="Or type any number"
+        value="${TARGET_LEGS>0?TARGET_LEGS:''}"
+        oninput="const v=parseInt(this.value,10);if(v>0){TARGET_LEGS=v;renderTickets()}"
+        style="width:130px;padding:8px 10px;border-radius:7px;border:1px solid var(--rule);
+        background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
+      <span class="m">legs — works for any number, not just the quick buttons above</span>
+    </div>
     <div class="mktlab">Duplicates</div>
     <div class="subnav">
       <button class="${!ALLOW_DUPES?'on':''}" onclick="ALLOW_DUPES=false;renderTickets()">No duplicates from current tickets</button>
@@ -3705,16 +3817,27 @@ async function diagnoseSharp(){
 // future days the odds API actually has data for — schedule, probables, and market
 // lines only, clearly separated from the fully-simulated live board.
 let BOOKSHOT_UPLOAD_DATE=null; // null = "use whatever day is currently open" at analyze time
+// THE ITEM-5 FIX: this used to only offer a future date as an upload target
+// if ODDS_BYDATE already had that date's odds loaded — meaning uploading a
+// book screenshot for TOMORROW before your odds feed had ever pulled
+// tomorrow's slate left you with no way to even select tomorrow at all. The
+// upload target and the odds-feed cache are two unrelated things; gating one
+// on the other was the actual bug. Always offers today + tomorrow (computed
+// directly, not borrowed from a different cache), plus anything further out
+// that ODDS_BYDATE happens to already know about.
+function tomorrowStr(){
+  const d=new Date(today()+'T12:00:00'); // noon avoids any DST-edge date-shift surprises
+  d.setDate(d.getDate()+1);
+  return new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+}
 function renderBookUploadDateRow(){
   const el=document.getElementById('bookUploadDateRow');
   if(!el)return;
-  // Same source renderDayPicker already uses for which future dates actually have
-  // games on the board — no separate lookup, no risk of drifting out of sync with it.
-  const future=Object.keys(ODDS_BYDATE).filter(d=>d>=today()).sort();
-  const dates=future.length?future:[today()];
+  const fromOdds=Object.keys(ODDS_BYDATE).filter(d=>d>=today());
+  const dates=[...new Set([today(),tomorrowStr(),...fromOdds])].sort();
   const active=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
   el.innerHTML=dates.map(d=>{
-    const label=d===today()?'Today':dayLabel(d);
+    const label=d===today()?'Today':d===tomorrowStr()?'Tomorrow':dayLabel(d);
     const on=active===d;
     return `<button class="${on?'on':''}" onclick="BOOKSHOT_UPLOAD_DATE='${d}';renderBookUploadDateRow();renderBookStatus()">${label}</button>`;
   }).join('');
@@ -5396,7 +5519,7 @@ let LAST_COMBO=[];        // last built combo — needed for reroll
 function setLegs(n,btn){
   TARGET_LEGS=n;
   document.querySelectorAll('#legBtns button').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
+  if(btn)btn.classList.add('on'); // btn is null when called from the typed-number input — no fixed button to highlight
   // toggle profit input opacity — only needed for "by target $" mode
   const pi=document.getElementById('targetProfit');
   if(pi)pi.style.opacity=n===0?'1':'0.4';
@@ -5733,9 +5856,28 @@ function dailyLimit(){return +(BR_DAILY_BASE*getBankroll().limitMult).toFixed(2)
 function ticketLimit(){return +(BR_TICKET_BASE*getBankroll().limitMult).toFixed(2)}
 
 function stakedToday(){
+  // THE MONEY BUG: this only summed b.history, which is populated ONLY once
+  // a ticket settles. debitStake() removes real money from the balance the
+  // MOMENT a stake is typed, before the ticket ever grades — so a stake on a
+  // pending, unsettled ticket was invisible here. That meant checkStakeAllowed
+  // (which reads this to enforce the daily cap) could be silently bypassed by
+  // staking several pending tickets on the same day, and the "used today"
+  // figure shown on the Money tab itself was wrong for exactly the same
+  // reason. b.debited already tracks every currently-debited, not-yet-settled
+  // stake by ticket id — this now includes those, filtered to tickets whose
+  // locked entry is actually dated today (a debited stake from a PAST day
+  // that's still pending shouldn't count against TODAY's cap).
   const b=getBankroll();
   const d=today();
-  return b.history.filter(h=>h.date===d).reduce((a,h)=>a+h.stake,0);
+  const settledToday=b.history.filter(h=>h.date===d).reduce((a,h)=>a+h.stake,0);
+  const L=get(LS.locked,[]);
+  const debited=b.debited||{};
+  const pendingToday=Object.keys(debited).reduce((a,id)=>{
+    const t=L.find(x=>String(x.id)===String(id));
+    if(t&&t.date===d&&!t.archived)return a+debited[id];
+    return a;
+  },0);
+  return settledToday+pendingToday;
 }
 
 // Called whenever a stake is entered on a locked ticket — enforces the caps and
@@ -7446,14 +7588,14 @@ async function analyzeExtPicks(){
   const el=document.getElementById('extResult');
   if(!key){el.innerHTML='<div class="empty">Needs an Anthropic key in Settings first.</div>';return}
   const files=document.getElementById('extShots').files;
-  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot first.</div>';return}
-  const srcHint=(document.getElementById('extSrcName').value||'').trim();
-  el.innerHTML='<div class="empty">Reading '+files.length+' screenshot'+(files.length>1?'s':'')+'…</div>';
+  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot or PDF first.</div>';return}
+  // srcHint input removed as part of the item-6 fix — source is now confirmed/corrected POST-upload via extSrcOverride on the results screen, not requested up front
+  el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
   try{
     const imgBlocks=[];
     for(const f of files){
       const b64=await fileToB64(f);
-      imgBlocks.push({type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}});
+      imgBlocks.push(fileToContentBlock(f,b64)); // same real image-vs-PDF branch analyzeBookShots uses
     }
     const prompt=`These screenshots come from sports data/handicapping sites (Covers.com, OddsShark,
 Picks and Parlays, Action Network, VSiN, a Facebook tipster, etc). They come in several different
@@ -7544,7 +7686,7 @@ Treat this exactly like Formats 1-3 combined, just read from plain text instead 
 ═══ GENERAL RULES ═══
 - Team names: use standard 2-3 letter abbreviations (PHI, BAL, NYY, LAD, etc).
 - If a source name isn't visible anywhere, use "Unknown".
-${srcHint?`- The user suggests these are from: "${srcHint}" — use that unless a different name is clearly visible.`:''}
+
 - Skip anything blurry, cut off, or ambiguous rather than guessing.
 - A single upload batch may contain multiple formats — sort each screenshot into the right bucket.`;
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
@@ -7594,12 +7736,24 @@ ${srcHint?`- The user suggests these are from: "${srcHint}" — use that unless 
     if(consensus.length)rows.push(`<div class="mktlab">Public consensus (${consensus.length})</div>
       <ol>${consensus.map(x=>`<li><b>${x.src}</b> — ${x.away} ${x.awayPct}% / ${x.home} ${x.homePct}%</li>`).join('')}</ol>`);
     if(trends.length)rows.push(`<div class="mktlab">Trends (${trends.length})</div>
-      <ol>${trends.map(x=>`<li><b>${x.src}</b> — ${x.away}@${x.home}${x.team?' · '+x.team:''}: ${x.text}
+      <ol>${trends.map(x=>`<li><b>${x.src}</b> — ${x.away}@${x.home}${x.team?' '+x.team:''}: ${x.text}
         ${x.implies?`<span class="flag cool">${x.implies}</span>`:''}</li>`).join('')}</ol>`);
+    // THE ITEM-6 FIX: source used to be requested BEFORE analysis, meaning you
+    // had to know what platform a screenshot came from before you'd even seen
+    // what was in it. The model already auto-detects a real source per entry
+    // (x.src) when nothing is provided — this now shows what it detected,
+    // post-upload, with an optional override that corrects every row at once
+    // if the auto-detect got it wrong or you want to relabel it.
+    const detectedSrcs=[...new Set([...picks,...trends,...consensus].map(x=>x.src).filter(Boolean))];
     el.innerHTML=`<div class="tkt hi"><h3>${picks.length} picks · ${trends.length} trends · ${consensus.length} consensus rows</h3>
       <div class="sub">Check these before saving — vision extraction isn't perfect.</div>
       ${rows.join('')}
-      <div class="bar"><button class="primary" onclick="saveExtPicks()">Save all</button></div></div>`;
+      <div class="mktlab">Source</div>
+      <div class="sub" style="margin-top:0">Detected: <b>${detectedSrcs.length?detectedSrcs.join(', '):'unclear — name it below'}</b></div>
+      <input id="extSrcOverride" placeholder="Override / correct the source name (optional)"
+        style="width:100%;margin-top:6px;padding:9px;border-radius:7px;border:1px solid var(--rule);
+        background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
+      <div class="bar" style="margin-top:8px"><button class="primary" onclick="saveExtPicks()">Save all</button></div></div>`;
   }catch(e){
     el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
   }
@@ -7608,6 +7762,16 @@ ${srcHint?`- The user suggests these are from: "${srcHint}" — use that unless 
 function saveExtPicks(){
   const bundle=window._pendingExt;if(!bundle)return;
   const d=today();
+  // apply the post-upload source override, if one was typed, to every
+  // picks/trends/consensus entry at once — this is the actual save-time
+  // correction step the item-6 fix is built around
+  const overrideEl=document.getElementById('extSrcOverride');
+  const override=(overrideEl&&overrideEl.value||'').trim();
+  if(override){
+    ['picks','trends','consensus'].forEach(k=>{
+      (bundle[k]||[]).forEach(x=>{x.src=override});
+    });
+  }
 
   // ── picks ──
   const allP=getExt();
@@ -7775,6 +7939,14 @@ function buildTabHtml(){
       ${[2,3,4,5,6,7,8,9,10].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="setLegs(${n},this)">${n}</button>`).join('')}
       <button class="${TARGET_LEGS===-1?'on':''}" onclick="setLegs(-1,this)">No limit</button>
       <button class="${TARGET_LEGS===0?'on':''}" onclick="setLegs(0,this)">By target $</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <input type="number" min="1" max="30" placeholder="Or type any number"
+        value="${TARGET_LEGS>0?TARGET_LEGS:''}"
+        oninput="const v=parseInt(this.value,10);if(v>0)setLegs(v,null)"
+        style="width:130px;padding:8px 10px;border-radius:7px;border:1px solid var(--rule);
+        background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
+      <span class="m">legs — works for any number, not just the quick buttons above</span>
     </div>
     <div class="mktlab">Same-game combos</div>
     <div class="subnav"><button id="sgpToggle" onclick="this.classList.toggle('on')">SGP mode — allow run line + total together on one game</button></div>
@@ -8378,7 +8550,33 @@ function rebuildSystemTop10AutoParlay(){
       return{game:l.game,pick:l.pick,p:l.p,gid:g?g.id:null,gameDate:today()};
     });
 }
+// THE ITEM-4 FIX: auto-parlays used to build themselves silently on every
+// app load, with no way to turn it off — you have real presets doing this
+// work on purpose now, so an unrequested ticket showing up in Tickets the
+// moment you open the app is just noise, not help. Default is OFF; each
+// bucket (Market/Outside/System) can be independently re-enabled in Settings
+// if you ever want the old always-on behavior back for a specific one.
+function autoParlayEnabled(source){
+  const settings=get('d4.autoParlaySettings',{});
+  return settings[source]===true; // explicit opt-in only — undefined/false both mean off
+}
+function setAutoParlayEnabled(source,on){
+  const settings=get('d4.autoParlaySettings',{});
+  settings[source]=on;
+  set('d4.autoParlaySettings',settings);
+  if(!on){
+    // turning it off also removes today's already-built auto-ticket, so
+    // switching it off actually stops the noise immediately rather than
+    // just preventing the NEXT one
+    const L=get(LS.locked,[]);
+    const existing=findTodaysAutoParlay(source);
+    if(existing&&!existing.archived){
+      set(LS.locked,L.filter(t=>t.id!==existing.id));
+    }
+  }
+}
 function syncTrackedAutoParlay(source){
+  if(!autoParlayEnabled(source))return null;
   const builder=source==='market'?rebuildMarketAutoParlay
     :source==='outside'?rebuildOutsideAutoParlay
     :source==='system'?rebuildSystemTop10AutoParlay
@@ -8496,10 +8694,9 @@ function consensusHtml(){
   const upload=`<div class="tkt">
     <div class="sbar" style="margin-top:0"><h2>Upload picks from anywhere</h2><div class="ln"></div></div>
     <div class="sub">Screenshots from OddsShark, Covers, Picks &amp; Parlays, Facebook tipsters, Action
-    Network — anything. Claude reads the source name and every pick off the image.</div>
-    <input id="extSrcName" placeholder="source name (optional — leave blank to auto-detect)"
-      autocomplete="off" spellcheck="false" style="margin-top:8px">
-    <input type="file" id="extShots" accept="image/*" multiple style="margin-top:8px">
+    Network — anything. Claude reads the source name and every pick off the image automatically; you'll
+    get a chance to confirm or correct the detected source AFTER it's read, not before.</div>
+    <input type="file" id="extShots" accept="image/*,application/pdf" multiple style="margin-top:8px">
     <div class="bar" style="margin-top:8px">
       <button class="primary" onclick="analyzeExtPicks()">Read screenshots</button>
       ${picks.length?`<button onclick="clearExtToday()">Clear today</button>`:''}
@@ -10817,6 +11014,14 @@ async function boot(){
   await loadESPN();
   // catch up anything left ungraded from previous days before painting anything
   try{await backfillGrading(true)}catch(e){console.warn('backfill',e)}
+  // THE ITEM-9 GAP: backfillGrading fetches missing finals/box scores for any
+  // stuck prior day, but never actually re-tried settling tickets with that
+  // newly-filled-in data — it could sit correctly graded in the archive while
+  // the ticket itself stayed unsettled/unarchived until the next unrelated
+  // trigger happened to fire. Settling right here, once, right after the data
+  // that was missing is now present, closes that gap.
+  try{settleLockedTickets()}catch(e){console.warn('settle after backfill',e)}
+  try{await backfillUngradedBestDays()}catch(e){}
   snapshot();snapshotBest();paintSlip();renderDayPicker();renderBookStatus();
   if(BOOTED)return;  // settings can be reopened/resaved any number of times — background
                       // timers only ever get registered once, first boot, no matter how
@@ -10864,7 +11069,7 @@ async function boot(){
     document.getElementById('setup').classList.add('hide');
     boot();
   }else{
-    renderUsage();renderBackupStatus();renderPctThresholdBtns();
+    renderUsage();renderBackupStatus();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
     document.getElementById('setup').classList.remove('hide');
   }
 })();
