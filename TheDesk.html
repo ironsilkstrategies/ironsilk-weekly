@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v98</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v99</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -674,6 +674,14 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       were being graded as a straight loss. Fixed now, and it auto-corrected every already-settled ticket once
       automatically. Use this button to force it to check again (e.g. if you restore an older backup).</div>
       <div id="pushRepairStatus"></div>
+    </div>
+
+    <div class="tkt">
+      <div class="bar" style="margin-top:0">
+        <button onclick="runBankrollCorrection()" style="border-color:var(--gold);color:var(--gold)">Correct bankroll → $80 / $0 spent today</button>
+      </div>
+      <div class="sub" style="margin-top:8px">One-time correction. Sets your balance to $80.00 and clears today's
+      pending spend to $0. Use this if the balance is displaying wrong due to a data glitch.</div>
     </div>
 
     <div class="sbar"><h2>Elite stat threshold</h2><div class="ln"></div></div>
@@ -8127,6 +8135,28 @@ function ticketRecord(t){
 // was booked (bankroll or tracked history) and re-books it correctly. Nothing
 // is touched for a ticket that regrades identically; this only fixes what was
 // actually wrong.
+function correctBankrollBalance(targetBalance,dailySpent){
+  // Sets bankroll to exact known-good state.
+  // balance = BR_BASELINE + profit  →  profit = balance - BR_BASELINE
+  const b=getBankroll();
+  b.profit=targetBalance-BR_BASELINE; // e.g. 80-100 = -20
+  // clear all pending debits so stakedToday() reads correctly
+  b.debited={};
+  // if daily spent > 0, we'd re-enter those — but user says $0 spent
+  if(dailySpent&&dailySpent>0){
+    // nothing to log — placeholder for future use
+  }
+  saveBankroll(b);
+}
+
+function runBankrollCorrection(){
+  if(!confirm('Reset bankroll to $80.00 balance with $0 spent today?'))return;
+  correctBankrollBalance(80,0);
+  alert('Done — bankroll corrected to $80.00, daily spend reset to $0.');
+  renderTickets();
+  try{renderMoney();}catch(e){}
+}
+
 function runPushBugRepairManually(){
   const status=document.getElementById('pushRepairStatus');
   if(status)status.innerHTML='<div class="empty">Checking…</div>';
