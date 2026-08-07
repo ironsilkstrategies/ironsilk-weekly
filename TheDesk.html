@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.02</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.03</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -992,15 +992,36 @@ async function callGemini(key, contentBlocks, maxTokens=8000){
 }
 
 async function analyzeBookShots(){
-  const key=get(LS.ai,'');
   const el=document.getElementById('bookShotResult');
-  if(!key){el.innerHTML='<div class="empty">Needs a Gemini API key in Settings first.</div>';return}
   const files=document.getElementById('bookShots').files;
   if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot, PDF, or text file first.</div>';return}
   el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
+
+  // ── OFFLINE PATH — slate_picks.txt parsed locally, zero API cost ──
+  const textFiles=[...files].filter(f=>isPlainTextFile(f));
+  const otherFiles=[...files].filter(f=>!isPlainTextFile(f));
+  if(textFiles.length){
+    const allParsed=[];
+    for(const f of textFiles){
+      const text=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(f);});
+      const result=parseSlateText(text);
+      // picks from slate_picks.txt map directly to book odds entries
+      result.picks.forEach(p=>allParsed.push(p));
+    }
+    if(allParsed.length&&!otherFiles.length){
+      // save directly as book odds — same storage path as API results
+      saveBookOdds(allParsed,el);
+      return;
+    }
+  }
+
+  // ── ONLINE PATH — images/PDFs need Gemini key ──
+  const key=get(LS.ai,'');
+  if(!key){el.innerHTML='<div class="empty">Needs a Gemini API key in Settings for image/PDF files. Text .txt files work free with no key.</div>';return}
+  el.innerHTML='<div class="empty">Reading '+otherFiles.length+' image file'+(otherFiles.length>1?'s':'')+'…</div>';
   try{
     const imgBlocks=[];
-    for(const f of files){
+    for(const f of otherFiles){
       // base64 is only needed for image/PDF — text/.docx read as real text
       // directly and skip that step entirely, both faster and no wasted work
       const needsB64=!isPlainTextFile(f)&&!isDocxFile(f)&&!isLegacyDocFile(f);
@@ -1060,6 +1081,29 @@ async function analyzeBookShots(){
     el.innerHTML=`<div class="tkt"><h3>Couldn't read that</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
   }
 }
+// Offline book odds save — feeds parsed slate_picks.txt entries directly
+// into the same bookshots storage that the API path uses
+function saveBookOdds(picks,el){
+  window._pendingBookShots=picks;
+  const d=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
+  const all=get(LS.bookshots,{});
+  all[d]=all[d]||[];
+  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  picks.forEach(x=>{
+    const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
+    const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,capturedAt:Date.now()};
+    const k=keyOf(rec);
+    const i=all[d].findIndex(y=>keyOf(y)===k);
+    if(i>=0)all[d][i]=rec;else all[d].push(rec);
+  });
+  set(LS.bookshots,all);
+  window._pendingBookShots=null;
+  document.getElementById('bookShots').value='';
+  renderBookStatus();
+  if(el)el.innerHTML=`<div class="tkt hi"><h3>Locked in</h3><div class="sub">${picks.length} selections saved for ${d} from text file — no API needed.</div></div>`;
+  render();
+}
+
 function saveBookShots(){
   const parsed=window._pendingBookShots;
   if(!parsed)return;
