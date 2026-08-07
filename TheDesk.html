@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.08</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.09</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -8108,13 +8108,13 @@ function parseSlateText(text){
     // OU: o8.0 (-111) / u8.5 (-113)
     let curAway=null,curHome=null;
     for(const l of lines){
-      if(/^MLB PICKS/i.test(l))continue;
+      if(/^MLB PICKS/i.test(l)||/^MLB COVERS/i.test(l)||/^Source:/i.test(l)||/^Proj:/i.test(l))continue;
       const gameM=l.match(/^([A-Z]{2,4})\s*@\s*([A-Z]{2,4})/i);
       if(gameM){curAway=normAbbr(gameM[1]);curHome=normAbbr(gameM[2]);continue;}
       if(!curAway)continue;
       const game=curAway+'@'+curHome;
 
-      // ML: TOR +160 / HOU -163
+      // ML: TOR +160 / HOU -163  (two sides — sportsbetting.ag format)
       const mlM=l.match(/^ML:\s*([A-Z]{2,4})\s*([+\-]\d+)\s*\/\s*([A-Z]{2,4})\s*([+\-]\d+)/i);
       if(mlM){
         picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'moneyline',
@@ -8125,7 +8125,16 @@ function parseSlateText(text){
           line:null,price:+mlM[4],conf:null});
         continue;
       }
-      // RL: TOR +1.5 (-133) / HOU -1.5 (+126)
+      // ML: WAS -116  (single side — Covers computer pick format)
+      const mlS=l.match(/^ML:\s*([A-Z]{2,4})\s*([+\-]\d+)$/i);
+      if(mlS){
+        const t=mlS[1].toUpperCase();
+        picks.push({src:'Covers',away:curAway,home:curHome,game,market:'moneyline',
+          pick:t+' ML '+mlS[2],side:t===curAway?'away':'home',
+          line:null,price:+mlS[2],conf:null});
+        continue;
+      }
+      // RL: TOR +1.5 (-133) / HOU -1.5 (+126)  (two sides)
       const rlM=l.match(/^RL:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
       if(rlM){
         picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'runline',
@@ -8136,13 +8145,31 @@ function parseSlateText(text){
           line:+rlM[5],price:+rlM[6],conf:null});
         continue;
       }
-      // OU: o8.0 (-111) / u8.5 (-113)
+      // OU: o8.0 (-111) / u8.5 (-113)  (two sides)
       const ouM=l.match(/^OU:\s*o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i);
       if(ouM){
         picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'total',
           pick:'o'+ouM[1],side:'over',line:+ouM[1],price:+ouM[2],conf:null});
         picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'total',
           pick:'u'+ouM[3],side:'under',line:+ouM[3],price:+ouM[4],conf:null});
+        continue;
+      }
+      // OU: o7.5 (-121)  (single side — Covers computer pick format)
+      const ouS=l.match(/^OU:\s*([ou])([\d.]+)\s*\(([+\-]\d+)\)$/i);
+      if(ouS){
+        const isOver=ouS[1].toLowerCase()==='o';
+        picks.push({src:'Covers',away:curAway,home:curHome,game,market:'total',
+          pick:(isOver?'o':'u')+ouS[2],side:isOver?'over':'under',
+          line:+ouS[2],price:+ouS[3],conf:null});
+        continue;
+      }
+      // RL: TEAM +/-line (price) single side — Covers format
+      const rlS=l.match(/^RL:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)$/i);
+      if(rlS){
+        const t=rlS[1].toUpperCase();
+        picks.push({src:'Covers',away:curAway,home:curHome,game,market:'runline',
+          pick:t+' '+rlS[2],side:t===curAway?'away':'home',
+          line:+rlS[2],price:+rlS[3],conf:null});
         continue;
       }
       // F5 ML: TOR +180 / PHI -210
@@ -8264,8 +8291,11 @@ function saveExtPicks(){
 }
 
 function clearExtToday(){
-  if(!confirm("Clear all external picks saved for today?"))return;
-  const all=getExt();delete all[today()];set(LS.extpicks,all);
+  if(!confirm('Clear all external picks, trends, and consensus saved for today?'))return;
+  const d=today();
+  const all=getExt();delete all[d];set(LS.extpicks,all);
+  const allT=get(LS.exttrends,{});delete allT[d];set(LS.exttrends,allT);
+  const allC=get(LS.extconsensus,{});delete allC[d];set(LS.extconsensus,allC);
   try{syncTrackedAutoParlay('outside');}catch(e){}
   renderTickets();
 }
