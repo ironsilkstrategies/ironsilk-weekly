@@ -483,10 +483,10 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <li><b>Games, lineups, stats, weather, head-to-head</b> — MLB Stats API. Free, no key.</li>
     <li><b>Live scores and box scores</b> — ESPN. Free, no key.</li>
     <li><b>Odds</b> — optional, display only. Used to compare against the sim, never to build it.</li>
-    <li><b>Chat and screenshot reading</b> — optional, console.anthropic.com key.</li>
+    <li><b>Chat and screenshot reading</b> — optional, aistudio.google.com key.</li>
   </ol>
   <input id="setupKeyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
-  <input id="setupAiIn" placeholder="anthropic api key (optional)" autocomplete="off" spellcheck="false">
+  <input id="setupAiIn" placeholder="gemini api key (optional)" autocomplete="off" spellcheck="false">
   <input id="setupSharpIn" placeholder="sharpapi.io key (optional)" autocomplete="off" spellcheck="false">
   <input id="setupRundownIn" placeholder="therundown.io key (optional)" autocomplete="off" spellcheck="false">
   <div class="sub" style="margin:10px 0">Everything here can be changed later in the Settings tab.</div>
@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v101</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.02</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -613,7 +613,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
       <div class="sub" style="margin-bottom:8px">MLB Stats API and ESPN live scores are free and need no key.
       Everything below is optional — the simulator runs fully without any of them.</div>
       <input id="keyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
-      <input id="aiIn" placeholder="anthropic api key — chat &amp; screenshot reading" autocomplete="off" spellcheck="false">
+      <input id="aiIn" placeholder="gemini api key — chat &amp; screenshot reading" autocomplete="off" spellcheck="false">
       <input id="sharpIn" placeholder="sharpapi.io key — totals &amp; props" autocomplete="off" spellcheck="false">
       <input id="rundownIn" placeholder="therundown.io key — run lines" autocomplete="off" spellcheck="false">
       <input id="oddspapiIn" placeholder="oddspapi.io key — global books, diagnostic only" autocomplete="off" spellcheck="false">
@@ -965,10 +965,36 @@ async function fileToContentBlock(f,b64){
   }
   return{type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}};
 }
+// ── Gemini API wrapper — replaces Anthropic for all vision/chat calls ─────────
+// Model: gemini-2.0-flash (free tier: 15 req/min, 1500/day)
+// Converts content blocks (image/text) into Gemini parts format
+async function callGemini(key, contentBlocks, maxTokens=8000){
+  const parts=[];
+  for(const b of contentBlocks){
+    if(b.type==='text'){
+      parts.push({text:b.text});
+    }else if(b.type==='image'&&b.source){
+      parts.push({inline_data:{mime_type:b.source.media_type,data:b.source.data}});
+    }else if(b.type==='document'&&b.source){
+      // PDFs — Gemini supports inline PDF via inline_data
+      parts.push({inline_data:{mime_type:'application/pdf',data:b.source.data}});
+    }
+  }
+  const body={contents:[{role:'user',parts}],
+    generationConfig:{maxOutputTokens:maxTokens,temperature:0.1}};
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)});
+  const j=await r.json();
+  if(j.error)throw new Error(j.error.message||'Gemini API error');
+  const text=(j.candidates||[]).map(c=>(c.content&&c.content.parts||[]).map(p=>p.text||'').join('')).join('\n');
+  return text;
+}
+
 async function analyzeBookShots(){
   const key=get(LS.ai,'');
   const el=document.getElementById('bookShotResult');
-  if(!key){el.innerHTML='<div class="empty">Needs an Anthropic key in Settings first.</div>';return}
+  if(!key){el.innerHTML='<div class="empty">Needs a Gemini API key in Settings first.</div>';return}
   const files=document.getElementById('bookShots').files;
   if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot, PDF, or text file first.</div>';return}
   el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
@@ -992,14 +1018,7 @@ async function analyzeBookShots(){
       Each entry: {"away":"team abbr or name","home":"team abbr or name","market":"moneyline"|"runline"|"total"|"f5total"|"f5side",
       "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -150 or 145)}.
       One entry per selection you can actually read clearly — skip anything blurry or cut off rather than guessing.`;
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,
-        messages:[{role:'user',content:[...imgBlocks,{type:'text',text:prompt}]}]})});
-    const j=await r.json();
-    if(j.error){el.innerHTML=`<div class="tkt"><h3>API error</h3><div class="sub">${j.error.message||'unknown'}</div></div>`;return}
-    const raw=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    const raw=await callGemini(key,[...imgBlocks,{type:'text',text:prompt}],8000);
     let parsed;
     const cleaned=raw.replace(/```json|```/g,'').trim();
     try{
@@ -7725,16 +7744,38 @@ function getSrcStats(){return get(LS.srcstats,{})}
 function extToday(){return getExt()[today()]||[]}
 
 async function analyzeExtPicks(){
-  const key=get(LS.ai,'');
   const el=document.getElementById('extResult');
-  if(!key){el.innerHTML='<div class="empty">Needs an Anthropic key in Settings first.</div>';return}
   const files=document.getElementById('extShots').files;
-  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot, PDF, or text file first.</div>';return}
-  // srcHint input removed as part of the item-6 fix — source is now confirmed/corrected POST-upload via extSrcOverride on the results screen, not requested up front
+  if(!files.length){el.innerHTML='<div class="empty">Pick at least one file first.</div>';return}
   el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
+
+  // ── OFFLINE PATH — plain text files parsed locally, zero API cost ──
+  const textFiles=[...files].filter(f=>isPlainTextFile(f));
+  const otherFiles=[...files].filter(f=>!isPlainTextFile(f));
+  let offlinePicks=[],offlineTrends=[],offlineConsensus=[];
+  for(const f of textFiles){
+    const text=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(f);});
+    const result=parseSlateText(text);
+    offlinePicks=offlinePicks.concat(result.picks);
+    offlineTrends=offlineTrends.concat(result.trends);
+    offlineConsensus=offlineConsensus.concat(result.consensus);
+  }
+  if(!otherFiles.length){
+    if(!offlinePicks.length&&!offlineTrends.length&&!offlineConsensus.length){
+      el.innerHTML='<div class="empty">Nothing parsed — check file format.</div>';return;
+    }
+    window._pendingExt={picks:offlinePicks,trends:offlineTrends,consensus:offlineConsensus};
+    renderExtResults(el,offlinePicks,offlineTrends,offlineConsensus);
+    return;
+  }
+
+  // ── ONLINE PATH — images/PDFs still go to Claude API ──
+  const key=get(LS.ai,'');
+  if(!key){el.innerHTML='<div class="empty">Needs a Gemini API key for image/PDF files. Text .txt files work free with no key.</div>';return}
+  el.innerHTML='<div class="empty">Reading '+otherFiles.length+' image file'+(otherFiles.length>1?'s':'')+'…</div>';
   try{
     const imgBlocks=[];
-    for(const f of files){
+    for(const f of otherFiles){
       // same real image/PDF/text/.docx branch analyzeBookShots uses — base64
       // is only computed when the file actually needs it
       const needsB64=!isPlainTextFile(f)&&!isDocxFile(f)&&!isLegacyDocFile(f);
@@ -7833,14 +7874,7 @@ Treat this exactly like Formats 1-3 combined, just read from plain text instead 
 
 - Skip anything blurry, cut off, or ambiguous rather than guessing.
 - A single upload batch may contain multiple formats — sort each screenshot into the right bucket.`;
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,
-        messages:[{role:'user',content:[...imgBlocks,{type:'text',text:prompt}]}]})});
-    const j=await r.json();
-    if(j.error){el.innerHTML=`<div class="tkt"><h3>API error</h3><div class="sub">${j.error.message||'unknown'}</div></div>`;return}
-    const raw=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    const raw=await callGemini(key,[...imgBlocks,{type:'text',text:prompt}],8000);
     let parsed;
     const cleaned=raw.replace(/```json|```/g,'').trim();
     try{
@@ -7868,41 +7902,183 @@ Treat this exactly like Formats 1-3 combined, just read from plain text instead 
     const picks=Array.isArray(parsed.picks)?parsed.picks:[];
     const trends=Array.isArray(parsed.trends)?parsed.trends:[];
     const consensus=Array.isArray(parsed.consensus)?parsed.consensus:[];
-    if(!picks.length&&!trends.length&&!consensus.length){
+    if(!picks.length&&!trends.length&&!consensus.length&&!offlinePicks.length&&!offlineTrends.length&&!offlineConsensus.length){
       el.innerHTML='<div class="empty">Nothing readable came back — try clearer screenshots.</div>';return;
     }
-    window._pendingExt={picks,trends,consensus};
-    const rows=[];
-    if(picks.length)rows.push(`<div class="mktlab" style="margin-top:0">Picks (${picks.length})</div>
-      <ol>${picks.map(x=>`<li><b>${x.src}</b> — ${x.away} @ ${x.home} · ${x.pick}
-        ${x.conf?`<span class="flag cool">${x.conf}</span>`:''}
-        ${x.predictedAway!==undefined?`<span class="m"> proj ${x.predictedAway}-${x.predictedHome}</span>`:''}</li>`).join('')}</ol>`);
-    if(consensus.length)rows.push(`<div class="mktlab">Public consensus (${consensus.length})</div>
-      <ol>${consensus.map(x=>`<li><b>${x.src}</b> — ${x.away} ${x.awayPct}% / ${x.home} ${x.homePct}%</li>`).join('')}</ol>`);
-    if(trends.length)rows.push(`<div class="mktlab">Trends (${trends.length})</div>
-      <ol>${trends.map(x=>`<li><b>${x.src}</b> — ${x.away}@${x.home}${x.team?' '+x.team:''}: ${x.text}
-        ${x.implies?`<span class="flag cool">${x.implies}</span>`:''}</li>`).join('')}</ol>`);
-    // THE ITEM-6 FIX: source used to be requested BEFORE analysis, meaning you
-    // had to know what platform a screenshot came from before you'd even seen
-    // what was in it. The model already auto-detects a real source per entry
-    // (x.src) when nothing is provided — this now shows what it detected,
-    // post-upload, with an optional override that corrects every row at once
-    // if the auto-detect got it wrong or you want to relabel it.
-    const detectedSrcs=[...new Set([...picks,...trends,...consensus].map(x=>x.src).filter(Boolean))];
-    el.innerHTML=`<div class="tkt hi"><h3>${picks.length} picks · ${trends.length} trends · ${consensus.length} consensus rows</h3>
-      <div class="sub">Check these before saving — vision extraction isn't perfect.</div>
-      ${rows.join('')}
-      <div class="mktlab">Source</div>
-      <div class="sub" style="margin-top:0">Detected: <b>${detectedSrcs.length?detectedSrcs.join(', '):'unclear — name it below'}</b></div>
-      <input id="extSrcOverride" placeholder="Override / correct the source name (optional)"
-        style="width:100%;margin-top:6px;padding:9px;border-radius:7px;border:1px solid var(--rule);
-        background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
-      <div class="bar" style="margin-top:8px"><button class="primary" onclick="saveExtPicks()">Save all</button></div></div>`;
+    const allPicks=[...offlinePicks,...picks];
+    const allTrends=[...offlineTrends,...trends];
+    const allConsensus=[...offlineConsensus,...consensus];
+    window._pendingExt={picks:allPicks,trends:allTrends,consensus:allConsensus};
+    renderExtResults(el,allPicks,allTrends,allConsensus);
   }catch(e){
     // could be a real network failure OR a thrown file-format rejection
     // (legacy .doc) — message already says which
     el.innerHTML=`<div class="tkt"><h3>Couldn't read that</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
   }
+}
+
+// ── Shared result renderer — used by both offline and API paths ───────────────
+function renderExtResults(el,picks,trends,consensus){
+  const rows=[];
+  if(picks.length)rows.push(`<div class="mktlab" style="margin-top:0">Picks (${picks.length})</div>
+    <ol>${picks.map(x=>`<li><b>${x.src||'Covers'}</b> — ${x.away}@${x.home} · ${x.pick||x.market}
+      ${x.conf?`<span class="flag cool">${x.conf}</span>`:''}
+      ${x.predictedAway!=null?`<span class="m"> proj ${x.predictedAway}-${x.predictedHome}</span>`:''}</li>`).join('')}</ol>`);
+  if(consensus.length)rows.push(`<div class="mktlab">Public consensus (${consensus.length})</div>
+    <ol>${consensus.map(x=>`<li><b>${x.src||'Covers'}</b> — ${x.away} ${x.awayPct??'?'}% / ${x.home} ${x.homePct??'?'}%
+      ${x.market==='total'?`· ${x.overPct??'?'}% O / ${x.underPct??'?'}% U`:''}</li>`).join('')}</ol>`);
+  if(trends.length)rows.push(`<div class="mktlab">Trends (${trends.length})</div>
+    <ol>${trends.map(x=>`<li><b>${x.src||'Covers'}</b> — ${x.away}@${x.home}${x.team?' '+x.team:''}: ${x.text}
+      ${x.implies?`<span class="flag cool">${x.implies}</span>`:''}</li>`).join('')}</ol>`);
+  const detectedSrcs=[...new Set([...picks,...trends,...consensus].map(x=>x.src).filter(Boolean))];
+  el.innerHTML=`<div class="tkt hi"><h3>${picks.length} picks · ${trends.length} trends · ${consensus.length} consensus rows</h3>
+    <div class="sub">Check these before saving.</div>
+    ${rows.join('')}
+    <div class="mktlab">Source</div>
+    <div class="sub" style="margin-top:0">Detected: <b>${detectedSrcs.length?detectedSrcs.join(', '):'unclear — name it below'}</b></div>
+    <input id="extSrcOverride" placeholder="Override / correct the source name (optional)"
+      style="width:100%;margin-top:6px;padding:9px;border-radius:7px;border:1px solid var(--rule);
+      background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
+    <div class="bar" style="margin-top:8px"><button class="primary" onclick="saveExtPicks()">Save all</button></div></div>`;
+}
+
+// ── Deterministic offline parser — handles the three IronSilk slate formats ──
+// slate_picks.txt  : ML/RL/OU lines per game
+// slate_consensus.txt : TEAM XX% / TEAM XX% rows + TOTALS section
+// slate_trends.txt : TEAM trends bullets per game block
+function parseSlateText(text){
+  const picks=[],trends=[],consensus=[];
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+
+  // detect file type by content fingerprint
+  const isConsensus=lines.some(l=>/\d+%\s*\//.test(l)||/TOTALS/i.test(l));
+  const isTrends=lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under|[A-Z]{2,3})\s+is\s+\d/i.test(l));
+  const isPicks=lines.some(l=>/^ML:/i.test(l)||/^OU:/i.test(l)||/^RL:/i.test(l));
+
+  if(isConsensus){
+    // ── CONSENSUS FORMAT ──
+    // "TOR 25% / HOU 75%"  → moneyline consensus
+    // "TOTALS" section → total consensus rows
+    let inTotals=false;
+    let curAway=null,curHome=null;
+    for(const l of lines){
+      if(/^TOTALS$/i.test(l)){inTotals=true;continue;}
+      if(!inTotals){
+        // moneyline row: "TOR 25% / HOU 75%"
+        const m=l.match(/^([A-Z]{2,4})\s+(\d+)%\s*\/\s*([A-Z]{2,4})\s+(\d+)%/i);
+        if(m){
+          consensus.push({src:'Covers',away:m[1].toUpperCase(),home:m[3].toUpperCase(),
+            market:'moneyline',metric:'bets',
+            awayPct:+m[2],homePct:+m[4],
+            overPct:null,underPct:null,line:null});
+        }
+      }else{
+        // totals row: "SF/TEX: 100% Under | Line 8"
+        const m=l.match(/^([A-Z\/]+):\s*(\d+)%\s*(Over|Under)/i);
+        if(m){
+          const teams=m[1].split('/');
+          const aw=teams[0]||'';const hm=teams[1]||'';
+          const isOver=/over/i.test(m[3]);
+          const lineM=l.match(/Line\s+([\d.]+)/i);
+          const lineV=lineM?+lineM[1]:null;
+          // check for second consensus note e.g. "92% Under money leaders"
+          const m2=l.match(/(\d+)%\s*(Over|Under)\s+money/i);
+          consensus.push({src:'Covers',away:aw.toUpperCase(),home:hm.toUpperCase(),
+            market:'total',metric:'bets',
+            awayPct:null,homePct:null,
+            overPct:isOver?+m[2]:m2&&/over/i.test(m2[2])?+m2[1]:100-+m[2],
+            underPct:isOver?100-+m[2]:+m[2],
+            line:lineV});
+          if(m2){
+            consensus.push({src:'Covers (money leaders)',away:aw.toUpperCase(),home:hm.toUpperCase(),
+              market:'total',metric:'money',
+              overPct:/over/i.test(m2[2])?+m2[1]:100-+m2[1],
+              underPct:/under/i.test(m2[2])?+m2[1]:100-+m2[1],
+              line:lineV});
+          }
+        }
+      }
+    }
+  }
+
+  if(isTrends){
+    // ── TRENDS FORMAT ──
+    // Game header: "TOR @ HOU" or "TOR @ HOU | ..."
+    // Team label: "TOR:" or "TOR trends:"
+    // Bullet: "Under 5-0 last 5 overall."
+    let curAway=null,curHome=null,curTeam=null;
+    for(const l of lines){
+      if(/^MLB TRENDS/i.test(l)||/^Source:/i.test(l))continue;
+      const gameM=l.match(/^([A-Z]{2,4})\s*@\s*([A-Z]{2,4})/i);
+      if(gameM){curAway=gameM[1].toUpperCase();curHome=gameM[2].toUpperCase();curTeam=null;continue;}
+      const teamM=l.match(/^([A-Z]{2,4}):\s*(.*)/);
+      if(teamM&&curAway){
+        curTeam=teamM[1].toUpperCase();
+        const rest=teamM[2].trim();
+        if(rest)pushTrend(rest);
+        continue;
+      }
+      if(curAway&&l.length>8)pushTrend(l);
+    }
+    function pushTrend(text){
+      if(!text||!curAway)return;
+      const isOver=/^over/i.test(text);
+      const isUnder=/^under/i.test(text);
+      const implies=isOver?'over':isUnder?'under':null;
+      trends.push({src:'Covers',away:curAway,home:curHome,team:curTeam,
+        text,implies,game:curAway+'@'+curHome});
+    }
+  }
+
+  if(isPicks){
+    // ── PICKS FORMAT ──
+    // Game header: "TOR @ HOU | ..."
+    // ML: TOR +160 / HOU -163
+    // RL: TOR +1.5 (-133) / HOU -1.5 (+126)
+    // OU: o8.0 (-111) / u8.5 (-113)
+    let curAway=null,curHome=null;
+    for(const l of lines){
+      if(/^MLB PICKS/i.test(l))continue;
+      const gameM=l.match(/^([A-Z]{2,4})\s*@\s*([A-Z]{2,4})/i);
+      if(gameM){curAway=gameM[1].toUpperCase();curHome=gameM[2].toUpperCase();continue;}
+      if(!curAway)continue;
+      const game=curAway+'@'+curHome;
+
+      // ML: TOR +160 / HOU -163
+      const mlM=l.match(/^ML:\s*([A-Z]{2,4})\s*([+\-]\d+)\s*\/\s*([A-Z]{2,4})\s*([+\-]\d+)/i);
+      if(mlM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'moneyline',
+          pick:mlM[1].toUpperCase()+' ML '+mlM[2],side:mlM[1].toUpperCase()===curAway?'away':'home',
+          line:null,price:+mlM[2],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'moneyline',
+          pick:mlM[3].toUpperCase()+' ML '+mlM[4],side:mlM[3].toUpperCase()===curHome?'home':'away',
+          line:null,price:+mlM[4],conf:null});
+        continue;
+      }
+      // RL: TOR +1.5 (-133) / HOU -1.5 (+126)
+      const rlM=l.match(/^RL:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
+      if(rlM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'runline',
+          pick:rlM[1].toUpperCase()+' '+rlM[2],side:rlM[1].toUpperCase()===curAway?'away':'home',
+          line:+rlM[2],price:+rlM[3],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'runline',
+          pick:rlM[4].toUpperCase()+' '+rlM[5],side:rlM[4].toUpperCase()===curHome?'home':'away',
+          line:+rlM[5],price:+rlM[6],conf:null});
+        continue;
+      }
+      // OU: o8.0 (-111) / u8.5 (-113)
+      const ouM=l.match(/^OU:\s*o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i);
+      if(ouM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'total',
+          pick:'o'+ouM[1],side:'over',line:+ouM[1],price:+ouM[2],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'total',
+          pick:'u'+ouM[3],side:'under',line:+ouM[3],price:+ouM[4],conf:null});
+        continue;
+      }
+    }
+  }
+
+  return {picks,trends,consensus};
 }
 
 function saveExtPicks(){
@@ -10705,7 +10881,7 @@ async function send(){
   const key=get(LS.ai,'');
   const inp=document.getElementById('chatIn'),q=inp.value.trim();
   if(!q)return;
-  if(!key){alert('Add an Anthropic key in setup to use chat.');return}
+  if(!key){alert('Add a Gemini API key in Settings to use chat.');return}
   inp.value='';CHAT.push({role:'user',content:q});paintChat();
   const top=PROPS.slice(0,40).map(p=>`${p.name} ${p.mkt} ${(p.p*100).toFixed(0)}% (${p.game})`).join('; ');
   const L=get(LS.locked,[]);
@@ -10745,14 +10921,13 @@ async function send(){
     +`that's the real answer, not just win/loss record. `
     +`Be direct and concise. Never claim certainty. Say plainly when a sample is too small to trust.`;
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:sys,
-        messages:CHAT.slice(-10).map(m=>({role:m.role,content:m.content}))})});
-    const j=await r.json();
-    CHAT.push({role:'assistant',content:j.error?('Error: '+(j.error.message||'failed'))
-      :(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n')});
+    // Chat uses text-only — prepend system prompt as first user turn for Gemini
+    const chatBlocks=[
+      {type:'text',text:'[SYSTEM] '+sys},
+      ...CHAT.slice(-10).map(m=>({type:'text',text:(m.role==='user'?'[USER] ':'[ASSISTANT] ')+m.content}))
+    ];
+    const raw=await callGemini(key,chatBlocks,1500);
+    CHAT.push({role:'assistant',content:raw||'No response.'});
   }catch(e){CHAT.push({role:'assistant',content:'Network error.'})}
   paintChat();
 }
