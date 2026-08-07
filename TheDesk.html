@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.07</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.08</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1084,7 +1084,7 @@ async function analyzeBookShots(){
 // Offline book odds save — feeds parsed slate_picks.txt entries directly
 // into the same bookshots storage that the API path uses
 function saveBookOdds(picks,el){
-  const d=today(); // always file under today for txt uploads
+  const d=today();
   const all=get(LS.bookshots,{});
   all[d]=all[d]||[];
   const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
@@ -1094,16 +1094,16 @@ function saveBookOdds(picks,el){
     const homeAb=norm(x.home);
     const awayAb=norm(x.away);
     const game=awayAb+'@'+homeAb;
+    const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
     const rec={away:awayAb,home:homeAb,game,market:x.market,
       side:x.side,line:x.line!=null?x.line:null,
-      price:x.price,capturedAt:Date.now()};
+      price:x.price,gid:gm?gm.id:null,capturedAt:Date.now()};
     const k=keyOf(rec);
     const i=all[d].findIndex(y=>keyOf(y)===k);
     if(i>=0)all[d][i]=rec;else all[d].push(rec);
   });
   set(LS.bookshots,all);
   document.getElementById('bookShots').value='';
-  // force preview to today so renderBookStatus shows the right date
   BOOKSHOT_UPLOAD_DATE=d;
   renderBookStatus();
   if(el)el.innerHTML=`<div class="tkt hi"><h3>Locked in</h3><div class="sub">${picks.length} selections saved for ${d} from text file — no API needed.</div></div>`;
@@ -3689,6 +3689,22 @@ function trendPanel(g,s){
   }
 
   if(!rows.length)return '<div class="empty">No trend strong enough to flag on this game.</div>';
+  // ── 23 · External uploaded trends (Covers, OddsShark, etc.) ────────────
+  const extTrends=applicableTrends(g,s);
+  if(extTrends.length){
+    extTrends.forEach(t=>{
+      const imp=t.implies;
+      const isOver=/^over/i.test(t.text);
+      const isUnder=/^under/i.test(t.text);
+      let implies=null,relevant=null;
+      if(imp==='over'||isOver){implies='over';relevant=modelTotalLean;}
+      else if(imp==='under'||isUnder){implies='under';relevant=modelTotalLean;}
+      else if(imp==='home'||imp===g.home.abbr){implies=g.home.abbr;relevant=modelSide;}
+      else if(imp==='away'||imp===g.away.abbr){implies=g.away.abbr;relevant=modelSide;}
+      add(`${t.src||'Covers'} trend${t.team?' · '+t.team:''}`,t.text,implies,relevant);
+    });
+  }
+
   const agree=rows.filter(r=>r.cls==='agree').length,conflict=rows.filter(r=>r.cls==='conflict').length;
   return `<div class="tkt hi" style="margin-bottom:10px">
       <h3>${agree} backing · ${conflict} contesting · ${rows.length} total signals</h3>
@@ -8180,12 +8196,15 @@ function saveExtPicks(){
     });
   }
 
+  const ENORM={'CHW':'CWS','AZ':'ARI','WAS':'WSH','ATH':'ATH','OAK':'ATH'};
+  const enorm=a=>{const u=(a||'').toUpperCase();return ENORM[u]||abbr(a)||u;};
+
   // ── picks ──
   const allP=getExt();
   allP[d]=allP[d]||[];
   const keyOfP=x=>[x.src,x.game,x.market,x.side,x.line].join('|');
   (bundle.picks||[]).forEach(x=>{
-    const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
+    const homeAb=enorm(x.home),awayAb=enorm(x.away);
     const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
     const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
       gid:gm?gm.id:null,capturedAt:Date.now(),hit:null};
@@ -8199,7 +8218,7 @@ function saveExtPicks(){
   allT[d]=allT[d]||[];
   const keyOfT=x=>[x.src,x.game,x.text].join('|');
   (bundle.trends||[]).forEach(x=>{
-    const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
+    const homeAb=enorm(x.home),awayAb=enorm(x.away);
     const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
     const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
       gid:gm?gm.id:null,capturedAt:Date.now()};
@@ -8213,7 +8232,7 @@ function saveExtPicks(){
   allC[d]=allC[d]||[];
   const keyOfC=x=>[x.src,x.game].join('|');
   (bundle.consensus||[]).forEach(x=>{
-    const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
+    const homeAb=enorm(x.home),awayAb=enorm(x.away);
     const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
     const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
       gid:gm?gm.id:null,capturedAt:Date.now()};
