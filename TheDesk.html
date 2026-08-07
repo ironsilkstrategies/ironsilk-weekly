@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.04</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.05</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1088,9 +1088,11 @@ function saveBookOdds(picks,el){
   const all=get(LS.bookshots,{});
   all[d]=all[d]||[];
   const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  const NORM={'CHW':'CWS','AZ':'ARI','WAS':'WSH','ATH':'ATH','OAK':'ATH'};
+  const norm=a=>(NORM[a.toUpperCase()]||a.toUpperCase());
   picks.forEach(x=>{
-    const homeAb=x.home.toUpperCase();
-    const awayAb=x.away.toUpperCase();
+    const homeAb=norm(x.home);
+    const awayAb=norm(x.away);
     const game=awayAb+'@'+homeAb;
     const rec={away:awayAb,home:homeAb,game,market:x.market,
       side:x.side,line:x.line!=null?x.line:null,
@@ -7998,6 +8000,10 @@ function parseSlateText(text){
   const picks=[],trends=[],consensus=[];
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
 
+  // normalize abbreviations to match what GAMES array uses
+  const ABBR_MAP={'CHW':'CWS','AZ':'ARI','WSH':'WSH','WAS':'WSH','ATH':'ATH','OAK':'ATH','NYY':'NYY','NYM':'NYM'};
+  function normAbbr(a){return ABBR_MAP[a.toUpperCase()]||a.toUpperCase();}
+
   // detect file type by content fingerprint
   const isConsensus=lines.some(l=>/\d+%\s*\//.test(l)||/TOTALS/i.test(l));
   const isTrends=lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under|[A-Z]{2,3})\s+is\s+\d/i.test(l));
@@ -8015,7 +8021,7 @@ function parseSlateText(text){
         // moneyline row: "TOR 25% / HOU 75%"
         const m=l.match(/^([A-Z]{2,4})\s+(\d+)%\s*\/\s*([A-Z]{2,4})\s+(\d+)%/i);
         if(m){
-          consensus.push({src:'Covers',away:m[1].toUpperCase(),home:m[3].toUpperCase(),
+          consensus.push({src:'Covers',away:normAbbr(m[1]),home:normAbbr(m[3]),
             market:'moneyline',metric:'bets',
             awayPct:+m[2],homePct:+m[4],
             overPct:null,underPct:null,line:null});
@@ -8031,7 +8037,7 @@ function parseSlateText(text){
           const lineV=lineM?+lineM[1]:null;
           // check for second consensus note e.g. "92% Under money leaders"
           const m2=l.match(/(\d+)%\s*(Over|Under)\s+money/i);
-          consensus.push({src:'Covers',away:aw.toUpperCase(),home:hm.toUpperCase(),
+          consensus.push({src:'Covers',away:normAbbr(aw),home:normAbbr(hm),
             market:'total',metric:'bets',
             awayPct:null,homePct:null,
             overPct:isOver?+m[2]:m2&&/over/i.test(m2[2])?+m2[1]:100-+m[2],
@@ -8058,7 +8064,7 @@ function parseSlateText(text){
     for(const l of lines){
       if(/^MLB TRENDS/i.test(l)||/^Source:/i.test(l))continue;
       const gameM=l.match(/^([A-Z]{2,4})\s*@\s*([A-Z]{2,4})/i);
-      if(gameM){curAway=gameM[1].toUpperCase();curHome=gameM[2].toUpperCase();curTeam=null;continue;}
+      if(gameM){curAway=normAbbr(gameM[1]);curHome=normAbbr(gameM[2]);curTeam=null;continue;}
       const teamM=l.match(/^([A-Z]{2,4}):\s*(.*)/);
       if(teamM&&curAway){
         curTeam=teamM[1].toUpperCase();
@@ -8088,7 +8094,7 @@ function parseSlateText(text){
     for(const l of lines){
       if(/^MLB PICKS/i.test(l))continue;
       const gameM=l.match(/^([A-Z]{2,4})\s*@\s*([A-Z]{2,4})/i);
-      if(gameM){curAway=gameM[1].toUpperCase();curHome=gameM[2].toUpperCase();continue;}
+      if(gameM){curAway=normAbbr(gameM[1]);curHome=normAbbr(gameM[2]);continue;}
       if(!curAway)continue;
       const game=curAway+'@'+curHome;
 
