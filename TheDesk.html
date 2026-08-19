@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.14</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.16</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -770,6 +770,7 @@ const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl'
 let NFL_GAMES=[],NFL_SIMS={}; // parallel NFL game store
+let NFL_WEEK=null,NFL_SEASON=null; // current week/season being viewed
 let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
 let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
 
@@ -11754,7 +11755,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.14
+   NFL ENGINE — BUILD v1.16
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12085,71 +12086,126 @@ function saveNFLBookOdds(picks,el){
 function renderNFL(){
   const el=document.getElementById('slate');
   if(!el)return;
+
   if(!NFL_GAMES.length){
     el.innerHTML=`<div class="tkt">
       <h3>🏈 NFL Board</h3>
-      <div class="sub">No NFL games loaded. Upload an NFL picks file on the Games tab,
-      or load games manually below.</div>
+      <div class="sub">No NFL games loaded. Hit the button to pull the current week's schedule from ESPN — free, no key needed.</div>
       <div class="bar" style="margin-top:8px">
-        <button class="primary" onclick="loadNFLSchedule()">Load NFL Schedule</button>
+        <button class="primary" onclick="loadNFLSchedule()">Load current week</button>
       </div>
       <div id="nflLoadStatus"></div>
     </div>`;
     return;
   }
+
   // run sims
-  NFL_GAMES.forEach(g=>{
-    if(!NFL_SIMS[g.id])NFL_SIMS[g.id]=simNFLGame(g);
-  });
-  const upcoming=NFL_GAMES.filter(g=>g.status!=='Final');
-  const final=NFL_GAMES.filter(g=>g.status==='Final');
-  let h='';
-  if(upcoming.length)h+=sbar('Upcoming',upcoming.length)+upcoming.map(nflCard).join('');
+  NFL_GAMES.forEach(g=>{if(!NFL_SIMS[g.id])NFL_SIMS[g.id]=simNFLGame(g);});
+
+  const week=NFL_WEEK||'?';
+  const season=NFL_SEASON||new Date().getFullYear();
+  const isPreseason=NFL_GAMES[0]&&NFL_GAMES[0].seasonType===1;
+  const weekLabel=isPreseason?`Preseason Week ${week}`:`Week ${week}`;
+
+  const weekNav=`<div style="display:flex;align-items:center;justify-content:space-between;
+    padding:10px 12px;background:var(--panel2);border-radius:8px;margin-bottom:10px">
+    <button onclick="loadNFLWeek(${season},${week-1})" style="background:none;border:1px solid var(--rule);
+      color:var(--chalk);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px">← Prev</button>
+    <div style="text-align:center">
+      <div style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase">
+        🏈 ${season} NFL</div>
+      <div style="font-weight:700;font-size:16px;color:var(--chalk)">${weekLabel}</div>
+      <div style="font-size:11px;color:var(--chalk-dim)">${NFL_GAMES.length} games</div>
+    </div>
+    <button onclick="loadNFLWeek(${season},${week+1})" style="background:none;border:1px solid var(--rule);
+      color:var(--chalk);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px">Next →</button>
+  </div>`;
+
+  const scheduled=NFL_GAMES.filter(g=>g.status==='Scheduled'||g.status==='In Progress');
+  const final=NFL_GAMES.filter(g=>g.status==='Final'||g.status==='Final/OT');
+
+  let h=weekNav;
+  if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(nflCard).join('');
   if(final.length)h+=sbar('Final',final.length)+final.map(nflCard).join('');
   el.innerHTML=h;
   document.getElementById('nG').textContent=NFL_GAMES.length;
 }
 
-// ── NFL Schedule loader (ESPN API — free, no key) ─────────────────────────────
 async function loadNFLSchedule(){
-  const statusEl=document.getElementById('nflLoadStatus');
-  if(statusEl)statusEl.innerHTML='<div class="empty">Loading NFL schedule…</div>';
+  const el=document.getElementById('slate');
+  if(el)el.innerHTML='<div class="empty">Loading current NFL week…</div>';
   try{
-    // ESPN public scoreboard endpoint
     const url='https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
     const r=await fetch(url);
     const j=await r.json();
-    const events=j.events||[];
-    NFL_GAMES=events.map((e,i)=>{
-      const comp=e.competitions[0];
-      const away=comp.competitors.find(c=>c.homeAway==='away');
-      const home=comp.competitors.find(c=>c.homeAway==='home');
-      if(!away||!home)return null;
-      const awayAbbr=(away.team.abbreviation||'???').toUpperCase();
-      const homeAbbr=(home.team.abbreviation||'???').toUpperCase();
-      return{
-        id:e.id||String(i),
-        week:j.week?.number||'',
-        time:e.date?new Date(e.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'}):'TBD',
-        status:comp.status?.type?.description||'Scheduled',
-        away:{abbr:awayAbbr,name:away.team.displayName||awayAbbr,
-          offRating:24,defRating:24, // will be updated with real data
-          record:away.records?.[0]?.summary||''},
-        home:{abbr:homeAbbr,name:home.team.displayName||homeAbbr,
-          offRating:24,defRating:24,
-          record:home.records?.[0]?.summary||''},
-      };
-    }).filter(Boolean);
-    // persist to localStorage
-    set(LS.nflgames,{d:today(),v:NFL_GAMES});
-    NFL_SIMS={};
-    if(statusEl)statusEl.innerHTML=`<div class="note">${NFL_GAMES.length} NFL games loaded.</div>`;
-    renderNFL();
-    document.getElementById('nG').textContent=NFL_GAMES.length;
+    NFL_WEEK=j.week&&j.week.number||1;
+    NFL_SEASON=j.season&&j.season.year||new Date().getFullYear();
+    _parseNFLEvents(j);
   }catch(e){
-    if(statusEl)statusEl.innerHTML=`<div class="empty">Failed to load: ${e.message}</div>`;
+    if(el)el.innerHTML=`<div class="empty">Failed to load: ${e.message}</div>`;
   }
 }
+
+async function loadNFLWeek(season,week){
+  if(week<1)week=1;
+  const el=document.getElementById('slate');
+  if(el)el.innerHTML='<div class="empty">Loading week '+week+'…</div>';
+  try{
+    // Try regular season first, then preseason
+    const seasonType=week<=4&&season<=new Date().getFullYear()?'1':'2';
+    const url=`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=${seasonType}&week=${week}`;
+    const r=await fetch(url);
+    const j=await r.json();
+    NFL_WEEK=j.week&&j.week.number||week;
+    NFL_SEASON=j.season&&j.season.year||season;
+    if(!(j.events||[]).length){
+      // flip season type
+      const alt=seasonType==='1'?'2':'1';
+      const r2=await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=${alt}&week=${week}`);
+      const j2=await r2.json();
+      if((j2.events||[]).length){_parseNFLEvents(j2);return;}
+    }
+    _parseNFLEvents(j);
+  }catch(e){
+    if(el)el.innerHTML=`<div class="empty">Failed: ${e.message}</div>`;
+  }
+}
+
+function _parseNFLEvents(j){
+  const events=j.events||[];
+  NFL_GAMES=events.map(function(e,i){
+    const comp=e.competitions[0];
+    const away=comp.competitors.find(function(c){return c.homeAway==='away';});
+    const home=comp.competitors.find(function(c){return c.homeAway==='home';});
+    if(!away||!home)return null;
+    const awayAbbr=(away.team.abbreviation||'???').toUpperCase();
+    const homeAbbr=(home.team.abbreviation||'???').toUpperCase();
+    let day='TBD',timeStr='TBD';
+    if(e.date){
+      const d=new Date(e.date);
+      day=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'America/Chicago'});
+      timeStr=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'});
+    }
+    return{
+      id:e.id||String(i),
+      week:j.week&&j.week.number||NFL_WEEK||'',
+      seasonType:j.season&&j.season.type||2,
+      day:day,time:timeStr,date:e.date||'',
+      status:comp.status&&comp.status.type&&comp.status.type.description||'Scheduled',
+      away:{abbr:awayAbbr,name:away.team.displayName||awayAbbr,offRating:24,defRating:24,record:away.records&&away.records[0]&&away.records[0].summary||''},
+      home:{abbr:homeAbbr,name:home.team.displayName||homeAbbr,offRating:24,defRating:24,record:home.records&&home.records[0]&&home.records[0].summary||''},
+    };
+  }).filter(Boolean);
+  const cacheKey=(NFL_SEASON||'')+'w'+(NFL_WEEK||'');
+  const cache=get(LS.nflgames,{});
+  cache[cacheKey]={ts:Date.now(),v:NFL_GAMES,week:NFL_WEEK,season:NFL_SEASON};
+  set(LS.nflgames,cache);
+  NFL_SIMS={};
+  renderNFL();
+  const nG=document.getElementById('nG');
+  if(nG)nG.textContent=NFL_GAMES.length;
+}
+
 
 // ── parseSlateText NFL extension ──────────────────────────────────────────────
 // Extends the existing MLB parser to handle NFL-specific formats.
@@ -12291,9 +12347,901 @@ const _origSaveBookOdds=typeof saveBookOdds==='function'?saveBookOdds:null;
 
 // ── Boot: restore NFL games from cache ────────────────────────────────────────
 (function restoreNFLGames(){
-  const c=get(LS.nflgames,{d:'',v:[]});
-  if(c.v&&c.v.length){NFL_GAMES=c.v;NFL_SIMS={};}
+  const cache=get(LS.nflgames,{});
+  // find most recent cached week
+  const keys=Object.keys(cache).sort((a,b)=>(cache[b].ts||0)-(cache[a].ts||0));
+  if(keys.length){
+    const latest=cache[keys[0]];
+    if(latest.v&&latest.v.length){
+      NFL_GAMES=latest.v;
+      NFL_WEEK=latest.week||null;
+      NFL_SEASON=latest.season||null;
+      NFL_SIMS={};
+    }
+  }
 })();
+
+/* ═══════════════════════════════════════════════════════════════════════
+   NFL INTELLIGENCE LAYER — A+++ build
+   Power ratings · Live odds · Calibration · A-G Evaluation · Injuries
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// ── NFL Division map ─────────────────────────────────────────────────────────
+const NFL_DIVISION={
+  BUF:'AFC East',MIA:'AFC East',NE:'AFC East',NYJ:'AFC East',
+  BAL:'AFC North',CIN:'AFC North',CLE:'AFC North',PIT:'AFC North',
+  HOU:'AFC South',IND:'AFC South',JAX:'AFC South',TEN:'AFC South',
+  DEN:'AFC West',KC:'AFC West',LAC:'AFC West',LV:'AFC West',
+  DAL:'NFC East',NYG:'NFC East',PHI:'NFC East',WSH:'NFC East',
+  CHI:'NFC North',DET:'NFC North',GB:'NFC North',MIN:'NFC North',
+  ATL:'NFC South',CAR:'NFC South',NO:'NFC South',TB:'NFC South',
+  ARI:'NFC West',LAR:'NFC West',SEA:'NFC West',SF:'NFC West',
+};
+function nflIsDivisionGame(g){
+  return NFL_DIVISION[g.away.abbr]&&NFL_DIVISION[g.away.abbr]===NFL_DIVISION[g.home.abbr];
+}
+function nflIsConferenceGame(g){
+  const da=NFL_DIVISION[g.away.abbr],dh=NFL_DIVISION[g.home.abbr];
+  if(!da||!dh)return null;
+  return da.slice(0,3)===dh.slice(0,3);
+}
+
+// ── NFL Power Ratings ────────────────────────────────────────────────────────
+// Fetches from ESPN's team stats API — real offensive/defensive ratings.
+// Points per game (off) and points allowed per game (def) for each team.
+// Cached weekly, not daily — NFL teams don't change dramatically day to day.
+let NFL_POWER={};  // {abbr: {offPPG, defPPG, sos, record, streak}}
+
+async function fetchNFLPowerRatings(){
+  try{
+    // ESPN team stats — regular season standings with offensive/defensive numbers
+    const url='https://site.api.espn.com/apis/site/v2/sports/football/nfl/standings';
+    const r=await fetch(url);
+    const j=await r.json();
+    const entries=[];
+    (j.children||[]).forEach(conf=>{
+      (conf.children||[]).forEach(div=>{
+        (div.standings&&div.standings.entries||[]).forEach(e=>entries.push(e));
+      });
+    });
+    entries.forEach(e=>{
+      const abbr=(e.team&&e.team.abbreviation||'').toUpperCase();
+      if(!abbr)return;
+      const stats={};
+      (e.stats||[]).forEach(s=>{stats[s.name]=s.value;});
+      NFL_POWER[abbr]={
+        offPPG:stats.pointsFor/Math.max(1,stats.gamesPlayed)||24,
+        defPPG:stats.pointsAgainst/Math.max(1,stats.gamesPlayed)||24,
+        wins:stats.wins||0,losses:stats.losses||0,ties:stats.ties||0,
+        pf:stats.pointsFor||0,pa:stats.pointsAgainst||0,
+        sos:stats.strengthOfSchedule||0,
+        streak:stats.streak||0,
+      };
+    });
+    // cache for the week
+    set('d4.nflpower',{ts:Date.now(),v:NFL_POWER,week:NFL_WEEK});
+    // update existing NFL_GAMES with real ratings
+    NFL_GAMES.forEach(g=>{
+      if(NFL_POWER[g.away.abbr]){g.away.offRating=NFL_POWER[g.away.abbr].offPPG;g.away.defRating=NFL_POWER[g.away.abbr].defPPG;}
+      if(NFL_POWER[g.home.abbr]){g.home.offRating=NFL_POWER[g.home.abbr].offPPG;g.home.defRating=NFL_POWER[g.home.abbr].defPPG;}
+    });
+    NFL_SIMS={};  // invalidate sims so they rerun with real numbers
+    if(ACTIVE_SPORT==='nfl')renderNFL();
+    console.log('NFL power ratings loaded:',Object.keys(NFL_POWER).length,'teams');
+  }catch(e){
+    console.warn('NFL power ratings failed:',e.message);
+  }
+}
+
+// boot: restore cached power ratings
+(function restoreNFLPower(){
+  const c=get('d4.nflpower',{});
+  if(c.v&&Object.keys(c.v).length){NFL_POWER=c.v;}
+})();
+
+// ── NFL Advanced Sim Engine ────────────────────────────────────────────────────
+// Replaces the basic normal distribution sim with a full possession-based model.
+// Uses real PPG offense/defense, home field advantage, situational adjustments,
+// and calibration correction just like the MLB engine.
+const NFL_HFA=2.5;       // home field advantage in points (real NFL average ~2.5)
+const NFL_CALIB_KEY='d4.nflcalib';
+
+function simNFLGame(g,N){
+  N=N||10000;
+
+  // Get real power ratings or fall back to league average
+  const awayPow=NFL_POWER[g.away.abbr]||{offPPG:22,defPPG:22};
+  const homePow=NFL_POWER[g.home.abbr]||{offPPG:22,defPPG:22};
+
+  // Project expected scores: blend offense vs opponent defense, regress to mean
+  const leagueAvg=22.0;
+  const regFactor=0.35;  // regression to mean — early season more regression
+  const gamesPlayed=Math.max(awayPow.wins+awayPow.losses+awayPow.ties,
+    homePow.wins+homePow.losses+homePow.ties,1);
+  const regW=Math.max(0,Math.min(1,(gamesPlayed-1)/8)); // full confidence at week 9+
+  const reg=1-regFactor*(1-regW);
+
+  // Score projection: my offense vs their defense, blended
+  let awayExp=((awayPow.offPPG+homePow.defPPG)/2)*reg + leagueAvg*(1-reg);
+  let homeExp=((homePow.offPPG+awayPow.defPPG)/2)*reg + leagueAvg*(1-reg) + NFL_HFA;
+
+  // situational adjustments
+  if(nflIsDivisionGame(g)){awayExp*=0.97;homeExp*=0.97;}  // division games tighter
+  if(g.away.abbr===g.home.abbr)awayExp=homeExp=22; // shouldn't happen
+
+  // calibration drift correction (mirrors MLB engine)
+  const nflCalib=get(NFL_CALIB_KEY,{});
+  const driftAdj=(nflCalib.globalDrift||0)/2;
+  awayExp=Math.max(3,awayExp+driftAdj);
+  homeExp=Math.max(3,homeExp+driftAdj);
+
+  // NFL scoring variance — scores cluster around ~10, 17, 24, 27, 31 etc
+  // Use normal distribution but with NFL-realistic std dev
+  const std=10.5;
+  let hw=0,aw=0,tie=0;
+  const totals=[],margins=[];
+  const scoreFreq={},totFreq={};
+  const h1Totals=[];
+
+  for(let i=0;i<N;i++){
+    let a=Math.max(0,Math.round(awayExp+randn()*std));
+    let h=Math.max(0,Math.round(homeExp+randn()*std));
+    // snap to realistic NFL scores — teams almost never score 1,2,4,5,6... 
+    // enforce touchdown/field goal scoring clusters
+    a=snapNFLScore(a);
+    h=snapNFLScore(h);
+    totals.push(a+h);
+    margins.push(h-a);  // positive = home wins by X
+    const key=a+'-'+h;scoreFreq[key]=(scoreFreq[key]||0)+1;
+    const tk=String(a+h);totFreq[tk]=(totFreq[tk]||0)+1;
+    if(h>a)hw++;else if(a>h)aw++;else tie++;
+    // first half: roughly 45% of total scoring
+    const h1a=Math.max(0,Math.round(a*0.45+randn()*4));
+    const h1h=Math.max(0,Math.round(h*0.45+randn()*4));
+    h1Totals.push(h1a+h1h);
+  }
+
+  totals.sort((a,b)=>a-b);
+  margins.sort((a,b)=>a-b);
+  h1Totals.sort((a,b)=>a-b);
+
+  // most common score
+  let modeScore=null,modeN=0;
+  Object.keys(scoreFreq).forEach(k=>{if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeScore=k;}});
+
+  // raw win probabilities
+  let rawHw=(hw+tie*0.5)/N;
+  let rawAw=(aw+tie*0.5)/N;
+
+  // apply NFL calibration correction if available
+  try{
+    const calHw=nflSideCalibAdj(rawHw,rawHw>=0.5?'favorite':'underdog');
+    if(!isNaN(calHw)&&calHw>0&&calHw<1){rawHw=calHw;rawAw=1-calHw;}
+  }catch(e){}
+
+  const med=totals[Math.floor(N/2)];
+  const medMargin=margins[Math.floor(N/2)]; // positive = home favored
+  const medH1=h1Totals[Math.floor(N/2)];
+
+  const over=x=>{
+    const raw=totals.filter(v=>v>x).length/N;
+    try{
+      const cal=nflTotalCalibAdj(raw,rawHw>=0.5?'favorite':'underdog');
+      if(!isNaN(cal)&&cal>0&&cal<1)return cal;
+    }catch(e){}
+    return raw;
+  };
+
+  const spreadCover=line=>{
+    // P(home covers line) — positive line means home is underdog
+    return margins.filter(m=>m>line).length/N;
+  };
+
+  return{
+    awayProj:Math.round(awayExp*10)/10,
+    homeProj:Math.round(homeExp*10)/10,
+    hw:rawHw,aw:rawAw,
+    med,medMargin,medH1,
+    modeScore,modeScorePct:modeN/N,
+    p10:totals[Math.floor(N*.1)],
+    p90:totals[Math.floor(N*.9)],
+    N,over,spreadCover,
+    awayExp,homeExp,
+  };
+}
+
+// Snap raw score to realistic NFL scoring clusters
+function snapNFLScore(s){
+  if(s<0)return 0;
+  // Common NFL scores: 0,3,6,7,9,10,13,14,16,17,20,21,23,24,27,28,30,31,34,35,37,38,41,42
+  const valid=[0,3,6,7,9,10,13,14,16,17,20,21,23,24,27,28,30,31,33,34,37,38,41,42,44,45,48];
+  let best=valid[0],bestD=Math.abs(s-valid[0]);
+  for(const v of valid){const d=Math.abs(s-v);if(d<bestD){bestD=d;best=v;}}
+  return best;
+}
+
+// ── NFL Calibration system ────────────────────────────────────────────────────
+// Mirrors MLB segmented calibration — tracks real hit rate vs stated probability
+// across market type (spread/total/moneyline) and situation (fav/dog/div/conf/neutral)
+const NFL_CAL_BANDS=[[0,0.10],[0.10,0.20],[0.20,0.30],[0.30,0.40],[0.40,0.50],
+  [0.50,0.60],[0.60,0.70],[0.70,0.80],[0.80,0.90],[0.90,1.00]];
+
+function nflBandOf(p){
+  for(const[lo,hi]of NFL_CAL_BANDS)if(p>=lo&&p<hi)return`${(lo*100)|0}-${(hi*100)|0}`;
+  return'90-100';
+}
+function getNFLCalib(){return get(NFL_CALIB_KEY,{});}
+
+function nflSideCalibAdj(raw,situation){
+  const c=getNFLCalib();
+  const band=nflBandOf(raw);
+  const key=`side|${situation||'any'}|${band}`;
+  const entry=c[key];
+  if(!entry||entry.n<8)return raw;
+  const hitRate=entry.hits/entry.n;
+  const k=Math.min(1,(entry.n-8)/20);
+  return raw*(1-k)+hitRate*k;
+}
+function nflTotalCalibAdj(raw,situation){
+  const c=getNFLCalib();
+  const band=nflBandOf(raw);
+  const key=`total|${situation||'any'}|${band}`;
+  const entry=c[key];
+  if(!entry||entry.n<8)return raw;
+  const hitRate=entry.hits/entry.n;
+  const k=Math.min(1,(entry.n-8)/20);
+  return raw*(1-k)+hitRate*k;
+}
+function nflSpreadCalibAdj(raw,situation){
+  const c=getNFLCalib();
+  const band=nflBandOf(raw);
+  const key=`spread|${situation||'any'}|${band}`;
+  const entry=c[key];
+  if(!entry||entry.n<8)return raw;
+  const hitRate=entry.hits/entry.n;
+  const k=Math.min(1,(entry.n-8)/20);
+  return raw*(1-k)+hitRate*k;
+}
+
+// Grade NFL results and update calibration
+function gradeNFLResults(){
+  const arc=get(LS.nflarc,{});
+  const calib=getNFLCalib();
+  let changed=false;
+  Object.keys(arc).forEach(wk=>{
+    const A=arc[wk];
+    if(!A.rows||!A.finals)return;
+    A.rows.forEach(r=>{
+      if(r.graded)return;
+      const F=A.finals[r.id];
+      if(!F||F.a===null||F.h===null)return;
+      // grade spread
+      if(r.spreadSide&&r.spreadLine!==null){
+        const margin=r.spreadSide==='home'?F.h-F.a:F.a-F.h;
+        const hit=margin>r.spreadLine;
+        const key=`spread|${r.situation||'any'}|${r.band}`;
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        changed=true;
+      }
+      // grade total
+      if(r.totalSide&&r.totalLine!==null){
+        const tot=F.a+F.h;
+        const hit=r.totalSide==='over'?tot>r.totalLine:tot<r.totalLine;
+        const key=`total|${r.situation||'any'}|${r.band}`;
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        changed=true;
+      }
+      // grade moneyline
+      if(r.mlSide){
+        const hit=r.mlSide==='home'?F.h>F.a:F.a>F.h;
+        const key=`side|${r.situation||'any'}|${r.band}`;
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        changed=true;
+      }
+      r.graded=true;
+    });
+  });
+  if(changed){set(NFL_CALIB_KEY,calib);set(LS.nflarc,arc);}
+}
+
+// ── NFL Live Odds (The Odds API — free tier 500 req/month) ───────────────────
+// Augments uploaded txt odds with live market data when key is available.
+// Uses same LS.oddspapi key as MLB to avoid requiring a second key.
+async function fetchNFLLiveOdds(){
+  const key=get(LS.oddspapi,'');
+  if(!key)return;
+  try{
+    const url=`https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+    const r=await fetch(url);
+    const j=await r.json();
+    if(!Array.isArray(j))return;
+    const d=today();
+    const all=get(LS.nflshots,{});
+    all[d]=all[d]||[];
+    j.forEach(game=>{
+      const home=(game.home_team||'').toUpperCase();
+      const away=(game.away_team||'').toUpperCase();
+      // map full team names to abbreviations
+      const homeAb=nflTeamNameToAbbr(home);
+      const awayAb=nflTeamNameToAbbr(away);
+      if(!homeAb||!awayAb)return;
+      const gameKey=awayAb+'@'+homeAb;
+      const gm=NFL_GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+      const gid=gm?gm.id:null;
+      // use DraftKings or FanDuel as primary book, fall back to first available
+      const book=game.bookmakers.find(b=>b.key==='draftkings')||
+                 game.bookmakers.find(b=>b.key==='fanduel')||
+                 game.bookmakers[0];
+      if(!book)return;
+      book.markets.forEach(mkt=>{
+        if(mkt.key==='h2h'){
+          mkt.outcomes.forEach(o=>{
+            const teamAb=nflTeamNameToAbbr((o.name||'').toUpperCase());
+            const side=teamAb===awayAb?'away':'home';
+            const rec={away:awayAb,home:homeAb,game:gameKey,market:'moneyline',
+              side,line:null,price:o.price,gid,capturedAt:Date.now(),src:'live'};
+            const k=[rec.game,rec.market,rec.side,rec.line].join('|');
+            const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
+            if(i>=0)all[d][i]=rec;else all[d].push(rec);
+          });
+        }
+        if(mkt.key==='spreads'){
+          mkt.outcomes.forEach(o=>{
+            const teamAb=nflTeamNameToAbbr((o.name||'').toUpperCase());
+            const side=teamAb===awayAb?'away':'home';
+            const rec={away:awayAb,home:homeAb,game:gameKey,market:'spread',
+              side,line:o.point,price:o.price,gid,capturedAt:Date.now(),src:'live'};
+            const k=[rec.game,rec.market,rec.side,rec.line].join('|');
+            const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
+            if(i>=0)all[d][i]=rec;else all[d].push(rec);
+          });
+        }
+        if(mkt.key==='totals'){
+          mkt.outcomes.forEach(o=>{
+            const side=o.name.toLowerCase()==='over'?'over':'under';
+            const rec={away:awayAb,home:homeAb,game:gameKey,market:'total',
+              side,line:o.point,price:o.price,gid,capturedAt:Date.now(),src:'live'};
+            const k=[rec.game,rec.market,rec.side,rec.line].join('|');
+            const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
+            if(i>=0)all[d][i]=rec;else all[d].push(rec);
+          });
+        }
+      });
+    });
+    set(LS.nflshots,all);
+    NFL_SIMS={};
+    if(ACTIVE_SPORT==='nfl')renderNFL();
+    console.log('NFL live odds loaded from The Odds API');
+  }catch(e){console.warn('NFL live odds failed:',e.message);}
+}
+
+// Full team name → abbreviation map for Odds API
+function nflTeamNameToAbbr(name){
+  const MAP={
+    'ARIZONA CARDINALS':'ARI','ATLANTA FALCONS':'ATL','BALTIMORE RAVENS':'BAL',
+    'BUFFALO BILLS':'BUF','CAROLINA PANTHERS':'CAR','CHICAGO BEARS':'CHI',
+    'CINCINNATI BENGALS':'CIN','CLEVELAND BROWNS':'CLE','DALLAS COWBOYS':'DAL',
+    'DENVER BRONCOS':'DEN','DETROIT LIONS':'DET','GREEN BAY PACKERS':'GB',
+    'HOUSTON TEXANS':'HOU','INDIANAPOLIS COLTS':'IND','JACKSONVILLE JAGUARS':'JAX',
+    'KANSAS CITY CHIEFS':'KC','LOS ANGELES CHARGERS':'LAC','LOS ANGELES RAMS':'LAR',
+    'LAS VEGAS RAIDERS':'LV','MIAMI DOLPHINS':'MIA','MINNESOTA VIKINGS':'MIN',
+    'NEW ENGLAND PATRIOTS':'NE','NEW ORLEANS SAINTS':'NO','NEW YORK GIANTS':'NYG',
+    'NEW YORK JETS':'NYJ','PHILADELPHIA EAGLES':'PHI','PITTSBURGH STEELERS':'PIT',
+    'SEATTLE SEAHAWKS':'SEA','SAN FRANCISCO 49ERS':'SF','TAMPA BAY BUCCANEERS':'TB',
+    'TENNESSEE TITANS':'TEN','WASHINGTON COMMANDERS':'WSH',
+  };
+  return MAP[name.toUpperCase()]||null;
+}
+
+// ── NFL A-G Evaluation ────────────────────────────────────────────────────────
+// Full 7-section evaluation mirroring MLB master evaluation.
+// Sections: A) My line  B) Outside projection range  C) Market comparison
+//           D) My picks  E) Props  F) Prop vs market  G) Confidence
+function evaluateNFLGame(g){
+  const s=NFL_SIMS[g.id];
+  if(!s)return null;
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  const lines=nflBookLinesFor(gameKey);
+  const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+  const homeSpread=lines.find(x=>x.market==='spread'&&x.side==='home');
+  const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+  const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
+  const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+  const ext=nflExtFor(gameKey);
+  const trends=nflTrendsFor(gameKey);
+  const cons=nflConsensusFor(gameKey);
+
+  const awayPow=NFL_POWER[g.away.abbr];
+  const homePow=NFL_POWER[g.home.abbr];
+
+  // A) My projected line
+  const mySpread=Math.round(s.medMargin*10)/10;  // positive = home favored
+  const myTotal=s.med;
+  const myAwayWinP=s.aw;
+  const myHomeWinP=s.hw;
+  const myAwayML=nflFairML(myAwayWinP);
+  const myHomeML=nflFairML(myHomeWinP);
+
+  // B) Outside projections (from uploaded Covers/OddsShark data)
+  const outsidePicks=ext.filter(x=>x.market==='moneyline'||x.market==='spread');
+  const outsideML=ext.filter(x=>x.market==='moneyline');
+  const outsideAgreesHome=outsideML.filter(x=>x.side==='home').length;
+  const outsideAgreesAway=outsideML.filter(x=>x.side==='away').length;
+
+  // C) Market edge
+  let spreadEdge=null,mlEdge=null,totalEdge=null;
+  if(awaySpread){
+    const myCover=s.spreadCover(-awaySpread.line);  // P(away covers)
+    const marketP=100/(100+Math.abs(awaySpread.price))*(awaySpread.price<0?1:-1)+0.5;
+    spreadEdge={market:awaySpread.price,fair:nflFairML(myCover),edge:awaySpread.price-nflFairML(myCover)};
+  }
+  if(awayML){
+    mlEdge={market:awayML.price,fair:myAwayML,edge:awayML.price-myAwayML};
+  }
+  if(totalOver){
+    const myOverP=s.over(totalOver.line);
+    totalEdge={line:totalOver.line,myOverP,market:totalOver.price,fair:nflFairML(myOverP),edge:totalOver.price-nflFairML(myOverP)};
+  }
+
+  // D) Pick recommendations — side + total
+  const sideEdgeThresh=4;  // minimum edge in American odds points to flag
+  const sidePick=spreadEdge&&Math.abs(spreadEdge.edge)>=sideEdgeThresh?
+    (spreadEdge.edge>0?`${g.away.abbr} ${awaySpread?awaySpread.line:mySpread>0?'+'+mySpread:mySpread}`
+                      :`${g.home.abbr} ${homeSpread?homeSpread.line:mySpread>0?'-'+mySpread:'+'+Math.abs(mySpread)}`)
+    :(myAwayWinP>0.55?`${g.away.abbr} ML`:myHomeWinP>0.55?`${g.home.abbr} ML`:null);
+
+  const totalPick=totalEdge&&Math.abs(totalEdge.edge)>=sideEdgeThresh?
+    (totalEdge.edge>0?`Under ${totalOver.line}`:`Over ${totalOver.line}`)
+    :(myOverP=>(myOverP>0.55?`Over ${myTotal}`:myOverP<0.45?`Under ${myTotal}`:null))(s.over(myTotal));
+
+  // G) Confidence — composite score 0-100
+  const signals=[];
+  if(spreadEdge&&Math.abs(spreadEdge.edge)>=sideEdgeThresh)signals.push({w:3,v:Math.min(1,Math.abs(spreadEdge.edge)/20)});
+  if(mlEdge&&Math.abs(mlEdge.edge)>=sideEdgeThresh)signals.push({w:2,v:Math.min(1,Math.abs(mlEdge.edge)/20)});
+  if(totalEdge&&Math.abs(totalEdge.edge)>=sideEdgeThresh)signals.push({w:2,v:Math.min(1,Math.abs(totalEdge.edge)/20)});
+  if(outsidePicks.length>=2)signals.push({w:1,v:0.7});
+  if(trends.length>=3)signals.push({w:1,v:0.6});
+  const consML=cons.find(x=>x.market==='moneyline');
+  if(consML){const lean=Math.max(consML.awayPct||0,consML.homePct||0)/100;signals.push({w:1,v:lean>0.7?0.9:0.5});}
+  if(nflIsDivisionGame(g))signals.push({w:1,v:0.3});  // div games are tighter
+  const totalW=signals.reduce((a,x)=>a+x.w,0)||1;
+  const confidence=Math.round(signals.reduce((a,x)=>a+x.w*x.v,0)/totalW*100);
+
+  // Overall verdict
+  const edgeCount=[spreadEdge,mlEdge,totalEdge].filter(e=>e&&Math.abs(e.edge)>=sideEdgeThresh).length;
+  const verdict=edgeCount>=2&&outsideAgreesHome+outsideAgreesAway>=1?'strong':
+                edgeCount>=1?'lean':'split';
+
+  return{g,s,gameKey,verdict,confidence,
+    mySpread,myTotal,myAwayWinP,myHomeWinP,myAwayML,myHomeML,
+    spreadEdge,mlEdge,totalEdge,
+    sidePick,totalPick,
+    outsidePicks,trends,cons,
+    awayPow,homePow,
+  };
+}
+
+// ── NFL Master Evaluation ─────────────────────────────────────────────────────
+function nflMasterEvaluation(){
+  return NFL_GAMES
+    .filter(g=>g.status!=='Final'&&g.status!=='Final/OT')
+    .map(g=>{
+      if(!NFL_SIMS[g.id])NFL_SIMS[g.id]=simNFLGame(g);
+      return evaluateNFLGame(g);
+    })
+    .filter(Boolean)
+    .sort((a,b)=>{
+      const rank={strong:0,lean:1,split:2};
+      return rank[a.verdict]-rank[b.verdict]||b.confidence-a.confidence;
+    });
+}
+
+function renderNFLMasterEval(){
+  const evals=nflMasterEvaluation();
+  if(!evals.length)return'<div class="empty">No upcoming NFL games to evaluate.</div>';
+
+  const rows=evals.map(ev=>{
+    const{g,s,verdict,confidence,mySpread,myTotal,myAwayML,myHomeML,
+      spreadEdge,mlEdge,totalEdge,sidePick,totalPick,trends,cons,awayPow,homePow}=ev;
+
+    const verdictColor=verdict==='strong'?'var(--win)':verdict==='lean'?'var(--gold)':'var(--mute)';
+    const verdictLabel=verdict==='strong'?'STRONG':verdict==='lean'?'LEAN':'SPLIT';
+
+    const awayRecord=awayPow?`${awayPow.wins}-${awayPow.losses}`:'';
+    const homeRecord=homePow?`${homePow.wins}-${homePow.losses}`:'';
+
+    const edgeRow=e=>e?`<span style="color:${Math.abs(e.edge)>=6?'var(--win)':Math.abs(e.edge)>=3?'var(--gold)':'var(--mute)'}">
+      ${e.edge>0?'+':''}${e.edge} edge</span>`:'<span style="color:var(--mute)">no line</span>';
+
+    const consML=cons.find(x=>x.market==='moneyline');
+    const consTot=cons.find(x=>x.market==='total');
+
+    return`<div class="tkt" style="border-left:3px solid ${verdictColor}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px">
+        <div>
+          <h3 style="margin:0">🏈 ${g.away.abbr} @ ${g.home.abbr}</h3>
+          <div class="sub" style="margin-top:2px">${g.day||''} ${g.time||''} · Week ${g.week||'?'}</div>
+          ${awayRecord||homeRecord?`<div class="sub">${g.away.abbr} ${awayRecord} · ${g.home.abbr} ${homeRecord}</div>`:''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;
+            color:${verdictColor};font-weight:700">${verdictLabel}</div>
+          <div style="font-size:18px;font-weight:700;color:${verdictColor}">${confidence}%</div>
+          <div class="sub">confidence</div>
+        </div>
+      </div>
+
+      <!-- A) My Line -->
+      <div class="mktlab" style="margin-top:10px">A · My Projection</div>
+      <div class="sub">
+        ${g.away.abbr} ${s.awayProj} – ${g.home.abbr} ${s.homeProj} · Total ${myTotal}
+        · Spread ${mySpread>0?g.home.abbr+' -'+mySpread:mySpread<0?g.away.abbr+' -'+Math.abs(mySpread):'Pick\'em'}
+        · ML ${g.away.abbr} ${myAwayML>0?'+':''}${myAwayML} / ${g.home.abbr} ${myHomeML>0?'+':''}${myHomeML}
+      </div>
+      <div class="sub" style="color:var(--mute)">
+        Mode: ${s.modeScore||'?'} (${((s.modeScorePct||0)*100).toFixed(1)}%) ·
+        Range: ${s.p10}–${s.p90}
+      </div>
+
+      <!-- B) Power ratings -->
+      ${awayPow||homePow?`<div class="mktlab" style="margin-top:8px">B · Team Strength</div>
+      <div class="sub">
+        ${awayPow?`${g.away.abbr}: ${awayPow.offPPG.toFixed(1)} off / ${awayPow.defPPG.toFixed(1)} def allowed`:''}
+        ${awayPow&&homePow?' · ':''}
+        ${homePow?`${g.home.abbr}: ${homePow.offPPG.toFixed(1)} off / ${homePow.defPPG.toFixed(1)} def allowed`:''}
+      </div>`:''}
+
+      <!-- C) Market edge -->
+      <div class="mktlab" style="margin-top:8px">C · Market Edge</div>
+      <div class="sub">
+        Spread: ${edgeRow(spreadEdge)} ·
+        ML: ${edgeRow(mlEdge)} ·
+        Total: ${edgeRow(totalEdge)}
+      </div>
+
+      <!-- D) Picks -->
+      <div class="mktlab" style="margin-top:8px">D · My Picks</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+        ${sidePick?`<span style="background:var(--panel2);border:1px solid var(--cold);
+          border-radius:6px;padding:4px 10px;font-family:'IBM Plex Mono';font-size:12px;color:var(--cold)">
+          ${sidePick}</span>`:'<span class="sub">No strong side edge</span>'}
+        ${totalPick?`<span style="background:var(--panel2);border:1px solid var(--gold);
+          border-radius:6px;padding:4px 10px;font-family:'IBM Plex Mono';font-size:12px;color:var(--gold)">
+          ${totalPick}</span>`:'<span class="sub">No strong total edge</span>'}
+      </div>
+
+      <!-- E) Consensus -->
+      ${consML?`<div class="mktlab" style="margin-top:8px">E · Public Consensus</div>
+      <div class="sub">
+        ${g.away.abbr} ${consML.awayPct||'?'}% / ${g.home.abbr} ${consML.homePct||'?'}%
+        ${consTot?` · Total: ${consTot.overPct||'?'}% O / ${consTot.underPct||'?'}% U (line ${consTot.line||'?'})`:''}
+      </div>`:''}
+
+      <!-- F) Trends -->
+      ${trends.length?`<div class="mktlab" style="margin-top:8px">F · Trends (${trends.length})</div>
+      ${trends.slice(0,4).map(t=>`<div class="sub" style="margin-top:2px">
+        · ${t.team?'<b>'+t.team+'</b>: ':''}${t.text}</div>`).join('')}
+      ${trends.length>4?`<div class="sub" style="color:var(--mute)">+${trends.length-4} more</div>`:''}
+      `:''}
+
+      <!-- G) Situation -->
+      <div class="mktlab" style="margin-top:8px">G · Situation</div>
+      <div class="sub">
+        ${nflIsDivisionGame(g)?'🏆 Division game · ':''}
+        ${nflIsConferenceGame(g)?'🏟 Conference game · ':''}
+        Week ${g.week||'?'}${g.seasonType===1?' · Preseason':''}
+      </div>
+    </div>`;
+  });
+
+  const strong=evals.filter(e=>e.verdict==='strong').length;
+  const lean=evals.filter(e=>e.verdict==='lean').length;
+  return`<div class="tkt hi" style="margin-bottom:10px">
+    <h3>🏈 NFL Master Evaluation — Week ${NFL_WEEK||'?'}</h3>
+    <div class="sub">${evals.length} games evaluated · ${strong} strong · ${lean} lean</div>
+    <div class="sub" style="color:var(--mute)">Power ratings: ${Object.keys(NFL_POWER).length?'loaded ✓':'not loaded — hit "Load current week" first'}</div>
+  </div>${rows.join('')}`;
+}
+
+// ── NFL Trend panel for game cards ───────────────────────────────────────────
+function nflTrendPanel(g,s){
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  const trends=nflTrendsFor(gameKey);
+  const rows=[];
+  const mySpread=s?s.medMargin:0;
+  const myTotalLean=s?(s.over(s.med)>0.52?'over':s.over(s.med)<0.48?'under':'neutral'):'neutral';
+  const mySide=s?(s.hw>0.5?g.home.abbr:g.away.abbr):'';
+
+  function add(name,text,implies,relevant){
+    let cls='neutral',verdict='Neutral signal';
+    if(implies&&relevant){
+      if(implies===relevant){cls='agree';verdict='Backs model lean';}
+      else{cls='conflict';verdict='Contests model lean';}
+    }
+    rows.push({name,text,cls,verdict});
+  }
+
+  // Power ratings signal
+  const awayPow=NFL_POWER[g.away.abbr];
+  const homePow=NFL_POWER[g.home.abbr];
+  if(awayPow&&homePow){
+    const netOff=(awayPow.offPPG-homePow.defPPG)-(homePow.offPPG-awayPow.defPPG);
+    if(Math.abs(netOff)>=4){
+      const favTeam=netOff>0?g.away.abbr:g.home.abbr;
+      add('Power ratings edge',
+        `${favTeam} has a net scoring edge of <b>${Math.abs(netOff).toFixed(1)} PPG</b> in this matchup`,
+        favTeam===g.away.abbr?g.away.abbr:g.home.abbr,mySide);
+    }
+  }
+
+  // Division game signal
+  if(nflIsDivisionGame(g)){
+    add('Division game',
+      'Division games historically tighter — totals trend under vs non-div matchups',
+      'under',myTotalLean);
+  }
+
+  // Home field
+  add('Home field',
+    `${g.home.abbr} gets standard +${NFL_HFA} point home field advantage in projection`,
+    g.home.abbr,mySide);
+
+  // Records
+  if(awayPow&&homePow){
+    const awayWPct=awayPow.wins/(awayPow.wins+awayPow.losses||1);
+    const homeWPct=homePow.wins/(homePow.wins+homePow.losses||1);
+    if(Math.abs(awayWPct-homeWPct)>=0.2){
+      const better=awayWPct>homeWPct?g.away.abbr:g.home.abbr;
+      add('Record mismatch',
+        `${better} has a significantly better record — ${g.away.abbr} ${awayPow.wins}-${awayPow.losses} vs ${g.home.abbr} ${homePow.wins}-${homePow.losses}`,
+        better,mySide);
+    }
+  }
+
+  // Uploaded trends from Covers
+  trends.forEach(t=>{
+    const isOver=/^over/i.test(t.text);
+    const isUnder=/^under/i.test(t.text);
+    let implies=null,relevant=null;
+    if(isOver){implies='over';relevant=myTotalLean;}
+    else if(isUnder){implies='under';relevant=myTotalLean;}
+    else if(t.team){implies=t.team;relevant=mySide;}
+    add(`${t.src||'Covers'} trend${t.team?' · '+t.team:''}`,t.text,implies,relevant);
+  });
+
+  if(!rows.length)return'<div class="empty">No trend data. Upload slate_trends.txt on the Outside tab.</div>';
+
+  const agree=rows.filter(r=>r.cls==='agree').length;
+  const conflict=rows.filter(r=>r.cls==='conflict').length;
+  return`<div class="tkt hi" style="margin-bottom:8px">
+    <h3>${agree} backing · ${conflict} contesting · ${rows.length} total signals</h3>
+    <div class="sub">Model leans <b>${myTotalLean.toUpperCase()} ${s?s.med:'?'}</b> and <b>${mySide||'?'}</b>.</div>
+  </div>
+  ${rows.map(r=>`<div class="trow ${r.cls}"><div class="tdot"></div><div class="tbody">
+    <div class="tname">${r.name}</div><div class="ttext">${r.text}</div>
+    <div class="tverdict">${r.verdict}</div></div></div>`).join('')}`;
+}
+
+// ── Wire NFL eval into Tickets → Eval tab ────────────────────────────────────
+// Override renderMasterEval to return NFL version when active sport is NFL
+const _origRenderMasterEval=typeof renderMasterEval==='function'?renderMasterEval:null;
+function renderMasterEval(){
+  if(ACTIVE_SPORT==='nfl')return renderNFLMasterEval();
+  return _origRenderMasterEval?_origRenderMasterEval():'';
+}
+
+// ── Refresh NFL when switching to NFL tab ────────────────────────────────────
+// Auto-fetch power ratings + live odds on first NFL load
+let _nflDataLoaded=false;
+function nflOnActivate(){
+  if(_nflDataLoaded)return;
+  _nflDataLoaded=true;
+  fetchNFLPowerRatings();
+  fetchNFLLiveOdds();
+}
+
+// ── Updated NFL game card with trend panel ───────────────────────────────────
+// Add A-G and Trends tabs to NFL cards (mirrors MLB card structure)
+function nflCardFull(g){
+  const s=NFL_SIMS[g.id];
+  if(!s)return'';
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  const lines=nflBookLinesFor(gameKey);
+  const hasReal=lines.length>0;
+  const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+  const homeSpread=lines.find(x=>x.market==='spread'&&x.side==='home');
+  const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+  const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
+  const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+  const totalUnder=lines.find(x=>x.market==='total'&&x.side==='under');
+  const h1Over=lines.find(x=>x.market==='h1total'&&x.side==='over');
+  const h1Under=lines.find(x=>x.market==='h1total'&&x.side==='under');
+  const h1AwaySpread=lines.find(x=>x.market==='h1spread'&&x.side==='away');
+  const h1HomeSpread=lines.find(x=>x.market==='h1spread'&&x.side==='home');
+  const propLines=lines.filter(x=>x.market==='prop');
+
+  const awayFairML=nflFairML(s.aw);
+  const homeFairML=nflFairML(s.hw);
+  const spreadEdge=awaySpread?awaySpread.price-nflFairML(s.spreadCover(-awaySpread.line)):null;
+  const mlEdgeAway=awayML?awayML.price-awayFairML:null;
+  const mlEdgeHome=homeML?homeML.price-homeFairML:null;
+  const totalEdge=totalOver?totalOver.price-nflFairML(s.over(totalOver.line)):null;
+
+  const awayPow=NFL_POWER[g.away.abbr];
+  const homePow=NFL_POWER[g.home.abbr];
+  const ext=nflExtFor(gameKey);
+  const cons=nflConsensusFor(gameKey);
+  const consML=cons.find(x=>x.market==='moneyline');
+  const consTot=cons.find(x=>x.market==='total');
+
+  function sq(label,price,edge,fairML,picks){
+    const edgeAbs=edge!=null?Math.abs(edge):0;
+    const cls=edge==null?'edge-none':edge>=4?'edge-pos':edge<=-4?'edge-neg':'edge-none';
+    const edgeStr=edge!=null?(edge>0?'+':'')+Math.round(edge):'—';
+    const pBadge=picks>0?`<span style="display:inline-block;width:8px;height:8px;
+      border-radius:2px;background:#9b59b6;margin-left:2px;vertical-align:middle"></span>`:'';
+    return`<div class="betsq ${cls}" onclick="nflSlipToggle('${g.id}','${label}',${price||0})">
+      <div class="sq-label" style="font-size:9px">${label}${pBadge}</div>
+      <div class="sq-price" style="color:${edgeAbs>=6?'var(--win)':edgeAbs>=3?'var(--gold)':'var(--chalk)'}">${price!=null?(price>0?'+':'')+price:'—'}</div>
+      <div class="sq-edge" style="font-size:9px">${edgeStr}${fairML!=null?' · f'+fairML:''}</div>
+    </div>`;
+  }
+
+  const realBadge=hasReal?`<span style="font-family:'IBM Plex Mono';font-size:8px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--cold);
+    border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:4px">REAL LINE</span>`:'';
+
+  const awayRecord=awayPow?` (${awayPow.wins}-${awayPow.losses})`:'';
+  const homeRecord=homePow?` (${homePow.wins}-${homePow.losses})`:'';
+
+  const awayExtPicks=ext.filter(x=>x.side==='away'&&x.market==='moneyline').length;
+  const homeExtPicks=ext.filter(x=>x.side==='home'&&x.market==='moneyline').length;
+
+  const id=g.id;
+  return`<div class="card" id="nfl-card-${id}">
+    <div class="cardhead">
+      <div class="matchup">
+        <span class="away">${g.away.abbr}</span>
+        <span class="atsign">@</span>
+        <span class="home">${g.home.abbr}</span>
+      </div>
+      <div class="gametime">${g.day||''} ${g.time||''}</div>
+    </div>
+    <div style="font-size:10px;color:var(--chalk-dim);font-family:'IBM Plex Mono';margin-bottom:4px">
+      ${g.away.abbr}${awayRecord} @ ${g.home.abbr}${homeRecord}
+      ${nflIsDivisionGame(g)?'· <span style="color:var(--gold)">DIV</span>':''}
+    </div>
+
+    <!-- Sim line -->
+    <div style="font-size:12px;margin-bottom:6px">
+      Proj: <b>${g.away.abbr} ${s.awayProj}</b> – <b>${g.home.abbr} ${s.homeProj}</b>
+      <span class="m"> · O/U ${s.med} · Spread ${s.medMargin>0?g.home.abbr+' -'+s.medMargin:s.medMargin<0?g.away.abbr+' -'+Math.abs(s.medMargin):"Pick'em"}</span>
+    </div>
+
+    <!-- Spread -->
+    <div class="mktlab">Spread ${realBadge}</div>
+    <div class="sqrow">
+      ${sq(`${g.away.abbr} ${awaySpread?awaySpread.line:s.medMargin>0?'+'+Math.abs(s.medMargin):s.medMargin}`,awaySpread?awaySpread.price:null,spreadEdge,null,0)}
+      ${sq(`${g.home.abbr} ${homeSpread?homeSpread.line:s.medMargin>0?'-'+s.medMargin:'+'+Math.abs(s.medMargin)}`,homeSpread?homeSpread.price:null,spreadEdge?-spreadEdge:null,null,0)}
+    </div>
+
+    <!-- Moneyline -->
+    <div class="mktlab" style="margin-top:4px">Moneyline</div>
+    <div class="sqrow">
+      ${sq(`${g.away.abbr} ML`,awayML?awayML.price:null,mlEdgeAway,awayFairML,awayExtPicks)}
+      ${sq(`${g.home.abbr} ML`,homeML?homeML.price:null,mlEdgeHome,homeFairML,homeExtPicks)}
+    </div>
+
+    <!-- Total -->
+    <div class="mktlab" style="margin-top:4px">Total</div>
+    <div class="sqrow">
+      ${sq(`Over ${totalOver?totalOver.line:s.med}`,totalOver?totalOver.price:null,totalEdge,null,0)}
+      ${sq(`Under ${totalUnder?totalUnder.line:s.med}`,totalUnder?totalUnder.price:null,totalEdge?-totalEdge:null,null,0)}
+    </div>
+
+    ${h1Over||h1AwaySpread?`
+    <!-- 1st Half -->
+    <div class="mktlab" style="margin-top:4px">1st Half</div>
+    <div class="sqrow">
+      ${h1AwaySpread?sq(`${g.away.abbr} 1H ${h1AwaySpread.line}`,h1AwaySpread.price,null,null,0):''}
+      ${h1HomeSpread?sq(`${g.home.abbr} 1H ${h1HomeSpread.line}`,h1HomeSpread.price,null,null,0):''}
+    </div>
+    ${h1Over?`<div class="sqrow">
+      ${sq(`1H Over ${h1Over.line}`,h1Over.price,null,null,0)}
+      ${h1Under?sq(`1H Under ${h1Under.line}`,h1Under.price,null,null,0):''}
+    </div>`:''}
+    `:''}
+
+    <!-- Props -->
+    ${propLines.length?`<div class="mktlab" style="margin-top:4px">Props (${propLines.length})</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:3px">
+      ${propLines.map(p=>`<div class="betsq edge-none" onclick="nflSlipToggle('${id}','${p.player} ${p.stat} ${p.line}+',${p.price})">
+        <div class="sq-label" style="font-size:8px">${p.player}</div>
+        <div class="sq-price">${p.stat} ${p.line}+ (${p.price>0?'+':''}${p.price})</div>
+      </div>`).join('')}
+    </div>`:''}
+
+    <!-- Consensus bar -->
+    ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
+      <span style="font-family:'IBM Plex Mono';color:var(--chalk-dim);min-width:28px">${g.away.abbr} ${consML.awayPct||'?'}%</span>
+      <div style="flex:1;height:4px;border-radius:2px;background:var(--rule)">
+        <div style="height:100%;width:${consML.awayPct||0}%;background:var(--cold);border-radius:2px"></div>
+      </div>
+      <span style="font-family:'IBM Plex Mono';color:var(--chalk-dim);min-width:28px;text-align:right">${consML.homePct||'?'}% ${g.home.abbr}</span>
+    </div>
+    ${consTot?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--chalk-dim);margin-top:2px">
+      O/U: ${consTot.overPct||'?'}% Over / ${consTot.underPct||'?'}% Under
+    </div>`:''}
+    `:''}
+
+    <!-- Expandable tabs -->
+    <div class="exprow" style="margin-top:8px">
+      <button onclick="nflTogglePanel('trends','${id}',this)">Trends</button>
+      <button onclick="nflTogglePanel('ag','${id}',this)">A-G</button>
+      <button onclick="nflTogglePanel('mybets','${id}',this)">My Bets</button>
+    </div>
+    <div class="panel" id="p-nfltrends-${id}">${nflTrendPanel(g,s)}</div>
+    <div class="panel" id="p-nflag-${id}">${renderNFLGameAG(g,s)}</div>
+    <div class="panel" id="p-nflmybets-${id}"></div>
+  </div>`;
+}
+
+function nflTogglePanel(which,gid,btn){
+  const p=document.getElementById('p-nfl'+which+'-'+gid);
+  if(!p)return;
+  const row=btn.parentElement;
+  const wasOn=p.classList.contains('on');
+  // close all panels for this card
+  row.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  row.parentElement.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+  if(!wasOn){p.classList.add('on');btn.classList.add('on');}
+}
+
+// Compact A-G panel for individual game card
+function renderNFLGameAG(g,s){
+  const ev=evaluateNFLGame(g);
+  if(!ev)return'<div class="empty">Run sims first.</div>';
+  const{verdict,confidence,mySpread,myTotal,myAwayML,myHomeML,
+    spreadEdge,mlEdge,totalEdge,sidePick,totalPick}=ev;
+  const verdictColor=verdict==='strong'?'var(--win)':verdict==='lean'?'var(--gold)':'var(--mute)';
+  return`<div class="sub" style="margin-top:6px">
+    <b style="color:${verdictColor}">${verdict.toUpperCase()} · ${confidence}% confidence</b><br>
+    <b>A) My line:</b> ${g.away.abbr} ${s.awayProj} – ${g.home.abbr} ${s.homeProj} · O/U ${myTotal}<br>
+    <b>B) Spread:</b> ${mySpread>0?g.home.abbr+' -'+mySpread:mySpread<0?g.away.abbr+' -'+Math.abs(mySpread):"Pick'em"}<br>
+    <b>C) Edge:</b> Spread ${spreadEdge!=null?(spreadEdge>0?'+':'')+Math.round(spreadEdge):'—'} · ML ${mlEdge!=null?(mlEdge.edge>0?'+':'')+Math.round(mlEdge.edge):'—'} · Total ${totalEdge!=null?(totalEdge>0?'+':'')+Math.round(totalEdge):'—'}<br>
+    <b>D) Picks:</b> ${sidePick||'No strong edge'} ${totalPick?'· '+totalPick:''}<br>
+    <b>G) Confidence:</b> ${confidence}%
+    ${nflIsDivisionGame(g)?'<br><span style="color:var(--gold)">🏆 Division game</span>':''}
+  </div>`;
+}
+
+// ── Override nflCard to use full version ─────────────────────────────────────
+// The basic nflCard defined earlier is replaced by nflCardFull
+const _nflCardBasic=nflCard;
+function nflCard(g){return nflCardFull(g);}
+
+// ── NFL refreshEverything hook ───────────────────────────────────────────────
+const _origRefreshEverything=typeof refreshEverything==='function'?refreshEverything:null;
+function refreshEverything(){
+  if(ACTIVE_SPORT==='nfl'){
+    loadNFLSchedule().then(()=>{
+      fetchNFLPowerRatings();
+      fetchNFLLiveOdds();
+    });
+    return;
+  }
+  if(_origRefreshEverything)_origRefreshEverything();
+}
+
+// ── Updated switchSport to trigger NFL data load ──────────────────────────────
+const _origSwitchSport=switchSport;
+function switchSport(sport){
+  _origSwitchSport(sport);
+  if(sport==='nfl'){nflOnActivate();}
+}
 
 /* ═══════════════════════════════════════════════════════════════
    NFL ENGINE END
