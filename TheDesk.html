@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.19</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.20</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -514,19 +514,9 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <button onclick="tab('settings',this)">Settings</button>
   </nav>
 </header>
-<div id="sportSwitcher" style="display:flex;gap:8px;padding:10px 14px 6px;background:#0B0F14;border-bottom:1px solid rgba(255,255,255,.06)">
-  <button id="sportBtn-mlb" onclick="switchSport('mlb')"
-    style="flex:1;font-size:16px;font-weight:900;text-transform:uppercase;
-    padding:13px 0;border-radius:10px;border:2px solid var(--gold);background:var(--gold);
-    color:#000;cursor:pointer;min-height:50px;touch-action:manipulation;
-    -webkit-tap-highlight-color:rgba(0,0,0,0)">
-    ⚾ MLB</button>
-  <button id="sportBtn-nfl" onclick="switchSport('nfl')"
-    style="flex:1;font-size:16px;font-weight:900;text-transform:uppercase;
-    padding:13px 0;border-radius:10px;border:2px solid #555;background:#1c1c1c;
-    color:#fff;cursor:pointer;min-height:50px;touch-action:manipulation;
-    -webkit-tap-highlight-color:rgba(0,0,0,0)">
-    🏈 NFL</button>
+<div style="display:flex;padding:8px 12px;gap:8px;background:#0d1117;position:relative;z-index:999">
+  <div id="sportBtn-mlb" ontouchstart="void(0)" ontouchend="doSportSwitch('mlb');return false" onclick="doSportSwitch('mlb')" style="flex:1;height:52px;font-size:17px;font-weight:900;border-radius:10px;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">⚾ MLB</div>
+  <div id="sportBtn-nfl" ontouchstart="void(0)" ontouchend="doSportSwitch('nfl');return false" onclick="doSportSwitch('nfl')" style="flex:1;height:52px;font-size:17px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏈 NFL</div>
 </div>
 
 <main>
@@ -775,6 +765,29 @@ let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},
 let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl'
 let NFL_GAMES=[],NFL_SIMS={}; // parallel NFL game store
 let NFL_WEEK=null,NFL_SEASON=null; // current week/season being viewed
+
+// doSportSwitch — called directly from ontouchend/onclick on the switcher divs.
+// Defined here early so it's available the moment the DOM is ready.
+function doSportSwitch(sport){
+  ACTIVE_SPORT=sport;
+  const mlbBtn=document.getElementById('sportBtn-mlb');
+  const nflBtn=document.getElementById('sportBtn-nfl');
+  if(mlbBtn&&nflBtn){
+    mlbBtn.style.background=sport==='mlb'?'var(--gold)':'#1c1c1c';
+    mlbBtn.style.color=sport==='mlb'?'#000':'#fff';
+    nflBtn.style.background=sport==='nfl'?'var(--gold)':'#1c1c1c';
+    nflBtn.style.color=sport==='nfl'?'#000':'#fff';
+  }
+  const slate=document.getElementById('slate');
+  if(sport==='nfl'){
+    if(typeof renderNFL==='function')renderNFL();
+    if(typeof nflOnActivate==='function')nflOnActivate();
+  }else{
+    if(typeof render==='function')render();
+  }
+  const nG=document.getElementById('nG');
+  if(nG)nG.textContent=sport==='nfl'?NFL_GAMES.length:GAMES.length;
+}
 let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
 let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
 
@@ -11759,7 +11772,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.19
+   NFL ENGINE — BUILD v1.20
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
