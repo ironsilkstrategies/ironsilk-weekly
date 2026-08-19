@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.22</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.23</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3974,6 +3974,15 @@ async function diagnoseRundown(){
   }
 }
 async function refreshEverything(){
+  // NFL sport active — run NFL refresh instead
+  if(ACTIVE_SPORT==='nfl'){
+    const el=document.getElementById('slate');
+    if(el)el.innerHTML='<div class="empty">Refreshing NFL data…</div>';
+    await loadNFLSchedule();
+    await fetchNFLPowerRatings();
+    await fetchNFLLiveOdds();
+    return;
+  }
   const st=document.getElementById('refreshAllStatus');
   const steps=[];
   const paint=()=>{st.innerHTML=steps.map(s=>`<div class="sub">${s}</div>`).join('')};
@@ -8449,8 +8458,11 @@ function renderTickets(){
   const modeRow=(cur,opts,setter)=>`<div class="subnav" style="margin-bottom:10px">${
     opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
   if(TICKETTAB==='eval'){
-    try{body.innerHTML=renderMasterEval();}
-    catch(e){body.innerHTML=`<div class="tkt"><h3>Eval error</h3><div class="sub">${e.message}</div></div>`;}
+    try{
+      body.innerHTML=ACTIVE_SPORT==='nfl'?renderNFLMasterEval():renderMasterEval();
+    }catch(e){
+      body.innerHTML=`<div class="tkt"><h3>Eval error</h3><div class="sub">${e.message}</div></div>`;
+    }
   }
   if(TICKETTAB==='build'){
     const row=modeRow(BUILD_MODE,[['presets','Presets'],['custom','Custom']],'BUILD_MODE');
@@ -11775,7 +11787,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.22
+   NFL ENGINE — BUILD v1.23
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12845,8 +12857,9 @@ function evaluateNFLGame(g){
 
 // ── NFL Master Evaluation ─────────────────────────────────────────────────────
 function nflMasterEvaluation(){
-  return NFL_GAMES
-    .filter(g=>g.status!=='Final'&&g.status!=='Final/OT')
+  // Include all games — during preseason all may be Final, still useful for review
+  const games=NFL_GAMES.length?NFL_GAMES:[];
+  return games
     .map(g=>{
       if(!NFL_SIMS[g.id])NFL_SIMS[g.id]=simNFLGame(g);
       return evaluateNFLGame(g);
@@ -12854,7 +12867,7 @@ function nflMasterEvaluation(){
     .filter(Boolean)
     .sort((a,b)=>{
       const rank={strong:0,lean:1,split:2};
-      return rank[a.verdict]-rank[b.verdict]||b.confidence-a.confidence;
+      return (rank[a.verdict]||2)-(rank[b.verdict]||2)||b.confidence-a.confidence;
     });
 }
 
@@ -13046,11 +13059,9 @@ function nflTrendPanel(g,s){
 
 // ── Wire NFL eval into Tickets → Eval tab ────────────────────────────────────
 // Override renderMasterEval to return NFL version when active sport is NFL
-const _origRenderMasterEval=typeof renderMasterEval==='function'?renderMasterEval:null;
-function renderMasterEval(){
-  if(ACTIVE_SPORT==='nfl')return renderNFLMasterEval();
-  return _origRenderMasterEval?_origRenderMasterEval():'';
-}
+// renderMasterEval routes to MLB or NFL based on active sport
+// NOTE: do NOT redefine renderMasterEval here — it already exists at line 6721.
+// Instead the renderTickets dispatch checks ACTIVE_SPORT directly.
 
 // ── Refresh NFL when switching to NFL tab ────────────────────────────────────
 // Auto-fetch power ratings + live odds on first NFL load
@@ -13228,24 +13239,10 @@ const _nflCardBasic=nflCard;
 function nflCard(g){return nflCardFull(g);}
 
 // ── NFL refreshEverything hook ───────────────────────────────────────────────
-const _origRefreshEverything=typeof refreshEverything==='function'?refreshEverything:null;
-function refreshEverything(){
-  if(ACTIVE_SPORT==='nfl'){
-    loadNFLSchedule().then(()=>{
-      fetchNFLPowerRatings();
-      fetchNFLLiveOdds();
-    });
-    return;
-  }
-  if(_origRefreshEverything)_origRefreshEverything();
-}
+// refreshEverything NFL hook — patched into the original below
 
 // ── Updated switchSport to trigger NFL data load ──────────────────────────────
-const _origSwitchSport=switchSport;
-function switchSport(sport){
-  _origSwitchSport(sport);
-  if(sport==='nfl'){nflOnActivate();}
-}
+// nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════
    NFL ENGINE END
