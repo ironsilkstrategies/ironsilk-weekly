@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.20</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.22</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -8448,7 +8448,10 @@ function renderTickets(){
     `<button class="${TICKETTAB===k?'on':''}" onclick="TICKETTAB='${k}';renderTickets()">${l}</button>`).join('');
   const modeRow=(cur,opts,setter)=>`<div class="subnav" style="margin-bottom:10px">${
     opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
-  if(TICKETTAB==='eval')  body.innerHTML=renderMasterEval();
+  if(TICKETTAB==='eval'){
+    try{body.innerHTML=renderMasterEval();}
+    catch(e){body.innerHTML=`<div class="tkt"><h3>Eval error</h3><div class="sub">${e.message}</div></div>`;}
+  }
   if(TICKETTAB==='build'){
     const row=modeRow(BUILD_MODE,[['presets','Presets'],['custom','Custom']],'BUILD_MODE');
     body.innerHTML=row+(BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
@@ -11772,7 +11775,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.20
+   NFL ENGINE — BUILD v1.22
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12467,14 +12470,13 @@ function simNFLGame(g,N){
   N=N||10000;
 
   // Get real power ratings or fall back to league average
-  const awayPow=NFL_POWER[g.away.abbr]||{offPPG:22,defPPG:22};
-  const homePow=NFL_POWER[g.home.abbr]||{offPPG:22,defPPG:22};
+  const awayPow=NFL_POWER[g.away.abbr]||{offPPG:22,defPPG:22,wins:0,losses:0,ties:0};
+  const homePow=NFL_POWER[g.home.abbr]||{offPPG:22,defPPG:22,wins:0,losses:0,ties:0};
 
   // Project expected scores: blend offense vs opponent defense, regress to mean
   const leagueAvg=22.0;
   const regFactor=0.35;  // regression to mean — early season more regression
-  const gamesPlayed=Math.max(awayPow.wins+awayPow.losses+awayPow.ties,
-    homePow.wins+homePow.losses+homePow.ties,1);
+  const gamesPlayed=Math.max((awayPow.wins||0)+(awayPow.losses||0)+(awayPow.ties||0),(homePow.wins||0)+(homePow.losses||0)+(homePow.ties||0),1);
   const regW=Math.max(0,Math.min(1,(gamesPlayed-1)/8)); // full confidence at week 9+
   const reg=1-regFactor*(1-regW);
 
@@ -12555,8 +12557,8 @@ function simNFLGame(g,N){
   };
 
   return{
-    awayProj:Math.round(awayExp*10)/10,
-    homeProj:Math.round(homeExp*10)/10,
+    awayProj:isNaN(awayExp)?22:Math.round(awayExp*10)/10,
+    homeProj:isNaN(homeExp)?22:Math.round(homeExp*10)/10,
     hw:rawHw,aw:rawAw,
     med,medMargin,medH1,
     modeScore,modeScorePct:modeN/N,
@@ -13068,6 +13070,7 @@ function nflCardFull(g){
   const gameKey=g.away.abbr+'@'+g.home.abbr;
   const lines=nflBookLinesFor(gameKey);
   const hasReal=lines.length>0;
+
   const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
   const homeSpread=lines.find(x=>x.market==='spread'&&x.side==='home');
   const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
@@ -13080,122 +13083,105 @@ function nflCardFull(g){
   const h1HomeSpread=lines.find(x=>x.market==='h1spread'&&x.side==='home');
   const propLines=lines.filter(x=>x.market==='prop');
 
-  const awayFairML=nflFairML(s.aw);
-  const homeFairML=nflFairML(s.hw);
-  const spreadEdge=awaySpread?awaySpread.price-nflFairML(s.spreadCover(-awaySpread.line)):null;
-  const mlEdgeAway=awayML?awayML.price-awayFairML:null;
-  const mlEdgeHome=homeML?homeML.price-homeFairML:null;
-  const totalEdge=totalOver?totalOver.price-nflFairML(s.over(totalOver.line)):null;
-
   const awayPow=NFL_POWER[g.away.abbr];
   const homePow=NFL_POWER[g.home.abbr];
   const ext=nflExtFor(gameKey);
   const cons=nflConsensusFor(gameKey);
   const consML=cons.find(x=>x.market==='moneyline');
-  const consTot=cons.find(x=>x.market==='total');
 
-  function sq(label,price,edge,fairML,picks){
-    const edgeAbs=edge!=null?Math.abs(edge):0;
-    const cls=edge==null?'edge-none':edge>=4?'edge-pos':edge<=-4?'edge-neg':'edge-none';
-    const edgeStr=edge!=null?(edge>0?'+':'')+Math.round(edge):'—';
-    const pBadge=picks>0?`<span style="display:inline-block;width:8px;height:8px;
-      border-radius:2px;background:#9b59b6;margin-left:2px;vertical-align:middle"></span>`:'';
-    return`<div class="betsq ${cls}" onclick="nflSlipToggle('${g.id}','${label}',${price||0})">
-      <div class="sq-label" style="font-size:9px">${label}${pBadge}</div>
-      <div class="sq-price" style="color:${edgeAbs>=6?'var(--win)':edgeAbs>=3?'var(--gold)':'var(--chalk)'}">${price!=null?(price>0?'+':'')+price:'—'}</div>
-      <div class="sq-edge" style="font-size:9px">${edgeStr}${fairML!=null?' · f'+fairML:''}</div>
+  const ap=isNaN(s.awayProj)?22:s.awayProj;
+  const hp=isNaN(s.homeProj)?22:s.homeProj;
+  const med=isNaN(s.med)?44:s.med;
+  const margin=isNaN(s.medMargin)?0:s.medMargin;
+  const awayFairML=nflFairML(Math.max(.05,Math.min(.95,s.aw||.5)));
+  const homeFairML=nflFairML(Math.max(.05,Math.min(.95,s.hw||.5)));
+
+  const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.spreadCover(-awaySpread.line)||.5))):null;
+  const mlEdgeAway=awayML?awayML.price-awayFairML:null;
+  const mlEdgeHome=homeML?homeML.price-homeFairML:null;
+  const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,s.over(totalOver.line)||.5))):null;
+
+  const awayRecord=awayPow?` ${awayPow.wins}-${awayPow.losses}`:'';
+  const homeRecord=homePow?` ${homePow.wins}-${homePow.losses}`:'';
+  const divGame=nflIsDivisionGame(g);
+
+  function betSq(label,price,edge,fair){
+    const eAbs=edge!=null?Math.abs(edge):0;
+    const cls=eAbs>=6?'value':eAbs>=3?'':'avoid';
+    const edgeStr=edge!=null?(edge>0?'+':'')+Math.round(edge)+' edge':'';
+    const fairStr=fair!=null?` · fair ${fair>0?'+':''}${fair}`:'';
+    return`<div class="bet ${cls}" onclick="nflSlipToggle('${g.id}','${label}',${price||0})" style="flex:1;min-width:0">
+      <div class="bl">${label}</div>
+      <div class="bo">${price!=null?(price>0?'+':'')+price:'—'}</div>
+      <div class="bs">${edgeStr}${fairStr}</div>
     </div>`;
   }
 
-  const realBadge=hasReal?`<span style="font-family:'IBM Plex Mono';font-size:8px;
-    letter-spacing:.06em;text-transform:uppercase;color:var(--cold);
-    border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:4px">REAL LINE</span>`:'';
+  const realBadge=hasReal?`<span style="font-family:'IBM Plex Mono';font-size:8px;color:var(--cold);
+    border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:6px">REAL</span>`:'';
 
-  const awayRecord=awayPow?` (${awayPow.wins}-${awayPow.losses})`:'';
-  const homeRecord=homePow?` (${homePow.wins}-${homePow.losses})`:'';
-
-  const awayExtPicks=ext.filter(x=>x.side==='away'&&x.market==='moneyline').length;
-  const homeExtPicks=ext.filter(x=>x.side==='home'&&x.market==='moneyline').length;
-
+  const spreadLabel=margin>0?`${g.home.abbr} -${margin}`:margin<0?`${g.away.abbr} -${Math.abs(margin)}`:"Pick'em";
   const id=g.id;
-  return`<div class="card" id="nfl-card-${id}">
-    <div class="cardhead">
-      <div class="matchup">
-        <span class="away">${g.away.abbr}</span>
-        <span class="atsign">@</span>
-        <span class="home">${g.home.abbr}</span>
+
+  return`<div class="tkt" id="nfl-card-${id}" style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:var(--chalk)">${g.away.abbr} <span style="color:var(--mute);font-size:14px">@</span> ${g.home.abbr}</div>
+        <div style="font-size:10px;color:var(--mute);font-family:'IBM Plex Mono'">${g.day||''} ${g.time||''}${divGame?' · <span style="color:var(--gold)">DIV</span>':''}</div>
       </div>
-      <div class="gametime">${g.day||''} ${g.time||''}</div>
+      <div style="text-align:right;font-family:'IBM Plex Mono';font-size:10px;color:var(--mute)">
+        ${g.away.abbr}${awayRecord}<br>${g.home.abbr}${homeRecord}
+      </div>
     </div>
-    <div style="font-size:10px;color:var(--chalk-dim);font-family:'IBM Plex Mono';margin-bottom:4px">
-      ${g.away.abbr}${awayRecord} @ ${g.home.abbr}${homeRecord}
-      ${nflIsDivisionGame(g)?'· <span style="color:var(--gold)">DIV</span>':''}
-    </div>
-
-    <!-- Sim line -->
-    <div style="font-size:12px;margin-bottom:6px">
-      Proj: <b>${g.away.abbr} ${s.awayProj}</b> – <b>${g.home.abbr} ${s.homeProj}</b>
-      <span class="m"> · O/U ${s.med} · Spread ${s.medMargin>0?g.home.abbr+' -'+s.medMargin:s.medMargin<0?g.away.abbr+' -'+Math.abs(s.medMargin):"Pick'em"}</span>
+    <div style="font-size:11px;color:var(--chalk-dim);margin-bottom:8px">
+      Proj: <b>${ap}</b>–<b>${hp}</b> · O/U <b>${med}</b> · <b>${spreadLabel}</b>
+      ${g.status==='Final'?'<span style="color:var(--win);margin-left:6px">FINAL</span>':''}
     </div>
 
-    <!-- Spread -->
-    <div class="mktlab">Spread ${realBadge}</div>
-    <div class="sqrow">
-      ${sq(`${g.away.abbr} ${awaySpread?awaySpread.line:s.medMargin>0?'+'+Math.abs(s.medMargin):s.medMargin}`,awaySpread?awaySpread.price:null,spreadEdge,null,0)}
-      ${sq(`${g.home.abbr} ${homeSpread?homeSpread.line:s.medMargin>0?'-'+s.medMargin:'+'+Math.abs(s.medMargin)}`,homeSpread?homeSpread.price:null,spreadEdge?-spreadEdge:null,null,0)}
+    <div class="mktlab">Spread${realBadge}</div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      ${betSq(`${g.away.abbr} ${awaySpread?awaySpread.line:margin>0?'+'+Math.abs(margin):-margin}`,awaySpread?awaySpread.price:null,spreadEdge,null)}
+      ${betSq(`${g.home.abbr} ${homeSpread?homeSpread.line:margin>0?-margin:'+'+Math.abs(margin)}`,homeSpread?homeSpread.price:null,spreadEdge?-spreadEdge:null,null)}
     </div>
 
-    <!-- Moneyline -->
-    <div class="mktlab" style="margin-top:4px">Moneyline</div>
-    <div class="sqrow">
-      ${sq(`${g.away.abbr} ML`,awayML?awayML.price:null,mlEdgeAway,awayFairML,awayExtPicks)}
-      ${sq(`${g.home.abbr} ML`,homeML?homeML.price:null,mlEdgeHome,homeFairML,homeExtPicks)}
+    <div class="mktlab" style="margin-top:8px">Moneyline</div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      ${betSq(`${g.away.abbr} ML`,awayML?awayML.price:null,mlEdgeAway,awayFairML)}
+      ${betSq(`${g.home.abbr} ML`,homeML?homeML.price:null,mlEdgeHome,homeFairML)}
     </div>
 
-    <!-- Total -->
-    <div class="mktlab" style="margin-top:4px">Total</div>
-    <div class="sqrow">
-      ${sq(`Over ${totalOver?totalOver.line:s.med}`,totalOver?totalOver.price:null,totalEdge,null,0)}
-      ${sq(`Under ${totalUnder?totalUnder.line:s.med}`,totalUnder?totalUnder.price:null,totalEdge?-totalEdge:null,null,0)}
+    <div class="mktlab" style="margin-top:8px">Total</div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      ${betSq(`Over ${totalOver?totalOver.line:med}`,totalOver?totalOver.price:null,totalEdge,null)}
+      ${betSq(`Under ${totalUnder?totalUnder.line:med}`,totalUnder?totalUnder.price:null,totalEdge?-totalEdge:null,null)}
     </div>
 
-    ${h1Over||h1AwaySpread?`
-    <!-- 1st Half -->
-    <div class="mktlab" style="margin-top:4px">1st Half</div>
-    <div class="sqrow">
-      ${h1AwaySpread?sq(`${g.away.abbr} 1H ${h1AwaySpread.line}`,h1AwaySpread.price,null,null,0):''}
-      ${h1HomeSpread?sq(`${g.home.abbr} 1H ${h1HomeSpread.line}`,h1HomeSpread.price,null,null,0):''}
+    ${h1AwaySpread||h1Over?`
+    <div class="mktlab" style="margin-top:8px">1st Half</div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      ${h1AwaySpread?betSq(`${g.away.abbr} 1H ${h1AwaySpread.line}`,h1AwaySpread.price,null,null):''}
+      ${h1HomeSpread?betSq(`${g.home.abbr} 1H ${h1HomeSpread.line}`,h1HomeSpread.price,null,null):''}
     </div>
-    ${h1Over?`<div class="sqrow">
-      ${sq(`1H Over ${h1Over.line}`,h1Over.price,null,null,0)}
-      ${h1Under?sq(`1H Under ${h1Under.line}`,h1Under.price,null,null,0):''}
+    ${h1Over?`<div style="display:flex;gap:6px;margin-top:4px">
+      ${betSq(`1H Over ${h1Over.line}`,h1Over.price,null,null)}
+      ${h1Under?betSq(`1H Under ${h1Under.line}`,h1Under.price,null,null):''}
     </div>`:''}
     `:''}
 
-    <!-- Props -->
-    ${propLines.length?`<div class="mktlab" style="margin-top:4px">Props (${propLines.length})</div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:3px">
-      ${propLines.map(p=>`<div class="betsq edge-none" onclick="nflSlipToggle('${id}','${p.player} ${p.stat} ${p.line}+',${p.price})">
-        <div class="sq-label" style="font-size:8px">${p.player}</div>
-        <div class="sq-price">${p.stat} ${p.line}+ (${p.price>0?'+':''}${p.price})</div>
-      </div>`).join('')}
+    ${propLines.length?`<div class="mktlab" style="margin-top:8px">Props (${propLines.length})</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+      ${propLines.map(p=>betSq(`${p.player} ${p.stat} ${p.line}+`,p.price,null,null)).join('')}
     </div>`:''}
 
-    <!-- Consensus bar -->
     ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
-      <span style="font-family:'IBM Plex Mono';color:var(--chalk-dim);min-width:28px">${g.away.abbr} ${consML.awayPct||'?'}%</span>
+      <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px">${g.away.abbr} ${consML.awayPct||'?'}%</span>
       <div style="flex:1;height:4px;border-radius:2px;background:var(--rule)">
         <div style="height:100%;width:${consML.awayPct||0}%;background:var(--cold);border-radius:2px"></div>
       </div>
-      <span style="font-family:'IBM Plex Mono';color:var(--chalk-dim);min-width:28px;text-align:right">${consML.homePct||'?'}% ${g.home.abbr}</span>
-    </div>
-    ${consTot?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--chalk-dim);margin-top:2px">
-      O/U: ${consTot.overPct||'?'}% Over / ${consTot.underPct||'?'}% Under
+      <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px;text-align:right">${consML.homePct||'?'}% ${g.home.abbr}</span>
     </div>`:''}
-    `:''}
 
-    <!-- Expandable tabs -->
-    <div class="exprow" style="margin-top:8px">
+    <div class="exprow" style="margin-top:10px">
       <button onclick="nflTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="nflTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="nflTogglePanel('mybets','${id}',this)">My Bets</button>
@@ -13205,6 +13191,7 @@ function nflCardFull(g){
     <div class="panel" id="p-nflmybets-${id}"></div>
   </div>`;
 }
+
 
 function nflTogglePanel(which,gid,btn){
   const p=document.getElementById('p-nfl'+which+'-'+gid);
