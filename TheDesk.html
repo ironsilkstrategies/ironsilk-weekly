@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.23</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.24</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -1060,7 +1060,12 @@ async function analyzeBookShots(){
     }
     if(allParsed.length&&!otherFiles.length){
       // save directly as book odds — same storage path as API results
+      el.innerHTML=`<div class="empty">Parsed ${allParsed.length} picks · sport=${ACTIVE_SPORT} · saving…</div>`;
       saveBookOdds(allParsed,el);
+      return;
+    }
+    if(!allParsed.length&&!otherFiles.length){
+      el.innerHTML=`<div class="empty">Nothing parsed from text file. First line: "${textFiles[0]?textFiles[0].name:''}" · sport=${ACTIVE_SPORT}</div>`;
       return;
     }
   }
@@ -11787,7 +11792,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.23
+   NFL ENGINE — BUILD v1.24
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
