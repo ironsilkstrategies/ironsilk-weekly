@@ -497,26 +497,26 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.17</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.18</div>
     </div>
   </div>
   <div class="meterwrap">
     <div class="meterlab"><span>Odds · <b id="credText">0 / 24</b></span><span id="lastPull">—</span></div>
     <div class="meter" id="meter"></div>
   </div>
+  <div id="sportSwitcher" style="display:flex;gap:8px;padding:8px 12px 0">
+    <button id="sportBtn-mlb" onclick="switchSport('mlb')"
+      style="flex:1;font-size:16px;font-weight:900;text-transform:uppercase;
+      padding:13px 0;border-radius:10px;border:2px solid var(--gold);background:var(--gold);
+      color:#000;cursor:pointer;min-height:50px;touch-action:manipulation">
+      ⚾ MLB</button>
+    <button id="sportBtn-nfl" onclick="switchSport('nfl')"
+      style="flex:1;font-size:16px;font-weight:900;text-transform:uppercase;
+      padding:13px 0;border-radius:10px;border:2px solid #555;background:transparent;
+      color:#fff;cursor:pointer;min-height:50px;touch-action:manipulation">
+      🏈 NFL</button>
+  </div>
   <nav>
-    <div id="sportSwitcher" style="display:flex;gap:6px;margin-bottom:8px;padding:0 2px">
-      <button id="sportBtn-mlb" class="on" onclick="switchSport('mlb')"
-        style="flex:1;font-family:'IBM Plex Mono';font-size:13px;letter-spacing:.06em;text-transform:uppercase;
-        padding:10px 0;border-radius:8px;border:2px solid var(--gold);background:var(--gold);
-        color:#000;cursor:pointer;font-weight:700;min-height:44px">
-        ⚾ MLB</button>
-      <button id="sportBtn-nfl" onclick="switchSport('nfl')"
-        style="flex:1;font-family:'IBM Plex Mono';font-size:13px;letter-spacing:.06em;text-transform:uppercase;
-        padding:10px 0;border-radius:8px;border:2px solid var(--rule);background:var(--panel2);
-        color:var(--chalk);cursor:pointer;font-weight:700;min-height:44px">
-        🏈 NFL</button>
-    </div>
     <button class="on" onclick="tab('games',this)">Games<span class="n" id="nG"></span></button>
     <button onclick="tab('tickets',this)">Tickets</button>
     <button onclick="tab('grades',this)">Record<span class="n" id="nR"></span></button>
@@ -11757,7 +11757,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.17
+   NFL ENGINE — BUILD v1.18
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -11807,12 +11807,10 @@ function switchSport(sport){
     if(!btn)return;
     if(s===sport){
       btn.style.background='var(--gold)';btn.style.color='#000';
-      btn.style.borderColor='var(--gold)';btn.style.fontWeight='700';
-      btn.style.border='2px solid var(--gold)';
+      btn.style.border='2px solid var(--gold)';btn.style.fontWeight='900';
     }else{
-      btn.style.background='var(--panel2)';btn.style.color='var(--chalk)';
-      btn.style.borderColor='var(--rule)';btn.style.fontWeight='700';
-      btn.style.border='2px solid var(--rule)';
+      btn.style.background='transparent';btn.style.color='#fff';
+      btn.style.border='2px solid #555';btn.style.fontWeight='900';
     }
   });
   // re-render current tab
@@ -12139,7 +12137,7 @@ async function loadNFLSchedule(){
   const el=document.getElementById('slate');
   if(el)el.innerHTML='<div class="empty">Loading current NFL week…</div>';
   try{
-    const url='https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
+    const url='https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?limit=100';
     const r=await fetch(url);
     const j=await r.json();
     NFL_WEEK=j.week&&j.week.number||1;
