@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.24</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.25</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -11792,7 +11792,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.24
+   NFL ENGINE — BUILD v1.25
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -11916,7 +11916,20 @@ function nflFairML(p){
 // ── NFL book lines (from uploaded txt) ───────────────────────────────────────
 function getNFLBookLines(){return get(LS.nflshots,{})[today()]||[];}
 function nflBookLinesFor(gameKey){
-  return getNFLBookLines().filter(x=>x.game===gameKey);
+  const all=getNFLBookLines();
+  // exact match first
+  const exact=all.filter(x=>x.game===gameKey);
+  if(exact.length)return exact;
+  // fuzzy: normalize both sides and try again
+  const ABBR={'LV':'LV','OAK':'LV','LVR':'LV','WSH':'WSH','WAS':'WSH','LAR':'LAR','LAC':'LAC','SF':'SF',
+    'GB':'GB','KC':'KC','TB':'TB','NE':'NE','NO':'NO','NYG':'NYG','NYJ':'NYJ','JAX':'JAX'};
+  const norm=a=>ABBR[a]||a;
+  const [awayKey,homeKey]=(gameKey||'').split('@');
+  const normKey=norm(awayKey)+'@'+norm(homeKey);
+  return all.filter(x=>{
+    const [xa,xh]=(x.game||'').split('@');
+    return norm(xa)+'@'+norm(xh)===normKey;
+  });
 }
 function nflBookLine(gameKey,market,side){
   return nflBookLinesFor(gameKey).find(x=>x.market===market&&x.side===side)||null;
