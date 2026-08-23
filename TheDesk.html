@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.25</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.27</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -514,23 +514,24 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <button onclick="tab('settings',this)">Settings</button>
   </nav>
 </header>
-<div style="display:flex;padding:8px 12px;gap:8px;background:#0d1117;position:relative;z-index:999">
-  <div id="sportBtn-mlb" ontouchstart="void(0)" ontouchend="doSportSwitch('mlb');return false" onclick="doSportSwitch('mlb')" style="flex:1;height:52px;font-size:17px;font-weight:900;border-radius:10px;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">⚾ MLB</div>
-  <div id="sportBtn-nfl" ontouchstart="void(0)" ontouchend="doSportSwitch('nfl');return false" onclick="doSportSwitch('nfl')" style="flex:1;height:52px;font-size:17px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏈 NFL</div>
+<div style="display:flex;padding:8px 12px 4px;gap:6px;background:#0d1117;position:relative;z-index:999">
+  <div id="sportBtn-mlb" ontouchstart="void(0)" ontouchend="doSportSwitch('mlb');return false" onclick="doSportSwitch('mlb')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">⚾ MLB</div>
+  <div id="sportBtn-nfl" ontouchstart="void(0)" ontouchend="doSportSwitch('nfl');return false" onclick="doSportSwitch('nfl')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏈 NFL</div>
+  <div id="sportBtn-ncaaf" ontouchstart="void(0)" ontouchend="doSportSwitch('ncaaf');return false" onclick="doSportSwitch('ncaaf')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏟 CFB</div>
 </div>
 
 <main>
   <div class="view on" id="v-games">
-    <div class="bar" style="margin:0 0 10px">
-      <button class="primary" onclick="refreshEverything()">↻ Refresh everything</button>
+    <div class="bar" style="margin:0 0 6px;gap:6px">
+      <button class="primary" onclick="refreshEverything()" style="flex:2">↻ Refresh everything</button>
+      <button onclick="pullLiveOdds()" style="flex:1;font-size:12px" id="pullOddsBtn">⚡ Pull odds</button>
     </div>
     <div id="refreshAllStatus"></div>
     <div class="tkt">
       <div class="sbar" style="margin-top:0"><h2>Your book's real lines</h2><div class="ln"></div></div>
-      <div class="sub">Upload screenshots of your actual sportsbook — several at once if a slate takes a few.
-      Claude reads the teams, lines, and prices off the images. <b>Whatever you upload outranks every API</b>
-      and becomes the real tappable line for that market, including First 5. Saved lines persist across
-      reloads and back up to GitHub — upload once per slate, not every visit.</div>
+      <div class="sub">Upload a txt file or screenshots from your sportsbook. <b>Whatever you upload outranks every API</b>
+      and becomes the real tappable line for that market. Or hit <b>⚡ Pull odds</b> above to auto-fetch
+      live lines from The Odds API — no file needed.</div>
       <div class="sub" id="bookStatus" style="margin-top:6px;font-family:'IBM Plex Mono';font-size:10.5px"></div>
       <div class="mktlab" style="margin-top:8px">Which slate are these for?</div>
       <div class="subnav" id="bookUploadDateRow"></div>
@@ -759,34 +760,36 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus',
-nflgames:'d4.nflgames',nflshots:'d4.nflshots',nflarc:'d4.nflarc',nflext:'d4.nflext',nfltrends:'d4.nfltrends',nflconsensus:'d4.nflconsensus'};
+nflgames:'d4.nflgames',nflshots:'d4.nflshots',nflarc:'d4.nflarc',nflext:'d4.nflext',nfltrends:'d4.nfltrends',nflconsensus:'d4.nflconsensus',
+ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
-let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl'
+let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl' | 'ncaaf'
 let NFL_GAMES=[],NFL_SIMS={}; // parallel NFL game store
 let NFL_WEEK=null,NFL_SEASON=null; // current week/season being viewed
+let NCAAF_GAMES=[],NCAAF_SIMS={};
+let NCAAF_WEEK=null,NCAAF_SEASON=null;
 
-// doSportSwitch — called directly from ontouchend/onclick on the switcher divs.
-// Defined here early so it's available the moment the DOM is ready.
 function doSportSwitch(sport){
   ACTIVE_SPORT=sport;
-  const mlbBtn=document.getElementById('sportBtn-mlb');
-  const nflBtn=document.getElementById('sportBtn-nfl');
-  if(mlbBtn&&nflBtn){
-    mlbBtn.style.background=sport==='mlb'?'var(--gold)':'#1c1c1c';
-    mlbBtn.style.color=sport==='mlb'?'#000':'#fff';
-    nflBtn.style.background=sport==='nfl'?'var(--gold)':'#1c1c1c';
-    nflBtn.style.color=sport==='nfl'?'#000':'#fff';
-  }
+  ['mlb','nfl','ncaaf'].forEach(s=>{
+    const btn=document.getElementById('sportBtn-'+s);
+    if(!btn)return;
+    btn.style.background=s===sport?'var(--gold)':'#1c1c1c';
+    btn.style.color=s===sport?'#000':'#fff';
+  });
   const slate=document.getElementById('slate');
   if(sport==='nfl'){
     if(typeof renderNFL==='function')renderNFL();
     if(typeof nflOnActivate==='function')nflOnActivate();
+  }else if(sport==='ncaaf'){
+    if(typeof renderNCAAF==='function')renderNCAAF();
+    if(typeof ncaafOnActivate==='function')ncaafOnActivate();
   }else{
     if(typeof render==='function')render();
   }
   const nG=document.getElementById('nG');
-  if(nG)nG.textContent=sport==='nfl'?NFL_GAMES.length:GAMES.length;
+  if(nG)nG.textContent=sport==='nfl'?NFL_GAMES.length:sport==='ncaaf'?NCAAF_GAMES.length:GAMES.length;
 }
 let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
 let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
@@ -1059,13 +1062,11 @@ async function analyzeBookShots(){
       result.picks.forEach(p=>allParsed.push(p));
     }
     if(allParsed.length&&!otherFiles.length){
-      // save directly as book odds — same storage path as API results
-      el.innerHTML=`<div class="empty">Parsed ${allParsed.length} picks · sport=${ACTIVE_SPORT} · saving…</div>`;
       saveBookOdds(allParsed,el);
       return;
     }
     if(!allParsed.length&&!otherFiles.length){
-      el.innerHTML=`<div class="empty">Nothing parsed from text file. First line: "${textFiles[0]?textFiles[0].name:''}" · sport=${ACTIVE_SPORT}</div>`;
+      el.innerHTML='<div class="empty">Nothing parsed — check file format. File must start with MLB, NFL, or NCAAF.</div>';
       return;
     }
   }
@@ -1141,6 +1142,7 @@ async function analyzeBookShots(){
 function saveBookOdds(picks,el){
   // Route NFL picks to NFL storage when NFL sport is active
   if(ACTIVE_SPORT==='nfl'){saveNFLBookOdds(picks,el);return;}
+  if(ACTIVE_SPORT==='ncaaf'){saveNCAAFBookOdds(picks,el);return;}
   const d=today();
   const all=get(LS.bookshots,{});
   all[d]=all[d]||[];
@@ -1273,6 +1275,7 @@ function tab(n,b){
   document.querySelectorAll('nav>button').forEach(x=>x.classList.remove('on'));
   if(b)b.classList.add('on');
   if(n==='games'&&ACTIVE_SPORT==='nfl')renderNFL();
+  if(n==='games'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
   if(n==='tickets')renderTickets();
   if(n==='grades')renderGrades(true);
   if(n==='recap')renderRecap();
@@ -3986,6 +3989,13 @@ async function refreshEverything(){
     await loadNFLSchedule();
     await fetchNFLPowerRatings();
     await fetchNFLLiveOdds();
+    return;
+  }
+  if(ACTIVE_SPORT==='ncaaf'){
+    const el=document.getElementById('slate');
+    if(el)el.innerHTML='<div class="empty">Refreshing CFB data…</div>';
+    await loadNCAAFSchedule();
+    await fetchNCAAFLiveOdds();
     return;
   }
   const st=document.getElementById('refreshAllStatus');
@@ -7900,17 +7910,17 @@ async function analyzeExtPicks(){
     offlineConsensus=offlineConsensus.concat(result.consensus);
   }
   if(!otherFiles.length){
-    // DEBUG — show parse results before deciding
-    el.innerHTML+=`<div class="tkt"><div class="sub" style="font-family:'IBM Plex Mono';font-size:11px">
-      textFiles: ${textFiles.length} | otherFiles: ${otherFiles.length}<br>
-      picks: ${offlinePicks.length} | trends: ${offlineTrends.length} | consensus: ${offlineConsensus.length}
-    </div></div>`;
     if(!offlinePicks.length&&!offlineTrends.length&&!offlineConsensus.length){
-      el.innerHTML+='<div class="empty">Nothing parsed — check file format.</div>';return;
+      el.innerHTML='<div class="empty">Nothing parsed — check file format.</div>';return;
     }
     // Route NFL data to NFL storage
     const hasNFL=offlinePicks.some(x=>x.isNFL)||offlineTrends.some(x=>x.sport==='nfl')||
       (textFiles.length&&/^NFL/i.test((textFiles[0].name||'')));
+    const hasNCAAF=(textFiles.length&&/^NCAAF/i.test((textFiles[0].name||'')));
+    if(ACTIVE_SPORT==='ncaaf'||hasNCAAF){
+      if(typeof saveNCAAFExtData==='function')saveNCAAFExtData(offlinePicks,offlineTrends,offlineConsensus,el);
+      return;
+    }
     if(ACTIVE_SPORT==='nfl'||hasNFL){
       saveNFLExtData(offlinePicks,offlineTrends,offlineConsensus,el);
       return;
@@ -8098,15 +8108,18 @@ function renderExtResults(el,picks,trends,consensus){
 // slate_consensus.txt : TEAM XX% / TEAM XX% rows + TOTALS section
 // slate_trends.txt : TEAM trends bullets per game block
 function parseSlateText(text){
-  // Detect NFL files and hand off to NFL parser
+  // Detect NFL/NCAAF files and hand off to their parsers
   const firstLine=(text.split('\n')[0]||'').trim();
   if(/^NFL/i.test(firstLine)){
     const nflResult=parseNFLSlateText(text);
     return{picks:nflResult.picks,trends:nflResult.trends,consensus:nflResult.consensus,isNFL:true};
   }
+  if(/^NCAAF/i.test(firstLine)){
+    const r=parseNCAAFSlateText(text);
+    return{picks:r.picks,trends:r.trends,consensus:r.consensus,isNCAAF:true};
+  }
   const picks=[],trends=[],consensus=[];
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
-
   // normalize abbreviations to match what GAMES array uses
   const ABBR_MAP={'CHW':'CWS','AZ':'ARI','WSH':'WSH','WAS':'WSH','ATH':'ATH','OAK':'ATH','NYY':'NYY','NYM':'NYM'};
   function normAbbr(a){return ABBR_MAP[a.toUpperCase()]||a.toUpperCase();}
@@ -8382,11 +8395,20 @@ function saveExtPicks(){
 }
 
 function clearExtToday(){
-  if(!confirm('Clear all external picks, trends, and consensus saved for today?'))return;
+  if(!confirm('Clear all external picks, trends, and consensus for today? (MLB, NFL, CFB)'))return;
   const d=today();
+  // MLB
   const all=getExt();delete all[d];set(LS.extpicks,all);
   const allT=get(LS.exttrends,{});delete allT[d];set(LS.exttrends,allT);
   const allC=get(LS.extconsensus,{});delete allC[d];set(LS.extconsensus,allC);
+  // NFL
+  const nflE=get(LS.nflext,{});delete nflE[d];set(LS.nflext,nflE);
+  const nflT=get(LS.nfltrends,{});delete nflT[d];set(LS.nfltrends,nflT);
+  const nflC=get(LS.nflconsensus,{});delete nflC[d];set(LS.nflconsensus,nflC);
+  // NCAAF
+  const cfbE=get(LS.ncaafext,{});delete cfbE[d];set(LS.ncaafext,cfbE);
+  const cfbT=get(LS.ncaaftrends,{});delete cfbT[d];set(LS.ncaaftrends,cfbT);
+  const cfbC=get(LS.ncaafconsensus,{});delete cfbC[d];set(LS.ncaafconsensus,cfbC);
   try{syncTrackedAutoParlay('outside');}catch(e){}
   renderTickets();
 }
@@ -8464,7 +8486,8 @@ function renderTickets(){
     opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
   if(TICKETTAB==='eval'){
     try{
-      body.innerHTML=ACTIVE_SPORT==='nfl'?renderNFLMasterEval():renderMasterEval();
+      const fn=ACTIVE_SPORT==='nfl'?renderNFLMasterEval:ACTIVE_SPORT==='ncaaf'?renderNCAAFMasterEval:renderMasterEval;
+      body.innerHTML=fn();
     }catch(e){
       body.innerHTML=`<div class="tkt"><h3>Eval error</h3><div class="sub">${e.message}</div></div>`;
     }
@@ -11792,7 +11815,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.25
+   NFL ENGINE — BUILD v1.27
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -11864,41 +11887,6 @@ function switchSport(sport){
 // ── NFL Simulation engine ────────────────────────────────────────────────────
 // Uses normal distribution around team scoring means.
 // NFL average: ~24 pts/team, std dev ~10. Adjusts for home field (+3 pts).
-function simNFLGame(g,N=10000){
-  const awayMean=g.away.offRating||24;
-  const homeMean=g.home.offRating||24;
-  const awayDef=g.away.defRating||24;
-  const homeDef=g.home.defRating||24;
-  const HFA=3; // home field advantage in points
-
-  // projected scores: offense vs opponent defense, blended
-  const awayProj=Math.max(0,(awayMean+homeDef)/2);
-  const homeProj=Math.max(0,(homeMean+awayDef)/2+HFA);
-  const std=10;
-
-  let awayWins=0,homeWins=0,ties=0;
-  const totals=[],spreads=[];
-  for(let i=0;i<N;i++){
-    const a=Math.max(0,Math.round(awayProj+randn()*std));
-    const h=Math.max(0,Math.round(homeProj+randn()*std));
-    totals.push(a+h);
-    spreads.push(a-h); // positive = away covers positive spread
-    if(a>h)awayWins++;else if(h>a)homeWins++;else ties++;
-  }
-  totals.sort((a,b)=>a-b);
-  spreads.sort((a,b)=>a-b);
-  const medTotal=totals[Math.floor(N/2)];
-  const medSpread=spreads[Math.floor(N/2)]; // away team projected spread
-  const awayWinP=(awayWins+ties*0.5)/N;
-  return{
-    awayWinP,homeWinP:1-awayWinP,
-    medTotal,medSpread,
-    awayProj:Math.round(awayProj),
-    homeProj:Math.round(homeProj),
-    N,
-  };
-}
-
 function randn(){
   // Box-Muller
   let u=0,v=0;
@@ -11944,162 +11932,7 @@ function nflConsensusFor(gameKey){return getNFLConsensus().filter(x=>x.game===ga
 function nflExtFor(gameKey){return getNFLExt().filter(x=>x.game===gameKey);}
 
 // ── NFL game card ─────────────────────────────────────────────────────────────
-function nflCard(g){
-  const s=NFL_SIMS[g.id];
-  if(!s)return'';
-  const gameKey=g.away.abbr+'@'+g.home.abbr;
-  const lines=nflBookLinesFor(gameKey);
-  const hasReal=lines.length>0;
-  const ext=nflExtFor(gameKey);
-  const trends=nflTrendsFor(gameKey);
-  const cons=nflConsensusFor(gameKey);
 
-  // spread lines
-  const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
-  const homeSpread=lines.find(x=>x.market==='spread'&&x.side==='home');
-  const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
-  const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
-  const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
-  const totalUnder=lines.find(x=>x.market==='total'&&x.side==='under');
-  const h1AwaySpread=lines.find(x=>x.market==='h1spread'&&x.side==='away');
-  const h1HomeSpread=lines.find(x=>x.market==='h1spread'&&x.side==='home');
-  const h1Over=lines.find(x=>x.market==='h1total'&&x.side==='over');
-  const h1Under=lines.find(x=>x.market==='h1total'&&x.side==='under');
-
-  // sim-derived edge
-  const awayFairML=nflFairML(s.awayWinP);
-  const homeFairML=nflFairML(s.homeWinP);
-  const awayEdge=awayML?awayML.price-awayFairML:null;
-  const homeEdge=homeML?homeML.price-homeFairML:null;
-  const totalEdge=totalOver?(totalOver.line-s.medTotal):null;
-  const spreadEdge=awaySpread?(awaySpread.line-s.medSpread):null;
-
-  // consensus display
-  const mlCons=cons.find(x=>x.market==='moneyline');
-  const totCons=cons.find(x=>x.market==='total');
-
-  // purple square for outside picks
-  const purpleAway=ext.filter(x=>x.side==='away'&&x.market==='moneyline').length;
-  const purpleHome=ext.filter(x=>x.side==='home'&&x.market==='moneyline').length;
-
-  function sq(edge,label,price,fair,picks){
-    const cls=edge!==null?(edge>0?'edge-pos':'edge-neg'):'edge-none';
-    const edgeStr=edge!==null?(edge>0?'+':'')+edge:'—';
-    const pBadge=picks>0?`<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#9b59b6;margin-left:3px;vertical-align:middle"></span>`:'';
-    return`<div class="betsq ${cls}" onclick="nflSlipToggle('${g.id}','${label}',${price||0})">
-      <div class="sq-label">${label}${pBadge}</div>
-      <div class="sq-price" style="color:${edge>2?'var(--win)':edge<-2?'var(--rust)':'var(--gold)'}">${price!==null?price:'—'}</div>
-      <div class="sq-edge">${edgeStr} · fair ${fair}</div>
-    </div>`;
-  }
-
-  const awayTeam=NFL_TEAMS[g.away.abbr]||{name:g.away.abbr};
-  const homeTeam=NFL_TEAMS[g.home.abbr]||{name:g.home.abbr};
-
-  const realBadge=hasReal?`<span class="realline-badge">REAL LINE</span>`:'';
-
-  // trends section
-  let trendsHtml='';
-  if(trends.length){
-    trendsHtml=`<div class="expanel" id="p-nfltrends-${g.id}">
-      <div class="mktlab" style="margin-top:8px">Trends (${trends.length})</div>
-      ${trends.map(t=>`<div class="trend-row"><span class="trend-dot ${/^over/i.test(t.text)?'agree':/^under/i.test(t.text)?'agree':'neutral'}"></span>
-        <span>${t.team?`<b>${t.team}</b>: `:''}${t.text}</span></div>`).join('')}
-    </div>`;
-  }
-
-  // consensus bar
-  let consHtml='';
-  if(mlCons){
-    const awayPct=mlCons.awayPct||0,homePct=mlCons.homePct||0;
-    consHtml=`<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px">
-      <span style="font-family:'IBM Plex Mono';color:var(--chalk-dim)">${g.away.abbr} ${awayPct}%</span>
-      <div style="flex:1;height:4px;border-radius:2px;background:var(--rule);overflow:hidden">
-        <div style="height:100%;width:${awayPct}%;background:var(--cold)"></div>
-      </div>
-      <span style="font-family:'IBM Plex Mono';color:var(--chalk-dim)">${homePct}% ${g.home.abbr}</span>
-    </div>`;
-    if(totCons){
-      const uPct=totCons.underPct||0,oPct=totCons.overPct||0;
-      consHtml+=`<div style="font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk-dim);margin-top:3px">
-        Totals: ${oPct}% Over / ${uPct}% Under${totCons.line?' · Line '+totCons.line:''}
-      </div>`;
-    }
-  }
-
-  // props section
-  const propLines=lines.filter(x=>x.market==='prop');
-  let propsHtml='';
-  if(propLines.length){
-    propsHtml=`<div class="mktlab" style="margin-top:8px">Props (${propLines.length})</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
-        ${propLines.map(p=>`<div class="betsq edge-none" onclick="nflSlipToggle('${g.id}','${p.player} ${p.stat} ${p.line}+',${p.price})">
-          <div class="sq-label" style="font-size:9px">${p.player}</div>
-          <div class="sq-price">${p.stat} ${p.line}+ (${p.price>0?'+':''}${p.price})</div>
-        </div>`).join('')}
-      </div>`;
-  }
-
-  return`<div class="card" id="nfl-card-${g.id}">
-    <div class="cardhead">
-      <div class="matchup">
-        <span class="away">${g.away.abbr}</span>
-        <span class="atsign">@</span>
-        <span class="home">${g.home.abbr}</span>
-      </div>
-      <div class="gametime">${g.time||''}</div>
-    </div>
-    <div style="font-size:11px;color:var(--chalk-dim);font-family:'IBM Plex Mono';margin-bottom:6px">
-      ${awayTeam.name} @ ${homeTeam.name}${g.week?' · Week '+g.week:''}
-    </div>
-
-    <!-- Sim projection -->
-    <div class="proj-line">
-      <span>Proj: <b>${g.away.abbr} ${s.awayProj}</b> – <b>${g.home.abbr} ${s.homeProj}</b></span>
-      <span class="m">Total ${s.medTotal} · Spread ${g.away.abbr} ${s.medSpread>0?'+':''}${s.medSpread}</span>
-    </div>
-
-    <!-- Spread -->
-    <div class="mktlab" style="margin-top:8px">Spread ${realBadge}</div>
-    <div class="sqrow">
-      ${sq(spreadEdge,`${g.away.abbr} ${awaySpread?awaySpread.line:s.medSpread>0?'+'+s.medSpread:s.medSpread}`,awaySpread?awaySpread.price:null,nflFairML(s.awayWinP),0)}
-      ${sq(spreadEdge?-spreadEdge:null,`${g.home.abbr} ${homeSpread?homeSpread.line:s.medSpread>0?-s.medSpread:'+'+Math.abs(s.medSpread)}`,homeSpread?homeSpread.price:null,nflFairML(s.homeWinP),0)}
-    </div>
-
-    <!-- Moneyline -->
-    <div class="mktlab" style="margin-top:6px">Moneyline</div>
-    <div class="sqrow">
-      ${sq(awayEdge,`${g.away.abbr} ML`,awayML?awayML.price:null,awayFairML,purpleAway)}
-      ${sq(homeEdge,`${g.home.abbr} ML`,homeML?homeML.price:null,homeFairML,purpleHome)}
-    </div>
-
-    <!-- Total -->
-    <div class="mktlab" style="margin-top:6px">Total</div>
-    <div class="sqrow">
-      ${sq(totalEdge?-totalEdge:null,`Over ${totalOver?totalOver.line:s.medTotal}`,totalOver?totalOver.price:null,'—',0)}
-      ${sq(totalEdge,`Under ${totalUnder?totalUnder.line:s.medTotal}`,totalUnder?totalUnder.price:null,'—',0)}
-    </div>
-
-    ${h1AwaySpread||h1Over?`
-    <!-- 1st Half -->
-    <div class="mktlab" style="margin-top:6px">1st Half</div>
-    <div class="sqrow">
-      ${h1AwaySpread?sq(null,`${g.away.abbr} 1H ${h1AwaySpread.line}`,h1AwaySpread.price,null,0):''}
-      ${h1HomeSpread?sq(null,`${g.home.abbr} 1H ${h1HomeSpread.line}`,h1HomeSpread.price,null,0):''}
-    </div>
-    ${h1Over?`<div class="sqrow">
-      ${sq(null,'1H Over '+h1Over.line,h1Over.price,null,0)}
-      ${h1Under?sq(null,'1H Under '+h1Under.line,h1Under.price,null,0):''}
-    </div>`:''}
-    `:''}
-
-    ${consHtml}
-    ${trendsHtml}
-    ${propsHtml}
-  </div>`;
-}
-
-// ── NFL slip toggle (add leg to ticket builder) ───────────────────────────────
 function nflSlipToggle(gid,label,price){
   const g=NFL_GAMES.find(x=>x.id===gid);if(!g)return;
   const leg={gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport:'nfl',
@@ -12159,7 +11992,7 @@ function renderNFL(){
 
   const weekNav=`<div style="display:flex;align-items:center;justify-content:space-between;
     padding:10px 12px;background:var(--panel2);border-radius:8px;margin-bottom:10px">
-    <button onclick="loadNFLWeek(${season},${week-1})" style="background:none;border:1px solid var(--rule);
+    <button onclick="loadNFLWeek(${season},${Number(week)-1})" style="background:none;border:1px solid var(--rule);
       color:var(--chalk);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px">← Prev</button>
     <div style="text-align:center">
       <div style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase">
@@ -12167,7 +12000,7 @@ function renderNFL(){
       <div style="font-weight:700;font-size:16px;color:var(--chalk)">${weekLabel}</div>
       <div style="font-size:11px;color:var(--chalk-dim)">${NFL_GAMES.length} games</div>
     </div>
-    <button onclick="loadNFLWeek(${season},${week+1})" style="background:none;border:1px solid var(--rule);
+    <button onclick="loadNFLWeek(${season},${Number(week)+1})" style="background:none;border:1px solid var(--rule);
       color:var(--chalk);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px">Next →</button>
   </div>`;
 
@@ -12394,6 +12227,117 @@ function saveNFLExtData(picks,trends,consensus,el){
 // When ACTIVE_SPORT is 'nfl', route parsed data to NFL storage
 const _origSaveExtPicks=typeof saveExtPicks==='function'?saveExtPicks:null;
 const _origSaveBookOdds=typeof saveBookOdds==='function'?saveBookOdds:null;
+
+// ── pullLiveOdds — one-tap odds pull for active sport ─────────────────────────
+async function pullLiveOdds(){
+  const btn=document.getElementById('pullOddsBtn');
+  const key=get(LS.oddspapi,'');
+  if(!key){
+    document.getElementById('bookShotResult').innerHTML=
+      '<div class="tkt"><h3>Odds API key needed</h3><div class="sub">Add your The Odds API key in Settings → Odds API Key. Free tier: 500 req/month.</div></div>';
+    return;
+  }
+  if(btn){btn.textContent='⏳ Pulling…';btn.disabled=true;}
+  const el=document.getElementById('bookShotResult');
+  try{
+    if(ACTIVE_SPORT==='nfl'){
+      el.innerHTML='<div class="empty">Pulling NFL odds…</div>';
+      await fetchNFLLiveOdds();
+      el.innerHTML='<div class="tkt hi"><h3>NFL odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
+    }else if(ACTIVE_SPORT==='ncaaf'){
+      el.innerHTML='<div class="empty">Pulling CFB odds…</div>';
+      await fetchNCAAFLiveOdds();
+      el.innerHTML='<div class="tkt hi"><h3>CFB odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
+    }else{
+      el.innerHTML='<div class="empty">Pulling MLB odds…</div>';
+      await fetchMLBLiveOdds();
+      el.innerHTML='<div class="tkt hi"><h3>MLB odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
+    }
+  }catch(e){
+    el.innerHTML=`<div class="tkt"><h3>Pull failed</h3><div class="sub">${e.message}</div></div>`;
+  }
+  if(btn){btn.textContent='⚡ Pull odds';btn.disabled=false;}
+}
+
+// ── MLB Live Odds (The Odds API) ──────────────────────────────────────────────
+async function fetchMLBLiveOdds(){
+  const key=get(LS.oddspapi,'');if(!key)return;
+  const url=`https://api.the-odds-api.com/v4/sports/baseball_mlb/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+  const r=await fetch(url);const j=await r.json();
+  if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
+  const d=today();const all=get(LS.bookshots,{});all[d]=all[d]||[];
+  const NAME_MAP={'Oakland Athletics':'ATH','Athletics':'ATH','Chicago White Sox':'CWS',
+    'Arizona Diamondbacks':'ARI','Washington Nationals':'WSH','San Diego Padres':'SD',
+    'San Francisco Giants':'SF','Tampa Bay Rays':'TB','Kansas City Royals':'KC',
+    'Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD','New York Mets':'NYM',
+    'New York Yankees':'NYY','St. Louis Cardinals':'STL','Colorado Rockies':'COL',
+    'Detroit Tigers':'DET','Minnesota Twins':'MIN','Milwaukee Brewers':'MIL',
+    'Baltimore Orioles':'BAL','Texas Rangers':'TEX','Houston Astros':'HOU',
+    'Seattle Mariners':'SEA','Miami Marlins':'MIA','Atlanta Braves':'ATL',
+    'Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Pittsburgh Pirates':'PIT',
+    'Philadelphia Phillies':'PHI','Toronto Blue Jays':'TOR','Chicago Cubs':'CHC',
+    'Boston Red Sox':'BOS','New York Mets':'NYM'};
+  function mlbAbbr(name){return NAME_MAP[name]||abbr(name)||name.slice(0,3).toUpperCase();}
+  let count=0;
+  j.forEach(game=>{
+    const homeAb=mlbAbbr(game.home_team);const awayAb=mlbAbbr(game.away_team);
+    const gm=GAMES.find(g=>g.home.abbr===homeAb&&g.away.abbr===awayAb);
+    const gid=gm?gm.id:null;const gameKey=awayAb+'@'+homeAb;
+    const book=game.bookmakers.find(b=>b.key==='draftkings')||game.bookmakers.find(b=>b.key==='fanduel')||game.bookmakers[0];
+    if(!book)return;
+    book.markets.forEach(mkt=>{
+      mkt.outcomes.forEach(o=>{
+        let market,side,line=null;
+        if(mkt.key==='h2h'){market='moneyline';side=mlbAbbr(o.name)===awayAb?'away':'home';}
+        else if(mkt.key==='spreads'){market='runline';side=mlbAbbr(o.name)===awayAb?'away':'home';line=o.point;}
+        else if(mkt.key==='totals'){market='total';side=o.name.toLowerCase()==='over'?'over':'under';line=o.point;}
+        else return;
+        const rec={away:awayAb,home:homeAb,game:gameKey,market,side,line,price:o.price,gid,capturedAt:Date.now()};
+        const k=[rec.game,rec.market,rec.side,rec.line].join('|');
+        const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
+        if(i>=0)all[d][i]=rec;else{all[d].push(rec);count++;}
+      });
+    });
+  });
+  set(LS.bookshots,all);BOOKSHOT_UPLOAD_DATE=d;
+  renderBookStatus();render();
+  console.log('MLB live odds:',count,'new lines');
+}
+
+// ── NCAAF Live Odds (The Odds API) ───────────────────────────────────────────
+async function fetchNCAAFLiveOdds(){
+  const key=get(LS.oddspapi,'');if(!key)return;
+  const url=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
+  const r=await fetch(url);const j=await r.json();
+  if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
+  const d=today();const all=get(LS.ncaafshots,{});all[d]=all[d]||[];
+  j.forEach(game=>{
+    const home=game.home_team;const away=game.away_team;
+    // Match to ESPN game by full name
+    const gm=NCAAF_GAMES.find(g=>g.home.name===home||g.home.name.includes(home.split(' ').pop()));
+    const homeAb=gm?gm.home.abbr:home.toUpperCase().replace(/\s+/g,'-').slice(0,8);
+    const awayGm=NCAAF_GAMES.find(g=>g.away.name===away||g.away.name.includes(away.split(' ').pop()));
+    const awayAb=awayGm?awayGm.away.abbr:away.toUpperCase().replace(/\s+/g,'-').slice(0,8);
+    const gid=gm?gm.id:null;const gameKey=awayAb+'@'+homeAb;
+    const book=game.bookmakers.find(b=>b.key==='draftkings')||game.bookmakers.find(b=>b.key==='fanduel')||game.bookmakers[0];
+    if(!book)return;
+    book.markets.forEach(mkt=>{
+      mkt.outcomes.forEach(o=>{
+        let market,side,line=null;
+        if(mkt.key==='h2h'){market='moneyline';side=o.name===home?'home':'away';}
+        else if(mkt.key==='spreads'){market='spread';side=o.name===home?'home':'away';line=o.point;}
+        else if(mkt.key==='totals'){market='total';side=o.name.toLowerCase()==='over'?'over':'under';line=o.point;}
+        else return;
+        const rec={away:awayAb,home:homeAb,game:gameKey,market,side,line,price:o.price,gid,capturedAt:Date.now()};
+        const k=[rec.game,rec.market,rec.side,rec.line].join('|');
+        const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
+        if(i>=0)all[d][i]=rec;else all[d].push(rec);
+      });
+    });
+  });
+  set(LS.ncaafshots,all);NCAAF_SIMS={};
+  if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
+}
 
 // ── Boot: restore NFL games from cache ────────────────────────────────────────
 (function restoreNFLGames(){
@@ -13261,6 +13205,553 @@ function nflCard(g){return nflCardFull(g);}
 
 // ── Updated switchSport to trigger NFL data load ──────────────────────────────
 // nflOnActivate is called from doSportSwitch directly — no override needed
+
+/* ═══════════════════════════════════════════════════════════════════════
+   NCAAF ENGINE — BUILD v1.27
+   Full college football intelligence layer — same depth as NFL
+   FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// ── NCAAF constants ─────────────────────────────────────────────────────────
+const NCAAF_HFA=4.5; // college home field advantage (real avg ~4.5 pts)
+const NCAAF_CALIB_KEY='d4.ncaafcalib';
+let NCAAF_POWER={}; // {team_id: {offPPG, defPPG, wins, losses, ...}}
+
+// Top 25 conferences for reference
+const NCAAF_CONF={
+  'Alabama':'SEC','Georgia':'SEC','Ohio State':'Big Ten','Michigan':'Big Ten',
+  'Texas':'SEC','Oklahoma':'SEC','USC':'Big Ten','Penn State':'Big Ten',
+  'Notre Dame':'Independent','Clemson':'ACC','Florida State':'ACC',
+  'Oregon':'Big Ten','Washington':'Big Ten','LSU':'SEC','Tennessee':'SEC',
+};
+
+// ── NCAAF storage helpers ────────────────────────────────────────────────────
+function getNCAAFBookLines(){return get(LS.ncaafshots,{})[today()]||[];}
+function ncaafBookLinesFor(gameKey){
+  const all=getNCAAFBookLines();
+  const exact=all.filter(x=>x.game===gameKey);
+  if(exact.length)return exact;
+  // fuzzy match on abbreviated names
+  const norm=a=>(a||'').toUpperCase().replace(/\s+/g,'-').slice(0,6);
+  const [ak,hk]=(gameKey||'').split('@');
+  return all.filter(x=>{
+    const [xa,xh]=(x.game||'').split('@');
+    return norm(xa)===norm(ak)&&norm(xh)===norm(hk);
+  });
+}
+function getNCAAFExt(){return get(LS.ncaafext,{})[today()]||[];}
+function getNCAAFTrends(){return get(LS.ncaaftrends,{})[today()]||[];}
+function getNCAAFConsensus(){return get(LS.ncaafconsensus,{})[today()]||[];}
+function ncaafTrendsFor(k){return getNCAAFTrends().filter(x=>x.game===k);}
+function ncaafConsensusFor(k){return getNCAAFConsensus().filter(x=>x.game===k);}
+function ncaafExtFor(k){return getNCAAFExt().filter(x=>x.game===k);}
+
+// ── NCAAF Sim Engine ─────────────────────────────────────────────────────────
+// College football has higher scoring, wider variance, and bigger HFA than NFL.
+// Average FBS score ~28 PPG, std dev ~14 (wider than NFL due to talent gap blowouts).
+function simNCAAFGame(g,N){
+  N=N||10000;
+  const awayPow=NCAAF_POWER[g.awayId||g.away.name]||{offPPG:26,defPPG:26,wins:0,losses:0};
+  const homePow=NCAAF_POWER[g.homeId||g.home.name]||{offPPG:26,defPPG:26,wins:0,losses:0};
+  const leagueAvg=26.0;
+  const gamesPlayed=Math.max((awayPow.wins||0)+(awayPow.losses||0),(homePow.wins||0)+(homePow.losses||0),1);
+  const regW=Math.min(1,(gamesPlayed-1)/6);
+  const reg=1-0.4*(1-regW);
+  let awayExp=((awayPow.offPPG+homePow.defPPG)/2)*reg+leagueAvg*(1-reg);
+  let homeExp=((homePow.offPPG+awayPow.defPPG)/2)*reg+leagueAvg*(1-reg)+NCAAF_HFA;
+  awayExp=Math.max(3,awayExp);homeExp=Math.max(3,homeExp);
+  const std=14; // wider variance in college
+  let hw=0,aw=0,ties=0;
+  const totals=[],margins=[];
+  for(let i=0;i<N;i++){
+    const a=Math.max(0,Math.round(awayExp+randn()*std));
+    const h=Math.max(0,Math.round(homeExp+randn()*std));
+    totals.push(a+h);margins.push(h-a);
+    if(h>a)hw++;else if(a>h)aw++;else ties++;
+  }
+  totals.sort((a,b)=>a-b);margins.sort((a,b)=>a-b);
+  const med=totals[Math.floor(N/2)];
+  const medMargin=margins[Math.floor(N/2)];
+  const over=x=>totals.filter(v=>v>x).length/N;
+  const spreadCover=line=>margins.filter(m=>m>line).length/N;
+  return{
+    awayProj:isNaN(awayExp)?26:Math.round(awayExp*10)/10,
+    homeProj:isNaN(homeExp)?26:Math.round(homeExp*10)/10,
+    hw:hw/N,aw:aw/N,med,medMargin,over,spreadCover,N
+  };
+}
+
+// ── NCAAF Power Ratings (ESPN) ────────────────────────────────────────────────
+async function fetchNCAAFPowerRatings(){
+  try{
+    const url='https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season=2025';
+    const r=await fetch(url);const j=await r.json();
+    (j.children||[]).forEach(conf=>{
+      (conf.standings&&conf.standings.entries||[]).forEach(e=>{
+        const name=e.team&&e.team.displayName||'';
+        const stats={};(e.stats||[]).forEach(s=>{stats[s.name]=s.value;});
+        const gp=Math.max(stats.gamesPlayed||0,1);
+        NCAAF_POWER[name]={
+          offPPG:(stats.pointsFor||gp*26)/gp,
+          defPPG:(stats.pointsAgainst||gp*26)/gp,
+          wins:stats.wins||0,losses:stats.losses||0,
+        };
+      });
+    });
+    set('d4.ncaafpower',{ts:Date.now(),v:NCAAF_POWER});
+    NCAAF_GAMES.forEach(g=>{
+      const ap=NCAAF_POWER[g.away.name];const hp=NCAAF_POWER[g.home.name];
+      if(ap){g.away.offRating=ap.offPPG;g.away.defRating=ap.defPPG;}
+      if(hp){g.home.offRating=hp.offPPG;g.home.defRating=hp.defPPG;}
+    });
+    NCAAF_SIMS={};
+    if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
+    console.log('NCAAF power ratings:',Object.keys(NCAAF_POWER).length,'teams');
+  }catch(e){console.warn('NCAAF power ratings failed:',e.message);}
+}
+
+// Restore cached power ratings
+(function restoreNCAAFPower(){
+  const c=get('d4.ncaafpower',{});
+  if(c.v&&Object.keys(c.v).length)NCAAF_POWER=c.v;
+})();
+
+// ── NCAAF Schedule (ESPN) ────────────────────────────────────────────────────
+async function loadNCAAFSchedule(){
+  const el=document.getElementById('slate');
+  if(el)el.innerHTML='<div class="empty">Loading CFB schedule…</div>';
+  try{
+    const url='https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100';
+    const r=await fetch(url);const j=await r.json();
+    NCAAF_WEEK=j.week&&j.week.number||1;
+    NCAAF_SEASON=j.season&&j.season.year||2025;
+    _parseNCAAFEvents(j);
+  }catch(e){
+    if(el)el.innerHTML=`<div class="empty">Failed to load CFB: ${e.message}</div>`;
+  }
+}
+
+async function loadNCAAFWeek(season,week){
+  if(week<0)week=0;
+  const el=document.getElementById('slate');
+  if(el)el.innerHTML=`<div class="empty">Loading CFB Week ${week}…</div>`;
+  try{
+    const url=`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=${season}&seasontype=2&week=${week}`;
+    const r=await fetch(url);const j=await r.json();
+    NCAAF_WEEK=j.week&&j.week.number||week;
+    NCAAF_SEASON=j.season&&j.season.year||season;
+    _parseNCAAFEvents(j);
+  }catch(e){
+    if(el)el.innerHTML=`<div class="empty">Failed: ${e.message}</div>`;
+  }
+}
+
+function _parseNCAAFEvents(j){
+  const events=j.events||[];
+  NCAAF_GAMES=events.map(function(e,i){
+    const comp=e.competitions[0];
+    const away=comp.competitors.find(function(c){return c.homeAway==='away';});
+    const home=comp.competitors.find(function(c){return c.homeAway==='home';});
+    if(!away||!home)return null;
+    const awayName=away.team.displayName||away.team.abbreviation||'???';
+    const homeName=home.team.displayName||home.team.abbreviation||'???';
+    const awayAbbr=(away.team.abbreviation||'???').toUpperCase();
+    const homeAbbr=(home.team.abbreviation||'???').toUpperCase();
+    let day='TBD',timeStr='TBD';
+    if(e.date){
+      const d=new Date(e.date);
+      day=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'America/Chicago'});
+      timeStr=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'});
+    }
+    const ranking=t=>{const r=t.curatedRank&&t.curatedRank.current;return r&&r<=25?`#${r} `:'';};
+    return{
+      id:e.id||String(i),week:NCAAF_WEEK||'',
+      day,time:timeStr,date:e.date||'',
+      status:comp.status&&comp.status.type&&comp.status.type.description||'Scheduled',
+      away:{abbr:awayAbbr,name:awayName,ranking:ranking(away.team),
+        offRating:26,defRating:26,record:away.records&&away.records[0]&&away.records[0].summary||''},
+      home:{abbr:homeAbbr,name:homeName,ranking:ranking(home.team),
+        offRating:26,defRating:26,record:home.records&&home.records[0]&&home.records[0].summary||''},
+    };
+  }).filter(Boolean);
+  const cacheKey=(NCAAF_SEASON||'')+'w'+(NCAAF_WEEK||'');
+  const cache=get(LS.ncaafgames,{});
+  cache[cacheKey]={ts:Date.now(),v:NCAAF_GAMES,week:NCAAF_WEEK,season:NCAAF_SEASON};
+  set(LS.ncaafgames,cache);
+  NCAAF_SIMS={};
+  renderNCAAF();
+  const nG=document.getElementById('nG');
+  if(nG)nG.textContent=NCAAF_GAMES.length;
+}
+
+// ── NCAAF render ─────────────────────────────────────────────────────────────
+function renderNCAAF(){
+  const el=document.getElementById('slate');if(!el)return;
+  if(!NCAAF_GAMES.length){
+    el.innerHTML=`<div class="tkt">
+      <h3>🏟 College Football Board</h3>
+      <div class="sub">No CFB games loaded. Hit the button to pull the current week from ESPN — free, no key needed.</div>
+      <div class="bar" style="margin-top:8px">
+        <button class="primary" onclick="loadNCAAFSchedule()">Load current week</button>
+      </div>
+    </div>`;
+    return;
+  }
+  NCAAF_GAMES.forEach(g=>{if(!NCAAF_SIMS[g.id])NCAAF_SIMS[g.id]=simNCAAFGame(g);});
+  const week=NCAAF_WEEK||'?';const season=NCAAF_SEASON||2025;
+  const weekNav=`<div style="display:flex;align-items:center;justify-content:space-between;
+    padding:10px 12px;background:var(--panel2);border-radius:8px;margin-bottom:10px">
+    <button onclick="loadNCAAFWeek(${season},${Number(week)-1})" style="background:none;border:1px solid var(--rule);
+      color:var(--chalk);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px">← Prev</button>
+    <div style="text-align:center">
+      <div style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold);text-transform:uppercase">🏟 ${season} CFB</div>
+      <div style="font-weight:700;font-size:16px;color:var(--chalk)">${week===0?'Week 0':week<=4?'Week '+week+' (Early)':'Week '+week}</div>
+      <div style="font-size:11px;color:var(--chalk-dim)">${NCAAF_GAMES.length} games</div>
+    </div>
+    <button onclick="loadNCAAFWeek(${season},${Number(week)+1})" style="background:none;border:1px solid var(--rule);
+      color:var(--chalk);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px">Next →</button>
+  </div>`;
+  const scheduled=NCAAF_GAMES.filter(g=>g.status==='Scheduled'||g.status==='In Progress');
+  const final=NCAAF_GAMES.filter(g=>g.status==='Final'||g.status==='Final/OT');
+  let h=weekNav;
+  if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(ncaafCard).join('');
+  if(final.length)h+=sbar('Final',final.length)+final.map(ncaafCard).join('');
+  el.innerHTML=h;
+  document.getElementById('nG').textContent=NCAAF_GAMES.length;
+}
+
+// ── NCAAF game card ───────────────────────────────────────────────────────────
+function ncaafCard(g){
+  const s=NCAAF_SIMS[g.id];if(!s)return'';
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  const lines=ncaafBookLinesFor(gameKey);
+  const hasReal=lines.length>0;
+  const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+  const homeSpread=lines.find(x=>x.market==='spread'&&x.side==='home');
+  const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+  const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
+  const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+  const totalUnder=lines.find(x=>x.market==='total'&&x.side==='under');
+  const cons=ncaafConsensusFor(gameKey);
+  const consML=cons.find(x=>x.market==='moneyline');
+  const ap=isNaN(s.awayProj)?26:s.awayProj;
+  const hp=isNaN(s.homeProj)?26:s.homeProj;
+  const med=isNaN(s.med)?52:s.med;
+  const margin=isNaN(s.medMargin)?0:s.medMargin;
+  const awayFairML=nflFairML(Math.max(.05,Math.min(.95,s.aw||.5)));
+  const homeFairML=nflFairML(Math.max(.05,Math.min(.95,s.hw||.5)));
+  const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.spreadCover(-awaySpread.line)||.5))):null;
+  const mlEdgeAway=awayML?awayML.price-awayFairML:null;
+  const mlEdgeHome=homeML?homeML.price-homeFairML:null;
+  const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,s.over(totalOver.line)||.5))):null;
+  const spreadLabel=margin>0?`${g.home.abbr} -${margin}`:margin<0?`${g.away.abbr} -${Math.abs(margin)}`:"Pick'em";
+  const realBadge=hasReal?`<span style="font-family:'IBM Plex Mono';font-size:8px;color:var(--cold);border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:4px">REAL</span>`:'';
+  function betSq(label,price,edge,fair){
+    const eAbs=edge!=null?Math.abs(edge):0;
+    const cls=eAbs>=6?'value':eAbs>=3?'':'avoid';
+    const edgeStr=edge!=null?(edge>0?'+':'')+Math.round(edge)+' edge':'';
+    const fairStr=fair!=null?` · f${fair>0?'+':''}${fair}`:'';
+    return`<div class="bet ${cls}" onclick="ncaafSlipToggle('${g.id}','${label}',${price||0})" style="flex:1;min-width:0">
+      <div class="bl">${label}</div>
+      <div class="bo">${price!=null?(price>0?'+':'')+price:'—'}</div>
+      <div class="bs">${edgeStr}${fairStr}</div>
+    </div>`;
+  }
+  const awayRank=g.away.ranking||'';const homeRank=g.home.ranking||'';
+  const id=g.id;
+  return`<div class="tkt" id="ncaaf-card-${id}" style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:var(--chalk)">${awayRank}${g.away.abbr} <span style="color:var(--mute);font-size:13px">@</span> ${homeRank}${g.home.abbr}</div>
+        <div style="font-size:10px;color:var(--mute);font-family:'IBM Plex Mono'">${g.day||''} ${g.time||''}</div>
+        <div style="font-size:10px;color:var(--chalk-dim)">${g.away.name} @ ${g.home.name}</div>
+      </div>
+      <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">
+        ${g.away.record||''}<br>${g.home.record||''}
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--chalk-dim);margin-bottom:8px">
+      Proj: <b>${ap}</b>–<b>${hp}</b> · O/U <b>${med}</b> · <b>${spreadLabel}</b>
+      ${g.status==='Final'?'<span style="color:var(--win);margin-left:6px">FINAL</span>':''}
+    </div>
+    <div class="mktlab">Spread${realBadge}</div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      ${betSq(`${g.away.abbr} ${awaySpread?awaySpread.line:margin>0?'+'+Math.abs(margin):-margin}`,awaySpread?awaySpread.price:null,spreadEdge,null)}
+      ${betSq(`${g.home.abbr} ${homeSpread?homeSpread.line:margin>0?-margin:'+'+Math.abs(margin)}`,homeSpread?homeSpread.price:null,spreadEdge?-spreadEdge:null,null)}
+    </div>
+    <div class="mktlab" style="margin-top:8px">Moneyline</div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      ${betSq(`${g.away.abbr} ML`,awayML?awayML.price:null,mlEdgeAway,awayFairML)}
+      ${betSq(`${g.home.abbr} ML`,homeML?homeML.price:null,mlEdgeHome,homeFairML)}
+    </div>
+    <div class="mktlab" style="margin-top:8px">Total</div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      ${betSq(`Over ${totalOver?totalOver.line:med}`,totalOver?totalOver.price:null,totalEdge,null)}
+      ${betSq(`Under ${totalUnder?totalUnder.line:med}`,totalUnder?totalUnder.price:null,totalEdge?-totalEdge:null,null)}
+    </div>
+    ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
+      <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px">${g.away.abbr} ${consML.awayPct||'?'}%</span>
+      <div style="flex:1;height:4px;border-radius:2px;background:var(--rule)">
+        <div style="height:100%;width:${consML.awayPct||0}%;background:var(--cold);border-radius:2px"></div>
+      </div>
+      <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px;text-align:right">${consML.homePct||'?'}% ${g.home.abbr}</span>
+    </div>`:''}
+    <div class="exprow" style="margin-top:10px">
+      <button onclick="ncaafTogglePanel('trends','${id}',this)">Trends</button>
+      <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
+      <button onclick="ncaafTogglePanel('mybets','${id}',this)">My Bets</button>
+    </div>
+    <div class="panel" id="p-ncaaftrends-${id}">${ncaafTrendPanel(g,s)}</div>
+    <div class="panel" id="p-ncaafag-${id}">${ncaafGameAG(g,s)}</div>
+    <div class="panel" id="p-ncaafmybets-${id}"></div>
+  </div>`;
+}
+
+function ncaafTogglePanel(which,gid,btn){
+  const p=document.getElementById('p-ncaaf'+which+'-'+gid);if(!p)return;
+  const row=btn.parentElement;const wasOn=p.classList.contains('on');
+  row.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  row.parentElement.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+  if(!wasOn){p.classList.add('on');btn.classList.add('on');}
+}
+
+function ncaafSlipToggle(gid,label,price){
+  const g=NCAAF_GAMES.find(x=>x.id===gid);if(!g)return;
+  const leg={gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport:'ncaaf',
+    date:today(),p:Math.abs(price)>=100?Math.min(.95,Math.max(.05,100/(100+Math.abs(price)))):0.5};
+  SLIP.push(leg);set(LS.slip,SLIP);renderSlip();
+}
+
+// ── NCAAF Trend panel ────────────────────────────────────────────────────────
+function ncaafTrendPanel(g,s){
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  const trends=ncaafTrendsFor(gameKey);
+  const rows=[];
+  const myTotalLean=s?(s.over(s.med)>0.52?'over':s.over(s.med)<0.48?'under':'neutral'):'neutral';
+  const mySide=s?(s.hw>0.5?g.home.abbr:g.away.abbr):'';
+  function add(name,text,implies,relevant){
+    let cls='neutral',verdict='Neutral';
+    if(implies&&relevant){cls=implies===relevant?'agree':'conflict';verdict=implies===relevant?'Backs model':'Contests model';}
+    rows.push({name,text,cls,verdict});
+  }
+  // Home field signal
+  add('Home field advantage',`${g.home.name} gets +${NCAAF_HFA} pts HFA — college HFA is significantly stronger than NFL`,g.home.abbr,mySide);
+  // Rankings
+  if(g.away.ranking||g.home.ranking){
+    const ranked=`${g.away.ranking?g.away.ranking+g.away.name:''}${g.home.ranking?' vs '+g.home.ranking+g.home.name:''}`;
+    add('AP Rankings',`Ranked matchup: ${ranked} — expect sharp attention and tighter lines`,null,null);
+  }
+  // Uploaded trends
+  trends.forEach(t=>{
+    const isOver=/^over/i.test(t.text);const isUnder=/^under/i.test(t.text);
+    let implies=null,relevant=null;
+    if(isOver){implies='over';relevant=myTotalLean;}
+    else if(isUnder){implies='under';relevant=myTotalLean;}
+    else if(t.team){implies=t.team;relevant=mySide;}
+    add(`${t.src||'Covers'} trend${t.team?' · '+t.team:''}`,t.text,implies,relevant);
+  });
+  if(!rows.length)return'<div class="empty">No trend data. Upload ncaaf_trends.txt on the Outside tab.</div>';
+  const agree=rows.filter(r=>r.cls==='agree').length;
+  const conflict=rows.filter(r=>r.cls==='conflict').length;
+  return`<div class="tkt hi" style="margin-bottom:8px">
+    <h3>${agree} backing · ${conflict} contesting · ${rows.length} signals</h3>
+    <div class="sub">Model: <b>${myTotalLean.toUpperCase()} ${s?s.med:'?'}</b> · Side: <b>${mySide||'?'}</b></div>
+  </div>
+  ${rows.map(r=>`<div class="trow ${r.cls}"><div class="tdot"></div><div class="tbody">
+    <div class="tname">${r.name}</div><div class="ttext">${r.text}</div>
+    <div class="tverdict">${r.verdict}</div></div></div>`).join('')}`;
+}
+
+// ── NCAAF A-G game panel ─────────────────────────────────────────────────────
+function ncaafGameAG(g,s){
+  if(!s)return'<div class="empty">No sim data.</div>';
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  const lines=ncaafBookLinesFor(gameKey);
+  const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+  const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+  const med=isNaN(s.med)?52:s.med;
+  const margin=isNaN(s.medMargin)?0:s.medMargin;
+  const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.spreadCover(-awaySpread.line)||.5))):null;
+  const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,s.over(totalOver.line)||.5))):null;
+  const spreadLabel=margin>0?`${g.home.abbr} -${margin}`:margin<0?`${g.away.abbr} -${Math.abs(margin)}`:"Pick'em";
+  const sidePick=spreadEdge&&Math.abs(spreadEdge)>=4?(spreadEdge>0?`${g.away.abbr} spread`:`${g.home.abbr} spread`):s.hw>0.6?`${g.home.abbr} ML`:s.aw>0.6?`${g.away.abbr} ML`:null;
+  const totalPick=totalEdge&&Math.abs(totalEdge)>=4?(totalEdge>0?`Under ${totalOver?totalOver.line:med}`:`Over ${totalOver?totalOver.line:med}`):null;
+  const confidence=Math.min(95,50+Math.abs(spreadEdge||0)*2+Math.abs(totalEdge||0)*1.5+(g.away.ranking||g.home.ranking?5:0));
+  return`<div class="sub" style="margin-top:6px">
+    <b>A) Proj:</b> ${g.away.abbr} ${isNaN(s.awayProj)?26:s.awayProj} – ${g.home.abbr} ${isNaN(s.homeProj)?26:s.homeProj} · O/U ${med}<br>
+    <b>B) Spread:</b> ${spreadLabel}<br>
+    <b>C) Edge:</b> Spread ${spreadEdge!=null?(spreadEdge>0?'+':'')+Math.round(spreadEdge):'—'} · Total ${totalEdge!=null?(totalEdge>0?'+':'')+Math.round(totalEdge):'—'}<br>
+    <b>D) Picks:</b> ${sidePick||'No strong side edge'} ${totalPick?'· '+totalPick:''}<br>
+    <b>G) Confidence:</b> ${Math.round(confidence)}%
+    ${g.away.ranking||g.home.ranking?'<br><span style="color:var(--gold)">⭐ Ranked matchup</span>':''}
+  </div>`;
+}
+
+// ── NCAAF Master Evaluation ───────────────────────────────────────────────────
+function renderNCAAFMasterEval(){
+  if(!NCAAF_GAMES.length)return'<div class="empty">No CFB games loaded. Switch to CFB tab and load the schedule first.</div>';
+  NCAAF_GAMES.forEach(g=>{if(!NCAAF_SIMS[g.id])NCAAF_SIMS[g.id]=simNCAAFGame(g);});
+  const evals=NCAAF_GAMES.map(g=>{
+    const s=NCAAF_SIMS[g.id];if(!s)return null;
+    const gameKey=g.away.abbr+'@'+g.home.abbr;
+    const lines=ncaafBookLinesFor(gameKey);
+    const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+    const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+    const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.spreadCover(-awaySpread.line)||.5))):null;
+    const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,s.over(totalOver.line)||.5))):null;
+    const eAbs=Math.max(Math.abs(spreadEdge||0),Math.abs(totalEdge||0));
+    const verdict=eAbs>=8?'strong':eAbs>=4?'lean':'split';
+    const confidence=Math.min(95,50+eAbs*2+(g.away.ranking||g.home.ranking?5:0));
+    return{g,s,verdict,confidence,spreadEdge,totalEdge};
+  }).filter(Boolean).sort((a,b)=>{
+    const r={strong:0,lean:1,split:2};
+    return(r[a.verdict]||2)-(r[b.verdict]||2)||b.confidence-a.confidence;
+  });
+  const strong=evals.filter(e=>e.verdict==='strong').length;
+  const lean=evals.filter(e=>e.verdict==='lean').length;
+  const rows=evals.map(ev=>{
+    const{g,s,verdict,confidence,spreadEdge,totalEdge}=ev;
+    const vColor=verdict==='strong'?'var(--win)':verdict==='lean'?'var(--gold)':'var(--mute)';
+    const med=isNaN(s.med)?52:s.med;
+    const margin=isNaN(s.medMargin)?0:s.medMargin;
+    const spreadLabel=margin>0?`${g.home.abbr} -${margin}`:margin<0?`${g.away.abbr} -${Math.abs(margin)}`:"Pick'em";
+    return`<div class="tkt" style="border-left:3px solid ${vColor}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h3 style="margin:0">🏟 ${g.away.ranking||''}${g.away.abbr} @ ${g.home.ranking||''}${g.home.abbr}</h3>
+          <div class="sub">${g.day||''} ${g.time||''} · Week ${g.week||'?'}</div>
+          <div class="sub">${g.away.name} @ ${g.home.name}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'IBM Plex Mono';font-size:10px;color:${vColor};font-weight:700">${verdict.toUpperCase()}</div>
+          <div style="font-size:18px;font-weight:700;color:${vColor}">${Math.round(confidence)}%</div>
+        </div>
+      </div>
+      <div class="sub" style="margin-top:6px">
+        Proj: ${isNaN(s.awayProj)?26:s.awayProj}–${isNaN(s.homeProj)?26:s.homeProj} · O/U ${med} · ${spreadLabel}<br>
+        Edge: Spread ${spreadEdge!=null?(spreadEdge>0?'+':'')+Math.round(spreadEdge):'—'} · Total ${totalEdge!=null?(totalEdge>0?'+':'')+Math.round(totalEdge):'—'}
+      </div>
+    </div>`;
+  });
+  return`<div class="tkt hi" style="margin-bottom:10px">
+    <h3>🏟 CFB Master Evaluation — Week ${NCAAF_WEEK||'?'}</h3>
+    <div class="sub">${evals.length} games · ${strong} strong · ${lean} lean</div>
+  </div>${rows.join('')}`;
+}
+
+// ── NCAAF book odds save ──────────────────────────────────────────────────────
+function saveNCAAFBookOdds(picks,el){
+  const d=today();
+  const all=get(LS.ncaafshots,{});all[d]=all[d]||[];
+  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  picks.forEach(x=>{
+    const rec={...x,capturedAt:Date.now()};
+    const k=keyOf(rec);const i=all[d].findIndex(y=>keyOf(y)===k);
+    if(i>=0)all[d][i]=rec;else all[d].push(rec);
+  });
+  set(LS.ncaafshots,all);
+  if(el)el.innerHTML=`<div class="tkt hi"><h3>CFB lines locked in</h3>
+    <div class="sub">${picks.length} picks saved for ${d}.</div></div>`;
+}
+
+// ── NCAAF ext data save ───────────────────────────────────────────────────────
+function saveNCAAFExtData(picks,trends,consensus,el){
+  const d=today();
+  const allP=get(LS.ncaafext,{});allP[d]=[...(allP[d]||[]),...picks];set(LS.ncaafext,allP);
+  const allT=get(LS.ncaaftrends,{});allT[d]=[...(allT[d]||[]),...trends];set(LS.ncaaftrends,allT);
+  const allC=get(LS.ncaafconsensus,{});allC[d]=[...(allC[d]||[]),...consensus];set(LS.ncaafconsensus,allC);
+  if(el)el.innerHTML=`<div class="tkt hi"><h3>CFB data saved</h3>
+    <div class="sub">${picks.length} picks · ${trends.length} trends · ${consensus.length} consensus</div></div>`;
+  if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
+}
+
+// ── NCAAF text file parser ────────────────────────────────────────────────────
+// Same format as NFL but starts with NCAAF
+// SPREAD: TEAM -3 (-110) / TEAM +3 (-110)
+// OU: o55.5 (-110) / u55.5 (-110)
+function parseNCAAFSlateText(text){
+  const picks=[],trends=[],consensus=[];
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const isConsensus=lines.some(l=>/\d+%\s*\//.test(l)||/TOTALS/i.test(l));
+  const isTrends=lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under)\s+is\s+\d/i.test(l));
+  const isPicks=lines.some(l=>/^ML:|^SPREAD:|^OU:/i.test(l));
+  if(isPicks){
+    let curAway=null,curHome=null;
+    for(const l of lines){
+      if(/^NCAAF|^Source:|^Proj:/i.test(l))continue;
+      const gameM=l.match(/^(.+?)\s*@\s*(.+?)(\s*\|.*)?$/);
+      if(gameM&&!(/^(ML|SPREAD|OU|H1):/i.test(l))){
+        curAway=(gameM[1]||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12);
+        curHome=(gameM[2]||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12);
+        continue;
+      }
+      if(!curAway)continue;
+      const game=curAway+'@'+curHome;
+      const mlM=l.match(/^ML:\s*(.+?)\s*([+\-]\d+)\s*\/\s*(.+?)\s*([+\-]\d+)$/i);
+      if(mlM){
+        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:'away',price:+mlM[2]});
+        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:'home',price:+mlM[4]});
+        continue;
+      }
+      const spM=l.match(/^SPREAD:\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
+      if(spM){
+        picks.push({away:curAway,home:curHome,game,market:'spread',side:'away',line:+spM[2],price:+spM[3]});
+        picks.push({away:curAway,home:curHome,game,market:'spread',side:'home',line:+spM[5],price:+spM[6]});
+        continue;
+      }
+      const ouM=l.match(/^OU:\s*o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i);
+      if(ouM){
+        picks.push({away:curAway,home:curHome,game,market:'total',side:'over',line:+ouM[1],price:+ouM[2]});
+        picks.push({away:curAway,home:curHome,game,market:'total',side:'under',line:+ouM[3],price:+ouM[4]});
+        continue;
+      }
+    }
+  }
+  if(isConsensus){
+    let inTotals=false;
+    for(const l of lines){
+      if(/^TOTALS$/i.test(l)){inTotals=true;continue;}
+      if(!inTotals){
+        const m=l.match(/^(.+?)\s+(\d+)%\s*\/\s*(.+?)\s+(\d+)%/i);
+        if(m)consensus.push({away:m[1].trim(),home:m[3].trim(),market:'moneyline',awayPct:+m[2],homePct:+m[4],src:'Covers'});
+      }else{
+        const m=l.match(/^(.+?):\s*(\d+)%\s*(Over|Under)/i);
+        if(m){const t=m[1].split('/');consensus.push({away:(t[0]||'').trim(),home:(t[1]||'').trim(),market:'total',overPct:/over/i.test(m[3])?+m[2]:100-+m[2],underPct:/under/i.test(m[3])?+m[2]:100-+m[2],src:'Covers'});}
+      }
+    }
+  }
+  if(isTrends){
+    let curAway=null,curHome=null,curTeam=null;
+    for(const l of lines){
+      if(/^NCAAF TRENDS|^Source:/i.test(l))continue;
+      const gameM=l.match(/^(.+?)\s*@\s*(.+?)(\s*\|.*)?$/);
+      if(gameM&&!(/^(ML|SPREAD|OU):/i.test(l))&&l.includes('@')){
+        curAway=(gameM[1]||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12);
+        curHome=(gameM[2]||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12);
+        curTeam=null;continue;
+      }
+      const teamM=l.match(/^([A-Z0-9\-]{2,12}):\s*(.*)/);
+      if(teamM&&curAway){curTeam=teamM[1];const rest=teamM[2].trim();if(rest)rest.split(/\.\s+/).filter(Boolean).forEach(b=>{if(b.length>5)trends.push({away:curAway,home:curHome,game:curAway+'@'+curHome,team:curTeam,text:b,src:'Covers'});});continue;}
+      if(curAway&&l.length>8)trends.push({away:curAway,home:curHome,game:curAway+'@'+curHome,team:curTeam,text:l,src:'Covers'});
+    }
+  }
+  return{picks,trends,consensus};
+}
+
+// ── NCAAF on activate ─────────────────────────────────────────────────────────
+let _ncaafDataLoaded=false;
+function ncaafOnActivate(){
+  if(_ncaafDataLoaded)return;
+  _ncaafDataLoaded=true;
+  fetchNCAAFPowerRatings();
+}
+
+// ── Restore NCAAF games from cache ───────────────────────────────────────────
+(function restoreNCAAFGames(){
+  const cache=get(LS.ncaafgames,{});
+  const keys=Object.keys(cache).sort((a,b)=>(cache[b].ts||0)-(cache[a].ts||0));
+  if(keys.length){const latest=cache[keys[0]];if(latest.v&&latest.v.length){NCAAF_GAMES=latest.v;NCAAF_WEEK=latest.week||null;NCAAF_SEASON=latest.season||null;}}
+})();
 
 /* ═══════════════════════════════════════════════════════════════
    NFL ENGINE END
