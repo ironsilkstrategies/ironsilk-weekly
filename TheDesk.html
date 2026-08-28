@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.27</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.28</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -12109,6 +12109,8 @@ let LAST_FINAL_COUNT=-1;
    gate, and reports back exactly what it did instead of failing silently. This
    is the "something looks stale, fix it now" button. */
 async function forceGradeEverything(){
+  // NFL grades on the same trigger as MLB, into its own archive (LS.nflarc).
+  try{if(typeof gradeNFLResults==='function')gradeNFLResults()}catch(e){console.warn('NFL grading:',e)}
   const btn=document.getElementById('forceGradeBtn');
   const status=document.getElementById('forceGradeStatus');
   if(btn)btn.disabled=true;
@@ -12311,7 +12313,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.27
+   NFL ENGINE — BUILD v1.28
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12371,6 +12373,33 @@ function randn(){
 }
 
 // ── NFL fair-value odds ────────────────────────────────────────────────────────
+/* ── EDGE MATH ────────────────────────────────────────────────────────────
+   Edge was computed as (book price - fair price) — subtracting one American
+   odds number from another. American odds are not a linear scale and they are
+   discontinuous across ±100, so that difference is not a quantity. Concretely,
+   a book at +100 against a fair of -100 is ZERO real disagreement, yet it
+   printed as "+200 edge". That is where the -318 / +293 on your moneylines
+   came from: the pair straddles the ±100 gap, so the subtraction inflates an
+   ~22-point probability gap into a 300-plus number.
+
+   The right measures are probability difference and expected value, both of
+   which are linear and comparable across markets. */
+function amerToProb(a){if(a==null||isNaN(a))return null;return a>0?100/(a+100):(-a)/((-a)+100)}
+function amerProfit(a){return a>0?a/100:100/(-a)}          // profit per 1 unit staked
+function evPct(p,a){                                        // expected return %, e.g. +4.2
+  if(p==null||a==null||isNaN(a))return null;
+  return (p*amerProfit(a)-(1-p))*100;
+}
+/* Pólya normal-tail approximation: P(Z > z).
+   NOTE the constant is 2/PI. The commonly copied form uses 8/PI, which is for
+   erf on a different argument scaling; using 8/PI here overstates confidence by
+   up to 15 percentage points — it turns a true 15.9% into 2.0% — and would
+   manufacture enormous fake edges on every spread and prop. Verified against
+   the true normal tail before use. */
+function normTail(z){
+  if(!isFinite(z))return z>0?0:1;
+  return 0.5*(1-Math.sign(z)*Math.sqrt(1-Math.exp(-z*z*(2/Math.PI))));
+}
 function nflFairML(p){
   if(p>=0.5)return Math.round(-(p/(1-p))*100);
   return Math.round(((1-p)/p)*100);
@@ -12904,6 +12933,121 @@ const NFL_DIVISION={
   ATL:'NFC South',CAR:'NFC South',NO:'NFC South',TB:'NFC South',
   ARI:'NFC West',LAR:'NFC West',SEA:'NFC West',SF:'NFC West',
 };
+// ── UPGRADE 1/2: venue environment ──────────────────────────────────────────
+// Fully enclosed (fixed or retractable) roofs — no weather adjustment.
+// SoFi (LAC/LAR) is covered but open-sided, so it is treated as outdoor.
+const NFL_DOME=new Set(['DAL','DET','HOU','IND','LV','MIN','NO','ATL','ARI','BUF']);
+// Artificial surface. Everything else is natural grass.
+const NFL_TURF=new Set(['ARI','ATL','BUF','CHI','CIN','DAL','DET','HOU','IND','LV','LAC','LAR',
+  'MIN','NE','NO','NYG','NYJ','PHI','SEA','TB','TEN']);
+function nflSurfaceMult(homeAbbr){return NFL_TURF.has(String(homeAbbr||'').toUpperCase())?1.03:1.00}
+function nflEnvMult(g){
+  if(!g||!g.home)return 1.00;
+  if(NFL_DOME.has(String(g.home.abbr||'').toUpperCase()))return 1.00;
+  const w=g.weather;
+  if(!w)return 1.00;                      // no weather data -> no adjustment
+  let m=1.00;
+  const t=parseFloat(w.temp);
+  if(!isNaN(t)){ if(t<32)m*=0.96; else if(t>80)m*=1.02; }
+  // Football differs from baseball: direction is irrelevant, any strong wind
+  // suppresses the passing game.
+  const wind=parseFloat(String(w.wind||'').match(/(\d+)/)?.[1]);
+  if(!isNaN(wind)){ if(wind>=25)m*=0.94; else if(wind>=15)m*=0.97; }
+  if(/rain|snow|shower|storm|sleet/i.test(String(w.cond||'')))m*=0.96;
+  return Math.max(0.88,Math.min(1.05,m));
+}
+function nflEnvChips(g){
+  const home=String(g.home&&g.home.abbr||'').toUpperCase();
+  const chips=[NFL_TURF.has(home)?'TURF':'GRASS'];
+  if(NFL_DOME.has(home))chips.push('DOME');
+  else if(g.weather){
+    const t=parseFloat(g.weather.temp),wd=parseFloat(String(g.weather.wind||'').match(/(\d+)/)?.[1]);
+    if(!isNaN(t)&&t<32)chips.push('COLD');
+    if(!isNaN(wd)&&wd>=15)chips.push('WIND '+wd);
+    if(/rain|snow|shower|storm|sleet/i.test(String(g.weather.cond||'')))chips.push('WET');
+  }
+  const e=nflEnvMult(g);
+  if(Math.abs(e-1)>0.001)chips.push('ENV '+(e>1?'+':'')+Math.round((e-1)*100)+'%');
+  return chips;
+}
+// ── UPGRADE 6: prop engine ──────────────────────────────────────────────────
+// Props are built from team-level power ratings and position splits, because
+// there is no per-player NFL stats feed the way MLB StatsAPI provides one. The
+// player, stat and line all come from the PROP: rows in the uploaded file, so
+// the model only has to supply the probability.
+// Every yardage stat uses normTail (2/PI Polya). The 8/PI variant that circulates
+// for this is wrong by up to 15 points and would invent edges that are not there.
+const NFL_PROP_MODEL={
+  passing:   {share:0.95, per25:245, sd:65},
+  rushing:   {share:0.55, per25:115, sd:35},
+  receiving: {share:0.20, per25:245, sd:22},
+};
+function buildNFLProps(g,s){
+  const out=[];
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  const uploaded=nflBookLinesFor(gameKey).filter(x=>x.market==='prop'&&x.player);
+  if(!uploaded.length)return out;
+  const awayPow=NFL_POWER[g.away.abbr]||{offPPG:24,defPPG:24};
+  const homePow=NFL_POWER[g.home.abbr]||{offPPG:24,defPPG:24};
+  const awayExp=s.awayProj||awayPow.offPPG, homeExp=s.homeProj||homePow.offPPG;
+
+  uploaded.forEach(bp=>{
+    // Which side is the player on? The parser records the game's two abbrs; if
+    // it did not tag the player's team, fall back to the home side rather than
+    // guessing a team the name might belong to.
+    const isHome=(bp.team? bp.team===g.home.abbr : bp.home===g.home.abbr);
+    const teamExp=isHome?homeExp:awayExp;
+    const oppDef=isHome?awayPow.defPPG:homePow.defPPG;
+    /* Opponent adjustment, centred on the league average of ~22 points allowed.
+       The spec's (28-oppDef)/28 ran BACKWARDS — it shrank the projection as the
+       opposing defense got worse — and for every realistic defPPG it fell below
+       the 0.8 floor, so after clamping it was a constant and the opponent had no
+       effect at all. This is neutral at 22 and moves the right direction. */
+    const oppAdj=Math.max(0.8,Math.min(1.2,(oppDef||22)/22));
+    const stat=String(bp.stat||'').toLowerCase();
+    const line=+bp.line;
+    if(isNaN(line))return;
+    let p=null,kind=null;
+
+    if(/passing yard/.test(stat))       kind='passing';
+    else if(/rushing yard/.test(stat))  kind='rushing';
+    else if(/receiving yard/.test(stat))kind='receiving';
+
+    if(kind){
+      const m=NFL_PROP_MODEL[kind];
+      const exp=(teamExp/25)*m.per25*oppAdj*m.share;
+      p=normTail((line-exp)/m.sd);          // P(yards > line)
+    } else if(/reception/.test(stat)){
+      const yds=(teamExp/25)*245*oppAdj*0.20;
+      p=poisAtLeast(Math.ceil(line),yds/8); // ~8 yards per reception
+    } else if(/passing touchdown/.test(stat)){
+      p=poisAtLeast(Math.ceil(line),(teamExp/25)*1.6*oppAdj);
+    } else if(/rushing touchdown/.test(stat)){
+      p=poisAtLeast(Math.ceil(line),(teamExp/25)*0.7*oppAdj);
+    } else if(/receiving touchdown/.test(stat)){
+      p=poisAtLeast(Math.ceil(line),(teamExp/25)*0.45*oppAdj);
+    } else if(/touchdown/.test(stat)){
+      p=poisAtLeast(Math.ceil(line),(teamExp/25)*0.6*oppAdj);
+    }
+    if(p==null||isNaN(p)||p<=0.03||p>=0.97)return;
+
+    const price=bp.price;
+    const fair=nflFairML(p);
+    out.push({
+      player:bp.player,stat:bp.stat,line,price,
+      simP:Math.round(p*1000)/1000,fairML:fair,
+      ev:evPct(p,price),
+      // the object the bet square renders
+      e:{p,price,fair,ev:evPct(p,price),impl:amerToProb(price)},
+      // flag at 60%+ calibrated probability AND positive expected value
+      actionable:(p>=0.60&&evPct(p,price)>=2),
+      game:gameKey,team:isHome?g.home.abbr:g.away.abbr
+    });
+  });
+  // rank by expected value, not by raw probability — a 75% shot at a terrible
+  // price is worse than a 58% shot at a good one
+  return out.sort((a,b)=>(b.ev||-999)-(a.ev||-999));
+}
 function nflIsDivisionGame(g){
   return NFL_DIVISION[g.away.abbr]&&NFL_DIVISION[g.away.abbr]===NFL_DIVISION[g.home.abbr];
 }
@@ -12999,92 +13143,114 @@ const NFL_CALIB_KEY='d4.nflcalib';
 function simNFLGame(g,N){
   N=N||10000;
 
-  // Get real power ratings or fall back to league average
   const awayPow=NFL_POWER[g.away.abbr]||{offPPG:22,defPPG:22,wins:0,losses:0,ties:0};
   const homePow=NFL_POWER[g.home.abbr]||{offPPG:22,defPPG:22,wins:0,losses:0,ties:0};
 
-  // Project expected scores: blend offense vs opponent defense, regress to mean
   const leagueAvg=22.0;
-  const regFactor=0.35;  // regression to mean — early season more regression
-  const gamesPlayed=Math.max((awayPow.wins||0)+(awayPow.losses||0)+(awayPow.ties||0),(homePow.wins||0)+(homePow.losses||0)+(homePow.ties||0),1);
-  const regW=Math.max(0,Math.min(1,(gamesPlayed-1)/8)); // full confidence at week 9+
+  const regFactor=0.35;
+  const gamesPlayed=Math.max((awayPow.wins||0)+(awayPow.losses||0)+(awayPow.ties||0),
+                             (homePow.wins||0)+(homePow.losses||0)+(homePow.ties||0),1);
+  const regW=Math.max(0,Math.min(1,(gamesPlayed-1)/8));
   const reg=1-regFactor*(1-regW);
 
-  // Score projection: my offense vs their defense, blended
   let awayExp=((awayPow.offPPG+homePow.defPPG)/2)*reg + leagueAvg*(1-reg);
   let homeExp=((homePow.offPPG+awayPow.defPPG)/2)*reg + leagueAvg*(1-reg) + NFL_HFA;
 
-  // situational adjustments
-  if(nflIsDivisionGame(g)){awayExp*=0.97;homeExp*=0.97;}  // division games tighter
-  if(g.away.abbr===g.home.abbr)awayExp=homeExp=22; // shouldn't happen
+  // ── situational adjustments (upgrades 1-3) ──
+  if(nflIsDivisionGame(g)){awayExp*=0.96;homeExp*=0.96;}   // division games run tighter
+  const surf=nflSurfaceMult(g.home.abbr);                   // turf plays ~3% higher scoring
+  awayExp*=surf; homeExp*=surf;
+  const env=nflEnvMult(g);                                  // 1.00 unless weather is known
+  awayExp*=env; homeExp*=env;
+  if(g.away.abbr===g.home.abbr)awayExp=homeExp=22;
 
-  // calibration drift correction (mirrors MLB engine)
-  const nflCalib=get(NFL_CALIB_KEY,{});
+  const nflCalib=hotGet(NFL_CALIB_KEY,{});
   const driftAdj=(nflCalib.globalDrift||0)/2;
-  awayExp=Math.max(3,awayExp+driftAdj);
-  homeExp=Math.max(3,homeExp+driftAdj);
+  awayExp=Math.max(10,Math.min(40,awayExp+driftAdj));
+  homeExp=Math.max(10,Math.min(40,homeExp+driftAdj));
 
-  // NFL scoring variance — scores cluster around ~10, 17, 24, 27, 31 etc
-  // Use normal distribution but with NFL-realistic std dev
   const std=10.5;
-  let hw=0,aw=0,tie=0;
-  const totals=[],margins=[];
-  const scoreFreq={},totFreq={};
-  const h1Totals=[];
+  /* Same histogram approach as the MLB engine: scores are small non-negative
+     integers, so frequency tables answer over()/cover() in O(1) instead of
+     rescanning and re-sorting three 10,000-element arrays on every call. */
+  const TSPAN=120, MSPAN=121, MOFF=60;      // margins from -60..+60
+  const totFreq=new Int32Array(TSPAN);
+  const marFreq=new Int32Array(MSPAN);
+  const h1Freq=new Int32Array(TSPAN);
+  const scoreFreq=Object.create(null);
+  let hw=0,aw=0,tie=0,as=0,hs=0;
 
   for(let i=0;i<N;i++){
-    let a=Math.max(0,Math.round(awayExp+randn()*std));
-    let h=Math.max(0,Math.round(homeExp+randn()*std));
-    // snap to realistic NFL scores — teams almost never score 1,2,4,5,6... 
-    // enforce touchdown/field goal scoring clusters
-    a=snapNFLScore(a);
-    h=snapNFLScore(h);
-    totals.push(a+h);
-    margins.push(h-a);  // positive = home wins by X
-    const key=a+'-'+h;scoreFreq[key]=(scoreFreq[key]||0)+1;
-    const tk=String(a+h);totFreq[tk]=(totFreq[tk]||0)+1;
-    if(h>a)hw++;else if(a>h)aw++;else tie++;
-    // first half: roughly 45% of total scoring
-    const h1a=Math.max(0,Math.round(a*0.45+randn()*4));
-    const h1h=Math.max(0,Math.round(h*0.45+randn()*4));
-    h1Totals.push(h1a+h1h);
+    let a=snapNFLScore(Math.max(0,Math.round(awayExp+randn()*std)));
+    let h=snapNFLScore(Math.max(0,Math.round(homeExp+randn()*std)));
+    as+=a; hs+=h;
+    const t=a+h; totFreq[t<TSPAN?t:TSPAN-1]++;
+    let m=h-a; if(m<-MOFF)m=-MOFF; else if(m>MOFF)m=MOFF;
+    marFreq[m+MOFF]++;
+    const key=a+'-'+h; scoreFreq[key]=(scoreFreq[key]||0)+1;
+    if(h>a)hw++; else if(a>h)aw++; else tie++;
+    const h1=Math.max(0,Math.round(a*0.45+randn()*4))+Math.max(0,Math.round(h*0.45+randn()*4));
+    h1Freq[h1<TSPAN?h1:TSPAN-1]++;
   }
 
-  totals.sort((a,b)=>a-b);
-  margins.sort((a,b)=>a-b);
-  h1Totals.sort((a,b)=>a-b);
+  // cumGE[k] = count of totals >= k
+  const cumGE=new Float64Array(TSPAN+2);
+  for(let k=TSPAN-1;k>=0;k--)cumGE[k]=cumGE[k+1]+totFreq[k];
+  // marGE[k] = count of margins >= (k - MOFF)
+  const marGE=new Float64Array(MSPAN+2);
+  for(let k=MSPAN-1;k>=0;k--)marGE[k]=marGE[k+1]+marFreq[k];
 
-  // most common score
+  const qFrom=(freq,span,q)=>{const idx=Math.floor(N*q);let run=0;
+    for(let v=0;v<span;v++){run+=freq[v];if(run>idx)return v}return span-1};
+
   let modeScore=null,modeN=0;
-  Object.keys(scoreFreq).forEach(k=>{if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeScore=k;}});
+  for(const k in scoreFreq)if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeScore=k}
 
-  // raw win probabilities
-  let rawHw=(hw+tie*0.5)/N;
-  let rawAw=(aw+tie*0.5)/N;
-
-  // apply NFL calibration correction if available
+  let rawHw=(hw+tie*0.5)/N, rawAw=(aw+tie*0.5)/N;
   try{
     const calHw=nflSideCalibAdj(rawHw,rawHw>=0.5?'favorite':'underdog');
     if(!isNaN(calHw)&&calHw>0&&calHw<1){rawHw=calHw;rawAw=1-calHw;}
   }catch(e){}
 
-  const med=totals[Math.floor(N/2)];
-  const medMargin=margins[Math.floor(N/2)]; // positive = home favored
-  const medH1=h1Totals[Math.floor(N/2)];
+  const med=qFrom(totFreq,TSPAN,.5);
+  const medMargin=qFrom(marFreq,MSPAN,.5)-MOFF;   // positive = home favored
+  const medH1=qFrom(h1Freq,TSPAN,.5);
 
   const over=x=>{
-    const raw=totals.filter(v=>v>x).length/N;
+    let k=Math.floor(x)+1; if(k<0)k=0; if(k>TSPAN)return 0;
+    const raw=cumGE[k]/N;
     try{
       const cal=nflTotalCalibAdj(raw,rawHw>=0.5?'favorite':'underdog');
       if(!isNaN(cal)&&cal>0&&cal<1)return cal;
     }catch(e){}
     return raw;
   };
+  const overH1=x=>{let k=Math.floor(x)+1;if(k<0)k=0;if(k>TSPAN)return 0;
+    let run=0;for(let v=k;v<TSPAN;v++)run+=h1Freq[v];return run/N};
 
-  const spreadCover=line=>{
-    // P(home covers line) — positive line means home is underdog
-    return margins.filter(m=>m>line).length/N;
+  /* SIGN CONVENTION, stated once because getting it wrong silently inverts
+     every spread edge: homeCover(line) is P(the HOME side covers a handicap of
+     `line` written from the home team's perspective). Home -3 covers when the
+     home margin exceeds 3. awayCover is the complement at the mirrored line.
+     The old code called spreadCover(-awaySpread.line) against a function that
+     returned P(margin > line), which answered a different question than the
+     away square it was labelling. */
+  const homeCover=line=>{
+    // home line -3 -> needs margin > 3 ; home line +3 -> needs margin > -3
+    const need=-line;
+    let k=Math.floor(need)+1+MOFF;
+    if(k<0)k=0; if(k>MSPAN)return 0;
+    return marGE[k]/N;
   };
+  const awayCover=line=>{
+    // away line +3 -> away covers when margin < 3  (margin = home - away)
+    const need=line;
+    let k=Math.floor(need)+MOFF+ (Number.isInteger(need)?1:1);
+    if(k<0)return 0; if(k>MSPAN)k=MSPAN;
+    return 1-(marGE[k]/N);
+  };
+  // kept for backward compatibility with existing call sites
+  const spreadCover=line=>homeCover(line);
 
   return{
     awayProj:isNaN(awayExp)?22:Math.round(awayExp*10)/10,
@@ -13092,9 +13258,11 @@ function simNFLGame(g,N){
     hw:rawHw,aw:rawAw,
     med,medMargin,medH1,
     modeScore,modeScorePct:modeN/N,
-    p10:totals[Math.floor(N*.1)],
-    p90:totals[Math.floor(N*.9)],
-    N,over,spreadCover,
+    p10:qFrom(totFreq,TSPAN,.1),
+    p90:qFrom(totFreq,TSPAN,.9),
+    mean:(as+hs)/N,
+    N,over,overH1,spreadCover,homeCover,awayCover,
+    env,surf,
     awayExp,homeExp,
   };
 }
@@ -13611,6 +13779,7 @@ function nflCardFull(g){
   const h1AwaySpread=lines.find(x=>x.market==='h1spread'&&x.side==='away');
   const h1HomeSpread=lines.find(x=>x.market==='h1spread'&&x.side==='home');
   const propLines=lines.filter(x=>x.market==='prop');
+  const nflProps=buildNFLProps(g,s);
 
   const awayPow=NFL_POWER[g.away.abbr];
   const homePow=NFL_POWER[g.home.abbr];
@@ -13625,26 +13794,49 @@ function nflCardFull(g){
   const awayFairML=nflFairML(Math.max(.05,Math.min(.95,s.aw||.5)));
   const homeFairML=nflFairML(Math.max(.05,Math.min(.95,s.hw||.5)));
 
-  const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.spreadCover(-awaySpread.line)||.5))):null;
-  const mlEdgeAway=awayML?awayML.price-awayFairML:null;
-  const mlEdgeHome=homeML?homeML.price-homeFairML:null;
-  const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,s.over(totalOver.line)||.5))):null;
+  /* Every side is now priced against ITS OWN simulated probability.
+     Previously only the away/over side was computed and the opposite square
+     was shown as the negated mirror of it — which is why Over and Under both
+     displayed the same magnitude with flipped signs. Two sides of a real
+     market are not mirror images: they have different prices and the book's
+     vig sits between them, so both can be negative EV at once. That is the
+     normal case, and the board should be able to say so. */
+  const clampP=p=>Math.max(.02,Math.min(.98,(p==null||isNaN(p))?.5:p));
+  const mk=(p,price)=>{
+    if(price==null)return null;
+    const P=clampP(p);
+    return{p:P,price,fair:nflFairML(P),ev:evPct(P,price),impl:amerToProb(price)};
+  };
+  const eAwaySpread = awaySpread ? mk(s.awayCover(awaySpread.line), awaySpread.price) : null;
+  const eHomeSpread = homeSpread ? mk(s.homeCover(homeSpread.line), homeSpread.price) : null;
+  const eAwayML     = awayML     ? mk(s.aw, awayML.price) : null;
+  const eHomeML     = homeML     ? mk(s.hw, homeML.price) : null;
+  const eOver       = totalOver  ? mk(s.over(totalOver.line), totalOver.price) : null;
+  const eUnder      = totalUnder ? mk(1-s.over(totalUnder.line), totalUnder.price) : null;
 
   const awayRecord=awayPow?` ${awayPow.wins}-${awayPow.losses}`:'';
   const homeRecord=homePow?` ${homePow.wins}-${homePow.losses}`:'';
   const divGame=nflIsDivisionGame(g);
 
-  function betSq(label,price,edge,fair){
-    const eAbs=edge!=null?Math.abs(edge):0;
-    const cls=eAbs>=6?'value':eAbs>=3?'':'avoid';
-    const edgeStr=edge!=null?(edge>0?'+':'')+Math.round(edge)+' edge':'';
-    const fairStr=fair!=null?` · fair ${fair>0?'+':''}${fair}`:'';
-    return`<div class="bet ${cls}" onclick="nflSlipToggle('${g.id}','${label}',${price||0})" style="flex:1;min-width:0">
+  function betSq(label,e){
+    // EV% is the honest unit: expected return per unit staked, comparable
+    // across moneylines, spreads and totals. Anything at or above +2% EV is
+    // worth surfacing; below zero the book is ahead and the square says so.
+    if(!e)return`<div class="bq" style="flex:1;opacity:.55">
+      <div class="bl">${label}</div><div class="bo">—</div>
+      <div class="be" style="color:var(--mute)">no line uploaded</div></div>`;
+    const ev=e.ev, good=ev>=2, bad=ev<0;
+    const col=good?'var(--win)':bad?'var(--rust)':'var(--gold)';
+    const border=good?'rgba(46,204,113,.55)':bad?'rgba(240,86,60,.35)':'rgba(255,180,61,.45)';
+    return`<div class="bq" style="flex:1;border-color:${border}">
       <div class="bl">${label}</div>
-      <div class="bo">${price!=null?(price>0?'+':'')+price:'—'}</div>
-      <div class="bs">${edgeStr}${fairStr}</div>
+      <div class="bo" style="color:${col}">${e.price>0?'+':''}${e.price}</div>
+      <div class="be" style="color:${col}">${ev>=0?'+':''}${ev.toFixed(1)}% EV</div>
+      <div class="be" style="color:var(--mute);font-size:9px">
+        sim ${(e.p*100).toFixed(0)}% vs book ${(e.impl*100).toFixed(0)}% · fair ${e.fair>0?'+':''}${e.fair}</div>
     </div>`;
   }
+  const sgn=n=>n==null?'':(n>0?'+'+n:''+n);
 
   const realBadge=hasReal?`<span style="font-family:'IBM Plex Mono';font-size:8px;color:var(--cold);
     border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:6px">REAL</span>`:'';
@@ -13662,6 +13854,10 @@ function nflCardFull(g){
         ${g.away.abbr}${awayRecord}<br>${g.home.abbr}${homeRecord}
       </div>
     </div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">
+      ${nflEnvChips(g).map(c=>`<span style="font-family:'IBM Plex Mono';font-size:8.5px;
+        color:var(--mute);border:1px solid var(--rule);border-radius:3px;padding:1px 5px">${c}</span>`).join('')}
+    </div>
     <div style="font-size:11px;color:var(--chalk-dim);margin-bottom:8px">
       Proj: <b>${ap}</b>–<b>${hp}</b> · O/U <b>${med}</b> · <b>${spreadLabel}</b>
       ${g.status==='Final'?'<span style="color:var(--win);margin-left:6px">FINAL</span>':''}
@@ -13669,37 +13865,37 @@ function nflCardFull(g){
 
     <div class="mktlab">Spread${realBadge}</div>
     <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`${g.away.abbr} ${awaySpread?awaySpread.line:margin>0?'+'+Math.abs(margin):-margin}`,awaySpread?awaySpread.price:null,spreadEdge,null)}
-      ${betSq(`${g.home.abbr} ${homeSpread?homeSpread.line:margin>0?-margin:'+'+Math.abs(margin)}`,homeSpread?homeSpread.price:null,spreadEdge?-spreadEdge:null,null)}
+      ${betSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,eAwaySpread)}
+      ${betSq(`${g.home.abbr} ${homeSpread?sgn(homeSpread.line):sgn(-margin)}`,eHomeSpread)}
     </div>
 
     <div class="mktlab" style="margin-top:8px">Moneyline</div>
     <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`${g.away.abbr} ML`,awayML?awayML.price:null,mlEdgeAway,awayFairML)}
-      ${betSq(`${g.home.abbr} ML`,homeML?homeML.price:null,mlEdgeHome,homeFairML)}
+      ${betSq(`${g.away.abbr} ML`,eAwayML)}
+      ${betSq(`${g.home.abbr} ML`,eHomeML)}
     </div>
 
     <div class="mktlab" style="margin-top:8px">Total</div>
     <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`Over ${totalOver?totalOver.line:med}`,totalOver?totalOver.price:null,totalEdge,null)}
-      ${betSq(`Under ${totalUnder?totalUnder.line:med}`,totalUnder?totalUnder.price:null,totalEdge?-totalEdge:null,null)}
+      ${betSq(`Over ${totalOver?totalOver.line:med}`,eOver)}
+      ${betSq(`Under ${totalUnder?totalUnder.line:med}`,eUnder)}
     </div>
 
     ${h1AwaySpread||h1Over?`
     <div class="mktlab" style="margin-top:8px">1st Half</div>
     <div style="display:flex;gap:6px;margin-top:4px">
-      ${h1AwaySpread?betSq(`${g.away.abbr} 1H ${h1AwaySpread.line}`,h1AwaySpread.price,null,null):''}
-      ${h1HomeSpread?betSq(`${g.home.abbr} 1H ${h1HomeSpread.line}`,h1HomeSpread.price,null,null):''}
+      ${h1AwaySpread?betSq(`${g.away.abbr} 1H ${sgn(h1AwaySpread.line)}`,mk(s.awayCover(h1AwaySpread.line*2),h1AwaySpread.price)):''}
+      ${h1HomeSpread?betSq(`${g.home.abbr} 1H ${sgn(h1HomeSpread.line)}`,mk(s.homeCover(h1HomeSpread.line*2),h1HomeSpread.price)):''}
     </div>
     ${h1Over?`<div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`1H Over ${h1Over.line}`,h1Over.price,null,null)}
-      ${h1Under?betSq(`1H Under ${h1Under.line}`,h1Under.price,null,null):''}
+      ${betSq(`1H Over ${h1Over.line}`,mk(s.overH1(h1Over.line),h1Over.price))}
+      ${h1Under?betSq(`1H Under ${h1Under.line}`,mk(1-s.overH1(h1Under.line),h1Under.price)):''}
     </div>`:''}
     `:''}
 
-    ${propLines.length?`<div class="mktlab" style="margin-top:8px">Props (${propLines.length})</div>
+    ${nflProps.length?`<div class="mktlab" style="margin-top:8px">Props (${nflProps.length})</div>
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
-      ${propLines.map(p=>betSq(`${p.player} ${p.stat} ${p.line}+`,p.price,null,null)).join('')}
+      ${nflProps.map(p=>betSq(`${p.player} ${p.stat} ${p.line}+`,p.e)).join('')}
     </div>`:''}
 
     ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
@@ -13763,7 +13959,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.27
+   NCAAF ENGINE — BUILD v1.28
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
