@@ -623,6 +623,12 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
       Everything below is optional — the simulator runs fully without any of them.</div>
       <input id="keyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
       <input id="aiIn" placeholder="gemini api key — chat &amp; screenshot reading" autocomplete="off" spellcheck="false">
+      <div class="sub" style="margin:6px 0 8px;font-family:'IBM Plex Mono';font-size:10.5px">
+        Vision model: <b id="geminiModelNow" style="color:var(--gold)">—</b>
+        <span style="color:var(--mute)"> · re-pins itself automatically if Google retires it</span>
+        <button onclick="repinGeminiModel()" style="margin-top:6px">Check for a newer model</button>
+        <div id="geminiModelStatus" class="sub" style="margin-top:4px"></div>
+      </div>
       <input id="sharpIn" placeholder="sharpapi.io key — totals &amp; props" autocomplete="off" spellcheck="false">
       <input id="rundownIn" placeholder="therundown.io key — run lines" autocomplete="off" spellcheck="false">
       <input id="oddspapiIn" placeholder="oddspapi.io key — global books, diagnostic only" autocomplete="off" spellcheck="false">
@@ -1010,6 +1016,22 @@ function renderStorageStatus(){
   el.innerHTML='Local storage: <b style="color:'+col+'">'+mb+' MB used ('+pct+'% of a typical 5 MB cap)</b>'+
     (pct>85?'<br>Close to the limit — free space to keep results saving.':'');
 }
+async function repinGeminiModel(){
+  const st=document.getElementById('geminiModelStatus');
+  const key=get(LS.ai,'');
+  if(!key){if(st)st.textContent='Add a Gemini API key first.';return}
+  if(st)st.textContent='Asking Google what this key can reach…';
+  try{
+    const m=await discoverGeminiModel(key);
+    const was=geminiModel();
+    setGeminiModel(m);
+    if(st)st.textContent=(m===was?'Already on the best available model: ':'Switched to ')+m;
+  }catch(e){if(st)st.textContent='Could not check: '+((e&&e.message)||e)}
+}
+function renderGeminiModel(){
+  const el=document.getElementById('geminiModelNow');
+  if(el)el.textContent=geminiModel();
+}
 function renderBackupStatus(){
   const el=document.getElementById('backupStatus');if(!el)return;
   const last=localStorage.getItem('d4.lastBackup');
@@ -1174,9 +1196,46 @@ async function fileToContentBlock(f,b64){
   }
   return{type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}};
 }
-// ── Gemini API wrapper — replaces Anthropic for all vision/chat calls ─────────
-// Model: gemini-2.0-flash (free tier: 15 req/min, 1500/day)
-// Converts content blocks (image/text) into Gemini parts format
+/* ── Gemini API wrapper ───────────────────────────────────────────────────
+   The model ID used to be hardcoded to gemini-2.0-flash. Google shut that
+   model down on June 1 2026 and every screenshot upload started failing with
+   "this model is no longer available" — nothing wrong with the app, the
+   endpoint underneath it simply stopped existing.
+
+   Hardcoding a newer string just restarts the same clock: gemini-2.5-flash is
+   already scheduled for retirement on October 16 2026. So instead of naming
+   one model, this keeps an ordered preference list, and when Google retires
+   whatever is in front it asks the API which models the key can actually reach
+   and re-pins to the best available one. A retirement becomes a one-request
+   hiccup instead of a dead feature.
+
+   Default is gemini-3.6-flash: same free tier as before (15 req/min, 1500/day)
+   and noticeably better OCR on cramped odds boards. */
+const GEMINI_FALLBACKS=['gemini-3.6-flash','gemini-3.7-flash','gemini-3.5-flash','gemini-2.5-flash','gemini-3.1-flash-lite'];
+function geminiModel(){return get('d4.geminiModel','')||GEMINI_FALLBACKS[0]}
+function setGeminiModel(m){set('d4.geminiModel',m);const el=document.getElementById('geminiModelNow');if(el)el.textContent=m}
+function isModelGoneErr(msg){
+  return /no longer available|is not found|not supported|NOT_FOUND|deprecated|unsupported model|does not exist/i.test(String(msg||''));
+}
+/* Ask the key itself what it can reach, rather than trusting a list baked in
+   at build time. Prefers the caller's fallback order, then any other flash
+   model, newest version first. */
+async function discoverGeminiModel(key){
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+  const j=await r.json();
+  if(j.error)throw new Error(j.error.message||'Could not list models');
+  const usable=(j.models||[])
+    .filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent'))
+    .map(m=>(m.name||'').replace(/^models\//,''))
+    .filter(Boolean);
+  for(const want of GEMINI_FALLBACKS)if(usable.includes(want))return want;
+  const ver=n=>{const m=n.match(/(\d+(?:\.\d+)?)/);return m?parseFloat(m[1]):0};
+  const flash=usable.filter(n=>/flash/i.test(n)&&!/image|tts|live|embedding/i.test(n))
+    .sort((a,b)=>ver(b)-ver(a));
+  if(flash.length)return flash[0];
+  if(usable.length)return usable[0];
+  throw new Error('This API key has no usable text models.');
+}
 async function callGemini(key, contentBlocks, maxTokens=8000){
   const parts=[];
   for(const b of contentBlocks){
@@ -1191,10 +1250,25 @@ async function callGemini(key, contentBlocks, maxTokens=8000){
   }
   const body={contents:[{role:'user',parts}],
     generationConfig:{maxOutputTokens:maxTokens,temperature:0.1}};
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
-  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(body)});
-  const j=await r.json();
+  const send=async model=>{
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)});
+    return r.json();
+  };
+  let model=geminiModel();
+  let j=await send(model);
+  // If the pinned model has been retired, find a live one and re-pin so this
+  // self-corrects once instead of failing on every future upload.
+  if(j.error&&isModelGoneErr(j.error.message)){
+    let replacement=null;
+    try{replacement=await discoverGeminiModel(key)}catch(e){}
+    if(replacement&&replacement!==model){
+      setGeminiModel(replacement);
+      model=replacement;
+      j=await send(model);
+    }
+  }
   if(j.error)throw new Error(j.error.message||'Gemini API error');
   const text=(j.candidates||[]).map(c=>(c.content&&c.content.parts||[]).map(p=>p.text||'').join('')).join('\n');
   return text;
@@ -1448,7 +1522,7 @@ function fillSettingsTab(){
   v('keyIn',get(LS.key,''));v('aiIn',get(LS.ai,''));v('sharpIn',get(LS.sharp,''));
   v('rundownIn',get(LS.rundown,''));v('oddspapiIn',get(LS.oddspapi,''));
   v('ghrepoIn',get(LS.ghrepo,''));v('ghtokenIn',get(LS.ghtoken,''));
-  renderUsage();renderBackupStatus();renderStorageStatus();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
+  renderUsage();renderBackupStatus();renderStorageStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
 }
 function saveSettingsTab(){
   const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
@@ -12092,7 +12166,7 @@ async function boot(){
     document.getElementById('setup').classList.add('hide');
     boot();
   }else{
-    renderUsage();renderBackupStatus();renderStorageStatus();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
+    renderUsage();renderBackupStatus();renderStorageStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
     document.getElementById('setup').classList.remove('hide');
   }
 })();
