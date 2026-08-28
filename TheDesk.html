@@ -1252,30 +1252,113 @@ async function callGemini(key, contentBlocks, maxTokens=8000){
     generationConfig:{maxOutputTokens:maxTokens,temperature:0.1}};
   const send=async model=>{
     const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
-    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body)});
-    return r.json();
+    try{
+      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)});
+      const j=await r.json();
+      if(j&&j.error&&j.error.code==null)j.error.code=r.status;
+      return j;
+    }catch(netErr){
+      return{error:{message:'Network request failed: '+((netErr&&netErr.message)||netErr),code:0}};
+    }
   };
-  let model=geminiModel();
-  let j=await send(model);
-  // If the pinned model has been retired, find a live one and re-pin so this
-  // self-corrects once instead of failing on every future upload.
-  if(j.error&&isModelGoneErr(j.error.message)){
-    let replacement=null;
-    try{replacement=await discoverGeminiModel(key)}catch(e){}
-    if(replacement&&replacement!==model){
-      setGeminiModel(replacement);
-      model=replacement;
-      j=await send(model);
+
+  /* "This model is currently experiencing high demand" is a 503 — Google's
+     capacity, not your key and not your request. It used to be treated as
+     fatal and thrown straight at the user on the very first attempt, so an
+     upload failed on a condition that usually clears in a few seconds.
+
+     Overload is now retried with exponential backoff and jitter, and if the
+     pinned model stays saturated the request is handed to the next model in
+     the preference list rather than giving up. A 429 is different in kind —
+     that is YOUR quota, and hammering it makes it worse — so it backs off
+     harder and fewer times, then reports honestly instead of pretending a
+     retry will help. */
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const attemptOrder=[geminiModel(),...GEMINI_FALLBACKS.filter(m=>m!==geminiModel())];
+  let lastErr=null;
+
+  for(let mi=0;mi<attemptOrder.length;mi++){
+    let model=attemptOrder[mi];
+    const MAX=mi===0?4:2;   // try hardest on the pinned model, then move on
+    for(let attempt=0;attempt<MAX;attempt++){
+      if(attempt>0||mi>0){
+        const rateLimited=isRateLimitErr(lastErr);
+        const base=rateLimited?4000:900;
+        const wait=Math.min(20000,base*Math.pow(2,attempt))+Math.random()*400;
+        if(typeof onGeminiRetry==='function')onGeminiRetry(model,attempt+1,Math.round(wait/1000),rateLimited);
+        await sleep(wait);
+      }
+      const j=await send(model);
+
+      if(!j.error){
+        // a model further down the list worked — pin it so the next upload
+        // starts where this one succeeded
+        if(model!==geminiModel())setGeminiModel(model);
+        return(j.candidates||[]).map(c=>(c.content&&c.content.parts||[]).map(p=>p.text||'').join('')).join('\n');
+      }
+      lastErr=j.error;
+
+      if(isModelGoneErr(j.error.message)){
+        let replacement=null;
+        try{replacement=await discoverGeminiModel(key)}catch(e){}
+        if(replacement&&!attemptOrder.includes(replacement)){attemptOrder.splice(mi+1,0,replacement)}
+        break; // retrying a retired model is pointless — move to the next one
+      }
+      if(isOverloadErr(j.error)||isRateLimitErr(j.error))continue; // worth another go
+      /* A rejected key or a malformed request fails identically on every
+         model, so walking the rest of the list just makes five useless
+         requests and delays an answer the first response already gave. */
+      if(isFatalErr(j.error)){mi=attemptOrder.length;break}
+      break; // unknown error on this model — try the next one, but don't retry this one
     }
   }
-  if(j.error)throw new Error(j.error.message||'Gemini API error');
-  const text=(j.candidates||[]).map(c=>(c.content&&c.content.parts||[]).map(p=>p.text||'').join('')).join('\n');
-  return text;
+
+  throw new Error(friendlyGeminiError(lastErr));
+}
+/* Backoff can mean 20+ seconds of silence. Without this the app just looks
+   frozen and you tap again, which queues another request against the same
+   saturated model. Show what it's doing instead. */
+let GEMINI_STATUS_EL=null;
+function onGeminiRetry(model,attempt,waitSec,rateLimited){
+  if(!GEMINI_STATUS_EL)return;
+  GEMINI_STATUS_EL.innerHTML='<div class="tkt"><h3>'+
+    (rateLimited?'Rate limited — backing off':'Google is busy — retrying')+'</h3>'+
+    '<div class="sub">Attempt '+attempt+' on '+model+' · waiting '+waitSec+'s.<br>'+
+    'This is Google\'s capacity, not your key. Leave this open — it retries on its own.</div></div>';
+}
+function isFatalErr(e){
+  const m=String((e&&e.message)||e||'');
+  return (e&&(e.code===400||e.code===401||e.code===403))||
+    /API key not valid|API_KEY_INVALID|PERMISSION_DENIED|INVALID_ARGUMENT|UNAUTHENTICATED|billing/i.test(m);
+}
+function isOverloadErr(e){
+  const m=String((e&&e.message)||e||'');
+  return (e&&(e.code===503||e.code===500))||/high demand|overloaded|UNAVAILABLE|try again later|INTERNAL/i.test(m);
+}
+function isRateLimitErr(e){
+  const m=String((e&&e.message)||e||'');
+  return (e&&e.code===429)||/RESOURCE_EXHAUSTED|rate limit|quota/i.test(m);
+}
+/* The raw API string is accurate but tells you nothing about what to DO. */
+function friendlyGeminiError(e){
+  const raw=String((e&&e.message)||e||'Unknown error');
+  if(isRateLimitErr(e))
+    return 'Gemini free tier limit reached (15 requests/min, 1500/day). Wait a minute and try again, '+
+           'or upload fewer screenshots per batch. Text .txt files never touch the API and always work.';
+  if(isOverloadErr(e))
+    return 'Google\'s servers are overloaded right now — this is on their end, not your key. '+
+           'Already retried across several models. Give it a minute, or upload a .txt file instead, which needs no API at all.';
+  if(/API key not valid|API_KEY_INVALID|PERMISSION_DENIED/i.test(raw))
+    return 'That Gemini API key was rejected. Check it in Settings, or generate a new one at aistudio.google.com.';
+  if(/^Network request failed/i.test(raw))
+    return raw+' — check your connection.';
+  return raw;
 }
 
 async function analyzeBookShots(){
   const el=document.getElementById('bookShotResult');
+  GEMINI_STATUS_EL=el;
   const files=document.getElementById('bookShots').files;
   if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot, PDF, or text file first.</div>';return}
   el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
@@ -8199,6 +8282,7 @@ function extToday(){return getExt()[today()]||[]}
 
 async function analyzeExtPicks(){
   const el=document.getElementById('extResult');
+  GEMINI_STATUS_EL=el;
   const files=document.getElementById('extShots').files;
   if(!files.length){el.innerHTML='<div class="empty">Pick at least one file first.</div>';return}
   el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
