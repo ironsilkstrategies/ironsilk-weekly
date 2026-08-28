@@ -1360,9 +1360,39 @@ function friendlyGeminiError(e){
   return raw;
 }
 
+/* Which sport a screenshot upload belongs to. Captured when Analyze is pressed
+   so that switching tabs mid-read can't misfile the result. */
+let BOOKSHOT_SPORT=null;
+function buildVisionPrompt(sport){
+  const common='Extract every game/market you can see into a JSON array — nothing else, no markdown '+
+    'fences, no commentary. One entry per selection you can actually read clearly; skip anything '+
+    'blurry or cut off rather than guessing. Use the team names or abbreviations exactly as shown.';
+  if(sport==='nfl'||sport==='ncaaf'){
+    const lg=sport==='nfl'?'NFL':'college football (NCAAF)';
+    return `These are screenshots or exports of a real sportsbook's ${lg} board. ${common} Include:
+      - Full-game moneyline -> market:"moneyline", side:"away" or "home"
+      - Full-game point spread -> market:"spread", side:"away" or "home" (line is the handicap, e.g. -3 or +3.5)
+      - Full-game total -> market:"total", side:"over" or "under"
+      - First-half spread -> market:"h1spread", side:"away" or "home"
+      - First-half total -> market:"h1total", side:"over" or "under"
+      There are no run lines and no first-5-innings markets in football — never emit those.
+      Each entry: {"away":"team","home":"team","market":"moneyline"|"spread"|"total"|"h1spread"|"h1total",
+      "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -110 or 145)}.`;
+  }
+  return `These are screenshots or exports of a real sportsbook's MLB board. ${common} Include:
+      - Full-game moneyline -> market:"moneyline", side:"away" or "home"
+      - Full-game run line -> market:"runline", side:"away" or "home"
+      - Full-game total -> market:"total", side:"over" or "under"
+      - First-5-innings TOTAL ("F5 total", "1st 5 O/U") -> market:"f5total", side:"over" or "under"
+      - First-5-innings SIDES/MONEYLINE ("F5 ML", "1st 5 moneyline") -> market:"f5side", side:"away" or "home"
+      Do NOT confuse F5 side moneylines with F5 totals — they are different markets.
+      Each entry: {"away":"team","home":"team","market":"moneyline"|"runline"|"total"|"f5total"|"f5side",
+      "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -150 or 145)}.`;
+}
 async function analyzeBookShots(){
   const el=document.getElementById('bookShotResult');
   GEMINI_STATUS_EL=el;
+  BOOKSHOT_SPORT=ACTIVE_SPORT;
   const files=document.getElementById('bookShots').files;
   if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot, PDF, or text file first.</div>';return}
   el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
@@ -1429,17 +1459,13 @@ async function analyzeBookShots(){
       const b64=needsB64?await fileToB64(f):null;
       imgBlocks.push(await fileToContentBlock(f,b64));
     }
-    const prompt=`These are screenshots (or text/document exports) of a real sportsbook's MLB board. Extract
-      every game/market you can see into a JSON array — nothing else, no markdown fences, no commentary. Include:
-      - Full-game moneyline → market:"moneyline", side:"away" or "home"
-      - Full-game run line → market:"runline", side:"away" or "home"
-      - Full-game total → market:"total", side:"over" or "under"
-      - First-5-innings TOTAL ("F5 total", "1st 5 O/U") → market:"f5total", side:"over" or "under"
-      - First-5-innings SIDES/MONEYLINE ("F5 ML", "F5 away", "F5 home", "1st 5 moneyline") → market:"f5side", side:"away" or "home"
-      Do NOT confuse F5 side moneylines with F5 totals — they are different markets.
-      Each entry: {"away":"team abbr or name","home":"team abbr or name","market":"moneyline"|"runline"|"total"|"f5total"|"f5side",
-      "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -150 or 145)}.
-      One entry per selection you can actually read clearly — skip anything blurry or cut off rather than guessing.`;
+    /* This prompt used to be hardcoded to MLB — it asked for run lines and
+       first-5-inning markets no matter which board you photographed. Point it
+       at an NFL screenshot and Gemini was being told to find baseball markets
+       in a football slate, so spreads came back labelled "runline" (or not at
+       all) and the board had nothing it could match. The prompt now describes
+       the sport actually being uploaded. */
+    const prompt=buildVisionPrompt(BOOKSHOT_SPORT||ACTIVE_SPORT);
     const raw=await callGemini(key,[...imgBlocks,{type:'text',text:prompt}],8000);
     let parsed;
     const cleaned=raw.replace(/```json|```/g,'').trim();
@@ -1529,6 +1555,31 @@ function saveBookOdds(picks,el,fileSport){
 function saveBookShots(){
   const parsed=window._pendingBookShots;
   if(!parsed)return;
+  /* This function wrote to LS.bookshots — the MLB store — unconditionally.
+     The text-upload path routes by sport, but the SCREENSHOT path never did,
+     so NFL and CFB screenshots were read correctly, confirmed on screen, and
+     then filed into MLB storage. The NFL board reads LS.nflshots, found
+     nothing, and showed dashes on every market while claiming the save
+     succeeded. That is the "it won't push what came in from the screenshots"
+     symptom: the data existed, just in the wrong drawer under the wrong
+     abbreviations. */
+  const sport=BOOKSHOT_SPORT||ACTIVE_SPORT;
+  if(sport==='nfl'||sport==='ncaaf'){
+    const resolve=sport==='nfl'?(x=>nflAbbrFor(x)||String(x||'').toUpperCase()):
+                                (x=>String(x||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12));
+    const norm=parsed.map(x=>({
+      ...x,
+      // football has no run line — if the model still emitted one, it means a spread
+      market:x.market==='runline'?'spread':x.market,
+      away:resolve(x.away),home:resolve(x.home)
+    })).filter(x=>!/^f5/.test(x.market||''));
+    (sport==='nfl'?saveNFLBookOdds:saveNCAAFBookOdds)(norm,document.getElementById('bookShotResult'));
+    window._pendingBookShots=null;
+    const inp=document.getElementById('bookShots');if(inp)inp.value='';
+    if(sport==='nfl'&&typeof renderNFL==='function')renderNFL();
+    if(sport==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
+    return;
+  }
   const all=get(LS.bookshots,{});
   // File under whichever date was actually selected on the upload panel — this is
   // the fix for screenshots of tomorrow's lines silently filing under today and
