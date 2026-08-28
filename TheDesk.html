@@ -524,6 +524,9 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 <div id="storageBanner" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;
 background:rgba(240,86,60,.12);border:1px solid rgba(240,86,60,.45);color:var(--rust);
 font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
+<div id="nflPowerWarn" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;
+background:rgba(255,180,61,.10);border:1px solid rgba(255,180,61,.40);color:var(--gold);
+font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
 
   <div class="view on" id="v-games">
     <div class="bar" style="margin:0 0 6px;gap:6px">
@@ -780,6 +783,7 @@ let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl' | 'ncaaf'
 let NFL_GAMES=[],NFL_SIMS={}; // parallel NFL game store
 let NFL_WEEK=null,NFL_SEASON=null; // current week/season being viewed
 let NCAAF_GAMES=[],NCAAF_SIMS={};
+let NFL_POWER_RATED=0,NFL_POWER_FLAT=false; // is there real season data behind the NFL projections?
 let NCAAF_WEEK=null,NCAAF_SEASON=null;
 
 function doSportSwitch(sport){
@@ -12391,6 +12395,15 @@ function renderNFL(){
      and blank the entire board with no visible error. Drop malformed entries
      instead of letting them take the slate down. */
   NFL_GAMES=(NFL_GAMES||[]).filter(g=>g&&g.away&&g.home&&g.away.name&&g.home.name);
+  /* Say plainly when the projections have no season data behind them, rather
+     than printing an identical confident-looking number on all 16 games. */
+  const _nflWarn=document.getElementById('nflPowerWarn');
+  if(_nflWarn){
+    _nflWarn.style.display=NFL_POWER_FLAT?'block':'none';
+    if(NFL_POWER_FLAT)_nflWarn.innerHTML='&#9888; No completed-season scoring data for these teams yet '+
+      '(preseason). Every projection below is the league-average baseline plus home field &mdash; '+
+      'they are placeholders, not model output. Your uploaded book lines are still real.';
+  }
 
   const el=document.getElementById('slate');
   if(!el)return;
@@ -12522,6 +12535,44 @@ function _parseNFLEvents(j){
 // H1SPREAD: KC -1.5 (-115) / LV +1.5 (+105)
 // H1OU: o22.5 (-110) / u22.5 (-110)
 // PROP: P.Mahomes passing yards 275.5+ (-115)  [player: stat: line+]
+/* The NFL parser only ever accepted 2-4 letter abbreviations. Real sportsbook
+   exports and screenshot transcriptions write "Washington Commanders @
+   Baltimore Ravens", which failed the game-line regex outright — curAway
+   stayed null, every following bet line was skipped, and the file produced
+   ZERO picks. The upload reported success and the board kept showing dashes.
+
+   This resolves any of: abbreviation, full name, city, or nickname, built from
+   the NFL_TEAMS table already in the app so it cannot drift out of sync. */
+let _NFL_NAME_INDEX=null;
+function nflNameIndex(){
+  if(_NFL_NAME_INDEX)return _NFL_NAME_INDEX;
+  const idx=Object.create(null);
+  const put=(k,ab)=>{k=String(k||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(k&&!(k in idx))idx[k]=ab};
+  Object.keys(NFL_TEAMS).forEach(ab=>{
+    const full=NFL_TEAMS[ab].name;           // "Washington Commanders"
+    put(ab,ab); put(full,ab);
+    const parts=full.split(' ');
+    put(parts[parts.length-1],ab);           // nickname: "Commanders"
+    put(parts.slice(0,-1).join(''),ab);      // city: "Washington", "New England"
+  });
+  // aliases books and feeds actually use
+  Object.entries({WAS:'WSH',LA:'LAR',STL:'LAR',SD:'LAC',OAK:'LV',LVR:'LV',JAC:'JAX',
+    TAM:'TB',NOR:'NO',NWE:'NE',SFO:'SF',GNB:'GB',KAN:'KC',ARZ:'ARI',CLV:'CLE',
+    BLT:'BAL',HST:'HOU',WASHINGTONFOOTBALLTEAM:'WSH',REDSKINS:'WSH',OAKLANDRAIDERS:'LV',
+    SANDIEGOCHARGERS:'LAC',STLOUISRAMS:'LAR'}).forEach(([k,v])=>put(k,v));
+  _NFL_NAME_INDEX=idx;return idx;
+}
+function nflAbbrFor(s){
+  if(!s)return null;
+  const k=String(s).toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const idx=nflNameIndex();
+  if(idx[k])return idx[k];
+  // last resort: longest indexed name contained in the string (handles
+  // "at Baltimore Ravens (-3)" style noise around the team name)
+  let best=null,bestLen=0;
+  for(const name in idx){if(name.length>3&&name.length>bestLen&&k.includes(name)){best=idx[name];bestLen=name.length}}
+  return best;
+}
 function parseNFLSlateText(text){
   const picks=[],trends=[],consensus=[],props=[];
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
@@ -12538,22 +12589,28 @@ function parseNFLSlateText(text){
     let curAway=null,curHome=null;
     for(const l of lines){
       if(/^NFL|^Source:|^Proj:/i.test(l))continue;
-      const gameM=l.match(/^([A-Z]{2,4})\s*@\s*([A-Z]{2,4})/i);
-      if(gameM){curAway=norm(gameM[1]);curHome=norm(gameM[2]);continue;}
+      // accept "WSH @ BAL" and "Washington Commanders @ Baltimore Ravens" alike
+      const gameM=l.match(/^(.+?)\s*@\s*(.+?)(?:\s*\|.*)?$/);
+      if(gameM){
+        const a=nflAbbrFor(gameM[1]),h=nflAbbrFor(gameM[2]);
+        if(a&&h){curAway=a;curHome=h;continue;}
+      }
       if(!curAway)continue;
       const game=curAway+'@'+curHome;
       // ML: KC -200 / LV +170
-      const mlM=l.match(/^ML:\s*([A-Z]{2,4})\s*([+\-]\d+)\s*\/\s*([A-Z]{2,4})\s*([+\-]\d+)/i);
+      const mlM=l.match(/^ML:\s*(.+?)\s*([+\-]\d+)\s*\/\s*(.+?)\s*([+\-]\d+)\s*$/i);
       if(mlM){
-        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:norm(mlM[1])===curAway?'away':'home',price:+mlM[2]});
-        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:norm(mlM[3])===curHome?'home':'away',price:+mlM[4]});
+        const s1=nflAbbrFor(mlM[1]),s2=nflAbbrFor(mlM[3]);
+        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:s1===curAway?'away':'home',price:+mlM[2]});
+        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:s2===curHome?'home':'away',price:+mlM[4]});
         continue;
       }
       // SPREAD: KC -3 (-110) / LV +3 (-110)
-      const spM=l.match(/^SPREAD:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
+      const spM=l.match(/^SPREAD:\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
       if(spM){
-        picks.push({away:curAway,home:curHome,game,market:'spread',side:norm(spM[1])===curAway?'away':'home',line:+spM[2],price:+spM[3]});
-        picks.push({away:curAway,home:curHome,game,market:'spread',side:norm(spM[4])===curHome?'home':'away',line:+spM[5],price:+spM[6]});
+        const s1=nflAbbrFor(spM[1]),s2=nflAbbrFor(spM[4]);
+        picks.push({away:curAway,home:curHome,game,market:'spread',side:s1===curAway?'away':'home',line:+spM[2],price:+spM[3]});
+        picks.push({away:curAway,home:curHome,game,market:'spread',side:s2===curHome?'home':'away',line:+spM[5],price:+spM[6]});
         continue;
       }
       // OU: o47.5 (-110) / u47.5 (-110)
@@ -12823,20 +12880,37 @@ async function fetchNFLPowerRatings(){
         (div.standings&&div.standings.entries||[]).forEach(e=>entries.push(e));
       });
     });
+    /* In preseason the standings feed carries zero games played, so
+       pointsFor/gamesPlayed was 0 — and `0 || 24` quietly turned that into 24
+       for EVERY team. The result was a board where all 16 games projected the
+       same 22-24.5 with the identical spread, because the only thing left
+       separating the two sides was home-field advantage. Those numbers looked
+       like model output and were not.
+
+       Teams with no games played are now simply not rated, and a board with no
+       real ratings behind it says so instead of printing a confident number. */
     entries.forEach(e=>{
       const abbr=(e.team&&e.team.abbreviation||'').toUpperCase();
       if(!abbr)return;
       const stats={};
       (e.stats||[]).forEach(s=>{stats[s.name]=s.value;});
+      const gp=+stats.gamesPlayed||0;
+      if(gp<1)return;                 // no games -> no rating, not a fake average
+      const pf=+stats.pointsFor||0, pa=+stats.pointsAgainst||0;
+      if(!pf&&!pa)return;
       NFL_POWER[abbr]={
-        offPPG:stats.pointsFor/Math.max(1,stats.gamesPlayed)||24,
-        defPPG:stats.pointsAgainst/Math.max(1,stats.gamesPlayed)||24,
+        offPPG:pf/gp, defPPG:pa/gp, gp,
         wins:stats.wins||0,losses:stats.losses||0,ties:stats.ties||0,
-        pf:stats.pointsFor||0,pa:stats.pointsAgainst||0,
+        pf,pa,
         sos:stats.strengthOfSchedule||0,
         streak:stats.streak||0,
       };
     });
+    NFL_POWER_RATED=Object.keys(NFL_POWER).length;
+    // Flat ratings are as useless as none — check that teams actually differ.
+    const offs=Object.values(NFL_POWER).map(t=>t.offPPG);
+    const spread=offs.length?Math.max(...offs)-Math.min(...offs):0;
+    NFL_POWER_FLAT=(NFL_POWER_RATED<8||spread<1.5);
     // cache for the week
     set('d4.nflpower',{ts:Date.now(),v:NFL_POWER,week:NFL_WEEK});
     // update existing NFL_GAMES with real ratings
@@ -12855,7 +12929,13 @@ async function fetchNFLPowerRatings(){
 // boot: restore cached power ratings
 (function restoreNFLPower(){
   const c=get('d4.nflpower',{});
-  if(c.v&&Object.keys(c.v).length){NFL_POWER=c.v;}
+  if(c.v&&Object.keys(c.v).length){
+    NFL_POWER=c.v;
+    NFL_POWER_RATED=Object.keys(NFL_POWER).length;
+    const offs=Object.values(NFL_POWER).map(t=>t.offPPG).filter(n=>typeof n==='number');
+    const spread=offs.length?Math.max(...offs)-Math.min(...offs):0;
+    NFL_POWER_FLAT=(NFL_POWER_RATED<8||spread<1.5);
+  }else{NFL_POWER_RATED=0;NFL_POWER_FLAT=true}
 })();
 
 // ── NFL Advanced Sim Engine ────────────────────────────────────────────────────
