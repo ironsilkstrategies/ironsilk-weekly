@@ -515,12 +515,16 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   </nav>
 </header>
 <div style="display:flex;padding:8px 12px 4px;gap:6px;background:#0d1117;position:relative;z-index:999">
-  <div id="sportBtn-mlb" ontouchstart="void(0)" ontouchend="doSportSwitch('mlb');return false" onclick="doSportSwitch('mlb')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">⚾ MLB</div>
-  <div id="sportBtn-nfl" ontouchstart="void(0)" ontouchend="doSportSwitch('nfl');return false" onclick="doSportSwitch('nfl')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏈 NFL</div>
-  <div id="sportBtn-ncaaf" ontouchstart="void(0)" ontouchend="doSportSwitch('ncaaf');return false" onclick="doSportSwitch('ncaaf')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏟 CFB</div>
+  <div id="sportBtn-mlb" role="button" tabindex="0" aria-label="MLB" onclick="doSportSwitch('mlb')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">⚾ MLB</div>
+  <div id="sportBtn-nfl" role="button" tabindex="0" aria-label="NFL" onclick="doSportSwitch('nfl')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏈 NFL</div>
+  <div id="sportBtn-ncaaf" role="button" tabindex="0" aria-label="NCAAF" onclick="doSportSwitch('ncaaf')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏟 CFB</div>
 </div>
 
 <main>
+<div id="storageBanner" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;
+background:rgba(240,86,60,.12);border:1px solid rgba(240,86,60,.45);color:var(--rust);
+font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
+
   <div class="view on" id="v-games">
     <div class="bar" style="margin:0 0 6px;gap:6px">
       <button class="primary" onclick="refreshEverything()" style="flex:2">↻ Refresh everything</button>
@@ -632,6 +636,8 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <div class="sbar"><h2>Backup</h2><div class="ln"></div></div>
     <div class="tkt">
       <div class="sub" id="backupStatus" style="margin-bottom:8px"></div>
+      <div class="sub" id="storageStatus" style="margin-bottom:8px"></div>
+      <button onclick="freeStorageNow()" style="margin-bottom:10px">Free space (keep graded history)</button>
       <div class="bar" style="margin-top:0">
         <button class="primary" onclick="exportBackup()">Export everything to a file</button>
         <button onclick="document.getElementById('importFile').click()">Restore from a file</button>
@@ -790,6 +796,15 @@ function doSportSwitch(sport){
   }
   const nG=document.getElementById('nG');
   if(nG)nG.textContent=sport==='nfl'?NFL_GAMES.length:sport==='ncaaf'?NCAAF_GAMES.length:GAMES.length;
+  /* Two things were missing here.
+     1) The choice never persisted, so every reload silently snapped back to
+        MLB even though the CFB board was the one being worked.
+     2) The renders above paint #slate, which lives inside the Games view. If
+        you switched sport from Grades or Tickets, the tap appeared to do
+        nothing at all. Send the user to the board they just asked for. */
+  try{localStorage.setItem('d4.activeSport',sport)}catch(e){}
+  const gv=document.getElementById('v-games');
+  if(gv&&!gv.classList.contains('on')&&typeof tab==='function')tab('games');
 }
 let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
 let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
@@ -798,7 +813,88 @@ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',
 const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
 const fmtDate=d=>new Date(d).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',timeZone:APP_TZ});
 function get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
-function set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+/* ── STORAGE LAYER (quota-aware) ──────────────────────────────────────────
+   Was: try{setItem}catch(e){} — a silent swallow. localStorage caps around
+   5MB and this app writes box scores, sims, odds-by-date and three sports'
+   game caches into it. Once the cap was hit, EVERY write failed silently:
+   tickets, grades, bankroll and archive all looked saved until reload, then
+   reverted. That is the single largest source of phantom data loss.
+   Now: on a quota error we prune the cheapest-to-rebuild caches in order,
+   retry after each step, and if it still won't fit we surface it instead of
+   pretending the write landed. ───────────────────────────────────────────*/
+let STORAGE_ALERTED=false;
+function isQuotaErr(e){
+  return e&&(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'||e.code===22||e.code===1014);
+}
+// cheapest-to-rebuild first. Each returns true if it actually freed anything.
+const PRUNE_LADDER=[
+  ()=>pruneKeyedCache('d4.boxcache',120),      // box scores — refetchable from StatsAPI
+  ()=>pruneDatedMap('d4.oddsdate',21),         // historical odds by date
+  ()=>pruneKeyedCache('d4.boxcache',40),
+  ()=>pruneDatedMap('d4.nflgames',3),
+  ()=>pruneDatedMap('d4.ncaafgames',3),
+  ()=>pruneDatedMap('d4.oddsdate',7),
+  ()=>pruneKeyedCache('d4.boxcache',10)
+];
+function pruneKeyedCache(key,keep){
+  try{
+    const raw=localStorage.getItem(key);if(!raw)return false;
+    const c=JSON.parse(raw);const keys=Object.keys(c);
+    if(keys.length<=keep)return false;
+    keys.sort((a,b)=>((c[b]&&c[b].ts)||0)-((c[a]&&c[a].ts)||0)).slice(keep).forEach(k=>delete c[k]);
+    localStorage.setItem(key,JSON.stringify(c));return true;
+  }catch(e){try{localStorage.removeItem(key)}catch(_){}; return true}
+}
+function pruneDatedMap(key,keepDays){
+  try{
+    const raw=localStorage.getItem(key);if(!raw)return false;
+    const m=JSON.parse(raw);const days=Object.keys(m).sort();
+    if(days.length<=keepDays)return false;
+    days.slice(0,days.length-keepDays).forEach(d=>delete m[d]);
+    localStorage.setItem(key,JSON.stringify(m));return true;
+  }catch(e){return false}
+}
+function set(k,v){
+  let payload;
+  try{payload=JSON.stringify(v)}catch(e){console.warn('set: unserializable',k,e);return false}
+  try{localStorage.setItem(k,payload);return true}
+  catch(e){
+    if(!isQuotaErr(e)){console.warn('set failed',k,e);return false}
+    for(const step of PRUNE_LADDER){
+      let freed=false;try{freed=step()}catch(_){}
+      if(!freed)continue;
+      try{localStorage.setItem(k,payload);storageRecovered();return true}catch(e2){if(!isQuotaErr(e2))return false}
+    }
+    storageFull(k);
+    return false;
+  }
+}
+function storageFull(k){
+  console.error('STORAGE FULL — write dropped:',k);
+  const b=document.getElementById('storageBanner');
+  if(b){b.style.display='block';
+    b.innerHTML='&#9888; Device storage is full — new results are not being saved. '+
+      '<u style="cursor:pointer" onclick="freeStorageNow()">Free space now</u>';}
+  if(!STORAGE_ALERTED){STORAGE_ALERTED=true;
+    setTimeout(()=>{try{alert('Storage is full. Recent grades and tickets may not be saving. Open Settings \u2192 Free Space, or export a backup and clear old caches.')}catch(_){}} ,300);}
+}
+function storageRecovered(){
+  const b=document.getElementById('storageBanner');if(b)b.style.display='none';
+}
+// user-facing hard reclaim: dumps every rebuildable cache, keeps graded history
+function freeStorageNow(){
+  ['d4.boxcache','d4.oddsdate','d4.nflgames','d4.ncaafgames','d4.h2h','d4.splits']
+    .forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
+  storageRecovered();
+  try{alert('Rebuildable caches cleared. Graded history, tickets and bankroll were kept.')}catch(e){}
+  location.reload();
+}
+// how full are we, roughly — drives the Settings readout
+function storageBytes(){
+  let n=0;try{for(const k in localStorage){if(!Object.prototype.hasOwnProperty.call(localStorage,k))continue;
+    n+=k.length+(localStorage.getItem(k)||'').length}}catch(e){}
+  return n;
+}
 function esc(s){return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;')}
 function credits(){const c=get(LS.cred,{d:'',n:0});return c.d!==today()?{d:today(),n:0}:c}
 function burn(){const c=credits();c.n++;set(LS.cred,c);paintMeter()}
@@ -823,6 +919,31 @@ function backupData(){
     if(k.startsWith('d4.')&&!EXCLUDE.has(k))data[k]=localStorage.getItem(k);
   });
   return data;
+}
+/* navigator.clipboard is undefined on non-HTTPS origins and inside some iOS
+   standalone/webview contexts — calling .writeText on it threw and killed the
+   handler, so Copy CSV did nothing at all on device. Falls back to a hidden
+   textarea + execCommand, then to a selectable prompt. */
+function copyText(text,okMsg){
+  const done=()=>{try{alert(okMsg||'Copied.')}catch(e){}};
+  if(navigator.clipboard&&navigator.clipboard.writeText&&window.isSecureContext){
+    navigator.clipboard.writeText(text).then(done,()=>legacyCopy(text,done));
+    return;
+  }
+  legacyCopy(text,done);
+}
+function legacyCopy(text,done){
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=text;ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.select();ta.setSelectionRange(0,text.length);
+    const ok=document.execCommand('copy');
+    ta.remove();
+    if(ok){done();return}
+  }catch(e){}
+  try{window.prompt('Copy failed \u2014 select and copy manually:',text)}catch(e){}
 }
 function exportBackup(){
   const data=backupData();
@@ -853,6 +974,17 @@ function importBackup(input){
   };
   reader.readAsText(file);
   input.value='';
+}
+/* Storage was previously invisible. When it filled, writes just stopped and
+   the app looked like it was losing data at random. This makes the ceiling
+   legible before it is hit. */
+function renderStorageStatus(){
+  const el=document.getElementById('storageStatus');if(!el)return;
+  const b=storageBytes(),mb=(b/1048576).toFixed(2);
+  const pct=Math.min(100,Math.round(b/5242880*100));
+  const col=pct>85?'var(--rust)':pct>65?'var(--gold)':'var(--mute)';
+  el.innerHTML='Local storage: <b style="color:'+col+'">'+mb+' MB used ('+pct+'% of a typical 5 MB cap)</b>'+
+    (pct>85?'<br>Close to the limit — free space to keep results saving.':'');
 }
 function renderBackupStatus(){
   const el=document.getElementById('backupStatus');if(!el)return;
@@ -1054,19 +1186,47 @@ async function analyzeBookShots(){
   const textFiles=[...files].filter(f=>isPlainTextFile(f));
   const otherFiles=[...files].filter(f=>!isPlainTextFile(f));
   if(textFiles.length){
-    const allParsed=[];
+    /* Previously this kept ONLY result.picks and dropped trends and consensus
+       on the floor. Upload a valid trends or consensus export here and it
+       reported "Nothing parsed — check file format" on a file it had in fact
+       parsed correctly. Now anything with content gets routed to where it
+       belongs, and the failure message says what it actually saw. */
+    const allParsed=[];let allTrends=[],allConsensus=[];
+    const sportsSeen=new Set();const diag=[];
     for(const f of textFiles){
-      const text=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(f);});
+      let text='';
+      try{
+        text=await new Promise((res,rej)=>{const r=new FileReader();
+          r.onload=e=>res(e.target.result);
+          r.onerror=()=>rej(new Error('Could not read '+f.name));r.readAsText(f);});
+      }catch(err){diag.push(f.name+': unreadable');continue}
       const result=parseSlateText(text);
-      // picks from slate_picks.txt map directly to book odds entries
+      if(result.sport)sportsSeen.add(result.sport);
       result.picks.forEach(p=>allParsed.push(p));
+      allTrends=allTrends.concat(result.trends||[]);
+      allConsensus=allConsensus.concat(result.consensus||[]);
+      diag.push(f.name+': '+(detectSlateSport(text)||'no sport header').toUpperCase()+
+        ' · '+result.picks.length+' picks · '+(result.trends||[]).length+' trends · '+
+        (result.consensus||[]).length+' consensus');
     }
-    if(allParsed.length&&!otherFiles.length){
-      saveBookOdds(allParsed,el);
-      return;
-    }
-    if(!allParsed.length&&!otherFiles.length){
-      el.innerHTML='<div class="empty">Nothing parsed — check file format. File must start with MLB, NFL, or NCAAF.</div>';
+    if(!otherFiles.length){
+      // The file declares its own sport. Trust that over whichever tab is open.
+      const fileSport=sportsSeen.size===1?[...sportsSeen][0]:null;
+      if(allParsed.length){saveBookOdds(allParsed,el,fileSport);
+        if(allTrends.length||allConsensus.length){
+          try{saveExtBySport(fileSport||ACTIVE_SPORT,[],allTrends,allConsensus)}catch(e){}
+        }
+        return;
+      }
+      if(allTrends.length||allConsensus.length){
+        saveExtBySport(fileSport||ACTIVE_SPORT,[],allTrends,allConsensus,el);
+        return;
+      }
+      el.innerHTML='<div class="tkt"><h3>Nothing parsed</h3><div class="sub">'+
+        'The header line must start with MLB, NFL, or NCAAF, and bet lines must look like '+
+        '<code>ML:</code>, <code>SPREAD:</code>, <code>RL:</code> or <code>OU:</code>.<br><br>'+
+        'What each file actually gave:<br><span style="font-family:\'IBM Plex Mono\';font-size:10.5px">'+
+        diag.join('<br>')+'</span></div></div>';
       return;
     }
   }
@@ -1139,10 +1299,22 @@ async function analyzeBookShots(){
 }
 // Offline book odds save — feeds parsed slate_picks.txt entries directly
 // into the same bookshots storage that the API path uses
-function saveBookOdds(picks,el){
-  // Route NFL picks to NFL storage when NFL sport is active
-  if(ACTIVE_SPORT==='nfl'){saveNFLBookOdds(picks,el);return;}
-  if(ACTIVE_SPORT==='ncaaf'){saveNCAAFBookOdds(picks,el);return;}
+/* One place that decides which sport's store a parsed upload belongs to.
+   The old rule was "whatever tab is open", so an NFL export uploaded while
+   the MLB board happened to be showing was written into MLB storage and run
+   through MLB abbreviation normalization — silently mis-filed, with no error.
+   A file that names its own sport now wins; the open tab is only the
+   fallback for files that don't say. */
+function saveExtBySport(sport,picks,trends,consensus,el){
+  if(sport==='ncaaf'&&typeof saveNCAAFExtData==='function')return saveNCAAFExtData(picks,trends,consensus,el);
+  if(sport==='nfl'&&typeof saveNFLExtData==='function')return saveNFLExtData(picks,trends,consensus,el);
+  window._pendingExt={picks,trends,consensus};
+  if(el&&typeof renderExtResults==='function')renderExtResults(el,picks,trends,consensus);
+}
+function saveBookOdds(picks,el,fileSport){
+  const sport=fileSport||(picks&&picks.length&&picks[0].sport)||ACTIVE_SPORT;
+  if(sport==='nfl'){saveNFLBookOdds(picks,el);return;}
+  if(sport==='ncaaf'){saveNCAAFBookOdds(picks,el);return;}
   const d=today();
   const all=get(LS.bookshots,{});
   all[d]=all[d]||[];
@@ -1252,7 +1424,7 @@ function fillSettingsTab(){
   v('keyIn',get(LS.key,''));v('aiIn',get(LS.ai,''));v('sharpIn',get(LS.sharp,''));
   v('rundownIn',get(LS.rundown,''));v('oddspapiIn',get(LS.oddspapi,''));
   v('ghrepoIn',get(LS.ghrepo,''));v('ghtokenIn',get(LS.ghtoken,''));
-  renderUsage();renderBackupStatus();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
+  renderUsage();renderBackupStatus();renderStorageStatus();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
 }
 function saveSettingsTab(){
   const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
@@ -4940,10 +5112,18 @@ function cacheBox(gid,box){
   if(!gid||!box)return;
   const c=getBoxCache();
   c[gid]={box,ts:Date.now()};
-  // keep the cache bounded — 400 games is roughly two months of full slates
-  const keys=Object.keys(c);
-  if(keys.length>400){
-    keys.sort((a,b)=>(c[a].ts||0)-(c[b].ts||0)).slice(0,keys.length-400).forEach(k=>delete c[k]);
+  /* Was capped at 400 entries. A single MLB box score serializes to roughly
+     100-300KB, so 400 of them is tens of megabytes against a ~5MB localStorage
+     ceiling — the cache alone could blow the quota and take every other write
+     down with it. Cap on BYTES, which is the thing that actually runs out,
+     and keep a hard entry ceiling as a second guard. */
+  const MAX_BYTES=1.6e6, MAX_ENTRIES=60;
+  let keys=Object.keys(c).sort((a,b)=>((c[b].ts)||0)-((c[a].ts)||0)); // newest first
+  if(keys.length>MAX_ENTRIES)keys.slice(MAX_ENTRIES).forEach(k=>delete c[k]);
+  let bytes=0;
+  for(const k of Object.keys(c).sort((a,b)=>((c[b].ts)||0)-((c[a].ts)||0))){
+    const sz=JSON.stringify(c[k]).length;
+    if(bytes+sz>MAX_BYTES&&k!==gid)delete c[k]; else bytes+=sz;
   }
   set(LS_BOXCACHE,c);
 }
@@ -7896,37 +8076,40 @@ async function analyzeExtPicks(){
   const textFiles=[...files].filter(f=>isPlainTextFile(f));
   const otherFiles=[...files].filter(f=>!isPlainTextFile(f));
 
-  // DEBUG — show what the browser sees about each file
-  const debugLines=[...files].map(f=>`${f.name} | type="${f.type}" | size=${f.size} | isText=${isPlainTextFile(f)}`);
-  el.innerHTML=`<div class="tkt"><div class="sub" style="font-family:'IBM Plex Mono';font-size:11px">${debugLines.join('<br>')}</div></div>`;
-  await new Promise(r=>setTimeout(r,100)); // let UI update
+  el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
 
   let offlinePicks=[],offlineTrends=[],offlineConsensus=[];
+  const sportsSeen=new Set();const diag=[];
   for(const f of textFiles){
-    const text=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(f);});
+    let text='';
+    try{
+      text=await new Promise((res,rej)=>{const r=new FileReader();
+        r.onload=e=>res(e.target.result);
+        r.onerror=()=>rej(new Error('unreadable'));r.readAsText(f);});
+    }catch(err){diag.push(f.name+': could not be read');continue}
     const result=parseSlateText(text);
+    if(result.sport)sportsSeen.add(result.sport);
     offlinePicks=offlinePicks.concat(result.picks);
-    offlineTrends=offlineTrends.concat(result.trends);
-    offlineConsensus=offlineConsensus.concat(result.consensus);
+    offlineTrends=offlineTrends.concat(result.trends||[]);
+    offlineConsensus=offlineConsensus.concat(result.consensus||[]);
+    diag.push(f.name+': '+(detectSlateSport(text)||'no sport header').toUpperCase()+
+      ' · '+result.picks.length+' picks · '+(result.trends||[]).length+' trends · '+
+      (result.consensus||[]).length+' consensus');
   }
   if(!otherFiles.length){
     if(!offlinePicks.length&&!offlineTrends.length&&!offlineConsensus.length){
-      el.innerHTML='<div class="empty">Nothing parsed — check file format.</div>';return;
-    }
-    // Route NFL data to NFL storage
-    const hasNFL=offlinePicks.some(x=>x.isNFL)||offlineTrends.some(x=>x.sport==='nfl')||
-      (textFiles.length&&/^NFL/i.test((textFiles[0].name||'')));
-    const hasNCAAF=(textFiles.length&&/^NCAAF/i.test((textFiles[0].name||'')));
-    if(ACTIVE_SPORT==='ncaaf'||hasNCAAF){
-      if(typeof saveNCAAFExtData==='function')saveNCAAFExtData(offlinePicks,offlineTrends,offlineConsensus,el);
+      el.innerHTML='<div class="tkt"><h3>Nothing parsed</h3><div class="sub">'+
+        'Header must start with MLB, NFL, or NCAAF.<br><br>What each file gave:<br>'+
+        '<span style="font-family:\'IBM Plex Mono\';font-size:10.5px">'+diag.join('<br>')+'</span></div></div>';
       return;
     }
-    if(ACTIVE_SPORT==='nfl'||hasNFL){
-      saveNFLExtData(offlinePicks,offlineTrends,offlineConsensus,el);
-      return;
-    }
-    window._pendingExt={picks:offlinePicks,trends:offlineTrends,consensus:offlineConsensus};
-    renderExtResults(el,offlinePicks,offlineTrends,offlineConsensus);
+    /* The old routing tested offlinePicks.some(x=>x.isNFL) — but isNFL was only
+       ever set on the parser's RESULT object, never on individual picks, so that
+       branch was dead. It then fell back to testing whether the FILENAME began
+       with "NFL", which no real export does, leaving ACTIVE_SPORT as the only
+       thing actually deciding. Route on what the file declared instead. */
+    const fileSport=sportsSeen.size===1?[...sportsSeen][0]:null;
+    saveExtBySport(fileSport||ACTIVE_SPORT,offlinePicks,offlineTrends,offlineConsensus,el);
     return;
   }
 
@@ -8107,16 +8290,38 @@ function renderExtResults(el,picks,trends,consensus){
 // slate_picks.txt  : ML/RL/OU lines per game
 // slate_consensus.txt : TEAM XX% / TEAM XX% rows + TOTALS section
 // slate_trends.txt : TEAM trends bullets per game block
-function parseSlateText(text){
-  // Detect NFL/NCAAF files and hand off to their parsers
-  const firstLine=(text.split('\n')[0]||'').trim();
-  if(/^NFL/i.test(firstLine)){
-    const nflResult=parseNFLSlateText(text);
-    return{picks:nflResult.picks,trends:nflResult.trends,consensus:nflResult.consensus,isNFL:true};
+/* Sport detection used to read ONLY the literal first line. Any file exported
+   with a UTF-8 BOM, a leading blank line, or a title row above the header fell
+   through to the MLB parser, produced zero picks, and reported
+   "Nothing parsed — check file format" on a perfectly valid NFL/CFB file.
+   Now: strip the BOM, normalize line endings, and scan the first several
+   non-empty lines for the sport marker. */
+function stripBOM(t){return String(t||'').replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n')}
+function detectSlateSport(text){
+  const head=stripBOM(text).split('\n').map(l=>l.trim()).filter(Boolean).slice(0,8);
+  for(const l of head){
+    if(/^(NCAAF|CFB|COLLEGE\s*FOOTBALL)\b/i.test(l))return'ncaaf';
+    if(/^NFL\b/i.test(l))return'nfl';
+    if(/^MLB\b/i.test(l))return'mlb';
   }
-  if(/^NCAAF/i.test(firstLine)){
+  return null;
+}
+function parseSlateText(text){
+  text=stripBOM(text);
+  const sport=detectSlateSport(text);
+  if(sport==='nfl'){
+    const r=parseNFLSlateText(text);
+    // Every pick carries its own sport. The routing code downstream used to
+    // test picks.some(x=>x.isNFL) — a flag that was only ever set on the
+    // RESULT object, never on individual picks, so that test was permanently
+    // false and content-based routing silently never fired.
+    r.picks.forEach(p=>p.sport='nfl');
+    return{picks:r.picks,trends:r.trends,consensus:r.consensus,sport:'nfl',isNFL:true};
+  }
+  if(sport==='ncaaf'){
     const r=parseNCAAFSlateText(text);
-    return{picks:r.picks,trends:r.trends,consensus:r.consensus,isNCAAF:true};
+    r.picks.forEach(p=>p.sport='ncaaf');
+    return{picks:r.picks,trends:r.trends,consensus:r.consensus,sport:'ncaaf',isNCAAF:true};
   }
   const picks=[],trends=[],consensus=[];
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
@@ -8310,7 +8515,8 @@ function parseSlateText(text){
     }
   }
 
-  return {picks,trends,consensus};
+  picks.forEach(p=>p.sport='mlb');
+  return {picks,trends,consensus,sport:'mlb'};
 }
 
 function saveExtPicks(){
@@ -9804,8 +10010,17 @@ async function loadESPN(){
         const stillLive=GAMES.some(g=>g.abstract==='Live');
         if(!stillLive){clearInterval(LIVE_POLL);LIVE_POLL=null;return;}
         await loadESPN();
-        if(document.getElementById('v-games').classList.contains('active')||
-           document.querySelector('.view.active')?.id==='v-games'){render();}
+        /* Was checking for class 'active'. Views are toggled with class 'on'
+           (.view.on{display:block}) — 'active' is never set anywhere in the
+           app, so this condition was permanently false and the board never
+           repainted during live games. Scores were polling; the screen just
+           never showed them. */
+        const gv=document.getElementById('v-games');
+        if(gv&&gv.classList.contains('on')){
+          if(ACTIVE_SPORT==='nfl'&&typeof renderNFL==='function')renderNFL();
+          else if(ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
+          else render();
+        }
         // the Elimination Map's bubbles are only as alive as the real score
         // data behind them — this is what makes them actually MOVE when a
         // real game updates, instead of only refreshing on next manual open.
@@ -11072,7 +11287,7 @@ function exportCSV(){
   csv+='\n\ndate,player,market,type,predicted,result\n';
   Object.keys(arc).sort().forEach(d=>(arc[d].pgrades||[]).forEach(o=>{
     csv+=[d,o.n,'"'+o.m+'"',o.t,o.p,o.hit?'W':'L'].join(',')+'\n'}));
-  navigator.clipboard.writeText(csv).then(()=>alert('CSV copied.'),()=>alert('Copy failed.'));
+  copyText(csv,'CSV copied.');
 }
 
 
@@ -11587,7 +11802,10 @@ async function exportImage(targetId,btnId,filename,shareTitle){
     alert("Image renderer didn't load — check your connection, or screenshot the card manually.");
     return;
   }
-  const orig=btn.textContent;btn.textContent='Rendering…';btn.disabled=true;
+  // btn was dereferenced without a null check — if the button id ever changed
+  // or the card re-rendered mid-tap, this threw before the export ran.
+  const orig=btn?btn.textContent:'';
+  if(btn){btn.textContent='Rendering…';btn.disabled=true;}
   try{
     const canvas=await html2canvas(target,{backgroundColor:'#0B0F14',scale:2,useCORS:true});
     const blob=await new Promise(res=>canvas.toBlob(res,'image/png',1));
@@ -11607,7 +11825,7 @@ async function exportImage(targetId,btnId,filename,shareTitle){
     if(e&&e.name==='AbortError'){}
     else alert("Couldn't export automatically — screenshot the card as a fallback.");
   }
-  btn.textContent=orig;btn.disabled=false;
+  if(btn){btn.textContent=orig;btn.disabled=false;}
 }
 let BOOTED=false;
 /* ── background auto-grading ──────────────────────────────────────────────
@@ -11743,6 +11961,14 @@ async function backfillUngradedBestDays(){
 }
 
 async function boot(){
+  /* The sport selection persisted on switch but nothing read it back, so every
+     cold start dropped to MLB regardless of what was last being worked. */
+  try{
+    const sp=localStorage.getItem('d4.activeSport');
+    if(sp&&['mlb','nfl','ncaaf'].includes(sp)&&sp!=='mlb'){
+      setTimeout(()=>{try{doSportSwitch(sp)}catch(e){}},900);
+    }
+  }catch(e){}
   await pullFromGitHubIfEmpty();
   paintMeter();loadSlip();
   document.getElementById('nR').textContent=Object.keys(get(LS.arc,{})).length||'';
@@ -11809,7 +12035,7 @@ async function boot(){
     document.getElementById('setup').classList.add('hide');
     boot();
   }else{
-    renderUsage();renderBackupStatus();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
+    renderUsage();renderBackupStatus();renderStorageStatus();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
     document.getElementById('setup').classList.remove('hide');
   }
 })();
@@ -11857,32 +12083,11 @@ const NFL_TEAMS={
 };
 
 // ── Sport switcher ────────────────────────────────────────────────────────────
-function switchSport(sport){
-  ACTIVE_SPORT=sport;
-  // update button styles
-  ['mlb','nfl'].forEach(s=>{
-    const btn=document.getElementById('sportBtn-'+s);
-    if(!btn)return;
-    if(s===sport){
-      btn.style.background='var(--gold)';btn.style.color='#000';
-      btn.style.border='2px solid var(--gold)';btn.style.fontWeight='900';
-    }else{
-      btn.style.background='transparent';btn.style.color='#fff';
-      btn.style.border='2px solid #555';btn.style.fontWeight='900';
-    }
-  });
-  // re-render current tab
-  const activeTab=document.querySelector('nav > button.on');
-  const tabOnclick=activeTab?activeTab.getAttribute('onclick'):'';
-  const tabMatch=tabOnclick.match(/tab\('(\w+)'/);
-  const tabName=tabMatch?tabMatch[1]:'games';
-  if(tabName==='games'){
-    if(sport==='nfl')renderNFL();else render();
-  }
-  // update game count badge
-  const nG=document.getElementById('nG');
-  if(nG)nG.textContent=sport==='nfl'?NFL_GAMES.length:GAMES.length;
-}
+/* Legacy switcher. It predated CFB: it only iterated ['mlb','nfl'], so calling
+   it with 'ncaaf' set ACTIVE_SPORT to ncaaf but then fell through to the MLB
+   render() and displayed GAMES.length in the badge — a half-switched state.
+   Kept as an alias so any stale call site routes to the one real switcher. */
+function switchSport(sport){return doSportSwitch(sport)}
 
 // ── NFL Simulation engine ────────────────────────────────────────────────────
 // Uses normal distribution around team scoring means.
@@ -11967,6 +12172,11 @@ function saveNFLBookOdds(picks,el){
 
 // ── NFL render ─────────────────────────────────────────────────────────────────
 function renderNFL(){
+  /* One corrupt or partially-written cached game used to throw inside the sim
+     and blank the entire board with no visible error. Drop malformed entries
+     instead of letting them take the slate down. */
+  NFL_GAMES=(NFL_GAMES||[]).filter(g=>g&&g.away&&g.home&&g.away.name&&g.home.name);
+
   const el=document.getElementById('slate');
   if(!el)return;
 
@@ -13386,6 +13596,11 @@ function _parseNCAAFEvents(j){
 
 // ── NCAAF render ─────────────────────────────────────────────────────────────
 function renderNCAAF(){
+  /* One corrupt or partially-written cached game used to throw inside the sim
+     and blank the entire board with no visible error. Drop malformed entries
+     instead of letting them take the slate down. */
+  NCAAF_GAMES=(NCAAF_GAMES||[]).filter(g=>g&&g.away&&g.home&&g.away.name&&g.home.name);
+
   const el=document.getElementById('slate');if(!el)return;
   if(!NCAAF_GAMES.length){
     el.innerHTML=`<div class="tkt">
