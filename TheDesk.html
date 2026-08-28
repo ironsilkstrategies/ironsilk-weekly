@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.28</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.30</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -12313,7 +12313,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.28
+   NFL ENGINE — BUILD v1.30
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -14072,7 +14072,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.28
+   NCAAF ENGINE — BUILD v1.30
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -14138,11 +14138,18 @@ function simNCAAFGame(g,N){
   const med=totals[Math.floor(N/2)];
   const medMargin=margins[Math.floor(N/2)];
   const over=x=>totals.filter(v=>v>x).length/N;
+  /* Same sign convention as the NFL engine, stated explicitly because the old
+     single spreadCover() was being called with a negated away line and so
+     answered a different question than the square it labelled.
+     margin = home - away.  homeCover(line): home covers a handicap written from
+     the home side.  awayCover(line): away covers its own line. */
   const spreadCover=line=>margins.filter(m=>m>line).length/N;
+  const homeCover=line=>margins.filter(m=>m> -line).length/N;
+  const awayCover=line=>margins.filter(m=>m< line).length/N;
   return{
     awayProj:isNaN(awayExp)?26:Math.round(awayExp*10)/10,
     homeProj:isNaN(homeExp)?26:Math.round(homeExp*10)/10,
-    hw:hw/N,aw:aw/N,med,medMargin,over,spreadCover,N
+    hw:hw/N,aw:aw/N,med,medMargin,over,spreadCover,homeCover,awayCover,N
   };
 }
 
@@ -14310,22 +14317,73 @@ function ncaafCard(g){
   const margin=isNaN(s.medMargin)?0:s.medMargin;
   const awayFairML=nflFairML(Math.max(.05,Math.min(.95,s.aw||.5)));
   const homeFairML=nflFairML(Math.max(.05,Math.min(.95,s.hw||.5)));
-  const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.spreadCover(-awaySpread.line)||.5))):null;
-  const mlEdgeAway=awayML?awayML.price-awayFairML:null;
-  const mlEdgeHome=homeML?homeML.price-homeFairML:null;
-  const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,s.over(totalOver.line)||.5))):null;
+  /* Was the same broken measure the NFL board had: book price minus fair price,
+     subtracting two American odds numbers across the ±100 discontinuity, with
+     the opposite square rendered as the negation of the first. Now each side is
+     priced against its own simulated probability and reported as EV%. */
+  const clampP=p=>Math.max(.02,Math.min(.98,(p==null||isNaN(p))?.5:p));
+  const mk=(p,price)=>{
+    if(price==null)return null;
+    const P=clampP(p);
+    return{p:P,price,fair:nflFairML(P),ev:evPct(P,price),impl:amerToProb(price)};
+  };
+  const eAwaySpread = awaySpread ? mk(s.awayCover(awaySpread.line), awaySpread.price) : null;
+  const eHomeSpread = homeSpread ? mk(s.homeCover(homeSpread.line), homeSpread.price) : null;
+  const eAwayML     = awayML     ? mk(s.aw, awayML.price) : null;
+  const eHomeML     = homeML     ? mk(s.hw, homeML.price) : null;
+  const eOver       = totalOver  ? mk(s.over(totalOver.line), totalOver.price) : null;
+  const eUnder      = totalUnder ? mk(1-s.over(totalUnder.line), totalUnder.price) : null;
+  const sgn=n=>n==null?'':(n>0?'+'+n:''+n);
+  const simAwPct=Math.round(s.aw*100)+'%', simHmPct=Math.round(s.hw*100)+'%';
+  const simTotVal=(s.med||0).toFixed(1);
+  const simMargin=(s.homeProj-s.awayProj);
+  const simHomeSpread=(simMargin>=0?'-':'+')+Math.abs(simMargin).toFixed(1);
+  const simAwaySpread=(simMargin>=0?'+':'-')+Math.abs(simMargin).toFixed(1);
   const spreadLabel=margin>0?`${g.home.abbr} -${margin}`:margin<0?`${g.away.abbr} -${Math.abs(margin)}`:"Pick'em";
   const realBadge=hasReal?`<span style="font-family:'IBM Plex Mono';font-size:8px;color:var(--cold);border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:4px">REAL</span>`:'';
-  function betSq(label,price,edge,fair){
-    const eAbs=edge!=null?Math.abs(edge):0;
-    const cls=eAbs>=6?'value':eAbs>=3?'':'avoid';
-    const edgeStr=edge!=null?(edge>0?'+':'')+Math.round(edge)+' edge':'';
-    const fairStr=fair!=null?` · f${fair>0?'+':''}${fair}`:'';
-    return`<div class="bet ${cls}" onclick="ncaafSlipToggle('${g.id}','${label}',${price||0})" style="flex:1;min-width:0">
-      <div class="bl">${label}</div>
-      <div class="bo">${price!=null?(price>0?'+':'')+price:'—'}</div>
-      <div class="bs">${edgeStr}${fairStr}</div>
-    </div>`;
+  function cfbSq(label,pick,e,simVal){
+    if(!e)return`<div class="cmpr"><div class="bl">${label}</div>
+      <div class="bo">${simVal!==undefined?simVal:'—'}</div><div class="bs">sim only</div></div>`;
+    const mp=e.p,kp=e.impl,pct=Math.round(kp*100);
+    const priceStr=(e.price>0?'+':'')+e.price;
+    let cls='',badge='';
+    const gap=(mp-kp)*100;
+    if(gap>=EDGE_MIN){cls=' value';badge=`<span class="eb up">+${gap.toFixed(1)}</span>`}
+    else if(gap<=-EDGE_MIN){cls=' avoid';badge=`<span class="eb dn">${gap.toFixed(1)}</span>`}
+    const fair=`<div class="bf">model ${(mp*100).toFixed(0)}% · fair ${e.fair>0?'+':''}${e.fair}`
+      +` · <span style="color:${e.ev>=2?'var(--win)':e.ev<0?'var(--rust)':'var(--mute)'}">`
+      +`${e.ev>=0?'+':''}${e.ev.toFixed(1)}% EV</span></div>`;
+    const simChip=simVal!==undefined?`<div class="sim-chip">sim ${simVal}</div>`:'';
+    // same three-signal alignment tiers the MLB and NFL squares use
+    const bookLeans=typeof kp==='number'&&kp>=0.58;
+    const modelEdgeHere=cls===' value', modelAgainstHere=cls===' avoid';
+    let srcCls='',srcBadge='',outsideAgrees=false,outsideUnanimous=false,outsideAgainst=false;
+    const extHere=(typeof ncaafExtFor==='function')?ncaafExtFor(gameKey):[];
+    if(extHere&&extHere.length){
+      const sameMkt=extHere.filter(x=>nflMarketMatchesPick(x,pick));
+      const onThis=sameMkt.filter(x=>nflPickMatchesSide(x,pick));
+      if(onThis.length){
+        const srcMkt=new Set(sameMkt.map(x=>x.src||'upload')), srcThis=new Set(onThis.map(x=>x.src||'upload'));
+        outsideUnanimous=srcMkt.size>=2&&srcThis.size===srcMkt.size;
+        outsideAgrees=true;
+        srcBadge=`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':srcThis.size+' source'+(srcThis.size>1?'s':'')}</div>`;
+      }else if(sameMkt.length)outsideAgainst=true;
+    }
+    const signalsFor=[bookLeans,modelEdgeHere,outsideAgrees].filter(Boolean).length;
+    const hasConflict=(modelAgainstHere&&(bookLeans||outsideAgrees))||(outsideAgainst&&(bookLeans||modelEdgeHere));
+    let tierCls='';
+    if(hasConflict)tierCls=' conflict';
+    else if(signalsFor>=3||(signalsFor>=2&&outsideUnanimous))tierCls=' supreme';
+    else if(signalsFor>=2)tierCls=' strong';
+    else if(signalsFor>=1)tierCls=' lean';
+    if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
+    const tierBadge=tierCls===' supreme'?`<div class="tier-tag supreme">◆ SUPREME</div>`
+      :tierCls===' strong'?`<div class="tier-tag strong">STRONG</div>`
+      :tierCls===' conflict'?`<div class="tier-tag conflict">⚠ CONFLICT</div>`:'';
+    return`<div class="bet${cls}${srcCls}${tierCls}" role="button" tabindex="0"
+      onclick="ncaafSlipToggle('${g.id}','${String(pick).replace(/'/g,"\\'")}',${e.price})">
+      <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
+      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${tierBadge}</div>`;
   }
   const awayRank=g.away.ranking||'';const homeRank=g.home.ranking||'';
   const id=g.id;
@@ -14340,24 +14398,32 @@ function ncaafCard(g){
         ${g.away.record||''}<br>${g.home.record||''}
       </div>
     </div>
-    <div style="font-size:11px;color:var(--chalk-dim);margin-bottom:8px">
-      Proj: <b>${ap}</b>–<b>${hp}</b> · O/U <b>${med}</b> · <b>${spreadLabel}</b>
-      ${g.status==='Final'?'<span style="color:var(--win);margin-left:6px">FINAL</span>':''}
+    ${g.status==='Final'
+      ?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
+         <div class="rd">final</div></div>`
+      :`<div class="proj">
+         <div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div>
+         <div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>
+       </div>`}
+    <div class="sig">
+      <div class="sigchip">O/U <b>${med}</b> · ${spreadLabel}</div>
+      ${g.away.record?`<div class="sigchip">${g.away.abbr} <b>${g.away.record}</b></div>`:''}
+      ${g.home.record?`<div class="sigchip">${g.home.abbr} <b>${g.home.record}</b></div>`:''}
     </div>
     <div class="mktlab">Spread${realBadge}</div>
-    <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`${g.away.abbr} ${awaySpread?awaySpread.line:margin>0?'+'+Math.abs(margin):-margin}`,awaySpread?awaySpread.price:null,spreadEdge,null)}
-      ${betSq(`${g.home.abbr} ${homeSpread?homeSpread.line:margin>0?-margin:'+'+Math.abs(margin)}`,homeSpread?homeSpread.price:null,spreadEdge?-spreadEdge:null,null)}
+    <div class="betgrid">
+      ${cfbSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,`${g.away.abbr} spread`,eAwaySpread,simAwaySpread)}
+      ${cfbSq(`${g.home.abbr} ${homeSpread?sgn(homeSpread.line):sgn(-margin)}`,`${g.home.abbr} spread`,eHomeSpread,simHomeSpread)}
     </div>
     <div class="mktlab" style="margin-top:8px">Moneyline</div>
-    <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`${g.away.abbr} ML`,awayML?awayML.price:null,mlEdgeAway,awayFairML)}
-      ${betSq(`${g.home.abbr} ML`,homeML?homeML.price:null,mlEdgeHome,homeFairML)}
+    <div class="betgrid">
+      ${cfbSq(`${g.away.abbr}`,`${g.away.abbr} ML`,eAwayML,simAwPct)}
+      ${cfbSq(`${g.home.abbr}`,`${g.home.abbr} ML`,eHomeML,simHmPct)}
     </div>
     <div class="mktlab" style="margin-top:8px">Total</div>
-    <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`Over ${totalOver?totalOver.line:med}`,totalOver?totalOver.price:null,totalEdge,null)}
-      ${betSq(`Under ${totalUnder?totalUnder.line:med}`,totalUnder?totalUnder.price:null,totalEdge?-totalEdge:null,null)}
+    <div class="betgrid">
+      ${cfbSq(`Over ${totalOver?totalOver.line:med}`,`Over ${totalOver?totalOver.line:med}`,eOver,simTotVal)}
+      ${cfbSq(`Under ${totalUnder?totalUnder.line:med}`,`Under ${totalUnder?totalUnder.line:med}`,eUnder,simTotVal)}
     </div>
     ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
       <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px">${g.away.abbr} ${consML.awayPct||'?'}%</span>
@@ -14366,6 +14432,9 @@ function ncaafCard(g){
       </div>
       <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px;text-align:right">${consML.homePct||'?'}% ${g.home.abbr}</span>
     </div>`:''}
+    <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
+    <div class="legend" style="margin-top:2px"><span>◆ SUPREME = book price, model edge and outside sources all agree</span><span>STRONG = two of three</span><span>⚠ CONFLICT = they disagree</span></div>
+
     <div class="exprow" style="margin-top:10px">
       <button onclick="ncaafTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
