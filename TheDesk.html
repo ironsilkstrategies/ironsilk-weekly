@@ -12665,10 +12665,18 @@ function parseNFLSlateText(text){
   const isTrends=lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under)\s+is\s+\d/i.test(l));
   const isPicks=lines.some(l=>/^ML:|^OU:|^RL:|^SPREAD:|^H1SPREAD:|^H1OU:|^PROP:/i.test(l));
 
+  /* SOURCE: lines were skipped outright, so no pick carried an attribution.
+     Without it there is no way to count how many independent outlets landed on
+     a side, which is what the alignment tiers are built on. Declared at function
+     scope because the return that stamps it sits outside the picks branch. */
+  let curSrc='upload';
+
   if(isPicks){
     let curAway=null,curHome=null;
     for(const l of lines){
-      if(/^NFL|^Source:|^Proj:/i.test(l))continue;
+      const srcM=l.match(/^SOURCE:\s*(.+?)\s*$/i);
+      if(srcM){curSrc=srcM[1].trim()||'upload';continue;}
+      if(/^NFL|^Proj:/i.test(l))continue;
       // accept "WSH @ BAL" and "Washington Commanders @ Baltimore Ravens" alike
       const gameM=l.match(/^(.+?)\s*@\s*(.+?)(?:\s*\|.*)?$/);
       if(gameM){
@@ -12758,7 +12766,8 @@ function parseNFLSlateText(text){
     }
   }
 
-  return{picks,trends,consensus,props,isNFL:true};
+  picks.forEach(p=>{if(!p.src)p.src=curSrc});
+    return{picks,trends,consensus,props,isNFL:true};
 }
 
 // ── NFL ext picks save ────────────────────────────────────────────────────────
@@ -12769,8 +12778,13 @@ function saveNFLExtData(picks,trends,consensus,el){
   picks.forEach(x=>{
     const gm=NFL_GAMES.find(g=>g.away.abbr===x.away&&g.home.abbr===x.home);
     const rec={...x,gid:gm?gm.id:null,capturedAt:Date.now()};
-    const k=[x.game,x.market,x.side,x.line].join('|');
-    const i=allP[d].findIndex(y=>[y.game,y.market,y.side,y.line].join('|')===k);
+    /* The dedupe key omitted the source, so uploading a second outlet's picks
+       OVERWROTE the first outlet's row for the same side. Consensus could
+       therefore never exceed one source and "unanimous" was unreachable.
+       Keying on the source too means re-uploading the SAME outlet still
+       replaces its own row, while a different outlet is kept alongside it. */
+    const k=[x.game,x.market,x.side,x.line,rec.src||'upload'].join('|');
+    const i=allP[d].findIndex(y=>[y.game,y.market,y.side,y.line,y.src||'upload'].join('|')===k);
     if(i>=0)allP[d][i]=rec;else allP[d].push(rec);
   });
   set(LS.nflext,allP);
@@ -12982,6 +12996,32 @@ const NFL_PROP_MODEL={
   rushing:   {share:0.55, per25:115, sd:35},
   receiving: {share:0.20, per25:245, sd:22},
 };
+/* MLB's marketMatchesPick/pickMatchesSide are written around run lines and
+   first-5-innings markets. Football needs its own vocabulary — spread, h1spread,
+   h1total, prop — so the tier system compares like with like instead of
+   silently matching nothing and reporting "no outside sources" forever. */
+function nflMarketMatchesPick(ext,pick){
+  const p=String(pick||'').toLowerCase();
+  switch(ext.market){
+    case 'moneyline': return /\bml\b/.test(p);
+    case 'spread':    return /spread/.test(p)&&!/1h/.test(p);
+    case 'total':     return /^over|^under/.test(p);
+    case 'h1spread':  return /1h spread/.test(p);
+    case 'h1total':   return /^1h (over|under)/.test(p);
+    case 'prop':      return !!ext.player&&p.includes(String(ext.player).toLowerCase());
+    default: return false;
+  }
+}
+function nflPickMatchesSide(ext,pick){
+  const p=String(pick||'').toLowerCase();
+  if(ext.side==='over')return /\bover\b/.test(p);
+  if(ext.side==='under')return /\bunder\b/.test(p);
+  if(ext.side==='away'||ext.side==='home'){
+    const ab=String(ext.side==='away'?ext.away:ext.home||'').toLowerCase();
+    return !!ab&&p.startsWith(ab);
+  }
+  return false;
+}
 function buildNFLProps(g,s){
   const out=[];
   const gameKey=g.away.abbr+'@'+g.home.abbr;
@@ -13802,6 +13842,13 @@ function nflCardFull(g){
      vig sits between them, so both can be negative EV at once. That is the
      normal case, and the board should be able to say so. */
   const clampP=p=>Math.max(.02,Math.min(.98,(p==null||isNaN(p))?.5:p));
+  // sim handicap chips — same convention as the MLB card: win% for sides,
+  // projected total for totals, signed spread for the spread squares
+  const simAwPct=Math.round(s.aw*100)+'%', simHmPct=Math.round(s.hw*100)+'%';
+  const simTotVal=(s.mean||s.med).toFixed(1);
+  const simMargin=(s.homeProj-s.awayProj);
+  const simHomeSpread=(simMargin>=0?'-':'+')+Math.abs(simMargin).toFixed(1);
+  const simAwaySpread=(simMargin>=0?'+':'-')+Math.abs(simMargin).toFixed(1);
   const mk=(p,price)=>{
     if(price==null)return null;
     const P=clampP(p);
@@ -13818,23 +13865,77 @@ function nflCardFull(g){
   const homeRecord=homePow?` ${homePow.wins}-${homePow.losses}`:'';
   const divGame=nflIsDivisionGame(g);
 
-  function betSq(label,e){
-    // EV% is the honest unit: expected return per unit staked, comparable
-    // across moneylines, spreads and totals. Anything at or above +2% EV is
-    // worth surfacing; below zero the book is ahead and the square says so.
-    if(!e)return`<div class="bq" style="flex:1;opacity:.55">
-      <div class="bl">${label}</div><div class="bo">—</div>
-      <div class="be" style="color:var(--mute)">no line uploaded</div></div>`;
-    const ev=e.ev, good=ev>=2, bad=ev<0;
-    const col=good?'var(--win)':bad?'var(--rust)':'var(--gold)';
-    const border=good?'rgba(46,204,113,.55)':bad?'rgba(240,86,60,.35)':'rgba(255,180,61,.45)';
-    return`<div class="bq" style="flex:1;border-color:${border}">
-      <div class="bl">${label}</div>
-      <div class="bo" style="color:${col}">${e.price>0?'+':''}${e.price}</div>
-      <div class="be" style="color:${col}">${ev>=0?'+':''}${ev.toFixed(1)}% EV</div>
-      <div class="be" style="color:var(--mute);font-size:9px">
-        sim ${(e.p*100).toFixed(0)}% vs book ${(e.impl*100).toFixed(0)}% · fair ${e.fair>0?'+':''}${e.fair}</div>
-    </div>`;
+  /* NFL squares now emit the same DOM and classes as the MLB card's b() square,
+     so both boards read identically: label, sim chip, book price, market %,
+     model %/fair line, and the value/avoid colouring. The previous NFL-only
+     markup used classes that don't exist in the stylesheet, which is why the
+     football cards rendered as flat text instead of tiles.
+
+     Edge colouring uses the probability gap (model % minus market %) exactly
+     like MLB, via the same EDGE_MIN threshold. EV% is kept as an extra line
+     because it is the number that actually decides whether a price is worth
+     taking — MLB gets it too now. */
+  function nflSq(label,pick,e,simVal){
+    if(!e)return`<div class="cmpr"><div class="bl">${label}</div>
+      <div class="bo">${simVal!==undefined?simVal:'—'}</div>
+      <div class="bs">sim only</div></div>`;
+    const mp=e.p, kp=e.impl;
+    const pct=Math.round(kp*100);
+    const priceStr=(e.price>0?'+':'')+e.price;
+    let cls='',badge='';
+    const gap=(mp-kp)*100;
+    if(gap>=EDGE_MIN){cls=' value';badge=`<span class="eb up">+${gap.toFixed(1)}</span>`}
+    else if(gap<=-EDGE_MIN){cls=' avoid';badge=`<span class="eb dn">${gap.toFixed(1)}</span>`}
+    const fair=`<div class="bf">model ${(mp*100).toFixed(0)}% · fair ${e.fair>0?'+':''}${e.fair}`
+      +` · <span style="color:${e.ev>=2?'var(--win)':e.ev<0?'var(--rust)':'var(--mute)'}">`
+      +`${e.ev>=0?'+':''}${e.ev.toFixed(1)}% EV</span></div>`;
+    const simChip=simVal!==undefined?`<div class="sim-chip">sim ${simVal}</div>`:'';
+
+    /* ═══ ALIGNMENT TIER — identical logic to the MLB square. Three independent
+       reads are checked separately and then combined, so the colour answers
+       "how many unrelated things point the same way here", not just one of them.
+         1 BOOK LEAN     — the real price itself already implies >=58% on this side
+         2 MODEL EDGE    — the sim disagrees with the market in this side's favour
+         3 OUTSIDE       — uploaded sources picked this side, and how many agree
+       SUPREME = all three (or two with unanimous outside), STRONG = any two,
+       LEAN = one, CONFLICT = signals actively point opposite ways. */
+    const bookLeans=typeof kp==='number'&&kp>=0.58;
+    const modelEdgeHere=cls===' value';
+    const modelAgainstHere=cls===' avoid';
+    let srcCls='',srcBadge='',outsideAgrees=false,outsideUnanimous=false,outsideAgainst=false;
+    const gameKeyHere=g.away.abbr+'@'+g.home.abbr;
+    const extHere=nflExtFor(gameKeyHere);
+    if(extHere.length){
+      const sameMkt=extHere.filter(x=>nflMarketMatchesPick(x,pick));
+      const onThis=sameMkt.filter(x=>nflPickMatchesSide(x,pick));
+      if(onThis.length){
+        const allSrcOnMkt=new Set(sameMkt.map(x=>x.src||'upload'));
+        const allSrcOnThis=new Set(onThis.map(x=>x.src||'upload'));
+        outsideUnanimous=allSrcOnMkt.size>=2&&allSrcOnThis.size===allSrcOnMkt.size;
+        outsideAgrees=true;
+        srcBadge=`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':allSrcOnThis.size+' source'+(allSrcOnThis.size>1?'s':'')}</div>`;
+      }else if(sameMkt.length){
+        outsideAgainst=true;   // sources covered this market but took the other side
+      }
+    }
+    const signalsFor=[bookLeans,modelEdgeHere,outsideAgrees].filter(Boolean).length;
+    const hasConflict=(modelAgainstHere&&(bookLeans||outsideAgrees))||(outsideAgainst&&(bookLeans||modelEdgeHere));
+    let tierCls='';
+    if(hasConflict)tierCls=' conflict';
+    else if(signalsFor>=3||(signalsFor>=2&&outsideUnanimous))tierCls=' supreme';
+    else if(signalsFor>=2)tierCls=' strong';
+    else if(signalsFor>=1)tierCls=' lean';
+    if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
+    const tierBadge=tierCls===' supreme'?`<div class="tier-tag supreme">◆ SUPREME</div>`
+      :tierCls===' strong'?`<div class="tier-tag strong">STRONG</div>`
+      :tierCls===' conflict'?`<div class="tier-tag conflict">⚠ CONFLICT</div>`:'';
+
+    const id=g.id+'|'+pick;
+    const on=(typeof SLIP!=='undefined'&&SLIP.some?SLIP.some(x=>x.id===id):false);
+    return`<div class="bet${cls}${srcCls}${tierCls} ${on?'on':''}" role="button" tabindex="0"
+      onclick="nflSlipToggle('${g.id}','${pick.replace(/'/g,"\\'")}',${e.price})">
+      <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
+      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${tierBadge}</div>`;
   }
   const sgn=n=>n==null?'':(n>0?'+'+n:''+n);
 
@@ -13854,48 +13955,57 @@ function nflCardFull(g){
         ${g.away.abbr}${awayRecord}<br>${g.home.abbr}${homeRecord}
       </div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">
-      ${nflEnvChips(g).map(c=>`<span style="font-family:'IBM Plex Mono';font-size:8.5px;
-        color:var(--mute);border:1px solid var(--rule);border-radius:3px;padding:1px 5px">${c}</span>`).join('')}
-    </div>
-    <div style="font-size:11px;color:var(--chalk-dim);margin-bottom:8px">
-      Proj: <b>${ap}</b>–<b>${hp}</b> · O/U <b>${med}</b> · <b>${spreadLabel}</b>
-      ${g.status==='Final'?'<span style="color:var(--win);margin-left:6px">FINAL</span>':''}
+
+    ${g.status==='Final'
+      ?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
+         <div class="rd">final</div></div>`
+      :`<div class="proj">
+         <div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div>
+         <div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>
+         <div class="md">most common ${s.modeScore?s.modeScore.replace('-','–'):'—'} · ${(s.modeScorePct*100).toFixed(1)}%</div>
+       </div>`}
+    <div class="sig">
+      <div class="sigchip">O/U <b>${med}</b> · ${spreadLabel}</div>
+      ${divGame?`<div class="sigchip" style="color:var(--gold)">DIVISION GAME</div>`:''}
+      ${nflEnvChips(g).map(c=>`<div class="sigchip">${c}</div>`).join('')}
+      ${awayPow?`<div class="sigchip">${g.away.abbr} <b>${awayPow.wins}-${awayPow.losses}</b> · <b>${(awayPow.offPPG||0).toFixed(1)}</b> PF / <b>${(awayPow.defPPG||0).toFixed(1)}</b> PA</div>`:''}
+      ${homePow?`<div class="sigchip">${g.home.abbr} <b>${homePow.wins}-${homePow.losses}</b> · <b>${(homePow.offPPG||0).toFixed(1)}</b> PF / <b>${(homePow.defPPG||0).toFixed(1)}</b> PA</div>`:''}
+      ${NFL_POWER_FLAT?`<div class="sigchip" style="color:var(--gold);border-color:rgba(255,180,61,.4)">PLACEHOLDER PROJECTION · no season data yet</div>`:''}
     </div>
 
     <div class="mktlab">Spread${realBadge}</div>
-    <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,eAwaySpread)}
-      ${betSq(`${g.home.abbr} ${homeSpread?sgn(homeSpread.line):sgn(-margin)}`,eHomeSpread)}
+    <div class="betgrid">
+      ${nflSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,`${g.away.abbr} spread`,eAwaySpread,simAwaySpread)}
+      ${nflSq(`${g.home.abbr} ${homeSpread?sgn(homeSpread.line):sgn(-margin)}`,`${g.home.abbr} spread`,eHomeSpread,simHomeSpread)}
     </div>
 
-    <div class="mktlab" style="margin-top:8px">Moneyline</div>
-    <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`${g.away.abbr} ML`,eAwayML)}
-      ${betSq(`${g.home.abbr} ML`,eHomeML)}
+    <div class="mktlab" style="margin-top:8px">Moneyline${awayML||homeML?realBadge:''}</div>
+    <div class="betgrid">
+      ${nflSq(`${g.away.abbr}`,`${g.away.abbr} ML`,eAwayML,simAwPct)}
+      ${nflSq(`${g.home.abbr}`,`${g.home.abbr} ML`,eHomeML,simHmPct)}
     </div>
 
-    <div class="mktlab" style="margin-top:8px">Total</div>
-    <div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`Over ${totalOver?totalOver.line:med}`,eOver)}
-      ${betSq(`Under ${totalUnder?totalUnder.line:med}`,eUnder)}
+    <div class="mktlab" style="margin-top:8px">Total${totalOver?realBadge:''}</div>
+    <div class="betgrid">
+      ${nflSq(`Over ${totalOver?totalOver.line:med}`,`Over ${totalOver?totalOver.line:med}`,eOver,simTotVal)}
+      ${nflSq(`Under ${totalUnder?totalUnder.line:med}`,`Under ${totalUnder?totalUnder.line:med}`,eUnder,simTotVal)}
     </div>
 
     ${h1AwaySpread||h1Over?`
     <div class="mktlab" style="margin-top:8px">1st Half</div>
-    <div style="display:flex;gap:6px;margin-top:4px">
-      ${h1AwaySpread?betSq(`${g.away.abbr} 1H ${sgn(h1AwaySpread.line)}`,mk(s.awayCover(h1AwaySpread.line*2),h1AwaySpread.price)):''}
-      ${h1HomeSpread?betSq(`${g.home.abbr} 1H ${sgn(h1HomeSpread.line)}`,mk(s.homeCover(h1HomeSpread.line*2),h1HomeSpread.price)):''}
+    <div class="betgrid">
+      ${h1AwaySpread?nflSq(`${g.away.abbr} 1H ${sgn(h1AwaySpread.line)}`,`${g.away.abbr} 1H spread`,mk(s.awayCover(h1AwaySpread.line*2),h1AwaySpread.price)):''}
+      ${h1HomeSpread?nflSq(`${g.home.abbr} 1H ${sgn(h1HomeSpread.line)}`,`${g.home.abbr} 1H spread`,mk(s.homeCover(h1HomeSpread.line*2),h1HomeSpread.price)):''}
     </div>
     ${h1Over?`<div style="display:flex;gap:6px;margin-top:4px">
-      ${betSq(`1H Over ${h1Over.line}`,mk(s.overH1(h1Over.line),h1Over.price))}
-      ${h1Under?betSq(`1H Under ${h1Under.line}`,mk(1-s.overH1(h1Under.line),h1Under.price)):''}
+      ${nflSq(`1H Over ${h1Over.line}`,`1H Over ${h1Over.line}`,mk(s.overH1(h1Over.line),h1Over.price),s.medH1)}
+      ${h1Under?nflSq(`1H Under ${h1Under.line}`,`1H Under ${h1Under.line}`,mk(1-s.overH1(h1Under.line),h1Under.price),s.medH1):''}
     </div>`:''}
     `:''}
 
     ${nflProps.length?`<div class="mktlab" style="margin-top:8px">Props (${nflProps.length})</div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
-      ${nflProps.map(p=>betSq(`${p.player} ${p.stat} ${p.line}+`,p.e)).join('')}
+    <div class="betgrid">
+      ${nflProps.map(p=>nflSq(`${p.player} ${p.stat} ${p.line}+`,`${p.player} ${p.stat} ${p.line}+`,p.e,(p.simP*100).toFixed(0)+'%')).join('')}
     </div>`:''}
 
     ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
@@ -13905,6 +14015,9 @@ function nflCardFull(g){
       </div>
       <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px;text-align:right">${consML.homePct||'?'}% ${g.home.abbr}</span>
     </div>`:''}
+
+    <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
+    <div class="legend" style="margin-top:2px"><span>◆ SUPREME = book price, model edge and outside sources all agree</span><span>STRONG = two of three</span><span>⚠ CONFLICT = they disagree</span></div>
 
     <div class="exprow" style="margin-top:10px">
       <button onclick="nflTogglePanel('trends','${id}',this)">Trends</button>
