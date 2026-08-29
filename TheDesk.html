@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.33</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.35</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -798,6 +798,7 @@ let NCAAF_POWER={};                       // {team key: {offPPG, defPPG, wins, l
 let NCAAF_POWER_RATED=0,NCAAF_POWER_FLAT=true;
 let NFL_DEPTH={},NFL_DEPTH_STATUS='';     // {team abbr: {players:[{name,pos,depth}]}}
 let CFBD_STATUS='';
+let CFB_PORTAL={},CFB_PORTAL_STATUS='',CFB_PLAYER_STATS={};
 let NFL_POWER_RATED=0,NFL_POWER_FLAT=false; // is there real season data behind the NFL projections?
 let NCAAF_WEEK=null,NCAAF_SEASON=null;
 
@@ -1030,7 +1031,7 @@ function importBackup(input){
 async function reloadCFBD(){
   const el=document.getElementById('dataFeedStatus');
   if(el)el.innerHTML='Fetching SP+ ratings…';
-  await fetchCFBDRatings(true);renderDataFeedStatus();
+  await fetchCFBDRatings(true);await fetchCFBPortal(true);renderDataFeedStatus();
 }
 async function reloadNFLDepth(){
   const el=document.getElementById('dataFeedStatus');
@@ -1062,6 +1063,9 @@ function renderDataFeedStatus(){
     'CFB SP+: <b style="color:'+(spTeams?'var(--win)':'var(--mute)')+'">'+
       (spTeams?spTeams+' teams':'not loaded')+'</b>'+
       (cs?' <span style="color:var(--mute)">('+cs+')</span>':'')+
+    '<br>CFB portal: <b style="color:'+(Object.keys((typeof CFB_PORTAL!=='undefined'&&CFB_PORTAL)||{}).length?'var(--win)':'var(--mute)')+'">'+
+      (Object.keys((typeof CFB_PORTAL!=='undefined'&&CFB_PORTAL)||{}).length||'not loaded')+
+      (Object.keys((typeof CFB_PORTAL!=='undefined'&&CFB_PORTAL)||{}).length?' players':'')+'</b>'+
     '<br>NFL depth charts: <b style="color:'+(depthTeams?'var(--win)':'var(--mute)')+'">'+
       (depthTeams?depthTeams+' teams · '+players+' skill players':'not loaded')+'</b>'+
       (ds?' <span style="color:var(--mute)">('+ds+')</span>':'');
@@ -1469,8 +1473,10 @@ async function analyzeBookShots(){
           r.onload=e=>res(e.target.result);
           r.onerror=()=>rej(new Error('Could not read '+f.name));r.readAsText(f);});
       }catch(err){diag.push(f.name+': unreadable');continue}
-      const result=parseSlateText(text);
-      if(result.sport)sportsSeen.add(result.sport);
+      // a single file may carry more than one sport
+      const result=parseSlateTextMulti(text)||parseSlateText(text);
+      if(result.sports)result.sports.forEach(sp=>sportsSeen.add(sp));
+      else if(result.sport)sportsSeen.add(result.sport);
       result.picks.forEach(p=>allParsed.push(p));
       allTrends=allTrends.concat(result.trends||[]);
       allConsensus=allConsensus.concat(result.consensus||[]);
@@ -1577,7 +1583,29 @@ function saveExtBySport(sport,picks,trends,consensus,el){
   if(el&&typeof renderExtResults==='function')renderExtResults(el,picks,trends,consensus);
 }
 function saveBookOdds(picks,el,fileSport){
-  const sport=fileSport||(picks&&picks.length&&picks[0].sport)||ACTIVE_SPORT;
+  /* Picks now carry their own sport, so one upload containing MLB, NFL and CFB
+     slates files each group into its own store rather than forcing the whole
+     file into a single destination. */
+  const groups={};
+  (picks||[]).forEach(p=>{(groups[p.sport||fileSport||ACTIVE_SPORT]||(groups[p.sport||fileSport||ACTIVE_SPORT]=[])).push(p)});
+  const sports=Object.keys(groups);
+  if(sports.length>1){
+    const counts=[];
+    sports.forEach(sp=>{
+      const rows=groups[sp];
+      if(sp==='nfl')saveNFLBookOdds(rows,null);
+      else if(sp==='ncaaf')saveNCAAFBookOdds(rows,null);
+      else saveBookOdds(rows,null,'mlb');
+      counts.push(rows.length+' '+sp.toUpperCase());
+    });
+    if(el)el.innerHTML='<div class="tkt"><h3>Lines locked in</h3><div class="sub">'+
+      counts.join(' &middot; ')+' selections filed to their own boards.</div></div>';
+    if(typeof renderNFL==='function'&&ACTIVE_SPORT==='nfl')renderNFL();
+    if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
+    if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
+    return;
+  }
+  const sport=sports[0]||fileSport||ACTIVE_SPORT;
   if(sport==='nfl'){saveNFLBookOdds(picks,el);return;}
   if(sport==='ncaaf'){saveNCAAFBookOdds(picks,el);return;}
   const d=today();
@@ -5459,6 +5487,33 @@ function boxFor(gid){
 // Resolve a leg to its game's actual result, wherever that lives.
 // Returns {a,h,fa,fh,f5ok,gid,live,source} or null if genuinely unknown yet.
 function resolveLeg(leg,ticketDate){
+  /* Tickets can now mix sports, so a leg tagged nfl/ncaaf must be resolved
+     against ITS OWN schedule. Previously every leg was looked up in the MLB
+     GAMES array only — a football leg matched nothing, returned null forever,
+     and produced a ticket that could never be graded either way. */
+  if(leg.sport==='nfl'||leg.sport==='ncaaf'){
+    const arr=leg.sport==='nfl'?(NFL_GAMES||[]):(NCAAF_GAMES||[]);
+    let fg=null;
+    if(leg.gid)fg=arr.find(z=>z.id===leg.gid);
+    if(!fg)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
+    if(fg){
+      const done=fg.status==='Final'||fg.abstract==='Final';
+      if(done&&fg.awayScore!=null)
+        return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:false,source:'memory',g:fg};
+      const live=fg.status==='InProgress'||fg.abstract==='Live';
+      if(live&&fg.awayScore!=null)
+        return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:true,source:'memory',g:fg,completed:null};
+      return null;                       // scheduled, hasn't kicked off
+    }
+    // finished football games fall back to their own archive
+    const farc=get(leg.sport==='nfl'?LS.nflarc:'d4.ncaafarc',{});
+    for(const d of Object.keys(farc)){
+      const row=(farc[d]||[]).find(r=>r.game===leg.game||r.gid===leg.gid);
+      if(row&&row.awayScore!=null)
+        return{a:+row.awayScore,h:+row.homeScore,gid:row.gid||leg.gid,live:false,source:'archive'};
+    }
+    return null;
+  }
   // 1) in-memory GAMES — today's slate, and the only place with live in-progress scores
   let g=null;
   if(leg.gid)g=GAMES.find(z=>z.id===leg.gid);
@@ -6501,6 +6556,49 @@ function marketPool(){
       });
     }
   });
+
+  /* Every ticket builder — templates, custom, specialty — draws from this one
+     pool, so adding football here makes all of them cross-sport at once.
+     Same discipline as MLB: a market only enters the pool when a REAL posted
+     line backs it, never a synthetic model number. Legs carry their sport so
+     resolveLeg can grade them against the right schedule. */
+  const football=(games,sims,sport,linesFor)=>{
+    (games||[]).forEach(g=>{
+      if(g.status==='Final'||g.abstract==='Final')return;
+      const s=(sims||{})[g.id];if(!s)return;
+      const gl=g.away.abbr+'@'+g.home.abbr;
+      let lines=[];try{lines=linesFor(gl)||[]}catch(e){}
+      if(!lines.length)return;                       // no real book line -> no pick
+      const find=(m,side)=>lines.find(x=>x.market===m&&x.side===side);
+      const ml=(side)=>{
+        const bk=find('moneyline',side);if(!bk)return;
+        const p=side==='away'?s.aw:s.hw;
+        if(p>=.5)pool.push({p,pick:g[side].abbr+' ML',game:gl,kind:'side',sport,gid:g.id});
+      };
+      ml('away');ml('home');
+      ['away','home'].forEach(side=>{
+        const bk=find('spread',side);if(!bk||bk.line==null)return;
+        const p=side==='away'?s.awayCover(bk.line):s.homeCover(bk.line);
+        if(p!=null&&!isNaN(p)&&p>=.5)
+          pool.push({p,pick:g[side].abbr+' '+(bk.line>0?'+':'')+bk.line,game:gl,kind:'spread',sport,gid:g.id});
+      });
+      const ov=find('total','over'),un=find('total','under');
+      if(ov&&ov.line!=null){
+        const o=s.over(ov.line);
+        if(o>=.5)pool.push({p:o,pick:'Over '+ov.line,game:gl,kind:'total',sport,gid:g.id});
+        else if(un&&(1-o)>=.5)pool.push({p:1-o,pick:'Under '+un.line,game:gl,kind:'total',sport,gid:g.id});
+      }
+    });
+  };
+  try{
+    if(typeof NFL_GAMES!=='undefined')
+      football(NFL_GAMES,typeof NFL_SIMS!=='undefined'?NFL_SIMS:{},'nfl',
+        typeof nflBookLinesFor==='function'?nflBookLinesFor:()=>[]);
+    if(typeof NCAAF_GAMES!=='undefined')
+      football(NCAAF_GAMES,typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{},'ncaaf',
+        typeof ncaafBookLinesFor==='function'?ncaafBookLinesFor:()=>[]);
+  }catch(e){console.warn('football pool skipped:',e);}
+
   return pool.sort((a,b)=>b.p-a.p);
 }
 function deal(pool,used,n){
@@ -8630,6 +8728,51 @@ function detectSlateSport(text){
   }
   return null;
 }
+/* ── MULTI-SPORT UPLOADS ──────────────────────────────────────────────────
+   detectSlateSport() reads one sport for a whole file, so a single export
+   containing a CFB slate, an MLB slate and an NFL slate could only ever be
+   filed under one of them — the other two were silently dropped. Split the
+   file on bare sport headers first, then parse and file each section on its
+   own. One upload, three destinations. */
+function splitSportSections(text){
+  const lines=stripBOM(text).split('\n');
+  const out=[];let cur=null;
+  const isHdr=l=>{
+    const t=l.trim();
+    if(/^(MLB|NFL)$/i.test(t))return t.toUpperCase();
+    if(/^(NCAAF|CFB|COLLEGE\s*FOOTBALL)$/i.test(t))return 'NCAAF';
+    // also accept "MLB PICKS", "NFL SLATE" style headers on their own line
+    const m=t.match(/^(MLB|NFL|NCAAF|CFB)\b[\w\s]{0,20}$/i);
+    if(m&&!/[:@]/.test(t))return /CFB/i.test(m[1])?'NCAAF':m[1].toUpperCase();
+    return null;
+  };
+  for(const l of lines){
+    const h=isHdr(l);
+    if(h){cur={sport:h==='NCAAF'?'ncaaf':h.toLowerCase(),lines:[l]};out.push(cur);continue}
+    if(cur)cur.lines.push(l);
+  }
+  return out.filter(sec=>sec.lines.length>1).map(sec=>({sport:sec.sport,text:sec.lines.join('\n')}));
+}
+function parseSlateTextMulti(text){
+  const secs=splitSportSections(text);
+  if(secs.length<2)return null;               // single-sport file: normal path
+  const all={picks:[],trends:[],consensus:[],props:[],sports:[],bySport:{}};
+  secs.forEach(sec=>{
+    const r=parseSlateText(sec.text);
+    if(!r)return;
+    (r.picks||[]).forEach(p=>{p.sport=p.sport||sec.sport});
+    all.picks=all.picks.concat(r.picks||[]);
+    all.trends=all.trends.concat(r.trends||[]);
+    all.consensus=all.consensus.concat(r.consensus||[]);
+    all.props=all.props.concat(r.props||[]);
+    if(!all.sports.includes(sec.sport))all.sports.push(sec.sport);
+    const b=all.bySport[sec.sport]||(all.bySport[sec.sport]={picks:[],trends:[],consensus:[]});
+    b.picks=b.picks.concat(r.picks||[]);
+    b.trends=b.trends.concat(r.trends||[]);
+    b.consensus=b.consensus.concat(r.consensus||[]);
+  });
+  return all.picks.length||all.trends.length||all.consensus.length?all:null;
+}
 function parseSlateText(text){
   text=stripBOM(text);
   const sport=detectSlateSport(text);
@@ -10156,8 +10299,13 @@ function genTickets(mode){
             <span class="pp">${(x.p*100).toFixed(0)}%</span>
           </li>`;
         }
-        const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
-        return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
+        const jumpTo=(!x.sport&&gid&&GAMES.some(z=>z.id===gid))?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
+        // a mixed-sport ticket is unreadable without knowing which board a leg
+        // came from — MLB stays unlabelled so existing tickets look unchanged
+        const sportTag=x.sport?`<span style="font-family:'IBM Plex Mono';font-size:8px;
+          letter-spacing:.06em;color:var(--mute);border:1px solid var(--rule);
+          border-radius:3px;padding:0 4px;margin-left:4px">${x.sport==='ncaaf'?'CFB':x.sport.toUpperCase()}</span>`:'';
+        return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span>${sportTag} <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
       }).join('');
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
       const lockBadge=t.finalized
@@ -12296,6 +12444,7 @@ async function boot(){
      throw a temporal-dead-zone error. Wait for the script to actually finish
      instead of guessing at a delay. */
   whenScriptReady(()=>{fetchCFBDRatings().catch(()=>{})});
+  whenScriptReady(()=>{fetchCFBPortal().catch(()=>{})},2000);
   whenScriptReady(()=>{fetchNFLDepthCharts().catch(()=>{})},1200);
   try{
     const sp=localStorage.getItem('d4.activeSport');
@@ -12375,7 +12524,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.33
+   NFL ENGINE — BUILD v1.35
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12715,7 +12864,11 @@ function nflAbbrFor(s){
   for(const name in idx){if(name.length>3&&name.length>bestLen&&k.includes(name)){best=idx[name];bestLen=name.length}}
   return best;
 }
-function parseNFLSlateText(text){
+function parseNFLSlateText(text,opts){
+  /* CFB reuses this grammar but must resolve team names against its own
+     schedule — running college names through the NFL abbreviation table
+     returns null for every team, which silently produced zero picks. */
+  const _resolve=(opts&&opts.resolve)||nflAbbrFor;
   const picks=[],trends=[],consensus=[],props=[];
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
   const NFL_NORM={'WAS':'WSH','LAR':'LAR','LA':'LAR','LV':'LV','OAK':'LV'};
@@ -12725,7 +12878,9 @@ function parseNFLSlateText(text){
 
   const isConsensus=lines.some(l=>/\d+%\s*\//.test(l)||/TOTALS/i.test(l));
   const isTrends=lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under)\s+is\s+\d/i.test(l));
-  const isPicks=lines.some(l=>/^ML:|^OU:|^RL:|^SPREAD:|^H1SPREAD:|^H1OU:|^PROP:/i.test(l));
+  const isPicks=lines.some(l=>/^ML:|^OU:|^RL:|^SPREAD:|^H1SPREAD:|^H1ML:|^H1OU:|^Q1SPREAD:|^Q1ML:|^Q1OU:|^PROP:/i.test(l));
+  // NFL resolves by abbreviation table; CFB resolves against the loaded schedule
+  const resolveTeam=x=>_resolve(x);
 
   /* SOURCE: lines were skipped outright, so no pick carried an attribution.
      Without it there is no way to count how many independent outlets landed on
@@ -12742,7 +12897,7 @@ function parseNFLSlateText(text){
       // accept "WSH @ BAL" and "Washington Commanders @ Baltimore Ravens" alike
       const gameM=l.match(/^(.+?)\s*@\s*(.+?)(?:\s*\|.*)?$/);
       if(gameM){
-        const a=nflAbbrFor(gameM[1]),h=nflAbbrFor(gameM[2]);
+        const a=_resolve(gameM[1]),h=_resolve(gameM[2]);
         if(a&&h){curAway=a;curHome=h;continue;}
       }
       if(!curAway)continue;
@@ -12750,7 +12905,7 @@ function parseNFLSlateText(text){
       // ML: KC -200 / LV +170
       const mlM=l.match(/^ML:\s*(.+?)\s*([+\-]\d+)\s*\/\s*(.+?)\s*([+\-]\d+)\s*$/i);
       if(mlM){
-        const s1=nflAbbrFor(mlM[1]),s2=nflAbbrFor(mlM[3]);
+        const s1=_resolve(mlM[1]),s2=_resolve(mlM[3]);
         picks.push({away:curAway,home:curHome,game,market:'moneyline',side:s1===curAway?'away':'home',price:+mlM[2]});
         picks.push({away:curAway,home:curHome,game,market:'moneyline',side:s2===curHome?'home':'away',price:+mlM[4]});
         continue;
@@ -12758,7 +12913,7 @@ function parseNFLSlateText(text){
       // SPREAD: KC -3 (-110) / LV +3 (-110)
       const spM=l.match(/^SPREAD:\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
       if(spM){
-        const s1=nflAbbrFor(spM[1]),s2=nflAbbrFor(spM[4]);
+        const s1=_resolve(spM[1]),s2=_resolve(spM[4]);
         picks.push({away:curAway,home:curHome,game,market:'spread',side:s1===curAway?'away':'home',line:+spM[2],price:+spM[3]});
         picks.push({away:curAway,home:curHome,game,market:'spread',side:s2===curHome?'home':'away',line:+spM[5],price:+spM[6]});
         continue;
@@ -12769,6 +12924,39 @@ function parseNFLSlateText(text){
         picks.push({away:curAway,home:curHome,game,market:'total',side:'over',line:+ouM[1],price:+ouM[2]});
         picks.push({away:curAway,home:curHome,game,market:'total',side:'under',line:+ouM[3],price:+ouM[4]});
         continue;
+      }
+      /* Period markets accepted full names only after this widening — the
+         book writes "North Carolina", not "UNC". Also added first-half
+         moneyline and the entire first-quarter set, which sportsbetting.ag
+         posts for every game and the parser previously ignored outright. */
+      const perM=l.match(/^(H1|Q1)(SPREAD|ML|OU):\s*(.+)$/i);
+      if(perM){
+        const per=perM[1].toUpperCase()==='H1'?'h1':'q1';
+        const kind=perM[2].toUpperCase(), rest=perM[3];
+        if(kind==='OU'){
+          const m=rest.match(/o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i);
+          if(m){
+            picks.push({away:curAway,home:curHome,game,market:per+'total',side:'over',line:+m[1],price:+m[2]});
+            picks.push({away:curAway,home:curHome,game,market:per+'total',side:'under',line:+m[3],price:+m[4]});
+            continue;
+          }
+        }else if(kind==='ML'){
+          const m=rest.match(/^(.+?)\s*([+\-]\d+)\s*\/\s*(.+?)\s*([+\-]\d+)\s*$/);
+          if(m){
+            const s1=resolveTeam(m[1]);
+            picks.push({away:curAway,home:curHome,game,market:per+'ml',side:s1===curAway?'away':'home',price:+m[2]});
+            picks.push({away:curAway,home:curHome,game,market:per+'ml',side:s1===curAway?'home':'away',price:+m[4]});
+            continue;
+          }
+        }else{
+          const m=rest.match(/^(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/);
+          if(m){
+            const s1=resolveTeam(m[1]);
+            picks.push({away:curAway,home:curHome,game,market:per+'spread',side:s1===curAway?'away':'home',line:+m[2],price:+m[3]});
+            picks.push({away:curAway,home:curHome,game,market:per+'spread',side:s1===curAway?'home':'away',line:+m[5],price:+m[6]});
+            continue;
+          }
+        }
       }
       // H1SPREAD: KC -1.5 (-115) / LV +1.5 (+105)
       const h1spM=l.match(/^H1SPREAD:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
@@ -13187,6 +13375,34 @@ const NFL_PROP_MODEL={
    first-5-innings markets. Football needs its own vocabulary — spread, h1spread,
    h1total, prop — so the tier system compares like with like instead of
    silently matching nothing and reporting "no outside sources" forever. */
+/* CFB has no fixed abbreviation table the way the NFL does, so the loaded
+   schedule is the source of truth: match an uploaded name ("North Carolina")
+   to the abbreviation the board actually uses ("UNC"). Without this, book
+   lines saved as NORTH-CAROLI@TCU-HORNED never matched UNC@TCU and the CFB
+   squares stayed empty no matter how clean the upload was. */
+/* College names carry diacritics the book strips: the schedule says
+   "San Jose State" with an accent, the upload says "San Jose State" without.
+   Decompose and drop combining marks so the two forms compare equal. */
+function cfbKeyOf(x){
+  return String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+function ncaafAbbrFor(raw){
+  if(!raw)return null;
+  const k=cfbKeyOf(raw);
+  if(!k)return null;
+  for(const g of (NCAAF_GAMES||[])){
+    for(const t of [g.away,g.home]){
+      if(!t)continue;
+      const cands=[t.abbr,t.name,t.shortName,t.location,t.displayName]
+        .filter(Boolean).map(cfbKeyOf);
+      if(cands.includes(k))return t.abbr;
+      // "NORTHCAROLINA" should match "NORTHCAROLINATARHEELS"
+      if(cands.some(c=>c.length>3&&(c.startsWith(k)||k.startsWith(c))))return t.abbr;
+    }
+  }
+  return null;
+}
 function nflMarketMatchesPick(ext,pick){
   const p=String(pick||'').toLowerCase();
   switch(ext.market){
@@ -14335,7 +14551,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.33
+   NCAAF ENGINE — BUILD v1.35
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -14520,6 +14736,126 @@ function applyCFBDRatings(map){
   ncaafPowerFlags();
   NCAAF_SIMS={};
   if(ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
+}
+/* ── CFB TRANSFER PORTAL ──────────────────────────────────────────────────
+   College rosters churn in a way NFL rosters do not. A team's leading receiver
+   in Week 1 may have zero snaps for that school and a full season of
+   production somewhere else, so "this player has no stats for this team" is
+   the normal case, not a data gap. Looking a transfer up only under their new
+   team returns nothing and the model treats a proven starter as unknown.
+
+   This indexes the portal by player, then resolves stats against the team they
+   actually played for. Prior-team production is always labelled as such — it
+   is a real signal, but it was earned against a different schedule, and a
+   G5-to-P4 move in particular should not be read at face value. */
+const cfbNameKey=n=>cfbKeyOf(n);
+async function fetchCFBPortal(force){
+  const key=get(LS.cfbd,'');
+  if(!key){CFB_PORTAL_STATUS='no key';return false;}
+  const cache=get('d4.cfbportal',{});
+  if(!force&&cache.ts&&(Date.now()-cache.ts)<6048e5&&cache.v&&Object.keys(cache.v).length){
+    CFB_PORTAL=cache.v;CFB_PORTAL_STATUS='cached '+Object.keys(CFB_PORTAL).length+' players';return true;
+  }
+  const year=new Date().getFullYear();
+  try{
+    let rows=await cfbdGet('/player/portal?year='+year,key);
+    if(!Array.isArray(rows)||!rows.length)rows=await cfbdGet('/player/portal?year='+(year-1),key);
+    if(!Array.isArray(rows)||!rows.length){CFB_PORTAL_STATUS='no portal rows';return false;}
+    const map={};
+    rows.forEach(r=>{
+      const full=[r.firstName,r.lastName].filter(Boolean).join(' ').trim();
+      if(!full)return;
+      const from=(r.fromTeam&&(r.fromTeam.school||r.fromTeam))||r.origin||null;
+      const to=(r.toTeam&&(r.toTeam.school||r.toTeam))||r.destination||null;
+      if(!to)return;
+      const k=cfbNameKey(full);
+      map[k]=map[k]||[];
+      map[k].push({name:full,from,to,
+        pos:(r.position&&(r.position.position||r.position))||r.position||null,
+        season:r.season||year,stars:r.stars||null,eligibility:r.eligibility||null});
+    });
+    CFB_PORTAL=map;
+    set('d4.cfbportal',{ts:Date.now(),v:map});
+    CFB_PORTAL_STATUS='loaded '+Object.keys(map).length+' players';
+    return true;
+  }catch(e){CFB_PORTAL_STATUS='failed: '+(e&&e.message||e);return false;}
+}
+(function restoreCFBPortal(){
+  const c=get('d4.cfbportal',{});
+  if(c.v&&Object.keys(c.v).length){CFB_PORTAL=c.v;CFB_PORTAL_STATUS='cached '+Object.keys(c.v).length+' players';}
+})();
+// Season stats for one team, cached per team+year (a call each, so cache hard).
+async function fetchCFBPlayerSeason(team,year){
+  const key=get(LS.cfbd,'');if(!key||!team)return null;
+  const ck=cfbNameKey(team)+':'+year;
+  if(CFB_PLAYER_STATS[ck])return CFB_PLAYER_STATS[ck];
+  const disk=get('d4.cfbpstats',{});
+  if(disk[ck]&&disk[ck].ts&&(Date.now()-disk[ck].ts)<6048e5){
+    CFB_PLAYER_STATS[ck]=disk[ck].v;return disk[ck].v;
+  }
+  try{
+    const rows=await cfbdGet('/stats/player/season?year='+year+'&team='+encodeURIComponent(team),key);
+    if(!Array.isArray(rows))return null;
+    const byPlayer={};
+    rows.forEach(r=>{
+      const k=cfbNameKey(r.player);if(!k)return;
+      (byPlayer[k]=byPlayer[k]||{player:r.player,team,year,stats:{}});
+      byPlayer[k].stats[(r.category||'')+'.'+(r.statType||'')]=+r.stat;
+    });
+    CFB_PLAYER_STATS[ck]=byPlayer;
+    disk[ck]={ts:Date.now(),v:byPlayer};set('d4.cfbpstats',disk);
+    return byPlayer;
+  }catch(e){console.warn('CFB player stats failed',e);return null;}
+}
+/* The lookup the rest of the app should use for a college player: returns
+   their production and says plainly WHICH team earned it. */
+async function cfbPlayerContext(name,currentTeam){
+  const k=cfbNameKey(name);
+  const moves=(CFB_PORTAL[k]||[]).slice().sort((a,b)=>(b.season||0)-(a.season||0));
+  const move=moves.find(m=>!currentTeam||cfbNameKey(m.to)===cfbNameKey(currentTeam))||moves[0]||null;
+  const year=new Date().getFullYear();
+  // current team first — a returning starter needs no portal lookup at all
+  let cur=await fetchCFBPlayerSeason(currentTeam,year-1);
+  if(cur&&cur[k])return{player:cur[k].player,team:currentTeam,statsTeam:currentTeam,
+    transferred:false,stats:cur[k].stats,year:year-1,note:null};
+  if(move&&move.from){
+    const prior=await fetchCFBPlayerSeason(move.from,year-1);
+    if(prior&&prior[k])return{player:prior[k].player,team:currentTeam,statsTeam:move.from,
+      transferred:true,stats:prior[k].stats,year:year-1,pos:move.pos,
+      note:'Prior-team production at '+move.from+' — earned against a different schedule.'};
+    return{player:name,team:currentTeam,statsTeam:move.from,transferred:true,stats:null,
+      year:year-1,pos:move.pos,note:'Transferred from '+move.from+'; no season stats found.'};
+  }
+  return{player:name,team:currentTeam,statsTeam:null,transferred:false,stats:null,note:'No prior production found.'};
+}
+// Everyone who transferred INTO a given school this cycle.
+function cfbPortalPanel(g){
+  if(!Object.keys(CFB_PORTAL||{}).length)
+    return '<div class="empty">Portal data not loaded. Add a CollegeFootballData key in Settings, then use "Reload CFB SP+ ratings".</div>';
+  const side=(t,label)=>{
+    const inc=cfbIncomingTransfers(t.name||t.abbr);
+    if(!inc.length)return `<div class="mktlab" style="margin-top:8px">${label} — no incoming transfers found</div>`;
+    const rows=inc.slice(0,15).map(m=>`<div style="display:flex;justify-content:space-between;gap:10px">
+      <span>${m.name}${m.pos?` <span style="color:var(--mute)">${m.pos}</span>`:''}</span>
+      <span style="color:var(--mute)">from ${m.from||'—'}${m.stars?` · ${m.stars}★`:''}</span></div>`).join('');
+    return `<div class="mktlab" style="margin-top:8px">${label} — ${inc.length} incoming</div>
+      <div class="sub" style="font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.7">${rows}</div>`;
+  };
+  return side(g.away,g.away.abbr)+side(g.home,g.home.abbr)+
+    `<div class="sub" style="margin-top:8px;color:var(--mute);font-size:10px">
+      Production listed for a transfer was earned at their previous school, against a
+      different schedule. Treat a G5-to-P4 move with more caution than the raw numbers suggest.</div>`;
+}
+function cfbIncomingTransfers(team){
+  if(!team)return[];
+  const out=[];const tk=cfbNameKey(team);
+  Object.keys(CFB_PORTAL).forEach(k=>{
+    (CFB_PORTAL[k]||[]).forEach(m=>{
+      if(m.to&&cfbNameKey(m.to)===tk)out.push(m);
+      else if(m.to&&tk.length>3&&cfbNameKey(m.to).startsWith(tk))out.push(m);
+    });
+  });
+  return out;
 }
 // ── NCAAF Power Ratings (ESPN) ────────────────────────────────────────────────
 async function fetchNCAAFPowerRatings(){
@@ -14835,11 +15171,13 @@ function ncaafCard(g){
       <button onclick="ncaafTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="ncaafTogglePanel('alt','${id}',this)">Alt Lines</button>
+      <button onclick="ncaafTogglePanel('portal','${id}',this)">Portal</button>
       <button onclick="ncaafTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
     <div class="panel" id="p-ncaaftrends-${id}">${ncaafTrendPanel(g,s)}</div>
     <div class="panel" id="p-ncaafag-${id}">${ncaafGameAG(g,s)}</div>
     <div class="panel" id="p-ncaafalt-${id}">${footballAltPanel(g,s)}</div>
+    <div class="panel" id="p-ncaafportal-${id}">${cfbPortalPanel(g)}</div>
     <div class="panel" id="p-ncaafmybets-${id}"></div>
   </div>`;
 }
@@ -15011,38 +15349,18 @@ function parseNCAAFSlateText(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
   const isConsensus=lines.some(l=>/\d+%\s*\//.test(l)||/TOTALS/i.test(l));
   const isTrends=lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under)\s+is\s+\d/i.test(l));
-  const isPicks=lines.some(l=>/^ML:|^SPREAD:|^OU:/i.test(l));
+  const isPicks=lines.some(l=>/^ML:|^SPREAD:|^OU:|^H1SPREAD:|^H1ML:|^H1OU:|^Q1SPREAD:|^Q1ML:|^Q1OU:/i.test(l));
   if(isPicks){
-    let curAway=null,curHome=null;
-    for(const l of lines){
-      if(/^NCAAF|^Source:|^Proj:/i.test(l))continue;
-      const gameM=l.match(/^(.+?)\s*@\s*(.+?)(\s*\|.*)?$/);
-      if(gameM&&!(/^(ML|SPREAD|OU|H1):/i.test(l))){
-        curAway=(gameM[1]||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12);
-        curHome=(gameM[2]||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12);
-        continue;
-      }
-      if(!curAway)continue;
-      const game=curAway+'@'+curHome;
-      const mlM=l.match(/^ML:\s*(.+?)\s*([+\-]\d+)\s*\/\s*(.+?)\s*([+\-]\d+)$/i);
-      if(mlM){
-        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:'away',price:+mlM[2]});
-        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:'home',price:+mlM[4]});
-        continue;
-      }
-      const spM=l.match(/^SPREAD:\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
-      if(spM){
-        picks.push({away:curAway,home:curHome,game,market:'spread',side:'away',line:+spM[2],price:+spM[3]});
-        picks.push({away:curAway,home:curHome,game,market:'spread',side:'home',line:+spM[5],price:+spM[6]});
-        continue;
-      }
-      const ouM=l.match(/^OU:\s*o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i);
-      if(ouM){
-        picks.push({away:curAway,home:curHome,game,market:'total',side:'over',line:+ouM[1],price:+ouM[2]});
-        picks.push({away:curAway,home:curHome,game,market:'total',side:'under',line:+ouM[3],price:+ouM[4]});
-        continue;
-      }
-    }
+    /* CFB used to have a cut-down picks parser with no first-half or
+       first-quarter markets and a .slice(0,12) name mangle that produced keys
+       like NORTH-CAROLI@TCU-HORNED — which never matched the UNC@TCU key the
+       board looks up. Reuse the football grammar wholesale, then resolve team
+       names against the loaded CFB schedule so the keys line up. */
+    const cfbResolve=x=>ncaafAbbrFor(x)||
+      (String(x||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12)||null);
+    const r=parseNFLSlateText(text.replace(/^\s*(NCAAF|CFB|COLLEGE FOOTBALL)/i,'NFL'),{resolve:cfbResolve});
+    const fixed=(r.picks||[]).map(p=>({...p,sport:'ncaaf'}));
+    return{picks:fixed,trends:r.trends||[],consensus:r.consensus||[],props:r.props||[],sport:'ncaaf',isNCAAF:true};
   }
   if(isConsensus){
     let inTotals=false;
