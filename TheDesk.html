@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.30</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.33</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -626,6 +626,7 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
       Everything below is optional — the simulator runs fully without any of them.</div>
       <input id="keyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
       <input id="aiIn" placeholder="gemini api key — chat &amp; screenshot reading" autocomplete="off" spellcheck="false">
+      <input id="cfbdIn" placeholder="collegefootballdata.com key — CFB SP+ ratings (free, 1000/mo)" autocomplete="off" spellcheck="false">
       <div class="sub" style="margin:6px 0 8px;font-family:'IBM Plex Mono';font-size:10.5px">
         Vision model: <b id="geminiModelNow" style="color:var(--gold)">—</b>
         <span style="color:var(--mute)"> · re-pins itself automatically if Google retires it</span>
@@ -646,6 +647,11 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
     <div class="tkt">
       <div class="sub" id="backupStatus" style="margin-bottom:8px"></div>
       <div class="sub" id="storageStatus" style="margin-bottom:8px"></div>
+      <div class="sub" id="dataFeedStatus" style="margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <button onclick="reloadCFBD()">Reload CFB SP+ ratings</button>
+        <button onclick="reloadNFLDepth()">Reload NFL depth charts</button>
+      </div>
       <button onclick="freeStorageNow()" style="margin-bottom:10px">Free space (keep graded history)</button>
       <div class="bar" style="margin-top:0">
         <button class="primary" onclick="exportBackup()">Export everything to a file</button>
@@ -776,13 +782,22 @@ const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',p
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus',
 nflgames:'d4.nflgames',nflshots:'d4.nflshots',nflarc:'d4.nflarc',nflext:'d4.nflext',nfltrends:'d4.nfltrends',nflconsensus:'d4.nflconsensus',
-ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus'};
+cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl' | 'ncaaf'
 let NFL_GAMES=[],NFL_SIMS={}; // parallel NFL game store
 let NFL_WEEK=null,NFL_SEASON=null; // current week/season being viewed
 let NCAAF_GAMES=[],NCAAF_SIMS={};
+/* These belong to the CFB and NFL engine sections far below, but boot() and
+   doSportSwitch() run from the middle of the file and reach them first. Left
+   declared beside their engines, a `let` in the temporal dead zone threw a
+   ReferenceError that killed the whole script on a fresh install. Declared up
+   here they are simply empty until their engine fills them. */
+let NCAAF_POWER={};                       // {team key: {offPPG, defPPG, wins, losses, src}}
+let NCAAF_POWER_RATED=0,NCAAF_POWER_FLAT=true;
+let NFL_DEPTH={},NFL_DEPTH_STATUS='';     // {team abbr: {players:[{name,pos,depth}]}}
+let CFBD_STATUS='';
 let NFL_POWER_RATED=0,NFL_POWER_FLAT=false; // is there real season data behind the NFL projections?
 let NCAAF_WEEK=null,NCAAF_SEASON=null;
 
@@ -1012,6 +1027,45 @@ function importBackup(input){
 /* Storage was previously invisible. When it filled, writes just stopped and
    the app looked like it was losing data at random. This makes the ceiling
    legible before it is hit. */
+async function reloadCFBD(){
+  const el=document.getElementById('dataFeedStatus');
+  if(el)el.innerHTML='Fetching SP+ ratings…';
+  await fetchCFBDRatings(true);renderDataFeedStatus();
+}
+async function reloadNFLDepth(){
+  const el=document.getElementById('dataFeedStatus');
+  if(el)el.innerHTML='Fetching 32 rosters + depth charts (about 15s)…';
+  await fetchNFLDepthCharts(true);renderDataFeedStatus();
+}
+let SCRIPT_READY=false;
+function whenScriptReady(fn,extraDelay){
+  const go=()=>setTimeout(()=>{try{fn()}catch(e){console.warn('deferred init failed',e)}},extraDelay||0);
+  if(SCRIPT_READY)return go();
+  const iv=setInterval(()=>{if(SCRIPT_READY){clearInterval(iv);go()}},50);
+  setTimeout(()=>clearInterval(iv),15000);
+}
+function renderDataFeedStatus(){
+  const el=document.getElementById('dataFeedStatus');if(!el)return;
+  /* This runs from the first-run setup branch, which executes ABOVE the NFL and
+     CFB engine sections where NCAAF_POWER / NFL_DEPTH are declared with let.
+     Naming them directly threw a temporal-dead-zone ReferenceError that killed
+     the entire script on a fresh install with no keys saved. Reach them through
+     typeof so the status line degrades instead of taking the app down. */
+  const POW=(typeof NCAAF_POWER!=='undefined'&&NCAAF_POWER)||{};
+  const DEP=(typeof NFL_DEPTH!=='undefined'&&NFL_DEPTH)||{};
+  const cs=(typeof CFBD_STATUS!=='undefined'&&CFBD_STATUS)||'';
+  const ds=(typeof NFL_DEPTH_STATUS!=='undefined'&&NFL_DEPTH_STATUS)||'';
+  const spTeams=Object.values(POW).filter(v=>v&&v.src==='SP+').length;
+  const depthTeams=Object.keys(DEP).length;
+  const players=Object.values(DEP).reduce((a,t)=>a+((t.players||[]).length),0);
+  el.innerHTML=
+    'CFB SP+: <b style="color:'+(spTeams?'var(--win)':'var(--mute)')+'">'+
+      (spTeams?spTeams+' teams':'not loaded')+'</b>'+
+      (cs?' <span style="color:var(--mute)">('+cs+')</span>':'')+
+    '<br>NFL depth charts: <b style="color:'+(depthTeams?'var(--win)':'var(--mute)')+'">'+
+      (depthTeams?depthTeams+' teams · '+players+' skill players':'not loaded')+'</b>'+
+      (ds?' <span style="color:var(--mute)">('+ds+')</span>':'');
+}
 function renderStorageStatus(){
   const el=document.getElementById('storageStatus');if(!el)return;
   const b=storageBytes(),mb=(b/1048576).toFixed(2);
@@ -1657,14 +1711,14 @@ function openSettings(){
 }
 function fillSettingsTab(){
   const v=(id,val)=>{const e=document.getElementById(id);if(e)e.value=val};
-  v('keyIn',get(LS.key,''));v('aiIn',get(LS.ai,''));v('sharpIn',get(LS.sharp,''));
+  v('keyIn',get(LS.key,''));v('aiIn',get(LS.ai,''));v('sharpIn',get(LS.sharp,''));v('cfbdIn',get(LS.cfbd,''));
   v('rundownIn',get(LS.rundown,''));v('oddspapiIn',get(LS.oddspapi,''));
   v('ghrepoIn',get(LS.ghrepo,''));v('ghtokenIn',get(LS.ghtoken,''));
-  renderUsage();renderBackupStatus();renderStorageStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
+  renderUsage();renderBackupStatus();renderStorageStatus();renderDataFeedStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
 }
 function saveSettingsTab(){
   const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
-  set(LS.key,v('keyIn'));set(LS.ai,v('aiIn'));set(LS.sharp,v('sharpIn'));
+  set(LS.key,v('keyIn'));set(LS.ai,v('aiIn'));set(LS.sharp,v('sharpIn'));set(LS.cfbd,v('cfbdIn'));
   set(LS.rundown,v('rundownIn'));set(LS.oddspapi,v('oddspapiIn'));
   localStorage.setItem('d4.setupDone','1');
   const el=document.getElementById('oddspapiDiag');
@@ -12235,6 +12289,14 @@ async function backfillUngradedBestDays(){
 async function boot(){
   /* The sport selection persisted on switch but nothing read it back, so every
      cold start dropped to MLB regardless of what was last being worked. */
+  /* boot() is invoked partway down the file, but the CFB and NFL engine
+     sections — and the let-declared NCAAF_POWER / NFL_DEPTH they own — are
+     defined further below. Firing these on a bare timer only worked because
+     parsing usually finished inside 1.5s; on a slow device it would race and
+     throw a temporal-dead-zone error. Wait for the script to actually finish
+     instead of guessing at a delay. */
+  whenScriptReady(()=>{fetchCFBDRatings().catch(()=>{})});
+  whenScriptReady(()=>{fetchNFLDepthCharts().catch(()=>{})},1200);
   try{
     const sp=localStorage.getItem('d4.activeSport');
     if(sp&&['mlb','nfl','ncaaf'].includes(sp)&&sp!=='mlb'){
@@ -12307,13 +12369,13 @@ async function boot(){
     document.getElementById('setup').classList.add('hide');
     boot();
   }else{
-    renderUsage();renderBackupStatus();renderStorageStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
+    renderUsage();renderBackupStatus();renderStorageStatus();renderDataFeedStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
     document.getElementById('setup').classList.remove('hide');
   }
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.30
+   NFL ENGINE — BUILD v1.33
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12984,6 +13046,131 @@ function nflEnvChips(g){
   if(Math.abs(e-1)>0.001)chips.push('ENV '+(e>1?'+':'')+Math.round((e-1)*100)+'%');
   return chips;
 }
+/* ── NFL DEPTH CHARTS (ESPN) ──────────────────────────────────────────────
+   Props were modelled with a flat 20% target share for every receiver, because
+   the engine had no idea who WR1 was. This pulls each team's roster once a day
+   and derives the skill-position ordering, so a prop line attaches to the
+   actual player rather than an average one.
+
+   Deliberately uses /roster and NOT /depthcharts: the depth chart endpoint
+   returns a separate $ref URL per player, which means ~80 extra requests per
+   team. The roster payload carries the athletes inline. 32 calls, once daily,
+   cached — not 2,500 on every render. */
+const NFL_SKILL_POS=new Set(['QB','RB','WR','TE','FB']);
+async function fetchNFLDepthCharts(force){
+  const cache=get(LS.nfldepth,{});
+  if(!force&&cache.ts&&(Date.now()-cache.ts)<864e5&&cache.v&&Object.keys(cache.v).length){
+    NFL_DEPTH=cache.v;NFL_DEPTH_STATUS='cached '+Object.keys(NFL_DEPTH).length+' teams';return true;
+  }
+  try{
+    const tr=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams');
+    const tj=await tr.json();
+    const teams=((tj.sports||[])[0]||{}).leagues?.[0]?.teams||[];
+    if(!teams.length){NFL_DEPTH_STATUS='team list empty';return false;}
+    const out={};
+    // sequential with a small gap — these are undocumented endpoints and the
+    // community guidance is explicitly to keep request volume low
+    for(const w of teams){
+      const t=w.team||{};if(!t.id)continue;
+      try{
+        const rr=await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${t.id}/roster`);
+        const rj=await rr.json();
+        const players=[];
+        (rj.athletes||[]).forEach(grp=>{
+          const list=Array.isArray(grp)?grp:(grp.items||[grp]);
+          list.forEach(a=>{
+            if(!a||!a.fullName)return;
+            const pos=((a.position&&(a.position.abbreviation||a.position.name))||'').toUpperCase();
+            if(!NFL_SKILL_POS.has(pos))return;
+            players.push({name:a.fullName,short:a.shortName||a.displayName||a.fullName,
+              pos,id:a.id,jersey:a.jersey||null,
+              exp:num(a.experience&&a.experience.years)||0});
+          });
+        });
+        /* The roster gives names and positions but NOT depth order. The
+           depth chart gives order but identifies players only by $ref URL.
+           Fetching those refs is the ~80-calls-per-team trap. Instead: pull the
+           depth chart once and pull the athlete ID out of each ref URL, then
+           join against the roster we already have. Two calls per team total. */
+        const byId={};players.forEach(p=>{if(p.id)byId[String(p.id)]=p});
+        try{
+          const dr=await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${t.id}/depthcharts`);
+          const dj=await dr.json();
+          (dj.items||dj.depthchart||[]).forEach(unit=>{
+            const posns=unit.positions||{};
+            Object.keys(posns).forEach(k=>{
+              const entry=posns[k]||{};
+              const abbr=((entry.position&&entry.position.abbreviation)||k||'').toUpperCase();
+              if(!NFL_SKILL_POS.has(abbr))return;
+              const ath=entry.athletes||[];
+              ath.forEach((a,i)=>{
+                const ref=String(a.athlete&&a.athlete['$ref']||a['$ref']||'');
+                const m=ref.match(/athletes\/(\d+)/);
+                const id=m?m[1]:(a.id?String(a.id):null);
+                const rank=(a.rank!=null?a.rank:i+1);
+                if(id&&byId[id])byId[id].depth=Math.min(byId[id].depth||99,rank);
+              });
+            });
+          });
+        }catch(e){/* depth order is a bonus; roster alone still works */}
+        // anyone the depth chart didn't rank falls in behind those it did
+        const seq={};
+        players.sort((a,b)=>(a.depth||99)-(b.depth||99)).forEach(p=>{
+          seq[p.pos]=(seq[p.pos]||0)+1;
+          if(!p.depth)p.depth=seq[p.pos];
+        });
+        if(players.length)out[(t.abbreviation||'').toUpperCase()]={players,ts:Date.now()};
+      }catch(e){/* one team failing must not kill the batch */}
+      await new Promise(r=>setTimeout(r,120));
+    }
+    if(!Object.keys(out).length){NFL_DEPTH_STATUS='no rosters parsed';return false;}
+    NFL_DEPTH=out;
+    set(LS.nfldepth,{ts:Date.now(),v:out});
+    NFL_DEPTH_STATUS='loaded '+Object.keys(out).length+' teams';
+    if(ACTIVE_SPORT==='nfl'&&typeof renderNFL==='function')renderNFL();
+    return true;
+  }catch(e){NFL_DEPTH_STATUS='failed: '+(e&&e.message||e);console.warn('NFL depth charts failed',e);return false;}
+}
+(function restoreNFLDepth(){
+  const c=get(LS.nfldepth,{});
+  if(c.v&&Object.keys(c.v).length){NFL_DEPTH=c.v;NFL_DEPTH_STATUS='cached '+Object.keys(c.v).length+' teams';}
+})();
+/* Find a rostered player by the name written on an uploaded PROP: line.
+   Book exports write "P.Mahomes" or "Patrick Mahomes II" — match on surname
+   plus first initial rather than requiring an exact string. */
+function nflFindPlayer(teamAbbr,rawName){
+  const roster=(NFL_DEPTH[String(teamAbbr||'').toUpperCase()]||{}).players||[];
+  if(!roster.length||!rawName)return null;
+  const clean=String(rawName).replace(/[.]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+  const parts=clean.split(' ').filter(Boolean);
+  const last=parts[parts.length-1], firstInit=(parts[0]||'')[0];
+  let hit=roster.find(p=>p.name.toLowerCase()===clean);
+  if(hit)return hit;
+  const byLast=roster.filter(p=>{
+    const pn=p.name.toLowerCase().split(' ');
+    return pn[pn.length-1]===last||pn.includes(last);
+  });
+  if(byLast.length===1)return byLast[0];
+  if(byLast.length>1&&firstInit){
+    const m=byLast.find(p=>p.name.toLowerCase()[0]===firstInit);
+    if(m)return m;
+  }
+  return byLast[0]||null;
+}
+/* Share of team volume for a player, from their position and roster depth.
+   Falls back to the old flat split when the roster hasn't loaded. */
+function nflShareFor(player,kind){
+  if(!player)return kind==='passing'?0.95:kind==='rushing'?0.55:0.20;
+  const p=player.pos;
+  if(kind==='passing')return p==='QB'?0.95:0.02;
+  if(kind==='rushing')return p==='RB'?(player.depth===1?0.60:player.depth===2?0.25:0.12)
+                              :p==='QB'?0.10:p==='FB'?0.05:0.04;
+  // receiving
+  if(p==='WR')return player.depth===1?0.25:player.depth===2?0.17:0.09;
+  if(p==='TE')return player.depth===1?0.15:0.05;
+  if(p==='RB')return player.depth===1?0.10:0.05;
+  return 0.06;
+}
 // ── UPGRADE 6: prop engine ──────────────────────────────────────────────────
 // Props are built from team-level power ratings and position splits, because
 // there is no per-player NFL stats feed the way MLB StatsAPI provides one. The
@@ -13053,19 +13240,31 @@ function buildNFLProps(g,s){
     else if(/rushing yard/.test(stat))  kind='rushing';
     else if(/receiving yard/.test(stat))kind='receiving';
 
+    /* Every receiver used to get a flat 20% of team passing yards regardless of
+       whether they were WR1 or the third tight end. With depth charts loaded we
+       can use the player's actual position and depth instead. When the roster
+       hasn't loaded, nflShareFor returns the old flat values, so this degrades
+       to previous behaviour rather than breaking. */
+    const teamAb=isHome?g.home.abbr:g.away.abbr;
+    const who=(typeof nflFindPlayer==='function')?nflFindPlayer(teamAb,bp.player):null;
+
     if(kind){
       const m=NFL_PROP_MODEL[kind];
-      const exp=(teamExp/25)*m.per25*oppAdj*m.share;
-      p=normTail((line-exp)/m.sd);          // P(yards > line)
+      const share=(typeof nflShareFor==='function')?nflShareFor(who,kind):m.share;
+      const exp=(teamExp/25)*m.per25*oppAdj*share;
+      // a deeper role is also a noisier one — widen the spread down the chart
+      const sd=m.sd*(who&&who.depth>1?1.15:1);
+      p=normTail((line-exp)/sd);          // P(yards > line)
     } else if(/reception/.test(stat)){
-      const yds=(teamExp/25)*245*oppAdj*0.20;
+      const share=(typeof nflShareFor==='function')?nflShareFor(who,'receiving'):0.20;
+      const yds=(teamExp/25)*245*oppAdj*share;
       p=poisAtLeast(Math.ceil(line),yds/8); // ~8 yards per reception
     } else if(/passing touchdown/.test(stat)){
-      p=poisAtLeast(Math.ceil(line),(teamExp/25)*1.6*oppAdj);
+      p=poisAtLeast(Math.ceil(line),(teamExp/25)*1.6*oppAdj*(who&&who.pos!=='QB'?0.1:1));
     } else if(/rushing touchdown/.test(stat)){
-      p=poisAtLeast(Math.ceil(line),(teamExp/25)*0.7*oppAdj);
+      p=poisAtLeast(Math.ceil(line),(teamExp/25)*0.7*oppAdj*(who?nflShareFor(who,'rushing')/0.55:1));
     } else if(/receiving touchdown/.test(stat)){
-      p=poisAtLeast(Math.ceil(line),(teamExp/25)*0.45*oppAdj);
+      p=poisAtLeast(Math.ceil(line),(teamExp/25)*0.45*oppAdj*(who?nflShareFor(who,'receiving')/0.20:1));
     } else if(/touchdown/.test(stat)){
       p=poisAtLeast(Math.ceil(line),(teamExp/25)*0.6*oppAdj);
     }
@@ -13075,6 +13274,7 @@ function buildNFLProps(g,s){
     const fair=nflFairML(p);
     out.push({
       player:bp.player,stat:bp.stat,line,price,
+      matched:who?who.name:null,pos:who?who.pos:null,depth:who?who.depth:null,
       simP:Math.round(p*1000)/1000,fairML:fair,
       ev:evPct(p,price),
       // the object the bet square renders
@@ -14022,15 +14222,78 @@ function nflCardFull(g){
     <div class="exprow" style="margin-top:10px">
       <button onclick="nflTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="nflTogglePanel('ag','${id}',this)">A-G</button>
+      <button onclick="nflTogglePanel('alt','${id}',this)">Alt Lines</button>
+      <button onclick="nflTogglePanel('props','${id}',this)">Props</button>
       <button onclick="nflTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
     <div class="panel" id="p-nfltrends-${id}">${nflTrendPanel(g,s)}</div>
     <div class="panel" id="p-nflag-${id}">${renderNFLGameAG(g,s)}</div>
+    <div class="panel" id="p-nflalt-${id}">${footballAltPanel(g,s)}</div>
+    <div class="panel" id="p-nflprops-${id}">${nflPropsPanel(g,s)}</div>
     <div class="panel" id="p-nflmybets-${id}"></div>
   </div>`;
 }
 
 
+/* Football alt lines. The MLB altLines() walks run lines at ±1.5/2.5/3.5 and
+   totals from 5.5 to 13.5 — baseball ranges that are meaningless for football.
+   This walks the spread around the simulated margin and the total around the
+   simulated total, which is what makes the panel useful on a football card. */
+function footballAltLines(g,s){
+  const out={spread:[],tot:[]};
+  const mid=Math.round((s.homeProj-s.awayProj)||0);
+  for(let d=-14;d<=14;d+=3.5){
+    const line=Math.round((mid+d)*2)/2;
+    if(Math.abs(line)>28)continue;
+    const ph=s.homeCover?s.homeCover(-line):null;
+    if(ph==null||isNaN(ph))continue;
+    out.spread.push({label:`${g.home.abbr} ${line>0?'-':'+'}${Math.abs(line)}`,p:ph});
+    out.spread.push({label:`${g.away.abbr} ${line>0?'+':'-'}${Math.abs(line)}`,p:1-ph});
+  }
+  const base=Math.round(s.med||s.mean||45);
+  for(let t=base-12.5;t<=base+12.5;t+=3){
+    const line=Math.round(t*2)/2;
+    if(line<20)continue;
+    const o=s.over(line);
+    if(o==null||isNaN(o))continue;
+    out.tot.push({label:`Over ${line}`,p:o});
+    out.tot.push({label:`Under ${line}`,p:1-o});
+  }
+  return out;
+}
+function footballAltPanel(g,s){
+  if(!s)return '<div class="empty">Run sims first.</div>';
+  const A=footballAltLines(g,s);
+  const sec=(title,arr)=>{
+    if(!arr.length)return'';
+    const sorted=[...arr].sort((a,b)=>b.p-a.p);
+    return`<div class="mktlab" style="margin-top:8px">${title}</div>
+      <div class="sub" style="font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.7">
+      ${sorted.map(x=>`<div style="display:flex;justify-content:space-between;gap:10px">
+        <span>${x.label}</span>
+        <span style="color:var(--chalk)">${(x.p*100).toFixed(0)}%<span style="color:var(--mute)"> · needs ${minPrice(x.p)}</span></span>
+      </div>`).join('')}</div>`;
+  };
+  return sec('Alternate spreads',A.spread)+sec('Alternate totals',A.tot)+
+    `<div class="sub" style="margin-top:8px;color:var(--mute);font-size:10px">
+      "needs" is the break-even price at the model's probability. Anything better than that is +EV.</div>`;
+}
+function nflPropsPanel(g,s){
+  if(!s)return '<div class="empty">Run sims first.</div>';
+  const props=buildNFLProps(g,s);
+  if(!props.length)return '<div class="empty">No PROP: lines uploaded for this game yet.</div>';
+  return`<div class="sub" style="font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.8">
+    ${props.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px">
+      <span>${p.actionable?'<b style="color:var(--win)">◆ </b>':''}${p.player} ${p.stat} ${p.line}+${
+        p.matched?`<span style="color:var(--mute)"> · ${p.pos}${p.depth?p.depth:''}</span>`:
+        `<span style="color:var(--rust)"> · unmatched</span>`}</span>
+      <span>${(p.simP*100).toFixed(0)}% · <span style="color:${p.ev>=2?'var(--win)':p.ev<0?'var(--rust)':'var(--gold)'}">${p.ev>=0?'+':''}${p.ev.toFixed(1)}% EV</span></span>
+    </div>`).join('')}
+    <div style="margin-top:8px;color:var(--mute);font-size:10px">
+      Volume share comes from ESPN depth charts; scoring level from team power ratings.
+      Position/depth is shown next to each name — "unmatched" means the roster had no
+      player by that name, so a generic share was used. Still a screen, not a signal.</div></div>`;
+}
 function nflTogglePanel(which,gid,btn){
   const p=document.getElementById('p-nfl'+which+'-'+gid);
   if(!p)return;
@@ -14072,7 +14335,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.30
+   NCAAF ENGINE — BUILD v1.33
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -14080,7 +14343,6 @@ function nflCard(g){return nflCardFull(g);}
 // ── NCAAF constants ─────────────────────────────────────────────────────────
 const NCAAF_HFA=4.5; // college home field advantage (real avg ~4.5 pts)
 const NCAAF_CALIB_KEY='d4.ncaafcalib';
-let NCAAF_POWER={}; // {team_id: {offPPG, defPPG, wins, losses, ...}}
 
 // Top 25 conferences for reference
 const NCAAF_CONF={
@@ -14116,8 +14378,8 @@ function ncaafExtFor(k){return getNCAAFExt().filter(x=>x.game===k);}
 // Average FBS score ~28 PPG, std dev ~14 (wider than NFL due to talent gap blowouts).
 function simNCAAFGame(g,N){
   N=N||10000;
-  const awayPow=NCAAF_POWER[g.awayId||g.away.name]||{offPPG:26,defPPG:26,wins:0,losses:0};
-  const homePow=NCAAF_POWER[g.homeId||g.home.name]||{offPPG:26,defPPG:26,wins:0,losses:0};
+  const awayPow=ncaafPowerFor(g.away)||{offPPG:26,defPPG:26,wins:0,losses:0,unrated:true};
+  const homePow=ncaafPowerFor(g.home)||{offPPG:26,defPPG:26,wins:0,losses:0,unrated:true};
   const leagueAvg=26.0;
   const gamesPlayed=Math.max((awayPow.wins||0)+(awayPow.losses||0),(homePow.wins||0)+(homePow.losses||0),1);
   const regW=Math.min(1,(gamesPlayed-1)/6);
@@ -14126,55 +14388,178 @@ function simNCAAFGame(g,N){
   let homeExp=((homePow.offPPG+awayPow.defPPG)/2)*reg+leagueAvg*(1-reg)+NCAAF_HFA;
   awayExp=Math.max(3,awayExp);homeExp=Math.max(3,homeExp);
   const std=14; // wider variance in college
+  /* Was two 10,000-element arrays, a comparator sort on each, and an O(N)
+     .filter() on EVERY over()/cover() call. The Alt Lines panel makes ~40 such
+     calls per card, so a 99-game CFB slate meant tens of millions of array
+     reads per render — measured 35x slower than the NFL board doing the same
+     work. Scores are small non-negative integers, so a frequency table answers
+     these exactly in O(1), and median comes off the cumulative counts with no
+     sort at all. Same approach already used by the MLB and NFL engines. */
+  const TSPAN=200, MSPAN=241, MOFF=120;   // totals 0..199, margins -120..+120
+  const totFreq=new Int32Array(TSPAN);
+  const marFreq=new Int32Array(MSPAN);
   let hw=0,aw=0,ties=0;
-  const totals=[],margins=[];
   for(let i=0;i<N;i++){
     const a=Math.max(0,Math.round(awayExp+randn()*std));
     const h=Math.max(0,Math.round(homeExp+randn()*std));
-    totals.push(a+h);margins.push(h-a);
+    const tt=a+h; totFreq[tt<TSPAN?tt:TSPAN-1]++;
+    let m=h-a; if(m<-MOFF)m=-MOFF; else if(m>MOFF)m=MOFF;
+    marFreq[m+MOFF]++;
     if(h>a)hw++;else if(a>h)aw++;else ties++;
   }
-  totals.sort((a,b)=>a-b);margins.sort((a,b)=>a-b);
-  const med=totals[Math.floor(N/2)];
-  const medMargin=margins[Math.floor(N/2)];
-  const over=x=>totals.filter(v=>v>x).length/N;
+  // cumulative "at or above" tables
+  const cumT=new Float64Array(TSPAN+2);
+  for(let k=TSPAN-1;k>=0;k--)cumT[k]=cumT[k+1]+totFreq[k];
+  const cumM=new Float64Array(MSPAN+2);
+  for(let k=MSPAN-1;k>=0;k--)cumM[k]=cumM[k+1]+marFreq[k];
+  const qFrom=(freq,span,q)=>{const idx=Math.floor(N*q);let run=0;
+    for(let v=0;v<span;v++){run+=freq[v];if(run>idx)return v}return span-1};
+  const med=qFrom(totFreq,TSPAN,.5);
+  const medMargin=qFrom(marFreq,MSPAN,.5)-MOFF;
+  const over=x=>{let k=Math.floor(x)+1;if(k<0)k=0;if(k>TSPAN)return 0;return cumT[k]/N};
   /* Same sign convention as the NFL engine, stated explicitly because the old
      single spreadCover() was being called with a negated away line and so
      answered a different question than the square it labelled.
      margin = home - away.  homeCover(line): home covers a handicap written from
      the home side.  awayCover(line): away covers its own line. */
-  const spreadCover=line=>margins.filter(m=>m>line).length/N;
-  const homeCover=line=>margins.filter(m=>m> -line).length/N;
-  const awayCover=line=>margins.filter(m=>m< line).length/N;
+  const homeCover=line=>{let k=Math.floor(-line)+1+MOFF;if(k<0)k=0;if(k>MSPAN)return 0;return cumM[k]/N};
+  // away covers its own +line when margin < line. Margins are integers, so the
+  // count of m < line is 1 - P(m >= ceil(line)) for both integer and half lines
+  // — using floor(line)+1 here would wrongly count the exact push as a cover.
+  const awayCover=line=>{let k=Math.ceil(line)+MOFF;if(k<0)return 0;if(k>MSPAN)k=MSPAN;return 1-(cumM[k]/N)};
+  const spreadCover=line=>{let k=Math.floor(line)+1+MOFF;if(k<0)k=0;if(k>MSPAN)return 0;return cumM[k]/N};
   return{
     awayProj:isNaN(awayExp)?26:Math.round(awayExp*10)/10,
     homeProj:isNaN(homeExp)?26:Math.round(homeExp*10)/10,
+    p10:qFrom(totFreq,TSPAN,.1),p90:qFrom(totFreq,TSPAN,.9),
     hw:hw/N,aw:aw/N,med,medMargin,over,spreadCover,homeCover,awayCover,N
   };
 }
 
+// Resolve a team object to its rating by trying every identifier ESPN uses.
+function ncaafPowerFor(t){
+  if(!t)return null;
+  for(const k of [t.id,t.name,t.displayName,t.shortName,t.location,t.abbr,t.abbreviation]){
+    if(k&&NCAAF_POWER[String(k).trim()])return NCAAF_POWER[String(k).trim()];
+  }
+  return null;
+}
+function ncaafPowerFlags(){
+  const vals=Object.values(NCAAF_POWER).filter(v=>v&&typeof v.offPPG==='number');
+  NCAAF_POWER_RATED=vals.length;
+  const offs=vals.map(v=>v.offPPG);
+  const spread=offs.length?Math.max(...offs)-Math.min(...offs):0;
+  NCAAF_POWER_FLAT=(NCAAF_POWER_RATED<20||spread<2);
+}
+/* ── CFB SP+ RATINGS (CollegeFootballData) ────────────────────────────────
+   The ESPN standings fallback uses last season's raw points for/against, which
+   at Week 1 is both stale and unadjusted for who anyone played. SP+ is a
+   purpose-built predictive rating — it separates offense and defense on a
+   points-per-game scale and is opponent-adjusted, so it is meaningful before a
+   single snap of the new season. That is exactly the gap that made every
+   Week 1 card project the same score.
+   Free tier is 1,000 calls/month with a key; team ratings are one call a week,
+   so this sits far inside it. Cached for 24h. Falls back to the ESPN standings
+   path whenever the key is absent or the call fails. */
+const CFBD_BASE='https://api.collegefootballdata.com';
+async function fetchCFBDRatings(force){
+  const key=get(LS.cfbd,'');
+  if(!key){CFBD_STATUS='no key';return false;}
+  const cache=get('d4.cfbdsp',{});
+  const fresh=cache.ts&&(Date.now()-cache.ts)<864e5;
+  if(fresh&&!force&&cache.v&&Object.keys(cache.v).length){
+    applyCFBDRatings(cache.v);CFBD_STATUS='cached '+Object.keys(cache.v).length+' teams';return true;
+  }
+  const year=new Date().getFullYear();
+  try{
+    let rows=await cfbdGet('/ratings/sp?year='+year,key);
+    // Preseason: the current year's SP+ may not be published yet. Last completed
+    // season's final ratings are a far better prior than league-average.
+    if(!Array.isArray(rows)||rows.length<20){
+      rows=await cfbdGet('/ratings/sp?year='+(year-1),key);
+      if(Array.isArray(rows)&&rows.length)CFBD_STATUS='using '+(year-1)+' SP+ (current year not published)';
+    }
+    if(!Array.isArray(rows)||!rows.length){CFBD_STATUS='no ratings returned';return false;}
+    const map={};
+    rows.forEach(r=>{
+      const team=r.team; if(!team)return;
+      // SP+ offense/defense ratings are already on a points-per-game scale.
+      const off=num(r.offense&&r.offense.rating), def=num(r.defense&&r.defense.rating);
+      if(off==null&&def==null)return;
+      map[team]={offPPG:off==null?26:off,defPPG:def==null?26:def,
+                 sp:num(r.rating),conference:r.conference||'',src:'SP+'};
+    });
+    if(!Object.keys(map).length){CFBD_STATUS='ratings had no usable rows';return false;}
+    set('d4.cfbdsp',{ts:Date.now(),v:map});
+    applyCFBDRatings(map);
+    CFBD_STATUS=(CFBD_STATUS||'')+' · loaded '+Object.keys(map).length+' teams';
+    return true;
+  }catch(e){CFBD_STATUS='failed: '+(e&&e.message||e);console.warn('CFBD SP+ failed',e);return false;}
+}
+function num(v){const n=parseFloat(v);return isNaN(n)?null:n}
+async function cfbdGet(path,key){
+  const r=await fetch(CFBD_BASE+path,{headers:{'Authorization':'Bearer '+key,'Accept':'application/json'}});
+  if(r.status===401||r.status===403)throw new Error('key rejected ('+r.status+')');
+  if(r.status===429)throw new Error('monthly call limit reached');
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json();
+}
+/* SP+ names ("Alabama") differ from ESPN schedule names ("Alabama Crimson
+   Tide"), so index under several forms and let ncaafPowerFor resolve. */
+function applyCFBDRatings(map){
+  Object.keys(map).forEach(team=>{
+    const rec=map[team];
+    NCAAF_POWER[team]=rec;
+    (NCAAF_GAMES||[]).forEach(g=>{
+      [g.away,g.home].forEach(t=>{
+        const nm=String(t&&t.name||'');
+        if(nm&&(nm===team||nm.startsWith(team+' ')))NCAAF_POWER[nm]=rec;
+      });
+    });
+  });
+  ncaafPowerFlags();
+  NCAAF_SIMS={};
+  if(ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
+}
 // ── NCAAF Power Ratings (ESPN) ────────────────────────────────────────────────
 async function fetchNCAAFPowerRatings(){
   try{
     const url='https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season=2025';
     const r=await fetch(url);const j=await r.json();
+    /* Two bugs lived here.
+
+       1) KEY MISMATCH. Ratings were stored under the ESPN displayName
+          ("TCU Horned Frogs") but simNCAAFGame looked them up as
+          NCAAF_POWER[g.awayId || g.away.name] — and g.awayId is referenced in
+          exactly one place in the whole app and never assigned anywhere. Any
+          team whose schedule name didn't match its standings displayName
+          character-for-character missed, silently fell through to the 26/26
+          default, and produced the identical 26-30.5 projection on every card.
+          Ratings are now indexed under every name ESPN gives us.
+
+       2) FAKE AVERAGES. `stats.pointsFor || gp*26` meant a team with no
+          scoring data was assigned exactly league-average instead of being
+          left unrated — the same defect the NFL board had, where a placeholder
+          gets presented as a projection. Unrated is now unrated. */
+    const put=(k,v)=>{if(k)NCAAF_POWER[String(k).trim()]=v;};
     (j.children||[]).forEach(conf=>{
       (conf.standings&&conf.standings.entries||[]).forEach(e=>{
-        const name=e.team&&e.team.displayName||'';
+        const tm=e.team||{};
         const stats={};(e.stats||[]).forEach(s=>{stats[s.name]=s.value;});
-        const gp=Math.max(stats.gamesPlayed||0,1);
-        NCAAF_POWER[name]={
-          offPPG:(stats.pointsFor||gp*26)/gp,
-          defPPG:(stats.pointsAgainst||gp*26)/gp,
-          wins:stats.wins||0,losses:stats.losses||0,
-        };
+        const gp=+stats.gamesPlayed||0;
+        const pf=+stats.pointsFor||0, pa=+stats.pointsAgainst||0;
+        if(gp<1||(!pf&&!pa))return;          // no data -> no rating, not a fake 26
+        const rec={offPPG:pf/gp,defPPG:pa/gp,gp,wins:stats.wins||0,losses:stats.losses||0};
+        [tm.displayName,tm.shortDisplayName,tm.name,tm.location,tm.abbreviation,tm.id,tm.nickname]
+          .forEach(k=>put(k,rec));
       });
     });
+    ncaafPowerFlags();
     set('d4.ncaafpower',{ts:Date.now(),v:NCAAF_POWER});
     NCAAF_GAMES.forEach(g=>{
-      const ap=NCAAF_POWER[g.away.name];const hp=NCAAF_POWER[g.home.name];
-      if(ap){g.away.offRating=ap.offPPG;g.away.defRating=ap.defPPG;}
-      if(hp){g.home.offRating=hp.offPPG;g.home.defRating=hp.defPPG;}
+      const ap=ncaafPowerFor(g.away),hp=ncaafPowerFor(g.home);
+      if(ap){g.away.offRating=ap.offPPG;g.away.defRating=ap.defPPG;g.away.record=ap.wins+'-'+ap.losses;}
+      if(hp){g.home.offRating=hp.offPPG;g.home.defRating=hp.defPPG;g.home.record=hp.wins+'-'+hp.losses;}
     });
     NCAAF_SIMS={};
     if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
@@ -14186,6 +14571,7 @@ async function fetchNCAAFPowerRatings(){
 (function restoreNCAAFPower(){
   const c=get('d4.ncaafpower',{});
   if(c.v&&Object.keys(c.v).length)NCAAF_POWER=c.v;
+  ncaafPowerFlags();
 })();
 
 // ── NCAAF Schedule (ESPN) ────────────────────────────────────────────────────
@@ -14262,6 +14648,16 @@ function renderNCAAF(){
      and blank the entire board with no visible error. Drop malformed entries
      instead of letting them take the slate down. */
   NCAAF_GAMES=(NCAAF_GAMES||[]).filter(g=>g&&g.away&&g.home&&g.away.name&&g.home.name);
+  /* Same honesty rule as the NFL board: if nothing real is behind the numbers,
+     say so instead of printing an identical confident projection on 99 games. */
+  const _cfbWarn=document.getElementById('nflPowerWarn');
+  if(_cfbWarn&&ACTIVE_SPORT==='ncaaf'){
+    _cfbWarn.style.display=NCAAF_POWER_FLAT?'block':'none';
+    if(NCAAF_POWER_FLAT)_cfbWarn.innerHTML='&#9888; No usable team scoring data loaded ('+
+      NCAAF_POWER_RATED+' teams rated). Every projection below is the league-average '+
+      'baseline plus home field &mdash; placeholders, not model output. '+
+      '<u style="cursor:pointer" onclick="fetchNCAAFPowerRatings()">Retry ratings fetch</u>';
+  }
 
   const el=document.getElementById('slate');if(!el)return;
   if(!NCAAF_GAMES.length){
@@ -14438,10 +14834,12 @@ function ncaafCard(g){
     <div class="exprow" style="margin-top:10px">
       <button onclick="ncaafTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
+      <button onclick="ncaafTogglePanel('alt','${id}',this)">Alt Lines</button>
       <button onclick="ncaafTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
     <div class="panel" id="p-ncaaftrends-${id}">${ncaafTrendPanel(g,s)}</div>
     <div class="panel" id="p-ncaafag-${id}">${ncaafGameAG(g,s)}</div>
+    <div class="panel" id="p-ncaafalt-${id}">${footballAltPanel(g,s)}</div>
     <div class="panel" id="p-ncaafmybets-${id}"></div>
   </div>`;
 }
@@ -14696,6 +15094,9 @@ function ncaafOnActivate(){
    NFL ENGINE END
    ═══════════════════════════════════════════════════════════════ */
 
+
+/* Everything above is now evaluated — deferred data feeds may safely run. */
+SCRIPT_READY=true;
 </script>
 </body>
 </html>
