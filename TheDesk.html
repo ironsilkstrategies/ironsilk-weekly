@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.36</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.37</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -3587,7 +3587,7 @@ function applyDupeFilter(pool){
   return pool.filter(l=>!used.has(l.pick+'|'+l.game));
 }
 
-let PRESET_MARKETS=new Set(['ml','rl','total','prop']); // f5 off by default — new market type, opt in explicitly
+let PRESET_MARKETS=new Set(['ml','rl','spread','total','prop']); // period markets opt-in // f5 off by default — new market type, opt in explicitly
 
 function buildPreset(mode){
   let pool=applyDupeFilter(fullPresetPool());
@@ -3596,6 +3596,9 @@ function buildPreset(mode){
     if(l.kind==='rl')return PRESET_MARKETS.has('rl');
     if(l.kind==='total')return PRESET_MARKETS.has('total');
     if(l.kind==='f5side'||l.kind==='f5total')return PRESET_MARKETS.has('f5');
+    if(l.kind==='spread')return PRESET_MARKETS.has('spread');
+    if(l.kind==='h1')return PRESET_MARKETS.has('h1');
+    if(l.kind==='q1')return PRESET_MARKETS.has('q1');
     if(l.kind==='prop'||l.kind==='hr')return PRESET_MARKETS.has('prop');
     return true;
   });
@@ -3957,8 +3960,11 @@ function presetTabHtml(){
     <div class="subnav" style="opacity:${fixedMarkets?0.4:1};pointer-events:${fixedMarkets?'none':'auto'}">
       <button class="${PRESET_MARKETS.has('ml')?'on':''}" onclick="toggleWonMarket('ml',this)">Moneyline</button>
       <button class="${PRESET_MARKETS.has('rl')?'on':''}" onclick="toggleWonMarket('rl',this)">Run line</button>
+      <button class="${PRESET_MARKETS.has('spread')?'on':''}" onclick="toggleWonMarket('spread',this)">Spread</button>
       <button class="${PRESET_MARKETS.has('total')?'on':''}" onclick="toggleWonMarket('total',this)">Totals</button>
-      <button class="${PRESET_MARKETS.has('f5')?'on':''}" onclick="toggleWonMarket('f5',this)">First 5</button>
+      <button class="${PRESET_MARKETS.has('f5')?'on':''}" onclick="toggleWonMarket('f5',this)">First 5 <span style="opacity:.55">MLB</span></button>
+      <button class="${PRESET_MARKETS.has('h1')?'on':''}" onclick="toggleWonMarket('h1',this)">1st Half <span style="opacity:.55">FB</span></button>
+      <button class="${PRESET_MARKETS.has('q1')?'on':''}" onclick="toggleWonMarket('q1',this)">1st Qtr <span style="opacity:.55">NFL</span></button>
       <button class="${PRESET_MARKETS.has('prop')?'on':''}" onclick="toggleWonMarket('prop',this)">Props</button>
     </div>`;
   return `<div class="tkt">
@@ -6696,6 +6702,38 @@ function marketPool(){
         if(o>=.5)pool.push({p:o,pick:'Over '+ov.line,game:gl,kind:'total',sport,gid:g.id});
         else if(un&&(1-o)>=.5)pool.push({p:1-o,pick:'Under '+un.line,game:gl,kind:'total',sport,gid:g.id});
       }
+      /* Period markets. Football has halves and quarters; baseball has first
+         five innings. They are not interchangeable, and the NFL board was
+         being offered a baseball market it can never fill.
+         CFB gets 1H only — sportsbetting.ag posts 1Q for college too, but the
+         quarter-level sim for college is far noisier than the NFL's, so it
+         stays out of the ticket pool until graded history says otherwise. */
+      const periods=sport==='nfl'?['h1','q1']:['h1'];
+      periods.forEach(per=>{
+        const label=per==='h1'?'1H':'1Q';
+        // the sim models full games; a half is ~52% of scoring, a quarter ~26%
+        const frac=per==='h1'?0.52:0.26;
+        ['away','home'].forEach(side=>{
+          const bk=find(per+'spread',side);if(!bk||bk.line==null)return;
+          const full=bk.line/frac;                       // scale the period line to a full-game equivalent
+          const p=side==='away'?s.awayCover(full):s.homeCover(full);
+          if(p!=null&&!isNaN(p)&&p>=.5)
+            pool.push({p,pick:g[side].abbr+' '+label+' '+(bk.line>0?'+':'')+bk.line,
+              game:gl,kind:per,sport,gid:g.id});
+        });
+        const po=find(per+'total','over'),pu=find(per+'total','under');
+        if(po&&po.line!=null){
+          const o=per==='h1'&&s.overH1?s.overH1(po.line):s.over(po.line/frac);
+          if(o>=.5)pool.push({p:o,pick:label+' Over '+po.line,game:gl,kind:per,sport,gid:g.id});
+          else if(pu&&(1-o)>=.5)pool.push({p:1-o,pick:label+' Under '+pu.line,game:gl,kind:per,sport,gid:g.id});
+        }
+        const pm=find(per+'ml',null);
+        ['away','home'].forEach(side=>{
+          const bk=find(per+'ml',side);if(!bk)return;
+          const p=side==='away'?s.aw:s.hw;
+          if(p>=.5)pool.push({p,pick:g[side].abbr+' '+label+' ML',game:gl,kind:per,sport,gid:g.id});
+        });
+      });
     });
   };
   try{
@@ -12632,7 +12670,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.36
+   NFL ENGINE — BUILD v1.37
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12726,6 +12764,22 @@ function nflFairML(p){
 
 // ── NFL book lines (from uploaded txt) ───────────────────────────────────────
 function getNFLBookLines(){return get(LS.nflshots,{})[today()]||[];}
+function repairNFLKeys(){
+  if(!(NFL_GAMES||[]).length)return 0;
+  const all=get(LS.nflshots,{});let fixed=0;
+  Object.keys(all).forEach(d=>{
+    (all[d]||[]).forEach(r=>{
+      const [xa,xh]=(r.game||'').split('@');
+      const ra=nflAbbrFor(xa),rh=nflAbbrFor(xh);
+      if(ra&&rh){
+        const k=ra+'@'+rh;
+        if(k!==r.game){r.game=k;r.away=ra;r.home=rh;fixed++;}
+      }
+    });
+  });
+  if(fixed)set(LS.nflshots,all);
+  return fixed;
+}
 function nflBookLinesFor(gameKey){
   const all=getNFLBookLines();
   // exact match first
@@ -12794,6 +12848,7 @@ function renderNFL(){
      and blank the entire board with no visible error. Drop malformed entries
      instead of letting them take the slate down. */
   NFL_GAMES=(NFL_GAMES||[]).filter(g=>g&&g.away&&g.home&&g.away.name&&g.home.name);
+  try{repairNFLKeys()}catch(e){}
   /* Say plainly when the projections have no season data behind them, rather
      than printing an identical confident-looking number on all 16 games. */
   const _nflWarn=document.getElementById('nflPowerWarn');
@@ -14659,7 +14714,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.36
+   NCAAF ENGINE — BUILD v1.37
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -14682,13 +14737,40 @@ function ncaafBookLinesFor(gameKey){
   const all=getNCAAFBookLines();
   const exact=all.filter(x=>x.game===gameKey);
   if(exact.length)return exact;
-  // fuzzy match on abbreviated names
-  const norm=a=>(a||'').toUpperCase().replace(/\s+/g,'-').slice(0,6);
+  /* Uploads that landed BEFORE the CFB schedule finished loading had no
+     abbreviations to resolve against, so they were stored under slugged names
+     like NORTH-CAROLI@TCU-HORNED. The old fuzzy match compared 6-char slugs,
+     which can never turn "NORTH-" into "UNC" — so a perfectly good upload sat
+     in storage and the board showed "sim only" forever. Resolve each stored
+     key through the schedule at READ time as well as write time. */
   const [ak,hk]=(gameKey||'').split('@');
-  return all.filter(x=>{
+  const hit=all.filter(x=>{
     const [xa,xh]=(x.game||'').split('@');
+    const ra=ncaafAbbrFor(xa)||xa, rh=ncaafAbbrFor(xh)||xh;
+    if(ra===ak&&rh===hk)return true;
+    // last resort: same 6-char slug on both sides (old behaviour)
+    const norm=a=>(a||'').toUpperCase().replace(/\s+/g,'-').slice(0,6);
     return norm(xa)===norm(ak)&&norm(xh)===norm(hk);
   });
+  return hit;
+}
+/* Rewrite any stored CFB rows that were saved before the schedule was
+   available, so the repair is permanent rather than re-derived every render. */
+function repairNCAAFKeys(){
+  if(!(NCAAF_GAMES||[]).length)return 0;
+  const all=get(LS.ncaafshots,{});let fixed=0;
+  Object.keys(all).forEach(d=>{
+    (all[d]||[]).forEach(r=>{
+      const [xa,xh]=(r.game||'').split('@');
+      const ra=ncaafAbbrFor(xa),rh=ncaafAbbrFor(xh);
+      if(ra&&rh){
+        const k=ra+'@'+rh;
+        if(k!==r.game){r.game=k;r.away=ra;r.home=rh;fixed++;}
+      }
+    });
+  });
+  if(fixed)set(LS.ncaafshots,all);
+  return fixed;
 }
 function getNCAAFExt(){return get(LS.ncaafext,{})[today()]||[];}
 function getNCAAFTrends(){return get(LS.ncaaftrends,{})[today()]||[];}
@@ -15092,6 +15174,7 @@ function renderNCAAF(){
      and blank the entire board with no visible error. Drop malformed entries
      instead of letting them take the slate down. */
   NCAAF_GAMES=(NCAAF_GAMES||[]).filter(g=>g&&g.away&&g.home&&g.away.name&&g.home.name);
+  try{repairNCAAFKeys()}catch(e){}
   /* Same honesty rule as the NFL board: if nothing real is behind the numbers,
      say so instead of printing an identical confident projection on 99 games. */
   const _cfbWarn=document.getElementById('nflPowerWarn');
