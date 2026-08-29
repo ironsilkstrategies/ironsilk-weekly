@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.37</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.38</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -524,6 +524,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
 <div id="storageBanner" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;
 background:rgba(240,86,60,.12);border:1px solid rgba(240,86,60,.45);color:var(--rust);
 font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
+<div id="cfbPowerWarn" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;background:rgba(255,180,61,.10);border:1px solid rgba(255,180,61,.40);color:var(--gold);font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
 <div id="nflPowerWarn" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;
 background:rgba(255,180,61,.10);border:1px solid rgba(255,180,61,.40);color:var(--gold);
 font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
@@ -4863,6 +4864,9 @@ function lineupSig(g){
   return a+'|'+h+'|'+(g.away.p?g.away.p.id:'?')+'|'+(g.home.p?g.home.p.id:'?');
 }
 function render(){
+  // hide football banners when the MLB board is active
+  const _nw=document.getElementById('nflPowerWarn');if(_nw)_nw.style.display='none';
+  const _cw=document.getElementById('cfbPowerWarn');if(_cw)_cw.style.display='none';
   const el=document.getElementById('slate');
   if(!GAMES.length){el.innerHTML='<div class="empty">No games today.</div>';return}
 
@@ -12670,7 +12674,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.37
+   NFL ENGINE — BUILD v1.38
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12849,6 +12853,7 @@ function renderNFL(){
      instead of letting them take the slate down. */
   NFL_GAMES=(NFL_GAMES||[]).filter(g=>g&&g.away&&g.home&&g.away.name&&g.home.name);
   try{repairNFLKeys()}catch(e){}
+  const _cfbB=document.getElementById('cfbPowerWarn');if(_cfbB)_cfbB.style.display='none';
   /* Say plainly when the projections have no season data behind them, rather
      than printing an identical confident-looking number on all 16 games. */
   const _nflWarn=document.getElementById('nflPowerWarn');
@@ -14538,18 +14543,21 @@ function nflCardFull(g){
     ${g.status==='Final'
       ?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
          <div class="rd">final</div></div>`
-      :`<div class="proj">
-         <div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div>
-         <div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>
-         <div class="md">most common ${s.modeScore?s.modeScore.replace('-','–'):'—'} · ${(s.modeScorePct*100).toFixed(1)}%</div>
-       </div>`}
+      :NFL_POWER_FLAT
+         ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded — add CFBD key or tap Retry</div></div>`
+         :`<div class="proj">
+             <div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div>
+             <div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>
+             <div class="md">most common ${s.modeScore?s.modeScore.replace('-','–'):'—'} · ${(s.modeScorePct*100).toFixed(1)}%</div>
+           </div>`}
     <div class="sig">
-      <div class="sigchip">O/U <b>${med}</b> · ${spreadLabel}</div>
+      <div class="sigchip">O/U <b>${NFL_POWER_FLAT?'—':med}</b> · ${spreadLabel}</div>
       ${divGame?`<div class="sigchip" style="color:var(--gold)">DIVISION GAME</div>`:''}
       ${nflEnvChips(g).map(c=>`<div class="sigchip">${c}</div>`).join('')}
-      ${awayPow?`<div class="sigchip">${g.away.abbr} <b>${awayPow.wins}-${awayPow.losses}</b> · <b>${(awayPow.offPPG||0).toFixed(1)}</b> PF / <b>${(awayPow.defPPG||0).toFixed(1)}</b> PA</div>`:''}
-      ${homePow?`<div class="sigchip">${g.home.abbr} <b>${homePow.wins}-${homePow.losses}</b> · <b>${(homePow.offPPG||0).toFixed(1)}</b> PF / <b>${(homePow.defPPG||0).toFixed(1)}</b> PA</div>`:''}
-      ${NFL_POWER_FLAT?`<div class="sigchip" style="color:var(--gold);border-color:rgba(255,180,61,.4)">PLACEHOLDER PROJECTION · no season data yet</div>`:''}
+      ${awayPow&&!awayPow.unrated?`<div class="sigchip">${g.away.abbr} <b>${awayPow.wins}-${awayPow.losses}</b> · <b>${(awayPow.offPPG||0).toFixed(1)}</b> PF / <b>${(awayPow.defPPG||0).toFixed(1)}</b> PA</div>`:''}
+      ${homePow&&!homePow.unrated?`<div class="sigchip">${g.home.abbr} <b>${homePow.wins}-${homePow.losses}</b> · <b>${(homePow.offPPG||0).toFixed(1)}</b> PF / <b>${(homePow.defPPG||0).toFixed(1)}</b> PA</div>`:''}
+      ${NFL_POWER_FLAT?`<div class="sigchip" style="color:var(--rust);border-color:rgba(240,86,60,.4)">RATINGS NOT LOADED — tap Retry above</div>`:''}
+
     </div>
 
     <div class="mktlab">Spread${realBadge}</div>
@@ -14714,7 +14722,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.37
+   NCAAF ENGINE — BUILD v1.38
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -15175,10 +15183,11 @@ function renderNCAAF(){
      instead of letting them take the slate down. */
   NCAAF_GAMES=(NCAAF_GAMES||[]).filter(g=>g&&g.away&&g.home&&g.away.name&&g.home.name);
   try{repairNCAAFKeys()}catch(e){}
+  const _nflB=document.getElementById('nflPowerWarn');if(_nflB)_nflB.style.display='none';
   /* Same honesty rule as the NFL board: if nothing real is behind the numbers,
      say so instead of printing an identical confident projection on 99 games. */
-  const _cfbWarn=document.getElementById('nflPowerWarn');
-  if(_cfbWarn&&ACTIVE_SPORT==='ncaaf'){
+  const _cfbWarn=document.getElementById('cfbPowerWarn');
+  if(_cfbWarn){
     _cfbWarn.style.display=NCAAF_POWER_FLAT?'block':'none';
     if(NCAAF_POWER_FLAT)_cfbWarn.innerHTML='&#9888; No usable team scoring data loaded ('+
       NCAAF_POWER_RATED+' teams rated). Every projection below is the league-average '+
@@ -15324,14 +15333,15 @@ function ncaafCard(g){
     ${g.status==='Final'
       ?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
          <div class="rd">final</div></div>`
-      :`<div class="proj">
-         <div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div>
-         <div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>
-       </div>`}
+      :NCAAF_POWER_FLAT
+         ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded</div></div>`
+         :`<div class="proj"><div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div><div class="rd">${Math.round(ap)}–${Math.round(hp)}</div></div>`}
     <div class="sig">
-      <div class="sigchip">O/U <b>${med}</b> · ${spreadLabel}</div>
+      <div class="sigchip">O/U <b>${NCAAF_POWER_FLAT?'—':med}</b> · ${spreadLabel}</div>
       ${g.away.record?`<div class="sigchip">${g.away.abbr} <b>${g.away.record}</b></div>`:''}
       ${g.home.record?`<div class="sigchip">${g.home.abbr} <b>${g.home.record}</b></div>`:''}
+      ${NCAAF_POWER_FLAT?`<div class="sigchip" style="color:var(--rust);border-color:rgba(240,86,60,.4)">RATINGS NOT LOADED — add CFBD key in Settings</div>`:''}
+      
     </div>
     <div class="mktlab">Spread${realBadge}</div>
     <div class="betgrid">
