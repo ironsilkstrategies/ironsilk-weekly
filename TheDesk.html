@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.46</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.47</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -12829,7 +12829,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.46
+   NFL ENGINE — BUILD v1.47
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -14919,7 +14919,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.46
+   NCAAF ENGINE — BUILD v1.47
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -16206,6 +16206,26 @@ function coachBriefing(g,s,sport){
     if(lines.length)sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
       text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Your record with these teams</div>
       <div style="font-size:11.5px;line-height:1.8">${lines.join('<br>')}</div>`);
+  }catch(e){}
+
+  // 5b · the Coach's own pick for THIS game, same compact format as the
+  //      slate-wide picks board, placed last so it reads as the conclusion
+  //      of everything above it rather than a separate opinion
+  try{
+    const pk=coachPickFor(g,s,sport);
+    if(pk){
+      const sideCol=pk.sideConf>=.62?'var(--win)':pk.sideConf>=.55?'var(--chalk)':'var(--mute)';
+      const totStr=pk.totalDir&&pk.totalDir!=='—'
+        ?`${pk.totalDir==='over'?'⬆️':'⬇️'} O/U ${pk.totalLine}${pk.totalP?' ('+(pk.totalP*100).toFixed(0)+'%)':''}${!pk.totalReal?' <span style="color:var(--mute);font-size:9px">(sim, no line posted)</span>':''}`
+        :'<span style="color:var(--mute)">no total lean — nothing posted yet</span>';
+      sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Coach pick</div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:16px;color:${sideCol};margin-bottom:2px">
+          ${pk.sideTeam} W <span style="font-family:'IBM Plex Mono';font-size:11px;font-weight:400;color:var(--mute)">(${(pk.sideConf*100).toFixed(0)}%)</span></div>
+        <div style="font-size:12px">${totStr}</div>
+        <div style="margin-top:4px;color:var(--mute);font-size:10px">Side is the model's own win probability.
+          Total prefers your uploaded book line, falling back to a sharp source, then the model's own median last.</div>`);
+    }
   }catch(e){}
 
   // 6 · CFB transfer portal note, when relevant — production earned elsewhere
