@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.42</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.43</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -785,7 +785,7 @@ const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',p
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus',
 nflgames:'d4.nflgames',nflshots:'d4.nflshots',nflarc:'d4.nflarc',nflext:'d4.nflext',nfltrends:'d4.nfltrends',nflconsensus:'d4.nflconsensus',
-cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus'};
+cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus',teamledger:'d4.teamledger',frozen:'d4.frozen',syslog:'d4.syslog',trendlog:'d4.trendlog'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl' | 'ncaaf'
@@ -803,6 +803,11 @@ let NFL_DEPTH={},NFL_DEPTH_STATUS='';     // {team abbr: {players:[{name,pos,dep
 let CFBD_STATUS='';
 let CFB_PORTAL={},CFB_PORTAL_STATUS='',CFB_PLAYER_STATS={};
 let NFL_POWER_RATED=0,NFL_POWER_FLAT=false; // is there real season data behind the NFL projections?
+/* Declared up here with its flags for the same reason NCAAF_POWER is: the intel
+   layer and boot path both reach it before the NFL engine section is evaluated,
+   and a `let` in the temporal dead zone throws rather than reading as empty. */
+let NFL_POWER={};  // {abbr: {offPPG, defPPG, sos, record, streak}}
+const NFL_HFA=2.5;       // home field advantage in points (real NFL average ~2.5)
 let NCAAF_WEEK=null,NCAAF_SEASON=null;
 
 function doSportSwitch(sport){
@@ -5065,6 +5070,14 @@ function card(g){
   }
   // signal chips: H2H, venue records, HR threats
   let sig='';
+  // intel chips: your record with these teams, frozen number, take/fade, system form
+  try{
+    sig+=teamRecordChip(g.away.abbr)+teamRecordChip(g.home.abbr);
+    sig+=frozenChip(g,s,'mlb');
+    sig+=takeFadeChip(g,s,'mlb');
+    sig+=trendInfluenceChip(g,s);
+    sig+=systemFormChip('mlb');
+  }catch(e){}
   const hk=[g.away.id,g.home.id].sort().join('-'),hr=H2H[hk];
   if(hr&&hr.games>=6){
     const aWins=hr.aId===g.away.id?hr.aw:hr.bw;
@@ -11430,6 +11443,37 @@ function renderStatsTab(){
     </table></div>`;
   return h;
 }
+/* Step 4 -> 5 of the workflow: recalibrate on everything graded so far, rebuild
+   the team ledger and trend reliability from outcomes, then FREEZE the day's
+   projections. After this point new information is measured against the locked
+   number instead of silently moving it. */
+async function runBiasAndFreeze(){
+  const el=document.getElementById('freezeStatus');
+  const say=t=>{if(el)el.innerHTML=t};
+  say('Recalibrating\u2026');
+  try{
+    await hardRecalibrate();
+    const tGraded=gradeTrendLog();
+    const sGraded=gradeSystemLog();
+    const ledger=buildTeamLedger();
+    const nTeams=Object.keys(ledger).length;
+    const flagged=Object.keys(ledger).filter(k=>ledger[k].flag==='black');
+    const green=Object.keys(ledger).filter(k=>ledger[k].flag==='green');
+    let frozen=0;
+    ['mlb','nfl','ncaaf'].forEach(sp=>{try{logSystemPicks(sp);frozen+=freezeSlate(sp)}catch(e){}});
+    say(`<div style="color:var(--win)">\u2744 Slate frozen \u2014 ${frozen} game${frozen===1?'':'s'} locked.</div>
+      <div style="margin-top:4px">Team ledger rebuilt: <b>${nTeams}</b> teams.
+      ${green.length?`<span style="color:var(--win)">\u25c6 ${green.length} green</span>`:''}
+      ${flagged.length?` <span style="color:var(--rust)">\u2620 ${flagged.length} black flag: ${flagged.slice(0,8).join(', ')}</span>`:''}</div>
+      <div style="margin-top:4px;color:var(--mute)">Graded this pass: ${tGraded} trend rows, ${sGraded} system picks.</div>
+      <div style="margin-top:4px;color:var(--mute)">Everything arriving from here is compared against the locked number and the official line.</div>`);
+    if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
+    if(typeof renderNFL==='function'&&ACTIVE_SPORT==='nfl')renderNFL();
+    if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
+  }catch(e){
+    say('<div style="color:var(--rust)">Failed: '+(e&&e.message||e)+'</div>');
+  }
+}
 async function hardRecalibrate(){
   const el=document.getElementById('gradeBody');
   el.innerHTML='<div class="empty">Recalibrating from graded history…</div>';
@@ -11575,7 +11619,7 @@ async function renderGrades(force){
     h=innerRow(RESULTS_MODE,[['sides','Sides'],['props','Props'],['f5','First 5'],['picks','Every pick']],'RESULTS_MODE');
   }
   if(GRADETAB==='calib'){
-    h=innerRow(CALIB_MODE,[['calib','Corrections'],['learn','Learned bias'],['deep','Deep dive']],'CALIB_MODE');
+    h=innerRow(CALIB_MODE,[['calib','Corrections'],['learn','Learned bias'],['deep','Deep dive'],['syslog','System vs Book'],['ledger','Team ledger']],'CALIB_MODE');
   }
   if(GRADETAB==='history'){
     h=innerRow(HIST_MODE,[['days','By day'],['recap','Share card']],'HIST_MODE');
@@ -11687,7 +11731,11 @@ async function renderGrades(force){
       <div class="sub">Each correction is shrunk by n/(n+k) — with a handful of games a team barely moves the
       projection, with dozens it moves most of the way. That's what keeps one blowout from rewriting the model.
       Team corrections are capped at ±0.85 runs and start at ${MIN_SHOW} games. Player prop corrections start at 6.</div>
-      <div class="bar"><button class="primary" onclick="hardRecalibrate()">Recalibrate everything now</button></div></div>
+      <div class="bar">
+        <button class="primary" onclick="runBiasAndFreeze()">Run learning bias &amp; freeze today's slate</button>
+        <button onclick="hardRecalibrate()">Recalibrate only (no freeze)</button>
+      </div>
+      <div class="sub" id="freezeStatus" style="margin-top:8px"></div></div>
       <div class="sbar"><h2>Team run bias</h2><div class="ln"></div><div class="ct mono">${tk.length}</div></div>`;
     h+=tk.length?`<div class="tkt"><table class="boxtbl">
       <tr><th>Team</th><th>Games</th><th>Avg miss</th><th>Applied</th><th>Weight</th><th>As pick</th></tr>
@@ -11714,6 +11762,70 @@ async function renderGrades(force){
       <div class="sub" style="margin-top:6px">Factor under 1.00 means the model has been too optimistic on that
       player and his props are now discounted. Over 1.00 means it's been too pessimistic.</div></div>`
       :'<div class="empty">Need at least 6 graded props per player.</div>';
+  }
+  if(GRADETAB==='calib'&&CALIB_MODE==='syslog'){
+    const all=systemScorecard(null,null);
+    const l20=systemScorecard(null,20);
+    const pct=v=>v==null?'—':(v*100).toFixed(1)+'%';
+    const streakStr=l20.streak>=2?`${l20.streak}${l20.streakType?' win':' loss'} streak`:'—';
+    h+=`<div class="tkt hi"><h3>System vs the book</h3>
+      <div class="sub">Every game the model had an opinion on gets logged and graded, whether or not you bet it.
+      The subset you actually played is the most biased sample available — this is the unbiased one.</div>
+      <table class="boxtbl" style="margin-top:10px">
+        <tr><th></th><th>Record</th><th>Win%</th></tr>
+        <tr><td>System (all time)</td><td>${all.sysW}-${all.sysL}</td><td class="hi">${pct(all.sysPct)}</td></tr>
+        <tr><td>Book favourite (all time)</td><td>${all.bkW}-${all.bkL}</td><td>${pct(all.bkPct)}</td></tr>
+        <tr><td>System (last 20)</td><td>${l20.sysW}-${l20.sysL}</td><td class="hi">${pct(l20.sysPct)}</td></tr>
+        <tr><td>Book favourite (last 20)</td><td>${l20.bkW}-${l20.bkL}</td><td>${pct(l20.bkPct)}</td></tr>
+        <tr><td>Current form</td><td colspan="2" style="color:${l20.streakType===true?'var(--win)':l20.streakType===false?'var(--rust)':'var(--mute)'}">${streakStr}</td></tr>
+      </table>
+      <div class="sub" style="margin-top:8px">Beating the book's favourite straight-up is not the same as beating
+      the price. A model can pick more winners and still lose money if it only wins on chalk.</div></div>`;
+    const rows=all.rows.slice(-40).reverse();
+    h+=`<div class="sbar"><h2>Recent graded games</h2><div class="ln"></div><div class="ct mono">${rows.length}</div></div>`;
+    h+=rows.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Date</th><th>Game</th><th>System</th><th>Book</th><th>Won</th><th></th></tr>
+      ${rows.map(r=>`<tr>
+        <td class="mono" style="font-size:10px">${r.date}</td>
+        <td>${r.game}</td>
+        <td style="color:${r.systemHit?'var(--win)':'var(--rust)'}">${r.systemPick} ${r.systemConf}%</td>
+        <td style="color:${r.bookHit===true?'var(--win)':r.bookHit===false?'var(--rust)':'var(--mute)'}">${r.bookFav||'—'}</td>
+        <td class="hi">${r.winner}</td>
+        <td>${r.systemHit&&!r.bookHit?'<span style="color:var(--win)">system beat book</span>':
+             !r.systemHit&&r.bookHit?'<span style="color:var(--rust)">book beat system</span>':''}</td>
+      </tr>`).join('')}
+      </table></div>`
+      :'<div class="empty">Nothing graded yet. Run the learning bias after games finish.</div>';
+  }
+  if(GRADETAB==='calib'&&CALIB_MODE==='ledger'){
+    const L=teamLedger(true);
+    const keys=Object.keys(L).filter(k=>L[k].n>=3)
+      .sort((a,b)=>L[a].roi-L[b].roi);
+    const black=keys.filter(k=>L[k].flag==='black');
+    const green=keys.filter(k=>L[k].flag==='green');
+    h+=`<div class="tkt hi"><h3>Your record by team</h3>
+      <div class="sub">This is YOUR profit per team, not the model's accuracy. They are different questions —
+      the model can project a team well while you still bleed on it, usually because of the price you take.</div>
+      ${black.length?`<div style="margin-top:8px;color:var(--rust)">\u2620 <b>Black flags</b> — ${black.join(', ')}</div>`:''}
+      ${green.length?`<div style="margin-top:4px;color:var(--win)">\u25c6 <b>Green</b> — ${green.join(', ')}</div>`:''}
+      </div>`;
+    h+=keys.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Team</th><th>Bets</th><th>Sides</th><th>O/U</th><th>u/bet</th><th></th></tr>
+      ${keys.map(k=>{const o=L[k];
+        const col=o.flag==='black'?'var(--rust)':o.flag==='green'?'var(--win)':'var(--mute)';
+        const mark=o.flag==='black'?'\u2620':o.flag==='green'?'\u25c6':'';
+        return `<tr>
+          <td style="color:${col}">${mark} ${k}</td>
+          <td>${o.n}</td>
+          <td>${o.sideN?o.sideW+'-'+o.sideL+(o.sideP?'-'+o.sideP:''):'—'}</td>
+          <td>${o.totN?(o.ovW+o.unW)+'-'+(o.ovL+o.unL):'—'}</td>
+          <td class="hi" style="color:${col}">${o.roi>=0?'+':''}${o.roi.toFixed(2)}</td>
+          <td style="font-size:10px;color:var(--mute)">${o.flag==='black'?'fade / roach spray':o.flag==='green'?'lean in':''}</td>
+        </tr>`}).join('')}
+      </table>
+      <div class="sub" style="margin-top:6px">Needs 3+ graded bets to appear, 6+ before a flag is assigned.
+      u/bet is units returned per unit staked at −110 equivalent.</div></div>`
+      :'<div class="empty">No graded bets logged yet. Log picks and grade them, then run the learning bias.</div>';
   }
   if(GRADETAB==='calib'&&CALIB_MODE==='deep'){
     const seg=computeSegmentedCalibration();
@@ -12676,7 +12788,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.42
+   NFL ENGINE — BUILD v1.43
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -13692,7 +13804,6 @@ function nflIsConferenceGame(g){
 // Fetches from ESPN's team stats API — real offensive/defensive ratings.
 // Points per game (off) and points allowed per game (def) for each team.
 // Cached weekly, not daily — NFL teams don't change dramatically day to day.
-let NFL_POWER={};  // {abbr: {offPPG, defPPG, sos, record, streak}}
 
 async function fetchNFLPowerRatings(){
   try{
@@ -13768,7 +13879,6 @@ async function fetchNFLPowerRatings(){
 // Replaces the basic normal distribution sim with a full possession-based model.
 // Uses real PPG offense/defense, home field advantage, situational adjustments,
 // and calibration correction just like the MLB engine.
-const NFL_HFA=2.5;       // home field advantage in points (real NFL average ~2.5)
 const NFL_CALIB_KEY='d4.nflcalib';
 
 function simNFLGame(g,N){
@@ -14581,6 +14691,8 @@ function nflCardFull(g){
            </div>`}
     <div class="sig">
       <div class="sigchip">O/U <b>${NFL_POWER_FLAT?'—':med}</b> · ${spreadLabel}</div>
+      ${(()=>{try{return teamRecordChip(g.away.abbr)+teamRecordChip(g.home.abbr)
+        +frozenChip(g,s,'nfl')+takeFadeChip(g,s,'nfl')+systemFormChip('nfl')}catch(e){return''}})()}
       ${(()=>{try{
         if(NFL_POWER_FLAT)return'';
         const _lns=nflBookLinesFor(g.away.abbr+'@'+g.home.abbr);if(!_lns.length)return'';
@@ -14648,6 +14760,7 @@ function nflCardFull(g){
       <button onclick="nflTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="nflTogglePanel('alt','${id}',this)">Alt Lines</button>
       <button onclick="nflTogglePanel('props','${id}',this)">Props</button>
+      <button onclick="nflTogglePanel('verdict','${id}',this)">Take/Fade</button>
       ${(isLive||isFinal)?`<button onclick="nflTogglePanel('livebox','${id}',this)">${isLive?'Live box':'Box score'}</button>`:''}
       <button onclick="nflTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
@@ -14655,6 +14768,7 @@ function nflCardFull(g){
     <div class="panel" id="p-nflag-${id}">${renderNFLGameAG(g,s)}</div>
     <div class="panel" id="p-nflalt-${id}">${footballAltPanel(g,s)}</div>
     <div class="panel" id="p-nflprops-${id}">${nflPropsPanel(g,s)}</div>
+    <div class="panel" id="p-nflverdict-${id}">${takeFadePanel(g,s,'nfl')}</div>
     <div class="panel" id="p-nfllivebox-${id}"><div id="p-fb-livebox-${id}">${(isLive||isFinal)?fbLiveBoxPanel(g,'nfl'):''}</div></div>
     <div class="panel" id="p-nflmybets-${id}"></div>
   </div>`;
@@ -14761,7 +14875,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.42
+   NCAAF ENGINE — BUILD v1.43
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -15368,6 +15482,495 @@ function fbBoxRefresh(gid,espnId,league){
     if(g)panel.innerHTML=fbLiveBoxPanel(g,league);
   });
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTEL LAYER — team ledger, frozen slate, take/fade verdict, system scorecard
+   ───────────────────────────────────────────────────────────────────────────
+   The learning bias already measures where the MODEL is wrong. None of it
+   measured where YOU are wrong. Those are different questions: the model can
+   project a team accurately while you still lose money betting them, because
+   your entry price is bad or you keep taking the wrong side of a good number.
+   This layer tracks the second question and puts the answer on the card.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. TEAM LEDGER ────────────────────────────────────────────────────────
+   Your actual record per team, split into sides and totals, built from the
+   picks you logged (LS.mine) plus locked parlay legs, graded against finals.
+   Not the model's record — yours. */
+function buildTeamLedger(){
+  const arc=get(LS.arc,{});
+  const mine=get(LS.mine,{});
+  const locked=get(LS.locked,[]);
+  const T={};   // abbr -> {sideW,sideL,sideP, ovW,ovL,unW,unL, units, n}
+  const touch=ab=>{
+    if(!ab)return null;
+    T[ab]=T[ab]||{sideW:0,sideL:0,sideP:0,ovW:0,ovL:0,unW:0,unL:0,units:0,n:0};
+    return T[ab];
+  };
+  // index finals by game key for fast lookup
+  const finals={};
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a==null||F.h==null)return;
+      finals[(r.a||'')+'@'+(r.h||'')]={a:+F.a,h:+F.h,date:d};
+      finals[r.id]={a:+F.a,h:+F.h,date:d,away:r.a,home:r.h};
+    });
+  });
+  const gradePick=(pick,gameKey)=>{
+    const F=finals[gameKey];if(!F)return null;
+    const [aw,hm]=(gameKey||'').split('@');
+    const p=String(pick||'').trim();
+    // total
+    let m=p.match(/^(Over|Under)\s+([\d.]+)$/i);
+    if(m){
+      const tot=F.a+F.h, line=+m[2], isOver=/over/i.test(m[1]);
+      if(tot===line)return{kind:'total',side:isOver?'over':'under',hit:null,teams:[aw,hm]};
+      const hit=isOver?tot>line:tot<line;
+      return{kind:'total',side:isOver?'over':'under',hit,teams:[aw,hm]};
+    }
+    // moneyline
+    m=p.match(/^([A-Z]{2,4})\s+ML$/i);
+    if(m){
+      const t=m[1].toUpperCase();
+      const winner=F.a>F.h?aw:F.h>F.a?hm:null;
+      if(!winner)return{kind:'side',team:t,hit:null,teams:[t]};
+      return{kind:'side',team:t,hit:winner===t,teams:[t]};
+    }
+    // spread / runline  "KC -3.5"  "NYY +1.5"
+    m=p.match(/^([A-Z]{2,4})\s+([+-][\d.]+)$/i);
+    if(m){
+      const t=m[1].toUpperCase(),ln=+m[2];
+      const own=t===aw?F.a:F.h, opp=t===aw?F.h:F.a;
+      const margin=own-opp+ln;
+      if(margin===0)return{kind:'side',team:t,hit:null,teams:[t]};
+      return{kind:'side',team:t,hit:margin>0,teams:[t]};
+    }
+    return null;
+  };
+  const record=(pick,gameKey,units)=>{
+    const g=gradePick(pick,gameKey);if(!g)return;
+    if(g.kind==='total'){
+      (g.teams||[]).forEach(ab=>{
+        const o=touch(ab);if(!o)return;o.n++;
+        if(g.hit===null)return;
+        if(g.side==='over'){g.hit?o.ovW++:o.ovL++}else{g.hit?o.unW++:o.unL++}
+        o.units+=(g.hit?(units||1)*0.91:-(units||1));
+      });
+    }else{
+      const o=touch(g.team);if(!o)return;o.n++;
+      if(g.hit===null){o.sideP++;return}
+      g.hit?o.sideW++:o.sideL++;
+      o.units+=(g.hit?(units||1)*0.91:-(units||1));
+    }
+  };
+  Object.keys(mine).forEach(d=>(mine[d]||[]).forEach(e=>record(e.pick,e.game,e.units)));
+  locked.forEach(t=>(t.legs||[]).forEach(l=>record(l.pick,l.game,(t.stake||1)/Math.max(1,(t.legs||[]).length))));
+  // classify
+  Object.keys(T).forEach(ab=>{
+    const o=T[ab];
+    const sideN=o.sideW+o.sideL, totN=o.ovW+o.ovL+o.unW+o.unL;
+    o.sideN=sideN;o.totN=totN;
+    o.sidePct=sideN?o.sideW/sideN:null;
+    o.ouPct=totN?(o.ovW+o.unW)/totN:null;
+    o.roi=o.n?o.units/o.n:0;
+    // black flag needs a real sample AND real bleeding
+    o.flag=(o.n>=6&&o.roi<=-0.25)?'black'
+          :(o.n>=6&&o.roi>=0.25)?'green'
+          :(o.n>=4&&o.roi<=-0.40)?'black'
+          :'neutral';
+  });
+  set(LS.teamledger,{ts:Date.now(),v:T});
+  return T;
+}
+function teamLedger(force){
+  const c=get(LS.teamledger,{});
+  if(!force&&c.v&&c.ts&&Date.now()-c.ts<36e5)return c.v;
+  return buildTeamLedger();
+}
+function teamLedgerFor(abbr){
+  const L=teamLedger();
+  return L[String(abbr||'').toUpperCase()]||null;
+}
+/* Compact chip for the game card — your record with this team. */
+function teamRecordChip(abbr){
+  const o=teamLedgerFor(abbr);
+  if(!o||o.n<3)return'';
+  const side=o.sideN?`${o.sideW}-${o.sideL}`:'—';
+  const ou=o.totN?`${o.ovW+o.unW}-${o.ovL+o.unL}`:'—';
+  const roiStr=(o.roi>=0?'+':'')+o.roi.toFixed(2)+'u/bet';
+  const col=o.flag==='black'?'var(--rust)':o.flag==='green'?'var(--win)':'var(--mute)';
+  const mark=o.flag==='black'?'\u2620 ':o.flag==='green'?'\u25c6 ':'';
+  return`<div class="sigchip" style="color:${col};border-color:${o.flag==='black'?'rgba(240,86,60,.45)':o.flag==='green'?'rgba(46,204,113,.45)':'var(--rule)'}"
+    title="Your record betting ${abbr}">
+    ${mark}${abbr} you <b>${side}</b> · O/U <b>${ou}</b> · ${roiStr}</div>`;
+}
+
+/* ── 2. FROZEN SLATE ───────────────────────────────────────────────────────
+   Once you run the learning bias, the day's projections lock. Everything that
+   arrives afterwards is measured against the frozen number instead of quietly
+   moving it — which is the only way to tell whether new information actually
+   improved the read or just chased the market. */
+function freezeSlate(sport){
+  const sp=sport||ACTIVE_SPORT;
+  const d=today();
+  const all=get(LS.frozen,{});
+  const bucket=all[d]||(all[d]={});
+  const games=sp==='nfl'?NFL_GAMES:sp==='ncaaf'?NCAAF_GAMES:GAMES;
+  const sims=sp==='nfl'?NFL_SIMS:sp==='ncaaf'?NCAAF_SIMS:SIMS;
+  let n=0;
+  (games||[]).forEach(g=>{
+    const s=(sims||{})[g.id];if(!s)return;
+    const key=sp+':'+(g.away.abbr+'@'+g.home.abbr);
+    bucket[key]={
+      ts:Date.now(),sport:sp,
+      awayProj:s.awayProj,homeProj:s.homeProj,
+      med:s.med!=null?s.med:null,
+      aw:s.aw,hw:s.hw,
+      // the official number at freeze time, so drift is measurable
+      bookSpread:(()=>{try{
+        const ln=sp==='nfl'?nflBookLinesFor(g.away.abbr+'@'+g.home.abbr)
+                :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
+        const sp2=ln.find(x=>x.market==='spread'&&x.side==='home');
+        return sp2?sp2.line:null;
+      }catch(e){return null}})(),
+      bookTotal:(()=>{try{
+        const ln=sp==='nfl'?nflBookLinesFor(g.away.abbr+'@'+g.home.abbr)
+                :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
+        const t=ln.find(x=>x.market==='total'&&x.side==='over');
+        return t?t.line:null;
+      }catch(e){return null}})(),
+    };
+    n++;
+  });
+  set(LS.frozen,all);
+  return n;
+}
+function frozenFor(g,sport){
+  const sp=sport||ACTIVE_SPORT;
+  const all=get(LS.frozen,{});
+  const bucket=all[today()]||{};
+  return bucket[sp+':'+(g.away.abbr+'@'+g.home.abbr)]||null;
+}
+function isSlateFrozen(sport){
+  const sp=sport||ACTIVE_SPORT;
+  const bucket=get(LS.frozen,{})[today()]||{};
+  return Object.keys(bucket).some(k=>k.startsWith(sp+':'));
+}
+/* Chip showing the locked number and how far the live sim has drifted from it. */
+function frozenChip(g,s,sport){
+  const f=frozenFor(g,sport);
+  if(!f)return'';
+  const dA=(s.awayProj-f.awayProj), dH=(s.homeProj-f.homeProj);
+  const drift=Math.abs(dA)+Math.abs(dH);
+  const stale=drift>=1.0;
+  return`<div class="sigchip" style="color:${stale?'var(--gold)':'var(--mute)'};
+    border-color:${stale?'rgba(255,180,61,.45)':'var(--rule)'}"
+    title="Projection frozen at ${new Date(f.ts).toLocaleTimeString()}">
+    \u2744 LOCKED <b>${f.awayProj}\u2013${f.homeProj}</b>${
+      stale?` · drift ${drift.toFixed(1)}`:''}</div>`;
+}
+
+/* ── 3. TAKE / FADE VERDICT ────────────────────────────────────────────────
+   Three inputs, stated separately so you can see WHY, never blended into one
+   opaque score: model edge, calibration at this confidence band, and your own
+   record with the teams involved. */
+function takeFadeVerdict(g,s,sport){
+  const sp=sport||ACTIVE_SPORT;
+  const reasons=[];let score=0;
+  // (a) model edge vs the posted number
+  let edge=null;
+  try{
+    const ln=sp==='nfl'?nflBookLinesFor(g.away.abbr+'@'+g.home.abbr)
+            :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
+    const aw=ln.find(x=>x.market==='spread'&&x.side==='away');
+    if(aw&&s.awayCover){
+      const p=s.awayCover(aw.line);
+      edge=evPct(p,aw.price);
+      if(edge>=4){score+=2;reasons.push(`model +${edge.toFixed(1)}% EV on ${g.away.abbr}`)}
+      else if(edge<=-4){score-=1;reasons.push(`model says pass (${edge.toFixed(1)}% EV)`)}
+    }
+  }catch(e){}
+  // (b) your record with both teams
+  const la=teamLedgerFor(g.away.abbr), lh=teamLedgerFor(g.home.abbr);
+  [[la,g.away.abbr],[lh,g.home.abbr]].forEach(([o,ab])=>{
+    if(!o||o.n<5)return;
+    if(o.flag==='black'){score-=2;reasons.push(`\u2620 you are ${o.roi.toFixed(2)}u/bet on ${ab}`)}
+    else if(o.flag==='green'){score+=1;reasons.push(`\u25c6 you are +${o.roi.toFixed(2)}u/bet on ${ab}`)}
+  });
+  // (c) calibration at this confidence band
+  try{
+    const conf=Math.max(s.aw,s.hw);
+    const band=conf>=.65?'high':conf>=.55?'mid':'low';
+    const cal=get(LS.calib,{});
+    const bandRec=cal.bands&&cal.bands[band];
+    if(bandRec&&bandRec.n>=10){
+      const act=bandRec.w/bandRec.n, exp=bandRec.e/bandRec.n;
+      const gap=(act-exp)*100;
+      if(gap<=-8){score-=2;reasons.push(`you run ${gap.toFixed(0)}pts under expectation in the ${band} band`)}
+      else if(gap>=8){score+=1;reasons.push(`you beat expectation by ${gap.toFixed(0)}pts in the ${band} band`)}
+    }
+  }catch(e){}
+  const verdict=score>=3?'TAKE':score<=-3?'FADE':score>=1?'lean take':score<=-1?'lean fade':'neutral';
+  return{verdict,score,reasons,edge};
+}
+function takeFadeChip(g,s,sport){
+  const v=takeFadeVerdict(g,s,sport);
+  if(v.verdict==='neutral'&&!v.reasons.length)return'';
+  const col=v.verdict==='TAKE'?'var(--win)':v.verdict==='FADE'?'var(--rust)':
+            v.verdict==='lean take'?'var(--cold)':v.verdict==='lean fade'?'var(--gold)':'var(--mute)';
+  const bc=v.verdict==='TAKE'?'rgba(46,204,113,.5)':v.verdict==='FADE'?'rgba(240,86,60,.5)':'var(--rule)';
+  return`<div class="sigchip" style="color:${col};border-color:${bc}"
+    title="${v.reasons.join(' \u00b7 ').replace(/"/g,'')}">
+    ${v.verdict.toUpperCase()}${v.reasons.length?` \u00b7 ${v.reasons.length} signal${v.reasons.length>1?'s':''}`:''}</div>`;
+}
+function takeFadePanel(g,s,sport){
+  const v=takeFadeVerdict(g,s,sport);
+  const col=v.verdict==='TAKE'?'var(--win)':v.verdict==='FADE'?'var(--rust)':'var(--mute)';
+  const la=teamLedgerFor(g.away.abbr), lh=teamLedgerFor(g.home.abbr);
+  const teamRow=(o,ab)=>{
+    if(!o||!o.n)return`<div style="color:var(--mute)">${ab}: no graded history yet</div>`;
+    const mark=o.flag==='black'?'\u2620':o.flag==='green'?'\u25c6':'\u00b7';
+    const c=o.flag==='black'?'var(--rust)':o.flag==='green'?'var(--win)':'var(--chalk)';
+    return`<div style="color:${c}">${mark} <b>${ab}</b> — sides ${o.sideW}-${o.sideL}${o.sideP?'-'+o.sideP:''},
+      O/U ${o.ovW+o.unW}-${o.ovL+o.unL}, ${(o.roi>=0?'+':'')}${o.roi.toFixed(2)}u per bet over ${o.n}</div>`;
+  };
+  return`<div class="sub" style="line-height:1.75">
+    <div style="font-family:'Archivo';font-weight:900;font-size:16px;color:${col};margin-bottom:6px">
+      ${v.verdict.toUpperCase()}<span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--mute);font-weight:400"> · score ${v.score>0?'+':''}${v.score}</span></div>
+    ${v.reasons.length?v.reasons.map(r=>`<div>\u2022 ${r}</div>`).join(''):'<div style="color:var(--mute)">No strong signal either way.</div>'}
+    <div style="margin-top:10px;font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--mute)">Your history</div>
+    ${teamRow(la,g.away.abbr)}
+    ${teamRow(lh,g.home.abbr)}
+    <div style="margin-top:10px;color:var(--mute);font-size:10px">
+      Verdict blends model EV, your per-team profit and your calibration in this confidence band.
+      It is a summary of your own record — not a prediction, and not a substitute for the number.</div>
+  </div>`;
+}
+
+/* ── 4. SYSTEM vs BOOK SCORECARD ───────────────────────────────────────────
+   Logs what the MODEL picked and what the BOOK favoured on every game, whether
+   or not you bet it. Without this you only ever see the subset you acted on,
+   which is the most biased sample available. */
+function logSystemPicks(sport){
+  const sp=sport||ACTIVE_SPORT;
+  const games=sp==='nfl'?NFL_GAMES:sp==='ncaaf'?NCAAF_GAMES:GAMES;
+  const sims=sp==='nfl'?NFL_SIMS:sp==='ncaaf'?NCAAF_SIMS:SIMS;
+  const log=get(LS.syslog,{});
+  const d=today();
+  const day=log[d]||(log[d]={});
+  (games||[]).forEach(g=>{
+    const s=(sims||{})[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const key=sp+':'+gl;
+    if(day[key]&&day[key].graded)return;
+    let lines=[];
+    try{lines=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):[]}catch(e){}
+    const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+    const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
+    const bookFav=(awayML&&homeML)?(awayML.price<homeML.price?g.away.abbr:g.home.abbr)
+                 :(homeML?g.home.abbr:awayML?g.away.abbr:null);
+    day[key]={
+      sport:sp,game:gl,
+      systemPick:s.hw>=s.aw?g.home.abbr:g.away.abbr,
+      systemConf:+(Math.max(s.aw,s.hw)*100).toFixed(1),
+      bookFav,graded:false,winner:null,systemHit:null,bookHit:null,
+    };
+  });
+  set(LS.syslog,log);
+  return Object.keys(day).length;
+}
+function gradeSystemLog(){
+  const log=get(LS.syslog,{});
+  const arc=get(LS.arc,{});
+  const finals={};
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{const F=fin[r.id];if(F&&F.a!=null)finals[(r.a||'')+'@'+(r.h||'')]={a:+F.a,h:+F.h}});
+  });
+  const addFinal=(arr,sp)=>(arr||[]).forEach(g=>{
+    if(g.awayScore==null||g.awayScore==='')return;
+    finals[g.away.abbr+'@'+g.home.abbr]={a:+g.awayScore,h:+g.homeScore};
+  });
+  addFinal(NFL_GAMES,'nfl');addFinal(NCAAF_GAMES,'ncaaf');
+  let graded=0;
+  Object.keys(log).forEach(d=>{
+    Object.keys(log[d]).forEach(k=>{
+      const row=log[d][k];if(row.graded)return;
+      const F=finals[row.game];if(!F)return;
+      const [aw,hm]=row.game.split('@');
+      const winner=F.a>F.h?aw:F.h>F.a?hm:null;
+      if(!winner)return;
+      row.winner=winner;
+      row.systemHit=row.systemPick===winner;
+      row.bookHit=row.bookFav?row.bookFav===winner:null;
+      row.graded=true;graded++;
+    });
+  });
+  if(graded)set(LS.syslog,log);
+  return graded;
+}
+function systemScorecard(sport,lastN){
+  gradeSystemLog();
+  const log=get(LS.syslog,{});
+  const rows=[];
+  Object.keys(log).sort().forEach(d=>Object.keys(log[d]).forEach(k=>{
+    const r=log[d][k];
+    if(sport&&r.sport!==sport)return;
+    if(r.graded)rows.push({...r,date:d});
+  }));
+  const recent=lastN?rows.slice(-lastN):rows;
+  const sysW=recent.filter(r=>r.systemHit===true).length;
+  const sysL=recent.filter(r=>r.systemHit===false).length;
+  const bkW=recent.filter(r=>r.bookHit===true).length;
+  const bkL=recent.filter(r=>r.bookHit===false).length;
+  // streak on the system, most recent first
+  let streak=0,streakType=null;
+  for(let i=recent.length-1;i>=0;i--){
+    const h=recent[i].systemHit;if(h===null)continue;
+    if(streakType===null){streakType=h;streak=1}
+    else if(h===streakType)streak++;
+    else break;
+  }
+  return{n:recent.length,sysW,sysL,bkW,bkL,
+    sysPct:sysW+sysL?sysW/(sysW+sysL):null,
+    bkPct:bkW+bkL?bkW/(bkW+bkL):null,
+    streak,streakType,rows:recent};
+}
+/* Per-game-card strip: how the system and the book have been running lately. */
+function systemFormChip(sport){
+  const sc=systemScorecard(sport,20);
+  if(!sc.n)return'';
+  const sysPct=sc.sysPct!=null?(sc.sysPct*100).toFixed(0)+'%':'—';
+  const bkPct=sc.bkPct!=null?(sc.bkPct*100).toFixed(0)+'%':'—';
+  const hot=sc.streakType===true&&sc.streak>=3;
+  const cold=sc.streakType===false&&sc.streak>=3;
+  const col=hot?'var(--win)':cold?'var(--rust)':'var(--mute)';
+  const streakStr=sc.streak>=2?` \u00b7 ${sc.streak}${sc.streakType?'W':'L'} streak`:'';
+  return`<div class="sigchip" style="color:${col}"
+    title="Last ${sc.n} graded games — system vs the book's favourite">
+    SYS <b>${sc.sysW}-${sc.sysL}</b> (${sysPct}) vs BOOK <b>${sc.bkW}-${sc.bkL}</b> (${bkPct})${streakStr}</div>`;
+}
+
+
+/* ── 5. TRENDS INTO THE SIMULATION ─────────────────────────────────────────
+   Trends were displayed and used for alignment tiers, but never touched the
+   projection. Feeding them in raw would be worse than ignoring them: a "5-0 in
+   last 5" at n=5 has a standard error near 22 points, and roughly a third of
+   such lines are perfect by chance alone.
+
+   So the nudge is deliberately small and doubly shrunk:
+     1. by sample size of the trend itself (n/(n+8))
+     2. by the MEASURED accuracy of that trend family in your own graded history
+
+   A trend family that has never beaten a coin flip contributes nothing, no
+   matter how gaudy its record looks. That is the learning-bias loop applied to
+   trends rather than to teams. */
+const TREND_SHRINK=8;
+const TREND_MAX_RUNS=0.45;      // hard cap on total influence, in runs/points
+
+function trendFamily(text){
+  const t=String(text||'').toLowerCase();
+  if(/\bunder is\b/.test(t))return'under';
+  if(/\bover is\b/.test(t))return'over';
+  if(/\bare \d+-\d+/.test(t))return'side';
+  return'other';
+}
+function trendSampleSize(text){
+  const m=String(text||'').match(/(\d+)-(\d+)(?:-(\d+))?/);
+  if(!m)return 0;
+  return (+m[1]||0)+(+m[2]||0)+(+m[3]||0);
+}
+function trendWinRate(text){
+  const m=String(text||'').match(/(\d+)-(\d+)(?:-(\d+))?/);
+  if(!m)return null;
+  const w=+m[1]||0,l=+m[2]||0;
+  return (w+l)?w/(w+l):null;
+}
+/* Measured reliability of each trend family from your graded archive. */
+function trendReliability(){
+  const log=get(LS.trendlog,{});
+  const out={};
+  Object.keys(log).forEach(fam=>{
+    const o=log[fam];
+    if(!o||!o.n)return;
+    const hit=o.w/o.n;
+    // shrink toward 50% — a family needs volume before it earns influence
+    const w=o.n/(o.n+20);
+    out[fam]={n:o.n,hit,weight:+( (hit-0.5)*2*w ).toFixed(3)};
+  });
+  return out;
+}
+/* Net directional lean from every VERIFIED trend on this game. */
+function trendSimAdjustment(g,s){
+  let trends=[];
+  try{trends=applicableTrends(g,s)||[]}catch(e){return{total:0,side:0,used:0,detail:[]}}
+  const rel=trendReliability();
+  let total=0,side=0,used=0;const detail=[];
+  trends.forEach(t=>{
+    if(!t.applies)return;                    // fails its own stated condition
+    if(t.unverified)return;                  // series position we cannot confirm
+    const fam=trendFamily(t.text);
+    if(fam==='other')return;
+    const n=trendSampleSize(t.text);
+    if(n<4)return;
+    const wr=trendWinRate(t.text);
+    if(wr==null)return;
+    const sampleW=n/(n+TREND_SHRINK);
+    const famW=rel[fam]?Math.max(0,rel[fam].weight):0.15;   // unproven family gets a floor, not a free pass
+    const strength=(wr-0.5)*2*sampleW*famW;
+    if(fam==='over'){total+=strength;used++;detail.push({fam,n,wr,strength})}
+    else if(fam==='under'){total-=strength;used++;detail.push({fam,n,wr,strength})}
+    else if(fam==='side'){side+=strength;used++;detail.push({fam,n,wr,strength})}
+  });
+  const clamp=(v)=>Math.max(-TREND_MAX_RUNS,Math.min(TREND_MAX_RUNS,v));
+  return{total:+clamp(total).toFixed(3),side:+clamp(side).toFixed(3),used,detail};
+}
+/* After finals land, score every trend that was on the board so the reliability
+   table is built from outcomes rather than from the trend's own claim. */
+function gradeTrendLog(){
+  const arc=get(LS.arc,{});
+  const trendsByDay=get(LS.exttrends,{});
+  const log=get(LS.trendlog,{});
+  const seen=log.__seen||(log.__seen={});
+  let graded=0;
+  Object.keys(trendsByDay).forEach(d=>{
+    const A=arc[d];if(!A)return;
+    const fin=A.finals||{};
+    const byGame={};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a==null)return;
+      byGame[(r.a||'')+'@'+(r.h||'')]={a:+F.a,h:+F.h,total:+F.a+ +F.h};
+    });
+    (trendsByDay[d]||[]).forEach((t,idx)=>{
+      const sig=d+'|'+idx;
+      if(seen[sig])return;
+      const F=byGame[t.game];if(!F)return;
+      const fam=trendFamily(t.text);
+      if(fam!=='over'&&fam!=='under')return;   // only totals are gradeable without a line
+      const line=t.line||null;
+      if(line==null)return;
+      const hit=fam==='over'?F.total>line:F.total<line;
+      log[fam]=log[fam]||{n:0,w:0};
+      log[fam].n++;if(hit)log[fam].w++;
+      seen[sig]=1;graded++;
+    });
+  });
+  if(graded)set(LS.trendlog,log);
+  return graded;
+}
+/* Card chip: what the trends are actually contributing, or why nothing. */
+function trendInfluenceChip(g,s){
+  const a=trendSimAdjustment(g,s);
+  if(!a.used)return'';
+  const dir=a.total>0.05?'OVER':a.total<-0.05?'UNDER':'neutral';
+  const col=Math.abs(a.total)>=0.2?'var(--gold)':'var(--mute)';
+  return`<div class="sigchip" style="color:${col}"
+    title="${a.used} verified trend${a.used>1?'s':''} shifting the total by ${a.total>0?'+':''}${a.total}">
+    TRENDS \u00b7 ${a.used} verified \u00b7 ${dir==='neutral'?'no lean':dir+' '+(a.total>0?'+':'')+a.total}</div>`;
+}
+
 // ── NCAAF Power Ratings (ESPN) ────────────────────────────────────────────────
 async function fetchNCAAFPowerRatings(){
   try{
@@ -15660,6 +16263,8 @@ function ncaafCard(g){
          :`<div class="proj"><div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div><div class="rd">${Math.round(ap)}–${Math.round(hp)}</div></div>`}
     <div class="sig">
       <div class="sigchip">O/U <b>${NCAAF_POWER_FLAT?'—':med}</b> · ${spreadLabel}</div>
+      ${(()=>{try{return teamRecordChip(g.away.abbr)+teamRecordChip(g.home.abbr)
+        +frozenChip(g,s,'ncaaf')+takeFadeChip(g,s,'ncaaf')+systemFormChip('ncaaf')}catch(e){return''}})()}
       ${(()=>{try{
         if(NCAAF_POWER_FLAT)return'';
         if(!awaySpread&&!totalOver)return'';
@@ -15706,6 +16311,7 @@ function ncaafCard(g){
       <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="ncaafTogglePanel('alt','${id}',this)">Alt Lines</button>
       <button onclick="ncaafTogglePanel('portal','${id}',this)">Portal</button>
+      <button onclick="ncaafTogglePanel('verdict','${id}',this)">Take/Fade</button>
       ${(cfbLive||cfbFinal)?`<button onclick="ncaafTogglePanel('livebox','${id}',this)">${cfbLive?'Live box':'Box score'}</button>`:''}
       <button onclick="ncaafTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
@@ -15713,6 +16319,7 @@ function ncaafCard(g){
     <div class="panel" id="p-ncaafag-${id}">${ncaafGameAG(g,s)}</div>
     <div class="panel" id="p-ncaafalt-${id}">${footballAltPanel(g,s)}</div>
     <div class="panel" id="p-ncaafportal-${id}">${cfbPortalPanel(g)}</div>
+    <div class="panel" id="p-ncaafverdict-${id}">${takeFadePanel(g,s,'ncaaf')}</div>
     <div class="panel" id="p-ncaaflivebox-${id}"><div id="p-fb-livebox-${id}">${(cfbLive||cfbFinal)?fbLiveBoxPanel(g,'ncaaf'):''}</div></div>
     <div class="panel" id="p-ncaafmybets-${id}"></div>
   </div>`;
