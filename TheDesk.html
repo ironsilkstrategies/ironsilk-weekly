@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.44</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.45</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -5162,6 +5162,7 @@ function card(g){
    </div>
    ${!bettingClosed&&s?betGrid(g,s,M):''}
    <div class="exprow">
+    <button class="expbtn" onclick="pan(${g.id},'coach',this)">Coach</button>
     <button class="expbtn" onclick="pan(${g.id},'trend',this)">Trends</button>
     <button class="expbtn" onclick="pan(${g.id},'ag',this)">A–G</button>
     <button class="expbtn" onclick="pan(${g.id},'alt',this)">Alt lines</button>
@@ -5170,6 +5171,7 @@ function card(g){
     ${isLive?`<button class="expbtn" onclick="pan(${g.id},'livebox',this)">Live box</button>`:''}
     ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button>`:''}
    </div>
+   <div class="panel" id="p-coach-${g.id}">${coachBriefing(g,s,'mlb')}</div>
    <div class="panel" id="p-trend-${g.id}">${trendPanel(g,s)}</div>
    <div class="panel" id="p-ag-${g.id}">${agPanel(g,s,M,topReasons(),realLineRead())}</div>
    <div class="panel" id="p-alt-${g.id}">${altPanel(g,s)}</div>
@@ -12827,7 +12829,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.44
+   NFL ENGINE — BUILD v1.45
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -14796,6 +14798,7 @@ function nflCardFull(g){
     <div class="legend" style="margin-top:2px"><span>◆ SUPREME = book price, model edge and outside sources all agree</span><span>STRONG = two of three</span><span>⚠ CONFLICT = they disagree</span></div>
 
     <div class="exprow" style="margin-top:10px">
+      <button onclick="nflTogglePanel('coach','${id}',this)">Coach</button>
       <button onclick="nflTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="nflTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="nflTogglePanel('alt','${id}',this)">Alt Lines</button>
@@ -14804,6 +14807,7 @@ function nflCardFull(g){
       ${(isLive||isFinal)?`<button onclick="nflTogglePanel('livebox','${id}',this)">${isLive?'Live box':'Box score'}</button>`:''}
       <button onclick="nflTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
+    <div class="panel" id="p-nflcoach-${id}">${coachBriefing(g,s,'nfl')}</div>
     <div class="panel" id="p-nfltrends-${id}">${nflTrendPanel(g,s)}</div>
     <div class="panel" id="p-nflag-${id}">${renderNFLGameAG(g,s)}</div>
     <div class="panel" id="p-nflalt-${id}">${footballAltPanel(g,s)}</div>
@@ -14915,7 +14919,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.44
+   NCAAF ENGINE — BUILD v1.45
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -16012,6 +16016,124 @@ function trendInfluenceChip(g,s){
 }
 
 
+// ── PER-GAME COACH BRIEFING ──────────────────────────────────────────────
+// The Coach's full briefing on ONE game — every factor that actually feeds
+// the projection, ranked and in plain language, in a single panel instead
+// of scattered across five tabs. This is the "everything I should know about
+// the game" ask: uploaded trends broken down individually (not just a count),
+// park/weather, pitcher or team form, H2H, and the take/fade read together.
+function coachBriefing(g,s,sport){
+  if(!s)return'<div class="empty">Run sims first.</div>';
+  const sec=[];
+
+  // 1 · headline verdict, stated first because it's the summary of everything below
+  try{
+    const v=takeFadeVerdict(g,s,sport);
+    if(v&&v.reasons.length){
+      const col=v.verdict==='TAKE'?'var(--win)':v.verdict==='FADE'?'var(--rust)':'var(--gold)';
+      sec.push(`<div style="font-family:'Archivo';font-weight:900;font-size:15px;color:${col};margin-bottom:4px">
+        ${v.verdict.toUpperCase()}</div>
+        <div style="margin-bottom:10px">${v.reasons.map(r=>'\u2022 '+r).join('<br>')}</div>`);
+    }
+  }catch(e){}
+
+  // 2 · every uploaded trend that actually applies, broken down individually —
+  //     not just a count, the real "7-2 team, 4-5 over-style" breakdown asked for
+  try{
+    const trends=(applicableTrends(g,s)||[]).filter(t=>t.applies);
+    if(trends.length){
+      sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">
+        Trends on the board (${trends.length})</div>`);
+      sec.push(trends.map(t=>{
+        const n=trendSampleSize(t.text), wr=trendWinRate(t.text);
+        const fam=trendFamily(t.text);
+        const tag=fam==='over'?'OVER':fam==='under'?'UNDER':fam==='side'?'SIDE':'';
+        const col=fam==='over'?'var(--win)':fam==='under'?'var(--cold)':'var(--chalk)';
+        return`<div style="padding:5px 0;border-bottom:1px solid var(--rule);font-size:11.5px">
+          ${tag?`<span style="color:${col};font-family:'IBM Plex Mono';font-size:9px;font-weight:700">${tag}</span> `:''}
+          ${t.text}${n?` <span style="color:var(--mute)">(n=${n}${wr!=null?', '+(wr*100).toFixed(0)+'%':''})</span>`:''}
+          ${t.unverified?'<span style="color:var(--gold)"> — series position unverified</span>':''}
+        </div>`;
+      }).join(''));
+      try{
+        const adj=trendSimAdjustment(g,s);
+        if(adj.used)sec.push(`<div style="margin-top:6px;color:var(--mute);font-size:10px">
+          Net effect on the sim after shrinkage: ${adj.total>0?'+':''}${adj.total} runs/points toward
+          ${adj.total>0?'the over':adj.total<0?'the under':'neutral'}. Small by design — see the Coach tab
+          for why a "5-0" trend doesn't move the number very far.</div>`);
+      }catch(e){}
+    }
+  }catch(e){}
+
+  // 3 · park, weather, big-bat / pitcher's park — MLB only, ESPN provides none
+  //     of this for football so the section is skipped rather than padded
+  if(sport==='mlb'||!sport){
+    try{
+      const pf=PARK[g.home.abbr]||null;
+      const w=g.weather;
+      const notes=[];
+      if(pf&&pf[1]!=null){
+        if(pf[1]>=112)notes.push(`<b>${g.home.abbr}'s park plays as a big-bat park</b> — ${pf[1]} HR factor, well above the 100 league-average line.`);
+        else if(pf[1]<=88)notes.push(`<b>${g.home.abbr}'s park suppresses power</b> — ${pf[1]} HR factor, a real pitcher's park.`);
+      }
+      const temp=w?parseFloat(w.temp):null;
+      if(temp!=null&&!isNaN(temp)&&(temp>=88||temp<=45))
+        notes.push(`${w.temp}\u00b0${w.cond?' '+w.cond:''} — ${temp>=88?'hot, thin air that carries the ball':'cold, dense air that suppresses scoring'}.`);
+      if(w&&w.wind&&/out/i.test(w.wind))notes.push(`Wind: ${w.wind} — blowing out is a real tailwind for the total.`);
+      else if(w&&w.wind&&/in\b/i.test(w.wind))notes.push(`Wind: ${w.wind} — blowing in works against the total.`);
+      if(w&&w.cond&&/rain|snow|shower|storm|sleet/i.test(w.cond))notes.push(`Conditions: ${w.cond} — weather risk for this game.`);
+      if(notes.length)sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Park &amp; weather</div>
+        <div style="font-size:11.5px;line-height:1.7">${notes.join('<br>')}</div>`);
+    }catch(e){}
+  }
+
+  // 4 · pitcher/team form — reuses the same trendPanel factor engine (starter
+  //     form, workload, command, contact) so this never disagrees with the
+  //     Trends tab; it just puts the plain-language version in one place
+  try{
+    const full=trendPanel(g,s);
+    const rows=[...full.matchAll(/<div class="tname">([^<]+)<\/div>\s*<div class="ttext">([\s\S]*?)<\/div>/g)];
+    if(rows.length){
+      sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Form &amp; matchup factors</div>`);
+      sec.push(rows.map(r=>`<div style="padding:4px 0;font-size:11.5px">
+        <b>${r[1]}:</b> ${r[2].replace(/<[^>]+>/g,m=>/<b>|<\/b>/.test(m)?m:'')}</div>`).join(''));
+    }
+  }catch(e){}
+
+  // 5 · your own history with these teams — the ledger, spelled out
+  try{
+    const la=teamLedgerFor(g.away.abbr),lh=teamLedgerFor(g.home.abbr);
+    const row=(o,ab)=>{
+      if(!o||!o.n)return null;
+      const mark=o.flag==='black'?'\u2620 fade signal':o.flag==='green'?'\u25c6 lean-in signal':'no strong signal';
+      return`<b>${ab}</b>: ${o.sideW}-${o.sideL} sides, ${o.ovW+o.unW}-${o.ovL+o.unL} O/U over ${o.n} graded,
+        ${(o.roi>=0?'+':'')}${o.roi.toFixed(2)}u/bet — ${mark}`;
+    };
+    const lines=[row(la,g.away.abbr),row(lh,g.home.abbr)].filter(Boolean);
+    if(lines.length)sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Your record with these teams</div>
+      <div style="font-size:11.5px;line-height:1.8">${lines.join('<br>')}</div>`);
+  }catch(e){}
+
+  // 6 · CFB transfer portal note, when relevant — production earned elsewhere
+  if(sport==='ncaaf'){
+    try{
+      const inc=[...(typeof cfbIncomingTransfers==='function'?cfbIncomingTransfers(g.away.name||g.away.abbr):[]),
+                 ...(typeof cfbIncomingTransfers==='function'?cfbIncomingTransfers(g.home.name||g.home.abbr):[])];
+      if(inc.length)sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Transfer portal</div>
+        <div style="font-size:11.5px;color:var(--mute)">${inc.length} incoming transfer${inc.length>1?'s':''}
+        on this card — see the Portal tab for names and former schools before trusting box-score production at face value.</div>`);
+    }catch(e){}
+  }
+
+  if(!sec.length)return'<div class="empty">Nothing flagged for this game yet — no uploaded trends, no park/weather signal, and no graded history with either team. That is a genuinely quiet card, not a missing one.</div>';
+  return`<div class="sub">${sec.join('')}</div>`;
+}
+
 /* ── THE COACH TAB ─────────────────────────────────────────────────────────
    Everything the Coach says or shows on a game card, decoded in one place.
    Two sections: what the Coach is saying RIGHT NOW (live, pulled from real
@@ -16034,15 +16156,36 @@ function renderCoachTab(){
     </div></div>`;
 
   h+=`<div class="sbar"><h2>Speaking right now</h2><div class="ln"></div></div>`;
+  /* This used to check only the two account-level triggers (bankroll, best
+     performer) and skip every game entirely — which is why it read "nothing
+     to say" on a slate full of live take/fade calls. It now scans every game
+     on today's board, across all three sports, and lists every card the
+     Coach is actually speaking on right now, exactly like the strip that
+     shows up on that card. */
   const live=[];
-  if(br)live.push(br);
-  if(best)live.push(best);
+  if(br)live.push({...br,src:'Bankroll'});
+  if(best)live.push({...best,src:'Best performer'});
+  const scanSport=(games,sims,sp)=>{
+    (games||[]).forEach(g=>{
+      const sm=(sims||{})[g.id];if(!sm)return;
+      let v=null;try{v=coachGameRead(g,sm,sp)}catch(e){}
+      if(v)live.push({...v,src:g.away.abbr+' @ '+g.home.abbr});
+    });
+  };
+  try{scanSport(GAMES,SIMS,'mlb')}catch(e){}
+  try{scanSport(NFL_GAMES,NFL_SIMS,'nfl')}catch(e){}
+  try{scanSport(NCAAF_GAMES,NCAAF_SIMS,'ncaaf')}catch(e){}
+  const order={warn:0,bad:0,neutral:1,good:2};
+  live.sort((a,b)=>(order[a.tone]??1)-(order[b.tone]??1));
   h+=live.length?live.map(v=>{
     const toneColor={warn:'var(--rust)',bad:'var(--rust)',neutral:'var(--mute)',good:'var(--win)'};
     return`<div class="tkt" style="border-left:3px solid ${toneColor[v.tone]||'var(--mute)'}">
+      <div style="font-family:'IBM Plex Mono';font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+        color:var(--mute);margin-bottom:2px">${v.src}</div>
       <div class="sub">${v.text}</div></div>`;
   }).join(''):`<div class="empty">Nothing rises to a Coach-level comment right now
-    — bankroll pace is normal and no bucket is running far enough ahead to call out.</div>`;
+    — no game has a strong enough take/fade signal, and bankroll pace and bucket
+    performance are both unremarkable. Sims need to have run for this to populate.</div>`;
 
   // ── per-game triggers, explained ──
   h+=`<div class="sbar"><h2>What triggers a line on a game card</h2><div class="ln"></div></div>
@@ -16461,6 +16604,7 @@ function ncaafCard(g){
 
     <div class="exprow" style="margin-top:10px">
       <button onclick="ncaafTogglePanel('trends','${id}',this)">Trends</button>
+      <button onclick="ncaafTogglePanel('coach','${id}',this)">Coach</button>
       <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="ncaafTogglePanel('alt','${id}',this)">Alt Lines</button>
       <button onclick="ncaafTogglePanel('portal','${id}',this)">Portal</button>
@@ -16468,6 +16612,7 @@ function ncaafCard(g){
       ${(cfbLive||cfbFinal)?`<button onclick="ncaafTogglePanel('livebox','${id}',this)">${cfbLive?'Live box':'Box score'}</button>`:''}
       <button onclick="ncaafTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
+    <div class="panel" id="p-ncaafcoach-${id}">${coachBriefing(g,s,'ncaaf')}</div>
     <div class="panel" id="p-ncaaftrends-${id}">${ncaafTrendPanel(g,s)}</div>
     <div class="panel" id="p-ncaafag-${id}">${ncaafGameAG(g,s)}</div>
     <div class="panel" id="p-ncaafalt-${id}">${footballAltPanel(g,s)}</div>
