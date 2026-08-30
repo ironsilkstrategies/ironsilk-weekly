@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.39</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.40</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -12674,7 +12674,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.39
+   NFL ENGINE — BUILD v1.40
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12971,7 +12971,12 @@ function _parseNFLEvents(j){
       week:j.week&&j.week.number||NFL_WEEK||'',
       seasonType:j.season&&j.season.type||2,
       day:day,time:timeStr,date:e.date||'',
-      status:comp.status&&comp.status.type&&comp.status.type.description||'Scheduled',
+      status:(comp.status&&comp.status.type&&comp.status.type.description)||'Scheduled',
+      abstract:(comp.status&&comp.status.type&&comp.status.type.state)||'pre',
+      clock:comp.status&&comp.status.displayClock||'',
+      period:comp.status&&comp.status.period||0,
+      awayScore:comp.competitors?(comp.competitors.find(c=>c.homeAway==='away')||{}).score||null:null,
+      homeScore:comp.competitors?(comp.competitors.find(c=>c.homeAway==='home')||{}).score||null:null,
       away:{abbr:awayAbbr,name:away.team.displayName||awayAbbr,offRating:24,defRating:24,record:away.records&&away.records[0]&&away.records[0].summary||''},
       home:{abbr:homeAbbr,name:home.team.displayName||homeAbbr,offRating:24,defRating:24,record:home.records&&home.records[0]&&home.records[0].summary||''},
     };
@@ -14396,6 +14401,8 @@ function nflOnActivate(){
 function nflCardFull(g){
   const s=NFL_SIMS[g.id];
   if(!s)return'';
+  const isLive=g.abstract==='in'||g.abstract==='live'||g.status==='InProgress'||g.status==='Halftime';
+  const isFinal=g.abstract==='post'||g.status==='Final';
   const gameKey=g.away.abbr+'@'+g.home.abbr;
   const lines=nflBookLinesFor(gameKey);
   const hasReal=lines.length>0;
@@ -14639,12 +14646,14 @@ function nflCardFull(g){
       <button onclick="nflTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="nflTogglePanel('alt','${id}',this)">Alt Lines</button>
       <button onclick="nflTogglePanel('props','${id}',this)">Props</button>
+      ${(isLive||isFinal)?`<button onclick="nflTogglePanel('livebox','${id}',this)">${isLive?'Live box':'Box score'}</button>`:''}
       <button onclick="nflTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
     <div class="panel" id="p-nfltrends-${id}">${nflTrendPanel(g,s)}</div>
     <div class="panel" id="p-nflag-${id}">${renderNFLGameAG(g,s)}</div>
     <div class="panel" id="p-nflalt-${id}">${footballAltPanel(g,s)}</div>
     <div class="panel" id="p-nflprops-${id}">${nflPropsPanel(g,s)}</div>
+    <div class="panel" id="p-nfllivebox-${id}"><div id="p-fb-livebox-${id}">${(isLive||isFinal)?fbLiveBoxPanel(g,'nfl'):''}</div></div>
     <div class="panel" id="p-nflmybets-${id}"></div>
   </div>`;
 }
@@ -14750,7 +14759,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.39
+   NCAAF ENGINE — BUILD v1.40
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -15105,6 +15114,258 @@ function cfbIncomingTransfers(team){
   });
   return out;
 }
+/* ── FOOTBALL LIVE BOX ────────────────────────────────────────────────────
+   Same depth as the MLB box: quarter linescore with possession marker,
+   passing/rushing/receiving tables per team, team toggle, 45s live cache.
+   Works for both NFL and CFB — the ESPN summary endpoint is the same path,
+   only the league slug differs. */
+let FB_BOX_CACHE={};           // keyed by espnId
+let FB_BOX_INFLIGHT={};
+const FB_ESPN={
+  nfl:'https://site.api.espn.com/apis/site/v2/sports/football/nfl',
+  ncaaf:'https://site.api.espn.com/apis/site/v2/sports/football/college-football',
+};
+
+async function fetchFBBoxscore(espnId,league){
+  if(!espnId)return null;
+  const cached=FB_BOX_CACHE[espnId];
+  if(cached&&Date.now()-cached.ts<45000)return cached;
+  if(FB_BOX_INFLIGHT[espnId])return FB_BOX_INFLIGHT[espnId];
+  const base=FB_ESPN[league]||FB_ESPN.nfl;
+  const p=(async()=>{
+    try{
+      const r=await fetch(`${base}/summary?event=${espnId}`);
+      const j=await r.json();
+      const result=parseFBBoxscore(j);
+      FB_BOX_CACHE[espnId]={ts:Date.now(),...result};
+      return FB_BOX_CACHE[espnId];
+    }catch(e){return null;}
+    finally{delete FB_BOX_INFLIGHT[espnId];}
+  })();
+  FB_BOX_INFLIGHT[espnId]=p;
+  return p;
+}
+
+function parseFBBoxscore(j){
+  // Linescore — ESPN puts it in j.header.competitions[0].competitors
+  const comp=((j.header||{}).competitions||[])[0]||((j.boxscore||{}).teams||[{},{}])[0]&&{};
+  const hcomp=((j.header||{}).competitions||[])[0]||{};
+  const competitors=(hcomp.competitors||[]);
+  const awayComp=competitors.find(c=>c.homeAway==='away')||competitors[0]||{};
+  const homeComp=competitors.find(c=>c.homeAway==='home')||competitors[1]||{};
+  const awayAbbr=(awayComp.team&&awayComp.team.abbreviation||'').toUpperCase();
+  const homeAbbr=(homeComp.team&&homeComp.team.abbreviation||'').toUpperCase();
+  const awayScore=+(awayComp.score||0);
+  const homeScore=+(homeComp.score||0);
+  // Quarter/half scores from linescores
+  const awayLns=(awayComp.linescores||[]).map(x=>x.value!=null?x.value:'');
+  const homeLns=(homeComp.linescores||[]).map(x=>x.value!=null?x.value:'');
+  // status
+  const hStatus=(hcomp.status||{});
+  const period=hStatus.period||0;
+  const clock=hStatus.displayClock||'';
+  const state=(hStatus.type||{}).state||'pre';
+  const pos=((j.situation||{}).possession||{}).id;
+  const posTeamId=pos||(((j.situation||{}).possessionText)||'');
+  const awayTeamId=awayComp.id||awayComp.team&&awayComp.team.id||'';
+  const homeTeamId=homeComp.id||homeComp.team&&homeComp.team.id||'';
+  const possAway=pos&&(awayTeamId===pos||awayAbbr===pos);
+  const possHome=pos&&(homeTeamId===pos||homeAbbr===pos);
+  const dn=j.situation&&j.situation.downDistanceText||'';
+  const spot=j.situation&&j.situation.possessionText||'';
+  // Player stats from j.boxscore.players
+  const players=(j.boxscore||{}).players||[];
+  const teamStats={};
+  players.forEach(teamBlock=>{
+    const ab=(teamBlock.team&&teamBlock.team.abbreviation||'').toUpperCase();
+    if(!ab)return;
+    const out={passing:[],rushing:[],receiving:[],fumbles:[],interceptions:[],defense:[]};
+    (teamBlock.statistics||[]).forEach(group=>{
+      const cat=(group.name||group.type||'').toLowerCase();
+      const labels=group.labels||group.keys||[];
+      (group.athletes||[]).forEach(a=>{
+        const name=(a.athlete&&(a.athlete.shortName||a.athlete.displayName))||'';
+        const stats={name};
+        (a.stats||[]).forEach((v,i)=>{ if(labels[i])stats[labels[i]]=v; });
+        if(cat.includes('pass'))out.passing.push(stats);
+        else if(cat.includes('rush'))out.rushing.push(stats);
+        else if(cat.includes('receiv'))out.receiving.push(stats);
+        else if(cat.includes('fumble'))out.fumbles.push(stats);
+        else if(cat.includes('interc'))out.interceptions.push(stats);
+        else if(cat.includes('defens')||cat.includes('tackle')||cat.includes('sack'))out.defense.push(stats);
+      });
+    });
+    teamStats[ab]=out;
+  });
+  return{awayAbbr,homeAbbr,awayScore,homeScore,awayLns,homeLns,
+    period,clock,state,possAway,possHome,dn,spot,teamStats};
+}
+
+function fbLiveBoxPanel(g,league){
+  const espnId=g.espnId||g.id;
+  const cached=FB_BOX_CACHE[espnId];
+  const isLive=g.abstract==='in'||g.abstract==='live'||g.status==='InProgress'||g.status==='Halftime';
+  const isFinal=g.abstract==='post'||g.status==='Final';
+
+  // ── Quarter linescore ────────────────────────────────────────────────
+  const mkLinescore=(box)=>{
+    const nPeriods=league==='ncaaf'?4:4;
+    const awayQ=box?box.awayLns:[]; const homeQ=box?box.homeLns:[];
+    const aScore=box?box.awayScore:(g.awayScore||0);
+    const hScore=box?box.homeScore:(g.homeScore||0);
+    const per=box?box.period:(g.period||0);
+    const cols=Math.max(nPeriods,awayQ.length,homeQ.length);
+    const labels=Array.from({length:cols},(_,i)=>{
+      if(i<4)return 'Q'+(i+1);
+      if(i===4)return 'OT'; return 'OT'+(i-3);
+    });
+    const cell=(v,i)=>{
+      const cur=(box&&i===per-1&&isLive);
+      const empty=v===''||v===undefined||v===null;
+      return`<td style="text-align:center;padding:5px 5px;font-family:'IBM Plex Mono';font-size:11px;
+        color:${empty?'var(--mute)':cur?'var(--gold)':'var(--chalk)'};
+        background:${cur?'rgba(242,169,59,.08)':'transparent'};
+        border-bottom:1px solid var(--rule)">${empty?'·':v}</td>`;
+    };
+    // possession indicator ◆ in team column
+    const awayPoss=box&&box.possAway?'<span style="color:var(--gold);font-size:9px"> ◆</span>':'';
+    const homePoss=box&&box.possHome?'<span style="color:var(--gold);font-size:9px"> ◆</span>':'';
+    return`<div style="overflow-x:auto;margin:10px 0 4px">
+      <table style="width:100%;border-collapse:collapse;min-width:280px">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 6px;font-family:'IBM Plex Mono';font-size:9px;
+            letter-spacing:.08em;color:var(--mute);text-transform:uppercase;
+            border-bottom:1px solid var(--rule)">TEAM</th>
+          ${labels.map((l,i)=>`<th style="text-align:center;padding:4px 5px;
+            font-family:'IBM Plex Mono';font-size:9px;
+            color:${i===per-1&&isLive?'var(--gold)':'var(--mute)'};
+            border-bottom:1px solid var(--rule)">${l}</th>`).join('')}
+          <th style="text-align:center;padding:4px 8px;font-family:'IBM Plex Mono';
+            font-size:9px;color:var(--gold);letter-spacing:.06em;
+            border-bottom:1px solid var(--rule)">PTS</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="padding:6px 6px;font-family:'Archivo';font-weight:900;font-size:13px;
+              border-bottom:1px solid var(--rule)">${g.away.abbr}${awayPoss}</td>
+            ${Array.from({length:cols},(_,i)=>cell(awayQ[i],i)).join('')}
+            <td style="text-align:center;padding:6px 8px;font-family:'Archivo';font-weight:900;
+              font-size:16px;color:${aScore>hScore?'var(--win)':'var(--chalk)'};
+              border-bottom:1px solid var(--rule)">${aScore}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 6px;font-family:'Archivo';font-weight:900;font-size:13px">${g.home.abbr}${homePoss}</td>
+            ${Array.from({length:cols},(_,i)=>cell(homeQ[i],i)).join('')}
+            <td style="text-align:center;padding:6px 8px;font-family:'Archivo';font-weight:900;
+              font-size:16px;color:${hScore>aScore?'var(--win)':'var(--chalk)'}">${hScore}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    ${box&&box.dn?`<div style="font-family:'IBM Plex Mono';font-size:10px;color:var(--gold);margin:4px 0 2px">
+      ${box.dn}${box.spot?' — '+box.spot:''}</div>`:''}`;
+  };
+
+  // ── Stat table helper — passing / rushing / receiving / defense ───────
+  const statTable=(rows,cols,heading)=>{
+    if(!rows||!rows.length)return'';
+    return`<div style="margin-top:14px">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin-bottom:6px">${heading}</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:360px">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 6px;font-family:'IBM Plex Mono';
+            font-size:8.5px;color:var(--mute);border-bottom:1px solid var(--rule)">Player</th>
+          ${cols.map(c=>`<th style="text-align:center;padding:4px 5px;
+            font-family:'IBM Plex Mono';font-size:8.5px;color:var(--mute);
+            border-bottom:1px solid var(--rule)">${c}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+        ${rows.map(p=>`<tr>
+          <td style="padding:6px 6px;font-size:11.5px;font-weight:600;
+            border-bottom:1px solid var(--rule);white-space:nowrap">${p.name||'?'}</td>
+          ${cols.map(c=>{
+            const v=p[c]||p[c.toLowerCase()]||p[c.toUpperCase()]||'—';
+            const raw=parseFloat(String(v).replace(/[^0-9.\-]/g,''));
+            // highlight big games: 300+ pass yds, 100+ rush/rec, 1+ TD
+            const hot=(c==='YDS'||c==='C/ATT')&&!isNaN(raw)&&raw>=150
+              ||(c==='TD')&&!isNaN(raw)&&raw>=1
+              ||(c==='SACKS'||c==='TFL')&&!isNaN(raw)&&raw>=1;
+            const bad=(c==='INT')&&!isNaN(raw)&&raw>=1;
+            return`<td style="text-align:center;padding:6px 5px;font-family:'IBM Plex Mono';
+              font-size:11px;color:${hot?'var(--win)':bad?'var(--rust)':'var(--chalk)'};
+              border-bottom:1px solid var(--rule)">${v}</td>`;
+          }).join('')}
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+  };
+
+  // ── Team toggle — same interaction as MLB ─────────────────────────────
+  const tkId='_fbBoxTeam_'+g.id;
+  const activeTeam=(window[tkId])||'away';
+  const toggle=`<div class="subnav" style="margin-top:10px">
+    <button class="${activeTeam==='away'?'on':''}"
+      onclick="window['${tkId}']='away';fbBoxRefresh('${g.id}','${espnId}','${league}')">
+      ${g.away.abbr}</button>
+    <button class="${activeTeam==='home'?'on':''}"
+      onclick="window['${tkId}']='home';fbBoxRefresh('${g.id}','${espnId}','${league}')">
+      ${g.home.abbr}</button>
+  </div>`;
+
+  // ── Assemble ──────────────────────────────────────────────────────────
+  const box=FB_BOX_CACHE[espnId]||null;
+  const linescore=mkLinescore(box);
+  let playerSection='<div class="empty" style="padding:14px 0">Loading player stats…</div>';
+  if(box&&box.teamStats){
+    const abbr=activeTeam==='away'?g.away.abbr:g.home.abbr;
+    const st=box.teamStats[abbr]||Object.values(box.teamStats)[activeTeam==='away'?0:1]||{};
+    const pasCols=['C/ATT','YDS','AVG','TD','INT','QBR'];
+    const rusCols=['CAR','YDS','AVG','TD','LONG'];
+    const recCols=['REC','YDS','AVG','TD','LONG','TGTS'];
+    const defCols=['TOT','SOLO','SACKS','TFL','PD','INT'];
+    playerSection=
+      statTable(st.passing,pasCols,abbr+' Passing')
+      +statTable(st.rushing,rusCols,abbr+' Rushing')
+      +statTable(st.receiving,recCols,abbr+' Receiving')
+      +statTable(st.defense,defCols,abbr+' Defense');
+    if(!playerSection.trim())
+      playerSection='<div class="empty" style="padding:10px 0">No player stats available yet.</div>';
+  }
+
+  // Kick off (or refresh) the fetch — same deferred pattern as MLB
+  if(!box||Date.now()-box.ts>45000){
+    setTimeout(()=>{
+      fetchFBBoxscore(espnId,league).then(b=>{
+        if(!b)return;
+        fbBoxRefresh(g.id,espnId,league);
+      });
+    },0);
+  }
+
+  return`<div style="padding:2px 0">
+    ${linescore}
+    ${toggle}
+    ${playerSection}
+    <div style="margin-top:12px;text-align:center">
+      <button onclick="delete FB_BOX_CACHE['${espnId}'];fbBoxRefresh('${g.id}','${espnId}','${league}')"
+        style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+        background:transparent;border:1px solid var(--rule);color:var(--mute);
+        border-radius:6px;padding:6px 14px;cursor:pointer">↻ Refresh</button>
+    </div>
+  </div>`;
+}
+function fbBoxRefresh(gid,espnId,league){
+  // Re-render the panel using cached data (or trigger a fetch if stale).
+  // Used by the team toggle and the refresh button.
+  fetchFBBoxscore(espnId,league).then(()=>{
+    const panel=document.getElementById('p-fb-livebox-'+gid);
+    if(!panel)return;
+    const g=(league==='nfl'?NFL_GAMES:NCAAF_GAMES).find(x=>x.id===gid);
+    if(g)panel.innerHTML=fbLiveBoxPanel(g,league);
+  });
+}
 // ── NCAAF Power Ratings (ESPN) ────────────────────────────────────────────────
 async function fetchNCAAFPowerRatings(){
   try{
@@ -15207,7 +15468,7 @@ function _parseNCAAFEvents(j){
     }
     const ranking=t=>{const r=t.curatedRank&&t.curatedRank.current;return r&&r<=25?`#${r} `:'';};
     return{
-      id:e.id||String(i),week:NCAAF_WEEK||'',
+      id:e.id||String(i),espnId:e.id||'',week:NCAAF_WEEK||'',
       day,time:timeStr,date:e.date||'',
       status:comp.status&&comp.status.type&&comp.status.type.description||'Scheduled',
       away:{abbr:awayAbbr,name:awayName,ranking:ranking(away.team),
@@ -15282,6 +15543,8 @@ function renderNCAAF(){
 // ── NCAAF game card ───────────────────────────────────────────────────────────
 function ncaafCard(g){
   const s=NCAAF_SIMS[g.id];if(!s)return'';
+  const cfbLive=g.abstract==='in'||g.status==='InProgress'||g.status==='Halftime';
+  const cfbFinal=g.abstract==='post'||g.status==='Final';
   const gameKey=g.away.abbr+'@'+g.home.abbr;
   const lines=ncaafBookLinesFor(gameKey);
   const hasReal=lines.length>0;
@@ -15441,12 +15704,14 @@ function ncaafCard(g){
       <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="ncaafTogglePanel('alt','${id}',this)">Alt Lines</button>
       <button onclick="ncaafTogglePanel('portal','${id}',this)">Portal</button>
+      ${(cfbLive||cfbFinal)?`<button onclick="ncaafTogglePanel('livebox','${id}',this)">${cfbLive?'Live box':'Box score'}</button>`:''}
       <button onclick="ncaafTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
     <div class="panel" id="p-ncaaftrends-${id}">${ncaafTrendPanel(g,s)}</div>
     <div class="panel" id="p-ncaafag-${id}">${ncaafGameAG(g,s)}</div>
     <div class="panel" id="p-ncaafalt-${id}">${footballAltPanel(g,s)}</div>
     <div class="panel" id="p-ncaafportal-${id}">${cfbPortalPanel(g)}</div>
+    <div class="panel" id="p-ncaaflivebox-${id}"><div id="p-fb-livebox-${id}">${(cfbLive||cfbFinal)?fbLiveBoxPanel(g,'ncaaf'):''}</div></div>
     <div class="panel" id="p-ncaafmybets-${id}"></div>
   </div>`;
 }
