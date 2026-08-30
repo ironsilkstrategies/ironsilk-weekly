@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.43</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.44</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -509,6 +509,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <button onclick="tab('tickets',this)">Tickets</button>
     <button onclick="tab('grades',this)">Record<span class="n" id="nR"></span></button>
     <button onclick="tab('best',this)">Best<span class="n" id="nBest"></span></button>
+    <button onclick="tab('coach',this)">Coach</button>
     <button onclick="tab('chat',this)">Chat</button>
     <button onclick="tab('money',this)">Money</button>
     <button onclick="tab('settings',this)">Settings</button>
@@ -618,6 +619,10 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
 
   <div class="view" id="v-money">
     <div id="moneyBody"></div>
+  </div>
+
+  <div class="view" id="v-coach">
+    <div id="coachBody"></div>
   </div>
 
   <div class="view" id="v-settings">
@@ -1886,6 +1891,7 @@ function tab(n,b){
   if(n==='best'){bestTab(BESTTAB||'today');}
   if(n==='settings')fillSettingsTab();
   if(n==='money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab();}
+  if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
   window.scrollTo(0,0);
 }
 
@@ -3392,6 +3398,34 @@ function coachLongshotCheck(legs){
   return null;
 }
 
+// ── per-game read — the Coach's take on THIS card specifically, synthesized
+// from the same take/fade verdict, team ledger and frozen-drift data already
+// on the card, but spoken as one sentence instead of five separate chips.
+// This is what makes the Coach actually say something on a game card rather
+// than only living on the ticket/money/record screens.
+function coachGameRead(g,s,sport){
+  if(!g||!s)return null;
+  let v=null;
+  try{v=takeFadeVerdict(g,s,sport)}catch(e){return null}
+  if(!v)return null;
+  if(v.verdict==='TAKE')
+    return{tone:'good',text:`${v.reasons[0]||'Model and history line up here'} — this is a green-light spot, not a coin flip.`};
+  if(v.verdict==='FADE')
+    return{tone:'warn',text:`${v.reasons[0]||'This one fights your own numbers'} — the case against is louder than the case for.`};
+  // drift check even with no take/fade signal — worth a note on its own
+  try{
+    const f=frozenFor(g,sport);
+    if(f){
+      const drift=Math.abs(s.awayProj-f.awayProj)+Math.abs(s.homeProj-f.homeProj);
+      if(drift>=1.5)
+        return{tone:'neutral',text:`Locked number has drifted ${drift.toFixed(1)} points since freeze — new info moved this one, worth a second look before trusting the frozen line.`};
+    }
+  }catch(e){}
+  if(v.verdict==='lean take'||v.verdict==='lean fade')
+    return{tone:'neutral',text:`${v.reasons[0]||'Mild lean here'} — real but not strong enough to lead with.`};
+  return null;
+}
+
 // ── the master dispatcher — call this from wherever the Coach should speak,
 // pass whatever context is available, get back the single most important
 // thing to say (or null, meaning stay quiet — a coach who talks constantly
@@ -3416,6 +3450,10 @@ function coachSpeak(context){
   if(context.screen==='record'||context.screen==='eval'){
     const best=coachBestPerformer();
     if(best)candidates.push(best);
+  }
+  if(context.game&&context.sim){
+    const gr=coachGameRead(context.game,context.sim,context.sport);
+    if(gr)candidates.push(gr);
   }
   // priority order when multiple things are true at once: warnings before
   // neutral notes before good news — a duplicate risk matters more right
@@ -5119,6 +5157,7 @@ function card(g){
     ${isLive?liveScoreBar(g.id,g):""}
     ${finalLine}${!isLive?projLine:''}
     ${sig?`<div class="sig">${sig}</div>`:''}
+    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'mlb'})}catch(e){return''}})()}
     ${badges}
    </div>
    ${!bettingClosed&&s?betGrid(g,s,M):''}
@@ -12788,7 +12827,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.43
+   NFL ENGINE — BUILD v1.44
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -14708,6 +14747,7 @@ function nflCardFull(g){
       ${NFL_POWER_FLAT?`<div class="sigchip" style="color:var(--rust);border-color:rgba(240,86,60,.4)">RATINGS NOT LOADED — tap Retry above</div>`:''}
 
     </div>
+    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'nfl'})}catch(e){return''}})()}
 
     <div class="mktlab">Spread${realBadge}</div>
     <div class="betgrid">
@@ -14875,7 +14915,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.43
+   NCAAF ENGINE — BUILD v1.44
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -15971,6 +16011,118 @@ function trendInfluenceChip(g,s){
     TRENDS \u00b7 ${a.used} verified \u00b7 ${dir==='neutral'?'no lean':dir+' '+(a.total>0?'+':'')+a.total}</div>`;
 }
 
+
+/* ── THE COACH TAB ─────────────────────────────────────────────────────────
+   Everything the Coach says or shows on a game card, decoded in one place.
+   Two sections: what the Coach is saying RIGHT NOW (live, pulled from real
+   data), and a permanent glossary of every chip/badge that appears on cards
+   across all three sports, since most of them are compact by design and
+   compact things need somewhere to be spelled out in full. */
+function renderCoachTab(){
+  let h='';
+  // ── live section: the Coach's current reads, same functions the cards use ──
+  const br=coachBankrollRead();
+  const best=coachBestPerformer();
+  h+=`<div class="sbar" style="margin-top:0"><h2>The Coach</h2><div class="ln"></div></div>
+    <div class="tkt hi"><div class="sub">
+      No heart, all analysis. The Coach never says "bet this" — only what holds up against
+      your own recorded history and what doesn't. Every line it speaks is a pure function of
+      data already on the board: your bankroll pace, your graded record per team, the model's
+      edge against the posted price, and your calibration in that confidence band. Nothing here
+      is invented or estimated — if the Coach goes quiet on a card, it means none of its checks
+      found anything worth flagging, not that it has nothing to say by default.
+    </div></div>`;
+
+  h+=`<div class="sbar"><h2>Speaking right now</h2><div class="ln"></div></div>`;
+  const live=[];
+  if(br)live.push(br);
+  if(best)live.push(best);
+  h+=live.length?live.map(v=>{
+    const toneColor={warn:'var(--rust)',bad:'var(--rust)',neutral:'var(--mute)',good:'var(--win)'};
+    return`<div class="tkt" style="border-left:3px solid ${toneColor[v.tone]||'var(--mute)'}">
+      <div class="sub">${v.text}</div></div>`;
+  }).join(''):`<div class="empty">Nothing rises to a Coach-level comment right now
+    — bankroll pace is normal and no bucket is running far enough ahead to call out.</div>`;
+
+  // ── per-game triggers, explained ──
+  h+=`<div class="sbar"><h2>What triggers a line on a game card</h2><div class="ln"></div></div>
+    <div class="tkt"><table class="boxtbl">
+      <tr><th>Trigger</th><th>Fires when</th><th>Tone</th></tr>
+      <tr><td>Take read</td><td>Model shows real edge AND your own history with these teams
+        or this confidence band backs it up</td><td style="color:var(--win)">good</td></tr>
+      <tr><td>Fade read</td><td>Model passes AND/OR you're a documented black flag on one of
+        these teams AND/OR you underperform in this confidence band</td><td style="color:var(--rust)">warn</td></tr>
+      <tr><td>Drift note</td><td>Slate is frozen and the live sim has moved 1.5+ points off the
+        locked number since freeze</td><td style="color:var(--mute)">neutral</td></tr>
+      <tr><td>Lean note</td><td>Some signal exists but not enough to call TAKE or FADE outright</td>
+        <td style="color:var(--mute)">neutral</td></tr>
+      <tr><td>Duplicate warning</td><td>A pick is already sitting on 2+ pending tickets — same
+        idea deciding a bigger share of the board than it should</td><td style="color:var(--rust)">warn</td></tr>
+      <tr><td>Weak leg</td><td>One leg on a slip is priced 6+ points worse than the rest of the
+        ticket's average edge</td><td style="color:var(--rust)">warn</td></tr>
+      <tr><td>Longshot note</td><td>6+ legs and combined probability under 2% — a real swing,
+        named as one</td><td style="color:var(--mute)">neutral</td></tr>
+      <tr><td>Bankroll read</td><td>Balance is spent for the month, daily cap already hit, or the
+        multiplier has grown from real profit</td><td>varies</td></tr>
+      <tr><td>Best performer</td><td>One pick bucket (mine/system/market/specialty) is running
+        15+ points ahead of the worst, on 8+ graded picks each</td><td style="color:var(--win)">good</td></tr>
+    </table>
+    <div class="sub" style="margin-top:6px">Only the single most important thing fires at once —
+    warnings outrank neutral notes, which outrank good news. A card that says nothing has been
+    checked and found unremarkable, not skipped.</div></div>`;
+
+  // ── full chip glossary, sport by sport ──
+  h+=`<div class="sbar"><h2>Every chip on a game card, decoded</h2><div class="ln"></div></div>`;
+  const glossSection=(title,rows)=>`<div class="tkt"><h3 style="margin-bottom:6px">${title}</h3>
+    <table class="boxtbl">${rows.map(r=>`<tr><td style="white-space:nowrap;font-family:'IBM Plex Mono';
+      font-size:10.5px">${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table></div>`;
+
+  h+=glossSection('All sports',[
+    ['REAL',"At least one line for this market came from your own uploaded book odds or a live pull — not just the simulator's opinion."],
+    ['sim only',"No real line exists for this square yet. Shows the model's own number so the card still reads, but there's nothing to compare it against."],
+    ['model sees value (green)',"Model probability beats the market-implied probability by more than the edge threshold — a real price gap in your favour."],
+    ['model says pass (red)',"Model disagrees with the price in the other direction — the market is asking more than the model thinks this is worth."],
+    ['no real edge',"Model and market roughly agree. Nothing wrong with the pick, just no free money sitting on the table."],
+    ['◆ SUPREME',"Book price, model edge, AND outside sources all point the same way. The rarest and strongest tier."],
+    ['STRONG',"Two of those three signals agree."],
+    ['⚠ CONFLICT',"The signals disagree with each other — model likes one side, an outside source or the book's own lean favours the other. Worth a second look before trusting either."],
+    ['EDGE / NO EDGE chip',"The single best-EV play the model found on this card, stated as a percentage. NO EDGE still shows the best number found, just below the threshold that would call it a real edge."],
+    ['☠ you [team]',"Your own graded record betting this team specifically — sides record, over/under record, and units returned per unit staked. Six-plus graded bets and −0.25u/bet or worse earns the skull."],
+    ['◆ you [team] (green)',"Same ledger, other direction — six-plus bets and +0.25u/bet or better."],
+    ['❄ LOCKED',"The slate has been frozen (learning bias was run). Shows the projection at freeze time. \"drift\" appears if the live sim has since moved a point or more off that locked number."],
+    ['TAKE / FADE chip',"The Coach's per-game verdict, blending model edge, your team record, and your calibration in this confidence band into one word. Tap into Take/Fade for the full reasoning."],
+    ['TRENDS · N verified',"How many uploaded trends passed their own stated condition (not \"unverified\" due to unknowable series position) and are actually nudging the total. The nudge itself is capped small and shrunk by both sample size and that trend family's own track record in your graded history."],
+    ['SYS ##-## vs BOOK ##-##',"Last 20 graded games — how often the model's top pick won versus how often the book's own favourite (by moneyline price) won, whether or not you bet either one."],
+  ]);
+
+  h+=glossSection('MLB-specific',[
+    ['H2H 2yr',"Head-to-head record between these two teams over the last two seasons, minimum 6 meetings before it shows."],
+    ['park factor / grass / turf / dome',"Park-specific run-scoring context folded into the total projection."],
+    ['HR threat',"Batters on this card with an elevated home-run rate against the projected pitcher handedness."],
+    ['most common score',"The single most frequent exact score across the 10,000-iteration simulation, with its own probability — usually low, since run totals are a wide distribution."],
+    ['bullpen / arm chips',"Recent pitcher workload and rest, factored into the projection."],
+  ]);
+
+  h+=glossSection('NFL & CFB-specific',[
+    ['DIVISION GAME',"Division matchups run tighter than the model's baseline — this flags it rather than silently adjusting."],
+    ['1H / 1Q chips',"Period lines, scaled from the full-game sim to a half or quarter equivalent rather than modelled separately. CFB only gets 1H — a college quarter is too small a sample for the sim to speak to with any precision."],
+    ['RATINGS NOT LOADED',"No usable team scoring data behind this projection yet — NFL needs ESPN standings with games played (empty preseason), CFB needs a CollegeFootballData key in Settings. The dashes on the score line mean exactly what they look like: nothing to show yet, not a broken card."],
+    ['Live box / Box score',"Full quarter-by-quarter linescore, possession marker, and passing/rushing/receiving/defense tables. Only appears once a game has started or finished."],
+    ['Portal (CFB only)',"Incoming transfers per team with their prior school named. Production shown is what they earned at that PREVIOUS school, against a different schedule — treat a G5-to-P4 jump with extra caution."],
+    ['SP+ / offPPG / defPPG',"CollegeFootballData's predictive rating, already opponent-adjusted — meaningful even in Week 1 with no season data yet, unlike raw points-for/against."],
+  ]);
+
+  h+=`<div class="sbar"><h2>Where to see the receipts</h2><div class="ln"></div></div>
+    <div class="tkt"><div class="sub">
+      Every number the Coach or a chip cites traces back to a screen you can open yourself:
+      <b>Record → Team ledger</b> for your per-team profit, <b>Record → System vs Book</b> for
+      the unbiased win/loss log, <b>Record → Learned bias</b> for what the model has corrected
+      about itself, and <b>Record → Deep dive</b> for calibration by confidence band. The Coach
+      never has private information — it's reading the same tables you can.
+    </div></div>`;
+  return h;
+}
+
 // ── NCAAF Power Ratings (ESPN) ────────────────────────────────────────────────
 async function fetchNCAAFPowerRatings(){
   try{
@@ -16281,6 +16433,7 @@ function ncaafCard(g){
       ${NCAAF_POWER_FLAT?`<div class="sigchip" style="color:var(--rust);border-color:rgba(240,86,60,.4)">RATINGS NOT LOADED — add CFBD key in Settings</div>`:''}
       
     </div>
+    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'ncaaf'})}catch(e){return''}})()}
     <div class="mktlab">Spread${realBadge}</div>
     <div class="betgrid">
       ${cfbSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,`${g.away.abbr} spread`,eAwaySpread,simAwaySpread)}
