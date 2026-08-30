@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.40</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.42</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -8958,6 +8958,8 @@ function parseSlateText(text){
     let inTotals=false;
     let curAway=null,curHome=null;
     for(const l of lines){
+      // new game header resets totals mode so ML rows aren't swallowed
+      if(/^[A-Z]{2,4}\s*@\s*[A-Z]{2,4}/i.test(l)){inTotals=false;continue;}
       if(/^TOTALS$/i.test(l)){inTotals=true;continue;}
       if(!inTotals){
         // moneyline row: "TOR 25% / HOU 75%"
@@ -12674,7 +12676,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.40
+   NFL ENGINE — BUILD v1.42
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -12975,8 +12977,8 @@ function _parseNFLEvents(j){
       abstract:(comp.status&&comp.status.type&&comp.status.type.state)||'pre',
       clock:comp.status&&comp.status.displayClock||'',
       period:comp.status&&comp.status.period||0,
-      awayScore:comp.competitors?(comp.competitors.find(c=>c.homeAway==='away')||{}).score||null:null,
-      homeScore:comp.competitors?(comp.competitors.find(c=>c.homeAway==='home')||{}).score||null:null,
+      awayScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='away')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
+      homeScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='home')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
       away:{abbr:awayAbbr,name:away.team.displayName||awayAbbr,offRating:24,defRating:24,record:away.records&&away.records[0]&&away.records[0].summary||''},
       home:{abbr:homeAbbr,name:home.team.displayName||homeAbbr,offRating:24,defRating:24,record:home.records&&home.records[0]&&home.records[0].summary||''},
     };
@@ -14568,10 +14570,10 @@ function nflCardFull(g){
     </div>
 
     ${g.status==='Final'
-      ?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
+      ?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore!=null&&g.awayScore!==''?g.awayScore:'?'} – ${g.homeScore!=null&&g.homeScore!==''?g.homeScore:'?'} ${g.home.abbr}</div>
          <div class="rd">final</div></div>`
       :NFL_POWER_FLAT
-         ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded — add CFBD key or tap Retry</div></div>`
+         ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded</div></div>`
          :`<div class="proj">
              <div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div>
              <div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>
@@ -14759,7 +14761,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.40
+   NCAAF ENGINE — BUILD v1.42
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
