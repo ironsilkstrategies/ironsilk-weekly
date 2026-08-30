@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.45</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.46</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -12829,7 +12829,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.45
+   NFL ENGINE — BUILD v1.46
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -14919,7 +14919,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.45
+   NCAAF ENGINE — BUILD v1.46
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -16016,6 +16016,96 @@ function trendInfluenceChip(g,s){
 }
 
 
+// ── COACH PICKS ───────────────────────────────────────────────────────────
+// The Coach's own regular pick for a game: a side to win and an over/under
+// lean, in the compact "TEAM W | \u2191/\u2193 O/U" format. This is a SUMMARY of
+// everything else on the card, not a sixth opinion — the side comes from the
+// same win probability the card already shows, and the total lean comes from
+// the same operative-total math trendPanel uses (your book's line first, a
+// sharp source second, the model's own number only as a last resort).
+// A pick is only ever the side/total already implied elsewhere on the card;
+// nothing here invents a number that isn't already backing some other chip.
+function coachTotalRead(g,s,sport){
+  if(sport==='mlb'||!sport){
+    try{
+      const ot=operativeTotal(g,s);
+      const p=s.over(ot.line);
+      return{line:ot.line,src:ot.src,dir:p>=.5?'over':'under',p:p>=.5?p:1-p,real:ot.src!=='model'};
+    }catch(e){return null}
+  }
+  try{
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const lines=sport==='nfl'?nflBookLinesFor(gl):ncaafBookLinesFor(gl);
+    const ov=lines.find(x=>x.market==='total'&&x.side==='over');
+    if(ov&&ov.line!=null&&s.over){
+      const p=s.over(ov.line);
+      return{line:ov.line,src:'your book',dir:p>=.5?'over':'under',p:p>=.5?p:1-p,real:true};
+    }
+    // no posted total — fall back to the sim's own median as a labelled estimate
+    if(s.med!=null)return{line:s.med,src:'model',dir:'—',p:null,real:false};
+  }catch(e){}
+  return null;
+}
+function coachPickFor(g,s,sport){
+  if(!s||s.aw==null||s.hw==null)return null;
+  const sideTeam=s.hw>=s.aw?g.home.abbr:g.away.abbr;
+  const sideConf=Math.max(s.aw,s.hw);
+  const tot=coachTotalRead(g,s,sport);
+  let v=null;try{v=takeFadeVerdict(g,s,sport)}catch(e){}
+  return{
+    sideTeam,sideConf,
+    totalDir:tot?tot.dir:null,totalLine:tot?tot.line:null,totalP:tot?tot.p:null,
+    totalReal:tot?tot.real:false,
+    verdict:v?v.verdict:'neutral',
+    label:`${sideTeam} W${tot&&tot.dir!=='—'?` | ${tot.dir==='over'?'\u2b06\ufe0f':'\u2b07\ufe0f'} O/U ${tot.line}`:''}`,
+  };
+}
+/* Coach Picks section for the Coach tab: today's full slate, one line per
+   game, in the same compact format across all three sports at once. */
+function coachPicksBoard(){
+  const rows=[];
+  const scan=(games,sims,sp)=>{
+    (games||[]).forEach(g=>{
+      const s=(sims||{})[g.id];if(!s)return;
+      const pk=coachPickFor(g,s,sp);if(!pk)return;
+      rows.push({...pk,sport:sp,gl:g.away.abbr+'@'+g.home.abbr,gid:g.id});
+    });
+  };
+  try{scan(GAMES,SIMS,'mlb')}catch(e){}
+  try{scan(NFL_GAMES,NFL_SIMS,'nfl')}catch(e){}
+  try{scan(NCAAF_GAMES,NCAAF_SIMS,'ncaaf')}catch(e){}
+  if(!rows.length)return'<div class="empty">No sims have run yet today. Open the Games tab for each sport once to populate picks.</div>';
+  // strongest conviction first: side confidence + total confidence, real lines weighted over sim-only
+  rows.sort((a,b)=>{
+    const score=r=>(r.sideConf-0.5)+((r.totalP||0.5)-0.5)*(r.totalReal?1:0.4);
+    return score(b)-score(a);
+  });
+  const sportTag={mlb:'MLB',nfl:'NFL',ncaaf:'CFB'};
+  return`<div class="tkt"><table class="boxtbl">
+    <tr><th>Game</th><th>Coach pick</th><th>Side</th><th>Total</th><th></th></tr>
+    ${rows.map(r=>{
+      const sideCol=r.sideConf>=.62?'var(--win)':r.sideConf>=.55?'var(--chalk)':'var(--mute)';
+      const totCol=r.totalReal?(r.totalP>=.6?'var(--win)':'var(--chalk)'):'var(--mute)';
+      const totStr=r.totalDir&&r.totalDir!=='—'
+        ?`${r.totalDir==='over'?'\u2b06\ufe0f':'\u2b07\ufe0f'} ${r.totalLine}${r.totalP?' ('+(r.totalP*100).toFixed(0)+'%)':''}`
+        :'—';
+      const vTag=r.verdict==='TAKE'?'<span style="color:var(--win)">TAKE</span>'
+        :r.verdict==='FADE'?'<span style="color:var(--rust)">FADE</span>':'';
+      return`<tr>
+        <td style="font-family:'IBM Plex Mono';font-size:10px">${sportTag[r.sport]} · ${r.gl}</td>
+        <td style="font-family:'Archivo';font-weight:800">${r.label}</td>
+        <td style="color:${sideCol}">${(r.sideConf*100).toFixed(0)}%</td>
+        <td style="color:${totCol}">${totStr}${!r.totalReal&&r.totalDir!=='—'?' <span style="color:var(--mute);font-size:9px">(sim)</span>':''}</td>
+        <td>${vTag}</td>
+      </tr>`;
+    }).join('')}
+    </table>
+    <div class="sub" style="margin-top:8px">Side % is the model's own win probability, not a promise. Total shows
+    "(sim)" when no book line was posted for this game yet — that number is the model's own median, not
+    something to treat as sharp. TAKE/FADE mirrors the same verdict shown on the card itself.</div></div>`;
+}
+
+// ── PER-GAME COACH BRIEFING ──────────────────────────────────────────────
 // ── PER-GAME COACH BRIEFING ──────────────────────────────────────────────
 // The Coach's full briefing on ONE game — every factor that actually feeds
 // the projection, ranked and in plain language, in a single panel instead
@@ -16154,6 +16244,9 @@ function renderCoachTab(){
       is invented or estimated — if the Coach goes quiet on a card, it means none of its checks
       found anything worth flagging, not that it has nothing to say by default.
     </div></div>`;
+
+  h+=`<div class="sbar"><h2>Coach picks — today's slate</h2><div class="ln"></div></div>`;
+  try{h+=coachPicksBoard()}catch(e){h+='<div class="empty">Could not build picks: '+(e&&e.message||e)+'</div>'}
 
   h+=`<div class="sbar"><h2>Speaking right now</h2><div class="ln"></div></div>`;
   /* This used to check only the two account-level triggers (bankroll, best
