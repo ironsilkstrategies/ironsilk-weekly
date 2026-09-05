@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.48</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.49</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -12829,7 +12829,7 @@ async function boot(){
 })();
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.48
+   NFL ENGINE — BUILD v1.49
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -13719,17 +13719,38 @@ function ncaafAbbrFor(raw){
   if(!raw)return null;
   const k=cfbKeyOf(raw);
   if(!k)return null;
+  /* CRITICAL FIX — the old single-pass loop tried a bidirectional prefix
+     match (c.startsWith(k) || k.startsWith(c)) on the FIRST team it reached,
+     and returned immediately on any hit. That direction is unsafe: querying
+     "Ohio State" (key OHIOSTATE) satisfies k.startsWith(c) against "Ohio"
+     (key OHIO) — a completely different school — because OHIOSTATE happens to
+     start with the letters OHIO. Reproduced directly: ncaafAbbrFor('Ohio
+     State') was returning 'OHIO' (Ohio Bobcats) instead of 'OSU' (Ohio State
+     Buckeyes), which silently misfiles that team's book line onto the wrong
+     game — the same class of bug as the cross-game spread contamination,
+     just one level lower in the stack.
+
+     Fixed with two passes: (1) scan EVERY team for an exact match on any name
+     form first, so a real exact match always wins regardless of scan order;
+     only if NOTHING matches exactly does (2) allow a ONE-DIRECTIONAL prefix
+     check — the schedule's own longer form starting with the query, never
+     the reverse — and only when exactly one team qualifies. An ambiguous
+     prefix (two different teams both plausible) resolves to nothing rather
+     than guessing, since a wrong resolution here silently corrupts a card
+     the same way the removed lookup fuzziness did. */
+  let prefixHits=[];
   for(const g of (NCAAF_GAMES||[])){
     for(const t of [g.away,g.home]){
       if(!t)continue;
       const cands=[t.abbr,t.name,t.shortName,t.location,t.displayName]
         .filter(Boolean).map(cfbKeyOf);
-      if(cands.includes(k))return t.abbr;
-      // "NORTHCAROLINA" should match "NORTHCAROLINATARHEELS"
-      if(cands.some(c=>c.length>3&&(c.startsWith(k)||k.startsWith(c))))return t.abbr;
+      if(cands.includes(k))return t.abbr;                       // exact — always wins immediately
+      if(k.length>3&&cands.some(c=>c.length>k.length&&c.startsWith(k)))
+        prefixHits.push(t.abbr);                                 // query is a prefix of their longer name only
     }
   }
-  return null;
+  const uniquePrefixHits=[...new Set(prefixHits)];
+  return uniquePrefixHits.length===1?uniquePrefixHits[0]:null;
 }
 function nflMarketMatchesPick(ext,pick){
   const p=String(pick||'').toLowerCase();
@@ -14919,7 +14940,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.48
+   NCAAF ENGINE — BUILD v1.49
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -14943,43 +14964,36 @@ function ncaafBookLinesFor(gameKey){
   if(!all.length)return[];
   const exact=all.filter(x=>x.game===gameKey);
   if(exact.length)return exact;
-  /* Build every plausible abbreviation/slug for the requested game from the
-     loaded schedule, then check each stored key against all of them.
-     This survives slug-stored uploads, alternate name forms, and any other
-     key mismatch without requiring a separate repair pass. */
+  /* CRITICAL FIX — the previous fallback here matched stored rows to a query
+     using a bidirectional prefix test: f.startsWith(k) || k.startsWith(f).
+     At a handful of games that never showed a wrong hit in testing. At a real
+     99-game slate it is exactly the kind of heuristic that goes wrong: any
+     short, generic key can end up a prefix of some unrelated team's longer
+     resolved form, and once one game falsely matches, every OTHER unresolved
+     game in the slate falls through to the same fuzzy check and can land on
+     the SAME wrong stored row — which is precisely the symptom reported:
+     every single CFB card showing an identical spread that didn't belong to
+     it. A wrong "REAL" line silently corrupting every card is worse than an
+     honest "sim only," so the fallback is now strict: resolve BOTH sides
+     through the schedule and require an EXACT abbreviation match, nothing
+     fuzzy. If that still finds nothing, run the repair pass once and check
+     again — no guessing beyond that. */
   const [ak,hk]=(gameKey||'').split('@');
-  // also try resolving through any team names that map to these abbrs
-  const awayForms=new Set([ak]);
-  const homeForms=new Set([hk]);
-  for(const g of (NCAAF_GAMES||[])){
-    [g.away,g.home].forEach(t=>{
-      if(!t)return;
-      const abbr=t.abbr;
-      const forms=awayForms.has(abbr)?awayForms:homeForms.has(abbr)?homeForms:null;
-      if(!forms)return;
-      [t.name,t.shortName,t.location,t.displayName].filter(Boolean).forEach(n=>forms.add(cfbKeyOf(n)));
-      // also add the 12-char slug the parser uses as fallback
-      if(t.name)forms.add(String(t.name).toUpperCase().replace(/\s+/g,'-').slice(0,12));
-    });
-  }
   const hit=all.filter(x=>{
     const [xa,xh]=(x.game||'').split('@');
-    const ka=cfbKeyOf(xa), kh=cfbKeyOf(xh);
-    // direct set membership
-    if(awayForms.has(ka)&&homeForms.has(kh))return true;
-    if(awayForms.has(xa)&&homeForms.has(xh))return true;
-    // slug-prefix match (NORTHCAROLI matches NORTHCAROLINATARHEELS)
-    const awayHit=[...awayForms].some(f=>f.length>3&&(f.startsWith(ka)||ka.startsWith(f)));
-    const homeHit=[...homeForms].some(f=>f.length>3&&(f.startsWith(kh)||kh.startsWith(f)));
-    if(awayHit&&homeHit)return true;
-    // try resolving through the resolver as last resort
-    const ra=ncaafAbbrFor(xa), rh=ncaafAbbrFor(xh);
-    return ra===ak&&rh===hk;
+    if(xa===ak&&xh===hk)return true;                 // stored key already an abbr
+    const ra=ncaafAbbrFor(xa), rh=ncaafAbbrFor(xh);   // stored key is a name/slug
+    return ra&&rh&&ra===ak&&rh===hk;
   });
   if(hit.length)return hit;
-  // if still nothing, run the repair and try once more
   try{repairNCAAFKeys()}catch(e){}
-  return getNCAAFBookLines().filter(x=>x.game===gameKey);
+  const all2=getNCAAFBookLines();
+  return all2.filter(x=>{
+    if(x.game===gameKey)return true;
+    const [xa,xh]=(x.game||'').split('@');
+    const ra=ncaafAbbrFor(xa), rh=ncaafAbbrFor(xh);
+    return ra&&rh&&ra===ak&&rh===hk;
+  });
 }
 /* Rewrite any stored CFB rows that were saved before the schedule was
    available, so the repair is permanent rather than re-derived every render. */
@@ -16451,8 +16465,16 @@ async function fetchNCAAFPowerRatings(){
     set('d4.ncaafpower',{ts:Date.now(),v:NCAAF_POWER});
     NCAAF_GAMES.forEach(g=>{
       const ap=ncaafPowerFor(g.away),hp=ncaafPowerFor(g.home);
-      if(ap){g.away.offRating=ap.offPPG;g.away.defRating=ap.defPPG;g.away.record=ap.wins+'-'+ap.losses;}
-      if(hp){g.home.offRating=hp.offPPG;g.home.defRating=hp.defPPG;g.home.record=hp.wins+'-'+hp.losses;}
+      /* ap.wins / ap.losses only exist on the ESPN-standings fallback record —
+         a CFBD SP+ record has neither field, so this was unconditionally
+         building the literal string "undefined-undefined" and OVERWRITING the
+         perfectly good "W-L" record the initial schedule parse already put on
+         g.away.record straight from ESPN. Only touch it when SP+ actually has
+         real win/loss numbers; otherwise leave the existing record alone. */
+      if(ap){g.away.offRating=ap.offPPG;g.away.defRating=ap.defPPG;
+        if(typeof ap.wins==='number'&&typeof ap.losses==='number')g.away.record=ap.wins+'-'+ap.losses;}
+      if(hp){g.home.offRating=hp.offPPG;g.home.defRating=hp.defPPG;
+        if(typeof hp.wins==='number'&&typeof hp.losses==='number')g.home.record=hp.wins+'-'+hp.losses;}
     });
     NCAAF_SIMS={};
     if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
@@ -16518,7 +16540,16 @@ function _parseNCAAFEvents(j){
     return{
       id:e.id||String(i),espnId:e.id||'',week:NCAAF_WEEK||'',
       day,time:timeStr,date:e.date||'',
-      status:comp.status&&comp.status.type&&comp.status.type.description||'Scheduled',
+      /* status text AND the normalized ESPN state both captured — status text
+         varies ("Final","Final/OT") but comp.status.type.state is always
+         exactly 'pre'/'in'/'post', so grouping and live-refresh below key off
+         the reliable field, not a description string that can drift. */
+      status:(comp.status&&comp.status.type&&comp.status.type.description)||'Scheduled',
+      abstract:(comp.status&&comp.status.type&&comp.status.type.state)||'pre',
+      clock:(comp.status&&comp.status.displayClock)||'',
+      period:(comp.status&&comp.status.period)||0,
+      awayScore:(()=>{const sc=away.score;return sc!=null&&sc!==''?+sc:null})(),
+      homeScore:(()=>{const sc=home.score;return sc!=null&&sc!==''?+sc:null})(),
       away:{abbr:awayAbbr,name:awayName,ranking:ranking(away.team),
         offRating:26,defRating:26,record:away.records&&away.records[0]&&away.records[0].summary||''},
       home:{abbr:homeAbbr,name:homeName,ranking:ranking(home.team),
@@ -16536,6 +16567,48 @@ function _parseNCAAFEvents(j){
 }
 
 // ── NCAAF render ─────────────────────────────────────────────────────────────
+/* ── CFB LIVE SCORE REFRESH ───────────────────────────────────────────────
+   MLB has had a 90s live poll since the very first build; CFB never got one.
+   The initial schedule parse only ran ONCE, so a game's status field was
+   frozen at whatever it was when the week was first loaded — a finished game
+   just stayed labelled "Scheduled" forever, which is exactly why final games
+   were never sorting into the Final section and no live score ever appeared.
+   This re-fetches the SAME scoreboard endpoint and updates status/abstract/
+   scores/clock on the EXISTING game objects by id, without discarding sims,
+   ratings, or anything else already loaded. */
+let NCAAF_LIVE_POLL=null;
+async function refreshNCAAFLiveScores(){
+  if(!(NCAAF_GAMES||[]).length)return 0;
+  try{
+    const url=(NCAAF_SEASON&&NCAAF_WEEK)
+      ?`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=${NCAAF_SEASON}&seasontype=2&week=${NCAAF_WEEK}`
+      :'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100';
+    const r=await fetch(url);const j=await r.json();
+    const byId={};
+    (j.events||[]).forEach(e=>{byId[e.id]=e;});
+    let changed=0;
+    NCAAF_GAMES.forEach(g=>{
+      const e=byId[g.espnId||g.id];if(!e)return;
+      const comp=e.competitions&&e.competitions[0];if(!comp)return;
+      const away=comp.competitors.find(c=>c.homeAway==='away');
+      const home=comp.competitors.find(c=>c.homeAway==='home');
+      const newAbstract=(comp.status&&comp.status.type&&comp.status.type.state)||'pre';
+      const newStatus=(comp.status&&comp.status.type&&comp.status.type.description)||g.status;
+      if(newAbstract!==g.abstract||newStatus!==g.status)changed++;
+      g.abstract=newAbstract;g.status=newStatus;
+      g.clock=(comp.status&&comp.status.displayClock)||g.clock;
+      g.period=(comp.status&&comp.status.period)||g.period;
+      if(away){const sc=away.score;g.awayScore=sc!=null&&sc!==''?+sc:g.awayScore;}
+      if(home){const sc=home.score;g.homeScore=sc!=null&&sc!==''?+sc:g.homeScore;}
+    });
+    // keep the poll alive only while something is actually live
+    const anyLive=NCAAF_GAMES.some(g=>g.abstract==='in');
+    if(anyLive&&!NCAAF_LIVE_POLL)NCAAF_LIVE_POLL=setInterval(refreshNCAAFLiveScores,90000);
+    if(!anyLive&&NCAAF_LIVE_POLL){clearInterval(NCAAF_LIVE_POLL);NCAAF_LIVE_POLL=null;}
+    if(changed&&ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
+    return changed;
+  }catch(e){console.warn('CFB live refresh failed',e);return 0;}
+}
 function renderNCAAF(){
   /* One corrupt or partially-written cached game used to throw inside the sim
      and blank the entire board with no visible error. Drop malformed entries
@@ -16579,9 +16652,17 @@ function renderNCAAF(){
     <button onclick="loadNCAAFWeek(${season},${Number(week)+1})" style="background:none;border:1px solid var(--rule);
       color:var(--chalk);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px">Next →</button>
   </div>`;
-  const scheduled=NCAAF_GAMES.filter(g=>g.status==='Scheduled'||g.status==='In Progress');
-  const final=NCAAF_GAMES.filter(g=>g.status==='Final'||g.status==='Final/OT');
+  /* Was filtering on the exact status TEXT ("Final","In Progress"), which
+     ESPN doesn't guarantee stays constant across every game (overtime games,
+     postponements, and different description strings for the same state all
+     exist). g.abstract is ESPN's own normalized state ('pre'/'in'/'post') and
+     is far more reliable — fall back to the text only for games that predate
+     this fix and have no abstract field yet at all. */
+  const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
+  const scheduled=NCAAF_GAMES.filter(g=>!isFinalGame(g));
+  const final=NCAAF_GAMES.filter(isFinalGame);
   let h=weekNav;
+  h+=`<div class="bar" style="margin:-4px 0 10px"><button onclick="refreshNCAAFLiveScores()">↻ Refresh scores</button></div>`;
   if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(ncaafCard).join('');
   if(final.length)h+=sbar('Final',final.length)+final.map(ncaafCard).join('');
   el.innerHTML=h;
