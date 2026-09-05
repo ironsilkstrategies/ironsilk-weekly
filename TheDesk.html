@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.51</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.52</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -12873,7 +12873,7 @@ setTimeout(()=>{
 },4000);
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.51
+   NFL ENGINE — BUILD v1.52
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -13100,16 +13100,59 @@ function renderNFL(){
       color:var(--chalk);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px">Next →</button>
   </div>`;
 
-  const scheduled=NFL_GAMES.filter(g=>g.status==='Scheduled'||g.status==='In Progress');
-  const final=NFL_GAMES.filter(g=>g.status==='Final'||g.status==='Final/OT');
+  /* Same fix as CFB: exact status TEXT isn't reliable across every game
+     (overtime games and different descriptions for the same state both
+     exist). g.abstract is ESPN's own normalized 'pre'/'in'/'post' state. */
+  const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
+  const scheduled=NFL_GAMES.filter(g=>!isFinalGame(g));
+  const final=NFL_GAMES.filter(isFinalGame);
 
   let h=weekNav;
+  h+=`<div class="bar" style="margin:-4px 0 10px"><button onclick="refreshNFLLiveScores()">↻ Refresh scores</button></div>`;
   if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(nflCard).join('');
   if(final.length)h+=sbar('Final',final.length)+final.map(nflCard).join('');
   el.innerHTML=h;
   document.getElementById('nG').textContent=NFL_GAMES.length;
 }
 
+/* ── NFL LIVE SCORE REFRESH ────────────────────────────────────────────────
+   Same fix as the CFB poller, same two root causes: (1) the refresh trigger
+   only ever lived inside the fresh-network-load path, never the far more
+   common cache-restore reopen, and (2) it only re-armed while something was
+   ACTIVELY live, so a whole slate sitting at "Scheduled" all morning never
+   got checked until someone happened to be watching the exact moment a game
+   went live. NFL never had ANY version of this poller at all. */
+let NFL_LIVE_POLL=null;
+async function refreshNFLLiveScores(){
+  if(!(NFL_GAMES||[]).length)return 0;
+  try{
+    const url=(NFL_SEASON&&NFL_WEEK)
+      ?`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${NFL_SEASON}&seasontype=2&week=${NFL_WEEK}`
+      :'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
+    const r=await fetch(url);const j=await r.json();
+    const byId={};(j.events||[]).forEach(e=>{byId[e.id]=e;});
+    let changed=0;
+    NFL_GAMES.forEach(g=>{
+      const e=byId[g.espnId||g.id];if(!e)return;
+      const comp=e.competitions&&e.competitions[0];if(!comp)return;
+      const away=comp.competitors.find(c=>c.homeAway==='away');
+      const home=comp.competitors.find(c=>c.homeAway==='home');
+      const newAbstract=(comp.status&&comp.status.type&&comp.status.type.state)||'pre';
+      const newStatus=(comp.status&&comp.status.type&&comp.status.type.description)||g.status;
+      if(newAbstract!==g.abstract||newStatus!==g.status)changed++;
+      g.abstract=newAbstract;g.status=newStatus;
+      g.clock=(comp.status&&comp.status.displayClock)||g.clock;
+      g.period=(comp.status&&comp.status.period)||g.period;
+      if(away){const sc=away.score;g.awayScore=sc!=null&&sc!==''?+sc:g.awayScore;}
+      if(home){const sc=home.score;g.homeScore=sc!=null&&sc!==''?+sc:g.homeScore;}
+    });
+    const anyNotFinal=NFL_GAMES.some(g=>g.abstract!=='post');
+    if(anyNotFinal&&!NFL_LIVE_POLL)NFL_LIVE_POLL=setInterval(refreshNFLLiveScores,90000);
+    if(!anyNotFinal&&NFL_LIVE_POLL){clearInterval(NFL_LIVE_POLL);NFL_LIVE_POLL=null;}
+    if(changed&&ACTIVE_SPORT==='nfl'&&typeof renderNFL==='function')renderNFL();
+    return changed;
+  }catch(e){console.warn('NFL live refresh failed',e);return 0;}
+}
 async function loadNFLSchedule(){
   const el=document.getElementById('slate');
   if(el)el.innerHTML='<div class="empty">Loading current NFL week…</div>';
@@ -13166,7 +13209,7 @@ function _parseNFLEvents(j){
       timeStr=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'});
     }
     return{
-      id:e.id||String(i),
+      id:e.id||String(i),espnId:e.id||'',
       week:j.week&&j.week.number||NFL_WEEK||'',
       seasonType:j.season&&j.season.type||2,
       day:day,time:timeStr,date:e.date||'',
@@ -13552,6 +13595,11 @@ async function fetchNCAAFLiveOdds(){
     }
   }
 })();
+/* Same fix as CFB: this cache-restore path is the NORMAL app-reopen route,
+   not the rare fresh-network-load one — the refresh trigger has to live here
+   too, or a stale cached status just sits unrefreshed on every ordinary
+   reopen. */
+whenScriptReady(()=>{refreshNFLLiveScores().catch(()=>{})},1500);
 
 /* ═══════════════════════════════════════════════════════════════════════
    NFL INTELLIGENCE LAYER — A+++ build
@@ -14985,7 +15033,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.51
+   NCAAF ENGINE — BUILD v1.52
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -16704,10 +16752,18 @@ async function refreshNCAAFLiveScores(){
       if(away){const sc=away.score;g.awayScore=sc!=null&&sc!==''?+sc:g.awayScore;}
       if(home){const sc=home.score;g.homeScore=sc!=null&&sc!==''?+sc:g.homeScore;}
     });
-    // keep the poll alive only while something is actually live
-    const anyLive=NCAAF_GAMES.some(g=>g.abstract==='in');
-    if(anyLive&&!NCAAF_LIVE_POLL)NCAAF_LIVE_POLL=setInterval(refreshNCAAFLiveScores,90000);
-    if(!anyLive&&NCAAF_LIVE_POLL){clearInterval(NCAAF_LIVE_POLL);NCAAF_LIVE_POLL=null;}
+    /* Was gated on "anyLive" — a game currently mid-play. That only ever
+       armed the poll for the narrow window something was ACTUALLY live. A
+       whole slate sitting at "Scheduled" all morning never had anything
+       "live" yet, so the poll never started, and a game that kicked off and
+       finished entirely while the tab sat open with nobody watching just
+       silently never got rechecked — exactly the symptom of an 11am game
+       still reading "Scheduled" at 2pm. Poll as long as ANYTHING in the
+       loaded week hasn't reached its final state yet, not just while
+       something is mid-play. */
+    const anyNotFinal=NCAAF_GAMES.some(g=>g.abstract!=='post');
+    if(anyNotFinal&&!NCAAF_LIVE_POLL)NCAAF_LIVE_POLL=setInterval(refreshNCAAFLiveScores,90000);
+    if(!anyNotFinal&&NCAAF_LIVE_POLL){clearInterval(NCAAF_LIVE_POLL);NCAAF_LIVE_POLL=null;}
     if(changed&&ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
     return changed;
   }catch(e){console.warn('CFB live refresh failed',e);return 0;}
@@ -17181,6 +17237,15 @@ function ncaafOnActivate(){
   const keys=Object.keys(cache).sort((a,b)=>(cache[b].ts||0)-(cache[a].ts||0));
   if(keys.length){const latest=cache[keys[0]];if(latest.v&&latest.v.length){NCAAF_GAMES=latest.v;NCAAF_WEEK=latest.week||null;NCAAF_SEASON=latest.season||null;}}
 })();
+/* restoreNCAAFGames() above is the path that runs on every NORMAL app reopen
+   — a fresh network load through _parseNCAAFEvents is the rare case (only
+   when the user explicitly loads a week). The live-score refresh trigger was
+   wired ONLY inside _parseNCAAFEvents, so the overwhelmingly common
+   cache-restore reopen never kicked off a single refresh — cached status from
+   however many hours ago just sat there unchanged, which is the actual
+   mechanism behind an 11am game still reading "Scheduled" at 2pm. Trigger the
+   same refresh here too, once the script has finished loading. */
+whenScriptReady(()=>{refreshNCAAFLiveScores().catch(()=>{})},1500);
 
 /* ═══════════════════════════════════════════════════════════════
    NFL ENGINE END
