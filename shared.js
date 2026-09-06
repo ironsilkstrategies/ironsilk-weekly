@@ -3,7 +3,7 @@ const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',p
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus',
 nflgames:'d4.nflgames',nflshots:'d4.nflshots',nflarc:'d4.nflarc',nflext:'d4.nflext',nfltrends:'d4.nfltrends',nflconsensus:'d4.nflconsensus',
-cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus',pendingupload:'d4.pendingupload',teamledger:'d4.teamledger',frozen:'d4.frozen',syslog:'d4.syslog',trendlog:'d4.trendlog'};
+cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus',pendingupload:'d4.pendingupload',allfinals:'d4.allfinals',fbpool:'d4.fbpool',teamledger:'d4.teamledger',frozen:'d4.frozen',syslog:'d4.syslog',trendlog:'d4.trendlog'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl' | 'ncaaf'
@@ -4960,20 +4960,31 @@ function resolveLeg(leg,ticketDate){
      GAMES array only — a football leg matched nothing, returned null forever,
      and produced a ticket that could never be graded either way. */
   if(leg.sport==='nfl'||leg.sport==='ncaaf'){
-    const arr=leg.sport==='nfl'?(NFL_GAMES||[]):(NCAAF_GAMES||[]);
+    /* Prefer the live array when the football engine is loaded (gives live
+       in-progress scores), but fall through to the SHARED finals store when
+       it isn't — so a football leg on a locked ticket grades correctly from
+       ANY page, including mlb.html where NFL_GAMES/NCAAF_GAMES don't exist.
+       Before this, a football leg simply never graded off the football page. */
+    const arr=leg.sport==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[])
+                               :(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]);
     let fg=null;
     if(leg.gid)fg=arr.find(z=>z.id===leg.gid);
     if(!fg)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
     if(fg){
-      const done=fg.status==='Final'||fg.abstract==='Final';
+      const done=fg.status==='Final'||fg.abstract==='Final'||fg.abstract==='post';
       if(done&&fg.awayScore!=null)
         return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:false,source:'memory',g:fg};
-      const live=fg.status==='InProgress'||fg.abstract==='Live';
+      const live=fg.status==='InProgress'||fg.abstract==='Live'||fg.abstract==='in';
       if(live&&fg.awayScore!=null)
         return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:true,source:'memory',g:fg,completed:null};
-      return null;                       // scheduled, hasn't kicked off
+      // fall through to shared store rather than returning null — the shared
+      // store may already hold this game's final from a prior football-page visit
     }
-    // finished football games fall back to their own archive
+    // shared cross-sport finals store — visible on every page
+    const shared=get(LS.allfinals,{})[leg.game];
+    if(shared&&shared.a!=null)
+      return{a:+shared.a,h:+shared.h,gid:leg.gid,live:false,source:'shared'};
+    // finished football games also live in their own sport archive
     const farc=get(leg.sport==='nfl'?LS.nflarc:'d4.ncaafarc',{});
     for(const d of Object.keys(farc)){
       const row=(farc[d]||[]).find(r=>r.game===leg.game||r.gid===leg.gid);
@@ -6091,12 +6102,40 @@ function marketPool(){
     });
   };
   try{
-    if(typeof NFL_GAMES!=='undefined')
-      football(NFL_GAMES,typeof NFL_SIMS!=='undefined'?NFL_SIMS:{},'nfl',
+    /* NFL_GAMES/NCAAF_GAMES are declared in shared.js (as empty arrays) so
+       they exist on EVERY page — testing `typeof !== undefined` was always
+       true and wrongly suppressed the snapshot replay on mlb.html. The real
+       signal for "the football engine is actually loaded here" is whether its
+       sim function exists (it lives in football-engine.js). */
+    const fbEngineLoaded=typeof simNFLGame==='function'||typeof simNCAAFGame==='function';
+    let builtFromLive=false;
+    if(fbEngineLoaded&&NFL_GAMES&&NFL_GAMES.length){
+      football(NFL_GAMES,NFL_SIMS||{},'nfl',
         typeof nflBookLinesFor==='function'?nflBookLinesFor:()=>[]);
-    if(typeof NCAAF_GAMES!=='undefined')
-      football(NCAAF_GAMES,typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{},'ncaaf',
+      builtFromLive=true;
+    }
+    if(fbEngineLoaded&&NCAAF_GAMES&&NCAAF_GAMES.length){
+      football(NCAAF_GAMES,NCAAF_SIMS||{},'ncaaf',
         typeof ncaafBookLinesFor==='function'?ncaafBookLinesFor:()=>[]);
+      builtFromLive=true;
+    }
+    /* On the football page, snapshot the football candidates we just built
+       into shared storage so OTHER pages (mlb.html) can offer them in the
+       ticket generator without needing the football sim closures in memory.
+       On a page with no football engine, replay that snapshot instead — the
+       candidates are plain data, fully usable for building cross-sport
+       tickets. This is what makes an MLB+NFL+CFB parlay buildable from any
+       page, not just the football ones. */
+    if(builtFromLive){
+      const fbCandidates=pool.filter(x=>x.sport==='nfl'||x.sport==='ncaaf')
+        .map(x=>({p:x.p,pick:x.pick,game:x.game,kind:x.kind,sport:x.sport,gid:x.gid}));
+      try{set(LS.fbpool,{ts:Date.now(),v:fbCandidates})}catch(e){}
+    }else{
+      const snap=get(LS.fbpool,{});
+      if(snap.v&&snap.v.length&&(Date.now()-(snap.ts||0))<6*3600000){
+        snap.v.forEach(x=>pool.push(x));
+      }
+    }
   }catch(e){console.warn('football pool skipped:',e);}
 
   return pool.sort((a,b)=>b.p-a.p);
@@ -6850,6 +6889,13 @@ function renderMasterEval(){
   const nCons=(get(LS.extconsensus,{})[d]||[]).length;
   const nBook=(get(LS.bookshots,{})[d]||[]).length;
   const nSim=GAMES.filter(g=>SIMS[g.id]).length;
+  /* Cross-sport coverage — the Eval tab was MLB-only, counting just GAMES/SIMS.
+     Football book lines live in their own storage keys and are visible from
+     any page; surface them so the evaluation panel reflects the WHOLE system
+     in play, not just baseball. */
+  const nfBook=((get(LS.nflshots,{})[d]||[]).length)+((get(LS.ncaafshots,{})[d]||[]).length);
+  const nfSim=(typeof NFL_GAMES!=='undefined'?NFL_GAMES.filter(g=>(NFL_SIMS||{})[g.id]).length:0)
+             +(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES.filter(g=>(NCAAF_SIMS||{})[g.id]).length:0);
   const run=lastEvalRun();
   const fp=evalInputFingerprint();
   const stale=run&&run.fingerprint!==fp;
@@ -6884,6 +6930,8 @@ function renderMasterEval(){
       ${chip(nTrends>0,'Trends',nTrends)}
       ${chip(nCons>0,'Public consensus',nCons)}
       ${chip(((get('d4.drift',{})||{}).n||0)>0,'Calibration',(get('d4.drift',{})||{}).n||0)}
+      ${chip(nfBook>0,'Football book lines',nfBook)}
+      ${chip(nfSim>0,'Football sims (this page)',nfSim)}
     </div>
     <div class="bar" style="margin-top:11px">
       <button class="primary" id="evalRunBtn" onclick="runMasterEval()">
@@ -12143,6 +12191,10 @@ async function boot(){
      that page will ever see, and so its OWN board actually gets its first
      render (nothing else was going to trigger that). */
   try{replayPendingUploads()}catch(e){}
+  /* Sweep whatever finals this page's engines know about into the shared store
+     on boot, so every page contributes to (and benefits from) the unified
+     cross-sport view of results. */
+  try{syncFinalsToShared()}catch(e){}
   const pageSport=window.__PAGE_SPORT__||'mlb';
   if(pageSport==='nfl'){
     ACTIVE_SPORT='nfl';
@@ -12278,7 +12330,9 @@ function buildTeamLedger(){
     T[ab]=T[ab]||{sideW:0,sideL:0,sideP:0,ovW:0,ovL:0,unW:0,unL:0,units:0,n:0};
     return T[ab];
   };
-  // index finals by game key for fast lookup
+  // index finals by game key for fast lookup — MLB from the archive, and ALL
+  // sports from the shared finals store, so your record with football teams
+  // (KC, TCU, etc.) shows up here too, not just baseball teams.
   const finals={};
   Object.keys(arc).forEach(d=>{
     const A=arc[d],fin=A.finals||{};
@@ -12288,6 +12342,12 @@ function buildTeamLedger(){
       finals[r.id]={a:+F.a,h:+F.h,date:d,away:r.a,home:r.h};
     });
   });
+  try{
+    const shared=allFinals();
+    Object.keys(shared).forEach(gk=>{
+      if(!finals[gk]){const F=shared[gk];finals[gk]={a:+F.a,h:+F.h,date:''};}
+    });
+  }catch(e){}
   const gradePick=(pick,gameKey)=>{
     const F=finals[gameKey];if(!F)return null;
     const [aw,hm]=(gameKey||'').split('@');
@@ -12524,6 +12584,63 @@ function takeFadePanel(g,s,sport){
    Logs what the MODEL picked and what the BOOK favoured on every game, whether
    or not you bet it. Without this you only ever see the subset you acted on,
    which is the most biased sample available. */
+/* ── SHARED CROSS-SPORT FINALS STORE ──────────────────────────────────────
+   The unified tabs — Eval, Money, Record, Best, System scorecard, Team ledger
+   — all need to know final scores across ALL sports. They used to read the
+   live NFL_GAMES / NCAAF_GAMES arrays directly, which only exist on the page
+   whose engine is loaded. On the split that means football finals are simply
+   invisible to those tabs whenever you're on mlb.html, and MLB finals are
+   invisible on the football pages. This store fixes that at the root: every
+   engine writes its finals here (a plain persisted map, keyed by AWAY@HOME),
+   and every tab reads from HERE, so the whole system sees every sport
+   regardless of which page is open. */
+function recordFinal(sport,game,awayScore,homeScore){
+  if(awayScore==null||awayScore===''||homeScore==null||homeScore==='')return;
+  const all=get(LS.allfinals,{});
+  all[game]={sport,a:+awayScore,h:+homeScore,ts:Date.now()};
+  set(LS.allfinals,all);
+}
+/* Sweep whatever finals are currently in memory for the loaded sport(s) into
+   the shared store. Cheap; safe to call often. Each page calls this for the
+   engines it actually has loaded, so over normal use every sport's finals
+   accumulate in one shared place. */
+function syncFinalsToShared(){
+  const all=get(LS.allfinals,{});let changed=false;
+  const sweep=(arr,sport)=>(arr||[]).forEach(g=>{
+    if(g.awayScore==null||g.awayScore==='')return;
+    const isFinal=g.abstract==='post'||g.abstract==='Final'||g.status==='Final';
+    if(!isFinal)return;
+    const key=g.away.abbr+'@'+g.home.abbr;
+    const prev=all[key];
+    if(!prev||prev.a!==+g.awayScore||prev.h!==+g.homeScore){
+      all[key]={sport,a:+g.awayScore,h:+g.homeScore,ts:Date.now()};changed=true;
+    }
+  });
+  // MLB finals come from the archive (LS.arc), not a live array
+  try{
+    const arc=get(LS.arc,{});
+    Object.keys(arc).forEach(d=>{
+      const A=arc[d],fin=A.finals||{};
+      (A.rows||[]).forEach(r=>{
+        const F=fin[r.id];if(!F||F.a==null)return;
+        const key=(r.a||'')+'@'+(r.h||'');
+        const prev=all[key];
+        if(!prev||prev.a!==+F.a||prev.h!==+F.h){
+          all[key]={sport:'mlb',a:+F.a,h:+F.h,ts:Date.now()};changed=true;
+        }
+      });
+    });
+  }catch(e){}
+  if(typeof NFL_GAMES!=='undefined')sweep(NFL_GAMES,'nfl');
+  if(typeof NCAAF_GAMES!=='undefined')sweep(NCAAF_GAMES,'ncaaf');
+  if(changed)set(LS.allfinals,all);
+  return all;
+}
+/* The single source of truth every tab should use: {game: {sport,a,h}}. */
+function allFinals(){
+  syncFinalsToShared();
+  return get(LS.allfinals,{});
+}
 function logSystemPicks(sport){
   const sp=sport||ACTIVE_SPORT;
   const games=sp==='nfl'?NFL_GAMES:sp==='ncaaf'?NCAAF_GAMES:GAMES;
@@ -12554,17 +12671,11 @@ function logSystemPicks(sport){
 }
 function gradeSystemLog(){
   const log=get(LS.syslog,{});
-  const arc=get(LS.arc,{});
-  const finals={};
-  Object.keys(arc).forEach(d=>{
-    const A=arc[d],fin=A.finals||{};
-    (A.rows||[]).forEach(r=>{const F=fin[r.id];if(F&&F.a!=null)finals[(r.a||'')+'@'+(r.h||'')]={a:+F.a,h:+F.h}});
-  });
-  const addFinal=(arr,sp)=>(arr||[]).forEach(g=>{
-    if(g.awayScore==null||g.awayScore==='')return;
-    finals[g.away.abbr+'@'+g.home.abbr]={a:+g.awayScore,h:+g.homeScore};
-  });
-  addFinal(NFL_GAMES,'nfl');addFinal(NCAAF_GAMES,'ncaaf');
+  /* Was reading NFL_GAMES/NCAAF_GAMES live arrays, which are empty on any page
+     that doesn't load that engine — so football system picks never graded
+     cross-page. Now reads the shared finals store, which every sport writes
+     to regardless of which page is open. */
+  const finals=allFinals();
   let graded=0;
   Object.keys(log).forEach(d=>{
     Object.keys(log[d]).forEach(k=>{

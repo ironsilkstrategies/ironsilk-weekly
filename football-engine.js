@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.54
+   NFL ENGINE — BUILD v1.55
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -281,6 +281,10 @@ async function refreshNFLLiveScores(){
     const anyNotFinal=NFL_GAMES.some(g=>g.abstract!=='post');
     if(anyNotFinal&&!NFL_LIVE_POLL)NFL_LIVE_POLL=setInterval(refreshNFLLiveScores,90000);
     if(!anyNotFinal&&NFL_LIVE_POLL){clearInterval(NFL_LIVE_POLL);NFL_LIVE_POLL=null;}
+    /* Propagate any finals into the shared cross-sport store so the unified
+       tabs (Eval, Record, Money, System scorecard) and locked-ticket grading
+       can see them from ANY page, not just this one. */
+    if(typeof syncFinalsToShared==='function'){try{syncFinalsToShared()}catch(e){}}
     if(changed&&ACTIVE_SPORT==='nfl'&&typeof renderNFL==='function')renderNFL();
     return changed;
   }catch(e){console.warn('NFL live refresh failed',e);return 0;}
@@ -2165,7 +2169,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.54
+   NCAAF ENGINE — BUILD v1.55
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -3044,6 +3048,7 @@ async function refreshNCAAFLiveScores(){
     const anyNotFinal=NCAAF_GAMES.some(g=>g.abstract!=='post');
     if(anyNotFinal&&!NCAAF_LIVE_POLL)NCAAF_LIVE_POLL=setInterval(refreshNCAAFLiveScores,90000);
     if(!anyNotFinal&&NCAAF_LIVE_POLL){clearInterval(NCAAF_LIVE_POLL);NCAAF_LIVE_POLL=null;}
+    if(typeof syncFinalsToShared==='function'){try{syncFinalsToShared()}catch(e){}}
     if(changed&&ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
     return changed;
   }catch(e){console.warn('CFB live refresh failed',e);return 0;}
