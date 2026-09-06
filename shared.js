@@ -1050,8 +1050,11 @@ function saveBookShots(){
      abbreviations. */
   const sport=BOOKSHOT_SPORT||ACTIVE_SPORT;
   if(sport==='nfl'||sport==='ncaaf'){
+    /* CFB was using a raw slug fallback (x→"WASHINGTON-S") instead of the
+       schedule-aware resolver. ncaafAbbrFor uses the two-pass exact+location
+       resolution that correctly handles e.g. "Washington"→WASH vs "Washington State"→WSU. */
     const resolve=sport==='nfl'?(x=>nflAbbrFor(x)||String(x||'').toUpperCase()):
-                                (x=>String(x||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12));
+                                (x=>(typeof ncaafAbbrFor==='function'?ncaafAbbrFor(x):null)||String(x||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12));
     const norm=parsed.map(x=>({
       ...x,
       // football has no run line — if the model still emitted one, it means a spread

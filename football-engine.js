@@ -3464,7 +3464,14 @@ function saveNCAAFBookOdds(picks,el){
   const all=get(LS.ncaafshots,{});all[d]=all[d]||[];
   const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
   picks.forEach(x=>{
-    const rec={...x,capturedAt:Date.now()};
+    /* Build the game key from away@home if the pick doesn't already have one.
+       The text-upload path always sets x.game; the vision (screenshot) path
+       sets x.away and x.home after resolution but skips x.game — so without
+       this, keyOf would be "|market|side|line" and ncaafBookLinesFor could
+       never find any match, even after successful resolution and storage. */
+    const awAb=String(x.away||'').toUpperCase();
+    const hmAb=String(x.home||'').toUpperCase();
+    const rec={...x,away:awAb,home:hmAb,game:x.game||(awAb&&hmAb?awAb+'@'+hmAb:''),capturedAt:Date.now()};
     const k=keyOf(rec);const i=all[d].findIndex(y=>keyOf(y)===k);
     if(i>=0)all[d][i]=rec;else all[d].push(rec);
   });
