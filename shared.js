@@ -3,7 +3,7 @@ const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',p
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus',
 nflgames:'d4.nflgames',nflshots:'d4.nflshots',nflarc:'d4.nflarc',nflext:'d4.nflext',nfltrends:'d4.nfltrends',nflconsensus:'d4.nflconsensus',
-cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus',teamledger:'d4.teamledger',frozen:'d4.frozen',syslog:'d4.syslog',trendlog:'d4.trendlog'};
+cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus',pendingupload:'d4.pendingupload',teamledger:'d4.teamledger',frozen:'d4.frozen',syslog:'d4.syslog',trendlog:'d4.trendlog'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl' | 'ncaaf'
@@ -8258,11 +8258,12 @@ function parseSlateTextMulti(text){
   if(secs.length<2)return null;               // single-sport file: normal path
   const all={picks:[],trends:[],consensus:[],props:[],sports:[],bySport:{}};
   const skipped=[];
+  const deferred={};
   secs.forEach(sec=>{
     let r=null;
-    try{r=parseSlateText(sec.text)}catch(e){skipped.push(sec.sport);return}
+    try{r=parseSlateText(sec.text)}catch(e){skipped.push(sec.sport);deferred[sec.sport]=sec.text;return}
     if(!r)return;
-    if(r.unavailable){skipped.push(sec.sport);return}
+    if(r.unavailable){skipped.push(sec.sport);deferred[sec.sport]=sec.text;return}
     (r.picks||[]).forEach(p=>{p.sport=p.sport||sec.sport});
     all.picks=all.picks.concat(r.picks||[]);
     all.trends=all.trends.concat(r.trends||[]);
@@ -8275,6 +8276,20 @@ function parseSlateTextMulti(text){
     b.consensus=b.consensus.concat(r.consensus||[]);
   });
   all.skippedSports=skipped;
+  /* A section this page can't parse (NFL/CFB grammar lives in
+     football-engine.js, which mlb.html doesn't load) is NOT dropped — its raw
+     text is stashed and replayed automatically the next time the page that
+     CAN parse it opens. So one upload from anywhere lands everywhere, without
+     making the user think about which page they happened to be on. */
+  if(Object.keys(deferred).length){
+    try{
+      const pend=get(LS.pendingupload,{});
+      Object.keys(deferred).forEach(sp=>{
+        pend[sp]={text:deferred[sp],ts:Date.now()};
+      });
+      set(LS.pendingupload,pend);
+    }catch(e){}
+  }
   return all.picks.length||all.trends.length||all.consensus.length?all:null;
 }
 function parseSlateText(text){
@@ -12056,6 +12071,35 @@ async function backfillUngradedBestDays(){
 }
 
 let __deskBooted=false;
+/* Replays any upload section that was stashed by a page which couldn't parse
+   it. Called on boot, after the engines for THIS page have loaded. */
+function replayPendingUploads(){
+  let pend;
+  try{pend=get(LS.pendingupload,{})}catch(e){return 0}
+  const sports=Object.keys(pend||{});
+  if(!sports.length)return 0;
+  let done=0;const remaining={};
+  sports.forEach(sp=>{
+    const canParse=sp==='nfl'?typeof parseNFLSlateText==='function'
+                  :sp==='ncaaf'?typeof parseNCAAFSlateText==='function':true;
+    if(!canParse){remaining[sp]=pend[sp];return;}
+    try{
+      const r=parseSlateText(pend[sp].text);
+      if(r&&!r.unavailable&&(r.picks||[]).length){
+        (r.picks||[]).forEach(p=>p.sport=p.sport||sp);
+        saveBookOdds(r.picks,null,sp);
+        done++;
+      }
+    }catch(e){remaining[sp]=pend[sp];}
+  });
+  try{set(LS.pendingupload,remaining)}catch(e){}
+  if(done){
+    if(typeof renderNFL==='function'&&ACTIVE_SPORT==='nfl')renderNFL();
+    if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
+    if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
+  }
+  return done;
+}
 async function boot(){
   /* boot() had no idempotency guard at all. That was fine as long as nothing
      ever called it twice — but the setup-gate fallback added alongside this
@@ -12098,6 +12142,7 @@ async function boot(){
      football page doesn't spend its boot budget fetching a board nobody on
      that page will ever see, and so its OWN board actually gets its first
      render (nothing else was going to trigger that). */
+  try{replayPendingUploads()}catch(e){}
   const pageSport=window.__PAGE_SPORT__||'mlb';
   if(pageSport==='nfl'){
     ACTIVE_SPORT='nfl';

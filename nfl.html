@@ -788,6 +788,31 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
 <script>
 window.__PAGE_SPORT__='nfl';
 </script>
+<script>
+/* ── DEPLOYMENT GUARD ──────────────────────────────────────────────────────
+   This page is only a shell — all logic lives in shared.js (plus
+   football-engine.js on the football pages) in the SAME folder. If those
+   aren't uploaded next to it, or the page is opened as a local file rather
+   than served from the site, the HTML still renders (you'd see the nav and
+   empty Settings fields) but nothing works and no saved keys appear. That
+   failure used to be completely silent and looked exactly like "my API keys
+   vanished." Now it says what actually happened. */
+window.addEventListener('DOMContentLoaded',function(){
+  setTimeout(function(){
+    if(typeof get==='function')return;              // shared.js loaded fine
+    var isFile=(location.protocol==='file:');
+    var msg=isFile
+      ? 'This page was opened as a local file. Serve it from your site instead \u2014 the same address as your other pages \u2014 so it can load its code and share your saved keys, tickets and history across sports.'
+      : 'The app code did not load. Upload shared.js and football-engine.js into the same folder as this page, then reload.';
+    document.body.innerHTML=
+      '<div style="font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh;padding:28px 20px;line-height:1.6">'
+      +'<div style="font-size:19px;font-weight:800;color:#f0563c;margin-bottom:12px">App code did not load</div>'
+      +'<div style="font-size:15px;max-width:640px">'+msg+'</div>'
+      +'<div style="margin-top:18px;font-family:monospace;font-size:13px;color:#8b949e;white-space:pre-line">'
+      +'Required in this folder:\n  shared.js\n  football-engine.js</div></div>';
+  },1200);
+});
+</script>
 <script src="shared.js"></script>
 <script src="football-engine.js"></script>
 <script>
