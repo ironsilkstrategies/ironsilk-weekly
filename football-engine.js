@@ -979,11 +979,32 @@ function ncaafAbbrFor(raw){
         .filter(Boolean).map(cfbKeyOf);
       if(cands.includes(k))return t.abbr;                       // exact — always wins immediately
       if(k.length>3&&cands.some(c=>c.length>k.length&&c.startsWith(k)))
-        prefixHits.push(t.abbr);                                 // query is a prefix of their longer name only
+        prefixHits.push({abbr:t.abbr,name:t.name||''});
     }
   }
-  const uniquePrefixHits=[...new Set(prefixHits)];
-  return uniquePrefixHits.length===1?uniquePrefixHits[0]:null;
+  const uniqueAbbrs=[...new Set(prefixHits.map(x=>x.abbr))];
+  if(uniqueAbbrs.length===1)return uniqueAbbrs[0];
+  if(uniqueAbbrs.length>1){
+    /* TIEBREAKER: when multiple teams share a prefix (e.g. "Washington"
+       matches both "Washington Huskies" and "Washington State Cougars"),
+       check whether the query exactly matches one team's LOCATION — defined
+       as the name with its last word (mascot) removed. The Huskies'
+       location is "Washington"; the Cougars' is "Washington State". A query
+       of "Washington" hits the Huskies exactly and is never ambiguous
+       after this check. Without this, both Washington teams returned null,
+       the upload stored a slug, repairNCAAFKeys couldn't fix one side of
+       the game key, and the card showed sim only even after a successful
+       upload — exactly the bug reported. */
+    const locMatch=prefixHits.filter(x=>{
+      const words=(x.name||'').split(/\s+/).filter(Boolean);
+      if(words.length<2)return false;
+      const loc=cfbKeyOf(words.slice(0,-1).join(' '));// "Washington" from "Washington Huskies"
+      return loc===k;
+    });
+    const uniqueLoc=[...new Set(locMatch.map(x=>x.abbr))];
+    if(uniqueLoc.length===1)return uniqueLoc[0];
+  }
+  return null;
 }
 function nflMarketMatchesPick(ext,pick){
   const p=String(pick||'').toLowerCase();
