@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DESK">
+<meta name="theme-color" content="#0B0F14">
+<title>DESK — MLB</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+--ink:#080B10;--panel:#111820;--panel2:#18212C;--panel3:#1F2A37;--rule:#26323F;
+--chalk:#F2F4F7;--mute:#8593A3;--gold:#FFB43D;--cold:#4DD8F0;--rust:#F0563C;--moss:#5FA35C;--win:#3DDC84;
+--violet:#A78BFA;--pink:#F472B6;
+/* depth */
+--sh-sm:0 1px 2px rgba(0,0,0,.4);
+--sh-md:0 4px 16px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.3);
+--sh-lg:0 12px 32px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.35);
+/* surfaces */
+--grad-card:linear-gradient(160deg,#161F29 0%,#111820 100%);
+--grad-card-hi:linear-gradient(160deg,#1B2836 0%,#131C26 100%);
+--grad-bet:linear-gradient(165deg,#1C2733 0%,#151E28 100%);
+--hair:rgba(255,255,255,.055);
+/* glows */
+--glow-gold:0 0 0 1px rgba(255,180,61,.5),0 0 20px rgba(255,180,61,.18);
+--glow-win:0 0 0 1px rgba(61,220,132,.45),0 0 18px rgba(61,220,132,.15);
+--glow-rust:0 0 0 1px rgba(240,86,60,.4),0 0 18px rgba(240,86,60,.12);
+--ease:cubic-bezier(.22,1,.36,1)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{background:var(--ink);color:var(--chalk);font-family:"Inter",system-ui,-apple-system,sans-serif;
+font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+letter-spacing:-.006em;
+background-image:radial-gradient(1100px 520px at 50% -8%,rgba(255,180,61,.055),transparent 62%);
+background-attachment:fixed}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+header{position:sticky;top:0;z-index:40;background:rgba(8,11,16,.72);
+border-bottom:1px solid var(--hair);padding:calc(env(safe-area-inset-top) + 10px) 14px 0;
+backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);
+box-shadow:0 1px 0 rgba(255,255,255,.03),0 8px 24px rgba(0,0,0,.4)}
+.brand{display:flex;align-items:baseline;justify-content:space-between}
+.brand h1{font-family:"Archivo";font-weight:900;font-size:20px;margin:0;text-transform:uppercase;
+letter-spacing:-.03em;background:linear-gradient(135deg,#fff 30%,#B8C4D0 100%);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.brand h1 span{color:var(--gold)}
+.dateline{font-family:"IBM Plex Mono";font-size:10px;color:var(--mute);letter-spacing:.05em;text-transform:uppercase}
+.meterwrap{margin-top:7px}
+.meterlab{display:flex;justify-content:space-between;font-family:"IBM Plex Mono";font-size:9px;
+letter-spacing:.09em;text-transform:uppercase;color:var(--mute);margin-bottom:3px}
+.meterlab b{color:var(--chalk);font-weight:500}
+.meter{display:flex;gap:2px;height:4px}
+.tick{flex:1;background:var(--rule);border-radius:1px}
+.tick.spent{background:var(--gold)}.tick.now{background:var(--cold);box-shadow:0 0 6px rgba(95,211,232,.6)}
+nav{display:flex;margin-top:7px;overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav>button{flex:1;min-width:64px;background:none;border:none;border-bottom:2px solid transparent;color:var(--mute);
+font-family:"Inter";font-weight:700;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+padding:10px 3px 8px;cursor:pointer;transition:color .2s var(--ease),border-color .2s var(--ease);
+position:relative}
+nav>button:hover{color:#B8C4D0}
+nav>button.on{color:var(--gold);border-bottom-color:var(--gold);
+text-shadow:0 0 16px rgba(255,180,61,.5)}
+nav>button .n{font-family:"IBM Plex Mono";font-size:9px;opacity:.6;margin-left:2px}
+
+main{padding:12px 10px 110px;max-width:700px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+.sbar{display:flex;align-items:center;gap:8px;margin:18px 3px 8px}
+.sbar:first-child{margin-top:2px}
+.sbar h2{font-family:"Inter";font-weight:700;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+color:var(--mute);margin:0;white-space:nowrap}
+.sbar .ln{flex:1;height:1px;background:linear-gradient(90deg,var(--rule),transparent)}
+.sbar .ct{font-family:"IBM Plex Mono";font-size:10px;color:var(--mute)}
+
+/* ---------- GAME CARD ---------- */
+.game{background:var(--grad-card);border:1px solid var(--hair);border-radius:16px;margin-bottom:12px;
+overflow:hidden;box-shadow:var(--sh-md);transition:transform .25s var(--ease),box-shadow .25s var(--ease)}
+.game:hover{box-shadow:var(--sh-lg)}
+.game.edge{border-color:rgba(255,180,61,.28);box-shadow:var(--sh-md),0 0 28px rgba(255,180,61,.07)}
+.game.in-play{border-color:rgba(61,220,132,.26);box-shadow:var(--sh-md),0 0 28px rgba(61,220,132,.07)}
+.game.edge{border-color:rgba(242,169,59,.4)}
+.game.done{border-color:rgba(90,110,130,.35)}
+.ghd{padding:12px 13px 0}
+.grow1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.teams{font-family:"Archivo";font-weight:900;font-size:19px;letter-spacing:-.025em}
+.teams .at{color:var(--mute);font-weight:500;margin:0 4px;font-size:14px}
+.meta{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);text-align:right;white-space:nowrap;line-height:1.4}
+.env{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);margin:4px 0 6px}
+.env b{color:var(--cold);font-weight:500}.env .pf{color:var(--gold)}
+.arms{font-size:11.5px;color:var(--mute);line-height:1.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arms b{color:var(--chalk);font-weight:500}
+.arms .st{font-family:"IBM Plex Mono";color:var(--cold);font-size:10.5px}
+.flag{display:inline-block;font-family:"IBM Plex Mono";font-size:8.5px;padding:1px 4px;border-radius:3px;margin-left:3px}
+.flag.hot{background:rgba(199,82,42,.2);color:var(--rust)}
+.flag.cool{background:rgba(95,163,92,.18);color:var(--moss)}
+.flag.own{background:rgba(242,169,59,.16);color:var(--gold)}
+.flag.elite{background:rgba(242,169,59,.28);color:var(--gold);border:1px solid rgba(242,169,59,.5);
+  font-weight:800;box-shadow:0 0 6px rgba(242,169,59,.35)}
+.proj{display:flex;align-items:baseline;gap:9px;margin:9px 0 3px;flex-wrap:wrap}
+.proj .sc{font-family:"Archivo";font-weight:900;font-size:24px;letter-spacing:-.03em}
+.proj .rd{font-family:"IBM Plex Mono";font-size:12px;color:var(--mute)}
+.proj .md{font-family:"IBM Plex Mono";font-size:10px;color:var(--gold);background:rgba(242,169,59,.1);
+padding:2px 6px;border-radius:4px;border:1px solid rgba(242,169,59,.25)}
+.sig{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 2px}
+.sigchip{font-family:"IBM Plex Mono";font-size:9px;padding:3px 7px;border-radius:4px;
+background:var(--panel2);border:1px solid var(--rule);color:var(--mute)}
+.sigchip b{color:var(--chalk);font-weight:500}
+.badge{display:inline-flex;font-family:"Inter";font-size:9.5px;font-weight:700;letter-spacing:.06em;
+text-transform:uppercase;padding:3px 7px;border-radius:20px;margin:7px 4px 0 0}
+.badge.play{background:rgba(242,169,59,.14);color:var(--gold);border:1px solid rgba(242,169,59,.35)}
+.badge.pass{background:rgba(122,136,150,.1);color:var(--mute);border:1px solid var(--rule)}
+.badge.dark{background:rgba(199,82,42,.12);color:var(--rust);border:1px solid rgba(199,82,42,.3)}
+.badge.proj{background:rgba(95,211,232,.1);color:var(--cold);border:1px solid rgba(95,211,232,.3)}
+.badge.fin{background:rgba(74,222,128,.12);color:var(--win);border:1px solid rgba(74,222,128,.3)}
+
+/* ---------- SPORTSBOOK BET GRID ---------- */
+.mktblock{padding:10px 13px 13px}
+.mktlab{font-family:"Inter";font-weight:600;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+color:var(--mute);margin:10px 0 5px}
+.mktlab:first-child{margin-top:2px}
+.betgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.betgrid.thirds{grid-template-columns:1fr 1fr 1fr}
+.bet{background:var(--grad-bet);border:1px solid var(--hair);border-radius:13px;padding:12px 9px;
+cursor:pointer;text-align:center;min-height:64px;position:relative;overflow:hidden;
+display:flex;flex-direction:column;justify-content:center;gap:4px;
+box-shadow:var(--sh-sm),inset 0 1px 0 rgba(255,255,255,.045);
+transition:transform .18s var(--ease),box-shadow .22s var(--ease),border-color .22s var(--ease)}
+/* top sheen — the thing that makes it read as a physical surface, not a div */
+.bet::before{content:'';position:absolute;inset:0 0 auto 0;height:42%;pointer-events:none;
+background:linear-gradient(180deg,rgba(255,255,255,.055),transparent)}
+.bet:active{transform:scale(.965)}
+.bet .bl{font-family:"Inter";font-size:13px;font-weight:700;color:var(--chalk);
+line-height:1.2;letter-spacing:-.01em}
+.bet .bo{font-family:"Archivo";font-size:19px;font-weight:800;color:var(--gold);
+line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.bet .bs{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);font-weight:500}
+.bet.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold);box-shadow:var(--glow-gold),inset 0 1px 0 rgba(255,255,255,.1);
+transform:translateY(-1px)}
+.bet.on .bl{color:#fff}
+.bet.on .bo{color:#FFD08A}
+.bet:focus-visible{outline:2px solid var(--cold);outline-offset:2px}
+/* ---- sim handicap chip — shown on every bet square, above the price ---- */
+.bet .sim-chip{font-family:"IBM Plex Mono";font-size:8px;font-weight:600;letter-spacing:.06em;
+text-transform:uppercase;color:var(--cold);background:rgba(95,211,232,.10);
+border:1px solid rgba(95,211,232,.25);border-radius:4px;padding:1px 5px;
+display:inline-block;margin-bottom:2px}
+.bet.source-pick{border-color:#a78bfa!important;box-shadow:0 0 0 1px rgba(167,139,250,.3) inset}
+.bet.consensus-pick{border-color:#f472b6!important;box-shadow:0 0 0 1px rgba(244,114,182,.35) inset}
+.src-tag{font-family:"IBM Plex Mono";font-size:7.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:#a78bfa;margin-top:3px}
+.src-tag.unanimous{color:#f472b6}
+/* ---- live score bar ---- */
+.live-bar{background:linear-gradient(160deg,rgba(61,220,132,.11),rgba(61,220,132,.03));
+border:1px solid rgba(61,220,132,.24);border-radius:13px;padding:11px 13px;margin:8px 0;
+display:flex;flex-direction:column;gap:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.live-score{display:flex;align-items:center;gap:8px}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--win);flex:0 0 auto;
+box-shadow:0 0 0 0 rgba(61,220,132,.7);animation:livePulse 1.8s var(--ease) infinite}
+@keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(61,220,132,.6)}
+70%{box-shadow:0 0 0 9px rgba(61,220,132,0)}100%{box-shadow:0 0 0 0 rgba(61,220,132,0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+/* ---- value signalling: green = model sees real edge, red = model says stay away ---- */
+.bet.value{border-color:rgba(61,220,132,.5);
+background:linear-gradient(165deg,rgba(61,220,132,.14),rgba(21,30,40,.9));
+box-shadow:var(--glow-win),inset 0 1px 0 rgba(255,255,255,.05)}
+.bet.value .bl{color:var(--win)}
+.bet.value .bo{color:#8BF0B5}
+.bet.avoid{border-color:rgba(240,86,60,.34);opacity:.58;
+background:linear-gradient(165deg,rgba(240,86,60,.07),rgba(21,30,40,.9))}
+.bet.avoid .bl{color:var(--rust)}
+/* THE ITEM: "when you push them you can't visually tell" — .value.on already
+   had an explicit override, but .avoid/.source-pick/.consensus-pick.on never
+   did, so selecting one of THOSE left it ambiguous which color was actually
+   winning the cascade. Every combined state now gets its own explicit
+   selected-look, AND (more importantly) a real checkmark badge that doesn't
+   depend on subtle border/glow differences at all — that's the actually
+   unmissable signal, the color coordination is just polish on top of it. */
+.bet.on{position:relative}
+.bet.on::after{content:'✓';position:absolute;top:5px;right:7px;width:18px;height:18px;
+  border-radius:50%;background:var(--gold);color:#0B0F14;font-size:11px;font-weight:900;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.4);
+  z-index:2}
+.bet.value.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold);box-shadow:var(--glow-gold)}
+.bet.avoid.on{opacity:1;background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold);box-shadow:var(--glow-gold)}
+.bet.avoid.on .bl{color:#fff}
+.bet.source-pick.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold)!important;box-shadow:var(--glow-gold)}
+.bet.consensus-pick.on{background:linear-gradient(165deg,rgba(255,180,61,.22),rgba(255,180,61,.09));
+border-color:var(--gold)!important;box-shadow:var(--glow-gold)}
+
+/* ═══ ALIGNMENT TIERS — how many independent signals (book lean, model edge,
+   outside consensus) point the same way. A real hierarchy, not just more
+   colors: thicker border + visible glow scale UP with agreement, so Supreme
+   is unmistakably the strongest square on the card at a glance, not just
+   "a different color from Strong." ═══ */
+.bet.lean{border-width:1.5px;border-color:rgba(95,211,232,.45)}
+.bet.strong{border-width:2px;border-color:#5FD3E8;
+  box-shadow:0 0 10px rgba(95,211,232,.28),inset 0 1px 0 rgba(255,255,255,.05)}
+.bet.supreme{border-width:2.5px;border-color:#FFD75E;
+  background:linear-gradient(165deg,rgba(255,215,94,.16),rgba(21,30,40,.9));
+  box-shadow:0 0 16px rgba(255,215,94,.4),inset 0 1px 0 rgba(255,255,255,.08)}
+.bet.supreme .bl{color:#FFD75E}
+.bet.conflict{border-width:2px;border-style:dashed;border-color:var(--rust);
+  background:linear-gradient(165deg,rgba(240,86,60,.1),rgba(21,30,40,.9))}
+.tier-tag{font-family:"IBM Plex Mono";font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:800;margin-top:3px}
+.tier-tag.supreme{color:#FFD75E}
+.tier-tag.strong{color:#5FD3E8}
+.tier-tag.conflict{color:var(--rust)}
+/* selected + tiered — the checkmark badge stays gold/unmissable regardless of
+   tier, but the tier's own border/glow shows through underneath it so you can
+   still tell "this Supreme pick is the one I've selected" apart from a
+   Supreme pick you haven't tapped yet */
+.bet.supreme.on{border-color:#FFD75E!important;box-shadow:0 0 16px rgba(255,215,94,.5),var(--glow-gold)}
+.bet.strong.on{border-color:#5FD3E8!important;box-shadow:0 0 10px rgba(95,211,232,.35),var(--glow-gold)}
+.bet.conflict.on{border-color:var(--rust)!important;box-shadow:var(--glow-gold)}
+.eb{font-family:"Inter";font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;
+display:inline-block;letter-spacing:.02em}
+.eb.up{background:rgba(74,222,128,.18);color:var(--win)}
+.eb.dn{background:rgba(199,82,42,.18);color:var(--rust)}
+.bet .bf{font-family:"IBM Plex Mono";font-size:8.5px;color:var(--mute);line-height:1.3}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-family:"IBM Plex Mono";font-size:9.5px;
+color:var(--mute);margin:8px 0 2px;align-items:center}
+.legend i{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:4px;vertical-align:-1px}
+.legend i.v{border:1.5px solid var(--win);background:rgba(74,222,128,.14)}
+.legend i.a{border:1.5px solid var(--rust);background:rgba(199,82,42,.10)}
+.legend i.n{border:1.5px solid var(--rule);background:var(--panel2)}
+/* ---- trends ---- */
+.trow{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border-radius:8px;
+border:1px solid var(--rule);background:var(--panel2);margin-bottom:6px}
+.trow.agree{border-color:rgba(74,222,128,.45);background:linear-gradient(180deg,rgba(74,222,128,.07),var(--panel2))}
+.trow.conflict{border-color:rgba(199,82,42,.45);background:linear-gradient(180deg,rgba(199,82,42,.07),var(--panel2))}
+.trow .tdot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;margin-top:6px;background:var(--mute)}
+.trow.agree .tdot{background:var(--win)}
+.trow.conflict .tdot{background:var(--rust)}
+.trow .tbody{flex:1}
+.trow .tname{font-family:"IBM Plex Mono";font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.trow .ttext{font-size:12px;line-height:1.5;margin-top:2px}
+.trow .tverdict{font-family:"IBM Plex Mono";font-size:9px;font-weight:600;margin-top:3px}
+.trow.agree .tverdict{color:var(--win)}
+.trow.conflict .tverdict{color:var(--rust)}
+.trow.neutral .tverdict{color:var(--mute)}
+.valbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-family:"IBM Plex Mono";font-size:11px}
+.valpill{background:rgba(74,222,128,.14);border:1px solid rgba(74,222,128,.4);color:var(--win);
+padding:4px 9px;border-radius:20px;font-size:10.5px;font-weight:600}
+.cmpr{background:var(--panel);border:1px dashed var(--rule);border-radius:9px;padding:11px 9px;
+text-align:center;min-height:60px;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.cmpr .bl{font-family:"IBM Plex Sans";font-size:12.5px;font-weight:600;color:var(--mute);line-height:1.2}
+.cmpr .bo{font-family:"IBM Plex Mono";font-size:15px;font-weight:600;color:var(--chalk);line-height:1}
+.cmpr .bs{font-family:"IBM Plex Mono";font-size:9px;color:var(--mute)}
+.cmpr.book{border-color:var(--cold);border-style:solid}
+.cmpr.book .bo{color:var(--cold)}
+
+/* ---------- EXPANDERS ---------- */
+.exprow{display:flex;border-top:1px solid var(--rule)}
+.expbtn{flex:1;background:none;border:none;border-right:1px solid var(--hair);color:var(--mute);
+transition:background .2s var(--ease),color .2s var(--ease);
+font-family:"Archivo";font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+padding:11px 4px;cursor:pointer}
+.expbtn:last-child{border-right:none}
+.expbtn.on{color:var(--gold);background:rgba(255,180,61,.09);box-shadow:inset 0 -2px 0 var(--gold)}
+.panel{display:none;border-top:1px solid var(--hair);
+background:linear-gradient(180deg,#0C1218,#0E141B);padding:14px 14px;
+box-shadow:inset 0 6px 14px -8px rgba(0,0,0,.7)}
+.panel.on{animation:panelIn .3s var(--ease)}
+@keyframes panelIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.panel.on{display:block}
+.row{display:flex;gap:9px;padding:6px 0;border-bottom:1px solid rgba(42,54,66,.5)}
+.row:last-child{border-bottom:0}
+.row .lb{font-family:"Archivo";font-weight:700;font-size:9px;letter-spacing:.09em;color:var(--gold);min-width:15px;padding-top:2px}
+.row .tx{flex:1;font-size:12px;line-height:1.5}
+.hist{display:flex;align-items:flex-end;gap:1px;height:32px;margin-top:5px}
+.hb{flex:1;background:var(--rule);border-radius:1px 1px 0 0;min-height:1px}
+.hb.md{background:var(--gold)}
+.histx{display:flex;justify-content:space-between;font-family:"IBM Plex Mono";font-size:8px;color:var(--mute);margin-top:2px}
+
+/* ---------- PROPS INSIDE GAME ---------- */
+.ptype{margin-bottom:11px}
+.ptype h4{font-family:"IBM Plex Mono";font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+color:var(--gold);margin:0 0 5px;padding-bottom:3px;border-bottom:1px solid var(--rule)}
+.prop{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--rule);
+border-radius:7px;padding:8px 10px;margin-bottom:4px;cursor:pointer}
+.prop.on{border-color:var(--gold);background:rgba(242,169,59,.09)}
+.prop .pc{font-family:"IBM Plex Mono";font-size:14px;font-weight:600;min-width:40px;text-align:right}
+.p90{color:var(--win)}.p80{color:var(--gold)}.p70{color:var(--chalk)}.plow{color:var(--mute)}
+.prop .pw{flex:1;min-width:0}
+.prop .pn{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prop .pm{font-family:"IBM Plex Mono";font-size:10px;color:var(--mute);margin-top:1px}
+
+/* ---------- BOX SCORE ---------- */
+.boxtbl{width:100%;border-collapse:collapse;font-family:"IBM Plex Mono";font-size:10.5px}
+.boxtbl th{text-align:right;color:var(--mute);font-weight:500;font-size:9px;text-transform:uppercase;padding:3px 4px;border-bottom:1px solid var(--rule)}
+.boxtbl th:first-child{text-align:left}
+.boxtbl td{text-align:right;padding:3px 4px;border-bottom:1px solid rgba(42,54,66,.4)}
+.boxtbl td:first-child{text-align:left;color:var(--chalk)}
+.boxtbl .hi{color:var(--gold)}
+.finalsc{font-family:"Archivo";font-weight:900;font-size:22px;margin-bottom:8px}
+.gradeline{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid rgba(42,54,66,.4);font-size:12px}
+.gradeline .gm{font-family:"IBM Plex Mono";font-size:11px;color:var(--mute);flex:1}
+
+/* ---------- SLIP ---------- */
+.slip{position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(20,27,35,.98);
+border-top:2px solid var(--gold);padding:11px 14px calc(env(safe-area-inset-bottom) + 11px);
+backdrop-filter:blur(14px);display:none;align-items:center;gap:10px;cursor:pointer}
+.slip.on{display:flex}
+.slip .si{flex:1;min-width:0}
+.slip .sl{font-family:"IBM Plex Mono";font-size:9px;color:var(--mute);letter-spacing:.07em;text-transform:uppercase;
+display:flex;align-items:center;gap:5px}
+.slip .sl .chev{transition:transform .25s var(--ease,ease);display:inline-block}
+.slip.expanded .sl .chev{transform:rotate(180deg)}
+.slip .so{font-family:"Archivo";font-weight:900;font-size:17px}
+.slip button{font-family:"Archivo";font-weight:700;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+border-radius:7px;padding:10px 12px;cursor:pointer;border:1px solid var(--rule)}
+.slip .c{background:var(--panel2);color:var(--chalk)}
+.slip .k{background:var(--gold);color:#0B0F14;border-color:var(--gold)}
+
+/* ── expandable slip sheet — tap the bar to raise it, review/remove legs,
+   tap again (or the scrim) to lower it back down before locking in ── */
+.slip-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:49;
+  opacity:0;pointer-events:none;transition:opacity .25s var(--ease,ease)}
+.slip-scrim.on{opacity:1;pointer-events:auto}
+.slip-sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;
+  background:var(--panel,#141b23);border-top:2px solid var(--gold);
+  border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.5);
+  max-height:72vh;display:flex;flex-direction:column;
+  transform:translateY(100%);transition:transform .3s var(--ease,cubic-bezier(.2,.9,.3,1));
+  padding-bottom:env(safe-area-inset-bottom)}
+.slip-sheet.on{transform:translateY(0)}
+.slip-sheet-handle{width:40px;height:4px;background:var(--rule);border-radius:3px;
+  margin:9px auto 4px;flex:0 0 auto}
+.slip-sheet-head{padding:6px 16px 10px;flex:0 0 auto;display:flex;justify-content:space-between;
+  align-items:baseline;border-bottom:1px solid var(--rule)}
+.slip-sheet-body{overflow-y:auto;padding:8px 14px;flex:1 1 auto;-webkit-overflow-scrolling:touch}
+.slip-leg{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--rule)}
+.slip-leg:last-child{border-bottom:none}
+.slip-leg-info{flex:1;min-width:0}
+.slip-leg-pick{font-family:"Archivo";font-weight:800;font-size:14px}
+.slip-leg-game{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);letter-spacing:.05em;margin-top:1px}
+.slip-leg-prob{font-family:"IBM Plex Mono";font-size:12px;color:var(--gold);flex:0 0 auto}
+.slip-leg-rm{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:1px solid var(--rust,#c0392b);
+  background:transparent;color:var(--rust,#c0392b);font-size:14px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.slip-sheet-foot{flex:0 0 auto;padding:10px 14px calc(env(safe-area-inset-bottom) + 10px);
+  border-top:1px solid var(--rule);display:flex;gap:10px}
+.slip-sheet-foot button{flex:1;font-family:"Archivo";font-weight:700;font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;border-radius:8px;padding:12px;cursor:pointer;border:1px solid var(--rule)}
+.slip-sheet-foot .c{background:var(--panel2);color:var(--chalk)}
+.slip-sheet-foot .k{background:var(--gold);color:#0B0F14;border-color:var(--gold)}
+
+/* ---------- WAGER ROW ON LOCKED TICKETS ---------- */
+.wager-row{display:flex;align-items:stretch;gap:6px;margin-top:11px;padding-top:10px;border-top:1px solid var(--rule);flex-wrap:nowrap}
+.wager-pill{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--rule);border-radius:40px;padding:8px 10px;flex:1;min-width:0;text-align:center}
+.wager-pill.stake-pill{border-color:rgba(95,211,232,.4);background:rgba(95,211,232,.06)}
+.wager-pill.odds-pill{border-color:rgba(242,169,59,.3);background:rgba(242,169,59,.06)}
+.wager-pill.payout-pill{border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.06)}
+.wager-pill.payout-pill.neg{border-color:rgba(199,82,42,.35);background:rgba(199,82,42,.06)}
+.wp-label{font-family:"IBM Plex Mono";font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin-bottom:3px}
+.wp-val{font-family:"Archivo";font-weight:900;font-size:15px;line-height:1;color:var(--chalk)}
+.stake-pill .wp-val{color:var(--cold)}
+.odds-pill .wp-val{color:var(--gold)}
+.payout-pill .wp-val{color:var(--win)}
+.payout-pill.neg .wp-val{color:var(--rust)}
+.wp-sub{font-family:"IBM Plex Mono";font-size:7.5px;color:var(--mute);margin-top:2px}
+.stake-input{font-family:"Archivo";font-weight:900;font-size:15px;color:var(--cold);background:transparent;border:none;outline:none;width:100%;text-align:center;padding:0;max-width:72px}
+/* ---------- TICKETS / GRADES ---------- */
+.tkt{background:var(--grad-card);border:1px solid var(--hair);border-radius:15px;padding:14px;
+margin-bottom:11px;box-shadow:var(--sh-md)}
+.tkt.hi{border-color:rgba(255,180,61,.3);background:var(--grad-card-hi);
+box-shadow:var(--sh-md),0 0 30px rgba(255,180,61,.07)}
+.tkt h3{font-family:"Archivo";font-weight:900;font-size:15px;margin:0 0 2px;text-transform:uppercase}
+.tkt .sub{font-family:"IBM Plex Mono";font-size:10px;color:var(--mute);margin-bottom:8px;line-height:1.5}
+.tkt .sub b{color:var(--gold)}
+.tkt ol{margin:0;padding-left:18px;font-size:12.5px;line-height:1.75}
+.tkt ol .m{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--mute)}
+.tkt ol .pp{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--moss)}
+.subnav{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;padding-bottom:3px}
+.subnav::-webkit-scrollbar{display:none}
+.subnav button{white-space:nowrap;font-family:"Inter";font-size:11px;font-weight:600;padding:8px 14px;
+border-radius:999px;background:var(--panel2);border:1px solid var(--hair);color:var(--mute);cursor:pointer;
+text-transform:uppercase;letter-spacing:.05em;box-shadow:var(--sh-sm);
+transition:all .2s var(--ease)}
+.subnav button:hover{color:var(--chalk);border-color:rgba(255,255,255,.14)}
+.subnav button.on{background:linear-gradient(135deg,#FFC55A 0%,var(--gold) 100%);color:#0B0F14;
+border-color:var(--gold);font-weight:800;box-shadow:0 3px 14px rgba(255,180,61,.32)}
+.subview{display:none}.subview.on{display:block}
+
+/* ---------- FORMS / CHAT ---------- */
+.bar{display:flex;gap:6px;margin-top:10px}
+.bar button{flex:1;font-family:"Inter";font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+background:var(--panel2);color:var(--chalk);border:1px solid var(--hair);border-radius:11px;padding:13px;
+cursor:pointer;box-shadow:var(--sh-sm);transition:all .2s var(--ease)}
+.bar button:hover{border-color:rgba(255,255,255,.16);transform:translateY(-1px)}
+.bar button:active{transform:translateY(0) scale(.985)}
+.bar button.primary{background:linear-gradient(135deg,#FFC55A 0%,#F09B22 100%);color:#0B0F14;
+border-color:transparent;font-weight:800;box-shadow:0 4px 18px rgba(255,180,61,.34)}
+.bar button.primary:hover{box-shadow:0 6px 24px rgba(255,180,61,.44)}
+.bar button:disabled{opacity:.4}
+input{width:100%;background:var(--panel);border:1px solid var(--rule);border-radius:7px;color:var(--chalk);
+font-family:"IBM Plex Mono";font-size:14px;padding:12px;margin:5px 0}
+input:focus{outline:none;border-color:var(--cold)}
+.chatbox{display:flex;flex-direction:column;height:calc(100vh - 260px);min-height:330px}
+.msgs{flex:1;overflow-y:auto;padding:2px}
+.msg{margin-bottom:9px;font-size:13.5px;line-height:1.55}
+.msg.u{text-align:right}
+.msg .b{display:inline-block;padding:9px 12px;border-radius:12px;max-width:88%;text-align:left;white-space:pre-wrap}
+.msg.u .b{background:var(--gold);color:#0B0F14}
+.msg.a .b{background:var(--panel);border:1px solid var(--rule)}
+.chatin{display:flex;gap:6px;margin-top:8px}
+.chatin input{flex:1;margin:0}
+.chatin button{font-family:"Archivo";font-weight:700;font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+background:var(--gold);color:#0B0F14;border:1px solid var(--gold);border-radius:7px;padding:11px 14px;cursor:pointer}
+.note{font-size:11px;color:var(--mute);line-height:1.55;border-left:2px solid var(--rule);padding-left:9px;margin:14px 3px 0}
+.note b{color:var(--gold);font-weight:600}
+.empty{text-align:center;padding:38px 18px;color:var(--mute);font-size:12.5px;line-height:1.6}
+.setup{position:fixed;inset:0;z-index:80;background:var(--ink);padding:calc(env(safe-area-inset-top) + 26px) 18px 18px;overflow-y:auto}
+.setup.hide{display:none}
+.setup h2{font-family:"Archivo";font-weight:900;font-size:22px;text-transform:uppercase;margin:0 0 5px}
+.setup p,.steps{font-size:12.5px;color:var(--mute);line-height:1.65}
+.steps b{color:var(--chalk);font-weight:500}
+button:focus-visible{outline:2px solid var(--cold);outline-offset:2px}
+/* ---------- RECAP / SHARE CARD ---------- */
+.recapwrap{background:#0B0F14;border-radius:16px;overflow:hidden;border:1px solid var(--rule);margin-bottom:14px}
+.recapcard{padding:26px 22px 22px;position:relative}
+.recapcard::before{content:'';position:absolute;inset:0;
+background:radial-gradient(circle at 15% 0%,rgba(242,169,59,.10),transparent 55%),
+radial-gradient(circle at 100% 100%,rgba(95,211,232,.07),transparent 50%);pointer-events:none}
+.rc-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;position:relative}
+.rc-brand{font-family:"Archivo";font-weight:900;font-size:22px;letter-spacing:-.02em;text-transform:uppercase}
+.rc-brand span{color:var(--gold)}
+.rc-tag{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);letter-spacing:.12em;text-transform:uppercase;margin-top:2px}
+.rc-date{font-family:"IBM Plex Mono";font-size:11px;color:var(--mute);text-align:right;letter-spacing:.05em}
+.rc-hero{text-align:center;margin:8px 0 22px;position:relative}
+.rc-hero .pct{font-family:"Archivo";font-weight:900;font-size:56px;letter-spacing:-.03em;line-height:1;color:var(--gold)}
+.rc-hero .rec{font-family:"IBM Plex Mono";font-size:15px;color:var(--chalk);margin-top:4px}
+.rc-hero .lab{font-family:"IBM Plex Mono";font-size:9.5px;color:var(--mute);letter-spacing:.15em;text-transform:uppercase;margin-top:6px}
+.rc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:18px;position:relative}
+.rc-stat{background:rgba(255,255,255,.03);border:1px solid var(--rule);border-radius:10px;padding:12px 8px;text-align:center}
+.rc-stat .v{font-family:"Archivo";font-weight:900;font-size:20px;color:var(--chalk)}
+.rc-stat .v.win{color:var(--win)}.rc-stat .v.gold{color:var(--gold)}
+.rc-stat .l{font-family:"IBM Plex Mono";font-size:8.5px;color:var(--mute);letter-spacing:.08em;text-transform:uppercase;margin-top:3px}
+.rc-list{position:relative;margin-bottom:6px}
+.rc-list h5{font-family:"IBM Plex Mono";font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+color:var(--mute);margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
+.rc-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;
+border-bottom:1px solid rgba(42,54,66,.4);font-size:12.5px}
+.rc-row:last-child{border-bottom:none}
+.rc-row .g{color:var(--chalk)}
+.rc-row .p{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--mute)}
+.rc-row .r{font-family:"Archivo";font-weight:700;font-size:12px}
+.rc-row .r.w{color:var(--win)}.rc-row .r.l{color:var(--rust)}
+.rc-foot{display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:14px;
+border-top:1px solid var(--rule);position:relative}
+.rc-foot .cal{font-family:"IBM Plex Mono";font-size:10px;color:var(--cold)}
+.rc-foot .cta{font-family:"Archivo";font-weight:900;font-size:13px;letter-spacing:.02em}
+.rc-foot .cta span{color:var(--gold)}
+.rc-empty-slot{background:rgba(255,255,255,.02);border:1px dashed var(--rule);border-radius:10px;
+padding:14px;text-align:center;font-family:"IBM Plex Mono";font-size:10.5px;color:var(--mute)}
+.rc-picker{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px;scrollbar-width:none}
+.rc-picker::-webkit-scrollbar{display:none}
+.rc-picker button{white-space:nowrap;font-family:"IBM Plex Mono";font-size:10.5px;padding:8px 12px;border-radius:20px;
+background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:pointer}
+.rc-picker button.on{background:var(--gold);color:#0B0F14;border-color:var(--gold);font-weight:600}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+<div class="setup" id="setup">
+  <h2>Set up the desk</h2>
+  <p>The simulator runs entirely free and never uses bookmaker odds to form a projection.</p>
+  <ol class="steps">
+    <li><b>Games, lineups, stats, weather, head-to-head</b> — MLB Stats API. Free, no key.</li>
+    <li><b>Live scores and box scores</b> — ESPN. Free, no key.</li>
+    <li><b>Odds</b> — optional, display only. Used to compare against the sim, never to build it.</li>
+    <li><b>Chat and screenshot reading</b> — optional, aistudio.google.com key.</li>
+  </ol>
+  <input id="setupKeyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
+  <input id="setupAiIn" placeholder="gemini api key (optional)" autocomplete="off" spellcheck="false">
+  <input id="setupSharpIn" placeholder="sharpapi.io key (optional)" autocomplete="off" spellcheck="false">
+  <input id="setupRundownIn" placeholder="therundown.io key (optional)" autocomplete="off" spellcheck="false">
+  <div class="sub" style="margin:10px 0">Everything here can be changed later in the Settings tab.</div>
+  <div class="bar"><button class="primary" onclick="saveKeys()">Start</button></div>
+</div>
+
+<header>
+  <div class="brand"><h1>The<span>Desk</span></h1>
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <div class="dateline" id="dateline">—</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.54</div>
+    </div>
+  </div>
+  <div class="meterwrap">
+    <div class="meterlab"><span>Odds · <b id="credText">0 / 24</b></span><span id="lastPull">—</span></div>
+    <div class="meter" id="meter"></div>
+  </div>
+  <nav>
+    <button class="on" onclick="tab('games',this)">Games<span class="n" id="nG"></span></button>
+    <button onclick="tab('tickets',this)">Tickets</button>
+    <button onclick="tab('grades',this)">Record<span class="n" id="nR"></span></button>
+    <button onclick="tab('best',this)">Best<span class="n" id="nBest"></span></button>
+    <button onclick="tab('coach',this)">Coach</button>
+    <button onclick="tab('chat',this)">Chat</button>
+    <button onclick="tab('money',this)">Money</button>
+    <button onclick="tab('settings',this)">Settings</button>
+  </nav>
+</header>
+<div style="display:flex;padding:8px 12px 4px;gap:6px;background:#0d1117;position:relative;z-index:999">
+  <div id="sportBtn-mlb" role="button" tabindex="0" aria-label="MLB" onclick="doSportSwitch('mlb')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">⚾ MLB</div>
+  <div id="sportBtn-nfl" role="button" tabindex="0" aria-label="NFL" onclick="doSportSwitch('nfl')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏈 NFL</div>
+  <div id="sportBtn-ncaaf" role="button" tabindex="0" aria-label="NCAAF" onclick="doSportSwitch('ncaaf')" style="flex:1;height:48px;font-size:14px;font-weight:900;border-radius:10px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;cursor:pointer">🏟 CFB</div>
+</div>
+
+<main>
+<div id="storageBanner" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;
+background:rgba(240,86,60,.12);border:1px solid rgba(240,86,60,.45);color:var(--rust);
+font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
+<div id="cfbPowerWarn" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;background:rgba(255,180,61,.10);border:1px solid rgba(255,180,61,.40);color:var(--gold);font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
+<div id="nflPowerWarn" style="display:none;margin:8px 3px 4px;padding:10px 12px;border-radius:10px;
+background:rgba(255,180,61,.10);border:1px solid rgba(255,180,61,.40);color:var(--gold);
+font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
+
+  <div class="view on" id="v-games">
+    <div class="bar" style="margin:0 0 6px;gap:6px">
+      <button class="primary" onclick="refreshEverything()" style="flex:2">↻ Refresh everything</button>
+      <button onclick="pullLiveOdds()" style="flex:1;font-size:12px" id="pullOddsBtn">⚡ Pull odds</button>
+    </div>
+    <div id="refreshAllStatus"></div>
+    <div class="tkt">
+      <div class="sbar" style="margin-top:0"><h2>Your book's real lines</h2><div class="ln"></div></div>
+      <div class="sub">Upload a txt file or screenshots from your sportsbook. <b>Whatever you upload outranks every API</b>
+      and becomes the real tappable line for that market. Or hit <b>⚡ Pull odds</b> above to auto-fetch
+      live lines from The Odds API — no file needed.</div>
+      <div class="sub" id="bookStatus" style="margin-top:6px;font-family:'IBM Plex Mono';font-size:10.5px"></div>
+      <div class="mktlab" style="margin-top:8px">Which slate are these for?</div>
+      <div class="subnav" id="bookUploadDateRow"></div>
+      <input type="file" id="bookShots" accept="image/*,application/pdf,.doc,.docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="margin-top:8px">
+      <div class="bar" style="margin-top:8px"><button class="primary" onclick="analyzeBookShots()">Analyze screenshots</button></div>
+      <div id="bookShotResult"></div>
+    </div>
+    <div class="rc-picker" id="dayPicker"></div>
+    <div id="previewBanner"></div>
+    <div id="slate"><div class="empty">Loading board…</div></div>
+    <div class="note">
+      <b>The projection never touches bookmaker odds.</b> It runs 10,000 simulations off confirmed lineups,
+      per-plate-appearance rates, opposing starter, park factor, live weather, home/away splits, two-year
+      head-to-head, and starter workload. Market prices are shown only to compare against — never to build it.<br><br>
+      <b>Most common outcome</b> is the exact final score that came up more than any other across all 10,000
+      runs. That's a different and often more useful number than the median.
+    </div>
+  </div>
+
+  <div class="view" id="v-tickets">
+    <div class="subnav" id="ticketNav"></div>
+    <div id="ticketBody"></div>
+  </div>
+
+  <div class="view" id="v-grades">
+    <div class="subnav" id="gradeNav"></div>
+    <div id="gradeBody"><div class="empty">Grading needs at least one completed slate.</div></div>
+    <div class="bar">
+      <button class="primary" onclick="renderGrades(true)">Regrade all</button>
+      <button onclick="exportCSV()">Copy CSV</button>
+    </div>
+    <div class="note"><b>Regrade all</b> force-fetches every final score and re-runs all grading from scratch. Use this any time grades look stale or missing — your data in d4.arc is never deleted, only updated.</div>
+  </div>
+
+  <div class="view" id="v-recap">
+    <input id="handleIn" placeholder="@YourHandle or your brand name" style="margin-bottom:10px">
+    <div class="bar" style="margin-top:0"><button class="primary" onclick="saveHandle()">Save branding</button></div>
+    <div class="rc-picker" id="recapPicker"></div>
+    <div id="recapCard"></div>
+    <div class="bar"><button class="primary" onclick="renderRecap()">Refresh</button><button class="primary" id="exportBtn" onclick="exportRecapImage()">Save image</button></div>
+    <div class="note">
+      <b>Screenshot the card above — that's the whole workflow.</b> Long-press → Save Image on iPhone,
+      or use the share sheet. Nothing else on this tab needs to be visible; the card is self-contained
+      with its own branding, date, and record.<br><br>
+      Pick a day from the strip above. Only days with graded results can produce a card — nothing to
+      show until a slate finishes and you've opened Grades once to pull final scores.
+    </div>
+  </div>
+
+  <div class="view" id="v-best">
+    <div class="subnav" id="bestNav"></div>
+    <div class="subview on" id="best-today">
+      <div id="bestCard"></div>
+      <div class="bar"><button class="primary" onclick="renderBest()">Refresh</button><button class="primary" id="exportBestBtn" onclick="exportImage('bestShareTarget','exportBestBtn','thedesk-best-'+today(),'The Desk — Best of '+fmtDate(new Date()))">Save image</button></div>
+    </div>
+    <div class="subview" id="best-recap">
+      <div class="rc-picker" id="bestRecapPicker"></div>
+      <div id="bestRecapCard"></div>
+      <div class="bar"><button class="primary" id="exportBestRecapBtn" onclick="exportImage('bestRecapShareTarget','exportBestRecapBtn','thedesk-best-recap-'+BEST_RECAP_DAY,'The Desk — Best Bets Recap')">Save image</button></div>
+    </div>
+    <div class="note">
+      <b>Today</b> is forward-looking — not a result, just today's top-ranked plays. <b>Recap</b> is the
+      graded record of what Best Bets said on past days, checked against the final box score, so the two
+      never get confused with each other.<br><br>
+      Home run pick is the single highest home-run probability on the board, standalone — not tied to any
+      side or total.
+    </div>
+  </div>
+
+  <div class="view" id="v-chat">
+    <div class="chatbox">
+      <div class="msgs" id="msgs"><div class="empty">Ask about the board. It has every sim, signal, prop, grade and record loaded.</div></div>
+      <div class="chatin"><input id="chatIn" placeholder="Ask…" onkeydown="if(event.key==='Enter')send()"><button onclick="send()">Send</button></div>
+    </div>
+  </div>
+
+  <div class="view" id="v-money">
+    <div id="moneyBody"></div>
+  </div>
+
+  <div class="view" id="v-coach">
+    <div id="coachBody"></div>
+  </div>
+
+  <div class="view" id="v-settings">
+    <div class="sbar" style="margin-top:0"><h2>API keys</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="sub" style="margin-bottom:8px">MLB Stats API and ESPN live scores are free and need no key.
+      Everything below is optional — the simulator runs fully without any of them.</div>
+      <input id="keyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
+      <input id="aiIn" placeholder="gemini api key — chat &amp; screenshot reading" autocomplete="off" spellcheck="false">
+      <input id="cfbdIn" placeholder="collegefootballdata.com key — CFB SP+ ratings (free, 1000/mo)" autocomplete="off" spellcheck="false">
+      <div class="sub" style="margin:6px 0 8px;font-family:'IBM Plex Mono';font-size:10.5px">
+        Vision model: <b id="geminiModelNow" style="color:var(--gold)">—</b>
+        <span style="color:var(--mute)"> · re-pins itself automatically if Google retires it</span>
+        <button onclick="repinGeminiModel()" style="margin-top:6px">Check for a newer model</button>
+        <div id="geminiModelStatus" class="sub" style="margin-top:4px"></div>
+      </div>
+      <input id="sharpIn" placeholder="sharpapi.io key — totals &amp; props" autocomplete="off" spellcheck="false">
+      <input id="rundownIn" placeholder="therundown.io key — run lines" autocomplete="off" spellcheck="false">
+      <input id="oddspapiIn" placeholder="oddspapi.io key — global books, diagnostic only" autocomplete="off" spellcheck="false">
+      <div class="bar" style="margin-top:8px">
+        <button class="primary" onclick="saveSettingsTab()">Save keys</button>
+        <button onclick="diagnoseOddsPapi()">Diagnose OddsPapi</button>
+      </div>
+      <div id="oddspapiDiag"></div>
+    </div>
+
+    <div class="sbar"><h2>Backup</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="sub" id="backupStatus" style="margin-bottom:8px"></div>
+      <div class="sub" id="storageStatus" style="margin-bottom:8px"></div>
+      <div class="sub" id="dataFeedStatus" style="margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <button onclick="reloadCFBD()">Reload CFB SP+ ratings</button>
+        <button onclick="reloadNFLDepth()">Reload NFL depth charts</button>
+        <button onclick="runFeedSelfTest()">Run data feed self-test</button>
+      </div>
+      <div id="feedSelfTest" class="sub" style="margin-bottom:10px"></div>
+      <button onclick="freeStorageNow()" style="margin-bottom:10px">Free space (keep graded history)</button>
+      <div class="bar" style="margin-top:0">
+        <button class="primary" onclick="exportBackup()">Export everything to a file</button>
+        <button onclick="document.getElementById('importFile').click()">Restore from a file</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importBackup(this)">
+      <div class="sub" style="margin-top:8px"><b>API keys are never included in this file</b> — safe to upload
+      to a GitHub repo or store anywhere. Re-paste your keys here after restoring.
+      <b>Do this before clearing Safari's site data, switching domains, or anything risky.</b>
+      Clearing your browser's site data for this domain deletes everything stored here — graded history,
+      calibration, locked tickets, all of it — with no warning.</div>
+    </div>
+
+    <div class="sbar"><h2>GitHub auto-sync</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <input id="ghrepoIn" placeholder="owner/repo — e.g. ironsilkstrategies/thedesk" autocomplete="off" spellcheck="false">
+      <input id="ghtokenIn" type="password" placeholder="GitHub token — repo-scoped, contents read/write only" autocomplete="off" spellcheck="false">
+      <div class="bar" style="margin-top:8px"><button class="primary" onclick="saveGhSettings();pushToGitHub(true)">Sync to GitHub now</button></div>
+      <div class="sub" style="margin-top:8px">Pushes a credential-free file to <code>data-backup.json</code> in your repo.
+      If this device ever starts up with zero graded history, it automatically pulls the last synced
+      snapshot back down — no button, no prompt. Use a <b>fine-grained token scoped to this one repo,
+      "Contents: read and write" only</b>.</div>
+    </div>
+
+    <div class="sbar"><h2>Usage</h2><div class="ln"></div></div>
+    <div class="tkt"><div id="usagePanel"></div></div>
+
+    <div class="sbar"><h2>Grading</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="bar" style="margin-top:0">
+        <button class="primary" id="forceGradeBtn" onclick="forceGradeEverything()">Grade everything now</button>
+      </div>
+      <div class="sub" style="margin-top:8px">Grading normally runs itself in the background the moment a game
+      goes final — you shouldn't need this. Use it if something looks stale: force-fetches today's final scores,
+      regrades every prop and side, recalculates calibration, grades every uploaded external pick, and settles
+      any staked ticket that's now fully decided. Nothing here is destructive — it only fills in or corrects,
+      never deletes.</div>
+      <div id="forceGradeStatus"></div>
+    </div>
+
+    <div class="tkt">
+      <div class="bar" style="margin-top:0">
+        <button onclick="runPushBugRepairManually()">Re-check for the push/tie bug</button>
+      </div>
+      <div class="sub" style="margin-top:8px">Run lines and whole-number totals could tie — a real push — but
+      were being graded as a straight loss. Fixed now, and it auto-corrected every already-settled ticket once
+      automatically. Use this button to force it to check again (e.g. if you restore an older backup).</div>
+      <div id="pushRepairStatus"></div>
+    </div>
+
+    <div class="tkt">
+      <div class="bar" style="margin-top:0">
+        <button onclick="runBankrollCorrection()" style="border-color:var(--gold);color:var(--gold)">Correct bankroll → $80 / $0 spent today</button>
+      </div>
+      <div class="sub" style="margin-top:8px">One-time correction. Sets your balance to $80.00 and clears today's
+      pending spend to $0. Use this if the balance is displaying wrong due to a data glitch.</div>
+    </div>
+
+    <div class="tkt">
+      <div class="bar" style="margin-top:0">
+        <button onclick="clearExtToday()" style="border-color:var(--rust);color:var(--rust)">Clear today's outside data</button>
+      </div>
+      <div class="sub" style="margin-top:8px">Wipes all uploaded picks, trends, and consensus for today.
+      Use this before re-uploading fresh slate files to avoid stale data stacking.</div>
+    </div>
+
+    <div class="sbar"><h2>Elite stat threshold</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="sub" style="margin-top:0">Any real league-wide stat inside this percentile gets a gold ⭐ badge
+      on the game card — pitcher ERA, K/9, team record, park HR factor. Real data only, from MLB's own leaderboards
+      and standings, never guessed.</div>
+      <div id="pctThresholdBtns" class="subnav" style="margin-top:10px"></div>
+    </div>
+
+    <div class="sbar"><h2>Auto-built tickets</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="sub" style="margin-top:0">Off by default. When ON, that bucket silently builds its own daily
+      ticket the moment the app loads — with real presets doing this work on purpose, most people don't want
+      the extra noise. Turning one off also removes today's already-built auto-ticket for it, if there is one.</div>
+      <div id="autoParlayToggles" style="margin-top:10px"></div>
+    </div>
+
+    <div class="sbar"><h2>Color legend</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="sub" style="margin-top:0">Every color used across the app, and exactly what it means. This is
+      the complete list — nothing here is decorative, every color is a real signal.</div>
+      <div id="colorLegend" style="margin-top:10px"></div>
+    </div>
+
+    <div class="sbar"><h2>Maintenance</h2><div class="ln"></div></div>
+    <div class="tkt">
+      <div class="bar" style="margin-top:0"><button onclick="hardReload()">Hard reload — clear cache &amp; force latest version</button></div>
+      <div class="sub" style="margin-top:8px">Clears everything this page cached and reloads fresh. On iPhone Home Screen
+      apps this usually works — if it still shows an old build number after this, force-quit the app
+      (swipe it away in the app switcher) and reopen from the icon.</div>
+    </div>
+
+    <div class="note">
+      <b>Where the data comes from.</b> Games, lineups, stats, weather and head-to-head come from the
+      MLB Stats API. Live scores and box scores come from ESPN. Both are free and need no key.
+      Odds sources are display-only and never feed the projection.
+    </div>
+  </div>
+</main>
+
+<div class="slip-scrim" id="slipScrim" onclick="closeSlipSheet()"></div>
+<div class="slip-sheet" id="slipSheet">
+  <div class="slip-sheet-handle"></div>
+  <div class="slip-sheet-head">
+    <div style="font-family:'Archivo';font-weight:900;font-size:15px">Review ticket</div>
+    <div class="m" id="slipSheetSummary">—</div>
+  </div>
+  <div class="slip-sheet-body" id="slipSheetBody"></div>
+  <div class="slip-sheet-foot">
+    <button class="c" onclick="clearSlip()">Clear all</button>
+    <button class="k" onclick="lockSlip()">Lock in</button>
+  </div>
+</div>
+
+<div class="slip" id="slip" onclick="toggleSlipSheet(event)">
+  <div class="si"><div class="sl" id="slN"><span class="chev">▲</span> 0 legs</div><div class="so" id="slO">—</div></div>
+  <button class="c" onclick="event.stopPropagation();clearSlip()">Clear</button>
+  <button class="k" onclick="event.stopPropagation();lockSlip()">Lock in</button>
+</div>
+
+<script>
+window.__PAGE_SPORT__='nfl';
+</script>
+<script src="shared.js"></script>
+<script src="football-engine.js"></script>
+<script>
+(function(){
+  ACTIVE_SPORT='nfl';
+  document.querySelectorAll('[id^=\"sportBtn-\"]').forEach(function(btn){
+    var s=btn.id.replace('sportBtn-','');
+    var active=(s===ACTIVE_SPORT);
+    btn.style.background=active?'var(--gold)':'#1c1c1c';
+    btn.style.color=active?'#000':'#fff';
+  });
+})();
+</script>
+</script>
+</body>
+</html>

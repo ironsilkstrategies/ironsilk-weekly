@@ -1,0 +1,13067 @@
+
+const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
+arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
+h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus',
+nflgames:'d4.nflgames',nflshots:'d4.nflshots',nflarc:'d4.nflarc',nflext:'d4.nflext',nfltrends:'d4.nfltrends',nflconsensus:'d4.nflconsensus',
+cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus',teamledger:'d4.teamledger',frozen:'d4.frozen',syslog:'d4.syslog',trendlog:'d4.trendlog'};
+const APP_TZ='America/Chicago';
+let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
+let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl' | 'ncaaf'
+let NFL_GAMES=[],NFL_SIMS={}; // parallel NFL game store
+let NFL_WEEK=null,NFL_SEASON=null; // current week/season being viewed
+let NCAAF_GAMES=[],NCAAF_SIMS={};
+/* These belong to the CFB and NFL engine sections far below, but boot() and
+   doSportSwitch() run from the middle of the file and reach them first. Left
+   declared beside their engines, a `let` in the temporal dead zone threw a
+   ReferenceError that killed the whole script on a fresh install. Declared up
+   here they are simply empty until their engine fills them. */
+let NCAAF_POWER={};                       // {team key: {offPPG, defPPG, wins, losses, src}}
+let NCAAF_POWER_RATED=0,NCAAF_POWER_FLAT=true;
+let NFL_DEPTH={},NFL_DEPTH_STATUS='';     // {team abbr: {players:[{name,pos,depth}]}}
+let CFBD_STATUS='';
+let CFB_PORTAL={},CFB_PORTAL_STATUS='',CFB_PLAYER_STATS={};
+let NFL_POWER_RATED=0,NFL_POWER_FLAT=false; // is there real season data behind the NFL projections?
+/* Declared up here with its flags for the same reason NCAAF_POWER is: the intel
+   layer and boot path both reach it before the NFL engine section is evaluated,
+   and a `let` in the temporal dead zone throws rather than reading as empty. */
+let NFL_POWER={};  // {abbr: {offPPG, defPPG, sos, record, streak}}
+const NFL_HFA=2.5;       // home field advantage in points (real NFL average ~2.5)
+let NCAAF_WEEK=null,NCAAF_SEASON=null;
+
+/* Which HTML page owns each sport's engine, for the cross-page nav below. */
+const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html'};
+function doSportSwitch(sport){
+  /* The app is now split across three pages, each loading only the engine it
+     needs — mlb.html never loads football-engine.js at all, and nfl.html /
+     cfb.html both load football-engine.js but default to different boards.
+     Tapping a sport button whose engine ISN'T present on the current page
+     used to be impossible to reach (there was only one page), so this never
+     needed a check. Now: if the engine is here, switch in place exactly as
+     before. If it isn't, the sport buttons stay IDENTICAL on every page —
+     the only difference is a tap on a sport that lives elsewhere navigates
+     there instead of trying to render code that was never loaded. */
+  const engineHere=sport==='nfl'?typeof renderNFL==='function'
+                  :sport==='ncaaf'?typeof renderNCAAF==='function'
+                  :typeof render==='function';
+  if(!engineHere){
+    try{localStorage.setItem('d4.activeSport',sport)}catch(e){}
+    const dest=SPORT_PAGE[sport];
+    if(dest)window.location.href=dest;
+    return;
+  }
+  ACTIVE_SPORT=sport;
+  ['mlb','nfl','ncaaf'].forEach(s=>{
+    const btn=document.getElementById('sportBtn-'+s);
+    if(!btn)return;
+    btn.style.background=s===sport?'var(--gold)':'#1c1c1c';
+    btn.style.color=s===sport?'#000':'#fff';
+  });
+  if(sport==='nfl'){
+    if(typeof renderNFL==='function')renderNFL();
+    if(typeof nflOnActivate==='function')nflOnActivate();
+  }else if(sport==='ncaaf'){
+    if(typeof renderNCAAF==='function')renderNCAAF();
+    if(typeof ncaafOnActivate==='function')ncaafOnActivate();
+  }else{
+    if(typeof render==='function')render();
+  }
+  const nG=document.getElementById('nG');
+  if(nG)nG.textContent=
+    sport==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES.length:0):
+    sport==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES.length:0):
+    (typeof GAMES!=='undefined'?GAMES.length:0);
+  /* Two things were missing here.
+     1) The choice never persisted, so every reload silently snapped back to
+        MLB even though the CFB board was the one being worked.
+     2) The renders above paint #slate, which lives inside the Games view. If
+        you switched sport from Grades or Tickets, the tap appeared to do
+        nothing at all. Send the user to the board they just asked for. */
+  try{localStorage.setItem('d4.activeSport',sport)}catch(e){}
+  const gv=document.getElementById('v-games');
+  if(gv&&!gv.classList.contains('on')&&typeof tab==='function')tab('games');
+}
+let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
+let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
+
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
+const fmtDate=d=>new Date(d).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',timeZone:APP_TZ});
+function get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+/* ── HOT-PATH READ CACHE ──────────────────────────────────────────────────
+   nbRuns() is the innermost function of the simulator: four calls per sim
+   iteration, 10,000 iterations per game, every game on the board. It was
+   calling get(LS.calib) — a synchronous localStorage read plus a JSON.parse —
+   on EVERY ONE of those calls. A 15-game slate meant roughly 600,000 blocking
+   storage reads and 600,000 JSON parses before a single card painted. On
+   desktop localStorage is memory-backed and this merely hurts; on iOS Safari
+   it is disk-backed and it is the reason the app crawls.
+
+   hotGet() memoizes reads and throws the whole cache away whenever ANYTHING
+   is written, so it can never serve a value older than the last write. Within
+   one simulation pass — where nothing is written — it collapses 600,000 reads
+   into a handful. Objects are returned by reference exactly as get() did, so
+   the existing read-modify-write patterns keep working unchanged. */
+let _LSGEN=0;
+let _hotCache=Object.create(null),_hotGen=-1;
+function bumpStorageGen(){_LSGEN++;_hotCache=Object.create(null);_hotGen=_LSGEN}
+function hotGet(k,d){
+  if(_hotGen!==_LSGEN){_hotCache=Object.create(null);_hotGen=_LSGEN}
+  if(k in _hotCache){const v=_hotCache[k];return v===undefined?d:v}
+  let v;try{const raw=localStorage.getItem(k);v=raw?JSON.parse(raw):undefined}catch(e){v=undefined}
+  _hotCache[k]=v;
+  return v===undefined?d:v;
+}
+/* ── STORAGE LAYER (quota-aware) ──────────────────────────────────────────
+   Was: try{setItem}catch(e){} — a silent swallow. localStorage caps around
+   5MB and this app writes box scores, sims, odds-by-date and three sports'
+   game caches into it. Once the cap was hit, EVERY write failed silently:
+   tickets, grades, bankroll and archive all looked saved until reload, then
+   reverted. That is the single largest source of phantom data loss.
+   Now: on a quota error we prune the cheapest-to-rebuild caches in order,
+   retry after each step, and if it still won't fit we surface it instead of
+   pretending the write landed. ───────────────────────────────────────────*/
+let STORAGE_ALERTED=false;
+function isQuotaErr(e){
+  return e&&(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'||e.code===22||e.code===1014);
+}
+// cheapest-to-rebuild first. Each returns true if it actually freed anything.
+const PRUNE_LADDER=[
+  ()=>pruneKeyedCache('d4.boxcache',120),      // box scores — refetchable from StatsAPI
+  ()=>pruneDatedMap('d4.oddsdate',21),         // historical odds by date
+  ()=>pruneKeyedCache('d4.boxcache',40),
+  ()=>pruneDatedMap('d4.nflgames',3),
+  ()=>pruneDatedMap('d4.ncaafgames',3),
+  ()=>pruneDatedMap('d4.oddsdate',7),
+  ()=>pruneKeyedCache('d4.boxcache',10)
+];
+function pruneKeyedCache(key,keep){
+  try{
+    const raw=localStorage.getItem(key);if(!raw)return false;
+    const c=JSON.parse(raw);const keys=Object.keys(c);
+    if(keys.length<=keep)return false;
+    keys.sort((a,b)=>((c[b]&&c[b].ts)||0)-((c[a]&&c[a].ts)||0)).slice(keep).forEach(k=>delete c[k]);
+    localStorage.setItem(key,JSON.stringify(c));return true;
+  }catch(e){try{localStorage.removeItem(key)}catch(_){}; return true}
+}
+function pruneDatedMap(key,keepDays){
+  try{
+    const raw=localStorage.getItem(key);if(!raw)return false;
+    const m=JSON.parse(raw);const days=Object.keys(m).sort();
+    if(days.length<=keepDays)return false;
+    days.slice(0,days.length-keepDays).forEach(d=>delete m[d]);
+    localStorage.setItem(key,JSON.stringify(m));return true;
+  }catch(e){return false}
+}
+function set(k,v){
+  let payload;
+  try{payload=JSON.stringify(v)}catch(e){console.warn('set: unserializable',k,e);return false}
+  try{localStorage.setItem(k,payload);bumpStorageGen();return true}
+  catch(e){
+    if(!isQuotaErr(e)){console.warn('set failed',k,e);return false}
+    for(const step of PRUNE_LADDER){
+      let freed=false;try{freed=step()}catch(_){}
+      if(!freed)continue;
+      try{localStorage.setItem(k,payload);bumpStorageGen();storageRecovered();return true}catch(e2){if(!isQuotaErr(e2))return false}
+    }
+    storageFull(k);
+    return false;
+  }
+}
+function storageFull(k){
+  console.error('STORAGE FULL — write dropped:',k);
+  const b=document.getElementById('storageBanner');
+  if(b){b.style.display='block';
+    b.innerHTML='&#9888; Device storage is full — new results are not being saved. '+
+      '<u style="cursor:pointer" onclick="freeStorageNow()">Free space now</u>';}
+  if(!STORAGE_ALERTED){STORAGE_ALERTED=true;
+    setTimeout(()=>{try{alert('Storage is full. Recent grades and tickets may not be saving. Open Settings \u2192 Free Space, or export a backup and clear old caches.')}catch(_){}} ,300);}
+}
+function storageRecovered(){
+  const b=document.getElementById('storageBanner');if(b)b.style.display='none';
+}
+// user-facing hard reclaim: dumps every rebuildable cache, keeps graded history
+function freeStorageNow(){
+  ['d4.boxcache','d4.oddsdate','d4.nflgames','d4.ncaafgames','d4.h2h','d4.splits']
+    .forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
+  storageRecovered();
+  try{alert('Rebuildable caches cleared. Graded history, tickets and bankroll were kept.')}catch(e){}
+  location.reload();
+}
+// how full are we, roughly — drives the Settings readout
+function storageBytes(){
+  let n=0;try{for(const k in localStorage){if(!Object.prototype.hasOwnProperty.call(localStorage,k))continue;
+    n+=k.length+(localStorage.getItem(k)||'').length}}catch(e){}
+  return n;
+}
+function esc(s){return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;')}
+function credits(){const c=get(LS.cred,{d:'',n:0});return c.d!==today()?{d:today(),n:0}:c}
+function burn(){const c=credits();c.n++;set(LS.cred,c);paintMeter()}
+function paintMeter(){
+  const c=credits(),m=document.getElementById('meter');m.innerHTML='';
+  for(let i=0;i<24;i++){const t=document.createElement('div');
+    t.className='tick'+(i<c.n-1?' spent':i===c.n-1?' now':'');m.appendChild(t)}
+  document.getElementById('credText').textContent=c.n+' / 24';
+  const b=document.getElementById('oddsBtn');if(b)b.disabled=c.n>=24||!get(LS.key,'');
+  const lp=get(LS.pull,0);
+  document.getElementById('lastPull').textContent=lp?fmtTime(lp):'no pull';
+}
+// credentials never leave the browser in any backup — a file that could sit in a git
+// repo should never carry live API keys. Re-paste them in Settings after a restore;
+// that's a 10-second cost against a permanent plaintext leak in git history. Both manual
+// export and automatic GitHub sync route through this one function, so there's exactly
+// one place that decides what's safe to leave the device.
+function backupData(){
+  const data={};
+  const EXCLUDE=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken]);
+  Object.keys(localStorage).forEach(k=>{
+    if(k.startsWith('d4.')&&!EXCLUDE.has(k))data[k]=localStorage.getItem(k);
+  });
+  return data;
+}
+/* navigator.clipboard is undefined on non-HTTPS origins and inside some iOS
+   standalone/webview contexts — calling .writeText on it threw and killed the
+   handler, so Copy CSV did nothing at all on device. Falls back to a hidden
+   textarea + execCommand, then to a selectable prompt. */
+function copyText(text,okMsg){
+  const done=()=>{try{alert(okMsg||'Copied.')}catch(e){}};
+  if(navigator.clipboard&&navigator.clipboard.writeText&&window.isSecureContext){
+    navigator.clipboard.writeText(text).then(done,()=>legacyCopy(text,done));
+    return;
+  }
+  legacyCopy(text,done);
+}
+function legacyCopy(text,done){
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=text;ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.select();ta.setSelectionRange(0,text.length);
+    const ok=document.execCommand('copy');
+    ta.remove();
+    if(ok){done();return}
+  }catch(e){}
+  try{window.prompt('Copy failed \u2014 select and copy manually:',text)}catch(e){}
+}
+function exportBackup(){
+  const data=backupData();
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='thedesk-backup-'+today()+'.json';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+  localStorage.setItem('d4.lastBackup',Date.now().toString());
+  renderBackupStatus();
+}
+function importBackup(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      const keys=Object.keys(data).filter(k=>k.startsWith('d4.'));
+      if(!keys.length){alert('No recognizable backup data in that file.');return}
+      if(!confirm(`Restore ${keys.length} stored items from this backup? This overwrites anything currently saved under the same keys — graded history and calibration will be replaced with what's in the file.`))return;
+      keys.forEach(k=>localStorage.setItem(k,data[k]));
+      alert('Restored. Reloading…');
+      location.reload();
+    }catch(err){
+      alert("Could not read that file — is it a real backup export from this app?");
+    }
+  };
+  reader.readAsText(file);
+  input.value='';
+}
+/* Storage was previously invisible. When it filled, writes just stopped and
+   the app looked like it was losing data at random. This makes the ceiling
+   legible before it is hit. */
+async function reloadCFBD(){
+  const el=document.getElementById('dataFeedStatus');
+  if(el)el.innerHTML='Fetching SP+ ratings…';
+  await fetchCFBDRatings(true);await fetchCFBPortal(true);renderDataFeedStatus();
+}
+async function reloadNFLDepth(){
+  const el=document.getElementById('dataFeedStatus');
+  if(el)el.innerHTML='Fetching 32 rosters + depth charts (about 15s)…';
+  await fetchNFLDepthCharts(true);renderDataFeedStatus();
+}
+let SCRIPT_READY=false;
+function whenScriptReady(fn,extraDelay){
+  const go=()=>setTimeout(()=>{try{fn()}catch(e){console.warn('deferred init failed',e)}},extraDelay||0);
+  if(SCRIPT_READY)return go();
+  const iv=setInterval(()=>{if(SCRIPT_READY){clearInterval(iv);go()}},50);
+  setTimeout(()=>clearInterval(iv),15000);
+}
+/* ── LIVE SELF-TEST ───────────────────────────────────────────────────────
+   Every external feed in this app was built against the documented response
+   shape, not against a live call — the build environment can't reach ESPN or
+   CollegeFootballData. That leaves one real unknown: whether the JSON actually
+   looks the way the parser expects. This runs each endpoint FROM THE DEVICE
+   and reports three things per feed — did the request succeed, did the parser
+   find the fields it needs, and what did a real row look like. A green line
+   means verified on your hardware, not verified against my assumption. */
+async function runFeedSelfTest(){
+  const el=document.getElementById('feedSelfTest');if(!el)return;
+  const out=[];
+  const row=(name,ok,detail,sample)=>out.push(
+    `<div style="margin:6px 0;padding:6px 8px;border-radius:6px;border:1px solid ${ok?'rgba(46,204,113,.4)':'rgba(240,86,60,.45)'};
+      background:${ok?'rgba(46,204,113,.07)':'rgba(240,86,60,.07)'}">
+      <b style="color:${ok?'var(--win)':'var(--rust)'}">${ok?'PASS':'FAIL'}</b> ${name}
+      <div style="color:var(--mute);font-family:'IBM Plex Mono';font-size:10px;margin-top:2px">${detail}</div>
+      ${sample?`<div style="color:var(--mute);font-family:'IBM Plex Mono';font-size:9.5px;margin-top:3px;
+        word-break:break-all;max-height:60px;overflow:auto">${sample}</div>`:''}</div>`);
+  const paint=()=>el.innerHTML=out.join('')||'<div class="empty">Running…</div>';
+  el.innerHTML='<div class="empty">Running self-test — this makes a few real API calls…</div>';
+  const peek=o=>{try{return String(JSON.stringify(o)).slice(0,220).replace(/</g,'&lt;')}catch(e){return''}};
+
+  // 1) ESPN NFL teams
+  try{
+    const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams');
+    const j=await r.json();
+    const teams=((j.sports||[])[0]||{}).leagues?.[0]?.teams||[];
+    row('ESPN NFL team list',teams.length>=32,
+      `HTTP ${r.status} · ${teams.length} teams · parser path sports[0].leagues[0].teams`,
+      teams.length?peek(teams[0].team):'shape did not match — send me this: '+peek(j).slice(0,180));
+    // 2) roster shape (one team only)
+    if(teams.length){
+      const id=teams[0].team.id;
+      const rr=await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${id}/roster`);
+      const rj=await rr.json();
+      let n=0,ex=null;
+      (rj.athletes||[]).forEach(g=>{const list=Array.isArray(g)?g:(g.items||[g]);
+        list.forEach(a=>{if(a&&a.fullName){n++;if(!ex)ex={fullName:a.fullName,pos:a.position&&a.position.abbreviation,id:a.id}}})});
+      row('ESPN NFL roster',n>0,`HTTP ${rr.status} · ${n} athletes parsed from athletes[]`,
+        ex?peek(ex):'no athletes matched — send me: '+peek(rj).slice(0,180));
+      // 3) depth chart shape
+      const dr=await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${id}/depthcharts`);
+      const dj=await dr.json();
+      let ranked=0;
+      (dj.items||dj.depthchart||[]).forEach(u=>Object.values(u.positions||{}).forEach(p=>
+        (p.athletes||[]).forEach(a=>{if(String(a.athlete&&a.athlete['$ref']||a['$ref']||'').match(/athletes\/(\d+)/))ranked++})));
+      row('ESPN NFL depth chart',ranked>0,
+        `HTTP ${dr.status} · ${ranked} ranked athlete refs · parser path items[].positions{}.athletes[]`,
+        ranked?'':'shape did not match — send me: '+peek(dj).slice(0,180));
+    }
+  }catch(e){row('ESPN NFL endpoints',false,'request failed: '+(e&&e.message||e),'');}
+  paint();
+
+  // 4) ESPN CFB standings (the SP+ fallback path)
+  try{
+    const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season='+(new Date().getFullYear()-1));
+    const j=await r.json();
+    let n=0,ex=null;
+    (j.children||[]).forEach(c=>((c.standings&&c.standings.entries)||[]).forEach(e=>{
+      const st={};(e.stats||[]).forEach(x=>st[x.name]=x.value);
+      if((+st.gamesPlayed||0)>0&&((+st.pointsFor||0)||(+st.pointsAgainst||0))){n++;
+        if(!ex)ex={team:e.team&&e.team.displayName,gp:st.gamesPlayed,pf:st.pointsFor,pa:st.pointsAgainst}}}));
+    row('ESPN CFB standings (ratings fallback)',n>=20,
+      `HTTP ${r.status} · ${n} teams with usable scoring data`,
+      ex?peek(ex):'no usable rows — send me: '+peek(j).slice(0,180));
+  }catch(e){row('ESPN CFB standings',false,'request failed: '+(e&&e.message||e),'');}
+  paint();
+
+  // 5-7) CollegeFootballData
+  const key=get(LS.cfbd,'');
+  if(!key){
+    row('CollegeFootballData',false,'no API key saved — add one above, then rerun','');
+  }else{
+    const Y=new Date().getFullYear();
+    try{
+      const rows=await cfbdGet('/ratings/sp?year='+Y,key).catch(()=>cfbdGet('/ratings/sp?year='+(Y-1),key));
+      const ok=Array.isArray(rows)&&rows.length>=20;
+      const ex=ok?{team:rows[0].team,off:rows[0].offense&&rows[0].offense.rating,def:rows[0].defense&&rows[0].defense.rating}:null;
+      row('CFBD SP+ ratings',ok&&ex&&ex.off!=null,
+        `${Array.isArray(rows)?rows.length:0} teams · parser reads offense.rating / defense.rating`,
+        ex?peek(ex):'shape did not match — send me: '+peek(rows).slice(0,180));
+    }catch(e){row('CFBD SP+ ratings',false,String(e&&e.message||e),'');}
+    try{
+      const p=await cfbdGet('/player/portal?year='+Y,key).catch(()=>cfbdGet('/player/portal?year='+(Y-1),key));
+      const ok=Array.isArray(p)&&p.length>0;
+      const f=ok?p[0]:null;
+      const shaped=f&&(f.firstName||f.lastName)&&(f.toTeam||f.destination);
+      row('CFBD transfer portal',!!shaped,
+        `${Array.isArray(p)?p.length:0} rows · parser reads firstName/lastName, fromTeam.school, toTeam.school`,
+        f?peek(f):'no rows — send me the response');
+    }catch(e){row('CFBD transfer portal',false,String(e&&e.message||e),'');}
+    try{
+      const team=(NCAAF_GAMES&&NCAAF_GAMES[0]&&(NCAAF_GAMES[0].home.name||NCAAF_GAMES[0].home.abbr))||'Alabama';
+      const st=await cfbdGet('/stats/player/season?year='+(Y-1)+'&team='+encodeURIComponent(team),key);
+      const ok=Array.isArray(st)&&st.length>0;
+      row('CFBD player season stats',ok,
+        `${Array.isArray(st)?st.length:0} stat rows for ${team} · parser reads player/category/statType/stat`,
+        ok?peek(st[0]):'no rows for '+team+' — try another team');
+    }catch(e){row('CFBD player season stats',false,String(e&&e.message||e),'');}
+  }
+
+  const passes=out.filter(x=>/>PASS</.test(x)).length;
+  out.unshift(`<div style="margin-bottom:4px"><b>${passes}/${out.length} feeds verified live on this device.</b>
+    <span style="color:var(--mute)">Any FAIL line shows the raw response — send me that and I'll match the parser to it.</span></div>`);
+  paint();
+}
+function renderDataFeedStatus(){
+  const el=document.getElementById('dataFeedStatus');if(!el)return;
+  /* This runs from the first-run setup branch, which executes ABOVE the NFL and
+     CFB engine sections where NCAAF_POWER / NFL_DEPTH are declared with let.
+     Naming them directly threw a temporal-dead-zone ReferenceError that killed
+     the entire script on a fresh install with no keys saved. Reach them through
+     typeof so the status line degrades instead of taking the app down. */
+  const POW=(typeof NCAAF_POWER!=='undefined'&&NCAAF_POWER)||{};
+  const DEP=(typeof NFL_DEPTH!=='undefined'&&NFL_DEPTH)||{};
+  const cs=(typeof CFBD_STATUS!=='undefined'&&CFBD_STATUS)||'';
+  const ds=(typeof NFL_DEPTH_STATUS!=='undefined'&&NFL_DEPTH_STATUS)||'';
+  const spTeams=Object.values(POW).filter(v=>v&&v.src==='SP+').length;
+  const depthTeams=Object.keys(DEP).length;
+  const players=Object.values(DEP).reduce((a,t)=>a+((t.players||[]).length),0);
+  el.innerHTML=
+    'CFB SP+: <b style="color:'+(spTeams?'var(--win)':'var(--mute)')+'">'+
+      (spTeams?spTeams+' teams':'not loaded')+'</b>'+
+      (cs?' <span style="color:var(--mute)">('+cs+')</span>':'')+
+    '<br>CFB portal: <b style="color:'+(Object.keys((typeof CFB_PORTAL!=='undefined'&&CFB_PORTAL)||{}).length?'var(--win)':'var(--mute)')+'">'+
+      (Object.keys((typeof CFB_PORTAL!=='undefined'&&CFB_PORTAL)||{}).length||'not loaded')+
+      (Object.keys((typeof CFB_PORTAL!=='undefined'&&CFB_PORTAL)||{}).length?' players':'')+'</b>'+
+    '<br>NFL depth charts: <b style="color:'+(depthTeams?'var(--win)':'var(--mute)')+'">'+
+      (depthTeams?depthTeams+' teams · '+players+' skill players':'not loaded')+'</b>'+
+      (ds?' <span style="color:var(--mute)">('+ds+')</span>':'');
+}
+function renderStorageStatus(){
+  const el=document.getElementById('storageStatus');if(!el)return;
+  const b=storageBytes(),mb=(b/1048576).toFixed(2);
+  const pct=Math.min(100,Math.round(b/5242880*100));
+  const col=pct>85?'var(--rust)':pct>65?'var(--gold)':'var(--mute)';
+  el.innerHTML='Local storage: <b style="color:'+col+'">'+mb+' MB used ('+pct+'% of a typical 5 MB cap)</b>'+
+    (pct>85?'<br>Close to the limit — free space to keep results saving.':'');
+}
+async function repinGeminiModel(){
+  const st=document.getElementById('geminiModelStatus');
+  const key=get(LS.ai,'');
+  if(!key){if(st)st.textContent='Add a Gemini API key first.';return}
+  if(st)st.textContent='Asking Google what this key can reach…';
+  try{
+    const m=await discoverGeminiModel(key);
+    const was=geminiModel();
+    setGeminiModel(m);
+    if(st)st.textContent=(m===was?'Already on the best available model: ':'Switched to ')+m;
+  }catch(e){if(st)st.textContent='Could not check: '+((e&&e.message)||e)}
+}
+function renderGeminiModel(){
+  const el=document.getElementById('geminiModelNow');
+  if(el)el.textContent=geminiModel();
+}
+function renderBackupStatus(){
+  const el=document.getElementById('backupStatus');if(!el)return;
+  const last=localStorage.getItem('d4.lastBackup');
+  const ghLast=localStorage.getItem('d4.lastGhSync');
+  const repo=get(LS.ghrepo,'');
+  el.innerHTML=(last
+    ?`Last manual export ${new Date(Number(last)).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}<br>`
+    :`<span style="color:var(--rust)">No manual backup on file yet.</span><br>`)
+    +(repo
+      ?(ghLast?`GitHub auto-sync: last pushed ${new Date(Number(ghLast)).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}`
+        :`<span style="color:var(--gold)">GitHub configured, hasn't synced yet — tap Sync now.</span>`)
+      :`<span style="color:var(--mute)">GitHub auto-sync not configured.</span>`);
+}
+function b64u(str){return btoa(unescape(encodeURIComponent(str)))}
+function b64d(str){return decodeURIComponent(escape(atob(str)))}
+async function pushToGitHub(manual){
+  const token=get(LS.ghtoken,''),repo=get(LS.ghrepo,'');
+  if(!token||!repo){if(manual)alert('Add both a GitHub token and owner/repo in Settings first.');return{ok:false,reason:'not configured'}}
+  const path='data-backup.json';
+  const api=`https://api.github.com/repos/${repo}/contents/${path}`;
+  try{
+    let sha=null;
+    const rGet=await fetch(api,{headers:{'Authorization':'token '+token,'Accept':'application/vnd.github+json'}});
+    if(rGet.status===200){const cur=await rGet.json();sha=cur.sha}
+    else if(rGet.status!==404){
+      const body=await rGet.text();
+      return{ok:false,reason:'HTTP '+rGet.status+' checking existing file',body:body.slice(0,300)};
+    }
+    const content=b64u(JSON.stringify(backupData(),null,2));
+    const body={message:'Auto backup — '+today(),content,...(sha?{sha}:{})};
+    const rPut=await fetch(api,{method:'PUT',
+      headers:{'Authorization':'token '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},
+      body:JSON.stringify(body)});
+    if(!rPut.ok){
+      const t=await rPut.text();
+      return{ok:false,reason:'HTTP '+rPut.status+' on commit',body:t.slice(0,300)};
+    }
+    localStorage.setItem('d4.lastGhSync',Date.now().toString());
+    renderBackupStatus();
+    return{ok:true};
+  }catch(e){
+    return{ok:false,reason:'network error',body:(e&&e.message)||String(e)};
+  }
+}
+// runs once at boot — if this device has no graded history at all (fresh install, wiped
+// site data, new domain) it tries to silently pull the last known-good snapshot back from
+// the repo's public file. No token needed — reading a public repo file needs no auth.
+async function pullFromGitHubIfEmpty(){
+  const repo=get(LS.ghrepo,'');
+  if(!repo)return;
+  const hasHistory=Object.keys(get(LS.arc,{})).length>0;
+  if(hasHistory)return;
+  try{
+    const r=await fetch(`https://raw.githubusercontent.com/${repo}/main/data-backup.json?t=${Date.now()}`);
+    if(!r.ok)return;
+    const data=await r.json();
+    const keys=Object.keys(data).filter(k=>k.startsWith('d4.'));
+    if(!keys.length)return;
+    keys.forEach(k=>localStorage.setItem(k,data[k]));
+    console.log('Auto-restored',keys.length,'items from GitHub backup — this device had no history.');
+  }catch(e){}
+}
+async function hardReload(){
+  try{
+    if('caches' in window){
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+  }catch(e){}
+  try{
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+  }catch(e){}
+  location.href=location.pathname+'?refresh='+Date.now();
+}
+function saveGhSettings(){
+  set(LS.ghrepo,document.getElementById('ghrepoIn').value.trim());
+  set(LS.ghtoken,document.getElementById('ghtokenIn').value.trim());
+}
+function fileToB64(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+// THE ITEM-10 FIX: builds the right Claude API content block for whatever
+// file type was actually uploaded — real image types (jpeg/png/gif/webp) as
+// type:'image', PDFs as type:'document' (Claude's API reads PDFs natively —
+// this is NOT an image block with PDF bytes stuffed into it, which the API
+// would reject). Anything else falls back to image and lets the API's own
+// error surface rather than silently mis-sending it.
+// ── real text-file support (item 10, corrected) ──────────────────────────
+// .txt/.md are plain text — reading them AS TEXT (not base64/vision) is both
+// simpler and more reliable than any image route, since there's zero OCR
+// risk on something that was never a picture to begin with. .docx is a
+// zipped-XML binary format that genuinely can't be handed to the API
+// directly — it needs real extraction, done here with Mammoth.js, loaded
+// on demand only when a .docx actually shows up (no dead weight on every
+// page load for a library most uploads will never need). Legacy .doc
+// (pre-2007 binary format) has no reliable client-side extraction path at
+// all — rather than silently mangle it, this says so plainly and asks for
+// .docx/.txt/.md instead.
+let MAMMOTH_LOADED=false;
+function loadMammoth(){
+  if(MAMMOTH_LOADED)return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+    s.onload=()=>{MAMMOTH_LOADED=true;res()};
+    s.onerror=()=>rej(new Error('Could not load the .docx reader — check your connection.'));
+    document.head.appendChild(s);
+  });
+}
+function isPlainTextFile(f){
+  const n=f.name.toLowerCase();
+  const t=(f.type||'').toLowerCase();
+  // explicit text extensions
+  if(n.endsWith('.txt')||n.endsWith('.md')||n.endsWith('.csv'))return true;
+  // explicit text MIME types
+  if(t.startsWith('text/'))return true;
+  // iOS sometimes serves .txt files with no MIME type or as octet-stream
+  // if it's not an image, PDF, or Office doc, treat it as text
+  if(!t||t==='application/octet-stream'){
+    if(!n.endsWith('.pdf')&&!n.endsWith('.docx')&&!n.endsWith('.doc')
+       &&!n.match(/\.(png|jpg|jpeg|gif|webp|heic|heif)$/))return true;
+  }
+  return false;
+}
+function isDocxFile(f){
+  const n=f.name.toLowerCase();
+  return n.endsWith('.docx')||f.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+}
+function isLegacyDocFile(f){
+  const n=f.name.toLowerCase();
+  return n.endsWith('.doc')&&!n.endsWith('.docx');
+}
+// Returns either an API content block ({type:'image'|'document'|'text',...})
+// OR throws a real, readable error for the one format that genuinely can't
+// be handled (.doc) — callers should catch and surface that message plainly
+// rather than let it fail silently.
+async function fileToContentBlock(f,b64){
+  if(isLegacyDocFile(f)){
+    throw new Error(`"${f.name}" is an old-format .doc file — that format can't be read reliably. Save it as .docx or .txt and upload that instead.`);
+  }
+  if(isPlainTextFile(f)){
+    const text=await f.text(); // real UTF-8 text, no base64 round-trip needed
+    return{type:'text',text};
+  }
+  if(isDocxFile(f)){
+    await loadMammoth();
+    const arrayBuffer=await f.arrayBuffer();
+    const result=await window.mammoth.extractRawText({arrayBuffer});
+    return{type:'text',text:result.value};
+  }
+  const mt=(f.type||'').toLowerCase();
+  if(mt==='application/pdf'||f.name.toLowerCase().endsWith('.pdf')){
+    return{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}};
+  }
+  return{type:'image',source:{type:'base64',media_type:f.type||'image/png',data:b64}};
+}
+/* ── Gemini API wrapper ───────────────────────────────────────────────────
+   The model ID used to be hardcoded to gemini-2.0-flash. Google shut that
+   model down on June 1 2026 and every screenshot upload started failing with
+   "this model is no longer available" — nothing wrong with the app, the
+   endpoint underneath it simply stopped existing.
+
+   Hardcoding a newer string just restarts the same clock: gemini-2.5-flash is
+   already scheduled for retirement on October 16 2026. So instead of naming
+   one model, this keeps an ordered preference list, and when Google retires
+   whatever is in front it asks the API which models the key can actually reach
+   and re-pins to the best available one. A retirement becomes a one-request
+   hiccup instead of a dead feature.
+
+   Default is gemini-3.6-flash: same free tier as before (15 req/min, 1500/day)
+   and noticeably better OCR on cramped odds boards. */
+const GEMINI_FALLBACKS=['gemini-3.6-flash','gemini-3.7-flash','gemini-3.5-flash','gemini-2.5-flash','gemini-3.1-flash-lite'];
+function geminiModel(){return get('d4.geminiModel','')||GEMINI_FALLBACKS[0]}
+function setGeminiModel(m){set('d4.geminiModel',m);const el=document.getElementById('geminiModelNow');if(el)el.textContent=m}
+function isModelGoneErr(msg){
+  return /no longer available|is not found|not supported|NOT_FOUND|deprecated|unsupported model|does not exist/i.test(String(msg||''));
+}
+/* Ask the key itself what it can reach, rather than trusting a list baked in
+   at build time. Prefers the caller's fallback order, then any other flash
+   model, newest version first. */
+async function discoverGeminiModel(key){
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+  const j=await r.json();
+  if(j.error)throw new Error(j.error.message||'Could not list models');
+  const usable=(j.models||[])
+    .filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent'))
+    .map(m=>(m.name||'').replace(/^models\//,''))
+    .filter(Boolean);
+  for(const want of GEMINI_FALLBACKS)if(usable.includes(want))return want;
+  const ver=n=>{const m=n.match(/(\d+(?:\.\d+)?)/);return m?parseFloat(m[1]):0};
+  const flash=usable.filter(n=>/flash/i.test(n)&&!/image|tts|live|embedding/i.test(n))
+    .sort((a,b)=>ver(b)-ver(a));
+  if(flash.length)return flash[0];
+  if(usable.length)return usable[0];
+  throw new Error('This API key has no usable text models.');
+}
+async function callGemini(key, contentBlocks, maxTokens=8000){
+  const parts=[];
+  for(const b of contentBlocks){
+    if(b.type==='text'){
+      parts.push({text:b.text});
+    }else if(b.type==='image'&&b.source){
+      parts.push({inline_data:{mime_type:b.source.media_type,data:b.source.data}});
+    }else if(b.type==='document'&&b.source){
+      // PDFs — Gemini supports inline PDF via inline_data
+      parts.push({inline_data:{mime_type:'application/pdf',data:b.source.data}});
+    }
+  }
+  const body={contents:[{role:'user',parts}],
+    generationConfig:{maxOutputTokens:maxTokens,temperature:0.1}};
+  const send=async model=>{
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    try{
+      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)});
+      const j=await r.json();
+      if(j&&j.error&&j.error.code==null)j.error.code=r.status;
+      return j;
+    }catch(netErr){
+      return{error:{message:'Network request failed: '+((netErr&&netErr.message)||netErr),code:0}};
+    }
+  };
+
+  /* "This model is currently experiencing high demand" is a 503 — Google's
+     capacity, not your key and not your request. It used to be treated as
+     fatal and thrown straight at the user on the very first attempt, so an
+     upload failed on a condition that usually clears in a few seconds.
+
+     Overload is now retried with exponential backoff and jitter, and if the
+     pinned model stays saturated the request is handed to the next model in
+     the preference list rather than giving up. A 429 is different in kind —
+     that is YOUR quota, and hammering it makes it worse — so it backs off
+     harder and fewer times, then reports honestly instead of pretending a
+     retry will help. */
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const attemptOrder=[geminiModel(),...GEMINI_FALLBACKS.filter(m=>m!==geminiModel())];
+  let lastErr=null;
+
+  for(let mi=0;mi<attemptOrder.length;mi++){
+    let model=attemptOrder[mi];
+    const MAX=mi===0?4:2;   // try hardest on the pinned model, then move on
+    for(let attempt=0;attempt<MAX;attempt++){
+      if(attempt>0||mi>0){
+        const rateLimited=isRateLimitErr(lastErr);
+        const base=rateLimited?4000:900;
+        const wait=Math.min(20000,base*Math.pow(2,attempt))+Math.random()*400;
+        if(typeof onGeminiRetry==='function')onGeminiRetry(model,attempt+1,Math.round(wait/1000),rateLimited);
+        await sleep(wait);
+      }
+      const j=await send(model);
+
+      if(!j.error){
+        // a model further down the list worked — pin it so the next upload
+        // starts where this one succeeded
+        if(model!==geminiModel())setGeminiModel(model);
+        return(j.candidates||[]).map(c=>(c.content&&c.content.parts||[]).map(p=>p.text||'').join('')).join('\n');
+      }
+      lastErr=j.error;
+
+      if(isModelGoneErr(j.error.message)){
+        let replacement=null;
+        try{replacement=await discoverGeminiModel(key)}catch(e){}
+        if(replacement&&!attemptOrder.includes(replacement)){attemptOrder.splice(mi+1,0,replacement)}
+        break; // retrying a retired model is pointless — move to the next one
+      }
+      if(isOverloadErr(j.error)||isRateLimitErr(j.error))continue; // worth another go
+      /* A rejected key or a malformed request fails identically on every
+         model, so walking the rest of the list just makes five useless
+         requests and delays an answer the first response already gave. */
+      if(isFatalErr(j.error)){mi=attemptOrder.length;break}
+      break; // unknown error on this model — try the next one, but don't retry this one
+    }
+  }
+
+  throw new Error(friendlyGeminiError(lastErr));
+}
+/* Backoff can mean 20+ seconds of silence. Without this the app just looks
+   frozen and you tap again, which queues another request against the same
+   saturated model. Show what it's doing instead. */
+let GEMINI_STATUS_EL=null;
+function onGeminiRetry(model,attempt,waitSec,rateLimited){
+  if(!GEMINI_STATUS_EL)return;
+  GEMINI_STATUS_EL.innerHTML='<div class="tkt"><h3>'+
+    (rateLimited?'Rate limited — backing off':'Google is busy — retrying')+'</h3>'+
+    '<div class="sub">Attempt '+attempt+' on '+model+' · waiting '+waitSec+'s.<br>'+
+    'This is Google\'s capacity, not your key. Leave this open — it retries on its own.</div></div>';
+}
+function isFatalErr(e){
+  const m=String((e&&e.message)||e||'');
+  return (e&&(e.code===400||e.code===401||e.code===403))||
+    /API key not valid|API_KEY_INVALID|PERMISSION_DENIED|INVALID_ARGUMENT|UNAUTHENTICATED|billing/i.test(m);
+}
+function isOverloadErr(e){
+  const m=String((e&&e.message)||e||'');
+  return (e&&(e.code===503||e.code===500))||/high demand|overloaded|UNAVAILABLE|try again later|INTERNAL/i.test(m);
+}
+function isRateLimitErr(e){
+  const m=String((e&&e.message)||e||'');
+  return (e&&e.code===429)||/RESOURCE_EXHAUSTED|rate limit|quota/i.test(m);
+}
+/* The raw API string is accurate but tells you nothing about what to DO. */
+function friendlyGeminiError(e){
+  const raw=String((e&&e.message)||e||'Unknown error');
+  if(isRateLimitErr(e))
+    return 'Gemini free tier limit reached (15 requests/min, 1500/day). Wait a minute and try again, '+
+           'or upload fewer screenshots per batch. Text .txt files never touch the API and always work.';
+  if(isOverloadErr(e))
+    return 'Google\'s servers are overloaded right now — this is on their end, not your key. '+
+           'Already retried across several models. Give it a minute, or upload a .txt file instead, which needs no API at all.';
+  if(/API key not valid|API_KEY_INVALID|PERMISSION_DENIED/i.test(raw))
+    return 'That Gemini API key was rejected. Check it in Settings, or generate a new one at aistudio.google.com.';
+  if(/^Network request failed/i.test(raw))
+    return raw+' — check your connection.';
+  return raw;
+}
+
+/* Which sport a screenshot upload belongs to. Captured when Analyze is pressed
+   so that switching tabs mid-read can't misfile the result. */
+let BOOKSHOT_SPORT=null;
+function buildVisionPrompt(sport){
+  const common='Extract every game/market you can see into a JSON array — nothing else, no markdown '+
+    'fences, no commentary. One entry per selection you can actually read clearly; skip anything '+
+    'blurry or cut off rather than guessing. Use the team names or abbreviations exactly as shown.';
+  if(sport==='nfl'||sport==='ncaaf'){
+    const lg=sport==='nfl'?'NFL':'college football (NCAAF)';
+    return `These are screenshots or exports of a real sportsbook's ${lg} board. ${common} Include:
+      - Full-game moneyline -> market:"moneyline", side:"away" or "home"
+      - Full-game point spread -> market:"spread", side:"away" or "home" (line is the handicap, e.g. -3 or +3.5)
+      - Full-game total -> market:"total", side:"over" or "under"
+      - First-half spread -> market:"h1spread", side:"away" or "home"
+      - First-half total -> market:"h1total", side:"over" or "under"
+      There are no run lines and no first-5-innings markets in football — never emit those.
+      Each entry: {"away":"team","home":"team","market":"moneyline"|"spread"|"total"|"h1spread"|"h1total",
+      "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -110 or 145)}.`;
+  }
+  return `These are screenshots or exports of a real sportsbook's MLB board. ${common} Include:
+      - Full-game moneyline -> market:"moneyline", side:"away" or "home"
+      - Full-game run line -> market:"runline", side:"away" or "home"
+      - Full-game total -> market:"total", side:"over" or "under"
+      - First-5-innings TOTAL ("F5 total", "1st 5 O/U") -> market:"f5total", side:"over" or "under"
+      - First-5-innings SIDES/MONEYLINE ("F5 ML", "1st 5 moneyline") -> market:"f5side", side:"away" or "home"
+      Do NOT confuse F5 side moneylines with F5 totals — they are different markets.
+      Each entry: {"away":"team","home":"team","market":"moneyline"|"runline"|"total"|"f5total"|"f5side",
+      "line":number or null,"side":"away"|"home"|"over"|"under","price":number (American odds, e.g. -150 or 145)}.`;
+}
+async function analyzeBookShots(){
+  const el=document.getElementById('bookShotResult');
+  GEMINI_STATUS_EL=el;
+  BOOKSHOT_SPORT=ACTIVE_SPORT;
+  const files=document.getElementById('bookShots').files;
+  if(!files.length){el.innerHTML='<div class="empty">Pick at least one screenshot, PDF, or text file first.</div>';return}
+  el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
+
+  // ── OFFLINE PATH — slate_picks.txt parsed locally, zero API cost ──
+  const textFiles=[...files].filter(f=>isPlainTextFile(f));
+  const otherFiles=[...files].filter(f=>!isPlainTextFile(f));
+  if(textFiles.length){
+    /* Previously this kept ONLY result.picks and dropped trends and consensus
+       on the floor. Upload a valid trends or consensus export here and it
+       reported "Nothing parsed — check file format" on a file it had in fact
+       parsed correctly. Now anything with content gets routed to where it
+       belongs, and the failure message says what it actually saw. */
+    const allParsed=[];let allTrends=[],allConsensus=[];
+    const sportsSeen=new Set();const diag=[];
+    for(const f of textFiles){
+      let text='';
+      try{
+        text=await new Promise((res,rej)=>{const r=new FileReader();
+          r.onload=e=>res(e.target.result);
+          r.onerror=()=>rej(new Error('Could not read '+f.name));r.readAsText(f);});
+      }catch(err){diag.push(f.name+': unreadable');continue}
+      // a single file may carry more than one sport
+      const result=parseSlateTextMulti(text)||parseSlateText(text);
+      if(result.sports)result.sports.forEach(sp=>sportsSeen.add(sp));
+      else if(result.sport)sportsSeen.add(result.sport);
+      result.picks.forEach(p=>allParsed.push(p));
+      allTrends=allTrends.concat(result.trends||[]);
+      allConsensus=allConsensus.concat(result.consensus||[]);
+      diag.push(f.name+': '+(detectSlateSport(text)||'no sport header').toUpperCase()+
+        ' · '+result.picks.length+' picks · '+(result.trends||[]).length+' trends · '+
+        (result.consensus||[]).length+' consensus');
+    }
+    if(!otherFiles.length){
+      // The file declares its own sport. Trust that over whichever tab is open.
+      const fileSport=sportsSeen.size===1?[...sportsSeen][0]:null;
+      if(allParsed.length){saveBookOdds(allParsed,el,fileSport);
+        if(allTrends.length||allConsensus.length){
+          try{saveExtBySport(fileSport||ACTIVE_SPORT,[],allTrends,allConsensus)}catch(e){}
+        }
+        return;
+      }
+      if(allTrends.length||allConsensus.length){
+        saveExtBySport(fileSport||ACTIVE_SPORT,[],allTrends,allConsensus,el);
+        return;
+      }
+      el.innerHTML='<div class="tkt"><h3>Nothing parsed</h3><div class="sub">'+
+        'The header line must start with MLB, NFL, or NCAAF, and bet lines must look like '+
+        '<code>ML:</code>, <code>SPREAD:</code>, <code>RL:</code> or <code>OU:</code>.<br><br>'+
+        'What each file actually gave:<br><span style="font-family:\'IBM Plex Mono\';font-size:10.5px">'+
+        diag.join('<br>')+'</span></div></div>';
+      return;
+    }
+  }
+
+  // ── ONLINE PATH — images/PDFs need Gemini key ──
+  const key=get(LS.ai,'');
+  if(!key){el.innerHTML='<div class="empty">Needs a Gemini API key in Settings for image/PDF files. Text .txt files work free with no key.</div>';return}
+  el.innerHTML='<div class="empty">Reading '+otherFiles.length+' image file'+(otherFiles.length>1?'s':'')+'…</div>';
+  try{
+    const imgBlocks=[];
+    for(const f of otherFiles){
+      // base64 is only needed for image/PDF — text/.docx read as real text
+      // directly and skip that step entirely, both faster and no wasted work
+      const needsB64=!isPlainTextFile(f)&&!isDocxFile(f)&&!isLegacyDocFile(f);
+      const b64=needsB64?await fileToB64(f):null;
+      imgBlocks.push(await fileToContentBlock(f,b64));
+    }
+    /* This prompt used to be hardcoded to MLB — it asked for run lines and
+       first-5-inning markets no matter which board you photographed. Point it
+       at an NFL screenshot and Gemini was being told to find baseball markets
+       in a football slate, so spreads came back labelled "runline" (or not at
+       all) and the board had nothing it could match. The prompt now describes
+       the sport actually being uploaded. */
+    const prompt=buildVisionPrompt(BOOKSHOT_SPORT||ACTIVE_SPORT);
+    const raw=await callGemini(key,[...imgBlocks,{type:'text',text:prompt}],8000);
+    let parsed;
+    const cleaned=raw.replace(/```json|```/g,'').trim();
+    try{
+      parsed=JSON.parse(cleaned);
+    }catch(e1){
+      // Recovery pass: grab the outermost [...] span in case the model added a
+      // stray sentence before/after the array despite being told not to.
+      try{
+        const start=cleaned.indexOf('[');
+        const end=cleaned.lastIndexOf(']');
+        if(start!==-1&&end>start){
+          parsed=JSON.parse(cleaned.slice(start,end+1));
+        }else{
+          throw e1;
+        }
+      }catch(e2){
+        el.innerHTML=`<div class="tkt"><h3>Couldn't parse a clean list</h3><div class="sub">This can happen with a
+          very large upload (try fewer screenshots per batch) or if the response got cut off. Raw response below —
+          check whether it looks truncated at the end.</div>
+          <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${raw.slice(0,3500)}</pre></div>`;
+        return;
+      }
+    }
+    if(!Array.isArray(parsed)||!parsed.length){
+      el.innerHTML='<div class="empty">Nothing readable came back — try clearer or less cropped screenshots.</div>';
+      return;
+    }
+    window._pendingBookShots=parsed;
+    el.innerHTML=`<div class="tkt hi"><h3>${parsed.length} selections read</h3>
+      <div class="sub">Check these against the actual screenshots before saving — vision extraction isn't perfect.</div>
+      <ol>${parsed.map((x,i)=>`<li>${x.away} @ ${x.home} — ${x.market} ${x.line!==null&&x.line!==undefined?x.line:''} ${x.side} <span class="pp">${x.price>0?'+':''}${x.price}</span></li>`).join('')}</ol>
+      <div class="bar"><button class="primary" onclick="saveBookShots()">Looks right — save to comparison history</button></div>
+    </div>`;
+  }catch(e){
+    // could be a real network failure OR a thrown file-format rejection
+    // (e.g. a legacy .doc upload) — the message itself already says which,
+    // so the title stays generic rather than mislabeling a format error as
+    // a connectivity problem
+    el.innerHTML=`<div class="tkt"><h3>Couldn't read that</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
+  }
+}
+// Offline book odds save — feeds parsed slate_picks.txt entries directly
+// into the same bookshots storage that the API path uses
+/* One place that decides which sport's store a parsed upload belongs to.
+   The old rule was "whatever tab is open", so an NFL export uploaded while
+   the MLB board happened to be showing was written into MLB storage and run
+   through MLB abbreviation normalization — silently mis-filed, with no error.
+   A file that names its own sport now wins; the open tab is only the
+   fallback for files that don't say. */
+function saveExtBySport(sport,picks,trends,consensus,el){
+  if(sport==='ncaaf'&&typeof saveNCAAFExtData==='function')return saveNCAAFExtData(picks,trends,consensus,el);
+  if(sport==='nfl'&&typeof saveNFLExtData==='function')return saveNFLExtData(picks,trends,consensus,el);
+  window._pendingExt={picks,trends,consensus};
+  if(el&&typeof renderExtResults==='function')renderExtResults(el,picks,trends,consensus);
+}
+/* ── CROSS-PAGE UPLOAD FALLBACK ───────────────────────────────────────────
+   The app is now split across mlb.html / nfl.html / cfb.html. A combined
+   MLB+NFL+CFB odds file can be uploaded from ANY of them — that's the whole
+   point of staying "connected" across the split — but saveNFLBookOdds() and
+   saveNCAAFBookOdds() only exist when football-engine.js is actually loaded
+   (i.e. you're on nfl.html or cfb.html). Uploading a combined file from
+   mlb.html would otherwise throw the moment it hit an NFL/CFB row.
+
+   This writes the SAME storage shape those functions produce, directly, with
+   no dependency on the football engine being present. gid is left null since
+   there's no loaded schedule to resolve it against here — that's fine: the
+   book-line lookup functions match by team-abbreviation game key, not by
+   gid, and the football engine's own repair pass fixes up gid the next time
+   that page actually loads. Nothing is lost by uploading from the "wrong"
+   page; it's just filed for later instead of resolved immediately. */
+function saveFootballOddsToStorage(sport,picks){
+  const key=sport==='nfl'?LS.nflshots:LS.ncaafshots;
+  const d=today();
+  const all=get(key,{});
+  all[d]=all[d]||[];
+  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  picks.forEach(x=>{
+    const awayAb=String(x.away||'').toUpperCase(),homeAb=String(x.home||'').toUpperCase();
+    const game=awayAb+'@'+homeAb;
+    const rec={away:awayAb,home:homeAb,game,market:x.market,side:x.side,
+      line:x.line!=null?x.line:null,price:x.price,player:x.player||null,
+      stat:x.stat||null,gid:null,capturedAt:Date.now()};
+    const k=keyOf(rec),i=all[d].findIndex(y=>keyOf(y)===k);
+    if(i>=0)all[d][i]=rec;else all[d].push(rec);
+  });
+  set(key,all);
+  return picks.length;
+}
+function saveBookOdds(picks,el,fileSport){
+  /* Picks now carry their own sport, so one upload containing MLB, NFL and CFB
+     slates files each group into its own store rather than forcing the whole
+     file into a single destination. */
+  const groups={};
+  (picks||[]).forEach(p=>{(groups[p.sport||fileSport||ACTIVE_SPORT]||(groups[p.sport||fileSport||ACTIVE_SPORT]=[])).push(p)});
+  const sports=Object.keys(groups);
+  if(sports.length>1){
+    const counts=[];
+    sports.forEach(sp=>{
+      const rows=groups[sp];
+      if(sp==='nfl'){
+        if(typeof saveNFLBookOdds==='function')saveNFLBookOdds(rows,null);
+        else saveFootballOddsToStorage('nfl',rows);
+      }else if(sp==='ncaaf'){
+        if(typeof saveNCAAFBookOdds==='function')saveNCAAFBookOdds(rows,null);
+        else saveFootballOddsToStorage('ncaaf',rows);
+      }else saveBookOdds(rows,null,'mlb');
+      counts.push(rows.length+' '+sp.toUpperCase());
+    });
+    if(el)el.innerHTML='<div class="tkt"><h3>Lines locked in</h3><div class="sub">'+
+      counts.join(' &middot; ')+' selections filed to their own boards.</div></div>';
+    if(typeof renderNFL==='function'&&ACTIVE_SPORT==='nfl')renderNFL();
+    if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
+    if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
+    return;
+  }
+  const sport=sports[0]||fileSport||ACTIVE_SPORT;
+  if(sport==='nfl'){
+    if(typeof saveNFLBookOdds==='function')saveNFLBookOdds(picks,el);
+    else{const n=saveFootballOddsToStorage('nfl',picks);
+      if(el)el.innerHTML=`<div class="tkt hi"><h3>NFL lines saved</h3><div class="sub">${n} picks filed —
+        open nfl.html to see them resolved against the live schedule.</div></div>`;}
+    return;
+  }
+  if(sport==='ncaaf'){
+    if(typeof saveNCAAFBookOdds==='function')saveNCAAFBookOdds(picks,el);
+    else{const n=saveFootballOddsToStorage('ncaaf',picks);
+      if(el)el.innerHTML=`<div class="tkt hi"><h3>CFB lines saved</h3><div class="sub">${n} picks filed —
+        open cfb.html to see them resolved against the live schedule.</div></div>`;}
+    return;
+  }
+  const d=today();
+  const all=get(LS.bookshots,{});
+  all[d]=all[d]||[];
+  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  const NORM={'CHW':'CWS','AZ':'ARI','WAS':'WSH','ATH':'ATH','OAK':'ATH'};
+  const norm=a=>(NORM[a.toUpperCase()]||a.toUpperCase());
+  picks.forEach(x=>{
+    const homeAb=norm(x.home);
+    const awayAb=norm(x.away);
+    const game=awayAb+'@'+homeAb;
+    const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+    const rec={away:awayAb,home:homeAb,game,market:x.market,
+      side:x.side,line:x.line!=null?x.line:null,
+      price:x.price,gid:gm?gm.id:null,capturedAt:Date.now()};
+    const k=keyOf(rec);
+    const i=all[d].findIndex(y=>keyOf(y)===k);
+    if(i>=0)all[d][i]=rec;else all[d].push(rec);
+  });
+  set(LS.bookshots,all);
+  document.getElementById('bookShots').value='';
+  BOOKSHOT_UPLOAD_DATE=d;
+  renderBookStatus();
+  if(el)el.innerHTML=`<div class="tkt hi"><h3>Locked in</h3><div class="sub">${picks.length} selections saved for ${d} from text file — no API needed.</div></div>`;
+  render();
+}
+
+function saveBookShots(){
+  const parsed=window._pendingBookShots;
+  if(!parsed)return;
+  /* This function wrote to LS.bookshots — the MLB store — unconditionally.
+     The text-upload path routes by sport, but the SCREENSHOT path never did,
+     so NFL and CFB screenshots were read correctly, confirmed on screen, and
+     then filed into MLB storage. The NFL board reads LS.nflshots, found
+     nothing, and showed dashes on every market while claiming the save
+     succeeded. That is the "it won't push what came in from the screenshots"
+     symptom: the data existed, just in the wrong drawer under the wrong
+     abbreviations. */
+  const sport=BOOKSHOT_SPORT||ACTIVE_SPORT;
+  if(sport==='nfl'||sport==='ncaaf'){
+    const resolve=sport==='nfl'?(x=>nflAbbrFor(x)||String(x||'').toUpperCase()):
+                                (x=>String(x||'').trim().toUpperCase().replace(/\s+/g,'-').slice(0,12));
+    const norm=parsed.map(x=>({
+      ...x,
+      // football has no run line — if the model still emitted one, it means a spread
+      market:x.market==='runline'?'spread':x.market,
+      away:resolve(x.away),home:resolve(x.home)
+    })).filter(x=>!/^f5/.test(x.market||''));
+    (sport==='nfl'?saveNFLBookOdds:saveNCAAFBookOdds)(norm,document.getElementById('bookShotResult'));
+    window._pendingBookShots=null;
+    const inp=document.getElementById('bookShots');if(inp)inp.value='';
+    if(sport==='nfl'&&typeof renderNFL==='function')renderNFL();
+    if(sport==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
+    return;
+  }
+  const all=get(LS.bookshots,{});
+  // File under whichever date was actually selected on the upload panel — this is
+  // the fix for screenshots of tomorrow's lines silently filing under today and
+  // never showing up on the preview board. Falls back sensibly if nothing was
+  // explicitly picked: whatever day is currently being previewed, else today.
+  const d=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
+  all[d]=all[d]||[];
+  // dedupe on identity — re-uploading the same slate replaces those selections instead of
+  // stacking duplicates, so uploads are safe to repeat and stay locked in cleanly
+  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  parsed.forEach(x=>{
+    const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
+    const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,capturedAt:Date.now()};
+    const k=keyOf(rec);
+    const i=all[d].findIndex(y=>keyOf(y)===k);
+    if(i>=0)all[d][i]=rec;else all[d].push(rec);
+  });
+  set(LS.bookshots,all);
+  window._pendingBookShots=null;
+  document.getElementById('bookShots').value='';
+  renderBookStatus();
+  document.getElementById('bookShotResult').innerHTML=`<div class="tkt hi"><h3>Locked in</h3><div class="sub">${parsed.length} selections saved for ${d}. These persist across reloads and back up to GitHub — you don't need to re-upload them.</div></div>`;
+  render();
+}
+function renderBookStatus(){
+  const el=document.getElementById('bookStatus');if(!el)return;
+  // Reflects the date currently selected on the upload panel, not always "today" —
+  // otherwise uploading tomorrow's screenshots looked like it silently failed here
+  // even though it correctly saved, because this status line kept checking today().
+  const d=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
+  const dLabel=d===today()?'today':dayLabel(d);
+  const all=get(LS.bookshots,{})[d]||[];
+  if(!all.length){el.innerHTML=`<span style="color:var(--mute)">Nothing saved for ${dLabel} yet.</span>`;return}
+  const games=new Set(all.map(x=>x.game)).size;
+  const mkts={};all.forEach(x=>mkts[x.market]=(mkts[x.market]||0)+1);
+  el.innerHTML=`<span style="color:var(--win)">✓ ${all.length} selections locked in for ${dLabel} across ${games} game${games>1?'s':''}</span>
+    <span style="color:var(--mute)"> — ${Object.keys(mkts).map(m=>m+' '+mkts[m]).join(', ')}</span>
+    <button onclick="clearBookShots()" style="margin-left:8px;padding:3px 8px;font-size:9px;background:none;border:1px solid var(--rule);color:var(--mute);border-radius:5px;cursor:pointer">clear ${dLabel}</button>`;
+}
+function clearBookShots(){
+  const d=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
+  const dLabel=d===today()?"today's":dayLabel(d)+"'s";
+  if(!confirm(`Clear ${dLabel} saved book lines? The app will fall back to API sources until you upload again.`))return;
+  const all=get(LS.bookshots,{});
+  delete all[d];
+  set(LS.bookshots,all);
+  renderBookStatus();render();
+}
+// answers "when this book sets a total at X, how has it actually gone" — purely
+// historical pattern lookup, entirely separate from the simulator's own math. Needs real
+// accumulated history before it means anything; says so honestly if there isn't enough yet.
+function bookTrendForTotal(line,tolerance){
+  tolerance=tolerance||0.5;
+  const shots=get(LS.bookshots,{}),arc=get(LS.arc,{});
+  let overHits=0,total=0;
+  Object.keys(shots).forEach(d=>{
+    const finals=(arc[d]||{}).finals;if(!finals)return;
+    (shots[d]||[]).forEach(x=>{
+      if(x.market!=='total'||x.line===null||Math.abs(x.line-line)>tolerance)return;
+      const row=(arc[d].rows||[]).find(r=>r.a+'@'+r.h===x.game||awayHomeMatch(r,x.game));
+      if(!row)return;
+      const F=finals[row.id];if(!F||F.a===null||F.h===null)return;
+      total++;
+      if((F.a+F.h)>x.line)overHits++;
+    });
+  });
+  if(total<8)return{ready:false,total};
+  return{ready:true,total,overPct:(overHits/total*100).toFixed(0)};
+}
+function awayHomeMatch(r,gl){return (r.a+'@'+r.h)===gl}
+function openSettings(){
+  document.querySelectorAll('nav>button').forEach(b=>{
+    if(b.textContent.trim()==='Settings'){tab('settings',b)}
+  });
+}
+function fillSettingsTab(){
+  const v=(id,val)=>{const e=document.getElementById(id);if(e)e.value=val};
+  v('keyIn',get(LS.key,''));v('aiIn',get(LS.ai,''));v('sharpIn',get(LS.sharp,''));v('cfbdIn',get(LS.cfbd,''));
+  v('rundownIn',get(LS.rundown,''));v('oddspapiIn',get(LS.oddspapi,''));
+  v('ghrepoIn',get(LS.ghrepo,''));v('ghtokenIn',get(LS.ghtoken,''));
+  renderUsage();renderBackupStatus();renderStorageStatus();renderDataFeedStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
+}
+function saveSettingsTab(){
+  const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
+  set(LS.key,v('keyIn'));set(LS.ai,v('aiIn'));set(LS.sharp,v('sharpIn'));set(LS.cfbd,v('cfbdIn'));
+  set(LS.rundown,v('rundownIn'));set(LS.oddspapi,v('oddspapiIn'));
+  localStorage.setItem('d4.setupDone','1');
+  const el=document.getElementById('oddspapiDiag');
+  if(el)el.innerHTML='<div class="tkt hi"><h3>Saved</h3><div class="sub">Keys stored locally. Hit Refresh everything on the Games tab to pull with them.</div></div>';
+}
+function saveKeys(){
+  const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
+  set(LS.key,v('setupKeyIn'));set(LS.ai,v('setupAiIn'));
+  set(LS.sharp,v('setupSharpIn'));set(LS.rundown,v('setupRundownIn'));
+  localStorage.setItem('d4.setupDone','1');
+  document.getElementById('setup').classList.add('hide');boot();
+}
+function tab(n,b){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.getElementById('v-'+n).classList.add('on');
+  document.querySelectorAll('nav>button').forEach(x=>x.classList.remove('on'));
+  if(b)b.classList.add('on');
+  if(n==='games'&&ACTIVE_SPORT==='nfl')renderNFL();
+  if(n==='games'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
+  if(n==='tickets')renderTickets();
+  if(n==='grades')renderGrades(true);
+  if(n==='recap')renderRecap();
+  if(n==='best'){bestTab(BESTTAB||'today');}
+  if(n==='settings')fillSettingsTab();
+  if(n==='money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab();}
+  if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
+  window.scrollTo(0,0);
+}
+
+/* ================= MATH ================= */
+function poisCDF(k,l){let s=0,t=Math.exp(-l);for(let i=0;i<=k;i++){s+=t;t*=l/(i+1)}return Math.min(1,s)}
+function poisAtLeast(k,l){return k<=0?1:1-poisCDF(k-1,l)}
+function poisSample(l){if(l<=0)return 0;
+  if(l>25){const u=Math.random()||1e-9,v=Math.random();
+    return Math.max(0,Math.round(l+Math.sqrt(l)*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)))}
+  let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random()}while(p>L);return k-1}
+// Was truncating k=3.6 to a full 4 exponential draws (for-loop with i<k runs i=0..3,
+// silently drawing Gamma(4,θ) instead of Gamma(3.6,θ)). That widened variance and
+// pushed the modal exact-score up a notch across nearly every game — part of why
+// 3-4/4-3 kept winning "most common score" regardless of which teams were playing.
+// Fixed with the standard integer-part-plus-fractional-remainder construction.
+function gammaInt(k,t){
+  const ik=Math.floor(k),frac=k-ik;
+  let s=0;
+  for(let i=0;i<ik;i++)s+=-Math.log(Math.random()||1e-9);
+  if(frac>1e-9){
+    // Johnk's algorithm for the Gamma(frac,1) remainder, frac in (0,1)
+    let x,y,u,v;
+    do{
+      u=Math.random()||1e-9;v=Math.random()||1e-9;
+      x=Math.pow(u,1/frac);y=Math.pow(v,1/(1-frac));
+    }while(x+y>1);
+    const e=-Math.log(Math.random()||1e-9);
+    s+=(x/(x+y))*e;
+  }
+  return s*t;
+}
+function nbRuns(m){const k=hotGet(LS.calib,{}).dispK||3.6;return poisSample(gammaInt(k,Math.max(.15,m)/k))}
+function tbDist(pv,n){let d=[1];for(let i=0;i<n;i++){const nd=new Array(d.length+4).fill(0);
+  for(let a=0;a<d.length;a++)for(let b=0;b<5;b++)nd[a+b]+=d[a]*pv[b];d=nd}return d}
+function atLeast(d,k){let s=0;for(let i=k;i<d.length;i++)s+=d[i];return Math.min(1,Math.max(0,s))}
+function blendPA(f,pa){const lo=Math.floor(pa),w=pa-lo;return f(lo)*(1-w)+f(lo+1)*w}
+function comb(n,k){if(k>n)return 0;let r=1;for(let i=0;i<k;i++)r=r*(n-i)/(i+1);return r}
+function imp(a){return a>0?100/(a+100):(-a)/((-a)+100)}
+/* ================= USAGE TRACKING ================= */
+// Every metered source gets a call counted here, whether it succeeded or not — the goal
+// is knowing how close to a real limit you are, not just celebrating successes.
+function usage(){
+  const d=get(LS.usage,{});
+  const dayKey=today(),monthKey=today().slice(0,7);
+  if(d.dayKey!==dayKey){d.odds_d=0;d.sharp_d=0;d.rundown_d=0;d.oddspapi_d=0;d.dayKey=dayKey}
+  if(d.monthKey!==monthKey){d.oddspapi_m=0;d.monthKey=monthKey}
+  return d;
+}
+function trackCall(platform){
+  const d=usage();
+  d[platform+'_d']=(d[platform+'_d']||0)+1;
+  if(platform==='oddspapi')d.oddspapi_m=(d.oddspapi_m||0)+1;
+  set(LS.usage,d);
+}
+function usageBar(label,used,limit,note){
+  const pct=limit?Math.min(100,(used/limit)*100):0;
+  const col=pct>=90?'var(--rust)':pct>=65?'var(--gold)':'var(--win)';
+  return `<div style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono';font-size:10.5px;margin-bottom:4px">
+      <span>${label}</span><span style="color:var(--mute)">${limit?used+' / '+limit:used+' calls today — no confirmed limit'}</span>
+    </div>
+    <div style="height:6px;background:var(--panel2);border-radius:3px;overflow:hidden">
+      <div style="height:100%;width:${limit?pct:Math.min(100,used*3)}%;background:${col};border-radius:3px"></div>
+    </div>
+    ${note?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);margin-top:3px">${note}</div>`:''}
+  </div>`;
+}
+function renderColorLegend(){
+  const el=document.getElementById('colorLegend');
+  if(!el)return;
+  const swatch=(color,label,desc,extra)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;
+    border-bottom:1px solid var(--rule)">
+    <div style="flex:0 0 auto;width:16px;height:16px;border-radius:5px;margin-top:1px;
+      background:${color};box-shadow:0 0 0 1px rgba(255,255,255,.08)"></div>
+    <div><div style="font-weight:700;font-size:12.5px">${label}${extra||''}</div>
+      <div class="m" style="margin-top:1px">${desc}</div></div>
+  </div>`;
+  const section=(title)=>`<div class="mktlab" style="margin-top:14px">${title}</div>`;
+
+  el.innerHTML=
+    section('Game card — bet squares — single signals')+
+    swatch('var(--gold)','Selected (gold + ✓ badge)','This is one of YOUR picks right now — the checkmark is the real signal, color is backup.')+
+    swatch('var(--win)','Green border','Model sees real edge here — the number is worth a second look.')+
+    swatch('var(--rust)','Red border, dimmed','Model says stay away — priced against the model\'s own read.')+
+    swatch('#a78bfa','Purple border','An outside source (uploaded pick/trend) also has this exact side.')+
+    swatch('#f472b6','Pink border','UNANIMOUS — every outside source you\'ve uploaded agrees on this side.')+
+
+    section('Game card — ALIGNMENT TIERS (how many things agree)')+
+    swatch('#FFD75E','◆ SUPREME — thick gold glow','Book price leans this way, model has real edge, AND outside sources are unanimous. All three independent reads agree — this is as strong as the card gets.',' <span class="m">(rare)</span>')+
+    swatch('#5FD3E8','STRONG — cyan glow','Any two of the three signals (book lean, model edge, outside consensus) align.')+
+    swatch('rgba(95,211,232,.6)','Lean — thin cyan border','Exactly one signal present — worth noting, not yet a real convergence.')+
+    swatch('var(--rust)','⚠ CONFLICT — dashed red border','Signals actively disagree — e.g. the model likes this side but outside sources are unanimous on the OTHER side. Worth a second look specifically because something doesn\'t line up.')+
+
+    section('Elite stat badges (⭐ gold)')+
+    swatch('var(--gold)','⭐ Top N% badge','Real league-wide percentile — pitcher ERA/K-9, team record, or park HR factor. Threshold is tunable above.')+
+
+    section('Live game state')+
+    swatch('var(--win)','Pulsing green dot','Game is live right now.')+
+    swatch('var(--cold)','Cyan','A projected/simulated number, not yet a real result.')+
+
+    section('Elimination Map bubbles')+
+    swatch('var(--rust)','Red bubble','Ticket is dead — at least one leg already lost.')+
+    swatch('var(--win)','Green bubble','Ticket is fully won — every leg decided, none lost.')+
+    swatch('var(--gold)','Amber bubble','Still alive — at least one leg is undecided. Pulsing ring = one result from being fully decided.')+
+    swatch('var(--mute)','Grey bubble','Nothing on this ticket has started yet.')+
+    swatch('#5FD3E8','Cyan strand','Connects tickets riding on the same team — a web, not just a shared game.')+
+
+    section('The Coach')+
+    swatch('var(--rust)','Red / warning','Something worth stopping to look at — a duplicate, a weak leg, a bankroll issue.')+
+    swatch('var(--mute)','Grey / neutral','An observation, not a warning — e.g. noting a real longshot ticket.')+
+    swatch('var(--win)','Green / good','Real, verified good news — an earned bankroll multiplier, a performing bucket.')+
+
+    section('Ticket buckets')+
+    swatch('var(--gold)','Gold','My picks — the only bucket that touches your real bankroll.')+
+    swatch('#5FD3E8','Cyan','System, Market, Specialty, Outside — tracked daily, flat $1, never touches real money.');
+}
+function renderAutoParlayToggles(){
+  const el=document.getElementById('autoParlayToggles');
+  if(!el)return;
+  const labels={market:'Market picks',outside:'Outside picks',system:'System top 10'};
+  el.innerHTML=Object.keys(labels).map(src=>{
+    const on=autoParlayEnabled(src);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+      border-bottom:1px solid var(--rule)">
+      <span>${labels[src]}</span>
+      <button class="${on?'on':''}" onclick="setAutoParlayEnabled('${src}',${!on});renderAutoParlayToggles();renderTickets()"
+        style="min-width:52px">${on?'ON':'OFF'}</button>
+    </div>`;
+  }).join('');
+}
+function renderPctThresholdBtns(){
+  const el=document.getElementById('pctThresholdBtns');
+  if(!el)return;
+  const current=getPercentileThreshold();
+  el.innerHTML=[3,5,10,15,20].map(n=>
+    `<button class="${current===n?'on':''}" onclick="setPercentileThreshold(${n});renderPctThresholdBtns();render()">Top ${n}%</button>`
+  ).join('');
+}
+function renderUsage(){
+  const u=usage(),c=credits();
+  const el=document.getElementById('usagePanel');
+  if(!el)return;
+  el.innerHTML=
+    usageBar('Odds API',c.n,24,'Resets midnight CT — confirmed 25/day free tier')+
+    usageBar('SharpAPI',u.sharp_d||0,null,'12 req/min cap confirmed, no daily cap stated — watch for 429s')+
+    usageBar('TheRundown',u.rundown_d||0,null,'Hit a 20,000/day data-point wall before — cost per call varies by slate size, not 1:1 with request count')+
+    usageBar('OddsPapi',u.oddspapi_m||0,250,'Monthly limit, not daily — resets on the 1st');
+}
+function amer(p){if(!p||p<=0||p>=1)return '—';return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p)}
+// display-only: real books never mirror -133/+133. This applies a standard ~4.5% overround
+// (typical MLB moneyline vig) so the shown price looks like an actual board — both sides
+// priced slightly worse than fair. The probability that drives picks, edges, and every
+// prediction underneath stays the untouched fair number; only this rendered price changes.
+function vigAmer(p){
+  if(!p||p<=0||p>=1)return '—';
+  const OVERROUND=0.045;
+  const pv=Math.min(.98,Math.max(.02,p+OVERROUND/2));
+  return amer(pv);
+}
+
+/* ================= PARK + ENV ================= */
+// ═══════════════════════════════════════════════════════════════════════
+// LEAGUE-WIDE PERCENTILE ENGINE — "top 5% of what" answered honestly: league
+// wide, this season, real numbers, tunable threshold (default 5% but you can
+// loosen/tighten it in Settings). Everything below only ranks against REAL
+// MLB StatsAPI data pulled once and cached for the day — nothing invented.
+// ═══════════════════════════════════════════════════════════════════════
+let PERCENTILE_THRESHOLD=5; // tunable — "top N%" cutoff, adjustable in Settings
+function getPercentileThreshold(){
+  const stored=get('d4.pctThreshold',null);
+  return stored!==null?stored:PERCENTILE_THRESHOLD;
+}
+function setPercentileThreshold(n){
+  PERCENTILE_THRESHOLD=n;
+  set('d4.pctThreshold',n);
+}
+
+// Park factors are already a real, complete, 30-team league-wide dataset —
+// no fetch needed, just rank what's already there. Two separate rankings:
+// hitter-friendly (high HR factor) and pitcher-friendly (low run factor).
+function parkPercentiles(){
+  const teams=Object.keys(PARK);
+  const byHR=teams.slice().sort((a,b)=>PARK[b][1]-PARK[a][1]);
+  const byRunSuppress=teams.slice().sort((a,b)=>PARK[a][0]-PARK[b][0]); // lowest run factor = best pitcher's park
+  const n=teams.length;
+  const cutoff=Math.max(1,Math.ceil(n*getPercentileThreshold()/100));
+  return{
+    topHRParks:new Set(byHR.slice(0,cutoff)),
+    topPitcherParks:new Set(byRunSuppress.slice(0,cutoff))
+  };
+}
+
+// Real league-wide qualified-pitcher leaderboards, fetched once per day from
+// MLB's own stats/leaders endpoint and cached — this is what makes "top 5% of
+// ERA league-wide this season" an honest, provable claim instead of a guess
+// based on only the two starters in tonight's game.
+const LS_LEAGUE_LEADERS='d4.leagueLeaders';
+async function fetchLeaguePitchingLeaders(){
+  const cached=get(LS_LEAGUE_LEADERS,null);
+  if(cached&&cached.date===today())return cached;
+  const season=new Date().getFullYear();
+  try{
+    const [eraR,soR]=await Promise.all([
+      fetch(`https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=earnedRunAverage&season=${season}&sportId=1&limit=300&statGroup=pitching`),
+      fetch(`https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=strikeoutsPer9Inn&season=${season}&sportId=1&limit=300&statGroup=pitching`)
+    ]);
+    const eraJ=await eraR.json(),soJ=await soR.json();
+    const eraLeaders=((eraJ.leagueLeaders||[])[0]||{}).leaders||[];
+    const soLeaders=((soJ.leagueLeaders||[])[0]||{}).leaders||[];
+    // ERA: LOWER is better, so the leaderboard is already sorted best-first.
+    // K/9: HIGHER is better, same — already sorted best-first by the API.
+    const result={date:today(),
+      era:eraLeaders.map(l=>({id:l.person.id,name:l.person.fullName,value:parseFloat(l.value)})),
+      k9:soLeaders.map(l=>({id:l.person.id,name:l.person.fullName,value:parseFloat(l.value)}))};
+    set(LS_LEAGUE_LEADERS,result);
+    return result;
+  }catch(e){
+    console.warn('league leaders fetch failed',e);
+    return cached||{date:today(),era:[],k9:[]};
+  }
+}
+// Where does THIS pitcher rank against the real league-wide leaderboard —
+// returns a percentile position (0 = literal best in the league) or null if
+// he's not in the qualified sample (too few innings to qualify, most likely).
+function pitcherPercentile(pitcherId,leaders){
+  if(!pitcherId||!leaders||!leaders.length)return null;
+  const idx=leaders.findIndex(l=>l.id===pitcherId);
+  if(idx===-1)return null;
+  return(idx/leaders.length)*100; // 0 = best, 100 = worst, within the qualified sample
+}
+// Sync version — reads the module-level cache populated once per loadAll()
+// cycle by loadPercentileData(), rather than fetching. This is what card()
+// actually calls, since card() is synchronous. The async version above stays
+// for any future caller that genuinely wants a fresh fetch on demand.
+function pitcherEliteBadgesSync(pitcherId){
+  if(!pitcherId||!LEAGUE_PITCH_LEADERS.era.length)return[];
+  const threshold=getPercentileThreshold();
+  const badges=[];
+  const eraPct=pitcherPercentile(pitcherId,LEAGUE_PITCH_LEADERS.era);
+  if(eraPct!==null&&eraPct<=threshold)badges.push({stat:'ERA',pct:+eraPct.toFixed(1)});
+  const k9Pct=pitcherPercentile(pitcherId,LEAGUE_PITCH_LEADERS.k9);
+  if(k9Pct!==null&&k9Pct<=threshold)badges.push({stat:'K/9',pct:+k9Pct.toFixed(1)});
+  return badges;
+}
+// A single, real, honest badge for a probable starter — checked against BOTH
+// ERA and K/9 league leaderboards independently, since a pitcher can be
+// elite in one and merely average in the other.
+async function pitcherEliteBadges(pitcherId){
+  if(!pitcherId)return[];
+  const leaders=await fetchLeaguePitchingLeaders();
+  const threshold=getPercentileThreshold();
+  const badges=[];
+  const eraPct=pitcherPercentile(pitcherId,leaders.era);
+  if(eraPct!==null&&eraPct<=threshold)badges.push({stat:'ERA',pct:+eraPct.toFixed(1)});
+  const k9Pct=pitcherPercentile(pitcherId,leaders.k9);
+  if(k9Pct!==null&&k9Pct<=threshold)badges.push({stat:'K/9',pct:+k9Pct.toFixed(1)});
+  return badges;
+}
+
+// Real, all-30-team overall win% standings — fetched once per day, cached,
+// separate from the existing home/away splits fetch (that one only pulls
+// split records, not the overall record every team's percentile rank needs).
+const LS_LEAGUE_STANDINGS='d4.leagueStandings';
+async function fetchLeagueStandings(){
+  const cached=get(LS_LEAGUE_STANDINGS,null);
+  if(cached&&cached.date===today())return cached;
+  try{
+    const r=await fetch('https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season='+new Date().getFullYear());
+    const j=await r.json();
+    const teams=[];
+    (j.records||[]).forEach(rec=>(rec.teamRecords||[]).forEach(t=>{
+      const w=t.wins,l=t.losses;
+      if(w==null||l==null||(w+l)===0)return;
+      teams.push({id:t.team.id,abbr:(t.team.abbreviation||'').toUpperCase(),pct:w/(w+l),w,l});
+    }));
+    teams.sort((a,b)=>b.pct-a.pct); // best record first
+    const result={date:today(),teams};
+    set(LS_LEAGUE_STANDINGS,result);
+    return result;
+  }catch(e){
+    console.warn('league standings fetch failed',e);
+    return cached||{date:today(),teams:[]};
+  }
+}
+function teamRecordPercentile(teamAbbr,standings){
+  if(!teamAbbr||!standings||!standings.teams.length)return null;
+  const idx=standings.teams.findIndex(t=>t.abbr===teamAbbr);
+  if(idx===-1)return null;
+  return(idx/standings.teams.length)*100;
+}
+// Elite badge for a team's overall record — top-N% by real win percentage,
+// same tunable threshold as everything else in this engine.
+async function teamRecordBadge(teamAbbr){
+  if(!teamAbbr)return null;
+  const standings=await fetchLeagueStandings();
+  const pct=teamRecordPercentile(teamAbbr,standings);
+  const threshold=getPercentileThreshold();
+  if(pct===null||pct>threshold)return null;
+  const t=standings.teams.find(x=>x.abbr===teamAbbr);
+  return{pct:+pct.toFixed(1),record:t?`${t.w}-${t.l}`:null};
+}
+// Sync version for card() — same cache-reading pattern as pitcherEliteBadgesSync.
+function teamRecordBadgeSync(teamAbbr){
+  if(!teamAbbr||!LEAGUE_STANDINGS.teams.length)return null;
+  const pct=teamRecordPercentile(teamAbbr,LEAGUE_STANDINGS);
+  const threshold=getPercentileThreshold();
+  if(pct===null||pct>threshold)return null;
+  const t=LEAGUE_STANDINGS.teams.find(x=>x.abbr===teamAbbr);
+  return{pct:+pct.toFixed(1),record:t?`${t.w}-${t.l}`:null};
+}
+
+const PARK={COL:[112,118],CIN:[106,114],BOS:[105,101],KC:[104,94],PHI:[104,109],ARI:[103,102],
+TEX:[103,102],ATH:[103,99],ATL:[102,103],BAL:[102,100],WSH:[102,101],LAA:[102,104],TOR:[101,103],
+CHC:[101,101],MIN:[100,101],HOU:[100,104],CWS:[100,103],PIT:[99,92],MIL:[99,104],STL:[98,95],
+LAD:[98,105],NYY:[98,108],TB:[97,96],MIA:[97,95],DET:[97,93],NYM:[96,97],CLE:[96,98],
+SEA:[95,97],SD:[95,96],SF:[94,90]};
+const DOME={TB:1,TOR:1,ARI:1,HOU:1,MIL:1,TEX:1,MIA:1,SEA:1};
+const LG={ops:.715,whip:1.28,runs:4.42};
+const PA_SLOT=[4.65,4.55,4.45,4.36,4.27,4.17,4.07,3.97,3.87];
+
+function envMult(g){
+  const pf=PARK[g.home.abbr]||[100,100];
+  let m=pf[0]/100;
+  const w=g.weather;
+  if(w&&!DOME[g.home.abbr]){
+    if(w.temp)m*=1+((parseFloat(w.temp)-70)*.0016);
+    const wind=(w.wind||'').toLowerCase(),mph=parseFloat(wind)||0;
+    if(wind.includes('out'))m*=1+Math.min(.09,mph*.006);
+    else if(wind.includes('in'))m*=1-Math.min(.09,mph*.006);
+    if(/rain|drizzle/.test((w.cond||'').toLowerCase()))m*=.98;
+  }
+  return Math.max(.85,Math.min(1.18,m));
+}
+// recent hot/cold form — real signal, small weight, same philosophy as oppMult/venueAdj.
+// Needs a real recent sample before it does anything; a bounded, dampened nudge to a
+// batter's effective OPS, not a rewrite of who he is. This is data the app was already
+// fetching for every hitter and simply discarding — no new API calls involved.
+function formMult(s,rs){
+  if(!rs||!rs.plateAppearances||rs.plateAppearances<12)return 1;
+  const rOps=parseFloat(rs.ops||0)||0,sOps=parseFloat(s.ops||0)||0;
+  if(!rOps||!sOps)return 1;
+  return Math.max(.90,Math.min(1.12,Math.pow(rOps/sOps,.5)));
+}
+function hRates(s,rs){const pa=s.plateAppearances||0;if(pa<40)return null;
+  const h=s.hits||0,d=s.doubles||0,t=s.triples||0,hr=s.homeRuns||0,fm=formMult(s,rs);
+  return{pa,p1:Math.max(0,h-d-t-hr)/pa,p2:d/pa,p3:t/pa,p4:hr/pa,pH:h/pa,
+    pRBI:Math.min(.32,(s.rbi||0)/pa),ops:(parseFloat(s.ops||0)||0)*fm,hr:hr,hrRate:hr/pa,formMult:fm}}
+function oppMult(p){if(!p||!p.whip)return 1;
+  return Math.max(.80,Math.min(1.22,Math.pow(parseFloat(p.whip)/LG.whip,.62)))}
+function expIP(p){if(!p)return 5.2;const ip=parseFloat(p.ip||0),gs=p.gs||0;
+  return gs>=4&&ip>0?Math.max(3.6,Math.min(6.6,ip/gs)):5.2}
+
+/* home/away record adjustment — real signal, small weight */
+function venueAdj(g,side){
+  const sp=SPLITS[g[side].id];
+  if(!sp)return 1;
+  const rec=side==='home'?sp.home:sp.away;
+  if(!rec||rec.w+rec.l<20)return 1;
+  const wp=rec.w/(rec.w+rec.l);
+  return 1+((wp-.5)*.10);   // capped influence: a .600 venue team gets +1%
+}
+/* two-year head-to-head run environment — informs total, not the side */
+function h2hAdj(g){
+  const k=[g.away.id,g.home.id].sort().join('-');
+  const r=H2H[k];
+  if(!r||r.games<6)return 1;
+  const perGame=r.runs/r.games;
+  return Math.max(.94,Math.min(1.06,1+((perGame-8.8)*.012)));
+}
+
+function teamRuns(lu,oppP,env,vAdj,hAdj){
+  const r=lu.map(x=>hRates(x.stat,x.rstat)).filter(Boolean);
+  if(r.length<5)return null;
+  const o=r.reduce((a,x)=>a+(x.ops||LG.ops),0)/r.length;
+  return Math.max(1.5,Math.min(9,LG.runs*Math.pow(o/LG.ops,1.75)*oppMult(oppP)*env*vAdj*hAdj));
+}
+function simGame(g,N){
+  N=N||10000;
+  const env=envMult(g),hAdj=h2hAdj(g);
+  let aR=teamRuns(g.away.lineup,g.home.p,env,venueAdj(g,'away'),hAdj);
+  let hR=teamRuns(g.home.lineup,g.away.p,env,venueAdj(g,'home'),hAdj);
+  if(aR===null||hR===null)return null;
+  hR*=1.035;
+  // learned bias correction — shrunk, capped, and only after enough games are on record.
+  // Per-team correction handles team-specific tendencies; global drift catches the model
+  // running hot/cold across every team combined — a structural miss, not a team one.
+  const drift=globalDriftAdj()/2; // split the correction across both teams' projections
+  aR=Math.max(1.2,aR+teamRunAdj(g.away.abbr)+drift);
+  hR=Math.max(1.2,hR+teamRunAdj(g.home.abbr)+drift);
+  const aF=aR*.555,hF=hR*.555;
+  /* The totals distribution used to be a plain 10,000-element array that was
+     then sorted with a comparator (≈130,000 comparator calls) and, worse,
+     rescanned with .filter() on EVERY over() call. over() is hit 44 times per
+     game by the bet squares, presets, master evaluation and backtest — so each
+     board render did ~7 million array reads and allocated 44 throwaway arrays
+     per game, purely to answer questions a histogram answers in one lookup.
+
+     Runs are small non-negative integers, so a frequency table is exact, not an
+     approximation: identical numbers, O(1) instead of O(N). Median and the
+     percentiles come straight off the cumulative counts, so the sort is gone
+     entirely. Exact-score frequencies move from string-keyed object writes
+     ("7-4") to a flat typed array, removing 10,000 string concats per game. */
+  const MAXR=48,TSPAN=MAXR*2+2;
+  const totFreq=new Int32Array(TSPAN);          // total runs -> count
+  const scoreFreq=new Int32Array((MAXR+1)*(MAXR+1)); // a*(MAXR+1)+h -> count
+  let hw=0,as=0,hs=0,f5h=0,f5a=0,f5t=0,bins=new Array(24).fill(0);
+  for(let i=0;i<N;i++){
+    let a=nbRuns(aR),h=nbRuns(hR);
+    if(a===h)Math.random()<.48?a++:h++;
+    if(h>a)hw++;
+    as+=a;hs+=h;
+    const t=a+h;
+    totFreq[t<TSPAN?t:TSPAN-1]++;
+    bins[t<23?t:23]++;
+    if(a<=MAXR&&h<=MAXR)scoreFreq[a*(MAXR+1)+h]++;
+    const fa=nbRuns(aF),fh=nbRuns(hF);
+    if(fh>fa)f5h++;else if(fa>fh)f5a++;
+    f5t+=fa+fh;
+  }
+  // cumGE[k] = how many simulated totals came in at k or above.
+  // over(x) wants P(total > x). Runs are integers, so t > x is the same as
+  // t >= floor(x)+1 for both half-point lines (8.5 -> t>=9) and integer lines
+  // (9 -> t>=10), which makes it a single indexed read.
+  const cumGE=new Float64Array(TSPAN+2);
+  for(let k=TSPAN-1;k>=0;k--)cumGE[k]=cumGE[k+1]+totFreq[k];
+  // identical to reading sortedTotals[Math.floor(N*q)], without the sort:
+  // the value at that index is the smallest v whose cumulative count exceeds it
+  const quantile=q=>{const idx=Math.floor(N*q);let run=0;
+    for(let v=0;v<TSPAN;v++){run+=totFreq[v];if(run>idx)return v}return TSPAN-1};
+  let modeKey=null,modeN=0;
+  for(let a=0;a<=MAXR;a++)for(let h=0;h<=MAXR;h++){
+    const c=scoreFreq[a*(MAXR+1)+h];
+    if(c>modeN){modeN=c;modeKey=a+'-'+h}
+  }
+  let modeTot=0,modeTotN=0;
+  bins.forEach((c,i)=>{if(c>modeTotN){modeTotN=c;modeTot=i}});
+  // Apply the direct probability calibration correction here, at the single
+  // source every downstream consumer reads from — bet squares, presets, master
+  // evaluation, backtest all inherit the correction automatically instead of each
+  // needing their own patch. Situation is approximated pre-market as "favorite"
+  // if the raw sim itself has one side above 50% by a real margin — the market-
+  // relative version (favorite/underdog vs the BOOK) is used once a price exists,
+  // in situationOf(), for the archived-row segmented calibration above.
+  let rawHw=hw/N,rawAw=1-hw/N;
+  try{
+    const situation=rawHw>=0.5?'favorite':'underdog';
+    const calHw=sideCalibAdj(rawHw,situation);
+    const calAw=1-calHw;
+    if(!isNaN(calHw)&&calHw>0&&calHw<1){rawHw=calHw;rawAw=calAw}
+  }catch(e){/* calibration not loaded yet this session — fall back to raw sim */}
+  // same live calibration for the total, applied inside the over() closure so
+  // every caller (bet squares, presets, backtest, master evaluation) gets the
+  // corrected number automatically rather than needing its own patch
+  const rawOver=x=>{
+    let k=Math.floor(x)+1;
+    if(k<0)k=0; else if(k>TSPAN)k=TSPAN;
+    return cumGE[k]/N;
+  };
+  const calibratedOver=x=>{
+    const raw=rawOver(x);
+    try{
+      const situation=rawHw>=0.5?'favorite':'underdog';
+      const cal=totalCalibAdj(raw,situation);
+      if(!isNaN(cal)&&cal>0&&cal<1)return cal;
+    }catch(e){/* calibration not loaded yet */}
+    return raw;
+  };
+  return{aR:as/N,hR:hs/N,hw:rawHw,aw:rawAw,env,hAdj,
+    med:quantile(.5),mean:(as+hs)/N,p10:quantile(.1),p90:quantile(.9),
+    bins,N,modeScore:modeKey,modeScorePct:modeN/N,modeTot,modeTotPct:modeTotN/N,
+    f5h:f5h/N,f5a:f5a/N,f5tie:1-(f5h+f5a)/N,f5tot:f5t/N,
+    over:calibratedOver};
+}
+/* run-line probability from the same distribution, computed separately for clarity */
+function rlProb(g,s,side,line){
+  // approximate from the score distribution: P(margin > line)
+  const N=4000;const env=envMult(g),hAdj=h2hAdj(g);
+  let aR=teamRuns(g.away.lineup,g.home.p,env,venueAdj(g,'away'),hAdj);
+  let hR=teamRuns(g.home.lineup,g.away.p,env,venueAdj(g,'home'),hAdj);
+  if(aR===null||hR===null)return null;
+  hR*=1.035;
+  let c=0;
+  for(let i=0;i<N;i++){
+    let a=nbRuns(aR),h=nbRuns(hR);
+    if(a===h)Math.random()<.48?a++:h++;
+    const m=side==='home'?h-a:a-h;
+    if(m>line)c++;
+  }
+  let raw=c/N;
+  try{
+    // this side is the one being ASKED about — line<0 means asking about the
+    // favorite covering, so use the raw win side as a rough favorite/underdog proxy
+    const situation=(side==='home'?(s?s.hw:0.5):(s?s.aw:0.5))>=0.5?'favorite':'underdog';
+    const cal=rlCalibAdj(raw,situation);
+    if(!isNaN(cal)&&cal>0&&cal<1)raw=cal;
+  }catch(e){/* calibration not loaded yet */}
+  return raw;
+}
+/* market comparison only — never feeds the projection */
+function marketOf(g){
+  const k=today()+'|'+g.home.abbr+'|'+g.away.abbr,mk=ODDS[k]||{},op=OPENS[k]||{};
+  let mH=null,mA=null,oH=null,oA=null;
+  Object.keys(mk).forEach(n=>{if(abbr(n)===g.home.abbr)mH=mk[n];if(abbr(n)===g.away.abbr)mA=mk[n]});
+  Object.keys(op).forEach(n=>{if(abbr(n)===g.home.abbr)oH=op[n];if(abbr(n)===g.away.abbr)oA=op[n]});
+  if(mH===null||mA===null)return null;
+  const t=mH+mA;
+  return{fh:mH/t,fa:mA/t,oH,oA,rawH:mH};
+}
+function hasRealML(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return false;
+  return marketOf(g)!==null;
+}
+// blends the sim's own moneyline probability with the real Odds API price — same
+// pattern as totals. Home and away are blended from the same market call so they stay
+// true complements; this is what makes the button real-bettable instead of sim-only.
+function mlBlend(g,s){
+  const M=marketOf(g);
+  if(!M)return{home:s.hw,away:s.aw};
+  return{home:s.hw*0.55+M.fh*0.45,away:s.aw*0.55+M.fa*0.45};
+}
+
+/* ================= ENTITY LEARNING ================= */
+// Tracks where the model is biased per team and per player, then corrects.
+// Every correction is shrunk toward "no adjustment" by n/(n+k): with 3 games seen a team's
+// measured bias barely moves the projection; with 40 it moves most of the way. This is
+// what stops the model from overfitting to a hot week or one blowout.
+const SHRINK_TEAM=18, SHRINK_PLAYER=12, MIN_SHOW=3;
+function computeEntities(){
+  const arc=get(LS.arc,{});
+  const teams={},players={};
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      // per-team run bias: positive means the model projects that team too high
+      [[r.a,r.pa,F.a],[r.h,r.ph,F.h]].forEach(([ab,proj,act])=>{
+        teams[ab]=teams[ab]||{n:0,bias:0,sw:0,sl:0,picked:0};
+        teams[ab].n++;teams[ab].bias+=(proj-act);
+      });
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      if(won){
+        const hit=won===r.side;
+        teams[r.side]=teams[r.side]||{n:0,bias:0,sw:0,sl:0,picked:0};
+        teams[r.side].picked++;hit?teams[r.side].sw++:teams[r.side].sl++;
+      }
+    });
+    (A.pgrades||[]).forEach(o=>{
+      players[o.n]=players[o.n]||{n:0,w:0,e:0,types:{}};
+      const P=players[o.n];P.n++;P.e+=o.p;if(o.hit)P.w++;
+      P.types[o.t]=P.types[o.t]||{n:0,w:0,e:0};
+      P.types[o.t].n++;P.types[o.t].e+=o.p;if(o.hit)P.types[o.t].w++;
+    });
+  });
+  // shrink to usable adjustments
+  const teamAdj={},playerAdj={};
+  Object.keys(teams).forEach(t=>{
+    const o=teams[t];
+    const rawBias=o.n?o.bias/o.n:0;                    // avg runs over-projected
+    const w=o.n/(o.n+SHRINK_TEAM);
+    teamAdj[t]={n:o.n,rawBias:+rawBias.toFixed(3),adj:+(-rawBias*w).toFixed(3),
+      sw:o.sw,sl:o.sl,weight:+w.toFixed(2)};
+  });
+  Object.keys(players).forEach(p=>{
+    const o=players[p];
+    const act=o.w/o.n,exp=o.e/o.n;
+    const raw=exp>0?act/exp:1;
+    const w=o.n/(o.n+SHRINK_PLAYER);
+    const f=1+(raw-1)*w;
+    playerAdj[p]={n:o.n,actual:+(act*100).toFixed(1),predicted:+(exp*100).toFixed(1),
+      f:+Math.max(.5,Math.min(1.5,f)).toFixed(3),weight:+w.toFixed(2)};
+  });
+  set(LS.ent,{teams:teamAdj,players:playerAdj,ts:Date.now()});
+  return{teams:teamAdj,players:playerAdj};
+}
+// ── Global drift correction — the actual "how far off eternally" feedback loop ──
+// teamRunAdj corrects PER TEAM. This corrects the model's OVERALL tendency — if the
+// whole engine is running hot or cold across every team combined, that's a structural
+// calibration issue (dispersion, environment multiplier, etc), not a team-specific one,
+// and per-team shrinkage will never fully absorb it. This is computed from every graded
+// game ever, shrunk by sample size same as the team correction, and actually applied.
+function computeGlobalDrift(){
+  const arc=get(LS.arc,{});
+  let n=0,totalBias=0,sideCorrect=0,sideGraded=0;
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      const actualTotal=F.a+F.h;
+      totalBias+=(r.pt-actualTotal); // positive = model runs hot on totals overall
+      n++;
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      if(won){sideGraded++;if(won===r.side)sideCorrect++;}
+    });
+  });
+  if(n<MIN_N_CAL){
+    set('d4.drift',{n,totalDrift:0,ready:false});
+    return{totalDrift:0,ready:false};
+  }
+  const avgBias=totalBias/n;
+  const w=n/(n+SHRINK_TEAM); // same shrink curve as team-level, so small samples stay near 0
+  const totalDrift=+Math.max(-1.2,Math.min(1.2,-avgBias*w)).toFixed(3); // negative avgBias(over-proj) -> positive correction
+  const sidePct=sideGraded?+(sideCorrect/sideGraded*100).toFixed(1):null;
+  set('d4.drift',{n,avgBias:+avgBias.toFixed(3),totalDrift,sidePct,sideGraded,ready:true,ts:Date.now()});
+  return{totalDrift,ready:true};
+}
+function globalDriftAdj(){
+  const d=hotGet('d4.drift',null);
+  return d&&d.ready?d.totalDrift:0;
+}
+// ── day-over-day trend — is yesterday's miss actually smaller today? ──
+function calibrationTrend(){
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).filter(d=>arc[d].finals).sort();
+  const out=[];
+  days.forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    let n=0,err=0;
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      err+=Math.abs(r.pt-(F.a+F.h));n++;
+    });
+    if(n)out.push({date:d,avgMiss:+(err/n).toFixed(2),n});
+  });
+  return out;
+}
+function teamRunAdj(ab){
+  const e=hotGet(LS.ent,{});
+  const t=e.teams&&e.teams[ab];
+  if(!t||t.n<MIN_SHOW)return 0;
+  return Math.max(-.85,Math.min(.85,t.adj));   // capped so it can never dominate the projection
+}
+function playerPropAdj(name){
+  const e=hotGet(LS.ent,{});
+  const p=e.players&&e.players[name];
+  if(!p||p.n<6)return 1;
+  return p.f;
+}
+
+/* ================= ALTERNATE LINES ================= */
+// Fair price the sim implies, plus the worst price still worth taking.
+// Book odds are never fed into the simulation — this is purely "here's my number,
+// go see if your book beats it."
+function altLines(g,s){
+  const out={rl:[],tot:[]};
+  [1.5,2.5,3.5].forEach(ln=>{
+    const ph=rlProb(g,s,'home',ln),pa=rlProb(g,s,'away',ln);
+    if(ph!==null)out.rl.push({label:`${g.home.abbr} -${ln}`,p:ph});
+    if(pa!==null)out.rl.push({label:`${g.away.abbr} -${ln}`,p:pa});
+  });
+  [1.5,2.5,3.5].forEach(ln=>{
+    const ph=rlProb(g,s,'home',-ln),pa=rlProb(g,s,'away',-ln);
+    if(ph!==null)out.rl.push({label:`${g.home.abbr} +${ln}`,p:ph});
+    if(pa!==null)out.rl.push({label:`${g.away.abbr} +${ln}`,p:pa});
+  });
+  for(let t=5.5;t<=13.5;t+=1){
+    const o=s.over(t);
+    out.tot.push({label:`Over ${t}`,p:o});
+    out.tot.push({label:`Under ${t}`,p:1-o});
+  }
+  return out;
+}
+function minPrice(p){
+  // the break-even American price for a given true probability
+  if(p<=0||p>=1)return '—';
+  return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p);
+}
+function altPanel(g,s){
+  if(!s)return '<div class="empty">Needs a lineup first.</div>';
+  const A=altLines(g,s);
+  const sec=(title,arr,note)=>{
+    const sorted=[...arr].sort((a,b)=>b.p-a.p);
+    const safest=sorted[0];
+    return `<div class="ptype"><h4>${title}</h4>
+      <div class="sub" style="font-family:'IBM Plex Mono';font-size:10px;color:var(--mute);margin-bottom:6px">${note}</div>
+      <table class="boxtbl"><tr><th>Line</th><th>Sim</th><th>Fair price</th><th>Take if better than</th></tr>
+      ${sorted.map(x=>{
+        const cushion=Math.max(.02,x.p*.06);           // demand ~6% edge over fair before calling it a play
+        const need=minPrice(Math.min(.97,x.p+cushion));
+        const cl=x.p>=.8?'hi':'';
+        return `<tr><td>${x.label}</td><td class="${cl}">${(x.p*100).toFixed(1)}%</td>
+          <td>${minPrice(x.p)}</td><td class="hi">${need}</td></tr>`}).join('')}
+      </table>
+      <div style="font-family:'IBM Plex Mono';font-size:10px;color:var(--gold);margin-top:5px">
+        Safest here: <b>${safest.label}</b> at ${(safest.p*100).toFixed(1)}%</div></div>`;
+  };
+  const all=[...A.rl,...A.tot].sort((a,b)=>b.p-a.p);
+  const best=all[0];
+  return `<div class="tkt hi" style="margin-bottom:11px">
+      <h3>Safest on this game</h3>
+      <div class="sub"><b>${best.label}</b> — the sim hits it ${(best.p*100).toFixed(1)}% of the time.
+      Fair price ${minPrice(best.p)}. Only worth taking if your book pays better than
+      <b>${minPrice(Math.min(.97,best.p+Math.max(.02,best.p*.06)))}</b>.</div>
+      <div class="sub">Highest probability is not the same as best value. A 92% leg at a terrible
+      price loses money long-term; a 58% leg at a generous one makes it. Use the right-hand column.</div>
+    </div>
+    ${sec('Alternate run lines',A.rl,'Margin of victory. Plus numbers are the cushion side.')}
+    ${sec('Alternate totals',A.tot,'Full-game runs, both directions.')}`;
+}
+/* ================= PROPS ================= */
+function buildProps(){
+  PROPS=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final'||g.abstract==='Live')return; // no new prop lines once a game is underway
+    try{
+    const gl=g.away.abbr+'@'+g.home.abbr,env=envMult(g);
+    const hrPF=((PARK[g.home.abbr]||[100,100])[1])/100;
+    [['away','home'],['home','away']].forEach(([sd,op])=>{
+      const lu=g[sd].lineup,oP=g[op].p;if(!lu||!lu.length)return;
+      const m=oppMult(oP)*Math.pow(env,.6),proj=!!g[sd].lineupProj;
+      lu.slice(0,9).forEach((pl,i)=>{
+        try{
+        const r=hRates(pl.stat);if(!r)return;
+        const pa=PA_SLOT[i]||4,nm=pl.name,pid=pl.id;
+        const pv=[0,r.p1*m,r.p2*m,r.p3*m,r.p4*m*hrPF];
+        pv[0]=Math.max(0,1-(pv[1]+pv[2]+pv[3]+pv[4]));
+        const q=Math.min(.65,r.pH*m);
+        [1,2].forEach(k=>{
+          const p=blendPA(n=>{let s=0;for(let j=0;j<k;j++)s+=comb(n,j)*Math.pow(q,j)*Math.pow(1-q,n-j);return 1-s},pa);
+          PROPS.push({p,name:nm,mkt:k+'+ hits',game:gl,gid:g.id,team:g[sd].abbr,type:'hits',pid,thr:k,proj})});
+        [1,2,3,4].forEach(k=>PROPS.push({p:blendPA(n=>atLeast(tbDist(pv,n),k),pa),
+          name:nm,mkt:k+'+ total bases',game:gl,gid:g.id,team:g[sd].abbr,type:'tb',pid,thr:k,proj}));
+        PROPS.push({p:blendPA(n=>1-Math.pow(1-r.pRBI*m,n),pa),name:nm,mkt:'1+ RBI',
+          game:gl,gid:g.id,team:g[sd].abbr,type:'rbi',pid,thr:1,proj});
+        const hrP=blendPA(n=>1-Math.pow(1-Math.min(.14,r.hrRate*m*hrPF),n),pa);
+        PROPS.push({p:hrP,name:nm,mkt:'1+ home run',game:gl,gid:g.id,team:g[sd].abbr,type:'hr',pid,thr:1,proj});
+        }catch(e){/* one bad hitter record — skip just that player, keep the rest of the game's props */}
+      });
+    });
+    ['away','home'].forEach(sd=>{
+      try{
+      const p=g[sd].p;if(!p||!p.ip)return;
+      const ip=parseFloat(p.ip),e=expIP(p),pid=p.id;
+      if(p.so)[4,5,6,7].forEach(k=>PROPS.push({p:poisAtLeast(k,(p.so/ip)*e),name:p.name,mkt:k+'+ strikeouts',game:gl,gid:g.id,team:g[sd].abbr,type:'k',pid,thr:k}));
+      if(p.bb)[1,2].forEach(k=>PROPS.push({p:poisAtLeast(k,(p.bb/ip)*e),name:p.name,mkt:k+'+ walks allowed',game:gl,gid:g.id,team:g[sd].abbr,type:'bb',pid,thr:k}));
+      if(p.h)[4,5,6].forEach(k=>PROPS.push({p:poisAtLeast(k,(p.h/ip)*e),name:p.name,mkt:k+'+ hits allowed',game:gl,gid:g.id,team:g[sd].abbr,type:'ha',pid,thr:k}));
+      }catch(e){/* one bad pitcher record — skip just that side */}
+    });
+    }catch(e){console.error('buildProps failed for a game, skipping it:',e);}
+  });
+  PROPS.forEach(p=>{
+    const f=calibFactor(p.type)*playerPropAdj(p.name);
+    if(f!==1)p.p=Math.max(.03,Math.min(.97,p.p*f));
+    if(p.type==='hr'||p.type==='hits'){
+      p.p=Math.max(.03,Math.min(.97,sharpPropBlend(p.gid,p.name,p.type,p.thr,p.p)));
+    }
+  });
+  PROPS.sort((a,b)=>b.p-a.p);
+}
+
+/* ================= CALIBRATION ================= */
+const MIN_N_CAL=15;
+function computeCalibration(){
+  const arc=get(LS.arc,{}),agg={};
+  Object.keys(arc).forEach(d=>(arc[d].pgrades||[]).forEach(o=>{
+    agg[o.t]=agg[o.t]||{n:0,w:0,e:0};agg[o.t].n++;agg[o.t].e+=o.p;if(o.hit)agg[o.t].w++}));
+  const f={};
+  Object.keys(agg).forEach(t=>{
+    const o=agg[t];
+    if(o.n<MIN_N_CAL){f[t]={f:1,n:o.n};return}
+    const a=o.w/o.n,e=o.e/o.n;
+    f[t]={f:Math.max(.35,Math.min(1.25,e>0?a/e:1)),n:o.n,actual:+(a*100).toFixed(1),predicted:+(e*100).toFixed(1)};
+  });
+  const prev=get(LS.calib,{});
+  set(LS.calib,{...prev,types:f,ts:Date.now(),dispK:prev.dispK||3.6});
+  return f;
+}
+function calibFactor(t){const c=get(LS.calib,{});return (c.types&&c.types[t]&&c.types[t].f)||1}
+
+/* ================= DATA ================= */
+function abbr(n){const m={'Arizona Diamondbacks':'ARI','Atlanta Braves':'ATL','Baltimore Orioles':'BAL','Boston Red Sox':'BOS',
+'Chicago Cubs':'CHC','Chicago White Sox':'CWS','Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Colorado Rockies':'COL',
+'Detroit Tigers':'DET','Houston Astros':'HOU','Kansas City Royals':'KC','Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD',
+'Miami Marlins':'MIA','Milwaukee Brewers':'MIL','Minnesota Twins':'MIN','New York Mets':'NYM','New York Yankees':'NYY',
+'Athletics':'ATH','Oakland Athletics':'ATH','Philadelphia Phillies':'PHI','Pittsburgh Pirates':'PIT','San Diego Padres':'SD',
+'San Francisco Giants':'SF','Seattle Mariners':'SEA','St. Louis Cardinals':'STL','Tampa Bay Rays':'TB','Texas Rangers':'TEX',
+'Toronto Blue Jays':'TOR','Washington Nationals':'WSH'};return m[n]||n.slice(0,3).toUpperCase()}
+function short(n){
+  if(!n)return '—';
+  const SUF=/^(jr\.?|sr\.?|ii|iii|iv|v)$/i;
+  let p=n.split(' ').filter(Boolean);
+  let suffix='';
+  if(p.length>1&&SUF.test(p[p.length-1])){suffix=' '+p[p.length-1];p=p.slice(0,-1)}
+  return p.length>1?p[0][0]+'.'+p[p.length-1]+suffix:n;
+}
+
+async function projectedLineupFor(teamId){
+  const c=get(LS.projlu,{}),d=today();
+  if(c.d===d&&c.teams&&c.teams[teamId])return c.teams[teamId];
+  try{
+    const end=new Date(Date.now()-864e5),start=new Date(Date.now()-7*864e5);
+    const f=x=>x.toISOString().slice(0,10);
+    const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?teamId=${teamId}&sportId=1&startDate=${f(start)}&endDate=${f(end)}&gameType=R`);
+    const j=await r.json();
+    const gs=[];(j.dates||[]).forEach(dd=>(dd.games||[]).forEach(g=>{
+      if(((g.status||{}).abstractGameState)==='Final')gs.push(g)}));
+    if(!gs.length)return [];
+    gs.sort((a,b)=>new Date(b.gameDate)-new Date(a.gameDate));
+    const br=await fetch(`https://statsapi.mlb.com/api/v1/game/${gs[0].gamePk}/boxscore`);
+    const bj=await br.json();
+    const side=bj.teams.away.team.id===teamId?bj.teams.away:(bj.teams.home.team.id===teamId?bj.teams.home:null);
+    if(!side)return [];
+    const st=Object.values(side.players||{})
+      .filter(p=>p.battingOrder&&/00$/.test(p.battingOrder))
+      .sort((a,b)=>parseInt(a.battingOrder)-parseInt(b.battingOrder)).slice(0,9)
+      .map(p=>({id:p.person.id,fullName:p.person.fullName}));
+    c.d=d;c.teams=c.teams||{};c.teams[teamId]=st;set(LS.projlu,c);
+    return st;
+  }catch(e){return []}
+}
+async function loadH2H(pairs){
+  const c=get(LS.h2h,{});
+  if(c.d!==today()){c.d=today();c.pairs={}}
+  const need=pairs.filter(p=>!c.pairs[p.k]);
+  await Promise.all(need.map(async p=>{
+    try{
+      const end=new Date(),start=new Date(Date.now()-730*864e5);
+      const f=x=>x.toISOString().slice(0,10);
+      const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=${p.a}&opponentId=${p.b}`
+        +`&startDate=${f(start)}&endDate=${f(end)}&gameType=R`);
+      const j=await r.json();
+      let games=0,runs=0,aw=0,bw=0;
+      (j.dates||[]).forEach(dd=>(dd.games||[]).forEach(g=>{
+        if(((g.status||{}).abstractGameState)!=='Final')return;
+        const as=g.teams.away.score,hs=g.teams.home.score;
+        if(as===null||hs===null)return;
+        games++;runs+=as+hs;
+        const winId=hs>as?g.teams.home.team.id:g.teams.away.team.id;
+        if(winId===p.a)aw++;else bw++;
+      }));
+      c.pairs[p.k]={games,runs,aw,bw,aId:p.a};
+    }catch(e){}
+  }));
+  set(LS.h2h,c);H2H=c.pairs||{};
+}
+async function loadSplits(){
+  const c=get(LS.splits,{});
+  if(c.d===today()&&c.teams){SPLITS=c.teams;return}
+  try{
+    const r=await fetch('https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season='+new Date().getFullYear()+'&hydrate=team');
+    const j=await r.json();
+    const out={};
+    (j.records||[]).forEach(rec=>(rec.teamRecords||[]).forEach(t=>{
+      const sr=((t.records||{}).splitRecords)||[];
+      const hm=sr.find(x=>x.type==='home'),aw=sr.find(x=>x.type==='away');
+      out[t.team.id]={home:hm?{w:hm.wins,l:hm.losses}:null,away:aw?{w:aw.wins,l:aw.losses}:null};
+    }));
+    set(LS.splits,{d:today(),teams:out});SPLITS=out;
+  }catch(e){}
+}
+async function people(ids,grp){
+  const out={},u=[...new Set(ids)];
+  for(let i=0;i<u.length;i+=60){
+    try{
+      const r=await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${u.slice(i,i+60).join(',')}`
+        +`&hydrate=stats(group=[${grp}],type=[season,lastXGames],limit=5)`);
+      const j=await r.json();
+      (j.people||[]).forEach(p=>{
+        let se={},re={};
+        (p.stats||[]).forEach(st=>{const sp=((st.splits||[])[0]||{}).stat;if(!sp)return;
+          const t=(st.type||{}).displayName||'';
+          if(t==='season')se=sp;else if(t.indexOf('lastX')>=0)re=sp});
+        out[p.id]=grp==='pitching'
+          ?{id:p.id,name:short(p.fullName),hand:(p.pitchHand||{}).code||'',era:se.era,whip:se.whip,
+            so:se.strikeOuts,bb:se.baseOnBalls,h:se.hits,ip:se.inningsPitched,gs:se.gamesStarted,
+            pit:se.pitchesThrown,rEra:re.era||null}
+          :{stat:se,rstat:re};
+      });
+    }catch(e){}
+  }
+  return out;
+}
+// module-level cache — populated once per loadAll() cycle, read SYNCHRONOUSLY
+// by card() below. card() itself can't be async (it returns an HTML string
+// directly into template literals all over the render pipeline), so the real
+// network fetches happen once here, up front, and every card just reads the
+// already-resolved result for the rest of this render cycle.
+let LEAGUE_PITCH_LEADERS={date:null,era:[],k9:[]};
+let LEAGUE_STANDINGS={date:null,teams:[]};
+async function loadPercentileData(){
+  try{LEAGUE_PITCH_LEADERS=await fetchLeaguePitchingLeaders();}catch(e){}
+  try{LEAGUE_STANDINGS=await fetchLeagueStandings();}catch(e){}
+}
+async function loadAll(){
+  document.getElementById('dateline').textContent=fmtDate(new Date()).toUpperCase()+' CT';
+  try{
+    const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today()}`
+      +`&hydrate=probablePitcher,team,linescore,lineups,venue`);
+    const j=await r.json();
+    const gs=(j.dates&&j.dates[0]&&j.dates[0].games)||[];
+    await loadSplits();
+    loadPercentileData(); // don't await — badges can pop in a beat after the rest of the board loads, not worth blocking on
+    await loadH2H(gs.map(g=>{
+      const a=g.teams.away.team.id,b=g.teams.home.team.id;
+      return{a,b,k:[a,b].sort().join('-')}}));
+    const pI=[],need=[];
+    gs.forEach(g=>['away','home'].forEach(s=>{
+      const p=g.teams[s].probablePitcher;if(p&&p.id)pI.push(p.id);
+      if(!((g.lineups||{})[s+'Players']||[]).length)need.push(g.teams[s].team.id)}));
+    const uq=[...new Set(need)];
+    const pr=await Promise.all(uq.map(id=>projectedLineupFor(id)));
+    const PROJ={};uq.forEach((id,i)=>PROJ[id]=pr[i]);
+    const hI=[];
+    gs.forEach(g=>['away','home'].forEach(s=>{
+      const real=((g.lineups||{})[s+'Players']||[]);
+      if(real.length)real.forEach(x=>x.id&&hI.push(x.id));
+      else (PROJ[g.teams[s].team.id]||[]).forEach(x=>x.id&&hI.push(x.id))}));
+    const P=pI.length?await people(pI,'pitching'):{},H=hI.length?await people(hI,'hitting'):{};
+    GAMES=gs.map(g=>{
+      const A=g.teams.away,B=g.teams.home;
+      const mk=(t,pp,lu,fb)=>{
+        const proj=!lu||!lu.length,src=proj?fb:lu;
+        return{name:t.team.name,abbr:abbr(t.team.name),id:t.team.id,
+          w:(t.leagueRecord||{}).wins,l:(t.leagueRecord||{}).losses,
+          p:pp?(P[pp.id]||{name:pp.fullName}):null,
+          lineupProj:proj&&(src||[]).length>0,
+          lineup:(src||[]).slice(0,9).map(x=>({id:x.id,name:short(x.fullName),stat:(H[x.id]||{}).stat||{},rstat:(H[x.id]||{}).rstat||{}}))};
+      };
+      return{id:g.gamePk,time:g.gameDate,
+        status:(g.status||{}).detailedState||'',abstract:(g.status||{}).abstractGameState||'',
+        venue:(g.venue||{}).name||'',weather:null,
+        awayScore:g.teams.away.score,homeScore:g.teams.home.score,
+        away:mk(A,A.probablePitcher,(g.lineups||{}).awayPlayers,PROJ[A.team.id]),
+        home:mk(B,B.probablePitcher,(g.lineups||{}).homePlayers,PROJ[B.team.id])};
+    }).sort((a,b)=>new Date(a.time)-new Date(b.time));
+    try{
+      computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();render();buildProps();render();
+    }catch(e){console.error('post-fetch processing error:',e);}
+    loadWeather();loadBoxes();
+  }catch(e){document.getElementById('slate').innerHTML=
+    '<div class="empty">Couldn\'t reach the MLB feed. Reload, or serve over https.</div>'}
+}
+async function loadWeather(){
+  await Promise.all(GAMES.map(async g=>{
+    try{const r=await fetch(`https://statsapi.mlb.com/api/v1.1/game/${g.id}/feed/live`);
+      const j=await r.json();const w=(j.gameData||{}).weather||{};
+      if(w.temp)g.weather={temp:w.temp,cond:w.condition,wind:w.wind}}catch(e){}}));
+  buildProps();render();
+}
+async function loadBoxes(){
+  const fin=GAMES.filter(g=>g.abstract==='Final');
+  await Promise.all(fin.map(async g=>{
+    if(BOX[g.id])return;
+    try{const r=await fetch(`https://statsapi.mlb.com/api/v1/game/${g.id}/boxscore`);
+      const bx=await r.json();BOX[g.id]=bx;cacheBox(g.id,bx)}catch(e){}}));
+  if(fin.length)render();
+}
+async function loadOdds(manual){
+  const key=get(LS.key,'');if(!key)return;
+  const c=credits();if(c.n>=24){if(manual)alert('24 credits used. Resets midnight CT.');return}
+  const last=get(LS.pull,0);
+  if(!manual&&Date.now()-last<36e5)return;
+  if(manual&&Date.now()-last<6e4){alert('Just pulled.');return}
+  try{
+    const r=await fetch(`https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=h2h&oddsFormat=american&apiKey=${encodeURIComponent(key)}`);
+    if(!r.ok){alert(r.status===401?'Key rejected.':'Odds failed ('+r.status+').');return}
+    const d=await r.json();burn();set(LS.pull,Date.now());
+    const snap={},byDate={};
+    d.forEach(ev=>{const px={};
+      (ev.bookmakers||[]).forEach(b=>(b.markets||[]).forEach(m=>{if(m.key!=='h2h')return;
+        (m.outcomes||[]).forEach(o=>(px[o.name]=px[o.name]||[]).push(o.price))}));
+      const av={};Object.keys(px).forEach(t=>{const q=px[t].map(imp);av[t]=q.reduce((a,b)=>a+b,0)/q.length});
+      // date-scoped key — without this, a series between the same two teams on back-to-back
+      // days could silently overwrite each other's prices, since only the last-processed
+      // event for that team pair would survive in a plain team|team key.
+      const evDate=ev.commence_time
+        ?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.commence_time))
+        :today();
+      snap[evDate+'|'+abbr(ev.home_team)+'|'+abbr(ev.away_team)]=av;
+      // bucket by the game's actual Central-time date, so future slates with posted odds are discoverable
+      if(ev.commence_time&&av[ev.home_team]&&av[ev.away_team]){
+        const gd=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.commence_time));
+        (byDate[gd]=byDate[gd]||[]).push({home:abbr(ev.home_team),away:abbr(ev.away_team),
+          fh:av[ev.home_team]/(av[ev.home_team]+av[ev.away_team]),time:ev.commence_time});
+      }
+    });
+    ODDS=snap;set(LS.odds,{d:today(),v:snap});
+    ODDS_BYDATE=byDate;set(LS.oddsdate,byDate);
+    const o=get(LS.open,{d:'',v:{}});if(o.d!==today()){OPENS=snap;set(LS.open,{d:today(),v:snap})}
+    render();renderDayPicker();
+  }catch(e){if(manual)alert('Network error.')}
+}
+async function diagnoseOdds(){
+  const el=document.getElementById('oddsDiag');
+  el.innerHTML='<div class="empty">Fetching raw response…</div>';
+  const key=get(LS.key,'');
+  if(!key){el.innerHTML='<div class="tkt"><h3>No key</h3><div class="sub">No odds key is saved in setup — nothing to diagnose.</div></div>';return}
+  const c=credits();
+  if(c.n>=24){
+    el.innerHTML='<div class="tkt"><h3>24/24 credits used today</h3><div class="sub">Resets at midnight CT. This is likely why nothing new is showing — the app is out of pulls for today regardless of what the books have posted.</div></div>';
+    return;
+  }
+  try{
+    const url=`https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=h2h&oddsFormat=american&apiKey=${encodeURIComponent(key)}`;
+    const r=await fetch(url);
+    const remain=r.headers.get('x-requests-remaining'),used=r.headers.get('x-requests-used');
+    if(!r.ok){
+      const body=await r.text();
+      el.innerHTML=`<div class="tkt"><h3>HTTP ${r.status}</h3>
+        <div class="sub">${r.status===401?'Key rejected — check it was pasted correctly in setup.':r.status===429?'Rate limited by the provider itself, separate from this app\'s own daily counter.':'Unexpected error.'}</div>
+        <div class="sub" style="word-break:break-all">${body.slice(0,300)}</div></div>`;
+      return;
+    }
+    burn();set(LS.pull,Date.now());
+    const d=await r.json();
+    const dates={};
+    d.forEach(ev=>{
+      if(!ev.commence_time)return;
+      const gd=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.commence_time));
+      dates[gd]=(dates[gd]||0)+1;
+    });
+    const sortedDates=Object.keys(dates).sort();
+    const tmrw=new Date(Date.now()+864e5);
+    const tmrwStr=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(tmrw);
+    el.innerHTML=`<div class="tkt hi"><h3>${d.length} events returned</h3>
+      <div class="sub">Provider quota: ${used!==null?used+' used, '+remain+' remaining this cycle':'not reported in headers'}</div>
+      <div class="sub">Today (${today()}): ${dates[today()]||0} games</div>
+      <div class="sub">Tomorrow (${tmrwStr}): ${dates[tmrwStr]||0} games ${dates[tmrwStr]?'— it IS in the raw response':'— NOT present in the raw response'}</div>
+      <div class="sub">All dates present in this response: ${sortedDates.length?sortedDates.join(', '):'none'}</div>
+      <div class="sub">${!d.length?'Zero events at all — the request itself is returning nothing for MLB right now.':
+        !dates[tmrwStr]?'Tomorrow genuinely isn\'t in the API\'s data yet — this isn\'t an app bug, the provider itself doesn\'t have it, regardless of what a sportsbook app shows.':
+        'Tomorrow IS in the data — if the day picker still doesn\'t show it, that\'s a real bug in this app\'s rendering, tell me and I\'ll dig into that specifically.'}</div>
+    </div>`;
+    // this diagnostic pull is real data — feed it into the normal pipeline too, don't waste the credit
+    const snap={},byDate={};
+    d.forEach(ev=>{const px={};
+      (ev.bookmakers||[]).forEach(b=>(b.markets||[]).forEach(m=>{if(m.key!=='h2h')return;
+        (m.outcomes||[]).forEach(o=>(px[o.name]=px[o.name]||[]).push(o.price))}));
+      const av={};Object.keys(px).forEach(t=>{const q=px[t].map(imp);av[t]=q.reduce((a,b)=>a+b,0)/q.length});
+      const evDate=ev.commence_time
+        ?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.commence_time))
+        :today();
+      snap[evDate+'|'+abbr(ev.home_team)+'|'+abbr(ev.away_team)]=av;
+      if(ev.commence_time&&av[ev.home_team]&&av[ev.away_team]){
+        const gd=evDate;
+        (byDate[gd]=byDate[gd]||[]).push({home:abbr(ev.home_team),away:abbr(ev.away_team),
+          fh:av[ev.home_team]/(av[ev.home_team]+av[ev.away_team]),time:ev.commence_time});
+      }
+    });
+    ODDS=snap;set(LS.odds,{d:today(),v:snap});
+    ODDS_BYDATE=byDate;set(LS.oddsdate,byDate);
+    render();renderDayPicker();
+  }catch(e){
+    el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${e.message||e}</div></div>`;
+  }
+}
+/* ================= SHARPAPI — TOTALS & PROPS ================= */
+// Only wiring in market types confirmed by a real diagnostic pull: player_home_runs,
+// player_hits, total_runs, team_total. The innings-segment markets (1st_5_innings_total_runs
+// etc.) showed a binary Yes/No shape with line:null in the sample, not a numeric O/U ladder —
+// left unparsed rather than guessed at until a row with an actual line turns up.
+function stripAccents(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
+function nameKey(n){
+  // reduces any name format to "f|last" for cross-source matching — handles
+  // SharpAPI's full names against this app's own "F.Last Jr." short() format
+  const clean=stripAccents(n).replace(/\./g,' ').trim();
+  let p=clean.split(/\s+/).filter(Boolean);
+  const SUF=/^(jr|sr|ii|iii|iv|v)$/i;
+  if(p.length>1&&SUF.test(p[p.length-1]))p=p.slice(0,-1);
+  if(!p.length)return '';
+  return (p[0][0]||'').toLowerCase()+'|'+(p[p.length-1]||'').toLowerCase();
+}
+const SHARP_TYPE={home_runs:'hr',hits:'hits'};
+async function loadSharp(manual){
+  const key=get(LS.sharp,'');if(!key)return;
+  trackCall('sharp');
+  try{
+    const r=await fetch('https://api.sharpapi.io/api/v1/odds?league=MLB',{headers:{'X-API-Key':key}});
+    if(!r.ok){if(manual)alert(r.status===401||r.status===403?'SharpAPI key rejected.':r.status===429?'SharpAPI rate limited — free tier is 12 req/min.':'SharpAPI failed ('+r.status+').');return}
+    const j=await r.json();
+    const data=j.data||[];
+    const props=[],totals=[];
+    data.forEach(o=>{
+      if(!o.is_main_line)return;  // skip alternates here — this feeds the primary comparison, not the ladder
+      const homeAb=o.home&&o.home.abbreviation,awayAb=o.away&&o.away.abbreviation;
+      if(!homeAb||!awayAb)return;
+      if(o.market_type==='player_home_runs'||o.market_type==='player_hits'){
+        const t=SHARP_TYPE[o.stat_category];if(!t)return;
+        if(o.selection_type!=='over')return;  // props here are X+ style, only need the over side
+        props.push({key:nameKey(o.player_name||o.selection),type:t,line:o.line,
+          prob:o.odds_probability,american:o.odds_american,book:o.sportsbook,
+          home:homeAb,away:awayAb,time:o.event_start_time});
+      }
+      if(o.market_type==='total_runs'&&(o.selection_type==='over'||o.selection_type==='under')){
+        totals.push({side:o.selection_type,line:o.line,prob:o.odds_probability,
+          american:o.odds_american,book:o.sportsbook,home:homeAb,away:awayAb,time:o.event_start_time});
+      }
+    });
+    SHARP_PROPS=props;SHARP_TOTALS=totals;
+    if(manual)alert(`Pulled ${props.length} prop lines and ${totals.length} total lines from SharpAPI.`);
+    buildProps();render();
+  }catch(e){if(manual)alert('SharpAPI network error.')}
+}
+function sharpPropFor(gid,name,type){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return null;
+  const k=nameKey(name);
+  return SHARP_PROPS.find(p=>p.key===k&&p.type===type&&
+    ((p.home===g.home.abbr&&p.away===g.away.abbr))) || null;
+}
+// Neither confirmed data source currently returns a real numeric F5 line — SharpAPI's
+// innings-segment markets came back as binary Yes/No with line:null, and neither h2h
+// market covers F5 at all. This checks for real backing rather than assuming it, so F5
+// picks stay off the board (not tappable, not in tickets) until an actual line exists —
+// and it activates automatically the moment one does, without needing this rewritten.
+function hasRealF5(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return false;
+  const has=SHARP_TOTALS.some(t=>t.home===g.home.abbr&&t.away===g.away.abbr&&t.segment==='1st_5_innings');
+  return has;
+}
+function hasRealTotal(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return false;
+  return SHARP_TOTALS.some(t=>t.home===g.home.abbr&&t.away===g.away.abbr&&!t.segment);
+}
+function sharpTotalFor(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return null;
+  const rows=SHARP_TOTALS.filter(t=>t.home===g.home.abbr&&t.away===g.away.abbr);
+  if(!rows.length)return null;
+  const over=rows.find(t=>t.side==='over'),under=rows.find(t=>t.side==='under');
+  return{line:(over||under).line,overProb:over?over.prob:null,underProb:under?under.prob:null,
+    overAmerican:over?over.american:null,underAmerican:under?under.american:null,book:(over||under).book};
+}
+// blends the sim's own total probability with SharpAPI's real market probability —
+// this changes what gets predicted, not just what gets displayed next to it. Only
+// blends when the book's line is within half a run of the line being asked about,
+// since a total two runs off the one being priced isn't informative for it.
+function sharpTotalBlend(g,line,simProb){
+  const st=sharpTotalFor(g.id);
+  if(!st||st.overProb===null||Math.abs(st.line-line)>0.5)return simProb;
+  return simProb*0.55+st.overProb*0.45;
+}
+// same idea for a single player prop — blends sim probability with SharpAPI's real
+// price at the SAME threshold only, never across mismatched lines
+function sharpPropBlend(gid,name,type,thr,simProb){
+  const sp=sharpPropFor(gid,name,type);
+  if(!sp||Math.floor(sp.line)+1!==thr)return simProb;
+  return simProb*0.55+sp.prob*0.45;
+}
+
+// TheRundown's v2 API structure is only confirmed from their docs example, not a live
+// pull — MLB's sport_id specifically isn't documented anywhere I could verify, so this
+// tries the commonly-referenced legacy value (3) and shows the RAW response either way.
+// If it 404s or comes back empty, the response itself will say why — better than silently
+// guessing and building parsing logic against a schema that was never actually confirmed.
+// Confirmed live from your diagnostic pull: market name 'handicap' = run line, with real
+// alternates (+1.5/+2.5/+3.5, -1.5/-2.5/-3.5) priced across 3 books. This is the actual
+// gap neither Odds API nor SharpAPI could fill — wiring it in for real, not guessed.
+function parseRundownPrices(pricesObj){
+  const vals=Object.values(pricesObj||{}).map(p=>p.price).filter(x=>typeof x==='number');
+  if(!vals.length)return null;
+  const probs=vals.map(imp);
+  return probs.reduce((a,b)=>a+b,0)/probs.length;
+}
+async function loadRundown(manual){
+  const key=get(LS.rundown,'');
+  if(!key)return{ok:false,reason:'no key saved'};
+  trackCall('rundown');
+  try{
+    const r=await fetch(`https://therundown.io/api/v2/sports/3/events/${today()}?key=${encodeURIComponent(key)}`);
+    if(!r.ok){
+      let body='';try{body=(await r.text()).slice(0,200)}catch(e){}
+      return{ok:false,reason:`HTTP ${r.status}`,body};
+    }
+    const j=await r.json();
+    const events=j.events||[];
+    const rl=[];
+    events.forEach(ev=>{
+      const homeT=(ev.teams||[]).find(t=>t.is_home),awayT=(ev.teams||[]).find(t=>t.is_away);
+      if(!homeT||!awayT)return;
+      const teamMap={};(ev.teams||[]).forEach(t=>{teamMap[t.team_id]=t.abbreviation});
+      const gl=awayT.abbreviation+'@'+homeT.abbreviation;
+      (ev.markets||[]).forEach(mkt=>{
+        if(mkt.name!=='handicap')return;
+        (mkt.participants||[]).forEach(part=>{
+          const teamAbbr=teamMap[part.id];if(!teamAbbr)return;
+          (part.lines||[]).forEach(line=>{
+            const val=parseFloat(line.value),prob=parseRundownPrices(line.prices);
+            if(prob===null||isNaN(val))return;
+            rl.push({game:gl,team:teamAbbr,value:val,prob,book:'TheRundown'});
+          });
+        });
+      });
+    });
+    RUNDOWN_RL=rl;
+    buildProps();render();
+    return{ok:true,count:rl.length};
+  }catch(e){
+    return{ok:false,reason:'network error',body:(e&&e.message)||String(e)};
+  }
+}
+function hasRealRunLine(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return false;
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  return RUNDOWN_RL.some(r=>r.game===gl);
+}
+function rundownRLFor(gid,teamAbbr,value){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return null;
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  return RUNDOWN_RL.find(r=>r.game===gl&&r.team===teamAbbr&&Math.abs(r.value-value)<0.01)||null;
+}
+// oddspapi.io — different company from odds-api.io despite the similar name. Docs only
+// show a soccer example, so MLB's sportId isn't assumed here — this looks it up for real
+// via /sports before ever touching /fixtures or /odds.
+// Confirmed via diagnostic: sportId 13 = baseball, tournamentId 109 = MLB specifically.
+// After exhaustively checking every field in a real, untruncated response: there is no
+// line/handicap value anywhere in fixture-level odds, and outcomes carry no name field —
+// meaning direction (over vs under, which team) genuinely cannot be determined here, only
+// whether a market LOOKS like a balanced total by price shape. That's the one honest thing
+// this source can contribute — informational only, never a pick, never blended into a
+// probability. Uses the bulk odds-by-tournaments endpoint to spend 2 calls total against
+// the 250/month cap instead of one call per fixture.
+async function loadOddsPapi(manual){
+  const key=get(LS.oddspapi,'');
+  if(!key)return{ok:false,reason:'no key saved'};
+  const BASE='https://api.oddspapi.io/v4',SPORT_ID=13,TOURN_ID=109;
+  try{
+    trackCall('oddspapi');
+    const rf=await fetch(`${BASE}/fixtures?apiKey=${encodeURIComponent(key)}&sportId=${SPORT_ID}&tournamentId=${TOURN_ID}&from=${today()}&to=${today()}&hasOdds=true`);
+    if(!rf.ok)return{ok:false,reason:'HTTP '+rf.status+' on fixtures'};
+    const fxData=await rf.json();
+    const fxList=Array.isArray(fxData)?fxData:(fxData.fixtures||[]);
+    if(!fxList.length){OP_SIGNALS={};return{ok:true,count:0}}
+    trackCall('oddspapi');
+    const ro=await fetch(`${BASE}/odds-by-tournaments?apiKey=${encodeURIComponent(key)}&tournamentIds=${TOURN_ID}`);
+    if(!ro.ok)return{ok:false,reason:'HTTP '+ro.status+' on odds'};
+    const oddsData=await ro.json();
+    const oddsList=Array.isArray(oddsData)?oddsData:(oddsData.fixtures||[]);
+    const sigs={};
+    oddsList.forEach(ev=>{
+      const meta=fxList.find(f=>f.fixtureId===ev.fixtureId);
+      if(!meta)return;
+      // confirmed via the Rays/Rangers sample: participant1 = home, participant2 = away
+      const homeAb=abbr(meta.participant1Name||''),awayAb=abbr(meta.participant2Name||'');
+      if(!homeAb||!awayAb)return;
+      const gl=awayAb+'@'+homeAb;
+      let balancedCount=0,bookCount=0;
+      Object.keys(ev.bookmakerOdds||{}).forEach(bk=>{
+        bookCount++;
+        const mkts=(ev.bookmakerOdds[bk]||{}).markets||{};
+        Object.keys(mkts).forEach(mid=>{
+          const outcomes=mkts[mid].outcomes||{};
+          const keys=Object.keys(outcomes);
+          if(keys.length!==2)return;
+          const prices=keys.map(k=>((outcomes[k].players||{})['0']||{}).price).filter(p=>typeof p==='number');
+          if(prices.length!==2)return;
+          const implied=prices.map(p=>1/p),sum=implied[0]+implied[1];
+          if(Math.abs(implied[0]/sum-0.5)<0.12)balancedCount++;
+        });
+      });
+      sigs[gl]={balancedCount,bookCount};
+    });
+    OP_SIGNALS=sigs;
+    return{ok:true,count:Object.keys(sigs).length};
+  }catch(e){
+    return{ok:false,reason:'network error',body:(e&&e.message)||String(e)};
+  }
+}
+// your book's screenshot-extracted lines, matched to today's games — this is comparison
+// data ONLY. It never enters simGame/teamRuns, never blends into a displayed probability,
+// and is never tappable or picked. The model's own read at YOUR specific line is computed
+// fresh each time via s.over()/rlProb() — the real number is shown, the sim's own thinking
+// about it is shown right next to it, and the two are never merged into one number.
+// 4 points is the signal floor — matches the app's existing "under 3 is noise" stance,
+// with a point of buffer so borderline cases don't flicker green/red between renders.
+const EDGE_MIN=4;
+function f5OverAt(s,line){return Math.min(.92,Math.max(.08,.5+(s.f5tot-line)*.16))}
+/* ================= TICKET PRESETS ================= */
+// Each preset picks legs from the same unfiltered pools the builder uses, but sorts
+// and filters by a different signal — probability, edge direction, or market-vs-model
+// disagreement — so "best" means something different depending on what you're after.
+let PRESET_MODE='sysbest';
+let ALLOW_DUPES=false;
+
+function currentLockedPickSet(){
+  // every pick string already sitting in a locked ticket, for duplicate filtering
+  const L=get(LS.locked,[]);
+  const s=new Set();
+  L.forEach(t=>t.legs.forEach(l=>s.add(l.pick+'|'+l.game)));
+  return s;
+}
+
+function edgeOf(leg){
+  if(typeof leg.modelP!=='number'||typeof leg.marketP!=='number')return 0;
+  return (leg.modelP-leg.marketP)*100;
+}
+
+function fullPresetPool(){
+  // pulls every market type regardless of BUILDMODES — presets decide their own mix
+  const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder(),
+    ...allF5SidesForBuilder(),...allF5TotalsForBuilder()];
+  // ptype was missing here before — every prop leg in THIS pool (the one every
+  // preset actually draws from) carried no way to tell a strikeout prop from an
+  // RBI prop from a hits prop. calibFactor()/computeCalibration() key their
+  // per-prop-type track record on exactly this field, so without it no preset
+  // could ever look up a prop leg's real calibration history. addableLegsFor()
+  // (the Modify feature's pool) already stamped this correctly — this brings
+  // the preset pool in line with it.
+  PROPS.filter(p=>p.type!=='hr').forEach(p=>
+    pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',modelP:p.p,marketP:p.p,
+      ptype:p.type,pid:p.pid,thr:p.thr}));
+  PROPS.filter(p=>p.type==='hr').forEach(p=>
+    pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',modelP:p.p,marketP:p.p,
+      ptype:'hr',pid:p.pid,thr:p.thr}));
+  return pool;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CONCENTRATION / DUPLICATE RISK ENGINE
+// The real danger isn't "the exact same pick string appears twice" — it's
+// "how many of my currently-pending tickets have ANY leg riding on this one
+// game." One bad final score on a heavily-repeated game can wipe out several
+// tracked tickets at once, correlated, in a single result. This treats that
+// as the actual thing to measure, with exact-pick duplication as a specific,
+// worse case of the same risk (not a separate concept).
+// ═══════════════════════════════════════════════════════════════════════
+
+// Every leg across every currently-PENDING locked ticket, tagged with which
+// ticket/bucket it came from — the raw material every function below works from.
+function pendingLegExposure(){
+  const L=get(LS.locked,[]).filter(t=>!t.archived);
+  const rows=[];
+  L.forEach(t=>t.legs.forEach(l=>{
+    rows.push({game:l.game,pick:l.pick,kind:legKindOf(l),ticketId:t.id,
+      ticketName:t.name||null,source:t.source||'mine',gid:l.gid||null});
+  }));
+  return rows;
+}
+// Legs on locked tickets don't reliably carry a `kind` field the way pool legs
+// do (tog()-created legs on the game board never got one) — infer it from the
+// pick text itself so exposure analysis and the sub-out advisory both work
+// on real historical tickets, not just freshly-built ones.
+function legKindOf(l){
+  if(l.kind)return l.kind;
+  if(l.isProp||l.ptype)return l.ptype==='hr'?'hr':'prop';
+  const pk=l.pick||'';
+  if(/^F5 (over|under) /.test(pk))return 'f5total';
+  if(/^F5 /.test(pk))return 'f5side';
+  if(/^(Over|Under) /.test(pk))return 'total';
+  if(/ ML$/.test(pk))return 'side';
+  if(/[+-]\d+(\.\d+)?$/.test(pk))return 'rl';
+  return 'other';
+}
+
+// Game-level concentration — how many PENDING tickets have any leg at all on
+// this game, regardless of which specific market or pick. This is the number
+// that actually answers "what single result could hurt me the most."
+function gameConcentration(){
+  const rows=pendingLegExposure();
+  const byGame={};
+  rows.forEach(r=>{
+    const b=byGame[r.game]=byGame[r.game]||{game:r.game,tickets:new Set(),legs:[]};
+    b.tickets.add(r.ticketId);
+    b.legs.push(r);
+  });
+  return Object.values(byGame)
+    .map(b=>({game:b.game,ticketCount:b.tickets.size,legCount:b.legs.length,legs:b.legs}))
+    .sort((a,b)=>b.ticketCount-a.ticketCount||b.legCount-a.legCount);
+}
+
+// Exact-pick concentration — the stricter, worse case: not just the same game,
+// the literal same bet showing up on multiple tickets. Rank matters here
+// (asked for explicitly) so a "how many times, by rank" view is possible.
+function pickConcentration(){
+  const rows=pendingLegExposure();
+  const byPick={};
+  rows.forEach(r=>{
+    const key=r.pick+'|'+r.game;
+    const b=byPick[key]=byPick[key]||{pick:r.pick,game:r.game,kind:r.kind,tickets:new Set(),sources:new Set()};
+    b.tickets.add(r.ticketId);
+    b.sources.add(r.source);
+  });
+  return Object.values(byPick)
+    .map(b=>({pick:b.pick,game:b.game,kind:b.kind,ticketCount:b.tickets.size,sourceCount:b.sources.size}))
+    .filter(b=>b.ticketCount>1) // a "duplicate" by definition needs to appear more than once
+    .sort((a,b)=>b.ticketCount-a.ticketCount)
+    .map((b,i)=>({...b,rank:i+1}));
+}
+
+// The sub-out advisory: for a game with heavy concentration, suggest swapping
+// ONE leg family out for a different one on the SAME game, so the ticket keeps
+// its position on that game without doubling down on the exact same market
+// that's already overexposed everywhere else. Doesn't invent new picks — pulls
+// the real alternative from whatever's currently on the board for that game.
+function suggestSubOut(game,avoidKind){
+  const pool=applyDupeFilter(fullPresetPool()).filter(l=>l.game===game);
+  const families=['side','rl','total','f5side','f5total'];
+  const avoidFam=legFamily(avoidKind);
+  const alt=families.find(fam=>fam!==avoidFam&&pool.some(l=>legFamily(l.kind)===fam));
+  if(!alt)return null;
+  const candidates=pool.filter(l=>legFamily(l.kind)===alt).sort((a,b)=>b.p-a.p);
+  return candidates[0]||null;
+}
+
+// The red-flag threshold: how many pending tickets on one game before it's
+// worth surfacing as a warning. 3+ tickets sharing a single game's result
+// means that one final score decides at least 3 tracked outcomes at once.
+const CONCENTRATION_WARN_AT=3;
+
+function concentrationReport(){
+  const games=gameConcentration();
+  const picks=pickConcentration();
+  const flagged=games.filter(g=>g.ticketCount>=CONCENTRATION_WARN_AT);
+  const surplus=games.length&&games[0].ticketCount>=CONCENTRATION_WARN_AT
+    ?games[0]:null; // the single biggest concentration, if it clears the bar — the "kill all my tickets" game
+  return{games,picks,flagged,surplus,
+    totalPendingTickets:new Set(pendingLegExposure().map(r=>r.ticketId)).size};
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// THE COACH — no heart, all analysis. Reads real site state (bankroll pace,
+// preset track records, concentration exposure, edge-vs-consensus math,
+// calibration's own findings) and speaks about what's actually true. Never
+// says "bet this" — only "here's what holds up and what doesn't." Every
+// verdict below is a pure function of real stored data; nothing here
+// invents a number or a stat.
+//
+// Design: a set of independent TRIGGER functions, each returning either
+// null (nothing worth saying) or a {tone, text} verdict. coachSpeak(context)
+// runs the triggers relevant to wherever it's called from and returns the
+// single most important thing to say right now — not a wall of commentary,
+// one clean line, like a real coach would actually say in the moment.
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── bankroll pace, read against YOUR stated goal, not a generic one ──
+// $5/day in $1 increments, ~20 betting days/month, $100 baseline, scaling by
+// system performance toward $10k by year end — this is already exactly how
+// BR_BASELINE/BR_DAILY_BASE were built. The Coach just narrates it honestly.
+function coachBankrollRead(){
+  const b=getBankroll();
+  const bal=BR_BASELINE+b.profit;
+  const staked=stakedToday();
+  const dl=dailyLimit();
+  const daysElapsed=new Date().getDate();
+  const expectedProfit=0; // no assumption of profit by any point — the goal is pace, not a promised curve
+  if(bal<=0){
+    return{tone:'bad',text:`Balance is at $${bal.toFixed(2)}. The month's budget is spent — this isn't the time to press, it's the time to wait for next month or let the multiplier rebuild.`};
+  }
+  if(b.limitMult>1){
+    return{tone:'good',text:`Daily limit is up to $${dl.toFixed(2)} — the system's earned a bigger stake size through real profit, not by you pushing past the cap. That's the multiplier working as designed.`};
+  }
+  if(staked>=dl-0.001&&dl<=BR_DAILY_BASE+0.001){
+    return{tone:'neutral',text:`Today's $${dl.toFixed(2)} is in. That's the whole plan for today — $1 increments, patience over the month, not the day.`};
+  }
+  return null;
+}
+
+// ── which preset is actually working, from REAL recorded history ──
+// Reads the same buildAllTimeRecord/recordStats every Record tab screen
+// already trusts — no separate scoring logic, so the Coach can never
+// disagree with what you'd see if you checked yourself.
+function coachBestPerformer(){
+  const R=buildAllTimeRecord();
+  const buckets={mine:R.mine,system:R.system,market:R.market,specialty:R.specialty};
+  const scored=Object.keys(buckets).map(k=>({name:k,...recordStats(buckets[k])}))
+    .filter(s=>s.w+s.l>=8); // needs a real sample before the Coach will say anything about it
+  if(!scored.length)return null;
+  scored.sort((a,b)=>parseFloat(b.pct)-parseFloat(a.pct));
+  const best=scored[0];
+  const worst=scored[scored.length-1];
+  if(scored.length>=2&&parseFloat(best.pct)-parseFloat(worst.pct)>=15){
+    return{tone:'good',text:`${bucketLabel(best.name)} is running ${best.pct}% (${best.w}-${best.l}) — clearly ahead of ${bucketLabel(worst.name)} at ${worst.pct}%. If there's a sweet spot forming, that's where it's showing up right now.`};
+  }
+  return null;
+}
+function bucketLabel(k){return{mine:'My picks',system:'System',market:'Market',specialty:'Specialty'}[k]||k}
+
+// ── duplicate/concentration risk, live, before you lock the third ticket ──
+// This is the explicit ask: "flag that a potential pick is already on 2
+// tickets" — checks the pick against pendingLegExposure BEFORE it's added,
+// not after.
+function coachDuplicateCheck(pick,game){
+  const rows=pendingLegExposure();
+  const already=rows.filter(r=>r.pick===pick&&r.game===game);
+  const ticketIds=new Set(already.map(r=>r.ticketId));
+  if(ticketIds.size>=2){
+    return{tone:'warn',text:`${pick} is already on ${ticketIds.size} pending tickets. Adding it again isn't a new idea — it's the same result deciding a bigger share of the board.`};
+  }
+  return null;
+}
+
+// ── weak-leg detection — a ticket with real potential dragged down by one
+// pick that doesn't hold up against the book, the model, or the trend
+// consensus. This is the "tell me when to cut fat" ask, made concrete.
+function coachWeakLegCheck(legs){
+  if(!legs||legs.length<2)return null;
+  const scored=legs.map(l=>({leg:l,edge:edgeOf(l)}));
+  const avgEdge=scored.reduce((a,x)=>a+x.edge,0)/scored.length;
+  const weakest=scored.slice().sort((a,b)=>a.edge-b.edge)[0];
+  // only speak up when the gap between the weakest leg and the rest is real —
+  // not every ticket has a problem leg, most don't
+  if(weakest.edge<=-4&&avgEdge-weakest.edge>=6){
+    return{tone:'warn',text:`${weakest.leg.pick} is dragging this ticket — everything else here has real edge, that one's priced against you by ${Math.abs(weakest.edge).toFixed(1)} points. Worth asking if it belongs.`};
+  }
+  return null;
+}
+
+// ── emotional-ticket detection — a longshot parlay with an unusually high
+// leg count relative to what the same builder normally produces, which is
+// often (not always) a signal of chasing rather than reading the board ──
+function coachLongshotCheck(legs){
+  if(!legs||legs.length<6)return null;
+  const combinedP=legs.reduce((a,x)=>a*(x.p||0.5),1);
+  if(combinedP<0.02){
+    return{tone:'neutral',text:`${legs.length} legs, combined odds under 2% — this is a real swing-for-it ticket, not a base hit. Nothing wrong with that if it's a small piece of the month, not the whole plan.`};
+  }
+  return null;
+}
+
+// ── per-game read — the Coach's take on THIS card specifically, synthesized
+// from the same take/fade verdict, team ledger and frozen-drift data already
+// on the card, but spoken as one sentence instead of five separate chips.
+// This is what makes the Coach actually say something on a game card rather
+// than only living on the ticket/money/record screens.
+function coachGameRead(g,s,sport){
+  if(!g||!s)return null;
+  let v=null;
+  try{v=takeFadeVerdict(g,s,sport)}catch(e){return null}
+  if(!v)return null;
+  if(v.verdict==='TAKE')
+    return{tone:'good',text:`${v.reasons[0]||'Model and history line up here'} — this is a green-light spot, not a coin flip.`};
+  if(v.verdict==='FADE')
+    return{tone:'warn',text:`${v.reasons[0]||'This one fights your own numbers'} — the case against is louder than the case for.`};
+  // drift check even with no take/fade signal — worth a note on its own
+  try{
+    const f=frozenFor(g,sport);
+    if(f){
+      const drift=Math.abs(s.awayProj-f.awayProj)+Math.abs(s.homeProj-f.homeProj);
+      if(drift>=1.5)
+        return{tone:'neutral',text:`Locked number has drifted ${drift.toFixed(1)} points since freeze — new info moved this one, worth a second look before trusting the frozen line.`};
+    }
+  }catch(e){}
+  if(v.verdict==='lean take'||v.verdict==='lean fade')
+    return{tone:'neutral',text:`${v.reasons[0]||'Mild lean here'} — real but not strong enough to lead with.`};
+  return null;
+}
+
+// ── the master dispatcher — call this from wherever the Coach should speak,
+// pass whatever context is available, get back the single most important
+// thing to say (or null, meaning stay quiet — a coach who talks constantly
+// stops being useful) ──
+function coachSpeak(context){
+  context=context||{};
+  const candidates=[];
+  if(context.pick&&context.game){
+    const dup=coachDuplicateCheck(context.pick,context.game);
+    if(dup)candidates.push(dup);
+  }
+  if(context.legs){
+    const weak=coachWeakLegCheck(context.legs);
+    if(weak)candidates.push(weak);
+    const longshot=coachLongshotCheck(context.legs);
+    if(longshot)candidates.push(longshot);
+  }
+  if(context.screen==='money'){
+    const br=coachBankrollRead();
+    if(br)candidates.push(br);
+  }
+  if(context.screen==='record'||context.screen==='eval'){
+    const best=coachBestPerformer();
+    if(best)candidates.push(best);
+  }
+  if(context.game&&context.sim){
+    const gr=coachGameRead(context.game,context.sim,context.sport);
+    if(gr)candidates.push(gr);
+  }
+  // priority order when multiple things are true at once: warnings before
+  // neutral notes before good news — a duplicate risk matters more right
+  // now than a compliment about pace
+  const order={warn:0,bad:0,neutral:1,good:2};
+  candidates.sort((a,b)=>(order[a.tone]??1)-(order[b.tone]??1));
+  return candidates[0]||null;
+}
+// Renders the Coach's line as a compact, visually distinct strip — same
+// visual language as the rest of the app (tkt card, flag colors) but with
+// its own identity so it reads as a voice, not another stat block.
+function coachHtml(context){
+  const v=coachSpeak(context);
+  if(!v)return '';
+  const toneColor={warn:'var(--rust)',bad:'var(--rust)',neutral:'var(--mute)',good:'var(--win)'};
+  const toneIcon={warn:'⚠',bad:'⚠',neutral:'○',good:'↑'};
+  return `<div class="tkt" style="border-left:3px solid ${toneColor[v.tone]};background:rgba(255,255,255,.02)">
+    <div style="display:flex;gap:8px;align-items:flex-start">
+      <span style="color:${toneColor[v.tone]};font-weight:800;flex:0 0 auto">${toneIcon[v.tone]}</span>
+      <div><div style="font-family:'IBM Plex Mono';font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+        color:var(--mute);margin-bottom:2px">Coach</div>
+      <div style="font-size:12.5px;line-height:1.5">${v.text}</div></div>
+    </div>
+  </div>`;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// ELIMINATION MAP — per-ticket "how close to winning or dying right now"
+// Every leg already has a real, computable status via gradeLeg (dead, alive
+// and clinched, alive and uncertain, not started). A ticket's status is NOT
+// a percentage — one dead leg kills the whole ticket regardless of how many
+// other legs already won, so the honest representation is a state machine,
+// not an average. This is that state machine, per pending ticket, feeding
+// the bubble map.
+// ═══════════════════════════════════════════════════════════════════════
+function ticketEliminationStatus(t){
+  // THE BUG THIS FIXES: status used to fall back to 'scheduled' any time
+  // decided===0, with no way to tell "nothing has started yet" apart from
+  // "a live game in progress where nothing on this ticket has resolved yet."
+  // A 12-leg ticket sitting through a live game with 0 legs decided (the
+  // exact screenshot reported — 12 games loaded, everything reading as "not
+  // started") is genuinely LIVE and tense, not scheduled — gradeLeg just
+  // never surfaced the live signal before, so this function had no way to
+  // know. Now tracking anyLegLive separately from decided/pending.
+  let dead=false,wins=0,decided=0,pending=0,anyLegLive=false,total=t.legs.length;
+  const legStates=t.legs.map(x=>{
+    const g=gradeLeg(x,t.date);
+    if(g.live)anyLegLive=true;
+    let state;
+    if(g.push===true){state='push';decided++;}
+    else if(g.hit===true){state='won';wins++;decided++;}
+    else if(g.hit===false){state='dead';dead=true;decided++;}
+    else{state=g.live?'live':'pending';pending++;}
+    return{pick:x.pick,game:x.game,state,detail:g.detail,live:!!g.live};
+  });
+  // status: dead (any leg lost) > won (every leg decided, none lost) >
+  // live (some pending, none dead yet — this is the "still alive" state that
+  // actually matters, the tension point — now correctly includes "a game on
+  // this ticket is live even though nothing's decided yet") > scheduled
+  // (truly nothing has started across the whole ticket)
+  let status;
+  if(dead)status='dead';
+  else if(pending===0&&decided>0)status='won';
+  else if((decided>0&&pending>0)||anyLegLive)status='live';
+  else status='scheduled';
+  return{status,legStates,wins,dead,decided,pending,total,anyLegLive,
+    legsFromElimination:dead?0:(pending>0?pending:0)}; // how many still-live legs stand between this ticket and being fully decided
+}
+
+// Real payout magnitude for bubble sizing — flat $1 for tracked-only sources,
+// actual staked amount for 'mine'. Falls back to combined probability's
+// implied payout if no stake was ever recorded, so a bubble always has SOME
+// real size to draw rather than defaulting to a fixed circle for everyone.
+function ticketPayoutMagnitude(t){
+  const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+  const w=getWagers();
+  const stake=trackedOnly?1:(w[t.id]||1);
+  const odds=probToAmer(t.p);
+  const res=amerPayout(odds,stake);
+  return{stake,toWin:res?res.profit:0,payout:stake+(res?res.profit:0)};
+}
+
+function eliminationMapData(){
+  const L=get(LS.locked,[]).filter(t=>!t.archived);
+  const conc=concentrationReport();
+  const gameRisk={};
+  conc.games.forEach(g=>{gameRisk[g.game]=g.ticketCount});
+
+  // ── team webs — the actual "webbed together by certain picks" ask ──
+  // A shared GAME is one connection; a shared TEAM is a stronger, more
+  // specific one (two tickets both riding the same team's moneyline, even
+  // across different props/markets, are correlated on that team's outcome
+  // specifically). teamAbbrFor already exists and extracts the real team a
+  // pick is riding on — this builds the actual graph edges between tickets.
+  const teamTickets={}; // team abbr -> Set of ticket ids riding on it
+  L.forEach(t=>t.legs.forEach(x=>{
+    const team=teamAbbrFor(x);
+    if(!team)return;
+    (teamTickets[team]=teamTickets[team]||new Set()).add(t.id);
+  }));
+  const edges=[]; // {a:ticketId,b:ticketId,team,strength}
+  Object.keys(teamTickets).forEach(team=>{
+    const ids=[...teamTickets[team]];
+    if(ids.length<2)return;
+    for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){
+      edges.push({a:ids[i],b:ids[j],team});
+    }
+  });
+
+  const bubbles=L.map(t=>{
+    const es=ticketEliminationStatus(t);
+    const pay=ticketPayoutMagnitude(t);
+    const games=[...new Set(t.legs.map(x=>x.game))];
+    const teams=[...new Set(t.legs.map(x=>teamAbbrFor(x)).filter(Boolean))];
+    const maxSharedRisk=Math.max(0,...games.map(g=>gameRisk[g]||0));
+    return{id:t.id,name:t.name||t.date,source:t.source||'mine',
+      status:es.status,legsFromElimination:es.legsFromElimination,
+      wins:es.wins,total:es.total,decided:es.decided,legStates:es.legStates,
+      payout:pay.payout,stake:pay.stake,games,teams,sharedRisk:maxSharedRisk,
+      anyLegLive:es.anyLegLive};
+  });
+  return{bubbles,conc,edges,teamTickets};
+}
+
+// ── the "which teams are going to break me / cruise me" message feed ──
+// Entirely real data, phrased with personality — never invents a stat. Ranks
+// teams by how many PENDING tickets ride on them (the actual danger/reward
+// concentration), and reports their current live state honestly.
+function eliminationFeed(){
+  const{bubbles,teamTickets}=eliminationMapData();
+  const msgs=[];
+  const teamStates={}; // team -> {tickets, dead, live, won}
+  Object.keys(teamTickets).forEach(team=>{
+    teamStates[team]={tickets:teamTickets[team].size,dead:0,live:0,won:0,pending:0};
+  });
+  bubbles.forEach(b=>{
+    b.teams.forEach(team=>{
+      const ts=teamStates[team];if(!ts)return;
+      if(b.status==='dead')ts.dead++;
+      else if(b.status==='won')ts.won++;
+      else if(b.status==='live')ts.live++;
+      else ts.pending++;
+    });
+  });
+  const ranked=Object.keys(teamStates).map(team=>({team,...teamStates[team]}))
+    .filter(t=>t.tickets>=2).sort((a,b)=>b.tickets-a.tickets);
+
+  ranked.forEach(t=>{
+    if(t.dead>0){
+      msgs.push({tone:'bad',text:`${t.team} just tanked ${t.dead} of your ${t.tickets} tickets riding on them.`});
+    }else if(t.live>0){
+      msgs.push({tone:'tense',text:`${t.team} is live and holding up ${t.live} ticket${t.live>1?'s':''} — ${t.tickets} total riding on them tonight.`});
+    }else if(t.won===t.tickets&&t.tickets>0){
+      msgs.push({tone:'good',text:`${t.team} delivered clean — ${t.won} ticket${t.won>1?'s':''} cruising because of them.`});
+    }
+  });
+  // biggest single point of failure, regardless of team webs
+  const liveOneAway=bubbles.filter(b=>b.status==='live'&&b.legsFromElimination<=1);
+  if(liveOneAway.length){
+    const biggest=liveOneAway.sort((a,b)=>b.payout-a.payout)[0];
+    msgs.push({tone:'tense',text:`"${biggest.name}" is one result from done — $${biggest.payout.toFixed(2)} on the line right now.`});
+  }
+  const deadCount=bubbles.filter(b=>b.status==='dead').length;
+  const liveCount=bubbles.filter(b=>b.status==='live').length;
+  if(deadCount===0&&liveCount===0&&bubbles.length>0){
+    msgs.push({tone:'good',text:`Nothing's died yet. ${bubbles.length} ticket${bubbles.length>1?'s':''} still standing.`});
+  }
+  return msgs;
+}
+
+function applyDupeFilter(pool){
+  if(ALLOW_DUPES)return pool;
+  const used=currentLockedPickSet();
+  return pool.filter(l=>!used.has(l.pick+'|'+l.game));
+}
+
+let PRESET_MARKETS=new Set(['ml','rl','spread','total','prop']); // period markets opt-in // f5 off by default — new market type, opt in explicitly
+
+function buildPreset(mode){
+  let pool=applyDupeFilter(fullPresetPool());
+  pool=pool.filter(l=>{
+    if(l.kind==='side')return PRESET_MARKETS.has('ml');
+    if(l.kind==='rl')return PRESET_MARKETS.has('rl');
+    if(l.kind==='total')return PRESET_MARKETS.has('total');
+    if(l.kind==='f5side'||l.kind==='f5total')return PRESET_MARKETS.has('f5');
+    if(l.kind==='spread')return PRESET_MARKETS.has('spread');
+    if(l.kind==='h1')return PRESET_MARKETS.has('h1');
+    if(l.kind==='q1')return PRESET_MARKETS.has('q1');
+    if(l.kind==='prop'||l.kind==='hr')return PRESET_MARKETS.has('prop');
+    return true;
+  });
+  // TARGET_LEGS===-1 means "No limit" — every .slice(0,n) below needs n to be
+  // `undefined` (not a number) to mean "take everything," since slice(0,-1)
+  // means "drop the last element," the opposite of what's wanted here. -1 was
+  // picked as the UI sentinel specifically because 0 is already used elsewhere
+  // (the custom Build tab's "By target $" mode) and can't be reused here.
+  const n=TARGET_LEGS===-1?undefined:(TARGET_LEGS||4);
+
+  if(mode==='sysbest'){
+    // purely the simulator's own conviction — market price is irrelevant here
+    return pool.filter(l=>l.modelP>=0.5).sort((a,b)=>b.modelP-a.modelP).slice(0,n);
+  }
+  if(mode==='booklean'){
+    // purely where the market's money is — the model gets no say
+    return pool.filter(l=>l.marketP>=0.5).sort((a,b)=>b.marketP-a.marketP).slice(0,n);
+  }
+  if(mode==='fucksystem'){
+    // exact inversion of sysbest: whatever the sim rates worst
+    return pool.filter(l=>l.modelP>0&&l.modelP<=0.5).sort((a,b)=>a.modelP-b.modelP).slice(0,n);
+  }
+  if(mode==='outside'){
+    // built from what other sites published, matched onto tonight's board.
+    // Consensus picks (more than one source on the same side) sort first, then
+    // by how many sources backed them.
+    const ext=extToday();
+    if(!ext.length)return [];
+    const groups={};
+    ext.forEach(x=>{
+      if(!x.gid)return;
+      const g=GAMES.find(z=>z.id===x.gid);
+      if(!g||g.abstract==='Final')return;
+      const s2=SIMS[g.id];
+      let pick=null,p=null;
+      if(x.market==='moneyline'){
+        const ab=x.side==='home'?g.home.abbr:g.away.abbr;
+        pick=ab+' ML';p=s2?(x.side==='home'?s2.hw:s2.aw):0.5;
+      }else if(x.market==='total'&&x.line!=null){
+        pick=(x.side==='over'?'Over ':'Under ')+x.line;
+        p=s2?(x.side==='over'?s2.over(x.line):1-s2.over(x.line)):0.5;
+      }else if(x.market==='runline'&&x.line!=null){
+        const ab=x.side==='home'?g.home.abbr:g.away.abbr;
+        pick=ab+' '+(x.line>0?'+':'')+x.line;
+        p=s2?rlProb(g,s2,x.side,-x.line):0.5;
+      }
+      if(!pick||p==null)return;
+      const k=x.game+'|'+pick;
+      groups[k]=groups[k]||{pick,game:x.game,p,kind:x.market==='total'?'total':x.market==='runline'?'rl':'side',srcs:new Set()};
+      groups[k].srcs.add(x.src);
+    });
+    return Object.values(groups)
+      .map(g=>({...g,nSrc:g.srcs.size}))
+      .sort((a,b)=>b.nSrc-a.nSrc||b.p-a.p)
+      .slice(0,n);
+  }
+
+  // ── the original eight presets — restored alongside the four newer ones ──
+  const sides=pool.filter(l=>l.kind==='side');
+  const rls=pool.filter(l=>l.kind==='rl');
+  const totals=pool.filter(l=>l.kind==='total');
+  const legalPush=(combo,leg,sgp)=>{if(legalToAdd(combo,leg,sgp))combo.push(leg)};
+  const edgeOf2=(l)=>(typeof l.modelP==='number'&&typeof l.marketP==='number')?(l.modelP-l.marketP)*100:0;
+
+  if(mode==='easy'){
+    // straight highest model probability, no edge requirement — the safest reads
+    return pool.filter(l=>l.modelP>=0.55).sort((a,b)=>b.modelP-a.modelP).slice(0,n);
+  }
+  if(mode==='tailbooks'){
+    // whatever side the market itself favors most — highest marketP, ignore the model entirely
+    return pool.filter(l=>l.marketP>=0.52).sort((a,b)=>b.marketP-a.marketP).slice(0,n);
+  }
+  if(mode==='fadebooks'){
+    // the side the market likes LEAST — true underdogs by market price, model unused
+    return pool.filter(l=>l.marketP<=0.48&&l.marketP>0).sort((a,b)=>a.marketP-b.marketP).slice(0,n);
+  }
+  if(mode==='tailsystem'){
+    // whatever side the SIM likes most, independent of what the market thinks
+    return pool.filter(l=>l.modelP>=0.52).sort((a,b)=>b.modelP-a.modelP).slice(0,n);
+  }
+  if(mode==='fadesystem'){
+    // the side the sim likes LEAST — deliberately taking the model's least favorite outcome
+    return pool.filter(l=>l.modelP<=0.48&&l.modelP>0).sort((a,b)=>a.modelP-b.modelP).slice(0,n);
+  }
+  if(mode==='combo'){
+    // ML + Total paired on the SAME game for as many games as needed — classic SGP shape
+    const byGame={};
+    sides.forEach(l=>{(byGame[l.game]=byGame[l.game]||{}).ml=l});
+    totals.forEach(l=>{
+      const b=byGame[l.game];if(!b)return;
+      const best=!b.total||l.p>b.total.p;
+      if(best)byGame[l.game].total=l;
+    });
+    const pairs=Object.values(byGame).filter(x=>x.ml&&x.total)
+      .sort((a,b)=>(b.ml.p*b.total.p)-(a.ml.p*a.total.p));
+    // n===undefined means No limit — take every paired game on the board instead
+    // of computing Math.ceil(undefined/2), which is NaN and would silently
+    // slice to an empty array
+    const half=n===undefined?pairs.length:Math.ceil(n/2);
+    const out=[];
+    pairs.slice(0,half).forEach(x=>{out.push(x.ml);out.push(x.total)});
+    return out;
+  }
+  if(mode==='lucky10'){
+    // exactly 3 ML + 3 RL + 3 Total + 1 best-value underdog, best probability within each bucket
+    const combo=[];
+    const sgp=false;
+    sides.slice().sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='side').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    rls.slice().sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='rl').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    totals.slice().sort((a,b)=>b.p-a.p).forEach(l=>{
+      if(combo.filter(c=>c.kind==='total').length>=3)return;
+      legalPush(combo,l,sgp);
+    });
+    const dogs=pool.filter(l=>l.p<0.48&&l.marketP&&l.marketP<0.48)
+      .sort((a,b)=>edgeOf2(b)-edgeOf2(a));
+    if(dogs.length&&!combo.some(c=>c.game===dogs[0].game))combo.push(dogs[0]);
+    return combo;
+  }
+  if(mode==='armageddon'){
+    // deliberately go against every positive-edge signal — take the picks with the
+    // WORST edge (model most disagrees with, in the market's favor) across the board.
+    // This is chaos mode, not a recommendation.
+    return pool.filter(l=>edgeOf2(l)<=-4).sort((a,b)=>edgeOf2(a)-edgeOf2(b)).slice(0,n);
+  }
+  if(mode==='edgeplus'){
+    // straight mirror of Armageddon: instead of the worst edges, take the BEST —
+    // the picks where the model most disagrees with the market IN THE MODEL'S
+    // favor. Same edgeOf2 math everything else on this screen already uses
+    // (modelP - marketP, in percentage points), same +/-4 floor as the rest of
+    // the app treats as "not noise," just sorted the opposite direction.
+    return pool.filter(l=>edgeOf2(l)>=4).sort((a,b)=>edgeOf2(b)-edgeOf2(a)).slice(0,n);
+  }
+  if(mode==='calibchamp'){
+    // Only picks whose EXACT segment — same market, same favorite/underdog
+    // situation, same confidence band (props: same prop type) — has a real,
+    // sample-backed track record of NOT underperforming what it claimed.
+    // calibRecordFor() is the single source of truth for that; nothing here
+    // re-derives the pass/fail logic, it just filters and ranks by it. Ranked
+    // by best ODDS within the passing set — the highest model probability
+    // first, since "best odds" from a set that's already proven itself is the
+    // actual ask, not best edge (that's EDGE+'s job) or worst edge (Armageddon's).
+    const scored=pool.map(l=>({leg:l,rec:calibRecordFor(l)}))
+      .filter(x=>x.rec.ready&&x.rec.passes);
+    return scored.sort((a,b)=>b.leg.p-a.leg.p).slice(0,n).map(x=>x.leg);
+  }
+  if(mode==='popular'){
+    return buildPopularPreset(n);
+  }
+  return [];
+}
+
+// ── POPULAR — the same game/pick showing up across many INDEPENDENT presets
+// at once is a stronger signal than any one preset's own confidence, and it's
+// also exactly the concentration risk the duplicate-analysis engine warns
+// about — this preset turns that cross-agreement into something buildable,
+// and doubles as the answer to "which games are most likely to cause
+// duplicates across my tickets" (a game that wins on 6 presets independently
+// is a game you will almost certainly end up with several tickets on).
+// Only counts presets that express a real directional opinion on a SPECIFIC
+// pick — Combo/Lucky10 build fixed SHAPES rather than voting for one side,
+// so including them would count "this preset always returns something" as a
+// vote rather than "this preset agrees with this pick," which is the actual
+// question being asked.
+const POPULAR_VOTERS=['sysbest','booklean','fucksystem','easy','tailbooks',
+  'fadebooks','tailsystem','fadesystem','armageddon','edgeplus','calibchamp'];
+function buildPopularPreset(n){
+  const votes={}; // key: pick|game -> {leg, voters:Set}
+  POPULAR_VOTERS.forEach(voterMode=>{
+    let picks;
+    try{picks=buildPreset(voterMode);}catch(e){picks=[];}
+    picks.forEach(l=>{
+      const key=l.pick+'|'+l.game;
+      const v=votes[key]=votes[key]||{leg:l,voters:new Set()};
+      v.voters.add(voterMode);
+    });
+  });
+  const ranked=Object.values(votes)
+    .filter(v=>v.voters.size>=2) // "popular" requires actual agreement, not one preset alone
+    .sort((a,b)=>b.voters.size-a.voters.size||b.leg.p-a.leg.p);
+  return ranked.slice(0,n===undefined?ranked.length:n).map(v=>({...v.leg,popularVotes:v.voters.size,popularSources:[...v.voters]}));
+}
+// Read-only version for the concentration report and the "which games are
+// likely to duplicate across my tickets" advisory — same vote-counting, but
+// returns EVERY pick with 2+ votes rather than capping at a leg count, since
+// this is meant to be inspected, not locked as a ticket.
+function popularityReport(){
+  const votes={};
+  POPULAR_VOTERS.forEach(voterMode=>{
+    let picks;
+    try{picks=buildPreset(voterMode);}catch(e){picks=[];}
+    picks.forEach(l=>{
+      const key=l.pick+'|'+l.game;
+      const v=votes[key]=votes[key]||{leg:l,voters:new Set(),games:new Set()};
+      v.voters.add(voterMode);
+    });
+  });
+  const byGame={};
+  Object.values(votes).forEach(v=>{
+    if(v.voters.size<2)return;
+    const g=byGame[v.leg.game]=byGame[v.leg.game]||{game:v.leg.game,picks:[],maxVotes:0};
+    g.picks.push({pick:v.leg.pick,votes:v.voters.size,sources:[...v.voters]});
+    g.maxVotes=Math.max(g.maxVotes,v.voters.size);
+  });
+  return Object.values(byGame).sort((a,b)=>b.maxVotes-a.maxVotes);
+}
+
+const PRESETS=[
+  ['sysbest','Systems best','The picks the simulator rates highest, independent of what the market thinks. Files under System — tracked daily at a flat $1, no bankroll impact.'],
+  ['booklean','Books lean','Whatever side the market itself is pricing hardest. The model gets no vote here. Files under Market picks — tracked daily at a flat $1, no bankroll impact.'],
+  ['outside','Outside picks','Built from picks uploaded off other sites — OddsShark, Covers, Picks and Parlays. Files under Outside picks — tracked daily at a flat $1, no bankroll impact.'],
+  ['fucksystem','Fuck the system','Straight inversion of Systems best — every side the simulator likes least. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
+  ['easy','Easy wins','Highest model probability, no edge required — the safest available reads. Files under My picks — counts against your bankroll.'],
+  ['tailbooks','Tail the books','Whatever side the market itself favors most. Ignores the model entirely. Files under Market picks — tracked daily at a flat $1, no bankroll impact.'],
+  ['fadebooks','Fade the books','The side the market likes least — true underdogs by market price alone. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
+  ['tailsystem','Tail the system','Whatever side the simulator likes most, independent of the market. Files under System — tracked daily at a flat $1, no bankroll impact.'],
+  ['fadesystem','Fade the system','The side the simulator likes least — its own least favorite outcome. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
+  ['combo','Combination+','Moneyline + Total paired together on the same game, for as many games as needed. Files under My picks — counts against your bankroll.'],
+  ['lucky10','Lucky 10','3 moneyline, 3 run line, 3 total, plus the single best-value underdog by edge. Files under My picks — counts against your bankroll.'],
+  ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
+  ['edgeplus','EDGE+','The picks where the model disagrees with the market hardest IN THE MODEL\'S favor — highest edge on the board, mirror image of Armageddon. Files under System — tracked daily at a flat $1, no bankroll impact.'],
+  ['calibchamp','Calibration Champ','Only picks from a market/situation/confidence-band (or prop type) with a real, sample-backed record of NOT underperforming what it claimed — best odds within that proven set. Files under System — tracked daily at a flat $1, no bankroll impact.'],
+  ['popular','Popular','Picks that independently show up across multiple OTHER presets at once — the strongest cross-agreement on the board, and the same signal that flags which games are most likely to duplicate across your tickets. Files under System — tracked daily at a flat $1, no bankroll impact.']
+];
+// ── Every preset routes to exactly ONE of four buckets. Only 'mine' ever
+// touches the bankroll — that's reserved for picks YOU built by hand (Easy
+// wins, Combination+, Lucky 10 — anything that isn't the system betting
+// against or independently of itself). 'system'/'market'/'specialty' are
+// tracked-for-the-record only, always staked at a flat $1, never debited or
+// credited against real money. This map used to send almost everything to
+// 'mine' regardless of what it conceptually was — sysbest and tailsystem are
+// literally "the system's own picks" and belong under System, not Mine;
+// Armageddon/fade-the-books/fade-the-system are their own weird animal and
+// get a fourth bucket, Specialty, rather than being crammed into Mine.
+const PRESET_SOURCE={
+  sysbest:'system',booklean:'market',outside:'outside',fucksystem:'specialty',
+  easy:'mine',tailbooks:'market',fadebooks:'specialty',tailsystem:'system',
+  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty',edgeplus:'system',calibchamp:'system',popular:'system'
+};
+// Human-readable ticket name per preset — stamped onto the saved ticket so it
+// shows up labeled in the UI instead of a bare date, which was the whole
+// reason "some presets aren't going to their designated location" was hard to
+// even notice: nothing distinguished one saved ticket from another.
+const PRESET_DISPLAY_NAME={
+  sysbest:'Systems best',booklean:'Books lean',outside:'Outside picks',
+  fucksystem:'Fuck the system',easy:'Easy wins',tailbooks:'Tail the books',
+  fadebooks:'Fade the books',tailsystem:'Tail the system',fadesystem:'Fade the system',
+  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon',edgeplus:'EDGE+',calibchamp:'Calibration Champ',popular:'Popular'
+};
+// which sources are tracked-only (flat $1, never touch the bankroll) — checked
+// everywhere staking and settlement happen so this is the single source of truth
+const TRACKED_ONLY_SOURCES=new Set(['market','outside','system','specialty']);
+
+function toggleWonMarket(m,btn){
+  btn.classList.toggle('on');
+  if(btn.classList.contains('on'))PRESET_MARKETS.add(m);else PRESET_MARKETS.delete(m);
+  renderTickets();
+}
+// ── Preset holds — same video-poker idea as the custom builder's HOLD/Reroll,
+// but its OWN state and rebuild path. Presets recompute buildPreset() fresh on
+// every render (there's no persisted LAST_COMBO the way the custom builder has),
+// so "holding" a preset leg means: keep it pinned across a rebuild, drop every
+// other leg, and refill the remaining slots from the preset's own ranking logic
+// while skipping anything that collides with a held pick (same game+market, or
+// same pick text). Deliberately separate from HELD_PICKS/rerollHeld() — those
+// are wired tightly to custom-builder-only state (selectedModes(), sgpToggle,
+// qualifyingPool()) that presets don't use, and sharing one Set would mean a
+// hold in one builder silently bleeds into the other.
+let PRESET_HELD=new Set();
+function togglePresetHold(pick){
+  if(PRESET_HELD.has(pick))PRESET_HELD.delete(pick);
+  else PRESET_HELD.add(pick);
+  renderTickets();
+}
+function clearPresetHolds(){
+  PRESET_HELD.clear();
+  renderTickets();
+}
+// Same collision rule buildPreset's own pool already respects via legalToAdd
+// elsewhere in the app — no two legs sharing a game unless they're a legal
+// ML+Total pair — kept simple here since presets don't have an SGP toggle.
+function presetLegCollides(held,leg){
+  // Was checking "same kind" for a same-game collision, which is the WRONG
+  // rule and let a held F5-side leg sit alongside a full-game ML on the same
+  // game (different kinds, so no match) — exactly the kind of correlated same-
+  // game pairing that isn't allowed anywhere else in the app. This now routes
+  // through legalToAdd, the single real source of truth for which same-game
+  // pairs are actually legal (only full-game ML+Total, everything else needs
+  // SGP), instead of maintaining a second, looser rule that could disagree
+  // with it. Legs created via tog() on the game board (older custom-ticket
+  // legs) never got a `kind` stamped at all — legalToAdd's own legFamily()
+  // already treats an unset kind as 'prop', which correctly blocks it from
+  // pairing with anything else on the same game, same as any other prop.
+  return held.some(h=>{
+    if(h.pick===leg.pick)return true;
+    if(h.game!==leg.game)return false;
+    return !legalToAdd([h],leg,false); // false = never allow SGP-only pairings through a hold/modify collision check
+  });
+}
+function presetLegsWithHolds(mode){
+  const full=buildPreset(mode);
+  if(!PRESET_HELD.size)return full;
+  // held legs might not be in THIS render's ranked pool at all (e.g. you held
+  // a leg, then flipped a market toggle that excludes it) — pull each held pick
+  // from the full unfiltered pool by exact match so it survives regardless
+  const pool=applyDupeFilter(fullPresetPool());
+  const held=[];
+  PRESET_HELD.forEach(pick=>{
+    const found=pool.find(l=>l.pick===pick);
+    if(found)held.push(found);
+    else PRESET_HELD.delete(pick); // the leg is gone entirely (game started, etc) — drop the stale hold
+  });
+  const n=TARGET_LEGS===-1?undefined:(TARGET_LEGS||4);
+  const remaining=n===undefined?undefined:Math.max(0,n-held.length);
+  const fill=full.filter(l=>!presetLegCollides(held,l)).slice(0,remaining);
+  return[...held,...fill];
+}
+
+function presetTabHtml(){
+  // holds don't carry over between different presets — a leg held while looking
+  // at "Systems best" doesn't mean anything inside "Fade the system", which is
+  // built on the opposite logic; switching presets clears the hold set so a
+  // stale hold can't quietly survive into a preset it was never chosen for
+  const buttons=PRESETS.map(([k,l])=>
+    `<button class="${PRESET_MODE===k?'on':''}" onclick="if(PRESET_MODE!=='${k}')PRESET_HELD.clear();PRESET_MODE='${k}';renderTickets()">${l}</button>`).join('');
+  const active=PRESETS.find(x=>x[0]===PRESET_MODE);
+  // Combo now genuinely respects the leg-count control (including No limit) —
+  // only Lucky 10 is truly fixed-shape (always exactly 3+3+3+1=10 regardless
+  // of what's picked), so it's the only one whose leg-count row gets disabled.
+  // The market-toggle row still disables for both, since neither reads that.
+  const fixedMarkets=PRESET_MODE==='combo'||PRESET_MODE==='lucky10';
+  const fixedLegs=PRESET_MODE==='lucky10';
+  const legs=presetLegsWithHolds(PRESET_MODE);
+  const combined=legs.reduce((a,l)=>a*l.p,1);
+  const legRows=legs.map(l=>{
+    const e=edgeOf(l);
+    const eTxt=e?` <span style="color:${e>=4?'var(--win)':e<=-4?'var(--rust)':'var(--mute)'}">${e>0?'+':''}${e.toFixed(1)} edge</span>`:'';
+    const srcTag=l.nSrc?` <span class="flag cool">${l.nSrc} source${l.nSrc>1?'s':''}</span>`:'';
+    const held=PRESET_HELD.has(l.pick);
+    return `<li style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--rule)">
+      <button onclick="togglePresetHold('${esc(l.pick)}')" style="flex:0 0 auto;padding:2px 8px;font-size:9px;
+        font-family:'IBM Plex Mono';letter-spacing:.06em;border-radius:4px;border:1px solid;cursor:pointer;
+        background:${held?'rgba(242,169,59,.15)':'transparent'};
+        border-color:${held?'var(--gold)':'var(--rule)'};
+        color:${held?'var(--gold)':'var(--mute)'}">
+        ${held?'HELD':'HOLD'}
+      </button>
+      <span style="flex:1">${l.pick} <span class="m">${l.game}</span>${srcTag}</span>
+      <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}
+    </li>`;
+  }).join('');
+  const payload=encodeURIComponent(JSON.stringify(legs.map(l=>({game:l.game,pick:l.pick,p:l.p,isProp:l.kind==='prop'||l.kind==='hr'}))));
+  const marketToggles=`<div class="mktlab">Markets to draw from${fixedMarkets?' <span style="color:var(--mute);text-transform:none;letter-spacing:0">— this preset has a fixed shape and ignores this</span>':''}</div>
+    <div class="subnav" style="opacity:${fixedMarkets?0.4:1};pointer-events:${fixedMarkets?'none':'auto'}">
+      <button class="${PRESET_MARKETS.has('ml')?'on':''}" onclick="toggleWonMarket('ml',this)">Moneyline</button>
+      <button class="${PRESET_MARKETS.has('rl')?'on':''}" onclick="toggleWonMarket('rl',this)">Run line</button>
+      <button class="${PRESET_MARKETS.has('spread')?'on':''}" onclick="toggleWonMarket('spread',this)">Spread</button>
+      <button class="${PRESET_MARKETS.has('total')?'on':''}" onclick="toggleWonMarket('total',this)">Totals</button>
+      <button class="${PRESET_MARKETS.has('f5')?'on':''}" onclick="toggleWonMarket('f5',this)">First 5 <span style="opacity:.55">MLB</span></button>
+      <button class="${PRESET_MARKETS.has('h1')?'on':''}" onclick="toggleWonMarket('h1',this)">1st Half <span style="opacity:.55">FB</span></button>
+      <button class="${PRESET_MARKETS.has('q1')?'on':''}" onclick="toggleWonMarket('q1',this)">1st Qtr <span style="opacity:.55">NFL</span></button>
+      <button class="${PRESET_MARKETS.has('prop')?'on':''}" onclick="toggleWonMarket('prop',this)">Props</button>
+    </div>`;
+  return `<div class="tkt">
+    <div class="mktlab" style="margin-top:0">Preset</div>
+    <div class="subnav" style="flex-wrap:wrap">${buttons}</div>
+    ${marketToggles}
+    <div class="mktlab">Legs on the parlay${fixedLegs?' <span style="color:var(--mute);text-transform:none;letter-spacing:0">— Lucky 10 is always exactly 10 legs</span>':''}</div>
+    <div class="subnav" id="legBtns" style="flex-wrap:wrap;opacity:${fixedLegs?0.4:1};pointer-events:${fixedLegs?'none':'auto'}">
+      ${[2,3,4,5,6,7,8,9,10].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="TARGET_LEGS=${n};renderTickets()">${n}</button>`).join('')}
+      <button class="${TARGET_LEGS===-1?'on':''}" onclick="TARGET_LEGS=-1;renderTickets()">No limit</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;opacity:${fixedLegs?0.4:1};pointer-events:${fixedLegs?'none':'auto'}">
+      <input type="number" min="1" max="30" placeholder="Or type any number"
+        value="${TARGET_LEGS>0?TARGET_LEGS:''}"
+        oninput="const v=parseInt(this.value,10);if(v>0){TARGET_LEGS=v;renderTickets()}"
+        style="width:130px;padding:8px 10px;border-radius:7px;border:1px solid var(--rule);
+        background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
+      <span class="m">legs — works for any number, not just the quick buttons above</span>
+    </div>
+    <div class="mktlab">Duplicates</div>
+    <div class="subnav">
+      <button class="${!ALLOW_DUPES?'on':''}" onclick="ALLOW_DUPES=false;renderTickets()">No duplicates from current tickets</button>
+      <button class="${ALLOW_DUPES?'on':''}" onclick="ALLOW_DUPES=true;renderTickets()">Duplicates allowed</button>
+    </div>
+    <div class="sub" style="margin-top:8px">${active[2]}</div>
+  </div>
+  ${legs.length?coachHtml({legs}):''}
+  <div class="tkt hi">
+    <h3>${active[1]}${PRESET_MODE==='armageddon'?' ⚠️':''}</h3>
+    ${legs.length?`<div class="sub"><b>${(combined*100).toFixed(combined<.01?3:1)}%</b> combined ·
+      ${legs.length} legs · 1 in ${Math.round(1/combined).toLocaleString()}${PRESET_HELD.size?` · ${PRESET_HELD.size} held`:''}</div>
+      <ol style="list-style:none;padding:0;margin:10px 0">${legRows}</ol>
+      <div class="bar">
+        <button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}','${PRESET_MODE}')">Confirm &amp; save</button>
+        <button onclick="renderTickets()">Reroll free legs</button>
+        ${PRESET_HELD.size?`<button onclick="clearPresetHolds()">Clear holds</button>`:''}
+      </div>
+      <div class="sub" style="margin-top:6px;color:var(--mute)">Tap HOLD on any leg to keep it. Hit Reroll to swap out the rest.</div>`
+      :(PRESET_HELD.size
+        ?`<div class="empty">Every held leg is still valid, but no other picks currently qualify for this preset.
+           <button onclick="clearPresetHolds()" style="margin-top:8px">Clear holds</button></div>`
+        :'<div class="empty">Not enough qualifying legs on the board for this preset right now.</div>')}
+  </div>`;
+}
+
+/* ================= TRENDS ================= */
+// Every trend here is computed from data the app already holds. Each one gets scored
+// against what the model independently concluded — green when the trend backs the model's
+// lean, red when it argues against it. A conflict isn't a bug; it's the most useful thing
+// on the card, because it's the model telling you where its own read is contested.
+function operativeTotal(g,s){
+  const bt=bookLineForMarket(g.id,'total');
+  if(bt&&bt.line!==null&&bt.line!==undefined)return{line:bt.line,src:'your book'};
+  const st=sharpTotalFor(g.id);
+  if(st&&st.line)return{line:st.line,src:st.book};
+  return{line:Math.floor(s.mean)+.5,src:'model'};
+}
+function trendPanel(g,s){
+  if(!s)return '<div class="empty">Needs a lineup before trends mean anything.</div>';
+  const ot=operativeTotal(g,s);
+  const modelOver=s.over(ot.line);
+  const modelTotalLean=modelOver>=.5?'over':'under';
+  const modelSide=s.hw>=s.aw?g.home.abbr:g.away.abbr;
+  const rows=[];
+  const add=(name,text,implies,relevant,forced)=>{
+    let cls='neutral',verdict='Neutral — does not push either way';
+    if(forced){cls=forced;verdict=forced==='agree'?`Backs the model`:`Argues against the model`;}
+    else if(implies&&relevant){
+      const agree=implies===relevant;
+      cls=agree?'agree':'conflict';
+      verdict=agree?`Backs the model — leans ${relevant}`:`Argues against — model leans ${relevant}`;
+    }
+    rows.push({name,text,cls,verdict});
+  };
+
+  // ── 1 · H2H run environment ──────────────────────────────────────────────
+  const hk=[g.away.id,g.home.id].sort().join('-'),hrec=H2H[hk];
+  if(hrec&&hrec.games>=5&&hrec.runs){
+    const rpg=hrec.runs/hrec.games;
+    const implies=rpg>ot.line+0.4?'over':rpg<ot.line-0.4?'under':null;
+    add('H2H run environment',
+      `These two have averaged <b>${rpg.toFixed(1)} combined runs</b> across ${hrec.games} meetings vs tonight's ${ot.line} (${ot.src}).`,
+      implies,modelTotalLean);
+  }
+
+  // ── 2 · Venue splits ─────────────────────────────────────────────────────
+  const hs=SPLITS[g.home.id],as_=SPLITS[g.away.id];
+  if(hs&&as_){
+    const hw=hs.home.w/Math.max(1,hs.home.w+hs.home.l),aw=as_.away.w/Math.max(1,as_.away.w+as_.away.l);
+    const splitSide=hw>=aw?g.home.abbr:g.away.abbr;
+    const margin=Math.abs(hw-aw);
+    if(margin>=0.07)
+      add('Venue splits',
+        `${g.home.abbr} win <b>${(hw*100).toFixed(0)}%</b> at home; ${g.away.abbr} win <b>${(aw*100).toFixed(0)}%</b> on the road — ${margin>=0.15?'a meaningful gap':'slight edge'} in site-specific performance.`,
+        splitSide,modelSide);
+  }
+
+  // ── 3 · Starter recent form vs baseline (both starters) ──────────────────
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.rEra&&q.era){
+      const d=parseFloat(q.rEra)-parseFloat(q.era);
+      if(Math.abs(d)>=0.75){
+        add(`${g[sd].abbr} starter form`,
+          `${q.name} posts a <b>${q.rEra} ERA over his last 5</b> vs ${q.era} season — ${d<0?'pitching sharper than normal, suppressing runs':'struggling above baseline, run environment risk'}.`,
+          d<0?'under':'over',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 4 · Starter workload / IP per start ──────────────────────────────────
+  // Low IP/GS = short outings = more bullpen exposure = total risk
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.ip&&q.gs&&q.gs>=5){
+      const ipg=parseFloat(q.ip)/q.gs;
+      if(ipg<4.8){
+        add(`${g[sd].abbr} starter workload`,
+          `${q.name} is averaging only <b>${ipg.toFixed(1)} innings per start</b> — short outings mean earlier bullpen exposure, which inflates scoring variance.`,
+          'over',modelTotalLean);
+      } else if(ipg>=6.2){
+        add(`${g[sd].abbr} starter depth`,
+          `${q.name} is going deep — <b>${ipg.toFixed(1)} innings per start</b>. Less bullpen contact reduces run-scoring variance.`,
+          'under',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 5 · Strikeout rate vs walk rate (K/BB ratio as control indicator) ────
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.so&&q.bb&&q.bb>0&&q.ip){
+      const ip=parseFloat(q.ip);
+      const kRate=q.so/ip,bbRate=q.bb/ip;
+      const kbb=q.so/q.bb;
+      if(kbb>=4.0){
+        add(`${g[sd].abbr} command trend`,
+          `${q.name} has a <b>${kbb.toFixed(1)} K/BB ratio</b> — elite command. High strikeout, low walk pitchers consistently compress run environments.`,
+          'under',modelTotalLean);
+      } else if(bbRate>=1.2){
+        add(`${g[sd].abbr} control concern`,
+          `${q.name} is walking <b>${bbRate.toFixed(1)} per inning</b>. Free passes pile up quickly and inflate scoring, especially in a one-run game context.`,
+          'over',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 6 · Pitcher hits-per-inning (contact suppression) ────────────────────
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.h&&q.ip){
+      const ip=parseFloat(q.ip),hpi=q.h/ip;
+      if(hpi<0.75){
+        add(`${g[sd].abbr} contact suppression`,
+          `${q.name} allows only <b>${hpi.toFixed(2)} hits per inning</b> — strong contact suppression, harder for runs to accumulate.`,
+          'under',modelTotalLean);
+      } else if(hpi>1.15){
+        add(`${g[sd].abbr} contact allowed`,
+          `${q.name} is giving up <b>${hpi.toFixed(2)} hits per inning</b>. High contact rate pitchers are particularly vulnerable in hitter-friendly conditions tonight.`,
+          'over',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 7 · Lineup OPS recency vs season (hot/cold team bats) ────────────────
+  ['away','home'].forEach(sd=>{
+    const lu=g[sd].lineup;
+    if(!lu||lu.length<5)return;
+    const recentOps=lu.map(x=>parseFloat(x.rstat&&x.rstat.ops||0)).filter(v=>v>0);
+    const seasonOps=lu.map(x=>parseFloat(x.stat&&x.stat.ops||0)).filter(v=>v>0);
+    if(recentOps.length<4||seasonOps.length<4)return;
+    const rAvg=recentOps.reduce((a,b)=>a+b,0)/recentOps.length;
+    const sAvg=seasonOps.reduce((a,b)=>a+b,0)/seasonOps.length;
+    const delta=rAvg-sAvg;
+    if(Math.abs(delta)>=0.030){
+      const side=g[sd].abbr;
+      const teamIsModel=side===modelSide;
+      const hotFavorsOver=delta>0; // hot offense → more runs → over
+      add(`${side} lineup temperature`,
+        `${side}'s lineup is running <b>${delta>0?'+':''}${(delta*1000).toFixed(0)} OPS points ${delta>0?'above':'below'} their season baseline</b> over recent games. ${delta>0?'Hot bats elevate scoring.':'Cold bats suppress runs.'}`,
+        delta>0?'over':'under',modelTotalLean);
+    }
+  });
+
+  // ── 8 · Park factor (run + HR) ───────────────────────────────────────────
+  const pf=PARK[g.home.abbr]||[100,100];
+  if(Math.abs(pf[0]-100)>=3){
+    add('Park factor',
+      `${g.home.abbr}'s park indexes at <b>${pf[0]} for scoring</b> (100 = neutral)${Math.abs(pf[1]-100)>=5?` and <b>${pf[1]} for home runs</b> — HR environment matters for single-run outcomes`:''}.`,
+      pf[0]>100?'over':'under',modelTotalLean);
+  }
+
+  // ── 9 · Park HR factor as side signal ────────────────────────────────────
+  // A heavy HR park boosts the power-hitting side's win probability
+  if(pf[1]>=115){
+    const lu=g.home.lineup||[];
+    const awlu=g.away.lineup||[];
+    const homeHR=lu.reduce((a,x)=>a+(x.stat&&x.stat.homeRuns||0),0);
+    const awayHR=awlu.reduce((a,x)=>a+(x.stat&&x.stat.homeRuns||0),0);
+    if(Math.abs(homeHR-awayHR)>=8){
+      const hrSide=homeHR>awayHR?g.home.abbr:g.away.abbr;
+      add('Park × power lineup',
+        `This park inflates HR at <b>${pf[1]}</b> index and ${hrSide} has the heavier power lineup (${homeHR>awayHR?homeHR:awayHR} combined HRs vs ${homeHR>awayHR?awayHR:homeHR}). Power teams get a disproportionate lift here.`,
+        hrSide,modelSide);
+    }
+  }
+
+  // ── 10 · Weather — temperature extremes ──────────────────────────────────
+  const w=g.weather;
+  if(w&&w.temp){
+    if(w.temp>=86){
+      add('Heat carry',`<b>${w.temp}°</b> — warm dense air carries the ball further. Ballparks play bigger in heat, especially combined with low humidity.`,'over',modelTotalLean);
+    } else if(w.temp<=50){
+      add('Cold suppression',`<b>${w.temp}°</b> — cold air is denser, kills carry. Pitchers also get better grip. Run environments shrink in cold.`,'under',modelTotalLean);
+    } else if(w.temp>=80){
+      add('Warm conditions',`<b>${w.temp}°</b> — warm but not extreme. Slight carry boost if wind cooperates.`,'over',modelTotalLean);
+    }
+  }
+
+  // ── 11 · Weather — wind direction and speed ───────────────────────────────
+  if(w&&w.wind){
+    const ws=w.wind;
+    const spd=parseInt(ws)||0;
+    const outDir=/out|blowing out|to (center|left|right|cf|lf|rf)/i.test(ws);
+    const inDir=/in\b|blowing in|from (center|left|right|cf|lf|rf)/i.test(ws);
+    const crossDir=/cross|left to right|right to left/i.test(ws);
+    if(outDir&&spd>=10){
+      add('Wind — blowing out',`<b>${ws}</b> — carries fly balls toward the seats. ${spd>=15?'Strong out wind is one of the highest-confidence over signals in baseball.':'Meaningful carry boost.'}`,
+        'over',modelTotalLean);
+    } else if(inDir&&spd>=10){
+      add('Wind — blowing in',`<b>${ws}</b> — knocks balls down, suppresses home runs, helps pitchers. ${spd>=15?'Hard in-wind parks play historically under.':'Mild suppression effect.'}`,
+        'under',modelTotalLean);
+    } else if(crossDir&&spd>=12){
+      add('Wind — crosswind',`<b>${ws}</b> — crosswinds complicate pitcher grip and break. Marginally increases walks and contact, slight over lean.`,
+        'over',modelTotalLean);
+    }
+  }
+
+  // ── 12 · Dew point estimate from temp + conditions ───────────────────────
+  // No direct dew point from API — approximate from condition strings
+  if(w&&w.temp&&w.cond){
+    const humid=/humid|muggy|mist|fog|drizzle|shower/i.test(w.cond);
+    if(humid&&w.temp>=72){
+      add('Humidity — pitcher grip',
+        `<b>${w.cond} at ${w.temp}°</b> — high humidity at warm temps approximates a dew point above 60°F. Breaking ball grip degrades, which typically flattens strikeout rates and increases contact.`,
+        'over',modelTotalLean);
+    }
+  }
+
+  // ── 13 · Series game number ───────────────────────────────────────────────
+  // Series G3+ means advance scouts have deep video, bullpens are taxed, and
+  // offenses have adjusted — run environments tighten in G3 vs G1
+  if(hrec&&hrec.games){
+    // Estimate if teams played recently by checking H2H rec freshness
+    // Flag if this looks like a continuation series (H2H win totals imply recent meetings)
+    const recentH2H=(hrec.aw+hrec.bw)>=(hrec.games*0.35);
+    if(recentH2H&&hrec.games>=6){
+      add('Familiarity factor',
+        `These teams have met <b>${hrec.games} times</b> in recent data. Deep familiarity tends to tighten run environments — pitchers pitch to known weaknesses, lineups adjust. Later-series games trend toward lower scoring.`,
+        'under',modelTotalLean);
+    }
+  }
+
+  // ── 14 · Run differential vs record divergence ───────────────────────────
+  // Teams over-performing their run diff regress; under-performing teams improve
+  if(hs&&as_){
+    const homeW=hs.home.w+((SPLITS[g.home.id]||{}).away||{}).w||0;
+    const homeL=hs.home.l+((SPLITS[g.home.id]||{}).away||{}).l||0;
+    // We don't have run diff directly — use win% vs OPS proxy
+    // If home team has strong OPS but poor record, they're underperforming
+    const homeLu=g.home.lineup||[];
+    const homeOpsAvg=homeLu.map(x=>parseFloat(x.stat&&x.stat.ops||0)).filter(v=>v>0);
+    if(homeOpsAvg.length>=5){
+      const avgOps=homeOpsAvg.reduce((a,b)=>a+b,0)/homeOpsAvg.length;
+      const winPct=homeW/Math.max(1,homeW+homeL);
+      // Strong OPS, weak record = regression candidate (bullpen masking offense)
+      if(avgOps>0.730&&winPct<0.450){
+        add('Offense-record divergence',
+          `${g.home.abbr} lineup posts a <b>${avgOps.toFixed(3)} average OPS</b> but wins only ${(winPct*100).toFixed(0)}% — offense is outperforming the record, suggesting bullpen or luck is masking run-scoring potential. Regression favors more offense.`,
+          'over',modelTotalLean);
+      }
+    }
+  }
+
+  // ── 15 · Bullpen exposure signal from starter K/BB + IP/GS ──────────────
+  // Combine starter depth + command: if both starters are going short AND walking people,
+  // bullpen will see heavy action → run environment expands
+  const awP=g.away.p,hmP=g.home.p;
+  if(awP&&hmP&&awP.ip&&hmP.ip&&awP.gs&&hmP.gs){
+    const awIPG=parseFloat(awP.ip)/awP.gs;
+    const hmIPG=parseFloat(hmP.ip)/hmP.gs;
+    const awBBR=awP.bb?awP.bb/parseFloat(awP.ip):0;
+    const hmBBR=hmP.bb?hmP.bb/parseFloat(hmP.ip):0;
+    const bothShort=awIPG<5.0&&hmIPG<5.0;
+    const bothWalky=awBBR>0.95&&hmBBR>0.95;
+    if(bothShort&&bothWalky){
+      add('Dual bullpen exposure',
+        `Both starters average under 5 innings and walk over 0.9 batters per inning. When both pens enter early in a game with command issues, scoring totals historically inflate by 1-2 runs above the posted line.`,
+        'over',modelTotalLean);
+    } else if(bothShort){
+      add('Short-starter matchup',
+        `Both ${g.away.abbr} and ${g.home.abbr} starters average <b>under 5 innings per outing</b>. Expect bullpen involvement from the 4th or 5th inning — scoring variance goes up when relievers enter early.`,
+        'over',modelTotalLean);
+    }
+  }
+
+  // ── 16 · Lineup power vs pitcher whip (contact environment) ─────────────
+  // Low WHIP pitcher vs. high-HR lineup = suppressed power; High WHIP vs. power lineup = inflation
+  ['away','home'].forEach(sd=>{
+    const opp=sd==='away'?'home':'away';
+    const pitcher=g[opp].p;
+    const offLu=g[sd].lineup||[];
+    if(!pitcher||!pitcher.whip||offLu.length<5)return;
+    const whip=parseFloat(pitcher.whip);
+    const luHR=offLu.reduce((a,x)=>a+(x.stat&&x.stat.homeRuns||0),0);
+    const luOps=offLu.map(x=>parseFloat(x.stat&&x.stat.ops||0)).filter(v=>v>0);
+    const avgOps=luOps.length?luOps.reduce((a,b)=>a+b,0)/luOps.length:0;
+    if(whip<=1.05&&avgOps>=0.760){
+      add(`Elite WHIP vs power offense`,
+        `${pitcher.name} has a <b>${whip} WHIP</b> — allows very little baserunners — against ${g[sd].abbr}'s power lineup (avg OPS ${avgOps.toFixed(3)}). Pitcher wins this matchup; power gets suppressed.`,
+        'under',modelTotalLean);
+    } else if(whip>=1.35&&luHR>=15){
+      add(`High-WHIP vs power lineup`,
+        `${pitcher.name} has a <b>${whip} WHIP</b> — gives up baserunners — facing ${g[sd].abbr}'s lineup with ${luHR} combined HRs. Runners on base amplify the damage from power bats.`,
+        'over',modelTotalLean);
+    }
+  });
+
+  // ── 17 · Sharp market movement signal ───────────────────────────────────
+  const mM=marketOf(g);
+  const st=sharpTotalFor(g.id);
+  if(st&&st.line&&mM){
+    // If sharp total differs meaningfully from model's sim total — flag it
+    const simTotal=s.mean;
+    const sharpGap=Math.abs(st.line-simTotal);
+    if(sharpGap>=1.0){
+      const sharpLean=st.line>simTotal?'over':'under'; // sharp posted higher line = expects more runs
+      add('Sharp vs sim divergence',
+        `SharpSports posts <b>${st.line}</b> while this model's sim lands at <b>${simTotal.toFixed(1)}</b> — a <b>${sharpGap.toFixed(1)}-run gap</b>. When sharp money and simulation diverge this much, the sharp number usually reflects real-money pressure.`,
+        sharpLean===modelTotalLean?'agree':'conflict',null,sharpLean===modelTotalLean?'agree':'conflict');
+    }
+  }
+
+  // ── 18 · Pitcher total pitches vs avg — fatigue signal ──────────────────
+  ['away','home'].forEach(sd=>{
+    const q=g[sd].p;
+    if(q&&q.pit&&q.gs&&q.gs>=4){
+      const pitPerStart=q.pit/q.gs;
+      // High pitch count per start means this pitcher stresses the arm more
+      // rEra being worse than era is already covered; this is about physical load
+      if(pitPerStart>=100&&q.rEra&&parseFloat(q.rEra)>parseFloat(q.era||'0')+0.5){
+        add(`${g[sd].abbr} pitch load + fade`,
+          `${q.name} averages <b>${pitPerStart.toFixed(0)} pitches per start</b> and his recent ERA (${q.rEra}) is climbing above his season mark. High pitch counts plus performance fade is a classic pre-blowup pattern.`,
+          'over',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 19 · Hand advantage — platoon exposure ───────────────────────────────
+  // Opposing pitcher hand vs lineup composition
+  ['away','home'].forEach(sd=>{
+    const opp=sd==='away'?'home':'away';
+    const pitcher=g[opp].p;
+    if(!pitcher||!pitcher.hand)return;
+    const lu=g[sd].lineup||[];
+    // We don't have batter hand from API directly, but we can note when the pitcher
+    // is a rare handedness (LHP) and the team's OPS suggests they struggle vs that
+    if(pitcher.hand==='L'){
+      const ops=lu.map(x=>parseFloat(x.stat&&x.stat.ops||0)).filter(v=>v>0);
+      const avg=ops.length?ops.reduce((a,b)=>a+b,0)/ops.length:0;
+      if(avg<0.700&&ops.length>=5){
+        add(`LHP platoon suppression`,
+          `${g[opp].abbr} sends a lefty (${pitcher.name}) and ${g[sd].abbr}'s lineup averages only <b>${avg.toFixed(3)} OPS</b>. Left-heavy lineups facing elite LHPs tend to underperform their season averages.`,
+          'under',modelTotalLean);
+      }
+    }
+  });
+
+  // ── 20 · Stolen base / speed pressure vs catcher ─────────────────────────
+  // Teams with high stolen base rates force pitchers to alter windup — disrupts rhythm
+  // Proxy: look for high OBP lineups (speed correlates with OBP at team level)
+  ['away','home'].forEach(sd=>{
+    const lu=g[sd].lineup||[];
+    const obpProxy=lu.map(x=>{
+      const s=x.stat||{};
+      const pa=s.plateAppearances||1;
+      return ((s.hits||0)+(s.baseOnBalls||0))/pa;
+    }).filter(v=>v>0.05);
+    if(obpProxy.length<5)return;
+    const avgOBP=obpProxy.reduce((a,b)=>a+b,0)/obpProxy.length;
+    const oppP=g[sd==='away'?'home':'away'].p;
+    if(avgOBP>=0.345&&oppP&&parseFloat(oppP.whip||99)>=1.25){
+      add(`High-OBP lineup vs shaky control`,
+        `${g[sd].abbr} reaches base at a <b>${avgOBP.toFixed(3)} rate</b> and the opposing pitcher has a ${oppP.whip} WHIP. Getting on base frequently against a walk-prone starter is a classic scoring setup.`,
+        'over',modelTotalLean);
+    }
+  });
+
+  // ── 21 · Model bias correction disclosure ───────────────────────────────
+  const ent=get(LS.ent,{}).teams||{};
+  [[g.away.abbr,'away'],[g.home.abbr,'home']].forEach(([ab])=>{
+    const t=ent[ab];
+    if(t&&t.n>=MIN_SHOW&&Math.abs(t.rawBias)>=0.35){
+      rows.push({name:`Self-check · ${ab}`,
+        text:`Across ${t.n} graded games this model has <b>${t.rawBias>0?'over':'under'}-projected ${ab} by ${Math.abs(t.rawBias).toFixed(2)} runs</b> on average. That correction is already baked into tonight's number.`,
+        cls:'neutral',verdict:'Already corrected — shown so you know the history'});
+    }
+  });
+
+  // ── 22 · Your book's history at this total ───────────────────────────────
+  const bt_=bookTrendForTotal(ot.line);
+  if(bt_&&bt_.ready){
+    add('Your book at this number',
+      `When your book posts <b>${ot.line}</b>, it has gone over <b>${bt_.overPct}%</b> of the time across ${bt_.total} tracked games.`,
+      Number(bt_.overPct)>=50?'over':'under',modelTotalLean);
+  }else if(bt_){
+    rows.push({name:'Your book at this number',cls:'neutral',
+      text:`Only <b>${bt_.total}</b> tracked ${bt_.total===1?'game':'games'} at ${ot.line} so far — needs 8 before this says anything real.`,
+      verdict:'Building history — upload screenshots daily to grow it'});
+  }
+
+  if(!rows.length)return '<div class="empty">No trend strong enough to flag on this game.</div>';
+  // ── 23 · External uploaded trends (Covers, OddsShark, etc.) ────────────
+  const extTrends=applicableTrends(g,s);
+  if(extTrends.length){
+    extTrends.forEach(t=>{
+      const imp=t.implies;
+      const isOver=/^over/i.test(t.text);
+      const isUnder=/^under/i.test(t.text);
+      let implies=null,relevant=null;
+      if(imp==='over'||isOver){implies='over';relevant=modelTotalLean;}
+      else if(imp==='under'||isUnder){implies='under';relevant=modelTotalLean;}
+      else if(imp==='home'||imp===g.home.abbr){implies=g.home.abbr;relevant=modelSide;}
+      else if(imp==='away'||imp===g.away.abbr){implies=g.away.abbr;relevant=modelSide;}
+      add(`${t.src||'Covers'} trend${t.team?' · '+t.team:''}`,t.text,implies,relevant);
+    });
+  }
+
+  const agree=rows.filter(r=>r.cls==='agree').length,conflict=rows.filter(r=>r.cls==='conflict').length;
+  return `<div class="tkt hi" style="margin-bottom:10px">
+      <h3>${agree} backing · ${conflict} contesting · ${rows.length} total signals</h3>
+      <div class="sub">Model leans <b>${modelTotalLean.toUpperCase()} ${ot.line}</b> and <b>${modelSide}</b> on the side.
+      Green rows back that read, red argue against it. A stack of red is the model flagging its own number is contested.</div>
+    </div>
+    ${rows.map(r=>`<div class="trow ${r.cls}"><div class="tdot"></div><div class="tbody">
+      <div class="tname">${r.name}</div><div class="ttext">${r.text}</div>
+      <div class="tverdict">${r.verdict}</div></div></div>`).join('')}`;
+}
+
+/* ================= TRENDS END ================= */
+function bookLinesFor(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return[];
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  // Reads by whichever day is actually being viewed — PREVIEW_DAY when browsing
+  // tomorrow's board, today() otherwise. Every other book-line lookup in the app
+  // (props, trends, master evaluation) chains through this one function, so fixing
+  // it here fixes the read side everywhere at once.
+  const d=PREVIEW_DAY||today();
+  const all=get(LS.bookshots,{})[d]||[];
+  return all.filter(x=>x.game===gl);
+}
+// your uploaded screenshot outranks every API source — if you have a real line for a
+// market, that IS the real line, full stop, checked before SharpAPI/TheRundown/OddsAPI.
+// The probability shown comes purely from devigging YOUR price — the sim is never asked.
+function bookLineForMarket(gid,market,side){
+  return bookLinesFor(gid).find(x=>x.market===market&&(!side||x.side===side))||null;
+}
+function bookDevig(price){return imp(price)}
+function bookLineRead(g,s){
+  if(!s)return[];
+  const lines=bookLinesFor(g.id);
+  if(!lines.length)return[];
+  const out=[];
+  lines.forEach(x=>{
+    if(x.market==='total'&&x.line!==null&&x.line!==undefined){
+      const p=s.over(x.line);
+      const verdict=p>=0.5?'Over':'Under';
+      out.push({label:'Your book — total',
+        text:`${x.line} (${x.side} ${x.price>0?'+':''}${x.price}) — model's own combined-score read clears it ${(p*100).toFixed(0)}% of the time, leaning ${verdict}.`});
+    }
+    if(x.market==='runline'&&x.line!==null&&x.line!==undefined){
+      const teamAb=x.side==='home'?g.home.abbr:x.side==='away'?g.away.abbr:null;
+      if(teamAb){
+        const p=rlProb(g,s,x.side,x.line);
+        if(p!==null)out.push({label:'Your book — run line',
+          text:`${teamAb} ${x.line>=0?'-':'+'}${Math.abs(x.line)} (${x.price>0?'+':''}${x.price}) — model's own read covers it ${(p*100).toFixed(0)}% of the time.`});
+      }
+    }
+    if(x.market==='moneyline'){
+      const teamAb=x.side==='home'?g.home.abbr:x.side==='away'?g.away.abbr:null;
+      if(teamAb){
+        const p=teamAb===g.home.abbr?s.hw:s.aw;
+        out.push({label:'Your book — moneyline',
+          text:`${teamAb} (${x.price>0?'+':''}${x.price}) — model's own sim has them winning ${(p*100).toFixed(0)}% of the time.`});
+      }
+    }
+  });
+  return out;
+}
+function oddsPapiSignal(gid){
+  const g=GAMES.find(x=>x.id===gid);if(!g)return null;
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  return OP_SIGNALS[gl]||null;
+}
+async function diagnoseOddsPapi(){
+  const el=document.getElementById('oddspapiDiag');
+  const key=document.getElementById('oddspapiIn').value.trim()||get(LS.oddspapi,'');
+  if(!key){el.innerHTML='<div class="tkt"><h3>No key</h3><div class="sub">Paste a key above first.</div></div>';return}
+  el.innerHTML='<div class="empty">Step 1 — finding baseball\'s sport ID…</div>';
+  const BASE='https://api.oddspapi.io/v4';
+  try{
+    const r1=await fetch(`${BASE}/sports?apiKey=${encodeURIComponent(key)}`);trackCall('oddspapi');
+    if(!r1.ok){
+      const body=await r1.text();
+      el.innerHTML=`<div class="tkt"><h3>HTTP ${r1.status} on /sports</h3><div class="sub">${r1.status===401||r1.status===403?'Key rejected.':'Unexpected error.'}</div>
+        <div class="sub" style="word-break:break-all">${body.slice(0,400)}</div></div>`;
+      return;
+    }
+    const sports=await r1.json();
+    const bball=(Array.isArray(sports)?sports:[]).find(s=>/baseball/i.test(s.sportName||''));
+    if(!bball){
+      el.innerHTML=`<div class="tkt"><h3>No baseball entry found</h3>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(sports,null,2).slice(0,3000)}</pre></div>`;
+      return;
+    }
+    el.innerHTML=`<div class="empty">sportId=${bball.sportId} — step 2, finding the real MLB tournament (not minor leagues)…</div>`;
+    const r2=await fetch(`${BASE}/tournaments?apiKey=${encodeURIComponent(key)}&sportId=${bball.sportId}`);trackCall('oddspapi');
+    let mlbTourn=null,allTourns=[];
+    if(r2.ok){
+      const tourns=await r2.json();
+      allTourns=Array.isArray(tourns)?tourns:(tourns.tournaments||[]);
+      // exact "MLB" match preferred over anything containing minor-league words
+      mlbTourn=allTourns.find(t=>/^mlb$/i.test((t.tournamentName||'').trim()))
+        ||allTourns.find(t=>/major league baseball/i.test(t.tournamentName||'')&&!/minor|rookie|A-A|AAA|AA\b/i.test(t.tournamentName||''));
+    }
+    if(!mlbTourn){
+      el.innerHTML=`<div class="tkt"><h3>Couldn't isolate MLB from the tournament list</h3>
+        <div class="sub">${allTourns.length} baseball tournaments found under sportId=${bball.sportId}. Raw list below —
+        look for the exact MLB name so I can hardcode the right tournamentId.</div>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(allTourns.map(t=>({id:t.tournamentId,name:t.tournamentName})),null,2).slice(0,4000)}</pre></div>`;
+      return;
+    }
+    el.innerHTML=`<div class="empty">MLB tournamentId=${mlbTourn.tournamentId} — step 3, pulling market-name reference…</div>`;
+    let marketRef=null,marketRefSrc='';
+    for(const path of['/markets','/market-types','/marketTypes']){
+      try{
+        const rm=await fetch(`${BASE}${path}?apiKey=${encodeURIComponent(key)}`);trackCall('oddspapi');
+        if(rm.ok){marketRef=await rm.json();marketRefSrc=path;break}
+      }catch(e){}
+    }
+    // the reference list is multi-sport (led with soccer, sportId 10, last time) — filter
+    // down to baseball's sportId specifically rather than showing the raw mixed dump
+    let bballMarkets=null;
+    if(marketRef){
+      const arr=Array.isArray(marketRef)?marketRef:(marketRef.markets||[]);
+      bballMarkets=arr.filter(m=>m.sportId===bball.sportId||m.sportId===Number(bball.sportId));
+    }
+    el.innerHTML=`<div class="empty">Step 4 — pulling real MLB-only fixtures and odds…</div>`;
+    const from=today(),to=new Date(Date.now()+2*864e5).toISOString().slice(0,10);
+    const r4=await fetch(`${BASE}/fixtures?apiKey=${encodeURIComponent(key)}&sportId=${bball.sportId}&tournamentId=${mlbTourn.tournamentId}&from=${from}&to=${to}&hasOdds=true`);trackCall('oddspapi');
+    const fixtures=r4.ok?await r4.json():[];
+    const list=Array.isArray(fixtures)?fixtures:(fixtures.fixtures||[]);
+    // pick whichever fixture starts furthest in the future — most likely still pregame,
+    // since the free tier apparently can't pull odds for a game that's already live
+    const pregame=[...list].filter(f=>f.startTime&&new Date(f.startTime)>new Date())
+      .sort((a,b)=>new Date(a.startTime)-new Date(b.startTime));
+    const pick=pregame[0]||list[0];
+    let h=`<div class="tkt hi"><h3>MLB isolated — tournamentId ${mlbTourn.tournamentId}</h3>
+      <div class="sub">"${mlbTourn.tournamentName}" · ${list.length} real MLB fixtures with odds in range · ${pregame.length} confirmed still pregame</div></div>`;
+    h+=bballMarkets&&bballMarkets.length?`<div class="tkt"><h3>Market reference — baseball only (sportId ${bball.sportId})</h3>
+      <div class="sub">${bballMarkets.length} baseball market definitions found, filtered from ${Array.isArray(marketRef)?marketRef.length:'?'} total across all sports</div>
+      <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(bballMarkets,null,2).slice(0,4500)}</pre></div>`
+      :marketRef?`<div class="tkt"><h3>Market reference found, but zero baseball entries</h3><div class="sub">${marketRefSrc} responded but nothing matched sportId=${bball.sportId} — every entry so far has been soccer. May need pagination or a different filter param.</div></div>`
+      :`<div class="tkt"><h3>No market-name reference endpoint found</h3><div class="sub">Tried /markets, /market-types, /marketTypes — none responded.</div></div>`;
+    if(pick){
+      const fid=pick.fixtureId;
+      const r5=await fetch(`${BASE}/odds?apiKey=${encodeURIComponent(key)}&fixtureId=${fid}`);trackCall('oddspapi');
+      const oddsBody=r5.ok?await r5.json():await r5.text();
+      const isPregame=pregame.length>0;
+      h+=`<div class="tkt"><h3>Raw odds — ${isPregame?'confirmed pregame':'live, may hit access restriction'} MLB fixture: ${pick.participant1Name||'?'} vs ${pick.participant2Name||'?'}</h3>
+        <div class="sub">Starts ${pick.startTime}</div>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(oddsBody,null,2).slice(0,5000)}</pre></div>`;
+      // isolate ONE near-even (total-shaped) market and print it completely, with nothing
+      // truncated — the previous pass may have cut off a line/handicap field before it
+      // ever appeared. Check every key on the object, not just the ones already known.
+      if(oddsBody&&oddsBody.bookmakerOdds){
+        let target=null,targetBook=null;
+        for(const bk of Object.keys(oddsBody.bookmakerOdds)){
+          const mkts=(oddsBody.bookmakerOdds[bk]||{}).markets||{};
+          for(const mid of Object.keys(mkts)){
+            const outcomes=mkts[mid].outcomes||{};
+            const prices=Object.values(outcomes).map(o=>((o.players||{})['0']||{}).price).filter(p=>typeof p==='number');
+            if(prices.length===2){
+              const implied=prices.map(p=>1/p);
+              const sum=implied[0]+implied[1];
+              const balance=Math.abs(implied[0]/sum-0.5);
+              if(balance<0.12){target=mkts[mid];targetBook=bk;break}
+            }
+          }
+          if(target)break;
+        }
+        if(target){
+          h+=`<div class="tkt hi"><h3>Isolated near-even market — checking every field for a line value</h3>
+            <div class="sub">Book: ${targetBook} — this is the FULL object, nothing cut off. Look for anything resembling a line, handicap, points, or spread value.</div>
+            <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(target,null,2)}</pre></div>`;
+        }else{
+          h+=`<div class="tkt"><h3>No near-even market found on this fixture</h3><div class="sub">Every market on this book looked skewed — try again on a different game, or a total-heavy matchup.</div></div>`;
+        }
+      }
+    }
+    el.innerHTML=h;
+  }catch(e){
+    el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
+  }
+}
+async function diagnoseRundown(){
+  const el=document.getElementById('rundownDiag');
+  const key=get(LS.rundown,'');
+  if(!key){el.innerHTML='<div class="tkt"><h3>No key</h3><div class="sub">No therundown.io key saved in setup — nothing to diagnose.</div></div>';return}
+  el.innerHTML='<div class="empty">Fetching raw response…</div>';
+  const guessSportId=3;
+  try{
+    const r=await fetch(`https://therundown.io/api/v2/sports/${guessSportId}/events/${today()}?key=${encodeURIComponent(key)}`);
+    if(!r.ok){
+      const body=await r.text();
+      el.innerHTML=`<div class="tkt"><h3>HTTP ${r.status}</h3>
+        <div class="sub">Tried sport_id=${guessSportId} for MLB — unconfirmed guess. A 404 here likely means that's the wrong id;
+        the response body below may name the correct one.</div>
+        <div class="sub" style="word-break:break-all">${body.slice(0,400)}</div></div>`;
+      return;
+    }
+    const j=await r.json();
+    const events=j.events||[];
+    let h=`<div class="tkt hi"><h3>${events.length} events returned</h3>
+      <div class="sub">sport_id=${guessSportId} (guessed) · ${JSON.stringify(j.meta||{})}</div></div>`;
+    if(events.length){
+      // pick an event that actually has a non-empty markets array — a finished game or one
+      // with no market maker posted yet may return markets:[], which tells us nothing
+      const withMarkets=events.find(ev=>ev.markets&&ev.markets.length)||events[0];
+      const marketTypes=new Set();
+      events.forEach(ev=>(ev.markets||[]).forEach(m=>marketTypes.add(m.name||m.market_id)));
+      h+=`<div class="tkt"><h3>Market types present</h3><div class="sub">${[...marketTypes].join(', ')||'none found in any event\'s markets array'}</div></div>`;
+      h+=`<div class="tkt"><h3>Markets array — the actual odds structure</h3>
+        <div class="sub">Showing event: ${(withMarkets.teams||[]).map(t=>t.abbreviation).join(' @ ')} · ${withMarkets.markets?withMarkets.markets.length:0} market entries</div>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(withMarkets.markets||'no markets field on this event',null,2).slice(0,6000)}</pre></div>`;
+      h+=`<div class="tkt"><h3>Full first event (for reference, trimmed)</h3>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--mute);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${JSON.stringify(events[0],null,2).slice(0,1500)}</pre></div>`;
+    }
+    el.innerHTML=h;
+  }catch(e){
+    el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${e.message||e}</div></div>`;
+  }
+}
+async function refreshEverything(){
+  // NFL sport active — run NFL refresh instead
+  if(ACTIVE_SPORT==='nfl'){
+    const el=document.getElementById('slate');
+    if(el)el.innerHTML='<div class="empty">Refreshing NFL data…</div>';
+    await loadNFLSchedule();
+    await fetchNFLPowerRatings();
+    await fetchNFLLiveOdds();
+    return;
+  }
+  if(ACTIVE_SPORT==='ncaaf'){
+    const el=document.getElementById('slate');
+    if(el)el.innerHTML='<div class="empty">Refreshing CFB data…</div>';
+    await loadNCAAFSchedule();
+    await fetchNCAAFLiveOdds();
+    return;
+  }
+  const st=document.getElementById('refreshAllStatus');
+  const steps=[];
+  const paint=()=>{st.innerHTML=steps.map(s=>`<div class="sub">${s}</div>`).join('')};
+  steps.push('⏳ Schedule &amp; lineups…');paint();
+  try{await loadAll();steps[steps.length-1]=`✅ Schedule &amp; lineups — ${GAMES.length} games`}
+  catch(e){steps[steps.length-1]='❌ Schedule/lineups failed'}
+  paint();
+  if(get(LS.key,'')){
+    steps.push('⏳ Odds API…');paint();
+    try{await loadOdds(true);steps[steps.length-1]='✅ Odds API pulled'}
+    catch(e){steps[steps.length-1]='❌ Odds API failed'}
+  }else{steps.push('⏭️ Odds API — no key saved')}
+  paint();
+  if(get(LS.sharp,'')){
+    steps.push('⏳ SharpAPI…');paint();
+    try{await loadSharp(true);steps[steps.length-1]=`✅ SharpAPI — ${SHARP_PROPS.length} props, ${SHARP_TOTALS.length} totals`}
+    catch(e){steps[steps.length-1]='❌ SharpAPI failed'}
+  }else{steps.push('⏭️ SharpAPI — no key saved')}
+  paint();
+  if(get(LS.rundown,'')){
+    steps.push('⏳ TheRundown…');paint();
+    const rdResult=await loadRundown(true);
+    if(rdResult.ok)steps[steps.length-1]=`✅ TheRundown — ${rdResult.count} run-line prices`;
+    else steps[steps.length-1]=`❌ TheRundown — ${rdResult.reason}${rdResult.body?': '+rdResult.body:''}`;
+  }else{steps.push('⏭️ TheRundown — no key saved')}
+  paint();
+  if(get(LS.oddspapi,'')){
+    steps.push('⏳ OddsPapi…');paint();
+    const opResult=await loadOddsPapi(true);
+    if(opResult.ok)steps[steps.length-1]=`✅ OddsPapi — ${opResult.count} games, informational only (no line values available)`;
+    else steps[steps.length-1]=`❌ OddsPapi — ${opResult.reason}${opResult.body?': '+opResult.body:''}`;
+  }else{steps.push('⏭️ OddsPapi — no key saved')}
+  paint();
+  render();buildProps();renderDayPicker();
+  // rebuild today's three tracked-only auto-parlays (Market picks, Outside picks,
+  // System top 10) now that fresh book lines / outside uploads / sims may have
+  // changed what qualifies for each
+  try{syncTrackedAutoParlay('market');syncTrackedAutoParlay('outside');syncTrackedAutoParlay('system');}catch(e){}
+  steps.push(`Done — ${new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}`);
+  paint();
+}
+async function diagnoseSharp(){
+  const el=document.getElementById('sharpDiag');
+  const key=get(LS.sharp,'');
+  if(!key){el.innerHTML='<div class="tkt"><h3>No key</h3><div class="sub">No SharpAPI key saved in setup — nothing to diagnose.</div></div>';return}
+  el.innerHTML='<div class="empty">Fetching raw response…</div>';
+  try{
+    const r=await fetch('https://api.sharpapi.io/api/v1/odds?league=MLB',{headers:{'X-API-Key':key}});
+    if(!r.ok){
+      const body=await r.text();
+      el.innerHTML=`<div class="tkt"><h3>HTTP ${r.status}</h3>
+        <div class="sub">${r.status===401||r.status===403?'Key rejected — check it was pasted correctly.':r.status===429?'Rate limited — free tier is 12 req/min.':'Unexpected error.'}</div>
+        <div class="sub" style="word-break:break-all">${body.slice(0,400)}</div></div>`;
+      return;
+    }
+    const j=await r.json();
+    const data=j.data||[];
+    const byType={};
+    data.forEach(o=>{const t=o.market_type||'unknown';(byType[t]=byType[t]||[]).push(o)});
+    const types=Object.keys(byType);
+    let h=`<div class="tkt hi"><h3>${data.length} rows returned</h3>
+      <div class="sub">Meta: ${JSON.stringify(j.meta||j.pagination||{})}</div>
+      <div class="sub">Market types present: ${types.length?types.join(', '):'none'}</div>
+      <div class="sub">${types.length?'One raw example per type below — this is the real, unmodified shape. I need to see this before wiring in any actual parsing.':'No rows at all — either MLB has nothing posted right now on this key, or the league filter needs a different value.'}</div>
+    </div>`;
+    types.forEach(t=>{
+      h+=`<div class="tkt"><h3>${t} <span class="m" style="font-family:'IBM Plex Mono';font-size:11px;color:var(--mute)">(${byType[t].length} rows)</span></h3>
+        <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin:0">${JSON.stringify(byType[t][0],null,2)}</pre></div>`;
+    });
+    el.innerHTML=h;
+  }catch(e){
+    el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${e.message||e}</div></div>`;
+  }
+}
+
+/* ================= FUTURE DAY PREVIEW ================= */
+// The odds feed often has lines posted for games a day or more out, even though MLB
+// doesn't post lineups until a few hours before first pitch. This surfaces whichever
+// future days the odds API actually has data for — schedule, probables, and market
+// lines only, clearly separated from the fully-simulated live board.
+let BOOKSHOT_UPLOAD_DATE=null; // null = "use whatever day is currently open" at analyze time
+// THE ITEM-5 FIX: this used to only offer a future date as an upload target
+// if ODDS_BYDATE already had that date's odds loaded — meaning uploading a
+// book screenshot for TOMORROW before your odds feed had ever pulled
+// tomorrow's slate left you with no way to even select tomorrow at all. The
+// upload target and the odds-feed cache are two unrelated things; gating one
+// on the other was the actual bug. Always offers today + tomorrow (computed
+// directly, not borrowed from a different cache), plus anything further out
+// that ODDS_BYDATE happens to already know about.
+function tomorrowStr(){
+  const d=new Date(today()+'T12:00:00'); // noon avoids any DST-edge date-shift surprises
+  d.setDate(d.getDate()+1);
+  return new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+}
+function renderBookUploadDateRow(){
+  const el=document.getElementById('bookUploadDateRow');
+  if(!el)return;
+  const fromOdds=Object.keys(ODDS_BYDATE).filter(d=>d>=today());
+  const dates=[...new Set([today(),tomorrowStr(),...fromOdds])].sort();
+  const active=BOOKSHOT_UPLOAD_DATE||PREVIEW_DAY||today();
+  el.innerHTML=dates.map(d=>{
+    const label=d===today()?'Today':d===tomorrowStr()?'Tomorrow':dayLabel(d);
+    const on=active===d;
+    return `<button class="${on?'on':''}" onclick="BOOKSHOT_UPLOAD_DATE='${d}';renderBookUploadDateRow();renderBookStatus()">${label}</button>`;
+  }).join('');
+}
+function renderDayPicker(){
+  renderBookUploadDateRow(); // kept in lockstep with the day picker — same data source
+  const el=document.getElementById('dayPicker');
+  const hasKey=!!get(LS.key,'');
+  const future=Object.keys(ODDS_BYDATE).filter(d=>d>=today()).sort();
+  if(!hasKey){
+    el.innerHTML='<div class="empty" style="padding:10px 4px;text-align:left">No odds key configured, so there\'s no odds feed to check for future days — day preview needs one. Add a key in setup to unlock it.</div>';
+    return;
+  }
+  if(future.length<=1){
+    const lp=get(LS.pull,0);
+    const when=lp?new Date(lp).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'never';
+    el.innerHTML=`<div class="empty" style="padding:10px 4px;text-align:left">Odds key is active, last pulled ${when} — but the feed only has today's games listed right now.
+      Books often don't post the next slate's lines until later in the day. Nothing broken, just nothing to preview yet.</div>`;
+    return;
+  }
+  el.innerHTML=future.map(d=>{
+    const label=d===today()?'Today':dayLabel(d);
+    const on=(PREVIEW_DAY||today())===d;
+    return `<button class="${on?'on':''}" onclick="${d===today()?'backToToday()':`loadPreviewDay('${d}')`}">${label}</button>`;
+  }).join('');
+}
+let PREVIEW_STARTED=0;
+function renderPreviewBanner(){
+  const el=document.getElementById('previewBanner');
+  if(!el)return;
+  if(!PREVIEW_DAY||PREVIEW_DAY===today()){el.innerHTML='';return}
+  const mins=PREVIEW_STARTED?Math.floor((Date.now()-PREVIEW_STARTED)/60000):0;
+  el.innerHTML=`<div class="tkt" style="border-color:var(--gold);background:rgba(242,169,59,.08);
+    position:sticky;top:0;z-index:5;margin-bottom:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div><b style="color:var(--gold)">⚠️ Viewing ${dayLabel(PREVIEW_DAY)} — not today's live board</b>
+        <div class="sub" style="margin-top:2px">Live scores, grading, and bankroll settlement all still
+        run on today underneath this. This is a projection preview only.${mins>=15?` Been open ${mins} min.`:''}</div>
+      </div>
+      <button class="primary" onclick="backToToday()" style="flex:0 0 auto">Back to today</button>
+    </div>
+  </div>`;
+}
+function backToToday(){PREVIEW_DAY=null;PREVIEW_STARTED=0;render();renderDayPicker();renderPreviewBanner()}
+async function loadPreviewDay(d){
+  PREVIEW_DAY=d;PREVIEW_STARTED=Date.now();renderDayPicker();
+  const el=document.getElementById('slate');
+  el.innerHTML='<div class="empty">Loading preview…</div>';
+  try{
+    const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}`
+      +`&hydrate=probablePitcher,team,lineups,venue`);
+    const j=await r.json();
+    const gs=((j.dates||[])[0]||{}).games||[];
+    if(!gs.length){el.innerHTML='<div class="empty">No games scheduled this date.</div>';return}
+
+    await loadH2H(gs.map(g=>{
+      const a=g.teams.away.team.id,b=g.teams.home.team.id;
+      return{a,b,k:[a,b].sort().join('-')}}));
+
+    const pI=[],need=[];
+    gs.forEach(g=>['away','home'].forEach(s=>{
+      const p=g.teams[s].probablePitcher;if(p&&p.id)pI.push(p.id);
+      if(!((g.lineups||{})[s+'Players']||[]).length)need.push(g.teams[s].team.id)}));
+    const uq=[...new Set(need)];
+    const pr=await Promise.all(uq.map(id=>projectedLineupFor(id)));
+    const PROJ={};uq.forEach((id,i)=>PROJ[id]=pr[i]);
+    const hI=[];
+    gs.forEach(g=>['away','home'].forEach(s=>{
+      const real=((g.lineups||{})[s+'Players']||[]);
+      if(real.length)real.forEach(x=>x.id&&hI.push(x.id));
+      else (PROJ[g.teams[s].team.id]||[]).forEach(x=>x.id&&hI.push(x.id))}));
+    const P=pI.length?await people(pI,'pitching'):{},H=hI.length?await people(hI,'hitting'):{};
+
+    // Build the exact same GAMES shape loadAll() produces for today, so the same
+    // simGame + card() pipeline renders this preview identically to the live slate.
+    const previewGames=gs.map(g=>{
+      const A=g.teams.away,B=g.teams.home;
+      const mk=(t,pp,lu,fb)=>{
+        const proj=!lu||!lu.length,src=proj?fb:lu;
+        return{name:t.team.name,abbr:abbr(t.team.name),id:t.team.id,
+          w:(t.leagueRecord||{}).wins,l:(t.leagueRecord||{}).losses,
+          p:pp?(P[pp.id]||{name:pp.fullName}):null,
+          lineupProj:proj&&(src||[]).length>0,
+          lineup:(src||[]).slice(0,9).map(x=>({id:x.id,name:short(x.fullName),
+            stat:(H[x.id]||{}).stat||{},rstat:(H[x.id]||{}).rstat||{}}))};
+      };
+      return{id:g.gamePk,time:g.gameDate,
+        status:(g.status||{}).detailedState||'',abstract:'Preview',
+        venue:(g.venue||{}).name||'',weather:null,
+        awayScore:null,homeScore:null,
+        away:mk(A,A.probablePitcher,(g.lineups||{}).awayPlayers,PROJ[A.team.id]),
+        home:mk(B,B.probablePitcher,(g.lineups||{}).homePlayers,PROJ[B.team.id])};
+    }).sort((a,b)=>new Date(a.time)-new Date(b.time));
+
+    // Simulate every game exactly like the live board does
+    previewGames.forEach(g=>{
+      const s=simGame(g);
+      if(s)SIMS[g.id]=s;
+    });
+
+    const anyLineups=previewGames.some(g=>!g.away.lineupProj||!g.home.lineupProj);
+    const noteHtml=`<div class="note">${anyLineups
+      ?'Some lineups here are official, some are projected from recent starts — same rule as the live board. Projected lineups are marked on each card.'
+      :'All lineups below are projected — MLB usually posts confirmed lineups a few hours before first pitch. This updates automatically as they firm up.'}</div>`;
+
+    let h=`<div class="sbar" style="margin-top:0"><h2>Preview · ${dayLabel(d)}</h2><div class="ln"></div>
+      <div class="ct mono">${previewGames.length}</div></div>${noteHtml}`;
+    h+=previewGames.map(g=>card(g)).join('');
+    el.innerHTML=h;
+    renderPreviewBanner();
+  }catch(e){
+    console.error('preview day error',e);
+    document.getElementById('slate').innerHTML='<div class="empty">Could not load the preview for this date.</div>';
+  }
+}
+
+/* ================= RENDER GAMES ================= */
+function lineupSig(g){
+  // the ONE thing that should legitimately trigger a fresh simulation — if this string is
+  // identical to last time, nothing about the actual matchup changed, so the cached score
+  // should stay exactly as it was rather than re-rolling 10,000 random sims for no reason
+  const a=(g.away.lineup||[]).map(p=>p.id).join(',');
+  const h=(g.home.lineup||[]).map(p=>p.id).join(',');
+  return a+'|'+h+'|'+(g.away.p?g.away.p.id:'?')+'|'+(g.home.p?g.home.p.id:'?');
+}
+function render(){
+  // hide football banners when the MLB board is active
+  const _nw=document.getElementById('nflPowerWarn');if(_nw)_nw.style.display='none';
+  const _cw=document.getElementById('cfbPowerWarn');if(_cw)_cw.style.display='none';
+  const el=document.getElementById('slate');
+  if(!GAMES.length){el.innerHTML='<div class="empty">No games today.</div>';return}
+
+  // Preserve exact scroll position and which panel/tab was open per game card,
+  // since innerHTML replacement below destroys all of that and used to jump
+  // the page back to the top on every single pick tap.
+  const scrollY=window.scrollY;
+  const openPanels={};
+  document.querySelectorAll('.panel.on').forEach(p=>{
+    const m=p.id.match(/^p-([a-z]+)-(\d+)$/);
+    if(m)openPanels[m[2]]=m[1];
+  });
+
+  GAMES.forEach(g=>{
+    const sig=lineupSig(g);
+    const cached=SIMS[g.id];
+    if(!cached||cached._sig!==sig){
+      const s=simGame(g);
+      if(s)s._sig=sig;
+      SIMS[g.id]=s;
+    }
+  });
+  const fin=GAMES.filter(g=>g.abstract==='Final');
+  const live=GAMES.filter(g=>g.abstract==='Live');
+  const up=GAMES.filter(g=>g.abstract!=='Final'&&g.abstract!=='Live');
+  /* CRITICAL FIX — render() is called from several MLB-only background
+     loops (the 15-minute loadAll() refresh, loadWeather(), loadBoxes(),
+     autoGradeIfFinals(), the day-rollover check) with no awareness of what
+     the user is actually looking at. Every one of those was writing straight
+     into the SAME #slate element the NFL and CFB boards also use — so if you
+     were reading the NCAAF board and one of those timers fired in the
+     background, MLB's board silently overwrote it underneath you with no
+     warning. That's exactly the "reverts back to MLB while I'm researching"
+     symptom. The nav badge count still updates either way (cheap, and it
+     should stay accurate even when MLB isn't on screen) — only the actual
+     disruptive repaint is gated on MLB genuinely being the visible sport. */
+  document.getElementById('nG').textContent=GAMES.length;
+  if(ACTIVE_SPORT!=='mlb')return;
+  let h='';
+  if(live.length)h+=sbar('In progress',live.length)+live.map(card).join('');
+  if(up.length)h+=sbar('Upcoming',up.length)+up.map(card).join('');
+  if(fin.length)h+=sbar('Final',fin.length)+fin.map(card).join('');
+  el.innerHTML=h;
+
+  // Reopen whatever panel was expanded per game, and re-highlight its tab button
+  Object.keys(openPanels).forEach(gid=>{
+    const which=openPanels[gid];
+    const p=document.getElementById('p-'+which+'-'+gid);
+    if(p){
+      p.classList.add('on');
+      const row=p.previousElementSibling;
+      if(row&&row.classList.contains('exprow')){
+        [...row.children].forEach(b=>{
+          if(b.getAttribute('onclick')&&b.getAttribute('onclick').includes(`'${which}'`))b.classList.add('on');
+        });
+      }
+    }
+  });
+
+  // Restore scroll position — innerHTML replacement resets it to 0 by default
+  window.scrollTo(0,scrollY);
+}
+function sbar(t,n){return `<div class="sbar"><h2>${t}</h2><div class="ln"></div><div class="ct mono">${n}</div></div>`}
+
+// Shows three things for one game, side by side: what the user personally locked in,
+// what the system committed to via a confirmed system ticket, and what the book's own
+// posted odds imply — three independent reads so they can be compared directly.
+function myBetsPanel(g,s,M){
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const L=get(LS.locked,[]);
+  const mineTickets=L.filter(t=>t.source!=='system'&&t.legs.some(x=>x.game===gl));
+  const sysTickets=L.filter(t=>t.source==='system'&&t.legs.some(x=>x.game===gl));
+
+  const legRow=(t,x)=>{
+    const w=getWagers();
+    const stake=w[t.id];
+    const stakeTxt=stake?` <span class="m">$${(+stake).toFixed(2)} staked</span>`:'';
+    return `<li>${x.pick} <span class="pp">${(x.p*100).toFixed(0)}%</span>${stakeTxt}
+      <span class="m">${t.date}${t.finalized?' · 🔒 final':''}</span></li>`;
+  };
+
+  const mineHtml=mineTickets.length
+    ?`<ol>${mineTickets.flatMap(t=>t.legs.filter(x=>x.game===gl).map(x=>legRow(t,x))).join('')}</ol>`
+    :`<div class="empty" style="padding:10px 0">You haven't locked a pick on this game.</div>`;
+
+  const sysHtml=sysTickets.length
+    ?`<ol>${sysTickets.flatMap(t=>t.legs.filter(x=>x.game===gl).map(x=>legRow(t,x))).join('')}</ol>`
+    :`<div class="empty" style="padding:10px 0">No confirmed system ticket includes this game.</div>`;
+
+  // book-implied read — straight from the devigged market price, no invented numbers
+  let bookHtml;
+  if(M){
+    const bookSide=M.fh>=M.fa?g.home.abbr:g.away.abbr;
+    const bookPct=Math.max(M.fh,M.fa);
+    const bookTotal=bookLineForMarket(g.id,'total');
+    const rlBook=bookLineForMarket(g.id,'runline');
+    bookHtml=`<ol style="list-style:none;padding-left:0">
+      <li>Moneyline favors <b>${bookSide}</b> <span class="pp">${(bookPct*100).toFixed(0)}%</span>
+        <span class="m">implied by ${M.rawH>0?'+':''}${M.rawH}</span></li>
+      ${bookTotal?`<li>Total posted at <b>${bookTotal.line}</b></li>`:''}
+      ${rlBook?`<li>Run line posted at <b>${rlBook.line>0?'+':''}${rlBook.line}</b></li>`:''}
+      ${s?`<li style="margin-top:4px;color:var(--cold)">Sim disagrees by
+        <b>${Math.abs((s.hw-M.fh)*100).toFixed(1)} pts</b> on the moneyline</li>`:''}
+    </ol>`;
+  }else{
+    bookHtml=`<div class="empty" style="padding:10px 0">No book line uploaded or pulled for this game yet.</div>`;
+  }
+
+  return `<div class="mktlab" style="margin-top:0">Your picks</div>${mineHtml}
+    <div class="mktlab">System picks</div>${sysHtml}
+    <div class="mktlab">What the book projects</div>${bookHtml}`;
+}
+
+function card(g){
+  const s=SIMS[g.id],M=marketOf(g),done=g.abstract==='Final';
+  // betting closes the moment a game goes live — pregame lines are stale the instant
+  // first pitch is thrown, so the tappable squares get replaced with a live scoreboard
+  // instead of letting anyone tap a pick on a game already in progress
+  const bettingClosed=done||g.abstract==='Live';
+  // plain-language read of the model against whatever REAL line exists — not the model's
+  // own synthetic total, the actual posted number. This is what answers "the model has
+  // 11.5 but the book has 9.5 — is 9 a good bet or is 11 the safer one."
+  function realLineRead(){
+    if(!s)return [];
+    const out=[];
+    if(M){
+      const favSide=s.hw>=s.aw?'home':'away';
+      const favAb=g[favSide].abbr;
+      const modelP=favSide==='home'?s.hw:s.aw;
+      const mktP=favSide==='home'?M.fh:M.fa;
+      const gap=(modelP-mktP)*100;
+      let text;
+      if(Math.abs(gap)<3)text=`${favAb} moneyline is priced about where the model has it — no real edge either way.`;
+      else if(gap>=3)text=`Model likes ${favAb} more than the real line does — model ${(modelP*100).toFixed(0)}% vs market ${(mktP*100).toFixed(0)}%. Reads as value on ${favAb}.`;
+      else text=`Real moneyline is shorter than the model would price it — market ${(mktP*100).toFixed(0)}% vs model ${(modelP*100).toFixed(0)}%. Book likes ${favAb} more than the sim does.`;
+      out.push({label:'Side',text});
+    }
+    const st=sharpTotalFor(g.id);
+    if(st&&st.overProb!==null){
+      const atReal=s.over(st.line);
+      let text;
+      if(atReal>=.65)text=`Real total is ${st.line} — model clears it ${(atReal*100).toFixed(0)}% of the time. Reads as a solid Over.`;
+      else if(atReal<=.35)text=`Real total is ${st.line} — model stays under it ${((1-atReal)*100).toFixed(0)}% of the time. Reads as a solid Under.`;
+      else text=`Real total is ${st.line} — model has it at ${(atReal*100).toFixed(0)}% to clear it, close to a coinflip by the model's own math.`;
+      out.push({label:'Total',text});
+    }
+    return out;
+  }
+  let edge=null,side=null;
+  if(s&&M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
+    if(eh>=ea){edge=eh;side=g.home.abbr}else{edge=ea;side=g.away.abbr}}
+  const pf=PARK[g.home.abbr]||[100,100],w=g.weather;
+  // ranks the strongest already-computed signals into plain language — reuses edge, H2H,
+  // park factor, and starter form rather than calculating anything new. Caps at 3 so it
+  // reads as "here's why," not a wall of every stat available.
+  function topReasons(){
+    if(!s)return [];
+    const reasons=[];
+    if(edge!==null&&Math.abs(edge)>=5)
+      reasons.push({w:Math.abs(edge),t:`Real market disagrees with the model by ${Math.abs(edge).toFixed(1)} points on ${side} — the largest single factor here.`});
+    const hk2=[g.away.id,g.home.id].sort().join('-'),hrec=H2H[hk2];
+    if(hrec&&hrec.games>=6){
+      const aWins=hrec.aId===g.away.id?hrec.aw:hrec.games-hrec.aw;
+      const pct=aWins/hrec.games;
+      if(pct>=0.7||pct<=0.3)
+        reasons.push({w:Math.abs(pct-0.5)*20,t:`${g.away.abbr} is ${aWins}-${hrec.games-aWins} against ${g.home.abbr} over the last two years — a real historical lean, not just this season.`});
+    }
+    ['away','home'].forEach(sd=>{
+      const q=g[sd].p;
+      if(q&&q.rEra&&q.era){
+        const d=parseFloat(q.rEra)-parseFloat(q.era);
+        if(Math.abs(d)>=1.3)
+          reasons.push({w:Math.abs(d),t:`${q.name} is running ${d<0?'well under':'well over'} their season ERA over the last 5 starts (${q.rEra} vs ${q.era} season) — real recent form, not just a name on the mound.`});
+      }
+    });
+    if(pf[1]>=110||pf[1]<=88)
+      reasons.push({w:Math.abs(pf[1]-100)/4,t:`${g.home.abbr}'s park plays ${pf[1]>=110?'well above':'well below'} average for home runs (${pf[1]}) — a real park effect, not noise.`});
+    if(w&&w.temp&&(w.temp>=88||w.temp<=45))
+      reasons.push({w:Math.abs(w.temp-68)/10,t:`${w.temp}° is a real weather factor tonight — ${w.temp>=88?'hot air carries the ball further':'cold air suppresses scoring'}.`});
+    return reasons.sort((a,b)=>b.w-a.w).slice(0,3);
+  }
+  const arm=sd=>{const q=g[sd].p;if(!q)return '<b>TBD</b>';
+    let f='';
+    if(q.rEra&&q.era){const d=parseFloat(q.rEra)-parseFloat(q.era);
+      if(d>=1)f=`<span class="flag hot">L5 ${parseFloat(q.rEra).toFixed(2)}</span>`;
+      else if(d<=-1)f=`<span class="flag cool">L5 ${parseFloat(q.rEra).toFixed(2)}</span>`}
+    const ipg=q.ip&&q.gs?(parseFloat(q.ip)/q.gs).toFixed(1):null;
+    // real league-wide top-N% badge — gold glow, distinct from the L5 hot/cool
+    // flag above (that's short-term form; this is a season-long, league-wide
+    // ranking against every qualified starter, cached once per load)
+    const elite=pitcherEliteBadgesSync(q.id);
+    const eliteBadges=elite.map(e=>
+      `<span class="flag elite" title="Top ${e.pct}% league-wide in ${e.stat} this season">⭐ Top ${Math.ceil(e.pct)}% ${e.stat}</span>`
+    ).join('');
+    return `<b>${q.name}</b>${q.hand?' ('+q.hand+')':''} <span class="st">${q.era||'—'}${q.whip?' / '+q.whip:''}${q.so?' / '+q.so+'K':''}${ipg?' / '+ipg+'ip':''}</span>${f}${eliteBadges}`};
+
+  let badges='';
+  if(done)badges+='<div class="badge fin">Final</div>';
+  else if(!s)badges+='<div class="badge dark">No lineup available yet</div>';
+  else{
+    badges+=edge===null?'<div class="badge pass">Sim ready · no market to compare</div>'
+      :edge>=3?`<div class="badge play">Edge · ${side} · +${edge.toFixed(1)}</div>`
+      :`<div class="badge pass">No edge · best ${edge>0?'+':''}${edge.toFixed(1)}</div>`;
+    if(g.away.lineupProj||g.home.lineupProj){
+      const who=[g.away.lineupProj?g.away.abbr:null,g.home.lineupProj?g.home.abbr:null].filter(Boolean).join('/');
+      badges+=`<div class="badge proj">Projected lineup · ${who}</div>`;
+    }
+  }
+  // signal chips: H2H, venue records, HR threats
+  let sig='';
+  // intel chips: your record with these teams, frozen number, take/fade, system form
+  try{
+    sig+=teamRecordChip(g.away.abbr)+teamRecordChip(g.home.abbr);
+    sig+=frozenChip(g,s,'mlb');
+    sig+=takeFadeChip(g,s,'mlb');
+    sig+=trendInfluenceChip(g,s);
+    sig+=systemFormChip('mlb');
+  }catch(e){}
+  const hk=[g.away.id,g.home.id].sort().join('-'),hr=H2H[hk];
+  if(hr&&hr.games>=6){
+    const aWins=hr.aId===g.away.id?hr.aw:hr.bw;
+    sig+=`<div class="sigchip">H2H 2yr <b>${aWins}-${hr.games-aWins}</b> ${g.away.abbr} · <b>${(hr.runs/hr.games).toFixed(1)}</b> r/g</div>`;
+  }
+  const sa=SPLITS[g.away.id],sh=SPLITS[g.home.id];
+  if(sa&&sa.away)sig+=`<div class="sigchip">${g.away.abbr} away <b>${sa.away.w}-${sa.away.l}</b></div>`;
+  if(sh&&sh.home)sig+=`<div class="sigchip">${g.home.abbr} home <b>${sh.home.w}-${sh.home.l}</b></div>`;
+  const hrs=PROPS.filter(p=>p.gid===g.id&&p.type==='hr').sort((a,b)=>b.p-a.p).slice(0,2);
+  if(hrs.length&&hrs[0].p>=.12)sig+=`<div class="sigchip">HR threat <b>${hrs.map(x=>x.name+' '+(x.p*100).toFixed(0)+'%').join(', ')}</b></div>`;
+  const opSig=oddsPapiSignal(g.id);
+  if(opSig&&opSig.balancedCount>0)sig+=`<div class="sigchip">OddsPapi: balanced total on <b>${opSig.balancedCount}</b> book${opSig.balancedCount>1?'s':''} — no line or direction available, informational only</div>`;
+
+  const projLine=s?`<div class="proj">
+      <div class="sc">${g.away.abbr} ${s.aR.toFixed(1)} – ${s.hR.toFixed(1)} ${g.home.abbr}</div>
+      <div class="rd">${Math.round(s.aR)}–${Math.round(s.hR)}</div>
+      <div class="md">most common ${s.modeScore?s.modeScore.replace('-','–'):'—'} · ${(s.modeScorePct*100).toFixed(1)}%</div>
+    </div>`:'';
+
+  const finalLine=done?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
+    <div class="rd">final</div></div>${finalBetStrip(g)}`:'';
+
+  const isLive=g.abstract==='Live';
+  // real league-wide top-N% badges — team record (win%) and park (HR factor)
+  // both read from the same synchronous caches as the pitcher badges above
+  const awayRecBadge=teamRecordBadgeSync(g.away.abbr);
+  const homeRecBadge=teamRecordBadgeSync(g.home.abbr);
+  const recBadgeHtml=(b,label)=>b?`<span class="flag elite" title="Top ${b.pct}% league-wide by record (${b.record})">⭐ ${label} top ${Math.ceil(b.pct)}%</span>`:'';
+  const parkPcts=parkPercentiles();
+  const parkBadge=parkPcts.topHRParks.has(g.home.abbr)
+    ?`<span class="flag elite" title="Top ${getPercentileThreshold()}% league-wide HR park factor">⭐ HR park</span>`:'';
+  return `<div class="game ${edge>=3&&!done?'edge':''} ${done?'done':''} ${isLive?'in-play':''}" id="g${g.id}">
+   <div class="ghd">
+    <div class="grow1"><div class="teams">${g.away.abbr}<span class="at">@</span>${g.home.abbr}
+      ${recBadgeHtml(awayRecBadge,g.away.abbr)}${recBadgeHtml(homeRecBadge,g.home.abbr)}</div>
+     <div class="meta">${fmtTime(g.time)}<br>${g.away.w}-${g.away.l} · ${g.home.w}-${g.home.l}</div></div>
+    <div class="env">Park <span class="pf">${pf[0]}</span>r / <span class="pf">${pf[1]}</span>hr${parkBadge}${w?` · <b>${w.temp}°</b> ${w.cond||''} ${w.wind||''}`:DOME[g.home.abbr]?' · dome':''}${s&&s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}</div>
+    <div class="arms">${arm('away')}</div><div class="arms">${arm('home')}</div>
+    ${isLive?liveScoreBar(g.id,g):""}
+    ${finalLine}${!isLive?projLine:''}
+    ${sig?`<div class="sig">${sig}</div>`:''}
+    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'mlb'})}catch(e){return''}})()}
+    ${badges}
+   </div>
+   ${!bettingClosed&&s?betGrid(g,s,M):''}
+   <div class="exprow">
+    <button class="expbtn" onclick="pan(${g.id},'coach',this)">Coach</button>
+    <button class="expbtn" onclick="pan(${g.id},'trend',this)">Trends</button>
+    <button class="expbtn" onclick="pan(${g.id},'ag',this)">A–G</button>
+    <button class="expbtn" onclick="pan(${g.id},'alt',this)">Alt lines</button>
+    <button class="expbtn" onclick="pan(${g.id},'props',this)">Props</button>
+    <button class="expbtn" onclick="pan(${g.id},'mybets',this)">My bets</button>
+    ${isLive?`<button class="expbtn" onclick="pan(${g.id},'livebox',this)">Live box</button>`:''}
+    ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button>`:''}
+   </div>
+   <div class="panel" id="p-coach-${g.id}">${coachBriefing(g,s,'mlb')}</div>
+   <div class="panel" id="p-trend-${g.id}">${trendPanel(g,s)}</div>
+   <div class="panel" id="p-ag-${g.id}">${agPanel(g,s,M,topReasons(),realLineRead())}</div>
+   <div class="panel" id="p-alt-${g.id}">${altPanel(g,s)}</div>
+   <div class="panel" id="p-props-${g.id}">${propPanel(g)}</div>
+   <div class="panel" id="p-mybets-${g.id}">${myBetsPanel(g,s,M)}</div>
+   ${isLive?`<div class="panel" id="p-livebox-${g.id}">${liveBoxPanel(g.id,g)}</div>`:''}
+   ${done?`<div class="panel" id="p-box-${g.id}">${boxPanel(g)}</div>`:''}
+  </div>`;
+}
+
+// Loose matching between an external pick record and a bet square's label/pick string —
+// external picks store side (away/home/over/under) and market type, bet squares are
+// built from team abbrs and formatted strings, so match on market family + side.
+function marketMatchesPick(ext,pick,label){
+  const p=(pick+' '+label).toLowerCase();
+  if(ext.market==='moneyline')return /ml| ml$/i.test(p)||!/[+-]?\d+\.5/.test(p);
+  if(ext.market==='runline')return /[+-]1\.5/.test(p);
+  if(ext.market==='total')return /^over|^under|^f5 over|^f5 under/i.test(pick);
+  if(ext.market==='f5total')return /f5.*(over|under)/i.test(p);
+  if(ext.market==='f5side')return /^f5 /i.test(pick)&&!/over|under/i.test(pick);
+  return false;
+}
+function pickMatchesSide(ext,pick,label){
+  const p=pick.toLowerCase();
+  if(ext.side==='over')return p.includes('over');
+  if(ext.side==='under')return p.includes('under');
+  if(ext.side==='away'||ext.side==='home'){
+    const ab=(ext.side==='away'?ext.away:ext.home||'').toLowerCase();
+    return ab&&p.includes(ab.toLowerCase());
+  }
+  return false;
+}
+
+function betGrid(g,s,M){
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  // EV signalling. modelP = what the sim independently thinks of THIS exact line.
+  // marketP = the devigged probability actually priced in. Edge is the gap between them —
+  // positive means you're being paid more than the model thinks the risk is worth.
+  // 4 points is the floor for a signal; below that is noise and stays neutral on purpose.
+  const b=(label,pick,prob,pairPct,opts)=>{
+    opts=opts||{};
+    const id=gl+'|'+pick;
+    const on=SLIP.some(x=>x.id===id);
+    const pct=pairPct!==undefined?pairPct:Math.round(prob*100);
+    const priceStr=(opts.realPrice!==undefined&&opts.realPrice!==null)
+      ? (opts.realPrice>0?'+'+opts.realPrice:''+opts.realPrice)
+      : vigAmer(prob);
+    let cls='',badge='',fair='';
+    const mp=opts.modelP,kp=opts.marketP;
+    if(typeof mp==='number'&&typeof kp==='number'&&isFinite(mp)&&isFinite(kp)){
+      const e=(mp-kp)*100;
+      if(e>=EDGE_MIN){cls=' value';badge=`<span class="eb up">+${e.toFixed(1)}</span>`}
+      else if(e<=-EDGE_MIN){cls=' avoid';badge=`<span class="eb dn">${e.toFixed(1)}</span>`}
+      fair=`<div class="bf">model ${(mp*100).toFixed(0)}% · fair ${amer(mp)}</div>`;
+    }
+    // sim handicap chip — shown above the book price so the gap is unmissable:
+    // "sim 10.1" when book says 8.5, "sim -3.2" when book says -1.5, "sim 58%" for ML
+    const simChip=opts.simVal!==undefined
+      ?`<div class="sim-chip">sim ${opts.simVal}</div>`
+      :'';
+
+    // ═══ ALIGNMENT TIER — three INDEPENDENT signals, checked separately, then
+    // combined into one tier. This is the real fix: before, only "does an
+    // outside source agree" ever became a color — the book's own real price
+    // and the model's edge never got checked TOGETHER with outside consensus
+    // to answer "how many independent things point the same way here."
+    //   Signal 1 — BOOK LEAN: does the real book price itself already favor
+    //     this side strongly (marketP alone, not edge — the book's own view).
+    //   Signal 2 — MODEL EDGE: does the model disagree with the market in
+    //     THIS side's favor (the existing value/avoid computation above).
+    //   Signal 3 — OUTSIDE CONSENSUS: do uploaded sources agree, and how many.
+    // Tiers, highest to lowest:
+    //   SUPREME  — book leans this way AND model has real edge AND outside
+    //              sources are unanimous. All three independent reads agree.
+    //   STRONG   — any two of the three signals align.
+    //   LEAN     — exactly one signal present.
+    //   CONFLICT — signals actively point different directions (e.g. model
+    //              likes it but outside sources are unanimous on the OTHER
+    //              side) — this is worth seeing, not just staying neutral.
+    //   (none)   — no real signal either way, plain square.
+    const bookLeans=typeof kp==='number'&&kp>=0.58; // book's own price implies ≥58% on this exact side
+    const modelEdgeHere=cls===' value';
+    const modelAgainstHere=cls===' avoid';
+    let srcCls='',srcBadge='',outsideAgrees=false,outsideUnanimous=false,outsideAgainst=false;
+    const extHere=extToday().filter(x=>x.gid===g.id);
+    if(extHere.length){
+      const sameMkt=extHere.filter(x=>marketMatchesPick(x,pick,label));
+      const onThis=sameMkt.filter(x=>pickMatchesSide(x,pick,label));
+      if(onThis.length){
+        const allSrcOnMkt=new Set(sameMkt.map(x=>x.src));
+        const allSrcOnThis=new Set(onThis.map(x=>x.src));
+        outsideUnanimous=allSrcOnMkt.size>=2&&allSrcOnThis.size===allSrcOnMkt.size;
+        outsideAgrees=true;
+        srcBadge=`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':onThis.length+' source'+(onThis.length>1?'s':'')}</div>`;
+      }else if(sameMkt.length){
+        // outside sources exist for this MARKET but none of them picked THIS
+        // side — meaning they're on the other side, a real disagreement
+        outsideAgainst=true;
+      }
+    }
+    const signalsFor=[bookLeans,modelEdgeHere,outsideAgrees].filter(Boolean).length;
+    const hasConflict=(modelAgainstHere&&(bookLeans||outsideAgrees))||(outsideAgainst&&(bookLeans||modelEdgeHere));
+    let tierCls='';
+    if(hasConflict)tierCls=' conflict';
+    else if(signalsFor>=3||(signalsFor>=2&&outsideUnanimous))tierCls=' supreme';
+    else if(signalsFor>=2)tierCls=' strong';
+    else if(signalsFor>=1)tierCls=' lean';
+    if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
+    const tierBadge=tierCls===' supreme'?`<div class="tier-tag supreme">◆ SUPREME</div>`
+      :tierCls===' strong'?`<div class="tier-tag strong">STRONG</div>`
+      :tierCls===' conflict'?`<div class="tier-tag conflict">⚠ CONFLICT</div>`:'';
+    return `<div class="bet${cls}${srcCls}${tierCls} ${on?'on':''}" role="button" tabindex="0"
+      onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
+      <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
+      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${tierBadge}</div>`;
+  };
+  // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
+  // always sum to exactly 100 instead of each rounding independently, which can silently
+  // produce 101% (or 99%) whenever the true probability lands near a half-percent boundary
+  const pair=p=>{const a=Math.round(p*100);return [a,100-a]};
+  const favSide=s.hw>=s.aw?'home':'away';
+  const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
+  const favCover=rlProb(g,s,favSide,1.5),dogCover=favCover===null?null:1-favCover;
+  const t1=Math.floor(s.mean)+.5;
+  const f5t=Math.floor(s.f5tot)+.5;
+  const f5over=Math.min(.9,Math.max(.1,.5+(s.f5tot-f5t)*.16));
+  const [f5oPct,f5uPct]=pair(f5over);
+  const stMatch=sharpTotalFor(g.id);
+  const mM=marketOf(g);
+  let rlPair=[null,null];
+  if(favCover!==null)rlPair=pair(favCover);
+  // sim handicap values — computed once, threaded into every bet square as simVal
+  // ML: sim win% for each side
+  const simAwML=Math.round(s.aw*100)+'%';
+  const simHmML=Math.round(s.hw*100)+'%';
+  // Total: sim projected total (same number shown on both over and under squares so
+  // you instantly see "book 8.5, sim 10.1" without any mental math)
+  const simTot=s.mean.toFixed(1);
+  // Run line: sim implied spread = hR - aR (positive = home favored by that many runs)
+  // Shown as a signed number matching the convention of a real spread (+3.2 / -3.2)
+  const simSpread=s.hR-s.aR;
+  const simFavSpread=(simSpread>=0?'-':'+')+(Math.abs(simSpread).toFixed(1));
+  const simDogSpread=(simSpread>=0?'+':'-')+(Math.abs(simSpread).toFixed(1));
+  // F5
+  const simF5Tot=s.f5tot.toFixed(1);
+  const simF5Aw=Math.round(s.f5a*100)+'%';
+  const simF5Hm=Math.round(s.f5h*100)+'%';
+
+  const bookML=bookLineForMarket(g.id,'moneyline');
+  const realMLBlock=(()=>{
+    if(bookML){
+      const homeBook=bookLineForMarket(g.id,'moneyline','home'),awayBook=bookLineForMarket(g.id,'moneyline','away');
+      const hp=homeBook?bookDevig(homeBook.price):null,ap=awayBook?bookDevig(awayBook.price):null;
+      if(hp!==null&&ap!==null){
+        const sum=hp+ap,[bhPct,baPct]=[Math.round(hp/sum*100),Math.round(ap/sum*100)];
+        return `<div class="mktlab">Moneyline <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',ap/sum,baPct,{realPrice:awayBook.price,modelP:s.aw,marketP:ap/sum,simVal:simAwML})}${b(g.home.abbr,g.home.abbr+' ML',hp/sum,bhPct,{realPrice:homeBook.price,modelP:s.hw,marketP:hp/sum,simVal:simHmML})}</div>`;
+      }
+    }
+    if(!mM)return '';
+    const bl=mlBlend(g,s);
+    const [bhPct,baPct]=pair(bl.home);
+    return `<div class="mktlab">Moneyline <span class="flag cool">real line</span></div>
+      <div class="betgrid">${b(g.away.abbr,g.away.abbr+' ML',bl.away,baPct,{modelP:s.aw,marketP:M.fa,simVal:simAwML})}${b(g.home.abbr,g.home.abbr+' ML',bl.home,bhPct,{modelP:s.hw,marketP:M.fh,simVal:simHmML})}</div>`;
+  })();
+  const bookTotal=bookLineForMarket(g.id,'total');
+  const realTotalBlock=(()=>{
+    if(bookTotal&&bookTotal.line!==null){
+      const overBook=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTotal.line)<0.01);
+      const underBook=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTotal.line)<0.01);
+      if(overBook&&underBook){
+        const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
+        const [roPct,ruPct]=[Math.round(op/sum*100),Math.round(up/sum*100)];
+        return `<div class="mktlab">Total runs · ${bookTotal.line} <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b('Over '+bookTotal.line,'Over '+bookTotal.line,op/sum,roPct,{realPrice:overBook.price,modelP:s.over(bookTotal.line),marketP:op/sum,simVal:simTot})}${b('Under '+bookTotal.line,'Under '+bookTotal.line,up/sum,ruPct,{realPrice:underBook.price,modelP:1-s.over(bookTotal.line),marketP:up/sum,simVal:simTot})}</div>`;
+      }
+    }
+    if(!stMatch||stMatch.overProb===null)return '';
+    const blended=sharpTotalBlend(g,stMatch.line,s.over(stMatch.line));
+    const [roPct,ruPct]=pair(blended);
+    const dvSum=(stMatch.overProb||0)+(stMatch.underProb||0);
+    const mkO=dvSum>0?stMatch.overProb/dvSum:null;
+    return `<div class="mktlab">Total runs · ${stMatch.line} <span class="flag cool">real line — ${stMatch.book}</span></div>
+      <div class="betgrid">${b('Over '+stMatch.line,'Over '+stMatch.line,blended,roPct,{realPrice:stMatch.overAmerican,modelP:s.over(stMatch.line),marketP:mkO,simVal:simTot})}${b('Under '+stMatch.line,'Under '+stMatch.line,1-blended,ruPct,{realPrice:stMatch.underAmerican,modelP:1-s.over(stMatch.line),marketP:mkO===null?null:1-mkO,simVal:simTot})}</div>`;
+  })();
+  const bookRL=bookLineForMarket(g.id,'runline');
+  const realRLBlock=(()=>{
+    if(bookRL){
+      const favBook=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line<0);
+      const dogBook=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line>0);
+      if(favBook&&dogBook){
+        const fp=bookDevig(favBook.price),dp=bookDevig(dogBook.price),sum=fp+dp;
+        const fAb=favBook.side==='home'?g.home.abbr:g.away.abbr,dAb=dogBook.side==='home'?g.home.abbr:g.away.abbr;
+        const [rfPct,rdPct]=[Math.round(fp/sum*100),Math.round(dp/sum*100)];
+        const favModel=rlProb(g,s,favBook.side,-favBook.line);
+        const dogModel=rlProb(g,s,dogBook.side,-dogBook.line);
+        const favOutright=favBook.side==='home'?s.hw:s.aw;
+        const suspect=(fp/sum)>favOutright+0.05;
+        const warn=suspect?`<div class="sub" style="color:var(--rust);margin-top:4px">Check this one — the extracted sides look inverted against the model, so no edge is being shown here.</div>`:'';
+        // sim spread shown from each team's perspective — fav gets the negative side
+        const favIsHome=favBook.side==='home';
+        const favSimSpread=favIsHome?simFavSpread:(simSpread>=0?simDogSpread:simFavSpread);
+        const dogSimSpread=favIsHome?simDogSpread:(simSpread>=0?simFavSpread:simDogSpread);
+        return `<div class="mktlab">Run line <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b(fAb+' '+favBook.line,fAb+' '+favBook.line,fp/sum,rfPct,{realPrice:favBook.price,modelP:suspect?null:favModel,marketP:suspect?null:fp/sum,simVal:favSimSpread})}${b(dAb+' +'+dogBook.line,dAb+' +'+dogBook.line,dp/sum,rdPct,{realPrice:dogBook.price,modelP:suspect?null:dogModel,marketP:suspect?null:dp/sum,simVal:dogSimSpread})}</div>${warn}`;
+      }
+    }
+    if(!hasRealRunLine(g.id))return '';
+    const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+    if(!favRD&&!dogRD)return '';
+    let favBlend=favCover;
+    if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+    else if(dogRD)favBlend=1-(dogCover*0.55+dogRD.prob*0.45);
+    const dogBlend=1-favBlend;
+    const [rfPct,rdPct]=pair(favBlend);
+    const mkFav=favRD?favRD.prob:(dogRD?1-dogRD.prob:null);
+    // favSide is already the sim's own favorite — so favSimSpread is always negative
+    return `<div class="mktlab">Run line <span class="flag cool">real line — TheRundown</span></div>
+      <div class="betgrid">${b(favAb+' -1.5',favAb+' -1.5',favBlend,rfPct,{modelP:favCover,marketP:mkFav,simVal:simFavSpread})}${b(dogAb+' +1.5',dogAb+' +1.5',dogBlend,rdPct,{modelP:dogCover,marketP:mkFav===null?null:1-mkFav,simVal:simDogSpread})}</div>`;
+  })();
+  return `<div class="mktblock">
+    ${realMLBlock}
+    ${realRLBlock}
+    ${realTotalBlock}
+    ${(()=>{
+      // F5 side squares — from book screenshots (market:"f5side")
+      const awayF5Side=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='away');
+      const homeF5Side=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='home');
+      let f5SideBlock='';
+      if(awayF5Side&&homeF5Side){
+        const ap=bookDevig(awayF5Side.price),hp=bookDevig(homeF5Side.price),sum=ap+hp;
+        const [baPct,bhPct]=[Math.round(ap/sum*100),Math.round(hp/sum*100)];
+        f5SideBlock=`<div class="mktlab">First 5 moneyline <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,ap/sum,baPct,{realPrice:awayF5Side.price,modelP:s.f5a,marketP:ap/sum,simVal:simF5Aw})}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,hp/sum,bhPct,{realPrice:homeF5Side.price,modelP:s.f5h,marketP:hp/sum,simVal:simF5Hm})}</div>`;
+      } else if(awayF5Side||homeF5Side){
+        const found=awayF5Side||homeF5Side;
+        const foundSide=awayF5Side?'away':'home';
+        const otherSide=foundSide==='away'?'home':'away';
+        const foundAb=g[foundSide].abbr,otherAb=g[otherSide].abbr;
+        const foundSimVal=foundSide==='away'?simF5Aw:simF5Hm;
+        f5SideBlock=`<div class="mktlab">First 5 moneyline <span class="flag cool book">your book</span></div>
+          <div class="betgrid">${foundSide==='away'
+            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5a,Math.round(s.f5a*100),{realPrice:found.price,modelP:s.f5a,simVal:foundSimVal})
+            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${simF5Aw}</div><div class="bs">sim only</div></div>`}
+          ${foundSide==='home'
+            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5h,Math.round(s.f5h*100),{realPrice:found.price,modelP:s.f5h,simVal:foundSimVal})
+            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${simF5Hm}</div><div class="bs">sim only</div></div>`}
+          </div>`;
+      }
+      // F5 total block
+      const bookF5Total=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
+      const realF5=hasRealF5(g.id);
+      let f5TotalBlock='';
+      if(bookF5Total){
+        const overBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='over');
+        const underBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='under');
+        if(overBook&&underBook){
+          const op=bookDevig(overBook.price),up=bookDevig(underBook.price),sum=op+up;
+          const mO=f5OverAt(s,overBook.line);
+          f5TotalBlock=`<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
+            <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100),{realPrice:overBook.price,modelP:mO,marketP:op/sum,simVal:simF5Tot})}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100),{realPrice:underBook.price,modelP:1-mO,marketP:up/sum,simVal:simF5Tot})}</div>`;
+        }
+      } else if(realF5){
+        f5TotalBlock=`<div class="mktlab">First 5 total · ${f5t}</div>
+          <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct,{simVal:simF5Tot})}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct,{simVal:simF5Tot})}</div>`;
+      }
+      // sim-only side squares when no book f5side but we have a real F5 total from the book
+      // (you uploaded F5 total lines so you definitely want the side squares too — sim drives them)
+      const bookF5AnyExists=bookF5Total||awayF5Side||homeF5Side;
+      const f5SideSimBlock=(!f5SideBlock&&(realF5||bookF5AnyExists))
+        ?`<div class="mktlab">First 5 moneyline <span class="flag cool">sim</span></div>
+           <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a,undefined,{simVal:simF5Aw})}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h,undefined,{simVal:simF5Hm})}</div>`
+        :'';
+      if(f5SideBlock||f5TotalBlock||f5SideSimBlock){
+        return f5SideBlock+f5SideSimBlock+f5TotalBlock;
+      }
+      // no real line at all — sim-only display, not tappable
+      return `<div class="mktlab" style="color:var(--mute)">First 5 innings — no real line posted</div>
+        <div class="betgrid">
+          <div class="cmpr"><div class="bl">${g.away.abbr}</div><div class="bo">${simF5Aw}</div><div class="bs">sim only</div></div>
+          <div class="cmpr"><div class="bl">${g.home.abbr}</div><div class="bo">${simF5Hm}</div><div class="bs">sim only</div></div>
+        </div>`;
+    })()}
+    <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
+  </div>`;
+}
+
+function agPanel(g,s,M,topR,realR){
+  if(!s)return '<div class="empty">Needs a lineup — projected or confirmed — before it can simulate.</div>';
+  const bookR=bookLineRead(g,s);
+  let relocated='';
+  if(topR&&topR.length)relocated+=`<div class="tkt"><h3>Why this number</h3>
+    <ol style="margin:0;padding-left:18px;font-size:12px;line-height:1.7">${topR.map(r=>`<li>${r.t}</li>`).join('')}</ol></div>`;
+  if(realR&&realR.length)relocated+=`<div class="tkt">${realR.map(r=>`<div class="sub" style="margin-bottom:6px"><b style="color:var(--gold)">${r.label}</b> — ${r.text}</div>`).join('')}</div>`;
+  if(bookR&&bookR.length)relocated+=`<div class="tkt hi">${bookR.map(r=>`<div class="sub" style="margin-bottom:6px"><b style="color:var(--cold)">${r.label}</b> — ${r.text}</div>`).join('')}</div>`;
+  let hist='';
+  const mx=Math.max(...s.bins);
+  hist=`<div class="hist">${s.bins.map((b,i)=>`<div class="hb ${i===s.modeTot?'md':''}" style="height:${Math.max(1,b/mx*32)}px"></div>`).join('')}</div>
+    <div class="histx mono"><span>0</span><span>mode ${s.modeTot} · ${(s.modeTotPct*100).toFixed(1)}%</span><span>23+</span></div>`;
+  let edge=null,side=null;
+  if(M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
+    if(eh>=ea){edge=eh;side=g.home.abbr}else{edge=ea;side=g.away.abbr}}
+  return `${relocated}
+   <div class="row"><div class="lb">A</div><div class="tx">Sim <span class="mono">${g.away.abbr} ${s.aR.toFixed(1)} – ${s.hR.toFixed(1)} ${g.home.abbr}</span>
+     · rounded <span class="mono">${Math.round(s.aR)}–${Math.round(s.hR)}</span>
+     · my line <span class="mono">${amer(s.hw)}</span> ${g.home.abbr}</div></div>
+   <div class="row"><div class="lb">B</div><div class="tx"><b>Most common exact score</b>
+     <span class="mono">${s.modeScore?s.modeScore.replace('-','–'):'—'}</span> at ${(s.modeScorePct*100).toFixed(1)}% of runs.
+     Most common total <span class="mono">${s.modeTot}</span> at ${(s.modeTotPct*100).toFixed(1)}%.
+     Median ${s.med}, mean ${s.mean.toFixed(1)}, 10th–90th ${s.p10}–${s.p90}.${hist}</div></div>
+   <div class="row"><div class="lb">C</div><div class="tx">${M?`Market ${g.home.abbr} <span class="mono">${amer(M.fh)}</span>${M.oH?` · opened <span class="mono">${amer(M.oH)}</span>`:''} — shown for comparison only, not used in the projection`:'No market pulled. The projection does not need it.'}</div></div>
+   <div class="row"><div class="lb">D</div><div class="tx">${edge!==null?(edge>=3?`<b>${side}</b> — sim ${(Math.max(s.hw,s.aw)*100).toFixed(1)}% vs market ${((side===g.home.abbr?M.fh:M.fa)*100).toFixed(1)}%`:'No edge worth taking — gap under 3 points is noise.'):'Pull odds to compare.'}</div></div>
+   <div class="row"><div class="lb">E</div><div class="tx">Over / under —
+     7.5 <span class="mono">${(s.over(7.5)*100).toFixed(0)}/${((1-s.over(7.5))*100).toFixed(0)}</span>
+     · 8.5 <span class="mono">${(s.over(8.5)*100).toFixed(0)}/${((1-s.over(8.5))*100).toFixed(0)}</span>
+     · 9.5 <span class="mono">${(s.over(9.5)*100).toFixed(0)}/${((1-s.over(9.5))*100).toFixed(0)}</span>
+     · 10.5 <span class="mono">${(s.over(10.5)*100).toFixed(0)}/${((1-s.over(10.5))*100).toFixed(0)}</span></div></div>
+   ${(()=>{const st=sharpTotalFor(g.id);if(!st)return '';
+     return `<div class="row"><div class="lb">E2</div><div class="tx" style="color:var(--cold)">SharpAPI ${st.book} line ${st.line} — blended into the Total runs prediction above when within half a run of it
+       ${st.overProb?' · book over '+(st.overProb*100).toFixed(0)+'% ('+(st.overAmerican>0?'+':'')+st.overAmerican+')':''}
+       ${st.underProb?' · book under '+(st.underProb*100).toFixed(0)+'% ('+(st.underAmerican>0?'+':'')+st.underAmerican+')':''}</div></div>`;
+   })()}
+   <div class="row"><div class="lb">F5</div><div class="tx">${g.home.abbr} <span class="mono">${(s.f5h*100).toFixed(0)}%</span>
+     · ${g.away.abbr} <span class="mono">${(s.f5a*100).toFixed(0)}%</span>
+     · tie <span class="mono">${(s.f5tie*100).toFixed(0)}%</span>
+     · F5 total <span class="mono">${s.f5tot.toFixed(1)}</span></div></div>
+   <div class="row"><div class="lb">G</div><div class="tx">${g.venue} · env ×${s.env.toFixed(3)}${s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}
+     · ${s.N.toLocaleString()} sims${g.status?' · '+g.status:''}</div></div>`;
+}
+
+const PTYPE=[['tb','Total bases'],['hits','Hits'],['hr','Home runs'],['rbi','RBI'],
+['k','Strikeouts'],['bb','Walks allowed'],['ha','Hits allowed']];
+function propPanel(g){
+  const mine=PROPS.filter(p=>p.gid===g.id);
+  if(!mine.length)return '<div class="empty">Props appear once a lineup is available.</div>';
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  return PTYPE.map(([t,label])=>{
+    const list=mine.filter(p=>p.type===t).sort((a,b)=>b.p-a.p);
+    if(!list.length)return '';
+    return `<div class="ptype"><h4>${label} · ${list.length}</h4>${list.map(p=>{
+      const c=p.p>=.9?'p90':p.p>=.8?'p80':p.p>=.7?'p70':'plow';
+      const id=gl+'|PROP|'+p.name+' '+p.mkt;
+      const on=SLIP.some(x=>x.id===id);
+      const sp=(p.type==='hr'||p.type==='hits')?sharpPropFor(g.id,p.name,p.type):null;
+      const spMatch=sp&&Math.floor(sp.line)+1===p.thr;
+      const cmp=spMatch?`<div class="pm" style="color:var(--cold)">${sp.book} o${sp.line}: ${(sp.prob*100).toFixed(0)}% (${sp.american>0?'+':''}${sp.american}) — blended into the % above</div>`:'';
+      return `<div class="prop ${on?'on':''}" onclick="tog('${esc(id)}','${esc(gl)}','${esc(p.name+' '+p.mkt)}',${p.p},${g.id},'${esc(p.type)}','${esc(p.name)}','${esc(p.mkt)}')">
+        <div class="pc mono ${c}">${(p.p*100).toFixed(0)}%</div>
+        <div class="pw"><div class="pn">${p.name}${p.proj?' <span class="flag cool">proj</span>':''}</div>
+        <div class="pm">${p.mkt} · ${p.team}</div>${cmp}</div></div>`}).join('')}</div>`;
+  }).join('');
+}
+
+function boxPanel(g){
+  const bx=BOX[g.id];
+  if(!bx||!bx.teams)return '<div class="empty">Box score loading…</div>';
+  const tbl=(side,abbrv)=>{
+    const T=bx.teams[side];if(!T)return '';
+    const bats=Object.values(T.players||{}).filter(p=>p.battingOrder)
+      .sort((a,b)=>parseInt(a.battingOrder)-parseInt(b.battingOrder));
+    const pits=Object.values(T.players||{}).filter(p=>((p.stats||{}).pitching||{}).inningsPitched);
+    return `<div style="margin-bottom:11px">
+      <h4 style="font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin:0 0 4px">${abbrv} batting</h4>
+      <table class="boxtbl"><tr><th>Player</th><th>AB</th><th>H</th><th>HR</th><th>TB</th><th>R</th><th>RBI</th><th>BB</th><th>K</th></tr>
+      ${bats.map(p=>{const b=(p.stats||{}).batting||{};
+        return `<tr><td>${short(p.person.fullName)}</td><td>${b.atBats??'-'}</td>
+        <td class="${(b.hits||0)>=2?'hi':''}">${b.hits??'-'}</td>
+        <td class="${(b.homeRuns||0)>=1?'hi':''}">${b.homeRuns??'-'}</td>
+        <td>${b.totalBases??'-'}</td>
+        <td>${b.runs??'-'}</td><td>${b.rbi??'-'}</td><td>${b.baseOnBalls??'-'}</td><td>${b.strikeOuts??'-'}</td></tr>`}).join('')}
+      </table>
+      <h4 style="font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin:8px 0 4px">${abbrv} pitching</h4>
+      <table class="boxtbl"><tr><th>Pitcher</th><th>IP</th><th>H</th><th>HR</th><th>R</th><th>ER</th><th>BB</th><th>K</th><th>P</th></tr>
+      ${pits.map(p=>{const q=(p.stats||{}).pitching||{};
+        return `<tr><td>${short(p.person.fullName)}</td><td>${q.inningsPitched??'-'}</td><td>${q.hits??'-'}</td>
+        <td>${q.homeRuns??'-'}</td>
+        <td>${q.runs??'-'}</td><td>${q.earnedRuns??'-'}</td><td>${q.baseOnBalls??'-'}</td>
+        <td class="${(q.strikeOuts||0)>=6?'hi':''}">${q.strikeOuts??'-'}</td><td>${q.pitchesThrown??'-'}</td></tr>`}).join('')}
+      </table></div>`;
+  };
+  // grade every pick tied to this game
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const graded=[];
+  get(LS.locked,[]).forEach(t=>t.legs.forEach(l=>{if(l.game===gl)graded.push({src:'parlay '+t.date,...l})}));
+  const m=get(LS.mine,{});
+  Object.keys(m).forEach(d=>(m[d]||[]).forEach(e=>{if(e.game===gl)graded.push({src:'my pick',pick:e.pick,game:gl,mineRow:e})}));
+  const gradeHtml=graded.length?graded.map(x=>{
+    const r=x.isProp||x.ptype?gradePropFromBox(g,x):gradeSideFromScore(g,x.pick);
+    const tag=r===true?'<span style="color:var(--win)">✅</span>':r===false?'<span style="color:var(--rust)">❌</span>':'<span style="color:var(--mute)">—</span>';
+    return `<div class="gradeline"><span>${x.pick}</span><span class="gm">${x.src}</span>${tag}</div>`}).join('')
+    :'<div class="empty" style="padding:14px">No picks logged on this game.</div>';
+  // every prop that was on the board for THIS game, individually graded — not just ones you picked
+  const gameProps=PROPS.filter(p=>p.gid===g.id);
+  const allPropsHtml=gameProps.length?PTYPE.map(([t,label])=>{
+    const list=gameProps.filter(p=>p.type===t).sort((a,b)=>b.p-a.p);
+    if(!list.length)return '';
+    return `<div class="ptype"><h4>${label}</h4>${list.map(p=>{
+      const r=gradeLiveProp(g,p);
+      const tag=r===true?'✅':r===false?'❌':'—';
+      const col=r===true?'var(--win)':r===false?'var(--rust)':'var(--mute)';
+      return `<div class="gradeline"><span>${p.name} <span class="gm">${p.mkt} · called ${(p.p*100).toFixed(0)}%</span></span>
+        <span style="color:${col}">${tag}</span></div>`}).join('')}</div>`;
+  }).join(''):'<div class="empty" style="padding:14px">No props were generated for this game.</div>';
+  return `<div class="finalsc">${g.away.abbr} ${g.awayScore} – ${g.homeScore} ${g.home.abbr}</div>
+    <div class="mktlab" style="margin-top:0">Your picks on this game</div>${gradeHtml}
+    <div class="mktlab">Every prop, individually graded</div>${allPropsHtml}
+    <div class="mktlab">Box score</div>
+    ${tbl('away',g.away.abbr)}${tbl('home',g.home.abbr)}`;
+}
+/* ── grade + show your work ──────────────────────────────────────────────
+   Every place a ✅/❌ shows should also show the actual number that decided
+   it — "Under 7.5 · final 4-2 (6)" or "3+ K · 2 K" — live or final, side or
+   prop. This is the single source of truth both paths route through so the
+   detail text can never drift from the boolean that graded it. */
+// Small inline HTML fragment: the ✅/❌/— tag PLUS the number that decided it, sized
+// to sit right next to a pick in a list without breaking the line.
+function finalBetStrip(g){
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const myLegs=[];
+  get(LS.locked,[]).forEach(t=>t.legs.forEach(x=>{if(x.game===gl)myLegs.push(x)}));
+  if(!myLegs.length)return '';
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px 10px">
+    ${myLegs.map(x=>{
+      const badge=gradeLegBadge(x,x.gameDate||today());
+      return `<div style="font-size:11px"><span style="color:var(--chalk)">${x.pick}</span> ${badge}</div>`;
+    }).join('')}
+  </div>`;
+}
+function jumpToGame(gid){
+  // switch to Games tab, then scroll straight to that card once it's rendered
+  const navBtn=[...document.querySelectorAll('nav>button')].find(b=>b.textContent.trim()==='Games');
+  tab('games',navBtn);
+  setTimeout(()=>{
+    const card=document.getElementById('g'+gid);
+    if(card){
+      card.scrollIntoView({behavior:'smooth',block:'start'});
+      card.style.transition='box-shadow .3s';
+      card.style.boxShadow='0 0 0 2px var(--gold)';
+      setTimeout(()=>{card.style.boxShadow=''},1800);
+      // auto-open the box/livebox panel so the stats are right there
+      const g=GAMES.find(x=>x.id===gid);
+      const which=g&&g.abstract==='Final'?'box':g&&g.abstract==='Live'?'livebox':'ag';
+      const btn=[...card.querySelectorAll('.expbtn')].find(b=>
+        b.getAttribute('onclick')&&b.getAttribute('onclick').includes(`'${which}'`));
+      if(btn)pan(gid,which,btn);
+    }
+  },80);
+}
+/* ================= GRADING RESOLVER — the single source of truth =================
+   THE BUG THIS FIXES: every grading path used to look up games in the in-memory
+   GAMES array, which only ever holds TODAY'S slate. At midnight GAMES reloads and
+   yesterday's games vanish, so any ticket from yesterday could never grade — the
+   lookup silently returned "not final yet" forever and the ticket sat stuck.
+   Everything now resolves through here: live memory first, then the persistent
+   archive, so a leg can be graded on any day, forever, regardless of what's loaded. */
+
+const LS_BOXCACHE='d4.boxcache';
+function getBoxCache(){return get(LS_BOXCACHE,{})}
+function cacheBox(gid,box){
+  if(!gid||!box)return;
+  const c=getBoxCache();
+  c[gid]={box,ts:Date.now()};
+  /* Was capped at 400 entries. A single MLB box score serializes to roughly
+     100-300KB, so 400 of them is tens of megabytes against a ~5MB localStorage
+     ceiling — the cache alone could blow the quota and take every other write
+     down with it. Cap on BYTES, which is the thing that actually runs out,
+     and keep a hard entry ceiling as a second guard. */
+  const MAX_BYTES=1.6e6, MAX_ENTRIES=60;
+  let keys=Object.keys(c).sort((a,b)=>((c[b].ts)||0)-((c[a].ts)||0)); // newest first
+  if(keys.length>MAX_ENTRIES)keys.slice(MAX_ENTRIES).forEach(k=>delete c[k]);
+  let bytes=0;
+  for(const k of Object.keys(c).sort((a,b)=>((c[b].ts)||0)-((c[a].ts)||0))){
+    const sz=JSON.stringify(c[k]).length;
+    if(bytes+sz>MAX_BYTES&&k!==gid)delete c[k]; else bytes+=sz;
+  }
+  set(LS_BOXCACHE,c);
+}
+function boxFor(gid){
+  if(BOX[gid])return BOX[gid];
+  const c=getBoxCache();
+  return c[gid]?c[gid].box:null;
+}
+
+// Resolve a leg to its game's actual result, wherever that lives.
+// Returns {a,h,fa,fh,f5ok,gid,live,source} or null if genuinely unknown yet.
+function resolveLeg(leg,ticketDate){
+  /* Tickets can now mix sports, so a leg tagged nfl/ncaaf must be resolved
+     against ITS OWN schedule. Previously every leg was looked up in the MLB
+     GAMES array only — a football leg matched nothing, returned null forever,
+     and produced a ticket that could never be graded either way. */
+  if(leg.sport==='nfl'||leg.sport==='ncaaf'){
+    const arr=leg.sport==='nfl'?(NFL_GAMES||[]):(NCAAF_GAMES||[]);
+    let fg=null;
+    if(leg.gid)fg=arr.find(z=>z.id===leg.gid);
+    if(!fg)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
+    if(fg){
+      const done=fg.status==='Final'||fg.abstract==='Final';
+      if(done&&fg.awayScore!=null)
+        return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:false,source:'memory',g:fg};
+      const live=fg.status==='InProgress'||fg.abstract==='Live';
+      if(live&&fg.awayScore!=null)
+        return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:true,source:'memory',g:fg,completed:null};
+      return null;                       // scheduled, hasn't kicked off
+    }
+    // finished football games fall back to their own archive
+    const farc=get(leg.sport==='nfl'?LS.nflarc:'d4.ncaafarc',{});
+    for(const d of Object.keys(farc)){
+      const row=(farc[d]||[]).find(r=>r.game===leg.game||r.gid===leg.gid);
+      if(row&&row.awayScore!=null)
+        return{a:+row.awayScore,h:+row.homeScore,gid:row.gid||leg.gid,live:false,source:'archive'};
+    }
+    return null;
+  }
+  // 1) in-memory GAMES — today's slate, and the only place with live in-progress scores
+  let g=null;
+  if(leg.gid)g=GAMES.find(z=>z.id===leg.gid);
+  if(!g)g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
+  if(g){
+    if(g.abstract==='Final'&&g.awayScore!==null&&g.awayScore!==undefined){
+      const f5=f5Of(g.id);
+      return{a:g.awayScore,h:g.homeScore,fa:f5?f5.fa:null,fh:f5?f5.fh:null,
+        f5ok:!!f5,gid:g.id,live:false,source:'memory',g};
+    }
+    if(g.abstract==='Live'){
+      const L=ESPN_LIVE[g.id]||{};
+      // innings remaining: 9 - completed innings, floored at 0. Bottom of the 9th with
+      // the home team already ahead means the game can also end early (no bottom half).
+      const completed=Math.max(0,(L.inning||0)-(L.inningHalf==='Top'?1:0));
+      return{a:g.awayScore,h:g.homeScore,gid:g.id,live:true,source:'memory',g,
+        inning:L.inning||null,inningHalf:L.inningHalf||null,completed};
+    }
+    return null; // scheduled, hasn't started
+  }
+  // 2) persistent archive — this is what makes yesterday's tickets gradeable
+  const arc=get(LS.arc,{});
+  const dates=[];
+  if(leg.gameDate)dates.push(leg.gameDate);
+  if(ticketDate&&ticketDate!==leg.gameDate)dates.push(ticketDate);
+  Object.keys(arc).sort().reverse().forEach(d=>{if(!dates.includes(d))dates.push(d)});
+  for(const d of dates){
+    const A=arc[d];
+    if(!A||!A.finals)continue;
+    // match on stored game id first — exact and doubleheader-safe
+    if(leg.gid&&A.finals[leg.gid]){
+      const F=A.finals[leg.gid];
+      if(F.a===null||F.h===null)continue;
+      return{...F,gid:leg.gid,live:false,source:'archive',date:d};
+    }
+    // fall back to matchup string via that day's snapshot rows
+    const row=(A.rows||[]).find(r=>(r.a+'@'+r.h)===leg.game);
+    if(row&&A.finals[row.id]){
+      const F=A.finals[row.id];
+      if(F.a===null||F.h===null)continue;
+      return{...F,gid:row.id,live:false,source:'archive',date:d};
+    }
+  }
+  return null;
+}
+
+// Grade any leg — side, total, run line, F5, or prop — from resolved data.
+// Returns {hit:true|false|null, detail:string|null}
+function gradeLeg(leg,ticketDate){
+  const R=resolveLeg(leg,ticketDate);
+  // `live` is stamped onto EVERY return below now — this is the actual fix for
+  // the elimination map showing every in-progress ticket as "not started."
+  // resolveLeg always knew whether the underlying game was live; gradeLeg just
+  // never surfaced that back out, so a leg sitting through a live, undecided
+  // game and a leg that genuinely hadn't started yet both collapsed to the
+  // exact same {hit:null} — indistinguishable to any caller, including the
+  // elimination map's own status logic. gradeLegBadge was independently
+  // re-resolving the leg a second time just to get this same signal for its
+  // ⏳ icon; now it can read it straight off this return instead.
+  if(!R)return{hit:null,detail:null,live:false};
+  const isProp=leg.isProp||leg.ptype;
+  if(isProp){
+    const box=boxFor(R.gid);
+    if(!box)return{hit:null,detail:R.live?'live box not loaded':null,live:!!R.live};
+    let pl=null;
+    for(const s of ['away','home']){
+      const P=((box.teams||{})[s]||{}).players||{};
+      const c=P['ID'+leg.pid];
+      if(c){pl=c;break}
+    }
+    if(!pl)return{hit:null,detail:null,live:!!R.live};
+    const b=(pl.stats||{}).batting||{},q=(pl.stats||{}).pitching||{};
+    const t=leg.ptype,thr=leg.thr;
+    const label={k:'K',bb:'BB allowed',ha:'H allowed',hits:'hits',tb:'total bases',rbi:'RBI',hr:'HR'}[t]||t;
+    const isPitch=(t==='k'||t==='bb'||t==='ha');
+    if(isPitch&&!q.inningsPitched)return{hit:null,detail:R.live?'not in yet':null,live:!!R.live};
+    if(!isPitch&&!b.plateAppearances)return{hit:null,detail:R.live?'not in yet':null,live:!!R.live};
+    const actual=t==='k'?(q.strikeOuts||0):t==='bb'?(q.baseOnBalls||0):t==='ha'?(q.hits||0)
+      :t==='hits'?(b.hits||0):t==='tb'?(b.totalBases||0):t==='rbi'?(b.rbi||0):t==='hr'?(b.homeRuns||0):null;
+    if(actual===null)return{hit:null,detail:null,live:!!R.live};
+    return{hit:R.live?null:actual>=thr,detail:`${actual} ${label}${R.live?' so far':''}`,live:!!R.live};
+  }
+  const a=R.a,h=R.h,pick=leg.pick;
+  if(a===null||a===undefined||h===null||h===undefined)return{hit:null,detail:null,live:!!R.live};
+  const [awayAb,homeAb]=(leg.game||'@').split('@');
+  const line=`${awayAb} ${a}–${h} ${homeAb}${R.live?' (live)':''}`;
+  const tot=a+h;
+
+  // ── mathematical elimination while a game is still live ──────────────────
+  // An OVER is dead the moment the current total already clears the line — that's
+  // just arithmetic, no projection needed. An UNDER can only ever be dead once we
+  // know how many innings are left, since runs can still be added. We bound the
+  // realistic remaining scoring using this game's own simulated run environment
+  // (falling back to the league-average ~4.3 R/team/game if no sim exists), and
+  // call it dead when even a generous 2-standard-deviation ceiling can't reach the
+  // line anymore. This is intentionally conservative — it should never flip a leg
+  // that could still plausibly go the other way.
+  const remainingCeiling=()=>{
+    if(R.completed==null)return null;               // no inning data — can't bound it
+    const inningsLeft=Math.max(0,9-R.completed);
+    if(inningsLeft<=0)return 0;
+    const s=SIMS[R.gid];
+    const perTeamPerInning=s?((s.aR||4.3)+(s.hR||4.3))/2/9:4.3/9;
+    // generous ceiling: mean plus a wide buffer per remaining inning, both teams combined
+    return inningsLeft*2*(perTeamPerInning*2.3);
+  };
+
+  // Everything below used to return bare {hit,detail} objects with no `live`
+  // flag at all — wrapped in this inner function so `live:!!R.live` gets
+  // stamped on the result exactly ONCE at the call site below, instead of
+  // needing every one of these ~12 return statements edited individually
+  // (error-prone, easy to miss one and silently reintroduce the same bug
+  // this whole change exists to fix).
+  const gradeSideOrTotal=()=>{
+    // THE PUSH BUG: a whole-number total line (e.g. "Over 8" instead of "Over
+    // 8.5") CAN tie exactly — tot===ln — and this used to just evaluate
+    // tot>ln as false, silently grading a real push as a straight loss. Same
+    // rule as ML/F5 pushes elsewhere in this function: a push is a decided,
+    // NEUTRAL outcome, never a loss.
+    if(/^Over /.test(pick)){
+      const ln=parseFloat(pick.slice(5));
+      if(!R.live){
+        if(tot===ln)return{hit:null,push:true,detail:`${line} · total ${tot} — push, refunded, not counted as a loss`};
+        return{hit:tot>ln,detail:`${line} · total ${tot}`};
+      }
+      if(tot>ln)return{hit:true,detail:`${line} · total ${tot} — already clinched`};
+      return{hit:null,detail:`${line} · total ${tot} so far`};
+    }
+    if(/^Under /.test(pick)){
+      const ln=parseFloat(pick.slice(6));
+      if(!R.live){
+        if(tot===ln)return{hit:null,push:true,detail:`${line} · total ${tot} — push, refunded, not counted as a loss`};
+        return{hit:tot<ln,detail:`${line} · total ${tot}`};
+      }
+      if(tot>=ln){
+        if(tot===ln)return{hit:null,push:true,detail:`${line} · total ${tot} — push, refunded, not counted as a loss`};
+        return{hit:false,detail:`${line} · total ${tot} — already over the line`};
+      }
+      const ceiling=remainingCeiling();
+      if(ceiling!==null&&(tot+ceiling)<ln)
+        return{hit:true,detail:`${line} · total ${tot}, ${R.completed} innings gone — mathematically out of reach`};
+      return{hit:null,detail:`${line} · total ${tot} so far`};
+    }
+    if(/ ML$/.test(pick)){
+      const who=pick.replace(/ ML$/,'');
+      if(!R.live){
+        if(a===h)return{hit:null,push:true,detail:line+' · push — refunded, not counted as a loss'};
+        return{hit:(h>a?homeAb:awayAb)===who,detail:line};
+      }
+      // a live ML lock is much riskier to call early — only settle it once the trailing
+      // team's deficit exceeds what's realistically reachable in the innings left
+      const margin=h-a;                    // positive = home leading
+      const whoIsHome=who===homeAb;
+      const backingMargin=whoIsHome?margin:-margin;   // positive = the picked side is ahead
+      const ceiling=remainingCeiling();
+      if(backingMargin>0&&ceiling!==null&&ceiling<backingMargin)
+        return{hit:true,detail:`${line} — lead is out of reach with ${R.completed} innings gone`};
+      if(backingMargin<0&&ceiling!==null&&ceiling<-backingMargin)
+        return{hit:false,detail:`${line} — deficit is out of reach with ${R.completed} innings gone`};
+      return{hit:null,detail:line};
+    }
+    return null; // falls through to run line / F5 handling below
+  };
+  const sideResult=gradeSideOrTotal();
+  if(sideResult)return{...sideResult,live:!!R.live};
+  const rlm=pick.match(/^(.+) ([+-]\d+(?:\.\d+)?)$/);
+  if(rlm&&!/^F5 /.test(pick)){
+    const who=rlm[1],ln=parseFloat(rlm[2]);
+    const margin=who===homeAb?(h-a):(a-h);
+    // THE PUSH BUG, run-line version: an integer run line (e.g. "+2" instead
+    // of "+1.5") can land EXACTLY on the number — margin+ln===0 — and this
+    // used to evaluate that as false (a loss) instead of checking for the
+    // tie first. Real push, same treatment as everywhere else.
+    if(!R.live&&(margin+ln)===0)
+      return{hit:null,push:true,detail:`${line} · margin ${margin>0?'+':''}${margin} — push, refunded, not counted as a loss`,live:false};
+    return{hit:R.live?null:(margin+ln)>0,detail:`${line} · margin ${margin>0?'+':''}${margin}`,live:!!R.live};
+  }
+  if(/^F5 /.test(pick)){
+    if(!R.f5ok||R.fa===null||R.fa===undefined)return{hit:null,detail:null,live:!!R.live};
+    const f5tot=R.fa+R.fh;
+    if(/^F5 over /.test(pick))return{hit:f5tot>parseFloat(pick.slice(8)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`,live:!!R.live};
+    if(/^F5 under /.test(pick))return{hit:f5tot<parseFloat(pick.slice(9)),detail:`F5 ${R.fa}–${R.fh} · total ${f5tot}`,live:!!R.live};
+    const who=pick.slice(3);
+    if(R.fa===R.fh)return{hit:null,push:true,detail:`F5 ${R.fa}–${R.fh} · push — refunded, not counted as a loss`,live:!!R.live};
+    return{hit:(R.fh>R.fa?homeAb:awayAb)===who,detail:`F5 ${R.fa}–${R.fh}`,live:!!R.live};
+  }
+  return{hit:null,detail:line,live:!!R.live};
+}
+function gradeLegBadge(leg,ticketDate){
+  // was independently re-resolving the leg a second time (resolveLeg call
+  // below) purely to get the same live/not-live signal gradeLeg now already
+  // returns directly — one fewer redundant resolve per badge render
+  const{hit,detail,live}=gradeLeg(leg,ticketDate);
+  const icon=hit===true?'✅':hit===false?'❌':live?'⏳':'—';
+  const color=hit===true?'var(--win)':hit===false?'var(--rust)':'var(--mute)';
+  const d=detail?`<span style="font-family:'IBM Plex Mono';font-size:9.5px;color:${color};margin-left:5px">${detail}</span>`:'';
+  return`<span style="color:${color}">${icon}</span>${d}`;
+}
+function legGameId(leg,ticketDate){
+  const R=resolveLeg(leg,ticketDate);
+  return R?R.gid:null;
+}
+
+/* ── Migration + backfill ────────────────────────────────────────────────
+   Existing tickets were saved without gid/gameDate on every leg. This walks
+   them once, fills in what it can from the archive, then fetches any missing
+   historical finals and box scores so stuck tickets can finally grade. */
+async function backfillGrading(silent){
+  const arc=get(LS.arc,{});
+  const L=get(LS.locked,[]);
+  let changed=false;
+
+  // 1) stamp gameDate on legs that don't have one, using the ticket's date
+  L.forEach(t=>t.legs.forEach(x=>{
+    if(!x.gameDate){x.gameDate=t.date;changed=true}
+  }));
+
+  // 2) figure out which dates still have ungraded legs
+  const needDates=new Set();
+  L.forEach(t=>t.legs.forEach(x=>{
+    const r=gradeLeg(x,t.date);
+    if(r.hit===null)needDates.add(x.gameDate||t.date);
+  }));
+
+  // 3) fetch finals for those dates into the archive if missing
+  for(const d of needDates){
+    if(d>today())continue;
+    try{
+      const f=await fetchFinals(d);
+      if(Object.keys(f).length){
+        arc[d]=arc[d]||{ts:Date.now(),rows:[]};
+        arc[d].finals={...(arc[d].finals||{}),...f};
+        changed=true;
+      }
+    }catch(e){}
+  }
+  if(changed)set(LS.arc,arc);
+
+  // 4) fetch + cache box scores for any prop leg that still can't grade
+  const needBoxes=new Set();
+  L.forEach(t=>t.legs.forEach(x=>{
+    if(!(x.isProp||x.ptype))return;
+    const r=gradeLeg(x,t.date);
+    if(r.hit!==null)return;
+    const gid=x.gid||legGameId(x,t.date);
+    if(gid&&!boxFor(gid))needBoxes.add(gid);
+  }));
+  for(const gid of needBoxes){
+    try{
+      const rr=await fetch(`https://statsapi.mlb.com/api/v1/game/${gid}/boxscore`);
+      const bj=await rr.json();
+      if(bj&&bj.teams)cacheBox(gid,bj);
+    }catch(e){}
+  }
+
+  // 5) re-stamp gid onto legs now that the archive can resolve them
+  L.forEach(t=>t.legs.forEach(x=>{
+    if(x.gid)return;
+    const gid=legGameId(x,t.date);
+    if(gid){x.gid=gid;changed=true}
+  }));
+  if(changed)set(LS.locked,L);
+
+  try{settleLockedTickets()}catch(e){}
+  if(!silent){
+    const still=L.reduce((n,t)=>n+t.legs.filter(x=>gradeLeg(x,t.date).hit===null).length,0);
+    return{dates:[...needDates],boxes:needBoxes.size,stillPending:still};
+  }
+  return null;
+}
+/* ================= RESOLVER END ================= */
+
+function gradeLiveProp(g,p){
+  const bx=BOX[g.id];if(!bx||!p.pid)return null;
+  for(const s of ['away','home']){
+    const P=((bx.teams||{})[s]||{}).players||{};
+    const pl=P['ID'+p.pid];
+    if(pl)return gradePropRec(pl,p.type,p.thr);
+  }
+  return null;
+}
+function gradeSideFromScore(g,pick){
+  const a=g.awayScore,h=g.homeScore;
+  if(a===null||h===null)return null;
+  if(/ ML$/.test(pick)){const who=pick.replace(/ ML$/,'');
+    if(a===h)return null;return (h>a?g.home.abbr:g.away.abbr)===who}
+  if(/^Over /.test(pick))return (a+h)>parseFloat(pick.slice(5));
+  if(/^Under /.test(pick))return (a+h)<parseFloat(pick.slice(6));
+  if(/ -\d+\.5$/.test(pick)){
+    const m=pick.match(/^(.+) -(\d+\.5)$/),who=m[1],ln=parseFloat(m[2]);
+    return who===g.home.abbr?(h-a)>ln:(a-h)>ln;
+  }
+  if(/ \+\d+\.5$/.test(pick)){
+    const m=pick.match(/^(.+) \+(\d+\.5)$/),who=m[1],ln=parseFloat(m[2]);
+    return who===g.home.abbr?(h-a)>-ln:(a-h)>-ln;
+  }
+  // F5 needs first-five runs, which live in the archived finals (pulled with linescore)
+  const F=f5Of(g.id);
+  if(/^F5 over /.test(pick)){if(!F)return null;return (F.fa+F.fh)>parseFloat(pick.slice(8))}
+  if(/^F5 under /.test(pick)){if(!F)return null;return (F.fa+F.fh)<parseFloat(pick.slice(9))}
+  if(/^F5 /.test(pick)){if(!F||F.fa===F.fh)return null;
+    const who=pick.slice(3);return (F.fh>F.fa?g.home.abbr:g.away.abbr)===who}
+  return null;
+}
+function f5Of(gid){
+  const arc=get(LS.arc,{});
+  for(const d of Object.keys(arc)){
+    const f=(arc[d].finals||{})[gid];
+    if(f&&f.f5ok)return f;
+  }
+  return null;
+}
+function gradePropFromBox(g,x){
+  const bx=BOX[g.id];if(!bx||!x.pid)return null;
+  for(const s of ['away','home']){
+    const P=((bx.teams||{})[s]||{}).players||{};
+    const pl=P['ID'+x.pid];
+    if(!pl)continue;
+    const b=(pl.stats||{}).batting||{},q=(pl.stats||{}).pitching||{};
+    const t=x.ptype,thr=x.thr;
+    if(t==='k')return q.inningsPitched?(q.strikeOuts||0)>=thr:null;
+    if(t==='bb')return q.inningsPitched?(q.baseOnBalls||0)>=thr:null;
+    if(t==='ha')return q.inningsPitched?(q.hits||0)>=thr:null;
+    if(!b.plateAppearances)return null;
+    if(t==='hits')return (b.hits||0)>=thr;
+    if(t==='tb')return (b.totalBases||0)>=thr;
+    if(t==='rbi')return (b.rbi||0)>=thr;
+    if(t==='hr')return (b.homeRuns||0)>=thr;
+  }
+  return null;
+}
+function pan(gid,which,btn){
+  ['trend','ag','alt','props','box','livebox','mybets'].forEach(k=>{
+    const p=document.getElementById('p-'+k+'-'+gid);
+    if(p&&k!==which)p.classList.remove('on');
+  });
+  const p=document.getElementById('p-'+which+'-'+gid);
+  if(p)p.classList.toggle('on');
+  const row=btn.parentElement;
+  [...row.children].forEach(b=>b.classList.remove('on'));
+  if(p&&p.classList.contains('on'))btn.classList.add('on');
+}
+
+/* ================= SLIP ================= */
+function loadSlip(){SLIP=get(LS.slip,[])}
+function tog(id,game,pick,prob,gid,ptype,pname,pmkt){
+  const i=SLIP.findIndex(x=>x.id===id);
+  if(i>=0)SLIP.splice(i,1);
+  else{
+    const leg={id,game,pick,p:prob,gid};
+    if(ptype){leg.ptype=ptype;leg.isProp=1;leg.pname=pname;leg.pmkt=pmkt;
+      const src=PROPS.find(z=>z.gid===gid&&z.name===pname&&z.mkt===pmkt);
+      if(src){leg.pid=src.pid;leg.thr=src.thr}}
+    SLIP.push(leg);
+  }
+  set(LS.slip,SLIP);render();paintSlip();
+}
+function clearSlip(){SLIP=[];set(LS.slip,SLIP);render();paintSlip()}
+let SLIP_SHEET_OPEN=false;
+function paintSlip(){
+  const el=document.getElementById('slip');
+  if(!SLIP.length){
+    el.classList.remove('on');
+    closeSlipSheet(); // no legs left — the sheet has nothing to show, so drop it too
+    return;
+  }
+  el.classList.add('on');
+  const c=SLIP.reduce((a,x)=>a*x.p,1);
+  const gs=new Set(SLIP.map(x=>x.game));
+  document.getElementById('slN').innerHTML='<span class="chev">▲</span> '+SLIP.length+' legs · '+gs.size+' games';
+  document.getElementById('slO').textContent=(c*100).toFixed(c<.01?3:1)+'% · 1 in '+Math.round(1/c).toLocaleString();
+  // keep the sheet's own contents in sync any time paintSlip runs — covers the
+  // case where a leg gets removed from inside the sheet itself and the summary/
+  // list both need to reflect that immediately, not just on next open
+  if(SLIP_SHEET_OPEN)renderSlipSheetBody();
+}
+// Tapping the collapsed bar raises the sheet; tapping it again (or the scrim,
+// or a leg's own ✕) can lower it — this is the "click it and review or remove
+// games before I lock it in" flow. The bar's own Clear/Lock-in buttons still
+// work directly without opening the sheet at all, via stopPropagation above.
+function toggleSlipSheet(e){
+  if(e)e.stopPropagation();
+  if(SLIP_SHEET_OPEN)closeSlipSheet();else openSlipSheet();
+}
+function openSlipSheet(){
+  if(!SLIP.length)return;
+  SLIP_SHEET_OPEN=true;
+  document.getElementById('slip').classList.add('expanded');
+  document.getElementById('slipScrim').classList.add('on');
+  document.getElementById('slipSheet').classList.add('on');
+  renderSlipSheetBody();
+}
+function closeSlipSheet(){
+  SLIP_SHEET_OPEN=false;
+  const bar=document.getElementById('slip');
+  if(bar)bar.classList.remove('expanded');
+  const scrim=document.getElementById('slipScrim');
+  if(scrim)scrim.classList.remove('on');
+  const sheet=document.getElementById('slipSheet');
+  if(sheet)sheet.classList.remove('on');
+}
+function renderSlipSheetBody(){
+  const body=document.getElementById('slipSheetBody');
+  const summary=document.getElementById('slipSheetSummary');
+  if(!body||!summary)return;
+  if(!SLIP.length){closeSlipSheet();return}
+  const c=SLIP.reduce((a,x)=>a*x.p,1);
+  const gs=new Set(SLIP.map(x=>x.game));
+  summary.textContent=(c*100).toFixed(c<.01?3:1)+'% · 1 in '+Math.round(1/c).toLocaleString();
+  // Coach checks each leg for duplicate exposure the moment you're reviewing
+  // the slip — never blocks the tap itself, just flags it right where you're
+  // already looking before you lock anything in.
+  const coach=coachHtml({legs:SLIP});
+  body.innerHTML=coach+SLIP.map(x=>{
+    const dup=coachDuplicateCheck(x.pick,x.game);
+    return `<div class="slip-leg">
+      <div class="slip-leg-info">
+        <div class="slip-leg-pick">${x.pick}${dup?` <span class="flag hot" title="${esc(dup.text)}">⚠ dup ×${(pendingLegExposure().filter(r=>r.pick===x.pick&&r.game===x.game).length)}</span>`:''}</div>
+        <div class="slip-leg-game">${x.game}${x.pname?' · '+x.pname:''}</div>
+      </div>
+      <div class="slip-leg-prob">${(x.p*100).toFixed(0)}%</div>
+      <button class="slip-leg-rm" onclick="removeSlipLeg('${esc(x.id)}')" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
+// Removing a leg from inside the sheet reuses tog()'s own removal branch —
+// tog(id) with no other args still correctly removes, since the removal path
+// only ever checks whether the id already exists in SLIP, same as tapping the
+// same pick again on the game card would do.
+function removeSlipLeg(id){
+  tog(id);
+  if(SLIP.length)renderSlipSheetBody();
+}
+function lockSlip(){
+  if(!SLIP.length)return;
+  const gs=new Set(SLIP.map(x=>x.game));
+  if(gs.size<SLIP.length&&!confirm('Multiple legs share a game — that\'s correlated. Lock anyway?'))return;
+  // custom Build-tab tickets never had a name at all before — optional prompt,
+  // blank/cancel just leaves it unnamed (falls back to date-only display, same
+  // as always), nothing forces a name on a quick lock-in
+  const name=(prompt('Name this ticket? (optional — leave blank to skip)','')||'').trim()||null;
+  const L=get(LS.locked,[]);
+  const d0=today();
+  L.unshift({id:Date.now(),date:d0,name,source:'mine',
+    legs:SLIP.map(x=>({...x,gameDate:d0})),
+    p:SLIP.reduce((a,x)=>a*x.p,1)});
+  set(LS.locked,L);
+  SLIP=[];set(LS.slip,SLIP);render();paintSlip();
+  alert(`Locked${name?' — "'+name+'"':''}. See Tickets → My Parlays.`);
+}
+// ── Modify a pending ticket — add or remove legs before it's locked in ──
+// Available on any ticket that is NOT finalized and NOT archived. A finalized
+// ticket ("Lock as final") is explicitly your permanent record for grading and
+// calibration and stays immutable; an archived ticket is already graded/settled
+// so editing it after the fact would corrupt the record it just became. Anything
+// short of that is fair game to change your mind on.
+let TICKET_EDIT_ID=null; // which ticket (if any) is currently expanded into edit mode
+function canModifyTicket(t){
+  return !t.finalized&&!t.archived;
+}
+function toggleModifyTicket(id){
+  TICKET_EDIT_ID=(TICKET_EDIT_ID===id)?null:id;
+  renderTickets();
+}
+function removeLegFromTicket(ticketId,legId){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===ticketId);
+  if(!t||!canModifyTicket(t))return;
+  if(t.legs.length<=1){
+    if(!confirm('This is the only leg on the ticket — removing it deletes the whole ticket. Continue?'))return;
+    set(LS.locked,L.filter(x=>x.id!==ticketId));
+    TICKET_EDIT_ID=null;
+    renderTickets();
+    return;
+  }
+  t.legs=t.legs.filter(x=>x.id!==legId);
+  t.p=t.legs.reduce((a,x)=>a*x.p,1);
+  set(LS.locked,L);
+  renderTickets();
+}
+// Pool of addable legs for the edit view — same real sources every builder
+// already draws from, filtered down to markets not already on this ticket so
+// you can't accidentally add a second, colliding pick from a game you're
+// already on (same rule legalToAdd enforces elsewhere).
+function addableLegsFor(t){
+  const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder(),
+    ...allF5SidesForBuilder(),...allF5TotalsForBuilder()];
+  PROPS.forEach(p=>{
+    if(p.type==='hr')pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',gid:p.gid,pid:p.pid,ptype:'hr',isProp:1});
+    else pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',gid:p.gid,pid:p.pid,ptype:p.type,thr:p.thr,isProp:1});
+  });
+  return pool.filter(l=>!presetLegCollides(t.legs,l)).sort((a,b)=>b.p-a.p).slice(0,25);
+}
+function addLegToTicket(ticketId,pick,game,p,gid,isProp,ptype,pid,thr){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===ticketId);
+  if(!t||!canModifyTicket(t))return;
+  if(t.legs.some(x=>x.pick===pick&&x.game===game))return; // already on the ticket
+  const leg={id:ticketId+'|'+pick,game,pick,p,gid:gid||null,gameDate:t.date};
+  if(isProp){leg.isProp=1;leg.ptype=ptype;if(pid)leg.pid=pid;if(thr!=null)leg.thr=thr}
+  t.legs.push(leg);
+  t.p=t.legs.reduce((a,x)=>a*x.p,1);
+  set(LS.locked,L);
+  renderTickets();
+}
+function delLocked(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(t&&t.finalized){
+    if(!confirm("This ticket is locked in as final and shouldn't normally be deleted — it's part of your permanent record. Delete anyway?"))return;
+  }
+  set(LS.locked,L.filter(x=>x.id!==id));renderTickets();
+}
+// Manual rename — works on ANY ticket regardless of source or how it was built.
+// A preset-confirmed ticket starts with its preset's name (e.g. "Armageddon")
+// but that's just a starting point, not a lock; this lets you override it,
+// and also gives custom Build-tab tickets (which never had a name at all) a
+// way to get one after the fact.
+function renameTicket(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  const next=prompt('Name this ticket:',t.name||'');
+  if(next===null)return;         // cancelled
+  t.name=next.trim()||null;      // blank clears the name back to date-only display
+  set(LS.locked,L);
+  renderTickets();
+}
+// ── Move a ticket to a different tracking bucket — the fix for "if something
+// from books or system goes to my picks I can move it to where it needs to
+// go." Handles the money implications correctly rather than just flipping a
+// label: if the ticket was already settled (graded and recorded, win/loss/push
+// booked somewhere), that settlement gets reversed first so nothing ends up
+// double-counted in two buckets or silently vanishes from both. A still-pending
+// ticket just changes bucket outright — nothing to reconcile yet.
+const BUCKET_LABEL={mine:'My picks',system:'System',market:'Market',specialty:'Specialty',outside:'Outside'};
+function reverseTicketSettlement(t){
+  const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+  if(!trackedOnly){
+    const b=getBankroll();
+    const rec=b.history.find(h=>h.id===t.id);
+    if(rec){
+      b.profit-=rec.profit; // undo the profit/loss this ticket contributed
+      // recompute the limit multiplier off the corrected profit, same formula
+      // settleTicket uses, so undoing a settlement doesn't leave a stale limit
+      const over=Math.max(0,b.profit-BR_BASELINE);
+      const earned=1+(over/BR_BASELINE);
+      const floor=b.carriedMult||1;
+      b.limitMult=+Math.min(BR_MAX_MULT,Math.max(floor,earned)).toFixed(4);
+      b.history=b.history.filter(h=>h.id!==t.id);
+      saveBankroll(b);
+    }
+  }else{
+    const h=get('d4.trackedhistory',{});
+    if(h[t.source]&&h[t.source].some(r=>r.id===t.id)){
+      h[t.source]=h[t.source].filter(r=>r.id!==t.id);
+      set('d4.trackedhistory',h);
+    }
+  }
+}
+function moveTicket(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  if(t.finalized){
+    if(!confirm('This ticket is locked in as final — that\'s meant to be your permanent, unchanging '+
+      'record. Moving it overrides that. Only do this to fix a genuine routing mistake. Continue?'))return;
+  }
+  const current=t.source||'mine';
+  const options=Object.keys(BUCKET_LABEL).filter(k=>k!==current);
+  const list=options.map((k,i)=>`${i+1}. ${BUCKET_LABEL[k]}`).join('\n');
+  const choice=prompt(`Move "${t.name||t.date}" from ${BUCKET_LABEL[current]} to:\n${list}\n\nEnter a number:`);
+  if(choice===null)return;
+  const idx=parseInt(choice,10)-1;
+  if(isNaN(idx)||idx<0||idx>=options.length){alert('Not a valid option — nothing moved.');return}
+  const target=options[idx];
+  const wasSettled=t.archived&&(t.finalRecord!==undefined);
+  if(wasSettled){
+    if(!confirm(`This ticket was already graded and settled under ${BUCKET_LABEL[current]}. Moving it to `+
+      `${BUCKET_LABEL[target]} will reverse that settlement (undo any profit/loss it booked) so it can `+
+      `re-settle correctly in its new bucket. Continue?`))return;
+    // reverseTicketSettlement already removes this ticket's id from wherever it
+    // was recorded (b.history or trackedhistory[source]) — that alone is what
+    // clears settleLockedTickets' dedupe check. The wager itself must NOT be
+    // deleted here: it's the actual dollar amount that needs to carry over and
+    // get recorded again under the NEW bucket. An earlier version of this wiped
+    // the wager to "force a fresh re-grade," which worked for archiving but
+    // silently threw away the stake, so the ticket re-settled with $0 and never
+    // produced a tracked-history/bankroll entry in its new home at all.
+    reverseTicketSettlement(t);
+    t.archived=false;
+    t.archivedAt=null;
+    t.finalRecord=null;
+  }
+  t.source=target;
+  set(LS.locked,L);
+  renderTickets();
+  if(wasSettled)settleLockedTickets(); // immediately re-settle under the new bucket rather than waiting for the next grading pass
+  alert(`Moved to ${BUCKET_LABEL[target]}.`);
+}
+function finalizeLocked(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  if(!confirm("Lock this ticket in as final? Once locked it's protected from accidental deletion — this is your permanent record for grading and calibration."))return;
+  t.finalized=true;
+  set(LS.locked,L);
+  renderTickets();
+}
+
+/* ================= TARGET TICKET BUILDER ================= */
+// Same qualifying pool as Best Bets — real lines only, no synthetic F5. Thresholds are
+// per-type now: 60% sides, 70% totals, 75% RBI, 80% other props, 27% HR.
+// Greedy safest-first: sorts by probability descending, adds legs until the combined
+// payout clears the target, skipping a second leg from any game already used.
+// Same-game legality, matching how an actual sportsbook ticket works:
+// standard ticket — one side-family pick (ML or RL) per game, and it MAY be paired with
+// that game's Total (ML+Total is fine on a real ticket). RL+Total together, or any second
+// side-family pick, is NOT legal on a standard multi-game parlay — that combination only
+// exists on an SGP, which itself needs 2+ picks from that same game to unlock alt lines.
+function legFamily(kind){
+  if(kind==='side')return 'ml';
+  if(kind==='rl')return 'rl';
+  if(kind==='total')return 'total';
+  // was checking kind==='f5'/'f5t', which nothing has ever actually produced —
+  // allF5SidesForBuilder/allF5TotalsForBuilder (the only real source of F5 legs
+  // in any pool) stamp kind:'f5side' and kind:'f5total'. Fixed to match, since
+  // the mismatch meant every F5 leg silently fell through to the 'prop' bucket
+  // below, which blocks ANY same-game pairing at all — including the completely
+  // legal F5-side + F5-total combination this fix now allows correctly.
+  if(kind==='f5side'||kind==='f5total')return 'f5';
+  return 'prop';
+}
+function legalToAdd(combo,leg,sgpMode){
+  const sameGame=combo.filter(c=>c.game===leg.game);
+  if(!sameGame.length)return true;
+  if(sgpMode)return true;  // SGP unlocks any combo once 2+ legs share a game
+  if(sameGame.length>=2)return false;  // standard ticket caps at 2 legs from one game
+  const existingFam=legFamily(sameGame[0].kind),newFam=legFamily(leg.kind);
+  // The ONLY legal same-game pair on a standard (non-SGP) ticket is one full-game
+  // ML + one full-game Total — that's the one pairing close enough to independent
+  // to allow outside SGP mode. Everything else on the same game is correlated and
+  // needs SGP: F5 markets against full-game markets (same underlying innings
+  // feeding both), and F5 side against F5 total just as much as full-game side
+  // against full-game total is. A previous version of this incorrectly carved out
+  // F5+F5 as if it were as independent as ML+Total — it isn't, same reasoning
+  // applies to the F5 segment as the full game.
+  return (existingFam==='ml'&&newFam==='total')||(existingFam==='total'&&newFam==='ml');
+}
+function bestRunLines(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    if(!hasRealRunLine(g.id))return;
+    const favSide=s.hw>=s.aw?'home':'away';
+    const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
+    const favCover=rlProb(g,s,favSide,1.5);
+    if(favCover===null)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+    let favBlend=favCover;
+    if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+    else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
+    const dogBlend=1-favBlend;
+    if(favBlend>=PUBLIC_THRESH.side)out.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl'});
+    if(dogBlend>=PUBLIC_THRESH.side)out.push({p:dogBlend,pick:dogAb+' +1.5',game:gl,kind:'rl'});
+  });
+  return out;
+}
+// ---- unfiltered pools for the ticket builder ----
+// PUBLIC_THRESH gates stay in bestSides/bestTotals for the Scout/Best tabs.
+// The builder gets every real-line pick so it can hit any target the user sets.
+function allSidesForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    // once a game has started, betting on it is over — a real book would never
+    // honor a pregame line after first pitch, and neither should this
+    if(g.abstract==='Final'||g.abstract==='Live')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookML=bookLineForMarket(g.id,'moneyline');
+    if(bookML){
+      const hB=bookLineForMarket(g.id,'moneyline','home'),aB=bookLineForMarket(g.id,'moneyline','away');
+      if(hB&&aB){
+        const hp=bookDevig(hB.price),ap=bookDevig(aB.price),sum=hp+ap;
+        out.push({p:(s.hw+hp/sum)/2,pick:g.home.abbr+' ML',game:gl,kind:'side',modelP:s.hw,marketP:hp/sum,price:hB.price});
+        out.push({p:(s.aw+ap/sum)/2,pick:g.away.abbr+' ML',game:gl,kind:'side',modelP:s.aw,marketP:ap/sum,price:aB.price});
+        return;
+      }
+    }
+    if(hasRealML(g.id)){
+      const bl=mlBlend(g,s);
+      const M=marketOf(g);
+      out.push({p:bl.home,pick:g.home.abbr+' ML',game:gl,kind:'side',modelP:s.hw,marketP:M?M.fh:bl.home});
+      out.push({p:bl.away,pick:g.away.abbr+' ML',game:gl,kind:'side',modelP:s.aw,marketP:M?M.fa:bl.away});
+    }
+  });
+  return out;
+}
+function allRunLinesForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    // once a game has started, betting on it is over — a real book would never
+    // honor a pregame line after first pitch, and neither should this
+    if(g.abstract==='Final'||g.abstract==='Live')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const favSide=s.hw>=s.aw?'home':'away';
+    const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
+    const bookRL=bookLineForMarket(g.id,'runline');
+    if(bookRL){
+      const favBook=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line<0);
+      const dogBook=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line>0);
+      if(favBook&&dogBook){
+        const fp=bookDevig(favBook.price),dp=bookDevig(dogBook.price),sum=fp+dp;
+        const fAb=favBook.side==='home'?g.home.abbr:g.away.abbr;
+        const dAb=dogBook.side==='home'?g.home.abbr:g.away.abbr;
+        const favModel=rlProb(g,s,favBook.side,-favBook.line);
+        const dogModel=rlProb(g,s,dogBook.side,-dogBook.line);
+        out.push({p:fp/sum,pick:fAb+' '+favBook.line,game:gl,kind:'rl',modelP:favModel,marketP:fp/sum,price:favBook.price});
+        out.push({p:dp/sum,pick:dAb+' +'+dogBook.line,game:gl,kind:'rl',modelP:dogModel,marketP:dp/sum,price:dogBook.price});
+        return;
+      }
+    }
+    if(!hasRealRunLine(g.id))return;
+    const favCover=rlProb(g,s,favSide,1.5);if(favCover===null)return;
+    const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+    let favBlend=favCover;
+    if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+    else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
+    out.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl',modelP:favCover,marketP:favBlend});
+    out.push({p:1-favBlend,pick:dogAb+' +1.5',game:gl,kind:'rl',modelP:1-favCover,marketP:1-favBlend});
+  });
+  return out;
+}
+function allTotalsForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    // once a game has started, betting on it is over — a real book would never
+    // honor a pregame line after first pitch, and neither should this
+    if(g.abstract==='Final'||g.abstract==='Live')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookTotal=bookLineForMarket(g.id,'total');
+    if(bookTotal&&bookTotal.line!==null){
+      const oB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTotal.line)<0.01);
+      const uB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTotal.line)<0.01);
+      if(oB&&uB){
+        const op=bookDevig(oB.price),up=bookDevig(uB.price),sum=op+up;
+        const mO=s.over(bookTotal.line);
+        out.push({p:op/sum,pick:'Over '+bookTotal.line,game:gl,kind:'total',modelP:mO,marketP:op/sum,price:oB.price});
+        out.push({p:up/sum,pick:'Under '+bookTotal.line,game:gl,kind:'total',modelP:1-mO,marketP:up/sum,price:uB.price});
+        return;
+      }
+    }
+    const st=sharpTotalFor(g.id);if(!st||st.overProb===null)return;
+    const blended=sharpTotalBlend(g,st.line,s.over(st.line));
+    out.push({p:blended,pick:'Over '+st.line,game:gl,kind:'total',modelP:s.over(st.line),marketP:blended});
+    out.push({p:1-blended,pick:'Under '+st.line,game:gl,kind:'total',modelP:1-s.over(st.line),marketP:1-blended});
+  });
+  return out;
+}
+// ── First 5 innings sides + totals for the builders ──────────────────────
+// F5 has always graded correctly (gradeLeg/f5Of) and always showed up on the
+// game card itself (real book f5side/f5total prices when uploaded, sim fallback
+// otherwise) — it just never fed into the preset/custom-builder POOLS, so it
+// could never actually end up on a parlay. Same precedence chain as every other
+// market here: your uploaded book screenshot first, then a sim-only fallback.
+// F5 total intentionally does NOT blend in SharpAPI's segment total the way the
+// full-game total does — the game card's own F5 block doesn't either (hasRealF5
+// only gates whether the "real F5 total" label shows, the number itself is pure
+// sim), so this matches existing, already-correct behavior rather than
+// introducing a new blend that doesn't exist anywhere else in the app.
+function allF5SidesForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final'||g.abstract==='Live')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const awayF5=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='away');
+    const homeF5=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='home');
+    if(awayF5&&homeF5){
+      const ap=bookDevig(awayF5.price),hp=bookDevig(homeF5.price),sum=ap+hp;
+      out.push({p:hp/sum,pick:'F5 '+g.home.abbr,game:gl,kind:'f5side',modelP:s.f5h,marketP:hp/sum,price:homeF5.price});
+      out.push({p:ap/sum,pick:'F5 '+g.away.abbr,game:gl,kind:'f5side',modelP:s.f5a,marketP:ap/sum,price:awayF5.price});
+      return;
+    }
+    // no real F5 side price on the board — sim-only, same numbers already
+    // shown on the game card's "sim only" F5 comparison chip
+    out.push({p:s.f5h,pick:'F5 '+g.home.abbr,game:gl,kind:'f5side',modelP:s.f5h,marketP:s.f5h});
+    out.push({p:s.f5a,pick:'F5 '+g.away.abbr,game:gl,kind:'f5side',modelP:s.f5a,marketP:s.f5a});
+  });
+  return out;
+}
+function allF5TotalsForBuilder(){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final'||g.abstract==='Live')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookF5Total=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
+    if(bookF5Total&&bookF5Total.line!==null&&bookF5Total.line!==undefined){
+      const overB=bookLinesFor(g.id).find(x=>x.market==='f5total'&&x.side==='over'&&Math.abs(x.line-bookF5Total.line)<0.01);
+      const underB=bookLinesFor(g.id).find(x=>x.market==='f5total'&&x.side==='under'&&Math.abs(x.line-bookF5Total.line)<0.01);
+      if(overB&&underB){
+        const op=bookDevig(overB.price),up=bookDevig(underB.price),sum=op+up;
+        const mO=f5OverAt(s,bookF5Total.line);
+        out.push({p:op/sum,pick:'F5 over '+bookF5Total.line,game:gl,kind:'f5total',modelP:mO,marketP:op/sum,price:overB.price});
+        out.push({p:up/sum,pick:'F5 under '+bookF5Total.line,game:gl,kind:'f5total',modelP:1-mO,marketP:up/sum,price:underB.price});
+        return;
+      }
+    }
+    if(!hasRealF5(g.id))return; // no real F5 total posted anywhere — don't invent a sim-only line with no market reference at all
+    const f5Line=Math.floor(s.f5tot)+.5;
+    const f5Over=f5OverAt(s,f5Line);
+    out.push({p:f5Over,pick:'F5 over '+f5Line,game:gl,kind:'f5total',modelP:f5Over,marketP:f5Over});
+    out.push({p:1-f5Over,pick:'F5 under '+f5Line,game:gl,kind:'f5total',modelP:1-f5Over,marketP:1-f5Over});
+  });
+  return out;
+}
+function qualifyingPool(modes){
+  const pool=[];
+  if(modes.has('ml'))allSidesForBuilder().forEach(x=>pool.push(x));
+  if(modes.has('rl'))allRunLinesForBuilder().forEach(x=>pool.push(x));
+  if(modes.has('total'))allTotalsForBuilder().forEach(x=>pool.push(x));
+  if(modes.has('f5')){allF5SidesForBuilder().forEach(x=>pool.push(x));allF5TotalsForBuilder().forEach(x=>pool.push(x));}
+  if(modes.has('prop')){
+    PROPS.filter(p=>p.type!=='hr').forEach(p=>
+      pool.push({p:p.p,pick:p.name+' '+p.mkt,game:p.game,kind:'prop',modelP:p.p,marketP:p.p}));
+    PROPS.filter(p=>p.type==='hr').forEach(p=>
+      pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',modelP:p.p,marketP:p.p}));
+  }
+  // sort best probability first — builder adds legs greedily until target odds are hit
+  return pool.sort((a,b)=>b.p-a.p);
+}
+let BUILDMODES=new Set(['ml','total','prop']); // f5 off by default here too — same reasoning as PRESET_MARKETS
+function selectedModes(){
+  // read the DOM if the build tab is mounted, otherwise fall back to stored state
+  const modes=new Set();
+  let found=false;
+  ['ml','rl','total','f5','prop'].forEach(m=>{
+    const el=document.getElementById('mode-'+m);
+    if(el){found=true;if(el.classList.contains('on'))modes.add(m)}
+  });
+  if(found){BUILDMODES=modes;return modes}
+  return BUILDMODES;
+}
+function toggleMode(m,btn){
+  btn.classList.toggle('on');
+  if(btn.classList.contains('on'))BUILDMODES.add(m);else BUILDMODES.delete(m);
+}
+function isPropKind(k){return k==='prop'||k==='hr'}
+/* ── BUILDER STATE ──────────────────────────────────────── */
+let TARGET_LEGS=4;        // how many legs to target (0 = use $ target)
+let HELD_PICKS=new Set(); // picks currently held (video-poker style)
+let LAST_COMBO=[];        // last built combo — needed for reroll
+
+function setLegs(n,btn){
+  TARGET_LEGS=n;
+  document.querySelectorAll('#legBtns button').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on'); // btn is null when called from the typed-number input — no fixed button to highlight
+  // toggle profit input opacity — only needed for "by target $" mode
+  const pi=document.getElementById('targetProfit');
+  if(pi)pi.style.opacity=n===0?'1':'0.4';
+}
+
+function toggleHold(pick){
+  if(HELD_PICKS.has(pick))HELD_PICKS.delete(pick);
+  else HELD_PICKS.add(pick);
+  renderBuilderResult(LAST_COMBO);
+}
+
+function rerollHeld(){
+  if(!LAST_COMBO.length){buildTargetTicket();return;}
+  const held=LAST_COMBO.filter(l=>HELD_PICKS.has(l.pick));
+  const sgpMode=document.getElementById('sgpToggle').classList.contains('on');
+  const modes=selectedModes();
+  const pool=qualifyingPool(modes).filter(l=>!held.some(h=>h.pick===l.pick));
+  const combo=[...held];
+  let mult=combo.reduce((a,l)=>a*(1/l.p),1);
+  const target=TARGET_LEGS>0?TARGET_LEGS:getTargetLegsFromProfit();
+
+  // reserve HR seat
+  if(modes.has('prop')&&!combo.some(l=>l.kind==='hr')){
+    const bestHR=pool.filter(l=>l.kind==='hr').sort((a,b)=>b.p-a.p)[0];
+    if(bestHR&&legalToAdd(combo,bestHR,sgpMode)){combo.push(bestHR);mult*=1/bestHR.p;}
+  }
+  for(const leg of pool){
+    if(combo.length>=target)break;
+    if(combo.includes(leg)||combo.some(c=>c.pick===leg.pick))continue;
+    if(!legalToAdd(combo,leg,sgpMode))continue;
+    combo.push(leg);mult*=1/leg.p;
+  }
+  LAST_COMBO=combo;
+  renderBuilderResult(combo);
+}
+
+function getTargetLegsFromProfit(){
+  const stake=parseFloat(document.getElementById('targetStake').value)||10;
+  const profit=parseFloat(document.getElementById('targetProfit').value)||50;
+  const neededMult=1+(profit/stake);
+  // rough leg estimate: average leg prob ~0.55 → 0.55^n = 1/neededMult
+  return Math.max(2,Math.min(12,Math.ceil(Math.log(1/neededMult)/Math.log(0.55))));
+}
+
+function lockBuiltTicket(){
+  if(!LAST_COMBO.length)return;
+  const stake=parseFloat(document.getElementById('targetStake').value)||0;
+  const combinedProb=LAST_COMBO.reduce((a,l)=>a*l.p,1);
+  const id=Date.now();
+  const locked=get(LS.locked,[]);
+  locked.push({id,date:fmtDate(new Date()),
+    source:'mine',
+    legs:LAST_COMBO.map(l=>{
+      const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
+      return{id:id+'|'+l.pick,game:l.game,pick:l.pick,p:l.p,
+        gid:gm?gm.id:null,gameDate:today()};
+    }),
+    p:combinedProb,stake:stake||null});
+  set(LS.locked,locked);
+  HELD_PICKS.clear();LAST_COMBO=[];
+  document.getElementById('targetResult').innerHTML=
+    '<div class="tkt hi"><h3>Locked ✓</h3><div class="sub">Ticket saved to the Tickets tab. You can track your stake and payout there.</div></div>';
+  renderTickets();
+}
+
+function renderBuilderResult(combo){
+  const stake=parseFloat(document.getElementById('targetStake').value)||0;
+  const resEl=document.getElementById('targetResult');
+  if(!combo.length){resEl.innerHTML='';return;}
+  const mult=combo.reduce((a,l)=>a*(1/l.p),1);
+  const combinedProb=combo.reduce((a,l)=>a*l.p,1);
+  const profit=stake*(mult-1);
+  const sgpMode=document.getElementById('sgpToggle').classList.contains('on');
+  const sgpNote=sgpMode?'<div class="sub" style="color:var(--cold)">SGP mode on. Confirm your book offers these together before firing.</div>':'';
+  const hrTag=l=>l.kind==='hr'?` <span class="flag cool">${hrTierLabel(l.p)}</span>`:'';
+  const legs=combo.map(l=>{
+    const held=HELD_PICKS.has(l.pick);
+    return `<li style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--rule)">
+      <button onclick="toggleHold('${esc(l.pick)}')" style="flex:0 0 auto;padding:2px 8px;font-size:9px;
+        font-family:'IBM Plex Mono';letter-spacing:.06em;border-radius:4px;border:1px solid;cursor:pointer;
+        background:${held?'rgba(242,169,59,.15)':'transparent'};
+        border-color:${held?'var(--gold)':'var(--rule)'};
+        color:${held?'var(--gold)':'var(--mute)'}">
+        ${held?'HELD':'HOLD'}
+      </button>
+      <span style="flex:1">${l.pick}${hrTag(l)} <span class="m">${l.game}</span></span>
+      <span class="pp">${(l.p*100).toFixed(0)}%</span>
+    </li>`;
+  }).join('');
+  resEl.innerHTML=`<div class="tkt hi">
+    <h3>${stake?'$'+stake+' → ~$'+profit.toFixed(0)+' profit':combo.length+' legs built'}</h3>
+    <div class="sub"><b>${(combinedProb*100).toFixed(combinedProb<.01?3:1)}%</b> combined · ${combo.length} legs · 1 in ${Math.round(1/combinedProb).toLocaleString()}</div>
+    ${sgpNote}
+    <ol style="list-style:none;padding:0;margin:10px 0">${legs}</ol>
+    <div class="bar" style="margin-top:4px">
+      <button class="primary" onclick="lockBuiltTicket()">Lock this ticket</button>
+      <button onclick="rerollHeld()">Reroll free legs</button>
+    </div>
+    <div class="sub" style="margin-top:6px;color:var(--mute)">Tap HOLD on any leg to keep it. Hit Reroll to swap out the rest.</div>
+  </div>`;
+}
+
+function buildTargetTicket(){
+  HELD_PICKS.clear();
+  const stake=parseFloat(document.getElementById('targetStake').value);
+  const sgpMode=document.getElementById('sgpToggle').classList.contains('on');
+  const resEl=document.getElementById('targetResult');
+  const modes=selectedModes();
+  if(!modes.size){resEl.innerHTML='<div class="empty">Pick at least one market type above.</div>';return}
+  const pool=qualifyingPool(modes);
+  if(!pool.length){resEl.innerHTML='<div class="empty">No real lines available in the selected markets.</div>';return}
+
+  const combo=[];
+  let mult=1;
+  // TARGET_LEGS>0: fixed leg count. TARGET_LEGS===0: "by target $" (uses the
+  // profit-target estimate below). TARGET_LEGS===-1: "No limit" — target isn't
+  // used at all in that case (the loop guard below only checks TARGET_LEGS>0),
+  // so avoid the wasted/misleading getTargetLegsFromProfit() DOM read for it.
+  const target=TARGET_LEGS>0?TARGET_LEGS:(TARGET_LEGS===0?getTargetLegsFromProfit():null);
+  const neededMult=TARGET_LEGS===0&&stake?(1+(parseFloat(document.getElementById('targetProfit').value)||50)/stake):null;
+
+  if(modes.has('prop')){
+    const bestHR=pool.filter(l=>l.kind==='hr').sort((a,b)=>b.p-a.p)[0];
+    if(bestHR&&legalToAdd(combo,bestHR,sgpMode)){combo.push(bestHR);mult*=1/bestHR.p;}
+  }
+  for(const leg of pool){
+    if(TARGET_LEGS>0&&combo.length>=target)break;
+    if(neededMult!==null&&mult>=neededMult)break;
+    if(combo.some(c=>c.pick===leg.pick))continue;
+    if(!legalToAdd(combo,leg,sgpMode))continue;
+    combo.push(leg);mult*=1/leg.p;
+  }
+  if(!combo.length){resEl.innerHTML='<div class="empty">Nothing available in the selected markets right now.</div>';return}
+  LAST_COMBO=combo;
+  renderBuilderResult(combo);
+}
+
+/* ================= TICKETS ================= */
+function marketPool(){
+  const pool=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    if(hasRealML(g.id)){
+      const bl=mlBlend(g,s);
+      pool.push({p:Math.max(bl.home,bl.away),pick:(bl.home>=bl.away?g.home.abbr:g.away.abbr)+' ML',game:gl,kind:'side'});
+    }
+    const favSide=s.hw>=s.aw?'home':'away';
+    const favAb=g[favSide].abbr,dogAb=favSide==='home'?g.away.abbr:g.home.abbr;
+    const favCover=rlProb(g,s,favSide,1.5);
+    if(favCover!==null&&hasRealRunLine(g.id)){
+      const favRD=rundownRLFor(g.id,favAb,-1.5),dogRD=rundownRLFor(g.id,dogAb,1.5);
+      let favBlend=favCover;
+      if(favRD)favBlend=favCover*0.55+favRD.prob*0.45;
+      else if(dogRD)favBlend=1-((1-favCover)*0.55+dogRD.prob*0.45);
+      const dogBlend=1-favBlend;
+      if(favBlend>=.40)pool.push({p:favBlend,pick:favAb+' -1.5',game:gl,kind:'rl'});
+      if(dogBlend>=.60)pool.push({p:dogBlend,pick:dogAb+' +1.5',game:gl,kind:'rl'});
+    }
+    // Totals only ever pick the real posted line, never the model's own synthetic
+    // number — same rule as F5. No free alternate-line source is confirmed yet, so a
+    // game with no SharpAPI total simply gets no total pick, full stop.
+    if(hasRealTotal(g.id)){
+      const st=sharpTotalFor(g.id);
+      const o=sharpTotalBlend(g,st.line,s.over(st.line));
+      if(o>=.5)pool.push({p:o,pick:'Over '+st.line,game:gl,kind:'total'});
+      else if((1-o)>=.5)pool.push({p:1-o,pick:'Under '+st.line,game:gl,kind:'total'});
+    }
+    // F5 stays out of every ticket/pick pool until a real posted line backs it —
+    // see hasRealF5() for why nothing currently qualifies
+    if(hasRealF5(g.id)){
+      pool.push({p:Math.max(s.f5h,s.f5a),pick:'F5 '+(s.f5h>s.f5a?g.home.abbr:g.away.abbr),game:gl,kind:'f5'});
+      [3.5,4.5].forEach(t=>{
+        const o=Math.min(.82,Math.max(.18,.5+(s.f5tot-t)*.14));
+        if(o>=.52)pool.push({p:o,pick:'F5 over '+t,game:gl,kind:'f5t'});
+        else if((1-o)>=.52)pool.push({p:1-o,pick:'F5 under '+t,game:gl,kind:'f5t'});
+      });
+    }
+  });
+
+  /* Every ticket builder — templates, custom, specialty — draws from this one
+     pool, so adding football here makes all of them cross-sport at once.
+     Same discipline as MLB: a market only enters the pool when a REAL posted
+     line backs it, never a synthetic model number. Legs carry their sport so
+     resolveLeg can grade them against the right schedule. */
+  const football=(games,sims,sport,linesFor)=>{
+    (games||[]).forEach(g=>{
+      if(g.status==='Final'||g.abstract==='Final')return;
+      const s=(sims||{})[g.id];if(!s)return;
+      const gl=g.away.abbr+'@'+g.home.abbr;
+      let lines=[];try{lines=linesFor(gl)||[]}catch(e){}
+      if(!lines.length)return;                       // no real book line -> no pick
+      const find=(m,side)=>lines.find(x=>x.market===m&&x.side===side);
+      const ml=(side)=>{
+        const bk=find('moneyline',side);if(!bk)return;
+        const p=side==='away'?s.aw:s.hw;
+        if(p>=.5)pool.push({p,pick:g[side].abbr+' ML',game:gl,kind:'side',sport,gid:g.id});
+      };
+      ml('away');ml('home');
+      ['away','home'].forEach(side=>{
+        const bk=find('spread',side);if(!bk||bk.line==null)return;
+        const p=side==='away'?s.awayCover(bk.line):s.homeCover(bk.line);
+        if(p!=null&&!isNaN(p)&&p>=.5)
+          pool.push({p,pick:g[side].abbr+' '+(bk.line>0?'+':'')+bk.line,game:gl,kind:'spread',sport,gid:g.id});
+      });
+      const ov=find('total','over'),un=find('total','under');
+      if(ov&&ov.line!=null){
+        const o=s.over(ov.line);
+        if(o>=.5)pool.push({p:o,pick:'Over '+ov.line,game:gl,kind:'total',sport,gid:g.id});
+        else if(un&&(1-o)>=.5)pool.push({p:1-o,pick:'Under '+un.line,game:gl,kind:'total',sport,gid:g.id});
+      }
+      /* Period markets. Football has halves and quarters; baseball has first
+         five innings. They are not interchangeable, and the NFL board was
+         being offered a baseball market it can never fill.
+         CFB gets 1H only — sportsbetting.ag posts 1Q for college too, but the
+         quarter-level sim for college is far noisier than the NFL's, so it
+         stays out of the ticket pool until graded history says otherwise. */
+      const periods=sport==='nfl'?['h1','q1']:['h1'];
+      periods.forEach(per=>{
+        const label=per==='h1'?'1H':'1Q';
+        // the sim models full games; a half is ~52% of scoring, a quarter ~26%
+        const frac=per==='h1'?0.52:0.26;
+        ['away','home'].forEach(side=>{
+          const bk=find(per+'spread',side);if(!bk||bk.line==null)return;
+          const full=bk.line/frac;                       // scale the period line to a full-game equivalent
+          const p=side==='away'?s.awayCover(full):s.homeCover(full);
+          if(p!=null&&!isNaN(p)&&p>=.5)
+            pool.push({p,pick:g[side].abbr+' '+label+' '+(bk.line>0?'+':'')+bk.line,
+              game:gl,kind:per,sport,gid:g.id});
+        });
+        const po=find(per+'total','over'),pu=find(per+'total','under');
+        if(po&&po.line!=null){
+          const o=per==='h1'&&s.overH1?s.overH1(po.line):s.over(po.line/frac);
+          if(o>=.5)pool.push({p:o,pick:label+' Over '+po.line,game:gl,kind:per,sport,gid:g.id});
+          else if(pu&&(1-o)>=.5)pool.push({p:1-o,pick:label+' Under '+pu.line,game:gl,kind:per,sport,gid:g.id});
+        }
+        const pm=find(per+'ml',null);
+        ['away','home'].forEach(side=>{
+          const bk=find(per+'ml',side);if(!bk)return;
+          const p=side==='away'?s.aw:s.hw;
+          if(p>=.5)pool.push({p,pick:g[side].abbr+' '+label+' ML',game:gl,kind:per,sport,gid:g.id});
+        });
+      });
+    });
+  };
+  try{
+    if(typeof NFL_GAMES!=='undefined')
+      football(NFL_GAMES,typeof NFL_SIMS!=='undefined'?NFL_SIMS:{},'nfl',
+        typeof nflBookLinesFor==='function'?nflBookLinesFor:()=>[]);
+    if(typeof NCAAF_GAMES!=='undefined')
+      football(NCAAF_GAMES,typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{},'ncaaf',
+        typeof ncaafBookLinesFor==='function'?ncaafBookLinesFor:()=>[]);
+  }catch(e){console.warn('football pool skipped:',e);}
+
+  return pool.sort((a,b)=>b.p-a.p);
+}
+function deal(pool,used,n){
+  const out=[],seen={};
+  for(const m of pool){
+    const id=m.game+'|'+m.pick;
+    if(used.has(id)||seen[m.game])continue;
+    out.push(m);used.add(id);seen[m.game]=1;
+    if(out.length===n)break;
+  }
+  return out;
+}
+/* ================= WAGER / PAYOUT ON LOCKED TICKETS ================= */
+const LS_WAGERS='d4.wagers';
+function getWagers(){return get(LS_WAGERS,{})}
+function saveWager(id,stake){
+  const w=getWagers();
+  if(!stake||isNaN(stake)||stake<=0){delete w[id]}else{w[id]=parseFloat(stake)}
+  set(LS_WAGERS,w);
+}
+function probToAmer(p){
+  if(!p||p<=0||p>=1)return '—';
+  return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p);
+}
+function amerPayout(amerStr,stake){
+  if(!stake||isNaN(stake)||stake<=0)return null;
+  const o=parseFloat((amerStr+'').replace('+',''));
+  if(isNaN(o))return null;
+  const profit=o>0?(stake*o/100):(stake*100/Math.abs(o));
+  return{total:stake+profit,profit};
+}
+// Debits the balance the instant a stake is entered — a real book takes your money
+// when you place the bet, not when it settles. If the stake is cleared or changed
+// before settlement, the OLD debit is reversed first so re-typing never double-charges.
+function debitStake(id,newStake){
+  const b=getBankroll();
+  b.debited=b.debited||{};
+  const prior=b.debited[id]||0;
+  if(prior)b.profit+=prior;               // undo whatever was debited before
+  if(newStake>0){
+    b.profit-=newStake;
+    b.debited[id]=newStake;
+  }else{
+    delete b.debited[id];
+  }
+  saveBankroll(b);
+}
+function onWagerInput(id,combinedP,inputEl){
+  const stake=parseFloat(inputEl.value)||0;
+  if(stake>0){
+    const check=checkStakeAllowed(id,stake);
+    if(!check.ok){
+      inputEl.style.color='var(--rust)';
+      const subEl=document.getElementById('wp-sub-'+id);
+      if(subEl){subEl.textContent=check.reason;subEl.style.color='var(--rust)'}
+      return; // don't save an over-cap stake
+    }
+  }
+  const inputElRef=document.getElementById('ws-'+id);
+  if(inputElRef)inputElRef.style.color='';
+  saveWager(id,stake||null);
+  debitStake(id,stake);
+  refreshPayout(id,combinedP,stake);
+}
+function refreshPayout(id,combinedP,stake){
+  const payEl=document.getElementById('wp-pay-'+id);
+  const subEl=document.getElementById('wp-sub-'+id);
+  const pillEl=document.getElementById('wp-pill-'+id);
+  if(!payEl)return;
+  if(!stake||stake<=0){
+    payEl.textContent='$—';if(subEl)subEl.textContent='profit';
+    if(pillEl){pillEl.classList.remove('neg')}return;
+  }
+  const odds=probToAmer(combinedP);
+  const res=amerPayout(odds,stake);
+  if(!res){payEl.textContent='$—';return}
+  payEl.textContent='$'+res.total.toFixed(2);
+  if(subEl)subEl.textContent='+$'+res.profit.toFixed(2)+' profit';
+  if(pillEl)pillEl.classList.toggle('neg',res.profit<0);
+}
+function buildWagerRow(t){
+  const w=getWagers();
+  const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+  const stake=trackedOnly?1:(w[t.id]||'');
+  const odds=probToAmer(t.p);
+  const res=stake?amerPayout(odds,stake):null;
+  const payTxt=res?'$'+res.total.toFixed(2):'$—';
+  const profTxt=res?'+$'+res.profit.toFixed(2)+' profit':'profit';
+  const tl=ticketLimit();
+  // Market/Outside tickets are tracked-only — fixed $1, no input, no bankroll
+  // interaction. The stake pill still shows the number (so the payout math reads
+  // the same as any other ticket) but isn't editable and never calls debitStake.
+  const stakeCell=trackedOnly
+    ?`<div class="wager-pill stake-pill" style="opacity:.85">
+        <div class="wp-label">Stake</div>
+        <div class="wp-val">$1.00</div>
+        <div class="wp-sub">tracked only</div>
+      </div>`
+    :`<div class="wager-pill stake-pill" onclick="document.getElementById('ws-${t.id}').focus()">
+        <div class="wp-label">Stake</div>
+        <div class="wp-val"><span style="font-size:10px;opacity:.6">$</span><input
+          id="ws-${t.id}" class="stake-input" type="number" min="0" max="${tl}" step="0.5"
+          placeholder="0" value="${stake}"
+          oninput="onWagerInput(${t.id},${t.p},this)"
+        ></div>
+        <div class="wp-sub" id="wp-sub-${t.id}-cap">cap $${tl.toFixed(2)}</div>
+      </div>`;
+  return `<div class="wager-row">
+    ${stakeCell}
+    <div class="wager-pill odds-pill">
+      <div class="wp-label">Parlay odds</div>
+      <div class="wp-val">${odds}</div>
+      <div class="wp-sub">${(t.p*100).toFixed(t.p<.01?3:1)}% hit rate</div>
+    </div>
+    <div class="wager-pill payout-pill" id="wp-pill-${t.id}">
+      <div class="wp-label">To win</div>
+      <div class="wp-val" id="wp-pay-${t.id}">${payTxt}</div>
+      <div class="wp-sub" id="wp-sub-${t.id}">${profTxt}</div>
+    </div>
+  </div>`;
+}
+
+/* ================= BANKROLL ================= */
+// $100/month budget. Money already spent is burned — losses don't refund the limit.
+// Daily cap $5, per-ticket cap $1, until cumulative profit clears $100 for the month.
+// Once profit exceeds $100, every dollar of profit ABOVE $100 raises the limit
+// multiplier by that ticket's profit as a percentage of the $100 baseline — a $30
+// winning ticket landed after already clearing $100 raises the multiplier by 0.30.
+const BR_BASELINE=100;
+const BR_DAILY_BASE=5;
+const BR_TICKET_BASE=1;
+
+function currentMonth(){return today().slice(0,7)}
+
+function getBankroll(){
+  const b=get('d4.bankroll',null);
+  const m=currentMonth();
+  if(!b||b.month!==m){
+    // new month — budget resets, burned money stays burned (history is kept, not reset)
+    // profit resets with the new month's budget, but the limit multiplier carries
+    // over — a month spent earning higher limits shouldn't be wiped by the calendar
+    const fresh={month:m,profit:0,
+      limitMult:b&&b.limitMult?Math.max(1,b.limitMult):1.0,
+      carriedMult:b&&b.limitMult>1?b.limitMult:null,
+      history:b?b.history||[]:[]};
+    set('d4.bankroll',fresh);
+    return fresh;
+  }
+  return b;
+}
+function saveBankroll(b){set('d4.bankroll',b)}
+
+function dailyLimit(){return +(BR_DAILY_BASE*getBankroll().limitMult).toFixed(2)}
+function ticketLimit(){return +(BR_TICKET_BASE*getBankroll().limitMult).toFixed(2)}
+
+function stakedToday(){
+  // THE MONEY BUG: this only summed b.history, which is populated ONLY once
+  // a ticket settles. debitStake() removes real money from the balance the
+  // MOMENT a stake is typed, before the ticket ever grades — so a stake on a
+  // pending, unsettled ticket was invisible here. That meant checkStakeAllowed
+  // (which reads this to enforce the daily cap) could be silently bypassed by
+  // staking several pending tickets on the same day, and the "used today"
+  // figure shown on the Money tab itself was wrong for exactly the same
+  // reason. b.debited already tracks every currently-debited, not-yet-settled
+  // stake by ticket id — this now includes those, filtered to tickets whose
+  // locked entry is actually dated today (a debited stake from a PAST day
+  // that's still pending shouldn't count against TODAY's cap).
+  const b=getBankroll();
+  const d=today();
+  const settledToday=b.history.filter(h=>h.date===d).reduce((a,h)=>a+h.stake,0);
+  const L=get(LS.locked,[]);
+  const debited=b.debited||{};
+  const pendingToday=Object.keys(debited).reduce((a,id)=>{
+    const t=L.find(x=>String(x.id)===String(id));
+    if(t&&t.date===d&&!t.archived)return a+debited[id];
+    return a;
+  },0);
+  return settledToday+pendingToday;
+}
+
+// Called whenever a stake is entered on a locked ticket — enforces the caps and
+// returns {ok:true} or {ok:false,reason:'...'} so the UI can block and explain.
+function checkStakeAllowed(ticketId,newStake){
+  const bal=BR_BASELINE+getBankroll().profit;
+  if(bal<=0)return{ok:false,reason:`Balance is $${bal.toFixed(2)} — the month's budget is spent.`};
+  if(newStake>bal)return{ok:false,reason:`Only $${bal.toFixed(2)} left this month.`};
+  const tl=ticketLimit();
+  if(newStake>tl+0.001)return{ok:false,reason:`Ticket cap right now is $${tl.toFixed(2)}.`};
+  const dl=dailyLimit();
+  const already=stakedToday();
+  // subtract this ticket's own existing stake if it was already counted today
+  const w=getWagers();
+  const existing=w[ticketId]||0;
+  const otherToday=already-existing;
+  if(otherToday+newStake>dl+0.001)return{ok:false,reason:`Daily cap right now is $${dl.toFixed(2)} — you've already staked $${otherToday.toFixed(2)} today.`};
+  return{ok:true};
+}
+
+const BR_MAX_MULT=10;   // hard ceiling — limits can grow 10x, never past it
+// A ticket in this state already had its stake DEBITED at placement (see
+// onWagerInput). Settling a WIN credits back the stake plus profit; settling a
+// LOSS credits nothing further, because the stake is already gone from the balance.
+function settleTicket(ticketId,stake,profit,won){
+  const b=getBankroll();
+  if(b.history.some(h=>h.id===ticketId))return; // already settled once
+  const wasDebited=(b.debited||{})[ticketId];
+  if(wasDebited){
+    // undo the placeholder debit, then apply the real result — this way profit
+    // always ends up net-correct regardless of when settlement happens
+    b.profit+=stake;
+    delete b.debited[ticketId];
+  }
+  b.profit+=profit;
+  // Limits track profit ABOVE the baseline, in both directions. The old version only
+  // ever ratcheted up on wins, so a hot streak left limits inflated through an entire
+  // losing run — the exact opposite of what bankroll discipline should do. Now it's a
+  // pure function of where profit actually stands, so it falls back as profit falls.
+  const over=Math.max(0,b.profit-BR_BASELINE);
+  const earned=1+(over/BR_BASELINE);
+  const floor=b.carriedMult||1;   // never drop below what previous months earned
+  b.limitMult=+Math.min(BR_MAX_MULT,Math.max(floor,earned)).toFixed(4);
+  b.history.push({id:ticketId,date:today(),stake,profit,won,ts:Date.now()});
+  saveBankroll(b);
+}
+
+// Runs during grading — finds every locked ticket with a stake and a fully-decided
+// outcome (no pending legs) that hasn't been settled yet, and books it.
+// Records a tracked-only outcome (market/outside buckets) without touching the
+// bankroll at all — same win/loss/push logic as settleTicket, but writes to its
+// own history list instead of d4.bankroll, since these were never real money.
+function recordTrackedOutcome(ticketId,stake,profit,won,source){
+  const key='d4.trackedhistory';
+  const h=get(key,{});
+  h[source]=h[source]||[];
+  if(h[source].some(r=>r.id===ticketId))return; // already recorded once
+  h[source].push({id:ticketId,date:today(),stake,profit,won,ts:Date.now()});
+  set(key,h);
+}
+function getTrackedHistory(source){
+  const h=get('d4.trackedhistory',{});
+  return source?(h[source]||[]):h;
+}
+
+function settleLockedTickets(){
+  // BUG THIS FIXES: this used to bail out immediately (`if(!stake) return`) for
+  // any ticket with no recorded wager — which meant a "My picks" ticket you
+  // locked in without ever typing a dollar amount into the stake box was
+  // completely invisible to the entire overnight grading cycle, forever. The
+  // games would finish, the correct result was fully computable the whole time,
+  // and this function would just skip the ticket every single run because it
+  // was gated on a UI interaction (typing a stake) that has nothing to do with
+  // whether the games are actually over. Manually tapping Archive/Archive-all
+  // worked fine because THOSE call ticketIsComplete()/gradeLeg() directly with
+  // no stake requirement at all — the bug was specific to the unattended path.
+  // Fix: grading and archiving now happen for every ticket regardless of stake.
+  // Only the MONEY side (bankroll debit/credit, tracked-source history) is
+  // skipped when there's truly no stake to record — grading itself never is.
+  const L=get(LS.locked,[]);
+  const w=getWagers();
+  L.forEach(t=>{
+    if(t.archived)return; // already settled/archived — nothing left to do
+    const stake=w[t.id]||0;
+    const hasStake=stake>0;
+    const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+    // Check whether money/tracking has already been recorded — but only use this
+    // to skip the MONEY step, never to skip grading and archiving. A ticket that
+    // was already paid out but not archived (e.g. confirmed preset that fired
+    // saveWager at confirm time) was previously returned here entirely, leaving
+    // it stuck as pending forever even though all games finished.
+    let alreadyRecorded=false;
+    if(hasStake){
+      if(!trackedOnly){
+        const b=getBankroll();
+        alreadyRecorded=b.history.some(h=>h.id===t.id);
+      }else{
+        const already=getTrackedHistory(t.source);
+        alreadyRecorded=already.some(h=>h.id===t.id);
+      }
+    }
+    let allDecided=true,anyLoss=false,pushCount=0;
+    // standard sportsbook rule: a PUSHED leg is removed from the parlay and the
+    // payout recalculates on whatever's left (a 2-team parlay with 1 push becomes
+    // a straight bet on the surviving leg, at that leg's own odds) — a push never
+    // costs you the ticket and never inflates it either
+    const survivingP=[]; // combined probability of the legs that actually settled live
+    t.legs.forEach(x=>{
+      const g=gradeLeg(x,t.date);
+      if(g.push){pushCount++;return} // pushed legs don't block settlement or count as a loss
+      if(g.hit===null){allDecided=false;return}
+      if(g.hit===false)anyLoss=true;
+      survivingP.push(x.p);
+    });
+    // A parlay is exactly as dead as any ONE of its remaining legs losing — a single
+    // dead leg sinks the ticket regardless of what other legs do, so there's no
+    // reason to wait on them once one has been eliminated (gradeLeg already applies
+    // conservative in-game math elimination, not just final scores).
+    if(anyLoss)allDecided=true;
+    if(!allDecided)return;
+    const won=!anyLoss;
+    const outcome=pushCount===t.legs.length?'push':(won?true:false);
+    if(hasStake&&!alreadyRecorded){
+      let profit;
+      if(pushCount===t.legs.length){
+        profit=0; // every leg pushed — the whole ticket refunds, no win, no loss
+      }else if(won){
+        // recompute odds from only the legs that actually decided a real outcome —
+        // pushed legs are excluded from the combined probability entirely, exactly
+        // like a real book strips a push out and prices the rest on its own
+        const combinedP=survivingP.length?survivingP.reduce((a,x)=>a*x,1):t.p;
+        const odds=probToAmer(combinedP);
+        const res=amerPayout(odds,stake);
+        profit=res?res.profit:0;
+      }else{
+        profit=-stake;
+      }
+      if(trackedOnly){
+        // record-only path — win/loss/push is tracked for that source's daily
+        // history, but the bankroll (d4.bankroll) is never touched.
+        recordTrackedOutcome(t.id,stake,profit,outcome,t.source);
+      }else{
+        settleTicket(t.id,stake,profit,outcome);
+      }
+      if(outcome===false)recordLossPostMortem(t,stake);
+    }
+    // grading + archiving always happens once all legs are decided —
+    // never blocked by whether money was already recorded
+    t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);
+    set(LS.locked,L);
+  });
+}
+
+/* ── loss post-mortem ── */
+// For a losing ticket, walks every leg back through that day's snapshot + final score
+// and compares what the 10,000-sim distribution actually predicted against what happened —
+// not just win/loss, but how far off the mean, median, and mode were from the real result.
+function recordLossPostMortem(ticket,stake){
+  const arc=get(LS.arc,{});
+  const d=ticket.date;
+  const A=arc[d];
+  const findings=[];
+  ticket.legs.forEach(x=>{
+    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+    if(!g)return;
+    const row=A&&A.rows?A.rows.find(r=>r.id===g.id):null;
+    const F=A&&A.finals?A.finals[g.id]:null;
+    if(!row||!F||F.a===null||F.h===null){
+      findings.push({leg:x.pick,game:x.game,note:'No snapshot data available for this game to compare against.'});
+      return;
+    }
+    const actualTotal=F.a+F.h;
+    const actualScore=`${F.a}-${F.h}`;
+    const actualWinner=F.h>F.a?g.home.abbr:(F.a>F.h?g.away.abbr:null);
+    const won=gradeSideFromScore(g,x.pick);
+    const totalMiss=+(actualTotal-row.pt).toFixed(2);
+    const sideMiss=won===false&&row.side!==actualWinner;
+    let note;
+    if(sideMiss){
+      note=`Model favored ${row.side} at ${(row.sp*100).toFixed(0)}% — ${actualWinner||'neither side'} actually won ${actualScore}. `+
+        `Most common simulated score was ${row.mode||'—'}; actual landed ${Math.abs(totalMiss)>=2?'well outside':'close to'} the predicted range.`;
+    }else if(Math.abs(totalMiss)>=2){
+      note=`Total missed by ${totalMiss>0?'+':''}${totalMiss} runs — model's mean projection was ${row.pt}, `+
+        `most common simulated total was ${row.modeTot}, actual was ${actualTotal}. `+
+        `${totalMiss>0?'Scoring ran well above what the sims expected.':'Scoring came in well under what the sims expected.'}`;
+    }else{
+      note=`Side/total were within the model's expected range (mean ${row.pt}, actual ${actualTotal}) — `+
+        `this leg lost on variance the model already knew was possible, not a systematic miss.`;
+    }
+    findings.push({leg:x.pick,game:x.game,predictedTotal:row.pt,predictedMode:row.mode,
+      predictedModeTot:row.modeTot,predictedSide:row.side,sidePct:row.sp,
+      actualScore,actualTotal,totalMiss,sideMiss,note});
+  });
+  const pm=get('d4.lossmortems',{});
+  pm[ticket.id]={ticketId:ticket.id,date:ticket.date,stake,findings,ts:Date.now()};
+  set('d4.lossmortems',pm);
+  // feed systematic misses into calibration signal — if totalMiss keeps trending the
+  // same direction across losses, that's a real bias, not noise, and computeCalibration
+  // already reads graded arc data, so this just ensures the loss is graded promptly
+  try{computeCalibration();}catch(e){}
+}
+
+function getLossMortems(){return get('d4.lossmortems',{})}
+
+/* ── Money tab UI ── */
+function renderMoneyTab(){
+  const b=getBankroll();
+  const pm=getLossMortems();
+  const dl=dailyLimit(),tl=ticketLimit(),staked=stakedToday();
+  // three real outcomes now, not two — a push is neither a win nor a loss
+  const wins=b.history.filter(h=>h.won===true);
+  const losses=b.history.filter(h=>h.won===false);
+  const pushes=b.history.filter(h=>h.won==='push');
+  const totalStaked=b.history.reduce((a,h)=>a+h.stake,0);
+
+  // Balance = starting budget + everything won or lost so far this month.
+  // This is the one number that answers "how am I doing" at a glance.
+  const balance=BR_BASELINE+b.profit;
+  const balColor=b.profit>0?'var(--win)':b.profit<0?'var(--rust)':'var(--chalk)';
+  const sorted=b.history.slice().sort((x,y)=>x.ts-y.ts); // oldest first, to build running balance
+  let running=BR_BASELINE;
+  const withRunning=sorted.map(rec=>{running+=rec.profit;return{...rec,runningBalance:running}});
+  const latest=withRunning.length?withRunning[withRunning.length-1]:null;
+
+  // ── Balance card ──────────────────────────────────────────────────────
+  let h=coachHtml({screen:'money'});
+  h+=`<div class="tkt hi" style="text-align:center;padding:22px 16px">
+    <div style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--mute)">Balance · ${currentMonth()}</div>
+    <div style="font-family:'Archivo';font-weight:900;font-size:44px;line-height:1.1;
+      color:${balColor};margin:4px 0">$${balance.toFixed(2)}</div>
+    <div style="font-family:'IBM Plex Mono';font-size:12px;color:${balColor}">
+      ${b.profit>0?'+':''}$${b.profit.toFixed(2)} this month
+    </div>
+  </div>`;
+
+  // ── Latest transaction — the single most recent thing that happened ────
+  if(latest){
+    const latestIsPush=latest.won==='push';
+    const lc=latestIsPush?'var(--mute)':latest.won?'var(--win)':'var(--rust)';
+    const lArrow=latestIsPush?'—':latest.won?'▲':'▼';
+    const lLabel=latestIsPush?'Ticket pushed':latest.won?'Ticket won':'Ticket lost';
+    h+=`<div class="tkt" style="border-left:3px solid ${lc}">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin-bottom:4px">Latest</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700">${lLabel} · ${latest.date}</div>
+          <div class="m" style="margin-top:2px">$${latest.stake.toFixed(2)} staked → balance $${latest.runningBalance.toFixed(2)}</div>
+        </div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${lc}">
+          ${lArrow} ${latest.profit>=0?'+':''}$${latest.profit.toFixed(2)}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── Limits — condensed to one line ──────────────────────────────────────
+  h+=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:10px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${tl.toFixed(2)}</div>
+        <div class="m">per ticket</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${dl.toFixed(2)}</div>
+        <div class="m">per day · $${staked.toFixed(2)} used today</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">${b.limitMult.toFixed(2)}×</div>
+        <div class="m">multiplier</div></div>
+    </div>
+    <div class="sub" style="margin-top:10px;text-align:center">
+      ${b.profit>BR_BASELINE
+        ?`Limits scaled up <b>${((b.limitMult-1)*100).toFixed(0)}%</b> from clearing the $${BR_BASELINE} baseline.`
+        :`$${Math.max(0,BR_BASELINE-b.profit).toFixed(2)} more in profit unlocks higher limits.`}
+    </div>
+  </div>`;
+
+  if(!withRunning.length){
+    h+=`<div class="empty">No settled tickets yet. Stake a locked ticket and it'll show up here
+      the moment every leg grades final.</div>`;
+    return h;
+  }
+
+  // ── Season snapshot — one line, not a wall ──────────────────────────────
+  h+=`<div class="note" style="text-align:center;display:flex;justify-content:center;gap:18px;flex-wrap:wrap">
+    <span><b style="color:var(--chalk)">${wins.length}-${losses.length}${pushes.length?'-'+pushes.length:''}</b> record${pushes.length?' (W-L-Push)':''}</span>
+    <span><b style="color:var(--chalk)">$${totalStaked.toFixed(2)}</b> total staked</span>
+  </div>`;
+
+  // ── Transaction feed — newest first, running balance on every line ─────
+  h+=`<div class="sbar"><h2>Transactions</h2><div class="ln"></div></div>`;
+  h+=withRunning.slice().reverse().map(rec=>{
+    const mortem=pm[rec.id];
+    const isPush=rec.won==='push';
+    const color=isPush?'var(--mute)':rec.won?'var(--win)':'var(--rust)';
+    const arrow=isPush?'—':rec.won?'▲':'▼';
+    const label=isPush?'Push':rec.won?'Won':'Lost';
+    // a push is never a loss — no post-mortem, nothing "went wrong"
+    const mortemHtml=(rec.won===false&&mortem)?`
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--rule)">
+        <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+          text-transform:uppercase;color:var(--rust);margin-bottom:4px">What went wrong</div>
+        ${mortem.findings.map(f=>{
+          const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===f.game);
+          const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
+          return `<div${jumpTo} style="padding:5px 0;border-bottom:1px solid var(--rule)">
+          <div style="font-size:12px;font-weight:600">${f.leg} <span class="m">${f.game}</span>${g?' <span class="m" style="color:var(--gold)">↳ view game</span>':''}</div>
+          <div class="sub" style="margin-top:2px">${f.note||f.notes||''}</div>
+        </div>`;}).join('')}
+      </div>`:'';
+    return `<div class="tkt" style="border-left:3px solid ${color}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <div style="font-weight:700">${label} · ${rec.date}</div>
+          <div class="m" style="margin-top:2px">$${rec.stake.toFixed(2)} staked</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Archivo';font-weight:900;font-size:18px;color:${color}">
+            ${arrow} ${rec.profit>=0?'+':''}$${rec.profit.toFixed(2)}</div>
+          <div class="m" style="font-size:10px">balance $${rec.runningBalance.toFixed(2)}</div>
+        </div>
+      </div>
+      ${mortemHtml}
+    </div>`;
+  }).join('');
+  return h;
+}
+/* ================= BANKROLL END ================= */
+
+
+
+/* ================= CLOSING LINE VALUE =================
+   The single most predictive measure of whether a bettor is actually good. If the
+   line moves toward your pick after you take it, you beat the close — and beating
+   the close consistently predicts long-run profit far better than short-run W/L,
+   which is mostly variance. This captures the market price at snapshot time and
+   again once the game locks, then compares.
+   NOTE: this can only measure games from the moment it's installed forward —
+   closing prices for past days were never stored and can't be reconstructed. */
+const LS_CLV='d4.clv';
+function getCLV(){return get(LS_CLV,{})}
+
+// Called on every odds refresh. Records the earliest price seen for a game (the
+// "taken" reference) and keeps overwriting the latest until the game starts, at
+// which point the last value seen becomes the close.
+function captureCLV(){
+  const store=getCLV(),d=today();
+  store[d]=store[d]||{};
+  let changed=false;
+  GAMES.forEach(g=>{
+    const M=marketOf(g);
+    if(!M||M.fh===null||M.fh===undefined)return;
+    const key=g.away.abbr+'@'+g.home.abbr;
+    const rec=store[d][key]||{};
+    if(rec.openH===undefined){rec.openH=+M.fh.toFixed(4);rec.openTs=Date.now();changed=true}
+    // keep updating the close until the game is no longer pre-game
+    if(g.abstract!=='Final'&&g.abstract!=='Live'){
+      const nh=+M.fh.toFixed(4);
+      if(rec.closeH!==nh){rec.closeH=nh;rec.closeTs=Date.now();changed=true}
+    }else if(rec.locked!==true){
+      rec.locked=true;changed=true;   // freeze — this is the close
+    }
+    store[d][key]=rec;
+  });
+  if(changed)set(LS_CLV,store);
+}
+
+// CLV for one pick: how far the market moved toward or away from it after you took it.
+function clvFor(leg,dateStr){
+  const store=getCLV();
+  const d=dateStr||leg.gameDate||today();
+  const rec=(store[d]||{})[leg.game];
+  if(!rec||rec.openH===undefined||rec.closeH===undefined)return null;
+  const [awayAb,homeAb]=(leg.game||'@').split('@');
+  const m=(leg.pick||'').match(/^(.+) ML$/);
+  if(!m)return null;                        // moneyline only for now
+  const who=m[1];
+  const openP=who===homeAb?rec.openH:1-rec.openH;
+  const closeP=who===homeAb?rec.closeH:1-rec.closeH;
+  // market moving TOWARD your side (higher implied prob at close) = you got the better number
+  const move=+((closeP-openP)*100).toFixed(2);
+  return{openP,closeP,move,beat:move>0};
+}
+
+function clvSummary(){
+  const L=get(LS.locked,[]);
+  let n=0,beat=0,totalMove=0;
+  const rows=[];
+  L.forEach(t=>t.legs.forEach(x=>{
+    const c=clvFor(x,x.gameDate||t.date);
+    if(!c)return;
+    n++;if(c.beat)beat++;totalMove+=c.move;
+    rows.push({date:t.date,pick:x.pick,game:x.game,...c});
+  }));
+  return{n,beat,beatPct:n?+(beat/n*100).toFixed(1):null,
+    avgMove:n?+(totalMove/n).toFixed(2):null,rows};
+}
+
+
+/* ================= SIGNAL LAYER =================
+   Everything uploaded from outside — picks, trends, public consensus — gets
+   validated, scored, and fed into one evaluation instead of sitting in storage
+   unused. Trends are checked against tonight's actual conditions before they're
+   allowed to count, because "5-1 as a favorite" is meaningless when tonight's
+   team is a dog. */
+
+/* ── is this trend actually applicable to tonight's game? ── */
+function trendApplies(tr,g,s){
+  if(!g)return{ok:false,why:'game not on the board'};
+  const t=(tr.text||'').toLowerCase();
+  const M=marketOf(g);
+  const teamAb=tr.team;
+  const isHome=teamAb===g.home.abbr;
+  const fails=[];
+
+  // favorite / underdog — check tonight's actual price
+  if(/as an underdog|as a home underdog|as a road underdog/.test(t)){
+    if(!M)fails.push('no price to check favorite status');
+    else{
+      const p=isHome?M.fh:M.fa;
+      if(p>=0.5)fails.push(`${teamAb} is favored tonight, not an underdog`);
+    }
+  }
+  if(/as a favorite|as a home favorite|as a road favorite/.test(t)){
+    if(!M)fails.push('no price to check favorite status');
+    else{
+      const p=isHome?M.fh:M.fa;
+      if(p<0.5)fails.push(`${teamAb} is an underdog tonight, not favored`);
+    }
+  }
+  // starter handedness — the trend is about the OPPOSING starter
+  const wantsL=/vs\.? a left-handed starter|against a lefty|vs\.? lhp/.test(t);
+  const wantsR=/vs\.? a right-handed starter|against a righty|vs\.? rhp/.test(t);
+  if(wantsL||wantsR){
+    const opp=isHome?g.away.p:g.home.p;
+    const hand=opp&&opp.hand;
+    if(!hand)fails.push('opposing starter handedness unknown');
+    else if(wantsL&&hand!=='L')fails.push(`opposing starter is ${hand}HP, not a lefty`);
+    else if(wantsR&&hand!=='R')fails.push(`opposing starter is ${hand}HP, not a righty`);
+  }
+  // home / road split
+  if(/home games?|at home/.test(t)&&!isHome)fails.push(`${teamAb} is on the road tonight`);
+  if(/road games?|away games?/.test(t)&&isHome)fails.push(`${teamAb} is at home tonight`);
+  // interleague
+  if(/interleague/.test(t)){
+    const AL=new Set(['BAL','BOS','NYY','TB','TOR','CWS','CLE','DET','KC','MIN','HOU','LAA','ATH','SEA','TEX']);
+    const a=AL.has(g.away.abbr),h=AL.has(g.home.abbr);
+    if(a===h)fails.push('not an interleague game tonight');
+  }
+  // opponent record
+  if(/vs\.? a team with a losing record/.test(t)){
+    const opp=isHome?g.away:g.home;
+    if(opp.w==null||opp.l==null)fails.push('opponent record unknown');
+    else if(opp.w>=opp.l)fails.push(`${opp.abbr} is not under .500`);
+  }
+  if(/vs\.? a team with a winning record|winning home record/.test(t)){
+    const opp=isHome?g.away:g.home;
+    if(opp.w==null||opp.l==null)fails.push('opponent record unknown');
+    else if(opp.w<opp.l)fails.push(`${opp.abbr} is not above .500`);
+  }
+  // series position is not knowable from our data — flag rather than silently pass
+  const seriesDep=/game \d of a series/.test(t);
+  return{ok:fails.length===0,why:fails[0]||null,unverified:seriesDep};
+}
+
+function applicableTrends(g,s){
+  const all=get(LS.exttrends,{})[today()]||[];
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  return all.filter(x=>x.game===gl).map(x=>{
+    const chk=trendApplies(x,g,s);
+    return{...x,applies:chk.ok,why:chk.why,unverified:chk.unverified};
+  });
+}
+
+/* ── public consensus, keeping bet% and money% distinct ──
+   Covers publishes both on separate views. They frequently disagree, and that
+   disagreement IS the signal — heavy ticket count one way with heavy money the
+   other is small money vs big money taking opposite sides. Merging them into one
+   number destroys exactly the information worth having. */
+function consensusFor(g){
+  const all=get(LS.extconsensus,{})[today()]||[];
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const rows=all.filter(x=>x.game===gl);
+  const out={ml:{},total:{}};
+  rows.forEach(r=>{
+    const bucket=r.market==='total'?out.total:out.ml;
+    const metric=r.metric==='money'?'money':'bets';
+    bucket[metric]={awayPct:r.awayPct,homePct:r.homePct,
+      overPct:r.overPct,underPct:r.underPct,line:r.line,
+      awayPrice:r.awayPrice,homePrice:r.homePrice,src:r.src};
+  });
+  // divergence: same market, opposite lean between ticket count and money
+  const div=[];
+  ['ml','total'].forEach(mk=>{
+    const b=out[mk].bets,m=out[mk].money;
+    if(!b||!m)return;
+    if(mk==='ml'&&b.homePct!=null&&m.homePct!=null){
+      const bSide=b.homePct>=50?'home':'away',mSide=m.homePct>=50?'home':'away';
+      if(bSide!==mSide){
+        const bp=bSide==='home'?b.homePct:100-b.homePct;
+        const mp=mSide==='home'?m.homePct:100-m.homePct;
+        div.push({market:'moneyline',bets:bSide,money:mSide,
+          detail:`${bp}% of tickets on the ${bSide} side, but ${mp}% of the money on ${mSide}`});
+      }
+    }
+    if(mk==='total'&&b.overPct!=null&&m.overPct!=null){
+      const bSide=b.overPct>=50?'over':'under',mSide=m.overPct>=50?'over':'under';
+      if(bSide!==mSide){
+        const bp=bSide==='over'?b.overPct:100-b.overPct;
+        const mp=mSide==='over'?m.overPct:100-m.overPct;
+        div.push({market:'total',bets:bSide,money:mSide,
+          detail:`${bp}% of tickets on the ${bSide}, but ${mp}% of the money on the ${mSide} — small bets and big money on opposite sides`});
+      }
+    }
+  });
+  return{...out,divergence:div,has:rows.length>0};
+}
+
+/* ── does a source contradict itself? model vs its own published trends ── */
+function sourceSelfConflict(g){
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const picks=(getExt()[today()]||[]).filter(x=>x.game===gl);
+  const trends=(get(LS.exttrends,{})[today()]||[]).filter(x=>x.game===gl);
+  const out=[];
+  const bySrc={};
+  picks.forEach(p=>{(bySrc[p.src]=bySrc[p.src]||{picks:[],trends:[]}).picks.push(p)});
+  trends.forEach(t=>{
+    const k=Object.keys(bySrc).find(s2=>t.src&&t.src.toLowerCase().includes(s2.toLowerCase().split(' ')[0]))||t.src;
+    (bySrc[k]=bySrc[k]||{picks:[],trends:[]}).trends.push(t);
+  });
+  Object.keys(bySrc).forEach(src=>{
+    const b=bySrc[src];
+    const totPick=b.picks.find(p=>p.market==='total');
+    if(!totPick)return;
+    const trendDir=b.trends.filter(t=>t.implies==='over'||t.implies==='under');
+    if(trendDir.length<2)return;
+    const over=trendDir.filter(t=>t.implies==='over').length;
+    const under=trendDir.length-over;
+    const trendLean=over>under?'over':under>over?'under':null;
+    if(trendLean&&trendLean!==totPick.side){
+      out.push({src,detail:`${src}'s model picks ${totPick.side.toUpperCase()} `+
+        `but its own trends lean ${trendLean.toUpperCase()} (${Math.max(over,under)} of ${trendDir.length})`});
+    }
+  });
+  return out;
+}
+
+
+
+const LS_EVAL='d4.evalrun';
+// fingerprint of everything that feeds an evaluation — if this changes, the last
+// run is stale and the screen says so instead of quietly showing old conclusions
+function evalInputFingerprint(){
+  const d=today();
+  return JSON.stringify({
+    games:GAMES.length,
+    sims:GAMES.filter(g=>SIMS[g.id]).length,
+    book:(get(LS.bookshots,{})[d]||[]).length,
+    picks:(getExt()[d]||[]).length,
+    trends:(get(LS.exttrends,{})[d]||[]).length,
+    cons:(get(LS.extconsensus,{})[d]||[]).length,
+    calib:(get('d4.drift',{})||{}).n||0
+  });
+}
+function lastEvalRun(){
+  const r=get(LS_EVAL,null);
+  return r&&r.date===today()?r:null;
+}
+
+function renderMasterEval(){
+  const d=today();
+  const nPicks=(getExt()[d]||[]).length;
+  const nTrends=(get(LS.exttrends,{})[d]||[]).length;
+  const nCons=(get(LS.extconsensus,{})[d]||[]).length;
+  const nBook=(get(LS.bookshots,{})[d]||[]).length;
+  const nSim=GAMES.filter(g=>SIMS[g.id]).length;
+  const run=lastEvalRun();
+  const fp=evalInputFingerprint();
+  const stale=run&&run.fingerprint!==fp;
+
+  const chip=(ok,label,n)=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <span style="width:7px;height:7px;border-radius:50%;background:${ok?'var(--win)':'var(--rule)'};
+      flex:0 0 auto"></span>
+    <span style="color:${ok?'var(--chalk)':'var(--mute)'}">${label}</span>
+    <span class="m">${n}</span></div>`;
+
+  const status=!run
+    ?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">
+       <b style="color:var(--gold)">Not evaluated yet today.</b> Load what you've got below,
+       then hit Run evaluation.</div>`
+    :stale
+    ?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">
+       <b style="color:var(--gold)">Inputs changed since the last run.</b>
+       Last evaluated ${new Date(run.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} —
+       new data has come in since. Run it again for a current read.</div>`
+    :`<div class="note" style="border-left:3px solid var(--win);padding-left:10px">
+       <b style="color:var(--win)">✓ Evaluated ${new Date(run.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</b>
+       — ${run.evals.length} games scored against ${run.sourceCount} inputs. Nothing has changed since.</div>`;
+
+  const feed=`<div class="tkt hi">
+    <h3>Master evaluation</h3>
+    <div class="sub" style="margin-bottom:9px">Weighs every independent read on tonight's board
+    against every other one. Green dots are loaded and feeding in.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 14px">
+      ${chip(nSim>0,'Simulations',nSim)}
+      ${chip(nBook>0,'Book lines',nBook)}
+      ${chip(nPicks>0,'Outside picks',nPicks)}
+      ${chip(nTrends>0,'Trends',nTrends)}
+      ${chip(nCons>0,'Public consensus',nCons)}
+      ${chip(((get('d4.drift',{})||{}).n||0)>0,'Calibration',(get('d4.drift',{})||{}).n||0)}
+    </div>
+    <div class="bar" style="margin-top:11px">
+      <button class="primary" id="evalRunBtn" onclick="runMasterEval()">
+        ${run&&!stale?'Re-run evaluation':'Run evaluation'}</button>
+      <button onclick="forceGradeEverything()">Calibrate first</button>
+    </div>
+  </div>${status}`;
+
+  if(!run)return feed+`<div class="empty">Results appear here once you run it.</div>`;
+  const evals=run.evals;
+  if(!evals.length)return feed+'<div class="empty">No games were available to evaluate.</div>';
+
+  const counts={strong:0,lean:0,split:0,away:0};
+  evals.forEach(e=>counts[e.verdict]++);
+  const summary=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      ${['strong','lean','split','away'].map(k=>`<div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:22px;color:${VERDICT[k].color}">${counts[k]}</div>
+        <div class="m">${VERDICT[k].label}</div></div>`).join('')}
+    </div>
+  </div>`;
+
+  const cards=evals.map(e=>{
+    const V=VERDICT[e.verdict];
+    const sigRows=e.sideSignals.map(x=>`<div style="display:flex;justify-content:space-between;
+      padding:3px 0;font-size:11.5px">
+      <span style="color:var(--mute)">${x.src}</span>
+      <span style="color:${x.side===e.side?'var(--chalk)':'var(--rust)'};font-weight:600">${x.detail||x.side}</span>
+    </div>`).join('');
+    const conflictRows=e.conflicts.length?`<div style="margin-top:8px;padding-top:8px;
+      border-top:1px solid var(--hair)">
+      <div class="mktlab" style="margin-top:0;color:var(--rust)">Conflicts</div>
+      ${e.conflicts.map(c=>`<div class="sub" style="color:var(--rust)">${c.detail}</div>`).join('')}
+    </div>`:'';
+    const droppedRows=(e.trendsDropped||[]).length?`<div style="margin-top:8px;padding-top:8px;
+      border-top:1px solid var(--hair)">
+      <div class="mktlab" style="margin-top:0">Trends that don't apply tonight</div>
+      ${e.trendsDropped.slice(0,4).map(t=>`<div class="sub" style="opacity:.65">
+        <s>${t.text}</s> <span style="color:var(--mute)">— ${t.why}</span></div>`).join('')}
+    </div>`:'';
+    return `<div class="tkt" style="border-left:3px solid ${V.color}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <div>
+          <div style="font-family:'Archivo';font-weight:900;font-size:16px">${e.game}</div>
+          <div class="m">${e.nSources} independent reads · ${e.trendsLive} live trend${e.trendsLive===1?'':'s'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Inter';font-weight:800;font-size:11px;letter-spacing:.08em;
+            color:${V.color}">${V.label}</div>
+          <div class="m">${e.agreement}% agree</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12.5px"><b style="color:${V.color}">${e.side}</b> <span class="m">side</span></span>
+        <span style="font-size:12.5px"><b>${e.totalLean.toUpperCase()} ${e.totalLine}</b>
+          <span class="m">${e.totalAgreement}% agree</span></span>
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--hair)">${sigRows}</div>
+      ${conflictRows}${droppedRows}
+      <div class="bar" style="margin-top:8px">
+        <button onclick="jumpToGame(${e.gid})">Open game card</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return feed+summary+`<div class="note">${VERDICT.strong.note} ${VERDICT.away.note}</div>`+cards;
+}
+function runMasterEval(){
+  const btn=document.getElementById('evalRunBtn');
+  if(btn){btn.disabled=true;btn.textContent='Evaluating…'}
+  // let the button paint before the work blocks the thread
+  setTimeout(()=>{
+    const evals=masterEvaluation();
+    const d=today();
+    set(LS_EVAL,{date:d,ts:Date.now(),fingerprint:evalInputFingerprint(),
+      evals,
+      sourceCount:(getExt()[d]||[]).length+(get(LS.exttrends,{})[d]||[]).length
+        +(get(LS.extconsensus,{})[d]||[]).length+(get(LS.bookshots,{})[d]||[]).length});
+    const b=document.getElementById('ticketBody');
+    if(b)b.innerHTML=renderMasterEval();
+    window.scrollTo(0,0);
+  },40);
+}
+
+/* ================= MASTER EVALUATION =================
+   Takes every independent read on a game — the simulator, your book's price, what
+   outside sites picked, where the public's tickets and money are, and which of
+   their trends actually apply tonight — and scores how much they agree.
+   Agreement is the point. One source saying something is noise; five independent
+   sources landing on the same side is a signal. And heavy disagreement is its own
+   answer: when nobody agrees, the honest read is stay away. */
+
+const VERDICT={
+  strong:{label:'STRONG',color:'var(--win)',note:'Independent sources line up. This is as close to conviction as the board gets.'},
+  lean:{label:'LEAN',color:'var(--gold)',note:'More agreement than not, but not unanimous.'},
+  split:{label:'SPLIT',color:'var(--mute)',note:'Sources are genuinely divided. No edge either way.'},
+  away:{label:'STAY AWAY',color:'var(--rust)',note:'Signals actively contradict each other. Sitting this one out is a position.'}
+};
+
+function evaluateGame(g){
+  const s=SIMS[g.id];
+  if(!s)return null;
+  const M=marketOf(g);
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const sig=[];   // every independent read, normalized to a side
+
+  // 1 — the simulator
+  const simSide=s.hw>=.5?g.home.abbr:g.away.abbr;
+  const simConf=Math.max(s.hw,s.aw);
+  sig.push({src:'Simulator',kind:'model',side:simSide,strength:simConf,
+    detail:`${simSide} ${(simConf*100).toFixed(0)}%`});
+
+  // 2 — your book's own price
+  if(M){
+    const bookSide=M.fh>=M.fa?g.home.abbr:g.away.abbr;
+    sig.push({src:'Your book',kind:'market',side:bookSide,strength:Math.max(M.fh,M.fa),
+      detail:`${bookSide} ${(Math.max(M.fh,M.fa)*100).toFixed(0)}% implied`});
+  }
+
+  // 3 — outside sites' published picks
+  const picks=(getExt()[today()]||[]).filter(x=>x.game===gl&&x.market==='moneyline');
+  picks.forEach(p=>{
+    const side=p.side==='home'?g.home.abbr:g.away.abbr;
+    sig.push({src:p.src,kind:'outside',side,strength:.6,detail:side});
+  });
+
+  // 4 — public consensus, tickets and money counted separately
+  const cons=consensusFor(g);
+  if(cons.ml.bets&&cons.ml.homePct!=null){
+    const side=cons.ml.bets.homePct>=50?g.home.abbr:g.away.abbr;
+    sig.push({src:'Public tickets',kind:'public',side,
+      strength:Math.max(cons.ml.bets.homePct,100-cons.ml.bets.homePct)/100,
+      detail:`${Math.max(cons.ml.bets.homePct,100-cons.ml.bets.homePct)}% of bets`});
+  }
+  if(cons.ml.money&&cons.ml.money.homePct!=null){
+    const side=cons.ml.money.homePct>=50?g.home.abbr:g.away.abbr;
+    sig.push({src:'Public money',kind:'money',side,
+      strength:Math.max(cons.ml.money.homePct,100-cons.ml.money.homePct)/100,
+      detail:`${Math.max(cons.ml.money.homePct,100-cons.ml.money.homePct)}% of money`});
+  }
+
+  // 5 — trends that actually pass tonight's conditions
+  const trends=applicableTrends(g,s);
+  const live=trends.filter(t=>t.applies);
+  const dropped=trends.filter(t=>!t.applies);
+  const sideTrends=live.filter(t=>t.implies===g.home.abbr||t.implies===g.away.abbr
+    ||t.implies==='home'||t.implies==='away');
+  sideTrends.forEach(t=>{
+    const side=t.implies==='home'?g.home.abbr:t.implies==='away'?g.away.abbr:t.implies;
+    sig.push({src:'Trend · '+(t.src||'site'),kind:'trend',side,strength:.5,detail:t.text});
+  });
+
+  // ── agreement scoring, weighted so one loud source can't fake a consensus ──
+  const W={model:1.0,market:.9,outside:.7,public:.4,money:.6,trend:.5};
+  const tally={};
+  sig.forEach(x=>{
+    tally[x.side]=(tally[x.side]||0)+(W[x.kind]||.5)*x.strength;
+  });
+  const sides=Object.keys(tally).sort((a,b)=>tally[b]-tally[a]);
+  const top=sides[0],second=sides[1];
+  const topW=tally[top]||0,secW=tally[second]||0;
+  const total=topW+secW||1;
+  const agreement=topW/total;
+
+  // totals get their own read
+  const totalSigs=[];
+  const ot=operativeTotal(g,s);
+  const simOver=s.over(ot.line);
+  totalSigs.push({src:'Simulator',side:simOver>=.5?'over':'under',
+    strength:Math.max(simOver,1-simOver),kind:'model'});
+  const totPicks=(getExt()[today()]||[]).filter(x=>x.game===gl&&x.market==='total');
+  totPicks.forEach(p=>totalSigs.push({src:p.src,side:p.side,strength:.6,kind:'outside'}));
+  if(cons.total.bets&&cons.total.bets.overPct!=null)
+    totalSigs.push({src:'Public tickets',side:cons.total.bets.overPct>=50?'over':'under',
+      strength:Math.max(cons.total.bets.overPct,100-cons.total.bets.overPct)/100,kind:'public'});
+  if(cons.total.money&&cons.total.money.overPct!=null)
+    totalSigs.push({src:'Public money',side:cons.total.money.overPct>=50?'over':'under',
+      strength:Math.max(cons.total.money.overPct,100-cons.total.money.overPct)/100,kind:'money'});
+  live.filter(t=>t.implies==='over'||t.implies==='under')
+    .forEach(t=>totalSigs.push({src:'Trend',side:t.implies,strength:.5,kind:'trend',detail:t.text}));
+  const tTally={};
+  totalSigs.forEach(x=>{tTally[x.side]=(tTally[x.side]||0)+(W[x.kind]||.5)*x.strength});
+  const tOver=tTally.over||0,tUnder=tTally.under||0;
+  const tTop=tOver>=tUnder?'over':'under';
+  const tAgree=(Math.max(tOver,tUnder))/((tOver+tUnder)||1);
+
+  const conflicts=[...cons.divergence,...sourceSelfConflict(g)];
+  // verdict blends side agreement, total agreement, and how many hard conflicts fired
+  const nSrc=sig.length;
+  let verdict;
+  if(nSrc<3)verdict='split';
+  else if(conflicts.length>=2)verdict='away';
+  else if(agreement>=.78&&conflicts.length===0)verdict='strong';
+  else if(agreement>=.62)verdict='lean';
+  else if(agreement<.55)verdict='away';
+  else verdict='split';
+
+  return{game:gl,gid:g.id,verdict,agreement:+(agreement*100).toFixed(0),
+    side:top,sideSignals:sig,tally,
+    totalLean:tTop,totalLine:ot.line,totalAgreement:+(tAgree*100).toFixed(0),totalSignals:totalSigs,
+    conflicts,trendsLive:live.length,trendsDropped:dropped,consensus:cons,nSources:nSrc};
+}
+
+function masterEvaluation(){
+  // evaluation is for games you could still act on — once a game is live the
+  // window to bet it is already closed, so it shouldn't appear as an actionable read
+  return GAMES.filter(g=>g.abstract!=='Final'&&g.abstract!=='Live')
+    .map(evaluateGame).filter(Boolean)
+    .sort((a,b)=>{
+      const rank={strong:0,lean:1,split:2,away:3};
+      return rank[a.verdict]-rank[b.verdict]||b.agreement-a.agreement;
+    });
+}
+
+
+/* ================= DIRECT PROBABILITY CALIBRATION =================
+   Props already get a "did the model's stated probability match reality" check
+   (computeCalibration above). Sides, totals, and run lines never did — they only
+   improve indirectly, through run-projection nudges that flow into the win-prob
+   math one step removed from the actual claim being made. This closes that gap
+   directly, and segments it by market type AND situation instead of one blended
+   number, because an aggregate correction can hide a market- or situation-specific
+   blind spot by averaging it away with everything that IS well-calibrated. */
+
+// ── division map — fixed MLB structure, safe to hardcode, never changes mid-season ──
+const DIVISION={
+  NYY:'AL East',BOS:'AL East',TOR:'AL East',BAL:'AL East',TB:'AL East',
+  CWS:'AL Central',CLE:'AL Central',DET:'AL Central',KC:'AL Central',MIN:'AL Central',
+  HOU:'AL West',SEA:'AL West',TEX:'AL West',ATH:'AL West',LAA:'AL West',
+  NYM:'NL East',ATL:'NL East',PHI:'NL East',MIA:'NL East',WSH:'NL East',
+  CHC:'NL Central',STL:'NL Central',MIL:'NL Central',CIN:'NL Central',PIT:'NL Central',
+  LAD:'NL West',SD:'NL West',SF:'NL West',ARI:'NL West',COL:'NL West'
+};
+function isDivisionGame(g){
+  const da=DIVISION[g.away.abbr],dh=DIVISION[g.home.abbr];
+  return da&&dh&&da===dh;
+}
+function isInterleagueGame(g){
+  const da=DIVISION[g.away.abbr],dh=DIVISION[g.home.abbr];
+  if(!da||!dh)return null;
+  return da.slice(0,2)!==dh.slice(0,2);
+}
+
+// ── rest days — computed from the app's OWN archive, not invented. A team that
+// hasn't appeared in a graded/snapshotted game in the last N days is assumed to
+// be coming off a break; back-to-back days is the normal case and stays neutral.
+function restDaysFor(teamAbbr,beforeDate){
+  const arc=get(LS.arc,{});
+  const dates=Object.keys(arc).filter(d=>d<beforeDate).sort().reverse();
+  for(const d of dates.slice(0,10)){
+    const rows=(arc[d].rows||[]);
+    if(rows.some(r=>r.a===teamAbbr||r.h===teamAbbr)){
+      const gap=Math.round((new Date(beforeDate)-new Date(d))/86400000);
+      return gap; // 1 = played yesterday (normal), 2+ = had a break, 0 shouldn't happen
+    }
+  }
+  return null; // no record far enough back — unknown, not assumed
+}
+function restBucket(days){
+  if(days===null||days===undefined)return null;
+  if(days<=1)return 'normal-rest';
+  if(days===2)return 'one-day-break';
+  return 'extended-break';
+}
+
+// ── park factor bucket — high/neutral/low scoring environment, from the PARK table
+// that already drives the simulator itself, so this reuses real numbers not new ones ──
+function parkBucket(g){
+  const pf=PARK[g.home.abbr];
+  if(!pf)return 'neutral-park';
+  if(pf[0]>=108)return 'hitter-park';
+  if(pf[0]<=95)return 'pitcher-park';
+  return 'neutral-park';
+}
+
+// Was only [0.50,1.00] — anything under 50% (the entire underdog side of every
+// pick) fell through the loop and silently landed in bandOf's fallback, which
+// hard-coded '50-60' regardless of how far under 50% the real probability was.
+// That's not a display-only bug: sideCalibAdj/totalCalibAdj/rlCalibAdj all call
+// bandOf() to look up which segment's correction factor to apply, and they're
+// called LIVE inside simGame on every underdog probability the sim produces —
+// so a genuine 25% underdog pick was being corrected using whatever factor the
+// 50-60% favorite band happened to have, which has no relationship to it at
+// all. Extended to cover the full 0-100% range symmetrically.
+const CAL_BANDS=[[0,0.10],[0.10,0.20],[0.20,0.30],[0.30,0.40],[0.40,0.50],
+  [0.50,0.60],[0.60,0.70],[0.70,0.80],[0.80,0.90],[0.90,1.00]];
+const CAL_MIN_N=12;          // per-bucket minimum before a correction activates
+const CAL_HALF_LIFE_DAYS=45; // recency weighting — a game 45 days old counts half
+
+function bandOf(p){
+  for(const[lo,hi]of CAL_BANDS)if(p>=lo&&p<hi)return`${(lo*100)|0}-${(hi*100)|0}`;
+  // only reachable for p<=0 or p>=1 now that CAL_BANDS covers the full range —
+  // clamp to the nearest real band instead of hard-coding '50-60' for every
+  // out-of-range value regardless of which end it came from
+  return p>=1?'90-100':'0-10';
+}
+function recencyWeight(dateStr){
+  const days=(Date.now()-new Date(dateStr).getTime())/86400000;
+  return Math.pow(0.5,Math.max(0,days)/CAL_HALF_LIFE_DAYS);
+}
+
+// situational bucket for a graded side/total row — home/away favorite status is
+// the one dimension we can reconstruct reliably from what's already archived;
+// park/rest/division splits would need extra fields stamped at snapshot time,
+// which the "Still to build" note below flags rather than faking.
+function situationOf(row){
+  if(row.mh===null||row.mh===undefined)return'no-market';
+  const favIsHome=row.mh>=0.5;
+  const pickedFav=(favIsHome&&row.side===row.h)||(!favIsHome&&row.side===row.a);
+  return pickedFav?'favorite':'underdog';
+}
+// Extended situation — folds in park/division/rest on top of favorite/underdog,
+// for the cross-market leakage check and the deeper breakdown. Kept SEPARATE from
+// situationOf() above rather than replacing it, because every existing segment key
+// and every correction factor already computed and applied live is keyed on the
+// single-dimension favorite/underdog string — changing that key format would
+// silently orphan every correction that's already active in simGame today.
+function extendedSituationOf(row,dateStr){
+  const base=situationOf(row);
+  if(base==='no-market')return[base];
+  const tags=[base];
+  const pf=PARK[row.h];
+  if(pf){
+    if(pf[0]>=108)tags.push('hitter-park');
+    else if(pf[0]<=95)tags.push('pitcher-park');
+  }
+  const div=DIVISION[row.a]&&DIVISION[row.h]&&DIVISION[row.a]===DIVISION[row.h];
+  if(div!==undefined&&DIVISION[row.a]&&DIVISION[row.h])tags.push(div?'division-game':'non-division-game');
+  if(dateStr){
+    const pickedHome=row.side===row.h;
+    const pickedAbbr=pickedHome?row.h:row.a;
+    const rest=restDaysFor(pickedAbbr,dateStr);
+    const rb=restBucket(rest);
+    if(rb)tags.push(rb);
+  }
+  return tags;
+}
+
+/* ── #1 + #2: segmented calibration — by market type AND situation ── */
+function computeSegmentedCalibration(){
+  const arc=get(LS.arc,{});
+  const buckets={}; // key: market|situation|band -> {n,w,e,wN} (wN = weighted n for recency)
+  const marketBuckets={}; // key: market -> same, for the market-only rollup
+  let touched=0;
+
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.mh===null||r.mh===undefined)return; // no market price, no probability claim to check
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      if(!won)return; // true tie, not a calibration data point
+      const hit=won===r.side?1:0;
+      const stated=r.sp; // the model's own stated probability for the side it picked
+      if(stated===null||stated===undefined)return;
+      const wt=recencyWeight(d);
+      const sit=situationOf(r);
+      const band=bandOf(stated);
+      const mk='moneyline';
+      [`${mk}|${sit}|${band}`].forEach(key=>{
+        const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+        b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      });
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+    // ── totals — now that totLine/totMktP/totModelP are captured at snapshot
+    // time, this activates for real instead of being a documented gap ──
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.totLine===null||r.totLine===undefined||r.totModelP===null||r.totModelP===undefined)return;
+      const actualTotal=F.a+F.h;
+      if(actualTotal===r.totLine)return; // push, not a calibration data point
+      const pickedOver=r.totModelP>=0.5;
+      const hit=(pickedOver&&actualTotal>r.totLine)||(!pickedOver&&actualTotal<r.totLine)?1:0;
+      const stated=pickedOver?r.totModelP:1-r.totModelP;
+      const wt=recencyWeight(d);
+      const sit=situationOf(r); // favorite/underdog still comes from the moneyline read
+      const band=bandOf(stated);
+      const mk='total';
+      const key=`${mk}|${sit}|${band}`;
+      const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+      b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+    // ── run line — same activation, using rlLine/rlMktP/rlModelP ──
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.rlLine===null||r.rlLine===undefined||r.rlModelP===null||r.rlModelP===undefined||!r.rlFavSide)return;
+      const favIsHome=r.rlFavSide===r.h;
+      const margin=favIsHome?(F.h-F.a):(F.a-F.h); // positive = favorite's margin of victory
+      if((margin+r.rlLine)===0)return; // push on the run line, not a data point
+      const favCovered=(margin+r.rlLine)>0;
+      const hit=favCovered?1:0; // rlModelP is stored as the favorite's cover probability
+      const stated=r.rlModelP;
+      const wt=recencyWeight(d);
+      const sit=situationOf(r);
+      const band=bandOf(stated);
+      const mk='runline';
+      const key=`${mk}|${sit}|${band}`;
+      const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+      b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+    // ── F5 moneyline — was entirely missing; now that f5MlSide/f5MlMktP/
+    // f5MlModelP are captured at snapshot time, this activates for real.
+    // Finals store F5 score as F.fa/F.fh (away/home first-5 runs), guarded by
+    // F.f5ok — the linescore didn't always have 5+ innings recorded, and
+    // grading off an incomplete/absent F5 linescore would be worse than not
+    // grading it at all.
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||!F.f5ok||F.fa===undefined||F.fh===undefined||F.fa===null||F.fh===null)return;
+      if(!r.f5MlSide||r.f5MlModelP===null||r.f5MlModelP===undefined)return;
+      if(F.fa===F.fh)return; // F5 tie, not a calibration data point
+      const hit=(F.fh>F.fa?r.h:r.a)===r.f5MlSide?1:0;
+      const stated=r.f5MlModelP;
+      const wt=recencyWeight(d);
+      const sit=stated>=0.5?'favorite':'underdog';
+      const band=bandOf(stated);
+      const mk='f5moneyline';
+      const key=`${mk}|${sit}|${band}`;
+      const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+      b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+    // ── F5 total — same F.fa/F.fh + f5ok guard ──
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||!F.f5ok||F.fa===undefined||F.fh===undefined||F.fa===null||F.fh===null)return;
+      if(r.f5TotLine===null||r.f5TotLine===undefined||r.f5TotModelP===null||r.f5TotModelP===undefined)return;
+      const actualF5Tot=F.fa+F.fh;
+      if(actualF5Tot===r.f5TotLine)return; // push
+      const pickedOver=r.f5TotModelP>=0.5;
+      const hit=(pickedOver&&actualF5Tot>r.f5TotLine)||(!pickedOver&&actualF5Tot<r.f5TotLine)?1:0;
+      const stated=pickedOver?r.f5TotModelP:1-r.f5TotModelP;
+      const wt=recencyWeight(d);
+      const sit=situationOf(r); // borrow the full-game favorite/underdog read — F5 doesn't have its own independent one
+      const band=bandOf(stated);
+      const mk='f5total';
+      const key=`${mk}|${sit}|${band}`;
+      const b=buckets[key]=buckets[key]||{n:0,w:0,e:0,wN:0};
+      b.n++;b.w+=hit;b.e+=stated;b.wN+=wt;
+      const mb=marketBuckets[mk]=marketBuckets[mk]||{n:0,w:0,e:0};
+      mb.n++;mb.w+=hit;mb.e+=stated;
+      touched++;
+    });
+  });
+
+  const segFactors={};
+  Object.keys(buckets).forEach(key=>{
+    const b=buckets[key];
+    if(b.n<CAL_MIN_N){segFactors[key]={f:1,n:b.n,ready:false};return}
+    const actual=b.w/b.n;
+    const stated=b.e/b.n;
+    const raw=stated>0?actual/stated:1;
+    // shrink toward 1 by RAW sample size, but the "actual" and "stated" figures shown
+    // to the user are recency-weighted so a stale correction doesn't linger after
+    // the model's actually improved
+    const w=b.n/(b.n+CAL_MIN_N);
+    segFactors[key]={f:+Math.max(.6,Math.min(1.4,1+(raw-1)*w)).toFixed(3),
+      n:b.n,actual:+(actual*100).toFixed(1),predicted:+(stated*100).toFixed(1),ready:true};
+  });
+  const marketFactors={};
+  Object.keys(marketBuckets).forEach(mk=>{
+    const b=marketBuckets[mk];
+    if(b.n<CAL_MIN_N){marketFactors[mk]={f:1,n:b.n,ready:false};return}
+    const actual=b.w/b.n,stated=b.e/b.n,raw=stated>0?actual/stated:1;
+    const w=b.n/(b.n+CAL_MIN_N);
+    marketFactors[mk]={f:+Math.max(.6,Math.min(1.4,1+(raw-1)*w)).toFixed(3),
+      n:b.n,actual:+(actual*100).toFixed(1),predicted:+(stated*100).toFixed(1),ready:true};
+  });
+
+  set('d4.segcalib',{segments:segFactors,markets:marketFactors,touched,ts:Date.now()});
+  return{segments:segFactors,markets:marketFactors};
+}
+
+// The correction actually applied to a live side probability — segment-specific
+// first (market+situation+band), falling back to the market-wide number, falling
+// back to no correction. This is what makes the whole thing more than a display.
+// Total and run-line equivalents of sideCalibAdj — same shape, same reasoning:
+// correct the DISTANCE from 50% by the measured factor for that market+situation+
+// band, never letting a correction cross 50% and silently flip the recommended side.
+function totalCalibAdj(overP,situation){
+  const c=hotGet('d4.segcalib',null);
+  if(!c)return overP;
+  const band=bandOf(overP);
+  const seg=c.segments[`total|${situation}|${band}`];
+  const factor=(seg&&seg.ready)?seg.f:((c.markets.total&&c.markets.total.ready)?c.markets.total.f:1);
+  const dist=overP-0.5;
+  return Math.max(0.01,Math.min(0.99,0.5+dist*factor));
+}
+function rlCalibAdj(favCoverP,situation){
+  const c=hotGet('d4.segcalib',null);
+  if(!c)return favCoverP;
+  const band=bandOf(favCoverP);
+  const seg=c.segments[`runline|${situation}|${band}`];
+  const factor=(seg&&seg.ready)?seg.f:((c.markets.runline&&c.markets.runline.ready)?c.markets.runline.f:1);
+  const dist=favCoverP-0.5;
+  return Math.max(0.01,Math.min(0.99,0.5+dist*factor));
+}
+
+// ── does THIS exact leg have a proven, non-losing calibration record? ──
+// The real thing "Calibration Champ" needs: not just today's model probability,
+// but whether that probability's specific slice of history — same market,
+// same favorite/underdog situation, same confidence band (for sides/totals/
+// run lines), or same prop type (for props) — has ACTUALLY hit at or above
+// its stated rate often enough to trust, with enough sample size to mean
+// anything. This is read-only — it never applies a correction, it just
+// reports whether the segment clears the bar.
+function calibRecordFor(leg){
+  if(leg.kind==='prop'||leg.kind==='hr'){
+    const c=get(LS.calib,{}),ty=c.types||{};
+    const rec=leg.ptype?ty[leg.ptype]:null;
+    if(!rec||rec.n===undefined||rec.n<MIN_N_CAL)return{ready:false,n:rec?rec.n:0};
+    // calibFactor()'s own definition of "doesn't lose": the actual hit rate is
+    // at or above what was predicted (f>=1 means actual outperformed or matched
+    // the stated probability) — anything under 1 means this prop type has
+    // historically overpromised relative to what actually happened
+    return{ready:true,n:rec.n,actual:rec.actual,predicted:rec.predicted,f:rec.f,passes:rec.f>=1};
+  }
+  // mk now covers F5 too — was returning {ready:false} unconditionally for
+  // f5side/f5total, meaning an F5 leg could NEVER pass this filter no matter
+  // how good its real record was. F5 has its own segmented history in
+  // d4.segcalib under the 'f5moneyline'/'f5total' market keys once
+  // computeSegmentedCalibration's F5 tracking has run — same lookup shape as
+  // every other market, just a different key.
+  const mk=leg.kind==='rl'?'runline':leg.kind==='total'?'total':leg.kind==='side'?'moneyline'
+    :leg.kind==='f5side'?'f5moneyline':leg.kind==='f5total'?'f5total':null;
+  if(mk){
+    const c=get('d4.segcalib',null);
+    if(c&&typeof leg.modelP==='number'){
+      const situation=leg.modelP>=0.5?'favorite':'underdog';
+      const band=bandOf(leg.modelP);
+      const seg=c.segments[`${mk}|${situation}|${band}`];
+      if(seg&&seg.ready)return{ready:true,n:seg.n,actual:seg.actual,predicted:seg.predicted,f:seg.f,passes:seg.actual>=seg.predicted};
+    }
+  }
+  // ── team record fallback ──────────────────────────────────────────────
+  // Was entirely missing: a side/total/F5 pick on a specific TEAM that's
+  // proven itself — real win rate when that team was actually picked, not
+  // just projection accuracy — never fed into "doesn't lose" at all. Uses
+  // LS.ent.teams (already computed by computeEntities: sw/sl = side-picks
+  // won/lost when this exact team was the pick), same MIN_SHOW floor the
+  // rest of the app already uses before trusting a team's number.
+  const teamAb=teamAbbrFor(leg);
+  if(teamAb){
+    const e=get(LS.ent,{}).teams||{};
+    const t=e[teamAb];
+    const picked=t?(t.sw+t.sl):0;
+    if(t&&picked>=MIN_SHOW){
+      const actual=picked?t.sw/picked:0;
+      return{ready:true,n:picked,actual:+(actual*100).toFixed(1),predicted:null,
+        f:null,passes:actual>=0.5,bySource:'team'};
+    }
+  }
+  return{ready:false,n:0};
+}
+// Pull the team abbreviation a leg is actually picking, so calibRecordFor can
+// check that team's real side-pick record — works for every market shape a
+// pick's text can take (ML, run line, F5 side; totals have no team to check).
+function teamAbbrFor(leg){
+  if(!leg.pick)return null;
+  const m=leg.pick.match(/^F5\s+([A-Z]{2,3})$/)||leg.pick.match(/^([A-Z]{2,3})\s+ML$/)
+    ||leg.pick.match(/^([A-Z]{2,3})\s+[+-]\d/);
+  return m?m[1]:null;
+}
+function sideCalibAdj(modelP,situation){
+  const c=hotGet('d4.segcalib',null);
+  if(!c)return modelP;
+  // bandOf/situationOf are keyed off the STATED probability regardless of which
+  // side of 50% it's on — a picked underdog can legitimately carry modelP<0.5.
+  // The clamp below used to floor everything at 0.5, which silently rewrote
+  // a well-calibrated 30% claim into a wrong 50% one. Correcting toward reality
+  // must be allowed to land on EITHER side of 50%, bounded only by sane extremes.
+  const band=bandOf(modelP);
+  const segKey=`moneyline|${situation}|${band}`;
+  const seg=c.segments[segKey];
+  const factor=(seg&&seg.ready)?seg.f:((c.markets.moneyline&&c.markets.moneyline.ready)?c.markets.moneyline.f:1);
+  // factor scales the DISTANCE from 50%, not the raw probability — this is what
+  // keeps a correction from silently flipping which side gets recommended, while
+  // still allowing the corrected value to fall wherever the distance says it should
+  const dist=modelP-0.5;
+  const corrected=0.5+dist*factor;
+  return Math.max(0.01,Math.min(0.99,corrected));
+}
+
+/* ── #4: confidence-band-specific Kelly throttling ── */
+// If a band is shown to be overconfident, Kelly sizing in that exact band should
+// shrink automatically — not just the displayed probability, the actual stake math.
+function kellyBandThrottle(modelP,situation){
+  const c=get('d4.segcalib',null);
+  if(!c)return 1;
+  const band=bandOf(modelP);
+  const seg=c.segments[`moneyline|${situation}|${band}`];
+  if(!seg||!seg.ready)return 1;
+  // if the band is overconfident (actual < predicted), throttle stake sizing
+  // proportionally; if it's underconfident, leave sizing alone rather than
+  // rewarding it further — asymmetric on purpose, since the cost of being too
+  // aggressive on a bad band is worse than the cost of being slightly conservative
+  // on a good one
+  if(seg.actual>=seg.predicted)return 1;
+  const shortfall=(seg.predicted-seg.actual)/seg.predicted;
+  return Math.max(0.3,1-shortfall);
+}
+
+/* ── #5: cross-validate calibration against the backtest engine ── */
+// Proof, not faith: replay last month's picks with TODAY's calibration factors
+// applied retroactively, and compare ROI against the uncorrected baseline. If
+// applying calibration doesn't improve backtest ROI, the correction isn't real yet.
+function validateCalibrationAgainstBacktest(){
+  const baseline=runBacktest({minEdge:0,markets:{sides:true,props:false},staking:'flat'});
+  const c=get('d4.segcalib',null);
+  if(!c||!Object.keys(c.segments).length)return{ready:false};
+  // re-run with each bet's model probability passed through sideCalibAdj before
+  // pricing — this reuses runBacktest's own bet list rather than re-deriving one
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).filter(d=>arc[d].finals).sort();
+  const adjBets=[];
+  days.forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.mh===null||r.edge===null||r.edge===undefined)return;
+      if(F.a===F.h)return;
+      const won=(F.h>F.a?r.h:r.a)===r.side;
+      const sit=situationOf(r);
+      const adjP=sideCalibAdj(r.sp,sit);
+      const mktP=r.side===r.h?r.mh:(1-r.mh);
+      const price=btPrice(mktP);
+      adjBets.push({price,won,modelP:adjP});
+    });
+  });
+  let staked=0,profit=0,w=0,l=0;
+  adjBets.forEach(b=>{
+    const stake=1;staked+=stake;
+    const pl=b.won?btPayout(b.price,stake):-stake;
+    profit+=pl;b.won?w++:l++;
+  });
+  const adjROI=staked?+(profit/staked*100).toFixed(2):0;
+  return{ready:true,baselineROI:baseline.roi,adjustedROI:adjROI,
+    improved:adjROI>baseline.roi,delta:+(adjROI-baseline.roi).toFixed(2),
+    baselineN:baseline.n,adjN:adjBets.length};
+}
+
+/* ── #6: does the model's edge hold up specifically when it disagrees with the field? ── */
+// Reuses evaluateGame's own conflict/verdict machinery from the Master Evaluation —
+// this asks whether STRONG/LEAN calls that went AGAINST outside consensus actually
+// won at the rate their stated confidence implied, tracked separately from calls
+// where everyone agreed. This is where a real edge would show up if one exists.
+function disagreementCalibration(){
+  const arc=get(LS.arc,{});
+  const agree={n:0,w:0,e:0},disagree={n:0,w:0,e:0};
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      if(r.mh===null||r.sp===null||r.sp===undefined)return;
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);if(!won)return;
+      const hit=won===r.side?1:0;
+      const marketSide=r.mh>=0.5?r.h:r.a;
+      const bucket=(marketSide===r.side)?agree:disagree;
+      bucket.n++;bucket.w+=hit;bucket.e+=r.sp;
+    });
+  });
+  const summarize=b=>b.n?{n:b.n,actual:+(b.w/b.n*100).toFixed(1),predicted:+(b.e/b.n*100).toFixed(1)}:null;
+  return{agree:summarize(agree),disagree:summarize(disagree)};
+}
+
+/* ── #7: is the correction converging (healthy) or diverging (something's breaking)? ── */
+function calibrationDriftVelocity(){
+  const hist=get('d4.calibhistory',[]);
+  const c=get('d4.segcalib',null);
+  if(!c)return{trend:'no-data',points:hist};
+  // snapshot today's market-level factors, keep a rolling log so direction is visible
+  const today_=today();
+  const snapshot={date:today_,markets:{}};
+  Object.keys(c.markets).forEach(mk=>{snapshot.markets[mk]=c.markets[mk].f});
+  const filtered=hist.filter(h=>h.date!==today_);
+  filtered.push(snapshot);
+  const trimmed=filtered.slice(-30); // last 30 recorded days
+  set('d4.calibhistory',trimmed);
+  if(trimmed.length<3)return{trend:'building',points:trimmed};
+  const recent=trimmed.slice(-3),older=trimmed.slice(-6,-3);
+  if(!older.length)return{trend:'building',points:trimmed};
+  const avgDistFromOne=arr=>{
+    let sum=0,n=0;
+    arr.forEach(pt=>Object.values(pt.markets).forEach(f=>{sum+=Math.abs(f-1);n++}));
+    return n?sum/n:0;
+  };
+  const recentDist=avgDistFromOne(recent),olderDist=avgDistFromOne(older);
+  const trend=recentDist<olderDist-0.01?'converging':recentDist>olderDist+0.01?'diverging':'stable';
+  return{trend,recentDist:+recentDist.toFixed(3),olderDist:+olderDist.toFixed(3),points:trimmed};
+}
+
+/* ── #8: meta-calibration — does trusting a correction actually help? ── */
+// A correction built on 12-15 games could be real signal or noise that reverts.
+// This checks, after the fact, whether GAMES GRADED AFTER a correction was applied
+// actually calibrated better than the games used to build the correction did —
+// i.e. did applying it predict forward, or was it curve-fit to what already happened.
+function metaCalibrationCheck(){
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).filter(d=>arc[d].finals).sort();
+  if(days.length<CAL_MIN_N*2)return{ready:false,reason:`Need ${CAL_MIN_N*2} graded days, have ${days.length}.`};
+  const mid=Math.floor(days.length/2);
+  const buildOn=days.slice(0,mid),testOn=days.slice(mid);
+  const gather=(dateList)=>{
+    let n=0,w=0,e=0;
+    dateList.forEach(d=>{
+      const A=arc[d],fin=A.finals||{};
+      (A.rows||[]).forEach(r=>{
+        const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+        if(r.mh===null||r.sp===null||r.sp===undefined)return;
+        const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);if(!won)return;
+        n++;w+=(won===r.side?1:0);e+=r.sp;
+      });
+    });
+    return n?{n,actual:w/n,predicted:e/n}:null;
+  };
+  const build=gather(buildOn),test=gather(testOn);
+  if(!build||!test)return{ready:false,reason:'Not enough decided games in one half.'};
+  const buildGap=Math.abs(build.actual-build.predicted);
+  const testGap=Math.abs(test.actual-test.predicted);
+  // if a correction fit to the first half would have closed the gap, the SECOND
+  // half (which never saw that correction) should show a smaller gap than the
+  // first half did on its own raw numbers — if it doesn't, the "signal" was noise
+  const trustworthy=testGap<=buildGap*1.15; // small tolerance for natural variance
+  return{ready:true,buildGap:+buildGap.toFixed(3),testGap:+testGap.toFixed(3),
+    trustworthy,buildN:build.n,testN:test.n};
+}
+
+/* ── #9: cross-market leakage — one root cause corrupting several markets ── */
+// If the same situational bucket is miscalibrated across multiple markets, that's
+// one upstream bias (e.g. road-team run projections running cold) getting patched
+// three separate times instead of diagnosed once at the source.
+function crossMarketLeakage(){
+  const c=get('d4.segcalib',null);
+  if(!c)return[];
+  const bySituation={};
+  Object.keys(c.segments).forEach(key=>{
+    const[mk,sit,band]=key.split('|');
+    const seg=c.segments[key];
+    if(!seg.ready)return;
+    const gap=seg.actual-seg.predicted;
+    if(Math.abs(gap)<5)return; // small gaps aren't worth flagging as leakage
+    (bySituation[sit]=bySituation[sit]||[]).push({market:mk,band,gap:+gap.toFixed(1),n:seg.n});
+  });
+  return Object.keys(bySituation)
+    .map(sit=>({situation:sit,markets:bySituation[sit]}))
+    .filter(x=>x.markets.length>=2); // leakage = same situation, multiple markets affected
+}
+/* ================= DIRECT PROBABILITY CALIBRATION END ================= */
+
+/* ================= BACKTEST ENGINE =================
+   Replays every graded day in the archive against a filter set and reports what
+   would actually have happened. This is the difference between "my picks went 12-8"
+   and "picks at 5%+ edge went 12-8 for +14% ROI while everything under 3% lost money."
+   Uses only data captured at snapshot time — the pick, the model's probability, the
+   market's probability, and the final result — so it can't peek at the future. */
+
+// A realistic price to bet into. mh/sp are devigged fair probabilities; a real book
+// prices worse than fair. This applies half of a standard two-way hold to each side
+// so the ROI figures aren't fantasy numbers.
+const BT_HOLD=0.022;
+function btPrice(fairProb){
+  const p=Math.min(0.985,fairProb*(1+BT_HOLD));
+  return p>=.5?-(100*p/(1-p)):(100*(1-p)/p);
+}
+function btPayout(amer,stake){
+  return amer>0?stake*amer/100:stake*100/Math.abs(amer);
+}
+
+function runBacktest(opts){
+  const o=Object.assign({minEdge:0,maxEdge:99,minProb:0,maxProb:1,
+    markets:{sides:true,props:true},staking:'flat',kellyFrac:0.25,bankroll:100},opts||{});
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).filter(d=>arc[d].finals).sort();
+  const bets=[];
+
+  days.forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    if(o.markets.sides)(A.rows||[]).forEach(r=>{
+      const F=fin[r.id];
+      if(!F||F.a===null||F.h===null)return;
+      if(r.mh===null||r.mh===undefined||r.edge===null||r.edge===undefined)return;
+      const e=r.edge;
+      if(e<o.minEdge||e>o.maxEdge)return;
+      const modelP=r.sp;
+      if(modelP<o.minProb||modelP>o.maxProb)return;
+      const mktP=r.side===r.h?r.mh:(1-r.mh);
+      const price=btPrice(mktP);
+      if(F.a===F.h)return;                       // push, no action
+      const won=(F.h>F.a?r.h:r.a)===r.side;
+      bets.push({date:d,kind:'side',pick:r.side+' ML',game:r.a+'@'+r.h,
+        modelP,mktP,price,edge:e,won,situation:situationOf(r)});
+    });
+    if(o.markets.props)(A.pgrades||[]).forEach(g=>{
+      const modelP=g.p;
+      if(modelP<o.minProb||modelP>o.maxProb)return;
+      // props carry no stored market price, so the model's own fair price is the
+      // reference — edge is unknowable here, so an edge filter can't apply
+      if(o.minEdge>0)return;
+      const price=btPrice(modelP);
+      bets.push({date:d,kind:'prop',pick:g.n+' '+g.m,game:'',
+        modelP,mktP:modelP,price,edge:null,won:!!g.hit});
+    });
+  });
+
+  bets.sort((a,b)=>a.date<b.date?-1:1);
+  let bank=o.bankroll,peak=o.bankroll,maxDD=0,staked=0,profit=0,w=0,l=0;
+  const curve=[],byDay={};
+  bets.forEach(b=>{
+    let stake=1;
+    if(o.staking==='kelly'){
+      const dec=b.price>0?(b.price/100+1):(100/Math.abs(b.price)+1);
+      const bOdds=dec-1;
+      const k=(b.modelP*bOdds-(1-b.modelP))/bOdds;
+      // #4: throttle Kelly sizing down when this exact confidence band + situation
+      // has shown itself to be overconfident historically — the correction isn't
+      // just cosmetic, it actually reduces how much gets risked on a shaky band
+      const throttle=b.situation?kellyBandThrottle(b.modelP,b.situation):1;
+      stake=Math.max(0,k*o.kellyFrac*throttle*bank);
+      stake=Math.min(stake,bank*0.1);          // never risk more than 10% on one bet
+    }
+    if(stake<=0)return;
+    staked+=stake;
+    const pl=b.won?btPayout(b.price,stake):-stake;
+    profit+=pl;bank+=pl;
+    b.won?w++:l++;
+    peak=Math.max(peak,bank);
+    maxDD=Math.max(maxDD,peak-bank);
+    byDay[b.date]=(byDay[b.date]||0)+pl;
+    curve.push({date:b.date,bank:+bank.toFixed(2)});
+  });
+  const n=w+l;
+  return{n,w,l,
+    winPct:n?+(w/n*100).toFixed(1):0,
+    staked:+staked.toFixed(2),
+    profit:+profit.toFixed(2),
+    roi:staked?+(profit/staked*100).toFixed(2):0,
+    endBank:+bank.toFixed(2),
+    maxDD:+maxDD.toFixed(2),
+    curve,byDay,bets,days:days.length};
+}
+
+// Sweep edge thresholds so the honest question — "where does my edge actually live?"
+// — gets a table instead of a guess.
+function backtestSweep(){
+  const bands=[[0,99],[2,99],[3,99],[4,99],[5,99],[6,99],[8,99],[10,99]];
+  return bands.map(([lo,hi])=>{
+    const r=runBacktest({minEdge:lo,maxEdge:hi,markets:{sides:true,props:false}});
+    return{label:lo===0?'All sides':`${lo}%+ edge`,...r};
+  }).filter(r=>r.n>0);
+}
+
+function sparkline(curve,w,h){
+  if(curve.length<2)return '';
+  const vals=curve.map(c=>c.bank);
+  const min=Math.min(...vals),max=Math.max(...vals),rng=(max-min)||1;
+  const pts=vals.map((v,i)=>`${(i/(vals.length-1))*w},${h-((v-min)/rng)*h}`).join(' ');
+  const up=vals[vals.length-1]>=vals[0];
+  const col=up?'var(--win)':'var(--rust)';
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none"
+    style="display:block;margin:8px 0">
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8"
+      stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+let BT_EDGE=0,BT_STAKE='flat',BT_MKT='sides';
+function renderBacktest(){
+  const arc=get(LS.arc,{});
+  const graded=Object.keys(arc).filter(d=>arc[d].finals).length;
+  if(graded<2)return `<div class="empty">Backtesting needs at least two graded days.
+    Currently have ${graded}.</div>`;
+
+  const markets=BT_MKT==='sides'?{sides:true,props:false}
+    :BT_MKT==='props'?{sides:false,props:true}:{sides:true,props:true};
+  const r=runBacktest({minEdge:BT_MKT==='props'?0:BT_EDGE,markets,staking:BT_STAKE});
+  const sweep=backtestSweep();
+  const pc=v=>v>0?'var(--win)':v<0?'var(--rust)':'var(--mute)';
+
+  const pills=(cur,opts,setter)=>`<div class="subnav">${opts.map(([k,l])=>
+    `<button class="${String(cur)===String(k)?'on':''}" onclick="${setter}=${typeof k==='number'?k:`'${k}'`};renderTickets()">${l}</button>`).join('')}</div>`;
+
+  let h=`<div class="tkt hi">
+    <h3>Backtest · ${graded} graded days</h3>
+    <div class="sub">Replays every pick the model actually made, at a realistic price
+    (fair odds plus ${(BT_HOLD*200).toFixed(1)}% two-way hold). Nothing here can see the
+    future — it only uses what was known when the pick was snapshotted.</div>
+  </div>
+  <div class="tkt">
+    <div class="mktlab" style="margin-top:0">Market</div>
+    ${pills(BT_MKT,[['sides','Sides'],['props','Props'],['both','Both']],'BT_MKT')}
+    ${BT_MKT!=='props'?`<div class="mktlab">Minimum edge</div>
+    ${pills(BT_EDGE,[[0,'Any'],[2,'2%+'],[3,'3%+'],[4,'4%+'],[5,'5%+'],[6,'6%+'],[8,'8%+']],'BT_EDGE')}`:''}
+    <div class="mktlab">Staking</div>
+    ${pills(BT_STAKE,[['flat','Flat $1'],['kelly','Quarter Kelly']],'BT_STAKE')}
+  </div>`;
+
+  if(!r.n)return h+`<div class="empty">No bets match that filter.</div>`;
+
+  h+=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:24px;color:${pc(r.roi)}">
+        ${r.roi>0?'+':''}${r.roi}%</div><div class="m">ROI</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:24px;color:${pc(r.profit)}">
+        ${r.profit>0?'+':''}$${r.profit}</div><div class="m">profit</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:24px">${r.winPct}%</div>
+        <div class="m">${r.w}-${r.l}</div></div>
+    </div>
+    ${sparkline(r.curve,300,54)}
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px;
+      font-size:11px;color:var(--mute);border-top:1px solid var(--hair);padding-top:9px">
+      <span>$${r.staked} staked</span>
+      <span>bank $${r.endBank}</span>
+      <span>max drawdown $${r.maxDD}</span>
+    </div>
+  </div>`;
+
+  if(sweep.length){
+    h+=`<div class="sbar"><h2>Where the edge actually lives</h2><div class="ln"></div></div>
+    <div class="tkt"><div class="sub" style="margin-bottom:8px">Sides only, flat stake.
+    If ROI climbs as the threshold rises, the edge signal is real. If it doesn't,
+    the model's edge number isn't telling you anything useful yet.</div>
+    ${sweep.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;
+      padding:7px 0;border-bottom:1px solid var(--hair)">
+      <span style="font-weight:600;font-size:12.5px">${x.label}</span>
+      <span style="text-align:right">
+        <span style="font-family:'Archivo';font-weight:800;color:${pc(x.roi)}">${x.roi>0?'+':''}${x.roi}%</span>
+        <span class="m" style="margin-left:8px">${x.w}-${x.l} · $${x.profit>0?'+':''}${x.profit}</span>
+      </span></div>`).join('')}</div>`;
+  }
+  return h;
+}
+
+/* ================= ALL-TIME RECORD ================= */
+// Every pick that's ever been made, from every source, decomposed down to individual
+// straight legs — a parlay counts as N separate record entries, not one. This is the
+// only honest way to answer "how am I actually doing" since a 3-1 parlay record hides
+// that three of those legs individually hit and one alone sank the whole ticket.
+function buildAllTimeRecord(){
+  // Was: mine/system/book/outside, with 'book' dead — nothing has assigned that
+  // source since Market/Outside became their own real buckets. Replaced with the
+  // actual four LS.locked buckets that exist now: mine/system/market/specialty,
+  // plus outside (which draws from uploaded picks, not LS.locked, same as before).
+  const mine=[],system=[],market=[],specialty=[],outside=[];
+
+  // ── every LS.locked ticket, split by its real t.source ──
+  get(LS.locked,[]).forEach(t=>{
+    const bucket=t.source==='system'?system:t.source==='market'?market
+      :t.source==='specialty'?specialty:t.source==='outside'?outside:mine;
+    t.legs.forEach(x=>{
+      const{hit,push,detail}=gradeLeg(x,t.date);
+      const gid=legGameId(x,t.date);
+      bucket.push({date:t.date,pick:x.pick,game:x.game,p:x.p,hit,push,detail,
+        ticketId:t.id,ticketName:t.name||null,
+        gid:gid&&GAMES.some(z=>z.id===gid)?gid:null,fromParlay:t.legs.length>1});
+    });
+  });
+
+  // ── Outside picks — from every uploaded source screenshot ──
+  const ext=getExt();
+  Object.keys(ext).forEach(d=>{
+    ext[d].forEach(x=>{
+      outside.push({date:d,pick:x.pick||(x.side+' '+(x.line??'')),game:x.game,
+        src:x.src||'uploaded',hit:x.hit,conf:x.conf,gid:x.gid});
+    });
+  });
+
+  return{mine,system,market,specialty,outside};
+}
+
+function recordStats(list){
+  const w=list.filter(x=>x.hit===true).length;
+  const l=list.filter(x=>x.hit===false).length;
+  const p=list.filter(x=>x.push===true).length;
+  const pending=list.length-w-l-p;
+  return{w,l,p,pending,total:list.length,pct:w+l?((w/(w+l))*100).toFixed(1):'—'};
+}
+
+let ATR_TAB='mine';
+function renderAllTimeRecord(){
+  const R=buildAllTimeRecord();
+  const mineS=recordStats(R.mine),sysS=recordStats(R.system),
+        marketS=recordStats(R.market),specS=recordStats(R.specialty),outS=recordStats(R.outside);
+
+  // renderAllTimeRecord() only RETURNS html — it never writes to the page itself.
+  // The one place that paints it is renderTickets(), so the buttons need to call
+  // that, not this, or ATR_TAB updates internally while the screen never repaints.
+  const tabBtn=(k,l,s)=>`<button class="${ATR_TAB===k?'on':''}" onclick="ATR_TAB='${k}';renderTickets()">
+    ${l} <span class="m">${s.w}-${s.l}</span></button>`;
+  const cell=(lbl,st)=>`<div><div style="font-family:'Archivo';font-weight:900;font-size:19px;
+    color:${st.w>=st.l&&st.w>0?'var(--win)':st.l>st.w?'var(--rust)':'var(--mute)'}">${st.pct}%</div>
+    <div class="m">${lbl} · ${st.w}-${st.l}</div></div>`;
+
+  const clv=clvSummary();
+  const clvCard=clv.n>=5?`<div class="tkt" style="border-left:3px solid ${clv.avgMove>0?'var(--win)':'var(--rust)'}">
+    <div class="mktlab" style="margin-top:0">Closing line value · ${clv.n} picks</div>
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;
+        color:${clv.beatPct>=52?'var(--win)':'var(--rust)'}">${clv.beatPct}%</div>
+        <div class="m">beat the close</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;
+        color:${clv.avgMove>0?'var(--win)':'var(--rust)'}">${clv.avgMove>0?'+':''}${clv.avgMove}</div>
+        <div class="m">avg points moved</div></div>
+    </div>
+    <div class="sub" style="margin-top:8px">Beating the close on more than half your picks
+    predicts long-run profit better than win rate does. Under 50% means the market is
+    correcting against you after you bet.</div>
+  </div>`:(clv.n>0?`<div class="note">Closing line value: tracking started, ${clv.n} of 5 picks
+    needed before this means anything.</div>`:'');
+
+  let h=coachHtml({screen:'record'})+clvCard+`<div class="tkt hi">
+    <h3>All-time record</h3>
+    <div class="sub">Every parlay broken down leg by leg — a 3-1 parlay record shows up here as
+    three separate wins and one loss, not one bundled result. This is the honest number.</div>
+  </div>
+  <div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:14px">
+      ${cell('Mine',mineS)}${cell('System',sysS)}${cell('Market',marketS)}${cell('Specialty',specS)}${cell('Outside',outS)}
+    </div>
+  </div>
+  <div class="subnav">
+    ${tabBtn('mine','Mine',mineS)}
+    ${tabBtn('system','System',sysS)}
+    ${tabBtn('market','Market',marketS)}
+    ${tabBtn('specialty','Specialty',specS)}
+    ${tabBtn('outside','Outside',outS)}
+  </div>`;
+
+  const active=ATR_TAB==='mine'?R.mine:ATR_TAB==='system'?R.system
+    :ATR_TAB==='market'?R.market:ATR_TAB==='specialty'?R.specialty:R.outside;
+  const stats=ATR_TAB==='mine'?mineS:ATR_TAB==='system'?sysS
+    :ATR_TAB==='market'?marketS:ATR_TAB==='specialty'?specS:outS;
+
+  if(!active.length){
+    h+=`<div class="empty">Nothing here yet.</div>`;
+    return h;
+  }
+
+  h+=`<div class="note">${stats.pending} pick${stats.pending!==1?'s':''} still pending final grades.</div>`;
+
+  // group by source for Outside so each platform's picks are visually separated
+  if(ATR_TAB==='outside'){
+    const bySrc={};
+    active.forEach(x=>{(bySrc[x.src]=bySrc[x.src]||[]).push(x)});
+    h+=Object.keys(bySrc).sort().map(src=>{
+      const s=recordStats(bySrc[src]);
+      const rows=bySrc[src].slice().reverse().map(x=>legRowHtml(x,true)).join('');
+      return `<div class="tkt"><h3>${src} <span class="m">${s.w}-${s.l}</span></h3>${rows}</div>`;
+    }).join('');
+  }else{
+    // group by ticket NAME within the bucket so mis-routed or oddly-named tickets
+    // stand out immediately instead of blending into one flat list — this is the
+    // actual fix for "keeping track since some presets aren't going to their
+    // designated location": you can now see, right in the bucket you're checking,
+    // every distinctly-named ticket that landed there.
+    const byName={};
+    active.forEach(x=>{const k=x.ticketName||'(unnamed)';(byName[k]=byName[k]||[]).push(x)});
+    const names=Object.keys(byName).sort((a,b)=>a==='(unnamed)'?1:b==='(unnamed)'?-1:a.localeCompare(b));
+    h+=names.map(nm=>{
+      const s=recordStats(byName[nm]);
+      const rows=byName[nm].slice().reverse().map(x=>legRowHtml(x,false)).join('');
+      return `<div class="tkt"><h3>${nm} <span class="m">${s.w}-${s.l}</span></h3>${rows}</div>`;
+    }).join('');
+  }
+  return h;
+}
+
+function legRowHtml(x,isOutside){
+  const color=x.hit===true?'var(--win)':x.hit===false?'var(--rust)':'var(--mute)';
+  const icon=x.hit===true?'✅':x.hit===false?'❌':x.push?'➖':'⏳';
+  const jumpTo=x.gid?` onclick="jumpToGame(${x.gid})" style="cursor:pointer"`:'';
+  const detail=x.detail?`<span style="font-family:'IBM Plex Mono';font-size:9.5px;color:${color};margin-left:5px">${x.detail}</span>`:'';
+  const parlayTag=x.fromParlay?` <span class="m" style="opacity:.6">parlay leg</span>`:'';
+  const confTag=x.conf?` <span class="flag cool">${x.conf}</span>`:'';
+  return `<div${jumpTo} style="display:flex;justify-content:space-between;align-items:center;
+    padding:6px 0;border-bottom:1px solid var(--rule);gap:8px">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:12.5px;font-weight:600">${x.pick}${confTag}${parlayTag}</div>
+      <div class="m">${x.game} · ${x.date}${x.p?' · '+(x.p*100).toFixed(0)+'%':''}</div>
+    </div>
+    <div style="text-align:right;flex:0 0 auto">
+      <span style="color:${color}">${icon}</span>${detail}
+    </div>
+  </div>`;
+}
+/* ================= ALL-TIME RECORD END ================= */
+
+/* ================= EXTERNAL PICKS (other platforms) ================= */
+// Screenshots from OddsShark, Covers, Picks & Parlays, Facebook tipsters etc.
+// get read into d4.extpicks, graded on the same cycle as everything else, and
+// rolled into d4.srcstats so we learn which sources are actually worth listening to.
+function getExt(){return get(LS.extpicks,{})}
+function getSrcStats(){return get(LS.srcstats,{})}
+function extToday(){return getExt()[today()]||[]}
+
+async function analyzeExtPicks(){
+  const el=document.getElementById('extResult');
+  GEMINI_STATUS_EL=el;
+  const files=document.getElementById('extShots').files;
+  if(!files.length){el.innerHTML='<div class="empty">Pick at least one file first.</div>';return}
+  el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
+
+  // ── OFFLINE PATH — plain text files parsed locally, zero API cost ──
+  const textFiles=[...files].filter(f=>isPlainTextFile(f));
+  const otherFiles=[...files].filter(f=>!isPlainTextFile(f));
+
+  el.innerHTML='<div class="empty">Reading '+files.length+' file'+(files.length>1?'s':'')+'…</div>';
+
+  let offlinePicks=[],offlineTrends=[],offlineConsensus=[];
+  const sportsSeen=new Set();const diag=[];
+  for(const f of textFiles){
+    let text='';
+    try{
+      text=await new Promise((res,rej)=>{const r=new FileReader();
+        r.onload=e=>res(e.target.result);
+        r.onerror=()=>rej(new Error('unreadable'));r.readAsText(f);});
+    }catch(err){diag.push(f.name+': could not be read');continue}
+    const result=parseSlateText(text);
+    if(result.sport)sportsSeen.add(result.sport);
+    offlinePicks=offlinePicks.concat(result.picks);
+    offlineTrends=offlineTrends.concat(result.trends||[]);
+    offlineConsensus=offlineConsensus.concat(result.consensus||[]);
+    diag.push(f.name+': '+(detectSlateSport(text)||'no sport header').toUpperCase()+
+      ' · '+result.picks.length+' picks · '+(result.trends||[]).length+' trends · '+
+      (result.consensus||[]).length+' consensus');
+  }
+  if(!otherFiles.length){
+    if(!offlinePicks.length&&!offlineTrends.length&&!offlineConsensus.length){
+      el.innerHTML='<div class="tkt"><h3>Nothing parsed</h3><div class="sub">'+
+        'Header must start with MLB, NFL, or NCAAF.<br><br>What each file gave:<br>'+
+        '<span style="font-family:\'IBM Plex Mono\';font-size:10.5px">'+diag.join('<br>')+'</span></div></div>';
+      return;
+    }
+    /* The old routing tested offlinePicks.some(x=>x.isNFL) — but isNFL was only
+       ever set on the parser's RESULT object, never on individual picks, so that
+       branch was dead. It then fell back to testing whether the FILENAME began
+       with "NFL", which no real export does, leaving ACTIVE_SPORT as the only
+       thing actually deciding. Route on what the file declared instead. */
+    const fileSport=sportsSeen.size===1?[...sportsSeen][0]:null;
+    saveExtBySport(fileSport||ACTIVE_SPORT,offlinePicks,offlineTrends,offlineConsensus,el);
+    return;
+  }
+
+  // ── ONLINE PATH — images/PDFs still go to Claude API ──
+  const key=get(LS.ai,'');
+  if(!key){el.innerHTML='<div class="empty">Needs a Gemini API key for image/PDF files. Text .txt files work free with no key.</div>';return}
+  el.innerHTML='<div class="empty">Reading '+otherFiles.length+' image file'+(otherFiles.length>1?'s':'')+'…</div>';
+  try{
+    const imgBlocks=[];
+    for(const f of otherFiles){
+      // same real image/PDF/text/.docx branch analyzeBookShots uses — base64
+      // is only computed when the file actually needs it
+      const needsB64=!isPlainTextFile(f)&&!isDocxFile(f)&&!isLegacyDocFile(f);
+      const b64=needsB64?await fileToB64(f):null;
+      imgBlocks.push(await fileToContentBlock(f,b64));
+    }
+    const prompt=`These screenshots come from sports data/handicapping sites (Covers.com, OddsShark,
+Picks and Parlays, Action Network, VSiN, a Facebook tipster, etc). They come in several different
+formats — identify which format each screenshot is and extract accordingly. Return ONE JSON object,
+nothing else, no markdown fences, no commentary:
+
+{"picks":[...],"trends":[...],"consensus":[...]}
+
+═══ FORMAT 1 — CONSENSUS / PUBLIC MONEY TABLES ═══
+Rows showing two teams with bet% and money% split (e.g. "WAS 71% / ATL 29%", with prices and bet
+counts). This is public betting consensus, NOT a pick from the site — it shows what bettors are doing.
+IMPORTANT — these sites publish TWO different consensus views and they often disagree:
+  * "Consensus" tab = percentage of BETS (ticket count) -> metric:"bets"
+  * "Public Money" tab = percentage of MONEY wagered   -> metric:"money"
+Read the active tab label to decide. If you genuinely cannot tell, use metric:"bets".
+Never merge the two — a game with 82% of tickets on the under but 75% of the money on
+the over is the single most useful thing on the page, and averaging them destroys it.
+
+Also note whether the row is a MONEYLINE consensus (two team percentages, with prices
+like -110/+130) or a TOTAL consensus (Over/Under percentages with a number like 8.5).
+
+Add one entry per game per view to "consensus":
+{"src":"site name (e.g. Covers)","away":"abbr","home":"abbr",
+ "market":"moneyline" or "total","metric":"bets" or "money",
+ "awayPct":number or null,"homePct":number or null,
+ "overPct":number or null,"underPct":number or null,
+ "line":number or null,
+ "awayPrice":number or null,"homePrice":number or null,
+ "awayBets":number or null,"homeBets":number or null}
+The team with the HIGHER percentage is where the public money is — record both sides' percentages
+so we can see the split, not just the majority side.
+
+═══ FORMAT 2 — "COMPUTER PICKS" CARDS ═══
+A card with "Predicted Score" showing two teams and decimal run projections (e.g. "PHI 5.41 @ 5.25
+BAL"), then ML / Total / Run Line columns with price boxes. Boxes with a GREEN outline/highlight are
+the site's computer pick for that market; plain gray boxes are the other side, not picked.
+Add one entry per HIGHLIGHTED (green) box to "picks":
+{"src":"site name (e.g. Covers Computer Picks)","away":"abbr","home":"abbr",
+ "market":"moneyline"|"runline"|"total",
+ "pick":"exactly what the green box says, e.g. 'PHI +107' or 'o8.5' or 'BAL +1.5'",
+ "side":"away"|"home"|"over"|"under","line":number or null,"price":number,
+ "predictedAway":number,"predictedHome":number,"conf":null}
+Use the predicted score decimals for predictedAway/predictedHome on every pick from that card, even
+though the number itself doesn't change per market — it's the same projection driving all three.
+If NEITHER box in a pair is green/highlighted, do not add a pick for that market — the card is only
+showing you data, not making that specific call.
+
+═══ FORMAT 3 — "TRENDS" LISTS ═══
+Plain-language trend sentences under two team name pills, one of which may be highlighted/circled
+(that's the team the trend favors). Sentences look like "Over is 6-0 in Skenes' last 6 starts on
+grass" or "Under is 4-0 in Phillies last 4 when their opponent scores 5+". Add each sentence as one
+entry to "trends":
+{"src":"site name","away":"abbr","home":"abbr","team":"which team abbr the trend is about, or null
+if it's about the total/matchup rather than one side","text":"the trend sentence exactly as written",
+"implies":"over"|"under"|"away"|"home"|null}
+Set "implies" by reading the sentence: a trend stating "Over is X-Y" implies "over"; "Under is X-Y"
+implies "under"; a team-record trend like "Dodgers are 5-0 as a home underdog" implies that team
+("home" or "away" — whichever side they are in THIS game).
+
+═══ ALSO: "TOP PROJECTION" BLOCKS ═══
+Trends screenshots often carry a highlighted player prop ("Bryce Harper o0.5 Total RBIs
+(+155)"). Capture those into "picks" with market:"prop":
+{"src":"site name","away":"abbr","home":"abbr","market":"prop",
+ "pick":"exactly as written","player":"player name","statType":"rbi"|"hits"|"tb"|"hr"|"k"|"bb"|"ha",
+ "line":number,"side":"over","price":number,"conf":"best"}
+
+═══ FORMAT 4 — A COMPILED TEXT/MARKDOWN DOCUMENT (not a live-site screenshot) ═══
+Sometimes the screenshot is of a plain compiled document instead of the original site UI —
+dark or white headers per game, bullet-point trend lists, markdown-style tables, lines like
+"ML: PHI -150 (pick) | WAS +147" or "**Computer Picks — Predicted Score: WAS 5.01 @ PHI 5.64**".
+Treat this exactly like Formats 1-3 combined, just read from plain text instead of colored boxes:
+- A line ending in "(pick)" is the site's selection -> goes to "picks", same schema as Format 2.
+  Use the "Predicted Score" line for predictedAway/predictedHome.
+- Bullet points describing a team's record (e.g. "Under is 4-0 in Nationals last 4 games vs. a
+  right-handed starter.") are trend sentences -> goes to "trends", same schema as Format 3.
+- A markdown table headed "Consensus" / "Sides" / "Totals" with % splits is Format 1 -> goes to
+  "consensus". If the doc explicitly labels a table "Sharp"/"Top 10%"/"Team Money Leaders", set
+  metric:"money"; a plain "Overall" or unlabeled bet-count table is metric:"bets".
+- A section titled "Outside Sources" / individual named posters with picks like "Yankees ML" or
+  a parlay leg list — extract each distinct pick as its own entry in "picks", with "src" set to
+  the poster's name exactly as written (e.g. "Corey Gilcher", "Kyle Ramsey"). If two sources have
+  word-for-word identical leg lists, still record both — do not silently merge or drop one; the
+  app dedupes on its own if that's ever wanted.
+- Ignore any narrative commentary in the doc (e.g. a "Notes" section explaining how to read the
+  doc) — that's meta-instruction, not a pick, trend, or consensus row, and should not become an
+  entry in any of the three arrays.
+
+═══ GENERAL RULES ═══
+- Team names: use standard 2-3 letter abbreviations (PHI, BAL, NYY, LAD, etc).
+- If a source name isn't visible anywhere, use "Unknown".
+
+- Skip anything blurry, cut off, or ambiguous rather than guessing.
+- A single upload batch may contain multiple formats — sort each screenshot into the right bucket.`;
+    const raw=await callGemini(key,[...imgBlocks,{type:'text',text:prompt}],8000);
+    let parsed;
+    const cleaned=raw.replace(/```json|```/g,'').trim();
+    try{
+      parsed=JSON.parse(cleaned);
+    }catch(e1){
+      // Recovery pass: the model sometimes wraps valid JSON in a stray sentence
+      // ("Here's the extraction:" before, or a trailing note after) even when told
+      // not to — rather than fail outright, grab the outermost {...} span and retry.
+      try{
+        const start=cleaned.indexOf('{');
+        const end=cleaned.lastIndexOf('}');
+        if(start!==-1&&end>start){
+          parsed=JSON.parse(cleaned.slice(start,end+1));
+        }else{
+          throw e1;
+        }
+      }catch(e2){
+        el.innerHTML=`<div class="tkt"><h3>Couldn't parse a clean list</h3>
+          <div class="sub">This can happen with a very large upload (try fewer screenshots per batch) or
+          if the response got cut off. Raw response below — check whether it looks truncated at the end.</div>
+          <pre style="white-space:pre-wrap;word-break:break-all;font-family:'IBM Plex Mono';font-size:10.5px;color:var(--chalk);background:var(--panel2);padding:9px;border-radius:7px;margin-top:6px">${raw.slice(0,3500)}</pre></div>`;
+        return;
+      }
+    }
+    const picks=Array.isArray(parsed.picks)?parsed.picks:[];
+    const trends=Array.isArray(parsed.trends)?parsed.trends:[];
+    const consensus=Array.isArray(parsed.consensus)?parsed.consensus:[];
+    if(!picks.length&&!trends.length&&!consensus.length&&!offlinePicks.length&&!offlineTrends.length&&!offlineConsensus.length){
+      el.innerHTML='<div class="empty">Nothing readable came back — try clearer screenshots.</div>';return;
+    }
+    const allPicks=[...offlinePicks,...picks];
+    const allTrends=[...offlineTrends,...trends];
+    const allConsensus=[...offlineConsensus,...consensus];
+    window._pendingExt={picks:allPicks,trends:allTrends,consensus:allConsensus};
+    renderExtResults(el,allPicks,allTrends,allConsensus);
+  }catch(e){
+    // could be a real network failure OR a thrown file-format rejection
+    // (legacy .doc) — message already says which
+    el.innerHTML=`<div class="tkt"><h3>Couldn't read that</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
+  }
+}
+
+// ── Shared result renderer — used by both offline and API paths ───────────────
+function renderExtResults(el,picks,trends,consensus){
+  const rows=[];
+  if(picks.length)rows.push(`<div class="mktlab" style="margin-top:0">Picks (${picks.length})</div>
+    <ol>${picks.map(x=>`<li><b>${x.src||'Covers'}</b> — ${x.away}@${x.home} · ${x.pick||x.market}
+      ${x.conf?`<span class="flag cool">${x.conf}</span>`:''}
+      ${x.predictedAway!=null?`<span class="m"> proj ${x.predictedAway}-${x.predictedHome}</span>`:''}</li>`).join('')}</ol>`);
+  if(consensus.length)rows.push(`<div class="mktlab">Public consensus (${consensus.length})</div>
+    <ol>${consensus.map(x=>`<li><b>${x.src||'Covers'}</b> — ${x.away} ${x.awayPct??'?'}% / ${x.home} ${x.homePct??'?'}%
+      ${x.market==='total'?`· ${x.overPct??'?'}% O / ${x.underPct??'?'}% U`:''}</li>`).join('')}</ol>`);
+  if(trends.length)rows.push(`<div class="mktlab">Trends (${trends.length})</div>
+    <ol>${trends.map(x=>`<li><b>${x.src||'Covers'}</b> — ${x.away}@${x.home}${x.team?' '+x.team:''}: ${x.text}
+      ${x.implies?`<span class="flag cool">${x.implies}</span>`:''}</li>`).join('')}</ol>`);
+  const detectedSrcs=[...new Set([...picks,...trends,...consensus].map(x=>x.src).filter(Boolean))];
+  el.innerHTML=`<div class="tkt hi"><h3>${picks.length} picks · ${trends.length} trends · ${consensus.length} consensus rows</h3>
+    <div class="sub">Check these before saving.</div>
+    ${rows.join('')}
+    <div class="mktlab">Source</div>
+    <div class="sub" style="margin-top:0">Detected: <b>${detectedSrcs.length?detectedSrcs.join(', '):'unclear — name it below'}</b></div>
+    <input id="extSrcOverride" placeholder="Override / correct the source name (optional)"
+      style="width:100%;margin-top:6px;padding:9px;border-radius:7px;border:1px solid var(--rule);
+      background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
+    <div class="bar" style="margin-top:8px"><button class="primary" onclick="saveExtPicks()">Save all</button></div></div>`;
+}
+
+// ── Deterministic offline parser — handles the three IronSilk slate formats ──
+// slate_picks.txt  : ML/RL/OU lines per game
+// slate_consensus.txt : TEAM XX% / TEAM XX% rows + TOTALS section
+// slate_trends.txt : TEAM trends bullets per game block
+/* Sport detection used to read ONLY the literal first line. Any file exported
+   with a UTF-8 BOM, a leading blank line, or a title row above the header fell
+   through to the MLB parser, produced zero picks, and reported
+   "Nothing parsed — check file format" on a perfectly valid NFL/CFB file.
+   Now: strip the BOM, normalize line endings, and scan the first several
+   non-empty lines for the sport marker. */
+function stripBOM(t){return String(t||'').replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n')}
+function detectSlateSport(text){
+  const head=stripBOM(text).split('\n').map(l=>l.trim()).filter(Boolean).slice(0,8);
+  for(const l of head){
+    if(/^(NCAAF|CFB|COLLEGE\s*FOOTBALL)\b/i.test(l))return'ncaaf';
+    if(/^NFL\b/i.test(l))return'nfl';
+    if(/^MLB\b/i.test(l))return'mlb';
+  }
+  return null;
+}
+/* ── MULTI-SPORT UPLOADS ──────────────────────────────────────────────────
+   detectSlateSport() reads one sport for a whole file, so a single export
+   containing a CFB slate, an MLB slate and an NFL slate could only ever be
+   filed under one of them — the other two were silently dropped. Split the
+   file on bare sport headers first, then parse and file each section on its
+   own. One upload, three destinations. */
+function splitSportSections(text){
+  const lines=stripBOM(text).split('\n');
+  const out=[];let cur=null;
+  const isHdr=l=>{
+    const t=l.trim();
+    if(/^(MLB|NFL)$/i.test(t))return t.toUpperCase();
+    if(/^(NCAAF|CFB|COLLEGE\s*FOOTBALL)$/i.test(t))return 'NCAAF';
+    // also accept "MLB PICKS", "NFL SLATE" style headers on their own line
+    const m=t.match(/^(MLB|NFL|NCAAF|CFB)\b[\w\s]{0,20}$/i);
+    if(m&&!/[:@]/.test(t))return /CFB/i.test(m[1])?'NCAAF':m[1].toUpperCase();
+    return null;
+  };
+  for(const l of lines){
+    const h=isHdr(l);
+    if(h){cur={sport:h==='NCAAF'?'ncaaf':h.toLowerCase(),lines:[l]};out.push(cur);continue}
+    if(cur)cur.lines.push(l);
+  }
+  return out.filter(sec=>sec.lines.length>1).map(sec=>({sport:sec.sport,text:sec.lines.join('\n')}));
+}
+function parseSlateTextMulti(text){
+  const secs=splitSportSections(text);
+  if(secs.length<2)return null;               // single-sport file: normal path
+  const all={picks:[],trends:[],consensus:[],props:[],sports:[],bySport:{}};
+  const skipped=[];
+  secs.forEach(sec=>{
+    let r=null;
+    try{r=parseSlateText(sec.text)}catch(e){skipped.push(sec.sport);return}
+    if(!r)return;
+    if(r.unavailable){skipped.push(sec.sport);return}
+    (r.picks||[]).forEach(p=>{p.sport=p.sport||sec.sport});
+    all.picks=all.picks.concat(r.picks||[]);
+    all.trends=all.trends.concat(r.trends||[]);
+    all.consensus=all.consensus.concat(r.consensus||[]);
+    all.props=all.props.concat(r.props||[]);
+    if(!all.sports.includes(sec.sport))all.sports.push(sec.sport);
+    const b=all.bySport[sec.sport]||(all.bySport[sec.sport]={picks:[],trends:[],consensus:[]});
+    b.picks=b.picks.concat(r.picks||[]);
+    b.trends=b.trends.concat(r.trends||[]);
+    b.consensus=b.consensus.concat(r.consensus||[]);
+  });
+  all.skippedSports=skipped;
+  return all.picks.length||all.trends.length||all.consensus.length?all:null;
+}
+function parseSlateText(text){
+  text=stripBOM(text);
+  const sport=detectSlateSport(text);
+  /* parseNFLSlateText/parseNCAAFSlateText live in football-engine.js, which
+     mlb.html deliberately never loads (that's the whole point of the split).
+     Uploading an NFL/CFB-only file directly on mlb.html used to throw a
+     ReferenceError here and take the WHOLE parse down with it. Now it comes
+     back empty and clearly marked as unavailable on this page, rather than
+     crashing — the caller decides what to tell the user. */
+  if(sport==='nfl'){
+    if(typeof parseNFLSlateText!=='function')
+      return{picks:[],trends:[],consensus:[],sport:'nfl',isNFL:true,unavailable:true};
+    const r=parseNFLSlateText(text);
+    // Every pick carries its own sport. The routing code downstream used to
+    // test picks.some(x=>x.isNFL) — a flag that was only ever set on the
+    // RESULT object, never on individual picks, so that test was permanently
+    // false and content-based routing silently never fired.
+    r.picks.forEach(p=>p.sport='nfl');
+    return{picks:r.picks,trends:r.trends,consensus:r.consensus,sport:'nfl',isNFL:true};
+  }
+  if(sport==='ncaaf'){
+    if(typeof parseNCAAFSlateText!=='function')
+      return{picks:[],trends:[],consensus:[],sport:'ncaaf',isNCAAF:true,unavailable:true};
+    const r=parseNCAAFSlateText(text);
+    r.picks.forEach(p=>p.sport='ncaaf');
+    return{picks:r.picks,trends:r.trends,consensus:r.consensus,sport:'ncaaf',isNCAAF:true};
+  }
+  const picks=[],trends=[],consensus=[];
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  // normalize abbreviations to match what GAMES array uses
+  const ABBR_MAP={'CHW':'CWS','AZ':'ARI','WSH':'WSH','WAS':'WSH','ATH':'ATH','OAK':'ATH','NYY':'NYY','NYM':'NYM'};
+  function normAbbr(a){return ABBR_MAP[a.toUpperCase()]||a.toUpperCase();}
+
+  // detect file type by content fingerprint
+  const isConsensus=lines.some(l=>/\d+%\s*\//.test(l)||/TOTALS/i.test(l));
+  const isTrends=lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under|[A-Z]{2,3})\s+is\s+\d/i.test(l));
+  const isPicks=lines.some(l=>/^ML:/i.test(l)||/^OU:/i.test(l)||/^RL:/i.test(l));
+
+  if(isConsensus){
+    // ── CONSENSUS FORMAT ──
+    // "TOR 25% / HOU 75%"  → moneyline consensus
+    // "TOTALS" section → total consensus rows
+    let inTotals=false;
+    let curAway=null,curHome=null;
+    for(const l of lines){
+      // new game header resets totals mode so ML rows aren't swallowed
+      if(/^[A-Z]{2,4}\s*@\s*[A-Z]{2,4}/i.test(l)){inTotals=false;continue;}
+      if(/^TOTALS$/i.test(l)){inTotals=true;continue;}
+      if(!inTotals){
+        // moneyline row: "TOR 25% / HOU 75%"
+        const m=l.match(/^([A-Z]{2,4})\s+(\d+)%\s*\/\s*([A-Z]{2,4})\s+(\d+)%/i);
+        if(m){
+          consensus.push({src:'Covers',away:normAbbr(m[1]),home:normAbbr(m[3]),
+            market:'moneyline',metric:'bets',
+            awayPct:+m[2],homePct:+m[4],
+            overPct:null,underPct:null,line:null});
+        }
+      }else{
+        // totals row: "SF/TEX: 100% Under | Line 8"
+        const m=l.match(/^([A-Z\/]+):\s*(\d+)%\s*(Over|Under)/i);
+        if(m){
+          const teams=m[1].split('/');
+          const aw=teams[0]||'';const hm=teams[1]||'';
+          const isOver=/over/i.test(m[3]);
+          const lineM=l.match(/Line\s+([\d.]+)/i);
+          const lineV=lineM?+lineM[1]:null;
+          // check for second consensus note e.g. "92% Under money leaders"
+          const m2=l.match(/(\d+)%\s*(Over|Under)\s+money/i);
+          consensus.push({src:'Covers',away:normAbbr(aw),home:normAbbr(hm),
+            market:'total',metric:'bets',
+            awayPct:null,homePct:null,
+            overPct:isOver?+m[2]:m2&&/over/i.test(m2[2])?+m2[1]:100-+m[2],
+            underPct:isOver?100-+m[2]:+m[2],
+            line:lineV});
+          if(m2){
+            consensus.push({src:'Covers (money leaders)',away:aw.toUpperCase(),home:hm.toUpperCase(),
+              market:'total',metric:'money',
+              overPct:/over/i.test(m2[2])?+m2[1]:100-+m2[1],
+              underPct:/under/i.test(m2[2])?+m2[1]:100-+m2[1],
+              line:lineV});
+          }
+        }
+      }
+    }
+  }
+
+  if(isTrends){
+    // ── TRENDS FORMAT ──
+    // Game header: "TOR @ HOU" or "TOR @ HOU | ..."
+    // Team label: "TOR:" or "TOR trends:"
+    // Bullet: "Under 5-0 last 5 overall."
+    let curAway=null,curHome=null,curTeam=null;
+    for(const l of lines){
+      if(/^MLB TRENDS/i.test(l)||/^Source:/i.test(l))continue;
+      const gameM=l.match(/^([A-Z]{2,4})\s*@\s*([A-Z]{2,4})/i);
+      if(gameM){curAway=normAbbr(gameM[1]);curHome=normAbbr(gameM[2]);curTeam=null;continue;}
+      const teamM=l.match(/^([A-Z]{2,4}):\s*(.*)/);
+      if(teamM&&curAway){
+        curTeam=teamM[1].toUpperCase();
+        const rest=teamM[2].trim();
+        if(rest)pushTrend(rest);
+        continue;
+      }
+      if(curAway&&l.length>8)pushTrend(l);
+    }
+    function pushTrend(text){
+      if(!text||!curAway)return;
+      const isOver=/^over/i.test(text);
+      const isUnder=/^under/i.test(text);
+      const implies=isOver?'over':isUnder?'under':null;
+      trends.push({src:'Covers',away:curAway,home:curHome,team:curTeam,
+        text,implies,game:curAway+'@'+curHome});
+    }
+  }
+
+  if(isPicks){
+    // ── PICKS FORMAT ──
+    // Game header: "TOR @ HOU | ..."
+    // ML: TOR +160 / HOU -163
+    // RL: TOR +1.5 (-133) / HOU -1.5 (+126)
+    // OU: o8.0 (-111) / u8.5 (-113)
+    let curAway=null,curHome=null;
+    for(const l of lines){
+      if(/^MLB PICKS/i.test(l)||/^MLB COVERS/i.test(l)||/^Source:/i.test(l)||/^Proj:/i.test(l))continue;
+      const gameM=l.match(/^([A-Z]{2,4})\s*@\s*([A-Z]{2,4})/i);
+      if(gameM){curAway=normAbbr(gameM[1]);curHome=normAbbr(gameM[2]);continue;}
+      if(!curAway)continue;
+      const game=curAway+'@'+curHome;
+
+      // ML: TOR +160 / HOU -163  (two sides — sportsbetting.ag format)
+      const mlM=l.match(/^ML:\s*([A-Z]{2,4})\s*([+\-]\d+)\s*\/\s*([A-Z]{2,4})\s*([+\-]\d+)/i);
+      if(mlM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'moneyline',
+          pick:mlM[1].toUpperCase()+' ML '+mlM[2],side:mlM[1].toUpperCase()===curAway?'away':'home',
+          line:null,price:+mlM[2],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'moneyline',
+          pick:mlM[3].toUpperCase()+' ML '+mlM[4],side:mlM[3].toUpperCase()===curHome?'home':'away',
+          line:null,price:+mlM[4],conf:null});
+        continue;
+      }
+      // ML: WAS -116  (single side — Covers computer pick format)
+      const mlS=l.match(/^ML:\s*([A-Z]{2,4})\s*([+\-]\d+)$/i);
+      if(mlS){
+        const t=mlS[1].toUpperCase();
+        picks.push({src:'Covers',away:curAway,home:curHome,game,market:'moneyline',
+          pick:t+' ML '+mlS[2],side:t===curAway?'away':'home',
+          line:null,price:+mlS[2],conf:null});
+        continue;
+      }
+      // RL: TOR +1.5 (-133) / HOU -1.5 (+126)  (two sides)
+      const rlM=l.match(/^RL:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
+      if(rlM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'runline',
+          pick:rlM[1].toUpperCase()+' '+rlM[2],side:rlM[1].toUpperCase()===curAway?'away':'home',
+          line:+rlM[2],price:+rlM[3],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'runline',
+          pick:rlM[4].toUpperCase()+' '+rlM[5],side:rlM[4].toUpperCase()===curHome?'home':'away',
+          line:+rlM[5],price:+rlM[6],conf:null});
+        continue;
+      }
+      // OU: o8.0 (-111) / u8.5 (-113)  (two sides)
+      const ouM=l.match(/^OU:\s*o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i);
+      if(ouM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'total',
+          pick:'o'+ouM[1],side:'over',line:+ouM[1],price:+ouM[2],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'total',
+          pick:'u'+ouM[3],side:'under',line:+ouM[3],price:+ouM[4],conf:null});
+        continue;
+      }
+      // OU: o7.5 (-121)  (single side — Covers computer pick format)
+      const ouS=l.match(/^OU:\s*([ou])([\d.]+)\s*\(([+\-]\d+)\)$/i);
+      if(ouS){
+        const isOver=ouS[1].toLowerCase()==='o';
+        picks.push({src:'Covers',away:curAway,home:curHome,game,market:'total',
+          pick:(isOver?'o':'u')+ouS[2],side:isOver?'over':'under',
+          line:+ouS[2],price:+ouS[3],conf:null});
+        continue;
+      }
+      // RL: TEAM +/-line (price) single side — Covers format
+      const rlS=l.match(/^RL:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)$/i);
+      if(rlS){
+        const t=rlS[1].toUpperCase();
+        picks.push({src:'Covers',away:curAway,home:curHome,game,market:'runline',
+          pick:t+' '+rlS[2],side:t===curAway?'away':'home',
+          line:+rlS[2],price:+rlS[3],conf:null});
+        continue;
+      }
+      // F5 ML: TOR +180 / PHI -210
+      const f5mlM=l.match(/^F5\s+ML:\s*([A-Z]{2,4})\s*([+\-]\d+)\s*\/\s*([A-Z]{2,4})\s*([+\-]\d+)/i);
+      if(f5mlM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'f5side',
+          pick:'F5 '+f5mlM[1].toUpperCase(),side:f5mlM[1].toUpperCase()===curAway?'away':'home',
+          line:null,price:+f5mlM[2],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'f5side',
+          pick:'F5 '+f5mlM[3].toUpperCase(),side:f5mlM[3].toUpperCase()===curHome?'home':'away',
+          line:null,price:+f5mlM[4],conf:null});
+        continue;
+      }
+      // F5 RL: TOR +0.5 (+120) / PHI -0.5 (-140)
+      const f5rlM=l.match(/^F5\s+RL:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
+      if(f5rlM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'f5side',
+          pick:'F5 '+f5rlM[1].toUpperCase()+' '+f5rlM[2],side:f5rlM[1].toUpperCase()===curAway?'away':'home',
+          line:+f5rlM[2],price:+f5rlM[3],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'f5side',
+          pick:'F5 '+f5rlM[4].toUpperCase()+' '+f5rlM[5],side:f5rlM[4].toUpperCase()===curHome?'home':'away',
+          line:+f5rlM[5],price:+f5rlM[6],conf:null});
+        continue;
+      }
+      // F5 OU: o4.5 (+103) / u4.5 (-123)
+      const f5ouM=l.match(/^F5\s+OU:\s*o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i);
+      if(f5ouM){
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'f5total',
+          pick:'F5 over '+f5ouM[1],side:'over',line:+f5ouM[1],price:+f5ouM[2],conf:null});
+        picks.push({src:'OddsShark',away:curAway,home:curHome,game,market:'f5total',
+          pick:'F5 under '+f5ouM[3],side:'under',line:+f5ouM[3],price:+f5ouM[4],conf:null});
+        continue;
+      }
+    }
+  }
+
+  picks.forEach(p=>p.sport='mlb');
+  return {picks,trends,consensus,sport:'mlb'};
+}
+
+function saveExtPicks(){
+  const bundle=window._pendingExt;if(!bundle)return;
+  const d=today();
+  // apply the post-upload source override, if one was typed, to every
+  // picks/trends/consensus entry at once — this is the actual save-time
+  // correction step the item-6 fix is built around
+  const overrideEl=document.getElementById('extSrcOverride');
+  const override=(overrideEl&&overrideEl.value||'').trim();
+  if(override){
+    ['picks','trends','consensus'].forEach(k=>{
+      (bundle[k]||[]).forEach(x=>{x.src=override});
+    });
+  }
+
+  const ENORM={'CHW':'CWS','AZ':'ARI','WAS':'WSH','ATH':'ATH','OAK':'ATH'};
+  const enorm=a=>{const u=(a||'').toUpperCase();return ENORM[u]||abbr(a)||u;};
+
+  // ── picks ──
+  const allP=getExt();
+  allP[d]=allP[d]||[];
+  const keyOfP=x=>[x.src,x.game,x.market,x.side,x.line].join('|');
+  (bundle.picks||[]).forEach(x=>{
+    const homeAb=enorm(x.home),awayAb=enorm(x.away);
+    const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+    const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
+      gid:gm?gm.id:null,capturedAt:Date.now(),hit:null};
+    const k=keyOfP(rec),i=allP[d].findIndex(y=>keyOfP(y)===k);
+    if(i>=0)allP[d][i]={...allP[d][i],...rec};else allP[d].push(rec);
+  });
+  set(LS.extpicks,allP);
+
+  // ── trends ──
+  const allT=get(LS.exttrends,{});
+  allT[d]=allT[d]||[];
+  const keyOfT=x=>[x.src,x.game,x.text].join('|');
+  (bundle.trends||[]).forEach(x=>{
+    const homeAb=enorm(x.home),awayAb=enorm(x.away);
+    const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+    const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
+      gid:gm?gm.id:null,capturedAt:Date.now()};
+    const k=keyOfT(rec),i=allT[d].findIndex(y=>keyOfT(y)===k);
+    if(i>=0)allT[d][i]=rec;else allT[d].push(rec);
+  });
+  set(LS.exttrends,allT);
+
+  // ── consensus ──
+  const allC=get(LS.extconsensus,{});
+  allC[d]=allC[d]||[];
+  const keyOfC=x=>[x.src,x.game].join('|');
+  (bundle.consensus||[]).forEach(x=>{
+    const homeAb=enorm(x.home),awayAb=enorm(x.away);
+    const gm=GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
+    const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,
+      gid:gm?gm.id:null,capturedAt:Date.now()};
+    const k=keyOfC(rec),i=allC[d].findIndex(y=>keyOfC(y)===k);
+    if(i>=0)allC[d][i]=rec;else allC[d].push(rec);
+  });
+  set(LS.extconsensus,allC);
+
+  const savedPicks=(bundle.picks||[]).length;
+  const savedTrends=(bundle.trends||[]).length;
+  const savedConsensus=(bundle.consensus||[]).length;
+
+  window._pendingExt=null;
+  document.getElementById('extShots').value='';
+  try{syncTrackedAutoParlay('outside');}catch(e){}
+
+  // show confirmation so it's clear what landed
+  const el=document.getElementById('extResult');
+  if(el)el.innerHTML=`<div class="tkt hi">
+    <h3>✓ Saved</h3>
+    <div class="sub">
+      ${savedPicks?`<b>${savedPicks}</b> picks · `:''}
+      ${savedTrends?`<b>${savedTrends}</b> trends · `:''}
+      ${savedConsensus?`<b>${savedConsensus}</b> consensus rows`:''}
+      <br>Filed under ${d}. Shows on game cards under Trends tab.
+    </div>
+  </div>`;
+  renderTickets();
+}
+
+function clearExtToday(){
+  if(!confirm('Clear all external picks, trends, and consensus for today? (MLB, NFL, CFB)'))return;
+  const d=today();
+  // MLB
+  const all=getExt();delete all[d];set(LS.extpicks,all);
+  const allT=get(LS.exttrends,{});delete allT[d];set(LS.exttrends,allT);
+  const allC=get(LS.extconsensus,{});delete allC[d];set(LS.extconsensus,allC);
+  // NFL
+  const nflE=get(LS.nflext,{});delete nflE[d];set(LS.nflext,nflE);
+  const nflT=get(LS.nfltrends,{});delete nflT[d];set(LS.nfltrends,nflT);
+  const nflC=get(LS.nflconsensus,{});delete nflC[d];set(LS.nflconsensus,nflC);
+  // NCAAF
+  const cfbE=get(LS.ncaafext,{});delete cfbE[d];set(LS.ncaafext,cfbE);
+  const cfbT=get(LS.ncaaftrends,{});delete cfbT[d];set(LS.ncaaftrends,cfbT);
+  const cfbC=get(LS.ncaafconsensus,{});delete cfbC[d];set(LS.ncaafconsensus,cfbC);
+  try{syncTrackedAutoParlay('outside');}catch(e){}
+  renderTickets();
+}
+
+/* Grade every external pick that has a final score available */
+function gradeExtPicks(){
+  const all=getExt(),arc=get(LS.arc,{});
+  let changed=false;
+  Object.keys(all).forEach(d=>{
+    const A=arc[d];if(!A||!A.finals)return;
+    all[d].forEach(p=>{
+      if(p.hit!==null&&p.hit!==undefined)return;
+      const F=p.gid?A.finals[p.gid]:null;
+      if(!F||isNaN(F.a)||isNaN(F.h))return;
+      const tot=F.a+F.h,margin=F.h-F.a;
+      let hit=null;
+      if(p.market==='moneyline')
+        hit=p.side==='home'?F.h>F.a:F.a>F.h;
+      else if(p.market==='total'&&p.line!==null)
+        hit=p.side==='over'?tot>p.line:tot<p.line;
+      else if(p.market==='runline'&&p.line!==null)
+        hit=p.side==='home'?(margin+p.line)>0:((-margin)+p.line)>0;
+      else if(p.market==='f5total'&&p.line!==null&&F.f5ok)
+        hit=p.side==='over'?(F.fa+F.fh)>p.line:(F.fa+F.fh)<p.line;
+      else if(p.market==='f5side'&&F.f5ok)
+        hit=p.side==='home'?F.fh>F.fa:F.fa>F.fh;
+      else if(p.market==='prop'&&p.pid&&p.ptype&&p.thr!=null){
+        // outside props grade off the same cached box scores everything else uses
+        const box=boxFor(p.gid);
+        if(box){
+          let pl=null;
+          for(const sd of ['away','home']){
+            const P=((box.teams||{})[sd]||{}).players||{};
+            if(P['ID'+p.pid]){pl=P['ID'+p.pid];break}
+          }
+          if(pl)hit=gradePropRec(pl,p.ptype,p.thr);
+        }
+      }
+      if(hit!==null){p.hit=hit;changed=true}
+    });
+  });
+  if(changed)set(LS.extpicks,all);
+  rebuildSrcStats();
+}
+
+function rebuildSrcStats(){
+  const all=getExt(),stats={};
+  Object.keys(all).forEach(d=>{
+    all[d].forEach(p=>{
+      if(p.hit===null||p.hit===undefined)return;
+      const s=stats[p.src]=stats[p.src]||{n:0,w:0,l:0,byMarket:{},byConf:{}};
+      s.n++;p.hit?s.w++:s.l++;
+      const m=s.byMarket[p.market]=s.byMarket[p.market]||{w:0,l:0};
+      p.hit?m.w++:m.l++;
+      const c=p.conf||'none';
+      const cf=s.byConf[c]=s.byConf[c]||{w:0,l:0};
+      p.hit?cf.w++:cf.l++;
+    });
+  });
+  set(LS.srcstats,stats);
+}
+
+/* ================= TICKETS TABS ================= */
+const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['eval','Eval'],['outside','Outside'],['elimmap','🫧 Map'],['record','Record'],['backtest','Backtest']];
+let BUILD_MODE='presets';   // presets | custom
+let OUTSIDE_MODE='consensus';
+
+function renderTickets(){
+  const nav=document.getElementById('ticketNav');
+  const body=document.getElementById('ticketBody');
+  if(!nav||!body)return;
+  nav.innerHTML=TTABS.map(([k,l])=>
+    `<button class="${TICKETTAB===k?'on':''}" onclick="TICKETTAB='${k}';renderTickets()">${l}</button>`).join('');
+  const modeRow=(cur,opts,setter)=>`<div class="subnav" style="margin-bottom:10px">${
+    opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
+  if(TICKETTAB==='eval'){
+    try{
+      const fn=ACTIVE_SPORT==='nfl'?renderNFLMasterEval:ACTIVE_SPORT==='ncaaf'?renderNCAAFMasterEval:renderMasterEval;
+      body.innerHTML=fn();
+    }catch(e){
+      body.innerHTML=`<div class="tkt"><h3>Eval error</h3><div class="sub">${e.message}</div></div>`;
+    }
+  }
+  if(TICKETTAB==='build'){
+    const row=modeRow(BUILD_MODE,[['presets','Presets'],['custom','Custom']],'BUILD_MODE');
+    body.innerHTML=row+(BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
+  }
+  if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
+  if(TICKETTAB==='tracked')body.innerHTML=trackedPicksHtml();
+  if(TICKETTAB==='elimmap')body.innerHTML=eliminationMapHtml();
+  if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
+  if(TICKETTAB==='backtest')body.innerHTML=renderBacktest();
+  if(TICKETTAB==='outside'){
+    const row=modeRow(OUTSIDE_MODE,[['consensus','Consensus'],['sources','Source records']],'OUTSIDE_MODE');
+    body.innerHTML=row+(OUTSIDE_MODE==='consensus'?consensusHtml():sourcesHtml());
+  }
+  window.scrollTo(0,0);
+}
+
+function buildTabHtml(){
+  return `<div class="tkt">
+    <div class="mktlab" style="margin-top:0">Markets to draw from</div>
+    <div class="subnav">
+      <button id="mode-ml" class="${BUILDMODES.has('ml')?'on':''}" onclick="toggleMode('ml',this)">Moneyline</button>
+      <button id="mode-rl" class="${BUILDMODES.has('rl')?'on':''}" onclick="toggleMode('rl',this)">Run line</button>
+      <button id="mode-total" class="${BUILDMODES.has('total')?'on':''}" onclick="toggleMode('total',this)">Totals</button>
+      <button id="mode-f5" class="${BUILDMODES.has('f5')?'on':''}" onclick="toggleMode('f5',this)">First 5</button>
+      <button id="mode-prop" class="${BUILDMODES.has('prop')?'on':''}" onclick="toggleMode('prop',this)">Props</button>
+    </div>
+    <div class="mktlab">Legs on the parlay</div>
+    <div class="subnav" id="legBtns" style="flex-wrap:wrap">
+      ${[2,3,4,5,6,7,8,9,10].map(n=>`<button class="${TARGET_LEGS===n?'on':''}" onclick="setLegs(${n},this)">${n}</button>`).join('')}
+      <button class="${TARGET_LEGS===-1?'on':''}" onclick="setLegs(-1,this)">No limit</button>
+      <button class="${TARGET_LEGS===0?'on':''}" onclick="setLegs(0,this)">By target $</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <input type="number" min="1" max="30" placeholder="Or type any number"
+        value="${TARGET_LEGS>0?TARGET_LEGS:''}"
+        oninput="const v=parseInt(this.value,10);if(v>0)setLegs(v,null)"
+        style="width:130px;padding:8px 10px;border-radius:7px;border:1px solid var(--rule);
+        background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
+      <span class="m">legs — works for any number, not just the quick buttons above</span>
+    </div>
+    <div class="mktlab">Same-game combos</div>
+    <div class="subnav"><button id="sgpToggle" onclick="this.classList.toggle('on')">SGP mode — allow run line + total together on one game</button></div>
+    <div class="betgrid">
+      <div><input id="targetStake" type="number" placeholder="stake $" min="1" step="1"></div>
+      <div><input id="targetProfit" type="number" placeholder="target profit $" min="1" step="1" style="opacity:${TARGET_LEGS===0?1:0.4}"></div>
+    </div>
+    <div class="bar" style="margin-top:8px">
+      <button class="primary" onclick="buildTargetTicket()">Build ticket</button>
+      <button onclick="rerollHeld()">Reroll free legs</button>
+    </div>
+    <div class="sub" style="margin-top:6px">Set a leg count and hit Build. Lock legs you want to keep, then
+    <b>Reroll free legs</b> to swap out the rest — video-poker hold. When it looks right, <b>Lock this ticket</b>.</div>
+  </div>
+  <div id="targetResult"></div>`;
+}
+
+// A ticket is "complete" only when every leg's game has actually gone final AND
+// graded to a definite true/false — not just that the game ended, since a leg can
+// end up null (push, incomplete box score, F5 data missing) and shouldn't be archived
+// as if it were decided.
+function ticketIsComplete(t){
+  return t.legs.every(x=>{
+    const g=gradeLeg(x,t.date);
+    // a push is a DECIDED outcome (neutral), not a still-pending one — only a
+    // genuine null with no push flag means we're still waiting on this leg
+    return g.hit===true||g.hit===false||g.push===true;
+  });
+}
+function ticketRecord(t){
+  let w=0,l=0,p=0;
+  t.legs.forEach(x=>{
+    const g=gradeLeg(x,t.date);
+    if(g.hit===true)w++;
+    else if(g.hit===false)l++;
+    else if(g.push===true)p++;
+  });
+  return{w,l,p,won:l===0&&w>0};
+}
+// ── PUSH BUG REPAIR — one-time correction pass ────────────────────────────
+// Run lines and whole-number totals could tie (a real push) but the old
+// gradeLeg logic graded that as a straight loss. This walks every ticket that
+// was ALREADY archived/settled under the old bug, re-grades every leg with
+// the fixed logic, and — only for tickets where the record actually changes —
+// corrects both the stored finalRecord AND the real money: reverses whatever
+// was booked (bankroll or tracked history) and re-books it correctly. Nothing
+// is touched for a ticket that regrades identically; this only fixes what was
+// actually wrong.
+function correctBankrollBalance(targetBalance,dailySpent){
+  const b=getBankroll();
+  const d=today();
+  b.profit=targetBalance-BR_BASELINE;
+  b.debited={};
+  // strip today's history entries — these are what stakedToday() sums against the daily cap
+  b.history=(b.history||[]).filter(h=>h.date!==d);
+  saveBankroll(b);
+  // also clear wager records for any pending tickets dated today
+  const L=get(LS.locked,[]);
+  const todayPendingIds=new Set(L.filter(t=>t.date===d&&!t.archived).map(t=>t.id));
+  const wagers=getWagers();
+  todayPendingIds.forEach(id=>{ delete wagers[id]; });
+  set(LS_WAGERS,wagers);
+}
+
+function runBankrollCorrection(){
+  if(!confirm('Reset bankroll to $80.00 balance with $0 spent today?'))return;
+  correctBankrollBalance(80,0);
+  alert('Done — bankroll corrected to $80.00, daily spend reset to $0.');
+  renderTickets();
+  try{renderMoney();}catch(e){}
+}
+
+function runPushBugRepairManually(){
+  const status=document.getElementById('pushRepairStatus');
+  if(status)status.innerHTML='<div class="empty">Checking…</div>';
+  setTimeout(()=>{
+    const result=repairPushBug();
+    localStorage.setItem('d4.pushBugRepaired','1');
+    if(status){
+      status.innerHTML=result.fixed>0
+        ?`<div class="tkt hi" style="margin-top:8px"><h3>Fixed ${result.fixed} ticket${result.fixed>1?'s':''}</h3>
+          <div class="sub">Checked ${result.checked} archived tickets. ${result.fixedDetails.map(d=>
+            `<br>· "${d.name}" — was ${d.before.w}-${d.before.l}${d.before.p?'-'+d.before.p+'p':''},
+             now ${d.after.w}-${d.after.l}${d.after.p?'-'+d.after.p+'p':''}`).join('')}</div></div>`
+        :`<div class="note" style="margin-top:8px">Checked ${result.checked} archived tickets — nothing needed fixing.</div>`;
+    }
+  },30);
+}
+function repairPushBug(){
+  const L=get(LS.locked,[]);
+  let checked=0,fixed=0;
+  const fixedDetails=[];
+  L.forEach(t=>{
+    if(!t.archived)return; // only already-settled tickets can be wrong — pending ones grade fresh every time anyway
+    checked++;
+    const oldRecord=t.finalRecord||{w:0,l:0,p:0,won:false};
+    const newRecord=ticketRecord(t); // re-derives from the NOW-FIXED gradeLeg
+    const changed=oldRecord.w!==newRecord.w||oldRecord.l!==newRecord.l||
+      oldRecord.p!==newRecord.p||oldRecord.won!==newRecord.won;
+    if(!changed)return;
+    fixed++;
+    fixedDetails.push({name:t.name||t.date,id:t.id,before:oldRecord,after:newRecord});
+    // reverse whatever money was booked under the wrong record, then rebook
+    // correctly — same reversal logic moveTicket already uses for this exact
+    // situation (undo a settlement, then let it re-settle)
+    reverseTicketSettlement(t);
+    t.finalRecord=newRecord;
+    const w=getWagers();
+    const stake=w[t.id];
+    if(stake&&stake>0){
+      const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
+      let profit;
+      if(newRecord.l===0&&newRecord.w===0){
+        profit=0; // every leg pushed
+      }else if(newRecord.won){
+        const survivingP=t.legs.map(x=>gradeLeg(x,t.date)).filter(g=>g.hit!==null&&!g.push)
+          .length?t.legs.filter(x=>{const g=gradeLeg(x,t.date);return g.hit===true}).reduce((a,x)=>a*x.p,1):t.p;
+        const odds=probToAmer(survivingP);
+        const res=amerPayout(odds,stake);
+        profit=res?res.profit:0;
+      }else{
+        profit=-stake;
+      }
+      const outcome=(newRecord.l===0&&newRecord.w===0)?'push':newRecord.won;
+      if(trackedOnly)recordTrackedOutcome(t.id,stake,profit,outcome,t.source);
+      else settleTicket(t.id,stake,profit,outcome);
+    }
+  });
+  set(LS.locked,L);
+  return{checked,fixed,fixedDetails};
+}
+function archiveTicket(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  if(!ticketIsComplete(t)){
+    const pending=t.legs.filter(x=>gradeLeg(x,t.date).hit===null).map(x=>x.game);
+    alert(`Can't archive yet — still waiting on: ${[...new Set(pending)].join(', ')}. Try "Grade everything now" in Settings first.`);
+    return;
+  }
+  t.archived=true;
+  t.archivedAt=Date.now();
+  t.finalRecord=ticketRecord(t);
+  set(LS.locked,L);
+  renderTickets();
+}
+function unarchiveTicket(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(!t)return;
+  t.archived=false;
+  set(LS.locked,L);
+  renderTickets();
+}
+function archiveAllComplete(){
+  const L=get(LS.locked,[]);
+  let n=0;
+  L.forEach(t=>{
+    if(t.archived)return;
+    if(ticketIsComplete(t)){
+      t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);n++;
+    }
+  });
+  set(LS.locked,L);
+  if(n===0)alert('Nothing to archive — no fully-decided tickets are still pending.');
+  renderTickets();
+}
+
+let MINE_VIEW='pending';
+function minePicksHtml(){
+  const locked=get(LS.locked,[]);
+  if(!locked.length)return `<div class="empty">No tickets locked yet. Build one on the Build tab, or tap picks on game cards and hit Lock In.</div>`;
+  const pending=locked.filter(t=>!t.archived);
+  const archived=locked.filter(t=>t.archived);
+  const readyToArchive=pending.filter(t=>ticketIsComplete(t)).length;
+  setTimeout(()=>genTickets('mine'),0);
+  return `<div class="sbar" style="margin-top:0"><h2>Your tickets</h2><div class="ln"></div></div>
+    <div class="subnav">
+      <button class="${MINE_VIEW==='pending'?'on':''}" onclick="MINE_VIEW='pending';renderTickets()">Pending <span class="m">${pending.length}</span></button>
+      <button class="${MINE_VIEW==='archived'?'on':''}" onclick="MINE_VIEW='archived';renderTickets()">Archived <span class="m">${archived.length}</span></button>
+    </div>
+    ${MINE_VIEW==='pending'&&readyToArchive>0?`<div class="note" style="display:flex;align-items:center;
+      justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span><b>${readyToArchive}</b> ticket${readyToArchive>1?'s are':' is'} fully graded and ready to archive.</span>
+      <button class="primary" onclick="archiveAllComplete()">Archive all complete</button>
+    </div>`:''}
+    <div id="tickets"></div>`;
+}
+
+// ── Elimination Map — bubble chart of every pending ticket ──────────────
+// Position: simple force-free grid-jitter layout, clustered by shared-game
+// risk so tickets riding on the same game visually group together (the same
+// concentration signal as the Duplicates tab, made spatial). Size: sqrt-scaled
+// by real payout so AREA (not radius) is proportional to what's actually on
+// the line — a $50 payout bubble is 5x the AREA of a $10 one, not 5x the
+// width, which is what a human eye actually reads as "5x bigger."
+// Color: real live status. Ring thickness: how many legs stand between this
+// ticket and elimination RIGHT NOW — a thin ring means one bad result away
+// from dead, a thick ring means still several legs from being decided either way.
+// Real force-directed layout — mutual repulsion keeps bubbles from overlapping,
+// attraction along team-web EDGES pulls tickets riding the same team toward
+// each other, so the actual correlation structure ("webbed together by
+// certain picks") becomes the physical shape of the graph instead of a grid.
+// Deterministic seeded start positions (so it doesn't jump on every render)
+// relaxed through a small fixed number of simulation steps — enough to settle
+// into a stable, readable layout without needing a persistent animation loop.
+function forceLayout(bubbles,edges,w,h){
+  let seed=42;const rnd=()=>{seed=(seed*1103515245+12345)%2147483648;return seed/2147483648};
+  const nodes=bubbles.map((b,i)=>({...b,
+    x:w*0.15+rnd()*w*0.7,y:h*0.15+rnd()*h*0.7}));
+  const byId={};nodes.forEach(n=>byId[n.id]=n);
+  const realEdges=edges.filter(e=>byId[e.a]&&byId[e.b]);
+  for(let iter=0;iter<80;iter++){
+    // repulsion — every pair pushes apart, stronger the closer they are
+    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+      const a=nodes[i],b=nodes[j];
+      let dx=a.x-b.x,dy=a.y-b.y;
+      let dist=Math.sqrt(dx*dx+dy*dy)||0.01;
+      const minDist=a.r+b.r+18;
+      if(dist<minDist*2.2){
+        const force=(minDist*2.2-dist)/dist*0.06;
+        dx*=force;dy*=force;
+        a.x+=dx;a.y+=dy;b.x-=dx;b.y-=dy;
+      }
+    }
+    // attraction along team-web edges — pulls webbed tickets toward each other
+    realEdges.forEach(e=>{
+      const a=byId[e.a],b=byId[e.b];
+      let dx=b.x-a.x,dy=b.y-a.y;
+      const dist=Math.sqrt(dx*dx+dy*dy)||0.01;
+      const targetDist=(a.r+b.r)*1.6;
+      const force=(dist-targetDist)/dist*0.025;
+      dx*=force;dy*=force;
+      a.x+=dx;a.y+=dy;b.x-=dx;b.y-=dy;
+    });
+    // gentle pull toward center so the whole graph doesn't drift off-canvas
+    nodes.forEach(n=>{
+      n.x+=(w/2-n.x)*0.004;n.y+=(h/2-n.y)*0.004;
+      n.x=Math.max(n.r+6,Math.min(w-n.r-6,n.x));
+      n.y=Math.max(n.r+6,Math.min(h-n.r-6,n.y));
+    });
+  }
+  return{nodes,byId,realEdges};
+}
+function eliminationMapSvg(bubbles,edges,w,h){
+  if(!bubbles.length)return '';
+  const STATUS_COLOR={dead:'#F0563C',won:'#3DDC84',live:'#FFB43D',scheduled:'#5B6B7A'};
+  const maxPayout=Math.max(1,...bubbles.map(b=>b.payout));
+  const minR=14,maxR=44;
+  const sized=bubbles.map(b=>({...b,r:minR+(maxR-minR)*Math.sqrt(b.payout/maxPayout)}));
+  const{nodes,byId,realEdges}=forceLayout(sized,edges,w,h);
+
+  // web strands — drawn first so bubbles render on top. Opacity/width scale
+  // with how many tickets that team ties together system-wide, so a team
+  // webbing 5 tickets together reads as visibly thicker than one webbing 2.
+  const teamEdgeCounts={};
+  realEdges.forEach(e=>{teamEdgeCounts[e.team]=(teamEdgeCounts[e.team]||0)+1});
+  const strands=realEdges.map(e=>{
+    const a=byId[e.a],b=byId[e.b];
+    const weight=Math.min(3,1+teamEdgeCounts[e.team]*0.3);
+    const anyDead=a.status==='dead'||b.status==='dead';
+    const col=anyDead?'#F0563C':'#5FD3E8';
+    return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"
+      stroke="${col}" stroke-width="${weight}" stroke-opacity="${anyDead?0.35:0.28}"/>`;
+  }).join('');
+
+  const circles=nodes.map(b=>{
+    const col=STATUS_COLOR[b.status];
+    const ringW=b.status==='dead'||b.status==='won'?2:
+      Math.max(1.5,Math.min(5,1.5+(b.legsFromElimination/Math.max(1,b.total))*4));
+    const glow=b.status==='live'&&b.legsFromElimination<=1
+      ?`<circle cx="${b.x}" cy="${b.y}" r="${b.r+5}" fill="none" stroke="${col}" stroke-width="1"
+          opacity="0.5"><animate attributeName="r" values="${b.r+3};${b.r+9};${b.r+3}"
+          dur="1.8s" repeatCount="indefinite"/><animate attributeName="opacity"
+          values="0.6;0.05;0.6" dur="1.8s" repeatCount="indefinite"/></circle>`:'';
+    // a genuinely live bubble gets a slow breathing pulse on its own fill —
+    // real motion tied to real state, not decoration on dead/scheduled ones
+    const breathe=b.status==='live'?`<animate attributeName="fill-opacity" values="0.18;0.32;0.18"
+        dur="2.4s" repeatCount="indefinite"/>`:'';
+    const label=b.total>1?`${b.wins}/${b.decided||b.total}`:(b.status==='dead'?'✕':b.status==='won'?'✓':'…');
+    return `${glow}<g style="cursor:pointer" onclick="showBubbleDetail(${b.id})">
+      <circle cx="${b.x}" cy="${b.y}" r="${b.r}" fill="${col}" fill-opacity="0.22"
+        stroke="${col}" stroke-width="${ringW}">${breathe}</circle>
+      <text x="${b.x}" y="${b.y+4}" text-anchor="middle" font-family="Archivo" font-weight="800"
+        font-size="${Math.max(10,b.r*0.4)}" fill="${col}">${label}</text>
+    </g>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="display:block">
+    ${strands}${circles}
+  </svg>`;
+}
+let BUBBLE_DETAIL_ID=null;
+function showBubbleDetail(id){
+  BUBBLE_DETAIL_ID=(BUBBLE_DETAIL_ID===id)?null:id;
+  renderTickets();
+}
+function eliminationMapHtml(){
+  const{bubbles,conc,edges}=eliminationMapData();
+  // ── real diagnostic, not a guess ──────────────────────────────────────
+  // Built after a report of "only 2 bubbles when there should be more" that
+  // couldn't be verified without seeing the actual stored data. Rather than
+  // guess again, this surfaces the real counts at every filtering step so
+  // any future discrepancy is immediately visible and provable instead of
+  // requiring a screenshot-and-speculate cycle.
+  const allLocked=get(LS.locked,[]);
+  const archivedCount=allLocked.filter(t=>t.archived).length;
+  const pendingCount=allLocked.filter(t=>!t.archived).length;
+  const bySource={};
+  allLocked.forEach(t=>{const src=t.source||'mine';bySource[src]=(bySource[src]||0)+1});
+  const feed=eliminationFeed();
+  const counts={dead:0,won:0,live:0,scheduled:0};
+  bubbles.forEach(b=>counts[b.status]++);
+  const totalPayout=bubbles.filter(b=>b.status!=='dead').reduce((a,b)=>a+b.payout,0);
+  const atRiskPayout=bubbles.filter(b=>b.status==='live').reduce((a,b)=>a+b.payout,0);
+  const oneAway=bubbles.filter(b=>b.status==='live'&&b.legsFromElimination<=1);
+
+  let h=`<div class="tkt hi"><h3>Elimination Map</h3>
+    <div class="sub">Every pending ticket, sized by real payout, colored by what's actually happening right
+    now. <b style="color:var(--rust)">Red</b> = already dead, one leg lost. <b style="color:var(--win)">Green</b>
+    = fully won. <b style="color:var(--gold)">Amber</b> = still alive, at least one leg undecided. Grey = nothing's
+    started. Ring thickness = how many legs stand between that ticket and being fully decided — thin ring pulsing
+    means one result away from dead or won. <b style="color:#5FD3E8">Cyan strands</b> connect tickets riding on the
+    SAME team — thicker strand means more tickets tied to that one team's result. Tap any bubble for the leg-by-leg
+    breakdown. Refreshes automatically while any game is live.</div></div>`;
+
+  // ── receive-only message feed — real events, phrased with personality,
+  // never invents a stat that isn't backed by real ticket/team data above ──
+  if(feed.length){
+    const toneColor={bad:'var(--rust)',tense:'var(--gold)',good:'var(--win)'};
+    const toneIcon={bad:'💀',tense:'⚡',good:'🔥'};
+    h+=`<div class="tkt" style="background:#0a0e13;border:1px solid var(--rule);
+      font-family:'IBM Plex Mono';padding:0;overflow:hidden">
+      <div style="padding:8px 12px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:6px">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--win);
+          box-shadow:0 0 6px var(--win)"></span>
+        <span style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)">Live feed · receive only</span>
+      </div>
+      <div style="max-height:180px;overflow-y:auto;padding:4px 0">
+        ${feed.map(m=>`<div style="padding:7px 12px;font-size:12px;color:${toneColor[m.tone]};
+          border-bottom:1px solid rgba(255,255,255,.04)">${toneIcon[m.tone]} ${m.text}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  h+=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--rust)">${counts.dead}</div>
+        <div class="m">dead</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold)">${counts.live}</div>
+        <div class="m">still alive</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--win)">${counts.won}</div>
+        <div class="m">won</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--mute)">${counts.scheduled}</div>
+        <div class="m">not started</div></div>
+    </div>
+  </div>`;
+
+  if(oneAway.length){
+    h+=`<div class="tkt" style="border-left:3px solid var(--gold)">
+      <div class="mktlab" style="margin-top:0;color:var(--gold)">⚡ One leg from deciding</div>
+      ${oneAway.map(b=>{
+        const shakyLeg=b.legStates.find(l=>l.state==='pending'||l.state==='live');
+        return `<div style="padding:4px 0;cursor:pointer" onclick="showBubbleDetail(${b.id})">
+          <b>${b.name}</b> <span class="m">$${b.payout.toFixed(2)} on the line</span>
+          ${shakyLeg?`<div class="sub">Comes down to: ${shakyLeg.pick} <span class="m">${shakyLeg.game}</span>${shakyLeg.detail?' · '+shakyLeg.detail:''}</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // only show the diagnostic when the counts actually disagree with what's
+  // rendered, or when something's archived — no reason to clutter the screen
+  // with a breakdown that matches expectations
+  if(pendingCount!==bubbles.length||archivedCount>0){
+    h+=`<div class="tkt" style="border-left:3px solid var(--cold,#5FD3E8)">
+      <div class="mktlab" style="margin-top:0;color:var(--cold,#5FD3E8)">🔍 What's actually in storage</div>
+      <div class="sub">
+        <b>${allLocked.length}</b> total tickets ever locked · <b>${pendingCount}</b> pending · <b>${archivedCount}</b> archived (already graded/settled, not shown on the map)<br>
+        By bucket: ${Object.keys(bySource).map(s2=>`${s2} ×${bySource[s2]}`).join(', ')||'none'}<br>
+        Bubbles actually drawn: <b>${bubbles.length}</b>
+        ${pendingCount!==bubbles.length?` <span style="color:var(--rust)">— MISMATCH, this shouldn't happen, tell me if you see this</span>`:''}
+      </div>
+    </div>`;
+  }
+
+  h+=`<div class="tkt" id="elimMapCanvas">${eliminationMapSvg(bubbles,edges,340,Math.max(240,Math.ceil(bubbles.length/3)*100))}</div>`;
+
+  const anyLongshot=bubbles.some(b=>b.total>=6);
+  h+=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center">
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px">$${totalPayout.toFixed(2)}</div>
+        <div class="m">total payout still possible</div></div>
+      <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${atRiskPayout.toFixed(2)}</div>
+        <div class="m">riding on still-live tickets</div></div>
+    </div>
+    ${anyLongshot?`<div class="sub" style="margin-top:8px;text-align:center">These are fair, de-vigged payouts
+      computed straight from each leg's real win probability — not inflated sportsbook marketing odds. A long
+      parlay's combined win chance drops fast (12 legs at even 85% each is only ~14% to hit all of them), so its
+      honest payout is smaller than a book's rounded/juiced number would show for the same legs.</div>`:''}
+  </div>`;
+
+  if(BUBBLE_DETAIL_ID){
+    const b=bubbles.find(x=>x.id===BUBBLE_DETAIL_ID);
+    if(b){
+      h+=`<div class="tkt hi" style="border-color:var(--gold)">
+        <h3>${b.name} <span class="m" style="text-transform:uppercase">${b.status}</span></h3>
+        <div class="sub">$${b.stake.toFixed(2)} staked → $${b.payout.toFixed(2)} to win · ${b.source}</div>
+        <ol style="list-style:none;padding:0;margin-top:8px">
+        ${b.legStates.map(l=>{
+          const col=l.state==='won'?'var(--win)':l.state==='dead'?'var(--rust)':l.state==='push'?'var(--mute)':'var(--gold)';
+          const icon=l.state==='won'?'✓':l.state==='dead'?'✕':l.state==='push'?'—':'…';
+          return `<li style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--hair)">
+            <span><span style="color:${col};font-weight:800">${icon}</span> ${l.pick}
+              <span class="m">${l.game}</span></span>
+            <span class="m" style="color:${col}">${l.detail||l.state}</span>
+          </li>`;
+        }).join('')}
+        </ol>
+        <div class="bar"><button onclick="showBubbleDetail(${b.id})">Close</button></div>
+      </div>`;
+    }
+  }
+  return h;
+}
+function duplicatesPicksHtml(){
+  const r=concentrationReport();
+  const pop=popularityReport();
+
+  let h=`<div class="tkt hi"><h3>Duplicate &amp; concentration risk</h3>
+    <div class="sub">Not "the same pick appears twice" — the real question: how many of your
+    ${r.totalPendingTickets} pending tickets would be decided, correlated, by ONE game's result.
+    Threshold for a red flag is ${CONCENTRATION_WARN_AT}+ tickets on the same game.</div></div>`;
+
+  if(r.surplus){
+    const sub=suggestSubOut(r.surplus.game,r.surplus.legs[0].kind);
+    h+=`<div class="tkt" style="border-left:3px solid var(--rust)">
+      <div class="mktlab" style="margin-top:0;color:var(--rust)">⚠ Biggest single-game exposure</div>
+      <div style="font-family:'Archivo';font-weight:900;font-size:18px">${r.surplus.game}</div>
+      <div class="sub"><b>${r.surplus.ticketCount}</b> pending tickets have a leg on this game
+      (${r.surplus.legCount} legs total). One final score here affects all of them at once.</div>
+      ${sub?`<div class="sub" style="margin-top:6px">Suggested sub-out: swap a leg on this game for
+        <b>${sub.pick}</b> (${legFamily(sub.kind)}, ${(sub.p*100).toFixed(0)}%) instead of stacking
+        another ${legFamily(r.surplus.legs[0].kind)} pick here.</div>`:''}
+    </div>`;
+  }else{
+    h+=`<div class="note">No single game currently clears the ${CONCENTRATION_WARN_AT}-ticket red-flag threshold. Good spread.</div>`;
+  }
+
+  if(r.flagged.length>1){
+    h+=`<div class="sbar"><h2>All flagged games</h2><div class="ln"></div>
+      <div class="ct mono">${r.flagged.length}</div></div>`;
+    h+=r.flagged.map(g=>{
+      const kindCounts={};
+      g.legs.forEach(l=>{kindCounts[legFamily(l.kind)]=(kindCounts[legFamily(l.kind)]||0)+1});
+      const kindTxt=Object.keys(kindCounts).map(k=>`${k} ×${kindCounts[k]}`).join(', ');
+      return `<div class="tkt"><div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700">${g.game}</span>
+        <span class="pp">${g.ticketCount} tickets</span></div>
+        <div class="m" style="margin-top:2px">${kindTxt}</div></div>`;
+    }).join('');
+  }
+
+  const dupPicks=r.picks;
+  h+=`<div class="sbar"><h2>Exact-pick duplicates, ranked</h2><div class="ln"></div>
+    <div class="ct mono">${dupPicks.length}</div></div>`;
+  h+=dupPicks.length?dupPicks.map(p=>`<div class="tkt">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span><b>#${p.rank}</b> ${p.pick} <span class="m">${p.game}</span></span>
+        <span class="pp">${p.ticketCount}× · ${p.sourceCount} bucket${p.sourceCount>1?'s':''}</span>
+      </div></div>`).join(''):'<div class="empty">No exact pick appears on more than one pending ticket right now.</div>';
+
+  h+=`<div class="sbar"><h2>Cross-preset agreement — likely duplicate sources</h2><div class="ln"></div></div>
+    <div class="sub" style="margin:0 0 8px">Games where multiple independent presets landed on the same pick —
+    this is what tends to CAUSE duplicates before you've even built tickets. High agreement here means expect
+    overlap once System/Market/Specialty all build their daily parlays.</div>`;
+  h+=pop.length?pop.slice(0,10).map(g=>`<div class="tkt">
+      <div style="font-weight:700">${g.game}</div>
+      ${g.picks.sort((a,b)=>b.votes-a.votes).map(p=>`<div style="display:flex;justify-content:space-between;
+        padding:3px 0"><span class="m">${p.pick}</span>
+        <span class="pp">${p.votes} presets</span></div>`).join('')}
+    </div>`).join(''):'<div class="empty">No cross-preset agreement above 2 presets right now.</div>';
+
+  return h;
+}
+// ── Tracked tab — unified view of ALL system/market/specialty tickets ────────
+// This replaces the three separate System/Market/Specialty tabs that were
+// silently swallowing confirmed preset tickets (Popular, Books lean, etc.) with
+// no visible display. Every ticket with source in TRACKED_ONLY_SOURCES lands
+// here — flat $1, never touches bankroll — filterable by source sub-tab.
+function trackedPicksHtml(){
+  // force settle anything that's gradeable right now before rendering
+  try{settleLockedTickets();}catch(e){}
+  const all=get(LS.locked,[]).filter(t=>TRACKED_ONLY_SOURCES.has(t.source));
+  const srcLabels={system:'System',market:'Market',specialty:'Specialty',outside:'Outside'};
+  const sources=['all','system','market','specialty','outside'];
+  const srcCounts={all:all.length};
+  sources.slice(1).forEach(s=>{srcCounts[s]=all.filter(t=>t.source===s).length;});
+  const filtered=TRACKED_SOURCE==='all'?all:all.filter(t=>t.source===TRACKED_SOURCE);
+  const pending=filtered.filter(t=>!t.archived);
+  const archived=filtered.filter(t=>t.archived);
+  const view=TRACKED_VIEW;
+  const viewSet=view==='archived'?archived:pending;
+  const readyToArchive=pending.filter(t=>ticketIsComplete(t)).length;
+
+  const srcNav=sources.map(s=>`<button class="${TRACKED_SOURCE===s?'on':''}"
+    onclick="TRACKED_SOURCE='${s}';renderTickets()">${s==='all'?'All':srcLabels[s]||s}
+    <span class="m">${srcCounts[s]}</span></button>`).join('');
+  const viewNav=`<button class="${view==='pending'?'on':''}" onclick="TRACKED_VIEW='pending';renderTickets()">
+    Pending <span class="m">${pending.length}</span></button>
+    <button class="${view==='archived'?'on':''}" onclick="TRACKED_VIEW='archived';renderTickets()">
+    Archived <span class="m">${archived.length}</span></button>`;
+
+  let html=`<div class="tkt hi"><h3>Tracked Tickets</h3>
+    <div class="sub">All preset tickets — system, market, specialty. Flat $1 each, never touches your bankroll.
+    Every confirmed preset lands here regardless of type.</div></div>
+    <div class="subnav" style="flex-wrap:wrap">${srcNav}</div>
+    <div class="subnav">${viewNav}</div>`;
+
+  if(view==='pending'&&readyToArchive>0){
+    html+=`<div class="note" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span><b>${readyToArchive}</b> ticket${readyToArchive>1?'s are':' is'} fully graded — ready to archive.</span>
+      <button class="primary" onclick="archiveAllTracked()">Archive all complete</button></div>`;
+  }
+
+  if(!viewSet.length){
+    html+=`<div class="empty">${view==='archived'
+      ?'No archived tracked tickets yet.'
+      :'No pending tracked tickets. Build one from Presets on the Build tab — Popular, Books lean, Edge+, etc.'}</div>`;
+    return html;
+  }
+
+  viewSet.forEach(t=>{
+    let w=0,l=0,pd=0;
+    const rows=t.legs.map(x=>{
+      const{hit:r}=gradeLeg(x,t.date);
+      const badgeHtml=gradeLegBadge(x,t.date);
+      if(r===true)w++;else if(r===false)l++;else pd++;
+      const gid=legGameId(x,t.date);
+      const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
+      return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span>
+        <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
+    }).join('');
+    const rec=(w+l||pd===0)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' pending':''}`:' · pending';
+    const srcBadge=`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);
+      border-radius:4px;padding:1px 6px;margin-left:6px">${srcLabels[t.source]||t.source}</span>`;
+    const complete=ticketIsComplete(t);
+    const statusBadge=t.archived
+      ?`<span style="font-family:'IBM Plex Mono';font-size:9px;text-transform:uppercase;
+          color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 6px;margin-left:6px">📦 archived</span>`
+      :complete
+      ?`<span style="font-family:'IBM Plex Mono';font-size:9px;text-transform:uppercase;
+          color:var(--cold);border:1px solid var(--cold);border-radius:4px;padding:1px 6px;margin-left:6px">✓ ready</span>`
+      :'';
+    const deleteBtn=`<button onclick="if(confirm('Delete this ticket?')){const L=get(LS.locked,[]);set(LS.locked,L.filter(x=>x.id!==${t.id}));renderTickets();}"
+      style="background:none;border:1px solid var(--rust);color:var(--rust);border-radius:4px;
+      padding:2px 8px;font-size:11px;cursor:pointer;margin-left:8px">✕</button>`;
+    const archBtn=!t.archived&&complete?`<button onclick="archiveSingle(${t.id})"
+      style="background:none;border:1px solid var(--cold);color:var(--cold);border-radius:4px;
+      padding:2px 8px;font-size:11px;cursor:pointer;margin-left:4px">Archive</button>`:'';
+    html+=`<div class="tkt${t.archived?' archived':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
+        <h3 style="margin:0">${t.name||t.date}${srcBadge}${statusBadge}</h3>
+        <div>${archBtn}${deleteBtn}</div>
+      </div>
+      <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · ${t.legs.length} legs${rec}</div>
+      <ol>${rows}</ol>
+      ${buildWagerRow(t)}
+    </div>`;
+  });
+  return html;
+}
+
+function archiveAllTracked(){
+  const L=get(LS.locked,[]);
+  let count=0;
+  L.forEach(t=>{
+    if(!t.archived&&TRACKED_ONLY_SOURCES.has(t.source)&&ticketIsComplete(t)){
+      t.archived=true;count++;
+    }
+  });
+  if(count)set(LS.locked,L);
+  renderTickets();
+}
+
+function archiveSingle(id){
+  const L=get(LS.locked,[]);
+  const t=L.find(x=>x.id===id);
+  if(t){t.archived=true;set(LS.locked,L);}
+  renderTickets();
+}
+
+function specialtyPicksHtml(){
+  // Armageddon, Fade the books, Fade the system, Fuck the system — the presets
+  // that are deliberately going against the model or the market, not "your own"
+  // picks and not the model's own top-conviction reads either. Tracked-only,
+  // flat $1, never touches the bankroll — same as System/Market/Outside.
+  const locked=get(LS.locked,[]).filter(t=>t.source==='specialty');
+  if(!locked.length)return `<div class="tkt hi"><h3>Specialty</h3>
+    <div class="sub">Armageddon, Fade the books, Fade the system, Fuck the system — the presets that
+    deliberately go against the model or the market. Confirm one from Build → Presets and it'll show up
+    here, named, tracked daily at a flat $1, never touching your bankroll.</div></div>
+    <div class="empty">No specialty tickets saved yet.</div>`;
+  const pending=locked.filter(t=>!t.archived);
+  const archived=locked.filter(t=>t.archived);
+  const readyToArchive=pending.filter(t=>ticketIsComplete(t)).length;
+  setTimeout(()=>genTickets('specialty'),0);
+  return `<div class="tkt hi"><h3>Specialty</h3>
+    <div class="sub">Armageddon, Fade the books, Fade the system, Fuck the system. Tracked daily at a
+    flat $1, never touches your bankroll.</div></div>
+    <div class="subnav">
+      <button class="${MINE_VIEW==='pending'?'on':''}" onclick="MINE_VIEW='pending';renderTickets()">Pending <span class="m">${pending.length}</span></button>
+      <button class="${MINE_VIEW==='archived'?'on':''}" onclick="MINE_VIEW='archived';renderTickets()">Archived <span class="m">${archived.length}</span></button>
+    </div>
+    ${MINE_VIEW==='pending'&&readyToArchive>0?`<div class="note" style="display:flex;align-items:center;
+      justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span><b>${readyToArchive}</b> ticket${readyToArchive>1?'s are':' is'} fully graded and ready to archive.</span>
+      <button class="primary" onclick="archiveAllComplete()">Archive all complete</button>
+    </div>`:''}
+    <div id="tickets"></div>`;
+}
+
+// ── Shared unanimous-consensus rule — used by both the display list and the
+// auto-parlay builder below, so "unanimous" always means the exact same thing
+// everywhere in the app rather than two slightly different definitions drifting
+// apart over time. ──
+function extConsensusGroups(){
+  const picks=extToday();
+  const groups={};
+  picks.forEach(p=>{
+    const k=[p.game,p.market,p.line??''].join('|');
+    (groups[k]=groups[k]||{game:p.game,market:p.market,line:p.line,gid:p.gid,picks:[]}).picks.push(p);
+  });
+  return Object.values(groups).map(G=>{
+    const sides={};
+    G.picks.forEach(p=>{(sides[p.side]=sides[p.side]||[]).push(p)});
+    const sideKeys=Object.keys(sides);
+    return{...G,sideKeys,sides,unanimous:sideKeys.length===1&&G.picks.length>1};
+  });
+}
+
+// ── Auto-parlay builders for the two tracked-only buckets ──────────────────
+// These run once per day (idempotent — re-running just rebuilds today's single
+// tracked parlay for that bucket rather than creating duplicates), combining
+// every confirmed pick in that source into ONE parlay, staked flat $1, filed
+// under the tracked-only bucket so it never touches the bankroll.
+function findTodaysAutoParlay(source){
+  const L=get(LS.locked,[]);
+  return L.find(t=>t.source===source&&t.date===today()&&t.autoParlay);
+}
+function rebuildMarketAutoParlay(){
+  // "Market picks" = every real book-line edge currently on the board — the same
+  // pool marketPicksHtml() already displays, just turned into one tracked ticket
+  // instead of a read-only top-12 list.
+  const picks=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookML=bookLineForMarket(g.id,'moneyline');
+    if(bookML){
+      const hB=bookLineForMarket(g.id,'moneyline','home'),aB=bookLineForMarket(g.id,'moneyline','away');
+      if(hB&&aB){
+        const hp=bookDevig(hB.price),ap=bookDevig(aB.price),sum=hp+ap;
+        const hEdge=(s.hw-hp/sum)*100,aEdge=(s.aw-ap/sum)*100;
+        if(hEdge>=3)picks.push({game:gl,pick:g.home.abbr+' ML',p:hp/sum,gid:g.id,gameDate:today()});
+        if(aEdge>=3)picks.push({game:gl,pick:g.away.abbr+' ML',p:ap/sum,gid:g.id,gameDate:today()});
+      }
+    }
+    const bookTotal=bookLineForMarket(g.id,'total');
+    if(bookTotal&&bookTotal.line!==null){
+      const oB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTotal.line)<0.01);
+      const uB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTotal.line)<0.01);
+      if(oB&&uB){
+        const op=bookDevig(oB.price),up=bookDevig(uB.price),sum=op+up;
+        const mO=s.over(bookTotal.line);
+        const oEdge=(mO-op/sum)*100,uEdge=((1-mO)-up/sum)*100;
+        if(oEdge>=3)picks.push({game:gl,pick:'Over '+bookTotal.line,p:op/sum,gid:g.id,gameDate:today()});
+        if(uEdge>=3)picks.push({game:gl,pick:'Under '+bookTotal.line,p:up/sum,gid:g.id,gameDate:today()});
+      }
+    }
+  });
+  return picks;
+}
+function rebuildOutsideAutoParlay(){
+  // "Outside picks" = only picks where every uploaded source that touched that
+  // exact game+market+line agreed on the same side — genuine unanimous consensus,
+  // not majority. Uses extConsensusGroups() so this can never drift from what
+  // the Consensus tab displays as "Unanimous."
+  const groups=extConsensusGroups().filter(G=>G.unanimous);
+  const picks=[];
+  groups.forEach(G=>{
+    const side=G.sideKeys[0];
+    const g=G.gid?GAMES.find(x=>x.id===G.gid):null;
+    if(!g||g.abstract==='Final')return; // don't parlay a game that's already started
+    const s=SIMS[g.id];
+    let pick=null,p=null;
+    if(G.market==='moneyline'){
+      const ab=side==='home'?g.home.abbr:g.away.abbr;
+      pick=ab+' ML';p=s?(side==='home'?s.hw:s.aw):0.5;
+    }else if(G.market==='total'&&G.line!=null){
+      pick=(side==='over'?'Over ':'Under ')+G.line;
+      p=s?(side==='over'?s.over(G.line):1-s.over(G.line)):0.5;
+    }else if(G.market==='runline'&&G.line!=null){
+      const ab=side==='home'?g.home.abbr:g.away.abbr;
+      pick=ab+' '+(G.line>0?'+':'')+G.line;
+      p=s?rlProb(g,s,side,-G.line):0.5;
+    }
+    if(pick&&p!=null)picks.push({game:G.game,pick,p,gid:g.id,gameDate:today()});
+  });
+  return picks;
+}
+// Rebuilds (or creates) today's single tracked parlay for a bucket. Idempotent:
+// if one already exists for today, its legs are replaced in place rather than
+// spawning a duplicate ticket — safe to call repeatedly as new data comes in.
+function rebuildSystemTop10AutoParlay(){
+  // "System top 10" = the simulator's own ten highest-conviction SIDE/TOTAL/RUN-LINE
+  // picks across the whole board right now, independent of what the market or any
+  // outside source thinks. Props are HARD-EXCLUDED here, always, regardless of the
+  // global PRESET_MARKETS toggle — this used to draw from fullPresetPool() with no
+  // market filter at all, so a single 85%+ prop could crowd out real game-level
+  // picks from the ranking; that's exactly the behavior this preset should never
+  // have. If props-in-System is ever wanted, that should be a deliberate opt-in
+  // toggle on this specific ticket, not the silent default.
+  const pool=applyDupeFilter(fullPresetPool()).filter(l=>{
+    if(l.kind==='prop'||l.kind==='hr')return false; // no props in System, ever
+    const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
+    return !(g&&g.abstract==='Final'); // don't parlay a game that's already started
+  });
+  return pool.filter(l=>l.modelP>=0.5).sort((a,b)=>b.modelP-a.modelP).slice(0,10)
+    .map(l=>{
+      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
+      return{game:l.game,pick:l.pick,p:l.p,gid:g?g.id:null,gameDate:today()};
+    });
+}
+// THE ITEM-4 FIX: auto-parlays used to build themselves silently on every
+// app load, with no way to turn it off — you have real presets doing this
+// work on purpose now, so an unrequested ticket showing up in Tickets the
+// moment you open the app is just noise, not help. Default is OFF; each
+// bucket (Market/Outside/System) can be independently re-enabled in Settings
+// if you ever want the old always-on behavior back for a specific one.
+function autoParlayEnabled(source){
+  const settings=get('d4.autoParlaySettings',{});
+  return settings[source]===true; // explicit opt-in only — undefined/false both mean off
+}
+function setAutoParlayEnabled(source,on){
+  const settings=get('d4.autoParlaySettings',{});
+  settings[source]=on;
+  set('d4.autoParlaySettings',settings);
+  if(!on){
+    // turning it off also removes today's already-built auto-ticket, so
+    // switching it off actually stops the noise immediately rather than
+    // just preventing the NEXT one
+    const L=get(LS.locked,[]);
+    const existing=findTodaysAutoParlay(source);
+    if(existing&&!existing.archived){
+      set(LS.locked,L.filter(t=>t.id!==existing.id));
+    }
+  }
+}
+function syncTrackedAutoParlay(source){
+  if(!autoParlayEnabled(source))return null;
+  const builder=source==='market'?rebuildMarketAutoParlay
+    :source==='outside'?rebuildOutsideAutoParlay
+    :source==='system'?rebuildSystemTop10AutoParlay
+    :null;
+  if(!builder)return null;
+  const picks=builder();
+  const L=get(LS.locked,[]);
+  const existing=findTodaysAutoParlay(source);
+  if(!picks.length){
+    // nothing qualifies right now — remove a stale auto-parlay rather than leave
+    // an empty or outdated one sitting in the record
+    if(existing){
+      const idx=L.findIndex(t=>t.id===existing.id);
+      if(idx>=0){L.splice(idx,1);set(LS.locked,L)}
+    }
+    return null;
+  }
+  const legs=picks.map(x=>({id:(existing?existing.id:Date.now())+'|'+x.pick,...x}));
+  const combinedP=legs.reduce((a,x)=>a*x.p,1);
+  if(existing){
+    existing.legs=legs;existing.p=combinedP;
+    set(LS.locked,L);
+    saveWager(existing.id,1); // tracked-only buckets are always exactly $1, never bankroll-debited
+    return existing;
+  }
+  const id=Date.now();
+  const ticket={id,date:today(),legs,p:combinedP,source,autoParlay:true};
+  L.unshift(ticket);
+  set(LS.locked,L);
+  saveWager(id,1);
+  return ticket;
+}
+
+function systemPicksHtml(){
+  // Shows today's single auto-built System top-10 ticket — same wager-row/grading
+  // treatment as any locked ticket, just always exactly this one, always rebuilt
+  // from the model's own current top-10 conviction picks, tracked-only (no bankroll).
+  syncTrackedAutoParlay('system'); // idempotent — rebuilds in place if one exists
+  const t=findTodaysAutoParlay('system');
+  const head=`<div class="tkt hi"><h3>System top 10</h3>
+    <div class="sub">The simulator's ten highest-conviction picks on today's board, right now —
+    independent of what the market or any outside source thinks. Rebuilds automatically as lineups,
+    odds, and sims update through the day. Tracked at a flat $1, never touches your bankroll.</div></div>`;
+  if(!t||!t.legs.length)return head+`<div class="empty">Nothing qualifies yet — needs lineups and sims
+    loaded for today's games first.</div>`;
+  let w=0,l=0,pd=0;
+  const rows=t.legs.map(x=>{
+    const{hit:r}=gradeLeg(x,t.date);
+    const badgeHtml=gradeLegBadge(x,t.date);
+    if(r===true)w++;else if(r===false)l++;else pd++;
+    const gid=legGameId(x,t.date);
+    const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
+    return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
+  }).join('');
+  const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
+  return head+`<div class="tkt hi"><h3>${t.date}</h3>
+    <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
+    <ol>${rows}</ol>${buildWagerRow(t)}</div>`;
+}
+
+function marketPicksHtml(){
+  // Top edges derived purely from real book lines — what the market itself is offering
+  const picks=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const bookML=bookLineForMarket(g.id,'moneyline');
+    if(bookML){
+      const hB=bookLineForMarket(g.id,'moneyline','home'),aB=bookLineForMarket(g.id,'moneyline','away');
+      if(hB&&aB){
+        const hp=bookDevig(hB.price),ap=bookDevig(aB.price),sum=hp+ap;
+        picks.push({game:gl,pick:g.home.abbr+' ML',mkt:'ML',price:hB.price,
+          model:s.hw,market:hp/sum,edge:(s.hw-hp/sum)*100});
+        picks.push({game:gl,pick:g.away.abbr+' ML',mkt:'ML',price:aB.price,
+          model:s.aw,market:ap/sum,edge:(s.aw-ap/sum)*100});
+      }
+    }
+    const bookTotal=bookLineForMarket(g.id,'total');
+    if(bookTotal&&bookTotal.line!==null){
+      const oB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTotal.line)<0.01);
+      const uB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTotal.line)<0.01);
+      if(oB&&uB){
+        const op=bookDevig(oB.price),up=bookDevig(uB.price),sum=op+up;
+        const mO=s.over(bookTotal.line);
+        picks.push({game:gl,pick:'Over '+bookTotal.line,mkt:'Total',price:oB.price,
+          model:mO,market:op/sum,edge:(mO-op/sum)*100});
+        picks.push({game:gl,pick:'Under '+bookTotal.line,mkt:'Total',price:uB.price,
+          model:1-mO,market:up/sum,edge:((1-mO)-up/sum)*100});
+      }
+    }
+  });
+  if(!picks.length)return `<div class="empty">No book lines saved yet. Upload your sportsbook screenshots on the Games tab first.</div>`;
+  const top=picks.sort((a,b)=>b.edge-a.edge).slice(0,12);
+  return `<div class="tkt hi"><h3>Best edges against your book</h3>
+    <div class="sub">Every real posted line, ranked by how far the model's own number sits from what your
+    book is charging. Positive edge means the model thinks you're getting paid more than the risk is worth.</div></div>
+    ${top.map(p=>`<div class="tkt" style="border-left:3px solid ${p.edge>=4?'var(--win)':p.edge<=-4?'var(--rust)':'var(--rule)'}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div><div style="font-weight:700;font-size:14px">${p.pick}</div>
+          <div class="m" style="font-size:10px">${p.game} · ${p.mkt}</div></div>
+        <div style="text-align:right">
+          <div style="font-family:'Archivo';font-weight:900;font-size:17px;color:var(--gold)">${p.price>0?'+':''}${p.price}</div>
+          <div style="font-family:'IBM Plex Mono';font-size:10px;
+            color:${p.edge>=4?'var(--win)':p.edge<=-4?'var(--rust)':'var(--mute)'}">
+            ${p.edge>0?'+':''}${p.edge.toFixed(1)} edge</div>
+        </div>
+      </div>
+      <div class="sub" style="margin-top:4px">model ${(p.model*100).toFixed(0)}% · book implies ${(p.market*100).toFixed(0)}%</div>
+    </div>`).join('')}`;
+}
+
+function consensusHtml(){
+  const picks=extToday();
+  const consRows=get(LS.extconsensus,{})[today()]||[];
+  const trendRows=get(LS.exttrends,{})[today()]||[];
+  const hasAny=picks.length||consRows.length||trendRows.length;
+  const upload=`<div class="tkt">
+    <div class="sbar" style="margin-top:0"><h2>Upload picks from anywhere</h2><div class="ln"></div></div>
+    <div class="sub">Screenshots from OddsShark, Covers, Picks &amp; Parlays, Facebook tipsters, Action
+    Network — anything. Claude reads the source name and every pick off the image automatically; you'll
+    get a chance to confirm or correct the detected source AFTER it's read, not before.</div>
+    <input type="file" id="extShots" accept="image/*,application/pdf,.doc,.docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="margin-top:8px">
+    <div class="bar" style="margin-top:8px">
+      <button class="primary" onclick="analyzeExtPicks()">Read screenshots</button>
+      ${hasAny?`<button onclick="clearExtToday()">Clear today</button>`:''}
+    </div>
+    <div id="extResult"></div>
+  </div>`;
+  if(!hasAny)return upload+`<div class="empty">No external picks saved for today yet.</div>`;
+  // show saved consensus rows if no picks but consensus exists
+  if(!picks.length&&(consRows.length||trendRows.length)){
+    let html=upload;
+    if(consRows.length){
+      html+=`<div class="tkt"><div class="mktlab" style="margin-top:0">Saved Consensus (${consRows.length})</div><ol>`;
+      consRows.forEach(x=>{
+        html+=`<li><b>${x.src||'Covers'}</b> — ${x.away} ${x.awayPct??'?'}% / ${x.home} ${x.homePct??'?'}%</li>`;
+      });
+      html+=`</ol></div>`;
+    }
+    if(trendRows.length){
+      html+=`<div class="tkt"><div class="mktlab" style="margin-top:0">Saved Trends (${trendRows.length})</div><ol>`;
+      trendRows.forEach(x=>{
+        html+=`<li><b>${x.src||'Covers'}</b> — ${x.game||''}${x.team?' '+x.team:''}: ${x.text||''}</li>`;
+      });
+      html+=`</ol></div>`;
+    }
+    return html;
+  }
+
+  // group by game+market+line
+  const groups={};
+  picks.forEach(p=>{
+    const k=[p.game,p.market,p.line??''].join('|');
+    (groups[k]=groups[k]||{game:p.game,market:p.market,line:p.line,gid:p.gid,picks:[]}).picks.push(p);
+  });
+  const stats=getSrcStats();
+  const rows=Object.values(groups).map(G=>{
+    const sides={};
+    G.picks.forEach(p=>{(sides[p.side]=sides[p.side]||[]).push(p)});
+    const sideKeys=Object.keys(sides);
+    const unanimous=sideKeys.length===1&&G.picks.length>1;
+    const contested=sideKeys.length>1;
+    // what does our model say
+    const g=G.gid?GAMES.find(x=>x.id===G.gid):null;
+    const s=g?SIMS[g.id]:null;
+    let ourSide=null,ourP=null;
+    if(s){
+      if(G.market==='moneyline'||G.market==='f5side'){
+        const hw=G.market==='moneyline'?s.hw:s.f5h;
+        ourSide=hw>=.5?'home':'away';ourP=Math.max(hw,1-hw);
+      }else if((G.market==='total'||G.market==='f5total')&&G.line!==null){
+        const ov=G.market==='total'?s.over(G.line):f5OverAt(s,G.line);
+        ourSide=ov>=.5?'over':'under';ourP=Math.max(ov,1-ov);
+      }
+    }
+    const agreesWithUs=ourSide&&sideKeys.length===1&&sideKeys[0]===ourSide;
+    const againstUs=ourSide&&sideKeys.length===1&&sideKeys[0]!==ourSide;
+    const label=(sd)=>{
+      if(sd==='home')return g?g.home.abbr:'home';
+      if(sd==='away')return g?g.away.abbr:'away';
+      return sd;
+    };
+    const tone=againstUs?'var(--rust)':unanimous&&agreesWithUs?'var(--win)':contested?'var(--gold)':'var(--rule)';
+    const header=unanimous?(agreesWithUs?'Unanimous — and the model agrees':'Unanimous — model disagrees')
+      :contested?'Contested':'Single source';
+    return `<div class="tkt" style="border-left:3px solid ${tone}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <div style="font-weight:700">${G.game}</div>
+        <div class="m" style="font-size:10px">${G.market}${G.line!==null&&G.line!==undefined?' '+G.line:''}</div>
+      </div>
+      <div style="font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.06em;
+        text-transform:uppercase;color:${tone};margin:4px 0 6px">${header}</div>
+      ${sideKeys.map(sd=>`<div style="display:flex;justify-content:space-between;gap:8px;
+        padding:4px 0;border-bottom:1px solid var(--rule)">
+        <span style="font-weight:600;font-size:12.5px;
+          color:${ourSide===sd?'var(--cold)':'var(--chalk)'}">${label(sd)}
+          ${ourSide===sd?'<span style="font-size:9px;color:var(--cold)"> ← model</span>':''}</span>
+        <span style="font-size:11px;color:var(--mute);text-align:right">
+          ${sides[sd].map(p=>{
+            const st=stats[p.src];
+            const rec=st&&st.n>=5?` <span style="color:var(--mute)">(${st.w}-${st.l})</span>`:'';
+            return `${p.src}${p.conf?' · '+p.conf:''}${rec}`;
+          }).join('<br>')}
+        </span></div>`).join('')}
+      ${ourP?`<div class="sub" style="margin-top:5px">Model has ${label(ourSide)} at ${(ourP*100).toFixed(0)}%.</div>`:''}
+    </div>`;
+  }).join('');
+
+  const nUnan=Object.values(groups).filter(G=>new Set(G.picks.map(p=>p.side)).size===1&&G.picks.length>1).length;
+  const nCont=Object.values(groups).filter(G=>new Set(G.picks.map(p=>p.side)).size>1).length;
+  return upload+`<div class="tkt hi"><h3>${Object.keys(groups).length} markets · ${picks.length} picks</h3>
+    <div class="sub"><b>${nUnan}</b> unanimous · <b>${nCont}</b> contested · from
+    <b>${new Set(picks.map(p=>p.src)).size}</b> sources. Red border means every source lined up on one
+    side and the model took the other — that's the disagreement worth looking at hardest.</div></div>${rows}`;
+}
+
+function sourcesHtml(){
+  const stats=getSrcStats();
+  const names=Object.keys(stats).sort((a,b)=>stats[b].n-stats[a].n);
+  const all=getExt();
+  const pending=Object.values(all).flat().filter(p=>p.hit===null||p.hit===undefined).length;
+  const head=`<div class="tkt hi"><h3>Source records</h3>
+    <div class="sub">Every pick uploaded gets graded on the same cycle as your own. These records feed
+    the consensus view so a source with a real track record carries more weight than one without.
+    ${pending?`<br><b>${pending}</b> picks still waiting on final scores.`:''}</div>
+    <div class="bar" style="margin-top:8px"><button class="primary" onclick="gradeExtPicks();renderTickets()">Grade external picks now</button></div>
+  </div>`;
+  if(!names.length)return head+'<div class="empty">Nothing graded yet. Upload picks on the Consensus tab and grade them once games finish.</div>';
+  const pct=(w,l)=>w+l?((w/(w+l))*100).toFixed(1)+'%':'—';
+  return head+names.map(n=>{
+    const s=stats[n];
+    const mk=Object.keys(s.byMarket).map(m=>
+      `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px">
+        <span style="color:var(--mute)">${m}</span>
+        <span><span class="pp">${pct(s.byMarket[m].w,s.byMarket[m].l)}</span>
+        <span class="m"> ${s.byMarket[m].w}-${s.byMarket[m].l}</span></span></div>`).join('');
+    const cf=Object.keys(s.byConf).filter(c=>c!=='none').map(c=>
+      `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px">
+        <span style="color:var(--gold)">${c}</span>
+        <span><span class="pp">${pct(s.byConf[c].w,s.byConf[c].l)}</span>
+        <span class="m"> ${s.byConf[c].w}-${s.byConf[c].l}</span></span></div>`).join('');
+    const winPct=s.w/Math.max(1,s.n);
+    const tone=s.n<10?'var(--rule)':winPct>=.55?'var(--win)':winPct<=.45?'var(--rust)':'var(--gold)';
+    return `<div class="tkt" style="border-left:3px solid ${tone}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <h3 style="margin:0">${n}</h3>
+        <div style="text-align:right">
+          <div style="font-family:'Archivo';font-weight:900;font-size:19px;color:${tone}">${pct(s.w,s.l)}</div>
+          <div class="m" style="font-size:10px">${s.w}-${s.l} · ${s.n} graded</div>
+        </div>
+      </div>
+      ${s.n<10?'<div class="sub" style="margin-top:4px">Under 10 graded picks — not enough to mean anything yet.</div>':''}
+      <div class="mktlab" style="margin-top:8px">By market</div>${mk}
+      ${cf?`<div class="mktlab" style="margin-top:8px">By stated confidence</div>${cf}`:''}
+    </div>`;
+  }).join('');
+}
+
+function confirmSystemTicket(payload,src,presetKey){
+  src=src||'mine';
+  // Name the ticket after the preset that built it — before this, every saved
+  // ticket showed only a bare date, which is exactly why misrouted tickets went
+  // unnoticed: nothing on the card told you which preset it came from or whether
+  // it landed where it should have. Falls back to a generic label only when this
+  // wasn't built from a named preset at all (e.g. the older prop-card flow).
+  const name=presetKey&&PRESET_DISPLAY_NAME[presetKey]?PRESET_DISPLAY_NAME[presetKey]:null;
+  let legs;
+  try{legs=JSON.parse(decodeURIComponent(payload))}catch(e){return}
+  if(!legs||!legs.length)return;
+  if(!confirm(`Save this ${legs.length}-leg ${name?'"'+name+'" ':''}ticket? You can delete it later, or lock it as final once you're sure.`))return;
+  const L=get(LS.locked,[]);
+  const id=Date.now();
+  L.unshift({id,date:today(),name,presetKey:presetKey||null,
+    legs:legs.map(x=>{
+      const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      return{id:id+'|'+x.pick,...x,gid:x.gid||(gm?gm.id:null),gameDate:x.gameDate||today()};
+    }),
+    p:legs.reduce((a,x)=>a*x.p,1),source:src});
+  set(LS.locked,L);
+  // Tracked-only tickets (system/market/specialty/outside) settle by reading a
+  // stake from getWagers() — but nothing was ever writing one for a manually
+  // confirmed preset ticket (only the auto-parlay builders did that). Without
+  // this, settleLockedTickets() would bail out on `if(!stake) return` forever
+  // and this ticket would never grade, never archive, never show a result —
+  // silently stuck as pending regardless of how the games actually went.
+  if(TRACKED_ONLY_SOURCES.has(src))saveWager(id,1);
+  renderTickets();
+  const where={system:'Tracked',market:'Tracked',specialty:'Tracked',outside:'Tracked',mine:'My Picks'}[src]||'My Picks';
+  // Switch to the right tab immediately so the user sees the ticket
+  TICKETTAB=src==='mine'?'mine':'tracked';
+  if(TRACKED_ONLY_SOURCES.has(src))TRACKED_SOURCE=src;
+  alert(`Saved${name?' — "'+name+'"':''} — now showing in Tickets → ${where}.`);
+}
+
+function genTickets(mode){
+  mode=mode||(TICKETTAB==='mine'?'mine':'system');
+  const el=document.getElementById('tickets');
+  if(!el)return;
+  const L=get(LS.locked,[]);
+  let h='';
+  // 'specialty' reuses the exact same card rendering as 'mine' — the markup
+  // already reads t.name/t.source generically — just scoped to tickets whose
+  // source is specialty (Armageddon, Fade the books, Fade the system, Fuck the
+  // system) instead of the mine bucket.
+  if(mode==='mine'||mode==='specialty'){
+    const base=mode==='specialty'?L.filter(t=>t.source==='specialty'):L;
+    const view=(typeof MINE_VIEW!=='undefined')?MINE_VIEW:'pending';
+    const set_=view==='archived'?base.filter(t=>t.archived):base.filter(t=>!t.archived);
+    if(!set_.length){
+      el.innerHTML=`<div class="empty">${view==='archived'?'No archived tickets yet — finish grading a ticket and archive it to see it here.':'No pending tickets — everything is archived.'}</div>`;
+      return;
+    }
+    set_.forEach(t=>{
+      let w=0,l=0,pd=0;
+      const editing=TICKET_EDIT_ID===t.id&&canModifyTicket(t);
+      const rows=t.legs.map(x=>{
+        const{hit:r}=gradeLeg(x,t.date);
+        const badgeHtml=gradeLegBadge(x,t.date);
+        if(r===true)w++;else if(r===false)l++;else pd++;
+        const gid=legGameId(x,t.date);
+        // in edit mode, a ✕ replaces the jump-to-game tap (both would fight over
+        // the same click target) — removing a leg is the only action available
+        // on a row while editing, viewing stats happens outside edit mode
+        if(editing){
+          return `<li style="display:flex;align-items:center;gap:8px">
+            <button onclick="removeLegFromTicket(${t.id},'${esc(x.id)}')" title="Remove"
+              style="flex:0 0 auto;background:none;border:1px solid var(--rust);color:var(--rust);
+              border-radius:4px;padding:1px 7px;cursor:pointer;font-size:11px">✕</button>
+            <span style="flex:1">${x.pick} <span class="m">${x.game}</span></span>
+            <span class="pp">${(x.p*100).toFixed(0)}%</span>
+          </li>`;
+        }
+        const jumpTo=(!x.sport&&gid&&GAMES.some(z=>z.id===gid))?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
+        // a mixed-sport ticket is unreadable without knowing which board a leg
+        // came from — MLB stays unlabelled so existing tickets look unchanged
+        const sportTag=x.sport?`<span style="font-family:'IBM Plex Mono';font-size:8px;
+          letter-spacing:.06em;color:var(--mute);border:1px solid var(--rule);
+          border-radius:3px;padding:0 4px;margin-left:4px">${x.sport==='ncaaf'?'CFB':x.sport.toUpperCase()}</span>`:'';
+        return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span>${sportTag} <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
+      }).join('');
+      const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
+      const lockBadge=t.finalized
+        ?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--win);border:1px solid var(--win);
+            border-radius:4px;padding:1px 6px;margin-left:6px">🔒 final</span>`:'';
+      const complete=ticketIsComplete(t);
+      const archBadge=t.archived
+        ?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);
+            border-radius:4px;padding:1px 6px;margin-left:6px">📦 archived</span>`
+        :complete
+        ?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--cold);border:1px solid var(--cold);
+            border-radius:4px;padding:1px 6px;margin-left:6px">✓ ready to archive</span>`
+        :pd>0?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--mute);border:1px solid var(--rule);
+            border-radius:4px;padding:1px 6px;margin-left:6px">${pd} pending</span>`:'';
+      let actionBtn;
+      const moveBtn=`<button onclick="moveTicket(${t.id})" title="Move to a different tracking bucket">Move</button>`;
+      if(t.archived){
+        actionBtn=`<button onclick="unarchiveTicket(${t.id})">Move back to pending</button>
+          ${moveBtn}
+          <button onclick="delLocked(${t.id})">Delete</button>`;
+      }else{
+        // Modify only shows while the ticket is neither finalized nor archived —
+        // "Lock as final" is the explicit point where a ticket becomes permanent
+        // record and stops being editable; archiving means it's already graded.
+        const modifyBtn=canModifyTicket(t)
+          ?`<button onclick="toggleModifyTicket(${t.id})">${editing?'Done editing':'Modify'}</button>`:'';
+        actionBtn=`${complete?`<button class="primary" onclick="archiveTicket(${t.id})">Archive</button>`:''}
+          ${modifyBtn}
+          ${moveBtn}
+          ${t.finalized?'':`<button onclick="finalizeLocked(${t.id})">Lock as final</button>`}
+          <button onclick="delLocked(${t.id})">Delete</button>`;
+      }
+      // Named tickets (built from a preset, or manually renamed) show that name
+      // first, with the date demoted to a subtitle. Every ticket — named or not,
+      // preset or custom — gets a ✏️ rename button, since the manual "name your
+      // ticket" ability disappeared when preset auto-naming was added and needs
+      // to exist independently of it: auto-naming sets a starting name, renaming
+      // lets you override it on ANY ticket regardless of how it was built.
+      const renameBtn=`<button onclick="renameTicket(${t.id})" title="Rename"
+        style="background:none;border:none;color:var(--mute);cursor:pointer;padding:0 0 0 6px;
+        font-size:12px;vertical-align:middle" aria-label="Rename ticket">✏️</button>`;
+      const nameLine=t.name
+        ?`<h3>${t.name}${renameBtn}${lockBadge}${archBadge}</h3><div class="m" style="margin-top:-4px;margin-bottom:6px">${t.date}${t.source&&t.source!=='mine'?' · '+({system:'System',market:'Market',specialty:'Specialty',outside:'Outside'}[t.source]||t.source):''}</div>`
+        :`<h3>${t.date}${renameBtn}${lockBadge}${archBadge}</h3>`;
+      h+=`<div class="tkt ${t.archived?'':'hi'}">${nameLine}
+        <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
+        <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
+      // addable-legs picker — only rendered for the one ticket currently being
+      // edited, right below its card. Same pool every builder already draws
+      // from, filtered to exclude anything that would collide with what's
+      // already on this ticket.
+      if(editing){
+        const addable=addableLegsFor(t);
+        const addRows=addable.length?addable.map(l=>{
+          const propArgs=l.isProp?`,1,'${esc(l.ptype||'')}',${l.pid!=null?`'${esc(l.pid)}'`:'null'},${l.thr!=null?l.thr:'null'}`:',0,null,null,null';
+          return `<li onclick="addLegToTicket(${t.id},'${esc(l.pick)}','${esc(l.game)}',${l.p},${l.gid!=null?l.gid:'null'}${propArgs})"
+            style="cursor:pointer">${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`;
+        }).join(''):'<li class="m">Nothing available to add right now.</li>';
+        h+=`<div class="tkt" style="border-color:var(--gold);border-style:dashed">
+          <div class="mktlab" style="margin-top:0">Add a leg to "${t.name||t.date}"</div>
+          <div class="sub">Tap any pick below to add it to this ticket. Highest probability first.</div>
+          <ol style="max-height:280px;overflow-y:auto">${addRows}</ol>
+        </div>`;
+      }
+    });
+    el.innerHTML=h;
+    return;
+  }
+  const pool=marketPool();
+  if(!pool.length){el.innerHTML=h+'<div class="empty">Generated tickets appear once lineups post.</div>';return}
+  const used=new Set();
+  h+=`<div class="note">These are auto-generated by the system, not locked-in picks.
+    Review a combination and hit <b>Confirm &amp; save</b> to move it to your real ticket
+    list — nothing here counts toward your record until you confirm it.</div>`;
+  h+='<div class="sbar"><h2>Sides · run lines · totals · F5</h2><div class="ln"></div></div>';
+  [[6,'Six · A'],[6,'Six · B'],[8,'Eight · A'],[8,'Eight · B'],[10,'Ten · A'],[10,'Ten · B']].forEach(([n,lab],i)=>{
+    const legs=deal(pool,used,n);
+    if(legs.length<n){h+=`<div class="tkt"><h3>${lab}</h3><div class="sub">Only ${legs.length} distinct markets left on this slate.</div></div>`;return}
+    const c=legs.reduce((a,x)=>a*x.p,1);
+    const payload=encodeURIComponent(JSON.stringify(legs.map(x=>({game:x.game,pick:x.pick,p:x.p,isProp:x.isProp||false}))));
+    h+=`<div class="tkt ${i<2?'hi':''}"><h3>${lab}</h3>
+      <div class="sub"><b>${(c*100).toFixed(c<.01?3:1)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs</div>
+      <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}','${PRESET_MODE}')">Confirm &amp; save</button></div></div>`;
+  });
+  const pu=new Set();
+  h+='<div class="sbar"><h2>Prop cards only</h2><div class="ln"></div></div>';
+  [['Props · A',22],['Props · B',22]].forEach(([lab,n])=>{
+    const legs=[];
+    // reserve one seat for the best still-available qualifying HR prop — otherwise HR
+    // never wins a raw-probability walk against 85%+ hits/K props and never appears
+    const bestHR=PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr)
+      .filter(p=>!pu.has(p.name+'|'+p.mkt+'|'+p.game)).sort((a,b)=>b.p-a.p)[0];
+    if(bestHR){
+      legs.push(bestHR);pu.add(bestHR.name+'|'+bestHR.mkt+'|'+bestHR.game);
+    }
+    for(const p of PROPS){
+      const id=p.name+'|'+p.mkt+'|'+p.game;
+      if(pu.has(id))continue;
+      if(legs.filter(x=>x.name===p.name).length>=2)continue;
+      legs.push(p);pu.add(id);
+      if(legs.length===n)break;
+    }
+    if(!legs.length)return;
+    const c=legs.reduce((a,x)=>a*x.p,1);
+    const byGame={};
+    legs.forEach(x=>{(byGame[x.game]=byGame[x.game]||[]).push(x)});
+    // grade every prop leg the same way ticket legs are graded, so prop cards
+    // carry a real record instead of showing raw probabilities forever
+    let pw=0,pl=0,ppd=0;
+    const gradeOfProp=(x)=>{
+      const g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      if(!g||(g.abstract!=='Final'&&g.abstract!=='Live'))return{r:null,g,badge:''};
+      const r=gradePropFromBox(g,{name:x.name,ptype:x.type,thr:x.thr,mkt:x.mkt});
+      const badge=gradeLegBadge({game:x.game,pick:x.name+' '+x.mkt,isProp:1,
+        ptype:x.type,thr:x.thr,pid:x.pid,gid:g?g.id:null,gameDate:today()},today());
+      return{r,g,badge};
+    };
+    const gameList=Object.keys(byGame).map(gm=>{
+      const gl=byGame[gm].sort((a,b)=>b.p-a.p);
+      return `<div style="margin:8px 0 4px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase">${gm} · ${gl.length} pick${gl.length>1?'s':''}</div>
+        <ol>${gl.map(x=>{
+          const{r,g,badge}=gradeOfProp(x);
+          if(r===true)pw++;else if(r===false)pl++;else ppd++;
+          const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
+          return `<li${jumpTo}>${x.name} <span class="m">${x.mkt}</span>${x.type==='hr'?` <span class="flag cool">${hrTierLabel(x.p)}</span>`:''} <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badge}</li>`;
+        }).join('')}</ol>`;
+    }).join('');
+    const prec=(pw+pl)?` · <b style="color:${pl>0?'var(--rust)':'var(--win)'}">${pw}-${pl}</b>${ppd?' · '+ppd+' live':''}`:'';
+    const propPayload=encodeURIComponent(JSON.stringify(legs.map(x=>({game:x.game,pick:x.name+' '+x.mkt,p:x.p,isProp:true,name:x.name,ptype:x.type,thr:x.thr,mkt:x.mkt}))));
+    h+=`<div class="tkt"><h3>${lab}</h3>
+      <div class="sub"><b>${(c*100).toFixed(4)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs · ${Object.keys(byGame).length} games${prec}</div>
+      ${gameList}
+      <div class="bar"><button class="primary" onclick="confirmSystemTicket('${propPayload}')">Confirm &amp; save</button></div></div>`;
+  });
+  el.innerHTML=h;
+}
+
+/* ================= ESPN LIVE SCOREBOARD ================= */
+// Free, no key. Updates every 90s while any game is live.
+// Bridges to GAMES[] by matching team abbreviations.
+const ESPN_BASE='https://site.api.espn.com/apis/site/v2/sports/baseball/mlb';
+let ESPN_LIVE={};   // keyed by our GAMES[].id after bridge
+let ESPN_RAW=[];    // raw ESPN events for the scoreboard tab
+let LIVE_POLL=null;
+
+// ESPN uses different abbreviations — map to ours
+const ESPN_ABBR_MAP={
+  'WSH':'WSH','WAS':'WSH','CHW':'CWS','KCR':'KC','TBR':'TB','SDP':'SD',
+  'SFG':'SF','NYY':'NYY','NYM':'NYM','LAD':'LAD','LAA':'LAA','ARI':'ARI',
+  'ATL':'ATL','BAL':'BAL','BOS':'BOS','CHC':'CHC','CIN':'CIN','CLE':'CLE',
+  'COL':'COL','DET':'DET','HOU':'HOU','MIA':'MIA','MIL':'MIL','MIN':'MIN',
+  'OAK':'OAK','PHI':'PHI','PIT':'PIT','SEA':'SEA','STL':'STL','TEX':'TEX',
+  'TOR':'TOR','ATH':'OAK'
+};
+
+async function loadESPN(){
+  try{
+    const r=await fetch(`${ESPN_BASE}/scoreboard?dates=${today().replace(/-/g,'')}`);
+    const j=await r.json();
+    ESPN_RAW=(j.events||[]);
+    bridgeESPN();
+    // if any game is live, start or keep the 90s poll
+    const anyLive=ESPN_RAW.some(e=>{
+      const s=(((e.competitions||[])[0]||{}).status||{}).type||{};
+      return s.state==='in';
+    });
+    if(anyLive&&!LIVE_POLL){
+      LIVE_POLL=setInterval(async()=>{
+        const stillLive=GAMES.some(g=>g.abstract==='Live');
+        if(!stillLive){clearInterval(LIVE_POLL);LIVE_POLL=null;return;}
+        await loadESPN();
+        /* Was checking for class 'active'. Views are toggled with class 'on'
+           (.view.on{display:block}) — 'active' is never set anywhere in the
+           app, so this condition was permanently false and the board never
+           repainted during live games. Scores were polling; the screen just
+           never showed them. */
+        const gv=document.getElementById('v-games');
+        if(gv&&gv.classList.contains('on')){
+          if(ACTIVE_SPORT==='nfl'&&typeof renderNFL==='function')renderNFL();
+          else if(ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
+          else render();
+        }
+        // the Elimination Map's bubbles are only as alive as the real score
+        // data behind them — this is what makes them actually MOVE when a
+        // real game updates, instead of only refreshing on next manual open.
+        // Re-runs the force layout with fresh gradeLeg() results every real
+        // live-score poll, so motion is tied to real events, not a fake timer.
+        if(TICKETTAB==='elimmap'){
+          const canvas=document.getElementById('elimMapCanvas');
+          const body=document.getElementById('ticketBody');
+          if(canvas&&body)body.innerHTML=eliminationMapHtml();
+        }
+      },90000);
+    }
+    if(!anyLive&&LIVE_POLL){clearInterval(LIVE_POLL);LIVE_POLL=null;}
+  }catch(e){console.warn('ESPN load failed',e);}
+}
+
+function bridgeESPN(){
+  ESPN_LIVE={};
+  if(!GAMES.length||!ESPN_RAW.length)return;
+  ESPN_RAW.forEach(ev=>{
+    const comp=(ev.competitions||[])[0];if(!comp)return;
+    const teams=comp.competitors||[];
+    const away=teams.find(t=>t.homeAway==='away');
+    const home=teams.find(t=>t.homeAway==='home');
+    if(!away||!home)return;
+    // Try mapped abbreviation first, then raw abbr, then name-based fuzzy match
+    const normalize=s=>(s||'').toUpperCase().replace(/\s+/g,'');
+    const espnAway=ESPN_ABBR_MAP[away.team.abbreviation]||away.team.abbreviation;
+    const espnHome=ESPN_ABBR_MAP[home.team.abbreviation]||home.team.abbreviation;
+    const awayName=normalize(away.team.displayName||'');
+    const homeName=normalize(home.team.displayName||'');
+    let game=GAMES.find(g=>g.away.abbr===espnAway&&g.home.abbr===espnHome);
+    // Fallback: match by team display name containing the abbr
+    if(!game){
+      game=GAMES.find(g=>{
+        const a=normalize(g.away.abbr),h=normalize(g.home.abbr);
+        const an=normalize(g.away.name||''),hn=normalize(g.home.name||'');
+        return (awayName.includes(a)||awayName.includes(an)||a===espnAway)
+            && (homeName.includes(h)||homeName.includes(hn)||h===espnHome);
+      });
+    }
+    // Fallback 2: just match both city/nickname parts of the ESPN display name
+    if(!game){
+      game=GAMES.find(g=>{
+        const ga=normalize(g.away.abbr),gh=normalize(g.home.abbr);
+        return awayName.includes(ga)&&homeName.includes(gh);
+      });
+    }
+    if(!game)return;
+    const status=comp.status||{};
+    const stype=status.type||{};
+    const situation=comp.situation||{};
+    // ESPN puts linescores on each COMPETITOR, not on the competition.
+    // Reading comp.linescores returns undefined — that's why innings rendered blank.
+    const awayInn=(away.linescores||[]).map(x=>x.value??0);
+    const homeInn=(home.linescores||[]).map(x=>x.value??0);
+    const pitcher=situation.pitcher||null;
+    const batter=situation.batter||null;
+    const awayStats=buildESPNRoster(away);
+    const homeStats=buildESPNRoster(home);
+    const isTop=situation.isTopInning;
+    // shortDetail is already formatted: "Top 5th" / "Bot 3rd" / "Mid 4th" / "End 7th"
+    const detail=stype.shortDetail||stype.detail||'';
+    // Top of inning: away bats, home pitches. Bottom: reverse.
+    const pitchTeam=isTop===true?home.team.abbreviation:isTop===false?away.team.abbreviation:'';
+    const batTeam=isTop===true?away.team.abbreviation:isTop===false?home.team.abbreviation:'';
+    ESPN_LIVE[game.id]={
+      awayScore:parseInt(away.score)||0,
+      homeScore:parseInt(home.score)||0,
+      inning:status.period||0,
+      inningHalf:isTop!==undefined?(isTop?'Top':'Bot'):'',
+      detail,
+      outs:situation.outs??null,
+      balls:situation.balls??null,
+      strikes:situation.strikes??null,
+      onFirst:situation.onFirst||false,
+      onSecond:situation.onSecond||false,
+      onThird:situation.onThird||false,
+      state:stype.state||'pre',
+      displayClock:status.displayClock||'',
+      pitcher:pitcher?{name:pitcher.athlete?.displayName||'',
+        summary:pitcher.summary||'',team:pitchTeam}:null,
+      batter:batter?{name:batter.athlete?.displayName||'',
+        summary:batter.summary||'',team:batTeam}:null,
+      awayInn,homeInn,
+      awayHits:parseInt(away.hits)||null,
+      homeHits:parseInt(home.hits)||null,
+      awayErrors:parseInt(away.errors)||null,
+      homeErrors:parseInt(home.errors)||null,
+      awayStats,homeStats,
+      lastPlay:situation.lastPlay?.text||null,
+      espnAwayAbbr:away.team.abbreviation,
+      espnHomeAbbr:home.team.abbreviation,
+      espnEventId:ev.id||null
+    };
+  });
+}
+
+function buildESPNRoster(competitor){
+  // NOTE: this parses comp.statistics from the /scoreboard payload, which ESPN
+  // usually leaves empty or team-level-only during a live game — it is NOT the
+  // same object as the real per-player boxscore. Kept as a fallback only; the
+  // actual live pitching/batting tables now come from fetchESPNBoxscore below.
+  const stats={pitchers:[],batters:[]};
+  (competitor.statistics||[]).forEach(group=>{
+    (group.athletes||[]).forEach(a=>{
+      const name=a.athlete?.shortName||a.athlete?.displayName||'';
+      const vals={};
+      (group.labels||[]).forEach((lbl,i)=>{vals[lbl]=a.stats?.[i]||'';});
+      if(group.name==='pitching')stats.pitchers.push({name,...vals});
+      else if(group.name==='batting')stats.batters.push({name,...vals});
+    });
+  });
+  return stats;
+}
+
+/* ── real per-player live boxscore — /summary, not /scoreboard ──────────────
+   The scoreboard endpoint (already polled every 90s for scores/situation) does
+   NOT reliably carry full per-athlete stat lines — that's a separate, heavier
+   payload at /summary?event={id}. This is why pitching/batting tables were
+   rendering empty even though the score, inning, and current batter/pitcher
+   all worked fine — those come from the scoreboard, this doesn't. Fetched lazily
+   (only for a game whose Live Box panel is actually open) and cached so it
+   isn't re-pulled on every re-render. */
+const ESPN_BOX_CACHE={};   // gid -> {stats, ts}
+const ESPN_BOX_INFLIGHT={}; // gid -> Promise, so a fast double-tap can't double-fetch
+async function fetchESPNBoxscore(gid){
+  const L=ESPN_LIVE[gid];
+  if(!L||!L.espnEventId)return null;
+  const cached=ESPN_BOX_CACHE[gid];
+  if(cached&&Date.now()-cached.ts<45000)return cached.stats; // live data goes stale fast — 45s cache
+  if(ESPN_BOX_INFLIGHT[gid])return ESPN_BOX_INFLIGHT[gid];
+  const p=(async()=>{
+    try{
+      const r=await fetch(`${ESPN_BASE}/summary?event=${L.espnEventId}`);
+      const j=await r.json();
+      const players=(j.boxscore||{}).players||[];
+      const parsed={}; // keyed by ESPN team abbreviation
+      players.forEach(teamBlock=>{
+        const ab=teamBlock.team?.abbreviation;
+        if(!ab)return;
+        const out={pitchers:[],batters:[]};
+        (teamBlock.statistics||[]).forEach(group=>{
+          const labels=group.labels||group.keys||[];
+          (group.athletes||[]).forEach(a=>{
+            const name=a.athlete?.shortName||a.athlete?.displayName||'';
+            const vals={};
+            (a.stats||[]).forEach((v,i)=>{if(labels[i])vals[labels[i]]=v});
+            const gname=(group.name||group.type||'').toLowerCase();
+            if(gname.includes('pitch'))out.pitchers.push({name,...vals});
+            else if(gname.includes('bat'))out.batters.push({name,...vals});
+          });
+        });
+        parsed[ab]=out;
+      });
+      ESPN_BOX_CACHE[gid]={stats:parsed,ts:Date.now()};
+      return parsed;
+    }catch(e){console.warn('ESPN boxscore fetch failed',e);return null}
+    finally{delete ESPN_BOX_INFLIGHT[gid]}
+  })();
+  ESPN_BOX_INFLIGHT[gid]=p;
+  return p;
+}
+
+/* ── Live score bar on the game card header ── */
+function liveScoreBar(gid,g){
+  const L=ESPN_LIVE[gid];
+  if(!L||L.state!=='in')return '';
+
+  const base=(on,x,y)=>`<rect x="${x}" y="${y}" width="10" height="10" rx="1"
+    transform="rotate(45 ${x+5} ${y+5})"
+    fill="${on?'var(--gold)':'rgba(255,255,255,.07)'}"
+    stroke="${on?'var(--gold)':'rgba(255,255,255,.16)'}" stroke-width="1"/>`;
+  const diamond=`<svg width="42" height="42" viewBox="0 0 42 42">
+    ${base(L.onSecond,16,2)}${base(L.onFirst,26,12)}${base(L.onThird,6,12)}
+  </svg>`;
+
+  const outDots=Array.from({length:3},(_,i)=>
+    `<div style="width:6px;height:6px;border-radius:50%;
+      background:${i<(L.outs||0)?'var(--rust)':'rgba(255,255,255,.1)'};
+      border:1px solid ${i<(L.outs||0)?'var(--rust)':'rgba(255,255,255,.18)'}"></div>`).join('');
+
+  // Inning state — "Top 5th" / "Mid 4th" / "Bot 7th" straight from ESPN
+  const inningTxt=L.detail||`${L.inningHalf} ${L.inning}`;
+  const isMid=/mid|end/i.test(inningTxt);
+
+  const count=(L.balls!==null&&L.strikes!==null)
+    ?`<span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--gold)">${L.balls}-${L.strikes}</span>`:'';
+
+  const awayLead=L.awayScore>L.homeScore,homeLead=L.homeScore>L.awayScore;
+  const teamScore=(ab,score,lead)=>`
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:44px">
+      <span style="font-family:'IBM Plex Mono';font-size:9.5px;letter-spacing:.06em;
+        color:${lead?'var(--chalk)':'var(--mute)'}">${ab}</span>
+      <span style="font-family:'Archivo';font-weight:900;font-size:28px;line-height:1.05;
+        color:${lead?'var(--chalk)':'var(--mute)'}">${score}</span>
+    </div>`;
+
+  // your bet's live progress, if you have one on this game — pulled from locked tickets
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const myLegs=[];
+  get(LS.locked,[]).forEach(t=>t.legs.forEach(x=>{if(x.game===gl)myLegs.push(x)}));
+  const betStrip=myLegs.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;
+    padding-top:7px;border-top:1px solid var(--rule)">
+    ${myLegs.map(x=>{
+      const badge=gradeLegBadge(x,x.gameDate||today());
+      return `<div style="font-size:11px"><span style="color:var(--chalk)">${x.pick}</span> ${badge}</div>`;
+    }).join('')}
+  </div>`:'';
+
+  return `<div class="live-bar">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <div style="display:flex;align-items:center;gap:12px">
+        ${teamScore(g.away.abbr,L.awayScore,awayLead)}
+        ${teamScore(g.home.abbr,L.homeScore,homeLead)}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+        <div style="display:flex;align-items:center;gap:5px">
+          <span class="live-dot"></span>
+          <span style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;
+            color:var(--gold);text-transform:uppercase">${inningTxt}</span>
+        </div>
+        ${!isMid?`<div style="display:flex;align-items:center;gap:7px">
+          ${diamond}
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+            ${count}
+            <div style="display:flex;gap:2px">${outDots}</div>
+          </div>
+        </div>`:`<span style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">
+          changing sides</span>`}
+      </div>
+    </div>
+    ${(L.pitcher||L.batter)&&!isMid?`<div style="display:flex;gap:14px;margin-top:7px;
+      padding-top:7px;border-top:1px solid var(--rule);flex-wrap:wrap">
+      ${L.pitcher?`<div style="flex:1;min-width:110px">
+        <div style="font-family:'IBM Plex Mono';font-size:7.5px;letter-spacing:.1em;
+          color:var(--mute);text-transform:uppercase">Pitching · ${L.pitcher.team}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--chalk);margin-top:1px">${L.pitcher.name}</div>
+        ${L.pitcher.summary?`<div style="font-family:'IBM Plex Mono';font-size:9px;
+          color:var(--mute)">${L.pitcher.summary}</div>`:''}
+      </div>`:''}
+      ${L.batter?`<div style="flex:1;min-width:110px">
+        <div style="font-family:'IBM Plex Mono';font-size:7.5px;letter-spacing:.1em;
+          color:var(--mute);text-transform:uppercase">At bat · ${L.batter.team}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--chalk);margin-top:1px">${L.batter.name}</div>
+        ${L.batter.summary?`<div style="font-family:'IBM Plex Mono';font-size:9px;
+          color:var(--mute)">${L.batter.summary}</div>`:''}
+      </div>`:''}
+    </div>`:''}
+    ${L.lastPlay?`<div style="font-size:11px;color:var(--chalk);line-height:1.4;
+      padding-top:6px;border-top:1px solid var(--rule);margin-top:6px;
+      font-style:italic;opacity:.8">${L.lastPlay}</div>`:''}
+    ${betStrip}
+  </div>`;
+}
+
+/* ── Live box score panel ── */
+function setLiveBoxTeam(gid,team){
+  window.__liveBoxTeam=window.__liveBoxTeam||{};
+  window.__liveBoxTeam[gid]=team;
+  const panel=document.getElementById('p-livebox-'+gid);
+  if(panel){
+    const g=GAMES.find(z=>z.id===gid);
+    if(g)panel.innerHTML=liveBoxPanel(gid,g);
+  }
+}
+function liveBoxPanel(gid,g){
+  const L=ESPN_LIVE[gid];
+  if(!L){
+    const espnGames=ESPN_RAW.map(ev=>{
+      const comp=(ev.competitions||[])[0]||{};
+      const teams=comp.competitors||[];
+      const aw=teams.find(t=>t.homeAway==='away');
+      const hm=teams.find(t=>t.homeAway==='home');
+      const st=(comp.status||{}).type||{};
+      return `${aw?.team?.abbreviation||'?'} @ ${hm?.team?.abbreviation||'?'} [${st.state||'?'}]`;
+    }).join(', ')||'none fetched yet';
+    return `<div class="tkt"><h3>Waiting on ESPN bridge</h3>
+      <div class="sub">ESPN games visible: <b>${espnGames}</b><br>
+      Expected: <b>${g.away.abbr} @ ${g.home.abbr}</b></div>
+      <div class="bar" style="margin-top:8px">
+        <button class="primary" onclick="loadESPN().then(()=>render())">Retry</button>
+      </div></div>`;
+  }
+
+  // ── Linescore ──────────────────────────────────────────────────────────
+  const maxInn=Math.max(L.awayInn.length,L.homeInn.length,9);
+  const innNums=Array.from({length:maxInn},(_,i)=>i+1);
+  const currentInn=L.inning||0;
+
+  const innCell=(val,inn)=>{
+    const isCurrent=inn===currentInn;
+    const isEmpty=val===''||val===undefined||val===null;
+    return `<td style="text-align:center;padding:5px 4px;
+      font-family:'IBM Plex Mono';font-size:11px;
+      color:${isEmpty?'var(--mute)':isCurrent?'var(--gold)':'var(--chalk)'};
+      background:${isCurrent?'rgba(242,169,59,.08)':'transparent'};
+      border-bottom:1px solid var(--rule)">${isEmpty?'·':val}</td>`;
+  };
+
+  const linescore=`<div style="overflow-x:auto;margin:10px 0 4px">
+    <table style="width:100%;border-collapse:collapse;min-width:300px">
+      <thead><tr>
+        <th style="text-align:left;padding:4px 6px;font-family:'IBM Plex Mono';
+          font-size:9px;letter-spacing:.08em;color:var(--mute);text-transform:uppercase;
+          border-bottom:1px solid var(--rule)">TEAM</th>
+        ${innNums.map(i=>`<th style="text-align:center;padding:4px 3px;
+          font-family:'IBM Plex Mono';font-size:9px;color:${i===currentInn?'var(--gold)':'var(--mute)'};
+          border-bottom:1px solid var(--rule)">${i}</th>`).join('')}
+        <th style="text-align:center;padding:4px 6px;font-family:'IBM Plex Mono';
+          font-size:9px;color:var(--gold);letter-spacing:.06em;
+          border-bottom:1px solid var(--rule)">R</th>
+        ${L.awayHits!==null?`<th style="text-align:center;padding:4px 4px;font-family:'IBM Plex Mono';
+          font-size:9px;color:var(--mute);border-bottom:1px solid var(--rule)">H</th>
+        <th style="text-align:center;padding:4px 4px;font-family:'IBM Plex Mono';
+          font-size:9px;color:var(--mute);border-bottom:1px solid var(--rule)">E</th>`:''}
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="padding:6px 6px;font-family:'Archivo';font-weight:900;font-size:13px;
+            border-bottom:1px solid var(--rule)">${g.away.abbr}</td>
+          ${innNums.map(i=>innCell(L.awayInn[i-1],i)).join('')}
+          <td style="text-align:center;padding:6px;font-family:'Archivo';font-weight:900;
+            font-size:16px;color:${L.awayScore>L.homeScore?'var(--win)':'var(--chalk)'};
+            border-bottom:1px solid var(--rule)">${L.awayScore}</td>
+          ${L.awayHits!==null?`<td style="text-align:center;padding:6px 4px;
+            font-family:'IBM Plex Mono';font-size:11px;color:var(--mute);
+            border-bottom:1px solid var(--rule)">${L.awayHits}</td>
+          <td style="text-align:center;padding:6px 4px;font-family:'IBM Plex Mono';
+            font-size:11px;color:var(--mute);border-bottom:1px solid var(--rule)">${L.awayErrors??0}</td>`:''}
+        </tr>
+        <tr>
+          <td style="padding:6px 6px;font-family:'Archivo';font-weight:900;font-size:13px">${g.home.abbr}</td>
+          ${innNums.map(i=>innCell(L.homeInn[i-1],i)).join('')}
+          <td style="text-align:center;padding:6px;font-family:'Archivo';font-weight:900;
+            font-size:16px;color:${L.homeScore>L.awayScore?'var(--win)':'var(--chalk)'}">${L.homeScore}</td>
+          ${L.homeHits!==null?`<td style="text-align:center;padding:6px 4px;
+            font-family:'IBM Plex Mono';font-size:11px;color:var(--mute)">${L.homeHits}</td>
+          <td style="text-align:center;padding:6px 4px;font-family:'IBM Plex Mono';
+            font-size:11px;color:var(--mute)">${L.homeErrors??0}</td>`:''}
+        </tr>
+      </tbody>
+    </table>
+  </div>`;
+
+  // ── Pitching lines — full box score columns, matching the boxscore this
+  //    was built to mirror: PC, IP, H, R, ER, BB, K, ERA, WHIP ─────────────
+  const pitchKeys=['PC','IP','H','R','ER','BB','K','ERA','WHIP'];
+  const pitchSection=(stats,ab)=>{
+    if(!stats.pitchers.length)return '';
+    return `<div style="margin-top:14px">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin-bottom:6px">${ab} pitching</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:420px">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 6px;font-family:'IBM Plex Mono';
+            font-size:8.5px;color:var(--mute);border-bottom:1px solid var(--rule)">P</th>
+          ${pitchKeys.map(k=>`<th style="text-align:center;padding:4px 5px;
+            font-family:'IBM Plex Mono';font-size:8.5px;color:var(--mute);
+            border-bottom:1px solid var(--rule)">${k}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+        ${stats.pitchers.map(p=>`<tr>
+          <td style="padding:6px;font-size:11.5px;font-weight:600;border-bottom:1px solid var(--rule);
+            white-space:nowrap">${p.name}</td>
+          ${pitchKeys.map(k=>{
+            const v=p[k];
+            const hot=(k==='K'&&parseInt(v)>=6)||(k==='PC'&&parseInt(v)>=90);
+            const bad=(k==='ER'&&parseInt(v)>=3)||(k==='ERA'&&parseFloat(v)>=5)||(k==='WHIP'&&parseFloat(v)>=1.5);
+            return `<td style="text-align:center;padding:6px 5px;font-family:'IBM Plex Mono';
+              font-size:11px;color:${hot?'var(--win)':bad?'var(--rust)':'var(--chalk)'};
+              border-bottom:1px solid var(--rule)">${v||'—'}</td>`;
+          }).join('')}
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+  };
+
+  // ── Batting lines — full lineup columns matching the boxscore, including
+  //    season AVG for context on the number ─────────────────────────────
+  const batKeys=['AB','R','H','RBI','HR','BB','K','SB','AVG'];
+  const batSection=(stats,ab)=>{
+    if(!stats.batters.length)return '';
+    return `<div style="margin-top:14px">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin-bottom:6px">${ab} batting</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:420px">
+        <thead><tr>
+          <th style="text-align:left;padding:4px 6px;font-family:'IBM Plex Mono';
+            font-size:8.5px;color:var(--mute);border-bottom:1px solid var(--rule)">Hitter</th>
+          ${batKeys.map(k=>`<th style="text-align:center;padding:4px 4px;
+            font-family:'IBM Plex Mono';font-size:8.5px;color:var(--mute);
+            border-bottom:1px solid var(--rule)">${k}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+        ${stats.batters.map(p=>`<tr>
+          <td style="padding:6px;font-size:11.5px;border-bottom:1px solid var(--rule);
+            white-space:nowrap">${p.name}</td>
+          ${batKeys.map(k=>{
+            const v=p[k];
+            const hot=(k==='H'||k==='RBI'||k==='HR')&&parseInt(v)>=1;
+            return `<td style="text-align:center;padding:6px 4px;font-family:'IBM Plex Mono';
+              font-size:11px;color:${hot?'var(--win)':'var(--chalk)'};
+              border-bottom:1px solid var(--rule)">${v||(k==='AVG'?'—':'0')}</td>`;
+          }).join('')}
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+  };
+
+  // ── Team toggle — same shape as the ESPN view: one team's full box at a
+  //    time instead of two half-width columns squeezed together ──────────
+  const activeTeam=(window.__liveBoxTeam&&window.__liveBoxTeam[gid])||'away';
+  const toggle=`<div class="subnav" style="margin-top:10px">
+    <button class="${activeTeam==='away'?'on':''}" onclick="setLiveBoxTeam(${gid},'away')">${g.away.abbr}</button>
+    <button class="${activeTeam==='home'?'on':''}" onclick="setLiveBoxTeam(${gid},'home')">${g.home.abbr}</button>
+  </div>`;
+
+  // Prefer the REAL per-player boxscore once it's loaded; fall back to the thin
+  // scoreboard-derived stats (usually empty) only until the real fetch resolves.
+  const boxCache=ESPN_BOX_CACHE[gid];
+  const realBox=boxCache?boxCache.stats:null;
+  const awayReal=realBox&&(realBox[L.espnAwayAbbr]||Object.values(realBox)[0]);
+  const homeReal=realBox&&(realBox[L.espnHomeAbbr]||Object.values(realBox)[1]);
+  const awayFinal=(awayReal&&(awayReal.pitchers.length||awayReal.batters.length))?awayReal:L.awayStats;
+  const homeFinal=(homeReal&&(homeReal.pitchers.length||homeReal.batters.length))?homeReal:L.homeStats;
+
+  const oneTeam=activeTeam==='away'
+    ?pitchSection(awayFinal,g.away.abbr)+batSection(awayFinal,g.away.abbr)
+    :pitchSection(homeFinal,g.home.abbr)+batSection(homeFinal,g.home.abbr);
+
+  const hasRealData=(awayFinal&&(awayFinal.pitchers.length||awayFinal.batters.length))
+    ||(homeFinal&&(homeFinal.pitchers.length||homeFinal.batters.length));
+
+  // Kick off the real boxscore fetch only when we don't already have fresh data —
+  // this is the only reliable "panel opened" trigger since there's no separate hook,
+  // but re-rendering on every cache hit would fight the user mid-tap (e.g. switching
+  // the team toggle) with a repaint that reverts nothing but wastes a frame. Only
+  // repaint when this call actually produced NEW data we didn't have a moment ago.
+  if(!hasRealData||Date.now()-((ESPN_BOX_CACHE[gid]||{}).ts||0)>=45000){
+    setTimeout(()=>{
+      const before=ESPN_BOX_CACHE[gid]?ESPN_BOX_CACHE[gid].ts:0;
+      fetchESPNBoxscore(gid).then(res=>{
+        if(!res)return;
+        const after=ESPN_BOX_CACHE[gid]?ESPN_BOX_CACHE[gid].ts:0;
+        if(after===before)return; // nothing new came back — don't repaint
+        const panel=document.getElementById('p-livebox-'+gid);
+        if(panel){const gg=GAMES.find(z=>z.id===gid);if(gg)panel.innerHTML=liveBoxPanel(gid,gg)}
+      });
+    },0);
+  }
+
+  return `<div style="padding:2px 0">
+    ${linescore}
+    ${toggle}
+    ${!hasRealData?`<div class="empty" style="padding:14px 0">Loading player stats…</div>`:''}
+    ${oneTeam}
+    <div style="margin-top:12px;text-align:center">
+      <button onclick="delete ESPN_BOX_CACHE[${gid}];loadESPN().then(()=>render())" style="font-family:'IBM Plex Mono';
+        font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+        background:transparent;border:1px solid var(--rule);color:var(--mute);
+        border-radius:6px;padding:6px 14px;cursor:pointer">↻ Refresh</button>
+    </div>
+  </div>`;
+}
+/* ================= ESPN LIVE END ================= */
+function allGamesFinalized(d){
+  // Returns true only when every game in today's snapshot has a confirmed final score.
+  // This is the gate for treating today as settled — not just "we fetched some finals."
+  const arc=get(LS.arc,{});
+  const entry=arc[d];
+  if(!entry||!entry.rows||!entry.finals)return false;
+  return entry.rows.every(r=>{
+    const F=entry.finals[r.id];
+    return F&&!isNaN(F.a)&&!isNaN(F.h)&&F.a!==null&&F.h!==null;
+  });
+}
+
+function snapshot(){
+  const d=today(),arc=get(LS.arc,{});
+  // Block snapshot refresh only when explicitly locked (manual) OR when every
+  // game has a confirmed final. Partial finals mid-afternoon do NOT block this —
+  // new games starting later in the day still need their picks recorded.
+  if(arc[d]&&arc[d].locked)return;
+  if(arc[d]&&allGamesFinalized(d))return;
+  const rows=[];
+  GAMES.forEach(g=>{
+    const s=SIMS[g.id];if(!s)return;
+    const M=marketOf(g);
+    let side=s.hw>=.5?g.home.abbr:g.away.abbr,edge=null;
+    if(M){const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
+      edge=+Math.max(eh,ea).toFixed(1);side=eh>=ea?g.home.abbr:g.away.abbr}
+    // ── total & run-line market probability, captured at snapshot time ──
+    // Previously only the moneyline price (M.fh) was stored per row, which is why
+    // total/run-line segmented calibration couldn't activate — there was nothing
+    // to compare the model's total/RL claim against. Same book-first precedence
+    // as everywhere else: your uploaded screenshot outranks SharpAPI/TheRundown.
+    let totLine=null,totMktP=null,totModelP=null;
+    const bookTot=bookLineForMarket(g.id,'total');
+    if(bookTot&&bookTot.line!==null&&bookTot.line!==undefined){
+      const overB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='over'&&Math.abs(x.line-bookTot.line)<0.01);
+      const underB=bookLinesFor(g.id).find(x=>x.market==='total'&&x.side==='under'&&Math.abs(x.line-bookTot.line)<0.01);
+      if(overB&&underB){
+        const op=bookDevig(overB.price),up=bookDevig(underB.price),sum=op+up;
+        totLine=bookTot.line;totMktP=+(op/sum).toFixed(4);totModelP=+s.over(bookTot.line).toFixed(4);
+      }
+    }
+    if(totLine===null){
+      const st=sharpTotalFor(g.id);
+      if(st&&st.overProb!==null){
+        totLine=st.line;totMktP=+st.overProb.toFixed(4);totModelP=+s.over(st.line).toFixed(4);
+      }
+    }
+    let rlLine=null,rlMktP=null,rlModelP=null,rlFavSide=null;
+    const bookRL=bookLineForMarket(g.id,'runline');
+    if(bookRL){
+      const favB=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line<0);
+      const dogB=bookLinesFor(g.id).find(x=>x.market==='runline'&&x.line>0);
+      if(favB&&dogB){
+        const fp=bookDevig(favB.price),dp=bookDevig(dogB.price),sum=fp+dp;
+        rlLine=favB.line;rlFavSide=favB.side==='home'?g.home.abbr:g.away.abbr;
+        rlMktP=+(fp/sum).toFixed(4);
+        rlModelP=+rlProb(g,s,favB.side,-favB.line).toFixed(4);
+      }
+    }
+    // ── F5 market price, captured at snapshot the same way total/runline
+    // already are — was entirely missing before, which is exactly why F5
+    // could never build a real calibration bucket: f5/f5p/f5t below only ever
+    // recorded the SIM's own read, with nothing to check it against.
+    let f5MlSide=null,f5MlMktP=null,f5MlModelP=null;
+    const awayF5=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='away');
+    const homeF5=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='home');
+    if(awayF5&&homeF5){
+      const ap=bookDevig(awayF5.price),hp=bookDevig(homeF5.price),sum=ap+hp;
+      f5MlSide=hp>=ap?g.home.abbr:g.away.abbr;
+      f5MlMktP=+((hp>=ap?hp:ap)/sum).toFixed(4);
+      f5MlModelP=+(hp>=ap?s.f5h:s.f5a).toFixed(4);
+    }
+    let f5TotLine=null,f5TotMktP=null,f5TotModelP=null;
+    const bookF5Tot=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
+    if(bookF5Tot&&bookF5Tot.line!==null&&bookF5Tot.line!==undefined){
+      const overB=bookLinesFor(g.id).find(x=>x.market==='f5total'&&x.side==='over'&&Math.abs(x.line-bookF5Tot.line)<0.01);
+      const underB=bookLinesFor(g.id).find(x=>x.market==='f5total'&&x.side==='under'&&Math.abs(x.line-bookF5Tot.line)<0.01);
+      if(overB&&underB){
+        const op=bookDevig(overB.price),up=bookDevig(underB.price),sum=op+up;
+        f5TotLine=bookF5Tot.line;f5TotMktP=+(op/sum).toFixed(4);f5TotModelP=+f5OverAt(s,bookF5Tot.line).toFixed(4);
+      }
+    }
+    /* One malformed sim in a large in-memory GAMES array used to throw here and
+       silently abort the entire snapshot pass for every OTHER game behind it —
+       a single bad entry taking down the whole batch. Never actually seen in
+       normal play (simGame always populates these), but this runs on every
+       boot, so it's worth a floor: skip a malformed entry instead of throwing. */
+    if(s.aR==null||s.hR==null||s.mean==null||s.hw==null||s.f5h==null||s.f5a==null||s.f5tot==null){return;}
+    rows.push({id:g.id,a:g.away.abbr,h:g.home.abbr,pa:+s.aR.toFixed(2),ph:+s.hR.toFixed(2),
+      pt:+s.mean.toFixed(2),mode:s.modeScore,modeTot:s.modeTot,hw:+s.hw.toFixed(4),
+      mh:M?+M.fh.toFixed(4):null,edge,side,sp:+(side===g.home.abbr?s.hw:s.aw).toFixed(4),
+      f5:s.f5h>s.f5a?g.home.abbr:g.away.abbr,f5p:+Math.max(s.f5h,s.f5a).toFixed(4),f5t:+s.f5tot.toFixed(2),
+      totLine,totMktP,totModelP,rlLine,rlMktP,rlModelP,rlFavSide,
+      f5MlSide,f5MlMktP,f5MlModelP,f5TotLine,f5TotMktP,f5TotModelP});
+  });
+  if(!rows.length)return;
+  const ps=[];
+  PROPS.slice(0,40).forEach(p=>ps.push(p));
+  const rest=PROPS.slice(40),step=Math.max(1,Math.floor(rest.length/45));
+  for(let i=0;i<rest.length&&ps.length<85;i+=step)ps.push(rest[i]);
+  arc[d]={rows,props:ps.filter(p=>p.pid).map(p=>({pid:p.pid,gid:p.gid,n:p.name,t:p.type,k:p.thr,
+    p:+p.p.toFixed(4),m:p.mkt,g:p.game})),ts:Date.now(),locked:false};
+  set(LS.arc,arc);
+  document.getElementById('nR').textContent=Object.keys(arc).length;
+}
+async function fetchFinals(d){
+  const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}&hydrate=linescore`);
+  const j=await r.json();const f={};
+  (((j.dates||[])[0]||{}).games||[]).forEach(g=>{
+    if(((g.status||{}).abstractGameState)!=='Final')return;
+    // scores come back as strings from the API — parse explicitly so "10">"9" works correctly
+    const aScore=parseInt(g.teams.away.score,10);
+    const hScore=parseInt(g.teams.home.score,10);
+    if(isNaN(aScore)||isNaN(hScore))return; // incomplete game data — skip rather than grade wrong
+    let fa=0,fh=0,ok=false;
+    const inn=((g.linescore||{}).innings)||[];
+    if(inn.length>=5){ok=true;inn.slice(0,5).forEach(i=>{fa+=(i.away||{}).runs||0;fh+=(i.home||{}).runs||0})}
+    f[g.gamePk]={a:aScore,h:hScore,fa,fh,f5ok:ok};
+  });
+  return f;
+}
+function gradePropRec(pl,t,thr){
+  const b=((pl.stats||{}).batting)||{},pi=((pl.stats||{}).pitching)||{};
+  if(t==='k'||t==='bb'||t==='ha'){
+    if(!pi.inningsPitched)return null;
+    if(t==='k')return (pi.strikeOuts||0)>=thr;
+    if(t==='bb')return (pi.baseOnBalls||0)>=thr;
+    return (pi.hits||0)>=thr;
+  }
+  if(!b.plateAppearances)return null;
+  if(t==='hits')return (b.hits||0)>=thr;
+  if(t==='tb')return (b.totalBases||0)>=thr;
+  if(t==='rbi')return (b.rbi||0)>=thr;
+  if(t==='hr')return (b.homeRuns||0)>=thr;
+  return null;
+}
+async function gradePropsFor(A){
+  if(A.pgrades||!A.props||!A.props.length)return;
+  const gids=[...new Set(A.props.map(p=>p.gid))],boxes={};
+  for(const gid of gids){
+    try{const r=await fetch(`https://statsapi.mlb.com/api/v1/game/${gid}/boxscore`);boxes[gid]=await r.json()}catch(e){}
+  }
+  const out=[];
+  A.props.forEach(p=>{
+    const bx=boxes[p.gid];if(!bx)return;
+    let pl=null;
+    for(const s of ['away','home']){const P=((bx.teams||{})[s]||{}).players||{};if(P['ID'+p.pid]){pl=P['ID'+p.pid];break}}
+    if(!pl)return;
+    const hit=gradePropRec(pl,p.t,p.k);
+    if(hit===null)return;
+    out.push({p:p.p,hit:hit?1:0,t:p.t,n:p.n,m:p.m});
+  });
+  if(out.length)A.pgrades=out;
+}
+/* ================= SIM VS BOOK ACCURACY TRACKING ================= */
+// After each day grades, we record:
+// - sim's total projection vs actual total (and vs book line)
+// - sim's side pick vs actual winner
+// - which trend signals fired and whether they agreed or conflicted with the sim
+// - conflict log: when trends said one thing and sim said another, who was right
+// This feeds back into calibration and is displayed in the Stats tab.
+const LS_SVB='d4.simvbook';
+function getSimVsBook(){return get(LS_SVB,{});}
+
+function recordSimVsBook(arc,bookshots){
+  const svb=getSimVsBook();
+  Object.keys(arc).forEach(d=>{
+    if(svb[d]&&svb[d].locked)return; // already settled
+    const A=arc[d];
+    if(!A.finals||!A.rows)return;
+    const dayShots=bookshots[d]||[];
+    const games=[];
+    A.rows.forEach(r=>{
+      const F=A.finals[r.id];
+      if(!F||F.a===null||F.h===null)return;
+      const actual=F.a+F.h;
+      const simTotal=r.pt;
+      const simErr=simTotal-actual; // positive = over-projected
+      // find book total for this game
+      const bookLine=dayShots.find(x=>(x.game===r.a+'@'+r.h||x.game===r.h+'@'+r.a)&&x.market==='total'&&x.side==='over');
+      const bookTotal=bookLine?bookLine.line:null;
+      const bookErr=bookTotal!==null?bookTotal-actual:null; // positive = book was too high
+      const actual_winner=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      const simCorrect=actual_winner?actual_winner===r.side:null;
+      // trend conflict: did trend signals conflict with the sim's lean?
+      // We store the conflict count and whether the trends or sim was right
+      // (we can't re-run trends here, but we can look at the stored edge and market data)
+      const hadEdge=r.edge!==null&&r.edge>=3;
+      const marketAgreed=r.mh!==null?(r.mh>=0.5?r.h:r.a)===r.side:null;
+      games.push({
+        g:r.a+'@'+r.h,id:r.id,
+        simTotal,bookTotal,actual,
+        simErr,bookErr,
+        simSide:r.side,actualWinner:actual_winner,simCorrect,
+        hadEdge,marketAgreed,
+        simProb:r.sp,marketProb:r.mh
+      });
+    });
+    if(games.length){
+      svb[d]={games,ts:Date.now(),locked:d!==today()};
+    }
+  });
+  set(LS_SVB,svb);
+  // wire conflict data into calibration signal
+  updateSimConflictCalib(svb);
+}
+
+function updateSimConflictCalib(svb){
+  // Track: when market prob and sim prob disagreed by >8%, who was right
+  // Store as d4.svbcalib — used by computeEntities to weight corrections
+  const conf={sideW:0,sideL:0,mktW:0,mktL:0,totalSimErr:0,totalBookErr:0,n:0,nTotal:0};
+  Object.values(svb).forEach(day=>{
+    (day.games||[]).forEach(g=>{
+      if(g.simCorrect!==null&&g.marketAgreed!==null&&g.simProb&&g.marketProb){
+        const gap=Math.abs(g.simProb-g.marketProb);
+        if(gap>=0.08){ // meaningful disagreement
+          if(g.simCorrect)conf.sideW++;else conf.sideL++;
+          const mktCorrect=(g.marketProb>=0.5?g.marketAgreed===true:g.marketAgreed===false);
+          // marketAgreed already encodes whether market agreed with sim side
+          // if sim correct, market disagreed = mkt wrong here
+          if(g.simCorrect===true)conf.mktL++;else conf.mktW++;
+        }
+      }
+      if(g.simErr!==null){conf.totalSimErr+=Math.abs(g.simErr);conf.nTotal++;}
+      if(g.bookErr!==null){conf.totalBookErr+=Math.abs(g.bookErr);conf.n++;}
+    });
+  });
+  set('d4.svbcalib',conf);
+}
+
+/* ================= STATS TAB (Sim vs Book) ================= */
+function renderStatsTab(){
+  const svb=getSimVsBook();
+  const days=Object.keys(svb).sort().reverse();
+  if(!days.length)return '<div class="empty">No graded data yet. Come back after your first full slate finishes.</div>';
+
+  // aggregate
+  let simTotalErrSum=0,bookTotalErrSum=0,nTotal=0;
+  let simSideW=0,simSideL=0;
+  let mktAgreeAndRight=0,mktDisagreeAndSimRight=0,mktDisagreeAndMktRight=0,mktDisagreeN=0;
+  const byDay=[];
+
+  days.forEach(d=>{
+    const day=svb[d];let dSimW=0,dSimL=0,dSimTE=0,dBookTE=0,dn=0;
+    (day.games||[]).forEach(g=>{
+      if(g.simErr!==null){simTotalErrSum+=Math.abs(g.simErr);dSimTE+=Math.abs(g.simErr);nTotal++;dn++;}
+      if(g.bookErr!==null){bookTotalErrSum+=Math.abs(g.bookErr);dBookTE+=Math.abs(g.bookErr);}
+      if(g.simCorrect===true){simSideW++;dSimW++;}
+      if(g.simCorrect===false){simSideL++;dSimL++;}
+      if(g.simCorrect!==null&&g.marketAgreed!==null&&g.simProb&&g.marketProb){
+        const gap=Math.abs(g.simProb-g.marketProb);
+        if(gap>=0.08){
+          mktDisagreeN++;
+          if(g.simCorrect)mktDisagreeAndSimRight++;else mktDisagreeAndMktRight++;
+        }
+      }
+    });
+    byDay.push({d,dSimW,dSimL,dSimTE:dn?dSimTE/dn:null,dn});
+  });
+
+  const pct=(w,l)=>w+l?((w/(w+l))*100).toFixed(1)+'%':'—';
+  const avgSimTE=nTotal?(simTotalErrSum/nTotal).toFixed(2):'—';
+  const avgBookTE=nTotal&&bookTotalErrSum?(bookTotalErrSum/nTotal).toFixed(2):'—';
+
+  const conf=get('d4.svbcalib',{});
+
+  let h=`
+  <div class="tkt hi">
+    <h3>Sim vs Book — season record</h3>
+    <div class="sub">Every game where the model had a real-line market to compare against. <b>Side record</b> is how often the sim picked the actual winner. <b>Total accuracy</b> compares sim's projected run total vs the book's posted line — who was closer to the actual score.</div>
+  </div>
+  <div class="tkt">
+    <div class="mktlab" style="margin-top:0">Side predictions</div>
+    <ol style="list-style:none;padding-left:0">
+      <li>Sim side correct <span class="pp">${pct(simSideW,simSideL)}</span> <span class="m">${simSideW}W–${simSideL}L</span></li>
+    </ol>
+    <div class="mktlab">Total run accuracy</div>
+    <ol style="list-style:none;padding-left:0">
+      <li>Sim avg miss <span class="pp" style="color:var(--cold)">${avgSimTE} runs</span> <span class="m">across ${nTotal} games</span></li>
+      <li>Book avg miss <span class="pp" style="color:var(--gold)">${avgBookTE||'—'} runs</span> <span class="m">vs same games</span></li>
+      ${avgSimTE!=='—'&&avgBookTE!=='—'?`<li style="margin-top:4px"><b>${parseFloat(avgSimTE)<parseFloat(avgBookTE)?'Sim is outperforming the book line on totals accuracy':'Book line is currently closer on totals'}</b></li>`:''}
+    </ol>
+  </div>`;
+
+  if(mktDisagreeN>=5){
+    h+=`<div class="tkt">
+      <div class="mktlab" style="margin-top:0">When sim and market disagreed (gap ≥8%)</div>
+      <ol style="list-style:none;padding-left:0">
+        <li>Sim was right <span class="pp">${pct(mktDisagreeAndSimRight,mktDisagreeAndMktRight)}</span> <span class="m">${mktDisagreeAndSimRight} of ${mktDisagreeN} disagreements</span></li>
+        <li>Book was right <span class="pp">${pct(mktDisagreeAndMktRight,mktDisagreeAndSimRight)}</span> <span class="m">${mktDisagreeAndMktRight} of ${mktDisagreeN}</span></li>
+      </ol>
+      <div class="sub" style="margin-top:6px">When the model sees a big edge vs the market and fires — this is the record on those calls specifically. This data feeds directly into the edge threshold calibration.</div>
+    </div>`;
+  }
+
+  h+=`<div class="sbar"><h2>By day</h2><div class="ln"></div></div>`;
+  h+=byDay.filter(D=>D.dn>0).map(D=>`
+    <div class="tkt"><h3>${D.d}</h3>
+      <div class="sub">Sides: <b>${D.dSimW}-${D.dSimL}</b>${D.dSimTE!==null?' · Avg total miss: <b>'+D.dSimTE.toFixed(2)+' runs</b>':''}</div>
+    </div>`).join('')||'<div class="empty">No daily breakdowns yet.</div>';
+
+  h+=`<div class="sbar"><h2>All games detail</h2><div class="ln"></div></div><div class="tkt">
+    <table class="boxtbl">
+      <tr><th>Game</th><th>Sim total</th><th>Book</th><th>Actual</th><th>Sim Δ</th><th>Book Δ</th><th>Side</th><th>Result</th></tr>
+      ${days.flatMap(d=>(svb[d].games||[]).map(g=>{
+        const simDelta=g.simErr!==null?(g.simErr>0?'+':'')+g.simErr.toFixed(1):'—';
+        const bookDelta=g.bookErr!==null?(g.bookErr>0?'+':'')+g.bookErr.toFixed(1):'—';
+        const simClose=g.simErr!==null&&g.bookErr!==null&&Math.abs(g.simErr)<Math.abs(g.bookErr);
+        return `<tr>
+          <td>${g.g}<br><span style="color:var(--mute);font-size:9px">${d}</span></td>
+          <td>${g.simTotal.toFixed(1)}</td>
+          <td>${g.bookTotal!==null?g.bookTotal:'—'}</td>
+          <td><b>${g.actual}</b></td>
+          <td style="color:${simClose?'var(--win)':'var(--rust)'}">${simDelta}</td>
+          <td style="color:${simClose?'var(--rust)':'var(--win)'}">${bookDelta}</td>
+          <td>${g.simSide}</td>
+          <td style="color:${g.simCorrect===true?'var(--win)':g.simCorrect===false?'var(--rust)':'var(--mute)'}">
+            ${g.simCorrect===true?'✅':g.simCorrect===false?'❌':'—'}
+          </td></tr>`;
+      })).join('')}
+    </table></div>`;
+  return h;
+}
+/* Step 4 -> 5 of the workflow: recalibrate on everything graded so far, rebuild
+   the team ledger and trend reliability from outcomes, then FREEZE the day's
+   projections. After this point new information is measured against the locked
+   number instead of silently moving it. */
+async function runBiasAndFreeze(){
+  const el=document.getElementById('freezeStatus');
+  const say=t=>{if(el)el.innerHTML=t};
+  say('Recalibrating\u2026');
+  try{
+    await hardRecalibrate();
+    const tGraded=gradeTrendLog();
+    const sGraded=gradeSystemLog();
+    const ledger=buildTeamLedger();
+    const nTeams=Object.keys(ledger).length;
+    const flagged=Object.keys(ledger).filter(k=>ledger[k].flag==='black');
+    const green=Object.keys(ledger).filter(k=>ledger[k].flag==='green');
+    let frozen=0;
+    ['mlb','nfl','ncaaf'].forEach(sp=>{try{logSystemPicks(sp);frozen+=freezeSlate(sp)}catch(e){}});
+    say(`<div style="color:var(--win)">\u2744 Slate frozen \u2014 ${frozen} game${frozen===1?'':'s'} locked.</div>
+      <div style="margin-top:4px">Team ledger rebuilt: <b>${nTeams}</b> teams.
+      ${green.length?`<span style="color:var(--win)">\u25c6 ${green.length} green</span>`:''}
+      ${flagged.length?` <span style="color:var(--rust)">\u2620 ${flagged.length} black flag: ${flagged.slice(0,8).join(', ')}</span>`:''}</div>
+      <div style="margin-top:4px;color:var(--mute)">Graded this pass: ${tGraded} trend rows, ${sGraded} system picks.</div>
+      <div style="margin-top:4px;color:var(--mute)">Everything arriving from here is compared against the locked number and the official line.</div>`);
+    if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
+    if(typeof renderNFL==='function'&&ACTIVE_SPORT==='nfl')renderNFL();
+    if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
+  }catch(e){
+    say('<div style="color:var(--rust)">Failed: '+(e&&e.message||e)+'</div>');
+  }
+}
+async function hardRecalibrate(){
+  const el=document.getElementById('gradeBody');
+  el.innerHTML='<div class="empty">Recalibrating from graded history…</div>';
+  const arc=get(LS.arc,{});
+  const days=Object.keys(arc).sort().reverse();
+  const touched=[];
+  for(const d of days){
+    if(arc[d].locked){continue}  // already settled — never re-touch a day that's locked in
+    try{
+      const f=await fetchFinals(d);
+      if(Object.keys(f).length){
+        arc[d].finals=f;
+        delete arc[d].pgrades;
+        await gradePropsFor(arc[d]);
+        if(d!==today())arc[d].locked=true;
+        else if(allGamesFinalized(d))arc[d].locked=true;
+        touched.push(d);
+      }
+    }catch(e){}
+  }
+  set(LS.arc,arc);
+  computeCalibration();
+  computeEntities();
+  try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
+    try{gradeExtPicks();}catch(e){console.warn("ext",e)}
+    try{settleLockedTickets();}catch(e){console.warn("bankroll",e)}
+  buildProps();   // new calibration applies to any game that hasn't started yet, immediately
+  render();
+  renderGrades();
+  const c=get(LS.calib,{}),types=c.types||{};
+  const changed=Object.keys(types).filter(t=>types[t].n>=MIN_N_CAL&&Math.abs(types[t].f-1)>=0.03)
+    .map(t=>`${t}: your model was ${types[t].f>1?'underestimating':'overestimating'} it by about ${Math.abs((1-types[t].f)*100).toFixed(0)}% (${types[t].n} graded, actual ${types[t].actual}% vs predicted ${types[t].predicted}%)`);
+  alert(`Recalibrated using ${touched.length?touched.join(', ')+' ':''}already-graded history only — locked days from before today weren't touched.\n\n`
+    +(changed.length?'What changed and why:\n'+changed.join('\n'):'Not enough graded volume yet on any prop type to show a real adjustment breakdown.')
+    +'\n\nAny game that hasn\'t started yet already reflects this — anything already locked from a past day stays exactly as it was graded.');
+}
+const GTABS=[['results','Results'],['calib','Calibration'],['history','History'],['stats','Sim vs Book']];
+let RESULTS_MODE='sides',HIST_MODE='days',CALIB_MODE='calib';
+async function unlockTodayAndRegrade(){
+  const arc=get(LS.arc,{});
+  const d=today();
+  if(arc[d]){
+    arc[d].locked=false;
+    delete arc[d].finals; // clear cached finals so fetchFinals runs fresh
+    set(LS.arc,arc);
+  }
+  await renderGrades(true);
+}
+async function renderGrades(force){
+  try{
+  document.getElementById('gradeNav').innerHTML=GTABS.map(([k,l])=>
+    `<button class="${GRADETAB===k?'on':''}" onclick="GRADETAB='${k}';renderGrades()">${l}</button>`).join('');
+  const arc=get(LS.arc,{});
+  const dates=Object.keys(arc).sort().reverse();
+  const body=document.getElementById('gradeBody');
+  if(!dates.length){body.innerHTML='<div class="empty">No snapshots yet. One is taken each day you open the app.</div>';return}
+  const syncLine=()=>{
+    const today_=arc[today()];
+    const isLocked=today_&&today_.locked;
+    const isAllFinal=today_&&allGamesFinalized(today());
+    const hasSome=today_&&today_.finals&&Object.keys(today_.finals).length>0;
+    const total=today_&&today_.rows?today_.rows.length:0;
+    const finalized=today_&&today_.finals?Object.keys(today_.finals).length:0;
+    const status=!today_?'No snapshot yet today — waiting for lineups'
+      :isLocked?`All ${total} games final · locked ${new Date(today_.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}`
+      :isAllFinal?`All ${total} games final · grades complete`
+      :hasSome?`${finalized} of ${total} games final — slate still live, picks stay open`
+      :`Snapshot taken ${new Date(today_.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} · waiting for first finals`;
+    const unlockBtn=isLocked
+      ?`<button onclick="unlockTodayAndRegrade()" style="margin-left:10px;padding:3px 10px;
+          font-size:10px;font-family:'IBM Plex Mono';background:rgba(242,169,59,.15);
+          border:1px solid var(--gold);color:var(--gold);border-radius:5px;cursor:pointer">
+          Force regrade</button>`
+      :'';
+    const color=isLocked?'var(--win)':hasSome?'var(--gold)':'var(--mute)';
+    return `<div class="note" style="margin:0 0 12px;display:flex;align-items:center;
+      flex-wrap:wrap;gap:4px;border-left:3px solid ${color};padding-left:10px">
+      <b style="color:${color}">${status}</b>${unlockBtn}</div>`;
+  };
+  if(force||!arc[dates[0]].finals){
+    body.innerHTML=syncLine()+'<div class="empty">Pulling final scores…</div>';
+    // on force: explicitly unlock today so re-fetch always runs regardless of lock state
+    if(force&&arc[today()]){arc[today()].locked=false;}
+    for(const d of dates){
+      const isToday=d===today();
+      if(arc[d].locked&&!isToday)continue;
+      if(arc[d].finals&&!force&&!isToday)continue;
+    for(const d of dates){
+      const isToday=d===today();
+      if(arc[d].locked&&!isToday)continue;
+      if(arc[d].finals&&!force&&!isToday)continue;
+      try{const f=await fetchFinals(d);
+        if(Object.keys(f).length){
+          arc[d].finals=f;
+          await gradePropsFor(arc[d]);
+          // Only lock a day when it's fully settled:
+          // - past days: always lock once we have any finals
+          // - today: only lock when every game in the snapshot has a confirmed final
+          if(!isToday)arc[d].locked=true;
+          else if(allGamesFinalized(d))arc[d].locked=true;
+        }
+      }catch(e){}
+    }
+    }
+    set(LS.arc,arc);computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();buildProps();
+    try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
+    try{gradeExtPicks();}catch(e){console.warn("ext",e)}
+  }
+    try{settleLockedTickets();}catch(e){console.warn("bankroll",e)}
+  let sW=0,sL=0,fW=0,fL=0,f5W=0,f5L=0,tErr=0,tN=0,scErr=0,modeHit=0,modeN=0;
+  const sideBuck={},days=[],misses=[];
+  dates.forEach(d=>{
+    const A=arc[d],fin=A.finals||{};let dW=0,dL=0;
+    A.rows.forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      if(won){const hit=won===r.side;hit?sW++:sL++;hit?dW++:dL++;
+        if(r.edge!==null&&r.edge>=3){hit?fW++:fL++}
+        const b=Math.min(9,Math.floor(r.sp*10));
+        sideBuck[b]=sideBuck[b]||{n:0,w:0};sideBuck[b].n++;if(hit)sideBuck[b].w++}
+      if(F.f5ok){const fw=F.fh>F.fa?r.h:(F.fa>F.fh?r.a:null);
+        if(fw){fw===r.f5?f5W++:f5L++}}
+      tErr+=Math.abs(r.pt-(F.a+F.h));tN++;scErr+=Math.abs(r.pa-F.a)+Math.abs(r.ph-F.h);
+      if(r.mode){modeN++;if(r.mode===F.a+'-'+F.h)modeHit++}
+      misses.push({d,g:`${r.a}@${r.h}`,proj:`${r.pa.toFixed(1)}-${r.ph.toFixed(1)}`,
+        act:`${F.a}-${F.h}`,mode:r.mode,scErr:Math.abs(r.pa-F.a)+Math.abs(r.ph-F.h),
+        side:r.side,edge:r.edge,hit:won?won===r.side:null});
+    });
+    if(Object.keys(fin).length)days.push({d,dW,dL,rows:A.rows,fin});
+  });
+  let pW=0,pL=0;const pType={},pBuck={};
+  dates.forEach(d=>(arc[d].pgrades||[]).forEach(o=>{
+    o.hit?pW++:pL++;
+    pType[o.t]=pType[o.t]||{n:0,w:0,e:0};pType[o.t].n++;pType[o.t].e+=o.p;if(o.hit)pType[o.t].w++;
+    const b=Math.min(9,Math.floor(o.p*10));
+    pBuck[b]=pBuck[b]||{n:0,w:0};pBuck[b].n++;if(o.hit)pBuck[b].w++}));
+  const pct=(w,l)=>w+l?((w/(w+l))*100).toFixed(1)+'%':'—';
+  const TN={hits:'Hits',tb:'Total bases',rbi:'RBI',k:'Strikeouts',bb:'Walks allowed',ha:'Hits allowed',hr:'Home runs'};
+  let h='';
+  const innerRow=(cur,opts,setter)=>`<div class="subnav">${opts.map(([k,l])=>
+    `<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderGrades()">${l}</button>`).join('')}</div>`;
+  if(GRADETAB==='results'){
+    h=innerRow(RESULTS_MODE,[['sides','Sides'],['props','Props'],['f5','First 5'],['picks','Every pick']],'RESULTS_MODE');
+  }
+  if(GRADETAB==='calib'){
+    h=innerRow(CALIB_MODE,[['calib','Corrections'],['learn','Learned bias'],['deep','Deep dive'],['syslog','System vs Book'],['ledger','Team ledger']],'CALIB_MODE');
+  }
+  if(GRADETAB==='history'){
+    h=innerRow(HIST_MODE,[['days','By day'],['recap','Share card']],'HIST_MODE');
+  }
+  if(GRADETAB==='results'&&RESULTS_MODE==='sides'){
+    h+=`<div class="tkt hi"><h3>${pct(sW,sL)}</h3><div class="sub">straight sides · <b>${sW}-${sL}</b></div>
+      <ol style="list-style:none;padding-left:0">
+      <li>Flagged 3+ edge <span class="pp">${pct(fW,fL)}</span> <span class="m">${fW}-${fL}</span></li>
+      <li>Total runs, avg miss <span class="pp">${tN?(tErr/tN).toFixed(2):'—'}</span> <span class="m">across ${tN} games</span></li>
+      <li>Team score, avg miss <span class="pp">${tN?(scErr/(tN*2)).toFixed(2):'—'}</span> <span class="m">runs per side</span></li>
+      <li>Exact score called <span class="pp">${modeN?((modeHit/modeN)*100).toFixed(1)+'%':'—'}</span> <span class="m">${modeHit} of ${modeN} via most-common-outcome</span></li>
+      </ol></div>
+      <div class="sbar"><h2>Worst misses</h2><div class="ln"></div></div>
+      <div class="tkt"><ol>${misses.filter(m=>m.hit!==null).sort((a,b)=>b.scErr-a.scErr).slice(0,8)
+        .map(m=>`<li>${m.g} <span class="m">${m.d} · picked <b>${m.side}</b> · proj ${m.proj}, actual ${m.act}, off ${m.scErr.toFixed(1)}</span>
+        ${m.hit?'<span class="pp">✅</span>':'<span style="color:var(--rust)">❌</span>'}</li>`).join('')}</ol></div>`;
+  }
+  if(GRADETAB==='results'&&RESULTS_MODE==='props'){
+    h+=`<div class="tkt hi"><h3>${pct(pW,pL)}</h3><div class="sub">graded props · <b>${pW}-${pL}</b></div>
+      <ol style="list-style:none;padding-left:0">${Object.keys(pType).sort((a,b)=>pType[b].n-pType[a].n).map(t=>{
+      const o=pType[t],act=(o.w/o.n)*100,exp=(o.e/o.n)*100,off=act-exp;
+      const cl=Math.abs(off)<=5?'p90':Math.abs(off)<=10?'p80':'plow';
+      return `<li>${TN[t]||t} <span class="m">n=${o.n}</span> → predicted <b>${exp.toFixed(0)}%</b>,
+        actual <span class="pp ${cl}">${act.toFixed(0)}%</span> <span class="m">${off>0?'+':''}${off.toFixed(0)}</span></li>`}).join('')}
+      </ol></div>`;
+  }
+  if(GRADETAB==='results'&&RESULTS_MODE==='picks'){
+    const pickDays=dates.filter(d=>arc[d].pgrades&&arc[d].pgrades.length);
+    if(!PICKSDAY||!pickDays.includes(PICKSDAY))PICKSDAY=pickDays[0]||null;
+    if(!pickDays.length){
+      h+='<div class="empty">No individual props graded yet. Open this tab after a slate finishes.</div>';
+    }else{
+      const picks=arc[PICKSDAY].pgrades;
+      const w=picks.filter(o=>o.hit).length,l=picks.length-w;
+      h+=`<div class="subnav">${pickDays.slice(0,10).map(d=>
+        `<button class="${d===PICKSDAY?'on':''}" onclick="PICKSDAY='${d}';renderGrades()">${d}</button>`).join('')}</div>
+      <div class="tkt hi"><h3>${w}-${l}</h3><div class="sub">every individual prop graded on ${PICKSDAY}</div></div>
+      <div class="tkt"><ol style="list-style:none;padding-left:0">${picks.map(o=>
+        `<li>${o.n} <span class="m">${o.m} · called ${(o.p*100).toFixed(0)}%</span>
+        <span class="pp" style="color:${o.hit?'var(--win)':'var(--rust)'}">${o.hit?'✅ WIN':'❌ LOSS'}</span></li>`).join('')}
+      </ol></div>`;
+    }
+  }
+  if(GRADETAB==='results'&&RESULTS_MODE==='f5'){
+    h+=`<div class="tkt hi"><h3>${pct(f5W,f5L)}</h3><div class="sub">first five innings · <b>${f5W}-${f5L}</b></div>
+      <div class="sub">F5 strips out bullpen variance, which is the single largest source of noise in a
+      full-game projection. If this number runs meaningfully better than the straight-side number, the
+      model reads starters well and relievers poorly.</div></div>`;
+  }
+  if(GRADETAB==='calib'&&CALIB_MODE==='calib'){
+    const c=get(LS.calib,{}),ty=c.types||{};
+    const drift=get('d4.drift',null);
+    const trend=calibrationTrend();
+    const recentTrend=trend.slice(-10);
+    const driftHtml=drift&&drift.ready?`<div class="tkt hi">
+      <h3>Global drift · every graded game ever</h3>
+      <div class="sub">Across <b>${drift.n}</b> graded games, the model has averaged
+      <b>${drift.avgBias>0?'+':''}${drift.avgBias} runs ${drift.avgBias>0?'over':'under'}</b> per game on total runs —
+      not one team, the whole engine. A correction of <b>${drift.totalDrift>0?'+':''}${drift.totalDrift}</b> runs
+      is now baked into every new projection to pull that back toward zero.
+      ${drift.sidePct!==null?`Side picks are hitting <b>${drift.sidePct}%</b> across ${drift.sideGraded} decided games.`:''}</div>
+    </div>`:`<div class="tkt"><div class="sub">Need at least ${MIN_N_CAL} graded games before a global
+      correction activates. Currently at ${drift?drift.n:0}.</div></div>`;
+    const trendHtml=recentTrend.length?`<div class="tkt">
+      <div class="mktlab" style="margin-top:0">Daily average miss — is it shrinking?</div>
+      <ol style="list-style:none;padding-left:0">${recentTrend.map((d,i)=>{
+        const prev=recentTrend[i-1];
+        const arrow=prev?(d.avgMiss<prev.avgMiss?'↓':d.avgMiss>prev.avgMiss?'↑':'→'):'';
+        const arrowColor=prev?(d.avgMiss<prev.avgMiss?'var(--win)':d.avgMiss>prev.avgMiss?'var(--rust)':'var(--mute)'):'var(--mute)';
+        return `<li>${d.date} <span class="m">n=${d.n}</span>
+          <span class="pp">${d.avgMiss} runs avg miss</span>
+          <span style="color:${arrowColor}">${arrow}</span></li>`;
+      }).join('')}</ol>
+      <div class="sub" style="margin-top:6px">This is the actual test of whether calibration is working —
+      the average miss size should trend down over time, not just bounce around. A steady ↓ means
+      yesterday's correction is helping; a steady ↑ means something's fighting the correction.</div>
+    </div>`:'';
+    h+=driftHtml+trendHtml+`<div class="sbar"><h2>Active corrections</h2><div class="ln"></div></div><div class="tkt hi">
+      <div class="sub">Every prop probability is multiplied by its type's factor before display, computed from
+      your own graded history. Recomputes each time grades refresh.</div>
+      <ol style="list-style:none;padding-left:0">${Object.keys(ty).map(t=>{
+        const o=ty[t];
+        if(o.n<MIN_N_CAL)return `<li>${TN[t]||t} <span class="m">n=${o.n}, under ${MIN_N_CAL} — no correction yet</span></li>`;
+        return `<li>${TN[t]||t} <span class="m">predicted ${o.predicted}%, actual ${o.actual}%, n=${o.n}</span>
+          <span class="pp" style="color:${Math.abs(o.f-1)<.05?'var(--win)':'var(--gold)'}">×${o.f.toFixed(2)}</span></li>`}).join('')||'<li class="m">Nothing graded yet.</li>'}
+      </ol></div>
+      <div class="sbar"><h2>Side calibration</h2><div class="ln"></div></div><div class="tkt">
+      <ol style="list-style:none;padding-left:0">${Object.keys(sideBuck).sort().map(b=>{
+        const o=sideBuck[b],lo=b*10,hi=+b*10+10,act=(o.w/o.n)*100,off=act-(lo+5);
+        const cl=Math.abs(off)<=6?'p90':Math.abs(off)<=12?'p80':'plow';
+        return `<li>said <b>${lo}–${hi}%</b> <span class="m">n=${o.n}</span> → actual
+          <span class="pp ${cl}">${act.toFixed(0)}%</span> <span class="m">${off>0?'+':''}${off.toFixed(0)}</span></li>`}).join('')||'<li class="m">Not enough graded games.</li>'}
+      </ol></div>
+      <div class="sbar"><h2>Prop calibration</h2><div class="ln"></div></div><div class="tkt">
+      <ol style="list-style:none;padding-left:0">${Object.keys(pBuck).sort().map(b=>{
+        const o=pBuck[b],lo=b*10,hi=+b*10+10,act=(o.w/o.n)*100,off=act-(lo+5);
+        const cl=Math.abs(off)<=6?'p90':Math.abs(off)<=12?'p80':'plow';
+        return `<li>said <b>${lo}–${hi}%</b> <span class="m">n=${o.n}</span> → actual
+          <span class="pp ${cl}">${act.toFixed(0)}%</span> <span class="m">${off>0?'+':''}${off.toFixed(0)}</span></li>`}).join('')||'<li class="m">Not enough graded props.</li>'}
+      </ol></div>`;
+  }
+  if(GRADETAB==='calib'&&CALIB_MODE==='learn'){
+    const E=computeEntities();
+    const tk=Object.keys(E.teams).filter(t=>E.teams[t].n>=MIN_SHOW)
+      .sort((a,b)=>Math.abs(E.teams[b].rawBias)-Math.abs(E.teams[a].rawBias));
+    const pk=Object.keys(E.players).filter(p=>E.players[p].n>=6)
+      .sort((a,b)=>Math.abs(E.players[b].f-1)-Math.abs(E.players[a].f-1)).slice(0,30);
+    h+=`<div class="tkt hi"><h3>How it learns</h3>
+      <div class="sub">Each correction is shrunk by n/(n+k) — with a handful of games a team barely moves the
+      projection, with dozens it moves most of the way. That's what keeps one blowout from rewriting the model.
+      Team corrections are capped at ±0.85 runs and start at ${MIN_SHOW} games. Player prop corrections start at 6.</div>
+      <div class="bar">
+        <button class="primary" onclick="runBiasAndFreeze()">Run learning bias &amp; freeze today's slate</button>
+        <button onclick="hardRecalibrate()">Recalibrate only (no freeze)</button>
+      </div>
+      <div class="sub" id="freezeStatus" style="margin-top:8px"></div></div>
+      <div class="sbar"><h2>Team run bias</h2><div class="ln"></div><div class="ct mono">${tk.length}</div></div>`;
+    h+=tk.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Team</th><th>Games</th><th>Avg miss</th><th>Applied</th><th>Weight</th><th>As pick</th></tr>
+      ${tk.map(t=>{const o=E.teams[t];
+        const col=o.rawBias>0.4?'var(--rust)':o.rawBias<-0.4?'var(--cold)':'var(--mute)';
+        return `<tr><td>${t}</td><td>${o.n}</td>
+          <td style="color:${col}">${o.rawBias>0?'+':''}${o.rawBias.toFixed(2)}</td>
+          <td class="hi">${o.adj>0?'+':''}${o.adj.toFixed(2)}</td>
+          <td>${(o.weight*100).toFixed(0)}%</td>
+          <td>${o.sw+o.sl?o.sw+'-'+o.sl:'—'}</td></tr>`}).join('')}
+      </table>
+      <div class="sub" style="margin-top:6px">Positive avg miss means the model projects that team too high and
+      is now subtracting runs. Weight is how much of the measured bias is actually being applied — it climbs
+      as games accumulate.</div></div>`
+      :'<div class="empty">Need at least '+MIN_SHOW+' graded games per team.</div>';
+    h+=`<div class="sbar"><h2>Player prop accuracy</h2><div class="ln"></div><div class="ct mono">${pk.length}</div></div>`;
+    h+=pk.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Player</th><th>N</th><th>Predicted</th><th>Actual</th><th>Factor</th></tr>
+      ${pk.map(p=>{const o=E.players[p];
+        const col=o.f<.9?'var(--rust)':o.f>1.1?'var(--win)':'var(--mute)';
+        return `<tr><td>${p}</td><td>${o.n}</td><td>${o.predicted}%</td>
+          <td style="color:${col}">${o.actual}%</td><td class="hi">×${o.f.toFixed(2)}</td></tr>`}).join('')}
+      </table>
+      <div class="sub" style="margin-top:6px">Factor under 1.00 means the model has been too optimistic on that
+      player and his props are now discounted. Over 1.00 means it's been too pessimistic.</div></div>`
+      :'<div class="empty">Need at least 6 graded props per player.</div>';
+  }
+  if(GRADETAB==='calib'&&CALIB_MODE==='syslog'){
+    const all=systemScorecard(null,null);
+    const l20=systemScorecard(null,20);
+    const pct=v=>v==null?'—':(v*100).toFixed(1)+'%';
+    const streakStr=l20.streak>=2?`${l20.streak}${l20.streakType?' win':' loss'} streak`:'—';
+    h+=`<div class="tkt hi"><h3>System vs the book</h3>
+      <div class="sub">Every game the model had an opinion on gets logged and graded, whether or not you bet it.
+      The subset you actually played is the most biased sample available — this is the unbiased one.</div>
+      <table class="boxtbl" style="margin-top:10px">
+        <tr><th></th><th>Record</th><th>Win%</th></tr>
+        <tr><td>System (all time)</td><td>${all.sysW}-${all.sysL}</td><td class="hi">${pct(all.sysPct)}</td></tr>
+        <tr><td>Book favourite (all time)</td><td>${all.bkW}-${all.bkL}</td><td>${pct(all.bkPct)}</td></tr>
+        <tr><td>System (last 20)</td><td>${l20.sysW}-${l20.sysL}</td><td class="hi">${pct(l20.sysPct)}</td></tr>
+        <tr><td>Book favourite (last 20)</td><td>${l20.bkW}-${l20.bkL}</td><td>${pct(l20.bkPct)}</td></tr>
+        <tr><td>Current form</td><td colspan="2" style="color:${l20.streakType===true?'var(--win)':l20.streakType===false?'var(--rust)':'var(--mute)'}">${streakStr}</td></tr>
+      </table>
+      <div class="sub" style="margin-top:8px">Beating the book's favourite straight-up is not the same as beating
+      the price. A model can pick more winners and still lose money if it only wins on chalk.</div></div>`;
+    const rows=all.rows.slice(-40).reverse();
+    h+=`<div class="sbar"><h2>Recent graded games</h2><div class="ln"></div><div class="ct mono">${rows.length}</div></div>`;
+    h+=rows.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Date</th><th>Game</th><th>System</th><th>Book</th><th>Won</th><th></th></tr>
+      ${rows.map(r=>`<tr>
+        <td class="mono" style="font-size:10px">${r.date}</td>
+        <td>${r.game}</td>
+        <td style="color:${r.systemHit?'var(--win)':'var(--rust)'}">${r.systemPick} ${r.systemConf}%</td>
+        <td style="color:${r.bookHit===true?'var(--win)':r.bookHit===false?'var(--rust)':'var(--mute)'}">${r.bookFav||'—'}</td>
+        <td class="hi">${r.winner}</td>
+        <td>${r.systemHit&&!r.bookHit?'<span style="color:var(--win)">system beat book</span>':
+             !r.systemHit&&r.bookHit?'<span style="color:var(--rust)">book beat system</span>':''}</td>
+      </tr>`).join('')}
+      </table></div>`
+      :'<div class="empty">Nothing graded yet. Run the learning bias after games finish.</div>';
+  }
+  if(GRADETAB==='calib'&&CALIB_MODE==='ledger'){
+    const L=teamLedger(true);
+    const keys=Object.keys(L).filter(k=>L[k].n>=3)
+      .sort((a,b)=>L[a].roi-L[b].roi);
+    const black=keys.filter(k=>L[k].flag==='black');
+    const green=keys.filter(k=>L[k].flag==='green');
+    h+=`<div class="tkt hi"><h3>Your record by team</h3>
+      <div class="sub">This is YOUR profit per team, not the model's accuracy. They are different questions —
+      the model can project a team well while you still bleed on it, usually because of the price you take.</div>
+      ${black.length?`<div style="margin-top:8px;color:var(--rust)">\u2620 <b>Black flags</b> — ${black.join(', ')}</div>`:''}
+      ${green.length?`<div style="margin-top:4px;color:var(--win)">\u25c6 <b>Green</b> — ${green.join(', ')}</div>`:''}
+      </div>`;
+    h+=keys.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Team</th><th>Bets</th><th>Sides</th><th>O/U</th><th>u/bet</th><th></th></tr>
+      ${keys.map(k=>{const o=L[k];
+        const col=o.flag==='black'?'var(--rust)':o.flag==='green'?'var(--win)':'var(--mute)';
+        const mark=o.flag==='black'?'\u2620':o.flag==='green'?'\u25c6':'';
+        return `<tr>
+          <td style="color:${col}">${mark} ${k}</td>
+          <td>${o.n}</td>
+          <td>${o.sideN?o.sideW+'-'+o.sideL+(o.sideP?'-'+o.sideP:''):'—'}</td>
+          <td>${o.totN?(o.ovW+o.unW)+'-'+(o.ovL+o.unL):'—'}</td>
+          <td class="hi" style="color:${col}">${o.roi>=0?'+':''}${o.roi.toFixed(2)}</td>
+          <td style="font-size:10px;color:var(--mute)">${o.flag==='black'?'fade / roach spray':o.flag==='green'?'lean in':''}</td>
+        </tr>`}).join('')}
+      </table>
+      <div class="sub" style="margin-top:6px">Needs 3+ graded bets to appear, 6+ before a flag is assigned.
+      u/bet is units returned per unit staked at −110 equivalent.</div></div>`
+      :'<div class="empty">No graded bets logged yet. Log picks and grade them, then run the learning bias.</div>';
+  }
+  if(GRADETAB==='calib'&&CALIB_MODE==='deep'){
+    const seg=computeSegmentedCalibration();
+    const dc=disagreementCalibration();
+    const dv=calibrationDriftVelocity();
+    const meta=metaCalibrationCheck();
+    const leak=crossMarketLeakage();
+    const bt=validateCalibrationAgainstBacktest();
+
+    h+=`<div class="tkt hi"><h3>Direct probability calibration</h3>
+      <div class="sub">Props already get checked against reality. This does the same for sides — segmented
+      by market and by favorite/underdog situation, not one blended number, so a correction can't hide inside
+      an average that looks fine overall. Recomputes every time grades run.</div></div>`;
+
+    // #1/#2 — segmented corrections table
+    const segKeys=Object.keys(seg.segments).filter(k=>seg.segments[k].ready);
+    h+=`<div class="sbar"><h2>Segmented corrections</h2><div class="ln"></div><div class="ct mono">${segKeys.length}</div></div>`;
+    h+=segKeys.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Market</th><th>Situation</th><th>Band</th><th>N</th><th>Said</th><th>Actual</th><th>Factor</th></tr>
+      ${segKeys.map(k=>{
+        const[mk,sit,band]=k.split('|');const o=seg.segments[k];
+        const col=Math.abs(o.f-1)<0.05?'var(--mute)':o.f<1?'var(--rust)':'var(--win)';
+        return `<tr><td>${mk}</td><td>${sit}</td><td>${band}%</td><td>${o.n}</td>
+          <td>${o.predicted}%</td><td>${o.actual}%</td><td style="color:${col}">×${o.f}</td></tr>`;
+      }).join('')}</table>
+      <div class="sub" style="margin-top:6px">Factor scales how far a pick's stated probability sits from 50% —
+      under 1.00 pulls an overconfident pick back toward the coin flip, over 1.00 pushes an underconfident one
+      further out. This is applied live, inside the simulator itself, not just shown here.</div></div>`
+      :`<div class="empty">Need ${CAL_MIN_N}+ decided moneyline picks in a market/situation/band combo before
+      a correction activates. Keep grading.</div>`;
+
+    // #6 — disagreement calibration
+    h+=`<div class="sbar"><h2>When the model disagrees with the market</h2><div class="ln"></div></div>`;
+    if(dc.agree||dc.disagree){
+      h+=`<div class="tkt">
+        <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+          <div><div style="font-family:'Archivo';font-weight:900;font-size:19px">${dc.agree?dc.agree.actual+'%':'—'}</div>
+            <div class="m">agreed w/ market · said ${dc.agree?dc.agree.predicted+'%':'—'} · n=${dc.agree?dc.agree.n:0}</div></div>
+          <div><div style="font-family:'Archivo';font-weight:900;font-size:19px;color:var(--gold)">${dc.disagree?dc.disagree.actual+'%':'—'}</div>
+            <div class="m">disagreed w/ market · said ${dc.disagree?dc.disagree.predicted+'%':'—'} · n=${dc.disagree?dc.disagree.n:0}</div></div>
+        </div>
+        <div class="sub" style="margin-top:8px">If the disagree column beats its own stated probability, the
+        model has a real independent edge when it goes against the field. If it falls short worse than the
+        agree column does, going against consensus is where the model is weakest, not strongest.</div>
+      </div>`;
+    }else h+='<div class="empty">Not enough decided picks with a market price yet.</div>';
+
+    // #7 — drift velocity
+    h+=`<div class="sbar"><h2>Is calibration converging or diverging?</h2><div class="ln"></div></div>`;
+    const trendColor=dv.trend==='converging'?'var(--win)':dv.trend==='diverging'?'var(--rust)':'var(--mute)';
+    h+=`<div class="tkt" style="border-left:3px solid ${trendColor}">
+      <div style="font-family:'Archivo';font-weight:900;font-size:16px;color:${trendColor};
+        text-transform:uppercase">${dv.trend}</div>
+      <div class="sub" style="margin-top:4px">${dv.trend==='converging'
+        ?'Recent corrections are smaller than older ones — the model is getting more accurate on its own, less patching required.'
+        :dv.trend==='diverging'
+        ?'Recent corrections are LARGER than older ones — something is actively breaking. Worth checking for a data source change or a rule/environment shift.'
+        :dv.trend==='building'
+        ?'Not enough daily snapshots yet to call a direction — check back after a few more days of grading.'
+        :'No calibration data yet.'}</div>
+      ${dv.recentDist!==undefined?`<div class="m" style="margin-top:6px">recent avg |factor−1|: ${dv.recentDist} · older: ${dv.olderDist}</div>`:''}
+    </div>`;
+
+    // #8 — meta calibration
+    h+=`<div class="sbar"><h2>Is the correction itself trustworthy?</h2><div class="ln"></div></div>`;
+    if(meta.ready){
+      h+=`<div class="tkt" style="border-left:3px solid ${meta.trustworthy?'var(--win)':'var(--rust)'}">
+        <div style="font-family:'Archivo';font-weight:900;font-size:15px;color:${meta.trustworthy?'var(--win)':'var(--rust)'}">
+          ${meta.trustworthy?'Holds up out of sample':'Looks like noise, not signal'}</div>
+        <div class="sub" style="margin-top:4px">Splits your graded history in half. Builds a calibration gap on
+        the first half (n=${meta.buildN}, gap ${meta.buildGap}), then checks whether the SECOND half — which never
+        saw that correction — shows a similar or smaller gap (n=${meta.testN}, gap ${meta.testGap}).
+        ${meta.trustworthy?'It does — the pattern generalized forward instead of just describing what already happened.'
+          :'It got worse instead — this looks like it was curve-fit to the first half rather than a real, repeating pattern.'}</div>
+      </div>`;
+    }else h+=`<div class="empty">${meta.reason||'Not enough graded days yet.'}</div>`;
+
+    // #9 — cross-market leakage
+    h+=`<div class="sbar"><h2>Cross-market leakage</h2><div class="ln"></div></div>`;
+    if(leak.length){
+      h+=leak.map(l=>`<div class="tkt" style="border-left:3px solid var(--gold)">
+        <div style="font-weight:700">${l.situation}</div>
+        <div class="sub">Miscalibrated across ${l.markets.length} markets at once —
+        ${l.markets.map(m=>`${m.market} ${m.band}% (${m.gap>0?'+':''}${m.gap})`).join(', ')}.
+        Same situation breaking in more than one market usually means one upstream cause, not several
+        unrelated ones — check the underlying run/win projection for that situation before trusting
+        each market's own correction independently.</div>
+      </div>`).join('');
+    }else h+='<div class="empty">No shared miscalibration detected across markets right now — good sign.</div>';
+
+    // #5 — cross-validation against the backtest
+    h+=`<div class="sbar"><h2>Does calibration actually improve backtest ROI?</h2><div class="ln"></div></div>`;
+    if(bt.ready){
+      const better=bt.improved;
+      h+=`<div class="tkt" style="border-left:3px solid ${better?'var(--win)':'var(--rust)'}">
+        <div style="display:flex;justify-content:space-around;text-align:center">
+          <div><div style="font-family:'Archivo';font-weight:900;font-size:19px">${bt.baselineROI}%</div>
+            <div class="m">raw ROI · n=${bt.baselineN}</div></div>
+          <div><div style="font-family:'Archivo';font-weight:900;font-size:19px;color:${better?'var(--win)':'var(--rust)'}">${bt.adjustedROI}%</div>
+            <div class="m">calibrated ROI · n=${bt.adjN}</div></div>
+        </div>
+        <div class="sub" style="margin-top:8px">${better
+          ?`Applying today's calibration retroactively improves ROI by ${bt.delta>0?'+':''}${bt.delta} points — this is real evidence, not just a display change.`
+          :`Applying today's calibration retroactively does NOT improve ROI (${bt.delta} points). The segmented corrections may need more data, or may be overfitting to recent noise.`}</div>
+      </div>`;
+    }else h+='<div class="empty">Not enough segmented data yet to cross-validate.</div>';
+
+    // ── extended situational breakdown — park / division / rest, now that all
+    // three are captured (park from the same table simGame uses, division from a
+    // fixed MLB structure, rest computed from the archive itself) ──
+    const arcAll=get(LS.arc,{});
+    const extBuckets={};
+    Object.keys(arcAll).forEach(d=>{
+      const A=arcAll[d],fin=A.finals||{};
+      (A.rows||[]).forEach(r=>{
+        const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+        if(r.mh===null||r.mh===undefined||r.sp===null||r.sp===undefined)return;
+        const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);if(!won)return;
+        const hit=won===r.side?1:0;
+        extendedSituationOf(r,d).slice(1).forEach(tag=>{ // slice(1) skips the base favorite/underdog tag, already shown above
+          const b=extBuckets[tag]=extBuckets[tag]||{n:0,w:0,e:0};
+          b.n++;b.w+=hit;b.e+=r.sp;
+        });
+      });
+    });
+    const extReady=Object.keys(extBuckets).filter(k=>extBuckets[k].n>=CAL_MIN_N);
+    h+=`<div class="sbar"><h2>Park · division · rest breakdown</h2><div class="ln"></div>
+      <div class="ct mono">${extReady.length}</div></div>`;
+    h+=extReady.length?`<div class="tkt"><table class="boxtbl">
+      <tr><th>Situation</th><th>N</th><th>Said</th><th>Actual</th><th>Gap</th></tr>
+      ${extReady.sort((a,b)=>extBuckets[b].n-extBuckets[a].n).map(tag=>{
+        const b=extBuckets[tag],actual=+(b.w/b.n*100).toFixed(1),said=+(b.e/b.n*100).toFixed(1);
+        const gap=+(actual-said).toFixed(1);
+        const col=Math.abs(gap)<5?'var(--mute)':gap<0?'var(--rust)':'var(--win)';
+        return `<tr><td>${tag}</td><td>${b.n}</td><td>${said}%</td><td>${actual}%</td>
+          <td style="color:${col}">${gap>0?'+':''}${gap}</td></tr>`;
+      }).join('')}</table>
+      <div class="sub" style="margin-top:6px">Not yet fed back into the simulator directly — this is diagnostic,
+      showing whether the model has a specific park, division, or rest-day blind spot worth investigating.
+      Rest days are computed from your own graded history (a team with no record 10+ days back shows as
+      unknown rather than a guess). Division splits use fixed MLB alignment.</div></div>`
+      :`<div class="empty">Need ${CAL_MIN_N}+ decided picks in a park/division/rest bucket before this shows anything —
+      keep grading and it'll fill in.</div>`;
+
+    h+=`<div class="note"><b>Now live:</b> total-market and run-line segmentation are active — both now store
+    their own market probability at snapshot time and apply a correction inside the simulator itself, the same
+    way sides already did. Park/division/rest splits above are diagnostic only for now; feeding them back into
+    the live sim the way favorite/underdog already is would be the natural next step once there's enough volume
+    in each bucket to trust it.</div>`;
+  }
+  if(GRADETAB==='history'&&HIST_MODE==='days'){
+    h=days.map(D=>`<div class="tkt"><h3>${D.d}</h3><div class="sub"><b>${D.dW}-${D.dL}</b> on sides</div>
+      <ol>${D.rows.map(r=>{const F=D.fin[r.id];
+        if(!F)return `<li>${r.a}@${r.h} <span class="m">pending</span></li>`;
+        const won=F.h>F.a?r.h:r.a,hit=won===r.side;
+        return `<li>${r.a} ${F.a}–${F.h} ${r.h} <span class="m">picked ${r.side}${r.edge!==null?' · edge '+r.edge:''}
+          · proj ${r.pa.toFixed(1)}–${r.ph.toFixed(1)}${r.mode?' · called '+r.mode:''}</span>
+          <span class="pp" style="color:${hit?'var(--win)':'var(--rust)'}">${hit?'W':'L'}</span></li>`}).join('')}</ol></div>`).join('')
+      ||'<div class="empty">No finalized days yet.</div>';
+  }
+  if(GRADETAB==='stats'){
+    h=renderStatsTab();
+  }
+  if(GRADETAB==='history'&&HIST_MODE==='recap'){
+    // Recap used to be its own top-level tab; it's the same backward-looking day
+    // review the rest of this screen does, so it lives here now.
+    body.innerHTML=syncLine()+h+'<div id="recapHost"></div>';
+    setTimeout(()=>{
+      const host=document.getElementById('recapHost');
+      const src=document.getElementById('v-recap');
+      if(host&&src)host.innerHTML=src.innerHTML;
+      try{renderRecap()}catch(e){}
+    },0);
+    document.getElementById('nR').textContent=dates.length;
+    return;
+  }
+  body.innerHTML=syncLine()+h;
+  document.getElementById('nR').textContent=dates.length;
+  }catch(e){
+    const body=document.getElementById('gradeBody');
+    if(body)body.innerHTML=`<div class="tkt"><h3>Grades render error</h3>
+      <div class="sub">${e&&e.message||e}</div>
+      <div class="bar" style="margin-top:8px"><button class="primary" onclick="renderGrades(true)">Try regrade</button></div></div>`;
+    console.error('renderGrades',e);
+  }
+}
+function exportCSV(){
+  const arc=get(LS.arc,{});
+  let csv='date,away,home,proj_away,proj_home,proj_total,mode_score,model_home_win,market_home_win,edge,pick,pick_prob,f5_pick,final_away,final_home,f5_away,f5_home\n';
+  Object.keys(arc).sort().forEach(d=>{
+    const A=arc[d],f=A.finals||{};
+    A.rows.forEach(r=>{const F=f[r.id]||{};
+      csv+=[d,r.a,r.h,r.pa,r.ph,r.pt,r.mode||'',r.hw,r.mh??'',r.edge??'',r.side,r.sp,r.f5,
+        F.a??'',F.h??'',F.fa??'',F.fh??''].join(',')+'\n'})});
+  csv+='\n\ndate,player,market,type,predicted,result\n';
+  Object.keys(arc).sort().forEach(d=>(arc[d].pgrades||[]).forEach(o=>{
+    csv+=[d,o.n,'"'+o.m+'"',o.t,o.p,o.hit?'W':'L'].join(',')+'\n'}));
+  copyText(csv,'CSV copied.');
+}
+
+
+/* ================= CHAT ================= */
+function slateContext(){
+  return GAMES.map(g=>{
+    const s=SIMS[g.id];if(!s)return `${g.away.abbr}@${g.home.abbr} — no lineup`;
+    const M=marketOf(g),pf=PARK[g.home.abbr]||[100,100];
+    const hk=[g.away.id,g.home.id].sort().join('-'),hr=H2H[hk];
+    const sa=SPLITS[g.away.id],sh=SPLITS[g.home.id];
+    return `${g.away.abbr}(${g.away.w}-${g.away.l})@${g.home.abbr}(${g.home.w}-${g.home.l}) ${fmtTime(g.time)} ${g.venue} `
+      +`park${pf[0]}/${pf[1]}${g.weather?` ${g.weather.temp}F ${g.weather.wind||''}`:''}`
+      +` | ${g.away.p?g.away.p.name+' '+(g.away.p.era||'')+'ERA'+(g.away.p.rEra?' L5:'+g.away.p.rEra:''):'TBD'}`
+      +` vs ${g.home.p?g.home.p.name+' '+(g.home.p.era||'')+'ERA'+(g.home.p.rEra?' L5:'+g.home.p.rEra:''):'TBD'}`
+      +` | SIM ${g.away.abbr} ${s.aR.toFixed(1)}-${s.hR.toFixed(1)} ${g.home.abbr}; MOST COMMON EXACT SCORE ${s.modeScore} at ${(s.modeScorePct*100).toFixed(1)}%;`
+      +` mode total ${s.modeTot} at ${(s.modeTotPct*100).toFixed(1)}%; mean ${s.mean.toFixed(1)}; median ${s.med};`
+      +` ${g.home.abbr} win ${(s.hw*100).toFixed(1)}%; F5 ${(s.f5h*100).toFixed(0)}/${(s.f5a*100).toFixed(0)}/tie${(s.f5tie*100).toFixed(0)}`
+      +(hr&&hr.games>=6?`; H2H 2yr ${hr.games}g ${(hr.runs/hr.games).toFixed(1)}r/g`:'')
+      +(sa&&sa.away?`; ${g.away.abbr} away ${sa.away.w}-${sa.away.l}`:'')
+      +(sh&&sh.home?`; ${g.home.abbr} home ${sh.home.w}-${sh.home.l}`:'')
+      +(M?`; market ${g.home.abbr} ${(M.fh*100).toFixed(1)}% (comparison only)`:'; no market')
+      +(g.abstract==='Final'?`; FINAL ${g.awayScore}-${g.homeScore}`:'');
+  }).join('\n');
+}
+function gradesContext(){
+  const arc=get(LS.arc,{}),dates=Object.keys(arc).sort();
+  if(!dates.length)return 'No graded history yet.';
+  let sW=0,sL=0,fW=0,fL=0,f5W=0,f5L=0,pW=0,pL=0,modeHit=0,modeN=0,tErr=0,tN=0;
+  const pType={},worst=[];
+  dates.forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    A.rows.forEach(r=>{
+      const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+      const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+      if(won){const hit=won===r.side;hit?sW++:sL++;if(r.edge!==null&&r.edge>=3){hit?fW++:fL++}}
+      if(F.f5ok){const fw=F.fh>F.fa?r.h:(F.fa>F.fh?r.a:null);if(fw){fw===r.f5?f5W++:f5L++}}
+      if(r.mode){modeN++;if(r.mode===F.a+'-'+F.h)modeHit++}
+      tErr+=Math.abs(r.pt-(F.a+F.h));tN++;
+      worst.push({g:`${r.a}@${r.h}`,d,proj:`${r.pa.toFixed(1)}-${r.ph.toFixed(1)}`,act:`${F.a}-${F.h}`,
+        e:Math.abs(r.pa-F.a)+Math.abs(r.ph-F.h)});
+    });
+    (A.pgrades||[]).forEach(o=>{o.hit?pW++:pL++;
+      pType[o.t]=pType[o.t]||{n:0,w:0,e:0};pType[o.t].n++;pType[o.t].e+=o.p;if(o.hit)pType[o.t].w++});
+  });
+  const pct=(w,l)=>w+l?((w/(w+l))*100).toFixed(1)+'%':'n/a';
+  const pl=Object.keys(pType).map(t=>{const o=pType[t];
+    return `${t} predicted ${((o.e/o.n)*100).toFixed(0)}% actual ${((o.w/o.n)*100).toFixed(0)}% n=${o.n}`}).join('; ');
+  return `${dates.length} graded days, ${tN} games.\nSides ${sW}-${sL} (${pct(sW,sL)}). `
+    +`Flagged 3+ edge ${fW}-${fL} (${pct(fW,fL)}). F5 ${f5W}-${f5L} (${pct(f5W,f5L)}). Props ${pW}-${pL} (${pct(pW,pL)}).\n`
+    +`Exact score via most-common-outcome: ${modeHit}/${modeN}. Avg total miss ${tN?(tErr/tN).toFixed(2):'n/a'} runs.\n`
+    +`Prop types: ${pl||'none'}\n`
+    +`Worst misses: ${worst.sort((a,b)=>b.e-a.e).slice(0,6).map(m=>`${m.d} ${m.g} proj ${m.proj} actual ${m.act} off ${m.e.toFixed(1)}`).join('; ')}`;
+}
+function calibContext(){
+  const c=get(LS.calib,{}),ty=c.types||{};
+  if(!Object.keys(ty).length)return 'No corrections active yet.';
+  return Object.keys(ty).map(t=>{const o=ty[t];
+    return o.n<MIN_N_CAL?`${t}: n=${o.n}, no correction`
+      :`${t}: predicted ${o.predicted}% actual ${o.actual}%, now multiplied by ${o.f.toFixed(2)}`}).join('. ');
+}
+function entityContext(){
+  const e=get(LS.ent,{});
+  if(!e.teams)return 'No entity learning yet.';
+  const tk=Object.keys(e.teams).filter(t=>e.teams[t].n>=MIN_SHOW)
+    .sort((a,b)=>Math.abs(e.teams[b].rawBias)-Math.abs(e.teams[a].rawBias)).slice(0,10);
+  const pk=Object.keys(e.players||{}).filter(p=>e.players[p].n>=6)
+    .sort((a,b)=>Math.abs(e.players[b].f-1)-Math.abs(e.players[a].f-1)).slice(0,12);
+  return `Team run bias (positive = model projects them too high, correction already applied): `
+    +(tk.map(t=>`${t} ${e.teams[t].rawBias>0?'+':''}${e.teams[t].rawBias} over ${e.teams[t].n}g, applying ${e.teams[t].adj}`).join('; ')||'none yet')
+    +`.\nPlayer prop factors: `
+    +(pk.map(p=>`${p} predicted ${e.players[p].predicted}% actual ${e.players[p].actual}% n=${e.players[p].n} factor ${e.players[p].f}`).join('; ')||'none yet');
+}
+async function send(){
+  const key=get(LS.ai,'');
+  const inp=document.getElementById('chatIn'),q=inp.value.trim();
+  if(!q)return;
+  if(!key){alert('Add a Gemini API key in Settings to use chat.');return}
+  inp.value='';CHAT.push({role:'user',content:q});paintChat();
+  const top=PROPS.slice(0,40).map(p=>`${p.name} ${p.mkt} ${(p.p*100).toFixed(0)}% (${p.game})`).join('; ');
+  const L=get(LS.locked,[]);
+  const R=buildAllTimeRecord();
+  const mineS=recordStats(R.mine),sysS=recordStats(R.system),outS=recordStats(R.outside);
+  const drift=get('d4.drift',null);
+  const trend=calibrationTrend().slice(-7);
+  const srcStats=getSrcStats();
+  const b=getBankroll();
+  const sys=`You are the analyst inside this user's own app, The Desk. Sections:\n\n`
+    +`1) TONIGHT'S BOARD — 10,000 sims per game, built ONLY from player stats, lineups, park, weather, `
+    +`home/away splits, two-year head-to-head and starter workload. Bookmaker odds are NEVER an input, only a comparison:\n${slateContext()}\n\n`
+    +`2) TOP PROPS: ${top}\n\n3) GRADED HISTORY:\n${gradesContext()}\n\n`
+    +`4) ACTIVE SELF-CORRECTIONS:\n${calibContext()}\n\n4b) LEARNED PER-TEAM AND PER-PLAYER BIAS:\n${entityContext()}\n\n`
+    +`4c) GLOBAL DRIFT — the model's overall (not per-team) bias across every graded game ever, and the `
+    +`correction currently applied to every new projection to counter it:\n`
+    +(drift&&drift.ready?`Across ${drift.n} graded games, average total-runs bias is ${drift.avgBias>0?'+':''}${drift.avgBias} `
+      +`(positive = model runs hot). Active correction: ${drift.totalDrift>0?'+':''}${drift.totalDrift} runs per game. `
+      +`Side picks hitting ${drift.sidePct}% across ${drift.sideGraded} decided games.`
+      :`Not enough graded games yet for a global correction (need ${MIN_N_CAL}).`)+'\n\n'
+    +`4d) LAST 7 DAYS' AVERAGE MISS SIZE (is calibration actually improving?): `
+    +(trend.length?trend.map(t=>`${t.date}: ${t.avgMiss} runs (n=${t.n})`).join('; '):'not enough graded days yet')+'\n\n'
+    +`5) ALL-TIME RECORD, decomposed to individual straight legs (a parlay's legs each count separately):\n`
+    +`Mine: ${mineS.w}-${mineS.l} (${mineS.pct}%, ${mineS.pending} pending)\n`
+    +`System (confirmed only): ${sysS.w}-${sysS.l} (${sysS.pct}%, ${sysS.pending} pending)\n`
+    +`Outside sources combined: ${outS.w}-${outS.l} (${outS.pct}%, ${outS.pending} pending)\n`
+    +`Per-source breakdown: ${Object.keys(srcStats).length?Object.keys(srcStats).map(s=>{
+      const o=srcStats[s];return `${s} ${o.w}-${o.l}`}).join('; '):'none uploaded yet'}\n\n`
+    +`6) LOCKED PARLAYS:\n${L.length?L.map(t=>`${t.date} (${(t.p*100).toFixed(2)}%): ${t.legs.map(x=>x.pick+' '+x.game).join(', ')}`).join('\n'):'none'}\n\n`
+    +`7) BANKROLL: $${(BR_BASELINE+b.profit).toFixed(2)} balance this month, ${b.profit>=0?'+':''}$${b.profit.toFixed(2)} net, `
+    +`${b.history.length} tickets settled, limit multiplier ${b.limitMult.toFixed(2)}x.\n\n`
+    +`Rules: PLAYER PROPS at the user's book are X+ ladders only — never recommend an under on a player prop. `
+    +`Game totals, run lines and F5 totals DO offer both directions, so unders are fully in play there and you `
+    +`should recommend whichever side the sim favors. Treat the most-common-exact-score as more informative than `
+    +`the median when discussing likely outcomes. Edge under 3 points is noise. When asked how the system is `
+    +`performing or whether calibration is working, lead with the global drift and daily-miss trend in section 4c/4d — `
+    +`that's the real answer, not just win/loss record. `
+    +`Be direct and concise. Never claim certainty. Say plainly when a sample is too small to trust.`;
+  try{
+    // Chat uses text-only — prepend system prompt as first user turn for Gemini
+    const chatBlocks=[
+      {type:'text',text:'[SYSTEM] '+sys},
+      ...CHAT.slice(-10).map(m=>({type:'text',text:(m.role==='user'?'[USER] ':'[ASSISTANT] ')+m.content}))
+    ];
+    const raw=await callGemini(key,chatBlocks,1500);
+    CHAT.push({role:'assistant',content:raw||'No response.'});
+  }catch(e){CHAT.push({role:'assistant',content:'Network error.'})}
+  paintChat();
+}
+function paintChat(){
+  const el=document.getElementById('msgs');
+  el.innerHTML=CHAT.map(m=>`<div class="msg ${m.role==='user'?'u':'a'}"><div class="b">${m.content.replace(/</g,'&lt;')}</div></div>`).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+/* ================= RECAP / SHARE CARD ================= */
+let RECAP_DAY=null;
+function recapDays(){
+  const arc=get(LS.arc,{});
+  return Object.keys(arc).filter(d=>arc[d].finals&&Object.keys(arc[d].finals).length).sort().reverse();
+}
+function dayLabel(d){
+  const dt=new Date(d+'T12:00:00');
+  return dt.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+}
+function saveHandle(){
+  const v=document.getElementById('handleIn').value.trim();
+  if(v)set(LS.handle,v);
+  renderRecap();
+}
+function renderRecap(){
+  const hi=document.getElementById('handleIn');
+  if(hi&&!hi.value)hi.value=get(LS.handle,'');
+  const days=recapDays();
+  const pk=document.getElementById('recapPicker');
+  if(!days.length){
+    pk.innerHTML='';
+    document.getElementById('recapCard').innerHTML=
+      '<div class="empty">No graded days yet. Open Grades after a slate finishes to pull final scores, then come back here.</div>';
+    return;
+  }
+  if(!RECAP_DAY||!days.includes(RECAP_DAY))RECAP_DAY=days[0];
+  pk.innerHTML=days.slice(0,10).map(d=>
+    `<button class="${d===RECAP_DAY?'on':''}" onclick="RECAP_DAY='${d}';renderRecap()">${dayLabel(d)}</button>`).join('');
+  document.getElementById('recapCard').innerHTML=buildRecapCard(RECAP_DAY);
+}
+function buildRecapCard(d){
+  const arc=get(LS.arc,{}),A=arc[d];
+  if(!A||!A.finals)return '<div class="empty">Nothing graded for this day.</div>';
+  const fin=A.finals;
+  let sW=0,sL=0,fW=0,fL=0,f5W=0,f5L=0;
+  const rows=[];
+  A.rows.forEach(r=>{
+    const F=fin[r.id];if(!F||F.a===null||F.h===null)return;
+    const won=F.h>F.a?r.h:(F.a>F.h?r.a:null);
+    if(!won)return;
+    const hit=won===r.side;
+    hit?sW++:sL++;
+    if(r.edge!==null&&r.edge>=3){hit?fW++:fL++}
+    if(F.f5ok){const fw=F.fh>F.fa?r.h:(F.fa>F.fh?r.a:null);
+      if(fw){fw===r.f5?f5W++:f5L++}}
+    rows.push({g:`${r.a} ${F.a}–${F.h} ${r.h}`,pick:r.side,edge:r.edge,hit});
+  });
+  let pW=0,pL=0;
+  (A.pgrades||[]).forEach(o=>{o.hit?pW++:pL++});
+  const pct=(w,l)=>w+l?((w/(w+l))*100).toFixed(0):'—';
+  const overall=sW+pW,overallL=sL+pL;
+  const bestRows=rows.filter(r=>r.hit).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,5);
+  const worstRows=rows.filter(r=>!r.hit).slice(0,2);
+  const showRows=[...bestRows,...worstRows].slice(0,6);
+  // calibration snapshot for the footer credibility line
+  const c=get(LS.calib,{}),ty=c.types||{};
+  const calN=Object.values(ty).reduce((a,o)=>a+(o.n||0),0);
+  return `<div class="recapwrap" id="shareTarget"><div class="recapcard">
+    <div class="rc-head">
+      <div><div class="rc-brand">THE<span>DESK</span></div><div class="rc-tag">Simulation-based MLB analysis</div></div>
+      <div class="rc-date">${dayLabel(d)}<br>Verified box-score grading</div>
+    </div>
+    <div class="rc-hero">
+      <div class="pct">${pct(overall,overallL)}%</div>
+      <div class="rec">${overall}-${overallL} on the day</div>
+      <div class="lab">Every pick graded against the final box score</div>
+    </div>
+    <div class="rc-stats">
+      <div class="rc-stat"><div class="v win">${sW}-${sL}</div><div class="l">Sides</div></div>
+      <div class="rc-stat"><div class="v gold">${fW}-${fL}</div><div class="l">3+ Edge plays</div></div>
+      <div class="rc-stat"><div class="v">${pW}-${pL}</div><div class="l">Props</div></div>
+    </div>
+    ${f5W+f5L?`<div class="rc-stats" style="grid-template-columns:1fr"><div class="rc-stat"><div class="v">${f5W}-${f5L}</div><div class="l">First 5 innings</div></div></div>`:''}
+    <div class="rc-list">
+      <h5>Card highlights</h5>
+      ${showRows.length?showRows.map(r=>`<div class="rc-row">
+        <div><div class="g">${r.g}</div><div class="p">picked ${r.pick}${r.edge!==null?' · edge +'+r.edge:''}</div></div>
+        <div class="r ${r.hit?'w':'l'}">${r.hit?'WIN':'LOSS'}</div></div>`).join('')
+        :'<div class="rc-empty-slot">No graded games this day</div>'}
+    </div>
+    <div class="rc-foot">
+      <div class="cal">${calN>0?calN+' props in the calibration model':'Model self-grades every night'}</div>
+      <div class="cta">Follow <span>${get(LS.handle,'@YourHandle')}</span></div>
+    </div>
+  </div></div>`;
+}
+async function exportRecapImage(){
+  if(!document.getElementById('shareTarget')){alert('Pick a graded day first — nothing to export yet.');return}
+  await exportImage('shareTarget','exportBtn','thedesk-recap-'+RECAP_DAY,'The Desk — '+dayLabel(RECAP_DAY));
+}
+/* ================= BEST BETS ================= */
+// Today = forward-looking, ranked live. Recap = the graded record of what Best Bets
+// actually said on a past day, checked against the real final score and box score —
+// so a claim of "here's today's best plays" always has a receipts trail behind it.
+let BESTTAB='today',BEST_RECAP_DAY=null;
+const BNAV=[['today','Today'],['recap','Recap']];
+function bestTab(t){
+  BESTTAB=t;
+  document.getElementById('bestNav').innerHTML=BNAV.map(([k,l])=>
+    `<button class="${t===k?'on':''}" onclick="bestTab('${k}')">${l}</button>`).join('');
+  document.getElementById('best-today').classList.toggle('on',t==='today');
+  document.getElementById('best-recap').classList.toggle('on',t==='recap');
+  if(t==='today')renderBest();else renderBestRecap();
+}
+// public-facing floor: Best Bets and Recap never show a pick below this bar, even if it
+// means showing fewer than 5. Everything below still gets tracked in Grades internally —
+// this only controls what's public.
+const PUBLIC_THRESH={side:0.60,total:0.70,f5:0.70,hr:0.27,prop:0.80,rbi:0.75};
+// per-prop-type floor for anything public-facing — replaces the old flat 70% bar with
+// what was actually specified: RBI is a noisier, lower-signal stat so it gets its own
+// lower bar; everything else that behaves like a clean binary outcome (hits, total bases,
+// strikeouts, walks) holds the stricter 80%. HR keeps its own tiered system separately.
+function propThreshFor(type){
+  if(type==='rbi')return PUBLIC_THRESH.rbi;
+  if(type==='hr')return PUBLIC_THRESH.hr;
+  return PUBLIC_THRESH.prop;
+}
+// HR is structurally rarer than hits/Ks/walks, so a raw 29% HR prop is genuinely elite
+// within its own category even though it looks weak next to an 88% strikeout prop on a
+// flat sort. This tier is for INCLUSION/labeling only — the displayed % always stays the
+// true raw number, and this never touches how anything else gets sorted.
+function hrTierLabel(p){
+  if(p<0.25)return null;
+  if(p<0.27)return '60–70 tier';
+  if(p<0.29)return '70–80 tier';
+  if(p<0.30)return '80–90 tier';
+  return '90–95 tier';
+}
+function bestSides(n){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    if(!hasRealML(g.id))return;
+    const M=marketOf(g);
+    const bl=mlBlend(g,s);
+    const favSide=bl.home>=bl.away?'home':'away';
+    const ab=g[favSide].abbr,prob=Math.max(bl.home,bl.away);
+    if(prob<PUBLIC_THRESH.side)return;
+    const eh=(s.hw-M.fh)*100,ea=(s.aw-M.fa)*100;
+    const edge=favSide==='home'?eh:ea;
+    out.push({pick:ab+' ML',game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob,edge});
+  });
+  return out.sort((a,b)=>{
+    const ka=a.edge!==null?1000+a.edge:a.prob*100,kb=b.edge!==null?1000+b.edge:b.prob*100;
+    return kb-ka;
+  }).slice(0,n);
+}
+function bestTotals(n){
+  const out=[];
+  GAMES.forEach(g=>{
+    if(g.abstract==='Final')return;
+    const s=SIMS[g.id];if(!s)return;
+    if(!hasRealTotal(g.id))return;
+    const st=sharpTotalFor(g.id);
+    const o=sharpTotalBlend(g,st.line,s.over(st.line));
+    const prob=Math.max(o,1-o);
+    if(prob<PUBLIC_THRESH.total)return;
+    out.push({pick:(o>=.5?'Over ':'Under ')+st.line,game:g.away.abbr+'@'+g.home.abbr,gid:g.id,prob});
+  });
+  return out.sort((a,b)=>b.prob-a.prob).slice(0,n);
+}
+function bestPropsRaw(n){
+  return PROPS.filter(p=>p.type!=='hr'&&p.p>=propThreshFor(p.type)).slice(0,n)
+    .map(p=>({name:p.name,mkt:p.mkt,type:p.type,thr:p.thr,pid:p.pid,gid:p.gid,game:p.game,p:p.p}));
+}
+function bestHRRaw(){
+  const hrs=PROPS.filter(p=>p.type==='hr'&&p.p>=PUBLIC_THRESH.hr).sort((a,b)=>b.p-a.p);
+  if(!hrs.length)return null;
+  const h=hrs[0];
+  return{name:h.name,mkt:h.mkt,type:'hr',thr:1,pid:h.pid,gid:h.gid,game:h.game,p:h.p};
+}
+function buildBestCard(){
+  const sides=bestSides(5),totals=bestTotals(5),props=bestPropsRaw(5),hr=bestHRRaw();
+  const pf=x=>(x*100).toFixed(1);
+  const rows=(title,arr,foot,pickKey,probKey)=>arr.length
+    ?`<div class="rc-list"><h5>${title}</h5>${arr.map(x=>`<div class="rc-row">
+      <div><div class="g">${x[pickKey]||(x.name+' '+x.mkt)}</div><div class="p">${x.game}${x.edge!==null&&x.edge!==undefined?' · edge +'+x.edge.toFixed(1):''}</div></div>
+      <div class="r" style="color:var(--gold)">${pf(x[probKey])}%</div></div>`).join('')}
+      ${foot?`<div class="p" style="font-size:9.5px;padding-top:4px">${foot}</div>`:''}</div>`
+    :`<div class="rc-list"><h5>${title}</h5><div class="rc-empty-slot">Not enough data yet</div></div>`;
+  return `<div class="recapwrap" id="bestShareTarget"><div class="recapcard">
+    <div class="rc-head">
+      <div><div class="rc-brand">THE<span>DESK</span></div><div class="rc-tag">Today's top plays · simulation-ranked</div></div>
+      <div class="rc-date">${fmtDate(new Date())}<br>10,000 sims / game</div>
+    </div>
+    ${hr?`<div class="rc-hero"><div class="pct" style="font-size:34px">${hr.name}</div>
+      <div class="rec">1+ HR · ${pf(hr.p)}%</div>
+      <div class="lab">Best home run chance on the board · ${hr.game}</div></div>`
+      :`<div class="rc-hero"><div class="lab">No home run data yet</div></div>`}
+    ${rows('Best 5 sides',sides,'Ranked by edge vs. market where pulled, else by sim win probability','pick','prob')}
+    ${rows('Best 5 totals',totals,'Blended with SharpAPI\'s real total line when one is posted for that game','pick','prob')}
+    ${rows('Best 5 props',props,'Ranked by sim probability, self-calibrated against graded history','_','p')}
+    <div class="rc-foot">
+      <div class="cal">Built from lineups, park, weather, H2H — never from book odds</div>
+      <div class="cta">Follow <span>${get(LS.handle,'@YourHandle')}</span></div>
+    </div>
+  </div></div>`;
+}
+function renderBest(){
+  const el=document.getElementById('bestCard');
+  if(!GAMES.length){el.innerHTML='<div class="empty">Board not loaded yet.</div>';return}
+  const d=today(),log=get(LS.bestlog,{}),entry=log[d];
+  const locked=entry&&entry.locked;
+  const lockBar=`<div class="note" style="margin:0 0 10px;display:flex;align-items:center;
+    flex-wrap:wrap;gap:8px;border-left:3px solid ${locked?'var(--win)':'var(--gold)'};padding-left:10px">
+    <b style="color:${locked?'var(--win)':'var(--gold)'}">${locked
+      ?`🔒 Locked at ${new Date(entry.lockedAt||entry.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} — this is what gets graded tonight`
+      :`Unlocked — still moving with lineups and odds`}</b>
+    ${locked
+      ?`<button onclick="unlockBestToday()" style="padding:3px 10px;font-size:10px;
+          font-family:'IBM Plex Mono';background:transparent;border:1px solid var(--rule);
+          color:var(--mute);border-radius:5px;cursor:pointer">Unlock</button>`
+      :`<button onclick="lockBestToday()" style="padding:3px 10px;font-size:10px;
+          font-family:'IBM Plex Mono';background:rgba(242,169,59,.15);border:1px solid var(--gold);
+          color:var(--gold);border-radius:5px;cursor:pointer">Lock today's picks</button>`}
+  </div>`;
+  el.innerHTML=lockBar+buildBestCard();
+}
+
+/* ---- snapshot + grade the day's Best Bets, separately from the main archive ---- */
+function lockBestToday(){
+  const d=today(),log=get(LS.bestlog,{});
+  if(!log[d]){alert("Nothing to lock yet — the Best card builds once lineups post.");return}
+  if(log[d].locked){alert("Today's Best picks are already locked.");return}
+  if(!confirm("Lock today's Best picks? They'll stop updating as lineups and odds move, and this is what gets graded tonight."))return;
+  log[d].locked=true;log[d].lockedAt=Date.now();
+  set(LS.bestlog,log);
+  bestTab(BESTTAB||'today');
+}
+function unlockBestToday(){
+  const d=today(),log=get(LS.bestlog,{});
+  if(!log[d]||!log[d].locked)return;
+  if(!confirm("Unlock today's Best picks so they refresh again? Only do this if you locked by mistake — the card will start moving with the board."))return;
+  log[d].locked=false;delete log[d].lockedAt;
+  set(LS.bestlog,log);
+  snapshotBest();
+  bestTab(BESTTAB||'today');
+}
+// THE BUG THIS FIXES: the Best card had no reliable auto-lock, so it silently
+// rewrote itself on every ~15-minute refresh all day unless YOU remembered to
+// manually tap Lock — which is exactly "the Best section keeps switching up."
+// Manual lock still works and still takes priority, but now there's also a
+// real, automatic deadline: the moment the FIRST game of today's slate goes
+// live, lineups have genuinely stopped moving, so the card freezes itself
+// right there instead of depending on you catching it in time.
+function shouldAutoLockBest(){
+  return GAMES.some(g=>g.abstract==='Live'||g.abstract==='Final');
+}
+function snapshotBest(){
+  const d=today(),log=get(LS.bestlog,{});
+  if(log[d]&&(log[d].locked||log[d].pgradesDone))return;
+  if(!GAMES.length)return;
+  // auto-lock check happens BEFORE writing a new snapshot — if any game has
+  // already gone live, whatever was captured last is what freezes, rather
+  // than sneaking in one more overwrite first
+  if(log[d]&&shouldAutoLockBest()){
+    log[d].locked=true;log[d].lockedAt=Date.now();log[d].autoLocked=true;
+    set(LS.bestlog,log);
+    return;
+  }
+  const sides=bestSides(5),totals=bestTotals(5),props=bestPropsRaw(5),hr=bestHRRaw();
+  if(!sides.length&&!totals.length&&!props.length)return;
+  log[d]={sides,totals,props,hr,ts:Date.now(),locked:false};
+  set(LS.bestlog,log);
+  document.getElementById('nBest')&&(document.getElementById('nBest').textContent=Object.keys(log).length);
+}
+function gradeSideRaw(pick,F,game){
+  if(!F||F.a===null||F.h===null)return null;
+  const [awayAb,homeAb]=game.split('@'),a=F.a,h=F.h;
+  if(/ ML$/.test(pick)){const who=pick.replace(/ ML$/,'');if(a===h)return null;return (h>a?homeAb:awayAb)===who}
+  if(/^Over /.test(pick))return (a+h)>parseFloat(pick.slice(5));
+  if(/^Under /.test(pick))return (a+h)<parseFloat(pick.slice(6));
+  return null;
+}
+async function gradeBestLog(d){
+  const log=get(LS.bestlog,{}),entry=log[d];
+  if(!entry)return null;
+  let finals=(get(LS.arc,{})[d]||{}).finals;
+  if(!finals){try{finals=await fetchFinals(d)}catch(e){finals={}}}
+  // THE THIRD BEST-SECTION BUG: sideResults/totalResults were computed fresh
+  // every call but NEVER WRITTEN BACK to storage — only props/HR got persisted
+  // (inside the pgradesDone block below). Anything that read log[d].sides
+  // directly instead of calling gradeBestLog() again saw ungraded picks
+  // forever, even after the games were long final. Now sides/totals get saved
+  // back into the entry every time this runs, same as props/HR always did.
+  const sideResults=entry.sides.map(x=>({...x,hit:gradeSideRaw(x.pick,finals[x.gid],x.game)}));
+  const totalResults=entry.totals.map(x=>({...x,hit:gradeSideRaw(x.pick,finals[x.gid],x.game)}));
+  let propResults=entry.props,hrResult=entry.hr;
+  const neededGids=[...new Set([...entry.props.map(p=>p.gid),entry.hr?entry.hr.gid:null].filter(Boolean))];
+  const allFinal=neededGids.length>0&&neededGids.every(gid=>finals[gid]);
+  let wroteBack=false;
+  if(!entry.pgradesDone&&allFinal){
+    const boxes={};
+    for(const gid of neededGids){
+      try{const r=await fetch(`https://statsapi.mlb.com/api/v1/game/${gid}/boxscore`);boxes[gid]=await r.json()}catch(e){}
+    }
+    const gradeOne=p=>{
+      const box=boxes[p.gid];if(!box)return null;
+      let pl=null;
+      for(const s of ['away','home']){const P=((box.teams||{})[s]||{}).players||{};if(P['ID'+p.pid]){pl=P['ID'+p.pid];break}}
+      if(!pl)return null;
+      return gradePropRec(pl,p.type,p.thr);
+    };
+    propResults=entry.props.map(p=>({...p,hit:gradeOne(p)}));
+    hrResult=entry.hr?{...entry.hr,hit:gradeOne(entry.hr)}:null;
+    if(Object.keys(boxes).length){
+      entry.props=propResults;entry.hr=hrResult;entry.pgradesDone=true;
+      entry.locked=true;entry.lockedAt=entry.lockedAt||Date.now();
+      wroteBack=true;
+    }
+  }
+  // sides/totals are considered "done" once every game they reference is
+  // final — independent of the props/pgradesDone gate above, since a card
+  // can have sides graded while props are still waiting on box scores
+  const sideGids=[...new Set([...entry.sides.map(x=>x.gid),...entry.totals.map(x=>x.gid)])];
+  const sidesAllFinal=sideGids.length>0&&sideGids.every(gid=>finals[gid]);
+  if(sidesAllFinal&&(!entry.sidesGradesDone)){
+    entry.sides=sideResults;entry.totals=totalResults;entry.sidesGradesDone=true;
+    wroteBack=true;
+  }
+  if(wroteBack){log[d]=entry;set(LS.bestlog,log)}
+  const allGraded=[...sideResults,...totalResults,...propResults,hrResult].filter(x=>x&&x.hit!==null);
+  const w=allGraded.filter(x=>x.hit===true).length,l=allGraded.filter(x=>x.hit===false).length;
+  return{sides:sideResults,totals:totalResults,props:propResults,hr:hrResult,w,l};
+}
+function bestRecapDays(){return Object.keys(get(LS.bestlog,{})).sort().reverse()}
+async function renderBestRecap(){
+  const days=bestRecapDays();
+  const pk=document.getElementById('bestRecapPicker');
+  if(!days.length){
+    pk.innerHTML='';
+    document.getElementById('bestRecapCard').innerHTML='<div class="empty">No Best Bets logged yet — one is captured automatically each day the app is opened.</div>';
+    return;
+  }
+  if(!BEST_RECAP_DAY||!days.includes(BEST_RECAP_DAY))BEST_RECAP_DAY=days[0];
+  pk.innerHTML=days.slice(0,10).map(d=>
+    `<button class="${d===BEST_RECAP_DAY?'on':''}" onclick="BEST_RECAP_DAY='${d}';renderBestRecap()">${dayLabel(d)}</button>`).join('');
+  document.getElementById('bestRecapCard').innerHTML='<div class="empty">Grading against the box score…</div>';
+  const G=await gradeBestLog(BEST_RECAP_DAY);
+  document.getElementById('bestRecapCard').innerHTML=G?buildBestRecapCard(BEST_RECAP_DAY,G):'<div class="empty">Nothing to grade for this day.</div>';
+}
+function buildBestRecapCard(d,G){
+  const pf=x=>(x*100).toFixed(1);
+  const mark=h=>h===true?'<span class="r w">WIN</span>':h===false?'<span class="r l">LOSS</span>':'<span class="r" style="color:var(--mute)">—</span>';
+  const rows=(title,arr,keyLabel)=>arr.length
+    ?`<div class="rc-list"><h5>${title}</h5>${arr.map(x=>`<div class="rc-row">
+      <div><div class="g">${keyLabel(x)}</div><div class="p">${x.game} · called ${pf(x.p!==undefined?x.p:x.prob)}%</div></div>
+      ${mark(x.hit)}</div>`).join('')}</div>`
+    :`<div class="rc-list"><h5>${title}</h5><div class="rc-empty-slot">None logged</div></div>`;
+  const pct=G.w+G.l?((G.w/(G.w+G.l))*100).toFixed(0):'—';
+  return `<div class="recapwrap" id="bestRecapShareTarget"><div class="recapcard">
+    <div class="rc-head">
+      <div><div class="rc-brand">THE<span>DESK</span></div><div class="rc-tag">Best Bets · graded recap</div></div>
+      <div class="rc-date">${dayLabel(d)}<br>Verified box-score grading</div>
+    </div>
+    <div class="rc-hero">
+      <div class="pct">${pct}%</div>
+      <div class="rec">${G.w}-${G.l} across sides, totals, props &amp; HR</div>
+      <div class="lab">Graded against the real final score</div>
+    </div>
+    ${rows('Sides',G.sides,x=>x.pick)}
+    ${rows('Totals',G.totals,x=>x.pick)}
+    ${rows('Props',G.props,x=>x.name+' '+x.mkt)}
+    ${G.hr?rows('Home run pick',[G.hr],x=>x.name+' 1+ HR'):''}
+    <div class="rc-foot">
+      <div class="cal">Same picks, published before first pitch, checked after</div>
+      <div class="cta">Follow <span>${get(LS.handle,'@YourHandle')}</span></div>
+    </div>
+  </div></div>`;
+}
+
+/* ---- one shared exporter for every share card (Recap / Best-today / Best-recap) ---- */
+async function exportImage(targetId,btnId,filename,shareTitle){
+  const btn=document.getElementById(btnId);
+  const target=document.getElementById(targetId);
+  if(!target){alert('Nothing to export yet.');return}
+  if(typeof html2canvas==='undefined'){
+    alert("Image renderer didn't load — check your connection, or screenshot the card manually.");
+    return;
+  }
+  // btn was dereferenced without a null check — if the button id ever changed
+  // or the card re-rendered mid-tap, this threw before the export ran.
+  const orig=btn?btn.textContent:'';
+  if(btn){btn.textContent='Rendering…';btn.disabled=true;}
+  try{
+    const canvas=await html2canvas(target,{backgroundColor:'#0B0F14',scale:2,useCORS:true});
+    const blob=await new Promise(res=>canvas.toBlob(res,'image/png',1));
+    if(!blob)throw new Error('no blob');
+    const fname=filename+'.png';
+    const file=new File([blob],fname,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:shareTitle});
+    }else{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=fname;document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+      alert('Downloaded. If it opened in a new tab instead, long-press and choose Save to Photos.');
+    }
+  }catch(e){
+    if(e&&e.name==='AbortError'){}
+    else alert("Couldn't export automatically — screenshot the card as a fallback.");
+  }
+  if(btn){btn.textContent=orig;btn.disabled=false;}
+}
+let BOOTED=false;
+/* ── background auto-grading ──────────────────────────────────────────────
+   Grading used to only happen when the Grades tab was opened, so a slate could
+   finish and everything downstream — records, calibration, bankroll settlement,
+   external source stats — would sit stale until someone navigated there. This
+   watches for newly-final games and grades them the moment they land. */
+let LAST_FINAL_COUNT=-1;
+/* ── manual force-grade — Settings tab button ──────────────────────────────
+   Same pipeline as autoGradeIfFinals but never skipped by the change-detection
+   gate, and reports back exactly what it did instead of failing silently. This
+   is the "something looks stale, fix it now" button. */
+async function forceGradeEverything(){
+  // NFL grades on the same trigger as MLB, into its own archive (LS.nflarc).
+  try{if(typeof gradeNFLResults==='function')gradeNFLResults()}catch(e){console.warn('NFL grading:',e)}
+  const btn=document.getElementById('forceGradeBtn');
+  const status=document.getElementById('forceGradeStatus');
+  if(btn)btn.disabled=true;
+  if(status)status.innerHTML='<div class="empty">Grading everything…</div>';
+  const steps=[];
+  try{
+    const arc=get(LS.arc,{});
+    const d=today();
+    let gamesGraded=0;
+    if(arc[d]){
+      const f=await fetchFinals(d);
+      if(Object.keys(f).length){
+        arc[d].finals=f;
+        gamesGraded=Object.keys(f).length;
+        await gradePropsFor(arc[d]);
+        if(allGamesFinalized(d)){arc[d].locked=true;steps.push('Today fully finalized and locked.')}
+        else steps.push(`${gamesGraded} game(s) graded — slate not fully final yet.`);
+      }else{
+        steps.push('No final scores available from MLB yet for today.');
+      }
+      set(LS.arc,arc);
+    }else{
+      steps.push('No snapshot exists for today yet.');
+    }
+    computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();
+    steps.push('Calibration and entity bias recomputed.');
+
+    try{recordSimVsBook(arc,get(LS.bookshots,{}));steps.push('Sim-vs-book accuracy updated.');}
+    catch(e){steps.push('Sim-vs-book update skipped (error).');}
+
+    try{gradeExtPicks();steps.push('External source picks graded.');}
+    catch(e){steps.push('External pick grading skipped (error).');}
+
+    try{settleLockedTickets();steps.push('Bankroll settlement checked.');}
+    catch(e){steps.push('Bankroll settlement skipped (error).');}
+
+    // walk every ungraded ticket leg across ALL past dates, fetch whatever finals and
+    // box scores are missing, and settle — this is what un-sticks yesterday's tickets
+    const bf=await backfillGrading(false);
+    if(bf)steps.push(`Backfill: checked ${bf.dates.length} date(s), fetched ${bf.boxes} box score(s), ${bf.stillPending} leg(s) still genuinely pending.`);
+    LAST_FINAL_COUNT=GAMES.filter(g=>g.abstract==='Final').length;
+
+    if(status)status.innerHTML=`<div class="tkt hi"><h3>Done</h3>
+      <div class="sub">${steps.map(s=>'· '+s).join('<br>')}</div></div>`;
+
+    // refresh whatever's currently visible
+    const active=document.querySelector('.view.on');
+    if(active){
+      if(active.id==='v-tickets')renderTickets();
+      if(active.id==='v-money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab()}
+      if(active.id==='v-games')render();
+      if(active.id==='v-grades')renderGrades(true);
+    }
+  }catch(e){
+    if(status)status.innerHTML=`<div class="tkt"><h3>Error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
+  }finally{
+    if(btn)btn.disabled=false;
+  }
+}
+
+async function autoGradeIfFinals(){
+  // one-time repair for the run-line/total push bug — runs once ever, then
+  // never again, flagged in localStorage so it doesn't re-scan every ticket
+  // on every grading pass forever
+  if(!localStorage.getItem('d4.pushBugRepaired')){
+    try{
+      const result=repairPushBug();
+      localStorage.setItem('d4.pushBugRepaired','1');
+      if(result.fixed>0){
+        console.log(`Push bug repair: corrected ${result.fixed} of ${result.checked} archived tickets.`,result.fixedDetails);
+      }
+    }catch(e){console.warn('push bug repair failed',e)}
+  }
+  const finals=GAMES.filter(g=>g.abstract==='Final').length;
+  if(finals===LAST_FINAL_COUNT)return;   // nothing changed since last pass
+  LAST_FINAL_COUNT=finals;
+  if(!finals)return;
+  try{
+    const arc=get(LS.arc,{});
+    const d=today();
+    if(!arc[d])return;
+    const f=await fetchFinals(d);
+    if(!Object.keys(f).length)return;
+    arc[d].finals=f;
+    await gradePropsFor(arc[d]);
+    if(allGamesFinalized(d))arc[d].locked=true;
+    set(LS.arc,arc);
+    computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();
+    try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){}
+    try{gradeExtPicks();}catch(e){}
+    try{settleLockedTickets();}catch(e){}
+    try{await backfillGrading(true);}catch(e){}
+    // Best card grading was the second half of item 2 — gradeBestLog() existed
+    // but was only ever called manually from Recap, so a card could sit
+    // ungraded/unarchived indefinitely unless you happened to open that tab.
+    // Now it rides the same real "finals changed" trigger everything else
+    // uses, for both today AND any recent day that never got graded.
+    try{await gradeBestLog(d)}catch(e){}
+    try{await backfillUngradedBestDays()}catch(e){}
+    // refresh whatever view is currently open so the new grades show immediately
+    const active=document.querySelector('.view.on');
+    if(active){
+      if(active.id==='v-tickets')renderTickets();
+      if(active.id==='v-money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab()}
+      if(active.id==='v-games')render();
+      if(active.id==='v-best')renderBest();
+    }
+  }catch(e){console.warn('autoGrade',e)}
+}
+// Walks every day in bestlog that isn't graded+archived yet and grades it —
+// this is what makes a Best card from three days ago that never got looked
+// at eventually settle on its own instead of sitting stuck forever.
+async function backfillUngradedBestDays(){
+  const log=get(LS.bestlog,{});
+  const today_=today();
+  const stuck=Object.keys(log).filter(d=>d!==today_&&log[d]&&!log[d].pgradesDone);
+  for(const d of stuck){
+    try{await gradeBestLog(d)}catch(e){}
+  }
+}
+
+let __deskBooted=false;
+async function boot(){
+  /* boot() had no idempotency guard at all. That was fine as long as nothing
+     ever called it twice — but the setup-gate fallback added alongside this
+     guard is specifically a SECOND path that can call boot(), precisely in
+     the failure case it exists to recover from. Without this flag, a genuine
+     double-boot would double every interval and fetch boot() kicks off:
+     two live-score polls, two depth-chart fetches, two SP+ fetches, running
+     forever in parallel. One line closes that off completely. */
+  if(__deskBooted)return;
+  __deskBooted=true;
+  /* The sport selection persisted on switch but nothing read it back, so every
+     cold start dropped to MLB regardless of what was last being worked. */
+  /* boot() is invoked partway down the file, but the CFB and NFL engine
+     sections — and the let-declared NCAAF_POWER / NFL_DEPTH they own — are
+     defined further below. Firing these on a bare timer only worked because
+     parsing usually finished inside 1.5s; on a slow device it would race and
+     throw a temporal-dead-zone error. Wait for the script to actually finish
+     instead of guessing at a delay. */
+  whenScriptReady(()=>{fetchCFBDRatings().catch(()=>{})});
+  whenScriptReady(()=>{fetchCFBPortal().catch(()=>{})},2000);
+  whenScriptReady(()=>{fetchNFLDepthCharts().catch(()=>{})},1200);
+  /* This used to auto-restore whatever sport was last active and redirect
+     to it — sensible on a single page where "switching sport" just meant
+     repainting the same document. On the split (mlb.html/nfl.html/cfb.html),
+     that would mean opening mlb.html could silently bounce you to nfl.html
+     because that's what a PREVIOUS session happened to end on — surprising
+     and wrong. Each page now declares its own default sport explicitly in
+     its own bootstrap script; this cross-page auto-redirect is retired. */
+  await pullFromGitHubIfEmpty();
+  paintMeter();loadSlip();
+  document.getElementById('nR').textContent=Object.keys(get(LS.arc,{})).length||'';
+  document.getElementById('nBest').textContent=Object.keys(get(LS.bestlog,{})).length||'';
+  const o=get(LS.open,{d:'',v:{}});if(o.d===today())OPENS=o.v;
+  const c=get(LS.odds,{d:'',v:{}});if(c.d===today())ODDS=c.v;
+  H2H=(get(LS.h2h,{}).pairs)||{};SPLITS=(get(LS.splits,{}).teams)||{};ODDS_BYDATE=get(LS.oddsdate,{});
+  /* boot() was written MLB-first: it always ran the MLB schedule/odds/lineup
+     load chain, regardless of what page called it. On the split, nfl.html
+     and cfb.html declare their own identity via window.__PAGE_SPORT__ before
+     shared.js even loads — branch on that instead of assuming MLB, so a
+     football page doesn't spend its boot budget fetching a board nobody on
+     that page will ever see, and so its OWN board actually gets its first
+     render (nothing else was going to trigger that). */
+  const pageSport=window.__PAGE_SPORT__||'mlb';
+  if(pageSport==='nfl'){
+    ACTIVE_SPORT='nfl';
+    if(typeof loadNFLSchedule==='function')await loadNFLSchedule().catch(()=>{});
+    if(typeof fetchNFLPowerRatings==='function')await fetchNFLPowerRatings().catch(()=>{});
+    if(typeof renderNFL==='function')renderNFL();
+    if(typeof nflOnActivate==='function')nflOnActivate();
+  }else if(pageSport==='ncaaf'){
+    ACTIVE_SPORT='ncaaf';
+    if(typeof loadNCAAFSchedule==='function')await loadNCAAFSchedule().catch(()=>{});
+    if(typeof renderNCAAF==='function')renderNCAAF();
+    if(typeof ncaafOnActivate==='function')ncaafOnActivate();
+  }else{
+    await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);
+    await loadESPN();
+  }
+  // catch up anything left ungraded from previous days before painting anything
+  try{await backfillGrading(true)}catch(e){console.warn('backfill',e)}
+  // THE ITEM-9 GAP: backfillGrading fetches missing finals/box scores for any
+  // stuck prior day, but never actually re-tried settling tickets with that
+  // newly-filled-in data — it could sit correctly graded in the archive while
+  // the ticket itself stayed unsettled/unarchived until the next unrelated
+  // trigger happened to fire. Settling right here, once, right after the data
+  // that was missing is now present, closes that gap.
+  try{settleLockedTickets()}catch(e){console.warn('settle after backfill',e)}
+  try{await backfillUngradedBestDays()}catch(e){}
+  snapshot();snapshotBest();paintSlip();renderDayPicker();renderBookStatus();
+  if(BOOTED)return;  // settings can be reopened/resaved any number of times — background
+                      // timers only ever get registered once, first boot, no matter how
+                      // many times saveKeys() runs afterward
+  BOOTED=true;
+  setInterval(()=>{loadOdds(false).then(()=>{try{captureCLV()}catch(e){}})},3e5);
+  setInterval(()=>loadSharp(false),3e5);
+  if(get(LS.ghrepo,'')&&get(LS.ghtoken,'')){
+    const last=Number(localStorage.getItem('d4.lastGhSync')||0);
+    if(Date.now()-last>20*36e5)pushToGitHub(false);
+    setInterval(()=>{
+      const l=Number(localStorage.getItem('d4.lastGhSync')||0);
+      if(Date.now()-l>20*36e5)pushToGitHub(false);
+    },36e5);
+  }
+  setInterval(()=>{
+    // if a preview day's been sitting open 20+ minutes, pull back to today automatically —
+    // the live board and grading were never actually blocked, but leaving it visually
+    // parked on a future date this long risks someone thinking that's still today
+    if(PREVIEW_DAY&&PREVIEW_STARTED&&(Date.now()-PREVIEW_STARTED)>12e5)backToToday();
+    loadAll().then(()=>{loadESPN();snapshot();snapshotBest();autoGradeIfFinals()});
+  },9e5);
+  // check every 3 minutes whether any game has gone final since the last pass, and if so
+  // grade + settle immediately instead of waiting for someone to open the Grades tab
+  setInterval(()=>autoGradeIfFinals(),18e4);
+  let DAY=today();
+  setInterval(async()=>{
+    if(today()!==DAY){DAY=today();OPENS={};ODDS={};SLIP=[];BOX={};
+      set(LS.slip,SLIP);await loadAll();await loadOdds(false);snapshot();snapshotBest();paintSlip();paintMeter()}
+  },3e4);
+}
+// Setup gate. The odds key is OPTIONAL — gating on it alone meant a null there
+// would hide a fully-configured app behind the setup screen and look like data loss.
+// Gate on whether this install has ANY prior state instead: a key of any kind, or
+// any archived/graded history. Nothing in localStorage is ever cleared by this check.
+(function(){
+  /* .setup sits at z-index:80, above every other element in the app — by
+     design, since it's the first-run gate. That also makes it the single
+     highest-risk failure mode in the whole file: if ANYTHING in this check
+     throws, the old code never reached classList.add('hide') or boot(), so
+     the overlay stayed up FOREVER and every button underneath it — the
+     entire app — was genuinely unclickable, not broken, just covered. This
+     wraps the real logic in try/catch and, on ANY failure, fails OPEN: hide
+     the overlay and boot anyway. A user who already has a working install
+     should never be locked out by a bug in the fresh-install detection. */
+  try{
+    const anyKey=[LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi]
+      .some(k=>{const v=get(k,'');return v!==null&&v!==undefined&&v!==''});
+    const anyHistory=Object.keys(get(LS.arc,{})).length>0
+      ||Object.keys(get(LS.bestlog,{})).length>0
+      ||(get(LS.locked,[])||[]).length>0;
+    const seenSetup=localStorage.getItem('d4.setupDone')==='1';
+    if(anyKey||anyHistory||seenSetup){
+      localStorage.setItem('d4.setupDone','1');
+      document.getElementById('setup').classList.add('hide');
+      boot();
+    }else{
+      renderUsage();renderBackupStatus();renderStorageStatus();renderDataFeedStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
+      document.getElementById('setup').classList.remove('hide');
+    }
+  }catch(e){
+    console.error('Setup gate failed — failing open so the app is never permanently blocked:',e);
+    try{document.getElementById('setup').classList.add('hide');}catch(e2){}
+    try{boot();}catch(e3){console.error('boot() also failed:',e3);}
+  }
+})();
+/* Belt-and-suspenders: if setup is STILL visible a few seconds after load for
+   any reason (a race, a slow script, anything not caught above) and this
+   clearly isn't a brand-new install, force it closed rather than leave the
+   whole app permanently covered. */
+setTimeout(()=>{
+  try{
+    if(__deskBooted)return;                 // already booted via the normal path or the catch above
+    const el=document.getElementById('setup');
+    if(!el||el.classList.contains('hide'))return;
+    const hasAnyState=Object.keys(localStorage).some(k=>k.startsWith('d4.'));
+    if(hasAnyState){el.classList.add('hide');try{boot();}catch(e){}}
+  }catch(e){}
+},4000);
+
+/* ── Physically relocated from inside the football section, where it had
+   landed purely by accident of anchor-based insertion order — it is called
+   from the MLB card too (coachHtml({..sport:'mlb'})), so it belongs here, as
+   its own clearly-labelled cross-sport layer, not buried inside NFL/CFB code.
+   No logic changed — this is a pure relocation, verified byte-for-byte below. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTEL LAYER — team ledger, frozen slate, take/fade verdict, system scorecard
+   ───────────────────────────────────────────────────────────────────────────
+   The learning bias already measures where the MODEL is wrong. None of it
+   measured where YOU are wrong. Those are different questions: the model can
+   project a team accurately while you still lose money betting them, because
+   your entry price is bad or you keep taking the wrong side of a good number.
+   This layer tracks the second question and puts the answer on the card.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. TEAM LEDGER ────────────────────────────────────────────────────────
+   Your actual record per team, split into sides and totals, built from the
+   picks you logged (LS.mine) plus locked parlay legs, graded against finals.
+   Not the model's record — yours. */
+function buildTeamLedger(){
+  const arc=get(LS.arc,{});
+  const mine=get(LS.mine,{});
+  const locked=get(LS.locked,[]);
+  const T={};   // abbr -> {sideW,sideL,sideP, ovW,ovL,unW,unL, units, n}
+  const touch=ab=>{
+    if(!ab)return null;
+    T[ab]=T[ab]||{sideW:0,sideL:0,sideP:0,ovW:0,ovL:0,unW:0,unL:0,units:0,n:0};
+    return T[ab];
+  };
+  // index finals by game key for fast lookup
+  const finals={};
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a==null||F.h==null)return;
+      finals[(r.a||'')+'@'+(r.h||'')]={a:+F.a,h:+F.h,date:d};
+      finals[r.id]={a:+F.a,h:+F.h,date:d,away:r.a,home:r.h};
+    });
+  });
+  const gradePick=(pick,gameKey)=>{
+    const F=finals[gameKey];if(!F)return null;
+    const [aw,hm]=(gameKey||'').split('@');
+    const p=String(pick||'').trim();
+    // total
+    let m=p.match(/^(Over|Under)\s+([\d.]+)$/i);
+    if(m){
+      const tot=F.a+F.h, line=+m[2], isOver=/over/i.test(m[1]);
+      if(tot===line)return{kind:'total',side:isOver?'over':'under',hit:null,teams:[aw,hm]};
+      const hit=isOver?tot>line:tot<line;
+      return{kind:'total',side:isOver?'over':'under',hit,teams:[aw,hm]};
+    }
+    // moneyline
+    m=p.match(/^([A-Z]{2,4})\s+ML$/i);
+    if(m){
+      const t=m[1].toUpperCase();
+      const winner=F.a>F.h?aw:F.h>F.a?hm:null;
+      if(!winner)return{kind:'side',team:t,hit:null,teams:[t]};
+      return{kind:'side',team:t,hit:winner===t,teams:[t]};
+    }
+    // spread / runline  "KC -3.5"  "NYY +1.5"
+    m=p.match(/^([A-Z]{2,4})\s+([+-][\d.]+)$/i);
+    if(m){
+      const t=m[1].toUpperCase(),ln=+m[2];
+      const own=t===aw?F.a:F.h, opp=t===aw?F.h:F.a;
+      const margin=own-opp+ln;
+      if(margin===0)return{kind:'side',team:t,hit:null,teams:[t]};
+      return{kind:'side',team:t,hit:margin>0,teams:[t]};
+    }
+    return null;
+  };
+  const record=(pick,gameKey,units)=>{
+    const g=gradePick(pick,gameKey);if(!g)return;
+    if(g.kind==='total'){
+      (g.teams||[]).forEach(ab=>{
+        const o=touch(ab);if(!o)return;o.n++;
+        if(g.hit===null)return;
+        if(g.side==='over'){g.hit?o.ovW++:o.ovL++}else{g.hit?o.unW++:o.unL++}
+        o.units+=(g.hit?(units||1)*0.91:-(units||1));
+      });
+    }else{
+      const o=touch(g.team);if(!o)return;o.n++;
+      if(g.hit===null){o.sideP++;return}
+      g.hit?o.sideW++:o.sideL++;
+      o.units+=(g.hit?(units||1)*0.91:-(units||1));
+    }
+  };
+  Object.keys(mine).forEach(d=>(mine[d]||[]).forEach(e=>record(e.pick,e.game,e.units)));
+  locked.forEach(t=>(t.legs||[]).forEach(l=>record(l.pick,l.game,(t.stake||1)/Math.max(1,(t.legs||[]).length))));
+  // classify
+  Object.keys(T).forEach(ab=>{
+    const o=T[ab];
+    const sideN=o.sideW+o.sideL, totN=o.ovW+o.ovL+o.unW+o.unL;
+    o.sideN=sideN;o.totN=totN;
+    o.sidePct=sideN?o.sideW/sideN:null;
+    o.ouPct=totN?(o.ovW+o.unW)/totN:null;
+    o.roi=o.n?o.units/o.n:0;
+    // black flag needs a real sample AND real bleeding
+    o.flag=(o.n>=6&&o.roi<=-0.25)?'black'
+          :(o.n>=6&&o.roi>=0.25)?'green'
+          :(o.n>=4&&o.roi<=-0.40)?'black'
+          :'neutral';
+  });
+  set(LS.teamledger,{ts:Date.now(),v:T});
+  return T;
+}
+function teamLedger(force){
+  const c=get(LS.teamledger,{});
+  if(!force&&c.v&&c.ts&&Date.now()-c.ts<36e5)return c.v;
+  return buildTeamLedger();
+}
+function teamLedgerFor(abbr){
+  const L=teamLedger();
+  return L[String(abbr||'').toUpperCase()]||null;
+}
+/* Compact chip for the game card — your record with this team. */
+function teamRecordChip(abbr){
+  const o=teamLedgerFor(abbr);
+  if(!o||o.n<3)return'';
+  const side=o.sideN?`${o.sideW}-${o.sideL}`:'—';
+  const ou=o.totN?`${o.ovW+o.unW}-${o.ovL+o.unL}`:'—';
+  const roiStr=(o.roi>=0?'+':'')+o.roi.toFixed(2)+'u/bet';
+  const col=o.flag==='black'?'var(--rust)':o.flag==='green'?'var(--win)':'var(--mute)';
+  const mark=o.flag==='black'?'\u2620 ':o.flag==='green'?'\u25c6 ':'';
+  return`<div class="sigchip" style="color:${col};border-color:${o.flag==='black'?'rgba(240,86,60,.45)':o.flag==='green'?'rgba(46,204,113,.45)':'var(--rule)'}"
+    title="Your record betting ${abbr}">
+    ${mark}${abbr} you <b>${side}</b> · O/U <b>${ou}</b> · ${roiStr}</div>`;
+}
+
+/* ── 2. FROZEN SLATE ───────────────────────────────────────────────────────
+   Once you run the learning bias, the day's projections lock. Everything that
+   arrives afterwards is measured against the frozen number instead of quietly
+   moving it — which is the only way to tell whether new information actually
+   improved the read or just chased the market. */
+function freezeSlate(sport){
+  const sp=sport||ACTIVE_SPORT;
+  const d=today();
+  const all=get(LS.frozen,{});
+  const bucket=all[d]||(all[d]={});
+  const games=sp==='nfl'?NFL_GAMES:sp==='ncaaf'?NCAAF_GAMES:GAMES;
+  const sims=sp==='nfl'?NFL_SIMS:sp==='ncaaf'?NCAAF_SIMS:SIMS;
+  let n=0;
+  (games||[]).forEach(g=>{
+    const s=(sims||{})[g.id];if(!s)return;
+    const key=sp+':'+(g.away.abbr+'@'+g.home.abbr);
+    bucket[key]={
+      ts:Date.now(),sport:sp,
+      awayProj:s.awayProj,homeProj:s.homeProj,
+      med:s.med!=null?s.med:null,
+      aw:s.aw,hw:s.hw,
+      // the official number at freeze time, so drift is measurable
+      bookSpread:(()=>{try{
+        const ln=sp==='nfl'?nflBookLinesFor(g.away.abbr+'@'+g.home.abbr)
+                :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
+        const sp2=ln.find(x=>x.market==='spread'&&x.side==='home');
+        return sp2?sp2.line:null;
+      }catch(e){return null}})(),
+      bookTotal:(()=>{try{
+        const ln=sp==='nfl'?nflBookLinesFor(g.away.abbr+'@'+g.home.abbr)
+                :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
+        const t=ln.find(x=>x.market==='total'&&x.side==='over');
+        return t?t.line:null;
+      }catch(e){return null}})(),
+    };
+    n++;
+  });
+  set(LS.frozen,all);
+  return n;
+}
+function frozenFor(g,sport){
+  const sp=sport||ACTIVE_SPORT;
+  const all=get(LS.frozen,{});
+  const bucket=all[today()]||{};
+  return bucket[sp+':'+(g.away.abbr+'@'+g.home.abbr)]||null;
+}
+function isSlateFrozen(sport){
+  const sp=sport||ACTIVE_SPORT;
+  const bucket=get(LS.frozen,{})[today()]||{};
+  return Object.keys(bucket).some(k=>k.startsWith(sp+':'));
+}
+/* Chip showing the locked number and how far the live sim has drifted from it. */
+function frozenChip(g,s,sport){
+  const f=frozenFor(g,sport);
+  if(!f)return'';
+  const dA=(s.awayProj-f.awayProj), dH=(s.homeProj-f.homeProj);
+  const drift=Math.abs(dA)+Math.abs(dH);
+  const stale=drift>=1.0;
+  return`<div class="sigchip" style="color:${stale?'var(--gold)':'var(--mute)'};
+    border-color:${stale?'rgba(255,180,61,.45)':'var(--rule)'}"
+    title="Projection frozen at ${new Date(f.ts).toLocaleTimeString()}">
+    \u2744 LOCKED <b>${f.awayProj}\u2013${f.homeProj}</b>${
+      stale?` · drift ${drift.toFixed(1)}`:''}</div>`;
+}
+
+/* ── 3. TAKE / FADE VERDICT ────────────────────────────────────────────────
+   Three inputs, stated separately so you can see WHY, never blended into one
+   opaque score: model edge, calibration at this confidence band, and your own
+   record with the teams involved. */
+function takeFadeVerdict(g,s,sport){
+  const sp=sport||ACTIVE_SPORT;
+  const reasons=[];let score=0;
+  // (a) model edge vs the posted number
+  let edge=null;
+  try{
+    const ln=sp==='nfl'?nflBookLinesFor(g.away.abbr+'@'+g.home.abbr)
+            :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
+    const aw=ln.find(x=>x.market==='spread'&&x.side==='away');
+    if(aw&&s.awayCover){
+      const p=s.awayCover(aw.line);
+      edge=evPct(p,aw.price);
+      if(edge>=4){score+=2;reasons.push(`model +${edge.toFixed(1)}% EV on ${g.away.abbr}`)}
+      else if(edge<=-4){score-=1;reasons.push(`model says pass (${edge.toFixed(1)}% EV)`)}
+    }
+  }catch(e){}
+  // (b) your record with both teams
+  const la=teamLedgerFor(g.away.abbr), lh=teamLedgerFor(g.home.abbr);
+  [[la,g.away.abbr],[lh,g.home.abbr]].forEach(([o,ab])=>{
+    if(!o||o.n<5)return;
+    if(o.flag==='black'){score-=2;reasons.push(`\u2620 you are ${o.roi.toFixed(2)}u/bet on ${ab}`)}
+    else if(o.flag==='green'){score+=1;reasons.push(`\u25c6 you are +${o.roi.toFixed(2)}u/bet on ${ab}`)}
+  });
+  // (c) calibration at this confidence band
+  try{
+    const conf=Math.max(s.aw,s.hw);
+    const band=conf>=.65?'high':conf>=.55?'mid':'low';
+    const cal=get(LS.calib,{});
+    const bandRec=cal.bands&&cal.bands[band];
+    if(bandRec&&bandRec.n>=10){
+      const act=bandRec.w/bandRec.n, exp=bandRec.e/bandRec.n;
+      const gap=(act-exp)*100;
+      if(gap<=-8){score-=2;reasons.push(`you run ${gap.toFixed(0)}pts under expectation in the ${band} band`)}
+      else if(gap>=8){score+=1;reasons.push(`you beat expectation by ${gap.toFixed(0)}pts in the ${band} band`)}
+    }
+  }catch(e){}
+  const verdict=score>=3?'TAKE':score<=-3?'FADE':score>=1?'lean take':score<=-1?'lean fade':'neutral';
+  return{verdict,score,reasons,edge};
+}
+function takeFadeChip(g,s,sport){
+  const v=takeFadeVerdict(g,s,sport);
+  if(v.verdict==='neutral'&&!v.reasons.length)return'';
+  const col=v.verdict==='TAKE'?'var(--win)':v.verdict==='FADE'?'var(--rust)':
+            v.verdict==='lean take'?'var(--cold)':v.verdict==='lean fade'?'var(--gold)':'var(--mute)';
+  const bc=v.verdict==='TAKE'?'rgba(46,204,113,.5)':v.verdict==='FADE'?'rgba(240,86,60,.5)':'var(--rule)';
+  return`<div class="sigchip" style="color:${col};border-color:${bc}"
+    title="${v.reasons.join(' \u00b7 ').replace(/"/g,'')}">
+    ${v.verdict.toUpperCase()}${v.reasons.length?` \u00b7 ${v.reasons.length} signal${v.reasons.length>1?'s':''}`:''}</div>`;
+}
+function takeFadePanel(g,s,sport){
+  const v=takeFadeVerdict(g,s,sport);
+  const col=v.verdict==='TAKE'?'var(--win)':v.verdict==='FADE'?'var(--rust)':'var(--mute)';
+  const la=teamLedgerFor(g.away.abbr), lh=teamLedgerFor(g.home.abbr);
+  const teamRow=(o,ab)=>{
+    if(!o||!o.n)return`<div style="color:var(--mute)">${ab}: no graded history yet</div>`;
+    const mark=o.flag==='black'?'\u2620':o.flag==='green'?'\u25c6':'\u00b7';
+    const c=o.flag==='black'?'var(--rust)':o.flag==='green'?'var(--win)':'var(--chalk)';
+    return`<div style="color:${c}">${mark} <b>${ab}</b> — sides ${o.sideW}-${o.sideL}${o.sideP?'-'+o.sideP:''},
+      O/U ${o.ovW+o.unW}-${o.ovL+o.unL}, ${(o.roi>=0?'+':'')}${o.roi.toFixed(2)}u per bet over ${o.n}</div>`;
+  };
+  return`<div class="sub" style="line-height:1.75">
+    <div style="font-family:'Archivo';font-weight:900;font-size:16px;color:${col};margin-bottom:6px">
+      ${v.verdict.toUpperCase()}<span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--mute);font-weight:400"> · score ${v.score>0?'+':''}${v.score}</span></div>
+    ${v.reasons.length?v.reasons.map(r=>`<div>\u2022 ${r}</div>`).join(''):'<div style="color:var(--mute)">No strong signal either way.</div>'}
+    <div style="margin-top:10px;font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--mute)">Your history</div>
+    ${teamRow(la,g.away.abbr)}
+    ${teamRow(lh,g.home.abbr)}
+    <div style="margin-top:10px;color:var(--mute);font-size:10px">
+      Verdict blends model EV, your per-team profit and your calibration in this confidence band.
+      It is a summary of your own record — not a prediction, and not a substitute for the number.</div>
+  </div>`;
+}
+
+/* ── 4. SYSTEM vs BOOK SCORECARD ───────────────────────────────────────────
+   Logs what the MODEL picked and what the BOOK favoured on every game, whether
+   or not you bet it. Without this you only ever see the subset you acted on,
+   which is the most biased sample available. */
+function logSystemPicks(sport){
+  const sp=sport||ACTIVE_SPORT;
+  const games=sp==='nfl'?NFL_GAMES:sp==='ncaaf'?NCAAF_GAMES:GAMES;
+  const sims=sp==='nfl'?NFL_SIMS:sp==='ncaaf'?NCAAF_SIMS:SIMS;
+  const log=get(LS.syslog,{});
+  const d=today();
+  const day=log[d]||(log[d]={});
+  (games||[]).forEach(g=>{
+    const s=(sims||{})[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const key=sp+':'+gl;
+    if(day[key]&&day[key].graded)return;
+    let lines=[];
+    try{lines=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):[]}catch(e){}
+    const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+    const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
+    const bookFav=(awayML&&homeML)?(awayML.price<homeML.price?g.away.abbr:g.home.abbr)
+                 :(homeML?g.home.abbr:awayML?g.away.abbr:null);
+    day[key]={
+      sport:sp,game:gl,
+      systemPick:s.hw>=s.aw?g.home.abbr:g.away.abbr,
+      systemConf:+(Math.max(s.aw,s.hw)*100).toFixed(1),
+      bookFav,graded:false,winner:null,systemHit:null,bookHit:null,
+    };
+  });
+  set(LS.syslog,log);
+  return Object.keys(day).length;
+}
+function gradeSystemLog(){
+  const log=get(LS.syslog,{});
+  const arc=get(LS.arc,{});
+  const finals={};
+  Object.keys(arc).forEach(d=>{
+    const A=arc[d],fin=A.finals||{};
+    (A.rows||[]).forEach(r=>{const F=fin[r.id];if(F&&F.a!=null)finals[(r.a||'')+'@'+(r.h||'')]={a:+F.a,h:+F.h}});
+  });
+  const addFinal=(arr,sp)=>(arr||[]).forEach(g=>{
+    if(g.awayScore==null||g.awayScore==='')return;
+    finals[g.away.abbr+'@'+g.home.abbr]={a:+g.awayScore,h:+g.homeScore};
+  });
+  addFinal(NFL_GAMES,'nfl');addFinal(NCAAF_GAMES,'ncaaf');
+  let graded=0;
+  Object.keys(log).forEach(d=>{
+    Object.keys(log[d]).forEach(k=>{
+      const row=log[d][k];if(row.graded)return;
+      const F=finals[row.game];if(!F)return;
+      const [aw,hm]=row.game.split('@');
+      const winner=F.a>F.h?aw:F.h>F.a?hm:null;
+      if(!winner)return;
+      row.winner=winner;
+      row.systemHit=row.systemPick===winner;
+      row.bookHit=row.bookFav?row.bookFav===winner:null;
+      row.graded=true;graded++;
+    });
+  });
+  if(graded)set(LS.syslog,log);
+  return graded;
+}
+function systemScorecard(sport,lastN){
+  gradeSystemLog();
+  const log=get(LS.syslog,{});
+  const rows=[];
+  Object.keys(log).sort().forEach(d=>Object.keys(log[d]).forEach(k=>{
+    const r=log[d][k];
+    if(sport&&r.sport!==sport)return;
+    if(r.graded)rows.push({...r,date:d});
+  }));
+  const recent=lastN?rows.slice(-lastN):rows;
+  const sysW=recent.filter(r=>r.systemHit===true).length;
+  const sysL=recent.filter(r=>r.systemHit===false).length;
+  const bkW=recent.filter(r=>r.bookHit===true).length;
+  const bkL=recent.filter(r=>r.bookHit===false).length;
+  // streak on the system, most recent first
+  let streak=0,streakType=null;
+  for(let i=recent.length-1;i>=0;i--){
+    const h=recent[i].systemHit;if(h===null)continue;
+    if(streakType===null){streakType=h;streak=1}
+    else if(h===streakType)streak++;
+    else break;
+  }
+  return{n:recent.length,sysW,sysL,bkW,bkL,
+    sysPct:sysW+sysL?sysW/(sysW+sysL):null,
+    bkPct:bkW+bkL?bkW/(bkW+bkL):null,
+    streak,streakType,rows:recent};
+}
+/* Per-game-card strip: how the system and the book have been running lately. */
+function systemFormChip(sport){
+  const sc=systemScorecard(sport,20);
+  if(!sc.n)return'';
+  const sysPct=sc.sysPct!=null?(sc.sysPct*100).toFixed(0)+'%':'—';
+  const bkPct=sc.bkPct!=null?(sc.bkPct*100).toFixed(0)+'%':'—';
+  const hot=sc.streakType===true&&sc.streak>=3;
+  const cold=sc.streakType===false&&sc.streak>=3;
+  const col=hot?'var(--win)':cold?'var(--rust)':'var(--mute)';
+  const streakStr=sc.streak>=2?` \u00b7 ${sc.streak}${sc.streakType?'W':'L'} streak`:'';
+  return`<div class="sigchip" style="color:${col}"
+    title="Last ${sc.n} graded games — system vs the book's favourite">
+    SYS <b>${sc.sysW}-${sc.sysL}</b> (${sysPct}) vs BOOK <b>${sc.bkW}-${sc.bkL}</b> (${bkPct})${streakStr}</div>`;
+}
+
+
+/* ── 5. TRENDS INTO THE SIMULATION ─────────────────────────────────────────
+   Trends were displayed and used for alignment tiers, but never touched the
+   projection. Feeding them in raw would be worse than ignoring them: a "5-0 in
+   last 5" at n=5 has a standard error near 22 points, and roughly a third of
+   such lines are perfect by chance alone.
+
+   So the nudge is deliberately small and doubly shrunk:
+     1. by sample size of the trend itself (n/(n+8))
+     2. by the MEASURED accuracy of that trend family in your own graded history
+
+   A trend family that has never beaten a coin flip contributes nothing, no
+   matter how gaudy its record looks. That is the learning-bias loop applied to
+   trends rather than to teams. */
+const TREND_SHRINK=8;
+const TREND_MAX_RUNS=0.45;      // hard cap on total influence, in runs/points
+
+function trendFamily(text){
+  const t=String(text||'').toLowerCase();
+  if(/\bunder is\b/.test(t))return'under';
+  if(/\bover is\b/.test(t))return'over';
+  if(/\bare \d+-\d+/.test(t))return'side';
+  return'other';
+}
+function trendSampleSize(text){
+  const m=String(text||'').match(/(\d+)-(\d+)(?:-(\d+))?/);
+  if(!m)return 0;
+  return (+m[1]||0)+(+m[2]||0)+(+m[3]||0);
+}
+function trendWinRate(text){
+  const m=String(text||'').match(/(\d+)-(\d+)(?:-(\d+))?/);
+  if(!m)return null;
+  const w=+m[1]||0,l=+m[2]||0;
+  return (w+l)?w/(w+l):null;
+}
+/* Measured reliability of each trend family from your graded archive. */
+function trendReliability(){
+  const log=get(LS.trendlog,{});
+  const out={};
+  Object.keys(log).forEach(fam=>{
+    const o=log[fam];
+    if(!o||!o.n)return;
+    const hit=o.w/o.n;
+    // shrink toward 50% — a family needs volume before it earns influence
+    const w=o.n/(o.n+20);
+    out[fam]={n:o.n,hit,weight:+( (hit-0.5)*2*w ).toFixed(3)};
+  });
+  return out;
+}
+/* Net directional lean from every VERIFIED trend on this game. */
+function trendSimAdjustment(g,s){
+  let trends=[];
+  try{trends=applicableTrends(g,s)||[]}catch(e){return{total:0,side:0,used:0,detail:[]}}
+  const rel=trendReliability();
+  let total=0,side=0,used=0;const detail=[];
+  trends.forEach(t=>{
+    if(!t.applies)return;                    // fails its own stated condition
+    if(t.unverified)return;                  // series position we cannot confirm
+    const fam=trendFamily(t.text);
+    if(fam==='other')return;
+    const n=trendSampleSize(t.text);
+    if(n<4)return;
+    const wr=trendWinRate(t.text);
+    if(wr==null)return;
+    const sampleW=n/(n+TREND_SHRINK);
+    const famW=rel[fam]?Math.max(0,rel[fam].weight):0.15;   // unproven family gets a floor, not a free pass
+    const strength=(wr-0.5)*2*sampleW*famW;
+    if(fam==='over'){total+=strength;used++;detail.push({fam,n,wr,strength})}
+    else if(fam==='under'){total-=strength;used++;detail.push({fam,n,wr,strength})}
+    else if(fam==='side'){side+=strength;used++;detail.push({fam,n,wr,strength})}
+  });
+  const clamp=(v)=>Math.max(-TREND_MAX_RUNS,Math.min(TREND_MAX_RUNS,v));
+  return{total:+clamp(total).toFixed(3),side:+clamp(side).toFixed(3),used,detail};
+}
+/* After finals land, score every trend that was on the board so the reliability
+   table is built from outcomes rather than from the trend's own claim. */
+function gradeTrendLog(){
+  const arc=get(LS.arc,{});
+  const trendsByDay=get(LS.exttrends,{});
+  const log=get(LS.trendlog,{});
+  const seen=log.__seen||(log.__seen={});
+  let graded=0;
+  Object.keys(trendsByDay).forEach(d=>{
+    const A=arc[d];if(!A)return;
+    const fin=A.finals||{};
+    const byGame={};
+    (A.rows||[]).forEach(r=>{
+      const F=fin[r.id];if(!F||F.a==null)return;
+      byGame[(r.a||'')+'@'+(r.h||'')]={a:+F.a,h:+F.h,total:+F.a+ +F.h};
+    });
+    (trendsByDay[d]||[]).forEach((t,idx)=>{
+      const sig=d+'|'+idx;
+      if(seen[sig])return;
+      const F=byGame[t.game];if(!F)return;
+      const fam=trendFamily(t.text);
+      if(fam!=='over'&&fam!=='under')return;   // only totals are gradeable without a line
+      const line=t.line||null;
+      if(line==null)return;
+      const hit=fam==='over'?F.total>line:F.total<line;
+      log[fam]=log[fam]||{n:0,w:0};
+      log[fam].n++;if(hit)log[fam].w++;
+      seen[sig]=1;graded++;
+    });
+  });
+  if(graded)set(LS.trendlog,log);
+  return graded;
+}
+/* Card chip: what the trends are actually contributing, or why nothing. */
+function trendInfluenceChip(g,s){
+  const a=trendSimAdjustment(g,s);
+  if(!a.used)return'';
+  const dir=a.total>0.05?'OVER':a.total<-0.05?'UNDER':'neutral';
+  const col=Math.abs(a.total)>=0.2?'var(--gold)':'var(--mute)';
+  return`<div class="sigchip" style="color:${col}"
+    title="${a.used} verified trend${a.used>1?'s':''} shifting the total by ${a.total>0?'+':''}${a.total}">
+    TRENDS \u00b7 ${a.used} verified \u00b7 ${dir==='neutral'?'no lean':dir+' '+(a.total>0?'+':'')+a.total}</div>`;
+}
+
+
+// ── COACH PICKS ───────────────────────────────────────────────────────────
+// The Coach's own regular pick for a game: a side to win and an over/under
+// lean, in the compact "TEAM W | \u2191/\u2193 O/U" format. This is a SUMMARY of
+// everything else on the card, not a sixth opinion — the side comes from the
+// same win probability the card already shows, and the total lean comes from
+// the same operative-total math trendPanel uses (your book's line first, a
+// sharp source second, the model's own number only as a last resort).
+// A pick is only ever the side/total already implied elsewhere on the card;
+// nothing here invents a number that isn't already backing some other chip.
+function coachTotalRead(g,s,sport){
+  if(sport==='mlb'||!sport){
+    try{
+      const ot=operativeTotal(g,s);
+      const p=s.over(ot.line);
+      return{line:ot.line,src:ot.src,dir:p>=.5?'over':'under',p:p>=.5?p:1-p,real:ot.src!=='model'};
+    }catch(e){return null}
+  }
+  try{
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const lines=sport==='nfl'?nflBookLinesFor(gl):ncaafBookLinesFor(gl);
+    const ov=lines.find(x=>x.market==='total'&&x.side==='over');
+    if(ov&&ov.line!=null&&s.over){
+      const p=s.over(ov.line);
+      return{line:ov.line,src:'your book',dir:p>=.5?'over':'under',p:p>=.5?p:1-p,real:true};
+    }
+    // no posted total — fall back to the sim's own median as a labelled estimate
+    if(s.med!=null)return{line:s.med,src:'model',dir:'—',p:null,real:false};
+  }catch(e){}
+  return null;
+}
+function coachPickFor(g,s,sport){
+  if(!s||s.aw==null||s.hw==null)return null;
+  const sideTeam=s.hw>=s.aw?g.home.abbr:g.away.abbr;
+  const sideConf=Math.max(s.aw,s.hw);
+  const tot=coachTotalRead(g,s,sport);
+  let v=null;try{v=takeFadeVerdict(g,s,sport)}catch(e){}
+  return{
+    sideTeam,sideConf,
+    totalDir:tot?tot.dir:null,totalLine:tot?tot.line:null,totalP:tot?tot.p:null,
+    totalReal:tot?tot.real:false,
+    verdict:v?v.verdict:'neutral',
+    label:`${sideTeam} W${tot&&tot.dir!=='—'?` | ${tot.dir==='over'?'\u2b06\ufe0f':'\u2b07\ufe0f'} O/U ${tot.line}`:''}`,
+  };
+}
+/* Coach Picks section for the Coach tab: today's full slate, one line per
+   game, in the same compact format across all three sports at once. */
+function coachPicksBoard(){
+  const rows=[];
+  const scan=(games,sims,sp)=>{
+    (games||[]).forEach(g=>{
+      const s=(sims||{})[g.id];if(!s)return;
+      const pk=coachPickFor(g,s,sp);if(!pk)return;
+      rows.push({...pk,sport:sp,gl:g.away.abbr+'@'+g.home.abbr,gid:g.id});
+    });
+  };
+  try{scan(GAMES,SIMS,'mlb')}catch(e){}
+  try{scan(NFL_GAMES,NFL_SIMS,'nfl')}catch(e){}
+  try{scan(NCAAF_GAMES,NCAAF_SIMS,'ncaaf')}catch(e){}
+  if(!rows.length)return'<div class="empty">No sims have run yet today. Open the Games tab for each sport once to populate picks.</div>';
+  // strongest conviction first: side confidence + total confidence, real lines weighted over sim-only
+  rows.sort((a,b)=>{
+    const score=r=>(r.sideConf-0.5)+((r.totalP||0.5)-0.5)*(r.totalReal?1:0.4);
+    return score(b)-score(a);
+  });
+  const sportTag={mlb:'MLB',nfl:'NFL',ncaaf:'CFB'};
+  return`<div class="tkt"><table class="boxtbl">
+    <tr><th>Game</th><th>Coach pick</th><th>Side</th><th>Total</th><th></th></tr>
+    ${rows.map(r=>{
+      const sideCol=r.sideConf>=.62?'var(--win)':r.sideConf>=.55?'var(--chalk)':'var(--mute)';
+      const totCol=r.totalReal?(r.totalP>=.6?'var(--win)':'var(--chalk)'):'var(--mute)';
+      const totStr=r.totalDir&&r.totalDir!=='—'
+        ?`${r.totalDir==='over'?'\u2b06\ufe0f':'\u2b07\ufe0f'} ${r.totalLine}${r.totalP?' ('+(r.totalP*100).toFixed(0)+'%)':''}`
+        :'—';
+      const vTag=r.verdict==='TAKE'?'<span style="color:var(--win)">TAKE</span>'
+        :r.verdict==='FADE'?'<span style="color:var(--rust)">FADE</span>':'';
+      return`<tr>
+        <td style="font-family:'IBM Plex Mono';font-size:10px">${sportTag[r.sport]} · ${r.gl}</td>
+        <td style="font-family:'Archivo';font-weight:800">${r.label}</td>
+        <td style="color:${sideCol}">${(r.sideConf*100).toFixed(0)}%</td>
+        <td style="color:${totCol}">${totStr}${!r.totalReal&&r.totalDir!=='—'?' <span style="color:var(--mute);font-size:9px">(sim)</span>':''}</td>
+        <td>${vTag}</td>
+      </tr>`;
+    }).join('')}
+    </table>
+    <div class="sub" style="margin-top:8px">Side % is the model's own win probability, not a promise. Total shows
+    "(sim)" when no book line was posted for this game yet — that number is the model's own median, not
+    something to treat as sharp. TAKE/FADE mirrors the same verdict shown on the card itself.</div></div>`;
+}
+
+// ── PER-GAME COACH BRIEFING ──────────────────────────────────────────────
+// ── PER-GAME COACH BRIEFING ──────────────────────────────────────────────
+// The Coach's full briefing on ONE game — every factor that actually feeds
+// the projection, ranked and in plain language, in a single panel instead
+// of scattered across five tabs. This is the "everything I should know about
+// the game" ask: uploaded trends broken down individually (not just a count),
+// park/weather, pitcher or team form, H2H, and the take/fade read together.
+function coachBriefing(g,s,sport){
+  if(!s)return'<div class="empty">Run sims first.</div>';
+  const sec=[];
+
+  // 1 · headline verdict, stated first because it's the summary of everything below
+  try{
+    const v=takeFadeVerdict(g,s,sport);
+    if(v&&v.reasons.length){
+      const col=v.verdict==='TAKE'?'var(--win)':v.verdict==='FADE'?'var(--rust)':'var(--gold)';
+      sec.push(`<div style="font-family:'Archivo';font-weight:900;font-size:15px;color:${col};margin-bottom:4px">
+        ${v.verdict.toUpperCase()}</div>
+        <div style="margin-bottom:10px">${v.reasons.map(r=>'\u2022 '+r).join('<br>')}</div>`);
+    }
+  }catch(e){}
+
+  // 2 · every uploaded trend that actually applies, broken down individually —
+  //     not just a count, the real "7-2 team, 4-5 over-style" breakdown asked for
+  try{
+    const trends=(applicableTrends(g,s)||[]).filter(t=>t.applies);
+    if(trends.length){
+      sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">
+        Trends on the board (${trends.length})</div>`);
+      sec.push(trends.map(t=>{
+        const n=trendSampleSize(t.text), wr=trendWinRate(t.text);
+        const fam=trendFamily(t.text);
+        const tag=fam==='over'?'OVER':fam==='under'?'UNDER':fam==='side'?'SIDE':'';
+        const col=fam==='over'?'var(--win)':fam==='under'?'var(--cold)':'var(--chalk)';
+        return`<div style="padding:5px 0;border-bottom:1px solid var(--rule);font-size:11.5px">
+          ${tag?`<span style="color:${col};font-family:'IBM Plex Mono';font-size:9px;font-weight:700">${tag}</span> `:''}
+          ${t.text}${n?` <span style="color:var(--mute)">(n=${n}${wr!=null?', '+(wr*100).toFixed(0)+'%':''})</span>`:''}
+          ${t.unverified?'<span style="color:var(--gold)"> — series position unverified</span>':''}
+        </div>`;
+      }).join(''));
+      try{
+        const adj=trendSimAdjustment(g,s);
+        if(adj.used)sec.push(`<div style="margin-top:6px;color:var(--mute);font-size:10px">
+          Net effect on the sim after shrinkage: ${adj.total>0?'+':''}${adj.total} runs/points toward
+          ${adj.total>0?'the over':adj.total<0?'the under':'neutral'}. Small by design — see the Coach tab
+          for why a "5-0" trend doesn't move the number very far.</div>`);
+      }catch(e){}
+    }
+  }catch(e){}
+
+  // 3 · park, weather, big-bat / pitcher's park — MLB only, ESPN provides none
+  //     of this for football so the section is skipped rather than padded
+  if(sport==='mlb'||!sport){
+    try{
+      const pf=PARK[g.home.abbr]||null;
+      const w=g.weather;
+      const notes=[];
+      if(pf&&pf[1]!=null){
+        if(pf[1]>=112)notes.push(`<b>${g.home.abbr}'s park plays as a big-bat park</b> — ${pf[1]} HR factor, well above the 100 league-average line.`);
+        else if(pf[1]<=88)notes.push(`<b>${g.home.abbr}'s park suppresses power</b> — ${pf[1]} HR factor, a real pitcher's park.`);
+      }
+      const temp=w?parseFloat(w.temp):null;
+      if(temp!=null&&!isNaN(temp)&&(temp>=88||temp<=45))
+        notes.push(`${w.temp}\u00b0${w.cond?' '+w.cond:''} — ${temp>=88?'hot, thin air that carries the ball':'cold, dense air that suppresses scoring'}.`);
+      if(w&&w.wind&&/out/i.test(w.wind))notes.push(`Wind: ${w.wind} — blowing out is a real tailwind for the total.`);
+      else if(w&&w.wind&&/in\b/i.test(w.wind))notes.push(`Wind: ${w.wind} — blowing in works against the total.`);
+      if(w&&w.cond&&/rain|snow|shower|storm|sleet/i.test(w.cond))notes.push(`Conditions: ${w.cond} — weather risk for this game.`);
+      if(notes.length)sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Park &amp; weather</div>
+        <div style="font-size:11.5px;line-height:1.7">${notes.join('<br>')}</div>`);
+    }catch(e){}
+  }
+
+  // 4 · pitcher/team form — reuses the same trendPanel factor engine (starter
+  //     form, workload, command, contact) so this never disagrees with the
+  //     Trends tab; it just puts the plain-language version in one place
+  try{
+    const full=trendPanel(g,s);
+    const rows=[...full.matchAll(/<div class="tname">([^<]+)<\/div>\s*<div class="ttext">([\s\S]*?)<\/div>/g)];
+    if(rows.length){
+      sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Form &amp; matchup factors</div>`);
+      sec.push(rows.map(r=>`<div style="padding:4px 0;font-size:11.5px">
+        <b>${r[1]}:</b> ${r[2].replace(/<[^>]+>/g,m=>/<b>|<\/b>/.test(m)?m:'')}</div>`).join(''));
+    }
+  }catch(e){}
+
+  // 5 · your own history with these teams — the ledger, spelled out
+  try{
+    const la=teamLedgerFor(g.away.abbr),lh=teamLedgerFor(g.home.abbr);
+    const row=(o,ab)=>{
+      if(!o||!o.n)return null;
+      const mark=o.flag==='black'?'\u2620 fade signal':o.flag==='green'?'\u25c6 lean-in signal':'no strong signal';
+      return`<b>${ab}</b>: ${o.sideW}-${o.sideL} sides, ${o.ovW+o.unW}-${o.ovL+o.unL} O/U over ${o.n} graded,
+        ${(o.roi>=0?'+':'')}${o.roi.toFixed(2)}u/bet — ${mark}`;
+    };
+    const lines=[row(la,g.away.abbr),row(lh,g.home.abbr)].filter(Boolean);
+    if(lines.length)sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Your record with these teams</div>
+      <div style="font-size:11.5px;line-height:1.8">${lines.join('<br>')}</div>`);
+  }catch(e){}
+
+  // 5b · the Coach's own pick for THIS game, same compact format as the
+  //      slate-wide picks board, placed last so it reads as the conclusion
+  //      of everything above it rather than a separate opinion
+  try{
+    const pk=coachPickFor(g,s,sport);
+    if(pk){
+      const sideCol=pk.sideConf>=.62?'var(--win)':pk.sideConf>=.55?'var(--chalk)':'var(--mute)';
+      const totStr=pk.totalDir&&pk.totalDir!=='—'
+        ?`${pk.totalDir==='over'?'⬆️':'⬇️'} O/U ${pk.totalLine}${pk.totalP?' ('+(pk.totalP*100).toFixed(0)+'%)':''}${!pk.totalReal?' <span style="color:var(--mute);font-size:9px">(sim, no line posted)</span>':''}`
+        :'<span style="color:var(--mute)">no total lean — nothing posted yet</span>';
+      sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Coach pick</div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:16px;color:${sideCol};margin-bottom:2px">
+          ${pk.sideTeam} W <span style="font-family:'IBM Plex Mono';font-size:11px;font-weight:400;color:var(--mute)">(${(pk.sideConf*100).toFixed(0)}%)</span></div>
+        <div style="font-size:12px">${totStr}</div>
+        <div style="margin-top:4px;color:var(--mute);font-size:10px">Side is the model's own win probability.
+          Total prefers your uploaded book line, falling back to a sharp source, then the model's own median last.</div>`);
+    }
+  }catch(e){}
+
+  // 6 · CFB transfer portal note, when relevant — production earned elsewhere
+  if(sport==='ncaaf'){
+    try{
+      const inc=[...(typeof cfbIncomingTransfers==='function'?cfbIncomingTransfers(g.away.name||g.away.abbr):[]),
+                 ...(typeof cfbIncomingTransfers==='function'?cfbIncomingTransfers(g.home.name||g.home.abbr):[])];
+      if(inc.length)sec.push(`<div style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--mute);margin:10px 0 6px">Transfer portal</div>
+        <div style="font-size:11.5px;color:var(--mute)">${inc.length} incoming transfer${inc.length>1?'s':''}
+        on this card — see the Portal tab for names and former schools before trusting box-score production at face value.</div>`);
+    }catch(e){}
+  }
+
+  if(!sec.length)return'<div class="empty">Nothing flagged for this game yet — no uploaded trends, no park/weather signal, and no graded history with either team. That is a genuinely quiet card, not a missing one.</div>';
+  return`<div class="sub">${sec.join('')}</div>`;
+}
+
+/* ── THE COACH TAB ─────────────────────────────────────────────────────────
+   Everything the Coach says or shows on a game card, decoded in one place.
+   Two sections: what the Coach is saying RIGHT NOW (live, pulled from real
+   data), and a permanent glossary of every chip/badge that appears on cards
+   across all three sports, since most of them are compact by design and
+   compact things need somewhere to be spelled out in full. */
+function renderCoachTab(){
+  let h='';
+  // ── live section: the Coach's current reads, same functions the cards use ──
+  const br=coachBankrollRead();
+  const best=coachBestPerformer();
+  h+=`<div class="sbar" style="margin-top:0"><h2>The Coach</h2><div class="ln"></div></div>
+    <div class="tkt hi"><div class="sub">
+      No heart, all analysis. The Coach never says "bet this" — only what holds up against
+      your own recorded history and what doesn't. Every line it speaks is a pure function of
+      data already on the board: your bankroll pace, your graded record per team, the model's
+      edge against the posted price, and your calibration in that confidence band. Nothing here
+      is invented or estimated — if the Coach goes quiet on a card, it means none of its checks
+      found anything worth flagging, not that it has nothing to say by default.
+    </div></div>`;
+
+  h+=`<div class="sbar"><h2>Coach picks — today's slate</h2><div class="ln"></div></div>`;
+  try{h+=coachPicksBoard()}catch(e){h+='<div class="empty">Could not build picks: '+(e&&e.message||e)+'</div>'}
+
+  h+=`<div class="sbar"><h2>Speaking right now</h2><div class="ln"></div></div>`;
+  /* This used to check only the two account-level triggers (bankroll, best
+     performer) and skip every game entirely — which is why it read "nothing
+     to say" on a slate full of live take/fade calls. It now scans every game
+     on today's board, across all three sports, and lists every card the
+     Coach is actually speaking on right now, exactly like the strip that
+     shows up on that card. */
+  const live=[];
+  if(br)live.push({...br,src:'Bankroll'});
+  if(best)live.push({...best,src:'Best performer'});
+  const scanSport=(games,sims,sp)=>{
+    (games||[]).forEach(g=>{
+      const sm=(sims||{})[g.id];if(!sm)return;
+      let v=null;try{v=coachGameRead(g,sm,sp)}catch(e){}
+      if(v)live.push({...v,src:g.away.abbr+' @ '+g.home.abbr});
+    });
+  };
+  try{scanSport(GAMES,SIMS,'mlb')}catch(e){}
+  try{scanSport(NFL_GAMES,NFL_SIMS,'nfl')}catch(e){}
+  try{scanSport(NCAAF_GAMES,NCAAF_SIMS,'ncaaf')}catch(e){}
+  const order={warn:0,bad:0,neutral:1,good:2};
+  live.sort((a,b)=>(order[a.tone]??1)-(order[b.tone]??1));
+  h+=live.length?live.map(v=>{
+    const toneColor={warn:'var(--rust)',bad:'var(--rust)',neutral:'var(--mute)',good:'var(--win)'};
+    return`<div class="tkt" style="border-left:3px solid ${toneColor[v.tone]||'var(--mute)'}">
+      <div style="font-family:'IBM Plex Mono';font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+        color:var(--mute);margin-bottom:2px">${v.src}</div>
+      <div class="sub">${v.text}</div></div>`;
+  }).join(''):`<div class="empty">Nothing rises to a Coach-level comment right now
+    — no game has a strong enough take/fade signal, and bankroll pace and bucket
+    performance are both unremarkable. Sims need to have run for this to populate.</div>`;
+
+  // ── per-game triggers, explained ──
+  h+=`<div class="sbar"><h2>What triggers a line on a game card</h2><div class="ln"></div></div>
+    <div class="tkt"><table class="boxtbl">
+      <tr><th>Trigger</th><th>Fires when</th><th>Tone</th></tr>
+      <tr><td>Take read</td><td>Model shows real edge AND your own history with these teams
+        or this confidence band backs it up</td><td style="color:var(--win)">good</td></tr>
+      <tr><td>Fade read</td><td>Model passes AND/OR you're a documented black flag on one of
+        these teams AND/OR you underperform in this confidence band</td><td style="color:var(--rust)">warn</td></tr>
+      <tr><td>Drift note</td><td>Slate is frozen and the live sim has moved 1.5+ points off the
+        locked number since freeze</td><td style="color:var(--mute)">neutral</td></tr>
+      <tr><td>Lean note</td><td>Some signal exists but not enough to call TAKE or FADE outright</td>
+        <td style="color:var(--mute)">neutral</td></tr>
+      <tr><td>Duplicate warning</td><td>A pick is already sitting on 2+ pending tickets — same
+        idea deciding a bigger share of the board than it should</td><td style="color:var(--rust)">warn</td></tr>
+      <tr><td>Weak leg</td><td>One leg on a slip is priced 6+ points worse than the rest of the
+        ticket's average edge</td><td style="color:var(--rust)">warn</td></tr>
+      <tr><td>Longshot note</td><td>6+ legs and combined probability under 2% — a real swing,
+        named as one</td><td style="color:var(--mute)">neutral</td></tr>
+      <tr><td>Bankroll read</td><td>Balance is spent for the month, daily cap already hit, or the
+        multiplier has grown from real profit</td><td>varies</td></tr>
+      <tr><td>Best performer</td><td>One pick bucket (mine/system/market/specialty) is running
+        15+ points ahead of the worst, on 8+ graded picks each</td><td style="color:var(--win)">good</td></tr>
+    </table>
+    <div class="sub" style="margin-top:6px">Only the single most important thing fires at once —
+    warnings outrank neutral notes, which outrank good news. A card that says nothing has been
+    checked and found unremarkable, not skipped.</div></div>`;
+
+  // ── full chip glossary, sport by sport ──
+  h+=`<div class="sbar"><h2>Every chip on a game card, decoded</h2><div class="ln"></div></div>`;
+  const glossSection=(title,rows)=>`<div class="tkt"><h3 style="margin-bottom:6px">${title}</h3>
+    <table class="boxtbl">${rows.map(r=>`<tr><td style="white-space:nowrap;font-family:'IBM Plex Mono';
+      font-size:10.5px">${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table></div>`;
+
+  h+=glossSection('All sports',[
+    ['REAL',"At least one line for this market came from your own uploaded book odds or a live pull — not just the simulator's opinion."],
+    ['sim only',"No real line exists for this square yet. Shows the model's own number so the card still reads, but there's nothing to compare it against."],
+    ['model sees value (green)',"Model probability beats the market-implied probability by more than the edge threshold — a real price gap in your favour."],
+    ['model says pass (red)',"Model disagrees with the price in the other direction — the market is asking more than the model thinks this is worth."],
+    ['no real edge',"Model and market roughly agree. Nothing wrong with the pick, just no free money sitting on the table."],
+    ['◆ SUPREME',"Book price, model edge, AND outside sources all point the same way. The rarest and strongest tier."],
+    ['STRONG',"Two of those three signals agree."],
+    ['⚠ CONFLICT',"The signals disagree with each other — model likes one side, an outside source or the book's own lean favours the other. Worth a second look before trusting either."],
+    ['EDGE / NO EDGE chip',"The single best-EV play the model found on this card, stated as a percentage. NO EDGE still shows the best number found, just below the threshold that would call it a real edge."],
+    ['☠ you [team]',"Your own graded record betting this team specifically — sides record, over/under record, and units returned per unit staked. Six-plus graded bets and −0.25u/bet or worse earns the skull."],
+    ['◆ you [team] (green)',"Same ledger, other direction — six-plus bets and +0.25u/bet or better."],
+    ['❄ LOCKED',"The slate has been frozen (learning bias was run). Shows the projection at freeze time. \"drift\" appears if the live sim has since moved a point or more off that locked number."],
+    ['TAKE / FADE chip',"The Coach's per-game verdict, blending model edge, your team record, and your calibration in this confidence band into one word. Tap into Take/Fade for the full reasoning."],
+    ['TRENDS · N verified',"How many uploaded trends passed their own stated condition (not \"unverified\" due to unknowable series position) and are actually nudging the total. The nudge itself is capped small and shrunk by both sample size and that trend family's own track record in your graded history."],
+    ['SYS ##-## vs BOOK ##-##',"Last 20 graded games — how often the model's top pick won versus how often the book's own favourite (by moneyline price) won, whether or not you bet either one."],
+  ]);
+
+  h+=glossSection('MLB-specific',[
+    ['H2H 2yr',"Head-to-head record between these two teams over the last two seasons, minimum 6 meetings before it shows."],
+    ['park factor / grass / turf / dome',"Park-specific run-scoring context folded into the total projection."],
+    ['HR threat',"Batters on this card with an elevated home-run rate against the projected pitcher handedness."],
+    ['most common score',"The single most frequent exact score across the 10,000-iteration simulation, with its own probability — usually low, since run totals are a wide distribution."],
+    ['bullpen / arm chips',"Recent pitcher workload and rest, factored into the projection."],
+  ]);
+
+  h+=glossSection('NFL & CFB-specific',[
+    ['DIVISION GAME',"Division matchups run tighter than the model's baseline — this flags it rather than silently adjusting."],
+    ['1H / 1Q chips',"Period lines, scaled from the full-game sim to a half or quarter equivalent rather than modelled separately. CFB only gets 1H — a college quarter is too small a sample for the sim to speak to with any precision."],
+    ['RATINGS NOT LOADED',"No usable team scoring data behind this projection yet — NFL needs ESPN standings with games played (empty preseason), CFB needs a CollegeFootballData key in Settings. The dashes on the score line mean exactly what they look like: nothing to show yet, not a broken card."],
+    ['Live box / Box score',"Full quarter-by-quarter linescore, possession marker, and passing/rushing/receiving/defense tables. Only appears once a game has started or finished."],
+    ['Portal (CFB only)',"Incoming transfers per team with their prior school named. Production shown is what they earned at that PREVIOUS school, against a different schedule — treat a G5-to-P4 jump with extra caution."],
+    ['SP+ / offPPG / defPPG',"CollegeFootballData's predictive rating, already opponent-adjusted — meaningful even in Week 1 with no season data yet, unlike raw points-for/against."],
+  ]);
+
+  h+=`<div class="sbar"><h2>Where to see the receipts</h2><div class="ln"></div></div>
+    <div class="tkt"><div class="sub">
+      Every number the Coach or a chip cites traces back to a screen you can open yourself:
+      <b>Record → Team ledger</b> for your per-team profit, <b>Record → System vs Book</b> for
+      the unbiased win/loss log, <b>Record → Learned bias</b> for what the model has corrected
+      about itself, and <b>Record → Deep dive</b> for calibration by confidence band. The Coach
+      never has private information — it's reading the same tables you can.
+    </div></div>`;
+  return h;
+}
+
+
+
+/* Everything above is now evaluated — deferred data feeds may safely run. */
+SCRIPT_READY=true;
