@@ -167,8 +167,13 @@ function saveNFLBookOdds(picks,el){
     if(i>=0)all[d][i]=rec;else all[d].push(rec);
   });
   set(LS.nflshots,all);
-  if(el)el.innerHTML=`<div class="tkt hi"><h3>NFL lines locked in</h3>
-    <div class="sub">${picks.length} NFL picks saved for ${d}.</div></div>`;
+  try{repairNFLKeys()}catch(e){}
+  const nflGames=new Set(picks.map(p=>p.game));
+  const nflMkt={};picks.forEach(p=>{nflMkt[p.market]=(nflMkt[p.market]||0)+1});
+  const nflSummary=Object.entries(nflMkt).map(([m,n])=>n+' '+m).join(' · ');
+  if(el)el.innerHTML=`<div class="tkt hi"><h3>NFL lines locked in ✓</h3>
+    <div class="sub">${picks.length} picks · ${nflGames.size} game${nflGames.size===1?'':'s'} · ${nflSummary}</div>
+    <div class="sub" style="color:var(--mute);margin-top:4px">Stored as ${d}. Game card tiles will now show REAL instead of sim only.</div></div>`;
 }
 
 // ── NFL render ─────────────────────────────────────────────────────────────────
@@ -3443,8 +3448,18 @@ function saveNCAAFBookOdds(picks,el){
     if(i>=0)all[d][i]=rec;else all[d].push(rec);
   });
   set(LS.ncaafshots,all);
-  if(el)el.innerHTML=`<div class="tkt hi"><h3>CFB lines locked in</h3>
-    <div class="sub">${picks.length} picks saved for ${d}.</div></div>`;
+  /* Re-run the key repair immediately so slugs are fixed if the schedule is
+     already loaded. If NCAAF_GAMES is still empty (schedule still fetching),
+     renderNCAAF will re-repair once it arrives. Either way the lines land. */
+  try{repairNCAAFKeys()}catch(e){}
+  /* Build a summary of what actually landed so it's visible in the UI */
+  const games=new Set(picks.map(p=>p.game));
+  const mktCounts={};picks.forEach(p=>{mktCounts[p.market]=(mktCounts[p.market]||0)+1});
+  const summary=Object.entries(mktCounts).map(([m,n])=>n+' '+m).join(' · ');
+  if(el)el.innerHTML=`<div class="tkt hi"><h3>CFB lines locked in ✓</h3>
+    <div class="sub">${picks.length} picks · ${games.size} game${games.size===1?'':'s'} · ${summary}</div>
+    <div class="sub" style="color:var(--mute);margin-top:4px">Stored as ${d}. Spread, moneyline and total tiles on each game card will now show REAL instead of sim only.</div></div>`;
+  if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
 }
 
 // ── NCAAF ext data save ───────────────────────────────────────────────────────
