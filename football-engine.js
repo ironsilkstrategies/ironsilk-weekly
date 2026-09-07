@@ -686,9 +686,11 @@ async function fetchMLBLiveOdds(){
   console.log('MLB live odds:',count,'new lines');
 }
 
-// ── NCAAF Live Odds (The Odds API) ───────────────────────────────────────────
+// ── NCAAF Live Odds + Player Props (The Odds API) ────────────────────────────
 async function fetchNCAAFLiveOdds(){
   const key=get(LS.oddspapi,'');if(!key)return;
+  // Fetch props separately — player_props is a different market group and
+  // costs extra credits, so we pull it after the main odds call succeeds
   const url=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
   const r=await fetch(url);const j=await r.json();
   if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
@@ -718,6 +720,47 @@ async function fetchNCAAFLiveOdds(){
     });
   });
   set(LS.ncaafshots,all);NCAAF_SIMS={};
+  // ── Pull CFB player props (player_pass_tds, player_rush_yds, etc.) ────────
+  try{
+    const propsAll=get('d4.ncaafprops',{});propsAll[d]=propsAll[d]||[];
+    // The Odds API requires individual game IDs for player props — use the
+    // event list endpoint to get game IDs, then fetch props per game.
+    const eventsUrl=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/events?apiKey=${encodeURIComponent(key)}&dateFormat=iso`;
+    const evR=await fetch(eventsUrl);const evJ=await evR.json();
+    if(Array.isArray(evJ)){
+      // Only fetch props for today's and tomorrow's games to save credits
+      const now=Date.now();const tomorrow=now+86400000;
+      const todayEvents=evJ.filter(ev=>{const t=new Date(ev.commence_time).getTime();return t>=now-3600000&&t<=tomorrow;});
+      const PROP_MARKETS='player_pass_tds,player_pass_yds,player_rush_yds,player_receptions,player_reception_yds';
+      for(const ev of todayEvents.slice(0,8)){// cap at 8 games to preserve credits
+        try{
+          const pUrl=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${PROP_MARKETS}&oddsFormat=american`;
+          const pR=await fetch(pUrl);const pJ=await pR.json();
+          if(!pJ.bookmakers)continue;
+          const book=pJ.bookmakers.find(b=>b.key==='draftkings')||pJ.bookmakers.find(b=>b.key==='fanduel')||pJ.bookmakers[0];
+          if(!book)continue;
+          const home=ev.home_team,away=ev.away_team;
+          const gm=NCAAF_GAMES.find(g=>g.home.name===home||g.home.displayName===home);
+          const gameKey=(gm?gm.away.abbr:away.slice(0,5).toUpperCase())+'@'+(gm?gm.home.abbr:home.slice(0,5).toUpperCase());
+          book.markets.forEach(mkt=>{
+            mkt.outcomes.forEach(o=>{
+              if(!o.description)return;// no player name
+              propsAll[d].push({
+                player:o.description,
+                stat:mkt.key.replace('player_','').replace(/_/g,' '),
+                line:o.point,
+                price:o.price,
+                side:o.name.toLowerCase()==='over'?'over':'under',
+                game:gameKey,
+                capturedAt:Date.now()
+              });
+            });
+          });
+        }catch(e){}
+      }
+      set('d4.ncaafprops',propsAll);
+    }
+  }catch(e){console.warn('CFB props fetch failed:',e.message);}
   if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
 }
 
@@ -985,11 +1028,6 @@ function ncaafAbbrFor(raw){
     'TEXASAM':'TEXASAM',
     'GEORGIA SOUTHERN':'GEORGIASOUTHERN',
     'CENTRALFLORIDA':'UCF',        // sportsbook "Central Florida" → ESPN "UCF Knights"
-    'SMU':'SMU',                   // SMU Mustangs — pin exact abbr
-    'SMUMUSTANGS':'SMU',
-    'FSU':'FSU',                   // Florida State — pin exact abbr
-    'FLORIDASTATE':'FSU',
-    'FLORIDAST':'FSU',
   };
   const aliasKey=NCAAF_SB_ALIASES[k];
   if(aliasKey){
