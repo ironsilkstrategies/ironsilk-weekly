@@ -1575,7 +1575,7 @@ function evaluateNFLGame(g){
   // C) Market edge
   let spreadEdge=null,mlEdge=null,totalEdge=null;
   if(awaySpread){
-    const myCover=s.spreadCover(-awaySpread.line);  // P(away covers)
+    const myCover=s.awayCover(awaySpread.line);  // P(away covers away spread)
     const marketP=100/(100+Math.abs(awaySpread.price))*(awaySpread.price<0?1:-1)+0.5;
     spreadEdge={market:awaySpread.price,fair:nflFairML(myCover),edge:awaySpread.price-nflFairML(myCover)};
   }
@@ -2700,6 +2700,28 @@ function parseFBBoxscore(j){
    tapping into the Live box panel. This is the missing inline piece, same
    visual language — big score, live dot, down & distance in place of
    count/outs — plus the same bet-progress strip pulled from locked tickets. */
+function fbFinalHeadline(g,s,sport){
+  const aA=g.awayScore!=null&&g.awayScore!==''?+g.awayScore:null;
+  const hA=g.homeScore!=null&&g.homeScore!==''?+g.homeScore:null;
+  const sc=aA!=null?g.away.abbr+' '+aA+' – '+hA+' '+g.home.abbr
+                   :g.away.abbr+' ? – ? '+g.home.abbr;
+  const scoreDiv='<div class="sc" style="color:var(--win)">'+sc+'</div>';
+  if(aA==null)return '<div class="proj">'+scoreDiv+'<div class="rd">final</div></div>';
+  const projM=Math.round(((s&&s.homeProj)||0)-((s&&s.awayProj)||0));
+  const actM=hA-aA;
+  const diff=Math.abs(projM-actM);
+  const projW=projM>0?g.home.abbr:g.away.abbr;
+  const actW=actM>0?g.home.abbr:actM<0?g.away.abbr:'TIE';
+  const hit=projW===actW;
+  const dc=diff<=7?'var(--win)':diff<=14?'var(--gold)':'var(--rust)';
+  const arrow=projM>=0?'+':'-';
+  return '<div class="proj">'+scoreDiv
+    +'<div class="rd" style="margin-top:3px">final</div>'
+    +'<div style="font-family:IBM Plex Mono;font-size:9px;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">'
+    +'<span style="color:'+(hit?'var(--win)':'var(--rust)')+'">model '+(hit?'✓':'✗')+' (proj '+arrow+Math.abs(projM)+')</span>'
+    +'<span style="color:'+dc+'">off by '+diff+' pts</span>'
+    +'</div></div>';
+}
 function fbLiveScoreBar(g,league){
   if(g.abstract!=='in')return'';
   const box=FB_BOX_CACHE[g.espnId||g.id]||null;
@@ -3170,6 +3192,112 @@ function renderNCAAF(){
 }
 
 // ── NCAAF game card ───────────────────────────────────────────────────────────
+/* ── Item 8+7: Analysis panel + trend-adjusted projection (mirrors TheDesk.html) */
+/* ── ITEM 8: POST-GAME ANALYSIS PANEL ─────────────────────────────────────
+   Appears on Final cards. Shows where the model was right/wrong, where the
+   book was right/wrong, which trends fired, and what to calibrate from this.
+   Feeds into the calibration narrative — not just a number but a reason. */
+function fbAnalysisPanel(g,s,sport){
+  const aA=g.awayScore!=null&&g.awayScore!==''?+g.awayScore:null;
+  const hA=g.homeScore!=null&&g.homeScore!==''?+g.homeScore:null;
+  if(aA==null||hA==null)return '<div class="empty">No final score yet.</div>';
+  const linesFor=sport==='nfl'?nflBookLinesFor:ncaafBookLinesFor;
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  const lines=linesFor(gameKey);
+  const projM=Math.round(((s&&s.homeProj)||0)-((s&&s.awayProj)||0));
+  const actualM=hA-aA;
+  const projTot=(s&&s.med)||0;
+  const actualTot=aA+hA;
+  const projW=projM>0?g.home.abbr:g.away.abbr;
+  const actualW=actualM>0?g.home.abbr:actualM<0?g.away.abbr:'TIE';
+  const modelSideHit=projW===actualW;
+  const modelTotErr=Math.abs(projTot-actualTot);
+  const modelSpreadErr=Math.abs(projM-actualM);
+  // book performance
+  const bookSpread=lines.find(x=>x.market==='spread'&&x.side==='home');
+  const bookSpreadHit=bookSpread?((bookSpread.line>0?(hA-aA>bookSpread.line):(hA-aA>bookSpread.line))):null;
+  const bookTotal=lines.find(x=>x.market==='total'&&x.side==='over');
+  const bookTotalHit=bookTotal?(actualTot>bookTotal.line):null;
+  const bookML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
+  const bookFavHome=bookML&&bookML.price<0;
+  const bookSideHit=bookML?(bookFavHome?(hA>aA):(aA>hA)):null;
+  const row=(label,hit,detail)=>`<div class="rc-row" style="margin:4px 0">
+    <div><div class="g">${label}</div><div class="p">${detail||''}</div></div>
+    <div class="r" style="color:${hit===true?'var(--win)':hit===false?'var(--rust)':'var(--mute)'}">
+      ${hit===true?'✓ HIT':hit===false?'✗ MISS':'—'}</div></div>`;
+  const scoreColor=modelSpreadErr<=7?'var(--win)':modelSpreadErr<=14?'var(--gold)':'var(--rust)';
+  const h=`<div style="padding:8px 0">
+    <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Post-game breakdown</div>
+    <div class="rc-list"><h5>Model</h5>
+      ${row('Side pick',modelSideHit,`Projected ${projW} by ${Math.abs(projM)}, actual ${actualW} by ${Math.abs(actualM)}`)}
+      ${row('Total',modelTotErr<7?true:modelTotErr<14?null:false,`Projected ${projTot.toFixed(1)}, actual ${actualTot} (off by ${modelTotErr.toFixed(0)} pts)`)}
+      <div class="p" style="font-size:9.5px;padding-top:4px;color:${scoreColor}">Margin error: ${modelSpreadErr} pts — ${modelSpreadErr<=7?'normal variance':modelSpreadErr<=14?'notable miss':'bad miss'}</div>
+    </div>
+    ${lines.length?`<div class="rc-list" style="margin-top:8px"><h5>Book</h5>
+      ${bookML?row('Moneyline favorite',bookSideHit,bookFavHome?g.home.abbr+' favored':g.away.abbr+' favored'):''}
+      ${bookSpread?row('Spread',bookSpreadHit,g.home.abbr+' '+(bookSpread.line>0?'+':'')+bookSpread.line):''}
+      ${bookTotal?row('Total',bookTotalHit,(bookTotal.line>0?'O/U '+bookTotal.line:'')):''}
+    </div>`:''}
+    <div style="margin-top:8px;padding:8px;background:var(--panel2);border-radius:6px;font-size:11px;color:var(--mute)">
+      <b style="color:var(--chalk)">Calibration note:</b>
+      Model ${modelSideHit?'called the winner correctly':'missed the winner'} and was ${modelSpreadErr<=7?'within normal variance on the margin':'off on the margin by '+modelSpreadErr+' pts'}.
+      ${modelTotErr<7?' Total projection was sharp.':` Total was off by ${modelTotErr.toFixed(0)} pts — ${projTot>actualTot?'model ran hot, sim overprojects scoring':'model ran cold, sim underprojects scoring'}.`}
+      This result is included in your calibration score.
+    </div>
+  </div>`;
+  return h;
+}
+
+/* ── ITEM 7: TREND-ADJUSTED PROJECTION ────────────────────────────────────────
+   The raw sim (projW/projM) is computed before any trend or calibration data
+   is available. Once the board has real trends loaded, compute a second
+   "adjusted" projection that layers trend signals on top: if every trend for
+   a game points Under, reduce the projected total slightly; if the system has
+   strong ATS history on one side, nudge the win probability. Shows both numbers
+   on the card so you can see how much the signal moved.
+   Returns {adjAway, adjHome, adjMed, drift} or null if no adjustment needed. */
+function computeTrendAdjustedProjection(g,s,sport){
+  if(!s||!s.awayProj||!s.homeProj||!s.med)return null;
+  const linesFor=sport==='nfl'?nflBookLinesFor:ncaafBookLinesFor;
+  const gameKey=g.away.abbr+'@'+g.home.abbr;
+  // Collect trend signals from applicableTrends if available
+  let totalNudge=0,sideNudge=0,trendCount=0;
+  try{
+    const trends=applicableTrends(g,s,sport);
+    (trends||[]).forEach(t=>{
+      const txt=String(t.text||t||'').toLowerCase();
+      // Under trends → nudge total down
+      if(/under.*\b[5-9]\d*%|under.*is \d+-[01]\b/.test(txt)){totalNudge-=1.5;trendCount++;}
+      if(/over.*\b[5-9]\d*%|over.*is \d+-[01]\b/.test(txt)){totalNudge+=1.5;trendCount++;}
+      // ATS trends for a specific team → nudge win prob
+      if(new RegExp(g.away.abbr+'.*ats.*\\d+-[01]\\b','i').test(txt)){sideNudge-=0.04;trendCount++;}
+      if(new RegExp(g.home.abbr+'.*ats.*\\d+-[01]\\b','i').test(txt)){sideNudge+=0.04;trendCount++;}
+    });
+  }catch(e){}
+  // Global calibration drift (already computed, free to apply)
+  const drift=globalDriftAdj?globalDriftAdj():0;
+  if(Math.abs(totalNudge)<0.1&&Math.abs(sideNudge)<0.01&&Math.abs(drift)<0.05)return null;
+  const adjMed=Math.max(20,s.med+(totalNudge*0.5)+(drift*2));
+  const rawMargin=s.homeProj-s.awayProj;
+  const adjMargin=rawMargin+(sideNudge*20);
+  const adjHome=(adjMed+adjMargin)/2;
+  const adjAway=(adjMed-adjMargin)/2;
+  return{adjAway:+adjAway.toFixed(1),adjHome:+adjHome.toFixed(1),adjMed:+adjMed.toFixed(1),
+    trendCount,drift:+drift.toFixed(2),nudge:totalNudge};
+}
+
+function ncaafPropsPanel(g){
+  const apiProps=(get('d4.ncaafprops',{})[today()]||[])
+    .filter(p=>p.game&&(p.game.includes(g.away.abbr)||p.game.includes(g.home.abbr)));
+  if(!apiProps.length)return '<div class="empty">No CFB player props yet — tap ⚡ Pull odds to fetch them from The Odds API.</div>';
+  return`<div style="font-family:'IBM Plex Mono';font-size:10.5px;padding:4px 0">
+    <div style="font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Player props · from The Odds API</div>
+    ${apiProps.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px">
+      <span style="color:var(--chalk)">${p.player}</span>
+      <span style="color:var(--mute)">${p.stat.replace(/_/g,' ')} ${p.line} ${p.side} <span style="color:var(--gold)">${p.price>0?'+':''}${p.price}</span></span>
+    </div>`).join('')}
+  </div>`;
+}
 function ncaafCard(g){
   const s=NCAAF_SIMS[g.id];if(!s)return'';
   const cfbLive=g.abstract==='in'||g.status==='InProgress'||g.status==='Halftime';
@@ -3268,6 +3396,59 @@ function ncaafCard(g){
   }
   const awayRank=g.away.ranking||'';const homeRank=g.home.ranking||'';
   const id=g.id;
+
+  /* ── ITEM 6: TOP/BOTTOM 5% HIGHLIGHTS ─────────────────────────────────────
+     Calculate percentiles across all loaded teams for offense and defense.
+     Highlight elite/poor units directly on the card, same way MLB flags
+     park factors and ERA tiers. Uses SP+ offPPG/defPPG already in NCAAF_POWER. */
+  const pctileChips=(()=>{
+    const vals=Object.values(NCAAF_POWER||{}).filter(v=>v&&typeof v.offPPG==='number');
+    if(vals.length<10)return'';
+    const offs=vals.map(v=>v.offPPG).sort((a,b)=>a-b);
+    const defs=vals.map(v=>v.defPPG).sort((a,b)=>a-b);
+    const pctile=(arr,val)=>arr.filter(v=>v<=val).length/arr.length;
+    const chip=(txt,hi)=>`<span class="sigchip" style="background:${hi?'rgba(95,211,232,.12)':'rgba(240,86,60,.12)'};color:${hi?'var(--cold)':'var(--rust)'};">${txt}</span>`;
+    const chips=[];
+    const aPow=NCAAF_POWER[g.away.name]||NCAAF_POWER[g.away.abbr];
+    const hPow=NCAAF_POWER[g.home.name]||NCAAF_POWER[g.home.abbr];
+    if(aPow){
+      const offP=pctile(offs,aPow.offPPG);const defP=pctile(defs,aPow.defPPG);
+      if(offP>=.95)chips.push(chip('🔥 '+g.away.abbr+' OFFENSE TOP 5%',true));
+      if(offP<=.05)chips.push(chip('❄ '+g.away.abbr+' OFFENSE BOT 5%',false));
+      if(defP<=.05)chips.push(chip('🔒 '+g.away.abbr+' DEFENSE TOP 5%',true));// low defPPG = elite
+      if(defP>=.95)chips.push(chip('💥 '+g.away.abbr+' DEFENSE BOT 5%',false));
+    }
+    if(hPow){
+      const offP=pctile(offs,hPow.offPPG);const defP=pctile(defs,hPow.defPPG);
+      if(offP>=.95)chips.push(chip('🔥 '+g.home.abbr+' OFFENSE TOP 5%',true));
+      if(offP<=.05)chips.push(chip('❄ '+g.home.abbr+' OFFENSE BOT 5%',false));
+      if(defP<=.05)chips.push(chip('🔒 '+g.home.abbr+' DEFENSE TOP 5%',true));
+      if(defP>=.95)chips.push(chip('💥 '+g.home.abbr+' DEFENSE BOT 5%',false));
+    }
+    return chips.length?`<div class="sig" style="margin-top:4px">${chips.join('')}</div>`:'';
+  })();
+
+  /* ── ITEM 9: TEAM SPOTLIGHT ────────────────────────────────────────────────
+     Read the team ledger for both teams. Flag if the SYSTEM, the BOOK, or
+     YOU (user bets) have a notable win/loss pattern with either team.
+     Same signal as MLB's home-run-park or ERA flags — just for team history. */
+  const spotlightChips=(()=>{
+    let L;try{L=buildTeamLedger()}catch(e){return'';}
+    const chip=(txt,good)=>`<span class="sigchip" style="background:${good?'rgba(95,211,232,.08)':'rgba(240,86,60,.08)'};color:${good?'var(--cold)':'var(--rust)'};border:1px solid ${good?'var(--cold)':'var(--rust)'};">${txt}</span>`;
+    const chips=[];
+    [g.away.abbr,g.home.abbr].forEach(ab=>{
+      const t=L[ab];if(!t||t.n<4)return; // need at least 4 graded bets to flag
+      const sideWin=t.sideW/(t.sideW+t.sideL||1);
+      const sysScores=systemScorecard?.(null,null,ab)||null;
+      // your betting record with this team
+      if(t.sideW+t.sideL>=4){
+        if(sideWin>=.75)chips.push(chip('✅ '+ab+' GOLDEN ('+t.sideW+'-'+t.sideL+')',true));
+        if(sideWin<=.25)chips.push(chip('⚠ '+ab+' AVOID ('+t.sideW+'-'+t.sideL+')',false));
+      }
+    });
+    return chips.length?`<div class="sig" style="margin-top:2px">${chips.join('')}</div>`:'';
+  })();
+
   return`<div class="tkt" id="ncaaf-card-${id}" style="margin-bottom:10px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
       <div>
@@ -3280,12 +3461,19 @@ function ncaafCard(g){
       </div>
     </div>
     ${(g.abstract==='in')?fbLiveScoreBar(g,'ncaaf'):
-      g.status==='Final'
-      ?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore!=null&&g.awayScore!==''?g.awayScore:'?'} – ${g.homeScore!=null&&g.homeScore!==''?g.homeScore:'?'} ${g.home.abbr}</div>
-         <div class="rd">final</div></div>`
+      (g.abstract==='post'||g.status==='Final')
+      ?fbFinalHeadline(g,s,'ncaaf')
       :NCAAF_POWER_FLAT
          ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded</div></div>`
-         :`<div class="proj"><div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div><div class="rd">${Math.round(ap)}–${Math.round(hp)}</div></div>`}
+         :(()=>{
+             /* ITEM 7: show both raw sim AND trend/calibration-adjusted projection */
+             const adj=computeTrendAdjustedProjection(g,s,'ncaaf');
+             const raw=`${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}`;
+             const adjLine=adj?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--cold);margin-top:2px">`
+               +`adj ${g.away.abbr} ${adj.adjAway} – ${adj.adjHome} ${g.home.abbr}`
+               +`<span style="color:var(--mute);margin-left:5px">${adj.trendCount} trend${adj.trendCount!==1?'s':''}</span></div>`:'';
+             return `<div class="proj"><div class="sc">${raw}</div><div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>${adjLine}</div>`;
+           })()}
     <div class="sig">
       <div class="sigchip">O/U <b>${NCAAF_POWER_FLAT?'—':med}</b> · ${spreadLabel}</div>
       ${(()=>{try{return teamRecordChip(g.away.abbr)+teamRecordChip(g.home.abbr)
@@ -3307,6 +3495,7 @@ function ncaafCard(g){
       
     </div>
     ${(()=>{try{return coachHtml({game:g,sim:s,sport:'ncaaf'})}catch(e){return''}})()}
+    ${pctileChips}${spotlightChips}
     <div class="mktlab">Spread${realBadge}</div>
     <div class="betgrid">
       ${cfbSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,`${g.away.abbr} spread`,eAwaySpread,simAwaySpread)}
@@ -3336,19 +3525,23 @@ function ncaafCard(g){
       <button onclick="ncaafTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="ncaafTogglePanel('coach','${id}',this)">Coach</button>
       <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
+      <button onclick="ncaafTogglePanel('props','${id}',this)">Props</button>
       <button onclick="ncaafTogglePanel('alt','${id}',this)">Alt Lines</button>
       <button onclick="ncaafTogglePanel('portal','${id}',this)">Portal</button>
       <button onclick="ncaafTogglePanel('verdict','${id}',this)">Take/Fade</button>
       ${(cfbLive||cfbFinal)?`<button onclick="ncaafTogglePanel('livebox','${id}',this)">${cfbLive?'Live box':'Box score'}</button>`:''}
+      ${cfbFinal?`<button onclick="ncaafTogglePanel('analysis','${id}',this)" style="background:rgba(95,211,232,.1);color:var(--cold)">📊 Analysis</button>`:''}
       <button onclick="ncaafTogglePanel('mybets','${id}',this)">My Bets</button>
     </div>
     <div class="panel" id="p-ncaafcoach-${id}">${coachBriefing(g,s,'ncaaf')}</div>
     <div class="panel" id="p-ncaaftrends-${id}">${ncaafTrendPanel(g,s)}</div>
     <div class="panel" id="p-ncaafag-${id}">${ncaafGameAG(g,s)}</div>
+    <div class="panel" id="p-ncaafprops-${id}">${ncaafPropsPanel(g)}</div>
     <div class="panel" id="p-ncaafalt-${id}">${footballAltPanel(g,s)}</div>
     <div class="panel" id="p-ncaafportal-${id}">${cfbPortalPanel(g)}</div>
     <div class="panel" id="p-ncaafverdict-${id}">${takeFadePanel(g,s,'ncaaf')}</div>
     <div class="panel" id="p-ncaaflivebox-${id}"><div id="p-fb-livebox-${id}">${(cfbLive||cfbFinal)?fbLiveBoxPanel(g,'ncaaf'):''}</div></div>
+    <div class="panel" id="p-ncaafanalysis-${id}">${cfbFinal?fbAnalysisPanel(g,s,'ncaaf'):''}</div>
     <div class="panel" id="p-ncaafmybets-${id}"></div>
   </div>`;
 }
@@ -3417,8 +3610,8 @@ function ncaafGameAG(g,s){
   const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
   const med=isNaN(s.med)?52:s.med;
   const margin=isNaN(s.medMargin)?0:s.medMargin;
-  const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.spreadCover(-awaySpread.line)||.5))):null;
-  const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,s.over(totalOver.line)||.5))):null;
+  const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.awayCover?s.awayCover(awaySpread.line):.5))):null;
+  const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,typeof s.over==='function'?s.over(totalOver.line):.5))):null;
   const spreadLabel=margin>0?`${g.home.abbr} -${margin}`:margin<0?`${g.away.abbr} -${Math.abs(margin)}`:"Pick'em";
   const sidePick=spreadEdge&&Math.abs(spreadEdge)>=4?(spreadEdge>0?`${g.away.abbr} spread`:`${g.home.abbr} spread`):s.hw>0.6?`${g.home.abbr} ML`:s.aw>0.6?`${g.away.abbr} ML`:null;
   const totalPick=totalEdge&&Math.abs(totalEdge)>=4?(totalEdge>0?`Under ${totalOver?totalOver.line:med}`:`Over ${totalOver?totalOver.line:med}`):null;
@@ -3443,11 +3636,16 @@ function renderNCAAFMasterEval(){
     const lines=ncaafBookLinesFor(gameKey);
     const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
     const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
-    const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.spreadCover(-awaySpread.line)||.5))):null;
-    const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,s.over(totalOver.line)||.5))):null;
+    const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.awayCover?s.awayCover(awaySpread.line):.5))):null;
+    const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,typeof s.over==='function'?s.over(totalOver.line):.5))):null;
     const eAbs=Math.max(Math.abs(spreadEdge||0),Math.abs(totalEdge||0));
-    const verdict=eAbs>=8?'strong':eAbs>=4?'lean':'split';
-    const confidence=Math.min(95,50+eAbs*2+(g.away.ranking||g.home.ranking?5:0));
+    /* Confidence based on EV% not raw odds units — cap spreadEdge/totalEdge to
+       EV range before computing confidence so +1790 odds units can't inflate it. */
+    const evSpread=awaySpread&&spreadEdge!=null?+(evPct(s.awayCover?s.awayCover(awaySpread.line):.5,awaySpread.price)).toFixed(1):null;
+    const evTotal=totalOver&&totalEdge!=null?+(evPct(typeof s.over==='function'?s.over(totalOver.line):.5,totalOver.price)).toFixed(1):null;
+    const evAbs=Math.max(Math.abs(evSpread||0),Math.abs(evTotal||0));
+    const verdict=evAbs>=15?'strong':evAbs>=8?'lean':'split';
+    const confidence=Math.min(95,50+evAbs*1.5+(g.away.ranking||g.home.ranking?5:0));
     return{g,s,verdict,confidence,spreadEdge,totalEdge};
   }).filter(Boolean).sort((a,b)=>{
     const r={strong:0,lean:1,split:2};
@@ -3475,7 +3673,7 @@ function renderNCAAFMasterEval(){
       </div>
       <div class="sub" style="margin-top:6px">
         Proj: ${isNaN(s.awayProj)?26:s.awayProj}–${isNaN(s.homeProj)?26:s.homeProj} · O/U ${med} · ${spreadLabel}<br>
-        Edge: Spread ${spreadEdge!=null?(spreadEdge>0?'+':'')+Math.round(spreadEdge):'—'} · Total ${totalEdge!=null?(totalEdge>0?'+':'')+Math.round(totalEdge):'—'}
+        Edge: Spread ${evSpread!=null?(evSpread>0?'+':'')+evSpread+'% EV':'—'} · Total ${evTotal!=null?(evTotal>0?'+':'')+evTotal+'% EV':'—'}
       </div>
     </div>`;
   });

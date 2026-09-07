@@ -11784,6 +11784,43 @@ function bestHRRaw(){
   const h=hrs[0];
   return{name:h.name,mkt:h.mkt,type:'hr',thr:1,pid:h.pid,gid:h.gid,game:h.game,p:h.p};
 }
+function buildFootballBestSides(games,sims,linesFor,sport,n){
+  const picks=[];
+  (games||[]).forEach(g=>{
+    const s=sims[g.id];if(!s)return;
+    const lines=linesFor(g.away.abbr+'@'+g.home.abbr);
+    const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+    const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
+    const hw=s.hw||0.5;
+    if(awayML){picks.push({pick:g.away.abbr+' ML',game:g.away.abbr+'@'+g.home.abbr,prob:1-hw,sport,edge:awayML?+(amerToProb(awayML.price)-0)*100:null});}
+    if(homeML){picks.push({pick:g.home.abbr+' ML',game:g.away.abbr+'@'+g.home.abbr,prob:hw,sport,edge:homeML?+(amerToProb(homeML.price)-0)*100:null});}
+  });
+  return picks.sort((a,b)=>b.prob-a.prob).slice(0,n);
+}
+function buildFootballBestTotals(games,sims,linesFor,sport,n){
+  const picks=[];
+  (games||[]).forEach(g=>{
+    const s=sims[g.id];if(!s)return;
+    const lines=linesFor(g.away.abbr+'@'+g.home.abbr);
+    const over=lines.find(x=>x.market==='total'&&x.side==='over');
+    const med=s.med||s.mean||45;
+    if(over){
+      const dir=med>over.line?'Over':'Under';
+      /* s.overP doesn't exist on football sims — the sim returns s.over()
+         as a function. Use it correctly; fall back to model median direction
+         at 55% confidence when no function is available. */
+      let p=0.5;
+      if(typeof s.over==='function'){
+        p=dir==='Over'?s.over(over.line):1-s.over(over.line);
+      }else{
+        p=dir==='Over'?0.55:0.55; // signal direction, no magnitude
+      }
+      picks.push({pick:dir+' '+over.line,game:g.away.abbr+'@'+g.home.abbr,prob:p,sport});
+    }
+  });
+  return picks.sort((a,b)=>b.prob-a.prob).slice(0,n);
+}
+
 function buildBestCard(){
   const sides=bestSides(5),totals=bestTotals(5),props=bestPropsRaw(5),hr=bestHRRaw();
   const pf=x=>(x*100).toFixed(1);
