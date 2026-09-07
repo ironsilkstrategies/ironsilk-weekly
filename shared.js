@@ -1760,8 +1760,21 @@ function computeEntities(){
 // and per-team shrinkage will never fully absorb it. This is computed from every graded
 // game ever, shrunk by sample size same as the team correction, and actually applied.
 function computeGlobalDrift(){
+  /* ITEM 4: Football calibration included — NFL and CFB graded games feed the
+     same drift calculation as MLB so calibration applies across all sports. */
   const arc=get(LS.arc,{});
   let n=0,totalBias=0,sideCorrect=0,sideGraded=0;
+  [get(LS.nflarc,{}),get('d4.ncaafarc',{})].forEach(fbArc=>{
+    Object.keys(fbArc).forEach(d=>{
+      (fbArc[d]||[]).forEach(r=>{
+        if(r.awayScore==null||r.homeScore==null)return;
+        const actTot=+r.awayScore+(+r.homeScore);
+        if(r.projTotal!=null){totalBias+=(r.projTotal-actTot);n++;}
+        const actW=r.homeScore>r.awayScore?'home':'away';
+        if(r.projWinner){sideGraded++;if(r.projWinner===actW)sideCorrect++;}
+      });
+    });
+  });
   Object.keys(arc).forEach(d=>{
     const A=arc[d],fin=A.finals||{};
     (A.rows||[]).forEach(r=>{
@@ -6935,6 +6948,10 @@ function renderMasterEval(){
       ${chip(((get('d4.drift',{})||{}).n||0)>0,'Calibration',(get('d4.drift',{})||{}).n||0)}
       ${chip(nfBook>0,'Football book lines',nfBook)}
       ${chip(nfSim>0,'Football sims (this page)',nfSim)}
+      ${(()=>{const na=get(LS.nflarc,{}),ca=get('d4.ncaafarc',{});
+        const fbG=Object.values(na).flat().filter(r=>r.awayScore!=null).length
+               +Object.values(ca).flat().filter(r=>r.awayScore!=null).length;
+        return chip(fbG>0,'Football graded (calibration)',fbG);})()}
     </div>
     <div class="bar" style="margin-top:11px">
       <button class="primary" id="evalRunBtn" onclick="runMasterEval()">
@@ -8376,10 +8393,25 @@ function parseSlateText(text){
   const ABBR_MAP={'CHW':'CWS','AZ':'ARI','WSH':'WSH','WAS':'WSH','ATH':'ATH','OAK':'ATH','NYY':'NYY','NYM':'NYM'};
   function normAbbr(a){return ABBR_MAP[a.toUpperCase()]||a.toUpperCase();}
 
-  // detect file type by content fingerprint
-  const isConsensus=lines.some(l=>/\d+%\s*\//.test(l)||/TOTALS/i.test(l));
-  const isTrends=lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under|[A-Z]{2,3})\s+is\s+\d/i.test(l));
-  const isPicks=lines.some(l=>/^ML:/i.test(l)||/^OU:/i.test(l)||/^RL:/i.test(l));
+  /* ITEM 10: SMART UPLOAD ROUTING ─────────────────────────────────────────
+     Before this, the type detector only had MLB-shaped patterns. Football book
+     odds (SPREAD: / ML: / OU: headers), football trends, and football consensus
+     all looked identical to it — routing was essentially a coin flip. Now every
+     real content shape has explicit fingerprints so the correct storage bucket
+     is always chosen automatically, with no user decision needed.
+
+     Detection priority (first match wins):
+       1. Book odds: SPREAD: / ML: / OU: lines — unambiguous, highest priority
+       2. Consensus: % / % lines or TOTALS header — public betting %s
+       3. Trends: explicit "trends" keyword, "is X-Y in last N" patterns
+       4. Props: player name + stat + line combos
+       5. Ext picks: everything else that doesn't fit the above
+  */
+  const isBookOdds=lines.some(l=>/^SPREAD:/i.test(l)||/^ML:/i.test(l)||/^OU:/i.test(l)||/^RL:/i.test(l)||/^H1SPREAD:/i.test(l)||/^H1OU:/i.test(l)||/^ALTERNATE:/i.test(l));
+  const isConsensus=!isBookOdds&&(lines.some(l=>/\d+%\s*\//.test(l)||/TOTALS/i.test(l)));
+  const isTrends=!isBookOdds&&(lines.some(l=>/trends/i.test(l))||lines.some(l=>/:\s+(Over|Under|[A-Z]{2,3})\s+is\s+\d/i.test(l))||lines.some(l=>/\s+is\s+\d+-\d+\s+(in|over|under|ats)/i.test(l)));
+  const isProps=!isBookOdds&&!isTrends&&(lines.some(l=>/\d+\.?\d*\s*(Hits?|HRs?|RBIs?|Ks?|TDs?|Yds?|Rec|Rush|Pass)/i.test(l)));
+  const isPicks=isBookOdds||lines.some(l=>/^ML:/i.test(l)||/^OU:/i.test(l)||/^RL:/i.test(l));
 
   if(isConsensus){
     // ── CONSENSUS FORMAT ──
@@ -12666,6 +12698,11 @@ function logSystemPicks(sport){
       sport:sp,game:gl,
       systemPick:s.hw>=s.aw?g.home.abbr:g.away.abbr,
       systemConf:+(Math.max(s.aw,s.hw)*100).toFixed(1),
+      /* ITEM 4: projected total + winner direction written here so that when
+         gradeSystemLog compares to the actual result it has something to feed
+         back into computeGlobalDrift for cross-sport calibration. */
+      projTotal:s.med!=null?+s.med.toFixed(1):null,
+      projWinner:s.hw>=s.aw?'home':'away',
       bookFav,graded:false,winner:null,systemHit:null,bookHit:null,
     };
   });
@@ -12691,6 +12728,28 @@ function gradeSystemLog(){
       row.systemHit=row.systemPick===winner;
       row.bookHit=row.bookFav?row.bookFav===winner:null;
       row.graded=true;graded++;
+      /* ITEM 4 bridge: mirror projection data into the football archives so
+         computeGlobalDrift can read projTotal/projWinner without requiring
+         the football engine to be loaded on this page. */
+      if(row.sport==='nfl'||row.sport==='ncaaf'){
+        try{
+          const fbKey=row.sport==='nfl'?LS.nflarc:'d4.ncaafarc';
+          const fbArc=get(fbKey,{});
+          const today_=d;
+          fbArc[today_]=fbArc[today_]||[];
+          const existing=fbArc[today_].find(x=>x.game===row.game);
+          if(existing){
+            if(row.projTotal!=null)existing.projTotal=row.projTotal;
+            if(row.projWinner)existing.projWinner=row.projWinner;
+            existing.awayScore=F.a;existing.homeScore=F.h;
+          }else{
+            fbArc[today_].push({game:row.game,sport:row.sport,
+              projTotal:row.projTotal,projWinner:row.projWinner,
+              awayScore:F.a,homeScore:F.h,graded:true});
+          }
+          set(fbKey,fbArc);
+        }catch(e){}
+      }
     });
   });
   if(graded)set(LS.syslog,log);

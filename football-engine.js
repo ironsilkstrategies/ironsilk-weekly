@@ -971,6 +971,33 @@ function ncaafAbbrFor(raw){
      prefix (two different teams both plausible) resolves to nothing rather
      than guessing, since a wrong resolution here silently corrupts a card
      the same way the removed lookup fuzziness did. */
+  /* SPORTSBOOK ALIAS TABLE — some teams are listed differently on sportsbooks
+     vs ESPN. "Mississippi" on DraftKings/FanDuel means Ole Miss, but ESPN
+     calls them "Ole Miss Rebels". Without this, "Mississippi" matched only
+     Mississippi State (whose ESPN name starts with "Mississippi") and stored
+     the wrong team. This runs BEFORE the prefix scan so the alias wins cleanly. */
+  const NCAAF_SB_ALIASES={
+    'MISSISSIPPI':'OLEMISS',       // sportsbook "Mississippi" → ESPN "Ole Miss Rebels"
+    'OLEMISS':'OLEMISS',
+    'SOUTHERNCAL':'USC',           // sportsbook "Southern Cal" → ESPN "USC Trojans"
+    'SOUTHERNCALIFORNIA':'USC',
+    'PITT':'PITTSBURGH',           // sportsbook "Pitt" → ESPN "Pittsburgh Panthers"
+    'TEXASAM':'TEXASAM',
+    'GEORGIA SOUTHERN':'GEORGIASOUTHERN',
+    'CENTRALFLORIDA':'UCF',        // sportsbook "Central Florida" → ESPN "UCF Knights"
+  };
+  const aliasKey=NCAAF_SB_ALIASES[k];
+  if(aliasKey){
+    for(const ga of (NCAAF_GAMES||[])){
+      for(const ta of [ga.away,ga.home]){
+        if(!ta)continue;
+        const ca=[ta.abbr,ta.name,ta.shortName,ta.location,ta.displayName]
+          .filter(Boolean).map(cfbKeyOf);
+        if(ca.includes(aliasKey))return ta.abbr;
+        if(ca.some(c=>c.length>=aliasKey.length&&c.startsWith(aliasKey)))return ta.abbr;
+      }
+    }
+  }
   let prefixHits=[];
   for(const g of (NCAAF_GAMES||[])){
     for(const t of [g.away,g.home]){
@@ -3463,6 +3490,7 @@ function saveNCAAFBookOdds(picks,el){
   const d=today();
   const all=get(LS.ncaafshots,{});all[d]=all[d]||[];
   const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  const gameSet=new Set();
   picks.forEach(x=>{
     /* Build the game key from away@home if the pick doesn't already have one.
        The text-upload path always sets x.game; the vision (screenshot) path
@@ -3471,7 +3499,9 @@ function saveNCAAFBookOdds(picks,el){
        never find any match, even after successful resolution and storage. */
     const awAb=String(x.away||'').toUpperCase();
     const hmAb=String(x.home||'').toUpperCase();
-    const rec={...x,away:awAb,home:hmAb,game:x.game||(awAb&&hmAb?awAb+'@'+hmAb:''),capturedAt:Date.now()};
+    const game=x.game||(awAb&&hmAb?awAb+'@'+hmAb:'');
+    const rec={...x,away:awAb,home:hmAb,game,capturedAt:Date.now()};
+    if(game)gameSet.add(game);
     const k=keyOf(rec);const i=all[d].findIndex(y=>keyOf(y)===k);
     if(i>=0)all[d][i]=rec;else all[d].push(rec);
   });
@@ -3481,7 +3511,7 @@ function saveNCAAFBookOdds(picks,el){
      renderNCAAF will re-repair once it arrives. Either way the lines land. */
   try{repairNCAAFKeys()}catch(e){}
   /* Build a summary of what actually landed so it's visible in the UI */
-  const games=new Set(picks.map(p=>p.game));
+  const games=gameSet;
   const mktCounts={};picks.forEach(p=>{mktCounts[p.market]=(mktCounts[p.market]||0)+1});
   const summary=Object.entries(mktCounts).map(([m,n])=>n+' '+m).join(' · ');
   if(el)el.innerHTML=`<div class="tkt hi"><h3>CFB lines locked in ✓</h3>
