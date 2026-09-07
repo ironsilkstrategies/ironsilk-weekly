@@ -566,6 +566,11 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
   </div>
 
   <div class="view" id="v-grades">
+    <div style="display:flex;gap:0;border-bottom:1px solid #1e2a36;margin-bottom:0">
+      <button onclick="setGradeSport('mlb',this)" style="flex:1;padding:9px 0;font-family:'IBM Plex Mono';font-size:11px;font-weight:700;letter-spacing:.06em;border:none;cursor:pointer;background:transparent;color:var(--gold);border-bottom:2px solid var(--gold)" id="gradeSportBtn-mlb">⚾ MLB</button>
+      <button onclick="setGradeSport('nfl',this)" style="flex:1;padding:9px 0;font-family:'IBM Plex Mono';font-size:11px;font-weight:700;letter-spacing:.06em;border:none;cursor:pointer;background:transparent;color:var(--mute);border-bottom:2px solid transparent" id="gradeSportBtn-nfl">🏈 NFL</button>
+      <button onclick="setGradeSport('ncaaf',this)" style="flex:1;padding:9px 0;font-family:'IBM Plex Mono';font-size:11px;font-weight:700;letter-spacing:.06em;border:none;cursor:pointer;background:transparent;color:var(--mute);border-bottom:2px solid transparent" id="gradeSportBtn-ncaaf">🏟 CFB</button>
+    </div>
     <div class="subnav" id="gradeNav"></div>
     <div id="gradeBody"><div class="empty">Grading needs at least one completed slate.</div></div>
     <div class="bar">
@@ -814,6 +819,7 @@ let NFL_POWER_RATED=0,NFL_POWER_FLAT=false; // is there real season data behind 
 let NFL_POWER={};  // {abbr: {offPPG, defPPG, sos, record, streak}}
 const NFL_HFA=2.5;       // home field advantage in points (real NFL average ~2.5)
 let NCAAF_WEEK=null,NCAAF_SEASON=null;
+let ACTIVE_TAB='games'; // declared here — used by doSportSwitch below
 
 function doSportSwitch(sport){
   ACTIVE_SPORT=sport;
@@ -856,8 +862,20 @@ function doSportSwitch(sport){
     if(ACTIVE_TAB==='best'&&typeof renderBest==='function')renderBest();
   }
 }
-let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
+let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build',GRADE_SPORT='mlb';
 let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
+function setGradeSport(s,el){
+  GRADE_SPORT=s;
+  ['mlb','nfl','ncaaf'].forEach(k=>{
+    const b=document.getElementById('gradeSportBtn-'+k);
+    if(!b)return;
+    const active=k===s;
+    const color=k==='mlb'?'var(--gold)':k==='nfl'?'#4a9eff':'#4caf84';
+    b.style.color=active?color:'var(--mute)';
+    b.style.borderBottom=active?'2px solid '+color:'2px solid transparent';
+  });
+  renderGrades(false);
+}
 
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
@@ -1895,7 +1913,6 @@ function saveKeys(){
   localStorage.setItem('d4.setupDone','1');
   document.getElementById('setup').classList.add('hide');boot();
 }
-let ACTIVE_TAB='games';
 function tab(n,b){
   ACTIVE_TAB=n;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
