@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TheDesk · Odds Loader</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
     --bg:#0a0e14;--surface:#111820;--border:#1e2a36;
@@ -12,57 +13,38 @@
     --text:#e8edf2;--muted:#5a6a7a;--label:#8a9baa;
   }
   body{background:var(--bg);color:var(--text);font-family:'IBM Plex Mono',monospace;min-height:100vh;padding:16px}
-  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
   header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)}
   .logo{font-size:16px;font-weight:600;color:var(--accent)}
   .logo span{color:var(--muted);font-weight:400}
   .badge{font-size:9px;background:var(--accent2);color:#0a0e14;padding:2px 7px;border-radius:3px;font-weight:600;letter-spacing:.1em;margin-left:8px}
-  h2{font-size:11px;letter-spacing:.12em;color:var(--muted);margin:18px 0 8px}
-  /* DROP ZONE */
-  #dropzone{
-    border:2px dashed var(--border);border-radius:8px;padding:28px 20px;
-    text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
-    margin-bottom:16px;
-  }
-  #dropzone.drag{border-color:var(--accent);background:rgba(245,200,66,.06)}
-  #dropzone input{display:none}
-  #dropzone p{font-size:12px;color:var(--muted);line-height:1.7}
-  #dropzone p strong{color:var(--accent);cursor:pointer}
-  /* SPORT TABS */
   .tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--border)}
   .tab{font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--muted);padding:8px 16px;cursor:pointer;border-bottom:2px solid transparent}
   .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-  /* DATE */
   .date-row{display:flex;align-items:center;gap:10px;margin-bottom:16px}
   .date-row label{font-size:10px;color:var(--muted);letter-spacing:.08em}
-  .date-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);
-    padding:6px 10px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:12px}
-  /* STATUS */
+  .date-row input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:12px}
+  #dropzone{border:2px dashed var(--border);border-radius:8px;padding:28px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:16px}
+  #dropzone.drag{border-color:var(--accent);background:rgba(245,200,66,.06)}
+  #dropzone input{display:none}
+  #dropzone p{font-size:12px;color:var(--muted);line-height:1.9}
+  #dropzone p strong{color:var(--accent);cursor:pointer}
   #status{font-size:11px;color:var(--muted);margin-bottom:14px;min-height:18px}
   #status.ok{color:var(--plus)}
   #status.err{color:var(--minus)}
   #status.working{color:var(--accent)}
-  /* PREVIEW TABLE */
-  #preview{margin-bottom:16px}
   .game-block{border:1px solid var(--border);border-radius:6px;margin-bottom:10px;overflow:hidden}
   .game-header{background:var(--surface);padding:7px 12px;font-size:11px;color:var(--label);display:flex;justify-content:space-between}
-  .game-header span{font-size:9px;color:var(--muted)}
   .odds-row{display:grid;grid-template-columns:110px 1fr 1fr 1fr;gap:4px;padding:6px 12px;border-bottom:1px solid var(--border);font-size:11px}
   .odds-row:last-child{border-bottom:none}
-  .odds-row .mkt{color:var(--muted);letter-spacing:.06em}
+  .odds-row .mkt{color:var(--muted)}
   .odds-row .side{color:var(--label)}
-  .pval{font-weight:600}
-  .pval.p{color:var(--plus)}
-  .pval.m{color:var(--minus)}
-  .pval.n{color:var(--text)}
-  /* BUTTONS */
+  .pval.p{color:var(--plus);font-weight:600}
+  .pval.m{color:var(--minus);font-weight:600}
   .btn-row{display:flex;gap:10px;margin-top:4px}
-  button{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;
-    letter-spacing:.08em;border:none;border-radius:5px;padding:12px 20px;cursor:pointer;width:100%}
+  button{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;letter-spacing:.08em;border:none;border-radius:5px;padding:12px 20px;cursor:pointer;width:100%}
   #saveBtn{background:var(--accent);color:#0a0e14}
   #saveBtn:disabled{opacity:.4;cursor:not-allowed}
   #clearBtn{background:var(--surface);color:var(--muted);border:1px solid var(--border);width:auto;padding:12px 16px}
-  /* LOG */
   #log{font-size:10px;color:var(--muted);margin-top:16px;line-height:1.8;white-space:pre-wrap}
 </style>
 </head>
@@ -73,27 +55,26 @@
   <div style="font-size:10px;color:var(--muted)" id="storedCount">—</div>
 </header>
 
-<!-- SPORT -->
 <div class="tabs">
-  <div class="tab active" data-sport="mlb" onclick="setSport('mlb',this)">MLB</div>
-  <div class="tab" data-sport="nfl" onclick="setSport('nfl',this)">NFL</div>
-  <div class="tab" data-sport="ncaaf" onclick="setSport('ncaaf',this)">CFB</div>
+  <div class="tab active" onclick="setSport('mlb',this)">MLB</div>
+  <div class="tab" onclick="setSport('nfl',this)">NFL</div>
+  <div class="tab" onclick="setSport('ncaaf',this)">CFB</div>
 </div>
 
-<!-- DATE -->
 <div class="date-row">
   <label>SLATE DATE</label>
   <input type="date" id="slateDate">
 </div>
 
-<!-- DROP ZONE -->
-<div id="dropzone" onclick="document.getElementById('fileIn').click()"
+<div id="dropzone"
+  onclick="document.getElementById('fileIn').click()"
   ondragover="event.preventDefault();this.classList.add('drag')"
   ondragleave="this.classList.remove('drag')"
   ondrop="handleDrop(event)">
   <input type="file" id="fileIn" accept="image/*" multiple onchange="handleFiles(this.files)">
-  <p>Drop sportsbetting.ag screenshots here<br>or <strong>tap to choose files</strong><br><br>
-  <span style="font-size:10px">Reads full game · F5 · 1H · 1Q in one shot</span></p>
+  <p>Drop sportsbetting.ag screenshots here<br>
+  or <strong>tap to choose files</strong><br><br>
+  <span style="font-size:10px;color:var(--muted)">Full game · F5 · 1H · 1Q — all parsed in one shot</span></p>
 </div>
 
 <div id="status"></div>
@@ -107,21 +88,26 @@
 <div id="log"></div>
 
 <script>
-// ── CONFIG ────────────────────────────────────────────────────────────────
-const ANTHROPIC_KEY_STORE = 'd4.key'; // reuse TheDesk's own Anthropic key slot
-// TheDesk localStorage keys (mirrors shared.js LS object)
-const LS_BOOKSHOTS  = 'd4.bookshots';   // MLB
-const LS_NFLSHOTS   = 'd4.nflshots';    // NFL
-const LS_NCAAFSHOTS = 'd4.ncaafshots';  // CFB/NCAAF
+// ── STORAGE KEYS — mirrors shared.js LS object exactly ───────────────────
+const LS = {
+  ai:         'd4.ai',          // Gemini key — same slot TheDesk uses
+  bookshots:  'd4.bookshots',   // MLB lines
+  nflshots:   'd4.nflshots',    // NFL lines
+  ncaafshots: 'd4.ncaafshots',  // CFB lines
+};
+
+// Gemini models — same fallback chain as TheDesk
+const GEMINI_MODELS = ['gemini-3.6-flash','gemini-3.7-flash','gemini-3.5-flash','gemini-2.5-flash'];
 
 let SPORT = 'mlb';
 let PARSED = [];
 
 // ── HELPERS ───────────────────────────────────────────────────────────────
-const get = (k, d={}) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } };
-const set = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+const get  = (k, d) => { try { const v = localStorage.getItem(k); return v != null ? JSON.parse(v) : d; } catch { return d; } };
+const set  = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const today = () => new Date().toISOString().slice(0,10);
-const lsKey = s => s==='nfl' ? LS_NFLSHOTS : s==='ncaaf' ? LS_NCAAFSHOTS : LS_BOOKSHOTS;
+const lsKey = s => s==='nfl' ? LS.nflshots : s==='ncaaf' ? LS.ncaafshots : LS.bookshots;
+const getDate = () => document.getElementById('slateDate').value || today();
 
 function setSport(s, el) {
   SPORT = s;
@@ -130,28 +116,62 @@ function setSport(s, el) {
   updateStoredCount();
 }
 
-function getDate() {
-  return document.getElementById('slateDate').value || today();
-}
-
 function setStatus(msg, cls='') {
   const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = cls;
+  el.textContent = msg; el.className = cls;
 }
 
-function log(msg) {
-  document.getElementById('log').textContent += msg + '\n';
-}
+function log(msg) { document.getElementById('log').textContent += msg + '\n'; }
 
 function updateStoredCount() {
   const d = getDate();
   const all = get(lsKey(SPORT), {});
   const n = (all[d] || []).length;
-  document.getElementById('storedCount').textContent = `${n} lines stored for ${d}`;
+  document.getElementById('storedCount').textContent = `${n} lines stored · ${d}`;
 }
 
-// ── INIT ─────────────────────────────────────────────────────────────────
+// ── GEMINI CALL — same pattern as TheDesk's callGemini() ─────────────────
+async function callGemini(key, images, promptText) {
+  const parts = [
+    { text: promptText },
+    ...images.map(img => ({ inline_data: { mime_type: img.mimeType, data: img.data } }))
+  ];
+  const body = {
+    contents: [{ role: 'user', parts }],
+    generationConfig: { maxOutputTokens: 8000, temperature: 0.1 }
+  };
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  for (let mi = 0; mi < GEMINI_MODELS.length; mi++) {
+    const model = GEMINI_MODELS[mi];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    for (let attempt = 0; attempt < (mi === 0 ? 4 : 2); attempt++) {
+      if (attempt > 0 || mi > 0) {
+        const wait = Math.min(20000, 900 * Math.pow(2, attempt)) + Math.random() * 400;
+        setStatus(`Gemini busy — retrying in ${Math.round(wait/1000)}s…`, 'working');
+        await sleep(wait);
+      }
+      try {
+        setStatus(`Calling ${model}…`, 'working');
+        const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (j.error) {
+          if (j.error.code === 503 || j.error.code === 429) { continue; }
+          throw new Error(j.error.message || JSON.stringify(j.error));
+        }
+        const text = j.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!text) throw new Error('Empty response from Gemini');
+        return text;
+      } catch(e) {
+        if (mi === GEMINI_MODELS.length - 1 && attempt >= 1) throw e;
+      }
+    }
+  }
+  throw new Error('All Gemini models exhausted');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
 document.getElementById('slateDate').value = today();
 document.getElementById('slateDate').addEventListener('change', updateStoredCount);
 updateStoredCount();
@@ -170,107 +190,79 @@ async function handleFiles(files) {
   document.getElementById('preview').innerHTML = '';
   document.getElementById('saveBtn').disabled = true;
 
-  const apiKey = get(ANTHROPIC_KEY_STORE, null) ||
-                 get('d4.ai', null) ||
-                 prompt('Paste your Anthropic API key (stored in TheDesk settings):');
-  if (!apiKey) { setStatus('No API key — add it in TheDesk Settings.', 'err'); return; }
-  // persist it if not already stored
-  if (!localStorage.getItem(ANTHROPIC_KEY_STORE)) set(ANTHROPIC_KEY_STORE, apiKey);
+  const apiKey = get(LS.ai, null);
+  if (!apiKey) {
+    setStatus('No Gemini key found — add it in TheDesk Settings first.', 'err');
+    return;
+  }
 
   setStatus(`Reading ${files.length} screenshot${files.length>1?'s':''}…`, 'working');
 
-  // Convert all files to base64
   const images = [];
   for (const f of files) {
-    const b64 = await new Promise((res, rej) => {
+    const data = await new Promise((res, rej) => {
       const r = new FileReader();
       r.onload = e => res(e.target.result.split(',')[1]);
-      r.onerror = () => rej();
+      r.onerror = rej;
       r.readAsDataURL(f);
     });
-    images.push({ type: f.type || 'image/jpeg', data: b64, name: f.name });
+    images.push({ mimeType: f.type || 'image/jpeg', data, name: f.name });
   }
 
-  const sportLabel = SPORT === 'ncaaf' ? 'college football (NCAAF/CFB)' : SPORT.toUpperCase();
   const mlbMarkets = `
-- Full-game moneyline  → market:"moneyline", side:"away"|"home"
-- Full-game run line   → market:"runline",   side:"away"|"home", line: +/-1.5
-- Full-game total      → market:"total",     side:"over"|"under"
-- 1st 5 innings ML     → market:"f5side",    side:"away"|"home"
-- 1st 5 innings total  → market:"f5total",   side:"over"|"under"
-- 1st 5 innings RL     → market:"f5runline", side:"away"|"home", line: +/-0.5`;
+- Full-game moneyline      → market:"moneyline",  side:"away"|"home",  line:null
+- Full-game run line       → market:"runline",    side:"away"|"home",  line:+/-1.5
+- Full-game total          → market:"total",      side:"over"|"under", line:the number
+- 1st 5 innings moneyline  → market:"f5side",     side:"away"|"home",  line:null
+- 1st 5 innings run line   → market:"f5runline",  side:"away"|"home",  line:+/-0.5
+- 1st 5 innings total      → market:"f5total",    side:"over"|"under", line:the number`;
+
   const fbMarkets = `
-- Full-game moneyline  → market:"moneyline", side:"away"|"home"
-- Full-game spread     → market:"spread",    side:"away"|"home"
-- Full-game total      → market:"total",     side:"over"|"under"
-- 1st half spread      → market:"h1spread",  side:"away"|"home"
-- 1st half total       → market:"h1total",   side:"over"|"under"
-- 1st quarter spread   → market:"q1spread",  side:"away"|"home"
-- 1st quarter total    → market:"q1total",   side:"over"|"under"`;
+- Full-game moneyline  → market:"moneyline", side:"away"|"home",  line:null
+- Full-game spread     → market:"spread",    side:"away"|"home",  line:the handicap
+- Full-game total      → market:"total",     side:"over"|"under", line:the number
+- 1st half spread      → market:"h1spread",  side:"away"|"home",  line:the handicap
+- 1st half total       → market:"h1total",   side:"over"|"under", line:the number
+- 1st quarter spread   → market:"q1spread",  side:"away"|"home",  line:the handicap
+- 1st quarter total    → market:"q1total",   side:"over"|"under", line:the number`;
 
-  const prompt_text = `These are screenshots from a sportsbook showing ${sportLabel} odds.
+  const sportLabel = SPORT === 'ncaaf' ? 'college football (CFB/NCAAF)' : SPORT.toUpperCase();
+  const promptText = `These are screenshots from sportsbetting.ag showing ${sportLabel} odds.
 
-Extract EVERY visible bet line into a JSON array. Each object:
+Extract EVERY visible bet line into a JSON array. Each object must have:
 {
-  "away": "TEAM_ABBR",
-  "home": "TEAM_ABBR",
-  "market": "<see below>",
+  "away": "ABBR",
+  "home": "ABBR",
+  "market": "...",
   "side": "away"|"home"|"over"|"under",
   "line": number or null,
-  "price": number  (American odds, e.g. -110 or +145)
+  "price": number (American odds e.g. -110 or +145)
 }
 
 Markets to extract:
 ${SPORT === 'mlb' ? mlbMarkets : fbMarkets}
 
 Rules:
-- Use standard MLB/NFL/CFB abbreviations (PHI, ATL, NYM, MIA, SMU, FSU etc)
-- away = visiting team, home = home team — preserve order from the screen
-- line = the spread/runline number (e.g. -3, +1.5), null for moneylines
-- price = the American odds number
-- Extract ALL games visible, ALL markets visible per game
-- If a panel shows "1st 5 innings" columns, extract those as f5side/f5total
-- If a panel shows "1st Half" columns, extract as h1spread/h1total
-- If a panel shows "1st Quarter" columns, extract as q1spread/q1total
-- Return ONLY a valid JSON array, no markdown, no explanation`;
-
-  const content = [
-    { type: 'text', text: prompt_text },
-    ...images.map(img => ({
-      type: 'image',
-      source: { type: 'base64', media_type: img.type, data: img.data }
-    }))
-  ];
+- away = the visiting team, home = the home team (preserve order shown on screen)
+- Use standard abbreviations: PHI, ATL, NYM, MIA, CLE, BAL, LAA, BOS, CHC, MIL, WSH, SD, STL, SF, TOR, ATH, SMU, FSU etc
+- line = spread/runline number (e.g. -3 or +1.5), null for moneylines
+- price = the American odds integer
+- Extract ALL games visible and ALL markets per game including alt-line panels
+- If a column header says "1st 5 Innings" extract as f5side/f5total/f5runline
+- If a column header says "1st Half" extract as h1spread/h1total
+- If a column header says "1st Quarter" extract as q1spread/q1total
+- Return ONLY a valid JSON array — no markdown fences, no explanation`;
 
   try {
-    setStatus('Sending to Claude vision…', 'working');
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        messages: [{ role: 'user', content }]
-      })
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      setStatus('API error: ' + (err.error?.message || resp.status), 'err');
-      return;
-    }
-
-    const data = await resp.json();
-    const raw = data.content?.find(b => b.type === 'text')?.text || '';
-    log('RAW OUTPUT:\n' + raw.slice(0, 300) + (raw.length > 300 ? '…' : ''));
+    const raw = await callGemini(apiKey, images, promptText);
+    log('RAW:\n' + raw.slice(0, 400) + (raw.length > 400 ? '…' : ''));
 
     let parsed;
     try {
-      const clean = raw.replace(/```json|```/g, '').trim();
-      parsed = JSON.parse(clean);
+      parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
     } catch(e) {
-      setStatus('Could not parse JSON from Claude response.', 'err');
-      log('Parse error: ' + e.message);
+      setStatus('Could not parse Gemini response as JSON.', 'err');
+      log('Parse error: ' + e.message + '\n' + raw.slice(0,500));
       return;
     }
 
@@ -280,72 +272,59 @@ Rules:
     }
 
     PARSED = parsed;
-    setStatus(`✓ ${parsed.length} lines extracted from ${images.length} screenshot${images.length>1?'s':''}`, 'ok');
+    setStatus(`✓ ${parsed.length} lines extracted`, 'ok');
     renderPreview(parsed);
     document.getElementById('saveBtn').disabled = false;
 
   } catch(e) {
-    setStatus('Network error: ' + e.message, 'err');
-    log(e.stack || e.message);
+    setStatus('Error: ' + e.message, 'err');
+    log(e.message);
   }
 }
 
-// ── PREVIEW ────────────────────────────────────────────────────────────────
+// ── PREVIEW ───────────────────────────────────────────────────────────────
 function renderPreview(picks) {
   const container = document.getElementById('preview');
-  // group by game
   const games = {};
   picks.forEach(p => {
     const key = p.away + '@' + p.home;
     if (!games[key]) games[key] = { away: p.away, home: p.home, lines: [] };
     games[key].lines.push(p);
   });
-
   container.innerHTML = '';
   Object.values(games).forEach(g => {
     const block = document.createElement('div');
     block.className = 'game-block';
-
-    const hdr = document.createElement('div');
-    hdr.className = 'game-header';
-    hdr.innerHTML = `<b>${g.away} @ ${g.home}</b><span>${g.lines.length} markets</span>`;
-    block.appendChild(hdr);
-
+    block.innerHTML = `<div class="game-header"><b>${g.away} @ ${g.home}</b><span>${g.lines.length} markets</span></div>`;
     g.lines.forEach(l => {
+      const pc = l.price > 0 ? 'p' : 'm';
+      const lineStr = l.line != null ? (l.line > 0 ? '+'+l.line : l.line) : '';
       const row = document.createElement('div');
       row.className = 'odds-row';
-      const pc = l.price > 0 ? 'p' : l.price < 0 ? 'm' : 'n';
-      const lineStr = l.line != null ? (l.line > 0 ? '+' + l.line : l.line) : '';
-      row.innerHTML = `
-        <span class="mkt">${l.market}</span>
-        <span class="side">${l.side}</span>
-        <span>${lineStr}</span>
-        <span class="pval ${pc}">${l.price > 0 ? '+' : ''}${l.price}</span>`;
+      row.innerHTML = `<span class="mkt">${l.market}</span><span class="side">${l.side}</span><span>${lineStr}</span><span class="pval ${pc}">${l.price>0?'+':''}${l.price}</span>`;
       block.appendChild(row);
     });
-
     container.appendChild(block);
   });
 }
 
-// ── SAVE TO THEDESK ────────────────────────────────────────────────────────
+// ── SAVE TO THEDESK ───────────────────────────────────────────────────────
 function saveToDesk() {
   if (!PARSED.length) return;
   const d = getDate();
   const key = lsKey(SPORT);
   const all = get(key, {});
   all[d] = all[d] || [];
-
   const keyOf = x => [x.game, x.market, x.side, x.line].join('|');
   const now = Date.now();
-
   let saved = 0, updated = 0;
+
   PARSED.forEach(x => {
-    const away = x.away.toUpperCase();
-    const home = x.home.toUpperCase();
-    const game = away + '@' + home;
+    const away = (x.away||'').toUpperCase();
+    const home = (x.home||'').toUpperCase();
     const rec = {
-      away, home, game,
+      away, home,
+      game: away + '@' + home,
       market: x.market,
       side: x.side,
       line: x.line != null ? x.line : null,
@@ -361,8 +340,8 @@ function saveToDesk() {
 
   set(key, all);
   updateStoredCount();
-  setStatus(`✓ Saved ${saved} new + ${updated} updated lines for ${d} → ${key}`, 'ok');
-  log(`Wrote to ${key}[${d}]: ${saved} new, ${updated} updated`);
+  setStatus(`✓ ${saved} new · ${updated} updated → ${key} [${d}]`, 'ok');
+  log(`Saved to ${key}[${d}]: ${saved} new, ${updated} updated`);
   document.getElementById('saveBtn').disabled = true;
   PARSED = [];
   document.getElementById('preview').innerHTML = '';
@@ -375,7 +354,7 @@ function clearDay() {
   const all = get(key, {});
   const n = (all[d] || []).length;
   if (!n) { setStatus(`Nothing stored for ${d}`, 'err'); return; }
-  if (!confirm(`Delete all ${n} stored lines for ${SPORT.toUpperCase()} on ${d}?`)) return;
+  if (!confirm(`Delete all ${n} ${SPORT.toUpperCase()} lines for ${d}?`)) return;
   delete all[d];
   set(key, all);
   setStatus(`Cleared ${n} lines for ${d}`, 'ok');
