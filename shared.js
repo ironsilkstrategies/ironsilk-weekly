@@ -3,7 +3,7 @@ const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',p
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus',
 nflgames:'d4.nflgames',nflshots:'d4.nflshots',nflarc:'d4.nflarc',nflext:'d4.nflext',nfltrends:'d4.nfltrends',nflconsensus:'d4.nflconsensus',
-cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus',pendingupload:'d4.pendingupload',allfinals:'d4.allfinals',fbpool:'d4.fbpool',teamledger:'d4.teamledger',frozen:'d4.frozen',syslog:'d4.syslog',trendlog:'d4.trendlog'};
+cfbd:'d4.cfbd',nfldepth:'d4.nfldepth',ncaafgames:'d4.ncaafgames',ncaafshots:'d4.ncaafshots',ncaafext:'d4.ncaafext',ncaaftrends:'d4.ncaaftrends',ncaafconsensus:'d4.ncaafconsensus',pendingupload:'d4.pendingupload',allfinals:'d4.allfinals',fbpool:'d4.fbpool',teamledger:'d4.teamledger',frozen:'d4.frozen',syslog:'d4.syslog',trendlog:'d4.trendlog',convergence:'d4.convergence',ledger:'d4.ledger'};
 const APP_TZ='America/Chicago';
 let GAMES=[],ODDS={},OPENS={},PROPS=[],SIMS={},SLIP=[],CHAT=[],H2H={},SPLITS={},BOX={},ODDS_BYDATE={},PREVIEW_DAY=null,SHARP_PROPS=[],SHARP_TOTALS=[],RUNDOWN_RL=[],OP_SIGNALS={};
 let ACTIVE_SPORT='mlb'; // 'mlb' | 'nfl' | 'ncaaf'
@@ -10965,7 +10965,7 @@ async function hardRecalibrate(){
     +(changed.length?'What changed and why:\n'+changed.join('\n'):'Not enough graded volume yet on any prop type to show a real adjustment breakdown.')
     +'\n\nAny game that hasn\'t started yet already reflects this — anything already locked from a past day stays exactly as it was graded.');
 }
-const GTABS=[['results','Results'],['calib','Calibration'],['history','History'],['stats','Sim vs Book']];
+const GTABS=[['results','Results'],['calib','Calibration'],['history','History'],['stats','Sim vs Book'],['ledger','📋 Ledger']];
 let RESULTS_MODE='sides',HIST_MODE='days',CALIB_MODE='calib';
 async function unlockTodayAndRegrade(){
   const arc=get(LS.arc,{});
@@ -10977,6 +10977,349 @@ async function unlockTodayAndRegrade(){
   }
   await renderGrades(true);
 }
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE LEDGER — UNIFIED INTELLIGENCE HUB
+   Three running records + team intelligence + convergence trends.
+   The single place to understand how every source of information is performing.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. PICK SOURCE EXTRACTORS ──────────────────────────────────────────── */
+
+/* Convert American odds to implied probability */
+function oddsToImplied(price){
+  if(!price||isNaN(price))return null;
+  return price<0?Math.abs(price)/(Math.abs(price)+100):100/(price+100);
+}
+
+/* System picks: sides/totals 70%+, MLB props 25%+, football TDs/INTs/sacks 40%+ */
+function getSystemPicksForLedger(sport){
+  const log=get(LS.syslog,{});
+  const picks=[];
+  const propStore=sport==='nfl'?get('d4.nflprops',{}):sport==='ncaaf'?get('d4.ncaafprops',{}):null;
+  Object.keys(log).sort().reverse().forEach(d=>{
+    Object.keys(log[d]).forEach(k=>{
+      const r=log[d][k];
+      if(sport&&r.sport!==sport)return;
+      if(r.systemConf>=70){
+        picks.push({...r,date:d,source:'system',displayConf:r.systemConf+'%',
+          label:r.systemPick+' ML',category:'side'});
+      }
+    });
+  });
+  // MLB props 25%+
+  if(!sport||sport==='mlb'){
+    const arc=get(LS.arc,{});
+    Object.keys(arc).sort().reverse().forEach(d=>{
+      const A=arc[d];
+      (A&&A.props||[]).forEach(p=>{
+        if(p.p>=0.25)picks.push({sport:'mlb',date:d,source:'system',
+          game:p.game,label:p.name+' '+p.mkt,displayConf:(p.p*100).toFixed(0)+'%',
+          category:'prop',graded:p.hit!=null,hit:p.hit,systemConf:+(p.p*100).toFixed(1)});
+      });
+    });
+  }
+  // Football props: TDs/INTs/sacks 40%+
+  ['nfl','ncaaf'].forEach(sp=>{
+    if(sport&&sport!==sp)return;
+    const today_=today();
+    const propData=get(sp==='nfl'?'d4.nflprops':'d4.ncaafprops',{});
+    Object.keys(propData).sort().reverse().forEach(d=>{
+      (propData[d]||[]).forEach(p=>{
+        const isFbProp=/td|interception|sack/i.test(p.stat||'');
+        if(!isFbProp)return;
+        const imp=oddsToImplied(p.price);
+        if(imp&&imp>=0.40)picks.push({sport:sp,date:d,source:'system',
+          game:p.game,label:p.player+' '+p.stat.replace(/_/g,' ')+' '+p.side,
+          displayConf:(imp*100).toFixed(0)+'%',category:'fbprop',
+          systemConf:+(imp*100).toFixed(1)});
+      });
+    });
+  });
+  return picks.sort((a,b)=>b.systemConf-a.systemConf);
+}
+
+/* Book picks: markets where book implies 60%+ probability */
+function getBookImpliedPicks(sport){
+  const picks=[];
+  const THRESHOLD=0.60;
+  const keys=sport==='nfl'?[LS.nflshots]:sport==='ncaaf'?[LS.ncaafshots]:[LS.bookshots,LS.nflshots,LS.ncaafshots];
+  const sportOf={[LS.bookshots]:'mlb',[LS.nflshots]:'nfl',[LS.ncaafshots]:'ncaaf'};
+  keys.forEach(key=>{
+    const all=get(key,{});
+    Object.keys(all).sort().reverse().forEach(d=>{
+      (all[d]||[]).forEach(r=>{
+        const imp=oddsToImplied(r.price);
+        if(!imp||imp<THRESHOLD)return;
+        const sp=r.sport||sportOf[key]||'mlb';
+        if(sport&&sp!==sport)return;
+        const sgn_=n=>n>0?'+'+n:''+n;
+        const label=r.market==='moneyline'?(r.side==='home'?(r.home||r.game.split('@')[1]):(r.away||r.game.split('@')[0]))+' ML'
+          :r.market==='spread'?(r.side==='home'?(r.home||'home'):(r.away||'away'))+' '+sgn_(r.line||0)
+          :r.market==='total'?r.side+' '+(r.line||'?')
+          :r.market+' '+r.side;
+        picks.push({sport:sp,date:d,source:'book',game:r.game,market:r.market,
+          side:r.side,line:r.line,price:r.price,implied:imp,
+          label,displayConf:(imp*100).toFixed(0)+'%',graded:false,hit:null});
+      });
+    });
+  });
+  // Deduplicate by game+market+side (take highest implied)
+  const seen=new Map();
+  picks.forEach(p=>{const k=p.game+'|'+p.market+'|'+p.side;if(!seen.has(k)||seen.get(k).implied<p.implied)seen.set(k,p);});
+  return [...seen.values()].sort((a,b)=>b.implied-a.implied);
+}
+
+/* My tickets: from locked tickets, with preset attribution */
+function getMyPicksForLedger(){
+  const L=get(LS.locked,[]);
+  const picks=[];
+  L.forEach(t=>{
+    (t.legs||[]).forEach(leg=>{
+      const source=t.source==='specialty'
+        ?(/fade.*system/i.test(t.name||'')?'fade_system':/tail.*system/i.test(t.name||'')?'tail_system'
+          :/fade.*book/i.test(t.name||'')?'fade_book':/tail.*book/i.test(t.name||'')?'tail_book':'mine')
+        :'mine';
+      picks.push({...leg,ticketId:t.id,ticketName:t.name||'',source,date:t.date||today(),
+        sport:leg.sport||'mlb',label:leg.pick,displayConf:leg.p?(leg.p*100).toFixed(0)+'%':'?',
+        graded:leg.hit!=null,hit:leg.hit});
+    });
+  });
+  return picks.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+}
+
+/* ── 2. GRADE BOOK PICKS AGAINST RESULTS ────────────────────────────────── */
+function gradeBookPicksAgainstFinals(){
+  const finals=typeof allFinals==='function'?allFinals():get(LS.allfinals,{});
+  const keys=[LS.bookshots,LS.nflshots,LS.ncaafshots];
+  const graded=[];
+  keys.forEach(key=>{
+    const all=get(key,{});
+    const sportOf={[LS.bookshots]:'mlb',[LS.nflshots]:'nfl',[LS.ncaafshots]:'ncaaf'};
+    const sp=sportOf[key];
+    Object.keys(all).forEach(d=>{
+      (all[d]||[]).filter(r=>oddsToImplied(r.price)>=0.60).forEach(r=>{
+        const F=finals[r.game];if(!F)return;
+        const [aw,hm]=(r.game||'').split('@');
+        let hit=null;
+        if(r.market==='moneyline'){
+          const winner=F.a>F.h?aw:F.h>F.a?hm:null;
+          hit=winner?(r.side==='home'?winner===hm:winner===aw):null;
+        }else if(r.market==='spread'&&r.line!=null){
+          const margin=r.side==='home'?F.h-F.a:F.a-F.h;
+          hit=margin>r.line;
+        }else if(r.market==='total'&&r.line!=null){
+          hit=r.side==='over'?(F.a+F.h)>r.line:(F.a+F.h)<r.line;
+        }
+        if(hit!==null)graded.push({...r,sport:sp,date:d,source:'book',hit,
+          label:(r.market==='moneyline'?(r.side==='home'?(r.home||hm):(r.away||aw))+' ML'
+            :r.market==='total'?r.side+' '+(r.line||''):(r.side==='home'?hm:aw)+' '+(r.line>0?'+':'')+r.line)});
+      });
+    });
+  });
+  return graded;
+}
+
+/* ── 3. CONVERGENCE TRENDS ───────────────────────────────────────────────── */
+function buildConvergenceTrends(){
+  /* Find every graded game where we have picks from multiple sources
+     and compute hit rates for each convergence pattern. */
+  const finals=allFinals();
+  const sysLog=get(LS.syslog,{});
+  const locked=get(LS.locked,[]);
+  const stats={
+    system_only:{n:0,w:0},book_only:{n:0,w:0},mine_only:{n:0,w:0},
+    sys_book:{n:0,w:0},sys_mine:{n:0,w:0},book_mine:{n:0,w:0},
+    all_three:{n:0,w:0},sys_book_fade:{n:0,w:0},
+    fade_system:{n:0,w:0},fade_book:{n:0,w:0}
+  };
+  const bookPicks=gradeBookPicksAgainstFinals();
+  const bookByGame={};
+  bookPicks.forEach(p=>{(bookByGame[p.game]=bookByGame[p.game]||[]).push(p);});
+
+  Object.keys(sysLog).forEach(d=>{
+    Object.keys(sysLog[d]).forEach(k=>{
+      const sys=sysLog[d][k];
+      if(!sys.graded||sys.winner===null)return;
+      const game=sys.game;const F=finals[game];if(!F)return;
+      const [aw,hm]=game.split('@');
+      const sysHit=sys.systemHit;
+      if(sysHit===null)return;
+      // check if book also has a pick on this game
+      const bookOnGame=(bookByGame[game]||[]).filter(b=>b.market==='moneyline');
+      const bookPick=bookOnGame[0];
+      const bookSide=bookPick?(bookPick.side==='home'?hm:aw):null;
+      const bookHit=bookPick?bookPick.hit:null;
+      // check if user had a ticket on this game
+      const myLegs=locked.flatMap(t=>t.legs||[]).filter(l=>l.game===game&&l.sport===sys.sport);
+      const myPick=myLegs[0];
+      const myHit=myPick?myPick.hit:null;
+      const systemSide=sys.systemPick;
+      const agree=(a,b)=>a!=null&&b!=null&&a===b;
+      const disagree=(a,b)=>a!=null&&b!=null&&a!==b;
+      const hasSys=true,hasBook=bookSide!=null,hasMine=myPick!=null;
+      if(hasSys&&!hasBook&&!hasMine){stats.system_only.n++;if(sysHit)stats.system_only.w++;}
+      if(!hasSys&&hasBook&&!hasMine&&bookHit!=null){stats.book_only.n++;if(bookHit)stats.book_only.w++;}
+      if(!hasSys&&!hasBook&&hasMine&&myHit!=null){stats.mine_only.n++;if(myHit)stats.mine_only.w++;}
+      if(hasSys&&hasBook&&agree(systemSide,bookSide)&&!hasMine){
+        stats.sys_book.n++;if(sysHit)stats.sys_book.w++;}
+      if(hasSys&&hasMine&&agree(systemSide,myPick.pick?.split(' ')[0])&&!hasBook){
+        stats.sys_mine.n++;if(sysHit)stats.sys_mine.w++;}
+      if(hasSys&&hasBook&&hasMine&&agree(systemSide,bookSide)){
+        stats.all_three.n++;if(sysHit)stats.all_three.w++;}
+      if(hasSys&&hasBook&&disagree(systemSide,bookSide)&&bookHit!=null){
+        stats.sys_book_fade.n++;if(bookHit)stats.sys_book_fade.w++;}
+      if(hasMine&&myPick&&/fade.*sys/i.test(myPick.ticketName||'')){
+        stats.fade_system.n++;if(myHit===false)stats.fade_system.w++;}// win = sys was wrong
+      if(hasMine&&myPick&&/fade.*book/i.test(myPick.ticketName||'')){
+        stats.fade_book.n++;if(myHit===false)stats.fade_book.w++;}
+    });
+  });
+  set(LS.convergence,{stats,ts:Date.now()});
+  return stats;
+}
+
+/* ── 4. TEAM PERCENTILES (top/bottom 10%) ────────────────────────────────── */
+function buildTeamPercentiles(){
+  const L=buildTeamLedger();
+  const teams=Object.keys(L).filter(ab=>L[ab].n>=4);
+  if(teams.length<10)return{top:[],bottom:[],all:L};
+  // Compute side win rate for each team
+  const rated=teams.map(ab=>{
+    const t=L[ab];
+    const total=t.sideW+t.sideL;
+    return{ab,win:total>0?t.sideW/total:0.5,n:total,units:t.units||0};
+  }).filter(x=>x.n>=4);
+  rated.sort((a,b)=>b.win-a.win);
+  const top10=Math.max(1,Math.ceil(rated.length*0.10));
+  const bot10=Math.max(1,Math.ceil(rated.length*0.10));
+  return{
+    top:rated.slice(0,top10),
+    bottom:rated.slice(-bot10).reverse(),
+    all:L,count:rated.length
+  };
+}
+
+/* ── 5. LEDGER DISPLAY ───────────────────────────────────────────────────── */
+function renderLedgerTab(){
+  const sport=ACTIVE_SPORT||'mlb';
+  const sysPicks=getSystemPicksForLedger(sport);
+  const bookPicks=getBookImpliedPicks(sport);
+  const myPicks=getMyPicksForLedger();
+  const conv=buildConvergenceTrends();
+  const pct=buildTeamPercentiles();
+
+  const pf=x=>(x*100).toFixed(0)+'%';
+  const pct_=n=>n?+((n*100).toFixed(0))+'%':'—';
+  const winColor=w=>w>=0.65?'var(--win)':w<=0.35?'var(--rust)':'var(--chalk)';
+
+  // Pick row renderer
+  const pickRow=(p,showSport)=>{
+    const hitBadge=p.hit===true?'<span style="color:var(--win)">✓</span>'
+      :p.hit===false?'<span style="color:var(--rust)">✗</span>'
+      :'<span style="color:var(--mute)">—</span>';
+    const sportTag=showSport&&p.sport?`<span style="font-family:'IBM Plex Mono';font-size:8px;background:rgba(242,169,59,.15);color:var(--gold);padding:1px 4px;border-radius:3px;margin-left:4px">${p.sport==='ncaaf'?'CFB':p.sport.toUpperCase()}</span>`:'';
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--rule)">
+      <div><div style="font-size:12px;color:var(--chalk)">${p.label}${sportTag}</div>
+        <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${p.game||''} · ${p.date||''}</div></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${p.displayConf}</span>
+        ${hitBadge}
+      </div>
+    </div>`;
+  };
+
+  const section=(title,picks,showSport,emptyMsg,note)=>`
+    <div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)">${title}</div>
+        <div style="font-family:'IBM Plex Mono';font-size:10px;color:var(--mute)">${picks.filter(p=>p.hit!==null).length}/${picks.length} graded</div>
+      </div>
+      ${note?`<div style="font-size:10px;color:var(--mute);margin-bottom:6px">${note}</div>`:''}
+      ${picks.length?picks.slice(0,15).map(p=>pickRow(p,showSport)).join('')
+        :`<div class="empty" style="padding:8px 0;font-size:12px">${emptyMsg}</div>`}
+    </div>`;
+
+  const gradedBook=bookPicks.filter(p=>p.hit!==null);
+  const bookWins=gradedBook.filter(p=>p.hit===true).length;
+  const sysGraded=sysPicks.filter(p=>p.hit!==null);
+  const sysWins=sysGraded.filter(p=>p.hit===true).length;
+  const myGraded=myPicks.filter(p=>p.hit!==null);
+  const myWins=myGraded.filter(p=>p.hit===true).length;
+
+  // Summary bar
+  const summaryBar=`<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    ${[
+      {label:'System',w:sysWins,n:sysGraded.length,color:'var(--cold)'},
+      {label:'Books',w:bookWins,n:gradedBook.length,color:'var(--gold)'},
+      {label:'Mine',w:myWins,n:myGraded.length,color:'var(--win)'},
+    ].map(x=>`<div style="flex:1;min-width:80px;background:var(--panel2);border-radius:8px;padding:10px 12px;text-align:center">
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);text-transform:uppercase">${x.label}</div>
+      <div style="font-size:18px;font-weight:800;color:${winColor(x.n>0?x.w/x.n:0.5)}">${x.n>0?(x.w/x.n*100).toFixed(0)+'%':'—'}</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${x.w}-${x.n-x.w}</div>
+    </div>`).join('')}
+  </div>`;
+
+  // Convergence trends
+  const convRow=(label,key,note)=>{
+    const d=conv[key];if(!d||d.n<3)return'';
+    const wr=d.w/d.n;
+    return`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)">
+      <div><div style="font-size:12px;color:var(--chalk)">${label}</div>
+        <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${note}</div></div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <span style="font-family:'IBM Plex Mono';font-size:11px;color:${winColor(wr)}">${(wr*100).toFixed(0)}%</span>
+        <span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--mute)">${d.w}-${d.n-d.w}</span>
+      </div>
+    </div>`;
+  };
+  const convSection=`<div style="margin-bottom:16px">
+    <div style="font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin-bottom:8px">Our generated trends</div>
+    ${convRow('System alone','system_only','Only the model picked this — no book or personal alignment')||''}
+    ${convRow('Book alone','book_only','Book implied 60%+ with no system or personal pick')||''}
+    ${convRow('System + Book agree','sys_book','Both model 70%+ and book 60%+ on same side')||''}
+    ${convRow('All three align','all_three','System + Book + Me all on the same pick — rarest signal')||''}
+    ${convRow('Fade the System','fade_system','How often betting against the system is right')||''}
+    ${convRow('Fade the Books','fade_book','How often betting against book favorites is right')||''}
+    ${!Object.values(conv).some(x=>x.n>=3)?`<div class="empty" style="font-size:12px;padding:8px 0">Trends build automatically as games grade. Need 3+ data points per pattern — keep playing.</div>`:''}
+  </div>`;
+
+  // Team percentiles
+  const teamSection=pct.count>=10?`<div style="margin-bottom:16px">
+    <div style="font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin-bottom:8px">Team intelligence · ${pct.count} teams tracked</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div style="flex:1;background:rgba(95,211,232,.08);border:1px solid var(--cold);border-radius:8px;padding:10px">
+        <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--cold);margin-bottom:6px">✅ TOP 10% — BET WITH</div>
+        ${pct.top.map(t=>`<div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:var(--chalk);font-size:12px">${t.ab}</span>
+          <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--win)">${(t.win*100).toFixed(0)}% · ${t.n} bets</span>
+        </div>`).join('')}
+      </div>
+      <div style="flex:1;background:rgba(240,86,60,.08);border:1px solid var(--rust);border-radius:8px;padding:10px">
+        <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--rust);margin-bottom:6px">⚠ BOT 10% — CAUTION</div>
+        ${pct.bottom.map(t=>`<div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:var(--chalk);font-size:12px">${t.ab}</span>
+          <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--rust)">${(t.win*100).toFixed(0)}% · ${t.n} bets</span>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`:'<div class="empty" style="font-size:12px;margin-bottom:16px">Team intelligence needs 4+ graded bets per team. Keep building history.</div>';
+
+  return`<div style="padding:4px 0">
+    ${summaryBar}
+    ${section('📊 System picks (70%+ confidence)',sysPicks.filter(p=>p.category!=='prop'&&p.category!=='fbprop'),true,
+      'No system picks yet — sims run automatically as games approach.',
+      'Sides/totals at 70%+. Football TDs/INTs/sacks at 40%+. MLB props at 25%+.')}
+    ${section('📘 Book-implied picks (60%+)',bookPicks,true,
+      'No book lines uploaded yet — use ⚡ Pull odds or upload a text file.',
+      'Markets where the book prices imply a 60%+ win probability. This is what the house believes.')}
+    ${section('🎫 My picks',myPicks,true,
+      'No locked tickets yet — build a ticket and lock it in.',
+      'Your direct picks from the ticket builder. Presets like "Fade System" are tagged accordingly.')}
+    ${convSection}
+    ${teamSection}
+  </div>`;
+}
+
 async function renderGrades(force){
   try{
   document.getElementById('gradeNav').innerHTML=GTABS.map(([k,l])=>
@@ -11441,6 +11784,8 @@ async function renderGrades(force){
           <span class="pp" style="color:${hit?'var(--win)':'var(--rust)'}">${hit?'W':'L'}</span></li>`}).join('')}</ol></div>`).join('')
       ||'<div class="empty">No finalized days yet.</div>';
   }
+  /* ── LEDGER TAB ─────────────────────────────────────────────────────── */
+  if(GRADETAB==='ledger'){body.innerHTML=renderLedgerTab();return;}
   if(GRADETAB==='stats'){
     h=renderStatsTab();
   }
