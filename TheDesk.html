@@ -513,7 +513,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <button onclick="tab('chat',this)">Chat</button>
     <button onclick="tab('money',this)">Money</button>
     <button onclick="tab('settings',this)">Settings</button>
-    <button onclick="window.location.href='odds-loader.html'" style="color:var(--gold);white-space:nowrap">⚡ Odds</button>
+    <button onclick="tab('odds',this)" style="color:var(--gold)">⚡ Odds</button>
   </nav>
 </header>
 <div style="display:flex;padding:8px 12px 4px;gap:6px;background:#0d1117;position:relative;z-index:999">
@@ -18179,6 +18179,517 @@ whenScriptReady(()=>{refreshNCAAFLiveScores().catch(()=>{})},1500);
 
 /* Everything above is now evaluated — deferred data feeds may safely run. */
 SCRIPT_READY=true;
+</script>
+
+<!-- ═══════════════════════════════════════════════
+     ODDS LOADER — embedded native tab
+     Reads screenshots, PDFs, and txt files.
+     Writes directly to d4.bookshots / d4.nflshots / d4.ncaafshots.
+     Uses TheDesk's own CSS variables — no external styles needed.
+     ═══════════════════════════════════════════════ -->
+
+<!-- Odds panel view -->
+<style>
+#v-odds .ol-sport-row{display:flex;gap:6px;margin-bottom:12px}
+#v-odds .ol-sport-btn{flex:1;padding:10px 0;border-radius:8px;font-family:"IBM Plex Mono",monospace;
+  font-size:12px;font-weight:700;letter-spacing:.06em;border:none;cursor:pointer;
+  background:#1c2530;color:var(--mute)}
+#v-odds .ol-sport-btn.on{background:var(--gold);color:#000}
+#v-odds .ol-dropzone{
+  border:2px dashed #2a3a4a;border-radius:10px;padding:32px 16px;
+  text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
+  margin-bottom:14px;background:#0d1520}
+#v-odds .ol-dropzone.drag{border-color:var(--gold);background:rgba(245,200,66,.06)}
+#v-odds .ol-dropzone p{font-size:12px;color:var(--mute);line-height:2}
+#v-odds .ol-dropzone strong{color:var(--gold)}
+#v-odds .ol-status{font-family:"IBM Plex Mono",monospace;font-size:11px;
+  color:var(--mute);margin-bottom:10px;min-height:16px}
+#v-odds .ol-status.ok{color:#4caf84}
+#v-odds .ol-status.err{color:#e05c5c}
+#v-odds .ol-status.work{color:var(--gold)}
+#v-odds .ol-game{border:1px solid #1e2a36;border-radius:6px;margin-bottom:8px;overflow:hidden}
+#v-odds .ol-ghdr{background:#111820;padding:7px 12px;font-size:11px;
+  display:flex;justify-content:space-between;color:#8a9baa;font-family:"IBM Plex Mono",monospace}
+#v-odds .ol-grow{display:grid;grid-template-columns:120px 1fr 60px 72px;
+  gap:4px;padding:5px 12px;border-bottom:1px solid #1a2330;font-size:11px;font-family:"IBM Plex Mono",monospace}
+#v-odds .ol-grow:last-child{border-bottom:none}
+#v-odds .ol-mkt{color:var(--mute)}
+#v-odds .ol-side{color:#8a9baa}
+#v-odds .ol-price.p{color:#4caf84;font-weight:700}
+#v-odds .ol-price.m{color:#e05c5c;font-weight:700}
+#v-odds .ol-save{width:100%;padding:13px;background:var(--gold);color:#000;
+  font-family:"IBM Plex Mono",monospace;font-weight:700;font-size:13px;
+  letter-spacing:.08em;border:none;border-radius:8px;cursor:pointer;margin-top:4px}
+#v-odds .ol-save:disabled{opacity:.35;cursor:not-allowed}
+#v-odds .ol-clear{background:#111820;color:var(--mute);border:1px solid #1e2a36;
+  border-radius:8px;padding:10px 14px;font-family:"IBM Plex Mono",monospace;
+  font-size:11px;font-weight:600;cursor:pointer;margin-top:6px;width:100%}
+#v-odds .ol-log{font-family:"IBM Plex Mono",monospace;font-size:9.5px;
+  color:#3a4a5a;margin-top:12px;line-height:1.9;white-space:pre-wrap}
+#v-odds .ol-count{font-family:"IBM Plex Mono",monospace;font-size:10px;
+  color:var(--mute);text-align:right;margin-bottom:10px}
+</style>
+
+<div class="view" id="v-odds">
+  <div class="sbar" style="margin-top:0"><h2>Odds Loader</h2><div class="ln"></div></div>
+
+  <!-- sport selector -->
+  <div class="ol-sport-row">
+    <button class="ol-sport-btn on" id="olSportMLB" onclick="olSetSport('mlb',this)">⚾ MLB</button>
+    <button class="ol-sport-btn" id="olSportNFL" onclick="olSetSport('nfl',this)">🏈 NFL</button>
+    <button class="ol-sport-btn" id="olSportCFB" onclick="olSetSport('ncaaf',this)">🏟 CFB</button>
+  </div>
+
+  <!-- date -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);letter-spacing:.08em">SLATE DATE</span>
+    <input type="date" id="olDate"
+      style="background:#111820;border:1px solid #1e2a36;color:var(--chalk);
+      padding:6px 10px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:12px"
+      onchange="olUpdateCount()">
+  </div>
+
+  <!-- stored count -->
+  <div class="ol-count" id="olCount">—</div>
+
+  <!-- drop zone -->
+  <div class="ol-dropzone" id="olDrop"
+    onclick="document.getElementById('olFileIn').click()"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="olHandleDrop(event)">
+    <input type="file" id="olFileIn" accept="image/*,.pdf,.txt" multiple
+      style="display:none" onchange="olHandleFiles(this.files)">
+    <p>
+      Drop sportsbetting.ag <strong>screenshots</strong>, <strong>PDFs</strong>, or <strong>txt files</strong><br>
+      Full game · F5 · 1H · 1Q — all parsed in one shot
+    </p>
+  </div>
+
+  <!-- status -->
+  <div class="ol-status" id="olStatus"></div>
+
+  <!-- preview -->
+  <div id="olPreview"></div>
+
+  <!-- actions -->
+  <button class="ol-save" id="olSaveBtn" disabled onclick="olSave()">SAVE TO THEDESK</button>
+  <button class="ol-clear" onclick="olClearDay()">Clear stored lines for this date</button>
+
+  <!-- log -->
+  <div class="ol-log" id="olLog"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// ODDS LOADER — embedded in TheDesk
+// ═══════════════════════════════════════════════
+
+(function(){
+
+const OL = {
+  sport: 'mlb',
+  parsed: [],
+  lsKey: s => s==='nfl' ? 'd4.nflshots' : s==='ncaaf' ? 'd4.ncaafshots' : 'd4.bookshots',
+  get: (k,d={}) => { try { const v=localStorage.getItem(k); return v!=null?JSON.parse(v):d } catch { return d } },
+  set: (k,v) => localStorage.setItem(k,JSON.stringify(v)),
+  today: () => new Date().toISOString().slice(0,10),
+  getDate: () => document.getElementById('olDate').value || new Date().toISOString().slice(0,10),
+};
+
+// Gemini models — same chain as TheDesk
+const OL_MODELS = ['gemini-3.6-flash','gemini-3.7-flash','gemini-3.5-flash','gemini-2.5-flash'];
+
+function olStatus(msg, cls='') {
+  const el = document.getElementById('olStatus');
+  el.textContent = msg; el.className = 'ol-status ' + cls;
+}
+function olLog(msg) { document.getElementById('olLog').textContent += msg + '\n'; }
+
+window.olSetSport = function(s, el) {
+  OL.sport = s;
+  document.querySelectorAll('.ol-sport-btn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  olUpdateCount();
+};
+
+window.olUpdateCount = function() {
+  const d = OL.getDate();
+  const all = OL.get(OL.lsKey(OL.sport), {});
+  const n = (all[d]||[]).length;
+  document.getElementById('olCount').textContent = n ? `${n} lines stored for ${d}` : `No lines stored for ${d}`;
+};
+
+// Init date on tab open
+if(document.getElementById('olDate')) {
+  document.getElementById('olDate').value = OL.today();
+}
+
+// ── GEMINI CALL — mirrors TheDesk's callGemini() exactly ─────────────────
+async function olCallGemini(parts) {
+  const key = OL.get('d4.ai', null);
+  if (!key) throw new Error('No Gemini key — add it in Settings first.');
+
+  const body = {
+    contents: [{ role: 'user', parts }],
+    generationConfig: { maxOutputTokens: 8000, temperature: 0.1 }
+  };
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  for (let mi = 0; mi < OL_MODELS.length; mi++) {
+    const model = OL_MODELS[mi];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    for (let attempt = 0; attempt < (mi===0?4:2); attempt++) {
+      if (attempt > 0 || mi > 0) {
+        const wait = Math.min(20000, 900 * Math.pow(2, attempt)) + Math.random()*400;
+        olStatus(`Gemini busy — retrying in ${Math.round(wait/1000)}s…`, 'work');
+        await sleep(wait);
+      }
+      try {
+        olStatus(`Sending to ${model}…`, 'work');
+        const r = await fetch(url, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        if (j.error) {
+          if ([503,429].includes(j.error.code||r.status)) continue;
+          throw new Error(j.error.message || JSON.stringify(j.error));
+        }
+        const text = j.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!text) throw new Error('Empty Gemini response');
+        return text;
+      } catch(e) {
+        if (mi === OL_MODELS.length-1 && attempt >= 1) throw e;
+      }
+    }
+  }
+  throw new Error('All Gemini models exhausted');
+}
+
+// ── FILE HANDLING ─────────────────────────────────────────────────────────
+window.olHandleDrop = function(e) {
+  e.preventDefault();
+  document.getElementById('olDrop').classList.remove('drag');
+  olHandleFiles(e.dataTransfer.files);
+};
+
+window.olHandleFiles = async function(files) {
+  if (!files.length) return;
+  document.getElementById('olLog').textContent = '';
+  OL.parsed = [];
+  document.getElementById('olPreview').innerHTML = '';
+  document.getElementById('olSaveBtn').disabled = true;
+  olStatus(`Reading ${files.length} file${files.length>1?'s':''}…`, 'work');
+
+  const txtFiles   = [...files].filter(f => f.type === 'text/plain' || f.name.endsWith('.txt'));
+  const mediaFiles = [...files].filter(f => !f.name.endsWith('.txt'));
+
+  let allParsed = [];
+
+  // ── TXT PATH — parse our own format directly, no API needed ──
+  for (const f of txtFiles) {
+    const text = await new Promise((res,rej) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result);
+      r.onerror = rej;
+      r.readAsText(f);
+    });
+    const picks = olParseTxt(text);
+    olLog(`${f.name}: ${picks.length} lines parsed from txt`);
+    allParsed = allParsed.concat(picks);
+  }
+
+  // ── IMAGE / PDF PATH — send to Gemini ────────────────────────
+  if (mediaFiles.length) {
+    const key = OL.get('d4.ai', null);
+    if (!key) {
+      olStatus('No Gemini key — add it in Settings to read images/PDFs.', 'err');
+      if (!allParsed.length) return;
+    } else {
+      const parts = [];
+      for (const f of mediaFiles) {
+        const b64 = await new Promise((res,rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result.split(',')[1]);
+          r.onerror = rej;
+          r.readAsDataURL(f);
+        });
+        const mime = f.type || (f.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+        parts.push({ inline_data: { mime_type: mime, data: b64 } });
+        olLog(`Queued ${f.name} (${mime})`);
+      }
+
+      const mlbMarkets = `
+- Full-game moneyline     → market:"moneyline", side:"away"|"home", line:null
+- Full-game run line      → market:"runline",   side:"away"|"home", line:+/-1.5
+- Full-game total         → market:"total",     side:"over"|"under", line:the number
+- 1st 5 innings ML        → market:"f5side",    side:"away"|"home", line:null
+- 1st 5 innings run line  → market:"f5runline", side:"away"|"home", line:+/-0.5
+- 1st 5 innings total     → market:"f5total",   side:"over"|"under", line:the number`;
+
+      const fbMarkets = `
+- Full-game moneyline  → market:"moneyline", side:"away"|"home", line:null
+- Full-game spread     → market:"spread",    side:"away"|"home", line:the handicap
+- Full-game total      → market:"total",     side:"over"|"under", line:the number
+- 1st half spread      → market:"h1spread",  side:"away"|"home", line:the handicap
+- 1st half total       → market:"h1total",   side:"over"|"under", line:the number
+- 1st quarter spread   → market:"q1spread",  side:"away"|"home", line:the handicap
+- 1st quarter total    → market:"q1total",   side:"over"|"under", line:the number`;
+
+      const sportLabel = OL.sport==='ncaaf' ? 'college football (CFB/NCAAF)' : OL.sport.toUpperCase();
+      parts.push({ text: `These are ${sportLabel} odds from sportsbetting.ag — screenshots or PDF exports.
+
+Extract EVERY visible bet line as a JSON array. Each object:
+{"away":"ABBR","home":"ABBR","market":"...","side":"away"|"home"|"over"|"under","line":number|null,"price":number}
+
+Markets:
+${OL.sport==='mlb' ? mlbMarkets : fbMarkets}
+
+Rules:
+- away = visiting team, home = home team
+- Standard abbreviations: ATL, PHI, NYM, MIA, CLE, BAL, LAA, BOS, CHC, MIL, WSH, SD, STL, SF, TOR, ATH, SMU, FSU etc
+- line = spread/runline number, null for moneylines
+- price = American odds integer (e.g. -110, +145)
+- Extract ALL games, ALL visible markets including alt-line panels (F5, 1H, 1Q)
+- If column header says "1st 5 Innings" → f5side/f5total/f5runline
+- If column header says "1st Half" → h1spread/h1total
+- If column header says "1st Quarter" → q1spread/q1total
+- Return ONLY a valid JSON array, no markdown, no explanation` });
+
+      try {
+        const raw = await olCallGemini(parts);
+        olLog('Gemini raw:\n' + raw.slice(0,300) + (raw.length>300?'…':''));
+        const cleaned = raw.replace(/```json|```/g,'').trim();
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed)) {
+          allParsed = allParsed.concat(parsed);
+          olLog(`Images/PDFs: ${parsed.length} lines extracted`);
+        }
+      } catch(e) {
+        olStatus('Vision error: ' + e.message, 'err');
+        olLog(e.message);
+        if (!allParsed.length) return;
+      }
+    }
+  }
+
+  if (!allParsed.length) {
+    olStatus('Nothing extracted — check files and try again.', 'err');
+    return;
+  }
+
+  OL.parsed = allParsed;
+  olStatus(`✓ ${allParsed.length} lines ready — review and save`, 'ok');
+  olRenderPreview(allParsed);
+  document.getElementById('olSaveBtn').disabled = false;
+};
+
+// ── TXT PARSER — reads our own generated format + TheDesk's native format ─
+function olParseTxt(text) {
+  const picks = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+
+  // Detect sport from header
+  let sport = OL.sport;
+  const firstLine = lines[0] || '';
+  if (/^MLB/i.test(firstLine)) sport = 'mlb';
+  else if (/^NCAAF|^CFB/i.test(firstLine)) sport = 'ncaaf';
+  else if (/^NFL/i.test(firstLine)) sport = 'nfl';
+
+  let curAway = null, curHome = null;
+
+  // Our IronSilk PDF/HTML format: "Team Name\nG. Pitcher · R\n+1.5\n-150 +145\nO 8\n-114"
+  // TheDesk native format: "MLB ATL @ PHI 2026-09-07 12:05"
+  // Pipe format: "ATL @ PHI | moneyline | ATL | +145"
+
+  for (const l of lines) {
+    // ── GAME HEADER: "MLB ATL @ PHI ..." or "NCAAF SMU @ FSU ..."
+    const gameM = l.match(/^(?:MLB|NFL|NCAAF|CFB)\s+([A-Z]{2,5})\s*@\s*([A-Z]{2,5})/i);
+    if (gameM) { curAway = gameM[1].toUpperCase(); curHome = gameM[2].toUpperCase(); continue; }
+
+    // ── PIPE FORMAT: "ATL @ PHI | moneyline | ATL | +145"
+    const pipeM = l.match(/^([A-Z]{2,5})\s*@\s*([A-Z]{2,5})\s*\|\s*(\w+)\s*\|\s*[\w\s.+-]+\|\s*([+-]\d+)/i);
+    if (pipeM) {
+      curAway = pipeM[1].toUpperCase(); curHome = pipeM[2].toUpperCase();
+      const mkt = pipeM[3].toLowerCase();
+      const price = parseInt(pipeM[4]);
+      // derive side from which team appears in field 3
+      const teamField = l.split('|')[2].trim().toUpperCase();
+      const side = teamField === curAway ? 'away' : teamField === curHome ? 'home' :
+                   /over/i.test(teamField) ? 'over' : /under/i.test(teamField) ? 'under' : teamField;
+      picks.push({ away:curAway, home:curHome, market:mkt, side, line:null, price });
+      continue;
+    }
+
+    if (!curAway) continue;
+
+    // ── THEDESK NATIVE FORMAT with parens: "ML: ATL +145 / PHI -160"
+    const mlM = l.match(/^ML:\s*([A-Z]{2,5})\s*([+-]\d+)\s*\/\s*([A-Z]{2,5})\s*([+-]\d+)/i);
+    if (mlM) {
+      picks.push({ away:curAway,home:curHome,market:'moneyline',side:mlM[1].toUpperCase()===curAway?'away':'home',line:null,price:+mlM[2] });
+      picks.push({ away:curAway,home:curHome,market:'moneyline',side:mlM[3].toUpperCase()===curHome?'home':'away',line:null,price:+mlM[4] });
+      continue;
+    }
+    const rlM = l.match(/^RL:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if (rlM) {
+      picks.push({ away:curAway,home:curHome,market:'runline',side:rlM[1].toUpperCase()===curAway?'away':'home',line:+rlM[2],price:+rlM[3] });
+      picks.push({ away:curAway,home:curHome,market:'runline',side:rlM[4].toUpperCase()===curHome?'home':'away',line:+rlM[5],price:+rlM[6] });
+      continue;
+    }
+    const ouM = l.match(/^OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
+    if (ouM) {
+      picks.push({ away:curAway,home:curHome,market:'total',side:'over',line:+ouM[1],price:+ouM[2] });
+      picks.push({ away:curAway,home:curHome,market:'total',side:'under',line:+ouM[3],price:+ouM[4] });
+      continue;
+    }
+    // F5
+    const f5mlM = l.match(/^F5\s+ML:\s*([A-Z]{2,5})\s*([+-]\d+)\s*\/\s*([A-Z]{2,5})\s*([+-]\d+)/i);
+    if (f5mlM) {
+      picks.push({ away:curAway,home:curHome,market:'f5side',side:f5mlM[1].toUpperCase()===curAway?'away':'home',line:null,price:+f5mlM[2] });
+      picks.push({ away:curAway,home:curHome,market:'f5side',side:f5mlM[3].toUpperCase()===curHome?'home':'away',line:null,price:+f5mlM[4] });
+      continue;
+    }
+    const f5rlM = l.match(/^F5\s+RL:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if (f5rlM) {
+      picks.push({ away:curAway,home:curHome,market:'f5runline',side:f5rlM[1].toUpperCase()===curAway?'away':'home',line:+f5rlM[2],price:+f5rlM[3] });
+      picks.push({ away:curAway,home:curHome,market:'f5runline',side:f5rlM[4].toUpperCase()===curHome?'home':'away',line:+f5rlM[5],price:+f5rlM[6] });
+      continue;
+    }
+    const f5ouM = l.match(/^F5\s+OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
+    if (f5ouM) {
+      picks.push({ away:curAway,home:curHome,market:'f5total',side:'over',line:+f5ouM[1],price:+f5ouM[2] });
+      picks.push({ away:curAway,home:curHome,market:'f5total',side:'under',line:+f5ouM[3],price:+f5ouM[4] });
+      continue;
+    }
+    // Football: SPREAD / H1 / Q1
+    const spM = l.match(/^SPREAD:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if (spM) {
+      picks.push({ away:curAway,home:curHome,market:'spread',side:spM[1].toUpperCase()===curAway?'away':'home',line:+spM[2],price:+spM[3] });
+      picks.push({ away:curAway,home:curHome,market:'spread',side:spM[4].toUpperCase()===curHome?'home':'away',line:+spM[5],price:+spM[6] });
+      continue;
+    }
+    const h1spM = l.match(/^H1SPREAD:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if (h1spM) {
+      picks.push({ away:curAway,home:curHome,market:'h1spread',side:h1spM[1].toUpperCase()===curAway?'away':'home',line:+h1spM[2],price:+h1spM[3] });
+      picks.push({ away:curAway,home:curHome,market:'h1spread',side:h1spM[4].toUpperCase()===curHome?'home':'away',line:+h1spM[5],price:+h1spM[6] });
+      continue;
+    }
+    const h1ouM = l.match(/^H1OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
+    if (h1ouM) {
+      picks.push({ away:curAway,home:curHome,market:'h1total',side:'over',line:+h1ouM[1],price:+h1ouM[2] });
+      picks.push({ away:curAway,home:curHome,market:'h1total',side:'under',line:+h1ouM[3],price:+h1ouM[4] });
+      continue;
+    }
+    const q1spM = l.match(/^Q1SPREAD:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if (q1spM) {
+      picks.push({ away:curAway,home:curHome,market:'q1spread',side:q1spM[1].toUpperCase()===curAway?'away':'home',line:+q1spM[2],price:+q1spM[3] });
+      picks.push({ away:curAway,home:curHome,market:'q1spread',side:q1spM[4].toUpperCase()===curHome?'home':'away',line:+q1spM[5],price:+q1spM[6] });
+      continue;
+    }
+    const q1ouM = l.match(/^Q1OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
+    if (q1ouM) {
+      picks.push({ away:curAway,home:curHome,market:'q1total',side:'over',line:+q1ouM[1],price:+q1ouM[2] });
+      picks.push({ away:curAway,home:curHome,market:'q1total',side:'under',line:+q1ouM[3],price:+q1ouM[4] });
+      continue;
+    }
+  }
+
+  picks.forEach(p => p.sport = sport);
+  return picks;
+}
+
+// ── PREVIEW ───────────────────────────────────────────────────────────────
+function olRenderPreview(picks) {
+  const container = document.getElementById('olPreview');
+  const games = {};
+  picks.forEach(p => {
+    const k = (p.away||'?') + '@' + (p.home||'?');
+    if (!games[k]) games[k] = { away:p.away, home:p.home, lines:[] };
+    games[k].lines.push(p);
+  });
+  container.innerHTML = '';
+  Object.values(games).forEach(g => {
+    const block = document.createElement('div');
+    block.className = 'ol-game';
+    block.innerHTML = `<div class="ol-ghdr"><b>${g.away} @ ${g.home}</b><span>${g.lines.length} markets</span></div>`;
+    g.lines.forEach(l => {
+      const pc = l.price > 0 ? 'p' : 'm';
+      const lineStr = l.line != null ? (l.line > 0 ? '+'+l.line : l.line) : '';
+      const row = document.createElement('div');
+      row.className = 'ol-grow';
+      row.innerHTML = `<span class="ol-mkt">${l.market}</span><span class="ol-side">${l.side}</span><span style="color:#8a9baa">${lineStr}</span><span class="ol-price ${pc}">${l.price>0?'+':''}${l.price}</span>`;
+      block.appendChild(row);
+    });
+    container.appendChild(block);
+  });
+}
+
+// ── SAVE ──────────────────────────────────────────────────────────────────
+window.olSave = function() {
+  if (!OL.parsed.length) return;
+  const d = OL.getDate();
+
+  // Group by sport — txt parser tags sport, vision defaults to selected sport
+  const bySport = { mlb:[], nfl:[], ncaaf:[] };
+  OL.parsed.forEach(p => {
+    const s = p.sport || OL.sport;
+    (bySport[s] || bySport.mlb).push(p);
+  });
+
+  let total = 0;
+  Object.entries(bySport).forEach(([s, picks]) => {
+    if (!picks.length) return;
+    const key = OL.lsKey(s);
+    const all = OL.get(key, {});
+    all[d] = all[d] || [];
+    const keyOf = x => [x.game||((x.away||'')+'@'+(x.home||'')), x.market, x.side, x.line].join('|');
+    const now = Date.now();
+    let saved=0, updated=0;
+    picks.forEach(x => {
+      const away = (x.away||'').toUpperCase();
+      const home = (x.home||'').toUpperCase();
+      const rec = { away, home, game:away+'@'+home, market:x.market, side:x.side,
+                    line:x.line!=null?x.line:null, price:x.price, gid:null, capturedAt:now };
+      const k = keyOf(rec);
+      const i = all[d].findIndex(y => keyOf(y)===k);
+      if (i>=0){all[d][i]=rec;updated++;}else{all[d].push(rec);saved++;}
+    });
+    OL.set(key, all);
+    olLog(`${s.toUpperCase()}: ${saved} new · ${updated} updated → ${key}[${d}]`);
+    total += saved + updated;
+  });
+
+  olStatus(`✓ ${total} lines saved for ${d} — switch to Games to see them`, 'ok');
+  olUpdateCount();
+  document.getElementById('olSaveBtn').disabled = true;
+  OL.parsed = [];
+  document.getElementById('olPreview').innerHTML = '';
+
+  // Trigger TheDesk re-render if we're on the games tab
+  try { if(typeof render==='function') render(); } catch(_){}
+};
+
+// ── CLEAR DAY ─────────────────────────────────────────────────────────────
+window.olClearDay = function() {
+  const d = OL.getDate();
+  const key = OL.lsKey(OL.sport);
+  const all = OL.get(key, {});
+  const n = (all[d]||[]).length;
+  if (!n) { olStatus(`No lines stored for ${d}`, 'err'); return; }
+  if (!confirm(`Delete all ${n} ${OL.sport.toUpperCase()} lines for ${d}?`)) return;
+  delete all[d];
+  OL.set(key, all);
+  olStatus(`Cleared ${n} lines for ${d}`, 'ok');
+  olUpdateCount();
+};
+
+// Init
+window.olUpdateCount();
+
+})();
 </script>
 </body>
 </html>
