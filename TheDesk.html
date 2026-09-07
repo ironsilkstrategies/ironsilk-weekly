@@ -12155,7 +12155,11 @@ async function renderGrades(force){
       });
     });
     const pct=(w,l)=>w+l?`${((w/(w+l))*100).toFixed(0)}% (${w}-${l})`:'—';
-    const calibEntries=Object.entries(calib).filter(([,v])=>v&&v.n>=3).sort((a,b)=>b[1].n-a[1].n).slice(0,12);
+    // CFB calib keys are prefixed "cfb-", NFL keys are bare ("spread|...").
+    // Filter so each sport tab only shows its own calibration, never mixed.
+    const calibEntries=Object.entries(calib)
+      .filter(([k,v])=>v&&v.n>=3&&(GRADE_SPORT==='ncaaf'?k.startsWith('cfb-'):!k.startsWith('cfb-')))
+      .sort((a,b)=>b[1].n-a[1].n).slice(0,12);
     const calibHtml=calibEntries.length
       ?`<div class="tkt"><h3 style="margin-bottom:8px">Model calibration</h3><ol style="list-style:none;padding-left:0">${calibEntries.map(([k,v])=>`<li><span style="font-family:'IBM Plex Mono';font-size:10px;color:var(--mute)">${k}</span> <span class="pp">${pct(v.hits||0,v.n-(v.hits||0))}</span> <span class="m">n=${v.n}</span></li>`).join('')}</ol></div>`
       :'<div class="tkt"><div class="sub">Not enough graded games for calibration yet.</div></div>';

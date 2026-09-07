@@ -236,7 +236,21 @@ function renderNFL(){
      exist). g.abstract is ESPN's own normalized 'pre'/'in'/'post' state. */
   const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
   const scheduled=NFL_GAMES.filter(g=>!isFinalGame(g));
-  const final=NFL_GAMES.filter(isFinalGame);
+  // Snapshot + grade BEFORE filtering display — every final game's result
+  // gets attributed to the record/calibration store regardless of whether
+  // its card is still shown. Grading never depends on what's on screen.
+  try{snapshotNFL();gradeNFLResults();}catch(e){console.warn('NFL snapshot/grade:',e);}
+  // Cards for finals stay visible for 24h after kickoff, then drop off the
+  // board entirely so a full season of NFL finals never piles up and drags
+  // down render time. The game is still fully graded above — this only
+  // affects what's shown, never what's recorded.
+  const HIDE_AFTER_MS=24*60*60*1000;
+  const now=Date.now();
+  const final=NFL_GAMES.filter(g=>{
+    if(!isFinalGame(g))return false;
+    const kickoff=g.date?new Date(g.date).getTime():0;
+    return kickoff&&(now-kickoff)<HIDE_AFTER_MS;
+  });
 
   /* Same fix as the MLB board: renderNFL() is also called from background
      loops (the live-score poller) that have no idea what's currently on
@@ -686,11 +700,9 @@ async function fetchMLBLiveOdds(){
   console.log('MLB live odds:',count,'new lines');
 }
 
-// ── NCAAF Live Odds + Player Props (The Odds API) ────────────────────────────
+// ── NCAAF Live Odds (The Odds API) ───────────────────────────────────────────
 async function fetchNCAAFLiveOdds(){
   const key=get(LS.oddspapi,'');if(!key)return;
-  // Fetch props separately — player_props is a different market group and
-  // costs extra credits, so we pull it after the main odds call succeeds
   const url=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
   const r=await fetch(url);const j=await r.json();
   if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
@@ -720,47 +732,6 @@ async function fetchNCAAFLiveOdds(){
     });
   });
   set(LS.ncaafshots,all);NCAAF_SIMS={};
-  // ── Pull CFB player props (player_pass_tds, player_rush_yds, etc.) ────────
-  try{
-    const propsAll=get('d4.ncaafprops',{});propsAll[d]=propsAll[d]||[];
-    // The Odds API requires individual game IDs for player props — use the
-    // event list endpoint to get game IDs, then fetch props per game.
-    const eventsUrl=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/events?apiKey=${encodeURIComponent(key)}&dateFormat=iso`;
-    const evR=await fetch(eventsUrl);const evJ=await evR.json();
-    if(Array.isArray(evJ)){
-      // Only fetch props for today's and tomorrow's games to save credits
-      const now=Date.now();const tomorrow=now+86400000;
-      const todayEvents=evJ.filter(ev=>{const t=new Date(ev.commence_time).getTime();return t>=now-3600000&&t<=tomorrow;});
-      const PROP_MARKETS='player_pass_tds,player_pass_yds,player_rush_yds,player_receptions,player_reception_yds';
-      for(const ev of todayEvents.slice(0,8)){// cap at 8 games to preserve credits
-        try{
-          const pUrl=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${PROP_MARKETS}&oddsFormat=american`;
-          const pR=await fetch(pUrl);const pJ=await pR.json();
-          if(!pJ.bookmakers)continue;
-          const book=pJ.bookmakers.find(b=>b.key==='draftkings')||pJ.bookmakers.find(b=>b.key==='fanduel')||pJ.bookmakers[0];
-          if(!book)continue;
-          const home=ev.home_team,away=ev.away_team;
-          const gm=NCAAF_GAMES.find(g=>g.home.name===home||g.home.displayName===home);
-          const gameKey=(gm?gm.away.abbr:away.slice(0,5).toUpperCase())+'@'+(gm?gm.home.abbr:home.slice(0,5).toUpperCase());
-          book.markets.forEach(mkt=>{
-            mkt.outcomes.forEach(o=>{
-              if(!o.description)return;// no player name
-              propsAll[d].push({
-                player:o.description,
-                stat:mkt.key.replace('player_','').replace(/_/g,' '),
-                line:o.point,
-                price:o.price,
-                side:o.name.toLowerCase()==='over'?'over':'under',
-                game:gameKey,
-                capturedAt:Date.now()
-              });
-            });
-          });
-        }catch(e){}
-      }
-      set('d4.ncaafprops',propsAll);
-    }
-  }catch(e){console.warn('CFB props fetch failed:',e.message);}
   if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
 }
 
@@ -1448,6 +1419,121 @@ function nflSpreadCalibAdj(raw,situation){
 }
 
 // Grade NFL results and update calibration
+// ── NFL Snapshot — populates arc[week].rows/finals so gradeNFLResults has
+// something to grade against. Without this, d4.nflarc stays permanently
+// empty forever and no NFL record/calibration data is ever produced.
+function snapshotNFL(){
+  if(!NFL_GAMES||!NFL_GAMES.length)return;
+  const wk='w'+(NFL_SEASON||'')+'-'+(NFL_WEEK||'');
+  const arc=get(LS.nflarc,{});
+  const A=arc[wk]||(arc[wk]={rows:[],finals:{},ts:Date.now()});
+  const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
+
+  NFL_GAMES.forEach(g=>{
+    let row=A.rows.find(r=>r.id===g.id);
+    if(!row){
+      const gameKey=g.away.abbr+'@'+g.home.abbr;
+      const lines=nflBookLinesFor(gameKey);
+      const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+      const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+      const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+      row={
+        id:g.id,game:gameKey,
+        spreadSide:awaySpread?(awaySpread.line<0?'away':'home'):null,
+        spreadLine:awaySpread?Math.abs(awaySpread.line):null,
+        totalSide:totalOver?'over':null,
+        totalLine:totalOver?totalOver.line:null,
+        mlSide:awayML?(awayML.price<0?'away':'home'):null,
+        situation:nflIsDivisionGame(g)?'division':'nondivision',
+        band:'50-60', // placeholder band, refined below once sim exists
+        graded:false
+      };
+      A.rows.push(row);
+    }
+    // capture final score once the game is over
+    if(isFinalGame(g)&&g.awayScore!=null&&g.homeScore!=null&&!A.finals[g.id]){
+      A.finals[g.id]={a:g.awayScore,h:g.homeScore};
+    }
+  });
+  set(LS.nflarc,arc);
+}
+
+// ── CFB Snapshot — same pattern as NFL, populates d4.ncaafarc
+function snapshotNCAAF(){
+  if(!NCAAF_GAMES||!NCAAF_GAMES.length)return;
+  const wk='w'+(NCAAF_SEASON||'')+'-'+(NCAAF_WEEK||'');
+  const arc=get('d4.ncaafarc',{});
+  const A=arc[wk]||(arc[wk]={rows:[],finals:{},ts:Date.now()});
+  const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
+
+  NCAAF_GAMES.forEach(g=>{
+    let row=A.rows.find(r=>r.id===g.id);
+    if(!row){
+      const gameKey=g.away.abbr+'@'+g.home.abbr;
+      const lines=ncaafBookLinesFor(gameKey);
+      const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+      const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+      const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+      row={
+        id:g.id,game:gameKey,
+        spreadSide:awaySpread?(awaySpread.line<0?'away':'home'):null,
+        spreadLine:awaySpread?Math.abs(awaySpread.line):null,
+        totalSide:totalOver?'over':null,
+        totalLine:totalOver?totalOver.line:null,
+        mlSide:awayML?(awayML.price<0?'away':'home'):null,
+        graded:false
+      };
+      A.rows.push(row);
+    }
+    if(isFinalGame(g)&&g.awayScore!=null&&g.homeScore!=null&&!A.finals[g.id]){
+      A.finals[g.id]={a:g.awayScore,h:g.homeScore};
+    }
+  });
+  set('d4.ncaafarc',arc);
+}
+
+// ── CFB Grading — mirrors gradeNFLResults exactly, writes to d4.nflcalib
+// (shared calibration bucket, keyed by market so it doesn't collide with NFL rows)
+function gradeNCAAFResults(){
+  const arc=get('d4.ncaafarc',{});
+  const calib=getNFLCalib(); // shared calib store; CFB keys are distinct strings
+  let changed=false;
+  Object.keys(arc).forEach(wk=>{
+    const A=arc[wk];
+    if(!A.rows||!A.finals)return;
+    A.rows.forEach(r=>{
+      if(r.graded)return;
+      const F=A.finals[r.id];
+      if(!F||F.a===null||F.h===null)return;
+      if(r.spreadSide&&r.spreadLine!==null){
+        const margin=r.spreadSide==='home'?F.h-F.a:F.a-F.h;
+        const hit=margin>r.spreadLine;
+        const key=`cfb-spread|any|50-60`;
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        r.spreadHit=hit;changed=true;
+      }
+      if(r.totalSide&&r.totalLine!==null){
+        const tot=F.a+F.h;
+        const hit=r.totalSide==='over'?tot>r.totalLine:tot<r.totalLine;
+        const key=`cfb-total|any|50-60`;
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        r.totalHit=hit;changed=true;
+      }
+      if(r.mlSide){
+        const hit=r.mlSide==='home'?F.h>F.a:F.a>F.h;
+        const key=`cfb-side|any|50-60`;
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        r.mlHit=hit;changed=true;
+      }
+      r.graded=true;
+    });
+  });
+  if(changed){set(NFL_CALIB_KEY,calib);set('d4.ncaafarc',arc);}
+}
+
 function gradeNFLResults(){
   const arc=get(LS.nflarc,{});
   const calib=getNFLCalib();
@@ -1466,7 +1552,7 @@ function gradeNFLResults(){
         const key=`spread|${r.situation||'any'}|${r.band}`;
         if(!calib[key])calib[key]={n:0,hits:0};
         calib[key].n++;if(hit)calib[key].hits++;
-        changed=true;
+        r.spreadHit=hit;changed=true;
       }
       // grade total
       if(r.totalSide&&r.totalLine!==null){
@@ -1475,7 +1561,7 @@ function gradeNFLResults(){
         const key=`total|${r.situation||'any'}|${r.band}`;
         if(!calib[key])calib[key]={n:0,hits:0};
         calib[key].n++;if(hit)calib[key].hits++;
-        changed=true;
+        r.totalHit=hit;changed=true;
       }
       // grade moneyline
       if(r.mlSide){
@@ -1483,7 +1569,7 @@ function gradeNFLResults(){
         const key=`side|${r.situation||'any'}|${r.band}`;
         if(!calib[key])calib[key]={n:0,hits:0};
         calib[key].n++;if(hit)calib[key].hits++;
-        changed=true;
+        r.mlHit=hit;changed=true;
       }
       r.graded=true;
     });
@@ -3222,7 +3308,20 @@ function renderNCAAF(){
      this fix and have no abstract field yet at all. */
   const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
   const scheduled=NCAAF_GAMES.filter(g=>!isFinalGame(g));
-  const final=NCAAF_GAMES.filter(isFinalGame);
+  // Snapshot + grade BEFORE filtering display — same rule as NFL: every
+  // final game gets attributed to the record store regardless of card visibility.
+  try{snapshotNCAAF();gradeNCAAFResults();}catch(e){console.warn('CFB snapshot/grade:',e);}
+  // Cards for finals stay visible for 24h after kickoff, then drop off the
+  // board so a full 99-game Week 1 slate of finals doesn't sit there forever
+  // rendering sim + analysis panels that will never change. Game is still
+  // fully graded above — this only controls what's shown.
+  const HIDE_AFTER_MS_CFB=24*60*60*1000;
+  const nowCfb=Date.now();
+  const final=NCAAF_GAMES.filter(g=>{
+    if(!isFinalGame(g))return false;
+    const kickoff=g.date?new Date(g.date).getTime():0;
+    return kickoff&&(nowCfb-kickoff)<HIDE_AFTER_MS_CFB;
+  });
   /* Same fix as MLB and NFL: don't let a background poller repaint the CFB
      board over whatever sport is actually on screen. */
   document.getElementById('nG').textContent=NCAAF_GAMES.length;
