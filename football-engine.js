@@ -985,6 +985,11 @@ function ncaafAbbrFor(raw){
     'TEXASAM':'TEXASAM',
     'GEORGIA SOUTHERN':'GEORGIASOUTHERN',
     'CENTRALFLORIDA':'UCF',        // sportsbook "Central Florida" → ESPN "UCF Knights"
+    'SMU':'SMU',                   // SMU Mustangs — pin exact abbr
+    'SMUMUSTANGS':'SMU',
+    'FSU':'FSU',                   // Florida State — pin exact abbr
+    'FLORIDASTATE':'FSU',
+    'FLORIDAST':'FSU',
   };
   const aliasKey=NCAAF_SB_ALIASES[k];
   if(aliasKey){
