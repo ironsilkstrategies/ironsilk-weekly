@@ -1953,6 +1953,8 @@ async function restoreFromGitHub(){
     if(status){status.style.color='var(--rust)';status.textContent='Error: '+e.message;}
   }
 }
+function tab(n,b){
+  ACTIVE_TAB=n;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
   document.getElementById('v-'+n).classList.add('on');
   document.querySelectorAll('nav>button').forEach(x=>x.classList.remove('on'));
@@ -16067,8 +16069,6 @@ function evaluateNFLGame(g){
   const edgeBoost=spreadEdge?Math.min(15,Math.abs(spreadEdge.edge)/2):0;
   const confidence=Math.round(Math.min(97,50+agreement*35+edgeBoost));
   const edgeCount=[spreadEdge,mlEdge,totalEdge].filter(e=>e&&Math.abs(e.edge)>=sideEdgeThresh).length;
-  const verdict=edgeCount>=2&&outsideAgreesHome+outsideAgreesAway>=1?'strong':
-                edgeCount>=1?'lean':'split';
 
   const allEdges=[
     spreadEdge&&{side:g.away.abbr+(awaySpread?' '+(awaySpread.line>0?'+':'')+awaySpread.line:' spread'),edge:spreadEdge.edge||0},
@@ -18326,7 +18326,7 @@ function renderNCAAFMasterEval(){
     <div class="sub" style="color:var(--mute);margin-top:4px">
       Signals: Simulator · Book spread · Trends · Public consensus — weighted agreement drives verdict
     </div>
-  </div>${rows.join('')}\`;
+  </div>${rows.join('')}`;
 }
 
 // ── NCAAF book odds save ──────────────────────────────────────────────────────
