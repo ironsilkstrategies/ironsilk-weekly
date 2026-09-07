@@ -18492,23 +18492,33 @@ function olParseTxt(text) {
   const picks = [];
   const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
 
-  // Detect sport from header
+  // Detect sport from header — updates as we scan so multi-sport files work
   let sport = OL.sport;
-  const firstLine = lines[0] || '';
-  if (/^MLB/i.test(firstLine)) sport = 'mlb';
-  else if (/^NCAAF|^CFB/i.test(firstLine)) sport = 'ncaaf';
-  else if (/^NFL/i.test(firstLine)) sport = 'nfl';
-
   let curAway = null, curHome = null;
 
-  // Our IronSilk PDF/HTML format: "Team Name\nG. Pitcher · R\n+1.5\n-150 +145\nO 8\n-114"
-  // TheDesk native format: "MLB ATL @ PHI 2026-09-07 12:05"
-  // Pipe format: "ATL @ PHI | moneyline | ATL | +145"
+  // Normalise a team token: strip trailing date/time junk, uppercase
+  const normTeam = t => (t||'').trim().toUpperCase().replace(/\s+\d{4}-\d{2}-\d{2}.*$/,'').trim();
 
   for (const l of lines) {
-    // ── GAME HEADER: "MLB ATL @ PHI ..." or "NCAAF SMU @ FSU ..."
-    const gameM = l.match(/^(?:MLB|NFL|NCAAF|CFB)\s+([A-Z]{2,5})\s*@\s*([A-Z]{2,5})/i);
-    if (gameM) { curAway = gameM[1].toUpperCase(); curHome = gameM[2].toUpperCase(); continue; }
+
+    // ── STANDALONE SPORT HEADER: "MLB" / "NFL" / "NCAAF" / "CFB" on its own line
+    if (/^MLB$/i.test(l))   { sport = 'mlb';   curAway = null; curHome = null; continue; }
+    if (/^NFL$/i.test(l))   { sport = 'nfl';   curAway = null; curHome = null; continue; }
+    if (/^(?:NCAAF|CFB)$/i.test(l)) { sport = 'ncaaf'; curAway = null; curHome = null; continue; }
+
+    // ── SPORT-PREFIXED GAME HEADER: "MLB ATL @ PHI 2026-09-07 12:05"
+    const spGameM = l.match(/^(MLB|NFL|NCAAF|CFB)\s+(.+?)\s*@\s*(.+?)(?:\s+\d{4}-\d{2}-\d{2}.*)?$/i);
+    if (spGameM && !(/^(ML|RL|OU|SPREAD|F5|H1|Q1):/i.test(l))) {
+      sport = /NCAAF|CFB/i.test(spGameM[1]) ? 'ncaaf' : spGameM[1].toLowerCase();
+      curAway = normTeam(spGameM[2]); curHome = normTeam(spGameM[3]); continue;
+    }
+
+    // ── BARE GAME HEADER: "ATL @ PHI" or "SMU Mustangs @ Florida State"
+    // Must contain @ but NOT be a bet line (ML: / SPREAD: etc)
+    const bareGameM = l.match(/^(.+?)\s*@\s*(.+?)(?:\s+\d{4}-\d{2}-\d{2}.*)?$/);
+    if (bareGameM && l.includes('@') && !(/^(ML|RL|OU|SPREAD|F5|H1|Q1|H1SPREAD|H1OU|Q1SPREAD|Q1OU):/i.test(l)) && !l.includes('|')) {
+      curAway = normTeam(bareGameM[1]); curHome = normTeam(bareGameM[2]); continue;
+    }
 
     // ── PIPE FORMAT: "ATL @ PHI | moneyline | ATL | +145"
     const pipeM = l.match(/^([A-Z]{2,5})\s*@\s*([A-Z]{2,5})\s*\|\s*(\w+)\s*\|\s*[\w\s.+-]+\|\s*([+-]\d+)/i);
@@ -18526,69 +18536,89 @@ function olParseTxt(text) {
 
     if (!curAway) continue;
 
-    // ── THEDESK NATIVE FORMAT with parens: "ML: ATL +145 / PHI -160"
-    const mlM = l.match(/^ML:\s*([A-Z]{2,5})\s*([+-]\d+)\s*\/\s*([A-Z]{2,5})\s*([+-]\d+)/i);
+    // Side resolver — handles abbr vs full name (e.g. "SMU" matching "SMU MUSTANGS")
+    const isAway = t => { const u = t.toUpperCase(); return u === curAway || curAway.startsWith(u) || u.startsWith(curAway); };
+    const isHome = t => { const u = t.toUpperCase(); return u === curHome || curHome.startsWith(u) || u.startsWith(curHome); };
+    const sideOf = (t1, t2) => isAway(t1) ? ['away','home'] : isHome(t1) ? ['home','away'] : ['away','home'];
+
+    // ── ML: ATL +145 / PHI -160
+    const mlM = l.match(/^ML:\s*(\S+)\s*([+-]\d+)\s*\/\s*(\S+)\s*([+-]\d+)/i);
     if (mlM) {
-      picks.push({ away:curAway,home:curHome,market:'moneyline',side:mlM[1].toUpperCase()===curAway?'away':'home',line:null,price:+mlM[2] });
-      picks.push({ away:curAway,home:curHome,market:'moneyline',side:mlM[3].toUpperCase()===curHome?'home':'away',line:null,price:+mlM[4] });
+      const [s1,s2] = sideOf(mlM[1], mlM[3]);
+      picks.push({ away:curAway,home:curHome,market:'moneyline',side:s1,line:null,price:+mlM[2] });
+      picks.push({ away:curAway,home:curHome,market:'moneyline',side:s2,line:null,price:+mlM[4] });
       continue;
     }
-    const rlM = l.match(/^RL:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    // ── RL: ATL +1.5 (-150) / PHI -1.5 (+130)
+    const rlM = l.match(/^RL:\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
     if (rlM) {
-      picks.push({ away:curAway,home:curHome,market:'runline',side:rlM[1].toUpperCase()===curAway?'away':'home',line:+rlM[2],price:+rlM[3] });
-      picks.push({ away:curAway,home:curHome,market:'runline',side:rlM[4].toUpperCase()===curHome?'home':'away',line:+rlM[5],price:+rlM[6] });
+      const [s1,s2] = sideOf(rlM[1], rlM[4]);
+      picks.push({ away:curAway,home:curHome,market:'runline',side:s1,line:+rlM[2],price:+rlM[3] });
+      picks.push({ away:curAway,home:curHome,market:'runline',side:s2,line:+rlM[5],price:+rlM[6] });
       continue;
     }
+    // ── OU: o8.0 (-114) / u8.0 (-106)
     const ouM = l.match(/^OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
     if (ouM) {
       picks.push({ away:curAway,home:curHome,market:'total',side:'over',line:+ouM[1],price:+ouM[2] });
       picks.push({ away:curAway,home:curHome,market:'total',side:'under',line:+ouM[3],price:+ouM[4] });
       continue;
     }
-    // F5
-    const f5mlM = l.match(/^F5\s+ML:\s*([A-Z]{2,5})\s*([+-]\d+)\s*\/\s*([A-Z]{2,5})\s*([+-]\d+)/i);
+    // ── F5 ML: ATL +157 / PHI -180
+    const f5mlM = l.match(/^F5\s+ML:\s*(\S+)\s*([+-]\d+)\s*\/\s*(\S+)\s*([+-]\d+)/i);
     if (f5mlM) {
-      picks.push({ away:curAway,home:curHome,market:'f5side',side:f5mlM[1].toUpperCase()===curAway?'away':'home',line:null,price:+f5mlM[2] });
-      picks.push({ away:curAway,home:curHome,market:'f5side',side:f5mlM[3].toUpperCase()===curHome?'home':'away',line:null,price:+f5mlM[4] });
+      const [s1,s2] = sideOf(f5mlM[1], f5mlM[3]);
+      picks.push({ away:curAway,home:curHome,market:'f5side',side:s1,line:null,price:+f5mlM[2] });
+      picks.push({ away:curAway,home:curHome,market:'f5side',side:s2,line:null,price:+f5mlM[4] });
       continue;
     }
-    const f5rlM = l.match(/^F5\s+RL:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    // ── F5 RL: ATL +0.5 (+110) / PHI -0.5 (-130)
+    const f5rlM = l.match(/^F5\s+RL:\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
     if (f5rlM) {
-      picks.push({ away:curAway,home:curHome,market:'f5runline',side:f5rlM[1].toUpperCase()===curAway?'away':'home',line:+f5rlM[2],price:+f5rlM[3] });
-      picks.push({ away:curAway,home:curHome,market:'f5runline',side:f5rlM[4].toUpperCase()===curHome?'home':'away',line:+f5rlM[5],price:+f5rlM[6] });
+      const [s1,s2] = sideOf(f5rlM[1], f5rlM[4]);
+      picks.push({ away:curAway,home:curHome,market:'f5runline',side:s1,line:+f5rlM[2],price:+f5rlM[3] });
+      picks.push({ away:curAway,home:curHome,market:'f5runline',side:s2,line:+f5rlM[5],price:+f5rlM[6] });
       continue;
     }
+    // ── F5 OU: o4.5 (-102) / u4.5 (-118)
     const f5ouM = l.match(/^F5\s+OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
     if (f5ouM) {
       picks.push({ away:curAway,home:curHome,market:'f5total',side:'over',line:+f5ouM[1],price:+f5ouM[2] });
       picks.push({ away:curAway,home:curHome,market:'f5total',side:'under',line:+f5ouM[3],price:+f5ouM[4] });
       continue;
     }
-    // Football: SPREAD / H1 / Q1
-    const spM = l.match(/^SPREAD:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    // ── SPREAD: SMU -3 (+100) / Florida State +3 (-120)  [CFB full game]
+    const spM = l.match(/^SPREAD:\s*(.+?)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(.+?)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
     if (spM) {
-      picks.push({ away:curAway,home:curHome,market:'spread',side:spM[1].toUpperCase()===curAway?'away':'home',line:+spM[2],price:+spM[3] });
-      picks.push({ away:curAway,home:curHome,market:'spread',side:spM[4].toUpperCase()===curHome?'home':'away',line:+spM[5],price:+spM[6] });
+      const [s1,s2] = sideOf(spM[1], spM[4]);
+      picks.push({ away:curAway,home:curHome,market:'spread',side:s1,line:+spM[2],price:+spM[3] });
+      picks.push({ away:curAway,home:curHome,market:'spread',side:s2,line:+spM[5],price:+spM[6] });
       continue;
     }
-    const h1spM = l.match(/^H1SPREAD:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    // ── H1SPREAD: SMU -1.5 (-107) / FSU +1.5 (-113)
+    const h1spM = l.match(/^H1SPREAD:\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
     if (h1spM) {
-      picks.push({ away:curAway,home:curHome,market:'h1spread',side:h1spM[1].toUpperCase()===curAway?'away':'home',line:+h1spM[2],price:+h1spM[3] });
-      picks.push({ away:curAway,home:curHome,market:'h1spread',side:h1spM[4].toUpperCase()===curHome?'home':'away',line:+h1spM[5],price:+h1spM[6] });
+      const [s1,s2] = sideOf(h1spM[1], h1spM[4]);
+      picks.push({ away:curAway,home:curHome,market:'h1spread',side:s1,line:+h1spM[2],price:+h1spM[3] });
+      picks.push({ away:curAway,home:curHome,market:'h1spread',side:s2,line:+h1spM[5],price:+h1spM[6] });
       continue;
     }
+    // ── H1OU: o26.5 (-120) / u26.5 (+100)
     const h1ouM = l.match(/^H1OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
     if (h1ouM) {
       picks.push({ away:curAway,home:curHome,market:'h1total',side:'over',line:+h1ouM[1],price:+h1ouM[2] });
       picks.push({ away:curAway,home:curHome,market:'h1total',side:'under',line:+h1ouM[3],price:+h1ouM[4] });
       continue;
     }
-    const q1spM = l.match(/^Q1SPREAD:\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*([A-Z]{2,5})\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    // ── Q1SPREAD: SMU -0.5 (+105) / FSU +0.5 (-125)
+    const q1spM = l.match(/^Q1SPREAD:\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
     if (q1spM) {
-      picks.push({ away:curAway,home:curHome,market:'q1spread',side:q1spM[1].toUpperCase()===curAway?'away':'home',line:+q1spM[2],price:+q1spM[3] });
-      picks.push({ away:curAway,home:curHome,market:'q1spread',side:q1spM[4].toUpperCase()===curHome?'home':'away',line:+q1spM[5],price:+q1spM[6] });
+      const [s1,s2] = sideOf(q1spM[1], q1spM[4]);
+      picks.push({ away:curAway,home:curHome,market:'q1spread',side:s1,line:+q1spM[2],price:+q1spM[3] });
+      picks.push({ away:curAway,home:curHome,market:'q1spread',side:s2,line:+q1spM[5],price:+q1spM[6] });
       continue;
     }
+    // ── Q1OU: o11.5 (+105) / u11.5 (-125)
     const q1ouM = l.match(/^Q1OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
     if (q1ouM) {
       picks.push({ away:curAway,home:curHome,market:'q1total',side:'over',line:+q1ouM[1],price:+q1ouM[2] });
