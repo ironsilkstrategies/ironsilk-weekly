@@ -422,7 +422,7 @@ background:var(--gold);color:#0B0F14;border:1px solid var(--gold);border-radius:
 .note{font-size:11px;color:var(--mute);line-height:1.55;border-left:2px solid var(--rule);padding-left:9px;margin:14px 3px 0}
 .note b{color:var(--gold);font-weight:600}
 .empty{text-align:center;padding:38px 18px;color:var(--mute);font-size:12.5px;line-height:1.6}
-.setup{position:fixed;inset:0;z-index:80;background:var(--ink);padding:calc(env(safe-area-inset-top) + 26px) 18px 18px;overflow-y:auto}
+.setup{position:fixed;inset:0;z-index:1000;background:var(--ink);padding:calc(env(safe-area-inset-top) + 26px) 18px 18px;overflow-y:auto}
 .setup.hide{display:none}
 .setup h2{font-family:"Archivo";font-weight:900;font-size:22px;text-transform:uppercase;margin:0 0 5px}
 .setup p,.steps{font-size:12.5px;color:var(--mute);line-height:1.65}
@@ -800,6 +800,26 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
 </div>
 
 <script>
+// ── GLOBAL ERROR SURFACE ─────────────────────────────────────────────────
+// Any uncaught error or unhandled promise rejection gets shown on screen,
+// not just buried in the console where it's invisible on mobile Safari.
+window.addEventListener('error', function(e){
+  try{
+    const box=document.createElement('div');
+    box.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#3a0d0d;color:#ffb3b3;padding:14px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:50vh;overflow:auto;border-bottom:2px solid #ff4f4f';
+    box.textContent='SCRIPT ERROR: '+(e.message||'')+'\n'+(e.filename||'')+':'+(e.lineno||'')+'\n'+(e.error&&e.error.stack||'');
+    document.body.insertBefore(box,document.body.firstChild);
+  }catch(_){}
+});
+window.addEventListener('unhandledrejection', function(e){
+  try{
+    const box=document.createElement('div');
+    box.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#3a0d0d;color:#ffb3b3;padding:14px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:50vh;overflow:auto;border-bottom:2px solid #ff4f4f';
+    const reason=e.reason;
+    box.textContent='UNHANDLED PROMISE REJECTION: '+(reason&&reason.message||reason||'')+'\n'+(reason&&reason.stack||'');
+    document.body.insertBefore(box,document.body.firstChild);
+  }catch(_){}
+});
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
 h2h:'d4.h2h',splits:'d4.splits',ent:'d4.ent',handle:'d4.handle',bestlog:'d4.bestlog',oddsdate:'d4.oddsdate',sharp:'d4.sharp',rundown:'d4.rundown',oddspapi:'d4.oddspapi',usage:'d4.usage',ghtoken:'d4.ghtoken',ghrepo:'d4.ghrepo',bookshots:'d4.bookshots',extpicks:'d4.extpicks',srcstats:'d4.srcstats',exttrends:'d4.exttrends',extconsensus:'d4.extconsensus',
@@ -1915,7 +1935,7 @@ function saveSettingsTab(){
   const el=document.getElementById('oddspapiDiag');
   if(el)el.innerHTML='<div class="tkt hi"><h3>Saved</h3><div class="sub">Keys stored locally. Hit Refresh everything on the Games tab to pull with them.</div></div>';
 }
-function saveKeys(){
+async function saveKeys(){
   const v=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
   try{
     set(LS.key,v('setupKeyIn'));set(LS.ai,v('setupAiIn'));
@@ -1923,9 +1943,11 @@ function saveKeys(){
     localStorage.setItem('d4.setupDone','1');
   }catch(e){console.warn('saveKeys storage error:',e);}
   try{document.getElementById('setup').classList.add('hide');}catch(e){}
-  try{boot();}catch(e){
+  try{
+    await boot();
+  }catch(e){
     console.error('boot() failed:',e);
-    // Hard fallback — reload the page, setup flag is now set so it won't show again
+    alert('Something went wrong starting the app: '+(e&&e.message||e)+'\n\nReloading now.');
     setTimeout(()=>location.reload(),300);
   }
 }
