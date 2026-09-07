@@ -491,6 +491,15 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <input id="setupRundownIn" placeholder="therundown.io key (optional)" autocomplete="off" spellcheck="false">
   <div class="sub" style="margin:10px 0">Everything here can be changed later in the Settings tab.</div>
   <div class="bar"><button class="primary" onclick="saveKeys()">Start</button></div>
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid #1e2a36">
+    <div class="sub" style="margin-bottom:8px;color:var(--mute)">Already used TheDesk before? Restore your data from GitHub backup:</div>
+    <div style="display:flex;gap:8px">
+      <input id="restoreRepoIn" placeholder="owner/repo (e.g. ironsilkstrategies/thedesk-data)" autocomplete="off"
+        style="flex:1;font-size:11px" spellcheck="false">
+      <button onclick="restoreFromGitHub()" style="white-space:nowrap;font-family:'IBM Plex Mono';font-size:11px;padding:8px 12px;background:#1e2a36;border:1px solid #2a3a4a;color:var(--chalk);border-radius:6px;cursor:pointer">Restore</button>
+    </div>
+    <div id="restoreStatus" class="sub" style="margin-top:6px;font-size:10px"></div>
+  </div>
 </div>
 
 <header>
@@ -1907,14 +1916,43 @@ function saveSettingsTab(){
   if(el)el.innerHTML='<div class="tkt hi"><h3>Saved</h3><div class="sub">Keys stored locally. Hit Refresh everything on the Games tab to pull with them.</div></div>';
 }
 function saveKeys(){
-  const v=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
-  set(LS.key,v('setupKeyIn'));set(LS.ai,v('setupAiIn'));
-  set(LS.sharp,v('setupSharpIn'));set(LS.rundown,v('setupRundownIn'));
-  localStorage.setItem('d4.setupDone','1');
-  document.getElementById('setup').classList.add('hide');boot();
+  const v=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
+  try{
+    set(LS.key,v('setupKeyIn'));set(LS.ai,v('setupAiIn'));
+    set(LS.sharp,v('setupSharpIn'));set(LS.rundown,v('setupRundownIn'));
+    localStorage.setItem('d4.setupDone','1');
+  }catch(e){console.warn('saveKeys storage error:',e);}
+  try{document.getElementById('setup').classList.add('hide');}catch(e){}
+  try{boot();}catch(e){
+    console.error('boot() failed:',e);
+    // Hard fallback — reload the page, setup flag is now set so it won't show again
+    setTimeout(()=>location.reload(),300);
+  }
 }
-function tab(n,b){
-  ACTIVE_TAB=n;
+async function restoreFromGitHub(){
+  const repo=(document.getElementById('restoreRepoIn')||{}).value||'';
+  const status=document.getElementById('restoreStatus');
+  if(!repo){if(status)status.textContent='Enter your owner/repo first.';return;}
+  if(status){status.style.color='var(--gold)';status.textContent='Restoring…';}
+  try{
+    const r=await fetch(`https://raw.githubusercontent.com/${repo.trim()}/main/data-backup.json?t=${Date.now()}`);
+    if(!r.ok)throw new Error('File not found — check the repo name and make sure it is public.');
+    const data=await r.json();
+    const keys=Object.keys(data).filter(k=>k.startsWith('d4.'));
+    if(!keys.length)throw new Error('Backup file found but contains no d4.* keys.');
+    keys.forEach(k=>localStorage.setItem(k,data[k]));
+    localStorage.setItem('d4.setupDone','1');
+    // Save repo for future auto-restores
+    set(LS.ghrepo,repo.trim());
+    if(status){status.style.color='var(--win)';status.textContent=`✓ Restored ${keys.length} keys. Loading…`;}
+    setTimeout(()=>{
+      try{document.getElementById('setup').classList.add('hide');}catch(e){}
+      try{boot();}catch(e){location.reload();}
+    },800);
+  }catch(e){
+    if(status){status.style.color='var(--rust)';status.textContent='Error: '+e.message;}
+  }
+}
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
   document.getElementById('v-'+n).classList.add('on');
   document.querySelectorAll('nav>button').forEach(x=>x.classList.remove('on'));
