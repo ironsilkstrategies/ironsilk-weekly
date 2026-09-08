@@ -14598,11 +14598,15 @@ function nflExtFor(gameKey){return getNFLExt().filter(x=>x.game===gameKey);}
 
 function nflSlipToggle(gid,label,price){
   const g=NFL_GAMES.find(x=>x.id===gid);if(!g)return;
-  const leg={gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport:'nfl',
-    date:today(),p:Math.abs(price)>=100?Math.min(.95,Math.max(.05,100/(100+Math.abs(price)))):0.5};
-  SLIP.push(leg);
-  set(LS.slip,SLIP);
-  renderSlip();
+  const id=gid+'|'+label;
+  const i=SLIP.findIndex(x=>x.id===id);
+  if(i>=0){SLIP.splice(i,1);}
+  else{
+    const leg={id,gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport:'nfl',
+      gameDate:today(),p:Math.abs(price)>=100?Math.min(.95,Math.max(.05,100/(100+Math.abs(price)))):0.5};
+    SLIP.push(leg);
+  }
+  set(LS.slip,SLIP);render();paintSlip();
 }
 
 // ── NFL book odds upload (same pipeline as MLB) ───────────────────────────────
@@ -14688,7 +14692,15 @@ function renderNFL(){
      exist). g.abstract is ESPN's own normalized 'pre'/'in'/'post' state. */
   const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
   const scheduled=NFL_GAMES.filter(g=>!isFinalGame(g));
-  const final=NFL_GAMES.filter(isFinalGame);
+  try{if(typeof snapshotNFL==='function')snapshotNFL();}catch(e){console.warn('NFL snapshot:',e);}
+  try{if(typeof gradeNFLResults==='function')gradeNFLResults();}catch(e){console.warn('NFL grade:',e);}
+  const HIDE_AFTER_MS_NFL=24*60*60*1000;
+  const nowNfl=Date.now();
+  const final=NFL_GAMES.filter(g=>{
+    if(!isFinalGame(g))return false;
+    const kickoff=g.date?new Date(g.date).getTime():0;
+    return kickoff&&(nowNfl-kickoff)<HIDE_AFTER_MS_NFL;
+  });
 
   /* Same fix as the MLB board: renderNFL() is also called from background
      loops (the live-score poller) that have no idea what's currently on
@@ -15911,6 +15923,113 @@ function nflSpreadCalibAdj(raw,situation){
 }
 
 // Grade NFL results and update calibration
+// ── NFL Snapshot — populates arc[week].rows/finals so gradeNFLResults has
+// something to grade against. Without this, d4.nflarc stays permanently
+// empty and no NFL record/calibration data is ever produced.
+function snapshotNFL(){
+  if(!NFL_GAMES||!NFL_GAMES.length)return;
+  const wk='w'+(NFL_SEASON||'')+'-'+(NFL_WEEK||'');
+  const arc=get(LS.nflarc,{});
+  const A=arc[wk]||(arc[wk]={rows:[],finals:{},ts:Date.now()});
+  const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
+  NFL_GAMES.forEach(g=>{
+    let row=A.rows.find(r=>r.id===g.id);
+    if(!row){
+      const gameKey=g.away.abbr+'@'+g.home.abbr;
+      const lines=nflBookLinesFor(gameKey);
+      const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+      const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+      const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+      row={id:g.id,game:gameKey,
+        spreadSide:awaySpread?(awaySpread.line<0?'away':'home'):null,
+        spreadLine:awaySpread?Math.abs(awaySpread.line):null,
+        totalSide:totalOver?'over':null,
+        totalLine:totalOver?totalOver.line:null,
+        mlSide:awayML?(awayML.price<0?'away':'home'):null,
+        situation:nflIsDivisionGame(g)?'division':'nondivision',
+        band:'50-60',graded:false};
+      A.rows.push(row);
+    }
+    if(isFinalGame(g)&&g.awayScore!=null&&g.homeScore!=null&&!A.finals[g.id]){
+      A.finals[g.id]={a:g.awayScore,h:g.homeScore};
+    }
+  });
+  set(LS.nflarc,arc);
+}
+
+// ── CFB Snapshot — same pattern as NFL, populates d4.ncaafarc
+function snapshotNCAAF(){
+  if(!NCAAF_GAMES||!NCAAF_GAMES.length)return;
+  const wk='w'+(NCAAF_SEASON||'')+'-'+(NCAAF_WEEK||'');
+  const arc=get('d4.ncaafarc',{});
+  const A=arc[wk]||(arc[wk]={rows:[],finals:{},ts:Date.now()});
+  const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
+  NCAAF_GAMES.forEach(g=>{
+    let row=A.rows.find(r=>r.id===g.id);
+    if(!row){
+      const gameKey=g.away.abbr+'@'+g.home.abbr;
+      const lines=ncaafBookLinesFor(gameKey);
+      const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
+      const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
+      const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
+      row={id:g.id,game:gameKey,
+        spreadSide:awaySpread?(awaySpread.line<0?'away':'home'):null,
+        spreadLine:awaySpread?Math.abs(awaySpread.line):null,
+        totalSide:totalOver?'over':null,
+        totalLine:totalOver?totalOver.line:null,
+        mlSide:awayML?(awayML.price<0?'away':'home'):null,
+        graded:false};
+      A.rows.push(row);
+    }
+    if(isFinalGame(g)&&g.awayScore!=null&&g.homeScore!=null&&!A.finals[g.id]){
+      A.finals[g.id]={a:g.awayScore,h:g.homeScore};
+    }
+  });
+  set('d4.ncaafarc',arc);
+}
+
+// ── CFB Grading — mirrors gradeNFLResults, writes to the same shared
+// calibration store using cfb-prefixed keys so it never collides with NFL rows
+function gradeNCAAFResults(){
+  const arc=get('d4.ncaafarc',{});
+  const calib=getNFLCalib();
+  let changed=false;
+  Object.keys(arc).forEach(wk=>{
+    const A=arc[wk];
+    if(!A.rows||!A.finals)return;
+    A.rows.forEach(r=>{
+      if(r.graded)return;
+      const F=A.finals[r.id];
+      if(!F||F.a===null||F.h===null)return;
+      if(r.spreadSide&&r.spreadLine!==null){
+        const margin=r.spreadSide==='home'?F.h-F.a:F.a-F.h;
+        const hit=margin>r.spreadLine;
+        const key='cfb-spread|any|50-60';
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        r.spreadHit=hit;changed=true;
+      }
+      if(r.totalSide&&r.totalLine!==null){
+        const tot=F.a+F.h;
+        const hit=r.totalSide==='over'?tot>r.totalLine:tot<r.totalLine;
+        const key='cfb-total|any|50-60';
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        r.totalHit=hit;changed=true;
+      }
+      if(r.mlSide){
+        const hit=r.mlSide==='home'?F.h>F.a:F.a>F.h;
+        const key='cfb-side|any|50-60';
+        if(!calib[key])calib[key]={n:0,hits:0};
+        calib[key].n++;if(hit)calib[key].hits++;
+        r.mlHit=hit;changed=true;
+      }
+      r.graded=true;
+    });
+  });
+  if(changed){set(NFL_CALIB_KEY,calib);set('d4.ncaafarc',arc);}
+}
+
 function gradeNFLResults(){
   const arc=get(LS.nflarc,{});
   const calib=getNFLCalib();
@@ -17818,7 +17937,22 @@ function renderNCAAF(){
      this fix and have no abstract field yet at all. */
   const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
   const scheduled=NCAAF_GAMES.filter(g=>!isFinalGame(g));
-  const final=NCAAF_GAMES.filter(isFinalGame);
+  // Snapshot + grade every final game BEFORE filtering display — the record
+  // and calibration store gets the result regardless of whether the card
+  // stays visible below.
+  try{if(typeof snapshotNCAAF==='function')snapshotNCAAF();}catch(e){console.warn('CFB snapshot:',e);}
+  try{if(typeof gradeNCAAFResults==='function')gradeNCAAFResults();}catch(e){console.warn('CFB grade:',e);}
+  // Cards for finals drop off the board 24h after kickoff so a full week's
+  // worth of finals never sits there forever re-rendering sims and analysis
+  // panels that will never change again. This is the actual fix for the CFB
+  // freeze — the game is still fully graded above regardless of this filter.
+  const HIDE_AFTER_MS_CFB=24*60*60*1000;
+  const nowCfb=Date.now();
+  const final=NCAAF_GAMES.filter(g=>{
+    if(!isFinalGame(g))return false;
+    const kickoff=g.date?new Date(g.date).getTime():0;
+    return kickoff&&(nowCfb-kickoff)<HIDE_AFTER_MS_CFB;
+  });
   /* Same fix as MLB and NFL: don't let a background poller repaint the CFB
      board over whatever sport is actually on screen. */
   document.getElementById('nG').textContent=NCAAF_GAMES.length;
@@ -18116,9 +18250,15 @@ function ncaafTogglePanel(which,gid,btn){
 
 function ncaafSlipToggle(gid,label,price){
   const g=NCAAF_GAMES.find(x=>x.id===gid);if(!g)return;
-  const leg={gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport:'ncaaf',
-    date:today(),p:Math.abs(price)>=100?Math.min(.95,Math.max(.05,100/(100+Math.abs(price)))):0.5};
-  SLIP.push(leg);set(LS.slip,SLIP);renderSlip();
+  const id=gid+'|'+label;
+  const i=SLIP.findIndex(x=>x.id===id);
+  if(i>=0){SLIP.splice(i,1);}
+  else{
+    const leg={id,gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport:'ncaaf',
+      gameDate:today(),p:Math.abs(price)>=100?Math.min(.95,Math.max(.05,100/(100+Math.abs(price)))):0.5};
+    SLIP.push(leg);
+  }
+  set(LS.slip,SLIP);render();paintSlip();
 }
 
 // ── NCAAF Trend panel ────────────────────────────────────────────────────────
