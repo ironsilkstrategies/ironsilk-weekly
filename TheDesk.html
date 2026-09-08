@@ -16129,9 +16129,99 @@ function nflMasterEvaluation(){
     });
 }
 
+// ── NFL eval cache — same fingerprint/run-once pattern as MLB eval, so
+// opening the tab never blocks the thread recomputing every game live.
+const LS_NFL_EVAL='d4.nflevalrun';
+function nflEvalInputFingerprint(){
+  return JSON.stringify({
+    games:NFL_GAMES.length,
+    sims:NFL_GAMES.filter(g=>NFL_SIMS[g.id]).length,
+    book:(get(LS.nflshots,{})[today()]||[]).length,
+    week:NFL_WEEK,season:NFL_SEASON,
+    power:Object.keys(NFL_POWER||{}).length
+  });
+}
+function lastNFLEvalRun(){
+  const r=get(LS_NFL_EVAL,null);
+  return r&&r.week===NFL_WEEK?r:null;
+}
+function runNFLMasterEval(){
+  const btn=document.getElementById('nflEvalRunBtn');
+  if(btn){btn.disabled=true;btn.textContent='Evaluating…';}
+  setTimeout(()=>{
+    const evals=nflMasterEvaluation();
+    set(LS_NFL_EVAL,{week:NFL_WEEK,ts:Date.now(),fingerprint:nflEvalInputFingerprint(),evals});
+    const b=document.getElementById('ticketBody');
+    if(b)b.innerHTML=renderNFLMasterEval();
+    window.scrollTo(0,0);
+  },40);
+}
+function nflMasterEvaluation(){
+  // Include all games — during preseason all may be Final, still useful for review
+  const games=NFL_GAMES.length?NFL_GAMES:[];
+  return games
+    .map(g=>{
+      if(!NFL_SIMS[g.id])NFL_SIMS[g.id]=simNFLGame(g);
+      return evaluateNFLGame(g);
+    })
+    .filter(Boolean)
+    .sort((a,b)=>{
+      const rank={strong:0,lean:1,split:2};
+      return (rank[a.verdict]||2)-(rank[b.verdict]||2)||b.confidence-a.confidence;
+    });
+}
+
 function renderNFLMasterEval(){
-  const evals=nflMasterEvaluation();
-  if(!evals.length)return'<div class="empty">No upcoming NFL games to evaluate.</div>';
+  if(!NFL_GAMES.length)return'<div class="empty">No NFL games loaded. Switch to NFL tab and load the schedule first.</div>';
+  const run=lastNFLEvalRun();
+  const fp=nflEvalInputFingerprint();
+  const stale=run&&run.fingerprint!==fp;
+  const nSim=NFL_GAMES.filter(g=>NFL_SIMS[g.id]).length;
+  const nBook=(get(LS.nflshots,{})[today()]||[]).length;
+  const nPower=Object.keys(NFL_POWER||{}).length;
+
+  const chip=(ok,label,n)=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <span style="width:7px;height:7px;border-radius:50%;background:${ok?'var(--win)':'var(--rule)'};flex:0 0 auto"></span>
+    <span style="color:${ok?'var(--chalk)':'var(--mute)'}">${label}</span>
+    <span class="m">${n}</span></div>`;
+
+  const status=!run
+    ?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">
+       <b style="color:var(--gold)">Not evaluated yet this week.</b> Load what you've got below, then hit Run evaluation.</div>`
+    :stale
+    ?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">
+       <b style="color:var(--gold)">Inputs changed since the last run.</b>
+       Last evaluated ${new Date(run.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} — new data has come in since. Run it again for a current read.</div>`
+    :`<div class="note" style="border-left:3px solid var(--win);padding-left:10px">
+       <b style="color:var(--win)">✓ Evaluated ${new Date(run.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</b>
+       — ${run.evals.length} games scored. Nothing has changed since.</div>`;
+
+  const feed=`<div class="tkt hi">
+    <h3>🏈 NFL Master Evaluation — Week ${NFL_WEEK||'?'}</h3>
+    <div class="sub" style="margin-bottom:9px">Weighs every independent read on this week's board against every other one.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 14px">
+      ${chip(nSim>0,'Simulations',nSim)}
+      ${chip(nBook>0,'Book lines',nBook)}
+      ${chip(nPower>0,'Power ratings',nPower)}
+    </div>
+    <div class="bar" style="margin-top:11px">
+      <button class="primary" id="nflEvalRunBtn" onclick="runNFLMasterEval()">${run&&!stale?'Re-run evaluation':'Run evaluation'}</button>
+    </div>
+  </div>${status}`;
+
+  if(!run)return feed+`<div class="empty">Results appear here once you run it.</div>`;
+  const evals=run.evals;
+  if(!evals.length)return feed+'<div class="empty">No games were available to evaluate.</div>';
+
+  const strong=evals.filter(e=>e.verdict==='strong').length;
+  const lean=evals.filter(e=>e.verdict==='lean').length;
+  const summary=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      ${['strong','lean','split'].map(k=>`<div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:22px;color:${k==='strong'?'var(--win)':k==='lean'?'var(--gold)':'var(--mute)'}">${evals.filter(e=>e.verdict===k).length}</div>
+        <div class="m">${k.toUpperCase()}</div></div>`).join('')}
+    </div>
+  </div>`;
 
   const rows=evals.map(ev=>{
     const{g,s,verdict,confidence,mySpread,myTotal,myAwayML,myHomeML,
@@ -16227,13 +16317,7 @@ function renderNFLMasterEval(){
     </div>`;
   });
 
-  const strong=evals.filter(e=>e.verdict==='strong').length;
-  const lean=evals.filter(e=>e.verdict==='lean').length;
-  return`<div class="tkt hi" style="margin-bottom:10px">
-    <h3>🏈 NFL Master Evaluation — Week ${NFL_WEEK||'?'}</h3>
-    <div class="sub">${evals.length} games evaluated · ${strong} strong · ${lean} lean</div>
-    <div class="sub" style="color:var(--mute)">Power ratings: ${Object.keys(NFL_POWER).length?'loaded ✓':'not loaded — hit "Load current week" first'}</div>
-  </div>${rows.join('')}`;
+  return feed+summary+`<div class="sub" style="color:var(--mute);margin:8px 0">Power ratings: ${nPower?'loaded ✓':'not loaded — hit "Load current week" first'}</div>${rows.join('')}`;
 }
 
 // ── NFL Trend panel for game cards ───────────────────────────────────────────
@@ -18234,8 +18318,34 @@ function ncaafGameAG(g,s){
 }
 
 // ── NCAAF Master Evaluation ───────────────────────────────────────────────────
-function renderNCAAFMasterEval(){
-  if(!NCAAF_GAMES.length)return'<div class="empty">No CFB games loaded. Switch to CFB tab and load the schedule first.</div>';
+// ── CFB eval cache — same fingerprint/run-once pattern as MLB + NFL eval
+const LS_CFB_EVAL='d4.cfbevalrun';
+function cfbEvalInputFingerprint(){
+  return JSON.stringify({
+    games:NCAAF_GAMES.length,
+    sims:NCAAF_GAMES.filter(g=>NCAAF_SIMS[g.id]).length,
+    book:(get('d4.ncaafshots',{})[today()]||[]).length,
+    week:NCAAF_WEEK,season:NCAAF_SEASON,
+    power:Object.keys(NCAAF_POWER||{}).length
+  });
+}
+function lastCFBEvalRun(){
+  const r=get(LS_CFB_EVAL,null);
+  return r&&r.week===NCAAF_WEEK?r:null;
+}
+function runCFBMasterEval(){
+  const btn=document.getElementById('cfbEvalRunBtn');
+  if(btn){btn.disabled=true;btn.textContent='Evaluating…';}
+  setTimeout(()=>{
+    const evals=ncaafMasterEvaluation();
+    set(LS_CFB_EVAL,{week:NCAAF_WEEK,ts:Date.now(),fingerprint:cfbEvalInputFingerprint(),evals});
+    const b=document.getElementById('ticketBody');
+    if(b)b.innerHTML=renderNCAAFMasterEval();
+    window.scrollTo(0,0);
+  },40);
+}
+function ncaafMasterEvaluation(){
+  if(!NCAAF_GAMES.length)return[];
   NCAAF_GAMES.forEach(g=>{if(!NCAAF_SIMS[g.id])NCAAF_SIMS[g.id]=simNCAAFGame(g);});
   const evals=NCAAF_GAMES.map(g=>{
     const s=NCAAF_SIMS[g.id];if(!s)return null;
@@ -18294,8 +18404,63 @@ function renderNCAAFMasterEval(){
     const r={strong:0,lean:1,split:2};
     return(r[a.verdict]||2)-(r[b.verdict]||2)||b.confidence-a.confidence;
   });
+
+  return evals;
+}
+
+function renderNCAAFMasterEval(){
+  if(!NCAAF_GAMES.length)return'<div class="empty">No CFB games loaded. Switch to CFB tab and load the schedule first.</div>';
+  const run=lastCFBEvalRun();
+  const fp=cfbEvalInputFingerprint();
+  const stale=run&&run.fingerprint!==fp;
+  const nSim=NCAAF_GAMES.filter(g=>NCAAF_SIMS[g.id]).length;
+  const nBook=(get('d4.ncaafshots',{})[today()]||[]).length;
+  const nPower=Object.keys(NCAAF_POWER||{}).length;
+
+  const chip=(ok,label,n)=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <span style="width:7px;height:7px;border-radius:50%;background:${ok?'var(--win)':'var(--rule)'};flex:0 0 auto"></span>
+    <span style="color:${ok?'var(--chalk)':'var(--mute)'}">${label}</span>
+    <span class="m">${n}</span></div>`;
+
+  const status=!run
+    ?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">
+       <b style="color:var(--gold)">Not evaluated yet this week.</b> Load what you've got below, then hit Run evaluation.</div>`
+    :stale
+    ?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">
+       <b style="color:var(--gold)">Inputs changed since the last run.</b>
+       Last evaluated ${new Date(run.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} — new data has come in since. Run it again for a current read.</div>`
+    :`<div class="note" style="border-left:3px solid var(--win);padding-left:10px">
+       <b style="color:var(--win)">✓ Evaluated ${new Date(run.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</b>
+       — ${run.evals.length} games scored. Nothing has changed since.</div>`;
+
+  const feed=`<div class="tkt hi">
+    <h3>🏟 CFB Master Evaluation — Week ${NCAAF_WEEK||'?'}</h3>
+    <div class="sub" style="margin-bottom:9px">Weighs every independent read on this week's board against every other one.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 14px">
+      ${chip(nSim>0,'Simulations',nSim)}
+      ${chip(nBook>0,'Book lines',nBook)}
+      ${chip(nPower>0,'Power ratings',nPower)}
+    </div>
+    <div class="bar" style="margin-top:11px">
+      <button class="primary" id="cfbEvalRunBtn" onclick="runCFBMasterEval()">${run&&!stale?'Re-run evaluation':'Run evaluation'}</button>
+    </div>
+  </div>${status}`;
+
+  if(!run)return feed+`<div class="empty">Results appear here once you run it.</div>`;
+  const evals=run.evals;
+  if(!evals.length)return feed+'<div class="empty">No games were available to evaluate.</div>';
+
   const strong=evals.filter(e=>e.verdict==='strong').length;
   const lean=evals.filter(e=>e.verdict==='lean').length;
+  const away=evals.filter(e=>e.verdict==='away').length;
+  const summary=`<div class="tkt">
+    <div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      ${['strong','lean','split','away'].map(k=>`<div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:22px;color:${k==='strong'?'var(--win)':k==='lean'?'var(--gold)':k==='away'?'var(--rust)':'var(--mute)'}">${evals.filter(e=>e.verdict===k).length}</div>
+        <div class="m">${k.toUpperCase()}</div></div>`).join('')}
+    </div>
+  </div>`;
+
   const rows=evals.map(ev=>{
     const{g,s,verdict,confidence,spreadEdge,totalEdge,sideSignals,agreement,topSide,cfbGameTrends,cfbConsML}=ev;
     const vColor=verdict==='strong'?'var(--win)':verdict==='lean'?'var(--gold)':verdict==='away'?'var(--rust)':'var(--mute)';
@@ -18345,14 +18510,8 @@ function renderNCAAFMasterEval(){
       }
     </div>`;
   });
-  const away=evals.filter(e=>e.verdict==='away').length;
-  return`<div class="tkt hi" style="margin-bottom:10px">
-    <h3>🏟 CFB Master Evaluation — Week ${NCAAF_WEEK||'?'}</h3>
-    <div class="sub">${evals.length} games evaluated · ${strong} strong · ${lean} lean · ${away} stay away</div>
-    <div class="sub" style="color:var(--mute);margin-top:4px">
-      Signals: Simulator · Book spread · Trends · Public consensus — weighted agreement drives verdict
-    </div>
-  </div>${rows.join('')}`;
+
+  return feed+summary+`<div class="sub" style="color:var(--mute);margin:8px 0">Power ratings: ${nPower?'loaded ✓':'not loaded — hit "Load current week" first'}</div>${rows.join('')}`;
 }
 
 // ── NCAAF book odds save ──────────────────────────────────────────────────────
