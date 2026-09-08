@@ -506,7 +506,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.64</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.65</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -14472,7 +14472,7 @@ function renderCoachTab(){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.64
+   NFL ENGINE — BUILD v1.65
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -15211,22 +15211,30 @@ function parseOddsApiFootballGames(games,schedule,storageKey){
 }
 /* ITEM 3: football player props via The Odds API ─────────────────────────── */
 async function fetchFootballProps(sport,propStorageKey){
-  const key=get(LS.oddspapi,'');if(!key)return 0;
+  const key=get(LS.oddspapi,'');if(!key)return{count:0,error:'No API key set'};
   const sportKey=sport==='nfl'?'americanfootball_nfl':'americanfootball_ncaaf';
   const markets='player_pass_yards,player_rush_yards,player_reception_yards,player_anytime_td,player_receptions';
   try{
     const evR=await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/events?apiKey=${key}`);
-    if(!evR.ok)return 0;
+    if(!evR.ok){
+      const body=await evR.text().catch(()=>'');
+      return{count:0,error:`Events fetch failed: HTTP ${evR.status} ${body.slice(0,150)}`};
+    }
     const events=await evR.json();
+    if(!Array.isArray(events)||!events.length)return{count:0,error:'No upcoming events returned from The Odds API for this sport.'};
     const d=today();const ps=get(propStorageKey,{});ps[d]=ps[d]||[];
-    let cnt=0;
-    for(const ev of events.slice(0,5)){
+    let cnt=0;const gameErrors=[];
+    // Was capped at 5 events — raised to 15 so more of the slate actually
+    // gets checked. Props are frequently missing for a chunk of games
+    // (books don't always post CFB player props this far out), so a small
+    // cap made "0 props" look like a bug when it was mostly a coverage gap.
+    for(const ev of events.slice(0,15)){
       try{
         const pR=await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/events/${ev.id}/odds?apiKey=${key}&regions=us&markets=${markets}&oddsFormat=american`);
-        if(!pR.ok)continue;
+        if(!pR.ok){gameErrors.push(`${ev.away_team}@${ev.home_team}: HTTP ${pR.status}`);continue;}
         const pd=await pR.json();
         const book=(pd.bookmakers||[]).find(b=>b.key==='draftkings')||(pd.bookmakers||[])[0];
-        if(!book)continue;
+        if(!book){gameErrors.push(`${ev.away_team}@${ev.home_team}: no bookmaker offered these markets yet`);continue;}
         book.markets.forEach(mkt=>{
           const statMap={player_pass_yards:'pass_yds',player_rush_yards:'rush_yds',
             player_reception_yards:'rec_yds',player_anytime_td:'anytime_td',player_receptions:'receptions'};
@@ -15237,10 +15245,11 @@ async function fetchFootballProps(sport,propStorageKey){
             cnt++;
           });
         });
-      }catch(e){}
+      }catch(e){gameErrors.push(`${ev.away_team}@${ev.home_team}: ${e.message}`);}
     }
-    set(propStorageKey,ps);return cnt;
-  }catch(e){return 0;}
+    set(propStorageKey,ps);
+    return{count:cnt,error:cnt===0?(gameErrors[0]||'No props found in any checked game.'):null,checked:events.slice(0,15).length,gameErrors};
+  }catch(e){return{count:0,error:e.message};}
 }
 async function fetchNCAAFLiveOdds(){
   const key=get(LS.oddspapi,'');if(!key)return;
@@ -15248,11 +15257,12 @@ async function fetchNCAAFLiveOdds(){
   const r=await fetch(url);const j=await r.json();
   if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
   const {games,lines}=parseOddsApiFootballGames(j,NCAAF_GAMES||[],LS.ncaafshots);
-  const propCount=await fetchFootballProps('ncaaf','d4.ncaafprops').catch(()=>0);
+  const propResult=await fetchFootballProps('ncaaf','d4.ncaafprops').catch(e=>({count:0,error:e.message}));
+  set('d4.ncaafpropsLastResult',propResult);
   try{repairNCAAFKeys()}catch(e){}
   NCAAF_SIMS={};
   if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
-  return{games,lines,props:propCount};
+  return{games,lines,props:propResult.count,propsError:propResult.error};
 }
 
 // ── Boot: restore NFL games from cache ────────────────────────────────────────
@@ -16017,6 +16027,18 @@ function gradeNCAAFResults(){
   Object.keys(arc).forEach(wk=>{
     const A=arc[wk];
     if(!A.rows||!A.finals)return;
+    // REPAIR PASS — an earlier version of this function marked every row
+    // graded=true unconditionally, even when it had no book lines to grade
+    // against. Those rows never got spreadHit/totalHit/mlHit set, so they
+    // show up as "98 graded games" with every stat displaying "—". The
+    // if(r.graded)return below would skip them forever. Reset any row that
+    // claims graded=true but has none of the three hit fields set, so it
+    // gets a genuine chance to grade under the corrected logic below.
+    A.rows.forEach(r=>{
+      if(r.graded&&r.spreadHit===undefined&&r.totalHit===undefined&&r.mlHit===undefined){
+        r.graded=false;changed=true;
+      }
+    });
     A.rows.forEach(r=>{
       if(r.graded)return;
       const F=A.finals[r.id];
@@ -16062,6 +16084,13 @@ function gradeNFLResults(){
   Object.keys(arc).forEach(wk=>{
     const A=arc[wk];
     if(!A.rows||!A.finals)return;
+    // REPAIR PASS — same fix as CFB: reset rows stuck graded=true with no
+    // actual hit data from before the gradedAny fix existed.
+    A.rows.forEach(r=>{
+      if(r.graded&&r.spreadHit===undefined&&r.totalHit===undefined&&r.mlHit===undefined){
+        r.graded=false;changed=true;
+      }
+    });
     A.rows.forEach(r=>{
       if(r.graded)return;
       const F=A.finals[r.id];
@@ -16113,11 +16142,12 @@ async function fetchNFLLiveOdds(){
     const r=await fetch(url);const j2=await r.json();
     if(!Array.isArray(j2))throw new Error(j2.message||'Bad API response');
     const {games,lines}=parseOddsApiFootballGames(j2,NFL_GAMES||[],LS.nflshots);
-    const propCount=await fetchFootballProps('nfl','d4.nflprops').catch(()=>0);
+    const propResult=await fetchFootballProps('nfl','d4.nflprops').catch(e=>({count:0,error:e.message}));
+    set('d4.nflpropsLastResult',propResult);
     try{if(typeof repairNFLKeys==='function')repairNFLKeys()}catch(e){}
     NFL_SIMS={};
     if(ACTIVE_SPORT==='nfl')renderNFL();
-    return{games,lines,props:propCount};
+    return{games,lines,props:propResult.count,propsError:propResult.error};
   }catch(e){console.warn('NFL live odds failed:',e.message);}
 }
 
@@ -17033,7 +17063,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.64
+   NCAAF ENGINE — BUILD v1.65
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -18393,7 +18423,12 @@ function computeTrendAdjustedProjection(g,s,sport){
 function ncaafPropsPanel(g){
   const apiProps=(get('d4.ncaafprops',{})[today()]||[])
     .filter(p=>p.game&&(p.game.includes(g.away.abbr)||p.game.includes(g.home.abbr)));
-  if(!apiProps.length)return '<div class="empty">No CFB player props yet — tap ⚡ Pull odds to fetch them from The Odds API.</div>';
+  if(!apiProps.length){
+    const lastResult=get('d4.ncaafpropsLastResult',null);
+    const reason=lastResult&&lastResult.error?`<div class="sub" style="color:var(--rust);margin-top:6px">${lastResult.error}</div>`:'';
+    const checked=lastResult&&lastResult.checked?`<div class="sub" style="color:var(--mute);margin-top:2px">Checked ${lastResult.checked} game${lastResult.checked===1?'':'s'} for props.</div>`:'';
+    return `<div class="empty">No CFB player props yet — tap ⚡ Pull odds to fetch them from The Odds API.${reason}${checked}</div>`;
+  }
   return`<div style="font-family:'IBM Plex Mono';font-size:10.5px;padding:4px 0">
     <div style="font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Player props · from The Odds API</div>
     ${apiProps.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px">
