@@ -15258,7 +15258,11 @@ async function fetchNCAAFLiveOdds(){
    not the rare fresh-network-load one — the refresh trigger has to live here
    too, or a stale cached status just sits unrefreshed on every ordinary
    reopen. */
-whenScriptReady(()=>{refreshNFLLiveScores().catch(()=>{})},1500);
+whenScriptReady(()=>{
+  refreshNFLLiveScores().catch(()=>{}).finally(()=>{
+    if(ACTIVE_SPORT==='nfl'&&typeof renderNFL==='function')renderNFL();
+  });
+},1500);
 
 /* ═══════════════════════════════════════════════════════════════════════
    NFL INTELLIGENCE LAYER — A+++ build
@@ -18083,7 +18087,12 @@ function ncaafCard(g){
     const tierBadge=tierCls===' supreme'?`<div class="tier-tag supreme">◆ SUPREME</div>`
       :tierCls===' strong'?`<div class="tier-tag strong">STRONG</div>`
       :tierCls===' conflict'?`<div class="tier-tag conflict">⚠ CONFLICT</div>`:'';
-    return`<div class="bet${cls}${srcCls}${tierCls}" role="button" tabindex="0"
+    // Reflect whether this exact pick is already sitting in the slip — same
+    // pattern MLB and NFL tiles use. Without this the button never visually
+    // changes when tapped even though the pick is correctly added to SLIP.
+    const pickId=g.id+'|'+String(pick);
+    const onSlip=(typeof SLIP!=='undefined'&&SLIP.some)?SLIP.some(x=>x.id===pickId):false;
+    return`<div class="bet${cls}${srcCls}${tierCls}${onSlip?' on':''}" role="button" tabindex="0"
       onclick="ncaafSlipToggle('${g.id}','${String(pick).replace(/'/g,"\\'")}',${e.price})">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
       <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${tierBadge}</div>`;
@@ -18763,7 +18772,17 @@ function ncaafOnActivate(){
    however many hours ago just sat there unchanged, which is the actual
    mechanism behind an 11am game still reading "Scheduled" at 2pm. Trigger the
    same refresh here too, once the script has finished loading. */
-whenScriptReady(()=>{refreshNCAAFLiveScores().catch(()=>{})},1500);
+whenScriptReady(()=>{
+  refreshNCAAFLiveScores().catch(()=>{}).finally(()=>{
+    // Force one render on boot regardless of whether anything "changed" —
+    // otherwise a week where every game is already final never repaints,
+    // which means the 24h hide filter never runs and stale Friday cards
+    // just sit there showing whatever was last painted before this fix
+    // existed. Cards also never got their tapped/selected state redrawn,
+    // which is the same root cause as picks not visually marking on CFB.
+    if(ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();
+  });
+},1500);
 
 /* ═══════════════════════════════════════════════════════════════
    NFL ENGINE END
