@@ -506,7 +506,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.66</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.71</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -522,6 +522,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <button onclick="tab('chat',this)">Chat</button>
     <button onclick="tab('money',this)">Money</button>
     <button onclick="tab('settings',this)">Settings</button>
+    <button onclick="tab('odds',this)" style="color:var(--gold)">⚡ Odds</button>
   </nav>
 </header>
 <div style="display:flex;padding:8px 12px 4px;gap:6px;background:#0d1117;position:relative;z-index:999">
@@ -887,7 +888,23 @@ function doSportSwitch(sport){
     });
     // Re-render the active tab with the new sport
     if(ACTIVE_TAB==='tickets'&&typeof renderTickets==='function')renderTickets();
-    if(ACTIVE_TAB==='grades'&&typeof renderGrades==='function')renderGrades(false);
+    if(ACTIVE_TAB==='grades'){
+      // The Records tab has its OWN local sport switcher (GRADE_SPORT +
+      // gradeSportBtn-* styling) that was completely disconnected from the
+      // global one above. Switching sport anywhere else in the app left this
+      // screen showing a different sport than every other tab — sync it here
+      // so there is exactly one sport state, not two independently-drifting ones.
+      GRADE_SPORT=sport;
+      ['mlb','nfl','ncaaf'].forEach(s=>{
+        const b=document.getElementById('gradeSportBtn-'+s);
+        if(!b)return;
+        const active=s===sport;
+        const color=s==='mlb'?'var(--gold)':s==='nfl'?'#4a9eff':'#4caf84';
+        b.style.color=active?color:'var(--mute)';
+        b.style.borderBottom=active?'2px solid '+color:'2px solid transparent';
+      });
+      if(typeof renderGrades==='function')renderGrades(false);
+    }
     if(ACTIVE_TAB==='best'&&typeof renderBest==='function')renderBest();
   }
 }
@@ -903,6 +920,19 @@ function setGradeSport(s,el){
     b.style.color=active?color:'var(--mute)';
     b.style.borderBottom=active?'2px solid '+color:'2px solid transparent';
   });
+  // Keep the global sport switcher in lockstep — this local tab has its own
+  // switcher for convenience, but there is one sport state across the app,
+  // not two. Update ACTIVE_SPORT + the top button styling without forcing a
+  // full board re-render (that would fire renderNFL/renderNCAAF on the Games
+  // tab even though we're staying on Records).
+  ACTIVE_SPORT=s;
+  ['mlb','nfl','ncaaf'].forEach(k=>{
+    const btn=document.getElementById('sportBtn-'+k);
+    if(!btn)return;
+    btn.style.background=k===s?'var(--gold)':'#1c1c1c';
+    btn.style.color=k===s?'#000':'#fff';
+  });
+  try{localStorage.setItem('d4.activeSport',s)}catch(e){}
   renderGrades(false);
 }
 
@@ -13098,7 +13128,8 @@ function buildBestCard(){
 }
 function renderBest(){
   const el=document.getElementById('bestCard');
-  if(!GAMES.length){el.innerHTML='<div class="empty">Board not loaded yet.</div>';return}
+  const anyGamesLoaded=(GAMES&&GAMES.length)||(NFL_GAMES&&NFL_GAMES.length)||(NCAAF_GAMES&&NCAAF_GAMES.length);
+  if(!anyGamesLoaded){el.innerHTML='<div class="empty">Board not loaded yet.</div>';return}
   const d=today(),log=get(LS.bestlog,{}),entry=log[d];
   const locked=entry&&entry.locked;
   const lockBar=`<div class="note" style="margin:0 0 10px;display:flex;align-items:center;
@@ -13891,7 +13922,7 @@ function logSystemPicks(sport){
     const key=sp+':'+gl;
     if(day[key]&&day[key].graded)return;
     let lines=[];
-    try{lines=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):[]}catch(e){}
+    try{lines=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):bookLinesFor(g.id)}catch(e){}
     const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
     const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
     const bookFav=(awayML&&homeML)?(awayML.price<homeML.price?g.away.abbr:g.home.abbr)
@@ -14488,7 +14519,7 @@ function renderCoachTab(){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.66
+   NFL ENGINE — BUILD v1.71
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -15229,7 +15260,14 @@ function parseOddsApiFootballGames(games,schedule,storageKey){
 async function fetchFootballProps(sport,propStorageKey){
   const key=get(LS.oddspapi,'');if(!key)return{count:0,error:'No API key set'};
   const sportKey=sport==='nfl'?'americanfootball_nfl':'americanfootball_ncaaf';
-  const markets='player_pass_yards,player_rush_yards,player_reception_yards,player_anytime_td,player_receptions';
+  // CRITICAL FIX — these market keys were wrong. The Odds API's actual keys
+  // are player_pass_yds / player_rush_yds / player_reception_yds (docs:
+  // the-odds-api.com/sports-odds-data/betting-markets.html), not the
+  // "_yards" spelling this was sending. An invalid market key in the list
+  // can silently zero out the whole request depending on the endpoint, which
+  // is consistent with props always coming back empty regardless of key,
+  // sport, or how many events were checked.
+  const markets='player_pass_yds,player_rush_yds,player_reception_yds,player_anytime_td,player_receptions';
   try{
     const evR=await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/events?apiKey=${key}`);
     if(!evR.ok){
@@ -15240,20 +15278,20 @@ async function fetchFootballProps(sport,propStorageKey){
     if(!Array.isArray(events)||!events.length)return{count:0,error:'No upcoming events returned from The Odds API for this sport.'};
     const d=today();const ps=get(propStorageKey,{});ps[d]=ps[d]||[];
     let cnt=0;const gameErrors=[];
-    // Was capped at 5 events — raised to 15 so more of the slate actually
-    // gets checked. Props are frequently missing for a chunk of games
-    // (books don't always post CFB player props this far out), so a small
-    // cap made "0 props" look like a bug when it was mostly a coverage gap.
     for(const ev of events.slice(0,15)){
       try{
         const pR=await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/events/${ev.id}/odds?apiKey=${key}&regions=us&markets=${markets}&oddsFormat=american`);
-        if(!pR.ok){gameErrors.push(`${ev.away_team}@${ev.home_team}: HTTP ${pR.status}`);continue;}
+        if(!pR.ok){
+          const body=await pR.text().catch(()=>'');
+          gameErrors.push(`${ev.away_team}@${ev.home_team}: HTTP ${pR.status} ${body.slice(0,120)}`);
+          continue;
+        }
         const pd=await pR.json();
         const book=(pd.bookmakers||[]).find(b=>b.key==='draftkings')||(pd.bookmakers||[])[0];
         if(!book){gameErrors.push(`${ev.away_team}@${ev.home_team}: no bookmaker offered these markets yet`);continue;}
         book.markets.forEach(mkt=>{
-          const statMap={player_pass_yards:'pass_yds',player_rush_yards:'rush_yds',
-            player_reception_yards:'rec_yds',player_anytime_td:'anytime_td',player_receptions:'receptions'};
+          const statMap={player_pass_yds:'pass_yds',player_rush_yds:'rush_yds',
+            player_reception_yds:'rec_yds',player_anytime_td:'anytime_td',player_receptions:'receptions'};
           const stat=statMap[mkt.key];if(!stat)return;
           mkt.outcomes.forEach(o=>{
             ps[d].push({player:o.name,stat,line:o.point,side:(o.description||'over').toLowerCase(),
@@ -16997,7 +17035,12 @@ function nflPropsPanel(g,s){
   /* ITEM 3: Merge API-pulled props (from fetchFootballProps) with the sim-based ones */
   const apiProps=(get('d4.nflprops',{})[today()]||[])
     .filter(p=>p.game&&(p.game.includes(g.away.abbr)||p.game.includes(g.home.abbr)));
-  if(!props.length&&!apiProps.length)return '<div class="empty">No props for this game yet. Tap ⚡ Pull odds to fetch player props from The Odds API.</div>';
+  if(!props.length&&!apiProps.length){
+    const lastResult=get('d4.nflpropsLastResult',null);
+    const reason=lastResult&&lastResult.error?`<div class="sub" style="color:var(--rust);margin-top:6px">${lastResult.error}</div>`:'';
+    const checked=lastResult&&lastResult.checked?`<div class="sub" style="color:var(--mute);margin-top:2px">Checked ${lastResult.checked} game${lastResult.checked===1?'':'s'} for props.</div>`:'';
+    return `<div class="empty">No props for this game yet. Tap ⚡ Pull odds to fetch player props from The Odds API.${reason}${checked}</div>`;
+  }
   const apiSection=apiProps.length?`<div style="margin-top:10px;border-top:1px solid var(--rule);padding-top:8px">
     <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">From The Odds API</div>
     ${apiProps.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:10.5px;margin-bottom:3px">
@@ -17079,7 +17122,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.66
+   NCAAF ENGINE — BUILD v1.71
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -18871,3 +18914,393 @@ SCRIPT_READY=true;
 </script>
 </body>
 </html>
+
+<!-- ═══ ODDS LOADER — surgical, all-sport, all-data-type intake ═══════════ -->
+<style>
+#v-odds .ol-sport-row{display:flex;gap:0;margin-bottom:12px;border-bottom:1px solid #1e2a36}
+#v-odds .ol-sport-btn{flex:1;padding:10px 0;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.06em;border:none;cursor:pointer;background:transparent;color:var(--mute);border-bottom:2px solid transparent}
+#v-odds .ol-sport-btn.on{color:var(--gold);border-bottom-color:var(--gold)}
+#v-odds .ol-dropzone{border:2px dashed #2a3a4a;border-radius:10px;padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:14px;background:#0d1520}
+#v-odds .ol-dropzone.drag{border-color:var(--gold);background:rgba(245,200,66,.06)}
+#v-odds .ol-dropzone p{font-size:12px;color:var(--mute);line-height:1.9}
+#v-odds .ol-dropzone strong{color:var(--gold)}
+#v-odds .ol-status{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mute);margin-bottom:10px;min-height:16px}
+#v-odds .ol-status.ok{color:#4caf84}
+#v-odds .ol-status.err{color:#e05c5c}
+#v-odds .ol-status.work{color:var(--gold)}
+#v-odds .ol-game{border:1px solid #1e2a36;border-radius:6px;margin-bottom:8px;overflow:hidden}
+#v-odds .ol-ghdr{background:#111820;padding:7px 12px;font-size:11px;display:flex;justify-content:space-between;color:#8a9baa;font-family:'IBM Plex Mono',monospace}
+#v-odds .ol-grow{display:grid;grid-template-columns:110px 1fr 60px 72px;gap:4px;padding:5px 12px;border-bottom:1px solid #1a2330;font-size:11px;font-family:'IBM Plex Mono',monospace}
+#v-odds .ol-grow:last-child{border-bottom:none}
+#v-odds .ol-mkt{color:var(--mute)}
+#v-odds .ol-side{color:#8a9baa}
+#v-odds .ol-price.p{color:#4caf84;font-weight:700}
+#v-odds .ol-price.m{color:#e05c5c;font-weight:700}
+#v-odds .ol-save{width:100%;padding:13px;background:var(--gold);color:#000;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;letter-spacing:.08em;border:none;border-radius:8px;cursor:pointer;margin-top:4px}
+#v-odds .ol-save:disabled{opacity:.35;cursor:not-allowed}
+#v-odds .ol-clear{background:#111820;color:var(--mute);border:1px solid #1e2a36;border-radius:8px;padding:10px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;cursor:pointer;margin-top:6px;width:100%}
+#v-odds .ol-count{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);text-align:right;margin-bottom:10px}
+#v-odds .ol-log{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#3a4a5a;margin-top:12px;line-height:1.9;white-space:pre-wrap}
+#v-odds .ol-typebadge{display:inline-block;font-size:9px;padding:2px 6px;border-radius:3px;margin-right:4px;font-family:'IBM Plex Mono',monospace;font-weight:700;letter-spacing:.04em}
+#v-odds .ol-typebadge.lines{background:rgba(0,194,255,.15);color:#00c2ff;border:1px solid #00c2ff}
+#v-odds .ol-typebadge.trend{background:rgba(245,200,66,.15);color:#f5c842;border:1px solid #f5c842}
+#v-odds .ol-typebadge.cons{background:rgba(76,175,132,.15);color:#4caf84;border:1px solid #4caf84}
+#v-odds .ol-typebadge.outside{background:rgba(160,120,255,.15);color:#a078ff;border:1px solid #a078ff}
+</style>
+
+<div class="view" id="v-odds">
+  <div class="sbar" style="margin-top:0"><h2>Odds Loader</h2><div class="ln"></div></div>
+  <div class="sub" style="margin-bottom:12px">Drop screenshots, PDFs, or txt files. Reads lines, trends, public consensus, and outside picks — routes each to the right sport and market automatically. Uploading here means the Games tabs never need their own separate upload panels again.</div>
+
+  <div class="ol-sport-row">
+    <button class="ol-sport-btn on" onclick="olSetSport('mlb',this)">⚾ MLB</button>
+    <button class="ol-sport-btn" onclick="olSetSport('nfl',this)">🏈 NFL</button>
+    <button class="ol-sport-btn" onclick="olSetSport('ncaaf',this)">🏟 CFB</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);letter-spacing:.08em">SLATE DATE</span>
+    <input type="date" id="olDate" style="background:#111820;border:1px solid #1e2a36;color:var(--chalk);padding:6px 10px;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:12px" onchange="olUpdateCount()">
+  </div>
+  <div class="ol-count" id="olCount">—</div>
+  <div class="ol-dropzone" id="olDrop"
+    onclick="document.getElementById('olFileIn').click()"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="olHandleDrop(event)">
+    <input type="file" id="olFileIn" accept="image/*,.pdf,.txt" multiple style="display:none" onchange="olHandleFiles(this.files)">
+    <p>Drop <strong>screenshots</strong>, <strong>PDFs</strong>, or <strong>txt files</strong><br>
+    <span class="ol-typebadge lines">LINES</span><span class="ol-typebadge trend">TRENDS</span><span class="ol-typebadge cons">CONSENSUS</span><span class="ol-typebadge outside">OUTSIDE PICKS</span></p>
+  </div>
+  <div class="ol-status" id="olStatus"></div>
+  <div id="olPreview"></div>
+  <button class="ol-save" id="olSaveBtn" disabled onclick="olSave()">SAVE TO THEDESK</button>
+  <button class="ol-clear" onclick="olClearDay()">Clear stored data for this date</button>
+  <div class="ol-log" id="olLog"></div>
+</div>
+
+<script>
+(function(){
+const OL={
+  sport:'mlb',parsed:{lines:[],trends:[],consensus:[],outside:[]},
+  lsKey:s=>s==='nfl'?'d4.nflshots':s==='ncaaf'?'d4.ncaafshots':'d4.bookshots',
+  trendKey:s=>s==='nfl'?'d4.nfltrends':s==='ncaaf'?'d4.ncaaftrends':'d4.exttrends',
+  consKey:s=>s==='nfl'?'d4.nflconsensus':s==='ncaaf'?'d4.ncaafconsensus':'d4.extconsensus',
+  outsideKey:s=>s==='nfl'?'d4.nflext':s==='ncaaf'?'d4.ncaafext':'d4.extpicks',
+  get:(k,d)=>{try{const v=localStorage.getItem(k);return v!=null?JSON.parse(v):d}catch{return d}},
+  set:(k,v)=>localStorage.setItem(k,JSON.stringify(v)),
+  today:()=>new Date().toISOString().slice(0,10),
+  getDate:()=>document.getElementById('olDate').value||new Date().toISOString().slice(0,10),
+};
+const OL_MODELS=['gemini-3.6-flash','gemini-3.7-flash','gemini-3.5-flash','gemini-2.5-flash'];
+
+function olStatus(msg,cls=''){const el=document.getElementById('olStatus');el.textContent=msg;el.className='ol-status '+cls;}
+function olLog(msg){document.getElementById('olLog').textContent+=msg+'\n';}
+
+window.olSetSport=function(s,el){
+  OL.sport=s;
+  document.querySelectorAll('.ol-sport-btn').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on');
+  olUpdateCount();
+};
+
+window.olUpdateCount=function(){
+  const d=OL.getDate();
+  const parts=['mlb','nfl','ncaaf'].map(s=>{
+    const nLines=(OL.get(OL.lsKey(s),{})[d]||[]).length;
+    const nTrend=(OL.get(OL.trendKey(s),{})[d]||[]).length;
+    const nCons=(OL.get(OL.consKey(s),{})[d]||[]).length;
+    const nOut=(OL.get(OL.outsideKey(s),{})[d]||[]).length;
+    const total=nLines+nTrend+nCons+nOut;
+    return total?`${s.toUpperCase()} ${total} (L${nLines}·T${nTrend}·C${nCons}·O${nOut})`:null;
+  }).filter(Boolean);
+  document.getElementById('olCount').textContent=parts.length?`Stored for ${d}: ${parts.join(' · ')}`:`No data stored for ${d}`;
+};
+
+if(document.getElementById('olDate'))document.getElementById('olDate').value=OL.today();
+window.olUpdateCount();
+
+async function olCallGemini(parts){
+  const key=OL.get('d4.ai',null)||(typeof get==='function'?get(LS.ai,''):'');
+  if(!key)throw new Error('No Gemini key — add it in Settings first.');
+  const body={contents:[{role:'user',parts}],generationConfig:{maxOutputTokens:8000,temperature:0.1}};
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  for(let mi=0;mi<OL_MODELS.length;mi++){
+    const model=OL_MODELS[mi];
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    for(let attempt=0;attempt<(mi===0?4:2);attempt++){
+      if(attempt>0||mi>0){const wait=Math.min(20000,900*Math.pow(2,attempt))+Math.random()*400;olStatus(`Gemini busy — retrying in ${Math.round(wait/1000)}s…`,'work');await sleep(wait);}
+      try{
+        olStatus(`Sending to ${model}…`,'work');
+        const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const j=await r.json();
+        if(j.error){if([503,429].includes(j.error.code||r.status))continue;throw new Error(j.error.message||JSON.stringify(j.error));}
+        const text=j.candidates?.[0]?.content?.parts?.[0]?.text||'';
+        if(!text)throw new Error('Empty Gemini response');
+        return text;
+      }catch(e){if(mi===OL_MODELS.length-1&&attempt>=1)throw e;}
+    }
+  }
+  throw new Error('All Gemini models exhausted');
+}
+
+window.olHandleDrop=function(e){e.preventDefault();document.getElementById('olDrop').classList.remove('drag');olHandleFiles(e.dataTransfer.files);};
+
+window.olHandleFiles=async function(files){
+  if(!files.length)return;
+  document.getElementById('olLog').textContent='';
+  OL.parsed={lines:[],trends:[],consensus:[],outside:[]};
+  document.getElementById('olPreview').innerHTML='';
+  document.getElementById('olSaveBtn').disabled=true;
+  olStatus(`Reading ${files.length} file${files.length>1?'s':''}…`,'work');
+
+  const txtFiles=[...files].filter(f=>f.name.endsWith('.txt')||f.type==='text/plain');
+  const mediaFiles=[...files].filter(f=>!f.name.endsWith('.txt')&&f.type!=='text/plain');
+
+  for(const f of txtFiles){
+    const text=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(f);});
+    const picks=olParseTxt(text);
+    olLog(`${f.name}: ${picks.length} lines parsed from txt`);
+    OL.parsed.lines=OL.parsed.lines.concat(picks);
+  }
+
+  if(mediaFiles.length){
+    const key=OL.get('d4.ai',null)||(typeof get==='function'?get(LS.ai,''):'');
+    if(!key){olStatus('No Gemini key — add it in Settings to read images/PDFs.','err');if(!OL.parsed.lines.length)return;}
+    else{
+      const parts=[];
+      for(const f of mediaFiles){
+        const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f);});
+        const mime=f.type||(f.name.endsWith('.pdf')?'application/pdf':'image/jpeg');
+        parts.push({inline_data:{mime_type:mime,data:b64}});
+      }
+      const sportLabel=OL.sport==='ncaaf'?'college football (CFB/NCAAF)':OL.sport.toUpperCase();
+      parts.push({text:`These are ${sportLabel} screenshots — could be sportsbook odds, a trends/stats site, a public-betting-consensus page, or an outside expert's picks column (like Covers.com or a similar site).
+
+Classify and extract EVERYTHING visible into ONE JSON object with four arrays:
+
+{
+  "lines": [{"away":"ABBR","home":"ABBR","market":"moneyline"|"spread"|"runline"|"total"|"f5side"|"f5total"|"f5runline"|"h1spread"|"h1total"|"q1spread"|"q1total","side":"away"|"home"|"over"|"under","line":number|null,"price":number}],
+  "trends": [{"away":"ABBR","home":"ABBR","team":"ABBR or null","text":"the trend statement exactly as written","implies":"ABBR of the side it favors, or null"}],
+  "consensus": [{"away":"ABBR","home":"ABBR","market":"moneyline"|"spread"|"total","awayPct":number,"homePct":number}],
+  "outside": [{"away":"ABBR","home":"ABBR","src":"the site/analyst name if shown, else 'Outside'","pick":"the specific side/total picked as text","side":"away"|"home"|"over"|"under"}]
+}
+
+Rules:
+- Use standard team abbreviations for the sport shown.
+- Only include an array's items if that TYPE of content is actually visible — most screenshots will only populate one or two of the four arrays, leave the rest empty.
+- For odds/lines: away=visiting team, home=home team, line=spread/total number (null for moneyline), price=American odds integer.
+- For trends: capture the trend text close to verbatim, and only set "implies" if the trend clearly favors one side.
+- For consensus: percentages should sum to roughly 100 for that market.
+- For outside picks: "src" is whichever site, show, or analyst name is visible on the screenshot; if genuinely anonymous, use "Outside".
+- Return ONLY the JSON object, no markdown fences, no explanation.`});
+
+      try{
+        const raw=await olCallGemini(parts);
+        olLog('Gemini:\n'+raw.slice(0,300)+(raw.length>300?'…':''));
+        const parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
+        const tagSport=arr=>(arr||[]).map(x=>({...x,sport:OL.sport}));
+        OL.parsed.lines=OL.parsed.lines.concat(tagSport(parsed.lines));
+        OL.parsed.trends=OL.parsed.trends.concat(tagSport(parsed.trends));
+        OL.parsed.consensus=OL.parsed.consensus.concat(tagSport(parsed.consensus));
+        OL.parsed.outside=OL.parsed.outside.concat(tagSport(parsed.outside));
+        olLog(`Extracted: ${parsed.lines?.length||0} lines, ${parsed.trends?.length||0} trends, ${parsed.consensus?.length||0} consensus, ${parsed.outside?.length||0} outside picks`);
+      }catch(e){olStatus('Vision error: '+e.message,'err');olLog(e.message);if(!OL.parsed.lines.length)return;}
+    }
+  }
+
+  const total=OL.parsed.lines.length+OL.parsed.trends.length+OL.parsed.consensus.length+OL.parsed.outside.length;
+  if(!total){olStatus('Nothing extracted — check files and try again.','err');return;}
+  olStatus(`✓ ${total} items ready — review and save`,'ok');
+  olRenderPreview();
+  document.getElementById('olSaveBtn').disabled=false;
+};
+
+// TXT PARSER — reads the IronSilk odds format (lines only; trends/consensus/
+// outside picks arrive via screenshot since they're rarely posted as plain text)
+function olParseTxt(text){
+  const picks=[];
+  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
+  let sport=OL.sport,curAway=null,curHome=null;
+  const normTeam=t=>(t||'').trim().toUpperCase().replace(/\s+\d{4}-\d{2}-\d{2}.*$/,'').trim();
+  const isAway=t=>{const u=t.toUpperCase();return u===curAway||curAway.startsWith(u)||u.startsWith(curAway);};
+  const isHome=t=>{const u=t.toUpperCase();return u===curHome||curHome.startsWith(u)||u.startsWith(curHome);};
+  const sideOf=(t1)=>isAway(t1)?['away','home']:['home','away'];
+  const push=obj=>picks.push({...obj,away:curAway,home:curHome,sport});
+
+  for(const l of lines){
+    if(/^MLB$/i.test(l)){sport='mlb';curAway=null;curHome=null;continue;}
+    if(/^NFL$/i.test(l)){sport='nfl';curAway=null;curHome=null;continue;}
+    if(/^(?:NCAAF|CFB)$/i.test(l)){sport='ncaaf';curAway=null;curHome=null;continue;}
+    const spM=l.match(/^(MLB|NFL|NCAAF|CFB)\s+(.+?)\s*@\s*(.+?)(?:\s+\d{4}-\d{2}-\d{2}.*)?$/i);
+    if(spM&&!(/^(ML|RL|OU|SPREAD|F5|H1|Q1):/i.test(l))){sport=/NCAAF|CFB/i.test(spM[1])?'ncaaf':spM[1].toLowerCase();curAway=normTeam(spM[2]);curHome=normTeam(spM[3]);continue;}
+    const bareM=l.match(/^(.+?)\s*@\s*(.+?)(?:\s+\d{4}-\d{2}-\d{2}.*)?$/);
+    if(bareM&&l.includes('@')&&!(/^(ML|RL|OU|SPREAD|F5|H1|Q1|H1SPREAD|H1OU|Q1SPREAD|Q1OU):/i.test(l))&&!l.includes('|')){curAway=normTeam(bareM[1]);curHome=normTeam(bareM[2]);continue;}
+    if(!curAway)continue;
+    const mlM=l.match(/^ML:\s*(\S+)\s*([+-]\d+)\s*\/\s*(\S+)\s*([+-]\d+)/i);
+    if(mlM){const[s1,s2]=sideOf(mlM[1]);push({market:'moneyline',side:s1,line:null,price:+mlM[2]});push({market:'moneyline',side:s2,line:null,price:+mlM[4]});continue;}
+    const rlM=l.match(/^RL:\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if(rlM){const[s1,s2]=sideOf(rlM[1]);push({market:'runline',side:s1,line:+rlM[2],price:+rlM[3]});push({market:'runline',side:s2,line:+rlM[5],price:+rlM[6]});continue;}
+    const ouM=l.match(/^OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
+    if(ouM){push({market:'total',side:'over',line:+ouM[1],price:+ouM[2]});push({market:'total',side:'under',line:+ouM[3],price:+ouM[4]});continue;}
+    const f5mlM=l.match(/^F5\s+ML:\s*(\S+)\s*([+-]\d+)\s*\/\s*(\S+)\s*([+-]\d+)/i);
+    if(f5mlM){const[s1,s2]=sideOf(f5mlM[1]);push({market:'f5side',side:s1,line:null,price:+f5mlM[2]});push({market:'f5side',side:s2,line:null,price:+f5mlM[4]});continue;}
+    const f5rlM=l.match(/^F5\s+RL:\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if(f5rlM){const[s1,s2]=sideOf(f5rlM[1]);push({market:'f5runline',side:s1,line:+f5rlM[2],price:+f5rlM[3]});push({market:'f5runline',side:s2,line:+f5rlM[5],price:+f5rlM[6]});continue;}
+    const f5ouM=l.match(/^F5\s+OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
+    if(f5ouM){push({market:'f5total',side:'over',line:+f5ouM[1],price:+f5ouM[2]});push({market:'f5total',side:'under',line:+f5ouM[3],price:+f5ouM[4]});continue;}
+    const spM2=l.match(/^SPREAD:\s*(.+?)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(.+?)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if(spM2){const[s1,s2]=sideOf(spM2[1]);push({market:'spread',side:s1,line:+spM2[2],price:+spM2[3]});push({market:'spread',side:s2,line:+spM2[5],price:+spM2[6]});continue;}
+    const h1spM=l.match(/^H1SPREAD:\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if(h1spM){const[s1,s2]=sideOf(h1spM[1]);push({market:'h1spread',side:s1,line:+h1spM[2],price:+h1spM[3]});push({market:'h1spread',side:s2,line:+h1spM[5],price:+h1spM[6]});continue;}
+    const h1ouM=l.match(/^H1OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
+    if(h1ouM){push({market:'h1total',side:'over',line:+h1ouM[1],price:+h1ouM[2]});push({market:'h1total',side:'under',line:+h1ouM[3],price:+h1ouM[4]});continue;}
+    const q1spM=l.match(/^Q1SPREAD:\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)\s*\/\s*(\S+)\s*([+-][\d.]+)\s*\(([+-]\d+)\)/i);
+    if(q1spM){const[s1,s2]=sideOf(q1spM[1]);push({market:'q1spread',side:s1,line:+q1spM[2],price:+q1spM[3]});push({market:'q1spread',side:s2,line:+q1spM[5],price:+q1spM[6]});continue;}
+    const q1ouM=l.match(/^Q1OU:\s*o([\d.]+)\s*\(([+-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+-]\d+)\)/i);
+    if(q1ouM){push({market:'q1total',side:'over',line:+q1ouM[1],price:+q1ouM[2]});push({market:'q1total',side:'under',line:+q1ouM[3],price:+q1ouM[4]});continue;}
+  }
+  return picks;
+}
+
+function olRenderPreview(){
+  const container=document.getElementById('olPreview');
+  container.innerHTML='';
+
+  if(OL.parsed.lines.length){
+    const games={};
+    OL.parsed.lines.forEach(p=>{const k=(p.away||'?')+'@'+(p.home||'?');if(!games[k])games[k]={away:p.away,home:p.home,lines:[]};games[k].lines.push(p);});
+    const section=document.createElement('div');
+    section.innerHTML='<div class="mktlab" style="margin-bottom:6px"><span class="ol-typebadge lines">LINES</span>'+OL.parsed.lines.length+' items</div>';
+    Object.values(games).forEach(g=>{
+      const block=document.createElement('div');block.className='ol-game';
+      block.innerHTML=`<div class="ol-ghdr"><b>${g.away} @ ${g.home}</b><span>${g.lines.length} markets</span></div>`;
+      g.lines.forEach(l=>{const pc=l.price>0?'p':'m';const lineStr=l.line!=null?(l.line>0?'+'+l.line:l.line):'';const row=document.createElement('div');row.className='ol-grow';row.innerHTML=`<span class="ol-mkt">${l.market}</span><span class="ol-side">${l.side}</span><span style="color:#8a9baa">${lineStr}</span><span class="ol-price ${pc}">${l.price>0?'+':''}${l.price}</span>`;block.appendChild(row);});
+      section.appendChild(block);
+    });
+    container.appendChild(section);
+  }
+
+  if(OL.parsed.trends.length){
+    const section=document.createElement('div');
+    section.innerHTML='<div class="mktlab" style="margin:10px 0 6px"><span class="ol-typebadge trend">TRENDS</span>'+OL.parsed.trends.length+' items</div>'+
+      OL.parsed.trends.map(t=>`<div class="ol-game" style="padding:8px 12px"><b>${t.away}@${t.home}</b>${t.team?' · '+t.team:''}<div style="color:#8a9baa;font-size:11px;margin-top:2px">${t.text}${t.implies?' → <span style="color:var(--gold)">'+t.implies+'</span>':''}</div></div>`).join('');
+    container.appendChild(section);
+  }
+
+  if(OL.parsed.consensus.length){
+    const section=document.createElement('div');
+    section.innerHTML='<div class="mktlab" style="margin:10px 0 6px"><span class="ol-typebadge cons">CONSENSUS</span>'+OL.parsed.consensus.length+' items</div>'+
+      OL.parsed.consensus.map(c=>`<div class="ol-game" style="padding:8px 12px"><b>${c.away}@${c.home}</b> · ${c.market}<div style="color:#8a9baa;font-size:11px;margin-top:2px">${c.away} ${c.awayPct}% / ${c.home} ${c.homePct}%</div></div>`).join('');
+    container.appendChild(section);
+  }
+
+  if(OL.parsed.outside.length){
+    const section=document.createElement('div');
+    section.innerHTML='<div class="mktlab" style="margin:10px 0 6px"><span class="ol-typebadge outside">OUTSIDE PICKS</span>'+OL.parsed.outside.length+' items</div>'+
+      OL.parsed.outside.map(o=>`<div class="ol-game" style="padding:8px 12px"><b>${o.away}@${o.home}</b><div style="color:#8a9baa;font-size:11px;margin-top:2px">${o.src||'Outside'}: ${o.pick}</div></div>`).join('');
+    container.appendChild(section);
+  }
+}
+
+window.olSave=function(){
+  const total=OL.parsed.lines.length+OL.parsed.trends.length+OL.parsed.consensus.length+OL.parsed.outside.length;
+  if(!total)return;
+  const d=OL.getDate();
+  const now=Date.now();
+  let saved=0;
+
+  // ── LINES — same per-sport routing as before ─────────────────────────
+  if(OL.parsed.lines.length){
+    const bySport={mlb:[],nfl:[],ncaaf:[]};
+    OL.parsed.lines.forEach(p=>{const s=p.sport||OL.sport;(bySport[s]||bySport.mlb).push(p);});
+    Object.entries(bySport).forEach(([s,picks])=>{
+      if(!picks.length)return;
+      const key=OL.lsKey(s);const all=OL.get(key,{});all[d]=all[d]||[];
+      const keyOf=x=>[x.game||((x.away||'')+'@'+(x.home||'')),x.market,x.side,x.line].join('|');
+      picks.forEach(x=>{
+        const away=(x.away||'').toUpperCase(),home=(x.home||'').toUpperCase();
+        const rec={away,home,game:away+'@'+home,market:x.market,side:x.side,line:x.line!=null?x.line:null,price:x.price,gid:null,capturedAt:now};
+        const k=keyOf(rec);const i=all[d].findIndex(y=>keyOf(y)===k);
+        if(i>=0){all[d][i]=rec;}else{all[d].push(rec);}
+        saved++;
+      });
+      OL.set(key,all);
+      olLog(`${s.toUpperCase()} lines: ${picks.length} → ${key}[${d}]`);
+    });
+  }
+
+  // ── TRENDS ────────────────────────────────────────────────────────────
+  if(OL.parsed.trends.length){
+    const bySport={mlb:[],nfl:[],ncaaf:[]};
+    OL.parsed.trends.forEach(t=>{const s=t.sport||OL.sport;(bySport[s]||bySport.mlb).push(t);});
+    Object.entries(bySport).forEach(([s,items])=>{
+      if(!items.length)return;
+      const key=OL.trendKey(s);const all=OL.get(key,{});all[d]=all[d]||[];
+      items.forEach(t=>{
+        const away=(t.away||'').toUpperCase(),home=(t.home||'').toUpperCase();
+        all[d].push({away,home,game:away+'@'+home,team:t.team?t.team.toUpperCase():null,text:t.text,implies:t.implies?t.implies.toUpperCase():null,src:t.src||'Uploaded',capturedAt:now});
+        saved++;
+      });
+      OL.set(key,all);
+      olLog(`${s.toUpperCase()} trends: ${items.length} → ${key}[${d}]`);
+    });
+  }
+
+  // ── CONSENSUS ─────────────────────────────────────────────────────────
+  if(OL.parsed.consensus.length){
+    const bySport={mlb:[],nfl:[],ncaaf:[]};
+    OL.parsed.consensus.forEach(c=>{const s=c.sport||OL.sport;(bySport[s]||bySport.mlb).push(c);});
+    Object.entries(bySport).forEach(([s,items])=>{
+      if(!items.length)return;
+      const key=OL.consKey(s);const all=OL.get(key,{});all[d]=all[d]||[];
+      items.forEach(c=>{
+        const away=(c.away||'').toUpperCase(),home=(c.home||'').toUpperCase();
+        all[d].push({away,home,game:away+'@'+home,market:c.market||'moneyline',awayPct:c.awayPct,homePct:c.homePct,src:c.src||'Uploaded',capturedAt:now});
+        saved++;
+      });
+      OL.set(key,all);
+      olLog(`${s.toUpperCase()} consensus: ${items.length} → ${key}[${d}]`);
+    });
+  }
+
+  // ── OUTSIDE PICKS ─────────────────────────────────────────────────────
+  if(OL.parsed.outside.length){
+    const bySport={mlb:[],nfl:[],ncaaf:[]};
+    OL.parsed.outside.forEach(o=>{const s=o.sport||OL.sport;(bySport[s]||bySport.mlb).push(o);});
+    Object.entries(bySport).forEach(([s,items])=>{
+      if(!items.length)return;
+      const key=OL.outsideKey(s);const all=OL.get(key,{});all[d]=all[d]||[];
+      items.forEach(o=>{
+        const away=(o.away||'').toUpperCase(),home=(o.home||'').toUpperCase();
+        all[d].push({away,home,game:away+'@'+home,src:o.src||'Outside',pick:o.pick,side:o.side||null,capturedAt:now});
+        saved++;
+      });
+      OL.set(key,all);
+      olLog(`${s.toUpperCase()} outside picks: ${items.length} → ${key}[${d}]`);
+    });
+  }
+
+  olStatus(`✓ ${saved} items saved for ${d} across lines/trends/consensus/outside — switch to Games to see them`,'ok');
+  olUpdateCount();
+  document.getElementById('olSaveBtn').disabled=true;
+  OL.parsed={lines:[],trends:[],consensus:[],outside:[]};
+  document.getElementById('olPreview').innerHTML='';
+  try{if(typeof render==='function')render();}catch(_){}
+  try{if(typeof repairNCAAFKeys==='function')repairNCAAFKeys();}catch(_){}
+  try{if(ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();}catch(_){}
+  try{if(ACTIVE_SPORT==='nfl'&&typeof renderNFL==='function')renderNFL();}catch(_){}
+};
+
+window.olClearDay=function(){
+  const d=OL.getDate();
+  const keys=[OL.lsKey(OL.sport),OL.trendKey(OL.sport),OL.consKey(OL.sport),OL.outsideKey(OL.sport)];
+  let total=0;
+  keys.forEach(key=>{const all=OL.get(key,{});total+=(all[d]||[]).length;});
+  if(!total){olStatus(`No ${OL.sport.toUpperCase()} data stored for ${d}`,'err');return;}
+  if(!confirm(`Delete all ${total} ${OL.sport.toUpperCase()} items (lines+trends+consensus+outside) for ${d}?`))return;
+  keys.forEach(key=>{const all=OL.get(key,{});delete all[d];OL.set(key,all);});
+  olStatus(`Cleared ${total} items for ${d}`,'ok');
+  olUpdateCount();
+};
+})();
+</script>
