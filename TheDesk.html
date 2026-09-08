@@ -506,7 +506,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.71</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.72</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -14519,7 +14519,7 @@ function renderCoachTab(){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.71
+   NFL ENGINE — BUILD v1.72
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -15148,15 +15148,19 @@ async function pullLiveOdds(){
     if(ACTIVE_SPORT==='nfl'){
       el.innerHTML='<div class="empty">Pulling NFL odds + props…</div>';
       const nflRes=await fetchNFLLiveOdds()||{};
-      el.innerHTML=`<div class="tkt hi"><h3>NFL odds pulled ✓</h3>
+      const errLine=nflRes.error?`<div class="sub" style="color:var(--rust);margin-top:4px">${nflRes.error}</div>`:'';
+      el.innerHTML=`<div class="tkt hi"><h3>NFL odds pulled ${nflRes.error?'✗':'✓'}</h3>
         <div class="sub">${nflRes.lines||0} lines across ${nflRes.games||0} games${nflRes.props?` · ${nflRes.props} player props`:''}</div>
-        <div class="sub" style="color:var(--mute);margin-top:4px">Tiles on each game card now show REAL. Props available in the A-G panel.</div></div>`;
+        ${errLine}
+        ${!nflRes.error?'<div class="sub" style="color:var(--mute);margin-top:4px">Tiles on each game card now show REAL. Props available in the A-G panel.</div>':''}</div>`;
     }else if(ACTIVE_SPORT==='ncaaf'){
       el.innerHTML='<div class="empty">Pulling CFB odds + props…</div>';
       const cfbRes=await fetchNCAAFLiveOdds()||{};
-      el.innerHTML=`<div class="tkt hi"><h3>CFB odds pulled ✓</h3>
+      const errLine=cfbRes.error?`<div class="sub" style="color:var(--rust);margin-top:4px">${cfbRes.error}</div>`:'';
+      el.innerHTML=`<div class="tkt hi"><h3>CFB odds pulled ${cfbRes.error?'✗':'✓'}</h3>
         <div class="sub">${cfbRes.lines||0} lines across ${cfbRes.games||0} games${cfbRes.props?` · ${cfbRes.props} player props`:''}</div>
-        <div class="sub" style="color:var(--mute);margin-top:4px">Tiles on each game card now show REAL. Props available in the A-G panel.</div></div>`;
+        ${errLine}
+        ${!cfbRes.error?'<div class="sub" style="color:var(--mute);margin-top:4px">Tiles on each game card now show REAL. Props available in the A-G panel.</div>':''}</div>`;
     }else{
       el.innerHTML='<div class="empty">Pulling MLB odds…</div>';
       await fetchMLBLiveOdds();
@@ -15306,17 +15310,27 @@ async function fetchFootballProps(sport,propStorageKey){
   }catch(e){return{count:0,error:e.message};}
 }
 async function fetchNCAAFLiveOdds(){
-  const key=get(LS.oddspapi,'');if(!key)return;
+  const key=get(LS.oddspapi,'');if(!key)return{games:0,lines:0,error:'No Odds API key set.'};
   const url=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
-  const r=await fetch(url);const j=await r.json();
-  if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
-  const {games,lines}=parseOddsApiFootballGames(j,NCAAF_GAMES||[],LS.ncaafshots);
-  const propResult=await fetchFootballProps('ncaaf','d4.ncaafprops').catch(e=>({count:0,error:e.message}));
-  set('d4.ncaafpropsLastResult',propResult);
-  try{repairNCAAFKeys()}catch(e){}
-  NCAAF_SIMS={};
-  if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
-  return{games,lines,props:propResult.count,propsError:propResult.error};
+  try{
+    const r=await fetch(url);
+    const j=await r.json();
+    if(!r.ok){
+      return{games:0,lines:0,error:`The Odds API error (HTTP ${r.status}): ${j.message||j.error_code||'unknown error'}`};
+    }
+    if(!Array.isArray(j))return{games:0,lines:0,error:'Unexpected response shape from The Odds API — not a game list.'};
+    if(!j.length)return{games:0,lines:0,error:'The Odds API returned zero CFB games right now — nothing posted for this window yet.'};
+    const {games,lines}=parseOddsApiFootballGames(j,NCAAF_GAMES||[],LS.ncaafshots);
+    const propResult=await fetchFootballProps('ncaaf','d4.ncaafprops').catch(e=>({count:0,error:e.message}));
+    set('d4.ncaafpropsLastResult',propResult);
+    try{repairNCAAFKeys()}catch(e){}
+    NCAAF_SIMS={};
+    if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
+    return{games,lines,props:propResult.count,propsError:propResult.error};
+  }catch(e){
+    console.warn('CFB live odds failed:',e.message);
+    return{games:0,lines:0,error:'Request failed: '+e.message};
+  }
 }
 
 // ── Boot: restore NFL games from cache ────────────────────────────────────────
@@ -16190,11 +16204,21 @@ function gradeNFLResults(){
 // Augments uploaded txt odds with live market data when key is available.
 // Uses same LS.oddspapi key as MLB to avoid requiring a second key.
 async function fetchNFLLiveOdds(){
-  const key=get(LS.oddspapi,'');if(!key)return;
+  const key=get(LS.oddspapi,'');if(!key)return{games:0,lines:0,error:'No Odds API key set.'};
   const url=`https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
   try{
-    const r=await fetch(url);const j2=await r.json();
-    if(!Array.isArray(j2))throw new Error(j2.message||'Bad API response');
+    const r=await fetch(url);
+    const j2=await r.json();
+    if(!r.ok){
+      // The Odds API returns {message, error_code} on failure (bad key, rate
+      // limit, etc) with a 4xx/5xx status — that response is still valid JSON
+      // so it passed straight through the old Array.isArray check as if it
+      // might be data, then threw a vague "Bad API response" that got
+      // swallowed below. Surface the real reason instead.
+      return{games:0,lines:0,error:`The Odds API error (HTTP ${r.status}): ${j2.message||j2.error_code||'unknown error'}`};
+    }
+    if(!Array.isArray(j2))return{games:0,lines:0,error:'Unexpected response shape from The Odds API — not a game list.'};
+    if(!j2.length)return{games:0,lines:0,error:'The Odds API returned zero NFL games right now — nothing posted for this window yet.'};
     const {games,lines}=parseOddsApiFootballGames(j2,NFL_GAMES||[],LS.nflshots);
     const propResult=await fetchFootballProps('nfl','d4.nflprops').catch(e=>({count:0,error:e.message}));
     set('d4.nflpropsLastResult',propResult);
@@ -16202,7 +16226,10 @@ async function fetchNFLLiveOdds(){
     NFL_SIMS={};
     if(ACTIVE_SPORT==='nfl')renderNFL();
     return{games,lines,props:propResult.count,propsError:propResult.error};
-  }catch(e){console.warn('NFL live odds failed:',e.message);}
+  }catch(e){
+    console.warn('NFL live odds failed:',e.message);
+    return{games:0,lines:0,error:'Request failed: '+e.message};
+  }
 }
 
 // Full team name → abbreviation map for Odds API
@@ -17122,7 +17149,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.71
+   NCAAF ENGINE — BUILD v1.72
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
