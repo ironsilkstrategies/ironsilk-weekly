@@ -506,7 +506,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.73</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.75</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -14526,7 +14526,7 @@ function renderCoachTab(){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   NFL ENGINE — BUILD v1.73
+   NFL ENGINE — BUILD v1.75
    Sport switcher, NFL sim, NFL game cards, NFL data layer
    All 32 teams, preseason through playoffs.
    ═══════════════════════════════════════════════════════════════ */
@@ -14892,6 +14892,12 @@ function _parseNFLEvents(j){
       homeScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='home')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
       away:{abbr:awayAbbr,name:away.team.displayName||awayAbbr,offRating:24,defRating:24,record:away.records&&away.records[0]&&away.records[0].summary||''},
       home:{abbr:homeAbbr,name:home.team.displayName||homeAbbr,offRating:24,defRating:24,record:home.records&&home.records[0]&&home.records[0].summary||''},
+      // ESPN's own scoreboard event returns a "weather" field right alongside
+      // competitions — displayValue, temperature, conditionId. It was never
+      // read, so nflEnvMult()'s already-correct weather math (built earlier
+      // this session) had nothing to multiply against and stayed permanently
+      // inert. No second fetch needed — it's already in this response.
+      weather:e.weather?{temp:e.weather.temperature,cond:e.weather.displayValue,wind:null}:null,
     };
   }).filter(Boolean);
   const cacheKey=(NFL_SEASON||'')+'w'+(NFL_WEEK||'');
@@ -15771,7 +15777,57 @@ function nflIsConferenceGame(g){
 // Points per game (off) and points allowed per game (def) for each team.
 // Cached weekly, not daily — NFL teams don't change dramatically day to day.
 
+// ── Prior-season fallback ratings ──────────────────────────────────────────
+// The sim only ever had one data source: this season's box scores. In
+// preseason/Week 1 that's empty for every team, so NFL_POWER stayed
+// completely unrated and the sim fell back to a flat league-average number
+// for all 32 teams — which is why every early-week game projected nearly
+// identically. Real teams don't reset to average just because the calendar
+// flipped; last season's production is a genuine signal until this year's
+// sample is big enough to take over. This fetches the most recently
+// completed season's per-game stats as a base rating, then blends it toward
+// the current season using the same regW curve simNFLGame already had —
+// just never had a real number to decay from.
+async function fetchNFLPriorSeasonRatings(){
+  try{
+    const now=new Date();
+    // NFL season labeled by its START year — a game in Sept 2026 is the
+    // "2026" season; one in Jan/Feb 2027 is still the 2026 season (playoffs).
+    // The most recently COMPLETED season is last year's start-year label.
+    const priorYear=now.getMonth()>=7?now.getFullYear()-1:now.getFullYear()-2;
+    const prior={};
+    for(const confId of [8,7]){ // 8=AFC, 7=NFC
+      const url=`https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${priorYear}/types/2/groups/${confId}/standings`;
+      const r=await fetch(url);
+      if(!r.ok)continue;
+      const j=await r.json();
+      const entries=(j.standings&&j.standings.entries)||j.entries||[];
+      for(const e of entries){
+        // entries here are $ref-style — team + stats may need a follow-up
+        // fetch depending on response shape; handle both inline and $ref.
+        let teamAbbr=null,stats=e.stats;
+        if(e.team&&e.team.$ref){
+          try{const tr=await fetch(e.team.$ref);const tj=await tr.json();teamAbbr=(tj.abbreviation||'').toUpperCase();}catch(_){}
+        }else if(e.team&&e.team.abbreviation){
+          teamAbbr=e.team.abbreviation.toUpperCase();
+        }
+        if(!teamAbbr)continue;
+        const statMap={};
+        (stats||[]).forEach(s=>{statMap[s.name]=s.value;});
+        const gp=+statMap.gamesPlayed||17;
+        const pf=+statMap.pointsFor||0,pa=+statMap.pointsAgainst||0;
+        if(!pf&&!pa)continue;
+        prior[teamAbbr]={offPPG:pf/gp,defPPG:pa/gp,priorSeason:priorYear,priorGP:gp};
+      }
+    }
+    return prior;
+  }catch(e){console.warn('NFL prior-season fallback failed:',e.message);return{};}
+}
+
 async function fetchNFLPowerRatings(){
+  // Fetch last season's ratings first so they're ready as a fallback the
+  // moment we know this season's sample is thin.
+  const priorRatings=await fetchNFLPriorSeasonRatings();
   try{
     // ESPN team stats — regular season standings with offensive/defensive numbers
     const url='https://site.api.espn.com/apis/site/v2/sports/football/nfl/standings';
@@ -15798,15 +15854,38 @@ async function fetchNFLPowerRatings(){
       const stats={};
       (e.stats||[]).forEach(s=>{stats[s.name]=s.value;});
       const gp=+stats.gamesPlayed||0;
-      if(gp<1)return;                 // no games -> no rating, not a fake average
       const pf=+stats.pointsFor||0, pa=+stats.pointsAgainst||0;
-      if(!pf&&!pa)return;
+      const prior=priorRatings[abbr];
+      if(gp<1||(!pf&&!pa)){
+        // No current-season sample yet — use last season's real production
+        // instead of leaving the team unrated. This is still an actual team
+        // number, not a league-average placeholder; it just comes from the
+        // most recent completed season rather than this one.
+        if(prior){
+          NFL_POWER[abbr]={
+            offPPG:prior.offPPG,defPPG:prior.defPPG,gp:0,
+            wins:stats.wins||0,losses:stats.losses||0,ties:stats.ties||0,
+            sos:stats.strengthOfSchedule||0,streak:stats.streak||0,
+            fromPriorSeason:prior.priorSeason,
+          };
+        }
+        return;
+      }
+      // Real current-season games exist — blend them with last season's
+      // number, weighted toward this season as more games accumulate. At
+      // gp=1 this is mostly still last year's signal; by gp=8+ it's almost
+      // entirely this year's, same regression curve simNFLGame already uses.
+      const curOff=pf/gp,curDef=pa/gp;
+      const blendW=Math.max(0,Math.min(1,gp/8)); // 0 at gp=0, 1 at gp>=8
+      const offPPG=prior?curOff*blendW+prior.offPPG*(1-blendW):curOff;
+      const defPPG=prior?curDef*blendW+prior.defPPG*(1-blendW):curDef;
       NFL_POWER[abbr]={
-        offPPG:pf/gp, defPPG:pa/gp, gp,
+        offPPG, defPPG, gp,
         wins:stats.wins||0,losses:stats.losses||0,ties:stats.ties||0,
         pf,pa,
         sos:stats.strengthOfSchedule||0,
         streak:stats.streak||0,
+        blendedFromPrior:!!prior,
       };
     });
     NFL_POWER_RATED=Object.keys(NFL_POWER).length;
@@ -17077,10 +17156,18 @@ function nflPropsPanel(g,s){
   }
   const apiSection=apiProps.length?`<div style="margin-top:10px;border-top:1px solid var(--rule);padding-top:8px">
     <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">From The Odds API</div>
-    ${apiProps.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:10.5px;margin-bottom:3px">
+    ${apiProps.map(p=>{
+      // Yes/No markets (anytime_td, 1st_td, last_td) have no numeric line —
+      // p.line is genuinely undefined for these, and the old template always
+      // printed it literally as the word "undefined" between the stat and
+      // player name. Only include the line segment when one actually exists.
+      const lineStr=p.line!=null?` ${p.line}`:'';
+      const sideStr=p.side&&p.side!=='yes'&&p.side!=='no'?` ${p.side}`:'';
+      const label=p.line!=null?`${p.stat.replace(/_/g,' ')}${lineStr}${sideStr}`:`${p.stat.replace(/_/g,' ')}`;
+      return `<div style="display:flex;justify-content:space-between;gap:10px;font-size:10.5px;margin-bottom:3px">
       <span style="color:var(--chalk)">${p.player}</span>
-      <span style="color:var(--mute)">${p.stat.replace(/_/g,' ')} ${p.line} ${p.side} <span style="color:var(--gold)">${p.price>0?'+':''}${p.price}</span></span>
-    </div>`).join('')}
+      <span style="color:var(--mute)">${label} <span style="color:var(--gold)">${p.price>0?'+':''}${p.price}</span></span>
+    </div>`;}).join('')}
   </div>`:'';
   if(!props.length)return apiSection||'<div class="empty">No props available.</div>';
   return`<div class="sub" style="font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.8">
@@ -17156,7 +17243,7 @@ function nflCard(g){return nflCardFull(g);}
 // nflOnActivate is called from doSportSwitch directly — no override needed
 
 /* ═══════════════════════════════════════════════════════════════════════
-   NCAAF ENGINE — BUILD v1.73
+   NCAAF ENGINE — BUILD v1.75
    Full college football intelligence layer — same depth as NFL
    FBS teams · ESPN schedule · Sim engine · A-G eval · Calibration
    ═══════════════════════════════════════════════════════════════════════ */
@@ -18524,10 +18611,17 @@ function ncaafPropsPanel(g){
   }
   return`<div style="font-family:'IBM Plex Mono';font-size:10.5px;padding:4px 0">
     <div style="font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Player props · from The Odds API</div>
-    ${apiProps.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px">
+    ${apiProps.map(p=>{
+      // Yes/No markets (anytime_td etc.) have no numeric line — only show
+      // the line/side segment when a line actually exists, instead of
+      // printing the literal word "undefined".
+      const lineStr=p.line!=null?` ${p.line}`:'';
+      const sideStr=p.side&&p.side!=='yes'&&p.side!=='no'?` ${p.side}`:'';
+      const label=p.line!=null?`${p.stat.replace(/_/g,' ')}${lineStr}${sideStr}`:`${p.stat.replace(/_/g,' ')}`;
+      return `<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px">
       <span style="color:var(--chalk)">${p.player}</span>
-      <span style="color:var(--mute)">${p.stat.replace(/_/g,' ')} ${p.line} ${p.side} <span style="color:var(--gold)">${p.price>0?'+':''}${p.price}</span></span>
-    </div>`).join('')}
+      <span style="color:var(--mute)">${label} <span style="color:var(--gold)">${p.price>0?'+':''}${p.price}</span></span>
+    </div>`;}).join('')}
   </div>`;
 }
 function ncaafTrendPanel(g,s){
