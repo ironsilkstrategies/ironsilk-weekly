@@ -754,7 +754,9 @@ async function fetchNCAAFLiveOdds(){
    not the rare fresh-network-load one — the refresh trigger has to live here
    too, or a stale cached status just sits unrefreshed on every ordinary
    reopen. */
-whenScriptReady(()=>{refreshNFLLiveScores().catch(()=>{})},1500);
+if(window.__PAGE_SPORT__==='nfl'){
+  whenScriptReady(()=>{refreshNFLLiveScores().catch(()=>{})},1500);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    NFL INTELLIGENCE LAYER — A+++ build
@@ -1976,8 +1978,10 @@ let _nflDataLoaded=false;
 function nflOnActivate(){
   if(_nflDataLoaded)return;
   _nflDataLoaded=true;
-  fetchNFLPowerRatings();
-  fetchNFLLiveOdds();
+  if(window.__PAGE_SPORT__==='nfl'){
+    fetchNFLPowerRatings();
+    fetchNFLLiveOdds();
+  }
 }
 
 // ── Updated NFL game card with trend panel ───────────────────────────────────
@@ -3195,6 +3199,33 @@ function _parseNCAAFEvents(j){
         offRating:26,defRating:26,record:home.records&&home.records[0]&&home.records[0].summary||''},
     };
   }).filter(Boolean);
+
+  /* ── GAME ALLOWLIST ─────────────────────────────────────────────────────
+     Only keep games we have odds + predictions data for. Drops ~80 games
+     before render — eliminates the lag from processing the full 99-game slate.
+     Keys are AWAY@HOME using ESPN abbreviations (uppercase). */
+  const _AL=new Set([
+    'USF@ARMY','ODU@VT','PSU@TEM','ORE@OKST','ASU@TAM','WSU@KSU',
+    'OKLA@MICH','APP@ECU','WAKE@PUR','WKU@UGA','UTSA@TXST','ALA@UK',
+    'RICE@ND','EMU@MSU','MD@CONN','MSST@MINN','ARIZ@BYU','UCF@PITT',
+    'DUKE@ILL','CAL@SYR','USU@WASH','ULM@UAB','UNLV@UNT','DEL@VAN',
+    'MEM@BSU','JVST@OHIO','BUFF@FIU','USA@TULN','TLSA@SHSU','BGSU@NEB',
+    'TENN@GT','MTU@MRSH','GSU@KENN','ISU@IOWA','OSU@TEX','SDSU@UCLA',
+    'GASO@CLEM','FAU@NAVY','TTU@ORST','USM@AUB','CHAR@MISS','NDSU@AFA',
+    'ARK@UTAH','CSUS@FRES','ULL@USC','NMSU@HAW',
+    // ESPN alternate abbreviations
+    'APPST@ECU','WAKE FOR@PUR','WKU@GEORGIA','MISS ST@MINN',
+    'E MICH@MICH ST','JKSNV ST@OHIO','SAC ST@FRES ST','SAC ST@FRESNO ST',
+    'BOWLING GR@NEB','BOWLING GR@NEBRASKA','S ALA@TULANE','S ALA@TULN',
+    'GEORGIA SO@CLEM','GEORGIA SO@CLEMSON','MID TENN@MRSH','MID TENN@MARSHALL',
+    'NM STATE@HAW','NM STATE@HAWAII','LA-LAFAYET@USC','UL LAFAYET@USC',
+    'GEORGIA ST@KENN','GEORGIA ST@KENNESAW','NDAK ST@AFA','NDAK ST@AIR FORCE',
+    'N DAKO ST@AFA','JACK ST@OHIO','JAX ST@OHIO',
+  ]);
+  NCAAF_GAMES=NCAAF_GAMES.filter(function(g){
+    return _AL.has((g.away.abbr+'@'+g.home.abbr).toUpperCase().trim());
+  });
+
   const cacheKey=(NCAAF_SEASON||'')+'w'+(NCAAF_WEEK||'');
   const cache=get(LS.ncaafgames,{});
   cache[cacheKey]={ts:Date.now(),v:NCAAF_GAMES,week:NCAAF_WEEK,season:NCAAF_SEASON};
@@ -3929,7 +3960,7 @@ let _ncaafDataLoaded=false;
 function ncaafOnActivate(){
   if(_ncaafDataLoaded)return;
   _ncaafDataLoaded=true;
-  fetchNCAAFPowerRatings();
+  if(window.__PAGE_SPORT__==='ncaaf'){setTimeout(()=>fetchNCAAFPowerRatings().catch(()=>{}),4000);}
 }
 
 // ── Restore NCAAF games from cache ───────────────────────────────────────────
@@ -3946,7 +3977,9 @@ function ncaafOnActivate(){
    however many hours ago just sat there unchanged, which is the actual
    mechanism behind an 11am game still reading "Scheduled" at 2pm. Trigger the
    same refresh here too, once the script has finished loading. */
-whenScriptReady(()=>{refreshNCAAFLiveScores().catch(()=>{})},1500);
+if(window.__PAGE_SPORT__==='ncaaf'){
+  whenScriptReady(()=>{refreshNCAAFLiveScores().catch(()=>{})},2500);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    NFL ENGINE END

@@ -12583,9 +12583,17 @@ async function boot(){
      parsing usually finished inside 1.5s; on a slow device it would race and
      throw a temporal-dead-zone error. Wait for the script to actually finish
      instead of guessing at a delay. */
-  whenScriptReady(()=>{fetchCFBDRatings().catch(()=>{})});
-  whenScriptReady(()=>{fetchCFBPortal().catch(()=>{})},2000);
-  whenScriptReady(()=>{fetchNFLDepthCharts().catch(()=>{})},1200);
+  /* Only fetch the heavy background feeds for the sport this page serves.
+     On cfb.html, skip NFL depth; on nfl.html, skip CFB ratings/portal.
+     On mlb.html, skip both — they're never used. */
+  const _ps=window.__PAGE_SPORT__||'mlb';
+  if(_ps==='ncaaf'){
+    whenScriptReady(()=>{fetchCFBDRatings().catch(()=>{})},3000);
+    whenScriptReady(()=>{fetchCFBPortal().catch(()=>{})},6000);
+  }
+  if(_ps==='nfl'){
+    whenScriptReady(()=>{fetchNFLDepthCharts().catch(()=>{})},3000);
+  }
   /* This used to auto-restore whatever sport was last active and redirect
      to it — sensible on a single page where "switching sport" just meant
      repainting the same document. On the split (mlb.html/nfl.html/cfb.html),
@@ -12621,30 +12629,40 @@ async function boot(){
     if(typeof nflOnActivate==='function')nflOnActivate();
   }else if(pageSport==='ncaaf'){
     ACTIVE_SPORT='ncaaf';
-    if(typeof loadNCAAFSchedule==='function')await loadNCAAFSchedule().catch(()=>{});
+    /* Render from cache FIRST so the board appears instantly, then fetch
+       fresh schedule in the background. This eliminates the blank-screen
+       wait on CFB startup — cached games show immediately, live updates
+       arrive a second or two later without blocking the UI. */
     if(typeof renderNCAAF==='function')renderNCAAF();
     if(typeof ncaafOnActivate==='function')ncaafOnActivate();
+    if(typeof loadNCAAFSchedule==='function')
+      setTimeout(()=>loadNCAAFSchedule().catch(()=>{}),800);
   }else{
     await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);
     await loadESPN();
   }
-  // catch up anything left ungraded from previous days before painting anything
-  try{await backfillGrading(true)}catch(e){console.warn('backfill',e)}
-  // THE ITEM-9 GAP: backfillGrading fetches missing finals/box scores for any
-  // stuck prior day, but never actually re-tried settling tickets with that
-  // newly-filled-in data — it could sit correctly graded in the archive while
-  // the ticket itself stayed unsettled/unarchived until the next unrelated
-  // trigger happened to fire. Settling right here, once, right after the data
-  // that was missing is now present, closes that gap.
-  try{settleLockedTickets()}catch(e){console.warn('settle after backfill',e)}
-  try{await backfillUngradedBestDays()}catch(e){}
+  // catch up anything left ungraded from previous days — run async on football
+  // pages so it never blocks the board render
+  if(pageSport==='mlb'){
+    try{await backfillGrading(true)}catch(e){console.warn('backfill',e)}
+    try{settleLockedTickets()}catch(e){console.warn('settle after backfill',e)}
+    try{await backfillUngradedBestDays()}catch(e){}
+  }else{
+    setTimeout(async()=>{
+      try{await backfillGrading(true)}catch(e){}
+      try{settleLockedTickets()}catch(e){}
+      try{await backfillUngradedBestDays()}catch(e){}
+    },5000);
+  }
   snapshot();snapshotBest();paintSlip();renderDayPicker();renderBookStatus();
   if(BOOTED)return;  // settings can be reopened/resaved any number of times — background
                       // timers only ever get registered once, first boot, no matter how
                       // many times saveKeys() runs afterward
   BOOTED=true;
-  setInterval(()=>{loadOdds(false).then(()=>{try{captureCLV()}catch(e){}})},3e5);
-  setInterval(()=>loadSharp(false),3e5);
+  if(pageSport==='mlb'){
+    setInterval(()=>{loadOdds(false).then(()=>{try{captureCLV()}catch(e){}})},3e5);
+    setInterval(()=>loadSharp(false),3e5);
+  }
   if(get(LS.ghrepo,'')&&get(LS.ghtoken,'')){
     const last=Number(localStorage.getItem('d4.lastGhSync')||0);
     if(Date.now()-last>20*36e5)pushToGitHub(false);
@@ -12653,13 +12671,12 @@ async function boot(){
       if(Date.now()-l>20*36e5)pushToGitHub(false);
     },36e5);
   }
-  setInterval(()=>{
-    // if a preview day's been sitting open 20+ minutes, pull back to today automatically —
-    // the live board and grading were never actually blocked, but leaving it visually
-    // parked on a future date this long risks someone thinking that's still today
-    if(PREVIEW_DAY&&PREVIEW_STARTED&&(Date.now()-PREVIEW_STARTED)>12e5)backToToday();
-    loadAll().then(()=>{loadESPN();snapshot();snapshotBest();autoGradeIfFinals()});
-  },9e5);
+  if(pageSport==='mlb'){
+    setInterval(()=>{
+      if(PREVIEW_DAY&&PREVIEW_STARTED&&(Date.now()-PREVIEW_STARTED)>12e5)backToToday();
+      loadAll().then(()=>{loadESPN();snapshot();snapshotBest();autoGradeIfFinals()});
+    },9e5);
+  }
   // check every 3 minutes whether any game has gone final since the last pass, and if so
   // grade + settle immediately instead of waiting for someone to open the Grades tab
   setInterval(()=>autoGradeIfFinals(),18e4);
