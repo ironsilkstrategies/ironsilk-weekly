@@ -18044,6 +18044,42 @@ function _parseNCAAFEvents(j){
         offRating:26,defRating:26,record:home.records&&home.records[0]&&home.records[0].summary||''},
     };
   }).filter(Boolean);
+
+  /* ── GAME ALLOWLIST — only show matchups we have data for ──────────────
+     Keeps startup fast by dropping the other 80+ games before render.
+     Matching is abbr-based; ESPN abbrs are normalized to uppercase.       */
+  const CFB_ALLOWLIST=new Set([
+    'USF@ARMY','ODU@VT','PSU@TEM','ORE@OKST','ASU@TAM','WSU@KSU',
+    'OKLA@MICH','APP@ECU','WAKE@PUR','WKU@UGA','UTSA@TXST','ALA@UK',
+    'RICE@ND','EMU@MSU','MD@CONN','MSST@MINN','ARIZ@BYU','UCF@PITT',
+    'DUKE@ILL','CAL@SYR','USU@WASH','ULM@UAB','UNLV@UNT','DEL@VAN',
+    'MEM@BSU','JVST@OHIO','BUFF@FIU','USA@TULN','TLSA@SHSU','BGSU@NEB',
+    'TENN@GT','MTU@MRSH','GSU@KENN','ISU@IOWA','OSU@TEX','SDSU@UCLA',
+    'GASO@CLEM','FAU@NAVY','TTU@ORST','USM@AUB','CHAR@MISS','NDSU@AFA',
+    'ARK@UTAH','CSUS@FRES','ULL@USC','NMSU@HAW',
+    // ESPN sometimes uses different abbrs — common alternates
+    'APPST@ECU','APP ST@ECU','WAKE FOR@PUR','WKU@GEORGIA','MISS ST@MINN',
+    'E MICH@MICH ST','JKSNV ST@OHIO','JACKSONVILLE ST@OHIO',
+    'SAC ST@FRES ST','SAC ST@FRESNO ST','BOWLING GR@NEBRASKA',
+    'BOWLING GR@NEB','S ALA@TULANE','S ALA@TULN',
+    'GEORGIA SO@CLEMSON','GEORGIA SO@CLEM','MID TENN@MARSHALL',
+    'MID TENN@MRSH','NM STATE@HAWAII','NM STATE@HAW',
+    'LA-LAFAYET@USC','UL LAFAYET@USC','GEORGIA ST@KENNESAW',
+    'GEORGIA ST@KSU','NDAK ST@AIR FORCE','NDAK ST@AFA',
+  ]);
+  NCAAF_GAMES=NCAAF_GAMES.filter(function(g){
+    const key=(g.away.abbr+'@'+g.home.abbr).toUpperCase().trim();
+    if(CFB_ALLOWLIST.has(key))return true;
+    // secondary pass: check each allowlist entry against abbr prefix matches
+    const a=g.away.abbr.toUpperCase().trim();
+    const h=g.home.abbr.toUpperCase().trim();
+    return [...CFB_ALLOWLIST].some(function(pair){
+      const parts=pair.split('@');
+      if(parts.length!==2)return false;
+      return parts[0].trim()===a&&parts[1].trim()===h;
+    });
+  });
+
   const cacheKey=(NCAAF_SEASON||'')+'w'+(NCAAF_WEEK||'');
   const cache=get(LS.ncaafgames,{});
   cache[cacheKey]={ts:Date.now(),v:NCAAF_GAMES,week:NCAAF_WEEK,season:NCAAF_SEASON};
@@ -19012,21 +19048,18 @@ whenScriptReady(()=>{
 /* ═══════════════════════════════════════════════════════════════
    PRELOADED CFB DATA — Sept 12 2026
    Covers.com computer picks + consensus sides/totals
-   Auto-injects into localStorage on game day. Additive merge only —
-   never overwrites data you've already saved manually.
+   Fires once on game day. Additive merge — never overwrites manual saves.
    ═══════════════════════════════════════════════════════════════ */
 (function injectCFBData(){
-  const TARGET_DATE = '2026-09-12';
-  const GUARD_KEY   = 'd4.cfbPreload_2026-09-12';
-  if(sessionStorage.getItem(GUARD_KEY)) return;
-  sessionStorage.setItem(GUARD_KEY,'1');
+  const D='2026-09-12';
+  const G='d4.cfbPre_20260912';
+  if(sessionStorage.getItem(G))return;
+  sessionStorage.setItem(G,'1');
   const n=new Date();
-  const today=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
-  if(today !== TARGET_DATE) return;
+  const t=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+  if(t!==D)return;
 
-  // ── COMPUTER PICKS (Covers predicted scores + market calls) ──────────────
-  const PICKS = [
-    // 11:00 AM CT
+  const PICKS=[
     {src:'Covers',away:'USF',home:'ARMY',market:'spread',pick:'ARMY -3.5',side:'home',line:-3.5,price:-105,predictedAway:21.77,predictedHome:26.33,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'USF',home:'ARMY',market:'total',pick:'o44.5',side:'over',line:44.5,price:-110,predictedAway:21.77,predictedHome:26.33,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'USF',home:'ARMY',market:'moneyline',pick:'ARMY ML',side:'home',line:null,price:-165,predictedAway:21.77,predictedHome:26.33,conf:null,sport:'ncaaf'},
@@ -19054,11 +19087,9 @@ whenScriptReady(()=>{
     {src:'Covers',away:'WAKE',home:'PUR',market:'spread',pick:'WAKE -2.5',side:'away',line:-2.5,price:-104,predictedAway:27.15,predictedHome:24.21,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'WAKE',home:'PUR',market:'total',pick:'o50.0',side:'over',line:50.0,price:-110,predictedAway:27.15,predictedHome:24.21,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'WAKE',home:'PUR',market:'moneyline',pick:'WAKE ML',side:'away',line:null,price:-145,predictedAway:27.15,predictedHome:24.21,conf:null,sport:'ncaaf'},
-    // 11:45 AM CT
     {src:'Covers',away:'WKU',home:'UGA',market:'spread',pick:'UGA -40.5',side:'home',line:-40.5,price:-110,predictedAway:7.56,predictedHome:49.06,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'WKU',home:'UGA',market:'total',pick:'o54.5',side:'over',line:54.5,price:-110,predictedAway:7.56,predictedHome:49.06,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'WKU',home:'UGA',market:'moneyline',pick:'UGA ML',side:'home',line:null,price:-5000,predictedAway:7.56,predictedHome:49.06,conf:null,sport:'ncaaf'},
-    // 2:30 PM CT
     {src:'Covers',away:'UTSA',home:'TXST',market:'spread',pick:'UTSA +2.5',side:'away',line:2.5,price:-105,predictedAway:33.95,predictedHome:33.45,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'UTSA',home:'TXST',market:'total',pick:'o66.0',side:'over',line:66.0,price:-110,predictedAway:33.95,predictedHome:33.45,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'ALA',home:'UK',market:'spread',pick:'ALA -9.5',side:'away',line:-9.5,price:-107,predictedAway:29.32,predictedHome:20.34,conf:null,sport:'ncaaf'},
@@ -19090,17 +19121,14 @@ whenScriptReady(()=>{
     {src:'Covers',away:'ULM',home:'UAB',market:'total',pick:'o53.5',side:'over',line:53.5,price:-115,predictedAway:22.59,predictedHome:33.70,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'UNLV',home:'UNT',market:'spread',pick:'UNLV -2.5',side:'away',line:-2.5,price:-110,predictedAway:30.57,predictedHome:28.20,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'UNLV',home:'UNT',market:'total',pick:'o57.5',side:'over',line:57.5,price:-120,predictedAway:30.57,predictedHome:28.20,conf:null,sport:'ncaaf'},
-    // 2:45 PM CT
     {src:'Covers',away:'DEL',home:'VAN',market:'spread',pick:'DEL +21.5',side:'away',line:21.5,price:-105,predictedAway:17.59,predictedHome:38.11,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'DEL',home:'VAN',market:'moneyline',pick:'VAN ML',side:'home',line:null,price:-1400,predictedAway:17.59,predictedHome:38.11,conf:null,sport:'ncaaf'},
-    // 5:00 PM CT
     {src:'Covers',away:'MEM',home:'BSU',market:'spread',pick:'MEM +9.5',side:'away',line:9.5,price:-107,predictedAway:24.36,predictedHome:31.97,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'MEM',home:'BSU',market:'total',pick:'o55.5',side:'over',line:55.5,price:-110,predictedAway:24.36,predictedHome:31.97,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'JVST',home:'OHIO',market:'spread',pick:'JVST +2.5',side:'away',line:2.5,price:-113,predictedAway:24.43,predictedHome:26.18,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'JVST',home:'OHIO',market:'total',pick:'o48.5',side:'over',line:48.5,price:-110,predictedAway:24.43,predictedHome:26.18,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'BUFF',home:'FIU',market:'spread',pick:'BUFF +10.5',side:'away',line:10.5,price:-105,predictedAway:18.56,predictedHome:27.91,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'BUFF',home:'FIU',market:'total',pick:'u48.5',side:'under',line:48.5,price:-110,predictedAway:18.56,predictedHome:27.91,conf:null,sport:'ncaaf'},
-    // 6:00 PM CT
     {src:'Covers',away:'USA',home:'TULN',market:'spread',pick:'USA +9.5',side:'away',line:9.5,price:-115,predictedAway:19.43,predictedHome:28.50,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'TLSA',home:'SHSU',market:'spread',pick:'TLSA -11.5',side:'away',line:-11.5,price:-107,predictedAway:31.17,predictedHome:18.81,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'BGSU',home:'NEB',market:'spread',pick:'BGSU +30.5',side:'away',line:30.5,price:-110,predictedAway:10.07,predictedHome:40.40,conf:null,sport:'ncaaf'},
@@ -19112,38 +19140,29 @@ whenScriptReady(()=>{
     {src:'Covers',away:'ISU',home:'IOWA',market:'total',pick:'u42.5',side:'under',line:42.5,price:-110,predictedAway:13.86,predictedHome:28.37,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'OSU',home:'TEX',market:'spread',pick:'OSU +1.5',side:'away',line:1.5,price:-105,predictedAway:24.88,predictedHome:26.31,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'OSU',home:'TEX',market:'total',pick:'o48.5',side:'over',line:48.5,price:-110,predictedAway:24.88,predictedHome:26.31,conf:null,sport:'ncaaf'},
-    // 6:15 PM CT
     {src:'Covers',away:'SDSU',home:'UCLA',market:'spread',pick:'SDSU +13.5',side:'away',line:13.5,price:-107,predictedAway:22.73,predictedHome:32.83,conf:null,sport:'ncaaf'},
-    // 6:30 PM CT
     {src:'Covers',away:'GASO',home:'CLEM',market:'spread',pick:'GASO +20.5',side:'away',line:20.5,price:-110,predictedAway:18.13,predictedHome:35.47,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'GASO',home:'CLEM',market:'moneyline',pick:'CLEM ML',side:'home',line:null,price:-1350,predictedAway:18.13,predictedHome:35.47,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'FAU',home:'NAVY',market:'spread',pick:'FAU +4',side:'away',line:4,price:-110,predictedAway:27.39,predictedHome:33.64,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'TTU',home:'ORST',market:'spread',pick:'TTU -24.5',side:'away',line:-24.5,price:-110,predictedAway:38.95,predictedHome:12.61,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'TTU',home:'ORST',market:'total',pick:'o53.0',side:'over',line:53.0,price:-110,predictedAway:38.95,predictedHome:12.61,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'TTU',home:'ORST',market:'moneyline',pick:'TTU ML',side:'away',line:null,price:-3000,predictedAway:38.95,predictedHome:12.61,conf:null,sport:'ncaaf'},
-    // 6:45 PM CT
     {src:'Covers',away:'USM',home:'AUB',market:'spread',pick:'USM +33.5',side:'away',line:33.5,price:-110,predictedAway:12.11,predictedHome:42.48,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'CHAR',home:'MISS',market:'spread',pick:'CHAR +45.5',side:'away',line:45.5,price:-110,predictedAway:9.08,predictedHome:54.30,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'CHAR',home:'MISS',market:'moneyline',pick:'MISS ML',side:'home',line:null,price:-10000,predictedAway:9.08,predictedHome:54.30,conf:null,sport:'ncaaf'},
-    // 9:00 PM CT
     {src:'Covers',away:'NDSU',home:'AFA',market:'spread',pick:'NDSU -1.5',side:'away',line:-1.5,price:-110,predictedAway:25.18,predictedHome:22.46,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'NDSU',home:'AFA',market:'moneyline',pick:'NDSU ML',side:'away',line:null,price:-128,predictedAway:25.18,predictedHome:22.46,conf:null,sport:'ncaaf'},
-    // 9:15 PM CT
     {src:'Covers',away:'ARK',home:'UTAH',market:'spread',pick:'ARK +13.5',side:'away',line:13.5,price:-103,predictedAway:22.11,predictedHome:36.80,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'ARK',home:'UTAH',market:'moneyline',pick:'UTAH ML',side:'home',line:null,price:-470,predictedAway:22.11,predictedHome:36.80,conf:null,sport:'ncaaf'},
-    // 9:30 PM CT
     {src:'Covers',away:'CSUS',home:'FRES',market:'spread',pick:'CSUS +17.5',side:'away',line:17.5,price:-110,predictedAway:15.16,predictedHome:30.52,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'CSUS',home:'FRES',market:'moneyline',pick:'FRES ML',side:'home',line:null,price:-1100,predictedAway:15.16,predictedHome:30.52,conf:null,sport:'ncaaf'},
-    // 10:00 PM CT
     {src:'Covers',away:'ULL',home:'USC',market:'spread',pick:'ULL +31',side:'away',line:31,price:-115,predictedAway:14.06,predictedHome:44.46,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'ULL',home:'USC',market:'moneyline',pick:'USC ML',side:'home',line:null,price:-10000,predictedAway:14.06,predictedHome:44.46,conf:null,sport:'ncaaf'},
-    // 10:59 PM CT
     {src:'Covers',away:'NMSU',home:'HAW',market:'spread',pick:'NMSU +7.5',side:'away',line:7.5,price:-105,predictedAway:21.73,predictedHome:28.48,conf:null,sport:'ncaaf'},
     {src:'Covers',away:'NMSU',home:'HAW',market:'moneyline',pick:'HAW ML',side:'home',line:null,price:-310,predictedAway:21.73,predictedHome:28.48,conf:null,sport:'ncaaf'},
   ];
 
-  // ── CONSENSUS SIDES ───────────────────────────────────────────────────────
-  const SIDES = [
+  const CONS=[
     {src:'Covers',away:'MIA',home:'WAKE',market:'moneyline',awayPct:100,homePct:0},
     {src:'Covers',away:'UGA',home:'ARK',market:'moneyline',awayPct:0,homePct:100},
     {src:'Covers',away:'UNC',home:'CLEM',market:'moneyline',awayPct:100,homePct:0},
@@ -19174,14 +19193,6 @@ whenScriptReady(()=>{
     {src:'Covers',away:'TTU',home:'ORST',market:'spread',awayPct:95,homePct:5},
     {src:'Covers',away:'ASU',home:'TAM',market:'spread',awayPct:29,homePct:71},
     {src:'Covers',away:'UCD',home:'SMU',market:'spread',awayPct:25,homePct:75},
-    {src:'Covers',away:'WEBB',home:'LIB',market:'spread',awayPct:27,homePct:73},
-    {src:'Covers',away:'BGSU',home:'NEB',market:'spread',awayPct:28,homePct:73},
-    {src:'Covers',away:'MIA',home:'WAKE',market:'spread',awayPct:72,homePct:28},
-    {src:'Covers',away:'WIU',home:'WIS',market:'spread',awayPct:28,homePct:72},
-  ];
-
-  // ── CONSENSUS TOTALS ──────────────────────────────────────────────────────
-  const TOTALS = [
     {src:'Covers',away:'TEX',home:'OKLA',market:'total',overPct:100,underPct:0,line:47.5},
     {src:'Covers',away:'LT',home:'LSU',market:'total',overPct:88,underPct:12,line:56.5},
     {src:'Covers',away:'UGA',home:'ARK',market:'total',overPct:88,underPct:12,line:55.5},
@@ -19212,42 +19223,29 @@ whenScriptReady(()=>{
     {src:'Covers',away:'ULM',home:'UAB',market:'total',overPct:70,underPct:30,line:55.5},
     {src:'Covers',away:'CHAR',home:'MISS',market:'total',overPct:70,underPct:30,line:61.5},
     {src:'Covers',away:'ARIZ',home:'BYU',market:'total',overPct:70,underPct:30,line:48.5},
-    {src:'Covers',away:'TXSO',home:'UTEP',market:'total',overPct:74,underPct:26,line:54.5},
     {src:'Covers',away:'ETSU',home:'UNC',market:'total',overPct:72,underPct:28,line:51.5},
     {src:'Covers',away:'ALST',home:'TROY',market:'total',overPct:71,underPct:29,line:52.5},
   ];
 
-  // ── Merge into localStorage ───────────────────────────────────────────────
   try{
-    const d = TARGET_DATE;
-
-    // ncaafext — computer picks (dedup by away+home+market+side)
-    let ext={};
-    try{ext=JSON.parse(localStorage.getItem('d4.ncaafext')||'{}')}catch(e){}
-    const extKeys=new Set((ext[d]||[]).map(p=>[p.away,p.home,p.market,p.side].join('|')));
-    const newPicks=PICKS.filter(p=>!extKeys.has([p.away,p.home,p.market,p.side].join('|')));
-    ext[d]=[...(ext[d]||[]),...newPicks];
+    // ncaafext
+    var ext={};try{ext=JSON.parse(localStorage.getItem('d4.ncaafext')||'{}')}catch(e){}
+    var eK=new Set((ext[D]||[]).map(function(p){return p.away+'|'+p.home+'|'+p.market+'|'+p.side}));
+    var nP=PICKS.filter(function(p){return!eK.has(p.away+'|'+p.home+'|'+p.market+'|'+p.side)});
+    ext[D]=(ext[D]||[]).concat(nP);
     localStorage.setItem('d4.ncaafext',JSON.stringify(ext));
-
-    // ncaafconsensus — sides + totals (dedup by away+home+market)
-    let cons={};
-    try{cons=JSON.parse(localStorage.getItem('d4.ncaafconsensus')||'{}')}catch(e){}
-    const allCons=[...SIDES,...TOTALS];
-    const consKeys=new Set((cons[d]||[]).map(c=>[c.away,c.home,c.market].join('|')));
-    const newCons=allCons.filter(c=>!consKeys.has([c.away,c.home,c.market].join('|')));
-    cons[d]=[...(cons[d]||[]),...newCons];
+    // ncaafconsensus
+    var cons={};try{cons=JSON.parse(localStorage.getItem('d4.ncaafconsensus')||'{}')}catch(e){}
+    var cK=new Set((cons[D]||[]).map(function(c){return c.away+'|'+c.home+'|'+c.market}));
+    var nC=CONS.filter(function(c){return!cK.has(c.away+'|'+c.home+'|'+c.market)});
+    cons[D]=(cons[D]||[]).concat(nC);
     localStorage.setItem('d4.ncaafconsensus',JSON.stringify(cons));
-
-    // ncaaftrends — init if missing
-    let tr={};
-    try{tr=JSON.parse(localStorage.getItem('d4.ncaaftrends')||'{}')}catch(e){}
-    if(!tr[d])tr[d]=[];
+    // ncaaftrends init
+    var tr={};try{tr=JSON.parse(localStorage.getItem('d4.ncaaftrends')||'{}')}catch(e){}
+    if(!tr[D])tr[D]=[];
     localStorage.setItem('d4.ncaaftrends',JSON.stringify(tr));
-
-    console.log('[TheDesk CFB Preload] '+newPicks.length+' picks + '+newCons.length+' consensus rows injected for '+d);
-  }catch(e){
-    console.warn('[TheDesk CFB Preload] Failed:',e.message);
-  }
+    console.log('[TheDesk] CFB preload OK: '+nP.length+' picks, '+nC.length+' consensus for '+D);
+  }catch(e){console.warn('[TheDesk] CFB preload error:',e.message)}
 })();
 
 /* Everything above is now evaluated — deferred data feeds may safely run. */
