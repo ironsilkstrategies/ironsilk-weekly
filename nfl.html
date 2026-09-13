@@ -536,7 +536,7 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
   </div>
 
   <div style="margin-top:24px">
-  <button class="primary" onclick="saveSetup()">Launch TheDesk NFL →</button>
+  <button class="primary" id="launchBtn">Launch TheDesk NFL →</button>
   </div>
   <p style="font-size:11px;color:var(--dim);margin-top:16px;line-height:1.6">
     All data stays on your device. Keys are stored in localStorage and never sent anywhere except the respective APIs. You can update these any time in Settings.
@@ -3254,13 +3254,26 @@ function showToast(msg){
 
 // ── SETUP ─────────────────────────────────────────────────────────────────────
 function saveSetup(){
-  const fields={oddspapi:'su-oddspapi',ai:'su-ai',sharp:'su-sharp',rundown:'su-rundown',
-    ghrepo:'su-ghrepo',ghtoken:'su-ghtoken'};
-  Object.entries(fields).forEach(([key,id])=>{
-    const el=document.getElementById(id);
-    if(el&&el.value.trim())set(LS[key]||'d4.'+key,el.value.trim());
-  });
-  document.getElementById('setup').classList.add('hide');
+  try{
+    const fieldMap={
+      'su-oddspapi':LS.oddspapi,
+      'su-ai':LS.ai,
+      'su-sharp':LS.sharp,
+      'su-rundown':LS.rundown,
+      'su-ghrepo':LS.ghrepo,
+      'su-ghtoken':LS.ghtoken,
+    };
+    Object.entries(fieldMap).forEach(([id,lsKey])=>{
+      const el=document.getElementById(id);
+      if(el&&el.value&&el.value.trim())set(lsKey,el.value.trim());
+    });
+  }catch(e){console.warn('saveSetup fields:',e);}
+  try{
+    const su=document.getElementById('setup');
+    if(su)su.classList.add('hide');
+  }catch(e){}
+  // Mark that user has been through setup so we skip it next time
+  try{set('d4.setupDone',true);}catch(e){}
   boot();
 }
 
@@ -3348,19 +3361,48 @@ async function pushToGitHub(manual){
 // ── SETUP GATE ────────────────────────────────────────────────────────────────
 (function(){
   try{
-    const anyData=Object.values(LS).some(k=>{
+    const setupDone=get('d4.setupDone',false);
+    const anyData=setupDone||Object.values(LS).some(k=>{
       try{return localStorage.getItem(k)!=null}catch(e){return false}
     });
     const hasGames=get(LS.nflgames,null)!=null;
     if(anyData||hasGames){
-      document.getElementById('setup').classList.add('hide');
+      const su=document.getElementById('setup');
+      if(su)su.classList.add('hide');
       boot();
     }
-    // else setup screen stays visible
+    // else: setup screen stays visible — user will click Launch
   }catch(e){
-    document.getElementById('setup').classList.add('hide');
+    // On any error, fail open
+    const su=document.getElementById('setup');
+    if(su)su.classList.add('hide');
     boot();
   }
+})();
+
+// ── DOM EVENT BINDINGS (safe — fires after all functions defined) ─────────────
+(function attachEvents(){
+  // Setup launch button
+  const lb=document.getElementById('launchBtn');
+  if(lb)lb.addEventListener('click',function(){saveSetup();});
+
+  // Header buttons
+  const hBtns=document.querySelectorAll('.hdr-btn');
+  // already have onclick attrs on these — they're fine since script is in same scope
+
+  // Slip buttons
+  const slipEl=document.getElementById('slip');
+  if(slipEl)slipEl.addEventListener('click',function(e){toggleSlipSheet(e);});
+
+  const clearBtn=document.querySelector('.slip-btn.clear');
+  if(clearBtn)clearBtn.addEventListener('click',function(e){e.stopPropagation();clearSlip();});
+
+  const lockBtn=document.querySelector('.slip-btn.lock');
+  if(lockBtn)lockBtn.addEventListener('click',function(e){e.stopPropagation();lockSlip();});
+
+  // Chat enter key
+  const chatInp=document.getElementById('chatInput');
+  if(chatInp)chatInp.addEventListener('keydown',function(e){if(e.key==='Enter')sendChat();});
 })();
 
 SCRIPT_READY=true;
