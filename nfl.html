@@ -2090,35 +2090,39 @@ function coordPanel(g,s){
   const aPow=NFL_POWER[g.away.abbr];
   const hPow=NFL_POWER[g.home.abbr];
 
+  // ── Season stats (only when Week 1 results exist) ────────────────────
   if(!aPow&&!hPow){
-    html+=`<div class="note">Season stats not yet available — projections use league averages until teams play games.</div>`;
-    return html;
+    html+=`<div class="note" style="margin-bottom:10px">Season stats loading — sim uses league-average baseline until Week 1 results are in.
+      <button onclick="fetchNFLPowerRatings().then(()=>renderNFL())"
+        style="background:none;border:none;color:var(--gold);cursor:pointer;padding:0;margin-left:6px">↻ Retry</button>
+    </div>`;
+  } else {
+    if(aPow){
+      html+=`<div class="phead">${g.away.abbr} · ${aPow.wins}-${aPow.losses}</div>`;
+      html+=pctBar(`Offense PPG`,aPow.offPPG,14,35,ap.offPct);
+      html+=pctBar(`Defense PPG allowed`,aPow.defPPG,14,35,1-ap.defPct,true);
+    }
+    if(hPow){
+      html+=`<div class="phead" style="margin-top:14px">${g.home.abbr} · ${hPow.wins}-${hPow.losses}</div>`;
+      html+=pctBar(`Offense PPG`,hPow.offPPG,14,35,hp.offPct);
+      html+=pctBar(`Defense PPG allowed`,hPow.defPPG,14,35,1-hp.defPct,true);
+    }
+    html+=`<div class="phead" style="margin-top:14px">Head-to-Head</div>`;
+    html+=`<div class="intel-row">
+      <span class="intel-label">Away offense</span>
+      <span class="intel-val">${aPow?aPow.offPPG.toFixed(1):22} PPG</span>
+      <span class="intel-sub">vs ${hPow?hPow.defPPG.toFixed(1):22} allowed</span>
+    </div>
+    <div class="intel-row">
+      <span class="intel-label">Home offense</span>
+      <span class="intel-val">${hPow?hPow.offPPG.toFixed(1):22} PPG</span>
+      <span class="intel-sub">vs ${aPow?aPow.defPPG.toFixed(1):22} allowed</span>
+    </div>`;
   }
 
-  html+=`<div class="phead">${g.away.abbr} · ${aPow?`${aPow.wins}-${aPow.losses}`:''}</div>`;
-  if(aPow){
-    html+=pctBar(`Offense PPG`,aPow.offPPG,14,35,ap.offPct);
-    html+=pctBar(`Defense PPG allowed`,aPow.defPPG,14,35,1-ap.defPct,true);
-  }
-
-  html+=`<div class="phead" style="margin-top:14px">${g.home.abbr} · ${hPow?`${hPow.wins}-${hPow.losses}`:''}</div>`;
-  if(hPow){
-    html+=pctBar(`Offense PPG`,hPow.offPPG,14,35,hp.offPct);
-    html+=pctBar(`Defense PPG allowed`,hPow.defPPG,14,35,1-hp.defPct,true);
-  }
-
-  html+=`<div class="phead" style="margin-top:14px">Head-to-Head</div>`;
+  // ── Sim projection (always shown) ────────────────────────────────────
+  html+=`<div class="phead" style="margin-top:14px">Sim Projection</div>`;
   html+=`<div class="intel-row">
-    <span class="intel-label">Away offense</span>
-    <span class="intel-val">${aPow?aPow.offPPG.toFixed(1):22} PPG</span>
-    <span class="intel-sub">vs ${hPow?hPow.defPPG.toFixed(1):22} allowed</span>
-  </div>
-  <div class="intel-row">
-    <span class="intel-label">Home offense</span>
-    <span class="intel-val">${hPow?hPow.offPPG.toFixed(1):22} PPG</span>
-    <span class="intel-sub">vs ${aPow?aPow.defPPG.toFixed(1):22} allowed</span>
-  </div>
-  <div class="intel-row">
     <span class="intel-label">Projected total</span>
     <span class="intel-val">${s.med}</span>
     <span class="intel-sub">range ${s.p10}–${s.p90}</span>
@@ -2131,6 +2135,41 @@ function coordPanel(g,s){
     <span class="intel-label">Surface</span>
     <span class="intel-val">${NFL_TURF.has(g.home.abbr)?'Turf (+3% scoring)':'Natural grass'}</span>
   </div>`;
+
+  // ── Depth chart roster (always shown when loaded) ────────────────────
+  const awayRoster=(NFL_DEPTH[g.away.abbr]||{}).players||[];
+  const homeRoster=(NFL_DEPTH[g.home.abbr]||{}).players||[];
+
+  if(awayRoster.length||homeRoster.length){
+    const rosterBlock=(abbr,roster)=>{
+      if(!roster.length)return'';
+      const groups={QB:[],RB:[],WR:[],TE:[]};
+      roster.forEach(p=>{if(groups[p.pos])groups[p.pos].push(p);});
+      Object.values(groups).forEach(arr=>arr.sort((a,b)=>(a.depth||99)-(b.depth||99)));
+      return Object.entries(groups).filter(([,arr])=>arr.length).map(([pos,arr])=>{
+        return arr.slice(0,3).map(p=>`<div class="matchup-row">
+          <span class="matchup-name">${p.depth===1?'★ ':p.depth===2?'2 ':'3 '}${p.name}</span>
+          <span class="matchup-pos">${pos} · D${p.depth}</span>
+        </div>`).join('');
+      }).join('');
+    };
+
+    html+=`<div class="phead" style="margin-top:14px">${g.away.abbr} Depth Chart</div>`;
+    html+=rosterBlock(g.away.abbr,awayRoster)||`<div class="note">Loading…</div>`;
+    html+=`<div class="phead" style="margin-top:12px">${g.home.abbr} Depth Chart</div>`;
+    html+=rosterBlock(g.home.abbr,homeRoster)||`<div class="note">Loading…</div>`;
+    const cacheTs=(NFL_DEPTH[g.away.abbr]||NFL_DEPTH[g.home.abbr]||{}).updatedAt;
+    if(cacheTs)html+=`<div style="font-size:10px;color:var(--mute);margin-top:6px">
+      Depth chart cached ${new Date(cacheTs).toLocaleDateString()} ·
+      <span onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())"
+        style="color:var(--gold);cursor:pointer">refresh</span></div>`;
+  } else {
+    html+=`<div style="margin-top:10px">
+      <button class="primary" onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())">
+        Pull ESPN depth charts</button>
+      <div class="note" style="margin-top:6px">Depth charts show starters, backups, and volume shares for prop analysis.</div>
+    </div>`;
+  }
 
   return html;
 }
@@ -2162,40 +2201,48 @@ function propsPanel(g,s){
   const awayTE1=getTEs(g.away.abbr)[0];
   const homeTE1=getTEs(g.home.abbr)[0];
 
+  // Depth charts loaded?
+  const depthLoaded=awayQB||homeQB||awayWR1||homeWR1||awayRB1||homeRB1;
+
   const uploaded=bookLinesFor(g.away.abbr+'@'+g.home.abbr).filter(l=>l.market==='prop'&&l.player);
 
   // Build prop lines: use uploaded if available, else sim-derived
   const props=[];
 
-  function addProp(player,team,statKey,projVal,bookLine,stat,sd){
-    if(!player)return;
-    const line=bookLine||projVal*0.95;
+  /* addProp now accepts a fallback name string so it works with or without
+     a loaded depth chart player object. When the depth chart isn't cached yet
+     we pass a positional label (e.g. "TB QB") so the row still renders. */
+  function addProp(player,fallbackName,team,statKey,projVal,bookLine,stat,sd){
+    const displayName=player?player.name:fallbackName;
+    if(!displayName||!projVal)return;
+    const line=bookLine||Math.round(projVal*0.95);
     const freq=simPropFreq(projVal,line,sd);
     const overFreq=freq,underFreq=1-freq;
-    if(Math.max(overFreq,underFreq)<0.60)return; // only show 60%+ (70 preferred)
+    if(Math.max(overFreq,underFreq)<0.60)return;
     props.push({
-      player:player.name||team+' '+stat,
+      player:displayName,
       team,stat,projVal,line,
       overFreq,underFreq,
       recommendation:overFreq>=0.70?'OVER':underFreq>=0.70?'UNDER':
         overFreq>=0.60?'lean over':'lean under',
       confidence:Math.max(overFreq,underFreq),
       bookLine:!!bookLine,
+      simOnly:!player&&!bookLine, // flagged when no real player name or real line
     });
   }
 
-  addProp(awayQB,g.away.abbr,'qb_pass',s.props.away.qb_pass,
-    uploaded.find(l=>l.player&&l.player.toLowerCase().includes(awayQB&&awayQB.name.split(' ').pop().toLowerCase()||'')&&/pass/i.test(l.stat||''))?.line,
+  addProp(awayQB, g.away.abbr+' QB', g.away.abbr,'qb_pass',s.props.away.qb_pass,
+    uploaded.find(l=>l.player&&awayQB&&l.player.toLowerCase().includes(awayQB.name.split(' ').pop().toLowerCase())&&/pass/i.test(l.stat||''))?.line,
     'Pass Yds',65);
-  addProp(homeQB,g.home.abbr,'qb_pass',s.props.home.qb_pass,null,'Pass Yds',65);
-  addProp(awayWR1,g.away.abbr,'wr1_rec',s.props.away.wr1_rec,null,'Rec Yds',25);
-  addProp(homeWR1,g.home.abbr,'wr1_rec',s.props.home.wr1_rec,null,'Rec Yds',25);
-  addProp(awayRB1,g.away.abbr,'rb1_rush',s.props.away.rb1_rush,null,'Rush Yds',30);
-  addProp(homeRB1,g.home.abbr,'rb1_rush',s.props.home.rb1_rush,null,'Rush Yds',30);
-  addProp(awayTE1,g.away.abbr,'te1_rec',s.props.away.te1_rec,null,'Rec Yds',18);
-  addProp(homeTE1,g.home.abbr,'te1_rec',s.props.home.te1_rec,null,'Rec Yds',18);
+  addProp(homeQB, g.home.abbr+' QB', g.home.abbr,'qb_pass',s.props.home.qb_pass,null,'Pass Yds',65);
+  addProp(awayWR1,g.away.abbr+' WR1',g.away.abbr,'wr1_rec',s.props.away.wr1_rec,null,'Rec Yds',25);
+  addProp(homeWR1,g.home.abbr+' WR1',g.home.abbr,'wr1_rec',s.props.home.wr1_rec,null,'Rec Yds',25);
+  addProp(awayRB1,g.away.abbr+' RB1',g.away.abbr,'rb1_rush',s.props.away.rb1_rush,null,'Rush Yds',30);
+  addProp(homeRB1,g.home.abbr+' RB1',g.home.abbr,'rb1_rush',s.props.home.rb1_rush,null,'Rush Yds',30);
+  addProp(awayTE1,g.away.abbr+' TE1',g.away.abbr,'te1_rec',s.props.away.te1_rec,null,'Rec Yds',18);
+  addProp(homeTE1,g.home.abbr+' TE1',g.home.abbr,'te1_rec',s.props.home.te1_rec,null,'Rec Yds',18);
 
-  // Also add uploaded props
+  // Also add any uploaded props not already covered
   uploaded.forEach(l=>{
     const exists=props.find(p=>p.player===l.player);
     if(!exists&&l.player&&l.line){
@@ -2205,16 +2252,32 @@ function propsPanel(g,s){
         player:l.player,team:l.away||'',stat:l.stat||'Prop',
         projVal,line:l.line,overFreq:freq,underFreq:1-freq,
         recommendation:freq>=0.70?'OVER':(1-freq)>=0.70?'UNDER':'lean',
-        confidence:Math.max(freq,1-freq),bookLine:true,
+        confidence:Math.max(freq,1-freq),bookLine:true,simOnly:false,
       });
     }
   });
 
   props.sort((a,b)=>b.confidence-a.confidence);
 
+  // No props at all shouldn't happen anymore — sim always has projections.
+  // But guard anyway.
   if(!props.length){
-    html+=`<div class="empty" style="padding:20px 0">Upload odds or depth chart needed for prop analysis</div>`;
+    html+=`<div style="margin-top:8px">
+      <button class="primary" onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())">
+        Pull ESPN depth charts</button>
+      <div class="note" style="margin-top:6px">Depth charts unlock player names and sharper prop lines.</div>
+    </div>`;
     return html;
+  }
+
+  // If depth chart isn't loaded yet, show a soft prompt above the rows
+  if(!depthLoaded){
+    html+=`<div class="note" style="margin-bottom:10px">
+      Showing sim projections by position — 
+      <span onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())"
+        style="color:var(--gold);cursor:pointer;text-decoration:underline">pull depth charts</span>
+      to replace with real player names.
+    </div>`;
   }
 
   props.forEach(p=>{
@@ -2224,10 +2287,11 @@ function propsPanel(g,s){
       <div>
         <div class="prop-player">${p.player}</div>
         <div class="prop-stat">${p.team} · ${p.stat}</div>
-        ${p.bookLine?`<div style="font-size:9px;color:var(--gold);font-family:'IBM Plex Mono'">REAL LINE</div>`:''}
+        ${p.bookLine?`<div style="font-size:9px;color:var(--gold);font-family:'IBM Plex Mono'">REAL LINE</div>`
+          :p.simOnly?`<div style="font-size:9px;color:var(--mute);font-family:'IBM Plex Mono'">SIM PROJ</div>`:''}
       </div>
       <div style="text-align:right">
-        <div class="prop-line">O/U ${p.line.toFixed(1)}</div>
+        <div class="prop-line">O/U ${p.line.toFixed?p.line.toFixed(1):p.line}</div>
         <div class="prop-conf ${recCls}" style="font-family:'IBM Plex Mono';font-size:10px;font-weight:700">
           ${p.recommendation}
         </div>
