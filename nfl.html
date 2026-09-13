@@ -1152,17 +1152,36 @@ async function fetchNFLDepthCharts(force=false){
         const abbr=(jd.team&&jd.team.abbreviation||'').toUpperCase();
         if(!abbr)continue;
         const players=[];
-        (jd.positions||[]).forEach(pos=>{
-          if(!NFL_SKILL_POS.has(pos.position&&pos.position.abbreviation))return;
-          (pos.athletes||[]).forEach((a,depth)=>{
-            players.push({
-              name:a.athlete&&a.athlete.displayName||'',
-              pos:pos.position.abbreviation,
-              depth:depth+1,
-              id:a.athlete&&a.athlete.id||null,
-              jersey:a.athlete&&a.athlete.jersey||'',
+        /* ESPN depthcharts returns items[], each item has a positions{} map.
+           The old code checked jd.positions[] which is always undefined here —
+           that's why every team came back with zero players. */
+        const posEntries=jd.items||jd.positions||[];
+        posEntries.forEach(item=>{
+          const posMap=item.positions||{};
+          Object.keys(posMap).forEach(slot=>{
+            const entry=posMap[slot]||{};
+            const posAbbr=((entry.position&&entry.position.abbreviation)||'').toUpperCase();
+            if(!NFL_SKILL_POS.has(posAbbr))return;
+            (entry.athletes||[]).forEach((a,i)=>{
+              const ath=a.athlete||{};
+              const name=ath.displayName||ath.fullName||'';
+              if(!name)return;
+              players.push({name,pos:posAbbr,depth:(a.rank!=null?a.rank:i+1),
+                id:ath.id||null,jersey:ath.jersey||''});
             });
           });
+          /* Fallback: flat format where item itself has position+athletes */
+          if(!Object.keys(posMap).length&&item.position&&item.athletes){
+            const posAbbr=((item.position&&item.position.abbreviation)||'').toUpperCase();
+            if(!NFL_SKILL_POS.has(posAbbr))return;
+            (item.athletes||[]).forEach((a,i)=>{
+              const ath=a.athlete||{};
+              const name=ath.displayName||ath.fullName||'';
+              if(!name)return;
+              players.push({name,pos:posAbbr,depth:(a.rank!=null?a.rank:i+1),
+                id:ath.id||null,jersey:ath.jersey||''});
+            });
+          }
         });
         out[abbr]={players,updatedAt:Date.now()};
         await new Promise(r=>setTimeout(r,80));
@@ -3042,33 +3061,54 @@ function saveOddsText(){
 }
 
 function parseOddsText(text,statusEl){
+  /* Route through the full NFL slate grammar from football-engine.js first.
+     The old dumb regex only understood pipe-separated format and silently
+     dropped every line from a properly-formatted TheDesk txt file. */
+  if(typeof parseNFLSlateText==='function'){
+    const result=parseNFLSlateText(text);
+    if(result&&result.isNFL!==false){
+      const picks=result.picks||[];
+      const trends=result.trends||[];
+      const consensus=result.consensus||[];
+      if(picks.length||trends.length||consensus.length){
+        if(typeof saveNFLBookOdds==='function'&&picks.length){
+          saveNFLBookOdds(picks,statusEl);
+        }
+        if(trends.length||consensus.length){
+          const d=today();
+          if(trends.length){const a=get(LS.nfltrends,{});a[d]=[...(a[d]||[]),...trends];set(LS.nfltrends,a);}
+          if(consensus.length){const a=get(LS.nflconsensus,{});a[d]=[...(a[d]||[]),...consensus];set(LS.nflconsensus,a);}
+        }
+        if(!picks.length&&(trends.length||consensus.length)){
+          if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ Saved ${trends.length} trends · ${consensus.length} consensus</span>`;
+          renderNFL();
+        }
+        return;
+      }
+    }
+  }
+
+  /* Fallback: legacy pipe/space-separated format for non-TheDesk pastes */
   const lines=[];
   const rows=text.split('\n').filter(l=>l.trim());
   rows.forEach(row=>{
-    // Try to parse various formats
-    // Format: AWAY SPREAD PRICE | HOME SPREAD PRICE | O/U LINE PRICE
     const teamPat=/([A-Z]{2,4})\s+([\+\-]\d+\.?\d*)\s+([\+\-]\d+)/gi;
     const totalPat=/(over|under|o|u)\s*(\d+\.?\d*)\s+([\+\-]\d+)/i;
     let match;
     while((match=teamPat.exec(row))!==null){
       const abbr=nflAbbrFor(match[1])||match[1];
-      lines.push({
-        game:row,away:abbr,home:'',market:'spread',
+      lines.push({game:row,away:abbr,home:'',market:'spread',
         side:abbr,line:parseFloat(match[2]),price:parseInt(match[3]),
-        capturedAt:Date.now(),src:'text',
-      });
+        capturedAt:Date.now(),src:'text'});
     }
     const tot=totalPat.exec(row);
     if(tot){
       const side=tot[1].toLowerCase().startsWith('o')?'over':'under';
-      lines.push({
-        game:row,market:'total',side,
+      lines.push({game:row,market:'total',side,
         line:parseFloat(tot[2]),price:parseInt(tot[3]),
-        capturedAt:Date.now(),src:'text',
-      });
+        capturedAt:Date.now(),src:'text'});
     }
   });
-
   if(lines.length){
     const store=get(LS.nflshots,{});
     store[today()]=[...(store[today()]||[]),...lines];
@@ -3076,7 +3116,7 @@ function parseOddsText(text,statusEl){
     if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ Saved ${lines.length} lines</span>`;
     renderLinesList();renderNFL();
   }else{
-    if(statusEl)statusEl.innerHTML=`<span style="color:var(--rust)">Couldn't parse any lines — try: KC -3 -110 | O47.5 -110</span>`;
+    if(statusEl)statusEl.innerHTML=`<span style="color:var(--rust)">Format not recognized. Use the TheDesk txt format (NFL header, TEAM @ TEAM game lines, ML/SPREAD/OU: rows) or paste: KC -3 -110 | O47.5 -110</span>`;
   }
 }
 
