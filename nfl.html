@@ -1152,11 +1152,11 @@ async function fetchNFLDepthCharts(force=false){
         const abbr=(jd.team&&jd.team.abbreviation||'').toUpperCase();
         if(!abbr)continue;
         const players=[];
-        /* ESPN depthcharts returns items[], each item has a positions{} map.
-           The old code checked jd.positions[] which is always undefined here —
-           that's why every team came back with zero players. */
-        const posEntries=jd.items||jd.positions||[];
-        posEntries.forEach(item=>{
+        /* FIX: ESPN depthcharts returns items[], not positions[].
+           Each item has a positions{} object keyed by slot name.
+           The old jd.positions check always returned undefined → zero players. */
+        const dcEntries=jd.items||jd.depthchart||jd.positions||[];
+        dcEntries.forEach(item=>{
           const posMap=item.positions||{};
           Object.keys(posMap).forEach(slot=>{
             const entry=posMap[slot]||{};
@@ -1166,11 +1166,12 @@ async function fetchNFLDepthCharts(force=false){
               const ath=a.athlete||{};
               const name=ath.displayName||ath.fullName||'';
               if(!name)return;
-              players.push({name,pos:posAbbr,depth:(a.rank!=null?a.rank:i+1),
+              players.push({name,pos:posAbbr,
+                depth:(a.rank!=null?a.rank:i+1),
                 id:ath.id||null,jersey:ath.jersey||''});
             });
           });
-          /* Fallback: flat format where item itself has position+athletes */
+          /* Fallback: older flat shape where item itself has position+athletes */
           if(!Object.keys(posMap).length&&item.position&&item.athletes){
             const posAbbr=((item.position&&item.position.abbreviation)||'').toUpperCase();
             if(!NFL_SKILL_POS.has(posAbbr))return;
@@ -1178,7 +1179,8 @@ async function fetchNFLDepthCharts(force=false){
               const ath=a.athlete||{};
               const name=ath.displayName||ath.fullName||'';
               if(!name)return;
-              players.push({name,pos:posAbbr,depth:(a.rank!=null?a.rank:i+1),
+              players.push({name,pos:posAbbr,
+                depth:(a.rank!=null?a.rank:i+1),
                 id:ath.id||null,jersey:ath.jersey||''});
             });
           }
@@ -2109,9 +2111,8 @@ function coordPanel(g,s){
   const aPow=NFL_POWER[g.away.abbr];
   const hPow=NFL_POWER[g.home.abbr];
 
-  // ── Season stats (only when Week 1 results exist) ────────────────────
   if(!aPow&&!hPow){
-    html+=`<div class="note" style="margin-bottom:10px">Season stats loading — sim uses league-average baseline until Week 1 results are in.
+    html+=`<div class="note" style="margin-bottom:10px">Season stats load after Week 1 results are in.
       <button onclick="fetchNFLPowerRatings().then(()=>renderNFL())"
         style="background:none;border:none;color:var(--gold);cursor:pointer;padding:0;margin-left:6px">↻ Retry</button>
     </div>`;
@@ -2139,9 +2140,7 @@ function coordPanel(g,s){
     </div>`;
   }
 
-  // ── Sim projection (always shown) ────────────────────────────────────
-  html+=`<div class="phead" style="margin-top:14px">Sim Projection</div>`;
-  html+=`<div class="intel-row">
+  html+=`<div class="intel-row" style="margin-top:${aPow||hPow?'0':'4px'}">
     <span class="intel-label">Projected total</span>
     <span class="intel-val">${s.med}</span>
     <span class="intel-sub">range ${s.p10}–${s.p90}</span>
@@ -2155,39 +2154,27 @@ function coordPanel(g,s){
     <span class="intel-val">${NFL_TURF.has(g.home.abbr)?'Turf (+3% scoring)':'Natural grass'}</span>
   </div>`;
 
-  // ── Depth chart roster (always shown when loaded) ────────────────────
+  // Always show depth chart roster when loaded
   const awayRoster=(NFL_DEPTH[g.away.abbr]||{}).players||[];
   const homeRoster=(NFL_DEPTH[g.home.abbr]||{}).players||[];
-
   if(awayRoster.length||homeRoster.length){
-    const rosterBlock=(abbr,roster)=>{
+    const rBlock=(abbr,roster)=>{
       if(!roster.length)return'';
       const groups={QB:[],RB:[],WR:[],TE:[]};
       roster.forEach(p=>{if(groups[p.pos])groups[p.pos].push(p);});
       Object.values(groups).forEach(arr=>arr.sort((a,b)=>(a.depth||99)-(b.depth||99)));
-      return Object.entries(groups).filter(([,arr])=>arr.length).map(([pos,arr])=>{
-        return arr.slice(0,3).map(p=>`<div class="matchup-row">
+      return Object.entries(groups).filter(([,arr])=>arr.length).map(([pos,arr])=>
+        arr.slice(0,3).map(p=>`<div class="matchup-row">
           <span class="matchup-name">${p.depth===1?'★ ':p.depth===2?'2 ':'3 '}${p.name}</span>
           <span class="matchup-pos">${pos} · D${p.depth}</span>
-        </div>`).join('');
-      }).join('');
+        </div>`).join('')).join('');
     };
-
     html+=`<div class="phead" style="margin-top:14px">${g.away.abbr} Depth Chart</div>`;
-    html+=rosterBlock(g.away.abbr,awayRoster)||`<div class="note">Loading…</div>`;
-    html+=`<div class="phead" style="margin-top:12px">${g.home.abbr} Depth Chart</div>`;
-    html+=rosterBlock(g.home.abbr,homeRoster)||`<div class="note">Loading…</div>`;
-    const cacheTs=(NFL_DEPTH[g.away.abbr]||NFL_DEPTH[g.home.abbr]||{}).updatedAt;
-    if(cacheTs)html+=`<div style="font-size:10px;color:var(--mute);margin-top:6px">
-      Depth chart cached ${new Date(cacheTs).toLocaleDateString()} ·
-      <span onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())"
-        style="color:var(--gold);cursor:pointer">refresh</span></div>`;
+    html+=rBlock(g.away.abbr,awayRoster)||'<div class="note">No skill players found</div>';
+    html+=`<div class="phead" style="margin-top:10px">${g.home.abbr} Depth Chart</div>`;
+    html+=rBlock(g.home.abbr,homeRoster)||'<div class="note">No skill players found</div>';
   } else {
-    html+=`<div style="margin-top:10px">
-      <button class="primary" onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())">
-        Pull ESPN depth charts</button>
-      <div class="note" style="margin-top:6px">Depth charts show starters, backups, and volume shares for prop analysis.</div>
-    </div>`;
+    html+=`<div style="margin-top:10px"><button class="primary" onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())">Pull ESPN depth charts</button></div>`;
   }
 
   return html;
@@ -2220,48 +2207,40 @@ function propsPanel(g,s){
   const awayTE1=getTEs(g.away.abbr)[0];
   const homeTE1=getTEs(g.home.abbr)[0];
 
-  // Depth charts loaded?
-  const depthLoaded=awayQB||homeQB||awayWR1||homeWR1||awayRB1||homeRB1;
-
   const uploaded=bookLinesFor(g.away.abbr+'@'+g.home.abbr).filter(l=>l.market==='prop'&&l.player);
 
   // Build prop lines: use uploaded if available, else sim-derived
   const props=[];
 
-  /* addProp now accepts a fallback name string so it works with or without
-     a loaded depth chart player object. When the depth chart isn't cached yet
-     we pass a positional label (e.g. "TB QB") so the row still renders. */
-  function addProp(player,fallbackName,team,statKey,projVal,bookLine,stat,sd){
-    const displayName=player?player.name:fallbackName;
-    if(!displayName||!projVal)return;
-    const line=bookLine||Math.round(projVal*0.95);
+  function addProp(player,team,statKey,projVal,bookLine,stat,sd){
+    if(!player&&!bookLine)return; // only skip if no player AND no book line
+    const line=bookLine||projVal*0.95;
     const freq=simPropFreq(projVal,line,sd);
     const overFreq=freq,underFreq=1-freq;
-    if(Math.max(overFreq,underFreq)<0.60)return;
+    if(Math.max(overFreq,underFreq)<0.60)return; // only show 60%+ (70 preferred)
     props.push({
-      player:displayName,
+      player:player.name||team+' '+stat,
       team,stat,projVal,line,
       overFreq,underFreq,
       recommendation:overFreq>=0.70?'OVER':underFreq>=0.70?'UNDER':
         overFreq>=0.60?'lean over':'lean under',
       confidence:Math.max(overFreq,underFreq),
       bookLine:!!bookLine,
-      simOnly:!player&&!bookLine, // flagged when no real player name or real line
     });
   }
 
-  addProp(awayQB, g.away.abbr+' QB', g.away.abbr,'qb_pass',s.props.away.qb_pass,
-    uploaded.find(l=>l.player&&awayQB&&l.player.toLowerCase().includes(awayQB.name.split(' ').pop().toLowerCase())&&/pass/i.test(l.stat||''))?.line,
+  addProp(awayQB,g.away.abbr,'qb_pass',s.props.away.qb_pass,
+    uploaded.find(l=>l.player&&l.player.toLowerCase().includes(awayQB&&awayQB.name.split(' ').pop().toLowerCase()||'')&&/pass/i.test(l.stat||''))?.line,
     'Pass Yds',65);
-  addProp(homeQB, g.home.abbr+' QB', g.home.abbr,'qb_pass',s.props.home.qb_pass,null,'Pass Yds',65);
-  addProp(awayWR1,g.away.abbr+' WR1',g.away.abbr,'wr1_rec',s.props.away.wr1_rec,null,'Rec Yds',25);
-  addProp(homeWR1,g.home.abbr+' WR1',g.home.abbr,'wr1_rec',s.props.home.wr1_rec,null,'Rec Yds',25);
-  addProp(awayRB1,g.away.abbr+' RB1',g.away.abbr,'rb1_rush',s.props.away.rb1_rush,null,'Rush Yds',30);
-  addProp(homeRB1,g.home.abbr+' RB1',g.home.abbr,'rb1_rush',s.props.home.rb1_rush,null,'Rush Yds',30);
-  addProp(awayTE1,g.away.abbr+' TE1',g.away.abbr,'te1_rec',s.props.away.te1_rec,null,'Rec Yds',18);
-  addProp(homeTE1,g.home.abbr+' TE1',g.home.abbr,'te1_rec',s.props.home.te1_rec,null,'Rec Yds',18);
+  addProp(homeQB,g.home.abbr,'qb_pass',s.props.home.qb_pass,null,'Pass Yds',65);
+  addProp(awayWR1,g.away.abbr,'wr1_rec',s.props.away.wr1_rec,null,'Rec Yds',25);
+  addProp(homeWR1,g.home.abbr,'wr1_rec',s.props.home.wr1_rec,null,'Rec Yds',25);
+  addProp(awayRB1,g.away.abbr,'rb1_rush',s.props.away.rb1_rush,null,'Rush Yds',30);
+  addProp(homeRB1,g.home.abbr,'rb1_rush',s.props.home.rb1_rush,null,'Rush Yds',30);
+  addProp(awayTE1,g.away.abbr,'te1_rec',s.props.away.te1_rec,null,'Rec Yds',18);
+  addProp(homeTE1,g.home.abbr,'te1_rec',s.props.home.te1_rec,null,'Rec Yds',18);
 
-  // Also add any uploaded props not already covered
+  // Also add uploaded props
   uploaded.forEach(l=>{
     const exists=props.find(p=>p.player===l.player);
     if(!exists&&l.player&&l.line){
@@ -2271,32 +2250,42 @@ function propsPanel(g,s){
         player:l.player,team:l.away||'',stat:l.stat||'Prop',
         projVal,line:l.line,overFreq:freq,underFreq:1-freq,
         recommendation:freq>=0.70?'OVER':(1-freq)>=0.70?'UNDER':'lean',
-        confidence:Math.max(freq,1-freq),bookLine:true,simOnly:false,
+        confidence:Math.max(freq,1-freq),bookLine:true,
       });
     }
   });
 
   props.sort((a,b)=>b.confidence-a.confidence);
 
-  // No props at all shouldn't happen anymore — sim always has projections.
-  // But guard anyway.
+  // If no player objects loaded yet, add positional fallbacks using sim projections
   if(!props.length){
-    html+=`<div style="margin-top:8px">
-      <button class="primary" onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())">
-        Pull ESPN depth charts</button>
-      <div class="note" style="margin-top:6px">Depth charts unlock player names and sharper prop lines.</div>
-    </div>`;
-    return html;
+    const addFallback=(name,team,projVal,stat,sd)=>{
+      if(!projVal)return;
+      const line=Math.round(projVal*0.95/5)*5;
+      const freq=simPropFreq(projVal,line,sd);
+      if(Math.max(freq,1-freq)<0.60)return;
+      props.push({player:name,team,stat,projVal,line,overFreq:freq,underFreq:1-freq,
+        recommendation:freq>=0.70?'OVER':(1-freq)>=0.70?'UNDER':freq>=0.60?'lean over':'lean under',
+        confidence:Math.max(freq,1-freq),bookLine:false,simFallback:true});
+    };
+    addFallback(g.away.abbr+' QB',g.away.abbr,s.props.away.qb_pass,'Pass Yds',65);
+    addFallback(g.home.abbr+' QB',g.home.abbr,s.props.home.qb_pass,'Pass Yds',65);
+    addFallback(g.away.abbr+' RB1',g.away.abbr,s.props.away.rb1_rush,'Rush Yds',30);
+    addFallback(g.home.abbr+' RB1',g.home.abbr,s.props.home.rb1_rush,'Rush Yds',30);
+    addFallback(g.away.abbr+' WR1',g.away.abbr,s.props.away.wr1_rec,'Rec Yds',25);
+    addFallback(g.home.abbr+' WR1',g.home.abbr,s.props.home.wr1_rec,'Rec Yds',25);
+    props.sort((a,b)=>b.confidence-a.confidence);
   }
 
-  // If depth chart isn't loaded yet, show a soft prompt above the rows
-  if(!depthLoaded){
-    html+=`<div class="note" style="margin-bottom:10px">
-      Showing sim projections by position — 
-      <span onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())"
-        style="color:var(--gold);cursor:pointer;text-decoration:underline">pull depth charts</span>
-      to replace with real player names.
-    </div>`;
+  if(!props.length){
+    html+=`<div style="margin-top:8px"><button class="primary" onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())">Pull ESPN depth charts</button>
+      <div class="note" style="margin-top:6px">Depth charts unlock real player names. Sim projections shown above until loaded.</div></div>`;
+    return html;
+  }
+  if(props.some(p=>p.simFallback)){
+    html+=`<div class="note" style="margin-bottom:8px">Showing sim projections by position —
+      <span onclick="fetchNFLDepthCharts(true).then(()=>renderNFL())" style="color:var(--gold);cursor:pointer">pull depth charts</span>
+      to replace with real player names.</div>`;
   }
 
   props.forEach(p=>{
@@ -2306,11 +2295,10 @@ function propsPanel(g,s){
       <div>
         <div class="prop-player">${p.player}</div>
         <div class="prop-stat">${p.team} · ${p.stat}</div>
-        ${p.bookLine?`<div style="font-size:9px;color:var(--gold);font-family:'IBM Plex Mono'">REAL LINE</div>`
-          :p.simOnly?`<div style="font-size:9px;color:var(--mute);font-family:'IBM Plex Mono'">SIM PROJ</div>`:''}
+        ${p.bookLine?`<div style="font-size:9px;color:var(--gold);font-family:'IBM Plex Mono'">REAL LINE</div>`:''}
       </div>
       <div style="text-align:right">
-        <div class="prop-line">O/U ${p.line.toFixed?p.line.toFixed(1):p.line}</div>
+        <div class="prop-line">O/U ${p.line.toFixed(1)}</div>
         <div class="prop-conf ${recCls}" style="font-family:'IBM Plex Mono';font-size:10px;font-weight:700">
           ${p.recommendation}
         </div>
@@ -2994,17 +2982,13 @@ function renderOddsTab(){
 
     <div class="sbar"><h2>Upload Data</h2><div class="ln"></div></div>
     <div class="tkt">
-      <div class="upload-zone" onclick="document.getElementById('oddsFile').click()" id="uploadZone">
+      <div class="upload-zone" onclick="document.getElementById('bookShots').click()" id="uploadZone">
         <div class="icon">📄</div>
         <div style="font-weight:700;color:var(--chalk)">Upload odds, trends, or consensus</div>
-        <p>Paste or upload a .txt file from Covers, sportsbetting.ag, or any odds source</p>
+        <p>Drop a .txt, .pdf, or screenshot — txt files parse free, images need a Gemini key</p>
       </div>
-      <input type="file" id="oddsFile" accept=".txt,.pdf,.png,.jpg,.jpeg" style="display:none" onchange="handleOddsFile(this)">
-      <div style="margin-top:10px">
-        <textarea id="oddsPaste" rows="4" placeholder="Paste odds text here…\n\nFor example:\nKC -3 -110 | CLE +3 -110 | O47 -110 | U47 -110"></textarea>
-        <button class="primary" style="margin-top:8px" onclick="saveOddsText()">Save Odds Data</button>
-      </div>
-      <div id="uploadStatus" style="margin-top:8px"></div>
+      <input type="file" id="bookShots" accept=".txt,.pdf,.png,.jpg,.jpeg" style="display:none" multiple onchange="analyzeBookShots()">
+      <div id="bookShotResult" style="margin-top:8px"></div>
     </div>
 
     <div class="sbar"><h2>Today's Lines</h2><div class="ln"></div><span class="ct" id="linesCount"></span></div>
@@ -3037,132 +3021,15 @@ function renderLinesList(){
     </div>`).join('');
 }
 
-async function handleOddsFile(input){
-  const file=input.files[0];if(!file)return;
-  const status=document.getElementById('uploadStatus');
-  if(status)status.innerHTML='<span style="color:var(--mute)">Reading file…</span>';
-
-  if(file.type.startsWith('image/')||file.type==='application/pdf'){
-    // Send to Gemini for vision parsing
-    const key=get(LS.ai,'');
-    if(!key){if(status)status.innerHTML='<span style="color:var(--rust)">Gemini key required for image parsing — add in Settings</span>';return;}
-    const b64=await fileToBase64(file);
-    await parseWithGemini(b64,file.type,status);
-  }else{
-    const text=await file.text();
-    parseOddsText(text,status);
-  }
-}
-
-function saveOddsText(){
-  const text=document.getElementById('oddsPaste')&&document.getElementById('oddsPaste').value;
-  if(!text||!text.trim())return;
-  parseOddsText(text,document.getElementById('uploadStatus'));
-}
-
-function parseOddsText(text,statusEl){
-  /* Route through the full NFL slate grammar from football-engine.js first.
-     The old dumb regex only understood pipe-separated format and silently
-     dropped every line from a properly-formatted TheDesk txt file. */
-  if(typeof parseNFLSlateText==='function'){
-    const result=parseNFLSlateText(text);
-    if(result&&result.isNFL!==false){
-      const picks=result.picks||[];
-      const trends=result.trends||[];
-      const consensus=result.consensus||[];
-      if(picks.length||trends.length||consensus.length){
-        if(typeof saveNFLBookOdds==='function'&&picks.length){
-          saveNFLBookOdds(picks,statusEl);
-        }
-        if(trends.length||consensus.length){
-          const d=today();
-          if(trends.length){const a=get(LS.nfltrends,{});a[d]=[...(a[d]||[]),...trends];set(LS.nfltrends,a);}
-          if(consensus.length){const a=get(LS.nflconsensus,{});a[d]=[...(a[d]||[]),...consensus];set(LS.nflconsensus,a);}
-        }
-        if(!picks.length&&(trends.length||consensus.length)){
-          if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ Saved ${trends.length} trends · ${consensus.length} consensus</span>`;
-          renderNFL();
-        }
-        return;
-      }
-    }
-  }
-
-  /* Fallback: legacy pipe/space-separated format for non-TheDesk pastes */
-  const lines=[];
-  const rows=text.split('\n').filter(l=>l.trim());
-  rows.forEach(row=>{
-    const teamPat=/([A-Z]{2,4})\s+([\+\-]\d+\.?\d*)\s+([\+\-]\d+)/gi;
-    const totalPat=/(over|under|o|u)\s*(\d+\.?\d*)\s+([\+\-]\d+)/i;
-    let match;
-    while((match=teamPat.exec(row))!==null){
-      const abbr=nflAbbrFor(match[1])||match[1];
-      lines.push({game:row,away:abbr,home:'',market:'spread',
-        side:abbr,line:parseFloat(match[2]),price:parseInt(match[3]),
-        capturedAt:Date.now(),src:'text'});
-    }
-    const tot=totalPat.exec(row);
-    if(tot){
-      const side=tot[1].toLowerCase().startsWith('o')?'over':'under';
-      lines.push({game:row,market:'total',side,
-        line:parseFloat(tot[2]),price:parseInt(tot[3]),
-        capturedAt:Date.now(),src:'text'});
-    }
-  });
-  if(lines.length){
-    const store=get(LS.nflshots,{});
-    store[today()]=[...(store[today()]||[]),...lines];
-    set(LS.nflshots,store);
-    if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ Saved ${lines.length} lines</span>`;
-    renderLinesList();renderNFL();
-  }else{
-    if(statusEl)statusEl.innerHTML=`<span style="color:var(--rust)">Format not recognized. Use the TheDesk txt format (NFL header, TEAM @ TEAM game lines, ML/SPREAD/OU: rows) or paste: KC -3 -110 | O47.5 -110</span>`;
-  }
-}
-
-async function fileToBase64(file){
-  return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onload=e=>res(e.target.result.split(',')[1]);
-    r.onerror=rej;
-    r.readAsDataURL(file);
-  });
-}
-
-async function parseWithGemini(b64,mimeType,statusEl){
-  const key=get(LS.ai,'');if(!key)return;
-  if(statusEl)statusEl.innerHTML='<span style="color:var(--mute)">Analyzing image…</span>';
-  try{
-    const prompt=`Extract all NFL betting lines from this sportsbook screenshot. For each game return JSON objects in an array: [{away, home, market, side, line, price}]. Markets: spread, moneyline, total. Side: away/home/over/under. Price in American odds. Return only the JSON array, nothing else.`;
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[
-        {inline_data:{mime_type:mimeType,data:b64}},
-        {text:prompt}
-      ]}],generationConfig:{temperature:0.1,maxOutputTokens:2000}})
-    });
-    const j=await r.json();
-    const raw=j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts&&j.candidates[0].content.parts[0]&&j.candidates[0].content.parts[0].text||'';
-    const jsonStr=raw.replace(/```json|```/g,'').trim();
-    const picks=JSON.parse(jsonStr);
-    if(Array.isArray(picks)&&picks.length){
-      // Resolve abbreviations
-      const resolved=picks.map(p=>({
-        ...p,
-        away:nflAbbrFor(p.away)||p.away,
-        home:nflAbbrFor(p.home)||p.home,
-        game:(nflAbbrFor(p.away)||p.away)+'@'+(nflAbbrFor(p.home)||p.home),
-        capturedAt:Date.now(),src:'gemini',
-      }));
-      const store=get(LS.nflshots,{});
-      store[today()]=[...(store[today()]||[]),...resolved];
-      set(LS.nflshots,store);
-      if(statusEl)statusEl.innerHTML=`<span style="color:var(--win)">✓ ${resolved.length} lines extracted</span>`;
-      renderLinesList();renderNFL();
-    }else{if(statusEl)statusEl.innerHTML='<span style="color:var(--rust)">No lines found in image</span>';}
-  }catch(e){if(statusEl)statusEl.innerHTML=`<span style="color:var(--rust)">Error: ${e.message}</span>`;}
-}
+async /* handleOddsFile / saveOddsText / parseOddsText / parseWithGemini
+   REMOVED — these were a broken parallel pipeline that bypassed the
+   shared.js upload system. The upload zone now uses id="bookShots" and
+   calls analyzeBookShots() from shared.js, which handles .txt (free,
+   no key), PDF, and images (Gemini key) through the correct pipeline. */
+function handleOddsFile(){/* replaced by analyzeBookShots() */}
+function saveOddsText(){/* replaced by analyzeBookShots() */}
+function parseOddsText(){/* replaced by analyzeBookShots() */}
+async function parseWithGemini(){/* replaced by analyzeBookShots() */}
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 function renderSettings(){
