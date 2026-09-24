@@ -485,7 +485,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
     <li><b>Odds</b> — optional, display only. Used to compare against the sim, never to build it.</li>
     <li><b>Chat and screenshot reading</b> — optional, aistudio.google.com key.</li>
   </ol>
-  <input id="setupKeyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
+  <input id="setupKeyIn" placeholder="the-odds-api.com key" autocomplete="off" spellcheck="false">
   <input id="setupAiIn" placeholder="gemini api key (optional)" autocomplete="off" spellcheck="false">
   <input id="setupSharpIn" placeholder="sharpapi.io key (optional)" autocomplete="off" spellcheck="false">
   <input id="setupRundownIn" placeholder="therundown.io key (optional)" autocomplete="off" spellcheck="false">
@@ -497,7 +497,7 @@ background:var(--panel);border:1px solid var(--rule);color:var(--mute);cursor:po
   <div class="brand"><h1>The<span>Desk</span></h1>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div class="dateline" id="dateline">—</div>
-      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.62</div>
+      <div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);letter-spacing:.06em;margin-top:2px;text-align:right">BUILD v1.63</div>
     </div>
   </div>
   <div class="meterwrap">
@@ -537,15 +537,17 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
     </div>
     <div id="refreshAllStatus"></div>
     <div class="tkt">
-      <div class="sbar" style="margin-top:0"><h2>Your book's real lines</h2><div class="ln"></div></div>
-      <div class="sub">Upload a txt file or screenshots from your sportsbook. <b>Whatever you upload outranks every API</b>
-      and becomes the real tappable line for that market. Or hit <b>⚡ Pull odds</b> above to auto-fetch
-      live lines from The Odds API — no file needed.</div>
+      <div class="sbar" style="margin-top:0"><h2>Intake</h2><div class="ln"></div></div>
+      <div class="sub"><b>Odds, trends, predicted scores, consensus — one box, any sport.</b>
+      Fastest and free: on the site, select the board or article, copy, paste here. Screenshots and PDFs also work
+      (Gemini reads them). Whatever you save <b>outranks every API</b>. Or hit <b>⚡ Pull odds</b> above.</div>
       <div class="sub" id="bookStatus" style="margin-top:6px;font-family:'IBM Plex Mono';font-size:10.5px"></div>
       <div class="mktlab" style="margin-top:8px">Which slate are these for?</div>
       <div class="subnav" id="bookUploadDateRow"></div>
-      <input type="file" id="bookShots" accept="image/*,application/pdf,.doc,.docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="margin-top:8px">
-      <div class="bar" style="margin-top:8px"><button class="primary" onclick="analyzeBookShots()">Analyze screenshots</button></div>
+      <textarea id="intakePaste" rows="5" placeholder="Paste from sportsbetting.ag, Covers, Action Network, a txt file…" style="width:100%;box-sizing:border-box;margin-top:8px;font-family:'IBM Plex Mono';font-size:12px"></textarea>
+      <input type="file" id="bookShots" accept="image/*,application/pdf,.docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="margin-top:8px">
+      <div class="bar" style="margin-top:8px"><button class="primary" onclick="intakeRun()">Read it</button>
+        <button id="intakeCancelBtn" onclick="intakeCancel()" style="display:none">Cancel</button></div>
       <div id="bookShotResult"></div>
     </div>
     <div class="rc-picker" id="dayPicker"></div>
@@ -630,8 +632,11 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
     <div class="tkt">
       <div class="sub" style="margin-bottom:8px">MLB Stats API and ESPN live scores are free and need no key.
       Everything below is optional — the simulator runs fully without any of them.</div>
-      <input id="keyIn" placeholder="odds api key (optional)" autocomplete="off" spellcheck="false">
+      <div data-lbl="keyIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">The Odds API — live lines (all sports)</div>
+      <input id="keyIn" placeholder="the-odds-api.com key" autocomplete="off" spellcheck="false">
+      <div data-lbl="aiIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">Gemini — chat & screenshot reading</div>
       <input id="aiIn" placeholder="gemini api key — chat &amp; screenshot reading" autocomplete="off" spellcheck="false">
+      <div data-lbl="cfbdIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">CollegeFootballData — CFB SP+ ratings</div>
       <input id="cfbdIn" placeholder="collegefootballdata.com key — CFB SP+ ratings (free, 1000/mo)" autocomplete="off" spellcheck="false">
       <div class="sub" style="margin:6px 0 8px;font-family:'IBM Plex Mono';font-size:10.5px">
         Vision model: <b id="geminiModelNow" style="color:var(--gold)">—</b>
@@ -639,8 +644,11 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
         <button onclick="repinGeminiModel()" style="margin-top:6px">Check for a newer model</button>
         <div id="geminiModelStatus" class="sub" style="margin-top:4px"></div>
       </div>
+      <div data-lbl="sharpIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">SharpAPI — totals & props</div>
       <input id="sharpIn" placeholder="sharpapi.io key — totals &amp; props" autocomplete="off" spellcheck="false">
+      <div data-lbl="rundownIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">TheRundown — run lines</div>
       <input id="rundownIn" placeholder="therundown.io key — run lines" autocomplete="off" spellcheck="false">
+      <div data-lbl="oddspapiIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">OddsPapi.io — global books (diagnostic only)</div>
       <input id="oddspapiIn" placeholder="oddspapi.io key — global books, diagnostic only" autocomplete="off" spellcheck="false">
       <div class="bar" style="margin-top:8px">
         <button class="primary" onclick="saveSettingsTab()">Save keys</button>
@@ -675,7 +683,9 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
 
     <div class="sbar"><h2>GitHub auto-sync</h2><div class="ln"></div></div>
     <div class="tkt">
+      <div data-lbl="ghrepoIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">GitHub repo (owner/repo)</div>
       <input id="ghrepoIn" placeholder="owner/repo — e.g. ironsilkstrategies/thedesk" autocomplete="off" spellcheck="false">
+      <div data-lbl="ghtokenIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">GitHub token</div>
       <input id="ghtokenIn" type="password" placeholder="GitHub token — repo-scoped, contents read/write only" autocomplete="off" spellcheck="false">
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="saveGhSettings();pushToGitHub(true)">Sync to GitHub now</button></div>
       <div class="sub" style="margin-top:8px">Pushes a credential-free file to <code>data-backup.json</code> in your repo.
@@ -817,6 +827,7 @@ window.addEventListener('DOMContentLoaded',function(){
 <script>
 (function(){
   ACTIVE_SPORT='mlb';
+  try{localStorage.setItem('d4.activeSport',ACTIVE_SPORT)}catch(e){}
   document.querySelectorAll('[id^=\"sportBtn-\"]').forEach(function(btn){
     var s=btn.id.replace('sportBtn-','');
     var active=(s===ACTIVE_SPORT);
@@ -824,7 +835,6 @@ window.addEventListener('DOMContentLoaded',function(){
     btn.style.color=active?'#000':'#fff';
   });
 })();
-</script>
 </script>
 </body>
 </html>

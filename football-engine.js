@@ -624,85 +624,14 @@ function saveNFLExtData(picks,trends,consensus,el){
 const _origSaveExtPicks=typeof saveExtPicks==='function'?saveExtPicks:null;
 const _origSaveBookOdds=typeof saveBookOdds==='function'?saveBookOdds:null;
 
-// ── pullLiveOdds — one-tap odds pull for active sport ─────────────────────────
-async function pullLiveOdds(){
-  const btn=document.getElementById('pullOddsBtn');
-  const key=get(LS.oddspapi,'');
-  if(!key){
-    document.getElementById('bookShotResult').innerHTML=
-      '<div class="tkt"><h3>Odds API key needed</h3><div class="sub">Add your The Odds API key in Settings → Odds API Key. Free tier: 500 req/month.</div></div>';
-    return;
-  }
-  if(btn){btn.textContent='⏳ Pulling…';btn.disabled=true;}
-  const el=document.getElementById('bookShotResult');
-  try{
-    if(ACTIVE_SPORT==='nfl'){
-      el.innerHTML='<div class="empty">Pulling NFL odds…</div>';
-      await fetchNFLLiveOdds();
-      el.innerHTML='<div class="tkt hi"><h3>NFL odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
-    }else if(ACTIVE_SPORT==='ncaaf'){
-      el.innerHTML='<div class="empty">Pulling CFB odds…</div>';
-      await fetchNCAAFLiveOdds();
-      el.innerHTML='<div class="tkt hi"><h3>CFB odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
-    }else{
-      el.innerHTML='<div class="empty">Pulling MLB odds…</div>';
-      await fetchMLBLiveOdds();
-      el.innerHTML='<div class="tkt hi"><h3>MLB odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
-    }
-  }catch(e){
-    el.innerHTML=`<div class="tkt"><h3>Pull failed</h3><div class="sub">${e.message}</div></div>`;
-  }
-  if(btn){btn.textContent='⚡ Pull odds';btn.disabled=false;}
-}
+// pullLiveOdds / fetchMLBLiveOdds moved to shared.js — mlb.html never loads this file.
 
-// ── MLB Live Odds (The Odds API) ──────────────────────────────────────────────
-async function fetchMLBLiveOdds(){
-  const key=get(LS.oddspapi,'');if(!key)return;
-  const url=`https://api.the-odds-api.com/v4/sports/baseball_mlb/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
-  const r=await fetch(url);const j=await r.json();
-  if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
-  const d=today();const all=get(LS.bookshots,{});all[d]=all[d]||[];
-  const NAME_MAP={'Oakland Athletics':'ATH','Athletics':'ATH','Chicago White Sox':'CWS',
-    'Arizona Diamondbacks':'ARI','Washington Nationals':'WSH','San Diego Padres':'SD',
-    'San Francisco Giants':'SF','Tampa Bay Rays':'TB','Kansas City Royals':'KC',
-    'Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD','New York Mets':'NYM',
-    'New York Yankees':'NYY','St. Louis Cardinals':'STL','Colorado Rockies':'COL',
-    'Detroit Tigers':'DET','Minnesota Twins':'MIN','Milwaukee Brewers':'MIL',
-    'Baltimore Orioles':'BAL','Texas Rangers':'TEX','Houston Astros':'HOU',
-    'Seattle Mariners':'SEA','Miami Marlins':'MIA','Atlanta Braves':'ATL',
-    'Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Pittsburgh Pirates':'PIT',
-    'Philadelphia Phillies':'PHI','Toronto Blue Jays':'TOR','Chicago Cubs':'CHC',
-    'Boston Red Sox':'BOS','New York Mets':'NYM'};
-  function mlbAbbr(name){return NAME_MAP[name]||abbr(name)||name.slice(0,3).toUpperCase();}
-  let count=0;
-  j.forEach(game=>{
-    const homeAb=mlbAbbr(game.home_team);const awayAb=mlbAbbr(game.away_team);
-    const gm=GAMES.find(g=>g.home.abbr===homeAb&&g.away.abbr===awayAb);
-    const gid=gm?gm.id:null;const gameKey=awayAb+'@'+homeAb;
-    const book=game.bookmakers.find(b=>b.key==='draftkings')||game.bookmakers.find(b=>b.key==='fanduel')||game.bookmakers[0];
-    if(!book)return;
-    book.markets.forEach(mkt=>{
-      mkt.outcomes.forEach(o=>{
-        let market,side,line=null;
-        if(mkt.key==='h2h'){market='moneyline';side=mlbAbbr(o.name)===awayAb?'away':'home';}
-        else if(mkt.key==='spreads'){market='runline';side=mlbAbbr(o.name)===awayAb?'away':'home';line=o.point;}
-        else if(mkt.key==='totals'){market='total';side=o.name.toLowerCase()==='over'?'over':'under';line=o.point;}
-        else return;
-        const rec={away:awayAb,home:homeAb,game:gameKey,market,side,line,price:o.price,gid,capturedAt:Date.now()};
-        const k=[rec.game,rec.market,rec.side,rec.line].join('|');
-        const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
-        if(i>=0)all[d][i]=rec;else{all[d].push(rec);count++;}
-      });
-    });
-  });
-  set(LS.bookshots,all);BOOKSHOT_UPLOAD_DATE=d;
-  renderBookStatus();render();
-  console.log('MLB live odds:',count,'new lines');
-}
+
+
 
 // ── NCAAF Live Odds (The Odds API) ───────────────────────────────────────────
 async function fetchNCAAFLiveOdds(){
-  const key=get(LS.oddspapi,'');if(!key)return;
+  const key=theOddsApiKey();if(!key)return;
   const url=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
   const r=await fetch(url);const j=await r.json();
   if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
@@ -1424,166 +1353,104 @@ function nflSpreadCalibAdj(raw,situation){
 // ── NFL Snapshot — populates arc[week].rows/finals so gradeNFLResults has
 // something to grade against. Without this, d4.nflarc stays permanently
 // empty forever and no NFL record/calibration data is ever produced.
-function snapshotNFL(){
-  if(!NFL_GAMES||!NFL_GAMES.length)return;
-  const wk='w'+(NFL_SEASON||'')+'-'+(NFL_WEEK||'');
-  const arc=get(LS.nflarc,{});
-  const A=arc[wk]||(arc[wk]={rows:[],finals:{},ts:Date.now()});
-  const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
-
-  NFL_GAMES.forEach(g=>{
-    let row=A.rows.find(r=>r.id===g.id);
-    if(!row){
-      const gameKey=g.away.abbr+'@'+g.home.abbr;
-      const lines=nflBookLinesFor(gameKey);
-      const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
-      const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
-      const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
-      row={
-        id:g.id,game:gameKey,
-        spreadSide:awaySpread?(awaySpread.line<0?'away':'home'):null,
-        spreadLine:awaySpread?Math.abs(awaySpread.line):null,
-        totalSide:totalOver?'over':null,
-        totalLine:totalOver?totalOver.line:null,
-        mlSide:awayML?(awayML.price<0?'away':'home'):null,
-        situation:nflIsDivisionGame(g)?'division':'nondivision',
-        band:'50-60', // placeholder band, refined below once sim exists
-        graded:false
-      };
-      A.rows.push(row);
-    }
-    // capture final score once the game is over
-    if(isFinalGame(g)&&g.awayScore!=null&&g.homeScore!=null&&!A.finals[g.id]){
-      A.finals[g.id]={a:g.awayScore,h:g.homeScore};
-    }
-  });
-  set(LS.nflarc,arc);
+/* ── FOOTBALL SNAPSHOT + GRADING (NFL & CFB, one implementation) ────────────
+   The old rows stored the BOOK's favorite for spread/ML and "over" for every
+   total, then graded those — so the NFL/CFB record and calibration measured
+   whether favorites and overs hit, not whether the sim was right. Rows now
+   (v:2) carry the MODEL's pick per market with its probability. While a game
+   is pregame the pick refreshes on every snapshot (so a line uploaded Friday
+   still counts); it locks at kickoff. Legacy rows are kept but not counted. */
+function fbModelPicks(s,lines){
+  if(!s)return null;
+  const P={};
+  const aS=lines.find(x=>x.market==='spread'&&x.side==='away'),hS=lines.find(x=>x.market==='spread'&&x.side==='home');
+  if((aS&&aS.line!=null)||(hS&&hS.line!=null)){
+    const aL=aS&&aS.line!=null?+aS.line:-(+hS.line), hL=hS&&hS.line!=null?+hS.line:-aL;
+    const pA=s.awayCover?s.awayCover(aL):null, pH=s.homeCover?s.homeCover(hL):null;
+    if(pA!=null&&pH!=null){const home=pH>=pA;
+      P.spread={side:home?'home':'away',line:home?hL:aL,p:+(home?pH:pA).toFixed(3),price:(home?hS:aS)&&(home?hS:aS).price||null};}
+  }
+  const tO=lines.find(x=>x.market==='total'&&x.side==='over')||lines.find(x=>x.market==='total');
+  if(tO&&tO.line!=null&&typeof s.over==='function'){
+    const pO=s.over(+tO.line),over=pO>=0.5;
+    const tSide=lines.find(x=>x.market==='total'&&x.side===(over?'over':'under'));
+    P.total={side:over?'over':'under',line:+tO.line,p:+(over?pO:1-pO).toFixed(3),price:tSide&&tSide.price||null};
+  }
+  if(lines.some(x=>x.market==='moneyline')&&s.hw!=null){
+    const home=s.hw>=s.aw,m=lines.find(x=>x.market==='moneyline'&&x.side===(home?'home':'away'));
+    P.ml={side:home?'home':'away',p:+(home?s.hw:s.aw).toFixed(3),price:m&&m.price||null};
+  }
+  return Object.keys(P).length?P:null;
 }
+function fbSnapshot(sport){
+  const nfl=sport==='nfl',games=nfl?NFL_GAMES:NCAAF_GAMES;
+  if(!games||!games.length)return;
+  const key=nfl?LS.nflarc:'d4.ncaafarc',sims=nfl?NFL_SIMS:NCAAF_SIMS;
+  const linesFor=nfl?nflBookLinesFor:ncaafBookLinesFor;
+  const wk='w'+((nfl?NFL_SEASON:NCAAF_SEASON)||'')+'-'+((nfl?NFL_WEEK:NCAAF_WEEK)||'');
+  const arc=get(key,{});const A=arc[wk]||(arc[wk]={rows:[],finals:{},ts:Date.now()});
+  const isFinal=g=>g.abstract==='post'||(!g.abstract&&/^final/i.test(g.status||''));
+  const isPre=g=>(g.abstract||'pre')==='pre';
+  games.forEach(g=>{
+    const gameKey=g.away.abbr+'@'+g.home.abbr;
+    let row=A.rows.find(r=>r.id===g.id);
+    if(!row){row={id:g.id,game:gameKey,v:2,graded:false};A.rows.push(row);}
+    if(row.v===2&&isPre(g)&&!row.graded){
+      const picks=fbModelPicks(sims[g.id],linesFor(gameKey));
+      const sm=sims[g.id];
+      if(sm){row.projTotal=sm.med;row.projWinner=sm.hw>=sm.aw?'home':'away';}
+      try{const J=brainJudge(g,sm,sport);if(J)row.judge=brainLockable(J);}catch(e){}
+      if(picks){row.picks=picks;row.pickedAt=Date.now();
+        row.situation=nfl&&typeof nflIsDivisionGame==='function'&&nflIsDivisionGame(g)?'division':'nondivision';}
+    }
+    if(isFinal(g)&&g.awayScore!=null&&g.homeScore!=null&&!A.finals[g.id])A.finals[g.id]={a:+g.awayScore,h:+g.homeScore};
+  });
+  set(key,arc);
+}
+function fbGrade(sport){
+  const nfl=sport==='nfl',key=nfl?LS.nflarc:'d4.ncaafarc';
+  const arc=get(key,{});const calib=getNFLCalib();let changed=false;
+  const band=p=>typeof nflBandOf==='function'?nflBandOf(p):(Math.floor(p*10)*10)+'-'+(Math.floor(p*10)*10+10);
+  Object.values(arc).forEach(A=>{
+    if(!A||!A.rows||!A.finals)return;
+    A.rows.forEach(r=>{
+      if(r.graded||r.v!==2)return;
+      const F=A.finals[r.id];if(!F||F.a==null||F.h==null)return;
+      const P=r.picks||{};r.res={};
+      const out=(m,x)=>x>0?'W':x<0?'L':'P';
+      if(P.spread){const mg=P.spread.side==='home'?F.h-F.a:F.a-F.h;r.res.spread=out('spread',mg+P.spread.line);}
+      if(P.total){const t=F.a+F.h;r.res.total=out('total',P.total.side==='over'?t-P.total.line:P.total.line-t);}
+      if(P.ml){r.res.ml=F.h===F.a?'P':((P.ml.side==='home')===(F.h>F.a)?'W':'L');}
+      Object.entries(r.res).forEach(([m,res])=>{
+        if(res==='P')return;
+        const mk=m==='ml'?'side':m;
+        const ck=(nfl?'':'cfb-')+mk+'|'+(nfl?(r.situation||'any'):'any')+'|'+band(P[m].p);
+        (calib[ck]||(calib[ck]={n:0,hits:0})).n++;if(res==='W')calib[ck].hits++;
+      });
+      r.graded=true;changed=true;
+    });
+  });
+  if(changed){set(NFL_CALIB_KEY,calib);set(key,arc);}
+  try{brainLearn(sport)}catch(e){console.warn('brain learn',e)}
+  if(!fbGrade._box)fbGrade._box={};
+  if(!fbGrade._box[sport]){fbGrade._box[sport]=1;setTimeout(()=>{brainCollectBoxes(sport).catch(()=>{}).finally(()=>{fbGrade._box[sport]=0})},4000);}
+}
+function snapshotNFL(){fbSnapshot('nfl')}
 
 // ── CFB Snapshot — same pattern as NFL, populates d4.ncaafarc
-function snapshotNCAAF(){
-  if(!NCAAF_GAMES||!NCAAF_GAMES.length)return;
-  const wk='w'+(NCAAF_SEASON||'')+'-'+(NCAAF_WEEK||'');
-  const arc=get('d4.ncaafarc',{});
-  const A=arc[wk]||(arc[wk]={rows:[],finals:{},ts:Date.now()});
-  const isFinalGame=g=>g.abstract==='post'||(!g.abstract&&(g.status==='Final'||g.status==='Final/OT'));
-
-  NCAAF_GAMES.forEach(g=>{
-    let row=A.rows.find(r=>r.id===g.id);
-    if(!row){
-      const gameKey=g.away.abbr+'@'+g.home.abbr;
-      const lines=ncaafBookLinesFor(gameKey);
-      const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
-      const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
-      const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
-      row={
-        id:g.id,game:gameKey,
-        spreadSide:awaySpread?(awaySpread.line<0?'away':'home'):null,
-        spreadLine:awaySpread?Math.abs(awaySpread.line):null,
-        totalSide:totalOver?'over':null,
-        totalLine:totalOver?totalOver.line:null,
-        mlSide:awayML?(awayML.price<0?'away':'home'):null,
-        graded:false
-      };
-      A.rows.push(row);
-    }
-    if(isFinalGame(g)&&g.awayScore!=null&&g.homeScore!=null&&!A.finals[g.id]){
-      A.finals[g.id]={a:g.awayScore,h:g.homeScore};
-    }
-  });
-  set('d4.ncaafarc',arc);
-}
+function snapshotNCAAF(){fbSnapshot('ncaaf')}
 
 // ── CFB Grading — mirrors gradeNFLResults exactly, writes to d4.nflcalib
 // (shared calibration bucket, keyed by market so it doesn't collide with NFL rows)
-function gradeNCAAFResults(){
-  const arc=get('d4.ncaafarc',{});
-  const calib=getNFLCalib(); // shared calib store; CFB keys are distinct strings
-  let changed=false;
-  Object.keys(arc).forEach(wk=>{
-    const A=arc[wk];
-    if(!A.rows||!A.finals)return;
-    A.rows.forEach(r=>{
-      if(r.graded)return;
-      const F=A.finals[r.id];
-      if(!F||F.a===null||F.h===null)return;
-      if(r.spreadSide&&r.spreadLine!==null){
-        const margin=r.spreadSide==='home'?F.h-F.a:F.a-F.h;
-        const hit=margin>r.spreadLine;
-        const key=`cfb-spread|any|50-60`;
-        if(!calib[key])calib[key]={n:0,hits:0};
-        calib[key].n++;if(hit)calib[key].hits++;
-        r.spreadHit=hit;changed=true;
-      }
-      if(r.totalSide&&r.totalLine!==null){
-        const tot=F.a+F.h;
-        const hit=r.totalSide==='over'?tot>r.totalLine:tot<r.totalLine;
-        const key=`cfb-total|any|50-60`;
-        if(!calib[key])calib[key]={n:0,hits:0};
-        calib[key].n++;if(hit)calib[key].hits++;
-        r.totalHit=hit;changed=true;
-      }
-      if(r.mlSide){
-        const hit=r.mlSide==='home'?F.h>F.a:F.a>F.h;
-        const key=`cfb-side|any|50-60`;
-        if(!calib[key])calib[key]={n:0,hits:0};
-        calib[key].n++;if(hit)calib[key].hits++;
-        r.mlHit=hit;changed=true;
-      }
-      r.graded=true;
-    });
-  });
-  if(changed){set(NFL_CALIB_KEY,calib);set('d4.ncaafarc',arc);}
-}
+function gradeNCAAFResults(){fbGrade('ncaaf')}
 
-function gradeNFLResults(){
-  const arc=get(LS.nflarc,{});
-  const calib=getNFLCalib();
-  let changed=false;
-  Object.keys(arc).forEach(wk=>{
-    const A=arc[wk];
-    if(!A.rows||!A.finals)return;
-    A.rows.forEach(r=>{
-      if(r.graded)return;
-      const F=A.finals[r.id];
-      if(!F||F.a===null||F.h===null)return;
-      // grade spread
-      if(r.spreadSide&&r.spreadLine!==null){
-        const margin=r.spreadSide==='home'?F.h-F.a:F.a-F.h;
-        const hit=margin>r.spreadLine;
-        const key=`spread|${r.situation||'any'}|${r.band}`;
-        if(!calib[key])calib[key]={n:0,hits:0};
-        calib[key].n++;if(hit)calib[key].hits++;
-        r.spreadHit=hit;changed=true;
-      }
-      // grade total
-      if(r.totalSide&&r.totalLine!==null){
-        const tot=F.a+F.h;
-        const hit=r.totalSide==='over'?tot>r.totalLine:tot<r.totalLine;
-        const key=`total|${r.situation||'any'}|${r.band}`;
-        if(!calib[key])calib[key]={n:0,hits:0};
-        calib[key].n++;if(hit)calib[key].hits++;
-        r.totalHit=hit;changed=true;
-      }
-      // grade moneyline
-      if(r.mlSide){
-        const hit=r.mlSide==='home'?F.h>F.a:F.a>F.h;
-        const key=`side|${r.situation||'any'}|${r.band}`;
-        if(!calib[key])calib[key]={n:0,hits:0};
-        calib[key].n++;if(hit)calib[key].hits++;
-        r.mlHit=hit;changed=true;
-      }
-      r.graded=true;
-    });
-  });
-  if(changed){set(NFL_CALIB_KEY,calib);set(LS.nflarc,arc);}
-}
+function gradeNFLResults(){fbGrade('nfl')}
 
 // ── NFL Live Odds (The Odds API — free tier 500 req/month) ───────────────────
 // Augments uploaded txt odds with live market data when key is available.
 // Uses same LS.oddspapi key as MLB to avoid requiring a second key.
 async function fetchNFLLiveOdds(){
-  const key=get(LS.oddspapi,'');
+  const key=theOddsApiKey();
   if(!key)return;
   try{
     const url=`https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
@@ -2160,11 +2027,12 @@ function nflCardFull(g){
       ?`<div class="proj"><div class="sc" style="color:var(--win)">${g.away.abbr} ${g.awayScore!=null&&g.awayScore!==''?g.awayScore:'?'} – ${g.homeScore!=null&&g.homeScore!==''?g.homeScore:'?'} ${g.home.abbr}</div>
          <div class="rd">final</div></div>`
       :NFL_POWER_FLAT
-         ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded</div></div>`
+         ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded</div>${fbPredLine(g,'nfl',null,null)}${fbJudgeBlock(g,s,'nfl')}</div>`
          :`<div class="proj">
              <div class="sc">${g.away.abbr} ${ap} – ${hp} ${g.home.abbr}</div>
              <div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>
              <div class="md">most common ${s.modeScore?s.modeScore.replace('-','–'):'—'} · ${(s.modeScorePct*100).toFixed(1)}%</div>
+             ${fbPredLine(g,'nfl',ap,hp)}${fbJudgeBlock(g,s,'nfl')}
            </div>`}
     <div class="sig">
       <div class="sigchip">O/U <b>${NFL_POWER_FLAT?'—':med}</b> · ${spreadLabel}</div>
@@ -2374,9 +2242,23 @@ const NCAAF_CONF={
 
 // ── NCAAF storage helpers ────────────────────────────────────────────────────
 function getNCAAFBookLines(){return get(LS.ncaafshots,{})[today()]||[];}
+/* A miss falls through to the alias/fuzzy resolver (~5ms). At 99 games that
+   ran ~100 times per pass, twice per render — about a second of frozen UI the
+   moment any CFB lines existed. Results are memoized against a signature of
+   the stored lines, so any upload, pull or edit invalidates the cache. */
+let _NCAAF_BL_MEMO={sig:'',map:new Map()};
 function ncaafBookLinesFor(gameKey){
   const all=getNCAAFBookLines();
   if(!all.length)return[];
+  let mx=0;for(let i=0;i<all.length;i++){const c=+all[i].capturedAt||0;if(c>mx)mx=c;}
+  const sig=all.length+'|'+mx+'|'+(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES.length:0);
+  if(_NCAAF_BL_MEMO.sig!==sig)_NCAAF_BL_MEMO={sig,map:new Map()};
+  if(_NCAAF_BL_MEMO.map.has(gameKey))return _NCAAF_BL_MEMO.map.get(gameKey);
+  const res=_ncaafBookLinesForRaw(gameKey,all);
+  _NCAAF_BL_MEMO.map.set(gameKey,res);
+  return res;
+}
+function _ncaafBookLinesForRaw(gameKey,all){
   const exact=all.filter(x=>x.game===gameKey);
   if(exact.length)return exact;
   /* CRITICAL FIX — the previous fallback here matched stored rows to a query
@@ -3200,31 +3082,10 @@ function _parseNCAAFEvents(j){
     };
   }).filter(Boolean);
 
-  /* ── GAME ALLOWLIST ─────────────────────────────────────────────────────
-     Only keep games we have odds + predictions data for. Drops ~80 games
-     before render — eliminates the lag from processing the full 99-game slate.
-     Keys are AWAY@HOME using ESPN abbreviations (uppercase). */
-  const _AL=new Set([
-    'USF@ARMY','ODU@VT','PSU@TEM','ORE@OKST','ASU@TAM','WSU@KSU',
-    'OKLA@MICH','APP@ECU','WAKE@PUR','WKU@UGA','UTSA@TXST','ALA@UK',
-    'RICE@ND','EMU@MSU','MD@CONN','MSST@MINN','ARIZ@BYU','UCF@PITT',
-    'DUKE@ILL','CAL@SYR','USU@WASH','ULM@UAB','UNLV@UNT','DEL@VAN',
-    'MEM@BSU','JVST@OHIO','BUFF@FIU','USA@TULN','TLSA@SHSU','BGSU@NEB',
-    'TENN@GT','MTU@MRSH','GSU@KENN','ISU@IOWA','OSU@TEX','SDSU@UCLA',
-    'GASO@CLEM','FAU@NAVY','TTU@ORST','USM@AUB','CHAR@MISS','NDSU@AFA',
-    'ARK@UTAH','CSUS@FRES','ULL@USC','NMSU@HAW',
-    // ESPN alternate abbreviations
-    'APPST@ECU','WAKE FOR@PUR','WKU@GEORGIA','MISS ST@MINN',
-    'E MICH@MICH ST','JKSNV ST@OHIO','SAC ST@FRES ST','SAC ST@FRESNO ST',
-    'BOWLING GR@NEB','BOWLING GR@NEBRASKA','S ALA@TULANE','S ALA@TULN',
-    'GEORGIA SO@CLEM','GEORGIA SO@CLEMSON','MID TENN@MRSH','MID TENN@MARSHALL',
-    'NM STATE@HAW','NM STATE@HAWAII','LA-LAFAYET@USC','UL LAFAYET@USC',
-    'GEORGIA ST@KENN','GEORGIA ST@KENNESAW','NDAK ST@AFA','NDAK ST@AIR FORCE',
-    'N DAKO ST@AFA','JACK ST@OHIO','JAX ST@OHIO',
-  ]);
-  NCAAF_GAMES=NCAAF_GAMES.filter(function(g){
-    return _AL.has((g.away.abbr+'@'+g.home.abbr).toUpperCase().trim());
-  });
+  /* A hardcoded allowlist of one past week's ~46 matchups used to sit here as
+     a freeze workaround — it silently deleted every game on every other week.
+     Removed: the slate board renders one kickoff window at a time instead, so
+     the full FBS week loads without locking the page. */
 
   const cacheKey=(NCAAF_SEASON||'')+'w'+(NCAAF_WEEK||'');
   const cache=get(LS.ncaafgames,{});
@@ -3317,7 +3178,6 @@ function renderNCAAF(){
     </div>`;
     return;
   }
-  NCAAF_GAMES.forEach(g=>{if(!NCAAF_SIMS[g.id])NCAAF_SIMS[g.id]=simNCAAFGame(g);});
   const week=NCAAF_WEEK||'?';const season=NCAAF_SEASON||2025;
   const weekNav=`<div style="display:flex;align-items:center;justify-content:space-between;
     padding:10px 12px;background:var(--panel2);border-radius:8px;margin-bottom:10px">
@@ -3357,11 +3217,149 @@ function renderNCAAF(){
      board over whatever sport is actually on screen. */
   document.getElementById('nG').textContent=NCAAF_GAMES.length;
   if(ACTIVE_SPORT!=='ncaaf')return;
+  /* ── SLATE BOARD ─────────────────────────────────────────────────────────
+     The board used to sim all ~99 games (10,000 runs each) and build every
+     full card in one synchronous pass — about a million sim iterations on the
+     main thread before the first pixel, which is the freeze. Now the week is
+     split into kickoff windows; only the chosen window is simulated, in small
+     chunks that yield to the browser, and cards paint as soon as their sims
+     finish. A stale pass is cancelled the moment you tap another slate. */
+  const visible=[...scheduled,...final];
+  const slates=ncaafBuildSlates(visible);
+  const wk=String(season)+'-'+String(week);
+  if(NCAAF_SLATE_WEEK!==wk){NCAAF_SLATE_WEEK=wk;NCAAF_SLATE=null;}
+  if(!NCAAF_SLATE||!slates.some(x=>x.key===NCAAF_SLATE))NCAAF_SLATE=ncaafDefaultSlate(slates);
+  const cur=slates.find(x=>x.key===NCAAF_SLATE)||slates[0];
+  const games=cur?cur.games:[];
+  const chip=(key,label,n,sub)=>{
+    const on=key===NCAAF_SLATE;
+    return`<button onclick="ncaafPickSlate('${key}')" style="flex:0 0 auto;min-width:74px;padding:7px 10px;border-radius:9px;cursor:pointer;
+      border:1px solid ${on?'var(--gold)':'var(--rule)'};background:${on?'var(--gold)':'var(--panel2)'};color:${on?'#000':'var(--chalk)'};
+      font-weight:800;font-size:12px;line-height:1.2;text-align:center">${label}
+      <div style="font-family:'IBM Plex Mono';font-size:9.5px;font-weight:600;opacity:.8">${n} game${n===1?'':'s'}${sub?' · '+sub:''}</div></button>`;
+  };
   let h=weekNav;
+  h+=`<div style="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 10px;scrollbar-width:none">
+    ${slates.map(x=>chip(x.key,x.label,x.games.length,x.live?'<span style="color:'+(x.key===NCAAF_SLATE?'#000':'var(--rust)')+'">●LIVE</span>':'')).join('')}</div>`;
   h+=`<div class="bar" style="margin:-4px 0 10px"><button onclick="refreshNCAAFLiveScores()">↻ Refresh scores</button></div>`;
-  if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(ncaafCard).join('');
-  if(final.length)h+=sbar('Final',final.length)+final.map(ncaafCard).join('');
+  h+=`<div id="cfbSlateBody"></div>`;
   el.innerHTML=h;
+  ncaafPaintSlate(games);
+}
+
+let NCAAF_SLATE=null,NCAAF_SLATE_WEEK=null,NCAAF_PAINT_TOKEN=0;
+const NCAAF_TZ='America/Chicago';
+/* Central-time parts for a kickoff — every window boundary below is CT, the
+   same clock the book (sportsbetting.ag) posts in. */
+function ncaafKickParts(g){
+  const t=g&&g.date?new Date(g.date):null;
+  if(!t||isNaN(t))return null;
+  const p={};
+  new Intl.DateTimeFormat('en-US',{timeZone:NCAAF_TZ,weekday:'short',hour:'numeric',minute:'numeric',hour12:false,
+    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(t).forEach(x=>p[x.type]=x.value);
+  const hr=(+p.hour)%24,mn=+p.minute;
+  return{day:p.weekday,date:p.year+'-'+p.month+'-'+p.day,mins:hr*60+mn};
+}
+/* Saturday splits into the four TV windows the sport actually runs on;
+   any other day (Tue/Wed/Thu/Fri MACtion, Sunday, etc.) is its own slate. */
+function ncaafWindowOf(g){
+  const k=ncaafKickParts(g);
+  if(!k)return{key:'tbd',label:'TBD',order:99999};
+  const dayOrder={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+  const base=(dayOrder[k.day]!=null?dayOrder[k.day]:7)*10000;
+  if(k.day==='Sat'){
+    /* CT windows: 11:00 (noon ET) · 1:00–2:00 · 2:30 (3:30 ET) · 6:00+ primetime */
+    if(k.mins<12*60)      return{key:'sat-early',label:'Early',order:base+1};
+    if(k.mins<14*60+15)   return{key:'sat-mid',  label:'Midday',order:base+2};
+    if(k.mins<17*60+30)   return{key:'sat-aft',  label:'Afternoon',order:base+3};
+    return                       {key:'sat-late', label:'Late',order:base+4};
+  }
+  return{key:'d-'+k.date,label:k.day,order:base};
+}
+const ncaafIsLive=g=>g.abstract==='in'||(!g.abstract&&/progress|half|quarter/i.test(g.status||''));
+const ncaafIsFinal=g=>g.abstract==='post'||(!g.abstract&&/^final/i.test(g.status||''));
+function ncaafBuildSlates(games){
+  const map={};
+  games.forEach(g=>{
+    const w=ncaafWindowOf(g);
+    (map[w.key]||(map[w.key]={key:w.key,label:w.label,order:w.order,games:[]})).games.push(g);
+  });
+  const out=Object.values(map).sort((a,b)=>a.order-b.order);
+  out.forEach(x=>{
+    x.live=x.games.some(ncaafIsLive);
+    x.done=x.games.every(ncaafIsFinal);
+    x.games.sort((a,b)=>(new Date(a.date)-new Date(b.date))||
+      ((ncaafIsLive(b)?1:0)-(ncaafIsLive(a)?1:0)));
+  });
+  /* Cross-cutting views on top of the time windows: the games you actually
+     have book lines for (where a bet can happen), and everything live. */
+  const withLines=games.filter(g=>ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr).length);
+  if(withLines.length)out.unshift({key:'lines',label:'My Lines',order:-2,games:withLines,
+    live:withLines.some(ncaafIsLive),done:withLines.every(ncaafIsFinal)});
+  const live=games.filter(ncaafIsLive);
+  if(live.length)out.unshift({key:'live',label:'Live Now',order:-3,games:live,live:true,done:false});
+  return out;
+}
+/* Land where the action is: live games first, then the next window that
+   hasn't finished, then the last window of the week. */
+function ncaafDefaultSlate(slates){
+  if(!slates.length)return null;
+  const timed=slates.filter(x=>x.key!=='lines'&&x.key!=='live');
+  const liveW=timed.find(x=>x.live);if(liveW)return liveW.key;
+  const next=timed.find(x=>!x.done);if(next)return next.key;
+  return(timed[timed.length-1]||slates[0]).key;
+}
+function ncaafPickSlate(key){
+  NCAAF_SLATE=key;
+  renderNCAAF();
+  const b=document.getElementById('cfbSlateBody');
+  if(b&&b.scrollIntoView)try{b.scrollIntoView({block:'start',behavior:'smooth'})}catch(e){}
+}
+/* Sims only this slate, a few games per frame, painting cards as they land.
+   Sims are cached in NCAAF_SIMS, so returning to a slate is instant. */
+function ncaafPaintSlate(games){
+  const body=document.getElementById('cfbSlateBody');if(!body)return;
+  const token=++NCAAF_PAINT_TOKEN;
+  if(!games.length){body.innerHTML='<div class="empty">No games in this window.</div>';return;}
+  const live=games.filter(ncaafIsLive),fin=games.filter(ncaafIsFinal),
+        up=games.filter(g=>!ncaafIsLive(g)&&!ncaafIsFinal(g));
+  const groups=[['Live',live],['Upcoming',up],['Final',fin]].filter(x=>x[1].length);
+  body.innerHTML=groups.map(([t,arr],i)=>sbar(t,arr.length)+
+    `<div id="cfbGrp${i}">${arr.map(g=>`<div data-gid="${g.id}">${NCAAF_SIMS[g.id]?ncaafCard(g):
+      `<div class="tkt" style="opacity:.55;padding:12px"><b>${g.away.name}</b> @ <b>${g.home.name}</b>
+        <div class="sub mono" style="font-size:10px">running sim…</div></div>`}</div>`).join('')}</div>`).join('');
+  const queue=games.filter(g=>!NCAAF_SIMS[g.id]);
+  const step=()=>{
+    if(token!==NCAAF_PAINT_TOKEN||ACTIVE_SPORT!=='ncaaf')return; // user moved on
+    const t0=performance.now();
+    while(queue.length&&performance.now()-t0<24){
+      const g=queue.shift();
+      try{NCAAF_SIMS[g.id]=simNCAAFGame(g);}catch(e){console.warn('CFB sim failed',g&&g.id,e);continue;}
+      const slot=body.querySelector('[data-gid="'+g.id+'"]');
+      if(slot)slot.innerHTML=ncaafCard(g);
+    }
+    if(queue.length)setTimeout(step,0);else ncaafBackfillLined();
+  };
+  if(queue.length)setTimeout(step,0);else ncaafBackfillLined();
+}
+/* Picks need a sim. With lazy slates, a game you have lines for but never
+   opened would never get one — so after the visible slate finishes, quietly
+   sim just the lined games (not all 99) in the same yielding chunks, then
+   snapshot so their model picks are captured before kickoff. */
+let NCAAF_BACKFILL=false;
+function ncaafBackfillLined(){
+  if(NCAAF_BACKFILL)return;
+  const q=NCAAF_GAMES.filter(g=>!NCAAF_SIMS[g.id]&&(g.abstract||'pre')==='pre'&&
+    ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr).length);
+  if(!q.length){try{snapshotNCAAF()}catch(e){}return;}
+  NCAAF_BACKFILL=true;
+  const step=()=>{
+    const t0=performance.now();
+    while(q.length&&performance.now()-t0<16){const g=q.shift();try{NCAAF_SIMS[g.id]=simNCAAFGame(g)}catch(e){}}
+    if(q.length)return setTimeout(step,30);
+    NCAAF_BACKFILL=false;try{snapshotNCAAF()}catch(e){}
+  };
+  setTimeout(step,250);
 }
 
 // ── NCAAF game card ───────────────────────────────────────────────────────────
@@ -3370,6 +3368,19 @@ function renderNCAAF(){
    Appears on Final cards. Shows where the model was right/wrong, where the
    book was right/wrong, which trends fired, and what to calibrate from this.
    Feeds into the calibration narrative — not just a number but a reason. */
+
+/* Uploaded predicted score (Covers etc.) shown under the sim's own number,
+   with the gap between them — the disagreement is the interesting part. */
+function fbPredLine(g,sport,ap,hp){
+  if(typeof predFor!=='function')return'';
+  const p=predFor(sport,g.away.abbr+'@'+g.home.abbr);if(!p)return'';
+  let gap='';
+  if(ap!=null&&hp!=null&&!isNaN(ap)&&!isNaN(hp)){
+    const dm=Math.round(((p.h-p.a)-(hp-ap))*10)/10,dt=Math.round(((p.a+p.h)-(ap+hp))*10)/10;
+    gap=`<span style="color:var(--mute);margin-left:5px">vs sim: margin ${dm>0?'+':''}${dm} · total ${dt>0?'+':''}${dt}</span>`;}
+  return`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--gold);margin-top:2px">`+
+    `pred ${g.away.abbr} ${p.a} – ${p.h} ${g.home.abbr}${gap}</div>`;
+}
 function fbAnalysisPanel(g,s,sport){
   const aA=g.awayScore!=null&&g.awayScore!==''?+g.awayScore:null;
   const hA=g.homeScore!=null&&g.homeScore!==''?+g.homeScore:null;
@@ -3637,7 +3648,7 @@ function ncaafCard(g){
       (g.abstract==='post'||g.status==='Final')
       ?fbFinalHeadline(g,s,'ncaaf')
       :NCAAF_POWER_FLAT
-         ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded</div></div>`
+         ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded</div>${fbPredLine(g,'ncaaf',null,null)}${fbJudgeBlock(g,s,'ncaaf')}</div>`
          :(()=>{
              /* ITEM 7: show both raw sim AND trend/calibration-adjusted projection */
              const adj=computeTrendAdjustedProjection(g,s,'ncaaf');
@@ -3645,7 +3656,7 @@ function ncaafCard(g){
              const adjLine=adj?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--cold);margin-top:2px">`
                +`adj ${g.away.abbr} ${adj.adjAway} – ${adj.adjHome} ${g.home.abbr}`
                +`<span style="color:var(--mute);margin-left:5px">${adj.trendCount} trend${adj.trendCount!==1?'s':''}</span></div>`:'';
-             return `<div class="proj"><div class="sc">${raw}</div><div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>${adjLine}</div>`;
+             return `<div class="proj"><div class="sc">${raw}</div><div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>${adjLine}${fbPredLine(g,'ncaaf',ap,hp)}${fbJudgeBlock(g,s,'ncaaf')}</div>`;
            })()}
     <div class="sig">
       <div class="sigchip">O/U <b>${NCAAF_POWER_FLAT?'—':med}</b> · ${spreadLabel}</div>
@@ -3802,7 +3813,14 @@ function ncaafGameAG(g,s){
 // ── NCAAF Master Evaluation ───────────────────────────────────────────────────
 function renderNCAAFMasterEval(){
   if(!NCAAF_GAMES.length)return'<div class="empty">No CFB games loaded. Switch to CFB tab and load the schedule first.</div>';
-  NCAAF_GAMES.forEach(g=>{if(!NCAAF_SIMS[g.id])NCAAF_SIMS[g.id]=simNCAAFGame(g);});
+  /* An edge needs a book line to measure against. Simming all ~99 games here
+     froze the BEST tab the same way it froze the board; only games with
+     uploaded or pulled lines can score, so only those get simulated. */
+  NCAAF_GAMES.forEach(g=>{
+    if(NCAAF_SIMS[g.id])return;
+    if(!ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr).length)return;
+    try{NCAAF_SIMS[g.id]=simNCAAFGame(g);}catch(e){}
+  });
   const evals=NCAAF_GAMES.map(g=>{
     const s=NCAAF_SIMS[g.id];if(!s)return null;
     const gameKey=g.away.abbr+'@'+g.home.abbr;
@@ -3984,3 +4002,63 @@ if(window.__PAGE_SPORT__==='ncaaf'){
 /* ═══════════════════════════════════════════════════════════════
    NFL ENGINE END
    ═══════════════════════════════════════════════════════════════ */
+
+/* ── FOOTBALL RECORD TAB ─────────────────────────────────────────────────────
+   The Record tab only ever read the MLB archive, so the NFL page displayed
+   MLB's record (the "4-0 in a week-old feature"). Football pages now show
+   their own sport's record, graded on the model's picks. */
+function renderFootballRecord(sport){
+  const nfl=sport==='nfl';
+  try{fbSnapshot(sport);fbGrade(sport);}catch(e){console.warn('fb grade',e)}
+  const nav=document.getElementById('gradeNav');
+  if(nav)nav.innerHTML=`<button class="on">${nfl?'🏈 NFL':'🏟 CFB'} record</button>`;
+  const body=document.getElementById('gradeBody');if(!body)return;
+  const arc=get(nfl?LS.nflarc:'d4.ncaafarc',{});
+  const weeks=Object.keys(arc).filter(k=>arc[k]&&Array.isArray(arc[k].rows)).sort().reverse();
+  const T={spread:{W:0,L:0,P:0,u:0},total:{W:0,L:0,P:0,u:0},ml:{W:0,L:0,P:0,u:0}};
+  const hi={W:0,L:0},lo={W:0,L:0};let pending=0,legacy=0;const done=[];
+  const won=pr=>pr!=null&&!isNaN(pr)?amerProfit(+pr):amerProfit(-110);
+  weeks.forEach(wk=>arc[wk].rows.forEach(r=>{
+    if(r.v!==2){if(r.graded)legacy++;return;}
+    if(!r.graded){if(r.picks)pending++;return;}
+    if(!r.res||!Object.keys(r.res).length)return;
+    done.push({wk,r});
+    Object.entries(r.res).forEach(([m,x])=>{
+      const t=T[m];if(!t)return;t[x]++;
+      const pk=r.picks[m];
+      if(x==='W')t.u+=won(pk.price);else if(x==='L')t.u-=1;
+      if(x!=='P'){const b=pk.p>=0.6?hi:lo;b[x]++;}
+    });
+  }));
+  const pctOf=o=>o.W+o.L?Math.round(o.W/(o.W+o.L)*100)+'%':'—';
+  const all=['spread','total','ml'].reduce((a,m)=>({W:a.W+T[m].W,L:a.L+T[m].L,P:a.P+T[m].P,u:a.u+T[m].u}),{W:0,L:0,P:0,u:0});
+  const uCol=u=>u>0?'var(--win)':u<0?'var(--rust)':'var(--mute)';
+  const row=(lbl,o)=>`<div class="rc-row" style="margin:4px 0"><div><div class="g">${lbl}</div>
+    <div class="p">${o.W}-${o.L}${o.P?'-'+o.P:''} · ${pctOf(o)}</div></div>
+    <div class="r" style="color:${uCol(o.u)}">${o.u>=0?'+':''}${o.u.toFixed(2)}u</div></div>`;
+  let h=`<div class="tkt"><h3>${nfl?'NFL':'CFB'} model record</h3>
+    <div class="sub">Graded on the sim's own pick in each market, locked at kickoff. 1 unit per play; price from your lines (−110 if none).</div>
+    <div style="font-size:26px;font-weight:900;margin:8px 0 2px">${all.W}-${all.L}${all.P?'-'+all.P:''}
+      <span style="font-size:14px;color:${uCol(all.u)}">${all.u>=0?'+':''}${all.u.toFixed(2)}u</span></div>
+    <div class="rc-list">${row('Spread',T.spread)}${row('Total',T.total)}${row('Moneyline',T.ml)}</div>
+    <div class="sub" style="margin-top:8px">Confidence split: <b>60%+</b> ${hi.W}-${hi.L} (${pctOf(hi)}) · <b>under 60%</b> ${lo.W}-${lo.L} (${pctOf(lo)})</div>
+    ${pending?`<div class="sub">${pending} game${pending===1?'':'s'} with locked picks awaiting finals.</div>`:''}
+    ${legacy?`<div class="sub" style="color:var(--mute)">${legacy} older row${legacy===1?'':'s'} graded the book favorite, not the model — excluded.</div>`:''}
+  </div>`;
+  h+=brainReport(sport);
+  if(!done.length){body.innerHTML=h+`<div class="empty">No graded ${nfl?'NFL':'CFB'} picks yet. Picks are captured for any game with uploaded or pulled lines and grade automatically once ESPN posts the final.</div>`;return;}
+  const lab={spread:'ATS',total:'TOT',ml:'ML'};
+  const chipR=x=>`<span style="font-family:'IBM Plex Mono';font-size:10px;font-weight:800;color:${x==='W'?'var(--win)':x==='L'?'var(--rust)':'var(--mute)'}">${x}</span>`;
+  let curWk='';
+  done.slice(0,150).forEach(({wk,r})=>{
+    if(wk!==curWk){curWk=wk;h+=sbar(wk.replace(/^w(\d+)-/,'$1 · Week '),'');}
+    const [aw,hm]=r.game.split('@');const F=(arc[wk].finals||{})[r.id]||{};
+    const desc=m=>{const p=r.picks[m];const tm=p.side==='home'?hm:p.side==='away'?aw:p.side;
+      return m==='spread'?`${tm} ${p.line>0?'+':''}${p.line}`:m==='total'?`${p.side==='over'?'O':'U'} ${p.line}`:`${tm} ML`;};
+    h+=`<div class="rc-row" style="margin:3px 0"><div><div class="g">${r.game} <span style="color:var(--mute)">${F.a??''}-${F.h??''}</span></div>
+      <div class="p">${Object.keys(r.res).map(m=>`${lab[m]} ${desc(m)} ${chipR(r.res[m])}`).join(' · ')}</div></div></div>`;
+  });
+  body.innerHTML=h;
+}
+
+/* THE JUDGE (brain) now lives in shared.js — one engine for MLB, NFL and CFB. */
