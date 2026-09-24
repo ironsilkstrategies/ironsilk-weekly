@@ -168,7 +168,7 @@ function intakeParseGrammar(text,fallbackSport){
   const sections=[];let cur=null;
   stripBOM(text).split('\n').forEach(line=>{
     const l=line.replace(/^[\s\-*•>]+/,'').trim();
-    const hs=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB)\s*$/i);
+    const hs=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB)(?:\s+(?:ODDS|LINES|BOARD|SLATE))?\s*$/i);
     if(hs){cur={sport:/^(NCAAF|CFB|COLLEGE)/i.test(hs[1])?'ncaaf':hs[1].toLowerCase(),lines:[]};sections.push(cur);return;}
     if(!cur){cur={sport:null,lines:[]};sections.push(cur);}
     cur.lines.push(l);
@@ -216,10 +216,73 @@ const intakeCount=r=>Object.values(r).reduce((n,b)=>n+b.picks.length+b.trends.le
 function intakeMerge(into,from){Object.entries(from).forEach(([sp,b])=>{const t=into[sp]||(into[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[]});
   ['picks','trends','consensus','preds','raw'].forEach(k=>t[k].push(...b[k]))});return into;}
 
+
+/* Key:value odds sheets (what other AIs and many sites export):
+     SPORT: NFL / AWAY: Carolina Panthers / HOME: Cleveland Browns
+     SPREAD: Panthers -3 (-102) | Browns +3 (-118)
+     TOTAL: Over 42 (-115) | Under 42 (-105)
+     1H_SPREAD / 1F_RUN_LINE (first five) / RUN_LINE / MONEYLINE …
+   Rewritten into TheDesk grammar before anything else reads it. Sides are
+   matched by nickname against AWAY/HOME, falling back to listed order. */
+function intakeNormalizeKV(text){
+  const L=stripBOM(text).split('\n');
+  if(!L.some(l=>/^\s*(AWAY|HOME)\s*:/i.test(l)))return text;
+  const out=[];let sport=null,lastSport=null,away=null,home=null,pend=[];
+  const clean=n=>String(n||'').replace(/\(.*?\)/g,'').trim();
+  const words=n=>clean(n).toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>2);
+  const isHome=tok=>{const t=words(tok);if(!t.length)return null;
+    const h=words(home),a=words(away);const hh=t.some(w=>h.includes(w)),aa=t.some(w=>a.includes(w));
+    return hh&&!aa?true:aa&&!hh?false:null;};
+  const MAP=[[/^(1H|H1|FIRST_?HALF)_?(SPREAD|POINT_?SPREAD)$/,'H1SPREAD','side'],[/^(1H|H1|FIRST_?HALF)_?(MONEYLINE|ML)$/,'H1ML','ml'],
+    [/^(1H|H1|FIRST_?HALF)_?(TOTAL|OU|OVER_?UNDER)$/,'H1OU','tot'],
+    [/^(1F|F5|FIRST_?5|FIRST_?FIVE)_?(RUN_?LINE|RL|SPREAD)$/,'F5 RL','side'],[/^(1F|F5|FIRST_?5|FIRST_?FIVE)_?(MONEYLINE|ML)$/,'F5 ML','ml'],
+    [/^(1F|F5|FIRST_?5|FIRST_?FIVE)_?(TOTAL|OU)$/,'F5 OU','tot'],
+    [/^(RUN_?LINE|RL|PUCK_?LINE)$/,'RL','side'],[/^(SPREAD|POINT_?SPREAD|HANDICAP)$/,'SPREAD','side'],
+    [/^(MONEYLINE|MONEY_?LINE|ML)$/,'ML','ml'],[/^(TOTAL|TOTALS|OU|OVER_?UNDER)$/,'OU','tot']];
+  const flush=()=>{if(!away||!home)return;const sp=sport||lastSport;
+    if(sp!==lastSport){out.push('',sp==='ncaaf'?'NCAAF':sp.toUpperCase());lastSport=sp;}
+    const nm=x=>sp==='mlb'?(intakeAbbr('mlb',clean(x))||clean(x)):clean(x);
+    const A=nm(away),H=nm(home);out.push('',A+' @ '+H);
+    pend.forEach(([lab,kind,val])=>{
+      const parts=val.split(/\s*[|\/]\s*/).map(x=>x.trim()).filter(Boolean);if(parts.length<2)return;
+      if(kind==='tot'){const g=p=>{const m=p.match(/^(over|under|o|u)\s*([\d.]+)\s*\(?\s*([+\-]\d+|even|ev)\s*\)?/i);
+          return m?{s:m[1][0].toLowerCase(),l:m[2],p:/ev/i.test(m[3])?'+100':m[3]}:null;};
+        const o=parts.map(g).find(x=>x&&x.s==='o'),u=parts.map(g).find(x=>x&&x.s==='u');
+        if(o&&u)out.push(`${lab}: o${o.l} (${o.p}) / u${u.l} (${u.p})`);return;}
+      const g=p=>{const m=kind==='ml'?p.match(/^(.*?)\s+([+\-]\d{3,}|even|ev)\s*$/i)
+          :p.match(/^(.*?)\s+([+\-]?\d+(?:\.\d)?|pk|pick|ev)\s*\(\s*([+\-]\d+|even|ev)\s*\)\s*$/i);
+        if(!m)return null;const ev=x=>/^(even|ev)$/i.test(x)?'+100':x;
+        if(kind==='ml')return{t:m[1],v:ev(m[2])};
+        let ln=/^(pk|pick|ev)$/i.test(m[2])?0:+m[2];return{t:m[1],ln,p:ev(m[3])};};
+      let x=g(parts[0]),y=g(parts[1]);if(!x||!y)return;
+      if(isHome(x.t)===true||isHome(y.t)===false)[x,y]=[y,x];
+      const sg=v=>(v>0?'+':v<0?'':'+')+v;
+      if(kind==='ml')out.push(`${lab}: ${A} ${x.v} / ${H} ${y.v}`);
+      else out.push(`${lab}: ${A} ${x.ln===0?'+0':sg(x.ln)} (${x.p}) / ${H} ${y.ln===0?'-0':sg(y.ln)} (${y.p})`);
+    });
+    away=home=null;pend=[];};
+  L.forEach(raw=>{const l=raw.trim();if(!l||/^[=\-_*#]{3,}$/.test(l))return;
+    const m=l.match(/^([A-Za-z0-9_ ]{2,24}?)\s*:\s*(.+)$/);
+    const hdr=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB)\b(\s+(ODDS|LINES|BOARD|SLATE))?\s*$/i);
+    if(hdr){flush();sport=/^(NCAAF|CFB|COLLEGE)/i.test(hdr[1])?'ncaaf':hdr[1].toLowerCase();return;}
+    if(!m){out.push(l);return;}
+    const k=m[1].trim().toUpperCase().replace(/\s+/g,'_'),v=m[2].trim();
+    if(k==='SPORT'){flush();const t=v.toUpperCase();sport=/NCAA|CFB|COLLEGE/.test(t)?'ncaaf':/MLB|BASEBALL/.test(t)?'mlb':/NFL/.test(t)?'nfl':sport;return;}
+    if(k==='AWAY'){if(away&&home)flush();away=v;return;}
+    if(k==='HOME'){home=v;return;}
+    if(/^(TIME|DATE|SOURCE|BOOK|VENUE|PITCHERS?|NOTES?)$/.test(k))return;
+    const hit=MAP.find(([re])=>re.test(k));
+    if(hit&&away){pend.push([hit[1],hit[2],v]);return;}
+    out.push(l);
+  });
+  flush();
+  return out.join('\n');
+}
 /* Text: grammar first, then raw board copy, then (only if both find nothing)
    Gemini on the TEXT — a few KB, answers in seconds, no image upload. */
 async function intakeText(text,sig){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;
+  text=intakeNormalizeKV(text);
   /* Mixed pastes are normal (a Covers block plus a copied board), so read
      BOTH: grammar lines as grammar, and whatever is left as board copy. */
   const r=intakeParseGrammar(text,sp);
@@ -271,7 +334,7 @@ async function intakeFile(f,sig){
   if(data.length>11e6)throw new Error('file too large even after compression — split the PDF');
   const t=await callGemini(key,[{type:mime==='application/pdf'?'document':'image',source:{media_type:mime,data}},
     {type:'text',text:intakePrompt(sp)}],4000,{timeoutMs:35000,maxAttempts:2,maxWaitMs:3000,signal:sig});
-  return{r:intakeParseGrammar(intakeClean(t),sp),how:'screenshot transcribed'};
+  return{r:intakeParseGrammar(intakeNormalizeKV(intakeClean(t)),sp),how:'screenshot transcribed'};
 }
 function intakeCancel(){if(INTAKE.ctl)INTAKE.ctl.abort();}
 async function intakeRun(){
@@ -306,7 +369,7 @@ function intakePreview(el,st){
   const games=b=>{const m={};b.picks.forEach(p=>{const k=(p.away||'')+'@'+(p.home||'');(m[k]=m[k]||new Set()).add(p.market)});
     [['preds','PRED'],['consensus','CONS'],['trends','TREND']].forEach(([f,t])=>b[f].forEach(x=>(m[x.game]=m[x.game]||new Set()).add(t)));return m;};
   el.innerHTML=`<div class="tkt hi"><h3>Check it, then save</h3>${sports.map(sp=>{const b=r[sp];const g=games(b);
-    return`<div style="margin:8px 0"><b>${lab[sp]}</b> <span class="sub mono" style="font-size:10.5px">${b.picks.length} lines · ${b.preds.length} predictions · ${b.consensus.length} consensus · ${b.trends.length} trends${b.raw.length?' · '+b.raw.length+' section(s) held for the '+lab[sp]+' page':''}</span>
+    return`<div style="margin:8px 0"><b>${lab[sp]}</b> <span class="sub mono" style="font-size:10.5px">${b.picks.length} lines · ${b.preds.length} predictions · ${b.consensus.length} consensus · ${b.trends.length} trends${b.raw.length?' · saves to the '+lab[sp]+' board next time you open it':''}</span>
       ${Object.keys(g).length?`<div class="sub mono" style="font-size:10px;max-height:150px;overflow:auto;margin-top:3px">${Object.entries(g).map(([k,v])=>k+': '+[...v].join(', ')).join('<br>')}</div>`:''}</div>`;}).join('')}
     <div class="bar" style="margin-top:8px"><button class="primary" onclick="intakeSave()">Save all</button><button onclick="INTAKE.result=null;document.getElementById('bookShotResult').innerHTML=''">Discard</button></div>
     <details style="margin-top:6px"><summary class="sub">What each item gave</summary>${log}</details></div>`;
@@ -314,7 +377,7 @@ function intakePreview(el,st){
 function intakeSave(){
   const r=INTAKE.result;if(!r)return;const el=document.getElementById('bookShotResult');const done=[];
   Object.entries(r).forEach(([sp,b])=>{
-    if(b.raw.length){const p=get('d4.intakepending',{});p[sp]=(p[sp]||[]).concat(b.raw.map(t=>({t,ts:Date.now()})));set('d4.intakepending',p);done.push(b.raw.length+' '+sp.toUpperCase()+' section(s) queued for its page');}
+    if(b.raw.length){const p=get('d4.intakepending',{});p[sp]=(p[sp]||[]).concat(b.raw.map(t=>({t,ts:Date.now()})));set('d4.intakepending',p);done.push(sp==='ncaaf'?'CFB':sp.toUpperCase()+' lines waiting — they file automatically the moment you tap '+(sp==='ncaaf'?'CFB':sp.toUpperCase()));}
     if(b.picks.length){saveBookOdds(b.picks,null,sp);done.push(b.picks.length+' '+sp.toUpperCase()+' lines');}
     if(b.trends.length||b.consensus.length){
       if(sp==='mlb'){window._pendingExt={picks:[],trends:b.trends,consensus:b.consensus};try{saveExtPicks()}catch(e){}}
