@@ -162,7 +162,8 @@ function saveNFLBookOdds(picks,el){
     const gm=NFL_GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
     const rec={away:awayAb,home:homeAb,game,market:x.market,side:x.side,
       line:x.line!=null?x.line:null,price:x.price,player:x.player||null,
-      stat:x.stat||null,gid:gm?gm.id:null,capturedAt:Date.now()};
+      stat:x.stat||null,gid:gm?gm.id:null,capturedAt:Date.now(),
+      src:x.src||null,book:x.book||null,underPrice:x.underPrice!=null?x.underPrice:null};
     const k=keyOf(rec),i=all[d].findIndex(y=>keyOf(y)===k);
     if(i>=0)all[d][i]=rec;else all[d].push(rec);
   });
@@ -349,7 +350,59 @@ async function loadNFLWeek(season,week){
   }
 }
 
+
+/* ── FREE ESPN LINES ─────────────────────────────────────────────────────────
+   The scoreboard the app already downloads carries a bookmaker's spread,
+   total and moneylines. They were being thrown away. Now they fill ONLY the
+   markets you don't already have — an uploaded or pulled line always wins —
+   so the board has real numbers without spending an odds-API pull. Reads both
+   ESPN odds formats (flat and the newer open/close objects). */
+function fbEspnOddsRows(ev){
+  const c=(ev.competitions||[])[0];if(!c)return[];const o=(c.odds||[])[0];if(!o)return[];
+  const cs=c.competitors||[];const H=cs.find(x=>x.homeAway==='home'),A=cs.find(x=>x.homeAway==='away');if(!H||!A)return[];
+  const ha=((H.team||{}).abbreviation||'').toUpperCase(),aa=((A.team||{}).abbreviation||'').toUpperCase();
+  const num=x=>{if(x==null)return null;const v=parseFloat(String(x).replace(/^[ou]/i,'').replace(/^EVEN$/i,'100'));return isNaN(v)?null:v;};
+  const pick=(...xs)=>{for(const x of xs){const v=num(x);if(v!=null)return v;}return null;};
+  const cl=(p)=>p?(p.close||p.current||p.open||p):null;
+  let hLine=null;
+  const ps=o.pointSpread||{};
+  hLine=pick(cl(ps.home)&&cl(ps.home).line);
+  if(hLine==null&&o.details){const m=String(o.details).match(/^([A-Z]{2,4})\s+([+\-]?\d+(?:\.\d)?)/);if(m){const v=+m[2];hLine=m[1].toUpperCase()===ha?v:-v;}}
+  if(hLine==null&&o.spread!=null){const v=num(o.spread);if(v!=null)hLine=(o.homeTeamOdds&&o.homeTeamOdds.favorite)?-Math.abs(v):(o.awayTeamOdds&&o.awayTeamOdds.favorite)?Math.abs(v):v;}
+  const hsp=pick(cl(ps.home)&&cl(ps.home).odds,o.homeTeamOdds&&o.homeTeamOdds.spreadOdds,-110);
+  const asp=pick(cl(ps.away)&&cl(ps.away).odds,o.awayTeamOdds&&o.awayTeamOdds.spreadOdds,-110);
+  const tot=o.total||{};const T=pick(cl(tot.over)&&cl(tot.over).line,o.overUnder);
+  const op=pick(cl(tot.over)&&cl(tot.over).odds,o.overOdds,-110),up=pick(cl(tot.under)&&cl(tot.under).odds,o.underOdds,-110);
+  const ml=o.moneyline||{};
+  const hml=pick(cl(ml.home)&&cl(ml.home).odds,o.homeTeamOdds&&o.homeTeamOdds.moneyLine);
+  const aml=pick(cl(ml.away)&&cl(ml.away).odds,o.awayTeamOdds&&o.awayTeamOdds.moneyLine);
+  const g=aa+'@'+ha,R=[],base={away:aa,home:ha,game:g,src:'espn',book:((o.provider||{}).name)||'ESPN'};
+  if(hLine!=null){R.push({...base,market:'spread',side:'home',line:hLine,price:hsp});R.push({...base,market:'spread',side:'away',line:-hLine,price:asp});}
+  if(T!=null){R.push({...base,market:'total',side:'over',line:T,price:op});R.push({...base,market:'total',side:'under',line:T,price:up});}
+  if(hml!=null&&aml!=null){R.push({...base,market:'moneyline',side:'home',line:null,price:hml});R.push({...base,market:'moneyline',side:'away',line:null,price:aml});}
+  return R;
+}
+function fbIngestEspnOdds(sport,j){
+  const nfl=sport==='nfl';const linesFor=nfl?nflBookLinesFor:ncaafBookLinesFor;const save=nfl?saveNFLBookOdds:saveNCAAFBookOdds;
+  const rows=[];
+  (j&&j.events||[]).forEach(ev=>{
+    const st=((((ev.competitions||[])[0]||{}).status||ev.status||{}).type||{}).state;if(st&&st!=='pre')return; // pregame lines only
+    const R=fbEspnOddsRows(ev);if(!R.length)return;
+    let have=[];try{have=linesFor(R[0].game)||[];}catch(e){}
+    R.forEach(r=>{if(!have.some(h=>h.market===r.market&&h.side===r.side&&h.src!=='espn'))rows.push(r);});
+  });
+  if(rows.length){
+    /* ESPN lines move; replace the previous ESPN copy instead of stacking. */
+    const key=nfl?LS.nflshots:'d4.ncaafshots',all=get(key,{});
+    const drop=new Set(rows.map(r=>r.game+'|'+r.market+'|'+r.side));
+    Object.keys(all).forEach(d=>{if(Array.isArray(all[d]))all[d]=all[d].filter(x=>!(x.src==='espn'&&drop.has(x.game+'|'+x.market+'|'+x.side)));});
+    set(key,all);
+    try{save(rows,null);}catch(e){console.warn('espn odds save',e)}}
+  return rows.length;
+}
+
 function _parseNFLEvents(j){
+  try{fbIngestEspnOdds('nfl',j)}catch(err){console.warn('espn odds',err)}
   const events=j.events||[];
   NFL_GAMES=events.map(function(e,i){
     const comp=e.competitions[0];
@@ -544,9 +597,14 @@ function parseNFLSlateText(text,opts){
         continue;
       }
       // PROP: P.Mahomes passing yards 275.5+ (-115)
-      const propM=l.match(/^PROP:\s*(.+?)\s+(rushing yards|receiving yards|passing yards|receptions|touchdowns|carries|completions|sacks|tackles|interceptions)\s+([\d.]+)\+\s*\(([+\-]\d+)\)/i);
+      /* Accepts "passing yards 245.5+ (-115)" and the natural book style
+         "Pass Yds 245.5 (-115/-105)"; both normalize to the canonical stat. */
+      const propM=l.match(/^PROP:\s*(.+?)\s+(rushing yards|receiving yards|passing yards|rush(?:ing)? yds|rec(?:eiving)? yds|pass(?:ing)? yds|receptions|recs?|touchdowns|tds?|carries|completions|sacks|tackles|interceptions|ints?)\s+([\d.]+)\+?\s*\(\s*([+\-]\d+)(?:\s*\/\s*([+\-]\d+))?\s*\)/i);
       if(propM){
-        picks.push({away:curAway,home:curHome,game,market:'prop',player:propM[1].trim(),stat:propM[2],line:+propM[3],price:+propM[4],side:'over'});
+        const canon=s=>{s=s.toLowerCase();return /^pass/.test(s)?'passing yards':/^rush/.test(s)?'rushing yards':/^rec(eiving)? ?yds|^receiving yards/.test(s)?'receiving yards':
+          /^recs?$|^receptions$/.test(s)?'receptions':/^tds?$|^touchdowns$/.test(s)?'touchdowns':/^ints?$|^interceptions$/.test(s)?'interceptions':s;};
+        picks.push({away:curAway,home:curHome,game,market:'prop',player:propM[1].trim(),stat:canon(propM[2]),line:+propM[3],price:+propM[4],
+          underPrice:propM[5]!=null?+propM[5]:null,side:'over'});
         continue;
       }
     }
@@ -752,16 +810,26 @@ function nflEnvChips(g){
    team. The roster payload carries the athletes inline. 32 calls, once daily,
    cached — not 2,500 on every render. */
 const NFL_SKILL_POS=new Set(['QB','RB','WR','TE','FB']);
+/* ESPN's permanent NFL team IDs (unchanged for years) — the fallback when the
+   team-list request can't be reached. */
+const NFL_ESPN_IDS={ATL:1,BUF:2,CHI:3,CIN:4,CLE:5,DAL:6,DEN:7,DET:8,GB:9,TEN:10,IND:11,KC:12,LV:13,LAR:14,MIA:15,MIN:16,
+  NE:17,NO:18,NYG:19,NYJ:20,PHI:21,ARI:22,PIT:23,LAC:24,SF:25,SEA:26,TB:27,WSH:28,CAR:29,JAX:30,BAL:33,HOU:34};
 async function fetchNFLDepthCharts(force){
   const cache=get(LS.nfldepth,{});
   if(!force&&cache.ts&&(Date.now()-cache.ts)<864e5&&cache.v&&Object.keys(cache.v).length){
     NFL_DEPTH=cache.v;NFL_DEPTH_STATUS='cached '+Object.keys(NFL_DEPTH).length+' teams';return true;
   }
   try{
-    const tr=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams');
-    const tj=await tr.json();
-    const teams=((tj.sports||[])[0]||{}).leagues?.[0]?.teams||[];
-    if(!teams.length){NFL_DEPTH_STATUS='team list empty';return false;}
+    /* The team list only supplies ESPN team IDs. When a phone couldn't reach
+       it ("Load failed") the whole depth-chart feature died, even though
+       those IDs never change. Try twice, then use the built-in table. */
+    let teams=[];
+    for(let a=0;a<2&&!teams.length;a++){
+      try{const tr=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams');
+        const tj=await tr.json();teams=((tj.sports||[])[0]||{}).leagues?.[0]?.teams||[];}
+      catch(err){if(a===0)await new Promise(r=>setTimeout(r,600));}
+    }
+    if(!teams.length)teams=Object.entries(NFL_ESPN_IDS).map(([abbreviation,id])=>({team:{id:String(id),abbreviation}}));
     const out={};
     // sequential with a small gap — these are undocumented endpoints and the
     // community guidance is explicitly to keep request volume low
@@ -1482,6 +1550,8 @@ function fbSnapshot(sport){
       const sm=sims[g.id];
       if(sm){row.projTotal=sm.med;row.projWinner=sm.hw>=sm.aw?'home':'away';}
       try{const J=brainJudge(g,sm,sport);if(J)row.judge=brainLockable(J);}catch(e){}
+      if(nfl){try{const MP=nflModelProps(g,sm);if(MP.length)row.props=MP.map(x=>{const mid=x.ladder[Math.floor(x.ladder.length/2)]||x.ladder[0];
+        return{pid:x.pid,name:x.name,k:x.k,proj:x.proj,line:x.book?x.book.line:mid&&mid.line,p:x.book?x.book.p:mid&&mid.p,book:!!x.book};});}catch(e){}}
       if(picks){row.picks=picks;row.pickedAt=Date.now();
         row.situation=nfl&&typeof nflIsDivisionGame==='function'&&nflIsDivisionGame(g)?'division':'nondivision';}
     }
@@ -2281,25 +2351,17 @@ function nflStarters(abbr){
   return[...by('QB',1),...by('RB',1),...by('WR',2),...by('TE',1)];
 }
 function nflFormHTML(g,s){
-  const C=get(NFL_FORM_KEY,{});let J=null;try{J=brainJudge(g,s,'nfl')}catch(e){}
-  const props=(()=>{try{return buildNFLProps(g,s)}catch(e){return[]}})();
-  const side=(abbr,isHome)=>{
-    const st=nflStarters(abbr);if(!st.length)return`<div class="sub">${abbr}: depth chart not loaded${typeof NFL_DEPTH_STATUS!=='undefined'&&NFL_DEPTH_STATUS?' <span style="color:var(--mute)">('+NFL_DEPTH_STATUS+')</span>':''}.</div>`;
-    const pow=NFL_POWER[abbr]||{};const base=pow.rawOffPPG||pow.offPPG||22;
-    const proj=J?(isHome?J.h:J.a):base;const scale=Math.max(0.8,Math.min(1.25,proj/base));
-    return`<div style="margin-top:6px"><b>${abbr}</b> <span class="sub mono" style="font-size:9.5px">team proj ${proj.toFixed(1)} vs usual ${base.toFixed(1)} → players ×${scale.toFixed(2)}</span>`+st.map(p=>{
-      const k=p.pos==='QB'?'pass':p.pos==='RB'?'rush':'rec',lab=k==='pass'?'Pass':k==='rush'?'Rush':'Rec';
-      const G=(C[p.id]&&C[p.id].v||[]).filter(x=>x[k]!=null).slice(0,5);
-      if(!G.length)return`<div class="sub mono" style="font-size:10px">${p.name} ${p.pos} · <span style="color:var(--mute)">loading game log…</span></div>`;
-      const avg=G.reduce((a,x)=>a+x[k],0)/G.length,pj=avg*scale;
-      const bk=props.find(x=>x.player&&p.name&&x.player.toLowerCase().split(' ').pop()===p.name.toLowerCase().split(' ').pop());
-      let vs='';if(bk&&bk.line!=null){const sd=Math.max(12,pj*0.38);const z=(bk.line-pj)/sd;const pO=1-brainNorm(z);
-        vs=` · book ${bk.line} → over ${Math.round(pO*100)}%`;}
-      return`<div class="mono" style="font-size:10px;line-height:1.6">${p.name} <span style="color:var(--mute)">${p.pos}</span> · ${lab} last ${G.length}: ${G.map(x=>Math.round(x[k])).join(', ')}
-        · avg <b>${avg.toFixed(0)}</b> · proj <b style="color:var(--gold)">${pj.toFixed(0)}</b>${vs}</div>`;}).join('')+`</div>`;
-  };
   const need=!nflStarters(g.away.abbr).length||!nflStarters(g.home.abbr).length;
-  return side(g.away.abbr,false)+side(g.home.abbr,true)+(need?`<div class="bar" style="margin-top:8px">
+  const P=nflModelProps(g,s);const pc=x=>Math.round(x*100)+'%';
+  const side=ab=>{const st=nflStarters(ab);
+    if(!st.length)return`<div class="sub">${ab}: depth chart not loaded${typeof NFL_DEPTH_STATUS!=='undefined'&&NFL_DEPTH_STATUS?' <span style="color:var(--mute)">('+NFL_DEPTH_STATUS+')</span>':''}.</div>`;
+    const rows=st.map(p=>{const mine=P.filter(x=>x.pid===String(p.id));
+      if(!mine.length)return`<div class="mono" style="font-size:10px">${p.name} <span style="color:var(--mute)">${p.pos} · loading stats…</span></div>`;
+      return mine.map(x=>`<div class="mono" style="font-size:10px;line-height:1.6;margin-bottom:3px">${x.name} <span style="color:var(--mute)">${x.pos}</span> · ${x.lab}
+        proj <b style="color:var(--gold)">${x.proj}</b> <span style="color:var(--mute)">(season ${x.seasonPG??'—'}/g${x.gp?' in '+x.gp:''} · last5 ${x.last5??'—'})</span><br>
+        ${x.ladder.map(l=>`${l.line}+ <b>${pc(l.p)}</b>`).join(' · ')}${x.book?` · <span style="color:${x.book.ev>=2?'var(--win)':x.book.ev<0?'var(--rust)':'var(--gold)'}">book ${x.book.line} (${x.book.price>0?'+':''}${x.book.price}) → over ${pc(x.book.p)}, ${x.book.ev>=0?'+':''}${x.book.ev.toFixed(1)}% EV</span>`:''}</div>`).join('');}).join('');
+    return`<div style="margin-top:6px"><b>${ab}</b>${rows}</div>`;};
+  return`<div class="sub mono" style="font-size:9.5px;color:var(--mute)">season stats: ${NFL_SEASONSTATS_STATUS||'not loaded yet'}</div>`+side(g.away.abbr)+side(g.home.abbr)+(need?`<div class="bar" style="margin-top:8px">
     <button class="primary" onclick="nflRefreshDepthFor('${g.id}',this)">↻ Refresh depth charts</button></div>`:'');
 }
 async function nflRefreshDepthFor(gid,btn){
@@ -2311,8 +2373,80 @@ async function nflRefreshDepthFor(gid,btn){
 /* Loads only when a game's Props panel is opened; 10 starters, in parallel. */
 async function nflLoadForm(g){
   const ids=[...nflStarters(g.away.abbr),...nflStarters(g.home.abbr)].map(p=>p.id);
-  await Promise.all(ids.map(id=>nflPlayerForm(id).catch(()=>null)));
+  await Promise.all([nflLoadSeasonStats().catch(()=>null),...ids.map(id=>nflPlayerForm(id).catch(()=>null))]);
   const el=document.getElementById('nflform-'+g.id);if(el)el.innerHTML=nflFormHTML(g,NFL_SIMS[g.id]);
+}
+
+
+/* ── NFL SEASON STATS (bulk, like MLB's people?hydrate=stats) ────────────────
+   Three requests (passing, rushing, receiving) cover every player in the
+   league for the season, cached 12h and loaded automatically on the NFL page.
+   Per-player game logs remain the fallback and the "recent form" half. */
+const NFL_SEASONSTATS_KEY='d4.nflseason';
+let NFL_SEASONSTATS={},NFL_SEASONSTATS_STATUS='';
+async function nflLoadSeasonStats(force){
+  const season=+NFL_SEASON||new Date().getFullYear();const c=get(NFL_SEASONSTATS_KEY,{});
+  if(!force&&c.season===season&&c.v&&Object.keys(c.v).length&&Date.now()-c.ts<12*3600e3){
+    NFL_SEASONSTATS=c.v;NFL_SEASONSTATS_STATUS='cached '+Object.keys(c.v).length+' players';return true;}
+  const out={};let ok=0;
+  for(const cat of ['passing','rushing','receiving']){
+    try{
+      const r=await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&page=1&limit=500&category=offense:${cat}&season=${season}&seasontype=2`);
+      const j=await r.json();
+      const cols={};(j.categories||[]).forEach(cc=>{cols[cc.name]=(cc.names||[]).map(String);});
+      (j.athletes||[]).forEach(a=>{
+        const A=a.athlete||{};const id=String(A.id||'');if(!id)return;
+        const o=out[id]||(out[id]={name:A.displayName||'',pos:((A.position||{}).abbreviation)||'',team:(A.teamShortName||A.teamAbbreviation||'').toUpperCase()});
+        (a.categories||[]).forEach(cc=>{const names=cols[cc.name]||cc.names||[];const vals=cc.totals||cc.values||[];
+          const g=n=>{const i=names.indexOf(n);if(i<0)return null;const v=parseFloat(String(vals[i]).replace(/,/g,''));return isNaN(v)?null:v;};
+          const gp=g('gamesPlayed');if(gp!=null)o.gp=Math.max(o.gp||0,gp);
+          const py=g('passingYards'),ry=g('rushingYards'),cy=g('receivingYards'),rc=g('receptions');
+          if(py!=null)o.pass=py;if(ry!=null)o.rush=ry;if(cy!=null)o.rec=cy;if(rc!=null)o.recs=rc;});
+      });ok++;
+    }catch(err){console.warn('NFL season stats',cat,err&&err.message)}
+  }
+  const n=Object.keys(out).length;
+  if(n){NFL_SEASONSTATS=out;set(NFL_SEASONSTATS_KEY,{season,ts:Date.now(),v:out});}
+  NFL_SEASONSTATS_STATUS=n?('loaded '+n+' players'):('unavailable ('+ok+'/3 feeds answered) — using game logs');
+  return n>0;
+}
+(function(){const c=get(NFL_SEASONSTATS_KEY,{});if(c.v)NFL_SEASONSTATS=c.v;})();
+
+/* ── MODEL PROPS (like MLB's buildProps) ─────────────────────────────────────
+   Every starter gets a projection with no book line required:
+   base = 60% season per-game + 40% last-5 (either alone if that's all we
+   have), scaled by the Judge's team score vs that team's usual output.
+   Yards: normal around the projection; receptions: Poisson. A ladder of
+   lines shows the probability at each; a PROP: line adds book pricing. */
+function nflPoisAtLeast(k,m){let p=Math.exp(-m),c=p;for(let i=1;i<k;i++){p*=m/i;c+=p;}return Math.max(0,1-c);}
+function nflModelProps(g,s){
+  let J=null;try{J=brainJudge(g,s,'nfl')}catch(e){}
+  const book=(()=>{try{return nflBookLinesFor(g.away.abbr+'@'+g.home.abbr).filter(x=>x.market==='prop')}catch(e){return[]}})();
+  const FC=get(NFL_FORM_KEY,{});const out=[];
+  [[g.away.abbr,false],[g.home.abbr,true]].forEach(([ab,isHome])=>{
+    const pow=NFL_POWER[ab]||{};const usual=pow.rawOffPPG||pow.offPPG||22;
+    const proj=J?(isHome?J.h:J.a):usual;const scale=Math.max(0.8,Math.min(1.25,proj/usual));
+    nflStarters(ab).forEach(p=>{
+      const ss=NFL_SEASONSTATS[String(p.id)]||null;const logs=(FC[p.id]&&FC[p.id].v)||[];
+      const types=p.pos==='QB'?[['pass','Pass Yds','passing yards']]:p.pos==='RB'?[['rush','Rush Yds','rushing yards']]:[['rec','Rec Yds','receiving yards'],['recs','Receptions','receptions']];
+      types.forEach(([k,lab,bookStat])=>{
+        const L5=logs.filter(x=>x[k]!=null).slice(0,5);const last5=L5.length?L5.reduce((a,x)=>a+x[k],0)/L5.length:null;
+        const sPG=ss&&ss.gp&&ss[k]!=null?ss[k]/ss.gp:null;
+        const base=sPG!=null&&last5!=null?0.6*sPG+0.4*last5:(sPG!=null?sPG:last5);if(base==null)return;
+        const pj=base*scale;const rec={pid:String(p.id),name:p.name,team:ab,pos:p.pos,k,lab,proj:+pj.toFixed(1),
+          seasonPG:sPG!=null?+sPG.toFixed(1):null,last5:last5!=null?+last5.toFixed(1):null,gp:ss&&ss.gp||null,ladder:[]};
+        if(k==='recs'){const c=Math.round(pj);[c-1,c,c+1].filter(x=>x>=1).forEach(t=>rec.ladder.push({line:t-0.5,p:nflPoisAtLeast(t,pj)}));}
+        else{const st=k==='pass'?25:15,sd=k==='pass'?Math.max(45,pj*0.25):Math.max(18,pj*0.45);const mid=Math.round(pj/st)*st;
+          [mid-st,mid,mid+st].filter(x=>x>0).forEach(v=>{const line=v-0.5;rec.ladder.push({line,p:1-brainNorm((line-pj)/sd)});});rec.sd=sd;}
+        const last=(n)=>String(n||'').toLowerCase().split(' ').pop();
+        const bk=book.find(b=>b.player&&last(b.player)===last(p.name)&&(b.stat||'')===bookStat);
+        if(bk&&bk.line!=null){const pO=k==='recs'?nflPoisAtLeast(Math.floor(bk.line)+1,pj):1-brainNorm((bk.line-pj)/rec.sd);
+          const pr=bk.price!=null?bk.price:-110;rec.book={line:bk.line,price:pr,p:pO,ev:(pO*amerProfit(pr)-(1-pO))*100};}
+        out.push(rec);
+      });
+    });
+  });
+  return out;
 }
 
 function nflPropsPanel(g,s){
@@ -2320,9 +2454,9 @@ function nflPropsPanel(g,s){
   const props=buildNFLProps(g,s);
   /* Player form always shows; book prop pricing joins it when PROP: lines exist. */
   const fid='nflform-'+g.id;
-  const formBlock=`<div class="sub" style="margin-bottom:8px"><b>Player form</b> — last 5 games from ESPN game logs, projected to this game</div>
+  const formBlock=`<div class="sub" style="margin-bottom:8px"><b>Model props</b> — season + last-5 from ESPN, scaled to this game's projected score. % = chance of going over.</div>
     <div id="${fid}">${nflFormHTML(g,s)}</div>`;
-  if(!props.length)return formBlock+'<div class="sub" style="margin-top:8px;color:var(--mute)">No PROP: lines uploaded for this game — add them (e.g. <span class="mono">PROP: Jared Goff Pass Yds 245.5 (-115/-105)</span>) to price overs against your book.</div>';
+  if(!props.length)return formBlock+'<div class="sub" style="margin-top:8px;color:var(--mute)">No PROP: lines uploaded for this game — add them (e.g. <span class="mono">PROP: Jared Goff Pass Yds 245.5 (-115/-105)</span> or <span class="mono">PROP: Jared Goff passing yards 245.5+ (-115)</span>) to price overs against your book.</div>';
   return formBlock+'<div style="height:10px"></div>'+(
   `<div class="sub" style="font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.8">
     ${props.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px">
@@ -3200,6 +3334,7 @@ async function loadNCAAFWeek(season,week){
 }
 
 function _parseNCAAFEvents(j){
+  try{fbIngestEspnOdds('ncaaf',j)}catch(err){console.warn('espn odds',err)}
   const events=j.events||[];
   NCAAF_GAMES=events.map(function(e,i){
     const comp=e.competitions[0];
@@ -4201,6 +4336,18 @@ function renderFootballRecord(sport){
     ${legacy?`<div class="sub" style="color:var(--mute)">${legacy} older row${legacy===1?'':'s'} graded the book favorite, not the model — excluded.</div>`:''}
   </div>`;
   h+=brainReport(sport);
+  /* Model props graded against ESPN's real box score (like MLB's prop grading). */
+  try{let W=0,L=0,hi={W:0,L:0},bk={W:0,L:0},n=0;const miss=[];
+    weeks.forEach(wk=>arc[wk].rows.forEach(r=>{const Pl=r.actualBox&&r.actualBox.players;if(!r.props||!Pl)return;
+      r.props.forEach(p=>{const a=(Pl[p.pid]||{})[p.k];if(a==null||p.line==null)return;n++;
+        const over=a>p.line,call=p.p>=0.5,hit=over===call;hit?W++:L++;
+        if(Math.max(p.p,1-p.p)>=0.6)hit?hi.W++:hi.L++;if(p.book)hit?bk.W++:bk.L++;
+        if(miss.length<8&&Math.abs(a-p.proj)>(p.k==='pass'?60:p.k==='recs'?3:30))miss.push(`${p.name} ${p.k} proj ${p.proj} → ${a}`);});}));
+    const pc=o=>o.W+o.L?Math.round(o.W/(o.W+o.L)*100)+'%':'—';
+    h+=`<div class="tkt"><h3>Model props</h3>${n?`<div class="sub">All calls <b>${W}-${L}</b> (${pc({W,L})}) · 60%+ calls ${hi.W}-${hi.L} (${pc(hi)}) · vs your book lines ${bk.W}-${bk.L} (${pc(bk)})</div>
+      ${miss.length?`<div class="sub" style="color:var(--mute)">Biggest misses: ${miss.join(' · ')}</div>`:''}`
+      :`<div class="sub">Player props are locked at kickoff and graded here from ESPN's box score once games go final.</div>`}</div>`;
+  }catch(err){}
   if(!done.length){body.innerHTML=h+`<div class="empty">No graded ${nfl?'NFL':'CFB'} picks yet. Picks are captured for any game with uploaded or pulled lines and grade automatically once ESPN posts the final.</div>`;return;}
   const lab={spread:'ATS',total:'TOT',ml:'ML'};
   const chipR=x=>`<span style="font-family:'IBM Plex Mono';font-size:10px;font-weight:800;color:${x==='W'?'var(--win)':x==='L'?'var(--rust)':'var(--mute)'}">${x}</span>`;
@@ -4224,3 +4371,6 @@ function renderFootballRecord(sport){
 }
 
 /* THE JUDGE (brain) now lives in shared.js — one engine for MLB, NFL and CFB. */
+
+/* NFL page: season stats load themselves (12h cache) — nothing to tap. */
+if(typeof window!=='undefined'&&window.__PAGE_SPORT__==='nfl')setTimeout(()=>{nflLoadSeasonStats().catch(()=>{})},4000);

@@ -608,7 +608,16 @@ async function brainFetchBox(sport,espnId){
     const v=parseFloat(String(s.displayValue||s.value||'').replace(/,/g,''));return isNaN(v)?null:v;};
   const pick=t=>({yds:val(t,/^totalYards$|^Total Yards$/i),pass:val(t,/^netPassingYards$|^Passing$/i),rush:val(t,/^rushingYards$|^Rushing$/i)});
   const home=T.find(t=>t.homeAway==='home')||T[1],away=T.find(t=>t.homeAway==='away')||T[0];
-  return{away:pick(away),home:pick(home)};
+  /* Player lines, for grading model props: boxscore.players[].statistics[]
+     (passing / rushing / receiving), each with keys[] and athletes[].stats[]. */
+  const players={};
+  ((j.boxscore&&j.boxscore.players)||[]).forEach(tm=>(tm.statistics||[]).forEach(cat=>{
+    const keys=(cat.keys||cat.names||[]).map(String);const ix=n=>keys.indexOf(n);
+    (cat.athletes||[]).forEach(a=>{const id=String(((a.athlete||{}).id)||'');if(!id)return;const P=players[id]||(players[id]={});
+      const g=n=>{const i=ix(n);if(i<0)return null;const v=parseFloat(String((a.stats||[])[i]).replace(/,/g,''));return isNaN(v)?null:v;};
+      const py=g('passingYards'),ry=g('rushingYards'),cy=g('receivingYards'),rc=g('receptions');
+      if(py!=null)P.pass=py;if(ry!=null)P.rush=ry;if(cy!=null)P.rec=cy;if(rc!=null)P.recs=rc;});}));
+  return{away:pick(away),home:pick(home),players};
 }
 async function brainCollectBoxes(sport){
   const key=sport==='nfl'?LS.nflarc:'d4.ncaafarc';const arc=get(key,{});let n=0;
