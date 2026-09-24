@@ -263,6 +263,7 @@ function renderNFL(){
   h+=`<div class="bar" style="margin:-4px 0 10px"><button onclick="refreshNFLLiveScores()">↻ Refresh scores</button></div>`;
   if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(nflCard).join('');
   if(final.length)h+=sbar('Final',final.length)+final.map(nflCard).join('');
+  try{h=nflRankingsBlock()+h;}catch(err){}
   el.innerHTML=h;
 }
 
@@ -1140,6 +1141,7 @@ async function fetchNFLPowerRatings(){
       try{Object.assign(NFL_POWER,await nflRatingsFromScoreboards());}
       catch(err){console.warn('NFL scoreboard ratings failed',err&&err.message)}
     }
+    try{await nflApplyPriorSeason();}catch(err){console.warn('NFL prior season',err&&err.message)}
     NFL_POWER_RATED=Object.keys(NFL_POWER).length;
     // Flat ratings are as useless as none — check that teams actually differ.
     const offs=Object.values(NFL_POWER).map(t=>t.offPPG);
@@ -1180,6 +1182,55 @@ async function nflRatingsFromScoreboards(){
   return out;
 }
 
+
+/* ── PREVIOUS SEASON ANCHOR ─────────────────────────────────────────────────
+   Two games of points is mostly noise; the sim used to regress that noise
+   toward a generic 22 for every team, so September games came out near coin
+   flips (the Jets rated even with Detroit). Each team is now anchored to ITS
+   OWN previous season, worth NFL_PRIOR_K games of evidence, and this season
+   takes over as games pile up: at 4 GP it's 50/50, at 12 GP it's 75/25.
+   Raw and prior numbers are kept for the Power Rankings panel. */
+const NFL_PRIOR_K=4;
+async function nflPriorSeason(){
+  const season=(+NFL_SEASON||new Date().getFullYear())-1;
+  const c=get('d4.nflprior',{});if(c.season===season&&c.v&&Object.keys(c.v).length>=16)return c.v;
+  const out={};const entries=[];
+  const walk=n=>{if(!n||typeof n!=='object')return;
+    if(n.standings&&Array.isArray(n.standings.entries))n.standings.entries.forEach(x=>entries.push(x));(n.children||[]).forEach(walk);};
+  const r=await fetch(`https://site.api.espn.com/apis/v2/sports/football/nfl/standings?season=${season}&seasontype=2`);walk(await r.json());
+  entries.forEach(x=>{const ab=((x.team||{}).abbreviation||'').toUpperCase();if(!ab)return;const S={};(x.stats||[]).forEach(s=>S[s.name]=+s.value);
+    const gp=S.gamesPlayed||((S.wins||0)+(S.losses||0)+(S.ties||0));if(!gp||!(S.pointsFor>0))return;
+    out[ab]={off:S.pointsFor/gp,def:S.pointsAgainst/gp,w:S.wins||0,l:S.losses||0};});
+  if(Object.keys(out).length>=16)set('d4.nflprior',{season,v:out,ts:Date.now()});
+  return out;
+}
+async function nflApplyPriorSeason(){
+  let P={};try{P=await nflPriorSeason();}catch(e){}
+  Object.entries(NFL_POWER).forEach(([ab,t])=>{
+    if(t.rawOffPPG==null){t.rawOffPPG=t.offPPG;t.rawDefPPG=t.defPPG;}
+    const p=P[ab];const gp=+t.gp||((t.wins||0)+(t.losses||0)+(t.ties||0));
+    if(!p){t.priorOff=null;t.priorDef=null;t.priorW=0;t.offPPG=t.rawOffPPG;t.defPPG=t.rawDefPPG;return;}
+    const w=NFL_PRIOR_K/(gp+NFL_PRIOR_K);
+    t.priorOff=+p.off.toFixed(1);t.priorDef=+p.def.toFixed(1);t.priorRec=p.w+'-'+p.l;t.priorW=+w.toFixed(2);
+    t.offPPG=t.rawOffPPG*(1-w)+p.off*w;t.defPPG=t.rawDefPPG*(1-w)+p.def*w;});
+}
+/* ── POWER RANKINGS ─────────────────────────────────────────────────────── */
+function nflRankingsBlock(){
+  const T=Object.entries(NFL_POWER).filter(([,t])=>t&&t.offPPG!=null);
+  if(!T.length)return'';
+  T.sort((a,b)=>(b[1].offPPG-b[1].defPPG)-(a[1].offPPG-a[1].defPPG));
+  const f=x=>x==null?'—':(+x).toFixed(1);
+  const rows=T.map(([ab,t],i)=>{const net=t.offPPG-t.defPPG;
+    return`<tr><td>${i+1}</td><td><b>${ab}</b></td><td>${t.wins||0}-${t.losses||0}${t.ties?'-'+t.ties:''}</td>
+      <td>${f(t.rawOffPPG??t.offPPG)}/${f(t.rawDefPPG??t.defPPG)}</td><td>${t.priorOff!=null?f(t.priorOff)+'/'+f(t.priorDef):'—'}</td>
+      <td style="color:${net>=0?'var(--win)':'var(--rust)'}">${f(t.offPPG)}/${f(t.defPPG)} <b>${net>=0?'+':''}${f(net)}</b></td>
+      <td style="color:var(--mute)">${t.priorW?Math.round(t.priorW*100)+'%':'0%'}</td></tr>`;}).join('');
+  return`<details style="margin:0 0 10px"><summary style="cursor:pointer;font-weight:800;padding:8px 0">🏆 Power Rankings <span class="sub mono" style="font-size:10px">— what the sim uses</span></summary>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:'IBM Plex Mono';font-size:10px;line-height:1.7">
+    <tr style="color:var(--mute)"><td>#</td><td>Team</td><td>W-L</td><td>This yr PF/PA</td><td>Last yr</td><td>Used PF/PA · net</td><td>History wt</td></tr>${rows}</table></div>
+    <div class="sub" style="font-size:10px;margin-top:4px">Per game. Last season counts as ${NFL_PRIOR_K} games of evidence, so early weeks lean on history and this season takes over as games are played.</div></details>`;
+}
+
 // boot: restore cached power ratings
 (function restoreNFLPower(){
   const c=get('d4.nflpower',{});
@@ -1205,7 +1256,9 @@ function simNFLGame(g,N){
   const homePow=NFL_POWER[g.home.abbr]||{offPPG:22,defPPG:22,wins:0,losses:0,ties:0};
 
   const leagueAvg=22.0;
-  const regFactor=0.35;
+  /* With a previous-season anchor already in offPPG/defPPG, the generic pull
+     toward 22 is mostly redundant — keep a light touch instead of 35%. */
+  const regFactor=(awayPow.priorOff!=null&&homePow.priorOff!=null)?0.10:0.35;
   const gamesPlayed=Math.max((awayPow.wins||0)+(awayPow.losses||0)+(awayPow.ties||0),
                              (homePow.wins||0)+(homePow.losses||0)+(homePow.ties||0),1);
   const regW=Math.max(0,Math.min(1,(gamesPlayed-1)/8));
@@ -2195,11 +2248,75 @@ function footballAltPanel(g,s){
     `<div class="sub" style="margin-top:8px;color:var(--mute);font-size:10px">
       "needs" is the break-even price at the model's probability. Anything better than that is +EV.</div>`;
 }
+
+/* ── PLAYER FORM (ESPN game logs) ───────────────────────────────────────────
+   Starters' recent games, their average, and a projection scaled to the
+   Judge's team score (a team projected to score more than it usually does
+   lifts its players' numbers, and vice versa). Shown with or without book
+   prop lines; with a PROP: line it also prices the over. Cached 12h. */
+const NFL_FORM_KEY='d4.nflform';
+const NFL_FORM_INFLIGHT={};
+function nflPlayerForm(id){
+  const C=get(NFL_FORM_KEY,{});const hit=C[id];if(hit&&Date.now()-hit.ts<12*3600e3)return Promise.resolve(hit.v);
+  return NFL_FORM_INFLIGHT[id]||(NFL_FORM_INFLIGHT[id]=_nflPlayerFormFetch(id).finally(()=>{delete NFL_FORM_INFLIGHT[id]}));
+}
+async function _nflPlayerFormFetch(id){
+  const r=await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${id}/gamelog`);
+  const j=await r.json();const names=(j.names||[]).map(String);const ix=n=>names.indexOf(n);
+  const I={pass:ix('passingYards'),rush:ix('rushingYards'),rec:ix('receivingYards'),recs:ix('receptions'),ptd:ix('passingTouchdowns')};
+  const evMeta=j.events||{};const games=[];
+  (j.seasonTypes||[]).forEach(st=>{if(st.displayName&&/pre/i.test(st.displayName))return;
+    (st.categories||[]).forEach(c=>(c.events||[]).forEach(ev=>{
+      const n=k=>{const i=I[k];if(i<0||!ev.stats)return null;const v=parseFloat(String(ev.stats[i]).replace(/,/g,''));return isNaN(v)?null:v;};
+      const m=evMeta[ev.eventId]||{};games.push({id:ev.eventId,date:m.gameDate||'',opp:((m.opponent||{}).abbreviation)||'',
+        pass:n('pass'),rush:n('rush'),rec:n('rec'),recs:n('recs'),ptd:n('ptd')});}));});
+  const seen=new Set();const v=games.filter(x=>!seen.has(x.id)&&seen.add(x.id)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,8);
+  /* Re-read at write time: parallel loads each started from an old snapshot,
+     so the last one to finish used to overwrite the other nine. */
+  const W=get(NFL_FORM_KEY,{});W[id]={ts:Date.now(),v};const ks=Object.keys(W);if(ks.length>150)ks.slice(0,ks.length-150).forEach(k=>delete W[k]);set(NFL_FORM_KEY,W);
+  return v;
+}
+function nflStarters(abbr){
+  const P=((NFL_DEPTH[abbr]||{}).players||[]).filter(p=>p.id);const by=(pos,n)=>P.filter(p=>p.pos===pos).sort((a,b)=>(a.depth||9)-(b.depth||9)).slice(0,n);
+  return[...by('QB',1),...by('RB',1),...by('WR',2),...by('TE',1)];
+}
+function nflFormHTML(g,s){
+  const C=get(NFL_FORM_KEY,{});let J=null;try{J=brainJudge(g,s,'nfl')}catch(e){}
+  const props=(()=>{try{return buildNFLProps(g,s)}catch(e){return[]}})();
+  const side=(abbr,isHome)=>{
+    const st=nflStarters(abbr);if(!st.length)return`<div class="sub">${abbr}: depth chart not loaded — tap Refresh Depth Charts.</div>`;
+    const pow=NFL_POWER[abbr]||{};const base=pow.rawOffPPG||pow.offPPG||22;
+    const proj=J?(isHome?J.h:J.a):base;const scale=Math.max(0.8,Math.min(1.25,proj/base));
+    return`<div style="margin-top:6px"><b>${abbr}</b> <span class="sub mono" style="font-size:9.5px">team proj ${proj.toFixed(1)} vs usual ${base.toFixed(1)} → players ×${scale.toFixed(2)}</span>`+st.map(p=>{
+      const k=p.pos==='QB'?'pass':p.pos==='RB'?'rush':'rec',lab=k==='pass'?'Pass':k==='rush'?'Rush':'Rec';
+      const G=(C[p.id]&&C[p.id].v||[]).filter(x=>x[k]!=null).slice(0,5);
+      if(!G.length)return`<div class="sub mono" style="font-size:10px">${p.name} ${p.pos} · <span style="color:var(--mute)">loading game log…</span></div>`;
+      const avg=G.reduce((a,x)=>a+x[k],0)/G.length,pj=avg*scale;
+      const bk=props.find(x=>x.player&&p.name&&x.player.toLowerCase().split(' ').pop()===p.name.toLowerCase().split(' ').pop());
+      let vs='';if(bk&&bk.line!=null){const sd=Math.max(12,pj*0.38);const z=(bk.line-pj)/sd;const pO=1-brainNorm(z);
+        vs=` · book ${bk.line} → over ${Math.round(pO*100)}%`;}
+      return`<div class="mono" style="font-size:10px;line-height:1.6">${p.name} <span style="color:var(--mute)">${p.pos}</span> · ${lab} last ${G.length}: ${G.map(x=>Math.round(x[k])).join(', ')}
+        · avg <b>${avg.toFixed(0)}</b> · proj <b style="color:var(--gold)">${pj.toFixed(0)}</b>${vs}</div>`;}).join('')+`</div>`;
+  };
+  return side(g.away.abbr,false)+side(g.home.abbr,true);
+}
+/* Loads only when a game's Props panel is opened; 10 starters, in parallel. */
+async function nflLoadForm(g){
+  const ids=[...nflStarters(g.away.abbr),...nflStarters(g.home.abbr)].map(p=>p.id);
+  await Promise.all(ids.map(id=>nflPlayerForm(id).catch(()=>null)));
+  const el=document.getElementById('nflform-'+g.id);if(el)el.innerHTML=nflFormHTML(g,NFL_SIMS[g.id]);
+}
+
 function nflPropsPanel(g,s){
   if(!s)return '<div class="empty">Run sims first.</div>';
   const props=buildNFLProps(g,s);
-  if(!props.length)return '<div class="empty">No PROP: lines uploaded for this game yet.</div>';
-  return`<div class="sub" style="font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.8">
+  /* Player form always shows; book prop pricing joins it when PROP: lines exist. */
+  const fid='nflform-'+g.id;
+  const formBlock=`<div class="sub" style="margin-bottom:8px"><b>Player form</b> — last 5 games from ESPN game logs, projected to this game</div>
+    <div id="${fid}">${nflFormHTML(g,s)}</div>`;
+  if(!props.length)return formBlock+'<div class="sub" style="margin-top:8px;color:var(--mute)">No PROP: lines uploaded for this game — add them (e.g. <span class="mono">PROP: Jared Goff Pass Yds 245.5 (-115/-105)</span>) to price overs against your book.</div>';
+  return formBlock+'<div style="height:10px"></div>'+(
+  `<div class="sub" style="font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.8">
     ${props.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px">
       <span>${p.actionable?'<b style="color:var(--win)">◆ </b>':''}${p.player} ${p.stat} ${p.line}+${
         p.matched?`<span style="color:var(--mute)"> · ${p.pos}${p.depth?p.depth:''}</span>`:
@@ -2209,9 +2326,10 @@ function nflPropsPanel(g,s){
     <div style="margin-top:8px;color:var(--mute);font-size:10px">
       Volume share comes from ESPN depth charts; scoring level from team power ratings.
       Position/depth is shown next to each name — "unmatched" means the roster had no
-      player by that name, so a generic share was used. Still a screen, not a signal.</div></div>`;
+      player by that name, so a generic share was used. Still a screen, not a signal.</div></div>`);
 }
 function nflTogglePanel(which,gid,btn){
+  if(which==='props'){const G=NFL_GAMES.find(x=>String(x.id)===String(gid));if(G)setTimeout(()=>nflLoadForm(G).catch(()=>{}),0);}
   const p=document.getElementById('p-nfl'+which+'-'+gid);
   if(!p)return;
   const row=btn.parentElement;
@@ -4085,7 +4203,14 @@ function renderFootballRecord(sport){
     const desc=m=>{const p=r.picks[m];const tm=p.side==='home'?hm:p.side==='away'?aw:p.side;
       return m==='spread'?`${tm} ${p.line>0?'+':''}${p.line}`:m==='total'?`${p.side==='over'?'O':'U'} ${p.line}`:`${tm} ML`;};
     h+=`<div class="rc-row" style="margin:3px 0"><div><div class="g">${r.game} <span style="color:var(--mute)">${F.a??''}-${F.h??''}</span></div>
-      <div class="p">${Object.keys(r.res).map(m=>`${lab[m]} ${desc(m)} ${chipR(r.res[m])}`).join(' · ')}</div></div></div>`;
+      <div class="p">${Object.keys(r.res).map(m=>`${lab[m]} ${desc(m)} ${chipR(r.res[m])}`).join(' · ')}</div>
+      ${(()=>{const J=r.judge;if(!J)return'';const B=J.box,A=r.actualBox;
+        const cell=(p,a)=>a==null?`${p}`:`${p}→<b>${a}</b>`;
+        const line=(t,pb,ab,pts,fin)=>`<div>${t} pts ${cell(Math.round(pts),fin)}${pb?` · yds ${cell(pb.yds,ab&&ab.yds)} · pass ${cell(pb.pass,ab&&ab.pass)} · rush ${cell(pb.rush,ab&&ab.rush)}`:''}</div>`;
+        return`<details style="margin-top:2px"><summary style="font-size:10px;color:var(--mute);cursor:pointer">box: predicted → actual</summary>
+          <div class="mono" style="font-size:9.5px;line-height:1.6">${line(aw,B&&B.away,A&&A.away,J.a,F.a)}${line(hm,B&&B.home,A&&A.home,J.h,F.h)}
+          ${A?'':'<div style="color:var(--mute)">real box score still loading from ESPN</div>'}</div></details>`;})()}
+      </div></div>`;
   });
   body.innerHTML=h;
 }
