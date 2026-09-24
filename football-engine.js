@@ -1096,15 +1096,18 @@ function nflIsConferenceGame(g){
 async function fetchNFLPowerRatings(){
   try{
     // ESPN team stats — regular season standings with offensive/defensive numbers
-    const url='https://site.api.espn.com/apis/site/v2/sports/football/nfl/standings';
-    const r=await fetch(url);
-    const j=await r.json();
+    /* The old URL (apis/SITE/v2/.../standings) returns only a stub with a link
+       to the standings web page — no teams. Every device got zero ratings and
+       every card read "ratings not loaded", all season. apis/v2 carries the
+       real table; walk it at any depth since ESPN nests by conf/division. */
     const entries=[];
-    (j.children||[]).forEach(conf=>{
-      (conf.children||[]).forEach(div=>{
-        (div.standings&&div.standings.entries||[]).forEach(e=>entries.push(e));
-      });
-    });
+    const walk=n=>{if(!n||typeof n!=='object')return;
+      if(n.standings&&Array.isArray(n.standings.entries))n.standings.entries.forEach(x=>entries.push(x));
+      (n.children||[]).forEach(walk);};
+    try{
+      const r=await fetch('https://site.api.espn.com/apis/v2/sports/football/nfl/standings?seasontype=2');
+      walk(await r.json());
+    }catch(err){console.warn('NFL standings fetch failed',err&&err.message)}
     /* In preseason the standings feed carries zero games played, so
        pointsFor/gamesPlayed was 0 — and `0 || 24` quietly turned that into 24
        for EVERY team. The result was a board where all 16 games projected the
@@ -1119,7 +1122,7 @@ async function fetchNFLPowerRatings(){
       if(!abbr)return;
       const stats={};
       (e.stats||[]).forEach(s=>{stats[s.name]=s.value;});
-      const gp=+stats.gamesPlayed||0;
+      const gp=+stats.gamesPlayed||((+stats.wins||0)+(+stats.losses||0)+(+stats.ties||0));
       if(gp<1)return;                 // no games -> no rating, not a fake average
       const pf=+stats.pointsFor||0, pa=+stats.pointsAgainst||0;
       if(!pf&&!pa)return;
@@ -1131,6 +1134,12 @@ async function fetchNFLPowerRatings(){
         streak:stats.streak||0,
       };
     });
+    /* Second source, independent of the standings feed: completed games on the
+       weekly scoreboards. Real PF/PA per team from actual finals. */
+    if(Object.keys(NFL_POWER).length<8){
+      try{Object.assign(NFL_POWER,await nflRatingsFromScoreboards());}
+      catch(err){console.warn('NFL scoreboard ratings failed',err&&err.message)}
+    }
     NFL_POWER_RATED=Object.keys(NFL_POWER).length;
     // Flat ratings are as useless as none — check that teams actually differ.
     const offs=Object.values(NFL_POWER).map(t=>t.offPPG);
@@ -1149,6 +1158,26 @@ async function fetchNFLPowerRatings(){
   }catch(e){
     console.warn('NFL power ratings failed:',e.message);
   }
+}
+
+async function nflRatingsFromScoreboards(){
+  const season=NFL_SEASON||new Date().getFullYear();
+  const last=Math.max(1,(+NFL_WEEK||2)-1);const T={};
+  for(let w=1;w<=Math.min(last,18);w++){
+    let j;try{const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${season}&seasontype=2&week=${w}`);j=await r.json();}catch(e){continue;}
+    (j.events||[]).forEach(ev=>{
+      const c=(ev.competitions||[])[0];if(!c)return;
+      const st=(c.status||ev.status||{}).type||{};if(!(st.completed||st.state==='post'))return;
+      const cs=c.competitors||[];if(cs.length<2)return;
+      cs.forEach((t,i)=>{const o=cs[1-i];const ab=((t.team||{}).abbreviation||'').toUpperCase();if(!ab)return;
+        const pf=+t.score,pa=+o.score;if(isNaN(pf)||isNaN(pa))return;
+        const x=T[ab]||(T[ab]={pf:0,pa:0,gp:0,wins:0,losses:0,ties:0});
+        x.pf+=pf;x.pa+=pa;x.gp++;if(pf>pa)x.wins++;else if(pf<pa)x.losses++;else x.ties++;});
+    });
+  }
+  const out={};Object.entries(T).forEach(([ab,x])=>{if(x.gp)out[ab]={offPPG:x.pf/x.gp,defPPG:x.pa/x.gp,gp:x.gp,
+    wins:x.wins,losses:x.losses,ties:x.ties,pf:x.pf,pa:x.pa,sos:0,streak:0,src:'scoreboards'};});
+  return out;
 }
 
 // boot: restore cached power ratings
