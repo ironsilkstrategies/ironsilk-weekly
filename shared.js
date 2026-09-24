@@ -3286,6 +3286,12 @@ function fullPresetPool(){
   PROPS.filter(p=>p.type==='hr').forEach(p=>
     pool.push({p:p.p,pick:p.name+' 1+ HR',game:p.game,kind:'hr',modelP:p.p,marketP:p.p,
       ptype:'hr',pid:p.pid,thr:p.thr}));
+  /* Football was never in this pool — it only held MLB games, so on the NFL
+     and CFB pages every preset found zero legs ("Not enough qualifying legs").
+     Both sides of every football market with a REAL line, carrying the sim's
+     probability, the de-vigged market probability and the price, exactly the
+     fields the presets rank on. */
+  if(typeof fbPresetLegs==='function'){try{pool.push(...fbPresetLegs('nfl'),...fbPresetLegs('ncaaf'));}catch(e){console.warn('fb preset legs',e)}}
   return pool;
 }
 

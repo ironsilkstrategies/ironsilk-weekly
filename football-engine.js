@@ -2153,6 +2153,7 @@ function nflCardFull(g){
       <button onclick="nflTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="nflTogglePanel('ag','${id}',this)">A-G</button>
       <button onclick="nflTogglePanel('alt','${id}',this)">Alt Lines</button>
+      <button onclick="nflTogglePanel('projbox','${id}',this)">Proj. Box</button>
       <button onclick="nflTogglePanel('props','${id}',this)">Props</button>
       <button onclick="nflTogglePanel('verdict','${id}',this)">Take/Fade</button>
       ${(isLive||isFinal)?`<button onclick="nflTogglePanel('livebox','${id}',this)">${isLive?'Live box':'Box score'}</button>`:''}
@@ -2162,6 +2163,7 @@ function nflCardFull(g){
     <div class="panel" id="p-nfltrends-${id}">${nflTrendPanel(g,s)}</div>
     <div class="panel" id="p-nflag-${id}">${renderNFLGameAG(g,s)}</div>
     <div class="panel" id="p-nflalt-${id}">${footballAltPanel(g,s)}</div>
+    <div class="panel" id="p-nflprojbox-${id}">${fbProjBoxPanel(g,s,'nfl')}</div>
     <div class="panel" id="p-nflprops-${id}">${nflPropsPanel(g,s)}</div>
     <div class="panel" id="p-nflverdict-${id}">${takeFadePanel(g,s,'nfl')}</div>
     <div class="panel" id="p-nfllivebox-${id}"><div id="p-fb-livebox-${id}">${(isLive||isFinal)?fbLiveBoxPanel(g,'nfl'):''}</div></div>
@@ -3894,6 +3896,7 @@ function ncaafCard(g){
       <button onclick="ncaafTogglePanel('trends','${id}',this)">Trends</button>
       <button onclick="ncaafTogglePanel('coach','${id}',this)">Coach</button>
       <button onclick="ncaafTogglePanel('ag','${id}',this)">A-G</button>
+      <button onclick="ncaafTogglePanel('projbox','${id}',this)">Proj. Box</button>
       <button onclick="ncaafTogglePanel('props','${id}',this)">Props</button>
       <button onclick="ncaafTogglePanel('alt','${id}',this)">Alt Lines</button>
       <button onclick="ncaafTogglePanel('portal','${id}',this)">Portal</button>
@@ -3905,6 +3908,7 @@ function ncaafCard(g){
     <div class="panel" id="p-ncaafcoach-${id}">${coachBriefing(g,s,'ncaaf')}</div>
     <div class="panel" id="p-ncaaftrends-${id}">${ncaafTrendPanel(g,s)}</div>
     <div class="panel" id="p-ncaafag-${id}">${ncaafGameAG(g,s)}</div>
+    <div class="panel" id="p-ncaafprojbox-${id}">${fbProjBoxPanel(g,s,'ncaaf')}</div>
     <div class="panel" id="p-ncaafprops-${id}">${ncaafPropsPanel(g)}</div>
     <div class="panel" id="p-ncaafalt-${id}">${footballAltPanel(g,s)}</div>
     <div class="panel" id="p-ncaafportal-${id}">${cfbPortalPanel(g)}</div>
@@ -4321,3 +4325,57 @@ function renderFootballEval(sp){
 }
 function renderNFLMasterEval(){return renderFootballEval('nfl')}
 function renderNCAAFMasterEval(){return renderFootballEval('ncaaf')}
+
+/* ── FOOTBALL LEGS FOR THE TICKET PRESETS ─────────────────────────────────── */
+function fbPresetLegs(sport){
+  const nfl=sport==='nfl';if(typeof window!=='undefined'&&window.__PAGE_SPORT__&&window.__PAGE_SPORT__!==sport)return[];
+  const G=(nfl?NFL_GAMES:NCAAF_GAMES)||[],S=nfl?NFL_SIMS:NCAAF_SIMS,lf=nfl?nflBookLinesFor:ncaafBookLinesFor,sim=nfl?simNFLGame:simNCAAFGame;
+  const out=[];const dv=(a,b)=>{const x=imp(a),y=imp(b);return[x/(x+y),y/(x+y)];};
+  G.forEach(g=>{
+    if((g.abstract||'pre')!=='pre')return;
+    const gl=g.away.abbr+'@'+g.home.abbr,L=lf(gl)||[];if(!L.length)return;
+    let s2=S[g.id];if(!s2){try{s2=S[g.id]=sim(g)}catch(err){return}}
+    const f=(m,sd)=>L.find(x=>x.market===m&&x.side===sd);
+    const base={game:gl,sport,gid:g.id};
+    const both=(kind,A,B,mA,mB,pickA,pickB)=>{if(!A||!B||A.price==null||B.price==null||mA==null||mB==null)return;
+      const [pa,pb]=dv(A.price,B.price);
+      out.push({...base,kind,pick:pickA,modelP:mA,marketP:pa,price:A.price,p:(mA+pa)/2,line:A.line});
+      out.push({...base,kind,pick:pickB,modelP:mB,marketP:pb,price:B.price,p:(mB+pb)/2,line:B.line});};
+    const mh=f('moneyline','home'),ma=f('moneyline','away');
+    both('side',mh,ma,s2.hw,s2.aw,g.home.abbr+' ML',g.away.abbr+' ML');
+    const sh=f('spread','home'),sa=f('spread','away');
+    if(sh&&sa&&sh.line!=null&&sa.line!=null&&s2.homeCover&&s2.awayCover){const sg=v=>(v>0?'+':'')+v;
+      both('spread',sh,sa,s2.homeCover(+sh.line),s2.awayCover(+sa.line),g.home.abbr+' '+sg(+sh.line),g.away.abbr+' '+sg(+sa.line));}
+    const to=f('total','over'),tu=f('total','under');
+    if(to&&tu&&to.line!=null&&typeof s2.over==='function'){const po=s2.over(+to.line);
+      both('total',to,tu,po,1-po,'Over '+to.line,'Under '+tu.line);}
+  });
+  return out;
+}
+
+/* ── PROJECTED BOX SCORE TAB ─────────────────────────────────────────────────
+   The Judge's predicted box score used to sit inside the card's collapsed
+   "why". It gets its own tab now: points by quarter, yards, passing, rushing,
+   the game script odds, and (NFL) projected player lines. Once the game is
+   final, the same tab shows predicted → actual. */
+function fbProjBoxPanel(g,s,sport){
+  let J=null;try{J=brainJudge(g,s,sport)}catch(err){}
+  if(!J)return'<div class="empty">No projection yet — needs ratings or a book line.</div>';
+  const a=g.away.abbr,h=g.home.abbr,B=J.box,pc=x=>Math.round(x*100)+'%';
+  let A=null,F=null;
+  try{const arc=get(sport==='nfl'?LS.nflarc:'d4.ncaafarc',{});Object.values(arc).forEach(W=>{if(!W||!W.rows)return;
+    const r=W.rows.find(x=>x.id===g.id);if(r){if(r.judge&&r.judge.box)B=r.judge.box;A=r.actualBox||null;F=(W.finals||{})[g.id]||null;}});}catch(err){}
+  const c=(p,v)=>v==null?`${p}`:`${p} <span style="color:var(--mute)">→</span> <b>${v}</b>`;
+  const row=(t,x,y,fin)=>`<tr><td><b>${t}</b></td><td>${x.q}</td><td><b>${c(x.pts,fin)}</b></td><td>${c(x.yds,y&&y.yds)}</td><td>${c(x.pass,y&&y.pass)}</td><td>${c(x.rush,y&&y.rush)}</td></tr>`;
+  let h2=`<div class="sub" style="margin-bottom:6px"><b>${F?'Predicted → actual':'Projected box score'}</b> — ${a} ${J.final[0]}–${J.final[1]} ${h}
+    · close ${pc(J.close)} · blowout ${pc(Math.max(J.blowH,J.blowA))} · upset ${pc(J.h>=J.a?1-J.pHome:J.pHome)}</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.9">
+    <tr style="color:var(--mute)"><td></td><td>Q1-Q4</td><td>PTS</td><td>YDS</td><td>PASS</td><td>RUSH</td></tr>
+    ${row(a,B.away,A&&A.away,F&&F.a)}${row(h,B.home,A&&A.home,F&&F.h)}</table></div>`;
+  if(sport==='nfl'){try{const P=nflModelProps(g,s);if(P.length){
+    h2+=`<div class="sub" style="margin:10px 0 4px"><b>Projected player lines</b></div>`+P.map(x=>{
+      const act=A&&A.players&&A.players[x.pid]?A.players[x.pid][x.k]:null;
+      return`<div class="mono" style="font-size:10px;line-height:1.7">${x.team} ${x.name} <span style="color:var(--mute)">${x.pos}</span> · ${x.lab} <b style="color:var(--gold)">${x.proj}</b>${act!=null?` → <b>${act}</b>`:''}</div>`;}).join('');}
+    else h2+=`<div class="sub" style="margin-top:8px;color:var(--mute)">Player lines appear once depth charts load (Props tab → Refresh depth charts).</div>`;}catch(err){}}
+  return h2;
+}
