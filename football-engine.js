@@ -2161,7 +2161,7 @@ function nflCardFull(g){
       ${h1AwaySpread?nflSq(`${g.away.abbr} 1H ${sgn(h1AwaySpread.line)}`,`${g.away.abbr} 1H spread`,mk(s.awayCover(h1AwaySpread.line*2),h1AwaySpread.price)):''}
       ${h1HomeSpread?nflSq(`${g.home.abbr} 1H ${sgn(h1HomeSpread.line)}`,`${g.home.abbr} 1H spread`,mk(s.homeCover(h1HomeSpread.line*2),h1HomeSpread.price)):''}
     </div>
-    ${h1Over?`<div style="display:flex;gap:6px;margin-top:4px">
+    ${h1Over?`<div class="betgrid" style="margin-top:4px">
       ${nflSq(`1H Over ${h1Over.line}`,`1H Over ${h1Over.line}`,mk(s.overH1(h1Over.line),h1Over.price),s.medH1)}
       ${h1Under?nflSq(`1H Under ${h1Under.line}`,`1H Under ${h1Under.line}`,mk(1-s.overH1(h1Under.line),h1Under.price),s.medH1):''}
     </div>`:''}
@@ -2284,7 +2284,7 @@ function nflFormHTML(g,s){
   const C=get(NFL_FORM_KEY,{});let J=null;try{J=brainJudge(g,s,'nfl')}catch(e){}
   const props=(()=>{try{return buildNFLProps(g,s)}catch(e){return[]}})();
   const side=(abbr,isHome)=>{
-    const st=nflStarters(abbr);if(!st.length)return`<div class="sub">${abbr}: depth chart not loaded — tap Refresh Depth Charts.</div>`;
+    const st=nflStarters(abbr);if(!st.length)return`<div class="sub">${abbr}: depth chart not loaded${typeof NFL_DEPTH_STATUS!=='undefined'&&NFL_DEPTH_STATUS?' <span style="color:var(--mute)">('+NFL_DEPTH_STATUS+')</span>':''}.</div>`;
     const pow=NFL_POWER[abbr]||{};const base=pow.rawOffPPG||pow.offPPG||22;
     const proj=J?(isHome?J.h:J.a):base;const scale=Math.max(0.8,Math.min(1.25,proj/base));
     return`<div style="margin-top:6px"><b>${abbr}</b> <span class="sub mono" style="font-size:9.5px">team proj ${proj.toFixed(1)} vs usual ${base.toFixed(1)} → players ×${scale.toFixed(2)}</span>`+st.map(p=>{
@@ -2298,7 +2298,15 @@ function nflFormHTML(g,s){
       return`<div class="mono" style="font-size:10px;line-height:1.6">${p.name} <span style="color:var(--mute)">${p.pos}</span> · ${lab} last ${G.length}: ${G.map(x=>Math.round(x[k])).join(', ')}
         · avg <b>${avg.toFixed(0)}</b> · proj <b style="color:var(--gold)">${pj.toFixed(0)}</b>${vs}</div>`;}).join('')+`</div>`;
   };
-  return side(g.away.abbr,false)+side(g.home.abbr,true);
+  const need=!nflStarters(g.away.abbr).length||!nflStarters(g.home.abbr).length;
+  return side(g.away.abbr,false)+side(g.home.abbr,true)+(need?`<div class="bar" style="margin-top:8px">
+    <button class="primary" onclick="nflRefreshDepthFor('${g.id}',this)">↻ Refresh depth charts</button></div>`:'');
+}
+async function nflRefreshDepthFor(gid,btn){
+  if(btn){btn.disabled=true;btn.textContent='Loading rosters…';}
+  try{await fetchNFLDepthCharts(true);}catch(e){}
+  const g=NFL_GAMES.find(x=>String(x.id)===String(gid));
+  if(g){const el=document.getElementById('nflform-'+g.id);if(el)el.innerHTML=nflFormHTML(g,NFL_SIMS[g.id]);nflLoadForm(g).catch(()=>{});}
 }
 /* Loads only when a game's Props panel is opened; 10 starters, in parallel. */
 async function nflLoadForm(g){
