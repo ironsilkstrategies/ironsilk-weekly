@@ -1799,112 +1799,7 @@ function nflMasterEvaluation(){
     });
 }
 
-function renderNFLMasterEval(){
-  const evals=nflMasterEvaluation();
-  if(!evals.length)return'<div class="empty">No upcoming NFL games to evaluate.</div>';
-
-  const rows=evals.map(ev=>{
-    const{g,s,verdict,confidence,mySpread,myTotal,myAwayML,myHomeML,
-      spreadEdge,mlEdge,totalEdge,sidePick,totalPick,trends,cons,awayPow,homePow}=ev;
-
-    const verdictColor=verdict==='strong'?'var(--win)':verdict==='lean'?'var(--gold)':'var(--mute)';
-    const verdictLabel=verdict==='strong'?'STRONG':verdict==='lean'?'LEAN':'SPLIT';
-
-    const awayRecord=awayPow?`${awayPow.wins}-${awayPow.losses}`:'';
-    const homeRecord=homePow?`${homePow.wins}-${homePow.losses}`:'';
-
-    const edgeRow=e=>e?`<span style="color:${Math.abs(e.edge)>=6?'var(--win)':Math.abs(e.edge)>=3?'var(--gold)':'var(--mute)'}">
-      ${e.edge>0?'+':''}${e.edge} edge</span>`:'<span style="color:var(--mute)">no line</span>';
-
-    const consML=cons.find(x=>x.market==='moneyline');
-    const consTot=cons.find(x=>x.market==='total');
-
-    return`<div class="tkt" style="border-left:3px solid ${verdictColor}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px">
-        <div>
-          <h3 style="margin:0">🏈 ${g.away.abbr} @ ${g.home.abbr}</h3>
-          <div class="sub" style="margin-top:2px">${g.day||''} ${g.time||''} · Week ${g.week||'?'}</div>
-          ${awayRecord||homeRecord?`<div class="sub">${g.away.abbr} ${awayRecord} · ${g.home.abbr} ${homeRecord}</div>`:''}
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;
-            color:${verdictColor};font-weight:700">${verdictLabel}</div>
-          <div style="font-size:18px;font-weight:700;color:${verdictColor}">${confidence}%</div>
-          <div class="sub">confidence</div>
-        </div>
-      </div>
-
-      <!-- A) My Line -->
-      <div class="mktlab" style="margin-top:10px">A · My Projection</div>
-      <div class="sub">
-        ${g.away.abbr} ${s.awayProj} – ${g.home.abbr} ${s.homeProj} · Total ${myTotal}
-        · Spread ${mySpread>0?g.home.abbr+' -'+mySpread:mySpread<0?g.away.abbr+' -'+Math.abs(mySpread):'Pick\'em'}
-        · ML ${g.away.abbr} ${myAwayML>0?'+':''}${myAwayML} / ${g.home.abbr} ${myHomeML>0?'+':''}${myHomeML}
-      </div>
-      <div class="sub" style="color:var(--mute)">
-        Mode: ${s.modeScore||'?'} (${((s.modeScorePct||0)*100).toFixed(1)}%) ·
-        Range: ${s.p10}–${s.p90}
-      </div>
-
-      <!-- B) Power ratings -->
-      ${awayPow||homePow?`<div class="mktlab" style="margin-top:8px">B · Team Strength</div>
-      <div class="sub">
-        ${awayPow?`${g.away.abbr}: ${awayPow.offPPG.toFixed(1)} off / ${awayPow.defPPG.toFixed(1)} def allowed`:''}
-        ${awayPow&&homePow?' · ':''}
-        ${homePow?`${g.home.abbr}: ${homePow.offPPG.toFixed(1)} off / ${homePow.defPPG.toFixed(1)} def allowed`:''}
-      </div>`:''}
-
-      <!-- C) Market edge -->
-      <div class="mktlab" style="margin-top:8px">C · Market Edge</div>
-      <div class="sub">
-        Spread: ${edgeRow(spreadEdge)} ·
-        ML: ${edgeRow(mlEdge)} ·
-        Total: ${edgeRow(totalEdge)}
-      </div>
-
-      <!-- D) Picks -->
-      <div class="mktlab" style="margin-top:8px">D · My Picks</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-        ${sidePick?`<span style="background:var(--panel2);border:1px solid var(--cold);
-          border-radius:6px;padding:4px 10px;font-family:'IBM Plex Mono';font-size:12px;color:var(--cold)">
-          ${sidePick}</span>`:'<span class="sub">No strong side edge</span>'}
-        ${totalPick?`<span style="background:var(--panel2);border:1px solid var(--gold);
-          border-radius:6px;padding:4px 10px;font-family:'IBM Plex Mono';font-size:12px;color:var(--gold)">
-          ${totalPick}</span>`:'<span class="sub">No strong total edge</span>'}
-      </div>
-
-      <!-- E) Consensus -->
-      ${consML?`<div class="mktlab" style="margin-top:8px">E · Public Consensus</div>
-      <div class="sub">
-        ${g.away.abbr} ${consML.awayPct||'?'}% / ${g.home.abbr} ${consML.homePct||'?'}%
-        ${consTot?` · Total: ${consTot.overPct||'?'}% O / ${consTot.underPct||'?'}% U (line ${consTot.line||'?'})`:''}
-      </div>`:''}
-
-      <!-- F) Trends -->
-      ${trends.length?`<div class="mktlab" style="margin-top:8px">F · Trends (${trends.length})</div>
-      ${trends.slice(0,4).map(t=>`<div class="sub" style="margin-top:2px">
-        · ${t.team?'<b>'+t.team+'</b>: ':''}${t.text}</div>`).join('')}
-      ${trends.length>4?`<div class="sub" style="color:var(--mute)">+${trends.length-4} more</div>`:''}
-      `:''}
-
-      <!-- G) Situation -->
-      <div class="mktlab" style="margin-top:8px">G · Situation</div>
-      <div class="sub">
-        ${nflIsDivisionGame(g)?'🏆 Division game · ':''}
-        ${nflIsConferenceGame(g)?'🏟 Conference game · ':''}
-        Week ${g.week||'?'}${g.seasonType===1?' · Preseason':''}
-      </div>
-    </div>`;
-  });
-
-  const strong=evals.filter(e=>e.verdict==='strong').length;
-  const lean=evals.filter(e=>e.verdict==='lean').length;
-  return`<div class="tkt hi" style="margin-bottom:10px">
-    <h3>🏈 NFL Master Evaluation — Week ${NFL_WEEK||'?'}</h3>
-    <div class="sub">${evals.length} games evaluated · ${strong} strong · ${lean} lean</div>
-    <div class="sub" style="color:var(--mute)">Power ratings: ${Object.keys(NFL_POWER).length?'loaded ✓':'not loaded — hit "Load current week" first'}</div>
-  </div>${rows.join('')}`;
-}
+/* old renderNFLMasterEval replaced by renderFootballEval */
 
 // ── NFL Trend panel for game cards ───────────────────────────────────────────
 function nflTrendPanel(g,s){
@@ -4101,68 +3996,7 @@ function ncaafGameAG(g,s){
 }
 
 // ── NCAAF Master Evaluation ───────────────────────────────────────────────────
-function renderNCAAFMasterEval(){
-  if(!NCAAF_GAMES.length)return'<div class="empty">No CFB games loaded. Switch to CFB tab and load the schedule first.</div>';
-  /* An edge needs a book line to measure against. Simming all ~99 games here
-     froze the BEST tab the same way it froze the board; only games with
-     uploaded or pulled lines can score, so only those get simulated. */
-  NCAAF_GAMES.forEach(g=>{
-    if(NCAAF_SIMS[g.id])return;
-    if(!ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr).length)return;
-    try{NCAAF_SIMS[g.id]=simNCAAFGame(g);}catch(e){}
-  });
-  const evals=NCAAF_GAMES.map(g=>{
-    const s=NCAAF_SIMS[g.id];if(!s)return null;
-    const gameKey=g.away.abbr+'@'+g.home.abbr;
-    const lines=ncaafBookLinesFor(gameKey);
-    const awaySpread=lines.find(x=>x.market==='spread'&&x.side==='away');
-    const totalOver=lines.find(x=>x.market==='total'&&x.side==='over');
-    const spreadEdge=awaySpread?awaySpread.price-nflFairML(Math.max(.05,Math.min(.95,s.awayCover?s.awayCover(awaySpread.line):.5))):null;
-    const totalEdge=totalOver?totalOver.price-nflFairML(Math.max(.05,Math.min(.95,typeof s.over==='function'?s.over(totalOver.line):.5))):null;
-    const eAbs=Math.max(Math.abs(spreadEdge||0),Math.abs(totalEdge||0));
-    /* Confidence based on EV% not raw odds units — cap spreadEdge/totalEdge to
-       EV range before computing confidence so +1790 odds units can't inflate it. */
-    const evSpread=awaySpread&&spreadEdge!=null?+(evPct(s.awayCover?s.awayCover(awaySpread.line):.5,awaySpread.price)).toFixed(1):null;
-    const evTotal=totalOver&&totalEdge!=null?+(evPct(typeof s.over==='function'?s.over(totalOver.line):.5,totalOver.price)).toFixed(1):null;
-    const evAbs=Math.max(Math.abs(evSpread||0),Math.abs(evTotal||0));
-    const verdict=evAbs>=15?'strong':evAbs>=8?'lean':'split';
-    const confidence=Math.min(95,50+evAbs*1.5+(g.away.ranking||g.home.ranking?5:0));
-    return{g,s,verdict,confidence,spreadEdge,totalEdge};
-  }).filter(Boolean).sort((a,b)=>{
-    const r={strong:0,lean:1,split:2};
-    return(r[a.verdict]||2)-(r[b.verdict]||2)||b.confidence-a.confidence;
-  });
-  const strong=evals.filter(e=>e.verdict==='strong').length;
-  const lean=evals.filter(e=>e.verdict==='lean').length;
-  const rows=evals.map(ev=>{
-    const{g,s,verdict,confidence,spreadEdge,totalEdge}=ev;
-    const vColor=verdict==='strong'?'var(--win)':verdict==='lean'?'var(--gold)':'var(--mute)';
-    const med=isNaN(s.med)?52:s.med;
-    const margin=isNaN(s.medMargin)?0:s.medMargin;
-    const spreadLabel=margin>0?`${g.home.abbr} -${margin}`:margin<0?`${g.away.abbr} -${Math.abs(margin)}`:"Pick'em";
-    return`<div class="tkt" style="border-left:3px solid ${vColor}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <h3 style="margin:0">🏟 ${g.away.ranking||''}${g.away.abbr} @ ${g.home.ranking||''}${g.home.abbr}</h3>
-          <div class="sub">${g.day||''} ${g.time||''} · Week ${g.week||'?'}</div>
-          <div class="sub">${g.away.name} @ ${g.home.name}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:'IBM Plex Mono';font-size:10px;color:${vColor};font-weight:700">${verdict.toUpperCase()}</div>
-          <div style="font-size:18px;font-weight:700;color:${vColor}">${Math.round(confidence)}%</div>
-        </div>
-      </div>
-      <div class="sub" style="margin-top:6px">
-        Proj: ${isNaN(s.awayProj)?26:s.awayProj}–${isNaN(s.homeProj)?26:s.homeProj} · O/U ${med} · ${spreadLabel}<br>
-        Edge: Spread ${evSpread!=null?(evSpread>0?'+':'')+evSpread+'% EV':'—'} · Total ${evTotal!=null?(evTotal>0?'+':'')+evTotal+'% EV':'—'}
-      </div>
-    </div>`;
-  });
-  return`<div class="tkt hi" style="margin-bottom:10px">
-    <h3>🏟 CFB Master Evaluation — Week ${NCAAF_WEEK||'?'}</h3>
-    <div class="sub">${evals.length} games · ${strong} strong · ${lean} lean</div>
-  </div>${rows.join('')}`;
-}
+/* old renderNCAAFMasterEval replaced by renderFootballEval */
 
 // ── NCAAF book odds save ──────────────────────────────────────────────────────
 function saveNCAAFBookOdds(picks,el){
@@ -4374,3 +4208,116 @@ function renderFootballRecord(sport){
 
 /* NFL page: season stats load themselves (12h cache) — nothing to tap. */
 if(typeof window!=='undefined'&&window.__PAGE_SPORT__==='nfl')setTimeout(()=>{nflLoadSeasonStats().catch(()=>{})},4000);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOOTBALL MASTER EVALUATION — same machine as MLB's Eval tab.
+   The old NFL/CFB eval printed nonsense ("LEAN · 95% confidence" on a
+   pick'em, "Spread: −224 edge"). This one weighs independent reads per market
+   against YOUR book line: the pure sim, the Judge (market + predictions +
+   team memory), uploaded predicted scores, sample-size-shrunk trends and
+   sharp money. Verdicts come from agreement, confidence is the sim's real
+   probability, and any EV above 12% is flagged as suspect instead of sold.
+   ═══════════════════════════════════════════════════════════════════════════ */
+function fbEvalKey(sp){return 'd4.fbeval.'+sp}
+function fbEvalInputs(sp){
+  const nfl=sp==='nfl',G=(nfl?NFL_GAMES:NCAAF_GAMES)||[],S=(nfl?NFL_SIMS:NCAAF_SIMS)||{};
+  const lf=nfl?nflBookLinesFor:ncaafBookLinesFor;let book=0,espn=0,lined=0;
+  G.forEach(g=>{const L=lf(g.away.abbr+'@'+g.home.abbr)||[];if(L.length)lined++;L.forEach(x=>{x.src==='espn'?espn++:book++});});
+  const cnt=k=>Object.values(get(k,{})).reduce((n,a)=>n+(Array.isArray(a)?a.length:0),0);
+  const P=(get('d4.preds',{})[sp])||{};const preds=Object.values(P).reduce((n,d)=>n+Object.keys(d).length,0);
+  const b=brainGet(sp);
+  return{games:G.length,sims:G.filter(g=>S[g.id]).length,lined,book,espn,
+    trends:cnt(nfl?LS.nfltrends:'d4.ncaaftrends'),cons:cnt(nfl?LS.nflconsensus:'d4.ncaafconsensus'),preds,
+    rated:Object.keys(nfl?NFL_POWER:(typeof NCAAF_POWER!=='undefined'?NCAAF_POWER:{})).length,
+    prior:nfl?Object.values(NFL_POWER).filter(t=>t&&t.priorOff!=null).length:0,
+    depth:nfl?Object.keys(NFL_DEPTH||{}).length:0,
+    stats:nfl?Object.keys(NFL_SEASONSTATS||{}).length:0,brain:(b.log||[]).length};
+}
+function fbEvalFingerprint(sp){return JSON.stringify(fbEvalInputs(sp))}
+function runFootballEval(sp){
+  const nfl=sp==='nfl',G=(nfl?NFL_GAMES:NCAAF_GAMES)||[],S=nfl?NFL_SIMS:NCAAF_SIMS;
+  const lf=nfl?nflBookLinesFor:ncaafBookLinesFor,sim=nfl?simNFLGame:simNCAAFGame;
+  const evals=[];
+  G.forEach(g=>{
+    if((g.abstract||'pre')!=='pre')return;
+    const k=g.away.abbr+'@'+g.home.abbr,L=lf(k)||[];if(!L.length)return;       // no line, nothing to evaluate
+    let s=S[g.id];if(!s){try{s=S[g.id]=sim(g)}catch(err){return}}
+    let J=null;try{J=brainJudge(g,s,sp)}catch(err){}
+    const P=fbModelPicks(s,L);if(!P)return;
+    const pred=typeof predFor==='function'?predFor(sp,k):null;
+    const tr=brainTrendEvidence(g,sp),mo=brainMoney(g,sp);
+    const mkts=[];
+    const evOf=(p,price)=>(p*amerProfit(price!=null?+price:-110)-(1-p))*100;
+    const add=(market,label,side,p,price,sig,conf)=>{mkts.push({market,label,side,p,price,ev:evOf(p,price),sig,conf});};
+    if(P.spread){const hs=P.spread.side==='home',ln=P.spread.line,mu=J?J.h-J.a:null;
+      const sig=[{src:'Sim',ok:true,detail:`${hs?g.home.abbr:g.away.abbr} ${ln>0?'+':''}${ln} · ${Math.round(P.spread.p*100)}%`}];
+      if(J){const cov=hs?(mu+ln):(-mu+ln);sig.push({src:'Judge',ok:cov>0,detail:`${g.away.abbr} ${J.a}–${J.h} ${g.home.abbr}`});}
+      if(pred){const m=pred.h-pred.a,cov=hs?(m+ln):(-m+ln);sig.push({src:'Prediction',ok:cov>0,detail:`${pred.a}–${pred.h}`});}
+      if(Math.abs(tr.dMar)>=0.1)sig.push({src:'Trends',ok:(tr.dMar>0)===hs,detail:(tr.dMar>0?g.home.abbr:g.away.abbr)+' lean'});
+      if(mo&&mo.side)sig.push({src:'Sharp money',ok:(mo.side>0)===hs,detail:mo.note});
+      add('spread',`${hs?g.home.abbr:g.away.abbr} ${ln>0?'+':''}${ln}`,P.spread.side,P.spread.p,P.spread.price,sig);}
+    if(P.total){const ov=P.total.side==='over',ln=P.total.line;
+      const sig=[{src:'Sim',ok:true,detail:`${ov?'Over':'Under'} ${ln} · ${Math.round(P.total.p*100)}%`}];
+      if(J){const t=J.a+J.h;sig.push({src:'Judge',ok:ov?t>ln:t<ln,detail:`total ${t.toFixed(1)}`});}
+      if(pred){const t=pred.a+pred.h;sig.push({src:'Prediction',ok:ov?t>ln:t<ln,detail:`total ${t.toFixed(1)}`});}
+      if(Math.abs(tr.dTot)>=0.1)sig.push({src:'Trends',ok:(tr.dTot>0)===ov,detail:(tr.dTot>0?'Over':'Under')+' lean'});
+      add('total',`${ov?'Over':'Under'} ${ln}`,P.total.side,P.total.p,P.total.price,sig);}
+    if(P.ml&&P.ml.price!=null){const hs=P.ml.side==='home';
+      const sig=[{src:'Sim',ok:true,detail:`${hs?g.home.abbr:g.away.abbr} ${Math.round(P.ml.p*100)}%`}];
+      if(J)sig.push({src:'Judge',ok:hs?J.pHome>0.5:J.pHome<0.5,detail:`${Math.round((hs?J.pHome:1-J.pHome)*100)}%`});
+      if(pred)sig.push({src:'Prediction',ok:hs?pred.h>pred.a:pred.a>pred.h,detail:`${pred.a}–${pred.h}`});
+      add('ml',`${hs?g.home.abbr:g.away.abbr} ML`,P.ml.side,P.ml.p,P.ml.price,sig);}
+    mkts.forEach(m=>{const others=m.sig.slice(1),agree=others.filter(x=>x.ok).length,against=others.length-agree;
+      m.agree=agree;m.against=against;m.suspect=m.ev>12;
+      m.verdict=m.suspect?'split':m.ev>=3&&agree>=2&&against===0?'strong':m.ev>=1.5&&agree>=against?'lean':m.ev<0?'away':'split';});
+    const rank={strong:0,lean:1,split:2,away:3};mkts.sort((a,b)=>rank[a.verdict]-rank[b.verdict]||b.ev-a.ev);
+    evals.push({game:k,time:g.time||'',mkts,best:mkts[0],judge:J?{a:J.a,h:J.h,blow:Math.max(J.blowH,J.blowA)}:null,nSig:(mkts[0]||{sig:[]}).sig.length});
+  });
+  set(fbEvalKey(sp),{ts:Date.now(),fingerprint:fbEvalFingerprint(sp),evals});
+  try{renderTickets()}catch(err){}
+}
+function renderFootballEval(sp){
+  const I=fbEvalInputs(sp),run=get(fbEvalKey(sp),null),stale=run&&run.fingerprint!==fbEvalFingerprint(sp);
+  const chip=(ok,label,n)=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <span style="width:7px;height:7px;border-radius:50%;background:${ok?'var(--win)':'var(--rule)'};flex:0 0 auto"></span>
+    <span style="color:${ok?'var(--chalk)':'var(--mute)'}">${label}</span><span class="m">${n}</span></div>`;
+  const nm=sp==='nfl'?'NFL':'CFB';const t=x=>new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  const status=!run?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px"><b style="color:var(--gold)">Not evaluated yet.</b> Load what you've got, then hit Run evaluation.</div>`
+    :stale?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px"><b style="color:var(--gold)">Inputs changed since the last run.</b> Last evaluated ${t(run.ts)} — run it again for a current read.</div>`
+    :`<div class="note" style="border-left:3px solid var(--win);padding-left:10px"><b style="color:var(--win)">✓ Evaluated ${t(run.ts)}</b> — ${run.evals.length} games with lines. Nothing has changed since.</div>`;
+  const feed=`<div class="tkt hi"><h3>${nm} master evaluation</h3>
+    <div class="sub" style="margin-bottom:9px">Every independent read on this slate, weighed against your book line. Green dots are loaded and feeding the simulation.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 14px">
+      ${chip(I.sims>0,'Simulations',I.sims+'/'+I.games)}${chip(I.book+I.espn>0,'Book lines',I.book+(I.espn?' +'+I.espn+' ESPN':''))}
+      ${chip(I.rated>0,'Power ratings',I.rated+' teams')}${sp==='nfl'?chip(I.prior>0,'Last-season anchor',I.prior):''}
+      ${chip(I.preds>0,'Predicted scores',I.preds)}${chip(I.trends>0,'Trends',I.trends)}
+      ${chip(I.cons>0,'Public consensus',I.cons)}${sp==='nfl'?chip(I.depth>0,'Depth charts',I.depth+' teams'):''}
+      ${sp==='nfl'?chip(I.stats>0,'Season player stats',I.stats):''}${chip(I.brain>0,'Brain (graded games)',I.brain)}
+    </div>
+    <div class="bar" style="margin-top:11px"><button class="primary" onclick="runFootballEval('${sp}')">${run&&!stale?'Re-run evaluation':'Run evaluation'}</button>
+      <button onclick="try{fbGrade('${sp}');brainLearn('${sp}')}catch(e){};renderTickets()">Calibrate first</button></div></div>${status}`;
+  if(!run)return feed+`<div class="empty">Results appear here once you run it. Only games with a book line are scored — no line, no edge.</div>`;
+  if(!run.evals.length)return feed+`<div class="empty">No pregame ${nm} games with book lines yet. Upload odds or wait for ESPN lines to fill in.</div>`;
+  const counts={strong:0,lean:0,split:0,away:0};run.evals.forEach(e=>counts[(e.best||{}).verdict||'split']++);
+  const summary=`<div class="tkt"><div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+    ${['strong','lean','split','away'].map(k=>`<div><div style="font-family:'Archivo';font-weight:900;font-size:22px;color:${VERDICT[k].color}">${counts[k]}</div>
+      <div class="m">${VERDICT[k].label}</div></div>`).join('')}</div></div>`;
+  const pc=x=>Math.round(x*100)+'%';
+  const cards=run.evals.map(e=>{const B=e.best||{};const V=VERDICT[B.verdict||'split'];
+    return`<div class="tkt" style="border-left:3px solid ${V.color}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <div><div style="font-family:'Archivo';font-weight:900;font-size:16px">${e.game}</div>
+          <div class="m">${e.time}${e.judge?` · Judge ${e.judge.a}–${e.judge.h} · blowout ${pc(e.judge.blow)}`:''}</div></div>
+        <div style="text-align:right"><div style="font-family:'Inter';font-weight:800;font-size:11px;letter-spacing:.08em;color:${V.color}">${V.label}</div>
+          <div class="m">${B.label||''}</div></div></div>
+      ${e.mkts.map(m=>`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--hair)">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px"><b>${m.label} <span class="m">(${m.price>0?'+':''}${m.price??-110})</span></b>
+          <span style="color:${VERDICT[m.verdict].color};font-weight:700">${VERDICT[m.verdict].label} · ${pc(m.p)} · ${m.ev>=0?'+':''}${m.ev.toFixed(1)}% EV</span></div>
+        ${m.suspect?`<div class="sub" style="color:var(--gold)">EV this high usually means a stale line or thin early-season data — verify before betting.</div>`:''}
+        ${m.sig.map(x=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0">
+          <span style="color:var(--mute)">${x.src}</span><span style="color:${x.ok?'var(--chalk)':'var(--rust)'};font-weight:600">${x.ok?'':'✗ '}${x.detail}</span></div>`).join('')}
+      </div>`).join('')}</div>`;}).join('');
+  return feed+summary+cards;
+}
+function renderNFLMasterEval(){return renderFootballEval('nfl')}
+function renderNCAAFMasterEval(){return renderFootballEval('ncaaf')}

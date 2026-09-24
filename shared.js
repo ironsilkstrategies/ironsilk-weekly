@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-24d';
+const INTAKE_BUILD='intake 2026-09-25e';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
   const d=document.createElement('div');d.id='intakeBuild';d.className='sub mono';d.style.cssText='font-size:9.5px;opacity:.6;margin-top:4px';
@@ -811,7 +811,28 @@ let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
 const fmtDate=d=>new Date(d).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',timeZone:APP_TZ});
-function get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+/* ── STORAGE COMPRESSION ────────────────────────────────────────────────────
+   Safari gives each site ~5MB of localStorage. Betting data is repetitive
+   text, so large values are stored LZ-compressed (lz-string, UTF-16 safe),
+   typically a fraction of the size. Reads detect the marker and decompress;
+   everything else in the app sees plain JSON exactly as before. */
+var LZString=function(){var r=String.fromCharCode,o="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",n="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$",e={};function t(r,o){if(!e[r]){e[r]={};for(var n=0;n<r.length;n++)e[r][r.charAt(n)]=n}return e[r][o]}var i={compressToBase64:function(r){if(null==r)return"";var n=i._compress(r,6,function(r){return o.charAt(r)});switch(n.length%4){default:case 0:return n;case 1:return n+"===";case 2:return n+"==";case 3:return n+"="}},decompressFromBase64:function(r){return null==r?"":""==r?null:i._decompress(r.length,32,function(n){return t(o,r.charAt(n))})},compressToUTF16:function(o){return null==o?"":i._compress(o,15,function(o){return r(o+32)})+" "},decompressFromUTF16:function(r){return null==r?"":""==r?null:i._decompress(r.length,16384,function(o){return r.charCodeAt(o)-32})},compressToUint8Array:function(r){for(var o=i.compress(r),n=new Uint8Array(2*o.length),e=0,t=o.length;e<t;e++){var s=o.charCodeAt(e);n[2*e]=s>>>8,n[2*e+1]=s%256}return n},decompressFromUint8Array:function(o){if(null==o)return i.decompress(o);for(var n=new Array(o.length/2),e=0,t=n.length;e<t;e++)n[e]=256*o[2*e]+o[2*e+1];var s=[];return n.forEach(function(o){s.push(r(o))}),i.decompress(s.join(""))},compressToEncodedURIComponent:function(r){return null==r?"":i._compress(r,6,function(r){return n.charAt(r)})},decompressFromEncodedURIComponent:function(r){return null==r?"":""==r?null:(r=r.replace(/ /g,"+"),i._decompress(r.length,32,function(o){return t(n,r.charAt(o))}))},compress:function(o){return i._compress(o,16,function(o){return r(o)})},_compress:function(r,o,n){if(null==r)return"";var e,t,i,s={},u={},a="",p="",c="",l=2,f=3,h=2,d=[],m=0,v=0;for(i=0;i<r.length;i+=1)if(a=r.charAt(i),Object.prototype.hasOwnProperty.call(s,a)||(s[a]=f++,u[a]=!0),p=c+a,Object.prototype.hasOwnProperty.call(s,p))c=p;else{if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;e<h;e++)m<<=1,v==o-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;e<8;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;e<h;e++)m=m<<1|t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;e<16;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}0==--l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;0==--l&&(l=Math.pow(2,h),h++),s[p]=f++,c=String(a)}if(""!==c){if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;e<h;e++)m<<=1,v==o-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;e<8;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;e<h;e++)m=m<<1|t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;e<16;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}0==--l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;0==--l&&(l=Math.pow(2,h),h++)}for(t=2,e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;for(;;){if(m<<=1,v==o-1){d.push(n(m));break}v++}return d.join("")},decompress:function(r){return null==r?"":""==r?null:i._decompress(r.length,32768,function(o){return r.charCodeAt(o)})},_decompress:function(o,n,e){var t,i,s,u,a,p,c,l=[],f=4,h=4,d=3,m="",v=[],g={val:e(0),position:n,index:1};for(t=0;t<3;t+=1)l[t]=t;for(s=0,a=Math.pow(2,2),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;switch(s){case 0:for(s=0,a=Math.pow(2,8),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;c=r(s);break;case 1:for(s=0,a=Math.pow(2,16),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;c=r(s);break;case 2:return""}for(l[3]=c,i=c,v.push(c);;){if(g.index>o)return"";for(s=0,a=Math.pow(2,d),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;switch(c=s){case 0:for(s=0,a=Math.pow(2,8),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;l[h++]=r(s),c=h-1,f--;break;case 1:for(s=0,a=Math.pow(2,16),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;l[h++]=r(s),c=h-1,f--;break;case 2:return v.join("")}if(0==f&&(f=Math.pow(2,d),d++),l[c])m=l[c];else{if(c!==h)return null;m=i+i.charAt(0)}v.push(m),l[h++]=i+m.charAt(0),i=m,0==--f&&(f=Math.pow(2,d),d++)}}};return i}();"function"==typeof define&&define.amd?define(function(){return LZString}):"undefined"!=typeof module&&null!=module?module.exports=LZString:"undefined"!=typeof angular&&null!=angular&&angular.module("LZString",[]).factory("LZString",function(){return LZString});
+const _LZM='\u0001LZ';
+function _dec(raw){if(raw==null||raw==='')return undefined;
+  if(raw.charCodeAt(0)===1&&raw.startsWith(_LZM)){const j=LZString.decompressFromUTF16(raw.slice(_LZM.length));return j==null?undefined:JSON.parse(j);}
+  return JSON.parse(raw);}
+function _enc(json){if(json.length<8000)return json;
+  try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
+function get(k,d){try{const v=_dec(localStorage.getItem(k));return v===undefined?d:v}catch(e){return d}}
+/* One-time on load: re-save large uncompressed values compressed, which
+   frees space immediately on a device that is already full. */
+function compactStorage(){let saved=0;
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith('d4.'))continue;
+    const raw=localStorage.getItem(k);if(!raw||raw.length<8000||raw.startsWith(_LZM))continue;
+    const c=_enc(raw);if(c!==raw){try{localStorage.setItem(k,c);saved+=raw.length-c.length;}catch(e){}}}}catch(e){}
+  if(saved)try{bumpStorageGen()}catch(e){}
+  return saved;}
+try{compactStorage()}catch(e){}
 /* ── HOT-PATH READ CACHE ──────────────────────────────────────────────────
    nbRuns() is the innermost function of the simulator: four calls per sim
    iteration, 10,000 iterations per game, every game on the board. It was
@@ -832,7 +853,7 @@ function bumpStorageGen(){_LSGEN++;_hotCache=Object.create(null);_hotGen=_LSGEN}
 function hotGet(k,d){
   if(_hotGen!==_LSGEN){_hotCache=Object.create(null);_hotGen=_LSGEN}
   if(k in _hotCache){const v=_hotCache[k];return v===undefined?d:v}
-  let v;try{const raw=localStorage.getItem(k);v=raw?JSON.parse(raw):undefined}catch(e){v=undefined}
+  let v;try{v=_dec(localStorage.getItem(k))}catch(e){v=undefined}
   _hotCache[k]=v;
   return v===undefined?d:v;
 }
@@ -861,25 +882,24 @@ const PRUNE_LADDER=[
 ];
 function pruneKeyedCache(key,keep){
   try{
-    const raw=localStorage.getItem(key);if(!raw)return false;
-    const c=JSON.parse(raw);const keys=Object.keys(c);
+    const c=_dec(localStorage.getItem(key));if(!c)return false;const keys=Object.keys(c);
     if(keys.length<=keep)return false;
     keys.sort((a,b)=>((c[b]&&c[b].ts)||0)-((c[a]&&c[a].ts)||0)).slice(keep).forEach(k=>delete c[k]);
-    localStorage.setItem(key,JSON.stringify(c));return true;
+    localStorage.setItem(key,_enc(JSON.stringify(c)));return true;
   }catch(e){try{localStorage.removeItem(key)}catch(_){}; return true}
 }
 function pruneDatedMap(key,keepDays){
   try{
-    const raw=localStorage.getItem(key);if(!raw)return false;
-    const m=JSON.parse(raw);const days=Object.keys(m).sort();
+    const m=_dec(localStorage.getItem(key));if(!m)return false;const days=Object.keys(m).sort();
     if(days.length<=keepDays)return false;
     days.slice(0,days.length-keepDays).forEach(d=>delete m[d]);
-    localStorage.setItem(key,JSON.stringify(m));return true;
+    localStorage.setItem(key,_enc(JSON.stringify(m)));return true;
   }catch(e){return false}
 }
 function set(k,v){
   let payload;
   try{payload=JSON.stringify(v)}catch(e){console.warn('set: unserializable',k,e);return false}
+  payload=_enc(payload);
   try{localStorage.setItem(k,payload);bumpStorageGen();return true}
   catch(e){
     if(!isQuotaErr(e)){console.warn('set failed',k,e);return false}
@@ -2899,13 +2919,27 @@ async function loadBoxes(){
 }
 async function loadOdds(manual){
   const key=get(LS.key,'');if(!key)return;
-  const c=credits();if(c.n>=24){if(manual)alert('24 credits used. Resets midnight CT.');return}
+  const c=credits();if(c.n>=24){if(manual===true)alert('24 credits used. Resets midnight CT.');return}
   const last=get(LS.pull,0);
   if(!manual&&Date.now()-last<36e5)return;
-  if(manual&&Date.now()-last<6e4){alert('Just pulled.');return}
+  if(manual===true&&Date.now()-last<6e4){alert('Just pulled.');return}
+  if(manual==='refresh'&&Date.now()-last<6e4)return;
   try{
     const r=await fetch(`https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=h2h&oddsFormat=american&apiKey=${encodeURIComponent(key)}`);
-    if(!r.ok){alert(r.status===401?'Key rejected.':'Odds failed ('+r.status+').');return}
+    if(!r.ok){
+      /* The Odds API answers 401 both for a bad key AND when the monthly free
+         credits are used up. This used to fire a blocking "Key rejected."
+         alert on every Refresh Everything. Read the provider's own reason and
+         show it on the page instead; only an explicit tap gets a pop-up. */
+      let why='';try{const j=await r.json();why=String(j.message||j.error_code||'');}catch(e){}
+      const quota=/quota|credit|usage/i.test(why);
+      const msg=r.status===401?(quota?'The Odds API: monthly free credits are used up (resets on your plan date). ESPN lines still fill the board.'
+        :'The Odds API says this key is not valid'+(why?' — "'+why+'"':'')+'. Re-paste it in Settings → The Odds API.')
+        :'Odds pull failed ('+r.status+(why?': '+why:'')+').';
+      set('d4.oddsApiStatus',{ts:Date.now(),status:r.status,quota,msg});
+      const bs=document.getElementById('bookStatus');if(bs)bs.innerHTML='<span style="color:var(--rust)">'+msg+'</span>';
+      if(manual===true)alert(msg);
+      return}
     const d=await r.json();burn();set(LS.pull,Date.now());
     const snap={},byDate={};
     d.forEach(ev=>{const px={};
@@ -4747,7 +4781,7 @@ async function refreshEverything(){
   paint();
   if(get(LS.key,'')){
     steps.push('⏳ Odds API…');paint();
-    try{await loadOdds(true);steps[steps.length-1]='✅ Odds API pulled'}
+    try{await loadOdds('refresh');const st=get('d4.oddsApiStatus',{});steps[steps.length-1]=(st.ts&&Date.now()-st.ts<5000)?'⚠️ '+st.msg:'✅ Odds API pulled'}
     catch(e){steps[steps.length-1]='❌ Odds API failed'}
   }else{steps.push('⏭️ Odds API — no key saved')}
   paint();
