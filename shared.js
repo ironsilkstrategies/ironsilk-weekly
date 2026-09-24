@@ -48,6 +48,11 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
+const INTAKE_BUILD='intake 2026-09-24d';
+/* Stamp the card so it's obvious which code the phone is actually running. */
+setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
+  const d=document.createElement('div');d.id='intakeBuild';d.className='sub mono';d.style.cssText='font-size:9.5px;opacity:.6;margin-top:4px';
+  d.textContent=INTAKE_BUILD+' · reads key:value, grammar & board copy locally';b.parentNode.after(d);}}catch(e){}},0);
 const INTAKE_NFL={ARI:'cardinals arizona',ATL:'falcons atlanta',BAL:'ravens baltimore',BUF:'bills buffalo',CAR:'panthers carolina',
  CHI:'bears chicago',CIN:'bengals cincinnati',CLE:'browns cleveland',DAL:'cowboys dallas',DEN:'broncos denver',DET:'lions detroit',
  GB:'packers green bay',HOU:'texans houston',IND:'colts indianapolis',JAX:'jaguars jacksonville',KC:'chiefs kansas city',
@@ -239,7 +244,10 @@ function intakeNormalizeKV(text){
     [/^(1F|F5|FIRST_?5|FIRST_?FIVE)_?(TOTAL|OU)$/,'F5 OU','tot'],
     [/^(RUN_?LINE|RL|PUCK_?LINE)$/,'RL','side'],[/^(SPREAD|POINT_?SPREAD|HANDICAP)$/,'SPREAD','side'],
     [/^(MONEYLINE|MONEY_?LINE|ML)$/,'ML','ml'],[/^(TOTAL|TOTALS|OU|OVER_?UNDER)$/,'OU','tot']];
-  const flush=()=>{if(!away||!home)return;const sp=sport||lastSport;
+  const flush=()=>{if(!away||!home)return;
+    /* No SPORT: line (a partial paste) — infer it from the two team names,
+       falling back to the page you're on. Never guess "nothing" and punt to Gemini. */
+    const sp=sport||intakeGuessSport(clean(away)+' '+clean(home),window.__PAGE_SPORT__||ACTIVE_SPORT||'mlb');
     if(sp!==lastSport){out.push('',sp==='ncaaf'?'NCAAF':sp.toUpperCase());lastSport=sp;}
     const nm=x=>sp==='mlb'?(intakeAbbr('mlb',clean(x))||clean(x)):clean(x);
     const A=nm(away),H=nm(home);out.push('',A+' @ '+H);
