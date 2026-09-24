@@ -200,7 +200,7 @@ function intakeParseGrammar(text,fallbackSport){
         const a=intakeAbbr(sport,g[1]),h=intakeAbbr(sport,g[2]);if(a&&h){A=a;H=h;}return;}
       if(!A)return;const game=A+'@'+H;
       let m;
-      if((m=l.match(/^(?:PRED|PROJ)\w*:?\s*(.+?)\s+(\d{1,3}(?:\.\d)?)\s*[\/,\-–]\s*(.+?)\s+(\d{1,3}(?:\.\d)?)\s*$/i))){
+      if((m=l.match(/^(?:PRED|PROJ)\w*:?\s*(.+?)\s+(\d{1,3}(?:\.\d+)?)\s*[\/,\-–]\s*(.+?)\s+(\d{1,3}(?:\.\d+)?)\s*$/i))){
         let a=+m[2],h=+m[4];const t1=intakeAbbr(sport,m[1]);if(t1&&t1===H){[a,h]=[h,a];}
         B.preds.push({game,away:A,home:H,a,h,src:'upload'});return;}
       if((m=l.match(/^CONSTOT:?\s*O\w*\s*(\d{1,3})%\s*\/\s*U\w*\s*(\d{1,3})%(?:\s*\|\s*([\d.]+))?/i))){
