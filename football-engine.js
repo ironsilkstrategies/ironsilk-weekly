@@ -427,6 +427,7 @@ function _parseNFLEvents(j){
       clock:comp.status&&comp.status.displayClock||'',
       period:comp.status&&comp.status.period||0,
       awayScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='away')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
+      h1a:(()=>{const c=comp.competitors.find(x=>x.homeAway==='away')||{};const q=c.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),h1h:(()=>{const c=comp.competitors.find(x=>x.homeAway==='home')||{};const q=c.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       homeScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='home')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
       away:{abbr:awayAbbr,name:away.team.displayName||awayAbbr,offRating:24,defRating:24,record:away.records&&away.records[0]&&away.records[0].summary||''},
       home:{abbr:homeAbbr,name:home.team.displayName||homeAbbr,offRating:24,defRating:24,record:home.records&&home.records[0]&&home.records[0].summary||''},
@@ -1558,6 +1559,7 @@ function fbSnapshot(sport){
     if(isFinal(g)&&g.awayScore!=null&&g.homeScore!=null&&!A.finals[g.id])A.finals[g.id]={a:+g.awayScore,h:+g.homeScore};
   });
   set(key,arc);
+  try{logSystemPicks(sport)}catch(err){console.warn('syslog',err)}
 }
 function fbGrade(sport){
   const nfl=sport==='nfl',key=nfl?LS.nflarc:'d4.ncaafarc';
@@ -1584,6 +1586,7 @@ function fbGrade(sport){
   });
   if(changed){set(NFL_CALIB_KEY,calib);set(key,arc);}
   try{brainLearn(sport)}catch(e){console.warn('brain learn',e)}
+  try{syncFinalsToShared();gradeSystemLog()}catch(e){}
   if(!fbGrade._box)fbGrade._box={};
   if(!fbGrade._box[sport]){fbGrade._box[sport]=1;setTimeout(()=>{brainCollectBoxes(sport).catch(()=>{}).finally(()=>{fbGrade._box[sport]=0})},4000);}
 }
@@ -3261,6 +3264,8 @@ function _parseNCAAFEvents(j){
       clock:(comp.status&&comp.status.displayClock)||'',
       period:(comp.status&&comp.status.period)||0,
       awayScore:(()=>{const sc=away.score;return sc!=null&&sc!==''?+sc:null})(),
+      h1a:(()=>{const q=away.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
+      h1h:(()=>{const q=home.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       homeScore:(()=>{const sc=home.score;return sc!=null&&sc!==''?+sc:null})(),
       away:{abbr:awayAbbr,name:awayName,ranking:ranking(away.team),
         offRating:26,defRating:26,record:away.records&&away.records[0]&&away.records[0].summary||''},
@@ -4349,6 +4354,15 @@ function fbPresetLegs(sport){
     const to=f('total','over'),tu=f('total','under');
     if(to&&tu&&to.line!=null&&typeof s2.over==='function'){const po=s2.over(+to.line);
       both('total',to,tu,po,1-po,'Over '+to.line,'Under '+tu.line);}
+    /* 1st half — priced exactly like the card (full-game model at twice the
+       half line) so a ticket and its card never disagree; graded on the
+       halftime score. */
+    const ha=f('h1spread','away'),hh=f('h1spread','home');
+    if(ha&&hh&&ha.line!=null&&hh.line!=null){const sg=v=>(v>0?'+':'')+v;
+      both('h1',hh,ha,s2.homeCover(+hh.line*2),s2.awayCover(+ha.line*2),g.home.abbr+' 1H '+sg(+hh.line),g.away.abbr+' 1H '+sg(+ha.line));}
+    const ho=f('h1total','over'),hu=f('h1total','under');
+    if(ho&&hu&&ho.line!=null&&typeof s2.overH1==='function'){const po=s2.overH1(+ho.line);
+      both('h1',ho,hu,po,1-po,'1H Over '+ho.line,'1H Under '+hu.line);}
   });
   return out;
 }

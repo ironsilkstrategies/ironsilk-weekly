@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-25e';
+const INTAKE_BUILD='intake 2026-09-25g';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
   const d=document.createElement('div');d.id='intakeBuild';d.className='sub mono';d.style.cssText='font-size:9.5px;opacity:.6;margin-top:4px';
@@ -4098,7 +4098,10 @@ function presetTabHtml(){
       <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}
     </li>`;
   }).join('');
-  const payload=encodeURIComponent(JSON.stringify(legs.map(l=>({game:l.game,pick:l.pick,p:l.p,isProp:l.kind==='prop'||l.kind==='hr'}))));
+  /* sport/gid/kind were stripped here, so a football leg saved from a preset
+     was later looked up in the MLB schedule, matched nothing, and never graded. */
+  const payload=encodeURIComponent(JSON.stringify(legs.map(l=>({game:l.game,pick:l.pick,p:l.p,isProp:l.kind==='prop'||l.kind==='hr',
+    sport:l.sport||'mlb',gid:l.gid||null,kind:l.kind||null,price:l.price!=null?l.price:null}))));
   const marketToggles=`<div class="mktlab">Markets to draw from${fixedMarkets?' <span style="color:var(--mute);text-transform:none;letter-spacing:0">— this preset has a fixed shape and ignores this</span>':''}</div>
     <div class="subnav" style="opacity:${fixedMarkets?0.4:1};pointer-events:${fixedMarkets?'none':'auto'}">
       <button class="${PRESET_MARKETS.has('ml')?'on':''}" onclick="toggleWonMarket('ml',this)">Moneyline</button>
@@ -5006,6 +5009,7 @@ function lineupSig(g){
   return a+'|'+h+'|'+(g.away.p?g.away.p.id:'?')+'|'+(g.home.p?g.home.p.id:'?');
 }
 function render(){
+  try{if(typeof logSystemPicks==='function'&&typeof GAMES!=='undefined'&&GAMES.length&&(window.__PAGE_SPORT__||'mlb')==='mlb')setTimeout(()=>{try{logSystemPicks('mlb')}catch(e){}},0)}catch(e){}
   // hide football banners when the MLB board is active
   const _nw=document.getElementById('nflPowerWarn');if(_nw)_nw.style.display='none';
   const _cw=document.getElementById('cfbPowerWarn');if(_cw)_cw.style.display='none';
@@ -5791,7 +5795,7 @@ function resolveLeg(leg,ticketDate){
     if(fg){
       const done=fg.status==='Final'||fg.abstract==='Final'||fg.abstract==='post';
       if(done&&fg.awayScore!=null)
-        return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:false,source:'memory',g:fg};
+        return{a:+fg.awayScore,h:+fg.homeScore,h1a:fg.h1a,h1h:fg.h1h,gid:fg.id,live:false,source:'memory',g:fg};
       const live=fg.status==='InProgress'||fg.abstract==='Live'||fg.abstract==='in';
       if(live&&fg.awayScore!=null)
         return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:true,source:'memory',g:fg,completed:null};
@@ -5801,13 +5805,17 @@ function resolveLeg(leg,ticketDate){
     // shared cross-sport finals store — visible on every page
     const shared=get(LS.allfinals,{})[leg.game];
     if(shared&&shared.a!=null)
-      return{a:+shared.a,h:+shared.h,gid:leg.gid,live:false,source:'shared'};
-    // finished football games also live in their own sport archive
+      return{a:+shared.a,h:+shared.h,h1a:shared.h1a,h1h:shared.h1h,gid:leg.gid,live:false,source:'shared'};
+    /* Finished football games also live in the sport archive, in two shapes:
+       date → [rows] (finals mirror) and week → {rows,finals} (snapshots).
+       Treating a week object as a list threw here instead of finding the score. */
     const farc=get(leg.sport==='nfl'?LS.nflarc:'d4.ncaafarc',{});
     for(const d of Object.keys(farc)){
-      const row=(farc[d]||[]).find(r=>r.game===leg.game||r.gid===leg.gid);
-      if(row&&row.awayScore!=null)
-        return{a:+row.awayScore,h:+row.homeScore,gid:row.gid||leg.gid,live:false,source:'archive'};
+      const E=farc[d];
+      if(Array.isArray(E)){const row=E.find(r=>r.game===leg.game||r.gid===leg.gid);
+        if(row&&row.awayScore!=null)return{a:+row.awayScore,h:+row.homeScore,gid:row.gid||leg.gid,live:false,source:'archive'};}
+      else if(E&&Array.isArray(E.rows)&&E.finals){const row=E.rows.find(r=>r.game===leg.game||String(r.id)===String(leg.gid));
+        const F=row&&E.finals[row.id];if(F&&F.a!=null)return{a:+F.a,h:+F.h,gid:row.id,live:false,source:'archive'};}
     }
     return null;
   }
@@ -5976,6 +5984,19 @@ function gradeLeg(leg,ticketDate){
   };
   const sideResult=gradeSideOrTotal();
   if(sideResult)return{...sideResult,live:!!R.live};
+  /* 1st-half football picks: "1H Over 21.5", "1H Under 21.5", "KC 1H -6.5".
+     Graded on the halftime score captured from ESPN's quarter linescores. */
+  if(/(^|\s)1H\s/.test(pick)){
+    if(R.h1a==null||R.h1h==null)return{hit:null,detail:'1st-half score not available yet',live:!!R.live};
+    const ha=+R.h1a,hh=+R.h1h,ht=ha+hh;
+    let m=pick.match(/^1H (Over|Under) ([\d.]+)/i);
+    if(m){const ln=+m[2];if(ht===ln)return{hit:null,push:true,detail:`1H total ${ht} — push`,live:false};
+      return{hit:/over/i.test(m[1])?ht>ln:ht<ln,detail:`1H ${ha}–${hh} · total ${ht}`,live:false};}
+    m=pick.match(/^([A-Z]{2,4}) 1H ([+\-]?[\d.]+)/);
+    if(m){const [aw,hm]=String(leg.game||'').split('@');const mg=m[1]===hm?hh-ha:ha-hh,ln=+m[2];
+      if(mg+ln===0)return{hit:null,push:true,detail:`1H ${ha}–${hh} — push`,live:false};
+      return{hit:mg+ln>0,detail:`1H ${ha}–${hh}`,live:false};}
+  }
   const rlm=pick.match(/^(.+) ([+-]\d+(?:\.\d+)?)$/);
   if(rlm&&!/^F5 /.test(pick)){
     const who=rlm[1],ln=parseFloat(rlm[2]);
@@ -6726,9 +6747,10 @@ function lockBuiltTicket(){
   locked.push({id,date:fmtDate(new Date()),
     source:'mine',
     legs:LAST_COMBO.map(l=>{
-      const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
-      return{id:id+'|'+l.pick,game:l.game,pick:l.pick,p:l.p,
-        gid:gm?gm.id:null,gameDate:today()};
+      const fb=l.sport==='nfl'||l.sport==='ncaaf';
+      const gm=fb?null:GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===l.game);
+      return{id:id+'|'+l.pick,game:l.game,pick:l.pick,p:l.p,sport:l.sport||'mlb',kind:l.kind||null,
+        gid:l.gid||(gm?gm.id:null),gameDate:today()};
     }),
     p:combinedProb,stake:stake||null});
   set(LS.locked,locked);
@@ -8287,6 +8309,17 @@ function calibRecordFor(leg){
   // d4.segcalib under the 'f5moneyline'/'f5total' market keys once
   // computeSegmentedCalibration's F5 tracking has run — same lookup shape as
   // every other market, just a different key.
+  /* Football legs (spread, total, ML, 1H) have their own graded record in the
+     football calibration store — this lookup only knew MLB market names, so a
+     football leg could never qualify for Calibration Champ. */
+  if((leg.sport==='nfl'||leg.sport==='ncaaf')&&typeof getNFLCalib==='function'&&typeof leg.modelP==='number'){
+    const C=getNFLCalib(),pre=leg.sport==='ncaaf'?'cfb-':'';const mk2=leg.kind==='side'?'side':leg.kind==='h1'?'spread':leg.kind;
+    const band=nflBandOf(leg.modelP);let n=0,hits=0;
+    Object.keys(C).forEach(k=>{if(k.startsWith(pre+mk2+'|')&&k.endsWith('|'+band)&&(pre||!k.startsWith('cfb-'))){n+=C[k].n||0;hits+=C[k].hits||0;}});
+    if(n<MIN_N_CAL)return{ready:false,n};
+    const lo=parseFloat(String(band).split('-')[0])/100||leg.modelP;
+    return{ready:true,n,actual:hits/n,predicted:leg.modelP,passes:hits/n>=lo};
+  }
   const mk=leg.kind==='rl'?'runline':leg.kind==='total'?'total':leg.kind==='side'?'moneyline'
     :leg.kind==='f5side'?'f5moneyline':leg.kind==='f5total'?'f5total':null;
   if(mk){
@@ -10658,7 +10691,7 @@ function confirmSystemTicket(payload,src,presetKey){
   const id=Date.now();
   L.unshift({id,date:today(),name,presetKey:presetKey||null,
     legs:legs.map(x=>{
-      const gm=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      const gm=(!x.sport||x.sport==='mlb')?GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game):null;
       return{id:id+'|'+x.pick,...x,gid:x.gid||(gm?gm.id:null),gameDate:x.gameDate||today()};
     }),
     p:legs.reduce((a,x)=>a*x.p,1),source:src});
@@ -10806,7 +10839,7 @@ function genTickets(mode){
     const legs=deal(pool,used,n);
     if(legs.length<n){h+=`<div class="tkt"><h3>${lab}</h3><div class="sub">Only ${legs.length} distinct markets left on this slate.</div></div>`;return}
     const c=legs.reduce((a,x)=>a*x.p,1);
-    const payload=encodeURIComponent(JSON.stringify(legs.map(x=>({game:x.game,pick:x.pick,p:x.p,isProp:x.isProp||false}))));
+    const payload=encodeURIComponent(JSON.stringify(legs.map(x=>({game:x.game,pick:x.pick,p:x.p,isProp:x.isProp||false,sport:x.sport||'mlb',gid:x.gid||null,kind:x.kind||null,price:x.price!=null?x.price:null}))));
     h+=`<div class="tkt ${i<2?'hi':''}"><h3>${lab}</h3>
       <div class="sub"><b>${(c*100).toFixed(c<.01?3:1)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs</div>
       <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
@@ -11484,6 +11517,9 @@ function snapshot(){
   set(LS.arc,arc);
   document.getElementById('nR').textContent=Object.keys(arc).length;
   try{brainLockMLB()}catch(e){console.warn('mlb judge lock',e)}
+  /* The system-vs-books log only filled when "freeze slate" was tapped, so on
+     a normal day nothing was ever recorded to grade. Log on every snapshot. */
+  try{logSystemPicks('mlb')}catch(e){console.warn('syslog mlb',e)}
 }
 async function fetchFinals(d){
   const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}&hydrate=linescore`);
@@ -11808,8 +11844,10 @@ function getSystemPicksForLedger(sport){
       const r=log[d][k];
       if(sport&&r.sport!==sport)return;
       if(r.systemConf>=70){
+        /* rows store their result as systemHit — read as hit, and only once graded,
+           so an ungraded row is never counted as a loss. */
         picks.push({...r,date:d,source:'system',displayConf:r.systemConf+'%',
-          label:r.systemPick+' ML',category:'side'});
+          label:r.systemPick+' ML',category:'side',hit:r.graded?r.systemHit===true:null});
       }
     });
   });
@@ -11847,7 +11885,7 @@ function getSystemPicksForLedger(sport){
 
 /* Book picks: markets where book implies 60%+ probability */
 function getBookImpliedPicks(sport){
-  const picks=[];
+  const picks=[];let FIN={};try{FIN=allFinals()}catch(e){}
   const THRESHOLD=0.60;
   const keys=sport==='nfl'?[LS.nflshots]:sport==='ncaaf'?[LS.ncaafshots]:[LS.bookshots,LS.nflshots,LS.ncaafshots];
   const sportOf={[LS.bookshots]:'mlb',[LS.nflshots]:'nfl',[LS.ncaafshots]:'ncaaf'};
@@ -11864,9 +11902,16 @@ function getBookImpliedPicks(sport){
           :r.market==='spread'?(r.side==='home'?(r.home||'home'):(r.away||'away'))+' '+sgn_(r.line||0)
           :r.market==='total'?r.side+' '+(r.line||'?')
           :r.market+' '+r.side;
+        /* Every book pick was hard-coded ungraded, so the Books record sat at 0-0
+           while games went final. Grade against the shared finals store. */
+        let hit=null;const F=(FIN||{})[r.game];
+        if(F&&F.a!=null){const a=+F.a,h=+F.h,ln=r.line!=null?+r.line:null;
+          if(r.market==='moneyline'&&a!==h)hit=(r.side==='home')===(h>a);
+          else if(r.market==='spread'&&ln!=null){const m=(r.side==='home'?h-a:a-h)+ln;hit=m===0?null:m>0;}
+          else if(r.market==='total'&&ln!=null){const t=a+h;hit=t===ln?null:(r.side==='over'?t>ln:t<ln);}}
         picks.push({sport:sp,date:d,source:'book',game:r.game,market:r.market,
           side:r.side,line:r.line,price:r.price,implied:imp,
-          label,displayConf:(imp*100).toFixed(0)+'%',graded:false,hit:null});
+          label,displayConf:(imp*100).toFixed(0)+'%',graded:hit!==null,hit});
       });
     });
   });
@@ -11886,9 +11931,13 @@ function getMyPicksForLedger(){
         ?(/fade.*system/i.test(t.name||'')?'fade_system':/tail.*system/i.test(t.name||'')?'tail_system'
           :/fade.*book/i.test(t.name||'')?'fade_book':/tail.*book/i.test(t.name||'')?'tail_book':'mine')
         :'mine';
+      /* Locked-ticket legs never store a result, so every one read as ungraded
+         (and, with the old tally, as a loss). Grade from the finals on the spot. */
+      let hit=(leg.hit===true||leg.hit===false)?leg.hit:null;
+      if(hit===null){try{const G=gradeLeg(leg,t.date);if(G&&!G.push&&(G.hit===true||G.hit===false))hit=G.hit;}catch(e){}}
       picks.push({...leg,ticketId:t.id,ticketName:t.name||'',source,date:t.date||today(),
         sport:leg.sport||'mlb',label:leg.pick,displayConf:leg.p?(leg.p*100).toFixed(0)+'%':'?',
-        graded:leg.hit!=null,hit:leg.hit});
+        graded:hit!==null,hit});
     });
   });
   return picks.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
@@ -12039,18 +12088,18 @@ function renderLedgerTab(){
     <div style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-family:'IBM Plex Mono';font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)">${title}</div>
-        <div style="font-family:'IBM Plex Mono';font-size:10px;color:var(--mute)">${picks.filter(p=>p.hit!==null).length}/${picks.length} graded</div>
+        <div style="font-family:'IBM Plex Mono';font-size:10px;color:var(--mute)">${picks.filter(p=>(p.hit===true||p.hit===false)).length}/${picks.length} graded</div>
       </div>
       ${note?`<div style="font-size:10px;color:var(--mute);margin-bottom:6px">${note}</div>`:''}
       ${picks.length?picks.slice(0,15).map(p=>pickRow(p,showSport)).join('')
         :`<div class="empty" style="padding:8px 0;font-size:12px">${emptyMsg}</div>`}
     </div>`;
 
-  const gradedBook=bookPicks.filter(p=>p.hit!==null);
+  const gradedBook=bookPicks.filter(p=>(p.hit===true||p.hit===false));
   const bookWins=gradedBook.filter(p=>p.hit===true).length;
-  const sysGraded=sysPicks.filter(p=>p.hit!==null);
+  const sysGraded=sysPicks.filter(p=>(p.hit===true||p.hit===false));
   const sysWins=sysGraded.filter(p=>p.hit===true).length;
-  const myGraded=myPicks.filter(p=>p.hit!==null);
+  const myGraded=myPicks.filter(p=>(p.hit===true||p.hit===false));
   const myWins=myGraded.filter(p=>p.hit===true).length;
 
   // Summary bar
@@ -12189,7 +12238,8 @@ async function renderGrades(force){
       }catch(e){}
     }
     }
-    set(LS.arc,arc);try{brainLearnMLB()}catch(e){console.warn('mlb brain',e)}computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();buildProps();
+    set(LS.arc,arc);try{brainLearnMLB()}catch(e){console.warn('mlb brain',e)}
+    try{gradeSystemLog()}catch(e){}computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();buildProps();
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
     try{gradeExtPicks();}catch(e){console.warn("ext",e)}
   }
@@ -13227,6 +13277,8 @@ let LAST_FINAL_COUNT=-1;
    gate, and reports back exactly what it did instead of failing silently. This
    is the "something looks stale, fix it now" button. */
 async function forceGradeEverything(){
+  /* The system-vs-books log was only graded from the manual freeze button. */
+  try{gradeSystemLog()}catch(err){console.warn('syslog grade',err)}
   // NFL grades on the same trigger as MLB, into its own archive (LS.nflarc).
   try{if(typeof gradeNFLResults==='function')gradeNFLResults()}catch(e){console.warn('NFL grading:',e)}
   const btn=document.getElementById('forceGradeBtn');
@@ -13862,8 +13914,8 @@ function syncFinalsToShared(){
     if(!isFinal)return;
     const key=g.away.abbr+'@'+g.home.abbr;
     const prev=all[key];
-    if(!prev||prev.a!==+g.awayScore||prev.h!==+g.homeScore){
-      all[key]={sport,a:+g.awayScore,h:+g.homeScore,ts:Date.now()};changed=true;
+    if(!prev||prev.a!==+g.awayScore||prev.h!==+g.homeScore||(g.h1a!=null&&prev.h1a==null)){
+      all[key]={sport,a:+g.awayScore,h:+g.homeScore,h1a:g.h1a!=null?+g.h1a:null,h1h:g.h1h!=null?+g.h1h:null,ts:Date.now()};changed=true;
     }
   });
   // MLB finals come from the archive (LS.arc), not a live array
@@ -13903,12 +13955,19 @@ function logSystemPicks(sport){
     const gl=g.away.abbr+'@'+g.home.abbr;
     const key=sp+':'+gl;
     if(day[key]&&day[key].graded)return;
+    /* Freeze at first pitch / kickoff — the pick on record is the pregame one. */
+    const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');
+    if(day[key]&&!pre)return;
+    if(!day[key]&&!pre)return;
     let lines=[];
-    try{lines=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):[]}catch(e){}
+    /* MLB lines were never looked up here (only football), so every MLB row had
+       bookFav=null and "books" could never be graded against the system. */
+    try{lines=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):(typeof bookLinesFor==='function'?bookLinesFor(g.id):[])}catch(e){}
     const awayML=lines.find(x=>x.market==='moneyline'&&x.side==='away');
     const homeML=lines.find(x=>x.market==='moneyline'&&x.side==='home');
-    const bookFav=(awayML&&homeML)?(awayML.price<homeML.price?g.away.abbr:g.home.abbr)
+    let bookFav=(awayML&&homeML)?(awayML.price<homeML.price?g.away.abbr:g.home.abbr)
                  :(homeML?g.home.abbr:awayML?g.away.abbr:null);
+    if(!bookFav&&sp==='mlb'){try{const M=marketOf(g);if(M&&M.fh!=null)bookFav=M.fh>=M.fa?g.home.abbr:g.away.abbr;}catch(e){}}
     day[key]={
       sport:sp,game:gl,
       systemPick:s.hw>=s.aw?g.home.abbr:g.away.abbr,
