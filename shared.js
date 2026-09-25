@@ -3909,7 +3909,19 @@ function applyDupeFilter(pool){
 
 let PRESET_MARKETS=new Set(['ml','rl','spread','total','prop']); // period markets opt-in // f5 off by default — new market type, opt in explicitly
 
+/* Presets used to sort and take the top N with no same-game check, so a
+   first-5 over and the same game's full-game over could share a ticket — not
+   a parlay any book writes. Every preset now ranks its FULL list, then fills
+   legally (legalToAdd via presetLegCollides) until the ticket is full. */
+function presetRanked(mode){const save=TARGET_LEGS;TARGET_LEGS=-1;try{return _buildPresetRaw(mode)||[]}finally{TARGET_LEGS=save}}
+function presetTarget(mode){try{return(_buildPresetRaw(mode)||[]).length}catch(e){return TARGET_LEGS===-1?999:(TARGET_LEGS||4)}}
+function presetFill(start,ranked,n){const out=[...start];for(const l of ranked){if(out.length>=n)break;if(!presetLegCollides(out,l))out.push(l);}return out;}
 function buildPreset(mode){
+  const n=TARGET_LEGS===-1?999:Math.max(TARGET_LEGS||4,0);
+  const want=Math.min(n,Math.max(presetTarget(mode),n===999?0:n));
+  return presetFill([],presetRanked(mode),n===999?999:want);
+}
+function _buildPresetRaw(mode){
   let pool=applyDupeFilter(fullPresetPool());
   pool=pool.filter(l=>{
     if(l.kind==='side')return PRESET_MARKETS.has('ml');
@@ -4223,23 +4235,23 @@ function presetLegCollides(held,leg){
     return !legalToAdd([h],leg,false); // false = never allow SGP-only pairings through a hold/modify collision check
   });
 }
+const presetKey=l=>(l.game||'')+'|'+l.pick;
 function presetLegsWithHolds(mode){
   const full=buildPreset(mode);
   if(!PRESET_HELD.size)return full;
-  // held legs might not be in THIS render's ranked pool at all (e.g. you held
-  // a leg, then flipped a market toggle that excludes it) — pull each held pick
-  // from the full unfiltered pool by exact match so it survives regardless
+  /* Holds were stored by pick text only, and "F5 over 3.5" exists in several
+     games — so a hold on BOS/CHC re-attached to NYY/BAL. They're keyed by
+     game+pick now, and open slots refill from the full ranked list (not the
+     already-capped ticket), so a 10-leg ticket stays 10 legs. */
   const pool=applyDupeFilter(fullPresetPool());
   const held=[];
-  PRESET_HELD.forEach(pick=>{
-    const found=pool.find(l=>l.pick===pick);
-    if(found)held.push(found);
-    else PRESET_HELD.delete(pick); // the leg is gone entirely (game started, etc) — drop the stale hold
+  [...PRESET_HELD].forEach(k=>{
+    const found=pool.find(l=>presetKey(l)===k);
+    if(found&&!presetLegCollides(held,found))held.push(found);
+    else if(!found)PRESET_HELD.delete(k);
   });
-  const n=TARGET_LEGS===-1?undefined:(TARGET_LEGS||4);
-  const remaining=n===undefined?undefined:Math.max(0,n-held.length);
-  const fill=full.filter(l=>!presetLegCollides(held,l)).slice(0,remaining);
-  return[...held,...fill];
+  const n=TARGET_LEGS===-1?Math.max(full.length,held.length):Math.max(TARGET_LEGS||4,held.length);
+  return presetFill(held,presetRanked(mode),n);
 }
 
 function presetTabHtml(){
@@ -4262,9 +4274,9 @@ function presetTabHtml(){
     const e=edgeOf(l);
     const eTxt=e?` <span style="color:${e>=4?'var(--win)':e<=-4?'var(--rust)':'var(--mute)'}">${e>0?'+':''}${e.toFixed(1)} edge</span>`:'';
     const srcTag=l.nSrc?` <span class="flag cool">${l.nSrc} source${l.nSrc>1?'s':''}</span>`:'';
-    const held=PRESET_HELD.has(l.pick);
+    const held=PRESET_HELD.has(presetKey(l));
     return `<li style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--rule)">
-      <button onclick="togglePresetHold('${esc(l.pick)}')" style="flex:0 0 auto;padding:2px 8px;font-size:9px;
+      <button onclick="togglePresetHold('${esc(presetKey(l))}')" style="flex:0 0 auto;padding:2px 8px;font-size:9px;
         font-family:'IBM Plex Mono';letter-spacing:.06em;border-radius:4px;border:1px solid;cursor:pointer;
         background:${held?'rgba(242,169,59,.15)':'transparent'};
         border-color:${held?'var(--gold)':'var(--rule)'};
@@ -4314,6 +4326,7 @@ function presetTabHtml(){
     </div>
     <div class="sub" style="margin-top:8px">${active[2]}</div>
   </div>
+  ${legs.length&&TARGET_LEGS>0&&legs.length<TARGET_LEGS?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px">Only <b>${legs.length}</b> legal legs fit this preset on today's board (one pairing per game, and nothing a book wouldn't write). Turn on more markets or pick fewer legs.</div>`:''}
   ${legs.length?coachHtml({legs}):''}
   <div class="tkt hi">
     <h3>${active[1]}${PRESET_MODE==='armageddon'?' ⚠️':''}</h3>
