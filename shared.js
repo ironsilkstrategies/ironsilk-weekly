@@ -48,8 +48,9 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-25g';
+const INTAKE_BUILD='intake 2026-09-26h';
 /* Stamp the card so it's obvious which code the phone is actually running. */
+setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
   const d=document.createElement('div');d.id='intakeBuild';d.className='sub mono';d.style.cssText='font-size:9.5px;opacity:.6;margin-top:4px';
   d.textContent=INTAKE_BUILD+' · reads key:value, grammar & board copy locally';b.parentNode.after(d);}}catch(e){}},0);
@@ -169,7 +170,7 @@ function intakeBoardToGrammar(text,sport){
      TREND: any sentence            (TREND TEAM: sentence also works) */
 const INTAKE_EXTRA=/^(PRED|PROJ|CONS\$?|CONSTOT|TREND)\b/i;
 function intakeParseGrammar(text,fallbackSport){
-  const res={};const bucket=sp=>res[sp]||(res[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[]});
+  const res={};const bucket=sp=>res[sp]||(res[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[],xpicks:[],unread:[]});
   const sections=[];let cur=null;
   stripBOM(text).split('\n').forEach(line=>{
     const l=line.replace(/^[\s\-*•>]+/,'').trim();
@@ -217,9 +218,11 @@ function intakeParseGrammar(text,fallbackSport){
   });
   return res;
 }
-const intakeCount=r=>Object.values(r).reduce((n,b)=>n+b.picks.length+b.trends.length+b.consensus.length+b.preds.length+b.raw.length,0);
-function intakeMerge(into,from){Object.entries(from).forEach(([sp,b])=>{const t=into[sp]||(into[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[]});
-  ['picks','trends','consensus','preds','raw'].forEach(k=>t[k].push(...b[k]))});return into;}
+const _ic0=0;const intakeCount=r=>Object.values(r).reduce((n,b)=>n+b.picks.length+b.trends.length+b.consensus.length+b.preds.length+b.raw.length+(b.xpicks||[]).length,0);
+function intakeMerge(into,from){Object.entries(from).forEach(([sp,b])=>{const t=into[sp]||(into[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[],xpicks:[],unread:[]});
+  ['picks','trends','consensus','preds','raw','xpicks','unread'].forEach(k=>{t[k]=t[k]||[];t[k].push(...(b[k]||[]))})});return into;}
+/* A typed read: every line is read AS the chosen type, against the current slate. */
+function intakeTyped(text,type,src,sp){const o=intelParse(text,type,src,sp);return{[sp]:{picks:[],raw:[],...o}};}
 
 
 /* Key:value odds sheets (what other AIs and many sites export):
@@ -288,8 +291,15 @@ function intakeNormalizeKV(text){
 }
 /* Text: grammar first, then raw board copy, then (only if both find nothing)
    Gemini on the TEXT — a few KB, answers in seconds, no image upload. */
-async function intakeText(text,sig){
-  const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;
+async function intakeText(text,sig,type,src){
+  const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;type=type||'auto';src=src||'';
+  if(type!=='auto'&&type!=='odds'){
+    let r=intakeTyped(text,type,src,sp);
+    if(intakeCount(r))return{r,how:'read as '+type+' locally'};
+    const key=get(LS.ai,'');if(!key)return{r,how:'nothing matched this type (check the team names are on today\'s slate)'};
+    const t=await callGemini(key,[{type:'text',text:intelTypedPrompt(type,sp)+'\n\nCONTENT:\n'+text.slice(0,30000)}],3000,{timeoutMs:25000,maxAttempts:2,maxWaitMs:3000,signal:sig});
+    r=intakeTyped(intakeClean(t),type,src,sp);return{r,how:'transcribed by Gemini as '+type};
+  }
   text=intakeNormalizeKV(text);
   /* Mixed pastes are normal (a Covers block plus a copied board), so read
      BOTH: grammar lines as grammar, and whatever is left as board copy. */
@@ -298,6 +308,9 @@ async function intakeText(text,sig){
     return!(INTAKE_EXTRA.test(t)||/^(ML|SPREAD|RL|OU|H1\w*|Q1\w*|F5\s*\w+|SOURCE):/i.test(t)||/\s@\s/.test(t)||/^(NFL|NCAAF|CFB|MLB)\s*$/i.test(t));}).join('\n');
   const g=rest.trim()?intakeBoardToGrammar(rest,intakeGuessSport(text,sp)):'';
   if(g)intakeMerge(r,intakeParseGrammar(g,sp));
+  /* Auto mode safety net: lines that look like trends, splits, predictions or
+     picks still get read even without the grammar keywords. */
+  if(type==='auto'&&!intakeCount(r)){for(const tp of ['trend','cons','pred']){const x=intakeTyped(text,tp,src,sp);if(intakeCount(x)){intakeMerge(r,x);break;}}}
   if(intakeCount(r))return{r,how:g?'read locally (incl. board copy)':'read locally'};
   const key=get(LS.ai,'');if(!key)return{r,how:'nothing recognized (add a Gemini key to read free-form text)'};
   const t=await callGemini(key,[{type:'text',text:intakePrompt(sp)+'\n\nCONTENT:\n'+text.slice(0,30000)}],3000,
@@ -336,12 +349,14 @@ async function intakeShrink(f){
 async function intakeFile(f,sig){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;
   if(isPlainTextFile(f)||isDocxFile(f)){
-    const blk=await fileToContentBlock(f,null);return intakeText(blk.text||'',sig);}
+    const blk=await fileToContentBlock(f,null);return intakeText(blk.text||'',sig,(document.getElementById('intakeType')||{}).value,(document.getElementById('intakeSource')||{}).value);}
   const key=get(LS.ai,'');if(!key)throw new Error('needs a Gemini key (Settings) — text and .txt files work without one');
   const {mime,data}=await intakeShrink(f);
   if(data.length>11e6)throw new Error('file too large even after compression — split the PDF');
+  const TY=(document.getElementById('intakeType')||{}).value||'auto',SR=(document.getElementById('intakeSource')||{}).value||'';
   const t=await callGemini(key,[{type:mime==='application/pdf'?'document':'image',source:{media_type:mime,data}},
-    {type:'text',text:intakePrompt(sp)}],4000,{timeoutMs:35000,maxAttempts:2,maxWaitMs:3000,signal:sig});
+    {type:'text',text:(TY!=='auto'&&TY!=='odds')?intelTypedPrompt(TY,sp):intakePrompt(sp)}],4000,{timeoutMs:35000,maxAttempts:2,maxWaitMs:3000,signal:sig});
+  if(TY!=='auto'&&TY!=='odds')return{r:intakeTyped(intakeClean(t),TY,SR,sp),how:'screenshot read as '+TY};
   return{r:intakeParseGrammar(intakeNormalizeKV(intakeClean(t)),sp),how:'screenshot transcribed'};
 }
 function intakeCancel(){if(INTAKE.ctl)INTAKE.ctl.abort();}
@@ -353,7 +368,9 @@ async function intakeRun(){
   if(!text&&!files.length){el.innerHTML='<div class="empty">Paste something or pick a file first.</div>';return;}
   INTAKE.busy=true;INTAKE.ctl=new AbortController();const sig=INTAKE.ctl.signal;
   const cancelBtn=document.getElementById('intakeCancelBtn');if(cancelBtn)cancelBtn.style.display='';
-  const jobs=[];if(text)jobs.push({name:'Pasted text',run:()=>intakeText(text,sig)});
+  const TY=(document.getElementById('intakeType')||{}).value||'auto',SR=((document.getElementById('intakeSource')||{}).value||'').trim();
+  INTAKE.type=TY;INTAKE.source=SR||'upload';
+  const jobs=[];if(text)jobs.push({name:'Pasted text',run:()=>intakeText(text,sig,TY,SR)});
   files.forEach(f=>jobs.push({name:f.name,run:()=>intakeFile(f,sig)}));
   const st=jobs.map(j=>({name:j.name,s:'waiting'}));
   const paint=()=>{el.innerHTML=`<div class="tkt"><h3>Reading ${jobs.length} item${jobs.length>1?'s':''}…</h3>`+
@@ -377,7 +394,16 @@ function intakePreview(el,st){
   const games=b=>{const m={};b.picks.forEach(p=>{const k=(p.away||'')+'@'+(p.home||'');(m[k]=m[k]||new Set()).add(p.market)});
     [['preds','PRED'],['consensus','CONS'],['trends','TREND']].forEach(([f,t])=>b[f].forEach(x=>(m[x.game]=m[x.game]||new Set()).add(t)));return m;};
   el.innerHTML=`<div class="tkt hi"><h3>Check it, then save</h3>${sports.map(sp=>{const b=r[sp];const g=games(b);
-    return`<div style="margin:8px 0"><b>${lab[sp]}</b> <span class="sub mono" style="font-size:10.5px">${b.picks.length} lines · ${b.preds.length} predictions · ${b.consensus.length} consensus · ${b.trends.length} trends${b.raw.length?' · saves to the '+lab[sp]+' board next time you open it':''}</span>
+    const use=[b.picks.length?`${b.picks.length} book lines → the board, EV and the Judge's market witness`:'',
+      b.preds.length?`${b.preds.length} predicted scores → the Judge (weighted by this source's graded accuracy)`:'',
+      (b.xpicks||[]).length?`${b.xpicks.length} outside picks → Master Eval as a signal, graded by source`:'',
+      b.trends.length?`${b.trends.length} trends → the Judge (shrunk by sample size, weighted by each team's graded trend record)`:'',
+      b.consensus.length?`${b.consensus.length} consensus rows → sharp-money signal, public-side record`:''].filter(Boolean);
+    const un=(b.unread||[]);
+    return`<div style="margin:8px 0"><b>${lab[sp]}</b>${INTAKE.source&&INTAKE.source!=='upload'?` <span class="sub">· source: <b>${INTAKE.source}</b></span>`:''}
+      ${use.length?`<div class="sub" style="font-size:11px;margin-top:3px">${use.map(x=>'• '+x).join('<br>')}</div>`:''}
+      ${un.length?`<details style="margin-top:4px"><summary class="sub" style="color:var(--gold)">${un.length} line${un.length>1?'s':''} not understood — tap to see</summary><div class="mono" style="font-size:10px;color:var(--mute)">${un.slice(0,40).map(x=>x.replace(/</g,'&lt;')).join('<br>')}</div></details>`:''}
+      <span class="sub mono" style="font-size:10.5px">${b.picks.length} lines · ${b.preds.length} predictions · ${(b.xpicks||[]).length} picks · ${b.consensus.length} consensus · ${b.trends.length} trends${b.raw.length?' · saves to the '+lab[sp]+' board next time you open it':''}</span>
       ${Object.keys(g).length?`<div class="sub mono" style="font-size:10px;max-height:150px;overflow:auto;margin-top:3px">${Object.entries(g).map(([k,v])=>k+': '+[...v].join(', ')).join('<br>')}</div>`:''}</div>`;}).join('')}
     <div class="bar" style="margin-top:8px"><button class="primary" onclick="intakeSave()">Save all</button><button onclick="INTAKE.result=null;document.getElementById('bookShotResult').innerHTML=''">Discard</button></div>
     <details style="margin-top:6px"><summary class="sub">What each item gave</summary>${log}</details></div>`;
@@ -394,6 +420,9 @@ function intakeSave(){
     if(b.preds.length){const P=get('d4.preds',{});const d=today();P[sp]=P[sp]||{};P[sp][d]=P[sp][d]||{};
       b.preds.forEach(x=>{P[sp][d][x.game]={a:x.a,h:x.h,src:x.src,ts:Date.now()}});set('d4.preds',P);done.push(b.preds.length+' predictions');}
   });
+  try{Object.entries(r).forEach(([sp,b])=>{const src=INTAKE.source||'upload';
+    intelLog(sp,'trend',b.trends,src);intelLog(sp,'cons',b.consensus,src);intelLog(sp,'pred',b.preds,src);intelLog(sp,'xpick',b.xpicks||[],src);
+    if((b.xpicks||[]).length)done.push(b.xpicks.length+' outside picks ('+src+')');});}catch(e){console.warn('intel log',e)}
   INTAKE.result=null;const ta=document.getElementById('intakePaste');if(ta)ta.value='';const inp=document.getElementById('bookShots');if(inp)inp.value='';
   el.innerHTML=`<div class="tkt hi"><h3>Saved</h3><div class="sub">${done.join(' · ')}</div></div>`;
   if(typeof renderNFL==='function'&&ACTIVE_SPORT==='nfl')renderNFL();
@@ -502,11 +531,12 @@ function brainTrendEvidence(g,sport){
     const x=String(t.text||'');const m=x.match(/(\d{1,3})-(\d{1,3})(?:-\d{1,3})?/);if(!m)return;
     const W=+m[1],L=+m[2],n=W+L;if(!n||n>300)return;
     const ps=(W+20)/(n+40),edge=ps-0.5;let kind='',eff=0;
-    if(/\bover\b/i.test(x)&&!/\bunder\b/i.test(x)){kind='total';eff=edge*C.trTot;dTot+=eff;}
-    else if(/\bunder\b/i.test(x)&&!/\bover\b/i.test(x)){kind='total';eff=-edge*C.trTot;dTot+=eff;}
+    const tf=typeof intelTrendFactor==='function'?intelTrendFactor(sport,t.team||null):1;
+    if(/\bover\b/i.test(x)&&!/\bunder\b/i.test(x)){kind='total';eff=edge*C.trTot*tf;dTot+=eff;}
+    else if(/\bunder\b/i.test(x)&&!/\bover\b/i.test(x)){kind='total';eff=-edge*C.trTot*tf;dTot+=eff;}
     else if(/\bats\b|cover|run ?line/i.test(x)){const sd=side(t);if(sd){kind='side';eff=sd*edge*C.trMar;dMar+=eff;}}
     else if(/\bsu\b|\bwon\b|\bwin/i.test(x)){const sd=side(t);if(sd){kind='side';eff=sd*edge*C.trMar/2;dMar+=eff;}}
-    if(kind)items.push({text:x.slice(0,110),rec:W+'-'+L,real:Math.round(ps*100),eff:+eff.toFixed(2),kind});
+    if(kind)items.push({text:x.slice(0,110),rec:W+'-'+L,real:Math.round(ps*100),eff:+eff.toFixed(2),kind,tf:+tf.toFixed(2)});
   });
   return{dTot:Math.max(-C.trTotCap,Math.min(C.trTotCap,dTot)),dMar:Math.max(-C.trMarCap,Math.min(C.trMarCap,dMar)),items};
 }
@@ -663,6 +693,153 @@ function brainReport(sport){
     <div class="sub">Trends earned ${pc(b.trend)} influence (${b.trend.hit}/${b.trend.n} right) · money ${pc(b.money)} (${b.money.hit}/${b.money.n})</div>
     ${Object.keys(b.box||{}).length?`<div class="sub">Box bias: ${Object.entries(b.box).map(([k,v])=>k+' ×'+v.ratio.toFixed(2)).join(' · ')}</div>`:''}
   </div>`;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTEL — typed intake + grading for everything that isn't a book line.
+   Types: pred (predicted scores) · xpick (another platform's computer picks)
+          trend · cons (consensus / betting splits) · odds (book lines).
+   When the user picks a type there is no guessing: every line is read AS that
+   type. Games are found from team names on the current slate, so headers are
+   optional. Every saved item is logged with its SOURCE, graded when the game
+   goes final, and reported per source / per team / per trend kind. Graded
+   trends earn or lose influence per team inside the Judge.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const INTEL_KEY='d4.intel';
+function intelSlate(sp){
+  const G=sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);
+  return(G||[]).map(g=>({g,a:g.away.abbr,h:g.home.abbr,names:[g.away,g.home].map(t=>{const n=String(t.name||'').toLowerCase();
+    const w=n.split(/\s+/).filter(Boolean);return[t.abbr.toLowerCase(),n,w[w.length-1]||'',w.slice(-2).join(' ')].filter(x=>x&&x.length>=2);})}));
+}
+/* Which slate team(s) a line mentions. Nicknames and full names match on word
+   boundaries; bare abbreviations only in capitals, so "no" ≠ Saints. */
+function intelTeams(sp,line){
+  const S=intelSlate(sp),low=' '+String(line).toLowerCase().replace(/[^a-z0-9.\- ]/g,' ')+' ',hits=[];
+  S.forEach(x=>[['a',0],['h',1]].forEach(([side,i])=>{
+    const ab=side==='a'?x.a:x.h;
+    const byName=x.names[i].slice(1).some(n=>n.length>=3&&low.includes(' '+n+' '));
+    const byAbbr=new RegExp('(^|[^A-Za-z])'+ab+'([^A-Za-z]|$)').test(line);
+    if(byName||byAbbr){const pos=Math.min(...[ab.toLowerCase(),...x.names[i].slice(1)].map(n=>{const p=low.indexOf(' '+n+' ');return p<0?1e9:p}));
+      hits.push({game:x.a+'@'+x.h,team:ab,side,pos,g:x.g});}}));
+  return hits.sort((p,q)=>p.pos-q.pos);
+}
+function intelGameFor(sp,line,ctx){const t=intelTeams(sp,line);
+  if(t.length)return{game:t[0].game,team:t[0].team,teams:t};return ctx?{game:ctx,team:null,teams:[]}:null;}
+/* Trend direction: which way it points, and whether it's a fade (1-5 ATS). */
+function intelTrendDir(text){
+  const t=String(text),m=t.match(/(\d{1,3})-(\d{1,3})(?:-(\d{1,3}))?/);if(!m)return null;
+  const W=+m[1],L=+m[2];const kind=/\bunder\b/i.test(t)&&!/\bover\b/i.test(t)?'under':/\bover\b/i.test(t)&&!/\bunder\b/i.test(t)?'over'
+    :/\bats\b|cover|spread|run ?line/i.test(t)?'ats':/\bsu\b|straight up|won|win|record/i.test(t)?'su'
+    /* "Red Sox are 8-2 in their last 10 home games" — a team's plain W-L is a straight-up record */
+    :/\b(are|is)\s+\d{1,3}-\d{1,3}\b/i.test(t)?'su':null;
+  if(!kind)return null;return{kind,W,L,n:W+L,fade:W<L};
+}
+/* ── typed line parser ── */
+function intelParse(text,type,src,sp){
+  const out={xpicks:[],trends:[],consensus:[],preds:[],unread:[]};let ctx=null;
+  stripBOM(text).split('\n').map(l=>l.replace(/^[\s\-*•>#]+/,'').trim()).filter(Boolean).forEach(l=>{
+    if(/^(NFL|NCAAF|CFB|MLB)(\s+\w+)?$/i.test(l)||/^source\s*:/i.test(l))return;
+    const hdr=l.match(/^(.+?)\s+(?:@|at|vs\.?|v)\s+(.+?)$/i);
+    /* A line with a bet in it ("Over 40.5 Browns @ Jaguars", "Jets +6.5 vs Lions") is data, not a header. */
+    if(hdr&&!/\d{2,}%|\(\s*[+\-]\d/.test(l)&&!(type==='xpick'&&/\b(over|under|ml|moneyline)\b|[+\-]\d/i.test(l))&&!(type==='trend'&&/\d+-\d+/.test(l))){const t=intelTeams(sp,l);if(t.length>=2||(t.length&&t[0])){ctx=t[0].game;if(type!=='pred'||!/\d+\.\d|\b\d{1,2}\b.*\b\d{1,2}\b/.test(l))return;}}
+    const where=intelGameFor(sp,l,ctx);
+    if(type==='pred'){
+      const nums=(l.match(/\b\d{1,2}(?:\.\d+)?\b/g)||[]).map(Number).filter(x=>x<=80);
+      const tm=intelTeams(sp,l);
+      if(tm.length>=2&&tm[0].game===tm[1].game&&nums.length>=2){const G=tm[0].g;let a=nums[0],h=nums[1];if(tm[0].side==='h'){[a,h]=[h,a];}
+        out.preds.push({game:tm[0].game,away:G.away.abbr,home:G.home.abbr,a,h,src});return;}
+      if(where&&nums.length>=2&&where.teams.length<2&&ctx&&!where.team){const [aw,hm]=ctx.split('@');out.preds.push({game:ctx,away:aw,home:hm,a:nums[0],h:nums[1],src});return;}
+      out.unread.push(l);return;}
+    if(type==='trend'){const d=intelTrendDir(l);
+      if(d&&where){out.trends.push({game:where.game,away:where.game.split('@')[0],home:where.game.split('@')[1],team:where.team,text:l,src});return;}
+      out.unread.push(l);return;}
+    if(type==='cons'){
+      const pairs=[...l.matchAll(/([A-Za-z][A-Za-z .'&]{1,24}?)\s*[:\-]?\s*(\d{1,3})\s*%|(\d{1,3})\s*%\s*(?:on\s+)?([A-Za-z][A-Za-z .'&]{1,24})/g)]
+        .map(m=>({who:(m[1]||m[4]||'').trim(),pct:+(m[2]||m[3])}));
+      const money=/money|handle|\$|dollars/i.test(l);
+      const ou=pairs.filter(p=>/^(o|over|u|under)$/i.test(p.who));
+      if(ou.length&&(where||ctx)){const G=(where&&where.game)||ctx,[aw,hm]=G.split('@');const o=ou.find(p=>/^o/i.test(p.who)),u=ou.find(p=>/^u/i.test(p.who));
+        out.consensus.push({src,game:G,away:aw,home:hm,market:'total',metric:money?'money':'bets',awayPct:null,homePct:null,overPct:o?o.pct:(u?100-u.pct:null),underPct:u?u.pct:(o?100-o.pct:null),line:null});return;}
+      const tp=pairs.map(p=>({...p,t:intelTeams(sp,p.who)[0]})).filter(p=>p.t);
+      if(tp.length){const G=tp[0].t.game,[aw,hm]=G.split('@');let ap=null,hp=null;tp.forEach(p=>{if(p.t.game!==G)return;if(p.t.side==='a')ap=p.pct;else hp=p.pct;});
+        if(ap==null&&hp!=null)ap=100-hp;if(hp==null&&ap!=null)hp=100-ap;
+        out.consensus.push({src,game:G,away:aw,home:hm,market:/spread|ats/i.test(l)?'spread':'moneyline',metric:money?'money':'bets',awayPct:ap,homePct:hp,overPct:null,underPct:null,line:null});return;}
+      out.unread.push(l);return;}
+    if(type==='xpick'){
+      const tm=intelTeams(sp,l);let pick=null,G=(tm[0]&&tm[0].game)||ctx;
+      let m=l.match(/\b(over|under)\s*([\d.]+)/i)||l.match(/\b([ou])\s*([\d.]+)\b/i);
+      const f5=/\b(f5|first\s*5|1st\s*5)\b/i.test(l),h1=/\b(1h|first\s*half|1st\s*half)\b/i.test(l);
+      if(m&&G){pick=(f5?'F5 '+(/^o/i.test(m[1])?'over':'under'):h1?'1H '+(/^o/i.test(m[1])?'Over':'Under'):(/^o/i.test(m[1])?'Over':'Under'))+' '+m[2];}
+      else if(tm.length){const ab=tm[0].team;const sp2=l.match(/([+\-]\d{1,2}(?:\.5)?)(?!\d)/);
+        if(/\bml\b|moneyline|to win|straight up|\bsu\b/i.test(l)||!sp2)pick=(f5?'F5 ':'')+ab+' ML';
+        else pick=h1?`${ab} 1H ${sp2[1]}`:`${ab} ${sp2[1]}`;}
+      if(pick&&G){const [aw,hm]=G.split('@');out.xpicks.push({game:G,away:aw,home:hm,pick,text:l,src});return;}
+      out.unread.push(l);return;}
+  });
+  return out;
+}
+function intelTypedPrompt(type,sport){
+  const S=sport==='ncaaf'?'NCAAF':(sport||'mlb').toUpperCase();
+  const what={pred:'PREDICTED FINAL SCORES only. One line per game: AWAY TEAM @ HOME TEAM: AWAY_SCORE-HOME_SCORE',
+    xpick:'PICKS only (the site\'s recommended bets). One line per pick, e.g. "Jets +6.5", "Chiefs ML", "Over 47.5 Jets @ Lions", "F5 Under 4.5 Yankees @ Red Sox"',
+    trend:'TRENDS only. One trend sentence per line, copied exactly, e.g. "Jets are 5-1 ATS in their last 6 road games."',
+    cons:'CONSENSUS / BETTING SPLITS only. One line per game per market, e.g. "Jets 38% / Lions 62% bets", "Jets 55% / Lions 45% money", "Over 64% / Under 36% Jets @ Lions"'}[type];
+  return`Sport: ${S}. Extract ${what}. Use full team names. Plain text, no commentary, no markdown, no numbering. Copy every number exactly; skip anything else.`;
+}
+/* ── store + grade ── */
+function intelLog(sp,kind,items,src){
+  if(!items||!items.length)return;const L=get(INTEL_KEY,[]),d=today();
+  items.forEach(x=>{const id=[sp,kind,x.game,x.pick||x.text||x.market+(x.metric||''),x.src||src||'upload',d].join('|');
+    if(L.some(y=>y.id===id))return;
+    L.push({id,sp,kind,date:d,src:x.src||src||'upload',game:x.game,team:x.team||null,pick:x.pick||null,text:x.text||null,
+      a:x.a??null,h:x.h??null,market:x.market||null,metric:x.metric||null,awayPct:x.awayPct??null,homePct:x.homePct??null,overPct:x.overPct??null,graded:false});});
+  if(L.length>4000)L.splice(0,L.length-4000);set(INTEL_KEY,L);
+}
+function intelLineFor(sp,game,market,side){
+  const f=sp==='nfl'&&typeof nflBookLinesFor==='function'?nflBookLinesFor:sp==='ncaaf'&&typeof ncaafBookLinesFor==='function'?ncaafBookLinesFor:null;
+  let L=[];try{if(f)L=f(game)||[];else{const all=get(LS.bookshots,{});L=Object.values(all).flat().filter(x=>x.game===game);}}catch(e){}
+  const mk=sp==='mlb'&&market==='spread'?'runline':market;return L.find(x=>x.market===mk&&(side==null||x.side===side));
+}
+function gradeIntel(){
+  const L=get(INTEL_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
+  L.forEach(x=>{if(x.graded)return;const R=F[x.game];if(!R||R.a==null)return;const a=+R.a,h=+R.h,[aw,hm]=x.game.split('@');
+    if(x.kind==='xpick'){try{const G=gradeLeg({game:x.game,pick:x.pick,sport:x.sp},x.date);if(G&&G.push){x.graded=true;x.hit=null;x.push=true;n++;}
+      else if(G&&(G.hit===true||G.hit===false)){x.graded=true;x.hit=G.hit;n++;}}catch(e){}return;}
+    if(x.kind==='pred'&&x.a!=null){x.graded=true;x.err=+Math.abs((x.h-x.a)-(h-a)).toFixed(1);x.totErr=+Math.abs((x.h+x.a)-(h+a)).toFixed(1);x.hit=(x.h>x.a)===(h>a)&&a!==h;n++;return;}
+    if(x.kind==='cons'&&x.market==='moneyline'&&x.homePct!=null&&a!==h){x.graded=true;x.pubSide=x.homePct>=50?'home':'away';x.hit=(x.pubSide==='home')===(h>a);n++;return;}
+    if(x.kind==='cons'&&x.market==='total'&&x.overPct!=null){const t=intelLineFor(x.sp,x.game,'total','over');if(!t||t.line==null)return;const tot=a+h;if(tot===+t.line){x.graded=true;x.hit=null;return;}
+      x.graded=true;x.pubSide=x.overPct>=50?'over':'under';x.hit=(x.pubSide==='over')===(tot>+t.line);n++;return;}
+    if(x.kind==='trend'){const D=intelTrendDir(x.text);if(!D){x.graded=true;x.hit=null;return;}
+      let hit=null;const tm=x.team,isH=tm===hm;
+      if(D.kind==='over'||D.kind==='under'){const t=intelLineFor(x.sp,x.game,'total','over');if(!t||t.line==null)return;const tot=a+h;if(tot!==+t.line)hit=(D.kind==='over')===(tot>+t.line);}
+      else if(tm&&D.kind==='su'){if(a!==h)hit=isH?h>a:a>h;}
+      else if(tm&&D.kind==='ats'){const s=intelLineFor(x.sp,x.game,'spread',isH?'home':'away');if(!s||s.line==null)return;const m=(isH?h-a:a-h)+ +s.line;if(m!==0)hit=m>0;}
+      else{x.graded=true;x.hit=null;return;}
+      if(hit!==null&&D.fade)hit=!hit;             // "1-5 ATS" points the other way
+      x.graded=true;x.hit=hit;x.tkind=D.kind;n++;}});
+  if(n)set(INTEL_KEY,L);return n;
+}
+/* Per-team trend reliability for the Judge: shrunk hit rate → 0 (ignore) .. 2 (double). */
+function intelTrendFactor(sp,team){if(!team)return 1;const L=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='trend'&&x.team===team&&x.graded&&x.hit!=null);
+  const w=L.filter(x=>x.hit).length;return Math.max(0,Math.min(2,((w+5)/(L.length+10))*2));}
+/* Outside picks on a game, each with its source's graded record — for Eval. */
+function intelPicksFor(sp,game){const L=get(INTEL_KEY,[]);const rec=src=>{const g=L.filter(x=>x.sp===sp&&x.kind==='xpick'&&x.src===src&&x.graded&&x.hit!=null);return{w:g.filter(x=>x.hit).length,n:g.length};};
+  return L.filter(x=>x.sp===sp&&x.kind==='xpick'&&x.game===game&&!x.graded).map(x=>({...x,rec:rec(x.src)}));}
+function intelReport(sp){
+  const L=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.graded);if(!L.length)return`<div class="tkt"><h3>Intel record</h3><div class="sub">Picks, trends, consensus and predictions you upload are graded here once games go final — by source, by team and by trend type.</div></div>`;
+  const wl=a=>{const g=a.filter(x=>x.hit===true||x.hit===false),w=g.filter(x=>x.hit).length;return g.length?`${w}-${g.length-w} (${Math.round(w/g.length*100)}%)`:'—';};
+  const by=(arr,f)=>{const m={};arr.forEach(x=>{const k=f(x);if(k)(m[k]=m[k]||[]).push(x);});return m;};
+  const row=(k,v)=>`<div class="rc-row" style="margin:2px 0"><div class="g">${k}</div><div class="r mono" style="font-size:11px">${v}</div></div>`;
+  const X=L.filter(x=>x.kind==='xpick'),T=L.filter(x=>x.kind==='trend'),C=L.filter(x=>x.kind==='cons'),P=L.filter(x=>x.kind==='pred');
+  let h=`<div class="tkt"><h3>Intel record</h3>`;
+  if(X.length)h+=`<div class="mktlab">Outside picks by source</div>`+Object.entries(by(X,x=>x.src)).map(([k,v])=>row(k,wl(v))).join('');
+  if(P.length){h+=`<div class="mktlab">Predicted scores by source</div>`+Object.entries(by(P,x=>x.src)).map(([k,v])=>row(k,`winner ${wl(v)} · margin off ${(v.reduce((s,x)=>s+x.err,0)/v.length).toFixed(1)} · total off ${(v.reduce((s,x)=>s+x.totErr,0)/v.length).toFixed(1)}`)).join('');}
+  if(C.length){h+=`<div class="mktlab">Consensus — did the public side win?</div>`+Object.entries(by(C,x=>x.src+' · '+x.market+' '+(x.metric||'bets'))).map(([k,v])=>row(k,wl(v))).join('');}
+  if(T.length){h+=`<div class="mktlab">Trends by type</div>`+Object.entries(by(T,x=>x.tkind)).map(([k,v])=>row(k.toUpperCase(),wl(v))).join('');
+    h+=`<div class="mktlab">Trends by team</div>`+Object.entries(by(T,x=>x.team)).sort((a,b)=>b[1].length-a[1].length).slice(0,32).map(([k,v])=>row(k,wl(v)+(v.length>=5?` · weight ×${intelTrendFactor(sp,k).toFixed(2)}`:''))).join('');
+    h+=`<div class="mktlab">Trends by source</div>`+Object.entries(by(T,x=>x.src)).map(([k,v])=>row(k,wl(v))).join('');}
+  return h+`</div>`;
 }
 
 /* ── ODDS PULL (all pages) ────────────────────────────────────────────────
@@ -12239,6 +12416,7 @@ async function renderGrades(force){
     }
     }
     set(LS.arc,arc);try{brainLearnMLB()}catch(e){console.warn('mlb brain',e)}
+    try{syncFinalsToShared();gradeIntel()}catch(e){}
     try{gradeSystemLog()}catch(e){}computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();buildProps();
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
     try{gradeExtPicks();}catch(e){console.warn("ext",e)}
@@ -12278,7 +12456,7 @@ async function renderGrades(force){
     `<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderGrades()">${l}</button>`).join('')}</div>`;
   if(GRADETAB==='results'){
     setTimeout(()=>{const gb=document.getElementById('gradeBody');
-      if(gb&&ACTIVE_SPORT==='mlb'&&!gb.querySelector('[data-brain]'))gb.insertAdjacentHTML('afterbegin','<div data-brain>'+brainReport('mlb')+'</div>');},0);
+      if(gb&&ACTIVE_SPORT==='mlb'&&!gb.querySelector('[data-brain]'))gb.insertAdjacentHTML('afterbegin','<div data-brain>'+brainReport('mlb')+intelReport('mlb')+'</div>');},0);
     h=innerRow(RESULTS_MODE,[['sides','Sides'],['props','Props'],['f5','First 5'],['picks','Every pick']],'RESULTS_MODE');
   }
   if(GRADETAB==='calib'){
@@ -13277,6 +13455,7 @@ let LAST_FINAL_COUNT=-1;
    gate, and reports back exactly what it did instead of failing silently. This
    is the "something looks stale, fix it now" button. */
 async function forceGradeEverything(){
+  try{gradeIntel()}catch(err){}
   /* The system-vs-books log was only graded from the manual freeze button. */
   try{gradeSystemLog()}catch(err){console.warn('syslog grade',err)}
   // NFL grades on the same trigger as MLB, into its own archive (LS.nflarc).

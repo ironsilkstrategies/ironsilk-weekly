@@ -544,6 +544,13 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
       <div class="sub" id="bookStatus" style="margin-top:6px;font-family:'IBM Plex Mono';font-size:10.5px"></div>
       <div class="mktlab" style="margin-top:8px">Which slate are these for?</div>
       <div class="subnav" id="bookUploadDateRow"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <select id="intakeType" onchange="try{localStorage.setItem('d4.intakeType',this.value)}catch(e){}" style="flex:1 1 160px;padding:9px;border-radius:9px;background:var(--panel2);color:var(--chalk);border:1px solid var(--rule);font-weight:700">
+          <option value="auto">What is this? — Auto-detect</option><option value="odds">Book odds (my sportsbook)</option>
+          <option value="pred">Predicted scores</option><option value="xpick">Computer picks (another platform)</option>
+          <option value="trend">Trends</option><option value="cons">Consensus / betting splits</option></select>
+        <input id="intakeSource" placeholder="Source — Covers, Action…" onchange="try{localStorage.setItem('d4.intakeSource',this.value)}catch(e){}" style="flex:1 1 140px;padding:9px;border-radius:9px;background:var(--panel2);color:var(--chalk);border:1px solid var(--rule)">
+      </div>
       <textarea id="intakePaste" rows="5" placeholder="Paste from sportsbetting.ag, Covers, Action Network, a txt file…" style="width:100%;box-sizing:border-box;margin-top:8px;font-family:'IBM Plex Mono';font-size:12px"></textarea>
       <input type="file" id="bookShots" accept="image/*,application/pdf,.docx,.txt,.md,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="margin-top:8px">
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="intakeRun()">Read it</button>
@@ -823,7 +830,7 @@ window.addEventListener('DOMContentLoaded',function(){
   },1200);
 });
 </script>
-<script src="shared.js?v=20260925g"></script>
+<script src="shared.js?v=20260926h"></script>
 <script>
 (function(){
   ACTIVE_SPORT='mlb';

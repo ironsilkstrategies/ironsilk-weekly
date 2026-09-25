@@ -4179,6 +4179,7 @@ function renderFootballRecord(sport){
     ${legacy?`<div class="sub" style="color:var(--mute)">${legacy} older row${legacy===1?'':'s'} graded the book favorite, not the model — excluded.</div>`:''}
   </div>`;
   h+=brainReport(sport);
+  try{gradeIntel();h+=intelReport(sport);}catch(err){}
   /* Model props graded against ESPN's real box score (like MLB's prop grading). */
   try{let W=0,L=0,hi={W:0,L:0},bk={W:0,L:0},n=0;const miss=[];
     weeks.forEach(wk=>arc[wk].rows.forEach(r=>{const Pl=r.actualBox&&r.actualBox.players;if(!r.props||!Pl)return;
@@ -4264,11 +4265,15 @@ function runFootballEval(sp){
       if(pred){const m=pred.h-pred.a,cov=hs?(m+ln):(-m+ln);sig.push({src:'Prediction',ok:cov>0,detail:`${pred.a}–${pred.h}`});}
       if(Math.abs(tr.dMar)>=0.1)sig.push({src:'Trends',ok:(tr.dMar>0)===hs,detail:(tr.dMar>0?g.home.abbr:g.away.abbr)+' lean'});
       if(mo&&mo.side)sig.push({src:'Sharp money',ok:(mo.side>0)===hs,detail:mo.note});
+      try{intelPicksFor(sp,k).forEach(x=>{const m=x.pick.match(/^([A-Z]{2,4}) ([+\-][\d.]+)$/);if(!m)return;
+        sig.push({src:x.src+(x.rec.n?` (${x.rec.w}-${x.rec.n-x.rec.w})`:''),ok:(m[1]===g.home.abbr)===hs,detail:x.pick});});}catch(err){}
       add('spread',`${hs?g.home.abbr:g.away.abbr} ${ln>0?'+':''}${ln}`,P.spread.side,P.spread.p,P.spread.price,sig);}
     if(P.total){const ov=P.total.side==='over',ln=P.total.line;
       const sig=[{src:'Sim',ok:true,detail:`${ov?'Over':'Under'} ${ln} · ${Math.round(P.total.p*100)}%`}];
       if(J){const t=J.a+J.h;sig.push({src:'Judge',ok:ov?t>ln:t<ln,detail:`total ${t.toFixed(1)}`});}
       if(pred){const t=pred.a+pred.h;sig.push({src:'Prediction',ok:ov?t>ln:t<ln,detail:`total ${t.toFixed(1)}`});}
+      try{intelPicksFor(sp,k).forEach(x=>{const m=x.pick.match(/^(Over|Under) /);if(!m)return;
+        sig.push({src:x.src+(x.rec.n?` (${x.rec.w}-${x.rec.n-x.rec.w})`:''),ok:(m[1]==='Over')===ov,detail:x.pick});});}catch(err){}
       if(Math.abs(tr.dTot)>=0.1)sig.push({src:'Trends',ok:(tr.dTot>0)===ov,detail:(tr.dTot>0?'Over':'Under')+' lean'});
       add('total',`${ov?'Over':'Under'} ${ln}`,P.total.side,P.total.p,P.total.price,sig);}
     if(P.ml&&P.ml.price!=null){const hs=P.ml.side==='home';
