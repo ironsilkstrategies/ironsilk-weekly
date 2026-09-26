@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26j';
+const INTAKE_BUILD='intake 2026-09-26k';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -803,7 +803,7 @@ function intelLineFor(sp,game,market,side){
 }
 function gradeIntel(){
   const L=get(INTEL_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
-  L.forEach(x=>{if(x.graded)return;const R=F[x.game];if(!R||R.a==null)return;const a=+R.a,h=+R.h,[aw,hm]=x.game.split('@');
+  L.forEach(x=>{if(x.graded)return;const R=F[finalsKey(x.sp,x.game)];if(!R||R.a==null)return;const a=+R.a,h=+R.h,[aw,hm]=x.game.split('@');
     if(x.kind==='xpick'){try{const G=gradeLeg({game:x.game,pick:x.pick,sport:x.sp},x.date);if(G&&G.push){x.graded=true;x.hit=null;x.push=true;n++;}
       else if(G&&(G.hit===true||G.hit===false)){x.graded=true;x.hit=G.hit;n++;}}catch(e){}return;}
     if(x.kind==='pred'&&x.a!=null){x.graded=true;x.err=+Math.abs((x.h-x.a)-(h-a)).toFixed(1);x.totErr=+Math.abs((x.h+x.a)-(h+a)).toFixed(1);x.hit=(x.h>x.a)===(h>a)&&a!==h;n++;return;}
@@ -870,7 +870,25 @@ function voicesLog(sp){
       calls.push({id:[sp,gl,d,voice,market].join('|'),sp,date:d,game:gl,gid:g.id,voice,market,side,line,price:pr&&pr.price!=null?+pr.price:null,pick,...(extra||{})});};
     // Sim
     add('Sim','ml',s.hw>=s.aw?'home':'away');
-    if(hl!=null&&typeof s.homeCover==='function'&&typeof s.awayCover==='function')add('Sim','spread',s.homeCover(hl)>=s.awayCover(-hl)?'home':'away');
+    if(hl!=null){
+      if(typeof s.homeCover==='function'&&typeof s.awayCover==='function'){
+        add('Sim','spread',s.homeCover(hl)>=s.awayCover(-hl)?'home':'away');
+      }else if(sp==='mlb'&&typeof rlProb==='function'){
+        /* MLB sims never get homeCover/awayCover attached (those only exist on
+           football sims in football-engine.js) — this is why the Sim voice's
+           run-line call sat blank on every MLB game. rlProb(g,s,side,line) is
+           the same distribution football's homeCover/awayCover reads, just a
+           different call shape: it wants a plain margin threshold, not a
+           signed spread-as-written line, so hl has to be un-signed per side
+           first. hl is home's own signed run line (e.g. -1.5 favored): home
+           needs margin(home-away) > -hl to cover, away needs margin(away-home)
+           > hl to cover its own +1.5 — mirrors homeCover/awayCover's sign
+           convention (see the comment on homeCover in football-engine.js)
+           applied to rlProb's threshold-not-signed-line calling shape. */
+        const ph=rlProb(g,s,'home',-hl),pa=rlProb(g,s,'away',hl);
+        if(ph!=null&&pa!=null)add('Sim','spread',ph>=pa?'home':'away');
+      }
+    }
     if(tl!=null&&typeof s.over==='function'){const p=s.over(tl);if(Math.abs(p-0.5)>1e-9)add('Sim','total',p>0.5?'over':'under');}
     // Judge
     let J=null;try{J=brainJudge(g,s,sp)}catch(e){}
@@ -894,7 +912,7 @@ function voicesLog(sp){
   if(n){if(V.length>6000)V.splice(0,V.length-6000);set(VOICES_KEY,V);}return n;
 }
 function gradeVoices(){const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
-  V.forEach(x=>{if(x.graded)return;const R=F[x.game];if(!R||R.a==null)return;const a=+R.a,h=+R.h;let hit=null;
+  V.forEach(x=>{if(x.graded)return;const R=F[finalsKey(x.sp,x.game)];if(!R||R.a==null)return;const a=+R.a,h=+R.h;let hit=null;
     if(x.market==='ml'){if(a!==h)hit=(x.side==='home')===(h>a);}
     else if(x.market==='spread'&&x.line!=null){const m=(x.side==='home'?h-a:a-h)+x.line;if(m!==0)hit=m>0;}
     else if(x.market==='total'&&x.line!=null){const t=a+h;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
@@ -6094,7 +6112,7 @@ function resolveLeg(leg,ticketDate){
       // store may already hold this game's final from a prior football-page visit
     }
     // shared cross-sport finals store — visible on every page
-    const shared=get(LS.allfinals,{})[leg.game];
+    const shared=allFinals()[finalsKey(leg.sport,leg.game)];
     if(shared&&shared.a!=null)
       return{a:+shared.a,h:+shared.h,h1a:shared.h1a,h1h:shared.h1h,gid:leg.gid,live:false,source:'shared'};
     /* Finished football games also live in the sport archive, in two shapes:
@@ -12195,7 +12213,7 @@ function getBookImpliedPicks(sport){
           :r.market+' '+r.side;
         /* Every book pick was hard-coded ungraded, so the Books record sat at 0-0
            while games went final. Grade against the shared finals store. */
-        let hit=null;const F=(FIN||{})[r.game];
+        let hit=null;const F=(FIN||{})[finalsKey(sp,r.game)];
         if(F&&F.a!=null){const a=+F.a,h=+F.h,ln=r.line!=null?+r.line:null;
           if(r.market==='moneyline'&&a!==h)hit=(r.side==='home')===(h>a);
           else if(r.market==='spread'&&ln!=null){const m=(r.side==='home'?h-a:a-h)+ln;hit=m===0?null:m>0;}
@@ -12245,7 +12263,7 @@ function gradeBookPicksAgainstFinals(){
     const sp=sportOf[key];
     Object.keys(all).forEach(d=>{
       (all[d]||[]).filter(r=>oddsToImplied(r.price)>=0.60).forEach(r=>{
-        const F=finals[r.game];if(!F)return;
+        const F=finals[finalsKey(sp,r.game)];if(!F)return;
         const [aw,hm]=(r.game||'').split('@');
         let hit=null;
         if(r.market==='moneyline'){
@@ -13940,8 +13958,12 @@ function buildTeamLedger(){
   });
   try{
     const shared=allFinals();
-    Object.keys(shared).forEach(gk=>{
-      if(!finals[gk]){const F=shared[gk];finals[gk]={a:+F.a,h:+F.h,date:''};}
+    // shared keys are now 'sport:AWAY@HOME' (see finalsKey) — this map stays
+    // bare AWAY@HOME because that's the format e.game/l.game are stored in
+    // below, so strip the prefix back off on the way in.
+    Object.keys(shared).forEach(sk=>{
+      const gk=sk.includes(':')?sk.slice(sk.indexOf(':')+1):sk;
+      if(!finals[gk]){const F=shared[sk];finals[gk]={a:+F.a,h:+F.h,date:''};}
     });
   }catch(e){}
   const gradePick=(pick,gameKey)=>{
@@ -14190,10 +14212,37 @@ function takeFadePanel(g,s,sport){
    engine writes its finals here (a plain persisted map, keyed by AWAY@HOME),
    and every tab reads from HERE, so the whole system sees every sport
    regardless of which page is open. */
+/* Store key is SPORT:AWAY@HOME, never bare AWAY@HOME. MLB and NFL/CFB share a
+   large chunk of city abbreviations — CIN, CLE, DET, HOU, KC, MIA, MIN, PIT,
+   SF, TB, WSH and more all resolve to a real team in more than one league —
+   so on any day both a baseball game and a football game land on the same
+   abbreviation pair (routine in the Sept/Oct overlap window), a bare-string
+   key let one sport's final silently overwrite the other's, corrupting every
+   downstream grade (Intel, Voices, System log, Book picks) with the wrong
+   score. finalsKey() is the one place that format is built; every reader and
+   writer below goes through it so they can never drift apart again. */
+function finalsKey(sport,game){return(sport||'mlb')+':'+game;}
+/* One-time, idempotent migration for finals already saved under the old bare
+   key. Each stored value already carries its own `sport`, so this is lossless
+   UNLESS two sports already collided under the old key — in that case
+   whichever write landed last already clobbered the other and there's
+   nothing left to recover; going forward it can't happen again. */
+function migrateFinalsKeys(){
+  const all=get(LS.allfinals,{});let changed=false;
+  Object.keys(all).forEach(k=>{
+    const v=all[k];if(!v)return;
+    const nk=finalsKey(v.sport,k.includes(':')&&(k.startsWith('mlb:')||k.startsWith('nfl:')||k.startsWith('ncaaf:'))?k.split(':').slice(1).join(':'):k);
+    if(nk===k)return; // already migrated
+    if(!all[nk])all[nk]=v;
+    delete all[k];changed=true;
+  });
+  if(changed)set(LS.allfinals,all);
+  return all;
+}
 function recordFinal(sport,game,awayScore,homeScore){
   if(awayScore==null||awayScore===''||homeScore==null||homeScore==='')return;
   const all=get(LS.allfinals,{});
-  all[game]={sport,a:+awayScore,h:+homeScore,ts:Date.now()};
+  all[finalsKey(sport,game)]={sport,a:+awayScore,h:+homeScore,ts:Date.now()};
   set(LS.allfinals,all);
 }
 /* Sweep whatever finals are currently in memory for the loaded sport(s) into
@@ -14201,12 +14250,12 @@ function recordFinal(sport,game,awayScore,homeScore){
    engines it actually has loaded, so over normal use every sport's finals
    accumulate in one shared place. */
 function syncFinalsToShared(){
-  const all=get(LS.allfinals,{});let changed=false;
+  const all=migrateFinalsKeys();let changed=false;
   const sweep=(arr,sport)=>(arr||[]).forEach(g=>{
     if(g.awayScore==null||g.awayScore==='')return;
     const isFinal=g.abstract==='post'||g.abstract==='Final'||g.status==='Final';
     if(!isFinal)return;
-    const key=g.away.abbr+'@'+g.home.abbr;
+    const key=finalsKey(sport,g.away.abbr+'@'+g.home.abbr);
     const prev=all[key];
     if(!prev||prev.a!==+g.awayScore||prev.h!==+g.homeScore||(g.h1a!=null&&prev.h1a==null)){
       all[key]={sport,a:+g.awayScore,h:+g.homeScore,h1a:g.h1a!=null?+g.h1a:null,h1h:g.h1h!=null?+g.h1h:null,ts:Date.now()};changed=true;
@@ -14222,7 +14271,7 @@ function syncFinalsToShared(){
       const A=arc[d],fin=A.finals||{};
       (A.rows||[]).forEach(r=>{
         const F=fin[r.id];if(!F||F.a==null)return;
-        const key=(r.a||'')+'@'+(r.h||'');
+        const key=finalsKey('mlb',(r.a||'')+'@'+(r.h||''));
         const prev=all[key];
         if(!prev||prev.a!==+F.a||prev.h!==+F.h){
           all[key]={sport:'mlb',a:+F.a,h:+F.h,ts:Date.now()};changed=true;
@@ -14235,7 +14284,8 @@ function syncFinalsToShared(){
   if(changed)set(LS.allfinals,all);
   return all;
 }
-/* The single source of truth every tab should use: {game: {sport,a,h}}. */
+/* The single source of truth every tab should use: {'sport:game': {sport,a,h}}.
+   Always read via finalsKey(sport,game) — never a bare game string. */
 function allFinals(){
   syncFinalsToShared();
   return get(LS.allfinals,{});
@@ -14291,7 +14341,7 @@ function gradeSystemLog(){
   Object.keys(log).forEach(d=>{
     Object.keys(log[d]).forEach(k=>{
       const row=log[d][k];if(row.graded)return;
-      const F=finals[row.game];if(!F)return;
+      const F=finals[finalsKey(row.sport,row.game)];if(!F)return;
       const [aw,hm]=row.game.split('@');
       const winner=F.a>F.h?aw:F.h>F.a?hm:null;
       if(!winner)return;
