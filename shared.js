@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26k';
+const INTAKE_BUILD='intake 2026-09-26n';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -183,7 +183,26 @@ function intakeParseGrammar(text,fallbackSport){
     const body=sec.lines.join('\n');if(!body.trim())return;
     const sport=sec.sport||intakeGuessSport(body,fallbackSport);
     const B=bucket(sport);
-    if(!intakeCanResolve(sport)){B.raw.push((sport==='ncaaf'?'NCAAF':sport.toUpperCase())+'\n'+body);return;}
+    if(!intakeCanResolve(sport)){
+      /* This page hasn't loaded the engine that resolves this sport's team
+         names (e.g. an NCAAF file read on mlb.html, which never loads
+         football-engine.js). Before this, that content only went into the
+         raw/unread display bucket — inert, and gone for good unless the
+         person noticed and manually re-pasted it on the right page. The
+         multi-sport combined-file path (parseSlateTextMulti) already had a
+         real fix for this exact problem — stash to LS.pendingupload so
+         replayPendingUploads() picks it up automatically next time the
+         correct page boots — but a single-sport file read through the
+         normal intake grammar path never got that safety net. Now it does. */
+      try{
+        const hdr=sport==='ncaaf'?'NCAAF':sport.toUpperCase();
+        const pend=get(LS.pendingupload,{});
+        const prior=pend[sport]&&pend[sport].text?pend[sport].text+'\n':'';
+        pend[sport]={text:prior+hdr+'\n'+body,ts:Date.now()};
+        set(LS.pendingupload,pend);
+      }catch(e){}
+      B.raw.push((sport==='ncaaf'?'NCAAF':sport.toUpperCase())+'\n'+body);return;
+    }
     // 1) odds via the sport's own parser, with the extra lines stripped out
     const oddsText=sec.lines.filter(l=>!INTAKE_EXTRA.test(l)).join('\n');
     if(/^(ML|SPREAD|RL|OU|H1\w*|Q1\w*|F5\s*\w+):/im.test(oddsText)){
@@ -900,6 +919,23 @@ function voicesLog(sp){
     if(ms){const a=+ms[1],h=+ms[2];if(a!==h)add('Most common','ml',h>a?'home':'away',{score:a+'-'+h});
       if(hl!=null&&(h-a)+hl!==0)add('Most common','spread',(h-a)+hl>0?'home':'away',{score:a+'-'+h});
       if(tl!=null&&a+h!==tl)add('Most common','total',a+h>tl?'over':'under',{score:a+'-'+h});}
+    // Outside predicted scores (e.g. Covers.com computer picks) — these were
+    // being captured and graded on the Intel tab already, but never wired in
+    // as a voice, so they never showed up on the game card itself or counted
+    // toward "who agrees" here. One voice per distinct upload source, named
+    // for that source (e.g. 'Covers'), so it's clear whose prediction it is —
+    // never blended silently with any other source's number.
+    try{
+      const preds=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='pred'&&x.game===gl&&x.date===d&&x.a!=null&&x.h!=null);
+      const bySrc={};preds.forEach(x=>{(bySrc[x.src]=bySrc[x.src]||[]).push(x)});
+      Object.entries(bySrc).forEach(([src,arr])=>{
+        const last=arr[arr.length-1],a=last.a,h=last.h;if(a===h)return;
+        const voice=src||'Outside pred';
+        add(voice,'ml',h>a?'home':'away',{score:a+'-'+h});
+        if(hl!=null&&(h-a)+hl!==0)add(voice,'spread',(h-a)+hl>0?'home':'away',{score:a+'-'+h});
+        if(tl!=null&&a+h!==tl)add(voice,'total',a+h>tl?'over':'under',{score:a+'-'+h});
+      });
+    }catch(e){}
     // Coach — its own call is take/fade on the model side, plus its total read
     try{const c=coachPickFor(g,s,sp);if(c){const simSide=c.sideTeam===H?'home':'away';
       if(c.verdict==='take')add('Coach','ml',simSide);else if(c.verdict==='fade')add('Coach','ml',simSide==='home'?'away':'home');
@@ -921,7 +957,7 @@ function gradeVoices(){const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}cat
 function voicesReport(sp){
   const V=get(VOICES_KEY,[]).filter(x=>(!sp||sp==='all'||x.sp===sp)&&x.graded&&x.hit!=null);
   const mk={ml:'Moneyline',spread:sp==='mlb'?'Run line':'Spread',total:'Total'};
-  if(!V.length)return`<div class="tkt hi"><h3>Who to listen to</h3><div class="sub">Every voice — Sim, Judge, Most-common score, Coach, Books — gets its call locked at first pitch/kickoff and graded here, by market. Fills in as games go final.</div></div>`;
+  if(!V.length)return`<div class="tkt hi"><h3>Who to listen to</h3><div class="sub">Every voice — Sim, Judge, Most-common score, Coach, Books, and any predicted scores you upload from an outside source (e.g. Covers) — gets its call locked at first pitch/kickoff and graded here, by market. Fills in as games go final.</div></div>`;
   const voices=['Sim','Judge','Most common','Coach','Books'];
   const cell=a=>{if(!a.length)return'<td class="m" style="color:var(--mute)">—</td>';const w=a.filter(x=>x.hit).length,u=a.reduce((s,x)=>s+(x.units||0),0);
     const pc=w/a.length;return`<td class="m" style="color:${a.length>=10?(pc>=0.55?'var(--win)':pc<0.47?'var(--rust)':'var(--chalk)'):'var(--mute)'}">${w}-${a.length-w} <b>${Math.round(pc*100)}%</b><br><span style="font-size:9.5px">${u>=0?'+':''}${u.toFixed(1)}u</span></td>`;};

@@ -152,8 +152,14 @@ transform:translateY(-1px)}
 text-transform:uppercase;color:var(--cold);background:rgba(95,211,232,.10);
 border:1px solid rgba(95,211,232,.25);border-radius:4px;padding:1px 5px;
 display:inline-block;margin-bottom:2px}
-.bet.source-pick{border-color:#a78bfa!important;box-shadow:0 0 0 1px rgba(167,139,250,.3) inset}
-.bet.consensus-pick{border-color:#f472b6!important;box-shadow:0 0 0 1px rgba(244,114,182,.35) inset}
+/* No !important here on purpose: an outside-source pick that's ALSO tiered
+   (strong/supreme/conflict/lean) must show the tier's border color, not this
+   purple/pink one — the tier rules below are later in the cascade and win
+   on source order at equal specificity. !important here would silently
+   override every tiered card's border with purple regardless of tier,
+   which is exactly the bug this comment is guarding against. */
+.bet.source-pick{border-color:#a78bfa;box-shadow:0 0 0 1px rgba(167,139,250,.3) inset}
+.bet.consensus-pick{border-color:#f472b6;box-shadow:0 0 0 1px rgba(244,114,182,.35) inset}
 .src-tag{font-family:"IBM Plex Mono";font-size:7.5px;letter-spacing:.06em;text-transform:uppercase;
   color:#a78bfa;margin-top:3px}
 .src-tag.unanimous{color:#f472b6}
@@ -836,8 +842,8 @@ window.addEventListener('DOMContentLoaded',function(){
   },1200);
 });
 </script>
-<script src="shared.js?v=20260926m"></script>
-<script src="football-engine.js?v=20260926m"></script>
+<script src="shared.js?v=20260926n"></script>
+<script src="football-engine.js?v=20260926n"></script>
 <script>
 (function(){
   ACTIVE_SPORT='nfl';
