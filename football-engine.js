@@ -1560,6 +1560,7 @@ function fbSnapshot(sport){
   });
   set(key,arc);
   try{logSystemPicks(sport)}catch(err){console.warn('syslog',err)}
+  try{voicesLog(sport)}catch(err){console.warn('voices',err)}
 }
 function fbGrade(sport){
   const nfl=sport==='nfl',key=nfl?LS.nflarc:'d4.ncaafarc';
@@ -1586,7 +1587,7 @@ function fbGrade(sport){
   });
   if(changed){set(NFL_CALIB_KEY,calib);set(key,arc);}
   try{brainLearn(sport)}catch(e){console.warn('brain learn',e)}
-  try{syncFinalsToShared();gradeSystemLog()}catch(e){}
+  try{syncFinalsToShared();gradeSystemLog();gradeVoices()}catch(e){}
   if(!fbGrade._box)fbGrade._box={};
   if(!fbGrade._box[sport]){fbGrade._box[sport]=1;setTimeout(()=>{brainCollectBoxes(sport).catch(()=>{}).finally(()=>{fbGrade._box[sport]=0})},4000);}
 }
@@ -4179,7 +4180,7 @@ function renderFootballRecord(sport){
     ${legacy?`<div class="sub" style="color:var(--mute)">${legacy} older row${legacy===1?'':'s'} graded the book favorite, not the model — excluded.</div>`:''}
   </div>`;
   h+=brainReport(sport);
-  try{gradeIntel();h+=intelReport(sport);}catch(err){}
+  try{gradeIntel();gradeVoices();h=voicesReport(sport)+h+intelReport(sport);}catch(err){}
   /* Model props graded against ESPN's real box score (like MLB's prop grading). */
   try{let W=0,L=0,hi={W:0,L:0},bk={W:0,L:0},n=0;const miss=[];
     weeks.forEach(wk=>arc[wk].rows.forEach(r=>{const Pl=r.actualBox&&r.actualBox.players;if(!r.props||!Pl)return;

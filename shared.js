@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26h';
+const INTAKE_BUILD='intake 2026-09-26j';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -841,6 +841,93 @@ function intelReport(sp){
     h+=`<div class="mktlab">Trends by source</div>`+Object.entries(by(T,x=>x.src)).map(([k,v])=>row(k,wl(v))).join('');}
   return h+`</div>`;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VOICES — "who to listen to". Every voice's call on every game, per market,
+   locked at first pitch / kickoff and graded against the final:
+     Sim · Judge · Most-common score · Coach (take/fade) · Books' favorite
+   Graded against YOUR real lines (spread/total only when a line exists).
+   ═══════════════════════════════════════════════════════════════════════════ */
+const VOICES_KEY='d4.voices';
+const _vProfit=p=>{p=+p;return p>0?p/100:100/Math.abs(p)};
+function voicesLines(sp,g){const gl=g.away.abbr+'@'+g.home.abbr;let L=[];
+  try{L=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):(typeof bookLinesFor==='function'?bookLinesFor(g.id):[])}catch(e){}
+  const f=(m,s)=>L.find(x=>(x.market===m||(m==='spread'&&x.market==='runline'))&&x.side===s);
+  return{mlH:f('moneyline','home'),mlA:f('moneyline','away'),spH:f('spread','home'),spA:f('spread','away'),ov:f('total','over'),un:f('total','under')};}
+function voicesLog(sp){
+  const G=sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);
+  const S=sp==='nfl'?(typeof NFL_SIMS!=='undefined'?NFL_SIMS:{}):sp==='ncaaf'?(typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{}):(typeof SIMS!=='undefined'?SIMS:{});
+  if(!G||!G.length)return 0;const V=get(VOICES_KEY,[]);const idx={};V.forEach((x,i)=>idx[x.id]=i);const d=today();let n=0;
+  G.forEach(g=>{
+    const s=S[g.id];if(!s||s.aw==null)return;const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');
+    const gl=g.away.abbr+'@'+g.home.abbr,A=g.away.abbr,H=g.home.abbr,Ln=voicesLines(sp,g);
+    const hl=Ln.spH&&Ln.spH.line!=null?+Ln.spH.line:null,tl=Ln.ov&&Ln.ov.line!=null?+Ln.ov.line:null;
+    const calls=[];const add=(voice,market,side,extra)=>{if(!side)return;
+      const line=market==='spread'?(side==='home'?hl:hl!=null?-hl:null):market==='total'?tl:null;
+      const pr=market==='ml'?(side==='home'?Ln.mlH:Ln.mlA):market==='spread'?(side==='home'?Ln.spH:Ln.spA):market==='total'?(side==='over'?Ln.ov:Ln.un):null;
+      const pick=market==='ml'?(side==='home'?H:A)+' ML':market==='spread'?(side==='home'?H:A)+' '+(line>0?'+':'')+line:(side==='over'?'Over ':'Under ')+line;
+      calls.push({id:[sp,gl,d,voice,market].join('|'),sp,date:d,game:gl,gid:g.id,voice,market,side,line,price:pr&&pr.price!=null?+pr.price:null,pick,...(extra||{})});};
+    // Sim
+    add('Sim','ml',s.hw>=s.aw?'home':'away');
+    if(hl!=null&&typeof s.homeCover==='function'&&typeof s.awayCover==='function')add('Sim','spread',s.homeCover(hl)>=s.awayCover(-hl)?'home':'away');
+    if(tl!=null&&typeof s.over==='function'){const p=s.over(tl);if(Math.abs(p-0.5)>1e-9)add('Sim','total',p>0.5?'over':'under');}
+    // Judge
+    let J=null;try{J=brainJudge(g,s,sp)}catch(e){}
+    if(J){add('Judge','ml',J.pHome>=0.5?'home':'away');
+      if(hl!=null){const m=(J.h-J.a)+hl;if(m!==0)add('Judge','spread',m>0?'home':'away');}
+      if(tl!=null){const t=J.a+J.h;if(t!==tl)add('Judge','total',t>tl?'over':'under');}}
+    // Most common score
+    const ms=String(s.modeScore||'').match(/(\d+)\D+(\d+)/);
+    if(ms){const a=+ms[1],h=+ms[2];if(a!==h)add('Most common','ml',h>a?'home':'away',{score:a+'-'+h});
+      if(hl!=null&&(h-a)+hl!==0)add('Most common','spread',(h-a)+hl>0?'home':'away',{score:a+'-'+h});
+      if(tl!=null&&a+h!==tl)add('Most common','total',a+h>tl?'over':'under',{score:a+'-'+h});}
+    // Coach — its own call is take/fade on the model side, plus its total read
+    try{const c=coachPickFor(g,s,sp);if(c){const simSide=c.sideTeam===H?'home':'away';
+      if(c.verdict==='take')add('Coach','ml',simSide);else if(c.verdict==='fade')add('Coach','ml',simSide==='home'?'away':'home');
+      if(tl!=null&&(c.totalDir==='over'||c.totalDir==='under')&&c.totalReal)add('Coach','total',c.totalDir);}}catch(e){}
+    // Books' favorite
+    if(Ln.mlH&&Ln.mlA&&Ln.mlH.price!=null&&Ln.mlA.price!=null&&+Ln.mlH.price!==+Ln.mlA.price)add('Books','ml',+Ln.mlH.price<+Ln.mlA.price?'home':'away');
+    if(hl!=null&&hl!==0)add('Books','spread',hl<0?'home':'away');
+    calls.forEach(c=>{const i=idx[c.id];if(i!=null){if(!pre||V[i].graded)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
+  });
+  if(n){if(V.length>6000)V.splice(0,V.length-6000);set(VOICES_KEY,V);}return n;
+}
+function gradeVoices(){const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
+  V.forEach(x=>{if(x.graded)return;const R=F[x.game];if(!R||R.a==null)return;const a=+R.a,h=+R.h;let hit=null;
+    if(x.market==='ml'){if(a!==h)hit=(x.side==='home')===(h>a);}
+    else if(x.market==='spread'&&x.line!=null){const m=(x.side==='home'?h-a:a-h)+x.line;if(m!==0)hit=m>0;}
+    else if(x.market==='total'&&x.line!=null){const t=a+h;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
+    x.graded=true;x.hit=hit;if(hit!==null)x.units=hit?_vProfit(x.price!=null?x.price:-110):-1;n++;});
+  if(n)set(VOICES_KEY,V);return n;}
+function voicesReport(sp){
+  const V=get(VOICES_KEY,[]).filter(x=>(!sp||sp==='all'||x.sp===sp)&&x.graded&&x.hit!=null);
+  const mk={ml:'Moneyline',spread:sp==='mlb'?'Run line':'Spread',total:'Total'};
+  if(!V.length)return`<div class="tkt hi"><h3>Who to listen to</h3><div class="sub">Every voice — Sim, Judge, Most-common score, Coach, Books — gets its call locked at first pitch/kickoff and graded here, by market. Fills in as games go final.</div></div>`;
+  const voices=['Sim','Judge','Most common','Coach','Books'];
+  const cell=a=>{if(!a.length)return'<td class="m" style="color:var(--mute)">—</td>';const w=a.filter(x=>x.hit).length,u=a.reduce((s,x)=>s+(x.units||0),0);
+    const pc=w/a.length;return`<td class="m" style="color:${a.length>=10?(pc>=0.55?'var(--win)':pc<0.47?'var(--rust)':'var(--chalk)'):'var(--mute)'}">${w}-${a.length-w} <b>${Math.round(pc*100)}%</b><br><span style="font-size:9.5px">${u>=0?'+':''}${u.toFixed(1)}u</span></td>`;};
+  const rows=voices.map(v=>`<tr><td><b>${v}</b></td>${['ml','spread','total'].map(m=>cell(V.filter(x=>x.voice===v&&x.market===m))).join('')}</tr>`).join('');
+  const best=['ml','spread','total'].map(m=>{let top=null;voices.forEach(v=>{const a=V.filter(x=>x.voice===v&&x.market===m);if(a.length<10)return;
+    const u=a.reduce((s,x)=>s+(x.units||0),0)/a.length;if(!top||u>top.u)top={v,u,n:a.length};});
+    return top?`<b>${mk[m]}:</b> ${top.v} (${top.u>=0?'+':''}${(top.u*100).toFixed(1)}% ROI over ${top.n})`:`<b>${mk[m]}:</b> need 10+ graded`;}).join(' · ');
+  const bySport=(!sp||sp==='all')?['mlb','nfl','ncaaf'].filter(s=>V.some(x=>x.sp===s)).map(s=>{const a=V.filter(x=>x.sp===s);const w=a.filter(x=>x.hit).length;return`${s.toUpperCase()} ${w}-${a.length-w}`;}).join(' · '):'';
+  return`<div class="tkt hi"><h3>Who to listen to</h3><div class="sub" style="margin-bottom:6px">Each voice's call, locked at first pitch/kickoff, graded on the final against your line. Green = 55%+ on 10+ calls.</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;line-height:1.5"><tr style="color:var(--mute);font-size:10px"><td></td><td>${mk.ml}</td><td>${mk.spread}</td><td>${mk.total}</td></tr>${rows}</table></div>
+    <div class="sub" style="margin-top:8px">Best so far → ${best}</div>${bySport?`<div class="sub m">${bySport}</div>`:''}</div>`;
+}
+
+/* ── MULTI-SPORT TICKETS ─────────────────────────────────────────────────────
+   Each page only has its own sport loaded, so it publishes its live legs to a
+   shared store; with "All sports" on, presets draw from every sport's fresh,
+   not-yet-started legs. Legs carry sport + game id, so they grade anywhere. */
+let PRESET_ALLSPORTS=(()=>{try{return localStorage.getItem('d4.presetAllSports')==='1'}catch(e){return false}})();
+function setPresetAllSports(v){PRESET_ALLSPORTS=!!v;try{localStorage.setItem('d4.presetAllSports',v?'1':'0')}catch(e){}renderTickets();}
+function presetPublish(sp,legs){try{
+  const G=sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);
+  const t=gl=>{const g=G.find(z=>z.away.abbr+'@'+z.home.abbr===gl);return g&&g.time?new Date(g.time).getTime():null;};
+  const out=legs.filter(l=>(l.sport||'mlb')===sp).map(l=>({...l,sport:sp,start:l.start||t(l.game)}));
+  set('d4.xpool.'+sp,{ts:Date.now(),legs:out.slice(0,600)});}catch(e){}}
 
 /* ── ODDS PULL (all pages) ────────────────────────────────────────────────
    These lived in football-engine.js, which mlb.html never loads — so the MLB
@@ -3447,6 +3534,14 @@ function edgeOf(leg){
 }
 
 function fullPresetPool(){
+  const sp=window.__PAGE_SPORT__||ACTIVE_SPORT||'mlb';const local=_fullPresetPoolLocal();
+  presetPublish(sp,local);if(!PRESET_ALLSPORTS)return local;
+  const now=Date.now(),out=[...local];
+  ['mlb','nfl','ncaaf'].filter(x=>x!==sp).forEach(x=>{const P=get('d4.xpool.'+x,null);if(!P||now-P.ts>12*3600e3)return;
+    (P.legs||[]).forEach(l=>{if(l.start&&l.start<=now)return;out.push(l);});});
+  return out;
+}
+function _fullPresetPoolLocal(){
   // pulls every market type regardless of BUILDMODES — presets decide their own mix
   const pool=[...allSidesForBuilder(),...allRunLinesForBuilder(),...allTotalsForBuilder(),
     ...allF5SidesForBuilder(),...allF5TotalsForBuilder()];
@@ -4319,6 +4414,12 @@ function presetTabHtml(){
         background:var(--panel2);color:var(--chalk);font-family:'IBM Plex Mono';font-size:12px">
       <span class="m">legs — works for any number, not just the quick buttons above</span>
     </div>
+    <div class="mktlab">Sports</div>
+    <div class="subnav">
+      <button class="${!PRESET_ALLSPORTS?'on':''}" onclick="setPresetAllSports(false)">This page only</button>
+      <button class="${PRESET_ALLSPORTS?'on':''}" onclick="setPresetAllSports(true)">All sports (MLB + NFL + CFB)</button>
+    </div>
+    ${PRESET_ALLSPORTS?`<div class="sub" style="margin:-4px 0 8px">Other sports' legs come from their pages — open each sport once today so its board is fresh (${['mlb','nfl','ncaaf'].map(x=>{const P=get('d4.xpool.'+x,null);return x.toUpperCase()+': '+(P?Math.round((Date.now()-P.ts)/60000)+'m ago':'not loaded')}).join(' · ')}).</div>`:''}
     <div class="mktlab">Duplicates</div>
     <div class="subnav">
       <button class="${!ALLOW_DUPES?'on':''}" onclick="ALLOW_DUPES=false;renderTickets()">No duplicates from current tickets</button>
@@ -5199,7 +5300,7 @@ function lineupSig(g){
   return a+'|'+h+'|'+(g.away.p?g.away.p.id:'?')+'|'+(g.home.p?g.home.p.id:'?');
 }
 function render(){
-  try{if(typeof logSystemPicks==='function'&&typeof GAMES!=='undefined'&&GAMES.length&&(window.__PAGE_SPORT__||'mlb')==='mlb')setTimeout(()=>{try{logSystemPicks('mlb')}catch(e){}},0)}catch(e){}
+  try{if(typeof logSystemPicks==='function'&&typeof GAMES!=='undefined'&&GAMES.length&&(window.__PAGE_SPORT__||'mlb')==='mlb')setTimeout(()=>{try{logSystemPicks('mlb');voicesLog('mlb')}catch(e){}},0)}catch(e){}
   // hide football banners when the MLB board is active
   const _nw=document.getElementById('nflPowerWarn');if(_nw)_nw.style.display='none';
   const _cw=document.getElementById('cfbPowerWarn');if(_cw)_cw.style.display='none';
@@ -12429,7 +12530,7 @@ async function renderGrades(force){
     }
     }
     set(LS.arc,arc);try{brainLearnMLB()}catch(e){console.warn('mlb brain',e)}
-    try{syncFinalsToShared();gradeIntel()}catch(e){}
+    try{syncFinalsToShared();gradeIntel();gradeVoices()}catch(e){}
     try{gradeSystemLog()}catch(e){}computeCalibration();computeEntities();computeGlobalDrift();computeSegmentedCalibration();calibrationDriftVelocity();buildProps();
     try{recordSimVsBook(arc,get(LS.bookshots,{}));}catch(e){console.warn("svb",e)}
     try{gradeExtPicks();}catch(e){console.warn("ext",e)}
@@ -12469,7 +12570,7 @@ async function renderGrades(force){
     `<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderGrades()">${l}</button>`).join('')}</div>`;
   if(GRADETAB==='results'){
     setTimeout(()=>{const gb=document.getElementById('gradeBody');
-      if(gb&&ACTIVE_SPORT==='mlb'&&!gb.querySelector('[data-brain]'))gb.insertAdjacentHTML('afterbegin','<div data-brain>'+brainReport('mlb')+intelReport('mlb')+'</div>');},0);
+      if(gb&&ACTIVE_SPORT==='mlb'&&!gb.querySelector('[data-brain]'))gb.insertAdjacentHTML('afterbegin','<div data-brain>'+voicesReport('mlb')+brainReport('mlb')+intelReport('mlb')+'</div>');},0);
     h=innerRow(RESULTS_MODE,[['sides','Sides'],['props','Props'],['f5','First 5'],['picks','Every pick']],'RESULTS_MODE');
   }
   if(GRADETAB==='calib'){
@@ -13468,6 +13569,7 @@ let LAST_FINAL_COUNT=-1;
    gate, and reports back exactly what it did instead of failing silently. This
    is the "something looks stale, fix it now" button. */
 async function forceGradeEverything(){
+  try{gradeVoices()}catch(err){}
   try{gradeIntel()}catch(err){}
   /* The system-vs-books log was only graded from the manual freeze button. */
   try{gradeSystemLog()}catch(err){console.warn('syslog grade',err)}
@@ -14110,6 +14212,9 @@ function syncFinalsToShared(){
       all[key]={sport,a:+g.awayScore,h:+g.homeScore,h1a:g.h1a!=null?+g.h1a:null,h1h:g.h1h!=null?+g.h1h:null,ts:Date.now()};changed=true;
     }
   });
+  /* MLB's live board too — finals reached the shared store only via the grading
+     archive, so anything graded off it (voices, intel, system log) waited on that. */
+  try{if(typeof GAMES!=='undefined'&&Array.isArray(GAMES))sweep(GAMES,'mlb');}catch(e){}
   // MLB finals come from the archive (LS.arc), not a live array
   try{
     const arc=get(LS.arc,{});
@@ -14632,6 +14737,7 @@ function renderCoachTab(){
     </div></div>`;
 
   h+=`<div class="sbar"><h2>Coach picks — today's slate</h2><div class="ln"></div></div>`;
+  try{gradeVoices();h+=voicesReport('all')}catch(e){}
   try{h+=coachPicksBoard()}catch(e){h+='<div class="empty">Could not build picks: '+(e&&e.message||e)+'</div>'}
 
   h+=`<div class="sbar"><h2>Speaking right now</h2><div class="ln"></div></div>`;
