@@ -2567,6 +2567,7 @@ function simNCAAFGame(g,N){
   const TSPAN=200, MSPAN=241, MOFF=120;   // totals 0..199, margins -120..+120
   const totFreq=new Int32Array(TSPAN);
   const marFreq=new Int32Array(MSPAN);
+  const scoreFreq={};   // exact a-h score -> count, same approach simNFLGame already uses
   let hw=0,aw=0,ties=0;
   for(let i=0;i<N;i++){
     const a=Math.max(0,Math.round(awayExp+randn()*std));
@@ -2575,6 +2576,7 @@ function simNCAAFGame(g,N){
     let m=h-a; if(m<-MOFF)m=-MOFF; else if(m>MOFF)m=MOFF;
     marFreq[m+MOFF]++;
     if(h>a)hw++;else if(a>h)aw++;else ties++;
+    const key=a+'-'+h; scoreFreq[key]=(scoreFreq[key]||0)+1;
   }
   // cumulative "at or above" tables
   const cumT=new Float64Array(TSPAN+2);
@@ -2597,11 +2599,14 @@ function simNCAAFGame(g,N){
   // — using floor(line)+1 here would wrongly count the exact push as a cover.
   const awayCover=line=>{let k=Math.ceil(line)+MOFF;if(k<0)return 0;if(k>MSPAN)k=MSPAN;return 1-(cumM[k]/N)};
   const spreadCover=line=>{let k=Math.floor(line)+1+MOFF;if(k<0)k=0;if(k>MSPAN)return 0;return cumM[k]/N};
+  let modeScore=null,modeN=0;
+  for(const k in scoreFreq)if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeScore=k}
   return{
     awayProj:isNaN(awayExp)?26:Math.round(awayExp*10)/10,
     homeProj:isNaN(homeExp)?26:Math.round(homeExp*10)/10,
     p10:qFrom(totFreq,TSPAN,.1),p90:qFrom(totFreq,TSPAN,.9),
-    hw:hw/N,aw:aw/N,med,medMargin,over,spreadCover,homeCover,awayCover,N
+    hw:hw/N,aw:aw/N,med,medMargin,over,spreadCover,homeCover,awayCover,N,
+    modeScore,modeScorePct:modeN/N
   };
 }
 
@@ -3849,7 +3854,7 @@ function ncaafCard(g){
              const adjLine=adj?`<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--cold);margin-top:2px">`
                +`adj ${g.away.abbr} ${adj.adjAway} – ${adj.adjHome} ${g.home.abbr}`
                +`<span style="color:var(--mute);margin-left:5px">${adj.trendCount} trend${adj.trendCount!==1?'s':''}</span></div>`:'';
-             return `<div class="proj"><div class="sc">${raw}</div><div class="rd">${Math.round(ap)}–${Math.round(hp)}</div>${adjLine}${fbPredLine(g,'ncaaf',ap,hp)}${fbJudgeBlock(g,s,'ncaaf')}</div>`;
+             return `<div class="proj"><div class="sc">${raw}</div><div class="rd">${Math.round(ap)}–${Math.round(hp)}</div><div class="md">most common ${s.modeScore?s.modeScore.replace('-','–'):'—'} · ${(s.modeScorePct*100).toFixed(1)}%</div>${adjLine}${fbPredLine(g,'ncaaf',ap,hp)}${fbJudgeBlock(g,s,'ncaaf')}</div>`;
            })()}
     <div class="sig">
       <div class="sigchip">O/U <b>${NCAAF_POWER_FLAT?'—':med}</b> · ${spreadLabel}</div>
