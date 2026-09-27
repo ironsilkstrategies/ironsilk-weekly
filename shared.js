@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26o';
+const INTAKE_BUILD='intake 2026-09-26p';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -363,18 +363,28 @@ function parseMyTicketText(text){
     const awayAb=intakeAbbr(sport,hm[3]),homeAb=intakeAbbr(sport,hm[4]);
     if(!awayAb||!homeAb){skipped.push(line+'  (team name not recognized)');return;}
     const gl=awayAb+'@'+homeAb;
-    let body=legText.replace(/^\d+\s+/,'').replace(/\s+for GAME\s*$/i,'').replace(/½/g,'.5').trim();
+    // Period: "for GAME" (full game) or "for 1ST HALF" — this book also
+    // writes quarters ("for 1ST QUARTER" etc.) but gradeLeg has no quarter
+    // grading yet, so those are left ungrabbed and skipped rather than
+    // guessed at. Stripping only "for GAME" and leaving everything else on
+    // the end of body (as the first version of this did) is exactly why the
+    // two 1st-half legs here failed to match any pattern and got dropped.
+    const pm=legText.match(/\s+for\s+(GAME|1ST HALF)\s*$/i);
+    const period=pm?pm[1].toUpperCase():null;
+    let body=legText.replace(/^\d+\s+/,'').replace(/\s+for\s+.+$/i,'').replace(/½/g,'.5').trim();
+    if(!pm){skipped.push(line+'  (period not GAME or 1ST HALF — not supported yet)');return;}
+    const h1=period==='1ST HALF';
     let pick=null,price=null;
     let m=body.match(/^(.+?)\/(.+?)\s+(over|under)\s+([\d.]+)\s+([+-]\d+)$/i);
-    if(m){pick=(/over/i.test(m[3])?'Over ':'Under ')+m[4];price=+m[5];}
+    if(m){pick=(h1?'1H ':'')+(/over/i.test(m[3])?'Over ':'Under ')+m[4];price=+m[5];}
     else if((m=body.match(/^(.+?)\s+([+-]\d+(?:\.\d+)?)\s+([+-]\d+)$/))){
       const ab=intakeAbbr(sport,m[1]);
-      if(ab){pick=ab+' '+(/^[+-]/.test(m[2])?m[2]:'+'+m[2]);price=+m[3];}
-    }else if((m=body.match(/^(.+?)\s+([+-]\d+)$/))){
+      if(ab){pick=ab+(h1?' 1H ':' ')+(/^[+-]/.test(m[2])?m[2]:'+'+m[2]);price=+m[3];}
+    }else if(!h1&&(m=body.match(/^(.+?)\s+([+-]\d+)$/))){
       const ab=intakeAbbr(sport,m[1]);
       if(ab){pick=ab+' ML';price=+m[2];}
     }
-    if(!pick){skipped.push(line+'  (leg text not understood)');return;}
+    if(!pick){skipped.push(line+(h1?'  (1st-half moneyline not supported yet)':'  (leg text not understood)'));return;}
     const dm=whenText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     const gameDate=dm?`${dm[3]}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`:today();
     legs.push({id:'ext'+ticketNo+'_'+legs.length,game:gl,pick,p:ticketAmerToProb(price),sport,gameDate,price,book:'external'});
