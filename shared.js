@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26q';
+const INTAKE_BUILD='intake 2026-09-26s';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -372,6 +372,10 @@ function parseMyTicketText(text){
     const pm=legText.match(/\s+for\s+(GAME|1ST HALF)\s*$/i);
     const period=pm?pm[1].toUpperCase():null;
     let body=legText.replace(/^\d+\s+/,'').replace(/\s+for\s+.+$/i,'').replace(/½/g,'.5').trim();
+    // "buying N" (bought points, e.g. buying 2 on a total) sits between the
+    // price and "for GAME" — the number in the line is already the bought
+    // line itself, so this is just noise text to drop, not a math adjustment.
+    body=body.replace(/\s+buying\s+[\d.]+\s*$/i,'').trim();
     if(!pm){skipped.push(line+'  (period not GAME or 1ST HALF — not supported yet)');return;}
     const h1=period==='1ST HALF';
     let pick=null,price=null;
@@ -408,15 +412,15 @@ function parseMyTicketText(text){
      Total points - Over 32.5 (Game)
      Player stats - Player Name 175+ Passing yds (Game)
      ...next SGP header...
-   Spread/total legs here ARE gradeable (same grammar as the flat-ticket
-   parser, just no price to carry). Player-stat legs are NOT — gradeLeg's
-   only prop-grading path is MLB batting/pitching box-score stats; there is
-   no NFL passing/rushing/receiving-yards grading anywhere in this app yet.
-   Rather than invent a fake pid/threshold match against today's PROPS board
-   (built for a different sport's stat set) and risk silently mis-grading a
-   real-money leg, every player-stat leg is left out and counted separately
-   so the ticket honestly shows partial coverage instead of pretending to
-   track legs it can't actually verify. */
+   Spread/total legs use the same grammar as the flat-ticket parser, just
+   with no price to carry. Player-stat legs are graded through gradeFBPropLeg
+   (below), which reads the same per-game ESPN box score the live-box panel
+   already fetches (FB_BOX_CACHE / fetchFBBoxscore) and matches by player
+   name within the right stat category — passing/rushing/receiving yards
+   only, since that's what this book's props are and what ESPN's box
+   actually reports. A player-stat line whose phrasing doesn't match either
+   supported shape ("175+ Passing yds" / "over 60.5 Rushing yds") is left out
+   and counted separately rather than guessed at. */
 function parseSGPTicketText(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
   const kv={};
@@ -444,7 +448,15 @@ function parseSGPTicketText(text){
     if(/^\d+\s+Leg Parlay/i.test(line))return; // the summary line — not a leg
     if(!cur){skipped.push(line+'  (no SGP header seen yet)');return;}
     let m;
-    if(/^Player stats\s*-/i.test(line)){propSkipped++;return;}
+    if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(\d+)\+\s+(Passing|Rushing|Receiving)\s+yds\s*\(Game\)\s*$/i))){
+      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]}+ ${m[3]} yds`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
+        book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:m[3].toLowerCase(),thr:+m[2],dir:'atleast'}});return;
+    }
+    if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s+(Passing|Rushing|Receiving)\s+yds\s*\(Game\)\s*$/i))){
+      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]} ${m[3]} ${m[4]} yds`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
+        book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:m[4].toLowerCase(),thr:+m[3],dir:m[2].toLowerCase()}});return;
+    }
+    if(/^Player stats\s*-/i.test(line)){propSkipped++;skipped.push(line+'  (player-stat phrasing not recognized)');return;}
     if((m=line.match(/^Spread\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(Game\)\s*$/i))){
       const ab=intakeAbbr(cur.sport,m[1]);
       if(!ab){skipped.push(line+'  (team name not recognized)');return;}
@@ -472,7 +484,7 @@ async function intakeText(text,sig,type,src){
     if(res.ok){
       const parts=[`Ticket #${res.ticketNo} ${res.replaced?'updated':'saved'}`];
       if(res.legCount)parts.push(`${res.legCount} leg${res.legCount>1?'s':''} to My Parlays`);
-      if(res.propSkipped)parts.push(`${res.propSkipped} player-prop leg${res.propSkipped>1?'s':''} left out — no NFL player-stat grading yet`);
+      if(res.propSkipped)parts.push(`${res.propSkipped} player-prop line${res.propSkipped>1?'s':''} not recognized`);
       if(res.skipped.length)parts.push(`${res.skipped.length} line${res.skipped.length>1?'s':''} unrecognized`);
       const note=parts.join(' — ');
       return{r:{[sp]:{picks:[],trends:[],consensus:[],preds:[],raw:[note],xpicks:[],unread:[]}},how:note};
@@ -6388,7 +6400,59 @@ function resolveLeg(leg,ticketDate){
 
 // Grade any leg — side, total, run line, F5, or prop — from resolved data.
 // Returns {hit:true|false|null, detail:string|null}
+/* ── NFL/NCAAF player-prop leg grading ───────────────────────────────────
+   Reads the SAME per-game ESPN box score the live-box panel already fetches
+   (FB_BOX_CACHE, populated by fetchFBBoxscore in football-engine.js) — no
+   new data source, just a new consumer of one that already existed for
+   display only. Needs the football engine loaded on THIS page to work
+   (FB_BOX_CACHE/fetchFBBoxscore/resolveLeg's football branch all live in
+   football-engine.js) — on a page without it, this says so rather than
+   silently returning "not graded yet" forever. If the box isn't cached yet
+   (nobody's opened that game's live panel this session), it kicks off the
+   same background fetch that panel would, so the NEXT render already has
+   an answer — same lazy-fetch pattern boxFor() uses for MLB. */
+function gradeFBPropLeg(leg,ticketDate){
+  if(typeof FB_BOX_CACHE==='undefined'||typeof fetchFBBoxscore!=='function')
+    return{hit:null,detail:'needs the NFL/CFB page open to grade player props',live:false};
+  const R=resolveLeg(leg,ticketDate);
+  if(!R)return{hit:null,detail:null,live:false};
+  const g=R.g||(leg.sport==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[])).find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
+  if(!g)return{hit:null,detail:'game not on this page\'s slate yet',live:!!R.live};
+  const espnId=g.espnId||g.id;
+  let box=FB_BOX_CACHE[espnId];
+  if(!box||!box.teamStats){
+    try{fetchFBBoxscore(espnId,leg.sport);}catch(e){}
+    return{hit:null,detail:'player box loading — check back shortly',live:!!R.live};
+  }
+  const catKey=leg.fbProp.stat; // 'passing'|'rushing'|'receiving'
+  const norm=n=>String(n||'').toLowerCase().replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+  const want=norm(leg.fbProp.player);
+  const wantLast=want.split(' ').pop();
+  let found=null;
+  Object.values(box.teamStats||{}).forEach(st=>{
+    if(found)return;
+    (st[catKey]||[]).forEach(row=>{
+      if(found)return;
+      const rn=norm(row.name);
+      if(rn===want)found=row;
+    });
+  });
+  if(!found)Object.values(box.teamStats||{}).forEach(st=>{ // loose fallback: last name match only
+    if(found)return;
+    (st[catKey]||[]).forEach(row=>{if(!found&&norm(row.name).split(' ').pop()===wantLast)found=row;});
+  });
+  if(!found)return{hit:null,detail:'player not in box yet',live:!!R.live};
+  const ydsRaw=found.YDS??found.yds??found.Yds??'0';
+  const yds=parseFloat(String(ydsRaw).replace(/[^0-9.\-]/g,''))||0;
+  const {dir,thr}=leg.fbProp;
+  // "175+" is inclusive-at-least; explicit over/under N.5 lines are strict
+  // and can never push (fractional). Conservative like everything else here:
+  // only decided once the game is final — yards can still change live.
+  const hit=R.live?null:(dir==='atleast'?yds>=thr:dir==='over'?yds>thr:yds<thr);
+  return{hit,detail:`${found.name} ${yds} ${catKey} yds${R.live?' so far':''}`,live:!!R.live};
+}
 function gradeLeg(leg,ticketDate){
+  if(leg.fbProp)return gradeFBPropLeg(leg,ticketDate);
   const R=resolveLeg(leg,ticketDate);
   // `live` is stamped onto EVERY return below now — this is the actual fix for
   // the elimination map showing every in-progress ticket as "not started."
