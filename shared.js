@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26p';
+const INTAKE_BUILD='intake 2026-09-26q';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -399,8 +399,86 @@ function parseMyTicketText(text){
   set(LS.locked,L);
   return{ok:true,ticketNo,legCount:legs.length,skipped,replaced:idx>=0};
 }
+/* ── SGP / combined-parlay import — same book, different export shape ──────
+   No "|" per-leg lines, no per-leg game repeat, and critically NO PRICE on
+   any leg at all. Structure is:
+     N Leg Parlay (Includes M SGPs)
+     SGP 1: FOOTBALL - NFL - Away Team v Home Team
+     Spread - Nickname +7.5 (Game)
+     Total points - Over 32.5 (Game)
+     Player stats - Player Name 175+ Passing yds (Game)
+     ...next SGP header...
+   Spread/total legs here ARE gradeable (same grammar as the flat-ticket
+   parser, just no price to carry). Player-stat legs are NOT — gradeLeg's
+   only prop-grading path is MLB batting/pitching box-score stats; there is
+   no NFL passing/rushing/receiving-yards grading anywhere in this app yet.
+   Rather than invent a fake pid/threshold match against today's PROPS board
+   (built for a different sport's stat set) and risk silently mis-grading a
+   real-money leg, every player-stat leg is left out and counted separately
+   so the ticket honestly shows partial coverage instead of pretending to
+   track legs it can't actually verify. */
+function parseSGPTicketText(text){
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const kv={};
+  for(let i=0;i<lines.length-1;i++){
+    const k=lines[i].replace(/:\s*$/,'');
+    if(/^(Ticket Number|Accepted Date|Amount|Status|To win|Type)$/i.test(k))
+      kv[k.toLowerCase().replace(/\s+/g,'')]=lines[i+1].trim();
+  }
+  const ticketNo=(kv.ticketnumber||'').replace(/\D/g,'');
+  if(!ticketNo)return{ok:false,note:'no Ticket Number found'};
+  const descIdx=lines.findIndex(l=>/^Description\s*:?$/i.test(l));
+  const body=descIdx>=0?lines.slice(descIdx+1):lines;
+  const legs=[];const skipped=[];let propSkipped=0;
+  let cur=null; // {sport, gl}
+  body.forEach(line=>{
+    const sgpHdr=line.match(/^SGP\s*\d+\s*:\s*([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs?\.?\s+(.+)$/i);
+    if(sgpHdr){
+      const sportWord=sgpHdr[2].toUpperCase();
+      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':null;
+      if(!sport||!intakeCanResolve(sport)){cur=null;skipped.push(line+'  (sport not resolvable on this page)');return;}
+      const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
+      if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
+      cur={sport,gl:awayAb+'@'+homeAb};return;
+    }
+    if(/^\d+\s+Leg Parlay/i.test(line))return; // the summary line — not a leg
+    if(!cur){skipped.push(line+'  (no SGP header seen yet)');return;}
+    let m;
+    if(/^Player stats\s*-/i.test(line)){propSkipped++;return;}
+    if((m=line.match(/^Spread\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(Game\)\s*$/i))){
+      const ab=intakeAbbr(cur.sport,m[1]);
+      if(!ab){skipped.push(line+'  (team name not recognized)');return;}
+      legs.push({game:cur.gl,pick:ab+' '+m[2],p:0.5,sport:cur.sport,gameDate:today(),price:null,book:'external'});return;
+    }
+    if((m=line.match(/^Total points\s*-\s*(Over|Under)\s+([\d.]+)\s*\(Game\)\s*$/i))){
+      legs.push({game:cur.gl,pick:m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase()+' '+m[2],p:0.5,sport:cur.sport,gameDate:today(),price:null,book:'external'});return;
+    }
+    skipped.push(line+'  (leg text not understood)');
+  });
+  if(!legs.length&&!propSkipped)return{ok:false,note:'found Ticket Number '+ticketNo+' but no legs parsed'};
+  legs.forEach((l,i)=>l.id='ext'+ticketNo+'_'+i);
+  const L=get(LS.locked,[]);
+  const idx=L.findIndex(t=>String(t.id)==='ext'+ticketNo);
+  const ticket={id:'ext'+ticketNo,date:today(),name:'Ticket #'+ticketNo,source:'mine',imported:true,
+    stake:kv.amount||null,toWin:kv.towin||null,status:kv.status||null,
+    legs,p:legs.length?legs.reduce((a,x)=>a*x.p,1):null};
+  if(legs.length){if(idx>=0)L[idx]=ticket;else L.unshift(ticket);set(LS.locked,L);}
+  return{ok:true,ticketNo,legCount:legs.length,propSkipped,skipped,replaced:idx>=0,noneTracked:!legs.length};
+}
 async function intakeText(text,sig,type,src){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;type=type||'auto';src=src||'';
+  if(/Ticket Number\s*:/i.test(text)&&/SGP\s*\d+\s*:/i.test(text)){
+    const res=parseSGPTicketText(text);
+    if(res.ok){
+      const parts=[`Ticket #${res.ticketNo} ${res.replaced?'updated':'saved'}`];
+      if(res.legCount)parts.push(`${res.legCount} leg${res.legCount>1?'s':''} to My Parlays`);
+      if(res.propSkipped)parts.push(`${res.propSkipped} player-prop leg${res.propSkipped>1?'s':''} left out — no NFL player-stat grading yet`);
+      if(res.skipped.length)parts.push(`${res.skipped.length} line${res.skipped.length>1?'s':''} unrecognized`);
+      const note=parts.join(' — ');
+      return{r:{[sp]:{picks:[],trends:[],consensus:[],preds:[],raw:[note],xpicks:[],unread:[]}},how:note};
+    }
+    return{r:{[sp]:{picks:[],trends:[],consensus:[],preds:[],raw:['SGP ticket import failed: '+res.note],xpicks:[],unread:[]}},how:res.note};
+  }
   if(/Ticket Number\s*:/i.test(text)&&/Description\s*:/i.test(text)){
     const res=parseMyTicketText(text);
     if(res.ok){
