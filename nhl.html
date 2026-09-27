@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="DESK">
 <meta name="theme-color" content="#0B0F14">
-<title>DESK — NFL</title>
+<title>DESK — NHL</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -677,8 +677,6 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
       <div class="sub" id="storageStatus" style="margin-bottom:8px"></div>
       <div class="sub" id="dataFeedStatus" style="margin-bottom:6px"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-        <button onclick="reloadCFBD()">Reload CFB SP+ ratings</button>
-        <button onclick="reloadNFLDepth()">Reload NFL depth charts</button>
         <button onclick="runFeedSelfTest()">Run data feed self-test</button>
       </div>
       <div id="feedSelfTest" class="sub" style="margin-bottom:10px"></div>
@@ -810,7 +808,7 @@ font-family:'IBM Plex Mono';font-size:11px;line-height:1.5"></div>
 </div>
 
 <script>
-window.__PAGE_SPORT__='nfl';
+window.__PAGE_SPORT__='nhl';
 /* One-time cleanup from the retired standalone nfl.html: its depth-chart cache
    used a different shape (names never resolved) and the engine trusts a cache
    for 24h. Clear it once so the first load pulls clean rosters. */
@@ -821,7 +819,7 @@ try{if(!localStorage.getItem('d4.migr.nflsplit')){
 <script>
 /* ── DEPLOYMENT GUARD ──────────────────────────────────────────────────────
    This page is only a shell — all logic lives in shared.js (plus
-   football-engine.js on the football pages) in the SAME folder. If those
+   nhl-engine.js on this page) in the SAME folder. If those
    aren't uploaded next to it, or the page is opened as a local file rather
    than served from the site, the HTML still renders (you'd see the nav and
    empty Settings fields) but nothing works and no saved keys appear. That
@@ -833,21 +831,21 @@ window.addEventListener('DOMContentLoaded',function(){
     var isFile=(location.protocol==='file:');
     var msg=isFile
       ? 'This page was opened as a local file. Serve it from your site instead \u2014 the same address as your other pages \u2014 so it can load its code and share your saved keys, tickets and history across sports.'
-      : 'The app code did not load. Upload shared.js and football-engine.js into the same folder as this page, then reload.';
+      : 'The app code did not load. Upload shared.js and nhl-engine.js into the same folder as this page, then reload.';
     document.body.innerHTML=
       '<div style="font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh;padding:28px 20px;line-height:1.6">'
       +'<div style="font-size:19px;font-weight:800;color:#f0563c;margin-bottom:12px">App code did not load</div>'
       +'<div style="font-size:15px;max-width:640px">'+msg+'</div>'
       +'<div style="margin-top:18px;font-family:monospace;font-size:13px;color:#8b949e;white-space:pre-line">'
-      +'Required in this folder:\n  shared.js\n  football-engine.js</div></div>';
+      +'Required in this folder:\n  shared.js\n  nhl-engine.js</div></div>';
   },1200);
 });
 </script>
 <script src="shared.js?v=20260926w"></script>
-<script src="football-engine.js?v=20260926w"></script>
+<script src="nhl-engine.js?v=20260926w"></script>
 <script>
 (function(){
-  ACTIVE_SPORT='nfl';
+  ACTIVE_SPORT='nhl';
   try{localStorage.setItem('d4.activeSport',ACTIVE_SPORT)}catch(e){}
   document.querySelectorAll('[id^=\"sportBtn-\"]').forEach(function(btn){
     var s=btn.id.replace('sportBtn-','');

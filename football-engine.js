@@ -139,14 +139,7 @@ function nflExtFor(gameKey){return getNFLExt().filter(x=>x.game===gameKey);}
 
 // ── NFL game card ─────────────────────────────────────────────────────────────
 
-function nflSlipToggle(gid,label,price){
-  const g=NFL_GAMES.find(x=>x.id===gid);if(!g)return;
-  const leg={gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport:'nfl',
-    date:today(),p:Math.abs(price)>=100?Math.min(.95,Math.max(.05,100/(100+Math.abs(price)))):0.5};
-  SLIP.push(leg);
-  set(LS.slip,SLIP);
-  renderSlip();
-}
+function nflSlipToggle(gid,label,price){sportSlipToggle('nfl',gid,label,price);}
 
 // ── NFL book odds upload (same pipeline as MLB) ───────────────────────────────
 function saveNFLBookOdds(picks,el){
@@ -3945,12 +3938,7 @@ function ncaafTogglePanel(which,gid,btn){
   if(!wasOn){p.classList.add('on');btn.classList.add('on');}
 }
 
-function ncaafSlipToggle(gid,label,price){
-  const g=NCAAF_GAMES.find(x=>x.id===gid);if(!g)return;
-  const leg={gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport:'ncaaf',
-    date:today(),p:Math.abs(price)>=100?Math.min(.95,Math.max(.05,100/(100+Math.abs(price)))):0.5};
-  SLIP.push(leg);set(LS.slip,SLIP);renderSlip();
-}
+function ncaafSlipToggle(gid,label,price){sportSlipToggle('ncaaf',gid,label,price);}
 
 // ── NCAAF Trend panel ────────────────────────────────────────────────────────
 function ncaafTrendPanel(g,s){

@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26u';
+const INTAKE_BUILD='intake 2026-09-26w';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -75,13 +75,14 @@ function intakeAbbr(sport,raw){
   if(sport==='nfl')return intakeNFLAbbr(t);
   if(sport==='mlb'){const a=typeof abbr==='function'?abbr(t):null;return a||(/^[A-Z]{2,4}$/.test(t.toUpperCase())?t.toUpperCase():null);}
   if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;}return null;}
+  if(sport==='nhl'){return typeof nhlAbbrFor==='function'?nhlAbbrFor(t):null;}
   return null;
 }
 /* A sport's team names only resolve where that sport's engine is loaded. */
 /* A section is filed here only if this page has that sport's parser AND name
    resolver; otherwise the whole section (odds + extras) waits for its page, so
    nothing is half-saved. MLB's parser is in shared.js; football's is not. */
-const intakeCanResolve=sp=>sp==='mlb'||(sp==='nfl'&&typeof parseNFLSlateText==='function')||
+const intakeCanResolve=sp=>sp==='mlb'||(sp==='nhl'&&typeof parseNHLSlateText==='function'&&typeof nhlAbbrFor==='function')||(sp==='nfl'&&typeof parseNFLSlateText==='function')||
   (sp==='ncaaf'&&typeof parseNCAAFSlateText==='function'&&typeof ncaafAbbrFor==='function');
 function intakeGuessSport(text,fallback){
   const l=text.toLowerCase();let nfl=0,mlb=0;
@@ -90,6 +91,11 @@ function intakeGuessSport(text,fallback){
    'twins','tigers','royals','white sox','rangers','angels','athletics','giants ','brewers','cardinals ','reds','pirates','marlins','nationals','rockies','diamondbacks']
    .forEach(n=>{if(l.includes(n))mlb++;});
   if(/\b(run ?line|first 5|f5|innings?)\b/.test(l))mlb+=3;
+  let nhl=0;['bruins','sabres','flames','hurricanes','blackhawks','avalanche','blue jackets','red wings','oilers','canadiens','predators',
+   'devils','islanders','senators','flyers','penguins','sharks','kraken','maple leafs','lightning','canucks','golden knights','capitals',
+   'mammoth','ducks','wild ','puck ?line','1st period','goalie'].forEach(n=>{if(new RegExp('\\b'+n).test(l))nhl++;});
+  if(/\b(puck ?line|p1ou|power ?play|goalie|shots on goal)\b/.test(l))nhl+=3;
+  if(nhl>=2&&nhl>=nfl&&nhl>=mlb)return'nhl';
   if(/\b(state|university|tech|a&m)\b/.test(l)&&nfl<2&&mlb<2)return'ncaaf';
   if(nfl>=2&&nfl>=mlb)return'nfl';if(mlb>=2)return'mlb';
   return fallback||window.__PAGE_SPORT__||ACTIVE_SPORT||'mlb';
@@ -174,8 +180,8 @@ function intakeParseGrammar(text,fallbackSport){
   const sections=[];let cur=null;
   stripBOM(text).split('\n').forEach(line=>{
     const l=line.replace(/^[\s\-*•>]+/,'').trim();
-    const hs=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB)(?:\s+(?:ODDS|LINES|BOARD|SLATE))?\s*$/i);
-    if(hs){cur={sport:/^(NCAAF|CFB|COLLEGE)/i.test(hs[1])?'ncaaf':hs[1].toLowerCase(),lines:[]};sections.push(cur);return;}
+    const hs=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB|NHL|HOCKEY)(?:\s+(?:ODDS|LINES|BOARD|SLATE))?\s*$/i);
+    if(hs){cur={sport:/^(NCAAF|CFB|COLLEGE)/i.test(hs[1])?'ncaaf':/^(NHL|HOCKEY)/i.test(hs[1])?'nhl':hs[1].toLowerCase(),lines:[]};sections.push(cur);return;}
     if(!cur){cur={sport:null,lines:[]};sections.push(cur);}
     cur.lines.push(l);
   });
@@ -205,7 +211,7 @@ function intakeParseGrammar(text,fallbackSport){
     }
     // 1) odds via the sport's own parser, with the extra lines stripped out
     const oddsText=sec.lines.filter(l=>!INTAKE_EXTRA.test(l)).join('\n');
-    if(/^(ML|SPREAD|RL|OU|H1\w*|Q1\w*|F5\s*\w+):/im.test(oddsText)){
+    if(/^(ML|SPREAD|RL|PL|OU|H1\w*|Q1\w*|P1\w*|F5\s*\w+|PROP):/im.test(oddsText)){
       try{
         const hdr=sport==='ncaaf'?'NCAAF':sport.toUpperCase();
         const r=parseSlateText(hdr+'\n'+oddsText);
@@ -358,7 +364,7 @@ function parseMyTicketText(text){
     const hm=head.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs\.?\s+(.+?)\s*-\s*/i);
     if(!hm){skipped.push(line);return;}
     const sportWord=hm[2].toUpperCase();
-    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':null;
+    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
     if(!sport||!intakeCanResolve(sport)){skipped.push(line+'  (sport not resolvable on this page)');return;}
     const awayAb=intakeAbbr(sport,hm[3]),homeAb=intakeAbbr(sport,hm[4]);
     if(!awayAb||!homeAb){skipped.push(line+'  (team name not recognized)');return;}
@@ -369,7 +375,7 @@ function parseMyTicketText(text){
     // guessed at. Stripping only "for GAME" and leaving everything else on
     // the end of body (as the first version of this did) is exactly why the
     // two 1st-half legs here failed to match any pattern and got dropped.
-    const pm=legText.match(/\s+for\s+(GAME|1ST HALF)\s*$/i);
+    const pm=legText.match(/\s+for\s+(GAME|1ST HALF|1ST PERIOD)\s*$/i);
     const period=pm?pm[1].toUpperCase():null;
     let body=legText.replace(/^\d+\s+/,'').replace(/\s+for\s+.+$/i,'').replace(/½/g,'.5').trim();
     // "buying N" (bought points, e.g. buying 2 on a total) sits between the
@@ -377,16 +383,16 @@ function parseMyTicketText(text){
     // line itself, so this is just noise text to drop, not a math adjustment.
     body=body.replace(/\s+buying\s+[\d.]+\s*$/i,'').trim();
     if(!pm){skipped.push(line+'  (period not GAME or 1ST HALF — not supported yet)');return;}
-    const h1=period==='1ST HALF';
+    const h1=period==='1ST HALF',p1=period==='1ST PERIOD';
     let pick=null,price=null;
     let m=body.match(/^(.+?)\/(.+?)\s+(over|under)\s+([\d.]+)\s+([+-]\d+)$/i);
-    if(m){pick=(h1?'1H ':'')+(/over/i.test(m[3])?'Over ':'Under ')+m[4];price=+m[5];}
+    if(m){pick=(h1?'1H ':p1?'P1 ':'')+(/over/i.test(m[3])?'Over ':'Under ')+m[4];price=+m[5];}
     else if((m=body.match(/^(.+?)\s+([+-]\d+(?:\.\d+)?)\s+([+-]\d+)$/))){
       const ab=intakeAbbr(sport,m[1]);
-      if(ab){pick=ab+(h1?' 1H ':' ')+(/^[+-]/.test(m[2])?m[2]:'+'+m[2]);price=+m[3];}
+      if(ab){pick=ab+(h1?' 1H ':p1?' P1 ':' ')+(/^[+-]/.test(m[2])?m[2]:'+'+m[2]);price=+m[3];}
     }else if(!h1&&(m=body.match(/^(.+?)\s+([+-]\d+)$/))){
       const ab=intakeAbbr(sport,m[1]);
-      if(ab){pick=ab+' ML';price=+m[2];}
+      if(ab){pick=ab+(p1?' P1 ML':' ML');price=+m[2];}
     }
     if(!pick){skipped.push(line+(h1?'  (1st-half moneyline not supported yet)':'  (leg text not understood)'));return;}
     const dm=whenText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -439,7 +445,7 @@ function parseSGPTicketText(text){
     const sgpHdr=line.match(/^SGP\s*\d+\s*:\s*([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs?\.?\s+(.+)$/i);
     if(sgpHdr){
       const sportWord=sgpHdr[2].toUpperCase();
-      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':null;
+      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
       if(!sport||!intakeCanResolve(sport)){cur=null;skipped.push(line+'  (sport not resolvable on this page)');return;}
       const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
@@ -448,6 +454,21 @@ function parseSGPTicketText(text){
     if(/^\d+\s+Leg Parlay/i.test(line))return; // the summary line — not a leg
     if(!cur){skipped.push(line+'  (no SGP header seen yet)');return;}
     let m;
+    if(cur.sport==='nhl'){
+      const HS={goals:'goals',goal:'goals',assists:'assists',points:'points','shots on goal':'shots',shots:'shots',saves:'saves'};
+      let hm=line.match(/^Player stats\s*-\s*(.+?)\s+(\d+)\+\s+(Goals?|Assists|Points|Shots on Goal|Shots|Saves)\s*\(Game\)\s*$/i);
+      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} ${hm[2]}+ ${hm[3]}`,p:0.5,sport:'nhl',gameDate:today(),price:null,book:'external',isProp:1,
+        nhlProp:{player:hm[1].trim(),stat:HS[hm[3].toLowerCase()],thr:+hm[2],dir:'atleast'}});return;}
+      hm=line.match(/^Player stats\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s+(Goals?|Assists|Points|Shots on Goal|Shots|Saves)\s*\(Game\)\s*$/i);
+      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} ${hm[2]} ${hm[3]} ${hm[4]}`,p:0.5,sport:'nhl',gameDate:today(),price:null,book:'external',isProp:1,
+        nhlProp:{player:hm[1].trim(),stat:HS[hm[4].toLowerCase()],thr:+hm[3],dir:hm[2].toLowerCase()}});return;}
+      hm=line.match(/^Anytime goal ?scorer\s*-\s*(.+?)\s*\(Game\)\s*$/i);
+      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} anytime goal`,p:0.5,sport:'nhl',gameDate:today(),price:null,book:'external',isProp:1,
+        nhlProp:{player:hm[1].trim(),stat:'goals',thr:1,dir:'atleast'}});return;}
+      hm=line.match(/^(?:Moneyline|Money line|Winner)\s*-\s*(.+?)\s*\(Game\)\s*$/i);
+      if(hm){const ab=intakeAbbr('nhl',hm[1]);if(ab){legs.push({game:cur.gl,pick:ab+' ML',p:0.5,sport:'nhl',gameDate:today(),price:null,book:'external'});return;}}
+      line=line.replace(/^Puck ?line\s*-/i,'Spread -').replace(/^Total goals\s*-/i,'Total points -');
+    }
     if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(\d+)\+\s+(Passing|Rushing|Receiving)\s+yds\s*\(Game\)\s*$/i))){
       legs.push({game:cur.gl,pick:`${m[1]} ${m[2]}+ ${m[3]} yds`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
         book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:m[3].toLowerCase(),thr:+m[2],dir:'atleast'}});return;
@@ -607,7 +628,7 @@ function intakePreview(el,st){
   const log=st.map(x=>`<div class="sub mono" style="font-size:10px">${x.s==='ok'?'✅':'❌'} ${x.name}${x.note?' — '+x.note:''}</div>`).join('');
   if(!sports.length){el.innerHTML=`<div class="tkt"><h3>Nothing usable found</h3>${log}
     <div class="sub" style="margin-top:6px">Tip: select the board on the site, copy, and paste it here — that path never touches Gemini.</div></div>`;return;}
-  const lab={nfl:'🏈 NFL',ncaaf:'🏟 CFB',mlb:'⚾ MLB'};
+  const lab={nfl:'🏈 NFL',ncaaf:'🏟 CFB',mlb:'⚾ MLB',nhl:'🏒 NHL'};
   const games=b=>{const m={};b.picks.forEach(p=>{const k=(p.away||'')+'@'+(p.home||'');(m[k]=m[k]||new Set()).add(p.market)});
     [['preds','PRED'],['consensus','CONS'],['trends','TREND']].forEach(([f,t])=>b[f].forEach(x=>(m[x.game]=m[x.game]||new Set()).add(t)));return m;};
   el.innerHTML=`<div class="tkt hi"><h3>Check it, then save</h3>${sports.map(sp=>{const b=r[sp];const g=games(b);
@@ -645,6 +666,7 @@ function intakeSave(){
   if(typeof renderNFL==='function'&&ACTIVE_SPORT==='nfl')renderNFL();
   if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf'){NCAAF_SIMS={};renderNCAAF();}
   if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
+  if(typeof renderNHL==='function'&&ACTIVE_SPORT==='nhl')renderNHL();
 }
 /* CFB team names can only be resolved where the CFB engine lives. Anything
    uploaded elsewhere waits here and is filed the next time cfb.html opens. */
@@ -683,9 +705,11 @@ const BRAIN_KEY='d4.brain';
 const BR_CFG={
   nfl:  {sd0:13.5,sdK:0.00,blow:17,close:7,prior:{sim:15,market:11.5,pred:13},trTot:6,trTotCap:2.5,trMar:8,trMarCap:2,money:0.75,floor:3,unit:'pts',label:'blowout 17+'},
   ncaaf:{sd0:14.5,sdK:0.22,blow:21,close:8,prior:{sim:17,market:13.5,pred:15},trTot:6,trTotCap:2.5,trMar:8,trMarCap:2,money:0.75,floor:3,unit:'pts',label:'blowout 21+'},
+  nhl:  {sd0:2.35,sdK:0.05,blow:3,close:1,prior:{sim:2.4,market:2.2,pred:2.5},trTot:0.5,trTotCap:0.3,trMar:0.6,trMarCap:0.25,money:0.12,floor:0.8,unit:'goals',label:'3+ goal win'},
   mlb:  {sd0:4.3,sdK:0.08,blow:5,close:1,prior:{sim:4.5,market:4.2,pred:4.6},trTot:1.2,trTotCap:0.6,trMar:1.5,trMarCap:0.5,money:0.2,floor:0.5,unit:'runs',label:'5+ run win'}};
 /* Everything sport-specific in one place — the Judge itself never branches. */
 function brainAdapter(sport){
+  if(sport==='nhl'&&typeof nhlBrainAdapter==='function')return nhlBrainAdapter();
   if(sport==='mlb')return{
     key:g=>g.away.abbr+'@'+g.home.abbr,
     lines:g=>typeof bookLinesFor==='function'?bookLinesFor(g.id):[],
@@ -786,14 +810,14 @@ function brainJudge(g,s,sport){
   const P=x=>brainNorm((x-mu)/sd);const half=sport==='mlb'?0.5:0.5;
   const pHome=1-P(0),close=P(C.close+half)-P(-C.close-half);
   const blowH=1-P(C.blow-half),blowA=P(-C.blow+half);
-  let fa=AD.snap(A),fh=AD.snap(H);if(fa===fh){if(mu>=0)fh=AD.snap(fh+(sport==='mlb'?1:3));else fa=AD.snap(fa+(sport==='mlb'?1:3));}
-  const disputes=[],dM=sport==='mlb'?1:3,dT=sport==='mlb'?1.5:4;
+  let fa=AD.snap(A),fh=AD.snap(H);if(fa===fh){if(mu>=0)fh=AD.snap(fh+(sport==='mlb'||sport==='nhl'?1:3));else fa=AD.snap(fa+(sport==='mlb'||sport==='nhl'?1:3));}
+  const disputes=[],dM=sport==='mlb'||sport==='nhl'?(sport==='nhl'?0.75:1):3,dT=sport==='mlb'?1.5:sport==='nhl'?1:4;
   for(let i=0;i<W.length;i++)for(let j=i+1;j<W.length;j++){
     const dm=(W[i].h-W[i].a)-(W[j].h-W[j].a),dt=(W[i].h+W[i].a)-(W[j].h+W[j].a);
     if(Math.abs(dm)>=dM||Math.abs(dt)>=dT){const trust=W[i].wt.rmse<W[j].wt.rmse?W[i]:W[j];
       disputes.push({x:W[i].src,y:W[j].src,dm:+dm.toFixed(1),dt:+dt.toFixed(1),lean:trust.src});}}
   const bias=st=>{const x=(b.box||{})[st];return x&&x.n>=3?Math.max(0.8,Math.min(1.2,x.ratio)):1;};
-  return{a:+A.toFixed(sport==='mlb'?2:1),h:+H.toFixed(sport==='mlb'?2:1),final:[fa,fh],sd:+sd.toFixed(1),pHome,close,blowH,blowA,
+  return{a:+A.toFixed(sport==='mlb'||sport==='nhl'?2:1),h:+H.toFixed(sport==='mlb'||sport==='nhl'?2:1),final:[fa,fh],sd:+sd.toFixed(1),pHome,close,blowH,blowA,
     witnesses:W,mem:{a:+memA.toFixed(1),h:+memH.toFixed(1)},trend:tr,tU,money:mo,mU,disputes,
     box:AD.box(A,H,bias),boxRaw:AD.box(A,H,()=>1)};
 }
@@ -883,7 +907,7 @@ function brainBlock(g,s,sport){
   return`<div style="margin-top:4px;padding:6px 8px;border-radius:8px;background:var(--panel2);font-family:'IBM Plex Mono';font-size:10px;line-height:1.5">
     <div><b style="color:var(--gold)">JUDGE</b> ${aN} <b>${J.final[0]}</b> – <b>${J.final[1]}</b> ${hN}
       <span style="color:var(--mute)">(${J.a}–${J.h})</span></div>
-    <div style="color:var(--chalk-dim)">${sport==='mlb'?'1-run game':'close ≤'+C.close}: ${pct(J.close)} · ${fav} ${C.label}: ${pct(blow)} · upset: ${pct(upset)}</div>
+    <div style="color:var(--chalk-dim)">${sport==='mlb'?'1-run game':sport==='nhl'?'1-goal game':'close ≤'+C.close}: ${pct(J.close)} · ${fav} ${C.label}: ${pct(blow)} · upset: ${pct(upset)}</div>
     <details><summary style="color:var(--mute);cursor:pointer">why</summary>
       ${J.witnesses.map(w=>`<div>${lab[w.src]}: ${aN} ${w.a.toFixed(dp)}–${w.h.toFixed(dp)} ${hN} · weight ${pct(w.share)} <span style="color:var(--mute)">(±${w.wt.rmse.toFixed(1)} over ${w.wt.n} games)</span></div>`).join('')}
       ${J.disputes.map(d=>`<div style="color:var(--gold)">⚔ ${lab[d.x]} vs ${lab[d.y]}: ${d.dm>0?'+':''}${d.dm} margin, ${d.dt>0?'+':''}${d.dt} total → trusting ${lab[d.lean]} (better record)</div>`).join('')}
@@ -925,7 +949,7 @@ function brainReport(sport){
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTEL_KEY='d4.intel';
 function intelSlate(sp){
-  const G=sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);
+  const G=sportGames(sp);
   return(G||[]).map(g=>({g,a:g.away.abbr,h:g.home.abbr,names:[g.away,g.home].map(t=>{const n=String(t.name||'').toLowerCase();
     const w=n.split(/\s+/).filter(Boolean);return[t.abbr.toLowerCase(),n,w[w.length-1]||'',w.slice(-2).join(' ')].filter(x=>x&&x.length>=2);})}));
 }
@@ -1069,12 +1093,12 @@ function intelReport(sp){
 const VOICES_KEY='d4.voices';
 const _vProfit=p=>{p=+p;return p>0?p/100:100/Math.abs(p)};
 function voicesLines(sp,g){const gl=g.away.abbr+'@'+g.home.abbr;let L=[];
-  try{L=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):(typeof bookLinesFor==='function'?bookLinesFor(g.id):[])}catch(e){}
+  try{L=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):sp==='nhl'?(typeof nhlBookLinesFor==='function'?nhlBookLinesFor(gl):[]):(typeof bookLinesFor==='function'?bookLinesFor(g.id):[])}catch(e){}
   const f=(m,s)=>L.find(x=>(x.market===m||(m==='spread'&&x.market==='runline'))&&x.side===s);
   return{mlH:f('moneyline','home'),mlA:f('moneyline','away'),spH:f('spread','home'),spA:f('spread','away'),ov:f('total','over'),un:f('total','under')};}
 function voicesLog(sp){
-  const G=sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);
-  const S=sp==='nfl'?(typeof NFL_SIMS!=='undefined'?NFL_SIMS:{}):sp==='ncaaf'?(typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{}):(typeof SIMS!=='undefined'?SIMS:{});
+  const G=sportGames(sp);
+  const S=sportSims(sp);
   if(!G||!G.length)return 0;const V=get(VOICES_KEY,[]);const idx={};V.forEach((x,i)=>idx[x.id]=i);const d=today();let n=0;
   G.forEach(g=>{
     const s=S[g.id];if(!s||s.aw==null)return;const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');
@@ -1176,7 +1200,7 @@ function voicesReport(sp){
 let PRESET_ALLSPORTS=(()=>{try{return localStorage.getItem('d4.presetAllSports')==='1'}catch(e){return false}})();
 function setPresetAllSports(v){PRESET_ALLSPORTS=!!v;try{localStorage.setItem('d4.presetAllSports',v?'1':'0')}catch(e){}renderTickets();}
 function presetPublish(sp,legs){try{
-  const G=sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);
+  const G=sportGames(sp);
   const t=gl=>{const g=G.find(z=>z.away.abbr+'@'+z.home.abbr===gl);return g&&g.time?new Date(g.time).getTime():null;};
   const out=legs.filter(l=>(l.sport||'mlb')===sp).map(l=>({...l,sport:sp,start:l.start||t(l.game)}));
   set('d4.xpool.'+sp,{ts:Date.now(),legs:out.slice(0,600)});}catch(e){}}
@@ -1200,6 +1224,12 @@ async function pullLiveOdds(){
       if(typeof fetchNFLLiveOdds!=='function')throw new Error('NFL odds live on nfl.html');
       await fetchNFLLiveOdds();
       el.innerHTML='<div class="tkt hi"><h3>NFL odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
+    }else if(ACTIVE_SPORT==='nhl'){
+      el.innerHTML='<div class="empty">Pulling NHL odds…</div>';
+      if(typeof fetchNHLLiveOdds!=='function')throw new Error('NHL odds live on nhl.html');
+      const n=await fetchNHLLiveOdds();
+      el.innerHTML='<div class="tkt hi"><h3>NHL odds updated</h3><div class="sub">'+(n||0)+' lines from The Odds API. Your own uploaded lines are never overwritten.</div></div>';
+      if(typeof renderNHL==='function')renderNHL();
     }else if(ACTIVE_SPORT==='ncaaf'){
       el.innerHTML='<div class="empty">Pulling CFB odds…</div>';
       if(typeof fetchNCAAFLiveOdds!=='function')throw new Error('CFB odds live on cfb.html');
@@ -1260,7 +1290,36 @@ async function fetchMLBLiveOdds(){
 }
 
 /* Which HTML page owns each sport's engine, for the cross-page nav below. */
-const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html'};
+/* One place that answers "which slate / which sims belong to sport X".
+   Shared features used to inline sportGames(sp)
+   — any new sport silently fell through to the MLB slate. */
+function sportGames(sp){return sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[])
+  :sp==='nhl'?(typeof NHL_GAMES!=='undefined'?NHL_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);}
+function sportSims(sp){return sp==='nfl'?(typeof NFL_SIMS!=='undefined'?NFL_SIMS:{}):sp==='ncaaf'?(typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{})
+  :sp==='nhl'?(typeof NHL_SIMS!=='undefined'?NHL_SIMS:{}):(typeof SIMS!=='undefined'?SIMS:{});}
+function sportLinesFor(sp,g){const k=g.away.abbr+'@'+g.home.abbr;
+  return sp==='nfl'?nflBookLinesFor(k):sp==='ncaaf'?ncaafBookLinesFor(k):sp==='nhl'?nhlBookLinesFor(k):bookLinesFor(g.id);}
+/* One place that repaints the active sport's board. render() is the MLB
+   board; calling it on a football/hockey page (clearSlip, tog, etc. do)
+   used to overwrite that page's slate with "No games today." */
+function renderActiveBoard(){const ps=window.__PAGE_SPORT__||ACTIVE_SPORT;
+  if(ps==='nfl'&&typeof renderNFL==='function')return renderNFL();
+  if(ps==='ncaaf'&&typeof renderNCAAF==='function')return renderNCAAF();
+  if(ps==='nhl'&&typeof renderNHL==='function')return renderNHL();
+  if(typeof render==='function')return render();}
+/* Slip toggle shared by every non-MLB board. The football versions pushed a
+   leg with no id (so the tile never showed selected and a second tap added a
+   duplicate) and then called renderSlip(), which does not exist anywhere —
+   so every football tile tap threw after saving. */
+function sportSlipToggle(sport,gid,label,price,extra){
+  const g=sportGames(sport).find(x=>x.id===gid);if(!g)return;
+  const id=gid+'|'+label;const i=SLIP.findIndex(x=>x.id===id);
+  if(i>=0)SLIP.splice(i,1);
+  else SLIP.push(Object.assign({id,gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport,date:today(),
+    p:price!=null&&Math.abs(price)>=100?Math.min(.95,Math.max(.05,price>0?100/(price+100):-price/(-price+100))):0.5},extra||{}));
+  set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();
+}
+const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html'};
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -1273,6 +1332,7 @@ function doSportSwitch(sport){
      there instead of trying to render code that was never loaded. */
   const engineHere=sport==='nfl'?typeof renderNFL==='function'
                   :sport==='ncaaf'?typeof renderNCAAF==='function'
+                  :sport==='nhl'?typeof renderNHL==='function'
                   :typeof render==='function';
   /* Each sport owns its page. A football page has BOTH football engines
      loaded, so the engine-present check alone let CFB render inside nfl.html
@@ -1291,7 +1351,7 @@ function doSportSwitch(sport){
     return;
   }
   ACTIVE_SPORT=sport;
-  ['mlb','nfl','ncaaf'].forEach(s=>{
+  ['mlb','nfl','ncaaf','nhl'].forEach(s=>{
     const btn=document.getElementById('sportBtn-'+s);
     if(!btn)return;
     btn.style.background=s===sport?'var(--gold)':'#1c1c1c';
@@ -1303,6 +1363,8 @@ function doSportSwitch(sport){
   }else if(sport==='ncaaf'){
     if(typeof renderNCAAF==='function')renderNCAAF();
     if(typeof ncaafOnActivate==='function')ncaafOnActivate();
+  }else if(sport==='nhl'){
+    if(typeof renderNHL==='function')renderNHL();
   }else{
     if(typeof render==='function')render();
   }
@@ -2217,6 +2279,7 @@ async function analyzeBookShots(){
 function saveExtBySport(sport,picks,trends,consensus,el){
   if(sport==='ncaaf'&&typeof saveNCAAFExtData==='function')return saveNCAAFExtData(picks,trends,consensus,el);
   if(sport==='nfl'&&typeof saveNFLExtData==='function')return saveNFLExtData(picks,trends,consensus,el);
+  if(sport==='nhl'&&typeof saveNHLExtData==='function')return saveNHLExtData(picks,trends,consensus,el);
   window._pendingExt={picks,trends,consensus};
   if(el&&typeof renderExtResults==='function')renderExtResults(el,picks,trends,consensus);
 }
@@ -2264,7 +2327,8 @@ function saveBookOdds(picks,el,fileSport){
     const counts=[];
     sports.forEach(sp=>{
       const rows=groups[sp];
-      if(sp==='nfl'){
+      if(sp==='nhl'){if(typeof saveNHLBookOdds==='function')saveNHLBookOdds(rows,null);}
+      else if(sp==='nfl'){
         if(typeof saveNFLBookOdds==='function')saveNFLBookOdds(rows,null);
         else saveFootballOddsToStorage('nfl',rows);
       }else if(sp==='ncaaf'){
@@ -2281,6 +2345,7 @@ function saveBookOdds(picks,el,fileSport){
     return;
   }
   const sport=sports[0]||fileSport||ACTIVE_SPORT;
+  if(sport==='nhl'){if(typeof saveNHLBookOdds==='function')saveNHLBookOdds(picks,el);return;}
   if(sport==='nfl'){
     if(typeof saveNFLBookOdds==='function')saveNFLBookOdds(picks,el);
     else{const n=saveFootballOddsToStorage('nfl',picks);
@@ -2456,6 +2521,7 @@ function tab(n,b){
   if(b)b.classList.add('on');
   if(n==='games'&&ACTIVE_SPORT==='nfl')renderNFL();
   if(n==='games'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
+  if(n==='games'&&ACTIVE_SPORT==='nhl'&&typeof renderNHL==='function')renderNHL();
   if(n==='tickets')renderTickets();
   if(n==='grades')renderGrades(true);
   if(n==='recap')renderRecap();
@@ -5308,6 +5374,10 @@ async function diagnoseRundown(){
   }
 }
 async function refreshEverything(){
+  if(ACTIVE_SPORT==='nhl'){
+    const el=document.getElementById('slate');if(el)el.innerHTML='<div class="empty">Refreshing NHL data…</div>';
+    if(typeof nhlBoot==='function')await nhlBoot(true);return;
+  }
   // NFL sport active — run NFL refresh instead
   if(ACTIVE_SPORT==='nfl'){
     const el=document.getElementById('slate');
@@ -5552,6 +5622,7 @@ function lineupSig(g){
   return a+'|'+h+'|'+(g.away.p?g.away.p.id:'?')+'|'+(g.home.p?g.home.p.id:'?');
 }
 function render(){
+  {const ps=window.__PAGE_SPORT__;if(ps&&ps!=='mlb')return renderActiveBoard();}
   try{if(typeof logSystemPicks==='function'&&typeof GAMES!=='undefined'&&GAMES.length&&(window.__PAGE_SPORT__||'mlb')==='mlb')setTimeout(()=>{try{logSystemPicks('mlb');voicesLog('mlb')}catch(e){}},0)}catch(e){}
   // hide football banners when the MLB board is active
   const _nw=document.getElementById('nflPowerWarn');if(_nw)_nw.style.display='none';
@@ -6324,35 +6395,34 @@ function resolveLeg(leg,ticketDate){
      against ITS OWN schedule. Previously every leg was looked up in the MLB
      GAMES array only — a football leg matched nothing, returned null forever,
      and produced a ticket that could never be graded either way. */
-  if(leg.sport==='nfl'||leg.sport==='ncaaf'){
+  if(leg.sport==='nfl'||leg.sport==='ncaaf'||leg.sport==='nhl'){
     /* Prefer the live array when the football engine is loaded (gives live
        in-progress scores), but fall through to the SHARED finals store when
        it isn't — so a football leg on a locked ticket grades correctly from
        ANY page, including mlb.html where NFL_GAMES/NCAAF_GAMES don't exist.
        Before this, a football leg simply never graded off the football page. */
-    const arr=leg.sport==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[])
-                               :(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]);
+    const arr=sportGames(leg.sport);
     let fg=null;
     if(leg.gid)fg=arr.find(z=>z.id===leg.gid);
     if(!fg)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
     if(fg){
       const done=fg.status==='Final'||fg.abstract==='Final'||fg.abstract==='post';
       if(done&&fg.awayScore!=null)
-        return{a:+fg.awayScore,h:+fg.homeScore,h1a:fg.h1a,h1h:fg.h1h,gid:fg.id,live:false,source:'memory',g:fg};
+        return{a:+fg.awayScore,h:+fg.homeScore,h1a:fg.h1a,h1h:fg.h1h,p1a:fg.p1a,p1h:fg.p1h,gid:fg.id,live:false,source:'memory',g:fg};
       const live=fg.status==='InProgress'||fg.abstract==='Live'||fg.abstract==='in';
       if(live&&fg.awayScore!=null)
-        return{a:+fg.awayScore,h:+fg.homeScore,gid:fg.id,live:true,source:'memory',g:fg,completed:null};
+        return{a:+fg.awayScore,h:+fg.homeScore,p1a:fg.p1a,p1h:fg.p1h,period:fg.period,gid:fg.id,live:true,source:'memory',g:fg,completed:null};
       // fall through to shared store rather than returning null — the shared
       // store may already hold this game's final from a prior football-page visit
     }
     // shared cross-sport finals store — visible on every page
     const shared=allFinals()[finalsKey(leg.sport,leg.game)];
     if(shared&&shared.a!=null)
-      return{a:+shared.a,h:+shared.h,h1a:shared.h1a,h1h:shared.h1h,gid:leg.gid,live:false,source:'shared'};
+      return{a:+shared.a,h:+shared.h,h1a:shared.h1a,h1h:shared.h1h,p1a:shared.p1a,p1h:shared.p1h,gid:leg.gid,live:false,source:'shared'};
     /* Finished football games also live in the sport archive, in two shapes:
        date → [rows] (finals mirror) and week → {rows,finals} (snapshots).
        Treating a week object as a list threw here instead of finding the score. */
-    const farc=get(leg.sport==='nfl'?LS.nflarc:'d4.ncaafarc',{});
+    const farc=get(leg.sport==='nfl'?LS.nflarc:leg.sport==='nhl'?'d4.nhlarc':'d4.ncaafarc',{});
     for(const d of Object.keys(farc)){
       const E=farc[d];
       if(Array.isArray(E)){const row=E.find(r=>r.game===leg.game||r.gid===leg.gid);
@@ -6467,6 +6537,19 @@ function gradeFBPropLeg(leg,ticketDate){
 }
 function gradeLeg(leg,ticketDate){
   if(leg.fbProp)return gradeFBPropLeg(leg,ticketDate);
+  if(leg.nhlProp){if(typeof gradeNHLPropLeg==='function')return gradeNHLPropLeg(leg,ticketDate);
+    return{hit:null,detail:'needs the NHL page open to grade player props',live:false};}
+  /* 1st-period legs (hockey): graded off the period-1 score only. Decided the
+     moment period 1 is in the books (period>=2 or final), not at the final. */
+  {const pm=String(leg.pick||'').match(/^(?:P1\s+(Over|Under)\s+([\d.]+)|([A-Z]{2,4})\s+P1\s+(ML|[+-][\d.]+))$/i);
+   if(pm){const R=resolveLeg(leg,ticketDate);if(!R)return{hit:null,detail:null,live:false};
+     const p1done=R.p1a!=null&&R.p1h!=null&&(!R.live||(R.period||0)>=2);
+     if(!p1done)return{hit:null,detail:R.p1a!=null?`P1 ${R.p1a}-${R.p1h} so far`:'1st period not in yet',live:!!R.live};
+     const a=+R.p1a,h=+R.p1h;let hit=null;
+     if(pm[1]){const t=a+h,L=+pm[2];hit=t===L?null:(/over/i.test(pm[1])?t>L:t<L);}
+     else{const home=leg.game.split('@')[1]===pm[3].toUpperCase();const mine=home?h:a,opp=home?a:h;
+       if(/ML/i.test(pm[4]))hit=mine===opp?false:mine>opp;else{const m=mine-opp+(+pm[4]);hit=m===0?null:m>0;}}
+     return{hit,detail:`P1 ${a}-${h}${hit===null?' (push)':''}`,live:!!R.live};}}
   const R=resolveLeg(leg,ticketDate);
   // `live` is stamped onto EVERY return below now — this is the actual fix for
   // the elimination map showing every in-progress ticket as "not started."
@@ -6618,6 +6701,45 @@ function gradeLeg(leg,ticketDate){
     return{hit:(R.fh>R.fa?homeAb:awayAb)===who,detail:`F5 ${R.fa}–${R.fh}`,live:!!R.live};
   }
   return{hit:null,detail:line,live:!!R.live};
+}
+/* Every leg row showed x.p — the probability STORED ON THE LEG AT IMPORT
+   TIME — forever, no matter what actually happened in the game. Two ways
+   that broke:
+     1) It never moves. A live/final game recomputes nothing here; the same
+        number sits on screen from kickoff to final whistle. Compare to any
+        game card, which repaints its % live as the sim updates.
+     2) For a lot of legs it was never a real number to begin with. Ticket
+        formats that don't carry a price per leg (hockey/football SGP props,
+        spreads and totals with no odds attached) got p:0.5 hardcoded at
+        import — not an estimate, a placeholder — and that fake "50%"
+        rendered identically to a real 50% price-implied number, with no
+        way to tell them apart.
+   This renders the actual state instead: decided legs show 100/0/PUSH,
+   live legs lean on gradeLeg's own live detail text (already computed,
+   just never surfaced next to a stale %), and a placeholder-only leg shows
+   nothing rather than a number that was never real. */
+function legPctHtml(x,r){
+  if(r.hit===true)return'<span class="pp" style="color:var(--win)">100%</span>';
+  if(r.hit===false)return'<span class="pp" style="color:var(--rust)">0%</span>';
+  if(r.push)return'<span class="pp" style="color:var(--mute)">PUSH</span>';
+  if(x.price==null)return'';
+  return`<span class="pp">${(x.p*100).toFixed(0)}%</span>`;
+}
+/* Tickets never repainted on their own — every renderTickets()/genTickets()
+   call site is a manual action (tab switch, lock, archive, a button). Every
+   game-card board polls live scores on an interval and repaints itself;
+   sitting on My Bets during a live game showed the exact state from whenever
+   you opened the tab, unchanged, until you navigated away and back. */
+let TICKETS_LIVE_TIMER=null;
+function ticketsLiveLoop(){
+  if(TICKETS_LIVE_TIMER)clearInterval(TICKETS_LIVE_TIMER);
+  TICKETS_LIVE_TIMER=setInterval(()=>{
+    if(document.hidden)return;
+    const v=document.getElementById('v-tickets');
+    if(!v||!v.classList.contains('on'))return;
+    if(TICKETTAB==='mine')genTickets('mine');
+    else if(TICKETTAB==='tracked')genTickets('system');
+  },20000);
 }
 function gradeLegBadge(leg,ticketDate){
   // was independently re-resolving the leg a second time (resolveLeg call
@@ -9727,6 +9849,7 @@ function detectSlateSport(text){
   for(const l of head){
     if(/^(NCAAF|CFB|COLLEGE\s*FOOTBALL)\b/i.test(l))return'ncaaf';
     if(/^NFL\b/i.test(l))return'nfl';
+    if(/^(NHL|HOCKEY)\b/i.test(l))return'nhl';
     if(/^MLB\b/i.test(l))return'mlb';
   }
   return null;
@@ -9814,6 +9937,12 @@ function parseSlateText(text){
     // false and content-based routing silently never fired.
     r.picks.forEach(p=>p.sport='nfl');
     return{picks:r.picks,trends:r.trends,consensus:r.consensus,sport:'nfl',isNFL:true};
+  }
+  if(sport==='nhl'){
+    if(typeof parseNHLSlateText!=='function')
+      return{picks:[],trends:[],consensus:[],sport:'nhl',unavailable:true};
+    const r=parseNHLSlateText(text);r.picks.forEach(p=>p.sport='nhl');
+    return{picks:r.picks,trends:[],consensus:[],sport:'nhl'};
   }
   if(sport==='ncaaf'){
     if(typeof parseNCAAFSlateText!=='function')
@@ -11062,12 +11191,12 @@ function systemPicksHtml(){
     loaded for today's games first.</div>`;
   let w=0,l=0,pd=0;
   const rows=t.legs.map(x=>{
-    const{hit:r}=gradeLeg(x,t.date);
+    const gr=gradeLeg(x,t.date);const r=gr.hit;
     const badgeHtml=gradeLegBadge(x,t.date);
     if(r===true)w++;else if(r===false)l++;else pd++;
     const gid=legGameId(x,t.date);
     const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
-    return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
+    return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> ${legPctHtml(x,gr)} ${badgeHtml}</li>`;
   }).join('');
   const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
   return head+`<div class="tkt hi"><h3>${t.date}</h3>
@@ -11332,7 +11461,7 @@ function genTickets(mode){
       let w=0,l=0,pd=0;
       const editing=TICKET_EDIT_ID===t.id&&canModifyTicket(t);
       const rows=t.legs.map(x=>{
-        const{hit:r}=gradeLeg(x,t.date);
+        const gr=gradeLeg(x,t.date);const r=gr.hit;
         const badgeHtml=gradeLegBadge(x,t.date);
         if(r===true)w++;else if(r===false)l++;else pd++;
         const gid=legGameId(x,t.date);
@@ -11345,7 +11474,7 @@ function genTickets(mode){
               style="flex:0 0 auto;background:none;border:1px solid var(--rust);color:var(--rust);
               border-radius:4px;padding:1px 7px;cursor:pointer;font-size:11px">✕</button>
             <span style="flex:1">${x.pick} <span class="m">${x.game}</span></span>
-            <span class="pp">${(x.p*100).toFixed(0)}%</span>
+            ${legPctHtml(x,gr)}
           </li>`;
         }
         const jumpTo=(!x.sport&&gid&&GAMES.some(z=>z.id===gid))?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
@@ -11354,7 +11483,7 @@ function genTickets(mode){
         const sportTag=x.sport?`<span style="font-family:'IBM Plex Mono';font-size:8px;
           letter-spacing:.06em;color:var(--mute);border:1px solid var(--rule);
           border-radius:3px;padding:0 4px;margin-left:4px">${x.sport==='ncaaf'?'CFB':x.sport.toUpperCase()}</span>`:'';
-        return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span>${sportTag} <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}</li>`;
+        return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span>${sportTag} ${legPctHtml(x,gr)} ${badgeHtml}</li>`;
       }).join('');
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
       const lockBadge=t.finalized
@@ -12778,6 +12907,7 @@ function renderLedgerTab(){
 async function renderGrades(force){
   /* Football pages show their own sport's record — this function only ever
      read the MLB archive, which is why NFL displayed MLB's record. */
+  if(ACTIVE_SPORT==='nhl'&&typeof renderNHLRecord==='function'){try{renderNHLRecord()}catch(e){console.warn('nhl record',e)}return;}
   if((ACTIVE_SPORT==='nfl'||ACTIVE_SPORT==='ncaaf')&&typeof renderFootballRecord==='function'){
     try{renderFootballRecord(ACTIVE_SPORT)}catch(e){console.warn('football record',e)}
     return;
@@ -14097,6 +14227,12 @@ async function boot(){
     if(typeof fetchNFLPowerRatings==='function')await fetchNFLPowerRatings().catch(()=>{});
     if(typeof renderNFL==='function')renderNFL();
     if(typeof nflOnActivate==='function')nflOnActivate();
+  }else if(pageSport==='nhl'){
+    ACTIVE_SPORT='nhl';
+    /* nhl-engine.js loads AFTER this file; boot() can reach here before that
+       script tag has run. Poll for the engine instead of guessing a delay. */
+    (function go(n){if(typeof nhlBoot==='function'){renderNHL();nhlBoot().catch(e=>console.warn('nhl boot',e));return;}
+      if(n<100)setTimeout(()=>go(n+1),50);})(0);
   }else if(pageSport==='ncaaf'){
     ACTIVE_SPORT='ncaaf';
     /* Render from cache FIRST so the board appears instantly, then fetch
@@ -14111,6 +14247,7 @@ async function boot(){
     await loadAll();await loadOdds(false);await loadSharp(false);await loadRundown(false);
     await loadESPN();
   }
+  ticketsLiveLoop();
   // catch up anything left ungraded from previous days — run async on football
   // pages so it never blocks the board render
   if(pageSport==='mlb'){
@@ -14355,8 +14492,8 @@ function freezeSlate(sport){
   const d=today();
   const all=get(LS.frozen,{});
   const bucket=all[d]||(all[d]={});
-  const games=sp==='nfl'?NFL_GAMES:sp==='ncaaf'?NCAAF_GAMES:GAMES;
-  const sims=sp==='nfl'?NFL_SIMS:sp==='ncaaf'?NCAAF_SIMS:SIMS;
+  const games=sportGames(sp);
+  const sims=sportSims(sp);
   let n=0;
   (games||[]).forEach(g=>{
     const s=(sims||{})[g.id];if(!s)return;
@@ -14421,7 +14558,8 @@ function takeFadeVerdict(g,s,sport){
   let edge=null;
   try{
     const ln=sp==='nfl'?nflBookLinesFor(g.away.abbr+'@'+g.home.abbr)
-            :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
+            :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr)
+            :sp==='nhl'&&typeof nhlBookLinesFor==='function'?nhlBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
     const aw=ln.find(x=>x.market==='spread'&&x.side==='away');
     if(aw&&s.awayCover){
       const p=s.awayCover(aw.line);
@@ -14521,7 +14659,7 @@ function migrateFinalsKeys(){
   const all=get(LS.allfinals,{});let changed=false;
   Object.keys(all).forEach(k=>{
     const v=all[k];if(!v)return;
-    const nk=finalsKey(v.sport,k.includes(':')&&(k.startsWith('mlb:')||k.startsWith('nfl:')||k.startsWith('ncaaf:'))?k.split(':').slice(1).join(':'):k);
+    const nk=finalsKey(v.sport,k.includes(':')&&(k.startsWith('mlb:')||k.startsWith('nfl:')||k.startsWith('ncaaf:')||k.startsWith('nhl:'))?k.split(':').slice(1).join(':'):k);
     if(nk===k)return; // already migrated
     if(!all[nk])all[nk]=v;
     delete all[k];changed=true;
@@ -14548,7 +14686,7 @@ function syncFinalsToShared(){
     const key=finalsKey(sport,g.away.abbr+'@'+g.home.abbr);
     const prev=all[key];
     if(!prev||prev.a!==+g.awayScore||prev.h!==+g.homeScore||(g.h1a!=null&&prev.h1a==null)){
-      all[key]={sport,a:+g.awayScore,h:+g.homeScore,h1a:g.h1a!=null?+g.h1a:null,h1h:g.h1h!=null?+g.h1h:null,ts:Date.now()};changed=true;
+      all[key]={sport,a:+g.awayScore,h:+g.homeScore,h1a:g.h1a!=null?+g.h1a:null,h1h:g.h1h!=null?+g.h1h:null,p1a:g.p1a!=null?+g.p1a:null,p1h:g.p1h!=null?+g.p1h:null,ts:Date.now()};changed=true;
     }
   });
   /* MLB's live board too — finals reached the shared store only via the grading
@@ -14571,6 +14709,7 @@ function syncFinalsToShared(){
   }catch(e){}
   if(typeof NFL_GAMES!=='undefined')sweep(NFL_GAMES,'nfl');
   if(typeof NCAAF_GAMES!=='undefined')sweep(NCAAF_GAMES,'ncaaf');
+  if(typeof NHL_GAMES!=='undefined')sweep(NHL_GAMES,'nhl');
   if(changed)set(LS.allfinals,all);
   return all;
 }
@@ -14582,8 +14721,8 @@ function allFinals(){
 }
 function logSystemPicks(sport){
   const sp=sport||ACTIVE_SPORT;
-  const games=sp==='nfl'?NFL_GAMES:sp==='ncaaf'?NCAAF_GAMES:GAMES;
-  const sims=sp==='nfl'?NFL_SIMS:sp==='ncaaf'?NCAAF_SIMS:SIMS;
+  const games=sportGames(sp);
+  const sims=sportSims(sp);
   const log=get(LS.syslog,{});
   const d=today();
   const day=log[d]||(log[d]={});
@@ -14846,7 +14985,7 @@ function coachTotalRead(g,s,sport){
   }
   try{
     const gl=g.away.abbr+'@'+g.home.abbr;
-    const lines=sport==='nfl'?nflBookLinesFor(gl):ncaafBookLinesFor(gl);
+    const lines=sport==='nfl'?nflBookLinesFor(gl):sport==='nhl'?(typeof nhlBookLinesFor==='function'?nhlBookLinesFor(gl):[]):ncaafBookLinesFor(gl);
     const ov=lines.find(x=>x.market==='total'&&x.side==='over');
     if(ov&&ov.line!=null&&s.over){
       const p=s.over(ov.line);
@@ -14993,7 +15132,11 @@ function coachBriefing(g,s,sport){
   // 4 · pitcher/team form — reuses the same trendPanel factor engine (starter
   //     form, workload, command, contact) so this never disagrees with the
   //     Trends tab; it just puts the plain-language version in one place
-  try{
+  /* trendPanel is the MLB factor engine (starter form, park, contact). It ran
+     for every sport, so a hockey or football team sharing a city code with a
+     ballpark (BOS, MIA, DET, HOU, CIN, PIT, SEA, TB, WSH…) got baseball park
+     factors in its Coach briefing. MLB only. */
+  if(sport==='mlb'||!sport)try{
     const full=trendPanel(g,s);
     const rows=[...full.matchAll(/<div class="tname">([^<]+)<\/div>\s*<div class="ttext">([\s\S]*?)<\/div>/g)];
     if(rows.length){
