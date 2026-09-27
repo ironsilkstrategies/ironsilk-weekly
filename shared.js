@@ -917,7 +917,7 @@ function brainBlock(g,s,sport){
       <div>Volatility ±${J.sd} ${C.unit} margin</div>
       <table style="width:100%;margin-top:4px;font-size:9.5px;border-collapse:collapse"><tr style="color:var(--mute)"><td></td>${AD.boxCols.map(c=>`<td>${c[0]}</td>`).join('')}</tr>
         ${row(aN,J.box.away)}${row(hN,J.box.home)}</table>
-    </details></div>`;
+    </details></div>${(()=>{try{return houseSplitBadge(g)}catch(e){return''}})()}`;
 }
 const fbJudgeBlock=(g,s,sport)=>brainBlock(g,s,sport);
 function brainReport(sport){
@@ -4221,7 +4221,7 @@ function ticketPayoutMagnitude(t){
   const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
   const w=getWagers();
   const stake=trackedOnly?1:(w[t.id]||1);
-  const odds=probToAmer(t.p);
+  const odds=pricedOdds(t.legs);
   const res=amerPayout(odds,stake);
   return{stake,toWin:res?res.profit:0,payout:stake+(res?res.profit:0)};
 }
@@ -7755,6 +7755,31 @@ function probToAmer(p){
   if(!p||p<=0||p>=1)return '—';
   return p>=.5?'-'+Math.round(100*p/(1-p)):'+'+Math.round(100*(1-p)/p);
 }
+function americanToDecimal(price){
+  const n=parseFloat(price);
+  if(isNaN(n)||n===0)return null;
+  return n>0?1+n/100:1+100/Math.abs(n);
+}
+function decimalToAmerican(dec){
+  if(!dec||dec<=1)return '—';
+  return dec>=2?'+'+Math.round((dec-1)*100):'-'+Math.round(100/(dec-1));
+}
+// Combined odds/payout math for a ticket must be priced off each leg's REAL
+// sportsbook price (parsed from the pasted ticket) whenever it has one — only
+// a leg with no real price (a pure system/Judge/Coach pick) falls back to the
+// model's own implied price. Before this, every parlay's "Parlay odds" pill —
+// and its actual settled profit — was computed as probToAmer(product of every
+// leg's MODEL hit-probability), so a real, book-priced ticket still produced
+// invented, book-defying odds (a 26-leg ticket showing +6710886300) the moment
+// any leg lacked a resolved model probability and defaulted toward 50/50.
+function pricedOddsDecimal(legs){
+  return (legs||[]).reduce((acc,leg)=>{
+    const price=leg.price!=null?leg.price:(leg.p>0&&leg.p<1?parseFloat(probToAmer(leg.p)):null);
+    const d=price!=null?americanToDecimal(price):null;
+    return d?acc*d:acc;
+  },1);
+}
+function pricedOdds(legs){return decimalToAmerican(pricedOddsDecimal(legs))}
 function amerPayout(amerStr,stake){
   if(!stake||isNaN(stake)||stake<=0)return null;
   const o=parseFloat((amerStr+'').replace('+',''));
@@ -7778,7 +7803,7 @@ function debitStake(id,newStake){
   }
   saveBankroll(b);
 }
-function onWagerInput(id,combinedP,inputEl){
+function onWagerInput(id,decOdds,inputEl){
   const stake=parseFloat(inputEl.value)||0;
   if(stake>0){
     const check=checkStakeAllowed(id,stake);
@@ -7793,9 +7818,9 @@ function onWagerInput(id,combinedP,inputEl){
   if(inputElRef)inputElRef.style.color='';
   saveWager(id,stake||null);
   debitStake(id,stake);
-  refreshPayout(id,combinedP,stake);
+  refreshPayout(id,decOdds,stake);
 }
-function refreshPayout(id,combinedP,stake){
+function refreshPayout(id,decOdds,stake){
   const payEl=document.getElementById('wp-pay-'+id);
   const subEl=document.getElementById('wp-sub-'+id);
   const pillEl=document.getElementById('wp-pill-'+id);
@@ -7804,7 +7829,7 @@ function refreshPayout(id,combinedP,stake){
     payEl.textContent='$—';if(subEl)subEl.textContent='profit';
     if(pillEl){pillEl.classList.remove('neg')}return;
   }
-  const odds=probToAmer(combinedP);
+  const odds=decimalToAmerican(decOdds);
   const res=amerPayout(odds,stake);
   if(!res){payEl.textContent='$—';return}
   payEl.textContent='$'+res.total.toFixed(2);
@@ -7814,27 +7839,49 @@ function refreshPayout(id,combinedP,stake){
 function buildWagerRow(t){
   const w=getWagers();
   const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
-  const stake=trackedOnly?1:(w[t.id]||'');
-  const odds=probToAmer(t.p);
-  const res=stake?amerPayout(odds,stake):null;
+  // SGP-imported tickets (parseSGPTicketText) can't recover a real per-leg
+  // price for player props — the book's own SGP confirmation text never lists
+  // one — so every such leg lands at a placeholder p:0.5, purely to make the
+  // grading math work. That parser DOES capture the ticket's real quoted
+  // stake/to-win off the pasted confirmation (kv.amount/kv.towin) and stores
+  // them on the ticket — they just were never read back out here. Deriving
+  // "Parlay odds" from legs (real prices or not) for one of these tickets
+  // means multiplying in a string of 0.5 placeholders, which is exactly how
+  // a real ticket showed +6710886300: 0.5^26 has nothing to do with what the
+  // book actually quoted. When the ticket carries its own real number, that
+  // number wins outright over anything computed from legs.
+  const realStake=parseFloat(t.stake),realToWin=parseFloat(t.toWin);
+  const hasRealQuote=t.imported&&!isNaN(realStake)&&realStake>0&&!isNaN(realToWin)&&realToWin>0;
+  const stake=trackedOnly?1:(hasRealQuote?realStake:(w[t.id]||''));
+  const decOdds=hasRealQuote?(realStake+realToWin)/realStake:pricedOddsDecimal(t.legs);
+  const odds=decimalToAmerican(decOdds);
+  const res=hasRealQuote?{total:realStake+realToWin,profit:realToWin}:(stake?amerPayout(odds,stake):null);
   const payTxt=res?'$'+res.total.toFixed(2):'$—';
   const profTxt=res?'+$'+res.profit.toFixed(2)+' profit':'profit';
   const tl=ticketLimit();
   // Market/Outside tickets are tracked-only — fixed $1, no input, no bankroll
-  // interaction. The stake pill still shows the number (so the payout math reads
-  // the same as any other ticket) but isn't editable and never calls debitStake.
+  // interaction. Real-quote (SGP-imported) tickets are likewise fixed — the
+  // book already took this stake, it isn't yours to re-type here. Both show
+  // a locked stake pill; only a "mine" ticket with no real quote gets the
+  // editable input.
   const stakeCell=trackedOnly
     ?`<div class="wager-pill stake-pill" style="opacity:.85">
         <div class="wp-label">Stake</div>
         <div class="wp-val">$1.00</div>
         <div class="wp-sub">tracked only</div>
       </div>`
+    :hasRealQuote
+    ?`<div class="wager-pill stake-pill" style="opacity:.85">
+        <div class="wp-label">Stake</div>
+        <div class="wp-val">$${realStake.toFixed(2)}</div>
+        <div class="wp-sub">from your ticket</div>
+      </div>`
     :`<div class="wager-pill stake-pill" onclick="document.getElementById('ws-${t.id}').focus()">
         <div class="wp-label">Stake</div>
         <div class="wp-val"><span style="font-size:10px;opacity:.6">$</span><input
           id="ws-${t.id}" class="stake-input" type="number" min="0" max="${tl}" step="0.5"
           placeholder="0" value="${stake}"
-          oninput="onWagerInput(${t.id},${t.p},this)"
+          oninput="onWagerInput(${t.id},${decOdds},this)"
         ></div>
         <div class="wp-sub" id="wp-sub-${t.id}-cap">cap $${tl.toFixed(2)}</div>
       </div>`;
@@ -7843,7 +7890,7 @@ function buildWagerRow(t){
     <div class="wager-pill odds-pill">
       <div class="wp-label">Parlay odds</div>
       <div class="wp-val">${odds}</div>
-      <div class="wp-sub">${(t.p*100).toFixed(t.p<.01?3:1)}% hit rate</div>
+      <div class="wp-sub">${hasRealQuote?'from your ticket':(t.p*100).toFixed(t.p<.01?3:1)+'% hit rate'}</div>
     </div>
     <div class="wager-pill payout-pill" id="wp-pill-${t.id}">
       <div class="wp-label">To win</div>
@@ -8015,13 +8062,13 @@ function settleLockedTickets(){
     // payout recalculates on whatever's left (a 2-team parlay with 1 push becomes
     // a straight bet on the surviving leg, at that leg's own odds) — a push never
     // costs you the ticket and never inflates it either
-    const survivingP=[]; // combined probability of the legs that actually settled live
+    const survivingLegs=[]; // the legs that actually settled live (pushes excluded)
     t.legs.forEach(x=>{
       const g=gradeLeg(x,t.date);
       if(g.push){pushCount++;return} // pushed legs don't block settlement or count as a loss
       if(g.hit===null){allDecided=false;return}
       if(g.hit===false)anyLoss=true;
-      survivingP.push(x.p);
+      survivingLegs.push(x);
     });
     // A parlay is exactly as dead as any ONE of its remaining legs losing — a single
     // dead leg sinks the ticket regardless of what other legs do, so there's no
@@ -8037,10 +8084,10 @@ function settleLockedTickets(){
         profit=0; // every leg pushed — the whole ticket refunds, no win, no loss
       }else if(won){
         // recompute odds from only the legs that actually decided a real outcome —
-        // pushed legs are excluded from the combined probability entirely, exactly
-        // like a real book strips a push out and prices the rest on its own
-        const combinedP=survivingP.length?survivingP.reduce((a,x)=>a*x,1):t.p;
-        const odds=probToAmer(combinedP);
+        // pushed legs are excluded entirely, exactly like a real book strips a push
+        // out and prices the rest on its own. Priced off each leg's REAL book price,
+        // not the model's win-probability product.
+        const odds=pricedOdds(survivingLegs.length?survivingLegs:t.legs);
         const res=amerPayout(odds,stake);
         profit=res?res.profit:0;
       }else{
@@ -9730,7 +9777,117 @@ function legRowHtml(x,isOutside){
 // rolled into d4.srcstats so we learn which sources are actually worth listening to.
 function getExt(){return get(LS.extpicks,{})}
 function getSrcStats(){return get(LS.srcstats,{})}
-function extToday(){return getExt()[today()]||[]}
+// In-house sources — Judge, Coach, and the sim's own most-common exact score —
+// fed into this SAME store real uploaded outside picks live in, so they get
+// the identical agree/unanimous/CONFLICT tier treatment on the game card and
+// the identical win/loss tracking in Source records that any pasted-in
+// outside pick gets. Upserted (never appended) on the same [src,game,market,
+// side,line] key saveExtPicks() already uses for real uploads, so re-running
+// this mid-day updates today's read instead of piling up duplicates.
+// Runs across all four sports — sportGames()/sportSims() already resolve to
+// whichever board's globals actually exist on this page, same helper the
+// rest of the multi-sport code already relies on.
+const HOUSE_SOURCES=['Judge','Coach','Most common score'];
+function syncHousePicksForSport(sp){
+  const games=sportGames(sp),sims=sportSims(sp);
+  if(!games||!games.length)return;
+  const d=today();
+  const allP=getExt();allP[d]=allP[d]||[];
+  const keyOfP=x=>[x.src,x.game,x.market,x.side,x.line].join('|');
+  const upsert=rec=>{
+    const k=keyOfP(rec);
+    const i=allP[d].findIndex(y=>keyOfP(y)===k);
+    if(i>=0)allP[d][i]={...allP[d][i],...rec};else allP[d].push(rec);
+  };
+  games.forEach(g=>{
+    const s=(sims||{})[g.id];if(!s)return;
+    const gl=g.away.abbr+'@'+g.home.abbr;
+    const base={game:gl,away:g.away.abbr,home:g.home.abbr,gid:g.id,sport:sp,
+      capturedAt:Date.now(),hit:null,price:null,conf:null};
+    let tot=null;try{tot=coachTotalRead(g,s,sp)}catch(e){}
+    // Judge — projected-score side, plus a total lean against whatever total
+    // line is on the board (real book line preferred, sim median otherwise).
+    try{
+      const J=brainJudge(g,s,sp);
+      if(J){
+        const side=J.pHome>=0.5?'home':'away';
+        upsert({...base,src:'Judge',market:'moneyline',pick:(side==='home'?g.home.abbr:g.away.abbr)+' ML',side,line:null});
+        if(tot&&tot.line!=null){
+          const jSide=(J.a+J.h)>tot.line?'over':'under';
+          upsert({...base,src:'Judge',market:'total',pick:(jSide==='over'?'Over ':'Under ')+tot.line,side:jSide,line:tot.line});
+        }
+      }
+    }catch(e){}
+    // Coach — its own pick computation, same shape.
+    try{
+      const pk=coachPickFor(g,s,sp);
+      if(pk){
+        const side=pk.sideTeam===g.home.abbr?'home':'away';
+        upsert({...base,src:'Coach',market:'moneyline',pick:pk.sideTeam+' ML',side,line:null});
+        if(pk.totalDir&&pk.totalDir!=='—'&&pk.totalLine!=null){
+          upsert({...base,src:'Coach',market:'total',pick:(pk.totalDir==='over'?'Over ':'Under ')+pk.totalLine,
+            side:pk.totalDir,line:pk.totalLine});
+        }
+      }
+    }catch(e){}
+    // Most common score — the sim's single most-frequent exact final.
+    try{
+      if(s.modeScore){
+        const mm=String(s.modeScore).match(/(\d+)\D+(\d+)/);
+        if(mm){
+          const ma=+mm[1],mh=+mm[2],side=mh>=ma?'home':'away';
+          upsert({...base,src:'Most common score',market:'moneyline',
+            pick:(side==='home'?g.home.abbr:g.away.abbr)+' ML',side,line:null});
+          if(tot&&tot.line!=null){
+            const mSide=(ma+mh)>tot.line?'over':'under';
+            upsert({...base,src:'Most common score',market:'total',
+              pick:(mSide==='over'?'Over ':'Under ')+tot.line,side:mSide,line:tot.line});
+          }
+        }
+      }
+    }catch(e){}
+  });
+  set(LS.extpicks,allP);
+}
+function syncHousePicksToExt(){
+  ['mlb','nfl','ncaaf','nhl'].forEach(sp=>{try{syncHousePicksForSport(sp)}catch(e){}});
+}
+// Whether Judge, Coach and Most-common-score actually agree with EACH OTHER —
+// independent of outside sources, book price, or the model-edge tiering the
+// bet squares already do. Reads back from the very same store they were just
+// written to, so this is always in sync with what's actually posted.
+// Returns null when fewer than 2 of the three have an opinion yet on this
+// market for this game.
+function houseSplitFor(g,market){
+  const gl=g.away.abbr+'@'+g.home.abbr;
+  const rows=extToday().filter(x=>HOUSE_SOURCES.includes(x.src)&&x.game===gl&&x.market===market);
+  if(rows.length<2)return null;
+  return{agree:new Set(rows.map(r=>r.side)).size===1,rows};
+}
+// One combined callout for the game card — "do MY OWN sources even agree
+// with each other here" — separate from the outside-source SUPREME/CONFLICT
+// tiering on individual bet squares, which only ever compares against book
+// price and outside picks, not the three in-house reads against each other.
+function houseSplitBadge(g){
+  const sideLabel=(mkt,r)=>mkt==='moneyline'?(r.side==='home'?g.home.abbr:g.away.abbr):(r.side==='over'?'Over':'Under')+(r.line!=null?' '+r.line:'');
+  const parts=[];
+  ['moneyline','total'].forEach(mkt=>{
+    const sp=houseSplitFor(g,mkt);
+    if(sp&&!sp.agree)parts.push(`${mkt==='moneyline'?'Side':'Total'}: `+sp.rows.map(r=>`${r.src} ${sideLabel(mkt,r)}`).join(' vs '));
+  });
+  if(!parts.length)return'';
+  return`<div style="margin-top:4px;padding:6px 8px;border-radius:8px;background:var(--panel2);
+    border-left:3px solid var(--purple,#9b6bd6);font-family:'IBM Plex Mono';font-size:10px;line-height:1.5">
+    <b style="color:var(--purple,#9b6bd6)">⚡ IN-HOUSE SPLIT</b> — Judge, Coach and Most common score don't
+    all agree here.<br>${parts.join('<br>')}
+  </div>`;
+}
+let HOUSE_SYNC_TS=0;
+function extToday(){
+  const now=Date.now();
+  if(now-HOUSE_SYNC_TS>5000){try{syncHousePicksToExt();}catch(e){}HOUSE_SYNC_TS=now;}
+  return getExt()[today()]||[];
+}
 
 async function analyzeExtPicks(){
   const el=document.getElementById('extResult');
@@ -10389,36 +10546,50 @@ function gradeExtPicks(){
   const all=getExt(),arc=get(LS.arc,{});
   let changed=false;
   Object.keys(all).forEach(d=>{
-    const A=arc[d];if(!A||!A.finals)return;
+    const A=arc[d];
     all[d].forEach(p=>{
       if(p.hit!==null&&p.hit!==undefined)return;
-      const F=p.gid?A.finals[p.gid]:null;
-      if(!F||isNaN(F.a)||isNaN(F.h))return;
-      const tot=F.a+F.h,margin=F.h-F.a;
-      let hit=null;
-      if(p.market==='moneyline')
-        hit=p.side==='home'?F.h>F.a:F.a>F.h;
-      else if(p.market==='total'&&p.line!==null)
-        hit=p.side==='over'?tot>p.line:tot<p.line;
-      else if(p.market==='runline'&&p.line!==null)
-        hit=p.side==='home'?(margin+p.line)>0:((-margin)+p.line)>0;
-      else if(p.market==='f5total'&&p.line!==null&&F.f5ok)
-        hit=p.side==='over'?(F.fa+F.fh)>p.line:(F.fa+F.fh)<p.line;
-      else if(p.market==='f5side'&&F.f5ok)
-        hit=p.side==='home'?F.fh>F.fa:F.fa>F.fh;
-      else if(p.market==='prop'&&p.pid&&p.ptype&&p.thr!=null){
-        // outside props grade off the same cached box scores everything else uses
-        const box=boxFor(p.gid);
-        if(box){
-          let pl=null;
-          for(const sd of ['away','home']){
-            const P=((box.teams||{})[sd]||{}).players||{};
-            if(P['ID'+p.pid]){pl=P['ID'+p.pid];break}
+      const F=(A&&A.finals&&p.gid)?A.finals[p.gid]:null;
+      if(F&&!isNaN(F.a)&&!isNaN(F.h)){
+        // MLB's own finals archive — the only place carrying f5/runline/prop
+        // fields nothing else needs.
+        const tot=F.a+F.h,margin=F.h-F.a;
+        let hit=null;
+        if(p.market==='moneyline')
+          hit=p.side==='home'?F.h>F.a:F.a>F.h;
+        else if(p.market==='total'&&p.line!==null)
+          hit=p.side==='over'?tot>p.line:tot<p.line;
+        else if(p.market==='runline'&&p.line!==null)
+          hit=p.side==='home'?(margin+p.line)>0:((-margin)+p.line)>0;
+        else if(p.market==='f5total'&&p.line!==null&&F.f5ok)
+          hit=p.side==='over'?(F.fa+F.fh)>p.line:(F.fa+F.fh)<p.line;
+        else if(p.market==='f5side'&&F.f5ok)
+          hit=p.side==='home'?F.fh>F.fa:F.fa>F.fh;
+        else if(p.market==='prop'&&p.pid&&p.ptype&&p.thr!=null){
+          // outside props grade off the same cached box scores everything else uses
+          const box=boxFor(p.gid);
+          if(box){
+            let pl=null;
+            for(const sd of ['away','home']){
+              const P=((box.teams||{})[sd]||{}).players||{};
+              if(P['ID'+p.pid]){pl=P['ID'+p.pid];break}
+            }
+            if(pl)hit=gradePropRec(pl,p.ptype,p.thr);
           }
-          if(pl)hit=gradePropRec(pl,p.ptype,p.thr);
         }
+        if(hit!==null){p.hit=hit;changed=true;return;}
       }
-      if(hit!==null){p.hit=hit;changed=true}
+      // Any sport — moneyline/total grade fine off the shared cross-sport
+      // finals store, which is all Judge/Coach/Most-common-score ever post
+      // (see syncHousePicksToExt), and it's what makes those gradeable on
+      // NFL/CFB/NHL boards where there's no MLB-shaped finals archive at all.
+      const shared=allFinals()[finalsKey(p.sport||'mlb',p.game)];
+      if(!shared||shared.a==null||shared.h==null)return;
+      const tot=shared.a+shared.h;
+      let hit=null;
+      if(p.market==='moneyline')hit=p.side==='home'?shared.h>shared.a:shared.a>shared.h;
+      else if(p.market==='total'&&p.line!=null)hit=p.side==='over'?tot>p.line:tot<p.line;
+      if(hit!==null){p.hit=hit;changed=true;}
     });
   });
   if(changed)set(LS.extpicks,all);
@@ -10617,9 +10788,8 @@ function repairPushBug(){
       if(newRecord.l===0&&newRecord.w===0){
         profit=0; // every leg pushed
       }else if(newRecord.won){
-        const survivingP=t.legs.map(x=>gradeLeg(x,t.date)).filter(g=>g.hit!==null&&!g.push)
-          .length?t.legs.filter(x=>{const g=gradeLeg(x,t.date);return g.hit===true}).reduce((a,x)=>a*x.p,1):t.p;
-        const odds=probToAmer(survivingP);
+        const survivingLegs=t.legs.filter(x=>{const g=gradeLeg(x,t.date);return g.hit===true});
+        const odds=pricedOdds(survivingLegs.length?survivingLegs:t.legs);
         const res=amerPayout(odds,stake);
         profit=res?res.profit:0;
       }else{
@@ -10671,6 +10841,39 @@ function archiveAllComplete(){
 }
 
 let MINE_VIEW='pending';
+// Multi-select delete for the Archived view — a Set of ticket ids the user has
+// checked. Deleting was previously one ticket at a time, each click doing a
+// full storage write + full renderTickets() re-render; with dozens of archived
+// tickets that re-render is the expensive part, and it fired on every single
+// click. Checking boxes touches no storage and re-renders nothing; only the
+// final "Delete selected" does one write and one render, no matter how many
+// were checked.
+let ARCHIVE_SELECTED=new Set();
+function toggleArchiveSelect(id,checked){
+  if(checked)ARCHIVE_SELECTED.add(id);else ARCHIVE_SELECTED.delete(id);
+  const bar=document.getElementById('archive-bulkbar');
+  if(bar)bar.outerHTML=archiveBulkBarHtml();
+}
+function archiveBulkBarHtml(){
+  const n=ARCHIVE_SELECTED.size;
+  return `<div id="archive-bulkbar" class="note" style="display:flex;align-items:center;
+    justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <span><b>${n}</b> selected</span>
+    <span>
+      <button ${n?'':'disabled'} onclick="deleteSelectedArchived()">Delete selected</button>
+      <button ${n?'':'disabled'} onclick="ARCHIVE_SELECTED.clear();document.getElementById('archive-bulkbar').outerHTML=archiveBulkBarHtml();document.querySelectorAll('.arch-chk').forEach(c=>c.checked=false)">Clear</button>
+    </span>
+  </div>`;
+}
+function deleteSelectedArchived(){
+  if(!ARCHIVE_SELECTED.size)return;
+  const n=ARCHIVE_SELECTED.size;
+  if(!confirm(`Delete ${n} archived ticket${n>1?'s':''}? This can't be undone.`))return;
+  const L=get(LS.locked,[]);
+  set(LS.locked,L.filter(x=>!ARCHIVE_SELECTED.has(x.id)));
+  ARCHIVE_SELECTED.clear();
+  renderTickets(); // single re-render for the whole batch, not one per ticket
+}
 function minePicksHtml(){
   const locked=get(LS.locked,[]);
   if(!locked.length)return `<div class="empty">No tickets locked yet. Build one on the Build tab, or tap picks on game cards and hit Lock In.</div>`;
@@ -10680,9 +10883,10 @@ function minePicksHtml(){
   setTimeout(()=>genTickets('mine'),0);
   return `<div class="sbar" style="margin-top:0"><h2>Your tickets</h2><div class="ln"></div></div>
     <div class="subnav">
-      <button class="${MINE_VIEW==='pending'?'on':''}" onclick="MINE_VIEW='pending';renderTickets()">Pending <span class="m">${pending.length}</span></button>
-      <button class="${MINE_VIEW==='archived'?'on':''}" onclick="MINE_VIEW='archived';renderTickets()">Archived <span class="m">${archived.length}</span></button>
+      <button class="${MINE_VIEW==='pending'?'on':''}" onclick="MINE_VIEW='pending';ARCHIVE_SELECTED.clear();renderTickets()">Pending <span class="m">${pending.length}</span></button>
+      <button class="${MINE_VIEW==='archived'?'on':''}" onclick="MINE_VIEW='archived';ARCHIVE_SELECTED.clear();renderTickets()">Archived <span class="m">${archived.length}</span></button>
     </div>
+    ${MINE_VIEW==='archived'&&archived.length?archiveBulkBarHtml():''}
     ${MINE_VIEW==='pending'&&readyToArchive>0?`<div class="note" style="display:flex;align-items:center;
       justify-content:space-between;flex-wrap:wrap;gap:8px">
       <span><b>${readyToArchive}</b> ticket${readyToArchive>1?'s are':' is'} fully graded and ready to archive.</span>
@@ -11624,8 +11828,11 @@ function genTickets(mode){
             border-radius:4px;padding:1px 6px;margin-left:6px">${pd} pending</span>`:'';
       let actionBtn;
       const moveBtn=`<button onclick="moveTicket(${t.id})" title="Move to a different tracking bucket">Move</button>`;
+      const archChk=t.archived?`<label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer">
+          <input type="checkbox" class="arch-chk" ${ARCHIVE_SELECTED.has(t.id)?'checked':''}
+            onchange="toggleArchiveSelect(${t.id},this.checked)"> <span class="m">select</span></label>`:'';
       if(t.archived){
-        actionBtn=`<button onclick="unarchiveTicket(${t.id})">Move back to pending</button>
+        actionBtn=`${archChk}<button onclick="unarchiveTicket(${t.id})">Move back to pending</button>
           ${moveBtn}
           <button onclick="delLocked(${t.id})">Delete</button>`;
       }else{
