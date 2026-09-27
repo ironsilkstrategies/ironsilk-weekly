@@ -1726,23 +1726,30 @@ function evaluateNFLGame(g){
   const outsideAgreesHome=outsideML.filter(x=>x.side==='home').length;
   const outsideAgreesAway=outsideML.filter(x=>x.side==='away').length;
 
-  // C) Market edge
+  // C) Market edge — true EV% via evPct(myProb, marketPrice), the SAME
+  // formula every tile on the card already uses for its own "±X.X% EV" line.
+  // This used to be `market.price - fair.price` — a raw subtraction of two
+  // American-odds numbers, which is not a percentage of anything, then
+  // labelled "% EV" anyway. For a +260 market price against a +224 fair
+  // price that gave "+36.0% EV" here while the tile itself correctly showed
+  // "+11.2% EV" for the exact same pick — two different numbers, one wrong
+  // unit, both claiming to answer the same question. sideEdgeThresh is now a
+  // genuine EV% cutoff (3%), not a leftover odds-points threshold.
+  const sideEdgeThresh=3;  // minimum genuine EV%, not raw odds points
   let spreadEdge=null,mlEdge=null,totalEdge=null;
   if(awaySpread){
     const myCover=s.awayCover(awaySpread.line);  // P(away covers away spread)
-    const marketP=100/(100+Math.abs(awaySpread.price))*(awaySpread.price<0?1:-1)+0.5;
-    spreadEdge={market:awaySpread.price,fair:nflFairML(myCover),edge:awaySpread.price-nflFairML(myCover)};
+    spreadEdge={market:awaySpread.price,fair:nflFairML(myCover),edge:evPct(myCover,awaySpread.price)};
   }
   if(awayML){
-    mlEdge={market:awayML.price,fair:myAwayML,edge:awayML.price-myAwayML};
+    mlEdge={market:awayML.price,fair:myAwayML,edge:evPct(myAwayWinP,awayML.price)};
   }
   if(totalOver){
     const myOverP=s.over(totalOver.line);
-    totalEdge={line:totalOver.line,myOverP,market:totalOver.price,fair:nflFairML(myOverP),edge:totalOver.price-nflFairML(myOverP)};
+    totalEdge={line:totalOver.line,myOverP,market:totalOver.price,fair:nflFairML(myOverP),edge:evPct(myOverP,totalOver.price)};
   }
 
   // D) Pick recommendations — side + total
-  const sideEdgeThresh=4;  // minimum edge in American odds points to flag
   const sidePick=spreadEdge&&Math.abs(spreadEdge.edge)>=sideEdgeThresh?
     (spreadEdge.edge>0?`${g.away.abbr} ${awaySpread?awaySpread.line:mySpread>0?'+'+mySpread:mySpread}`
                       :`${g.home.abbr} ${homeSpread?homeSpread.line:mySpread>0?'-'+mySpread:'+'+Math.abs(mySpread)}`)

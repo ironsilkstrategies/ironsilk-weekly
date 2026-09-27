@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26t';
+const INTAKE_BUILD='intake 2026-09-26u';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
