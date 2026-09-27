@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26s';
+const INTAKE_BUILD='intake 2026-09-26t';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -455,6 +455,16 @@ function parseSGPTicketText(text){
     if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s+(Passing|Rushing|Receiving)\s+yds\s*\(Game\)\s*$/i))){
       legs.push({game:cur.gl,pick:`${m[1]} ${m[2]} ${m[3]} ${m[4]} yds`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
         book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:m[4].toLowerCase(),thr:+m[3],dir:m[2].toLowerCase()}});return;
+    }
+    // Receptions (a count, not yards) — same "receiving" box-score row as the
+    // yardage props above, just reading the REC field instead of YDS.
+    if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(\d+)\+\s+Receptions\s*\(Game\)\s*$/i))){
+      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]}+ Receptions`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
+        book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:'receptions',thr:+m[2],dir:'atleast'}});return;
+    }
+    if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s+Receptions\s*\(Game\)\s*$/i))){
+      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]} ${m[3]} Receptions`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
+        book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:'receptions',thr:+m[3],dir:m[2].toLowerCase()}});return;
     }
     if(/^Player stats\s*-/i.test(line)){propSkipped++;skipped.push(line+'  (player-stat phrasing not recognized)');return;}
     if((m=line.match(/^Spread\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(Game\)\s*$/i))){
@@ -6424,7 +6434,8 @@ function gradeFBPropLeg(leg,ticketDate){
     try{fetchFBBoxscore(espnId,leg.sport);}catch(e){}
     return{hit:null,detail:'player box loading — check back shortly',live:!!R.live};
   }
-  const catKey=leg.fbProp.stat; // 'passing'|'rushing'|'receiving'
+  const isRec=leg.fbProp.stat==='receptions';
+  const catKey=isRec?'receiving':leg.fbProp.stat; // 'passing'|'rushing'|'receiving'
   const norm=n=>String(n||'').toLowerCase().replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
   const want=norm(leg.fbProp.player);
   const wantLast=want.split(' ').pop();
@@ -6442,14 +6453,17 @@ function gradeFBPropLeg(leg,ticketDate){
     (st[catKey]||[]).forEach(row=>{if(!found&&norm(row.name).split(' ').pop()===wantLast)found=row;});
   });
   if(!found)return{hit:null,detail:'player not in box yet',live:!!R.live};
-  const ydsRaw=found.YDS??found.yds??found.Yds??'0';
-  const yds=parseFloat(String(ydsRaw).replace(/[^0-9.\-]/g,''))||0;
+  // Receptions is a count (REC), everything else is yardage (YDS) — same row,
+  // different field.
+  const raw=isRec?(found.REC??found.rec??'0'):(found.YDS??found.yds??found.Yds??'0');
+  const val=parseFloat(String(raw).replace(/[^0-9.\-]/g,''))||0;
   const {dir,thr}=leg.fbProp;
   // "175+" is inclusive-at-least; explicit over/under N.5 lines are strict
   // and can never push (fractional). Conservative like everything else here:
-  // only decided once the game is final — yards can still change live.
-  const hit=R.live?null:(dir==='atleast'?yds>=thr:dir==='over'?yds>thr:yds<thr);
-  return{hit,detail:`${found.name} ${yds} ${catKey} yds${R.live?' so far':''}`,live:!!R.live};
+  // only decided once the game is final — the count can still change live.
+  const hit=R.live?null:(dir==='atleast'?val>=thr:dir==='over'?val>thr:val<thr);
+  const label=isRec?'receptions':catKey+' yds';
+  return{hit,detail:`${found.name} ${val} ${label}${R.live?' so far':''}`,live:!!R.live};
 }
 function gradeLeg(leg,ticketDate){
   if(leg.fbProp)return gradeFBPropLeg(leg,ticketDate);
