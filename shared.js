@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26n';
+const INTAKE_BUILD='intake 2026-09-26o';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -310,8 +310,96 @@ function intakeNormalizeKV(text){
 }
 /* Text: grammar first, then raw board copy, then (only if both find nothing)
    Gemini on the TEXT — a few KB, answers in seconds, no image upload. */
+/* ── MY TICKET IMPORT — paste a sportsbook confirmation, get a real tracked
+   ticket ──────────────────────────────────────────────────────────────────
+   This is a different shape from everything else intake reads: not board
+   odds, not predictions — an actual bet you already placed, in whatever
+   text your book's "My Bets" screen gives you when you copy a ticket. It
+   never goes through the picks/trends/preds bucket system at all; it builds
+   a real ticket object and writes it straight into LS.locked, the exact
+   same store lockSlip() writes to — so from that point on it's graded by
+   gradeLeg/resolveLeg exactly like a ticket you built in the app, shows up
+   in Tickets → My Parlays, and the live elimination map tracks it the same
+   way. Re-pasting the same ticket (same Ticket Number) replaces it in place
+   rather than duplicating it, same "just re-upload to correct" pattern as
+   every other intake type.
+   Recognized shape (this book's export, one Description line per leg):
+     Ticket Number: 999278333
+     Accepted Date: 9/24/26
+     Amount: $1.00
+     To win: $2,476.14
+     Description:
+     Football - NFL - Away Team vs Home Team - Parlay | 477 Team Name +274 for GAME | 09/27/2026 01:00:00 PM (EST) | Pending
+   Each leg line is read as ONE of: moneyline ("Team +150"), spread/run line
+   ("Team +11 -110" — two trailing numbers), or total ("A/B over 42 -115").
+   A leg whose sport isn't resolvable on this page (e.g. an NCAAF leg pasted
+   on mlb.html) is skipped with a note, not guessed at. */
+function ticketAmerToProb(price){
+  if(price==null||isNaN(price))return 0.5;
+  return price>0?100/(price+100):(-price)/(-price+100);
+}
+function parseMyTicketText(text){
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const kv={};
+  for(let i=0;i<lines.length-1;i++){
+    const k=lines[i].replace(/:\s*$/,'');
+    if(/^(Ticket Number|Accepted Date|Amount|Status|To win|Type)$/i.test(k))
+      kv[k.toLowerCase().replace(/\s+/g,'')]=lines[i+1].trim();
+  }
+  const ticketNo=(kv.ticketnumber||'').replace(/\D/g,'');
+  if(!ticketNo)return{ok:false,note:'no Ticket Number found'};
+  const descIdx=lines.findIndex(l=>/^Description\s*:?$/i.test(l));
+  const descLines=(descIdx>=0?lines.slice(descIdx+1):lines).filter(l=>l.includes('|'));
+  const legs=[];const skipped=[];
+  descLines.forEach(line=>{
+    const parts=line.split('|').map(s=>s.trim());
+    if(parts.length<2)return;
+    const head=parts[0],legText=parts[1],whenText=parts[2]||'';
+    const hm=head.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs\.?\s+(.+?)\s*-\s*/i);
+    if(!hm){skipped.push(line);return;}
+    const sportWord=hm[2].toUpperCase();
+    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':null;
+    if(!sport||!intakeCanResolve(sport)){skipped.push(line+'  (sport not resolvable on this page)');return;}
+    const awayAb=intakeAbbr(sport,hm[3]),homeAb=intakeAbbr(sport,hm[4]);
+    if(!awayAb||!homeAb){skipped.push(line+'  (team name not recognized)');return;}
+    const gl=awayAb+'@'+homeAb;
+    let body=legText.replace(/^\d+\s+/,'').replace(/\s+for GAME\s*$/i,'').replace(/½/g,'.5').trim();
+    let pick=null,price=null;
+    let m=body.match(/^(.+?)\/(.+?)\s+(over|under)\s+([\d.]+)\s+([+-]\d+)$/i);
+    if(m){pick=(/over/i.test(m[3])?'Over ':'Under ')+m[4];price=+m[5];}
+    else if((m=body.match(/^(.+?)\s+([+-]\d+(?:\.\d+)?)\s+([+-]\d+)$/))){
+      const ab=intakeAbbr(sport,m[1]);
+      if(ab){pick=ab+' '+(/^[+-]/.test(m[2])?m[2]:'+'+m[2]);price=+m[3];}
+    }else if((m=body.match(/^(.+?)\s+([+-]\d+)$/))){
+      const ab=intakeAbbr(sport,m[1]);
+      if(ab){pick=ab+' ML';price=+m[2];}
+    }
+    if(!pick){skipped.push(line+'  (leg text not understood)');return;}
+    const dm=whenText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    const gameDate=dm?`${dm[3]}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`:today();
+    legs.push({id:'ext'+ticketNo+'_'+legs.length,game:gl,pick,p:ticketAmerToProb(price),sport,gameDate,price,book:'external'});
+  });
+  if(!legs.length)return{ok:false,note:'found Ticket Number '+ticketNo+' but no legs parsed'+(skipped.length?' — '+skipped.length+' line(s) unrecognized':'')};
+  const L=get(LS.locked,[]);
+  const idx=L.findIndex(t=>String(t.id)==='ext'+ticketNo);
+  const ticket={id:'ext'+ticketNo,date:legs[0].gameDate||today(),name:'Ticket #'+ticketNo,source:'mine',imported:true,
+    stake:kv.amount||null,toWin:kv.towin||null,status:kv.status||null,
+    legs,p:legs.reduce((a,x)=>a*x.p,1)};
+  if(idx>=0)L[idx]=ticket;else L.unshift(ticket);
+  set(LS.locked,L);
+  return{ok:true,ticketNo,legCount:legs.length,skipped,replaced:idx>=0};
+}
 async function intakeText(text,sig,type,src){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;type=type||'auto';src=src||'';
+  if(/Ticket Number\s*:/i.test(text)&&/Description\s*:/i.test(text)){
+    const res=parseMyTicketText(text);
+    if(res.ok){
+      const note=`Ticket #${res.ticketNo} ${res.replaced?'updated':'saved'} — ${res.legCount} leg${res.legCount>1?'s':''} to My Parlays`+
+        (res.skipped.length?` (${res.skipped.length} line${res.skipped.length>1?'s':''} skipped — unrecognized)`:'');
+      return{r:{[sp]:{picks:[],trends:[],consensus:[],preds:[],raw:[note],xpicks:[],unread:[]}},how:note};
+    }
+    return{r:{[sp]:{picks:[],trends:[],consensus:[],preds:[],raw:['Ticket import failed: '+res.note],xpicks:[],unread:[]}},how:res.note};
+  }
   if(type!=='auto'&&type!=='odds'){
     let r=intakeTyped(text,type,src,sp);
     if(intakeCount(r))return{r,how:'read as '+type+' locally'};
