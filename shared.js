@@ -48,7 +48,7 @@ function theOddsApiKey(){return get(LS.key,'')||get(LS.oddspapi,'')}
    One bad image never sinks the batch. Nothing saves until you confirm.
    ═══════════════════════════════════════════════════════════════════════════ */
 const INTAKE={busy:false,ctl:null,result:null};
-const INTAKE_BUILD='intake 2026-09-26w';
+const INTAKE_BUILD='intake 2026-09-26y';
 /* Stamp the card so it's obvious which code the phone is actually running. */
 setTimeout(()=>{try{const t=document.getElementById('intakeType'),sr=document.getElementById('intakeSource');if(t)t.value=localStorage.getItem('d4.intakeType')||'auto';if(sr)sr.value=localStorage.getItem('d4.intakeSource')||'';}catch(e){}},0);
 setTimeout(()=>{try{const b=document.getElementById('intakeCancelBtn');if(b&&!document.getElementById('intakeBuild')){
@@ -6528,12 +6528,23 @@ function gradeFBPropLeg(leg,ticketDate){
   const raw=isRec?(found.REC??found.rec??'0'):(found.YDS??found.yds??found.Yds??'0');
   const val=parseFloat(String(raw).replace(/[^0-9.\-]/g,''))||0;
   const {dir,thr}=leg.fbProp;
-  // "175+" is inclusive-at-least; explicit over/under N.5 lines are strict
-  // and can never push (fractional). Conservative like everything else here:
-  // only decided once the game is final — the count can still change live.
-  const hit=R.live?null:(dir==='atleast'?val>=thr:dir==='over'?val>thr:val<thr);
+  // Counting stats (yards, receptions) only go up. An over/at-least prop is a
+  // LOCKED WIN the instant the count clears the threshold — no need to wait
+  // for final, the number can't go back down. An under prop is a LOCKED LOSS
+  // the instant the count exceeds it, same reasoning in reverse. This used to
+  // be R.live?null:decided for every case — meaning a prop that was already
+  // mathematically won sat at "pending" for the entire rest of the game and
+  // only resolved once the final whistle blew, which is what "not live
+  // grading" actually was: correct at the end, silent the whole way there.
+  let hit;
+  if(dir==='under'){
+    hit = val>thr ? false : (R.live?null:true);
+  }else{ // 'atleast' or 'over'
+    const cleared = dir==='atleast'?val>=thr:val>thr;
+    hit = cleared ? true : (R.live?null:false);
+  }
   const label=isRec?'receptions':catKey+' yds';
-  return{hit,detail:`${found.name} ${val} ${label}${R.live?' so far':''}`,live:!!R.live};
+  return{hit,detail:`${found.name} ${val} ${label}${R.live?' so far':''}`,live:!!R.live,prog:{val,thr,dir}};
 }
 function gradeLeg(leg,ticketDate){
   if(leg.fbProp)return gradeFBPropLeg(leg,ticketDate);
@@ -6718,7 +6729,28 @@ function gradeLeg(leg,ticketDate){
    live legs lean on gradeLeg's own live detail text (already computed,
    just never surfaced next to a stale %), and a placeholder-only leg shows
    nothing rather than a number that was never real. */
+/* PrizePicks-style progress bar for a counting-stat prop: how far the actual
+   count is toward the threshold, live, not just win/loss. Reuses whatever
+   gradeFBPropLeg/gradeNHLPropLeg already computed (r.prog) — no separate
+   fetch, no separate matching logic, just a different way of showing the
+   same number. */
+function legProgressBarHtml(prog){
+  if(!prog||prog.thr==null||!prog.thr)return'';
+  const{val,thr,dir}=prog;
+  const fill=Math.max(0,Math.min(100,val/thr*100));
+  const over=dir!=='under';
+  const busted=!over&&val>thr;
+  const cleared=over&&(dir==='atleast'?val>=thr:val>thr);
+  const color=busted?'var(--rust)':cleared?'var(--win)':over?'var(--gold)':'var(--cold)';
+  return`<div style="display:flex;align-items:center;gap:6px;margin:2px 0 1px;min-width:110px">
+    <div style="flex:1;height:5px;border-radius:3px;background:var(--rule);overflow:hidden">
+      <div style="height:100%;width:${fill}%;background:${color}"></div>
+    </div>
+    <span style="font-family:'IBM Plex Mono';font-size:9px;color:${color};white-space:nowrap">${val}/${thr}${cleared?' ✓':busted?' ✕':''}</span>
+  </div>`;
+}
 function legPctHtml(x,r){
+  if(r.prog&&r.prog.thr)return legProgressBarHtml(r.prog);
   if(r.hit===true)return'<span class="pp" style="color:var(--win)">100%</span>';
   if(r.hit===false)return'<span class="pp" style="color:var(--rust)">0%</span>';
   if(r.push)return'<span class="pp" style="color:var(--mute)">PUSH</span>';
@@ -9455,12 +9487,100 @@ function renderBacktest(){
 // straight legs — a parlay counts as N separate record entries, not one. This is the
 // only honest way to answer "how am I actually doing" since a 3-1 parlay record hides
 // that three of those legs individually hit and one alone sank the whole ticket.
+/* ── Archived-ticket retention: 3 days, with a lifetime rollup so the
+   All-time record tab never loses a count ──────────────────────────────────
+   buildAllTimeRecord() below computes your lifetime win/loss stats FRESH,
+   every time, straight from the raw ticket objects in LS.locked — there was
+   no separate aggregate anywhere. Deleting an old ticket to save space would
+   have silently erased its wins and losses from that tally forever. This
+   rolls each purged ticket's leg-by-leg result into a permanent compact
+   counter (LS.lifetimelog: {bucket:{w,l,p,n}}) BEFORE the ticket itself is
+   deleted, and buildAllTimeRecord seeds each bucket with that many synthetic
+   already-decided entries so the count — not the itemized history — survives
+   the purge. A pending or still-live ticket is never touched here regardless
+   of age; only tickets already marked archived (fully graded) age out. */
+const LS_LIFELOG='d4.lifetimelog';
+function lifetimeLog(){return get(LS_LIFELOG,{mine:{w:0,l:0,p:0,n:0},system:{w:0,l:0,p:0,n:0},market:{w:0,l:0,p:0,n:0},specialty:{w:0,l:0,p:0,n:0}});}
+function rollTicketIntoLifetimeLog(t){
+  const key=t.source==='system'?'system':t.source==='market'?'market':t.source==='specialty'?'specialty':'mine';
+  const R=lifetimeLog();const b=R[key]||(R[key]={w:0,l:0,p:0,n:0});
+  t.legs.forEach(x=>{
+    const{hit}=gradeLeg(x,t.date);
+    if(hit===true){b.w++;b.p+=_vProfit(x.price!=null?x.price:-110);}
+    else if(hit===false){b.l++;b.p-=1;}
+    b.n++;
+  });
+  set(LS_LIFELOG,R);
+}
+function purgeOldArchivedTickets(days){
+  days=days||3;
+  const cutoff=Date.now()-days*86400e3;
+  const L=get(LS.locked,[]);const keep=[];let purged=0;
+  L.forEach(t=>{
+    const stamp=t.archived?(t.archivedAt||Date.parse(t.date)||0):Infinity; // never touches a non-archived ticket
+    if(t.archived&&stamp<cutoff){rollTicketIntoLifetimeLog(t);purged++;}
+    else keep.push(t);
+  });
+  if(purged)set(LS.locked,keep);
+  return purged;
+}
+/* Runs once per calendar day, not on every render -- purging is a maintenance
+   task, not something that needs to happen 50 times while you sit on a tab. */
+function maybeRunDailyMaintenance(){
+  const last=localStorage.getItem('d4.lastMaint')||'';
+  if(last===today())return;
+  try{
+    const n=purgeOldArchivedTickets(3);
+    if(n)console.log(`Daily maintenance: rolled up and purged ${n} archived ticket(s) older than 3 days.`);
+  }catch(e){console.warn('daily maintenance',e)}
+  localStorage.setItem('d4.lastMaint',today());
+}
+/* ── Regrade everything right now ────────────────────────────────────────
+   1) Every currently-pending ticket gets graded fresh under whatever the
+      CURRENT rules are (matters right after a grading-logic fix like the
+      football-prop one, where old tickets were sitting on stale null/never-
+      cleared results computed under the old, wrong logic).
+   2) Any ticket that's marked archived but, under fresh grading, ISN'T
+      actually fully decided (a leg's game genuinely isn't over) gets pulled
+      back to pending instead of silently staying mis-filed as done.
+   3) Warms the box-score cache for every pending prop leg on every loaded
+      football/hockey engine, so props start reflecting live progress
+      immediately instead of waiting on the next organic grade call. */
+function regradeAllTicketsNow(){
+  const L=get(LS.locked,[]);let unarchived=0,warmed=0;const seen=new Set();
+  L.forEach(t=>{
+    if(t.archived&&!ticketIsComplete(t)){t.archived=false;delete t.archivedAt;unarchived++;}
+    t.legs.forEach(x=>{
+      if(!(x.fbProp||x.nhlProp))return;
+      const key=x.sport+'|'+x.game;if(seen.has(key))return;seen.add(key);
+      const g=sportGames(x.sport).find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
+      if(!g||g.abstract!=='in')return;
+      const espnId=g.espnId||g.id;
+      if(x.fbProp&&typeof fetchFBBoxscore==='function'){fetchFBBoxscore(espnId,x.sport).catch(()=>{});warmed++;}
+      else if(x.nhlProp&&typeof fetchNHLBox==='function'){fetchNHLBox(espnId).catch(()=>{});warmed++;}
+    });
+  });
+  if(unarchived)set(LS.locked,L);
+  try{if(typeof backfillGrading==='function')backfillGrading(true);}catch(e){}
+  try{if(document.getElementById('v-tickets')&&document.getElementById('v-tickets').classList.contains('on'))renderTickets();}catch(e){}
+  return{unarchived,warmed};
+}
 function buildAllTimeRecord(){
   // Was: mine/system/book/outside, with 'book' dead — nothing has assigned that
   // source since Market/Outside became their own real buckets. Replaced with the
   // actual four LS.locked buckets that exist now: mine/system/market/specialty,
   // plus outside (which draws from uploaded picks, not LS.locked, same as before).
   const mine=[],system=[],market=[],specialty=[],outside=[];
+  // Seed each bucket with its rolled-up totals from purged (aged-out) tickets
+  // first, as generic already-decided entries — so a 3-day-old ticket that
+  // got purged for space still counts toward this lifetime total, it just no
+  // longer shows up as a browsable itemized pick.
+  {const roll=lifetimeLog();
+   [['mine',mine],['system',system],['market',market],['specialty',specialty]].forEach(([k,arr])=>{
+     const b=roll[k];if(!b)return;
+     for(let i=0;i<b.w;i++)arr.push({date:'archived',pick:'(archived)',game:'',hit:true,rolledUp:true});
+     for(let i=0;i<b.l;i++)arr.push({date:'archived',pick:'(archived)',game:'',hit:false,rolledUp:true});
+   });}
 
   // ── every LS.locked ticket, split by its real t.source ──
   get(LS.locked,[]).forEach(t=>{
@@ -14248,6 +14368,8 @@ async function boot(){
     await loadESPN();
   }
   ticketsLiveLoop();
+  try{maybeRunDailyMaintenance();}catch(e){console.warn('daily maintenance',e)}
+  setTimeout(()=>{try{regradeAllTicketsNow();}catch(e){console.warn('regrade all',e)}},1500);
   // catch up anything left ungraded from previous days — run async on football
   // pages so it never blocks the board render
   if(pageSport==='mlb'){
@@ -14681,7 +14803,7 @@ function syncFinalsToShared(){
   const all=migrateFinalsKeys();let changed=false;
   const sweep=(arr,sport)=>(arr||[]).forEach(g=>{
     if(g.awayScore==null||g.awayScore==='')return;
-    const isFinal=g.abstract==='post'||g.abstract==='Final'||g.status==='Final';
+    const isFinal=g.abstract==='post'||(!g.abstract&&g.status==='Final'); // structured state wins
     if(!isFinal)return;
     const key=finalsKey(sport,g.away.abbr+'@'+g.home.abbr);
     const prev=all[key];

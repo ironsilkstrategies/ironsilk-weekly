@@ -1908,7 +1908,7 @@ function nflCardFull(g){
   const s=NFL_SIMS[g.id];
   if(!s)return'';
   const isLive=g.abstract==='in'||g.abstract==='live'||g.status==='InProgress'||g.status==='Halftime';
-  const isFinal=g.abstract==='post'||g.status==='Final';
+  const isFinal=g.abstract==='post'||(!g.abstract&&g.status==='Final'); // structured state wins; the free-text status string only counts when there's no structured state to trust instead
   const gameKey=g.away.abbr+'@'+g.home.abbr;
   const lines=nflBookLinesFor(gameKey);
   const hasReal=lines.length>0;
@@ -2371,6 +2371,26 @@ function nflPropsPanel(g,s){
       Position/depth is shown next to each name — "unmatched" means the roster had no
       player by that name, so a generic share was used. Still a screen, not a signal.</div></div>`);
 }
+/* nflTogglePanel/ncaafTogglePanel only ever toggled a panel's visibility —
+   they never fetched anything. The livebox panel's HTML was written ONCE,
+   at card-build time, before fetchFBBoxscore had ever run for that game, so
+   it always rendered with an empty quarter-by-quarter line (FB_BOX_CACHE was
+   still empty) while the final score displayed fine because THAT comes from
+   the schedule endpoint, a completely separate source that was always
+   populated. Opening the panel never fixed it because nothing re-rendered
+   it afterward either. This fetches on open and re-renders in place, then
+   keeps refreshing every 20s while the game is actually live and the panel
+   stays open. */
+const FB_LIVEBOX_TIMER={};
+function fbRefreshLiveBox(sport,gid){
+  const arr=sport==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[]);
+  const g=arr.find(x=>String(x.id)===String(gid));if(!g)return;
+  const espnId=g.espnId||g.id;
+  fetchFBBoxscore(espnId,sport).then(()=>{
+    const p=document.getElementById('p-'+sport+'livebox-'+gid);
+    if(p&&p.classList.contains('on'))p.innerHTML=fbLiveBoxPanel(g,sport);
+  }).catch(()=>{});
+}
 function nflTogglePanel(which,gid,btn){
   if(which==='props'){const G=NFL_GAMES.find(x=>String(x.id)===String(gid));if(G)setTimeout(()=>nflLoadForm(G).catch(()=>{}),0);}
   const p=document.getElementById('p-nfl'+which+'-'+gid);
@@ -2380,7 +2400,15 @@ function nflTogglePanel(which,gid,btn){
   // close all panels for this card
   row.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
   row.parentElement.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
-  if(!wasOn){p.classList.add('on');btn.classList.add('on');}
+  if(FB_LIVEBOX_TIMER[gid]){clearInterval(FB_LIVEBOX_TIMER[gid]);delete FB_LIVEBOX_TIMER[gid];}
+  if(!wasOn){
+    p.classList.add('on');btn.classList.add('on');
+    if(which==='livebox'){
+      fbRefreshLiveBox('nfl',gid);
+      const G=NFL_GAMES.find(x=>String(x.id)===String(gid));
+      if(G&&G.abstract==='in')FB_LIVEBOX_TIMER[gid]=setInterval(()=>fbRefreshLiveBox('nfl',gid),20000);
+    }
+  }
 }
 
 // Compact A-G panel for individual game card
@@ -2986,7 +3014,7 @@ function fbLiveBoxPanel(g,league){
   const espnId=g.espnId||g.id;
   const cached=FB_BOX_CACHE[espnId];
   const isLive=g.abstract==='in'||g.abstract==='live'||g.status==='InProgress'||g.status==='Halftime';
-  const isFinal=g.abstract==='post'||g.status==='Final';
+  const isFinal=g.abstract==='post'||(!g.abstract&&g.status==='Final'); // structured state wins; the free-text status string only counts when there's no structured state to trust instead
 
   // ── Quarter linescore ────────────────────────────────────────────────
   const mkLinescore=(box)=>{
@@ -3683,7 +3711,7 @@ function ncaafPropsPanel(g){
 function ncaafCard(g){
   const s=NCAAF_SIMS[g.id];if(!s)return'';
   const cfbLive=g.abstract==='in'||g.status==='InProgress'||g.status==='Halftime';
-  const cfbFinal=g.abstract==='post'||g.status==='Final';
+  const cfbFinal=g.abstract==='post'||(!g.abstract&&g.status==='Final');
   const gameKey=g.away.abbr+'@'+g.home.abbr;
   const lines=ncaafBookLinesFor(gameKey);
   const hasReal=lines.length>0;
@@ -3843,7 +3871,7 @@ function ncaafCard(g){
       </div>
     </div>
     ${(g.abstract==='in')?fbLiveScoreBar(g,'ncaaf'):
-      (g.abstract==='post'||g.status==='Final')
+      (g.abstract==='post'||(!g.abstract&&g.status==='Final'))
       ?fbFinalHeadline(g,s,'ncaaf')
       :NCAAF_POWER_FLAT
          ?`<div class="proj"><div class="sc" style="color:var(--mute)">${g.away.abbr} — – — ${g.home.abbr}</div><div class="rd" style="color:var(--rust)">ratings not loaded</div>${fbPredLine(g,'ncaaf',null,null)}${fbJudgeBlock(g,s,'ncaaf')}</div>`
@@ -3935,7 +3963,15 @@ function ncaafTogglePanel(which,gid,btn){
   const row=btn.parentElement;const wasOn=p.classList.contains('on');
   row.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
   row.parentElement.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
-  if(!wasOn){p.classList.add('on');btn.classList.add('on');}
+  if(FB_LIVEBOX_TIMER[gid]){clearInterval(FB_LIVEBOX_TIMER[gid]);delete FB_LIVEBOX_TIMER[gid];}
+  if(!wasOn){
+    p.classList.add('on');btn.classList.add('on');
+    if(which==='livebox'){
+      fbRefreshLiveBox('ncaaf',gid);
+      const G=NCAAF_GAMES.find(x=>String(x.id)===String(gid));
+      if(G&&G.abstract==='in')FB_LIVEBOX_TIMER[gid]=setInterval(()=>fbRefreshLiveBox('ncaaf',gid),20000);
+    }
+  }
 }
 
 function ncaafSlipToggle(gid,label,price){sportSlipToggle('ncaaf',gid,label,price);}

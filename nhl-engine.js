@@ -380,7 +380,7 @@ function gradeNHLPropLeg(leg,ticketDate){
   const v=nhlBoxVal(row,stat);let hit=null;
   const overHit=dir==='atleast'?v>=thr:v>thr;
   if(dir==='under'){if(v>thr)hit=false;else if(!R.live)hit=true;}else{if(overHit)hit=true;else if(!R.live)hit=false;}
-  return{hit,detail:`${row.name} ${v} ${stat}${R.live?' so far':''}`,live:!!R.live};
+  return{hit,detail:`${row.name} ${v} ${stat}${R.live?' so far':''}`,live:!!R.live,prog:{val:v,thr,dir}};
 }
 
 /* ── Rosters ───────────────────────────────────────────────────────────── */
