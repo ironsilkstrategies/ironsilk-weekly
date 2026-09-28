@@ -35,11 +35,11 @@ const w=dom.window;
   const O=w.eval('msOrders(msAll()[0])');
   T("today's orders: all $20 on a 3-team parlay at +596 or longer",O.lanes[0].stake===20&&O.lanes[0].k===3&&w.eval(`decimalToAmerican(${O.lanes[0].minDec})`)==='+596');
   const R=w.eval('msRoutes(msAll()[0])');
-  T('route planner simulates 11 routes and ranks them by finish %',R.length===11&&R.every((r,i)=>i===0||R[i-1].p>=r.p));
+  T('route planner simulates every route and ranks them by finish %',R.length>=15&&R.every((r,i)=>i===0||R[i-1].p>=r.p),R.length+' routes');
   T('simulation is repeatable (seeded)',JSON.stringify(R.map(r=>r.p))===JSON.stringify(w.eval('(()=>{Object.keys(MS_PLAN_CACHE).forEach(k=>delete MS_PLAN_CACHE[k]);return msRoutes(msAll()[0]).map(r=>r.p)})()')));
-  const sim=w.eval("msSimRoute('snowball',{k:2},100,300,30,0.5,americanToDecimal(-110),4000,42)");
+  const L_={dec:w.eval('americanToDecimal(-110)'),p:0.5};const sim=w.eval(`msSimPots([{route:'snowball',cfg:{k:2},bal:100,start:100,L:${JSON.stringify(L_)}}],300,30,4000,42)`);
   T('sim math checks out: one 2-team win at 50%/leg = 25%',Math.abs(sim.p-0.25)<0.025&&Math.abs(sim.bust-0.75)<0.025,sim.p.toFixed(3));
-  const st=w.eval("msSimRoute('stairs',{k:2,f:.25},200,2500,30,0.5,americanToDecimal(-110),3000,7)");
+  const st=w.eval(`msSimPots([{route:'stairs',cfg:{k:2,f:.25},bal:200,start:200,L:${JSON.stringify(L_)}}],2500,30,3000,7)`);
   T('stair-step busts far less than snowball',st.bust<0.5,JSON.stringify(st));
   // ── attach + side quests + safe house ──
   w.eval(`set(LS.locked,[{id:701,date:today(),source:'mine',name:'Heist day 1',imported:true,stake:'20',toWin:'119.20',
@@ -66,7 +66,7 @@ const w=dom.window;
   // ── the Money tab ──
   w.eval("tab('money',null)");await wait(300);const mb=w.document.getElementById('moneyBody').innerHTML;
   T("Money tab: rank, TODAY'S ORDERS, built legs, side quests, route planner, map",/RANK/.test(mb)&&/TODAY'S ORDERS/.test(mb)&&/Built from Today's card/.test(mb)&&/SIDE QUESTS/.test(mb)&&/Route planner/.test(mb)&&/The Vault/.test(mb));
-  T('safe house shown on the heist card',/safe house <b[^>]*>\$29\.80/.test(mb));
+  T('safe house shown on the heist card',/safe <b[^>]*>\$29\.80/.test(mb));
   T('no uncaught errors',errors.length===0,errors.slice(0,3).join(' || '));
   console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length}/${out.length} passed`);
   process.exit(out.some(x=>x.startsWith('FAIL'))?1:0);
