@@ -588,14 +588,14 @@ async function intakeFile(f,sig){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;
   if(isPlainTextFile(f)||isDocxFile(f)){
     const blk=await fileToContentBlock(f,null);return intakeText(blk.text||'',sig,(document.getElementById('intakeType')||{}).value,(document.getElementById('intakeSource')||{}).value);}
-  const key=get(LS.ai,'');if(!key)throw new Error('needs a Gemini key (Settings) — text and .txt files work without one');
+  if(!anthKey()&&!get(LS.ai,''))throw new Error('needs an Anthropic or Gemini key (Settings) — text and .txt files work without one');
   const {mime,data}=await intakeShrink(f);
   if(data.length>11e6)throw new Error('file too large even after compression — split the PDF');
   const TY=(document.getElementById('intakeType')||{}).value||'auto',SR=(document.getElementById('intakeSource')||{}).value||'';
-  const t=await callGemini(key,[{type:mime==='application/pdf'?'document':'image',source:{media_type:mime,data}},
-    {type:'text',text:(TY!=='auto'&&TY!=='odds')?intelTypedPrompt(TY,sp):intakePrompt(sp)}],4000,{timeoutMs:35000,maxAttempts:2,maxWaitMs:3000,signal:sig});
-  if(TY!=='auto'&&TY!=='odds')return{r:intakeTyped(intakeClean(t),TY,SR,sp),how:'screenshot read as '+TY};
-  return{r:intakeParseGrammar(intakeNormalizeKV(intakeClean(t)),sp),how:'screenshot transcribed'};
+  const {t,by}=await visionRead([{type:mime==='application/pdf'?'document':'image',source:{media_type:mime,data}},
+    {type:'text',text:(TY!=='auto'&&TY!=='odds')?intelTypedPrompt(TY,sp):intakePrompt(sp)}],4000,sig);
+  if(TY!=='auto'&&TY!=='odds')return{r:intakeTyped(intakeClean(t),TY,SR,sp),how:'screenshot read by '+by+' as '+TY};
+  return{r:intakeParseGrammar(intakeNormalizeKV(intakeClean(t)),sp),how:'screenshot read by '+by};
 }
 function intakeCancel(){if(INTAKE.ctl)INTAKE.ctl.abort();}
 async function intakeRun(){
@@ -1314,7 +1314,7 @@ function charSquare(sp,g,s,pick,opts){
     const r=charWeight(sp,v,k.market,c.side===k.side?ctx:null);const on=c.side===k.side;
     if(v!=='Sim'){wAll+=r.w;if(on)wOn+=r.w;
       if(z!=null&&r.n>=6){learned=true;z+=0.5*(on?1:-1)*logit(r.p);}}
-    if(on){const C=CHARS[v],weak=v!=='Sim'&&r.n>=10&&r.p<0.47,hot=v!=='Sim'&&r.n>=10&&r.p>=0.56;
+    if(on){const C=CHARS[v],weak=v!=='Sim'&&r.n>=RULE_MIN&&r.p<0.47,hot=v!=='Sim'&&r.n>=RULE_MIN&&r.p>=0.56;
       chipHtml.push(`<span class="hs-chip${v==='Sim'?' god':''}${weak?' weak':''}${hot?' hot':''}" title="${C.label}${r.n?` · ${sp.toUpperCase()} ${k.market} ${r.rec} (${Math.round(r.p*100)}% learned)`:' · no graded history yet'}${c.score?' · '+c.score:''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`);}
   });
   const onN=calls.filter(c=>c.side===k.side).length;
@@ -1325,7 +1325,8 @@ function charSquare(sp,g,s,pick,opts){
   const unanimous=calls.length>=4&&onN===calls.length;
   const brainP=learned&&z!=null?sigm(z):null;
   const meter=`<div class="ch-meter">${onN}/${calls.length} characters${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`;
-  return{chips:chipHtml.length?`<div class="hs-row">${chipHtml.join('')}</div>`:'',meter:onN?meter:'',simHere,support,nOthers:others.length,unanimous,charsAgree,charsAgainst,brainP};
+  let rh='';try{rh=rulesHtml(rulesFor(sp,g,pick))}catch(e){}
+  return{chips:(chipHtml.length?`<div class="hs-row">${chipHtml.join('')}</div>`:'')+rh,meter:onN?meter:'',simHere,support,nOthers:others.length,unanimous,charsAgree,charsAgainst,brainP};
 }
 /* One tier rule for every board. o = the square's own reads, ci = charSquare(). */
 function charTier(o,ci){
@@ -1658,6 +1659,14 @@ function isQuotaErr(e){
   return e&&(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'||e.code===22||e.code===1014);
 }
 // cheapest-to-rebuild first. Each returns true if it actually freed anything.
+/* One identity for a stored book line. A main line (side/spread/total) is one
+   number per game-side-source: a re-upload REPLACES it — keying on the line
+   itself kept the stale 8am spread next to the moved one, and every reader took
+   the first (stale) match. Props key on player + stat + line so two players at
+   the same number no longer overwrite each other. */
+function bookKeyOf(x){return x.market==='prop'?[x.game,x.market,x.side,x.line,x.player||'',x.stat||''].join('|'):[x.game,x.market,x.side,x.src||''].join('|');}
+function bookDedupe(arr){const last={};(arr||[]).forEach((x,i)=>{const k=bookKeyOf(x);const p=last[k];
+  if(p==null||(x.capturedAt||i)>=(arr[p].capturedAt||p))last[k]=i;});const keep=new Set(Object.values(last));return(arr||[]).filter((x,i)=>keep.has(i));}
 const PRUNE_LADDER=[
   ()=>pruneKeyedCache('d4.boxcache',120),      // box scores — refetchable from StatsAPI
   ()=>pruneDatedMap('d4.oddsdate',21),         // historical odds by date
@@ -2512,7 +2521,7 @@ function saveFootballOddsToStorage(sport,picks){
   const d=today();
   const all=get(key,{});
   all[d]=all[d]||[];
-  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  const keyOf=bookKeyOf;all[d]=bookDedupe(all[d]);
   picks.forEach(x=>{
     const awayAb=String(x.away||'').toUpperCase(),homeAb=String(x.home||'').toUpperCase();
     const game=awayAb+'@'+homeAb;
@@ -2572,7 +2581,7 @@ function saveBookOdds(picks,el,fileSport){
   const d=today();
   const all=get(LS.bookshots,{});
   all[d]=all[d]||[];
-  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  const keyOf=bookKeyOf;all[d]=bookDedupe(all[d]);
   const NORM={'CHW':'CWS','AZ':'ARI','WAS':'WSH','ATH':'ATH','OAK':'ATH'};
   const norm=a=>(NORM[a.toUpperCase()]||a.toUpperCase());
   picks.forEach(x=>{
@@ -2635,7 +2644,7 @@ function saveBookShots(){
   all[d]=all[d]||[];
   // dedupe on identity — re-uploading the same slate replaces those selections instead of
   // stacking duplicates, so uploads are safe to repeat and stay locked in cleanly
-  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  const keyOf=bookKeyOf;all[d]=bookDedupe(all[d]);
   parsed.forEach(x=>{
     const homeAb=abbr(x.home)||x.home,awayAb=abbr(x.away)||x.away;
     const rec={...x,home:homeAb,away:awayAb,game:awayAb+'@'+homeAb,capturedAt:Date.now()};
@@ -2736,8 +2745,12 @@ function tab(n,b){
   if(n==='recap')renderRecap();
   if(n==='best'){bestTab(BESTTAB||'today');}
   if(n==='settings')fillSettingsTab();
-  if(n==='money'){const el=document.getElementById('moneyBody');if(el)el.innerHTML=renderMoneyTab();}
+  if(n==='settings'){const m=document.getElementById('storageMeter');if(m)m.innerHTML=storageMeterHtml();}
+  if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+missionsHtml()}catch(e){console.warn('missions',e)}el.innerHTML=h+renderMoneyTab();}}
   if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
+  if(n==='today')renderToday();
+  if(n==='grades')renderRecordsHub();
+  if(n==='mine')openMyGames();
   window.scrollTo(0,0);
 }
 
@@ -6618,6 +6631,8 @@ function resolveLeg(leg,ticketDate){
       // fall through to shared store rather than returning null — the shared
       // store may already hold this game's final from a prior football-page visit
     }
+    // not on this page's slate: live/final from the My Games ESPN feed
+    {const mg=mgResolve(leg,ticketDate);if(mg)return mg;}
     // shared cross-sport finals store — visible on every page
     const shared=allFinals()[finalsKey(leg.sport,leg.game)];
     if(shared&&shared.a!=null)
@@ -6655,6 +6670,8 @@ function resolveLeg(leg,ticketDate){
     }
     return null; // scheduled, hasn't started
   }
+  // 1b) not on this page (e.g. viewing from the NFL page): the My Games ESPN feed
+  if(!(typeof GAMES!=='undefined'&&GAMES.length)){const mg=mgResolve({...leg,sport:'mlb'},ticketDate);if(mg&&mg.live)return mg;}
   // 2) persistent archive — this is what makes yesterday's tickets gradeable
   const arc=get(LS.arc,{});
   const dates=[];
@@ -8170,7 +8187,8 @@ function refreshPayout(id,decOdds,stake){
   if(subEl)subEl.textContent='+$'+res.profit.toFixed(2)+' profit';
   if(pillEl)pillEl.classList.toggle('neg',res.profit<0);
 }
-function buildWagerRow(t){
+function buildWagerRow(t){let x='';try{x=hedgeHtml(t)+oddsSanityHtml(t)}catch(e){}return buildWagerRowCore(t)+x;}
+function buildWagerRowCore(t){
   const w=getWagers();
   const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
   // SGP-imported tickets (parseSGPTicketText) can't recover a real per-leg
@@ -15909,3 +15927,629 @@ function renderCoachTab(){
 
 /* Everything above is now evaluated — deferred data feeds may safely run. */
 SCRIPT_READY=true;
+
+/* ══ THE DAILY LOOP ══════════════════════════════════════════════════════════
+   8am lines → read the board → build tickets → paste them in → follow them.
+   Three pieces live here: Claude vision for screenshots, Today's Card (every
+   colored pick across the characters, deduped and ranked, plus props ≥70%),
+   and My Games (every game you have money on, all sports, one screen). */
+
+/* ── 1. Screenshot reader: Claude vision (your key), Gemini as the fallback ── */
+const ANTH_KEY='d4.anthKey',ANTH_MODEL='d4.anthModel';
+const anthKey=()=>(get(ANTH_KEY,'')||'').trim();
+const anthModel=()=>(get(ANTH_MODEL,'')||'claude-sonnet-5').trim();
+async function callClaudeVision(blocks,maxTokens,sig){
+  const content=blocks.map(b=>b.type==='text'?b:{type:b.type,source:{type:'base64',media_type:b.source.media_type,data:b.source.data}});
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:sig,
+    headers:{'content-type':'application/json','x-api-key':anthKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:anthModel(),max_tokens:maxTokens||4000,messages:[{role:'user',content}]})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error('Claude '+r.status+': '+((j.error&&j.error.message)||'request failed'));
+  return (j.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('\n');
+}
+/* Which reader handles a screenshot: Claude when its key is set, else Gemini. */
+async function visionRead(blocks,maxTokens,sig){
+  const ak=anthKey(),gk=get(LS.ai,'');
+  if(ak){try{return{t:await callClaudeVision(blocks,maxTokens,sig),by:'Claude'};}
+    catch(e){if(!gk||sig&&sig.aborted)throw e;console.warn('Claude vision failed, trying Gemini',e);}}
+  if(!gk)throw new Error('needs an Anthropic or Gemini key (Settings) — pasted text and .txt files work without one');
+  return{t:await callGemini(gk,blocks,maxTokens,{timeoutMs:35000,maxAttempts:2,maxWaitMs:3000,signal:sig}),by:'Gemini'};
+}
+function saveAnthSettings(){
+  const k=document.getElementById('anthKeyIn'),m=document.getElementById('anthModelIn');
+  if(k)set(ANTH_KEY,k.value.trim());if(m)set(ANTH_MODEL,m.value.trim());
+  const s=document.getElementById('anthKeyStatus');if(s)s.textContent=anthKey()?'✓ saved — screenshots go to Claude first':'no key — screenshots use Gemini';
+}
+
+/* ── 2. Today's Card ────────────────────────────────────────────────────── */
+const TC_KEY='d4.todaycard';
+const TC_COL={' supreme':['#FFD75E','SUPREME'],' strong':['#5FD3E8','STRONG'],value:['#2ecc71','VALUE'],source:['#a78bfa','OUTSIDE']};
+function tcOutside(sp,g,pick){
+  const gk=g.away.abbr+'@'+g.home.abbr;let rows=[],mk=null,sd=null;
+  try{
+    if(sp==='mlb'){rows=extToday().filter(x=>x.gid===g.id);const same=rows.filter(x=>marketMatchesPick(x,pick,pick));const on=same.filter(x=>pickMatchesSide(x,pick,pick));
+      return{agree:on.length>0,against:!on.length&&same.length>0,unanimous:new Set(same.map(x=>x.src)).size>=2&&new Set(on.map(x=>x.src)).size===new Set(same.map(x=>x.src)).size};}
+    if((sp==='nfl'||sp==='ncaaf')&&typeof nflMarketMatchesPick==='function'){
+      rows=sp==='nfl'?(typeof nflExtFor==='function'?nflExtFor(gk):[]):(typeof ncaafExtFor==='function'?ncaafExtFor(gk):[]);
+      const same=rows.filter(x=>nflMarketMatchesPick(x,pick)),on=same.filter(x=>nflPickMatchesSide(x,pick));
+      const s1=new Set(same.map(x=>x.src||'upload')),s2=new Set(on.map(x=>x.src||'upload'));
+      return{agree:on.length>0,against:!on.length&&same.length>0,unanimous:s1.size>=2&&s2.size===s1.size};}
+    if(sp==='nhl'&&typeof nhlOutsideFor==='function'){const k=sqKey(sp,g,pick);if(!k)return{};
+      const same=nhlOutsideFor(gk).filter(x=>{const q=sqKey(sp,g,x.pick);return q&&q.market===k.market;}),on=same.filter(x=>sqKey(sp,g,x.pick).side===k.side);
+      const s1=new Set(same.map(x=>x.src)),s2=new Set(on.map(x=>x.src));
+      return{agree:on.length>0,against:!on.length&&same.length>0,unanimous:s1.size>=2&&s2.size===s1.size};}
+  }catch(e){}
+  return{};
+}
+const tcSgn=n=>n==null?'':(n>0?'+':'')+n;
+/* Every side of every market on today's board, run through the same reads the
+   squares use, kept only if it earns one of your colors and isn't in conflict. */
+function todayCandidates(sp){
+  const games=sportGames(sp);const S=sportSims(sp);const out=[];
+  games.forEach(g=>{
+    const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');if(!pre)return;
+    let s=S[g.id];if(!s&&sp==='nhl'&&typeof nhlSimFor==='function'){try{s=nhlSimFor(g)}catch(e){}}if(!s||s.aw==null)return;
+    const gl=g.away.abbr+'@'+g.home.abbr,A=g.away.abbr,H=g.home.abbr,Ln=voicesLines(sp,g);
+    let calls=[];try{calls=characterCalls(sp,g,s)}catch(e){}
+    const lineOf=(m,side)=>{const c=calls.find(x=>x.market===m&&x.side===side);if(c)return c.line;
+      const o=calls.find(x=>x.market===m);if(!o||o.line==null)return null;return m==='spread'?-o.line:o.line;};
+    const cand=[];
+    const hlReal=Ln.spH&&Ln.spH.line!=null?+Ln.spH.line:null,tlReal=Ln.ov&&Ln.ov.line!=null?+Ln.ov.line:null;
+    // moneyline
+    [['home',H,Ln.mlH,s.hw],['away',A,Ln.mlA,s.aw]].forEach(([sd,ab,L,p])=>cand.push({m:'ml',sd,pick:ab+' ML',L,p,other:sd==='home'?Ln.mlA:Ln.mlH}));
+    // spread
+    const hl=hlReal!=null?hlReal:lineOf('spread','home');
+    if(hl!=null){const cover=(side,line)=>{try{if(typeof s.homeCover==='function')return side==='home'?s.homeCover(line):s.awayCover(line);
+        if(sp==='mlb'&&typeof rlProb==='function')return side==='home'?rlProb(g,s,'home',-line):rlProb(g,s,'away',line);}catch(e){}return null;};
+      cand.push({m:'spread',sd:'home',pick:H+' '+tcSgn(hl),L:hlReal!=null?Ln.spH:null,p:cover('home',hl),other:Ln.spA});
+      cand.push({m:'spread',sd:'away',pick:A+' '+tcSgn(-hl),L:hlReal!=null?Ln.spA:null,p:cover('away',-hl),other:Ln.spH});}
+    // total
+    const tl=tlReal!=null?tlReal:lineOf('total','over');
+    if(tl!=null&&typeof s.over==='function'){const po=s.over(tl),pu=typeof s.under==='function'?s.under(tl):1-po;
+      cand.push({m:'total',sd:'over',pick:'Over '+tl,L:tlReal!=null?Ln.ov:null,p:po,other:Ln.un});
+      cand.push({m:'total',sd:'under',pick:'Under '+tl,L:tlReal!=null?Ln.un:null,p:pu,other:Ln.ov});}
+    cand.forEach(c=>{
+      const price=c.L&&c.L.price!=null?+c.L.price:null,hasLine=price!=null;
+      let kp=null;if(hasLine){kp=imp(price);if(c.other&&c.other.price!=null){const k2=imp(+c.other.price);kp=kp/(kp+k2);}}
+      const mp=typeof c.p==='number'&&isFinite(c.p)?c.p:null;
+      const gap=hasLine&&mp!=null?(mp-kp)*100:null;
+      const modelEdgeHere=gap!=null&&gap>=EDGE_MIN,modelAgainstHere=gap!=null&&gap<=-EDGE_MIN,bookLeans=kp!=null&&kp>=0.58;
+      const os=hasLine?tcOutside(sp,g,c.pick):{};
+      const ci=charSquare(sp,g,s,c.pick,{price,modelP:mp});
+      const tier=charTier({hasLine,bookLeans,modelEdgeHere,modelAgainstHere,outsideAgrees:!!os.agree,outsideUnanimous:!!os.unanimous,outsideAgainst:!!os.against},ci);
+      if(tier===' conflict')return;
+      const color=tier===' supreme'||tier===' strong'?tier:modelEdgeHere?'value':os.agree?'source':null;
+      if(!color)return;
+      const rank={' supreme':4,' strong':3,value:2,source:1.5}[color]+(ci.brainP!=null?ci.brainP:(mp||0.5))+(gap!=null?Math.max(0,gap)/100:0);
+      const chars=calls.filter(x=>x.market===c.m&&x.side===c.sd&&CHARS[x.voice]).map(x=>x.voice);
+      let rules=[];try{rules=rulesFor(sp,g,c.pick)}catch(e){}
+      const rk=rank+0.15*rules.filter(r=>r.icon==='🔥'||r.icon==='🤝'||r.icon==='💰').length-0.3*rules.filter(r=>r.icon==='🧊').length;
+      out.push({sp,gid:g.id,game:gl,start:g.start||g.date||g.gameDate||'',m:c.m,sd:c.sd,pick:c.pick,price,mp,brainP:ci.brainP,gap,color,rank:rk,rules,chars,
+        of:ci.nOthers!=null?ci.nOthers+(ci.simHere!==undefined?1:0):0});
+    });
+  });
+  // one pick per game-market: if both sides somehow qualify, keep the stronger
+  const best={};out.forEach(x=>{const k=x.game+'|'+x.m;if(!best[k]||x.rank>best[k].rank)best[k]=x;});
+  return Object.values(best).sort((a,b)=>b.rank-a.rank);
+}
+/* Model props at ≥70%: the most aggressive line each player still clears 70% on. */
+function todayProps(sp){
+  const out=[];if(sp!=='nfl'||typeof nflModelProps!=='function')return out;
+  sportGames(sp).forEach(g=>{if((g.abstract||'pre')!=='pre')return;const s=sportSims(sp)[g.id];if(!s)return;
+    let P=[];try{P=nflModelProps(g,s)}catch(e){}
+    P.forEach(x=>{
+      if(x.book&&x.book.p>=0.70){out.push({game:g.away.abbr+'@'+g.home.abbr,name:x.name,team:x.team,lab:x.lab,line:x.book.line,p:x.book.p,proj:x.proj,book:true,price:x.book.price});return;}
+      const ok=(x.ladder||[]).filter(l=>l.p>=0.70).sort((a,b)=>b.line-a.line)[0];
+      if(ok)out.push({game:g.away.abbr+'@'+g.home.abbr,name:x.name,team:x.team,lab:x.lab,line:ok.line,p:ok.p,proj:x.proj,book:false});});
+  });
+  return out.sort((a,b)=>b.p-a.p).slice(0,40);
+}
+/* Today's snapshot per sport — each board refreshes its own sport when it
+   renders, so the Today tab shows every sport from any page. Only today is
+   kept, so it never grows. */
+let TC_T=null;
+function todaySnapshotSoon(){clearTimeout(TC_T);TC_T=setTimeout(todaySnapshot,1200);}
+function todaySnapshot(){
+  const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;if(!sp)return;
+  try{clvCapture(sp)}catch(e){}
+  let picks=[],props=[];try{picks=todayCandidates(sp)}catch(e){console.warn('today picks',e)}try{props=todayProps(sp)}catch(e){}
+  const all=get(TC_KEY,{})||{};const d=today();const T=all.d===d?all:{d,by:{}};
+  T.by[sp]={ts:Date.now(),picks,props};set(TC_KEY,T);
+  const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
+}
+function onTicketMatch(sp,game,m,sd){
+  const L=get(LS.locked,[]).filter(t=>!t.archived);
+  return L.some(t=>(t.legs||[]).some(l=>{if((l.sport||'mlb')!==sp||l.game!==game)return false;
+    const [a,h]=game.split('@');const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);return k&&k.market===m&&k.side===sd;}));
+}
+const SP_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL'};
+function renderToday(noSnap){
+  const el=document.getElementById('todayBody');if(!el)return;
+  if(!noSnap)todaySnapshot();
+  const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
+  const sports=['nfl','ncaaf','mlb','nhl'].filter(sp=>by[sp]);
+  const legend=`<div class="sub mono" style="font-size:9.5px;margin-bottom:6px">${Object.values(TC_COL).map(([c,l])=>`<span style="color:${c};margin-right:8px">■ ${l}</span>`).join('')}· conflicts and red are left off</div>`;
+  if(!sports.length){el.innerHTML=legend+'<div class="empty">Open a sport\'s Games board once today and its picks land here.</div>';return;}
+  const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
+  const age=ts=>{const m=Math.round((Date.now()-ts)/60000);return m<1?'just now':m<60?m+'m ago':Math.round(m/60)+'h ago';};
+  el.innerHTML=legend+sports.map(sp=>{const B=by[sp];const P=B.picks||[];
+    const rows=P.map(x=>{const [c,l]=TC_COL[x.color];const on=onTicketMatch(sp,x.game,x.m,x.sd);
+      const pr=x.price!=null?tcSgn(x.price):'<span style="color:var(--mute)">sim</span>';
+      const pc=x.brainP!=null?`brain ${Math.round(x.brainP*100)}%`:x.mp!=null?`model ${Math.round(x.mp*100)}%`:'';
+      return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${c};background:rgba(255,255,255,.02);${on?'opacity:.55':''}">
+        <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${esc(x.pick)} <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${pr}</span></div>
+          <div class="mono" style="font-size:9.5px;color:var(--mute)">${esc(x.game)} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${(()=>{const K=kellyStake(x.brainP!=null?x.brainP:x.mp,x.price);return K&&K.f>0?` · <b style="color:var(--win)">stake ${K.amt!=null?'$'+K.amt.toFixed(2):(K.f*100).toFixed(1)+'% of bankroll'}</b>`:'';})()}</div>
+          <div class="hs-row" style="justify-content:flex-start">${x.chars.map(chip).join('')}</div>${x.rules&&x.rules.length?`<div class="rule-row" style="justify-content:flex-start">${x.rules.slice(0,3).map(r=>`<span class="rule ${r.kind}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:''}</div>
+        <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:${c};font-weight:800">${l}${on?'<br><span style="color:var(--win)">✓ ON A TICKET</span>':''}</div></div>`;}).join('');
+    const props=(B.props||[]).map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${esc(x.name)}</b> ${x.line}+ ${esc(x.lab)} <b style="color:var(--win)">${Math.round(x.p*100)}%</b> <span style="color:var(--mute)">· proj ${x.proj} · ${esc(x.game)}${x.book?' · book '+tcSgn(x.price):''}</span></div>`).join('');
+    return`<div class="sbar" style="margin-top:10px"><h2>${SP_LAB[sp]} · ${P.length} pick${P.length===1?'':'s'}</h2><div class="ln"></div></div>
+      <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
+      ${rows||'<div class="empty">No colored, non-conflicted picks on this board yet.</div>'}
+      ${props?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
+}
+
+/* ── 3. My Games: every game you have money on, all sports ────────────────── */
+const MG_URL={mlb:'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard',nfl:'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
+  ncaaf:'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard',nhl:'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard'};
+const MG_ALIAS={mlb:{CHW:'CWS',ARI:'AZ',OAK:'ATH',WAS:'WSH'},nfl:{WAS:'WSH',JAC:'JAX',LA:'LAR',LVR:'LV',OAK:'LV',ARZ:'ARI'},ncaaf:{},
+  nhl:{LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV:'VGK',MON:'MTL',UTA:'UTAH',WAS:'WSH'}};
+const mgAb=(sp,x)=>{x=String(x||'').toUpperCase();return(MG_ALIAS[sp]||{})[x]||x;};
+const mgKey=(sp,gl)=>{const [a,h]=String(gl||'').split('@');return mgAb(sp,a)+'@'+mgAb(sp,h);};
+let MG_LIVE={},MG_TS=0,MG_BUSY=false,MG_TIMER=null;
+function mgPending(){
+  const out=[];get(LS.locked,[]).filter(t=>!t.archived).forEach(t=>(t.legs||[]).forEach(l=>out.push({t,l,sp:l.sport||'mlb',d:l.gameDate||t.date||today()})));
+  return out;
+}
+async function mgRefresh(force){
+  if(MG_BUSY||(!force&&Date.now()-MG_TS<40e3))return;MG_BUSY=true;
+  try{
+    const need={};mgPending().forEach(x=>{(need[x.sp]=need[x.sp]||new Set()).add(String(x.d).slice(0,10));});
+    const jobs=Object.entries(need).map(async([sp,ds])=>{
+      const arr=[...ds].sort();const lo=fbpYmd(arr[0]),hi=fbpShift(arr[arr.length-1],1);
+      try{const r=await fetch(MG_URL[sp]+'?dates='+lo+'-'+hi+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400'));const j=await r.json();
+        const M={};(j.events||[]).forEach(ev=>{const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];
+          const aw=cs.find(x=>x.homeAway==='away'),hm=cs.find(x=>x.homeAway==='home');if(!aw||!hm)return;
+          const st=(ev.status||c.status||{});const state=(st.type||{}).state||'pre';
+          const ls=x=>(x.linescores||[]).map(v=>+(v.value!=null?v.value:v.displayValue)||0);const la=ls(aw),lh=ls(hm);
+          const k=mgKey(sp,aw.team.abbreviation+'@'+hm.team.abbreviation);
+          (M[k]=M[k]||[]).push({espnId:String(ev.id),date:ev.date?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date)):'',
+            start:ev.date,state,detail:(st.type||{}).shortDetail||'',period:st.period||0,
+            a:aw.score!=null&&aw.score!==''?+aw.score:null,h:hm.score!=null&&hm.score!==''?+hm.score:null,
+            h1a:la.length>=2?la[0]+la[1]:null,h1h:lh.length>=2?lh[0]+lh[1]:null,p1a:la.length?la[0]:null,p1h:lh.length?lh[0]:null});});
+        MG_LIVE[sp]=M;}catch(e){}
+    });
+    await Promise.all(jobs);MG_TS=Date.now();
+  }finally{MG_BUSY=false;}
+}
+/* The ESPN event for a leg: same teams, on (or just after) the leg's date. */
+function mgEventFor(sp,game,d){
+  const L=(MG_LIVE[sp]||{})[mgKey(sp,game)];if(!L||!L.length)return null;
+  const day=String(d||'').slice(0,10);
+  return L.find(e=>e.date===day)||L.filter(e=>!day||e.date>=day).sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
+}
+function mgResolve(leg,ticketDate){
+  const e=mgEventFor(leg.sport||'mlb',leg.game,leg.gameDate||ticketDate);if(!e||e.a==null||e.state==='pre')return null;
+  return{a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,period:e.period,gid:leg.gid,live:e.state==='in',source:'espn-live',completed:e.state==='post'?true:null};
+}
+function renderMyGames(){
+  const el=document.getElementById('mineBody');if(!el)return;
+  const P=mgPending();
+  if(!P.length){el.innerHTML='<div class="empty">No pending tickets. Paste a ticket into Intake and its games show up here.</div>';return;}
+  const G={};P.forEach(x=>{const k=x.sp+'|'+x.l.game+'|'+String(x.d).slice(0,10);(G[k]=G[k]||{sp:x.sp,game:x.l.game,d:String(x.d).slice(0,10),rows:[]}).rows.push(x);});
+  const list=Object.values(G).map(b=>{
+    const onPage=sportGames(b.sp).find(z=>mgKey(b.sp,z.away.abbr+'@'+z.home.abbr)===mgKey(b.sp,b.game));
+    const e=mgEventFor(b.sp,b.game,b.d);
+    let state=e?e.state:'pre',a=e?e.a:null,h=e?e.h:null,detail=e?e.detail:'',start=e?e.start:'';
+    if(onPage){const ab=onPage.abstract;state=ab==='in'||ab==='Live'||onPage.status==='InProgress'?'in':(ab==='post'||ab==='Final'||onPage.status==='Final')?'post':state;
+      if(onPage.awayScore!=null&&onPage.awayScore!==''){a=+onPage.awayScore;h=+onPage.homeScore;}}
+    return{...b,state,a,h,detail,start};
+  }).sort((x,y)=>({in:0,pre:1,post:2}[x.state]-{in:0,pre:1,post:2}[y.state])||String(x.start||x.d).localeCompare(String(y.start||y.d)));
+  const [A,H]=['',''];
+  const hedges=get(LS.locked,[]).map(t=>{try{return hedgeHtml(t)?`<div class="sub" style="margin-top:6px"><b>${esc(t.name||('Ticket #'+t.id))}</b></div>`+hedgeHtml(t):''}catch(e){return''}}).join('');
+  el.innerHTML=hedges+`<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin-bottom:6px">${list.length} game${list.length>1?'s':''} with money on them · live scores refresh every 45s while this tab is open</div>`+
+  list.map(b=>{const [aw,hm]=b.game.split('@');
+    const sc=b.a!=null?`${aw} <b>${b.a}</b> – <b>${b.h}</b> ${hm}`:`${aw} @ ${hm}`;
+    const st=b.state==='in'?`<span style="color:var(--rust)">● LIVE</span> ${esc(b.detail)}`:b.state==='post'?'FINAL':(b.start?new Date(b.start).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}):b.d);
+    const legs=b.rows.map(x=>{let g=null,badge='',bar='';try{g=gradeLeg(x.l,x.t.date)}catch(e){}try{badge=gradeLegBadge(x.l,x.t.date)}catch(e){}try{bar=legPctHtml(x.l,g)}catch(e){}
+      return`<div class="sub" style="margin:3px 0"><span style="color:var(--mute);font-size:10px">${esc(x.t.name||('#'+x.t.id))}</span> · <b>${esc(x.l.pick)}</b> ${badge}${g&&g.detail?` <span class="mono" style="font-size:9.5px;color:var(--mute)">${esc(g.detail)}</span>`:''}${bar||''}</div>`;}).join('');
+    const tix=new Set(b.rows.map(x=>x.t.id)).size;
+    return`<div class="tkt${b.state==='in'?' hi':''}" style="margin:6px 0">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div style="font-weight:900;font-size:15px">${SP_LAB[b.sp]||''} ${sc}</div>
+        <div class="mono" style="font-size:10px">${st}</div></div>
+      <div class="mono" style="font-size:9px;color:var(--mute);margin:2px 0 4px">${b.rows.length} leg${b.rows.length>1?'s':''} on ${tix} ticket${tix>1?'s':''} · <a href="#" onclick="doSportSwitch('${b.sp}');return false" style="color:var(--cold)">open full card →</a></div>
+      ${legs}</div>`;}).join('');
+}
+function mgLoop(){
+  if(MG_TIMER)clearInterval(MG_TIMER);
+  const tick=async()=>{const v=document.getElementById('v-mine');if(!v||!v.classList.contains('on')||document.hidden)return;
+    await mgRefresh();renderMyGames();};
+  MG_TIMER=setInterval(tick,45e3);
+}
+async function openMyGames(){renderMyGames();await mgRefresh(true);renderMyGames();mgLoop();}
+
+/* ── Wiring: tabs, settings, snapshots — injected so all four pages get it ── */
+function dailyLoopInject(){
+  try{
+    const nav=document.querySelector('nav');
+    if(nav&&!document.getElementById('navToday')){
+      const games=[...nav.querySelectorAll('button')].find(b=>/tab\('games'/.test(b.getAttribute('onclick')||''));
+      const mk=(id,lab,n)=>{const b=document.createElement('button');b.id=id;b.setAttribute('onclick',`tab('${n}',this)`);b.innerHTML=lab;return b;};
+      const b1=mk('navToday','Today','today'),b2=mk('navMine','My Games<span class="n" id="nMine"></span>','mine');
+      if(games&&games.nextSibling){nav.insertBefore(b2,games.nextSibling);nav.insertBefore(b1,b2);}else{nav.appendChild(b1);nav.appendChild(b2);}
+    }
+    const main=document.querySelector('main');
+    if(main&&!document.getElementById('v-today')){
+      const v1=document.createElement('div');v1.className='view';v1.id='v-today';
+      v1.innerHTML=`<div class="sbar" style="margin-top:0"><h2>Today's card</h2><div class="ln"></div></div>
+        <div class="sub" style="margin-bottom:6px">Every gold, cyan, green and purple pick on today's boards — one per game and market, strongest first, conflicts left off. The letters are the characters on that side. Faded rows are already on a ticket.</div>
+        <div id="todayBody"></div><div class="bar"><button class="primary" onclick="renderToday()">Refresh</button></div>`;
+      const v2=document.createElement('div');v2.className='view';v2.id='v-mine';
+      v2.innerHTML=`<div class="sbar" style="margin-top:0"><h2>My games</h2><div class="ln"></div></div><div id="mineBody"></div>
+        <div class="bar"><button class="primary" onclick="openMyGames()">Refresh scores</button></div>`;
+      main.appendChild(v1);main.appendChild(v2);
+    }
+    const setv=document.getElementById('v-settings');
+    if(setv&&!document.getElementById('anthKeyIn')){
+      const d=document.createElement('div');d.className='tkt';
+      d.innerHTML=`<div data-lbl="anthKeyIn" style="font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:2px 0 4px">Anthropic key — reads your sportsbetting.ag screenshots</div>
+        <input id="anthKeyIn" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" value="${esc(anthKey())}" onchange="saveAnthSettings()">
+        <input id="anthModelIn" placeholder="model (default claude-sonnet-5)" autocomplete="off" spellcheck="false" value="${esc(get(ANTH_MODEL,'')||'')}" onchange="saveAnthSettings()" style="margin-top:6px">
+        <div class="sub mono" id="anthKeyStatus" style="font-size:10px;margin-top:4px">${anthKey()?'✓ saved — screenshots go to Claude first':'no key — screenshots use Gemini'}</div>
+        <div class="sub" style="font-size:10px;color:var(--mute)">Stored only in this browser. Each screenshot costs a few cents on your Anthropic account. If Claude fails, Gemini is tried next.</div>`;
+      const first=setv.querySelector('.tkt');if(first)setv.insertBefore(d,first);else setv.appendChild(d);
+    }
+    const gv=document.getElementById('v-grades');
+    if(gv&&!document.getElementById('recordsHub')){const h=document.createElement('div');h.id='recordsHub';gv.insertBefore(h,gv.firstChild);}
+    if(setv&&!document.getElementById('storageMeter')){const d=document.createElement('div');d.className='tkt';
+      d.innerHTML='<div class="sbar" style="margin-top:0"><h2>Storage</h2><div class="ln"></div></div><div id="storageMeter"></div>';setv.appendChild(d);}
+    navTidy();try{storageTidy()}catch(e){}
+    const n=document.getElementById('nMine');if(n){const c=new Set(mgPending().map(x=>x.sp+x.l.game)).size;n.textContent=c||'';}
+    ['render','renderNFL','renderNCAAF','renderNHL'].forEach(fn=>{const f=window[fn];if(typeof f!=='function'||f.__tc)return;
+      const w=function(){const r=f.apply(this,arguments);try{todaySnapshotSoon()}catch(e){}return r;};w.__tc=1;window[fn]=w;});
+  }catch(e){console.warn('daily loop inject',e);}
+}
+if(typeof document!=='undefined'){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',dailyLoopInject);else setTimeout(dailyLoopInject,0);}
+
+/* ══ RECORDS HUB · NAVIGATION · STORAGE ══════════════════════════════════════ */
+const HUB_VOICES=['Sim','Judge','Coach','Most common','Pred','Trends','Consensus','Books'];
+let HUB_CACHE=null,HUB_SIG='';
+/* Your pick record: every distinct pick on your settled tickets (ten tickets
+   with the same leg count once), graded, split by sport. */
+function hubYou(){
+  const L=get(LS.locked,[]).filter(t=>!TRACKED_ONLY_SOURCES.has(t.source));
+  const seen={},R={};let tw=0,tl=0,units=0;
+  L.forEach(t=>{
+    let rec=null;try{rec=ticketIsComplete(t)?ticketRecord(t):null}catch(e){}
+    if(rec){if(rec.l>0)tl++;else if(rec.w>0)tw++;
+      const st=parseFloat(t.stake),tw_=parseFloat(t.toWin);if(st>0&&tw_>0)units+=rec.l>0?-st:tw_;}
+    (t.legs||[]).forEach(l=>{const sp=l.sport||'mlb',k=sp+'|'+l.game+'|'+(l.gameDate||t.date)+'|'+String(l.pick).trim();if(seen[k])return;
+      let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(!g||g.hit==null)return;seen[k]=1;
+      const o=R[sp]||(R[sp]={w:0,n:0});o.n++;if(g.hit)o.w++;});
+  });
+  return{tickets:{w:tw,l:tl,units},picks:R};
+}
+function hubData(){
+  const V=get(VOICES_KEY,[]);const sig=V.length+'|'+get(LS.locked,[]).length+'|'+Math.floor(Date.now()/300e3);
+  if(HUB_CACHE&&HUB_SIG===sig)return HUB_CACHE;
+  const M={};V.forEach(x=>{if(!x.graded||x.hit==null)return;const v=HUB_VOICES.includes(x.voice)?x.voice:'Outside preds';
+    const o=((M[v]||(M[v]={}))[x.sp]||(M[v][x.sp]={w:0,n:0,u:0}));o.n++;if(x.hit)o.w++;o.u+=x.units||0;});
+  HUB_CACHE={M,you:hubYou()};HUB_SIG=sig;return HUB_CACHE;
+}
+function renderRecordsHub(){
+  const el=document.getElementById('recordsHub');if(!el)return;
+  let D;try{D=hubData()}catch(e){el.innerHTML='';return;}
+  const SPS=['mlb','nfl','ncaaf','nhl'];
+  const cell=(o)=>{if(!o||!o.n)return'<td style="color:var(--mute)">—</td>';const p=o.w/o.n;
+    const c=o.n>=10?(p>=0.55?'var(--win)':p<0.47?'var(--rust)':'var(--chalk)'):'var(--mute)';
+    return`<td style="color:${c}">${o.w}-${o.n-o.w}<br><b>${Math.round(p*100)}%</b></td>`;};
+  const sum=obj=>{const o={w:0,n:0};Object.values(obj||{}).forEach(x=>{o.w+=x.w;o.n+=x.n;});return o;};
+  const row=(label,obj,color)=>`<tr><td style="text-align:left;white-space:nowrap"><b style="color:${color||'var(--chalk)'}">${label}</b></td>${cell(sum(obj))}${SPS.map(sp=>cell((obj||{})[sp])).join('')}</tr>`;
+  const Y=D.you;
+  const rows=[row('You (picks)',Y.picks,'var(--gold)')].concat(
+    HUB_VOICES.filter(v=>D.M[v]).map(v=>row((CHARS[v]?CHARS[v].chip+' ':'')+(CHARS[v]?CHARS[v].label:v),D.M[v],CHARS[v]?CHARS[v].color:null)),
+    D.M['Outside preds']?[row('Outside preds',D.M['Outside preds'])]:[]);
+  const best=HUB_VOICES.concat(['Outside preds']).map(v=>({v,o:sum(D.M[v])})).filter(x=>x.o.n>=15).sort((a,b)=>b.o.w/b.o.n-a.o.w/a.o.n)[0];
+  el.innerHTML=`<div class="tkt hi" style="margin-bottom:8px"><h3>Records hub — everyone, every sport</h3>
+    <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+':''}$${Y.tickets.units.toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
+    <div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;border-collapse:collapse;text-align:center">
+      <tr style="color:var(--mute)"><td></td><td>ALL</td><td>MLB</td><td>NFL</td><td>CFB</td><td>NHL</td></tr>${rows.join('')}</table></div>
+    <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = winning over 10+ calls, red = losing. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div></div>`+(()=>{try{return clvHtml()+playbooksHtml()}catch(e){console.warn('clv/playbooks',e);return''}})();
+}
+/* Tabs you use daily stay in front; the rest sit under More. */
+const NAV_PRIMARY=['games','today','mine','tickets','grades','money'];
+function navTidy(){
+  const nav=document.querySelector('nav');if(!nav||document.getElementById('navMore'))return;
+  const btns=[...nav.querySelectorAll('button')];const nameOf=b=>((b.getAttribute('onclick')||'').match(/tab\('(\w+)'/)||[])[1];
+  const order=NAV_PRIMARY.map(n=>btns.find(b=>nameOf(b)===n)).filter(Boolean);
+  const rest=btns.filter(b=>!order.includes(b));
+  order.forEach(b=>nav.appendChild(b));
+  const more=document.createElement('button');more.id='navMore';more.textContent='More ▾';
+  more.onclick=()=>{nav.classList.toggle('more-open');more.textContent=nav.classList.contains('more-open')?'Less ▴':'More ▾';};
+  nav.appendChild(more);rest.forEach(b=>{b.classList.add('nav-sec');nav.appendChild(b);});
+  if(!document.getElementById('navCss')){const st=document.createElement('style');st.id='navCss';
+    st.textContent='nav:not(.more-open)>button.nav-sec:not(.on){display:none}';document.head.appendChild(st);}
+}
+/* Storage: what's using the ~5MB, and a daily tidy of stores that only grow. */
+function storageReport(){
+  const rows=[];let tot=0;
+  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);const n=(localStorage.getItem(k)||'').length*2;tot+=n;rows.push([k,n]);}
+  return{tot,rows:rows.sort((a,b)=>b[1]-a[1])};
+}
+function storageTidy(force){
+  const d=today();if(!force&&get('d4.tidyDay','')===d)return 0;let n=0;
+  const dated=[LS.extpicks,LS.exttrends,LS.extconsensus,LS.nflext,LS.nfltrends,LS.nflconsensus].filter(Boolean);
+  dated.forEach(k=>{try{if(pruneDatedMap(k,45))n++;}catch(e){}});
+  try{const I=get(FBP_IDX_KEY,{})||{};const cut=fbpShift(d,-30);let ch=false;
+    Object.keys(I).forEach(k=>{const dd=k.split(':')[2];if(dd&&dd<cut){delete I[k];ch=true;}});if(ch){set(FBP_IDX_KEY,I);n++;}}catch(e){}
+  try{localStorage.removeItem('d4.fbptried');}catch(e){}
+  set('d4.tidyDay',d);return n;
+}
+function storageMeterHtml(){
+  const R=storageReport(),cap=5*1024*1024,pct=Math.min(100,R.tot/cap*100);
+  const col=pct>85?'var(--rust)':pct>65?'var(--gold)':'var(--win)';
+  return`<div class="sub"><b>${(R.tot/1048576).toFixed(2)} MB</b> of ~5 MB used (${pct.toFixed(0)}%)</div>
+    <div style="height:7px;background:var(--rule);border-radius:4px;margin:4px 0"><div style="height:7px;width:${pct}%;background:${col};border-radius:4px"></div></div>
+    ${R.rows.slice(0,8).map(([k,n])=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${esc(k)}</span><span>${(n/1024).toFixed(0)} KB</span></div>`).join('')}
+    <div class="bar" style="margin-top:6px"><button onclick="storageTidy(true);document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Tidy now</button>
+      <button onclick="freeStorageNow();document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Free space (drops rebuildable caches)</button></div>`;
+}
+
+/* ══ BANKROLL ADVISOR ════════════════════════════════════════════════════════ */
+const BR_AMT='d4.brAmount';
+const brAmount=()=>{const v=parseFloat(get(BR_AMT,''));return v>0?v:null;};
+const dec=a=>americanToDecimal(a);
+/* Quarter-Kelly off your bankroll, capped at 3% — full Kelly is too swingy
+   when the probability itself is an estimate. */
+function kellyStake(p,price){
+  if(p==null||price==null)return null;const d=dec(price);if(!d)return null;const b=d-1,f=(b*p-(1-p))/b;
+  if(f<=0)return{f:0,amt:0};const q=Math.min(0.03,f/4),B=brAmount();return{f:q,amt:B?Math.round(B*q*100)/100:null};
+}
+/* A ticket's real stake and total payout — the pasted quote when there is one. */
+function ticketMoney(t){
+  const st=parseFloat(t.stake),tw=parseFloat(t.toWin);
+  if(st>0&&tw>0)return{stake:st,payout:st+tw,real:true};
+  const w=(getWagers()||{})[t.id];if(!(w>0))return null;
+  const d=pricedOddsDecimal(t.legs);return d>1?{stake:+w,payout:+w*d,real:false}:null;
+}
+/* Hedge math for a ticket with exactly one leg left. */
+function hedgeInfo(t){
+  if(!t||t.archived||TRACKED_ONLY_SOURCES.has(t.source))return null;
+  const legs=t.legs||[];if(legs.length<2)return null;
+  const G=legs.map(l=>{try{return gradeLeg(l,t.date)}catch(e){return{hit:null}}});
+  if(G.some(g=>g.hit===false))return null;
+  const open=legs.filter((l,i)=>G[i].hit==null&&!G[i].push);if(open.length!==1)return null;
+  const M=ticketMoney(t);if(!M)return null;
+  const leg=open[0],sp=leg.sport||'mlb';const[a,h]=String(leg.game).split('@');const gg={away:{abbr:a},home:{abbr:h}};
+  let opp=null,oppLabel='the other side',assumed=true;
+  const k=sqKey(sp,gg,leg.pick);
+  if(k){const live=sportGames(sp).find(z=>z.away.abbr+'@'+z.home.abbr===leg.game);
+    if(live){const Ln=voicesLines(sp,live);const other=k.market==='ml'?(k.side==='home'?Ln.mlA:Ln.mlH):k.market==='spread'?(k.side==='home'?Ln.spA:Ln.spH):(k.side==='over'?Ln.un:Ln.ov);
+      if(other&&other.price!=null){opp=+other.price;assumed=false;}}
+    oppLabel=k.market==='total'?(k.side==='over'?'the Under':'the Over'):(k.side==='home'?a:h)+(k.market==='ml'?' ML':' on the spread');}
+  else if(leg.fbProp||leg.nhlProp){const P=leg.fbProp||leg.nhlProp;oppLabel=`${P.player} ${P.dir==='under'?'over':'under'} ${P.thr}`;}
+  if(opp==null)opp=-110;
+  const dh=dec(opp),P=M.payout,S=M.stake;
+  const Heq=P/dh,lock=P-S-Heq;
+  const Hbe=S/(dh-1),ifWin=P-S-Hbe;
+  return{leg,oppLabel,opp,assumed,P,S,Heq,lock,Hbe,ifWin,real:M.real};
+}
+function hedgeHtml(t){
+  const H=hedgeInfo(t);if(!H)return'';
+  const $=x=>'$'+x.toFixed(2);
+  return`<div style="margin-top:6px;padding:8px 10px;border-radius:9px;border:1.5px solid #FFD75E;background:rgba(255,215,94,.07);font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.55">
+    <b style="color:#FFD75E">HEDGE WINDOW</b> — one leg left: <b>${esc(H.leg.pick)}</b>. Ticket pays ${$(H.P)}${H.real?'':' (est.)'}.<br>
+    ${H.lock>0?`<b>Lock profit:</b> bet ${$(H.Heq)} on ${esc(H.oppLabel)} at ${H.opp>0?'+':''}${H.opp} → <b style="color:var(--win)">+${$(H.lock)} guaranteed</b> either way.<br>`:''}
+    <b>Protect the stake:</b> bet ${$(H.Hbe)} on ${esc(H.oppLabel)} → lose nothing if it misses, <b>+${$(H.ifWin)}</b> if it hits.<br>
+    <span style="color:var(--mute)">${H.assumed?'Opposite price assumed -110 — use the real number from your book.':'Opposite price from your uploaded lines.'} Riding it unhedged: +${$(H.P-H.S)} or −${$(H.S)}.</span></div>`;
+}
+/* Odds sanity: longshot flags and quotes that don't match their own legs. */
+function oddsSanityHtml(t){
+  if(!t||!t.legs||t.legs.length<2)return'';
+  const notes=[];const M=ticketMoney(t);
+  let fairP=1;t.legs.forEach(l=>{let p=l.price!=null?imp(+l.price):0.5;if(!(p>0&&p<1))p=0.5;fairP*=p*0.955;});
+  const dRealQuote=M&&M.real?M.payout/M.stake:null;
+  if(fairP<1/5000)notes.push(`longshot: roughly 1 in ${Math.round(1/fairP).toLocaleString()} to cash — treat as a lottery ticket, keep the stake tiny`);
+  const priced=t.legs.filter(l=>l.price!=null);
+  if(dRealQuote&&priced.length===t.legs.length){const dLegs=pricedOddsDecimal(t.legs);
+    if(dLegs>1&&Math.abs(dRealQuote/dLegs-1)>0.25)notes.push(`book quote (${decimalToAmerican(dRealQuote)}) is ${dRealQuote<dLegs?'shorter':'longer'} than its own legs (${decimalToAmerican(dLegs)}) — correlated/SGP pricing, or a leg was misread`);}
+  const byGame={};t.legs.forEach(l=>{byGame[l.game]=(byGame[l.game]||0)+1;});
+  const stacked=Object.entries(byGame).filter(([,n])=>n>=3).map(([g,n])=>`${g} ×${n}`);
+  if(stacked.length&&!/SGP/i.test(t.type||''))notes.push(`${stacked.join(', ')}: several legs ride one game — they win and lose together more than the odds assume`);
+  return notes.length?`<div class="mono" style="margin-top:5px;font-size:10px;color:var(--gold);line-height:1.5">⚠ ${notes.join('<br>⚠ ')}</div>`:'';
+}
+
+/* ══ MISSIONS ════════════════════════════════════════════════════════════════
+   Parlay ladder, bankroll challenges, or your own. Attach a pending ticket as
+   the next step; when it settles the balance moves on its own. The odds of
+   pulling it off are shown straight, from YOUR leg hit rate once there is
+   enough of it (coin-flip legs until then). */
+const MS_KEY='d4.missions';
+const MS_TEMPLATES={
+  ladder:{name:'Parlay ladder',start:20,goal:1000,days:30,legs:3,note:'Roll the whole balance each step into a 3-team parlay. One miss ends the run — restart and it counts as a new attempt.'},
+  grind:{name:'$200 → $2,500',start:200,goal:2500,days:30,legs:2,note:'Never stake more than 15% of the balance on one ticket. Needs about +8.8% a day, every day.'},
+  custom:{name:'Custom',start:100,goal:500,days:14,legs:2,note:'Your numbers.'}
+};
+function msAll(){return get(MS_KEY,[])||[];}
+function msSave(A){set(MS_KEY,A);}
+function myLegRate(){
+  let w=0,n=0;get(LS.locked,[]).forEach(t=>{if(!t.archived)return;(t.legs||[]).forEach(l=>{let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(g&&g.hit!=null){n++;if(g.hit)w++;}});});
+  return n>=30?{p:(w+15)/(n+30),n,src:'your record'}:{p:0.5,n,src:'coin-flip legs (need 30 graded legs of yours)'};
+}
+function msStart(type){
+  const T=MS_TEMPLATES[type];let start=T.start,goal=T.goal,days=T.days;
+  if(type==='custom'){start=+prompt('Starting balance $',T.start)||T.start;goal=+prompt('Goal $',T.goal)||T.goal;days=+prompt('Days',T.days)||T.days;}
+  const A=msAll();A.push({id:Date.now(),type,name:T.name,start,goal,days,legs:T.legs,startDate:today(),balance:start,attempt:1,steps:[],status:'active'});
+  msSave(A);msRender();
+}
+function msAttach(id,sel){const tid=sel.value;if(!tid)return;const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;
+  if(m.steps.some(s=>String(s.ticketId)===tid))return;m.steps.push({ticketId:tid,date:today()});msSave(A);msRender();}
+function msRestart(id){const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;m.balance=m.start;m.attempt++;m.steps=[];m.status='active';m.startDate=today();msSave(A);msRender();}
+function msDelete(id){if(!confirm('Delete this mission?'))return;msSave(msAll().filter(x=>x.id!==id));msRender();}
+/* Settle attached tickets into the balance. */
+function msSync(){
+  const A=msAll();const L=get(LS.locked,[]);let ch=false;
+  A.forEach(m=>{if(m.status!=='active')return;
+    m.steps.forEach(s=>{if(s.done)return;const t=L.find(x=>String(x.id)===String(s.ticketId));if(!t)return;
+      let done=false,rec=null;try{done=ticketIsComplete(t);rec=done?ticketRecord(t):null}catch(e){}
+      if(!done)return;const M=ticketMoney(t);const stake=M?M.stake:0;
+      s.done=true;s.won=rec.l===0&&rec.w>0;s.stake=stake;s.payout=s.won&&M?M.payout:0;
+      m.balance=+(m.balance-stake+s.payout).toFixed(2);ch=true;});
+    if(m.balance>=m.goal)m.status='won';
+    else if(m.balance<=0.5||(m.type==='ladder'&&m.steps.some(s=>s.done&&!s.won)))m.status='busted';
+    const daysIn=Math.floor((Date.parse(today())-Date.parse(m.startDate))/864e5);
+    if(m.status==='active'&&daysIn>=m.days)m.status='expired';
+  });
+  if(ch||A.some(m=>m.status!=='active'))msSave(A);return A;
+}
+function msMath(m){
+  const R=myLegRate();const legDec=americanToDecimal(-110);const stepDec=Math.pow(legDec,m.legs);
+  const need=m.goal/Math.max(0.01,m.balance);
+  const stepsAllIn=Math.max(1,Math.ceil(Math.log(need)/Math.log(stepDec)));
+  const pStep=Math.pow(R.p,m.legs);const pAllIn=Math.pow(pStep,stepsAllIn);
+  const daysLeft=Math.max(1,m.days-Math.floor((Date.parse(today())-Date.parse(m.startDate))/864e5));
+  const perDay=Math.pow(need,1/daysLeft);
+  const oddsToday=decimalToAmerican(perDay);   // all-in today at this price keeps you on schedule
+  return{R,stepDec,stepsAllIn,pStep,pAllIn,daysLeft,perDay,oddsToday,need};
+}
+function msCard(m){
+  const X=msMath(m);const pct=Math.min(100,(m.balance-0)/m.goal*100);
+  const pend=get(LS.locked,[]).filter(t=>!t.archived&&!m.steps.some(s=>String(s.ticketId)===String(t.id)));
+  const col={active:'#5FD3E8',won:'var(--win)',busted:'var(--rust)',expired:'var(--mute)'}[m.status];
+  const steps=m.steps.map((s,i)=>`<div class="mono" style="font-size:10px">Step ${i+1}: ticket #${esc(s.ticketId)} ${s.done?(s.won?`<b style="color:var(--win)">WON</b> +$${(s.payout-s.stake).toFixed(2)}`:`<b style="color:var(--rust)">LOST</b> −$${s.stake.toFixed(2)}`):'<span style="color:var(--gold)">riding…</span>'}</div>`).join('');
+  return`<div class="tkt" style="border-color:${col};margin:8px 0">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🎯 ${esc(m.name)}</b><span class="mono" style="font-size:10px;color:${col}">${m.status.toUpperCase()}${m.attempt>1?' · attempt '+m.attempt:''}</span></div>
+    <div class="sub">$${m.start} → <b>$${m.goal}</b> in ${m.days} days · balance <b style="color:var(--gold)">$${m.balance.toFixed(2)}</b> · ${X.daysLeft} day${X.daysLeft>1?'s':''} left</div>
+    <div style="height:8px;background:var(--rule);border-radius:4px;margin:5px 0"><div style="height:8px;width:${pct}%;background:${col};border-radius:4px"></div></div>
+    ${m.status==='active'?`<div class="mono" style="font-size:10px;line-height:1.6">
+      <b>Today's threshold:</b> a ticket at <b>${X.oddsToday}</b> or longer, all-in, keeps you on schedule (×${X.perDay.toFixed(2)}/day).<br>
+      <b>Ladder math:</b> ${m.legs}-team parlays at -110 pay ×${X.stepDec.toFixed(2)} — ${X.stepsAllIn} straight win${X.stepsAllIn>1?'s':''} from here.<br>
+      <b>Straight odds:</b> ${(X.pAllIn*100).toFixed(X.pAllIn<0.01?2:1)}% to finish all-in (each step ${(X.pStep*100).toFixed(0)}%, using ${X.R.src}).</div>
+      <div class="bar" style="margin-top:6px"><select onchange="msAttach(${m.id},this)"><option value="">Attach a pending ticket as the next step…</option>
+        ${pend.map(t=>`<option value="${esc(String(t.id))}">#${esc(String(t.id))} ${esc(t.name||'')} · ${(t.legs||[]).length} legs</option>`).join('')}</select></div>`:''}
+    ${steps}
+    <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${esc(MS_TEMPLATES[m.type].note)}</div>
+    <div class="bar" style="margin-top:4px">${m.status!=='active'?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div></div>`;
+}
+function msRender(){const el=document.getElementById('missionsBody');if(el)el.innerHTML=missionsHtml(true);}
+function missionsHtml(inner){
+  const A=msSync();
+  const body=`${A.length?A.map(msCard).join(''):'<div class="empty">No missions running.</div>'}
+    <div class="bar">${Object.entries(MS_TEMPLATES).map(([k,T])=>`<button class="primary" onclick="msStart('${k}')">+ ${esc(T.name)}</button>`).join('')}</div>`;
+  return inner?body:`<div class="sbar"><h2>Missions</h2><div class="ln"></div></div><div id="missionsBody">${body}</div>`;
+}
+function bankrollSetHtml(){
+  const B=brAmount();
+  return`<div class="tkt"><div class="sub"><b>Your bankroll</b> — used for stake sizing on Today's card (quarter-Kelly, max 3% a pick).</div>
+    <input id="brAmtIn" type="number" min="0" step="1" placeholder="e.g. 500" value="${B||''}" onchange="set(BR_AMT,this.value);this.nextElementSibling.textContent=brAmount()?'✓ $'+brAmount()+' saved':'cleared'">
+    <div class="sub mono" style="font-size:10px">${B?'✓ $'+B+' saved':'not set — stakes show as % only'}</div></div>`;
+}
+
+/* ══ CLOSING LINE VALUE ══════════════════════════════════════════════════════
+   The truest early read on skill: did the number you (or a character) took
+   beat where the market closed? The first line the app sees for a market is
+   the open; every later update before start moves the close. Your CLV is the
+   close's implied chance on your side minus the price you actually took. */
+const CLV_KEY='d4.clv';
+function clvCapture(sp){
+  const G=sportGames(sp);if(!G||!G.length)return 0;const d=today();const A=get(CLV_KEY,{})||{};const D=A[d]||(A[d]={});let n=0;
+  G.forEach(g=>{const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');if(!pre)return;
+    const gl=g.away.abbr+'@'+g.home.abbr,Ln=voicesLines(sp,g);
+    [['ml','home',Ln.mlH],['ml','away',Ln.mlA],['spread','home',Ln.spH],['spread','away',Ln.spA],['total','over',Ln.ov],['total','under',Ln.un]].forEach(([m,sd,L])=>{
+      if(!L||L.price==null)return;const k=sp+'|'+gl+'|'+m+'|'+sd,cur={line:L.line!=null?+L.line:null,price:+L.price,ts:Date.now()};
+      const e=D[k];if(!e){D[k]={open:cur,close:cur};n++;return;}
+      if(e.close.price!==cur.price||e.close.line!==cur.line){e.close=cur;n++;}});});
+  if(n){Object.keys(A).sort().slice(0,-30).forEach(k=>delete A[k]);set(CLV_KEY,A);}return n;
+}
+function clvEntry(sp,game,m,sd,date){const A=get(CLV_KEY,{})||{};return((A[String(date||'').slice(0,10)]||{})[sp+'|'+game+'|'+m+'|'+sd])||null;}
+/* One leg vs the close: chance points (+ = you beat it) when the line matches, points when it moved. */
+function clvLeg(l,t){
+  if(l.price==null)return null;const sp=l.sport||'mlb';const[a,h]=String(l.game).split('@');
+  const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);if(!k)return null;
+  const e=clvEntry(sp,l.game,k.market,k.side,l.gameDate||t.date);if(!e||e.close.ts<=e.open.ts)return null;
+  const my=(String(l.pick).match(/([+-]?\d+(?:\.\d+)?)\s*$/)||[])[1];const myLine=k.market==='ml'?null:(my!=null?+my:null);
+  if(k.market==='ml'||myLine===e.close.line)return{pct:(imp(e.close.price)-imp(+l.price))*100};
+  if(myLine==null||e.close.line==null)return null;
+  const pts=k.market==='total'?(k.side==='over'?e.close.line-myLine:myLine-e.close.line):(myLine-e.close.line);
+  return{pts};
+}
+/* How far the market moved toward a side from open to close, in chance points. */
+function clvMove(sp,game,m,sd,date){const e=clvEntry(sp,game,m,sd,date);if(!e||e.close.ts<=e.open.ts)return null;
+  if(e.open.line!==e.close.line&&m!=='ml'){const dp=m==='total'?(sd==='over'?e.close.line-e.open.line:e.open.line-e.close.line):(e.open.line-e.close.line);return dp*(sp==='nfl'||sp==='ncaaf'?3:sp==='nhl'?8:6);}
+  return(imp(e.close.price)-imp(e.open.price))*100;}
+function clvSummary(){
+  const you={n:0,s:0,pn:0,ps:0};get(LS.locked,[]).forEach(t=>{if(TRACKED_ONLY_SOURCES.has(t.source))return;(t.legs||[]).forEach(l=>{const c=clvLeg(l,t);if(!c)return;
+    if(c.pct!=null){you.n++;you.s+=c.pct;}else{you.pn++;you.ps+=c.pts;}});});
+  const ch={};get(VOICES_KEY,[]).forEach(x=>{if(!CHARS[x.voice])return;const mv=clvMove(x.sp,x.game,x.market,x.side,x.date);if(mv==null)return;
+    const o=ch[x.voice]||(ch[x.voice]={n:0,s:0});o.n++;o.s+=mv;});
+  return{you,ch};
+}
+function clvHtml(){
+  const S=clvSummary();const f=(s,n)=>n?`${s/n>=0?'+':''}${(s/n).toFixed(1)}`:'—';
+  const col=(s,n)=>!n?'var(--mute)':s/n>0.3?'var(--win)':s/n<-0.3?'var(--rust)':'var(--chalk)';
+  const rows=CHAR_ORDER.filter(v=>S.ch[v]).map(v=>`<span style="margin-right:10px;color:${CHARS[v].color}">${CHARS[v].chip} <b style="color:${col(S.ch[v].s,S.ch[v].n)}">${f(S.ch[v].s,S.ch[v].n)}</b> <span style="color:var(--mute)">(${S.ch[v].n})</span></span>`).join('');
+  return`<div class="tkt" style="margin-bottom:8px"><h3>Closing line value</h3>
+    <div class="sub">You: <b style="color:${col(S.you.s,S.you.n)}">${f(S.you.s,S.you.n)}%</b> vs the close over ${S.you.n} priced leg${S.you.n===1?'':'s'}${S.you.pn?` · <b>${f(S.you.ps,S.you.pn)} pts</b> on ${S.you.pn} moved line${S.you.pn>1?'s':''}`:''}</div>
+    ${rows?`<div class="mono" style="font-size:10px;margin-top:4px">Market moved toward each character's side (chance pts): ${rows}</div>`:''}
+    <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Beating the close by +2% or more over 100+ bets is the clearest sign of a real edge — it shows up long before win/loss settles. The close is the last line the app saw pre-game, so pull odds again near kickoff to sharpen it.</div></div>`;
+}
+
+/* ══ PLAYBOOKS & RULES ═══════════════════════════════════════════════════════
+   Two kinds of rule badges on the squares:
+   · learned — a character on this side is in a situation it has PROVEN it wins
+     (or loses) in, from your graded ledger. Needs 12+ calls; never invented.
+   · principle — long-standing betting truths: NFL key numbers, sharp money
+     splitting from the tickets, heavy public sides. */
+/* Graded calls a character needs in a spot before it earns a 🔥/🧊/🤝 badge or a
+   hot/weak chip. 8 calls ≈ half an NFL week in one market; shrinkage toward 50%
+   still keeps a lucky 5-3 from looking like an edge. */
+const RULE_MIN=8;
+const KEYNUM={3:'~15% of NFL games land on exactly 3',7:'~9% of NFL games land on exactly 7',10:'10 is the next key number (~5%)',14:'14 is a key number (~5%)',6:'6 lands ~6% of the time',4:'4 lands ~5% of the time'};
+function rulesFor(sp,g,pick){
+  const k=sqKey(sp,g,pick);if(!k)return[];const out=[];const gl=g.away.abbr+'@'+g.home.abbr;
+  // learned — each character on this side, in this situation
+  let calls=[];try{const s=sportSims(sp)[g.id]||(sp==='nhl'&&typeof nhlSimFor==='function'?nhlSimFor(g):null);calls=characterCalls(sp,g,s).filter(c=>c.market===k.market&&c.side===k.side&&CHARS[c.voice]);}catch(e){}
+  calls.forEach(c=>{const B=charBrain();const m=((B.by[sp]||{})[c.voice]||{})[k.market];if(!m)return;
+    const cx=k.market==='total'?k.side:charCtxOf(c);const o=cx&&m.ctx[cx]&&m.ctx[cx].n>=RULE_MIN?m.ctx[cx]:(m.n>=RULE_MIN?m:null);if(!o)return;
+    const p=(o.w+CHAR_KC*0.5)/(o.n+CHAR_KC),lab=(o===m?k.market:cx);
+    if(p>=0.58)out.push({icon:'🔥',kind:'learned',text:`${CHARS[c.voice].chip} ${o.w}-${o.n-o.w} ${sp.toUpperCase()} ${lab}`});
+    else if(p<=0.42)out.push({icon:'🧊',kind:'learned',text:`${CHARS[c.voice].chip} ${o.w}-${o.n-o.w} ${lab} — fade`});});
+  try{const B=charBrain();if(calls.some(c=>c.voice==='Sim'))calls.filter(c=>c.voice!=='Sim').forEach(c=>{const o=B.combo['Sim+'+c.voice+' agree'];
+    if(o&&o.n>=RULE_MIN&&(o.w+5)/(o.n+10)>=0.6)out.push({icon:'🤝',kind:'learned',text:`★+${CHARS[c.voice].chip} together ${o.w}-${o.n-o.w}`});});}catch(e){}
+  // principle — key numbers (football spreads)
+  if((sp==='nfl'||sp==='ncaaf')&&k.market==='spread'){const n=+((String(pick).match(/([+-]\d+(?:\.\d+)?)/)||[])[1]);
+    if(!isNaN(n)){const a=Math.abs(n),fl=Math.floor(a),ce=Math.ceil(a);
+      if(a%1===0.5){if(n>0&&KEYNUM[fl])out.push({icon:'🔑',kind:'principle',text:`+${a} is past ${fl} — ${KEYNUM[fl]}`});
+        if(n<0&&KEYNUM[fl])out.push({icon:'🔑',kind:'principle',text:`-${a} needs ${ce}+ — a ${fl}-point win loses (${KEYNUM[fl].replace(/^~/,'~')})`});}
+      else if(KEYNUM[a])out.push({icon:'🔑',kind:'principle',text:`${n>0?'+':'-'}${a} sits ON a key number — push risk`});}}
+  // principle — sharp money vs tickets, heavy public
+  try{const mk=k.market==='total'?'total':(k.market==='spread'?'spread':'moneyline');
+    const rows=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl&&(x.market===mk||(mk==='spread'&&x.market==='moneyline')));
+    const bets=rows.filter(x=>x.metric!=='money').pop(),money=rows.filter(x=>x.metric==='money').pop();
+    const pctOf=r=>!r?null:k.market==='total'?(k.side==='over'?r.overPct:r.underPct):(k.side==='home'?r.homePct:r.awayPct);
+    const pb=pctOf(bets),pm=pctOf(money);
+    if(pb!=null&&pm!=null&&pm-pb>=10)out.push({icon:'💰',kind:'principle',text:`sharp split: ${pm}% of money on ${pb}% of tickets`});
+    else if(pb!=null&&pb>=70)out.push({icon:'👥',kind:'principle',text:`${pb}% of tickets here — heavy public side`});}catch(e){}
+  return out;
+}
+function rulesHtml(rs){return rs&&rs.length?`<div class="rule-row">${rs.slice(0,3).map(r=>`<span class="rule ${r.kind}" title="${esc(r.text)}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:'';}
+function playbooksHtml(){
+  const B=charBrain();const mk={ml:'side',spread:'spread',total:'total'};
+  const books=CHAR_ORDER.map(v=>{const edges=[];
+    Object.entries(B.by).forEach(([sp,V])=>Object.entries(V[v]||{}).forEach(([m,o])=>{
+      Object.entries(o.ctx||{}).forEach(([cx,c])=>{if(c.n>=8)edges.push({t:`${sp.toUpperCase()} ${mk[m]} (${cx})`,w:c.w,n:c.n,p:(c.w+CHAR_KC*0.5)/(c.n+CHAR_KC)});});
+      if(o.n>=8)edges.push({t:`${sp.toUpperCase()} ${mk[m]}`,w:o.w,n:o.n,p:(o.w+CHAR_K*0.5)/(o.n+CHAR_K)});}));
+    if(!edges.length)return'';
+    const best=edges.filter(e=>e.p>=0.54).sort((a,b)=>b.p-a.p).slice(0,3),worst=edges.filter(e=>e.p<=0.46).sort((a,b)=>a.p-b.p).slice(0,2);
+    const withSim=v==='Sim'?null:[B.combo['Sim+'+v+' agree'],B.combo['Sim+'+v+' disagree']];
+    return`<details style="margin:4px 0"><summary><b style="color:${CHARS[v].color}">${CHARS[v].chip} ${CHARS[v].label}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${best.length} edge${best.length===1?'':'s'} · ${worst.length} fade${worst.length===1?'':'s'}</span></summary>
+      <div class="mono" style="font-size:10px;line-height:1.6;padding:4px 0 4px 10px">
+      ${best.map(e=>`🔥 play: ${e.t} — ${e.w}-${e.n-e.w} (${Math.round(e.w/e.n*100)}%)`).join('<br>')||'no proven edge yet'}
+      ${worst.length?'<br>'+worst.map(e=>`🧊 fade: ${e.t} — ${e.w}-${e.n-e.w}`).join('<br>'):''}
+      ${withSim&&withSim[0]&&withSim[0].n>=8?`<br>🤝 with ★ agreeing: app ${withSim[0].w}-${withSim[0].n-withSim[0].w}`:''}${withSim&&withSim[1]&&withSim[1].n>=8?` · disagreeing: app ${withSim[1].w}-${withSim[1].n-withSim[1].w}`:''}</div></details>`;}).join('');
+  return`<div class="tkt" style="margin-bottom:8px"><h3>Playbooks</h3>
+    <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Each character's proven spots, from its own graded calls (8+ to list or badge a square). Principles that always apply: 🔑 key numbers · 💰 sharp money split · 👥 heavy public · parlays multiply the juice on every leg.</div>
+    ${books||'<div class="empty">Playbooks fill in as the characters\' calls get graded.</div>'}</div>`;
+}
+(function(){try{if(typeof document!=='undefined'&&!document.getElementById('rule-css')){const st=document.createElement('style');st.id='rule-css';
+  st.textContent='.rule-row{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:3px}.rule{font-family:"IBM Plex Mono",monospace;font-size:7.5px;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,.05);color:var(--chalk);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rule.learned{border:1px solid rgba(255,215,94,.4)}.rule.principle{border:1px solid rgba(95,211,232,.35)}';
+  (document.head||document.documentElement).appendChild(st);}}catch(e){}})();

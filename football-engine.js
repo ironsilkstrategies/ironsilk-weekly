@@ -148,7 +148,7 @@ function saveNFLBookOdds(picks,el){
   all[d]=all[d]||[];
   const NFL_NORM={'WSH':'WSH','WAS':'WSH','LAR':'LAR','LA':'LAR','LV':'LV','OAK':'LV','GB':'GB','KC':'KC','SF':'SF','TB':'TB','NE':'NE','NO':'NO','NYG':'NYG','NYJ':'NYJ'};
   const norm=a=>(NFL_NORM[a.toUpperCase()]||a.toUpperCase());
-  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  const keyOf=bookKeyOf;all[d]=bookDedupe(all[d]);
   picks.forEach(x=>{
     const homeAb=norm(x.home),awayAb=norm(x.away);
     const game=awayAb+'@'+homeAb;
@@ -4063,7 +4063,7 @@ function ncaafGameAG(g,s){
 function saveNCAAFBookOdds(picks,el){
   const d=today();
   const all=get(LS.ncaafshots,{});all[d]=all[d]||[];
-  const keyOf=x=>[x.game,x.market,x.side,x.line].join('|');
+  const keyOf=bookKeyOf;all[d]=bookDedupe(all[d]);
   const gameSet=new Set();
   picks.forEach(x=>{
     /* Build the game key from away@home if the pick doesn't already have one.
