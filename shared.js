@@ -6606,6 +6606,11 @@ function boxFor(gid){
 
 // Resolve a leg to its game's actual result, wherever that lives.
 // Returns {a,h,fa,fh,f5ok,gid,live,source} or null if genuinely unknown yet.
+/* Read-only view of a big archive, re-parsed at most every 15s. Grading used to
+   re-parse the whole NFL archive once per leg, per render — with a season's worth
+   of weeks and dozens of prop legs that pinned the phone's CPU and froze the app. */
+const ARC_RO={};
+function arcRead(key){const c=ARC_RO[key];if(c&&Date.now()-c.ts<15e3)return c.v;const v=get(key,{})||{};ARC_RO[key]={ts:Date.now(),v};return v;}
 function resolveLeg(leg,ticketDate){
   /* Tickets can now mix sports, so a leg tagged nfl/ncaaf must be resolved
      against ITS OWN schedule. Previously every leg was looked up in the MLB
@@ -6640,7 +6645,7 @@ function resolveLeg(leg,ticketDate){
     /* Finished football games also live in the sport archive, in two shapes:
        date → [rows] (finals mirror) and week → {rows,finals} (snapshots).
        Treating a week object as a list threw here instead of finding the score. */
-    const farc=get(leg.sport==='nfl'?LS.nflarc:leg.sport==='nhl'?'d4.nhlarc':'d4.ncaafarc',{});
+    const farc=arcRead(leg.sport==='nfl'?LS.nflarc:leg.sport==='nhl'?'d4.nhlarc':'d4.ncaafarc');
     for(const d of Object.keys(farc)){
       const E=farc[d];
       if(Array.isArray(E)){const row=E.find(r=>r.game===leg.game||r.gid===leg.gid);
@@ -6727,10 +6732,13 @@ const FBP_BOX_KEY='d4.fbbox',FBP_IDX_KEY='d4.fbevidx';
 const FBP_ESPN={nfl:'https://site.api.espn.com/apis/site/v2/sports/football/nfl',
   ncaaf:'https://site.api.espn.com/apis/site/v2/sports/football/college-football'};
 let FBP_MEM={},FBP_INFLIGHT={},FBP_RENDER_T=null;
-function fbpKick(){ // re-render the tickets board once fetched data lands
-  clearTimeout(FBP_RENDER_T);
-  FBP_RENDER_T=setTimeout(()=>{try{if(typeof renderTickets==='function'&&document.getElementById('tickets'))renderTickets();}catch(e){}
-    try{if(typeof nflRefreshOpenForms==='function')nflRefreshOpenForms();}catch(e){}},250);
+let FBP_LAST_RENDER=0;
+function fbpKick(){ // re-render the tickets board once fetched data lands — at most every 2s
+  if(typeof BT_BUSY!=='undefined'&&BT_BUSY)return;
+  if(FBP_RENDER_T)return;const wait=Math.max(250,2000-(Date.now()-FBP_LAST_RENDER));
+  FBP_RENDER_T=setTimeout(()=>{FBP_RENDER_T=null;FBP_LAST_RENDER=Date.now();try{if(typeof renderTickets==='function'&&document.getElementById('tickets'))renderTickets();}catch(e){}
+    try{if(typeof nflRefreshOpenForms==='function')nflRefreshOpenForms();}catch(e){}
+    try{const v=document.getElementById('v-mine');if(v&&v.classList.contains('on')&&typeof renderMyGames==='function')renderMyGames();}catch(e){}},wait);
 }
 function fbpParseHockey(j){
   const hc=((j.header||{}).competitions||[])[0]||{};const st=hc.status||{};const state=(st.type||{}).state||'pre';
@@ -6777,9 +6785,16 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    page's slate. Tickets stamp the import day as gameDate, and a Saturday import
    of a Sunday game (or a Thursday ticket for Monday night) was looked up on the
    wrong day — so the search covers the ticket date through a week after it. */
+const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
   const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':'nfl';
   const want=fbpGameKey(leg.game,sp);
+  const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
+  if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
+  const m=FBP_MISS[fk];if(m&&Date.now()-m.ts<3000)return m.r;   // same game, same answer — 13 legs don't search 13 times
+  const r=fbpEventIdCore(leg,ticketDate,sp,want);if(r.id)FBP_FOUND[fk]=r.id;else FBP_MISS[fk]={ts:Date.now(),r};return r;
+}
+function fbpEventIdCore(leg,ticketDate,sp,want){
   const arr=sportGames(sp);
   const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp)===want);
   if(g)return{id:String(g.espnId||g.id),pending:false};
@@ -6808,7 +6823,8 @@ function fbpEventId(leg,ticketDate){
   fetch(FBP_ESPN[sp]+'/scoreboard?'+(next?next+'&':'')+(sp==='ncaaf'?'groups=80&limit=900':'limit=400')).then(r=>r.json()).then(j=>{
     fbpIndexEvents(sp,j,lo);
     const T=get('d4.fbptried',{})||{};T[sp+'|'+next]=Date.now();set('d4.fbptried',T);   // only a real answer counts as tried
-  }).catch(()=>{}).then(()=>{delete FBP_INFLIGHT[k];fbpKick();});
+    Object.keys(FBP_MISS).forEach(k=>delete FBP_MISS[k]);
+  }).catch(()=>{}).then(()=>{delete FBP_INFLIGHT[k];Object.keys(FBP_MISS).forEach(x=>delete FBP_MISS[x]);fbpKick();});
   return{id:null,pending:true};
 }
 function fbpIndexEvents(sp,j,fallbackDay){
@@ -6824,16 +6840,19 @@ function fbpIndexEvents(sp,j,fallbackDay){
 /* ESPN event id for a game from the sport's own snapshot archive. Football rows
    are {id,game} per week, hockey rows {gid,game} per day. When a matchup shows
    up more than once, the snapshot closest to the ticket date wins. */
+const FBP_ARC_IDX={};
+function fbpArcIndex(sp){
+  const c=FBP_ARC_IDX[sp];if(c&&Date.now()-c.ts<60e3)return c.map;
+  const key=sp==='nfl'?LS.nflarc:sp==='ncaaf'?'d4.ncaafarc':sp==='nhl'?'d4.nhlarc':null;const map={};
+  if(key){const arc=get(key,{})||{};
+    Object.entries(arc).forEach(([k,A])=>{if(!A||!Array.isArray(A.rows))return;const dated=/^\d{4}-\d{2}-\d{2}$/.test(k)?Date.parse(k):null;
+      A.rows.forEach((r,i)=>{if(!r||!r.game)return;const id=String(r.id||r.gid||'');if(!id)return;const g=fbpGameKey(r.game,sp);
+        (map[g]=map[g]||[]).push({id,fin:!!((A.finals&&A.finals[r.id])||r.final),dated,ord:i});});});}
+  FBP_ARC_IDX[sp]={ts:Date.now(),map};return map;
+}
 function fbpArchiveId(sp,want,base){
-  const key=sp==='nfl'?LS.nflarc:sp==='ncaaf'?'d4.ncaafarc':sp==='nhl'?'d4.nhlarc':null;if(!key)return null;
-  const arc=get(key,{})||{};const t0=base?Date.parse(String(base).slice(0,10)):Date.now();const hits=[];
-  Object.entries(arc).forEach(([k,A])=>{if(!A||!Array.isArray(A.rows))return;
-    const dated=/^\d{4}-\d{2}-\d{2}$/.test(k)?Date.parse(k):null;
-    A.rows.forEach((r,i)=>{if(!r||fbpGameKey(r.game,sp)!==want)return;const id=String(r.id||r.gid||'');if(!id)return;
-      const fin=!!((A.finals&&A.finals[r.id])||r.final);
-      hits.push({id,fin,dist:dated!=null?Math.abs(dated-t0):null,ord:i});});});
-  if(!hits.length)return null;
-  // day-keyed archives (hockey): closest day; week buckets (football): a finished game, latest added
+  const L=fbpArcIndex(sp)[want];if(!L||!L.length)return null;const t0=base?Date.parse(String(base).slice(0,10)):Date.now();
+  const hits=L.map(h=>({...h,dist:h.dated!=null?Math.abs(h.dated-t0):null}));
   hits.sort((x,y)=>(x.dist!=null&&y.dist!=null?x.dist-y.dist:0)||(y.fin-x.fin)||(y.ord-x.ord));
   return hits[0].dist!=null&&hits[0].dist>10*864e5?null:hits[0].id;
 }
@@ -16916,12 +16935,14 @@ function btPropLegs(){
   const out=[];get(LS.locked,[]).forEach(t=>(t.legs||[]).forEach(l=>{if(!l.fbProp&&!l.nhlProp)return;
     const sp=l.nhlProp?'nhl':(l.sport==='ncaaf'?'ncaaf':'nfl');out.push({t,l,sp});}));return out;
 }
-function btUngraded(){return btPropLegs().filter(x=>{let g=null;try{g=gradeLeg(x.l,x.t.date)}catch(e){}return!g||(g.hit==null&&!g.live&&!g.push);});}
+let BT_UG=null;
+function btUngraded(){if(BT_UG&&Date.now()-BT_UG.ts<5000)return BT_UG.v;const v=btUngradedCore();BT_UG={ts:Date.now(),v};return v;}
+function btUngradedCore(){return btPropLegs().filter(x=>{let g=null;try{g=gradeLeg(x.l,x.t.date)}catch(e){}return!g||(g.hit==null&&!g.live&&!g.push);});}
 async function btWaitId(leg,date,tries){for(let i=0;i<(tries||30);i++){const ev=fbpEventId(leg,date);if(ev.id)return ev.id;if(!ev.pending&&i>0)return null;await new Promise(r=>setTimeout(r,350));}return null;}
 async function regradeAllProps(statusEl){
   if(BT_BUSY)return;BT_BUSY=true;const say=h=>{const e=statusEl||document.getElementById('btStatus');if(e)e.innerHTML=h;};
   try{
-    const todo=btUngraded();if(!todo.length){say('<span style="color:var(--win)">✓ Every prop leg is graded.</span>');return{legs:0,games:0};}
+    BT_UG=null;const todo=btUngraded();if(!todo.length){say('<span style="color:var(--win)">✓ Every prop leg is graded.</span>');return{legs:0,games:0};}
     try{const T=get('d4.fbptried',{})||{};Object.keys(T).forEach(k=>delete T[k]);set('d4.fbptried',T);}catch(e){}   // give ESPN a fresh try
     const ev={};let n=0;
     for(const x of todo){n++;say(`Finding games… ${n}/${todo.length}`);
@@ -16934,7 +16955,7 @@ async function regradeAllProps(statusEl){
         const box=G.sp==='nhl'?fbpParseHockey(j):fbpParseBox(j);FBP_MEM[G.id]={ts:Date.now(),box};
         if(box.state==='post'){const A=get(FBP_BOX_KEY,{})||{};A[G.sp+':'+G.id]={ts:Date.now(),final:true,box};set(FBP_BOX_KEY,A);}}catch(e){}
       await new Promise(r=>setTimeout(r,200));}
-    const left=btUngraded().length,done=todo.length-left;
+    BT_UG=null;const left=btUngraded().length,done=todo.length-left;
     set('d4.btDay',today());
     say(`<span style="color:${left?'var(--gold)':'var(--win)'}">✓ ${done} prop leg${done===1?'':'s'} graded from ${games.length} box score${games.length===1?'':'s'}${left?` · ${left} still waiting (game not final yet, or the player isn't in ESPN's box — check the name)`:''}.</span>`);
     try{if(typeof renderTickets==='function'&&document.getElementById('tickets'))renderTickets();}catch(e){}
