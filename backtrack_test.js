@@ -19,14 +19,14 @@ function fetcher(u){calls.push(u);
   if(/summary\?event=401/.test(u))return miaKc;if(/summary\?event=402/.test(u))return indHou;
   if(/football\/nfl\/scoreboard/.test(u)){
     if(/dates=\d{8}-\d{8}/.test(u))return{events:[]};                 // range: nothing (what bit us live)
-    if(scoreboardMode==='single'&&/dates=20260927/.test(u))return liveSB;  // the game's own day answers
+    if(scoreboardMode==='single'&&/week=3/.test(u))return liveSB;  // only the week-based board answers (as on the live site)
     if(/dates=/.test(u))return{events:[]};
     return{events:[]};}
   return{};}
 let html=fs.readFileSync(path.join(W,'nfl.html'),'utf8');
 html=html.replace(/<script src="([^"?]+)\?v=[^"]+"><\/script>/g,(m,f)=>`<script>${fs.readFileSync(path.join(W,f),'utf8')}</script>`);
 const errors=[];
-const seedArc={'w2026-3':{ts:Date.parse('2026-09-24T12:00:00Z'),finals:{'401':{a:16,h:24}},rows:[{id:'401',game:'MIA@KC',v:2}]}};
+const seedArc={'w-':{ts:Date.parse('2026-08-30T12:00:00Z'),finals:{'401':{a:16,h:24}},rows:[{id:'401',game:'MIA@KC',v:2}]}};
 const dom=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nfl.html',pretendToBeVisual:true,beforeParse(w){
   w.fetch=u=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(fetcher(u)),text:()=>Promise.resolve('{}')});
   w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;
@@ -36,6 +36,7 @@ const dom=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.c
 const w=dom.window;
 (async()=>{
   await wait(2500);
+  w.eval("NFL_SEASON=2026;NFL_WEEK=4");
   w.eval(`set(LS.nflarc,${JSON.stringify(seedArc)})`);
   const L=(pick,player,stat,thr,game)=>({game:game||'MIA@KC',pick,sport:'nfl',gameDate:'2026-09-27',price:null,isProp:1,fbProp:{player,stat,thr,dir:'atleast'}});
   const legs=[L('T. Kelce 40+ Receiving yds','T. Kelce','receiving',40),L('P. Mahomes 175+ Passing yds','P. Mahomes','passing',175),L('Malik Willis 150+ Passing yds','Malik Willis','passing',150),
@@ -58,7 +59,7 @@ const w=dom.window;
   const res=await w.eval('regradeAllProps()');
   T('backtrack grades the old tickets',res&&res.legs===10&&res.left===0,JSON.stringify(res));
   T('one box-score pull per game (2), not per leg (10)',calls.filter(u=>/summary\?event=/.test(u)).length===2,calls.filter(u=>/summary/.test(u)).join(' '));
-  T('IND@HOU (not in the archive) found via its own day\'s scoreboard',calls.some(u=>/scoreboard\?dates=20260927&/.test(u)));
+  T('IND@HOU (not in the archive) found via the week-based scoreboard, date queries empty',calls.some(u=>/seasontype=2&week=3/.test(u)));
   const G=legs.slice(0,8).map(l=>{const g=w.eval(`gradeLeg(${JSON.stringify(l)},'2026-09-27')`);return l.fbProp.player+'='+g.hit+'('+(g.prog?g.prog.val:'')+')';});
   const expect=['T. Kelce=false(38)','P. Mahomes=true(231)','Malik Willis=true(167)','Kenneth Walker III=true(81)','Tyquan Thornton=true(24)','Devon Achane=false(41)','Rashee Rice=true(72)','Greg Dulcich=false(9)'];
   T('every leg on #1000054317 graded against the real box',JSON.stringify(G)===JSON.stringify(expect),G.join(' | '));

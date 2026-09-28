@@ -33,7 +33,8 @@ const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path')
   const G=l=>w.eval('gradeLeg('+JSON.stringify(l)+',"2026-09-20")');
   const first=G(L('T. Kelce','receiving',40,'atleast'));
   T('first call is pending while it looks the game up (no slate needed)',first.hit===null,JSON.stringify(first));
-  await new Promise(r=>setTimeout(r,800));await new Promise(r=>setTimeout(r,800));
+  for(let i=0;i<30;i++){const g=G(L('T. Kelce','receiving',40,'atleast'));if(g.hit!=null||!/looking up/.test(g.detail||''))break;await new Promise(r=>setTimeout(r,150));}  // lookup walks week boards → game day
+  await new Promise(r=>setTimeout(r,400));
   const legs={kelce:L('T. Kelce','receiving',40,'atleast'),mahomes:L('P. Mahomes','passing',175,'atleast'),
     walker:L('Kenneth Walker III','rushing',60,'atleast'),recs:L('Travis Kelce','receptions',5,'atleast'),
     achane:L('Devon Achane','rushing',45,'atleast'),under:L('Tyquan Thornton','receiving',10.5,'under'),

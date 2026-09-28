@@ -6796,13 +6796,16 @@ function fbpEventId(leg,ticketDate){
   // 2) ESPN scoreboards: the game's own day (and the days either side) one at a
   //    time — single dates work on every ESPN sport — then the full window.
   const days=[fbpYmd(base),fbpShift(base,1),fbpShift(base,-1),fbpShift(base,2),fbpShift(base,3)];
-  const qs=days.map(d=>'dates='+d).concat(['dates='+lo+'-'+hi]);
+  const wk=[];try{const S=sp==='nfl'?(typeof NFL_SEASON!=='undefined'?NFL_SEASON:''):sp==='ncaaf'?(typeof NCAAF_SEASON!=='undefined'?NCAAF_SEASON:''):'';
+    const W=+(sp==='nfl'?(typeof NFL_WEEK!=='undefined'?NFL_WEEK:0):sp==='ncaaf'?(typeof NCAAF_WEEK!=='undefined'?NCAAF_WEEK:0):0);
+    if(sp==='nfl'||sp==='ncaaf'){if(S&&W)[W,W-1,W-2,W+1].filter(x=>x>0).forEach(x=>wk.push(`dates=${S}&seasontype=2&week=${x}`));wk.push('');}}catch(e){}
+  const qs=wk.concat(days.map(d=>'dates='+d),['dates='+lo+'-'+hi]);
   const tried=get('d4.fbptried',{})||{};
   const next=qs.find(q=>!(tried[sp+'|'+q]&&Date.now()-tried[sp+'|'+q]<10*60e3));
-  if(!next)return{id:null,pending:false};
+  if(next===undefined)return{id:null,pending:false};   // '' (the bare current-week board) is a real query, not "done"
   const k='sb:'+sp+':'+next;if(FBP_INFLIGHT[k])return{id:null,pending:true};
   FBP_INFLIGHT[k]=1;
-  fetch(FBP_ESPN[sp]+'/scoreboard?'+next+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400')).then(r=>r.json()).then(j=>{
+  fetch(FBP_ESPN[sp]+'/scoreboard?'+(next?next+'&':'')+(sp==='ncaaf'?'groups=80&limit=900':'limit=400')).then(r=>r.json()).then(j=>{
     fbpIndexEvents(sp,j,lo);
     const T=get('d4.fbptried',{})||{};T[sp+'|'+next]=Date.now();set('d4.fbptried',T);   // only a real answer counts as tried
   }).catch(()=>{}).then(()=>{delete FBP_INFLIGHT[k];fbpKick();});
@@ -6823,12 +6826,16 @@ function fbpIndexEvents(sp,j,fallbackDay){
    up more than once, the snapshot closest to the ticket date wins. */
 function fbpArchiveId(sp,want,base){
   const key=sp==='nfl'?LS.nflarc:sp==='ncaaf'?'d4.ncaafarc':sp==='nhl'?'d4.nhlarc':null;if(!key)return null;
-  const arc=get(key,{})||{};const t0=base?Date.parse(String(base).slice(0,10)):Date.now();let best=null;
+  const arc=get(key,{})||{};const t0=base?Date.parse(String(base).slice(0,10)):Date.now();const hits=[];
   Object.entries(arc).forEach(([k,A])=>{if(!A||!Array.isArray(A.rows))return;
-    const when=/^\d{4}-\d{2}-\d{2}$/.test(k)?Date.parse(k):(A.ts||0);
-    A.rows.forEach(r=>{if(!r||fbpGameKey(r.game,sp)!==want)return;const id=String(r.id||r.gid||'');if(!id)return;
-      const dist=Math.abs(when-t0);if(!best||dist<best.dist)best={id,dist};});});
-  return best&&best.dist<10*864e5?best.id:null;
+    const dated=/^\d{4}-\d{2}-\d{2}$/.test(k)?Date.parse(k):null;
+    A.rows.forEach((r,i)=>{if(!r||fbpGameKey(r.game,sp)!==want)return;const id=String(r.id||r.gid||'');if(!id)return;
+      const fin=!!((A.finals&&A.finals[r.id])||r.final);
+      hits.push({id,fin,dist:dated!=null?Math.abs(dated-t0):null,ord:i});});});
+  if(!hits.length)return null;
+  // day-keyed archives (hockey): closest day; week buckets (football): a finished game, latest added
+  hits.sort((x,y)=>(x.dist!=null&&y.dist!=null?x.dist-y.dist:0)||(y.fin-x.fin)||(y.ord-x.ord));
+  return hits[0].dist!=null&&hits[0].dist>10*864e5?null:hits[0].id;
 }
 function fbpBox(id,sp){
   const mem=(sp!=='nhl'&&typeof FB_BOX_CACHE!=='undefined'&&FB_BOX_CACHE[id]&&FB_BOX_CACHE[id].teamStats)?FB_BOX_CACHE[id]:null;
@@ -6866,7 +6873,7 @@ function gradeFBPropLeg(leg,ticketDate){
   const sp=leg.sport==='ncaaf'?'ncaaf':'nfl';
   const R=resolveLeg(leg,ticketDate); // may be null (not started / not yet in any store)
   const ev=fbpEventId(leg,ticketDate);
-  if(!ev.id)return{hit:null,detail:ev.pending?'looking up game…':'game not found on ESPN for '+(leg.gameDate||ticketDate||'that date'),live:!!(R&&R.live)};
+  if(!ev.id)return{hit:null,detail:ev.pending?'looking up game…':'game not found (checked your archive + ESPN weeks & days around '+(leg.gameDate||ticketDate||'that date')+')',live:!!(R&&R.live)};
   const box=fbpBox(ev.id,sp);
   if(!box||!box.teamStats||!Object.keys(box.teamStats).length)
     return{hit:null,detail:box&&box.state==='pre'?null:'player box loading — check back shortly',live:!!(R&&R.live)};
@@ -16129,7 +16136,12 @@ async function mgRefresh(force){
     const need={};mgPending().forEach(x=>{(need[x.sp]=need[x.sp]||new Set()).add(String(x.d).slice(0,10));});
     const jobs=Object.entries(need).map(async([sp,ds])=>{
       const arr=[...ds].sort();const lo=fbpYmd(arr[0]),hi=fbpShift(arr[arr.length-1],1);
-      try{const r=await fetch(MG_URL[sp]+'?dates='+lo+'-'+hi+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400'));const j=await r.json();
+      try{const urls=[MG_URL[sp]+'?dates='+lo+'-'+hi+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400')];
+        try{const S=sp==='nfl'?(typeof NFL_SEASON!=='undefined'?NFL_SEASON:''):sp==='ncaaf'?(typeof NCAAF_SEASON!=='undefined'?NCAAF_SEASON:''):'';
+          const W=+(sp==='nfl'?(typeof NFL_WEEK!=='undefined'?NFL_WEEK:0):sp==='ncaaf'?(typeof NCAAF_WEEK!=='undefined'?NCAAF_WEEK:0):0);
+          if(S&&W)[W,W-1].filter(x=>x>0).forEach(x=>urls.push(MG_URL[sp]+`?dates=${S}&seasontype=2&week=${x}`+(sp==='ncaaf'?'&groups=80&limit=900':'')));}catch(e){}
+        const js=await Promise.all(urls.map(u=>fetch(u).then(r=>r.json()).catch(()=>({events:[]}))));
+        const j={events:[].concat(...js.map(x=>x.events||[]))};
         const M={};(j.events||[]).forEach(ev=>{const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];
           const aw=cs.find(x=>x.homeAway==='away'),hm=cs.find(x=>x.homeAway==='home');if(!aw||!hm)return;
           const st=(ev.status||c.status||{});const state=(st.type||{}).state||'pre';
@@ -16905,7 +16917,7 @@ function btPropLegs(){
     const sp=l.nhlProp?'nhl':(l.sport==='ncaaf'?'ncaaf':'nfl');out.push({t,l,sp});}));return out;
 }
 function btUngraded(){return btPropLegs().filter(x=>{let g=null;try{g=gradeLeg(x.l,x.t.date)}catch(e){}return!g||(g.hit==null&&!g.live&&!g.push);});}
-async function btWaitId(leg,date,tries){for(let i=0;i<(tries||8);i++){const ev=fbpEventId(leg,date);if(ev.id)return ev.id;if(!ev.pending&&i>0)return null;await new Promise(r=>setTimeout(r,350));}return null;}
+async function btWaitId(leg,date,tries){for(let i=0;i<(tries||30);i++){const ev=fbpEventId(leg,date);if(ev.id)return ev.id;if(!ev.pending&&i>0)return null;await new Promise(r=>setTimeout(r,350));}return null;}
 async function regradeAllProps(statusEl){
   if(BT_BUSY)return;BT_BUSY=true;const say=h=>{const e=statusEl||document.getElementById('btStatus');if(e)e.innerHTML=h;};
   try{
