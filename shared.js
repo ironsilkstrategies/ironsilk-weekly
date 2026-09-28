@@ -16364,26 +16364,13 @@ function oddsSanityHtml(t){
    pulling it off are shown straight, from YOUR leg hit rate once there is
    enough of it (coin-flip legs until then). */
 const MS_KEY='d4.missions';
-const MS_TEMPLATES={
-  ladder:{name:'Parlay ladder',start:20,goal:1000,days:30,legs:3,note:'Roll the whole balance each step into a 3-team parlay. One miss ends the run — restart and it counts as a new attempt.'},
-  grind:{name:'$200 → $2,500',start:200,goal:2500,days:30,legs:2,note:'Never stake more than 15% of the balance on one ticket. Needs about +8.8% a day, every day.'},
-  custom:{name:'Custom',start:100,goal:500,days:14,legs:2,note:'Your numbers.'}
-};
 function msAll(){return get(MS_KEY,[])||[];}
 function msSave(A){set(MS_KEY,A);}
 function myLegRate(){
   let w=0,n=0;get(LS.locked,[]).forEach(t=>{if(!t.archived)return;(t.legs||[]).forEach(l=>{let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(g&&g.hit!=null){n++;if(g.hit)w++;}});});
   return n>=30?{p:(w+15)/(n+30),n,src:'your record'}:{p:0.5,n,src:'coin-flip legs (need 30 graded legs of yours)'};
 }
-function msStart(type){
-  const T=MS_TEMPLATES[type];let start=T.start,goal=T.goal,days=T.days;
-  if(type==='custom'){start=+prompt('Starting balance $',T.start)||T.start;goal=+prompt('Goal $',T.goal)||T.goal;days=+prompt('Days',T.days)||T.days;}
-  const A=msAll();A.push({id:Date.now(),type,name:T.name,start,goal,days,legs:T.legs,startDate:today(),balance:start,attempt:1,steps:[],status:'active'});
-  msSave(A);msRender();
-}
-function msAttach(id,sel){const tid=sel.value;if(!tid)return;const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;
-  if(m.steps.some(s=>String(s.ticketId)===tid))return;m.steps.push({ticketId:tid,date:today()});msSave(A);msRender();}
-function msRestart(id){const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;m.balance=m.start;m.attempt++;m.steps=[];m.status='active';m.startDate=today();msSave(A);msRender();}
+function msRestart(id){const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;m.balance=m.start;m.safe=0;m.attempt++;m.steps=[];m.status='active';m.startDate=today();msSave(A);msRender();}
 function msDelete(id){if(!confirm('Delete this mission?'))return;msSave(msAll().filter(x=>x.id!==id));msRender();}
 /* Settle attached tickets into the balance. */
 function msSync(){
@@ -16393,8 +16380,11 @@ function msSync(){
       let done=false,rec=null;try{done=ticketIsComplete(t);rec=done?ticketRecord(t):null}catch(e){}
       if(!done)return;const M=ticketMoney(t);const stake=M?M.stake:0;
       s.done=true;s.won=rec.l===0&&rec.w>0;s.stake=stake;s.payout=s.won&&M?M.payout:0;
-      m.balance=+(m.balance-stake+s.payout).toFixed(2);ch=true;});
-    if(m.balance>=m.goal)m.status='won';
+      if(s.won&&(s.route||m.routeKey||'').startsWith('heist')){const prof=s.payout-stake;const cut=+(prof*0.25).toFixed(2);m.safe=+((m.safe||0)+cut).toFixed(2);s.payout-=cut;}
+      m.balance=+(m.balance-stake+s.payout).toFixed(2);
+      (s.quests||[]).forEach(q=>{if(q.id==='clv'&&q.done==null){const ok=msCheckQuest({id:'clv'},t);q.done=ok;if(ok)m.xp=(m.xp||0)+q.xp;}});
+      ch=true;});
+    if(m.balance+(m.safe||0)>=m.goal)m.status='won';
     else if(m.balance<=0.5||(m.type==='ladder'&&m.steps.some(s=>s.done&&!s.won)))m.status='busted';
     const daysIn=Math.floor((Date.parse(today())-Date.parse(m.startDate))/864e5);
     if(m.status==='active'&&daysIn>=m.days)m.status='expired';
@@ -16411,32 +16401,7 @@ function msMath(m){
   const oddsToday=decimalToAmerican(perDay);   // all-in today at this price keeps you on schedule
   return{R,stepDec,stepsAllIn,pStep,pAllIn,daysLeft,perDay,oddsToday,need};
 }
-function msCard(m){
-  const X=msMath(m);const pct=Math.min(100,(m.balance-0)/m.goal*100);
-  const pend=get(LS.locked,[]).filter(t=>!t.archived&&!m.steps.some(s=>String(s.ticketId)===String(t.id)));
-  const col={active:'#5FD3E8',won:'var(--win)',busted:'var(--rust)',expired:'var(--mute)'}[m.status];
-  const steps=m.steps.map((s,i)=>`<div class="mono" style="font-size:10px">Step ${i+1}: ticket #${esc(s.ticketId)} ${s.done?(s.won?`<b style="color:var(--win)">WON</b> +$${(s.payout-s.stake).toFixed(2)}`:`<b style="color:var(--rust)">LOST</b> −$${s.stake.toFixed(2)}`):'<span style="color:var(--gold)">riding…</span>'}</div>`).join('');
-  return`<div class="tkt" style="border-color:${col};margin:8px 0">
-    <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🎯 ${esc(m.name)}</b><span class="mono" style="font-size:10px;color:${col}">${m.status.toUpperCase()}${m.attempt>1?' · attempt '+m.attempt:''}</span></div>
-    <div class="sub">$${m.start} → <b>$${m.goal}</b> in ${m.days} days · balance <b style="color:var(--gold)">$${m.balance.toFixed(2)}</b> · ${X.daysLeft} day${X.daysLeft>1?'s':''} left</div>
-    <div style="height:8px;background:var(--rule);border-radius:4px;margin:5px 0"><div style="height:8px;width:${pct}%;background:${col};border-radius:4px"></div></div>
-    ${m.status==='active'?`<div class="mono" style="font-size:10px;line-height:1.6">
-      <b>Today's threshold:</b> a ticket at <b>${X.oddsToday}</b> or longer, all-in, keeps you on schedule (×${X.perDay.toFixed(2)}/day).<br>
-      <b>Ladder math:</b> ${m.legs}-team parlays at -110 pay ×${X.stepDec.toFixed(2)} — ${X.stepsAllIn} straight win${X.stepsAllIn>1?'s':''} from here.<br>
-      <b>Straight odds:</b> ${(X.pAllIn*100).toFixed(X.pAllIn<0.01?2:1)}% to finish all-in (each step ${(X.pStep*100).toFixed(0)}%, using ${X.R.src}).</div>
-      <div class="bar" style="margin-top:6px"><select onchange="msAttach(${m.id},this)"><option value="">Attach a pending ticket as the next step…</option>
-        ${pend.map(t=>`<option value="${esc(String(t.id))}">#${esc(String(t.id))} ${esc(t.name||'')} · ${(t.legs||[]).length} legs</option>`).join('')}</select></div>`:''}
-    ${steps}
-    <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${esc(MS_TEMPLATES[m.type].note)}</div>
-    <div class="bar" style="margin-top:4px">${m.status!=='active'?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div></div>`;
-}
 function msRender(){const el=document.getElementById('missionsBody');if(el)el.innerHTML=missionsHtml(true);}
-function missionsHtml(inner){
-  const A=msSync();
-  const body=`${A.length?A.map(msCard).join(''):'<div class="empty">No missions running.</div>'}
-    <div class="bar">${Object.entries(MS_TEMPLATES).map(([k,T])=>`<button class="primary" onclick="msStart('${k}')">+ ${esc(T.name)}</button>`).join('')}</div>`;
-  return inner?body:`<div class="sbar"><h2>Missions</h2><div class="ln"></div></div><div id="missionsBody">${body}</div>`;
-}
 function bankrollSetHtml(){
   const B=brAmount();
   return`<div class="tkt"><div class="sub"><b>Your bankroll</b> — used for stake sizing on Today's card (quarter-Kelly, max 3% a pick).</div>
@@ -16553,3 +16518,168 @@ function playbooksHtml(){
 (function(){try{if(typeof document!=='undefined'&&!document.getElementById('rule-css')){const st=document.createElement('style');st.id='rule-css';
   st.textContent='.rule-row{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:3px}.rule{font-family:"IBM Plex Mono",monospace;font-size:7.5px;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,.05);color:var(--chalk);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rule.learned{border:1px solid rgba(255,215,94,.4)}.rule.principle{border:1px solid rgba(95,211,232,.35)}';
   (document.head||document.documentElement).appendChild(st);}}catch(e){}})();
+
+/* ══ MISSIONS 2.0 — routes, daily orders, checkpoints, side quests ═══════════
+   Every mission is a game with a map. The planner simulates each route
+   thousands of times on YOUR leg hit rate, picks the one most likely to get
+   you there in time, and every day writes the orders: exact stake, how many
+   legs, the minimum price the whole ticket has to beat — and it builds the
+   ticket for you from Today's card. Checkpoints tell you when to bank some.
+   Side quests pay XP for betting the way the system says wins. */
+const MS_ROUTES={
+  snowball:{name:'🎲 Snowball',desc:'Roll everything, every step. Fewest steps, one miss ends the run.'},
+  stairs:{name:'🪜 Stair-step',desc:'Bet a slice of the balance each day, keep the rest. Slower, survives bad days.'},
+  heist:{name:'🏦 The Heist',desc:'Roll it all, but every win stashes 25% of the profit in the safe house. A miss ends the run — the safe house doesn\'t.'},
+  twolane:{name:'⚖️ Two-lane',desc:'Each day: 60% on a 2-leg anchor, 40% on a 4-leg moonshot. The anchor funds the swings.'}
+};
+const MS_CHECKPOINTS=['The Corner','Chop Shop','Back Room','Casino Floor','Penthouse','The Vault'];
+const MS_RANKS=[[0,'Rookie'],[200,'Runner'],[500,'Hustler'],[1000,'Sharp'],[2500,'Syndicate'],[5000,'Kingpin']];
+function msRng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+/* One route, simulated. p = leg hit rate, legDec = one leg's decimal price. */
+function msSimRoute(route,cfg,bal,goal,days,p,legDec,runs,seed){
+  const rnd=msRng(seed);let ok=0,bust=0;const hitDays=[];const ends=[];
+  const tk=(k,stake)=>{let w=true;for(let i=0;i<k;i++)if(rnd()>=p){w=false;break;}return w?stake*Math.pow(legDec,k):0;};
+  for(let r=0;r<runs;r++){let b=bal,safe=0,d=0,won=false;
+    for(d=1;d<=days;d++){
+      if(route==='snowball'){b=tk(cfg.k,b);}
+      else if(route==='heist'){const st=b,ret=tk(cfg.k,st);if(ret>0){const prof=ret-st;safe+=prof*0.25;b=ret-prof*0.25;}else b=0;}
+      else if(route==='stairs'){const st=Math.max(1,b*cfg.f);if(st>b){b=0;}else b=b-st+tk(cfg.k,st);}
+      else if(route==='twolane'){const st=Math.max(1,b*0.2);if(st>b){b=0;}else b=b-st+tk(2,st*0.6)+tk(4,st*0.4);}
+      if(b+safe>=goal){won=true;break;}
+      if(b<1)break;}
+    if(won){ok++;hitDays.push(d);}else if(b<1)bust++;ends.push(b+safe);}
+  hitDays.sort((a,b)=>a-b);ends.sort((a,b)=>a-b);
+  return{p:ok/runs,bust:bust/runs,median:hitDays.length?hitDays[Math.floor(hitDays.length/2)]:null,endMed:ends[Math.floor(ends.length/2)]};
+}
+const MS_PLAN_CACHE={};
+/* Every route and setting, ranked by chance of reaching the goal in time. */
+function msRoutes(m){
+  const X=msMath(m);const p=X.R.p,legDec=americanToDecimal(-110);
+  const key=[m.id,m.balance,X.daysLeft,p.toFixed(3),m.goal].join('|');if(MS_PLAN_CACHE[key])return MS_PLAN_CACHE[key];
+  const cfgs=[];[2,3,4].forEach(k=>{cfgs.push(['snowball',{k}]);cfgs.push(['heist',{k}]);});
+  [[2,.25],[2,.4],[3,.2],[3,.35]].forEach(([k,f])=>cfgs.push(['stairs',{k,f}]));cfgs.push(['twolane',{}]);
+  const res=cfgs.map(([r,c],i)=>({route:r,cfg:c,...msSimRoute(r,c,m.balance,m.goal,X.daysLeft,p,legDec,2000,m.id+i*7919+Math.round(m.balance*100))}));
+  res.sort((a,b)=>b.p-a.p||(a.bust-b.bust));
+  return(MS_PLAN_CACHE[key]=res);
+}
+function msRouteLabel(r){const R=MS_ROUTES[r.route];return R.name+(r.cfg.k?` · ${r.cfg.k}-leg`:'')+(r.cfg.f?` · ${Math.round(r.cfg.f*100)}%`:'');}
+function msActiveRoute(m){const all=msRoutes(m);if(m.routeKey){const f=all.find(r=>msRouteKey(r)===m.routeKey);if(f)return f;}return all[0];}
+const msRouteKey=r=>r.route+'|'+(r.cfg.k||'')+'|'+(r.cfg.f||'');
+function msPickRoute(id,key){const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;m.routeKey=key;msSave(A);msRender();}
+/* Checkpoints: evenly spaced by multiplication, start → goal. */
+function msCheckpoints(m){const G=m.goal/m.start;return MS_CHECKPOINTS.map((n,i)=>({name:n,amt:Math.round(m.start*Math.pow(G,(i+1)/MS_CHECKPOINTS.length))}));}
+/* Build today's ticket from Today's card: k legs, one per game, priced, not
+   already on a ticket, clearing the minimum ticket price, strongest set first. */
+function msBuildTicket(k,minDec){
+  const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
+  const pool=[];Object.entries(by).forEach(([sp,B])=>(B.picks||[]).forEach(x=>{if(x.price==null)return;if(onTicketMatch(sp,x.game,x.m,x.sd))return;pool.push({...x,sp});}));
+  pool.sort((a,b)=>b.rank-a.rank);const top=pool.slice(0,9);
+  let best=null;const pick=(start,cur)=>{if(cur.length===k){const games=new Set(cur.map(x=>x.sp+x.game));if(games.size<k)return;
+      const d=cur.reduce((a,x)=>a*americanToDecimal(x.price),1),q=cur.reduce((a,x)=>a+x.rank,0);
+      const okP=d>=minDec;if(!best||(okP&&!best.ok)||(okP===best.ok&&(okP?q>best.q:d>best.d)))best={legs:[...cur],d,q,ok:okP};return;}
+    for(let i=start;i<top.length;i++){cur.push(top[i]);pick(i+1,cur);cur.pop();}};
+  pick(0,[]);return{best,poolN:pool.length};
+}
+/* The day's side quests — two a day, rotating, checked against the ticket you attach. */
+const MS_QUESTS=[
+  {id:'gold',name:'Gold Rush',xp:50,desc:'every leg is SUPREME or STRONG on Today\'s card'},
+  {id:'clean',name:'Clean Hands',xp:25,desc:'no 🧊 fade and no conflicted legs'},
+  {id:'key',name:'Key Master',xp:30,desc:'include a football side on the good side of a key number (+3.5, +7.5…)'},
+  {id:'money',name:'Follow the Money',xp:40,desc:'include a 💰 sharp-split side'},
+  {id:'cross',name:'World Tour',xp:30,desc:'legs from 2+ sports'},
+  {id:'crowd',name:'Full Council',xp:40,desc:'every leg has 4+ characters on it'},
+  {id:'clv',name:'Beat the Close',xp:60,desc:'every priced leg beats the closing line (checked when it settles)'}
+];
+function msQuestsToday(m){const h=[...(today()+m.id)].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,7);
+  const a=h%MS_QUESTS.length,b=(a+1+(h>>>5)%(MS_QUESTS.length-1))%MS_QUESTS.length;return[MS_QUESTS[a],MS_QUESTS[b]];}
+/* Match a ticket leg back to how Today's card saw it. */
+function msLegInfo(l){const sp=l.sport||'mlb';const[a,h]=String(l.game).split('@');const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);
+  const T=get(TC_KEY,{})||{};const B=((T.by||{})[sp])||{};const x=k?(B.picks||[]).find(p=>p.game===l.game&&p.m===k.market&&p.sd===k.side):null;return{sp,k,x};}
+function msCheckQuest(q,t){
+  const L=(t&&t.legs)||[];if(!L.length)return false;const I=L.map(msLegInfo);
+  if(q.id==='gold')return I.every(i=>i.x&&(i.x.color===' supreme'||i.x.color===' strong'));
+  if(q.id==='clean')return I.every(i=>!i.x||!(i.x.rules||[]).some(r=>r.icon==='🧊'));
+  if(q.id==='key')return I.some(i=>i.x&&(i.x.rules||[]).some(r=>r.icon==='🔑'&&/is past/.test(r.text)));
+  if(q.id==='money')return I.some(i=>i.x&&(i.x.rules||[]).some(r=>r.icon==='💰'));
+  if(q.id==='cross')return new Set(I.map(i=>i.sp)).size>=2;
+  if(q.id==='crowd')return I.every(i=>i.x&&(i.x.chars||[]).length>=4);
+  if(q.id==='clv'){const c=L.map(l=>{try{return clvLeg(l,t)}catch(e){return null}}).filter(Boolean);return c.length===L.filter(l=>l.price!=null).length&&c.length>0&&c.every(x=>(x.pct!=null?x.pct:x.pts)>0);}
+  return false;
+}
+function msXP(){return msAll().reduce((a,m)=>a+(m.xp||0),0);}
+function msRank(xp){let r=MS_RANKS[0];MS_RANKS.forEach(x=>{if(xp>=x[0])r=x;});const nx=MS_RANKS.find(x=>x[0]>xp);return{name:r[1],next:nx};}
+/* Attaching a ticket scores today's side quests (Beat the Close waits for the settle). */
+function msAttach(id,sel){const tid=sel.value;if(!tid)return;const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;
+  if(m.steps.some(s=>String(s.ticketId)===tid))return;const t=get(LS.locked,[]).find(x=>String(x.id)===tid);
+  const qs=msQuestsToday(m).map(q=>({id:q.id,name:q.name,xp:q.xp,done:q.id==='clv'?null:msCheckQuest(q,t)}));
+  qs.forEach(q=>{if(q.done)m.xp=(m.xp||0)+q.xp;});
+  m.steps.push({ticketId:tid,date:today(),quests:qs,route:msRouteKey(msActiveRoute(m))});msSave(A);msRender();}
+const MS_TEMPLATES={
+  ladder:{name:'Parlay ladder',start:20,goal:1000,days:30,legs:3,route:'snowball|3|',note:'Classic ladder: every step rides everything. A miss ends the run — run it back and it counts as a new attempt.'},
+  heist:{name:'The Heist',start:20,goal:5000,days:30,legs:3,route:'heist|3|',note:'Every win stashes a cut in the safe house. Even a busted run keeps what\'s in the safe.'},
+  grind:{name:'$200 → $2,500',start:200,goal:2500,days:30,legs:2,route:'stairs|2|0.25',note:'The long game. Never more than a slice on one ticket — bad days cost a step, not the mission.'},
+  weekend:{name:'Weekend Warrior',start:50,goal:400,days:7,legs:3,route:'',note:'One week, ×8. The planner picks the route; the clock is the enemy.'},
+  custom:{name:'Custom',start:100,goal:500,days:14,legs:2,route:'',note:'Your numbers. The planner finds the best route for them.'}
+};
+function msStart(type){
+  const T=MS_TEMPLATES[type];let start=T.start,goal=T.goal,days=T.days;
+  if(type==='custom'){start=+prompt('Starting balance $',T.start)||T.start;goal=+prompt('Goal $',T.goal)||T.goal;days=+prompt('Days',T.days)||T.days;}
+  const A=msAll();A.push({id:Date.now(),type,name:T.name,start,goal,days,legs:T.legs,startDate:today(),balance:start,attempt:1,steps:[],status:'active',routeKey:T.route||null,xp:0,safe:0});
+  msSave(A);msRender();
+}
+function msOrders(m){
+  const r=msActiveRoute(m);const b=m.balance;const $=x=>'$'+(Math.round(x*2)/2).toFixed(2);const legDec=americanToDecimal(-110);
+  const X=msMath(m);const lanes=[];
+  if(r.route==='snowball'||r.route==='heist')lanes.push({lab:'The play',stake:b,k:r.cfg.k,minDec:Math.pow(legDec,r.cfg.k)});
+  else if(r.route==='stairs')lanes.push({lab:'The play',stake:Math.max(1,b*r.cfg.f),k:r.cfg.k,minDec:Math.pow(legDec,r.cfg.k)});
+  else{const st=Math.max(1,b*0.2);lanes.push({lab:'Anchor',stake:st*0.6,k:2,minDec:Math.pow(legDec,2)},{lab:'Moonshot',stake:st*0.4,k:4,minDec:Math.pow(legDec,4)});}
+  const cps=msCheckpoints(m);const nextCp=cps.find(c=>c.amt>b);
+  return{r,lanes:lanes.map(L=>({...L,stake:Math.round(L.stake*2)/2,build:msBuildTicket(L.k,L.minDec)})),nextCp,cps,$};
+}
+function msCard(m){
+  const X=msMath(m);const O=m.status==='active'?msOrders(m):null;const routes=m.status==='active'?msRoutes(m):[];
+  const col={active:'#5FD3E8',won:'var(--win)',busted:'var(--rust)',expired:'var(--mute)'}[m.status];
+  const cps=msCheckpoints(m);const tot=m.balance+(m.safe||0);
+  const map=`<div style="position:relative;margin:10px 4px 18px">
+    <div style="height:6px;background:var(--rule);border-radius:3px"><div style="height:6px;width:${Math.min(100,Math.log(Math.max(1,tot/m.start))/Math.log(m.goal/m.start)*100)}%;background:${col};border-radius:3px"></div></div>
+    ${cps.map((c,i)=>{const x=(i+1)/cps.length*100,hit=tot>=c.amt;return`<div style="position:absolute;left:calc(${x}% - 5px);top:-3px;width:10px;height:10px;border-radius:50%;background:${hit?col:'#1a1f27'};border:2px solid ${hit?col:'var(--mute)'}"></div>
+      <div class="mono" style="position:absolute;left:calc(${x}% - 30px);width:60px;text-align:center;top:10px;font-size:7.5px;color:${hit?col:'var(--mute)'}">${c.name}<br>$${c.amt.toLocaleString()}</div>`;}).join('')}</div>`;
+  const pend=get(LS.locked,[]).filter(t=>!t.archived&&!m.steps.some(s=>String(s.ticketId)===String(t.id)));
+  const R=msRank(msXP());
+  let orders='';
+  if(O){const qs=msQuestsToday(m);const already=m.steps.find(s=>s.date===today());
+    orders=`<div style="margin-top:8px;padding:10px;border-radius:10px;background:rgba(95,211,232,.06);border:1px solid rgba(95,211,232,.35)">
+      <div class="mono" style="font-size:9px;letter-spacing:.1em;color:#5FD3E8">TODAY'S ORDERS · DAY ${m.days-X.daysLeft+1} OF ${m.days}${already?' · ✓ STEP LOGGED':''}</div>
+      <div style="font-weight:800;margin:3px 0">${msRouteLabel(O.r)} <span class="mono" style="font-size:10px;color:var(--mute)">— ${Math.round(O.r.p*100*10)/10}% to finish</span></div>
+      ${O.lanes.map(L=>{const B=L.build.best;
+        const legs=B?B.legs.map(x=>`<div class="mono" style="font-size:10.5px;padding-left:8px">• ${esc(x.pick)} <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> <span style="color:${TC_COL[x.color][0]}">${TC_COL[x.color][1]}</span>${(x.rules||[]).slice(0,1).map(r=>' '+r.icon).join('')} <span style="color:var(--mute)">${esc(x.game)}</span></div>`).join(''):'';
+        return`<div class="sub" style="margin-top:5px"><b>${L.lab}:</b> stake <b style="color:var(--gold)">${O.$(L.stake)}</b> on a <b>${L.k}-team parlay</b> priced <b>${decimalToAmerican(L.minDec)} or longer</b> → pays ${O.$(L.stake*L.minDec)}+.</div>
+          ${B?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">Built from Today's card:</div>${legs}
+            <div class="mono" style="font-size:10px;padding-left:8px;color:${B.ok?'var(--win)':'var(--rust)'}">= ${decimalToAmerican(B.d)} ${B.ok?'✓ clears the bar':'✗ short of '+decimalToAmerican(L.minDec)+' — add a leg or swap one for a plus-money side'}</div>`
+            :`<div class="mono" style="font-size:9.5px;color:var(--mute)">Upload today's lines and open a Games board — the planner builds the ticket from Today's card (${L.build.poolN} priced pick${L.build.poolN===1?'':'s'} there now).</div>`}`;}).join('')}
+      <div class="sub" style="margin-top:6px;font-size:11px"><b>Today's threshold:</b> ${O.nextCp?`next checkpoint <b>${O.nextCp.name}</b> at $${O.nextCp.amt.toLocaleString()}`:'goal in reach'}. ${O.r.route==='heist'?'Win → move 25% of the profit to the safe house.':O.r.route==='snowball'?'Win → roll it all tomorrow.':'Win or lose, tomorrow\'s stake resizes off the new balance.'}</div>
+      <div class="sub" style="font-size:11px"><b>If it loses:</b> ${O.r.route==='snowball'||O.r.route==='heist'?`the run ends${(m.safe||0)>0?` — the safe house keeps $${m.safe.toFixed(2)}`:''}. Run it back; never add money to chase.`:`balance drops to ${O.$(m.balance-O.lanes.reduce((a,L)=>a+L.stake,0))}; the planner re-plans. Never double the next stake to chase.`}</div>
+      <div class="mono" style="font-size:9.5px;margin-top:6px;color:#FFD75E">SIDE QUESTS · ${qs.map(q=>`<b>${q.name}</b> (+${q.xp} XP): ${q.desc}`).join(' · ')}</div>
+      <div class="bar" style="margin-top:6px"><select onchange="msAttach(${m.id},this)"><option value="">Placed it? Attach the ticket as today's step…</option>
+        ${pend.map(t=>`<option value="${esc(String(t.id))}">#${esc(String(t.id))} ${esc(t.name||'')} · ${(t.legs||[]).length} legs</option>`).join('')}</select></div></div>
+    <details style="margin-top:6px"><summary class="mono" style="font-size:10px">Route planner — ${routes.length} routes simulated ×2,000 on ${X.R.src}</summary>
+      <table class="mono" style="width:100%;font-size:9.5px;margin-top:4px;border-collapse:collapse"><tr style="color:var(--mute)"><td>route</td><td>finish</td><td>bust</td><td>median day</td><td></td></tr>
+      ${routes.slice(0,8).map(r=>`<tr style="${msRouteKey(r)===msRouteKey(O.r)?'color:#5FD3E8;font-weight:700':''}"><td>${msRouteLabel(r)}</td><td>${(r.p*100).toFixed(1)}%</td><td>${Math.round(r.bust*100)}%</td><td>${r.median||'—'}</td>
+        <td>${msRouteKey(r)===msRouteKey(O.r)?'◀':`<a href="#" onclick="msPickRoute(${m.id},'${msRouteKey(r)}');return false" style="color:var(--cold)">use</a>`}</td></tr>`).join('')}</table>
+      <div class="sub" style="font-size:9.5px;color:var(--mute)">${Object.values(MS_ROUTES).map(x=>`<b>${x.name}</b>: ${x.desc}`).join('<br>')}</div></details>`;}
+  const steps=m.steps.map((s,i)=>`<div class="mono" style="font-size:10px">Day ${i+1}: #${esc(s.ticketId)} ${s.done?(s.won?`<b style="color:var(--win)">WON</b> +$${(s.payout-s.stake).toFixed(2)}`:`<b style="color:var(--rust)">LOST</b> −$${s.stake.toFixed(2)}`):'<span style="color:var(--gold)">riding…</span>'}
+    ${(s.quests||[]).map(q=>q.done===true?` <span style="color:#FFD75E">★${q.name} +${q.xp}</span>`:q.done===false?` <span style="color:var(--mute)">✗${q.name}</span>`:` <span style="color:var(--mute)">…${q.name}</span>`).join('')}</div>`).join('');
+  return`<div class="tkt" style="border-color:${col};margin:8px 0">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🎯 ${esc(m.name)}</b><span class="mono" style="font-size:10px;color:${col}">${m.status.toUpperCase()}${m.attempt>1?' · attempt '+m.attempt:''}</span></div>
+    <div class="sub">$${m.start} → <b>$${m.goal.toLocaleString()}</b> in ${m.days} days · balance <b style="color:var(--gold)">$${m.balance.toFixed(2)}</b>${m.safe?` · safe house <b style="color:var(--win)">$${m.safe.toFixed(2)}</b>`:''} · ${X.daysLeft} day${X.daysLeft>1?'s':''} left</div>
+    ${map}${orders}${steps}
+    <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${esc(MS_TEMPLATES[m.type]?MS_TEMPLATES[m.type].note:'')}</div>
+    <div class="bar" style="margin-top:4px">${m.status!=='active'?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div></div>`;
+}
+function missionsHtml(inner){
+  const A=msSync();const xp=msXP(),R=msRank(xp);
+  const head=`<div class="mono" style="font-size:10.5px;margin:2px 0 6px">RANK <b style="color:#FFD75E">${R.name.toUpperCase()}</b> · ${xp} XP${R.next?` · ${R.next[0]-xp} to ${R.next[1]}`:''}</div>`;
+  const body=`${head}${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one — the planner does the math and writes your orders every day.</div>'}
+    <div class="bar">${Object.entries(MS_TEMPLATES).map(([k,T])=>`<button class="primary" onclick="msStart('${k}')">+ ${esc(T.name)}</button>`).join('')}</div>`;
+  return inner?body:`<div class="sbar"><h2>Missions</h2><div class="ln"></div></div><div id="missionsBody">${body}</div>`;
+}
