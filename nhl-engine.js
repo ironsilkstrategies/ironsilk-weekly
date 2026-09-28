@@ -15,7 +15,7 @@
    loader. Verify on device the first night pucks drop.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-let NHL_GAMES=[],NHL_SIMS={},NHL_BOX_CACHE={},NHL_RATINGS=null,NHL_PLAYERS=null,NHL_ROSTERS={},NHL_FLAT=true;
+let NHL_UPCOMING=[],NHL_GAMES=[],NHL_SIMS={},NHL_BOX_CACHE={},NHL_RATINGS=null,NHL_PLAYERS=null,NHL_ROSTERS={},NHL_FLAT=true;
 let NHL_STATUS={sched:'not loaded',ratings:'not loaded',players:'not loaded'};
 const NHL_LS={games:'d4.nhlgames',shots:'d4.nhlshots',ratings:'d4.nhlratings',players:'d4.nhlplayers',arc:'d4.nhlarc',
   ext:'d4.nhlext',trends:'d4.nhltrends',cons:'d4.nhlconsensus'};
@@ -112,6 +112,49 @@ async function loadNHLSchedule(){
     return (j.season||{}).year||null;
   }catch(e){NHL_STATUS.sched='schedule fetch failed: '+(e.message||e);return null;}
 }
+/* Next few days of games, so they're on tap ahead of time. */
+async function loadNHLUpcoming(days){
+  days=days||3;const pad=n=>String(n).padStart(2,'0');
+  const t0=new Date(today()+'T12:00:00');const fmt=d=>d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
+  const a=new Date(t0);a.setDate(a.getDate()+1);const b=new Date(t0);b.setDate(b.getDate()+days);
+  try{
+    const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${fmt(a)}-${fmt(b)}`);
+    const j=await r.json();const td=today();
+    NHL_UPCOMING=(j.events||[]).map(nhlParseEvent).filter(Boolean).map(g=>({...g,__date:nhlLocalDate(g.start)})).filter(g=>g.__date>td);
+    set('d4.nhlupcoming',{d:td,games:NHL_UPCOMING,ts:Date.now()});
+  }catch(e){const c=get('d4.nhlupcoming',null);if(c&&Array.isArray(c.games))NHL_UPCOMING=c.games.filter(g=>g.__date>today());}
+  return NHL_UPCOMING;
+}
+/* Lines Chris entered from sportsbetting.ag for Tue 9/29 and Wed 9/30. Filed as
+   'mine' (your uploads outrank live and ESPN lines). Written once each, after
+   the schedule confirms which team is home, so the key matches ESPN's. */
+const NHL_SEED_LINES=[
+  {d:'2026-09-29',a:'Florida Panthers',h:'Carolina Hurricanes',pl:[1.5,-225,-1.5,189],ml:[109,-123],ou:[6.5,109,-125]},
+  {d:'2026-09-29',a:'Montreal Canadiens',h:'Toronto Maple Leafs',pl:[1.5,-260,-1.5,215],ml:[-102,-112],ou:[6.5,-102,-114]},
+  {d:'2026-09-29',a:'New York Rangers',h:'Boston Bruins',pl:[1.5,-265,-1.5,219],ml:[-102,-112],ou:[5.5,-130,113]},
+  {d:'2026-09-29',a:'Vancouver Canucks',h:'Edmonton Oilers',pl:[1.5,-110,-1.5,-110],ml:[232,-270],ou:[6.5,-125,109]},
+  {d:'2026-09-29',a:'Chicago Blackhawks',h:'Vegas Golden Knights',pl:[1.5,-125,-1.5,105],ml:[208,-240],ou:[5.5,-130,113]},
+  {d:'2026-09-30',a:'Pittsburgh Penguins',h:'Philadelphia Flyers',ml:[110,-125],ou:[5.5,-128,112]},
+  {d:'2026-09-30',a:'Los Angeles Kings',h:'Colorado Avalanche',ml:[149,-170],ou:[5.5,-120,104]}
+];
+function nhlApplySeed(){
+  const done=get('d4.nhlseed',{});let n=0;const td=today();
+  NHL_SEED_LINES.forEach(S=>{
+    let A=nhlAbbrFor(S.a),H=nhlAbbrFor(S.h);if(!A||!H)return;
+    const k=S.d+'|'+[A,H].sort().join('-');if(done[k]||S.d<td)return;
+    const pool=[...NHL_GAMES,...NHL_UPCOMING];
+    const same=pool.find(z=>z.away.abbr===A&&z.home.abbr===H),flip=pool.find(z=>z.away.abbr===H&&z.home.abbr===A);
+    if(!same&&!flip)return;                     // wait until the schedule shows it
+    const sw=!same;const g=same||flip;const game=g.away.abbr+'@'+g.home.abbr;
+    const base={away:g.away.abbr,home:g.home.abbr,game,gid:g.id,src:'mine',book:'sportsbetting.ag',capturedAt:Date.now(),date:g.__date||td};
+    const sd=x=>sw?(x==='away'?'home':'away'):x;const rows=[];
+    if(S.ml)rows.push({...base,market:'moneyline',side:sd('away'),line:null,price:S.ml[0]},{...base,market:'moneyline',side:sd('home'),line:null,price:S.ml[1]});
+    if(S.pl)rows.push({...base,market:'spread',side:sd('away'),line:S.pl[0],price:S.pl[1]},{...base,market:'spread',side:sd('home'),line:S.pl[2],price:S.pl[3]});
+    if(S.ou)rows.push({...base,market:'total',side:'over',line:S.ou[0],price:S.ou[1]},{...base,market:'total',side:'under',line:S.ou[0],price:S.ou[2]});
+    nhlPutLines(rows);done[k]=Date.now();n++;
+  });
+  if(n)set('d4.nhlseed',done);return n;
+}
 function nhlLoadCachedSchedule(){
   const c=get(NHL_LS.games,null);
   if(c&&c.d===today()&&Array.isArray(c.games)){NHL_GAMES=c.games;NHL_STATUS.sched=`${c.games.length} games (cached)`;return c.season;}
@@ -194,16 +237,26 @@ function nhlSimFor(g){const sig=NHL_RATINGS?NHL_RATINGS.ts:0;let s=NHL_SIMS[g.id
 
 /* ── Lines: storage, priority, intake grammar, live pull ────────────────── */
 const NHL_SRC_RANK={mine:3,live:2,espn:1};
-function nhlLinesToday(){return get(NHL_LS.shots,{})[today()]||[];}
+/* Lines are filed under the GAME's date, not the day they were entered, so
+   lines for Tuesday's games entered on Monday are waiting on Tuesday's cards. */
+const nhlLocalDate=iso=>{try{return new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso))}catch(e){return today()}};
+function nhlDateOf(game){
+  if(NHL_GAMES.some(z=>z.away.abbr+'@'+z.home.abbr===game))return today();
+  const u=NHL_UPCOMING.find(z=>z.away.abbr+'@'+z.home.abbr===game);return u?u.__date:today();
+}
+function nhlLinesOn(d){return get(NHL_LS.shots,{})[d||today()]||[];}
+function nhlLinesToday(){return nhlLinesOn(today());}
 function nhlPutLines(rows){
-  const all=get(NHL_LS.shots,{}),d=today();all[d]=all[d]||[];
+  const all=get(NHL_LS.shots,{});
   const key=x=>[x.game,x.market,x.side,x.line,x.player||'',x.stat||'',x.src].join('|');
-  rows.forEach(r=>{const i=all[d].findIndex(y=>key(y)===key(r));if(i>=0)all[d][i]=r;else all[d].push(r);});
-  Object.keys(all).sort().slice(0,-7).forEach(k=>delete all[k]);set(NHL_LS.shots,all);
+  rows.forEach(r=>{const d=r.date||nhlDateOf(r.game);all[d]=all[d]||[];
+    const i=all[d].findIndex(y=>key(y)===key(r));if(i>=0)all[d][i]=r;else all[d].push(r);});
+  const keep=Object.keys(all).sort();const td=today();
+  keep.filter(k=>k<td).slice(0,-7).forEach(k=>delete all[k]);set(NHL_LS.shots,all);
 }
 /* Main line per market/side: your uploads beat live pulls beat ESPN. */
-function nhlBookLinesFor(game){
-  const L=nhlLinesToday().filter(x=>x.game===game);const best={};
+function nhlBookLinesFor(game,date){
+  const L=nhlLinesOn(date||nhlDateOf(game)).filter(x=>x.game===game);const best={};
   L.forEach(x=>{const k=x.market==='prop'?[x.market,x.player,x.stat,x.side].join('|'):x.market+'|'+x.side;const b=best[k];
     const r=NHL_SRC_RANK[x.src]||0,br=b?(NHL_SRC_RANK[b.src]||0):-1;
     if(!b||r>br||(r===br&&(x.capturedAt||0)>(b.capturedAt||0)))best[k]=x;});
@@ -257,7 +310,7 @@ function parseNHLSlateText(text){
   return{picks,trends:[],consensus:[],unread};
 }
 function saveNHLBookOdds(picks,el){
-  const rows=(picks||[]).map(x=>{const game=x.game||(x.away+'@'+x.home);const g=NHL_GAMES.find(z=>z.away.abbr+'@'+z.home.abbr===game);
+  const rows=(picks||[]).map(x=>{const game=x.game||(x.away+'@'+x.home);const g=NHL_GAMES.find(z=>z.away.abbr+'@'+z.home.abbr===game)||NHL_UPCOMING.find(z=>z.away.abbr+'@'+z.home.abbr===game);
     return{away:x.away,home:x.home,game,market:x.market,side:x.side,line:x.line!=null?x.line:null,price:x.price,
       player:x.player||null,stat:x.stat||null,gid:g?g.id:null,src:'mine',capturedAt:Date.now()};});
   nhlPutLines(rows);
@@ -408,11 +461,15 @@ function nhlBrainAdapter(){
     boxCols:[['P1-P2-P3','p'],['G','g'],['SOG≈','sog']],boxStats:['sog']};
 }
 
+function nhlPredBoxHtml(g){
+  try{const arc=get(NHL_LS.arc,{});for(const D of Object.values(arc)){const r=(D&&D.rows||[]).find(x=>x.gid===g.id);
+    if(r&&r.judge&&r.judge.box&&r.actualBox)return predBoxGradeHtml('nhl',g,r.judge.box,r.actualBox);}}catch(e){}return'';}
 /* ── Card ──────────────────────────────────────────────────────────────── */
 function nhlTile(g,s,label,pick,line,modelP,simStr,mkt){
-  if(!line){return`<div class="bet"><div class="bl">${label}</div><div class="sim-chip">sim ${simStr}</div>
+  if(!line){const cI=(()=>{try{return charSquare('nhl',g,s,pick,{})}catch(e){return{}}})(),tC=charTier({hasLine:false},cI);
+    return`<div class="bet${tC}"><div class="bl">${label}</div><div class="sim-chip">sim ${simStr}</div>
     <div class="bo" style="color:var(--mute)">${modelP!=null?nhlSgn(nhlFair(modelP)):'—'}</div><div class="bs">sim only</div>
-    <div class="bf" style="color:var(--mute)">no real line yet</div></div>`;}
+    <div class="bf" style="color:var(--mute)">no real line yet</div>${cI.chips||''}${cI.meter||''}${charTierTag(tC)}</div>`;}
   const kp=nhlImp(line.price),mp=modelP,ev=nhlEV(mp,line.price),gap=(mp-kp)*100;
   let cls='',badge='';
   if(!NHL_FLAT){if(gap>=EDGE_MIN){cls=' value';badge=`<span class="eb up">+${gap.toFixed(1)}</span>`;}
@@ -425,17 +482,16 @@ function nhlTile(g,s,label,pick,line,modelP,simStr,mkt){
   const same=xs.filter(x=>mkOf(x.pick)===mkt),on=same.filter(x=>sideOf(x.pick)===sideOf(pick));
   const srcOn=new Set(on.map(x=>x.src)),srcAll=new Set(same.map(x=>x.src));
   const outsideAgrees=on.length>0,outsideUnanimous=srcAll.size>=2&&srcOn.size===srcAll.size,outsideAgainst=!on.length&&same.length>0;
-  const signals=[bookLeans,modelEdgeHere,outsideAgrees].filter(Boolean).length;
-  const conflict=(modelAgainstHere&&(bookLeans||outsideAgrees))||(outsideAgainst&&(bookLeans||modelEdgeHere));
-  const tier=conflict?' conflict':signals>=3||(signals>=2&&outsideUnanimous)?' supreme':signals>=2?' strong':signals>=1?' lean':'';
-  const tag=tier===' supreme'?'<div class="tier-tag supreme">◆ SUPREME</div>':tier===' strong'?'<div class="tier-tag strong">STRONG</div>':tier===' conflict'?'<div class="tier-tag conflict">⚠ CONFLICT</div>':'';
+  const cInfo=(()=>{try{return charSquare('nhl',g,s,pick,{price:line.price,modelP:mp})}catch(e){return{}}})();
+  const tier=charTier({hasLine:true,bookLeans,modelEdgeHere,modelAgainstHere,outsideAgrees,outsideUnanimous,outsideAgainst},cInfo);
+  const tag=charTierTag(tier);
   const srcTag=outsideAgrees?`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':srcOn.size+' source'+(srcOn.size>1?'s':'')}</div>`:'';
   const srcCls=outsideAgrees?(outsideUnanimous?' consensus-pick':' source-pick'):'';
   const on2=SLIP.some(x=>x.id===g.id+'|'+pick);
   return`<div class="bet${cls}${srcCls}${tier} ${on2?'on':''}" role="button" tabindex="0" onclick="sportSlipToggle('nhl','${g.id}','${nhlQ(pick)}',${line.price})">
     <div class="bl">${label}</div><div class="sim-chip">sim ${simStr}</div><div class="bo">${nhlSgn(line.price)}</div>
     <div class="bs">${badge||Math.round(kp*100)+'%'}</div>
-    <div class="bf">model ${(mp*100).toFixed(0)}% · fair ${nhlSgn(nhlFair(mp))} · <span style="color:${ev>=2?'var(--win)':ev<0?'var(--rust)':'var(--mute)'}">${ev>=0?'+':''}${ev.toFixed(1)}% EV</span>${line.src!=='mine'?` · <span style="color:var(--mute)">${line.src}</span>`:''}</div>${srcTag}${tag}</div>`;
+    <div class="bf">model ${(mp*100).toFixed(0)}% · fair ${nhlSgn(nhlFair(mp))} · <span style="color:${ev>=2?'var(--win)':ev<0?'var(--rust)':'var(--mute)'}">${ev>=0?'+':''}${ev.toFixed(1)}% EV</span>${line.src!=='mine'?` · <span style="color:var(--mute)">${line.src}</span>`:''}</div>${srcTag}${cInfo.chips||''}${cInfo.meter||''}${tag}</div>`;
 }
 function nhlMkt(title,real,inner){return`<div class="mktlab" style="margin-top:8px">${title}${real?'<span style="font-family:\'IBM Plex Mono\';font-size:8px;color:var(--cold);border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:6px">REAL</span>':''}</div><div class="betgrid">${inner}</div>`;}
 function nhlCard(g){
@@ -447,8 +503,8 @@ function nhlCard(g){
       <div class="md">pregame sim ${s.awayProj.toFixed(1)}–${s.homeProj.toFixed(1)} · P1 ${g.p1a??'–'}-${g.p1h??'–'}</div></div>`;}
   else if(g.abstract==='post'){const tot=(g.awayScore||0)+(g.homeScore||0);const ov=L.over;
       head=`<div class="proj"><div class="sc">${A} ${g.awayScore} – ${g.homeScore} ${H}</div><div class="rd">FINAL${/OT|SO/.test(g.detail)?' / '+nhlEsc(g.detail.replace(/^Final\/?/i,'')):''}</div>
-      <div class="md">model called ${s.hw>=s.aw?H:A} (${(Math.max(s.hw,s.aw)*100).toFixed(0)}%) — ${((s.hw>=s.aw)===(g.homeScore>g.awayScore))?'✅ right':'❌ wrong'}${ov?` · total ${tot} vs ${ov.line} → ${tot>ov.line?'OVER':tot<ov.line?'UNDER':'PUSH'}`:''}</div></div>`;}
-  else{const P=(get('d4.preds',{}).nhl||{})[today()]||{};const pr=P[game];
+      <div class="md">model called ${s.hw>=s.aw?H:A} (${(Math.max(s.hw,s.aw)*100).toFixed(0)}%) — ${((s.hw>=s.aw)===(g.homeScore>g.awayScore))?'✅ right':'❌ wrong'}${ov?` · total ${tot} vs ${ov.line} → ${tot>ov.line?'OVER':tot<ov.line?'UNDER':'PUSH'}`:''}</div></div>${nhlPredBoxHtml(g)}`;}
+  else{const P=(get('d4.preds',{}).nhl||{})[g.__date||today()]||{};const pr=P[game];
       head=`<div class="proj"><div class="sc">${A} ${s.awayProj.toFixed(1)} – ${s.homeProj.toFixed(1)} ${H}</div>
       <div class="rd">${Math.round(s.awayProj)}–${Math.round(s.homeProj)}</div><div class="md">most common ${s.modeScore?s.modeScore.replace('-','–'):'—'} · ${(s.modeScorePct*100).toFixed(1)}%</div>
       ${pr?`<div style="font-family:'IBM Plex Mono';font-size:10px;color:var(--gold);margin-top:3px">pred ${A} ${pr.a} – ${pr.h} ${H} <span style="color:var(--mute)">vs sim: margin ${((pr.h-pr.a)-(s.homeProj-s.awayProj)).toFixed(1)} · total ${((pr.a+pr.h)-(s.awayProj+s.homeProj)).toFixed(1)}</span></div>`:''}
@@ -567,6 +623,7 @@ function nhlSnapshot(){
   const arc=get(NHL_LS.arc,{}),d=today(),day=arc[d]||(arc[d]={rows:[]});let changed=false;
   NHL_GAMES.forEach(g=>{if(g.abstract!=='pre'||NHL_FLAT)return;const s=nhlSimFor(g),L=nhlLineObj(g.away.abbr+'@'+g.home.abbr);
     let row=day.rows.find(r=>r.gid===g.id);if(!row){row={gid:g.id,game:g.away.abbr+'@'+g.home.abbr,v:2,picks:[]};day.rows.push(row);}
+    try{const J=brainJudge(g,s,'nhl');if(J)row.judge=brainLockable(J);}catch(e){}
     const cand=[];
     if(L.awayML&&L.homeML){cand.push({m:'ml',side:'away',price:L.awayML.price,p:s.aw},{m:'ml',side:'home',price:L.homeML.price,p:s.hw});}
     if(L.over&&L.under){cand.push({m:'total',side:'over',line:L.over.line,price:L.over.price,p:s.over(L.over.line)},{m:'total',side:'under',line:L.under.line,price:L.under.price,p:s.under(L.under.line)});}
@@ -575,11 +632,24 @@ function nhlSnapshot(){
     changed=true;});
   if(changed){Object.keys(arc).sort().slice(0,-120).forEach(k=>delete arc[k]);set(NHL_LS.arc,arc);}
 }
+function nhlTeamSOG(t){return(t.skaters||[]).reduce((a,r)=>a+(parseFloat(r.S??r.SOG??0)||0),0);}
+function nhlCollectActualBoxes(day){
+  (day&&day.rows||[]).forEach(r=>{if(!r.final||r.actualBox||!r.judge||(r.boxTried||0)>2)return;
+    const g=NHL_GAMES.find(z=>z.id===r.gid);if(!g||!g.espnId)return;
+    const use=b=>{if(!b||!b.teams)return;const[A,H]=r.game.split('@');const ta=b.teams[A],th=b.teams[H];if(!ta||!th)return;
+      const arc=get(NHL_LS.arc,{});const D=Object.values(arc).find(x=>(x.rows||[]).some(y=>y.gid===r.gid&&y.game===r.game));if(!D)return;
+      const R=D.rows.find(y=>y.gid===r.gid);R.actualBox={away:{sog:nhlTeamSOG(ta),g:r.final.a},home:{sog:nhlTeamSOG(th),g:r.final.h}};set(NHL_LS.arc,arc);
+      try{brainLearn('nhl')}catch(e){}};
+    const c=NHL_BOX_CACHE[g.espnId];if(c)use(c);else{r.boxTried=(r.boxTried||0)+1;fetchNHLBox(g.espnId).then(use).catch(()=>{});}
+  });
+}
 function nhlArchiveFinals(){
   const arc=get(NHL_LS.arc,{}),d=today(),day=arc[d];if(!day)return;let ch=false;
   NHL_GAMES.forEach(g=>{if(g.abstract!=='post'||g.awayScore==null)return;const r=day.rows.find(x=>x.gid===g.id);if(!r||r.final)return;
     r.final={a:+g.awayScore,h:+g.homeScore,p1a:g.p1a,p1h:g.p1h};r.awayScore=+g.awayScore;r.homeScore=+g.homeScore;ch=true;});
   if(ch)set(NHL_LS.arc,arc);
+  nhlCollectActualBoxes(day);
+  try{brainLearn('nhl')}catch(e){console.warn('nhl brain',e)}
 }
 function renderNHLRecord(){
   const nav=document.getElementById('gradeNav');if(nav)nav.innerHTML='<button class="on">🏒 NHL record</button>';
@@ -600,16 +670,27 @@ function renderNHLRecord(){
   body.innerHTML=h;
 }
 
+/* Upcoming days: full cards (sim, lines, characters) grouped by day. */
+function nhlUpcomingHtml(){
+  if(!NHL_UPCOMING.length)return'';
+  const byDay={};NHL_UPCOMING.forEach(g=>{(byDay[g.__date]=byDay[g.__date]||[]).push(g)});
+  return Object.keys(byDay).sort().map(d=>{
+    const lab=new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+    return`<div class="sbar" style="margin-top:14px"><h2>${lab} · upcoming</h2><div class="ln"></div></div>`+
+      byDay[d].sort((a,b)=>String(a.start).localeCompare(String(b.start))).map(g=>{try{return nhlCard(g)}catch(e){console.warn('nhl upcoming card',e);return''}}).join('');
+  }).join('');
+}
 /* ── Board ─────────────────────────────────────────────────────────────── */
 function renderNHL(){
   const el=document.getElementById('slate');if(!el)return;
   ['nflPowerWarn','cfbPowerWarn'].forEach(id=>{const w=document.getElementById(id);if(w)w.style.display='none';});
   const nG=document.getElementById('nG');if(nG)nG.textContent=NHL_GAMES.length;
   const status=`<div class="sub" style="font-family:'IBM Plex Mono';font-size:10px;margin:0 3px 8px">🏒 ${nhlEsc(NHL_STATUS.sched)} · ${nhlEsc(NHL_STATUS.ratings)} · ${nhlEsc(NHL_STATUS.players)}</div>`;
-  if(!NHL_GAMES.length){el.innerHTML=status+'<div class="empty">No NHL games today.</div>';return;}
+  const upcoming=nhlUpcomingHtml();
+  if(!NHL_GAMES.length){el.innerHTML=status+'<div class="empty">No NHL games today.</div>'+upcoming;return;}
   const y=window.scrollY,open={...NHL_OPEN};
   const order={in:0,pre:1,post:2};
-  el.innerHTML=status+[...NHL_GAMES].sort((a,b)=>order[a.abstract]-order[b.abstract]||String(a.start).localeCompare(String(b.start))).map(g=>{try{return nhlCard(g)}catch(e){console.warn('nhl card',e);return`<div class="tkt"><div class="sub">${g.away.abbr} @ ${g.home.abbr}: card error — ${nhlEsc(e.message)}</div></div>`;}}).join('');
+  el.innerHTML=status+[...NHL_GAMES].sort((a,b)=>order[a.abstract]-order[b.abstract]||String(a.start).localeCompare(String(b.start))).map(g=>{try{return nhlCard(g)}catch(e){console.warn('nhl card',e);return`<div class="tkt"><div class="sub">${g.away.abbr} @ ${g.home.abbr}: card error — ${nhlEsc(e.message)}</div></div>`;}}).join('')+upcoming;
   Object.entries(open).forEach(([gid,k])=>{if(!k)return;NHL_OPEN[gid]=null;const b=null;nhlPan(gid,k,b);});
   window.scrollTo(0,y);
   setTimeout(()=>{try{nhlSnapshot();nhlArchiveFinals();syncFinalsToShared();voicesLog('nhl');gradeVoices();gradeIntel();}catch(e){console.warn('nhl bookkeeping',e)}},0);
@@ -624,6 +705,7 @@ function nhlLiveLoop(){
 async function nhlBoot(force){
   let season=nhlLoadCachedSchedule();if(NHL_GAMES.length)renderNHL();
   const fresh=await loadNHLSchedule();season=fresh||season||new Date().getFullYear()+1;
+  try{await loadNHLUpcoming(3);nhlApplySeed();}catch(e){console.warn('nhl upcoming',e)}
   await loadNHLRatings(season,force);NHL_SIMS={};renderNHL();
   if(force&&(typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,''))){try{await fetchNHLLiveOdds()}catch(e){console.warn(e)}}
   loadNHLPlayers(season,force).then(()=>renderNHL()).catch(()=>{});

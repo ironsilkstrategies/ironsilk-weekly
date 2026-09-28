@@ -837,7 +837,9 @@ function brainLearnOne(sport,b,game,J,aa,ah,actualBox){
   if(J.money){b.money.n++;if(J.money===Math.sign(res))b.money.hit++;}
   if(actualBox&&J.box){brainAdapter(sport).boxStats.forEach(st=>{
     const pr=(+J.box.away[st]||0)+(+J.box.home[st]||0),ac=(+(actualBox.away||{})[st]||0)+(+(actualBox.home||{})[st]||0);
-    if(pr>0&&ac>0){const o=b.box[st]||(b.box[st]={n:0,ratio:1});o.n=Math.min(o.n+1,60);o.ratio=o.ratio+(ac/pr-o.ratio)/Math.min(o.n,10);}});}
+    if(pr>0&&ac>0){const o=b.box[st]||(b.box[st]={n:0,ratio:1});o.n=Math.min(o.n+1,60);o.ratio=o.ratio+(ac/pr-o.ratio)/Math.min(o.n,10);
+      const E=(b.boxErr||(b.boxErr={}))[st]||(b.boxErr[st]={n:0,ape:0,bias:0});E.n++;
+      E.ape=E.ape+(Math.abs(ac-pr)/ac-E.ape)/Math.min(E.n,30);E.bias=E.bias+((pr-ac)/ac-E.bias)/Math.min(E.n,30);}});}
   const m=(J.w||[]).find(w=>w.src==='market');
   b.log.unshift({d:today(),g:game,call:J.a+'-'+J.h,final:aa+'-'+ah,err:+Math.abs(res).toFixed(1),
     mkt:m?+Math.abs((ah-aa)-(m.h-m.a)).toFixed(1):null});b.log=b.log.slice(0,300);
@@ -845,6 +847,12 @@ function brainLearnOne(sport,b,game,J,aa,ah,actualBox){
 /* Football: rulings ride on the snapshot rows in d4.nflarc / d4.ncaafarc. */
 function brainLearn(sport){
   if(sport==='mlb')return brainLearnMLB();
+  if(sport==='nhl'){ // hockey keeps its rows in d4.nhlarc as {gid,game,judge,final}
+    const arc=get('d4.nhlarc',{});const b=brainGet('nhl');let ch=false;
+    Object.values(arc).forEach(D=>(D&&D.rows||[]).forEach(r=>{if(r.learned||!r.judge||!r.final||r.final.a==null)return;
+      if(!r.actualBox&&(r.boxTried||0)<3)return;          // wait for the real box so SOG can be graded too
+      brainLearnOne('nhl',b,r.game,r.judge,+r.final.a,+r.final.h,r.actualBox||null);r.learned=true;ch=true;}));
+    if(ch){brainPut('nhl',b);set('d4.nhlarc',arc);}return ch;}
   const key=sport==='nfl'?LS.nflarc:'d4.ncaafarc';const arc=get(key,{});const b=brainGet(sport);let ch=false;
   Object.values(arc).forEach(A=>{if(!A||!A.rows||!A.finals)return;A.rows.forEach(r=>{
     if(r.learned||!r.judge)return;const F=A.finals[r.id];if(!F||F.a==null)return;
@@ -896,6 +904,29 @@ async function brainCollectBoxes(sport){
     for(const r of A.rows){if(!r.judge||r.actualBox||r.boxTried>2||!A.finals[r.id])continue;
       try{r.actualBox=await brainFetchBox(sport,r.id);}catch(e){}r.boxTried=(r.boxTried||0)+1;n++;if(n>=12)break;}}
   if(n){set(key,arc);brainLearn(sport);}
+}
+/* Grade a predicted box score against the real one. Letter per stat from the
+   % miss: A ≤8% · B ≤15% · C ≤25% · D ≤40% · F beyond. */
+const BOX_LAB={yds:'Total yds',pass:'Pass yds',rush:'Rush yds',sog:'Shots',hits:'Hits',f5:'F5 runs'};
+function boxLetter(pct){return pct<=0.08?'A':pct<=0.15?'B':pct<=0.25?'C':pct<=0.40?'D':'F';}
+function predBoxGrade(sport,pred,act){
+  if(!pred||!act||!pred.away||!act.away)return null;
+  const stats=brainAdapter(sport).boxStats||[];const rows=[];let sum=0,n=0;
+  stats.forEach(st=>['away','home'].forEach(sd=>{const p=+(pred[sd]||{})[st],a=+(act[sd]||{})[st];
+    if(!(p>0)||!(a>0))return;const miss=Math.abs(p-a)/a;sum+=miss;n++;rows.push({st,sd,p:Math.round(p),a:Math.round(a),miss});}));
+  if(!n)return null;const avg=sum/n;return{rows,avg,letter:boxLetter(avg)};
+}
+function predBoxGradeHtml(sport,g,pred,act){
+  const G=predBoxGrade(sport,pred,act);if(!G)return'';
+  const col=l=>l==='A'||l==='B'?'var(--win)':l==='C'?'var(--gold)':'var(--rust)';
+  const cells=G.rows.map(r=>`<span style="margin-right:8px">${r.sd==='away'?g.away.abbr:g.home.abbr} ${BOX_LAB[r.st]||r.st} <b>${r.p}</b>→${r.a} <b style="color:${col(boxLetter(r.miss))}">${boxLetter(r.miss)}</b></span>`).join('');
+  return`<div style="font-family:'IBM Plex Mono';font-size:9.5px;margin-top:5px;line-height:1.6">
+    <b style="color:${col(G.letter)}">PREDICTED BOX ${G.letter}</b> <span style="color:var(--mute)">(off ${Math.round(G.avg*100)}% avg)</span><br>${cells}</div>`;
+}
+function boxAccuracyHtml(){
+  const out=[];['mlb','nfl','ncaaf','nhl'].forEach(sp=>{const E=(brainGet(sp).boxErr)||{};
+    Object.entries(E).forEach(([st,o])=>{if(o.n<3)return;out.push(`<div class="sub">${sp.toUpperCase()} ${BOX_LAB[st]||st}: grade <b>${boxLetter(o.ape)}</b> · off ${Math.round(o.ape*100)}% avg · runs ${o.bias>=0?'high':'low'} by ${Math.abs(Math.round(o.bias*100))}% (n=${o.n}) — auto-corrected going forward</div>`);});});
+  return out.length?`<div class="tkt hi"><h3>Predicted box scores — graded</h3>${out.join('')}</div>`:'';
 }
 function brainBlock(g,s,sport){
   let J;try{J=brainJudge(g,s,sport)}catch(e){console.warn('judge',e);return'';}
@@ -1096,79 +1127,253 @@ function voicesLines(sp,g){const gl=g.away.abbr+'@'+g.home.abbr;let L=[];
   try{L=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):sp==='nhl'?(typeof nhlBookLinesFor==='function'?nhlBookLinesFor(gl):[]):(typeof bookLinesFor==='function'?bookLinesFor(g.id):[])}catch(e){}
   const f=(m,s)=>L.find(x=>(x.market===m||(m==='spread'&&x.market==='runline'))&&x.side===s);
   return{mlH:f('moneyline','home'),mlA:f('moneyline','away'),spH:f('spread','home'),spA:f('spread','away'),ov:f('total','over'),un:f('total','under')};}
+/* ══ THE CHARACTERS ══════════════════════════════════════════════════════════
+   Every in-app read that takes a side is a "character": the Sim (the app's
+   own prediction — it reigns), the Judge, the Coach, Most-common score, the
+   gold Pred line, Trends and public Consensus. Each one makes its own call on
+   every game (side, spread, total) exactly like an outside pick would, those
+   calls are drawn on the bet squares, locked at kickoff into the voices
+   ledger, graded off the finals store, and fed to the character brain below,
+   which learns what each one is actually good at. */
+const CHARS={
+  'Sim':        {chip:'★',color:'#FFD75E',label:'Sim — the app'},
+  'Judge':      {chip:'J',color:'#f5a524',label:'Judge'},
+  'Coach':      {chip:'C',color:'#5FD3E8',label:'Coach'},
+  'Most common':{chip:'M',color:'#a78bfa',label:'Most common score'},
+  'Pred':       {chip:'P',color:'#e8c15a',label:'Pred (gold line)'},
+  'Trends':     {chip:'T',color:'#34d399',label:'Trends'},
+  'Consensus':  {chip:'$',color:'#f472b6',label:'Consensus (money/tickets)'}
+};
+const CHAR_ORDER=Object.keys(CHARS);
+const halfRound=x=>Math.round(x*2)/2;
+/* Every character's call for one game. Pure: computed from the sim, the
+   lines on the board and the intake stores — nothing needs to be saved first,
+   so it works on today's games and on upcoming days alike. */
+const CHAR_CACHE={};
+function characterCalls(sp,g,s){
+  if(!g||!s||s.aw==null)return[];
+  const ck=sp+'|'+g.id,c=CHAR_CACHE[ck];
+  if(c&&Date.now()-c.ts<4000&&c.s===s)return c.calls;
+  const gl=g.away.abbr+'@'+g.home.abbr,A=g.away.abbr,H=g.home.abbr,Ln=voicesLines(sp,g);
+  const d=g.__date||today();
+  let hl=Ln.spH&&Ln.spH.line!=null?+Ln.spH.line:null,tl=Ln.ov&&Ln.ov.line!=null?+Ln.ov.line:null;
+  let hlSim=false,tlSim=false;
+  // No posted line yet: characters still pick against the line the card shows
+  // (the sim's own number) so sim-only squares get picks and colors too.
+  if(hl==null){const fb=sp==='nfl'||sp==='ncaaf';
+    if(fb&&s.homeProj!=null&&s.awayProj!=null){const m=halfRound(s.homeProj-s.awayProj);if(m!==0){hl=-m;hlSim=true;}}
+    else if(!fb){hl=s.hw>=s.aw?-1.5:1.5;hlSim=true;}}
+  if(tl==null&&s.med!=null){tl=sp==='nfl'||sp==='ncaaf'?Math.round(s.med):halfRound(s.med);tlSim=true;}
+  const calls=[];
+  const add=(voice,market,side,extra)=>{if(!side)return;
+    const line=market==='spread'?(side==='home'?hl:hl!=null?-hl:null):market==='total'?tl:null;
+    if(market!=='ml'&&line==null)return;
+    const pr=market==='ml'?(side==='home'?Ln.mlH:Ln.mlA):market==='spread'?(side==='home'?Ln.spH:Ln.spA):market==='total'?(side==='over'?Ln.ov:Ln.un):null;
+    const pick=market==='ml'?(side==='home'?H:A)+' ML':market==='spread'?(side==='home'?H:A)+' '+(line>0?'+':'')+line:(side==='over'?'Over ':'Under ')+line;
+    calls.push({id:[sp,gl,d,voice,market].join('|'),sp,date:d,game:gl,gid:g.id,voice,market,side,line,
+      simLine:(market==='spread'&&hlSim)||(market==='total'&&tlSim),price:pr&&pr.price!=null?+pr.price:null,pick,...(extra||{})});};
+  const byMargin=(voice,a,h,extra)=>{if(a!==h)add(voice,'ml',h>a?'home':'away',extra);
+    if(hl!=null&&(h-a)+hl!==0)add(voice,'spread',(h-a)+hl>0?'home':'away',extra);
+    if(tl!=null&&a+h!==tl)add(voice,'total',a+h>tl?'over':'under',extra);};
+  // ★ Sim — the app. Its call is the sim's own probabilities, nothing else.
+  add('Sim','ml',s.hw>=s.aw?'home':'away');
+  if(hl!=null){
+    if(typeof s.homeCover==='function'&&typeof s.awayCover==='function')add('Sim','spread',s.homeCover(hl)>=s.awayCover(-hl)?'home':'away');
+    else if(sp==='mlb'&&typeof rlProb==='function'){const ph=rlProb(g,s,'home',-hl),pa=rlProb(g,s,'away',hl);if(ph!=null&&pa!=null)add('Sim','spread',ph>=pa?'home':'away');}
+  }
+  if(tl!=null&&typeof s.over==='function'){const p=s.over(tl);if(Math.abs(p-0.5)>1e-9)add('Sim','total',p>0.5?'over':'under');}
+  // Judge
+  let J=null;try{J=brainJudge(g,s,sp)}catch(e){}
+  if(J){add('Judge','ml',J.pHome>=0.5?'home':'away');
+    if(hl!=null){const m=(J.h-J.a)+hl;if(m!==0)add('Judge','spread',m>0?'home':'away');}
+    if(tl!=null){const t=J.a+J.h;if(t!==tl)add('Judge','total',t>tl?'over':'under');}}
+  // Most common score
+  const ms=String(s.modeScore||'').match(/(\d+)\D+(\d+)/);
+  if(ms)byMargin('Most common',+ms[1],+ms[2],{score:ms[1]+'-'+ms[2]});
+  // Pred — the gold "pred A x – y H" line under the projected score
+  try{const p=typeof predFor==='function'?predFor(sp,gl):null;if(p&&p.a!=null&&p.h!=null)byMargin('Pred',+p.a,+p.h,{score:p.a+'-'+p.h});}catch(e){}
+  // Outside predicted scores from the Intel log — one voice per source
+  try{
+    const preds=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='pred'&&x.game===gl&&x.date===d&&x.a!=null&&x.h!=null);
+    const bySrc={};preds.forEach(x=>{(bySrc[x.src]=bySrc[x.src]||[]).push(x)});
+    Object.entries(bySrc).forEach(([src,arr])=>{const last=arr[arr.length-1];byMargin(src||'Outside pred',last.a,last.h,{score:last.a+'-'+last.h});});
+  }catch(e){}
+  // Trends — the net lean of every uploaded trend on this game, as the Judge reads them
+  try{const tr=brainTrendEvidence(g,sp);
+    if(Math.abs(tr.dMar)>=0.05){const sd=tr.dMar>0?'home':'away';add('Trends','ml',sd);if(hl!=null)add('Trends','spread',sd);}
+    if(Math.abs(tr.dTot)>=0.05&&tl!=null)add('Trends','total',tr.dTot>0?'over':'under');}catch(e){}
+  // Consensus — where the money is (tickets if no money split was uploaded)
+  try{
+    const rows=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl);
+    const latest=(mk)=>{const r=rows.filter(x=>x.market===mk);return r.filter(x=>x.metric==='money').pop()||r.pop();};
+    const ml=latest('moneyline'),spc=latest('spread'),to=latest('total');
+    if(ml&&ml.homePct!=null&&ml.homePct!==50)add('Consensus','ml',ml.homePct>50?'home':'away',{metric:ml.metric});
+    const sps=spc||ml;if(hl!=null&&sps&&sps.homePct!=null&&sps.homePct!==50)add('Consensus','spread',sps.homePct>50?'home':'away',{metric:sps.metric});
+    if(tl!=null&&to&&to.overPct!=null&&to.overPct!==50)add('Consensus','total',to.overPct>50?'over':'under',{metric:to.metric});
+  }catch(e){}
+  // Coach — take/fade on the model side, plus its total read
+  try{const c=coachPickFor(g,s,sp);if(c){const simSide=c.sideTeam===H?'home':'away';
+    if(c.verdict==='take')add('Coach','ml',simSide);else if(c.verdict==='fade')add('Coach','ml',simSide==='home'?'away':'home');
+    if(tl!=null&&(c.totalDir==='over'||c.totalDir==='under')&&c.totalReal)add('Coach','total',c.totalDir);}}catch(e){}
+  // Books' favorite (ledger only — the book price is already its own signal on the square)
+  if(Ln.mlH&&Ln.mlA&&Ln.mlH.price!=null&&Ln.mlA.price!=null&&+Ln.mlH.price!==+Ln.mlA.price)add('Books','ml',+Ln.mlH.price<+Ln.mlA.price?'home':'away');
+  if(hl!=null&&hl!==0&&!hlSim)add('Books','spread',hl<0?'home':'away');
+  CHAR_CACHE[ck]={ts:Date.now(),s,calls};
+  return calls;
+}
 function voicesLog(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
-  if(!G||!G.length)return 0;const V=get(VOICES_KEY,[]);const idx={};V.forEach((x,i)=>idx[x.id]=i);const d=today();let n=0;
+  if(!G||!G.length)return 0;const V=get(VOICES_KEY,[]);const idx={};V.forEach((x,i)=>idx[x.id]=i);let n=0;
   G.forEach(g=>{
     const s=S[g.id];if(!s||s.aw==null)return;const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');
-    const gl=g.away.abbr+'@'+g.home.abbr,A=g.away.abbr,H=g.home.abbr,Ln=voicesLines(sp,g);
-    const hl=Ln.spH&&Ln.spH.line!=null?+Ln.spH.line:null,tl=Ln.ov&&Ln.ov.line!=null?+Ln.ov.line:null;
-    const calls=[];const add=(voice,market,side,extra)=>{if(!side)return;
-      const line=market==='spread'?(side==='home'?hl:hl!=null?-hl:null):market==='total'?tl:null;
-      const pr=market==='ml'?(side==='home'?Ln.mlH:Ln.mlA):market==='spread'?(side==='home'?Ln.spH:Ln.spA):market==='total'?(side==='over'?Ln.ov:Ln.un):null;
-      const pick=market==='ml'?(side==='home'?H:A)+' ML':market==='spread'?(side==='home'?H:A)+' '+(line>0?'+':'')+line:(side==='over'?'Over ':'Under ')+line;
-      calls.push({id:[sp,gl,d,voice,market].join('|'),sp,date:d,game:gl,gid:g.id,voice,market,side,line,price:pr&&pr.price!=null?+pr.price:null,pick,...(extra||{})});};
-    // Sim
-    add('Sim','ml',s.hw>=s.aw?'home':'away');
-    if(hl!=null){
-      if(typeof s.homeCover==='function'&&typeof s.awayCover==='function'){
-        add('Sim','spread',s.homeCover(hl)>=s.awayCover(-hl)?'home':'away');
-      }else if(sp==='mlb'&&typeof rlProb==='function'){
-        /* MLB sims never get homeCover/awayCover attached (those only exist on
-           football sims in football-engine.js) — this is why the Sim voice's
-           run-line call sat blank on every MLB game. rlProb(g,s,side,line) is
-           the same distribution football's homeCover/awayCover reads, just a
-           different call shape: it wants a plain margin threshold, not a
-           signed spread-as-written line, so hl has to be un-signed per side
-           first. hl is home's own signed run line (e.g. -1.5 favored): home
-           needs margin(home-away) > -hl to cover, away needs margin(away-home)
-           > hl to cover its own +1.5 — mirrors homeCover/awayCover's sign
-           convention (see the comment on homeCover in football-engine.js)
-           applied to rlProb's threshold-not-signed-line calling shape. */
-        const ph=rlProb(g,s,'home',-hl),pa=rlProb(g,s,'away',hl);
-        if(ph!=null&&pa!=null)add('Sim','spread',ph>=pa?'home':'away');
-      }
-    }
-    if(tl!=null&&typeof s.over==='function'){const p=s.over(tl);if(Math.abs(p-0.5)>1e-9)add('Sim','total',p>0.5?'over':'under');}
-    // Judge
-    let J=null;try{J=brainJudge(g,s,sp)}catch(e){}
-    if(J){add('Judge','ml',J.pHome>=0.5?'home':'away');
-      if(hl!=null){const m=(J.h-J.a)+hl;if(m!==0)add('Judge','spread',m>0?'home':'away');}
-      if(tl!=null){const t=J.a+J.h;if(t!==tl)add('Judge','total',t>tl?'over':'under');}}
-    // Most common score
-    const ms=String(s.modeScore||'').match(/(\d+)\D+(\d+)/);
-    if(ms){const a=+ms[1],h=+ms[2];if(a!==h)add('Most common','ml',h>a?'home':'away',{score:a+'-'+h});
-      if(hl!=null&&(h-a)+hl!==0)add('Most common','spread',(h-a)+hl>0?'home':'away',{score:a+'-'+h});
-      if(tl!=null&&a+h!==tl)add('Most common','total',a+h>tl?'over':'under',{score:a+'-'+h});}
-    // Outside predicted scores (e.g. Covers.com computer picks) — these were
-    // being captured and graded on the Intel tab already, but never wired in
-    // as a voice, so they never showed up on the game card itself or counted
-    // toward "who agrees" here. One voice per distinct upload source, named
-    // for that source (e.g. 'Covers'), so it's clear whose prediction it is —
-    // never blended silently with any other source's number.
-    try{
-      const preds=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='pred'&&x.game===gl&&x.date===d&&x.a!=null&&x.h!=null);
-      const bySrc={};preds.forEach(x=>{(bySrc[x.src]=bySrc[x.src]||[]).push(x)});
-      Object.entries(bySrc).forEach(([src,arr])=>{
-        const last=arr[arr.length-1],a=last.a,h=last.h;if(a===h)return;
-        const voice=src||'Outside pred';
-        add(voice,'ml',h>a?'home':'away',{score:a+'-'+h});
-        if(hl!=null&&(h-a)+hl!==0)add(voice,'spread',(h-a)+hl>0?'home':'away',{score:a+'-'+h});
-        if(tl!=null&&a+h!==tl)add(voice,'total',a+h>tl?'over':'under',{score:a+'-'+h});
-      });
-    }catch(e){}
-    // Coach — its own call is take/fade on the model side, plus its total read
-    try{const c=coachPickFor(g,s,sp);if(c){const simSide=c.sideTeam===H?'home':'away';
-      if(c.verdict==='take')add('Coach','ml',simSide);else if(c.verdict==='fade')add('Coach','ml',simSide==='home'?'away':'home');
-      if(tl!=null&&(c.totalDir==='over'||c.totalDir==='under')&&c.totalReal)add('Coach','total',c.totalDir);}}catch(e){}
-    // Books' favorite
-    if(Ln.mlH&&Ln.mlA&&Ln.mlH.price!=null&&Ln.mlA.price!=null&&+Ln.mlH.price!==+Ln.mlA.price)add('Books','ml',+Ln.mlH.price<+Ln.mlA.price?'home':'away');
-    if(hl!=null&&hl!==0)add('Books','spread',hl<0?'home':'away');
+    let calls=[];try{calls=characterCalls(sp,g,s)}catch(e){return;}
+    // a character's call is locked at first pitch / puck drop / kickoff; drop a
+    // stale pre-game call from another side if the character flipped before then
     calls.forEach(c=>{const i=idx[c.id];if(i!=null){if(!pre||V[i].graded)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
   });
-  if(n){if(V.length>6000)V.splice(0,V.length-6000);set(VOICES_KEY,V);}return n;
+  if(n){if(V.length>8000)V.splice(0,V.length-8000);set(VOICES_KEY,V);}return n;
 }
+
+/* ══ THE CHARACTER BRAIN ═════════════════════════════════════════════════════
+   Learns from every graded character call: how often each character hits, per
+   sport and market, and in which situations (favorite vs dog, over vs under).
+   Shrunk toward 50% so a hot week can't fool it; more games = more trust.
+   It also learns how the characters behave TOGETHER — when the crowd backs
+   the Sim, when it fades it — so the squares can say whether this particular
+   pattern of agreement has been worth anything. It re-reads the ledger every
+   time new grades land, so it recalibrates daily on its own.
+   The Sim stays the anchor ("the app reigns"): the brain adjusts FROM the
+   Sim's probability, never replaces it. */
+const CHAR_K=12,CHAR_KC=10;
+const charCtxOf=x=>x.market==='total'?x.side:(x.market==='spread'?(x.line!=null?(x.line<0?'fav':'dog'):null):(x.price!=null?(x.price<0?'fav':'dog'):null));
+let CHAR_BRAIN=null,CHAR_BRAIN_SIG='';
+function charBrain(){
+  const V=get(VOICES_KEY,[]);
+  const sig=V.length+'|'+V.filter(x=>x.graded).length;
+  if(CHAR_BRAIN&&sig===CHAR_BRAIN_SIG)return CHAR_BRAIN;
+  const B={by:{},all:{},agree:{},combo:{}};
+  const bump=(o,hit)=>{o.n=(o.n||0)+1;o.w=(o.w||0)+(hit?1:0);};
+  const G=V.filter(x=>x.graded&&x.hit!=null);
+  G.forEach(x=>{
+    const a=((B.by[x.sp]||(B.by[x.sp]={}))[x.voice]||(B.by[x.sp][x.voice]={}));
+    const m=a[x.market]||(a[x.market]={n:0,w:0,ctx:{}});bump(m,x.hit);
+    const cx=charCtxOf(x);if(cx)bump(m.ctx[cx]||(m.ctx[cx]={n:0,w:0}),x.hit);
+    const p=((B.all[x.voice]||(B.all[x.voice]={}))[x.market]||(B.all[x.voice][x.market]={n:0,w:0}));bump(p,x.hit);
+  });
+  // how the crowd behaves around the Sim, per game-market
+  const ev={};G.forEach(x=>{if(!CHARS[x.voice])return;(ev[x.sp+'|'+x.game+'|'+x.date+'|'+x.market]||(ev[x.sp+'|'+x.game+'|'+x.date+'|'+x.market]=[])).push(x);});
+  Object.values(ev).forEach(arr=>{
+    const sim=arr.find(x=>x.voice==='Sim');if(!sim)return;
+    const others=arr.filter(x=>x.voice!=='Sim');if(!others.length)return;
+    const ag=others.filter(x=>x.side===sim.side).length,sh=ag/others.length;
+    const bucket=sh>=0.99?'all back the app':sh>=0.6?'most back the app':sh>0.4?'split':sh>0?'most fade the app':'all fade the app';
+    bump(B.agree[bucket]||(B.agree[bucket]={n:0,w:0}),sim.hit);
+    others.forEach(o=>{const k='Sim+'+o.voice+(o.side===sim.side?' agree':' disagree');bump(B.combo[k]||(B.combo[k]={n:0,w:0}),sim.hit);});
+  });
+  CHAR_BRAIN=B;CHAR_BRAIN_SIG=sig;return B;
+}
+function charRate(sp,voice,market,ctx){
+  const B=charBrain();const m=((B.by[sp]||{})[voice]||{})[market];const pool=(B.all[voice]||{})[market];
+  // cross-sport pool is the prior for a thin single-sport record
+  const pp=pool?(pool.w+CHAR_K*0.5)/(pool.n+CHAR_K):0.5;
+  const pm=m?(m.w+CHAR_K*pp)/(m.n+CHAR_K):pp;
+  const c=m&&ctx?m.ctx[ctx]:null;
+  const p=c?(c.w+CHAR_KC*pm)/(c.n+CHAR_KC):pm;
+  return{p,n:m?m.n:0,rec:m?`${m.w}-${m.n-m.w}`:'0-0',ctxRec:c?`${c.w}-${c.n-c.w}`:null};
+}
+function charWeight(sp,voice,market,ctx){
+  const r=charRate(sp,voice,market,ctx);
+  let w=Math.max(0.25,Math.min(2.5,1+6*(r.p-0.5)));
+  if(voice==='Sim')w=Math.max(2,w*2);          // the app reigns
+  return{...r,w};
+}
+/* Parse a square's pick into {market, side} for the character layer. */
+function sqKey(sp,g,pick){
+  const p=String(pick||'').trim();
+  if(/^(F5|P1|1H|H1|Q\d)\b/i.test(p))return null;
+  let m=p.match(/^(Over|Under)\b/i);if(m)return{market:'total',side:m[1].toLowerCase()};
+  const ab=(p.match(/^([A-Za-z]{2,5})\b/)||[])[1];if(!ab)return null;
+  const up=ab.toUpperCase(),side=up===g.home.abbr?'home':up===g.away.abbr?'away':null;if(!side)return null;
+  if(/[+-]\d/.test(p.replace(/\bML\b/i,'')))return{market:'spread',side};
+  return{market:'ml',side};
+}
+const logit=p=>Math.log(Math.max(1e-4,Math.min(1-1e-4,p))/(1-Math.max(1e-4,Math.min(1-1e-4,p))));
+const sigm=z=>1/(1+Math.exp(-z));
+/* Everything a square needs from the characters. */
+function charSquare(sp,g,s,pick,opts){
+  opts=opts||{};const none={chips:'',meter:'',simHere:false,support:null,nOthers:0,unanimous:false,charsAgree:false,charsAgainst:false,brainP:null};
+  const k=sqKey(sp,g,pick);if(!k||!s)return none;
+  let calls=[];try{calls=characterCalls(sp,g,s).filter(c=>c.market===k.market&&CHARS[c.voice])}catch(e){return none;}
+  if(!calls.length)return none;
+  const ctx=k.market==='total'?k.side:(opts.price!=null?(opts.price<0?'fav':'dog'):(opts.line!=null?(opts.line<0?'fav':'dog'):null));
+  const sim=calls.find(c=>c.voice==='Sim'),others=calls.filter(c=>c.voice!=='Sim');
+  let wOn=0,wAll=0,z=opts.modelP!=null?logit(opts.modelP):null,learned=false;
+  const chipHtml=[];
+  CHAR_ORDER.forEach(v=>{const c=calls.find(x=>x.voice===v);if(!c)return;
+    const r=charWeight(sp,v,k.market,c.side===k.side?ctx:null);const on=c.side===k.side;
+    if(v!=='Sim'){wAll+=r.w;if(on)wOn+=r.w;
+      if(z!=null&&r.n>=6){learned=true;z+=0.5*(on?1:-1)*logit(r.p);}}
+    if(on){const C=CHARS[v],weak=v!=='Sim'&&r.n>=10&&r.p<0.47,hot=v!=='Sim'&&r.n>=10&&r.p>=0.56;
+      chipHtml.push(`<span class="hs-chip${v==='Sim'?' god':''}${weak?' weak':''}${hot?' hot':''}" title="${C.label}${r.n?` · ${sp.toUpperCase()} ${k.market} ${r.rec} (${Math.round(r.p*100)}% learned)`:' · no graded history yet'}${c.score?' · '+c.score:''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`);}
+  });
+  const onN=calls.filter(c=>c.side===k.side).length;
+  const support=others.length?wOn/wAll:null;
+  const simHere=!!(sim&&sim.side===k.side);
+  const charsAgree=support!=null&&others.length>=2&&support>=0.6;
+  const charsAgainst=support!=null&&others.length>=2&&support<=0.4;
+  const unanimous=calls.length>=4&&onN===calls.length;
+  const brainP=learned&&z!=null?sigm(z):null;
+  const meter=`<div class="ch-meter">${onN}/${calls.length} characters${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`;
+  return{chips:chipHtml.length?`<div class="hs-row">${chipHtml.join('')}</div>`:'',meter:onN?meter:'',simHere,support,nOthers:others.length,unanimous,charsAgree,charsAgainst,brainP};
+}
+/* One tier rule for every board. o = the square's own reads, ci = charSquare(). */
+function charTier(o,ci){
+  ci=ci||{};const godVsCrowd=ci.simHere&&ci.charsAgainst;
+  if(!o.hasLine){
+    if(godVsCrowd)return' conflict';
+    if(ci.simHere&&ci.unanimous)return' supreme';
+    if(ci.simHere&&ci.charsAgree)return' strong';
+    if(ci.simHere||ci.charsAgree)return' lean';
+    return'';
+  }
+  const signalsFor=[o.bookLeans,o.modelEdgeHere,o.outsideAgrees,ci.charsAgree].filter(Boolean).length;
+  const conflict=(o.modelAgainstHere&&(o.bookLeans||o.outsideAgrees||ci.charsAgree))
+    ||(o.outsideAgainst&&(o.bookLeans||o.modelEdgeHere||ci.charsAgree))
+    ||godVsCrowd||(ci.charsAgainst&&o.modelEdgeHere);
+  if(conflict)return' conflict';
+  if(signalsFor>=3||(signalsFor>=2&&(o.outsideUnanimous||ci.unanimous)))return' supreme';
+  if(signalsFor>=2)return' strong';
+  if(signalsFor>=1)return' lean';
+  return'';
+}
+function charTierTag(t){return t===' supreme'?'<div class="tier-tag supreme">◆ SUPREME</div>':t===' strong'?'<div class="tier-tag strong">STRONG</div>':t===' conflict'?'<div class="tier-tag conflict">⚠ CONFLICT</div>':'';}
+/* Character brain report — what each character is actually good at. */
+function charBrainReport(sp){
+  const B=charBrain();const mk={ml:'side',spread:'spread',total:'total'};
+  const rows=[];
+  const sps=sp&&sp!=='all'?[sp]:Object.keys(B.by);
+  sps.forEach(S=>Object.entries(B.by[S]||{}).forEach(([v,M])=>{if(!CHARS[v])return;
+    Object.entries(M).forEach(([m,o])=>{
+      Object.entries(o.ctx||{}).forEach(([cx,c])=>{if(c.n<8)return;const p=(c.w+CHAR_KC*0.5)/(c.n+CHAR_KC);rows.push({S,v,m,cx,rec:`${c.w}-${c.n-c.w}`,n:c.n,p,raw:c.w/c.n});});
+      if(o.n>=8){const p=(o.w+CHAR_K*0.5)/(o.n+CHAR_K);rows.push({S,v,m,cx:'all',rec:`${o.w}-${o.n-o.w}`,n:o.n,p,raw:o.w/o.n});}
+    });}));
+  const best=[...rows].sort((a,b)=>b.p-a.p).slice(0,6),worst=[...rows].sort((a,b)=>a.p-b.p).slice(0,4);
+  const line=r=>`<div class="sub"><b style="color:${CHARS[r.v].color}">${CHARS[r.v].chip} ${CHARS[r.v].label}</b> · ${r.S.toUpperCase()} ${mk[r.m]}${r.cx!=='all'?' ('+r.cx+')':''} · <b>${r.rec}</b> ${Math.round(r.raw*100)}%</div>`;
+  const ag=Object.entries(B.agree).map(([k,o])=>`<div class="sub">${k}: <b>${o.w}-${o.n-o.w}</b> for the app (${Math.round(o.w/o.n*100)}%)</div>`).join('');
+  return`<div class="tkt hi"><h3>Character brain</h3>
+    <div class="sub" style="color:var(--mute)">Every character's own calls, graded. Shrunk toward 50% — a character needs a real sample before it moves anything. The ★ Sim stays the anchor; the others adjust it.</div>
+    <div class="sub" style="margin-top:6px"><b>Best edges</b></div>${best.length?best.map(line).join(''):'<div class="sub" style="color:var(--mute)">Not enough graded calls yet (8+ per situation).</div>'}
+    ${worst.length?`<div class="sub" style="margin-top:6px"><b>Fade-worthy</b></div>${worst.filter(r=>r.raw<0.5).map(line).join('')||'<div class="sub" style="color:var(--mute)">none yet</div>'}`:''}
+    ${ag?`<div class="sub" style="margin-top:6px"><b>When the crowd meets the app</b></div>${ag}`:''}</div>`;
+}
+(function(){try{if(typeof document!=='undefined'&&!document.getElementById('hs-css')){
+  const st=document.createElement('style');st.id='hs-css';
+  st.textContent='.hs-row{display:flex;gap:3px;justify-content:center;flex-wrap:wrap;margin-top:4px}'
+   +'.hs-chip{font-family:"IBM Plex Mono",monospace;font-size:8.5px;font-weight:700;line-height:1;padding:2px 4px;border:1px solid;border-radius:3px}'
+   +'.hs-chip.god{background:rgba(255,215,94,.18);font-size:9.5px}.hs-chip.weak{opacity:.45}.hs-chip.hot{box-shadow:0 0 6px currentColor}'
+   +'.ch-meter{font-family:"IBM Plex Mono",monospace;font-size:8px;color:var(--mute);margin-top:2px;letter-spacing:.03em}';
+  (document.head||document.documentElement).appendChild(st);}}catch(e){}})();
 function gradeVoices(){const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
   V.forEach(x=>{if(x.graded)return;const R=F[finalsKey(x.sp,x.game)];if(!R||R.a==null)return;const a=+R.a,h=+R.h;let hit=null;
     if(x.market==='ml'){if(a!==h)hit=(x.side==='home')===(h>a);}
@@ -1177,10 +1382,14 @@ function gradeVoices(){const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}cat
     x.graded=true;x.hit=hit;if(hit!==null)x.units=hit?_vProfit(x.price!=null?x.price:-110):-1;n++;});
   if(n)set(VOICES_KEY,V);return n;}
 function voicesReport(sp){
+  let extra='';try{extra=charBrainReport(sp)+boxAccuracyHtml();}catch(e){}
+  return voicesReportCore(sp)+extra;
+}
+function voicesReportCore(sp){
   const V=get(VOICES_KEY,[]).filter(x=>(!sp||sp==='all'||x.sp===sp)&&x.graded&&x.hit!=null);
   const mk={ml:'Moneyline',spread:sp==='mlb'?'Run line':'Spread',total:'Total'};
   if(!V.length)return`<div class="tkt hi"><h3>Who to listen to</h3><div class="sub">Every voice — Sim, Judge, Most-common score, Coach, Books, and any predicted scores you upload from an outside source (e.g. Covers) — gets its call locked at first pitch/kickoff and graded here, by market. Fills in as games go final.</div></div>`;
-  const voices=['Sim','Judge','Most common','Coach','Books'];
+  const voices=['Sim','Judge','Most common','Pred','Trends','Consensus','Coach','Books'];
   const cell=a=>{if(!a.length)return'<td class="m" style="color:var(--mute)">—</td>';const w=a.filter(x=>x.hit).length,u=a.reduce((s,x)=>s+(x.units||0),0);
     const pc=w/a.length;return`<td class="m" style="color:${a.length>=10?(pc>=0.55?'var(--win)':pc<0.47?'var(--rust)':'var(--chalk)'):'var(--mute)'}">${w}-${a.length-w} <b>${Math.round(pc*100)}%</b><br><span style="font-size:9.5px">${u>=0?'+':''}${u.toFixed(1)}u</span></td>`;};
   const rows=voices.map(v=>`<tr><td><b>${v}</b></td>${['ml','spread','total'].map(m=>cell(V.filter(x=>x.voice===v&&x.market===m))).join('')}</tr>`).join('');
@@ -5989,10 +6198,8 @@ function betGrid(g,s,M){
     const modelEdgeHere=cls===' value';
     const modelAgainstHere=cls===' avoid';
     let srcCls='',srcBadge='',outsideAgrees=false,outsideUnanimous=false,outsideAgainst=false;
-    const extHere=extToday().filter(x=>x.gid===g.id&&!x.house);
-    const hInfo=(()=>{try{return houseSquareInfo(g,pick,label)}catch(e){return{chips:'',on:0,against:0,split:false,total:0}}})();
-    const houseAgrees=hInfo.on>=2&&hInfo.against===0;
-    const houseAgainst=hInfo.against>0&&hInfo.on>0?false:(hInfo.against>=2&&hInfo.on===0);
+    const extHere=extToday().filter(x=>x.gid===g.id);
+    const cInfo=(()=>{try{return charSquare('mlb',g,s,pick,{price:opts.realPrice,modelP:typeof mp==='number'?mp:null})}catch(e){return{}}})();
     if(extHere.length){
       const sameMkt=extHere.filter(x=>marketMatchesPick(x,pick,label));
       const onThis=sameMkt.filter(x=>pickMatchesSide(x,pick,label));
@@ -6008,25 +6215,14 @@ function betGrid(g,s,M){
         outsideAgainst=true;
       }
     }
-    const signalsFor=[bookLeans,modelEdgeHere,outsideAgrees,houseAgrees].filter(Boolean).length;
-    // in-house voices (Judge/Coach/Most common score) disagreeing with EACH OTHER on
-    // this market is a conflict on its own; so is the house unanimously opposing a side
-    // the book/model/outside sources like.
-    const hasConflict=(modelAgainstHere&&(bookLeans||outsideAgrees||houseAgrees))||(outsideAgainst&&(bookLeans||modelEdgeHere||houseAgrees))||hInfo.split||(houseAgainst&&(bookLeans||modelEdgeHere||outsideAgrees));
-    let tierCls='';
-    if(hasConflict)tierCls=' conflict';
-    else if(signalsFor>=3||(signalsFor>=2&&outsideUnanimous))tierCls=' supreme';
-    else if(signalsFor>=2)tierCls=' strong';
-    else if(signalsFor>=1)tierCls=' lean';
+    const tierCls=charTier({hasLine:typeof kp==='number',bookLeans,modelEdgeHere,modelAgainstHere,outsideAgrees,outsideUnanimous,outsideAgainst},cInfo);
     if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
-    const tierBadge=tierCls===' supreme'?`<div class="tier-tag supreme">◆ SUPREME</div>`
-      :tierCls===' strong'?`<div class="tier-tag strong">STRONG</div>`
-      :tierCls===' conflict'?`<div class="tier-tag conflict">⚠ CONFLICT</div>`:'';
+    const tierBadge=charTierTag(tierCls);
     return `<div class="bet${cls}${srcCls}${tierCls} ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
-      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${hInfo.chips?`<div class="hs-row">${hInfo.chips}</div>`:''}${tierBadge}</div>`;
+      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${cInfo.chips||''}${cInfo.meter||''}${tierBadge}</div>`;
   };
   // two-way markets: round ONE side, derive the other as 100-minus — guarantees they
   // always sum to exactly 100 instead of each rounding independently, which can silently
@@ -6516,7 +6712,19 @@ const FBP_ESPN={nfl:'https://site.api.espn.com/apis/site/v2/sports/football/nfl'
 let FBP_MEM={},FBP_INFLIGHT={},FBP_RENDER_T=null;
 function fbpKick(){ // re-render the tickets board once fetched data lands
   clearTimeout(FBP_RENDER_T);
-  FBP_RENDER_T=setTimeout(()=>{try{if(typeof renderTickets==='function'&&document.getElementById('tickets'))renderTickets();}catch(e){}},250);
+  FBP_RENDER_T=setTimeout(()=>{try{if(typeof renderTickets==='function'&&document.getElementById('tickets'))renderTickets();}catch(e){}
+    try{if(typeof nflRefreshOpenForms==='function')nflRefreshOpenForms();}catch(e){}},250);
+}
+function fbpParseHockey(j){
+  const hc=((j.header||{}).competitions||[])[0]||{};const st=hc.status||{};const state=(st.type||{}).state||'pre';
+  const teams={};
+  ((j.boxscore||{}).players||[]).forEach(T=>{const ab=String(T.team&&T.team.abbreviation||'').toUpperCase();if(!ab)return;
+    const t=teams[fbpAb(ab,'nhl')]={skaters:[],goalies:[]};
+    (T.statistics||[]).forEach(grp=>{const labels=(grp.labels||grp.names||[]).map(x=>String(x).toUpperCase());
+      const goalie=/goal/i.test(grp.name||grp.text||'')||labels.includes('SV');
+      (grp.athletes||[]).forEach(at=>{const row={name:(at.athlete||{}).displayName||'',short:(at.athlete||{}).shortName||''};
+        (at.stats||[]).forEach((v,i)=>{row[labels[i]]=v;});(goalie?t.goalies:t.skaters).push(row);});});});
+  return{state,period:st.period||0,teams,hockey:true};
 }
 function fbpParseBox(j){
   const hc=((j.header||{}).competitions||[])[0]||{};
@@ -6540,32 +6748,50 @@ function fbpParseBox(j){
   });
   return{state,period:st.period||0,teamStats};
 }
+const FBP_ALIAS={WAS:'WSH',JAC:'JAX',LA:'LAR',LVR:'LV',OAK:'LV',SD:'LAC',STL:'LAR',ARZ:'ARI',GNB:'GB',KAN:'KC',NWE:'NE',NOR:'NO',SFO:'SF',TAM:'TB',
+  LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV_:'VGK',MON:'MTL',UTA:'UTAH'};
+const fbpAb=(x,sp)=>{x=String(x||'').toUpperCase();if(sp==='nhl'&&x==='LV')return'VGK';return FBP_ALIAS[x]||x;};
+const fbpGameKey=(gl,sp)=>{const [a,h]=String(gl||'').split('@');return fbpAb(a,sp)+'@'+fbpAb(h,sp);};
+FBP_ESPN.nhl='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl';
+const fbpYmd=d=>String(d).replace(/-/g,'');
+function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.setDate(x.getDate()+n);
+  return x.getFullYear()+String(x.getMonth()+1).padStart(2,'0')+String(x.getDate()).padStart(2,'0');}
+/* The ESPN event id for a leg's game, found WITHOUT needing the game on this
+   page's slate. Tickets stamp the import day as gameDate, and a Saturday import
+   of a Sunday game (or a Thursday ticket for Monday night) was looked up on the
+   wrong day — so the search covers the ticket date through a week after it. */
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':'nfl';
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':'nfl';
+  const want=fbpGameKey(leg.game,sp);
   const arr=sportGames(sp);
-  const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
+  const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp)===want);
   if(g)return{id:String(g.espnId||g.id),pending:false};
-  const dates=[...new Set([leg.gameDate,ticketDate].filter(Boolean).map(d=>String(d).replace(/-/g,'')))];
   const idx=get(FBP_IDX_KEY,{})||{};
-  for(const d of dates){const id=idx[sp+':'+leg.game+':'+d];if(id)return{id,pending:false};}
-  let started=false;
-  dates.forEach(d=>{
-    const k='sb:'+sp+':'+d;if(FBP_INFLIGHT[k])return;started=true;
-    FBP_INFLIGHT[k]=1;
-    fetch(FBP_ESPN[sp]+'/scoreboard?dates='+d+(sp==='ncaaf'?'&groups=80&limit=400':'')).then(r=>r.json()).then(j=>{
-      const I=get(FBP_IDX_KEY,{})||{};
-      (j.events||[]).forEach(ev=>{
-        const cs=((ev.competitions||[])[0]||{}).competitors||[];
-        const aw=cs.find(c=>c.homeAway==='away'),hm=cs.find(c=>c.homeAway==='home');
-        if(aw&&hm)I[sp+':'+String(aw.team.abbreviation).toUpperCase()+'@'+String(hm.team.abbreviation).toUpperCase()+':'+d]=String(ev.id);
-      });
-      set(FBP_IDX_KEY,I);
-    }).catch(()=>{}).then(()=>{delete FBP_INFLIGHT[k];fbpKick();});
-  });
-  return{id:null,pending:started||dates.some(d=>FBP_INFLIGHT['sb:'+sp+':'+d])};
+  const base=[leg.gameDate,ticketDate].filter(Boolean).sort()[0];
+  if(!base)return{id:null,pending:false};
+  const hits=Object.keys(idx).filter(k=>k.startsWith(sp+':'+want+':')).map(k=>({d:k.split(':')[2],id:idx[k]}));
+  const lo=fbpShift(base,-1),hi=fbpShift(base,7);
+  const inWin=hits.filter(h=>h.d>=lo&&h.d<=hi).sort((a,b)=>a.d.localeCompare(b.d));
+  if(inWin.length)return{id:inWin[0].id,pending:false};
+  const k='sb:'+sp+':'+lo+'-'+hi;
+  const tried=get('d4.fbptried',{})||{};
+  if(FBP_INFLIGHT[k])return{id:null,pending:true};
+  if(tried[k]&&Date.now()-tried[k]<30*60e3)return{id:null,pending:false};
+  FBP_INFLIGHT[k]=1;
+  fetch(FBP_ESPN[sp]+'/scoreboard?dates='+lo+'-'+hi+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400')).then(r=>r.json()).then(j=>{
+    const I=get(FBP_IDX_KEY,{})||{};
+    (j.events||[]).forEach(ev=>{
+      const cs=((ev.competitions||[])[0]||{}).competitors||[];
+      const aw=cs.find(c=>c.homeAway==='away'),hm=cs.find(c=>c.homeAway==='home');
+      const day=ev.date?fbpYmd(new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date))):lo;
+      if(aw&&hm)I[sp+':'+fbpGameKey(aw.team.abbreviation+'@'+hm.team.abbreviation,sp)+':'+day]=String(ev.id);
+    });
+    set(FBP_IDX_KEY,I);
+  }).catch(()=>{}).then(()=>{delete FBP_INFLIGHT[k];const T=get('d4.fbptried',{})||{};T[k]=Date.now();set('d4.fbptried',T);fbpKick();});
+  return{id:null,pending:true};
 }
 function fbpBox(id,sp){
-  const mem=(typeof FB_BOX_CACHE!=='undefined'&&FB_BOX_CACHE[id]&&FB_BOX_CACHE[id].teamStats)?FB_BOX_CACHE[id]:null;
+  const mem=(sp!=='nhl'&&typeof FB_BOX_CACHE!=='undefined'&&FB_BOX_CACHE[id]&&FB_BOX_CACHE[id].teamStats)?FB_BOX_CACHE[id]:null;
   const store=get(FBP_BOX_KEY,{})||{};const saved=store[sp+':'+id];
   if(saved&&saved.box&&saved.final)return saved.box; // FINAL boxes never change
   const m=FBP_MEM[id];
@@ -6575,8 +6801,8 @@ function fbpBox(id,sp){
   if(!FBP_INFLIGHT['box:'+id]){
     FBP_INFLIGHT['box:'+id]=1;
     fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json()).then(j=>{
-      const box=fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
-      if(box.state==='post'&&Object.keys(box.teamStats).length){
+      const box=sp==='nhl'?fbpParseHockey(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
+      if(box.state==='post'&&Object.keys(box.teamStats||box.teams||{}).length){
         const S=get(FBP_BOX_KEY,{})||{};S[sp+':'+id]={ts:Date.now(),final:true,box};
         Object.keys(S).forEach(k=>{if(Date.now()-S[k].ts>6*864e5)delete S[k];});
         set(FBP_BOX_KEY,S);
@@ -6628,10 +6854,36 @@ function gradeFBPropLeg(leg,ticketDate){
   const label=isRec?'receptions':catKey+' yds';
   return{hit,detail:`${(found&&found.name)||leg.fbProp.player} ${val} ${label}${live?' so far':''}`,live,prog:{val,thr,dir}};
 }
+/* NHL player props, graded from any page (used to need the NHL page open,
+   and the game on today's slate). Same lookup + saved-final-box path as football. */
+function nhlPropVal(row,stat){const n=k=>{const v=row[k];if(v==null||v==='')return null;const x=parseFloat(String(v).replace(/[^\d.\-]/g,''));return isNaN(x)?null:x;};
+  if(stat==='goals')return n('G')??0;if(stat==='assists')return n('A')??0;
+  if(stat==='points')return n('PTS')??((n('G')??0)+(n('A')??0));
+  if(stat==='shots')return n('S')??n('SOG')??n('SHOTS')??0;if(stat==='saves')return n('SV')??n('SAVES')??0;return 0;}
+function gradeNHLPropShared(leg,ticketDate){
+  const ev=fbpEventId({...leg,sport:'nhl'},ticketDate);
+  if(!ev.id)return{hit:null,detail:ev.pending?'looking up game…':'game not found on ESPN near '+(leg.gameDate||ticketDate||'that date'),live:false};
+  // On the NHL page its own live box cache is warmer than a fresh fetch — use it.
+  let box=null;const gNow=sportGames('nhl').find(z=>String(z.espnId||z.id)===String(ev.id));
+  const stNow=gNow?(gNow.abstract==='in'?'in':gNow.abstract==='post'?'post':'pre'):null;
+  if(gNow&&typeof NHL_BOX_CACHE!=='undefined'&&typeof fetchNHLBox==='function'){const c=NHL_BOX_CACHE[ev.id];
+    if(c&&(stNow==='post'||Date.now()-c.ts<60e3))box={state:stNow,teams:c.teams};
+    else{if(!FBP_INFLIGHT['nhlbox:'+ev.id]){FBP_INFLIGHT['nhlbox:'+ev.id]=1;fetchNHLBox(ev.id).catch(()=>{}).then(()=>{delete FBP_INFLIGHT['nhlbox:'+ev.id];fbpKick();});}
+      if(c)box={state:stNow,teams:c.teams};}}
+  if(!box&&!(gNow&&typeof fetchNHLBox==='function'))box=fbpBox(ev.id,'nhl');
+  if(box&&stNow)box={...box,state:stNow};
+  if(!box||!box.teams||!Object.keys(box.teams).length)return{hit:null,detail:box&&box.state==='pre'?null:'player box loading — check back shortly',live:!!(box&&box.state==='in')};
+  if(box.state==='pre')return{hit:null,detail:null,live:false};
+  const live=box.state==='in';const {player,stat,thr,dir}=leg.nhlProp;
+  let row=null;Object.values(box.teams).forEach(t=>{if(!row)row=fbpFindRow([...(t.skaters||[]),...(t.goalies||[])],player);});
+  if(!row)return{hit:null,detail:live?'player not in box yet':'player not in final box — check the name',live};
+  const v=nhlPropVal(row,stat);let hit=null;const overHit=dir==='atleast'?v>=thr:v>thr;
+  if(dir==='under'){if(v>thr)hit=false;else if(!live)hit=true;}else{if(overHit)hit=true;else if(!live)hit=false;}
+  return{hit,detail:`${row.name} ${v} ${stat}${live?' so far':''}`,live,prog:{val:v,thr,dir}};
+}
 function gradeLeg(leg,ticketDate){
   if(leg.fbProp)return gradeFBPropLeg(leg,ticketDate);
-  if(leg.nhlProp){if(typeof gradeNHLPropLeg==='function')return gradeNHLPropLeg(leg,ticketDate);
-    return{hit:null,detail:'needs the NHL page open to grade player props',live:false};}
+  if(leg.nhlProp)return gradeNHLPropShared(leg,ticketDate);
   /* 1st-period legs (hockey): graded off the period-1 score only. Decided the
      moment period 1 is in the books (period>=2 or final), not at the final. */
   {const pm=String(leg.pick||'').match(/^(?:P1\s+(Over|Under)\s+([\d.]+)|([A-Z]{2,4})\s+P1\s+(ML|[+-][\d.]+))$/i);
@@ -9859,80 +10111,14 @@ function legRowHtml(x,isOutside){
 // rolled into d4.srcstats so we learn which sources are actually worth listening to.
 function getExt(){return get(LS.extpicks,{})}
 function getSrcStats(){return get(LS.srcstats,{})}
-// In-house sources — Judge, Coach, and the sim's own most-common exact score —
-// fed into this SAME store real uploaded outside picks live in, so they get
-// the identical agree/unanimous/CONFLICT tier treatment on the game card and
-// the identical win/loss tracking in Source records that any pasted-in
-// outside pick gets. Upserted (never appended) on the same [src,game,market,
-// side,line] key saveExtPicks() already uses for real uploads, so re-running
-// this mid-day updates today's read instead of piling up duplicates.
-// Runs across all four sports — sportGames()/sportSims() already resolve to
-// whichever board's globals actually exist on this page, same helper the
-// rest of the multi-sport code already relies on.
-const HOUSE_SOURCES=['Judge','Coach','Most common score'];
-// The voices ledger (voicesLog) already computes Judge / Most common / Coach
-// calls for ML, spread and total against the real posted lines, and locks them
-// at kickoff. Rather than re-deriving them a second way, mirror today's calls
-// from that ledger into the outside-picks store under the names below, so the
-// card tiers, the source chips and grading all see them as individual picks.
-const HOUSE_VOICE_MAP={'Judge':'Judge','Coach':'Coach','Most common':'Most common score'};
-const HOUSE_MKT_MAP={ml:'moneyline',spread:'spread',total:'total'};
-function syncHousePicksForSport(sp){
-  const games=sportGames(sp);
-  if(!games||!games.length)return;
-  try{voicesLog(sp)}catch(e){}
-  const d=today(),gids=new Set(games.map(g=>String(g.id)));
-  const V=get(VOICES_KEY,[]).filter(x=>x.sp===sp&&x.date===d&&HOUSE_VOICE_MAP[x.voice]&&gids.has(String(x.gid)));
-  const allP=getExt();allP[d]=allP[d]||[];
-  const keyOfP=x=>[x.src,x.game,x.market,x.side,x.line].join('|');
-  V.forEach(v=>{
-    const g=games.find(z=>String(z.id)===String(v.gid));if(!g)return;
-    const rec={src:HOUSE_VOICE_MAP[v.voice],game:v.game,away:g.away.abbr,home:g.home.abbr,gid:g.id,sport:sp,
-      market:HOUSE_MKT_MAP[v.market],pick:v.pick,side:v.side,line:v.line!=null?v.line:null,
-      price:v.price!=null?v.price:null,conf:null,house:true,capturedAt:Date.now()};
-    // a house voice only ever has ONE call per game+market — drop any earlier
-    // side it held there (e.g. before a line moved) so it can't vote both ways
-    allP[d]=allP[d].filter(y=>!(y.house&&y.src===rec.src&&y.game===rec.game&&y.market===rec.market&&keyOfP(y)!==keyOfP(rec)&&(y.hit===null||y.hit===undefined)));
-    const i=allP[d].findIndex(y=>keyOfP(y)===keyOfP(rec));
-    if(i>=0)allP[d][i]={...allP[d][i],...rec,hit:allP[d][i].hit};else allP[d].push({...rec,hit:null});
-  });
-  set(LS.extpicks,allP);
-}
-function syncHousePicksToExt(){
-  ['mlb','nfl','ncaaf','nhl'].forEach(sp=>{try{syncHousePicksForSport(sp)}catch(e){}});
-}
-// This game's in-house calls for one market, read back from the same store.
-function houseCallsFor(g,market,sp){
-  return extToday().filter(x=>x.house&&x.gid===g.id&&x.market===market&&(!sp||x.sport===sp));
-}
-// Chips + signals for ONE bet square: which in-house voices picked THIS side,
-// whether the house agrees with itself here, and whether it is split.
-const HOUSE_CHIP={'Judge':['J','#FFD75E'],'Coach':['C','#5FD3E8'],'Most common score':['S','#a78bfa']};
-function houseSquareInfo(g,pick,label,sp){
-  const out={chips:'',on:0,against:0,split:false,total:0};
-  const mkts=['moneyline','spread','total'];
-  const mk=mkts.find(m=>marketMatchesPick({market:m},pick,label));
-  if(!mk)return out;
-  const rows=houseCallsFor(g,mk,sp);
-  if(!rows.length)return out;
-  const mine=rows.filter(x=>pickMatchesSide(x,pick,label));
-  out.total=rows.length;out.on=mine.length;out.against=rows.length-mine.length;
-  out.split=rows.length>=2&&new Set(rows.map(r=>r.side)).size>1;
-  out.chips=mine.map(r=>{const c=HOUSE_CHIP[r.src]||['?','#999'];
-    return`<span class="hs-chip" title="${r.src}" style="color:${c[1]};border-color:${c[1]}">${c[0]}</span>`}).join('');
-  return out;
-}
-(function(){try{if(typeof document!=='undefined'&&!document.getElementById('hs-css')){
-  const st=document.createElement('style');st.id='hs-css';
-  st.textContent='.hs-row{display:flex;gap:3px;justify-content:center;margin-top:3px}'
-   +'.hs-chip{font-family:"IBM Plex Mono",monospace;font-size:8px;font-weight:700;line-height:1;padding:2px 4px;border:1px solid;border-radius:3px}';
-  (document.head||document.documentElement).appendChild(st);}}catch(e){}})();
-let HOUSE_SYNC_TS=0;
-function extToday(){
-  const now=Date.now();
-  if(now-HOUSE_SYNC_TS>5000){try{syncHousePicksToExt();}catch(e){}HOUSE_SYNC_TS=now;}
-  return getExt()[today()]||[];
-}
+// The characters (Judge, Coach, Most common, …) used to be mirrored into this
+// store as fake outside picks. They now live in their own layer (see THE
+// CHARACTERS), so any rows that mirror wrote are stripped once here — left in,
+// they would double-count as "outside sources" on every square.
+(function(){try{const all=get(LS.extpicks,{});let ch=false;
+  Object.keys(all).forEach(d=>{const n=(all[d]||[]).length;all[d]=(all[d]||[]).filter(x=>!x.house);if(all[d].length!==n)ch=true;});
+  if(ch)set(LS.extpicks,all);}catch(e){}})();
+function extToday(){return getExt()[today()]||[]}
 
 async function analyzeExtPicks(){
   const el=document.getElementById('extResult');
@@ -14799,24 +14985,34 @@ function buildTeamLedger(){
     }
     return null;
   };
-  const record=(pick,gameKey,units)=>{
+  /* Your record with a team counts GAMES, not tickets. Ten tickets riding
+     Buffalo in one game is one Buffalo decision: every distinct pick you had
+     on that team in that game is graded, and the game goes down as a win if
+     more of them won than lost (a loss if the reverse, a push if even).
+     Units follow the same rule: the average result of those distinct picks,
+     so stacking tickets on one game no longer multiplies the number. */
+  const games={};   // team|game|date|kind -> {team,kind,side,picks:{pick:hit}}
+  const record=(pick,gameKey,date)=>{
     const g=gradePick(pick,gameKey);if(!g)return;
-    if(g.kind==='total'){
-      (g.teams||[]).forEach(ab=>{
-        const o=touch(ab);if(!o)return;o.n++;
-        if(g.hit===null)return;
-        if(g.side==='over'){g.hit?o.ovW++:o.ovL++}else{g.hit?o.unW++:o.unL++}
-        o.units+=(g.hit?(units||1)*0.91:-(units||1));
-      });
-    }else{
-      const o=touch(g.team);if(!o)return;o.n++;
-      if(g.hit===null){o.sideP++;return}
-      g.hit?o.sideW++:o.sideL++;
-      o.units+=(g.hit?(units||1)*0.91:-(units||1));
-    }
+    const d=date||'';
+    const put=(ab,kind,side)=>{if(!ab)return;const k=ab+'|'+gameKey+'|'+d+'|'+kind;
+      const o=games[k]||(games[k]={team:ab,kind,side,picks:{}});o.picks[String(pick).trim()]=g.hit;};
+    if(g.kind==='total')(g.teams||[]).forEach(ab=>put(ab,'total',g.side));else put(g.team,'side',null);
   };
-  Object.keys(mine).forEach(d=>(mine[d]||[]).forEach(e=>record(e.pick,e.game,e.units)));
-  locked.forEach(t=>(t.legs||[]).forEach(l=>record(l.pick,l.game,(t.stake||1)/Math.max(1,(t.legs||[]).length))));
+  Object.keys(mine).forEach(d=>(mine[d]||[]).forEach(e=>record(e.pick,e.game,d)));
+  locked.forEach(t=>(t.legs||[]).forEach(l=>record(l.pick,l.game,l.gameDate||t.date)));
+  Object.values(games).forEach(G=>{
+    const hits=Object.values(G.picks).filter(h=>h!==null);
+    const o=touch(G.team);if(!o)return;o.n++;
+    if(!hits.length){if(G.kind==='side')o.sideP++;return;}
+    const w=hits.filter(Boolean).length,l=hits.length-w;
+    o.units+=(w*0.91-l)/hits.length;
+    if(w===l){if(G.kind==='side')o.sideP++;return;}
+    const won=w>l;
+    if(G.kind==='total'){const over=Object.keys(G.picks).some(p=>/^over/i.test(p))&&!Object.keys(G.picks).some(p=>/^under/i.test(p));
+      if(over){won?o.ovW++:o.ovL++}else{won?o.unW++:o.unL++}}
+    else{won?o.sideW++:o.sideL++}
+  });
   // classify
   Object.keys(T).forEach(ab=>{
     const o=T[ab];
@@ -14831,12 +15027,12 @@ function buildTeamLedger(){
           :(o.n>=4&&o.roi<=-0.40)?'black'
           :'neutral';
   });
-  set(LS.teamledger,{ts:Date.now(),v:T});
+  set(LS.teamledger,{ts:Date.now(),pg:1,v:T});
   return T;
 }
 function teamLedger(force){
   const c=get(LS.teamledger,{});
-  if(!force&&c.v&&c.ts&&Date.now()-c.ts<36e5)return c.v;
+  if(!force&&c.v&&c.ts&&c.pg&&Date.now()-c.ts<36e5)return c.v;
   return buildTeamLedger();
 }
 function teamLedgerFor(abbr){
@@ -14853,7 +15049,7 @@ function teamRecordChip(abbr){
   const col=o.flag==='black'?'var(--rust)':o.flag==='green'?'var(--win)':'var(--mute)';
   const mark=o.flag==='black'?'\u2620 ':o.flag==='green'?'\u25c6 ':'';
   return`<div class="sigchip" style="color:${col};border-color:${o.flag==='black'?'rgba(240,86,60,.45)':o.flag==='green'?'rgba(46,204,113,.45)':'var(--rule)'}"
-    title="Your record betting ${abbr}">
+    title="Your record with ${abbr} — one result per game, however many tickets rode it">
     ${mark}${abbr} you <b>${side}</b> · O/U <b>${ou}</b> · ${roiStr}</div>`;
 }
 

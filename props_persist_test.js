@@ -22,7 +22,7 @@ const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path')
   const mk=(ls)=>new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nfl.html',pretendToBeVisual:true,beforeParse(w){
     if(ls)Object.entries(ls).forEach(([k,v])=>{if(v!=null)w.localStorage.setItem(k,v)});
     w.fetch=u=>{calls.push(u);if(!net)return Promise.reject(new Error('offline'));
-      return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(/scoreboard\?dates=20260920/.test(u)?sbOld:/summary\?event=7777/.test(u)?finalBox:{events:[]}),text:()=>Promise.resolve('{}')});};
+      return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(/scoreboard\?dates=2026091\d-2026092\d/.test(u)?sbOld:/summary\?event=7777/.test(u)?finalBox:{events:[]}),text:()=>Promise.resolve('{}')});};
     w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;
     w.localStorage.setItem('d4.key',JSON.stringify('K'));w.localStorage.setItem('d4.setupDone','1');
     const RD=w.Date;class FD extends RD{constructor(...a){super(...(a.length?a:[RD.parse('2026-09-27T17:10:00Z')]))}static now(){return RD.parse('2026-09-27T17:10:00Z')}}w.Date=FD;

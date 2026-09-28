@@ -1989,11 +1989,13 @@ function nflCardFull(g){
        is no real line behind it, but the card is readable. */
     if(!e){
       const sp=typeof simVal==='string'?simVal:(simVal!=null?(simVal*100).toFixed(0)+'%':'—');
-      return`<div class="bet" role="button" tabindex="0">
+      const cI=(()=>{try{return charSquare('nfl',g,s,String(pick),{})}catch(err){return{}}})();
+      const tC=charTier({hasLine:false},cI);
+      return`<div class="bet${tC}" role="button" tabindex="0">
         <div class="bl">${label}</div>
         <div class="bo" style="color:var(--mute)">${sp}</div>
         <div class="bs">sim only</div>
-        <div class="bf" style="color:var(--mute)">no real line uploaded yet</div>
+        <div class="bf" style="color:var(--mute)">no real line uploaded yet</div>${cI.chips||''}${cI.meter||''}${charTierTag(tC)}
       </div>`;
     }
     const mp=e.p, kp=e.impl;
@@ -2035,24 +2037,18 @@ function nflCardFull(g){
         outsideAgainst=true;   // sources covered this market but took the other side
       }
     }
-    const signalsFor=[bookLeans,modelEdgeHere,outsideAgrees].filter(Boolean).length;
-    const hasConflict=(modelAgainstHere&&(bookLeans||outsideAgrees))||(outsideAgainst&&(bookLeans||modelEdgeHere));
-    let tierCls='';
-    if(hasConflict)tierCls=' conflict';
-    else if(signalsFor>=3||(signalsFor>=2&&outsideUnanimous))tierCls=' supreme';
-    else if(signalsFor>=2)tierCls=' strong';
-    else if(signalsFor>=1)tierCls=' lean';
+    // in-house voices (Judge / Coach / Most common score) — their own signal, shown as chips
+    const cInfo=(()=>{try{return charSquare('nfl',g,s,String(pick),{price:e.price,modelP:mp})}catch(err){return{}}})();
+    const tierCls=charTier({hasLine:true,bookLeans,modelEdgeHere,modelAgainstHere,outsideAgrees,outsideUnanimous,outsideAgainst},cInfo);
     if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
-    const tierBadge=tierCls===' supreme'?`<div class="tier-tag supreme">◆ SUPREME</div>`
-      :tierCls===' strong'?`<div class="tier-tag strong">STRONG</div>`
-      :tierCls===' conflict'?`<div class="tier-tag conflict">⚠ CONFLICT</div>`:'';
+    const tierBadge=charTierTag(tierCls);
 
     const id=g.id+'|'+pick;
     const on=(typeof SLIP!=='undefined'&&SLIP.some?SLIP.some(x=>x.id===id):false);
     return`<div class="bet${cls}${srcCls}${tierCls} ${on?'on':''}" role="button" tabindex="0"
       onclick="nflSlipToggle('${g.id}','${pick.replace(/'/g,"\\'")}',${e.price})">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
-      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${tierBadge}</div>`;
+      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${cInfo.chips||''}${cInfo.meter||''}${tierBadge}</div>`;
   }
   const sgn=n=>n==null?'':(n>0?'+'+n:''+n);
 
@@ -2251,6 +2247,22 @@ function nflStarters(abbr){
   const P=((NFL_DEPTH[abbr]||{}).players||[]).filter(p=>p.id);const by=(pos,n)=>P.filter(p=>p.pos===pos).sort((a,b)=>(a.depth||9)-(b.depth||9)).slice(0,n);
   return[...by('QB',1),...by('RB',1),...by('WR',2),...by('TE',1)];
 }
+/* Live tracking on the Props panel: the player's real count so far against the
+   projection and each ladder line, from the same box the ticket legs grade off. */
+function nflLivePropHtml(g,x){
+  try{if(!g||(g.abstract||'pre')==='pre')return'';
+    const box=fbpBox(String(g.espnId||g.id),'nfl');if(!box||!box.teamStats)return'';
+    const cat={pass:'passing',rush:'rushing',rec:'receiving',recs:'receiving'}[x.k];if(!cat)return'';
+    let row=null;Object.values(box.teamStats).forEach(t=>{if(!row)row=fbpFindRow(t[cat]||[],x.name);});
+    const raw=row?(x.k==='recs'?(row.REC??0):(row.YDS??0)):0;const v=parseFloat(String(raw).replace(/[^0-9.\-]/g,''))||0;
+    const live=box.state==='in',pct=Math.max(0,Math.min(100,x.proj>0?v/x.proj*100:0));
+    const hit=(x.ladder||[]).map(l=>`${l.line}+ ${v>=l.line?'<b style="color:var(--win)">✓</b>':live?'…':'<span style="color:var(--rust)">✗</span>'}`).join(' · ');
+    return`<span style="color:${live?'var(--gold)':'var(--chalk)'}"><b>${live?'LIVE':'FINAL'} ${v}</b> / proj ${x.proj}</span>
+      <span style="display:inline-block;width:70px;height:5px;background:var(--rule);border-radius:3px;vertical-align:middle;margin:0 4px"><span style="display:block;height:5px;width:${pct}%;background:${v>=x.proj?'var(--win)':'var(--gold)'};border-radius:3px"></span></span>${hit}<br>`;
+  }catch(e){return''}
+}
+function nflRefreshOpenForms(){try{document.querySelectorAll('[id^="nflform-"]').forEach(el=>{const gid=el.id.slice(8);const g=NFL_GAMES.find(z=>String(z.id)===gid);
+  if(g&&el.innerHTML)el.innerHTML=nflFormHTML(g,NFL_SIMS[g.id]);});}catch(e){}}
 function nflFormHTML(g,s){
   const need=!nflStarters(g.away.abbr).length||!nflStarters(g.home.abbr).length;
   const P=nflModelProps(g,s);const pc=x=>Math.round(x*100)+'%';
@@ -2259,7 +2271,7 @@ function nflFormHTML(g,s){
     const rows=st.map(p=>{const mine=P.filter(x=>x.pid===String(p.id));
       if(!mine.length)return`<div class="mono" style="font-size:10px">${p.name} <span style="color:var(--mute)">${p.pos} · loading stats…</span></div>`;
       return mine.map(x=>`<div class="mono" style="font-size:10px;line-height:1.6;margin-bottom:3px">${x.name} <span style="color:var(--mute)">${x.pos}</span> · ${x.lab}
-        proj <b style="color:var(--gold)">${x.proj}</b> <span style="color:var(--mute)">(season ${x.seasonPG??'—'}/g${x.gp?' in '+x.gp:''} · last5 ${x.last5??'—'})</span><br>
+        proj <b style="color:var(--gold)">${x.proj}</b> <span style="color:var(--mute)">(season ${x.seasonPG??'—'}/g${x.gp?' in '+x.gp:''} · last5 ${x.last5??'—'})</span><br>${nflLivePropHtml(g,x)}
         ${x.ladder.map(l=>`${l.line}+ <b>${pc(l.p)}</b>`).join(' · ')}${x.book?` · <span style="color:${x.book.ev>=2?'var(--win)':x.book.ev<0?'var(--rust)':'var(--gold)'}">book ${x.book.line} (${x.book.price>0?'+':''}${x.book.price}) → over ${pc(x.book.p)}, ${x.book.ev>=0?'+':''}${x.book.ev.toFixed(1)}% EV</span>`:''}</div>`).join('');}).join('');
     return`<div style="margin-top:6px"><b>${ab}</b>${rows}</div>`;};
   return`<div class="sub mono" style="font-size:9.5px;color:var(--mute)">season stats: ${NFL_SEASONSTATS_STATUS||'not loaded yet'}</div>`+side(g.away.abbr)+side(g.home.abbr)+(need?`<div class="bar" style="margin-top:8px">
@@ -2958,7 +2970,14 @@ function fbFinalHeadline(g,s,sport){
     +'<div style="font-family:IBM Plex Mono;font-size:9px;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">'
     +'<span style="color:'+(hit?'var(--win)':'var(--rust)')+'">model '+(hit?'✓':'✗')+' (proj '+arrow+Math.abs(projM)+')</span>'
     +'<span style="color:'+dc+'">off by '+diff+' pts</span>'
-    +'</div></div>';
+    +'</div>'+fbPredBoxHtml(g,sport)+'</div>';
+}
+/* The Judge's predicted box, graded against the real one once it's in. */
+function fbPredBoxHtml(g,sport){
+  try{const arc=get(sport==='ncaaf'?'d4.ncaafarc':LS.nflarc,{});
+    for(const A of Object.values(arc)){const r=(A&&A.rows||[]).find(x=>String(x.id)===String(g.id));
+      if(r&&r.judge&&r.judge.box&&r.actualBox)return predBoxGradeHtml(sport,g,r.judge.box,r.actualBox);}}catch(e){}
+  return'';
 }
 function fbLiveScoreBar(g,league){
   if(g.abstract!=='in')return'';
@@ -3756,11 +3775,13 @@ function ncaafCard(g){
   function cfbSq(label,pick,e,simVal){
     if(!e){
       const sp=typeof simVal==='string'?simVal:(simVal!=null?(+simVal*100).toFixed(0)+'%':'—');
-      return`<div class="bet" role="button" tabindex="0">
+      const cI=(()=>{try{return charSquare('ncaaf',g,s,String(pick),{})}catch(err){return{}}})();
+      const tC=charTier({hasLine:false},cI);
+      return`<div class="bet${tC}" role="button" tabindex="0">
         <div class="bl">${label}</div>
         <div class="bo" style="color:var(--mute)">${sp}</div>
         <div class="bs">sim only</div>
-        <div class="bf" style="color:var(--mute)">no real line uploaded yet</div>
+        <div class="bf" style="color:var(--mute)">no real line uploaded yet</div>${cI.chips||''}${cI.meter||''}${charTierTag(tC)}
       </div>`;
     }
     const mp=e.p,kp=e.impl,pct=Math.round(kp*100);
@@ -3788,21 +3809,15 @@ function ncaafCard(g){
         srcBadge=`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':srcThis.size+' source'+(srcThis.size>1?'s':'')}</div>`;
       }else if(sameMkt.length)outsideAgainst=true;
     }
-    const signalsFor=[bookLeans,modelEdgeHere,outsideAgrees].filter(Boolean).length;
-    const hasConflict=(modelAgainstHere&&(bookLeans||outsideAgrees))||(outsideAgainst&&(bookLeans||modelEdgeHere));
-    let tierCls='';
-    if(hasConflict)tierCls=' conflict';
-    else if(signalsFor>=3||(signalsFor>=2&&outsideUnanimous))tierCls=' supreme';
-    else if(signalsFor>=2)tierCls=' strong';
-    else if(signalsFor>=1)tierCls=' lean';
+    // in-house voices (Judge / Coach / Most common score) — their own signal, shown as chips
+    const cInfo=(()=>{try{return charSquare('ncaaf',g,s,String(pick),{price:e.price,modelP:mp})}catch(err){return{}}})();
+    const tierCls=charTier({hasLine:true,bookLeans,modelEdgeHere,modelAgainstHere,outsideAgrees,outsideUnanimous,outsideAgainst},cInfo);
     if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
-    const tierBadge=tierCls===' supreme'?`<div class="tier-tag supreme">◆ SUPREME</div>`
-      :tierCls===' strong'?`<div class="tier-tag strong">STRONG</div>`
-      :tierCls===' conflict'?`<div class="tier-tag conflict">⚠ CONFLICT</div>`:'';
+    const tierBadge=charTierTag(tierCls);
     return`<div class="bet${cls}${srcCls}${tierCls}" role="button" tabindex="0"
       onclick="ncaafSlipToggle('${g.id}','${String(pick).replace(/'/g,"\\'")}',${e.price})">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
-      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${tierBadge}</div>`;
+      <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${cInfo.chips||''}${cInfo.meter||''}${tierBadge}</div>`;
   }
   const awayRank=g.away.ranking||'';const homeRank=g.home.ranking||'';
   const id=g.id;
