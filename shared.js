@@ -2740,7 +2740,7 @@ function tab(n,b){
   if(n==='games'&&ACTIVE_SPORT==='nfl')renderNFL();
   if(n==='games'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
   if(n==='games'&&ACTIVE_SPORT==='nhl'&&typeof renderNHL==='function')renderNHL();
-  if(n==='tickets')renderTickets();
+  if(n==='tickets'){renderTickets();btAutoOnce();try{const tv=document.getElementById('v-tickets');if(tv&&!document.getElementById('btStatus')&&btUngraded().length){const d=document.createElement('div');d.innerHTML=btBarHtml();tv.insertBefore(d,tv.firstChild);}}catch(e){}}
   if(n==='grades')renderGrades(true);
   if(n==='recap')renderRecap();
   if(n==='best'){bestTab(BESTTAB||'today');}
@@ -6783,29 +6783,52 @@ function fbpEventId(leg,ticketDate){
   const arr=sportGames(sp);
   const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp)===want);
   if(g)return{id:String(g.espnId||g.id),pending:false};
-  const idx=get(FBP_IDX_KEY,{})||{};
   const base=[leg.gameDate,ticketDate].filter(Boolean).sort()[0];
+  // 1) the app's own archive: every game that was ever on the board kept its
+  //    ESPN event id there — no network needed, works for any past week.
+  const fromArc=fbpArchiveId(sp,want,base);if(fromArc)return{id:fromArc,pending:false};
+  const idx=get(FBP_IDX_KEY,{})||{};
   if(!base)return{id:null,pending:false};
   const hits=Object.keys(idx).filter(k=>k.startsWith(sp+':'+want+':')).map(k=>({d:k.split(':')[2],id:idx[k]}));
   const lo=fbpShift(base,-1),hi=fbpShift(base,7);
   const inWin=hits.filter(h=>h.d>=lo&&h.d<=hi).sort((a,b)=>a.d.localeCompare(b.d));
   if(inWin.length)return{id:inWin[0].id,pending:false};
-  const k='sb:'+sp+':'+lo+'-'+hi;
+  // 2) ESPN scoreboards: the game's own day (and the days either side) one at a
+  //    time — single dates work on every ESPN sport — then the full window.
+  const days=[fbpYmd(base),fbpShift(base,1),fbpShift(base,-1),fbpShift(base,2),fbpShift(base,3)];
+  const qs=days.map(d=>'dates='+d).concat(['dates='+lo+'-'+hi]);
   const tried=get('d4.fbptried',{})||{};
-  if(FBP_INFLIGHT[k])return{id:null,pending:true};
-  if(tried[k]&&Date.now()-tried[k]<30*60e3)return{id:null,pending:false};
+  const next=qs.find(q=>!(tried[sp+'|'+q]&&Date.now()-tried[sp+'|'+q]<10*60e3));
+  if(!next)return{id:null,pending:false};
+  const k='sb:'+sp+':'+next;if(FBP_INFLIGHT[k])return{id:null,pending:true};
   FBP_INFLIGHT[k]=1;
-  fetch(FBP_ESPN[sp]+'/scoreboard?dates='+lo+'-'+hi+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400')).then(r=>r.json()).then(j=>{
-    const I=get(FBP_IDX_KEY,{})||{};
-    (j.events||[]).forEach(ev=>{
-      const cs=((ev.competitions||[])[0]||{}).competitors||[];
-      const aw=cs.find(c=>c.homeAway==='away'),hm=cs.find(c=>c.homeAway==='home');
-      const day=ev.date?fbpYmd(new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date))):lo;
-      if(aw&&hm)I[sp+':'+fbpGameKey(aw.team.abbreviation+'@'+hm.team.abbreviation,sp)+':'+day]=String(ev.id);
-    });
-    set(FBP_IDX_KEY,I);
-  }).catch(()=>{}).then(()=>{delete FBP_INFLIGHT[k];const T=get('d4.fbptried',{})||{};T[k]=Date.now();set('d4.fbptried',T);fbpKick();});
+  fetch(FBP_ESPN[sp]+'/scoreboard?'+next+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400')).then(r=>r.json()).then(j=>{
+    fbpIndexEvents(sp,j,lo);
+    const T=get('d4.fbptried',{})||{};T[sp+'|'+next]=Date.now();set('d4.fbptried',T);   // only a real answer counts as tried
+  }).catch(()=>{}).then(()=>{delete FBP_INFLIGHT[k];fbpKick();});
   return{id:null,pending:true};
+}
+function fbpIndexEvents(sp,j,fallbackDay){
+  const I=get(FBP_IDX_KEY,{})||{};
+  (j.events||[]).forEach(ev=>{
+    const cs=((ev.competitions||[])[0]||{}).competitors||[];
+    const aw=cs.find(c=>c.homeAway==='away'),hm=cs.find(c=>c.homeAway==='home');
+    const day=ev.date?fbpYmd(new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date))):fallbackDay;
+    if(aw&&hm)I[sp+':'+fbpGameKey(aw.team.abbreviation+'@'+hm.team.abbreviation,sp)+':'+day]=String(ev.id);
+  });
+  set(FBP_IDX_KEY,I);
+}
+/* ESPN event id for a game from the sport's own snapshot archive. Football rows
+   are {id,game} per week, hockey rows {gid,game} per day. When a matchup shows
+   up more than once, the snapshot closest to the ticket date wins. */
+function fbpArchiveId(sp,want,base){
+  const key=sp==='nfl'?LS.nflarc:sp==='ncaaf'?'d4.ncaafarc':sp==='nhl'?'d4.nhlarc':null;if(!key)return null;
+  const arc=get(key,{})||{};const t0=base?Date.parse(String(base).slice(0,10)):Date.now();let best=null;
+  Object.entries(arc).forEach(([k,A])=>{if(!A||!Array.isArray(A.rows))return;
+    const when=/^\d{4}-\d{2}-\d{2}$/.test(k)?Date.parse(k):(A.ts||0);
+    A.rows.forEach(r=>{if(!r||fbpGameKey(r.game,sp)!==want)return;const id=String(r.id||r.gid||'');if(!id)return;
+      const dist=Math.abs(when-t0);if(!best||dist<best.dist)best={id,dist};});});
+  return best&&best.dist<10*864e5?best.id:null;
 }
 function fbpBox(id,sp){
   const mem=(sp!=='nhl'&&typeof FB_BOX_CACHE!=='undefined'&&FB_BOX_CACHE[id]&&FB_BOX_CACHE[id].teamStats)?FB_BOX_CACHE[id]:null;
@@ -16146,12 +16169,14 @@ function renderMyGames(){
   }).sort((x,y)=>({in:0,pre:1,post:2}[x.state]-{in:0,pre:1,post:2}[y.state])||String(x.start||x.d).localeCompare(String(y.start||y.d)));
   const [A,H]=['',''];
   const hedges=get(LS.locked,[]).map(t=>{try{return hedgeHtml(t)?`<div class="sub" style="margin-top:6px"><b>${esc(t.name||('Ticket #'+t.id))}</b></div>`+hedgeHtml(t):''}catch(e){return''}}).join('');
-  el.innerHTML=hedges+`<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin-bottom:6px">${list.length} game${list.length>1?'s':''} with money on them · live scores refresh every 45s while this tab is open</div>`+
+  const btNeed=(()=>{try{return btUngraded().length}catch(e){return 0}})();
+  el.innerHTML=(btNeed?btBarHtml():'')+hedges+`<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin-bottom:6px">${list.length} game${list.length>1?'s':''} with money on them · live scores refresh every 45s while this tab is open</div>`+
   list.map(b=>{const [aw,hm]=b.game.split('@');
     const sc=b.a!=null?`${aw} <b>${b.a}</b> – <b>${b.h}</b> ${hm}`:`${aw} @ ${hm}`;
     const st=b.state==='in'?`<span style="color:var(--rust)">● LIVE</span> ${esc(b.detail)}`:b.state==='post'?'FINAL':(b.start?new Date(b.start).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}):b.d);
     const legs=b.rows.map(x=>{let g=null,badge='',bar='';try{g=gradeLeg(x.l,x.t.date)}catch(e){}try{badge=gradeLegBadge(x.l,x.t.date)}catch(e){}try{bar=legPctHtml(x.l,g)}catch(e){}
-      return`<div class="sub" style="margin:3px 0"><span style="color:var(--mute);font-size:10px">${esc(x.t.name||('#'+x.t.id))}</span> · <b>${esc(x.l.pick)}</b> ${badge}${g&&g.detail?` <span class="mono" style="font-size:9.5px;color:var(--mute)">${esc(g.detail)}</span>`:''}${bar||''}</div>`;}).join('');
+      const showDet=g&&g.detail&&!String(badge).includes(g.detail);const pbar=g&&g.prog?bar:'';
+      return`<div class="sub" style="margin:3px 0"><span style="color:var(--mute);font-size:10px">${esc(x.t.name||('#'+x.t.id))}</span> · <b>${esc(x.l.pick)}</b> ${badge}${showDet?` <span class="mono" style="font-size:9.5px;color:var(--mute)">${esc(g.detail)}</span>`:''}${pbar?`<div>${pbar}</div>`:''}</div>`;}).join('');
     const tix=new Set(b.rows.map(x=>x.t.id)).size;
     return`<div class="tkt${b.state==='in'?' hi':''}" style="margin:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div style="font-weight:900;font-size:15px">${SP_LAB[b.sp]||''} ${sc}</div>
@@ -16165,7 +16190,7 @@ function mgLoop(){
     await mgRefresh();renderMyGames();};
   MG_TIMER=setInterval(tick,45e3);
 }
-async function openMyGames(){renderMyGames();await mgRefresh(true);renderMyGames();mgLoop();}
+async function openMyGames(){btAutoOnce();renderMyGames();await mgRefresh(true);renderMyGames();mgLoop();}
 
 /* ── Wiring: tabs, settings, snapshots — injected so all four pages get it ── */
 function dailyLoopInject(){
@@ -16868,3 +16893,44 @@ function missionsHtml(inner){
     ${msBoardHtml()}`;
   return inner?body:`<div class="sbar"><h2>Missions</h2><div class="ln"></div></div><div id="missionsBody">${body}</div>`;
 }
+
+/* ══ PROP BACKTRACK ══════════════════════════════════════════════════════════
+   Grades every player-prop leg on every ticket — pending and archived — by
+   pulling each game's final box score from ESPN once and saving it for good.
+   Runs by itself once a day when Tickets or My Games opens and something is
+   still ungraded; the "Regrade props" button runs it on demand. */
+let BT_BUSY=false;
+function btPropLegs(){
+  const out=[];get(LS.locked,[]).forEach(t=>(t.legs||[]).forEach(l=>{if(!l.fbProp&&!l.nhlProp)return;
+    const sp=l.nhlProp?'nhl':(l.sport==='ncaaf'?'ncaaf':'nfl');out.push({t,l,sp});}));return out;
+}
+function btUngraded(){return btPropLegs().filter(x=>{let g=null;try{g=gradeLeg(x.l,x.t.date)}catch(e){}return!g||(g.hit==null&&!g.live&&!g.push);});}
+async function btWaitId(leg,date,tries){for(let i=0;i<(tries||8);i++){const ev=fbpEventId(leg,date);if(ev.id)return ev.id;if(!ev.pending&&i>0)return null;await new Promise(r=>setTimeout(r,350));}return null;}
+async function regradeAllProps(statusEl){
+  if(BT_BUSY)return;BT_BUSY=true;const say=h=>{const e=statusEl||document.getElementById('btStatus');if(e)e.innerHTML=h;};
+  try{
+    const todo=btUngraded();if(!todo.length){say('<span style="color:var(--win)">✓ Every prop leg is graded.</span>');return{legs:0,games:0};}
+    try{const T=get('d4.fbptried',{})||{};Object.keys(T).forEach(k=>delete T[k]);set('d4.fbptried',T);}catch(e){}   // give ESPN a fresh try
+    const ev={};let n=0;
+    for(const x of todo){n++;say(`Finding games… ${n}/${todo.length}`);
+      const id=await btWaitId({...x.l,sport:x.sp},x.t.date);if(id)(ev[x.sp+':'+id]=ev[x.sp+':'+id]||{sp:x.sp,id});}
+    const games=Object.values(ev);let g=0;
+    const S=get(FBP_BOX_KEY,{})||{};
+    for(const G of games){g++;say(`Pulling box scores… ${g}/${games.length}`);
+      if(S[G.sp+':'+G.id]&&S[G.sp+':'+G.id].final)continue;
+      try{const r=await fetch(FBP_ESPN[G.sp]+'/summary?event='+G.id);const j=await r.json();
+        const box=G.sp==='nhl'?fbpParseHockey(j):fbpParseBox(j);FBP_MEM[G.id]={ts:Date.now(),box};
+        if(box.state==='post'){const A=get(FBP_BOX_KEY,{})||{};A[G.sp+':'+G.id]={ts:Date.now(),final:true,box};set(FBP_BOX_KEY,A);}}catch(e){}
+      await new Promise(r=>setTimeout(r,200));}
+    const left=btUngraded().length,done=todo.length-left;
+    set('d4.btDay',today());
+    say(`<span style="color:${left?'var(--gold)':'var(--win)'}">✓ ${done} prop leg${done===1?'':'s'} graded from ${games.length} box score${games.length===1?'':'s'}${left?` · ${left} still waiting (game not final yet, or the player isn't in ESPN's box — check the name)`:''}.</span>`);
+    try{if(typeof renderTickets==='function'&&document.getElementById('tickets'))renderTickets();}catch(e){}
+    try{const v=document.getElementById('v-mine');if(v&&v.classList.contains('on'))renderMyGames();}catch(e){}
+    try{msSync();}catch(e){}
+    return{legs:done,games:games.length,left};
+  }finally{BT_BUSY=false;}
+}
+function btAutoOnce(){try{if(get('d4.btDay','')===today())return;const past=btUngraded().filter(x=>String(x.l.gameDate||x.t.date).slice(0,10)<today());
+  if(past.length)setTimeout(()=>regradeAllProps(),800);}catch(e){}}
+function btBarHtml(){return`<div class="bar" style="margin:6px 0"><button onclick="regradeAllProps()">↻ Regrade props (pull final box scores)</button></div><div id="btStatus" class="sub mono" style="font-size:10px"></div>`;}
