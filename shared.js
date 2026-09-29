@@ -70,18 +70,41 @@ function intakeNFLAbbr(raw){
   if(nick)return nick;
   return Object.keys(INTAKE_NFL).find(k=>INTAKE_NFL[k].split(' ').slice(1).join(' ')&&l.includes(INTAKE_NFL[k].split(' ').slice(1).join(' ')))||null;
 }
+const INTAKE_NHL={ANA:'anaheim ducks',BOS:'boston bruins',BUF:'buffalo sabres',CGY:'calgary flames',CAR:'carolina hurricanes',CHI:'chicago blackhawks',
+ COL:'colorado avalanche',CBJ:'columbus blue jackets',DAL:'dallas stars',DET:'detroit red wings',EDM:'edmonton oilers',FLA:'florida panthers',LA:'los angeles kings',
+ MIN:'minnesota wild',MTL:'montreal canadiens',NSH:'nashville predators',NJ:'new jersey devils',NYI:'new york islanders',NYR:'new york rangers',OTT:'ottawa senators',
+ PHI:'philadelphia flyers',PIT:'pittsburgh penguins',SJ:'san jose sharks',SEA:'seattle kraken',STL:'st louis blues',TB:'tampa bay lightning',TOR:'toronto maple leafs',
+ UTAH:'utah mammoth',VAN:'vancouver canucks',VGK:'vegas golden knights',WSH:'washington capitals',WPG:'winnipeg jets'};
+const INTAKE_NHL_ALIAS={LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV:'VGK',UTA:'UTAH',UHC:'UTAH',ARI:'UTAH',WAS:'WSH',MON:'MTL',CLB:'CBJ',NAS:'NSH',WIN:'WPG'};
+function intakeNHLAbbr(raw){
+  const t=String(raw||'').trim();if(!t)return null;
+  if(typeof nhlAbbrFor==='function'){const a=nhlAbbrFor(t);if(a)return a;}
+  const U=t.toUpperCase().replace(/[^A-Z]/g,'');if(INTAKE_NHL[U])return U;if(INTAKE_NHL_ALIAS[U])return INTAKE_NHL_ALIAS[U];
+  const l=' '+t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ')+' ';
+  const nicks=Object.entries(INTAKE_NHL).map(([k,v])=>{const w=v.split(' ');const nick=(k==='CBJ'?'blue jackets':k==='DET'?'red wings':k==='TOR'?'maple leafs':k==='VGK'?'golden knights':w[w.length-1]);return[k,nick];}).sort((a,b)=>b[1].length-a[1].length);
+  for(const [k,n] of nicks)if(l.includes(' '+n+' '))return k;
+  const cities=Object.entries(INTAKE_NHL).filter(([k])=>k!=='NYI'&&k!=='NYR').map(([k,v])=>[k,v.replace(/ (ducks|bruins|sabres|flames|hurricanes|blackhawks|avalanche|blue jackets|stars|red wings|oilers|panthers|kings|wild|canadiens|predators|devils|senators|flyers|penguins|sharks|kraken|blues|lightning|maple leafs|mammoth|canucks|golden knights|capitals|jets)$/,'')]).sort((a,b)=>b[1].length-a[1].length);
+  for(const [k,c] of cities)if(l.includes(' '+c+' '))return k;
+  return null;
+}
 function intakeAbbr(sport,raw){
   const t=String(raw||'').trim();if(!t)return null;
   if(sport==='nfl')return intakeNFLAbbr(t);
   if(sport==='mlb'){const a=typeof abbr==='function'?abbr(t):null;return a||(/^[A-Z]{2,4}$/.test(t.toUpperCase())?t.toUpperCase():null);}
   if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;}return null;}
-  if(sport==='nhl'){return typeof nhlAbbrFor==='function'?nhlAbbrFor(t):null;}
+  if(sport==='nhl')return intakeNHLAbbr(t);
   return null;
 }
 /* A sport's team names only resolve where that sport's engine is loaded. */
 /* A section is filed here only if this page has that sport's parser AND name
    resolver; otherwise the whole section (odds + extras) waits for its page, so
    nothing is half-saved. MLB's parser is in shared.js; football's is not. */
+/* Ticket money arrives as text ("$1.85", "$1,159.51"). parseFloat("$1.85") is NaN,
+   so a real ticket's own stake / to-win never registered — every reader goes through this. */
+const moneyNum=x=>{const n=parseFloat(String(x==null?'':x).replace(/[^0-9.\-]/g,''));return isNaN(n)?NaN:n;};
+const moneyStr=x=>{const n=moneyNum(x);return isNaN(n)?null:String(n);};
+/* Can this page turn a TICKET's team names into abbreviations? (Slate text needs the sport's parser too; a ticket doesn't.) */
+const intakeCanNameResolve=sp=>sp==='mlb'||sp==='nhl'||sp==='nfl'||(sp==='ncaaf'&&typeof ncaafAbbrFor==='function');
 const intakeCanResolve=sp=>sp==='mlb'||(sp==='nhl'&&typeof parseNHLSlateText==='function'&&typeof nhlAbbrFor==='function')||(sp==='nfl'&&typeof parseNFLSlateText==='function')||
   (sp==='ncaaf'&&typeof parseNCAAFSlateText==='function'&&typeof ncaafAbbrFor==='function');
 function intakeGuessSport(text,fallback){
@@ -365,7 +388,7 @@ function parseMyTicketText(text){
     if(!hm){skipped.push(line);return;}
     const sportWord=hm[2].toUpperCase();
     const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
-    if(!sport||!intakeCanResolve(sport)){skipped.push(line+'  (sport not resolvable on this page)');return;}
+    if(!sport||!intakeCanNameResolve(sport)){skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
     const awayAb=intakeAbbr(sport,hm[3]),homeAb=intakeAbbr(sport,hm[4]);
     if(!awayAb||!homeAb){skipped.push(line+'  (team name not recognized)');return;}
     const gl=awayAb+'@'+homeAb;
@@ -399,11 +422,11 @@ function parseMyTicketText(text){
     const gameDate=dm?`${dm[3]}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`:today();
     legs.push({id:'ext'+ticketNo+'_'+legs.length,game:gl,pick,p:ticketAmerToProb(price),sport,gameDate,price,book:'external'});
   });
-  if(!legs.length)return{ok:false,note:'found Ticket Number '+ticketNo+' but no legs parsed'+(skipped.length?' — '+skipped.length+' line(s) unrecognized':'')};
+  if(!legs.length)return{ok:false,note:'found Ticket Number '+ticketNo+' but no legs parsed'+(skipped.length?' — '+skipped.length+' line(s) unrecognized: '+(skipped[0].match(/\(([^()]+)\)\s*$/)||[,'leg text not understood'])[1]:'')};
   const L=get(LS.locked,[]);
   const idx=L.findIndex(t=>String(t.id)==='ext'+ticketNo);
   const ticket={id:'ext'+ticketNo,date:legs[0].gameDate||today(),name:'Ticket #'+ticketNo,source:'mine',imported:true,
-    stake:kv.amount||null,toWin:kv.towin||null,status:kv.status||null,
+    stake:moneyStr(kv.amount),toWin:moneyStr(kv.towin),status:kv.status||null,
     legs,p:legs.reduce((a,x)=>a*x.p,1)};
   if(idx>=0)L[idx]=ticket;else L.unshift(ticket);
   set(LS.locked,L);
@@ -446,7 +469,7 @@ function parseSGPTicketText(text){
     if(sgpHdr){
       const sportWord=sgpHdr[2].toUpperCase();
       const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
-      if(!sport||!intakeCanResolve(sport)){cur=null;skipped.push(line+'  (sport not resolvable on this page)');return;}
+      if(!sport||!intakeCanNameResolve(sport)){cur=null;skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
       const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
       cur={sport,gl:awayAb+'@'+homeAb};return;
@@ -503,7 +526,7 @@ function parseSGPTicketText(text){
   const L=get(LS.locked,[]);
   const idx=L.findIndex(t=>String(t.id)==='ext'+ticketNo);
   const ticket={id:'ext'+ticketNo,date:today(),name:'Ticket #'+ticketNo,source:'mine',imported:true,
-    stake:kv.amount||null,toWin:kv.towin||null,status:kv.status||null,
+    stake:moneyStr(kv.amount),toWin:moneyStr(kv.towin),status:kv.status||null,
     legs,p:legs.length?legs.reduce((a,x)=>a*x.p,1):null};
   if(legs.length){if(idx>=0)L[idx]=ticket;else L.unshift(ticket);set(LS.locked,L);}
   return{ok:true,ticketNo,legCount:legs.length,propSkipped,skipped,replaced:idx>=0,noneTracked:!legs.length};
@@ -526,7 +549,7 @@ async function intakeText(text,sig,type,src){
     const res=parseMyTicketText(text);
     if(res.ok){
       const note=`Ticket #${res.ticketNo} ${res.replaced?'updated':'saved'} — ${res.legCount} leg${res.legCount>1?'s':''} to My Parlays`+
-        (res.skipped.length?` (${res.skipped.length} line${res.skipped.length>1?'s':''} skipped — unrecognized)`:'');
+        (res.skipped.length?` (${res.skipped.length} line${res.skipped.length>1?'s':''} skipped — ${(res.skipped[0].match(/\(([^()]+)\)\s*$/)||[,'unrecognized'])[1]})`:'');
       return{r:{[sp]:{picks:[],trends:[],consensus:[],preds:[],raw:[note],xpicks:[],unread:[]}},how:note};
     }
     return{r:{[sp]:{picks:[],trends:[],consensus:[],preds:[],raw:['Ticket import failed: '+res.note],xpicks:[],unread:[]}},how:res.note};
@@ -8260,7 +8283,7 @@ function buildWagerRowCore(t){
   // a real ticket showed +6710886300: 0.5^26 has nothing to do with what the
   // book actually quoted. When the ticket carries its own real number, that
   // number wins outright over anything computed from legs.
-  const realStake=parseFloat(t.stake),realToWin=parseFloat(t.toWin);
+  const realStake=moneyNum(t.stake),realToWin=moneyNum(t.toWin);
   const hasRealQuote=t.imported&&!isNaN(realStake)&&realStake>0&&!isNaN(realToWin)&&realToWin>0;
   const stake=trackedOnly?1:(hasRealQuote?realStake:(w[t.id]||''));
   const decOdds=hasRealQuote?(realStake+realToWin)/realStake:pricedOddsDecimal(t.legs);
@@ -16287,7 +16310,7 @@ function hubYou(){
   L.forEach(t=>{
     let rec=null;try{rec=ticketIsComplete(t)?ticketRecord(t):null}catch(e){}
     if(rec){if(rec.l>0)tl++;else if(rec.w>0)tw++;
-      const st=parseFloat(t.stake),tw_=parseFloat(t.toWin);if(st>0&&tw_>0)units+=rec.l>0?-st:tw_;}
+      const st=moneyNum(t.stake),tw_=moneyNum(t.toWin);if(st>0&&tw_>0)units+=rec.l>0?-st:tw_;}
     (t.legs||[]).forEach(l=>{const sp=l.sport||'mlb',k=sp+'|'+l.game+'|'+(l.gameDate||t.date)+'|'+String(l.pick).trim();if(seen[k])return;
       let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(!g||g.hit==null)return;seen[k]=1;
       const o=R[sp]||(R[sp]={w:0,n:0});o.n++;if(g.hit)o.w++;});
@@ -16372,7 +16395,7 @@ function kellyStake(p,price){
 }
 /* A ticket's real stake and total payout — the pasted quote when there is one. */
 function ticketMoney(t){
-  const st=parseFloat(t.stake),tw=parseFloat(t.toWin);
+  const st=moneyNum(t.stake),tw=moneyNum(t.toWin);
   if(st>0&&tw>0)return{stake:st,payout:st+tw,real:true};
   const w=(getWagers()||{})[t.id];if(!(w>0))return null;
   const d=pricedOddsDecimal(t.legs);return d>1?{stake:+w,payout:+w*d,real:false}:null;
