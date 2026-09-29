@@ -1194,7 +1194,7 @@ function characterCalls(sp,g,s){
   try{const p=typeof predFor==='function'?predFor(sp,gl):null;if(p&&p.a!=null&&p.h!=null)byMargin('Pred',+p.a,+p.h,{score:p.a+'-'+p.h});}catch(e){}
   // Outside predicted scores from the Intel log — one voice per source
   try{
-    const preds=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='pred'&&x.game===gl&&x.date===d&&x.a!=null&&x.h!=null);
+    const preds=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='pred'&&x.game===gl&&x.date===d&&x.a!=null&&x.h!=null);
     const bySrc={};preds.forEach(x=>{(bySrc[x.src]=bySrc[x.src]||[]).push(x)});
     Object.entries(bySrc).forEach(([src,arr])=>{const last=arr[arr.length-1];byMargin(src||'Outside pred',last.a,last.h,{score:last.a+'-'+last.h});});
   }catch(e){}
@@ -1204,7 +1204,7 @@ function characterCalls(sp,g,s){
     if(Math.abs(tr.dTot)>=0.05&&tl!=null)add('Trends','total',tr.dTot>0?'over':'under');}catch(e){}
   // Consensus — where the money is (tickets if no money split was uploaded)
   try{
-    const rows=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl);
+    const rows=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl);
     const latest=(mk)=>{const r=rows.filter(x=>x.market===mk);return r.filter(x=>x.metric==='money').pop()||r.pop();};
     const ml=latest('moneyline'),spc=latest('spread'),to=latest('total');
     if(ml&&ml.homePct!=null&&ml.homePct!==50)add('Consensus','ml',ml.homePct>50?'home':'away',{metric:ml.metric});
@@ -1248,8 +1248,10 @@ function voicesLog(sp){
 const CHAR_K=12,CHAR_KC=10;
 const charCtxOf=x=>x.market==='total'?x.side:(x.market==='spread'?(x.line!=null?(x.line<0?'fav':'dog'):null):(x.price!=null?(x.price<0?'fav':'dog'):null));
 let CHAR_BRAIN=null,CHAR_BRAIN_SIG='';
+let CHAR_BRAIN_TS=0;
 function charBrain(){
-  const V=get(VOICES_KEY,[]);
+  if(CHAR_BRAIN&&Date.now()-CHAR_BRAIN_TS<5000)return CHAR_BRAIN;
+  const V=roGet(VOICES_KEY,[]);CHAR_BRAIN_TS=Date.now();
   const sig=V.length+'|'+V.filter(x=>x.graded).length;
   if(CHAR_BRAIN&&sig===CHAR_BRAIN_SIG)return CHAR_BRAIN;
   const B={by:{},all:{},agree:{},combo:{}};
@@ -1612,6 +1614,11 @@ function _dec(raw){if(raw==null||raw==='')return undefined;
 function _enc(json){if(json.length<8000)return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
 function get(k,d){try{const v=_dec(localStorage.getItem(k));return v===undefined?d:v}catch(e){return d}}
+/* Read-only cached reads of big stores (ledger, intel, tickets). Cleared the
+   moment set() writes that key, so it's never stale. Callers must not mutate
+   what they get back — use get() when you intend to change and save. */
+const RO_CACHE={};
+function roGet(k,d,ttl){const c=RO_CACHE[k];if(c&&Date.now()-c.ts<(ttl||30e3))return c.v===undefined?d:c.v;const v=get(k,d);RO_CACHE[k]={ts:Date.now(),v};return v;}
 /* One-time on load: re-save large uncompressed values compressed, which
    frees space immediately on a device that is already full. */
 function compactStorage(){let saved=0;
@@ -1693,6 +1700,8 @@ function pruneDatedMap(key,keepDays){
   }catch(e){return false}
 }
 function set(k,v){
+  if(RO_CACHE[k])delete RO_CACHE[k];if(typeof ARC_RO!=='undefined'&&ARC_RO[k])delete ARC_RO[k];
+  if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof CHAR_BRAIN_TS!=='undefined')CHAR_BRAIN_TS=0;   // new grades → the brain relearns now
   let payload;
   try{payload=JSON.stringify(v)}catch(e){console.warn('set: unserializable',k,e);return false}
   payload=_enc(payload);
@@ -16107,7 +16116,7 @@ function todaySnapshot(){
   const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
 }
 function onTicketMatch(sp,game,m,sd){
-  const L=get(LS.locked,[]).filter(t=>!t.archived);
+  const L=roGet(LS.locked,[],5000).filter(t=>!t.archived);
   return L.some(t=>(t.legs||[]).some(l=>{if((l.sport||'mlb')!==sp||l.game!==game)return false;
     const [a,h]=game.split('@');const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);return k&&k.market===m&&k.side===sd;}));
 }
@@ -16238,6 +16247,7 @@ function dailyLoopInject(){
       const v1=document.createElement('div');v1.className='view';v1.id='v-today';
       v1.innerHTML=`<div class="sbar" style="margin-top:0"><h2>Today's card</h2><div class="ln"></div></div>
         <div class="sub" style="margin-bottom:6px">Every gold, cyan, green and purple pick on today's boards — one per game and market, strongest first, conflicts left off. The letters are the characters on that side. Faded rows are already on a ticket.</div>
+        <div class="bar"><button onclick="loadAllSports()">⟳ Load all sports</button></div><div class="lasStatus sub mono" style="font-size:10px"></div>
         <div id="todayBody"></div><div class="bar"><button class="primary" onclick="renderToday()">Refresh</button></div>`;
       const v2=document.createElement('div');v2.className='view';v2.id='v-mine';
       v2.innerHTML=`<div class="sbar" style="margin-top:0"><h2>My games</h2><div class="ln"></div></div><div id="mineBody"></div>
@@ -16422,7 +16432,9 @@ function oddsSanityHtml(t){
 const MS_KEY='d4.missions';
 function msAll(){return get(MS_KEY,[])||[];}
 function msSave(A){set(MS_KEY,A);}
-function myLegRate(){
+let MLR=null;
+function myLegRate(){if(MLR&&Date.now()-MLR.ts<60e3)return MLR.v;const v=myLegRateCore();MLR={ts:Date.now(),v};return v;}
+function myLegRateCore(){
   let w=0,n=0;get(LS.locked,[]).forEach(t=>{if(!t.archived)return;(t.legs||[]).forEach(l=>{let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(g&&g.hit!=null){n++;if(g.hit)w++;}});});
   return n>=30?{p:(w+15)/(n+30),n,src:'your record'}:{p:0.5,n,src:'coin-flip legs (need 30 graded legs of yours)'};
 }
@@ -16525,7 +16537,7 @@ function rulesFor(sp,g,pick){
       else if(KEYNUM[a])out.push({icon:'🔑',kind:'principle',text:`${n>0?'+':'-'}${a} sits ON a key number — push risk`});}}
   // principle — sharp money vs tickets, heavy public
   try{const mk=k.market==='total'?'total':(k.market==='spread'?'spread':'moneyline');
-    const rows=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl&&(x.market===mk||(mk==='spread'&&x.market==='moneyline')));
+    const rows=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl&&(x.market===mk||(mk==='spread'&&x.market==='moneyline')));
     const bets=rows.filter(x=>x.metric!=='money').pop(),money=rows.filter(x=>x.metric==='money').pop();
     const pctOf=r=>!r?null:k.market==='total'?(k.side==='over'?r.overPct:r.underPct):(k.side==='home'?r.homePct:r.awayPct);
     const pb=pctOf(bets),pm=pctOf(money);
@@ -16727,6 +16739,7 @@ function msBestSingle(m){const M={...m};delete M.routeKey;const k=[m.id,'best',m
   const best=keys.map((kk,i)=>({...msParse(kk),...msSimFor(M,[{balance:m.balance,start:m.start,routeKey:kk,rule:m.rule}],800,i*131)})).sort((a,b)=>b.p-a.p)[0];
   return(MS_PLAN_CACHE[k]=best);}
 function msActiveRoute(m){if(m.pots)return null;if(!m.routeKey)return msBestSingle(m);const all=msRoutes(m);return all.find(r=>msRouteKey(r)===m.routeKey)||{...msParse(m.routeKey),...msSimFor(m,null,1500)};}
+function msSetSport(id,v){const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;m.sport=v==='all'?null:v;msSave(A);msRender();}
 function msPickRoute(id,key){const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;m.routeKey=key;msSave(A);msRender();}
 function msCheckpoints(m){const G=m.goal/m.start;return MS_CHECKPOINTS.map((n,i)=>({name:n,amt:Math.round(m.start*Math.pow(G,(i+1)/MS_CHECKPOINTS.length))}));}
 function msDifficulty(p){return MS_DIFF.find(d=>p>=d[0]);}
@@ -16778,12 +16791,12 @@ function msCheckQuest(q,t){
 }
 function msXP(){return msAll().reduce((a,m)=>a+(m.xp||0),0);}
 function msRank(xp){let r=MS_RANKS[0];MS_RANKS.forEach(x=>{if(xp>=x[0])r=x;});const nx=MS_RANKS.find(x=>x[0]>xp);return{name:r[1],next:nx};}
-function msStart(id){
+function msStart(id,scope){
   const T=MS_TEMPLATES[id]||MS_TEMPLATES[{ladder:'ladder',heist:'heist',grind:'grind',weekend:'weekend_warrior',custom:'custom'}[id]];if(!T)return;
   let start=T.start,goal=T.goal,days=T.days;
   if(T.id==='custom'){start=+prompt('Starting balance $',T.start)||T.start;goal=+prompt('Goal $',T.goal)||T.goal;days=+prompt('Days',T.days)||T.days;}
   const m={id:Date.now()+Math.floor(Math.random()*1000),type:T.id,name:T.name,start,goal,days,startDate:today(),balance:start,attempt:1,steps:[],status:'active',
-    routeKey:T.route||null,rule:T.rule||null,sport:T.sport||null,xp:0,safe:0,legs:T.route?(msParse(T.route).cfg.k||2):2};
+    routeKey:T.route||null,rule:T.rule||null,sport:scope===undefined?(T.sport||null):(scope==='all'?null:scope),xp:0,safe:0,legs:T.route?(msParse(T.route).cfg.k||2):2};
   if(T.pots){m.pots=T.pots.map(([name,share,route,rule,sport])=>({name,share,routeKey:route,rule:rule||null,sport:sport||null,start:+(start*share).toFixed(2),balance:+(start*share).toFixed(2),safe:0}));m.routeKey=null;}
   try{const S=msSimFor(m,null,1500);m.diff=msDifficulty(S.p)[1];m.p0=S.p;}catch(e){}
   const A=msAll();A.push(m);msSave(A);msRender();
@@ -16818,7 +16831,7 @@ function msSync(){
 }
 function msAttach(id,sel,pot){const tid=sel.value;if(!tid)return;const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;
   if(m.steps.some(s=>String(s.ticketId)===tid))return;const t=get(LS.locked,[]).find(x=>String(x.id)===tid);
-  const P=m.pots?m.pots[pot||0]:null;const rule=P?P.rule:m.rule,sport=P?P.sport:m.sport;
+  const P=m.pots?m.pots[pot||0]:null;const rule=P?P.rule:m.rule,sport=P?(P.sport||m.sport||null):m.sport;
   const qs=msQuestsToday(m).map(q=>({id:q.id,name:q.name,xp:q.xp,done:q.id==='clv'?null:msCheckQuest(q,t)}));
   qs.forEach(q=>{if(q.done)m.xp=(m.xp||0)+q.xp;});
   const rc=msRuleCheck(t,rule,sport);
@@ -16830,13 +16843,17 @@ function msPotOrders(m,P,routeObj){
   const lanes=[];const r2=x=>Math.max(1,Math.round(x*2)/2);
   if(r.route==='twolane'){const st=Math.max(1,b*0.2);lanes.push({lab:'Anchor',stake:r2(st*0.6),k:2},{lab:'Moonshot',stake:r2(st*0.4),k:4});}
   else lanes.push({lab:'The play',stake:Math.min(b,r2(msStakeFor(r.route,r.cfg,b,P.start))),k:r.cfg.k||2});
-  return lanes.map(x=>{const minDec=Math.pow(L.dec,x.k);return{...x,minDec,build:msBuildTicket(x.k,minDec,P.rule,P.sport)};});
+  return lanes.map(x=>{const minDec=Math.pow(L.dec,x.k);return{...x,minDec,build:msBuildTicket(x.k,minDec,P.rule,P.sport||m.sport||null)};});
 }
 function msOrders(m){ // kept for single-pot callers
   const r=msActiveRoute(m);const P=msPotsOf(m)[0];const lanes=msPotOrders(m,P,r);const cps=msCheckpoints(m);
   return{r,lanes,cps,nextCp:cps.find(c=>c.amt>m.balance+(m.safe||0)),$:x=>'$'+(Math.round(x*2)/2).toFixed(2)};
 }
 const ms$=x=>'$'+(+x).toFixed(2);
+const MS_SP_OPTS=[['all','All sports'],['nfl','NFL only'],['ncaaf','CFB only'],['mlb','MLB only'],['nhl','NHL only']];
+function msSportSelect(cur,onchange,id){return`<select ${id?`id="${id}"`:''} ${onchange?`onchange="${onchange}"`:''} style="font-size:11px;padding:4px 6px">${MS_SP_OPTS.map(([v,l])=>`<option value="${v}" ${(cur||'all')===v?'selected':''}>${l}</option>`).join('')}</select>`;}
+/* Which sports Today's card has picks for right now. */
+function tcSportsLoaded(){const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};return['nfl','ncaaf','mlb','nhl'].filter(sp=>by[sp]&&(by[sp].picks||[]).length);}
 function msLaneHtml(L){const B=L.build.best;
   const legs=B?B.legs.map(x=>`<div class="mono" style="font-size:10.5px;padding-left:8px">• ${esc(x.pick)} <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> <span style="color:${TC_COL[x.color][0]}">${TC_COL[x.color][1]}</span>${(x.rules||[]).slice(0,1).map(r=>' '+r.icon).join('')} <span style="color:var(--mute)">${SP_LAB[x.sp]||''} ${esc(x.game)}</span></div>`).join(''):'';
   return`<div class="sub" style="margin-top:5px"><b>${L.lab}:</b> stake <b style="color:var(--gold)">${ms$(L.stake)}</b> on ${L.k===1?'a <b>single</b>':`a <b>${L.k}-team parlay</b>`} priced <b>${decimalToAmerican(L.minDec)} or longer</b> → pays ${ms$(L.stake*L.minDec)}+.</div>
@@ -16874,6 +16891,9 @@ function msCard(m){
     orders=`<div style="margin-top:8px;padding:10px;border-radius:10px;background:rgba(95,211,232,.06);border:1px solid rgba(95,211,232,.35)">
       <div class="mono" style="font-size:9px;letter-spacing:.1em;color:#5FD3E8">TODAY'S ORDERS · DAY ${Math.min(m.days,m.days-X.daysLeft+1)} OF ${m.days}${logged?` · ✓ ${logged} STEP${logged>1?'S':''} LOGGED`:''}</div>
       <div style="font-weight:800;margin:3px 0">${m.pots?'🧺 '+m.pots.length+' pots':msRouteLabel(r)} <span class="mono" style="font-size:10px;color:var(--mute)">— ${(fin*100).toFixed(fin<0.01?2:1)}% to finish from here</span></div>
+      ${(m.pots&&m.pots.every(P=>P.sport))?'':`<div class="mono" style="font-size:10px;margin:4px 0">Picks from ${msSportSelect(m.sport,`msSetSport(${m.id},this.value)`)}
+        ${(()=>{const have=tcSportsLoaded(),need=m.sport?[m.sport]:['nfl','ncaaf','mlb','nhl'];const miss=need.filter(x=>!have.includes(x));
+          return miss.length?` <span style="color:var(--gold)">· Today's card has no ${miss.map(x=>SP_LAB[x]).join(', ')} picks yet</span> <a href="#" onclick="loadAllSports();return false" style="color:var(--cold)">load them</a>`:` <span style="color:var(--win)">· ${need.length>1?'all sports loaded':'loaded'}</span>`;})()}</div>`}
       ${potBlocks}
       <div class="sub" style="margin-top:6px;font-size:11px"><b>Today's threshold:</b> ${(()=>{const n=cps.find(c=>c.amt>tot);return n?`next checkpoint <b>${n.name}</b> at $${n.amt.toLocaleString()} (${ms$(n.amt-tot)} away)`:'goal in reach';})()}.</div>
       <div class="sub" style="font-size:11px"><b>After it settles:</b> ${m.pots?'each pot follows its own plan; the mission is the total.':msAfter(r.route,m)}</div>
@@ -16911,14 +16931,14 @@ function msBoardHtml(){
       <div class="mono" style="font-size:10.5px">$${T.start} → $${T.goal.toLocaleString()} · ${T.days} days${first}</div>
       <div class="mono" style="font-size:9.5px;color:var(--mute)">${route}${T.rule?' · '+MS_FILTERS[T.rule].lab:''}${T.sport?' · '+SPORT_LAB[T.sport]:''}</div>
       <div class="sub" style="font-size:11px;margin:3px 0">${esc(T.note)}</div>
-      <button class="primary" onclick="msStart('${T.id}')">Start</button></div>`;}).join('');
+      <div class="bar" style="align-items:center">${T.pots&&T.pots.every(x=>x[4])?'':msSportSelect(T.sport,'',`msSp-${T.id}`)}<button class="primary" onclick="msStart('${T.id}',(document.getElementById('msSp-${T.id}')||{}).value)">Start</button></div></div>`;}).join('');
   return`<div class="subnav" style="flex-wrap:wrap">${Object.entries(MS_CATS).map(([k,l])=>`<button class="${MS_CAT===k?'on':''}" onclick="MS_CAT='${k}';msRender()">${l}</button>`).join('')}</div>${cards}`;
 }
 function missionsHtml(inner){
   const A=msSync();const xp=msXP(),R=msRank(xp);const act=A.filter(m=>m.status==='active');
   let exposure=0;act.forEach(m=>{try{msPotsOf(m).forEach(P=>{if(P.balance<1)return;msPotOrders(m,P,m.pots?null:msActiveRoute(m)).forEach(L=>exposure+=L.stake);});}catch(e){}});
   const head=`<div class="mono" style="font-size:10.5px;margin:2px 0 6px">RANK <b style="color:#FFD75E">${R.name.toUpperCase()}</b> · ${xp} XP${R.next?` · ${R.next[0]-xp} to ${R.next[1]}`:''}${act.length?` · ${act.length} running · today's stakes across missions <b style="color:var(--gold)">${ms$(exposure)}</b>`:''}</div>`;
-  const body=`${head}${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
+  const body=`${head}<div class="lasStatus sub mono" style="font-size:10px"></div>${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
     <div class="sbar" style="margin-top:12px"><h2>Mission board · ${MS_LIB.length}</h2><div class="ln"></div></div>
     <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Difficulty and finish % are simulated on ${myLegRate().src}. They move as your record grows.</div>
     ${msBoardHtml()}`;
@@ -16964,6 +16984,40 @@ async function regradeAllProps(statusEl){
     return{legs:done,games:games.length,left};
   }finally{BT_BUSY=false;}
 }
-function btAutoOnce(){try{if(get('d4.btDay','')===today())return;const past=btUngraded().filter(x=>String(x.l.gameDate||x.t.date).slice(0,10)<today());
+function btAutoOnce(){if(typeof BG_MODE!=='undefined'&&BG_MODE)return;try{if(get('d4.btDay','')===today())return;const past=btUngraded().filter(x=>String(x.l.gameDate||x.t.date).slice(0,10)<today());
   if(past.length)setTimeout(()=>regradeAllProps(),800);}catch(e){}}
 function btBarHtml(){return`<div class="bar" style="margin:6px 0"><button onclick="regradeAllProps()">↻ Regrade props (pull final box scores)</button></div><div id="btStatus" class="sub mono" style="font-size:10px"></div>`;}
+
+
+/* ══ LOAD ALL SPORTS ═════════════════════════════════════════════════════════
+   Today's card only knows a sport once its board has run today. This loads
+   each missing sport's page in a hidden frame, one at a time, lets its board
+   render (which files that sport's picks into Today's card), then closes it.
+   Your current sport choice is saved first and put back after. */
+const BG_MODE=typeof location!=='undefined'&&/[?&]bg=1/.test(location.search||'');
+let LAS_BUSY=false;
+async function loadAllSports(opts){
+  if(LAS_BUSY||BG_MODE)return;LAS_BUSY=true;opts=opts||{};
+  const say=h=>{document.querySelectorAll('.lasStatus').forEach(e=>e.innerHTML=h);};
+  const keep=(()=>{try{return localStorage.getItem('d4.activeSport')}catch(e){return null}})();
+  const here=window.__PAGE_SPORT__||ACTIVE_SPORT;
+  const todo=(opts.sports||['nfl','ncaaf','mlb','nhl']).filter(sp=>sp!==here&&(opts.force||!tcSportsLoaded().includes(sp)));
+  try{
+    try{todaySnapshot()}catch(e){}
+    for(const sp of todo){
+      say(`Loading ${SP_LAB[sp]} board in the background…`);
+      const t0=Date.now();const f=document.createElement('iframe');
+      f.src=SPORT_PAGE[sp]+'?bg=1';f.setAttribute('aria-hidden','true');f.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;border:0;opacity:0';
+      document.body.appendChild(f);
+      const got=await new Promise(res=>{const iv=setInterval(()=>{const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[sp];
+        if(B&&B.ts>=t0){clearInterval(iv);res(true);}else if(Date.now()-t0>(opts.timeout||45000)){clearInterval(iv);res(false);}},500);});
+      try{f.remove()}catch(e){}
+      try{if(keep!=null)localStorage.setItem('d4.activeSport',keep)}catch(e){}
+      if(!got)say(`${SP_LAB[sp]} didn't finish loading — try that board directly.`);
+    }
+    const have=tcSportsLoaded();
+    say(`<span style="color:var(--win)">✓ Today's card: ${have.length?have.map(x=>SP_LAB[x]).join(' · '):'no picks yet (upload today\'s lines first)'}</span>`);
+    try{const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);}catch(e){}
+    try{msRender()}catch(e){}
+  }finally{LAS_BUSY=false;try{if(keep!=null)localStorage.setItem('d4.activeSport',keep)}catch(e){}}
+}
