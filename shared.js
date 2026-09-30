@@ -101,6 +101,10 @@ function intakeAbbr(sport,raw){
    nothing is half-saved. MLB's parser is in shared.js; football's is not. */
 /* Ticket money arrives as text ("$1.85", "$1,159.51"). parseFloat("$1.85") is NaN,
    so a real ticket's own stake / to-win never registered — every reader goes through this. */
+/* A real American price: EVEN → +100; anything with |price| < 100, 0, NaN or empty is not a price.
+   A single 0 once slipped into the NHL lines and showed as "0 · +Infinity% EV", made the edge chip crown
+   it, and flipped the Judge (a 0 price reads as a 0% win chance). Every layer now refuses it. */
+function amerOk(p){if(p==null||p==='')return null;if(/^\s*(ev|even|evs)\s*$/i.test(String(p)))return 100;const n=+String(p).replace(/[^0-9.+\-]/g,'');return isFinite(n)&&Math.abs(n)>=100?n:null;}
 const moneyNum=x=>{const n=parseFloat(String(x==null?'':x).replace(/[^0-9.\-]/g,''));return isNaN(n)?NaN:n;};
 const moneyStr=x=>{const n=moneyNum(x);return isNaN(n)?null:String(n);};
 /* Can this page turn a TICKET's team names into abbreviations? (Slate text needs the sport's parser too; a ticket doesn't.) */
@@ -785,7 +789,7 @@ function brainAdapter(sport){
     market:(g,lines)=>{
       const to=lines.find(x=>x.market==='total');if(!to||to.line==null)return null;
       let pH=null;const mh=lines.find(x=>x.market==='moneyline'&&x.side==='home'),ma=lines.find(x=>x.market==='moneyline'&&x.side==='away');
-      if(mh&&ma){const a=imp(ma.price),h=imp(mh.price);pH=h/(a+h);}
+      if(mh&&ma&&amerOk(ma.price)!=null&&amerOk(mh.price)!=null){const a=imp(amerOk(ma.price)),h=imp(amerOk(mh.price));pH=h/(a+h);}
       else{const M=typeof marketOf==='function'?marketOf(g):null;if(M)pH=M.fh;}
       if(pH==null)return null;
       const mu=4.3*brainProbit(Math.max(0.05,Math.min(0.95,pH)));const T=+to.line;
@@ -1235,7 +1239,7 @@ function characterCalls(sp,g,s){
     const pr=market==='ml'?(side==='home'?Ln.mlH:Ln.mlA):market==='spread'?(side==='home'?Ln.spH:Ln.spA):market==='total'?(side==='over'?Ln.ov:Ln.un):null;
     const pick=market==='ml'?(side==='home'?H:A)+' ML':market==='spread'?(side==='home'?H:A)+' '+(line>0?'+':'')+line:(side==='over'?'Over ':'Under ')+line;
     calls.push({id:[sp,gl,d,voice,market].join('|'),sp,date:d,game:gl,gid:g.id,voice,market,side,line,
-      simLine:(market==='spread'&&hlSim)||(market==='total'&&tlSim),price:pr&&pr.price!=null?+pr.price:null,pick,...(extra||{})});};
+      simLine:(market==='spread'&&hlSim)||(market==='total'&&tlSim),price:pr?amerOk(pr.price):null,pick,...(extra||{})});};
   const byMargin=(voice,a,h,extra)=>{if(a!==h)add(voice,'ml',h>a?'home':'away',extra);
     if(hl!=null&&(h-a)+hl!==0)add(voice,'spread',(h-a)+hl>0?'home':'away',extra);
     if(tl!=null&&a+h!==tl)add(voice,'total',a+h>tl?'over':'under',extra);};
@@ -1335,7 +1339,8 @@ function charBrain(){
     const ag=others.filter(x=>x.side===sim.side).length,sh=ag/others.length;
     const bucket=sh>=0.99?'all back the app':sh>=0.6?'most back the app':sh>0.4?'split':sh>0?'most fade the app':'all fade the app';
     bump(B.agree[bucket]||(B.agree[bucket]={n:0,w:0}),sim.hit);
-    others.forEach(o=>{const k='Sim+'+o.voice+(o.side===sim.side?' agree':' disagree');bump(B.combo[k]||(B.combo[k]={n:0,w:0}),sim.hit);});
+    others.forEach(o=>{const k='Sim+'+o.voice+(o.side===sim.side?' agree':' disagree');bump(B.combo[k]||(B.combo[k]={n:0,w:0}),sim.hit);
+      const k2=sim.sp+'|'+sim.market+'|'+k;bump(B.combo[k2]||(B.combo[k2]={n:0,w:0}),sim.hit);});
   });
   CHAR_BRAIN=B;CHAR_BRAIN_SIG=sig;return B;
 }
@@ -1736,7 +1741,7 @@ function isQuotaErr(e){
    the first (stale) match. Props key on player + stat + line so two players at
    the same number no longer overwrite each other. */
 function bookKeyOf(x){return x.market==='prop'?[x.game,x.market,x.side,x.line,x.player||'',x.stat||''].join('|'):[x.game,x.market,x.side,x.src||''].join('|');}
-function bookDedupe(arr){const last={};(arr||[]).forEach((x,i)=>{const k=bookKeyOf(x);const p=last[k];
+function bookDedupe(arr){arr=(arr||[]).filter(x=>x.market==='prop'||x.price==null||amerOk(x.price)!=null);const last={};(arr||[]).forEach((x,i)=>{const k=bookKeyOf(x);const p=last[k];
   if(p==null||(x.capturedAt||i)>=(arr[p].capturedAt||p))last[k]=i;});const keep=new Set(Object.values(last));return(arr||[]).filter((x,i)=>keep.has(i));}
 const PRUNE_LADDER=[
   ()=>pruneKeyedCache('d4.boxcache',120),      // box scores — refetchable from StatsAPI
@@ -2601,6 +2606,7 @@ function saveFootballOddsToStorage(sport,picks){
     const rec={away:awayAb,home:homeAb,game,market:x.market,side:x.side,
       line:x.line!=null?x.line:null,price:x.price,player:x.player||null,
       stat:x.stat||null,gid:null,capturedAt:Date.now()};
+    if(rec.price!=null&&amerOk(rec.price)==null)return;rec.price=rec.price==null?null:amerOk(rec.price);
     const k=keyOf(rec),i=all[d].findIndex(y=>keyOf(y)===k);
     if(i>=0)all[d][i]=rec;else all[d].push(rec);
   });
@@ -16641,8 +16647,8 @@ function rulesFor(sp,g,pick){
     const p=(o.w+CHAR_KC*0.5)/(o.n+CHAR_KC),lab=(o===m?k.market:cx);
     if(p>=0.58)out.push({icon:'🔥',kind:'learned',text:`${CHARS[c.voice].chip} ${o.w}-${o.n-o.w} ${sp.toUpperCase()} ${lab}`});
     else if(p<=0.42)out.push({icon:'🧊',kind:'learned',text:`${CHARS[c.voice].chip} ${o.w}-${o.n-o.w} ${lab} — fade`});});
-  try{const B=charBrain();if(calls.some(c=>c.voice==='Sim'))calls.filter(c=>c.voice!=='Sim').forEach(c=>{const o=B.combo['Sim+'+c.voice+' agree'];
-    if(o&&o.n>=RULE_MIN&&(o.w+5)/(o.n+10)>=0.6)out.push({icon:'🤝',kind:'learned',text:`★+${CHARS[c.voice].chip} together ${o.w}-${o.n-o.w}`});});}catch(e){}
+  try{const B=charBrain();if(calls.some(c=>c.voice==='Sim'))calls.filter(c=>c.voice!=='Sim').forEach(c=>{const o=B.combo[sp+'|'+k.market+'|Sim+'+c.voice+' agree'];
+    if(o&&o.n>=RULE_MIN&&(o.w+5)/(o.n+10)>=0.6)out.push({icon:'🤝',kind:'learned',text:`★+${CHARS[c.voice].chip} ${sp.toUpperCase()} ${k.market==='ml'?'side':k.market} ${o.w}-${o.n-o.w}`});});}catch(e){}
   // principle — key numbers (football spreads)
   if((sp==='nfl'||sp==='ncaaf')&&k.market==='spread'){const n=+((String(pick).match(/([+-]\d+(?:\.\d+)?)/)||[])[1]);
     if(!isNaN(n)){const a=Math.abs(n),fl=Math.floor(a),ce=Math.ceil(a);

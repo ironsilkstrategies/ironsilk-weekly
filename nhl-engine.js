@@ -55,7 +55,7 @@ const nhlTeamName=a=>NHL_TEAMS[a]?NHL_TEAMS[a].join(' '):a;
 /* ── Small math ────────────────────────────────────────────────────────── */
 const nhlImp=a=>a==null||isNaN(a)?null:(a>0?100/(a+100):-a/(-a+100));
 const nhlProfit=a=>a>0?a/100:100/Math.abs(a);
-const nhlEV=(p,a)=>p==null||a==null||isNaN(a)?null:(p*nhlProfit(+a)-(1-p))*100;
+const nhlEV=(p,a)=>p==null||a==null||isNaN(a)||Math.abs(+a)<100?null:(p*nhlProfit(+a)-(1-p))*100;
 const nhlFair=p=>p==null?null:(p>=0.5?Math.round(-(p/(1-p))*100):Math.round(((1-p)/p)*100));
 const nhlSgn=n=>n==null?'—':(n>0?'+'+n:''+n);
 function nhlPois(l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random();}while(p>L);return k-1;}
@@ -72,12 +72,13 @@ const nhlQ=s=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 function nhlOddsFromEspn(c){
   const o=(c.odds||[])[0];if(!o)return null;
   const num=v=>{const n=parseFloat(String(v==null?'':v).replace(/[^0-9.+\-]/g,''));return isNaN(n)?null:n;};
-  const ml=side=>num(o[side+'TeamOdds']&&o[side+'TeamOdds'].moneyLine)??num(o.moneyline&&o.moneyline[side]&&(o.moneyline[side].close||o.moneyline[side].open||{}).odds);
-  const sp=side=>num(o[side+'TeamOdds']&&o[side+'TeamOdds'].spreadOdds)??num(o.pointSpread&&o.pointSpread[side]&&(o.pointSpread[side].close||{}).odds);
+  const px=v=>typeof amerOk==='function'?amerOk(v):num(v);
+  const ml=side=>px(o[side+'TeamOdds']&&o[side+'TeamOdds'].moneyLine)??px(o.moneyline&&o.moneyline[side]&&(o.moneyline[side].close||o.moneyline[side].open||{}).odds);
+  const sp=side=>px(o[side+'TeamOdds']&&o[side+'TeamOdds'].spreadOdds)??px(o.pointSpread&&o.pointSpread[side]&&(o.pointSpread[side].close||{}).odds);
   const spl=side=>num(o.pointSpread&&o.pointSpread[side]&&(o.pointSpread[side].close||{}).line);
   const tot=num(o.overUnder);
-  const ov=num(o.overOdds)??num(o.total&&o.total.over&&(o.total.over.close||{}).odds);
-  const un=num(o.underOdds)??num(o.total&&o.total.under&&(o.total.under.close||{}).odds);
+  const ov=px(o.overOdds)??px(o.total&&o.total.over&&(o.total.over.close||{}).odds);
+  const un=px(o.underOdds)??px(o.total&&o.total.under&&(o.total.under.close||{}).odds);
   return{awayML:ml('away'),homeML:ml('home'),awayPLp:sp('away'),homePLp:sp('home'),awayPL:spl('away'),homePL:spl('home'),total:tot,over:ov,under:un,details:o.details||''};
 }
 function nhlParseEvent(e){
@@ -244,9 +245,13 @@ function nhlDateOf(game){
   if(NHL_GAMES.some(z=>z.away.abbr+'@'+z.home.abbr===game))return today();
   const u=NHL_UPCOMING.find(z=>z.away.abbr+'@'+z.home.abbr===game);return u?u.__date:today();
 }
+(function(){try{const all=get('d4.nhlshots',{})||{};let bad=0;
+  Object.keys(all).forEach(d=>{const before=(all[d]||[]).length;all[d]=(all[d]||[]).filter(x=>amerOk(x.price)!=null);bad+=before-all[d].length;});
+  if(bad){set('d4.nhlshots',all);console.info('NHL: removed '+bad+' stored line(s) with an impossible price');}}catch(e){}})();
 function nhlLinesOn(d){return get(NHL_LS.shots,{})[d||today()]||[];}
 function nhlLinesToday(){return nhlLinesOn(today());}
 function nhlPutLines(rows){
+  rows=(rows||[]).map(r=>({...r,price:r.price==null?null:amerOk(r.price)})).filter(r=>r.price!=null);
   const all=get(NHL_LS.shots,{});
   const key=x=>[x.game,x.market,x.side,x.line,x.player||'',x.stat||'',x.src].join('|');
   rows.forEach(r=>{const d=r.date||nhlDateOf(r.game);all[d]=all[d]||[];
@@ -256,7 +261,7 @@ function nhlPutLines(rows){
 }
 /* Main line per market/side: your uploads beat live pulls beat ESPN. */
 function nhlBookLinesFor(game,date){
-  const L=nhlLinesOn(date||nhlDateOf(game)).filter(x=>x.game===game);const best={};
+  const L=nhlLinesOn(date||nhlDateOf(game)).filter(x=>x.game===game&&amerOk(x.price)!=null);const best={};
   L.forEach(x=>{const k=x.market==='prop'?[x.market,x.player,x.stat,x.side].join('|'):x.market+'|'+x.side;const b=best[k];
     const r=NHL_SRC_RANK[x.src]||0,br=b?(NHL_SRC_RANK[b.src]||0):-1;
     if(!b||r>br||(r===br&&(x.capturedAt||0)>(b.capturedAt||0)))best[k]=x;});
@@ -454,7 +459,7 @@ function nhlBrainAdapter(){
     trends:g=>nhlTrendsFor(g.away.abbr+'@'+g.home.abbr),cons:()=>Object.values(get(NHL_LS.cons,{})).flat(),
     snap:x=>Math.max(0,Math.round(x)),
     market:(g,lines)=>{const to=lines.find(x=>x.market==='total');const ma=lines.find(x=>x.market==='moneyline'&&x.side==='away'),mh=lines.find(x=>x.market==='moneyline'&&x.side==='home');
-      if(!to||to.line==null||!ma||!mh)return null;const a=nhlImp(ma.price),h=nhlImp(mh.price);const pH=h/(a+h);
+      if(!to||to.line==null||!ma||!mh)return null;const a=nhlImp(ma.price),h=nhlImp(mh.price);if(!(a>0&&h>0))return null;const pH=h/(a+h);
       const mu=2.35*brainProbit(Math.max(0.05,Math.min(0.95,pH)));const T=+to.line;return{a:(T-mu)/2,h:(T+mu)/2};},
     box:(A,H,bias)=>{const t=(x)=>{const p=[0.31,0.33,0.36].map(f=>Math.round(x*f*10)/10);return{p:p.join('-'),g:Math.round(x*10)/10,sog:Math.round(x/0.098*bias('sog'))};};
       return{away:t(A),home:t(H)};},
@@ -513,7 +518,7 @@ function nhlCard(g){
   const fav=s.hw>=s.aw?H:A;
   const evs=[];[['awayML',A+' ML',s.aw],['homeML',H+' ML',s.hw],['over','Over',L.over?s.over(L.over.line):null],['under','Under',L.under?s.under(L.under.line):null],
     ['awayPL',A+' PL',L.awayPL?s.awayCover(L.awayPL.line):null],['homePL',H+' PL',L.homePL?s.homeCover(L.homePL.line):null]]
-    .forEach(([k,lab,p])=>{const x=L[k];if(x&&p!=null)evs.push({lab:lab+(x.line!=null?' '+(k.endsWith('PL')?nhlSgn(x.line):x.line):''),ev:nhlEV(p,x.price)});});
+    .forEach(([k,lab,p])=>{const x=L[k];if(!x||p==null)return;const ev=nhlEV(p,x.price);if(ev==null||!isFinite(ev))return;evs.push({lab:lab+(x.line!=null?' '+(k.endsWith('PL')?nhlSgn(x.line):x.line):''),ev});});
   const best=evs.sort((a,b)=>b.ev-a.ev)[0];
   const chips=[`<div class="sigchip">O/U <b>${L.over?L.over.line:s.med}</b> · ${fav} ${L[fav===H?'homePL':'awayPL']?nhlSgn(L[fav===H?'homePL':'awayPL'].line):'-1.5'}</div>`,
     `<div class="sigchip">OT/SO ${(s.otP*100).toFixed(0)}%</div>`,`<div class="sigchip">P1 ${s.p1Proj.toFixed(2)} goals</div>`];
