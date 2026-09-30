@@ -845,8 +845,15 @@ function brainTrendEvidence(g,sport){
     else if(/\bunder\b/i.test(x)&&!/\bover\b/i.test(x)){kind='total';eff=-edge*C.trTot*tf;dTot+=eff;}
     else if(/\bats\b|cover|run ?line/i.test(x)){const sd=side(t);if(sd){kind='side';eff=sd*edge*C.trMar;dMar+=eff;}}
     else if(/\bsu\b|\bwon\b|\bwin/i.test(x)){const sd=side(t);if(sd){kind='side';eff=sd*edge*C.trMar/2;dMar+=eff;}}
-    if(kind)items.push({text:x.slice(0,110),rec:W+'-'+L,real:Math.round(ps*100),eff:+eff.toFixed(2),kind,tf:+tf.toFixed(2)});
+    if(kind)items.push({text:x.slice(0,110),rec:W+'-'+L,real:Math.round(ps*100),eff:+eff.toFixed(2),raw:eff,kind,tf:+tf.toFixed(2),n});
   });
+  /* Data-mined trends: "7-0-1 in their last 8 as a home underdog after a loss" is one of thousands of
+     splits someone searched until one looked good. Keep half of each trend's pull, scaled down for small
+     samples (full weight only at 20+ games), and let extra trends pointing the same way add less and less. */
+  dTot=0;dMar=0;
+  ['total','side'].forEach(kd=>{const it=items.filter(i=>i.kind===kd).map(i=>({...i,adj:i.raw*0.5*Math.min(1,i.n/20)}));
+    const pos=it.filter(i=>i.adj>0).sort((a,b)=>b.adj-a.adj),neg=it.filter(i=>i.adj<0).sort((a,b)=>a.adj-b.adj);
+    [pos,neg].forEach(L=>L.forEach((i,r)=>{const v=i.adj/(r+1);const orig=items.find(o=>o.text===i.text&&o.kind===kd);if(orig)orig.eff=+v.toFixed(3);if(kd==='total')dTot+=v;else dMar+=v;}));});
   return{dTot:Math.max(-C.trTotCap,Math.min(C.trTotCap,dTot)),dMar:Math.max(-C.trMarCap,Math.min(C.trMarCap,dMar)),items};
 }
 function brainMoney(g,sport){
@@ -1250,6 +1257,13 @@ function characterCalls(sp,g,s){
     else if(sp==='mlb'&&typeof rlProb==='function'){const ph=rlProb(g,s,'home',-hl),pa=rlProb(g,s,'away',hl);if(ph!=null&&pa!=null)add('Sim','spread',ph>=pa?'home':'away');}
   }
   if(tl!=null&&typeof s.over==='function'){const p=s.over(tl);if(Math.abs(p-0.5)>1e-9)add('Sim','total',p>0.5?'over':'under');}
+  // attach the Sim's own chance and the market's fair chance to each Sim call (calibration + blend learn from these)
+  try{calls.filter(c=>c.voice==='Sim').forEach(c=>{let p=null;
+    if(c.market==='ml')p=c.side==='home'?s.hw:s.aw;
+    else if(c.market==='total'&&typeof s.over==='function'){const o=s.over(c.line);p=c.side==='over'?o:(typeof s.under==='function'?s.under(c.line):1-o);}
+    else if(c.market==='spread'){if(typeof s.homeCover==='function')p=c.side==='home'?s.homeCover(c.line):s.awayCover(c.line);else if(sp==='mlb'&&typeof rlProb==='function')p=c.side==='home'?rlProb(g,s,'home',-c.line):rlProb(g,s,'away',c.line);}
+    if(p>0&&p<1)c.simP=+p.toFixed(4);
+    const mf=marketFair(sp,g,c.market,c.side,c.line);if(mf)c.mktP=+mf.p.toFixed(4),c.mktSrc=mf.src;});}catch(e){}
   // Judge
   let J=null;try{J=brainJudge(g,s,sp)}catch(e){}
   if(J){add('Judge','ml',J.pHome>=0.5?'home':'away');
@@ -1379,7 +1393,9 @@ function charSquare(sp,g,s,pick,opts){
   if(!calls.length)return none;
   const ctx=k.market==='total'?k.side:(opts.price!=null?(opts.price<0?'fav':'dog'):(opts.line!=null?(opts.line<0?'fav':'dog'):null));
   const sim=calls.find(c=>c.voice==='Sim'),others=calls.filter(c=>c.voice!=='Sim');
-  let wOn=0,wAll=0,z=opts.modelP!=null?logit(opts.modelP):null,learned=false;
+  let base=opts.modelP;try{const mf=marketFair(sp,g,k.market,k.side,opts.line!=null?opts.line:(calls[0]&&calls[0].line!=null?(k.side===calls[0].side?calls[0].line:(k.market==='spread'?-calls[0].line:calls[0].line)):null));
+    if(base!=null&&mf)base=blendProb(sp,k.market,base,mf.p);}catch(e){}
+  let wOn=0,wAll=0,z=base!=null?logit(base):null,learned=false;
   const chipHtml=[];
   CHAR_ORDER.forEach(v=>{const c=calls.find(x=>x.voice===v);if(!c)return;
     const r=charWeight(sp,v,k.market,c.side===k.side?ctx:null);const on=c.side===k.side;
@@ -1770,7 +1786,8 @@ function pruneDatedMap(key,keepDays){
 }
 function set(k,v){
   if(RO_CACHE[k])delete RO_CACHE[k];if(typeof ARC_RO!=='undefined'&&ARC_RO[k])delete ARC_RO[k];
-  if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof CHAR_BRAIN_TS!=='undefined')CHAR_BRAIN_TS=0;   // new grades → the brain relearns now
+  if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof CHAR_BRAIN_TS!=='undefined')CHAR_BRAIN_TS=0;
+  if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof BLEND_C!=='undefined')BLEND_C=null;   // new grades → the brain relearns now
   let payload;
   try{payload=JSON.stringify(v)}catch(e){console.warn('set: unserializable',k,e);return false}
   payload=_enc(payload);
@@ -2825,7 +2842,7 @@ function tab(n,b){
   if(n==='best'){bestTab(BESTTAB||'today');}
   if(n==='settings')fillSettingsTab();
   if(n==='settings'){const m=document.getElementById('storageMeter');if(m)m.innerHTML=storageMeterHtml();}
-  if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+missionsHtml()}catch(e){console.warn('missions',e)}el.innerHTML=h+renderMoneyTab();}}
+  if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+missionsHtml()}catch(e){console.warn('missions',e)}el.innerHTML=h+renderMoneyTab();}}
   if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
   if(n==='today')renderToday();
   if(n==='grades')renderRecordsHub();
@@ -8354,7 +8371,7 @@ function refreshPayout(id,decOdds,stake){
   if(subEl)subEl.textContent='+$'+res.profit.toFixed(2)+' profit';
   if(pillEl)pillEl.classList.toggle('neg',res.profit<0);
 }
-function buildWagerRow(t){let x='';try{x=hedgeHtml(t)+oddsSanityHtml(t)}catch(e){}return buildWagerRowCore(t)+x;}
+function buildWagerRow(t){let x='';try{x=hedgeHtml(t)+oddsSanityHtml(t)+parlayCorrHtml(t)}catch(e){}return buildWagerRowCore(t)+x;}
 function buildWagerRowCore(t){
   const w=getWagers();
   const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
@@ -16197,7 +16214,10 @@ function todayCandidates(sp){
   });
   // one pick per game-market: if both sides somehow qualify, keep the stronger
   const best={};out.forEach(x=>{const k=x.game+'|'+x.m;if(!best[k]||x.rank>best[k].rank)best[k]=x;});
-  return Object.values(best).sort((a,b)=>b.rank-a.rank);
+  const res=Object.values(best).sort((a,b)=>b.rank-a.rank);
+  res.forEach(x=>{try{const g=games.find(z=>z.id===x.gid);const mf=g?marketFair(sp,g,x.m,x.sd,null):null;x.mkt=mf?mf.p:null;x.blend=x.mp!=null?blendProb(sp,x.m,x.mp,x.mkt):null;}catch(e){}});
+  try{correlatedStakes(res)}catch(e){}
+  return res;
 }
 /* Model props at ≥70%: the most aggressive line each player still clears 70% on. */
 function todayProps(sp){
@@ -16245,7 +16265,7 @@ function renderToday(noSnap){
       const pc=x.brainP!=null?`brain ${Math.round(x.brainP*100)}%`:x.mp!=null?`model ${Math.round(x.mp*100)}%`:'';
       return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${c};background:rgba(255,255,255,.02);${on?'opacity:.55':''}">
         <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${esc(x.pick)} <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${pr}</span></div>
-          <div class="mono" style="font-size:9.5px;color:var(--mute)">${esc(x.game)} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${(()=>{const K=kellyStake(x.brainP!=null?x.brainP:x.mp,x.price);return K&&K.f>0?` · <b style="color:var(--win)">stake ${K.amt!=null?'$'+K.amt.toFixed(2):(K.f*100).toFixed(1)+'% of bankroll'}</b>`:'';})()}</div>
+          <div class="mono" style="font-size:9.5px;color:var(--mute)">${esc(x.game)} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${x.blend!=null&&x.mkt!=null?` · blend ${Math.round(x.blend*100)}% (mkt ${Math.round(x.mkt*100)}%)`:''}${x.stakeF>0?` · <b style="color:var(--win)">stake ${x.stakeAmt!=null?'$'+x.stakeAmt.toFixed(2):(x.stakeF*100).toFixed(1)+'% of bankroll'}</b>${x.capped?' <span style="color:var(--mute)">(day capped at 10%)</span>':''}`:''}</div>
           <div class="hs-row" style="justify-content:flex-start">${x.chars.map(chip).join('')}</div>${x.rules&&x.rules.length?`<div class="rule-row" style="justify-content:flex-start">${x.rules.slice(0,3).map(r=>`<span class="rule ${r.kind}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:''}</div>
         <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:${c};font-weight:800">${l}${on?'<br><span style="color:var(--win)">✓ ON A TICKET</span>':''}</div></div>`;}).join('');
     const props=(B.props||[]).map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${esc(x.name)}</b> ${x.line}+ ${esc(x.lab)} <b style="color:var(--win)">${Math.round(x.p*100)}%</b> <span style="color:var(--mute)">· proj ${x.proj} · ${esc(x.game)}${x.book?' · book '+tcSgn(x.price):''}</span></div>`).join('');
@@ -16367,7 +16387,7 @@ function dailyLoopInject(){
       const v1=document.createElement('div');v1.className='view';v1.id='v-today';
       v1.innerHTML=`<div class="sbar" style="margin-top:0"><h2>Today's card</h2><div class="ln"></div></div>
         <div class="sub" style="margin-bottom:6px">Every gold, cyan, green and purple pick on today's boards — one per game and market, strongest first, conflicts left off. The letters are the characters on that side. Faded rows are already on a ticket.</div>
-        <div class="bar"><button onclick="loadAllSports()">⟳ Load all sports</button></div><div class="lasStatus sub mono" style="font-size:10px"></div>
+        <div class="bar"><button onclick="loadAllSports()">⟳ Load all sports</button><button onclick="(async()=>{const e=document.querySelector('.sharpStatus');try{e.textContent='Pulling Pinnacle…';const r=await pullSharp();e.innerHTML='<span style=\'color:var(--win)\'>✓ '+r.n+' sharp prices ('+r.sports.map(x=>x.toUpperCase()).join(', ')+') — ⚡ badges now show where your book is behind</span>';renderToday(true);}catch(x){e.innerHTML='<span style=\'color:var(--rust)\'>'+x.message+'</span>';}})()">⚡ Pull sharp lines</button></div><div class="sharpStatus sub mono" style="font-size:10px"></div><div class="lasStatus sub mono" style="font-size:10px"></div>
         <div id="todayBody"></div><div class="bar"><button class="primary" onclick="renderToday()">Refresh</button></div>`;
       const v2=document.createElement('div');v2.className='view';v2.id='v-mine';
       v2.innerHTML=`<div class="sbar" style="margin-top:0"><h2>My games</h2><div class="ln"></div></div><div id="mineBody"></div>
@@ -16439,7 +16459,10 @@ function renderRecordsHub(){
     <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+':''}$${Y.tickets.units.toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
     <div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;border-collapse:collapse;text-align:center">
       <tr style="color:var(--mute)"><td></td><td>ALL</td><td>MLB</td><td>NFL</td><td>CFB</td><td>NHL</td></tr>${rows.join('')}</table></div>
-    <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = winning over 10+ calls, red = losing. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div></div>`+(()=>{try{return clvHtml()+playbooksHtml()}catch(e){console.warn('clv/playbooks',e);return''}})();
+    <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = winning over 10+ calls, red = losing. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div>
+    <div style="margin-top:6px">${[['You (picks)',sum(Y.picks)]].concat(HUB_VOICES.filter(v=>D.M[v]).map(v=>[(CHARS[v]?CHARS[v].chip+' ':'')+v,sum(D.M[v])])).map(([nm,o])=>{const L=luckSkill(o.w,o.n);
+      return o.n?`<div class="mono" style="font-size:9.5px">${esc(nm)}: ${o.w}-${o.n-o.w} → <b style="color:${L.lab==='strong sign of skill'?'var(--win)':L.lab==='leaning skill'?'var(--cold)':L.lab==='below breakeven'?'var(--rust)':'var(--mute)'}">${L.lab}</b>${L.p!=null?` <span style="color:var(--mute)">(p=${L.p.toFixed(2)})</span>`:''}</div>`:'';}).join('')}
+    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: how likely a pure -110 coin-flipper would post that record. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{return clvHtml()+calibrationHtml()+playbooksHtml()}catch(e){console.warn('clv/playbooks',e);return''}})();
 }
 /* Tabs you use daily stay in front; the rest sit under More. */
 const NAV_PRIMARY=['games','today','mine','tickets','grades','money'];
@@ -16592,7 +16615,21 @@ function clvCapture(sp){
       if(!L||L.price==null)return;const k=sp+'|'+gl+'|'+m+'|'+sd,cur={line:L.line!=null?+L.line:null,price:+L.price,ts:Date.now()};
       const e=D[k];if(!e){D[k]={open:cur,close:cur};n++;return;}
       if(e.close.price!==cur.price||e.close.line!==cur.line){e.close=cur;n++;}});});
+  // the sharp book's own open → close, keyed "side|S"
+  try{G.forEach(g=>{const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');if(!pre)return;const gl=g.away.abbr+'@'+g.home.abbr;
+    sharpRows(sp,gl).forEach(x=>{const k=sp+'|'+gl+'|'+x.market+'|'+x.side+'|S',cur={line:x.line,price:x.price,ts:x.ts||Date.now()};const e=D[k];
+      if(!e){D[k]={open:cur,close:cur};n++;}else if(e.close.price!==cur.price||e.close.line!==cur.line){e.close=cur;n++;}});});}catch(e){}
   if(n){Object.keys(A).sort().slice(0,-30).forEach(k=>delete A[k]);set(CLV_KEY,A);}return n;
+}
+/* CLV against the SHARP close: your price's expected value if the Pinnacle closing price was the truth. */
+function clvLegSharp(l,t){
+  if(l.price==null||amerOk(l.price)==null)return null;const sp=l.sport||'mlb';const[a,h]=String(l.game).split('@');
+  const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);if(!k)return null;const d=l.gameDate||t.date;
+  const other={away:'home',home:'away',over:'under',under:'over'}[k.side];
+  const me=clvEntry(sp,l.game,k.market,k.side+'|S',d),op=clvEntry(sp,l.game,k.market,other+'|S',d);if(!me||!op)return null;
+  const my=(String(l.pick).match(/([+-]?\d+(?:\.\d+)?)\s*$/)||[])[1];if(k.market!=='ml'&&(my==null||+my!==me.close.line))return null;
+  const f=fairPair(me.close.price,op.close.price);if(!f)return null;
+  return{ev:(f[0]*americanToDecimal(amerOk(l.price))-1)*100,fair:f[0]};
 }
 function clvEntry(sp,game,m,sd,date){const A=get(CLV_KEY,{})||{};return((A[String(date||'').slice(0,10)]||{})[sp+'|'+game+'|'+m+'|'+sd])||null;}
 /* One leg vs the close: chance points (+ = you beat it) when the line matches, points when it moved. */
@@ -16611,7 +16648,7 @@ function clvMove(sp,game,m,sd,date){const e=clvEntry(sp,game,m,sd,date);if(!e||e
   if(e.open.line!==e.close.line&&m!=='ml'){const dp=m==='total'?(sd==='over'?e.close.line-e.open.line:e.open.line-e.close.line):(e.open.line-e.close.line);return dp*(sp==='nfl'||sp==='ncaaf'?3:sp==='nhl'?8:6);}
   return(imp(e.close.price)-imp(e.open.price))*100;}
 function clvSummary(){
-  const you={n:0,s:0,pn:0,ps:0};get(LS.locked,[]).forEach(t=>{if(TRACKED_ONLY_SOURCES.has(t.source))return;(t.legs||[]).forEach(l=>{const c=clvLeg(l,t);if(!c)return;
+  const you={n:0,s:0,pn:0,ps:0,sn:0,ss:0};get(LS.locked,[]).forEach(t=>{if(TRACKED_ONLY_SOURCES.has(t.source))return;(t.legs||[]).forEach(l=>{const sh=clvLegSharp(l,t);if(sh){you.sn++;you.ss+=sh.ev;}const c=clvLeg(l,t);if(!c)return;
     if(c.pct!=null){you.n++;you.s+=c.pct;}else{you.pn++;you.ps+=c.pts;}});});
   const ch={};get(VOICES_KEY,[]).forEach(x=>{if(!CHARS[x.voice])return;const mv=clvMove(x.sp,x.game,x.market,x.side,x.date);if(mv==null)return;
     const o=ch[x.voice]||(ch[x.voice]={n:0,s:0});o.n++;o.s+=mv;});
@@ -16622,6 +16659,7 @@ function clvHtml(){
   const col=(s,n)=>!n?'var(--mute)':s/n>0.3?'var(--win)':s/n<-0.3?'var(--rust)':'var(--chalk)';
   const rows=CHAR_ORDER.filter(v=>S.ch[v]).map(v=>`<span style="margin-right:10px;color:${CHARS[v].color}">${CHARS[v].chip} <b style="color:${col(S.ch[v].s,S.ch[v].n)}">${f(S.ch[v].s,S.ch[v].n)}</b> <span style="color:var(--mute)">(${S.ch[v].n})</span></span>`).join('');
   return`<div class="tkt" style="margin-bottom:8px"><h3>Closing line value</h3>
+    ${S.you.sn?`<div class="sub"><b>vs the SHARP close (Pinnacle):</b> <b style="color:${col(S.you.ss,S.you.sn)}">${f(S.you.ss,S.you.sn)}% EV</b> per priced leg over ${S.you.sn} — the number the pros go by</div>`:`<div class="sub mono" style="font-size:9.5px;color:var(--mute)">Pull sharp lines (Today tab) in the morning and again near game time to grade against the sharp close.</div>`}
     <div class="sub">You: <b style="color:${col(S.you.s,S.you.n)}">${f(S.you.s,S.you.n)}%</b> vs the close over ${S.you.n} priced leg${S.you.n===1?'':'s'}${S.you.pn?` · <b>${f(S.you.ps,S.you.pn)} pts</b> on ${S.you.pn} moved line${S.you.pn>1?'s':''}`:''}</div>
     ${rows?`<div class="mono" style="font-size:10px;margin-top:4px">Market moved toward each character's side (chance pts): ${rows}</div>`:''}
     <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Beating the close by +2% or more over 100+ bets is the clearest sign of a real edge — it shows up long before win/loss settles. The close is the last line the app saw pre-game, so pull odds again near kickoff to sharpen it.</div></div>`;
@@ -16655,6 +16693,20 @@ function rulesFor(sp,g,pick){
       if(a%1===0.5){if(n>0&&KEYNUM[fl])out.push({icon:'🔑',kind:'principle',text:`+${a} is past ${fl} — ${KEYNUM[fl]}`});
         if(n<0&&KEYNUM[fl])out.push({icon:'🔑',kind:'principle',text:`-${a} needs ${ce}+ — a ${fl}-point win loses (${KEYNUM[fl].replace(/^~/,'~')})`});}
       else if(KEYNUM[a])out.push({icon:'🔑',kind:'principle',text:`${n>0?'+':'-'}${a} sits ON a key number — push risk`});}}
+  // principle — your book is behind the sharp price (stale line)
+  try{const Ln=voicesLines(sp,g);const bp=k.market==='ml'?(k.side==='home'?Ln.mlH:Ln.mlA):k.market==='spread'?(k.side==='home'?Ln.spH:Ln.spA):(k.side==='over'?Ln.ov:Ln.un);
+    if(bp&&amerOk(bp.price)!=null){const S=sharpFair(sp,gl,k.market,k.side,bp.line!=null?+bp.line:null);
+      if(S){const ev=(S.p*americanToDecimal(amerOk(bp.price))-1)*100;
+        if(ev>=2)out.unshift({icon:'⚡',kind:'principle',text:`beats the sharp price: +${ev.toFixed(1)}% vs Pinnacle fair ${Math.round(S.p*100)}%`});
+        else if(ev<=-6)out.push({icon:'🐢',kind:'principle',text:`${ev.toFixed(1)}% vs the sharp price — shop this one`});}}}catch(e){}
+  // principle — line movement since the open (your book, or the sharp book)
+  try{const src=[['book',clvEntry(sp,gl,k.market,k.side,today())],['sharp',clvEntry(sp,gl,k.market,k.side+'|S',today())]];
+    src.forEach(([nm,e])=>{if(!e||e.close.ts<=e.open.ts)return;const mv=k.market!=='ml'&&e.open.line!==e.close.line?null:(imp(e.close.price)-imp(e.open.price))*100;
+      if(mv==null||Math.abs(mv)<3)return;
+      const rows=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl&&x.metric!=='money');const b=rows.pop();
+      const pubHere=b?(k.market==='total'?(k.side==='over'?b.overPct:b.underPct):(k.side==='home'?b.homePct:b.awayPct)):null;
+      if(mv>0&&pubHere!=null&&pubHere<=40)out.unshift({icon:'🔄',kind:'principle',text:`reverse line move: ${nm} price moved here (${e.open.price}→${e.close.price}) with only ${pubHere}% of tickets`});
+      else if(mv>0)out.push({icon:'📈',kind:'principle',text:`${nm} steam: ${e.open.price} → ${e.close.price}`});});}catch(e){}
   // principle — sharp money vs tickets, heavy public
   try{const mk=k.market==='total'?'total':(k.market==='spread'?'spread':'moneyline');
     const rows=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl&&(x.market===mk||(mk==='spread'&&x.market==='moneyline')));
@@ -17140,4 +17192,178 @@ async function loadAllSports(opts){
     try{const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);}catch(e){}
     try{msRender()}catch(e){}
   }finally{LAS_BUSY=false;try{if(keep!=null)localStorage.setItem('d4.activeSport',keep)}catch(e){}}
+}
+
+/* ══ SHARP LAYER ═════════════════════════════════════════════════════════════
+   What the betting-market literature agrees on, built into the app:
+   1  a sharp reference price (Pinnacle) to judge every soft-book line
+   2  closing-line value measured against the SHARP close
+   3  parlay/SGP odds with the correlation between legs included
+   4  margin removal that respects the favorite-longshot bias (power method)
+   5  model + market blended, weighted by which has predicted better for you
+   6  calibration and luck-vs-skill on the records
+   7  a haircut on data-mined trends (in brainTrendEvidence)
+   8  risk-of-ruin and correlated stake sizing
+   9  line-movement and reverse-line-movement alerts                          */
+
+/* ── 4. Power devig: favorites carry less of the book's margin than longshots ── */
+function devigPower(a,b){ // a,b = implied probabilities WITH the book's margin
+  if(!(a>0&&b>0))return null;if(a+b<=1.0005)return[a/(a+b),b/(a+b)];
+  let lo=1,hi=5;for(let i=0;i<50;i++){const k=(lo+hi)/2;const s=Math.pow(a,k)+Math.pow(b,k);if(s>1)lo=k;else hi=k;}
+  const k=(lo+hi)/2;const fa=Math.pow(a,k),fb=Math.pow(b,k);return[fa/(fa+fb),fb/(fa+fb)];
+}
+function fairPair(pa,pb){const a=amerOk(pa),b=amerOk(pb);if(a==null||b==null)return null;return devigPower(imp(a),imp(b));}
+
+/* ── 1. Sharp reference lines from Pinnacle via your Odds API key ── */
+const SHARP_KEY='d4.sharpref';
+const ODDS_SPORT={mlb:'baseball_mlb',nfl:'americanfootball_nfl',ncaaf:'americanfootball_ncaaf',nhl:'icehockey_nhl'};
+function sharpStore(){return roGet(SHARP_KEY,{},15e3)||{};}
+async function pullSharp(sports){
+  const key=typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,'');if(!key)throw new Error('add your Odds API key in Settings first');
+  const all=get(SHARP_KEY,{})||{};let n=0;const done=[];
+  for(const sp of sports||['mlb','nfl','ncaaf','nhl']){
+    let j;try{const r=await fetch(`https://api.the-odds-api.com/v4/sports/${ODDS_SPORT[sp]}/odds/?apiKey=${key}&regions=eu&bookmakers=pinnacle&markets=h2h,spreads,totals&oddsFormat=american`);
+      if(r.status===401)throw new Error('Odds API 401 — bad key or out of credits');j=await r.json();}catch(e){if(/401/.test(e.message))throw e;continue;}
+    if(!Array.isArray(j))continue;
+    j.forEach(ev=>{const a=intakeAbbr(sp,ev.away_team),h=intakeAbbr(sp,ev.home_team);if(!a||!h)return;const gl=a+'@'+h;
+      const d=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.commence_time));
+      const bk=(ev.bookmakers||[]).find(b=>b.key==='pinnacle');if(!bk)return;
+      const D=((all[d]=all[d]||{})[sp]=(all[d]&&all[d][sp])||{ts:0,rows:[]});
+      D.rows=D.rows.filter(x=>x.game!==gl);
+      (bk.markets||[]).forEach(mk=>(mk.outcomes||[]).forEach(o=>{
+        const side=mk.key==='totals'?(/over/i.test(o.name)?'over':'under'):(intakeAbbr(sp,o.name)===a?'away':'home');
+        const market=mk.key==='h2h'?'ml':mk.key==='spreads'?'spread':'total';
+        if(amerOk(o.price)==null)return;D.rows.push({game:gl,market,side,line:o.point!=null?+o.point:null,price:amerOk(o.price),ts:Date.now()});n++;}));
+      D.ts=Date.now();});
+    done.push(sp);
+  }
+  Object.keys(all).sort().slice(0,-4).forEach(k=>delete all[k]);
+  set(SHARP_KEY,all);try{Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);}catch(e){}try{['mlb','nfl','ncaaf','nhl'].forEach(sp=>clvCapture(sp));}catch(e){}
+  return{n,sports:done};
+}
+function sharpRows(sp,gl,date){const D=((sharpStore()[date||today()]||{})[sp]);return D?D.rows.filter(x=>x.game===gl):[];}
+/* Fair (no-vig) chance of one side at one line, from the sharp book. */
+function sharpFair(sp,gl,market,side,line,date){
+  const R=sharpRows(sp,gl,date);if(!R.length)return null;
+  const other={away:'home',home:'away',over:'under',under:'over'}[side];
+  const me=R.find(x=>x.market===market&&x.side===side&&(market==='ml'||x.line===line));
+  const op=R.find(x=>x.market===market&&x.side===other&&(market==='ml'||(market==='spread'?x.line===-line:x.line===line)));
+  if(!me||!op)return null;const f=fairPair(me.price,op.price);return f?{p:f[0],price:me.price,line:me.line}:null;
+}
+/* The market's fair chance for a square: the sharp price when we have it, else your book's two sides. */
+function marketFair(sp,g,market,side,line){
+  const gl=g.away.abbr+'@'+g.home.abbr;const S=sharpFair(sp,gl,market,side,line);if(S)return{p:S.p,src:'sharp'};
+  try{const Ln=voicesLines(sp,g);const pick=(m,s)=>m==='ml'?(s==='home'?Ln.mlH:Ln.mlA):m==='spread'?(s==='home'?Ln.spH:Ln.spA):(s==='over'?Ln.ov:Ln.un);
+    const me=pick(market,side),op=pick(market,{away:'home',home:'away',over:'under',under:'over'}[side]);
+    if(me&&op){const f=fairPair(me.price,op.price);if(f)return{p:f[0],src:'book'};}}catch(e){}
+  return null;
+}
+
+/* ── 5. Model + market blend, weighted by what has actually predicted better ── */
+let BLEND_C=null,BLEND_SIG='';
+function blendWeight(sp,market){
+  const V=roGet(VOICES_KEY,[]);const sig=V.length;if(!BLEND_C||BLEND_SIG!==sig){BLEND_C={};BLEND_SIG=sig;}
+  const k=sp+'|'+market;if(BLEND_C[k])return BLEND_C[k];
+  const R=V.filter(x=>x.voice==='Sim'&&x.sp===sp&&x.market===market&&x.graded&&x.hit!=null&&x.simP>0&&x.mktP>0);
+  let best=0.5,bestB=Infinity;
+  for(let w=0;w<=1.0001;w+=0.05){let b=0;R.forEach(x=>{const p=w*x.simP+(1-w)*x.mktP;b+=Math.pow((x.hit?1:0)-p,2);});if(R.length&&b<bestB){bestB=b;best=w;}}
+  const n=R.length;const w=(n*best+25*0.5)/(n+25);   // few graded games → stay near an even blend
+  return(BLEND_C[k]={w,n});
+}
+function blendProb(sp,market,simP,mktP){if(simP==null)return null;if(mktP==null)return simP;const {w}=blendWeight(sp,market);return w*simP+(1-w)*mktP;}
+
+/* ── 3. Correlated parlay odds: legs from the same game move together ── */
+function sjRng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function sjPois(l,r){const L=Math.exp(-l);let k=0,p=1;do{k++;p*=r();}while(p>L);return k-1;}
+function sjNB(mu,disp,r){const g=(sh)=>{let d=sh-1/3,c=1/Math.sqrt(9*d);for(;;){let x,v;do{const u1=r(),u2=r();x=Math.sqrt(-2*Math.log(u1||1e-9))*Math.cos(2*Math.PI*u2);v=1+c*x;}while(v<=0);v=v*v*v;const u=r();if(u<1-0.0331*x*x*x*x||Math.log(u)<0.5*x*x+d*(1-v+Math.log(v)))return d*v;}};
+  return sjPois(g(disp)*mu/disp,r);}
+function sjNorm(r){return Math.sqrt(-2*Math.log(r()||1e-9))*Math.cos(2*Math.PI*r());}
+/* Scores drawn around the sim's own projections, so the marginals match the app and the legs share each draw. */
+function gameDraws(sp,s,N,seed){
+  const r=sjRng(seed||1);const out=[];
+  const mA=sp==='mlb'?s.aR:s.awayProj,mH=sp==='mlb'?s.hR:s.homeProj;if(!(mA>0&&mH>0))return null;
+  for(let i=0;i<(N||4000);i++){let a,h;
+    if(sp==='nhl'){a=sjPois(mA,r);h=sjPois(mH,r);if(a===h){if(r()<mH/(mA+mH))h++;else a++;}}
+    else if(sp==='mlb'){a=sjNB(mA,4,r);h=sjNB(mH,4,r);while(a===h){if(r()<0.5)a++;else h++;}}
+    else{const sd=sp==='nfl'?9.6:11.5;a=Math.max(0,Math.round(mA+sd*sjNorm(r)));h=Math.max(0,Math.round(mH+sd*sjNorm(r)));if(a===h){if(r()<0.5)a+=3;else h+=3;}}
+    out.push([a,h]);}
+  return out;
+}
+function legTest(sp,g,pick){
+  const k=sqKey(sp,g,pick);if(!k)return null;const n=+((String(pick).match(/([+-]?\d+(?:\.\d+)?)\s*$/)||[])[1]);
+  if(k.market==='ml')return([a,h])=>k.side==='home'?h>a:a>h;
+  if(k.market==='total'&&!isNaN(n))return([a,h])=>k.side==='over'?a+h>n:a+h<n;   // a push counts as a miss here (conservative)
+  if(k.market==='spread'&&!isNaN(n))return([a,h])=>(k.side==='home'?h-a:a-h)+n>0;
+  return null;
+}
+function parlayCorrelation(t){
+  const legs=t.legs||[];if(legs.length<2)return null;const byG={};
+  legs.forEach(l=>{const sp=l.sport||'mlb';(byG[sp+'|'+l.game]=byG[sp+'|'+l.game]||{sp,game:l.game,legs:[]}).legs.push(l);});
+  let indep=1,joint=1,modeled=0,groups=[];
+  Object.values(byG).forEach((G,gi)=>{
+    const g=sportGames(G.sp).find(z=>z.away.abbr+'@'+z.home.abbr===G.game);const s=g?(sportSims(G.sp)[g.id]||(G.sp==='nhl'&&typeof nhlSimFor==='function'?nhlSimFor(g):null)):null;
+    const tests=g?G.legs.map(l=>legTest(G.sp,g,l.pick)):[];
+    const D=s&&tests.length&&tests.every(Boolean)?gameDraws(G.sp,s,4000,gi+7):null;
+    if(D&&G.legs.length>=1){const ps=tests.map(f=>D.filter(f).length/D.length);const pj=D.filter(d=>tests.every(f=>f(d))).length/D.length;
+      const pi=ps.reduce((x,y)=>x*y,1);indep*=pi;joint*=pj;modeled+=G.legs.length;if(G.legs.length>1)groups.push({game:G.game,n:G.legs.length,ratio:pi>0?pj/pi:null});}
+    else G.legs.forEach(l=>{const p=l.price!=null&&amerOk(l.price)!=null?imp(amerOk(l.price))*0.955:(l.p>0&&l.p<1?l.p:0.5);indep*=p;joint*=p;});
+  });
+  return{indep,joint,modeled,total:legs.length,groups};
+}
+function parlayCorrHtml(t){
+  const C=parlayCorrelation(t);if(!C||!C.groups.length)return'';
+  const M=ticketMoney(t);const bookP=M?M.stake/M.payout:null;
+  const fmt=p=>p>0?'1 in '+Math.round(1/p).toLocaleString():'—';
+  const g=C.groups.map(x=>`${esc(x.game)} ×${x.n}: ${x.ratio>=1.05?'legs help each other':x.ratio<=0.95?'legs work against each other':'about independent'} (${x.ratio?x.ratio.toFixed(2):'—'}×)`).join('<br>');
+  const verdict=bookP?(C.joint>bookP*1.05?`<b style="color:var(--win)">priced long — correlation is on your side</b>`:C.joint<bookP*0.95?`<b style="color:var(--rust)">priced short for how these legs move together</b>`:'priced about fair'):'';
+  return`<div class="mono" style="margin-top:5px;font-size:10px;line-height:1.55;color:var(--chalk)">🔗 <b>Same-game legs</b> — true chance ${fmt(C.joint)} vs ${fmt(C.indep)} if independent${bookP?` · book pays like ${fmt(bookP)}`:''}${verdict?' · '+verdict:''}<br><span style="color:var(--mute)">${g}${C.modeled<C.total?` · ${C.total-C.modeled} leg(s) off this page's slate counted as independent`:''}</span></div>`;
+}
+
+/* ── 6. Calibration + luck vs skill ── */
+function normCdf(z){const t=1/(1+0.2316419*Math.abs(z));const d=0.3989423*Math.exp(-z*z/2);const p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p;}
+function luckSkill(w,n,p0){if(n<5)return{lab:'too few to judge',p:null};p0=p0||0.524;const z=(w-n*p0)/Math.sqrt(n*p0*(1-p0));const p=1-normCdf(z);
+  return{z,p,lab:z<=0?'below breakeven':p<0.05?'strong sign of skill':p<0.2?'leaning skill':'could easily be luck'};}
+function calibrationHtml(){
+  const V=roGet(VOICES_KEY,[]).filter(x=>x.voice==='Sim'&&x.graded&&x.hit!=null&&x.simP>0);
+  if(V.length<20)return`<div class="tkt" style="margin-bottom:8px"><h3>Calibration</h3><div class="sub" style="color:var(--mute)">Builds as the Sim's graded calls pile up (${V.length}/20). It shows whether "60%" really wins 60% of the time.</div></div>`;
+  const bins=[[0.5,0.55],[0.55,0.6],[0.6,0.65],[0.65,0.7],[0.7,0.8],[0.8,1.01]];
+  const rows=bins.map(([lo,hi])=>{const B=V.filter(x=>x.simP>=lo&&x.simP<hi);if(!B.length)return'';const pr=B.reduce((a,x)=>a+x.simP,0)/B.length,ac=B.filter(x=>x.hit).length/B.length;
+    const off=(ac-pr)*100;return`<tr><td>${Math.round(lo*100)}–${Math.min(100,Math.round(hi*100))}%</td><td>${Math.round(pr*100)}%</td><td style="color:${Math.abs(off)<5?'var(--win)':off>0?'var(--cold)':'var(--rust)'}">${Math.round(ac*100)}%</td><td>${B.length}</td></tr>`;}).join('');
+  const brier=V.reduce((a,x)=>a+Math.pow((x.hit?1:0)-x.simP,2),0)/V.length;
+  return`<div class="tkt" style="margin-bottom:8px"><h3>Calibration — does the ★ Sim's % come true?</h3>
+    <table class="mono" style="width:100%;font-size:10px;text-align:center"><tr style="color:var(--mute)"><td>it said</td><td>avg</td><td>actually won</td><td>n</td></tr>${rows}</table>
+    <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Brier ${brier.toFixed(3)} (0.25 = coin flip; lower is better). Green rows are within 5 points of what the Sim said.</div></div>`;
+}
+
+/* ── 8. Risk of ruin from your own settled tickets, and correlated stakes ── */
+let ROR_C=null;
+function riskOfRuin(){
+  const B=brAmount();if(!B)return{need:'set your bankroll'};
+  const LL=roGet(LS.locked,[],30e3);const sig=B+'|'+LL.length+'|'+LL.filter(t=>t.archived).length;
+  if(ROR_C&&ROR_C.sig===sig&&Date.now()-ROR_C.ts<60e3)return ROR_C.v;
+  const v=riskOfRuinCore(B,LL);ROR_C={sig,ts:Date.now(),v};return v;
+}
+function riskOfRuinCore(B,LL){
+  const L=LL.filter(t=>t.archived&&!TRACKED_ONLY_SOURCES.has(t.source));
+  const R=[];const stakes=[];L.forEach(t=>{let rec=null;try{rec=ticketIsComplete(t)?ticketRecord(t):null}catch(e){}const M=ticketMoney(t);if(!rec||!M)return;
+    R.push(rec.l>0?-1:(M.payout-M.stake)/M.stake);stakes.push(M.stake);});
+  if(R.length<10)return{need:'needs 10 settled tickets with a stake ('+R.length+' so far)'};
+  stakes.sort((a,b)=>a-b);const f=Math.min(1,stakes[Math.floor(stakes.length/2)]/B);const r=sjRng(99);let ruin=0,half=0;
+  for(let i=0;i<2000;i++){let b=1,h=false;for(let k=0;k<300;k++){b*=1+f*R[Math.floor(r()*R.length)];if(b<0.5)h=true;if(b<0.1){ruin++;break;}}if(h)half++;}
+  const mu=R.reduce((a,x)=>a+x,0)/R.length;
+  return{f,ruin:ruin/2000,half:half/2000,roi:mu,n:R.length};
+}
+function riskHtml(){
+  const X=riskOfRuin();if(X.need)return`<div class="tkt"><h3>Risk of ruin</h3><div class="sub" style="color:var(--mute)">${X.need}.</div></div>`;
+  const col=X.ruin>0.25?'var(--rust)':X.ruin>0.08?'var(--gold)':'var(--win)';
+  return`<div class="tkt"><h3>Risk of ruin</h3><div class="sub">At your typical stake (${(X.f*100).toFixed(1)}% of bankroll) and your real results so far (${X.roi>=0?'+':''}${(X.roi*100).toFixed(0)}% per ticket over ${X.n}):</div>
+    <div class="sub">Chance of losing 90% of the bankroll within 300 tickets: <b style="color:${col}">${(X.ruin*100).toFixed(1)}%</b> · of halving it at some point: <b>${(X.half*100).toFixed(0)}%</b></div>
+    <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Replays your own ticket history 2,000 times. Under 5% is comfortable; above 25% means the stakes are too big for the edge.</div></div>`;
+}
+/* Same-game picks share risk: shrink each by √(picks in that game), and cap a day at 10% of bankroll. */
+function correlatedStakes(rows){
+  const B=brAmount();const byG={};rows.forEach(x=>{(byG[x.sp+x.game]=byG[x.sp+x.game]||[]).push(x);});
+  rows.forEach(x=>{const K=kellyStake(x.blend!=null?x.blend:(x.brainP!=null?x.brainP:x.mp),x.price);x._f=K&&K.f>0?K.f/Math.sqrt(byG[x.sp+x.game].length):0;});
+  const tot=rows.reduce((a,x)=>a+x._f,0);const sc=tot>0.10?0.10/tot:1;
+  rows.forEach(x=>{x.stakeF=x._f*sc;x.stakeAmt=B?Math.round(B*x.stakeF*100)/100:null;x.capped=sc<1;});return rows;
 }
