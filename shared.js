@@ -464,6 +464,12 @@ function parseSGPTicketText(text){
   const body=descIdx>=0?lines.slice(descIdx+1):lines;
   const legs=[];const skipped=[];let propSkipped=0;
   let cur=null; // {sport, gl}
+  /* This book has two SGP dialects. The older one writes "(Game)" and lists AWAY v HOME. The newer
+     one writes "(Match)", says Handicap / Total goals / Anytime point, and lists HOME v AWAY.
+     A known slate settles orientation when it can; otherwise the dialect decides. */
+  const matchStyle=/\(Match\)/i.test(text);
+  const accepted=(()=>{const m=String(kv.accepteddate||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return today();
+    const y=m[3].length===2?'20'+m[3]:m[3];return `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;})();
   body.forEach(line=>{
     const sgpHdr=line.match(/^SGP\s*\d+\s*:\s*([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs?\.?\s+(.+)$/i);
     if(sgpHdr){
@@ -472,52 +478,87 @@ function parseSGPTicketText(text){
       if(!sport||!intakeCanNameResolve(sport)){cur=null;skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
       const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
-      cur={sport,gl:awayAb+'@'+homeAb};return;
+      let A=awayAb,H=homeAb;if(matchStyle){A=homeAb;H=awayAb;}
+      try{const known=new Set([...(sportGames(sport)||[]),...(sport==='nhl'&&typeof NHL_UPCOMING!=='undefined'?NHL_UPCOMING:[])].map(g=>g.away.abbr+'@'+g.home.abbr));
+        if(known.size&&!known.has(A+'@'+H)&&known.has(H+'@'+A)){const t=A;A=H;H=t;}}catch(e){}
+      cur={sport,gl:A+'@'+H,away:A,home:H,names:[sgpHdr[3],sgpHdr[4]].map(x=>String(x).trim())};return;
     }
     if(/^\d+\s+Leg Parlay/i.test(line))return; // the summary line — not a leg
     if(!cur){skipped.push(line+'  (no SGP header seen yet)');return;}
     let m;
+    line=line.replace(/\(Match\)\s*$/i,'(Game)');
+    const gd=accepted;
+    /* which side of THIS game a name means ("Canucks", "NY Rangers", "Red Sox") */
+    const side=nm=>{const w=String(nm).toLowerCase().replace(/[^a-z0-9 ]/g,' ').trim().split(/\s+/).pop();
+      const hit=(cur.names||[]).map((x,i)=>({x,i})).filter(o=>String(o.x).toLowerCase().replace(/[^a-z0-9 ]/g,' ').trim().split(/\s+/).pop()===w);
+      if(hit.length===1){const ab=intakeAbbr(cur.sport,cur.names[hit[0].i]);if(ab)return ab;}
+      return intakeAbbr(cur.sport,nm);};
+    const push=(o)=>{legs.push({p:0.5,sport:cur.sport,gameDate:gd,price:null,book:'external',game:cur.gl,...o});};
+    if((m=line.match(/^Handicap\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(Game\)\s*$/i))){
+      const ab=side(m[1]);if(!ab){skipped.push(line+'  (team name not recognized)');return;}
+      push({pick:ab+' '+m[2]});return;}
+    if((m=line.match(/^Total\s+(?:goals|runs|points)\s*-\s*(Over|Under)\s+([\d.]+)\s*\(Game\)\s*$/i))){
+      push({pick:m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase()+' '+m[2]});return;}
+    if(cur.sport==='mlb'&&/^Player\s/i.test(line)){
+      const MS={'batters struck out':['strikeouts','pitcher'],'strikeouts':['strikeouts','pitcher'],'hits allowed':['hitsallowed','pitcher'],'hits':['hits','batter'],
+        'home runs':['homeruns','batter'],'rbis':['rbis','batter'],'rbi':['rbis','batter'],'runs':['runs','batter'],'runs scored':['runs','batter'],'walks':['walks','batter']};
+      const kind='(batters struck out|strikeouts|hits allowed|hits|home runs|rbis?|runs scored|runs|walks)';
+      let mm=line.match(new RegExp('^Player\\s+'+kind+'\\s*-\\s*(.+?)\\s+(\\d+)\\+\\s*\\(Game\\)\\s*$','i')),dir='atleast',thr=null,nm=null,st=null;
+      if(mm){st=mm[1];nm=mm[2];thr=+mm[3];}
+      else if((mm=line.match(new RegExp('^Player\\s+'+kind+'\\s*-\\s*(.+?)\\s+(over|under)\\s+([\\d.]+)\\s*\\(Game\\)\\s*$','i')))){st=mm[1];nm=mm[2];dir=mm[3].toLowerCase();thr=+mm[4];}
+      if(st){const [stat,role]=MS[st.toLowerCase()];
+        push({pick:`${nm.trim()} ${dir==='atleast'?thr+'+':dir+' '+thr} ${st.toLowerCase()}`,isProp:1,mlbProp:{player:nm.trim(),stat,role,thr,dir}});return;}
+      propSkipped++;skipped.push(line+'  (baseball player-stat phrasing not recognized)');return;}
+    if(cur.sport==='nhl'){
+      const HS={goals:'goals',goal:'goals',assists:'assists',points:'points','shots on goal':'shots',shots:'shots',saves:'saves'};
+      if((m=line.match(/^Anytime\s+point\s*-\s*(.+?)\s*\(Game\)\s*$/i))){
+        push({pick:`${m[1].trim()} anytime point`,isProp:1,nhlProp:{player:m[1].trim(),stat:'points',thr:1,dir:'atleast'}});return;}
+      if((m=line.match(/^Player\s+(shots on goal|goals?|assists|points|saves)\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s*\(Game\)\s*$/i))){
+        push({pick:`${m[2].trim()} ${m[3].toLowerCase()} ${m[4]} ${m[1].toLowerCase()}`,isProp:1,nhlProp:{player:m[2].trim(),stat:HS[m[1].toLowerCase()],thr:+m[4],dir:m[3].toLowerCase()}});return;}
+      if((m=line.match(/^Player\s+(shots on goal|goals?|assists|points|saves)\s*-\s*(.+?)\s+(\d+)\+\s*\(Game\)\s*$/i))){
+        push({pick:`${m[2].trim()} ${m[3]}+ ${m[1].toLowerCase()}`,isProp:1,nhlProp:{player:m[2].trim(),stat:HS[m[1].toLowerCase()],thr:+m[3],dir:'atleast'}});return;}
+    }
     if(cur.sport==='nhl'){
       const HS={goals:'goals',goal:'goals',assists:'assists',points:'points','shots on goal':'shots',shots:'shots',saves:'saves'};
       let hm=line.match(/^Player stats\s*-\s*(.+?)\s+(\d+)\+\s+(Goals?|Assists|Points|Shots on Goal|Shots|Saves)\s*\(Game\)\s*$/i);
-      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} ${hm[2]}+ ${hm[3]}`,p:0.5,sport:'nhl',gameDate:today(),price:null,book:'external',isProp:1,
+      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} ${hm[2]}+ ${hm[3]}`,p:0.5,sport:'nhl',gameDate:accepted,price:null,book:'external',isProp:1,
         nhlProp:{player:hm[1].trim(),stat:HS[hm[3].toLowerCase()],thr:+hm[2],dir:'atleast'}});return;}
       hm=line.match(/^Player stats\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s+(Goals?|Assists|Points|Shots on Goal|Shots|Saves)\s*\(Game\)\s*$/i);
-      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} ${hm[2]} ${hm[3]} ${hm[4]}`,p:0.5,sport:'nhl',gameDate:today(),price:null,book:'external',isProp:1,
+      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} ${hm[2]} ${hm[3]} ${hm[4]}`,p:0.5,sport:'nhl',gameDate:accepted,price:null,book:'external',isProp:1,
         nhlProp:{player:hm[1].trim(),stat:HS[hm[4].toLowerCase()],thr:+hm[3],dir:hm[2].toLowerCase()}});return;}
       hm=line.match(/^Anytime goal ?scorer\s*-\s*(.+?)\s*\(Game\)\s*$/i);
-      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} anytime goal`,p:0.5,sport:'nhl',gameDate:today(),price:null,book:'external',isProp:1,
+      if(hm){legs.push({game:cur.gl,pick:`${hm[1]} anytime goal`,p:0.5,sport:'nhl',gameDate:accepted,price:null,book:'external',isProp:1,
         nhlProp:{player:hm[1].trim(),stat:'goals',thr:1,dir:'atleast'}});return;}
       hm=line.match(/^(?:Moneyline|Money line|Winner)\s*-\s*(.+?)\s*\(Game\)\s*$/i);
-      if(hm){const ab=intakeAbbr('nhl',hm[1]);if(ab){legs.push({game:cur.gl,pick:ab+' ML',p:0.5,sport:'nhl',gameDate:today(),price:null,book:'external'});return;}}
+      if(hm){const ab=intakeAbbr('nhl',hm[1]);if(ab){legs.push({game:cur.gl,pick:ab+' ML',p:0.5,sport:'nhl',gameDate:accepted,price:null,book:'external'});return;}}
       line=line.replace(/^Puck ?line\s*-/i,'Spread -').replace(/^Total goals\s*-/i,'Total points -');
     }
     if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(\d+)\+\s+(Passing|Rushing|Receiving)\s+yds\s*\(Game\)\s*$/i))){
-      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]}+ ${m[3]} yds`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
+      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]}+ ${m[3]} yds`,p:0.5,sport:cur.sport,gameDate:accepted,price:null,
         book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:m[3].toLowerCase(),thr:+m[2],dir:'atleast'}});return;
     }
     if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s+(Passing|Rushing|Receiving)\s+yds\s*\(Game\)\s*$/i))){
-      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]} ${m[3]} ${m[4]} yds`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
+      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]} ${m[3]} ${m[4]} yds`,p:0.5,sport:cur.sport,gameDate:accepted,price:null,
         book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:m[4].toLowerCase(),thr:+m[3],dir:m[2].toLowerCase()}});return;
     }
     // Receptions (a count, not yards) — same "receiving" box-score row as the
     // yardage props above, just reading the REC field instead of YDS.
     if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(\d+)\+\s+Receptions\s*\(Game\)\s*$/i))){
-      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]}+ Receptions`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
+      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]}+ Receptions`,p:0.5,sport:cur.sport,gameDate:accepted,price:null,
         book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:'receptions',thr:+m[2],dir:'atleast'}});return;
     }
     if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s+Receptions\s*\(Game\)\s*$/i))){
-      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]} ${m[3]} Receptions`,p:0.5,sport:cur.sport,gameDate:today(),price:null,
+      legs.push({game:cur.gl,pick:`${m[1]} ${m[2]} ${m[3]} Receptions`,p:0.5,sport:cur.sport,gameDate:accepted,price:null,
         book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:'receptions',thr:+m[3],dir:m[2].toLowerCase()}});return;
     }
     if(/^Player stats\s*-/i.test(line)){propSkipped++;skipped.push(line+'  (player-stat phrasing not recognized)');return;}
     if((m=line.match(/^Spread\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(Game\)\s*$/i))){
       const ab=intakeAbbr(cur.sport,m[1]);
       if(!ab){skipped.push(line+'  (team name not recognized)');return;}
-      legs.push({game:cur.gl,pick:ab+' '+m[2],p:0.5,sport:cur.sport,gameDate:today(),price:null,book:'external'});return;
+      legs.push({game:cur.gl,pick:ab+' '+m[2],p:0.5,sport:cur.sport,gameDate:accepted,price:null,book:'external'});return;
     }
     if((m=line.match(/^Total points\s*-\s*(Over|Under)\s+([\d.]+)\s*\(Game\)\s*$/i))){
-      legs.push({game:cur.gl,pick:m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase()+' '+m[2],p:0.5,sport:cur.sport,gameDate:today(),price:null,book:'external'});return;
+      legs.push({game:cur.gl,pick:m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase()+' '+m[2],p:0.5,sport:cur.sport,gameDate:accepted,price:null,book:'external'});return;
     }
     skipped.push(line+'  (leg text not understood)');
   });
@@ -525,7 +566,7 @@ function parseSGPTicketText(text){
   legs.forEach((l,i)=>l.id='ext'+ticketNo+'_'+i);
   const L=get(LS.locked,[]);
   const idx=L.findIndex(t=>String(t.id)==='ext'+ticketNo);
-  const ticket={id:'ext'+ticketNo,date:today(),name:'Ticket #'+ticketNo,source:'mine',imported:true,
+  const ticket={id:'ext'+ticketNo,date:accepted,name:'Ticket #'+ticketNo,source:'mine',imported:true,
     stake:moneyStr(kv.amount),toWin:moneyStr(kv.towin),status:kv.status||null,
     legs,p:legs.length?legs.reduce((a,x)=>a*x.p,1):null};
   if(legs.length){if(idx>=0)L[idx]=ticket;else L.unshift(ticket);set(LS.locked,L);}
@@ -6732,6 +6773,10 @@ function resolveLeg(leg,ticketDate){
       return{...F,gid:row.id,live:false,source:'archive',date:d};
     }
   }
+  // 3) The MLB board wasn't open that day, so nothing was archived: use the shared finals store, then
+  //    ESPN's own feed (My Games). Without this an MLB leg on a ticket could sit ungraded forever.
+  try{const sh=allFinals()[finalsKey('mlb',leg.game)];if(sh&&sh.a!=null&&sh.h!=null)return{a:+sh.a,h:+sh.h,live:false,source:'shared'};}catch(e){}
+  {const mg=mgResolve({...leg,sport:'mlb'},ticketDate);if(mg)return{...mg,completed:mg.completed};}
   return null;
 }
 
@@ -6783,6 +6828,20 @@ function fbpParseHockey(j){
         (at.stats||[]).forEach((v,i)=>{row[labels[i]]=v;});(goalie?t.goalies:t.skaters).push(row);});});});
   return{state,period:st.period||0,teams,hockey:true};
 }
+function fbpParseBaseball(j){
+  const hc=((j.header||{}).competitions||[])[0]||{};const st=hc.status||{};const state=(st.type||{}).state||'pre';
+  const teams={};
+  ((j.boxscore||{}).players||[]).forEach(T=>{const ab=fbpAb(T.team&&T.team.abbreviation,'mlb');if(!ab)return;
+    const t=teams[ab]={batters:[],pitchers:[]};
+    (T.statistics||[]).forEach(grp=>{const labels=(grp.labels||grp.names||[]).map(x=>String(x).toUpperCase());
+      const isP=/pitch/i.test((grp.type||'')+(grp.name||'')+(grp.text||''))||labels.includes('IP');
+      (grp.athletes||[]).forEach(at=>{const row={name:(at.athlete||{}).displayName||'',short:(at.athlete||{}).shortName||''};
+        (at.stats||[]).forEach((v,i)=>{row[labels[i]]=v;});
+        if(row['H-AB']!=null&&row.H==null){const m=String(row['H-AB']).match(/^(\d+)-/);if(m)row.H=m[1];}
+        if(row.SO!=null&&row.K==null)row.K=row.SO;
+        (isP?t.pitchers:t.batters).push(row);});});});
+  return{state,period:st.period||0,teams,baseball:true};
+}
 function fbpParseBox(j){
   const hc=((j.header||{}).competitions||[])[0]||{};
   const st=hc.status||{};const state=(st.type||{}).state||'pre';
@@ -6807,9 +6866,10 @@ function fbpParseBox(j){
 }
 const FBP_ALIAS={WAS:'WSH',JAC:'JAX',LA:'LAR',LVR:'LV',OAK:'LV',SD:'LAC',STL:'LAR',ARZ:'ARI',GNB:'GB',KAN:'KC',NWE:'NE',NOR:'NO',SFO:'SF',TAM:'TB',
   LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV_:'VGK',MON:'MTL',UTA:'UTAH'};
-const fbpAb=(x,sp)=>{x=String(x||'').toUpperCase();if(sp==='nhl'&&x==='LV')return'VGK';return FBP_ALIAS[x]||x;};
+const fbpAb=(x,sp)=>{x=String(x||'').toUpperCase();if(sp==='nhl'&&x==='LV')return'VGK';if(sp==='mlb')return({CHW:'CWS',ARI:'AZ',OAK:'ATH',WAS:'WSH'})[x]||x;return FBP_ALIAS[x]||x;};
 const fbpGameKey=(gl,sp)=>{const [a,h]=String(gl||'').split('@');return fbpAb(a,sp)+'@'+fbpAb(h,sp);};
 FBP_ESPN.nhl='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl';
+FBP_ESPN.mlb='https://site.api.espn.com/apis/site/v2/sports/baseball/mlb';
 const fbpYmd=d=>String(d).replace(/-/g,'');
 function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.setDate(x.getDate()+n);
   return x.getFullYear()+String(x.getMonth()+1).padStart(2,'0')+String(x.getDate()).padStart(2,'0');}
@@ -6819,7 +6879,7 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    wrong day — so the search covers the ticket date through a week after it. */
 const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':'nfl';
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':'nfl';
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
@@ -6828,7 +6888,8 @@ function fbpEventId(leg,ticketDate){
 }
 function fbpEventIdCore(leg,ticketDate,sp,want){
   const arr=sportGames(sp);
-  const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp)===want);
+  const rev=want.split('@').reverse().join('@');
+  const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>{const k=fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp);return k===want||k===rev;});
   if(g)return{id:String(g.espnId||g.id),pending:false};
   const base=[leg.gameDate,ticketDate].filter(Boolean).sort()[0];
   // 1) the app's own archive: every game that was ever on the board kept its
@@ -6836,7 +6897,7 @@ function fbpEventIdCore(leg,ticketDate,sp,want){
   const fromArc=fbpArchiveId(sp,want,base);if(fromArc)return{id:fromArc,pending:false};
   const idx=get(FBP_IDX_KEY,{})||{};
   if(!base)return{id:null,pending:false};
-  const hits=Object.keys(idx).filter(k=>k.startsWith(sp+':'+want+':')).map(k=>({d:k.split(':')[2],id:idx[k]}));
+  const hits=Object.keys(idx).filter(k=>k.startsWith(sp+':'+want+':')||k.startsWith(sp+':'+want.split('@').reverse().join('@')+':')).map(k=>({d:k.split(':')[2],id:idx[k]}));
   const lo=fbpShift(base,-1),hi=fbpShift(base,7);
   const inWin=hits.filter(h=>h.d>=lo&&h.d<=hi).sort((a,b)=>a.d.localeCompare(b.d));
   if(inWin.length)return{id:inWin[0].id,pending:false};
@@ -6879,7 +6940,7 @@ function fbpArcIndex(sp){
   if(key){const arc=get(key,{})||{};
     Object.entries(arc).forEach(([k,A])=>{if(!A||!Array.isArray(A.rows))return;const dated=/^\d{4}-\d{2}-\d{2}$/.test(k)?Date.parse(k):null;
       A.rows.forEach((r,i)=>{if(!r||!r.game)return;const id=String(r.id||r.gid||'');if(!id)return;const g=fbpGameKey(r.game,sp);
-        (map[g]=map[g]||[]).push({id,fin:!!((A.finals&&A.finals[r.id])||r.final),dated,ord:i});});});}
+        {const e={id,fin:!!((A.finals&&A.finals[r.id])||r.final),dated,ord:i};(map[g]=map[g]||[]).push(e);const gr=g.split('@').reverse().join('@');(map[gr]=map[gr]||[]).push(e);}});});}
   FBP_ARC_IDX[sp]={ts:Date.now(),map};return map;
 }
 function fbpArchiveId(sp,want,base){
@@ -6889,7 +6950,7 @@ function fbpArchiveId(sp,want,base){
   return hits[0].dist!=null&&hits[0].dist>10*864e5?null:hits[0].id;
 }
 function fbpBox(id,sp){
-  const mem=(sp!=='nhl'&&typeof FB_BOX_CACHE!=='undefined'&&FB_BOX_CACHE[id]&&FB_BOX_CACHE[id].teamStats)?FB_BOX_CACHE[id]:null;
+  const mem=((sp==='nfl'||sp==='ncaaf')&&typeof FB_BOX_CACHE!=='undefined'&&FB_BOX_CACHE[id]&&FB_BOX_CACHE[id].teamStats)?FB_BOX_CACHE[id]:null;
   const store=get(FBP_BOX_KEY,{})||{};const saved=store[sp+':'+id];
   if(saved&&saved.box&&saved.final)return saved.box; // FINAL boxes never change
   const m=FBP_MEM[id];
@@ -6899,7 +6960,7 @@ function fbpBox(id,sp){
   if(!FBP_INFLIGHT['box:'+id]){
     FBP_INFLIGHT['box:'+id]=1;
     fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json()).then(j=>{
-      const box=sp==='nhl'?fbpParseHockey(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
+      const box=sp==='nhl'?fbpParseHockey(j):sp==='mlb'?fbpParseBaseball(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
       if(box.state==='post'&&Object.keys(box.teamStats||box.teams||{}).length){
         const S=get(FBP_BOX_KEY,{})||{};S[sp+':'+id]={ts:Date.now(),final:true,box};
         Object.keys(S).forEach(k=>{if(Date.now()-S[k].ts>6*864e5)delete S[k];});
@@ -6979,7 +7040,26 @@ function gradeNHLPropShared(leg,ticketDate){
   if(dir==='under'){if(v>thr)hit=false;else if(!live)hit=true;}else{if(overHit)hit=true;else if(!live)hit=false;}
   return{hit,detail:`${row.name} ${v} ${stat}${live?' so far':''}`,live,prog:{val:v,thr,dir}};
 }
+/* Baseball player props from ESPN's box score — same lookup, saved-final and live-lock rules as football/hockey. */
+function gradeMLBPropShared(leg,ticketDate){
+  const ev=fbpEventId({...leg,sport:'mlb'},ticketDate);
+  if(!ev.id)return{hit:null,detail:ev.pending?'looking up game…':'game not found (checked your archive + ESPN days around '+(leg.gameDate||ticketDate||'that date')+')',live:false};
+  const box=fbpBox(ev.id,'mlb');
+  if(!box||!box.teams||!Object.keys(box.teams).length)return{hit:null,detail:box&&box.state==='pre'?null:'player box loading — check back shortly',live:!!(box&&box.state==='in')};
+  if(box.state==='pre')return{hit:null,detail:null,live:false};
+  const live=box.state==='in';const {player,stat,role,thr,dir}=leg.mlbProp;
+  let row=null;Object.values(box.teams).forEach(t=>{if(!row)row=fbpFindRow(role==='pitcher'?t.pitchers:t.batters,player);});
+  if(!row)return{hit:null,detail:live?(role==='pitcher'?'pitcher not in box yet':'not in the box yet'):'player not in final box — check the name (or he did not play)',live};
+  const F={strikeouts:'K',hitsallowed:'H',hits:'H',homeruns:'HR',rbis:'RBI',runs:'R',walks:'BB'}[stat];
+  const v=parseFloat(String(row[F]==null?0:row[F]).replace(/[^0-9.\-]/g,''))||0;
+  let hit=null;
+  if(dir==='under'){if(v>thr)hit=false;else if(!live)hit=true;}
+  else{const cleared=dir==='atleast'?v>=thr:v>thr;if(cleared)hit=true;else if(!live)hit=false;}
+  const lab={strikeouts:'Ks',hitsallowed:'hits allowed',hits:'hits',homeruns:'HR',rbis:'RBI',runs:'runs',walks:'BB'}[stat];
+  return{hit,detail:`${row.name} ${v} ${lab}${live?' so far':''}`,live,prog:{val:v,thr,dir}};
+}
 function gradeLeg(leg,ticketDate){
+  if(leg.mlbProp)return gradeMLBPropShared(leg,ticketDate);
   if(leg.fbProp)return gradeFBPropLeg(leg,ticketDate);
   if(leg.nhlProp)return gradeNHLPropShared(leg,ticketDate);
   /* 1st-period legs (hockey): graded off the period-1 score only. Decided the
@@ -16177,6 +16257,16 @@ const MG_ALIAS={mlb:{CHW:'CWS',ARI:'AZ',OAK:'ATH',WAS:'WSH'},nfl:{WAS:'WSH',JAC:
 const mgAb=(sp,x)=>{x=String(x||'').toUpperCase();return(MG_ALIAS[sp]||{})[x]||x;};
 const mgKey=(sp,gl)=>{const [a,h]=String(gl||'').split('@');return mgAb(sp,a)+'@'+mgAb(sp,h);};
 let MG_LIVE={},MG_TS=0,MG_BUSY=false,MG_TIMER=null;
+/* If a leg's game only exists in the ESPN feed the other way round (AWAY/HOME swapped by the book's
+   listing order), flip it so ML/spread legs are scored against the right team. Runs once per game. */
+function mgHealOrientation(){
+  const L=get(LS.locked,[]);let ch=false;
+  L.forEach(t=>(t.legs||[]).forEach(l=>{const sp=l.sport||'mlb';if(!l.game||!MG_LIVE[sp])return;
+    if((MG_LIVE[sp]||{})[mgKey(sp,l.game)])return;
+    const rev=l.game.split('@').reverse().join('@');
+    if((MG_LIVE[sp]||{})[mgKey(sp,rev)]){l.game=rev;ch=true;}}));
+  if(ch)set(LS.locked,L);
+}
 function mgPending(){
   const out=[];get(LS.locked,[]).filter(t=>!t.archived).forEach(t=>(t.legs||[]).forEach(l=>out.push({t,l,sp:l.sport||'mlb',d:l.gameDate||t.date||today()})));
   return out;
@@ -16205,6 +16295,7 @@ async function mgRefresh(force){
         MG_LIVE[sp]=M;}catch(e){}
     });
     await Promise.all(jobs);MG_TS=Date.now();
+    try{mgHealOrientation();}catch(e){}
   }finally{MG_BUSY=false;}
 }
 /* The ESPN event for a leg: same teams, on (or just after) the leg's date. */
@@ -16975,8 +17066,8 @@ function missionsHtml(inner){
    still ungraded; the "Regrade props" button runs it on demand. */
 let BT_BUSY=false;
 function btPropLegs(){
-  const out=[];get(LS.locked,[]).forEach(t=>(t.legs||[]).forEach(l=>{if(!l.fbProp&&!l.nhlProp)return;
-    const sp=l.nhlProp?'nhl':(l.sport==='ncaaf'?'ncaaf':'nfl');out.push({t,l,sp});}));return out;
+  const out=[];get(LS.locked,[]).forEach(t=>(t.legs||[]).forEach(l=>{if(!l.fbProp&&!l.nhlProp&&!l.mlbProp)return;
+    const sp=l.nhlProp?'nhl':l.mlbProp?'mlb':(l.sport==='ncaaf'?'ncaaf':'nfl');out.push({t,l,sp});}));return out;
 }
 let BT_UG=null;
 function btUngraded(){if(BT_UG&&Date.now()-BT_UG.ts<5000)return BT_UG.v;const v=btUngradedCore();BT_UG={ts:Date.now(),v};return v;}
@@ -16995,7 +17086,7 @@ async function regradeAllProps(statusEl){
     for(const G of games){g++;say(`Pulling box scores… ${g}/${games.length}`);
       if(S[G.sp+':'+G.id]&&S[G.sp+':'+G.id].final)continue;
       try{const r=await fetch(FBP_ESPN[G.sp]+'/summary?event='+G.id);const j=await r.json();
-        const box=G.sp==='nhl'?fbpParseHockey(j):fbpParseBox(j);FBP_MEM[G.id]={ts:Date.now(),box};
+        const box=G.sp==='nhl'?fbpParseHockey(j):G.sp==='mlb'?fbpParseBaseball(j):fbpParseBox(j);FBP_MEM[G.id]={ts:Date.now(),box};
         if(box.state==='post'){const A=get(FBP_BOX_KEY,{})||{};A[G.sp+':'+G.id]={ts:Date.now(),final:true,box};set(FBP_BOX_KEY,A);}}catch(e){}
       await new Promise(r=>setTimeout(r,200));}
     BT_UG=null;const left=btUngraded().length,done=todo.length-left;
