@@ -16763,7 +16763,8 @@ const MS_ROUTES={
 };
 const MS_CHECKPOINTS=['The Corner','Chop Shop','Back Room','Casino Floor','Penthouse','The Vault'];
 const MS_RANKS=[[0,'Rookie'],[200,'Runner'],[500,'Hustler'],[1000,'Sharp'],[2500,'Syndicate'],[5000,'Kingpin'],[10000,'Legend']];
-const MS_DIFF=[[0.35,'Easy','#2ecc71',100],[0.12,'Medium','#5FD3E8',300],[0.03,'Hard','#f5a524',700],[0,'Legendary','#f0563c',1500]];
+/* Five tiers, by your real chance to finish (simulated on your own leg record). XP pays for the risk. */
+const MS_DIFF=[[0.55,'Cakewalk','#7ee8a6',50],[0.35,'Easy','#2ecc71',100],[0.15,'Normal','#5FD3E8',250],[0.03,'Hard','#f5a524',700],[0,'Legendary','#f0563c',1500]];
 /* Leg rules: which Today's-card picks a mission may use, and how those legs price. */
 const MS_FILTERS={
   gold:{lab:'Gold only',desc:'every leg SUPREME or STRONG',f:x=>x.color===' supreme'||x.color===' strong'},
@@ -16783,6 +16784,19 @@ const SPORT_LAB={nfl:'NFL only',ncaaf:'CFB only',mlb:'MLB only',nhl:'NHL only'};
 const R_=(route,k,f,unit)=>[route,k||'',f||''].join('|')+(unit?'|'+unit:'');
 /* The board. [id, category, name, start, goal, days, route, rule, sport, hook] or pots. */
 const MS_LIB=[
+ // 🌱 Warm-ups — small goals, lots of time, singles. Built to be finished.
+ ['first_win','warmup','First Win',5,5.5,7,R_('stairs',1,.5),null,null,'Half the roll on one single. Cash it once and you\'re done. Learn the loop.'],
+ ['pocket_change','warmup','Pocket Change',10,11,14,R_('stairs',1,.3),null,null,'A dollar of profit in two weeks. Three bucks a pop on singles.'],
+ ['tip_money','warmup','Tip Money',10,12,21,R_('stairs',1,.25),null,null,'Twenty percent in three weeks, one single at a time.'],
+ ['nickel_dime','warmup','Nickel & Dime',50,55,21,R_('compound',1,.1),null,null,'10% stakes, +10% goal. The slow grind that actually finishes.'],
+ ['warm_lap','warmup','Warm-Up Lap',20,23,21,R_('compound',1,.15),null,null,'Three dollars of profit, three weeks, singles only.'],
+ ['steady_eddie','warmup','Steady Eddie',100,125,45,R_('stairs',1,.1),null,null,'$10 singles until you\'re up a quarter. No heroics.'],
+ ['coffee','warmup','Coffee Money',25,30,30,R_('compound',1,.1),null,null,'Five bucks in a month. Every day is a small, boring bet.'],
+ ['chalk_stroll','warmup','Chalk Stroll',50,60,30,R_('compound',1,.1),'chalk',null,'Favorites only, 10% stakes. Walk, don\'t run.'],
+ ['half_again','warmup','Half Again',20,30,30,R_('stairs',1,.2),null,null,'+50% in a month on singles. Your first real climb.'],
+ ['parlay_taste','warmup','Parlay Taste',10,15,21,R_('housemoney',2,.5,1),null,null,'$1 two-teamers. One hit pays for the whole mission.'],
+ ['first_parlay','warmup','First Parlay',5,10,14,R_('housemoney',2,.5,1),null,null,'Double five bucks with dollar two-teamers.'],
+ ['slow_double','warmup','Slow Double',20,40,90,R_('compound',1,.12),null,null,'Double it — but you get a whole season to do it.'],
  // 🪙 Penny stocks — tiny risk, big targets
  ['dollar_grand','penny','Dollar to a Grand',1,1000,30,R_('housemoney',4,.5,1),null,null,'One dollar. Four-leg shots until something lands, then only the house\'s money rides.'],
  ['five_hundred','penny','Five to Five Hundred',5,500,30,R_('housemoney',3,.4,1),null,null,'$1 a day on three-teamers from a $5 roll. One hit changes everything.'],
@@ -16849,7 +16863,7 @@ const MS_LIB=[
  ['weekend_warrior','sprint','Weekend Warrior',50,400,7,R_('stairs',3,.35),null,null,'One week, ×8. The clock is the enemy.'],
  ['custom','sprint','Custom',100,500,14,'',null,null,'Your numbers. The planner finds the best route.']
 ];
-const MS_CATS={penny:'🪙 Penny stocks',house:'🏠 House money',compound:'📈 Compound interest',steady:'🐢 Steady pace',ladder:'🎲 Ladders & heists',multi:'🧺 Multi-bankroll',rules:'🎭 Character & rule challenges',sprint:'⏱ Sprints'};
+const MS_CATS={warmup:'🌱 Warm-ups',penny:'🪙 Penny stocks',house:'🏠 House money',compound:'📈 Compound interest',steady:'🐢 Steady pace',ladder:'🎲 Ladders & heists',multi:'🧺 Multi-bankroll',rules:'🎭 Character & rule challenges',sprint:'⏱ Sprints'};
 const MS_TEMPLATES={};MS_LIB.forEach(r=>{MS_TEMPLATES[r[0]]={id:r[0],cat:r[1],name:r[2],start:r[3],goal:r[4],days:r[5],route:r[6],rule:r[7],sport:r[8],note:r[9],pots:r[10]||null};});
 const msParse=key=>{const [route,k,f,unit]=String(key||'').split('|');return{route,cfg:{k:k?+k:undefined,f:f?+f:undefined,unit:unit?+unit:undefined}};};
 const msRouteKey=r=>R_(r.route,r.cfg.k,r.cfg.f,r.cfg.unit);
@@ -17087,10 +17101,16 @@ function msCard(m){
     <div class="bar" style="margin-top:4px">${!active?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div></div>`;
 }
 /* The mission board: every template with its real difficulty on your numbers. */
-let MS_CAT='penny';const MS_BOARD_CACHE={};
+let MS_CAT='warmup',MS_TIER='all';const MS_BOARD_CACHE={};
 function msBoardHtml(){
   const p=myLegRate().p.toFixed(3);
-  const cards=MS_LIB.filter(r=>r[1]===MS_CAT).map(r=>{const T=MS_TEMPLATES[r[0]];
+  const tierOf=r=>{const T=MS_TEMPLATES[r[0]];if(T.id==='custom')return null;const ck=T.id+'|'+p;let S=MS_BOARD_CACHE[ck];
+    if(!S){const fake={id:7,start:T.start,goal:T.goal,days:T.days,startDate:today(),balance:T.start,safe:0,routeKey:T.route||null,rule:T.rule,
+        pots:T.pots?T.pots.map(([name,share,route,rule,sport])=>({name,share,routeKey:route,rule,sport,start:T.start*share,balance:T.start*share})):null};
+      try{S=MS_BOARD_CACHE[ck]=msSimFor(fake,null,700);}catch(e){return null;}}
+    return msDifficulty(S.p)[1];};
+  const list=MS_TIER==='all'?MS_LIB.filter(r=>r[1]===MS_CAT):MS_LIB.filter(r=>tierOf(r)===MS_TIER);
+  const cards=list.map(r=>{const T=MS_TEMPLATES[r[0]];
     const ck=T.id+'|'+p;let S=MS_BOARD_CACHE[ck];
     if(!S&&T.id!=='custom'){const fake={id:7,start:T.start,goal:T.goal,days:T.days,startDate:today(),balance:T.start,safe:0,routeKey:T.route||null,rule:T.rule,
         pots:T.pots?T.pots.map(([name,share,route,rule,sport])=>({name,share,routeKey:route,rule,sport,start:T.start*share,balance:T.start*share})):null};
@@ -17104,7 +17124,10 @@ function msBoardHtml(){
       <div class="mono" style="font-size:9.5px;color:var(--mute)">${route}${T.rule?' · '+MS_FILTERS[T.rule].lab:''}${T.sport?' · '+SPORT_LAB[T.sport]:''}</div>
       <div class="sub" style="font-size:11px;margin:3px 0">${esc(T.note)}</div>
       <div class="bar" style="align-items:center">${T.pots&&T.pots.every(x=>x[4])?'':msSportSelect(T.sport,'',`msSp-${T.id}`)}<button class="primary" onclick="msStart('${T.id}',(document.getElementById('msSp-${T.id}')||{}).value)">Start</button></div></div>`;}).join('');
-  return`<div class="subnav" style="flex-wrap:wrap">${Object.entries(MS_CATS).map(([k,l])=>`<button class="${MS_CAT===k?'on':''}" onclick="MS_CAT='${k}';msRender()">${l}</button>`).join('')}</div>${cards}`;
+  const tiers=`<div class="subnav" style="flex-wrap:wrap;margin-bottom:4px"><button class="${MS_TIER==='all'?'on':''}" onclick="MS_TIER='all';msRender()">By category</button>${MS_DIFF.slice().reverse().reverse().map(d=>`<button class="${MS_TIER===d[1]?'on':''}" style="color:${d[2]}" onclick="MS_TIER='${d[1]}';msRender()">${d[1]}</button>`).join('')}</div>`;
+  const cats=MS_TIER==='all'?`<div class="subnav" style="flex-wrap:wrap">${Object.entries(MS_CATS).map(([k,l])=>`<button class="${MS_CAT===k?'on':''}" onclick="MS_CAT='${k}';msRender()">${l}</button>`).join('')}</div>`:
+    `<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin:2px 0">${list.length} ${MS_TIER} mission${list.length===1?'':'s'} across every category${list.length?'':' — as your record improves, missions move into easier tiers'}</div>`;
+  return tiers+cats+cards;
 }
 function missionsHtml(inner){
   const A=msSync();const xp=msXP(),R=msRank(xp);const act=A.filter(m=>m.status==='active');

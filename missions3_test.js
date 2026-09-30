@@ -24,7 +24,7 @@ const w=dom.window;
   const lib=w.eval('MS_LIB.length'),cats=w.eval('Object.keys(MS_CATS)');
   const perCat=cats.map(c=>[c,w.eval(`MS_LIB.filter(r=>r[1]==='${c}').length`)]);
   T('50+ missions on the board',lib>=50,lib+' missions');
-  T('8 categories, 5+ missions each',cats.length===8&&perCat.every(x=>x[1]>=5),perCat.map(x=>x.join(':')).join(' '));
+  T('9 categories, 5+ missions each',cats.length===9&&perCat.every(x=>x[1]>=5),perCat.map(x=>x.join(':')).join(' '));
   T('penny missions: $1 → $1,000 and $5 → $500 exist',w.eval("!!MS_TEMPLATES.dollar_grand&&MS_TEMPLATES.dollar_grand.start===1&&MS_TEMPLATES.dollar_grand.goal===1000&&MS_TEMPLATES.five_hundred.start===5&&MS_TEMPLATES.five_hundred.goal===500"));
   // ── house money: small until you're up, then only profit rides ──
   const hm=(b,start)=>w.eval(`msStakeFor('housemoney',{k:3,f:.4,unit:1},${b},${start})`);
@@ -79,7 +79,7 @@ const w=dom.window;
   T('mission complete → XP for its difficulty + clean-run bonus',done.status==='won'&&done.clean&&done.xp-xp0>=base*1.5,`${diff}: +${done.xp-xp0} XP`);
   // ── the board ──
   w.eval("tab('money',null)");await wait(300);let mb=w.document.getElementById('moneyBody').innerHTML;
-  T('Money tab: mission board with categories and Start buttons',/Mission board · 5\d/.test(mb)&&/Penny stocks/.test(mb)&&/Dollar to a Grand/.test(mb)&&/first bet \$1/.test(mb));
+  T('Money tab: mission board with categories and Start buttons (opens on Warm-ups)',/Mission board · 6\d/.test(mb)&&/Penny stocks/.test(mb)&&/Warm-ups/.test(mb)&&/First Win/.test(mb)&&/Start/.test(mb));
   T('board shows difficulty + finish % per mission',/(EASY|MEDIUM|HARD|LEGENDARY) · [\d.]+%/.test(mb));
   T("header totals today's stakes across running missions",/today's stakes across missions/.test(mb));
   w.eval("MS_CAT='multi';msRender()");mb=w.document.getElementById('missionsBody').innerHTML;
