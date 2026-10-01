@@ -482,6 +482,42 @@ function nflAbbrFor(s){
   for(const name in idx){if(name.length>3&&name.length>bestLen&&k.includes(name)){best=idx[name];bestLen=name.length}}
   return best;
 }
+
+/* ══ PERIOD MARKETS (1st half, 1st quarter) ══════════════════════════════════
+   Priced from the sim's own projections: a period gets its share of the points,
+   with spread scaled by √share. Scores are whole numbers, so a "Pk" line or a
+   tied period pushes — chances shown are win ÷ (win + loss), the same basis the
+   price is paid on. */
+const FB_PER_SHARE={nfl:{h1:0.49,q1:0.21},ncaaf:{h1:0.50,q1:0.24}};
+const fbPhi=z=>{const t=1/(1+0.2316419*Math.abs(z)),d=0.3989423*Math.exp(-z*z/2);const p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p;};
+function fbPeriodModel(s,sp,per){
+  const sh=(FB_PER_SHARE[sp]||FB_PER_SHARE.nfl)[per];const ap=+s.awayProj||22,hp=+s.homeProj||22;
+  const mM=(hp-ap)*sh,mT=(ap+hp)*sh,sdM=(sp==='ncaaf'?16:13.5)*Math.sqrt(sh),sdT=(sp==='ncaaf'?16:13)*Math.sqrt(sh);
+  const above=(k,m,sd)=>1-fbPhi((k+0.5-m)/sd);          // P(X > k) for whole-number X
+  const exact=(k,m,sd)=>fbPhi((k+0.5-m)/sd)-fbPhi((k-0.5-m)/sd);
+  const twoWay=(win,push)=>{const lose=1-win-push;return win+lose>0?win/(win+lose):0.5;};
+  const cover=(side,line)=>{const need=-line;             // home margin must beat -line (away: mirror)
+    const mm=side==='home'?mM:-mM;const fl=Math.floor(need);const isInt=Math.abs(need-Math.round(need))<1e-9;
+    return isInt?twoWay(above(Math.round(need),mm,sdM),exact(Math.round(need),mm,sdM)):above(fl,mm,sdM);};
+  const ml=side=>{const mm=side==='home'?mM:-mM;return twoWay(above(0,mm,sdM),exact(0,mm,sdM));};
+  const over=line=>{const isInt=Math.abs(line-Math.round(line))<1e-9;return isInt?twoWay(above(line,mT,sdT),exact(line,mT,sdT)):above(Math.floor(line),mT,sdT);};
+  return{cover,ml,over,mT,mM,tie:exact(0,mM,sdM)};
+}
+function fbPeriodSection(g,s,sp,lines,mk,sq,opts){
+  opts=opts||{};const sg=x=>+x===0?'Pk':(x>0?'+':'')+x;const out=[];
+  [['h1','1st Half','1H'],['q1','1st Quarter','Q1']].forEach(([per,title,tag])=>{
+    const f=(m,sd)=>lines.find(x=>x.market===per+m&&x.side===sd);
+    const sa=f('spread','away'),sh=f('spread','home'),ma=f('ml','away'),mh=f('ml','home'),ov=f('total','over'),un=f('total','under');
+    const skipSpTot=per==='h1'&&opts.h1Shown;
+    if(!(ma||mh||(!skipSpTot&&(sa||sh||ov||un))))return;
+    const M=fbPeriodModel(s,sp,per);const grids=[];
+    if(!skipSpTot&&sa&&sh)grids.push(sq(`${g.away.abbr} ${tag} ${sg(sa.line)}`,`${tag} ${g.away.abbr} ${sg(sa.line)}`,mk(M.cover('away',+sa.line),sa.price),M.mM?(-M.mM).toFixed(1):'0')+sq(`${g.home.abbr} ${tag} ${sg(sh.line)}`,`${tag} ${g.home.abbr} ${sg(sh.line)}`,mk(M.cover('home',+sh.line),sh.price),M.mM.toFixed(1)));
+    if(ma&&mh)grids.push(sq(`${g.away.abbr} ${tag} ML`,`${tag} ${g.away.abbr} ML`,mk(M.ml('away'),ma.price),Math.round(M.ml('away')*100)+'%')+sq(`${g.home.abbr} ${tag} ML`,`${tag} ${g.home.abbr} ML`,mk(M.ml('home'),mh.price),Math.round(M.ml('home')*100)+'%'));
+    if(!skipSpTot&&ov&&un)grids.push(sq(`${tag} Over ${ov.line}`,`${tag} Over ${ov.line}`,mk(M.over(+ov.line),ov.price),M.mT.toFixed(1))+sq(`${tag} Under ${un.line}`,`${tag} Under ${un.line}`,mk(1-M.over(+un.line),un.price),M.mT.toFixed(1)));
+    out.push(`<div class="mktlab" style="margin-top:8px">${title}${skipSpTot?' moneyline':''} <span class="mono" style="font-size:9px;color:var(--mute);text-transform:none;letter-spacing:0">· proj ${(M.mT).toFixed(1)} pts${per==='q1'?` · tied quarter ${Math.round(M.tie*100)}% (push on Pk/ML)`:''}</span></div>`+grids.map(x=>`<div class="betgrid" style="margin-top:4px">${x}</div>`).join(''));
+  });
+  return out.join('');
+}
 function parseNFLSlateText(text,opts){
   /* CFB reuses this grammar but must resolve team names against its own
      schedule — running college names through the NFL abbreviation table
@@ -2132,6 +2168,7 @@ function nflCardFull(g){
     </div>`:''}
     `:''}
 
+    ${(()=>{try{return fbPeriodSection(g,s,'nfl',lines,mk,nflSq,{h1Shown:!!(h1AwaySpread||h1Over)})}catch(e){console.warn('nfl periods',e);return''}})()}
     ${nflProps.length?`<div class="mktlab" style="margin-top:8px">Props (${nflProps.length})</div>
     <div class="betgrid">
       ${nflProps.map(p=>nflSq(`${p.player} ${p.stat} ${p.line}+`,`${p.player} ${p.stat} ${p.line}+`,p.e,(p.simP*100).toFixed(0)+'%')).join('')}
@@ -3936,6 +3973,7 @@ function ncaafCard(g){
       ${cfbSq(`Over ${totalOver?totalOver.line:med}`,`Over ${totalOver?totalOver.line:med}`,eOver,simTotVal)}
       ${cfbSq(`Under ${totalUnder?totalUnder.line:med}`,`Under ${totalUnder?totalUnder.line:med}`,eUnder,simTotVal)}
     </div>
+    ${(()=>{try{return fbPeriodSection(g,s,'ncaaf',lines,mk,cfbSq)}catch(e){console.warn('cfb periods',e);return''}})()}
     ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
       <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px">${g.away.abbr} ${consML.awayPct||'?'}%</span>
       <div style="flex:1;height:4px;border-radius:2px;background:var(--rule)">

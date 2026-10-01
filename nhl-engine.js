@@ -209,12 +209,12 @@ function nhlExpected(g){
 }
 function simNHLGame(g,N){
   N=N||20000;const{la,lh}=nhlExpected(g);const shape=35;
-  const TOT=new Int32Array(30),MAR=new Int32Array(41),P1T=new Int32Array(20);const sf={};
+  const TOT=new Int32Array(30),MAR=new Int32Array(41),P1T=new Int32Array(20),P1M=new Int32Array(21);const sf={};
   let aw=0,hw=0,ot=0,sa=0,sh=0,p1a=0,p1h=0;
   for(let i=0;i<N;i++){
     let a=nhlPois(la*nhlGamma(shape)/shape),h=nhlPois(lh*nhlGamma(shape)/shape);
     let q=0,w=0;for(let k=0;k<a;k++)if(Math.random()<NHL_P1)q++;for(let k=0;k<h;k++)if(Math.random()<NHL_P1)w++;
-    p1a+=q;p1h+=w;P1T[Math.min(19,q+w)]++;
+    p1a+=q;p1h+=w;P1T[Math.min(19,q+w)]++;P1M[Math.max(0,Math.min(20,w-q+10))]++;
     if(Math.abs(a-h)===1){const r=Math.random();const lead=a>h?'a':'h';
       if(r<0.12){if(lead==='a')a++;else h++;}else if(r<0.18){if(lead==='a')h++;else a++;}}
     if(a===h){ot++;if(Math.random()<0.51)h++;else a++;}
@@ -227,10 +227,14 @@ function simNHLGame(g,N){
   const awayCover=al=>{let c=0;for(let m=-20;m<=20;m++)if(-m+al>0)c+=MAR[m+20];return c/N;};
   const p1Over=L=>{let c=0;for(let t=0;t<20;t++)if(t>L)c+=P1T[t];return c/N;};
   const p1Under=L=>{let c=0;for(let t=0;t<20;t++)if(t<L)c+=P1T[t];return c/N;};
+  /* 1st period: a tied period refunds a 2-way period moneyline, so its chance is win ÷ (win + loss). */
+  const p1Win=side=>{let w=0,l=0;for(let m=-10;m<=10;m++){const c=P1M[m+10];if(!m)continue;if((m>0)===(side==='home'))w+=c;else l+=c;}return w+l?w/(w+l):0.5;};
+  const p1Cover=(side,line)=>{let w=0,l=0;for(let m=-10;m<=10;m++){const c=P1M[m+10];const v=(side==='home'?m:-m)+line;if(v>0)w+=c;else if(v<0)l+=c;}return w+l?w/(w+l):0.5;};
+  const p1Tie=P1M[10]/N;
   let med=0,acc=0;for(let t=0;t<30;t++){acc+=TOT[t];if(acc>=N/2){med=t;break;}}
   let modeScore=null,modeN=0;for(const k in sf)if(sf[k]>modeN){modeN=sf[k];modeScore=k;}
   return{N,la,lh,awayProj:+(sa/N).toFixed(2),homeProj:+(sh/N).toFixed(2),aw:aw/N,hw:hw/N,otP:ot/N,med,
-    over,under,homeCover,awayCover,p1Over,p1Under,p1Proj:+((p1a+p1h)/N).toFixed(2),p1a:p1a/N,p1h:p1h/N,
+    over,under,homeCover,awayCover,p1Over,p1Under,p1Win,p1Cover,p1Tie,p1Proj:+((p1a+p1h)/N).toFixed(2),p1a:p1a/N,p1h:p1h/N,
     modeScore,modeScorePct:modeN/N,medMargin:(sh-sa)/N};
 }
 function nhlSimFor(g){const sig=NHL_RATINGS?NHL_RATINGS.ts:0;let s=NHL_SIMS[g.id];
@@ -271,6 +275,7 @@ function nhlLineObj(game){
   const L=nhlBookLinesFor(game),f=(m,s)=>L.find(x=>x.market===m&&x.side===s)||null;
   return{awayML:f('moneyline','away'),homeML:f('moneyline','home'),awayPL:f('spread','away'),homePL:f('spread','home'),
     over:f('total','over'),under:f('total','under'),p1over:f('p1total','over'),p1under:f('p1total','under'),
+    p1mlA:f('p1ml','away'),p1mlH:f('p1ml','home'),p1plA:f('p1spread','away'),p1plH:f('p1spread','home'),
     props:L.filter(x=>x.market==='prop')};
 }
 function nhlStoreEspnLines(){
@@ -299,6 +304,10 @@ function parseNHLSlateText(text){
     if(!A){unread.push(l);return;}
     const base={away:A,home:H,game:A+'@'+H};
     const side=t=>{const ab=nhlAbbrFor(t);return ab===A?'away':ab===H?'home':null;};
+    if((m=l.match(/^(?:P1ML|1PML|P1 ?MONEYLINE):\s*(.+?)\s+([+-]\d+)\s*\/\s*(.+?)\s+([+-]\d+)\s*$/i))){
+      const s1=side(m[1]),s2=side(m[3]);if(s1&&s2){picks.push({...base,market:'p1ml',side:s1,line:null,price:+m[2]},{...base,market:'p1ml',side:s2,line:null,price:+m[4]});return;}}
+    if((m=l.match(/^(?:P1PL|1PPL|P1 ?PUCK ?LINE|P1SPREAD):\s*(.+?)\s+([+-]?[\d.]+)\s*\(\s*([+-]\d+)\s*\)\s*\/\s*(.+?)\s+([+-]?[\d.]+)\s*\(\s*([+-]\d+)\s*\)\s*$/i))){
+      const s1=side(m[1]),s2=side(m[4]);if(s1&&s2){picks.push({...base,market:'p1spread',side:s1,line:num(m[2]),price:+m[3]},{...base,market:'p1spread',side:s2,line:num(m[5]),price:+m[6]});return;}}
     if((m=l.match(/^ML:\s*(.+?)\s+([+-]\d+)\s*\/\s*(.+?)\s+([+-]\d+)\s*$/i))){
       const s1=side(m[1]),s2=side(m[3]);if(s1&&s2){picks.push({...base,market:'moneyline',side:s1,line:null,price:+m[2]},{...base,market:'moneyline',side:s2,line:null,price:+m[4]});return;}}
     if((m=l.match(/^(?:PL|SPREAD|RL|PUCK ?LINE):\s*(.+?)\s+([+-]?[\d.]+)\s*\(\s*([+-]\d+)\s*\)\s*\/\s*(.+?)\s+([+-]?[\d.]+)\s*\(\s*([+-]\d+)\s*\)\s*$/i))){
@@ -539,7 +548,14 @@ function nhlCard(g){
     nhlTile(g,s,'Under '+tl,'Under '+tl,L.under,s.under(tl),(s.awayProj+s.homeProj).toFixed(1),'total'));
   const p1l=L.p1over?L.p1over.line:1.5;
   const p1=nhlMkt('1ST PERIOD TOTAL · '+p1l,!!L.p1over,nhlTile(g,s,'P1 Over '+p1l,'P1 Over '+p1l,L.p1over,s.p1Over(p1l),s.p1Proj.toFixed(2),'p1total')+
-    nhlTile(g,s,'P1 Under '+p1l,'P1 Under '+p1l,L.p1under,s.p1Under(p1l),s.p1Proj.toFixed(2),'p1total'));
+    nhlTile(g,s,'P1 Under '+p1l,'P1 Under '+p1l,L.p1under,s.p1Under(p1l),s.p1Proj.toFixed(2),'p1total'));  const sgP=x=>(x>0?'+':'')+x;
+  const p1pl=(L.p1plA&&L.p1plH)?nhlMkt('1ST PERIOD PUCK LINE',true,
+    nhlTile(g,s,`${g.away.abbr} ${sgP(L.p1plA.line)}`,`P1 ${g.away.abbr} ${sgP(L.p1plA.line)}`,L.p1plA,s.p1Cover('away',+L.p1plA.line),(s.p1a||0).toFixed(2),'p1spread')+
+    nhlTile(g,s,`${g.home.abbr} ${sgP(L.p1plH.line)}`,`P1 ${g.home.abbr} ${sgP(L.p1plH.line)}`,L.p1plH,s.p1Cover('home',+L.p1plH.line),(s.p1h||0).toFixed(2),'p1spread')):'';
+  const p1ml=(L.p1mlA&&L.p1mlH)?nhlMkt(`1ST PERIOD MONEYLINE · tie ${Math.round((s.p1Tie||0)*100)}% (push)`,true,
+    nhlTile(g,s,g.away.abbr,`P1 ${g.away.abbr} ML`,L.p1mlA,s.p1Win('away'),(s.p1a||0).toFixed(2),'p1ml')+
+    nhlTile(g,s,g.home.abbr,`P1 ${g.home.abbr} ML`,L.p1mlH,s.p1Win('home'),(s.p1h||0).toFixed(2),'p1ml')):'';
+
   const btn=(k,t)=>`<button onclick="nhlPan('${g.id}','${k}',this)">${t}</button>`;
   return`<div class="tkt" id="nhl-card-${g.id}" style="margin-bottom:10px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
@@ -548,7 +564,7 @@ function nhlCard(g){
       <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${A} ${nhlEsc(g.away.record)}<br>${H} ${nhlEsc(g.home.record)}</div></div>
     ${head}<div class="sig">${chips.join('')}${extra}</div>
     ${g.abstract==='pre'?(()=>{try{return coachHtml({game:g,sim:s,sport:'nhl'})}catch(e){return''}})():''}
-    ${g.abstract!=='post'?pl+ml+to+p1:''}
+    ${g.abstract!=='post'?pl+ml+to+p1+p1pl+p1ml:''}
     <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
     <div class="legend" style="margin-top:2px"><span>◆ SUPREME = book price, model edge and outside sources all agree</span><span>STRONG = two of three</span><span>⚠ CONFLICT = they disagree</span></div>
     <div class="exprow" style="margin-top:10px">${btn('coach','Coach')}${btn('trends','Trends')}${btn('alt','Alt Lines')}${btn('roster','Roster')}${btn('props','Props')}${btn('box','Proj. Box')}${btn('verdict','Take/Fade')}${g.abstract!=='pre'?btn('live',g.abstract==='in'?'Live box':'Box score'):''}${btn('mybets','My Bets')}</div>
