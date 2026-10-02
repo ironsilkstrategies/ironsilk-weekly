@@ -6848,8 +6848,15 @@ function resolveLeg(leg,ticketDate){
     {const mg=mgResolve(leg,ticketDate);if(mg)return mg;}
     // shared cross-sport finals store — visible on every page
     const shared=allFinals()[finalsKey(leg.sport,leg.game)];
-    if(shared&&shared.a!=null)
+    if(shared&&shared.a!=null){
+      /* Cross-check: ESPN occasionally sends a brief 'post' state mid-game
+         (a known halftime glitch), which causes syncFinalsToShared to write the
+         live score as if it were a final. If My Games currently says this game
+         is still live, trust that and keep the leg pending. The allFinals entry
+         will correct itself on the next 45-second refresh once the game truly ends. */
+      try{const mg2=mgResolve(leg,ticketDate);if(mg2&&mg2.live)return mg2;}catch(e){}
       return{a:+shared.a,h:+shared.h,h1a:shared.h1a,h1h:shared.h1h,p1a:shared.p1a,p1h:shared.p1h,gid:leg.gid,live:false,source:'shared'};
+    }
     /* Finished football games also live in the sport archive, in two shapes:
        date → [rows] (finals mirror) and week → {rows,finals} (snapshots).
        Treating a week object as a list threw here instead of finding the score. */
@@ -6910,7 +6917,10 @@ function resolveLeg(leg,ticketDate){
   }
   // 3) The MLB board wasn't open that day, so nothing was archived: use the shared finals store, then
   //    ESPN's own feed (My Games). Without this an MLB leg on a ticket could sit ungraded forever.
-  try{const sh=allFinals()[finalsKey('mlb',leg.game)];if(sh&&sh.a!=null&&sh.h!=null)return{a:+sh.a,h:+sh.h,live:false,source:'shared'};}catch(e){}
+  try{const sh=allFinals()[finalsKey('mlb',leg.game)];if(sh&&sh.a!=null&&sh.h!=null){
+    try{const mg2=mgResolve({...leg,sport:'mlb'},ticketDate);if(mg2&&mg2.live)return mg2;}catch(e){}
+    return{a:+sh.a,h:+sh.h,live:false,source:'shared'};}
+  }catch(e){}
   {const mg=mgResolve({...leg,sport:'mlb'},ticketDate);if(mg)return{...mg,completed:mg.completed};}
   return null;
 }
@@ -15558,6 +15568,7 @@ function recordFinal(sport,game,awayScore,homeScore){
   all[finalsKey(sport,game)]={sport,a:+awayScore,h:+homeScore,ts:Date.now()};
   set(LS.allfinals,all);
 }
+const SYNC_SEEN={};  // key → {a,h,ts} — two-pass debounce for syncFinalsToShared
 /* Sweep whatever finals are currently in memory for the loaded sport(s) into
    the shared store. Cheap; safe to call often. Each page calls this for the
    engines it actually has loaded, so over normal use every sport's finals
@@ -15567,8 +15578,20 @@ function syncFinalsToShared(){
   const sweep=(arr,sport)=>(arr||[]).forEach(g=>{
     if(g.awayScore==null||g.awayScore==='')return;
     const isFinal=g.abstract==='post'||(!g.abstract&&g.status==='Final'); // structured state wins
-    if(!isFinal)return;
+    if(!isFinal){const sk=finalsKey(sport,g.away.abbr+'@'+g.home.abbr);SYNC_SEEN[sk]={live:true,ts:Date.now()};return;}
     const key=finalsKey(sport,g.away.abbr+'@'+g.home.abbr);
+    /* Two-pass debounce: ESPN briefly sends 'post' at halftime on some games.
+       Only write to allFinals once we've seen the same final score twice, at
+       least 3 seconds apart. The first observation is cached; the second writes. */
+    const seen=SYNC_SEEN[key];const now=Date.now();
+    /* The debounce only applies when we previously saw this game as live: if
+       SYNC_SEEN has a 'live' flag we cleared when the game was in-progress, we
+       require two consecutive 'post' reads. If we never saw the game live (fresh
+       load, or a game that went from pre → post without being open), write immediately. */
+    if(seen&&seen.live){
+      if(seen.a!==+g.awayScore||seen.h!==+g.homeScore){SYNC_SEEN[key]={a:+g.awayScore,h:+g.homeScore,ts:now,live:true};return;}
+      if(now-seen.ts<3000)return;
+    }
     const prev=all[key];
     if(!prev||prev.a!==+g.awayScore||prev.h!==+g.homeScore||(g.h1a!=null&&prev.h1a==null)){
       all[key]={sport,a:+g.awayScore,h:+g.homeScore,h1a:g.h1a!=null?+g.h1a:null,h1h:g.h1h!=null?+g.h1h:null,p1a:g.p1a!=null?+g.p1a:null,p1h:g.p1h!=null?+g.p1h:null,ts:Date.now()};changed=true;
