@@ -372,10 +372,10 @@ function intakeNormalizeKV(text){
    (e.g. a ticket with CFB legs pasted on the NHL page). Keys are all-caps
    no-spaces slugs; values are the ESPN abbreviation used everywhere else. ── */
 const CFB_FALLBACK_ABBR={
-  NORTHTEXAS:'UNT',MEANGREENUNNORTHTEXAS:'UNT',UNT:'UNT',
+  NORTHTEXAS:'UNT',NORTHTEX:'UNT',NTEXAS:'UNT',MEANGREENUNNORTHTEXAS:'UNT',UNT:'UNT',
   TULSA:'TLSA',GOLDENHURRICANE:'TLSA',TLSA:'TLSA',
   WESTERNKENTUCKY:'WKU',HILLTOPPERS:'WKU',WKU:'WKU',
-  NEWMEXICOSTATE:'NMSU',AGGIES:'NMSU',NMSU:'NMSU',
+  NEWMEXICOSTATE:'NMSU',NEWMEXICOST:'NMSU',NEWMEXICO:'NMSU',AGGIES:'NMSU',NMSU:'NMSU',
   PITTSBURG:'PIT',PITTSBURGH:'PITT',STEELERS:'PIT',
   ALABAMA:'ALA',CRIMSONTIIDE:'ALA',ALA:'ALA',
   ARIZONA:'ARIZ',WILDCATS:'ARIZ',ARIZ:'ARIZ',ARIZONASTATE:'ASU',ASU:'ASU',
@@ -471,7 +471,7 @@ const CFB_FALLBACK_ABBR={
   WISCONSIN:'WIS',BADGERS:'WIS',WIS:'WIS',
   WYOMING:'WYO',COWBOYS:'WYO',WYO:'WYO',
 };
-const cfbFallbackAbbr=raw=>{if(!raw)return null;const k=String(raw).toUpperCase().replace(/[^A-Z0-9]/g,'');return CFB_FALLBACK_ABBR[k]||null;};
+const cfbFallbackAbbr=raw=>{if(!raw)return null;const words=String(raw).trim().split(/\s+/);const norm=x=>String(x).toUpperCase().replace(/[^A-Z0-9]/g,'');for(let len=words.length;len>=1;len--){const k=norm(words.slice(0,len).join(' '));if(CFB_FALLBACK_ABBR[k])return CFB_FALLBACK_ABBR[k];}return null;};
 function ticketAmerToProb(price){
   if(price==null||isNaN(price))return 0.5;
   return price>0?100/(price+100):(-price)/(-price+100);
@@ -584,7 +584,7 @@ function parseSGPTicketText(text){
     if(sgpHdr){
       const sportWord=sgpHdr[2].toUpperCase();
       const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
-      if(!sport||!intakeCanNameResolve(sport)){cur=null;skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
+      if(!sport||(sport!=='ncaaf'&&!intakeCanNameResolve(sport))){cur=null;skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
       const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
       let A=awayAb,H=homeAb;if(matchStyle){A=homeAb;H=awayAb;}
@@ -618,6 +618,13 @@ function parseSGPTicketText(text){
       if(st){const [stat,role]=MS[st.toLowerCase()];
         push({pick:`${nm.trim()} ${dir==='atleast'?thr+'+':dir+' '+thr} ${st.toLowerCase()}`,isProp:1,mlbProp:{player:nm.trim(),stat,role,thr,dir}});return;}
       propSkipped++;skipped.push(line+'  (baseball player-stat phrasing not recognized)');return;}
+    /* (1st period) and (1st half) lines — save with a period prefix so gradeLeg can use them */
+    if((m=line.match(/^(?:Handicap|Spread|Puck ?line)\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(1st\s*period\)\s*$/i))){const ab=intakeAbbr(cur.sport,m[1])||cfbFallbackAbbr(m[1]);if(ab){push({pick:'P1 '+ab+' '+m[2]});return;}skipped.push(line+'  (team not recognized)');return;}
+    if((m=line.match(/^Total\s+(?:goals|runs|points)\s*-\s*(Over|Under)\s+([\d.]+)\s*\(1st\s*period\)\s*$/i))){push({pick:'P1 '+m[1][0].toUpperCase()+m[1].slice(1).toLowerCase()+' '+m[2]});return;}
+    if((m=line.match(/^(?:Handicap|Spread|Puck ?line)\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(1st\s*half\)\s*$/i))){const ab=intakeAbbr(cur.sport,m[1])||cfbFallbackAbbr(m[1]);if(ab){push({pick:'1H '+ab+' '+m[2]});return;}skipped.push(line+'  (team not recognized)');return;}
+    if((m=line.match(/^Total\s+(?:goals|runs|points)\s*-\s*(Over|Under)\s+([\d.]+)\s*\(1st\s*half\)\s*$/i))){push({pick:'1H '+m[1][0].toUpperCase()+m[1].slice(1).toLowerCase()+' '+m[2]});return;}
+    /* Result - Team = moneyline in the (Match) dialect */
+    if((m=line.match(/^(?:Result|Winner|Moneyline|Money ?line)\s*-\s*(.+?)\s*\((?:Match|Game)\)\s*$/i))){const ab=intakeAbbr(cur.sport,m[1])||cfbFallbackAbbr(m[1]);if(ab){push({pick:ab+' ML'});return;}skipped.push(line+'  (team not recognized)');return;}
     if(cur.sport==='nhl'){
       const HS={goals:'goals',goal:'goals',assists:'assists',points:'points','shots on goal':'shots',shots:'shots',saves:'saves'};
       if((m=line.match(/^Anytime\s+point\s*-\s*(.+?)\s*\(Game\)\s*$/i))){
