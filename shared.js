@@ -368,6 +368,42 @@ function intakeNormalizeKV(text){
    A leg whose sport isn't resolvable on this page (e.g. an NCAAF leg pasted
    on mlb.html) is skipped with a note, not guessed at. */
 
+/* ── NHL / CFB PLAYER STAT STORE ────────────────────────────────────────
+   Rolling stats built from box scores we already pull each game day.
+   Keyed by sport:team_abbr:player_name → {games,stat,...} for quick lookup
+   in the Props tab and for prop-line recommendations. */
+const PSTAT_KEY='d4.pstats';
+const PSTAT_CACHE={};
+function pstatStore(){if(!PSTAT_CACHE._v){PSTAT_CACHE._v=roGet(PSTAT_KEY,{},120e3)||{};}return PSTAT_CACHE._v;}
+function pstatUpdate(sp,team,player,row){
+  const k=sp+':'+team+':'+player.replace(/[^a-z0-9]/gi,'').toLowerCase();
+  const S=pstatStore();const prev=S[k]||{n:0};
+  const n=(prev.n||0)+1;
+  // exponential moving average — more recent games weight more
+  const ema=(cur,val)=>cur==null?+val:(0.7*prev[cur]||0)+0.3*(+val||0);
+  if(sp==='nhl')S[k]={n,player,team,sp,g:ema('g',row.G||row.g||0),a:ema('a',row.A||row.a||0),s:ema('s',row.S||row.Shots||row.shots||0)};
+  else if(sp==='nfl'||sp==='ncaaf')S[k]={n,player,team,sp,pasYds:ema('pasYds',row.YDS||0),rusYds:ema('rusYds',row.YDS||0),recYds:ema('recYds',row.YDS||0),rec:ema('rec',row.REC||0),td:ema('td',row.TD||0)};
+  PSTAT_CACHE._v=S;try{set(PSTAT_KEY,S);}catch(e){}
+}
+function pstatFor(sp,player){
+  const raw=player.replace(/[^a-z0-9]/gi,'').toLowerCase();
+  const S=pstatStore();
+  return Object.values(S).find(x=>x.sp===sp&&x.player.replace(/[^a-z0-9]/gi,'').toLowerCase()===raw)||null;
+}
+/* Build pstats from an already-parsed hockey box */
+function pstatFeedNHL(game,box){
+  if(!box||!box.teams)return;
+  const [aw,hm]=String(game).split('@');
+  Object.entries(box.teams).forEach(([side,t])=>{const team=side==='away'?aw:hm;
+    (t.forwards||t.players||[]).forEach(r=>{if(r.name)pstatUpdate('nhl',team,r.name,r);});});
+}
+/* Build pstats from an already-parsed football box */
+function pstatFeedFB(game,box,sp){
+  if(!box||!box.teamStats)return;
+  const [aw,hm]=String(game).split('@');
+  Object.entries(box.teamStats).forEach(([side,t])=>{const team=side==='away'?aw:hm;
+    (['passing','rushing','receiving']).forEach(cat=>{(t[cat]||[]).forEach(r=>{if(r.name)pstatUpdate(sp,team,r.name,r);});});});
+}
 /* ── CFB FALLBACK ABBR — resolves team names when football-engine.js is absent
    (e.g. a ticket with CFB legs pasted on the NHL page). Keys are all-caps
    no-spaces slugs; values are the ESPN abbreviation used everywhere else. ── */
@@ -6962,6 +6998,8 @@ function fbpKick(){ // re-render the tickets board once fetched data lands — a
     try{if(typeof nflRefreshOpenForms==='function')nflRefreshOpenForms();}catch(e){}
     try{const v=document.getElementById('v-mine');if(v&&v.classList.contains('on')&&typeof renderMyGames==='function')renderMyGames();}catch(e){}},wait);
 }
+/* After parsing any box, feed the player rows into pstats */
+const _origNHLBox=fbpParseHockey; // will be re-wrapped below
 function fbpParseHockey(j){
   const hc=((j.header||{}).competitions||[])[0]||{};const st=hc.status||{};const state=(st.type||{}).state||'pre';
   const teams={};
@@ -6971,7 +7009,7 @@ function fbpParseHockey(j){
       const goalie=/goal/i.test(grp.name||grp.text||'')||labels.includes('SV');
       (grp.athletes||[]).forEach(at=>{const row={name:(at.athlete||{}).displayName||'',short:(at.athlete||{}).shortName||''};
         (at.stats||[]).forEach((v,i)=>{row[labels[i]]=v;});(goalie?t.goalies:t.skaters).push(row);});});});
-  return{state,period:st.period||0,teams,hockey:true};
+  const box={state,period:st.period||0,teams,hockey:true};return box;
 }
 function fbpParseBaseball(j){
   const hc=((j.header||{}).competitions||[])[0]||{};const st=hc.status||{};const state=(st.type||{}).state||'pre';
@@ -7106,6 +7144,8 @@ function fbpBox(id,sp){
     FBP_INFLIGHT['box:'+id]=1;
     fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json()).then(j=>{
       const box=sp==='nhl'?fbpParseHockey(j):sp==='mlb'?fbpParseBaseball(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
+  /* Feed parsed player rows into rolling season averages */
+  try{if(sp==='nhl')pstatFeedNHL(leg.game,box);else if(sp==='nfl'||sp==='ncaaf')pstatFeedFB(leg.game,box,sp);}catch(e){}
       if(box.state==='post'&&Object.keys(box.teamStats||box.teams||{}).length){
         const S=get(FBP_BOX_KEY,{})||{};S[sp+':'+id]={ts:Date.now(),final:true,box};
         Object.keys(S).forEach(k=>{if(Date.now()-S[k].ts>6*864e5)delete S[k];});
@@ -16350,6 +16390,17 @@ function todayCandidates(sp){
   });
   // one pick per game-market: if both sides somehow qualify, keep the stronger
   const best={};out.forEach(x=>{const k=x.game+'|'+x.m;if(!best[k]||x.rank>best[k].rank)best[k]=x;});
+  /* Standout prop: the player with the highest expected value vs their pstat average */
+  try{
+    let bestProp=null;const S=pstatStore();
+    Object.values(S).filter(x=>x.sp===sp&&x.n>=3).forEach(x=>{
+      const g=games.find(z=>z.away.abbr===x.team||z.home.abbr===x.team);if(!g)return;
+      if(g.abstract&&g.abstract!=='pre')return;  // game already started
+      if(sp==='nhl'&&x.g>0){const ev=x.g*3;bestProp=(!bestProp||ev>bestProp.ev)?{player:x.player,stat:'goals',avg:x.g.toFixed(2),ev,game:x.team===g.away.abbr?g.away.abbr+'@'+g.home.abbr:g.away.abbr+'@'+g.home.abbr,sp}:bestProp;}
+      if((sp==='nfl'||sp==='ncaaf')&&x.recYds>0){const ev=x.recYds;bestProp=(!bestProp||ev>bestProp.ev)?{player:x.player,stat:'receiving yds',avg:x.recYds.toFixed(0),ev,game:g.away.abbr+'@'+g.home.abbr,sp}:bestProp;}
+    });
+    if(bestProp)window.__TODAY_STANDOUT__=bestProp;
+  }catch(e){}
   const res=Object.values(best).sort((a,b)=>b.rank-a.rank);
   res.forEach(x=>{try{const g=games.find(z=>z.id===x.gid);const mf=g?marketFair(sp,g,x.m,x.sd,null):null;x.mkt=mf?mf.p:null;x.blend=x.mp!=null?blendProb(sp,x.m,x.mp,x.mkt):null;}catch(e){}});
   try{correlatedStakes(res)}catch(e){}
@@ -16377,7 +16428,13 @@ function todaySnapshot(){
   try{clvCapture(sp)}catch(e){}
   let picks=[],props=[];try{picks=todayCandidates(sp)}catch(e){console.warn('today picks',e)}try{props=todayProps(sp)}catch(e){}
   const all=get(TC_KEY,{})||{};const d=today();const T=all.d===d?all:{d,by:{}};
-  T.by[sp]={ts:Date.now(),picks,props};set(TC_KEY,T);
+  /* Daily lock: keep picks for games that have already started so picks
+     don't vanish mid-day when the board refreshes post-kickoff. Only add
+     new picks for games not yet in today's list. */
+  const prev=(T.by[sp]||{}).picks||[];
+  const prevGames=new Set(prev.map(p=>p.game));
+  const merged=[...prev,...(picks||[]).filter(p=>!prevGames.has(p.game))];
+  T.by[sp]={ts:Date.now(),picks:merged,props};set(TC_KEY,T);
   const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
 }
 function onTicketMatch(sp,game,m,sd){
@@ -16393,9 +16450,11 @@ function renderToday(noSnap){
   const sports=['nfl','ncaaf','mlb','nhl'].filter(sp=>by[sp]);
   const legend=`<div class="sub mono" style="font-size:9.5px;margin-bottom:6px">${Object.values(TC_COL).map(([c,l])=>`<span style="color:${c};margin-right:8px">■ ${l}</span>`).join('')}· conflicts and red are left off</div>`;
   if(!sports.length){el.innerHTML=legend+'<div class="empty">Open a sport\'s Games board once today and its picks land here.</div>';return;}
+  const standout=window.__TODAY_STANDOUT__;
+  const sdHtml=standout?('<div class="tkt" style="margin-bottom:8px;border-color:var(--gold)"><b>\u{1F31F} Standout prop</b> <span class="mono" style="font-size:10px;color:var(--mute)">'+standout.sp.toUpperCase()+'</span><div class="sub">'+esc(standout.player)+' \u00b7 '+esc(standout.stat)+' \u00b7 avg '+standout.avg+'/game</div></div>'):'';
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
   const age=ts=>{const m=Math.round((Date.now()-ts)/60000);return m<1?'just now':m<60?m+'m ago':Math.round(m/60)+'h ago';};
-  el.innerHTML=legend+sports.map(sp=>{const B=by[sp];const P=B.picks||[];
+  el.innerHTML=legend+sdHtml+sports.map(sp=>{const B=by[sp];const P=B.picks||[];
     const rows=P.map(x=>{const [c,l]=TC_COL[x.color];const on=onTicketMatch(sp,x.game,x.m,x.sd);
       const pr=x.price!=null?tcSgn(x.price):'<span style="color:var(--mute)">sim</span>';
       const pc=x.brainP!=null?`brain ${Math.round(x.brainP*100)}%`:x.mp!=null?`model ${Math.round(x.mp*100)}%`:'';
