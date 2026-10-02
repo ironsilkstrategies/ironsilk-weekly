@@ -171,6 +171,11 @@ function saveNFLBookOdds(picks,el){
 }
 
 // ── NFL render ─────────────────────────────────────────────────────────────────
+function nflCardWithProps(g){
+  const base=nflCard(g);
+  const props=typeof fbPropsCard==='function'?fbPropsCard(g,'nfl'):'';
+  return base+props;
+}
 function renderNFL(){
   /* One corrupt or partially-written cached game used to throw inside the sim
      and blank the entire board with no visible error. Drop malformed entries
@@ -255,8 +260,8 @@ function renderNFL(){
   if(ACTIVE_SPORT!=='nfl')return;
   let h=weekNav;
   h+=`<div class="bar" style="margin:-4px 0 10px"><button onclick="refreshNFLLiveScores()">↻ Refresh scores</button></div>`;
-  if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(nflCard).join('');
-  if(final.length)h+=sbar('Final',final.length)+final.map(nflCard).join('');
+  if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(nflCardWithProps).join('');
+  if(final.length)h+=sbar('Final',final.length)+final.map(nflCardWithProps).join('');
   try{h=nflRankingsBlock()+h;}catch(err){}
   el.innerHTML=h;
 }
@@ -2481,6 +2486,7 @@ function renderNFLGameAG(g,s){
 // ── Override nflCard to use full version ─────────────────────────────────────
 // The basic nflCard defined earlier is replaced by nflCardFull
 const _nflCardBasic=nflCard;
+const _nflCardOrig=null; // placeholder
 function nflCard(g){return nflCardFull(g);}
 
 // ── NFL refreshEverything hook ───────────────────────────────────────────────
@@ -3431,6 +3437,11 @@ async function refreshNCAAFLiveScores(){
     return changed;
   }catch(e){console.warn('CFB live refresh failed',e);return 0;}
 }
+function ncaafCardWithProps(g){
+  const base=ncaafCard(g);
+  const props=typeof fbPropsCard==='function'?fbPropsCard(g,'ncaaf'):'';
+  return base+props;
+}
 function renderNCAAF(){
   /* One corrupt or partially-written cached game used to throw inside the sim
      and blank the entire board with no visible error. Drop malformed entries
@@ -3764,6 +3775,25 @@ function ncaafPropsPanel(g){
     </div>`).join('')}
   </div>`;
 }
+
+/* Mini player-props card for a college/pro game from the pstat rolling store. */
+function fbPropsCard(g, sp){
+  try{
+    if(typeof pstatStore!=='function')return'';
+    const aw=g.away.abbr,hm=g.home.abbr;
+    const S=pstatStore();
+    const players=Object.values(S).filter(x=>x.sp===sp&&(x.team===aw||x.team===hm)&&x.n>=2);
+    if(!players.length)return'';
+    const rows=players.sort((a,b)=>(b.recYds||b.rusYds||b.pasYds||0)-(a.recYds||a.rusYds||a.pasYds||0)).slice(0,10).map(p=>{
+      const yds=p.recYds>0?`${p.recYds.toFixed(0)} rec`:p.rusYds>0?`${p.rusYds.toFixed(0)} rush`:p.pasYds>0?`${p.pasYds.toFixed(0)} pass`:'—';
+      const tds=(p.td||0)>0?` · ${p.td.toFixed(1)} td`:'';
+      const rec=(p.rec||0)>0?` · ${p.rec.toFixed(1)} rec`:'';
+      return`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${esc(p.player||'')}</b> <span style="color:var(--mute)">${p.team}</span> · <b style="color:var(--win)">${yds}</b>${rec}${tds} <span style="color:var(--mute);font-size:9px">(${p.n}G)</span></div>`;
+    }).join('');
+    return`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats (rolling avg)</summary>${rows}</details>`;
+  }catch(e){return'';}
+}
+
 function ncaafCard(g){
   const s=NCAAF_SIMS[g.id];if(!s)return'';
   const cfbLive=g.abstract==='in'||g.status==='InProgress'||g.status==='Halftime';
@@ -3974,6 +4004,7 @@ function ncaafCard(g){
       ${cfbSq(`Under ${totalUnder?totalUnder.line:med}`,`Under ${totalUnder?totalUnder.line:med}`,eUnder,simTotVal)}
     </div>
     ${(()=>{try{return fbPeriodSection(g,s,'ncaaf',lines,mk,cfbSq)}catch(e){console.warn('cfb periods',e);return''}})()}
+    ${typeof fbPropsCard==='function'?fbPropsCard(g,'ncaaf'):''}
     ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
       <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px">${g.away.abbr} ${consML.awayPct||'?'}%</span>
       <div style="flex:1;height:4px;border-radius:2px;background:var(--rule)">

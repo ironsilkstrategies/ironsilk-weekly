@@ -2990,7 +2990,7 @@ function tab(n,b){
   if(n==='best'){bestTab(BESTTAB||'today');}
   if(n==='settings')fillSettingsTab();
   if(n==='settings'){const m=document.getElementById('storageMeter');if(m)m.innerHTML=storageMeterHtml();}
-  if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+missionsHtml()}catch(e){console.warn('missions',e)}el.innerHTML=h+renderMoneyTab();}}
+  if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+missionsHtml()}catch(e){console.warn('missions',e)}try{h=msRoadmapSection()+h;}catch(e){}el.innerHTML=h+renderMoneyTab();}}
   if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
   if(n==='today')renderToday();
   if(n==='grades')renderRecordsHub();
@@ -16662,14 +16662,19 @@ function renderRecordsHub(){
     HUB_VOICES.filter(v=>D.M[v]).map(v=>row((CHARS[v]?CHARS[v].chip+' ':'')+(CHARS[v]?CHARS[v].label:v),D.M[v],CHARS[v]?CHARS[v].color:null)),
     D.M['Outside preds']?[row('Outside preds',D.M['Outside preds'])]:[]);
   const best=HUB_VOICES.concat(['Outside preds']).map(v=>({v,o:sum(D.M[v])})).filter(x=>x.o.n>=15).sort((a,b)=>b.o.w/b.o.n-a.o.w/a.o.n)[0];
-  el.innerHTML=`<div class="tkt hi" style="margin-bottom:8px"><h3>Records hub — everyone, every sport</h3>
+  const _sp=typeof REC_FILTER_SP!=='undefined'?REC_FILTER_SP:'all';
+  const _mkt=typeof REC_FILTER_MKT!=='undefined'?REC_FILTER_MKT:'all';
+  const spBtn=(k,l)=>'<button class="'+((_sp===k)?'on':'')+'" onclick="REC_FILTER_SP=\''+k+'\';renderRecordsHub()">'+l+'</button>';
+  const mktBtn=(k,l)=>'<button class="'+((_mkt===k)?'on':'')+'" onclick="REC_FILTER_MKT=\''+k+'\';renderRecordsHub()">'+l+'</button>';
+  const filterBar='<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+spBtn('all','All Sports')+spBtn('mlb','⚾ MLB')+spBtn('nfl','🏈 NFL')+spBtn('ncaaf','🏟 CFB')+spBtn('nhl','🏒 NHL')+'</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+mktBtn('all','All bets')+mktBtn('ml','Sides')+mktBtn('spread','Spreads')+mktBtn('total','Totals')+mktBtn('prop','Props')+'</div>';
+  el.innerHTML=filterBar+`<div class="tkt hi" style="margin-bottom:8px"><h3>Records hub — everyone, every sport</h3>
     <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+':''}$${Y.tickets.units.toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
     <div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;border-collapse:collapse;text-align:center">
       <tr style="color:var(--mute)"><td></td><td>ALL</td><td>MLB</td><td>NFL</td><td>CFB</td><td>NHL</td></tr>${rows.join('')}</table></div>
     <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = winning over 10+ calls, red = losing. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div>
     <div style="margin-top:6px">${[['You (picks)',sum(Y.picks)]].concat(HUB_VOICES.filter(v=>D.M[v]).map(v=>[(CHARS[v]?CHARS[v].chip+' ':'')+v,sum(D.M[v])])).map(([nm,o])=>{const L=luckSkill(o.w,o.n);
       return o.n?`<div class="mono" style="font-size:9.5px">${esc(nm)}: ${o.w}-${o.n-o.w} → <b style="color:${L.lab==='strong sign of skill'?'var(--win)':L.lab==='leaning skill'?'var(--cold)':L.lab==='below breakeven'?'var(--rust)':'var(--mute)'}">${L.lab}</b>${L.p!=null?` <span style="color:var(--mute)">(p=${L.p.toFixed(2)})</span>`:''}</div>`:'';}).join('')}
-    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: how likely a pure -110 coin-flipper would post that record. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{return clvHtml()+calibrationHtml()+playbooksHtml()}catch(e){console.warn('clv/playbooks',e);return''}})();
+    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: how likely a pure -110 coin-flipper would post that record. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return clvHtml()+calibrationHtml()+_eb+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
 }
 /* Tabs you use daily stay in front; the rest sit under More. */
 const NAV_PRIMARY=['games','today','mine','tickets','grades','money'];

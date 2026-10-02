@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TheDesk · NBA</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
+<script src="shared.js?v=20261002c"></script>
+<script src="nba-engine.js?v=20261002c"></script>
+<style>
+:root{--bg:#0d0f14;--card:#161921;--rule:#1f2430;--chalk:#e8eaf0;--mute:#6b7280;--win:#2ecc71;--rust:#e74c3c;--gold:#f5a524;--cold:#5FD3E8;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root{--bg:#0d0f14;--card:#161921}}
+@media(prefers-color-scheme:light){:root{--bg:#f0f2f5;--card:#fff;--rule:#e0e3e8;--chalk:#111;--mute:#6b7280}}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--chalk);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;min-height:100%}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:99;background:var(--bg);border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:4px;padding:6px 10px;overflow-x:auto}
+nav button{border:none;background:none;color:var(--mute);font-size:11px;font-weight:700;letter-spacing:.04em;padding:5px 10px;border-radius:20px;cursor:pointer;white-space:nowrap;text-transform:uppercase}
+nav button.on{background:var(--rule);color:var(--chalk)}
+.brand{font-size:13px;font-weight:900;letter-spacing:.08em;color:var(--chalk);margin-right:8px;white-space:nowrap}
+.build{font-size:9px;color:var(--mute);margin-left:auto;white-space:nowrap}
+#main{padding:10px;max-width:480px;margin:0 auto}
+.tkt{background:var(--card);border:1.5px solid var(--rule);border-radius:12px;padding:12px;margin:8px 0}
+.tkt h3{font-size:13px;font-weight:800;margin-bottom:6px}
+.sub{font-size:11px;color:var(--mute);line-height:1.5}
+.mono{font-family:'IBM Plex Mono',monospace}
+.empty{color:var(--mute);font-size:12px;text-align:center;padding:24px 0}
+.mktlab{font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px}
+.betgrid{display:flex;gap:6px;flex-wrap:wrap}
+.sq{flex:1;min-width:110px;padding:8px 10px;border-radius:10px;border:1.5px solid var(--rule);background:var(--card)}
+h2{font-size:15px;font-weight:800}
+.ln{height:1px;background:var(--rule);margin:6px 0}
+.bar{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.bar button,.intake-btn{border:1.5px solid var(--rule);background:none;color:var(--chalk);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer}
+.bar button.on,.intake-btn.on{background:var(--gold);color:#000;border-color:var(--gold)}
+textarea{width:100%;background:var(--card);border:1.5px solid var(--rule);border-radius:8px;color:var(--chalk);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:8px;resize:vertical;min-height:80px}
+.sbar{margin-top:8px}
+.game-card{background:var(--card)}
+input[type=file]{font-size:11px}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">THEDESK</span>
+  <button onclick="tab('games')" id="btn-games" class="on">GAMES</button>
+  <button onclick="tab('today')">TODAY</button>
+  <button onclick="tab('mine')">MY GAMES</button>
+  <button onclick="tab('tickets')">TICKETS</button>
+  <button onclick="tab('grades')">RECORD</button>
+  <button onclick="tab('money')">MONEY</button>
+  <button onclick="tab('intake')">+ ADD</button>
+  <span class="build">BUILD v1.63 · 🏀 NBA</span>
+</nav>
+
+<div id="main">
+
+<!-- GAMES TAB -->
+<div id="v-games" class="tab on">
+  <div id="slate">
+    <div class="empty">Loading NBA games…</div>
+  </div>
+</div>
+
+<!-- TODAY TAB -->
+<div id="v-today" class="tab" style="display:none">
+  <div id="todayBody"></div>
+</div>
+
+<!-- MY GAMES TAB -->
+<div id="v-mine" class="tab" style="display:none">
+  <div id="myGamesBody"></div>
+</div>
+
+<!-- TICKETS TAB -->
+<div id="v-tickets" class="tab" style="display:none">
+  <div id="ticketsBody"></div>
+</div>
+
+<!-- RECORDS TAB -->
+<div id="v-grades" class="tab" style="display:none">
+  <div id="recordsHub"></div>
+</div>
+
+<!-- MONEY TAB -->
+<div id="v-money" class="tab" style="display:none">
+  <div id="moneyBody"></div>
+</div>
+
+<!-- INTAKE TAB -->
+<div id="v-intake" class="tab" style="display:none">
+  <div class="tkt">
+    <h3>Add NBA lines</h3>
+    <div class="sub" style="margin-bottom:8px">Paste sportsbetting.ag lines, a ticket, or a Covers article.<br>Format: <span class="mono">ML: AWAY price / HOME price · SPREAD: AWAY ±X (price) / HOME ±X (price) · OU: oX (price) / uX (price)</span></div>
+    <div class="bar">
+      <button onclick="setSlate('today')" id="sl-today" class="on">TODAY</button>
+      <button onclick="setSlate('tomorrow')" id="sl-tomorrow">TOMORROW</button>
+    </div>
+    <div class="bar" style="margin-bottom:6px">
+      <select id="intakeType" style="background:var(--card);color:var(--chalk);border:1.5px solid var(--rule);border-radius:8px;padding:6px 10px;font-size:12px">
+        <option value="auto">What is this? — Auto-detect</option>
+        <option value="book">Book odds (my sportsbook)</option>
+        <option value="ticket">My ticket / parlay</option>
+      </select>
+      <input type="text" id="intakeSrc" placeholder="Source — Covers, Action…" style="flex:1;background:var(--card);color:var(--chalk);border:1.5px solid var(--rule);border-radius:8px;padding:6px 10px;font-size:12px">
+    </div>
+    <textarea id="intakeBox" placeholder="Paste here…" rows="6"></textarea>
+    <div class="bar" style="margin-top:6px">
+      <input type="file" id="intakeFile" accept="image/*,.pdf" multiple style="display:none" onchange="intakeFiles(this.files)">
+      <button onclick="document.getElementById('intakeFile').click()" style="border:1.5px solid var(--rule);background:none;color:var(--mute);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">Choose Files</button>
+    </div>
+    <div class="bar" style="margin-top:8px">
+      <button onclick="doIntake()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:10px 0;font-weight:800;font-size:14px;cursor:pointer;flex:1">READ IT</button>
+    </div>
+    <div id="intakeStatus" class="sub mono" style="font-size:10px;margin-top:8px;color:var(--mute)">intake 2026-10-02 · reads key:value, grammar &amp; board copy locally</div>
+  </div>
+
+  <div id="intakePreview" class="tkt" style="display:none">
+    <h3>CHECK IT, THEN SAVE</h3>
+    <div id="intakeCheck" class="sub mono" style="font-size:10px"></div>
+    <div class="bar" style="margin-top:8px">
+      <button onclick="saveIntake()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:8px 0;font-weight:800;font-size:14px;cursor:pointer;flex:1">SAVE ALL</button>
+      <button onclick="discardIntake()" style="border:1.5px solid var(--rule);background:none;color:var(--mute);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer">DISCARD</button>
+    </div>
+    <details style="margin-top:8px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ What each item gave</summary>
+      <div id="intakeDetail" class="sub mono" style="font-size:9.5px;margin-top:4px"></div>
+    </details>
+  </div>
+</div>
+
+</div><!-- #main -->
+
+<script>
+window.__PAGE_SPORT__ = 'nba';
+const ACTIVE_SPORT = 'nba';
+
+/* Tab switcher */
+function tab(name) {
+  document.querySelectorAll('.tab').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('on'));
+  const el = document.getElementById('v-' + name);
+  if (el) el.style.display = '';
+  const btn = document.getElementById('btn-' + name);
+  if (btn) btn.classList.add('on');
+  if (name === 'games')   renderNBA();
+  if (name === 'today')   { try { todaySnapshot(); renderToday(true); } catch(e) {} }
+  if (name === 'mine')    { try { mgRefresh(); } catch(e) {} }
+  if (name === 'tickets') { try { renderTickets(); } catch(e) {} }
+  if (name === 'grades')  { try { renderRecordsHub(); } catch(e) {} }
+  if (name === 'money')   { try { const el=document.getElementById('moneyBody'); if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+msRoadmapSection()+missionsHtml()}catch(e){} el.innerHTML=h;} } catch(e) {} }
+}
+
+/* Slate selector for intake */
+let intakeSlate = 'today';
+function setSlate(s) {
+  intakeSlate = s;
+  ['today','tomorrow'].forEach(k => document.getElementById('sl-' + k).classList.toggle('on', k === s));
+}
+
+/* Intake */
+let _pendingIntake = null;
+async function doIntake() {
+  const text = document.getElementById('intakeBox').value.trim();
+  const src  = document.getElementById('intakeSrc').value.trim() || 'sportsbetting.ag';
+  if (!text) { alert('Paste some odds or a ticket first.'); return; }
+  document.getElementById('intakeStatus').textContent = 'Reading…';
+  try {
+    // Try NBA lines first
+    const lines = intakeNBAGrammar(text);
+    if (lines && lines.length) {
+      _pendingIntake = { lines, src };
+      document.getElementById('intakeCheck').innerHTML =
+        `🏀 NBA · ${lines.length} lines · saves to the NBA board`;
+      document.getElementById('intakePreview').style.display = '';
+      document.getElementById('intakeDetail').textContent = lines.map(l => `${l.game} ${l.market} ${l.side} ${l.price}`).join('\n');
+    } else {
+      // Fall back to shared ticket parser
+      const r = parseMyTicketText ? parseMyTicketText(text) : null;
+      if (r && r.ok) {
+        document.getElementById('intakeCheck').innerHTML = `✅ Ticket #${r.ticketNo} saved — ${r.legCount} legs`;
+        document.getElementById('intakePreview').style.display = '';
+        _pendingIntake = null;
+      } else {
+        document.getElementById('intakeStatus').textContent = 'Nothing recognized. Try the SGP or My Parlays format.';
+      }
+    }
+  } catch(e) { document.getElementById('intakeStatus').textContent = 'Error: ' + e.message; }
+}
+
+function saveIntake() {
+  if (_pendingIntake) {
+    saveNBABookOdds(_pendingIntake.lines.map(l => ({...l, src: _pendingIntake.src})));
+    document.getElementById('intakePreview').style.display = 'none';
+    document.getElementById('intakeBox').value = '';
+    document.getElementById('intakeStatus').textContent = 'Saved ✓ — open Games to see the board.';
+    _pendingIntake = null;
+    renderNBA();
+  }
+}
+function discardIntake() { _pendingIntake = null; document.getElementById('intakePreview').style.display = 'none'; }
+async function intakeFiles(files) { /* Gemini vision — same as other pages */ try { const f=files[0]; if(!f)return; const r=await intakeFile?.(f); if(r)document.getElementById('intakeBox').value=r; } catch(e){} }
+
+/* Boot */
+document.addEventListener('DOMContentLoaded', () => {
+  try { if(typeof setupDone==='function'&&!setupDone()) tab('setup'); } catch(e) {}
+  renderNBA();
+  try { mgRefresh && mgRefresh(); } catch(e) {}
+  setInterval(() => { try { mgRefresh && mgRefresh(); } catch(e) {} }, 45000);
+});
+</script>
+</body>
+</html>
