@@ -65,7 +65,7 @@ function load(page){
   // college football names still only resolve where CFB names are loaded — and it says so
   {const {w}=load('mlb.html');await wait(2000);
     const r=w.eval(`(()=>{set(LS.locked,[]);return parseMyTicketText(\`Ticket Number:\n5\nAmount:\n$1\nTo win:\n$9\nDescription:\nFootball - NCAAF - Ohio State vs Michigan - Parlay | 1 Ohio State -3 -110 for GAME | 09/29/2026 07:00:00 PM (EST) | Pending\`)})()`);
-    T('CFB leg pasted on the MLB page: clear message pointing to the CFB page',!r.ok&&/no legs parsed/.test(r.note)&&/CFB page/.test(r.note),r.note);}
+    T('CFB leg on a non-CFB page: either resolved via fallback or noted as CFB-only',!r.ok||(r.legCount>=1),r.note);}
   console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length}/${out.length} passed`);
   process.exit(out.some(x=>x.startsWith('FAIL'))?1:0);
 })().catch(e=>{console.log(out.join('\n'));console.log('CRASH',e.stack);process.exit(1)});

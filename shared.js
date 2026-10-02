@@ -91,7 +91,7 @@ function intakeAbbr(sport,raw){
   const t=String(raw||'').trim();if(!t)return null;
   if(sport==='nfl')return intakeNFLAbbr(t);
   if(sport==='mlb'){const a=typeof abbr==='function'?abbr(t):null;return a||(/^[A-Z]{2,4}$/.test(t.toUpperCase())?t.toUpperCase():null);}
-  if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;}return null;}
+  if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;}return cfbFallbackAbbr(t);}
   if(sport==='nhl')return intakeNHLAbbr(t);
   return null;
 }
@@ -367,6 +367,111 @@ function intakeNormalizeKV(text){
    ("Team +11 -110" — two trailing numbers), or total ("A/B over 42 -115").
    A leg whose sport isn't resolvable on this page (e.g. an NCAAF leg pasted
    on mlb.html) is skipped with a note, not guessed at. */
+
+/* ── CFB FALLBACK ABBR — resolves team names when football-engine.js is absent
+   (e.g. a ticket with CFB legs pasted on the NHL page). Keys are all-caps
+   no-spaces slugs; values are the ESPN abbreviation used everywhere else. ── */
+const CFB_FALLBACK_ABBR={
+  NORTHTEXAS:'UNT',MEANGREENUNNORTHTEXAS:'UNT',UNT:'UNT',
+  TULSA:'TLSA',GOLDENHURRICANE:'TLSA',TLSA:'TLSA',
+  WESTERNKENTUCKY:'WKU',HILLTOPPERS:'WKU',WKU:'WKU',
+  NEWMEXICOSTATE:'NMSU',AGGIES:'NMSU',NMSU:'NMSU',
+  PITTSBURG:'PIT',PITTSBURGH:'PITT',STEELERS:'PIT',
+  ALABAMA:'ALA',CRIMSONTIIDE:'ALA',ALA:'ALA',
+  ARIZONA:'ARIZ',WILDCATS:'ARIZ',ARIZ:'ARIZ',ARIZONASTATE:'ASU',ASU:'ASU',
+  ARKANSAS:'ARK',RAZORBACKS:'ARK',ARK:'ARK',
+  AUBURN:'AUB',TIGERS:'AUB',AUB:'AUB',
+  BAYLOR:'BAY',BEARS:'BAY',BAY:'BAY',
+  BOISSTATE:'BSU',BRONCOS:'BSU',BSU:'BSU',
+  BOSTONCOLLEAGE:'BC',EAGLES:'BC',BC:'BC',BOSTONCO:'BC',
+  BUFALO:'BUFF',BULLS:'BUFF',BUFF:'BUFF',BUFFALO:'BUFF',
+  BYU:'BYU',COUGARS:'BYU',
+  CAL:'CAL',CALIFORNIA:'CAL',BEARS:'CAL',
+  CENTRALFLORIDA:'UCF',UCF:'UCF',KNIGHTS:'UCF',
+  CHARLOTTE:'CLT',FORTYNNINERS:'CLT',CLT:'CLT',
+  CINCINNATI:'CIN',BEARCATS:'CIN',CIN:'CIN',
+  CLEMSON:'CLEM',CLEMSONTIGERS:'CLEM',CLEM:'CLEM',
+  COASTALCAROLINA:'CCU',CHANTICLEERS:'CCU',CCU:'CCU',
+  COLORADO:'COLO',BUFFALOES:'COLO',COLO:'COLO',COLORADOSTATE:'CSU',CSU:'CSU',
+  DUKE:'DUKE',BLUEDEVILS:'DUKE',
+  EASTCAROLINA:'ECU',PIRATES:'ECU',ECU:'ECU',
+  FLORIDA:'FLA',GATORS:'FLA',FLA:'FLA',
+  FLORIDASTATE:'FSU',SEMINOLES:'FSU',FSU:'FSU',
+  FLORIDAATLANTIC:'FAU',OWLS:'FAU',FAU:'FAU',
+  FLORIDAINTL:'FIU',PANTHERS:'FIU',FIU:'FIU',
+  FRESNOSTATE:'FRES',BULLDOGS:'FRES',FRES:'FRES',
+  GEORGIA:'UGA',BULLDOGS:'UGA',UGA:'UGA',
+  GEORGIASOUTHERN:'GASO',EAGLES:'GASO',GASO:'GASO',
+  GEORGIATECH:'GT',YELLOWJACKETS:'GT',GT:'GT',
+  HAWAI:'HAW',HAWAIIRAINBOW:'HAW',HAW:'HAW',
+  HOUSTON:'HOU',COUGARS:'HOU',HOU:'HOU',
+  IDAHO:'IDHO',VANDALS:'IDHO',IDHO:'IDHO',
+  ILLINOIS:'ILL',ILLIINI:'ILL',ILL:'ILL',
+  INDIANA:'IND',HOOSIERS:'IND',IND:'IND',
+  IOWA:'IOWA',HAWKEYES:'IOWA',IOWA:'IOWA',IOWASTATE:'ISU',ISU:'ISU',
+  JACKSONVILLESTATE:'JVST',GAMECOCKS:'JVST',JVST:'JVST',
+  KANSAS:'KAN',JAYHAWKS:'KAN',KAN:'KAN',KANSASSTATE:'KSU',KSU:'KSU',
+  KENT:'KENT',KENT:'KENT',KSTATE:'KENT',
+  KENTUCKY:'UK',WILDCATS:'UK',UK:'UK',
+  LIBERTY:'LIB',FLAMES:'LIB',LIB:'LIB',
+  LOUISIANA:'ULL',RAGIN:'ULL',ULL:'ULL',LOUISIANAMONROE:'ULM',ULM:'ULM',
+  LOUISIANATECH:'LT',BULLDOGS:'LT',LT:'LT',
+  LOUISVILLE:'LOU',CARDINALS:'LOU',LOU:'LOU',
+  LSU:'LSU',TIGERS:'LSU',
+  MARSHALL:'MRSH',THUNDERINGHER:'MRSH',MRSH:'MRSH',
+  MARYLAND:'MD',TERRAPINS:'MD',TERPS:'MD',MD:'MD',
+  MEMPHIS:'MEM',TIGERS:'MEM',MEM:'MEM',
+  MIAMI:'MIA',HURRICANES:'MIA',MIA:'MIA',
+  MIAMIO:'MIOH',MIAMIOH:'MIOH',REDHAWKS:'MIOH',MIOH:'MIOH',
+  MICHIGAN:'MICH',WOLVERINES:'MICH',MICH:'MICH',MICHIGANSTATE:'MSU',SPARTANS:'MSU',MSU:'MSU',
+  MIDDLETENNESSEE:'MTSU',BLUERAIDERS:'MTSU',MTSU:'MTSU',
+  MINNESOTA:'MINN',GOPHERS:'MINN',MINN:'MINN',
+  MISSISSIPPISTATE:'MSST',BULLDOGS:'MSST',MSST:'MSST',
+  MISSOURT:'MIZ',MIZZOU:'MIZ',TIGERS:'MIZ',MIZ:'MIZ',
+  NAVY:'NAVY',MIDSHIPMEN:'NAVY',
+  NEBRASKA:'NEB',CORNHUSKERS:'NEB',NEB:'NEB',
+  NEVADA:'NEV',WOLFPACK:'NEV',NEV:'NEV',NEVADLV:'UNLV',UNLV:'UNLV',
+  NORTHCAROLINA:'UNC',TARHEELS:'UNC',UNC:'UNC',NORTHCAROLINASTATE:'NCST',NCST:'NCST',
+  NORTHWESTERN:'NU',WILDCATS:'NU',NU:'NU',
+  NOTREDAME:'ND',IRISHFIGHTING:'ND',ND:'ND',
+  OHIO:'OHIO',OHIOBOBCATS:'OHIO',BOBCATS:'OHIO',OHIOSTATE:'OSU',OSU:'OSU',BUCKYES:'OSU',
+  OLEMISS:'MISS',MISSISSIPPI:'MISS',REBELMS:'MISS',MISS:'MISS',
+  OKLAHOMA:'OU',SOONERS:'OU',OU:'OU',OKLAHOMASTATE:'OKST',OKST:'OKST',
+  OREGN:'ORE',DUCKS:'ORE',ORE:'ORE',OREGONSTATE:'ORST',ORST:'ORST',
+  PENN:'PENNST',PENNSTATE:'PENNST',NITTANYLIONS:'PENNST',PENNST:'PENNST',PSU:'PENNST',
+  PITTSBURGH:'PITT',PITTSPANTHERS:'PITT',PITT:'PITT',
+  PURDUE:'PUR',BOILERMAKERS:'PUR',PUR:'PUR',
+  RICE:'RICE',OWLS:'RICE',
+  RUTGERS:'RUTG',SCARLETKNIGHTS:'RUTG',RUTG:'RUTG',
+  SANDIEOGOSTATE:'SDSU',AZTECS:'SDSU',SDSU:'SDSU',SANJOSESTATE:'SJSU',SJSU:'SJSU',
+  SOUTHCAROLINA:'SC',GAMECOCKS:'SC',SC:'SC',
+  SOUTHERNMISS:'USM',GOLDENEAGLES:'USM',USM:'USM',
+  STANFORD:'STAN',CARDINAL:'STAN',STAN:'STAN',
+  SYRACUSE:'SYR',ORANGE:'SYR',SYR:'SYR',
+  TCU:'TCU',HORNEDFROG:'TCU',
+  TEMPLE:'TEM',OWLS:'TEM',TEM:'TEM',
+  TENNESSEE:'TENN',VOLUNTEERS:'TENN',VOLS:'TENN',TENN:'TENN',
+  TEXAS:'TEX',LONGHORNS:'TEX',TEX:'TEX',TEXASAM:'TAMU',TAMU:'TAMU',TEXASTECH:'TTU',TTU:'TTU',
+  TEXASSTATE:'TXST',BOBCATS:'TXST',TXST:'TXST',
+  TOLEDO:'TOL',ROCKETS:'TOL',TOL:'TOL',
+  TROY:'TROY',TROJANS:'TROY',
+  TULANE:'TULN',GREENWAVE:'TULN',TULN:'TULN',
+  UCLA:'UCLA',BRUINS:'UCLA',UAB:'UAB',
+  USC:'USC',TROJANUSC:'USC',
+  USF:'USF',BULLSUSC:'USF',
+  USM:'USM',
+  UTAH:'UTAH',UTES:'UTAH',UTAHSTATE:'USU',USU:'USU',
+  UTSA:'UTSA',ROADRUNNERS:'UTSA',UTSA:'UTSA',UTM:'UTEP',UTEP:'UTEP',MINERS:'UTEP',
+  VANDERBILT:'VAN',COMMODORES:'VAN',VAN:'VAN',
+  VIRGINIA:'VA',CAVALIERS:'VA',VA:'VA',VIRGINIATECH:'VT',VT:'VT',HOKIES:'VT',
+  WAKE:'WAKE',WAKEFOREST:'WAKE',DEACONS:'WAKE',
+  WASHINGTON:'WASH',HUSKIES:'WASH',WASH:'WASH',WASHINGTONSTATE:'WSU',WSU:'WSU',
+  WESTVIRGINIA:'WVU',MOUNTAINEERS:'WVU',WVU:'WVU',
+  WESTERNMICHIGAN:'WMU',BRONCOSWMU:'WMU',WMU:'WMU',
+  WISCONSIN:'WIS',BADGERS:'WIS',WIS:'WIS',
+  WYOMING:'WYO',COWBOYS:'WYO',WYO:'WYO',
+};
+const cfbFallbackAbbr=raw=>{if(!raw)return null;const k=String(raw).toUpperCase().replace(/[^A-Z0-9]/g,'');return CFB_FALLBACK_ABBR[k]||null;};
 function ticketAmerToProb(price){
   if(price==null||isNaN(price))return 0.5;
   return price>0?100/(price+100):(-price)/(-price+100);
@@ -391,8 +496,8 @@ function parseMyTicketText(text){
     const hm=head.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs\.?\s+(.+?)\s*-\s*/i);
     if(!hm){skipped.push(line);return;}
     const sportWord=hm[2].toUpperCase();
-    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
-    if(!sport||!intakeCanNameResolve(sport)){skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
+    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
+    if(!sport||(sport!=='ncaaf'&&!intakeCanNameResolve(sport))){skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names may resolve later':'sport not recognized')+')');return;}
     const awayAb=intakeAbbr(sport,hm[3]),homeAb=intakeAbbr(sport,hm[4]);
     if(!awayAb||!homeAb){skipped.push(line+'  (team name not recognized)');return;}
     const gl=awayAb+'@'+homeAb;
@@ -478,7 +583,7 @@ function parseSGPTicketText(text){
     const sgpHdr=line.match(/^SGP\s*\d+\s*:\s*([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs?\.?\s+(.+)$/i);
     if(sgpHdr){
       const sportWord=sgpHdr[2].toUpperCase();
-      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
+      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
       if(!sport||!intakeCanNameResolve(sport)){cur=null;skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
       const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
