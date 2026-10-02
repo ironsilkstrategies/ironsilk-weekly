@@ -12400,6 +12400,7 @@ function genTickets(mode){
         actionBtn=`${complete?`<button class="primary" onclick="archiveTicket(${t.id})">Archive</button>`:''}
           ${modifyBtn}
           ${moveBtn}
+          ${t.finalized?'':`<button style="color:var(--cold)" onclick="(async()=>{try{const el=document.querySelector('#tkt-${t.id} .rcalc');if(el)el.textContent='…';await mgRefresh(true);const n=clearStaleFromFinals();renderTickets();renderMyGames();}catch(e){}})()"><span class="rcalc">↻ Reset scores</span></button>`}
           ${t.finalized?'':`<button onclick="finalizeLocked(${t.id})">Lock as final</button>`}
           <button onclick="delLocked(${t.id})">Delete</button>`;
       }
@@ -16432,6 +16433,17 @@ function mgPending(){
   const out=[];get(LS.locked,[]).filter(t=>!t.archived).forEach(t=>(t.legs||[]).forEach(l=>out.push({t,l,sp:l.sport||'mlb',d:l.gameDate||t.date||today()})));
   return out;
 }
+function clearStaleFromFinals(){
+  const F=get(LS.allfinals,{});let n=0;
+  ['mlb','nfl','ncaaf','nhl'].forEach(sp=>{
+    const live=MG_LIVE[sp]||{};
+    Object.keys(live).forEach(k=>{const e=live[k];if(!e||e.state!=='in')return;
+      const game=e.away&&e.home?e.away+'@'+e.home:null;if(!game)return;
+      const fk=finalsKey(sp,game);
+      if(F[fk]){delete F[fk];delete SYNC_SEEN[fk];n++;}});});
+  if(n){set(LS.allfinals,F);console.info('TheDesk: cleared '+n+' stale score(s) — live games were marked as final');}
+  return n;
+}
 async function mgRefresh(force){
   if(MG_BUSY||(!force&&Date.now()-MG_TS<40e3))return;MG_BUSY=true;
   try{
@@ -16456,6 +16468,7 @@ async function mgRefresh(force){
         MG_LIVE[sp]=M;}catch(e){}
     });
     await Promise.all(jobs);MG_TS=Date.now();
+    try{clearStaleFromFinals();}catch(e){}
     try{mgHealOrientation();}catch(e){}
   }finally{MG_BUSY=false;}
 }
