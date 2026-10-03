@@ -565,6 +565,7 @@ function nhlCard(g){
     ${head}<div class="sig">${chips.join('')}${extra}</div>
     ${g.abstract==='pre'?(()=>{try{return coachHtml({game:g,sim:s,sport:'nhl'})}catch(e){return''}})():''}
     ${g.abstract!=='post'?pl+ml+to+p1+p1pl+p1ml:''}
+    ${typeof pstCardHtml==='function'?pstCardHtml('nhl',g):''}
     <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
     <div class="legend" style="margin-top:2px"><span>◆ SUPREME = book price, model edge and outside sources all agree</span><span>STRONG = two of three</span><span>⚠ CONFLICT = they disagree</span></div>
     <div class="exprow" style="margin-top:10px">${btn('coach','Coach')}${btn('trends','Trends')}${btn('alt','Alt Lines')}${btn('roster','Roster')}${btn('props','Props')}${btn('box','Proj. Box')}${btn('verdict','Take/Fade')}${g.abstract!=='pre'?btn('live',g.abstract==='in'?'Live box':'Box score'):''}${btn('mybets','My Bets')}</div>

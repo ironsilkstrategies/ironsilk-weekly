@@ -87,12 +87,25 @@ function intakeNHLAbbr(raw){
   for(const [k,c] of cities)if(l.includes(' '+c+' '))return k;
   return null;
 }
+/* ── names → ESPN abbreviations (also used by shared.js for tickets on any page) */
+const NBA_TEAMS={ATL:'Atlanta|Hawks',BOS:'Boston|Celtics',BKN:'Brooklyn|Nets|BRK',CHA:'Charlotte|Hornets|CHO',CHI:'Chicago|Bulls',CLE:'Cleveland|Cavaliers|Cavs',
+  DAL:'Dallas|Mavericks|Mavs',DEN:'Denver|Nuggets',DET:'Detroit|Pistons',GS:'Golden State|Warriors|GSW',HOU:'Houston|Rockets',IND:'Indiana|Pacers',
+  LAC:'LA Clippers|Los Angeles Clippers|Clippers',LAL:'LA Lakers|Los Angeles Lakers|Lakers',MEM:'Memphis|Grizzlies',MIA:'Miami|Heat',MIL:'Milwaukee|Bucks',
+  MIN:'Minnesota|Timberwolves|Wolves',NO:'New Orleans|Pelicans|NOP',NY:'New York|Knicks|NYK',OKC:'Oklahoma City|Thunder',ORL:'Orlando|Magic',
+  PHI:'Philadelphia|76ers|Sixers',PHX:'Phoenix|Suns|PHO',POR:'Portland|Trail Blazers|Blazers',SAC:'Sacramento|Kings',SA:'San Antonio|Spurs|SAS',
+  TOR:'Toronto|Raptors',UTAH:'Utah|Jazz|UTA',WSH:'Washington|Wizards|WAS'};
+function nbaAbbrFor(raw){const t=String(raw||'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();if(!t)return null;
+  if(NBA_TEAMS[t])return t;let best=null;
+  Object.entries(NBA_TEAMS).forEach(([ab,names])=>names.split('|').forEach(n=>{const N=n.toUpperCase();
+    if(t===N||t.endsWith(' '+N)||t.startsWith(N+' ')||t===N.replace(/ /g,'')){if(!best||N.length>best[1])best=[ab,N.length];}}));
+  return best?best[0]:null;}
 function intakeAbbr(sport,raw){
   const t=String(raw||'').trim();if(!t)return null;
   if(sport==='nfl')return intakeNFLAbbr(t);
   if(sport==='mlb'){const a=typeof abbr==='function'?abbr(t):null;return a||(/^[A-Z]{2,4}$/.test(t.toUpperCase())?t.toUpperCase():null);}
   if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;}return cfbFallbackAbbr(t);}
   if(sport==='nhl')return intakeNHLAbbr(t);
+  if(sport==='nba')return nbaAbbrFor(t);
   return null;
 }
 /* A sport's team names only resolve where that sport's engine is loaded. */
@@ -108,11 +121,19 @@ function amerOk(p){if(p==null||p==='')return null;if(/^\s*(ev|even|evs)\s*$/i.te
 const moneyNum=x=>{const n=parseFloat(String(x==null?'':x).replace(/[^0-9.\-]/g,''));return isNaN(n)?NaN:n;};
 const moneyStr=x=>{const n=moneyNum(x);return isNaN(n)?null:String(n);};
 /* Can this page turn a TICKET's team names into abbreviations? (Slate text needs the sport's parser too; a ticket doesn't.) */
-const intakeCanNameResolve=sp=>sp==='mlb'||sp==='nhl'||sp==='nfl'||(sp==='ncaaf'&&typeof ncaafAbbrFor==='function');
-const intakeCanResolve=sp=>sp==='mlb'||(sp==='nhl'&&typeof parseNHLSlateText==='function'&&typeof nhlAbbrFor==='function')||(sp==='nfl'&&typeof parseNFLSlateText==='function')||
+const intakeCanNameResolve=sp=>sp==='mlb'||sp==='nhl'||sp==='nba'||sp==='nfl'||(sp==='ncaaf'&&typeof ncaafAbbrFor==='function');
+const intakeCanResolve=sp=>sp==='mlb'||(sp==='nba'&&typeof parseNBASlateText==='function')||(sp==='nhl'&&typeof parseNHLSlateText==='function'&&typeof nhlAbbrFor==='function')||(sp==='nfl'&&typeof parseNFLSlateText==='function')||
   (sp==='ncaaf'&&typeof parseNCAAFSlateText==='function'&&typeof ncaafAbbrFor==='function');
 function intakeGuessSport(text,fallback){
   const l=text.toLowerCase();let nfl=0,mlb=0;
+  /* an explicit sport header line wins outright */
+  const first=(text.split('\n').map(x=>x.trim()).find(Boolean)||'').toUpperCase();
+  if(/^NBA\b/.test(first))return'nba';if(/^NHL\b/.test(first))return'nhl';if(/^MLB\b/.test(first))return'mlb';
+  if(/^(NCAAF|CFB|COLLEGE FOOTBALL)\b/.test(first))return'ncaaf';if(/^NFL\b/.test(first))return'nfl';
+  let nba=0;['celtics','knicks','lakers','warriors','nuggets','bucks','76ers','sixers','cavaliers','thunder','timberwolves','mavericks','grizzlies',
+   'pelicans','spurs','trail blazers','raptors','pistons','hornets','wizards','pacers','magic','clippers','suns','nets','hawks','rockets'].forEach(n=>{if(new RegExp('\\b'+n+'\\b').test(l))nba++;});
+  if(/\b(rebounds|three[- ]pointers|1st quarter|q1spread)\b/.test(l))nba+=2;
+  if(nba>=2&&!/\b(touchdown|run ?line|puck ?line)\b/.test(l))return'nba';
   Object.values(INTAKE_NFL).forEach(v=>{if(new RegExp('\\b'+v.split(' ')[0]+'\\b').test(l))nfl++;});
   ['yankees','red sox','dodgers','mets','cubs','astros','braves','phillies','padres','mariners','guardians','orioles','rays','blue jays',
    'twins','tigers','royals','white sox','rangers','angels','athletics','giants ','brewers','cardinals ','reds','pirates','marlins','nationals','rockies','diamondbacks']
@@ -241,7 +262,7 @@ function intakeParseGrammar(text,fallbackSport){
     if(/^(ML|SPREAD|RL|PL|OU|H1\w*|Q1\w*|P1\w*|F5\s*\w+|PROP):/im.test(oddsText)){
       try{
         const hdr=sport==='ncaaf'?'NCAAF':sport.toUpperCase();
-        const r=parseSlateText(hdr+'\n'+oddsText);
+        const r=(sport==='nba'&&typeof parseNBASlateText==='function')?parseNBASlateText(oddsText):parseSlateText(hdr+'\n'+oddsText);
         (r&&r.picks||[]).forEach(p=>{p.sport=sport;B.picks.push(p)});
       }catch(e){console.warn('intake odds parse',e)}
     }
@@ -368,146 +389,137 @@ function intakeNormalizeKV(text){
    A leg whose sport isn't resolvable on this page (e.g. an NCAAF leg pasted
    on mlb.html) is skipped with a note, not guessed at. */
 
-/* ── NHL / CFB PLAYER STAT STORE ────────────────────────────────────────
-   Rolling stats built from box scores we already pull each game day.
-   Keyed by sport:team_abbr:player_name → {games,stat,...} for quick lookup
-   in the Props tab and for prop-line recommendations. */
-const PSTAT_KEY='d4.pstats';
-const PSTAT_CACHE={};
-function pstatStore(){if(!PSTAT_CACHE._v){PSTAT_CACHE._v=roGet(PSTAT_KEY,{},120e3)||{};}return PSTAT_CACHE._v;}
-function pstatUpdate(sp,team,player,row){
-  const k=sp+':'+team+':'+player.replace(/[^a-z0-9]/gi,'').toLowerCase();
-  const S=pstatStore();const prev=S[k]||{n:0};
-  const n=(prev.n||0)+1;
-  // exponential moving average — more recent games weight more
-  const ema=(cur,val)=>cur==null?+val:(0.7*prev[cur]||0)+0.3*(+val||0);
-  if(sp==='nhl')S[k]={n,player,team,sp,g:ema('g',row.G||row.g||0),a:ema('a',row.A||row.a||0),s:ema('s',row.S||row.Shots||row.shots||0)};
-  else if(sp==='nfl'||sp==='ncaaf')S[k]={n,player,team,sp,pasYds:ema('pasYds',row.YDS||0),rusYds:ema('rusYds',row.YDS||0),recYds:ema('recYds',row.YDS||0),rec:ema('rec',row.REC||0),td:ema('td',row.TD||0)};
-  PSTAT_CACHE._v=S;try{set(PSTAT_KEY,S);}catch(e){}
+/* ══ PLAYER STAT ENGINE ═══════════════════════════════════════════════════
+   Every FINAL ESPN box score the app touches (grading, My Games, or the
+   background season backfill) feeds per-player season numbers. Each game is
+   counted exactly once (deduped by ESPN event id); live boxes never feed.
+   Per stat we keep sum, sum of squares and a recency-weighted mean, so a
+   projection blends season form with recent form, and a prop line gets a real
+   probability: Poisson for count stats (goals, HRs, TDs, hits, Ks, 3s,
+   receptions), Normal for yardage/points.                                   */
+const PST_KEY=sp=>'d4.pst.'+sp, PST_MAX=4000, PST_ALPHA=0.3;
+const PST_MEM={};
+const PST_STATS={
+  nhl:{g:'goals',a:'assists',pts:'points',s:'shots on goal'},
+  mlb:{h:'hits',hr:'home runs',rbi:'RBI',r:'runs',bb:'walks',tb:'total bases',k:'strikeouts (P)',ha:'hits allowed (P)',er:'earned runs (P)'},
+  nfl:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs'},
+  ncaaf:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs'},
+  nba:{pts:'points',reb:'rebounds',ast:'assists',fg3:'3-pointers',stl:'steals',blk:'blocks'}};
+const PST_COUNT=new Set(['g','a','s','h','hr','rbi','r','bb','tb','k','ha','er','ptd','rtd','wtd','td','rec','fg3','stl','blk']);
+function pstDb(sp){if(!PST_MEM[sp])PST_MEM[sp]=get(PST_KEY(sp),{p:{},fed:{}})||{p:{},fed:{}};return PST_MEM[sp];}
+function pstSave(sp){const D=pstDb(sp);const ids=Object.keys(D.p);
+  if(ids.length>PST_MAX){ids.sort((a,b)=>(D.p[a].n||0)-(D.p[b].n||0)).slice(0,ids.length-PST_MAX).forEach(k=>delete D.p[k]);}
+  const fk=Object.keys(D.fed);if(fk.length>6000)fk.slice(0,fk.length-6000).forEach(k=>delete D.fed[k]);
+  try{set(PST_KEY(sp),D);}catch(e){console.warn('pstat save',e);}}
+const pstId=n=>String(n||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const pstNum=v=>{const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:0;};
+/* add ONE game's line for one player */
+function pstAdd(sp,name,team,line){
+  const D=pstDb(sp);const id=pstId(name);if(!id)return;
+  const P=D.p[id]||(D.p[id]={name,team,n:0,s:{}});P.team=team||P.team;P.n++;
+  Object.entries(line).forEach(([k,v])=>{v=+v||0;const S=P.s[k]||(P.s[k]={sum:0,sq:0,ema:null,gp:0});
+    S.sum+=v;S.sq+=v*v;S.gp++;S.ema=S.ema==null?v:(1-PST_ALPHA)*S.ema+PST_ALPHA*v;});
 }
-function pstatFor(sp,player){
-  const raw=player.replace(/[^a-z0-9]/gi,'').toLowerCase();
-  const S=pstatStore();
-  return Object.values(S).find(x=>x.sp===sp&&x.player.replace(/[^a-z0-9]/gi,'').toLowerCase()===raw)||null;
+/* Feed a parsed box exactly once, and only when it is FINAL */
+function pstatFeed(sp,eventId,box){
+  if(!box||box.state!=='post'||!eventId)return 0;const D=pstDb(sp);if(D.fed[eventId])return 0;
+  const lines={};const L=(name,team)=>{const k=pstId(name);if(!k)return null;return lines[k]||(lines[k]={name,team,v:{}});};
+  if(sp==='nhl'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.skaters||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;
+      const g=pstNum(r.G),a=pstNum(r.A);Object.assign(x.v,{g,a,pts:g+a,s:pstNum(r.S!=null?r.S:r.SOG)});}));}
+  else if(sp==='mlb'){Object.entries(box.teams||{}).forEach(([team,t])=>{
+      (t.batters||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;const h=pstNum(r.H),hr=pstNum(r.HR);
+        const d2=pstNum(r['2B']),d3=pstNum(r['3B']);Object.assign(x.v,{h,hr,rbi:pstNum(r.RBI),r:pstNum(r.R),bb:pstNum(r.BB),tb:h+d2+2*d3+3*hr});});
+      (t.pitchers||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;Object.assign(x.v,{k:pstNum(r.K),ha:pstNum(r.H),er:pstNum(r.ER)});});});}
+  else if(sp==='nfl'||sp==='ncaaf'){Object.entries(box.teamStats||{}).forEach(([team,t])=>{
+      (t.passing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.py=pstNum(r.YDS);x.v.ptd=pstNum(r.TD);});
+      (t.rushing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.ry=pstNum(r.YDS);x.v.rtd=pstNum(r.TD);});
+      (t.receiving||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.rec=pstNum(r.REC);x.v.wy=pstNum(r.YDS);x.v.wtd=pstNum(r.TD);});});
+    Object.values(lines).forEach(x=>{['py','ptd','ry','rtd','rec','wy','wtd'].forEach(k=>{if(x.v[k]==null)x.v[k]=0;});x.v.td=x.v.rtd+x.v.wtd;});}
+  else if(sp==='nba'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.players||[]).forEach(r=>{
+      if(!pstNum(r.MIN)&&!pstNum(r.PTS))return;const x=L(r.name,team);if(!x)return;
+      Object.assign(x.v,{pts:pstNum(r.PTS),reb:pstNum(r.REB),ast:pstNum(r.AST),fg3:pstNum(String(r['3PT']||'').split('-')[0]),stl:pstNum(r.STL),blk:pstNum(r.BLK)});}));}
+  const all=Object.values(lines);if(!all.length)return 0;
+  all.forEach(x=>pstAdd(sp,x.name,x.team,x.v));D.fed[eventId]=1;pstSave(sp);return all.length;
 }
-/* Build pstats from an already-parsed hockey box */
-function pstatFeedNHL(game,box){
-  if(!box||!box.teams)return;
-  const [aw,hm]=String(game).split('@');
-  Object.entries(box.teams).forEach(([side,t])=>{const team=side==='away'?aw:hm;
-    (t.forwards||t.players||[]).forEach(r=>{if(r.name)pstatUpdate('nhl',team,r.name,r);});});
+/* Projection for one stat: shrink small samples toward a recency-weighted mean */
+function pstProj(sp,name,k){const P=pstDb(sp).p[pstId(name)];if(!P||!P.s[k]||!P.s[k].gp)return null;
+  const S=P.s[k],n=S.gp,mean=S.sum/n,ema=S.ema;const w=Math.min(1,n/10)*0.5;   // recent form gets up to 50%
+  const mu=(1-w)*mean+w*ema;const v=n>1?Math.max(0,(S.sq-n*mean*mean)/(n-1)):null;
+  return{mu,mean,ema,n,sd:v!=null?Math.sqrt(v):null,team:P.team,name:P.name};}
+function pstPoisCdf(k,l){if(l<=0)return k>=0?1:0;let t=Math.exp(-l),s=t;for(let i=1;i<=k;i++){t*=l/i;s+=t;}return Math.min(1,s);}
+function pstNormCdf(x){   // Marsaglia (2004) series — ~15 significant digits
+  if(!isFinite(x))return x>0?1:0;if(x<-8.5)return 0;if(x>8.5)return 1;
+  let s=x,t=x;const q=x*x;for(let i=1;i<400;i++){t*=q/(2*i+1);const ns=s+t;if(ns===s)break;s=ns;}
+  return 0.5+s*Math.exp(-0.5*q-0.91893853320467274178);}
+/* P(stat >= thr) — e.g. thr 1 for "anytime goal", 2 for "2+ hits", 49.5 for "o49.5 yds" */
+function pstProb(sp,name,k,thr,dir){const J=pstProj(sp,name,k);if(!J)return null;dir=dir||'over';
+  let pOver;
+  if(PST_COUNT.has(k)||(sp==='nhl'&&k==='pts')){const need=Math.ceil(thr-1e-9);pOver=1-pstPoisCdf(need-1,J.mu);}
+  else{const sd=Math.max(J.sd!=null&&J.n>=4?J.sd:J.mu*0.45,J.mu*0.25,1);pOver=1-pstNormCdf((thr-J.mu)/sd);}
+  const p=dir==='under'?1-pOver:pOver;return{p:Math.max(0.001,Math.min(0.999,p)),proj:J};}
+/* Top players for a team (used by the cards' Player stats panel) */
+function pstTeam(sp,team,limit){const D=pstDb(sp);const key=Object.keys(PST_STATS[sp]||{})[0];
+  return Object.values(D.p).filter(x=>x.team===team&&x.n>=1).map(x=>({x,score:Object.values(x.s).reduce((a,s)=>a+(s.gp?s.sum/s.gp:0),0)}))
+    .sort((a,b)=>b.score-a.score).slice(0,limit||8).map(o=>o.x);}
+function pstCardHtml(sp,g){try{
+  const teams=[g.away.abbr,g.home.abbr];const rows=[];const KEYS={nhl:['g','a','s'],mlb:['h','hr','rbi','k'],nfl:['py','ry','rec','wy','td'],ncaaf:['py','ry','rec','wy','td'],nba:['pts','reb','ast','fg3']}[sp]||[];
+  teams.forEach(tm=>pstTeam(sp,tm,6).forEach(P=>{const cells=KEYS.map(k=>{const S=P.s[k];if(!S||!S.gp||!S.sum)return'';const J=pstProj(sp,P.name,k);
+      return`${(PST_STATS[sp][k]||k).replace(/ \(P\)/,'')} <b>${J.mu.toFixed(J.mu<10?2:0)}</b>`;}).filter(Boolean);
+    if(cells.length)rows.push(`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${esc(P.name)}</b> <span style="color:var(--mute)">${tm} · ${P.n}G</span><br>${cells.join(' · ')}</div>`);}));
+  if(!rows.length)return`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats</summary><div class="sub" style="font-size:10px">No finals tracked for these teams yet — the season backfill fills this in the background.</div></details>`;
+  return`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats (season, form-weighted)</summary>${rows.join('')}</details>`;}catch(e){return'';}}
+/* ── Season backfill: walk recent completed ESPN events, feed each final box once.
+   Throttled (a few boxes per run) so it never stalls the page; it resumes
+   where it left off on the next page open until the window is covered. */
+const PST_BF_DAYS={mlb:45,nhl:60,nfl:120,ncaaf:60,nba:60};
+let PST_BF_BUSY=false;
+async function pstatBackfill(sp,maxBoxes){
+  if(PST_BF_BUSY||!FBP_ESPN[sp])return 0;PST_BF_BUSY=true;let done=0;
+  try{const D=pstDb(sp);const cur=D.bf||{};const end=today();
+    const from=cur.from||dayShift(end,-(PST_BF_DAYS[sp]||45));
+    const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000');
+    const j=await fetch(url).then(r=>r.json()).catch(()=>({events:[]}));
+    const ids=(j.events||[]).filter(ev=>((ev.status||{}).type||{}).state==='post').map(ev=>String(ev.id)).filter(id=>!D.fed[id]);
+    for(const id of ids.slice(0,maxBoxes||6)){
+      try{const s=await fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json());
+        const box=sp==='nhl'?fbpParseHockey(s):sp==='mlb'?fbpParseBaseball(s):sp==='nba'?fbpParseBasketball(s):fbpParseBox(s);
+        if(box)box.state='post';pstatFeed(sp,id,box);done++;}catch(e){}
+      await new Promise(r=>setTimeout(r,600));}
+    D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};pstSave(sp);
+  }finally{PST_BF_BUSY=false;}
+  return done;
 }
-/* Build pstats from an already-parsed football box */
-function pstatFeedFB(game,box,sp){
-  if(!box||!box.teamStats)return;
-  const [aw,hm]=String(game).split('@');
-  Object.entries(box.teamStats).forEach(([side,t])=>{const team=side==='away'?aw:hm;
-    (['passing','rushing','receiving']).forEach(cat=>{(t[cat]||[]).forEach(r=>{if(r.name)pstatUpdate(sp,team,r.name,r);});});});
+/* Runs quietly after page load: the page's own sport first, then any sport
+   you have pending tickets in. 6 boxes per pass, a pass every 90s, at most
+   60 boxes per session — the season fills in over a few visits. */
+let PST_SESSION=0;
+async function pstBackfillLoop(){
+  try{const sps=[window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb')];
+    try{mgPending().forEach(x=>{if(!sps.includes(x.sp))sps.push(x.sp);});}catch(e){}
+    let more=false;for(const sp of sps){if(PST_SESSION>=60)break;const n=await pstatBackfill(sp,6);PST_SESSION+=n;if((pstDb(sp).bf||{}).remaining)more=true;}
+    if(more&&PST_SESSION<60)setTimeout(pstBackfillLoop,90e3);}catch(e){}
+}
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pstBackfillLoop,8000));
+function pstatStatus(sp){const D=pstDb(sp);return{players:Object.keys(D.p).length,games:Object.keys(D.fed).length,remaining:(D.bf||{}).remaining};}
+/* Standout prop of the day for one sport: the highest-probability "scorer"
+   prop (goal / home run / TD / 25+ pts) among players in games not yet started. */
+function pstStandout(sp,games){
+  const K={nhl:['g',1,'anytime goal'],mlb:['hr',1,'to hit a home run'],nfl:['td',1,'anytime TD'],ncaaf:['td',1,'anytime TD'],nba:['pts',25,'25+ points']}[sp];if(!K)return null;
+  const open=(games||[]).filter(g=>{const a=String(g.abstract||'').toLowerCase();return !a||a==='pre'||a==='preview';});
+  const teams=new Map();open.forEach(g=>{teams.set(g.away.abbr,g);teams.set(g.home.abbr,g);});
+  let best=null;Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.s[K[0]]||{}).gp<3)return;
+    const r=pstProb(sp,P.name,K[0],K[1],'over');if(!r)return;
+    if(!best||r.p>best.p){const g=teams.get(P.team);best={sp,player:P.name,team:P.team,game:g.away.abbr+'@'+g.home.abbr,label:K[2],p:r.p,avg:r.proj.mu,n:r.proj.n};}});
+  return best;
 }
 /* ── CFB FALLBACK ABBR — resolves team names when football-engine.js is absent
    (e.g. a ticket with CFB legs pasted on the NHL page). Keys are all-caps
    no-spaces slugs; values are the ESPN abbreviation used everywhere else. ── */
-const CFB_FALLBACK_ABBR={
-  NORTHTEXAS:'UNT',NORTHTEX:'UNT',NTEXAS:'UNT',MEANGREENUNNORTHTEXAS:'UNT',UNT:'UNT',
-  TULSA:'TLSA',GOLDENHURRICANE:'TLSA',TLSA:'TLSA',
-  WESTERNKENTUCKY:'WKU',HILLTOPPERS:'WKU',WKU:'WKU',
-  NEWMEXICOSTATE:'NMSU',NEWMEXICOST:'NMSU',NEWMEXICO:'NMSU',AGGIES:'NMSU',NMSU:'NMSU',
-  PITTSBURG:'PIT',PITTSBURGH:'PITT',STEELERS:'PIT',
-  ALABAMA:'ALA',CRIMSONTIIDE:'ALA',ALA:'ALA',
-  ARIZONA:'ARIZ',WILDCATS:'ARIZ',ARIZ:'ARIZ',ARIZONASTATE:'ASU',ASU:'ASU',
-  ARKANSAS:'ARK',RAZORBACKS:'ARK',ARK:'ARK',
-  AUBURN:'AUB',TIGERS:'AUB',AUB:'AUB',
-  BAYLOR:'BAY',BEARS:'BAY',BAY:'BAY',
-  BOISSTATE:'BSU',BRONCOS:'BSU',BSU:'BSU',
-  BOSTONCOLLEAGE:'BC',EAGLES:'BC',BC:'BC',BOSTONCO:'BC',
-  BUFALO:'BUFF',BULLS:'BUFF',BUFF:'BUFF',BUFFALO:'BUFF',
-  BYU:'BYU',COUGARS:'BYU',
-  CAL:'CAL',CALIFORNIA:'CAL',BEARS:'CAL',
-  CENTRALFLORIDA:'UCF',UCF:'UCF',KNIGHTS:'UCF',
-  CHARLOTTE:'CLT',FORTYNNINERS:'CLT',CLT:'CLT',
-  CINCINNATI:'CIN',BEARCATS:'CIN',CIN:'CIN',
-  CLEMSON:'CLEM',CLEMSONTIGERS:'CLEM',CLEM:'CLEM',
-  COASTALCAROLINA:'CCU',CHANTICLEERS:'CCU',CCU:'CCU',
-  COLORADO:'COLO',BUFFALOES:'COLO',COLO:'COLO',COLORADOSTATE:'CSU',CSU:'CSU',
-  DUKE:'DUKE',BLUEDEVILS:'DUKE',
-  EASTCAROLINA:'ECU',PIRATES:'ECU',ECU:'ECU',
-  FLORIDA:'FLA',GATORS:'FLA',FLA:'FLA',
-  FLORIDASTATE:'FSU',SEMINOLES:'FSU',FSU:'FSU',
-  FLORIDAATLANTIC:'FAU',OWLS:'FAU',FAU:'FAU',
-  FLORIDAINTL:'FIU',PANTHERS:'FIU',FIU:'FIU',
-  FRESNOSTATE:'FRES',BULLDOGS:'FRES',FRES:'FRES',
-  GEORGIA:'UGA',BULLDOGS:'UGA',UGA:'UGA',
-  GEORGIASOUTHERN:'GASO',EAGLES:'GASO',GASO:'GASO',
-  GEORGIATECH:'GT',YELLOWJACKETS:'GT',GT:'GT',
-  HAWAI:'HAW',HAWAIIRAINBOW:'HAW',HAW:'HAW',
-  HOUSTON:'HOU',COUGARS:'HOU',HOU:'HOU',
-  IDAHO:'IDHO',VANDALS:'IDHO',IDHO:'IDHO',
-  ILLINOIS:'ILL',ILLIINI:'ILL',ILL:'ILL',
-  INDIANA:'IND',HOOSIERS:'IND',IND:'IND',
-  IOWA:'IOWA',HAWKEYES:'IOWA',IOWA:'IOWA',IOWASTATE:'ISU',ISU:'ISU',
-  JACKSONVILLESTATE:'JVST',GAMECOCKS:'JVST',JVST:'JVST',
-  KANSAS:'KAN',JAYHAWKS:'KAN',KAN:'KAN',KANSASSTATE:'KSU',KSU:'KSU',
-  KENT:'KENT',KENT:'KENT',KSTATE:'KENT',
-  KENTUCKY:'UK',WILDCATS:'UK',UK:'UK',
-  LIBERTY:'LIB',FLAMES:'LIB',LIB:'LIB',
-  LOUISIANA:'ULL',RAGIN:'ULL',ULL:'ULL',LOUISIANAMONROE:'ULM',ULM:'ULM',
-  LOUISIANATECH:'LT',BULLDOGS:'LT',LT:'LT',
-  LOUISVILLE:'LOU',CARDINALS:'LOU',LOU:'LOU',
-  LSU:'LSU',TIGERS:'LSU',
-  MARSHALL:'MRSH',THUNDERINGHER:'MRSH',MRSH:'MRSH',
-  MARYLAND:'MD',TERRAPINS:'MD',TERPS:'MD',MD:'MD',
-  MEMPHIS:'MEM',TIGERS:'MEM',MEM:'MEM',
-  MIAMI:'MIA',HURRICANES:'MIA',MIA:'MIA',
-  MIAMIO:'MIOH',MIAMIOH:'MIOH',REDHAWKS:'MIOH',MIOH:'MIOH',
-  MICHIGAN:'MICH',WOLVERINES:'MICH',MICH:'MICH',MICHIGANSTATE:'MSU',SPARTANS:'MSU',MSU:'MSU',
-  MIDDLETENNESSEE:'MTSU',BLUERAIDERS:'MTSU',MTSU:'MTSU',
-  MINNESOTA:'MINN',GOPHERS:'MINN',MINN:'MINN',
-  MISSISSIPPISTATE:'MSST',BULLDOGS:'MSST',MSST:'MSST',
-  MISSOURT:'MIZ',MIZZOU:'MIZ',TIGERS:'MIZ',MIZ:'MIZ',
-  NAVY:'NAVY',MIDSHIPMEN:'NAVY',
-  NEBRASKA:'NEB',CORNHUSKERS:'NEB',NEB:'NEB',
-  NEVADA:'NEV',WOLFPACK:'NEV',NEV:'NEV',NEVADLV:'UNLV',UNLV:'UNLV',
-  NORTHCAROLINA:'UNC',TARHEELS:'UNC',UNC:'UNC',NORTHCAROLINASTATE:'NCST',NCST:'NCST',
-  NORTHWESTERN:'NU',WILDCATS:'NU',NU:'NU',
-  NOTREDAME:'ND',IRISHFIGHTING:'ND',ND:'ND',
-  OHIO:'OHIO',OHIOBOBCATS:'OHIO',BOBCATS:'OHIO',OHIOSTATE:'OSU',OSU:'OSU',BUCKYES:'OSU',
-  OLEMISS:'MISS',MISSISSIPPI:'MISS',REBELMS:'MISS',MISS:'MISS',
-  OKLAHOMA:'OU',SOONERS:'OU',OU:'OU',OKLAHOMASTATE:'OKST',OKST:'OKST',
-  OREGN:'ORE',DUCKS:'ORE',ORE:'ORE',OREGONSTATE:'ORST',ORST:'ORST',
-  PENN:'PENNST',PENNSTATE:'PENNST',NITTANYLIONS:'PENNST',PENNST:'PENNST',PSU:'PENNST',
-  PITTSBURGH:'PITT',PITTSPANTHERS:'PITT',PITT:'PITT',
-  PURDUE:'PUR',BOILERMAKERS:'PUR',PUR:'PUR',
-  RICE:'RICE',OWLS:'RICE',
-  RUTGERS:'RUTG',SCARLETKNIGHTS:'RUTG',RUTG:'RUTG',
-  SANDIEOGOSTATE:'SDSU',AZTECS:'SDSU',SDSU:'SDSU',SANJOSESTATE:'SJSU',SJSU:'SJSU',
-  SOUTHCAROLINA:'SC',GAMECOCKS:'SC',SC:'SC',
-  SOUTHERNMISS:'USM',GOLDENEAGLES:'USM',USM:'USM',
-  STANFORD:'STAN',CARDINAL:'STAN',STAN:'STAN',
-  SYRACUSE:'SYR',ORANGE:'SYR',SYR:'SYR',
-  TCU:'TCU',HORNEDFROG:'TCU',
-  TEMPLE:'TEM',OWLS:'TEM',TEM:'TEM',
-  TENNESSEE:'TENN',VOLUNTEERS:'TENN',VOLS:'TENN',TENN:'TENN',
-  TEXAS:'TEX',LONGHORNS:'TEX',TEX:'TEX',TEXASAM:'TAMU',TAMU:'TAMU',TEXASTECH:'TTU',TTU:'TTU',
-  TEXASSTATE:'TXST',BOBCATS:'TXST',TXST:'TXST',
-  TOLEDO:'TOL',ROCKETS:'TOL',TOL:'TOL',
-  TROY:'TROY',TROJANS:'TROY',
-  TULANE:'TULN',GREENWAVE:'TULN',TULN:'TULN',
-  UCLA:'UCLA',BRUINS:'UCLA',UAB:'UAB',
-  USC:'USC',TROJANUSC:'USC',
-  USF:'USF',BULLSUSC:'USF',
-  USM:'USM',
-  UTAH:'UTAH',UTES:'UTAH',UTAHSTATE:'USU',USU:'USU',
-  UTSA:'UTSA',ROADRUNNERS:'UTSA',UTSA:'UTSA',UTM:'UTEP',UTEP:'UTEP',MINERS:'UTEP',
-  VANDERBILT:'VAN',COMMODORES:'VAN',VAN:'VAN',
-  VIRGINIA:'VA',CAVALIERS:'VA',VA:'VA',VIRGINIATECH:'VT',VT:'VT',HOKIES:'VT',
-  WAKE:'WAKE',WAKEFOREST:'WAKE',DEACONS:'WAKE',
-  WASHINGTON:'WASH',HUSKIES:'WASH',WASH:'WASH',WASHINGTONSTATE:'WSU',WSU:'WSU',
-  WESTVIRGINIA:'WVU',MOUNTAINEERS:'WVU',WVU:'WVU',
-  WESTERNMICHIGAN:'WMU',BRONCOSWMU:'WMU',WMU:'WMU',
-  WISCONSIN:'WIS',BADGERS:'WIS',WIS:'WIS',
-  WYOMING:'WYO',COWBOYS:'WYO',WYO:'WYO',
-};
-const cfbFallbackAbbr=raw=>{if(!raw)return null;const words=String(raw).trim().split(/\s+/);const norm=x=>String(x).toUpperCase().replace(/[^A-Z0-9]/g,'');for(let len=words.length;len>=1;len--){const k=norm(words.slice(0,len).join(' '));if(CFB_FALLBACK_ABBR[k])return CFB_FALLBACK_ABBR[k];}return null;};
+const CFB_FALLBACK_ABBR={'49ERS':'CLT','AF':'AF','AIRFORCE':'AF','AKR':'AKR','AKRON':'AKR','ALA':'ALA','ALABAMA':'ALA','APP':'APP','APPALACHIANST':'APP','APPALACHIANSTATE':'APP','APPSTATE':'APP','ARIZ':'ARIZ','ARIZONA':'ARIZ','ARIZONAST':'ASU','ARIZONASTATE':'ASU','ARK':'ARK','ARKANSAS':'ARK','ARKANSASST':'ARST','ARKANSASSTATE':'ARST','ARMY':'ARMY','ARST':'ARST','ASU':'ASU','AUB':'AUB','AUBURN':'AUB','AZTECS':'SDSU','BADGERS':'WIS','BALL':'BALL','BALLST':'BALL','BALLSTATE':'BALL','BAY':'BAY','BAYLOR':'BAY','BC':'BC','BEARCATS':'CIN','BEARKATS':'SHSU','BEAVERS':'ORST','BGSU':'BGSU','BLACKKNIGHTS':'ARMY','BLAZERS':'UAB','BLUEDEVILS':'DUKE','BLUEHENS':'DEL','BLUERAIDERS':'MTSU','BOILERMAKERS':'PUR','BOISEST':'BSU','BOISESTATE':'BSU','BOSTONCOLLEGE':'BC','BOWLINGGREEN':'BGSU','BRIGHAMYOUNG':'BYU','BRUINS':'UCLA','BSU':'BSU','BUCKEYES':'OSU','BUFF':'BUFF','BUFFALO':'BUFF','BUFFALOES':'COLO','BYU':'BYU','CAL':'CAL','CALIFORNIA':'CAL','CAVALIERS':'UVA','CCU':'CCU','CENTRALFLORIDA':'UCF','CENTRALMICHIGAN':'CMU','CHANTICLEERS':'CCU','CHARLOTTE':'CLT','CHIPPEWAS':'CMU','CIN':'CIN','CINCINNATI':'CIN','CLEM':'CLEM','CLEMSON':'CLEM','CLT':'CLT','CMU':'CMU','COASTALCAROLINA':'CCU','COLO':'COLO','COLORADO':'COLO','COLORADOST':'CSU','COLORADOSTATE':'CSU','COMMODORES':'VAN','CONNECTICUT':'UCONN','CORNHUSKERS':'NEB','CRIMSONTIDE':'ALA','CSU':'CSU','CYCLONES':'ISU','DEL':'DEL','DELAWARE':'DEL','DEMONDEACONS':'WAKE','DUKE':'DUKE','EASTCAROLINA':'ECU','EASTERNMICHIGAN':'EMU','ECU':'ECU','EMU':'EMU','FAU':'FAU','FIGHTINBLUEHENS':'DEL','FIGHTINGILLINI':'ILL','FIGHTINGIRISH':'ND','FIU':'FIU','FLA':'FLA','FLAMES':'LIB','FLORIDA':'FLA','FLORIDAATLANTIC':'FAU','FLORIDAINTERNATIONAL':'FIU','FLORIDAST':'FSU','FLORIDASTATE':'FSU','FRES':'FRES','FRESNOST':'FRES','FRESNOSTATE':'FRES','FSU':'FSU','GASO':'GASO','GAST':'GAST','GATORS':'FLA','GEORGIA':'UGA','GEORGIASOUTHERN':'GASO','GEORGIAST':'GAST','GEORGIASTATE':'GAST','GEORGIATECH':'GT','GOLDENBEARS':'CAL','GOLDENFLASHES':'KENT','GOLDENGOPHERS':'MINN','GOLDENHURRICANE':'TLSA','GREENWAVE':'TULN','GT':'GT','HAW':'HAW','HAWAII':'HAW','HAWKEYES':'IOWA','HILLTOPPERS':'WKU','HOKIES':'VT','HOOSIERS':'IND','HORNEDFROGS':'TCU','HOU':'HOU','HOUSTON':'HOU','ILL':'ILL','ILLINI':'ILL','ILLINOIS':'ILL','IND':'IND','INDIANA':'IND','IOWA':'IOWA','IOWAST':'ISU','IOWASTATE':'ISU','ISU':'ISU','JACKSONVILLEST':'JVST','JACKSONVILLESTATE':'JVST','JAMESMADISON':'JMU','JAYHAWKS':'KU','JMU':'JMU','JVST':'JVST','KANSAS':'KU','KANSASST':'KSU','KANSASSTATE':'KSU','KENN':'KENN','KENNESAWST':'KENN','KENNESAWSTATE':'KENN','KENT':'KENT','KENTST':'KENT','KENTSTATE':'KENT','KENTUCKY':'UK','KSTATE':'KSU','KSU':'KSU','KU':'KU','LATECH':'LT','LIB':'LIB','LIBERTY':'LIB','LOBOS':'UNM','LONGHORNS':'TEX','LOU':'LOU','LOUISIANA':'UL','LOUISIANALAFAYETTE':'UL','LOUISIANAMONROE':'ULM','LOUISIANATECH':'LT','LOUISVILLE':'LOU','LSU':'LSU','LT':'LT','MARSHALL':'MRSH','MARYLAND':'MD','MASSACHUSETTS':'UMASS','MD':'MD','MEANGREEN':'UNT','MEM':'MEM','MEMPHIS':'MEM','MIA':'MIA','MIAMI':'MIA','MIAMIFL':'MIA','MIAMIFLORIDA':'MIA','MIAMIOH':'M-OH','MIAMIOHIO':'M-OH','MICH':'MICH','MICHIGAN':'MICH','MICHIGANST':'MSU','MICHIGANSTATE':'MSU','MIDDLETENNESSEE':'MTSU','MIDDLETENNESSEESTATE':'MTSU','MIDSHIPMEN':'NAVY','MINERS':'UTEP','MINN':'MINN','MINNESOTA':'MINN','MINUTEMEN':'UMASS','MISS':'MISS','MISSISSIPPI':'MISS','MISSISSIPPIST':'MSST','MISSISSIPPISTATE':'MSST','MISSOURI':'MIZ','MISSOURIST':'MOST','MISSOURISTATE':'MOST','MIZ':'MIZ','MIZZOU':'MIZ','MOH':'M-OH','MONARCHS':'ODU','MOST':'MOST','MRSH':'MRSH','MSST':'MSST','MSU':'MSU','MTSU':'MTSU','NAVY':'NAVY','NCST':'NCST','NCSTATE':'NCST','ND':'ND','NEB':'NEB','NEBRASKA':'NEB','NEV':'NEV','NEVADA':'NEV','NEWMEXICO':'UNM','NEWMEXICOST':'NMSU','NEWMEXICOSTATE':'NMSU','NITTANYLIONS':'PSU','NIU':'NIU','NMSTATE':'NMSU','NMSU':'NMSU','NORTHCAROLINA':'UNC','NORTHCAROLINAST':'NCST','NORTHCAROLINASTATE':'NCST','NORTHERNILLINOIS':'NIU','NORTHTEXAS':'UNT','NORTHWESTERN':'NU','NOTREDAME':'ND','NU':'NU','ODU':'ODU','OHIO':'OHIO','OHIOST':'OSU','OHIOSTATE':'OSU','OKLAHOMA':'OU','OKLAHOMAST':'OKST','OKLAHOMASTATE':'OKST','OKST':'OKST','OLDDOMINION':'ODU','OLEMISS':'MISS','ORE':'ORE','OREGON':'ORE','OREGONST':'ORST','OREGONSTATE':'ORST','ORST':'ORST','OSU':'OSU','OU':'OU','PENNST':'PSU','PENNSTATE':'PSU','PITT':'PITT','PITTSBURGH':'PITT','PSU':'PSU','PUR':'PUR','PURDUE':'PUR','RAGINCAJUNS':'UL','RAINBOWWARRIORS':'HAW','RAZORBACKS':'ARK','REDHAWKS':'M-OH','REDRAIDERS':'TTU','REDWOLVES':'ARST','RICE':'RICE','ROADRUNNERS':'UTSA','RUTG':'RUTG','RUTGERS':'RUTG','SAMHOUSTON':'SHSU','SAMHOUSTONSTATE':'SHSU','SANDIEGOST':'SDSU','SANDIEGOSTATE':'SDSU','SANJOSEST':'SJSU','SANJOSESTATE':'SJSU','SC':'SC','SCARLETKNIGHTS':'RUTG','SDSU':'SDSU','SEMINOLES':'FSU','SHSU':'SHSU','SJSU':'SJSU','SOONERS':'OU','SOUTHALABAMA':'USA','SOUTHCAROLINA':'SC','SOUTHERNCAL':'USC','SOUTHERNCALIFORNIA':'USC','SOUTHERNMISS':'USM','SOUTHERNMISSISSIPPI':'USM','SOUTHFLORIDA':'USF','SPARTANS':'MSU','STAN':'STAN','STANFORD':'STAN','SUNDEVILS':'ASU','SYR':'SYR','SYRACUSE':'SYR','TA&M':'TA&M','TARHEELS':'UNC','TCU':'TCU','TEM':'TEM','TEMPLE':'TEM','TENN':'TENN','TENNESSEE':'TENN','TERPS':'MD','TERRAPINS':'MD','TEX':'TEX','TEXAS':'TEX','TEXASA&M':'TA&M','TEXASAM':'TA&M','TEXASSANANTONIO':'UTSA','TEXASST':'TXST','TEXASSTATE':'TXST','TEXASTECH':'TTU','THUNDERINGHERD':'MRSH','TLSA':'TLSA','TOL':'TOL','TOLEDO':'TOL','TROY':'TROY','TTU':'TTU','TULANE':'TULN','TULN':'TULN','TULSA':'TLSA','TXST':'TXST','UAB':'UAB','UCF':'UCF','UCLA':'UCLA','UCONN':'UCONN','UGA':'UGA','UK':'UK','UL':'UL','ULLAFAYETTE':'UL','ULM':'ULM','ULMONROE':'ULM','UMASS':'UMASS','UNC':'UNC','UNLV':'UNLV','UNM':'UNM','UNT':'UNT','USA':'USA','USC':'USC','USF':'USF','USM':'USM','USU':'USU','UTAH':'UTAH','UTAHST':'USU','UTAHSTATE':'USU','UTEP':'UTEP','UTES':'UTAH','UTSA':'UTSA','UVA':'UVA','VAN':'VAN','VANDERBILT':'VAN','VIRGINIA':'UVA','VIRGINIATECH':'VT','VOLS':'TENN','VOLUNTEERS':'TENN','VT':'VT','WAKE':'WAKE','WAKEFOREST':'WAKE','WASH':'WASH','WASHINGTON':'WASH','WASHINGTONST':'WSU','WASHINGTONSTATE':'WSU','WESTERNKENTUCKY':'WKU','WESTERNMICHIGAN':'WMU','WESTVIRGINIA':'WVU','WIS':'WIS','WISCONSIN':'WIS','WKU':'WKU','WMU':'WMU','WOLVERINES':'MICH','WSU':'WSU','WVU':'WVU','WYO':'WYO','WYOMING':'WYO','YELLOWJACKETS':'GT','ZIPS':'AKR'};
+const cfbFallbackAbbr=raw=>{if(!raw)return null;const words=String(raw).replace(/[()]/g,' ').trim().split(/\s+/);const norm=x=>String(x).toUpperCase().replace(/[^A-Z0-9&]/g,'');
+  /* full name first, then drop trailing words (nicknames): "North Texas Mean Green" -> "North Texas" */
+  for(let len=words.length;len>=1;len--){const k=norm(words.slice(0,len).join(''));if(CFB_FALLBACK_ABBR[k])return CFB_FALLBACK_ABBR[k];}
+  return null;};
 function ticketAmerToProb(price){
   if(price==null||isNaN(price))return 0.5;
   return price>0?100/(price+100):(-price)/(-price+100);
@@ -532,7 +544,7 @@ function parseMyTicketText(text){
     const hm=head.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs\.?\s+(.+?)\s*-\s*/i);
     if(!hm){skipped.push(line);return;}
     const sportWord=hm[2].toUpperCase();
-    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
+    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':sportWord==='NBA'?'nba':null;
     if(!sport||(sport!=='ncaaf'&&!intakeCanNameResolve(sport))){skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names may resolve later':'sport not recognized')+')');return;}
     const awayAb=intakeAbbr(sport,hm[3]),homeAb=intakeAbbr(sport,hm[4]);
     if(!awayAb||!homeAb){skipped.push(line+'  (team name not recognized)');return;}
@@ -619,7 +631,7 @@ function parseSGPTicketText(text){
     const sgpHdr=line.match(/^SGP\s*\d+\s*:\s*([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs?\.?\s+(.+)$/i);
     if(sgpHdr){
       const sportWord=sgpHdr[2].toUpperCase();
-      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':null;
+      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':sportWord==='NBA'?'nba':null;
       if(!sport||(sport!=='ncaaf'&&!intakeCanNameResolve(sport))){cur=null;skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
       const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
@@ -718,6 +730,7 @@ function parseSGPTicketText(text){
   legs.forEach((l,i)=>l.id='ext'+ticketNo+'_'+i);
   const L=get(LS.locked,[]);
   const idx=L.findIndex(t=>String(t.id)==='ext'+ticketNo);
+  legs.forEach(l=>{l.gdApprox=1;});
   const ticket={id:'ext'+ticketNo,date:accepted,name:'Ticket #'+ticketNo,source:'mine',imported:true,
     stake:moneyStr(kv.amount),toWin:moneyStr(kv.towin),status:kv.status||null,
     legs,p:legs.length?legs.reduce((a,x)=>a*x.p,1):null};
@@ -759,7 +772,8 @@ async function intakeText(text,sig,type,src){
      BOTH: grammar lines as grammar, and whatever is left as board copy. */
   const r=intakeParseGrammar(text,sp);
   const rest=stripBOM(text).split('\n').filter(l=>{const t=l.trim();
-    return!(INTAKE_EXTRA.test(t)||/^(ML|SPREAD|RL|OU|H1\w*|Q1\w*|F5\s*\w+|SOURCE):/i.test(t)||/\s@\s/.test(t)||/^(NFL|NCAAF|CFB|MLB)\s*$/i.test(t));}).join('\n');
+    /* every grammar key and sport header — anything missing here leaks into the board-copy reader and becomes phantom games */
+    return!(INTAKE_EXTRA.test(t)||/^(ML|MONEYLINE|SPREAD|ATS|RL|PL|OU|TOTAL|H1\w*|Q1\w*|P1\w*|F5\s*\w+|PROP|SOURCE)\s*:/i.test(t)||/\s@\s/.test(t)||/^(NFL|NCAAF|CFB|MLB|NHL|NBA|COLLEGE FOOTBALL)\s*$/i.test(t));}).join('\n');
   const g=rest.trim()?intakeBoardToGrammar(rest,intakeGuessSport(text,sp)):'';
   if(g)intakeMerge(r,intakeParseGrammar(g,sp));
   /* Auto mode safety net: lines that look like trends, splits, predictions or
@@ -844,7 +858,7 @@ function intakePreview(el,st){
   const log=st.map(x=>`<div class="sub mono" style="font-size:10px">${x.s==='ok'?'✅':'❌'} ${x.name}${x.note?' — '+x.note:''}</div>`).join('');
   if(!sports.length){el.innerHTML=`<div class="tkt"><h3>Nothing usable found</h3>${log}
     <div class="sub" style="margin-top:6px">Tip: select the board on the site, copy, and paste it here — that path never touches Gemini.</div></div>`;return;}
-  const lab={nfl:'🏈 NFL',ncaaf:'🏟 CFB',mlb:'⚾ MLB',nhl:'🏒 NHL'};
+  const lab={nfl:'🏈 NFL',ncaaf:'🏟 CFB',mlb:'⚾ MLB',nhl:'🏒 NHL',nba:'🏀 NBA'};
   const games=b=>{const m={};b.picks.forEach(p=>{const k=(p.away||'')+'@'+(p.home||'');(m[k]=m[k]||new Set()).add(p.market)});
     [['preds','PRED'],['consensus','CONS'],['trends','TREND']].forEach(([f,t])=>b[f].forEach(x=>(m[x.game]=m[x.game]||new Set()).add(t)));return m;};
   el.innerHTML=`<div class="tkt hi"><h3>Check it, then save</h3>${sports.map(sp=>{const b=r[sp];const g=games(b);
@@ -883,6 +897,7 @@ function intakeSave(){
   if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf'){NCAAF_SIMS={};renderNCAAF();}
   if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
   if(typeof renderNHL==='function'&&ACTIVE_SPORT==='nhl')renderNHL();
+  if(typeof renderNBA==='function'&&ACTIVE_SPORT==='nba')renderNBA();
 }
 /* CFB team names can only be resolved where the CFB engine lives. Anything
    uploaded elsewhere waits here and is filed the next time cfb.html opens. */
@@ -1298,7 +1313,7 @@ function intelLineFor(sp,game,market,side){
 }
 function gradeIntel(){
   const L=get(INTEL_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
-  L.forEach(x=>{if(x.graded)return;const R=F[finalsKey(x.sp,x.game)];if(!R||R.a==null)return;const a=+R.a,h=+R.h,[aw,hm]=x.game.split('@');
+  L.forEach(x=>{if(x.graded)return;const R=finalsFor(x.sp,x.game,String(x.date||'').slice(0,10),false);if(!R)return;const a=+R.a,h=+R.h,[aw,hm]=x.game.split('@');
     if(x.kind==='xpick'){try{const G=gradeLeg({game:x.game,pick:x.pick,sport:x.sp},x.date);if(G&&G.push){x.graded=true;x.hit=null;x.push=true;n++;}
       else if(G&&(G.hit===true||G.hit===false)){x.graded=true;x.hit=G.hit;n++;}}catch(e){}return;}
     if(x.kind==='pred'&&x.a!=null){x.graded=true;x.err=+Math.abs((x.h-x.a)-(h-a)).toFixed(1);x.totErr=+Math.abs((x.h+x.a)-(h+a)).toFixed(1);x.hit=(x.h>x.a)===(h>a)&&a!==h;n++;return;}
@@ -1611,7 +1626,7 @@ function charBrainReport(sp){
    +'.ch-meter{font-family:"IBM Plex Mono",monospace;font-size:8px;color:var(--mute);margin-top:2px;letter-spacing:.03em}';
   (document.head||document.documentElement).appendChild(st);}}catch(e){}})();
 function gradeVoices(){const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
-  V.forEach(x=>{if(x.graded)return;const R=F[finalsKey(x.sp,x.game)];if(!R||R.a==null)return;const a=+R.a,h=+R.h;let hit=null;
+  V.forEach(x=>{if(x.graded)return;const R=finalsFor(x.sp,x.game,String(x.date||'').slice(0,10),false);if(!R)return;const a=+R.a,h=+R.h;let hit=null;
     if(x.market==='ml'){if(a!==h)hit=(x.side==='home')===(h>a);}
     else if(x.market==='spread'&&x.line!=null){const m=(x.side==='home'?h-a:a-h)+x.line;if(m!==0)hit=m>0;}
     else if(x.market==='total'&&x.line!=null){const t=a+h;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
@@ -1669,6 +1684,8 @@ async function pullLiveOdds(){
       if(typeof fetchNFLLiveOdds!=='function')throw new Error('NFL odds live on nfl.html');
       await fetchNFLLiveOdds();
       el.innerHTML='<div class="tkt hi"><h3>NFL odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
+    }else if(ACTIVE_SPORT==='nba'){
+      el.innerHTML='<div class="tkt"><h3>NBA lines</h3><div class="sub">Paste your sportsbook\'s NBA lines in Intake — they file to this board.</div></div>';
     }else if(ACTIVE_SPORT==='nhl'){
       el.innerHTML='<div class="empty">Pulling NHL odds…</div>';
       if(typeof fetchNHLLiveOdds!=='function')throw new Error('NHL odds live on nhl.html');
@@ -1739,11 +1756,11 @@ async function fetchMLBLiveOdds(){
    Shared features used to inline sportGames(sp)
    — any new sport silently fell through to the MLB slate. */
 function sportGames(sp){return sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[])
-  :sp==='nhl'?(typeof NHL_GAMES!=='undefined'?NHL_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);}
+  :sp==='nhl'?(typeof NHL_GAMES!=='undefined'?NHL_GAMES:[]):sp==='nba'?(typeof NBA_GAMES!=='undefined'?NBA_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);}
 function sportSims(sp){return sp==='nfl'?(typeof NFL_SIMS!=='undefined'?NFL_SIMS:{}):sp==='ncaaf'?(typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{})
-  :sp==='nhl'?(typeof NHL_SIMS!=='undefined'?NHL_SIMS:{}):(typeof SIMS!=='undefined'?SIMS:{});}
+  :sp==='nhl'?(typeof NHL_SIMS!=='undefined'?NHL_SIMS:{}):sp==='nba'?(typeof NBA_SIMS!=='undefined'?NBA_SIMS:{}):(typeof SIMS!=='undefined'?SIMS:{});}
 function sportLinesFor(sp,g){const k=g.away.abbr+'@'+g.home.abbr;
-  return sp==='nfl'?nflBookLinesFor(k):sp==='ncaaf'?ncaafBookLinesFor(k):sp==='nhl'?nhlBookLinesFor(k):bookLinesFor(g.id);}
+  return sp==='nfl'?nflBookLinesFor(k):sp==='ncaaf'?ncaafBookLinesFor(k):sp==='nhl'?nhlBookLinesFor(k):sp==='nba'?(typeof nbaBookLinesFor==='function'?nbaBookLinesFor(k):[]):bookLinesFor(g.id);}
 /* One place that repaints the active sport's board. render() is the MLB
    board; calling it on a football/hockey page (clearSlip, tog, etc. do)
    used to overwrite that page's slate with "No games today." */
@@ -1751,6 +1768,7 @@ function renderActiveBoard(){const ps=window.__PAGE_SPORT__||ACTIVE_SPORT;
   if(ps==='nfl'&&typeof renderNFL==='function')return renderNFL();
   if(ps==='ncaaf'&&typeof renderNCAAF==='function')return renderNCAAF();
   if(ps==='nhl'&&typeof renderNHL==='function')return renderNHL();
+  if(ps==='nba'&&typeof renderNBA==='function')return renderNBA();
   if(typeof render==='function')return render();}
 /* Slip toggle shared by every non-MLB board. The football versions pushed a
    leg with no id (so the tile never showed selected and a second tap added a
@@ -1764,7 +1782,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
     p:price!=null&&Math.abs(price)>=100?Math.min(.95,Math.max(.05,price>0?100/(price+100):-price/(-price+100))):0.5},extra||{}));
   set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();
 }
-const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html'};
+const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -1778,6 +1796,7 @@ function doSportSwitch(sport){
   const engineHere=sport==='nfl'?typeof renderNFL==='function'
                   :sport==='ncaaf'?typeof renderNCAAF==='function'
                   :sport==='nhl'?typeof renderNHL==='function'
+                  :sport==='nba'?typeof renderNBA==='function'
                   :typeof render==='function';
   /* Each sport owns its page. A football page has BOTH football engines
      loaded, so the engine-present check alone let CFB render inside nfl.html
@@ -1810,6 +1829,8 @@ function doSportSwitch(sport){
     if(typeof ncaafOnActivate==='function')ncaafOnActivate();
   }else if(sport==='nhl'){
     if(typeof renderNHL==='function')renderNHL();
+  }else if(sport==='nba'){
+    if(typeof renderNBA==='function')renderNBA();
   }else{
     if(typeof render==='function')render();
   }
@@ -1831,7 +1852,11 @@ function doSportSwitch(sport){
 let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
 let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
 
-const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+/* today(): formatter built once per timezone; result cached for 1s (it's called thousands of times per render) */
+let TODAY_FMT=null,TODAY_TZ=null,TODAY_V='',TODAY_T=0;
+const today=()=>{const n=Date.now();if(n-TODAY_T<1000&&TODAY_TZ===APP_TZ)return TODAY_V;
+  if(!TODAY_FMT||TODAY_TZ!==APP_TZ){TODAY_FMT=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'});TODAY_TZ=APP_TZ;}
+  TODAY_V=TODAY_FMT.format(new Date(n));TODAY_T=n;return TODAY_V;};
 const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
 const fmtDate=d=>new Date(d).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',timeZone:APP_TZ});
 /* ── STORAGE COMPRESSION ────────────────────────────────────────────────────
@@ -1933,6 +1958,7 @@ function pruneDatedMap(key,keepDays){
   }catch(e){return false}
 }
 function set(k,v){
+  if(typeof LS!=='undefined'&&k===LS.allfinals&&typeof ALLF_C!=='undefined')ALLF_C=null;
   if(RO_CACHE[k])delete RO_CACHE[k];if(typeof ARC_RO!=='undefined'&&ARC_RO[k])delete ARC_RO[k];
   if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof CHAR_BRAIN_TS!=='undefined')CHAR_BRAIN_TS=0;
   if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof BLEND_C!=='undefined')BLEND_C=null;   // new grades → the brain relearns now
@@ -2790,6 +2816,7 @@ function saveBookOdds(picks,el,fileSport){
     sports.forEach(sp=>{
       const rows=groups[sp];
       if(sp==='nhl'){if(typeof saveNHLBookOdds==='function')saveNHLBookOdds(rows,null);}
+      else if(sp==='nba'){if(typeof saveNBABookOdds==='function')saveNBABookOdds(rows,null);else{const all=get('d4.nbashots',{})||{};(all[today()]=all[today()]||[]).push(...rows.map(r=>({...r,src:'mine',capturedAt:Date.now()})));set('d4.nbashots',all);}}
       else if(sp==='nfl'){
         if(typeof saveNFLBookOdds==='function')saveNFLBookOdds(rows,null);
         else saveFootballOddsToStorage('nfl',rows);
@@ -2808,6 +2835,7 @@ function saveBookOdds(picks,el,fileSport){
   }
   const sport=sports[0]||fileSport||ACTIVE_SPORT;
   if(sport==='nhl'){if(typeof saveNHLBookOdds==='function')saveNHLBookOdds(picks,el);return;}
+  if(sport==='nba'){if(typeof saveNBABookOdds==='function')saveNBABookOdds(picks,el);else{const all=get('d4.nbashots',{})||{};(all[today()]=all[today()]||[]).push(...picks.map(r=>({...r,src:'mine',capturedAt:Date.now()})));set('d4.nbashots',all);if(el)el.innerHTML='<div class="tkt"><h3>NBA lines saved</h3><div class="sub">Open the NBA board to see them.</div></div>';}return;}
   if(sport==='nfl'){
     if(typeof saveNFLBookOdds==='function')saveNFLBookOdds(picks,el);
     else{const n=saveFootballOddsToStorage('nfl',picks);
@@ -2984,6 +3012,7 @@ function tab(n,b){
   if(n==='games'&&ACTIVE_SPORT==='nfl')renderNFL();
   if(n==='games'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
   if(n==='games'&&ACTIVE_SPORT==='nhl'&&typeof renderNHL==='function')renderNHL();
+  if(n==='games'&&ACTIVE_SPORT==='nba'&&typeof renderNBA==='function')renderNBA();
   if(n==='tickets'){renderTickets();btAutoOnce();try{const tv=document.getElementById('v-tickets');if(tv&&!document.getElementById('btStatus')&&btUngraded().length){const d=document.createElement('div');d.innerHTML=btBarHtml();tv.insertBefore(d,tv.firstChild);}}catch(e){}}
   if(n==='grades')renderGrades(true);
   if(n==='recap')renderRecap();
@@ -5840,6 +5869,7 @@ async function diagnoseRundown(){
   }
 }
 async function refreshEverything(){
+  if(ACTIVE_SPORT==='nba'){if(typeof nbaBoot==='function')await nbaBoot(true);return;}
   if(ACTIVE_SPORT==='nhl'){
     const el=document.getElementById('slate');if(el)el.innerHTML='<div class="empty">Refreshing NHL data…</div>';
     if(typeof nhlBoot==='function')await nhlBoot(true);return;
@@ -6860,16 +6890,16 @@ function resolveLeg(leg,ticketDate){
      against ITS OWN schedule. Previously every leg was looked up in the MLB
      GAMES array only — a football leg matched nothing, returned null forever,
      and produced a ticket that could never be graded either way. */
-  if(leg.sport==='nfl'||leg.sport==='ncaaf'||leg.sport==='nhl'){
+  if(leg.sport==='nfl'||leg.sport==='ncaaf'||leg.sport==='nhl'||leg.sport==='nba'){
     /* Prefer the live array when the football engine is loaded (gives live
        in-progress scores), but fall through to the SHARED finals store when
        it isn't — so a football leg on a locked ticket grades correctly from
        ANY page, including mlb.html where NFL_GAMES/NCAAF_GAMES don't exist.
        Before this, a football leg simply never graded off the football page. */
-    const arr=sportGames(leg.sport);
+    const arr=sportGames(leg.sport);const want=legDay(leg,ticketDate),approx=!!leg.gdApprox||!leg.gameDate;
     let fg=null;
-    if(leg.gid)fg=arr.find(z=>z.id===leg.gid);
-    if(!fg)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
+    if(leg.gid)fg=arr.find(z=>String(z.id)===String(leg.gid));
+    if(!fg)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game&&dayOk(gameDayOf(z),want,approx));
     if(fg){
       const done=fg.status==='Final'||fg.abstract==='Final'||fg.abstract==='post';
       if(done&&fg.awayScore!=null)
@@ -6883,8 +6913,8 @@ function resolveLeg(leg,ticketDate){
     // not on this page's slate: live/final from the My Games ESPN feed
     {const mg=mgResolve(leg,ticketDate);if(mg)return mg;}
     // shared cross-sport finals store — visible on every page
-    const shared=allFinals()[finalsKey(leg.sport,leg.game)];
-    if(shared&&shared.a!=null){
+    const shared=finalsFor(leg.sport,leg.game,want,approx);
+    if(shared){
       /* Cross-check: ESPN occasionally sends a brief 'post' state mid-game
          (a known halftime glitch), which causes syncFinalsToShared to write the
          live score as if it were a final. If My Games currently says this game
@@ -6896,20 +6926,25 @@ function resolveLeg(leg,ticketDate){
     /* Finished football games also live in the sport archive, in two shapes:
        date → [rows] (finals mirror) and week → {rows,finals} (snapshots).
        Treating a week object as a list threw here instead of finding the score. */
-    const farc=arcRead(leg.sport==='nfl'?LS.nflarc:leg.sport==='nhl'?'d4.nhlarc':'d4.ncaafarc');
+    const farc=arcRead(leg.sport==='nfl'?LS.nflarc:leg.sport==='nhl'?'d4.nhlarc':leg.sport==='nba'?'d4.nbaarc':'d4.ncaafarc');
     for(const d of Object.keys(farc)){
       const E=farc[d];
-      if(Array.isArray(E)){const row=E.find(r=>r.game===leg.game||r.gid===leg.gid);
+      const isDay=/^\d{4}-\d{2}-\d{2}$/.test(d);
+      /* game-string matches only on the leg's own day; gid only when the leg HAS one
+         (undefined===undefined used to match the first row for every leg) */
+      const gameOk=r=>r.game===leg.game&&(!isDay||dayOk(d,want,approx));
+      const gidOk=r=>!!leg.gid&&(String(r.gid)===String(leg.gid)||String(r.id)===String(leg.gid));
+      if(Array.isArray(E)){const row=E.find(r=>gidOk(r)||gameOk(r));
         if(row&&row.awayScore!=null)return{a:+row.awayScore,h:+row.homeScore,gid:row.gid||leg.gid,live:false,source:'archive'};}
-      else if(E&&Array.isArray(E.rows)&&E.finals){const row=E.rows.find(r=>r.game===leg.game||String(r.id)===String(leg.gid));
+      else if(E&&Array.isArray(E.rows)&&E.finals){const row=E.rows.find(r=>gidOk(r)||gameOk(r));
         const F=row&&E.finals[row.id];if(F&&F.a!=null)return{a:+F.a,h:+F.h,gid:row.id,live:false,source:'archive'};}
     }
     return null;
   }
   // 1) in-memory GAMES — today's slate, and the only place with live in-progress scores
-  let g=null;
-  if(leg.gid)g=GAMES.find(z=>z.id===leg.gid);
-  if(!g)g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game);
+  let g=null;const want=legDay(leg,ticketDate),approx=!!leg.gdApprox||!leg.gameDate;
+  if(leg.gid)g=GAMES.find(z=>String(z.id)===String(leg.gid));
+  if(!g)g=GAMES.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game&&dayOk(gameDayOf(z),want,approx));
   if(g){
     if(g.abstract==='Final'&&g.awayScore!==null&&g.awayScore!==undefined){
       const f5=f5Of(g.id);
@@ -6943,7 +6978,9 @@ function resolveLeg(leg,ticketDate){
       if(F.a===null||F.h===null)continue;
       return{...F,gid:leg.gid,live:false,source:'archive',date:d};
     }
-    // fall back to matchup string via that day's snapshot rows
+    // matchup-string fallback ONLY on the leg's own day — a playoff series
+    // plays PHI@ATL on back-to-back nights and yesterday's final must not answer today
+    if(!dayOk(d,want,approx))continue;
     const row=(A.rows||[]).find(r=>(r.a+'@'+r.h)===leg.game);
     if(row&&A.finals[row.id]){
       const F=A.finals[row.id];
@@ -6953,7 +6990,7 @@ function resolveLeg(leg,ticketDate){
   }
   // 3) The MLB board wasn't open that day, so nothing was archived: use the shared finals store, then
   //    ESPN's own feed (My Games). Without this an MLB leg on a ticket could sit ungraded forever.
-  try{const sh=allFinals()[finalsKey('mlb',leg.game)];if(sh&&sh.a!=null&&sh.h!=null){
+  try{const sh=finalsFor('mlb',leg.game,want,approx);if(sh){
     try{const mg2=mgResolve({...leg,sport:'mlb'},ticketDate);if(mg2&&mg2.live)return mg2;}catch(e){}
     return{a:+sh.a,h:+sh.h,live:false,source:'shared'};}
   }catch(e){}
@@ -7053,6 +7090,14 @@ const fbpAb=(x,sp)=>{x=String(x||'').toUpperCase();if(sp==='nhl'&&x==='LV')retur
 const fbpGameKey=(gl,sp)=>{const [a,h]=String(gl||'').split('@');return fbpAb(a,sp)+'@'+fbpAb(h,sp);};
 FBP_ESPN.nhl='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl';
 FBP_ESPN.mlb='https://site.api.espn.com/apis/site/v2/sports/baseball/mlb';
+FBP_ESPN.nba='https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+function fbpParseBasketball(j){
+  const hc=((j.header||{}).competitions||[])[0]||{};const st=hc.status||{};const state=(st.type||{}).state||'pre';const teams={};
+  ((j.boxscore||{}).players||[]).forEach(T=>{const ab=String(T.team&&T.team.abbreviation||'').toUpperCase();if(!ab)return;
+    const t=teams[ab]={players:[]};(T.statistics||[]).forEach(grp=>{const labels=(grp.labels||grp.names||[]).map(x=>String(x).toUpperCase());
+      (grp.athletes||[]).forEach(at=>{const row={name:(at.athlete||{}).displayName||''};(at.stats||[]).forEach((v,i)=>{row[labels[i]]=v;});t.players.push(row);});});});
+  return{state,period:st.period||0,teams,basketball:true};
+}
 const fbpYmd=d=>String(d).replace(/-/g,'');
 function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.setDate(x.getDate()+n);
   return x.getFullYear()+String(x.getMonth()+1).padStart(2,'0')+String(x.getDate()).padStart(2,'0');}
@@ -7143,9 +7188,8 @@ function fbpBox(id,sp){
   if(!FBP_INFLIGHT['box:'+id]){
     FBP_INFLIGHT['box:'+id]=1;
     fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json()).then(j=>{
-      const box=sp==='nhl'?fbpParseHockey(j):sp==='mlb'?fbpParseBaseball(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
-  /* Feed parsed player rows into rolling season averages */
-  try{if(sp==='nhl')pstatFeedNHL(leg.game,box);else if(sp==='nfl'||sp==='ncaaf')pstatFeedFB(leg.game,box,sp);}catch(e){}
+      const box=sp==='nhl'?fbpParseHockey(j):sp==='mlb'?fbpParseBaseball(j):sp==='nba'?fbpParseBasketball(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
+      try{pstatFeed(sp,String(id),box);}catch(e){}   // finals only, once per game
       if(box.state==='post'&&Object.keys(box.teamStats||box.teams||{}).length){
         const S=get(FBP_BOX_KEY,{})||{};S[sp+':'+id]={ts:Date.now(),final:true,box};
         Object.keys(S).forEach(k=>{if(Date.now()-S[k].ts>6*864e5)delete S[k];});
@@ -10810,6 +10854,10 @@ function parseSlateText(text){
     r.picks.forEach(p=>p.sport='nfl');
     return{picks:r.picks,trends:r.trends,consensus:r.consensus,sport:'nfl',isNFL:true};
   }
+  if(sport==='nba'){
+    if(typeof parseNBASlateText!=='function')return{picks:[],trends:[],consensus:[],sport:'nba',unavailable:true};
+    const r=parseNBASlateText(text);return{picks:r.picks,trends:[],consensus:[],sport:'nba'};
+  }
   if(sport==='nhl'){
     if(typeof parseNHLSlateText!=='function')
       return{picks:[],trends:[],consensus:[],sport:'nhl',unavailable:true};
@@ -11178,8 +11226,8 @@ function gradeExtPicks(){
       // finals store, which is all Judge/Coach/Most-common-score ever post
       // (see syncHousePicksToExt), and it's what makes those gradeable on
       // NFL/CFB/NHL boards where there's no MLB-shaped finals archive at all.
-      const shared=allFinals()[finalsKey(p.sport||'mlb',p.game)];
-      if(!shared||shared.a==null||shared.h==null)return;
+      const shared=finalsFor(p.sport||'mlb',p.game,String(p.gameDate||p.date||'').slice(0,10),false);
+      if(!shared)return;
       const tot=shared.a+shared.h;
       let hit=null;
       if(p.market==='moneyline')hit=p.side==='home'?shared.h>shared.a:shared.a>shared.h;
@@ -13606,7 +13654,7 @@ function gradeBookPicksAgainstFinals(){
     const sp=sportOf[key];
     Object.keys(all).forEach(d=>{
       (all[d]||[]).filter(r=>oddsToImplied(r.price)>=0.60).forEach(r=>{
-        const F=finals[finalsKey(sp,r.game)];if(!F)return;
+        const F=finalsFor(sp,r.game,d,false);if(!F)return;
         const [aw,hm]=(r.game||'').split('@');
         let hit=null;
         if(r.market==='moneyline'){
@@ -14712,25 +14760,51 @@ function buildBestCard(){
     </div>
   </div></div>`;
 }
+/* ══ BEST TAB — one card for every sport ═══════════════════════════════════
+   Built from today's card (all sports you've opened today). Five best picks
+   by calibrated probability, priced between -350 and +400 so a -1000 "lock"
+   never crowds out a real edge, plus the day's standout scorer prop.
+   It LOCKS itself once — the moment today's master evaluation has run, or
+   30 minutes before its first game, whichever comes first — and is graded
+   from that frozen list. Nothing on it is replaced once games start.        */
+const BEST5_KEY='d4.best5',BEST5_LO=-350,BEST5_HI=400;
+function bestStandout(by){let b=null;Object.values(by||{}).forEach(B=>{const s=B&&B.standout;if(s&&(!b||s.p>b.p))b=s;});return b;}
+function standoutHtml(s){return`<div class="tkt" style="margin-bottom:8px;border-color:var(--gold)"><b>🌟 Standout prop</b> <span class="mono" style="font-size:10px;color:var(--mute)">${(s.sp||'').toUpperCase()}</span>
+  <div style="font-size:15px;font-weight:800;margin-top:2px">${esc(s.player)} ${esc(s.label)}</div>
+  <div class="sub mono">${esc(s.team)} · ${esc(s.game)} · model ${Math.round(s.p*100)}% · ${s.avg.toFixed(2)}/game over ${s.n} games</div></div>`;}
+function best5Prob(x){return x.blend!=null?x.blend:x.brainP!=null?x.brainP:x.mp;}
+function best5Started(x){const t=Date.parse(x.start||'');return isFinite(t)&&Date.now()>=t;}
+function best5Build(){
+  const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};const pool=[];
+  Object.values(by).forEach(B=>(B.picks||[]).forEach(x=>{const p=best5Prob(x);
+    if(p==null||x.price==null||x.price<BEST5_LO||x.price>BEST5_HI||best5Started(x))return;pool.push({...x,p});}));
+  pool.sort((a,b)=>b.p-a.p);const used=new Set(),out=[];
+  for(const x of pool){if(used.has(x.sp+'|'+x.game))continue;used.add(x.sp+'|'+x.game);out.push(x);if(out.length===5)break;}
+  return{picks:out,standout:bestStandout(by),sports:Object.keys(by)};
+}
+function best5State(){const d=today();let S=get(BEST5_KEY,{});if(S.d!==d)S={d,locked:false};
+  if(!S.locked){const b=best5Build();S.picks=b.picks;S.standout=b.standout;S.sports=b.sports;S.ts=Date.now();
+    const E=get(LS_EVAL,{})||{};const masterRan=E.date===d;
+    const first=Math.min(...b.picks.map(x=>Date.parse(x.start||'')).filter(isFinite),Infinity);
+    if(b.picks.length&&(masterRan||first-Date.now()<30*60e3)){S.locked=true;S.lockedAt=Date.now();S.why=masterRan?'master evaluation ran':'first game within 30 min';}
+    set(BEST5_KEY,S);}
+  return S;}
+function best5Lock(){const S=best5State();if(!S.picks||!S.picks.length){alert('Nothing to lock yet — open each sport board today first.');return;}
+  S.locked=true;S.lockedAt=Date.now();S.why='locked by you';set(BEST5_KEY,S);renderBest();}
 function renderBest(){
-  const el=document.getElementById('bestCard');
-  if(!GAMES.length){el.innerHTML='<div class="empty">Board not loaded yet.</div>';return}
-  const d=today(),log=get(LS.bestlog,{}),entry=log[d];
-  const locked=entry&&entry.locked;
-  const lockBar=`<div class="note" style="margin:0 0 10px;display:flex;align-items:center;
-    flex-wrap:wrap;gap:8px;border-left:3px solid ${locked?'var(--win)':'var(--gold)'};padding-left:10px">
-    <b style="color:${locked?'var(--win)':'var(--gold)'}">${locked
-      ?`🔒 Locked at ${new Date(entry.lockedAt||entry.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} — this is what gets graded tonight`
-      :`Unlocked — still moving with lineups and odds`}</b>
-    ${locked
-      ?`<button onclick="unlockBestToday()" style="padding:3px 10px;font-size:10px;
-          font-family:'IBM Plex Mono';background:transparent;border:1px solid var(--rule);
-          color:var(--mute);border-radius:5px;cursor:pointer">Unlock</button>`
-      :`<button onclick="lockBestToday()" style="padding:3px 10px;font-size:10px;
-          font-family:'IBM Plex Mono';background:rgba(242,169,59,.15);border:1px solid var(--gold);
-          color:var(--gold);border-radius:5px;cursor:pointer">Lock today's picks</button>`}
-  </div>`;
-  el.innerHTML=lockBar+buildBestCard();
+  const el=document.getElementById('bestCard');if(!el)return;
+  const S=best5State();
+  const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
+    <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen, graded from this list`:'Building — locks automatically after the master evaluation or 30 min before first game'}</b>
+    ${S.locked?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}
+    <div class="sub mono" style="font-size:9.5px">Sports on today's card: ${(S.sports||[]).map(x=>x.toUpperCase()).join(', ')||'none yet — open each sport board once'} · odds window ${BEST5_LO} to +${BEST5_HI}</div></div>`;
+  const rows=(S.picks||[]).map((x,i)=>{let res='';
+    try{const r=gradeLeg({sport:x.sp,game:x.game,pick:x.pick,gameDate:S.d,gid:x.gid},S.d);
+      if(r&&r.hit===true&&!r.live)res='<span style="color:var(--win)">✅</span>';else if(r&&r.hit===false&&!r.live)res='<span style="color:var(--rust)">❌</span>';else if(r&&r.live)res='<span style="color:var(--gold)">⏳ live</span>';}catch(e){}
+    return`<div class="tkt" style="margin:6px 0"><b>${i+1}. ${esc(x.pick)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${x.sp.toUpperCase()} · ${esc(x.game)}</span> ${res}
+      <div class="sub mono">${x.price>0?'+':''}${x.price} · model ${Math.round(x.p*100)}%${x.mkt!=null?` · market ${Math.round(x.mkt*100)}%`:''}${x.gap!=null?` · edge ${x.gap>0?'+':''}${x.gap.toFixed(1)} pts`:''}</div></div>`;}).join('');
+  el.innerHTML=bar+(S.standout?standoutHtml(S.standout):'')+(rows||'<div class="empty">No qualifying picks yet. Open each sport\'s Games board today so its picks reach the card.</div>')+
+    ((typeof GAMES!=='undefined'&&GAMES.length&&typeof buildBestCard==='function')?`<details style="margin-top:10px"><summary class="sub mono" style="cursor:pointer">▼ MLB deep card (props, HR board)</summary>${(()=>{try{return buildBestCard()}catch(e){return''}})()}</details>`:'');
 }
 
 /* ---- snapshot + grade the day's Best Bets, separately from the main archive ---- */
@@ -15151,6 +15225,10 @@ async function boot(){
     if(typeof fetchNFLPowerRatings==='function')await fetchNFLPowerRatings().catch(()=>{});
     if(typeof renderNFL==='function')renderNFL();
     if(typeof nflOnActivate==='function')nflOnActivate();
+  }else if(pageSport==='nba'){
+    ACTIVE_SPORT='nba';
+    (function go(n){if(typeof nbaBoot==='function'){nbaBoot().catch(e=>console.warn('nba boot',e));return;}
+      if(n<100)setTimeout(()=>go(n+1),50);})(0);
   }else if(pageSport==='nhl'){
     ACTIVE_SPORT='nhl';
     /* nhl-engine.js loads AFTER this file; boot() can reach here before that
@@ -15585,6 +15663,34 @@ function takeFadePanel(g,s,sport){
    downstream grade (Intel, Voices, System log, Book picks) with the wrong
    score. finalsKey() is the one place that format is built; every reader and
    writer below goes through it so they can never drift apart again. */
+/* ── DATE DISCIPLINE ───────────────────────────────────────────────────────
+   Every score lookup is checked against the leg's own game date. Teams meet
+   on consecutive days (MLB/NHL playoff series, NHL home-and-homes), so a
+   team string alone ("PHI@ATL") is never enough to identify a game. */
+let TD_FMT=null,TD_TZ=null;const TD_MEMO=new Map();
+function tdDay(iso){if(!iso)return'';const s=String(iso);if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  const hit=TD_MEMO.get(s);if(hit)return hit;
+  try{if(!TD_FMT||TD_TZ!==APP_TZ){TD_FMT=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'});TD_TZ=APP_TZ;TD_MEMO.clear();}
+    const v=TD_FMT.format(new Date(s));if(TD_MEMO.size>5000)TD_MEMO.clear();TD_MEMO.set(s,v);return v;}catch(e){return s.slice(0,10);}}
+function dayShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00Z');x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10);}
+function gameDayOf(g){if(!g)return'';
+  /* only fields that are real dates — NHL/football carry a display "time" like "6:00 PM CT" */
+  for(const v of [g.__date,g.start,g.date,g.gameDate,g.time]){if(v&&/^\d{4}-\d{2}-\d{2}/.test(String(v))&&isFinite(Date.parse(String(v).length===10?v+'T12:00:00Z':v)))return tdDay(v);}
+  return'';}
+function legDay(leg,ticketDate){return String((leg&&leg.gameDate)||ticketDate||'').slice(0,10);}
+/* A game on `day` matches a leg on `want` — exact when the leg's date is
+   real; a short forward window only when the date is just the ticket's
+   accepted date (SGP tickets carry no game dates). */
+function dayOk(day,want,approx){if(!want||!day)return true;if(day===want)return true;
+  return !!approx&&day>want&&day<=dayShift(want,4);}
+/* Shared finals entry for a game, ONLY if it belongs to the requested day. */
+function finalsFor(sport,game,want,approx){
+  const F=allFinals()[finalsKey(sport,game)];if(!F||F.a==null||F.h==null)return null;
+  if(!want)return F;
+  if(F.d)return dayOk(F.d,want,approx)?F:null;
+  /* legacy entry with no date: trust it only if it was written on the game day or the morning after */
+  const w=tdDay(F.ts||0);return(w===want||w===dayShift(want,1)||(approx&&dayOk(w,want,true)))?F:null;
+}
 function finalsKey(sport,game){return(sport||'mlb')+':'+game;}
 /* One-time, idempotent migration for finals already saved under the old bare
    key. Each stored value already carries its own `sport`, so this is lossless
@@ -15633,9 +15739,10 @@ function syncFinalsToShared(){
       if(seen.a!==+g.awayScore||seen.h!==+g.homeScore){SYNC_SEEN[key]={a:+g.awayScore,h:+g.homeScore,ts:now,live:true};return;}
       if(now-seen.ts<3000)return;
     }
-    const prev=all[key];
-    if(!prev||prev.a!==+g.awayScore||prev.h!==+g.homeScore||(g.h1a!=null&&prev.h1a==null)){
-      all[key]={sport,a:+g.awayScore,h:+g.homeScore,h1a:g.h1a!=null?+g.h1a:null,h1h:g.h1h!=null?+g.h1h:null,p1a:g.p1a!=null?+g.p1a:null,p1h:g.p1h!=null?+g.p1h:null,ts:Date.now()};changed=true;
+    const prev=all[key];const gd=gameDayOf(g);
+    if(prev&&prev.d&&gd&&gd<prev.d)return;
+    if(!prev||prev.d!==gd||prev.a!==+g.awayScore||prev.h!==+g.homeScore||(g.h1a!=null&&prev.h1a==null)){
+      all[key]={sport,d:gd,a:+g.awayScore,h:+g.homeScore,h1a:g.h1a!=null?+g.h1a:null,h1h:g.h1h!=null?+g.h1h:null,p1a:g.p1a!=null?+g.p1a:null,p1h:g.p1h!=null?+g.p1h:null,ts:Date.now()};changed=true;
     }
   });
   /* MLB's live board too — finals reached the shared store only via the grading
@@ -15650,8 +15757,9 @@ function syncFinalsToShared(){
         const F=fin[r.id];if(!F||F.a==null)return;
         const key=finalsKey('mlb',(r.a||'')+'@'+(r.h||''));
         const prev=all[key];
-        if(!prev||prev.a!==+F.a||prev.h!==+F.h){
-          all[key]={sport:'mlb',a:+F.a,h:+F.h,ts:Date.now()};changed=true;
+        if(prev&&prev.d&&d<prev.d)return;
+        if(!prev||prev.d!==d||prev.a!==+F.a||prev.h!==+F.h){
+          all[key]={sport:'mlb',d,a:+F.a,h:+F.h,ts:Date.now()};changed=true;
         }
       });
     });
@@ -15659,14 +15767,19 @@ function syncFinalsToShared(){
   if(typeof NFL_GAMES!=='undefined')sweep(NFL_GAMES,'nfl');
   if(typeof NCAAF_GAMES!=='undefined')sweep(NCAAF_GAMES,'ncaaf');
   if(typeof NHL_GAMES!=='undefined')sweep(NHL_GAMES,'nhl');
+  if(typeof NBA_GAMES!=='undefined')sweep(NBA_GAMES,'nba');
   if(changed)set(LS.allfinals,all);
   return all;
 }
 /* The single source of truth every tab should use: {'sport:game': {sport,a,h}}.
    Always read via finalsKey(sport,game) — never a bare game string. */
+/* Read-mostly: sync + decompress at most every 2s; any write to the finals
+   store (set → ALLF_C=null) makes the next read fresh immediately. */
+let ALLF_C=null,ALLF_T=0;
 function allFinals(){
+  if(ALLF_C&&Date.now()-ALLF_T<2000)return ALLF_C;
   syncFinalsToShared();
-  return get(LS.allfinals,{});
+  ALLF_C=get(LS.allfinals,{});ALLF_T=Date.now();return ALLF_C;
 }
 function logSystemPicks(sport){
   const sp=sport||ACTIVE_SPORT;
@@ -15719,7 +15832,7 @@ function gradeSystemLog(){
   Object.keys(log).forEach(d=>{
     Object.keys(log[d]).forEach(k=>{
       const row=log[d][k];if(row.graded)return;
-      const F=finals[finalsKey(row.sport,row.game)];if(!F)return;
+      const F=finalsFor(row.sport,row.game,String(d).slice(0,10),false);if(!F)return;
       const [aw,hm]=row.game.split('@');
       const winner=F.a>F.h?aw:F.h>F.a?hm:null;
       if(!winner)return;
@@ -16390,17 +16503,6 @@ function todayCandidates(sp){
   });
   // one pick per game-market: if both sides somehow qualify, keep the stronger
   const best={};out.forEach(x=>{const k=x.game+'|'+x.m;if(!best[k]||x.rank>best[k].rank)best[k]=x;});
-  /* Standout prop: the player with the highest expected value vs their pstat average */
-  try{
-    let bestProp=null;const S=pstatStore();
-    Object.values(S).filter(x=>x.sp===sp&&x.n>=3).forEach(x=>{
-      const g=games.find(z=>z.away.abbr===x.team||z.home.abbr===x.team);if(!g)return;
-      if(g.abstract&&g.abstract!=='pre')return;  // game already started
-      if(sp==='nhl'&&x.g>0){const ev=x.g*3;bestProp=(!bestProp||ev>bestProp.ev)?{player:x.player,stat:'goals',avg:x.g.toFixed(2),ev,game:x.team===g.away.abbr?g.away.abbr+'@'+g.home.abbr:g.away.abbr+'@'+g.home.abbr,sp}:bestProp;}
-      if((sp==='nfl'||sp==='ncaaf')&&x.recYds>0){const ev=x.recYds;bestProp=(!bestProp||ev>bestProp.ev)?{player:x.player,stat:'receiving yds',avg:x.recYds.toFixed(0),ev,game:g.away.abbr+'@'+g.home.abbr,sp}:bestProp;}
-    });
-    if(bestProp)window.__TODAY_STANDOUT__=bestProp;
-  }catch(e){}
   const res=Object.values(best).sort((a,b)=>b.rank-a.rank);
   res.forEach(x=>{try{const g=games.find(z=>z.id===x.gid);const mf=g?marketFair(sp,g,x.m,x.sd,null):null;x.mkt=mf?mf.p:null;x.blend=x.mp!=null?blendProb(sp,x.m,x.mp,x.mkt):null;}catch(e){}});
   try{correlatedStakes(res)}catch(e){}
@@ -16431,10 +16533,14 @@ function todaySnapshot(){
   /* Daily lock: keep picks for games that have already started so picks
      don't vanish mid-day when the board refreshes post-kickoff. Only add
      new picks for games not yet in today's list. */
-  const prev=(T.by[sp]||{}).picks||[];
-  const prevGames=new Set(prev.map(p=>p.game));
-  const merged=[...prev,...(picks||[]).filter(p=>!prevGames.has(p.game))];
-  T.by[sp]={ts:Date.now(),picks:merged,props};set(TC_KEY,T);
+  const B0=T.by[sp]||{};const prev=B0.picks||[];
+  /* a pick, once on today's card, keeps its price and side for the day —
+     games that start stay listed. New game-markets are added, never swapped. */
+  const kOf=x=>x.game+'|'+x.m;const have=new Set(prev.map(kOf));
+  const merged=[...prev,...(picks||[]).filter(x=>!have.has(kOf(x)))];
+  let standout=B0.standout||null;
+  if(!standout){try{standout=pstStandout(sp,sportGames(sp).length?sportGames(sp):(typeof GAMES!=='undefined'?GAMES:[]));}catch(e){}}
+  T.by[sp]={ts:Date.now(),picks:merged,props,standout};set(TC_KEY,T);
   const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
 }
 function onTicketMatch(sp,game,m,sd){
@@ -16442,7 +16548,7 @@ function onTicketMatch(sp,game,m,sd){
   return L.some(t=>(t.legs||[]).some(l=>{if((l.sport||'mlb')!==sp||l.game!==game)return false;
     const [a,h]=game.split('@');const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);return k&&k.market===m&&k.side===sd;}));
 }
-const SP_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL'};
+const SP_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
 function renderToday(noSnap){
   const el=document.getElementById('todayBody');if(!el)return;
   if(!noSnap)todaySnapshot();
@@ -16450,8 +16556,8 @@ function renderToday(noSnap){
   const sports=['nfl','ncaaf','mlb','nhl'].filter(sp=>by[sp]);
   const legend=`<div class="sub mono" style="font-size:9.5px;margin-bottom:6px">${Object.values(TC_COL).map(([c,l])=>`<span style="color:${c};margin-right:8px">■ ${l}</span>`).join('')}· conflicts and red are left off</div>`;
   if(!sports.length){el.innerHTML=legend+'<div class="empty">Open a sport\'s Games board once today and its picks land here.</div>';return;}
-  const standout=window.__TODAY_STANDOUT__;
-  const sdHtml=standout?('<div class="tkt" style="margin-bottom:8px;border-color:var(--gold)"><b>\u{1F31F} Standout prop</b> <span class="mono" style="font-size:10px;color:var(--mute)">'+standout.sp.toUpperCase()+'</span><div class="sub">'+esc(standout.player)+' \u00b7 '+esc(standout.stat)+' \u00b7 avg '+standout.avg+'/game</div></div>'):'';
+  const standout=bestStandout(by);
+  const sdHtml=standout?standoutHtml(standout):'';
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
   const age=ts=>{const m=Math.round((Date.now()-ts)/60000);return m<1?'just now':m<60?m+'m ago':Math.round(m/60)+'h ago';};
   el.innerHTML=legend+sdHtml+sports.map(sp=>{const B=by[sp];const P=B.picks||[];
@@ -16472,9 +16578,10 @@ function renderToday(noSnap){
 
 /* ── 3. My Games: every game you have money on, all sports ────────────────── */
 const MG_URL={mlb:'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard',nfl:'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
-  ncaaf:'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard',nhl:'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard'};
+  ncaaf:'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard',nhl:'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard',
+  nba:'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard'};
 const MG_ALIAS={mlb:{CHW:'CWS',ARI:'AZ',OAK:'ATH',WAS:'WSH'},nfl:{WAS:'WSH',JAC:'JAX',LA:'LAR',LVR:'LV',OAK:'LV',ARZ:'ARI'},ncaaf:{},
-  nhl:{LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV:'VGK',MON:'MTL',UTA:'UTAH',WAS:'WSH'}};
+  nhl:{LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV:'VGK',MON:'MTL',UTA:'UTAH',WAS:'WSH'},nba:{GSW:'GS',NYK:'NY',NOP:'NO',SAS:'SA',UTA:'UTAH',WAS:'WSH',BRK:'BKN',PHO:'PHX',CHO:'CHA'}};
 const mgAb=(sp,x)=>{x=String(x||'').toUpperCase();return(MG_ALIAS[sp]||{})[x]||x;};
 const mgKey=(sp,gl)=>{const [a,h]=String(gl||'').split('@');return mgAb(sp,a)+'@'+mgAb(sp,h);};
 let MG_LIVE={},MG_TS=0,MG_BUSY=false,MG_TIMER=null;
@@ -16482,6 +16589,17 @@ let MG_LIVE={},MG_TS=0,MG_BUSY=false,MG_TIMER=null;
    listing order), flip it so ML/spread legs are scored against the right team. Runs once per game. */
 function mgHealOrientation(){
   const L=get(LS.locked,[]);let ch=false;
+  /* College legs read off a non-CFB page carry fallback abbreviations that may
+     not be ESPN's. Match both teams by school identity on the leg's day. */
+  try{const C=MG_LIVE.ncaaf||{};
+    L.forEach(t=>(t.legs||[]).forEach(l=>{if(l.sport!=='ncaaf'||!l.game||C[mgKey('ncaaf',l.game)])return;
+      const [la,lh]=l.game.split('@');const want=legDay(l,t.date);const id=arr=>new Set((arr||[]).map(x=>cfbFallbackAbbr(x)||String(x).toUpperCase()));
+      for(const k of Object.keys(C)){const e=(C[k]||[]).find(x=>dayOk(x.date,want,!!l.gdApprox||!l.gameDate));if(!e)continue;
+        const A=id(e.an),H=id(e.hn);
+        const [ea,eh]=k.split('@');
+        const swap=(x,y)=>{l.pick=String(l.pick||'').split(/(\s+)/).map(w=>w===x?y:w).join('');};
+        if(A.has(la)&&H.has(lh)){if(la!==ea)swap(la,ea);if(lh!==eh)swap(lh,eh);l.game=k;ch=true;break;}
+        if(A.has(lh)&&H.has(la)){if(lh!==ea)swap(lh,ea);if(la!==eh)swap(la,eh);l.game=k;ch=true;break;}}}));}catch(e){}
   L.forEach(t=>(t.legs||[]).forEach(l=>{const sp=l.sport||'mlb';if(!l.game||!MG_LIVE[sp])return;
     if((MG_LIVE[sp]||{})[mgKey(sp,l.game)])return;
     const rev=l.game.split('@').reverse().join('@');
@@ -16494,12 +16612,13 @@ function mgPending(){
 }
 function clearStaleFromFinals(){
   const F=get(LS.allfinals,{});let n=0;
-  ['mlb','nfl','ncaaf','nhl'].forEach(sp=>{
-    const live=MG_LIVE[sp]||{};
-    Object.keys(live).forEach(k=>{const e=live[k];if(!e||e.state!=='in')return;
-      const game=e.away&&e.home?e.away+'@'+e.home:null;if(!game)return;
-      const fk=finalsKey(sp,game);
-      if(F[fk]){delete F[fk];delete SYNC_SEEN[fk];n++;}});});
+  /* MG_LIVE[sp][key] is a LIST of ESPN events. A shared final that ESPN now
+     reports as live or not-yet-started on the SAME day is stale — drop it. */
+  Object.keys(F).forEach(fk=>{const i=fk.indexOf(':');const sp=fk.slice(0,i),game=fk.slice(i+1);
+    const list=((MG_LIVE[sp]||{})[mgKey(sp,game)])||[];const E=F[fk];
+    const day=E.d||tdDay(E.ts||0);
+    const bad=list.some(e=>e.state!=='post'&&e.date===day);
+    if(bad){delete F[fk];delete SYNC_SEEN[fk];n++;}});
   if(n){set(LS.allfinals,F);console.info('TheDesk: cleared '+n+' stale score(s) — live games were marked as final');}
   return n;
 }
@@ -16520,7 +16639,8 @@ async function mgRefresh(force){
           const st=(ev.status||c.status||{});const state=(st.type||{}).state||'pre';
           const ls=x=>(x.linescores||[]).map(v=>+(v.value!=null?v.value:v.displayValue)||0);const la=ls(aw),lh=ls(hm);
           const k=mgKey(sp,aw.team.abbreviation+'@'+hm.team.abbreviation);
-          (M[k]=M[k]||[]).push({espnId:String(ev.id),date:ev.date?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date)):'',
+          const nm=t=>[t.abbreviation,t.location,t.displayName,t.shortDisplayName,t.name].filter(Boolean);
+          (M[k]=M[k]||[]).push({an:nm(aw.team),hn:nm(hm.team),espnId:String(ev.id),date:ev.date?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date)):'',
             start:ev.date,state,detail:(st.type||{}).shortDetail||'',period:st.period||0,
             a:aw.score!=null&&aw.score!==''?+aw.score:null,h:hm.score!=null&&hm.score!==''?+hm.score:null,
             h1a:la.length>=2?la[0]+la[1]:null,h1h:lh.length>=2?lh[0]+lh[1]:null,p1a:la.length?la[0]:null,p1h:lh.length?lh[0]:null});});
@@ -16532,13 +16652,15 @@ async function mgRefresh(force){
   }finally{MG_BUSY=false;}
 }
 /* The ESPN event for a leg: same teams, on (or just after) the leg's date. */
-function mgEventFor(sp,game,d){
+function mgEventFor(sp,game,d,approx){
   const L=(MG_LIVE[sp]||{})[mgKey(sp,game)];if(!L||!L.length)return null;
   const day=String(d||'').slice(0,10);
-  return L.find(e=>e.date===day)||L.filter(e=>!day||e.date>=day).sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
+  const hit=L.find(e=>e.date===day);if(hit||!day)return hit||L[0]||null;
+  if(!approx)return null;   // real game date and no game that day → not this event
+  return L.filter(e=>dayOk(e.date,day,true)).sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
 }
 function mgResolve(leg,ticketDate){
-  const e=mgEventFor(leg.sport||'mlb',leg.game,leg.gameDate||ticketDate);if(!e||e.a==null||e.state==='pre')return null;
+  const e=mgEventFor(leg.sport||'mlb',leg.game,leg.gameDate||ticketDate,!!leg.gdApprox||!leg.gameDate);if(!e||e.a==null||e.state==='pre')return null;
   return{a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,period:e.period,gid:leg.gid,live:e.state==='in',source:'espn-live',completed:e.state==='post'?true:null};
 }
 function renderMyGames(){
@@ -16617,7 +16739,7 @@ function dailyLoopInject(){
       d.innerHTML='<div class="sbar" style="margin-top:0"><h2>Storage</h2><div class="ln"></div></div><div id="storageMeter"></div>';setv.appendChild(d);}
     navTidy();try{storageTidy()}catch(e){}
     const n=document.getElementById('nMine');if(n){const c=new Set(mgPending().map(x=>x.sp+x.l.game)).size;n.textContent=c||'';}
-    ['render','renderNFL','renderNCAAF','renderNHL'].forEach(fn=>{const f=window[fn];if(typeof f!=='function'||f.__tc)return;
+    ['render','renderNFL','renderNCAAF','renderNHL','renderNBA'].forEach(fn=>{const f=window[fn];if(typeof f!=='function'||f.__tc)return;
       const w=function(){const r=f.apply(this,arguments);try{todaySnapshotSoon()}catch(e){}return r;};w.__tc=1;window[fn]=w;});
   }catch(e){console.warn('daily loop inject',e);}
 }
@@ -16666,7 +16788,7 @@ function renderRecordsHub(){
   const _mkt=typeof REC_FILTER_MKT!=='undefined'?REC_FILTER_MKT:'all';
   const spBtn=(k,l)=>'<button class="'+((_sp===k)?'on':'')+'" onclick="REC_FILTER_SP=\''+k+'\';renderRecordsHub()">'+l+'</button>';
   const mktBtn=(k,l)=>'<button class="'+((_mkt===k)?'on':'')+'" onclick="REC_FILTER_MKT=\''+k+'\';renderRecordsHub()">'+l+'</button>';
-  const filterBar='<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+spBtn('all','All Sports')+spBtn('mlb','⚾ MLB')+spBtn('nfl','🏈 NFL')+spBtn('ncaaf','🏟 CFB')+spBtn('nhl','🏒 NHL')+'</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+mktBtn('all','All bets')+mktBtn('ml','Sides')+mktBtn('spread','Spreads')+mktBtn('total','Totals')+mktBtn('prop','Props')+'</div>';
+  const filterBar='<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+spBtn('all','All Sports')+spBtn('mlb','⚾ MLB')+spBtn('nfl','🏈 NFL')+spBtn('ncaaf','🏟 CFB')+spBtn('nhl','🏒 NHL')+spBtn('nba','🏀 NBA')+'</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+mktBtn('all','All bets')+mktBtn('ml','Sides')+mktBtn('spread','Spreads')+mktBtn('total','Totals')+'</div>';
   el.innerHTML=filterBar+`<div class="tkt hi" style="margin-bottom:8px"><h3>Records hub — everyone, every sport</h3>
     <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+':''}$${Y.tickets.units.toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
     <div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;border-collapse:collapse;text-align:center">
@@ -16992,7 +17114,7 @@ const MS_FILTERS={
   money:{lab:'Sharp shadow',desc:'legs with a 💰 sharp-money split',f:x=>(x.rules||[]).some(r=>r.icon==='💰')},
   cross:{lab:'World tour',desc:'every ticket spans 2+ sports',f:()=>true,cross:true}
 };
-const SPORT_LAB={nfl:'NFL only',ncaaf:'CFB only',mlb:'MLB only',nhl:'NHL only'};
+const SPORT_LAB={nfl:'NFL only',ncaaf:'CFB only',mlb:'MLB only',nhl:'NHL only',nba:'NBA only'};
 const R_=(route,k,f,unit)=>[route,k||'',f||''].join('|')+(unit?'|'+unit:'');
 /* The board. [id, category, name, start, goal, days, route, rule, sport, hook] or pots. */
 const MS_LIB=[
@@ -17073,7 +17195,45 @@ const MS_LIB=[
  ['hockey_night','sprint','Hockey Night',5,250,14,R_('housemoney',3,.5,1),null,'nhl','NHL only. Pucks and parlays.'],
  ['saturday_chaos','sprint','Saturday Chaos',5,500,14,R_('housemoney',4,.5,1),null,'ncaaf','College football only. Embrace the chaos.'],
  ['weekend_warrior','sprint','Weekend Warrior',50,400,7,R_('stairs',3,.35),null,null,'One week, ×8. The clock is the enemy.'],
- ['custom','sprint','Custom',100,500,14,'',null,null,'Your numbers. The planner finds the best route.']
+ ['custom','sprint','Custom',100,500,14,'',null,null,'Your numbers. The planner finds the best route.'],
+ // ── Expansion: flagship 100x, more warm-ups, penny, house, compound, steady, multi, rules, sprints
+ ['ten_k_dream','ladder','100 to 10K',100,10000,30,R_('housemoney',4,.5,2),null,null,'The flagship. $100 to $10,000 in 30 days. Open the roadmap to see every checkpoint.'],
+ ['ten_k_slow','ladder','10K the Long Way',100,10000,90,R_('stairs',3,.25),null,null,'Same 100x, three months to do it. Stair-steps instead of moonshots.'],
+ ['grand_slam','ladder','Grand Slam',50,1000,21,R_('heist',3),null,null,'20x in three weeks. A quarter of every win goes to the safe.'],
+ ['rocket_fuel','ladder','Rocket Fuel',20,500,14,R_('snowball',3),null,null,'Let it ride on three-teamers. Two weeks, one shot at 25x.'],
+ ['vault_cracker','ladder','Vault Cracker',100,2500,30,R_('elevator',3),null,null,'All-in elevator: bank half at every checkpoint you clear.'],
+ ['free_shot','warmup','Free Shot',10,12,10,R_('stairs',1,.3),null,null,'Two dollars of profit on singles. The easiest board on the wall.'],
+ ['matchday','warmup','Matchday',15,18,21,R_('compound',1,.12),null,null,'Small singles every day for three weeks. Process over hero ball.'],
+ ['first_ten','warmup','First Ten Percent',50,55,14,R_('stairs',1,.1),'chalk',null,'Five bucks on favorites until you are up ten percent.'],
+ ['slow_start','warmup','Slow Start',5,6,14,R_('stairs',1,.2),null,null,'One dollar of profit in two weeks. Learn the attach-and-settle loop.'],
+ ['dime_store','penny','Dime Store',10,100,45,R_('housemoney',3,.5,1),null,null,'Ten to a hundred with dollar three-teamers riding house money.'],
+ ['micro_grind','penny','Micro Grind',1,20,30,R_('drip',3,0,1),null,null,'One dollar, one three-teamer a day. Twenty bucks is the finish line.'],
+ ['buck_bouncer','penny','Buck Bouncer',5,50,30,R_('housemoney',3,.5,1),null,null,'Five to fifty in a month. Profits only ever go back in.'],
+ ['vending_machine','penny','Vending Machine',2,25,21,R_('drip',4,0,1),null,null,'Two bucks, dollar four-teamers. One cash covers most of it.'],
+ ['full_house','house','Full House',50,500,30,R_('housemoney',3,.5,1),null,null,'Your $50 stops being at risk after the first cash. Grow it to $500.'],
+ ['profit_parlay','house','Profit Parlay',100,1000,45,R_('housemoney',4,.5,2),null,null,'Two dollar base stakes; profit funds every bigger swing.'],
+ ['the_annex','house','The Annex',200,2000,60,R_('housemoney',3,.4,2),null,null,'Ten-x over two months, profit-only scaling.'],
+ ['flip_it','house','Flip It',25,50,14,R_('housemoney',2,.5,1),null,null,'Double your entry in two weeks on two-teamers.'],
+ ['one_pct_half','compound','Half-Percent Club',100,150,60,R_('compound',1,.05),'chalk',null,'Five percent stakes on chalk. Fifty percent growth over two months.'],
+ ['tax_season','compound','Tax Season',200,400,60,R_('compound',1,.1),null,null,'Double it in sixty days with ten percent singles.'],
+ ['the_401k','compound','The 401k',100,175,45,R_('compound',1,.08),'gold',null,'Gold picks only, eight percent stakes. Boring on purpose.'],
+ ['savings_plan','compound','Savings Plan',50,100,45,R_('compound',1,.1),null,null,'Double fifty in six weeks without a single parlay.'],
+ ['one_and_done','steady','One and Done',200,300,45,R_('stairs',1,.08),null,null,'One single a day, eight percent of the roll. +50% is the goal.'],
+ ['the_long_game','steady','The Long Game',500,1500,120,R_('stairs',2,.1),null,null,'Four months of two-teamers at ten percent. Most quit; finishers triple.'],
+ ['workday','steady','Workday',100,130,30,R_('stairs',1,.1),null,null,'Clock in every day. Thirty percent in a month.'],
+ ['weekend_grind','steady','Weekend Grind',100,200,45,R_('stairs',2,.15),'chalk',null,'Chalky two-teamers, fifteen percent of the roll.'],
+ ['triple_stack','multi','Triple Stack',300,1500,45,null,null,null,'Three pots, three plans, one goal.',[['Safe',.4,R_('compound',1,.08),'chalk'],['Grind',.4,R_('stairs',2,.2)],['Moon',.2,R_('housemoney',4,.5,1)]]],
+ ['hedge_engine','multi','Hedge Engine',200,800,45,null,null,null,'70% chalk compounding, 30% dogs swinging.',[['Chalk',.7,R_('compound',1,.1),'chalk'],['Dogs',.3,R_('housemoney',3,.5,1),'dogs']]],
+ ['sim_only','rules','Sim Loyalist II',100,300,30,R_('stairs',2,.2),'sim',null,'The Sim on every leg. Trust the machine for a month.'],
+ ['council_run','rules','Council Run',100,250,30,R_('stairs',2,.2),'crowd',null,'Five-plus characters agreeing on every leg.'],
+ ['over_party','rules','Over Party',50,150,30,R_('housemoney',3,.5,1),'overs',null,'Overs only. Root for points.'],
+ ['dog_days','rules','Dog Days',50,200,30,R_('stairs',1,.15),'dogs',null,'Plus-money singles only. Fewer wins, bigger ones.'],
+ ['sharp_money_run','rules','Follow the Money',100,300,30,R_('stairs',2,.2),'money',null,'Only legs where the money and the tickets split.'],
+ ['mlb_marathon','sprint','October Baseball',100,300,30,R_('stairs',2,.2),null,'mlb','Baseball only, two-teamers, all of October.'],
+ ['nfl_sunday','sprint','NFL Sundays',50,300,28,R_('housemoney',3,.5,1),null,'nfl','Four NFL weekends, house-money three-teamers.'],
+ ['nhl_winter','sprint','Puck Season',100,300,45,R_('stairs',2,.2),null,'nhl','Hockey only, six weeks of two-teamers.'],
+ ['cfb_chaos','sprint','CFB Chaos',50,250,21,R_('housemoney',3,.5,1),null,'ncaaf','College only. Embrace the variance.'],
+ ['nba_tipoff','sprint','Tip-Off',50,200,30,R_('stairs',2,.2),null,'nba','Basketball only, from opening night.'],
 ];
 const MS_CATS={warmup:'🌱 Warm-ups',penny:'🪙 Penny stocks',house:'🏠 House money',compound:'📈 Compound interest',steady:'🐢 Steady pace',ladder:'🎲 Ladders & heists',multi:'🧺 Multi-bankroll',rules:'🎭 Character & rule challenges',sprint:'⏱ Sprints'};
 const MS_TEMPLATES={};MS_LIB.forEach(r=>{MS_TEMPLATES[r[0]]={id:r[0],cat:r[1],name:r[2],start:r[3],goal:r[4],days:r[5],route:r[6],rule:r[7],sport:r[8],note:r[9],pots:r[10]||null};});
@@ -17204,7 +17364,7 @@ function msRestart(id){const A=msAll();const m=A.find(x=>x.id===id);if(!m)return
 /* Settle attached tickets. Each step belongs to a pot (Main for single-pot missions). */
 function msSync(){
   const A=msAll();const L=get(LS.locked,[]);let ch=false;
-  A.forEach(m=>{if(m.status!=='active')return;const pots=m.pots;
+  A.forEach(m=>{if(m.status!=='active')return;const pots=m.pots;let settled=false;
     m.steps.forEach(s=>{if(s.done)return;const t=L.find(x=>String(x.id)===String(s.ticketId));if(!t)return;
       let done=false,rec=null;try{done=ticketIsComplete(t);rec=done?ticketRecord(t):null}catch(e){}
       if(!done)return;const M=ticketMoney(t);const stake=M?M.stake:0;
@@ -17216,7 +17376,8 @@ function msSync(){
       if(s.won&&rk.startsWith('elevator')){const cps=msCheckpoints(m);m.cpBank=m.cpBank||0;
         while(m.cpBank<cps.length&&(m.balance+(m.safe||0))>=cps[m.cpBank].amt){const half=+(m.balance/2).toFixed(2);m.balance=+(m.balance-half).toFixed(2);m.safe=+((m.safe||0)+half).toFixed(2);m.cpBank++;}}
       (s.quests||[]).forEach(q=>{if(q.id==='clv'&&q.done==null){const ok=msCheckQuest({id:'clv'},t);q.done=ok;if(ok)m.xp=(m.xp||0)+q.xp;}});
-      ch=true;});
+      ch=true;settled=true;});
+    if(settled&&m.status==='active'&&!pots)try{msAdapt(m);}catch(e){console.warn('adapt',e);}
     if(pots){m.balance=+pots.reduce((a,P)=>a+P.balance,0).toFixed(2);m.safe=+pots.reduce((a,P)=>a+(P.safe||0),0).toFixed(2);}
     const tot=m.balance+(m.safe||0);
     if(tot>=m.goal){m.status='won';const D=MS_DIFF.find(d=>d[1]===m.diff)||MS_DIFF[1];const clean=m.steps.every(s=>!s.rule||s.rule.ok);
@@ -17227,6 +17388,56 @@ function msSync(){
   });
   if(ch||A.some(m=>m.status!=='active'))msSave(A);return A;
 }
+/* ── ADAPTIVE ROUTING ─────────────────────────────────────────────────────
+   After every settled step, measure pace: where the balance is vs where a
+   straight-line (geometric) path from start to goal says it should be today.
+   If you've fallen behind (or got ahead), re-simulate every route from your
+   ACTUAL balance and days left, and switch to the one with the best finish
+   chance — but only if it's a real improvement (3+ points). Every switch is
+   logged with the numbers that drove it. Stakes always come from the live
+   balance, so a $50 roll and a $200 roll get different orders automatically. */
+function msPace(m){const days=Math.max(1,m.days);const t=Math.max(0,Math.min(days,Math.floor((Date.parse(today())-Date.parse(m.startDate))/864e5)));
+  const ideal=m.start*Math.pow(m.goal/m.start,t/days);const have=m.balance+(m.safe||0);
+  const left=Math.max(1,days-t);return{t,ideal,have,ratio:have/ideal,left,needPerDay:Math.pow(m.goal/Math.max(0.01,have),1/left)};}
+function msAdapt(m){
+  const pc=msPace(m);if(pc.ratio>=0.9&&pc.ratio<=1.25)return;
+  const cur=m.routeKey||msRouteKey(msBestSingle(m));let opts=[];try{opts=msRoutes(m)||[];}catch(e){return;}
+  if(!opts.length)return;const best=opts.slice().sort((a,b)=>(b.p||0)-(a.p||0))[0];const bk=msRouteKey(best);
+  const curOpt=opts.find(o=>msRouteKey(o)===cur);const pNow=curOpt?curOpt.p:null;
+  const why0=pc.ratio<0.9?`behind pace (${Math.round(pc.ratio*100)}% of target)`:`ahead of pace (${Math.round(pc.ratio*100)}% of target)`;
+  if(bk===cur||(pNow!=null&&(best.p-pNow)<0.03)){
+    /* no route is meaningfully better — say so, once a day, with the numbers */
+    const A=(m.adapt=m.adapt||[]);if(!A.some(x=>x.date===today()&&x.hold))
+      A.push({date:today(),hold:true,from:cur,to:cur,ratio:+pc.ratio.toFixed(3),pFrom:pNow,pTo:pNow!=null?pNow:best.p,needPerDay:+pc.needPerDay.toFixed(3),
+        why:`${why0} — kept route: no alternative finishes more often (needs ×${pc.needPerDay.toFixed(2)}/day for ${pc.left} days)`});
+    return;}
+  (m.adapt=m.adapt||[]).push({date:today(),from:cur,to:bk,ratio:+pc.ratio.toFixed(3),pFrom:pNow,pTo:best.p,needPerDay:+pc.needPerDay.toFixed(3),
+    why:pc.ratio<0.9?`behind pace (${Math.round(pc.ratio*100)}% of target)`:`ahead of pace (${Math.round(pc.ratio*100)}% of target) — locking in safer`});
+  m.routeKey=bk;Object.keys(MS_PLAN_CACHE).forEach(k=>delete MS_PLAN_CACHE[k]);
+}
+function msAdaptHtml(m){const a=(m.adapt||[]).slice(-3);if(!a.length)return'';
+  return`<div class="sub mono" style="font-size:9.5px;color:var(--gold);margin-top:4px">${a.map(x=>x.hold?`⏸ ${x.date}: ${esc(x.why)}`:`↻ ${x.date}: ${esc(x.why)} · ${esc(msRouteLabel({...msParse(x.from)}))} → ${esc(msRouteLabel({...msParse(x.to)}))} · finish ${x.pFrom!=null?Math.round(x.pFrom*100)+'%':'?'} → ${Math.round(x.pTo*100)}%`).join('<br>')}</div>`;}
+/* ── ROADMAP: the full day-by-day path, with your real balance laid over it ── */
+function msRoadmapToggle(id){const el=document.getElementById('msRM_'+id);if(!el)return;
+  if(el.style.display!=='none'){el.style.display='none';return;}const m=msAll().find(x=>String(x.id)===String(id));if(!m)return;el.innerHTML=msRoadmapHtml(m);el.style.display='block';}
+function msRoadmapHtml(m){
+  const days=m.days,G=m.goal/m.start,daily=Math.pow(G,1/days);const pc=msPace(m);
+  /* actual balance by day, replayed from settled steps */
+  const bal={};let b=m.start;const done=(m.steps||[]).filter(s=>s.done).sort((a,c)=>String(a.date).localeCompare(String(c.date)));
+  done.forEach(s=>{b=+(b-(s.stake||0)+(s.payout||0)).toFixed(2);bal[s.date]=b;});
+  const step=days<=31?1:days<=90?3:7;let last=m.start;const cps=msCheckpoints(m);const rows=[];
+  for(let d=0;d<=days;d+=step){const date=dayShift(m.startDate,d);const tgt=m.start*Math.pow(G,d/days);
+    Object.keys(bal).filter(x=>x<=date).forEach(x=>{last=bal[x];});
+    const past=d<=pc.t;const cp=cps.find(c=>c.amt>=m.start*Math.pow(G,Math.max(0,d-step)/days)&&c.amt<=tgt);
+    rows.push(`<tr style="${d===pc.t?'background:rgba(245,165,36,.12)':''}"><td>${d===pc.t?'▶ ':''}Day ${d}</td><td>${date.slice(5)}</td><td>$${tgt.toFixed(tgt<100?2:0)}</td>
+      <td style="color:${!past?'var(--mute)':last>=tgt?'var(--win)':'var(--rust)'}">${past?'$'+last.toFixed(2):'—'}</td><td style="color:var(--gold)">${cp?esc(cp.name):''}</td></tr>`);}
+  const lane=(()=>{try{const o=msOrders(m);return o.lanes.map(x=>`${x.lab}: $${x.stake} on ${x.k}-leg${x.minDec?` at ${decimalToAmerican(x.minDec)} or better`:''}`).join(' · ');}catch(e){return'';}})();
+  return`<div class="tkt" style="margin-top:6px"><h3>🗺 Roadmap · $${m.start} → $${m.goal.toLocaleString()} in ${days} days</h3>
+    <div class="sub mono">Path needs ×${daily.toFixed(3)} per day (${((daily-1)*100).toFixed(1)}%/day). Today: day ${pc.t}, target $${pc.ideal.toFixed(2)}, you have $${pc.have.toFixed(2)} (${Math.round(pc.ratio*100)}% of pace).
+    From here you need ×${pc.needPerDay.toFixed(3)}/day for ${pc.left} days.</div>
+    ${lane?`<div class="sub mono" style="margin-top:4px">Today's orders → ${esc(lane)}</div>`:''}
+    <div style="overflow-x:auto"><table class="mono" style="width:100%;font-size:10px;text-align:center;margin-top:6px"><tr style="color:var(--mute)"><td>day</td><td>date</td><td>target</td><td>actual</td><td>checkpoint</td></tr>${rows.join('')}</table></div>
+    ${msAdaptHtml(m)}<div class="sub" style="font-size:9.5px;color:var(--mute)">Target is the geometric path from start to goal. Fall behind or get well ahead and the route re-plans itself from your real balance.</div></div>`;}
 function msAttach(id,sel,pot){const tid=sel.value;if(!tid)return;const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;
   if(m.steps.some(s=>String(s.ticketId)===tid))return;const t=get(LS.locked,[]).find(x=>String(x.id)===tid);
   const P=m.pots?m.pots[pot||0]:null;const rule=P?P.rule:m.rule,sport=P?(P.sport||m.sport||null):m.sport;
@@ -17234,7 +17445,8 @@ function msAttach(id,sel,pot){const tid=sel.value;if(!tid)return;const A=msAll()
   qs.forEach(q=>{if(q.done)m.xp=(m.xp||0)+q.xp;});
   const rc=msRuleCheck(t,rule,sport);
   const rk=P?P.routeKey:(m.routeKey||msRouteKey(msActiveRoute(m)));
-  m.steps.push({ticketId:tid,date:today(),pot:pot||0,quests:qs,rule:rc,route:rk});msSave(A);msRender();}
+  const plannedK=(msParse(rk||'').cfg||{}).k||null;const actualK=t&&t.legs?t.legs.length:null;
+  m.steps.push({ticketId:tid,date:today(),pot:pot||0,quests:qs,rule:rc,route:rk,plannedK,actualK});msSave(A);msRender();}
 /* Orders for one pot: stake, legs, minimum ticket price, and the built ticket. */
 function msPotOrders(m,P,routeObj){
   const r=routeObj||msParse(P.routeKey);const X=msMath(m);const L=msLegProfile(P.rule,X.R.p);const b=P.balance;
@@ -17310,7 +17522,9 @@ function msCard(m){
     ${m.status==='won'?`<div class="sub" style="color:var(--win)"><b>MISSION COMPLETE</b>${m.clean?' · clean run bonus':''}</div>`:''}
     ${map}${orders}${steps}
     <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${esc(T.note||'')}</div>
-    <div class="bar" style="margin-top:4px">${!active?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div></div>`;
+    ${active?msAdaptHtml(m):''}
+    <div class="bar" style="margin-top:4px"><button onclick="msRoadmapToggle(${m.id})">🗺 Roadmap</button>${!active?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div>
+    <div id="msRM_${m.id}" style="display:none"></div></div>`;
 }
 /* The mission board: every template with its real difficulty on your numbers. */
 let MS_CAT='warmup',MS_TIER='all';const MS_BOARD_CACHE={};
@@ -17558,16 +17772,53 @@ function parlayCorrHtml(t){
 function normCdf(z){const t=1/(1+0.2316419*Math.abs(z));const d=0.3989423*Math.exp(-z*z/2);const p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p;}
 function luckSkill(w,n,p0){if(n<5)return{lab:'too few to judge',p:null};p0=p0||0.524;const z=(w-n*p0)/Math.sqrt(n*p0*(1-p0));const p=1-normCdf(z);
   return{z,p,lab:z<=0?'below breakeven':p<0.05?'strong sign of skill':p<0.2?'leaning skill':'could easily be luck'};}
+/* ══ CALIBRATION — shown per sport, day by day, with the reasons ══════════
+   "Calibrated" means when the Sim says 60%, it wins ~60%. Three numbers:
+   · Brier: mean squared error of the probability (0.25 = coin flip, lower = better)
+   · Gap (ECE): average distance between stated % and actual win rate, per bucket
+   · Blend: how much the model trusts its Sim vs the market, re-fit on graded
+     results (search 0..1 for the weight with the lowest Brier, shrunk toward
+     50/50 until there are enough games). A daily snapshot lets it explain
+     what moved and why.                                                     */
+const CAL_HIST='d4.calhist',CAL_SPS=['mlb','nfl','ncaaf','nhl','nba'];
+const CAL_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
+function calRows(){return roGet(VOICES_KEY,[]).filter(x=>x.voice==='Sim'&&x.graded&&x.hit!=null&&x.simP>0);}
+const calBrier=(R,f)=>R.length?R.reduce((a,x)=>a+Math.pow((x.hit?1:0)-f(x),2),0)/R.length:null;
+function calECE(R){if(!R.length)return null;const B={};R.forEach(x=>{const k=Math.min(9,Math.floor(x.simP*10));(B[k]=B[k]||[]).push(x);});
+  return Object.values(B).reduce((a,b)=>a+b.length*Math.abs(b.filter(x=>x.hit).length/b.length-b.reduce((s,x)=>s+x.simP,0)/b.length),0)/R.length;}
+function calTable(R){const bins=[[0.5,0.55],[0.55,0.6],[0.6,0.65],[0.65,0.7],[0.7,0.8],[0.8,1.01],[0,0.5]];
+  const rows=bins.map(([lo,hi])=>{const B=R.filter(x=>x.simP>=lo&&x.simP<hi);if(!B.length)return'';const pr=B.reduce((a,x)=>a+x.simP,0)/B.length,ac=B.filter(x=>x.hit).length/B.length,off=(ac-pr)*100;
+    return`<tr><td>${lo===0?'<50%':Math.round(lo*100)+'–'+Math.min(100,Math.round(hi*100))+'%'}</td><td>${Math.round(pr*100)}%</td><td style="color:${Math.abs(off)<5?'var(--win)':off>0?'var(--cold)':'var(--rust)'}">${Math.round(ac*100)}%</td><td>${off>=0?'+':''}${off.toFixed(0)}</td><td>${B.length}</td></tr>`;}).join('');
+  return`<table class="mono" style="width:100%;font-size:10px;text-align:center"><tr style="color:var(--mute)"><td>Sim said</td><td>avg</td><td>actually won</td><td>off</td><td>n</td></tr>${rows}</table>`;}
+/* daily snapshot of what the model believes, per sport (one per day) */
+function calSnapshot(){const H=get(CAL_HIST,{})||{};const d=today();if(H[d])return H;const R=calRows();H[d]={};
+  CAL_SPS.forEach(sp=>{const S=R.filter(x=>x.sp===sp);if(!S.length)return;const bw={};['ml','spread','total'].forEach(m=>{try{bw[m]=blendWeight(sp,m);}catch(e){}});
+    H[d][sp]={n:S.length,brier:calBrier(S,x=>x.simP),ece:calECE(S),bw};});
+  Object.keys(H).sort().slice(0,-90).forEach(k=>delete H[k]);set(CAL_HIST,H);return H;}
+function calWhy(sp){const H=get(CAL_HIST,{})||{};const days=Object.keys(H).filter(d=>H[d][sp]).sort();if(days.length<2)return'';
+  const now=H[days[days.length-1]][sp],then=H[days[Math.max(0,days.length-8)]][sp];const out=[];
+  ['ml','spread','total'].forEach(m=>{const a=(then.bw||{})[m],b=(now.bw||{})[m];if(!a||!b)return;const dw=b.w-a.w;if(Math.abs(dw)<0.02)return;
+    const R=calRows().filter(x=>x.sp===sp&&x.market===m&&x.mktP>0);const bs=calBrier(R,x=>x.simP),bm=calBrier(R,x=>x.mktP);
+    out.push(`<b>${m.toUpperCase()}</b>: Sim weight ${Math.round(a.w*100)}% → ${Math.round(b.w*100)}% — over ${R.length} graded calls the ${bs<bm?'Sim':'market'} was sharper (Brier Sim ${bs.toFixed(3)} vs market ${bm.toFixed(3)}), so it ${dw>0?'leans more on the Sim':'leans more on the market'}.`);});
+  if(now.brier!=null&&then.brier!=null){const d=now.brier-then.brier;out.push(`Overall Brier ${then.brier.toFixed(3)} → ${now.brier.toFixed(3)} (${d<0?'better':d>0?'worse':'flat'}); gap ${(then.ece*100).toFixed(1)} → ${(now.ece*100).toFixed(1)} pts.`);}
+  return out.length?`<div class="sub" style="font-size:10px;margin-top:4px"><b>What changed this week & why:</b><br>${out.join('<br>')}</div>`:'';}
+function calDrift(R){const byD={};R.forEach(x=>{(byD[x.date]=byD[x.date]||[]).push(x);});const days=Object.keys(byD).sort().slice(-14);if(!days.length)return'';
+  const rows=days.map((d,i)=>{const D=byD[d];const win=days.slice(Math.max(0,i-6),i+1).flatMap(k=>byD[k]);
+    const b=calBrier(D,x=>x.simP),b7=calBrier(win,x=>x.simP),e7=calECE(win);
+    return`<tr><td>${d.slice(5)}</td><td>${D.length}</td><td>${Math.round(D.filter(x=>x.hit).length/D.length*100)}%</td><td>${b.toFixed(3)}</td><td>${b7.toFixed(3)}</td><td style="color:${e7<0.05?'var(--win)':e7<0.1?'var(--gold)':'var(--rust)'}">${(e7*100).toFixed(1)}</td></tr>`;}).join('');
+  return`<div style="overflow-x:auto;margin-top:6px"><div class="sub" style="font-size:9.5px">Day by day — is the gap closing? (7-day rolling Brier & gap; gap under 5 pts is well calibrated)</div>
+    <table class="mono" style="width:100%;font-size:10px;text-align:center"><tr style="color:var(--mute)"><td>day</td><td>n</td><td>won</td><td>Brier</td><td>7d Brier</td><td>7d gap</td></tr>${rows}</table></div>`;}
 function calibrationHtml(){
-  const V=roGet(VOICES_KEY,[]).filter(x=>x.voice==='Sim'&&x.graded&&x.hit!=null&&x.simP>0);
-  if(V.length<20)return`<div class="tkt" style="margin-bottom:8px"><h3>Calibration</h3><div class="sub" style="color:var(--mute)">Builds as the Sim's graded calls pile up (${V.length}/20). It shows whether "60%" really wins 60% of the time.</div></div>`;
-  const bins=[[0.5,0.55],[0.55,0.6],[0.6,0.65],[0.65,0.7],[0.7,0.8],[0.8,1.01]];
-  const rows=bins.map(([lo,hi])=>{const B=V.filter(x=>x.simP>=lo&&x.simP<hi);if(!B.length)return'';const pr=B.reduce((a,x)=>a+x.simP,0)/B.length,ac=B.filter(x=>x.hit).length/B.length;
-    const off=(ac-pr)*100;return`<tr><td>${Math.round(lo*100)}–${Math.min(100,Math.round(hi*100))}%</td><td>${Math.round(pr*100)}%</td><td style="color:${Math.abs(off)<5?'var(--win)':off>0?'var(--cold)':'var(--rust)'}">${Math.round(ac*100)}%</td><td>${B.length}</td></tr>`;}).join('');
-  const brier=V.reduce((a,x)=>a+Math.pow((x.hit?1:0)-x.simP,2),0)/V.length;
-  return`<div class="tkt" style="margin-bottom:8px"><h3>Calibration — does the ★ Sim's % come true?</h3>
-    <table class="mono" style="width:100%;font-size:10px;text-align:center"><tr style="color:var(--mute)"><td>it said</td><td>avg</td><td>actually won</td><td>n</td></tr>${rows}</table>
-    <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Brier ${brier.toFixed(3)} (0.25 = coin flip; lower is better). Green rows are within 5 points of what the Sim said.</div></div>`;
+  const R=calRows();try{calSnapshot();}catch(e){}
+  if(R.length<20)return`<div class="tkt" style="margin-bottom:8px"><h3>Calibration</h3><div class="sub" style="color:var(--mute)">Builds as the Sim's graded calls pile up (${R.length}/20). It shows whether "60%" really wins 60% of the time — per sport, day by day.</div></div>`;
+  const fsp=typeof REC_FILTER_SP!=='undefined'?REC_FILTER_SP:'all';
+  const head=S=>`Brier ${calBrier(S,x=>x.simP).toFixed(3)} · gap ${(calECE(S)*100).toFixed(1)} pts · ${S.length} calls`;
+  const all=`<div class="tkt" style="margin-bottom:8px"><h3>Calibration — does the ★ Sim's % come true?</h3><div class="sub mono" style="font-size:9.5px">All sports: ${head(R)} (0.25 Brier = coin flip)</div>${calTable(R)}${calDrift(R)}</div>`;
+  const per=CAL_SPS.filter(sp=>fsp==='all'||fsp===sp).map(sp=>{const S=R.filter(x=>x.sp===sp);if(!S.length)return'';
+    const bw=['ml','spread','total'].map(m=>{try{const b=blendWeight(sp,m);return`${m} ${Math.round(b.w*100)}% Sim (${b.n})`;}catch(e){return'';}}).filter(Boolean).join(' · ');
+    return`<details class="tkt" style="margin-bottom:6px"${fsp===sp?' open':''}><summary><b>${CAL_LAB[sp]}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${head(S)}</span></summary>
+      ${calTable(S)}${calDrift(S)}<div class="sub mono" style="font-size:9.5px;margin-top:4px">Blend now: ${bw||'—'}</div>${calWhy(sp)}</details>`;}).join('');
+  return all+per;
 }
 
 /* ── 8. Risk of ruin from your own settled tickets, and correlated stakes ── */

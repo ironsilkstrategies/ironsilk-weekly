@@ -3776,23 +3776,8 @@ function ncaafPropsPanel(g){
   </div>`;
 }
 
-/* Mini player-props card for a college/pro game from the pstat rolling store. */
-function fbPropsCard(g, sp){
-  try{
-    if(typeof pstatStore!=='function')return'';
-    const aw=g.away.abbr,hm=g.home.abbr;
-    const S=pstatStore();
-    const players=Object.values(S).filter(x=>x.sp===sp&&(x.team===aw||x.team===hm)&&x.n>=2);
-    if(!players.length)return'';
-    const rows=players.sort((a,b)=>(b.recYds||b.rusYds||b.pasYds||0)-(a.recYds||a.rusYds||a.pasYds||0)).slice(0,10).map(p=>{
-      const yds=p.recYds>0?`${p.recYds.toFixed(0)} rec`:p.rusYds>0?`${p.rusYds.toFixed(0)} rush`:p.pasYds>0?`${p.pasYds.toFixed(0)} pass`:'—';
-      const tds=(p.td||0)>0?` · ${p.td.toFixed(1)} td`:'';
-      const rec=(p.rec||0)>0?` · ${p.rec.toFixed(1)} rec`:'';
-      return`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${esc(p.player||'')}</b> <span style="color:var(--mute)">${p.team}</span> · <b style="color:var(--win)">${yds}</b>${rec}${tds} <span style="color:var(--mute);font-size:9px">(${p.n}G)</span></div>`;
-    }).join('');
-    return`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats (rolling avg)</summary>${rows}</details>`;
-  }catch(e){return'';}
-}
+/* Player stats panel under each game card — from the shared player stat engine. */
+function fbPropsCard(g,sp){return typeof pstCardHtml==='function'?pstCardHtml(sp,g):'';}
 
 function ncaafCard(g){
   const s=NCAAF_SIMS[g.id];if(!s)return'';
