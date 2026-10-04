@@ -1352,6 +1352,17 @@ function nflRankingsBlock(){
 // and calibration correction just like the MLB engine.
 const NFL_CALIB_KEY='d4.nflcalib';
 
+/* real NFL margin frequencies, |margin| 0..21, % of games (approximate long-run
+   regular-season rates). NFL_KEY_SIM is this sim's own raw rate for the same
+   margins, measured across 0–10 point spreads; weight = real ÷ sim. */
+const NFL_KEY_PRIOR=[0.3,3.8,3.5,15.0,5.4,3.4,6.0,9.3,3.6,2.2,5.8,2.6,1.9,2.6,4.8,1.4,2.0,3.3,1.8,1.3,1.7,2.5];
+const NFL_KEY_SIM=[4.37,3.97,1.50,6.82,6.33,1.53,4.31,7.68,3.05,1.86,6.15,4.83,1.08,3.75,5.91,1.99,1.58,4.79,3.13,0.61,3.01,4.00];
+let NFL_KEY_W=null,NFL_KEY_T=0;
+function nflKeyWeights(){if(NFL_KEY_W&&Date.now()-NFL_KEY_T<3600e3)return NFL_KEY_W;
+  /* learn: blend the prior (worth 400 games) with margins from your own NFL finals */
+  const cnt=new Array(22).fill(0);let n=0;try{const F=typeof allFinals==='function'?allFinals():{};Object.keys(F).forEach(k=>{if(!k.startsWith('nfl:'))return;const m=Math.abs(+F[k].a-+F[k].h);if(!isFinite(m))return;n++;if(m<22)cnt[m]++;});}catch(e){}
+  const K=400;NFL_KEY_W=NFL_KEY_PRIOR.map((p,i)=>{const real=(p/100*K+cnt[i])/(K+n);return Math.max(0.05,Math.min(3,real/(NFL_KEY_SIM[i]/100)));});
+  NFL_KEY_T=Date.now();return NFL_KEY_W;}
 function simNFLGame(g,N){
   N=N||10000;
 
@@ -1389,7 +1400,7 @@ function simNFLGame(g,N){
      rescanning and re-sorting three 10,000-element arrays on every call. */
   const TSPAN=120, MSPAN=121, MOFF=60;      // margins from -60..+60
   const totFreq=new Int32Array(TSPAN);
-  const marFreq=new Int32Array(MSPAN);
+  let marFreq=new Float64Array(MSPAN);
   const h1Freq=new Int32Array(TSPAN);
   const scoreFreq=Object.create(null);
   let hw=0,aw=0,tie=0,as=0,hs=0;
@@ -1407,6 +1418,14 @@ function simNFLGame(g,N){
     h1Freq[h1<TSPAN?h1:TSPAN-1]++;
   }
 
+  /* ── KEY NUMBERS: real NFL margins pile up on 3 and 7 (and almost never tie,
+     since overtime decides). Independent score draws put ~7% on 3 and ~4% on
+     ties. Reweight the margin histogram to real frequencies (published NFL
+     history as the prior, refined by your own graded finals), keep the
+     location, renormalize, and re-derive the win split from it. */
+  if(typeof nflKeyWeights==='function'){const W=nflKeyWeights();let before=0,after=0;
+    for(let k=0;k<MSPAN;k++){before+=marFreq[k];const am=Math.abs(k-MOFF);marFreq[k]*=am<W.length?W[am]:1;after+=marFreq[k];}
+    if(after>0){const sc=before/after;hw=0;aw=0;tie=0;for(let k=0;k<MSPAN;k++){marFreq[k]*=sc;const m=k-MOFF;if(m>0)hw+=marFreq[k];else if(m<0)aw+=marFreq[k];else tie+=marFreq[k];}}}
   // cumGE[k] = count of totals >= k
   const cumGE=new Float64Array(TSPAN+2);
   for(let k=TSPAN-1;k>=0;k--)cumGE[k]=cumGE[k+1]+totFreq[k];
@@ -2593,6 +2612,16 @@ function ncaafExtFor(k){return getNCAAFExt().filter(x=>x.game===k);}
 // ── NCAAF Sim Engine ─────────────────────────────────────────────────────────
 // College football has higher scoring, wider variance, and bigger HFA than NFL.
 // Average FBS score ~28 PPG, std dev ~14 (wider than NFL due to talent gap blowouts).
+/* college margin frequencies |margin| 0..21, % of games (approximate long-run FBS rates);
+   CFB_KEY_SIM = this sim's own raw rates over 0–14 point spreads. weight = real ÷ sim,
+   blended with your own CFB finals (prior worth 300 games). */
+const CFB_KEY_PRIOR=[0.1,2.9,2.6,9.0,4.3,2.8,4.0,7.5,3.2,2.3,4.5,2.6,1.8,2.4,4.5,1.6,1.6,3.3,1.9,1.4,1.8,3.1];
+const CFB_KEY_SIM=[1.9,3.57,3.71,3.65,3.61,3.62,3.54,3.46,3.43,3.5,3.36,3.36,3.22,3.23,3.09,3.04,2.96,2.84,2.82,2.7,2.61,2.52];
+let CFB_KEY_W=null,CFB_KEY_T=0;
+function cfbKeyWeights(){if(CFB_KEY_W&&Date.now()-CFB_KEY_T<3600e3)return CFB_KEY_W;
+  const cnt=new Array(22).fill(0);let n=0;try{const F=typeof allFinals==='function'?allFinals():{};Object.keys(F).forEach(k=>{if(!k.startsWith('ncaaf:'))return;const m=Math.abs(+F[k].a-+F[k].h);if(!isFinite(m))return;n++;if(m<22)cnt[m]++;});}catch(e){}
+  const K=300;CFB_KEY_W=CFB_KEY_PRIOR.map((p,i)=>{const real=(p/100*K+cnt[i])/(K+n);return Math.max(0.03,Math.min(3,real/(CFB_KEY_SIM[i]/100)));});
+  CFB_KEY_T=Date.now();return CFB_KEY_W;}
 function simNCAAFGame(g,N){
   N=N||10000;
   const awayPow=ncaafPowerFor(g.away)||{offPPG:26,defPPG:26,wins:0,losses:0,unrated:true};
@@ -2649,7 +2678,7 @@ function simNCAAFGame(g,N){
      sort at all. Same approach already used by the MLB and NFL engines. */
   const TSPAN=200, MSPAN=241, MOFF=120;   // totals 0..199, margins -120..+120
   const totFreq=new Int32Array(TSPAN);
-  const marFreq=new Int32Array(MSPAN);
+  let marFreq=new Float64Array(MSPAN);
   const scoreFreq={};   // exact a-h score -> count, same approach simNFLGame already uses
   let hw=0,aw=0,ties=0;
   for(let i=0;i<N;i++){
@@ -2661,6 +2690,12 @@ function simNCAAFGame(g,N){
     if(h>a)hw++;else if(a>h)aw++;else ties++;
     const key=a+'-'+h; scoreFreq[key]=(scoreFreq[key]||0)+1;
   }
+  /* KEY NUMBERS (college): same reweighting as the NFL sim, with college
+     margin frequencies — 3 and 7 still spike, just less than the NFL, and
+     overtime makes ties vanish. Location is preserved; win split re-derived. */
+  if(typeof cfbKeyWeights==='function'){const W=cfbKeyWeights();let before=0,after=0;
+    for(let k=0;k<MSPAN;k++){before+=marFreq[k];const am=Math.abs(k-MOFF);marFreq[k]*=am<W.length?W[am]:1;after+=marFreq[k];}
+    if(after>0){const sc=before/after;hw=0;aw=0;ties=0;for(let k=0;k<MSPAN;k++){marFreq[k]*=sc;const m=k-MOFF;if(m>0)hw+=marFreq[k];else if(m<0)aw+=marFreq[k];else ties+=marFreq[k];}}}
   // cumulative "at or above" tables
   const cumT=new Float64Array(TSPAN+2);
   for(let k=TSPAN-1;k>=0;k--)cumT[k]=cumT[k+1]+totFreq[k];

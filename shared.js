@@ -224,7 +224,7 @@ function intakeBoardToGrammar(text,sport){
      TREND: any sentence            (TREND TEAM: sentence also works) */
 const INTAKE_EXTRA=/^(PRED|PROJ|CONS\$?|CONSTOT|TREND)\b/i;
 function intakeParseGrammar(text,fallbackSport){
-  const res={};const bucket=sp=>res[sp]||(res[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[],xpicks:[],unread:[]});
+  const res={};const bucket=sp=>res[sp]||(res[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[],xpicks:[],unread:[],props:[]});
   const sections=[];let cur=null;
   stripBOM(text).split('\n').forEach(line=>{
     const l=line.replace(/^[\s\-*•>]+/,'').trim();
@@ -255,7 +255,10 @@ function intakeParseGrammar(text,fallbackSport){
         pend[sport]={text:prior+hdr+'\n'+body,ts:Date.now()};
         set(LS.pendingupload,pend);
       }catch(e){}
-      B.raw.push((sport==='ncaaf'?'NCAAF':sport.toUpperCase())+'\n'+body);return;
+      B.raw.push((sport==='ncaaf'?'NCAAF':sport.toUpperCase())+'\n'+body);
+      /* prop lines need only a player name — read them on any page */
+      sec.lines.forEach(l=>{if(/^PROP:/i.test(l)){const pr=propParseLine(sport,l);if(pr){pr.game=null;(B.props=B.props||[]).push(pr);}}});
+      return;
     }
     // 1) odds via the sport's own parser, with the extra lines stripped out
     const oddsText=sec.lines.filter(l=>!INTAKE_EXTRA.test(l)).join('\n');
@@ -272,6 +275,7 @@ function intakeParseGrammar(text,fallbackSport){
       const g=l.match(/^(.+?)\s+(?:@|at|vs\.?)\s+(.+?)(?:\s*[|(].*)?$/i);
       if(g&&!INTAKE_EXTRA.test(l)&&!/:/.test(l.split(/\s+(?:@|at|vs)/i)[0])){
         const a=intakeAbbr(sport,g[1]),h=intakeAbbr(sport,g[2]);if(a&&h){A=a;H=h;}return;}
+      if(/^PROP:/i.test(l)){const pr=propParseLine(sport,l);if(pr){pr.game=A&&H?A+'@'+H:null;(B.props=B.props||[]).push(pr);}return;}
       if(!A)return;const game=A+'@'+H;
       let m;
       if((m=l.match(/^(?:PRED|PROJ)\w*:?\s*(.+?)\s+(\d{1,3}(?:\.\d+)?)\s*[\/,\-–]\s*(.+?)\s+(\d{1,3}(?:\.\d+)?)\s*$/i))){
@@ -291,9 +295,9 @@ function intakeParseGrammar(text,fallbackSport){
   });
   return res;
 }
-const _ic0=0;const intakeCount=r=>Object.values(r).reduce((n,b)=>n+b.picks.length+b.trends.length+b.consensus.length+b.preds.length+b.raw.length+(b.xpicks||[]).length,0);
+const _ic0=0;const intakeCount=r=>Object.values(r).reduce((n,b)=>n+b.picks.length+b.trends.length+b.consensus.length+b.preds.length+b.raw.length+(b.xpicks||[]).length+(b.props||[]).length,0);
 function intakeMerge(into,from){Object.entries(from).forEach(([sp,b])=>{const t=into[sp]||(into[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[],xpicks:[],unread:[]});
-  ['picks','trends','consensus','preds','raw','xpicks','unread'].forEach(k=>{t[k]=t[k]||[];t[k].push(...(b[k]||[]))})});return into;}
+  ['picks','trends','consensus','preds','raw','xpicks','unread','props'].forEach(k=>{t[k]=t[k]||[];t[k].push(...(b[k]||[]))})});return into;}
 /* A typed read: every line is read AS the chosen type, against the current slate. */
 function intakeTyped(text,type,src,sp){const o=intelParse(text,type,src,sp);return{[sp]:{picks:[],raw:[],...o}};}
 
@@ -397,7 +401,15 @@ function intakeNormalizeKV(text){
    projection blends season form with recent form, and a prop line gets a real
    probability: Poisson for count stats (goals, HRs, TDs, hits, Ks, 3s,
    receptions), Normal for yardage/points.                                   */
-const PST_KEY=sp=>'d4.pst.'+sp, PST_MAX=4000, PST_ALPHA=0.3;
+const PST_KEY=sp=>'d4.pst.'+sp, PST_ALPHA=0.3;
+/* per-sport player caps sized to real rosters (players who actually record stats) */
+const PST_CAP={mlb:1300,nfl:1700,ncaaf:2200,nhl:950,nba:560};
+/* compact on-disk format: {v:2,p:{id:[name,team,n,{k:[sum,sq,ema,gp]}]},fed,bf} — rounded, ~3x smaller */
+const pstR=x=>Math.round(x*100)/100;
+function pstPack(D){const p={};Object.entries(D.p).forEach(([id,P])=>{const s={};Object.entries(P.s).forEach(([k,S])=>{s[k]=[pstR(S.sum),pstR(S.sq),S.ema==null?null:pstR(S.ema),S.gp];});p[id]=[P.name,P.team,P.n,s,P.ev||null,P.glAt||null,P.eid||null];});
+  return{v:2,p,fed:D.fed,bf:D.bf};}
+function pstUnpack(R){if(!R||R.v!==2)return R;const p={};Object.entries(R.p||{}).forEach(([id,a])=>{const s={};Object.entries(a[3]||{}).forEach(([k,v])=>{s[k]={sum:v[0],sq:v[1],ema:v[2],gp:v[3]};});p[id]={name:a[0],team:a[1],n:a[2],s,ev:a[4]||undefined,glAt:a[5]||undefined,eid:a[6]||undefined};});
+  return{p,fed:R.fed||{},bf:R.bf};}
 const PST_MEM={};
 const PST_STATS={
   nhl:{g:'goals',a:'assists',pts:'points',s:'shots on goal'},
@@ -406,19 +418,22 @@ const PST_STATS={
   ncaaf:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs'},
   nba:{pts:'points',reb:'rebounds',ast:'assists',fg3:'3-pointers',stl:'steals',blk:'blocks'}};
 const PST_COUNT=new Set(['g','a','s','h','hr','rbi','r','bb','tb','k','ha','er','ptd','rtd','wtd','td','rec','fg3','stl','blk']);
-function pstDb(sp){if(!PST_MEM[sp])PST_MEM[sp]=get(PST_KEY(sp),{p:{},fed:{}})||{p:{},fed:{}};return PST_MEM[sp];}
-function pstSave(sp){const D=pstDb(sp);const ids=Object.keys(D.p);
-  if(ids.length>PST_MAX){ids.sort((a,b)=>(D.p[a].n||0)-(D.p[b].n||0)).slice(0,ids.length-PST_MAX).forEach(k=>delete D.p[k]);}
-  const fk=Object.keys(D.fed);if(fk.length>6000)fk.slice(0,fk.length-6000).forEach(k=>delete D.fed[k]);
-  try{set(PST_KEY(sp),D);}catch(e){console.warn('pstat save',e);}}
+function pstDb(sp){if(!PST_MEM[sp]){const R=pstUnpack(get(PST_KEY(sp),null));PST_MEM[sp]=R&&R.p?R:{p:{},fed:{}};}return PST_MEM[sp];}
+function pstSave(sp,cap){const D=pstDb(sp);const ids=Object.keys(D.p);const MAX=cap||PST_CAP[sp]||1500;
+  if(ids.length>MAX){ids.sort((a,b)=>(D.p[a].n||0)-(D.p[b].n||0)).slice(0,ids.length-MAX).forEach(k=>delete D.p[k]);}
+  const fk=Object.keys(D.fed);if(fk.length>4000)fk.slice(0,fk.length-4000).forEach(k=>delete D.fed[k]);
+  try{set(PST_KEY(sp),pstPack(D));}catch(e){console.warn('pstat save',e);}}
 const pstId=n=>String(n||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const pstNum=v=>{const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:0;};
 /* add ONE game's line for one player */
-function pstAdd(sp,name,team,line){
-  const D=pstDb(sp);const id=pstId(name);if(!id)return;
-  const P=D.p[id]||(D.p[id]={name,team,n:0,s:{}});P.team=team||P.team;P.n++;
+function pstAdd(sp,name,team,line,eventId){
+  const D=pstDb(sp);const id=pstId(name);if(!id)return false;
+  const P=D.p[id]||(D.p[id]={name,team,n:0,s:{}});
+  if(eventId){const h=String(eventId).slice(-6);P.ev=P.ev||[];if(P.ev.includes(h))return false;P.ev.push(h);if(P.ev.length>24)P.ev=P.ev.slice(-24);}
+  P.team=team||P.team;P.n++;
   Object.entries(line).forEach(([k,v])=>{v=+v||0;const S=P.s[k]||(P.s[k]={sum:0,sq:0,ema:null,gp:0});
     S.sum+=v;S.sq+=v*v;S.gp++;S.ema=S.ema==null?v:(1-PST_ALPHA)*S.ema+PST_ALPHA*v;});
+  return true;
 }
 /* Feed a parsed box exactly once, and only when it is FINAL */
 function pstatFeed(sp,eventId,box){
@@ -439,7 +454,10 @@ function pstatFeed(sp,eventId,box){
       if(!pstNum(r.MIN)&&!pstNum(r.PTS))return;const x=L(r.name,team);if(!x)return;
       Object.assign(x.v,{pts:pstNum(r.PTS),reb:pstNum(r.REB),ast:pstNum(r.AST),fg3:pstNum(String(r['3PT']||'').split('-')[0]),stl:pstNum(r.STL),blk:pstNum(r.BLK)});}));}
   const all=Object.values(lines);if(!all.length)return 0;
-  all.forEach(x=>pstAdd(sp,x.name,x.team,x.v));D.fed[eventId]=1;pstSave(sp);return all.length;
+  all.forEach(x=>pstAdd(sp,x.name,x.team,x.v,eventId));D.fed[eventId]=1;pstSave(sp);
+  try{if(!box.date)throw 0;const LK='d4.pstlast.'+sp,last=get(LK,{})||{};const d=tdDay(box.date);all.forEach(x=>{const k=pstId(x.name);if(!last[k]||last[k].d<=d)last[k]={d,v:x.v};});
+    const ks=Object.keys(last);if(ks.length>3000)ks.slice(0,ks.length-3000).forEach(k=>delete last[k]);set(LK,last);}catch(e){}
+  return all.length;
 }
 /* Projection for one stat: shrink small samples toward a recency-weighted mean */
 function pstProj(sp,name,k){const P=pstDb(sp).p[pstId(name)];if(!P||!P.s[k]||!P.s[k].gp)return null;
@@ -466,8 +484,9 @@ function pstCardHtml(sp,g){try{
   teams.forEach(tm=>pstTeam(sp,tm,6).forEach(P=>{const cells=KEYS.map(k=>{const S=P.s[k];if(!S||!S.gp||!S.sum)return'';const J=pstProj(sp,P.name,k);
       return`${(PST_STATS[sp][k]||k).replace(/ \(P\)/,'')} <b>${J.mu.toFixed(J.mu<10?2:0)}</b>`;}).filter(Boolean);
     if(cells.length)rows.push(`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${esc(P.name)}</b> <span style="color:var(--mute)">${tm} · ${P.n}G</span><br>${cells.join(' · ')}</div>`);}));
-  if(!rows.length)return`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats</summary><div class="sub" style="font-size:10px">No finals tracked for these teams yet — the season backfill fills this in the background.</div></details>`;
-  return`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats (season, form-weighted)</summary>${rows.join('')}</details>`;}catch(e){return'';}}
+  const pb=(()=>{try{return propBoardHtml(sp,g.away.abbr+'@'+g.home.abbr,12)}catch(e){return''}})();
+  if(!rows.length)return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats</summary><div class="sub" style="font-size:10px">No finals tracked for these teams yet — the season backfill fills this in the background.</div></details>`;
+  return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats (season, form-weighted)</summary>${rows.join('')}</details>`;}catch(e){return'';}}
 /* ── Season backfill: walk recent completed ESPN events, feed each final box once.
    Throttled (a few boxes per run) so it never stalls the page; it resumes
    where it left off on the next page open until the window is covered. */
@@ -483,7 +502,7 @@ async function pstatBackfill(sp,maxBoxes){
     for(const id of ids.slice(0,maxBoxes||6)){
       try{const s=await fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json());
         const box=sp==='nhl'?fbpParseHockey(s):sp==='mlb'?fbpParseBaseball(s):sp==='nba'?fbpParseBasketball(s):fbpParseBox(s);
-        if(box)box.state='post';pstatFeed(sp,id,box);done++;}catch(e){}
+        if(box){box.state='post';box.date=(((s.header||{}).competitions||[])[0]||{}).date||null;}pstatFeed(sp,id,box);done++;}catch(e){}
       await new Promise(r=>setTimeout(r,600));}
     D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};pstSave(sp);
   }finally{PST_BF_BUSY=false;}
@@ -501,6 +520,125 @@ async function pstBackfillLoop(){
 }
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pstBackfillLoop,8000));
 function pstatStatus(sp){const D=pstDb(sp);return{players:Object.keys(D.p).length,games:Object.keys(D.fed).length,remaining:(D.bf||{}).remaining};}
+/* ══ PROP LINES vs THE MODEL — every sport ═══════════════════════════════════
+   One format for all sports (the Gemini prompt writes it):
+     PROP: Jayson Tatum PTS 27.5 (-115/-105)        over / under prices
+     PROP: P.Mahomes passing yards 275.5+ (-115)    over-only (NFL style)
+   Lines are matched to the player-stat engine and priced: model P(over),
+   P(under), EV each side. Combo stats (PRA etc.) sum the components. */
+const PROP_STATS={
+  nba:[[/^(PTS|POINTS)$/,['pts']],[/^(REB|REBS|REBOUNDS)$/,['reb']],[/^(AST|ASTS|ASSISTS)$/,['ast']],[/^(3PM|3PT|THREES|3-?POINTERS?( MADE)?)$/,['fg3']],
+    [/^(STL|STEALS)$/,['stl']],[/^(BLK|BLOCKS)$/,['blk']],[/^(PRA|PTS\+REB\+AST)$/,['pts','reb','ast']],[/^(PR|PTS\+REB)$/,['pts','reb']],[/^(PA|PTS\+AST)$/,['pts','ast']],[/^(RA|REB\+AST)$/,['reb','ast']]],
+  nfl:[[/^(PASS(ING)? ?(YDS|YARDS))$/,['py']],[/^(PASS(ING)? ?(TDS?|TOUCHDOWNS))$/,['ptd']],[/^(RUSH(ING)? ?(YDS|YARDS))$/,['ry']],[/^(REC(EIVING)? ?(YDS|YARDS))$/,['wy']],
+    [/^(REC|RECS|RECEPTIONS)$/,['rec']],[/^(ATD|TD|ANYTIME TD|ANYTIME TOUCHDOWN|TOUCHDOWNS?)$/,['td']],[/^(RUSH\+REC ?YDS|SCRIMMAGE YDS)$/,['ry','wy']]],
+  mlb:[[/^(H|HITS)$/,['h']],[/^(HR|HOME RUNS?)$/,['hr']],[/^(RBI|RBIS)$/,['rbi']],[/^(R|RUNS)$/,['r']],[/^(TB|TOTAL BASES)$/,['tb']],[/^(BB|WALKS)$/,['bb']],
+    [/^(K|KS|SO|STRIKEOUTS|PITCHER STRIKEOUTS)$/,['k']],[/^(HA|HITS ALLOWED)$/,['ha']],[/^(ER|EARNED RUNS)$/,['er']],[/^(H\+R\+RBI|HRR)$/,['h','r','rbi']]],
+  nhl:[[/^(G|GOALS?)$/,['g']],[/^(A|ASSISTS?)$/,['a']],[/^(PTS|POINTS?)$/,['pts']],[/^(SOG|SHOTS( ON GOAL)?)$/,['s']]]};
+PROP_STATS.ncaaf=PROP_STATS.nfl;
+function propStatKeys(sp,stat){const S=String(stat||'').toUpperCase().replace(/\s+/g,' ').trim();for(const [re,k] of (PROP_STATS[sp]||[]))if(re.test(S))return k;return null;}
+function propParseLine(sp,line){
+  const m=String(line).match(/^PROP:\s*(.+?)\s+([+-]?\d+(?:\.\d+)?)\s*\+?\s*(?:\(\s*([+-]?\d+|even|ev)\s*(?:\/\s*([+-]?\d+|even|ev))?\s*\))?\s*$/i);if(!m)return null;
+  const head=m[1].trim().split(/\s+/);let keys=null,cut=0;
+  for(let n=Math.min(4,head.length-1);n>=1&&!keys;n--){const k=propStatKeys(sp,head.slice(-n).join(' '));if(k){keys=k;cut=n;}}
+  if(!keys)return null;const player=head.slice(0,head.length-cut).join(' ');const pr=v=>v==null?null:amerOk(/ev/i.test(v)?100:+v);
+  return{player,stat:head.slice(-cut).join(' '),keys,thr:+m[2],over:pr(m[3]),under:pr(m[4])};}
+/* tolerant name match: exact → "first-initial + last name" (T. Hill ↔ Tyreek Hill) */
+function propFindPlayer(sp,name){const D=pstDb(sp);const id=pstId(name);if(D.p[id])return D.p[id];
+  const parts=String(name).replace(/\./g,' ').trim().split(/\s+/);const last=pstId(parts[parts.length-1]),fi=pstId(parts[0]).charAt(0);
+  const hits=Object.values(D.p).filter(P=>{const q=String(P.name).trim().split(/\s+/);return pstId(q[q.length-1])===last&&pstId(q[0]).charAt(0)===fi;});
+  return hits.length===1?hits[0]:null;}
+/* P(sum of keys ≥ thr): one key → the engine's own distribution; combos → Normal on summed mean/variance */
+function propProb(sp,name,keys,thr){const P=propFindPlayer(sp,name);if(!P)return null;
+  if(keys.length===1){const r=pstProb(sp,P.name,keys[0],thr,'over');return r?{p:r.p,mu:r.proj.mu,n:r.proj.n,player:P.name,team:P.team}:null;}
+  let mu=0,v=0,n=1e9;for(const k of keys){const J=pstProj(sp,P.name,k);if(!J)return null;mu+=J.mu;const sd=J.sd!=null&&J.n>=4?J.sd:Math.max(J.mu*0.45,1);v+=sd*sd;n=Math.min(n,J.n);}
+  const p=1-pstNormCdf((thr-mu)/Math.sqrt(Math.max(v,1)));return{p:Math.max(0.001,Math.min(0.999,p)),mu,n,player:P.name,team:P.team};}
+const PROPLINES_KEY='d4.proplines';
+function propLinesPut(sp,rows){const all=get(PROPLINES_KEY,{})||{};const d=today();const day=all[d]||(all[d]=[]);
+  rows.forEach(r=>{const i=day.findIndex(x=>x.sp===sp&&pstId(x.player)===pstId(r.player)&&x.keys.join('+')===r.keys.join('+')&&x.thr===r.thr);const row={...r,sp,ts:Date.now()};if(i>=0)day[i]=row;else day.push(row);});
+  Object.keys(all).sort().slice(0,-7).forEach(k=>delete all[k]);set(PROPLINES_KEY,all);}
+/* priced rows for today (optionally one game) */
+function propBoard(sp,game){const day=((get(PROPLINES_KEY,{})||{})[today()]||[]).filter(x=>(!sp||x.sp===sp)&&(!game||!x.game||x.game===game));
+  const dec=a=>a>0?a/100+1:100/(-a)+1;
+  return day.map(x=>{const r=propProb(x.sp,x.player,x.keys,x.thr);if(!r)return{...x,matched:false};
+    const pU=1-r.p;const evO=x.over!=null?(r.p*dec(x.over)-1)*100:null,evU=x.under!=null?(pU*dec(x.under)-1)*100:null;
+    const best=evU!=null&&(evO==null||evU>evO)?{side:'under',ev:evU,p:pU,price:x.under}:evO!=null?{side:'over',ev:evO,p:r.p,price:x.over}:null;
+    return{...x,matched:true,pOver:r.p,mu:r.mu,n:r.n,team:r.team,player:r.player,evO,evU,best};}).sort((a,b)=>((b.best&&b.best.ev)||-99)-((a.best&&a.best.ev)||-99));}
+function propRowHtml(x){if(!x.matched)return`<div class="mono" style="font-size:10.5px;padding:3px 0;color:var(--mute)">${esc(x.player)} ${esc(x.stat)} ${x.thr} — no stats tracked yet for this player</div>`;
+  const ev=v=>v==null?'—':`<span style="color:${v>=3?'var(--win)':v<=-5?'var(--rust)':'var(--chalk)'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+  return`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)">${x.best&&x.best.ev>=3?'⭐ ':''}<b>${esc(x.player)}</b> <span style="color:var(--mute)">${(x.sp||'').toUpperCase()} ${esc(x.team||'')}</span> · ${esc(x.stat)} <b>${x.thr}</b>
+    <br>model ${x.mu.toFixed(x.mu<10?2:1)} avg (${x.n}G) · P(over) <b>${Math.round(x.pOver*100)}%</b> · over ${x.over!=null?(x.over>0?'+':'')+x.over:'—'} EV ${ev(x.evO)} · under ${x.under!=null?(x.under>0?'+':'')+x.under:'—'} EV ${ev(x.evU)}</div>`;}
+/* NFL and NHL cards already price uploaded props with their own engines —
+   on a game card, show only the props that engine is NOT already showing. */
+function propEngineCovers(sp,game,x){if(sp!=='nfl'&&sp!=='nhl'&&sp!=='ncaaf')return false;try{const [a,h]=String(game).split('@');
+  const L=sportLinesFor(sp,{away:{abbr:a},home:{abbr:h},id:null})||[];const last=s=>pstId(String(s).trim().split(/[\s.]+/).filter(Boolean).pop());
+  return L.some(b=>b.market==='prop'&&b.player&&+b.line===+x.thr&&(pstId(b.player)===pstId(x.player)||last(b.player)===last(x.player)));}catch(e){return false;}}
+function propBoardHtml(sp,game,limit){let R=propBoard(sp,game);if(game)R=R.filter(x=>!propEngineCovers(x.sp,game,x));R=R.slice(0,limit||40);if(!R.length)return'';
+  return`<div class="mktlab" style="margin-top:8px">Props vs model${game?'':' — '+(sp?sp.toUpperCase():'all sports')}</div>${R.map(propRowHtml).join('')}`;}
+/* ══ ROSTERS + PLAYER GAME LOGS (ESPN, free) ═══════════════════════════════
+   Endpoints (verified live against 2023–2025 seasons by the cfbfastR project):
+     teams list   site.api.espn.com/apis/site/v2/sports/{path}/teams?limit=1000
+     roster       site.api.espn.com/apis/site/v2/sports/{path}/teams/{id}/roster
+     game log     site.web.api.espn.com/apis/common/v3/sports/{path}/athletes/{id}/gamelog
+   A game log is the best prop input there is: every game the player played
+   this season, line by line — real distribution, not just an average.
+   Each (player, game) is counted once, whether it arrived from a box score or
+   a game log. Fetches are throttled and capped per session.               */
+const RS_PATH={mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba'};
+const RS_SKILL={nfl:/^(QB|RB|FB|WR|TE)$/,ncaaf:/^(QB|RB|FB|WR|TE)$/,nba:/./,nhl:/^(C|LW|RW|F|D)$/,mlb:/^(?!P$|SP$|RP$)/};
+let RS_SESSION=0;const RS_CAP=60,RS_MEM={};
+async function rsJson(u){try{const r=await fetch(u);return await r.json();}catch(e){return null;}}
+/* team abbreviation → ESPN team id (weekly cache) */
+async function rsTeamIds(sp){const C=get('d4.rsteams',{})||{};if(C[sp]&&C[sp].ts>Date.now()-7*864e5)return C[sp].ids;
+  const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+RS_PATH[sp]+'/teams?limit=1000'+(sp==='ncaaf'?'&groups=80':''));const ids={};
+  ((((j||{}).sports||[])[0]||{}).leagues||[]).forEach(L=>(L.teams||[]).forEach(t=>{const T=t.team||t;if(T&&T.abbreviation&&T.id)ids[String(T.abbreviation).toUpperCase()]=String(T.id);}));
+  if(Object.keys(ids).length){C[sp]={ts:Date.now(),ids};set('d4.rsteams',C);}return ids;}
+function rsAthletes(j){const out=[];const add=a=>{if(a&&a.id&&(a.displayName||a.fullName))out.push({id:String(a.id),name:a.displayName||a.fullName,pos:String(((a.position||{}).abbreviation)||'').toUpperCase()});};
+  ((j||{}).athletes||[]).forEach(g=>{if(Array.isArray(g.items))g.items.forEach(add);else add(g);});return out;}
+async function rsRoster(sp,team){const k=sp+':'+team;const C=get('d4.rsroster',{})||{};if(C[k]&&C[k].ts>Date.now()-3*864e5)return C[k].a;
+  const ids=await rsTeamIds(sp);const id=ids[String(team).toUpperCase()];if(!id)return[];
+  const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+RS_PATH[sp]+'/teams/'+id+'/roster');const a=rsAthletes(j);
+  if(a.length){C[k]={ts:Date.now(),a};const ks=Object.keys(C);if(ks.length>120)ks.sort((x,y)=>C[x].ts-C[y].ts).slice(0,ks.length-120).forEach(x=>delete C[x]);set('d4.rsroster',C);}return a;}
+/* ESPN stat names → this app's stat keys */
+const GL_MAP={
+  football:{passingYards:'py',passingTouchdowns:'ptd',rushingYards:'ry',rushingTouchdowns:'rtd',receptions:'rec',receivingYards:'wy',receivingTouchdowns:'wtd'},
+  nba:{points:'pts',totalRebounds:'reb',rebounds:'reb',assists:'ast',threePointFieldGoalsMade:'fg3',steals:'stl',blocks:'blk'},
+  nhl:{goals:'g',assists:'a',points:'pts',shotsTotal:'s',shots:'s',shotsOnGoal:'s'},
+  mlb:{hits:'h',homeRuns:'hr',RBIs:'rbi',runsBattedIn:'rbi',runs:'r',walks:'bb',doubles:'d2',triples:'d3',strikeouts:'k'}};
+/* tolerant game-log parser: names[] + seasonTypes[].categories[].events[{eventId,stats[]}] */
+function glParse(sp,j){const fam=sp==='nfl'||sp==='ncaaf'?'football':sp;const M=GL_MAP[fam]||{};const names=(j&&(j.names||j.labels))||[];const games={};
+  const walk=o=>{if(!o||typeof o!=='object')return;if(Array.isArray(o)){o.forEach(walk);return;}
+    if(o.eventId&&Array.isArray(o.stats)){const nm=Array.isArray(o.names)?o.names:names;const g=games[o.eventId]||(games[o.eventId]={});
+      o.stats.forEach((v,i)=>{const k=M[nm[i]];if(k&&g[k]==null)g[k]=pstNum(String(v).split('-')[0]);});return;}
+    Object.values(o).forEach(walk);};walk(j&&j.seasonTypes);
+  Object.values(games).forEach(g=>{if(fam==='football'){['py','ptd','ry','rtd','rec','wy','wtd'].forEach(k=>{if(g[k]==null)g[k]=0;});g.td=g.rtd+g.wtd;}
+    if(fam==='mlb'&&g.h!=null){g.tb=g.h+(g.d2||0)+2*(g.d3||0)+3*(g.hr||0);delete g.d2;delete g.d3;}
+    if(fam==='nhl'&&g.pts==null&&g.g!=null)g.pts=(g.g||0)+(g.a||0);});
+  return games;}
+/* feed one player's game log — skips games already counted from box scores */
+async function rsGamelog(sp,ath,team){if(RS_SESSION>=RS_CAP)return 0;const D=pstDb(sp);const P=D.p[pstId(ath.name)];
+  if(P&&P.glAt&&P.glAt>Date.now()-864e5)return 0;RS_SESSION++;
+  const j=await rsJson('https://site.web.api.espn.com/apis/common/v3/sports/'+RS_PATH[sp]+'/athletes/'+ath.id+'/gamelog');const G=glParse(sp,j);let n=0;
+  Object.entries(G).forEach(([eid,line])=>{if(!Object.keys(line).length)return;if(pstAdd(sp,ath.name,team,line,eid))n++;});
+  const Q=D.p[pstId(ath.name)];if(Q){Q.glAt=Date.now();Q.eid=ath.id;}pstSave(sp);return n;}
+/* find a player (by book-style name) on the teams of a game, then load his log */
+async function rsFindAndLoad(sp,name,teams){for(const tm of teams){const R=await rsRoster(sp,tm);
+    const parts=String(name).replace(/\./g,' ').trim().split(/\s+/);const last=pstId(parts[parts.length-1]),fi=pstId(parts[0]).charAt(0);
+    const hit=R.find(a=>pstId(a.name)===pstId(name))||R.find(a=>{const q=a.name.split(/\s+/);return pstId(q[q.length-1])===last&&pstId(q[0]).charAt(0)===fi;});
+    if(hit)return await rsGamelog(sp,hit,tm);}return 0;}
+/* on demand: every pasted prop line for a player we don't know yet */
+async function rsLoadPropPlayers(){const day=((get(PROPLINES_KEY,{})||{})[today()]||[]);let n=0;
+  for(const x of day){if(RS_SESSION>=RS_CAP)break;if(propFindPlayer(x.sp,x.player)&&(propFindPlayer(x.sp,x.player).n||0)>=3)continue;
+    let teams=x.game?String(x.game).split('@'):[];if(!teams.length){teams=[...new Set(sportGames(x.sp).flatMap(g=>[g.away.abbr,g.home.abbr]))].slice(0,40);}
+    try{n+=await rsFindAndLoad(x.sp,x.player,teams);}catch(e){}}
+  return n;}
+/* slate: key players on teams playing today (background, capped) */
+async function rsLoadSlate(sp,perTeam){const games=(sportGames(sp)||[]).filter(g=>{const a=String(g.abstract||'').toLowerCase();return !a||a==='pre'||a==='preview';});let n=0;
+  for(const g of games){for(const tm of [g.away.abbr,g.home.abbr]){if(RS_SESSION>=RS_CAP)return n;const R=(await rsRoster(sp,tm)).filter(a=>(RS_SKILL[sp]||/./).test(a.pos));
+      const D=pstDb(sp);const need=R.filter(a=>{const P=D.p[pstId(a.name)];return !P||!P.glAt||P.glAt<Date.now()-864e5;}).slice(0,perTeam||6);
+      for(const a of need){if(RS_SESSION>=RS_CAP)return n;try{n+=await rsGamelog(sp,a,tm);}catch(e){}await new Promise(r=>setTimeout(r,250));}}}
+  return n;}
+async function rsBoot(){try{await rsLoadPropPlayers();const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb');await rsLoadSlate(sp,sp==='ncaaf'?5:6);}catch(e){console.warn('rosters',e);}}
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(rsBoot,9000));
 /* Standout prop of the day for one sport: the highest-probability "scorer"
    prop (goal / home run / TD / 25+ pts) among players in games not yet started. */
 function pstStandout(sp,games){
@@ -881,6 +1019,7 @@ function intakeSave(){
   Object.entries(r).forEach(([sp,b])=>{
     if(b.raw.length){const p=get('d4.intakepending',{});p[sp]=(p[sp]||[]).concat(b.raw.map(t=>({t,ts:Date.now()})));set('d4.intakepending',p);done.push(sp==='ncaaf'?'CFB':sp.toUpperCase()+' lines waiting — they file automatically the moment you tap '+(sp==='ncaaf'?'CFB':sp.toUpperCase()));}
     if(b.picks.length){saveBookOdds(b.picks,null,sp);done.push(b.picks.length+' '+sp.toUpperCase()+' lines');}
+    if((b.props||[]).length){propLinesPut(sp,b.props);done.push(b.props.length+' '+sp.toUpperCase()+' prop lines');try{rsLoadPropPlayers().then(n=>{if(n)try{renderBest();}catch(e){}});}catch(e){}}
     if(b.trends.length||b.consensus.length){
       if(sp==='mlb'){window._pendingExt={picks:[],trends:b.trends,consensus:b.consensus};try{saveExtPicks()}catch(e){}}
       else saveExtBySport(sp,[],b.trends,b.consensus,null);
@@ -941,6 +1080,7 @@ const BR_CFG={
 /* Everything sport-specific in one place — the Judge itself never branches. */
 function brainAdapter(sport){
   if(sport==='nhl'&&typeof nhlBrainAdapter==='function')return nhlBrainAdapter();
+  if(sport==='nba')return typeof nbaBrainAdapter==='function'?nbaBrainAdapter():{key:g=>g.away.abbr+'@'+g.home.abbr,lines:()=>[],flat:()=>false,sim:()=>null,trends:()=>[],cons:()=>[],snap:x=>Math.round(x),market:()=>null,box:null,boxCols:[],boxStats:[]};
   if(sport==='mlb')return{
     key:g=>g.away.abbr+'@'+g.home.abbr,
     lines:g=>typeof bookLinesFor==='function'?bookLinesFor(g.id):[],
@@ -1087,10 +1227,17 @@ function brainLearn(sport){
   if(sport==='mlb')return brainLearnMLB();
   if(sport==='nhl'){ // hockey keeps its rows in d4.nhlarc as {gid,game,judge,final}
     const arc=get('d4.nhlarc',{});const b=brainGet('nhl');let ch=false;
-    Object.values(arc).forEach(D=>(D&&D.rows||[]).forEach(r=>{if(r.learned||!r.judge||!r.final||r.final.a==null)return;
-      if(!r.actualBox&&(r.boxTried||0)<3)return;          // wait for the real box so SOG can be graded too
+    const stale=dayShift(today(),-1);
+    Object.entries(arc).forEach(([dk,D])=>(D&&D.rows||[]).forEach(r=>{if(r.learned||!r.judge||!r.final||r.final.a==null)return;
+      /* wait for the real box so SOG can be graded too — but never past the next day,
+         so learning still happens when the NHL page isn't the one that's open */
+      if(!r.actualBox&&(r.boxTried||0)<3&&!(/^\d{4}-\d{2}-\d{2}$/.test(dk)&&dk<stale))return;
       brainLearnOne('nhl',b,r.game,r.judge,+r.final.a,+r.final.h,r.actualBox||null);r.learned=true;ch=true;}));
     if(ch){brainPut('nhl',b);set('d4.nhlarc',arc);}return ch;}
+  if(sport==='nba'){const L=get('d4.nbajudge',{})||{};const b=brainGet('nba');let ch=false;
+    Object.keys(L).forEach(d=>Object.values(L[d]).forEach(J=>{if(J.learned)return;const F=finalsFor('nba',J.game,d,false);if(!F)return;
+      brainLearnOne('nba',b,J.game,J,+F.a,+F.h,null);J.learned=true;J.final={a:+F.a,h:+F.h};ch=true;}));
+    if(ch){brainPut('nba',b);set('d4.nbajudge',L);}return ch;}
   const key=sport==='nfl'?LS.nflarc:'d4.ncaafarc';const arc=get(key,{});const b=brainGet(sport);let ch=false;
   Object.values(arc).forEach(A=>{if(!A||!A.rows||!A.finals)return;A.rows.forEach(r=>{
     if(r.learned||!r.judge)return;const F=A.finals[r.id];if(!F||F.a==null)return;
@@ -1162,7 +1309,7 @@ function predBoxGradeHtml(sport,g,pred,act){
     <b style="color:${col(G.letter)}">PREDICTED BOX ${G.letter}</b> <span style="color:var(--mute)">(off ${Math.round(G.avg*100)}% avg)</span><br>${cells}</div>`;
 }
 function boxAccuracyHtml(){
-  const out=[];['mlb','nfl','ncaaf','nhl'].forEach(sp=>{const E=(brainGet(sp).boxErr)||{};
+  const out=[];['mlb','nfl','ncaaf','nhl','nba'].forEach(sp=>{const E=(brainGet(sp).boxErr)||{};
     Object.entries(E).forEach(([st,o])=>{if(o.n<3)return;out.push(`<div class="sub">${sp.toUpperCase()} ${BOX_LAB[st]||st}: grade <b>${boxLetter(o.ape)}</b> · off ${Math.round(o.ape*100)}% avg · runs ${o.bias>=0?'high':'low'} by ${Math.abs(Math.round(o.bias*100))}% (n=${o.n}) — auto-corrected going forward</div>`);});});
   return out.length?`<div class="tkt hi"><h3>Predicted box scores — graded</h3>${out.join('')}</div>`:'';
 }
@@ -1475,6 +1622,7 @@ function voicesLog(sp){
     let calls=[];try{calls=characterCalls(sp,g,s)}catch(e){return;}
     // a character's call is locked at first pitch / puck drop / kickoff; drop a
     // stale pre-game call from another side if the character flipped before then
+    if(pre)calls.forEach(c=>{if(c.voice==='Sim'){try{c.f=factorsFor(sp,g,c);const b=blendProb(sp,c.market,c.simP,c.mktP>0?c.mktP:null);c.pUsed=b!=null?Math.max(0.01,Math.min(0.99,b+factorAdj(sp,c.f))):null;}catch(e){}}});
     calls.forEach(c=>{const i=idx[c.id];if(i!=null){if(!pre||V[i].graded)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
   });
   if(n){if(V.length>8000)V.splice(0,V.length-8000);set(VOICES_KEY,V);}return n;
@@ -1815,7 +1963,7 @@ function doSportSwitch(sport){
     return;
   }
   ACTIVE_SPORT=sport;
-  ['mlb','nfl','ncaaf','nhl'].forEach(s=>{
+  ['mlb','nfl','ncaaf','nhl','nba'].forEach(s=>{
     const btn=document.getElementById('sportBtn-'+s);
     if(!btn)return;
     btn.style.background=s===sport?'var(--gold)':'#1c1c1c';
@@ -1932,14 +2080,26 @@ function isQuotaErr(e){
 function bookKeyOf(x){return x.market==='prop'?[x.game,x.market,x.side,x.line,x.player||'',x.stat||''].join('|'):[x.game,x.market,x.side,x.src||''].join('|');}
 function bookDedupe(arr){arr=(arr||[]).filter(x=>x.market==='prop'||x.price==null||amerOk(x.price)!=null);const last={};(arr||[]).forEach((x,i)=>{const k=bookKeyOf(x);const p=last[k];
   if(p==null||(x.capturedAt||i)>=(arr[p].capturedAt||p))last[k]=i;});const keep=new Set(Object.values(last));return(arr||[]).filter((x,i)=>keep.has(i));}
+function pruneList(key,keep){try{const a=_dec(localStorage.getItem(key));if(!Array.isArray(a)||a.length<=keep)return false;localStorage.setItem(key,_enc(JSON.stringify(a.slice(-keep))));return true;}catch(e){return false}}
+function prunePlayers(frac){let any=false;['ncaaf','nfl','mlb','nhl','nba'].forEach(sp=>{try{const D=pstDb(sp);const n=Object.keys(D.p).length;if(n<50)return;pstSave(sp,Math.floor(n*frac));any=true;}catch(e){}});return any;}
+function prunePstLast(keep){let any=false;['ncaaf','nfl','mlb','nhl','nba'].forEach(sp=>{try{const k='d4.pstlast.'+sp,L=_dec(localStorage.getItem(k));if(!L)return;const ks=Object.keys(L);if(ks.length<=keep)return;
+  ks.sort((a,b)=>String(L[a].d).localeCompare(String(L[b].d))).slice(0,ks.length-keep).forEach(x=>delete L[x]);localStorage.setItem(k,_enc(JSON.stringify(L)));any=true;}catch(e){}});return any;}
 const PRUNE_LADDER=[
+  ()=>pruneDatedMap('d4.proplines',3),          // today's prop lines — re-pasteable
+  ()=>pruneList('d4.learnlog',15),
+  ()=>prunePstLast(800),                        // last-game lines (only needed ~2 days)
   ()=>pruneKeyedCache('d4.boxcache',120),      // box scores — refetchable from StatsAPI
   ()=>pruneDatedMap('d4.oddsdate',21),         // historical odds by date
   ()=>pruneKeyedCache('d4.boxcache',40),
   ()=>pruneDatedMap('d4.nflgames',3),
   ()=>pruneDatedMap('d4.ncaafgames',3),
   ()=>pruneDatedMap('d4.oddsdate',7),
-  ()=>pruneKeyedCache('d4.boxcache',10)
+  ()=>pruneKeyedCache('d4.boxcache',10),
+  ()=>pruneDatedMap('d4.nbashots',3),
+  ()=>pruneDatedMap('d4.calhist',30),
+  ()=>pruneList('d4.propcal',600),
+  ()=>prunePlayers(0.7),                         // player stats rebuild via the season backfill
+  ()=>prunePlayers(0.5)
 ];
 function pruneKeyedCache(key,keep){
   try{
@@ -7189,7 +7349,7 @@ function fbpBox(id,sp){
     FBP_INFLIGHT['box:'+id]=1;
     fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json()).then(j=>{
       const box=sp==='nhl'?fbpParseHockey(j):sp==='mlb'?fbpParseBaseball(j):sp==='nba'?fbpParseBasketball(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
-      try{pstatFeed(sp,String(id),box);}catch(e){}   // finals only, once per game
+      try{if(box)box.date=(((j.header||{}).competitions||[])[0]||{}).date||null;pstatFeed(sp,String(id),box);}catch(e){}   // finals only, once per game
       if(box.state==='post'&&Object.keys(box.teamStats||box.teams||{}).length){
         const S=get(FBP_BOX_KEY,{})||{};S[sp+':'+id]={ts:Date.now(),final:true,box};
         Object.keys(S).forEach(k=>{if(Date.now()-S[k].ts>6*864e5)delete S[k];});
@@ -7490,12 +7650,76 @@ function legProgressBarHtml(prog){
     <span style="font-family:'IBM Plex Mono';font-size:9px;color:${color};white-space:nowrap">${val}/${thr}${cleared?' ✓':busted?' ✕':''}</span>
   </div>`;
 }
+/* ══ LIVE CASH CHANCE ══════════════════════════════════════════════════════
+   Each leg's pre-game probability implies an expected margin (or total):
+   P(cover) = Φ((μ+L)/σ)  →  μ = σ·Φ⁻¹(p) − L. In-game, the final result is
+   the current margin plus the remaining expectation, with uncertainty that
+   shrinks with the square root of time left:
+     P_live = Φ((M_now + μ·f + L) / (σ·√f))        f = fraction of game left
+   Totals the same way with τ = X + σT·Φ⁻¹(p_over). Settled legs are 1 or 0,
+   unstarted legs keep their pre-game number, a push drops out of the parlay.
+   σ per sport = the spread of real results around closing lines.          */
+const LIVE_SIG={nfl:[13.5,13.5],ncaaf:[16,17],nba:[12,18.5],nhl:[2.3,2.3],mlb:[4.3,4.3]};
+function liveFracLeft(e,sp){if(!e||e.state==='pre')return 1;if(e.state==='post')return 0;const per=Math.max(1,e.period||1);
+  const Q={nfl:[4,15],ncaaf:[4,15],nba:[4,12],nhl:[3,20]}[sp];
+  if(Q){const [np,len]=Q;if(per>np)return 0.03;const left=e.clock!=null?e.clock/60:len/2;return Math.max(0.01,Math.min(1,((np-per)*len+left)/(np*len)));}
+  if(sp==='mlb'){const d=String(e.detail||'').toLowerCase();let half=(per-1)*2;
+    if(/bot/.test(d))half+=1.5;else if(/mid/.test(d))half+=1;else if(/end/.test(d))half+=2;else half+=0.5;
+    return Math.max(0.01,Math.min(1,(18-Math.min(17.9,half))/18));}
+  return 0.5;}
+function liveLegProb(x,r,td){
+  if(r&&r.push)return 1;if(r&&!r.live&&r.hit===true)return 1;if(r&&!r.live&&r.hit===false)return 0;
+  const p0=x.p>0&&x.p<1?x.p:(x.price!=null?imp(+x.price):null);if(p0==null)return null;
+  const sp=x.sport||'mlb';let pick=String(x.pick||'').trim();if(x.fbProp||x.nhlProp||x.mlbProp)return r&&r.live&&r.hit===true?1:p0;
+  const day=String(x.gameDate||td||'').slice(0,10);let e=null;try{e=mgEventFor(sp,x.game,day,!!x.gdApprox||!x.gameDate);}catch(err){}
+  if(!e||e.state==='pre'||e.a==null)return p0;let f=e.state==='post'?0.001:liveFracLeft(e,sp);let S=LIVE_SIG[sp]||[10,10];let A=e.a,H=e.h;
+  /* period legs (P1 / 1H / Q1 / F5): same model scoped to the period — time left IN
+     the period, σ shrunk to the period's share of the game, score so far in it */
+  const pm=pick.match(/^(P1|1H|H1|Q1|F5)\s+(.+)$/i);
+  if(pm){const kind=pm[1].toUpperCase();pick=pm[2];const Q={nfl:[4,15],ncaaf:[4,15],nba:[4,12],nhl:[3,20]}[sp];
+    let span,share,per=Math.max(1,e.period||1);
+    if(kind==='F5'){if(sp!=='mlb')return p0;share=5/9;const d=String(e.detail||'').toLowerCase();let half=(per-1)*2+(/bot/.test(d)?1.5:/mid/.test(d)?1:/end/.test(d)?2:0.5);
+      f=e.state==='post'||half>=10?0.001:Math.max(0.01,(10-half)/10);}
+    else{if(!Q)return p0;span=kind==='P1'||kind==='Q1'?1:2;share=span/Q[0];const len=Q[1];
+      if(per>span||e.state==='post'){f=0.001;const sa=span===1?e.p1a:e.h1a,sh=span===1?e.p1h:e.h1h;if(sa==null||sh==null)return p0;A=sa;H=sh;}
+      else{const left=e.clock!=null?e.clock/60:len/2;f=Math.max(0.01,Math.min(1,((span-per)*len+left)/(span*len)));}}
+    S=[S[0]*Math.sqrt(share),S[1]*Math.sqrt(share)];}
+  const pc=Math.max(0.01,Math.min(0.99,p0));let m;
+  if((m=pick.match(/^(over|under)\s+([\d.]+)/i))){const X=+m[2],over=/over/i.test(m[1]);const pOver0=over?pc:1-pc;
+    const T=A+H;if(T>X)return over?1:0;   // scores never go down: a cleared over is won, a passed under is lost
+    const tau=X+S[1]*brainProbit(pOver0);const po=pstNormCdf((T+tau*f-X)/(S[1]*Math.sqrt(f)));return over?po:1-po;}
+  if((m=pick.match(/^(\S+)\s+(ML|[+-]?\d+(?:\.\d+)?)\b/i))){const [aw,hm]=String(x.game).split('@');const tm=m[1].toUpperCase();
+    const side=tm===String(hm).toUpperCase()?'home':tm===String(aw).toUpperCase()?'away':null;if(!side)return p0;
+    const L=/ml/i.test(m[2])?0:+m[2];const Mnow=side==='home'?H-A:A-H;const mu=S[0]*brainProbit(pc)-L;
+    return pstNormCdf((Mnow+mu*f+L)/(S[0]*Math.sqrt(f)));}
+  return p0;}
+/* same-game legs move together: the pre-game sim measures joint ÷ independent per
+   game; live, that ratio fades as the game resolves (ratio^f, f = time left), and
+   the group stays inside the probability bounds max(0,Σp−(n−1)) ≤ joint ≤ min p. */
+const LIVE_CORR={};
+function liveCorrRatios(t){const k=String(t.id);const c=LIVE_CORR[k];if(c&&Date.now()-c.ts<600e3)return c.r;
+  let r={};try{const C=parlayCorrelation(t);(C&&C.groups||[]).forEach(g=>{if(g.ratio>0&&isFinite(g.ratio))r[g.game]=g.ratio;});}catch(e){}
+  LIVE_CORR[k]={ts:Date.now(),r};return r;}
+function liveTicketChance(t){let any=false,live=false,corr=false;const G={};
+  for(const x of (t.legs||[])){let r=null;try{r=gradeLeg(x,t.date);}catch(e){}
+    const q=liveLegProb(x,r,t.date);if(q==null)return null;if(r&&(r.live||r.hit!=null||r.push))any=true;if(r&&r.live)live=true;
+    if(q===0)return{p:0,any:true,live};(G[x.game]=G[x.game]||{qs:[],sp:x.sport||'mlb',day:String(x.gameDate||t.date||'').slice(0,10),ap:!!x.gdApprox||!x.gameDate}).qs.push(q);}
+  const R=Object.values(G).some(g=>g.qs.filter(q=>q<1).length>=2)?liveCorrRatios(t):{};let p=1;
+  Object.entries(G).forEach(([game,g])=>{const open=g.qs.filter(q=>q<1);let gp=g.qs.reduce((a,b)=>a*b,1);
+    if(open.length>=2&&R[game]){let f=1;try{const e=mgEventFor(g.sp,game,g.day,g.ap);f=e?liveFracLeft(e,g.sp):1;}catch(e){}
+      const lo=Math.max(0,open.reduce((a,b)=>a+b,0)-(open.length-1)),hi=Math.min(...open);gp=Math.max(lo,Math.min(hi,gp*Math.pow(R[game],f)));corr=true;}
+    p*=gp;});
+  return{p,any,live,corr};}
+function liveTicketHtml(t){try{const L=liveTicketChance(t);if(!L||!L.any||!(t.p>0))return'';const pct=L.p*100;
+  return`<div class="sub" style="margin-top:2px"><b style="color:${L.p===0?'var(--rust)':L.p>t.p?'var(--win)':'var(--gold)'}">📡 ${L.live?'Live':'Now'} cash chance ${L.p===0?'0% — busted':(pct<1?pct.toFixed(2):pct.toFixed(1))+'%'}</b>${L.p>0?` · 1 in ${Math.max(1,Math.round(1/L.p)).toLocaleString()} (was 1 in ${Math.round(1/t.p).toLocaleString()} pre-game)`:''}${L.corr?' · same-game legs correlated':''}</div>`;}catch(e){return'';}}
 function legPctHtml(x,r){
   if(r.prog&&r.prog.thr)return legProgressBarHtml(r.prog);
   if(r.hit===true)return'<span class="pp" style="color:var(--win)">100%</span>';
   if(r.hit===false)return'<span class="pp" style="color:var(--rust)">0%</span>';
   if(r.push)return'<span class="pp" style="color:var(--mute)">PUSH</span>';
   if(x.price==null)return'';
+  if(r&&r.live){const q=liveLegProb(x,r,x.gameDate);if(q!=null&&Math.abs(q-x.p)>=0.005){const up=q>x.p;
+    return`<span class="pp" style="color:${up?'var(--win)':'var(--rust)'}">${(q*100).toFixed(0)}%</span><span class="m" style="font-size:9px"> live (was ${(x.p*100).toFixed(0)}%)</span>`;}}
   return`<span class="pp">${(x.p*100).toFixed(0)}%</span>`;
 }
 /* Tickets never repainted on their own — every renderTickets()/genTickets()
@@ -11258,11 +11482,13 @@ function rebuildSrcStats(){
 }
 
 /* ================= TICKETS TABS ================= */
-const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['eval','Eval'],['outside','Outside'],['elimmap','🫧 Map'],['record','Record'],['backtest','Backtest']];
+/* Record + Eval moved to the Record tab (one place for every stat) */
+const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['outside','Outside'],['elimmap','🫧 Map'],['backtest','Backtest']];
 let BUILD_MODE='presets';   // presets | custom
 let OUTSIDE_MODE='consensus';
 
 function renderTickets(){
+  if(!TTABS.some(([k])=>k===TICKETTAB))TICKETTAB='build';
   const nav=document.getElementById('ticketNav');
   const body=document.getElementById('ticketBody');
   if(!nav||!body)return;
@@ -12168,7 +12394,7 @@ function systemPicksHtml(){
   }).join('');
   const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
   return head+`<div class="tkt hi"><h3>${t.date}</h3>
-    <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
+    <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}
     <ol>${rows}</ol>${buildWagerRow(t)}</div>`;
 }
 
@@ -12505,7 +12731,7 @@ function genTickets(mode){
         ?`<h3>${t.name}${renameBtn}${lockBadge}${archBadge}</h3><div class="m" style="margin-top:-4px;margin-bottom:6px">${t.date}${t.source&&t.source!=='mine'?' · '+({system:'System',market:'Market',specialty:'Specialty',outside:'Outside'}[t.source]||t.source):''}</div>`
         :`<h3>${t.date}${renameBtn}${lockBadge}${archBadge}</h3>`;
       h+=`<div class="tkt ${t.archived?'':'hi'}">${nameLine}
-        <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>
+        <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}
         <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
       // addable-legs picker — only rendered for the one ticket currently being
       // edited, right below its card. Same pool every builder already draws
@@ -14760,6 +14986,94 @@ function buildBestCard(){
     </div>
   </div></div>`;
 }
+/* ══ MASTER LEARNING LOOP ══════════════════════════════════════════════════
+   Every graded result, from every sport, feeds the brain from WHATEVER page
+   is open — the data all lives in shared storage. Runs on load, after every
+   My Games refresh, and whenever finals land (throttled to once per 30s).
+   Sinks: team off/def bias + source weights + volatility (brainLearn),
+   character/Sim calls (gradeVoices → calibration + blend weights),
+   outside picks/preds/consensus (gradeIntel), the Best card (best5 ledger),
+   and prop probabilities (prop ledger, graded from real box scores).       */
+const LEARN_SPS=['mlb','nfl','ncaaf','nhl','nba'],LEARN_KEY='d4.learnlog';
+let LEARN_T=0,LEARN_BUSY=false;
+function brainLearnAll(force){
+  if(LEARN_BUSY||(!force&&Date.now()-LEARN_T<30e3))return null;LEARN_BUSY=true;const res={ts:Date.now(),by:{}};
+  try{try{syncFinalsToShared();}catch(e){}
+    LEARN_SPS.forEach(sp=>{try{res.by[sp]=brainLearn(sp)?1:0;}catch(e){res.by[sp]='error: '+e.message;console.warn('learn',sp,e);}});
+    try{res.voices=gradeVoices();}catch(e){res.voices='error: '+e.message;}
+    try{res.intel=typeof gradeIntel==='function'?gradeIntel():0;}catch(e){res.intel='error: '+e.message;}
+    try{res.best=best5Grade();}catch(e){res.best='error: '+e.message;}
+    try{res.props=propCalGrade();}catch(e){res.props='error: '+e.message;}
+    const L=get(LEARN_KEY,[])||[];L.unshift(res);set(LEARN_KEY,L.slice(0,60));
+  }finally{LEARN_T=Date.now();LEARN_BUSY=false;}
+  return res;
+}
+/* Best card ledger: the locked picks are graded and also enter the voice
+   ledger as "Best", so Records, calibration and the blend all see them. */
+function best5Grade(){const S=get(BEST5_KEY,{});const log=get('d4.best5log',{})||{};let n=0;
+  if(S&&S.d&&S.locked&&!log[S.d])log[S.d]={picks:(S.picks||[]).map(x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:x.p,m:x.m,sd:x.sd,line:x.line,gid:x.gid})),standout:S.standout||null};
+  const V=get(VOICES_KEY,[]);const ids=new Set(V.map(x=>x.id));let vch=false;
+  Object.entries(log).forEach(([d,E])=>(E.picks||[]).forEach(x=>{if(x.hit!=null||x.push)return;
+    let r=null;try{r=gradeLeg({sport:x.sp,game:x.game,pick:x.pick,gameDate:d,gid:x.gid},d);}catch(e){}
+    if(!r||r.live)return;if(r.push){x.push=true;n++;return;}if(r.hit!==true&&r.hit!==false)return;x.hit=r.hit;n++;
+    const id=['best',x.sp,x.game,d,x.pick].join('|');
+    if(!ids.has(id)){V.push({id,sp:x.sp,date:d,game:x.game,voice:'Best',market:x.m||'ml',side:x.sd,line:x.line,price:x.price,simP:x.p,graded:true,hit:x.hit,units:x.hit?_vProfit(x.price):-1});ids.add(id);vch=true;}}));
+  Object.keys(log).sort().slice(0,-120).forEach(k=>delete log[k]);
+  if(n)set('d4.best5log',log);if(vch)set(VOICES_KEY,V);return n;}
+/* Prop ledger: every model prop probability the app shows as a pick
+   (standouts today) is logged, then graded from the player's real box line. */
+const PROPCAL_KEY='d4.propcal';
+function propCalLog(sp,player,team,k,thr,p,d,side,price){const L=get(PROPCAL_KEY,[])||[];side=side||'over';const id=[sp,pstId(player),k,thr,side,d].join('|');
+  if(L.some(x=>x.id===id))return;L.push({id,sp,player,team,k,thr,p,d,side,price:price==null?null:price,hit:null});set(PROPCAL_KEY,L.slice(-2000));}
+function propCalGrade(){const L=get(PROPCAL_KEY,[])||[];let n=0;
+  L.forEach(x=>{if(x.hit!=null)return;const g=(get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];
+    if(!g||g.d<x.d||g.d>dayShift(x.d,1))return;const ks=String(x.k).split('+');if(ks.some(k=>g.v[k]==null))return;
+    const v=ks.reduce((a,k)=>a+(+g.v[k]||0),0);x.actual=v;const over=v>=x.thr;x.hit=(x.side||'over')==='under'?!over&&v!==x.thr:over;n++;});
+  if(n)set(PROPCAL_KEY,L);return n;}
+/* Health: is anything waiting that should have been learned by now? */
+function learnHealth(){const out={};const y=dayShift(today(),-1);
+  LEARN_SPS.forEach(sp=>{const V=roGet(VOICES_KEY,[]).filter(x=>x.sp===sp);const pend=V.filter(x=>!x.graded);
+    const td=today();const stuck=pend.filter(x=>x.date&&x.date<td&&finalsFor(sp,x.game,x.date,false));
+    const b=brainGet(sp);out[sp]={calls:V.length,graded:V.length-pend.length,pending:pend.length,stuck:stuck.length,
+      teams:Object.keys(b.team||{}).length,sources:Object.keys(b.src||{}).length,games:Math.round(b.vol&&b.vol.n||0)};});
+  const P=get(PROPCAL_KEY,[])||[];out.props={logged:P.length,graded:P.filter(x=>x.hit!=null).length};
+  const B=get('d4.best5log',{})||{};const bp=Object.values(B).flatMap(e=>e.picks||[]);out.best={picks:bp.length,graded:bp.filter(x=>x.hit!=null).length,won:bp.filter(x=>x.hit).length};
+  out.last=(get(LEARN_KEY,[])||[])[0]||null;return out;}
+function learnHealthHtml(){const H=learnHealth();const lab={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
+  const rows=LEARN_SPS.map(sp=>{const x=H[sp];return`<tr><td>${lab[sp]}</td><td>${x.graded}/${x.calls}</td><td>${x.games}</td><td>${x.teams}</td><td style="color:${x.stuck?'var(--rust)':'var(--win)'}">${x.stuck?x.stuck+' ⚠':'✓'}</td></tr>`;}).join('');
+  const L=H.last;const errs=L?Object.entries(L.by||{}).filter(([k,v])=>typeof v==='string').map(([k,v])=>k+': '+v):[];
+  return`<div class="tkt" style="margin-bottom:8px"><h3>🧠 Learning health</h3>
+    <div class="sub" style="font-size:10px">Every final from every sport feeds the brain from any page. "Stuck" = a result exists but wasn't learned — it should always be ✓.</div>
+    <table class="mono" style="width:100%;font-size:10px;text-align:center;margin-top:4px"><tr style="color:var(--mute)"><td>sport</td><td>calls graded</td><td>games learned</td><td>teams tracked</td><td>stuck</td></tr>${rows}</table>
+    <div class="sub mono" style="font-size:9.5px;margin-top:4px">Best card: ${H.best.won}-${H.best.graded-H.best.won} graded of ${H.best.picks} · props: ${H.props.graded}/${H.props.logged} graded · last learn ${L?new Date(L.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'never'}
+    ${errs.length?`<br><span style="color:var(--rust)">errors: ${esc(errs.join(' · '))}</span>`:''}</div>
+    <div class="bar"><button onclick="brainLearnAll(true);renderRecordsHub()">↻ Learn now</button></div></div>`;}
+if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(()=>{try{brainLearnAll(true);}catch(e){}},5000));
+/* ══ HIGH-% PROPS ══════════════════════════════════════════════════════════
+   1) your pasted lines, ranked by model probability (with EV, so a 75% prop
+      priced at -400 is flagged as overpriced), and
+   2) "likely outcomes": for players on today's slate, the highest standard
+      threshold each clears ≥65% of the time — for every sport, no lines needed. */
+const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4]},nfl:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},
+  ncaaf:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},mlb:{h:[1,2],tb:[2,3],hr:[1],k:[5,6,7]},nhl:{s:[2,3,4],pts:[1],g:[1]}};
+function teamsToday(sp){const s=new Set();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(!a||a==='pre'||a==='preview'){s.add(g.away.abbr);s.add(g.home.abbr);}});}catch(e){}
+  try{const T=get(TC_KEY,{})||{};if(T.d===today())(((T.by||{})[sp]||{}).picks||[]).forEach(x=>String(x.game).split('@').forEach(t=>s.add(t)));}catch(e){}return s;}
+function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const teams=teamsToday(sp);if(!teams.size)return[];const out=[];
+  Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<3)return;
+    Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<3)return;let best=null;
+      ths.forEach(t=>{const r=pstProb(sp,P.name,k,t,'over');if(r&&r.p>=0.65)best={sp,player:P.name,team:P.team,k,thr:t,p:r.p,mu:r.proj.mu,n:r.proj.n};});
+      if(best)out.push(best);});});
+  return out.sort((a,b)=>b.p-a.p).slice(0,limit||12);}
+function likelyHtml(){const lab={pts:'pts',reb:'reb',ast:'ast',fg3:'threes',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'receptions',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'strikeouts',s:'SOG',g:'goal'};
+  const secs=['nfl','ncaaf','nba','nhl','mlb'].map(sp=>{const R=propLikely(sp,10);if(!R.length)return'';
+    return`<details class="tkt" style="margin:6px 0"><summary><b>${SP_LAB[sp]}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${R.length} likely</span></summary>${R.map(x=>
+      `<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${esc(x.player)}</b> <span style="color:var(--mute)">${esc(x.team)}</span> · <b>${x.thr}+ ${lab[x.k]||x.k}</b> · <span style="color:var(--win)">${Math.round(x.p*100)}%</span> · avg ${x.mu.toFixed(x.mu<10?2:0)} (${x.n}G)</div>`).join('')}</details>`;}).join('');
+  return secs?`<div class="mktlab">🔮 Likely outcomes today <span class="sub" style="font-size:9px">— highest standard line each player clears ≥65%, from his game logs</span></div>${secs}`:'';}
+function highPctLinesHtml(){const R=propBoard(null,null).filter(x=>x.matched&&x.best).map(x=>{const pO=x.pOver,side=pO>=0.5?'over':'under',p=side==='over'?pO:1-pO;
+    const price=side==='over'?x.over:x.under;const ev=side==='over'?x.evO:x.evU;return{...x,side,p,price,ev};}).filter(x=>x.p>=0.6).sort((a,b)=>b.p-a.p).slice(0,10);
+  if(!R.length)return'';
+  return`<div class="mktlab">📈 High-% props from your lines</div>${R.map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${esc(x.player)}</b> ${x.side} ${x.thr} ${esc(x.stat)} <span style="color:var(--mute)">${x.sp.toUpperCase()}</span>
+    · <b style="color:var(--win)">${Math.round(x.p*100)}%</b> · ${x.price!=null?(x.price>0?'+':'')+x.price:'no price'}${x.ev!=null?` · EV <span style="color:${x.ev>=0?'var(--win)':'var(--rust)'}">${x.ev>=0?'+':''}${x.ev.toFixed(1)}%</span>${x.ev<0?' (likely, but priced too short)':''}`:''}</div>`).join('')}`;}
 /* ══ BEST TAB — one card for every sport ═══════════════════════════════════
    Built from today's card (all sports you've opened today). Five best picks
    by calibrated probability, priced between -350 and +400 so a -1000 "lock"
@@ -14780,13 +15094,17 @@ function best5Build(){
     if(p==null||x.price==null||x.price<BEST5_LO||x.price>BEST5_HI||best5Started(x))return;pool.push({...x,p});}));
   pool.sort((a,b)=>b.p-a.p);const used=new Set(),out=[];
   for(const x of pool){if(used.has(x.sp+'|'+x.game))continue;used.add(x.sp+'|'+x.game);out.push(x);if(out.length===5)break;}
-  return{picks:out,standout:bestStandout(by),sports:Object.keys(by)};
+  let props=[];try{props=propBoard(null,null).filter(x=>x.matched&&x.best&&x.best.ev>=3&&x.best.p>=0.45&&x.n>=4).slice(0,3)
+    .map(x=>({sp:x.sp,player:x.player,team:x.team,stat:x.stat,keys:x.keys,thr:x.thr,side:x.best.side,price:x.best.price,p:x.best.p,ev:x.best.ev,mu:x.mu,n:x.n}));}catch(e){}
+  return{picks:out,props,standout:bestStandout(by),sports:Object.keys(by)};
 }
 function best5State(){const d=today();let S=get(BEST5_KEY,{});if(S.d!==d)S={d,locked:false};
-  if(!S.locked){const b=best5Build();S.picks=b.picks;S.standout=b.standout;S.sports=b.sports;S.ts=Date.now();
+  if(!S.locked){const b=best5Build();S.picks=b.picks;S.props=b.props;S.standout=b.standout;S.sports=b.sports;S.ts=Date.now();
     const E=get(LS_EVAL,{})||{};const masterRan=E.date===d;
     const first=Math.min(...b.picks.map(x=>Date.parse(x.start||'')).filter(isFinite),Infinity);
     if(b.picks.length&&(masterRan||first-Date.now()<30*60e3)){S.locked=true;S.lockedAt=Date.now();S.why=masterRan?'master evaluation ran':'first game within 30 min';}
+    if(S.locked)(S.props||[]).forEach(x=>{try{propCalLog(x.sp,x.player,x.team,x.keys.join('+'),x.thr,x.p,d,x.side,x.price);}catch(e){}});
+    if(S.locked&&S.standout){const s=S.standout;try{const K={nhl:['g',1],mlb:['hr',1],nfl:['td',1],ncaaf:['td',1],nba:['pts',25]}[s.sp];if(K)propCalLog(s.sp,s.player,s.team,K[0],K[1],s.p,d);}catch(e){}}
     set(BEST5_KEY,S);}
   return S;}
 function best5Lock(){const S=best5State();if(!S.picks||!S.picks.length){alert('Nothing to lock yet — open each sport board today first.');return;}
@@ -14803,8 +15121,14 @@ function renderBest(){
       if(r&&r.hit===true&&!r.live)res='<span style="color:var(--win)">✅</span>';else if(r&&r.hit===false&&!r.live)res='<span style="color:var(--rust)">❌</span>';else if(r&&r.live)res='<span style="color:var(--gold)">⏳ live</span>';}catch(e){}
     return`<div class="tkt" style="margin:6px 0"><b>${i+1}. ${esc(x.pick)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${x.sp.toUpperCase()} · ${esc(x.game)}</span> ${res}
       <div class="sub mono">${x.price>0?'+':''}${x.price} · model ${Math.round(x.p*100)}%${x.mkt!=null?` · market ${Math.round(x.mkt*100)}%`:''}${x.gap!=null?` · edge ${x.gap>0?'+':''}${x.gap.toFixed(1)} pts`:''}</div></div>`;}).join('');
-  el.innerHTML=bar+(S.standout?standoutHtml(S.standout):'')+(rows||'<div class="empty">No qualifying picks yet. Open each sport\'s Games board today so its picks reach the card.</div>')+
-    ((typeof GAMES!=='undefined'&&GAMES.length&&typeof buildBestCard==='function')?`<details style="margin-top:10px"><summary class="sub mono" style="cursor:pointer">▼ MLB deep card (props, HR board)</summary>${(()=>{try{return buildBestCard()}catch(e){return''}})()}</details>`:'');
+  const PL=get(PROPCAL_KEY,[])||[];
+  const props=(S.props||[]).map(x=>{const L=PL.find(z=>z.sp===x.sp&&pstId(z.player)===pstId(x.player)&&z.k===x.keys.join('+')&&z.thr===x.thr&&z.d===S.d);
+    const res=L&&L.hit!=null?(L.hit?' <span style="color:var(--win)">✅</span>':' <span style="color:var(--rust)">❌</span>')+` <span class="mono" style="font-size:10px">(${L.actual})</span>`:'';
+    return`<div class="tkt" style="margin:6px 0"><b>🎯 ${esc(x.player)} ${x.side} ${x.thr} ${esc(x.stat)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${x.sp.toUpperCase()} · ${esc(x.team||'')}</span>${res}
+      <div class="sub mono">${x.price>0?'+':''}${x.price} · model ${Math.round(x.p*100)}% · avg ${x.mu.toFixed(x.mu<10?2:1)} over ${x.n}G · EV +${x.ev.toFixed(1)}%</div></div>`;}).join('');
+  const hp=(()=>{try{return highPctLinesHtml()+likelyHtml()}catch(e){console.warn('likely',e);return''}})();
+  el.innerHTML=bar+(S.standout?standoutHtml(S.standout):'')+(props?`<div class="mktlab">Top props</div>${props}<div class="mktlab">Top picks</div>`:'')+(rows||'<div class="empty">No qualifying picks yet. Open each sport\'s Games board today so its picks reach the card.</div>')+
+    hp+((typeof GAMES!=='undefined'&&GAMES.length&&typeof buildBestCard==='function')?`<details style="margin-top:10px"><summary class="sub mono" style="cursor:pointer">▼ MLB deep card (props, HR board)</summary>${(()=>{try{return buildBestCard()}catch(e){return''}})()}</details>`:'');
 }
 
 /* ---- snapshot + grade the day's Best Bets, separately from the main archive ---- */
@@ -15685,7 +16009,9 @@ function dayOk(day,want,approx){if(!want||!day)return true;if(day===want)return 
   return !!approx&&day>want&&day<=dayShift(want,4);}
 /* Shared finals entry for a game, ONLY if it belongs to the requested day. */
 function finalsFor(sport,game,want,approx){
-  const F=allFinals()[finalsKey(sport,game)];if(!F||F.a==null||F.h==null)return null;
+  const A=allFinals();let F=A[finalsKey(sport,game)];
+  if((!F||F.a==null)&&typeof mgKey==='function'){const k2=mgKey(sport,game);if(k2!==game)F=A[finalsKey(sport,k2)];}
+  if(!F||F.a==null||F.h==null)return null;
   if(!want)return F;
   if(F.d)return dayOk(F.d,want,approx)?F:null;
   /* legacy entry with no date: trust it only if it was written on the game day or the morning after */
@@ -15701,7 +16027,10 @@ function migrateFinalsKeys(){
   const all=get(LS.allfinals,{});let changed=false;
   Object.keys(all).forEach(k=>{
     const v=all[k];if(!v)return;
-    const nk=finalsKey(v.sport,k.includes(':')&&(k.startsWith('mlb:')||k.startsWith('nfl:')||k.startsWith('ncaaf:')||k.startsWith('nhl:'))?k.split(':').slice(1).join(':'):k);
+    /* any "<sport>:" prefix counts as already keyed — a fixed list once rewrote every NBA final to nba:nba:… */
+    const pre=/^([a-z]{2,6}):/.exec(k);const bare=pre?k.slice(pre[0].length):k;
+    if(/^nba:|^[a-z]+:[a-z]+:/.test(k)&&/^([a-z]+):\1:/.test(k)){all[k.replace(/^([a-z]+):\1:/,'$1:')]=v;delete all[k];changed=true;return;}   // repair earlier double prefixes
+    const nk=finalsKey(v.sport,bare);
     if(nk===k)return; // already migrated
     if(!all[nk])all[nk]=v;
     delete all[k];changed=true;
@@ -16497,14 +16826,15 @@ function todayCandidates(sp){
       const chars=calls.filter(x=>x.market===c.m&&x.side===c.sd&&CHARS[x.voice]).map(x=>x.voice);
       let rules=[];try{rules=rulesFor(sp,g,c.pick)}catch(e){}
       const rk=rank+0.15*rules.filter(r=>r.icon==='🔥'||r.icon==='🤝'||r.icon==='💰').length-0.3*rules.filter(r=>r.icon==='🧊').length;
-      out.push({sp,gid:g.id,game:gl,start:g.start||g.date||g.gameDate||'',m:c.m,sd:c.sd,pick:c.pick,price,mp,brainP:ci.brainP,gap,color,rank:rk,rules,chars,
+      out.push({sp,gid:g.id,game:gl,start:g.start||g.date||g.gameDate||'',m:c.m,sd:c.sd,pick:c.pick,price,line:c.L&&c.L.line!=null?+c.L.line:null,mp,brainP:ci.brainP,gap,color,rank:rk,rules,chars,
         of:ci.nOthers!=null?ci.nOthers+(ci.simHere!==undefined?1:0):0});
     });
   });
   // one pick per game-market: if both sides somehow qualify, keep the stronger
   const best={};out.forEach(x=>{const k=x.game+'|'+x.m;if(!best[k]||x.rank>best[k].rank)best[k]=x;});
   const res=Object.values(best).sort((a,b)=>b.rank-a.rank);
-  res.forEach(x=>{try{const g=games.find(z=>z.id===x.gid);const mf=g?marketFair(sp,g,x.m,x.sd,null):null;x.mkt=mf?mf.p:null;x.blend=x.mp!=null?blendProb(sp,x.m,x.mp,x.mkt):null;}catch(e){}});
+  res.forEach(x=>{try{const g=games.find(z=>z.id===x.gid);const mf=g?marketFair(sp,g,x.m,x.sd,null):null;x.mkt=mf?mf.p:null;x.blend=x.mp!=null?blendProb(sp,x.m,x.mp,x.mkt):null;
+    if(x.blend!=null&&g){x.f=factorsFor(sp,g,{m:x.m,sd:x.sd,line:x.line,price:x.price});const fa=factorAdj(sp,x.f);if(fa){x.fAdj=fa;x.blend=Math.max(0.01,Math.min(0.99,x.blend+fa));}}}catch(e){}});
   try{correlatedStakes(res)}catch(e){}
   return res;
 }
@@ -16553,7 +16883,7 @@ function renderToday(noSnap){
   const el=document.getElementById('todayBody');if(!el)return;
   if(!noSnap)todaySnapshot();
   const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
-  const sports=['nfl','ncaaf','mlb','nhl'].filter(sp=>by[sp]);
+  const sports=['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>by[sp]);
   const legend=`<div class="sub mono" style="font-size:9.5px;margin-bottom:6px">${Object.values(TC_COL).map(([c,l])=>`<span style="color:${c};margin-right:8px">■ ${l}</span>`).join('')}· conflicts and red are left off</div>`;
   if(!sports.length){el.innerHTML=legend+'<div class="empty">Open a sport\'s Games board once today and its picks land here.</div>';return;}
   const standout=bestStandout(by);
@@ -16622,6 +16952,15 @@ function clearStaleFromFinals(){
   if(n){set(LS.allfinals,F);console.info('TheDesk: cleared '+n+' stale score(s) — live games were marked as final');}
   return n;
 }
+/* Every finished game My Games sees becomes a dated shared final — the store
+   grading reads on ANY page. Before this, finals only landed when that sport's
+   own board was open on game day, so tickets with other sports stayed pending. */
+function mgWriteFinals(sp,M){const F=get(LS.allfinals,{})||{};let ch=0;
+  Object.entries(M).forEach(([k,list])=>(list||[]).forEach(e=>{if(e.state!=='post'||e.a==null||e.h==null||!e.date)return;const key=finalsKey(sp,k);const prev=F[key];
+    if(prev&&prev.d&&prev.d>e.date)return;
+    if(prev&&prev.d===e.date&&prev.a===e.a&&prev.h===e.h&&(prev.h1a!=null||e.h1a==null))return;
+    F[key]={sport:sp,d:e.date,a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,ts:Date.now(),src:'espn'};ch++;}));
+  if(ch)set(LS.allfinals,F);return ch;}
 async function mgRefresh(force){
   if(MG_BUSY||(!force&&Date.now()-MG_TS<40e3))return;MG_BUSY=true;
   try{
@@ -16641,13 +16980,14 @@ async function mgRefresh(force){
           const k=mgKey(sp,aw.team.abbreviation+'@'+hm.team.abbreviation);
           const nm=t=>[t.abbreviation,t.location,t.displayName,t.shortDisplayName,t.name].filter(Boolean);
           (M[k]=M[k]||[]).push({an:nm(aw.team),hn:nm(hm.team),espnId:String(ev.id),date:ev.date?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date)):'',
-            start:ev.date,state,detail:(st.type||{}).shortDetail||'',period:st.period||0,
+            start:ev.date,state,detail:(st.type||{}).shortDetail||'',period:st.period||0,clock:st.clock!=null?+st.clock:null,
             a:aw.score!=null&&aw.score!==''?+aw.score:null,h:hm.score!=null&&hm.score!==''?+hm.score:null,
             h1a:la.length>=2?la[0]+la[1]:null,h1h:lh.length>=2?lh[0]+lh[1]:null,p1a:la.length?la[0]:null,p1h:lh.length?lh[0]:null});});
-        MG_LIVE[sp]=M;}catch(e){}
+        MG_LIVE[sp]=M;try{mgWriteFinals(sp,M);}catch(e){console.warn('mg finals',e);}}catch(e){}
     });
     await Promise.all(jobs);MG_TS=Date.now();
     try{clearStaleFromFinals();}catch(e){}
+    try{brainLearnAll();}catch(e){}
     try{mgHealOrientation();}catch(e){}
   }finally{MG_BUSY=false;}
 }
@@ -16699,6 +17039,17 @@ function mgLoop(){
     await mgRefresh();renderMyGames();};
   MG_TIMER=setInterval(tick,45e3);
 }
+/* Grading runs on EVERY page, not just My Games: catch up as soon as the app
+   opens, then every 60s while you have pending tickets, and repaint whatever
+   ticket view is showing so live scores and grades update in place. */
+let GRADE_T=null;
+async function gradeTick(force){try{if(typeof document!=='undefined'&&document.hidden&&!force)return;if(!mgPending().length)return;
+  await mgRefresh(true);try{brainLearnAll();}catch(e){}
+  const on=id=>{const v=document.getElementById(id);return v&&v.classList.contains('on');};
+  if(on('v-tickets'))try{renderTickets();}catch(e){}if(on('v-mine'))try{renderMyGames();}catch(e){}}catch(e){console.warn('grade tick',e);}}
+function gradeLoopStart(){if(GRADE_T)return;GRADE_T=setInterval(()=>gradeTick(false),60e3);setTimeout(()=>gradeTick(true),3000);}
+if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__)window.addEventListener('load',gradeLoopStart);
+if(typeof document!=='undefined')document.addEventListener('visibilitychange',()=>{if(!document.hidden)gradeTick(true);});
 async function openMyGames(){btAutoOnce();renderMyGames();await mgRefresh(true);renderMyGames();mgLoop();}
 
 /* ── Wiring: tabs, settings, snapshots — injected so all four pages get it ── */
@@ -16746,7 +17097,7 @@ function dailyLoopInject(){
 if(typeof document!=='undefined'){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',dailyLoopInject);else setTimeout(dailyLoopInject,0);}
 
 /* ══ RECORDS HUB · NAVIGATION · STORAGE ══════════════════════════════════════ */
-const HUB_VOICES=['Sim','Judge','Coach','Most common','Pred','Trends','Consensus','Books'];
+const HUB_VOICES=['Sim','Best','Judge','Coach','Most common','Pred','Trends','Consensus','Books'];
 let HUB_CACHE=null,HUB_SIG='';
 /* Your pick record: every distinct pick on your settled tickets (ten tickets
    with the same leg count once), graded, split by sport. */
@@ -16770,10 +17121,15 @@ function hubData(){
     const o=((M[v]||(M[v]={}))[x.sp]||(M[v][x.sp]={w:0,n:0,u:0}));o.n++;if(x.hit)o.w++;o.u+=x.units||0;});
   HUB_CACHE={M,you:hubYou()};HUB_SIG=sig;return HUB_CACHE;
 }
+let REC_VIEW='overview';
+function recViewBar(){const V=[['overview','📊 Overview'],['tickets','🎟 My tickets'],['eval','🧪 Model eval']];
+  return'<div class="subnav" style="margin-bottom:8px">'+V.map(([k,l])=>'<button class="'+(REC_VIEW===k?'on':'')+'" onclick="REC_VIEW=\''+k+'\';renderRecordsHub()">'+l+'</button>').join('')+'</div>';}
 function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
+  if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
+  if(REC_VIEW==='eval'){let h='';try{const fn=ACTIVE_SPORT==='nfl'?renderNFLMasterEval:ACTIVE_SPORT==='ncaaf'?renderNCAAFMasterEval:renderMasterEval;h=fn();}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   let D;try{D=hubData()}catch(e){el.innerHTML='';return;}
-  const SPS=['mlb','nfl','ncaaf','nhl'];
+  const SPS=['mlb','nfl','ncaaf','nhl','nba'];
   const cell=(o)=>{if(!o||!o.n)return'<td style="color:var(--mute)">—</td>';const p=o.w/o.n;
     const c=o.n>=10?(p>=0.55?'var(--win)':p<0.47?'var(--rust)':'var(--chalk)'):'var(--mute)';
     return`<td style="color:${c}">${o.w}-${o.n-o.w}<br><b>${Math.round(p*100)}%</b></td>`;};
@@ -16789,14 +17145,14 @@ function renderRecordsHub(){
   const spBtn=(k,l)=>'<button class="'+((_sp===k)?'on':'')+'" onclick="REC_FILTER_SP=\''+k+'\';renderRecordsHub()">'+l+'</button>';
   const mktBtn=(k,l)=>'<button class="'+((_mkt===k)?'on':'')+'" onclick="REC_FILTER_MKT=\''+k+'\';renderRecordsHub()">'+l+'</button>';
   const filterBar='<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+spBtn('all','All Sports')+spBtn('mlb','⚾ MLB')+spBtn('nfl','🏈 NFL')+spBtn('ncaaf','🏟 CFB')+spBtn('nhl','🏒 NHL')+spBtn('nba','🏀 NBA')+'</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+mktBtn('all','All bets')+mktBtn('ml','Sides')+mktBtn('spread','Spreads')+mktBtn('total','Totals')+'</div>';
-  el.innerHTML=filterBar+`<div class="tkt hi" style="margin-bottom:8px"><h3>Records hub — everyone, every sport</h3>
+  el.innerHTML=recViewBar()+filterBar+`<div class="tkt hi" style="margin-bottom:8px"><h3>Records hub — everyone, every sport</h3>
     <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+':''}$${Y.tickets.units.toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
     <div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;border-collapse:collapse;text-align:center">
       <tr style="color:var(--mute)"><td></td><td>ALL</td><td>MLB</td><td>NFL</td><td>CFB</td><td>NHL</td></tr>${rows.join('')}</table></div>
     <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = winning over 10+ calls, red = losing. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div>
     <div style="margin-top:6px">${[['You (picks)',sum(Y.picks)]].concat(HUB_VOICES.filter(v=>D.M[v]).map(v=>[(CHARS[v]?CHARS[v].chip+' ':'')+v,sum(D.M[v])])).map(([nm,o])=>{const L=luckSkill(o.w,o.n);
       return o.n?`<div class="mono" style="font-size:9.5px">${esc(nm)}: ${o.w}-${o.n-o.w} → <b style="color:${L.lab==='strong sign of skill'?'var(--win)':L.lab==='leaning skill'?'var(--cold)':L.lab==='below breakeven'?'var(--rust)':'var(--mute)'}">${L.lab}</b>${L.p!=null?` <span style="color:var(--mute)">(p=${L.p.toFixed(2)})</span>`:''}</div>`:'';}).join('')}
-    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: how likely a pure -110 coin-flipper would post that record. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return clvHtml()+calibrationHtml()+_eb+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
+    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: how likely a pure -110 coin-flipper would post that record. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return learnHealthHtml()+clvHtml()+calibrationHtml()+_eb+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
 }
 /* Tabs you use daily stay in front; the rest sit under More. */
 const NAV_PRIMARY=['games','today','mine','tickets','grades','money'];
@@ -16825,6 +17181,8 @@ function storageTidy(force){
   try{const I=get(FBP_IDX_KEY,{})||{};const cut=fbpShift(d,-30);let ch=false;
     Object.keys(I).forEach(k=>{const dd=k.split(':')[2];if(dd&&dd<cut){delete I[k];ch=true;}});if(ch){set(FBP_IDX_KEY,I);n++;}}catch(e){}
   try{localStorage.removeItem('d4.fbptried');}catch(e){}
+  /* soft budget: stay under 75% so a busy game day never hits the wall */
+  try{const cap=5*1024*1024;let i=0;while(storageReport().tot>cap*0.75&&i<PRUNE_LADDER.length){if(PRUNE_LADDER[i]())n++;i++;}}catch(e){}
   set('d4.tidyDay',d);return n;
 }
 function storageMeterHtml(){
@@ -17347,7 +17705,7 @@ function msCheckQuest(q,t){
   if(q.id==='clv'){const c=L.map(l=>{try{return clvLeg(l,t)}catch(e){return null}}).filter(Boolean);return c.length===L.filter(l=>l.price!=null).length&&c.length>0&&c.every(x=>(x.pct!=null?x.pct:x.pts)>0);}
   return false;
 }
-function msXP(){return msAll().reduce((a,m)=>a+(m.xp||0),0);}
+function msXP(){let g=0;try{g=msgGet().xp||0;}catch(e){}return msAll().reduce((a,m)=>a+(m.xp||0),0)+g;}
 function msRank(xp){let r=MS_RANKS[0];MS_RANKS.forEach(x=>{if(xp>=x[0])r=x;});const nx=MS_RANKS.find(x=>x[0]>xp);return{name:r[1],next:nx};}
 function msStart(id,scope){
   const T=MS_TEMPLATES[id]||MS_TEMPLATES[{ladder:'ladder',heist:'heist',grind:'grind',weekend:'weekend_warrior',custom:'custom'}[id]];if(!T)return;
@@ -17380,8 +17738,10 @@ function msSync(){
     if(settled&&m.status==='active'&&!pots)try{msAdapt(m);}catch(e){console.warn('adapt',e);}
     if(pots){m.balance=+pots.reduce((a,P)=>a+P.balance,0).toFixed(2);m.safe=+pots.reduce((a,P)=>a+(P.safe||0),0).toFixed(2);}
     const tot=m.balance+(m.safe||0);
+    try{const cps=msCheckpoints(m);m.cpHit=m.cpHit||[];cps.forEach(c=>{if(tot>=c.amt&&!m.cpHit.some(x=>x.amt===c.amt))m.cpHit.push({amt:c.amt,name:c.name,d:today()});});}catch(e){}
     if(tot>=m.goal){m.status='won';const D=MS_DIFF.find(d=>d[1]===m.diff)||MS_DIFF[1];const clean=m.steps.every(s=>!s.rule||s.rule.ok);
-      m.xp=(m.xp||0)+D[3]+(clean?Math.round(D[3]/2):0);m.clean=clean;}
+      m.xp=(m.xp||0)+D[3]+(clean?Math.round(D[3]/2):0);m.clean=clean;
+      if((m.mut||[]).length&&m.steps.every(s=>s.mutOk!==false)){const mult=(m.mut||[]).reduce((a,k)=>a*((MSG_MUT[k]||{}).mult||1),1);m.xp+=Math.round(D[3]*(mult-1));m.mutWin=true;}}
     else if((pots?pots.every(P=>P.balance<1):m.balance<1)||(m.type==='ladder'&&m.steps.some(s=>s.done&&!s.won)))m.status='busted';
     const daysIn=Math.floor((Date.parse(today())-Date.parse(m.startDate))/864e5);
     if(m.status==='active'&&daysIn>=m.days)m.status='expired';
@@ -17402,6 +17762,10 @@ function msPace(m){const days=Math.max(1,m.days);const t=Math.max(0,Math.min(day
 function msAdapt(m){
   const pc=msPace(m);if(pc.ratio>=0.9&&pc.ratio<=1.25)return;
   const cur=m.routeKey||msRouteKey(msBestSingle(m));let opts=[];try{opts=msRoutes(m)||[];}catch(e){return;}
+  /* never let the app itself escalate into all-in routes (snowball/heist/elevator)
+     unless the mission was built all-in: adapting changes pace, not risk of ruin */
+  const ALLIN=/^(snowball|heist|elevator)\|/;const tpl=(MS_TEMPLATES[m.type]||{}).route||m.routeKey||'';
+  if(!ALLIN.test(tpl))opts=opts.filter(o=>!ALLIN.test(msRouteKey(o)));if(!opts.length)return;
   if(!opts.length)return;const best=opts.slice().sort((a,b)=>(b.p||0)-(a.p||0))[0];const bk=msRouteKey(best);
   const curOpt=opts.find(o=>msRouteKey(o)===cur);const pNow=curOpt?curOpt.p:null;
   const why0=pc.ratio<0.9?`behind pace (${Math.round(pc.ratio*100)}% of target)`:`ahead of pace (${Math.round(pc.ratio*100)}% of target)`;
@@ -17418,7 +17782,7 @@ function msAdapt(m){
 function msAdaptHtml(m){const a=(m.adapt||[]).slice(-3);if(!a.length)return'';
   return`<div class="sub mono" style="font-size:9.5px;color:var(--gold);margin-top:4px">${a.map(x=>x.hold?`⏸ ${x.date}: ${esc(x.why)}`:`↻ ${x.date}: ${esc(x.why)} · ${esc(msRouteLabel({...msParse(x.from)}))} → ${esc(msRouteLabel({...msParse(x.to)}))} · finish ${x.pFrom!=null?Math.round(x.pFrom*100)+'%':'?'} → ${Math.round(x.pTo*100)}%`).join('<br>')}</div>`;}
 /* ── ROADMAP: the full day-by-day path, with your real balance laid over it ── */
-function msRoadmapToggle(id){const el=document.getElementById('msRM_'+id);if(!el)return;
+function msRoadmapToggle(id){try{msgFlag('roadmap');}catch(e){}const el=document.getElementById('msRM_'+id);if(!el)return;
   if(el.style.display!=='none'){el.style.display='none';return;}const m=msAll().find(x=>String(x.id)===String(id));if(!m)return;el.innerHTML=msRoadmapHtml(m);el.style.display='block';}
 function msRoadmapHtml(m){
   const days=m.days,G=m.goal/m.start,daily=Math.pow(G,1/days);const pc=msPace(m);
@@ -17438,6 +17802,198 @@ function msRoadmapHtml(m){
     ${lane?`<div class="sub mono" style="margin-top:4px">Today's orders → ${esc(lane)}</div>`:''}
     <div style="overflow-x:auto"><table class="mono" style="width:100%;font-size:10px;text-align:center;margin-top:6px"><tr style="color:var(--mute)"><td>day</td><td>date</td><td>target</td><td>actual</td><td>checkpoint</td></tr>${rows.join('')}</table></div>
     ${msAdaptHtml(m)}<div class="sub" style="font-size:9.5px;color:var(--mute)">Target is the geometric path from start to goal. Fall behind or get well ahead and the route re-plans itself from your real balance.</div></div>`;}
+/* ══ THE GAME LAYER — campaign, daily 3, process streak, bosses, trophies,
+   mutators, custom runs ════════════════════════════════════════════════════
+   Design rules (Octalysis research): reward skill and discipline (beating the
+   close, following the plan, staying inside limits), not volume or risk.
+   Streaks count PROCESS days, carry freeze tokens and never punish a day off
+   hard. Chasing a loss costs XP. All awards are idempotent — recomputed from
+   real data every render, granted once.                                     */
+const MSG_KEY='d4.msgame';
+function msgGet(){const G=get(MSG_KEY,null)||{};G.xp=G.xp||0;G.ach=G.ach||{};G.daily=G.daily||{};G.boss=G.boss||{};G.flags=G.flags||{};
+  G.streak=G.streak||{cur:0,best:0,last:null,freezes:1};G.ch=G.ch||{};G.log=G.log||[];return G;}
+function msgSave(G){G.log=G.log.slice(-60);set(MSG_KEY,G);}
+function msgAward(G,xp,why){G.xp=Math.max(0,G.xp+xp);G.log.push({d:today(),xp,why});MSG_FX.push({xp,why});}
+const MSG_FX=[];
+function msgFlag(k){const G=msgGet();if(!G.flags[k]){G.flags[k]=today();msgSave(G);}}
+/* ── fast, cached reads of settled tickets ── */
+let MSG_TC=null,MSG_TS=0;
+function msgTickets(){if(MSG_TC&&Date.now()-MSG_TS<60e3)return MSG_TC;const out=[];
+  (get(LS.locked,[])||[]).forEach(t=>{if(!t.legs||!t.legs.length)return;let done=false,rec=null;try{done=ticketIsComplete(t);rec=done?ticketRecord(t):null;}catch(e){}
+    if(!done||!rec)return;const won=rec.l===0&&rec.w>0;const M=(()=>{try{return ticketMoney(t)}catch(e){return null}})();
+    out.push({t,date:String(t.date||'').slice(0,10),won,legs:t.legs.length,stake:M?M.stake:0,sports:[...new Set(t.legs.map(l=>l.sport||'mlb'))],
+      plus:t.legs.length===1&&+t.legs[0].price>0,clv:(()=>{try{return msCheckQuest({id:'clv'},t)}catch(e){return false}})()});});
+  MSG_TC=out;MSG_TS=Date.now();return out;}
+const msgWeekKey=d=>{const x=new Date(String(d||today())+'T12:00:00Z');const day=(x.getUTCDay()+6)%7;x.setUTCDate(x.getUTCDate()-day);return x.toISOString().slice(0,10);};
+const msgInWeek=(d,wk)=>d>=wk&&d<=dayShift(wk,6);
+/* ── DAILY 3: process objectives, measured from real data ── */
+const MSG_DAILY=[
+  {id:'card',icon:'📋',name:'Load today\'s board',desc:'Today\'s card has picks from at least one sport',test:d=>{const T=get(TC_KEY,{})||{};return T.d===d&&Object.values(T.by||{}).some(B=>(B.picks||[]).length);}},
+  {id:'attach',icon:'🎯',name:'Play your plan',desc:'Attach a ticket to a running mission',test:d=>msAll().some(m=>(m.steps||[]).some(s=>s.date===d))},
+  {id:'limit',icon:'🛡',name:'Stay inside the lines',desc:'Bet today and keep every stake within your daily limit',test:d=>{const T=(get(LS.locked,[])||[]).filter(t=>String(t.date||'').slice(0,10)===d);
+     if(!T.length)return false;let sum=0;T.forEach(t=>{try{const M=ticketMoney(t);sum+=M?M.stake:0;}catch(e){}});const lim=(()=>{try{return dailyLimit()}catch(e){return 0}})();return !lim||sum<=lim+1e-9;}}];
+function msgDailyState(d){d=d||today();return MSG_DAILY.map(o=>{let ok=false;try{ok=!!o.test(d);}catch(e){}return{...o,ok};});}
+/* ── WEEKLY BOSS: synthesizes skills, one per week, health bar = what's left ── */
+const MSG_BOSSES=[
+  {id:'closer',icon:'⏱',name:'The Closer',desc:'Beat the closing line on 5 settled bets',hp:5,dmg:(W)=>W.filter(x=>x.clv).length},
+  {id:'dogs',icon:'🐕',name:'Underdog Uprising',desc:'Win 3 plus-money singles',hp:3,dmg:(W)=>W.filter(x=>x.plus&&x.won).length},
+  {id:'parlay',icon:'🧩',name:'The Parlay Pilgrim',desc:'Cash a parlay of 3+ legs',hp:1,dmg:(W)=>W.filter(x=>x.legs>=3&&x.won).length},
+  {id:'iron',icon:'🛡',name:'Iron Discipline',desc:'5 days this week inside your daily limit (with a bet placed)',hp:5,dmg:(W,wk)=>{let n=0;for(let i=0;i<7;i++){const d=dayShift(wk,i);if(d>today())break;try{if(MSG_DAILY[2].test(d))n++;}catch(e){}}return n;}},
+  {id:'sharp',icon:'🌟',name:'The Sharp Eye',desc:'A day where the Best card goes 4-1 or better',hp:1,dmg:(W,wk)=>{const B=get('d4.best5log',{})||{};return Object.entries(B).filter(([d,E])=>msgInWeek(d,wk)&&(E.picks||[]).filter(x=>x.hit===true).length>=4).length;}},
+  {id:'maestro',icon:'🎼',name:'Multi-Sport Maestro',desc:'Win tickets in 3 different sports',hp:3,dmg:(W)=>new Set(W.filter(x=>x.won).flatMap(x=>x.sports)).size},
+  {id:'grinder',icon:'⚙',name:'The Grinder',desc:'Settle 8 mission steps',hp:8,dmg:(W,wk)=>msAll().reduce((a,m)=>a+(m.steps||[]).filter(s=>s.done&&msgInWeek(s.date,wk)).length,0)},
+  {id:'climber',icon:'🧗',name:'Checkpoint Climber',desc:'Clear 2 mission checkpoints',hp:2,dmg:(W,wk)=>msAll().reduce((a,m)=>a+(m.cpHit||[]).filter(c=>msgInWeek(c.d,wk)).length,0)}];
+function msgBoss(wk){wk=wk||msgWeekKey();const i=Math.floor(Date.parse(wk)/(7*864e5))%MSG_BOSSES.length;const B=MSG_BOSSES[(i+MSG_BOSSES.length)%MSG_BOSSES.length];
+  const W=msgTickets().filter(x=>msgInWeek(x.date,wk));const d=Math.min(B.hp,B.dmg(W,wk)||0);return{...B,wk,dealt:d,dead:d>=B.hp};}
+/* ── TROPHIES: rarity tiers, real progress bars ── */
+const MSG_RAR={common:['Common','#9aa4b2',25],rare:['Rare','#4ea8ff',75],epic:['Epic','#b06cff',200],legendary:['Legendary','#ffb020',500]};
+function msgStats(){const A=msAll(),T=msgTickets(),G=msgGet();const won=A.filter(m=>m.status==='won');
+  const calR=(()=>{try{return calRows()}catch(e){return[]}})();
+  return{won:won.length,cats:new Set(won.map(m=>(MS_TEMPLATES[m.type]||{}).cat).filter(Boolean)).size,steps:A.reduce((a,m)=>a+(m.steps||[]).filter(s=>s.done).length,0),
+    clv:T.filter(x=>x.clv).length,dogs:T.filter(x=>x.plus&&x.won).length,big:T.filter(x=>x.legs>=4&&x.won).length,sports:new Set(T.filter(x=>x.won).flatMap(x=>x.sports)).size,
+    clean:won.filter(m=>m.clean).length,comeback:won.filter(m=>(m.adapt||[]).some(a=>/behind/.test(a.why))).length,mut2:won.filter(m=>(m.mut||[]).length>=2&&m.mutWin).length,
+    cps:A.reduce((a,m)=>a+(m.cpHit||[]).length,0),streak:G.streak.best,bosses:Object.values(G.boss).filter(b=>b.dead).length,
+    perfect:Object.values(get('d4.best5log',{})||{}).filter(E=>(E.picks||[]).length>=5&&E.picks.every(x=>x.hit===true)).length,
+    tenk:won.filter(m=>m.type==='ten_k_dream').length,daily3:Object.values(G.daily).filter(x=>x.all).length,roadmap:G.flags.roadmap?1:0,
+    xp:msXP(),calGap:calR.length>=200?(calECE(calR)*100):null,custom:A.filter(m=>String(m.type).startsWith('cust_')&&m.status==='won').length};}
+const MSG_ACH=[
+  ['first_step','👣','First Step','common','Settle your first mission step',S=>S.steps,1],
+  ['first_win','🏁','Mission Accomplished','common','Win a mission',S=>S.won,1],
+  ['navigator','🗺','Navigator','common','Open a mission roadmap',S=>S.roadmap,1],
+  ['checkpoint','🚩','Checkpoint','common','Clear a mission checkpoint',S=>S.cps,1],
+  ['daily_full','✅','Full Day','common','Complete all of the Daily 3 once',S=>S.daily3,1],
+  ['triple','🎼','Triple Threat','common','Win tickets in 3 sports',S=>S.sports,3],
+  ['five_wins','⭐','Five Star','rare','Win 5 missions',S=>S.won,5],
+  ['closer10','⏱','Closer','rare','Beat the closing line 10 times',S=>S.clv,10],
+  ['streak7','🔥','On Fire','rare','7-day process streak',S=>S.streak,7],
+  ['dog10','🐕','Dog Whisperer','rare','Win 10 plus-money singles',S=>S.dogs,10],
+  ['big_parlay','🧩','Four-Piece','rare','Cash a 4+ leg parlay',S=>S.big,1],
+  ['clean','🧼','By the Book','rare','Win a mission without breaking its rule',S=>S.clean,1],
+  ['boss1','⚔','Boss Slayer','rare','Defeat a weekly boss',S=>S.bosses,1],
+  ['custom','🛠','Architect','rare','Win a run you built yourself',S=>S.custom,1],
+  ['fifteen','💎','Fifteen Deep','epic','Win 15 missions',S=>S.won,15],
+  ['streak30','🌋','Unbreakable','epic','30-day process streak',S=>S.streak,30],
+  ['comeback','🔄','Comeback Kid','epic','Win a mission that fell behind pace',S=>S.comeback,1],
+  ['perfect','🎯','Perfect Card','epic','Best card goes 5-0',S=>S.perfect,1],
+  ['five_sports','🌐','Every Field','epic','Win tickets in all 5 sports',S=>S.sports,5],
+  ['boss5','🐉','Dragon Hunter','epic','Defeat 5 weekly bosses',S=>S.bosses,5],
+  ['mutant','🧬','Mutant','epic','Win a mission running 2+ mutators',S=>S.mut2,1],
+  ['closer50','🕰','Line Crusher','epic','Beat the closing line 50 times',S=>S.clv,50],
+  ['all_cats','🏛','Completionist','legendary','Win a mission in all 9 categories',S=>S.cats,9],
+  ['ten_k','👑','Ten Grand','legendary','Turn $100 into $10,000 (100 to 10K)',S=>S.tenk,1],
+  ['legend','🏆','Legend','legendary','Reach 10,000 XP',S=>S.xp,10000],
+  ['calibrated','📐','Calibrated','legendary','Sim within 4 pts of reality over 200+ graded calls',S=>S.calGap!=null&&S.calGap<4?1:0,1]];
+/* ── CAMPAIGN MAP ── */
+const MSG_CHAPTERS=[['Rookie Road','🌱',['warmup']],['Penny Lane','🪙',['penny']],['House Rules','🏠',['house','compound']],
+  ['The Long Haul','🐢',['steady','multi']],['High Stakes','🎲',['ladder','rules']],['Season Finale','🏟',['sprint']]];
+function msgCampaign(){const A=msAll();const wonT=new Set(A.filter(m=>m.status==='won').map(m=>m.type));let open=true;
+  return MSG_CHAPTERS.map(([name,icon,cats],i)=>{const ids=MS_LIB.filter(r=>cats.includes(r[1])).map(r=>r[0]);const w=ids.filter(id=>wonT.has(id)).length;
+    const ch={i,name,icon,ids,w,need:3,open,clear:w>=3};open=open&&w>=2;return ch;});}
+/* ── MUTATORS: optional rules → XP multiplier, checked on every attached ticket ── */
+const MSG_MUT={
+  solo:{icon:'1️⃣',name:'Singles Only',mult:1.25,desc:'every ticket is a single bet',ok:(t)=>t.legs.length===1},
+  dogs:{icon:'🐕',name:'Dogs Only',mult:1.4,desc:'every leg pays plus money',ok:(t)=>t.legs.every(l=>+l.price>0)},
+  daily:{icon:'📅',name:'One a Day',mult:1.2,desc:'at most one ticket per day',ok:(t,m)=>(m.steps||[]).filter(s=>s.date===today()).length<=1},
+  card:{icon:'📋',name:'Card Only',mult:1.3,desc:'every leg is on today\'s card',ok:(t)=>{const T=get(TC_KEY,{})||{};const P=Object.values(T.by||{}).flatMap(B=>B.picks||[]);return t.legs.every(l=>P.some(p=>p.game===l.game&&p.sp===(l.sport||'mlb')));}},
+  half:{icon:'🪶',name:'Half Stakes',mult:1.15,desc:'stake no more than 55% of the planned order',ok:(t,m,plan)=>{const M=ticketMoney(t);return !plan||!M||M.stake<=plan*0.55+0.01;}}};
+function msgMutMult(m){return(m.mut||[]).reduce((a,k)=>a*((MSG_MUT[k]||{}).mult||1),1);}
+function msSetMut(id,key){const A=msAll();const m=A.find(x=>String(x.id)===String(id));if(!m||(m.steps||[]).length)return;m.mut=m.mut||[];
+  const i=m.mut.indexOf(key);if(i>=0)m.mut.splice(i,1);else m.mut.push(key);msSave(A);msRender();}
+function msgMutHtml(m){if(m.status!=='active')return(m.mut||[]).length?`<div class="sub mono" style="font-size:9.5px">mutators: ${m.mut.map(k=>(MSG_MUT[k]||{}).icon+' '+(MSG_MUT[k]||{}).name).join(' · ')}${m.mutWin?' — <b style="color:var(--win)">bonus earned</b>':''}</div>`:'';
+  const locked=(m.steps||[]).length>0;const broken=(m.steps||[]).some(s=>s.mutOk===false);
+  return`<div class="msg-mut">${Object.entries(MSG_MUT).map(([k,M])=>{const on=(m.mut||[]).includes(k);
+    return`<button class="msg-chip${on?' on':''}" ${locked?'disabled':''} title="${esc(M.desc)}" onclick="msSetMut(${m.id},'${k}')">${M.icon} ${esc(M.name)} ×${M.mult}</button>`;}).join('')}
+    <div class="sub mono" style="font-size:9.5px">${locked?((m.mut||[]).length?(broken?'<span style="color:var(--rust)">a mutator rule was broken — bonus lost</span>':`mutators locked in · win for ×${msgMutMult(m).toFixed(2)} XP`):'mutators lock once a ticket is attached'):'Optional: add rules before your first ticket for bonus XP'}</div></div>`;}
+/* ── the tick: evaluate everything, grant what's newly earned (idempotent) ── */
+function msgTick(){const G=msgGet();const td=today();
+  // daily 3 + streak (yesterday and earlier are finalized lazily)
+  const ds=msgDailyState(td);const D=G.daily[td]||(G.daily[td]={});
+  ds.forEach(o=>{if(o.ok&&!D[o.id]){D[o.id]=1;msgAward(G,40,'Daily: '+o.name);}});
+  if(ds.every(o=>o.ok)&&!D.all){D.all=1;msgAward(G,60,'Daily 3 complete');}
+  const S=G.streak;let d=S.last?dayShift(S.last,1):null;
+  while(d&&d<td){const x=G.daily[d]||{};const n=['card','attach','limit'].filter(k=>x[k]).length;
+    if(n>=2){S.cur++;}else if(S.freezes>0){S.freezes--;G.log.push({d,xp:0,why:'🧊 streak freeze used'});}else{S.cur=0;}
+    S.last=d;d=dayShift(d,1);}
+  const todayCounts=['card','attach','limit'].filter(k=>D[k]).length>=2;
+  if(!S.last)S.last=dayShift(td,-1);
+  const live=S.cur+(todayCounts?1:0);if(live>S.best)S.best=live;
+  if(todayCounts&&!D.streaked){D.streaked=1;if(live>0&&live%7===0&&S.freezes<3){S.freezes++;G.log.push({d:td,xp:0,why:'🧊 earned a streak freeze'});}}
+  S.live=live;
+  // boss (this week + last week, so a weekend finish still counts)
+  [msgWeekKey(),msgWeekKey(dayShift(td,-7))].forEach(wk=>{const B=msgBoss(wk);const R=G.boss[wk]||(G.boss[wk]={id:B.id});R.dealt=B.dealt;
+    if(B.dead&&!R.dead){R.dead=1;msgAward(G,400,'Boss defeated: '+B.name);}});
+  // campaign chapter clears
+  msgCampaign().forEach(c=>{const k='chapter'+c.i;if(c.clear&&!G.ch[k]){G.ch[k]=td;msgAward(G,300*(c.i+1),'Chapter cleared: '+c.name);}});
+  // trophies
+  const St=msgStats();MSG_ACH.forEach(([id,icon,name,rar,desc,fn,tgt])=>{if(G.ach[id])return;let v=0;try{v=fn(St)||0;}catch(e){}
+    if(v>=tgt){G.ach[id]=td;msgAward(G,MSG_RAR[rar][2],'🏆 '+name);}});
+  msgSave(G);return G;}
+/* ── CUSTOM RUN BUILDER ── */
+function msgBuilderHtml(){const routes=['stairs|1|0.1','stairs|2|0.2','compound|1|0.12','housemoney|3|0.5|1','housemoney|4|0.5|2','snowball|3','heist|3','elevator|3','drip|3||1'];
+  const rules=Object.keys(MS_FILTERS||{});
+  return`<details class="tkt msg-card"><summary><b>🛠 Build your own run</b> <span class="sub mono" style="font-size:10px">— set the numbers, see the real odds before you commit</span></summary>
+    <div class="msg-grid"><label>Start $<input id="mbS" type="number" value="100" min="1"></label><label>Goal $<input id="mbG" type="number" value="500" min="2"></label><label>Days<input id="mbD" type="number" value="30" min="1" max="365"></label>
+    <label>Route<select id="mbR">${routes.map(r=>`<option value="${r}">${esc(msRouteLabel(msParse(r)))}</option>`).join('')}</select></label>
+    <label>Rule<select id="mbU"><option value="">none</option>${rules.map(r=>`<option>${r}</option>`).join('')}</select></label>
+    <label>Sport<select id="mbP"><option value="">any</option>${['mlb','nfl','ncaaf','nhl','nba'].map(s=>`<option>${s}</option>`).join('')}</select></label>
+    <label>Name<input id="mbN" type="text" placeholder="My run"></label></div>
+    <div class="bar"><button onclick="msgBuilderOdds()">🎲 Check the odds</button><button class="primary" onclick="msgBuilderStart()">Start this run</button></div><div id="mbOut" class="sub mono"></div></details>`;}
+function msgBuilderVals(){const v=id=>document.getElementById(id).value;return{start:Math.max(1,+v('mbS')||100),goal:Math.max(2,+v('mbG')||500),days:Math.max(1,Math.min(365,+v('mbD')||30)),
+  route:v('mbR'),rule:v('mbU')||null,sport:v('mbP')||null,name:(v('mbN')||'').trim()||'Custom run'};}
+function msgBuilderOdds(){const V=msgBuilderVals();const el=document.getElementById('mbOut');if(V.goal<=V.start){el.textContent='Goal must be above start.';return null;}
+  const m={id:1,type:'cust_preview',name:V.name,start:V.start,goal:V.goal,days:V.days,startDate:today(),balance:V.start,steps:[],status:'active',routeKey:V.route,rule:V.rule,sport:V.sport,safe:0,legs:(msParse(V.route).cfg||{}).k||2};
+  let p=null;try{const r=msSimFor(m,null,1500);p=r&&r.p!=null?r.p:null;}catch(e){}
+  const D=p!=null?msDifficulty(p)||MS_DIFF[MS_DIFF.length-1]:null;
+  el.innerHTML=p!=null?`Finish chance <b>${(p*100).toFixed(p<0.01?2:1)}%</b> → <b style="color:${D[2]}">${D[1]}</b> · ${D[3]} XP base · needs ×${Math.pow(V.goal/V.start,1/V.days).toFixed(3)}/day`:'Could not simulate — try a different route.';return D;}
+function msgBuilderStart(){const V=msgBuilderVals();if(V.goal<=V.start)return msgBuilderOdds();const id='cust_'+Date.now().toString(36);
+  const T={id,cat:'custom',name:'🛠 '+V.name,start:V.start,goal:V.goal,days:V.days,route:V.route,rule:V.rule,sport:V.sport,note:'Your build.',pots:null};
+  const C=get('d4.mscustom',{})||{};C[id]=T;set('d4.mscustom',C);MS_TEMPLATES[id]=T;msStart(id);}
+try{Object.assign(MS_TEMPLATES,get('d4.mscustom',{})||{});}catch(e){}
+/* ── the hub at the top of the Money tab ── */
+function msgRing(p,col,label,size){size=size||58;const deg=Math.max(0,Math.min(1,p))*360;
+  return`<div class="msg-ring" style="width:${size}px;height:${size}px;background:conic-gradient(${col} ${deg}deg,var(--rule) 0)"><div><b>${label}</b></div></div>`;}
+function msgHubHtml(){let G;try{G=msgTick();}catch(e){console.warn('game tick',e);G=msgGet();}
+  const ds=msgDailyState();const B=msgBoss();const St=msgStats();const camp=msgCampaign();const S=G.streak;
+  const fx=MSG_FX.splice(0).slice(-3);
+  const daily=`<div class="msg-card tkt"><div class="msg-row"><b>Daily 3</b><span class="mono msg-streak" title="process days (2 of 3 objectives); freezes protect a missed day">🔥 ${S.live||0} day${S.live===1?'':'s'} · best ${S.best} · 🧊×${S.freezes}</span></div>
+    ${ds.map(o=>`<div class="msg-obj${o.ok?' ok':''}">${o.ok?'✅':o.icon} <b>${esc(o.name)}</b> <span class="sub">${esc(o.desc)}</span> <span class="mono">+40</span></div>`).join('')}
+    <div class="sub mono" style="font-size:9.5px">2 of 3 keeps the streak alive · all 3 = +60 bonus · a 7-day streak earns a freeze (max 3)</div></div>`;
+  const hp=1-B.dealt/B.hp;
+  const boss=`<div class="msg-card tkt msg-boss${B.dead?' dead':''}"><div class="msg-row"><b>${B.icon} Weekly boss: ${esc(B.name)}</b><span class="mono">+400 XP</span></div>
+    <div class="sub">${esc(B.desc)} · week of ${B.wk.slice(5)}</div>
+    <div class="msg-hp"><div style="width:${(hp*100).toFixed(0)}%"></div></div><div class="sub mono" style="font-size:10px">${B.dead?'💀 DEFEATED':`${B.hp-B.dealt} hit${B.hp-B.dealt===1?'':'s'} left (${B.dealt}/${B.hp})`}</div></div>`;
+  const map=`<div class="msg-card tkt"><b>🗺 Campaign</b><div class="msg-map">${camp.map(c=>`<div class="msg-node${c.clear?' clear':c.open?' open':''}" title="${esc(c.name)}: win 3 to clear (+${300*(c.i+1)} XP)">
+      ${msgRing(c.w/3,c.clear?'var(--win)':'var(--gold)',c.icon,52)}<div class="mono" style="font-size:9px">${esc(c.name)}<br>${Math.min(c.w,3)}/3${c.open?'':' 🔒'}</div></div>`).join('<div class="msg-path"></div>')}</div>
+    <div class="sub" style="font-size:9.5px">Clear a chapter by winning 3 of its missions. Chapters unlock in order (2 wins opens the next) — free play is always available on the board below.</div></div>`;
+  const tro=MSG_ACH.map(([id,icon,name,rar,desc,fn,tgt])=>{const got=G.ach[id];let v=0;try{v=fn(St)||0;}catch(e){}const R=MSG_RAR[rar];
+    return`<div class="msg-tro${got?' got':''}" style="--rc:${R[1]}" title="${esc(desc)} · ${R[0]} · +${R[2]} XP"><div class="i">${got?icon:'🔒'}</div><div class="n">${esc(name)}</div>
+      ${got?`<div class="r">${R[0]}</div>`:`<div class="msg-bar"><div style="width:${Math.min(100,v/tgt*100).toFixed(0)}%"></div></div><div class="r">${Math.min(v,tgt)}/${tgt}</div>`}</div>`;}).join('');
+  const nGot=Object.keys(G.ach).length;
+  const trophies=`<details class="msg-card tkt"${nGot?'':' open'}><summary><b>🏆 Trophy case</b> <span class="mono" style="font-size:10px">${nGot}/${MSG_ACH.length}</span></summary><div class="msg-tros">${tro}</div></details>`;
+  const toast=fx.length?`<div class="msg-toast">${fx.map(f=>`<div>${f.xp>0?'+'+f.xp+' XP':f.xp+' XP'} · ${esc(f.why)}</div>`).join('')}<div class="msg-confetti">${'<i></i>'.repeat(18)}</div></div>`:'';
+  return msgCss()+toast+daily+boss+map+msgBuilderHtml()+trophies;}
+function msgCss(){return`<style>
+.msg-card{position:relative;overflow:hidden}.msg-row{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.msg-streak{font-size:10.5px;color:var(--gold)}.msg-obj{font-size:11.5px;padding:5px 0;border-bottom:1px solid var(--rule)}.msg-obj.ok{opacity:.7}.msg-obj .sub{font-size:10px}
+.msg-boss{border-color:#b0303a}.msg-boss.dead{border-color:var(--win);opacity:.85}.msg-hp{height:10px;border-radius:6px;background:var(--rule);margin:6px 0 2px;overflow:hidden}
+.msg-hp>div{height:100%;background:linear-gradient(90deg,#ff4b5c,#ff9a3c);transition:width .6s}
+.msg-map{display:flex;align-items:center;overflow-x:auto;gap:2px;padding:6px 0}.msg-node{text-align:center;min-width:64px;opacity:.45}.msg-node.open{opacity:1}.msg-node.clear{opacity:1;filter:drop-shadow(0 0 6px rgba(46,204,113,.6))}
+.msg-path{flex:0 0 14px;height:2px;background:var(--rule)}
+.msg-ring{border-radius:50%;display:grid;place-items:center;margin:0 auto}.msg-ring>div{width:76%;height:76%;border-radius:50%;background:var(--card,#161921);display:grid;place-items:center;font-size:18px}
+.msg-tros{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;margin-top:6px}
+.msg-tro{border:1.5px solid var(--rule);border-radius:10px;padding:6px;text-align:center;font-size:10px;opacity:.55}
+.msg-tro.got{opacity:1;border-color:var(--rc);box-shadow:0 0 10px -2px var(--rc)}.msg-tro .i{font-size:22px}.msg-tro .n{font-weight:800}.msg-tro .r{color:var(--rc);font-size:9px}
+.msg-bar{height:4px;background:var(--rule);border-radius:3px;margin:3px 0;overflow:hidden}.msg-bar>div{height:100%;background:var(--rc)}
+.msg-chip{font-size:10px;padding:3px 7px;margin:2px;border-radius:12px;border:1px solid var(--rule);background:none;color:var(--chalk)}.msg-chip.on{border-color:var(--gold);background:rgba(245,165,36,.15)}
+.msg-chip[disabled]{opacity:.5}.msg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin:6px 0}.msg-grid input,.msg-grid select{width:100%}
+.msg-toast{position:relative;border:1.5px solid var(--gold);border-radius:12px;padding:8px 10px;margin-bottom:8px;font-weight:800;color:var(--gold);animation:msgPop .5s ease-out}
+@keyframes msgPop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+.msg-confetti{position:absolute;inset:0;pointer-events:none}.msg-confetti i{position:absolute;top:-6px;width:6px;height:10px;border-radius:2px;animation:msgFall 1.6s ease-in forwards}
+${Array.from({length:18},(_,i)=>`.msg-confetti i:nth-child(${i+1}){left:${(i*5.5+3)%100}%;background:${['#ffb020','#2ecc71','#4ea8ff','#ff4b5c','#b06cff'][i%5]};animation-delay:${(i%6)*0.08}s}`).join('')}
+@keyframes msgFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(90px) rotate(540deg);opacity:0}}
+@media (prefers-reduced-motion:reduce){.msg-toast,.msg-confetti i,.msg-hp>div{animation:none;transition:none}}
+</style>`;}
+
 function msAttach(id,sel,pot){const tid=sel.value;if(!tid)return;const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;
   if(m.steps.some(s=>String(s.ticketId)===tid))return;const t=get(LS.locked,[]).find(x=>String(x.id)===tid);
   const P=m.pots?m.pots[pot||0]:null;const rule=P?P.rule:m.rule,sport=P?(P.sport||m.sport||null):m.sport;
@@ -17446,7 +18002,15 @@ function msAttach(id,sel,pot){const tid=sel.value;if(!tid)return;const A=msAll()
   const rc=msRuleCheck(t,rule,sport);
   const rk=P?P.routeKey:(m.routeKey||msRouteKey(msActiveRoute(m)));
   const plannedK=(msParse(rk||'').cfg||{}).k||null;const actualK=t&&t.legs?t.legs.length:null;
-  m.steps.push({ticketId:tid,date:today(),pot:pot||0,quests:qs,rule:rc,route:rk,plannedK,actualK});msSave(A);msRender();}
+  /* planned stake for this order, from the live balance */
+  let plan=null;try{const pr=msParse(rk||'');plan=+msStakeFor(pr.route,pr.cfg||{},P?P.balance:m.balance,P?P.start:m.start).toFixed(2);}catch(e){}
+  let mutOk=true;(m.mut||[]).forEach(k=>{const M=MSG_MUT[k];try{if(M&&!M.ok(t,m,plan))mutOk=false;}catch(e){}});
+  /* chase detector: right after a loss, a stake more than double the plan */
+  const M=(()=>{try{return ticketMoney(t)}catch(e){return null}})();const lastDone=[...m.steps].reverse().find(s=>s.done);
+  const chase=!!(lastDone&&!lastDone.won&&plan&&M&&M.stake>plan*2+0.01);
+  if(chase){try{const G=msgGet();msgAward(G,-50,'Chase detected: $'+M.stake.toFixed(2)+' vs planned $'+plan.toFixed(2)+' after a loss');msgSave(G);}catch(e){}
+    try{alert('Heads up: this stake ($'+M.stake.toFixed(2)+') is more than double the plan ($'+plan.toFixed(2)+') right after a loss. That\'s chasing — it costs 50 XP. The plan already sizes the comeback.');}catch(e){}}
+  m.steps.push({ticketId:tid,date:today(),pot:pot||0,quests:qs,rule:rc,route:rk,plannedK,actualK,plan,mutOk,chase});msSave(A);msRender();}
 /* Orders for one pot: stake, legs, minimum ticket price, and the built ticket. */
 function msPotOrders(m,P,routeObj){
   const r=routeObj||msParse(P.routeKey);const X=msMath(m);const L=msLegProfile(P.rule,X.R.p);const b=P.balance;
@@ -17463,9 +18027,21 @@ const ms$=x=>'$'+(+x).toFixed(2);
 const MS_SP_OPTS=[['all','All sports'],['nfl','NFL only'],['ncaaf','CFB only'],['mlb','MLB only'],['nhl','NHL only']];
 function msSportSelect(cur,onchange,id){return`<select ${id?`id="${id}"`:''} ${onchange?`onchange="${onchange}"`:''} style="font-size:11px;padding:4px 6px">${MS_SP_OPTS.map(([v,l])=>`<option value="${v}" ${(cur||'all')===v?'selected':''}>${l}</option>`).join('')}</select>`;}
 /* Which sports Today's card has picks for right now. */
-function tcSportsLoaded(){const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};return['nfl','ncaaf','mlb','nhl'].filter(sp=>by[sp]&&(by[sp].picks||[]).length);}
+/* which sports are in season today (regular season + playoffs, by calendar) */
+const SP_SEASON={mlb:['03-15','11-10'],nfl:['09-01','02-15'],ncaaf:['08-20','01-25'],nhl:['10-01','06-30'],nba:['10-18','06-25']};
+/* ESPN publishes each league's calendar on its scoreboard; read it once a day.
+   The hard-coded month ranges above are only the fallback. */
+function spInSeason(sp,d){const day=String(d||today()).slice(0,10);
+  try{const C=(get('d4.seasoncal',{})||{})[sp];if(C&&C.start&&C.end&&C.fetched>=dayShift(today(),-3))return day>=C.start&&day<=C.end;}catch(e){}
+  const md=day.slice(5);const r=SP_SEASON[sp];if(!r)return true;return r[0]<=r[1]?(md>=r[0]&&md<=r[1]):(md>=r[0]||md<=r[1]);}
+async function seasonCalLoad(sp){const C=get('d4.seasoncal',{})||{};if(C[sp]&&C[sp].fetched===today())return C[sp];
+  try{const j=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+SEASON_PATH[sp]+'/scoreboard?limit=1').then(r=>r.json());const L=(j.leagues||[])[0]||{};
+    const s=L.calendarStartDate,e=L.calendarEndDate;if(s&&e){C[sp]={start:tdDay(s),end:tdDay(e),fetched:today()};set('d4.seasoncal',C);}}catch(e){}
+  return C[sp]||null;}
+function liveSports(){return['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>spInSeason(sp));}
+function tcSportsLoaded(){const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};return['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>by[sp]&&(by[sp].picks||[]).length);}
 function msLaneHtml(L){const B=L.build.best;
-  const legs=B?B.legs.map(x=>`<div class="mono" style="font-size:10.5px;padding-left:8px">• ${esc(x.pick)} <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> <span style="color:${TC_COL[x.color][0]}">${TC_COL[x.color][1]}</span>${(x.rules||[]).slice(0,1).map(r=>' '+r.icon).join('')} <span style="color:var(--mute)">${SP_LAB[x.sp]||''} ${esc(x.game)}</span></div>`).join(''):'';
+  const legs=B?B.legs.map(x=>`<div class="mono" style="font-size:10.5px;padding-left:8px">• ${esc(x.pick)} <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> <span style="color:${(TC_COL[x.color]||['var(--mute)',''])[0]}">${(TC_COL[x.color]||['',''])[1]}</span>${(x.rules||[]).slice(0,1).map(r=>' '+r.icon).join('')} <span style="color:var(--mute)">${SP_LAB[x.sp]||''} ${esc(x.game)}</span></div>`).join(''):'';
   return`<div class="sub" style="margin-top:5px"><b>${L.lab}:</b> stake <b style="color:var(--gold)">${ms$(L.stake)}</b> on ${L.k===1?'a <b>single</b>':`a <b>${L.k}-team parlay</b>`} priced <b>${decimalToAmerican(L.minDec)} or longer</b> → pays ${ms$(L.stake*L.minDec)}+.</div>
     ${B?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">Built from Today's card:</div>${legs}
       <div class="mono" style="font-size:10px;padding-left:8px;color:${B.ok?'var(--win)':'var(--rust)'}">= ${decimalToAmerican(B.d)} ${B.ok?'✓ clears the bar':'✗ short of '+decimalToAmerican(L.minDec)+' — add a leg or swap in a plus-money side'}</div>`
@@ -17502,7 +18078,7 @@ function msCard(m){
       <div class="mono" style="font-size:9px;letter-spacing:.1em;color:#5FD3E8">TODAY'S ORDERS · DAY ${Math.min(m.days,m.days-X.daysLeft+1)} OF ${m.days}${logged?` · ✓ ${logged} STEP${logged>1?'S':''} LOGGED`:''}</div>
       <div style="font-weight:800;margin:3px 0">${m.pots?'🧺 '+m.pots.length+' pots':msRouteLabel(r)} <span class="mono" style="font-size:10px;color:var(--mute)">— ${(fin*100).toFixed(fin<0.01?2:1)}% to finish from here</span></div>
       ${(m.pots&&m.pots.every(P=>P.sport))?'':`<div class="mono" style="font-size:10px;margin:4px 0">Picks from ${msSportSelect(m.sport,`msSetSport(${m.id},this.value)`)}
-        ${(()=>{const have=tcSportsLoaded(),need=m.sport?[m.sport]:['nfl','ncaaf','mlb','nhl'];const miss=need.filter(x=>!have.includes(x));
+        ${(()=>{const have=tcSportsLoaded(),need=m.sport?[m.sport]:liveSports();const miss=need.filter(x=>!have.includes(x));
           return miss.length?` <span style="color:var(--gold)">· Today's card has no ${miss.map(x=>SP_LAB[x]).join(', ')} picks yet</span> <a href="#" onclick="loadAllSports();return false" style="color:var(--cold)">load them</a>`:` <span style="color:var(--win)">· ${need.length>1?'all sports loaded':'loaded'}</span>`;})()}</div>`}
       ${potBlocks}
       <div class="sub" style="margin-top:6px;font-size:11px"><b>Today's threshold:</b> ${(()=>{const n=cps.find(c=>c.amt>tot);return n?`next checkpoint <b>${n.name}</b> at $${n.amt.toLocaleString()} (${ms$(n.amt-tot)} away)`:'goal in reach';})()}.</div>
@@ -17522,7 +18098,7 @@ function msCard(m){
     ${m.status==='won'?`<div class="sub" style="color:var(--win)"><b>MISSION COMPLETE</b>${m.clean?' · clean run bonus':''}</div>`:''}
     ${map}${orders}${steps}
     <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${esc(T.note||'')}</div>
-    ${active?msAdaptHtml(m):''}
+    ${active?msAdaptHtml(m):''}${typeof msgMutHtml==='function'?msgMutHtml(m):''}
     <div class="bar" style="margin-top:4px"><button onclick="msRoadmapToggle(${m.id})">🗺 Roadmap</button>${!active?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div>
     <div id="msRM_${m.id}" style="display:none"></div></div>`;
 }
@@ -17559,7 +18135,8 @@ function missionsHtml(inner){
   const A=msSync();const xp=msXP(),R=msRank(xp);const act=A.filter(m=>m.status==='active');
   let exposure=0;act.forEach(m=>{try{msPotsOf(m).forEach(P=>{if(P.balance<1)return;msPotOrders(m,P,m.pots?null:msActiveRoute(m)).forEach(L=>exposure+=L.stake);});}catch(e){}});
   const head=`<div class="mono" style="font-size:10.5px;margin:2px 0 6px">RANK <b style="color:#FFD75E">${R.name.toUpperCase()}</b> · ${xp} XP${R.next?` · ${R.next[0]-xp} to ${R.next[1]}`:''}${act.length?` · ${act.length} running · today's stakes across missions <b style="color:var(--gold)">${ms$(exposure)}</b>`:''}</div>`;
-  const body=`${head}<div class="lasStatus sub mono" style="font-size:10px"></div>${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
+  const hub=(()=>{try{return msgHubHtml()}catch(e){console.warn('game hub',e);return''}})();
+  const body=`${head}${hub}<div class="lasStatus sub mono" style="font-size:10px"></div>${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
     <div class="sbar" style="margin-top:12px"><h2>Mission board · ${MS_LIB.length}</h2><div class="ln"></div></div>
     <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Difficulty and finish % are simulated on ${myLegRate().src}. They move as your record grows.</div>
     ${msBoardHtml()}`;
@@ -17622,7 +18199,7 @@ async function loadAllSports(opts){
   const say=h=>{document.querySelectorAll('.lasStatus').forEach(e=>e.innerHTML=h);};
   const keep=(()=>{try{return localStorage.getItem('d4.activeSport')}catch(e){return null}})();
   const here=window.__PAGE_SPORT__||ACTIVE_SPORT;
-  const todo=(opts.sports||['nfl','ncaaf','mlb','nhl']).filter(sp=>sp!==here&&(opts.force||!tcSportsLoaded().includes(sp)));
+  const todo=(opts.sports||liveSports()).filter(sp=>sp!==here&&(opts.force||!tcSportsLoaded().includes(sp)));
   try{
     try{todaySnapshot()}catch(e){}
     for(const sp of todo){
@@ -17670,7 +18247,7 @@ function sharpStore(){return roGet(SHARP_KEY,{},15e3)||{};}
 async function pullSharp(sports){
   const key=typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,'');if(!key)throw new Error('add your Odds API key in Settings first');
   const all=get(SHARP_KEY,{})||{};let n=0;const done=[];
-  for(const sp of sports||['mlb','nfl','ncaaf','nhl']){
+  for(const sp of sports||['mlb','nfl','ncaaf','nhl','nba']){
     let j;try{const r=await fetch(`https://api.the-odds-api.com/v4/sports/${ODDS_SPORT[sp]}/odds/?apiKey=${key}&regions=eu&bookmakers=pinnacle&markets=h2h,spreads,totals&oddsFormat=american`);
       if(r.status===401)throw new Error('Odds API 401 — bad key or out of credits');j=await r.json();}catch(e){if(/401/.test(e.message))throw e;continue;}
     if(!Array.isArray(j))continue;
@@ -17687,7 +18264,7 @@ async function pullSharp(sports){
     done.push(sp);
   }
   Object.keys(all).sort().slice(0,-4).forEach(k=>delete all[k]);
-  set(SHARP_KEY,all);try{Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);}catch(e){}try{['mlb','nfl','ncaaf','nhl'].forEach(sp=>clvCapture(sp));}catch(e){}
+  set(SHARP_KEY,all);try{Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);}catch(e){}try{['mlb','nfl','ncaaf','nhl','nba'].forEach(sp=>clvCapture(sp));}catch(e){}
   return{n,sports:done};
 }
 function sharpRows(sp,gl,date){const D=((sharpStore()[date||today()]||{})[sp]);return D?D.rows.filter(x=>x.game===gl):[];}
@@ -17772,6 +18349,72 @@ function parlayCorrHtml(t){
 function normCdf(z){const t=1/(1+0.2316419*Math.abs(z));const d=0.3989423*Math.exp(-z*z/2);const p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p;}
 function luckSkill(w,n,p0){if(n<5)return{lab:'too few to judge',p:null};p0=p0||0.524;const z=(w-n*p0)/Math.sqrt(n*p0*(1-p0));const p=1-normCdf(z);
   return{z,p,lab:z<=0?'below breakeven':p<0.05?'strong sign of skill':p<0.2?'leaning skill':'could easily be luck'};}
+/* ══ SITUATIONAL FACTORS — handicapping knowledge the brain must PROVE ═════
+   Every Sim call is tagged at lock time with the situations it sits in.
+   After grading, each factor's real hit rate is compared with what the model
+   said. A factor only moves future probabilities once the evidence is real:
+   30+ graded calls, |z| ≥ 1.5, the measured gap shrunk toward zero (K=60),
+   each factor capped at ±2.5 pts and the total at ±4 pts. Markets already
+   price most of this (published work on NBA back-to-backs and NFL rest says
+   blind fades don't beat the spread) — so nothing is assumed; it's learned.
+   Sources for the factor list: key-number frequencies (3, 7 dominate NFL
+   margins; a half point onto 3 is worth ~4 pts of win probability on
+   Pinnacle's ladder vs ~1.5 elsewhere), the favorite–longshot bias,
+   rest/back-to-back fatigue research, and Pythagorean luck regression.   */
+const FAC_LAB={fav:'favorite',bigfav:'big favorite (-200 or shorter)',dog:'underdog',longdog:'long underdog (+200 or longer)',home:'home side',road:'road side',
+  key3:'spread on the 3 (2.5–3.5)',key7:'spread on the 7 (6.5–7.5)',bigline:'big spread (10+)',over:'over',under:'under',hitot:'high total',lotot:'low total',
+  b2b:'picked team on 2nd night of back-to-back',oppb2b:'opponent on back-to-back',restedge:'picked team rested, opponent on back-to-back',
+  pythlucky:'picked team over-performing its scoring (Pythagorean)',pythunlucky:'picked team under-performing its scoring (Pythagorean)'};
+const FAC_HI={nfl:48,ncaaf:58,nba:232,mlb:9.5,nhl:6.5},FAC_LO={nfl:40,ncaaf:45,nba:215,mlb:7.5,nhl:5.5};
+const FAC_PYTH={mlb:1.83,nfl:2.37,ncaaf:2.37,nhl:2.05,nba:13.91};
+function facPlayedOn(sp,team,day){try{const F=allFinals();return Object.keys(F).some(k=>k.startsWith(sp+':')&&F[k].d===day&&k.slice(sp.length+1).split('@').includes(team));}catch(e){return false;}}
+/* Pythagorean luck from the brain's own season ledger of finals */
+/* Full-season W/L and points for/against from ESPN standings — once a day per sport.
+   Field names differ by sport (NHL "points" are standings points, not goals), so
+   each candidate field is accepted only if its per-game value is a sane score. */
+const SEASON_PATH={mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba'};
+const SEASON_RANGE={mlb:[2,8],nfl:[10,40],ncaaf:[8,55],nhl:[1.5,5],nba:[85,135]};
+function seasonParse(sp,j){const teams={};const R=SEASON_RANGE[sp];
+  const walk=n=>{(n.children||[]).forEach(walk);((n.standings||{}).entries||[]).forEach(e=>{const ab=e.team&&e.team.abbreviation;if(!ab)return;
+    const st=k=>{const s=(e.stats||[]).find(x=>x.name===k||x.type===k);return s&&isFinite(+s.value)?+s.value:null;};
+    const w=st('wins'),l=st('losses'),gp=st('gamesPlayed')||((w||0)+(l||0)+(st('ties')||0)+(st('otLosses')||st('OTLosses')||0));if(!gp)return;
+    const pick=c=>{for(const k of c){const v=st(k);if(v!=null&&v/gp>=R[0]&&v/gp<=R[1])return v;}return null;};
+    const pf=pick(['goalsFor','runsScored','runs','pointsFor']),pa=pick(['goalsAgainst','runsAllowed','pointsAgainst']);
+    if(pf!=null&&pa!=null&&w!=null)teams[ab]={w,l:l||0,gp,pf,pa};});};
+  walk(j||{});return teams;}
+async function seasonStatsLoad(sp,force){const S=get('d4.seasonstats',{})||{};if(!force&&S[sp]&&S[sp].d===today())return S[sp].teams;
+  const y=new Date().getFullYear();const url='https://site.api.espn.com/apis/v2/sports/'+SEASON_PATH[sp]+'/standings'+(sp==='ncaaf'?'?group=80':'');
+  try{const j=await fetch(url).then(r=>r.json());const teams=seasonParse(sp,j);if(Object.keys(teams).length){S[sp]={d:today(),teams};set('d4.seasonstats',S);}return teams;}catch(e){return(S[sp]||{}).teams||{};}}
+function seasonTeam(sp,team){const S=get('d4.seasonstats',{})||{};return((S[sp]||{}).teams||{})[team]||null;}
+if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(async()=>{try{for(const sp of Object.keys(SEASON_PATH))await seasonCalLoad(sp);liveSports().forEach(sp=>seasonStatsLoad(sp));}catch(e){}},6000));
+function facPyth(sp,team){const T=seasonTeam(sp,team);
+  if(T&&T.gp>=8&&T.pf>0&&T.pa>0){const x=FAC_PYTH[sp]||2;const exp=Math.pow(T.pf,x)/(Math.pow(T.pf,x)+Math.pow(T.pa,x));return{actual:T.w/T.gp,exp,n:T.gp,src:'season'};}
+  try{const F=allFinals();let w=0,n=0,pf=0,pa=0;Object.keys(F).forEach(k=>{if(!k.startsWith(sp+':'))return;const [a,h]=k.slice(sp.length+1).split('@');
+    if(a!==team&&h!==team)return;const E=F[k];const me=a===team?+E.a:+E.h,op=a===team?+E.h:+E.a;pf+=me;pa+=op;n++;if(me>op)w++;});
+  if(n<10||pf<=0||pa<=0)return null;const x=FAC_PYTH[sp]||2;const exp=Math.pow(pf,x)/(Math.pow(pf,x)+Math.pow(pa,x));return{actual:w/n,exp,n};}catch(e){return null;}}
+function factorsFor(sp,g,c){const f=[];const side=c.sd||c.side,m=c.m||c.market,line=c.line!=null?+c.line:null,price=c.price!=null?+c.price:null;
+  const team=side==='home'?g.home.abbr:side==='away'?g.away.abbr:null,opp=side==='home'?g.away.abbr:side==='away'?g.home.abbr:null;
+  if(m==='ml'||m==='moneyline'){if(price!=null){f.push(price<0?'fav':'dog');if(price<=-200)f.push('bigfav');if(price>=200)f.push('longdog');}}
+  if(team)f.push(side==='home'?'home':'road');
+  if((m==='spread')&&line!=null){const a=Math.abs(line);if(sp==='nfl'||sp==='ncaaf'){if(a>=2.5&&a<=3.5)f.push('key3');if(a>=6.5&&a<=7.5)f.push('key7');}if(a>=10)f.push('bigline');}
+  if(m==='total'&&line!=null){f.push(side==='over'?'over':'under');if(line>=(FAC_HI[sp]||1e9))f.push('hitot');if(line<=(FAC_LO[sp]||-1))f.push('lotot');}
+  if(team&&(sp==='nba'||sp==='nhl')){const y=dayShift(gameDayOf(g)||today(),-1);const tb=facPlayedOn(sp,team,y),ob=facPlayedOn(sp,opp,y);
+    if(tb)f.push('b2b');if(ob)f.push('oppb2b');if(ob&&!tb)f.push('restedge');}
+  if(team){const P=facPyth(sp,team);if(P){if(P.actual-P.exp>=0.08)f.push('pythlucky');if(P.exp-P.actual>=0.08)f.push('pythunlucky');}}
+  return f;}
+let FAC_C=null,FAC_SIG='';
+function factorTable(sp){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.filter(x=>x.graded).length;if(!FAC_C||FAC_SIG!==sig){FAC_C={};FAC_SIG=sig;}
+  if(FAC_C[sp])return FAC_C[sp];const T={};
+  V.forEach(x=>{if(x.sp!==sp||x.voice!=='Sim'||!x.graded||x.hit==null||!(x.simP>0)||!Array.isArray(x.f))return;const p=x.pUsed!=null?x.pUsed:x.simP;
+    x.f.forEach(k=>{const o=T[k]||(T[k]={n:0,w:0,ps:0,vs:0});o.n++;if(x.hit)o.w++;o.ps+=p;o.vs+=p*(1-p);});});
+  Object.entries(T).forEach(([k,o])=>{o.rate=o.w/o.n;o.pred=o.ps/o.n;o.gap=o.rate-o.pred;o.z=o.vs>0?(o.w-o.ps)/Math.sqrt(o.vs):0;
+    o.adj=(o.n>=30&&Math.abs(o.z)>=1.5)?Math.max(-0.025,Math.min(0.025,o.gap*o.n/(o.n+60))):0;});
+  return(FAC_C[sp]=T);}
+function factorAdj(sp,fs){if(!fs||!fs.length)return 0;const T=factorTable(sp);const a=fs.reduce((s,k)=>s+((T[k]||{}).adj||0),0);return Math.max(-0.04,Math.min(0.04,a));}
+function factorHtml(sp){const T=factorTable(sp);const rows=Object.entries(T).sort((a,b)=>b[1].n-a[1].n).map(([k,o])=>
+  `<tr><td style="text-align:left">${esc(FAC_LAB[k]||k)}</td><td>${o.n}</td><td>${Math.round(o.pred*100)}%</td><td>${Math.round(o.rate*100)}%</td><td style="color:${o.adj?'var(--gold)':'var(--mute)'}">${o.adj?(o.adj>0?'+':'')+(o.adj*100).toFixed(1)+' pts':o.n<30?'needs '+(30-o.n)+' more':'not significant'}</td></tr>`).join('');
+  if(!rows)return'';return`<div style="overflow-x:auto;margin-top:6px"><div class="sub" style="font-size:9.5px"><b>Situations the brain is testing</b> — it only adjusts once a pattern is statistically real (30+ games, z ≥ 1.5), and never by more than 4 pts.</div>
+  <table class="mono" style="width:100%;font-size:10px;text-align:center"><tr style="color:var(--mute)"><td style="text-align:left">situation</td><td>n</td><td>model said</td><td>won</td><td>learned adj</td></tr>${rows}</table></div>`;}
 /* ══ CALIBRATION — shown per sport, day by day, with the reasons ══════════
    "Calibrated" means when the Sim says 60%, it wins ~60%. Three numbers:
    · Brier: mean squared error of the probability (0.25 = coin flip, lower = better)
@@ -17817,7 +18460,7 @@ function calibrationHtml(){
   const per=CAL_SPS.filter(sp=>fsp==='all'||fsp===sp).map(sp=>{const S=R.filter(x=>x.sp===sp);if(!S.length)return'';
     const bw=['ml','spread','total'].map(m=>{try{const b=blendWeight(sp,m);return`${m} ${Math.round(b.w*100)}% Sim (${b.n})`;}catch(e){return'';}}).filter(Boolean).join(' · ');
     return`<details class="tkt" style="margin-bottom:6px"${fsp===sp?' open':''}><summary><b>${CAL_LAB[sp]}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${head(S)}</span></summary>
-      ${calTable(S)}${calDrift(S)}<div class="sub mono" style="font-size:9.5px;margin-top:4px">Blend now: ${bw||'—'}</div>${calWhy(sp)}</details>`;}).join('');
+      ${calTable(S)}${calDrift(S)}<div class="sub mono" style="font-size:9.5px;margin-top:4px">Blend now: ${bw||'—'}</div>${calWhy(sp)}${factorHtml(sp)}</details>`;}).join('');
   return all+per;
 }
 

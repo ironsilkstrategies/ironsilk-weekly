@@ -66,7 +66,7 @@ async function loadNBAScoreboard(){
   const d=today().replace(/-/g,'');const j=await fetch(NBA_ESPN+'/scoreboard?dates='+d+'&limit=40').then(r=>r.json()).catch(()=>({events:[]}));
   NBA_GAMES.length=0;(j.events||[]).map(nbaParseEvent).filter(Boolean).forEach(g=>{NBA_GAMES.push(g);NBA_SIMS[g.id]=nbaSimFor(g);});}
 async function nbaBoot(force){try{await loadNBARatings();await loadNBAScoreboard();}catch(e){console.warn('nba boot',e);}
-  NBA_GAMES.forEach(g=>{NBA_SIMS[g.id]=nbaSimFor(g);});try{syncFinalsToShared();}catch(e){}renderNBA();}
+  NBA_GAMES.forEach(g=>{NBA_SIMS[g.id]=nbaSimFor(g);});try{nbaLockJudge();}catch(e){}try{syncFinalsToShared();}catch(e){}try{brainLearnAll(true);}catch(e){}renderNBA();}
 /* ── book lines: same store pattern as NHL ── */
 function nbaLinesOn(d){return(get(NBA_LS.shots,{})||{})[d||today()]||[];}
 function nbaPutLines(rows){const all=get(NBA_LS.shots,{})||{};const d=today();const day=all[d]||(all[d]=[]);
@@ -128,3 +128,18 @@ function parseNBASlateText(text){
     unread.push(l);});
   return{picks,unread};
 }
+/* ── brain adapter: lets the shared learner (brainJudge/brainLearnOne) treat NBA like every other sport */
+function nbaBrainAdapter(){
+  return{key:g=>g.away.abbr+'@'+g.home.abbr,lines:g=>nbaBookLinesFor(g.away.abbr+'@'+g.home.abbr),flat:()=>false,
+    sim:s=>s&&s.awayProj!=null?{a:+s.awayProj,h:+s.homeProj}:null,trends:()=>[],cons:()=>[],snap:x=>Math.max(0,Math.round(x)),
+    market:(g,lines)=>{const to=lines.find(x=>x.market==='total'&&x.side==='over'),sp=lines.find(x=>x.market==='spread'&&x.side==='home');
+      if(!to||to.line==null||!sp||sp.line==null)return null;const T=+to.line,L=+sp.line;return{a:(T+L)/2,h:(T-L)/2};},   // home -4.5 → home = (T+4.5)/2
+    box:null,boxCols:[],boxStats:[]};
+}
+/* lock the pre-game judgement (first tip locks it) into a ledger the brain learns from on ANY page */
+function nbaLockJudge(){const d=today(),L=get('d4.nbajudge',{})||{};L[d]=L[d]||{};let ch=false;
+  NBA_GAMES.forEach(g=>{if(g.abstract!=='pre'||(L[d][g.id]&&L[d][g.id].final))return;const s=NBA_SIMS[g.id]||nbaSimFor(g);
+    let J=null;try{J=brainJudge(g,s,'nba');}catch(e){}
+    const lock=J?brainLockable(J):{a:s.awayProj,h:s.homeProj,w:[{src:'sim',a:s.awayProj,h:s.homeProj}]};lock.box=null;
+    L[d][g.id]={game:g.away.abbr+'@'+g.home.abbr,...lock,ts:Date.now()};ch=true;});
+  if(ch){Object.keys(L).sort().slice(0,-45).forEach(k=>delete L[k]);set('d4.nbajudge',L);}}
