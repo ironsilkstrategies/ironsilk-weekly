@@ -3276,9 +3276,11 @@ function fbBoxRefresh(gid,espnId,league){
 }
 
 // ── NCAAF Power Ratings (ESPN) ────────────────────────────────────────────────
+/* CFB season = the fall's calendar year; January bowls still belong to last year's season. */
+function cfbSeasonYear(){const d=new Date();return d.getMonth()<2?d.getFullYear()-1:d.getFullYear();}
 async function fetchNCAAFPowerRatings(){
   try{
-    const url='https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season=2025';
+    const url='https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season='+(+NCAAF_SEASON||cfbSeasonYear()); // was hard-coded 2025: the 2026 season read last year's records
     const r=await fetch(url);const j=await r.json();
     /* Two bugs lived here.
 
@@ -3344,7 +3346,7 @@ async function loadNCAAFSchedule(){
     const url='https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100';
     const r=await fetch(url);const j=await r.json();
     NCAAF_WEEK=j.week&&j.week.number||1;
-    NCAAF_SEASON=j.season&&j.season.year||2025;
+    NCAAF_SEASON=j.season&&j.season.year||cfbSeasonYear();
     _parseNCAAFEvents(j);
   }catch(e){
     if(el)el.innerHTML=`<div class="empty">Failed to load CFB: ${e.message}</div>`;

@@ -2003,6 +2003,8 @@ function sportSlipToggle(sport,gid,label,price,extra){
   set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
+/* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
+const PAGE_BUILD='20261005c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2025,12 +2027,12 @@ function doSportSwitch(sport){
   const pageOwner=window.__PAGE_SPORT__;
   if(pageOwner&&sport!==pageOwner&&SPORT_PAGE[sport]){
     try{localStorage.setItem('d4.activeSport',sport)}catch(e){}
-    window.location.href=SPORT_PAGE[sport];
+    window.location.href=pageUrl(sport);
     return;
   }
   if(!engineHere){
     try{localStorage.setItem('d4.activeSport',sport)}catch(e){}
-    const dest=SPORT_PAGE[sport];
+    const dest=pageUrl(sport);
     if(dest)window.location.href=dest;
     return;
   }
@@ -18684,18 +18686,23 @@ function riskOfRuin(){
 }
 function riskOfRuinCore(B,LL){
   const L=LL.filter(t=>t.archived&&!TRACKED_ONLY_SOURCES.has(t.source));
-  const R=[];const stakes=[];L.forEach(t=>{let rec=null;try{rec=ticketIsComplete(t)?ticketRecord(t):null}catch(e){}const M=ticketMoney(t);if(!rec||!M)return;
-    R.push(rec.l>0?-1:(M.payout-M.stake)/M.stake);stakes.push(M.stake);});
+  const R=[];const stakes=[];const W=[];L.forEach(t=>{let rec=null;try{rec=ticketIsComplete(t)?ticketRecord(t):null}catch(e){}const M=ticketMoney(t);if(!rec||!M)return;
+    /* push-only ticket = stake back (0), not a full win; a parlay with a pushed leg pays only on the legs that won */
+    let r;if(rec.l>0)r=-1;else if(!rec.w)r=0;else{let pay=M.payout;
+      if(rec.p>0){try{const dec=(t.legs||[]).reduce((a,l)=>{const g=gradeLeg(l,t.date);const d=g&&g.hit===true?americanToDecimal(l.price):1;return a*(d>1?d:1);},1);if(dec>1)pay=M.stake*dec;}catch(e){}}
+      r=(pay-M.stake)/M.stake;}
+    R.push(r);stakes.push(M.stake);W.push(r>0?'w':r<0?'l':'p');});
+  const wl={w:W.filter(x=>x==='w').length,l:W.filter(x=>x==='l').length,p:W.filter(x=>x==='p').length};
   if(R.length<10)return{need:'needs 10 settled tickets with a stake ('+R.length+' so far)'};
   stakes.sort((a,b)=>a-b);const f=Math.min(1,stakes[Math.floor(stakes.length/2)]/B);const r=sjRng(99);let ruin=0,half=0;
   for(let i=0;i<2000;i++){let b=1,h=false;for(let k=0;k<300;k++){b*=1+f*R[Math.floor(r()*R.length)];if(b<0.5)h=true;if(b<0.1){ruin++;break;}}if(h)half++;}
   const mu=R.reduce((a,x)=>a+x,0)/R.length;
-  return{f,ruin:ruin/2000,half:half/2000,roi:mu,n:R.length};
+  return{f,ruin:ruin/2000,half:half/2000,roi:mu,n:R.length,wl};
 }
 function riskHtml(){
   const X=riskOfRuin();if(X.need)return`<div class="tkt"><h3>Risk of ruin</h3><div class="sub" style="color:var(--mute)">${X.need}.</div></div>`;
   const col=X.ruin>0.25?'var(--rust)':X.ruin>0.08?'var(--gold)':'var(--win)';
-  return`<div class="tkt"><h3>Risk of ruin</h3><div class="sub">At your typical stake (${(X.f*100).toFixed(1)}% of bankroll) and your real results so far (${X.roi>=0?'+':''}${(X.roi*100).toFixed(0)}% per ticket over ${X.n}):</div>
+  return`<div class="tkt"><h3>Risk of ruin</h3><div class="sub">At your typical stake (${(X.f*100).toFixed(1)}% of bankroll) and your real results so far (${X.roi>=0?'+':''}${(X.roi*100).toFixed(0)}% per ticket over ${X.n} — ${X.wl.w}-${X.wl.l}${X.wl.p?'-'+X.wl.p:''}):</div>
     <div class="sub">Chance of losing 90% of the bankroll within 300 tickets: <b style="color:${col}">${(X.ruin*100).toFixed(1)}%</b> · of halving it at some point: <b>${(X.half*100).toFixed(0)}%</b></div>
     <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Replays your own ticket history 2,000 times. Under 5% is comfortable; above 25% means the stakes are too big for the edge.</div></div>`;
 }

@@ -3,17 +3,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d1117">
+<meta http-equiv="Cache-Control" content="no-cache">
 <title>TheDesk</title>
 <script>
 /* Front door. One bookmark → the board you used last.
-   Each sport lives on its own page; this just routes. */
+   Each sport lives on its own page; this just routes. The ?b= build tag
+   makes Safari fetch the current page after a deploy instead of a cached one. */
 (function(){
-  var PAGES={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html'};
+  var BUILD='20261005c';
+  var PAGES={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
   var last='';try{last=localStorage.getItem('d4.activeSport')||''}catch(e){}
-  var q=(location.search.match(/[?&]sport=(mlb|nfl|ncaaf|cfb|nhl)/)||[])[1];
+  var q=(location.search.match(/[?&]sport=(mlb|nfl|ncaaf|cfb|nhl|nba)/)||[])[1];
   if(q==='cfb')q='ncaaf';
   var dest=PAGES[q||last];
-  if(dest)location.replace(dest);
+  if(dest)location.replace(dest+'?b='+BUILD);
+  document.addEventListener('DOMContentLoaded',function(){[].forEach.call(document.querySelectorAll('a[href$=".html"]'),function(a){a.href=a.getAttribute('href')+'?b='+BUILD;});});
 })();
 </script>
 <style>
@@ -30,4 +34,5 @@
 <a href="nfl.html">🏈 NFL</a>
 <a href="nhl.html">🏒 NHL</a>
 <a href="cfb.html">🏟 CFB</a>
+<a href="nba.html">🏀 NBA</a>
 </body></html>
