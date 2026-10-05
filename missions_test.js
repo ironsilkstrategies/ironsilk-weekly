@@ -54,7 +54,7 @@ const w=dom.window;
   w.eval(`msAttach(msAll()[0].id,{value:'701'})`);const m2=w.eval('msAll()[0]');
   const expXP=w.eval('msQuestsToday(msAll()[0])').filter(x=>x.id!=='clv'&&w.eval(`msCheckQuest({id:'${x.id}'},${JSON.stringify(tk)})`)).reduce((a,x)=>a+x.xp,0);
   T("attaching scores today's two side quests into XP",m2.xp===expXP&&m2.steps[0].quests.length===2,`quests ${todays.join('+')} → ${m2.xp} XP`);
-  w.eval(`(()=>{const F=get(LS.allfinals,{});F[finalsKey('nfl','PHI@CHI')]={sport:'nfl',a:20,h:21,ts:1};F[finalsKey('nfl','LAC@BUF')]={sport:'nfl',a:16,h:24,ts:1};F[finalsKey('nhl','CHI@VGK')]={sport:'nhl',a:4,h:2,ts:1};set(LS.allfinals,F);})()`);
+  w.eval(`(()=>{const F=get(LS.allfinals,{});F[finalsKey('nfl','PHI@CHI')]={sport:'nfl',a:20,h:21,d:today(),ts:Date.now()};F[finalsKey('nfl','LAC@BUF')]={sport:'nfl',a:16,h:24,d:today(),ts:Date.now()};F[finalsKey('nhl','CHI@VGK')]={sport:'nhl',a:4,h:2,d:today(),ts:Date.now()};set(LS.allfinals,F);})()`);
   const m3=w.eval('msSync()[0]');
   T('heist win: 25% of the $119.20 profit ($29.80) goes to the safe house',m3.safe===29.8&&m3.balance===109.4,`balance ${m3.balance} safe ${m3.safe}`);
   T('rank from XP',w.eval('msRank(520).name')==='Hustler'&&w.eval('msRank(0).name')==='Rookie'&&w.eval('msRank(5000).name')==='Kingpin');

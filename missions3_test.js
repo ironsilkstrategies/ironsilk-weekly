@@ -63,7 +63,7 @@ const w=dom.window;
   T('each pot gets its own orders: Safe 10% single, Grind 25% 2-leg, Moon $1 4-leg',JSON.stringify(po)===JSON.stringify([[[1.5,1]],[[2.5,2]],[[1,4]]]),JSON.stringify(po));
   w.eval(`(()=>{const L=get(LS.locked,[]);L.push({id:803,date:today(),source:'mine',imported:true,stake:'1',toWin:'12',legs:[{game:'CHI@VGK',pick:'CHI ML',sport:'nhl',price:208},{game:'FLA@CAR',pick:'FLA ML',sport:'nhl',price:109}]});set(LS.locked,L);})()`);
   w.eval(`msAttach(msAll()[2].id,{value:'803'},2)`);
-  w.eval(`(()=>{const F=get(LS.allfinals,{});F[finalsKey('nhl','CHI@VGK')]={sport:'nhl',a:4,h:2,ts:1};F[finalsKey('nhl','FLA@CAR')]={sport:'nhl',a:3,h:1,ts:1};set(LS.allfinals,F);})()`);
+  w.eval(`(()=>{const F=get(LS.allfinals,{});F[finalsKey('nhl','CHI@VGK')]={sport:'nhl',a:4,h:2,d:today(),ts:Date.now()};F[finalsKey('nhl','FLA@CAR')]={sport:'nhl',a:3,h:1,d:today(),ts:Date.now()};set(LS.allfinals,F);})()`);
   const s3=w.eval('msSync()[2]');
   T('a Moon win moves only the Moon pot ($6 − $1 + $13 = $18), mission total $42',s3.pots[2].balance===18&&s3.pots[0].balance===15&&s3.pots[1].balance===9&&s3.balance===42,s3.pots.map(p=>p.balance).join('/')+' = '+s3.balance);
   // ── elevator banks half at a checkpoint ──
@@ -79,7 +79,7 @@ const w=dom.window;
   T('mission complete → XP for its difficulty + clean-run bonus',done.status==='won'&&done.clean&&done.xp-xp0>=base*1.5,`${diff}: +${done.xp-xp0} XP`);
   // ── the board ──
   w.eval("tab('money',null)");await wait(300);let mb=w.document.getElementById('moneyBody').innerHTML;
-  T('Money tab: mission board with categories and Start buttons (opens on Warm-ups)',/Mission board · 6\d/.test(mb)&&/Penny stocks/.test(mb)&&/Warm-ups/.test(mb)&&/First Win/.test(mb)&&/Start/.test(mb));
+  T('Money tab: mission board with categories and Start buttons (opens on Warm-ups)',/Mission board · 1\d\d/.test(mb)&&/Penny stocks/.test(mb)&&/Warm-ups/.test(mb)&&/First Win/.test(mb)&&/Start/.test(mb));
   T('board shows difficulty + finish % per mission',/(EASY|MEDIUM|HARD|LEGENDARY) · [\d.]+%/.test(mb));
   T("header totals today's stakes across running missions",/today's stakes across missions/.test(mb));
   w.eval("MS_CAT='multi';msRender()");mb=w.document.getElementById('missionsBody').innerHTML;
