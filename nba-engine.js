@@ -143,3 +143,5 @@ function nbaLockJudge(){const d=today(),L=get('d4.nbajudge',{})||{};L[d]=L[d]||{
     const lock=J?brainLockable(J):{a:s.awayProj,h:s.homeProj,w:[{src:'sim',a:s.awayProj,h:s.homeProj}]};lock.box=null;
     L[d][g.id]={game:g.away.abbr+'@'+g.home.abbr,...lock,ts:Date.now()};ch=true;});
   if(ch){Object.keys(L).sort().slice(0,-45).forEach(k=>delete L[k]);set('d4.nbajudge',L);}}
+
+try{if(typeof nbaCard==='function'){const _b=nbaCard;nbaCard=function(g){return pregameWrap('nba',g,_b.apply(this,arguments));};}}catch(e){}

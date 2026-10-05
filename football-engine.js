@@ -2100,6 +2100,7 @@ function nflCardFull(g){
     // in-house voices (Judge / Coach / Most common score) — their own signal, shown as chips
     const cInfo=(()=>{try{return charSquare('nfl',g,s,String(pick),{price:e.price,modelP:mp})}catch(err){return{}}})();
     const tierCls=charTier({hasLine:true,bookLeans,modelEdgeHere,modelAgainstHere,outsideAgrees,outsideUnanimous,outsideAgainst},cInfo);
+    {const _co=charAsOutside(typeof cInfo!=='undefined'?cInfo:null,outsideAgainst);if(_co.unanimous){outsideAgrees=true;outsideUnanimous=true;srcBadge=_co.badge;}else if(_co.agrees&&!outsideAgrees){outsideAgrees=true;srcBadge=_co.badge;}}
     if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
     const tierBadge=charTierTag(tierCls);
 
@@ -3899,6 +3900,7 @@ function ncaafCard(g){
     // in-house voices (Judge / Coach / Most common score) — their own signal, shown as chips
     const cInfo=(()=>{try{return charSquare('ncaaf',g,s,String(pick),{price:e.price,modelP:mp})}catch(err){return{}}})();
     const tierCls=charTier({hasLine:true,bookLeans,modelEdgeHere,modelAgainstHere,outsideAgrees,outsideUnanimous,outsideAgainst},cInfo);
+    {const _co=charAsOutside(typeof cInfo!=='undefined'?cInfo:null,outsideAgainst);if(_co.unanimous){outsideAgrees=true;outsideUnanimous=true;srcBadge=_co.badge;}else if(_co.agrees&&!outsideAgrees){outsideAgrees=true;srcBadge=_co.badge;}}
     if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
     const tierBadge=charTierTag(tierCls);
     return`<div class="bet${cls}${srcCls}${tierCls}" role="button" tabindex="0"
@@ -4539,3 +4541,6 @@ function fbProjBoxPanel(g,s,sport){
     else h2+=`<div class="sub" style="margin-top:8px;color:var(--mute)">Player lines appear once depth charts load (Props tab → Refresh depth charts).</div>`;}catch(err){}}
   return h2;
 }
+
+try{if(typeof nflCardWithProps==='function'){const _n=nflCardWithProps;nflCardWithProps=function(g){return pregameWrap('nfl',g,_n.apply(this,arguments));};}
+  if(typeof ncaafCardWithProps==='function'){const _c=ncaafCardWithProps;ncaafCardWithProps=function(g){return pregameWrap('ncaaf',g,_c.apply(this,arguments));};}}catch(e){}

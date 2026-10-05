@@ -495,11 +495,12 @@ function nhlTile(g,s,label,pick,line,modelP,simStr,mkt){
   const sideOf=p=>{const m=p.match(/^(?:P1\s+)?(Over|Under)/i);if(m)return m[1].toLowerCase();return(nhlAbbrFor(p.split(' ')[0])||'').toLowerCase();};
   const same=xs.filter(x=>mkOf(x.pick)===mkt),on=same.filter(x=>sideOf(x.pick)===sideOf(pick));
   const srcOn=new Set(on.map(x=>x.src)),srcAll=new Set(same.map(x=>x.src));
-  const outsideAgrees=on.length>0,outsideUnanimous=srcAll.size>=2&&srcOn.size===srcAll.size,outsideAgainst=!on.length&&same.length>0;
+  let outsideAgrees=on.length>0,outsideUnanimous=srcAll.size>=2&&srcOn.size===srcAll.size;const outsideAgainst=!on.length&&same.length>0;
   const cInfo=(()=>{try{return charSquare('nhl',g,s,pick,{price:line.price,modelP:mp})}catch(e){return{}}})();
   const tier=charTier({hasLine:true,bookLeans,modelEdgeHere,modelAgainstHere,outsideAgrees,outsideUnanimous,outsideAgainst},cInfo);
   const tag=charTierTag(tier);
-  const srcTag=outsideAgrees?`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':srcOn.size+' source'+(srcOn.size>1?'s':'')}</div>`:'';
+  let srcTag=outsideAgrees?`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':srcOn.size+' source'+(srcOn.size>1?'s':'')}</div>`:'';
+  {const _co=charAsOutside(cInfo,outsideAgainst);if(_co.unanimous){outsideAgrees=true;outsideUnanimous=true;srcTag=_co.badge;}else if(_co.agrees&&!outsideAgrees){outsideAgrees=true;srcTag=_co.badge;}}
   const srcCls=outsideAgrees?(outsideUnanimous?' consensus-pick':' source-pick'):'';
   const on2=SLIP.some(x=>x.id===g.id+'|'+pick);
   return`<div class="bet${cls}${srcCls}${tier} ${on2?'on':''}" role="button" tabindex="0" onclick="sportSlipToggle('nhl','${g.id}','${nhlQ(pick)}',${line.price})">
@@ -734,3 +735,5 @@ async function nhlBoot(force){
   try{if(typeof intakeReplay==='function')intakeReplay()}catch(e){}
   nhlLiveLoop();
 }
+
+try{if(typeof nhlCard==='function'){const _h=nhlCard;nhlCard=function(g){return pregameWrap('nhl',g,_h.apply(this,arguments));};}}catch(e){}
