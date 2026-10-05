@@ -71,12 +71,23 @@ function nbaParseEvent(ev){const c=(ev.competitions||[])[0];if(!c)return null;co
    (or before opening night) the board shows what's next instead of going blank */
 async function loadNBAScoreboard(){
   const td=today(),a=td.replace(/-/g,''),z=dayShift(td,7).replace(/-/g,'');
-  const j=await fetch(NBA_ESPN+'/scoreboard?dates='+a+'-'+z+'&limit=300').then(r=>r.json()).catch(()=>({events:[]}));
-  const all=(j.events||[]).map(ev=>{const g=nbaParseEvent(ev);if(g){g.__date=tdDay(g.start);g.pre=((ev.season||{}).type===1)||/preseason/i.test(((ev.season||{}).slug)||'');}return g;}).filter(Boolean);
+  /* The range call can come back empty in preseason (ESPN defaults a range to one
+     season type). If it does, ask day by day, and ask for preseason explicitly. */
+  const grab=u=>fetch(u).then(r=>r.json()).then(x=>x.events||[]).catch(()=>null);
+  let evs=await grab(NBA_ESPN+'/scoreboard?dates='+a+'-'+z+'&limit=300'),how='range';
+  if(!evs||!evs.length){const days=Array.from({length:8},(_,i)=>dayShift(td,i).replace(/-/g,''));
+    const per=await Promise.all(days.map(d=>grab(NBA_ESPN+'/scoreboard?dates='+d+'&limit=100')));
+    evs=per.flat().filter(Boolean);how='by day';
+    if(!evs.length){const pre=await Promise.all(days.map(d=>grab(NBA_ESPN+'/scoreboard?dates='+d+'&seasontype=1&limit=100')));evs=pre.flat().filter(Boolean);how='preseason';}}
+  const seen=new Set();evs=(evs||[]).filter(e=>e&&e.id&&!seen.has(e.id)&&seen.add(e.id));
+  NBA_LOAD_NOTE=evs.length?`${evs.length} games found (${how})`:'ESPN returned no NBA games for the next 8 days';
+  const all=evs.map(ev=>{const g=nbaParseEvent(ev);if(g){g.__date=tdDay(g.start);g.pre=((ev.season||{}).type===1)||/preseason/i.test(((ev.season||{}).slug)||'');}return g;}).filter(Boolean);
   NBA_GAMES.length=0;all.filter(g=>g.__date===td).forEach(g=>NBA_GAMES.push(g));NBA_UPCOMING=all.filter(g=>g.__date>td);
-  all.forEach(g=>{NBA_SIMS[g.id]=nbaSimFor(g);});}
-async function nbaBoot(force){try{await loadNBARatings();await loadNBAScoreboard();}catch(e){console.warn('nba boot',e);}
-  NBA_GAMES.forEach(g=>{NBA_SIMS[g.id]=nbaSimFor(g);});try{nbaLockJudge();}catch(e){}try{syncFinalsToShared();}catch(e){}try{brainLearnAll(true);}catch(e){}renderNBA();}
+  all.forEach(g=>{try{NBA_SIMS[g.id]=nbaSimFor(g);}catch(e){}});}
+let NBA_LOAD_NOTE='';
+/* Ratings and schedule load independently: a standings hiccup used to skip the schedule entirely. */
+async function nbaBoot(force){try{await loadNBARatings();}catch(e){console.warn('nba ratings',e);}try{await loadNBAScoreboard();}catch(e){console.warn('nba scoreboard',e);NBA_LOAD_NOTE='schedule load failed: '+(e&&e.message||e);}
+  NBA_GAMES.forEach(g=>{try{NBA_SIMS[g.id]=nbaSimFor(g);}catch(e){}});try{nbaLockJudge();}catch(e){}try{syncFinalsToShared();}catch(e){}try{brainLearnAll(true);}catch(e){}renderNBA();}
 /* ── book lines: same store pattern as NHL ── */
 function nbaLinesOn(d){return(get(NBA_LS.shots,{})||{})[d||today()]||[];}
 function nbaPutLines(rows){const all=get(NBA_LS.shots,{})||{};const d=today();const day=all[d]||(all[d]=[]);
@@ -184,9 +195,9 @@ const NBA_PANELS={
     return Object.entries(box.teams||{}).map(([ab,t])=>nbaTable([ab,...cols],(t.players||[]).filter(p=>p.MIN&&p.MIN!=='0').map(p=>[esc(p.name),...cols.map(c=>esc(p[c]==null?'':p[c]))]))).join('')||'<div class="sub">No box score yet.</div>';}};
 function renderNBA(){const el=document.getElementById('slate');if(!el)return;
   const by=st=>NBA_GAMES.filter(g=>g.abstract===st);const tag=g=>g.pre?'<div class="mono" style="font-size:9px;color:var(--gold)">PRESEASON — rotations are limited; treat the model as a rough read</div>':'';
-  const card=g=>tag(g)+nbaCard(g);
+  const card=g=>{try{return tag(g)+nbaCard(g);}catch(e){console.warn('nba card',g.id,e);return`<div class="tkt"><b>${esc(g.away.abbr)} @ ${esc(g.home.abbr)}</b><div class="sub">Card failed to build: ${esc(e&&e.message||e)}</div></div>`;}};
   let h=[['in','LIVE'],['pre','TODAY'],['post','FINAL']].map(([k,l])=>by(k).length?`<div class="mktlab">${l}</div>`+by(k).map(card).join(''):'').join('');
-  if(!NBA_GAMES.length)h+=`<div class="empty" style="padding:10px 0">No NBA games today.${NBA_UPCOMING.length?' Next games below.':' Nothing scheduled in the next 7 days — the board fills in as the schedule posts.'}</div>`;
+  if(!NBA_GAMES.length)h+=`<div class="empty" style="padding:10px 0">No NBA games today.${NBA_UPCOMING.length?' Next games below.':' Nothing scheduled in the next 7 days — the board fills in as the schedule posts.'}${NBA_LOAD_NOTE?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:4px">${esc(NBA_LOAD_NOTE)}</div>`:''}</div>`;
   const days=[...new Set(NBA_UPCOMING.map(g=>g.__date))].sort();
   days.forEach(d=>{const G=NBA_UPCOMING.filter(g=>g.__date===d).sort((a,b)=>String(a.start).localeCompare(String(b.start)));
     h+=`<div class="mktlab">UPCOMING · ${new Date(d+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'})} · ${G.length} game${G.length>1?'s':''}</div>`+G.map(card).join('');});
