@@ -1,0 +1,12 @@
+MLB
+
+Chicago White Sox @ Cleveland Guardians
+PRED: Chicago White Sox 3.58 / Cleveland Guardians 3.97
+TREND: Over is 6-0 in White Sox last 6 during game 2 of a series.
+TREND: Over is 5-0 in White Sox last 5 road games vs. a right-handed starter.
+TREND: White Sox are 4-0 in their last 4 road games.
+TREND: White Sox are 4-0 in their last 4 overall.
+TREND: Under is 4-0 in Guardians last 4 vs. a team with a winning record.
+TREND: Guardians are 6-1 in Williams' last 7 starts as a favorite.
+TREND: Guardians are 7-1 in their last 8 games following a loss.
+TREND: Over is 4-1-1 in Guardians last 6 home games.
