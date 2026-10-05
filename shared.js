@@ -120,6 +120,20 @@ function intakeAbbr(sport,raw){
 function amerOk(p){if(p==null||p==='')return null;if(/^\s*(ev|even|evs)\s*$/i.test(String(p)))return 100;const n=+String(p).replace(/[^0-9.+\-]/g,'');return isFinite(n)&&Math.abs(n)>=100?n:null;}
 const moneyNum=x=>{const n=parseFloat(String(x==null?'':x).replace(/[^0-9.\-]/g,''));return isNaN(n)?NaN:n;};
 const moneyStr=x=>{const n=moneyNum(x);return isNaN(n)?null:String(n);};
+/* Ticket labels: the value can sit on the next line OR after the colon on the same
+   line. "Payout"/"Potential payout"/"To pay" is stake + win, so it's converted to
+   to-win: the uploaded number is the book's real math and always wins. */
+function ticketKV(lines,kv){
+  const KEY=/^(Ticket Number|Accepted Date|Amount|Wager|Risk|Stake|Status|To win|Potential win|Possible win|Payout|Potential payout|Possible payout|To pay|Type)$/i;
+  for(let i=0;i<lines.length;i++){const m=lines[i].match(/^([A-Za-z ]+?):\s*(\S.*)$/);
+    let k,v;if(m&&KEY.test(m[1].trim())){k=m[1].trim();v=m[2].trim();}else{k=lines[i].replace(/:\s*$/,'');if(!KEY.test(k)||i===lines.length-1)continue;v=lines[i+1].trim();}
+    const n=k.toLowerCase().replace(/\s+/g,'');
+    const key=/^(wager|risk|stake)$/.test(n)?'amount':/^(potentialwin|possiblewin)$/.test(n)?'towin':/payout|topay/.test(n)?'payout':n;
+    if(kv[key]==null)kv[key]=v;}
+  if(kv.towin==null&&kv.payout!=null&&kv.amount!=null){const tw=moneyNum(kv.payout)-moneyNum(kv.amount);if(tw>0)kv.towin=String(+tw.toFixed(2));}
+  return kv;}
+/* Re-uploading a ticket never erases a real stake/to-win the first upload had. */
+function keepRealMoney(ticket,old){if(old){if(ticket.stake==null&&old.stake!=null)ticket.stake=old.stake;if(ticket.toWin==null&&old.toWin!=null)ticket.toWin=old.toWin;}return ticket;}
 /* Can this page turn a TICKET's team names into abbreviations? (Slate text needs the sport's parser too; a ticket doesn't.) */
 const intakeCanNameResolve=sp=>sp==='mlb'||sp==='nhl'||sp==='nba'||sp==='nfl'||(sp==='ncaaf'&&typeof ncaafAbbrFor==='function');
 const intakeCanResolve=sp=>sp==='mlb'||(sp==='nba'&&typeof parseNBASlateText==='function')||(sp==='nhl'&&typeof parseNHLSlateText==='function'&&typeof nhlAbbrFor==='function')||(sp==='nfl'&&typeof parseNFLSlateText==='function')||
@@ -665,11 +679,7 @@ function ticketAmerToProb(price){
 function parseMyTicketText(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
   const kv={};
-  for(let i=0;i<lines.length-1;i++){
-    const k=lines[i].replace(/:\s*$/,'');
-    if(/^(Ticket Number|Accepted Date|Amount|Status|To win|Type)$/i.test(k))
-      kv[k.toLowerCase().replace(/\s+/g,'')]=lines[i+1].trim();
-  }
+  ticketKV(lines,kv);
   const ticketNo=(kv.ticketnumber||'').replace(/\D/g,'');
   if(!ticketNo)return{ok:false,note:'no Ticket Number found'};
   const descIdx=lines.findIndex(l=>/^Description\s*:?$/i.test(l));
@@ -723,7 +733,7 @@ function parseMyTicketText(text){
   const ticket={id:'ext'+ticketNo,date:legs[0].gameDate||today(),name:'Ticket #'+ticketNo,source:'mine',imported:true,
     stake:moneyStr(kv.amount),toWin:moneyStr(kv.towin),status:kv.status||null,
     legs,p:legs.reduce((a,x)=>a*x.p,1)};
-  if(idx>=0)L[idx]=ticket;else L.unshift(ticket);
+  if(idx>=0)L[idx]=keepRealMoney(ticket,L[idx]);else L.unshift(ticket);
   set(LS.locked,L);
   return{ok:true,ticketNo,legCount:legs.length,skipped,replaced:idx>=0};
 }
@@ -748,11 +758,7 @@ function parseMyTicketText(text){
 function parseSGPTicketText(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
   const kv={};
-  for(let i=0;i<lines.length-1;i++){
-    const k=lines[i].replace(/:\s*$/,'');
-    if(/^(Ticket Number|Accepted Date|Amount|Status|To win|Type)$/i.test(k))
-      kv[k.toLowerCase().replace(/\s+/g,'')]=lines[i+1].trim();
-  }
+  ticketKV(lines,kv);
   const ticketNo=(kv.ticketnumber||'').replace(/\D/g,'');
   if(!ticketNo)return{ok:false,note:'no Ticket Number found'};
   const descIdx=lines.findIndex(l=>/^Description\s*:?$/i.test(l));
@@ -872,7 +878,7 @@ function parseSGPTicketText(text){
   const ticket={id:'ext'+ticketNo,date:accepted,name:'Ticket #'+ticketNo,source:'mine',imported:true,
     stake:moneyStr(kv.amount),toWin:moneyStr(kv.towin),status:kv.status||null,
     legs,p:legs.length?legs.reduce((a,x)=>a*x.p,1):null};
-  if(legs.length){if(idx>=0)L[idx]=ticket;else L.unshift(ticket);set(LS.locked,L);}
+  if(legs.length){if(idx>=0)L[idx]=keepRealMoney(ticket,L[idx]);else L.unshift(ticket);set(LS.locked,L);}
   return{ok:true,ticketNo,legCount:legs.length,propSkipped,skipped,replaced:idx>=0,noneTracked:!legs.length};
 }
 async function intakeText(text,sig,type,src){
@@ -2004,7 +2010,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261005c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261005d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -4947,7 +4953,14 @@ function ticketEliminationStatus(t){
 // actual staked amount for 'mine'. Falls back to combined probability's
 // implied payout if no stake was ever recorded, so a bubble always has SOME
 // real size to draw rather than defaulting to a fixed circle for everyone.
+/* An uploaded ticket carries the book's real stake + to-win. That number is the
+   truth for every money calc: computing a parlay from its legs gets SGPs and
+   correlated stacks wrong. Returns profit for `stake`, scaled if it differs. */
+function realQuoteProfit(t,stake){
+  const st=moneyNum(t.stake),tw=moneyNum(t.toWin);if(!(st>0&&tw>0))return null;
+  const s=stake>0?+stake:st;return +(tw*s/st).toFixed(2);}
 function ticketPayoutMagnitude(t){
+  const M0=ticketMoney(t);if(M0&&M0.real&&!TRACKED_ONLY_SOURCES.has(t.source))return{stake:M0.stake,toWin:+(M0.payout-M0.stake).toFixed(2),payout:M0.payout};
   const trackedOnly=TRACKED_ONLY_SOURCES.has(t.source);
   const w=getWagers();
   const stake=trackedOnly?1:(w[t.id]||1);
@@ -9184,9 +9197,11 @@ function settleLockedTickets(){
         // pushed legs are excluded entirely, exactly like a real book strips a push
         // out and prices the rest on its own. Priced off each leg's REAL book price,
         // not the model's win-probability product.
-        const odds=pricedOdds(survivingLegs.length?survivingLegs:t.legs);
+        const rq=pushCount===0?realQuoteProfit(t,stake):null;
+        if(rq!=null)profit=rq; // the book's own payout wins: leg-by-leg math misprices SGPs/correlated parlays
+        else{const odds=pricedOdds(survivingLegs.length?survivingLegs:t.legs);
         const res=amerPayout(odds,stake);
-        profit=res?res.profit:0;
+        profit=res?res.profit:0;}
       }else{
         profit=-stake;
       }
@@ -11790,9 +11805,11 @@ function repairPushBug(){
         profit=0; // every leg pushed
       }else if(newRecord.won){
         const survivingLegs=t.legs.filter(x=>{const g=gradeLeg(x,t.date);return g.hit===true});
-        const odds=pricedOdds(survivingLegs.length?survivingLegs:t.legs);
+        const rq=!newRecord.p?realQuoteProfit(t,stake):null;
+        if(rq!=null)profit=rq;
+        else{const odds=pricedOdds(survivingLegs.length?survivingLegs:t.legs);
         const res=amerPayout(odds,stake);
-        profit=res?res.profit:0;
+        profit=res?res.profit:0;}
       }else{
         profit=-stake;
       }
