@@ -1530,6 +1530,7 @@ const CHARS={
   'Consensus':  {chip:'$',color:'#f472b6',label:'Consensus (money/tickets)'}
 };
 const CHAR_ORDER=Object.keys(CHARS);
+const INDEP_VOICES=new Set(['Trends','Consensus','Coach']);
 const halfRound=x=>Math.round(x*2)/2;
 /* Every character's call for one game. Pure: computed from the sim, the
    lines on the board and the intake stores — nothing needs to be saved first,
@@ -1784,7 +1785,10 @@ function charSquare(sp,g,s,pick,opts){
   const simHere=!!(sim&&sim.side===k.side);
   const charsAgree=support!=null&&others.length>=2&&support>=0.6;
   const charsAgainst=support!=null&&others.length>=2&&support<=0.4;
-  const unanimous=calls.length>=4&&onN===calls.length;
+  /* Sim, Judge, Most common and Pred all read the same simulation, so four of them agreeing is one opinion, not four.
+     Unanimous needs every voice that spoke on this side AND at least one independent read (Trends, Consensus or Coach). */
+  const indepOn=calls.filter(c=>INDEP_VOICES.has(c.voice)&&c.side===k.side).length;
+  const unanimous=calls.length>=4&&onN===calls.length&&indepOn>=1;
   const brainP=learned&&z!=null?sigm(z):null;
   const meter=`<div class="ch-meter">${onN}/${calls.length} characters${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`;
   let rh='';try{rh=rulesHtml(rulesFor(sp,g,pick))}catch(e){}
@@ -4066,12 +4070,12 @@ async function projectedLineupFor(teamId){
   const c=get(LS.projlu,{}),d=today();
   if(c.d===d&&c.teams&&c.teams[teamId])return c.teams[teamId];
   try{
-    const end=new Date(Date.now()-864e5),start=new Date(Date.now()-7*864e5);
+    const end=new Date(Date.now()-864e5),start=new Date(Date.now()-21*864e5);
     const f=x=>x.toISOString().slice(0,10);
-    const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?teamId=${teamId}&sportId=1&startDate=${f(start)}&endDate=${f(end)}&gameType=R`);
+    const r=await fetch(`https://statsapi.mlb.com/api/v1/schedule?teamId=${teamId}&sportId=1&startDate=${f(start)}&endDate=${f(end)}`); // no gameType filter in the URL: postseason counts too. In October the last week has no regular-season games, so every team came back empty
     const j=await r.json();
     const gs=[];(j.dates||[]).forEach(dd=>(dd.games||[]).forEach(g=>{
-      if(((g.status||{}).abstractGameState)==='Final')gs.push(g)}));
+      if(((g.status||{}).abstractGameState)==='Final'&&/^[RFDLW]$/.test(g.gameType||'R'))gs.push(g)}));
     if(!gs.length)return [];
     gs.sort((a,b)=>new Date(b.gameDate)-new Date(a.gameDate));
     const br=await fetch(`https://statsapi.mlb.com/api/v1/game/${gs[0].gamePk}/boxscore`);
@@ -17469,7 +17473,11 @@ function myLegRateCore(){
   let w=0,n=0;get(LS.locked,[]).forEach(t=>{if(!t.archived)return;(t.legs||[]).forEach(l=>{let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(g&&g.hit!=null){n++;if(g.hit)w++;}});});
   return n>=30?{p:(w+15)/(n+30),n,src:'your record'}:{p:0.5,n,src:'coin-flip legs (need 30 graded legs of yours)'};
 }
-function msDelete(id){if(!confirm('Delete this mission?'))return;msSave(msAll().filter(x=>x.id!==id));msRender();}
+function msDelete(id){const A=msAll();const m=A.find(x=>x.id===id);
+  if(!confirm('Delete this mission?'+(m&&m.xp>0?` You keep the ${m.xp} XP it earned.`:'')))return;
+  /* XP lives on the mission, so deleting it used to erase what it earned. Bank it into the global total first. */
+  if(m&&m.xp>0){try{const G=msgGet();msgAward(G,m.xp,`🏦 ${m.name||'Mission'} — XP kept after cancel`);msgSave(G);}catch(e){}}
+  msSave(A.filter(x=>x.id!==id));msRender();}
 /* Settle attached tickets into the balance. */
 function msMath(m){
   const R=myLegRate();const legDec=americanToDecimal(-110);const stepDec=Math.pow(legDec,m.legs);

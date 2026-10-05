@@ -608,19 +608,39 @@ const NHL_PANELS={
       `<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);margin-top:4px">${nhlEsc(G.pos)}</div>`+G.players.map(p=>
       `<div style="font-size:11px">${p.num?'#'+nhlEsc(p.num)+' ':''}${nhlEsc(p.name)} <span style="color:var(--mute)">${nhlEsc(p.pos)}</span>${p.inj?` <span style="color:var(--rust)">${nhlEsc(p.inj)}</span>`:''}</div>`).join('')).join('')}</div>`;
     return`<div style="display:flex;gap:12px;flex-wrap:wrap">${side(g.away.abbr,a)}${side(g.home.abbr,h)}</div>`;},
-  props:(g,s)=>{const L=nhlLineObj(g.away.abbr+'@'+g.home.abbr);const rows=[];
-    const add=(player,stat,line,dir,price,tag)=>{const M=nhlPropModel(player,stat,line,dir,g,s);const pick=`${player} ${dir==='atleast'?line+'+':dir+' '+line} ${stat}`;
-      const p=M?M.p:null,ev=price!=null&&p!=null?nhlEV(p,price):null;const on=SLIP.some(x=>x.id===g.id+'|'+pick);
-      rows.push([`<span role="button" style="cursor:pointer;${on?'color:var(--gold)':''}" onclick="sportSlipToggle('nhl','${g.id}','${nhlQ(pick)}',${price!=null?price:(p?nhlFair(p):'null')},{nhlProp:{player:'${nhlQ(player)}',stat:'${stat}',thr:${line},dir:'${dir}'},isProp:1})">${on?'✓ ':'+ '}${nhlEsc(pick)}</span>`,
-        M?M.mu.toFixed(2):'—',p!=null?(p*100).toFixed(0)+'%':'—',p!=null?nhlSgn(nhlFair(p)):'—',price!=null?nhlSgn(price):'<span style="color:var(--mute)">'+tag+'</span>',
-        ev!=null?`<span style="color:${ev>=2?'var(--win)':ev<0?'var(--rust)':'var(--mute)'}">${ev>=0?'+':''}${ev.toFixed(1)}%</span>`:'—']);};
-    L.props.forEach(x=>add(x.player,x.stat,x.line,x.side,x.price,''));
-    if(NHL_PLAYERS){[g.away.abbr,g.home.abbr].forEach(ab=>{const ps=Object.values(NHL_PLAYERS).filter(p=>p.team===ab&&p.pos!=='G').sort((a,b)=>b.pts-a.pts).slice(0,6);
-      ps.forEach(p=>{add(p.name,'points',1,'atleast',null,'model');add(p.name,'goals',1,'atleast',null,'model');add(p.name,'shots',2.5,'over',null,'model');});
+  /* Props — same shape as the NFL card: grouped by team, one block per player
+     with the projection, season rate and a tappable ladder. Book PROP: lines
+     price against the model underneath each player. Every ladder rung and book
+     line still taps straight onto the slip and grades off the live box. */
+  props:(g,s)=>{const L=nhlLineObj(g.away.abbr+'@'+g.home.abbr);const pc=x=>Math.round(x*100)+'%';
+    const rung=(player,stat,line,dir,price,label)=>{const M=nhlPropModel(player,stat,line,dir,g,s);if(!M)return'';
+      const pick=`${player} ${dir==='atleast'?line+'+':dir+' '+line} ${stat}`;const on=SLIP.some(x=>x.id===g.id+'|'+pick);
+      const ev=price!=null?nhlEV(M.p,price):null;
+      return`<span role="button" class="nhl-rung" style="cursor:pointer;white-space:nowrap;${on?'color:var(--gold)':''}" onclick="sportSlipToggle('nhl','${g.id}','${nhlQ(pick)}',${price!=null?price:nhlFair(M.p)},{nhlProp:{player:'${nhlQ(player)}',stat:'${stat}',thr:${line},dir:'${dir}'},isProp:1})">${on?'✓ ':''}${label} <b>${pc(M.p)}</b>${price!=null?` <span style="color:var(--mute)">(${nhlSgn(price)})</span> <span style="color:${ev>=2?'var(--win)':ev<0?'var(--rust)':'var(--gold)'}">${ev>=0?'+':''}${ev.toFixed(1)}% EV</span>`:''}</span>`;};
+    const book=L.props||[];const used=new Set();
+    const bookFor=P=>book.filter((x,i)=>{const f=nhlFindPlayer(x.player);if(f&&f.name===P.name){used.add(i);return true;}return false;});
+    const block=P=>{const goalie=P.pos==='G';const gpTxt=P.gp?` in ${P.gp}`:(P.gpPrev?' · last season':'');
+      let head,ladder;
+      if(goalie){const M=nhlPropModel(P.name,'saves',24.5,'over',g,s);if(!M)return'';const mid=Math.floor(M.mu)+0.5;
+        head=`saves proj <b style="color:var(--gold)">${M.mu.toFixed(1)}</b> <span style="color:var(--mute)">(likely starter — not confirmed)</span>`;
+        ladder=[mid-2,mid,mid+2].filter(x=>x>0).map(l=>rung(P.name,'saves',l,'over',null,l+'+ SV')).join(' · ');}
+      else{const Mp=nhlPropModel(P.name,'points',1,'atleast',g,s),Ms=nhlPropModel(P.name,'shots',2.5,'over',g,s);if(!Mp&&!Ms)return'';
+        head=`PTS proj <b style="color:var(--gold)">${Mp?Mp.mu.toFixed(2):'—'}</b> · SOG proj <b style="color:var(--gold)">${Ms?Ms.mu.toFixed(1):'—'}</b> <span style="color:var(--mute)">(season ${P.pts.toFixed(2)} pts · ${P.sog.toFixed(1)} sog /g${gpTxt})</span>`;
+        ladder=[rung(P.name,'points',1,'atleast',null,'1+ PTS'),rung(P.name,'goals',1,'atleast',null,'1+ G'),
+          rung(P.name,'shots',1.5,'over',null,'2+ SOG'),rung(P.name,'shots',2.5,'over',null,'3+ SOG'),rung(P.name,'shots',3.5,'over',null,'4+ SOG')].filter(Boolean).join(' · ');}
+      const bk=bookFor(P).map(x=>rung(x.player,x.stat,x.line,x.side,x.price,`book ${x.side==='atleast'?x.line+'+':x.side+' '+x.line} ${x.stat}`)).filter(Boolean);
+      return`<div class="mono" style="font-size:10px;line-height:1.7;margin-bottom:5px">${nhlEsc(P.name)} <span style="color:var(--mute)">${nhlEsc(P.pos||'')}</span> · ${head}<br>${ladder}${bk.length?'<br>'+bk.join(' · '):''}</div>`;};
+    let body='';
+    if(NHL_PLAYERS){[g.away.abbr,g.home.abbr].forEach(ab=>{
+      const sk=Object.values(NHL_PLAYERS).filter(p=>p.team===ab&&p.pos!=='G').sort((a,b)=>b.pts-a.pts).slice(0,6);
       const gk=Object.values(NHL_PLAYERS).filter(p=>p.team===ab&&p.pos==='G').sort((a,b)=>(b.gp+b.gpPrev)-(a.gp+a.gpPrev))[0];
-      if(gk){const M=nhlPropModel(gk.name,'saves',24.5,'over',g,s);if(M)add(gk.name,'saves',Math.max(0.5,Math.floor(M.mu)+0.5),'over',null,'model (likely starter — not confirmed)');}});}
-    return`<div class="sub" style="margin-bottom:4px">${nhlEsc(NHL_STATUS.players)} · tap a row to add it to your slip — it grades off the live box score.</div>`+
-      (rows.length?nhlTable(['prop','proj','model','fair','book','EV'],rows):'<div class="sub">No prop lines uploaded and no player stats loaded. Upload lines as <code>PROP: Name SOG 2.5 (-120/+100)</code>.</div>');},
+      body+=`<div style="margin-top:6px"><b>${ab}</b>${[...sk,...(gk?[gk]:[])].map(block).join('')}</div>`;});}
+    const orphan=book.filter((x,i)=>!used.has(i)).map(x=>rung(x.player,x.stat,x.line,x.side,x.price,`${nhlEsc(x.player)} ${x.side==='atleast'?x.line+'+':x.side+' '+x.line} ${x.stat}`)||
+      `<span style="color:var(--mute)">${nhlEsc(x.player)} ${x.stat} ${x.line} — no model match</span>`);
+    if(orphan.length)body+=`<div style="margin-top:6px"><b>Book lines</b><div class="mono" style="font-size:10px;line-height:1.7">${orphan.join('<br>')}</div></div>`;
+    return`<div class="sub" style="margin-bottom:8px"><b>Model props</b> — season rates (blended with last season early on), scaled to this game's projected goals. % = chance of clearing. Tap any rung to add it to your slip — it grades off the live box score.</div>
+      <div class="sub mono" style="font-size:9.5px;color:var(--mute)">${nhlEsc(NHL_STATUS.players||'player stats not loaded yet')}</div>`+
+      (body||'<div class="sub">No player stats loaded and no PROP: lines uploaded. Upload lines as <code>PROP: Name SOG 2.5 (-120/+100)</code>.</div>');},
   box:(g,s)=>{const t=(ab,x)=>{const p=[NHL_P1,0.33,0.36].map(f=>(x*f).toFixed(2));return[ab,...p,x.toFixed(2),Math.round(x/0.098)];};
     return nhlTable(['team','P1','P2','P3','G','SOG≈'],[t(g.away.abbr,s.awayProj),t(g.home.abbr,s.homeProj)])+
       `<div class="sub" style="margin-top:4px">Win ${g.away.abbr} ${(s.aw*100).toFixed(0)}% / ${g.home.abbr} ${(s.hw*100).toFixed(0)}% · OT/SO ${(s.otP*100).toFixed(0)}% · shots ≈ goals ÷ league shooting % (estimate).</div>`;},

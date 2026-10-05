@@ -2289,8 +2289,9 @@ function nflPlayerForm(id){
   const C=get(NFL_FORM_KEY,{});const hit=C[id];if(hit&&Date.now()-hit.ts<12*3600e3)return Promise.resolve(hit.v);
   return NFL_FORM_INFLIGHT[id]||(NFL_FORM_INFLIGHT[id]=_nflPlayerFormFetch(id).finally(()=>{delete NFL_FORM_INFLIGHT[id]}));
 }
-async function _nflPlayerFormFetch(id){
-  const r=await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${id}/gamelog`);
+async function _nflPlayerFormFetch(id,league){
+  const slug=league==='ncaaf'?'college-football':'nfl',key=league==='ncaaf'?'cfb:'+id:id;
+  const r=await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/${slug}/athletes/${id}/gamelog`);
   const j=await r.json();const names=(j.names||[]).map(String);const ix=n=>names.indexOf(n);
   const I={pass:ix('passingYards'),rush:ix('rushingYards'),rec:ix('receivingYards'),recs:ix('receptions'),ptd:ix('passingTouchdowns')};
   const evMeta=j.events||{};const games=[];
@@ -2302,7 +2303,7 @@ async function _nflPlayerFormFetch(id){
   const seen=new Set();const v=games.filter(x=>!seen.has(x.id)&&seen.add(x.id)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,8);
   /* Re-read at write time: parallel loads each started from an old snapshot,
      so the last one to finish used to overwrite the other nine. */
-  const W=get(NFL_FORM_KEY,{});W[id]={ts:Date.now(),v};const ks=Object.keys(W);if(ks.length>150)ks.slice(0,ks.length-150).forEach(k=>delete W[k]);set(NFL_FORM_KEY,W);
+  const W=get(NFL_FORM_KEY,{});W[key]={ts:Date.now(),v};const ks=Object.keys(W);if(ks.length>150)ks.slice(0,ks.length-150).forEach(k=>delete W[k]);set(NFL_FORM_KEY,W);
   return v;
 }
 function nflStarters(abbr){
@@ -3799,17 +3800,75 @@ function computeTrendAdjustedProjection(g,s,sport){
     trendCount,drift:+drift.toFixed(2),nudge:totalNudge};
 }
 
+/* ── CFB PROPS — mirrors the NFL card ──────────────────────────────────────
+   The old panel only read d4.ncaafprops, which nothing ever wrote, so it was
+   always empty. CFB has no reliable depth charts, so the players come from the
+   game's own ESPN summary (each team's passing / rushing / receiving leader),
+   then the same season + last-5 blend and ladder the NFL card uses. */
+const CFB_LEAD_KEY='d4.cfbleaders';const CFB_LEAD_INFLIGHT={};
+function cfbLeaders(g){const c=get(CFB_LEAD_KEY,{})[String(g.espnId||g.id)];return c&&Date.now()-c.ts<12*3600e3?c.v:null;}
+async function cfbLoadLeaders(g){
+  const id=String(g.espnId||g.id);if(!id)return null;const hit=cfbLeaders(g);if(hit)return hit;
+  if(CFB_LEAD_INFLIGHT[id])return CFB_LEAD_INFLIGHT[id];
+  return CFB_LEAD_INFLIGHT[id]=(async()=>{try{
+    const r=await fetch(`${FB_ESPN.ncaaf}/summary?event=${id}`);const j=await r.json();
+    const v=cfbParseLeaders(j,g);const W=get(CFB_LEAD_KEY,{});W[id]={ts:Date.now(),v};
+    const ks=Object.keys(W);if(ks.length>80)ks.slice(0,ks.length-80).forEach(k=>delete W[k]);set(CFB_LEAD_KEY,W);return v;
+  }catch(e){return null;}finally{delete CFB_LEAD_INFLIGHT[id];}})();
+}
+function cfbParseLeaders(j,g){
+  const CAT={passingYards:['QB','pass'],rushingYards:['RB','rush'],receivingYards:['WR','rec']};const out={};
+  (j.leaders||[]).forEach((T,i)=>{const t=T.team||{};const ab=String(t.abbreviation||'').toUpperCase();
+    const side=ab&&ab===String(g.away.abbr).toUpperCase()?g.away.abbr:ab&&ab===String(g.home.abbr).toUpperCase()?g.home.abbr:
+      (String(t.id)===String(g.away.id)?g.away.abbr:String(t.id)===String(g.home.id)?g.home.abbr:(i===0?g.away.abbr:g.home.abbr));
+    const L=out[side]=out[side]||[];
+    (T.leaders||[]).forEach(cat=>{const m=CAT[cat.name];if(!m)return;
+      (cat.leaders||[]).slice(0,m[1]==='rec'?2:1).forEach(x=>{const A=x.athlete||{};if(!A.id||L.some(p=>p.id===String(A.id)&&p.k===m[1]))return;
+        L.push({id:String(A.id),name:A.displayName||A.shortName||'',pos:(A.position&&A.position.abbreviation)||m[0],k:m[1],total:+x.value||null});});});});
+  return out;
+}
+function cfbModelProps(g,s){
+  const LD=cfbLeaders(g)||{};const FC=get(NFL_FORM_KEY,{});const out=[];
+  const book=get('d4.ncaafprops',{})[today()]||[];const last=n=>String(n||'').toLowerCase().split(' ').pop();
+  [g.away.abbr,g.home.abbr].forEach(ab=>(LD[ab]||[]).forEach(p=>{
+    const logs=((FC['cfb:'+p.id]||{}).v)||[];
+    const kinds=p.k==='rec'?[['rec','Rec Yds','receiving yards'],['recs','Receptions','receptions']]:p.k==='pass'?[['pass','Pass Yds','passing yards']]:[['rush','Rush Yds','rushing yards']];
+    kinds.forEach(([k,lab,bookStat])=>{
+      const L=logs.filter(x=>x[k]!=null);const gp=L.length;const L5=L.slice(0,5);
+      const last5=L5.length?L5.reduce((a,x)=>a+x[k],0)/L5.length:null;
+      const sPG=k===p.k&&p.total!=null&&gp?p.total/gp:(gp?L.reduce((a,x)=>a+x[k],0)/gp:null);
+      const base=sPG!=null&&last5!=null?0.6*sPG+0.4*last5:(sPG!=null?sPG:last5);if(base==null)return;
+      const pj=base;const rec={pid:p.id,name:p.name,team:ab,pos:p.pos,k,lab,proj:+pj.toFixed(1),seasonPG:sPG!=null?+sPG.toFixed(1):null,last5:last5!=null?+last5.toFixed(1):null,gp:gp||null,ladder:[]};
+      if(k==='recs'){const c=Math.round(pj);[c-1,c,c+1].filter(x=>x>=1).forEach(t=>rec.ladder.push({line:t-0.5,p:nflPoisAtLeast(t,pj)}));}
+      else{const st=k==='pass'?25:15,sd=k==='pass'?Math.max(50,pj*0.28):Math.max(20,pj*0.5);const mid=Math.round(pj/st)*st;
+        [mid-st,mid,mid+st].filter(x=>x>0).forEach(v=>{const line=v-0.5;rec.ladder.push({line,p:1-brainNorm((line-pj)/sd)});});rec.sd=sd;}
+      const bk=book.find(b=>b.game&&b.game.includes(ab)&&b.player&&last(b.player)===last(p.name)&&String(b.stat||'').replace(/_/g,' ')===bookStat);
+      if(bk&&bk.line!=null){const pO=k==='recs'?nflPoisAtLeast(Math.floor(bk.line)+1,pj):1-brainNorm((bk.line-pj)/rec.sd);const pr=bk.price!=null?bk.price:-110;rec.book={line:bk.line,price:pr,p:pO,ev:(pO*amerProfit(pr)-(1-pO))*100};}
+      out.push(rec);});}));
+  return out;
+}
+function cfbFormHTML(g,s){
+  const LD=cfbLeaders(g);const P=cfbModelProps(g,s);const pc=x=>Math.round(x*100)+'%';
+  if(!LD)return'<div class="sub" style="color:var(--mute)">Loading this game\'s season leaders from ESPN…</div>';
+  const side=ab=>{const st=LD[ab]||[];if(!st.length)return`<div class="sub">${ab}: no season leaders listed by ESPN yet.</div>`;
+    const rows=st.map(p=>{const mine=P.filter(x=>x.pid===p.id&&(x.k===p.k||(p.k==='rec'&&x.k==='recs')));
+      if(!mine.length)return`<div class="mono" style="font-size:10px">${p.name} <span style="color:var(--mute)">${p.pos} · loading game log…</span></div>`;
+      return mine.map(x=>`<div class="mono" style="font-size:10px;line-height:1.6;margin-bottom:3px">${x.name} <span style="color:var(--mute)">${x.pos}</span> · ${x.lab}
+        proj <b style="color:var(--gold)">${x.proj}</b> <span style="color:var(--mute)">(season ${x.seasonPG??'—'}/g${x.gp?' in '+x.gp:''} · last5 ${x.last5??'—'})</span><br>
+        ${x.ladder.map(l=>`${l.line}+ <b>${pc(l.p)}</b>`).join(' · ')}${x.book?` · <span style="color:${x.book.ev>=2?'var(--win)':x.book.ev<0?'var(--rust)':'var(--gold)'}">book ${x.book.line} (${x.book.price>0?'+':''}${x.book.price}) → over ${pc(x.book.p)} · ${x.book.ev>=0?'+':''}${x.book.ev.toFixed(1)}% EV</span>`:''}</div>`).join('');}).join('');
+    return`<div style="margin-top:6px"><b>${ab}</b>${rows}</div>`;};
+  return side(g.away.abbr)+side(g.home.abbr);
+}
+async function cfbLoadForm(g){
+  const el=()=>document.getElementById('cfbform-'+g.id);
+  const LD=await cfbLoadLeaders(g);if(el())el().innerHTML=cfbFormHTML(g,NCAAF_SIMS[g.id]);if(!LD)return;
+  const ids=[...new Set(Object.values(LD).flat().map(p=>p.id))];
+  await Promise.all(ids.map(id=>{const C=get(NFL_FORM_KEY,{})['cfb:'+id];if(C&&Date.now()-C.ts<12*3600e3)return null;return _nflPlayerFormFetch(id,'ncaaf').catch(()=>null);}));
+  if(el())el().innerHTML=cfbFormHTML(g,NCAAF_SIMS[g.id]);
+}
 function ncaafPropsPanel(g){
-  const apiProps=(get('d4.ncaafprops',{})[today()]||[])
-    .filter(p=>p.game&&(p.game.includes(g.away.abbr)||p.game.includes(g.home.abbr)));
-  if(!apiProps.length)return '<div class="empty">No CFB player props yet — tap ⚡ Pull odds to fetch them from The Odds API.</div>';
-  return`<div style="font-family:'IBM Plex Mono';font-size:10.5px;padding:4px 0">
-    <div style="font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Player props · from The Odds API</div>
-    ${apiProps.map(p=>`<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px">
-      <span style="color:var(--chalk)">${p.player}</span>
-      <span style="color:var(--mute)">${p.stat.replace(/_/g,' ')} ${p.line} ${p.side} <span style="color:var(--gold)">${p.price>0?'+':''}${p.price}</span></span>
-    </div>`).join('')}
-  </div>`;
+  return`<div class="sub" style="margin-bottom:8px"><b>Model props</b> — each team's ESPN season leaders, season + last-5 blend. % = chance of going over. Book lines price in when a PROP: line is uploaded.</div>
+    <div id="cfbform-${g.id}">${cfbFormHTML(g,NCAAF_SIMS[g.id])}</div>`;
 }
 
 /* Player stats panel under each game card — from the shared player stat engine. */
@@ -4065,6 +4124,7 @@ function ncaafCard(g){
 }
 
 function ncaafTogglePanel(which,gid,btn){
+  if(which==='props'){const G=(NCAAF_GAMES||[]).find(x=>String(x.id)===String(gid));if(G)setTimeout(()=>cfbLoadForm(G).catch(()=>{}),0);}
   const p=document.getElementById('p-ncaaf'+which+'-'+gid);if(!p)return;
   const row=btn.parentElement;const wasOn=p.classList.contains('on');
   row.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
