@@ -1,0 +1,99 @@
+SOURCE: covers
+# Wed Oct 7, 2026 — book lines: sportsbetting.ag (3:24–3:25 PM) · predictions + trends: Covers (3:26–3:27 PM)
+
+MLB
+
+Los Angeles Dodgers @ Atlanta Braves
+ML: Los Angeles Dodgers -145 / Atlanta Braves +131
+RL: Los Angeles Dodgers -1.5 (+117) / Atlanta Braves +1.5 (-137)
+OU: o7.5 (-111) / u7.5 (-109)
+F5 ML: Los Angeles Dodgers -160 / Atlanta Braves +140
+F5 RL: Los Angeles Dodgers -0.5 (-115) / Atlanta Braves +0.5 (-105)
+F5 OU: o4 (-115) / u4 (-105)
+
+Tampa Bay Rays @ New York Yankees
+ML: Tampa Bay Rays +151 / New York Yankees -167
+RL: Tampa Bay Rays +1.5 (-151) / New York Yankees -1.5 (+131)
+OU: o7 (-117) / u7 (-103)
+F5 ML: Tampa Bay Rays +149 / New York Yankees -170
+F5 RL: Tampa Bay Rays +0.5 (-102) / New York Yankees -0.5 (-118)
+F5 OU: o4 (+100) / u4 (-120)
+PRED: Tampa Bay Rays 3.41 / New York Yankees 4.56
+TREND: Over is 5-0 in Rays last 5 after allowing 2 runs or less in their previous game.
+TREND: Rays are 5-0 in Martinezs last 5 starts following a team loss in their previous game.
+TREND: Under is 4-0 in Rays last 4 games as a favorite.
+TREND: Over is 4-0 in Rays last 4 games following a win.
+TREND: Over is 5-0 in Yankees last 5 games as a home favorite.
+TREND: Over is 6-0 in Yankees last 6 home games vs. a team with a winning road record.
+TREND: Yankees are 5-0 in their last 5 home games vs. a team with a winning road record.
+TREND: Over is 5-0 in Yankees last 5 after scoring 2 runs or less in their previous game.
+
+Milwaukee Brewers @ San Diego Padres
+ML: Milwaukee Brewers -102 / San Diego Padres -108
+RL: Milwaukee Brewers +1.5 (-215) / San Diego Padres -1.5 (+183)
+OU: o7.5 (-113) / u7.5 (-107)
+F5 ML: Milwaukee Brewers -115 / San Diego Padres -105
+F5 RL: Milwaukee Brewers -0.5 (+125) / San Diego Padres +0.5 (-145)
+F5 OU: o4.5 (+100) / u4.5 (-120)
+PRED: Milwaukee Brewers 4.95 / San Diego Padres 4.31
+TREND: Under is 4-0-1 in Brewers last 5 Divisional Playoff games.
+TREND: Under is 4-0-1 in Brewers last 5 vs. a team with a winning record.
+TREND: Under is 5-0 in Brewers last 5 games vs. a starter with a WHIP greater than 1.30.
+TREND: Under is 5-1 in Brewers last 6 road games.
+TREND: Over is 6-0 in Buehlers last 6 starts as a favorite.
+TREND: Over is 5-0 in Buehlers last 5 starts as a home favorite.
+TREND: Padres are 5-0 in Buehlers last 5 starts as a home favorite.
+TREND: Under is 3-0-2 in Padres last 5 Divisional Playoff games.
+
+NHL
+
+Colorado Avalanche @ Winnipeg Jets
+ML: Colorado Avalanche -184 / Winnipeg Jets +161
+PL: Colorado Avalanche -1.5 (+128) / Winnipeg Jets +1.5 (-148)
+OU: o6.5 (-106) / u6.5 (-110)
+P1ML: Colorado Avalanche -155 / Winnipeg Jets +135
+P1PL: Colorado Avalanche -0.5 (+140) / Winnipeg Jets +0.5 (-160)
+P1OU: o1.5 (-138) / u1.5 (+118)
+PRED: Colorado Avalanche 3.80 / Winnipeg Jets 2.75
+TREND: Over is 5-0 in Avalanche last 5 overall.
+TREND: Over is 5-0 in Avalanche last 5 vs. Western Conference.
+TREND: Over is 5-0 in Avalanche last 5 games as a favorite.
+TREND: Over is 6-0 in Avalanche last 6 when their opponent allows 2 goals or less in their previous game.
+TREND: Over is 4-0 in Jets last 4 home games.
+TREND: Over is 4-0 in Jets last 4 games as a home favorite.
+TREND: Over is 5-1 in Jets last 6 games as a favorite.
+TREND: Over is 4-1 in Jets last 5 vs. Western Conference.
+
+Pittsburgh Penguins @ Washington Capitals
+ML: Pittsburgh Penguins +140 / Washington Capitals -159
+PL: Pittsburgh Penguins +1.5 (-180) / Washington Capitals -1.5 (+157)
+OU: o6.5 (-112) / u6.5 (-104)
+P1ML: Pittsburgh Penguins +120 / Washington Capitals -140
+P1PL: Pittsburgh Penguins +0.5 (-170) / Washington Capitals -0.5 (+149)
+P1OU: o1.5 (-144) / u1.5 (+124)
+PRED: Pittsburgh Penguins 3.11 / Washington Capitals 3.65
+TREND: Under is 4-0 in Penguins last 4 games as a favorite.
+TREND: Penguins are 4-1 in their last 5 vs. Eastern Conference.
+TREND: Over is 7-2-1 in Penguins last 10 games as a road underdog.
+TREND: Under is 4-1 in Penguins last 5 games playing on 1 days rest.
+TREND: Capitals are 4-0 in their last 4 vs. Metropolitan.
+TREND: Capitals are 6-1 in their last 7 games as an underdog.
+TREND: Capitals are 5-1 in their last 6 home games.
+TREND: Capitals are 5-1 in their last 6 overall.
+
+Edmonton Oilers @ Anaheim Ducks
+ML: Edmonton Oilers -130 / Anaheim Ducks +115
+PL: Edmonton Oilers -1.5 (+180) / Anaheim Ducks +1.5 (-210)
+OU: o6.5 (-136) / u6.5 (+118)
+P1ML: Edmonton Oilers -125 / Anaheim Ducks +105
+P1PL: Edmonton Oilers -0.5 (+157) / Anaheim Ducks +0.5 (-180)
+P1OU: o1.5 (-160) / u1.5 (+140)
+PRED: Edmonton Oilers 3.70 / Anaheim Ducks 3.38
+TREND: Under is 4-0-1 in Oilers last 5 when their opponent allows 2 goals or less in their previous game.
+TREND: Under is 2-0-2 in Oilers last 4 vs. a team with a winning record.
+TREND: Over is 3-0-1 in Oilers last 4 after allowing 2 goals or less in their previous game.
+TREND: Over is 7-1-3 in Oilers last 11 games as a road favorite.
+TREND: Ducks are 4-1 in their last 5 games as a home underdog.
+TREND: Under is 4-1-1 in Ducks last 6 games playing on 2 days rest.
+TREND: Over is 4-1 in Ducks last 5 home games vs. a team with a road winning % of greater than .600.
+TREND: Ducks are 4-1 in their last 5 vs. a team with a winning % above .600.

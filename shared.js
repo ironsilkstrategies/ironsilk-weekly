@@ -275,7 +275,11 @@ function intakeParseGrammar(text,fallbackSport){
       return;
     }
     // 1) odds via the sport's own parser, with the extra lines stripped out
-    const oddsText=sec.lines.filter(l=>!INTAKE_EXTRA.test(l)).join('\n');
+    let oddsText=sec.lines.filter(l=>!INTAKE_EXTRA.test(l)).join('\n');
+    /* MLB's board parser reads abbreviations only ("LAD @ ATL"); the grammar — and
+       the Gemini prompt — write full names ("Los Angeles Dodgers @ Atlanta Braves"),
+       so every MLB line from a transcribed doc used to vanish. Abbreviate first. */
+    if(sport==='mlb')oddsText=intakeMlbAbbrLines(oddsText);
     if(/^(ML|SPREAD|RL|PL|OU|H1\w*|Q1\w*|P1\w*|F5\s*\w+|PROP):/im.test(oddsText)){
       try{
         const hdr=sport==='ncaaf'?'NCAAF':sport.toUpperCase();
@@ -309,6 +313,12 @@ function intakeParseGrammar(text,fallbackSport){
   });
   return res;
 }
+function intakeMlbAbbrLines(text){const ab=n=>{const x=intakeAbbr('mlb',String(n).trim());return x||String(n).trim();};
+  return text.split('\n').map(l=>{let m;
+    if((m=l.match(/^(.+?)\s+(?:@|at)\s+(.+?)\s*$/i))&&!/:/.test(l))return ab(m[1])+' @ '+ab(m[2]);
+    if((m=l.match(/^([A-Z0-9 ]+?):\s*(.+)$/i))&&!/^\s*[ou]\s*[\d.]/i.test(m[2]))
+      return m[1]+': '+m[2].split(/\s*\/\s*/).map(side=>{const q=side.match(/^(.+?)\s+([+-]?\d[\d.]*(?:\s*\([^)]*\))?|[+-]\d+)\s*$/);return q?ab(q[1])+' '+q[2]:side;}).join(' / ');
+    return l;}).join('\n');}
 const _ic0=0;const intakeCount=r=>Object.values(r).reduce((n,b)=>n+b.picks.length+b.trends.length+b.consensus.length+b.preds.length+b.raw.length+(b.xpicks||[]).length+(b.props||[]).length,0);
 function intakeMerge(into,from){Object.entries(from).forEach(([sp,b])=>{const t=into[sp]||(into[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[],xpicks:[],unread:[]});
   ['picks','trends','consensus','preds','raw','xpicks','unread','props'].forEach(k=>{t[k]=t[k]||[];t[k].push(...(b[k]||[]))})});return into;}
@@ -1021,7 +1031,7 @@ function intakePreview(el,st){
     <details style="margin-top:6px"><summary class="sub">What each item gave</summary>${log}</details></div>`;
 }
 function intakeSave(){
-  const r=INTAKE.result;if(!r)return;const el=document.getElementById('bookShotResult');const done=[];
+  const r=INTAKE.result;if(!r)return;const el=document.getElementById('bookShotResult')||{set innerHTML(v){}};const done=[];
   Object.entries(r).forEach(([sp,b])=>{
     if(b.raw.length){const p=get('d4.intakepending',{});p[sp]=(p[sp]||[]).concat(b.raw.map(t=>({t,ts:Date.now()})));set('d4.intakepending',p);done.push(sp==='ncaaf'?'CFB':sp.toUpperCase()+' lines waiting — they file automatically the moment you tap '+(sp==='ncaaf'?'CFB':sp.toUpperCase()));}
     if(b.picks.length){saveBookOdds(b.picks,null,sp);done.push(b.picks.length+' '+sp.toUpperCase()+' lines');}
@@ -1031,7 +1041,7 @@ function intakeSave(){
       else saveExtBySport(sp,[],b.trends,b.consensus,null);
       done.push(b.trends.length+' trends, '+b.consensus.length+' consensus');}
     if(b.preds.length){const P=get('d4.preds',{});const d=today();P[sp]=P[sp]||{};P[sp][d]=P[sp][d]||{};
-      b.preds.forEach(x=>{P[sp][d][x.game]={a:x.a,h:x.h,src:x.src,ts:Date.now()}});set('d4.preds',P);done.push(b.preds.length+' predictions');}
+      b.preds.forEach(x=>{P[sp][d][x.game]={a:x.a,h:x.h,src:(x.src&&x.src!=='upload'?x.src:INTAKE.source)||x.src,ts:Date.now()}});set('d4.preds',P);done.push(b.preds.length+' predictions');}
   });
   try{Object.entries(r).forEach(([sp,b])=>{const src=INTAKE.source||'upload';
     intelLog(sp,'trend',b.trends,src);intelLog(sp,'cons',b.consensus,src);intelLog(sp,'pred',b.preds,src);intelLog(sp,'xpick',b.xpicks||[],src);
@@ -1044,6 +1054,27 @@ function intakeSave(){
   if(typeof renderNHL==='function'&&ACTIVE_SPORT==='nhl')renderNHL();
   if(typeof renderNBA==='function'&&ACTIVE_SPORT==='nba')renderNBA();
 }
+/* ── AUTO-INTAKE DROP ───────────────────────────────────────────────────────
+   The site is served from the repo, so a file at intake/<YYYY-MM-DD>.txt is
+   readable by every page. On load, today's file is fetched and run through the
+   exact same reader as READ IT, then saved — once per version of the file
+   (content hash), so re-opening a page never double-files it. Sports whose
+   parser lives on another page wait in the pending queue and file there. */
+const DROP_KEY='d4.intakedrop';
+function dropHash(t){let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36);}
+async function intakeAutoDrop(day){day=day||today();if(typeof location==='undefined'||!/^https?:/.test(location.protocol))return null;
+  let text='';try{const r=await fetch('intake/'+day+'.txt?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;text=await r.text();}catch(e){return null;}
+  if(!text.trim()||/^\s*</.test(text))return null; // 404 pages come back as HTML on some hosts
+  const h=day+':'+dropHash(text);const seen=get(DROP_KEY,{})||{};if(seen[h])return{skipped:true,h};
+  const m=text.match(/^\s*SOURCE\s*:\s*(.+)$/im);const src=m?m[1].trim():'drop';
+  text=text.split('\n').filter(l=>!/^\s*(#|SOURCE\s*:)/i.test(l)).join('\n');
+  let res;try{res=await intakeText(text,null,'auto',src);}catch(e){console.warn('auto intake',e);return null;}
+  if(!intakeCount(res.r))return null;
+  const keep=INTAKE.result,keepSrc=INTAKE.source;INTAKE.result=res.r;INTAKE.source=src;
+  try{intakeSave();}finally{INTAKE.result=keep;INTAKE.source=keepSrc;}
+  seen[h]=Date.now();Object.keys(seen).sort((a,b)=>seen[a]-seen[b]).slice(0,-30).forEach(k=>delete seen[k]);set(DROP_KEY,seen);
+  try{const el=document.querySelector('.lasStatus')||document.getElementById('bookShotResult');if(el&&el.id==='bookShotResult')el.innerHTML=`<div class="tkt hi"><h3>📥 Today's slate auto-loaded</h3><div class="sub">From the site's intake drop (${esc(src)}) — ${intakeCount(res.r)} items.</div></div>`;}catch(e){}
+  return{saved:intakeCount(res.r),src,h};}
 /* CFB team names can only be resolved where the CFB engine lives. Anything
    uploaded elsewhere waits here and is filed the next time cfb.html opens. */
 function intakeReplay(tries){
@@ -1468,9 +1499,12 @@ function intelTypedPrompt(type,sport){
 /* ── store + grade ── */
 function intelLog(sp,kind,items,src){
   if(!items||!items.length)return;const L=get(INTEL_KEY,[]),d=today();
-  items.forEach(x=>{const id=[sp,kind,x.game,x.pick||x.text||x.market+(x.metric||''),x.src||src||'upload',d].join('|');
+  /* the source you named wins over the grammar's placeholder 'upload' — before this, Covers
+     predictions/trends were always graded as "upload", so source accuracy never accrued */
+  const S=x=>(x.src&&x.src!=='upload'?x.src:(src||x.src))||'upload';
+  items.forEach(x=>{const id=[sp,kind,x.game,x.pick||x.text||x.market+(x.metric||''),S(x),d].join('|');
     if(L.some(y=>y.id===id))return;
-    L.push({id,sp,kind,date:d,src:x.src||src||'upload',game:x.game,team:x.team||null,pick:x.pick||null,text:x.text||null,
+    L.push({id,sp,kind,date:d,src:S(x),game:x.game,team:x.team||null,pick:x.pick||null,text:x.text||null,
       a:x.a??null,h:x.h??null,market:x.market||null,metric:x.metric||null,awayPct:x.awayPct??null,homePct:x.homePct??null,overPct:x.overPct??null,graded:false});});
   if(L.length>4000)L.splice(0,L.length-4000);set(INTEL_KEY,L);
 }
@@ -2025,7 +2059,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261006d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261007a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15797,6 +15831,7 @@ async function boot(){
      render (nothing else was going to trigger that). */
   try{replayPendingUploads()}catch(e){}
   try{intakeReplay()}catch(e){console.warn('intake replay',e)}
+  try{intakeAutoDrop().then(x=>{if(x&&x.saved)try{intakeReplay()}catch(e){}}).catch(()=>{});}catch(e){}
   /* Sweep whatever finals this page's engines know about into the shared store
      on boot, so every page contributes to (and benefits from) the unified
      cross-sport view of results. */
