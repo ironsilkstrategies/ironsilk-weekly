@@ -2025,7 +2025,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261006c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261006d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -12561,7 +12561,7 @@ function systemPicksHtml(){
   }).join('');
   const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
   return head+`<div class="tkt hi"><h3>${t.date}</h3>
-    <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}${(()=>{try{return gradeDoctorHtml(t)}catch(e){return''}})()}
+    <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}${msFitChip(t)}${(()=>{try{return gradeDoctorHtml(t)}catch(e){return''}})()}
     <ol>${rows}</ol>${buildWagerRow(t)}</div>`;
 }
 
@@ -12898,7 +12898,7 @@ function genTickets(mode){
         ?`<h3>${t.name}${renameBtn}${lockBadge}${archBadge}</h3><div class="m" style="margin-top:-4px;margin-bottom:6px">${t.date}${t.source&&t.source!=='mine'?' · '+({system:'System',market:'Market',specialty:'Specialty',outside:'Outside'}[t.source]||t.source):''}</div>`
         :`<h3>${t.date}${renameBtn}${lockBadge}${archBadge}</h3>`;
       h+=`<div class="tkt ${t.archived?'':'hi'}">${nameLine}
-        <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}${(()=>{try{return gradeDoctorHtml(t)}catch(e){return''}})()}
+        <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}${msFitChip(t)}${(()=>{try{return gradeDoctorHtml(t)}catch(e){return''}})()}
         <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
       // addable-legs picker — only rendered for the one ticket currently being
       // edited, right below its card. Same pool every builder already draws
@@ -15171,6 +15171,8 @@ function brainLearnAll(force){
     try{res.intel=typeof gradeIntel==='function'?gradeIntel():0;}catch(e){res.intel='error: '+e.message;}
     try{res.best=best5Grade();}catch(e){res.best='error: '+e.message;}
     try{res.props=propCalGrade();}catch(e){res.props='error: '+e.message;}
+    try{res.charProps=cpropGrade();}catch(e){res.charProps='error: '+e.message;}
+    try{res.charParlays=cparGrade();}catch(e){res.charParlays='error: '+e.message;}
     const L=get(LEARN_KEY,[])||[];L.unshift(res);set(LEARN_KEY,L.slice(0,60));
   }finally{LEARN_T=Date.now();LEARN_BUSY=false;}
   return res;
@@ -17232,6 +17234,126 @@ function tcHotLine(sp,x){try{const V=roGet(VOICES_KEY,[],5000)||[];const d=today
     if(!c)return null;const h=charHist(V,c);return h.hot.length?{v,h:h.hot[0]}:null;}).filter(Boolean);
   if(!hits.length)return'';
   return`<div class="mono" style="font-size:9.5px;color:var(--win);margin-top:2px">${hits.map(o=>`🔥 ${CHARS[o.v].chip} ${esc(o.h.lab)} ${o.h.w}-${o.h.l}`).join(' · ')}</div>`;}catch(e){return'';}}
+/* ══ CHARACTER PARLAYS ══════════════════════════════════════════════════════
+   Each character builds its own 3–5 leg parlay from ITS OWN calls today, picking
+   the legs where its graded record is strongest: sport+market, the team, and the
+   head-to-head (shrunk: (w+2)/(n+4)), blended 50/50 with the leg's probability.
+   One leg per game. Legs 4 and 5 only join if they score ≥ 0.55. The parlay
+   freezes when the master evaluation runs and is graded leg by leg. */
+const CPAR_KEY='d4.charparlays';
+function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','h2h'].forEach(k=>{const x=h.H[k];if(x.n){sw+=x.n;sr+=x.n*x.r;}});
+  const hr=sw?sr/sw:0.5;
+  let p=null;try{const T=get(TC_KEY,{})||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);p=x?best5Prob(x):null;}catch(e){}
+  if(p==null&&c.price!=null)p=imp(+c.price)*0.955+0.0225;
+  if(p==null)p=0.5;
+  const why=['sport','team','h2h'].filter(k=>h.H[k].n>=3).map(k=>`${h.lab[k]} ${h.H[k].w}-${h.H[k].l}`);
+  return{score:0.5*p+0.5*hr,p,hr,why,weak:sw>=6&&hr<0.5};}
+function cparBuild(voice,V,d){V=V||get(VOICES_KEY,[])||[];d=d||today();
+  const calls=V.filter(x=>x.date===d&&x.voice===voice&&x.price!=null&&['ml','spread','total'].includes(x.market));
+  const cand=calls.map(c=>({c,...cparLegScore(V,c)})).filter(x=>!x.weak).sort((a,b)=>b.score-a.score);
+  const used=new Set(),legs=[];for(const x of cand){const g=x.c.sp+'|'+x.c.game;if(used.has(g))continue;if(legs.length>=3&&x.score<0.55)break;used.add(g);legs.push(x);if(legs.length===5)break;}
+  if(legs.length<3)return null;
+  const dec=legs.reduce((a,x)=>a*americanToDecimal(x.c.price),1),p=legs.reduce((a,x)=>a*x.p,1);
+  return{voice,d,legs:legs.map(x=>({sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,m:x.c.market,sd:x.c.side,p:x.p,hr:x.hr,why:x.why})),dec,p};}
+function cparState(){const d=today();const S=get(CPAR_KEY,{})||{};const E=get(LS_EVAL,{})||{};const locked=E.date===d;
+  if(!S[d]||!S[d].locked){const V=get(VOICES_KEY,[])||[];const day={locked,by:{}};
+    CHAR_ORDER.forEach(v=>{const P=cparBuild(v,V,d);if(P)day.by[v]=P;});
+    S[d]=day;if(locked){Object.keys(S).sort().slice(0,-60).forEach(k=>delete S[k]);set(CPAR_KEY,S);}}
+  return S[d];}
+function cparGrade(){const S=get(CPAR_KEY,{})||{};let n=0;
+  Object.entries(S).forEach(([d,D])=>{if(!D||!D.locked)return;Object.values(D.by||{}).forEach(P=>{if(P.done)return;
+    P.legs.forEach(l=>{if(l.hit!=null||l.push)return;let r=null;try{r=gradeLeg({sport:l.sp,game:l.game,pick:l.pick,gameDate:d},d);}catch(e){}
+      if(!r||r.live)return;if(r.push){l.push=true;n++;}else if(r.hit===true||r.hit===false){l.hit=r.hit;n++;}});
+    const live=P.legs.filter(l=>!l.push);if(live.some(l=>l.hit===false)){P.done=true;P.won=false;}else if(live.every(l=>l.hit===true)){P.done=true;P.won=live.length>0;}});});
+  if(n)set(CPAR_KEY,S);return n;}
+function cparRecord(voice){const S=get(CPAR_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=0;
+  Object.values(S).forEach(D=>{const P=D&&D.locked&&(D.by||{})[voice];if(!P)return;
+    P.legs.forEach(x=>{if(x.hit===true)lw++;else if(x.hit===false)ll++;});
+    if(P.done){if(P.won){w++;u+=P.legs.filter(x=>!x.push).reduce((a,x)=>a*americanToDecimal(x.price),1)-1;}else{l++;u-=1;}}});
+  return{w,l,u,lw,ll};}
+function cparHtml(){const D=cparState();const vs=Object.keys(D.by||{});
+  if(!vs.length)return'<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub">Each character needs 3+ priced calls today on games where its record isn\'t weak. Upload lines and open the boards.</div></div>';
+  const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
+  return`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Each character's own ${'3–5'}-leg ticket from its strongest spots today. ${D.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation — graded at the finals.</b>':'Building — freezes when the master evaluation runs.'}</div>
+    ${vs.map(v=>{const P=D.by[v],R=cparRecord(v);const rec=R.w+R.l?`${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}`:'no graded parlays yet';
+      return`<details style="margin:5px 0"><summary>${chip(v)} <b>${esc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${P.legs.length}-leg · ${decimalToAmerican(P.dec)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${(P.p*100).toFixed(P.p<0.1?1:0)}% · ${rec}</span></summary>
+        ${P.legs.map(l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}<b>${esc(l.pick)}</b> <span style="color:var(--gold)">${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} ${esc(l.game)} · ${Math.round(l.p*100)}%</span>${l.why.length?`<br><span style="color:var(--win)">↳ ${esc(l.why.join(' · '))}</span>`:''}</div>`).join('')}</details>`;}).join('')}</div>`;}
+
+/* ══ CHARACTER PROPS — 70%+ calls, graded, calibrated ══════════════════════
+   Four characters read every player on today's slate, each its own way:
+     ★ Sim         — the stat engine: season mean blended with recent form
+     M Most common — the season rate alone (the long record)
+     T Trends      — recent form alone (the exponentially weighted average)
+     J Judge       — weighs the other three by each one's graded prop accuracy
+   Each character calls the player's SWEET SPOT: the highest standard line it
+   gives ≥70%. Every call is logged once (before the player's game is in the
+   books), graded from the real box line, and bucketed by stated confidence so
+   "70–73%" means what it says. Calibrated % = (hits + p·12) / (n + 12) in that
+   character's bucket — shown next to every call and used to rank them. */
+const CPROP_KEY='d4.charprops',CPROP_VOICES=['Sim','Most common','Trends','Judge'];
+const CPROP_BKT=[[0.70,0.73],[0.73,0.76],[0.76,0.80],[0.80,0.85],[0.85,0.90],[0.90,1.01]];
+function cpropPAt(sp,k,mu,sd,n,thr){if(mu==null)return null;
+  if(PST_COUNT.has(k)||(sp==='nhl'&&k==='pts')){const need=Math.ceil(thr-1e-9);return 1-pstPoisCdf(need-1,mu);}
+  const s=Math.max(sd!=null&&n>=4?sd:mu*0.45,mu*0.25,1);return 1-pstNormCdf((thr-mu)/s);}
+function cpropBrier(){const L=get(CPROP_KEY,[])||[];const B={};CPROP_VOICES.forEach(v=>{const g=L.filter(x=>x.voice===v&&x.hit!=null);
+  B[v]=g.length>=10?g.reduce((a,x)=>a+Math.pow(x.p-(x.hit?1:0),2),0)/g.length:0.2;});return B;}
+function cpropReads(sp,name,k,thr,BR){const J=pstProj(sp,name,k);if(!J||J.n<4)return null;
+  const sim=pstProb(sp,name,k,thr,'over');const r={Sim:sim?sim.p:null,'Most common':cpropPAt(sp,k,J.mean,J.sd,J.n,thr),Trends:cpropPAt(sp,k,J.ema,J.sd,J.n,thr)};
+  BR=BR||cpropBrier();let sw=0,sp_=0;['Sim','Most common','Trends'].forEach(v=>{if(r[v]==null)return;const w=1/(BR[v]+0.02);sw+=w;sp_+=w*r[v];});
+  r.Judge=sw?sp_/sw:null;Object.keys(r).forEach(v=>{if(r[v]!=null)r[v]=Math.max(0.001,Math.min(0.999,r[v]));});return{r,J};}
+function cpropCalib(){const L=get(CPROP_KEY,[])||[];const C={};
+  CPROP_VOICES.forEach(v=>{C[v]=CPROP_BKT.map(([lo,hi])=>{const g=L.filter(x=>x.voice===v&&x.hit!=null&&x.p>=lo&&x.p<hi);const h=g.filter(x=>x.hit).length;
+    return{lo,hi,n:g.length,h,rate:g.length?h/g.length:null,avgP:g.length?g.reduce((a,x)=>a+x.p,0)/g.length:(lo+Math.min(hi,1))/2};});});return C;}
+function cpropCal(C,v,p){const b=(C[v]||[]).find(x=>p>=x.lo&&p<x.hi);if(!b||!b.n)return p;return(b.h+p*12)/(b.n+12);}
+function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C=cpropCalib();
+  ['nfl','ncaaf','nba','nhl','mlb'].forEach(sp=>{const L=LIKELY_LADDER[sp];if(!L)return;const teams=teamsToday(sp);if(!teams.size)return;
+    const last=get('d4.pstlast.'+sp,{})||{};
+    Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<4)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
+      Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<4)return;
+        const best={};ths.forEach(t=>{const R0=cpropReads(sp,P.name,k,t,BR);if(!R0)return;
+          CPROP_VOICES.forEach(v=>{const p=R0.r[v];if(p!=null&&p>=0.70)best[v]={p,thr:t,mu:R0.J.mu};});});
+        Object.entries(best).forEach(([v,b])=>out.push({id:[sp,pstId(P.name),k,b.thr,v,d].join('|'),sp,voice:v,player:P.name,team:P.team,k,thr:b.thr,p:+b.p.toFixed(4),cal:cpropCal(C,v,b.p),mu:b.mu,d}));});});});
+  return out;}
+function cpropLog(calls){const L=get(CPROP_KEY,[])||[];const have=new Set(L.map(x=>x.id));let n=0;
+  calls.forEach(c=>{if(have.has(c.id))return;L.push({id:c.id,sp:c.sp,voice:c.voice,player:c.player,team:c.team,k:c.k,thr:c.thr,p:c.p,d:c.d,hit:null});n++;});
+  if(n)set(CPROP_KEY,L.slice(-6000));return n;}
+function cpropGrade(){const L=get(CPROP_KEY,[])||[];let n=0;const LAST={};
+  L.forEach(x=>{if(x.hit!=null)return;const g=(LAST[x.sp]=LAST[x.sp]||get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];
+    if(!g||g.d<x.d||g.d>dayShift(x.d,1)||g.v[x.k]==null)return;x.actual=+g.v[x.k];x.hit=x.actual>=x.thr;n++;});
+  if(n)set(CPROP_KEY,L);return n;}
+const CPROP_LAB={pts:'PTS',reb:'REB',ast:'AST',fg3:'3PM',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'rec',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'K',s:'SOG',g:'goal'};
+function cpropCalibHtml(){const C=cpropCalib();
+  const rows=CPROP_VOICES.map(v=>{const cells=C[v].map(b=>b.n?`<td style="color:${b.rate>=b.avgP-0.03?'var(--win)':b.rate>=b.avgP-0.08?'var(--gold)':'var(--rust)'}">${b.h}/${b.n}<br><b>${Math.round(b.rate*100)}%</b></td>`:'<td style="color:var(--mute)">—</td>').join('');
+    const all=C[v].reduce((a,b)=>({n:a.n+b.n,h:a.h+b.h}),{n:0,h:0});
+    return`<tr><td style="text-align:left">${CHARS[v].chip} ${esc(v)}</td>${cells}<td>${all.n?Math.round(all.h/all.n*100)+'%':'—'}</td></tr>`;}).join('');
+  return`<div class="tkt"><h3>📐 Prop confidence — does it mean what it says?</h3>
+    <div class="sub" style="font-size:10px">Each character's graded 70%+ prop calls, bucketed by the confidence it stated. Green = hitting at or above what it claimed; red = overconfident. Every displayed % is pulled toward these real rates.</div>
+    <table class="mono" style="width:100%;font-size:9.5px;text-align:center;margin-top:4px;border-collapse:collapse"><tr style="color:var(--mute)"><td></td>${CPROP_BKT.map(([lo,hi])=>`<td>${Math.round(lo*100)}–${hi>1?'100':Math.round(hi*100)}%</td>`).join('')}<td>all</td></tr>${rows}</table></div>`;}
+let CPROP_FOCUS=null;
+function cpropFocus(id){CPROP_FOCUS=CPROP_FOCUS===id?null:id;renderToday(true);}
+function cpropSweetHtml(sp,name){const P=pstDb(sp).p[pstId(name)];if(!P)return'';const L=LIKELY_LADDER[sp]||{};const BR=cpropBrier();
+  const hist=(get(CPROP_KEY,[])||[]).filter(x=>x.sp===sp&&pstId(x.player)===pstId(name)&&x.hit!=null);
+  const stats=Object.entries(L).filter(([k])=>P.s[k]&&P.s[k].gp>=4).map(([k,ths])=>{const J=pstProj(sp,name,k);
+    const rows=ths.map(t=>{const R0=cpropReads(sp,name,k,t,BR);if(!R0)return'';return`<tr><td style="text-align:left">${t}+ ${CPROP_LAB[k]||k}</td>${CPROP_VOICES.map(v=>{const p=R0.r[v];return`<td style="color:${p>=0.7?'var(--win)':p>=0.55?'var(--gold)':'var(--mute)'}">${p==null?'—':Math.round(p*100)+'%'}</td>`;}).join('')}</tr>`;}).join('');
+    const h=hist.filter(x=>x.k===k);const hw=h.filter(x=>x.hit).length;
+    return`<div style="margin-top:6px"><div class="mono" style="font-size:10px"><b>${(PST_STATS[sp]||{})[k]||k}</b> · season ${J.mean.toFixed(1)}/g · recent ${J.ema.toFixed(1)} · ${J.n} games${h.length?` · characters ${hw}-${h.length-hw} on him here`:''}</div>
+      <table class="mono" style="width:100%;font-size:9.5px;text-align:center;border-collapse:collapse"><tr style="color:var(--mute)"><td></td>${CPROP_VOICES.map(v=>`<td>${CHARS[v].chip}</td>`).join('')}</tr>${rows}</table></div>`;}).join('');
+  return`<div style="padding:6px 8px;margin:4px 0;border-radius:8px;background:var(--panel2)"><b>🔎 ${esc(name)} — sweet spots</b>${stats||'<div class="sub">Not enough games logged yet.</div>'}</div>`;}
+function cpropHtml(F){let calls=[];try{calls=cpropToday();cpropLog(calls);}catch(e){console.warn('char props',e);}
+  calls=calls.filter(c=>F.sp==='all'||F.sp===c.sp);
+  const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
+  const byP={};calls.forEach(c=>{const k=c.sp+'|'+c.player;(byP[k]=byP[k]||{sp:c.sp,player:c.player,team:c.team,calls:[]}).calls.push(c);});
+  const list=Object.values(byP).map(x=>({...x,top:Math.max(...x.calls.map(c=>c.cal))})).sort((a,b)=>b.top-a.top).slice(0,40);
+  const body=list.length?list.map(x=>{const id=x.sp+'|'+pstId(x.player);
+    const byStat={};x.calls.forEach(c=>{const k=c.k+'|'+c.thr;(byStat[k]=byStat[k]||[]).push(c);});
+    return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;align-items:baseline">
+      <a href="#" onclick="cpropFocus('${esc(id)}');return false" style="color:var(--chalk);font-weight:800;text-decoration:none">${esc(x.player)} ${CPROP_FOCUS===id?'▾':'▸'}</a>
+      <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[x.sp]||''} · ${esc(x.team)}</span></div>
+      ${Object.values(byStat).map(cs=>{const c0=cs[0];const best=cs.reduce((a,c)=>c.cal>a.cal?c:a,cs[0]);
+        return`<div class="mono" style="font-size:10.5px;margin-top:2px"><b>${c0.thr}+ ${CPROP_LAB[c0.k]||c0.k}</b> ${cs.map(c=>chip(c.voice)).join('')} <span style="color:var(--win);font-weight:800">${Math.round(best.cal*100)}%</span> <span style="color:var(--mute)">calibrated · says ${Math.round(best.p*100)}% · proj ${best.mu.toFixed(1)}</span></div>`;}).join('')}
+      ${CPROP_FOCUS===id?cpropSweetHtml(x.sp,x.player):''}</div>`;}).join('')
+    :'<div class="empty">No 70%+ character prop calls yet — player game logs fill in as boards load and games finish.</div>';
+  return cpropCalibHtml()+`<div class="tkt"><h3>🎯 Character props today · 70%+</h3><div class="sub" style="font-size:10px">Each player's sweet spot per character — the highest line it gives 70%+. Tap a name for every line and every character's read. Sorted by calibrated %.</div>${body}</div>`;}
 let TODAY_LIVE_TIMER=null;
 function todayLiveLoop(){if(TODAY_LIVE_TIMER)return;
   TODAY_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-today');if(!v||!v.classList.contains('on'))return;
@@ -17298,8 +17420,10 @@ function renderToday(noSnap){
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
       ${rows||`<div class="empty">${total?'Nothing here matches the filter'+(P.length<total?' (live games are pinned above)':'')+'.':'No colored, non-conflicted picks on this board yet.'}</div>`}
       ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
-  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
-  if(F.view==='chars'){el.innerHTML=vw+(sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'')+charDeskHtml(F);return;}
+  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['props','🎯 Props']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
+  const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
+  if(F.view==='chars'){el.innerHTML=vw+spBar+(()=>{try{return cparHtml()}catch(e){console.warn('char parlays',e);return''}})()+charDeskHtml(F);return;}
+  if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
   el.innerHTML=vw+legend+bar+liveHtml+sdHtml+body;
 }
 
@@ -17532,10 +17656,14 @@ function hubData(){
   HUB_CACHE={M,you:hubYou()};HUB_SIG=sig;return HUB_CACHE;
 }
 let REC_VIEW='overview';
-function recViewBar(){const V=[['overview','📊 Overview'],['tickets','🎟 My tickets'],['eval','🧪 Model eval']];
+function recViewBar(){const V=[['overview','📊 Overview'],['tickets','🎟 My tickets'],['chars','🎭 Characters'],['eval','🧪 Model eval']];
   return'<div class="subnav" style="margin-bottom:8px">'+V.map(([k,l])=>'<button class="'+(REC_VIEW===k?'on':'')+'" onclick="REC_VIEW=\''+k+'\';renderRecordsHub()">'+l+'</button>').join('')+'</div>';}
 function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
+  if(REC_VIEW==='chars'){let h='';try{try{cpropGrade();cparGrade();}catch(e){}
+      const P=CHAR_ORDER.map(v=>({v,R:cparRecord(v)})).filter(x=>x.R.w+x.R.l);
+      h=cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${esc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
+    catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='eval'){let h='';try{const fn=ACTIVE_SPORT==='nfl'?renderNFLMasterEval:ACTIVE_SPORT==='ncaaf'?renderNCAAFMasterEval:renderMasterEval;h=fn();}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   let D;try{D=hubData()}catch(e){el.innerHTML='';return;}
@@ -17728,6 +17856,54 @@ function msLiveHtml(m){const open=msOpenTickets(m);if(!open.length)return'';
         <span class="mono" style="font-size:11px;font-weight:800;color:${p===0?'var(--rust)':p!=null&&p>=0.5?'var(--win)':'var(--gold)'}">${pc?pc+' to cash':''}</span></div>
       ${M?`<div class="mono" style="font-size:9.5px;color:var(--mute)">${ms$(M.stake)} → pays ${ms$(M.payout)}${s.plan?` · plan was ${ms$(s.plan)}`:''}</div>`:''}
       ${legs}</div>`;}).join('');}
+/* ── TICKET ↔ CHALLENGE MATCHER ────────────────────────────────────────────
+   For every ticket you've loaded that isn't on a challenge yet (today's and
+   upcoming), score how well it fits each running challenge's plan: the rule,
+   the sport, the leg count, the minimum price bar, the planned stake, and the
+   date window. Shows both ways: each challenge lists its best-fitting tickets,
+   and each ticket lists the challenges it fits. */
+function msTicketSettled(t){try{return(t.legs||[]).every(l=>{const r=gradeLeg(l,t.date);return r&&!r.live&&(r.hit!=null||r.push);});}catch(e){return false;}}
+function msFreeTickets(){const used=new Set(msAll().flatMap(m=>(m.steps||[]).map(s=>String(s.ticketId))));
+  return(get(LS.locked,[])||[]).filter(t=>!t.archived&&!used.has(String(t.id))&&(t.legs||[]).length&&!msTicketSettled(t));}
+function msTicketFit(m,pi,t){const P=msPotsOf(m)[pi];if(!P||P.balance<1)return null;
+  const ro=m.pots?msParse(P.routeKey):msActiveRoute(m);if(!ro)return null;
+  let lanes=[];try{lanes=msPotOrders(m,P,ro);}catch(e){}const L=lanes[0];if(!L)return null;
+  const M=(()=>{try{return ticketMoney(t)}catch(e){return null}})();
+  const dec=M&&M.stake>0?M.payout/M.stake:(()=>{try{return pricedOddsDecimal(t.legs)}catch(e){return null}})();
+  const k=(t.legs||[]).length;const lane=lanes.find(x=>x.k===k)||L;
+  const last=dayShift(m.startDate,m.days-1);const days=(t.legs||[]).map(l=>String(l.gameDate||t.date||'').slice(0,10)).filter(Boolean);
+  const rc=msRuleCheck(t,P.rule,P.sport||m.sport||null);
+  const checks=[
+    {lab:'rule'+(P.rule?` "${MS_FILTERS[P.rule].lab}"`:''),ok:rc.ok,why:rc.why||''},
+    {lab:`${lane.k}-leg plan`,ok:k===lane.k,why:`ticket has ${k}`},
+    {lab:`priced ${decimalToAmerican(lane.minDec)}+`,ok:dec!=null&&dec>=lane.minDec*0.999,why:dec?`ticket is ${decimalToAmerican(dec)}`:'no price'},
+    {lab:`stake ~${ms$(lane.stake)}`,ok:!!M&&M.stake<=lane.stake*1.5+0.01&&M.stake>=lane.stake*0.5-0.01,why:M?`ticket stakes ${ms$(M.stake)}`:'no stake on the ticket'},
+    {lab:'inside the challenge window',ok:days.every(d=>d>=m.startDate&&d<=last),why:`games ${[...new Set(days)].join(', ')}`}];
+  const score=checks.filter(c=>c.ok).length;
+  return{m,pi,t,P,lane,checks,score,full:score===checks.length,dates:[...new Set(days)].sort()};}
+function msFitsFor(t){return msAll().filter(m=>m.status==='active').flatMap(m=>msPotsOf(m).map((P,pi)=>msTicketFit(m,pi,t))).filter(Boolean).sort((a,b)=>b.score-a.score);}
+function msAttachId(mid,tid,pot){msAttach(mid,{value:String(tid)},pot);}
+function msFitRow(F,showMission){const tick=c=>`<span style="color:${c.ok?'var(--win)':'var(--rust)'}" title="${esc(c.ok?'':c.why)}">${c.ok?'✓':'✗'} ${esc(c.lab)}${c.ok?'':` <span style="color:var(--mute)">(${esc(c.why)})</span>`}</span>`;
+  const head=showMission?`🎯 ${esc(F.m.name)}${F.m.pots?' · '+esc(F.P.name):''}`:`#${esc(String(F.t.id))} ${esc(F.t.name||'')} · ${(F.t.legs||[]).length} legs${F.dates.length?' · '+F.dates.map(d=>d===today()?'today':fmtDate(new Date(d+'T12:00:00'))).join(', '):''}`;
+  return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline">
+    <b style="font-size:11.5px">${head}</b><span class="mono" style="font-size:10px;font-weight:800;color:${F.full?'var(--win)':F.score>=3?'var(--gold)':'var(--mute)'}">${F.score}/${F.checks.length} fit</span></div>
+    <div class="mono" style="font-size:9.5px;line-height:1.6">${F.checks.map(tick).join(' · ')}</div>
+    <div class="bar" style="margin-top:3px"><button style="font-size:10px" onclick="msAttachId(${F.m.id},'${esc(String(F.t.id))}',${F.pi})">Attach${showMission?'':' this ticket'}</button></div></div>`;}
+/* on a challenge card: its best-fitting tickets */
+function msFitHtml(m){if(m.status!=='active')return'';const T=msFreeTickets();if(!T.length)return'';
+  const F=T.flatMap(t=>msPotsOf(m).map((P,pi)=>msTicketFit(m,pi,t))).filter(x=>x&&x.score>=2).sort((a,b)=>b.score-a.score).slice(0,5);
+  if(!F.length)return'';
+  return`<details style="margin-top:6px"${F.some(x=>x.full)?' open':''}><summary class="mono" style="font-size:10px">🎟 Your tickets that fit this plan · ${F.filter(x=>x.full).length} full fit${F.filter(x=>x.full).length===1?'':'s'}</summary>${F.map(x=>msFitRow(x,false)).join('')}</details>`;}
+/* Money tab panel + ticket cards: where each ticket fits */
+function msMatcherHtml(){const T=msFreeTickets();if(!T.length||!msAll().some(m=>m.status==='active'))return'';
+  const rows=T.map(t=>{const F=msFitsFor(t).filter(x=>x.score>=2);if(!F.length)return'';
+    return`<div style="margin:6px 0"><div class="mono" style="font-size:10.5px"><b>#${esc(String(t.id))}</b> ${esc(t.name||'')} · ${(t.legs||[]).length} legs</div>${F.slice(0,3).map(x=>msFitRow(x,true)).join('')}</div>`;}).filter(Boolean);
+  if(!rows.length)return'';
+  return`<details class="tkt" style="margin:8px 0" open><summary><b>🎟 Where your tickets fit</b> <span class="mono" style="font-size:10px;color:var(--mute)">${rows.length} ticket${rows.length===1?'':'s'} not on a challenge yet</span></summary>
+    <div class="sub" style="font-size:10px">Checked against each running challenge: rule, leg count, minimum price, planned stake, and the challenge's date window. Upcoming games count — attach now, it settles when they finish.</div>${rows.join('')}</details>`;}
+function msFitChip(t){try{if(!msAll().some(m=>m.status==='active'))return'';const used=msAll().some(m=>(m.steps||[]).some(s=>String(s.ticketId)===String(t.id)));if(used)return'';
+  const F=msFitsFor(t)[0];if(!F||F.score<3)return'';
+  return`<div class="mono" style="font-size:9.5px;margin-top:2px;color:${F.full?'var(--win)':'var(--gold)'}">🎯 fits ${esc(F.m.name)}${F.m.pots?' · '+esc(F.P.name):''} (${F.score}/${F.checks.length}) <a href="#" style="color:var(--cold)" onclick="msAttachId(${F.m.id},'${esc(String(t.id))}',${F.pi});return false">attach</a></div>`;}catch(e){return'';}}
 let MS_LIVE_TIMER=null;
 function msLiveLoop(){if(MS_LIVE_TIMER)return;
   MS_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-money');if(!v||!v.classList.contains('on'))return;
@@ -18546,7 +18722,7 @@ function msCard(m){
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px"><b style="font-size:14px">🎯 ${esc(m.name)}</b><span class="mono" style="font-size:10px;color:${col}">${D?`<span style="color:${D[2]}">${D[1].toUpperCase()}</span> · `:''}${m.status.toUpperCase()}${m.attempt>1?' · attempt '+m.attempt:''}</span></div>
     <div class="sub">$${m.start} → <b>$${m.goal.toLocaleString()}</b> in ${m.days} days · balance <b style="color:var(--gold)">${ms$(m.balance)}</b>${m.safe?` · safe <b style="color:var(--win)">${ms$(m.safe)}</b>`:''} · ${X.daysLeft} day${X.daysLeft>1?'s':''} left</div>
     ${m.status==='won'?`<div class="sub" style="color:var(--win)"><b>MISSION COMPLETE</b>${m.clean?' · clean run bonus':''}</div>`:''}
-    ${map}${orders}<div id="msLive_${m.id}">${msLiveHtml(m)}</div>${steps}
+    ${map}${orders}<div id="msLive_${m.id}">${msLiveHtml(m)}</div>${msFitHtml(m)}${steps}
     <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${esc(T.note||'')}</div>
     ${active?msAdaptHtml(m):''}${typeof msgMutHtml==='function'?msgMutHtml(m):''}
     <div class="bar" style="margin-top:4px"><button onclick="msRoadmapToggle(${m.id})">🗺 Roadmap</button>${!active?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div>
@@ -18586,7 +18762,7 @@ function missionsHtml(inner){
   let exposure=0;act.forEach(m=>{try{msPotsOf(m).forEach(P=>{if(P.balance<1)return;msPotOrders(m,P,m.pots?null:msActiveRoute(m)).forEach(L=>exposure+=L.stake);});}catch(e){}});
   const head=`<div class="mono" style="font-size:10.5px;margin:2px 0 6px">RANK <b style="color:#FFD75E">${R.name.toUpperCase()}</b> · ${xp} XP${R.next?` · ${R.next[0]-xp} to ${R.next[1]}`:''}${act.length?` · ${act.length} running · today's stakes across missions <b style="color:var(--gold)">${ms$(exposure)}</b>`:''}</div>`;
   const hub=(()=>{try{return msgHubHtml()}catch(e){console.warn('game hub',e);return''}})();
-  const body=`${head}${hub}<div class="lasStatus sub mono" style="font-size:10px"></div>${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
+  const body=`${head}${hub}<div class="lasStatus sub mono" style="font-size:10px"></div>${(()=>{try{return msMatcherHtml()}catch(e){return''}})()}${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
     <div class="sbar" style="margin-top:12px"><h2>Mission board · ${MS_LIB.length}</h2><div class="ln"></div></div>
     <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Difficulty and finish % are simulated on ${myLegRate().src}. They move as your record grows.</div>
     ${msBoardHtml()}`;
