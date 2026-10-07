@@ -2025,7 +2025,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261006b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261006c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17699,7 +17699,41 @@ function msMath(m){
   const oddsToday=decimalToAmerican(perDay);   // all-in today at this price keeps you on schedule
   return{R,stepDec,stepsAllIn,pStep,pAllIn,daysLeft,perDay,oddsToday,need};
 }
-function msRender(){const el=document.getElementById('missionsBody');if(el)el.innerHTML=missionsHtml(true);}
+function msRender(){const el=document.getElementById('missionsBody');if(el)el.innerHTML=missionsHtml(true);try{msLiveLoop();}catch(e){}}
+/* ── LIVE TRACKER on a challenge ───────────────────────────────────────────
+   Every attached ticket that hasn't settled shows its legs live: score, clock,
+   each leg's status and live chance, and the whole ticket's cash chance —
+   the same engine as the Tickets tab. Refreshes itself every 30s while the
+   Money tab is open; only these boxes repaint, not the whole board. */
+function msOpenTickets(m){const L=get(LS.locked,[]);
+  return(m.steps||[]).filter(s=>!s.done).map(s=>({s,t:L.find(x=>String(x.id)===String(s.ticketId))})).filter(o=>o.t);}
+function msLiveHtml(m){const open=msOpenTickets(m);if(!open.length)return'';
+  return open.map(({s,t})=>{let C=null;try{C=liveTicketChance(t);}catch(e){}
+    let M=null;try{M=ticketMoney(t);}catch(e){}
+    const legs=(t.legs||[]).map(l=>{let r=null,q=null,e=null;try{r=gradeLeg(l,t.date);}catch(err){}try{q=liveLegProb(l,r,t.date);}catch(err){}
+      try{e=mgEventFor(l.sport||'mlb',l.game,String(l.gameDate||t.date||'').slice(0,10),!!l.gdApprox||!l.gameDate);}catch(err){}
+      const [aw,hm]=String(l.game||'').split('@');
+      const sc=e&&e.a!=null&&e.state!=='pre'?`${esc(aw)} ${e.a}–${e.h} ${esc(hm)} · ${esc(e.state==='post'?'Final':e.detail||'')}`
+        :e&&e.start?`starts ${new Date(e.start).toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit'})}`:'not started';
+      const st=r&&r.push?'↔':r&&!r.live&&r.hit===true?'✅':r&&!r.live&&r.hit===false?'❌':e&&e.state==='in'?'⏳':'·';
+      const qc=q==null?'var(--mute)':q>=0.6?'var(--win)':q>=0.4?'var(--gold)':'var(--rust)';
+      return`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--rule)"><span style="width:16px;text-align:center">${st}</span>
+        <div style="flex:1;min-width:0"><b style="font-size:11.5px">${esc(l.pick||'')}</b>${l.price!=null?` <span class="mono" style="font-size:10px;color:var(--gold)">${l.price>0?'+':''}${l.price}</span>`:''}
+          <div class="mono" style="font-size:9.5px;color:${e&&e.state==='in'?'var(--chalk)':'var(--mute)'}">${e&&e.state==='in'?'<span style="color:#ff4b5c">● </span>':''}${sc}</div></div>
+        ${q!=null&&!(r&&!r.live&&(r.hit!=null||r.push))?`<span class="mono" style="font-size:10.5px;font-weight:800;color:${qc}">${Math.round(q*100)}%</span>`:''}</div>`;}).join('');
+    const p=C?C.p:null;const pc=p==null?'':p===0?'busted':(p*100<1?(p*100).toFixed(2):(p*100).toFixed(1))+'%';
+    const head=p===0?'var(--rust)':C&&C.live?'#ff4b5c':'#5FD3E8';
+    return`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;border:1.5px solid ${head}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:12px">${C&&C.live?'<span style="color:#ff4b5c">● LIVE</span> ':''}Ticket #${esc(String(t.id))}</b>
+        <span class="mono" style="font-size:11px;font-weight:800;color:${p===0?'var(--rust)':p!=null&&p>=0.5?'var(--win)':'var(--gold)'}">${pc?pc+' to cash':''}</span></div>
+      ${M?`<div class="mono" style="font-size:9.5px;color:var(--mute)">${ms$(M.stake)} → pays ${ms$(M.payout)}${s.plan?` · plan was ${ms$(s.plan)}`:''}</div>`:''}
+      ${legs}</div>`;}).join('');}
+let MS_LIVE_TIMER=null;
+function msLiveLoop(){if(MS_LIVE_TIMER)return;
+  MS_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-money');if(!v||!v.classList.contains('on'))return;
+    const ms=msAll().filter(m=>msOpenTickets(m).length);if(!ms.length)return;
+    try{await mgRefresh(false);}catch(e){}
+    ms.forEach(m=>{const el=document.getElementById('msLive_'+m.id);if(el)el.innerHTML=msLiveHtml(m);});},30000);}
 function bankrollSetHtml(){
   const B=brAmount();
   return`<div class="tkt"><div class="sub"><b>Your bankroll</b> — used for stake sizing on Today's card (quarter-Kelly, max 3% a pick).</div>
@@ -18512,7 +18546,7 @@ function msCard(m){
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px"><b style="font-size:14px">🎯 ${esc(m.name)}</b><span class="mono" style="font-size:10px;color:${col}">${D?`<span style="color:${D[2]}">${D[1].toUpperCase()}</span> · `:''}${m.status.toUpperCase()}${m.attempt>1?' · attempt '+m.attempt:''}</span></div>
     <div class="sub">$${m.start} → <b>$${m.goal.toLocaleString()}</b> in ${m.days} days · balance <b style="color:var(--gold)">${ms$(m.balance)}</b>${m.safe?` · safe <b style="color:var(--win)">${ms$(m.safe)}</b>`:''} · ${X.daysLeft} day${X.daysLeft>1?'s':''} left</div>
     ${m.status==='won'?`<div class="sub" style="color:var(--win)"><b>MISSION COMPLETE</b>${m.clean?' · clean run bonus':''}</div>`:''}
-    ${map}${orders}${steps}
+    ${map}${orders}<div id="msLive_${m.id}">${msLiveHtml(m)}</div>${steps}
     <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${esc(T.note||'')}</div>
     ${active?msAdaptHtml(m):''}${typeof msgMutHtml==='function'?msgMutHtml(m):''}
     <div class="bar" style="margin-top:4px"><button onclick="msRoadmapToggle(${m.id})">🗺 Roadmap</button>${!active?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div>
