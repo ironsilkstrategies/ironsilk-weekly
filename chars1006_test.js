@@ -32,7 +32,7 @@ setTimeout(()=>{try{
   ['A@B','C@D','E@F','G@H','I@J','K@L'].forEach((g,i)=>{const mkt=i===0?'total':'ml',side=i===0?'under':'home';V.push({id:'t'+i,sp:'nhl',date:td,game:g,voice:'Coach',market:mkt,side,price:i===0?-110:-120,pick:i===0?'Under 5.5':g.split('@')[1]+' ML'});});
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)});set(TC_KEY,{d:today(),by:{}});set(LS_EVAL,{});localStorage.removeItem(CPAR_KEY)`);
   const pb=w.eval(`cparBuild('Coach')`);
-  T('character builds its own 3–5 leg parlay',pb&&pb.legs.length>=3&&pb.legs.length<=5,pb&&pb.legs.map(l=>l.pick).join(', '));
+  T('character builds its own 2–5 leg parlay (Banker-sized)',pb&&pb.legs.length>=2&&pb.legs.length<=5&&pb.size&&pb.legs.length===pb.size.k,pb&&pb.legs.map(l=>l.pick).join(', '));
   T('its strongest spot leads (Coach unders 8-2) and its weak spot is left off (C@D ML 3-7)',pb.legs[0].pick==='Under 5.5'&&!pb.legs.some(l=>l.game==='C@D'));
   T('parlay price is the product of its legs',Math.abs(pb.dec-pb.legs.reduce((a,l)=>a*w.eval(`americanToDecimal(${l.price})`),1))<1e-9);
   T('not frozen before the master evaluation',!w.eval('cparState().locked'));

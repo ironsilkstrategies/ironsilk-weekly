@@ -55,10 +55,10 @@ const L=(ml,spA,spH,spL)=>JSON.stringify([{away:'PHI',home:'CHI',game:'PHI@CHI',
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)})`);
   const judgeSide=w.eval("characterCalls('nfl',NFL_GAMES[0],NFL_SIMS[NFL_GAMES[0].id]).find(c=>c.voice==='Judge'&&c.market==='ml').side");
   const jp=judgeSide==='home'?'CHI ML':'PHI ML';
-  T('🔥 learned badge: Judge 16-4 shows on the side Judge picked',R(jp).some(x=>/^🔥 J 16-4 NFL/.test(x)),jp+': '+R(jp).join(' | '));
+  T('🔥 learned badge: Judge 16-4 shows on the side Judge picked',R(jp).some(x=>/^🔥 JUDGE 16-4 NFL/.test(x)),jp+': '+R(jp).join(' | '));
   const mkV=(n,hits)=>{const V=[];for(let i=0;i<n;i++)V.push({id:'q'+i,sp:'nfl',date:'2026-09-0'+(i%9+1),game:'Q'+i+'@R',voice:'Judge',market:'ml',side:judgeSide,price:judgeSide==='home'?-150:140,graded:true,hit:i<hits});return V;};
   w.eval(`set(VOICES_KEY,${JSON.stringify(mkV(8,7))})`);
-  T('8 graded calls (7-1) now earns the 🔥 badge',R(jp).some(x=>/^🔥 J 7-1/.test(x)),R(jp).join(' | '));
+  T('8 graded calls (7-1) now earns the 🔥 badge',R(jp).some(x=>/^🔥 JUDGE 7-1/.test(x)),R(jp).join(' | '));
   w.eval(`set(VOICES_KEY,${JSON.stringify(mkV(7,7))})`);
   T('7 calls is still too few — no badge, even at 7-0',!R(jp).some(x=>x.startsWith('🔥')),R(jp).join(' | '));
   w.eval(`set(VOICES_KEY,${JSON.stringify(mkV(8,5))})`);

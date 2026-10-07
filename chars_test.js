@@ -28,14 +28,14 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const calls=w.eval("characterCalls('nfl',NFL_GAMES[0],NFL_SIMS[NFL_GAMES[0].id]).map(c=>c.voice+':'+c.market+':'+c.side)");
   T('Sim makes a call on side, spread and total',['Sim:ml:','Sim:spread:','Sim:total:'].every(p=>calls.some(c=>c.startsWith(p))),calls.join(' '));
   T('Pred (gold line PHI 21.98–18.5) picks PHI on the side',calls.includes('Pred:ml:away'),calls.filter(c=>c.startsWith('Pred')).join(' '));
-  T('Consensus (70% of money on PHI) picks PHI',calls.includes('Consensus:ml:away'),calls.filter(c=>c.startsWith('Consensus')).join(' '));
+  T('Crowd FADES 70% public money on PHI (Levitt 2004) → home side',calls.includes('Consensus:ml:home')&&!calls.includes('Consensus:ml:away'),calls.filter(c=>c.startsWith('Consensus')).join(' '));
   T('Most common score makes its own picks',calls.some(c=>c.startsWith('Most common:')));
   w.eval('renderNFL()');await wait(300);
   const slate=w.document.getElementById('slate').innerHTML;
   T('character chips render on the card squares',(slate.match(/hs-chip/g)||[]).length>=4,(slate.match(/hs-chip/g)||[]).length+' chips');
   T('sim-only squares now carry a tier outline',/class="bet (lean|strong|supreme|conflict)/.test(slate));
   T('the ★ Sim chip is drawn',/hs-chip god/.test(slate));
-  T('agreement meter renders',/characters<\/div>|characters ·/.test(slate));
+  T('agreement meter renders (N of the roster, silent named)',/of 8 on this side/.test(slate));
   // tier rule
   const tier=(o,c)=>w.eval(`charTier(${JSON.stringify(o)},${JSON.stringify(c)})`);
   T('app vs crowd = CONFLICT',tier({hasLine:false},{simHere:true,charsAgainst:true})===' conflict');

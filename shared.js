@@ -1179,6 +1179,7 @@ function brainTrendEvidence(g,sport){
   list.forEach(t=>{
     const x=String(t.text||'');const m=x.match(/(\d{1,3})-(\d{1,3})(?:-\d{1,3})?/);if(!m)return;
     const W=+m[1],L=+m[2],n=W+L;if(!n||n>300)return;
+    if(n<5)return; // a 3-0 or 4-0 "trend" is noise — data-snooped splits need a sample before they mean anything
     const ps=(W+20)/(n+40),edge=ps-0.5;let kind='',eff=0;
     const tf=typeof intelTrendFactor==='function'?intelTrendFactor(sport,t.team||null):1;
     if(/\bover\b/i.test(x)&&!/\bunder\b/i.test(x)){kind='total';eff=edge*C.trTot*tf;dTot+=eff;}
@@ -1211,7 +1212,11 @@ function brainJudge(g,s,sport){
   const p=typeof predFor==='function'?predFor(sport,k):null;if(p)W.push({src:'pred',a:+p.a,h:+p.h});
   if(!W.length)return null;
   let sw=0,A=0,H=0;W.forEach(x=>{x.wt=brainWeight(b,sport,x.src);sw+=x.wt.w;A+=x.wt.w*x.a;H+=x.wt.w*x.h;});
-  A/=sw;H/=sw;W.forEach(x=>x.share=x.wt.w/sw);
+  /* Forecast-combination puzzle (Stock & Watson 2004; Timmermann 2006): estimated
+     weights carry estimation error, and equal weights usually win until the sample
+     is large. Shrink each learned share toward 1/n by λ = 30/(30 + games graded). */
+  {const nG=Math.min(...W.map(x=>x.wt.n||0)),lam=30/(30+nG),eq=1/W.length;A=0;H=0;
+    W.forEach(x=>{x.share=(1-lam)*(x.wt.w/sw)+lam*eq;A+=x.share*x.a;H+=x.share*x.h;});}
   const led={wA:A,wH:H};
   const tm=(ab,f)=>{const r=(b.team[ab]||{})[f];return r&&r.n?r.r*r.n/(r.n+6):0;};
   const memA=(tm(g.away.abbr,'off')+tm(g.home.abbr,'def'))/2,memH=(tm(g.home.abbr,'off')+tm(g.away.abbr,'def'))/2;
@@ -1575,17 +1580,25 @@ function voicesLines(sp,g){const gl=g.away.abbr+'@'+g.home.abbr;let L=[];
    calls are drawn on the bet squares, locked at kickoff into the voices
    ledger, graded off the finals store, and fed to the character brain below,
    which learns what each one is actually good at. */
+/* The roster. Every character has a name, a one-line school of thought, and
+   the condition under which it stays silent — a silent character is shown as
+   "no call" with its reason, never quietly dropped from the count. */
 const CHARS={
-  'Sim':        {chip:'★',color:'#FFD75E',label:'Sim — the app'},
-  'Judge':      {chip:'J',color:'#f5a524',label:'Judge'},
-  'Coach':      {chip:'C',color:'#5FD3E8',label:'Coach'},
-  'Most common':{chip:'M',color:'#a78bfa',label:'Most common score'},
-  'Pred':       {chip:'P',color:'#e8c15a',label:'Pred (gold line)'},
-  'Trends':     {chip:'T',color:'#34d399',label:'Trends'},
-  'Consensus':  {chip:'$',color:'#f472b6',label:'Consensus (money/tickets)'}
+  'Sim':        {chip:'★ SIM',color:'#FFD75E',label:'The Simulator',school:'10,000 Monte Carlo runs of the game',quiet:'no sim yet'},
+  'Judge':      {chip:'JUDGE',color:'#f5a524',label:'The Judge',school:'weighs every witness by its graded accuracy (forecast combination)',quiet:'no witnesses'},
+  'Coach':      {chip:'COACH',color:'#5FD3E8',label:'The Coach',school:'situational take/fade — matchup, rest, form',quiet:'no take or fade'},
+  'Most common':{chip:'SCORE',color:'#a78bfa',label:'The Scorekeeper',school:'the single most likely final score',quiet:'no modal score'},
+  'Pred':       {chip:'ORACLE',color:'#e8c15a',label:'The Oracle',school:'outside predicted scores you upload (non-Covers)',quiet:'no outside prediction uploaded'},
+  'Covers':     {chip:'COVERS',color:'#ff7a1a',label:'Covers',school:'Covers / OddsShark computer predicted score',quiet:'no Covers prediction uploaded'},
+  'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'situational trend records, shrunk for small samples',quiet:'no uploaded trends lean'},
+  'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'}
 };
 const CHAR_ORDER=Object.keys(CHARS);
-const INDEP_VOICES=new Set(['Trends','Consensus','Coach']);
+/* Independent reads: not derived from the app's own simulation. */
+const INDEP_VOICES=new Set(['Trends','Consensus','Coach','Pred','Covers']);
+const charName=v=>(CHARS[v]&&CHARS[v].label)||v;
+/* why a character is silent on this market */
+function charQuiet(v,market){if(v==='Coach'&&market==='spread')return'doesn\'t call spreads';return(CHARS[v]||{}).quiet||'no call';}
 const halfRound=x=>Math.round(x*2)/2;
 /* Every character's call for one game. Pure: computed from the sim, the
    lines on the board and the intake stores — nothing needs to be saved first,
@@ -1639,25 +1652,39 @@ function characterCalls(sp,g,s){
   const ms=String(s.modeScore||'').match(/(\d+)\D+(\d+)/);
   if(ms)byMargin('Most common',+ms[1],+ms[2],{score:ms[1]+'-'+ms[2]});
   // Pred — the gold "pred A x – y H" line under the projected score
-  try{const p=typeof predFor==='function'?predFor(sp,gl):null;if(p&&p.a!=null&&p.h!=null)byMargin('Pred',+p.a,+p.h,{score:p.a+'-'+p.h});}catch(e){}
-  // Outside predicted scores from the Intel log — one voice per source
+  /* Covers is its own character; every other uploaded prediction speaks as the Oracle. */
+  const isCovers=src=>/covers|oddsshark/i.test(String(src||''));
+  let spoke={};
+  try{const p=typeof predFor==='function'?predFor(sp,gl):null;if(p&&p.a!=null&&p.h!=null){const v=isCovers(p.src)?'Covers':'Pred';byMargin(v,+p.a,+p.h,{score:p.a+'-'+p.h,src:p.src||''});spoke[v]=1;}}catch(e){}
+  // Outside predicted scores from the Intel log — Covers → Covers, others → Oracle (once each)
   try{
     const preds=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='pred'&&x.game===gl&&x.date===d&&x.a!=null&&x.h!=null);
     const bySrc={};preds.forEach(x=>{(bySrc[x.src]=bySrc[x.src]||[]).push(x)});
-    Object.entries(bySrc).forEach(([src,arr])=>{const last=arr[arr.length-1];byMargin(src||'Outside pred',last.a,last.h,{score:last.a+'-'+last.h});});
+    Object.entries(bySrc).forEach(([src,arr])=>{const last=arr[arr.length-1];const v=isCovers(src)?'Covers':'Pred';
+      if(spoke[v])return;spoke[v]=1;byMargin(v,last.a,last.h,{score:last.a+'-'+last.h,src});});
   }catch(e){}
   // Trends — the net lean of every uploaded trend on this game, as the Judge reads them
   try{const tr=brainTrendEvidence(g,sp);
     if(Math.abs(tr.dMar)>=0.05){const sd=tr.dMar>0?'home':'away';add('Trends','ml',sd);if(hl!=null)add('Trends','spread',sd);}
     if(Math.abs(tr.dTot)>=0.05&&tl!=null)add('Trends','total',tr.dTot>0?'over':'under');}catch(e){}
-  // Consensus — where the money is (tickets if no money split was uploaded)
+  /* The Crowd — rebuilt on Levitt (2004): books don't balance action, they shade
+     lines AGAINST the public, so a lopsided public side is a fade, not a follow.
+       1) money and tickets both uploaded and money runs 10+ pts ahead of tickets
+          on one side → that's sharp money: FOLLOW the money
+       2) otherwise, 65%+ of the public on one side → FADE it
+       3) closer than 65/35 → no call (there's nothing to read)          */
   try{
     const rows=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl);
-    const latest=(mk)=>{const r=rows.filter(x=>x.market===mk);return r.filter(x=>x.metric==='money').pop()||r.pop();};
-    const ml=latest('moneyline'),spc=latest('spread'),to=latest('total');
-    if(ml&&ml.homePct!=null&&ml.homePct!==50)add('Consensus','ml',ml.homePct>50?'home':'away',{metric:ml.metric});
-    const sps=spc||ml;if(hl!=null&&sps&&sps.homePct!=null&&sps.homePct!==50)add('Consensus','spread',sps.homePct>50?'home':'away',{metric:sps.metric});
-    if(tl!=null&&to&&to.overPct!=null&&to.overPct!==50)add('Consensus','total',to.overPct>50?'over':'under',{metric:to.metric});
+    const pick=mk=>{const r=rows.filter(x=>x.market===mk);return{bets:r.filter(x=>x.metric!=='money').pop()||null,money:r.filter(x=>x.metric==='money').pop()||null};};
+    const read=(o,key,hi,lo)=>{const b=o.bets&&o.bets[key]!=null?+o.bets[key]:null,m=o.money&&o.money[key]!=null?+o.money[key]:null;
+      if(b!=null&&m!=null&&Math.abs(m-b)>=10)return{side:m>b?hi:lo,why:'sharp money',metric:'money'};
+      const x=b!=null?b:m;if(x==null)return null;
+      if(x>=65)return{side:lo,why:'fade public '+Math.round(x)+'%',metric:b!=null?'bets':'money'};
+      if(x<=35)return{side:hi,why:'fade public '+Math.round(100-x)+'%',metric:b!=null?'bets':'money'};return null;};
+    const ml=pick('moneyline'),spc=pick('spread'),to=pick('total');
+    const rm=read(ml,'homePct','home','away');if(rm)add('Consensus','ml',rm.side,{metric:rm.metric,why:rm.why});
+    const rs=read(spc.bets||spc.money?spc:ml,'homePct','home','away');if(hl!=null&&rs)add('Consensus','spread',rs.side,{metric:rs.metric,why:rs.why});
+    const rt=read(to,'overPct','over','under');if(tl!=null&&rt)add('Consensus','total',rt.side,{metric:rt.metric,why:rt.why});
   }catch(e){}
   // Coach — take/fade on the model side, plus its total read
   try{const c=coachPickFor(g,s,sp);if(c){const simSide=c.sideTeam===H?'home':'away';
@@ -1738,6 +1765,7 @@ function charWeight(sp,voice,market,ctx){
   const r=charRate(sp,voice,market,ctx);
   let w=Math.max(0.25,Math.min(2.5,1+6*(r.p-0.5)));
   if(voice==='Sim')w=Math.max(2,w*2);          // the app reigns
+  w*=bankerMult(voice);                         // the Banker's say: money results over the last 4 weeks
   return{...r,w};
 }
 /* Parse a square's pick into {market, side} for the character layer. */
@@ -1843,9 +1871,13 @@ function charSquare(sp,g,s,pick,opts){
   /* Sim, Judge, Most common and Pred all read the same simulation, so four of them agreeing is one opinion, not four.
      Unanimous needs every voice that spoke on this side AND at least one independent read (Trends, Consensus or Coach). */
   const indepOn=calls.filter(c=>INDEP_VOICES.has(c.voice)&&c.side===k.side).length;
-  const unanimous=calls.length>=4&&onN===calls.length&&indepOn>=1;
+  /* Unanimous means a real quorum: 5+ characters called this market, every one on
+     this side, and at least two of them are independent of the simulation. */
+  const unanimous=calls.length>=5&&onN===calls.length&&indepOn>=2;
   const brainP=learned&&z!=null?sigm(z):null;
-  const meter=`<div class="ch-meter">${onN}/${calls.length} characters${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`;
+  const silent=CHAR_ORDER.filter(v=>!calls.some(c=>c.voice===v));const against=calls.length-onN;
+  const meter=`<div class="ch-meter" title="${esc(silent.map(v=>charName(v)+': '+charQuiet(v,k.market)).join(' · '))}">${onN} of ${CHAR_ORDER.length} on this side${against?` · ${against} against`:''}${silent.length?` · ${silent.length} no call`:''}${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`+
+    (silent.length?`<div class="ch-meter" style="opacity:.7;font-size:8.5px">silent: ${silent.map(v=>esc(charName(v).replace(/^The /,''))).join(', ')}</div>`:'');
   let rh='';try{rh=rulesHtml(rulesFor(sp,g,pick))}catch(e){}
   /* double evaluation: the brain and the sport's proven-best characters on the same side */
   let dbl='';try{const top=charTop(sp);const onSet=new Set(calls.filter(c=>c.side===k.side).map(c=>c.voice));
@@ -2059,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261007b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261007c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2592,6 +2624,33 @@ async function pushToGitHub(manual){
     return{ok:false,reason:'network error',body:(e&&e.message)||String(e)};
   }
 }
+/* ── PUBLIC PICKS FEED ─────────────────────────────────────────────────────
+   The locked Best card, its graded track record and your subscribe link are
+   published to public/picks.json in your repo — picks.html renders it for
+   anyone. Auto-publishes when the card locks (and again as picks grade). */
+async function ghPut(path,text,msg){const token=get(LS.ghtoken,''),repo=get(LS.ghrepo,'');if(!token||!repo)return{ok:false,reason:'not configured'};
+  const api=`https://api.github.com/repos/${repo}/contents/${path}`;const H={'Authorization':'token '+token,'Accept':'application/vnd.github+json'};
+  try{let sha=null;const g=await fetch(api,{headers:H});if(g.status===200)sha=(await g.json()).sha;else if(g.status!==404)return{ok:false,reason:'HTTP '+g.status};
+    const r=await fetch(api,{method:'PUT',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify({message:msg,content:b64u(text),...(sha?{sha}:{})})});
+    return r.ok?{ok:true}:{ok:false,reason:'HTTP '+r.status+' '+(await r.text()).slice(0,160)};}catch(e){return{ok:false,reason:e.message||String(e)};}}
+function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();
+  const slim=x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
+    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push});
+  const hist=Object.keys(log).sort().reverse().slice(0,30).map(d=>({d,picks:(log[d].picks||[]).filter(x=>x.main).map(slim)})).filter(x=>x.picks.length);
+  const today_=S.locked?{d:S.d,lockedAt:S.lockedAt,picks:(S.top3||[]).map(x=>{const L=(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);return slim({...x,hit:L?L.hit:null,push:L?L.push:false});}),
+    bySport:Object.fromEntries(Object.entries(S.bySport||{}).map(([k,v])=>[k,v.map(slim)]))}:null;
+  return{v:1,generated:Date.now(),brand:'TheDesk',handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,history:hist};}
+async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual)alert('The Best card publishes once it locks — run the master evaluation or tap Lock now.');return{ok:false,reason:'not locked'};}
+  if(!get(LS.ghtoken,'')||!get(LS.ghrepo,'')){if(manual)alert('Add your GitHub token and owner/repo in Settings → Backup first. Publishing uses the same connection.');return{ok:false,reason:'not configured'};}
+  const F=publicFeed();const txt=JSON.stringify(F,null,1);
+  const a=await ghPut('public/picks.json',txt,'Publish picks — '+S.d);const b=a.ok?await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d):a;
+  set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:JSON.stringify(F.today&&F.today.picks.map(x=>x.hit))});
+  if(manual)alert(a.ok&&b.ok?'Published. Your public page updates in about a minute: '+location.origin+location.pathname.replace(/[^/]*$/,'')+'picks.html':'Publish failed: '+(a.reason||b.reason));
+  try{renderBest();}catch(e){}return{ok:a.ok&&b.ok};}
+/* auto: once when the card locks, and again whenever a pick grades */
+async function publishAuto(){try{const S=get(BEST5_KEY,{});if(!S.locked||!get(LS.ghtoken,''))return;const P=get('d4.pubstate',{})||{};
+  const F=publicFeed();const sig=JSON.stringify(F.today&&F.today.picks.map(x=>x.hit));
+  if(P.d===S.d&&P.ok&&P.sig===sig)return;await publishPicks(false);}catch(e){}}
 // runs once at boot — if this device has no graded history at all (fresh install, wiped
 // site data, new domain) it tries to silently pull the last known-good snapshot back from
 // the repo's public file. No token needed — reading a public repo file needs no auth.
@@ -15254,6 +15313,7 @@ function learnHealthHtml(){const H=learnHealth();const lab={mlb:'⚾ MLB',nfl:'�
     ${errs.length?`<br><span style="color:var(--rust)">errors: ${esc(errs.join(' · '))}</span>`:''}</div>
     <div class="bar"><button onclick="brainLearnAll(true);renderRecordsHub()">↻ Learn now</button></div></div>`;}
 if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(()=>{try{brainLearnAll(true);}catch(e){}},5000));
+if(typeof window!=='undefined'&&!/[?&]bg=1/.test(location.search||''))window.addEventListener('load',()=>{setTimeout(()=>{try{publishAuto();}catch(e){}},9000);setInterval(()=>{if(!document.hidden)try{publishAuto();}catch(e){}},15*60e3);});
 /* ══ HIGH-% PROPS ══════════════════════════════════════════════════════════
    1) your pasted lines, ranked by model probability (with EV, so a 75% prop
       priced at -400 is flagged as overpriced), and
@@ -15397,7 +15457,10 @@ function renderBest(){
     if(L){const main=(L.picks||[]).filter(x=>x.main);const open=main.filter(x=>x.hit==null&&!x.push);
       if(open.length){const mk=x=>{const g=main.find(y=>y.pick===x.pick&&y.game===x.game);return!g?'':g.push?' ↔':g.hit===true?' ✅':g.hit===false?' ❌':' ⏳';};
         prev=`<div class="sub" style="margin:10px 0 4px"><b>${fmtDate(new Date(P.d+'T12:00:00'))}'s card — still grading (${open.length} open)</b></div>`+bestPublicCardHtml(P,{id:'bestPrevShare',res:mk});}}}catch(e){}
-  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button></div>`+
+  const pub=get('d4.pubstate',{})||{};const pubTxt=pub.d===S.d?(pub.ok?`<span style="color:var(--win)">✓ public page updated ${new Date(pub.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span>`:`<span style="color:var(--rust)">publish failed: ${esc(pub.reason||'')}</span>`):'';
+  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button><a href="picks.html" target="_blank" style="font-size:11px;color:var(--cold);align-self:center">open public page ↗</a></div>
+    <div class="sub mono" style="font-size:9.5px">${pubTxt||'The public page (picks.html) shows only the locked card, its graded record and your subscribe link. It publishes itself when the card locks.'}</div>
+    <div class="sub" style="font-size:10px;margin-top:4px">Subscribe link for the public page <input id="subLinkIn" placeholder="https://… (Whop, Patreon, Stripe link)" value="${esc(get('d4.sublink',''))}" onchange="set('d4.sublink',this.value.trim())" style="width:100%;margin-top:2px"></div>`+
     ((S.props||[]).length?`<details class="tkt" style="margin-top:8px"><summary><b>Bonus props</b> <span class="mono" style="font-size:10px;color:var(--mute)">not part of the record</span></summary>${bestRowsHtml('Top props',S.props,null,'')}</details>`:'');
 }
 /* Recap: each past day's locked card, graded pick by pick */
@@ -17269,6 +17332,90 @@ function tcHotLine(sp,x){try{const V=roGet(VOICES_KEY,[],5000)||[];const d=today
     if(!c)return null;const h=charHist(V,c);return h.hot.length?{v,h:h.hot[0]}:null;}).filter(Boolean);
   if(!hits.length)return'';
   return`<div class="mono" style="font-size:9.5px;color:var(--win);margin-top:2px">${hits.map(o=>`🔥 ${CHARS[o.v].chip} ${esc(o.h.lab)} ${o.h.w}-${o.h.l}`).join(' · ')}</div>`;}catch(e){return'';}}
+const MS_FILTERS_EXTRA={};
+/* ══ THE BANKER ═════════════════════════════════════════════════════════════
+   The king of the challenge games. Not about clout — about money.
+   1. LEDGER   Every Monday each character gets a fresh $100. Every graded call it
+               made that week is a bet at 2% of its CURRENT roll (fixed-fractional,
+               so a cold streak shrinks the stakes instead of busting the roll), and
+               its locked daily parlay rides at 1%. Standings by bankroll, week by week.
+   2. SIZING   For any set of legs the Banker picks the parlay length by Kelly growth
+               (Kelly 1956; MacLean, Thorp & Ziemba 2011): g(k) = P·ln(1+f(D−1)) +
+               (1−P)·ln(1−f), f = ¼ Kelly. More legs only when they ADD growth.
+   3. SLATE    From every character's parlay he picks up to 5 to actually play —
+               highest growth first, no two sharing more than one leg — and sizes
+               each at ¼ Kelly, capped 2% each and 10% for the day.
+   4. VOICE    His 4-week bankroll results move each character's weight in the
+               squares, the brain and the tiers (×0.6 – ×1.4), once 30+ bets prove it.
+   5. CHALLENGES  He writes new challenges every week from the standings.        */
+const BANKER_KEY='d4.banker';
+const bkWeekStart=d=>{const t=new Date((d||today())+'T12:00:00');const wd=(t.getDay()+6)%7;return dayShift(String(d||today()).slice(0,10),-wd);};
+function bkRunWeek(ws,V,CP){const we=dayShift(ws,6);const out={};
+  CHAR_ORDER.forEach(v=>{const calls=V.filter(x=>x.voice===v&&x.graded&&x.date>=ws&&x.date<=we).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    let br=100,peak=100,dd=0,w=0,l=0,p=0,staked=0;const byM={};
+    const bet=(frac,dec,hit,m)=>{const st=+(br*frac).toFixed(2);if(hit==null){p++;return;}staked+=st;const pnl=hit?st*(dec-1):-st;br=+(br+pnl).toFixed(2);
+      if(hit)w++;else l++;const M=byM[m]=byM[m]||{pnl:0,n:0};M.pnl+=pnl;M.n++;peak=Math.max(peak,br);dd=Math.max(dd,(peak-br)/peak);};
+    calls.forEach(c=>bet(0.02,americanToDecimal(c.price!=null?c.price:-110),c.hit,c.sp+' '+c.market));
+    Object.entries(CP||{}).forEach(([d,D])=>{if(d<ws||d>we||!D||!D.locked)return;const P=(D.by||{})[v];if(!P||!P.done)return;
+      const dec=P.legs.filter(x=>!x.push).reduce((a,x)=>a*americanToDecimal(x.price),1);bet(0.01,dec,P.won,'parlay');});
+    const ms=Object.entries(byM).filter(([k,x])=>x.n>=3).sort((a,b)=>b[1].pnl-a[1].pnl);
+    out[v]={v,br,w,l,p,n:w+l,roi:staked?(br-100)/staked:0,dd,best:ms[0]?ms[0][0]:null,worst:ms.length>1?ms[ms.length-1][0]:null};});
+  return out;}
+let BK_C=null;
+function bkLedger(force){if(!force&&BK_C&&Date.now()-BK_C.ts<60e3)return BK_C.v;
+  const V=get(VOICES_KEY,[])||[],CP=get(CPAR_KEY,{})||{};const ws=bkWeekStart();
+  const weeks=[];for(let i=0;i<8;i++){const w0=dayShift(ws,-7*i);const R=bkRunWeek(w0,V,CP);const act=Object.values(R).filter(x=>x.n);
+    weeks.push({ws:w0,R,leader:act.sort((a,b)=>b.br-a.br)[0]||null});}
+  /* the Banker's verdict: pooled last 4 weeks, only with proof */
+  const mult={};CHAR_ORDER.forEach(v=>{let n=0,pnl=0;weeks.slice(0,4).forEach(W=>{const x=W.R[v];n+=x.n;pnl+=x.br-100;});
+    const roi=n?pnl/(n*2):0;mult[v]=n>=30?Math.max(0.6,Math.min(1.4,1+roi*3)):1;});
+  const v={ws,weeks,mult};BK_C={ts:Date.now(),v};return v;}
+function bankerMult(v){try{return bkLedger().mult[v]||1;}catch(e){return 1;}}
+/* Kelly-growth sizing for a list of legs {p,dec} already ranked best-first */
+function bkSize(legs,kMin,kMax){kMin=kMin||2;kMax=Math.min(kMax||5,legs.length);let best=null;
+  for(let k=kMin;k<=kMax;k++){const L=legs.slice(0,k);const P=L.reduce((a,x)=>a*x.p,1),D=L.reduce((a,x)=>a*x.dec,1);
+    const ev=P*D-1,fk=ev>0?ev/(D-1):0,f=Math.min(0.02,fk/4);const g=f>0?P*Math.log(1+f*(D-1))+(1-P)*Math.log(1-f):0;
+    const o={k,P,D,ev,f,g};if(!best||g>best.g+1e-12||(best.g<=0&&g<=0&&ev>best.ev))best=o;}
+  return best;}
+function bkSlate(){const D=cparState();const by=D.by||{};const L=bkLedger();
+  const cand=Object.entries(by).map(([v,P])=>{const legs=P.legs.map(x=>({p:x.score!=null?x.score:x.p,dec:americanToDecimal(x.price)}));
+    const pAdj=legs.reduce((a,x)=>a*x.p,1)*Math.min(1.15,Math.max(0.85,L.mult[v]||1));const D0=legs.reduce((a,x)=>a*x.dec,1);
+    const ev=pAdj*D0-1,fk=ev>0?ev/(D0-1):0,f=Math.min(0.02,fk/4),g=f>0?pAdj*Math.log(1+f*(D0-1))+(1-pAdj)*Math.log(1-f):0;
+    return{v,P,p:pAdj,dec:D0,ev,f,g,keys:new Set(P.legs.map(x=>x.sp+'|'+x.game+'|'+x.pick))};}).sort((a,b)=>b.g-a.g||b.ev-a.ev);
+  const pick=[];for(const c of cand){if(pick.length>=5)break;if(c.g<=0)continue;if(pick.some(o=>[...o.keys].filter(k=>c.keys.has(k)).length>1))continue;pick.push(c);}
+  const B=brAmount()||100;const tot=pick.reduce((a,x)=>a+x.f,0),sc=tot>0.10?0.10/tot:1;
+  pick.forEach(x=>{x.stakeF=x.f*sc;x.stake=Math.max(1,Math.round(B*x.stakeF*2)/2);});
+  return{picks:pick,passed:cand.filter(c=>!pick.includes(c)),bankroll:B,locked:D.locked};}
+/* Dynamic rules so challenges can be built around a character or the Banker */
+CHAR_ORDER.forEach(v=>{MS_FILTERS_EXTRA['ch_'+v.replace(/\s+/g,'_')]={lab:charName(v)+'\'s picks',desc:charName(v)+' is on every leg',f:x=>(x.chars||[]).includes(v)};});
+MS_FILTERS_EXTRA.banker={lab:'Banker\'s slate',desc:'every leg is in one of the Banker\'s parlays',f:x=>{try{const S=bkSlate();return S.picks.some(o=>o.P.legs.some(l=>l.game===x.game&&l.pick===x.pick));}catch(e){return false;}}};
+function bkChallenges(){const L=bkLedger();const prev=L.weeks[1]&&L.weeks[1].leader?L.weeks[1]:L.weeks[0];const lead=prev&&prev.leader;
+  const act=Object.values(L.weeks[0].R).filter(x=>x.n).sort((a,b)=>a.br-b.br);const cold=act[0];
+  const T=[];
+  T.push({id:'bk_table',cat:'banker',name:'🏦 The Banker\'s Table',start:50,goal:250,days:21,route:R_('housemoney',3,.5,1),rule:'banker',sport:null,
+    note:'Every leg comes from the Banker\'s own slate — the parlays he would actually play, sized by Kelly growth.'});
+  if(lead)T.push({id:'bk_hot',cat:'banker',name:'🔥 Ride the Hot Hand — '+charName(lead.v.v||lead.v),start:25,goal:100,days:14,route:R_('stairs',2,.2),rule:'ch_'+String(lead.v).replace(/\s+/g,'_'),sport:null,
+    note:`${charName(lead.v)} won ${prev.ws===L.ws?'this':'last'} week's $100 bankroll race ($${lead.br.toFixed(2)}). Every leg must have them on it.`});
+  if(cold&&cold.br<95)T.push({id:'bk_fade',cat:'banker',name:'🧊 Fade the Cold — '+charName(cold.v),start:20,goal:60,days:14,route:R_('stairs',1,.25),rule:'nofade_'+String(cold.v).replace(/\s+/g,'_'),sport:null,
+    note:`${charName(cold.v)} is last this week ($${cold.br.toFixed(2)}). Singles only, and never a leg they're on.`});
+  if(cold)MS_FILTERS_EXTRA['nofade_'+String(cold.v).replace(/\s+/g,'_')]={lab:'Fade '+charName(cold.v),desc:charName(cold.v)+' is on no leg',f:x=>!(x.chars||[]).includes(cold.v)};
+  T.forEach(t=>{MS_TEMPLATES[t.id]=t;});return T;}
+function bankerHtml(){const L=bkLedger(true);const W=L.weeks[0];const rows=Object.values(W.R).sort((a,b)=>b.br-a.br);
+  const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
+  const money=x=>`<b style="color:${x>=100?'var(--win)':'var(--rust)'}">$${x.toFixed(2)}</b>`;
+  const stand=rows.map((x,i)=>`<tr><td style="text-align:left">${i+1}. ${chip(x.v)} ${esc(charName(x.v))}</td><td>${money(x.br)}</td><td>${x.w}-${x.l}${x.p?'-'+x.p:''}</td><td>${x.n?(x.roi>=0?'+':'')+(x.roi*100).toFixed(1)+'%':'—'}</td><td>×${(L.mult[x.v]||1).toFixed(2)}</td></tr>`).join('');
+  const hist=L.weeks.slice(1).filter(x=>x.leader).map(x=>`<span class="mono" style="font-size:9.5px;margin-right:8px">${fmtDate(new Date(x.ws+'T12:00:00'))}: ${chip(x.leader.v)} $${x.leader.br.toFixed(0)}</span>`).join('');
+  let S=null;try{S=bkSlate();}catch(e){}
+  const slate=S&&S.picks.length?S.picks.map((o,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><b>${i+1}. ${chip(o.v)} ${esc(charName(o.v))}'s ${o.P.legs.length}-leg</b><span class="mono" style="font-size:11px;color:var(--gold)">${decimalToAmerican(o.dec)} · stake <b style="color:var(--win)">$${o.stake.toFixed(2)}</b></span></div>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(o.p*100).toFixed(1)}% to cash · EV ${o.ev>=0?'+':''}${(o.ev*100).toFixed(1)}% · ¼-Kelly ${(o.stakeF*100).toFixed(2)}% of $${S.bankroll}</div>
+      <div class="mono" style="font-size:10px">${o.P.legs.map(l=>esc(l.pick)+' <span style="color:var(--gold)">'+(l.price>0?'+':'')+l.price+'</span>').join(' · ')}</div></div>`).join('')
+    :'<div class="sub">The Banker passes today — no character parlay has positive Kelly growth. Sitting out is a position.</div>';
+  return`<div class="tkt" style="border-color:#c9a227"><h3>🏦 The Banker</h3>
+    <div class="sub" style="font-size:10px">Every character starts each week with $100. Every graded call is a 2% bet of its current roll; its daily parlay rides at 1%. Money talks — the multiplier is the Banker's say in how loud each character is (needs 30+ bets).</div>
+    <table class="mono" style="width:100%;font-size:10px;text-align:center;margin-top:6px;border-collapse:collapse"><tr style="color:var(--mute)"><td style="text-align:left">week of ${fmtDate(new Date(W.ws+'T12:00:00'))}</td><td>roll</td><td>W-L</td><td>ROI</td><td>weight</td></tr>${stand}</table>
+    ${hist?`<div style="margin-top:6px"><span class="sub" style="font-size:10px">Past weekly winners: </span>${hist}</div>`:''}
+    <div class="mktlab" style="margin-top:8px">The Banker's slate — up to 5 parlays he'd actually play ${S&&S.locked?'<span style="color:var(--win)">· 🔒 frozen</span>':''}</div>${slate}</div>`;}
 /* ══ CHARACTER PARLAYS ══════════════════════════════════════════════════════
    Each character builds its own 3–5 leg parlay from ITS OWN calls today, picking
    the legs where its graded record is strongest: sport+market, the team, and the
@@ -17286,10 +17433,13 @@ function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','
 function cparBuild(voice,V,d){V=V||get(VOICES_KEY,[])||[];d=d||today();
   const calls=V.filter(x=>x.date===d&&x.voice===voice&&x.price!=null&&['ml','spread','total'].includes(x.market));
   const cand=calls.map(c=>({c,...cparLegScore(V,c)})).filter(x=>!x.weak).sort((a,b)=>b.score-a.score);
-  const used=new Set(),legs=[];for(const x of cand){const g=x.c.sp+'|'+x.c.game;if(used.has(g))continue;if(legs.length>=3&&x.score<0.55)break;used.add(g);legs.push(x);if(legs.length===5)break;}
-  if(legs.length<3)return null;
+  const used=new Set(),top=[];for(const x of cand){const g=x.c.sp+'|'+x.c.game;if(used.has(g))continue;used.add(g);top.push(x);if(top.length===5)break;}
+  if(top.length<2)return null;
+  /* the Banker decides how many legs: the length with the most Kelly growth */
+  const sz=bkSize(top.map(x=>({p:x.score,dec:americanToDecimal(x.c.price)})),2,5);const legs=top.slice(0,sz.k);
   const dec=legs.reduce((a,x)=>a*americanToDecimal(x.c.price),1),p=legs.reduce((a,x)=>a*x.p,1);
-  return{voice,d,legs:legs.map(x=>({sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,m:x.c.market,sd:x.c.side,p:x.p,hr:x.hr,why:x.why})),dec,p};}
+  return{voice,d,legs:legs.map(x=>({sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,m:x.c.market,sd:x.c.side,p:x.p,score:x.score,hr:x.hr,why:x.why})),dec,p,
+    size:{k:sz.k,ev:sz.ev,g:sz.g,why:sz.g>0?`${sz.k} legs maximize Kelly growth`:`no length is +EV — ${sz.k} legs is the least-bad`}};}
 function cparState(){const d=today();const S=get(CPAR_KEY,{})||{};const E=get(LS_EVAL,{})||{};const locked=E.date===d;
   if(!S[d]||!S[d].locked){const V=get(VOICES_KEY,[])||[];const day={locked,by:{}};
     CHAR_ORDER.forEach(v=>{const P=cparBuild(v,V,d);if(P)day.by[v]=P;});
@@ -17309,9 +17459,9 @@ function cparRecord(voice){const S=get(CPAR_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=
 function cparHtml(){const D=cparState();const vs=Object.keys(D.by||{});
   if(!vs.length)return'<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub">Each character needs 3+ priced calls today on games where its record isn\'t weak. Upload lines and open the boards.</div></div>';
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
-  return`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Each character's own ${'3–5'}-leg ticket from its strongest spots today. ${D.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation — graded at the finals.</b>':'Building — freezes when the master evaluation runs.'}</div>
+  return`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Each character's own ticket from its strongest spots today — the Banker picks how many legs. ${D.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation — graded at the finals.</b>':'Building — freezes when the master evaluation runs.'}</div>
     ${vs.map(v=>{const P=D.by[v],R=cparRecord(v);const rec=R.w+R.l?`${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}`:'no graded parlays yet';
-      return`<details style="margin:5px 0"><summary>${chip(v)} <b>${esc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${P.legs.length}-leg · ${decimalToAmerican(P.dec)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${(P.p*100).toFixed(P.p<0.1?1:0)}% · ${rec}</span></summary>
+      return`<details style="margin:5px 0"><summary>${chip(v)} <b>${esc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${P.legs.length}-leg · ${decimalToAmerican(P.dec)}</span>${P.size?` <span class="mono" style="font-size:9px;color:#c9a227">🏦 ${esc(P.size.why)}</span>`:''} <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${(P.p*100).toFixed(P.p<0.1?1:0)}% · ${rec}</span></summary>
         ${P.legs.map(l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}<b>${esc(l.pick)}</b> <span style="color:var(--gold)">${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} ${esc(l.game)} · ${Math.round(l.p*100)}%</span>${l.why.length?`<br><span style="color:var(--win)">↳ ${esc(l.why.join(' · '))}</span>`:''}</div>`).join('')}</details>`;}).join('')}</div>`;}
 
 /* ══ CHARACTER PROPS — 70%+ calls, graded, calibrated ══════════════════════
@@ -17389,6 +17539,16 @@ function cpropHtml(F){let calls=[];try{calls=cpropToday();cpropLog(calls);}catch
       ${CPROP_FOCUS===id?cpropSweetHtml(x.sp,x.player):''}</div>`;}).join('')
     :'<div class="empty">No 70%+ character prop calls yet — player game logs fill in as boards load and games finish.</div>';
   return cpropCalibHtml()+`<div class="tkt"><h3>🎯 Character props today · 70%+</h3><div class="sub" style="font-size:10px">Each player's sweet spot per character — the highest line it gives 70%+. Tap a name for every line and every character's read. Sorted by calibrated %.</div>${body}</div>`;}
+/* The roster: every character by name, its school of thought, this week's
+   bankroll, and what it's calling today. */
+function charRosterHtml(){const L=bkLedger();const W=L.weeks[0].R;const V=get(VOICES_KEY,[])||[];const d=today();
+  return`<div class="tkt"><h3>🎭 The characters</h3>${CHAR_ORDER.map(v=>{const C=CHARS[v];const x=W[v]||{br:100,n:0,w:0,l:0};
+    const n=V.filter(c=>c.date===d&&c.voice===v).length;const all=V.filter(c=>c.voice===v&&c.graded&&c.hit!=null);const aw=all.filter(c=>c.hit).length;
+    return`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--rule)">
+      <span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color};margin-top:2px">${C.chip}</span>
+      <div style="flex:1;min-width:0"><b>${esc(C.label)}</b> <span class="mono" style="font-size:10px;color:${x.br>=100?'var(--win)':'var(--rust)'}">$${x.br.toFixed(2)} this week</span>
+        <div class="sub" style="font-size:10px">${esc(C.school)}</div>
+        <div class="mono" style="font-size:9.5px;color:var(--mute)">${n?n+' calls today':'silent today — '+esc(C.quiet)} · all-time ${aw}-${all.length-aw}${(L.mult[v]||1)!==1?` · Banker weight ×${L.mult[v].toFixed(2)}`:''}${x.best?' · best: '+esc(x.best):''}</div></div></div>`;}).join('')}</div>`;}
 let TODAY_LIVE_TIMER=null;
 function todayLiveLoop(){if(TODAY_LIVE_TIMER)return;
   TODAY_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-today');if(!v||!v.classList.contains('on'))return;
@@ -17457,7 +17617,8 @@ function renderToday(noSnap){
       ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
   const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['props','🎯 Props']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
-  if(F.view==='chars'){el.innerHTML=vw+spBar+(()=>{try{return cparHtml()}catch(e){console.warn('char parlays',e);return''}})()+charDeskHtml(F);return;}
+  if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
+    el.innerHTML=vw+spBar+safe(bankerHtml)+safe(charRosterHtml)+safe(cparHtml)+charDeskHtml(F);return;}
   if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
   el.innerHTML=vw+legend+bar+liveHtml+sdHtml+body;
 }
@@ -18131,6 +18292,7 @@ const MS_FILTERS={
   money:{lab:'Sharp shadow',desc:'legs with a 💰 sharp-money split',f:x=>(x.rules||[]).some(r=>r.icon==='💰')},
   cross:{lab:'World tour',desc:'every ticket spans 2+ sports',f:()=>true,cross:true}
 };
+Object.assign(MS_FILTERS,MS_FILTERS_EXTRA);
 const SPORT_LAB={nfl:'NFL only',ncaaf:'CFB only',mlb:'MLB only',nhl:'NHL only',nba:'NBA only'};
 const R_=(route,k,f,unit)=>[route,k||'',f||''].join('|')+(unit?'|'+unit:'');
 /* The board. [id, category, name, start, goal, days, route, rule, sport, hook] or pots. */
@@ -18797,7 +18959,10 @@ function missionsHtml(inner){
   let exposure=0;act.forEach(m=>{try{msPotsOf(m).forEach(P=>{if(P.balance<1)return;msPotOrders(m,P,m.pots?null:msActiveRoute(m)).forEach(L=>exposure+=L.stake);});}catch(e){}});
   const head=`<div class="mono" style="font-size:10.5px;margin:2px 0 6px">RANK <b style="color:#FFD75E">${R.name.toUpperCase()}</b> · ${xp} XP${R.next?` · ${R.next[0]-xp} to ${R.next[1]}`:''}${act.length?` · ${act.length} running · today's stakes across missions <b style="color:var(--gold)">${ms$(exposure)}</b>`:''}</div>`;
   const hub=(()=>{try{return msgHubHtml()}catch(e){console.warn('game hub',e);return''}})();
-  const body=`${head}${hub}<div class="lasStatus sub mono" style="font-size:10px"></div>${(()=>{try{return msMatcherHtml()}catch(e){return''}})()}${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
+  const bkc=(()=>{try{const T=bkChallenges();return`<div class="tkt" style="border-color:#c9a227;margin:8px 0"><h3>🏦 The Banker's challenges this week</h3>
+      <div class="sub" style="font-size:10px">Written from the characters' $100 bankroll race. They change every Monday.</div>${T.map(t=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${esc(t.name)}</b> <span class="mono" style="font-size:10px">$${t.start} → $${t.goal} in ${t.days} days</span>
+        <div class="sub" style="font-size:10.5px">${esc(t.note)}</div><div class="bar" style="margin-top:3px"><button style="font-size:10px" onclick="msStart('${t.id}')">Start</button></div></div>`).join('')}</div>`;}catch(e){console.warn('banker challenges',e);return''}})();
+  const body=`${head}${hub}<div class="lasStatus sub mono" style="font-size:10px"></div>${(()=>{try{return msMatcherHtml()}catch(e){return''}})()}${bkc}${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
     <div class="sbar" style="margin-top:12px"><h2>Mission board · ${MS_LIB.length}</h2><div class="ln"></div></div>
     <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Difficulty and finish % are simulated on ${myLegRate().src}. They move as your record grows.</div>
     ${msBoardHtml()}`;
