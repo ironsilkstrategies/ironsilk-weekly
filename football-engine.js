@@ -92,7 +92,19 @@ function nflFairML(p){
 }
 
 // ── NFL book lines (from uploaded txt) ───────────────────────────────────────
-function getNFLBookLines(){return get(LS.nflshots,{})[today()]||[];}
+/* Football slates are weekly: Tuesday's upload covers Thursday and Saturday games.
+   Every football store was read from today's bucket only, so the day after you
+   uploaded, every card fell back to "sim only". Read a rolling 8-day window,
+   oldest first, and let the newest row for the same game+market+side win. */
+const FB_WIN_DAYS=8;
+function fbWindow(key,dedupe){const all=get(key,{})||{};const out=[];
+  for(let i=FB_WIN_DAYS-1;i>=0;i--){const d=dayShift(today(),-i);(all[d]||[]).forEach(x=>out.push(x));}
+  (all[dayShift(today(),1)]||[]).forEach(x=>out.push(x)); // a "tomorrow" upload still applies
+  if(!dedupe)return out;const last=new Map();out.forEach((x,i)=>last.set(dedupe(x),i));const keep=new Set(last.values());return out.filter((x,i)=>keep.has(i));}
+const fbDedupeTrend=x=>(x.game||'')+'|'+String(x.text||'').trim().toLowerCase();
+const fbDedupeCons=x=>[x.game,x.market,x.metric,x.src||''].join('|');
+const fbDedupeExt=x=>[x.game,x.pick||x.market,x.src||''].join('|');
+function getNFLBookLines(){return fbWindow(LS.nflshots,bookKeyOf);}
 function repairNFLKeys(){
   if(!(NFL_GAMES||[]).length)return 0;
   const all=get(LS.nflshots,{});let fixed=0;
@@ -130,9 +142,9 @@ function nflBookLine(gameKey,market,side){
 }
 
 // ── NFL ext picks/trends/consensus ───────────────────────────────────────────
-function getNFLExt(){return get(LS.nflext,{})[today()]||[];}
-function getNFLTrends(){return get(LS.nfltrends,{})[today()]||[];}
-function getNFLConsensus(){return get(LS.nflconsensus,{})[today()]||[];}
+function getNFLExt(){return fbWindow(LS.nflext,fbDedupeExt);}
+function getNFLTrends(){return fbWindow(LS.nfltrends,fbDedupeTrend);}
+function getNFLConsensus(){return fbWindow(LS.nflconsensus,fbDedupeCons);}
 function nflTrendsFor(gameKey){return getNFLTrends().filter(x=>x.game===gameKey);}
 function nflConsensusFor(gameKey){return getNFLConsensus().filter(x=>x.game===gameKey);}
 function nflExtFor(gameKey){return getNFLExt().filter(x=>x.game===gameKey);}
@@ -2535,7 +2547,7 @@ const NCAAF_CONF={
 };
 
 // ── NCAAF storage helpers ────────────────────────────────────────────────────
-function getNCAAFBookLines(){return get(LS.ncaafshots,{})[today()]||[];}
+function getNCAAFBookLines(){return fbWindow(LS.ncaafshots,bookKeyOf);}
 /* A miss falls through to the alias/fuzzy resolver (~5ms). At 99 games that
    ran ~100 times per pass, twice per render — about a second of frozen UI the
    moment any CFB lines existed. Results are memoized against a signature of
@@ -2604,9 +2616,9 @@ function repairNCAAFKeys(){
   if(fixed)set(LS.ncaafshots,all);
   return fixed;
 }
-function getNCAAFExt(){return get(LS.ncaafext,{})[today()]||[];}
-function getNCAAFTrends(){return get(LS.ncaaftrends,{})[today()]||[];}
-function getNCAAFConsensus(){return get(LS.ncaafconsensus,{})[today()]||[];}
+function getNCAAFExt(){return fbWindow(LS.ncaafext,fbDedupeExt);}
+function getNCAAFTrends(){return fbWindow(LS.ncaaftrends,fbDedupeTrend);}
+function getNCAAFConsensus(){return fbWindow(LS.ncaafconsensus,fbDedupeCons);}
 function ncaafTrendsFor(k){return getNCAAFTrends().filter(x=>x.game===k);}
 function ncaafConsensusFor(k){return getNCAAFConsensus().filter(x=>x.game===k);}
 function ncaafExtFor(k){return getNCAAFExt().filter(x=>x.game===k);}
@@ -3831,7 +3843,7 @@ function cfbParseLeaders(j,g){
 }
 function cfbModelProps(g,s){
   const LD=cfbLeaders(g)||{};const FC=get(NFL_FORM_KEY,{});const out=[];
-  const book=get('d4.ncaafprops',{})[today()]||[];const last=n=>String(n||'').toLowerCase().split(' ').pop();
+  const book=fbWindow('d4.ncaafprops',null);const last=n=>String(n||'').toLowerCase().split(' ').pop();
   [g.away.abbr,g.home.abbr].forEach(ab=>(LD[ab]||[]).forEach(p=>{
     const logs=((FC['cfb:'+p.id]||{}).v)||[];
     const kinds=p.k==='rec'?[['rec','Rec Yds','receiving yards'],['recs','Receptions','receptions']]:p.k==='pass'?[['pass','Pass Yds','passing yards']]:[['rush','Rush Yds','rushing yards']];
