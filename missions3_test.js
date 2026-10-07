@@ -36,7 +36,7 @@ const w=dom.window;
   w.eval("msStart('dollar_grand')");let m=w.eval('msAll()[0]');
   T('$1 → $1,000 starts with a difficulty from the simulation',!!m.diff&&m.p0>=0,m.diff+' · '+(m.p0*100).toFixed(2)+'%');
   const o=w.eval('msOrders(msAll()[0])');
-  T('first order: $1 on a 4-team parlay at +1,228 or longer',o.lanes[0].stake===1&&o.lanes[0].k===4&&w.eval(`decimalToAmerican(${o.lanes[0].minDec})`)==='+1228',JSON.stringify([o.lanes[0].stake,o.lanes[0].k,w.eval(`decimalToAmerican(${o.lanes[0].minDec})`)]));
+  T('first order: $1 on a 4-team parlay at +1,229 or longer (rounded toward the price you can hit)',o.lanes[0].stake===1&&o.lanes[0].k===4&&w.eval(`decimalToAmerican(${o.lanes[0].minDec})`)==='+1229',JSON.stringify([o.lanes[0].stake,o.lanes[0].k,w.eval(`decimalToAmerican(${o.lanes[0].minDec})`)]));
   // ── rules steer the builder ──
   const dogs=w.eval("msBuildTicket(2,Math.pow(2.4,2),'dogs',null)");
   T('Dog Pound builds only plus-money legs',dogs.best&&dogs.best.legs.every(x=>x.price>0),dogs.best&&dogs.best.legs.map(x=>x.pick+' '+x.price).join(' + '));

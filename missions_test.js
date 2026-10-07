@@ -60,7 +60,7 @@ const w=dom.window;
   T('rank from XP',w.eval('msRank(520).name')==='Hustler'&&w.eval('msRank(0).name')==='Rookie'&&w.eval('msRank(5000).name')==='Kingpin');
   // ── stairs + two-lane orders ──
   w.eval("msStart('grind')");const g=w.eval('msOrders(msAll()[1])');
-  T('$200 grind: stake $50 (25%) on a 2-team parlay at +264 or longer',g.lanes[0].stake===50&&g.lanes[0].k===2&&w.eval(`decimalToAmerican(${g.lanes[0].minDec})`)==='+264');
+  T('$200 grind: stake $50 (25%) on a 2-team parlay at +265 or longer (rounded toward the price you can hit)',g.lanes[0].stake===50&&g.lanes[0].k===2&&w.eval(`decimalToAmerican(${g.lanes[0].minDec})`)==='+265');
   w.eval(`(()=>{const A=msAll();A[1].routeKey='twolane||';msSave(A);})()`);const tl=w.eval('msOrders(msAll()[1])');
   T('two-lane: $24 anchor (2-leg) + $16 moonshot (4-leg) = 20% of $200',tl.lanes.length===2&&tl.lanes[0].stake===24&&tl.lanes[1].stake===16&&tl.lanes[1].k===4);
   // ── the Money tab ──

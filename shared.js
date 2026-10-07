@@ -1181,13 +1181,15 @@ function brainJudge(g,s,sport){
   if(!W.length)return null;
   let sw=0,A=0,H=0;W.forEach(x=>{x.wt=brainWeight(b,sport,x.src);sw+=x.wt.w;A+=x.wt.w*x.a;H+=x.wt.w*x.h;});
   A/=sw;H/=sw;W.forEach(x=>x.share=x.wt.w/sw);
+  const led={wA:A,wH:H};
   const tm=(ab,f)=>{const r=(b.team[ab]||{})[f];return r&&r.n?r.r*r.n/(r.n+6):0;};
   const memA=(tm(g.away.abbr,'off')+tm(g.home.abbr,'def'))/2,memH=(tm(g.home.abbr,'off')+tm(g.away.abbr,'def'))/2;
   A+=memA;H+=memH;
   const tr=brainTrendEvidence(g,sport),tU=brainUse(b.trend);
-  A+=tU*(tr.dTot/2-tr.dMar/2);H+=tU*(tr.dTot/2+tr.dMar/2);
+  led.tA=tU*(tr.dTot/2-tr.dMar/2);led.tH=tU*(tr.dTot/2+tr.dMar/2);A+=led.tA;H+=led.tH;
   const mo=brainMoney(g,sport),mU=brainUse(b.money);
-  if(mo&&mo.side){A-=mU*C.money*mo.side/2;H+=mU*C.money*mo.side/2;}
+  led.mA=0;led.mH=0;if(mo&&mo.side){led.mA=-mU*C.money*mo.side/2;led.mH=mU*C.money*mo.side/2;A+=led.mA;H+=led.mH;}
+  led.fA=Math.max(0,C.floor-A);led.fH=Math.max(0,C.floor-H);
   A=Math.max(C.floor,A);H=Math.max(C.floor,H);
   const mu=H-A,sdBase=C.sd0+C.sdK*Math.abs(mu);
   const sd=b.vol.n>=10?Math.sqrt((10*sdBase*sdBase+b.vol.v*b.vol.n)/(10+b.vol.n)):sdBase;
@@ -1202,9 +1204,17 @@ function brainJudge(g,s,sport){
       disputes.push({x:W[i].src,y:W[j].src,dm:+dm.toFixed(1),dt:+dt.toFixed(1),lean:trust.src});}}
   const bias=st=>{const x=(b.box||{})[st];return x&&x.n>=3?Math.max(0.8,Math.min(1.2,x.ratio)):1;};
   return{a:+A.toFixed(sport==='mlb'||sport==='nhl'?2:1),h:+H.toFixed(sport==='mlb'||sport==='nhl'?2:1),final:[fa,fh],sd:+sd.toFixed(1),pHome,close,blowH,blowA,
-    witnesses:W,mem:{a:+memA.toFixed(1),h:+memH.toFixed(1)},trend:tr,tU,money:mo,mU,disputes,
-    box:AD.box(A,H,bias),boxRaw:AD.box(A,H,()=>1)};
+    witnesses:W,mem:{a:+memA.toFixed(1),h:+memH.toFixed(1)},trend:tr,tU,money:mo,mU,disputes,ledger:{...led,memA,memH},
+    box:brainBoxFit(AD.box(A,H,bias),fa,fh),boxRaw:AD.box(A,H,()=>1)};
 }
+/* The box table must agree with the headline: football PTS and quarters are
+   rebuilt to sum to the Judge's final score, and PASS+RUSH always equals YDS. */
+function brainBoxFit(box,fa,fh){if(!box||!box.away)return box;
+  [['away',fa],['home',fh]].forEach(([sd,pts])=>{const x=box[sd];
+    if(x.pts!=null&&x.q!=null){const Q=[0.22,0.30,0.21,0.27];const q=Q.map(f=>Math.round(pts*f));q[3]+=pts-q.reduce((a,b)=>a+b,0);x.pts=pts;x.q=q.join('-');}
+    if(x.yds!=null&&x.pass!=null&&x.rush!=null&&x.pass+x.rush!==x.yds){const t=x.pass+x.rush||1;x.pass=Math.round(x.yds*x.pass/t);x.rush=x.yds-x.pass;}
+    if(x.f5!=null&&x.late!=null&&x.runs!=null)x.late=Math.round((x.runs-x.f5)*10)/10;});
+  return box;}
 /* The part of a ruling that gets locked at kickoff and graded later. */
 function brainLockable(J){return{a:J.a,h:J.h,w:J.witnesses.map(w=>({src:w.src,a:w.a,h:w.h})),
   tMar:J.tU*J.trend.dMar,tTot:J.tU*J.trend.dTot,money:J.money&&J.money.side||0,box:J.boxRaw};}
@@ -1334,8 +1344,13 @@ function brainBlock(g,s,sport){
       ${J.witnesses.map(w=>`<div>${lab[w.src]}: ${aN} ${w.a.toFixed(dp)}–${w.h.toFixed(dp)} ${hN} · weight ${pct(w.share)} <span style="color:var(--mute)">(±${w.wt.rmse.toFixed(1)} over ${w.wt.n} games)</span></div>`).join('')}
       ${J.disputes.map(d=>`<div style="color:var(--gold)">⚔ ${lab[d.x]} vs ${lab[d.y]}: ${d.dm>0?'+':''}${d.dm} margin, ${d.dt>0?'+':''}${d.dt} total → trusting ${lab[d.lean]} (better record)</div>`).join('')}
       ${J.mem.a||J.mem.h?`<div>Team memory: ${aN} ${J.mem.a>0?'+':''}${J.mem.a}, ${hN} ${J.mem.h>0?'+':''}${J.mem.h} ${C.unit}</div>`:''}
-      ${J.trend.items.length?`<div>Trends (allowed ${pct(J.tU)} influence):</div>`+J.trend.items.slice(0,6).map(t=>`<div style="color:var(--mute)">· ${t.rec} → really ~${t.real}% · ${t.text}</div>`).join(''):''}
+      ${J.trend.items.length?`<div>Trends (allowed ${pct(J.tU)} influence):</div>`+J.trend.items.slice(0,6).map(t=>`<div style="color:var(--mute)">· ${t.rec} → really ~${t.real}% · ${t.kind} ${t.eff>=0?'+':''}${(t.eff*J.tU).toFixed(2)} ${C.unit} · ${t.text}</div>`).join(''):''}
       ${J.money?`<div>Money: ${J.money.note} (influence ${pct(J.mU)})</div>`:''}
+      ${(()=>{const L=J.ledger;if(!L)return'';const f=x=>(x>=0?'+':'')+x.toFixed(dp);const nz=x=>Math.abs(x)>=0.005;
+        const st=[[`Witnesses (weighted)`,L.wA,L.wH,1],['Team memory',L.memA,L.memH],['Trends',L.tA,L.tH],['Money split',L.mA,L.mH],['Scoring floor',L.fA,L.fH]]
+          .filter((r,i)=>i===0||nz(r[1])||nz(r[2]));
+        return`<div style="margin-top:4px;color:var(--chalk)"><b>The math</b></div>`+st.map(r=>`<div>${r[0]}: ${aN} ${r[3]?r[1].toFixed(dp):f(r[1])} · ${hN} ${r[3]?r[2].toFixed(dp):f(r[2])}</div>`).join('')+
+          `<div style="border-top:1px solid var(--rule)"><b>= ${aN} ${J.a.toFixed(dp)} – ${J.h.toFixed(dp)} ${hN}</b> → called ${J.final[0]}–${J.final[1]}${J.final[0]===Math.round(J.a)&&J.final[1]===Math.round(J.h)?'':' (snapped to a real final score)'}</div>`;})()}
       <div>Volatility ±${J.sd} ${C.unit} margin</div>
       <table style="width:100%;margin-top:4px;font-size:9.5px;border-collapse:collapse"><tr style="color:var(--mute)"><td></td>${AD.boxCols.map(c=>`<td>${c[0]}</td>`).join('')}</tr>
         ${row(aN,J.box.away)}${row(hN,J.box.home)}</table>
@@ -2010,7 +2025,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261006a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261006b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8869,6 +8884,10 @@ function americanToDecimal(price){
   if(isNaN(n)||n===0)return null;
   return n>0?1+n/100:1+100/Math.abs(n);
 }
+/* A minimum price shown to the user must be one they can actually hit: round
+   toward the longer price, and quote the payout from that displayed price. */
+function barAmerican(dec){if(!dec||dec<=1)return null;return dec>=2?Math.ceil((dec-1)*100-1e-9):-Math.floor(100/(dec-1)+1e-9);}
+function barDec(dec){const a=barAmerican(dec);return a==null?dec:americanToDecimal(a);}
 function decimalToAmerican(dec){
   if(!dec||dec<=1)return '—';
   return dec>=2?'+'+Math.round((dec-1)*100):'-'+Math.round(100/(dec-1));
@@ -15159,9 +15178,9 @@ function brainLearnAll(force){
 /* Best card ledger: the locked picks are graded and also enter the voice
    ledger as "Best", so Records, calibration and the blend all see them. */
 function best5Grade(){const S=get(BEST5_KEY,{});const log=get('d4.best5log',{})||{};let n=0;
-  const slim=x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:x.p,m:x.m,sd:x.sd,line:x.line,gid:x.gid});
+  const slim=x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:x.p,m:x.m,sd:x.sd,line:x.line,gid:x.gid,main:!!x.main,ev:x.ev,color:x.color,unan:!!x.unan,chars:x.chars||[],start:x.start||''});
   if(S&&S.d&&S.locked&&!log[S.d]){const sides=(S.sides||[]).map(slim),totals=(S.totals||[]).map(slim);
-    log[S.d]={sides,totals,picks:sides.length||totals.length?[...sides,...totals]:(S.picks||[]).map(slim),props:(S.props||[]).map(x=>({...x})),standout:S.standout||null};}
+    log[S.d]={sides,totals,picks:sides.length||totals.length?[...sides,...totals]:(S.picks||[]).map(slim),props:(S.props||[]).map(x=>({...x})),standout:S.standout||null,v:S.top3?2:1};n++;} // persist the card the moment it locks — not only once a pick grades
   const V=get(VOICES_KEY,[]);const ids=new Set(V.map(x=>x.id));let vch=false;
   Object.entries(log).forEach(([d,E])=>(E.picks||[]).forEach(x=>{if(x.hit!=null||x.push)return;
     let r=null;try{r=gradeLeg({sport:x.sp,game:x.game,pick:x.pick,gameDate:d,gid:x.gid},d);}catch(e){}
@@ -15238,36 +15257,73 @@ function standoutHtml(s){return`<div class="tkt" style="margin-bottom:8px;border
   <div class="sub mono">${esc(s.team)} · ${esc(s.game)} · model ${Math.round(s.p*100)}% · ${s.avg.toFixed(2)}/game over ${s.n} games</div></div>`;}
 function best5Prob(x){return x.blend!=null?x.blend:x.brainP!=null?x.brainP:x.mp;}
 function best5Started(x){const t=Date.parse(x.start||'');return isFinite(t)&&Date.now()>=t;}
+/* ── Best card v2: three picks, today's games only, priced -200 or longer ──
+   Qualifies: game is today, price between -200 and +400, at least VALUE color,
+   calibrated EV ≥ +1%, not EV-suspect or incoherent, one pick per game.
+   Ranked by agreement first (unanimous → supreme → strong → value → outside),
+   then by calibrated EV. Fewer than three qualify → it shows fewer. No chalk filler. */
+const BEST3_LO=-200,BEST3_HI=400,BEST3_TIER={unan:5,' supreme':4,' strong':3,value:2,source:1};
+function best3Ev(x){if(x.evCal!=null)return x.evCal;const p=best5Prob(x);return p!=null&&x.price!=null?(p*americanToDecimal(x.price)-1)*100:null;}
+function best3Tier(x){return x.unan?5:(BEST3_TIER[x.color]||0);}
+function best3Pool(by,sp){const pool=[];
+  Object.entries(by).forEach(([s0,B])=>{if(sp&&s0!==sp)return;(B.picks||[]).forEach(x0=>{const x={...x0,sp:s0};const p=best5Prob(x);const ev=best3Ev(x);
+    if(p==null||x.price==null||x.price<BEST3_LO||x.price>BEST3_HI)return;
+    if(!tcIsToday(x)||best5Started(x)||x.incoherent||x.suspect)return;
+    if(best3Tier(x)<1||ev==null||ev<1||p<0.45)return;pool.push({...x,p,ev});});});
+  pool.sort((a,b)=>best3Tier(b)-best3Tier(a)||b.ev-a.ev);
+  const u=new Set(),out=[];for(const x of pool){const k=x.sp+'|'+x.game;if(u.has(k))continue;u.add(k);out.push(x);if(out.length===3)break;}
+  return out;}
 function best5Build(){
-  const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};const pool=[];
-  Object.values(by).forEach(B=>(B.picks||[]).forEach(x=>{const p=best5Prob(x);
-    if(p==null||x.price==null||x.price<BEST5_LO||x.price>BEST5_HI||best5Started(x)||x.incoherent)return;pool.push({...x,p});}));
-  pool.sort((a,b)=>b.p-a.p);const used=new Set(),out=[];
-  for(const x of pool){if(used.has(x.sp+'|'+x.game))continue;used.add(x.sp+'|'+x.game);out.push(x);if(out.length===5)break;}
-  const top5=f=>{const u=new Set(),r=[];for(const x of pool){if(!f(x)||x.p<0.52||u.has(x.sp+'|'+x.game))continue;u.add(x.sp+'|'+x.game);r.push(x);if(r.length===5)break;}return r;};
-  const sides=top5(x=>x.m==='ml'||x.m==='spread'||x.m==='moneyline'),totals=top5(x=>x.m==='total');
-  /* props: your priced lines first (highest probability, +EV preferred), then the
-     slate's likeliest outcomes from game logs to fill out the five */
+  const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
+  const top3=best3Pool(by,null).map(x=>({...x,main:true}));
+  const bySport={};Object.keys(by).forEach(sp=>{bySport[sp]=best3Pool(by,sp);});
   let props=[];try{props=propBoard(null,null).filter(x=>x.matched&&x.best&&x.n>=4).map(x=>{const pO=x.pOver,side=pO>=0.5?'over':'under',p=side==='over'?pO:1-pO;
       return{sp:x.sp,player:x.player,team:x.team,stat:x.stat,keys:x.keys,thr:x.thr,side,price:side==='over'?x.over:x.under,p,ev:side==='over'?x.evO:x.evU,mu:x.mu,n:x.n};})
-    .filter(x=>x.p>=0.58&&(x.ev==null||x.ev>-3)).sort((a,b)=>b.p-a.p).slice(0,5);}catch(e){}
-  if(props.length<5){try{const lab={pts:'PTS',reb:'REB',ast:'AST',fg3:'3PM',py:'PASS YDS',ry:'RUSH YDS',wy:'REC YDS',rec:'REC',td:'ATD',h:'H',tb:'TB',hr:'HR',k:'K',s:'SOG',g:'G'};
-      const L=['nfl','ncaaf','nba','nhl','mlb'].flatMap(sp=>propLikely(sp,8)).sort((a,b)=>b.p-a.p);
-      for(const x of L){if(props.length>=5)break;if(props.some(y=>y.player===x.player))continue;
-        props.push({sp:x.sp,player:x.player,team:x.team,stat:lab[x.k]||x.k,keys:[x.k],thr:x.thr-0.5,side:'over',price:null,p:x.p,ev:null,mu:x.mu,n:x.n,likely:true});}}catch(e){}}
-  return{picks:out,sides,totals,props,standout:bestStandout(by),sports:Object.keys(by)};
+    .filter(x=>x.p>=0.58&&(x.ev==null||x.ev>-3)&&(x.price==null||x.price>=BEST3_LO)).sort((a,b)=>b.p-a.p).slice(0,3);}catch(e){}
+  /* every pick on the card is graded: the main three plus each sport's own three */
+  const seen=new Set(),picks=[];[...top3,...Object.values(bySport).flat()].forEach(x=>{const k=x.sp+'|'+x.game+'|'+x.pick;if(seen.has(k))return;seen.add(k);picks.push(x);});
+  return{top3,bySport,picks,props,standout:bestStandout(by),sports:Object.keys(by)};
 }
-function best5State(){const d=today();let S=get(BEST5_KEY,{});if(S.d!==d)S={d,locked:false};
-  if(!S.locked){const b=best5Build();S.picks=b.picks;S.sides=b.sides;S.totals=b.totals;S.props=b.props;S.standout=b.standout;S.sports=b.sports;S.ts=Date.now();
+function best5State(){const d=today();let S=get(BEST5_KEY,{});
+  if(S.d!==d){if(S.d&&S.locked)set('d4.best5prev',S);S={d,locked:false};}
+  if(!S.locked){const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,ts:Date.now()});
+    delete S.sides;delete S.totals;
     const E=get(LS_EVAL,{})||{};const masterRan=E.date===d;
     const first=Math.min(...b.picks.map(x=>Date.parse(x.start||'')).filter(isFinite),Infinity);
-    const any=(b.picks.length||b.sides.length||b.totals.length);
-    if(any&&(masterRan||first-Date.now()<30*60e3)){S.locked=true;S.lockedAt=Date.now();S.why=masterRan?'master evaluation ran':'first game within 30 min';}
+    if(b.picks.length&&(masterRan||first-Date.now()<30*60e3)){S.locked=true;S.lockedAt=Date.now();S.why=masterRan?'master evaluation ran':'first game within 30 min';}
     if(S.locked)(S.props||[]).forEach(x=>{try{propCalLog(x.sp,x.player,x.team,x.keys.join('+'),x.thr,x.p,d,x.side,x.price);}catch(e){}});
-    if(S.locked&&S.standout){const s=S.standout;try{const K={nhl:['g',1],mlb:['hr',1],nfl:['td',1],ncaaf:['td',1],nba:['pts',25]}[s.sp];if(K)propCalLog(s.sp,s.player,s.team,K[0],K[1],s.p,d);}catch(e){}}
     set(BEST5_KEY,S);}
   return S;}
-function best5Lock(){const S=best5State();if(!(S.picks||[]).length&&!(S.sides||[]).length&&!(S.totals||[]).length){alert('Nothing to lock yet — open each sport board today first.');return;}
+/* the public record: only the main three picks of each locked card */
+function best3Record(){const log=get('d4.best5log',{})||{};let w=0,l=0,pu=0,u=0,first=null;
+  Object.keys(log).sort().forEach(d=>{const M=(log[d].picks||[]).filter(x=>x.main);if(!M.length)return;if(!first)first=d;
+    M.forEach(x=>{if(x.push)pu++;else if(x.hit===true){w++;u+=_vProfit(x.price);}else if(x.hit===false){l++;u-=1;}});});
+  return{w,l,pu,u,first};}
+const BEST_TIER_LAB=x=>x.unan?['★ UNANIMOUS','#ff6fae']:(TC_COL[x.color]||['var(--mute)',''])[1]?[(TC_COL[x.color])[1],(TC_COL[x.color])[0]]:['',''];
+function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
+  const view=opts.sp||'all';const list=view==='all'?(S.top3||[]):((S.bySport||{})[view]||[]);
+  const R=best3Record();const recTxt=R.w+R.l?`${R.w}-${R.l}${R.pu?'-'+R.pu:''} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u since ${fmtDate(new Date(R.first+'T12:00:00'))}`:'Record starts with the first graded card';
+  const t=x=>{const d=Date.parse(x.start||'');return isFinite(d)?new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';};
+  const res=opts.res||(()=>'');
+  const rows=list.map((x,i)=>{const [tl,tc]=BEST_TIER_LAB(x);const ch=(x.chars||[]).length;
+    return`<div class="b3-row"><div class="b3-n">${i+1}</div><div style="flex:1;min-width:0">
+      <div class="b3-pick">${esc(x.pick)} <span class="b3-price">${x.price>0?'+':''}${x.price}</span>${res(x)}</div>
+      <div class="b3-meta">${em[x.sp]||''} ${(x.sp||'').toUpperCase()} · ${esc(x.game)}${t(x)?' · '+t(x):''}</div>
+      <div class="b3-meta">${tl?`<b style="color:${tc}">${tl}</b> · `:''}${ch?ch+' of the desk\'s voices agree · ':''}EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%</div></div>
+      <div class="b3-pct">${Math.round(x.p*100)}%<div class="b3-pl">to hit</div></div></div>`;}).join('');
+  const empty=`<div class="rc-empty-slot">${S.locked?'No play cleared the bar today — we don\'t force picks.':'Builds from today\'s boards — open each sport once.'}</div>`;
+  return`<div class="recapwrap" id="${opts.id||'bestShareTarget'}"><div class="recapcard">
+    <style>.b3-row{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+    .b3-n{font-weight:900;font-size:22px;color:var(--gold);width:22px;text-align:center}.b3-pick{font-weight:900;font-size:17px}
+    .b3-price{font-family:'IBM Plex Mono';font-size:13px;color:var(--gold)}.b3-meta{font-family:'IBM Plex Mono';font-size:10px;color:var(--mute);margin-top:2px}
+    .b3-pct{text-align:right;font-weight:900;font-size:20px;color:var(--win)}.b3-pl{font-size:9px;font-weight:600;color:var(--mute)}</style>
+    <div class="rc-head"><div><div class="rc-brand">THE<span>DESK</span></div><div class="rc-tag">${opts.title||(view==='all'?"Today's 3 best · every sport":(em[view]||'')+' '+view.toUpperCase()+" · today's 3 best")}</div>
+      <div class="rc-tag" style="font-size:11px;margin-top:2px;color:var(--win)">Track record: ${recTxt}</div></div>
+      <div class="rc-date">${fmtDate(new Date(S.d+'T12:00:00'))}<br>${S.locked?'🔒 locked':'building'}</div></div>
+    ${rows||empty}
+    <div class="rc-foot"><div class="cal">Today's games only · priced -200 or longer · ${S.locked?'locked '+(S.lockedAt?new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'')+' — never changes, graded at the final':'locks when the master evaluation runs'}</div>
+      <div class="cta">Follow <span>${esc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>`;}
+function best5Lock(){const S=best5State();if(!(S.picks||[]).length){alert('Nothing to lock yet — open each sport board today first.');return;}
   S.locked=true;S.lockedAt=Date.now();S.why='locked by you';set(BEST5_KEY,S);renderBest();}
 function bestRowsHtml(title,arr,res,emptyMsg){const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
   if(!arr||!arr.length)return`<div class="rc-list"><h5>${title}</h5><div class="rc-empty-slot">${emptyMsg||'Not enough data yet'}</div></div>`;
@@ -15288,19 +15344,35 @@ function bestDeepCardHtml(S,opts){opts=opts||{};const st=S.standout;const res=op
     ${bestRowsHtml('Best 5 props',S.props,res.prop,'Paste prop lines or open a board — props fill from game logs')}
     <div class="rc-foot"><div class="cal">Locked ${S.lockedAt?new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'—'} · never changes after · graded in Recap</div>
       <div class="cta">Follow <span>${esc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>`;}
+let BEST_VIEW='all';
+function bestView(v){BEST_VIEW=v;renderBest();}
 function renderBest(){
   const el=document.getElementById('bestCard');if(!el)return;
+  try{best5Grade();}catch(e){}
   const S=best5State();
+  const views=['all',...(S.sports||[]).filter(sp=>((S.bySport||{})[sp]||[]).length||!S.locked)];
+  if(!views.includes(BEST_VIEW))BEST_VIEW='all';
+  const tabs=`<div style="margin-bottom:8px">${views.map(v=>`<button class="msg-chip${BEST_VIEW===v?' on':''}" onclick="bestView('${v}')">${v==='all'?'Whole slate':SP_LAB[v]||v.toUpperCase()}</button>`).join('')}</div>`;
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
-    <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — this card won't change today`:'Building — locks itself after the master evaluation or 30 min before the first game'}</b>
-    ${S.locked?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}
-    <div class="sub mono" style="font-size:9.5px">Sports on today's card: ${(S.sports||[]).map(x=>x.toUpperCase()).join(', ')||'none yet — open each sport board once'} · odds ${BEST5_LO} to +${BEST5_HI}</div></div>`;
-  el.innerHTML=bar+bestDeepCardHtml(S)+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button></div>`;
+    <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:'Building — freezes the moment the master evaluation runs (or 30 min before the first game)'}</b>
+    ${S.locked?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}</div>`;
+  /* yesterday's card stays up until it's fully graded */
+  let prev='';try{const P=get('d4.best5prev',null);const L=P&&(get('d4.best5log',{})||{})[P.d];
+    if(L){const main=(L.picks||[]).filter(x=>x.main);const open=main.filter(x=>x.hit==null&&!x.push);
+      if(open.length){const mk=x=>{const g=main.find(y=>y.pick===x.pick&&y.game===x.game);return!g?'':g.push?' ↔':g.hit===true?' ✅':g.hit===false?' ❌':' ⏳';};
+        prev=`<div class="sub" style="margin:10px 0 4px"><b>${fmtDate(new Date(P.d+'T12:00:00'))}'s card — still grading (${open.length} open)</b></div>`+bestPublicCardHtml(P,{id:'bestPrevShare',res:mk});}}}catch(e){}
+  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button></div>`+
+    ((S.props||[]).length?`<details class="tkt" style="margin-top:8px"><summary><b>Bonus props</b> <span class="mono" style="font-size:10px;color:var(--mute)">not part of the record</span></summary>${bestRowsHtml('Top props',S.props,null,'')}</details>`:'');
 }
 /* Recap: each past day's locked card, graded pick by pick */
 function bestRecapNewDays(){return Object.keys(get('d4.best5log',{})||{}).sort().reverse();}
 function renderBestRecapNew(day){const el=document.getElementById('bestRecapCard');const E=(get('d4.best5log',{})||{})[day];if(!el||!E)return false;
   try{best5Grade();}catch(e){}
+  if(E.v===2){const main=(E.picks||[]).filter(x=>x.main);let w=0,l=0,pu=0;
+    const mk=x=>x.push?(pu++,' <span style="color:var(--mute)">↔ push</span>'):x.hit===true?(w++,' <span style="color:var(--win)">✅</span>'):x.hit===false?(l++,' <span style="color:var(--rust)">❌</span>'):' <span style="color:var(--mute)">⏳</span>';
+    const S={d:day,top3:main.map(x=>({...x,ev:x.ev!=null?x.ev:0})),locked:true,sports:[...new Set(main.map(x=>x.sp))]};
+    const html=bestPublicCardHtml(S,{id:'bestRecapShare',title:'Recap · graded against the final',res:mk});
+    el.innerHTML=html.replace('Recap · graded against the final',`Recap · ${w}-${l}${pu?'-'+pu:''} · graded against the final`);return true;}
   const PL=get(PROPCAL_KEY,[])||[];let w=0,l=0,pu=0;
   const mark=x=>{if(x.push){pu++;return' <span style="color:var(--mute)">↔</span>';}if(x.hit===true){w++;return' <span style="color:var(--win)">✅</span>';}if(x.hit===false){l++;return' <span style="color:var(--rust)">❌</span>';}return' <span style="color:var(--mute)">⏳</span>';};
   const pmark=x=>{const L=PL.find(z=>z.sp===x.sp&&pstId(z.player)===pstId(x.player)&&z.k===(x.keys||[]).join('+')&&z.thr===x.thr&&z.d===day);
@@ -16950,6 +17022,8 @@ function saveAnthSettings(){
 
 /* ── 2. Today's Card ────────────────────────────────────────────────────── */
 const TC_KEY='d4.todaycard';
+/* Football boards show the whole week; a pick only counts as "today" when its game is today. */
+function tcIsToday(x){const d=tdDay(x&&x.start||'');return !d||d===today();}
 const TC_COL={' supreme':['#FFD75E','SUPREME'],' strong':['#5FD3E8','STRONG'],value:['#2ecc71','VALUE'],source:['#a78bfa','OUTSIDE']};
 function tcOutside(sp,g,pick){
   const gk=g.away.abbr+'@'+g.home.abbr;let rows=[],mk=null,sd=null;
@@ -17083,6 +17157,85 @@ function onTicketMatch(sp,game,m,sd){
     const [a,h]=game.split('@');const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);return k&&k.market===m&&k.side===sd;}));
 }
 const SP_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
+/* ── Today filters + live state ─────────────────────────────────────────── */
+const TF_KEY='d4.todayfilter';
+function tfGet(){const f=get(TF_KEY,null)||{};return{tier:f.tier||'all',ch:f.ch||'all',sp:f.sp||'all',view:f.view||'picks'};}
+function tfSet(k,v){const f=tfGet();f[k]=v;set(TF_KEY,f);renderToday(true);}
+/* tier test: unanimous is a flag on any color; the rest are the card's colors */
+function tfPass(x,sp,F){
+  if(F.sp!=='all'&&F.sp!==sp)return false;
+  if(F.tier==='unan'&&!x.unan)return false;
+  if(F.tier!=='all'&&F.tier!=='unan'&&String(x.color||'').trim()!==F.tier)return false;
+  if(F.ch!=='all'&&!(x.chars||[]).includes(F.ch))return false;
+  return true;}
+/* one pick's live read: ESPN event + the same live model the tickets use */
+function tcLive(sp,x){
+  let e=null;try{e=mgEventFor(sp,x.game,today(),false)||mgEventFor(sp,x.game.split('@').reverse().join('@'),today(),false);}catch(err){}
+  if(!e||e.state==='pre'||e.a==null)return{state:'pre',e};
+  const p0=x.brainP!=null?x.brainP:x.blend!=null?x.blend:x.mp!=null?x.mp:(x.price!=null?imp(+x.price):null);
+  let p=null;try{p=liveLegProb({pick:x.pick,game:x.game,sport:sp,p:p0,price:x.price,gameDate:today()},null,today());}catch(err){}
+  return{state:e.state,e,p,p0};}
+/* ── CHARACTER DESK ──────────────────────────────────────────────────────────
+   Every character's call on today's games, side by side, with the history that
+   makes a call worth a look: that character's record in this sport+market, on
+   this team, and in this exact matchup (H2H). A call is HOT when one of those
+   records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
+function charHist(V,c){const [aw,hm]=String(c.game).split('@');const team=c.market==='total'?null:(c.side==='home'?hm:aw);
+  const same=x=>x.graded&&!x.push&&x.voice===c.voice&&x.sp===c.sp&&x.market===c.market&&x.id!==c.id;
+  const side=x=>c.market==='total'?x.side===c.side:true;
+  const pickedTeam=x=>{const [a,h]=String(x.game).split('@');return x.side==='home'?h:x.side==='away'?a:null;};
+  const rec=f=>{const L=V.filter(x=>same(x)&&f(x));const w=L.filter(x=>x.hit).length;return{w,l:L.length-w,n:L.length,r:(w+2)/(L.length+4)};};
+  const H={
+    sport:rec(side),
+    team:team?rec(x=>pickedTeam(x)===team):rec(x=>side(x)&&String(x.game).split('@').some(t=>t===aw||t===hm)),
+    h2h:rec(x=>{const g=String(x.game);return(g===c.game||g===hm+'@'+aw)&&side(x)&&(c.market==='total'||pickedTeam(x)===team);})};
+  const lab={sport:`${c.sp.toUpperCase()} ${c.market==='total'?c.side:c.market==='ml'?'ML':'spread'}`,team:team?team+' '+(c.market==='ml'?'ML':'spread'):'these teams '+c.side,h2h:'H2H'};
+  const hot=Object.entries(H).filter(([k,x])=>x.n>=6&&x.r>=0.6).map(([k,x])=>({k,lab:lab[k],...x})).sort((a,b)=>b.r-a.r);
+  return{H,lab,hot,team};}
+function charPickText(c){if(c.pick)return c.pick;const [a,h]=String(c.game).split('@');
+  if(c.market==='total')return(c.side==='over'?'Over ':'Under ')+(c.line!=null?c.line:'');
+  const t=c.side==='home'?h:a;if(c.market==='ml')return t+' ML';const L=c.line!=null?(c.side==='home'?+c.line:-c.line):null;return t+(L!=null?' '+(L>0?'+':'')+L:' spread');}
+function charDeskHtml(F){
+  const V=get(VOICES_KEY,[])||[];const d=today();
+  const calls=V.filter(x=>x.date===d&&CHARS[x.voice]&&(F.sp==='all'||F.sp===x.sp));
+  if(!calls.length)return'<div class="empty">No character calls logged for today yet — open each sport\'s Games board once.</div>';
+  const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" title="${esc(C.label||v)}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
+  const fmt=x=>`${x.w}-${x.l}`;
+  /* 1 · hot hands */
+  const hot=[];calls.forEach(c=>{const h=charHist(V,c);if(h.hot.length)hot.push({c,h});});
+  hot.sort((a,b)=>b.h.hot[0].r-a.h.hot[0].r||b.h.hot.length-a.h.hot.length);
+  const hotHtml=hot.length?hot.slice(0,12).map(({c,h})=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)">${chip(c.voice)}
+      <div style="flex:1"><b>${esc(charPickText(c))}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[c.sp]||''} · ${esc(c.game)}</span>
+      <div class="mono" style="font-size:9.5px">${h.hot.map(x=>`<span style="color:var(--win)">🔥 ${esc(x.lab)} ${fmt(x)}</span>`).join(' · ')}</div></div></div>`).join('')
+    :'<div class="sub">No character has a 60%+ record (6+ games) on today\'s teams, matchups or markets yet.</div>';
+  /* 2 · agree / disagree per game-market */
+  const G={};calls.forEach(c=>{const k=c.sp+'|'+c.game+'|'+c.market;(G[k]=G[k]||{sp:c.sp,game:c.game,m:c.market,by:{}}).by[c.voice]=c;});
+  const mLab={ml:'Moneyline',spread:'Spread',total:'Total'};
+  const rows=Object.values(G).sort((a,b)=>a.sp.localeCompare(b.sp)||a.game.localeCompare(b.game)||a.m.localeCompare(b.m)).map(g=>{
+    const sides={};Object.values(g.by).forEach(c=>{(sides[c.side]=sides[c.side]||[]).push(c);});
+    const ks=Object.keys(sides).sort((a,b)=>sides[b].length-sides[a].length);const split=ks.length>1;
+    const tot=Object.keys(g.by).length,top=sides[ks[0]].length;
+    const verdict=split?`<span style="color:var(--rust)">split ${top}-${tot-top}</span>`:`<span style="color:var(--win)">all ${tot} agree</span>`;
+    return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div class="mono" style="font-size:10px;color:var(--mute)">${SP_LAB[g.sp]||''} · ${esc(g.game)} · ${mLab[g.m]||g.m} · ${verdict}</div>
+      ${ks.map(k=>`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><b style="min-width:90px;font-size:12px">${esc(charPickText(sides[k][0]))}</b>${sides[k].map(c=>{const h=charHist(V,c);return chip(c.voice)+(h.hot.length?'<span style="font-size:10px">🔥</span>':'');}).join('')}</div>`).join('')}</div>`;}).join('');
+  /* 3 · each character's slate */
+  const byV={};calls.forEach(c=>(byV[c.voice]=byV[c.voice]||[]).push(c));
+  const cards=CHAR_ORDER.filter(v=>byV[v]).map(v=>{const all=V.filter(x=>x.voice===v&&x.graded&&!x.push);const w=all.filter(x=>x.hit).length;
+    return`<details style="margin:4px 0"><summary>${chip(v)} <b>${esc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${byV[v].length} calls today · ${w}-${all.length-w} all-time</span></summary>
+      ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${esc(charPickText(c))} <span style="color:var(--mute)">${esc(c.game)}</span> · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${esc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
+  return`<div class="tkt" style="border-color:var(--win)"><h3>🔥 Hot hands today</h3><div class="sub" style="font-size:10px">A character on a 60%+ run (6+ graded games) in this sport+market, on this team, or in this exact matchup.</div>${hotHtml}</div>
+    <div class="tkt"><h3>Who agrees, who doesn't</h3>${rows}</div>
+    <div class="tkt"><h3>Each character's slate</h3>${cards}</div>`;}
+/* on a Today pick: which of its characters are hot on this team / matchup / market */
+function tcHotLine(sp,x){try{const V=roGet(VOICES_KEY,[],5000)||[];const d=today();
+  const hits=(x.chars||[]).map(v=>{const c=V.find(y=>y.date===d&&y.voice===v&&y.sp===sp&&y.game===x.game&&y.market===(x.m==='moneyline'?'ml':x.m)&&y.side===x.sd);
+    if(!c)return null;const h=charHist(V,c);return h.hot.length?{v,h:h.hot[0]}:null;}).filter(Boolean);
+  if(!hits.length)return'';
+  return`<div class="mono" style="font-size:9.5px;color:var(--win);margin-top:2px">${hits.map(o=>`🔥 ${CHARS[o.v].chip} ${esc(o.h.lab)} ${o.h.w}-${o.h.l}`).join(' · ')}</div>`;}catch(e){return'';}}
+let TODAY_LIVE_TIMER=null;
+function todayLiveLoop(){if(TODAY_LIVE_TIMER)return;
+  TODAY_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-today');if(!v||!v.classList.contains('on'))return;
+    try{await mgRefresh(false);}catch(e){}renderToday(true);},30000);}
 function renderToday(noSnap){
   const el=document.getElementById('todayBody');if(!el)return;
   if(!noSnap)todaySnapshot();
@@ -17090,6 +17243,8 @@ function renderToday(noSnap){
   const sports=['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>by[sp]);
   const legend=`<div class="sub mono" style="font-size:9.5px;margin-bottom:6px">${Object.values(TC_COL).map(([c,l])=>`<span style="color:${c};margin-right:8px">■ ${l}</span>`).join('')}· conflicts and red are left off</div>`;
   if(!sports.length){el.innerHTML=legend+'<div class="empty">Open a sport\'s Games board once today and its picks land here.</div>';return;}
+  try{todayLiveLoop();if(Date.now()-MG_TS>40e3&&!MG_BUSY)mgRefresh(false).then(()=>{const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);}).catch(()=>{});}catch(e){}
+  const F=tfGet();
   const standout=bestStandout(by);
   const sdHtml=standout?standoutHtml(standout):'';
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
@@ -17097,20 +17252,55 @@ function renderToday(noSnap){
   /* sorted the way you read a board: brain % (high→low), then edge, then blend, then market */
   const tcKey=x=>[x.brainP!=null?x.brainP:(x.mp!=null?x.mp:0),x.gap!=null?x.gap:-99,x.blend!=null?x.blend:0,x.mkt!=null?x.mkt:0];
   const tcSort=(a,b)=>{const A=tcKey(a),B=tcKey(b);for(let i=0;i<4;i++){if(B[i]!==A[i])return B[i]-A[i];}return 0;};
-  el.innerHTML=legend+sdHtml+sports.map(sp=>{const B=by[sp];const P=(B.picks||[]).slice().sort(tcSort);
-    const rows=P.map(x=>{const [c,l]=TC_COL[x.color]||['var(--mute)',''];const on=onTicketMatch(sp,x.game,x.m,x.sd);
+  /* filter bar: tiers, characters, sport */
+  const allP=sports.flatMap(sp=>(by[sp].picks||[]).map(x=>({sp,x})));
+  const cnt=f=>allP.filter(({sp,x})=>tfPass(x,sp,{...F,...f})).length;
+  const fb=(k,v,lab,col)=>`<button class="msg-chip${F[k]===v?' on':''}" style="${col?`color:${col};`:''}" onclick="tfSet('${k}','${v}')">${lab} <span style="opacity:.6">${cnt({[k]:v})}</span></button>`;
+  const usedCh=CHAR_ORDER.filter(v=>allP.some(({x})=>(x.chars||[]).includes(v)));
+  const bar=`<div style="margin:4px 0 8px">
+    <div>${fb('tier','all','All')}${fb('tier','unan','★ Unanimous','#ff6fae')}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,c)).join('')}</div>
+    <div>${fb('ch','all','Any character')}${usedCh.map(v=>fb('ch',v,`${CHARS[v].chip} ${CHARS[v].label||v}`,CHARS[v].color)).join('')}</div>
+    ${sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:''}</div>`;
+  const pct=v=>Math.round(v*100)+'%';
+  const row=(sp,x,L)=>{const [c,l]=TC_COL[x.color]||['var(--mute)',''];const on=onTicketMatch(sp,x.game,x.m,x.sd);
       const pr=x.price!=null?tcSgn(x.price):'<span style="color:var(--mute)">sim</span>';
       const pc=x.brainP!=null?`brain ${Math.round(x.brainP*100)}%`:x.mp!=null?`model ${Math.round(x.mp*100)}%`:'';
-      return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${c};background:rgba(255,255,255,.02);${on?'opacity:.55':''}">
+      let live='';
+      if(L&&L.e&&L.state!=='pre'){const [aw,hm]=x.game.split('@');const E=L.e;
+        const sc=`${esc(aw)} <b>${E.a}</b> – <b>${E.h}</b> ${esc(hm)}`;
+        if(L.state==='post'){const r=L.p==null?'':L.p>0.99?'<b style="color:var(--win)">✅ HIT</b>':L.p<0.01?'<b style="color:var(--rust)">❌ MISS</b>':'<b style="color:var(--mute)">PUSH</b>';
+          live=`<div class="mono" style="font-size:10px;margin-top:2px">FINAL · ${sc} ${r}</div>`;}
+        else{const lp=L.p,col=lp==null?'var(--mute)':lp>=0.6?'var(--win)':lp>=0.4?'var(--gold)':'var(--rust)';
+          const mv=L.p0!=null&&lp!=null?Math.round((lp-L.p0)*100):null;
+          live=`<div class="mono" style="font-size:10.5px;margin-top:3px"><span style="color:#ff4b5c;font-weight:800">● LIVE</span> ${sc} · <span style="color:var(--mute)">${esc(E.detail||'')}</span></div>
+            ${lp!=null?`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><div style="flex:1;height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${Math.round(lp*100)}%;background:${col}"></div></div>
+            <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${pct(lp)} to win</span>${mv!=null&&mv!==0?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${pct(L.p0)}</span>`:''}</div>`:''}`;}}
+      return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${L&&L.state==='in'?'#ff4b5c':c};background:rgba(255,255,255,.02);${on&&!(L&&L.state==='in')?'opacity:.55':''}">
         <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${x.dbl?x.dbl+' ':''}${esc(x.pick)} <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${pr}</span>${x.unan?' <span class="src-tag unanimous" style="display:inline">★ unanimous</span>':''}</div>
-          <div class="mono" style="font-size:9.5px;color:var(--mute)">${esc(x.game)} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${x.blend!=null&&x.mkt!=null?` · blend ${Math.round(x.blend*100)}% (mkt ${Math.round(x.mkt*100)}%)`:''}${x.evCal!=null?` · EV ${x.evCal>=0?'+':''}${x.evCal.toFixed(1)}% calibrated`:''}${x.suspect?` · <span style="color:var(--rust)">⚠️ ${esc(x.suspect)} — EV suspect</span>`:''}${x.incoherent?` · <span style="color:var(--rust)">⚠️ ${esc(x.incoherent)}</span>`:''}${x.stakeF>0?` · <b style="color:var(--win)">stake ${x.stakeAmt!=null?'$'+x.stakeAmt.toFixed(2):(x.stakeF*100).toFixed(1)+'% of bankroll'}</b>${x.capped?' <span style="color:var(--mute)">(day capped at 10%)</span>':''}`:''}</div>
-          <div class="hs-row" style="justify-content:flex-start">${(x.chars||[]).map(chip).join('')}</div>${x.rules&&x.rules.length?`<div class="rule-row" style="justify-content:flex-start">${x.rules.slice(0,3).map(r=>`<span class="rule ${r.kind}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:''}</div>
-        <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:${c};font-weight:800">${l}${on?'<br><span style="color:var(--win)">✓ ON A TICKET</span>':''}</div></div>`;}).join('');
+          <div class="mono" style="font-size:9.5px;color:var(--mute)">${L&&L.state==='in'?SP_LAB[sp]+' · ':''}${esc(x.game)} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${x.blend!=null&&x.mkt!=null?` · blend ${Math.round(x.blend*100)}% (mkt ${Math.round(x.mkt*100)}%)`:''}${x.evCal!=null?` · EV ${x.evCal>=0?'+':''}${x.evCal.toFixed(1)}% calibrated`:''}${x.suspect?` · <span style="color:var(--rust)">⚠️ ${esc(x.suspect)} — EV suspect</span>`:''}${x.incoherent?` · <span style="color:var(--rust)">⚠️ ${esc(x.incoherent)}</span>`:''}${x.stakeF>0?` · <b style="color:var(--win)">stake ${x.stakeAmt!=null?'$'+x.stakeAmt.toFixed(2):(x.stakeF*100).toFixed(1)+'% of bankroll'}</b>${x.capped?' <span style="color:var(--mute)">(day capped at 10%)</span>':''}`:''}</div>
+          ${live}
+          <div class="hs-row" style="justify-content:flex-start">${(x.chars||[]).map(chip).join('')}</div>${tcHotLine(sp,x)}${x.rules&&x.rules.length?`<div class="rule-row" style="justify-content:flex-start">${x.rules.slice(0,3).map(r=>`<span class="rule ${r.kind}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:''}</div>
+        <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:${c};font-weight:800">${l}${on?'<br><span style="color:var(--win)">✓ ON A TICKET</span>':''}</div></div>`;};
+  /* live games, every sport, pinned to the top — closest-to-the-wire first */
+  const liveRows=[];
+  sports.forEach(sp=>(by[sp].picks||[]).forEach(x=>{if(!tfPass(x,sp,F))return;const L=tcLive(sp,x);if(L.state==='in')liveRows.push({sp,x,L});}));
+  liveRows.sort((a,b)=>(b.L.p!=null?b.L.p:0)-(a.L.p!=null?a.L.p:0));
+  const liveHtml=liveRows.length?`<div class="sbar" style="margin-top:6px"><h2 style="color:#ff4b5c">● Live now · ${liveRows.length}</h2><div class="ln"></div></div>
+    <div class="sub mono" style="font-size:9px;color:var(--mute)">win % = pre-game probability carried through the live score and time left · refreshes every 30s</div>
+    ${liveRows.map(r=>row(r.sp,r.x,r.L)).join('')}`:'';
+  const body=sports.filter(sp=>F.sp==='all'||F.sp===sp).map(sp=>{const B=by[sp];
+    const P=(B.picks||[]).filter(x=>tfPass(x,sp,F)).map(x=>({x,L:tcLive(sp,x)})).filter(o=>o.L.state!=='in');
+    const pre=P.filter(o=>o.L.state!=='post').sort((a,b)=>tcSort(a.x,b.x)),done=P.filter(o=>o.L.state==='post').sort((a,b)=>tcSort(a.x,b.x));
+    const rows=pre.map(o=>row(sp,o.x,o.L)).join('')+(done.length?`<div class="mktlab" style="margin-top:8px">Final</div>`+done.map(o=>row(sp,o.x,o.L)).join(''):'');
     const props=(B.props||[]).map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${esc(x.name)}</b> ${x.line}+ ${esc(x.lab)} <b style="color:var(--win)">${Math.round(x.p*100)}%</b> <span style="color:var(--mute)">· proj ${x.proj} · ${esc(x.game)}${x.book?' · book '+tcSgn(x.price):''}</span></div>`).join('');
-    return`<div class="sbar" style="margin-top:10px"><h2>${SP_LAB[sp]} · ${P.length} pick${P.length===1?'':'s'}</h2><div class="ln"></div></div>
+    const total=(B.picks||[]).length,shown=pre.length+done.length;
+    return`<div class="sbar" style="margin-top:10px"><h2>${SP_LAB[sp]} · ${shown}${shown!==total?' of '+total:''} pick${total===1?'':'s'}</h2><div class="ln"></div></div>
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
-      ${rows||'<div class="empty">No colored, non-conflicted picks on this board yet.</div>'}
-      ${props?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
+      ${rows||`<div class="empty">${total?'Nothing here matches the filter'+(P.length<total?' (live games are pinned above)':'')+'.':'No colored, non-conflicted picks on this board yet.'}</div>`}
+      ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
+  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
+  if(F.view==='chars'){el.innerHTML=vw+(sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'')+charDeskHtml(F);return;}
+  el.innerHTML=vw+legend+bar+liveHtml+sdHtml+body;
 }
 
 /* ── 3. My Games: every game you have money on, all sports ────────────────── */
@@ -17180,6 +17370,7 @@ async function mgRefresh(force){
        late/approximate dates). A single wide date range hit ESPN's 400-event limit,
        which cut off the newest games — exactly the ones still waiting on a grade. */
     const need={};const floor=dayShift(today(),-30);
+    try{tcSportsLoaded().forEach(sp=>{(need[sp]=need[sp]||new Set()).add(today());});}catch(e){} // Today tab: live scores for every pick on the card
     mgPending().forEach(x=>{const d=String(x.d).slice(0,10);if(d<floor)return;const S=(need[x.sp]=need[x.sp]||new Set());S.add(d);
       if(x.l.gdApprox||!x.l.gameDate)for(let i=1;i<=3;i++)S.add(dayShift(d,i));});
     const jobs=Object.entries(need).map(async([sp,ds])=>{
@@ -17885,7 +18076,7 @@ function msDifficulty(p){return MS_DIFF.find(d=>p>=d[0]);}
 /* Build a ticket from Today's card that obeys the mission's rule and sport. */
 function msBuildTicket(k,minDec,rule,sport){
   const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};const F=MS_FILTERS[rule];
-  const pool=[];Object.entries(by).forEach(([sp,B])=>{if(sport&&sp!==sport)return;(B.picks||[]).forEach(x=>{if(x.price==null)return;if(onTicketMatch(sp,x.game,x.m,x.sd))return;
+  const pool=[];Object.entries(by).forEach(([sp,B])=>{if(sport&&sp!==sport)return;(B.picks||[]).forEach(x=>{if(x.price==null)return;if(!tcIsToday(x))return;if(onTicketMatch(sp,x.game,x.m,x.sd))return;
     const X={...x,sp};if(F&&!F.f(X))return;pool.push(X);});});
   pool.sort((a,b)=>b.rank-a.rank);const top=pool.slice(0,10);
   let best=null;const pick=(start,cur)=>{if(cur.length===k){if(new Set(cur.map(x=>x.sp+x.game)).size<k)return;
@@ -18238,9 +18429,11 @@ function msAttach(id,sel,pot){const tid=sel.value;if(!tid)return;const A=msAll()
 function msPotOrders(m,P,routeObj){
   const r=routeObj||msParse(P.routeKey);const X=msMath(m);const L=msLegProfile(P.rule,X.R.p);const b=P.balance;
   const lanes=[];const r2=x=>Math.max(1,Math.round(x*2)/2);
-  if(r.route==='twolane'){const st=Math.max(1,b*0.2);lanes.push({lab:'Anchor',stake:r2(st*0.6),k:2},{lab:'Moonshot',stake:r2(st*0.4),k:4});}
+  if(r.route==='twolane'){const st=Math.max(1,b*0.2);const a=r2(st*0.6),mo=r2(st*0.4);
+    /* $1 minimums: on a small balance the two lanes would each round up to $1 and stake 2× the plan */
+    if(a+mo>st+0.01)lanes.push({lab:'Anchor',stake:Math.min(b,r2(st)),k:2});else lanes.push({lab:'Anchor',stake:a,k:2},{lab:'Moonshot',stake:mo,k:4});}
   else lanes.push({lab:'The play',stake:Math.min(b,r2(msStakeFor(r.route,r.cfg,b,P.start))),k:r.cfg.k||2});
-  return lanes.map(x=>{const minDec=Math.pow(L.dec,x.k);return{...x,minDec,build:msBuildTicket(x.k,minDec,P.rule,P.sport||m.sport||null)};});
+  return lanes.map(x=>{const minDec=barDec(Math.pow(L.dec,x.k));return{...x,minDec,build:msBuildTicket(x.k,minDec,P.rule,P.sport||m.sport||null)};});
 }
 function msOrders(m){ // kept for single-pot callers
   const r=msActiveRoute(m);const P=msPotsOf(m)[0];const lanes=msPotOrders(m,P,r);const cps=msCheckpoints(m);
