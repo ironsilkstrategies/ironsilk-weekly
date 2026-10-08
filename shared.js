@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261007c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261007d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15361,32 +15361,63 @@ function best5Started(x){const t=Date.parse(x.start||'');return isFinite(t)&&Dat
 const BEST3_LO=-200,BEST3_HI=400,BEST3_TIER={unan:5,' supreme':4,' strong':3,value:2,source:1};
 function best3Ev(x){if(x.evCal!=null)return x.evCal;const p=best5Prob(x);return p!=null&&x.price!=null?(p*americanToDecimal(x.price)-1)*100:null;}
 function best3Tier(x){return x.unan?5:(BEST3_TIER[x.color]||0);}
-function best3Pool(by,sp){const pool=[];
-  Object.entries(by).forEach(([s0,B])=>{if(sp&&s0!==sp)return;(B.picks||[]).forEach(x0=>{const x={...x0,sp:s0};const p=best5Prob(x);const ev=best3Ev(x);
-    if(p==null||x.price==null||x.price<BEST3_LO||x.price>BEST3_HI)return;
-    if(!tcIsToday(x)||best5Started(x)||x.incoherent||x.suspect)return;
-    if(best3Tier(x)<1||ev==null||ev<1||p<0.45)return;pool.push({...x,p,ev});});});
+function best3Pool(by,sp,opts){opts=opts||{};const pool=[],why={total:0,price:0,day:0,started:0,flag:0,ev:0,tier:0,prob:0};
+  Object.entries(by).forEach(([s0,B])=>{if(sp&&s0!==sp)return;(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};const p=best5Prob(x);const ev=best3Ev(x);why.total++;
+    if(x.price==null||x.price<BEST3_LO||x.price>BEST3_HI){why.price++;return;}
+    if(!opts.ignoreTime&&!tcIsToday(x)){why.day++;return;}
+    if(!opts.ignoreTime&&best5Started(x)){why.started++;return;}
+    if(x.incoherent||x.suspect){why.flag++;return;}
+    if(best3Tier(x)<1){why.tier++;return;}
+    if(p==null||p<0.45){why.prob++;return;}
+    if(ev==null||ev<1){why.ev++;return;}
+    pool.push({...x,p,ev});});});
   pool.sort((a,b)=>best3Tier(b)-best3Tier(a)||b.ev-a.ev);
   const u=new Set(),out=[];for(const x of pool){const k=x.sp+'|'+x.game;if(u.has(k))continue;u.add(k);out.push(x);if(out.length===3)break;}
-  return out;}
+  out.why=why;return out;}
+/* props when you haven't pasted prop lines: the characters' calibrated 70%+ calls first, then game-log likely lines */
+function best3Props(){let props=[];
+  try{props=propBoard(null,null).filter(x=>x.matched&&x.best&&x.n>=4).map(x=>{const pO=x.pOver,side=pO>=0.5?'over':'under',p=side==='over'?pO:1-pO;
+      return{sp:x.sp,player:x.player,team:x.team,stat:x.stat,keys:x.keys,thr:x.thr,side,price:side==='over'?x.over:x.under,p,ev:side==='over'?x.evO:x.evU,mu:x.mu,n:x.n};})
+    .filter(x=>x.p>=0.58&&(x.ev==null||x.ev>-3)&&(x.price==null||x.price>=BEST3_LO)).sort((a,b)=>b.p-a.p).slice(0,3);}catch(e){}
+  if(props.length<3){try{const C=cpropToday().sort((a,b)=>b.cal-a.cal);
+    for(const c of C){if(props.length>=3)break;if(props.some(y=>y.player===c.player))continue;
+      props.push({sp:c.sp,player:c.player,team:c.team,stat:CPROP_LAB[c.k]||c.k,keys:[c.k],thr:c.thr-0.5,side:'over',price:null,p:c.cal,ev:null,mu:c.mu,n:null,likely:true,voice:c.voice});}}catch(e){}}
+  if(props.length<3){try{const lab={pts:'PTS',reb:'REB',ast:'AST',fg3:'3PM',py:'PASS YDS',ry:'RUSH YDS',wy:'REC YDS',rec:'REC',td:'ATD',h:'H',tb:'TB',hr:'HR',k:'K',s:'SOG',g:'G'};
+    const L=['nfl','ncaaf','nba','nhl','mlb'].flatMap(sp=>propLikely(sp,8)).sort((a,b)=>b.p-a.p);
+    for(const x of L){if(props.length>=3)break;if(props.some(y=>y.player===x.player))continue;
+      props.push({sp:x.sp,player:x.player,team:x.team,stat:lab[x.k]||x.k,keys:[x.k],thr:x.thr-0.5,side:'over',price:null,p:x.p,ev:null,mu:x.mu,n:x.n,likely:true});}}catch(e){}}
+  return props;}
 function best5Build(){
   const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
   const top3=best3Pool(by,null).map(x=>({...x,main:true}));
   const bySport={};Object.keys(by).forEach(sp=>{bySport[sp]=best3Pool(by,sp);});
-  let props=[];try{props=propBoard(null,null).filter(x=>x.matched&&x.best&&x.n>=4).map(x=>{const pO=x.pOver,side=pO>=0.5?'over':'under',p=side==='over'?pO:1-pO;
-      return{sp:x.sp,player:x.player,team:x.team,stat:x.stat,keys:x.keys,thr:x.thr,side,price:side==='over'?x.over:x.under,p,ev:side==='over'?x.evO:x.evU,mu:x.mu,n:x.n};})
-    .filter(x=>x.p>=0.58&&(x.ev==null||x.ev>-3)&&(x.price==null||x.price>=BEST3_LO)).sort((a,b)=>b.p-a.p).slice(0,3);}catch(e){}
+  const props=best3Props();
   /* every pick on the card is graded: the main three plus each sport's own three */
   const seen=new Set(),picks=[];[...top3,...Object.values(bySport).flat()].forEach(x=>{const k=x.sp+'|'+x.game+'|'+x.pick;if(seen.has(k))return;seen.add(k);picks.push(x);});
-  return{top3,bySport,picks,props,standout:bestStandout(by),sports:Object.keys(by)};
+  return{top3,bySport,picks,props,standout:bestStandout(by),sports:Object.keys(by),why:best3Pool(by,null).why};
 }
 function best5State(){const d=today();let S=get(BEST5_KEY,{});
   if(S.d!==d){if(S.d&&S.locked)set('d4.best5prev',S);S={d,locked:false};}
-  if(!S.locked){const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,ts:Date.now()});
+  /* A card locked by the pre-v1.73 build stored 5 sides + 5 totals and no top3. It is
+     still frozen, so the 3 are chosen FROM the picks it locked (same rules, ignoring the
+     clock, since those games were open when it locked) and marked in the ledger. */
+  if(S.locked&&!S.top3){const locked=[...(S.sides||[]),...(S.totals||[]),...(S.picks||[])];const seen=new Set();const L=locked.filter(x=>{const k=x.sp+'|'+x.game+'|'+x.pick;if(seen.has(k))return false;seen.add(k);return true;});
+    const by={};L.forEach(x=>{(by[x.sp]=by[x.sp]||{picks:[]}).picks.push(x);});
+    let top=best3Pool(by,null,{ignoreTime:true});if(!top.length)top=L.slice().sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,3).map(x=>({...x,p:x.p,ev:best3Ev(x)}));
+    S.top3=top.map(x=>({...x,main:true}));S.bySport={};Object.keys(by).forEach(sp=>{S.bySport[sp]=best3Pool(by,sp,{ignoreTime:true});});
+    S.picks=L;if(!(S.props||[]).length)S.props=best3Props();S.migrated=true;S.why=(S.why||'locked')+' · carried over from the earlier build';set(BEST5_KEY,S);
+    try{const log=get('d4.best5log',{})||{};const E=log[S.d];if(E){const keys=new Set(S.top3.map(x=>x.sp+'|'+x.game+'|'+x.pick));
+      (E.picks||[]).forEach(x=>{x.main=keys.has(x.sp+'|'+x.game+'|'+x.pick);});S.top3.forEach(x=>{if(!(E.picks||[]).some(y=>y.sp===x.sp&&y.game===x.game&&y.pick===x.pick))(E.picks=E.picks||[]).push({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:x.p,m:x.m,sd:x.sd,line:x.line,gid:x.gid,main:true,ev:x.ev,color:x.color,unan:!!x.unan,chars:x.chars||[],start:x.start||''});});
+      E.v=2;set('d4.best5log',log);}}catch(e){}}
+  if(!S.locked){const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,why3:b.why,ts:Date.now()});
     delete S.sides;delete S.totals;
     const E=get(LS_EVAL,{})||{};const masterRan=E.date===d;
     const first=Math.min(...b.picks.map(x=>Date.parse(x.start||'')).filter(isFinite),Infinity);
-    if(b.picks.length&&(masterRan||first-Date.now()<30*60e3)){S.locked=true;S.lockedAt=Date.now();S.why=masterRan?'master evaluation ran':'first game within 30 min';}
+    /* never freeze an empty card while games are still ahead: keep building until something
+       qualifies, and only lock empty in the final 30 minutes before the last open game */
+    const lastOpen=Math.max(...Object.values((get(TC_KEY,{})||{}).by||{}).flatMap(B=>(B.picks||[]).filter(x=>tcIsToday(x)).map(x=>Date.parse(x.start||''))).filter(isFinite),-Infinity);
+    const ready=b.top3.length>0&&(masterRan||first-Date.now()<30*60e3);
+    if(ready||(b.picks.length&&!b.top3.length&&isFinite(lastOpen)&&lastOpen-Date.now()<30*60e3)){S.locked=true;S.lockedAt=Date.now();S.why=b.top3.length?(masterRan?'master evaluation ran':'first game within 30 min'):'nothing qualified before the last game';}
     if(S.locked)(S.props||[]).forEach(x=>{try{propCalLog(x.sp,x.player,x.team,x.keys.join('+'),x.thr,x.p,d,x.side,x.price);}catch(e){}});
     set(BEST5_KEY,S);}
   return S;}
@@ -15449,9 +15480,11 @@ function renderBest(){
   const views=['all',...(S.sports||[]).filter(sp=>((S.bySport||{})[sp]||[]).length||!S.locked)];
   if(!views.includes(BEST_VIEW))BEST_VIEW='all';
   const tabs=`<div style="margin-bottom:8px">${views.map(v=>`<button class="msg-chip${BEST_VIEW===v?' on':''}" onclick="bestView('${v}')">${v==='all'?'Whole slate':SP_LAB[v]||v.toUpperCase()}</button>`).join('')}</div>`;
+  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price','priced shorter than -200'],['day','not today'],['started','already started'],['flag','flagged EV-suspect'],['tier','below VALUE'],['prob','under 45%'],['ev','EV under +1%']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
+    :(!(S.top3||[]).length&&!(W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Today's card is empty — open each sport's Games board (or Load all sports on Today) so it has picks to choose from.</div>`:'');
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
     <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:'Building — freezes the moment the master evaluation runs (or 30 min before the first game)'}</b>
-    ${S.locked?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}</div>`;
+    ${S.locked?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${diag}</div>`;
   /* yesterday's card stays up until it's fully graded */
   let prev='';try{const P=get('d4.best5prev',null);const L=P&&(get('d4.best5log',{})||{})[P.d];
     if(L){const main=(L.picks||[]).filter(x=>x.main);const open=main.filter(x=>x.hit==null&&!x.push);
