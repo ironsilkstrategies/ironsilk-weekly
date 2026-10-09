@@ -54,7 +54,8 @@ setTimeout(()=>{try{
     const g={id:'n1',abstract:'pre',away:{abbr:'PIT',name:'Pittsburgh Penguins'},home:{abbr:'CBJ',name:'Columbus Blue Jackets'}};
     const html=w.eval(`(()=>{const g=${JSON.stringify(g)};const s=simNHLGame(g,4000);return sgpCardHtml('nhl',g,s)})()`);
     T('game card: Perfect SGP with alt spread + alt total at fair odds',/Perfect SGP/.test(html)&&/Alt spread/.test(html)&&/Alt total/.test(html)&&/fair/.test(html),html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,260));
-    T('SGP picks the alt line the sim gives 70%+',(()=>{const m=html.replace(/<[^>]+>/g,' ').match(/Alt spread\s+(\S+ [+\-]?[\d.]+)\s+(\d+)%/);return m&&+m[2]>=70;})());
+    T('SGP alt line: 70%+ when the ladder allows, never past a fair -300 (75%)',(()=>{const t=html.replace(/<[^>]+>/g,' ');const m=t.match(/Alt spread\s+(\S+ [+\-]?[\d.]+)\s+(\d+)%/);const lad=(t.match(/ladder: ([^l]+?)(?=Alt|Same|ladder|$)/)||[])[1]||'';
+      const ps=(lad.match(/(\d+)%/g)||[]).map(x=>parseInt(x));const any=ps.some(p=>p>=70&&p<=75);return m&&+m[2]<=75&&(!any||+m[2]>=70);})());
     T('SGP is skipped once the game starts',w.eval(`sgpCardHtml('nhl',{...${JSON.stringify(g)},abstract:'in'},simNHLGame(${JSON.stringify(g)},2000))`)==='');
   }catch(e){T('harness2',false,e.stack)}
   console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(0);},800);
