@@ -1049,7 +1049,7 @@ function intakeSave(){
   INTAKE.result=null;const ta=document.getElementById('intakePaste');if(ta)ta.value='';const inp=document.getElementById('bookShots');if(inp)inp.value='';
   el.innerHTML=`<div class="tkt hi"><h3>Saved</h3><div class="sub">${done.join(' · ')}</div></div>`;
   if(typeof renderNFL==='function'&&ACTIVE_SPORT==='nfl')renderNFL();
-  if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf'){NCAAF_SIMS={};renderNCAAF();}
+  if(typeof renderNCAAF==='function'&&ACTIVE_SPORT==='ncaaf'){renderNCAAF();}   /* intake never feeds the sim */
   if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
   if(typeof renderNHL==='function'&&ACTIVE_SPORT==='nhl')renderNHL();
   if(typeof renderNBA==='function'&&ACTIVE_SPORT==='nba')renderNBA();
@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261009a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261009b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2246,6 +2246,7 @@ function prunePlayers(frac){let any=false;['ncaaf','nfl','mlb','nhl','nba'].forE
 function prunePstLast(keep){let any=false;['ncaaf','nfl','mlb','nhl','nba'].forEach(sp=>{try{const k='d4.pstlast.'+sp,L=_dec(localStorage.getItem(k));if(!L)return;const ks=Object.keys(L);if(ks.length<=keep)return;
   ks.sort((a,b)=>String(L[a].d).localeCompare(String(L[b].d))).slice(0,ks.length-keep).forEach(x=>delete L[x]);localStorage.setItem(k,_enc(JSON.stringify(L)));any=true;}catch(e){}});return any;}
 const PRUNE_LADDER=[
+  ()=>{try{if(localStorage.getItem('d4.simcore')==null)return false;localStorage.removeItem('d4.simcore');SIMC=null;return true;}catch(e){return false}},   // sim histograms — re-simmed on demand
   ()=>pruneDatedMap('d4.proplines',3),          // today's prop lines — re-pasteable
   ()=>pruneList('d4.learnlog',15),
   ()=>prunePstLast(800),                        // last-game lines (only needed ~2 days)
@@ -3377,7 +3378,7 @@ function tab(n,b){
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.75) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.76) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3386,8 +3387,30 @@ function tab(n,b){
 let _SIMR=null;
 function simRand(){return _SIMR?_SIMR():Math.random();}
 function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h>>>0;}
-function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
-  _SIMR=sjRng(simHash(k));try{return fn.apply(this,a);}finally{_SIMR=prev;}};w.__seeded=true;w.__raw=fn;return w;}
+let _SIMK='';
+function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
+  _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.76) ════════════════════════════════════
+   The Monte Carlo loop is the only expensive part of a sim, and it depends on
+   nothing but the model's inputs (projected scoring, spread of outcomes, sample
+   size, the game's seed). Odds, calibration and every market read are applied
+   AFTER it, from the stored histograms. So the loop runs once per game per set
+   of inputs and the result is saved on the device: a reload reads it back in
+   well under a millisecond instead of re-simming the slate. It re-runs only
+   when an input actually moves (lineup, ratings, weather, learned drift). */
+const SIMC_KEY='d4.simcore',SIMC_VER='s1';let SIMC=null,SIMC_DIRTY=0,SIMC_T=null;const SIMC_STATS={hit:0,miss:0,ms:0};
+function simcStore(){if(!SIMC){try{const v=get(SIMC_KEY,{});SIMC=v&&typeof v==='object'?v:{};}catch(e){SIMC={};}}return SIMC;}
+function simcFlush(){SIMC_T=null;if(!SIMC_DIRTY||!SIMC)return;SIMC_DIRTY=0;
+  try{const lo=dayShift(today(),-4);Object.keys(SIMC).forEach(k=>{if(!SIMC[k]||String(SIMC[k].d)<lo)delete SIMC[k];});
+    const ks=Object.keys(SIMC);if(ks.length>600)ks.sort((a,b)=>SIMC[a].ts-SIMC[b].ts).slice(0,ks.length-600).forEach(k=>delete SIMC[k]);
+    set(SIMC_KEY,SIMC);}catch(e){}}
+if(typeof window!=='undefined')window.addEventListener('pagehide',()=>{try{simcFlush()}catch(e){}});
+function simCore(kind,inputs,run){
+  const k=SIMC_VER+'|'+kind+'|'+_SIMK+'|'+inputs.map(x=>typeof x==='number'?(isFinite(x)?String(+x.toFixed(6)):String(x)):String(x)).join('|');
+  const C=simcStore();const e=C[k];
+  if(e&&e.v){SIMC_STATS.hit++;if(e.d!==today()){e.d=today();SIMC_DIRTY=1;if(!SIMC_T)SIMC_T=setTimeout(simcFlush,1500);}return e.v;}
+  const t0=Date.now();const v=run();SIMC_STATS.miss++;SIMC_STATS.ms+=Date.now()-t0;
+  C[k]={v,d:today(),ts:Date.now()};SIMC_DIRTY=1;if(!SIMC_T)SIMC_T=setTimeout(simcFlush,1500);return v;}
 function simGameKey(sp,g,N){return sp+'|'+(g&&(g.id||((g.away&&g.away.abbr)+'@'+(g.home&&g.home.abbr))))+'|'+(N||'');}
 function poisCDF(k,l){let s=0,t=Math.exp(-l);for(let i=0;i<=k;i++){s+=t;t*=l/(i+1)}return Math.min(1,s)}
 function poisAtLeast(k,l){return k<=0?1:1-poisCDF(k-1,l)}
@@ -3788,6 +3811,7 @@ function simGame(g,N){
      entirely. Exact-score frequencies move from string-keyed object writes
      ("7-4") to a flat typed array, removing 10,000 string concats per game. */
   const MAXR=48,TSPAN=MAXR*2+2;
+  const C0=simCore('mlb',[aR,hR,aF,hF,N,hotGet(LS.calib,{}).dispK||3.6],()=>{
   const totFreq=new Int32Array(TSPAN);          // total runs -> count
   const scoreFreq=new Int32Array((MAXR+1)*(MAXR+1)); // a*(MAXR+1)+h -> count
   let hw=0,as=0,hs=0,f5h=0,f5a=0,f5t=0,bins=new Array(24).fill(0);
@@ -3804,6 +3828,10 @@ function simGame(g,N){
     if(fh>fa)f5h++;else if(fa>fh)f5a++;
     f5t+=fa+fh;
   }
+  let modeKey=null,modeN=0;
+  for(let a=0;a<=MAXR;a++)for(let h=0;h<=MAXR;h++){const c=scoreFreq[a*(MAXR+1)+h];if(c>modeN){modeN=c;modeKey=a+'-'+h}}
+  return{tot:Array.from(totFreq),bins,hw,as,hs,f5h,f5a,f5t,modeKey,modeN};});
+  const totFreq=Int32Array.from(C0.tot),bins=C0.bins.slice();let hw=C0.hw,as=C0.as,hs=C0.hs,f5h=C0.f5h,f5a=C0.f5a,f5t=C0.f5t;
   // cumGE[k] = how many simulated totals came in at k or above.
   // over(x) wants P(total > x). Runs are integers, so t > x is the same as
   // t >= floor(x)+1 for both half-point lines (8.5 -> t>=9) and integer lines
@@ -3814,11 +3842,7 @@ function simGame(g,N){
   // the value at that index is the smallest v whose cumulative count exceeds it
   const quantile=q=>{const idx=Math.floor(N*q);let run=0;
     for(let v=0;v<TSPAN;v++){run+=totFreq[v];if(run>idx)return v}return TSPAN-1};
-  let modeKey=null,modeN=0;
-  for(let a=0;a<=MAXR;a++)for(let h=0;h<=MAXR;h++){
-    const c=scoreFreq[a*(MAXR+1)+h];
-    if(c>modeN){modeN=c;modeKey=a+'-'+h}
-  }
+  const modeKey=C0.modeKey,modeN=C0.modeN;
   let modeTot=0,modeTotN=0;
   bins.forEach((c,i)=>{if(c>modeTotN){modeTotN=c;modeTot=i}});
   // Apply the direct probability calibration correction here, at the single
@@ -3866,13 +3890,10 @@ function rlProb(g,s,side,line){
   let hR=teamRuns(g.home.lineup,g.away.p,env,venueAdj(g,'home'),hAdj);
   if(aR===null||hR===null)return null;
   hR*=1.035;
-  let c=0;
-  for(let i=0;i<N;i++){
-    let a=nbRuns(aR),h=nbRuns(hR);
-    if(a===h)simRand()<.48?a++:h++;
-    const m=side==='home'?h-a:a-h;
-    if(m>line)c++;
-  }
+  /* one margin histogram per game (home − away, −40…+40), every side and line read from it */
+  const MG=simCore('mlbrl',[aR,hR,N,hotGet(LS.calib,{}).dispK||3.6],()=>{const M=new Array(81).fill(0);
+    for(let i=0;i<N;i++){let a=nbRuns(aR),h=nbRuns(hR);if(a===h)simRand()<.48?a++:h++;const m=Math.max(-40,Math.min(40,h-a));M[m+40]++;}return M;});
+  let c=0;for(let k=0;k<81;k++){const m=k-40;if((side==='home'?m:-m)>line)c+=MG[k];}
   let raw=c/N;
   try{
     // this side is the one being ASKED about — line<0 means asking about the
@@ -3884,7 +3905,7 @@ function rlProb(g,s,side,line){
   return raw;
 }
 simGame=simSeeded(simGame,(g,N)=>simGameKey('mlb',g,N));
-rlProb=simSeeded(rlProb,(g,s,side,line)=>simGameKey('mlb-rl',g,side+'|'+line));
+rlProb=simSeeded(rlProb,(g)=>simGameKey('mlb-rl',g,4000));
 /* market comparison only — never feeds the projection */
 function marketOf(g){
   const k=today()+'|'+g.home.abbr+'|'+g.away.abbr,mk=ODDS[k]||{},op=OPENS[k]||{};
@@ -11859,7 +11880,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.75) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.76) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -17406,7 +17427,7 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.75 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.76 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */

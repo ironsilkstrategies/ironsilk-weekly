@@ -766,7 +766,7 @@ async function fetchNCAAFLiveOdds(){
       });
     });
   });
-  set(LS.ncaafshots,all);NCAAF_SIMS={};
+  set(LS.ncaafshots,all);   /* book lines never feed the sim — the sim stays, the card re-reads the lines */
   if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
 }
 
@@ -1411,6 +1411,7 @@ function simNFLGame(g,N){
      integers, so frequency tables answer over()/cover() in O(1) instead of
      rescanning and re-sorting three 10,000-element arrays on every call. */
   const TSPAN=120, MSPAN=121, MOFF=60;      // margins from -60..+60
+  const C0=simCore('nfl',[awayExp,homeExp,std,N],()=>{
   const totFreq=new Int32Array(TSPAN);
   let marFreq=new Float64Array(MSPAN);
   const h1Freq=new Int32Array(TSPAN);
@@ -1429,6 +1430,11 @@ function simNFLGame(g,N){
     const h1=Math.max(0,Math.round(a*0.45+randn()*4))+Math.max(0,Math.round(h*0.45+randn()*4));
     h1Freq[h1<TSPAN?h1:TSPAN-1]++;
   }
+  let modeScore=null,modeN=0;
+  for(const k in scoreFreq)if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeScore=k}
+  return{tot:Array.from(totFreq),mar:Array.from(marFreq),h1:Array.from(h1Freq),hw,aw,tie,as,hs,modeScore,modeN};});
+  const totFreq=Int32Array.from(C0.tot),h1Freq=Int32Array.from(C0.h1);let marFreq=Float64Array.from(C0.mar);
+  let hw=C0.hw,aw=C0.aw,tie=C0.tie;const as=C0.as,hs=C0.hs;
 
   /* ── KEY NUMBERS: real NFL margins pile up on 3 and 7 (and almost never tie,
      since overtime decides). Independent score draws put ~7% on 3 and ~4% on
@@ -1448,8 +1454,7 @@ function simNFLGame(g,N){
   const qFrom=(freq,span,q)=>{const idx=Math.floor(N*q);let run=0;
     for(let v=0;v<span;v++){run+=freq[v];if(run>idx)return v}return span-1};
 
-  let modeScore=null,modeN=0;
-  for(const k in scoreFreq)if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeScore=k}
+  const modeScore=C0.modeScore,modeN=C0.modeN;
 
   let rawHw=(hw+tie*0.5)/N, rawAw=(aw+tie*0.5)/N;
   try{
@@ -1732,8 +1737,7 @@ async function fetchNFLLiveOdds(){
         }
       });
     });
-    set(LS.nflshots,all);
-    NFL_SIMS={};
+    set(LS.nflshots,all);   /* lines don't feed the sim — no re-sim on upload */
     if(ACTIVE_SPORT==='nfl')renderNFL();
     console.log('NFL live odds loaded from The Odds API');
   }catch(e){console.warn('NFL live odds failed:',e.message);}
@@ -2692,6 +2696,7 @@ function simNCAAFGame(g,N){
      these exactly in O(1), and median comes off the cumulative counts with no
      sort at all. Same approach already used by the MLB and NFL engines. */
   const TSPAN=200, MSPAN=241, MOFF=120;   // totals 0..199, margins -120..+120
+  const C0=simCore('ncaaf',[awayExp,homeExp,std,N],()=>{
   const totFreq=new Int32Array(TSPAN);
   let marFreq=new Float64Array(MSPAN);
   const scoreFreq={};   // exact a-h score -> count, same approach simNFLGame already uses
@@ -2705,6 +2710,10 @@ function simNCAAFGame(g,N){
     if(h>a)hw++;else if(a>h)aw++;else ties++;
     const key=a+'-'+h; scoreFreq[key]=(scoreFreq[key]||0)+1;
   }
+  let modeScore=null,modeN=0;
+  for(const k in scoreFreq)if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeScore=k}
+  return{tot:Array.from(totFreq),mar:Array.from(marFreq),hw,aw,ties,modeScore,modeN};});
+  const totFreq=Int32Array.from(C0.tot);let marFreq=Float64Array.from(C0.mar);let hw=C0.hw,aw=C0.aw,ties=C0.ties;
   /* KEY NUMBERS (college): same reweighting as the NFL sim, with college
      margin frequencies — 3 and 7 still spike, just less than the NFL, and
      overtime makes ties vanish. Location is preserved; win split re-derived. */
@@ -2732,8 +2741,7 @@ function simNCAAFGame(g,N){
   // — using floor(line)+1 here would wrongly count the exact push as a cover.
   const awayCover=line=>{let k=Math.ceil(line)+MOFF;if(k<0)return 0;if(k>MSPAN)k=MSPAN;return 1-(cumM[k]/N)};
   const spreadCover=line=>{let k=Math.floor(line)+1+MOFF;if(k<0)k=0;if(k>MSPAN)return 0;return cumM[k]/N};
-  let modeScore=null,modeN=0;
-  for(const k in scoreFreq)if(scoreFreq[k]>modeN){modeN=scoreFreq[k];modeScore=k}
+  const modeScore=C0.modeScore,modeN=C0.modeN;
   return{
     awayProj:isNaN(awayExp)?26:Math.round(awayExp*10)/10,
     homeProj:isNaN(homeExp)?26:Math.round(homeExp*10)/10,
@@ -3686,7 +3694,9 @@ function ncaafPaintSlate(games){
     }
     if(queue.length)setTimeout(step,0);else ncaafBackfillLined();
   };
-  if(queue.length)setTimeout(step,0);else ncaafBackfillLined();
+  /* first chunk runs now: stored sims fill every card before the screen paints,
+     so a reload never shows "running sim…" for a game it has already simmed */
+  if(queue.length)step();else ncaafBackfillLined();
 }
 /* Picks need a sim. With lazy slates, a game you have lines for but never
    opened would never get one — so after the visible slate finishes, quietly

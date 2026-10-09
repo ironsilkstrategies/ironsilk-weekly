@@ -209,6 +209,7 @@ function nhlExpected(g){
 }
 function simNHLGame(g,N){
   N=N||20000;const{la,lh}=nhlExpected(g);const shape=35;
+  const C0=simCore('nhl',[la,lh,shape,N,NHL_P1],()=>{
   const TOT=new Int32Array(30),MAR=new Int32Array(41),P1T=new Int32Array(20),P1M=new Int32Array(21);const sf={};
   let aw=0,hw=0,ot=0,sa=0,sh=0,p1a=0,p1h=0;
   for(let i=0;i<N;i++){
@@ -221,6 +222,9 @@ function simNHLGame(g,N){
     if(h>a)hw++;else aw++;sa+=a;sh+=h;
     TOT[Math.min(29,a+h)]++;MAR[Math.max(0,Math.min(40,h-a+20))]++;const key=a+'-'+h;sf[key]=(sf[key]||0)+1;
   }
+  let modeScore=null,modeN=0;for(const k in sf)if(sf[k]>modeN){modeN=sf[k];modeScore=k;}
+  return{TOT:Array.from(TOT),MAR:Array.from(MAR),P1T:Array.from(P1T),P1M:Array.from(P1M),aw,hw,ot,sa,sh,p1a,p1h,modeScore,modeN};});
+  const TOT=C0.TOT,MAR=C0.MAR,P1T=C0.P1T,P1M=C0.P1M;const{aw,hw,ot,sa,sh,p1a,p1h}=C0;
   const over=L=>{let c=0;for(let t=0;t<30;t++)if(t>L)c+=TOT[t];return c/N;};
   const under=L=>{let c=0;for(let t=0;t<30;t++)if(t<L)c+=TOT[t];return c/N;};
   const homeCover=hl=>{let c=0;for(let m=-20;m<=20;m++)if(m+hl>0)c+=MAR[m+20];return c/N;};
@@ -232,7 +236,7 @@ function simNHLGame(g,N){
   const p1Cover=(side,line)=>{let w=0,l=0;for(let m=-10;m<=10;m++){const c=P1M[m+10];const v=(side==='home'?m:-m)+line;if(v>0)w+=c;else if(v<0)l+=c;}return w+l?w/(w+l):0.5;};
   const p1Tie=P1M[10]/N;
   let med=0,acc=0;for(let t=0;t<30;t++){acc+=TOT[t];if(acc>=N/2){med=t;break;}}
-  let modeScore=null,modeN=0;for(const k in sf)if(sf[k]>modeN){modeN=sf[k];modeScore=k;}
+  const modeScore=C0.modeScore,modeN=C0.modeN;
   return{N,la,lh,awayProj:+(sa/N).toFixed(2),homeProj:+(sh/N).toFixed(2),aw:aw/N,hw:hw/N,otP:ot/N,med,
     over,under,homeCover,awayCover,p1Over,p1Under,p1Win,p1Cover,p1Tie,p1Proj:+((p1a+p1h)/N).toFixed(2),p1a:p1a/N,p1h:p1h/N,
     modeScore,modeScorePct:modeN/N,medMargin:(sh-sa)/N};
