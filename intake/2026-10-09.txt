@@ -1,0 +1,78 @@
+SOURCE: sportsbetting.ag
+# Fri Oct 9, 2026 — book lines: sportsbetting.ag (10:08–10:09 AM CT)
+
+NCAAF
+
+Florida State Seminoles @ Louisville Cardinals
+ML: Florida State Seminoles +150 / Louisville Cardinals -171
+SPREAD: Florida State Seminoles +3.5 (-110) / Louisville Cardinals -3.5 (-110)
+OU: o60 (-109) / u60 (-111)
+H1SPREAD: Florida State Seminoles +2.5 (-105) / Louisville Cardinals -2.5 (-115)
+H1ML: Florida State Seminoles +127 / Louisville Cardinals -147
+H1OU: o29.5 (-120) / u29.5 (+100)
+
+Iowa Hawkeyes @ Washington Huskies
+ML: Iowa Hawkeyes +125 / Washington Huskies -145
+SPREAD: Iowa Hawkeyes +3 (-125) / Washington Huskies -3 (+105)
+OU: o41 (-115) / u41 (-105)
+H1ML: Iowa Hawkeyes +110 / Washington Huskies -130
+H1OU: o20.5 (-105) / u20.5 (-115)
+Q1SPREAD: Iowa Hawkeyes +0.5 (-150) / Washington Huskies -0.5 (+130)
+
+Wyoming Cowboys @ San Jose State Spartans
+ML: Wyoming Cowboys +157 / San Jose State Spartans -180
+SPREAD: Wyoming Cowboys +4.5 (-116) / San Jose State Spartans -4.5 (-104)
+OU: o42.5 (-110) / u42.5 (-110)
+H1SPREAD: Wyoming Cowboys +3 (-110) / San Jose State Spartans -3 (-110)
+H1ML: Wyoming Cowboys +145 / San Jose State Spartans -165
+H1OU: o21 (-115) / u21 (-105)
+
+Washington State Cougars @ Utah State Aggies
+ML: Washington State Cougars +174 / Utah State Aggies -200
+SPREAD: Washington State Cougars +5.5 (-110) / Utah State Aggies -5.5 (-110)
+OU: o43.5 (-112) / u43.5 (-108)
+H1SPREAD: Washington State Cougars +3.5 (-115) / Utah State Aggies -3.5 (-105)
+H1ML: Washington State Cougars +161 / Utah State Aggies -185
+H1OU: o21.5 (-115) / u21.5 (-105)
+
+Iowa State Cyclones @ BYU Cougars
+ML: Iowa State Cyclones +330 / BYU Cougars -420
+SPREAD: Iowa State Cyclones +10 (-102) / BYU Cougars -10 (-118)
+OU: o46 (-116) / u46 (-104)
+H1SPREAD: Iowa State Cyclones +7 (-110) / BYU Cougars -7 (-110)
+H1ML: Iowa State Cyclones +274 / BYU Cougars -340
+H1OU: o23.5 (-105) / u23.5 (-115)
+
+NHL
+
+Pittsburgh Penguins @ Columbus Blue Jackets
+ML: Pittsburgh Penguins +101 / Columbus Blue Jackets -115
+PL: Pittsburgh Penguins +1.5 (-250) / Columbus Blue Jackets -1.5 (+207)
+OU: o6.5 (-110) / u6.5 (-106)
+P1ML: Pittsburgh Penguins -105 / Columbus Blue Jackets -115
+P1PL: Pittsburgh Penguins +0.5 (-200) / Columbus Blue Jackets -0.5 (+174)
+P1OU: o1.5 (-135) / u1.5 (+115)
+
+New York Rangers @ Washington Capitals
+ML: New York Rangers +125 / Washington Capitals -142
+PL: New York Rangers +1.5 (-205) / Washington Capitals -1.5 (+177)
+OU: o5.5 (-125) / u5.5 (+109)
+P1ML: New York Rangers +108 / Washington Capitals -128
+P1PL: New York Rangers +0.5 (-190) / Washington Capitals -0.5 (+165)
+P1OU: o1.5 (-118) / u1.5 (-102)
+
+Seattle Kraken @ Detroit Red Wings
+ML: Seattle Kraken +123 / Detroit Red Wings -140
+PL: Seattle Kraken +1.5 (-210) / Detroit Red Wings -1.5 (+180)
+OU: o6 (-107) / u6 (-109)
+P1ML: Seattle Kraken +110 / Detroit Red Wings -130
+P1PL: Seattle Kraken +0.5 (-181) / Detroit Red Wings -0.5 (+158)
+P1OU: o1.5 (-128) / u1.5 (+108)
+
+Anaheim Ducks @ Winnipeg Jets
+ML: Anaheim Ducks +107 / Winnipeg Jets -121
+PL: Anaheim Ducks +1.5 (-245) / Winnipeg Jets -1.5 (+203)
+OU: o6.5 (-101) / u6.5 (-115)
+P1ML: Anaheim Ducks -105 / Winnipeg Jets -115
+P1PL: Anaheim Ducks +0.5 (-200) / Winnipeg Jets -0.5 (+174)
+P1OU: o1.5 (-135) / u1.5 (+115)

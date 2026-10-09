@@ -50,6 +50,13 @@ function switchSport(sport){return doSportSwitch(sport)}
 // ── NFL Simulation engine ────────────────────────────────────────────────────
 // Uses normal distribution around team scoring means.
 // NFL average: ~24 pts/team, std dev ~10. Adjusts for home field (+3 pts).
+/* Which side is the FIRST team on a two-team line? Book layout is away on top,
+   so that is the default. Only a name that clearly resolves to the HOME team
+   (or the second name clearly resolving to the AWAY team) flips it — an
+   unrecognised short name ("Florida State" for "FSU") no longer scrambles the
+   sides or files both prices on the same team. */
+function fbFirstSide(s1,s2,away,home){if(s1===home&&s1!==away)return'home';if(s1===away)return'away';if(s2===away&&s2!==home)return'home';return'away';}
+const fbOther=s=>s==='away'?'home':'away';
 function randn(){
   // Box-Muller
   let u=0,v=0;
@@ -577,16 +584,16 @@ function parseNFLSlateText(text,opts){
       const mlM=l.match(/^ML:\s*(.+?)\s*([+\-]\d+)\s*\/\s*(.+?)\s*([+\-]\d+)\s*$/i);
       if(mlM){
         const s1=_resolve(mlM[1]),s2=_resolve(mlM[3]);
-        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:s1===curAway?'away':'home',price:+mlM[2]});
-        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:s2===curHome?'home':'away',price:+mlM[4]});
+        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:fbFirstSide(s1,s2,curAway,curHome),price:+mlM[2]});
+        picks.push({away:curAway,home:curHome,game,market:'moneyline',side:fbOther(fbFirstSide(s1,s2,curAway,curHome)),price:+mlM[4]});
         continue;
       }
       // SPREAD: KC -3 (-110) / LV +3 (-110)
       const spM=l.match(/^SPREAD:\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
       if(spM){
         const s1=_resolve(spM[1]),s2=_resolve(spM[4]);
-        picks.push({away:curAway,home:curHome,game,market:'spread',side:s1===curAway?'away':'home',line:+spM[2],price:+spM[3]});
-        picks.push({away:curAway,home:curHome,game,market:'spread',side:s2===curHome?'home':'away',line:+spM[5],price:+spM[6]});
+        picks.push({away:curAway,home:curHome,game,market:'spread',side:fbFirstSide(s1,s2,curAway,curHome),line:+spM[2],price:+spM[3]});
+        picks.push({away:curAway,home:curHome,game,market:'spread',side:fbOther(fbFirstSide(s1,s2,curAway,curHome)),line:+spM[5],price:+spM[6]});
         continue;
       }
       // OU: o47.5 (-110) / u47.5 (-110)
@@ -615,16 +622,16 @@ function parseNFLSlateText(text,opts){
           const m=rest.match(/^(.+?)\s*([+\-]\d+)\s*\/\s*(.+?)\s*([+\-]\d+)\s*$/);
           if(m){
             const s1=resolveTeam(m[1]);
-            picks.push({away:curAway,home:curHome,game,market:per+'ml',side:s1===curAway?'away':'home',price:+m[2]});
-            picks.push({away:curAway,home:curHome,game,market:per+'ml',side:s1===curAway?'home':'away',price:+m[4]});
+            picks.push({away:curAway,home:curHome,game,market:per+'ml',side:fbFirstSide(s1,resolveTeam(m[3]),curAway,curHome),price:+m[2]});
+            picks.push({away:curAway,home:curHome,game,market:per+'ml',side:fbOther(fbFirstSide(s1,resolveTeam(m[3]),curAway,curHome)),price:+m[4]});
             continue;
           }
         }else{
           const m=rest.match(/^(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*(.+?)\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/);
           if(m){
             const s1=resolveTeam(m[1]);
-            picks.push({away:curAway,home:curHome,game,market:per+'spread',side:s1===curAway?'away':'home',line:+m[2],price:+m[3]});
-            picks.push({away:curAway,home:curHome,game,market:per+'spread',side:s1===curAway?'home':'away',line:+m[5],price:+m[6]});
+            picks.push({away:curAway,home:curHome,game,market:per+'spread',side:fbFirstSide(s1,resolveTeam(m[4]),curAway,curHome),line:+m[2],price:+m[3]});
+            picks.push({away:curAway,home:curHome,game,market:per+'spread',side:fbOther(fbFirstSide(s1,resolveTeam(m[4]),curAway,curHome)),line:+m[5],price:+m[6]});
             continue;
           }
         }
@@ -632,8 +639,8 @@ function parseNFLSlateText(text,opts){
       // H1SPREAD: KC -1.5 (-115) / LV +1.5 (+105)
       const h1spM=l.match(/^H1SPREAD:\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*([A-Z]{2,4})\s*([+\-][\d.]+)\s*\(([+\-]\d+)\)/i);
       if(h1spM){
-        picks.push({away:curAway,home:curHome,game,market:'h1spread',side:norm(h1spM[1])===curAway?'away':'home',line:+h1spM[2],price:+h1spM[3]});
-        picks.push({away:curAway,home:curHome,game,market:'h1spread',side:norm(h1spM[4])===curHome?'home':'away',line:+h1spM[5],price:+h1spM[6]});
+        picks.push({away:curAway,home:curHome,game,market:'h1spread',side:fbFirstSide(norm(h1spM[1]),norm(h1spM[4]),curAway,curHome),line:+h1spM[2],price:+h1spM[3]});
+        picks.push({away:curAway,home:curHome,game,market:'h1spread',side:fbOther(fbFirstSide(norm(h1spM[1]),norm(h1spM[4]),curAway,curHome)),line:+h1spM[5],price:+h1spM[6]});
         continue;
       }
       // H1OU: o22.5 (-110) / u22.5 (-110)
