@@ -1,5 +1,5 @@
-SOURCE: sportsbetting.ag
-# Fri Oct 9, 2026 — book lines: sportsbetting.ag (10:08–10:09 AM CT)
+SOURCE: covers
+# Fri Oct 9, 2026 — book lines: sportsbetting.ag (10:08–10:09 AM CT) · predictions + trends: Covers (1:54–1:56 PM CT)
 
 NCAAF
 
@@ -10,6 +10,15 @@ OU: o60 (-109) / u60 (-111)
 H1SPREAD: Florida State Seminoles +2.5 (-105) / Louisville Cardinals -2.5 (-115)
 H1ML: Florida State Seminoles +127 / Louisville Cardinals -147
 H1OU: o29.5 (-120) / u29.5 (+100)
+PRED: Florida State Seminoles 27.85 / Louisville Cardinals 31.84
+TREND: Under is 6-0 in Seminoles last 6 games as a favorite.
+TREND: Over is 6-0 in Seminoles last 6 games on fieldturf.
+TREND: Under is 4-0 in Seminoles last 4 road games vs. a team with a losing home record.
+TREND: Under is 4-0 in Seminoles last 4 games after allowing less than 20 points in their previous game.
+TREND: Over is 4-0 in Cardinals last 4 games after allowing more than 450 total yards in their previous game.
+TREND: Over is 5-1 in Cardinals last 6 games overall.
+TREND: Cardinals are 5-1 ATS in their last 6 games as an underdog.
+TREND: Cardinals are 5-1 ATS in their last 6 games following a ATS loss.
 
 Iowa Hawkeyes @ Washington Huskies
 ML: Iowa Hawkeyes +125 / Washington Huskies -145
@@ -18,6 +27,15 @@ OU: o41 (-115) / u41 (-105)
 H1ML: Iowa Hawkeyes +110 / Washington Huskies -130
 H1OU: o20.5 (-105) / u20.5 (-115)
 Q1SPREAD: Iowa Hawkeyes +0.5 (-150) / Washington Huskies -0.5 (+130)
+PRED: Iowa Hawkeyes 19.46 / Washington Huskies 22.37
+TREND: Hawkeyes are 6-0-1 ATS in their last 7 road games.
+TREND: Hawkeyes are 6-0-1 ATS in their last 7 road games vs. a team with a winning home record.
+TREND: Over is 5-0 in Hawkeyes last 5 games following a double-digit loss at home.
+TREND: Hawkeyes are 3-0-1 ATS in their last 4 games as a road underdog.
+TREND: Huskies are 4-0 ATS in their last 4 games following a straight up loss.
+TREND: Over is 4-1 in Huskies last 5 games after accumulating less than 100 yards rushing in their previous game.
+TREND: Under is 5-1 in Huskies last 6 games as a home underdog.
+TREND: Over is 4-1 in Huskies last 5 home games vs. a team with a winning road record.
 
 Wyoming Cowboys @ San Jose State Spartans
 ML: Wyoming Cowboys +157 / San Jose State Spartans -180
@@ -26,6 +44,15 @@ OU: o42.5 (-110) / u42.5 (-110)
 H1SPREAD: Wyoming Cowboys +3 (-110) / San Jose State Spartans -3 (-110)
 H1ML: Wyoming Cowboys +145 / San Jose State Spartans -165
 H1OU: o21 (-115) / u21 (-105)
+PRED: Wyoming Cowboys 17.68 / San Jose State Spartans 22.73
+TREND: Under is 6-0 in Cowboys last 6 games as a favorite.
+TREND: Under is 6-0 in Cowboys last 6 games as a road underdog.
+TREND: Under is 6-0 in Cowboys last 6 games after scoring less than 20 points in their previous game.
+TREND: Under is 7-0 in Cowboys last 7 games after allowing less than 20 points in their previous game.
+TREND: Under is 4-0 in Spartans last 4 games overall.
+TREND: Under is 4-0 in Spartans last 4 games on fieldturf.
+TREND: Over is 5-1 in Spartans last 6 games following a double-digit loss at home.
+TREND: Spartans are 5-1 ATS in their last 6 games following a double-digit loss at home.
 
 Washington State Cougars @ Utah State Aggies
 ML: Washington State Cougars +174 / Utah State Aggies -200
@@ -34,6 +61,15 @@ OU: o43.5 (-112) / u43.5 (-108)
 H1SPREAD: Washington State Cougars +3.5 (-115) / Utah State Aggies -3.5 (-105)
 H1ML: Washington State Cougars +161 / Utah State Aggies -185
 H1OU: o21.5 (-115) / u21.5 (-105)
+PRED: Washington State Cougars 18.35 / Utah State Aggies 23.78
+TREND: Cougars are 8-1 ATS in their last 9 games as an underdog.
+TREND: Under is 7-1 in Cougars last 8 road games.
+TREND: Under is 6-1 in Cougars last 7 games as a road underdog.
+TREND: Cougars are 6-1 ATS in their last 7 games as a road underdog.
+TREND: Aggies are 5-0 ATS in their last 5 games as a home underdog.
+TREND: Aggies are 5-0 ATS vs. a team with a losing record.
+TREND: Aggies are 7-1 ATS in their last 8 home games vs. a team with a losing road record.
+TREND: Under is 4-0 in Aggies last 4 games following a straight up win.
 
 Iowa State Cyclones @ BYU Cougars
 ML: Iowa State Cyclones +330 / BYU Cougars -420
@@ -42,6 +78,15 @@ OU: o46 (-116) / u46 (-104)
 H1SPREAD: Iowa State Cyclones +7 (-110) / BYU Cougars -7 (-110)
 H1ML: Iowa State Cyclones +274 / BYU Cougars -340
 H1OU: o23.5 (-105) / u23.5 (-115)
+PRED: Iowa State Cyclones 18.39 / BYU Cougars 29.77
+TREND: Under is 5-0 in Cyclones last 5 games following a double-digit loss at home.
+TREND: Under is 4-0 in Cyclones last 4 road games.
+TREND: Cyclones are 7-1 ATS in their last 8 games as a road underdog.
+TREND: Under is 4-1 in Cyclones last 5 games as a favorite.
+TREND: Cougars are 5-0 ATS in their last 5 games as a home favorite.
+TREND: Under is 5-0 in Cougars last 5 games after scoring more than 40 points in their previous game.
+TREND: Cougars are 8-0 ATS in their last 8 games after accumulating less than 170 yards passing in their previous game.
+TREND: Cougars are 5-0 ATS in their last 5 games after allowing less than 275 total yards in their previous game.
 
 NHL
 
@@ -52,6 +97,15 @@ OU: o6.5 (-110) / u6.5 (-106)
 P1ML: Pittsburgh Penguins -105 / Columbus Blue Jackets -115
 P1PL: Pittsburgh Penguins +0.5 (-200) / Columbus Blue Jackets -0.5 (+174)
 P1OU: o1.5 (-135) / u1.5 (+115)
+PRED: Pittsburgh Penguins 3.36 / Columbus Blue Jackets 3.31
+TREND: Under is 4-0 in Penguins last 4 games as a favorite.
+TREND: Under is 3-0-1 in Penguins last 4 after allowing 5 goals or more in their previous game.
+TREND: Penguins are 4-1 in their last 5 vs. Eastern Conference.
+TREND: Over is 7-2-1 in Penguins last 10 games as a road underdog.
+TREND: Under is 3-0-1 in Blue Jackets last 4 following a home loss of 3 or more goals.
+TREND: Under is 6-1 in Blue Jackets last 7 games as a favorite.
+TREND: Under is 4-1 in Blue Jackets last 5 home games.
+TREND: Blue Jackets are 5-1 in their last 6 when their opponent allows 5 goals or more in their previous game.
 
 New York Rangers @ Washington Capitals
 ML: New York Rangers +125 / Washington Capitals -142
@@ -60,6 +114,15 @@ OU: o5.5 (-125) / u5.5 (+109)
 P1ML: New York Rangers +108 / Washington Capitals -128
 P1PL: New York Rangers +0.5 (-190) / Washington Capitals -0.5 (+165)
 P1OU: o1.5 (-118) / u1.5 (-102)
+PRED: New York Rangers 2.65 / Washington Capitals 3.10
+TREND: Under is 5-0 in Rangers last 5 road games.
+TREND: Rangers are 4-0 in their last 4 overall.
+TREND: Under is 4-1 in Rangers last 5 vs. Eastern Conference.
+TREND: Over is 4-1 in Rangers last 5 vs. Metropolitan.
+TREND: Capitals are 5-0 in their last 5 vs. Metropolitan.
+TREND: Capitals are 4-0 in their last 4 home games.
+TREND: Over is 4-0 in Capitals last 4 when their opponent allows 2 goals or less in their previous game.
+TREND: Capitals are 6-1 in their last 7 overall.
 
 Seattle Kraken @ Detroit Red Wings
 ML: Seattle Kraken +123 / Detroit Red Wings -140
@@ -68,6 +131,15 @@ OU: o6 (-107) / u6 (-109)
 P1ML: Seattle Kraken +110 / Detroit Red Wings -130
 P1PL: Seattle Kraken +0.5 (-181) / Detroit Red Wings -0.5 (+158)
 P1OU: o1.5 (-128) / u1.5 (+108)
+PRED: Seattle Kraken 2.87 / Detroit Red Wings 3.21
+TREND: Under is 3-0-1 in Kraken last 4 following a home loss of 3 or more goals.
+TREND: Over is 5-1-1 in Kraken last 7 after scoring 2 goals or less in their previous game.
+TREND: Under is 4-1-2 in Kraken last 7 games as a favorite.
+TREND: Over is 4-1-1 in Kraken last 6 following a loss of 3 or more goals.
+TREND: Under is 2-0-2 in Red Wings last 4 vs. Pacific.
+TREND: Under is 6-1-2 in Red Wings last 9 games playing on 2 days rest.
+TREND: Over is 5-1 in Red Wings last 6 games as a favorite.
+TREND: Over is 5-1 in Red Wings last 6 games as a home favorite.
 
 Anaheim Ducks @ Winnipeg Jets
 ML: Anaheim Ducks +107 / Winnipeg Jets -121
@@ -76,3 +148,12 @@ OU: o6.5 (-101) / u6.5 (-115)
 P1ML: Anaheim Ducks -105 / Winnipeg Jets -115
 P1PL: Anaheim Ducks +0.5 (-200) / Winnipeg Jets -0.5 (+174)
 P1OU: o1.5 (-135) / u1.5 (+115)
+PRED: Anaheim Ducks 3.28 / Winnipeg Jets 3.34
+TREND: Over is 5-0-2 in Ducks last 7 following a home loss of 3 or more goals.
+TREND: Ducks are 4-0 in their last 4 games following a loss of 3 or more goals.
+TREND: Ducks are 6-1 in their last 7 after scoring 2 goals or less in their previous game.
+TREND: Over is 5-1-3 in Ducks last 9 after scoring 2 goals or less in their previous game.
+TREND: Over is 4-0 in Jets last 4 home games.
+TREND: Over is 4-0 in Jets last 4 games as a home favorite.
+TREND: Over is 5-1 in Jets last 6 games as a favorite.
+TREND: Jets are 5-1 in their last 6 after allowing 2 goals or less in their previous game.

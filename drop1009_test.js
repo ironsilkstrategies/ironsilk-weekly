@@ -18,6 +18,14 @@ setTimeout(()=>{try{
   T('CFB: Florida State @ Louisville spread filed',/171/.test(shots)&&/3\.5/.test(shots),shots.slice(0,300));
   ['420','-200','-180','-145'].forEach(p=>T('CFB price '+p+' present',shots.includes(p.replace('-','-'))));
   T('CFB 1st-half lines filed',/29\.5/.test(shots)&&/23\.5/.test(shots));
+  const PR=nhl.eval(`get('d4.preds',{})`)||{};const pn=((PR.nhl||{})['2026-10-09']||{});
+  T('NHL: 4 Covers predictions filed',Object.keys(pn).length===4&&pn['NYR@WSH']&&pn['NYR@WSH'].a===2.65&&pn['NYR@WSH'].src==='covers',JSON.stringify(pn).slice(0,200));
+  const trN=nhl.eval(`get(INTEL_KEY,[]).filter(x=>x.kind==='trend'&&x.sp==='nhl').length`);
+  T('NHL: 32 trends filed',trN===32,String(trN));
+  const pc=cfb.eval(`JSON.stringify((get('d4.preds',{}).ncaaf||{})['2026-10-09']||{})`);
+  T('CFB: 5 Covers predictions filed',(pc.match(/covers/g)||[]).length===5&&/29\.77/.test(pc),pc.slice(0,300));
+  const trC=cfb.eval(`get(INTEL_KEY,[]).filter(x=>x.kind==='trend'&&x.sp==='ncaaf').length`);
+  T('CFB: 40 trends filed',trC===40,String(trC));
   /* short names that don't resolve must still land on the right side (first = away) */
   const r=cfb.eval(`JSON.stringify(parseNFLSlateText("NFL\\nFlorida State Seminoles @ Louisville Cardinals\\nML: Florida State +150 / Louisville -171\\nSPREAD: Florida State +3.5 (-110) / Louisville -3.5 (-110)\\nH1ML: FSU +127 / UL -147",{resolve:x=>/florida state seminoles/i.test(x)?'FSU':/louisville cardinals/i.test(x)?'LOU':null}))`);
   const P=JSON.parse(r);const arr=(P.picks||P).filter?(P.picks||P):[];
