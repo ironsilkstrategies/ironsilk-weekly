@@ -146,7 +146,7 @@ function nbaCard(g){const gl=g.away.abbr+'@'+g.home.abbr;const L=nbaBookLinesFor
       <div style="font-size:10px;color:var(--mute);font-family:'IBM Plex Mono'">${esc(time)}${g.venue?' · '+esc(g.venue):''}</div></div>
       <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${A} ${esc(g.away.record||'')}<br>${H} ${esc(g.home.record||'')}</div></div>
     ${score}<div class="sig">${chips.join('')}</div>
-    ${g.abstract==='pre'?(()=>{try{return coachHtml({game:g,sim:s,sport:'nba'})}catch(e){return''}})():''}
+    ${g.abstract==='pre'?(()=>{try{return coachHtml({game:g,sim:s,sport:'nba'})}catch(e){return''}})():''}${(()=>{try{return sgpCardHtml('nba',g,s)}catch(e){return''}})()}
     ${g.abstract!=='post'?nbaSection(g,'GAME','full','',L)+nbaSection(g,'1ST HALF','h1','h1',L)+nbaSection(g,'1ST QUARTER','q1','q1',L):''}
     ${!L.length&&g.abstract!=='post'?'<div class="sub" style="font-size:10px;margin-top:4px">No book lines yet — paste your sportsbook\'s NBA lines in Intake for real prices and EV.</div>':''}
     ${typeof pstCardHtml==='function'?pstCardHtml('nba',g):''}

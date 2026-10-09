@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261009d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261009e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2180,7 +2180,18 @@ function _dec(raw){if(raw==null||raw==='')return undefined;
   return JSON.parse(raw);}
 function _enc(json){if(json.length<8000)return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
-function get(k,d){try{const v=_dec(localStorage.getItem(k));return v===undefined?d:v}catch(e){return d}}
+/* v1.79 · the decompression cache. Every get() of a compressed store ran the
+   full LZ decompressor — and grading reads the game archive once PER LEG, so a
+   few hundred tickets meant hundreds of full decompressions on every page load
+   (measured 6+ seconds of a frozen screen on desktop; several times that on a
+   phone). The decompressed text is now kept per key and reused for as long as
+   the stored bytes are identical (compared on every read, so a write from any
+   code path or another tab is picked up immediately). Every caller still gets
+   its own freshly parsed copy, so nothing that mutates a result is affected. */
+const _DEC_C=new Map();
+function get(k,d){try{const raw=localStorage.getItem(k);if(raw==null||raw==='')return d;let j=raw;
+  if(raw.charCodeAt(0)===1&&raw.startsWith(_LZM)){const c=_DEC_C.get(k);if(c&&c.raw===raw)j=c.j;else{j=LZString.decompressFromUTF16(raw.slice(_LZM.length));_DEC_C.set(k,{raw,j});}}
+  if(j==null)return d;const v=JSON.parse(j);return v===undefined?d:v}catch(e){return d}}
 /* Read-only cached reads of big stores (ledger, intel, tickets). Cleared the
    moment set() writes that key, so it's never stale. Callers must not mutate
    what they get back — use get() when you intend to change and save. */
@@ -2284,7 +2295,8 @@ function set(k,v){
   if(typeof LS!=='undefined'&&k===LS.allfinals&&typeof ALLF_C!=='undefined')ALLF_C=null;
   if(RO_CACHE[k])delete RO_CACHE[k];if(typeof ARC_RO!=='undefined'&&ARC_RO[k])delete ARC_RO[k];
   if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof CHAR_BRAIN_TS!=='undefined')CHAR_BRAIN_TS=0;
-  if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof BLEND_C!=='undefined')BLEND_C=null;   // new grades → the brain relearns now
+  if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof BLEND_C!=='undefined')BLEND_C=null;
+  if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof splitRoll==='function')try{splitRoll(v)}catch(e){}   /* graded calls → permanent splits before they can age out */   // new grades → the brain relearns now
   let payload;
   try{payload=JSON.stringify(v)}catch(e){console.warn('set: unserializable',k,e);return false}
   payload=_enc(payload);
@@ -2636,11 +2648,15 @@ async function ghPut(path,text,msg){const token=get(LS.ghtoken,''),repo=get(LS.g
     return r.ok?{ok:true}:{ok:false,reason:'HTTP '+r.status+' '+(await r.text()).slice(0,160)};}catch(e){return{ok:false,reason:e.message||String(e)};}}
 function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();
   const slim=x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
-    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push});
+    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,
+    why:(()=>{if(!x.whyOn)return undefined;try{const W=pickWhy({...x,date:x.d0});return{bullets:W.bullets.slice(0,6),script:W.script};}catch(e){return undefined;}})()});
   const hist=Object.keys(log).sort().reverse().slice(0,30).map(d=>({d,picks:(log[d].picks||[]).filter(x=>x.main).map(slim)})).filter(x=>x.picks.length);
-  const today_=S.locked?{d:S.d,lockedAt:S.lockedAt,picks:(S.top3||[]).map(x=>{const L=(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);return slim({...x,hit:L?L.hit:null,push:L?L.push:false});}),
+  const today_=S.locked?{d:S.d,lockedAt:S.lockedAt,picks:(S.top3||[]).map(x=>{const L=(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);return slim({...x,hit:L?L.hit:null,push:L?L.push:false,whyOn:true,d0:S.d});}),
     bySport:Object.fromEntries(Object.entries(S.bySport||{}).map(([k,v])=>[k,v.map(slim)]))}:null;
-  return{v:1,generated:Date.now(),brand:'TheDesk',handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,history:hist};}
+  let parlay=null,prec=null;try{const B=get(BKDAY_KEY,{})||{};if(B.locked&&B.d===today()&&B.roll&&B.roll.cut.length){const cut=B.roll.legs.filter(l=>B.roll.cut.includes(l.sp+'|'+l.game));
+      parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(B.roll.cutDec),p:B.roll.cutP,result:tixDone(cut),legs:cut.map(l=>{let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}return{sp:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,by:charName(l.v),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
+    const RR=bkDayRecord().cut;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
+  return{v:2,generated:Date.now(),brand:'TheDesk',handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
 async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual)alert('The Best card publishes once it locks — run the master evaluation or tap Lock now.');return{ok:false,reason:'not locked'};}
   if(!get(LS.ghtoken,'')||!get(LS.ghrepo,'')){if(manual)alert('Add your GitHub token and owner/repo in Settings → Backup first. Publishing uses the same connection.');return{ok:false,reason:'not configured'};}
   const F=publicFeed();const txt=JSON.stringify(F,null,1);
@@ -3354,7 +3370,13 @@ function saveKeys(){
   localStorage.setItem('d4.setupDone','1');
   document.getElementById('setup').classList.add('hide');boot();
 }
-function tab(n,b){
+/* on-device speed log: every tab switch is timed so a slow screen on the phone
+   shows up in Settings → Storage with real numbers, not guesses */
+const PERF_LOG=[];
+function perfNote(what,ms){PERF_LOG.push({what,ms:Math.round(ms),at:Date.now()});if(PERF_LOG.length>30)PERF_LOG.shift();}
+if(typeof window!=='undefined')window.addEventListener('load',()=>{try{const nav=performance.getEntriesByType('navigation')[0];perfNote('page load',nav?nav.loadEventEnd:performance.now());}catch(e){}});
+function tab(n,b){const _t0=performance.now();try{return tabRaw(n,b);}finally{perfNote('tab: '+n,performance.now()-_t0);}}
+function tabRaw(n,b){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
   document.getElementById('v-'+n).classList.add('on');
   document.querySelectorAll('nav>button').forEach(x=>x.classList.remove('on'));
@@ -3372,13 +3394,14 @@ function tab(n,b){
   if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+missionsHtml()}catch(e){console.warn('missions',e)}try{h=msRoadmapSection()+h;}catch(e){}el.innerHTML=h+renderMoneyTab();}}
   if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
   if(n==='today')renderToday();
+  if(n==='banker')renderBankerTab();
   if(n==='grades')renderRecordsHub();
   if(n==='mine')openMyGames();
   window.scrollTo(0,0);
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.78) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.79) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3390,7 +3413,7 @@ function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++)
 let _SIMK='';
 function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
   _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
-/* ══ SIM ONCE, REUSE EVERYWHERE (v1.78) ════════════════════════════════════
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.79) ════════════════════════════════════
    The Monte Carlo loop is the only expensive part of a sim, and it depends on
    nothing but the model's inputs (projected scoring, spread of outcomes, sample
    size, the game's seed). Odds, calibration and every market read are applied
@@ -6776,7 +6799,7 @@ function card(g){
     ${isLive?liveScoreBar(g.id,g):""}
     ${finalLine}${!isLive?projLine:''}
     ${sig?`<div class="sig">${sig}</div>`:''}
-    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'mlb'})}catch(e){return''}})()}
+    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'mlb'})}catch(e){return''}})()}${(()=>{try{return sgpCardHtml('mlb',g,s)}catch(e){return''}})()}
     ${badges}
    </div>
    ${!bettingClosed&&s?betGrid(g,s,M):''}
@@ -7356,7 +7379,7 @@ function resolveLeg(leg,ticketDate){
   // 1b) not on this page (e.g. viewing from the NFL page): the My Games ESPN feed
   if(!(typeof GAMES!=='undefined'&&GAMES.length)){const mg=mgResolve({...leg,sport:'mlb'},ticketDate);if(mg&&mg.live)return mg;}
   // 2) persistent archive — this is what makes yesterday's tickets gradeable
-  const arc=get(LS.arc,{});
+  const arc=roGet(LS.arc,{},30e3);   /* read-only here: one parse per 30s, not one per leg */
   const dates=[];
   if(leg.gameDate)dates.push(leg.gameDate);
   if(ticketDate&&ticketDate!==leg.gameDate)dates.push(ticketDate);
@@ -8048,6 +8071,9 @@ async function backfillGrading(silent){
   const arc=get(LS.arc,{});
   const L=get(LS.locked,[]);
   let changed=false;
+  /* a ticket the settled ledger has frozen is done: never re-grade it, never refetch for it */
+  let FZ={};try{FZ=settledAll();}catch(e){}
+  const live=t=>!(t.archived&&FZ[String(t.id)]&&!FZ[String(t.id)].recovered);
 
   // 1) stamp gameDate on legs that don't have one, using the ticket's date
   L.forEach(t=>t.legs.forEach(x=>{
@@ -8056,7 +8082,7 @@ async function backfillGrading(silent){
 
   // 2) figure out which dates still have ungraded legs
   const needDates=new Set();
-  L.forEach(t=>t.legs.forEach(x=>{
+  L.filter(live).forEach(t=>t.legs.forEach(x=>{
     const r=gradeLeg(x,t.date);
     if(r.hit===null)needDates.add(x.gameDate||t.date);
   }));
@@ -8077,7 +8103,7 @@ async function backfillGrading(silent){
 
   // 4) fetch + cache box scores for any prop leg that still can't grade
   const needBoxes=new Set();
-  L.forEach(t=>t.legs.forEach(x=>{
+  L.filter(live).forEach(t=>t.legs.forEach(x=>{
     if(!(x.isProp||x.ptype))return;
     const r=gradeLeg(x,t.date);
     if(r.hit!==null)return;
@@ -8093,7 +8119,7 @@ async function backfillGrading(silent){
   }
 
   // 5) re-stamp gid onto legs now that the archive can resolve them
-  L.forEach(t=>t.legs.forEach(x=>{
+  L.filter(live).forEach(t=>t.legs.forEach(x=>{
     if(x.gid)return;
     const gid=legGameId(x,t.date);
     if(gid){x.gid=gid;changed=true}
@@ -9778,7 +9804,7 @@ function evalInputFingerprint(){
     calib:(get('d4.drift',{})||{}).n||0
   });
 }
-/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.78) ═════════════════════════════
+/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.79) ═════════════════════════════
    Each sport's evaluator lives on its own page (the engine has to be loaded to
    sim), but they now share one front door: Records → Model eval shows the eval
    for the page you're on plus a strip with every sport's status today — tap one
@@ -9788,7 +9814,9 @@ function evalInputFingerprint(){
    today, not only baseball's, so a football-and-hockey night still locks. */
 const EVAL_LOCK_KEY='d4.evallock';
 const EVAL_SPORTS=[['mlb','MLB'],['nfl','NFL'],['ncaaf','CFB'],['nhl','NHL'],['nba','NBA']];
-function evalLockMark(sp){const L=get(EVAL_LOCK_KEY,{})||{};if(L.date!==today())Object.assign(L,{date:today(),by:{}});L.by=L.by||{};L.by[sp]=Date.now();set(EVAL_LOCK_KEY,L);}
+function evalLockMark(sp){const L=get(EVAL_LOCK_KEY,{})||{};if(L.date!==today())Object.assign(L,{date:today(),by:{}});L.by=L.by||{};L.by[sp]=Date.now();set(EVAL_LOCK_KEY,L);
+  /* the Banker commits his desk the moment any master evaluation runs */
+  setTimeout(()=>{try{bkDayState()}catch(e){}},300);}
 function evalRanToday(){const d=today();const E=roGet(LS_EVAL,{},10e3)||{};if(E.date===d)return true;
   const L=roGet(EVAL_LOCK_KEY,{},10e3)||{};return L.date===d&&Object.keys(L.by||{}).length>0;}
 function evalRunAt(sp){const d=today();try{
@@ -11908,7 +11936,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.78) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.79) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -15633,7 +15661,12 @@ function renderBest(){
       if(open.length){const mk=x=>{const g=main.find(y=>y.pick===x.pick&&y.game===x.game);return!g?'':g.push?' ↔':g.hit===true?' ✅':g.hit===false?' ❌':' ⏳';};
         prev=`<div class="sub" style="margin:10px 0 4px"><b>${fmtDate(new Date(P.d+'T12:00:00'))}'s card — still grading (${open.length} open)</b></div>`+bestPublicCardHtml(P,{id:'bestPrevShare',res:mk});}}}catch(e){}
   const pub=get('d4.pubstate',{})||{};const pubTxt=pub.d===S.d?(pub.ok?`<span style="color:var(--win)">✓ public page updated ${new Date(pub.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span>`:`<span style="color:var(--rust)">publish failed: ${esc(pub.reason||'')}</span>`):'';
-  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button><a href="picks.html" target="_blank" style="font-size:11px;color:var(--cold);align-self:center">open public page ↗</a></div>
+  const L3=BEST_VIEW==='all'?(S.top3||[]):((S.bySport||{})[BEST_VIEW]||[]);
+  const notes=L3.length?`<div class="tkt" style="margin-top:8px"><h3>🎬 Reel notes — why each pick</h3><div class="sub" style="font-size:10px">Everything behind each play, plus a script you can read on camera.</div>${L3.map((x,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10px;color:var(--gold)">${sgnP(x.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(x.game)}</span>${whyHtml({...x,date:S.d},i===0)}</div>`).join('')}</div>`:'';
+  let rcT='';try{const B=bkDayState();const D=B.locked?B:B.preview;if(D&&D.roll&&D.roll.cut.length){const cut=D.roll.legs.filter(l=>D.roll.cut.includes(l.sp+'|'+l.game));
+    rcT=`<div class="tkt" style="margin-top:8px;border-left:3px solid #ff6fae"><h3>📣 Tonight's Roll Call parlay ${B.locked?'🔒':''}</h3><div class="mono" style="font-size:10.5px">${cut.map(l=>`${txtEsc(l.pick)} <span style="color:var(--gold)">${sgnP(l.price)}</span>`).join(' · ')}</div>
+      <div class="mono" style="font-size:10px;color:var(--mute)">${cut.length} legs · ${decimalToAmerican(D.roll.cutDec)} · ${(D.roll.cutP*100).toFixed(1)}% to cash</div><div class="bar" style="margin-top:4px"><button onclick="tab('banker',document.getElementById('navBanker'))">Open the Banker's desk →</button></div></div>`;}}catch(e){}
+  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button><a href="picks.html" target="_blank" style="font-size:11px;color:var(--cold);align-self:center">open public page ↗</a></div>
     <div class="sub mono" style="font-size:9.5px">${pubTxt||'The public page (picks.html) shows only the locked card, its graded record and your subscribe link. It publishes itself when the card locks.'}</div>
     <div class="sub" style="font-size:10px;margin-top:4px">Subscribe link for the public page <input id="subLinkIn" placeholder="https://… (Whop, Patreon, Stripe link)" value="${esc(get('d4.sublink',''))}" onchange="set('d4.sublink',this.value.trim())" style="width:100%;margin-top:2px"></div>`+
     ((S.props||[]).length?`<details class="tkt" style="margin-top:8px"><summary><b>Bonus props</b> <span class="mono" style="font-size:10px;color:var(--mute)">not part of the record</span></summary>${bestRowsHtml('Top props',S.props,null,'')}</details>`:'');
@@ -17455,29 +17488,87 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.78 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.79 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */
+
+/* ══ CHARACTER SPLITS — the permanent raw record (v1.79) ═══════════════════
+   The voices ledger keeps the last 8,000 calls, which at a full slate is
+   barely two weeks — so a character's record on a team or in a head-to-head
+   quietly forgot everything older. Every graded call is now rolled, once, into
+   a compact permanent table before it can age out:
+     per sport · character · market →
+       all · side (home / away / over / under) · role (favorite / underdog)
+       team (the team it picked; for totals, over/under per team) · H2H (the
+       matchup, by the team or total side it took)
+   Each cell is [wins, losses, pushes]. This is the raw material for every
+   "hot hand", the Banker, the SGP builder and calibration. Never trimmed. */
+const SPLIT_KEY='d4.charsplits';
+const splitRole=x=>{const p=x.price!=null?+x.price:null;if(x.market==='total')return null;
+  if(p!=null&&isFinite(p)&&Math.abs(p)>=100)return p<0?'fav':'dog';if(x.market==='spread'&&x.line!=null)return +x.line<0?'fav':+x.line>0?'dog':null;return null;};
+const splitTeam=x=>{const [a,h]=String(x.game).split('@');return x.side==='home'?h:x.side==='away'?a:null;};
+const splitPair=g=>String(g).split('@').slice().sort().join('-');
+function splitInc(o,k,r){const c=o[k]||(o[k]=[0,0,0]);c[r]++;}
+function splitRoll(V){if(!Array.isArray(V))return 0;let S=null,n=0;
+  for(const x of V){if(!x||!x.graded||x.sr||!CHARS[x.voice]||!x.sp||!x.market)continue;
+    if(!S)S=get(SPLIT_KEY,{})||{};
+    const r=x.push?2:x.hit===true?0:1;const M=(((S[x.sp]||(S[x.sp]={}))[x.voice]||(S[x.sp][x.voice]={}))[x.market]||(S[x.sp][x.voice][x.market]={all:[0,0,0],side:{},role:{},team:{},h2h:{}}));
+    M.all[r]++;splitInc(M.side,x.side,r);const ro=splitRole(x);if(ro)splitInc(M.role,ro,r);
+    const pr=splitPair(x.game),h=M.h2h[pr]||(M.h2h[pr]={});
+    if(x.market==='total'){String(x.game).split('@').forEach(t=>{const T=M.team[t]||(M.team[t]={});splitInc(T,x.side,r);});splitInc(h,x.side,r);}
+    else{const t=splitTeam(x);if(t){splitInc(M.team,t,r);splitInc(h,t,r);}}
+    x.sr=1;n++;}
+  if(n)set(SPLIT_KEY,S);return n;}
+function splitsGet(){return roGet(SPLIT_KEY,{},30e3)||{};}
 let CH_IDX=null;
 function charIdxSig(V){return V.length+'|'+(V.length?(V[0].id+'|'+V[V.length-1].id+'|'+(V[V.length-1].graded?1:0)):'')+'|'+_LSGEN;}
+/* raw bucket holds only calls NOT yet rolled into the permanent splits, so nothing counts twice */
 function charIdx(V){const sig=charIdxSig(V);if(CH_IDX&&CH_IDX.sig===sig)return CH_IDX;
-  const B={};for(const x of V){if(!x||!x.graded||x.push)continue;const k=x.voice+'|'+x.sp+'|'+x.market;(B[k]||(B[k]=[])).push(x);}
-  CH_IDX={sig,B,H:new Map()};return CH_IDX;}
-function charHist(V,c){const I=charIdx(V);const ck=c.id+'|'+c.voice+'|'+c.sp+'|'+c.market+'|'+c.side+'|'+c.game;const hit0=I.H.get(ck);if(hit0)return hit0;
-  const r0=charHistRaw(I.B[c.voice+'|'+c.sp+'|'+c.market]||[],c);I.H.set(ck,r0);return r0;}
-function charHistRaw(V,c){const [aw,hm]=String(c.game).split('@');const team=c.market==='total'?null:(c.side==='home'?hm:aw);
+  const B={};for(const x of V){if(!x||!x.graded||x.push||x.sr)continue;const k=x.voice+'|'+x.sp+'|'+x.market;(B[k]||(B[k]=[])).push(x);}
+  CH_IDX={sig,B,H:new Map(),S:splitsGet()};return CH_IDX;}
+const recOf=(w,l)=>({w,l,n:w+l,r:(w+2)/(w+l+4)});
+function charHist(V,c){const I=charIdx(V);const ck=c.id+'|'+c.voice+'|'+c.sp+'|'+c.market+'|'+c.side+'|'+c.game+'|'+c.price;const hit0=I.H.get(ck);if(hit0)return hit0;
+  const r0=charHistRaw(I.B[c.voice+'|'+c.sp+'|'+c.market]||[],c,(((I.S[c.sp]||{})[c.voice]||{})[c.market])||null);I.H.set(ck,r0);return r0;}
+function charHistRaw(V,c,M){const [aw,hm]=String(c.game).split('@');const tot=c.market==='total';const team=tot?null:(c.side==='home'?hm:aw);const role=splitRole(c);
   const same=x=>x.graded&&!x.push&&x.voice===c.voice&&x.sp===c.sp&&x.market===c.market&&x.id!==c.id;
-  const side=x=>c.market==='total'?x.side===c.side:true;
-  const pickedTeam=x=>{const [a,h]=String(x.game).split('@');return x.side==='home'?h:x.side==='away'?a:null;};
-  const rec=f=>{const L=V.filter(x=>same(x)&&f(x));const w=L.filter(x=>x.hit).length;return{w,l:L.length-w,n:L.length,r:(w+2)/(L.length+4)};};
+  const side=x=>tot?x.side===c.side:true;
+  const pair=splitPair(c.game);
+  const raw=f=>{const L=V.filter(x=>same(x)&&f(x));const w=L.filter(x=>x.hit).length;return[w,L.length-w];};
+  const agg=a=>a?[a[0],a[1]]:[0,0];const add=(p,q)=>recOf(p[0]+q[0],p[1]+q[1]);
+  const sum=(...A)=>A.reduce((o,a)=>[o[0]+(a?a[0]:0),o[1]+(a?a[1]:0)],[0,0]);
   const H={
-    sport:rec(side),
-    team:team?rec(x=>pickedTeam(x)===team):rec(x=>side(x)&&String(x.game).split('@').some(t=>t===aw||t===hm)),
-    h2h:rec(x=>{const g=String(x.game);return(g===c.game||g===hm+'@'+aw)&&side(x)&&(c.market==='total'||pickedTeam(x)===team);})};
-  const lab={sport:`${c.sp.toUpperCase()} ${c.market==='total'?c.side:c.market==='ml'?'ML':'spread'}`,team:team?team+' '+(c.market==='ml'?'ML':'spread'):'these teams '+c.side,h2h:'H2H'};
+    sport:add(raw(side),tot?agg(M&&M.side[c.side]):agg(M&&M.all)),
+    team:add(raw(x=>tot?(x.side===c.side&&String(x.game).split('@').some(t=>t===aw||t===hm)):splitTeam(x)===team),
+      tot?sum(M&&M.team[aw]&&M.team[aw][c.side],M&&M.team[hm]&&M.team[hm][c.side]):agg(M&&M.team[team])),
+    h2h:add(raw(x=>splitPair(x.game)===pair&&(tot?x.side===c.side:splitTeam(x)===team)),agg(M&&M.h2h[pair]&&M.h2h[pair][tot?c.side:team])),
+    where:tot?recOf(0,0):add(raw(x=>x.side===c.side),agg(M&&M.side[c.side])),
+    role:role?add(raw(x=>splitRole(x)===role),agg(M&&M.role[role])):recOf(0,0)};
+  const mk=c.market==='ml'?'ML':c.market==='spread'?'spread':'total';
+  const lab={sport:`${c.sp.toUpperCase()} ${tot?c.side:mk}`,team:team?team+' '+mk:'these teams '+c.side,h2h:'H2H',
+    where:tot?'':(c.side==='home'?'home':'road')+' '+mk,role:role?(role==='fav'?'favorite':'underdog')+' '+mk:''};
   const hot=Object.entries(H).filter(([k,x])=>x.n>=6&&x.r>=0.6).map(([k,x])=>({k,lab:lab[k],...x})).sort((a,b)=>b.r-a.r);
   return{H,lab,hot,team};}
+/* one character's splits for the Records → Characters table */
+function charSplitsFor(v,sp){const S=splitsGet();const V=roGet(VOICES_KEY,[],30e3)||[];
+  const out={};['ml','spread','total'].forEach(mk=>{const M=((S[sp]||{})[v]||{})[mk]||{all:[0,0,0],side:{},role:{},team:{},h2h:{}};
+    const R={all:M.all.slice(),side:JSON.parse(JSON.stringify(M.side)),role:JSON.parse(JSON.stringify(M.role)),team:JSON.parse(JSON.stringify(M.team))};
+    V.forEach(x=>{if(x.sr||!x.graded||x.voice!==v||x.sp!==sp||x.market!==mk)return;const r=x.push?2:x.hit?0:1;R.all[r]++;splitInc(R.side,x.side,r);const ro=splitRole(x);if(ro)splitInc(R.role,ro,r);
+      if(mk==='total')String(x.game).split('@').forEach(t=>{const T=R.team[t]||(R.team[t]={});splitInc(T,x.side,r);});else{const t=splitTeam(x);if(t)splitInc(R.team,t,r);}});
+    out[mk]=R;});return out;}
+function charSplitsHtml(F){const sp=F&&F.sp&&F.sp!=='all'?F.sp:(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb');const pc=a=>a&&a[0]+a[1]?Math.round(a[0]/(a[0]+a[1])*100)+'%':'—';
+  const cell=a=>a&&a[0]+a[1]?`<td style="color:${a[0]/(a[0]+a[1])>=0.55?'var(--win)':a[0]/(a[0]+a[1])<0.45?'var(--rust)':'var(--chalk)'}">${a[0]}-${a[1]}${a[2]?'-'+a[2]:''} <span style="color:var(--mute)">${pc(a)}</span></td>`:'<td style="color:var(--mute)">—</td>';
+  const rows=CHAR_ORDER.map(v=>{const X=charSplitsFor(v,sp);const n=['ml','spread','total'].reduce((s,m)=>s+X[m].all[0]+X[m].all[1],0);if(!n)return'';
+    const teams=Object.entries(X.ml.team).concat(Object.entries(X.spread.team)).reduce((o,[t,a])=>{const c=o[t]||(o[t]=[0,0,0]);c[0]+=a[0];c[1]+=a[1];return o;},{});
+    const best=Object.entries(teams).filter(([t,a])=>a[0]+a[1]>=5).sort((a,b)=>(b[1][0]+2)/(b[1][0]+b[1][1]+4)-(a[1][0]+2)/(a[1][0]+a[1][1]+4));
+    const tl=(L)=>L.map(([t,a])=>`${t} ${a[0]}-${a[1]}`).join(' · ')||'—';
+    return`<details style="margin:4px 0"><summary><b>${esc(charName(v))}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${n} graded ${sp.toUpperCase()} calls</span></summary>
+      <table class="mono" style="font-size:10px;width:100%;margin-top:4px"><tr style="color:var(--mute)"><td></td><td>all</td><td>home</td><td>road</td><td>fav</td><td>dog</td></tr>
+      ${['ml','spread'].map(m=>`<tr><td>${m==='ml'?'ML':'Spread'}</td>${cell(X[m].all)}${cell(X[m].side.home)}${cell(X[m].side.away)}${cell(X[m].role.fav)}${cell(X[m].role.dog)}</tr>`).join('')}
+      <tr><td>Total</td>${cell(X.total.all)}<td colspan="2">O ${cell(X.total.side.over).replace(/<\/?td[^>]*>/g,'')}</td><td colspan="2">U ${cell(X.total.side.under).replace(/<\/?td[^>]*>/g,'')}</td></tr></table>
+      <div class="mono" style="font-size:9.5px;margin-top:3px"><span style="color:var(--win)">best teams (5+):</span> ${tl(best.slice(0,4))}</div>
+      <div class="mono" style="font-size:9.5px"><span style="color:var(--rust)">worst teams (5+):</span> ${tl(best.slice(-4).reverse().filter(x=>!best.slice(0,4).includes(x)))}</div></details>`;}).join('');
+  return`<div class="tkt"><h3>📊 Character splits · ${sp.toUpperCase()}</h3><div class="sub" style="font-size:10px">Every graded call, kept permanently: home vs road, favorite vs underdog, over vs under, by team. The raw data behind every hot hand, the Banker and calibration.</div>${rows||'<div class="sub">No graded calls in this sport yet.</div>'}</div>`;}
 function charPickText(c){if(c.pick)return c.pick;const [a,h]=String(c.game).split('@');
   if(c.market==='total')return(c.side==='over'?'Over ':'Under ')+(c.line!=null?c.line:'');
   const t=c.side==='home'?h:a;if(c.market==='ml')return t+' ML';const L=c.line!=null?(c.side==='home'?+c.line:-c.line):null;return t+(L!=null?' '+(L>0?'+':'')+L:' spread');}
@@ -17984,8 +18075,8 @@ function dailyLoopInject(){
     if(nav&&!document.getElementById('navToday')){
       const games=[...nav.querySelectorAll('button')].find(b=>/tab\('games'/.test(b.getAttribute('onclick')||''));
       const mk=(id,lab,n)=>{const b=document.createElement('button');b.id=id;b.setAttribute('onclick',`tab('${n}',this)`);b.innerHTML=lab;return b;};
-      const b1=mk('navToday','Today','today'),b2=mk('navMine','My Games<span class="n" id="nMine"></span>','mine');
-      if(games&&games.nextSibling){nav.insertBefore(b2,games.nextSibling);nav.insertBefore(b1,b2);}else{nav.appendChild(b1);nav.appendChild(b2);}
+      const b1=mk('navToday','Today','today'),b2=mk('navMine','My Games<span class="n" id="nMine"></span>','mine'),b3=mk('navBanker','🏦 Banker','banker');
+      if(games&&games.nextSibling){nav.insertBefore(b2,games.nextSibling);nav.insertBefore(b1,b2);nav.insertBefore(b3,b2);}else{nav.appendChild(b1);nav.appendChild(b3);nav.appendChild(b2);}
     }
     const main=document.querySelector('main');
     if(main&&!document.getElementById('v-today')){
@@ -17997,7 +18088,10 @@ function dailyLoopInject(){
       const v2=document.createElement('div');v2.className='view';v2.id='v-mine';
       v2.innerHTML=`<div class="sbar" style="margin-top:0"><h2>My games</h2><div class="ln"></div></div><div id="mineBody"></div>
         <div class="bar"><button class="primary" onclick="openMyGames()">Refresh scores</button></div>`;
-      main.appendChild(v1);main.appendChild(v2);
+      const v3=document.createElement('div');v3.className='view';v3.id='v-banker';
+      v3.innerHTML=`<div class="sbar" style="margin-top:0"><h2>🏦 The Banker's desk</h2><div class="ln"></div></div><div id="bankerBody"></div>
+        <div class="bar"><button class="primary" onclick="renderBankerTab()">Refresh</button></div>`;
+      main.appendChild(v1);main.appendChild(v2);main.appendChild(v3);
     }
     const setv=document.getElementById('v-settings');
     if(setv&&!document.getElementById('anthKeyIn')){
@@ -18032,7 +18126,8 @@ function hubYou(){
   /* frozen legs first, so a pick graded once never drops out of the tally */
   settledList('mine').forEach(e=>(e.legs||[]).forEach(l=>{if(l.h!=='W'&&l.h!=='L')return;const k=l.sp+'|'+l.g+'|'+l.gd+'|'+String(l.pk).trim();if(seen[k])return;seen[k]=1;
     const o=R[l.sp]||(R[l.sp]={w:0,n:0});o.n++;if(l.h==='W')o.w++;}));
-  L.forEach(t=>{
+  let FZ={};try{FZ=settledAll();}catch(e){}
+  L.forEach(t=>{if(t.archived&&FZ[String(t.id)]&&(FZ[String(t.id)].legs||[]).length)return;   /* frozen: its legs were counted above */
     (t.legs||[]).forEach(l=>{const sp=l.sport||'mlb',k=sp+'|'+l.game+'|'+(l.gameDate||t.date)+'|'+String(l.pick).trim();if(seen[k])return;
       let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(!g||g.hit==null)return;seen[k]=1;
       const o=R[sp]||(R[sp]={w:0,n:0});o.n++;if(g.hit)o.w++;});
@@ -18053,7 +18148,7 @@ function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
   if(REC_VIEW==='chars'){let h='';try{try{cpropGrade();cparGrade();}catch(e){}
       const P=CHAR_ORDER.map(v=>({v,R:cparRecord(v)})).filter(x=>x.R.w+x.R.l);
-      h=cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${esc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
+      h=(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${esc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
     catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
@@ -18084,7 +18179,7 @@ function renderRecordsHub(){
     <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: how likely a pure -110 coin-flipper would post that record. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return learnHealthHtml()+clvHtml()+calibrationHtml()+calOffsetsHtml()+_eb+charProfilesHtml()+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
 }
 /* Tabs you use daily stay in front; the rest sit under More. */
-const NAV_PRIMARY=['games','today','mine','tickets','grades','money'];
+const NAV_PRIMARY=['games','today','banker','mine','tickets','grades','money'];
 function navTidy(){
   const nav=document.querySelector('nav');if(!nav||document.getElementById('navMore'))return;
   const btns=[...nav.querySelectorAll('button')];const nameOf=b=>((b.getAttribute('onclick')||'').match(/tab\('(\w+)'/)||[])[1];
@@ -18120,6 +18215,7 @@ function storageMeterHtml(){
   return`<div class="sub"><b>${(R.tot/1048576).toFixed(2)} MB</b> of ~5 MB used (${pct.toFixed(0)}%)</div>
     <div style="height:7px;background:var(--rule);border-radius:4px;margin:4px 0"><div style="height:7px;width:${pct}%;background:${col};border-radius:4px"></div></div>
     ${R.rows.slice(0,8).map(([k,n])=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${esc(k)}</span><span>${(n/1024).toFixed(0)} KB</span></div>`).join('')}
+    ${PERF_LOG.length?`<div class="mktlab" style="margin-top:8px">Speed on this device</div>${PERF_LOG.slice(-10).reverse().map(x=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${esc(x.what)}</span><span style="color:${x.ms>800?'var(--rust)':x.ms>250?'var(--gold)':'var(--win)'}">${x.ms} ms</span></div>`).join('')}`:''}
     <div class="bar" style="margin-top:6px"><button onclick="storageTidy(true);document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Tidy now</button>
       <button onclick="freeStorageNow();document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Free space (drops rebuildable caches)</button></div>`;
 }
@@ -18338,7 +18434,7 @@ function clvLegSharp(l,t){
   const f=fairPair(me.close.price,op.close.price);if(!f)return null;
   return{ev:(f[0]*americanToDecimal(amerOk(l.price))-1)*100,fair:f[0]};
 }
-function clvEntry(sp,game,m,sd,date){const A=get(CLV_KEY,{})||{};return((A[String(date||'').slice(0,10)]||{})[sp+'|'+game+'|'+m+'|'+sd])||null;}
+function clvEntry(sp,game,m,sd,date){const A=roGet(CLV_KEY,{},30e3)||{};return((A[String(date||'').slice(0,10)]||{})[sp+'|'+game+'|'+m+'|'+sd])||null;}
 /* One leg vs the close: chance points (+ = you beat it) when the line matches, points when it moved. */
 function clvLeg(l,t){
   if(l.price==null)return null;const sp=l.sport||'mlb';const[a,h]=String(l.game).split('@');
@@ -19536,3 +19632,238 @@ try{if(typeof card==='function'&&!card.__preg){const _c=card;card=function(g){re
 /* Today tab also carries the prop scouting (Best is strictly the locked deep card) */
 try{if(typeof renderToday==='function'&&!renderToday.__hp){const _rt=renderToday;renderToday=function(){const r=_rt.apply(this,arguments);
   try{const el=document.getElementById('todayBody');if(el&&!el.querySelector('.hp-sec')){const h=highPctLinesHtml()+likelyHtml();if(h)el.insertAdjacentHTML('beforeend','<div class="hp-sec">'+h+'</div>');}}catch(e){}return r;};renderToday.__hp=1;}}catch(e){}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   v1.79 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
+   ══════════════════════════════════════════════════════════════════════════ */
+const txtEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fairAmer=p=>p==null||!(p>0&&p<1)?null:p>=0.5?-Math.round(p/(1-p)*100):Math.round((1-p)/p*100);
+const sgnP=n=>n==null?'':(n>0?'+':'')+n;
+const mkNorm=m=>m==='moneyline'?'ml':m==='pl'?'spread':m;
+/* full team name for an abbreviation, from whichever schedule this page has */
+function teamFull(sp,abbr){try{const g=(sportGames(sp)||[]).find(z=>z.away&&z.home&&(z.away.abbr===abbr||z.home.abbr===abbr));if(g){const t=g.away.abbr===abbr?g.away:g.home;return t.name||t.displayName||null;}}catch(e){}return null;}
+/* Does this trend sentence back this pick? Totals: "Over is…"/"Under is…". Sides: the
+   sentence's subject is the team we picked (matched against its full name). */
+function trendBacks(text,x){const t=String(text||'');const mk=mkNorm(x.m||x.market);const sd=x.sd||x.side;
+  const tot=/^\s*(Over|Under)\s+is\b/i.exec(t);
+  if(mk==='total')return tot?(tot[1].toLowerCase()===sd?1:-1):0;
+  if(tot)return 0;
+  const subj=(t.match(/^\s*(.+?)\s+(?:are|is)\s+\d/i)||[])[1];if(!subj)return 0;
+  const [a,h]=String(x.game).split('@');const fa=teamFull(x.sp,a)||'',fh=teamFull(x.sp,h)||'';
+  const hitA=fa&&fa.toLowerCase().includes(subj.toLowerCase()),hitH=fh&&fh.toLowerCase().includes(subj.toLowerCase());
+  if(!hitA&&!hitH)return 0;const mine=sd==='home'?hitH:hitA;
+  /* "X are 5-1" backs X; "X are 1-5" fades X */
+  const rec=t.match(/(\d+)-(\d+)/);const good=!rec||+rec[1]>=+rec[2];return(mine===good)?1:-1;}
+/* ── WHY WE LIKE IT ───────────────────────────────────────────────────────
+   Every reason the desk has for a pick, from stored data only (so it reads the
+   same on every page): the sim's chance vs the price, EV, the Judge, Covers /
+   uploaded predicted score, which characters are on it and their records here,
+   the trends that back (and fight) it, and where the public is. Returns bullet
+   points plus a short script written to be read on camera. */
+function pickWhy(x0){const x={...x0,m:mkNorm(x0.m||x0.market),sd:x0.sd||x0.side};const d=x.date||x.d||today();
+  const [A,H]=String(x.game).split('@');const team=x.m==='total'?null:(x.sd==='home'?H:A),opp=x.m==='total'?null:(x.sd==='home'?A:H);
+  const V=roGet(VOICES_KEY,[],30e3)||[];const calls=V.filter(c=>c.sp===x.sp&&c.game===x.game&&c.market===x.m&&String(c.date).slice(0,10)===String(d).slice(0,10)&&CHARS[c.voice]);
+  const on=calls.filter(c=>c.side===x.sd),off=calls.filter(c=>c.side!==x.sd);
+  const B=[];const S=[];
+  const price=x.price!=null?+x.price:null;const mktP=price!=null?imp(price):null;
+  let p=x.p!=null?+x.p:null;const sim=calls.find(c=>c.voice==='Sim'&&c.simP!=null);
+  const simP=sim?(sim.side===x.sd?sim.simP:1-sim.simP):null;if(p==null)p=simP;
+  const ev=p!=null&&price!=null?(p*_vProfit(price)-(1-p))*100:null;
+  const lineTxt=x.pick+(price!=null?' ('+sgnP(price)+')':'');
+  if(simP!=null)B.push(`Sim: ${Math.round(simP*100)}% across 10,000 runs${mktP!=null?` vs ${Math.round(mktP*100)}% the price implies`:''}.`);
+  if(p!=null&&simP!=null&&Math.abs(p-simP)>0.015)B.push(`Desk number after calibration and market blend: ${Math.round(p*100)}%.`);
+  if(ev!=null)B.push(`Expected value ${ev>=0?'+':''}${ev.toFixed(1)}% per bet at ${sgnP(price)}.`);
+  let pr=null;try{pr=predFor(x.sp,x.game);}catch(e){}
+  if(pr&&pr.a!=null){const a=+pr.a,h=+pr.h,src=/covers/i.test(pr.src||'')?'Covers\' computer':'The uploaded projection';let ok=null,detail='';
+    if(x.m==='total'&&x.line!=null){const t=a+h;ok=x.sd==='over'?t>x.line:t<x.line;detail=`a ${t.toFixed(1)}-point total vs ${x.line}`;}
+    else if(x.m==='spread'&&x.line!=null){const m=x.sd==='home'?h-a:a-h;ok=m+(+x.line)>0;detail=`${team} by ${m.toFixed(1)}${+x.line?`, ${ok?'clearing':'short of'} ${sgnP(+x.line)}`:''}`;}
+    else{const m=x.sd==='home'?h-a:a-h;ok=m>0;detail=`${m>=0?team:opp} winning by ${Math.abs(m).toFixed(Math.abs(m)<1?2:1)}`;}
+    B.push(`${src} has it ${A} ${a}–${h} ${H} — ${detail}${ok===false?' (disagrees)':''}.`);if(ok)S.push(`${src} projects ${A} ${a}, ${H} ${h} — ${detail}.`);}
+  const judge=calls.find(c=>c.voice==='Judge');if(judge)B.push(`The Judge, weighing every witness by its graded accuracy, is ${judge.side===x.sd?'on this side':'on the other side'}.`);
+  /* characters + their records on this exact spot */
+  const recTxt=c=>{try{const h=charHist(V,c);const best=['h2h','team','where','role','sport'].map(k=>({k,...h.H[k],lab:h.lab[k]})).filter(o=>o.n>=4).sort((a,b)=>b.r-a.r)[0];return best?`${best.w}-${best.l} ${best.lab}`:null;}catch(e){return null;}};
+  const indep=on.filter(c=>INDEP_VOICES.has(c.voice)).length;
+  if(on.length){const names=on.map(c=>{const r=recTxt(c);return charName(c.voice)+(r?` (${r})`:'');});
+    B.push(`${on.length} of ${CHAR_ORDER.length} characters on it${indep?`, ${indep} independent of the sim`:''}: ${names.join(', ')}.`);
+    const lead=on.map(c=>({c,r:recTxt(c)})).filter(o=>o.r)[0];
+    S.push(`${on.length} of our ${CHAR_ORDER.length} analysts are on ${team||'the '+x.sd}${lead?` — ${charName(lead.c.voice)} is ${lead.r}`:''}.`);}
+  if(off.length)B.push(`Against: ${off.map(c=>charName(c.voice)).join(', ')}.`);
+  /* trends */
+  try{const T=(roGet(INTEL_KEY,[],30e3)||[]).filter(t=>t.sp===x.sp&&t.kind==='trend'&&t.game===x.game&&String(t.date||'').slice(0,10)===String(d).slice(0,10));
+    const pro=T.filter(t=>trendBacks(t.text,x)>0),con=T.filter(t=>trendBacks(t.text,x)<0);
+    pro.slice(0,3).forEach(t=>B.push(`Trend ✓ ${t.text}`));con.slice(0,2).forEach(t=>B.push(`Trend ✗ ${t.text}`));
+    if(pro.length)S.push(pro[0].text.replace(/\.$/,'')+'.');}catch(e){}
+  /* public split */
+  try{const R=(roGet(INTEL_KEY,[],30e3)||[]).filter(t=>t.sp===x.sp&&t.kind==='cons'&&t.game===x.game);
+    const mkName=x.m==='ml'?'moneyline':x.m;const r=R.filter(t=>t.market===mkName).pop()||R.filter(t=>t.market==='moneyline').pop();
+    if(r){const k=x.m==='total'?'overPct':'homePct';const v=r[k]!=null?+r[k]:null;if(v!=null){const mine=x.m==='total'?(x.sd==='over'?v:100-v):(x.sd==='home'?v:100-v);
+      B.push(`Public: ${Math.round(mine)}% of ${r.metric==='money'?'the money':'tickets'} on this side${mine<=35?' — we\'re against the crowd':mine>=65?' — heavy public side, priced in':''}.`);
+      if(mine<=35)S.push(`Only ${Math.round(mine)}% of the public is with us — we\'re fading the crowd.`);}}}catch(e){}
+  const head=`${lineTxt}${p!=null?` — ${Math.round(p*100)}% to hit`:''}${ev!=null?`, ${ev>=0?'+':''}${ev.toFixed(1)}% EV`:''}.`;
+  if(simP!=null&&mktP!=null&&simP>mktP)S.unshift(`We ran this game 10,000 times: ${team||'the '+x.sd} ${x.m==='ml'?'wins':x.m==='total'?'hits':'covers'} ${Math.round(simP*100)}% of the time; the price says ${Math.round(mktP*100)}%.`);
+  else if(on.length>=3)S.unshift(`The price is close to fair here — this one rides on who's backing it.`);
+  const script=[`${x.game.replace('@',' at ')} — I\'m on ${lineTxt}.`,...S.slice(0,4)].join(' ');
+  return{head,bullets:B,script,p,ev,agree:on.length,against:off.length};}
+function whyHtml(x,open){const W=pickWhy(x);const id='w'+Math.abs(simHash(x.sp+x.game+x.pick)).toString(36);
+  return`<details class="why"${open?' open':''} style="margin:4px 0 2px"><summary class="mono" style="font-size:10px;color:var(--gold);cursor:pointer">📝 Why we like it</summary>
+    <div style="font-size:11.5px;line-height:1.45;padding:4px 2px">${W.bullets.map(b=>`<div style="padding:1px 0">• ${txtEsc(b)}</div>`).join('')}
+    <div style="margin-top:6px;padding:7px 9px;border-radius:8px;background:var(--panel2)"><div class="mono" style="font-size:9px;color:var(--mute)">🎬 REEL SCRIPT</div><div id="${id}">${txtEsc(W.script)}</div>
+    <button style="font-size:10px;margin-top:4px" onclick="copyText(document.getElementById('${id}').textContent,'Script copied.')">Copy script</button></div></div></details>`;}
+
+/* ── THE BANKER'S DESK ────────────────────────────────────────────────────
+   Built the moment the master evaluation runs, then frozen for the day:
+   1. THE BANKER'S OWN — the one parlay that makes the most sense: every
+      character's priced calls pooled, one leg per game, scored by the
+      characters' records on that exact spot plus how many independent voices
+      agree, length chosen by Kelly growth (2–5 legs).
+   2. HIS SLATE — character parlays he'd also play, never sharing a game with
+      anything already on the desk: no bet repeats across his tickets.
+   3. THE ROLL CALL — each character's single best pick, best character first;
+      if a character's top pick is a game already taken, its next one in line.
+      The cut is the hittable part: strongest legs until the ticket would drop
+      under a 25% chance to cash (2–5 legs).
+   Every stake is ¼-Kelly of your bankroll, and the day never spends past your
+   daily limit. */
+const BKDAY_KEY='d4.bankerday',BKDAYS_KEY='d4.bankerdays';
+function bkDayCands(V,d){const out={};
+  CHAR_ORDER.forEach(v=>{const calls=V.filter(x=>String(x.date).slice(0,10)===d&&x.voice===v&&x.price!=null&&['ml','spread','total'].includes(x.market));
+    out[v]=calls.map(c=>{const s=cparLegScore(V,c);return{v,sp:c.sp,game:c.game,m:c.market,sd:c.side,line:c.line,pick:charPickText(c),price:c.price,p:s.p,score:s.score,hr:s.hr,why:s.why,weak:s.weak};})
+      .filter(x=>!x.weak&&x.p>0).sort((a,b)=>b.score-a.score);});
+  return out;}
+function bkBudget(){const B=brAmount()||100;let lim=null;try{lim=typeof dailyLimit==='function'?+dailyLimit():null;}catch(e){}
+  const cap=lim>0?Math.min(lim,B*0.10):B*0.10;return{B,cap:+cap.toFixed(2),fromLimit:lim>0};}
+function bkStake(f,B){return f>0?Math.max(1,Math.round(B*f*2)/2):0;}
+function bkDayBuild(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const C=bkDayCands(V,d);const L=bkLedger();const{B,cap,fromLimit}=bkBudget();
+  const used=new Set();const legOut=x=>({sp:x.sp,game:x.game,m:x.m,sd:x.sd,line:x.line,pick:x.pick,price:x.price,p:+(+x.p).toFixed(4),score:+(+x.score).toFixed(4),v:x.v,by:x.by||[x.v]});
+  /* 1 · the Banker's own: pool every character's call by game+market+side */
+  const pool={};Object.values(C).flat().forEach(x=>{const k=x.sp+'|'+x.game+'|'+x.m+'|'+x.sd;const o=pool[k]||(pool[k]={...x,by:[],sc:[]});o.by.push(x.v);o.sc.push(x.score*Math.min(1.15,Math.max(0.85,L.mult[x.v]||1)));});
+  const ranked=Object.values(pool).map(o=>{const indep=o.by.filter(v=>INDEP_VOICES.has(v)).length;const sc=o.sc.reduce((a,b)=>a+b,0)/o.sc.length+0.01*Math.min(4,o.by.length-1)+0.01*Math.min(2,indep);return{...o,score:sc};})
+    .filter(o=>o.by.length>=2).sort((a,b)=>b.score-a.score);
+  const own=[];for(const o of ranked){if(own.some(y=>y.sp===o.sp&&y.game===o.game))continue;own.push(o);if(own.length===5)break;}
+  let OWN=null;if(own.length>=2){const sz=bkSize(own.map(x=>({p:x.score,dec:americanToDecimal(x.price)})),2,5);const legs=own.slice(0,sz.k);
+    legs.forEach(x=>used.add(x.sp+'|'+x.game));const dec=legs.reduce((a,x)=>a*americanToDecimal(x.price),1),p=legs.reduce((a,x)=>a*x.p,1);
+    OWN={legs:legs.map(legOut),dec:+dec.toFixed(4),p:+p.toFixed(4),f:sz.f,g:sz.g,ev:sz.ev,k:sz.k,why:sz.g>0?`${sz.k} legs maximize Kelly growth`:`no length is +EV — ${sz.k} legs is the least-bad`};}
+  /* 2 · his slate: character parlays sharing no game with anything already taken */
+  const slate=[];try{const D=cparState();Object.entries(D.by||{}).map(([v,P])=>{const legs=P.legs||[];const pAdj=legs.reduce((a,x)=>a*(x.score!=null?x.score:x.p),1)*Math.min(1.15,Math.max(0.85,L.mult[v]||1));const D0=legs.reduce((a,x)=>a*americanToDecimal(x.price),1);
+      const ev=pAdj*D0-1,fk=ev>0?ev/(D0-1):0,f=Math.min(0.02,fk/4),g=f>0?pAdj*Math.log(1+f*(D0-1))+(1-pAdj)*Math.log(1-f):0;return{v,legs,dec:D0,p:legs.reduce((a,x)=>a*x.p,1),f,g,ev};})
+    .sort((a,b)=>b.g-a.g||b.ev-a.ev).forEach(o=>{if(slate.length>=3||o.g<=0)return;if(o.legs.some(l=>used.has(l.sp+'|'+l.game)))return;o.legs.forEach(l=>used.add(l.sp+'|'+l.game));
+      slate.push({v:o.v,legs:o.legs.map(l=>legOut({...l,m:l.m,sd:l.sd,v:o.v})),dec:+o.dec.toFixed(4),p:+o.p.toFixed(4),f:o.f,g:o.g,ev:o.ev});});}catch(e){}
+  /* stakes: ¼-Kelly each, the whole desk scaled to the daily budget */
+  const tix=[...(OWN?[OWN]:[]),...slate];let tot=tix.reduce((a,t)=>a+bkStake(t.f,B),0);const sc=tot>cap&&tot>0?cap/tot:1;
+  tix.forEach(t=>{t.stake=t.f>0?Math.max(1,Math.round(bkStake(t.f,B)*sc*2)/2):0;t.toWin=t.stake?+(t.stake*(t.dec-1)).toFixed(2):0;});
+  /* 3 · the roll call: best unique pick per character, best character first */
+  const order=CHAR_ORDER.slice().sort((a,b)=>{const ra=(L.weeks[0].R[a]||{}).br||100,rb=(L.weeks[0].R[b]||{}).br||100;return(L.mult[b]||1)-(L.mult[a]||1)||rb-ra;});
+  const rc=[],taken=new Set();order.forEach(v=>{const pick=(C[v]||[]).find(x=>!taken.has(x.sp+'|'+x.game));if(!pick)return;taken.add(pick.sp+'|'+pick.game);
+    const skipped=(C[v]||[]).indexOf(pick);rc.push({...legOut(pick),rank:skipped+1});});
+  const byP=rc.slice().sort((a,b)=>b.p-a.p);const cut=[];let cp=1;for(const x of byP){if(cut.length>=5)break;if(cut.length>=2&&cp*x.p<0.25)break;cut.push(x);cp*=x.p;}
+  const rcDec=a=>+a.reduce((s,x)=>s*americanToDecimal(x.price),1).toFixed(4),rcP=a=>+a.reduce((s,x)=>s*x.p,1).toFixed(5);
+  const ROLL={legs:rc,dec:rcDec(rc),p:rcP(rc),cut:cut.map(x=>x.sp+'|'+x.game),cutDec:rcDec(cut),cutP:rcP(cut)};
+  return{d,own:OWN,slate,roll:ROLL,B,cap,fromLimit,spent:+tix.reduce((a,t)=>a+t.stake,0).toFixed(2),ts:Date.now()};}
+function bkDayState(){const d=today();let S=get(BKDAY_KEY,{})||{};
+  if(S.d!==d){if(S.d&&S.locked){const H=get(BKDAYS_KEY,{})||{};H[S.d]=S;Object.keys(H).sort().slice(0,-120).forEach(k=>delete H[k]);set(BKDAYS_KEY,H);}S={d};}
+  if(S.locked)return S;
+  const ran=evalRanToday();
+  if(ran){const b=bkDayBuild();S={...b,locked:true,lockedAt:Date.now()};set(BKDAY_KEY,S);try{publishAuto&&setTimeout(()=>{try{publishAuto()}catch(e){}},500);}catch(e){}return S;}
+  /* before the eval: a live preview, rebuilt at most once a minute */
+  if(S.preview&&Date.now()-S.preview.ts<60e3)return S;
+  S.preview=bkDayBuild();set(BKDAY_KEY,S);return S;}
+function bkDayGrade(){let n=0;const one=S=>{const legs=[...((S.own||{}).legs||[]),...(S.slate||[]).flatMap(t=>t.legs),...((S.roll||{}).legs||[])];
+    legs.forEach(l=>{if(l.hit!=null||l.push)return;let r=null;try{r=gradeLeg({sport:l.sp,game:l.game,pick:l.pick,gameDate:S.d},S.d);}catch(e){}
+      if(!r||r.live)return;if(r.push){l.push=true;n++;}else if(r.hit===true||r.hit===false){l.hit=r.hit;n++;}});};
+  const S=get(BKDAY_KEY,{})||{};if(S.locked){one(S);if(n)set(BKDAY_KEY,S);}
+  const H=get(BKDAYS_KEY,{})||{};let hn=n;Object.values(H).forEach(one);if(n>hn)set(BKDAYS_KEY,H);return n;}
+const tixDone=legs=>{const live=legs.filter(l=>!l.push);if(live.some(l=>l.hit===false))return false;if(live.length&&live.every(l=>l.hit===true))return true;return null;};
+function bkDayRecord(){const H={...(get(BKDAYS_KEY,{})||{})};const S=get(BKDAY_KEY,{})||{};if(S.locked)H[S.d]=S;
+  const R={own:{w:0,l:0,u:0},roll:{w:0,l:0,u:0},cut:{w:0,l:0,u:0},slate:{w:0,l:0,u:0},money:0};
+  const add=(o,legs,dec,stake)=>{const r=tixDone(legs);if(r==null)return;const live=legs.filter(l=>!l.push);const d=live.reduce((a,l)=>a*americanToDecimal(l.price),1)||dec;
+    if(r){o.w++;o.u+=d-1;if(stake)R.money+=stake*(d-1);}else{o.l++;o.u-=1;if(stake)R.money-=stake;}};
+  Object.values(H).forEach(S=>{if(S.own)add(R.own,S.own.legs,S.own.dec,S.own.stake);(S.slate||[]).forEach(t=>add(R.slate,t.legs,t.dec,t.stake));
+    if(S.roll&&S.roll.legs.length){add(R.roll,S.roll.legs,S.roll.dec);const cut=S.roll.legs.filter(l=>(S.roll.cut||[]).includes(l.sp+'|'+l.game));if(cut.length)add(R.cut,cut,S.roll.cutDec);}});
+  return R;}
+function bkLegRow(l,opts){opts=opts||{};const mark=l.push?'↔ ':l.hit===true?'✅ ':l.hit===false?'❌ ':'';const C=CHARS[l.v]||{};
+  return`<div style="padding:5px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+    <div>${mark}<b>${txtEsc(l.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(l.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[l.sp]||'').split(' ')[0]} ${txtEsc(l.game)}</span>${opts.cut===false?' <span class="mono" style="font-size:9px;color:var(--mute)">(longshot leg)</span>':''}</div>
+    <div class="mono" style="font-size:10px;white-space:nowrap">${Math.round(l.p*100)}%</div></div>
+    <div class="mono" style="font-size:9.5px;color:var(--mute)">${(l.by||[l.v]).map(v=>`<span style="color:${(CHARS[v]||{}).color||'var(--mute)'}">${(CHARS[v]||{}).chip||v}</span>`).join(' ')}${opts.rank>1?` · its #${opts.rank} pick (top one was a game already taken)`:''}</div>
+    ${opts.why!==false?whyHtml({...l,date:opts.d}):''}</div>`;}
+function bkTicketHtml(title,t,sub,d){if(!t)return'';const r=tixDone(t.legs);
+  return`<div class="tkt" style="border-left:3px solid ${r===true?'var(--win)':r===false?'var(--rust)':'#c9a227'}"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h3 style="margin:0">${title}</h3>
+    <div style="text-align:right"><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">${decimalToAmerican(t.dec)}</div>${t.stake?`<div class="mono" style="font-size:10px">stake <b>$${t.stake.toFixed(2)}</b> → wins $${t.toWin.toFixed(2)}</div>`:''}</div></div>
+    <div class="mono" style="font-size:9.5px;color:var(--mute);margin:2px 0 4px">${t.legs.length} legs · ${(t.p*100).toFixed(1)}% to cash · EV ${t.p*t.dec-1>=0?'+':''}${((t.p*t.dec-1)*100).toFixed(1)}% at the leg chances${sub?' · '+sub:''}${r===true?' · <b style="color:var(--win)">CASHED</b>':r===false?' · <b style="color:var(--rust)">LOST</b>':''}</div>
+    ${t.legs.map(l=>bkLegRow(l,{d})).join('')}</div>`;}
+function renderBankerTab(){const el=document.getElementById('bankerBody');if(!el)return;
+  try{bkDayGrade();}catch(e){}
+  let S;try{S=bkDayState();}catch(e){el.innerHTML='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';return;}
+  const D=S.locked?S:S.preview;const R=bkDayRecord();const u=o=>`${o.w}-${o.l} · ${o.u>=0?'+':''}${o.u.toFixed(1)}u`;
+  const head=`<div class="note" style="border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px;margin-bottom:8px"><b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 The Banker's desk locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} — frozen, graded at the finals`:'Preview — the Banker commits the moment the master evaluation runs (any sport)'}</b>
+    ${!S.locked?`<div class="sub" style="font-size:10px">Load each sport's board, run its master evaluation, and this desk locks with what's on the board right then.</div>`:''}</div>`;
+  if(!D){el.innerHTML=head+'<div class="empty">Nothing yet — open today\'s boards so the characters make their calls.</div>';return;}
+  const budget=`<div class="tkt"><div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:10px">
+    <div><div style="font-family:'Archivo';font-weight:900;font-size:18px">$${D.B.toFixed(0)}</div><div class="m">bankroll</div></div>
+    <div><div style="font-family:'Archivo';font-weight:900;font-size:18px">$${D.cap.toFixed(2)}</div><div class="m">${D.fromLimit?'daily limit':'10% day cap'}</div></div>
+    <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${D.spent.toFixed(2)}</div><div class="m">on the desk</div></div>
+    <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:${R.money>=0?'var(--win)':'var(--rust)'}">${R.money>=0?'+':''}$${R.money.toFixed(2)}</div><div class="m">desk P/L</div></div></div>
+    <div class="mono" style="font-size:9.5px;color:var(--mute);text-align:center;margin-top:6px">Banker's own ${u(R.own)} · slate ${u(R.slate)} · roll call cut ${u(R.cut)} · full roll call ${u(R.roll)}</div></div>`;
+  const own=D.own?bkTicketHtml('🏦 The Banker\'s parlay',D.own,txtEsc(D.own.why),D.d):`<div class="tkt"><h3>🏦 The Banker's parlay</h3><div class="sub">Needs 2+ games where at least two characters agree. Open more boards.</div></div>`;
+  const slate=(D.slate||[]).map(t=>bkTicketHtml(`${(CHARS[t.v]||{}).chip||''} ${txtEsc(charName(t.v))}'s parlay`,t,'no game repeats anything above',D.d)).join('');
+  const rc=D.roll;const cutSet=new Set(rc.cut||[]);
+  const roll=rc&&rc.legs.length?`<div class="tkt" style="border-left:3px solid #ff6fae"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="margin:0">📣 The Roll Call</h3>
+      <div style="text-align:right"><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">${decimalToAmerican(rc.cutDec)}</div><div class="mono" style="font-size:9.5px">the cut · ${(rc.cutP*100).toFixed(1)}% to cash</div></div></div>
+    <div class="sub" style="font-size:10px">Each character's best pick, best character first; a game already taken goes to that character's next pick. <b>The cut</b> (the bright rows) is the hittable ticket we go public with — the full call of all ${rc.legs.length} pays ${decimalToAmerican(rc.dec)} at ${(rc.p*100).toFixed(2)}%.</div>
+    ${rc.legs.map(l=>`<div style="${cutSet.has(l.sp+'|'+l.game)?'':'opacity:.6'}">${bkLegRow(l,{rank:l.rank,cut:cutSet.has(l.sp+'|'+l.game),d:D.d})}</div>`).join('')}
+    <div class="bar" style="margin-top:6px"><button onclick="copyText(bkRollScript(),'Roll Call script copied.')">🎬 Copy the reel script</button></div></div>`:'';
+  el.innerHTML=head+budget+own+slate+roll+`<div class="sub" style="font-size:10px;margin-top:6px">Stakes are ¼-Kelly of your bankroll, capped 2% a ticket, and the whole desk never spends past the day cap. No game appears on two of the Banker's tickets.</div>`;}
+function bkRollScript(){const S=bkDayState();const D=S.locked?S:S.preview;if(!D||!D.roll)return'';const cut=D.roll.legs.filter(l=>(D.roll.cut||[]).includes(l.sp+'|'+l.game));
+  return[`Tonight's Roll Call — ${cut.length} legs, ${decimalToAmerican(D.roll.cutDec)}.`,...cut.map((l,i)=>`${i+1}. ${l.pick} (${sgnP(l.price)}) — ${charName(l.v)}'s pick. ${pickWhy({...l,date:D.d}).script}`)].join('\n\n');}
+
+/* ── PERFECT SGP — on every pregame game card ─────────────────────────────
+   For each market, the side backed hardest by the characters with the best
+   records on THIS spot (sport, team, H2H, home/road, fav/dog), then the most
+   aggressive alt line the sim still gives 70%+ — priced at the sim's fair odds
+   (what the alt should cost; compare it to the book's alt price). Props come
+   from the characters' calibrated 70%+ prop calls on this game's players. */
+let SGP_PROP_C=null;
+function sgpProps(){if(SGP_PROP_C&&Date.now()-SGP_PROP_C.ts<120e3)return SGP_PROP_C.v;let v=[];try{v=cpropToday();}catch(e){}SGP_PROP_C={ts:Date.now(),v};return v;}
+function sgpSideProb(sp,g,s,mk,side,line){try{
+  if(mk==='ml')return side==='home'?s.hw:s.aw;
+  if(mk==='spread'){if(typeof s.homeCover==='function'&&typeof s.awayCover==='function')return side==='home'?s.homeCover(line):s.awayCover(line);
+    if(sp==='mlb'&&typeof rlProb==='function')return side==='home'?rlProb(g,s,'home',-line):rlProb(g,s,'away',line);return null;}
+  if(mk==='total'){if(typeof s.over!=='function')return null;const o=s.over(line);return side==='over'?o:(typeof s.under==='function'?s.under(line):1-o);}}catch(e){}return null;}
+function sgpBacking(V,calls,mk,side){const on=calls.filter(c=>c.market===mk&&c.side===side&&CHARS[c.voice]);
+  const scored=on.map(c=>{let h=null;try{h=charHist(V,c);}catch(e){}const best=h?['h2h','team','where','role','sport'].map(k=>({k,...h.H[k],lab:h.lab[k]})).filter(o=>o.n>=4).sort((a,b)=>b.r-a.r)[0]:null;return{c,best,r:best?best.r:0.5};})
+    .sort((a,b)=>b.r-a.r);return{n:on.length,w:scored.reduce((a,o)=>a+o.r,0),top:scored[0]||null};}
+function sgpCardHtml(sp,g,s){try{
+  if(!g||!s||s.aw==null)return'';const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'||g.abstract==='pre'):((g.abstract||'pre')==='pre');if(!pre)return'';
+  const calls=characterCalls(sp,g,s);if(!calls.length)return'';const V=roGet(VOICES_KEY,[],30e3)||[];const A=g.away.abbr,H=g.home.abbr;
+  const fb=sp==='nfl'||sp==='ncaaf';const legs=[];
+  const pickSide=(mk,a,b)=>{const X=sgpBacking(V,calls,mk,a),Y=sgpBacking(V,calls,mk,b);if(!X.n&&!Y.n)return null;return X.w>=Y.w?{side:a,B:X,O:Y}:{side:b,B:Y,O:X};};
+  /* side: ML + best alt spread on the side the strongest characters back */
+  const sd=pickSide('spread','home','away')||pickSide('ml','home','away');
+  if(sd){const side=sd.side,team=side==='home'?H:A;const mlP=sgpSideProb(sp,g,s,'ml',side);
+    const main=calls.find(c=>c.market==='spread'&&c.voice==='Sim');const base=main&&main.line!=null?(main.side===side?+main.line:-main.line):(fb?0:-1.5);
+    const step=fb?[0,1,2.5,3.5,6.5,7.5,10.5,14]:sp==='nba'?[0,2,4,6,8,10]:[0,1,1.5,2.5,3];
+    const ladder=[...new Set(step.map(k=>+(base+k).toFixed(1)))].map(L=>({L,p:sgpSideProb(sp,g,s,'spread',side,L)})).filter(o=>o.p!=null);
+    const alt=ladder.find(o=>o.p>=0.70)||ladder[ladder.length-1];
+    if(mlP!=null)legs.push({kind:'ML',txt:`${team} ML`,p:mlP,ref:true,by:sgpBacking(V,calls,'ml',side)});
+    if(alt)legs.push({kind:'Alt spread',txt:`${team} ${alt.L>0?'+':''}${alt.L}`,p:alt.p,by:sd.B,ladder:ladder.map(o=>`${o.L>0?'+':''}${o.L} ${Math.round(o.p*100)}%`).join(' · ')});}
+  /* total */
+  const tt=pickSide('total','over','under');
+  if(tt){const side=tt.side;const main=calls.find(c=>c.market==='total'&&c.line!=null);const base=main?+main.line:(s.med||0);
+    const step=fb?[0,3,6,9,12]:sp==='nba'?[0,4,8,12]:[0,1,2];const ladder=step.map(k=>{const L=+(side==='over'?base-k:base+k).toFixed(1);return{L,p:sgpSideProb(sp,g,s,'total',side,L)};}).filter(o=>o.p!=null);
+    const alt=ladder.find(o=>o.p>=0.70)||ladder[ladder.length-1];
+    if(alt)legs.push({kind:'Alt total',txt:`${side==='over'?'Over':'Under'} ${alt.L}`,p:alt.p,by:tt.B,ladder:ladder.map(o=>`${side==='over'?'o':'u'}${o.L} ${Math.round(o.p*100)}%`).join(' · ')});}
+  /* props: the characters' calibrated 70%+ calls on this game's players, one per player */
+  const P=sgpProps().filter(x=>x.sp===sp&&(x.team===A||x.team===H)).sort((a,b)=>b.cal-a.cal);const seen=new Set();
+  P.forEach(x=>{if(seen.has(x.player)||seen.size>=2)return;seen.add(x.player);legs.push({kind:'Prop',txt:`${x.player} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}`,p:x.cal,propBy:x.voice});});
+  const play=legs.filter(l=>!l.ref);if(!play.length)return'';
+  const P0=play.reduce((a,l)=>a*l.p,1);
+  const row=l=>{const t=l.by&&l.by.top;const who=l.propBy?`${charName(l.propBy)} (calibrated)`:t?`${charName(t.c.voice)}${t.best?` — ${t.best.w}-${t.best.l} ${t.best.lab}`:''}`:'';
+    return`<div style="padding:4px 0;border-bottom:1px solid var(--rule)${l.ref?';opacity:.7':''}"><div style="display:flex;justify-content:space-between"><span><span class="mono" style="font-size:9px;color:var(--mute)">${l.kind}${l.ref?' (reference)':''}</span> <b>${txtEsc(l.txt)}</b></span>
+      <span class="mono" style="font-size:10.5px">${Math.round(l.p*100)}% · fair <b style="color:var(--gold)">${sgnP(fairAmer(l.p))}</b></span></div>
+      ${who?`<div class="mono" style="font-size:9.5px;color:var(--mute)">strongest backer: ${txtEsc(who)}${l.by&&l.by.n>1?` · ${l.by.n} characters on it`:''}</div>`:''}
+      ${l.ladder?`<div class="mono" style="font-size:9px;color:var(--mute)">ladder: ${l.ladder}</div>`:''}</div>`;};
+  return`<details class="tkt" style="margin:6px 0;border-left:3px solid #ff6fae"><summary><b>🎯 Perfect SGP</b> <span class="mono" style="font-size:10px;color:var(--mute)">${play.length} legs · ${(P0*100).toFixed(1)}% if independent · fair ${sgnP(fairAmer(P0))}</span></summary>
+    <div class="sub" style="font-size:10px;margin:4px 0">Each leg is the side the characters with the best record on this spot back, pushed to the most aggressive alt line the sim still gives 70%+. "Fair" is what that alt should cost — take it only if the book's alt price is longer.</div>
+    ${legs.map(row).join('')}
+    <div class="mono" style="font-size:9px;color:var(--mute);margin-top:4px">Same-game legs are correlated; books price SGPs with that built in, so the real payout will differ from the product of the legs.</div></details>`;
+}catch(e){return'';}}

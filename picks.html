@@ -44,6 +44,10 @@ body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,#1b2030 0%,v
 .day .ps{flex:1}.day .ps span{margin-right:10px;white-space:nowrap}
 .w{color:var(--win)}.l{color:var(--loss)}.p{color:var(--push)}
 .foot{margin-top:28px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);line-height:1.7;text-align:center}
+.why{margin-top:8px;font-size:12.5px;line-height:1.5;color:#cfd5e2}.why summary{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--gold);cursor:pointer;letter-spacing:.06em}
+.why li{margin:2px 0}.pl{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px}
+.pl h3{margin:0;font-family:'Archivo Black',sans-serif;font-size:17px}.pl .px{font-family:'Archivo Black',sans-serif;font-size:22px;color:var(--gold)}
+.leg{padding:8px 0;border-top:1px solid var(--line)}.leg b{font-size:15px}
 .share{display:flex;gap:8px;margin-top:6px}
 .share button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:11px;font:600 13px Inter,sans-serif}
 @media (max-width:380px){.pk{font-size:18px}.pct{font-size:17px}}
@@ -54,6 +58,7 @@ body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,#1b2030 0%,v
   <div class="record" id="rec"></div>
   <div class="hd"><h2 id="todayH">Today's 3</h2><span id="lock"></span></div>
   <div id="today"><div class="empty">Loading…</div></div>
+  <div id="parlayBox"></div>
   <a class="cta" id="cta" href="#" style="display:none" target="_blank" rel="noopener">GET EVERY PLAY<small>Subscribe for the full card, every sport, every day</small></a>
   <div class="share"><button onclick="share()">Share today's card</button></div>
   <div class="hd"><h2>Every result</h2><span>last 30 cards</span></div>
@@ -83,11 +88,21 @@ async function load(){
         <div class="pk">${esc(x.pick)}<span class="pr">${sgn(x.price)}</span></div>
         <div class="meta">${em[x.sp]||''} ${esc((x.sp||'').toUpperCase())} · ${esc(x.game)}${t?' · '+t:''}</div>
         <div class="meta">${tier}${x.voices&&x.voices.length?esc(x.voices.length)+' of our analysts agree':''}</div>
-        <div class="pct">${Math.round(x.p*100)}%<small>to hit</small></div></div>`;}).join('');}
+        <div class="pct">${Math.round(x.p*100)}%<small>to hit</small></div>${whyBlock(x.why)}</div>`;}).join('');}
   else $('today').innerHTML='<div class="empty">Today\'s card locks before first game. Nothing forced — some days the answer is pass.</div>';
+  try{renderParlay();}catch(e){}
   if(FEED.subscribe){const a=$('cta');a.href=FEED.subscribe;a.style.display='block';}
   $('hist').innerHTML=(FEED.history||[]).map(h=>`<div class="day"><b>${esc(day(h.d).replace(/^\w+, /,''))}</b><div class="ps">${h.picks.map(x=>{const [c]=res(x);return`<span class="${c==='hit'?'w':c==='miss'?'l':'p'}">${c==='hit'?'✓':c==='miss'?'✗':c==='push'?'↔':'·'} ${esc(x.pick)} ${sgn(x.price)}</span>`;}).join('')}</div></div>`).join('')||'<div class="empty">The record starts with the first graded card.</div>';
 }
+function whyBlock(W){if(!W||!W.bullets||!W.bullets.length)return'';return`<details class="why"><summary>WHY WE LIKE IT</summary><ul style="padding-left:16px;margin:6px 0">${W.bullets.map(b=>`<li>${esc(b)}</li>`).join('')}</ul></details>`;}
+function renderParlay(){const P=FEED&&FEED.parlay;const box=$('parlayBox');if(!P||!P.legs||!P.legs.length){box.innerHTML='';return;}
+  const R=FEED.parlayRecord;const res=P.result===true?'<span class="res hit" style="position:static">✓ CASHED</span>':P.result===false?'<span class="res miss" style="position:static">✗ LOST</span>':'';
+  box.innerHTML=`<div class="hd"><h2>Tonight's parlay</h2><span>${R&&R.w+R.l?R.w+'-'+R.l+' all-time':'the Roll Call'}</span></div>
+    <div class="pl"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>${P.legs.length}-leg Roll Call ${res}</h3><div class="px">${esc(P.price)}</div></div>
+    <div class="meta">${Math.round(P.p*1000)/10}% to cash · each leg is a different analyst's best pick · 🔒 locked ${new Date(P.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</div>
+    ${P.legs.map(l=>{const [c,lab]=res2(l);return`<div class="leg"><b>${esc(l.pick)}</b> <span class="pr">${sgn(l.price)}</span> <span class="res ${c}" style="position:static;margin-left:6px">${c==='open'?'':lab}</span>
+      <div class="meta">${em[l.sp]||''} ${esc(l.game)} · ${esc(l.by)}'s pick · ${Math.round(l.p*100)}%</div>${whyBlock(l.why)}</div>`;}).join('')}</div>`;}
+const res2=x=>x.push?['push','PUSH']:x.hit===true?['hit','✓']:x.hit===false?['miss','✗']:['open',''];
 function share(){if(!FEED||!FEED.today)return;const t=FEED.today.picks.map((x,i)=>`${i+1}. ${x.pick} ${sgn(x.price)}`).join('\n');
   const txt=`TheDesk — ${day(FEED.today.d)}\n${t}\n${location.href}`;if(navigator.share)navigator.share({title:'TheDesk',text:txt,url:location.href}).catch(()=>{});else{navigator.clipboard&&navigator.clipboard.writeText(txt);alert('Copied to clipboard');}}
 load();setInterval(load,120000);

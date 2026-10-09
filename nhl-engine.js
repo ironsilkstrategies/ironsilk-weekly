@@ -569,7 +569,7 @@ function nhlCard(g){
       <div style="font-size:10px;color:var(--mute);font-family:'IBM Plex Mono'">${nhlEsc(g.time)}${g.venue?' · '+nhlEsc(g.venue):''}</div></div>
       <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${A} ${nhlEsc(g.away.record)}<br>${H} ${nhlEsc(g.home.record)}</div></div>
     ${head}<div class="sig">${chips.join('')}${extra}</div>
-    ${g.abstract==='pre'?(()=>{try{return coachHtml({game:g,sim:s,sport:'nhl'})}catch(e){return''}})():''}
+    ${g.abstract==='pre'?(()=>{try{return coachHtml({game:g,sim:s,sport:'nhl'})}catch(e){return''}})():''}${(()=>{try{return sgpCardHtml('nhl',g,s)}catch(e){return''}})()}
     ${g.abstract!=='post'?pl+ml+to+p1+p1pl+p1ml:''}
     ${typeof pstCardHtml==='function'?pstCardHtml('nhl',g):''}
     <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>

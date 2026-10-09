@@ -2185,7 +2185,7 @@ function nflCardFull(g){
       ${NFL_POWER_FLAT?`<div class="sigchip" style="color:var(--rust);border-color:rgba(240,86,60,.4)">RATINGS NOT LOADED — tap Retry above</div>`:''}
 
     </div>
-    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'nfl'})}catch(e){return''}})()}
+    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'nfl'})}catch(e){return''}})()}${(()=>{try{return sgpCardHtml('nfl',g,s)}catch(e){return''}})()}
 
     <div class="mktlab">Spread${realBadge}</div>
     <div class="betgrid">
@@ -4100,7 +4100,7 @@ function ncaafCard(g){
       ${NCAAF_POWER_FLAT?`<div class="sigchip" style="color:var(--rust);border-color:rgba(240,86,60,.4)">RATINGS NOT LOADED — add CFBD key in Settings</div>`:''}
       
     </div>
-    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'ncaaf'})}catch(e){return''}})()}
+    ${(()=>{try{return coachHtml({game:g,sim:s,sport:'ncaaf'})}catch(e){return''}})()}${(()=>{try{return sgpCardHtml('ncaaf',g,s)}catch(e){return''}})()}
     ${pctileChips}${spotlightChips}
     <div class="mktlab">Spread${realBadge}</div>
     <div class="betgrid">
