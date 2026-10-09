@@ -53,8 +53,8 @@ function switchSport(sport){return doSportSwitch(sport)}
 function randn(){
   // Box-Muller
   let u=0,v=0;
-  while(u===0)u=Math.random();
-  while(v===0)v=Math.random();
+  while(u===0)u=simRand();
+  while(v===0)v=simRand();
   return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
 }
 
@@ -1513,6 +1513,7 @@ function simNFLGame(g,N){
 }
 
 // Snap raw score to realistic NFL scoring clusters
+simNFLGame=simSeeded(simNFLGame,(g,N)=>simGameKey('nfl',g,N));
 function snapNFLScore(s){
   if(s<0)return 0;
   // Common NFL scores: 0,3,6,7,9,10,13,14,16,17,20,21,23,24,27,28,30,31,34,35,37,38,41,42
@@ -2743,6 +2744,7 @@ function simNCAAFGame(g,N){
 }
 
 // Resolve a team object to its rating by trying every identifier ESPN uses.
+simNCAAFGame=simSeeded(simNCAAFGame,(g,N)=>simGameKey('ncaaf',g,N));
 function ncaafPowerFor(t){
   if(!t)return null;
   for(const k of [t.id,t.name,t.displayName,t.shortName,t.location,t.abbr,t.abbreviation]){

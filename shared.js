@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261007d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261009a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3377,12 +3377,24 @@ function tab(n,b){
 }
 
 /* ================= MATH ================= */
+/* ══ DETERMINISTIC SIMS (v1.75) ════════════════════════════════════════════
+   Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
+   win %, most-common score and any pick sitting near a threshold could flip.
+   Now each sim runs on its own seeded stream (sport + game + sample size): the
+   same inputs give the same numbers on every reload, every device. Numbers move
+   only when an INPUT moves — a lineup, a line, a new grade in calibration. */
+let _SIMR=null;
+function simRand(){return _SIMR?_SIMR():Math.random();}
+function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h>>>0;}
+function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
+  _SIMR=sjRng(simHash(k));try{return fn.apply(this,a);}finally{_SIMR=prev;}};w.__seeded=true;w.__raw=fn;return w;}
+function simGameKey(sp,g,N){return sp+'|'+(g&&(g.id||((g.away&&g.away.abbr)+'@'+(g.home&&g.home.abbr))))+'|'+(N||'');}
 function poisCDF(k,l){let s=0,t=Math.exp(-l);for(let i=0;i<=k;i++){s+=t;t*=l/(i+1)}return Math.min(1,s)}
 function poisAtLeast(k,l){return k<=0?1:1-poisCDF(k-1,l)}
 function poisSample(l){if(l<=0)return 0;
-  if(l>25){const u=Math.random()||1e-9,v=Math.random();
+  if(l>25){const u=simRand()||1e-9,v=simRand();
     return Math.max(0,Math.round(l+Math.sqrt(l)*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)))}
-  let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random()}while(p>L);return k-1}
+  let L=Math.exp(-l),k=0,p=1;do{k++;p*=simRand()}while(p>L);return k-1}
 // Was truncating k=3.6 to a full 4 exponential draws (for-loop with i<k runs i=0..3,
 // silently drawing Gamma(4,θ) instead of Gamma(3.6,θ)). That widened variance and
 // pushed the modal exact-score up a notch across nearly every game — part of why
@@ -3391,15 +3403,15 @@ function poisSample(l){if(l<=0)return 0;
 function gammaInt(k,t){
   const ik=Math.floor(k),frac=k-ik;
   let s=0;
-  for(let i=0;i<ik;i++)s+=-Math.log(Math.random()||1e-9);
+  for(let i=0;i<ik;i++)s+=-Math.log(simRand()||1e-9);
   if(frac>1e-9){
     // Johnk's algorithm for the Gamma(frac,1) remainder, frac in (0,1)
     let x,y,u,v;
     do{
-      u=Math.random()||1e-9;v=Math.random()||1e-9;
+      u=simRand()||1e-9;v=simRand()||1e-9;
       x=Math.pow(u,1/frac);y=Math.pow(v,1/(1-frac));
     }while(x+y>1);
-    const e=-Math.log(Math.random()||1e-9);
+    const e=-Math.log(simRand()||1e-9);
     s+=(x/(x+y))*e;
   }
   return s*t;
@@ -3781,7 +3793,7 @@ function simGame(g,N){
   let hw=0,as=0,hs=0,f5h=0,f5a=0,f5t=0,bins=new Array(24).fill(0);
   for(let i=0;i<N;i++){
     let a=nbRuns(aR),h=nbRuns(hR);
-    if(a===h)Math.random()<.48?a++:h++;
+    if(a===h)simRand()<.48?a++:h++;
     if(h>a)hw++;
     as+=a;hs+=h;
     const t=a+h;
@@ -3857,7 +3869,7 @@ function rlProb(g,s,side,line){
   let c=0;
   for(let i=0;i<N;i++){
     let a=nbRuns(aR),h=nbRuns(hR);
-    if(a===h)Math.random()<.48?a++:h++;
+    if(a===h)simRand()<.48?a++:h++;
     const m=side==='home'?h-a:a-h;
     if(m>line)c++;
   }
@@ -3871,6 +3883,8 @@ function rlProb(g,s,side,line){
   }catch(e){/* calibration not loaded yet */}
   return raw;
 }
+simGame=simSeeded(simGame,(g,N)=>simGameKey('mlb',g,N));
+rlProb=simSeeded(rlProb,(g,s,side,line)=>simGameKey('mlb-rl',g,side+'|'+line));
 /* market comparison only — never feeds the projection */
 function marketOf(g){
   const k=today()+'|'+g.home.abbr+'|'+g.away.abbr,mk=ODDS[k]||{},op=OPENS[k]||{};
@@ -7955,7 +7969,7 @@ function legRekey(tid,i,to){const L=get(LS.locked,[]);const t=L.find(x=>String(x
   const map={};[[oa,na],[oh,nh],[oa,nh],[oh,na]].forEach(([o,n])=>{if(mgAb(sp,o)===n)map[o]=n;});
   l.pick=String(l.pick||'').split(/(\s+)/).map(w=>map[w]||w).join('');l.game=to;set(LS.locked,L);try{renderTickets();}catch(e){}}
 function legSetManual(tid,i,res){const L=get(LS.locked,[]);const t=L.find(x=>String(x.id)===String(tid));if(!t||!t.legs[i])return;
-  t.legs[i].manual=res==='clear'?undefined:{hit:res==='won',push:res==='push',at:Date.now()};if(res==='clear')delete t.legs[i].manual;set(LS.locked,L);try{renderTickets();}catch(e){}}
+  t.legs[i].manual=res==='clear'?undefined:{hit:res==='won',push:res==='push',at:Date.now()};if(res==='clear')delete t.legs[i].manual;set(LS.locked,L);try{settledRefresh(tid);}catch(e){}try{renderTickets();}catch(e){}}
 function gradeDoctorHtml(t){if(t.finalized||t.archived)return'';const rows=[];
   (t.legs||[]).forEach((l,i)=>{let r=null;try{r=gradeLeg(l,t.date);}catch(e){}if(r&&(r.live||r.hit===true||r.hit===false||r.push))return;if(!legOverdue(l,t))return;
     const D=legDiagnose(l,t);const id=JSON.stringify(String(t.id)).replace(/"/g,'&quot;');
@@ -8313,6 +8327,7 @@ function delLocked(id){
   if(t&&t.finalized){
     if(!confirm("This ticket is locked in as final and shouldn't normally be deleted — it's part of your permanent record. Delete anyway?"))return;
   }
+  if(t)try{settledForget(id);}catch(e){}
   set(LS.locked,L.filter(x=>x.id!==id));renderTickets();
 }
 // Manual rename — works on ANY ticket regardless of source or how it was built.
@@ -9331,6 +9346,7 @@ function settleLockedTickets(){
     t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);
     set(LS.locked,L);
   });
+  try{settledSync(true);}catch(e){}
 }
 
 /* ── loss post-mortem ── */
@@ -10786,10 +10802,12 @@ function rollTicketIntoLifetimeLog(t){
 function purgeOldArchivedTickets(days){
   days=days||3;
   const cutoff=Date.now()-days*86400e3;
+  try{settledSync(true);}catch(e){}
+  const frozen=settledAll();                       // never drop a ticket the ledger hasn't frozen
   const L=get(LS.locked,[]);const keep=[];let purged=0;
   L.forEach(t=>{
     const stamp=t.archived?(t.archivedAt||Date.parse(t.date)||0):Infinity; // never touches a non-archived ticket
-    if(t.archived&&stamp<cutoff){rollTicketIntoLifetimeLog(t);purged++;}
+    if(t.archived&&stamp<cutoff&&frozen[String(t.id)]){rollTicketIntoLifetimeLog(t);purged++;}
     else keep.push(t);
   });
   if(purged)set(LS.locked,keep);
@@ -10801,8 +10819,8 @@ function maybeRunDailyMaintenance(){
   const last=localStorage.getItem('d4.lastMaint')||'';
   if(last===today())return;
   try{
-    const n=purgeOldArchivedTickets(3);
-    if(n)console.log(`Daily maintenance: rolled up and purged ${n} archived ticket(s) older than 3 days.`);
+    const n=purgeOldArchivedTickets(45);
+    if(n)console.log(`Daily maintenance: rolled up and purged ${n} archived ticket(s) older than 45 days.`);
   }catch(e){console.warn('daily maintenance',e)}
   localStorage.setItem('d4.lastMaint',today());
 }
@@ -10857,8 +10875,9 @@ function buildAllTimeRecord(){
   get(LS.locked,[]).forEach(t=>{
     const bucket=t.source==='system'?system:t.source==='market'?market
       :t.source==='specialty'?specialty:t.source==='outside'?outside:mine;
-    t.legs.forEach(x=>{
-      const{hit,push,detail}=gradeLeg(x,t.date);
+    t.legs.forEach((x,xi)=>{
+      let{hit,push,detail}=gradeLeg(x,t.date);
+      if(hit==null&&!push){const fh=settledLegHit(t.id,xi);if(fh==='W')hit=true;else if(fh==='L')hit=false;else if(fh==='P')push=true;}
       const gid=legGameId(x,t.date);
       bucket.push({date:t.date,pick:x.pick,game:x.game,p:x.p,hit,push,detail,
         ticketId:t.id,ticketName:t.name||null,
@@ -11840,6 +11859,78 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.75) ══════════════════
+   Every record on the site used to be re-derived from LS.locked on every read.
+   Two things quietly shrank it: daily maintenance purged archived tickets
+   older than 3 days (the leg counts were rolled up, the TICKET counts were
+   not), and a ticket whose old finals were no longer on the device re-graded
+   to "pending" and fell out of the tally. That is how 1-39 became 1-19.
+   Now: the moment a ticket settles it is written here, once, frozen. Nothing
+   prunes this key, nothing re-grades it. Only an explicit manual leg override
+   (or a delete you confirm) changes an entry. Tickets purged before this
+   existed are rebuilt from the bankroll + tracked history, which never pruned. */
+const SETTLED_KEY='d4.settled';
+function settledAll(){const S=get(SETTLED_KEY,{});return S&&typeof S==='object'&&!Array.isArray(S)?S:{};}
+function settledBucket(src){return src==='system'||src==='market'||src==='specialty'||src==='outside'?src:'mine';}
+/* settled = a leg lost (the ticket is dead) or every leg decided */
+function settledRec(t){let rec=null;try{rec=ticketRecord(t);}catch(e){return null;}
+  if(rec.l>0)return rec;let ok=false;try{ok=ticketIsComplete(t);}catch(e){}return ok?rec:null;}
+function settledEntry(t,rec,money){
+  const legs=(t.legs||[]).map(l=>{let g=null;try{g=gradeLeg(l,t.date)}catch(e){}
+    return{sp:l.sport||'mlb',g:l.game||'',pk:String(l.pick||''),pr:l.price!=null&&isFinite(+l.price)?+l.price:null,gd:String(l.gameDate||t.date||'').slice(0,10),
+      h:g&&g.push?'P':g&&g.hit===true?'W':g&&g.hit===false?'L':null};});
+  const won=rec.l===0&&rec.w>0,push=rec.l===0&&rec.w===0;
+  let M=null;try{M=ticketMoney(t)}catch(e){}
+  let stake=M?+M.stake||0:0,profit=null;
+  if(money&&money[String(t.id)]){const h=money[String(t.id)];stake=+h.stake||stake;profit=+h.profit;}
+  if(profit==null||!isFinite(profit)){
+    if(!stake)profit=0;else if(rec.l>0)profit=-stake;else if(push)profit=0;
+    else{let pay=M?M.payout:stake;
+      if(rec.p>0){try{const dec=(t.legs||[]).reduce((a,l)=>{const g=gradeLeg(l,t.date);const d=g&&g.hit===true?americanToDecimal(l.price):1;return a*(d>1?d:1);},1);if(dec>1)pay=stake*dec;}catch(e){}}
+      profit=pay-stake;}}
+  return{id:String(t.id),d:String(t.date||'').slice(0,10),src:settledBucket(t.source),name:t.name||null,n:legs.length,
+    w:rec.w,l:rec.l,p:rec.p,won,push,stake:+(+stake).toFixed(2),profit:+(+profit).toFixed(2),legs,at:Date.now(),v:1};
+}
+function settledMoneyIndex(){const m={};
+  try{(getBankroll().history||[]).forEach(h=>{if(h&&h.id!=null)m[String(h.id)]=Object.assign({src:'mine'},h);});}catch(e){}
+  try{const T=get('d4.trackedhistory',{})||{};Object.keys(T).forEach(s=>(T[s]||[]).forEach(h=>{if(h&&h.id!=null&&!m[String(h.id)])m[String(h.id)]=Object.assign({src:s},h);}));}catch(e){}
+  return m;}
+let SETL_SIG='';
+function settledSync(force){
+  const L=get(LS.locked,[])||[];
+  const sig=L.length+'|'+L.filter(t=>t&&t.archived).length+'|'+Math.floor(Date.now()/60e3);
+  if(!force&&sig===SETL_SIG)return 0;
+  const S=settledAll(),money=settledMoneyIndex();let ch=0;const live=new Set();
+  L.forEach(t=>{if(!t||!t.legs||!t.legs.length)return;const id=String(t.id);live.add(id);
+    const e=S[id];if(e&&!e.recovered)return;          // frozen — never re-graded
+    const rec=settledRec(t);if(!rec)return;
+    S[id]=settledEntry(t,rec,money);ch++;});
+  // tickets purged before the ledger existed: rebuild from the money history
+  Object.keys(money).forEach(id=>{if(S[id]||live.has(id))return;const h=money[id];
+    const won=h.won===true,push=h.won==='push';
+    S[id]={id,d:String(h.date||'').slice(0,10),src:settledBucket(h.src),name:null,n:null,w:won?1:0,l:won||push?0:1,p:push?1:0,
+      won,push,stake:+(+h.stake||0).toFixed(2),profit:+(+h.profit||0).toFixed(2),legs:[],at:Date.now(),v:1,recovered:true};ch++;});
+  if(ch)set(SETTLED_KEY,S);
+  SETL_SIG=sig;
+  return ch;
+}
+/* every settled ticket, ledger first; a live ticket only fills a gap */
+function settledList(bucket){
+  try{settledSync();}catch(e){}
+  const S=settledAll();const out=[];const seen=new Set();
+  Object.keys(S).forEach(id=>{const e=S[id];if(!e||e.deleted)return;seen.add(id);if(!bucket||e.src===bucket)out.push(e);});
+  (get(LS.locked,[])||[]).forEach(t=>{if(!t||!t.legs||!t.legs.length||seen.has(String(t.id)))return;const rec=settledRec(t);if(!rec)return;
+    const e=settledEntry(t,rec,null);if(!bucket||e.src===bucket)out.push(e);});
+  return out.sort((a,b)=>String(a.d).localeCompare(String(b.d)));
+}
+function settledRecord(bucket){const A=settledList(bucket||'mine');let w=0,l=0,p=0,u=0,st=0;
+  A.forEach(e=>{if(e.l>0)l++;else if(e.w>0)w++;else p++;if(e.stake>0){u+=e.profit;st+=e.stake;}});
+  return{w,l,p,n:A.length,profit:+u.toFixed(2),staked:+st.toFixed(2)};}
+/* an explicit manual change re-freezes that one ticket under the new result */
+function settledRefresh(id){try{const S=settledAll();const k=String(id);const t=(get(LS.locked,[])||[]).find(x=>String(x.id)===k);if(!t)return;
+  const rec=settledRec(t);if(rec)S[k]=settledEntry(t,rec,settledMoneyIndex());else delete S[k];set(SETTLED_KEY,S);}catch(e){}}
+function settledForget(id){try{const S=settledAll();S[String(id)]={id:String(id),deleted:true,at:Date.now()};set(SETTLED_KEY,S);}catch(e){}}
+function settledLegHit(tid,i){try{const e=settledAll()[String(tid)];const l=e&&e.legs&&e.legs[i];return l?l.h:null;}catch(e){return null}}
 // ── PUSH BUG REPAIR — one-time correction pass ────────────────────────────
 // Run lines and whole-number totals could tie (a real push) but the old
 // gradeLeg logic graded that as a straight loss. This walks every ticket that
@@ -12011,7 +12102,9 @@ function minePicksHtml(){
   const archived=locked.filter(t=>t.archived);
   const readyToArchive=pending.filter(t=>ticketIsComplete(t)).length;
   setTimeout(()=>genTickets('mine'),0);
+  let SR=null;try{SR=settledRecord('mine');}catch(e){}
   return `<div class="sbar" style="margin-top:0"><h2>Your tickets</h2><div class="ln"></div></div>
+    ${SR&&SR.n?`<div class="note" id="lifeRec">🔒 Lifetime ticket record <b>${SR.w}-${SR.l}${SR.p?'-'+SR.p:''}</b>${SR.staked?` · ${SR.profit>=0?'+':''}$${SR.profit.toFixed(2)} on $${SR.staked.toFixed(2)} staked`:''} — frozen at settlement, never re-graded or pruned.</div>`:''}
     <div class="subnav">
       <button class="${MINE_VIEW==='pending'?'on':''}" onclick="MINE_VIEW='pending';ARCHIVE_SELECTED.clear();renderTickets()">Pending <span class="m">${pending.length}</span></button>
       <button class="${MINE_VIEW==='archived'?'on':''}" onclick="MINE_VIEW='archived';ARCHIVE_SELECTED.clear();renderTickets()">Archived <span class="m">${archived.length}</span></button>
@@ -17313,7 +17406,18 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-function charHist(V,c){const [aw,hm]=String(c.game).split('@');const team=c.market==='total'?null:(c.side==='home'?hm:aw);
+/* v1.75 · one pass over the voices ledger, bucketed by character+sport+market,
+   and every history memoized. charHist used to filter the WHOLE ledger three
+   times per call, and the Banker filter rebuilt every character's parlay per
+   leg — 60 legs ≈ 6.5 seconds of frozen screen. */
+let CH_IDX=null;
+function charIdxSig(V){return V.length+'|'+(V.length?(V[0].id+'|'+V[V.length-1].id+'|'+(V[V.length-1].graded?1:0)):'')+'|'+_LSGEN;}
+function charIdx(V){const sig=charIdxSig(V);if(CH_IDX&&CH_IDX.sig===sig)return CH_IDX;
+  const B={};for(const x of V){if(!x||!x.graded||x.push)continue;const k=x.voice+'|'+x.sp+'|'+x.market;(B[k]||(B[k]=[])).push(x);}
+  CH_IDX={sig,B,H:new Map()};return CH_IDX;}
+function charHist(V,c){const I=charIdx(V);const ck=c.id+'|'+c.voice+'|'+c.sp+'|'+c.market+'|'+c.side+'|'+c.game;const hit0=I.H.get(ck);if(hit0)return hit0;
+  const r0=charHistRaw(I.B[c.voice+'|'+c.sp+'|'+c.market]||[],c);I.H.set(ck,r0);return r0;}
+function charHistRaw(V,c){const [aw,hm]=String(c.game).split('@');const team=c.market==='total'?null:(c.side==='home'?hm:aw);
   const same=x=>x.graded&&!x.push&&x.voice===c.voice&&x.sp===c.sp&&x.market===c.market&&x.id!==c.id;
   const side=x=>c.market==='total'?x.side===c.side:true;
   const pickedTeam=x=>{const [a,h]=String(x.game).split('@');return x.side==='home'?h:x.side==='away'?a:null;};
@@ -17383,8 +17487,8 @@ const MS_FILTERS_EXTRA={};
    5. CHALLENGES  He writes new challenges every week from the standings.        */
 const BANKER_KEY='d4.banker';
 const bkWeekStart=d=>{const t=new Date((d||today())+'T12:00:00');const wd=(t.getDay()+6)%7;return dayShift(String(d||today()).slice(0,10),-wd);};
-function bkRunWeek(ws,V,CP){const we=dayShift(ws,6);const out={};
-  CHAR_ORDER.forEach(v=>{const calls=V.filter(x=>x.voice===v&&x.graded&&x.date>=ws&&x.date<=we).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+function bkRunWeek(ws,V,CP,BYV){const we=dayShift(ws,6);const out={};
+  CHAR_ORDER.forEach(v=>{const calls=(BYV?BYV[v]||[]:V).filter(x=>x.voice===v&&x.graded&&x.date>=ws&&x.date<=we).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     let br=100,peak=100,dd=0,w=0,l=0,p=0,staked=0;const byM={};
     const bet=(frac,dec,hit,m)=>{const st=+(br*frac).toFixed(2);if(hit==null){p++;return;}staked+=st;const pnl=hit?st*(dec-1):-st;br=+(br+pnl).toFixed(2);
       if(hit)w++;else l++;const M=byM[m]=byM[m]||{pnl:0,n:0};M.pnl+=pnl;M.n++;peak=Math.max(peak,br);dd=Math.max(dd,(peak-br)/peak);};
@@ -17396,8 +17500,9 @@ function bkRunWeek(ws,V,CP){const we=dayShift(ws,6);const out={};
   return out;}
 let BK_C=null;
 function bkLedger(force){if(!force&&BK_C&&Date.now()-BK_C.ts<60e3)return BK_C.v;
-  const V=get(VOICES_KEY,[])||[],CP=get(CPAR_KEY,{})||{};const ws=bkWeekStart();
-  const weeks=[];for(let i=0;i<8;i++){const w0=dayShift(ws,-7*i);const R=bkRunWeek(w0,V,CP);const act=Object.values(R).filter(x=>x.n);
+  const V=roGet(VOICES_KEY,[],30e3)||[],CP=roGet(CPAR_KEY,{},30e3)||{};const ws=bkWeekStart();const lo=dayShift(ws,-49);
+  const BYV={};for(const x of V){if(x&&x.graded&&x.date>=lo)(BYV[x.voice]||(BYV[x.voice]=[])).push(x);}
+  const weeks=[];for(let i=0;i<8;i++){const w0=dayShift(ws,-7*i);const R=bkRunWeek(w0,V,CP,BYV);const act=Object.values(R).filter(x=>x.n);
     weeks.push({ws:w0,R,leader:act.sort((a,b)=>b.br-a.br)[0]||null});}
   /* the Banker's verdict: pooled last 4 weeks, only with proof */
   const mult={};CHAR_ORDER.forEach(v=>{let n=0,pnl=0;weeks.slice(0,4).forEach(W=>{const x=W.R[v];n+=x.n;pnl+=x.br-100;});
@@ -17410,7 +17515,10 @@ function bkSize(legs,kMin,kMax){kMin=kMin||2;kMax=Math.min(kMax||5,legs.length);
     const ev=P*D-1,fk=ev>0?ev/(D-1):0,f=Math.min(0.02,fk/4);const g=f>0?P*Math.log(1+f*(D-1))+(1-P)*Math.log(1-f):0;
     const o={k,P,D,ev,f,g};if(!best||g>best.g+1e-12||(best.g<=0&&g<=0&&ev>best.ev))best=o;}
   return best;}
-function bkSlate(){const D=cparState();const by=D.by||{};const L=bkLedger();
+let BKS_C=null;
+function bkSlate(){const D0=cparState();const B0=brAmount()||100;if(BKS_C&&BKS_C.D===D0&&BKS_C.B===B0&&Date.now()-BKS_C.ts<60e3)return BKS_C.v;const v=bkSlateRaw(D0);BKS_C={D:D0,B:B0,ts:Date.now(),v};return v;}
+function bkSlateKeys(){const S=bkSlate();if(!S.__keys){S.__keys=new Set();S.picks.forEach(o=>o.P.legs.forEach(l=>S.__keys.add(l.game+'|'+l.pick)));}return S.__keys;}
+function bkSlateRaw(D){const by=D.by||{};const L=bkLedger();
   const cand=Object.entries(by).map(([v,P])=>{const legs=P.legs.map(x=>({p:x.score!=null?x.score:x.p,dec:americanToDecimal(x.price)}));
     const pAdj=legs.reduce((a,x)=>a*x.p,1)*Math.min(1.15,Math.max(0.85,L.mult[v]||1));const D0=legs.reduce((a,x)=>a*x.dec,1);
     const ev=pAdj*D0-1,fk=ev>0?ev/(D0-1):0,f=Math.min(0.02,fk/4),g=f>0?pAdj*Math.log(1+f*(D0-1))+(1-pAdj)*Math.log(1-f):0;
@@ -17421,7 +17529,7 @@ function bkSlate(){const D=cparState();const by=D.by||{};const L=bkLedger();
   return{picks:pick,passed:cand.filter(c=>!pick.includes(c)),bankroll:B,locked:D.locked};}
 /* Dynamic rules so challenges can be built around a character or the Banker */
 CHAR_ORDER.forEach(v=>{MS_FILTERS_EXTRA['ch_'+v.replace(/\s+/g,'_')]={lab:charName(v)+'\'s picks',desc:charName(v)+' is on every leg',f:x=>(x.chars||[]).includes(v)};});
-MS_FILTERS_EXTRA.banker={lab:'Banker\'s slate',desc:'every leg is in one of the Banker\'s parlays',f:x=>{try{const S=bkSlate();return S.picks.some(o=>o.P.legs.some(l=>l.game===x.game&&l.pick===x.pick));}catch(e){return false;}}};
+MS_FILTERS_EXTRA.banker={lab:'Banker\'s slate',desc:'every leg is in one of the Banker\'s parlays',f:x=>{try{return bkSlateKeys().has(x.game+'|'+x.pick);}catch(e){return false;}}};
 function bkChallenges(){const L=bkLedger();const prev=L.weeks[1]&&L.weeks[1].leader?L.weeks[1]:L.weeks[0];const lead=prev&&prev.leader;
   const act=Object.values(L.weeks[0].R).filter(x=>x.n).sort((a,b)=>a.br-b.br);const cold=act[0];
   const T=[];
@@ -17458,12 +17566,12 @@ function bankerHtml(){const L=bkLedger(true);const W=L.weeks[0];const rows=Objec
 const CPAR_KEY='d4.charparlays';
 function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','h2h'].forEach(k=>{const x=h.H[k];if(x.n){sw+=x.n;sr+=x.n*x.r;}});
   const hr=sw?sr/sw:0.5;
-  let p=null;try{const T=get(TC_KEY,{})||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);p=x?best5Prob(x):null;}catch(e){}
+  let p=null;try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);p=x?best5Prob(x):null;}catch(e){}
   if(p==null&&c.price!=null)p=imp(+c.price)*0.955+0.0225;
   if(p==null)p=0.5;
   const why=['sport','team','h2h'].filter(k=>h.H[k].n>=3).map(k=>`${h.lab[k]} ${h.H[k].w}-${h.H[k].l}`);
   return{score:0.5*p+0.5*hr,p,hr,why,weak:sw>=6&&hr<0.5};}
-function cparBuild(voice,V,d){V=V||get(VOICES_KEY,[])||[];d=d||today();
+function cparBuild(voice,V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();
   const calls=V.filter(x=>x.date===d&&x.voice===voice&&x.price!=null&&['ml','spread','total'].includes(x.market));
   const cand=calls.map(c=>({c,...cparLegScore(V,c)})).filter(x=>!x.weak).sort((a,b)=>b.score-a.score);
   const used=new Set(),top=[];for(const x of cand){const g=x.c.sp+'|'+x.c.game;if(used.has(g))continue;used.add(g);top.push(x);if(top.length===5)break;}
@@ -17473,11 +17581,16 @@ function cparBuild(voice,V,d){V=V||get(VOICES_KEY,[])||[];d=d||today();
   const dec=legs.reduce((a,x)=>a*americanToDecimal(x.c.price),1),p=legs.reduce((a,x)=>a*x.p,1);
   return{voice,d,legs:legs.map(x=>({sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,m:x.c.market,sd:x.c.side,p:x.p,score:x.score,hr:x.hr,why:x.why})),dec,p,
     size:{k:sz.k,ev:sz.ev,g:sz.g,why:sz.g>0?`${sz.k} legs maximize Kelly growth`:`no length is +EV — ${sz.k} legs is the least-bad`}};}
-function cparState(){const d=today();const S=get(CPAR_KEY,{})||{};const E=get(LS_EVAL,{})||{};const locked=E.date===d;
-  if(!S[d]||!S[d].locked){const V=get(VOICES_KEY,[])||[];const day={locked,by:{}};
+let CPAR_MEM=null;
+function cparState(){const d=today();const E=roGet(LS_EVAL,{},10e3)||{};const locked=E.date===d;
+  /* an unlocked day is rebuilt at most once a minute and only when its inputs move */
+  const V0=roGet(VOICES_KEY,[],30e3)||[];const msig=d+'|'+locked+'|'+charIdxSig(V0);
+  if(CPAR_MEM&&CPAR_MEM.sig===msig&&Date.now()-CPAR_MEM.ts<60e3)return CPAR_MEM.v;
+  const S=get(CPAR_KEY,{})||{};
+  if(!S[d]||!S[d].locked){const V=V0;const day={locked,by:{}};
     CHAR_ORDER.forEach(v=>{const P=cparBuild(v,V,d);if(P)day.by[v]=P;});
     S[d]=day;if(locked){Object.keys(S).sort().slice(0,-60).forEach(k=>delete S[k]);set(CPAR_KEY,S);}}
-  return S[d];}
+  CPAR_MEM={sig:d+'|'+locked+'|'+charIdxSig(V0),ts:Date.now(),v:S[d]};return S[d];}
 function cparGrade(){const S=get(CPAR_KEY,{})||{};let n=0;
   Object.entries(S).forEach(([d,D])=>{if(!D||!D.locked)return;Object.values(D.by||{}).forEach(P=>{if(P.done)return;
     P.legs.forEach(l=>{if(l.hit!=null||l.push)return;let r=null;try{r=gradeLeg({sport:l.sp,game:l.game,pick:l.pick,gameDate:d},d);}catch(e){}
@@ -17866,11 +17979,11 @@ let HUB_CACHE=null,HUB_SIG='';
    with the same leg count once), graded, split by sport. */
 function hubYou(){
   const L=get(LS.locked,[]).filter(t=>!TRACKED_ONLY_SOURCES.has(t.source));
-  const seen={},R={};let tw=0,tl=0,units=0;
+  const seen={},R={};const SR=settledRecord('mine');const tw=SR.w,tl=SR.l,units=SR.profit;
+  /* frozen legs first, so a pick graded once never drops out of the tally */
+  settledList('mine').forEach(e=>(e.legs||[]).forEach(l=>{if(l.h!=='W'&&l.h!=='L')return;const k=l.sp+'|'+l.g+'|'+l.gd+'|'+String(l.pk).trim();if(seen[k])return;seen[k]=1;
+    const o=R[l.sp]||(R[l.sp]={w:0,n:0});o.n++;if(l.h==='W')o.w++;}));
   L.forEach(t=>{
-    let rec=null;try{rec=ticketIsComplete(t)?ticketRecord(t):null}catch(e){}
-    if(rec){if(rec.l>0)tl++;else if(rec.w>0)tw++;
-      const st=moneyNum(t.stake),tw_=moneyNum(t.toWin);if(st>0&&tw_>0)units+=rec.l>0?-st:tw_;}
     (t.legs||[]).forEach(l=>{const sp=l.sport||'mlb',k=sp+'|'+l.game+'|'+(l.gameDate||t.date)+'|'+String(l.pick).trim();if(seen[k])return;
       let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(!g||g.hit==null)return;seen[k]=1;
       const o=R[sp]||(R[sp]={w:0,n:0});o.n++;if(g.hit)o.w++;});
@@ -19333,13 +19446,16 @@ function calibrationHtml(){
 let ROR_C=null;
 function riskOfRuin(){
   const B=brAmount();if(!B)return{need:'set your bankroll'};
-  const LL=roGet(LS.locked,[],30e3);const sig=B+'|'+LL.length+'|'+LL.filter(t=>t.archived).length;
+  const LL=roGet(LS.locked,[],30e3);try{settledSync();}catch(e){}const sig=B+'|'+LL.length+'|'+LL.filter(t=>t.archived).length+'|'+Object.keys(settledAll()).length;
   if(ROR_C&&ROR_C.sig===sig&&Date.now()-ROR_C.ts<60e3)return ROR_C.v;
   const v=riskOfRuinCore(B,LL);ROR_C={sig,ts:Date.now(),v};return v;
 }
 function riskOfRuinCore(B,LL){
   const L=LL.filter(t=>t.archived&&!TRACKED_ONLY_SOURCES.has(t.source));
-  const R=[];const stakes=[];const W=[];L.forEach(t=>{let rec=null;try{rec=ticketIsComplete(t)?ticketRecord(t):null}catch(e){}const M=ticketMoney(t);if(!rec||!M)return;
+  const R=[];const stakes=[];const W=[];
+  {const have=new Set(L.map(t=>String(t.id)));let S={};try{S=settledAll();}catch(e){}
+   Object.keys(S).forEach(id=>{const e=S[id];if(!e||e.deleted||e.src!=='mine'||have.has(id)||!(e.stake>0))return;
+     const r=e.l>0?-1:!e.w?0:e.profit/e.stake;R.push(r);stakes.push(e.stake);W.push(r>0?'w':r<0?'l':'p');});}L.forEach(t=>{let rec=null;try{rec=ticketIsComplete(t)?ticketRecord(t):null}catch(e){}const M=ticketMoney(t);if(!rec||!M)return;
     /* push-only ticket = stake back (0), not a full win; a parlay with a pushed leg pays only on the legs that won */
     let r;if(rec.l>0)r=-1;else if(!rec.w)r=0;else{let pay=M.payout;
       if(rec.p>0){try{const dec=(t.legs||[]).reduce((a,l)=>{const g=gradeLeg(l,t.date);const d=g&&g.hit===true?americanToDecimal(l.price):1;return a*(d>1?d:1);},1);if(dec>1)pay=M.stake*dec;}catch(e){}}

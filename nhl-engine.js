@@ -58,12 +58,12 @@ const nhlProfit=a=>a>0?a/100:100/Math.abs(a);
 const nhlEV=(p,a)=>p==null||a==null||isNaN(a)||Math.abs(+a)<100?null:(p*nhlProfit(+a)-(1-p))*100;
 const nhlFair=p=>p==null?null:(p>=0.5?Math.round(-(p/(1-p))*100):Math.round(((1-p)/p)*100));
 const nhlSgn=n=>n==null?'—':(n>0?'+'+n:''+n);
-function nhlPois(l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random();}while(p>L);return k-1;}
+function nhlPois(l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=simRand();}while(p>L);return k-1;}
 function nhlPoisCDF(k,l){let s=0,t=Math.exp(-l);for(let i=0;i<=k;i++){s+=t;t*=l/(i+1);}return s;}
 const nhlPoisAtLeast=(n,l)=>n<=0?1:1-nhlPoisCDF(n-1,l);
 function nhlGamma(k){ // Marsaglia–Tsang, k>=1
-  const d=k-1/3,c=1/Math.sqrt(9*d);for(;;){let x,v;do{const u1=Math.random(),u2=Math.random();
-    x=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);v=1+c*x;}while(v<=0);v=v*v*v;const u=Math.random();
+  const d=k-1/3,c=1/Math.sqrt(9*d);for(;;){let x,v;do{const u1=simRand(),u2=simRand();
+    x=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);v=1+c*x;}while(v<=0);v=v*v*v;const u=simRand();
     if(u<1-0.0331*x*x*x*x||Math.log(u)<0.5*x*x+d*(1-v+Math.log(v)))return d*v;}}
 const nhlEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nhlQ=s=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
@@ -213,11 +213,11 @@ function simNHLGame(g,N){
   let aw=0,hw=0,ot=0,sa=0,sh=0,p1a=0,p1h=0;
   for(let i=0;i<N;i++){
     let a=nhlPois(la*nhlGamma(shape)/shape),h=nhlPois(lh*nhlGamma(shape)/shape);
-    let q=0,w=0;for(let k=0;k<a;k++)if(Math.random()<NHL_P1)q++;for(let k=0;k<h;k++)if(Math.random()<NHL_P1)w++;
+    let q=0,w=0;for(let k=0;k<a;k++)if(simRand()<NHL_P1)q++;for(let k=0;k<h;k++)if(simRand()<NHL_P1)w++;
     p1a+=q;p1h+=w;P1T[Math.min(19,q+w)]++;P1M[Math.max(0,Math.min(20,w-q+10))]++;
-    if(Math.abs(a-h)===1){const r=Math.random();const lead=a>h?'a':'h';
+    if(Math.abs(a-h)===1){const r=simRand();const lead=a>h?'a':'h';
       if(r<0.12){if(lead==='a')a++;else h++;}else if(r<0.18){if(lead==='a')h++;else a++;}}
-    if(a===h){ot++;if(Math.random()<0.51)h++;else a++;}
+    if(a===h){ot++;if(simRand()<0.51)h++;else a++;}
     if(h>a)hw++;else aw++;sa+=a;sh+=h;
     TOT[Math.min(29,a+h)]++;MAR[Math.max(0,Math.min(40,h-a+20))]++;const key=a+'-'+h;sf[key]=(sf[key]||0)+1;
   }
@@ -237,6 +237,7 @@ function simNHLGame(g,N){
     over,under,homeCover,awayCover,p1Over,p1Under,p1Win,p1Cover,p1Tie,p1Proj:+((p1a+p1h)/N).toFixed(2),p1a:p1a/N,p1h:p1h/N,
     modeScore,modeScorePct:modeN/N,medMargin:(sh-sa)/N};
 }
+simNHLGame=simSeeded(simNHLGame,(g,N)=>simGameKey('nhl',g,N));
 function nhlSimFor(g){const sig=NHL_RATINGS?NHL_RATINGS.ts:0;let s=NHL_SIMS[g.id];
   if(!s||s._sig!==sig){s=simNHLGame(g);s._sig=sig;NHL_SIMS[g.id]=s;}return s;}
 
