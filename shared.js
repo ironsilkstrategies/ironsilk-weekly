@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261009e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261009f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2180,7 +2180,7 @@ function _dec(raw){if(raw==null||raw==='')return undefined;
   return JSON.parse(raw);}
 function _enc(json){if(json.length<8000)return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
-/* v1.79 · the decompression cache. Every get() of a compressed store ran the
+/* v1.80 · the decompression cache. Every get() of a compressed store ran the
    full LZ decompressor — and grading reads the game archive once PER LEG, so a
    few hundred tickets meant hundreds of full decompressions on every page load
    (measured 6+ seconds of a frozen screen on desktop; several times that on a
@@ -3401,7 +3401,7 @@ function tabRaw(n,b){
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.79) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.80) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3413,7 +3413,7 @@ function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++)
 let _SIMK='';
 function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
   _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
-/* ══ SIM ONCE, REUSE EVERYWHERE (v1.79) ════════════════════════════════════
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.80) ════════════════════════════════════
    The Monte Carlo loop is the only expensive part of a sim, and it depends on
    nothing but the model's inputs (projected scoring, spread of outcomes, sample
    size, the game's seed). Odds, calibration and every market read are applied
@@ -9804,7 +9804,7 @@ function evalInputFingerprint(){
     calib:(get('d4.drift',{})||{}).n||0
   });
 }
-/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.79) ═════════════════════════════
+/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.80) ═════════════════════════════
    Each sport's evaluator lives on its own page (the engine has to be loaded to
    sim), but they now share one front door: Records → Model eval shows the eval
    for the page you're on plus a strip with every sport's status today — tap one
@@ -11936,7 +11936,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.79) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.80) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -17488,12 +17488,12 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.79 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.80 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */
 
-/* ══ CHARACTER SPLITS — the permanent raw record (v1.79) ═══════════════════
+/* ══ CHARACTER SPLITS — the permanent raw record (v1.80) ═══════════════════
    The voices ledger keeps the last 8,000 calls, which at a full slate is
    barely two weeks — so a character's record on a team or in a head-to-head
    quietly forgot everything older. Every graded call is now rolled, once, into
@@ -17711,8 +17711,11 @@ function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','
   if(p==null)p=0.5;
   const why=['sport','team','h2h'].filter(k=>h.H[k].n>=3).map(k=>`${h.lab[k]} ${h.H[k].w}-${h.H[k].l}`);
   return{score:0.5*p+0.5*hr,p,hr,why,weak:sw>=6&&hr<0.5};}
+/* Sensible tickets only: no leg priced shorter than -300 (a -450 favorite adds almost
+   nothing to the payout and is the leg that quietly sinks parlays). Underdogs: any price. */
+const BK_FLOOR=-300;const bkPriceOk=pr=>pr!=null&&isFinite(+pr)&&+pr>=BK_FLOOR;
 function cparBuild(voice,V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();
-  const calls=V.filter(x=>x.date===d&&x.voice===voice&&x.price!=null&&['ml','spread','total'].includes(x.market));
+  const calls=V.filter(x=>x.date===d&&x.voice===voice&&bkPriceOk(x.price)&&['ml','spread','total'].includes(x.market));
   const cand=calls.map(c=>({c,...cparLegScore(V,c)})).filter(x=>!x.weak).sort((a,b)=>b.score-a.score);
   const used=new Set(),top=[];for(const x of cand){const g=x.c.sp+'|'+x.c.game;if(used.has(g))continue;used.add(g);top.push(x);if(top.length===5)break;}
   if(top.length<2)return null;
@@ -17727,7 +17730,8 @@ function cparState(){const d=today();const locked=evalRanToday();
   const V0=roGet(VOICES_KEY,[],30e3)||[];const msig=d+'|'+locked+'|'+charIdxSig(V0);
   if(CPAR_MEM&&CPAR_MEM.sig===msig&&Date.now()-CPAR_MEM.ts<60e3)return CPAR_MEM.v;
   const S=get(CPAR_KEY,{})||{};
-  if(!S[d]||!S[d].locked){const V=V0;const day={locked,by:{}};
+  if(S[d]&&S[d].locked&&!S[d].floor&&Object.values(S[d].by||{}).some(P=>(P.legs||[]).some(l=>!bkPriceOk(l.price)))&&!Object.values(S[d].by||{}).some(P=>(P.legs||[]).some(l=>l.hit!=null||l.push)))S[d]={...S[d],locked:false};
+  if(!S[d]||!S[d].locked){const V=V0;const day={locked,by:{},floor:BK_FLOOR};
     CHAR_ORDER.forEach(v=>{const P=cparBuild(v,V,d);if(P)day.by[v]=P;});
     S[d]=day;if(locked){Object.keys(S).sort().slice(0,-60).forEach(k=>delete S[k]);set(CPAR_KEY,S);}}
   CPAR_MEM={sig:d+'|'+locked+'|'+charIdxSig(V0),ts:Date.now(),v:S[d]};return S[d];}
@@ -19634,7 +19638,7 @@ try{if(typeof renderToday==='function'&&!renderToday.__hp){const _rt=renderToday
   try{const el=document.getElementById('todayBody');if(el&&!el.querySelector('.hp-sec')){const h=highPctLinesHtml()+likelyHtml();if(h)el.insertAdjacentHTML('beforeend','<div class="hp-sec">'+h+'</div>');}}catch(e){}return r;};renderToday.__hp=1;}}catch(e){}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   v1.79 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
+   v1.80 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
    ══════════════════════════════════════════════════════════════════════════ */
 const txtEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fairAmer=p=>p==null||!(p>0&&p<1)?null:p>=0.5?-Math.round(p/(1-p)*100):Math.round((1-p)/p*100);
@@ -19727,7 +19731,7 @@ function whyHtml(x,open){const W=pickWhy(x);const id='w'+Math.abs(simHash(x.sp+x
 const BKDAY_KEY='d4.bankerday',BKDAYS_KEY='d4.bankerdays';
 function bkDayCands(V,d){const out={};
   CHAR_ORDER.forEach(v=>{const calls=V.filter(x=>String(x.date).slice(0,10)===d&&x.voice===v&&x.price!=null&&['ml','spread','total'].includes(x.market));
-    out[v]=calls.map(c=>{const s=cparLegScore(V,c);return{v,sp:c.sp,game:c.game,m:c.market,sd:c.side,line:c.line,pick:charPickText(c),price:c.price,p:s.p,score:s.score,hr:s.hr,why:s.why,weak:s.weak};})
+    out[v]=calls.filter(c=>bkPriceOk(c.price)).map(c=>{const s=cparLegScore(V,c);return{v,sp:c.sp,game:c.game,m:c.market,sd:c.side,line:c.line,pick:charPickText(c),price:c.price,p:s.p,score:s.score,hr:s.hr,why:s.why,weak:s.weak};})
       .filter(x=>!x.weak&&x.p>0).sort((a,b)=>b.score-a.score);});
   return out;}
 function bkBudget(){const B=brAmount()||100;let lim=null;try{lim=typeof dailyLimit==='function'?+dailyLimit():null;}catch(e){}
@@ -19758,9 +19762,12 @@ function bkDayBuild(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];cons
   const byP=rc.slice().sort((a,b)=>b.p-a.p);const cut=[];let cp=1;for(const x of byP){if(cut.length>=5)break;if(cut.length>=2&&cp*x.p<0.25)break;cut.push(x);cp*=x.p;}
   const rcDec=a=>+a.reduce((s,x)=>s*americanToDecimal(x.price),1).toFixed(4),rcP=a=>+a.reduce((s,x)=>s*x.p,1).toFixed(5);
   const ROLL={legs:rc,dec:rcDec(rc),p:rcP(rc),cut:cut.map(x=>x.sp+'|'+x.game),cutDec:rcDec(cut),cutP:rcP(cut)};
-  return{d,own:OWN,slate,roll:ROLL,B,cap,fromLimit,spent:+tix.reduce((a,t)=>a+t.stake,0).toFixed(2),ts:Date.now()};}
+  return{d,own:OWN,slate,roll:ROLL,B,cap,fromLimit,floor:BK_FLOOR,spent:+tix.reduce((a,t)=>a+t.stake,0).toFixed(2),ts:Date.now()};}
 function bkDayState(){const d=today();let S=get(BKDAY_KEY,{})||{};
   if(S.d!==d){if(S.d&&S.locked){const H=get(BKDAYS_KEY,{})||{};H[S.d]=S;Object.keys(H).sort().slice(0,-120).forEach(k=>delete H[k]);set(BKDAYS_KEY,H);}S={d};}
+  /* a desk locked before the -300 rule is rebuilt once, if none of its legs has graded yet */
+  if(S.locked&&S.floor!==BK_FLOOR){const legs=[...((S.own||{}).legs||[]),...(S.slate||[]).flatMap(t=>t.legs),...((S.roll||{}).legs||[])];
+    if(!legs.some(l=>l.hit!=null||l.push)){const b=bkDayBuild();S={...b,locked:true,lockedAt:S.lockedAt||Date.now(),rebuilt:'-300 rule'};set(BKDAY_KEY,S);}else{S.floor=BK_FLOOR;set(BKDAY_KEY,S);}}
   if(S.locked)return S;
   const ran=evalRanToday();
   if(ran){const b=bkDayBuild();S={...b,locked:true,lockedAt:Date.now()};set(BKDAY_KEY,S);try{publishAuto&&setTimeout(()=>{try{publishAuto()}catch(e){}},500);}catch(e){}return S;}
@@ -19812,7 +19819,7 @@ function renderBankerTab(){const el=document.getElementById('bankerBody');if(!el
     <div class="sub" style="font-size:10px">Each character's best pick, best character first; a game already taken goes to that character's next pick. <b>The cut</b> (the bright rows) is the hittable ticket we go public with — the full call of all ${rc.legs.length} pays ${decimalToAmerican(rc.dec)} at ${(rc.p*100).toFixed(2)}%.</div>
     ${rc.legs.map(l=>`<div style="${cutSet.has(l.sp+'|'+l.game)?'':'opacity:.6'}">${bkLegRow(l,{rank:l.rank,cut:cutSet.has(l.sp+'|'+l.game),d:D.d})}</div>`).join('')}
     <div class="bar" style="margin-top:6px"><button onclick="copyText(bkRollScript(),'Roll Call script copied.')">🎬 Copy the reel script</button></div></div>`:'';
-  el.innerHTML=head+budget+own+slate+roll+`<div class="sub" style="font-size:10px;margin-top:6px">Stakes are ¼-Kelly of your bankroll, capped 2% a ticket, and the whole desk never spends past the day cap. No game appears on two of the Banker's tickets.</div>`;}
+  el.innerHTML=head+budget+own+slate+roll+`<div class="sub" style="font-size:10px;margin-top:6px">No leg priced shorter than -300 — sensible tickets, not stacked chalk. Stakes are ¼-Kelly of your bankroll, capped 2% a ticket, and the whole desk never spends past the day cap. No game appears on two of the Banker's tickets.</div>`;}
 function bkRollScript(){const S=bkDayState();const D=S.locked?S:S.preview;if(!D||!D.roll)return'';const cut=D.roll.legs.filter(l=>(D.roll.cut||[]).includes(l.sp+'|'+l.game));
   return[`Tonight's Roll Call — ${cut.length} legs, ${decimalToAmerican(D.roll.cutDec)}.`,...cut.map((l,i)=>`${i+1}. ${l.pick} (${sgnP(l.price)}) — ${charName(l.v)}'s pick. ${pickWhy({...l,date:D.d}).script}`)].join('\n\n');}
 
@@ -19832,6 +19839,9 @@ function sgpSideProb(sp,g,s,mk,side,line){try{
 function sgpBacking(V,calls,mk,side){const on=calls.filter(c=>c.market===mk&&c.side===side&&CHARS[c.voice]);
   const scored=on.map(c=>{let h=null;try{h=charHist(V,c);}catch(e){}const best=h?['h2h','team','where','role','sport'].map(k=>({k,...h.H[k],lab:h.lab[k]})).filter(o=>o.n>=4).sort((a,b)=>b.r-a.r)[0]:null;return{c,best,r:best?best.r:0.5};})
     .sort((a,b)=>b.r-a.r);return{n:on.length,w:scored.reduce((a,o)=>a+o.r,0),top:scored[0]||null};}
+/* the most aggressive rung at 70%+ whose fair price is still -300 or better (≤75%);
+   if even the main line is past -300, the leg is left off */
+function sgpPickRung(ladder){const ok=ladder.filter(o=>o.p<=0.75);return ok.find(o=>o.p>=0.70)||ok[ok.length-1]||null;}
 function sgpCardHtml(sp,g,s){try{
   if(!g||!s||s.aw==null)return'';const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'||g.abstract==='pre'):((g.abstract||'pre')==='pre');if(!pre)return'';
   const calls=characterCalls(sp,g,s);if(!calls.length)return'';const V=roGet(VOICES_KEY,[],30e3)||[];const A=g.away.abbr,H=g.home.abbr;
@@ -19843,14 +19853,14 @@ function sgpCardHtml(sp,g,s){try{
     const main=calls.find(c=>c.market==='spread'&&c.voice==='Sim');const base=main&&main.line!=null?(main.side===side?+main.line:-main.line):(fb?0:-1.5);
     const step=fb?[0,1,2.5,3.5,6.5,7.5,10.5,14]:sp==='nba'?[0,2,4,6,8,10]:[0,1,1.5,2.5,3];
     const ladder=[...new Set(step.map(k=>+(base+k).toFixed(1)))].map(L=>({L,p:sgpSideProb(sp,g,s,'spread',side,L)})).filter(o=>o.p!=null);
-    const alt=ladder.find(o=>o.p>=0.70)||ladder[ladder.length-1];
+    const alt=sgpPickRung(ladder);
     if(mlP!=null)legs.push({kind:'ML',txt:`${team} ML`,p:mlP,ref:true,by:sgpBacking(V,calls,'ml',side)});
     if(alt)legs.push({kind:'Alt spread',txt:`${team} ${alt.L>0?'+':''}${alt.L}`,p:alt.p,by:sd.B,ladder:ladder.map(o=>`${o.L>0?'+':''}${o.L} ${Math.round(o.p*100)}%`).join(' · ')});}
   /* total */
   const tt=pickSide('total','over','under');
   if(tt){const side=tt.side;const main=calls.find(c=>c.market==='total'&&c.line!=null);const base=main?+main.line:(s.med||0);
     const step=fb?[0,3,6,9,12]:sp==='nba'?[0,4,8,12]:[0,1,2];const ladder=step.map(k=>{const L=+(side==='over'?base-k:base+k).toFixed(1);return{L,p:sgpSideProb(sp,g,s,'total',side,L)};}).filter(o=>o.p!=null);
-    const alt=ladder.find(o=>o.p>=0.70)||ladder[ladder.length-1];
+    const alt=sgpPickRung(ladder);
     if(alt)legs.push({kind:'Alt total',txt:`${side==='over'?'Over':'Under'} ${alt.L}`,p:alt.p,by:tt.B,ladder:ladder.map(o=>`${side==='over'?'o':'u'}${o.L} ${Math.round(o.p*100)}%`).join(' · ')});}
   /* props: the characters' calibrated 70%+ calls on this game's players, one per player */
   const P=sgpProps().filter(x=>x.sp===sp&&(x.team===A||x.team===H)).sort((a,b)=>b.cal-a.cal);const seen=new Set();
@@ -19863,7 +19873,7 @@ function sgpCardHtml(sp,g,s){try{
       ${who?`<div class="mono" style="font-size:9.5px;color:var(--mute)">strongest backer: ${txtEsc(who)}${l.by&&l.by.n>1?` · ${l.by.n} characters on it`:''}</div>`:''}
       ${l.ladder?`<div class="mono" style="font-size:9px;color:var(--mute)">ladder: ${l.ladder}</div>`:''}</div>`;};
   return`<details class="tkt" style="margin:6px 0;border-left:3px solid #ff6fae"><summary><b>🎯 Perfect SGP</b> <span class="mono" style="font-size:10px;color:var(--mute)">${play.length} legs · ${(P0*100).toFixed(1)}% if independent · fair ${sgnP(fairAmer(P0))}</span></summary>
-    <div class="sub" style="font-size:10px;margin:4px 0">Each leg is the side the characters with the best record on this spot back, pushed to the most aggressive alt line the sim still gives 70%+. "Fair" is what that alt should cost — take it only if the book's alt price is longer.</div>
+    <div class="sub" style="font-size:10px;margin:4px 0">Each leg is the side the characters with the best record on this spot back, pushed to the most aggressive alt line the sim still gives 70%+ — never past a fair -300. "Fair" is what that alt should cost — take it only if the book's alt price is longer.</div>
     ${legs.map(row).join('')}
     <div class="mono" style="font-size:9px;color:var(--mute);margin-top:4px">Same-game legs are correlated; books price SGPs with that built in, so the real payout will differ from the product of the legs.</div></details>`;
 }catch(e){return'';}}
