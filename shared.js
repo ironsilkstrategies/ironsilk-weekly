@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261009f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261009g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2180,7 +2180,7 @@ function _dec(raw){if(raw==null||raw==='')return undefined;
   return JSON.parse(raw);}
 function _enc(json){if(json.length<8000)return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
-/* v1.80 · the decompression cache. Every get() of a compressed store ran the
+/* v1.81 · the decompression cache. Every get() of a compressed store ran the
    full LZ decompressor — and grading reads the game archive once PER LEG, so a
    few hundred tickets meant hundreds of full decompressions on every page load
    (measured 6+ seconds of a frozen screen on desktop; several times that on a
@@ -3401,7 +3401,7 @@ function tabRaw(n,b){
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.80) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.81) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3413,7 +3413,7 @@ function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++)
 let _SIMK='';
 function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
   _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
-/* ══ SIM ONCE, REUSE EVERYWHERE (v1.80) ════════════════════════════════════
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.81) ════════════════════════════════════
    The Monte Carlo loop is the only expensive part of a sim, and it depends on
    nothing but the model's inputs (projected scoring, spread of outcomes, sample
    size, the game's seed). Odds, calibration and every market read are applied
@@ -9804,7 +9804,7 @@ function evalInputFingerprint(){
     calib:(get('d4.drift',{})||{}).n||0
   });
 }
-/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.80) ═════════════════════════════
+/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.81) ═════════════════════════════
    Each sport's evaluator lives on its own page (the engine has to be loaded to
    sim), but they now share one front door: Records → Model eval shows the eval
    for the page you're on plus a strip with every sport's status today — tap one
@@ -11936,7 +11936,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.80) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.81) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -15899,6 +15899,7 @@ async function forceGradeEverything(){
   try{gradeSystemLog()}catch(err){console.warn('syslog grade',err)}
   // NFL grades on the same trigger as MLB, into its own archive (LS.nflarc).
   try{if(typeof gradeNFLResults==='function')gradeNFLResults()}catch(e){console.warn('NFL grading:',e)}
+  try{await gradeSweep({force:true});}catch(e){console.warn('sweep',e)}   /* every overdue leg, every sport, every date */
   const btn=document.getElementById('forceGradeBtn');
   const status=document.getElementById('forceGradeStatus');
   if(btn)btn.disabled=true;
@@ -17488,12 +17489,12 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.80 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.81 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */
 
-/* ══ CHARACTER SPLITS — the permanent raw record (v1.80) ═══════════════════
+/* ══ CHARACTER SPLITS — the permanent raw record (v1.81) ═══════════════════
    The voices ledger keeps the last 8,000 calls, which at a full slate is
    barely two weeks — so a character's record on a team or in a head-to-head
    quietly forgot everything older. Every graded call is now rolled, once, into
@@ -17973,18 +17974,18 @@ function mgWriteFinals(sp,M){const F=get(LS.allfinals,{})||{};let ch=0;
     if(prev&&prev.d===e.date&&prev.a===e.a&&prev.h===e.h&&(prev.h1a!=null||e.h1a==null))return;
     F[key]={sport:sp,d:e.date,a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,ts:Date.now(),src:'espn'};ch++;}));
   if(ch)set(LS.allfinals,F);return ch;}
-async function mgRefresh(force){
+async function mgRefresh(force,deep){
   if(MG_BUSY||(!force&&Date.now()-MG_TS<40e3))return;MG_BUSY=true;
   try{
     /* ONE request per day that still has an ungraded leg (plus the next day for
        late/approximate dates). A single wide date range hit ESPN's 400-event limit,
        which cut off the newest games — exactly the ones still waiting on a grade. */
-    const need={};const floor=dayShift(today(),-30);
+    const need={};const floor=deep?'2000-01-01':dayShift(today(),-30);   /* the sweeper goes back as far as any open leg */
     try{tcSportsLoaded().forEach(sp=>{(need[sp]=need[sp]||new Set()).add(today());});}catch(e){} // Today tab: live scores for every pick on the card
     mgPending().forEach(x=>{const d=String(x.d).slice(0,10);if(d<floor)return;const S=(need[x.sp]=need[x.sp]||new Set());S.add(d);
       if(x.l.gdApprox||!x.l.gameDate)for(let i=1;i<=3;i++)S.add(dayShift(d,i));});
     const jobs=Object.entries(need).map(async([sp,ds])=>{
-      const arr=[...ds].filter(d=>d<=dayShift(today(),1)).sort().slice(-21);
+      const arr=[...ds].filter(d=>d<=dayShift(today(),1)).sort().slice(deep?-150:-21);
       try{const urls=arr.map(d=>MG_URL[sp]+'?dates='+fbpYmd(d)+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400'));
         try{const S=sp==='nfl'?(typeof NFL_SEASON!=='undefined'?NFL_SEASON:''):sp==='ncaaf'?(typeof NCAAF_SEASON!=='undefined'?NCAAF_SEASON:''):'';
           const W=+(sp==='nfl'?(typeof NFL_WEEK!=='undefined'?NFL_WEEK:0):sp==='ncaaf'?(typeof NCAAF_WEEK!=='undefined'?NCAAF_WEEK:0):0);
@@ -19638,7 +19639,7 @@ try{if(typeof renderToday==='function'&&!renderToday.__hp){const _rt=renderToday
   try{const el=document.getElementById('todayBody');if(el&&!el.querySelector('.hp-sec')){const h=highPctLinesHtml()+likelyHtml();if(h)el.insertAdjacentHTML('beforeend','<div class="hp-sec">'+h+'</div>');}}catch(e){}return r;};renderToday.__hp=1;}}catch(e){}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   v1.80 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
+   v1.81 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
    ══════════════════════════════════════════════════════════════════════════ */
 const txtEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fairAmer=p=>p==null||!(p>0&&p<1)?null:p>=0.5?-Math.round(p/(1-p)*100):Math.round((1-p)/p*100);
@@ -19877,3 +19878,66 @@ function sgpCardHtml(sp,g,s){try{
     ${legs.map(row).join('')}
     <div class="mono" style="font-size:9px;color:var(--mute);margin-top:4px">Same-game legs are correlated; books price SGPs with that built in, so the real payout will differ from the product of the legs.</div></details>`;
 }catch(e){return'';}}
+
+
+/* ══ THE GRADE SWEEPER (v1.81) — no ticket goes ungraded ═══════════════════
+   Grading used to be a handful of separate jobs, each with its own blind spot:
+   the ESPN refresh only looked back 30 days (and at most 21 dates a sport), the
+   prop box-score pull ran once a day and only when Tickets/My Games was open,
+   and a leg whose matchup ESPN lists under different abbreviations sat until
+   you noticed it. One sweeper now owns it:
+     1. every leg whose game day has passed and still has no result
+     2. ESPN scoreboards for EVERY one of those dates, any sport, no age limit
+     3. MLB finals + box scores from MLB's own feed
+     4. final box scores for every open player-prop leg
+     5. a matchup ESPN lists under other abbreviations is re-keyed automatically
+        when both teams match that day
+     6. tickets settle, the ledger freezes them, and every other record (the
+        characters, the Best card, character parlays, the Banker) grades too
+   It runs when the app opens, every 10 minutes while anything is overdue, and
+   when you come back to the app. Whatever still can't be graded is listed in
+   a banner on every page with the exact reason and one-tap Won/Lost/Push. */
+const GHEALTH_KEY='d4.gradehealth';let SWEEP_BUSY=false,SWEEP_TS=0;
+function sweepOverdue(){const out=[];(get(LS.locked,[])||[]).forEach(t=>{let FZ=null;
+  (t.legs||[]).forEach((l,i)=>{if(l.manual)return;let r=null;try{r=gradeLeg(l,t.date);}catch(e){}
+    if(r&&(r.live||r.hit===true||r.hit===false||r.push))return;let od=false;try{od=legOverdue(l,t);}catch(e){}if(!od)return;
+    if(t.archived){if(FZ==null)try{FZ=settledAll()[String(t.id)]||0;}catch(e){FZ=0;}if(FZ&&!FZ.recovered)return;}   /* frozen = settled for good */
+    out.push({t,l,i,sp:l.sport||'mlb',d:legDay(l,t.date)});});});return out;}
+function sweepAutoRekey(list){let n=0;list.forEach(x=>{try{const D=legDiagnose(x.l,x.t);if(D.code!=='rekey'||!D.to)return;
+    const [oa,oh]=String(x.l.game).split('@'),[na,nh]=D.to.split('@');const sp=x.sp;
+    const same=(o,n2)=>o===n2||mgAb(sp,o)===n2||mgAb(sp,n2)===o;
+    if((same(oa,na)&&same(oh,nh))||(same(oa,nh)&&same(oh,na))){legRekey(x.t.id,x.i,D.to);n++;}}catch(e){}});return n;}
+async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY)return null;if(!opts.force&&Date.now()-SWEEP_TS<9.5*60e3)return null;
+  SWEEP_BUSY=true;SWEEP_TS=Date.now();const before=sweepOverdue().length;
+  try{
+    if(before||opts.force){
+      try{await mgRefresh(true,true);}catch(e){}
+      try{sweepAutoRekey(sweepOverdue());}catch(e){}
+      if(sweepOverdue().some(x=>x.sp==='mlb'))try{await backfillGrading(true);}catch(e){}
+      try{if(btUngraded().some(x=>String(x.l.gameDate||x.t.date).slice(0,10)<=today()))await regradeAllProps(document.getElementById('btStatus'));}catch(e){}
+    }
+    try{settleLockedTickets();}catch(e){}try{settledSync(true);}catch(e){}
+    try{gradeVoices();}catch(e){}try{cparGrade();}catch(e){}try{best5Grade();}catch(e){}try{bkDayGrade();}catch(e){}try{cpropGrade();}catch(e){}try{msSync();}catch(e){}
+  }finally{SWEEP_BUSY=false;}
+  const left=sweepOverdue().map(x=>{let D={code:'?',msg:'no result found yet'};try{D=legDiagnose(x.l,x.t);}catch(e){}
+    return{tid:String(x.t.id),i:x.i,name:x.t.name||null,pick:x.l.pick,game:x.l.game,sp:x.sp,d:x.d,code:D.code,msg:D.msg};});
+  const H={ts:Date.now(),before,graded:Math.max(0,before-left.length),left};set(GHEALTH_KEY,H);
+  try{gradeBannerPaint();}catch(e){}
+  try{const on=id=>{const v=document.getElementById(id);return v&&v.classList.contains('on');};if(on('v-tickets'))renderTickets();if(on('v-mine'))renderMyGames();if(on('v-banker'))renderBankerTab();}catch(e){}
+  return H;}
+function gradeBannerPaint(){if(typeof document==='undefined')return;const H=get(GHEALTH_KEY,null);let el=document.getElementById('gradeBanner');
+  const left=(H&&H.left)||[];
+  if(!left.length){if(el)el.remove();return;}
+  if(!el){el=document.createElement('div');el.id='gradeBanner';el.style.cssText='margin:8px 3px 4px;padding:10px 12px;border-radius:10px;border:1px solid var(--gold);background:rgba(245,184,46,.08);font-size:12px';
+    const anchor=document.getElementById('storageBanner')||document.querySelector('nav');if(anchor&&anchor.parentNode)anchor.parentNode.insertBefore(el,anchor.nextSibling);else document.body.prepend(el);}
+  const rows=left.slice(0,12).map(x=>{const id=JSON.stringify(x.tid).replace(/"/g,'&quot;');return`<div class="mono" style="font-size:10px;padding:5px 0;border-top:1px dashed var(--rule)">
+      <b>${txtEsc(x.pick)}</b> <span style="color:var(--mute)">${(x.sp||'').toUpperCase()} ${txtEsc(x.game)} · ${txtEsc(x.d)}${x.name?' · '+txtEsc(x.name):''}</span><br><span style="color:var(--gold)">🩺 ${txtEsc(x.msg)}</span><br>
+      <button onclick="legSetManual(${id},${x.i},'won');gradeSweep({force:true})">✅ Won</button><button onclick="legSetManual(${id},${x.i},'lost');gradeSweep({force:true})">❌ Lost</button><button onclick="legSetManual(${id},${x.i},'push');gradeSweep({force:true})">↔ Push</button></div>`;}).join('');
+  el.innerHTML=`<details><summary><b style="color:var(--gold)">🩺 ${left.length} leg${left.length>1?'s':''} past game day without a grade</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">checked ${new Date(H.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></summary>
+    <div class="sub" style="font-size:10px;margin:4px 0">The sweeper pulled every date these games were on and still couldn't settle them. Each one says why. If the reason is a pick it can't read or a game ESPN doesn't list, set the result once and it's locked in.</div>
+    ${rows}${left.length>12?`<div class="sub" style="font-size:10px">+${left.length-12} more on Tickets → My picks</div>`:''}
+    <div class="bar" style="margin-top:6px"><button class="primary" onclick="this.textContent='Sweeping…';gradeSweep({force:true})">↻ Sweep again now</button></div></details>`;}
+if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){
+  window.addEventListener('load',()=>{try{gradeBannerPaint();}catch(e){}setTimeout(()=>{gradeSweep({force:true}).catch(()=>{});},4000);
+    setInterval(()=>{if(document.hidden)return;let n=0;try{n=sweepOverdue().length;}catch(e){}if(n)gradeSweep().catch(()=>{});},10*60e3);});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)gradeSweep().catch(()=>{});});}
