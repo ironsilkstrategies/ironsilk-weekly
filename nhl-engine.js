@@ -762,3 +762,120 @@ async function nhlBoot(force){
 }
 
 try{if(typeof nhlCard==='function'){const _h=nhlCard;nhlCard=function(g){return pregameWrap('nhl',g,_h.apply(this,arguments));};}}catch(e){}
+
+/* ══ NHL MASTER EVALUATION (v1.78) ══════════════════════════════════════════
+   Hockey had no master evaluation at all — the Records → Model eval tab on the
+   NHL page fell through to the MLB one. Same shape as the football evaluator:
+   every pregame game with a book line, every market the book posts (moneyline,
+   puck line, total, and the three 1st-period markets), the sim's read checked
+   against every independent witness (Judge, Covers/uploaded prediction, trends,
+   sharp money, outside picks), and a verdict per market. */
+const NHL_EVAL_KEY='d4.nhleval';
+function nhlEvalInputs(){
+  const G=NHL_GAMES||[];let book=0,espn=0,lined=0;
+  G.forEach(g=>{const L=nhlBookLinesFor(g.away.abbr+'@'+g.home.abbr)||[];if(L.length)lined++;L.forEach(x=>{x.src==='espn'?espn++:book++});});
+  const d=today();const I=(get(INTEL_KEY,[])||[]).filter(x=>x.sp==='nhl'&&String(x.date||'').slice(0,10)===d);
+  const P=((get('d4.preds',{})||{}).nhl||{})[d]||{};
+  let brain=0;try{brain=(brainGet('nhl').log||[]).length;}catch(e){}
+  return{games:G.length,sims:G.filter(g=>NHL_SIMS[g.id]).length,lined,book,espn,rated:NHL_RATINGS&&NHL_RATINGS.teams?Object.keys(NHL_RATINGS.teams).length:0,
+    preds:Object.keys(P).length,trends:I.filter(x=>x.kind==='trend').length,cons:I.filter(x=>x.kind==='cons').length,brain};
+}
+function nhlEvalFingerprint(){return JSON.stringify(nhlEvalInputs())}
+function runNHLMasterEval(){
+  const evals=[];const evOf=(p,price)=>(p*nhlProfit(price!=null?+price:-110)-(1-p))*100;
+  (NHL_GAMES||[]).forEach(g=>{
+    if((g.abstract||'pre')!=='pre')return;
+    const k=g.away.abbr+'@'+g.home.abbr,O=nhlLineObj(k);
+    if(!O.awayML&&!O.homeML&&!O.over&&!O.awayPL)return;                 // no line, nothing to evaluate
+    let s=null;try{s=nhlSimFor(g)}catch(e){return}if(!s)return;
+    let J=null;try{J=brainJudge(g,s,'nhl')}catch(e){}
+    const pred=typeof predFor==='function'?predFor('nhl',k):null;
+    let tr={dMar:0,dTot:0};try{tr=brainTrendEvidence(g,'nhl')||tr;}catch(e){}
+    let mo=null;try{mo=brainMoney(g,'nhl')}catch(e){}
+    let xp=[];try{xp=intelPicksFor('nhl',k)||[];}catch(e){}
+    const A=g.away.abbr,H=g.home.abbr,mkts=[];
+    const add=(market,label,side,p,price,sig)=>{if(p==null||!isFinite(p)||price==null)return;mkts.push({market,label,side,p,price,ev:evOf(p,price),sig});};
+    const better=(a,b)=>!a?b:!b?a:(b.ev>a.ev?b:a);
+    const pick2=(oA,pA,oB,pB)=>better(oA&&oA.price!=null?{o:oA,p:pA,ev:evOf(pA,oA.price)}:null,oB&&oB.price!=null?{o:oB,p:pB,ev:evOf(pB,oB.price)}:null);
+    const sideSig=(hs,ln)=>{const sig=[];
+      if(J){const mu=J.h-J.a;sig.push({src:'Judge',ok:ln==null?(hs?J.pHome>0.5:J.pHome<0.5):(hs?mu+ln>0:-mu+ln>0),detail:`${A} ${J.a}–${J.h} ${H}`});}
+      if(pred){const m=pred.h-pred.a;sig.push({src:'Prediction',ok:ln==null?(hs?m>0:m<0):(hs?m+ln>0:-m+ln>0),detail:`${pred.a}–${pred.h}`});}
+      if(Math.abs(tr.dMar||0)>=0.1)sig.push({src:'Trends',ok:(tr.dMar>0)===hs,detail:(tr.dMar>0?H:A)+' lean'});
+      if(mo&&mo.side)sig.push({src:'Sharp money',ok:(mo.side>0)===hs,detail:mo.note});
+      xp.forEach(x=>{const m=String(x.pick).match(/^([A-Z]{2,4})\b/);if(!m||/^(P1)/.test(x.pick)||(m[1]!==A&&m[1]!==H))return;
+        sig.push({src:x.src+(x.rec&&x.rec.n?` (${x.rec.w}-${x.rec.n-x.rec.w})`:''),ok:(m[1]===H)===hs,detail:x.pick});});
+      return sig;};
+    const totSig=(ov,ln,scale)=>{const sig=[];
+      if(J){const t=(J.a+J.h)*scale;sig.push({src:'Judge',ok:ov?t>ln:t<ln,detail:`total ${t.toFixed(2)}`});}
+      if(pred){const t=(+pred.a+ +pred.h)*scale;sig.push({src:'Prediction',ok:ov?t>ln:t<ln,detail:`total ${t.toFixed(2)}`});}
+      if(Math.abs(tr.dTot||0)>=0.1)sig.push({src:'Trends',ok:(tr.dTot>0)===ov,detail:(tr.dTot>0?'Over':'Under')+' lean'});
+      if(scale===1)xp.forEach(x=>{const m=String(x.pick).match(/^(Over|Under) /);if(!m)return;
+        sig.push({src:x.src+(x.rec&&x.rec.n?` (${x.rec.w}-${x.rec.n-x.rec.w})`:''),ok:(m[1]==='Over')===ov,detail:x.pick});});
+      return sig;};
+    const P1S=s.p1Proj&&(s.awayProj+s.homeProj)?s.p1Proj/(s.awayProj+s.homeProj):0.31;
+    /* moneyline */
+    {const b=pick2(O.awayML,s.aw,O.homeML,s.hw);if(b){const hs=b.o===O.homeML;
+      add('ml',`${hs?H:A} ML`,hs?'home':'away',b.p,b.o.price,[{src:'Sim',ok:true,detail:`${hs?H:A} ${Math.round(b.p*100)}%`},...sideSig(hs,null)]);}}
+    /* puck line */
+    {const pa=O.awayPL&&O.awayPL.line!=null?s.awayCover(+O.awayPL.line):null,ph=O.homePL&&O.homePL.line!=null?s.homeCover(+O.homePL.line):null;
+     const b=pick2(pa!=null?O.awayPL:null,pa,ph!=null?O.homePL:null,ph);if(b){const hs=b.o===O.homePL,ln=+b.o.line;
+      add('pl',`${hs?H:A} ${ln>0?'+':''}${ln}`,hs?'home':'away',b.p,b.o.price,[{src:'Sim',ok:true,detail:`${hs?H:A} ${ln>0?'+':''}${ln} · ${Math.round(b.p*100)}%`},...sideSig(hs,ln)]);}}
+    /* total */
+    {const ln=O.over&&O.over.line!=null?+O.over.line:O.under&&O.under.line!=null?+O.under.line:null;
+     if(ln!=null){const po=s.over(ln),pu=s.under(ln),dec=po+pu>0?po+pu:1;   /* whole-number totals: a push refunds */
+      const b=pick2(O.over,po/dec,O.under,pu/dec);if(b){const ov=b.o===O.over;
+        add('total',`${ov?'Over':'Under'} ${ln}`,ov?'over':'under',b.p,b.o.price,[{src:'Sim',ok:true,detail:`${ov?'Over':'Under'} ${ln} · ${Math.round(b.p*100)}%`},...totSig(ov,ln,1)]);}}}
+    /* 1st period */
+    {const b=pick2(O.p1mlA,s.p1Win('away'),O.p1mlH,s.p1Win('home'));if(b){const hs=b.o===O.p1mlH;
+      add('p1ml',`${hs?H:A} P1 ML`,hs?'home':'away',b.p,b.o.price,[{src:'Sim',ok:true,detail:`${hs?H:A} ${Math.round(b.p*100)}% (tie refunds)`},...sideSig(hs,null).filter(x=>x.src!=='Sharp money')]);}}
+    {const pa=O.p1plA&&O.p1plA.line!=null?s.p1Cover('away',+O.p1plA.line):null,ph=O.p1plH&&O.p1plH.line!=null?s.p1Cover('home',+O.p1plH.line):null;
+     const b=pick2(pa!=null?O.p1plA:null,pa,ph!=null?O.p1plH:null,ph);if(b){const hs=b.o===O.p1plH,ln=+b.o.line;
+      add('p1pl',`${hs?H:A} P1 ${ln>0?'+':''}${ln}`,hs?'home':'away',b.p,b.o.price,[{src:'Sim',ok:true,detail:`${Math.round(b.p*100)}%`}]);}}
+    {const ln=O.p1over&&O.p1over.line!=null?+O.p1over.line:null;
+     if(ln!=null){const b=pick2(O.p1over,s.p1Over(ln),O.p1under,s.p1Under(ln));if(b){const ov=b.o===O.p1over;
+      add('p1total',`P1 ${ov?'Over':'Under'} ${ln}`,ov?'over':'under',b.p,b.o.price,[{src:'Sim',ok:true,detail:`${Math.round(b.p*100)}%`},...totSig(ov,ln,P1S).filter(x=>x.src!=='Trends')]);}}}
+    mkts.forEach(m=>{const others=m.sig.slice(1),agree=others.filter(x=>x.ok).length,against=others.length-agree;
+      m.agree=agree;m.against=against;m.suspect=m.ev>12;
+      m.verdict=m.suspect?'split':m.ev>=3&&agree>=2&&against===0?'strong':m.ev>=1.5&&agree>=against?'lean':m.ev<0?'away':'split';});
+    const rank={strong:0,lean:1,split:2,away:3};mkts.sort((a,b)=>rank[a.verdict]-rank[b.verdict]||b.ev-a.ev);
+    if(!mkts.length)return;
+    evals.push({game:k,time:g.time||'',mkts,best:mkts[0],judge:J?{a:J.a,h:J.h,blow:Math.max(J.blowH||0,J.blowA||0)}:null});
+  });
+  set(NHL_EVAL_KEY,{date:today(),ts:Date.now(),fingerprint:nhlEvalFingerprint(),evals});
+  try{evalLockMark('nhl');}catch(e){}
+  try{renderRecordsHub()}catch(e){}try{renderTickets()}catch(e){}
+  return evals;
+}
+function renderNHLMasterEval(){
+  const I=nhlEvalInputs();let run=get(NHL_EVAL_KEY,null);if(run&&run.date!==today())run=null;const stale=run&&run.fingerprint!==nhlEvalFingerprint();
+  const chip=(ok,label,n)=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px"><span style="width:7px;height:7px;border-radius:50%;background:${ok?'var(--win)':'var(--rule)'};flex:0 0 auto"></span><span style="color:${ok?'var(--chalk)':'var(--mute)'}">${label}</span><span class="m">${n}</span></div>`;
+  const t=x=>new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  const status=!run?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px"><b style="color:var(--gold)">Not evaluated yet.</b> Load what you've got, then hit Run evaluation.</div>`
+    :stale?`<div class="note" style="border-left:3px solid var(--gold);padding-left:10px"><b style="color:var(--gold)">Inputs changed since the last run.</b> Last evaluated ${t(run.ts)} — run it again for a current read.</div>`
+    :`<div class="note" style="border-left:3px solid var(--win);padding-left:10px"><b style="color:var(--win)">✓ Evaluated ${t(run.ts)}</b> — ${run.evals.length} games with lines. Nothing has changed since.</div>`;
+  const feed=`<div class="tkt hi"><h3>NHL master evaluation</h3>
+    <div class="sub" style="margin-bottom:9px">Every independent read on tonight's games — full game and 1st period — weighed against your book line.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 14px">
+      ${chip(I.sims>0,'Simulations',I.sims+'/'+I.games)}${chip(I.book+I.espn>0,'Book lines',I.book+(I.espn?' +'+I.espn+' ESPN':''))}
+      ${chip(I.rated>0,'Team ratings',I.rated+' teams')}${chip(I.preds>0,'Predicted scores',I.preds)}
+      ${chip(I.trends>0,'Trends',I.trends)}${chip(I.cons>0,'Public consensus',I.cons)}${chip(I.brain>0,'Brain (graded games)',I.brain)}
+    </div>
+    <div class="bar" style="margin-top:11px"><button class="primary" onclick="runNHLMasterEval()">${run&&!stale?'Re-run evaluation':'Run evaluation'}</button></div></div>${status}`;
+  if(!run)return feed+`<div class="empty">Results appear here once you run it. Only games with a book line are scored — no line, no edge.</div>`;
+  if(!run.evals.length)return feed+`<div class="empty">No pregame NHL games with book lines yet. Upload odds or open the Games board so ESPN lines fill in.</div>`;
+  const counts={strong:0,lean:0,split:0,away:0};run.evals.forEach(e=>counts[(e.best||{}).verdict||'split']++);
+  const pc=x=>Math.round(x*100)+'%';
+  const summary=`<div class="tkt"><div style="display:flex;justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">${['strong','lean','split','away'].map(k=>`<div><div style="font-family:'Archivo';font-weight:900;font-size:22px;color:${VERDICT[k].color}">${counts[k]}</div><div class="m">${VERDICT[k].label}</div></div>`).join('')}</div></div>`;
+  const cards=run.evals.map(e=>{const B=e.best||{};const V=VERDICT[B.verdict||'split'];
+    return`<div class="tkt" style="border-left:3px solid ${V.color}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <div><div style="font-family:'Archivo';font-weight:900;font-size:16px">${e.game}</div><div class="m">${e.time}${e.judge?` · Judge ${e.judge.a}–${e.judge.h}`:''}</div></div>
+        <div style="text-align:right"><div style="font-family:'Inter';font-weight:800;font-size:11px;letter-spacing:.08em;color:${V.color}">${V.label}</div><div class="m">${B.label||''}</div></div></div>
+      ${e.mkts.map(m=>`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--hair)">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px"><b>${m.label} <span class="m">(${m.price>0?'+':''}${m.price})</span></b>
+          <span style="color:${VERDICT[m.verdict].color};font-weight:700">${VERDICT[m.verdict].label} · ${pc(m.p)} · ${m.ev>=0?'+':''}${m.ev.toFixed(1)}% EV</span></div>
+        ${m.suspect?`<div class="sub" style="color:var(--gold)">EV this high usually means a stale line or thin data — verify before betting.</div>`:''}
+        ${m.sig.map(x=>`<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0"><span style="color:var(--mute)">${x.src}</span><span style="color:${x.ok?'var(--chalk)':'var(--rust)'};font-weight:600">${x.ok?'':'✗ '}${x.detail}</span></div>`).join('')}
+      </div>`).join('')}</div>`;}).join('');
+  return feed+summary+cards;
+}

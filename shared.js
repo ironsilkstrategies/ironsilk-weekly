@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261009c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261009d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3378,7 +3378,7 @@ function tab(n,b){
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.77) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.78) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3390,7 +3390,7 @@ function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++)
 let _SIMK='';
 function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
   _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
-/* ══ SIM ONCE, REUSE EVERYWHERE (v1.77) ════════════════════════════════════
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.78) ════════════════════════════════════
    The Monte Carlo loop is the only expensive part of a sim, and it depends on
    nothing but the model's inputs (projected scoring, spread of outcomes, sample
    size, the game's seed). Odds, calibration and every market read are applied
@@ -9778,6 +9778,34 @@ function evalInputFingerprint(){
     calib:(get('d4.drift',{})||{}).n||0
   });
 }
+/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.78) ═════════════════════════════
+   Each sport's evaluator lives on its own page (the engine has to be loaded to
+   sim), but they now share one front door: Records → Model eval shows the eval
+   for the page you're on plus a strip with every sport's status today — tap one
+   to jump straight to that sport's eval. NHL got its own evaluator (it used to
+   fall through to MLB's). And "the master evaluation ran" — the moment the
+   character parlays and the Best card freeze — now means ANY sport's eval ran
+   today, not only baseball's, so a football-and-hockey night still locks. */
+const EVAL_LOCK_KEY='d4.evallock';
+const EVAL_SPORTS=[['mlb','MLB'],['nfl','NFL'],['ncaaf','CFB'],['nhl','NHL'],['nba','NBA']];
+function evalLockMark(sp){const L=get(EVAL_LOCK_KEY,{})||{};if(L.date!==today())Object.assign(L,{date:today(),by:{}});L.by=L.by||{};L.by[sp]=Date.now();set(EVAL_LOCK_KEY,L);}
+function evalRanToday(){const d=today();const E=roGet(LS_EVAL,{},10e3)||{};if(E.date===d)return true;
+  const L=roGet(EVAL_LOCK_KEY,{},10e3)||{};return L.date===d&&Object.keys(L.by||{}).length>0;}
+function evalRunAt(sp){const d=today();try{
+  if(sp==='mlb'){const E=get(LS_EVAL,null);return E&&E.date===d?E.ts:null;}
+  const L=get(EVAL_LOCK_KEY,{})||{};if(L.date===d&&L.by&&L.by[sp])return L.by[sp];
+  const k=sp==='nhl'?'d4.nhleval':'d4.fbeval.'+sp;const R=get(k,null);return R&&R.ts&&new Date(R.ts).toDateString()===new Date().toDateString()?R.ts:null;}catch(e){return null;}}
+function evalSportStrip(cur){const t=x=>new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  return`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px">${EVAL_SPORTS.map(([sp,l])=>{const at=evalRunAt(sp),on=sp===cur;
+    const url=typeof pageUrl==='function'?pageUrl(sp):null;const click=on?'':url?`onclick="location.href='${url}#eval'"`:'';
+    return`<button class="msg-chip${on?' on':''}" ${click} style="${!on&&!url?'opacity:.45':''}">${l} <span class="mono" style="font-size:9px;color:${at?'var(--win)':'var(--mute)'}">${at?'✓ '+t(at):sp==='nba'?'soon':'not run'}</span></button>`;}).join('')}</div>`;}
+function masterEvalFor(sp){sp=sp||ACTIVE_SPORT||'mlb';
+  const fn=sp==='nfl'?renderNFLMasterEval:sp==='ncaaf'?renderNCAAFMasterEval:sp==='nhl'&&typeof renderNHLMasterEval==='function'?renderNHLMasterEval:sp==='mlb'?renderMasterEval:null;
+  return evalSportStrip(sp)+(fn?fn():`<div class="tkt"><h3>${sp.toUpperCase()} master evaluation</h3><div class="sub">Not built for this sport yet — the other sports' evals are one tap away above.</div></div>`);}
+/* open straight to the eval when a page is reached through the strip (…#eval) */
+if(typeof window!=='undefined')window.addEventListener('load',()=>{try{if(location.hash!=='#eval')return;REC_VIEW='eval';
+  const b=[...document.querySelectorAll('nav>button')].find(x=>/'grades'/.test(x.getAttribute('onclick')||''));tab('grades',b);
+  setTimeout(()=>{try{if(REC_VIEW==='eval')renderRecordsHub();}catch(e){}},4000);}catch(e){}});
 function lastEvalRun(){
   const r=get(LS_EVAL,null);
   return r&&r.date===today()?r:null;
@@ -9916,8 +9944,9 @@ function runMasterEval(){
       evals,
       sourceCount:(getExt()[d]||[]).length+(get(LS.exttrends,{})[d]||[]).length
         +(get(LS.extconsensus,{})[d]||[]).length+(get(LS.bookshots,{})[d]||[]).length});
+    try{evalLockMark('mlb');}catch(e){}
     const b=document.getElementById('ticketBody');
-    if(b)b.innerHTML=renderMasterEval();
+    if(b)b.innerHTML=masterEvalFor('mlb');try{renderRecordsHub()}catch(e){}
     window.scrollTo(0,0);
   },40);
 }
@@ -11796,8 +11825,7 @@ function renderTickets(){
     opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
   if(TICKETTAB==='eval'){
     try{
-      const fn=ACTIVE_SPORT==='nfl'?renderNFLMasterEval:ACTIVE_SPORT==='ncaaf'?renderNCAAFMasterEval:renderMasterEval;
-      body.innerHTML=fn();
+      body.innerHTML=masterEvalFor(ACTIVE_SPORT);
     }catch(e){
       body.innerHTML=`<div class="tkt"><h3>Eval error</h3><div class="sub">${e.message}</div></div>`;
     }
@@ -11880,7 +11908,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.77) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.78) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -15525,7 +15553,7 @@ function best5State(){const d=today();let S=get(BEST5_KEY,{});
       E.v=2;set('d4.best5log',log);}}catch(e){}}
   if(!S.locked){const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,why3:b.why,ts:Date.now()});
     delete S.sides;delete S.totals;
-    const E=get(LS_EVAL,{})||{};const masterRan=E.date===d;
+    const masterRan=evalRanToday();
     const first=Math.min(...b.picks.map(x=>Date.parse(x.start||'')).filter(isFinite),Infinity);
     /* never freeze an empty card while games are still ahead: keep building until something
        qualifies, and only lock empty in the final 30 minutes before the last open game */
@@ -17427,7 +17455,7 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.77 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.78 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */
@@ -17603,7 +17631,7 @@ function cparBuild(voice,V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();
   return{voice,d,legs:legs.map(x=>({sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,m:x.c.market,sd:x.c.side,p:x.p,score:x.score,hr:x.hr,why:x.why})),dec,p,
     size:{k:sz.k,ev:sz.ev,g:sz.g,why:sz.g>0?`${sz.k} legs maximize Kelly growth`:`no length is +EV — ${sz.k} legs is the least-bad`}};}
 let CPAR_MEM=null;
-function cparState(){const d=today();const E=roGet(LS_EVAL,{},10e3)||{};const locked=E.date===d;
+function cparState(){const d=today();const locked=evalRanToday();
   /* an unlocked day is rebuilt at most once a minute and only when its inputs move */
   const V0=roGet(VOICES_KEY,[],30e3)||[];const msig=d+'|'+locked+'|'+charIdxSig(V0);
   if(CPAR_MEM&&CPAR_MEM.sig===msig&&Date.now()-CPAR_MEM.ts<60e3)return CPAR_MEM.v;
@@ -18028,7 +18056,7 @@ function renderRecordsHub(){
       h=cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${esc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
     catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
-  if(REC_VIEW==='eval'){let h='';try{const fn=ACTIVE_SPORT==='nfl'?renderNFLMasterEval:ACTIVE_SPORT==='ncaaf'?renderNCAAFMasterEval:renderMasterEval;h=fn();}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
+  if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   let D;try{D=hubData()}catch(e){el.innerHTML='';return;}
   const SPS=['mlb','nfl','ncaaf','nhl','nba'];
   const cell=(o)=>{if(!o||!o.n)return'<td style="color:var(--mute)">—</td>';const p=o.w/o.n;

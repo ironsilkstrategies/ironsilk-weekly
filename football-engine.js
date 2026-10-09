@@ -4523,7 +4523,8 @@ function runFootballEval(sp){
     const rank={strong:0,lean:1,split:2,away:3};mkts.sort((a,b)=>rank[a.verdict]-rank[b.verdict]||b.ev-a.ev);
     evals.push({game:k,time:g.time||'',mkts,best:mkts[0],judge:J?{a:J.a,h:J.h,blow:Math.max(J.blowH,J.blowA)}:null,nSig:(mkts[0]||{sig:[]}).sig.length});
   });
-  set(fbEvalKey(sp),{ts:Date.now(),fingerprint:fbEvalFingerprint(sp),evals});
+  set(fbEvalKey(sp),{ts:Date.now(),date:today(),fingerprint:fbEvalFingerprint(sp),evals});
+  try{evalLockMark(sp);}catch(err){}try{renderRecordsHub()}catch(err){}
   try{renderTickets()}catch(err){}
 }
 function renderFootballEval(sp){
