@@ -10,7 +10,7 @@ setTimeout(()=>{try{
   for(let i=0;i<200;i++)V.push({id:'h'+i,voice:CHAR_ORDER[i%8],sp:'nhl',market:'ml',side:'home',game:'BOS@TOR',date:'2026-09-'+String(1+i%28).padStart(2,'0'),price:-450,graded:true,hit:true});
   games.forEach((g,gi)=>CHAR_ORDER.forEach((v,vi)=>{V.push({id:['nhl',g,d,v,'ml'].join('|'),voice:v,sp:'nhl',market:'ml',side:g==='BOS@TOR'?'home':((gi+vi)%3?'home':'away'),game:g,date:d,price:g==='BOS@TOR'?-450:g==='CHI@STL'?-320:-130+gi*10,graded:false,hit:null});
     V.push({id:['nhl',g,d,v,'total'].join('|'),voice:v,sp:'nhl',market:'total',side:(gi+vi)%2?'over':'under',game:g,date:d,price:-110,line:6.5,graded:false,hit:null});}));
-  w.eval(`set(VOICES_KEY,${JSON.stringify(V)});localStorage.removeItem(CPAR_KEY);localStorage.removeItem(BKDAY_KEY);evalLockMark('nhl');`);
+  w.eval(`set(VOICES_KEY,${JSON.stringify(V)});set(TC_KEY,{d:today(),by:{nhl:{picks:${JSON.stringify(games.map(g=>({game:g,m:'ml',sd:'home',unan:true,blend:0.6,mp:0.6,mkt:0.57})))}}}});localStorage.removeItem(CPAR_KEY);localStorage.removeItem(BKDAY_KEY);evalLockMark('nhl');`);
   const L=JSON.parse(w.eval('JSON.stringify(bkDayState())'));
   const all=[...(L.own?L.own.legs:[]),...L.slate.flatMap(t=>t.legs),...L.roll.legs];
   T('Banker desk: no leg shorter than -300',all.length>0&&all.every(l=>+l.price>=-300),all.map(l=>l.pick+' '+l.price).join(', '));

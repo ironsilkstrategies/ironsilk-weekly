@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2358,7 +2358,7 @@ function paintMeter(){
 // one place that decides what's safe to leave the device.
 function backupData(){
   const data={};
-  const EXCLUDE=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken]);
+  const EXCLUDE=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,'d4.synctoken']);
   Object.keys(localStorage).forEach(k=>{
     if(k.startsWith('d4.')&&!EXCLUDE.has(k))data[k]=localStorage.getItem(k);
   });
@@ -12860,7 +12860,7 @@ function systemPicksHtml(){
   }).join('');
   const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
   return head+`<div class="tkt hi"><h3>${t.date}</h3>
-    <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}${msFitChip(t)}${(()=>{try{return gradeDoctorHtml(t)}catch(e){return''}})()}
+    <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}${legTaxHtml(t)}${msFitChip(t)}${(()=>{try{return gradeDoctorHtml(t)}catch(e){return''}})()}
     <ol>${rows}</ol>${buildWagerRow(t)}</div>`;
 }
 
@@ -13197,7 +13197,7 @@ function genTickets(mode){
         ?`<h3>${t.name}${renameBtn}${lockBadge}${archBadge}</h3><div class="m" style="margin-top:-4px;margin-bottom:6px">${t.date}${t.source&&t.source!=='mine'?' · '+({system:'System',market:'Market',specialty:'Specialty',outside:'Outside'}[t.source]||t.source):''}</div>`
         :`<h3>${t.date}${renameBtn}${lockBadge}${archBadge}</h3>`;
       h+=`<div class="tkt ${t.archived?'':'hi'}">${nameLine}
-        <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}${msFitChip(t)}${(()=>{try{return gradeDoctorHtml(t)}catch(e){return''}})()}
+        <div class="sub"><b>${(t.p*100).toFixed(t.p<.01?3:1)}%</b> · 1 in ${Math.round(1/t.p).toLocaleString()} · ${t.legs.length} legs${rec}</div>${liveTicketHtml(t)}${legTaxHtml(t)}${msFitChip(t)}${(()=>{try{return gradeDoctorHtml(t)}catch(e){return''}})()}
         <ol>${rows}</ol>${buildWagerRow(t)}<div class="bar">${actionBtn}</div></div>`;
       // addable-legs picker — only rendered for the one ticket currently being
       // edited, right below its card. Same pool every builder already draws
@@ -15553,7 +15553,9 @@ function bestStandout(by){let b=null;Object.values(by||{}).forEach(B=>{const s=B
 function standoutHtml(s){return`<div class="tkt" style="margin-bottom:8px;border-color:var(--gold)"><b>🌟 Standout prop</b> <span class="mono" style="font-size:10px;color:var(--mute)">${(s.sp||'').toUpperCase()}</span>
   <div style="font-size:15px;font-weight:800;margin-top:2px">${esc(s.player)} ${esc(s.label)}</div>
   <div class="sub mono">${esc(s.team)} · ${esc(s.game)} · model ${Math.round(s.p*100)}% · ${s.avg.toFixed(2)}/game over ${s.n} games</div></div>`;}
-function best5Prob(x){return x.blend!=null?x.blend:x.brainP!=null?x.brainP:x.mp;}
+function best5ProbRaw(x){return x.blend!=null?x.blend:x.brainP!=null?x.brainP:x.mp;}
+/* v1.90: through the truth map — what this range has actually hit */
+function best5Prob(x,sp){const p=best5ProbRaw(x);try{return truthP(x.sp||sp,p);}catch(e){return p;}}
 function best5Started(x){const t=Date.parse(x.start||'');return isFinite(t)&&Date.now()>=t;}
 /* ── Best card v2: three picks, today's games only, priced -200 or longer ──
    Qualifies: game is today, price between -200 and +400, at least VALUE color,
@@ -15561,7 +15563,7 @@ function best5Started(x){const t=Date.parse(x.start||'');return isFinite(t)&&Dat
    Ranked by agreement first (unanimous → supreme → strong → value → outside),
    then by calibrated EV. Fewer than three qualify → it shows fewer. No chalk filler. */
 const BEST3_LO=-200,BEST3_HI=400,BEST3_TIER={unan:5,' supreme':4,' strong':3,value:2,source:1};
-function best3Ev(x){if(x.evCal!=null)return x.evCal;const p=best5Prob(x);return p!=null&&x.price!=null?(p*americanToDecimal(x.price)-1)*100:null;}
+function best3Ev(x){const p=best5Prob(x);return p!=null&&x.price!=null?(p*americanToDecimal(x.price)-1)*100:null;}
 function best3Tier(x){return x.unan?5:(BEST3_TIER[x.color]||0);}
 function best3Pool(by,sp,opts){opts=opts||{};const pool=[],why={total:0,price:0,day:0,started:0,flag:0,ev:0,tier:0,prob:0};
   Object.entries(by).forEach(([s0,B])=>{if(sp&&s0!==sp)return;(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};const p=best5Prob(x);const ev=best3Ev(x);why.total++;
@@ -15569,6 +15571,8 @@ function best3Pool(by,sp,opts){opts=opts||{};const pool=[],why={total:0,price:0,
     if(!opts.ignoreTime&&!tcIsToday(x)){why.day++;return;}
     if(!opts.ignoreTime&&best5Started(x)){why.started++;return;}
     if(x.incoherent||x.suspect){why.flag++;return;}
+    if(laneStatus(pickLane(x,s0))==='blocked'){why.lane=(why.lane||0)+1;return;}
+    if(pickDisagrees(x,s0)){why.flag++;return;}
     if(best3Tier(x)<1){why.tier++;return;}
     if(p==null||p<0.45){why.prob++;return;}
     if(ev==null||ev<1){why.ev++;return;}
@@ -15682,7 +15686,7 @@ function renderBest(){
   const views=['all',...(S.sports||[]).filter(sp=>((S.bySport||{})[sp]||[]).length||!S.locked)];
   if(!views.includes(BEST_VIEW))BEST_VIEW='all';
   const tabs=`<div style="margin-bottom:8px">${views.map(v=>`<button class="msg-chip${BEST_VIEW===v?' on':''}" onclick="bestView('${v}')">${v==='all'?'Whole slate':SP_LAB[v]||v.toUpperCase()}</button>`).join('')}</div>`;
-  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price','priced shorter than -200'],['day','not today'],['started','already started'],['flag','flagged EV-suspect'],['tier','below VALUE'],['prob','under 45%'],['ev','EV under +1%']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
+  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price','priced shorter than -200'],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['tier','below VALUE'],['prob','under 45%'],['ev','EV under +1%']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
     :(!(S.top3||[]).length&&!(W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Today's card is empty — open each sport's Games board (or Load all sports on Today) so it has picks to choose from.</div>`:'');
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
     <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:'Building — freezes the moment the master evaluation runs (or 30 min before the first game)'}</b>
@@ -17739,24 +17743,31 @@ function bankerHtml(){const L=bkLedger(true);const W=L.weeks[0];const rows=Objec
 const CPAR_KEY='d4.charparlays';
 function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','h2h'].forEach(k=>{const x=h.H[k];if(x.n){sw+=x.n;sr+=x.n*x.r;}});
   const hr=sw?sr/sw:0.5;
-  let p=null;try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);p=x?best5Prob(x):null;}catch(e){}
+  let p=null;try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);p=x?best5Prob(x,c.sp):null;}catch(e){}
   if(p==null&&c.price!=null)p=imp(+c.price)*0.955+0.0225;
   if(p==null)p=0.5;
   const why=['sport','team','h2h'].filter(k=>h.H[k].n>=3).map(k=>`${h.lab[k]} ${h.H[k].w}-${h.H[k].l}`);
-  return{score:0.5*p+0.5*hr,p,hr,why,weak:sw>=6&&hr<0.5};}
+  /* v1.90 gate + lanes + disagreement */
+  let gate=null;try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);
+    const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);
+    gate=!x?'not on today\'s card':!x.unan?'crowd not unanimous':laneStatus(lk,c.voice)==='blocked'?'lane blocked: '+laneName(lk):pickDisagrees(x,c.sp)?'model fighting the market':null;}catch(e){}
+  return{score:0.5*p+0.5*hr,p,hr,why,weak:sw>=6&&hr<0.5,gate};}
 /* Sensible tickets only: no leg priced shorter than -300 (a -450 favorite adds almost
    nothing to the payout and is the leg that quietly sinks parlays). Underdogs: any price. */
 const BK_FLOOR=-300;const bkPriceOk=pr=>pr!=null&&isFinite(+pr)&&+pr>=BK_FLOOR;
 function cparBuild(voice,V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();
   const calls=V.filter(x=>x.date===d&&x.voice===voice&&bkPriceOk(x.price)&&['ml','spread','total'].includes(x.market));
-  const cand=calls.map(c=>({c,...cparLegScore(V,c)})).filter(x=>!x.weak).sort((a,b)=>b.score-a.score);
+  const all=calls.map(c=>({c,...cparLegScore(V,c)}));const cand=all.filter(x=>!x.weak&&!x.gate).sort((a,b)=>b.score-a.score);
   const used=new Set(),top=[];for(const x of cand){const g=x.c.sp+'|'+x.c.game;if(used.has(g))continue;used.add(g);top.push(x);if(top.length===5)break;}
   if(top.length<2)return null;
   /* the Banker decides how many legs: the length with the most Kelly growth */
-  const sz=bkSize(top.map(x=>({p:x.score,dec:americanToDecimal(x.c.price)})),2,5);const legs=top.slice(0,sz.k);
+  const sz=bkSize(top.map(x=>({p:x.score,dec:americanToDecimal(x.c.price)})),2,5);
+  /* leg budget: never build past a ${Math.round(CORE_CASH_MIN*100)}% cash chance */
+  const kB=legBudget(top.map(x=>x.p),sz.k);const cut=kB<sz.k;if(cut){sz.k=kB;}const legs=top.slice(0,sz.k);
   const dec=legs.reduce((a,x)=>a*americanToDecimal(x.c.price),1),p=legs.reduce((a,x)=>a*x.p,1);
   return{voice,d,legs:legs.map(x=>({sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,m:x.c.market,sd:x.c.side,p:x.p,score:x.score,hr:x.hr,why:x.why})),dec,p,
-    size:{k:sz.k,ev:sz.ev,g:sz.g,why:sz.g>0?`${sz.k} legs maximize Kelly growth`:`no length is +EV — ${sz.k} legs is the least-bad`}};}
+    size:{k:sz.k,ev:sz.ev,g:sz.g,why:cut?`${sz.k} legs — the leg budget keeps it above a ${Math.round(CORE_CASH_MIN*100)}% cash chance`:sz.g>0?`${sz.k} legs maximize Kelly growth`:`no length is +EV — ${sz.k} legs is the least-bad`},
+    gated:all.filter(x=>x.gate).length};}
 let CPAR_MEM=null;
 function cparState(){const d=today();const locked=evalRanToday();
   /* an unlocked day is rebuilt at most once a minute and only when its inputs move */
@@ -17780,7 +17791,7 @@ function cparRecord(voice){const S=get(CPAR_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=
     if(P.done){if(P.won){w++;u+=P.legs.filter(x=>!x.push).reduce((a,x)=>a*americanToDecimal(x.price),1)-1;}else{l++;u-=1;}}});
   return{w,l,u,lw,ll};}
 function cparHtml(){const D=cparState();const vs=Object.keys(D.by||{});
-  if(!vs.length)return'<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub">Each character needs 3+ priced calls today on games where its record isn\'t weak. Upload lines and open the boards.</div></div>';
+  if(!vs.length)return'<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub">No character has 2+ legs that pass today\'s rules — on the card, crowd unanimous, lane not blocked, model not fighting the market. A quiet day beats a forced ticket.</div></div>';
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
   return`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Each character's own ticket from its strongest spots today — the Banker picks how many legs. ${D.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation — graded at the finals.</b>':'Building — freezes when the master evaluation runs.'}</div>
     ${vs.map(v=>{const P=D.by[v],R=cparRecord(v);const rec=R.w+R.l?`${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}`:'no graded parlays yet';
@@ -18218,7 +18229,7 @@ function renderRecordsHub(){
     <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = beating the break-even its prices needed (10+ calls), red = below it. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div>
     <div style="margin-top:6px">${[['You (picks)',sum(Y.picks)]].concat(HUB_VOICES.filter(v=>D.M[v]).map(v=>[(CHARS[v]?CHARS[v].chip+' ':'')+v,sum(D.M[v])])).map(([nm,o])=>{const L=luckSkillPriced(o);
       return o.n?`<div class="mono" style="font-size:9.5px">${txtEsc(nm)}: ${o.w}-${o.n-o.w} <span style="color:var(--mute)">(${Math.round(o.w/o.n*100)}% · prices needed ${o.be?Math.round(o.be/o.n*100):52}%)</span> → <b style="color:${L.lab==='strong sign of skill'?'var(--win)':L.lab==='leaning skill'?'var(--cold)':L.lab==='below breakeven'?'var(--rust)':'var(--mute)'}">${L.lab}</b>${L.p!=null?` <span style="color:var(--mute)">(p=${L.p.toFixed(2)})</span>`:''}</div>`:'';}).join('')}
-    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: graded against what each pick's own price needed to break even — a -300 favorite has to hit 75%, not 52%. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return learnHealthHtml()+clvHtml()+calibrationHtml()+calOffsetsHtml()+_eb+charProfilesHtml()+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
+    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: graded against what each pick's own price needed to break even — a -300 favorite has to hit 75%, not 52%. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return strategyHtml()+learnHealthHtml()+clvHtml()+calibrationHtml()+calOffsetsHtml()+_eb+charProfilesHtml()+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
 }
 /* Tabs you use daily stay in front; the rest sit under More. */
 const NAV_PRIMARY=['games','today','banker','mine','tickets','grades','money'];
@@ -19699,7 +19710,7 @@ function riskHtml(){
 /* Same-game picks share risk: shrink each by √(picks in that game), and cap a day at 10% of bankroll. */
 function correlatedStakes(rows){
   const B=brAmount();const byG={};rows.forEach(x=>{(byG[x.sp+x.game]=byG[x.sp+x.game]||[]).push(x);});
-  rows.forEach(x=>{const K=kellyStake(x.blend!=null?x.blend:(x.brainP!=null?x.brainP:x.mp),x.price);x._f=K&&K.f>0?K.f/Math.sqrt(byG[x.sp+x.game].length):0;});
+  rows.forEach(x=>{const K=kellyStake(best5Prob(x),x.price);x._f=K&&K.f>0?K.f/Math.sqrt(byG[x.sp+x.game].length):0;});
   const tot=rows.reduce((a,x)=>a+x._f,0);const sc=tot>0.10?0.10/tot:1;
   rows.forEach(x=>{x.stakeF=x._f*sc;x.stakeAmt=B?Math.round(B*x.stakeF*100)/100:null;x.capped=sc<1;});return rows;
 }
@@ -20503,3 +20514,238 @@ function bnMoreOpen(){const nav=document.querySelector('nav');if(!nav)return;con
   document.body.appendChild(ov);}
 if(typeof window!=='undefined'){const go=()=>setTimeout(skinSetup,50);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();window.addEventListener('load',()=>setTimeout(skinSetup,300));
   window.addEventListener('resize',()=>{clearTimeout(window.__skT);window.__skT=setTimeout(skinSetup,200);});}
+
+/* ══ STRATEGY LAYER (v1.90) ═════════════════════════════════════════════════
+   What the graded record says, applied to every ticket the app builds:
+   1. TRUTH MAP — every decision probability is replaced by what that range has
+      ACTUALLY hit (the Sim's graded calls, shrunk toward the stated number,
+      forced monotone, per sport shrunk toward all sports). A "75%" that has gone
+      48% is priced as what it is.
+   2. LEG BUDGET — built parlays stop adding legs once the cash chance would fall
+      under 22% (about 1 in 4.5). Your own tickets show what the extra legs cost.
+   3. AGREEMENT GATE — character / Banker parlays only take legs the whole crowd
+      backs (unanimous ran 64%; split ran 47%).
+   4. LANES — sport × market × side-type, judged on UNITS (not win %), 30+ calls,
+      shrunk. Losing lanes are blocked from built tickets; proven ones are marked.
+   5. DISAGREEMENT FLAG — model ≥ 8 pts off the market is treated as a probable
+      model error unless that lane is proven.                                  */
+const TRUTH_K=30,TRUTH_KSP=40,TRUTH_MIN=60,CORE_CASH_MIN=0.20,DISAGREE_PTS=0.08,LANE_MIN=30;
+const truthId=p=>p;
+let TRUTH_C=null,TRUTH_SIG='';
+function truthRows(){return(roGet(VOICES_KEY,[],30e3)||[]).filter(x=>x.voice==='Sim'&&x.graded&&x.hit!=null&&((x.pUsed>0&&x.pUsed<1)||(x.simP>0&&x.simP<1)));}
+const truthPOf=x=>x.pUsed>0&&x.pUsed<1?x.pUsed:x.simP;
+function truthBins(R){const B={};R.forEach(x=>{const p=truthPOf(x);const k=Math.max(0,Math.min(19,Math.floor(p*20)));const b=B[k]||(B[k]={n:0,w:0,ps:0});b.n++;if(x.hit)b.w++;b.ps+=p;});return B;}
+function truthFit(B,prior,K){
+  const pts=Object.keys(B).map(Number).sort((a,b)=>a-b).map(k=>{const b=B[k],mp=b.ps/b.n,pr=prior(mp);return{x:mp,y:(b.w+K*pr)/(b.n+K),wt:b.n+K,n:b.n,w:b.w};});
+  const st=[];pts.forEach(p=>{st.push({y:p.y,wt:p.wt,xs:[p.x]});
+    while(st.length>1&&st[st.length-2].y>st[st.length-1].y){const b=st.pop(),a=st.pop();st.push({y:(a.y*a.wt+b.y*b.wt)/(a.wt+b.wt),wt:a.wt+b.wt,xs:a.xs.concat(b.xs)});}});
+  const out=[];st.forEach(s=>s.xs.forEach(x=>out.push({x,y:s.y})));return out;}
+function truthInterp(M,p){if(!M||!M.length)return p;const c=v=>Math.max(0.02,Math.min(0.98,v));
+  if(p<=M[0].x)return c(p+(M[0].y-M[0].x));const L=M[M.length-1];if(p>=L.x)return c(p+(L.y-L.x));
+  for(let i=1;i<M.length;i++){const a=M[i-1],b=M[i];if(p<=b.x){const t=b.x>a.x?(p-a.x)/(b.x-a.x):0;return c(a.y+t*(b.y-a.y));}}return c(p);}
+function truthMaps(){const R=truthRows();const sig=R.length+'|'+R.filter(x=>x.hit).length;if(TRUTH_C&&TRUTH_SIG===sig)return TRUTH_C;
+  const M={n:R.length,by:{}};if(R.length>=TRUTH_MIN){M.all=truthFit(truthBins(R),truthId,TRUTH_K);
+    const prior=p=>truthInterp(M.all,p);
+    [...new Set(R.map(x=>x.sp))].forEach(sp=>{const Rs=R.filter(x=>x.sp===sp);if(Rs.length>=15)M.by[sp]=truthFit(truthBins(Rs),prior,TRUTH_KSP);});}
+  TRUTH_C=M;TRUTH_SIG=sig;return M;}
+/* the one door every decision probability goes through */
+function truthP(sp,p){if(p==null||!isFinite(p))return p;const M=truthMaps();if(!M.all)return p;return truthInterp(M.by[sp]||M.all,p);}
+
+/* ── lanes ── */
+function laneType(m,sd,price,line){m=m==='moneyline'?'ml':m==='runline'||m==='puckline'?'spread':m;
+  if(m==='total')return sd==='under'?'under':'over';
+  if(m==='ml')return price==null||!isFinite(+price)?'side':+price<0?'fav':'dog';
+  if(m==='spread')return line!=null&&isFinite(+line)?(+line<0?'fav':'dog'):price!=null&&+price<0?'fav':'dog';return null;}
+const LANE_LAB={ml:'side',spread:'spread',total:'total'};
+function laneKey(sp,m,sd,price,line){m=m==='moneyline'?'ml':m;const t=laneType(m,sd,price,line);return t?sp+'|'+m+'|'+t:null;}
+function laneName(k){const[sp,m,t]=String(k).split('|');return`${SP_LAB[sp]||sp} ${LANE_LAB[m]||m} (${t})`;}
+let LANE_C=null,LANE_SIG='';
+function laneTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+V.filter(x=>x.graded).length;if(LANE_C&&LANE_SIG===sig)return LANE_C;
+  const G={},BYV={};const voices=new Set([...(typeof CHAR_ORDER!=='undefined'?CHAR_ORDER:[]),'Sim']);
+  V.forEach(x=>{if(!x.graded||x.hit==null||!voices.has(x.voice))return;const k=laneKey(x.sp,x.market,x.side,x.price,x.line);if(!k)return;
+    [G[k]||(G[k]={n:0,w:0,u:0}),(BYV[x.voice]||(BYV[x.voice]={}))[k]||(BYV[x.voice][k]={n:0,w:0,u:0})].forEach(o=>{o.n++;if(x.hit)o.w++;o.u+=x.units||0;});});
+  const judge=o=>{o.roi=o.u/o.n;o.shr=o.u/(o.n+LANE_MIN);o.st=o.n<LANE_MIN?'thin':o.shr<=-0.05?'blocked':o.shr>=0.03?'proven':'neutral';return o;};
+  Object.values(G).forEach(judge);Object.values(BYV).forEach(T=>Object.values(T).forEach(judge));
+  LANE_C={G,BYV};LANE_SIG=sig;return LANE_C;}
+function laneStatus(k,voice){if(!k)return'thin';const T=laneTable();const v=voice&&T.BYV[voice]&&T.BYV[voice][k];
+  if(v&&v.st==='blocked')return'blocked';const g=T.G[k];if(g&&g.st==='blocked')return'blocked';
+  if((v&&v.st==='proven')||(g&&g.st==='proven'))return'proven';return(g&&g.st)||'thin';}
+function pickLane(x,sp){return laneKey(x.sp||sp,x.m||x.market,x.sd||x.side,x.price,x.line);}
+/* model fighting the market by 8+ pts, in a lane that hasn't proven it can */
+function pickDisagrees(x,sp){if(x.mp==null||x.mkt==null)return false;return Math.abs(x.mp-x.mkt)>=DISAGREE_PTS&&laneStatus(pickLane(x,sp))!=='proven';}
+
+/* ── leg budget ── */
+function legBudget(ps,kMax,kMin){kMin=kMin||2;let k=Math.min(kMax,ps.length);while(k>kMin&&ps.slice(0,k).reduce((a,p)=>a*p,1)<CORE_CASH_MIN)k--;return k;}
+function legTaxHtml(t){try{const L=t.legs||[];if(L.length<4)return'';
+    let started=false;L.forEach(l=>{try{const r=gradeLeg(l,t.date);if(r&&(r.live||r.hit!=null||r.push))started=true;}catch(e){}});if(started)return'';
+    const ps=L.map(l=>{const p0=l.p>0&&l.p<1?+l.p:(l.price!=null&&isFinite(+l.price)?imp(+l.price)*0.955+0.0225:0.5);return truthP(l.sport||'mlb',p0);}).sort((a,b)=>b-a);
+    const all=ps.reduce((a,p)=>a*p,1),k=Math.max(2,legBudget(ps,ps.length)),best=ps.slice(0,k).reduce((a,p)=>a*p,1),b3=ps.slice(0,3).reduce((a,p)=>a*p,1);
+    const pc=p=>p<0.01?(p*100).toFixed(2)+'%':(p*100).toFixed(p<0.1?1:0)+'%';
+    return`<div class="mono" style="font-size:9.5px;margin-top:3px;color:var(--gold)">🧮 Leg tax: ${L.length} legs → ${pc(all)} on what these legs have actually hit · the best 3 alone → <b>${pc(b3)}</b> (${Math.round(b3/Math.max(all,1e-9))}× likelier)${k<3?` · the leg budget would stop at ${k}`:''}</div>`;}catch(e){return'';}}
+
+/* ── the Records-hub panel ── */
+function strategyHtml(){const M=truthMaps(),T=laneTable();
+  const marks=[0.55,0.6,0.65,0.7,0.75,0.8,0.85];
+  const truthRowsHtml=M.all?marks.map(p=>{const q=truthP(null,p),d=(q-p)*100;return`<td><b>${Math.round(p*100)}%</b><br><span style="color:${Math.abs(d)<3?'var(--win)':d<0?'var(--rust)':'var(--cold)'}">${Math.round(q*100)}%</span></td>`;}).join(''):'';
+  const lanes=Object.entries(T.G).filter(([k,o])=>o.n>=LANE_MIN).sort((a,b)=>b[1].shr-a[1].shr);
+  const lrow=([k,o])=>`<div class="mono" style="font-size:10px;padding:2px 0"><span style="color:${o.st==='proven'?'var(--win)':o.st==='blocked'?'var(--rust)':'var(--mute)'}">${o.st==='proven'?'✓':o.st==='blocked'?'⛔':'·'}</span> ${txtEsc(laneName(k))} · ${o.w}-${o.n-o.w} · ${o.u>=0?'+':''}${o.u.toFixed(1)}u <span style="color:var(--mute)">(${(o.roi*100).toFixed(0)}% ROI)</span></div>`;
+  const vb=Object.entries(T.BYV).flatMap(([v,L])=>Object.entries(L).filter(([k,o])=>o.st==='blocked').map(([k,o])=>({v,k,o}))).sort((a,b)=>a.o.shr-b.o.shr).slice(0,8);
+  return`<div class="tkt" style="margin-top:8px;border-color:rgba(255,197,90,.35)"><h3>🧭 Strategy — what the record says, applied</h3>
+    <div class="sub" style="font-size:10.5px">Every ticket the app builds now runs through these five rules. They update themselves as picks grade.</div>
+    <div class="mktlab" style="margin-top:8px">1 · Truth map — model said → has actually hit ${M.all?`<span class="mono" style="font-size:9px;color:var(--mute)">(${M.n} graded calls)</span>`:''}</div>
+    ${M.all?`<div style="overflow-x:auto"><table class="mono" style="width:100%;font-size:10px;text-align:center"><tr>${truthRowsHtml}</tr></table></div>
+      <div class="sub mono" style="font-size:9px;color:var(--mute)">Builders, Kelly sizing, the Banker and EV all use the bottom number now.</div>`
+      :`<div class="sub">Needs ${TRUTH_MIN-M.n} more graded Sim calls before it overrides anything.</div>`}
+    <div class="mktlab" style="margin-top:8px">2 · Leg budget</div><div class="sub" style="font-size:10.5px">Built parlays stop adding legs once the cash chance would drop under ${Math.round(CORE_CASH_MIN*100)}%. Your own 4+ leg tickets show the leg tax before kickoff.</div>
+    <div class="mktlab" style="margin-top:8px">3 · Agreement gate</div><div class="sub" style="font-size:10.5px">Character and Banker parlays only take legs the whole crowd backs.</div>
+    <div class="mktlab" style="margin-top:8px">4 · Lanes — judged on units</div>
+    ${lanes.length?lanes.map(lrow).join(''):'<div class="sub">No lane has 30 graded calls yet.</div>'}
+    ${vb.length?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--rust)">Blocked for one character: ${vb.map(x=>`${txtEsc(charName(x.v))} · ${txtEsc(laneName(x.k))} (${x.o.w}-${x.o.n-x.o.w})`).join(' · ')}</div>`:''}
+    <div class="mktlab" style="margin-top:8px">5 · Disagreement flag</div><div class="sub" style="font-size:10.5px">Model ${Math.round(DISAGREE_PTS*100)}+ pts away from the market is treated as a likely model miss, unless that lane is ✓ proven.</div></div>`;}
+
+/* ══ PRIVATE SYNC (v1.90) ═══════════════════════════════════════════════════
+   One private GitHub repo holds thedesk-sync.json. Every device pulls it when the
+   app opens (and every 3 minutes while it's on screen), merges, and pushes its own
+   changes 20 seconds after they happen. Merge rules:
+   · lists with ids (tickets, graded calls, ledgers) are UNIONED by id — a ticket
+     made on the phone and one made on the laptop both survive; on a clash the
+     newer copy wins, but a graded copy never loses to an ungraded one
+   · deleted tickets leave a tombstone so another device can't bring them back
+   · everything else: the newest write wins, per key
+   Credentials never sync. The old public data-backup.json is retired.        */
+const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
+const SYNC_NEVER=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
+const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k);
+function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
+let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
+function syncKts(){if(!SYNC_KTS){try{SYNC_KTS=JSON.parse(localStorage.getItem(SYNC.ts)||'{}')||{};}catch(e){SYNC_KTS={};}}return SYNC_KTS;}
+function syncSaveKts(){try{localStorage.setItem(SYNC.ts,JSON.stringify(syncKts()));}catch(e){}}
+function syncMark(k){if(SYNC_APPLY||syncSkip(k))return;syncKts()[k]=Date.now();syncSaveKts();
+  if(syncOn()){clearTimeout(SYNC_T);const last=+localStorage.getItem(SYNC.last)||0;SYNC_T=setTimeout(()=>syncNow(false),Math.max(20e3,last+180e3-Date.now()));}}
+/* every write is stamped, so the merge knows which copy is newer */
+const _syncSetRaw=set;
+set=function(k,v){const r=_syncSetRaw(k,v);try{if(r!==false)syncMark(k);}catch(e){}return r;};
+function syncDevice(){let d=localStorage.getItem(SYNC.dev);if(!d){d=(/iPhone|iPad/.test(navigator.userAgent||'')?'iPhone':/Android/.test(navigator.userAgent||'')?'Android':'Desktop')+'-'+Math.random().toString(36).slice(2,6);localStorage.setItem(SYNC.dev,d);}return d;}
+function syncTomb(){return get(SYNC.tomb,{})||{};}
+if(typeof delLocked==='function'){const _delL=delLocked;delLocked=function(id){const b=new Set((get(LS.locked,[])||[]).map(t=>String(t.id)));const r=_delL.apply(this,arguments);
+  const a=new Set((get(LS.locked,[])||[]).map(t=>String(t.id)));const T=syncTomb();let ch=false;b.forEach(x=>{if(!a.has(x)){T[x]=Date.now();ch=true;}});if(ch)set(SYNC.tomb,T);return r;};}
+function syncSnapshot(){const keys={};const K=syncKts();
+  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(syncSkip(k))continue;const v=get(k,undefined);if(v===undefined)continue;keys[k]={t:K[k]||0,v};}
+  return{v:1,dev:syncDevice(),ts:Date.now(),keys};}
+const syncIdOf=x=>x&&typeof x==='object'&&(x.id!=null?String(x.id):null);
+const syncGraded=x=>!!(x&&typeof x==='object'&&(x.graded===true||x.hit===true||x.hit===false||x.finalized||x.done));
+function syncMergeVal(k,L,R,tomb){const N=L.t>=R.t?L:R,O=N===L?R:L;const a=N.v,b=O.v;
+  if(Array.isArray(a)&&Array.isArray(b)){const idd=[...a.slice(0,5),...b.slice(0,5)].filter(x=>x&&typeof x==='object');
+    if(idd.length&&idd.every(x=>syncIdOf(x)!=null)){const m=new Map();
+      b.forEach(x=>m.set(syncIdOf(x),x));
+      a.forEach(x=>{const id=syncIdOf(x),o=m.get(id);m.set(id,o&&syncGraded(o)&&!syncGraded(x)?o:x);});
+      let out=[...m.values()];if(k===LS.locked&&tomb)out=out.filter(x=>!tomb[syncIdOf(x)]);
+      /* newest-first order of the newer copy, then anything only the older copy had */
+      const seen=new Set(),ord=[];a.forEach(x=>{const id=syncIdOf(x);if(!seen.has(id)&&m.has(id)&&out.includes(m.get(id))){seen.add(id);ord.push(m.get(id));}});
+      out.forEach(x=>{const id=syncIdOf(x);if(!seen.has(id)){seen.add(id);ord.push(x);}});
+      return ord;}
+    return a;}
+  if(a&&b&&typeof a==='object'&&typeof b==='object'&&!Array.isArray(a)&&!Array.isArray(b)&&k===SYNC.tomb)return{...b,...a};
+  /* date- or id-keyed maps (archives, ledgers): union the keys, newer copy wins a clash */
+  if(a&&b&&typeof a==='object'&&typeof b==='object'&&!Array.isArray(a)&&!Array.isArray(b)){const ka=Object.keys(a),kb=Object.keys(b);
+    const rec=v=>v!==null&&typeof v==='object';
+    const mapLike=[...ka,...kb].length>0&&([...ka,...kb].every(x=>/^\d{4}-\d{2}-\d{2}/.test(x)||/^(ext)?\d{5,}$/.test(x)||/^[a-z]+\|/.test(x))||(Object.values(a).every(rec)&&Object.values(b).every(rec)));
+    if(mapLike)return{...b,...a};}
+  return a;}
+function syncMerge(local,remote,firstAsMaster){const out={};const all=new Set([...Object.keys(local.keys||{}),...Object.keys((remote&&remote.keys)||{})]);
+  const tomb={...(((remote&&remote.keys||{})[SYNC.tomb]||{}).v||{}),...((local.keys[SYNC.tomb]||{}).v||{})};
+  all.forEach(k=>{if(syncSkip(k))return;const L=local.keys[k],R=remote&&remote.keys&&remote.keys[k];
+    if(!R){out[k]=L;return;}if(!L){out[k]=R;return;}
+    const L2=firstAsMaster==='local'?{...L,t:Math.max(L.t,R.t)+1}:firstAsMaster==='remote'?{...L,t:-1}:L;
+    out[k]={t:Math.max(L.t,R.t),v:syncMergeVal(k,L2,R,tomb)};});
+  return{v:1,dev:local.dev,ts:Date.now(),keys:out};}
+function syncApply(M){let n=0;const K=syncKts();SYNC_APPLY=true;
+  try{Object.entries(M.keys).forEach(([k,o])=>{if(syncSkip(k)||!o)return;const cur=get(k,undefined);
+    if(JSON.stringify(cur)!==JSON.stringify(o.v)){_syncSetRaw(k,o.v);n++;}K[k]=Math.max(K[k]||0,o.t||0);});}finally{SYNC_APPLY=false;}
+  syncSaveKts();return n;}
+function syncApi(path){return`https://api.github.com/repos/${get(SYNC.repo,'')}/contents/${path}`;}
+function syncHeaders(extra){return{'Authorization':'Bearer '+get(SYNC.token,''),'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(extra||{})};}
+function syncGit(path){return`https://api.github.com/repos/${get(SYNC.repo,'')}/git/${path}`;}
+async function syncRef(){const r=await fetch(syncGit('ref/heads/main')+'?t='+Date.now(),{headers:syncHeaders(),cache:'no-store'});
+  if(r.status===404||r.status===409)return null;if(r.status===401||r.status===403)throw new Error('token rejected (HTTP '+r.status+') — it needs Contents: read and write on '+get(SYNC.repo,''));
+  if(!r.ok)throw new Error('HTTP '+r.status+' reading the repo');const j=await r.json();return j.object&&j.object.sha||null;}
+async function syncPull(){const ref=await syncRef();if(!ref)return{snap:null,sha:null};
+  const r=await fetch(syncApi(SYNC.file)+'?ref='+ref,{headers:syncHeaders({'Accept':'application/vnd.github.raw'}),cache:'no-store'});
+  if(r.status===404)return{snap:null,sha:ref};if(!r.ok)throw new Error('HTTP '+r.status+' reading the sync file');
+  const raw=await r.text();const json=LZString.decompressFromBase64(raw.trim());if(!json)throw new Error('sync file is unreadable');return{snap:JSON.parse(json),sha:ref};}
+/* The repo is kept at ONE commit: each save is a fresh parentless commit and the
+   branch is moved onto it, so months of syncing don't pile up hundreds of MB of history. */
+async function syncPush(snap,ref){const content=LZString.compressToBase64(JSON.stringify(snap));
+  if(!ref){/* empty repo: the contents API makes the first commit */
+    const r=await fetch(syncApi(SYNC.file),{method:'PUT',headers:syncHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:'TheDesk sync — first save',content:btoa(content)})});
+    if(r.status===409||r.status===422)return{conflict:true};if(!r.ok)throw new Error('HTTP '+r.status+' creating the sync file');return{ok:true};}
+  const post=async(path,body)=>{const r=await fetch(syncGit(path),{method:'POST',headers:syncHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)});if(!r.ok)throw new Error('HTTP '+r.status+' saving ('+path+')');return r.json();};
+  const blob=await post('blobs',{content,encoding:'utf-8'});
+  const tree=await post('trees',{tree:[{path:SYNC.file,mode:'100644',type:'blob',sha:blob.sha}]});
+  const commit=await post('commits',{message:'TheDesk sync — '+snap.dev+' — '+new Date(snap.ts).toISOString(),tree:tree.sha,parents:[]});
+  if(await syncRef()!==ref)return{conflict:true};   /* someone saved while we merged — re-pull */
+  const r=await fetch(syncGit('refs/heads/main'),{method:'PATCH',headers:syncHeaders({'Content-Type':'application/json'}),body:JSON.stringify({sha:commit.sha,force:true})});
+  if(!r.ok)throw new Error('HTTP '+r.status+' moving the branch');return{ok:true};}
+/* first: undefined (normal) · 'local' (this device is the master copy) · 'remote' (take the cloud copy) */
+async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your private repo and token first.');return{ok:false};}
+  if(SYNC_BUSY)return SYNC_BUSY;
+  SYNC_BUSY=(async()=>{let changed=0;try{
+    for(let attempt=0;attempt<3;attempt++){
+      const{snap:remote,sha}=await syncPull();const local=syncSnapshot();
+      const M=syncMerge(local,remote,first);changed=syncApply(M);
+      const need=!remote||JSON.stringify(Object.fromEntries(Object.entries(M.keys).map(([k,o])=>[k,o.v])))!==JSON.stringify(Object.fromEntries(Object.entries(remote.keys||{}).map(([k,o])=>[k,o.v])));
+      if(!need)break;const p=await syncPush(M,sha);if(p.ok)break;if(attempt===2)throw new Error('another device kept saving at the same moment — try again');}
+    localStorage.setItem(SYNC.last,String(Date.now()));SYNC_STATE={ok:true,ts:Date.now(),msg:changed?`pulled ${changed} change${changed===1?'':'s'} from your other devices`:'up to date'};
+    if(manual)toastSync(SYNC_STATE.msg);
+    if(changed&&!manual){try{if(!sessionStorage.getItem('d4.syncReload')){sessionStorage.setItem('d4.syncReload','1');location.reload();}}catch(e){}}
+    return{ok:true,changed};}
+  catch(e){SYNC_STATE={ok:false,ts:Date.now(),msg:e.message||String(e)};if(manual)alert('Sync failed: '+SYNC_STATE.msg);return{ok:false,reason:SYNC_STATE.msg};}
+  finally{SYNC_BUSY=null;try{renderSyncStatus();}catch(e){}}})();
+  return SYNC_BUSY;}
+function toastSync(m){try{if(typeof toast==='function')return toast('☁️ '+m);}catch(e){}}
+function renderSyncStatus(){const el=document.getElementById('syncStatus');if(!el)return;const last=+localStorage.getItem(SYNC.last)||0;
+  el.innerHTML=!syncOn()?'<span style="color:var(--mute)">Not connected.</span>'
+    :SYNC_STATE.ok===false?`<span style="color:var(--rust)">⚠ ${txtEsc(SYNC_STATE.msg)}</span>`
+    :last?`<span style="color:var(--win)">✓ Synced ${new Date(last).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</span> · ${txtEsc(SYNC_STATE.msg||'')} <span style="color:var(--mute)">· this device: ${txtEsc(syncDevice())}</span>`
+    :'<span style="color:var(--gold)">Connected — not synced yet.</span>';}
+async function syncConnect(){const repo=(document.getElementById('syncRepoIn')||{}).value,tok=(document.getElementById('syncTokIn')||{}).value;
+  if(!repo||!/^[\w.-]+\/[\w.-]+$/.test(repo.trim())){alert('Repo should look like owner/name — e.g. ironsilkstrategies/thedesk-data');return;}
+  if(!tok||tok.trim().length<20){alert('Paste the fine-grained token for that repo.');return;}
+  _syncSetRaw(SYNC.repo,repo.trim());_syncSetRaw(SYNC.token,tok.trim());
+  let remote=null;try{remote=(await syncPull()).snap;}catch(e){alert('Could not reach the repo: '+e.message);renderSyncStatus();return;}
+  const hasLocal=(get(LS.locked,[])||[]).length+Object.keys(get(LS.arc,{})||{}).length>0;
+  let first;if(!remote)first='local';
+  else if(hasLocal)first=confirm(`The cloud copy was last saved by ${remote.dev||'another device'} on ${new Date(remote.ts).toLocaleString()}.\n\nOK = MERGE this device into it (tickets and graded history from both are kept; for settings, this device wins).\nCancel = take the cloud copy for settings (tickets and history are still merged).`)?'local':'remote';
+  else first='remote';
+  const r=await syncNow(true,first);if(r&&r.ok&&r.changed){setTimeout(()=>location.reload(),900);}}
+function syncDisconnect(){if(!confirm('Disconnect this device from sync? Nothing is deleted — it just stops syncing.'))return;localStorage.removeItem(SYNC.repo);localStorage.removeItem(SYNC.token);renderSyncStatus();syncSettingsPaint();}
+function syncSettingsHtml(){const on=syncOn();
+  return`<div class="sbar"><h2>☁️ Sync across devices</h2><div class="ln"></div></div><div class="tkt" id="syncTkt">
+    <div class="sub" style="font-size:10.5px">Everything you do here — tickets, grades, uploads, challenges — shows up on every browser you connect. Stored in a <b>private</b> GitHub repo only you can read. API keys never sync.</div>
+    ${on?`<div class="mono" style="font-size:10px;margin-top:6px">Repo: <b>${txtEsc(get(SYNC.repo,''))}</b></div>`:`
+    <div class="mono" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">Private repo (owner/name)</div>
+    <input id="syncRepoIn" placeholder="ironsilkstrategies/thedesk-data" autocomplete="off" spellcheck="false" value="ironsilkstrategies/thedesk-data">
+    <div class="mono" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">Fine-grained token</div>
+    <input id="syncTokIn" type="password" placeholder="github_pat_…  (this repo only · Contents: read and write)" autocomplete="off" spellcheck="false">`}
+    <div class="bar" style="margin-top:8px">${on?`<button class="primary" onclick="syncNow(true)">Sync now</button><button onclick="syncDisconnect()">Disconnect</button>`:`<button class="primary" onclick="syncConnect()">Connect this device</button>`}</div>
+    <div class="sub mono" id="syncStatus" style="font-size:10px;margin-top:6px"></div>
+    ${on?'':`<details style="margin-top:6px"><summary class="mono" style="font-size:10px">How to set it up (2 minutes, once)</summary><div class="sub" style="font-size:10.5px;line-height:1.6">
+      1. On github.com → New repository → name it <b>thedesk-data</b> → <b>Private</b> → Create.<br>
+      2. Settings → Developer settings → Fine-grained tokens → Generate. Repository access: <b>Only select repositories → thedesk-data</b>. Permissions → Repository → <b>Contents: Read and write</b>. Expiration: the longest it offers.<br>
+      3. Paste it here on your phone first and tap Connect — your phone becomes the master copy. Then paste the same token on every other browser.</div></details>`}</div>`;}
+function syncSettingsPaint(){const anchor=document.getElementById('ghrepoIn');let box=document.getElementById('syncBox');
+  if(!box){if(!anchor)return;const tk=anchor.closest('.tkt');if(!tk)return;box=document.createElement('div');box.id='syncBox';
+    const bar=tk.previousElementSibling&&tk.previousElementSibling.classList.contains('sbar')?tk.previousElementSibling:tk;bar.parentNode.insertBefore(box,bar);
+    try{const h=bar.querySelector&&bar.querySelector('h2');if(h)h.textContent='Public picks page (GitHub)';
+      const s=tk.querySelector('.sub');if(s)s.innerHTML='Only used to publish your public picks page (<code>public/picks.json</code>). Your private data no longer goes here — it syncs through the private repo above.';
+      const b=tk.querySelector('.bar button.primary');if(b){b.textContent='Save';b.setAttribute('onclick','saveGhSettings()');}}catch(e){}}
+  box.innerHTML=syncSettingsHtml();renderSyncStatus();}
+/* the old backup wrote your whole history to a PUBLIC repo file — retired */
+pushToGitHub=async function(manual){if(syncOn())return syncNow(manual);if(manual)alert('Backups no longer go to the public site repo. Connect a private repo under ☁️ Sync across devices.');return{ok:false,reason:'use private sync'};};
+pullFromGitHubIfEmpty=async function(){if(syncOn()){try{await syncNow(false);}catch(e){}}};
+if(typeof window!=='undefined'&&!window.__NO_SYNC_LOOP__){
+  const boot=()=>{try{syncSettingsPaint();}catch(e){}if(syncOn())setTimeout(()=>syncNow(false),2500);};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else setTimeout(boot,0);
+  setInterval(()=>{if(!document.hidden&&syncOn())syncNow(false);},180e3);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&syncOn())syncNow(false);else if(!document.hidden&&syncOn())syncNow(false);});
+  window.addEventListener('load',()=>setTimeout(()=>{try{sessionStorage.removeItem('d4.syncReload');}catch(e){}},60e3));}

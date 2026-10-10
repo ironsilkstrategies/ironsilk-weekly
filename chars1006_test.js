@@ -30,7 +30,8 @@ setTimeout(()=>{try{
   const V=[];const hist=(voice,game,market,side,n,wins)=>{for(let i=0;i<n;i++)V.push({id:voice+game+market+i,sp:'nhl',date:'2026-09-'+String(1+i).padStart(2,'0'),game,voice,market,side,graded:true,hit:i<wins});};
   hist('Coach','A@B','total','under',10,8);hist('Coach','X@Y','ml','home',20,15);hist('Coach','C@D','ml','home',10,3);
   ['A@B','C@D','E@F','G@H','I@J','K@L'].forEach((g,i)=>{const mkt=i===0?'total':'ml',side=i===0?'under':'home';V.push({id:'t'+i,sp:'nhl',date:td,game:g,voice:'Coach',market:mkt,side,price:i===0?-110:-120,pick:i===0?'Under 5.5':g.split('@')[1]+' ML'});});
-  w.eval(`set(VOICES_KEY,${JSON.stringify(V)});set(TC_KEY,{d:today(),by:{}});set(LS_EVAL,{});localStorage.removeItem(CPAR_KEY)`);
+  w.eval(`set(VOICES_KEY,${JSON.stringify(V)});set(TC_KEY,{d:today(),by:{nhl:{picks:${JSON.stringify(['A@B','C@D','E@F','G@H','I@J','K@L'].map((g,i)=>({game:g,m:i===0?'total':'ml',sd:i===0?'under':'home',unan:true,blend:0.6,mp:0.6,mkt:0.57})))}}}});set(LS_EVAL,{});localStorage.removeItem(CPAR_KEY)`);
+  /* v1.90: character parlays only take legs the whole crowd backs on today's card */
   const pb=w.eval(`cparBuild('Coach')`);
   T('character builds its own 2–5 leg parlay (Banker-sized)',pb&&pb.legs.length>=2&&pb.legs.length<=5&&pb.size&&pb.legs.length===pb.size.k,pb&&pb.legs.map(l=>l.pick).join(', '));
   T('its strongest spot leads (Coach unders 8-2) and its weak spot is left off (C@D ML 3-7)',pb.legs[0].pick==='Under 5.5'&&!pb.legs.some(l=>l.game==='C@D'));

@@ -24,7 +24,7 @@ setTimeout(()=>{try{
   const h=w.document.getElementById('bestCard').innerHTML;
   T('the card renders the picks',/Under 7\.5/.test(h)&&/COL ML/.test(h)&&!/No play cleared/.test(h));
   // building card: master ran but nothing qualifies → stays open and says why
-  w.eval(`localStorage.removeItem(BEST5_KEY);set(LS_EVAL,{date:today()});set(TC_KEY,{d:today(),by:{mlb:{ts:Date.now(),picks:${JSON.stringify([pk('mlb','MIL@SD','SD ML',-250,' supreme',.7,3,'21:00'),pk('mlb','X@Y','Y ML',-110,' strong',.55,-2,'21:00')])},props:[]}}})`);
+  w.eval(`localStorage.removeItem(BEST5_KEY);set(LS_EVAL,{date:today()});set(TC_KEY,{d:today(),by:{mlb:{ts:Date.now(),picks:${JSON.stringify([pk('mlb','MIL@SD','SD ML',-250,' supreme',.7,3,'21:00'),pk('mlb','X@Y','Y ML',-110,' strong',.513,-2,'21:00')])},props:[]}}})`);
   const S2=w.eval('best5State()');
   T('master eval with nothing qualifying does NOT freeze an empty card',!S2.locked&&!(S2.top3||[]).length);
   w.eval('renderBest()');const h2=w.document.getElementById('bestCard').innerHTML;

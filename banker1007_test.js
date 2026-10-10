@@ -68,9 +68,9 @@ setTimeout(async()=>{try{
   const td=w.eval('today()');const V2=[];const games=['A@B','C@D','E@F','G@H','I@J','K@L'];
   ['Coach','Judge','Sim'].forEach((v,vi)=>{for(let i=0;i<14;i++)V2.push({id:v+'h'+i,voice:v,sp:'nhl',market:'ml',side:'home',date:'2026-09-'+String(10+i).padStart(2,'0'),game:'Z@Y',graded:true,hit:i<10});
     games.forEach((g0,i)=>V2.push({id:v+g0,voice:v,sp:'nhl',market:'ml',side:'home',date:td,game:g0,price:vi===2&&i<3?-105:120,pick:g0.split('@')[1]+' ML'}));});
-  w.eval(`set(VOICES_KEY,${JSON.stringify(V2)});set(TC_KEY,{d:today(),by:{}});set(LS_EVAL,{});localStorage.removeItem(CPAR_KEY);set(BR_AMT,'100');BK_C=null;`);
+  w.eval(`set(VOICES_KEY,${JSON.stringify(V2)});set(TC_KEY,{d:today(),by:{nhl:{picks:${JSON.stringify(games.map(g=>({game:g,m:'ml',sd:'home',unan:true,blend:0.6,mp:0.6,mkt:0.57})))}}}});set(LS_EVAL,{});localStorage.removeItem(CPAR_KEY);set(BR_AMT,'100');BK_C=null;`);
   const pb=w.eval(`cparBuild('Coach')`);
-  T('character parlay length chosen by the Banker, with his reason',pb&&pb.size&&pb.legs.length===pb.size.k&&/Kelly/.test(pb.size.why),pb&&pb.size.why);
+  T('character parlay length chosen by the Banker (Kelly, capped by the v1.90 leg budget), with his reason',pb&&pb.size&&pb.legs.length===pb.size.k&&/Kelly|leg budget/.test(pb.size.why)&&pb.legs.reduce((a,l)=>a*l.p,1)>=0.2-1e-9,pb&&pb.size.why);
   const S=w.eval('bkSlate()');
   T('Banker\'s slate: up to 5 parlays, each +growth',S.picks.length>=1&&S.picks.length<=5&&S.picks.every(x=>x.g>0),S.picks.map(x=>x.v+' '+x.P.legs.length).join(', '));
   T('slate never risks more than 10% of the bankroll in total',S.picks.reduce((a,x)=>a+x.stakeF,0)<=0.1001);
