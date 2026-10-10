@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2129,6 +2129,7 @@ function doSportSwitch(sport){
     if(!btn)return;
     btn.style.background=s===sport?'var(--gold)':'#1c1c1c';
     btn.style.color=s===sport?'#000':'#fff';
+    btn.classList.toggle('on',s===sport);
   });
   if(sport==='nfl'){
     if(typeof renderNFL==='function')renderNFL();
@@ -3913,6 +3914,11 @@ function rlProb(g,s,side,line){
   let hR=teamRuns(g.home.lineup,g.away.p,env,venueAdj(g,'home'),hAdj);
   if(aR===null||hR===null)return null;
   hR*=1.035;
+  /* v1.86: same learned bias correction simGame applies — without it the run line
+     was priced off a different projection than the moneyline/total on the same card */
+  const drift=globalDriftAdj()/2;
+  aR=Math.max(1.2,aR+teamRunAdj(g.away.abbr)+drift);
+  hR=Math.max(1.2,hR+teamRunAdj(g.home.abbr)+drift);
   /* one margin histogram per game (home − away, −40…+40), every side and line read from it */
   const MG=simCore('mlbrl',[aR,hR,N,hotGet(LS.calib,{}).dispK||3.6],()=>{const M=new Array(81).fill(0);
     for(let i=0;i<N;i++){let a=nbRuns(aR),h=nbRuns(hR);if(a===h)simRand()<.48?a++:h++;const m=Math.max(-40,Math.min(40,h-a));M[m+40]++;}return M;});
@@ -11843,7 +11849,7 @@ function rebuildSrcStats(){
 
 /* ================= TICKETS TABS ================= */
 /* Record + Eval moved to the Record tab (one place for every stat) */
-const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['outside','Outside'],['elimmap','🫧 Map'],['backtest','Backtest']];
+const TTABS=[['build','Build'],['mine','My Picks'],['elimmap','🕸 The Web'],['tracked','Tracked'],['outside','Outside'],['backtest','Backtest']];
 let BUILD_MODE='chars';   // chars | presets | custom
 let OUTSIDE_MODE='consensus';
 
@@ -11894,7 +11900,7 @@ function renderTicketsRaw(){
   }
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
   if(TICKETTAB==='tracked')body.innerHTML=trackedPicksHtml();
-  if(TICKETTAB==='elimmap')body.innerHTML=eliminationMapHtml();
+  if(TICKETTAB==='elimmap'){body.innerHTML=bmapHtml();setTimeout(bmWire,0);}
   if(TICKETTAB==='record') body.innerHTML=renderAllTimeRecord();
   if(TICKETTAB==='backtest')body.innerHTML=renderBacktest();
   if(TICKETTAB==='outside'){
@@ -13334,11 +13340,7 @@ async function loadESPN(){
         // real game updates, instead of only refreshing on next manual open.
         // Re-runs the force layout with fresh gradeLeg() results every real
         // live-score poll, so motion is tied to real events, not a fake timer.
-        if(TICKETTAB==='elimmap'){
-          const canvas=document.getElementById('elimMapCanvas');
-          const body=document.getElementById('ticketBody');
-          if(canvas&&body)body.innerHTML=eliminationMapHtml();
-        }
+        /* the Web refreshes itself (bmWire) — nothing to do here */
       },90000);
     }
     if(!anyLive&&LIVE_POLL){clearInterval(LIVE_POLL);LIVE_POLL=null;}
@@ -18111,7 +18113,7 @@ function dailyLoopInject(){
     if(nav&&!document.getElementById('navToday')){
       const games=[...nav.querySelectorAll('button')].find(b=>/tab\('games'/.test(b.getAttribute('onclick')||''));
       const mk=(id,lab,n)=>{const b=document.createElement('button');b.id=id;b.setAttribute('onclick',`tab('${n}',this)`);b.innerHTML=lab;return b;};
-      const b1=mk('navToday','Today','today'),b2=mk('navMine','My Games<span class="n" id="nMine"></span>','mine'),b3=mk('navBanker','🏦 Banker','banker');
+      const b1=mk('navToday','Today','today'),b2=mk('navMine','My Games<span class="n" id="nMine"></span>','mine'),b3=mk('navBanker','Banker','banker');
       if(games&&games.nextSibling){nav.insertBefore(b2,games.nextSibling);nav.insertBefore(b1,b2);nav.insertBefore(b3,b2);}else{nav.appendChild(b1);nav.appendChild(b3);nav.appendChild(b2);}
     }
     const main=document.querySelector('main');
@@ -20235,4 +20237,200 @@ function gcHtml(sp,j){const G=gcTeams(j);const T=G.T;const a=T.away||{},h=T.home
   const tb=`<div class="subnav" style="margin:10px 0 6px">${tabs.map(([k,l])=>`<button class="${GC.tab===k?'on':''}" onclick="gcTab('${k}')">${l}</button>`).join('')}</div>`;
   const body=GC.tab==='bets'?gcBets(sp,GC.game,GC.d):GC.tab==='leaders'?gcLeaders(j):gcPlays(sp,j||{},T);
   return head+situ+gcWinProb(j,T)+tb+body+`<div class="mono" style="font-size:9px;color:var(--mute);margin-top:8px">ESPN feed · updated ${GC.ts?new Date(GC.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'}):'—'} · refreshes every 15s</div>`;}
-function gcBtn(sp,game,d,label){return`<button onclick="event.stopPropagation();openGamecast('${sp}','${String(game).replace(/'/g,'')}','${d||today()}')" style="font-size:10px;padding:3px 8px">📺 ${label||'Gamecast'}</button>`;}
+function gcBtn(sp,game,d,label){return`<button class="gc-btn" onclick="event.stopPropagation();openGamecast('${sp}','${String(game).replace(/'/g,'')}','${d||today()}')" style="font-size:10px;padding:3px 8px">📺 ${label||'Gamecast'}</button>`;}
+
+/* ══ THE WEB — interactive bubble map (v1.86) ═══════════════════════════════
+   Two kinds of node. GAMES are the hubs (score, clock, live pulse); TICKETS
+   are the bubbles (sized by payout, filled by status, an outer ring that
+   fills as legs come in, live cash chance inside). Every leg is a strand from
+   its ticket to its game, colored by what that leg is doing right now — so
+   you see at a glance which single game can break (or cash) half your board.
+   Drag to pan, pinch or ± to zoom, tap a bubble to light up everything it
+   touches, tap again (or the card) to open the whole ticket; tap a game for
+   everything riding on it and its Gamecast. Refreshes itself while open. */
+let BMAP={k:1,x:0,y:0,sel:null,f:'all',sp:'all',T:null,today:true};
+const BM_COL={won:'#3DDC84',dead:'#F0563C',live:'#FFB43D',alive:'#4DD8F0',sched:'#6B7A8C',push:'#8593A3'};
+function bmLegState(l,t){let g=null;try{g=gradeLeg(l,t.date);}catch(e){}
+  if(g&&!g.live&&g.push)return'push';if(g&&!g.live&&g.hit===true)return'won';if(g&&g.hit===false&&!g.live)return'dead';if(g&&g.live)return g.hit===true?'won':'live';
+  let e=null;try{e=mgEventFor(l.sport||'mlb',l.game,legDay(l,t.date),!!l.gdApprox||!l.gameDate);}catch(err){}
+  return e&&e.state==='in'?'live':e&&e.state==='post'?'live':'sched';}
+function bmapData(){const d=today();const all=get(LS.locked,[])||[];
+  const L=all.filter(t=>(t.legs||[]).length&&(!t.archived||(BMAP.today&&(String(t.date).slice(0,10)===d||(t.archivedAt&&new Date(t.archivedAt).toDateString()===new Date().toDateString())))));
+  const games={},tickets=[];
+  L.forEach(t=>{const legs=(t.legs||[]).map((l,i)=>{const sp=l.sport||'mlb';let gk=l.game;try{gk=mgKey(sp,l.game);}catch(e){}const day=legDay(l,t.date);const key=sp+'|'+gk+'|'+day;
+      const st=bmLegState(l,t);const G=games[key]||(games[key]={key,sp,game:l.game,d:day,legs:[],tix:new Set(),pay:0});G.legs.push({tid:String(t.id),i,st});G.tix.add(String(t.id));return{i,key,st,pick:l.pick,sp};});
+    const anyDead=legs.some(x=>x.st==='dead'),allDone=legs.every(x=>x.st==='won'||x.st==='push'),anyLive=legs.some(x=>x.st==='live');
+    const status=anyDead?'dead':allDone?'won':anyLive?'live':legs.some(x=>x.st==='won')?'alive':'sched';
+    let pay={payout:1,stake:1};try{pay=ticketPayoutMagnitude(t);}catch(e){}
+    let cash=null;try{const p0=t.p>0?t.p:legs.reduce((a,x)=>a*((t.legs[x.i].p>0&&t.legs[x.i].p<1)?+t.legs[x.i].p:(t.legs[x.i].price!=null?imp(+t.legs[x.i].price):0.5)),1);
+      const LC=liveTicketChance({...t,p:p0});cash=status==='dead'?0:status==='won'?1:(LC&&LC.any?LC.p:p0);}catch(e){}
+    const away=legs.filter(x=>x.st!=='won'&&x.st!=='push').length;
+    tickets.push({id:String(t.id),name:t.name||('Ticket #'+t.id),t,legs,status,payout:+pay.payout||0,stake:+pay.stake||0,cash,away,sports:[...new Set(legs.map(x=>x.sp))]});
+    if(status!=='dead')legs.forEach(x=>{games[x.key].pay+=+pay.payout||0;});});
+  Object.values(games).forEach(G=>{try{G.e=mgEventFor(G.sp,G.game,G.d,true);}catch(e){G.e=null;}G.state=G.e?G.e.state:'pre';});
+  return{tickets,games:Object.values(games)};}
+function bmPass(x){const f=BMAP.f;if(BMAP.sp!=='all'&&!x.sports.includes(BMAP.sp))return false;
+  return f==='all'||(f==='alive'&&x.status!=='dead'&&x.status!=='won')||(f==='one'&&x.status!=='dead'&&x.status!=='won'&&x.away===1)||(f==='live'&&x.status==='live')||x.status===f;}
+function bmLayout(T,G,W,H){/* games on an ellipse (live first), tickets relaxed toward the centroid of their games */
+  const gs=G.slice().sort((a,b)=>({in:0,pre:1,post:2}[a.state]-{in:0,pre:1,post:2}[b.state])||b.pay-a.pay);const P={};
+  const cx=W/2,cy=H/2,rx=W*0.40,ry=H*0.40;
+  gs.forEach((g,i)=>{const a=-Math.PI/2+i*2*Math.PI/Math.max(1,gs.length);P['g:'+g.key]={x:cx+rx*Math.cos(a),y:cy+ry*Math.sin(a)};});
+  if(gs.length===1)P['g:'+gs[0].key]={x:cx,y:H*0.18};
+  let seed=7;const rnd=()=>{seed=(seed*1103515245+12345)%2147483648;return seed/2147483648;};
+  T.forEach(t=>{const ks=[...new Set(t.legs.map(l=>l.key))];const c=ks.reduce((o,k)=>{const p=P['g:'+k]||{x:cx,y:cy};o.x+=p.x/ks.length;o.y+=p.y/ks.length;return o;},{x:0,y:0});
+    P['t:'+t.id]={x:c.x*0.55+cx*0.45+(rnd()-.5)*40,y:c.y*0.55+cy*0.45+(rnd()-.5)*40};});
+  const R=t=>bmR(t);
+  for(let it=0;it<90;it++){for(let i=0;i<T.length;i++){const a=P['t:'+T[i].id];
+      for(let j=i+1;j<T.length;j++){const b=P['t:'+T[j].id];let dx=a.x-b.x,dy=a.y-b.y,dd=Math.hypot(dx,dy)||0.01;const min=R(T[i])+R(T[j])+8;if(dd<min){const f=(min-dd)/dd*0.5;a.x+=dx*f;a.y+=dy*f;b.x-=dx*f;b.y-=dy*f;}}
+      gs.forEach(g=>{const b=P['g:'+g.key];let dx=a.x-b.x,dy=a.y-b.y,dd=Math.hypot(dx,dy)||0.01;const min=R(T[i])+46;if(dd<min){const f=(min-dd)/dd;a.x+=dx*f;a.y+=dy*f;}});
+      a.x=Math.max(R(T[i])+4,Math.min(W-R(T[i])-4,a.x));a.y=Math.max(R(T[i])+4,Math.min(H-R(T[i])-4,a.y));}}
+  return P;}
+function bmR(t){return Math.max(16,Math.min(44,10+Math.sqrt(Math.max(1,t.payout))*3.2));}
+function bmArc(cx,cy,r,f){if(f<=0)return'';if(f>=1)return`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#3DDC84" stroke-width="3.5"/>`;const a0=-Math.PI/2,a1=a0+f*2*Math.PI;
+  const x0=cx+r*Math.cos(a0),y0=cy+r*Math.sin(a0),x1=cx+r*Math.cos(a1),y1=cy+r*Math.sin(a1);return`<path d="M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${f>0.5?1:0} 1 ${x1.toFixed(1)},${y1.toFixed(1)}" fill="none" stroke="#3DDC84" stroke-width="3.5" stroke-linecap="round"/>`;}
+function bmapSvg(D){const W=380,H=Math.max(420,Math.min(760,260+D.tickets.length*16));const T=D.tickets.filter(bmPass);const keys=new Set(T.flatMap(t=>t.legs.map(l=>l.key)));const G=D.games.filter(g=>keys.has(g.key));
+  if(!T.length)return{svg:'<div class="empty">Nothing matches this filter.</div>',W,H};
+  const P=bmLayout(T,G,W,H);const sel=BMAP.sel;
+  const litT=new Set(),litG=new Set();if(sel){if(sel.type==='t'){litT.add(sel.id);const t=T.find(x=>x.id===sel.id);if(t)t.legs.forEach(l=>litG.add(l.key));}
+    else{litG.add(sel.id);T.forEach(t=>{if(t.legs.some(l=>l.key===sel.id))litT.add(t.id);});}}
+  const dim=(on)=>sel&&!on?' opacity=".13"':'';
+  let edges='';T.forEach(t=>t.legs.forEach(l=>{const a=P['t:'+t.id],b=P['g:'+l.key];if(!a||!b)return;const on=!sel||(litT.has(t.id)&&litG.has(l.key));
+    edges+=`<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${BM_COL[l.st]||'#555'}" stroke-width="${on&&sel?2.6:1.6}" stroke-opacity="${on?(l.st==='sched'?.45:.8):.07}"${l.st==='sched'?' stroke-dasharray="4 4"':''}${l.st==='live'?' class="bm-flow"':''}/>`;}));
+  const gnodes=G.map(g=>{const p=P['g:'+g.key];const e=g.e;const [a,h]=String(g.game).split('@');const live=g.state==='in',fin=g.state==='post';const on=!sel||litG.has(g.key);
+    const sc=e&&e.a!=null?`${e.a}–${e.h}`:'';const sub=live?(e.detail||'LIVE'):fin?'FINAL':(e&&e.start?new Date(e.start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'');
+    return`<g class="bm-node" data-k="g" data-id="${txtEsc(g.key)}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})"${dim(on)} style="cursor:pointer">
+      ${live?'<rect x="-44" y="-21" width="88" height="42" rx="12" fill="none" stroke="#ff4b5c" stroke-width="2" class="bm-pulse"/>':''}
+      <rect x="-40" y="-18" width="80" height="36" rx="10" fill="#0f1620" stroke="${live?'#ff4b5c':fin?'#3a4655':'#2b3a4a'}" stroke-width="1.5"/>
+      <text x="0" y="-3" text-anchor="middle" font-family="Inter, sans-serif" font-weight="800" font-size="10" fill="#F2F4F7">${txtEsc(a)} ${sc?`<tspan fill="#FFB43D">${sc}</tspan> `:'@ '}${txtEsc(h)}</text>
+      <text x="0" y="10" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" fill="${live?'#ff6b78':'#8593A3'}">${txtEsc(String(sub).slice(0,16))}</text></g>`;}).join('');
+  const tnodes=T.map(t=>{const p=P['t:'+t.id];const r=bmR(t);const c=BM_COL[t.status==='alive'?'alive':t.status];const on=!sel||litT.has(t.id);const n=t.legs.length,w=t.legs.filter(l=>l.st==='won'||l.st==='push').length;
+    return`<g class="bm-node" data-k="t" data-id="${txtEsc(t.id)}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})"${dim(on)} style="cursor:pointer">
+      ${t.status==='live'?`<circle r="${r+5}" fill="none" stroke="${c}" stroke-width="1.5" class="bm-pulse"/>`:''}
+      ${t.status!=='dead'&&t.status!=='won'&&t.away===1?`<circle r="${r+9}" fill="none" stroke="#FFB43D" stroke-width="1" stroke-dasharray="2 3" opacity=".9"/>`:''}
+      <circle r="${r}" fill="${c}" fill-opacity="${t.status==='dead'?.18:.22}" stroke="${c}" stroke-width="${sel&&litT.has(t.id)&&sel.type==='t'?3:1.6}"/>
+      <circle r="${r+2.5}" fill="none" stroke="#26323F" stroke-width="3.5"/>${bmArc(0,0,r+2.5,n?w/n:0)}
+      <text y="${r>22?-2:2}" text-anchor="middle" font-family="Archivo, Inter, sans-serif" font-weight="900" font-size="${r>26?12:10}" fill="#F2F4F7">$${t.payout>=100?Math.round(t.payout):t.payout.toFixed(0)}</text>
+      ${r>22&&t.cash!=null?`<text y="11" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="${c}">${t.status==='won'?'CASHED':t.status==='dead'?'DEAD':Math.round(t.cash*100)+'%'}</text>`:''}
+      <text y="${r+16}" text-anchor="middle" font-family="IBM Plex Mono" font-size="7.5" fill="#8593A3">${w}/${n}</text></g>`;}).join('');
+  const grid=`<defs><pattern id="bmgrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="rgba(255,255,255,.035)"/></pattern><radialGradient id="bmglow"><stop offset="0" stop-color="rgba(255,180,61,.08)"/><stop offset="1" stop-color="transparent"/></radialGradient></defs>
+    <rect x="-2000" y="-2000" width="4400" height="4400" fill="url(#bmgrid)"/><circle cx="${W/2}" cy="${H/2}" r="${Math.min(W,H)*0.45}" fill="url(#bmglow)"/>`;
+  return{svg:`<svg id="bmSvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:${Math.round(H*1.0)}px;max-height:72vh;display:block;touch-action:none;user-select:none;-webkit-user-select:none"><g id="bmWorld" transform="translate(${BMAP.x},${BMAP.y}) scale(${BMAP.k})">${grid}${edges}${gnodes}${tnodes}</g></svg>`,W,H};}
+function bmDetail(D){const sel=BMAP.sel;if(!sel)return`<div class="sub" style="text-align:center;margin-top:6px">Tap a bubble to light up everything it touches · tap a game hub for everything riding on it</div>`;
+  if(sel.type==='t'){const x=D.tickets.find(t=>t.id===sel.id);if(!x)return'';const c=BM_COL[x.status==='alive'?'alive':x.status];
+    return`<div class="tkt" style="border-left:3px solid ${c};margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:15px">${txtEsc(x.name)}</b>
+      <span class="mono" style="font-size:11px;color:${c};font-weight:800">${x.status==='won'?'✅ CASHED':x.status==='dead'?'❌ DEAD':x.cash!=null?Math.round(x.cash*100)+'% to cash':''}</span></div>
+      <div class="mono" style="font-size:10px;color:var(--mute)">$${x.stake.toFixed(2)} to win $${x.payout.toFixed(2)} · ${x.legs.length} legs · ${x.away} left</div>
+      ${x.legs.map(l=>legLiveCard(x.t,x.t.legs[l.i])).join('')}
+      <div class="bar"><button class="primary" onclick="openTicketSheet('${txtEsc(x.id)}')">Open the whole ticket</button><button onclick="BMAP.sel=null;bmPaint()">Clear</button></div></div>`;}
+  const g=D.games.find(z=>z.key===sel.id);if(!g)return'';const riding=D.tickets.filter(t=>t.legs.some(l=>l.key===g.key));const alive=riding.filter(t=>t.status!=='dead');
+  const e=g.e;const [a,h]=String(g.game).split('@');
+  return`<div class="tkt" style="border-left:3px solid ${g.state==='in'?'#ff4b5c':'var(--rule)'};margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:15px">${(SP_LAB[g.sp]||'').split(' ')[0]} ${txtEsc(a)} ${e&&e.a!=null?e.a+' – '+e.h:'@'} ${txtEsc(h)}</b>${g.state!=='pre'?gcBtn(g.sp,g.game,g.d):''}</div>
+    <div class="mono" style="font-size:10px;color:var(--mute)">${riding.length} ticket${riding.length>1?'s':''} ride on it · $${alive.reduce((s,t)=>s+t.payout,0).toFixed(2)} of payout still alive through this game</div>
+    ${riding.map(t=>{const lg=t.legs.filter(l=>l.key===g.key);return lg.map(l=>legLiveCard(t.t,t.t.legs[l.i],{link:true})).join('');}).join('')}
+    <div class="bar"><button onclick="BMAP.sel=null;bmPaint()">Clear</button></div></div>`;}
+function bmapHtml(){const D=bmapData();const T=D.tickets;
+  const sum=s=>T.filter(t=>t.status===s);const alive=T.filter(t=>t.status!=='dead'&&t.status!=='won');
+  const atStake=alive.reduce((a,t)=>a+t.payout,0),exp=alive.reduce((a,t)=>a+t.payout*(t.cash||0),0);
+  const swing=D.games.filter(g=>g.state!=='post').sort((a,b)=>b.pay-a.pay)[0];
+  const stat=(v,l,c)=>`<div style="flex:1;min-width:70px;text-align:center"><div style="font-family:'Archivo';font-weight:900;font-size:19px;color:${c||'var(--chalk)'}">${v}</div><div class="mono" style="font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em">${l}</div></div>`;
+  const fs=[['all','All',T.length],['alive','Alive',alive.length],['one','⚡ One away',alive.filter(t=>t.away===1).length],['live','● Live',sum('live').length],['won','Cashed',sum('won').length],['dead','Dead',sum('dead').length],['sched','Not started',sum('sched').length]];
+  const sps=[...new Set(T.flatMap(t=>t.sports))];
+  const head=`<div class="tkt hi" style="padding:12px"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="margin:0">🕸 The Web</h3><span class="mono" style="font-size:9.5px;color:var(--mute)">live · refreshes every 30s</span></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${stat('$'+atStake.toFixed(0),'still alive','var(--gold)')}${stat('$'+exp.toFixed(0),'expected','var(--cold)')}${stat(sum('won').length,'cashed','var(--win)')}${stat(sum('dead').length,'dead','var(--rust)')}</div>
+    ${swing&&swing.pay>0?`<div class="mono" style="font-size:10px;margin-top:8px;color:var(--mute)">Biggest swing game: <b style="color:var(--chalk);cursor:pointer" onclick="BMAP.sel={type:'g',id:'${txtEsc(swing.key)}'};bmPaint()">${txtEsc(swing.game)}</b> — $${swing.pay.toFixed(0)} of payout runs through it</div>`:''}</div>`;
+  const chips=`<div class="subnav" style="flex-wrap:wrap;margin:8px 0 4px">${fs.map(([k,l,n])=>`<button class="${BMAP.f===k?'on':''}" onclick="BMAP.f='${k}';BMAP.sel=null;bmPaint()">${l} <span style="opacity:.6">${n}</span></button>`).join('')}</div>
+    ${sps.length>1?`<div class="subnav" style="flex-wrap:wrap;margin-bottom:4px">${['all',...sps].map(sp=>`<button class="${BMAP.sp===sp?'on':''}" onclick="BMAP.sp='${sp}';BMAP.sel=null;bmPaint()">${sp==='all'?'All sports':(SP_LAB[sp]||sp)}</button>`).join('')}</div>`:''}`;
+  const S=bmapSvg(D);
+  const legend=`<div class="mono" style="display:flex;gap:10px;flex-wrap:wrap;font-size:9px;color:var(--mute);margin-top:6px">${[['live','live'],['alive','alive'],['won','cashed / leg won'],['dead','dead / leg lost'],['sched','not started']].map(([k,l])=>`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${BM_COL[k]};margin-right:3px"></span>${l}</span>`).join('')}<span>ring = legs in · dashed gold = one leg away</span></div>`;
+  const canvas=`<div class="tkt" style="padding:6px;position:relative;overflow:hidden;background:radial-gradient(600px 320px at 50% 40%,#121c27,#0a0f15)">${S.svg}
+    <div style="position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px">${['+','−','⟲'].map((s,i)=>`<button onclick="bmZoom(${i===0?1.25:i===1?0.8:0})" style="width:34px;height:34px;border-radius:10px;border:1px solid var(--rule);background:rgba(15,22,32,.85);color:var(--chalk);font-size:16px">${s}</button>`).join('')}</div>
+    ${legend}</div>`;
+  return head+chips+canvas+`<div id="bmDetail">${bmDetail(D)}</div>`+`<div class="mono" style="font-size:9px;color:var(--mute);margin-top:6px">${BMAP.today?'Showing open tickets plus everything settled today':'Open tickets only'} · <a href="#" onclick="BMAP.today=!BMAP.today;bmPaint();return false" style="color:var(--cold)">${BMAP.today?'hide today\'s settled':'show today\'s settled'}</a></div>`;}
+function bmPaint(){const body=document.getElementById('ticketBody');if(!body||TICKETTAB!=='elimmap')return;body.innerHTML=bmapHtml();bmWire();}
+function bmApply(){const w=document.getElementById('bmWorld');if(w)w.setAttribute('transform',`translate(${BMAP.x},${BMAP.y}) scale(${BMAP.k})`);}
+function bmZoom(f){if(!f){BMAP.k=1;BMAP.x=0;BMAP.y=0;}else{const svg=document.getElementById('bmSvg');const vb=svg?svg.viewBox.baseVal:{width:380,height:420};const cx=vb.width/2,cy=vb.height/2;
+  const k2=Math.max(0.5,Math.min(4,BMAP.k*f));BMAP.x=cx-(cx-BMAP.x)*(k2/BMAP.k);BMAP.y=cy-(cy-BMAP.y)*(k2/BMAP.k);BMAP.k=k2;}bmApply();}
+function bmWire(){const svg=document.getElementById('bmSvg');if(!svg)return;const pts=new Map();let start=null,moved=0,pinch0=null;
+  const toV=(ev)=>{const r=svg.getBoundingClientRect();const vb=svg.viewBox.baseVal;return{x:(ev.clientX-r.left)*vb.width/r.width,y:(ev.clientY-r.top)*vb.height/r.height};};
+  svg.addEventListener('pointerdown',ev=>{svg.setPointerCapture&&svg.setPointerCapture(ev.pointerId);pts.set(ev.pointerId,toV(ev));moved=0;
+    if(pts.size===1)start={p:toV(ev),x:BMAP.x,y:BMAP.y,node:ev.target.closest&&ev.target.closest('.bm-node')};
+    if(pts.size===2){const [a,b]=[...pts.values()];pinch0={d:Math.hypot(a.x-b.x,a.y-b.y),k:BMAP.k,x:BMAP.x,y:BMAP.y,c:{x:(a.x+b.x)/2,y:(a.y+b.y)/2}};}});
+  svg.addEventListener('pointermove',ev=>{if(!pts.has(ev.pointerId))return;pts.set(ev.pointerId,toV(ev));
+    if(pts.size===2&&pinch0){const [a,b]=[...pts.values()];const k2=Math.max(0.5,Math.min(4,pinch0.k*Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,pinch0.d)));
+      BMAP.x=pinch0.c.x-(pinch0.c.x-pinch0.x)*(k2/pinch0.k);BMAP.y=pinch0.c.y-(pinch0.c.y-pinch0.y)*(k2/pinch0.k);BMAP.k=k2;moved=99;bmApply();return;}
+    if(start){const p=toV(ev);const dx=p.x-start.p.x,dy=p.y-start.p.y;moved=Math.max(moved,Math.hypot(dx,dy));if(moved>6){BMAP.x=start.x+dx;BMAP.y=start.y+dy;bmApply();}}});
+  const up=ev=>{pts.delete(ev.pointerId);if(pts.size<2)pinch0=null;if(pts.size)return;
+    if(start&&moved<=6&&start.node){const k=start.node.getAttribute('data-k'),id=start.node.getAttribute('data-id');
+      if(BMAP.sel&&BMAP.sel.type===k&&BMAP.sel.id===id&&k==='t'){openTicketSheet(id);}else{BMAP.sel={type:k,id};bmPaint();setTimeout(()=>{const d=document.getElementById('bmDetail');if(d&&d.scrollIntoView)d.scrollIntoView({behavior:'smooth',block:'nearest'});},30);}}
+    else if(start&&moved<=6&&!start.node&&BMAP.sel){BMAP.sel=null;bmPaint();}
+    start=null;};
+  svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
+  svg.addEventListener('wheel',ev=>{ev.preventDefault();const p=toV(ev);const k2=Math.max(0.5,Math.min(4,BMAP.k*(ev.deltaY<0?1.12:0.89)));BMAP.x=p.x-(p.x-BMAP.x)*(k2/BMAP.k);BMAP.y=p.y-(p.y-BMAP.y)*(k2/BMAP.k);BMAP.k=k2;bmApply();},{passive:false});
+  clearInterval(BMAP.T);BMAP.T=setInterval(()=>{if(document.hidden||TICKETTAB!=='elimmap'){if(TICKETTAB!=='elimmap')clearInterval(BMAP.T);return;}if(Date.now()-TK_SCROLL_T<2000)return;bmPaint();},30000);}
+if(typeof document!=='undefined'&&!document.getElementById('bmCss')){const st=document.createElement('style');st.id='bmCss';
+  st.textContent='@keyframes bmPulse{0%{opacity:.9;stroke-width:2}70%{opacity:0;stroke-width:6}100%{opacity:0}}.bm-pulse{animation:bmPulse 1.8s ease-out infinite;transform-box:fill-box;transform-origin:center}@keyframes bmFlow{to{stroke-dashoffset:-16}}.bm-flow{stroke-dasharray:6 4;animation:bmFlow 1s linear infinite}.bm-node{transition:opacity .25s}';
+  (document.head||document.documentElement).appendChild(st);}
+
+
+/* ══ SKIN v2 (v1.86) — the facelift ════════════════════════════════════════
+   One stylesheet, every page: a bottom tab bar on phones (thumb-reach, like a
+   real app) with a More sheet for everything else, a compact segmented sport
+   switch, consistent chips/buttons everywhere (some screens were falling back
+   to raw browser buttons), softer cards with depth, smooth view transitions,
+   tidier details/summary, and focus/press states. Pure presentation — no data
+   or logic changes. */
+const SKIN_CSS=`
+:where(button){font-family:Inter,system-ui,sans-serif;font-weight:600;font-size:12px;color:var(--chalk);background:var(--panel2);border:1px solid var(--rule);border-radius:10px;padding:6px 11px;cursor:pointer;transition:transform .12s var(--ease),border-color .2s,background .2s}
+:where(button):active{transform:scale(.97)}
+:where(button):hover{border-color:rgba(255,255,255,.16)}
+.gc-btn{font-size:10.5px!important;padding:4px 9px!important;border-radius:999px!important;background:rgba(255,75,92,.12)!important;border:1px solid rgba(255,75,92,.45)!important;color:#ff8a95!important;font-weight:700!important}
+.msg-chip{font-family:Inter,sans-serif;font-size:11px;font-weight:600;padding:6px 11px;margin:2px;border-radius:999px;border:1px solid var(--rule);background:rgba(255,255,255,.03);color:var(--chalk);cursor:pointer}
+.msg-chip.on{border-color:transparent;background:linear-gradient(135deg,#FFC55A,var(--gold));color:#0B0F14}
+.tkt{box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 10px 28px rgba(0,0,0,.28);transition:border-color .25s var(--ease),transform .2s var(--ease)}
+.tkt h3{letter-spacing:-.01em}
+.view.on{animation:skinIn .28s var(--ease)}
+@keyframes skinIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+details>summary{cursor:pointer;list-style:none}details>summary::-webkit-details-marker{display:none}
+details>summary:before{content:'▸';display:inline-block;margin-right:5px;color:var(--mute);transition:transform .2s var(--ease)}details[open]>summary:before{transform:rotate(90deg)}
+::selection{background:rgba(255,180,61,.35)}
+*{scrollbar-width:thin;scrollbar-color:#2b3846 transparent}
+div:has(> #sportBtn-mlb){padding:8px 12px 6px!important;gap:5px!important;background:linear-gradient(180deg,rgba(8,11,16,.95),rgba(8,11,16,.6))!important}
+[id^="sportBtn-"]{height:36px!important;font-size:12px!important;font-weight:800!important;letter-spacing:.02em;border-radius:999px!important;background:rgba(255,255,255,.04)!important;color:var(--mute)!important;border:1px solid var(--rule);transition:all .2s var(--ease)}
+[id^="sportBtn-"].on{background:linear-gradient(135deg,#FFC55A,#F09B22)!important;color:#0B0F14!important;border-color:transparent;box-shadow:0 4px 16px rgba(255,180,61,.35)}
+body.bnav nav{position:fixed;left:0;right:0;bottom:0;z-index:80;margin:0;padding:5px 4px calc(env(safe-area-inset-bottom) + 6px);background:rgba(8,11,16,.94);backdrop-filter:blur(22px) saturate(1.6);-webkit-backdrop-filter:blur(22px) saturate(1.6);border-top:1px solid var(--hair);box-shadow:0 -8px 24px rgba(0,0,0,.45);overflow:visible}
+body.bnav nav>button{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;flex:1;padding:6px 2px 4px;border:none!important;border-radius:12px;font-size:9.5px;letter-spacing:.04em;text-shadow:none!important;background:none}
+body.bnav nav>button:before{content:attr(data-ico);font-size:19px;line-height:1;filter:grayscale(.6);opacity:.8;transition:all .2s var(--ease)}
+body.bnav nav>button.on{color:var(--gold);background:rgba(255,180,61,.08)}
+body.bnav nav>button.on:before{filter:none;opacity:1;transform:translateY(-1px) scale(1.08)}
+body.bnav nav>button .n{position:absolute;top:3px;right:16%;font-size:8.5px;opacity:.85;color:var(--gold)}body.bnav nav>button .n:empty{display:none}
+body.bnav nav>button.bn-hide,body.bnav nav>button.nav-sec{display:none!important}
+body.bnav main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
+#bnMore .bn-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:14px;background:var(--panel2);border:1px solid var(--rule);font-weight:700;font-size:11.5px;color:var(--chalk)}
+#bnMore .bn-tile span{font-size:22px}
+`;
+const BN_PRIMARY=['games','today','banker','mine','tickets'];
+const BN_ICO={games:'🏟',today:'⚡',banker:'🏦',mine:'📡',tickets:'🎟',grades:'📊',money:'💰',best:'🏆',coach:'🧠',chat:'💬',settings:'⚙️',recap:'🧾',sharp:'🦈',intel:'🛰',more:'☰'};
+function skinNavName(b){return((b.getAttribute('onclick')||'').match(/tab\('(\w+)'/)||[])[1]||(b.id==='navMore'?'more':'');}
+function skinSetup(){try{if(!document.getElementById('skinCss')){const st=document.createElement('style');st.id='skinCss';st.textContent=SKIN_CSS;document.head.appendChild(st);}
+  try{['mlb','nfl','ncaaf','nhl','nba'].forEach(s=>{const b=document.getElementById('sportBtn-'+s);if(b)b.classList.toggle('on',s===(window.__PAGE_SPORT__||ACTIVE_SPORT));});}catch(e){}
+  const nav=document.querySelector('nav');if(!nav)return;
+  const phone=window.matchMedia&&window.matchMedia('(max-width: 760px)').matches;document.body.classList.toggle('bnav',!!phone);
+  /* the header's blur makes position:fixed relative to the header, so the bar lives at the end of <body> on phones */
+  if(phone&&nav.parentNode!==document.body){nav.__home=nav.__home||nav.parentNode;document.body.appendChild(nav);}
+  else if(!phone&&nav.__home&&nav.parentNode!==nav.__home){nav.__home.appendChild(nav);}
+  [...nav.querySelectorAll('button')].forEach(b=>{const n=skinNavName(b);if(BN_ICO[n])b.setAttribute('data-ico',BN_ICO[n]);
+    if(phone&&n!=='more')b.classList.toggle('bn-hide',!BN_PRIMARY.includes(n));});
+  const more=document.getElementById('navMore');if(more&&phone&&!more.__bn){more.__bn=1;more.textContent='More';more.setAttribute('data-ico','☰');more.onclick=bnMoreOpen;}
+  /* keep More last on the bar */
+  if(more&&phone)nav.appendChild(more);}catch(e){console.warn('skin',e);}}
+function bnMoreOpen(){const nav=document.querySelector('nav');if(!nav)return;const items=[...nav.querySelectorAll('button')].filter(b=>{const n=skinNavName(b);return n&&n!=='more'&&!BN_PRIMARY.includes(n);});
+  let ov=document.getElementById('bnMore');if(ov){ov.remove();return;}
+  ov=document.createElement('div');ov.id='bnMore';ov.style.cssText='position:fixed;inset:0;z-index:85;background:rgba(0,0,0,.5);display:flex;align-items:flex-end';ov.onclick=ev=>{if(ev.target===ov)ov.remove();};
+  ov.innerHTML=`<div style="width:100%;background:var(--panel,#111820);border-radius:18px 18px 0 0;padding:14px 14px calc(96px + env(safe-area-inset-bottom));border-top:1px solid var(--rule)">
+    <div class="mono" style="font-size:9.5px;letter-spacing:.12em;color:var(--mute);margin-bottom:10px">MORE</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${items.map((b,i)=>`<button class="bn-tile" data-i="${i}"><span>${BN_ICO[skinNavName(b)]||'•'}</span>${txtEsc((b.textContent||'').replace(/\d+$/,'').trim())}</button>`).join('')}</div></div>`;
+  ov.querySelectorAll('.bn-tile').forEach(t=>t.onclick=()=>{const b=items[+t.getAttribute('data-i')];ov.remove();if(b){const n=skinNavName(b);tab(n,b);}});
+  document.body.appendChild(ov);}
+if(typeof window!=='undefined'){const go=()=>setTimeout(skinSetup,50);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();window.addEventListener('load',()=>setTimeout(skinSetup,300));
+  window.addEventListener('resize',()=>{clearTimeout(window.__skT);window.__skT=setTimeout(skinSetup,200);});}
