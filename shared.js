@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -20731,7 +20731,7 @@ function syncSettingsHtml(){const on=syncOn();
     <div class="sub mono" id="syncStatus" style="font-size:10px;margin-top:6px"></div>
     ${on?'':`<div class="sub" style="font-size:10.5px;margin-top:8px"><b>Set up once (2 minutes, on your phone):</b></div>
     <div class="bar" style="margin-top:4px;flex-wrap:wrap"><a class="gc-btn" style="text-decoration:none;padding:9px 12px" href="https://github.com/new?name=thedesk-data&visibility=private&description=TheDesk+private+sync" target="_blank" rel="noopener">① Create private repo</a>
-      <a class="gc-btn" style="text-decoration:none;padding:9px 12px" href="https://github.com/settings/personal-access-tokens/new?name=TheDesk+sync&description=TheDesk+private+sync+%E2%80%94+thedesk-data+only&expires_in=366&contents=write" target="_blank" rel="noopener">② Create token</a></div>
+      <a class="gc-btn" style="text-decoration:none;padding:9px 12px" href="https://github.com/settings/personal-access-tokens/new?name=TheDesk+sync&description=TheDesk+private+sync+%E2%80%94+thedesk-data+only&expires_in=365&contents=write" target="_blank" rel="noopener">② Create token</a></div>
     <div class="sub" style="font-size:10.5px;line-height:1.6;margin-top:4px">① opens with everything filled in — just tap <b>Create repository</b>.<br>
       ② opens with the name, a 1-year expiry and <b>Contents: Read and write</b> filled in. The one thing GitHub won't let a link pick: under <b>Repository access</b> choose <b>Only select repositories → thedesk-data</b>. Then Generate, copy, paste above, Connect.<br>
       Do your phone first — it becomes the master copy. Then paste the same token on every other browser.</div>`}</div>`;}
