@@ -1,0 +1,84 @@
+SOURCE: sportsbetting.ag
+# Sat Oct 10, 2026 — book lines: sportsbetting.ag (10:19 AM CT)
+
+MLB
+
+Chicago White Sox @ Cleveland Guardians
+ML: Chicago White Sox +122 / Cleveland Guardians -135
+RL: Chicago White Sox +1.5 (-185) / Cleveland Guardians -1.5 (+161)
+OU: o7 (-127) / u7 (+107)
+F5 ML: Chicago White Sox +110 / Cleveland Guardians -130
+F5 RL: Chicago White Sox +0.5 (-130) / Cleveland Guardians -0.5 (+110)
+F5 OU: o3.5 (-120) / u3.5 (+100)
+
+NHL
+
+Philadelphia Flyers @ Boston Bruins
+ML: Philadelphia Flyers +115 / Boston Bruins -130
+PL: Philadelphia Flyers +1.5 (-235) / Boston Bruins -1.5 (+195)
+OU: o5.5 (-116) / u5.5 (+100)
+
+Vancouver Canucks @ New Jersey Devils
+ML: Vancouver Canucks +244 / New Jersey Devils -285
+PL: Vancouver Canucks +1.5 (-105) / New Jersey Devils -1.5 (-115)
+OU: o6.5 (+102) / u6.5 (-118)
+
+Edmonton Oilers @ San Jose Sharks
+ML: Edmonton Oilers -155 / San Jose Sharks +136
+PL: Edmonton Oilers -1.5 (+159) / San Jose Sharks +1.5 (-182)
+OU: o6.5 (-121) / u6.5 (+105)
+
+Minnesota Wild @ Florida Panthers
+ML: Minnesota Wild +120 / Florida Panthers -136
+PL: Minnesota Wild +1.5 (-230) / Florida Panthers -1.5 (+192)
+OU: o5.5 (-121) / u5.5 (+105)
+
+Nashville Predators @ Ottawa Senators
+ML: Nashville Predators +139 / Ottawa Senators -158
+PL: Nashville Predators +1.5 (-190) / Ottawa Senators -1.5 (+165)
+OU: o6 (+100) / u6 (-116)
+
+Utah Mammoth @ Buffalo Sabres
+ML: Utah Mammoth -108 / Buffalo Sabres -106
+PL: Utah Mammoth -1.5 (+219) / Buffalo Sabres +1.5 (-265)
+OU: o6.5 (-101) / u6.5 (-115)
+
+Dallas Stars @ Pittsburgh Penguins
+ML: Dallas Stars -177 / Pittsburgh Penguins +155
+PL: Dallas Stars -1.5 (+145) / Pittsburgh Penguins +1.5 (-165)
+OU: o6.5 (-104) / u6.5 (-112)
+
+Detroit Red Wings @ Montreal Canadiens
+ML: Detroit Red Wings +160 / Montreal Canadiens -183
+PL: Detroit Red Wings +1.5 (-155) / Montreal Canadiens -1.5 (+135)
+OU: o6.5 (+104) / u6.5 (-120)
+
+Carolina Hurricanes @ Chicago Blackhawks
+ML: Carolina Hurricanes -238 / Chicago Blackhawks +206
+PL: Carolina Hurricanes -1.5 (+107) / Chicago Blackhawks +1.5 (-127)
+OU: o6 (+104) / u6 (-120)
+
+Toronto Maple Leafs @ Colorado Avalanche
+ML: Toronto Maple Leafs +179 / Colorado Avalanche -205
+PL: Toronto Maple Leafs +1.5 (-133) / Colorado Avalanche -1.5 (+113)
+OU: o6.5 (-122) / u6.5 (+106)
+
+Columbus Blue Jackets @ St. Louis Blues
+ML: Columbus Blue Jackets +113 / St. Louis Blues -128
+PL: Columbus Blue Jackets +1.5 (-245) / St. Louis Blues -1.5 (+203)
+OU: o6 (-106) / u6 (-110)
+
+Tampa Bay Lightning @ New York Islanders
+ML: Tampa Bay Lightning -175 / New York Islanders +153
+PL: Tampa Bay Lightning -1.5 (+157) / New York Islanders +1.5 (-180)
+OU: o5.5 (-109) / u5.5 (-107)
+
+Los Angeles Kings @ Vegas Golden Knights
+ML: Los Angeles Kings +140 / Vegas Golden Knights -159
+PL: Los Angeles Kings +1.5 (-185) / Vegas Golden Knights -1.5 (+161)
+OU: o6 (-115) / u6 (-101)
+
+Anaheim Ducks @ Calgary Flames
+ML: Anaheim Ducks -118 / Calgary Flames +104
+PL: Anaheim Ducks -1.5 (+203) / Calgary Flames +1.5 (-245)
+OU: o6.5 (-106) / u6.5 (-110)
