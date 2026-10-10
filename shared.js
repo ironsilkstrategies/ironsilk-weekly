@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2180,7 +2180,7 @@ function _dec(raw){if(raw==null||raw==='')return undefined;
   return JSON.parse(raw);}
 function _enc(json){if(json.length<8000)return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
-/* v1.83 · the decompression cache. Every get() of a compressed store ran the
+/* v1.84 · the decompression cache. Every get() of a compressed store ran the
    full LZ decompressor — and grading reads the game archive once PER LEG, so a
    few hundred tickets meant hundreds of full decompressions on every page load
    (measured 6+ seconds of a frozen screen on desktop; several times that on a
@@ -3401,7 +3401,7 @@ function tabRaw(n,b){
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.83) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.84) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3413,7 +3413,7 @@ function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++)
 let _SIMK='';
 function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
   _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
-/* ══ SIM ONCE, REUSE EVERYWHERE (v1.83) ════════════════════════════════════
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.84) ════════════════════════════════════
    The Monte Carlo loop is the only expensive part of a sim, and it depends on
    nothing but the model's inputs (projected scoring, spread of outcomes, sample
    size, the game's seed). Odds, calibration and every market read are applied
@@ -9809,7 +9809,7 @@ function evalInputFingerprint(){
     calib:(get('d4.drift',{})||{}).n||0
   });
 }
-/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.83) ═════════════════════════════
+/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.84) ═════════════════════════════
    Each sport's evaluator lives on its own page (the engine has to be loaded to
    sim), but they now share one front door: Records → Model eval shows the eval
    for the page you're on plus a strip with every sport's status today — tap one
@@ -11847,7 +11847,7 @@ const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['outsi
 let BUILD_MODE='chars';   // chars | presets | custom
 let OUTSIDE_MODE='consensus';
 
-/* v1.83 · Tickets keeps your place. renderTickets() used to jump to the top on
+/* v1.84 · Tickets keeps your place. renderTickets() used to jump to the top on
    EVERY call — including the background ones (live scores every 60s, the grade
    sweeper, coming back to the app), so the page yanked you up mid-scroll.
    Now: only a real navigation (another sub-tab or view) goes to the top. A
@@ -11966,7 +11966,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.83) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.84) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -17519,12 +17519,12 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.83 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.84 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */
 
-/* ══ CHARACTER SPLITS — the permanent raw record (v1.83) ═══════════════════
+/* ══ CHARACTER SPLITS — the permanent raw record (v1.84) ═══════════════════
    The voices ledger keeps the last 8,000 calls, which at a full slate is
    barely two weeks — so a character's record on a team or in a head-to-head
    quietly forgot everything older. Every graded call is now rolled, once, into
@@ -17849,17 +17849,19 @@ function cpropHtml(F){let calls=[];try{calls=cpropToday();cpropLog(calls);}catch
   calls=calls.filter(c=>F.sp==='all'||F.sp===c.sp);
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
   const byP={};calls.forEach(c=>{const k=c.sp+'|'+c.player;(byP[k]=byP[k]||{sp:c.sp,player:c.player,team:c.team,calls:[]}).calls.push(c);});
-  const list=Object.values(byP).map(x=>({...x,top:Math.max(...x.calls.map(c=>c.cal))})).sort((a,b)=>b.top-a.top).slice(0,40);
+  let mine=new Set();try{mgPending(true).forEach(o=>String(o.l.game||'').split('@').forEach(t=>mine.add((o.sp||'mlb')+'|'+t)));}catch(e){}
+  const list=Object.values(byP).map(x=>({...x,top:Math.max(...x.calls.map(c=>c.cal)),yours:mine.has(x.sp+'|'+x.team)})).sort((a,b)=>(b.yours-a.yours)||(b.top-a.top)).slice(0,40);
   const body=list.length?list.map(x=>{const id=x.sp+'|'+pstId(x.player);
     const byStat={};x.calls.forEach(c=>{const k=c.k+'|'+c.thr;(byStat[k]=byStat[k]||[]).push(c);});
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;align-items:baseline">
       <a href="#" onclick="cpropFocus('${esc(id)}');return false" style="color:var(--chalk);font-weight:800;text-decoration:none">${esc(x.player)} ${CPROP_FOCUS===id?'▾':'▸'}</a>
-      <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[x.sp]||''} · ${esc(x.team)}</span></div>
+      <span class="mono" style="font-size:9.5px;color:var(--mute)">${x.yours?'<b style="color:var(--gold)">💰 your game</b> · ':''}${SP_LAB[x.sp]||''} · ${esc(x.team)}</span></div>
       ${Object.values(byStat).map(cs=>{const c0=cs[0];const best=cs.reduce((a,c)=>c.cal>a.cal?c:a,cs[0]);
-        return`<div class="mono" style="font-size:10.5px;margin-top:2px"><b>${c0.thr}+ ${CPROP_LAB[c0.k]||c0.k}</b> ${cs.map(c=>chip(c.voice)).join('')} <span style="color:var(--win);font-weight:800">${Math.round(best.cal*100)}%</span> <span style="color:var(--mute)">calibrated · says ${Math.round(best.p*100)}% · proj ${best.mu.toFixed(1)}</span></div>`;}).join('')}
+        return`<div class="mono" style="font-size:10.5px;margin-top:2px"><b>${c0.thr}+ ${CPROP_LAB[c0.k]||c0.k}</b>${(()=>{try{return cpropLiveChip(best)}catch(e){return''}})()} ${cs.map(c=>chip(c.voice)+cpropFavTag(c)).join('')} <span style="color:var(--win);font-weight:800">${Math.round(best.cal*100)}%</span> <span style="color:var(--mute)">calibrated · says ${Math.round(best.p*100)}% · proj ${best.mu.toFixed(1)}</span></div>`;}).join('')}
       ${CPROP_FOCUS===id?cpropSweetHtml(x.sp,x.player):''}</div>`;}).join('')
     :'<div class="empty">No 70%+ character prop calls yet — player game logs fill in as boards load and games finish.</div>';
-  return cpropCalibHtml()+`<div class="tkt"><h3>🎯 Character props today · 70%+</h3><div class="sub" style="font-size:10px">Each player's sweet spot per character — the highest line it gives 70%+. Tap a name for every line and every character's read. Sorted by calibrated %.</div>${body}</div>`;}
+  let live='';try{live=cpropLiveHtml();}catch(e){}
+  return live+cpropCalibHtml()+`<div class="tkt"><h3>🎯 Character props today · 70%+</h3><div class="sub" style="font-size:10px">Each player's sweet spot per character — the highest line it gives 70%+. Tap a name for every line and every character's read. Sorted by calibrated %.</div>${body}</div>`;}
 /* The roster: every character by name, its school of thought, this week's
    bankroll, and what it's calling today. */
 function charRosterHtml(){const L=bkLedger();const W=L.weeks[0].R;const V=get(VOICES_KEY,[])||[];const d=today();
@@ -18070,13 +18072,12 @@ function renderMyGames(){
   const [A,H]=['',''];
   const hedges=get(LS.locked,[]).map(t=>{try{return hedgeHtml(t)?`<div class="sub" style="margin-top:6px"><b>${esc(t.name||('Ticket #'+t.id))}</b></div>`+hedgeHtml(t):''}catch(e){return''}}).join('');
   const btNeed=(()=>{try{return btUngraded().length}catch(e){return 0}})();
-  el.innerHTML=(btNeed?btBarHtml():'')+hedges+`<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin-bottom:6px">${list.length} game${list.length>1?'s':''} with money on them · live scores refresh every 45s while this tab is open</div>`+
+  let cpl='';try{cpl=cpropLiveHtml();}catch(e){}
+  el.innerHTML=cpl+(btNeed?btBarHtml():'')+hedges+`<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin-bottom:6px">${list.length} game${list.length>1?'s':''} with money on them · live scores refresh every 45s while this tab is open</div>`+
   list.map(b=>{const [aw,hm]=b.game.split('@');
     const sc=b.a!=null?`${aw} <b>${b.a}</b> – <b>${b.h}</b> ${hm}`:`${aw} @ ${hm}`;
     const st=b.state==='in'?`<span style="color:var(--rust)">● LIVE</span> ${esc(b.detail)}`:b.state==='post'?'FINAL':(b.start?new Date(b.start).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}):b.d);
-    const legs=b.rows.map(x=>{let g=null,badge='',bar='';try{g=gradeLeg(x.l,x.t.date)}catch(e){}try{badge=gradeLegBadge(x.l,x.t.date)}catch(e){}try{bar=legPctHtml(x.l,g)}catch(e){}
-      const showDet=g&&g.detail&&!String(badge).includes(g.detail);const pbar=g&&g.prog?bar:'';
-      return`<div class="sub" style="margin:3px 0"><span style="color:var(--mute);font-size:10px">${esc(x.t.name||('#'+x.t.id))}</span> · <b>${esc(x.l.pick)}</b> ${badge}${showDet?` <span class="mono" style="font-size:9.5px;color:var(--mute)">${esc(g.detail)}</span>`:''}${pbar?`<div>${pbar}</div>`:''}</div>`;}).join('');
+    const legs=b.rows.map(x=>{try{return legLiveCard(x.t,x.l,{link:true});}catch(e){return`<div class="sub">${txtEsc(x.l.pick)}</div>`;}}).join('');
     const tix=new Set(b.rows.map(x=>x.t.id)).size;
     return`<div class="tkt${b.state==='in'?' hi':''}" style="margin:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div style="font-weight:900;font-size:15px">${SP_LAB[b.sp]||''} ${sc}</div>
@@ -19669,7 +19670,7 @@ try{if(typeof renderToday==='function'&&!renderToday.__hp){const _rt=renderToday
   try{const el=document.getElementById('todayBody');if(el&&!el.querySelector('.hp-sec')){const h=highPctLinesHtml()+likelyHtml();if(h)el.insertAdjacentHTML('beforeend','<div class="hp-sec">'+h+'</div>');}}catch(e){}return r;};renderToday.__hp=1;}}catch(e){}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   v1.83 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
+   v1.84 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
    ══════════════════════════════════════════════════════════════════════════ */
 const txtEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fairAmer=p=>p==null||!(p>0&&p<1)?null:p>=0.5?-Math.round(p/(1-p)*100):Math.round((1-p)/p*100);
@@ -19910,7 +19911,7 @@ function sgpCardHtml(sp,g,s){try{
 }catch(e){return'';}}
 
 
-/* ══ THE GRADE SWEEPER (v1.83) — no ticket goes ungraded ═══════════════════
+/* ══ THE GRADE SWEEPER (v1.84) — no ticket goes ungraded ═══════════════════
    Grading used to be a handful of separate jobs, each with its own blind spot:
    the ESPN refresh only looked back 30 days (and at most 21 dates a sport), the
    prop box-score pull ran once a day and only when Tickets/My Games was open,
@@ -19973,7 +19974,7 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)gradeSweep().catch(()=>{});});}
 
 
-/* ══ CHARACTER PARLAY BUILDER — Tickets → Build → 🎭 Characters (v1.83) ═════
+/* ══ CHARACTER PARLAY BUILDER — Tickets → Build → 🎭 Characters (v1.84) ═════
    Pick a character and get its own picks for today, best first: ranked by its
    graded record on that exact spot (sport+market, the team, H2H, home/road,
    fav/dog) blended with the pick's chance. The Banker pre-checks the length
@@ -20034,3 +20035,110 @@ function cbLock(){const d=today();const pool=cbPool(CB_V);const sel=pool.filter(
   const legs=sel.map(x=>({id:id+'|'+x.pick,game:x.game,pick:x.pick,p:+(+x.p).toFixed(4),price:+x.price,sport:x.sp,gameDate:d,charVoice:x.v}));
   const L=get(LS.locked,[]);L.unshift({id,date:d,name:`${who} — ${sel.length}-leg`,source:'mine',charBuilt:CB_V,legs,p:legs.reduce((a,x)=>a*x.p,1)});set(LS.locked,L);
   CB_SEL=null;alert(`Locked "${who} — ${sel.length}-leg". It's in Tickets → My Picks, graded like any other ticket.`);try{TICKETTAB='mine';renderTickets();}catch(e){}}
+
+/* ══ LIVE TICKETS + LIVE CHARACTER PROPS (v1.84) ═══════════════════════════ */
+function dToast(html,ms){if(typeof document==='undefined')return;let box=document.getElementById('dToastBox');
+  if(!box){box=document.createElement('div');box.id='dToastBox';box.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:9999;display:flex;flex-direction:column;gap:6px;width:min(94vw,520px);pointer-events:none';document.body.appendChild(box);}
+  const t=document.createElement('div');t.style.cssText='pointer-events:auto;background:#0f1a12;border:1.5px solid var(--win);color:var(--chalk);border-radius:12px;padding:10px 12px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5)';
+  t.innerHTML=html;t.onclick=()=>t.remove();box.appendChild(t);setTimeout(()=>{try{t.remove()}catch(e){}},ms||9000);}
+/* ── one ticket leg, drawn like a Today row: score, clock, live win chance
+   carried through the score and time left, ▲▼ from where it started, and a
+   progress bar for props ─────────────────────────────────────────────────── */
+function legLiveCard(t,l,opts){opts=opts||{};let g=null;try{g=gradeLeg(l,t.date);}catch(e){}
+  const sp=l.sport||'mlb',d=legDay(l,t.date);let e=null;try{e=mgEventFor(sp,l.game,d,!!l.gdApprox||!l.gameDate);}catch(err){}
+  const done=g&&!g.live&&(g.hit===true||g.hit===false||g.push);
+  const state=done?'post':g&&g.live?'in':e?e.state:'pre';
+  const p0=l.p>0&&l.p<1?+l.p:(l.price!=null?imp(+l.price):null);
+  let lp=null;if(g&&g.hit===true)lp=1;else if(g&&g.hit===false&&!g.live)lp=0;else if(state==='in'){try{lp=liveLegProb(l,g,d);}catch(err){}}
+  const [aw,hm]=String(l.game).split('@');
+  const res=done?(g.push?['↔ PUSH','var(--mute)']:g.hit?['✅ WON','var(--win)']:['❌ LOST','var(--rust)']):state==='in'?['● LIVE','#ff4b5c']:[e&&e.start?new Date(e.start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'PREGAME','var(--mute)'];
+  const border=done?(g.push?'var(--rule)':g.hit?'var(--win)':'var(--rust)'):state==='in'?'#ff4b5c':'var(--rule)';
+  const sc=e&&e.a!=null?`${txtEsc(aw)} <b>${e.a}</b> – <b>${e.h}</b> ${txtEsc(hm)}${state==='in'&&e.detail?` · <span style="color:var(--mute)">${txtEsc(e.detail)}</span>`:state==='post'?' · FINAL':''}`:`${txtEsc(aw)} @ ${txtEsc(hm)}`;
+  const col=lp==null?'var(--mute)':lp>=0.6?'var(--win)':lp>=0.4?'var(--gold)':'var(--rust)';const mv=p0!=null&&lp!=null&&state==='in'?Math.round((lp-p0)*100):null;
+  let bar='';
+  if(g&&g.prog&&g.prog.thr){try{bar=legProgressBarHtml(g.prog);}catch(err){}}
+  else if(lp!=null&&state==='in')bar=`<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><div style="flex:1;height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${Math.round(lp*100)}%;background:${col}"></div></div>
+    <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${Math.round(lp*100)}% to hit</span>${mv?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${Math.round(p0*100)}%</span>`:''}</div>`;
+  const tid=JSON.stringify(String(t.id)).replace(/"/g,'&quot;');
+  return`<div ${opts.link?`onclick="openTicketSheet(${tid})" `:''}style="padding:7px 9px;margin:5px 0;border-radius:9px;border:1.5px solid ${border};background:rgba(255,255,255,.02);${opts.link?'cursor:pointer':''}">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-weight:800;font-size:13.5px;min-width:0">${txtEsc(l.pick)}${l.price!=null?` <span class="mono" style="font-size:11px;color:var(--gold)">${sgnP(+l.price)}</span>`:''}</div>
+      <div class="mono" style="font-size:10px;font-weight:800;color:${res[1]};white-space:nowrap">${res[0]}</div></div>
+    <div class="mono" style="font-size:10.5px;margin-top:2px">${(SP_LAB[sp]||'').split(' ')[0]} ${sc}</div>${bar}
+    ${g&&g.detail&&!(e&&e.a!=null&&String(g.detail).includes(e.a+'–'+e.h))?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">${txtEsc(g.detail)}</div>`:''}
+    ${opts.link?`<div class="mono" style="font-size:9.5px;color:var(--cold);margin-top:3px">${txtEsc(t.name||('Ticket #'+t.id))} · ${(t.legs||[]).length} legs · tap for the whole ticket ↗</div>`:''}</div>`;}
+/* ── the whole ticket, one tap away ───────────────────────────────────────── */
+let TK_SHEET=null,TK_SHEET_T=null;
+function ticketSheetHtml(t){let M=null;try{M=ticketMoney(t);}catch(e){}let rec=null;try{rec=ticketRecord(t);}catch(e){}
+  const n=(t.legs||[]).length;const done=rec&&(rec.l>0||(rec.w+rec.p===n));const won=rec&&rec.l===0&&rec.w>0&&rec.w+rec.p===n;
+  const status=!rec?'':rec.l>0?'<b style="color:var(--rust)">❌ LOST</b>':won?'<b style="color:var(--win)">✅ CASHED</b>':`<b style="color:var(--gold)">${rec.w}/${n-rec.p} legs in</b>`;
+  const dec=(t.legs||[]).reduce((a,l)=>a*(l.price!=null?americanToDecimal(+l.price):1),1);
+  let live='';try{const p0=t.p>0?t.p:(t.legs||[]).reduce((a,l)=>a*(l.p>0&&l.p<1?+l.p:(l.price!=null?imp(+l.price):1)),1);live=liveTicketHtml({...t,p:p0});}catch(e){}
+  return`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div><div style="font-family:'Archivo';font-weight:900;font-size:18px">${txtEsc(t.name||('Ticket #'+t.id))}</div>
+      <div class="mono" style="font-size:10px;color:var(--mute)">${txtEsc(t.date||'')} · ${n} leg${n>1?'s':''} · ${txtEsc(t.source||'mine')}${n>1?` · ${decimalToAmerican(dec)}`:''}</div></div>
+    <button onclick="closeTicketSheet()" style="font-size:16px;padding:4px 10px">✕</button></div>
+  <div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0;font-size:12px">${M?`<span>stake <b>$${(+M.stake).toFixed(2)}</b></span><span>pays <b style="color:var(--gold)">$${(+M.payout).toFixed(2)}</b></span>`:''}<span>${status}</span></div>
+  ${live}${(t.legs||[]).map(l=>legLiveCard(t,l)).join('')}
+  <div class="mono" style="font-size:9px;color:var(--mute);margin-top:6px">${done?'Settled — locked in your record.':'Live — refreshes every 20 seconds while open.'}</div>`;}
+function openTicketSheet(id){const t=(get(LS.locked,[])||[]).find(x=>String(x.id)===String(id));if(!t)return;TK_SHEET=String(id);
+  let ov=document.getElementById('tkSheet');if(!ov){ov=document.createElement('div');ov.id='tkSheet';ov.style.cssText='position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.62);display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=ev=>{if(ev.target===ov)closeTicketSheet();};document.body.appendChild(ov);}
+  ov.innerHTML=`<div id="tkSheetIn" style="background:var(--panel,#12151c);width:min(100vw,620px);max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:14px 14px 22px;border:1px solid var(--rule)">${ticketSheetHtml(t)}</div>`;
+  document.body.style.overflow='hidden';clearInterval(TK_SHEET_T);
+  TK_SHEET_T=setInterval(()=>{const inn=document.getElementById('tkSheetIn');const t2=(get(LS.locked,[])||[]).find(x=>String(x.id)===TK_SHEET);if(!inn||!t2){closeTicketSheet();return;}const y=inn.scrollTop;inn.innerHTML=ticketSheetHtml(t2);inn.scrollTop=y;},20000);}
+function closeTicketSheet(){clearInterval(TK_SHEET_T);TK_SHEET=null;const ov=document.getElementById('tkSheet');if(ov)ov.remove();document.body.style.overflow='';}
+
+/* ── CHARACTER PROPS, LIVE ────────────────────────────────────────────────
+   Every 70%+ prop a character calls is logged when its game is on the board,
+   then watched in the live box score: the moment the player clears the line,
+   it shows as HIT LIVE (with who called it) on Today → Props and My Games, and
+   a banner pops once. Finals grade it straight from the box — no waiting. */
+const CPROP_LIVE_STAT={nhl:{s:['S','SOG'],g:['G'],pts:['PTS']},mlb:{h:['H'],hr:['HR'],k:['K'],tb:['TB']},
+  nfl:{py:['passing','YDS'],ry:['rushing','YDS'],wy:['receiving','YDS'],rec:['receiving','REC'],td:['*','TD']}};
+CPROP_LIVE_STAT.ncaaf=CPROP_LIVE_STAT.nfl;
+function cpropBoxVal(sp,box,team,player,k){if(!box)return null;const M=CPROP_LIVE_STAT[sp];if(!M||!M[k])return null;const num=v=>{const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:null;};
+  if(sp==='nfl'||sp==='ncaaf'){const T=(box.teamStats||{})[team]||Object.values(box.teamStats||{}).find(x=>['passing','rushing','receiving'].some(c=>fbpFindRow(x[c]||[],player)))||null;if(!T)return null;
+    if(k==='td'){let s=0,any=false;['rushing','receiving'].forEach(c=>{const r=fbpFindRow(T[c]||[],player);if(r){any=true;s+=num(r.TD)||0;}});return any?s:null;}
+    const [cat,lab]=M[k];const r=fbpFindRow(T[cat]||[],player);if(!r)return null;return num(r[lab]);}
+  const teams=box.teams||{};const tt=teams[team]||Object.values(teams).find(x=>fbpFindRow([...(x.skaters||[]),...(x.batters||[]),...(x.pitchers||[]),...(x.players||[])],player));if(!tt)return null;
+  const rows=sp==='nhl'?(tt.skaters||[]):sp==='mlb'?(k==='k'?(tt.pitchers||[]):(tt.batters||[])):(tt.players||[]);const r=fbpFindRow(rows,player);if(!r)return null;
+  if(sp==='nhl'&&k==='pts'&&r.PTS==null)return(num(r.G)||0)+(num(r.A)||0);
+  for(const lab of M[k]){if(r[lab]!=null)return num(r[lab]);}return null;}
+function cpropGameFor(sp,team,d){try{const L=MG_LIVE[sp]||{};for(const k of Object.keys(L)){const [a,h]=k.split('@');if(a!==team&&h!==team&&mgAb(sp,a)!==team&&mgAb(sp,h)!==team)continue;
+    const e=(L[k]||[]).find(x=>x.date===d);if(e)return{key:k,e};}}catch(e){}
+  try{const g=(sportGames(sp)||[]).find(z=>z.away.abbr===team||z.home.abbr===team);if(g)return{key:g.away.abbr+'@'+g.home.abbr,e:null};}catch(e){}return null;}
+let CPL_C=null;
+function cpropLiveList(force){if(!force&&CPL_C&&Date.now()-CPL_C.ts<8000)return CPL_C.v;const d=today();
+  const L=(get(CPROP_KEY,[])||[]).filter(x=>x.d===d&&CPROP_LIVE_STAT[x.sp]);const out=[];
+  L.forEach(c=>{const G=cpropGameFor(c.sp,c.team,d);if(!G)return;const st=G.e?G.e.state:'pre';if(st==='pre'){out.push({...c,state:'pre',game:G.key});return;}
+    let id=G.e&&G.e.espnId;if(!id){try{const ev=fbpEventId({sport:c.sp,game:G.key,gameDate:d},d);id=ev.id;}catch(e){}}
+    const box=id?fbpBox(id,c.sp):null;const val=cpropBoxVal(c.sp,box,c.team,c.player,c.k);const fin=(box&&box.state==='post')||st==='post';
+    const hit=val!=null&&val>=c.thr;out.push({...c,game:G.key,state:fin?'post':'in',val,hitLive:hit,miss:fin&&val!=null&&!hit,pending:val==null});});
+  CPL_C={ts:Date.now(),v:out};return out;}
+function cpropLiveTick(){try{const pre=sgpProps();if(pre&&pre.length)cpropLog(pre);}catch(e){}
+  const L=cpropLiveList(true);if(!L.length)return;
+  /* grade finals straight from the box, and announce every new live hit once */
+  try{const S=get(CPROP_KEY,[])||[];let ch=0;L.forEach(x=>{if(x.state!=='post'||x.val==null)return;const r=S.find(y=>y.id===x.id);if(r&&r.hit==null){r.actual=x.val;r.hit=x.val>=x.thr;ch++;}});if(ch)set(CPROP_KEY,S);}catch(e){}
+  const seen=get('d4.cprophits',{})||{};let n=0;const d=today();
+  L.filter(x=>x.hitLive).forEach(x=>{if(seen[x.id])return;seen[x.id]=d;n++;
+    if(n<=3)dToast(`<b style="color:var(--win)">✅ HIT${x.state==='in'?' LIVE':''}</b> · ${txtEsc(x.player)} ${x.thr}+ ${CPROP_LAB[x.k]||x.k} <span class="mono" style="font-size:11px">(${x.val})</span><br><span style="font-size:11px;color:var(--mute)">${txtEsc(charName(x.voice))}'s pick · ${(SP_LAB[x.sp]||'')} ${txtEsc(x.game||'')}</span>`);});
+  if(n){Object.keys(seen).forEach(k=>{if(seen[k]<dayShift(d,-3))delete seen[k];});set('d4.cprophits',seen);}
+  try{const on=id=>{const v=document.getElementById(id);return v&&v.classList.contains('on');};if(on('v-mine'))renderMyGames();if(on('v-today')&&tfGet().view==='props')renderToday(true);}catch(e){}}
+function cpropLiveChip(c){const L=cpropLiveList();const x=L.find(y=>y.id===c.id)||L.find(y=>y.voice===c.voice&&y.player===c.player&&y.k===c.k&&y.thr===c.thr);if(!x||x.state==='pre')return'';
+  if(x.hitLive)return` <b style="color:var(--win)">✅ HIT${x.state==='in'?' LIVE':''} (${x.val})</b>`;if(x.miss)return` <b style="color:var(--rust)">❌ ${x.val}</b>`;
+  if(x.val!=null)return` <span style="color:#ff4b5c;font-weight:800">● ${x.val}/${x.thr}</span>`;return' <span style="color:var(--mute)">● live</span>';}
+function cpropLiveHtml(){const L=cpropLiveList().filter(x=>x.state!=='pre');if(!L.length)return'';
+  const by={};L.forEach(x=>{const k=x.sp+'|'+x.player+'|'+x.k+'|'+x.thr;(by[k]=by[k]||{...x,voices:[]}).voices.push(x.voice);});
+  const rows=Object.values(by).sort((a,b)=>(b.hitLive-a.hitLive)||((b.val||0)/b.thr-(a.val||0)/a.thr)).map(x=>{const pct=x.val!=null?Math.min(100,Math.round(x.val/x.thr*100)):0;const col=x.hitLive?'var(--win)':x.miss?'var(--rust)':'var(--gold)';
+    return`<div style="padding:6px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${x.hitLive?'var(--win)':x.miss?'var(--rust)':'#ff4b5c'}">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${txtEsc(x.player)} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}</b><span class="mono" style="font-size:10.5px;font-weight:800;color:${col}">${x.hitLive?'✅ HIT'+(x.state==='in'?' LIVE':''):x.miss?'❌ MISSED':x.val!=null?x.val+' / '+x.thr:'waiting on box'}</span></div>
+      <div style="height:5px;border-radius:3px;background:var(--rule);overflow:hidden;margin:3px 0"><div style="height:100%;width:${pct}%;background:${col}"></div></div>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game||x.team)} · called by ${x.voices.map(v=>`<span style="color:${(CHARS[v]||{}).color}">${txtEsc(charName(v))}</span>`).join(', ')}</div></div>`;}).join('');
+  return`<div class="tkt" style="border-color:#ff4b5c"><h3>🎯 Character props — live</h3><div class="sub" style="font-size:10px">Every 70%+ prop the characters called, tracked in the live box score. A hit lights up the second the player clears the line.</div>${rows}</div>`;}
+let CPL_TIMER=null;
+if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__)window.addEventListener('load',()=>{setTimeout(()=>{try{cpropLiveTick()}catch(e){}},7000);CPL_TIMER=setInterval(()=>{if(!document.hidden)try{cpropLiveTick()}catch(e){}},60e3);});
+
+/* a character's favorite players: its graded record on THIS player (any stat) */
+let CPF_C=null;
+function cpropFavTag(c){if(!CPF_C||Date.now()-CPF_C.ts>60e3){const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null)return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0});o.n++;if(x.hit)o.w++;});CPF_C={ts:Date.now(),R};}
+  const o=CPF_C.R[c.voice+'|'+c.sp+'|'+pstId(c.player)];if(!o||o.n<3)return'';const fav=o.n>=4&&o.w/o.n>=0.7;
+  return`<span class="mono" style="font-size:9px;color:${fav?'var(--gold)':'var(--mute)'}">${fav?'⭐':''}${o.w}-${o.n-o.w} on him</span> `;}
