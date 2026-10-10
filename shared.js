@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261009g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261009h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2180,7 +2180,7 @@ function _dec(raw){if(raw==null||raw==='')return undefined;
   return JSON.parse(raw);}
 function _enc(json){if(json.length<8000)return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
-/* v1.81 · the decompression cache. Every get() of a compressed store ran the
+/* v1.82 · the decompression cache. Every get() of a compressed store ran the
    full LZ decompressor — and grading reads the game archive once PER LEG, so a
    few hundred tickets meant hundreds of full decompressions on every page load
    (measured 6+ seconds of a frozen screen on desktop; several times that on a
@@ -3401,7 +3401,7 @@ function tabRaw(n,b){
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.81) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.82) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3413,7 +3413,7 @@ function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++)
 let _SIMK='';
 function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
   _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
-/* ══ SIM ONCE, REUSE EVERYWHERE (v1.81) ════════════════════════════════════
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.82) ════════════════════════════════════
    The Monte Carlo loop is the only expensive part of a sim, and it depends on
    nothing but the model's inputs (projected scoring, spread of outcomes, sample
    size, the game's seed). Odds, calibration and every market read are applied
@@ -9804,7 +9804,7 @@ function evalInputFingerprint(){
     calib:(get('d4.drift',{})||{}).n||0
   });
 }
-/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.81) ═════════════════════════════
+/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.82) ═════════════════════════════
    Each sport's evaluator lives on its own page (the engine has to be loaded to
    sim), but they now share one front door: Records → Model eval shows the eval
    for the page you're on plus a strip with every sport's status today — tap one
@@ -11839,7 +11839,7 @@ function rebuildSrcStats(){
 /* ================= TICKETS TABS ================= */
 /* Record + Eval moved to the Record tab (one place for every stat) */
 const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['outside','Outside'],['elimmap','🫧 Map'],['backtest','Backtest']];
-let BUILD_MODE='presets';   // presets | custom
+let BUILD_MODE='chars';   // chars | presets | custom
 let OUTSIDE_MODE='consensus';
 
 function renderTickets(){
@@ -11859,8 +11859,8 @@ function renderTickets(){
     }
   }
   if(TICKETTAB==='build'){
-    const row=modeRow(BUILD_MODE,[['presets','Presets'],['custom','Custom']],'BUILD_MODE');
-    body.innerHTML=row+(BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
+    const row=modeRow(BUILD_MODE,[['chars','🎭 Characters'],['presets','Presets'],['custom','Custom']],'BUILD_MODE');
+    body.innerHTML=row+(BUILD_MODE==='chars'?(()=>{try{return cbHtml()}catch(e){return'<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>'}})():BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
   }
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
   if(TICKETTAB==='tracked')body.innerHTML=trackedPicksHtml();
@@ -11936,7 +11936,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.81) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.82) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -17489,12 +17489,12 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.81 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.82 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */
 
-/* ══ CHARACTER SPLITS — the permanent raw record (v1.81) ═══════════════════
+/* ══ CHARACTER SPLITS — the permanent raw record (v1.82) ═══════════════════
    The voices ledger keeps the last 8,000 calls, which at a full slate is
    barely two weeks — so a character's record on a team or in a head-to-head
    quietly forgot everything older. Every graded call is now rolled, once, into
@@ -19639,7 +19639,7 @@ try{if(typeof renderToday==='function'&&!renderToday.__hp){const _rt=renderToday
   try{const el=document.getElementById('todayBody');if(el&&!el.querySelector('.hp-sec')){const h=highPctLinesHtml()+likelyHtml();if(h)el.insertAdjacentHTML('beforeend','<div class="hp-sec">'+h+'</div>');}}catch(e){}return r;};renderToday.__hp=1;}}catch(e){}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   v1.81 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
+   v1.82 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
    ══════════════════════════════════════════════════════════════════════════ */
 const txtEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fairAmer=p=>p==null||!(p>0&&p<1)?null:p>=0.5?-Math.round(p/(1-p)*100):Math.round((1-p)/p*100);
@@ -19880,7 +19880,7 @@ function sgpCardHtml(sp,g,s){try{
 }catch(e){return'';}}
 
 
-/* ══ THE GRADE SWEEPER (v1.81) — no ticket goes ungraded ═══════════════════
+/* ══ THE GRADE SWEEPER (v1.82) — no ticket goes ungraded ═══════════════════
    Grading used to be a handful of separate jobs, each with its own blind spot:
    the ESPN refresh only looked back 30 days (and at most 21 dates a sport), the
    prop box-score pull ran once a day and only when Tickets/My Games was open,
@@ -19941,3 +19941,66 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){
   window.addEventListener('load',()=>{try{gradeBannerPaint();}catch(e){}setTimeout(()=>{gradeSweep({force:true}).catch(()=>{});},4000);
     setInterval(()=>{if(document.hidden)return;let n=0;try{n=sweepOverdue().length;}catch(e){}if(n)gradeSweep().catch(()=>{});},10*60e3);});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)gradeSweep().catch(()=>{});});}
+
+
+/* ══ CHARACTER PARLAY BUILDER — Tickets → Build → 🎭 Characters (v1.82) ═════
+   Pick a character and get its own picks for today, best first: ranked by its
+   graded record on that exact spot (sport+market, the team, H2H, home/road,
+   fav/dog) blended with the pick's chance. The Banker pre-checks the length
+   with the most Kelly growth; check/uncheck anything, or force 2–6 legs. One
+   leg per game, nothing shorter than -300, games already started are left
+   off. "📣 Roll Call" builds one pick from each character instead. Lock it and
+   it's a normal ticket — graded, settled and on your record like any other. */
+let CB_V=null,CB_N='auto',CB_SP='all',CB_SEL=null,CB_SIG='';
+function cbStarted(sp,game){try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[sp]||{});const x=(B.picks||[]).find(y=>y.game===game&&y.start);
+  if(x&&isFinite(Date.parse(x.start)))return Date.parse(x.start)<=Date.now();}catch(e){}
+  try{const g=(sportGames(sp)||[]).find(z=>(z.away.abbr+'@'+z.home.abbr)===game);if(g){const a=String(g.abstract||g.state||'').toLowerCase();return!!a&&a!=='pre'&&a!=='preview'&&a!=='scheduled';}}catch(e){}return false;}
+function cbPool(v){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
+  let L;if(v==='__roll'){let R=null;try{const S=bkDayState();R=(S.locked?S:S.preview||{}).roll;}catch(e){}L=((R&&R.legs)||[]).map(x=>({...x,by:[x.v]}));}
+  else L=(bkDayCands(V,d)[v]||[]);
+  L=L.filter(x=>bkPriceOk(x.price)&&!cbStarted(x.sp,x.game)&&(CB_SP==='all'||x.sp===CB_SP));
+  const seen=new Set(),out=[];for(const x of L){const k=x.sp+'|'+x.game;if(seen.has(k))continue;seen.add(k);out.push({...x,k:k+'|'+x.m+'|'+x.sd});}
+  return out;}
+function cbDefault(pool){if(!pool.length)return[];if(CB_N!=='auto')return pool.slice(0,Math.min(+CB_N,pool.length)).map(x=>x.k);
+  if(pool.length<2)return pool.map(x=>x.k);const top=pool.slice(0,6);const sz=bkSize(top.map(x=>({p:x.score!=null?x.score:x.p,dec:americanToDecimal(x.price)})),2,Math.min(6,top.length));return top.slice(0,sz.k).map(x=>x.k);}
+function cbSetV(v){CB_V=v;CB_SEL=null;renderTickets();}
+function cbSetN(n){CB_N=n;CB_SEL=null;renderTickets();}
+function cbSetSp(sp){CB_SP=sp;CB_SEL=null;renderTickets();}
+function cbToggle(k){if(!CB_SEL)return;const i=CB_SEL.indexOf(k);if(i>=0)CB_SEL.splice(i,1);else CB_SEL.push(k);renderTickets();}
+function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const todays=V.filter(x=>String(x.date).slice(0,10)===d&&CHARS[x.voice]);
+  if(!todays.length)return'<div class="empty">No character picks logged for today yet — open each sport\'s Games board once, then come back.</div>';
+  let L=null;try{L=bkLedger();}catch(e){}
+  const counts={};todays.forEach(x=>{if(bkPriceOk(x.price))counts[x.voice]=(counts[x.voice]||0)+1;});
+  if(!CB_V||(CB_V!=='__roll'&&!counts[CB_V]))CB_V=CHAR_ORDER.filter(v=>counts[v]).sort((a,b)=>((L&&L.mult[b])||1)-((L&&L.mult[a])||1))[0]||'__roll';
+  const chip=v=>{const C=CHARS[v]||{};const W=L&&L.weeks[0].R[v];return`<button class="${CB_V===v?'on':''}" onclick="cbSetV('${v}')" style="${CB_V===v?'':'color:'+C.color}">${C.chip} <span class="mono" style="font-size:9px">${counts[v]||0}${W&&W.n?` · ${W.w}-${W.l}`:''}</span></button>`;};
+  const chips=`<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${CHAR_ORDER.filter(v=>counts[v]).map(chip).join('')}<button class="${CB_V==='__roll'?'on':''}" onclick="cbSetV('__roll')" style="${CB_V==='__roll'?'':'color:#ff6fae'}">📣 Roll Call</button></div>`;
+  const sps=[...new Set(todays.map(x=>x.sp))];
+  const spRow=sps.length>1?`<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${['all',...sps].map(sp=>`<button class="${CB_SP===sp?'on':''}" onclick="cbSetSp('${sp}')">${sp==='all'?'All sports':(SP_LAB[sp]||sp)}</button>`).join('')}</div>`:'';
+  const nRow=`<div class="mktlab" style="margin-top:4px">Legs</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${['auto',2,3,4,5,6].map(n=>`<button class="${String(CB_N)===String(n)?'on':''}" onclick="cbSetN('${n}')">${n==='auto'?'🏦 Banker picks':n}</button>`).join('')}</div>`;
+  const pool=cbPool(CB_V);const sig=CB_V+'|'+CB_N+'|'+CB_SP+'|'+pool.map(x=>x.k).join(',');
+  if(!CB_SEL||CB_SIG!==sig){CB_SEL=cbDefault(pool);CB_SIG=sig;}
+  const sel=pool.filter(x=>CB_SEL.includes(x.k));
+  const who=CB_V==='__roll'?'The Roll Call':charName(CB_V);
+  const intro=CB_V==='__roll'?'One pick from each character, best character first — a taken game goes to that character\'s next pick.'
+    :`${txtEsc(who)} — ${txtEsc((CHARS[CB_V]||{}).school||'')}. Its picks today, strongest first: its graded record on each exact spot blended with the pick's chance.`;
+  const rec=c=>{try{const call=V.find(y=>y.voice===c.v&&y.sp===c.sp&&y.game===c.game&&y.market===c.m&&String(y.date).slice(0,10)===d);if(!call)return'';const h=charHist(V,call);
+    const b=['h2h','team','where','role','sport'].map(k=>({...h.H[k],lab:h.lab[k]})).filter(o=>o.n>=3).sort((a,b)=>b.r-a.r)[0];return b?`${b.w}-${b.l} ${b.lab}`:'';}catch(e){return'';}};
+  const rows=pool.map((x,i)=>{const on=CB_SEL.includes(x.k);const r=rec(x);const C=CHARS[x.v]||{};
+    return`<div style="padding:6px 0;border-bottom:1px solid var(--rule);${on?'':'opacity:.55'}"><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+      <input type="checkbox" ${on?'checked':''} onchange="cbToggle('${x.k.replace(/'/g,"\\'")}')" style="width:20px;height:20px;min-width:20px;flex:0 0 20px;margin:2px 0 0;padding:0">
+      <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(x.price)}</span></span><span class="mono" style="font-size:10.5px">${Math.round(x.p*100)}%</span></div>
+        <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game)}${CB_V==='__roll'?` · <span style="color:${C.color}">${C.chip||''}</span>`:''}${r?` · <span style="color:var(--win)">${txtEsc(r)}</span>`:''}</div></div></label>
+      ${whyHtml({...x,date:d})}</div>`;}).join('');
+  const dec=sel.reduce((a,x)=>a*americanToDecimal(x.price),1),pc=sel.reduce((a,x)=>a*x.p,1);
+  let stake=0;try{const {B}=bkBudget();const sz=sel.length>=2?bkSize(sel.map(x=>({p:x.score!=null?x.score:x.p,dec:americanToDecimal(x.price)})),sel.length,sel.length):null;stake=sz&&sz.f>0?bkStake(sz.f,B):0;}catch(e){}
+  const sum=sel.length?`<div class="tkt" style="border-left:3px solid var(--gold);margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:baseline"><b>${txtEsc(who)}'s ${sel.length}-leg ticket</b>
+      <span style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold)">${sel.length>1?decimalToAmerican(dec):sgnP(sel[0].price)}</span></div>
+    <div class="mono" style="font-size:10px;color:var(--mute)">${(pc*100).toFixed(1)}% to cash · EV ${pc*dec-1>=0?'+':''}${((pc*dec-1)*100).toFixed(1)}% at the leg chances${stake?` · Banker size $${stake.toFixed(2)} (¼-Kelly)`:''}</div>
+    <div class="bar" style="margin-top:6px"><button class="primary" onclick="cbLock()">🔒 Lock this ticket</button></div></div>`:'<div class="sub" style="margin-top:6px">Check at least one pick to build a ticket.</div>';
+  return`<div class="tkt"><h3>🎭 Build from a character</h3><div class="sub" style="font-size:10px;margin-bottom:6px">${intro}</div>${chips}${spRow}${nRow}
+    ${pool.length?rows:`<div class="sub">No open picks for ${txtEsc(who)} right now (priced -300 or better, game not started).</div>`}</div>${sum}`;}
+function cbLock(){const d=today();const pool=cbPool(CB_V);const sel=pool.filter(x=>(CB_SEL||[]).includes(x.k));if(!sel.length)return;
+  const who=CB_V==='__roll'?'Roll Call':charName(CB_V);const id=Date.now();
+  const legs=sel.map(x=>({id:id+'|'+x.pick,game:x.game,pick:x.pick,p:+(+x.p).toFixed(4),price:+x.price,sport:x.sp,gameDate:d,charVoice:x.v}));
+  const L=get(LS.locked,[]);L.unshift({id,date:d,name:`${who} — ${sel.length}-leg`,source:'mine',charBuilt:CB_V,legs,p:legs.reduce((a,x)=>a*x.p,1)});set(LS.locked,L);
+  CB_SEL=null;alert(`Locked "${who} — ${sel.length}-leg". It's in Tickets → My Picks, graded like any other ticket.`);try{TICKETTAB='mine';renderTickets();}catch(e){}}
