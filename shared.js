@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18398,37 +18398,69 @@ function msTicketFit(m,pi,t){const P=msPotsOf(m)[pi];if(!P||P.balance<1)return n
   const k=(t.legs||[]).length;const lane=lanes.find(x=>x.k===k)||L;
   const last=dayShift(m.startDate,m.days-1);const days=(t.legs||[]).map(l=>String(l.gameDate||t.date||'').slice(0,10)).filter(Boolean);
   const rc=msRuleCheck(t,P.rule,P.sport||m.sport||null);
+  const RL=P.rule&&MS_FILTERS[P.rule]?MS_FILTERS[P.rule].lab:'';
+  const nBad=(String(rc.why||'').match(/^(\d+) leg/)||[])[1];
+  const pr=dec?decimalToAmerican(dec):null;
+  /* hard = the ticket can't count toward this challenge at all; the rest are plan deviations */
   const checks=[
-    {lab:'rule'+(P.rule?` "${MS_FILTERS[P.rule].lab}"`:''),ok:rc.ok,why:rc.why||''},
-    {lab:`${lane.k}-leg plan`,ok:k===lane.k,why:`ticket has ${k}`},
-    {lab:`priced ${decimalToAmerican(lane.minDec)}+`,ok:dec!=null&&dec>=lane.minDec*0.999,why:dec?`ticket is ${decimalToAmerican(dec)}`:'no price'},
-    {lab:`stake ~${ms$(lane.stake)}`,ok:!!M&&M.stake<=lane.stake*1.5+0.01&&M.stake>=lane.stake*0.5-0.01,why:M?`ticket stakes ${ms$(M.stake)}`:'no stake on the ticket'},
-    {lab:'inside the challenge window',ok:days.every(d=>d>=m.startDate&&d<=last),why:`games ${[...new Set(days)].join(', ')}`}];
+    {id:'rule',hard:true,lab:'rule'+(RL?` "${RL}"`:''),ok:rc.ok,why:rc.why||'',
+      miss:nBad?`${nBad} of ${k} legs off ${RL||'the rule'}`:(rc.why||'breaks the rule')},
+    {id:'legs',lab:`${lane.k}-leg plan`,ok:k===lane.k,why:`ticket has ${k}`,miss:`plan ${lane.k} leg${lane.k===1?'':'s'} · has ${k}`},
+    {id:'price',lab:`priced ${decimalToAmerican(lane.minDec)}+`,ok:dec!=null&&dec>=lane.minDec*0.999,why:dec?`ticket is ${pr}`:'no price',miss:`needs ${decimalToAmerican(lane.minDec)}+ · is ${pr||'unpriced'}`},
+    {id:'stake',lab:`stake ~${ms$(lane.stake)}`,ok:!!M&&M.stake<=lane.stake*1.5+0.01&&M.stake>=lane.stake*0.5-0.01,why:M?`ticket stakes ${ms$(M.stake)}`:'no stake on the ticket',miss:M?`plan ${ms$(lane.stake)} · yours ${ms$(M.stake)}`:'no stake set'},
+    {id:'window',hard:true,lab:'inside the challenge window',ok:days.every(d=>d>=m.startDate&&d<=last),why:`games ${[...new Set(days)].join(', ')}`,miss:'games fall outside its dates'}];
   const score=checks.filter(c=>c.ok).length;
-  return{m,pi,t,P,lane,checks,score,full:score===checks.length,dates:[...new Set(days)].sort()};}
-function msFitsFor(t){return msAll().filter(m=>m.status==='active').flatMap(m=>msPotsOf(m).map((P,pi)=>msTicketFit(m,pi,t))).filter(Boolean).sort((a,b)=>b.score-a.score);}
+  const hardOk=checks.every(c=>!c.hard||c.ok),misses=checks.filter(c=>!c.ok);
+  /* tier: ready (clean fit) · close (counts, one thing off plan) · off (counts, 2+ off plan) · no (can't count) */
+  const tier=!hardOk?'no':!misses.length?'ready':misses.length===1?'close':'off';
+  return{m,pi,t,P,lane,checks,score,full:score===checks.length,hardOk,misses,tier,dates:[...new Set(days)].sort()};}
+const MS_TIER_RANK={ready:0,close:1,off:2,no:3};
+const MS_TIER_LAB={ready:['READY','var(--win)'],close:['CLOSE','var(--gold)'],off:['OFF-PLAN','var(--mute)'],no:["DOESN'T QUALIFY",'var(--rust)']};
+function msFitsFor(t){return msAll().filter(m=>m.status==='active').flatMap(m=>msPotsOf(m).map((P,pi)=>msTicketFit(m,pi,t))).filter(Boolean).sort((a,b)=>MS_TIER_RANK[a.tier]-MS_TIER_RANK[b.tier]||b.score-a.score);}
 function msAttachId(mid,tid,pot){msAttach(mid,{value:String(tid)},pot);}
-function msFitRow(F,showMission){const tick=c=>`<span style="color:${c.ok?'var(--win)':'var(--rust)'}" title="${esc(c.ok?'':c.why)}">${c.ok?'✓':'✗'} ${esc(c.lab)}${c.ok?'':` <span style="color:var(--mute)">(${esc(c.why)})</span>`}</span>`;
-  const head=showMission?`🎯 ${esc(F.m.name)}${F.m.pots?' · '+esc(F.P.name):''}`:`#${esc(String(F.t.id))} ${esc(F.t.name||'')} · ${(F.t.legs||[]).length} legs${F.dates.length?' · '+F.dates.map(d=>d===today()?'today':fmtDate(new Date(d+'T12:00:00'))).join(', '):''}`;
-  return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline">
-    <b style="font-size:11.5px">${head}</b><span class="mono" style="font-size:10px;font-weight:800;color:${F.full?'var(--win)':F.score>=3?'var(--gold)':'var(--mute)'}">${F.score}/${F.checks.length} fit</span></div>
-    <div class="mono" style="font-size:9.5px;line-height:1.6">${F.checks.map(tick).join(' · ')}</div>
-    <div class="bar" style="margin-top:3px"><button style="font-size:10px" onclick="msAttachId(${F.m.id},'${esc(String(F.t.id))}',${F.pi})">Attach${showMission?'':' this ticket'}</button></div></div>`;}
-/* on a challenge card: its best-fitting tickets */
+function msChalName(F,pin){const nm=String(F.m.name||'');return(pin&&!/^\p{Extended_Pictographic}/u.test(nm)?'🎯 ':'')+txtEsc(nm)+(F.m.pots?' · '+txtEsc(F.P.name):'');}
+function msTicketLab(t){const id=String(t.id),nm=String(t.name||'');return'#'+txtEsc(id.replace(/^ext/,''))+(nm&&!nm.includes(id.replace(/^ext/,''))?' '+txtEsc(nm):'');}
+function msLegsN(t){const n=(t.legs||[]).length;return n+(n===1?' leg':' legs');}
+function msFitDates(F){return F.dates.map(d=>d===today()?'today':fmtDate(new Date(d+'T12:00:00'))).join(', ');}
+function msFitPips(F){return`<span class="fit-pips" title="${F.score}/${F.checks.length} checks">${F.checks.map(c=>`<i class="${c.ok?'ok':c.hard?'hard':'miss'}"></i>`).join('')}</span>`;}
+function msFitTag(F){const[l,c]=MS_TIER_LAB[F.tier];return`<span class="fit-tag" style="color:${c};border-color:${c}">${l}</span>`;}
+function msFitMisses(F){return F.misses.length?`<div class="fit-miss">${F.misses.map(c=>`<span class="${c.hard?'hard':''}" title="${txtEsc(c.why)}">${txtEsc(c.miss)}</span>`).join('')}</div>`:'<div class="fit-miss"><span class="ok">✓ clean fit — rule, legs, price, stake, dates</span></div>';}
+function msFitAttach(F,lab){return F.tier==='no'?'':`<button class="fit-at${F.tier==='ready'?' go':''}" onclick="msAttachId(${F.m.id},'${esc(String(F.t.id))}',${F.pi})">${lab||'Attach'}</button>`;}
+/* one challenge row (used on a ticket card, under "also fits", and on a challenge card) */
+function msFitRow(F,showMission){
+  const head=showMission?`${msChalName(F,1)}`:`${msTicketLab(F.t)} <span class="fit-sub">${msLegsN(F.t)}${F.dates.length?' · '+msFitDates(F):''}</span>`;
+  return`<div class="fit-row"><div class="fit-top"><b>${head}</b>${msFitTag(F)}</div>
+    <div class="fit-mid">${msFitPips(F)}${msFitMisses(F)}${msFitAttach(F)}</div></div>`;}
+/* on a challenge card: tickets that can count toward it */
 function msFitHtml(m){if(m.status!=='active')return'';const T=msFreeTickets();if(!T.length)return'';
-  const F=T.flatMap(t=>msPotsOf(m).map((P,pi)=>msTicketFit(m,pi,t))).filter(x=>x&&x.score>=2).sort((a,b)=>b.score-a.score).slice(0,5);
-  if(!F.length)return'';
-  return`<details style="margin-top:6px"${F.some(x=>x.full)?' open':''}><summary class="mono" style="font-size:10px">🎟 Your tickets that fit this plan · ${F.filter(x=>x.full).length} full fit${F.filter(x=>x.full).length===1?'':'s'}</summary>${F.map(x=>msFitRow(x,false)).join('')}</details>`;}
-/* Money tab panel + ticket cards: where each ticket fits */
+  const best={};T.forEach(t=>msPotsOf(m).forEach((P,pi)=>{const F=msTicketFit(m,pi,t);if(!F||F.tier==='no')return;const k=String(t.id);if(!best[k]||MS_TIER_RANK[F.tier]<MS_TIER_RANK[best[k].tier])best[k]=F;}));
+  const F=Object.values(best).sort((a,b)=>MS_TIER_RANK[a.tier]-MS_TIER_RANK[b.tier]||b.score-a.score).slice(0,5);
+  if(!F.length)return'';const nr=F.filter(x=>x.tier==='ready').length;
+  return`<details class="fit-box" style="margin-top:6px"${nr?' open':''}><summary class="mono" style="font-size:10px">🎟 Tickets that can count here · ${nr?`<b style="color:var(--win)">${nr} ready</b>`:`${F.length} close`}</summary>${F.map(x=>msFitRow(x,false)).join('')}</details>`;}
+/* Money tab: one compact card per ticket, sorted ready → close → off-plan; tickets that can't count anywhere fold into one line */
 function msMatcherHtml(){const T=msFreeTickets();if(!T.length||!msAll().some(m=>m.status==='active'))return'';
-  const rows=T.map(t=>{const F=msFitsFor(t).filter(x=>x.score>=2);if(!F.length)return'';
-    return`<div style="margin:6px 0"><div class="mono" style="font-size:10.5px"><b>#${esc(String(t.id))}</b> ${esc(t.name||'')} · ${(t.legs||[]).length} legs</div>${F.slice(0,3).map(x=>msFitRow(x,true)).join('')}</div>`;}).filter(Boolean);
-  if(!rows.length)return'';
-  return`<details class="tkt" style="margin:8px 0" open><summary><b>🎟 Where your tickets fit</b> <span class="mono" style="font-size:10px;color:var(--mute)">${rows.length} ticket${rows.length===1?'':'s'} not on a challenge yet</span></summary>
-    <div class="sub" style="font-size:10px">Checked against each running challenge: rule, leg count, minimum price, planned stake, and the challenge's date window. Upcoming games count — attach now, it settles when they finish.</div>${rows.join('')}</details>`;}
+  const R=T.map(t=>{const F=msFitsFor(t);return{t,F,best:F[0],ok:F.filter(x=>x.tier!=='no')};}).filter(x=>x.best);
+  const live=R.filter(x=>x.best.tier!=='no').sort((a,b)=>MS_TIER_RANK[a.best.tier]-MS_TIER_RANK[b.best.tier]||b.best.score-a.best.score);
+  const dead=R.filter(x=>x.best.tier==='no');
+  const n=k=>live.filter(x=>x.best.tier===k).length;
+  const card=({t,best:F,ok})=>{const more=ok.slice(1);
+    return`<div class="fit-card fit-${F.tier}"><div class="fit-top"><b>${msTicketLab(t)}</b><span class="fit-sub">${msLegsN(t)}${F.dates.length?' · '+msFitDates(F):''}</span>${msFitTag(F)}</div>
+      <div class="fit-chal">${msChalName(F,1)}</div>
+      <div class="fit-mid">${msFitPips(F)}${msFitMisses(F)}${msFitAttach(F)}</div>
+      ${more.length?`<details class="fit-more"><summary>also counts for ${more.length} more</summary>${more.map(x=>msFitRow(x,true)).join('')}</details>`:''}</div>`;};
+  const mainList=live.filter(x=>x.best.tier!=='off'),offList=live.filter(x=>x.best.tier==='off');
+  const why=x=>{const h=x.best.checks.find(c=>c.hard&&!c.ok);return h?h.miss:'';};
+  if(!live.length&&!dead.length)return'';
+  return`<details class="tkt fit-panel" style="margin:8px 0"${n('ready')||n('close')?' open':''}><summary><b>🎟 Where your tickets fit</b>
+      <span class="fit-sum">${n('ready')?`<i style="color:var(--win)">${n('ready')} ready</i>`:''}${n('close')?`<i style="color:var(--gold)">${n('close')} close</i>`:''}${n('off')?`<i>${n('off')} off-plan</i>`:''}${dead.length?`<i style="color:var(--rust)">${dead.length} can't count</i>`:''}</span></summary>
+    <div class="fit-legend mono"><span><i class="ok"></i>fits</span><span><i class="miss"></i>off the plan — still counts</span><span><i class="hard"></i>breaks the rule or dates — can't count</span></div>
+    ${mainList.map(card).join('')||'<div class="sub" style="font-size:10.5px">Nothing lines up cleanly right now.</div>'}
+    ${offList.length?`<details class="fit-more"><summary>${offList.length} off-plan ticket${offList.length===1?'':'s'} — they count, but 2+ things differ from the plan</summary>${offList.map(card).join('')}</details>`:''}
+    ${dead.length?`<details class="fit-more"><summary>${dead.length} ticket${dead.length===1?'':'s'} can't count toward any running challenge</summary>${dead.map(x=>`<div class="fit-dead"><b>${msTicketLab(x.t)}</b> <span class="fit-sub">${msLegsN(x.t)}</span><div>closest: ${msChalName(x.best)} — ${txtEsc(why(x))}</div></div>`).join('')}</details>`:''}
+  </details>`;}
 function msFitChip(t){try{if(!msAll().some(m=>m.status==='active'))return'';const used=msAll().some(m=>(m.steps||[]).some(s=>String(s.ticketId)===String(t.id)));if(used)return'';
-  const F=msFitsFor(t)[0];if(!F||F.score<3)return'';
-  return`<div class="mono" style="font-size:9.5px;margin-top:2px;color:${F.full?'var(--win)':'var(--gold)'}">🎯 fits ${esc(F.m.name)}${F.m.pots?' · '+esc(F.P.name):''} (${F.score}/${F.checks.length}) <a href="#" style="color:var(--cold)" onclick="msAttachId(${F.m.id},'${esc(String(t.id))}',${F.pi});return false">attach</a></div>`;}catch(e){return'';}}
+  const F=msFitsFor(t)[0];if(!F||F.tier==='no'||F.tier==='off')return'';
+  return`<div class="mono" style="font-size:9.5px;margin-top:2px;color:${F.tier==='ready'?'var(--win)':'var(--gold)'}">🎯 ${F.tier==='ready'?'fits':'close to'} ${msChalName(F)} <a href="#" style="color:var(--cold)" onclick="msAttachId(${F.m.id},'${esc(String(F.t.id))}',${F.pi});return false">attach</a></div>`;}catch(e){return'';}}
 let MS_LIVE_TIMER=null;
 function msLiveLoop(){if(MS_LIVE_TIMER)return;
   MS_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-money');if(!v||!v.classList.contains('on'))return;
@@ -19222,7 +19254,7 @@ function msCard(m){
     const potBlocks=msPotsOf(m).map((P,pi)=>{const ro=m.pots?msParse(P.routeKey):r;const lanes=msPotOrders(m,P,ro);
       const rule=P.rule?`<span class="mono" style="font-size:9px;color:#a78bfa"> · RULE: ${MS_FILTERS[P.rule].lab} (${MS_FILTERS[P.rule].desc})</span>`:'';
       const sport=P.sport?`<span class="mono" style="font-size:9px;color:#a78bfa"> · ${SPORT_LAB[P.sport]}</span>`:'';
-      return`${m.pots?`<div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--rule)"><b>${esc(P.name)}</b> <span class="mono" style="font-size:10px">${ms$(P.balance)}${P.safe?` + safe ${ms$(P.safe)}`:''} · ${msRouteLabel(ro)}</span>${rule}${sport}</div>`:(rule||sport?`<div>${rule}${sport}</div>`:'')}
+      return`${m.pots?`<div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--rule)"><b>${txtEsc(P.name)}</b> <span class="mono" style="font-size:10px">${ms$(P.balance)}${P.safe?` + safe ${ms$(P.safe)}`:''} · ${msRouteLabel(ro)}</span>${rule}${sport}</div>`:(rule||sport?`<div>${rule}${sport}</div>`:'')}
         ${P.balance<1?'<div class="sub" style="color:var(--rust)">This pot is spent.</div>':lanes.map(msLaneHtml).join('')}
         ${m.pots&&P.balance>=1?`<div class="bar" style="margin-top:4px">${attach(pi)}</div>`:''}`;}).join('');
     const fin=m.pots?S.p:r.p;
@@ -19245,7 +19277,7 @@ function msCard(m){
   const steps=m.steps.map((s,i)=>`<div class="mono" style="font-size:10px">Step ${i+1}${m.pots?` · ${esc(m.pots[s.pot||0].name)}`:''}: #${esc(s.ticketId)} ${s.done?(s.won?`<b style="color:var(--win)">WON</b> +${ms$(s.payout-s.stake)}`:`<b style="color:var(--rust)">LOST</b> −${ms$(s.stake)}`):'<span style="color:var(--gold)">riding…</span>'}
     ${s.rule&&!s.rule.ok?` <span style="color:var(--rust)">⚠ ${esc(s.rule.why)}</span>`:''}${(s.quests||[]).map(q=>q.done===true?` <span style="color:#FFD75E">★${q.name} +${q.xp}</span>`:q.done===false?` <span style="color:var(--mute)">✗${q.name}</span>`:` <span style="color:var(--mute)">…${q.name}</span>`).join('')}</div>`).join('');
   return`<div class="tkt" style="border-color:${col};margin:8px 0">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px"><b style="font-size:14px">🎯 ${esc(m.name)}</b><span class="mono" style="font-size:10px;color:${col}">${D?`<span style="color:${D[2]}">${D[1].toUpperCase()}</span> · `:''}${m.status.toUpperCase()}${m.attempt>1?' · attempt '+m.attempt:''}</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px"><b style="font-size:14px">🎯 ${txtEsc(m.name)}</b><span class="mono" style="font-size:10px;color:${col}">${D?`<span style="color:${D[2]}">${D[1].toUpperCase()}</span> · `:''}${m.status.toUpperCase()}${m.attempt>1?' · attempt '+m.attempt:''}</span></div>
     <div class="sub">$${m.start} → <b>$${m.goal.toLocaleString()}</b> in ${m.days} days · balance <b style="color:var(--gold)">${ms$(m.balance)}</b>${m.safe?` · safe <b style="color:var(--win)">${ms$(m.safe)}</b>`:''} · ${X.daysLeft} day${X.daysLeft>1?'s':''} left</div>
     ${m.status==='won'?`<div class="sub" style="color:var(--win)"><b>MISSION COMPLETE</b>${m.clean?' · clean run bonus':''}</div>`:''}
     ${map}${orders}<div id="msLive_${m.id}">${msLiveHtml(m)}</div>${msFitHtml(m)}${steps}
@@ -20408,6 +20440,27 @@ body.bnav main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
 #bnMore .bn-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:14px;background:var(--panel2);border:1px solid var(--rule);font-weight:700;font-size:11.5px;color:var(--chalk)}
 #bnMore .bn-tile span{font-size:22px}
+/* challenge fit cards (v1.87) */
+.fit-panel>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
+.fit-sum{display:inline-flex;flex-wrap:wrap;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute)}.fit-sum i{font-style:normal;font-weight:700}
+.fit-legend{display:flex;flex-wrap:wrap;gap:10px;font-size:9px;color:var(--mute);margin:6px 0 4px}.fit-legend span{display:inline-flex;align-items:center;gap:4px}
+.fit-legend i,.fit-pips i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--win)}
+.fit-legend i.miss,.fit-pips i.miss{background:var(--gold)}.fit-legend i.hard,.fit-pips i.hard{background:var(--rust)}
+.fit-card{margin:8px 0;padding:9px 10px;border-radius:12px;border:1px solid var(--rule);border-left:3px solid var(--mute);background:rgba(255,255,255,.02)}
+.fit-card.fit-ready{border-left-color:var(--win);background:rgba(61,220,132,.05)}.fit-card.fit-close{border-left-color:var(--gold)}.fit-card.fit-no{border-left-color:var(--rust)}
+.fit-top{display:flex;align-items:baseline;gap:6px;font-size:12px}.fit-top b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.fit-sub{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--mute);white-space:nowrap}
+.fit-tag{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:8.5px;font-weight:800;letter-spacing:.08em;padding:1px 6px;border:1px solid;border-radius:99px;white-space:nowrap}
+.fit-chal{font-size:11px;margin-top:3px;color:var(--chalk)}
+.fit-mid{display:flex;align-items:center;gap:8px;margin-top:5px}.fit-pips{display:inline-flex;gap:3px;flex:none}
+.fit-miss{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:4px}
+.fit-miss span{font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 6px;border-radius:6px;background:rgba(255,197,90,.10);color:var(--gold)}
+.fit-miss span.hard{background:rgba(232,93,74,.12);color:var(--rust)}.fit-miss span.ok{background:rgba(61,220,132,.10);color:var(--win)}
+button.fit-at{flex:none;width:auto;min-height:0;padding:5px 12px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-radius:99px;border:1px solid var(--rule);background:transparent;color:var(--chalk)}
+button.fit-at.go{background:linear-gradient(135deg,#3DDC84,#21a865);color:#0B0F14;border-color:transparent}
+.fit-row{padding:7px 0;border-top:1px solid var(--rule)}.fit-row .fit-top{font-size:11px}
+.fit-more{margin-top:6px}.fit-more>summary{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--mute);cursor:pointer;padding:3px 0}
+.fit-dead{padding:6px 0;border-top:1px solid var(--rule);font-size:11px}.fit-dead div{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--mute);margin-top:2px}
 `;
 const BN_PRIMARY=['games','today','banker','mine','tickets'];
 const BN_ICO={games:'🏟',today:'⚡',banker:'🏦',mine:'📡',tickets:'🎟',grades:'📊',money:'💰',best:'🏆',coach:'🧠',chat:'💬',settings:'⚙️',recap:'🧾',sharp:'🦈',intel:'🛰',more:'☰'};
