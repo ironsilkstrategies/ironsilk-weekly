@@ -54,7 +54,8 @@ const nhlTeamName=a=>NHL_TEAMS[a]?NHL_TEAMS[a].join(' '):a;
 
 /* ── Small math ────────────────────────────────────────────────────────── */
 const nhlImp=a=>a==null||isNaN(a)?null:(a>0?100/(a+100):-a/(-a+100));
-const nhlProfit=a=>a>0?a/100:100/Math.abs(a);
+/* v1.89: a missing/zero price used to return Infinity and turned a whole record into "+Infinityu" */
+const nhlProfit=a=>{a=+a;return!isFinite(a)||Math.abs(a)<100?null:a>0?a/100:100/Math.abs(a);};
 const nhlEV=(p,a)=>p==null||a==null||isNaN(a)||Math.abs(+a)<100?null:(p*nhlProfit(+a)-(1-p))*100;
 const nhlFair=p=>p==null?null:(p>=0.5?Math.round(-(p/(1-p))*100):Math.round(((1-p)/p)*100));
 const nhlSgn=n=>n==null?'—':(n>0?'+'+n:''+n);
@@ -691,7 +692,23 @@ function nhlCollectActualBoxes(day){
     const c=NHL_BOX_CACHE[g.espnId];if(c)use(c);else{r.boxTried=(r.boxTried||0)+1;fetchNHLBox(g.espnId).then(use).catch(()=>{});}
   });
 }
+/* v1.89 · past-day finals. nhlArchiveFinals only ever looked at TODAY, so any day the app
+   wasn't open when the games ended stayed "waiting on finals" forever (103 picks). One
+   ranged scoreboard call fills every open day from the last 30. Throttled to 10 min. */
+let NHL_BACKFILL_TS=0;
+async function nhlBackfillFinals(force){
+  if(!force&&Date.now()-NHL_BACKFILL_TS<600e3)return 0;NHL_BACKFILL_TS=Date.now();
+  const arc=get(NHL_LS.arc,{}),td=today(),lo=dayShift(td,-30);
+  const open=Object.keys(arc).filter(d=>d<td&&d>=lo&&(arc[d].rows||[]).some(r=>!r.final)).sort();if(!open.length)return 0;
+  const f=d=>d.replace(/-/g,'');
+  let j=null;try{const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${f(open[0])}-${f(dayShift(td,-1))}&limit=300`);j=await r.json();}catch(e){return 0;}
+  const G={};(j&&j.events||[]).map(nhlParseEvent).filter(Boolean).forEach(g=>{G[g.id]=g;});
+  let n=0;open.forEach(d=>(arc[d].rows||[]).forEach(r=>{if(r.final)return;const g=G[String(r.gid)];if(!g||g.abstract!=='post'||g.awayScore==null)return;
+    r.final={a:+g.awayScore,h:+g.homeScore,p1a:g.p1a,p1h:g.p1h};r.awayScore=+g.awayScore;r.homeScore=+g.homeScore;n++;}));
+  if(n){set(NHL_LS.arc,arc);try{brainLearn('nhl')}catch(e){}try{if(document.getElementById('gradeBody')&&typeof renderNHLRecord==='function'&&ACTIVE_SPORT==='nhl')renderNHLRecord();}catch(e){}}
+  return n;}
 function nhlArchiveFinals(){
+  try{nhlBackfillFinals();}catch(e){}
   const arc=get(NHL_LS.arc,{}),d=today(),day=arc[d];if(!day)return;let ch=false;
   NHL_GAMES.forEach(g=>{if(g.abstract!=='post'||g.awayScore==null)return;const r=day.rows.find(x=>x.gid===g.id);if(!r||r.final)return;
     r.final={a:+g.awayScore,h:+g.homeScore,p1a:g.p1a,p1h:g.p1h};r.awayScore=+g.awayScore;r.homeScore=+g.homeScore;ch=true;});
@@ -708,10 +725,10 @@ function renderNHLRecord(){
     if(p.m==='ml')res=(p.side==='home')===(h>a);
     else if(p.m==='total'){const t=a+h;res=t===p.line?null:(p.side==='over')===(t>p.line);}
     else{const m=(p.side==='home'?h-a:a-h)+p.line;res=m===0?null:m>0;}
-    const b=T[p.m];if(res===null)b.P++;else if(res){b.W++;b.u+=nhlProfit(p.price);}else{b.L++;b.u-=1;}})));
+    const b=T[p.m];const pr=nhlProfit(p.price);if(res===null)b.P++;else if(pr==null){res?b.W++:b.L++;b.nu=(b.nu||0)+1;}else if(res){b.W++;b.u+=pr;}else{b.L++;b.u-=1;}})));
   const lab={ml:'Moneyline',total:'Total',spread:'Puck line'};
   let h=`<div class="tkt hi"><h3>System picks — model's best-EV side per market (≥2% EV, locked pregame)</h3>`+
-    Object.entries(T).map(([k,b])=>`<div class="sub">${lab[k]}: <b>${b.W}-${b.L}${b.P?'-'+b.P:''}</b> · ${b.u>=0?'+':''}${b.u.toFixed(2)}u</div>`).join('')+
+    Object.entries(T).map(([k,b])=>`<div class="sub">${lab[k]}: <b>${b.W}-${b.L}${b.P?'-'+b.P:''}</b> · ${b.u>=0?'+':''}${b.u.toFixed(2)}u${b.nu?` <span style="color:var(--mute)">(${b.nu} unpriced, not in units)</span>`:''}</div>`).join('')+
     (pend?`<div class="sub" style="color:var(--mute)">${pend} pick${pend>1?'s':''} waiting on finals</div>`:'')+`</div>`;
   try{h+=voicesReport('nhl')}catch(e){}
   try{h+=intelReport('nhl')}catch(e){}
@@ -782,7 +799,7 @@ function nhlEvalInputs(){
 }
 function nhlEvalFingerprint(){return JSON.stringify(nhlEvalInputs())}
 function runNHLMasterEval(){
-  const evals=[];const evOf=(p,price)=>(p*nhlProfit(price!=null?+price:-110)-(1-p))*100;
+  const evals=[];const evOf=(p,price)=>(p*(nhlProfit(price!=null?+price:-110)??100/110)-(1-p))*100;
   (NHL_GAMES||[]).forEach(g=>{
     if((g.abstract||'pre')!=='pre')return;
     const k=g.away.abbr+'@'+g.home.abbr,O=nhlLineObj(k);

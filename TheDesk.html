@@ -10,7 +10,7 @@
    Each sport lives on its own page; this just routes. The ?b= build tag
    makes Safari fetch the current page after a deploy instead of a cached one. */
 (function(){
-  var BUILD='20261010f';
+  var BUILD='20261010g';
   var PAGES={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
   var last='';try{last=localStorage.getItem('d4.activeSport')||''}catch(e){}
   var q=(location.search.match(/[?&]sport=(mlb|nfl|ncaaf|cfb|nhl|nba)/)||[])[1];

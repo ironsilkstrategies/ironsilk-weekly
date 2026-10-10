@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18158,17 +18158,20 @@ const HUB_VOICES=['Sim','Brain','Blend','Best','Judge','Coach','Most common','Pr
 let HUB_CACHE=null,HUB_SIG='';
 /* Your pick record: every distinct pick on your settled tickets (ten tickets
    with the same leg count once), graded, split by sport. */
+/* v1.89 · price-aware break-even. Each pick adds the win rate its own price needs
+   (a -300 leg needs 75%, a +150 leg 40%); unpriced picks are treated as -110. */
+function hubBE(o,price){const a=+price;const q=isFinite(a)&&Math.abs(a)>=100?imp(a):0.524;o.be+=q;o.bv+=q*(1-q);}
 function hubYou(){
   const L=get(LS.locked,[]).filter(t=>!TRACKED_ONLY_SOURCES.has(t.source));
   const seen={},R={};const SR=settledRecord('mine');const tw=SR.w,tl=SR.l,units=SR.profit;
   /* frozen legs first, so a pick graded once never drops out of the tally */
   settledList('mine').forEach(e=>(e.legs||[]).forEach(l=>{if(l.h!=='W'&&l.h!=='L')return;const k=l.sp+'|'+l.g+'|'+l.gd+'|'+String(l.pk).trim();if(seen[k])return;seen[k]=1;
-    const o=R[l.sp]||(R[l.sp]={w:0,n:0});o.n++;if(l.h==='W')o.w++;}));
+    const o=R[l.sp]||(R[l.sp]={w:0,n:0,be:0,bv:0});o.n++;if(l.h==='W')o.w++;hubBE(o,l.pr);}));
   let FZ={};try{FZ=settledAll();}catch(e){}
   L.forEach(t=>{if(t.archived&&FZ[String(t.id)]&&(FZ[String(t.id)].legs||[]).length)return;   /* frozen: its legs were counted above */
     (t.legs||[]).forEach(l=>{const sp=l.sport||'mlb',k=sp+'|'+l.game+'|'+(l.gameDate||t.date)+'|'+String(l.pick).trim();if(seen[k])return;
       let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(!g||g.hit==null)return;seen[k]=1;
-      const o=R[sp]||(R[sp]={w:0,n:0});o.n++;if(g.hit)o.w++;});
+      const o=R[sp]||(R[sp]={w:0,n:0,be:0,bv:0});o.n++;if(g.hit)o.w++;hubBE(o,l.price);});
   });
   return{tickets:{w:tw,l:tl,units},picks:R};
 }
@@ -18176,7 +18179,7 @@ function hubData(){
   const V=get(VOICES_KEY,[]);const sig=V.length+'|'+get(LS.locked,[]).length+'|'+Math.floor(Date.now()/300e3);
   if(HUB_CACHE&&HUB_SIG===sig)return HUB_CACHE;
   const M={};V.forEach(x=>{if(!x.graded||x.hit==null)return;const v=HUB_VOICES.includes(x.voice)?x.voice:'Outside preds';
-    const o=((M[v]||(M[v]={}))[x.sp]||(M[v][x.sp]={w:0,n:0,u:0}));o.n++;if(x.hit)o.w++;o.u+=x.units||0;});
+    const o=((M[v]||(M[v]={}))[x.sp]||(M[v][x.sp]={w:0,n:0,u:0,be:0,bv:0}));o.n++;if(x.hit)o.w++;o.u+=x.units||0;hubBE(o,x.price);});
   HUB_CACHE={M,you:hubYou()};HUB_SIG=sig;return HUB_CACHE;
 }
 let REC_VIEW='overview';
@@ -18192,10 +18195,11 @@ function renderRecordsHub(){
   if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   let D;try{D=hubData()}catch(e){el.innerHTML='';return;}
   const SPS=['mlb','nfl','ncaaf','nhl','nba'];
-  const cell=(o)=>{if(!o||!o.n)return'<td style="color:var(--mute)">—</td>';const p=o.w/o.n;
-    const c=o.n>=10?(p>=0.55?'var(--win)':p<0.47?'var(--rust)':'var(--chalk)'):'var(--mute)';
-    return`<td style="color:${c}">${o.w}-${o.n-o.w}<br><b>${Math.round(p*100)}%</b></td>`;};
-  const sum=obj=>{const o={w:0,n:0};Object.values(obj||{}).forEach(x=>{o.w+=x.w;o.n+=x.n;});return o;};
+  /* colored against break-even for the prices actually taken, not a flat 55% */
+  const cell=(o)=>{if(!o||!o.n)return'<td style="color:var(--mute)">—</td>';const p=o.w/o.n,need=o.be?o.be/o.n:0.524;
+    const c=o.n>=10?(p>=need+0.03?'var(--win)':p<need-0.02?'var(--rust)':'var(--chalk)'):'var(--mute)';
+    return`<td style="color:${c}" title="needed ${Math.round(need*100)}%">${o.w}-${o.n-o.w}<br><b>${Math.round(p*100)}%</b></td>`;};
+  const sum=obj=>{const o={w:0,n:0,be:0,bv:0};Object.values(obj||{}).forEach(x=>{o.w+=x.w;o.n+=x.n;o.be+=x.be||0;o.bv+=x.bv||0;});return o;};
   const row=(label,obj,color)=>`<tr><td style="text-align:left;white-space:nowrap"><b style="color:${color||'var(--chalk)'}">${label}</b></td>${cell(sum(obj))}${SPS.map(sp=>cell((obj||{})[sp])).join('')}</tr>`;
   const Y=D.you;
   const rows=[row('You (picks)',Y.picks,'var(--gold)')].concat(
@@ -18211,10 +18215,10 @@ function renderRecordsHub(){
     <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+':''}$${Y.tickets.units.toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
     <div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;border-collapse:collapse;text-align:center">
       <tr style="color:var(--mute)"><td></td><td>ALL</td><td>MLB</td><td>NFL</td><td>CFB</td><td>NHL</td></tr>${rows.join('')}</table></div>
-    <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = winning over 10+ calls, red = losing. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div>
-    <div style="margin-top:6px">${[['You (picks)',sum(Y.picks)]].concat(HUB_VOICES.filter(v=>D.M[v]).map(v=>[(CHARS[v]?CHARS[v].chip+' ':'')+v,sum(D.M[v])])).map(([nm,o])=>{const L=luckSkill(o.w,o.n);
-      return o.n?`<div class="mono" style="font-size:9.5px">${esc(nm)}: ${o.w}-${o.n-o.w} → <b style="color:${L.lab==='strong sign of skill'?'var(--win)':L.lab==='leaning skill'?'var(--cold)':L.lab==='below breakeven'?'var(--rust)':'var(--mute)'}">${L.lab}</b>${L.p!=null?` <span style="color:var(--mute)">(p=${L.p.toFixed(2)})</span>`:''}</div>`:'';}).join('')}
-    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: how likely a pure -110 coin-flipper would post that record. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return learnHealthHtml()+clvHtml()+calibrationHtml()+calOffsetsHtml()+_eb+charProfilesHtml()+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
+    <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = beating the break-even its prices needed (10+ calls), red = below it. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div>
+    <div style="margin-top:6px">${[['You (picks)',sum(Y.picks)]].concat(HUB_VOICES.filter(v=>D.M[v]).map(v=>[(CHARS[v]?CHARS[v].chip+' ':'')+v,sum(D.M[v])])).map(([nm,o])=>{const L=luckSkillPriced(o);
+      return o.n?`<div class="mono" style="font-size:9.5px">${txtEsc(nm)}: ${o.w}-${o.n-o.w} <span style="color:var(--mute)">(${Math.round(o.w/o.n*100)}% · prices needed ${o.be?Math.round(o.be/o.n*100):52}%)</span> → <b style="color:${L.lab==='strong sign of skill'?'var(--win)':L.lab==='leaning skill'?'var(--cold)':L.lab==='below breakeven'?'var(--rust)':'var(--mute)'}">${L.lab}</b>${L.p!=null?` <span style="color:var(--mute)">(p=${L.p.toFixed(2)})</span>`:''}</div>`:'';}).join('')}
+    <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: graded against what each pick's own price needed to break even — a -300 favorite has to hit 75%, not 52%. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return learnHealthHtml()+clvHtml()+calibrationHtml()+calOffsetsHtml()+_eb+charProfilesHtml()+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
 }
 /* Tabs you use daily stay in front; the rest sit under More. */
 const NAV_PRIMARY=['games','today','banker','mine','tickets','grades','money'];
@@ -19534,6 +19538,8 @@ function parlayCorrHtml(t){
 
 /* ── 6. Calibration + luck vs skill ── */
 function normCdf(z){const t=1/(1+0.2316419*Math.abs(z));const d=0.3989423*Math.exp(-z*z/2);const p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p;}
+function luckSkillPriced(o){if(!o||o.n<5)return{lab:'too few to judge',p:null};if(!(o.bv>0))return luckSkill(o.w,o.n);
+  const z=(o.w-o.be)/Math.sqrt(o.bv),p=1-normCdf(z);return{z,p,lab:z<=0?'below breakeven':p<0.05?'strong sign of skill':p<0.2?'leaning skill':'could easily be luck'};}
 function luckSkill(w,n,p0){if(n<5)return{lab:'too few to judge',p:null};p0=p0||0.524;const z=(w-n*p0)/Math.sqrt(n*p0*(1-p0));const p=1-normCdf(z);
   return{z,p,lab:z<=0?'below breakeven':p<0.05?'strong sign of skill':p<0.2?'leaning skill':'could easily be luck'};}
 /* ══ SITUATIONAL FACTORS — handicapping knowledge the brain must PROVE ═════
