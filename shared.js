@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2180,7 +2180,7 @@ function _dec(raw){if(raw==null||raw==='')return undefined;
   return JSON.parse(raw);}
 function _enc(json){if(json.length<8000)return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
-/* v1.84 · the decompression cache. Every get() of a compressed store ran the
+/* v1.85 · the decompression cache. Every get() of a compressed store ran the
    full LZ decompressor — and grading reads the game archive once PER LEG, so a
    few hundred tickets meant hundreds of full decompressions on every page load
    (measured 6+ seconds of a frozen screen on desktop; several times that on a
@@ -3401,7 +3401,7 @@ function tabRaw(n,b){
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.84) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.85) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3413,7 +3413,7 @@ function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++)
 let _SIMK='';
 function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
   _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
-/* ══ SIM ONCE, REUSE EVERYWHERE (v1.84) ════════════════════════════════════
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.85) ════════════════════════════════════
    The Monte Carlo loop is the only expensive part of a sim, and it depends on
    nothing but the model's inputs (projected scoring, spread of outcomes, sample
    size, the game's seed). Odds, calibration and every market read are applied
@@ -9809,7 +9809,7 @@ function evalInputFingerprint(){
     calib:(get('d4.drift',{})||{}).n||0
   });
 }
-/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.84) ═════════════════════════════
+/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.85) ═════════════════════════════
    Each sport's evaluator lives on its own page (the engine has to be loaded to
    sim), but they now share one front door: Records → Model eval shows the eval
    for the page you're on plus a strip with every sport's status today — tap one
@@ -11847,7 +11847,7 @@ const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['outsi
 let BUILD_MODE='chars';   // chars | presets | custom
 let OUTSIDE_MODE='consensus';
 
-/* v1.84 · Tickets keeps your place. renderTickets() used to jump to the top on
+/* v1.85 · Tickets keeps your place. renderTickets() used to jump to the top on
    EVERY call — including the background ones (live scores every 60s, the grade
    sweeper, coming back to the app), so the page yanked you up mid-scroll.
    Now: only a real navigation (another sub-tab or view) goes to the top. A
@@ -11966,7 +11966,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.84) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.85) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -17519,12 +17519,12 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.84 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.85 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */
 
-/* ══ CHARACTER SPLITS — the permanent raw record (v1.84) ═══════════════════
+/* ══ CHARACTER SPLITS — the permanent raw record (v1.85) ═══════════════════
    The voices ledger keeps the last 8,000 calls, which at a full slate is
    barely two weeks — so a character's record on a team or in a head-to-head
    quietly forgot everything older. Every graded call is now rolled, once, into
@@ -17912,7 +17912,7 @@ function renderToday(noSnap){
           live=`<div class="mono" style="font-size:10px;margin-top:2px">FINAL · ${sc} ${r}</div>`;}
         else{const lp=L.p,col=lp==null?'var(--mute)':lp>=0.6?'var(--win)':lp>=0.4?'var(--gold)':'var(--rust)';
           const mv=L.p0!=null&&lp!=null?Math.round((lp-L.p0)*100):null;
-          live=`<div class="mono" style="font-size:10.5px;margin-top:3px"><span style="color:#ff4b5c;font-weight:800">● LIVE</span> ${sc} · <span style="color:var(--mute)">${esc(E.detail||'')}</span></div>
+          live=`<div class="mono" style="font-size:10.5px;margin-top:3px"><span style="color:#ff4b5c;font-weight:800">● LIVE</span> ${sc} · <span style="color:var(--mute)">${esc(E.detail||'')}</span> ${gcBtn(sp,x.game,today())}</div>
             ${lp!=null?`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><div style="flex:1;height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${Math.round(lp*100)}%;background:${col}"></div></div>
             <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${pct(lp)} to win</span>${mv!=null&&mv!==0?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${pct(L.p0)}</span>`:''}</div>`:''}`;}}
       return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${L&&L.state==='in'?'#ff4b5c':c};background:rgba(255,255,255,.02);${on&&!(L&&L.state==='in')?'opacity:.55':''}">
@@ -18082,7 +18082,7 @@ function renderMyGames(){
     return`<div class="tkt${b.state==='in'?' hi':''}" style="margin:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div style="font-weight:900;font-size:15px">${SP_LAB[b.sp]||''} ${sc}</div>
         <div class="mono" style="font-size:10px">${st}</div></div>
-      <div class="mono" style="font-size:9px;color:var(--mute);margin:2px 0 4px">${b.rows.length} leg${b.rows.length>1?'s':''} on ${tix} ticket${tix>1?'s':''} · <a href="#" onclick="doSportSwitch('${b.sp}');return false" style="color:var(--cold)">open full card →</a></div>
+      <div class="mono" style="font-size:9px;color:var(--mute);margin:2px 0 4px">${b.rows.length} leg${b.rows.length>1?'s':''} on ${tix} ticket${tix>1?'s':''} · <a href="#" onclick="doSportSwitch('${b.sp}');return false" style="color:var(--cold)">open full card →</a>${b.state!=='pre'?' '+gcBtn(b.sp,b.game,b.d):''}</div>
       ${legs}</div>`;}).join('');
 }
 function mgLoop(){
@@ -19670,7 +19670,7 @@ try{if(typeof renderToday==='function'&&!renderToday.__hp){const _rt=renderToday
   try{const el=document.getElementById('todayBody');if(el&&!el.querySelector('.hp-sec')){const h=highPctLinesHtml()+likelyHtml();if(h)el.insertAdjacentHTML('beforeend','<div class="hp-sec">'+h+'</div>');}}catch(e){}return r;};renderToday.__hp=1;}}catch(e){}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   v1.84 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
+   v1.85 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
    ══════════════════════════════════════════════════════════════════════════ */
 const txtEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fairAmer=p=>p==null||!(p>0&&p<1)?null:p>=0.5?-Math.round(p/(1-p)*100):Math.round((1-p)/p*100);
@@ -19911,7 +19911,7 @@ function sgpCardHtml(sp,g,s){try{
 }catch(e){return'';}}
 
 
-/* ══ THE GRADE SWEEPER (v1.84) — no ticket goes ungraded ═══════════════════
+/* ══ THE GRADE SWEEPER (v1.85) — no ticket goes ungraded ═══════════════════
    Grading used to be a handful of separate jobs, each with its own blind spot:
    the ESPN refresh only looked back 30 days (and at most 21 dates a sport), the
    prop box-score pull ran once a day and only when Tickets/My Games was open,
@@ -19974,7 +19974,7 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)gradeSweep().catch(()=>{});});}
 
 
-/* ══ CHARACTER PARLAY BUILDER — Tickets → Build → 🎭 Characters (v1.84) ═════
+/* ══ CHARACTER PARLAY BUILDER — Tickets → Build → 🎭 Characters (v1.85) ═════
    Pick a character and get its own picks for today, best first: ranked by its
    graded record on that exact spot (sport+market, the team, H2H, home/road,
    fav/dog) blended with the pick's chance. The Banker pre-checks the length
@@ -20036,7 +20036,7 @@ function cbLock(){const d=today();const pool=cbPool(CB_V);const sel=pool.filter(
   const L=get(LS.locked,[]);L.unshift({id,date:d,name:`${who} — ${sel.length}-leg`,source:'mine',charBuilt:CB_V,legs,p:legs.reduce((a,x)=>a*x.p,1)});set(LS.locked,L);
   CB_SEL=null;alert(`Locked "${who} — ${sel.length}-leg". It's in Tickets → My Picks, graded like any other ticket.`);try{TICKETTAB='mine';renderTickets();}catch(e){}}
 
-/* ══ LIVE TICKETS + LIVE CHARACTER PROPS (v1.84) ═══════════════════════════ */
+/* ══ LIVE TICKETS + LIVE CHARACTER PROPS (v1.85) ═══════════════════════════ */
 function dToast(html,ms){if(typeof document==='undefined')return;let box=document.getElementById('dToastBox');
   if(!box){box=document.createElement('div');box.id='dToastBox';box.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:9999;display:flex;flex-direction:column;gap:6px;width:min(94vw,520px);pointer-events:none';document.body.appendChild(box);}
   const t=document.createElement('div');t.style.cssText='pointer-events:auto;background:#0f1a12;border:1.5px solid var(--win);color:var(--chalk);border-radius:12px;padding:10px 12px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5)';
@@ -20062,7 +20062,7 @@ function legLiveCard(t,l,opts){opts=opts||{};let g=null;try{g=gradeLeg(l,t.date)
   const tid=JSON.stringify(String(t.id)).replace(/"/g,'&quot;');
   return`<div ${opts.link?`onclick="openTicketSheet(${tid})" `:''}style="padding:7px 9px;margin:5px 0;border-radius:9px;border:1.5px solid ${border};background:rgba(255,255,255,.02);${opts.link?'cursor:pointer':''}">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-weight:800;font-size:13.5px;min-width:0">${txtEsc(l.pick)}${l.price!=null?` <span class="mono" style="font-size:11px;color:var(--gold)">${sgnP(+l.price)}</span>`:''}</div>
-      <div class="mono" style="font-size:10px;font-weight:800;color:${res[1]};white-space:nowrap">${res[0]}</div></div>
+      <div class="mono" style="font-size:10px;font-weight:800;color:${res[1]};white-space:nowrap">${res[0]}${state!=='pre'&&opts.gc!==false?' '+gcBtn(sp,l.game,d,''):''}</div></div>
     <div class="mono" style="font-size:10.5px;margin-top:2px">${(SP_LAB[sp]||'').split(' ')[0]} ${sc}</div>${bar}
     ${g&&g.detail&&!(e&&e.a!=null&&String(g.detail).includes(e.a+'–'+e.h))?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">${txtEsc(g.detail)}</div>`:''}
     ${opts.link?`<div class="mono" style="font-size:9.5px;color:var(--cold);margin-top:3px">${txtEsc(t.name||('Ticket #'+t.id))} · ${(t.legs||[]).length} legs · tap for the whole ticket ↗</div>`:''}</div>`;}
@@ -20142,3 +20142,97 @@ let CPF_C=null;
 function cpropFavTag(c){if(!CPF_C||Date.now()-CPF_C.ts>60e3){const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null)return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0});o.n++;if(x.hit)o.w++;});CPF_C={ts:Date.now(),R};}
   const o=CPF_C.R[c.voice+'|'+c.sp+'|'+pstId(c.player)];if(!o||o.n<3)return'';const fav=o.n>=4&&o.w/o.n>=0.7;
   return`<span class="mono" style="font-size:9px;color:${fav?'var(--gold)':'var(--mute)'}">${fav?'⭐':''}${o.w}-${o.n-o.w} on him</span> `;}
+
+/* ══ GAMECAST (v1.85) — follow any game live, ESPN-style ════════════════════
+   Tap 📺 on a live/final game and it opens full screen: scoreboard, the
+   situation drawn out (football field with the ball, down & distance and red
+   zone · baseball diamond with runners, count and outs, batter vs pitcher ·
+   hockey/basketball period and clock), ESPN's win-probability line, the
+   play-by-play newest first with scoring plays lit, the leaders, and every
+   ticket leg and character prop you have riding on that game. ESPN's own
+   game summary feed, refreshed every 15 seconds while it's open. */
+let GC={sp:null,id:null,game:null,d:null,j:null,ts:0,T:null,tab:'plays'};
+function gcEventId(sp,game,d){let e=null;try{e=mgEventFor(sp,game,d,true)||mgEventFor(sp,String(game).split('@').reverse().join('@'),d,true);}catch(err){}if(e&&e.espnId)return e.espnId;
+  try{const g=(sportGames(sp)||[]).find(z=>(z.away.abbr+'@'+z.home.abbr)===game);if(g)return g.espnId||g.id;}catch(err){}
+  try{const r=fbpEventId({sport:sp,game,gameDate:d},d);if(r&&r.id)return r.id;}catch(err){}return null;}
+async function openGamecast(sp,game,d,id){d=d||today();id=id||gcEventId(sp,game,d);
+  GC={...GC,sp,game,d,id,j:null,tab:GC.tab||'plays'};
+  let ov=document.getElementById('gcSheet');if(!ov){ov=document.createElement('div');ov.id='gcSheet';ov.style.cssText='position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=ev=>{if(ev.target===ov)closeGamecast();};document.body.appendChild(ov);}
+  ov.innerHTML=`<div id="gcIn" style="background:var(--panel,#12151c);width:min(100vw,640px);height:94vh;overflow:auto;border-radius:16px 16px 0 0;padding:12px 12px 26px;border:1px solid var(--rule)"><div class="empty">${id?'Loading the gamecast…':'No ESPN game found for '+txtEsc(game)+' on '+txtEsc(d)+' yet.'}</div></div>`;
+  document.body.style.overflow='hidden';clearInterval(GC.T);if(!id)return;
+  await gcLoad();GC.T=setInterval(()=>{if(!document.hidden)gcLoad();},15000);}
+function closeGamecast(){clearInterval(GC.T);GC.T=null;const ov=document.getElementById('gcSheet');if(ov)ov.remove();if(!document.getElementById('tkSheet'))document.body.style.overflow='';}
+async function gcLoad(){if(!GC.id||!FBP_ESPN[GC.sp])return;try{const r=await fetch(FBP_ESPN[GC.sp]+'/summary?event='+GC.id);const j=await r.json();GC.j=j;GC.ts=Date.now();
+    try{const box=GC.sp==='nhl'?fbpParseHockey(j):GC.sp==='mlb'?fbpParseBaseball(j):GC.sp==='nba'?fbpParseBasketball(j):fbpParseBox(j);FBP_MEM[GC.id]={ts:Date.now(),box};}catch(e){}}catch(e){}
+  gcPaint();}
+function gcTab(t){GC.tab=t;gcPaint();}
+function gcPaint(){const inn=document.getElementById('gcIn');if(!inn)return;const y=inn.scrollTop;let h='';try{h=gcHtml(GC.sp,GC.j);}catch(e){h=`<div class="empty">Gamecast error: ${txtEsc(e.message)}</div>`;}inn.innerHTML=h;inn.scrollTop=y;}
+/* ── pieces ── */
+function gcTeams(j){const c=(((j||{}).header||{}).competitions||[])[0]||{};const cs=c.competitors||[];const T={};
+  cs.forEach(x=>{const t=x.team||{};T[x.homeAway]={id:String(t.id||''),abbr:t.abbreviation||'',name:t.displayName||t.name||'',color:t.color?('#'+String(t.color).replace('#','')):null,logo:t.logo||((t.logos||[])[0]||{}).href||'',score:x.score!=null?x.score:'',record:((x.record||[])[0]||{}).summary||'',poss:!!x.possession};});
+  const st=c.status||{};return{T,state:((st.type||{}).state)||'pre',detail:(st.type||{}).shortDetail||(st.type||{}).detail||'',period:st.period||0,clock:st.displayClock||'',date:c.date};}
+function gcField(sit,T){if(!sit)return'';const yl=sit.yardLine;const poss=String(sit.possession||'');const home=T.home||{},away=T.away||{};
+  const possT=poss&&poss===home.id?home:poss&&poss===away.id?away:null;
+  /* field: away end zone on the left (0), home on the right (100). "at NEB 34" = 34 yards
+     from NEB's goal line, so it's read off the text whenever ESPN gives it; 50 is midfield */
+  let x=null;const m=String(sit.possessionText||sit.downDistanceText||'').match(/(?:at\s+)?([A-Z]{2,5})\s+(\d{1,2})\s*$/);
+  if(m){const side=m[1],n=+m[2];x=side===home.abbr?100-n:side===away.abbr?n:null;}
+  if(x==null&&/50\s*$/.test(String(sit.possessionText||sit.downDistanceText||'')))x=50;
+  if(x==null&&yl!=null&&isFinite(+yl))x=Math.max(0,Math.min(100,+yl));
+  const ln=sit.downDistanceText||sit.shortDownDistanceText||'';
+  return`<div style="margin:8px 0"><div class="mono" style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><b>${txtEsc(ln||'')}</b>${sit.isRedZone?'<b style="color:#ff4b5c">🔴 RED ZONE</b>':''}</div>
+    <div style="position:relative;height:46px;border-radius:8px;background:repeating-linear-gradient(90deg,#1d5c2e 0 9.09%,#20683a 9.09% 18.18%);overflow:hidden;border:1px solid #2c7a45">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:8%;background:${away.color||'#334'};opacity:.85;display:flex;align-items:center;justify-content:center;font:800 10px Inter;color:#fff;writing-mode:vertical-rl">${txtEsc(away.abbr)}</div>
+      <div style="position:absolute;right:0;top:0;bottom:0;width:8%;background:${home.color||'#334'};opacity:.85;display:flex;align-items:center;justify-content:center;font:800 10px Inter;color:#fff;writing-mode:vertical-rl">${txtEsc(home.abbr)}</div>
+      ${x!=null?`<div style="position:absolute;top:6px;bottom:6px;left:calc(8% + ${x}*0.84%);width:3px;background:#5fd3e8;box-shadow:0 0 6px #5fd3e8"></div><div style="position:absolute;top:50%;left:calc(8% + ${x}*0.84%);transform:translate(-50%,-50%);font-size:18px">🏈</div>`:''}
+    </div>${possT?`<div class="mono" style="font-size:10px;color:var(--mute);margin-top:3px">${txtEsc(possT.abbr)} ball${sit.possessionText?' · '+txtEsc(sit.possessionText):''}</div>`:''}</div>`;}
+function gcDiamond(sit){if(!sit)return'';const on=v=>!!(v&&(v===true||v.athlete||v.playerId||v.id));const b=(o,k)=>`<div style="position:absolute;${o};width:22px;height:22px;transform:rotate(45deg);background:${k?'var(--gold)':'transparent'};border:2px solid ${k?'var(--gold)':'var(--mute)'}"></div>`;
+  const dots=(n,max,col)=>Array.from({length:max},(_,i)=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px;background:${i<n?col:'var(--rule)'}"></span>`).join('');
+  const nm=a=>a&&a.athlete?(a.athlete.shortName||a.athlete.displayName||''):'';
+  return`<div style="display:flex;gap:16px;align-items:center;margin:8px 0"><div style="position:relative;width:96px;height:90px;flex:0 0 96px">${b('left:37px;top:6px',on(sit.onSecond))}${b('left:68px;top:36px',on(sit.onFirst))}${b('left:6px;top:36px',on(sit.onThird))}
+      <div style="position:absolute;left:40px;top:66px;width:16px;height:16px;background:var(--chalk);clip-path:polygon(0 0,100% 0,100% 50%,50% 100%,0 50%)"></div></div>
+    <div class="mono" style="font-size:11px;line-height:1.8">B ${dots(+sit.balls||0,4,'var(--win)')}<br>S ${dots(+sit.strikes||0,3,'var(--gold)')}<br>O ${dots(+sit.outs||0,3,'#ff4b5c')}</div>
+    <div style="font-size:11.5px;min-width:0">${nm(sit.batter)?`<div>🏏 <b>${txtEsc(nm(sit.batter))}</b></div>`:''}${nm(sit.pitcher)?`<div style="color:var(--mute)">vs ⚾ ${txtEsc(nm(sit.pitcher))}</div>`:''}</div></div>`;}
+function gcWinProb(j,T){const W=(j&&j.winprobability)||[];if(W.length<2)return'';const pts=W.map(x=>+x.homeWinPercentage).filter(isFinite);if(pts.length<2)return'';
+  const w=300,h=64,step=w/(pts.length-1);const path=pts.map((p,i)=>`${i?'L':'M'}${(i*step).toFixed(1)},${(h-p*h).toFixed(1)}`).join(' ');const last=pts[pts.length-1];
+  const fav=last>=0.5?T.home:T.away,fp=last>=0.5?last:1-last;
+  return`<div style="margin:8px 0"><div class="mono" style="display:flex;justify-content:space-between;font-size:10px;color:var(--mute)"><span>ESPN win probability</span><b style="color:var(--chalk)">${txtEsc((fav||{}).abbr||'')} ${Math.round(fp*100)}%</b></div>
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:64px;display:block"><line x1="0" y1="${h/2}" x2="${w}" y2="${h/2}" stroke="var(--rule)" stroke-dasharray="3 3"/><path d="${path}" fill="none" stroke="var(--gold)" stroke-width="2"/>
+      <text x="2" y="10" font-size="9" fill="var(--mute)">${txtEsc((T.home||{}).abbr||'')}</text><text x="2" y="${h-2}" font-size="9" fill="var(--mute)">${txtEsc((T.away||{}).abbr||'')}</text></svg></div>`;}
+function gcPlays(sp,j,T){const id2ab={};Object.values(T).forEach(t=>{if(t&&t.id)id2ab[t.id]=t.abbr;});let P=[];
+  if(sp==='nfl'||sp==='ncaaf'){const D=j.drives||{};const all=[...(D.previous||[]),...(D.current?[D.current]:[])];
+    all.forEach(dr=>(dr.plays||[]).forEach(p=>P.push({...p,_drive:dr.description||'',_team:((dr.team||{}).abbreviation)||id2ab[String((dr.team||{}).id||'')]||''})));}
+  else P=(j.plays||[]).slice();
+  P=P.filter(p=>p&&p.text).reverse().slice(0,40);if(!P.length)return'<div class="sub">Play-by-play appears once the game starts.</div>';
+  return P.map(p=>{const sc=!!p.scoringPlay;const per=(p.period||{}).displayValue||((p.period||{}).number?((sp==='nhl'?'P':sp==='mlb'?'Inn ':'Q')+(p.period||{}).number):'');const clk=(p.clock||{}).displayValue||'';
+    const tm=p._team||id2ab[String((p.team||{}).id||'')]||'';
+    return`<div style="padding:6px 8px;margin:3px 0;border-radius:8px;${sc?'border:1.5px solid var(--win);background:rgba(46,204,113,.07)':'border:1px solid var(--rule)'}">
+      <div class="mono" style="font-size:9.5px;color:var(--mute);display:flex;justify-content:space-between"><span>${txtEsc(per)}${clk?' · '+txtEsc(clk):''}${tm?' · '+txtEsc(tm):''}</span>${p.awayScore!=null&&p.homeScore!=null?`<span>${p.awayScore}–${p.homeScore}</span>`:''}</div>
+      <div style="font-size:12px;margin-top:1px">${sc?'🔥 ':''}${txtEsc(p.text)}</div></div>`;}).join('');}
+function gcLeaders(j){const L=(j&&j.leaders)||[];if(!L.length)return'<div class="sub">Leaders appear once stats come in.</div>';
+  return L.map(T=>{const ab=((T.team||{}).abbreviation)||'';const cats=(T.leaders||[]).slice(0,4).map(c=>{const a=(c.leaders||[])[0];if(!a)return'';
+      return`<div class="mono" style="font-size:10.5px;padding:2px 0"><span style="color:var(--mute)">${txtEsc(c.displayName||c.name||'')}</span> <b>${txtEsc(((a.athlete||{}).shortName)||((a.athlete||{}).displayName)||'')}</b> ${txtEsc(a.displayValue||'')}</div>`;}).join('');
+    return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(ab)}</b>${cats}</div>`;}).join('');}
+function gcBets(sp,game,d){const out=[];const k=x=>{try{return mgKey(sp,x)}catch(e){return x}};const want=k(game),rev=k(String(game).split('@').reverse().join('@'));
+  (get(LS.locked,[])||[]).forEach(t=>(t.legs||[]).forEach(l=>{if((l.sport||'mlb')!==sp)return;const g2=k(l.game);if((g2===want||g2===rev)&&legDay(l,t.date)===d)out.push(legLiveCard(t,l,{link:true}));}));
+  let props='';try{const [a,h]=String(game).split('@');const L=cpropLiveList().filter(x=>x.sp===sp&&(x.team===a||x.team===h));
+    props=L.map(x=>`<div class="mono" style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.player)} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}</b> ${x.hitLive?'<b style="color:var(--win)">✅ HIT</b>':x.miss?'<b style="color:var(--rust)">❌</b>':x.val!=null?`<span style="color:#ff4b5c">● ${x.val}/${x.thr}</span>`:''} <span style="color:${(CHARS[x.voice]||{}).color}">${txtEsc(charName(x.voice))}</span></div>`).join('');}catch(e){}
+  return(out.length?out.join(''):'<div class="sub">No tickets on this game.</div>')+(props?`<div class="mktlab" style="margin-top:8px">Character props in this game</div>${props}`:'');}
+function gcHtml(sp,j){const G=gcTeams(j);const T=G.T;const a=T.away||{},h=T.home||{};
+  const live=G.state==='in',fin=G.state==='post';
+  const team=(t,right)=>`<div style="flex:1;text-align:${right?'right':'left'};min-width:0"><div style="display:flex;align-items:center;gap:6px;justify-content:${right?'flex-end':'flex-start'}">${!right&&t.logo?`<img src="${t.logo}" alt="" style="width:30px;height:30px">`:''}<b style="font-size:16px">${txtEsc(t.abbr||'')}</b>${t.poss?'<span title="possession">🏈</span>':''}${right&&t.logo?`<img src="${t.logo}" alt="" style="width:30px;height:30px">`:''}</div>
+    <div class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(t.record||'')}</div></div>`;
+  const head=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="mono" style="font-size:10px;color:${live?'#ff4b5c':'var(--mute)'};font-weight:800">${live?'● LIVE':fin?'FINAL':'PREGAME'} · ${txtEsc((SP_LAB[sp]||'').split(' ').slice(1).join(' ')||sp.toUpperCase())}</div>
+      <button onclick="closeGamecast()" style="font-size:16px;padding:3px 10px">✕</button></div>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 6px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--rule)">${team(a,false)}
+      <div style="text-align:center;flex:0 0 auto"><div style="font-family:'Archivo';font-weight:900;font-size:30px;letter-spacing:.02em">${txtEsc(a.score)}<span style="color:var(--mute);margin:0 6px">–</span>${txtEsc(h.score)}</div>
+        <div class="mono" style="font-size:10.5px;color:${live?'#ff4b5c':'var(--mute)'}">${txtEsc(G.detail||'')}</div></div>${team(h,true)}</div>`;
+  const sit=j&&j.situation;
+  let situ='';if(live&&sit){situ=(sp==='nfl'||sp==='ncaaf')?gcField(sit,T):sp==='mlb'?gcDiamond(sit):'';
+    const lp=(sit.lastPlay||{}).text;if(lp)situ+=`<div style="font-size:12px;padding:6px 8px;border-left:3px solid var(--gold);margin:6px 0;background:rgba(245,184,46,.06)">${txtEsc(lp)}</div>`;}
+  const tabs=[['plays','Play-by-play'],['bets','💰 My bets'],['leaders','Leaders']];
+  const tb=`<div class="subnav" style="margin:10px 0 6px">${tabs.map(([k,l])=>`<button class="${GC.tab===k?'on':''}" onclick="gcTab('${k}')">${l}</button>`).join('')}</div>`;
+  const body=GC.tab==='bets'?gcBets(sp,GC.game,GC.d):GC.tab==='leaders'?gcLeaders(j):gcPlays(sp,j||{},T);
+  return head+situ+gcWinProb(j,T)+tb+body+`<div class="mono" style="font-size:9px;color:var(--mute);margin-top:8px">ESPN feed · updated ${GC.ts?new Date(GC.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'}):'—'} · refreshes every 15s</div>`;}
+function gcBtn(sp,game,d,label){return`<button onclick="event.stopPropagation();openGamecast('${sp}','${String(game).replace(/'/g,'')}','${d||today()}')" style="font-size:10px;padding:3px 8px">📺 ${label||'Gamecast'}</button>`;}
