@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261009h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2180,7 +2180,7 @@ function _dec(raw){if(raw==null||raw==='')return undefined;
   return JSON.parse(raw);}
 function _enc(json){if(json.length<8000)return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
-/* v1.82 · the decompression cache. Every get() of a compressed store ran the
+/* v1.83 · the decompression cache. Every get() of a compressed store ran the
    full LZ decompressor — and grading reads the game archive once PER LEG, so a
    few hundred tickets meant hundreds of full decompressions on every page load
    (measured 6+ seconds of a frozen screen on desktop; several times that on a
@@ -3401,7 +3401,7 @@ function tabRaw(n,b){
 }
 
 /* ================= MATH ================= */
-/* ══ DETERMINISTIC SIMS (v1.82) ════════════════════════════════════════════
+/* ══ DETERMINISTIC SIMS (v1.83) ════════════════════════════════════════════
    Every sim drew from Math.random, so a reload re-rolled 10,000 games and the
    win %, most-common score and any pick sitting near a threshold could flip.
    Now each sim runs on its own seeded stream (sport + game + sample size): the
@@ -3413,7 +3413,7 @@ function simHash(s){let h=2166136261>>>0;s=String(s);for(let i=0;i<s.length;i++)
 let _SIMK='';
 function simSeeded(fn,keyFn){if(!fn||fn.__seeded)return fn;const w=function(...a){const prev=_SIMR,prevK=_SIMK;let k='';try{k=String(keyFn.apply(this,a));}catch(e){}
   _SIMR=sjRng(simHash(k));_SIMK=k;try{return fn.apply(this,a);}finally{_SIMR=prev;_SIMK=prevK;}};w.__seeded=true;w.__raw=fn;return w;}
-/* ══ SIM ONCE, REUSE EVERYWHERE (v1.82) ════════════════════════════════════
+/* ══ SIM ONCE, REUSE EVERYWHERE (v1.83) ════════════════════════════════════
    The Monte Carlo loop is the only expensive part of a sim, and it depends on
    nothing but the model's inputs (projected scoring, spread of outcomes, sample
    size, the game's seed). Odds, calibration and every market read are applied
@@ -8044,8 +8044,13 @@ function ticketsLiveLoop(){
     if(document.hidden)return;
     const v=document.getElementById('v-tickets');
     if(!v||!v.classList.contains('on'))return;
+    if(Date.now()-TK_SCROLL_T<2500&&TK_SCROLL_T>TK_TAP_T)return;   /* mid-scroll: catch it on the next tick */
+    const el=document.getElementById('tickets');const y=window.scrollY||0,open=new Set();
+    if(el)el.querySelectorAll('details[open]>summary').forEach(sm=>open.add(sm.textContent.trim().slice(0,80)));
     if(TICKETTAB==='mine')genTickets('mine');
     else if(TICKETTAB==='tracked')genTickets('system');
+    try{const e2=document.getElementById('tickets');if(e2&&open.size)e2.querySelectorAll('details>summary').forEach(sm=>{if(open.has(sm.textContent.trim().slice(0,80)))sm.parentNode.open=true;});
+      if(Math.abs((window.scrollY||0)-y)>2)window.scrollTo(0,y);}catch(e){}
   },20000);
 }
 function gradeLegBadge(leg,ticketDate){
@@ -9804,7 +9809,7 @@ function evalInputFingerprint(){
     calib:(get('d4.drift',{})||{}).n||0
   });
 }
-/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.82) ═════════════════════════════
+/* ══ ONE MASTER EVALUATION, EVERY SPORT (v1.83) ═════════════════════════════
    Each sport's evaluator lives on its own page (the engine has to be loaded to
    sim), but they now share one front door: Records → Model eval shows the eval
    for the page you're on plus a strip with every sport's status today — tap one
@@ -11842,7 +11847,32 @@ const TTABS=[['build','Build'],['mine','My Picks'],['tracked','Tracked'],['outsi
 let BUILD_MODE='chars';   // chars | presets | custom
 let OUTSIDE_MODE='consensus';
 
+/* v1.83 · Tickets keeps your place. renderTickets() used to jump to the top on
+   EVERY call — including the background ones (live scores every 60s, the grade
+   sweeper, coming back to the app), so the page yanked you up mid-scroll.
+   Now: only a real navigation (another sub-tab or view) goes to the top. A
+   refresh of the same screen keeps your scroll position and every open panel,
+   and a refresh that lands while you're actively scrolling waits until you stop. */
+let TK_LAST_KEY='',TK_SCROLL_T=0,TK_TAP_T=0,TK_DEFER=null;
+if(typeof window!=='undefined'){window.addEventListener('scroll',()=>{TK_SCROLL_T=Date.now();},{passive:true});
+  window.addEventListener('touchmove',()=>{TK_SCROLL_T=Date.now();},{passive:true});
+  window.addEventListener('pointerdown',()=>{TK_TAP_T=Date.now();},{passive:true});}
+function tkKey(){return[TICKETTAB,typeof BUILD_MODE!=='undefined'?BUILD_MODE:'',typeof MINE_VIEW!=='undefined'?MINE_VIEW:'',typeof OUTSIDE_MODE!=='undefined'?OUTSIDE_MODE:'',typeof ATR_TAB!=='undefined'?ATR_TAB:''].join('|');}
 function renderTickets(){
+  const key=tkKey(),same=key===TK_LAST_KEY;
+  if(same&&Date.now()-TK_SCROLL_T<1500&&TK_SCROLL_T>TK_TAP_T){clearTimeout(TK_DEFER);TK_DEFER=setTimeout(renderTickets,1600);return;}   /* you're scrolling — refresh after */
+  clearTimeout(TK_DEFER);
+  const body0=document.getElementById('ticketBody');
+  const y=window.scrollY||0,open=new Set();
+  if(same&&body0)body0.querySelectorAll('details[open]>summary').forEach(sm=>open.add(sm.textContent.trim().slice(0,80)));
+  const restore=()=>{try{const b=document.getElementById('ticketBody');if(b&&open.size)b.querySelectorAll('details>summary').forEach(sm=>{if(open.has(sm.textContent.trim().slice(0,80)))sm.parentNode.open=true;});
+    if(Math.abs((window.scrollY||0)-y)>2)window.scrollTo(0,y);}catch(e){}};
+  renderTicketsRaw();
+  TK_LAST_KEY=key;
+  if(same){restore();setTimeout(restore,0);setTimeout(restore,60);}   /* My Picks fills its cards a tick later */
+  else window.scrollTo(0,0);
+}
+function renderTicketsRaw(){
   if(!TTABS.some(([k])=>k===TICKETTAB))TICKETTAB='build';
   const nav=document.getElementById('ticketNav');
   const body=document.getElementById('ticketBody');
@@ -11871,7 +11901,7 @@ function renderTickets(){
     const row=modeRow(OUTSIDE_MODE,[['consensus','Consensus'],['sources','Source records']],'OUTSIDE_MODE');
     body.innerHTML=row+(OUTSIDE_MODE==='consensus'?consensusHtml():sourcesHtml());
   }
-  window.scrollTo(0,0);
+  /* scroll handled by renderTickets() */
 }
 
 function buildTabHtml(){
@@ -11936,7 +11966,7 @@ function ticketRecord(t){
   });
   return{w,l,p,won:l===0&&w>0};
 }
-/* ══ SETTLED LEDGER — the permanent ticket record (v1.82) ══════════════════
+/* ══ SETTLED LEDGER — the permanent ticket record (v1.83) ══════════════════
    Every record on the site used to be re-derived from LS.locked on every read.
    Two things quietly shrank it: daily maintenance purged archived tickets
    older than 3 days (the leg counts were rolled up, the TICKET counts were
@@ -17489,12 +17519,12 @@ function tcLive(sp,x){
    makes a call worth a look: that character's record in this sport+market, on
    this team, and in this exact matchup (H2H). A call is HOT when one of those
    records is at least 6 games and a shrunk hit rate ≥ 60% ((w+2)/(n+4)). */
-/* v1.82 · one pass over the voices ledger, bucketed by character+sport+market,
+/* v1.83 · one pass over the voices ledger, bucketed by character+sport+market,
    and every history memoized. charHist used to filter the WHOLE ledger three
    times per call, and the Banker filter rebuilt every character's parlay per
    leg — 60 legs ≈ 6.5 seconds of frozen screen. */
 
-/* ══ CHARACTER SPLITS — the permanent raw record (v1.82) ═══════════════════
+/* ══ CHARACTER SPLITS — the permanent raw record (v1.83) ═══════════════════
    The voices ledger keeps the last 8,000 calls, which at a full slate is
    barely two weeks — so a character's record on a team or in a head-to-head
    quietly forgot everything older. Every graded call is now rolled, once, into
@@ -19639,7 +19669,7 @@ try{if(typeof renderToday==='function'&&!renderToday.__hp){const _rt=renderToday
   try{const el=document.getElementById('todayBody');if(el&&!el.querySelector('.hp-sec')){const h=highPctLinesHtml()+likelyHtml();if(h)el.insertAdjacentHTML('beforeend','<div class="hp-sec">'+h+'</div>');}}catch(e){}return r;};renderToday.__hp=1;}}catch(e){}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   v1.82 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
+   v1.83 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
    ══════════════════════════════════════════════════════════════════════════ */
 const txtEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fairAmer=p=>p==null||!(p>0&&p<1)?null:p>=0.5?-Math.round(p/(1-p)*100):Math.round((1-p)/p*100);
@@ -19880,7 +19910,7 @@ function sgpCardHtml(sp,g,s){try{
 }catch(e){return'';}}
 
 
-/* ══ THE GRADE SWEEPER (v1.82) — no ticket goes ungraded ═══════════════════
+/* ══ THE GRADE SWEEPER (v1.83) — no ticket goes ungraded ═══════════════════
    Grading used to be a handful of separate jobs, each with its own blind spot:
    the ESPN refresh only looked back 30 days (and at most 21 dates a sport), the
    prop box-score pull ran once a day and only when Tickets/My Games was open,
@@ -19943,7 +19973,7 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)gradeSweep().catch(()=>{});});}
 
 
-/* ══ CHARACTER PARLAY BUILDER — Tickets → Build → 🎭 Characters (v1.82) ═════
+/* ══ CHARACTER PARLAY BUILDER — Tickets → Build → 🎭 Characters (v1.83) ═════
    Pick a character and get its own picks for today, best first: ranked by its
    graded record on that exact spot (sport+market, the team, H2H, home/road,
    fav/dog) blended with the pick's chance. The Banker pre-checks the length
