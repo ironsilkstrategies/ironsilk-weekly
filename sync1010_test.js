@@ -55,6 +55,8 @@ setTimeout(async()=>{try{
   /* bad token */
   laptop.eval(`localStorage.setItem('d4.synctoken',JSON.stringify('github_pat_WRONG_000000000000'))`);const r=await laptop.eval('syncNow(false)');
   T('a rejected token reports clearly instead of failing silently',r.ok===false&&/token rejected/.test(r.reason),r.reason);
+  const card=phone.eval(`localStorage.removeItem('d4.syncrepo');syncSettingsHtml()`);
+  T('setup card links straight to a prefilled private repo and token',/github\.com\/new\?name=thedesk-data&amp;visibility=private|github\.com\/new\?name=thedesk-data&visibility=private/.test(card)&&/personal-access-tokens\/new\?[^"]*contents=write/.test(card));
   /* public repo no longer receives your data */
   const fresh=mk('Desktop-2');await new Promise(z=>setTimeout(z,2600));fresh.eval(`set(LS.ghrepo,'me/ironsilk-weekly');set(LS.ghtoken,'x')`);await fresh.eval('pushToGitHub(false)');
   T('old public backup path is retired (no write to the site repo)',G.publicWrites===0);
