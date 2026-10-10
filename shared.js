@@ -509,8 +509,8 @@ function pstCardHtml(sp,g){try{
       return`${(PST_STATS[sp][k]||k).replace(/ \(P\)/,'')} <b>${J.mu.toFixed(J.mu<10?2:0)}</b>`;}).filter(Boolean);
     if(cells.length)rows.push(`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${esc(P.name)}</b> <span style="color:var(--mute)">${tm} · ${P.n}G</span><br>${cells.join(' · ')}</div>`);}));
   const pb=(()=>{try{return propBoardHtml(sp,g.away.abbr+'@'+g.home.abbr,12)}catch(e){return''}})();
-  if(!rows.length)return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats</summary><div class="sub" style="font-size:10px">No finals tracked for these teams yet — the season backfill fills this in the background.</div></details>`;
-  return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">▼ Player stats (season, form-weighted)</summary>${rows.join('')}</details>`;}catch(e){return'';}}
+  if(!rows.length)return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">Player stats</summary><div class="sub" style="font-size:10px">No finals tracked for these teams yet — the season backfill fills this in the background.</div></details>`;
+  return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">Player stats (season, form-weighted)</summary>${rows.join('')}</details>`;}catch(e){return'';}}
 /* ── Season backfill: walk recent completed ESPN events, feed each final box once.
    Throttled (a few boxes per run) so it never stalls the page; it resumes
    where it left off on the next page open until the window is covered. */
@@ -2091,7 +2091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -7989,7 +7989,7 @@ function pregameWrap(sp,g,html){try{if(!g||!g.id||!html)return html;const key=sp
         /* one write after the render settles — never a compress per card */
         clearTimeout(PREG_T);PREG_T=setTimeout(pregFlush,2000);}return html;}
     const S=PREG_MEM[key]?{h:PREG_MEM[key].replace(/\sid="[^"]*"/g,'')}:((get(PREG_KEY,{})||{})[key]);if(!S||!S.h)return html;
-    return html+`<details class="tkt" style="margin:-4px 0 10px;opacity:.92"><summary class="sub mono" style="cursor:pointer;font-size:10.5px">▼ Pregame numbers (locked at start)</summary><div style="pointer-events:none">${S.h}</div></details>`;}catch(e){return html;}}
+    return html+`<details class="tkt" style="margin:-4px 0 10px;opacity:.92"><summary class="sub mono" style="cursor:pointer;font-size:10.5px">Pregame numbers (locked at start)</summary><div style="pointer-events:none">${S.h}</div></details>`;}catch(e){return html;}}
 /* ══ GRADING DOCTOR ════════════════════════════════════════════════════════
    A leg that should be over but has no grade gets a diagnosis and a fix:
    · the matchup is on ESPN that day under different teams/orientation → one-tap re-match
@@ -20440,6 +20440,16 @@ body.bnav main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
 #bnMore .bn-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:14px;background:var(--panel2);border:1px solid var(--rule);font-weight:700;font-size:11.5px;color:var(--chalk)}
 #bnMore .bn-tile span{font-size:22px}
+/* game-card button rows wrap instead of widening the page (v1.88) — an unwrapped
+   row of 9–11 buttons made the layout ~600px wide and iOS zoomed the whole site out */
+.exprow{flex-wrap:wrap;gap:5px;padding:8px 0 2px}
+.exprow>button{flex:1 1 calc(25% - 5px);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9.5px;letter-spacing:.06em;padding:9px 4px;border-radius:9px}
+.exprow>button.expbtn{border:1px solid var(--hair);border-right:1px solid var(--hair)}
+.exprow>button.expbtn:last-child{border-right:1px solid var(--hair)}
+.exprow>button.on{color:var(--gold);border-color:rgba(255,180,61,.5)}
+/* backstop: nothing inside the page may push it wider than the screen */
+html,body{max-width:100%;overflow-x:clip}
+main{overflow-x:clip;min-width:0}
 /* challenge fit cards (v1.87) */
 .fit-panel>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
 .fit-sum{display:inline-flex;flex-wrap:wrap;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute)}.fit-sum i{font-style:normal;font-weight:700}
