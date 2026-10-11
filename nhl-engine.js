@@ -755,7 +755,7 @@ function renderNHL(){
   if(!NHL_GAMES.length){el.innerHTML=status+'<div class="empty">No NHL games today.</div>'+upcoming;return;}
   const y=window.scrollY,open={...NHL_OPEN};
   const order={in:0,pre:1,post:2};
-  el.innerHTML=status+[...NHL_GAMES].sort((a,b)=>order[a.abstract]-order[b.abstract]||String(a.start).localeCompare(String(b.start))).map(g=>{try{return nhlCard(g)}catch(e){console.warn('nhl card',e);return`<div class="tkt"><div class="sub">${g.away.abbr} @ ${g.home.abbr}: card error — ${nhlEsc(e.message)}</div></div>`;}}).join('')+upcoming;
+  el.innerHTML=status+[...NHL_GAMES].sort((a,b)=>order[a.abstract]-order[b.abstract]||String(a.start).localeCompare(String(b.start))).map(g=>{try{return (typeof pwrStrip==='function'?pwrStrip('nhl',g):'')+nhlCard(g)}catch(e){console.warn('nhl card',e);return`<div class="tkt"><div class="sub">${g.away.abbr} @ ${g.home.abbr}: card error — ${nhlEsc(e.message)}</div></div>`;}}).join('')+upcoming;
   Object.entries(open).forEach(([gid,k])=>{if(!k)return;NHL_OPEN[gid]=null;const b=null;nhlPan(gid,k,b);});
   window.scrollTo(0,y);
   setTimeout(()=>{try{nhlSnapshot();nhlArchiveFinals();syncFinalsToShared();voicesLog('nhl');gradeVoices();gradeIntel();}catch(e){console.warn('nhl bookkeeping',e)}},0);

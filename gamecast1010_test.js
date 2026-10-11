@@ -17,7 +17,7 @@ const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com
 setTimeout(async()=>{try{
   await w.eval(`openGamecast('ncaaf','IU@NEB','2026-10-10','55')`);const g=()=>w.document.getElementById('gcIn').innerHTML;
   T('gamecast opens with the live scoreboard',/● LIVE/.test(g())&&/3<span[^>]*>–<\/span>10/.test(g())&&/8:12 - 2nd/.test(g()));
-  T('football: field with the ball, down & distance, last play',/🏈/.test(g())&&/2nd &amp; 7 at NEB 34/.test(g())&&/Rush for 3 yards/.test(g()));
+  T('football: field with the ball, down & distance, last play',/<ellipse/.test(g())&&/2nd (&amp;|&) 7/.test(g())&&/at NEB 34/.test(g())&&/Rush for 3 yards/.test(g()));
   T('ESPN win probability line',/ESPN win probability/.test(g())&&/NEB 71%/.test(g()));
   T('play-by-play newest first, scoring plays lit',g().indexOf('Rush for 3 yards')<g().lastIndexOf('Touchdown pass')&&/🔥 Touchdown pass/.test(g()));
   w.eval(`gcTab('leaders')`);T('leaders tab',/D\. Raiola/.test(g()));

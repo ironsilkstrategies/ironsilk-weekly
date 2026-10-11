@@ -191,7 +191,7 @@ function saveNFLBookOdds(picks,el){
 
 // ── NFL render ─────────────────────────────────────────────────────────────────
 function nflCardWithProps(g){
-  const base=nflCard(g);
+  const base=(typeof pwrStrip==='function'?pwrStrip('nfl',g):'')+nflCard(g);
   const props=typeof fbPropsCard==='function'?fbPropsCard(g,'nfl'):'';
   return base+props;
 }
@@ -3687,7 +3687,7 @@ function ncaafPaintSlate(games){
         up=games.filter(g=>!ncaafIsLive(g)&&!ncaafIsFinal(g));
   const groups=[['Live',live],['Upcoming',up],['Final',fin]].filter(x=>x[1].length);
   body.innerHTML=groups.map(([t,arr],i)=>sbar(t,arr.length)+
-    `<div id="cfbGrp${i}">${arr.map(g=>`<div data-gid="${g.id}">${NCAAF_SIMS[g.id]?ncaafCard(g):
+    `<div id="cfbGrp${i}">${arr.map(g=>`<div data-gid="${g.id}">${typeof pwrStrip==='function'?pwrStrip('ncaaf',g):''}${NCAAF_SIMS[g.id]?ncaafCard(g):
       `<div class="tkt" style="opacity:.55;padding:12px"><b>${g.away.name}</b> @ <b>${g.home.name}</b>
         <div class="sub mono" style="font-size:10px">running sim…</div></div>`}</div>`).join('')}</div>`).join('');
   const queue=games.filter(g=>!NCAAF_SIMS[g.id]);
