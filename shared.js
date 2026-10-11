@@ -2135,7 +2135,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17605,6 +17605,7 @@ function todaySnapshot(){
   let standout=B0.standout||null;
   if(!standout){try{standout=pstStandout(sp,sportGames(sp).length?sportGames(sp):(typeof GAMES!=='undefined'?GAMES:[]));}catch(e){}}
   T.by[sp]={ts:Date.now(),picks:merged,props,standout};set(TC_KEY,T);
+  try{cpropLog(cpropToday().filter(c=>c.sp===sp));}catch(e){console.warn('char props log',e);}   /* v2.02: every character's prop calls lock pregame, every refresh */
   const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
 }
 function onTicketMatch(sp,game,m,sd){
@@ -17928,7 +17929,18 @@ function cparHtml(){const D=cparState();const vs=Object.keys(D.by||{});
    books), graded from the real box line, and bucketed by stated confidence so
    "70–73%" means what it says. Calibrated % = (hits + p·12) / (n + 12) in that
    character's bucket — shown next to every call and used to rank them. */
-const CPROP_KEY='d4.charprops',CPROP_VOICES=['Sim','Most common','Trends','Judge'];
+const CPROP_KEY='d4.charprops',CPROP_VOICES=['Sim','Most common','Trends','Coach','Judge'];
+/* v2.02 · the Coach reads the MATCHUP: tonight's opponent's defense (team power ratings,
+   schedule-adjusted) and home/road shift the player's projection, ±15% at most. Pitcher
+   lines read the opposing OFFENSE instead. */
+const CPROP_BASE={nfl:22,ncaaf:28,nhl:3,mlb:4.5,nba:112};
+function cpropOpp(sp,team){try{const g=(sportGames(sp)||[]).find(z=>z.away.abbr===team||z.home.abbr===team);if(!g)return null;const home=g.home.abbr===team;return{opp:home?g.away.abbr:g.home.abbr,home,g};}catch(e){return null;}}
+function cpropMatch(sp,team,k){const o=cpropOpp(sp,team);if(!o)return{m:1,why:''};let R=null;try{R=pwrRank(sp);}catch(e){}const x=R&&R.by[o.opp];const base=CPROP_BASE[sp]||20;let m=1,why='';
+  if(x){const pitch=sp==='mlb'&&['k','ha','er'].includes(k);
+    if(pitch){m=k==='k'?1-0.3*(x.off/base):1+0.6*(x.off/base);why=`${o.opp} offense ${x.off>=0?'+':''}${x.off.toFixed(1)}`;}
+    else{if(!R._dr){R._dr={};[...R.teams].sort((a,b)=>b.def-a.def).forEach((t,i)=>R._dr[t.abbr]=i+1);}m=1-0.6*(x.def/base);why=`${o.opp} defense ${x.def>=0?'+':''}${x.def.toFixed(1)} (#${R._dr[o.opp]} D)`;}}
+  else return{m:1,why:''};   /* no rating for the opponent yet → the Coach stays quiet rather than guess */
+  m*=o.home?1.02:0.98;m=Math.max(0.85,Math.min(1.15,m));return{m,why:(why?why+' · ':'')+(o.home?'home':'road'),opp:o.opp,home:o.home};}
 const CPROP_BKT=[[0.70,0.73],[0.73,0.76],[0.76,0.80],[0.80,0.85],[0.85,0.90],[0.90,1.01]];
 function cpropPAt(sp,k,mu,sd,n,thr){if(mu==null)return null;
   if(PST_COUNT.has(k)||(sp==='nhl'&&k==='pts')){const need=Math.ceil(thr-1e-9);return 1-pstPoisCdf(need-1,mu);}
@@ -17937,21 +17949,35 @@ function cpropBrier(){const L=get(CPROP_KEY,[])||[];const B={};CPROP_VOICES.forE
   B[v]=g.length>=10?g.reduce((a,x)=>a+Math.pow(x.p-(x.hit?1:0),2),0)/g.length:0.2;});return B;}
 function cpropReads(sp,name,k,thr,BR){const J=pstProj(sp,name,k);if(!J||J.n<4)return null;
   const sim=pstProb(sp,name,k,thr,'over');const r={Sim:sim?sim.p:null,'Most common':cpropPAt(sp,k,J.mean,J.sd,J.n,thr),Trends:cpropPAt(sp,k,J.ema,J.sd,J.n,thr)};
-  BR=BR||cpropBrier();let sw=0,sp_=0;['Sim','Most common','Trends'].forEach(v=>{if(r[v]==null)return;const w=1/(BR[v]+0.02);sw+=w;sp_+=w*r[v];});
+  let M={m:1,why:''};try{M=cpropMatch(sp,J.team,k);}catch(e){}r.Coach=M.m!==1?cpropPAt(sp,k,J.mu*M.m,J.sd!=null?J.sd*Math.sqrt(M.m):null,J.n,thr):null;J.match=M;
+  BR=BR||cpropBrier();let sw=0,sp_=0;['Sim','Most common','Trends','Coach'].forEach(v=>{if(r[v]==null)return;const w=1/(BR[v]+0.02);sw+=w;sp_+=w*r[v];});
   r.Judge=sw?sp_/sw:null;Object.keys(r).forEach(v=>{if(r[v]!=null)r[v]=Math.max(0.001,Math.min(0.999,r[v]));});return{r,J};}
 function cpropCalib(){const L=get(CPROP_KEY,[])||[];const C={};
   CPROP_VOICES.forEach(v=>{C[v]=CPROP_BKT.map(([lo,hi])=>{const g=L.filter(x=>x.voice===v&&x.hit!=null&&x.p>=lo&&x.p<hi);const h=g.filter(x=>x.hit).length;
     return{lo,hi,n:g.length,h,rate:g.length?h/g.length:null,avgP:g.length?g.reduce((a,x)=>a+x.p,0)/g.length:(lo+Math.min(hi,1))/2};});});return C;}
 function cpropCal(C,v,p){const b=(C[v]||[]).find(x=>p>=x.lo&&p<x.hi);if(!b||!b.n)return p;return(b.h+p*12)/(b.n+12);}
-function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C=cpropCalib();
+function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C=cpropCalib();const REC=cpropRecIdx();
   ['nfl','ncaaf','nba','nhl','mlb'].forEach(sp=>{const L=LIKELY_LADDER[sp];if(!L)return;const teams=teamsToday(sp);if(!teams.size)return;
     const last=get('d4.pstlast.'+sp,{})||{};
     Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<4)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
       Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<4)return;
         const best={};ths.forEach(t=>{const R0=cpropReads(sp,P.name,k,t,BR);if(!R0)return;
-          CPROP_VOICES.forEach(v=>{const p=R0.r[v];if(p!=null&&p>=0.70)best[v]={p,thr:t,mu:R0.J.mu};});});
-        Object.entries(best).forEach(([v,b])=>out.push({id:[sp,pstId(P.name),k,b.thr,v,d].join('|'),sp,voice:v,player:P.name,team:P.team,k,thr:b.thr,p:+b.p.toFixed(4),cal:cpropCal(C,v,b.p),mu:b.mu,d}));});});});
+          CPROP_VOICES.forEach(v=>{const p=R0.r[v];if(p!=null&&p>=0.70)best[v]={p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:''};});});
+        Object.entries(best).forEach(([v,b])=>{let cal=cpropCal(C,v,b.p);const o=REC[v+'|'+sp+'|'+pstId(P.name)];let fav=null;
+          /* v2.02 · its record on THIS player is evidence too — 6 games of prior weight on the calibrated % */
+          if(o&&o.n>=3){cal=(o.w+6*cal)/(o.n+6);fav=o.n>=4&&o.w/o.n>=0.7?'fav':o.n>=4&&o.w/o.n<=0.4?'fade':null;}
+          out.push({id:[sp,pstId(P.name),k,b.thr,v,d].join('|'),sp,voice:v,player:P.name,team:P.team,k,thr:b.thr,p:+b.p.toFixed(4),cal,mu:b.mu,d,fav,rec:o&&o.n>=3?`${o.w}-${o.n-o.w}`:null,why:b.why||''});});});});});
   return out;}
+/* every character's record on every player it has called */
+let CPR_C=null;
+function cpropRecIdx(){if(CPR_C&&Date.now()-CPR_C.ts<60e3)return CPR_C.R;const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null)return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0,player:x.player,sp:x.sp,team:x.team,voice:x.voice});o.n++;if(x.hit)o.w++;});CPR_C={ts:Date.now(),R};return R;}
+/* a character's favorite players (4+ calls, 70%+) and the ones it should stop calling (≤40%) */
+function cpropFavs(v){const L=Object.values(cpropRecIdx()).filter(o=>o.voice===v&&o.n>=4);const sc=o=>(o.w+1)/(o.n+2);
+  return{fav:L.filter(o=>o.w/o.n>=0.7).sort((a,b)=>sc(b)-sc(a)||b.n-a.n).slice(0,5),fade:L.filter(o=>o.w/o.n<=0.4).sort((a,b)=>sc(a)-sc(b)).slice(0,3)};}
+/* its best prop today — favorites first when they're within 3 points */
+function cpropOfDay(v,calls){calls=(calls||cpropToday()).filter(c=>c.voice===v&&c.fav!=='fade');if(!calls.length)return null;
+  return calls.sort((a,b)=>(b.cal+(b.fav==='fav'?0.03:0))-(a.cal+(a.fav==='fav'?0.03:0)))[0];}
+function cpropLine(c){return`${c.player} ${c.thr}+ ${CPROP_LAB[c.k]||c.k}`;}
 function cpropLog(calls){const L=get(CPROP_KEY,[])||[];const have=new Set(L.map(x=>x.id));let n=0;
   calls.forEach(c=>{if(have.has(c.id))return;L.push({id:c.id,sp:c.sp,voice:c.voice,player:c.player,team:c.team,k:c.k,thr:c.thr,p:c.p,d:c.d,hit:null});n++;});
   if(n)set(CPROP_KEY,L.slice(-6000));return n;}
@@ -17996,14 +18022,19 @@ function cpropHtml(F){let calls=[];try{calls=cpropToday();cpropLog(calls);}catch
   return live+cpropCalibHtml()+`<div class="tkt"><h3>🎯 Character props today · 70%+</h3><div class="sub" style="font-size:10px">Each player's sweet spot per character — the highest line it gives 70%+. Tap a name for every line and every character's read. Sorted by calibrated %.</div>${body}</div>`;}
 /* The roster: every character by name, its school of thought, this week's
    bankroll, and what it's calling today. */
-function charRosterHtml(){const L=bkLedger();const W=L.weeks[0].R;const V=get(VOICES_KEY,[])||[];const d=today();
+function charRosterHtml(){const L=bkLedger();const W=L.weeks[0].R;const V=get(VOICES_KEY,[])||[];const d=today();let PC=[];try{PC=cpropToday();}catch(e){}
   return`<div class="tkt"><h3>🎭 The characters</h3>${CHAR_ORDER.map(v=>{const C=CHARS[v];const x=W[v]||{br:100,n:0,w:0,l:0};
     const n=V.filter(c=>c.date===d&&c.voice===v).length;const all=V.filter(c=>c.voice===v&&c.graded&&c.hit!=null);const aw=all.filter(c=>c.hit).length;
     return`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--rule)">
       <span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color};margin-top:2px">${C.chip}</span>
       <div style="flex:1;min-width:0"><b>${txtEsc(C.label)}</b> <span class="mono" style="font-size:10px;color:${x.br>=100?'var(--win)':'var(--rust)'}">$${x.br.toFixed(2)} this week</span>
         <div class="sub" style="font-size:10px">${txtEsc(C.school)}</div>
-        <div class="mono" style="font-size:9.5px;color:var(--mute)">${n?n+' calls today':'silent today — '+esc(C.quiet)} · all-time ${aw}-${all.length-aw}${(L.mult[v]||1)!==1?` · Banker weight ×${L.mult[v].toFixed(2)}`:''}${x.best?' · best: '+esc(x.best):''}</div></div></div>`;}).join('')}</div>`;}
+        <div class="mono" style="font-size:9.5px;color:var(--mute)">${n?n+' calls today':'silent today — '+esc(C.quiet)} · all-time ${aw}-${all.length-aw}${(L.mult[v]||1)!==1?` · Banker weight ×${L.mult[v].toFixed(2)}`:''}${x.best?' · best: '+esc(x.best):''}</div>${charPropLines(v,PC)}</div></div>`;}).join('')}</div>`;}
+function charPropLines(v,PC){if(!CPROP_VOICES.includes(v))return'';let F={fav:[],fade:[]};try{F=cpropFavs(v);}catch(e){}let pod=null;try{pod=cpropOfDay(v,PC);}catch(e){}
+  const nm=o=>`${txtEsc(o.player)} <span style="color:var(--mute)">${o.w}-${o.n-o.w}</span>`;
+  return(pod?`<div class="mono" style="font-size:9.5px;margin-top:2px">🎯 Prop of the day: <b>${txtEsc(cpropLine(pod))}</b> <span style="color:var(--win)">${Math.round(pod.cal*100)}%</span>${pod.fav==='fav'?' ⭐':''}${pod.why?` <span style="color:var(--mute)">· ${txtEsc(pod.why)}</span>`:''}</div>`:'')
+    +(F.fav.length?`<div class="mono" style="font-size:9.5px;color:var(--gold)">⭐ Favorite players: ${F.fav.map(nm).join(' · ')}</div>`:'')
+    +(F.fade.length?`<div class="mono" style="font-size:9.5px;color:var(--cold)">🧊 Stopped trusting: ${F.fade.map(nm).join(' · ')}</div>`:'');}
 let TODAY_LIVE_TIMER=null;
 function todayLiveLoop(){if(TODAY_LIVE_TIMER)return;
   TODAY_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-today');if(!v||!v.classList.contains('on'))return;
@@ -19949,6 +19980,8 @@ function pickWhy(x0){const x={...x0,m:mkNorm(x0.m||x0.market),sd:x0.sd||x0.side}
     if(r){const k=x.m==='total'?'overPct':'homePct';const v=r[k]!=null?+r[k]:null;if(v!=null){const mine=x.m==='total'?(x.sd==='over'?v:100-v):(x.sd==='home'?v:100-v);
       B.push(`Public: ${Math.round(mine)}% of ${r.metric==='money'?'the money':'tickets'} on this side${mine<=35?' — we\'re against the crowd':mine>=65?' — heavy public side, priced in':''}.`);
       if(mine<=35)S.push(`Only ${Math.round(mine)}% of the public is with us — we\'re fading the crowd.`);}}}catch(e){}
+  /* v2.02 · the deeper read: standing, matchup, form, history, players, injuries, conditions, props */
+  try{const D=pickWhyDeep(x,team,opp,A,H);D.B.forEach(b=>B.push(b));S.unshift(...D.S.slice(0,2));}catch(e){console.warn('why deep',e);}
   const head=`${lineTxt}${p!=null?` — ${Math.round(p*100)}% to hit`:''}${ev!=null?`, ${ev>=0?'+':''}${ev.toFixed(1)}% EV`:''}.`;
   if(simP!=null&&mktP!=null&&simP>mktP)S.unshift(`We ran this game 10,000 times: ${team||'the '+x.sd} ${x.m==='ml'?'wins':x.m==='total'?'hits':'covers'} ${Math.round(simP*100)}% of the time; the price says ${Math.round(mktP*100)}%.`);
   else if(on.length>=3)S.unshift(`The price is close to fair here — this one rides on who's backing it.`);
@@ -20360,8 +20393,8 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__)window.addEventListener
 /* a character's favorite players: its graded record on THIS player (any stat) */
 let CPF_C=null;
 function cpropFavTag(c){if(!CPF_C||Date.now()-CPF_C.ts>60e3){const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null)return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0});o.n++;if(x.hit)o.w++;});CPF_C={ts:Date.now(),R};}
-  const o=CPF_C.R[c.voice+'|'+c.sp+'|'+pstId(c.player)];if(!o||o.n<3)return'';const fav=o.n>=4&&o.w/o.n>=0.7;
-  return`<span class="mono" style="font-size:9px;color:${fav?'var(--gold)':'var(--mute)'}">${fav?'⭐':''}${o.w}-${o.n-o.w} on him</span> `;}
+  const o=CPF_C.R[c.voice+'|'+c.sp+'|'+pstId(c.player)];if(!o||o.n<3)return'';const fav=o.n>=4&&o.w/o.n>=0.7,fade=o.n>=4&&o.w/o.n<=0.4;
+  return`<span class="mono" style="font-size:9px;color:${fav?'var(--gold)':fade?'var(--cold)':'var(--mute)'}">${fav?'⭐ favorite ':fade?'🧊 ':''}${o.w}-${o.n-o.w} on him</span> `;}
 
 /* ══ GAMECAST (v1.85) — follow any game live, ESPN-style ════════════════════
    Tap 📺 on a live/final game and it opens full screen: scoreboard, the
@@ -21003,6 +21036,93 @@ async function pwrBoot(){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!==
   pwrMount();for(let i=0;i<6;i++){const n=await pwrFetch(sp,8);pwrMount();if(!n)break;}
   try{const v=document.getElementById('v-games');if(v&&v.classList.contains('on')){const r=sp==='nfl'?renderNFL:sp==='ncaaf'?renderNCAAF:sp==='nhl'?renderNHL:sp==='nba'&&typeof renderNBA==='function'?renderNBA:render;if(typeof r==='function')r();}}catch(e){}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pwrBoot,3500));
+/* ══ ROSTERS, INJURIES & THE DEEPER "WHY" (v2.02) ═══════════════════════════
+   Injury reports come from ESPN's own game summary for every upcoming game
+   (refreshed every 3 hours). The football sims now cost a team what it's missing,
+   measured in this season's production from the player database:
+     · starting QB out → a QB penalty, halved when the backup has real production
+     · skill players out → their share of the team's scrimmage yards × its scoring,
+       40% of it (the rest gets replaced by the next man up)
+     Out / IR / Suspended count fully, Doubtful 85%, Questionable 25%.
+   Capped (NFL −6, CFB −8 points) so a bad report can't swing a game by itself. */
+const INJ_KEY='d4.inj',INJ_TTL=3*3600e3;
+const INJ_W=s=>{s=String(s||'').toLowerCase();return/out|injured reserve|\bir\b|suspend|pup|nfi/.test(s)?1:/doubt/.test(s)?0.85:/question/.test(s)?0.25:/day-to-day|probable/.test(s)?0.1:0;};
+function injStore(){const S=get(INJ_KEY,{})||{};return S&&typeof S==='object'?S:{};}
+function injParse(j){const T={};(((j||{}).injuries)||[]).forEach(t=>{const ab=((t.team||{}).abbreviation)||'';if(!ab)return;
+  T[ab]=(t.injuries||[]).map(i=>({n:((i.athlete||{}).displayName)||'',pos:(((i.athlete||{}).position||{}).abbreviation)||'',st:i.status||((i.type||{}).description)||'',det:((i.details||{}).type)||''})).filter(i=>i.n);});return T;}
+function injFor(sp,g){if(!g)return null;const e=injStore()[sp+':'+String(g.espnId||g.id)];return e?e.teams:null;}
+let INJ_BUSY={};
+async function injFetch(sp,max){if(INJ_BUSY[sp]||!FBP_ESPN[sp])return 0;INJ_BUSY[sp]=1;let n=0,changed=[];
+  try{const S=injStore();const now=Date.now();const G=(sportGames(sp)||[]).filter(g=>{const a=String(g.abstract||'pre').toLowerCase();return a==='pre'||a==='preview'||a==='scheduled';});
+    for(const g of G){if(n>=(max||24))break;const id=String(g.espnId||g.id);const k=sp+':'+id;if(S[k]&&now-S[k].ts<INJ_TTL)continue;
+      try{const j=await fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json());const teams=injParse(j);const before=JSON.stringify((S[k]||{}).teams||{});
+        S[k]={ts:now,d:today(),teams};if(JSON.stringify(teams)!==before)changed.push(g);n++;}catch(e){}
+      await new Promise(r=>setTimeout(r,250));}
+    Object.keys(S).forEach(k=>{if(now-S[k].ts>5*864e5)delete S[k];});set(INJ_KEY,S);}finally{INJ_BUSY[sp]=0;}
+  /* re-simulate the games whose report changed */
+  if(changed.length){try{const SIMS=sp==='nfl'&&typeof NFL_SIMS!=='undefined'?NFL_SIMS:sp==='ncaaf'&&typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:null;
+      if(SIMS){changed.forEach(g=>{delete SIMS[g.id];});const v=document.getElementById('v-games');if(v&&v.classList.contains('on')){if(sp==='nfl')renderNFL();else renderNCAAF();}}}catch(e){}}
+  return n;}
+/* a team's production from the player database, per game */
+function injTeamProd(sp,team){const D=pstDb(sp);const P=Object.values(D.p).filter(x=>x.team===team&&(x.n||0)>=2);const pg=(x,k)=>{const s=x.s[k];return s&&s.gp?s.sum/s.gp:0;};
+  return P.map(x=>({name:x.name,py:pg(x,'py'),ry:pg(x,'ry'),wy:pg(x,'wy'),pts:pg(x,'pts'),g:pg(x,'g'),n:x.n}));}
+function injMatch(list,name){const id=pstId(name);let hit=list.find(x=>pstId(x.name)===id);if(hit)return hit;
+  const p=fbpNorm(name).split(' ');const last=p[p.length-1];const c=list.filter(x=>{const q=fbpNorm(x.name).split(' ');return q[q.length-1]===last&&(q[0]||'')[0]===(p[0]||'')[0];});return c.length===1?c[0]:null;}
+/* what the injury report costs each side's offense, in points */
+function injAdj(sp,g){if(sp!=='nfl'&&sp!=='ncaaf')return null;const I=injFor(sp,g);if(!I)return null;const out={};
+  ['away','home'].forEach(side=>{const ab=g[side].abbr;const L=(I[ab]||[]).map(i=>({...i,w:INJ_W(i.st)})).filter(i=>i.w>0);const prod=injTeamProd(sp,ab);
+    let pts=0;const why=[];const tot=prod.reduce((a,x)=>a+x.ry+x.wy,0);
+    const pow=sp==='nfl'?(typeof NFL_POWER!=='undefined'&&NFL_POWER[ab])||{}:{};const ppg=pow.offPPG||(sp==='nfl'?22:28);
+    const qbs=prod.filter(x=>x.py>40).sort((a,b)=>b.py-a.py);
+    L.forEach(i=>{const m=injMatch(prod,i.n);if(!m)return;
+      if(/QB/i.test(i.pos)&&qbs[0]&&qbs[0].name===m.name){const backup=qbs[1];let pen=sp==='nfl'?4:5;if(backup&&backup.py>=0.7*m.py)pen/=2;pts+=pen*i.w;why.push({...i,val:`${Math.round(m.py)} pass yds/g`,cost:pen*i.w});}
+      else if(tot>0){const sh=(m.ry+m.wy)/tot;if(sh<0.04)return;const c=sh*ppg*0.4*i.w;pts+=c;why.push({...i,val:`${Math.round(m.ry+m.wy)} scrimmage yds/g (${Math.round(sh*100)}% of the team)`,cost:c});}});
+    const cap=sp==='nfl'?6:8;out[side]={off:-Math.min(cap,pts),why:why.sort((a,b)=>b.cost-a.cost),all:L};});
+  return out;}
+async function injBoot(){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!['nfl','ncaaf','nhl','nba'].includes(sp))return;
+  for(let i=0;i<3;i++){const n=await injFetch(sp,24);if(!n)break;}}
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__){window.addEventListener('load',()=>setTimeout(injBoot,6000));setInterval(()=>{if(!document.hidden)injBoot();},INJ_TTL);}
+/* players who matter for this pick, with form: season average vs recent */
+function whyPlayers(sp,team,n){const K={nfl:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],ncaaf:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],nhl:[['pts','pts'],['g','goals']],nba:[['pts','pts']],mlb:[['tb','total bases']]}[sp]||[];
+  const D=pstDb(sp);const out=[];K.forEach(([k,lab])=>{const P=Object.values(D.p).filter(x=>x.team===team&&x.s[k]&&x.s[k].gp>=2).sort((a,b)=>(b.s[k].sum/b.s[k].gp)-(a.s[k].sum/a.s[k].gp))[0];
+    if(!P||out.some(o=>o.name===P.name))return;const S=P.s[k];const mean=S.sum/S.gp,ema=S.ema;if(!mean)return;const hot=ema>=mean*1.15,cold=ema<=mean*0.85;
+    out.push({name:P.name,txt:`${P.name} ${mean.toFixed(mean<10?1:0)} ${lab}/g${hot?` 🔥 ${ema.toFixed(ema<10?1:0)} lately`:cold?` 🧊 ${ema.toFixed(ema<10?1:0)} lately`:''}`});});return out.slice(0,n||3);}
+/* the deeper read: standing, matchup, form, history, players, injuries, conditions, props */
+function pickWhyDeep(x,team,opp,A,H){const sp=x.sp;const B=[],S=[];let R=null;try{R=pwrRank(sp);}catch(e){}
+  const g=(()=>{try{return(sportGames(sp)||[]).find(z=>z.away.abbr+'@'+z.home.abbr===x.game);}catch(e){return null;}})();
+  const ap=ab=>{try{const o=sp==='ncaaf'?cfbRankOf({abbr:ab}):null;return o?`No. ${o.r} `:'';}catch(e){return'';}};
+  const a=R&&R.by[A],h=R&&R.by[H];
+  /* prestige + power */
+  if(a&&h){const rec=t=>`${t.w}-${t.l}${t.t?'-'+t.t:''}`;const dp=sp==='nhl'||sp==='mlb'?2:1;const m=h.r-a.r+(g&&g.neutral?0:R.h);const U=PWR_CFG[sp].unit;
+    B.push(`Standing: ${ap(A)}${A} (${rec(a)}, #${a.rank} in power, ${pwrSgn(a.r,dp)}) at ${ap(H)}${H} (${rec(h)}, #${h.rank}, ${pwrSgn(h.r,dp)}) — power line ${m>=0?H:A} by ${Math.abs(m).toFixed(dp)} ${U}.`);
+    if(x.m==='spread'&&x.line!=null&&team){const mT=team===H?m:-m;const cov=mT+(+x.line);B.push(`Power vs the number: ${team} ${mT>=0?'by '+mT.toFixed(dp):'losing by '+Math.abs(mT).toFixed(dp)} on power, ${x.line>0?'+':''}${x.line} on the ticket → ${cov>0?'covers by '+cov.toFixed(dp)+' ✓':'short by '+Math.abs(cov).toFixed(dp)+' ✗'}.`);if(cov>0)S.push(`On power ratings alone ${team} covers this number by ${cov.toFixed(dp)}.`);}
+    if(x.m==='ml'&&team){const mT=team===H?m:-m;B.push(`Power says ${mT>=0?team+' wins':opp+' wins'} by ${Math.abs(mT).toFixed(dp)}${mT>=0?' ✓':' ✗'}.`);}
+    if(x.m==='total'&&x.line!=null){let mu=0;try{const G=pwrGames(sp);mu=G.length?G.reduce((s,q)=>s+q[3]+q[4],0)/(2*G.length):0;}catch(e){}if(mu){const pt=2*mu+(a.off-h.def)+(h.off-a.def);const ok=x.sd==='over'?pt>x.line:pt<x.line;B.push(`Power total: ${pt.toFixed(dp)} (${A} offense ${pwrSgn(a.off,dp)} vs ${H} defense ${pwrSgn(h.def,dp)}; ${H} offense ${pwrSgn(h.off,dp)} vs ${A} defense ${pwrSgn(a.def,dp)}) vs ${x.line} → ${ok?'✓':'✗'} ${x.sd}.`);}}
+    if(team){const T=team===H?h:a,O=team===H?a:h;const odr=[...R.teams].sort((p,q)=>q.def-p.def).findIndex(t=>t.abbr===O.abbr)+1,tor=[...R.teams].sort((p,q)=>q.off-p.off).findIndex(t=>t.abbr===T.abbr)+1;
+      B.push(`Matchup: ${team} offense #${tor} (${pwrSgn(T.off,dp)}) into ${opp} defense #${odr} (${pwrSgn(O.def,dp)}).`);
+      B.push(`Form: ${team} last 5 ${T.last5||'—'} · ${opp} ${O.last5||'—'}.`);
+      if(O.luck>=1.5)B.push(`${opp} has won ${O.luck.toFixed(1)} more games than its scoring says — that tends to regress.`);
+      if(T.luck<=-1.5)B.push(`${team} has ${Math.abs(T.luck).toFixed(1)} fewer wins than its scoring earns — better than the record.`);
+      if(T.rank<=5&&O.rank>=R.teams.length*0.6)S.push(`${ap(team)}${team} is a top-${T.rank<=3?3:5} team in our power ratings against one in the bottom half.`);}
+    /* history: earlier meetings this season */
+    try{const met=pwrGames(sp).filter(q=>(q[1]===A&&q[2]===H)||(q[1]===H&&q[2]===A));if(met.length)B.push(`Met this season: ${met.map(q=>`${q[0].slice(5)} ${q[1]} ${q[3]}–${q[4]} ${q[2]}`).join(' · ')}.`);}catch(e){}}
+  /* players */
+  try{const tp=team?whyPlayers(sp,team,3):[],op=opp?whyPlayers(sp,opp,2):[];if(tp.length)B.push(`${team} key players: ${tp.map(o=>o.txt).join(' · ')}.`);if(op.length)B.push(`${opp} key players: ${op.map(o=>o.txt).join(' · ')}.`);
+    const hot=tp.find(o=>/🔥/.test(o.txt));if(hot)S.push(hot.txt.replace(/ 🔥 /,', and lately ')+'.');}catch(e){}
+  /* injuries */
+  try{const IA=g?injAdj(sp,g):null;const I=g?injFor(sp,g):null;
+    if(I)[A,H].forEach(ab=>{const L=(I[ab]||[]).filter(i=>INJ_W(i.st)>=0.25);if(!L.length)return;const side=ab===H?'home':'away';const W=IA&&IA[side];
+      const named=(W&&W.why.length?W.why.slice(0,3).map(i=>`${i.n} (${i.pos}, ${i.st}${i.val?' — '+i.val:''})`):L.slice(0,3).map(i=>`${i.n} (${i.pos}, ${i.st})`)).join(', ');
+      B.push(`Injuries ${ab}: ${named}${L.length>3?` +${L.length-3} more`:''}${W&&W.off<-0.2?` → the sim takes ${Math.abs(W.off).toFixed(1)} pts off ${ab}'s offense`:''}.`);
+      if(W&&W.off<=-2&&ab===opp)S.push(`${opp} is short-handed: ${W.why[0].n} is ${String(W.why[0].st).toLowerCase()}.`);});}catch(e){}
+  /* conditions */
+  try{if(g&&g.weather&&(sp==='nfl'||sp==='ncaaf')){const w=g.weather;const dome=sp==='nfl'&&typeof NFL_DOME!=='undefined'&&NFL_DOME.has(H);
+      if(!dome)B.push(`Conditions: ${[w.temp!=null?Math.round(+w.temp)+'°':'',w.wind||'',w.cond||''].filter(Boolean).join(', ')}${(()=>{try{const m=nflEnvMult(g);return m<0.99?` — the sim trims scoring ${Math.round((1-m)*100)}%`:'';}catch(e){return'';}})()}.`);
+      else B.push('Conditions: indoors — no weather in play.');}}catch(e){}
+  /* character props in this game */
+  try{const P=cpropToday().filter(c=>c.sp===sp&&(c.team===A||c.team===H)).sort((p,q)=>q.cal-p.cal).slice(0,2);
+    if(P.length)B.push(`Props the characters like here: ${P.map(c=>`${charName(c.voice)} — ${cpropLine(c)} ${Math.round(c.cal*100)}%${c.fav==='fav'?' ⭐':''}`).join(' · ')}.`);}catch(e){}
+  return{B,S};}
 /* ══ CHARACTER POWER RANKINGS (v2.01) ════════════════════════════════════════
    Every category a character calls — a sport overall, and each bet type in it
    (NFL spread dogs, NHL ML favorites, CFB unders…) — ranked by graded UNITS, shrunk
@@ -21276,7 +21396,8 @@ function subCharParlay(v,n){n=n||5;const d=today();const V=roGet(VOICES_KEY,[],3
 function subBanker(){let S=null;try{S=bkDayState();}catch(e){return null;}const D=S&&(S.locked?S:S.preview);if(!D||!D.own||!(D.own.legs||[]).length)return null;return{...D.own,locked:!!S.locked};}
 function subCard(){let best=null;try{best=best5State();}catch(e){}const R=(()=>{try{return best3Record();}catch(e){return null;}})();
   const chars=CHAR_ORDER.map(v=>{try{return subCharParlay(v,5);}catch(e){return null;}}).filter(Boolean).sort((a,b)=>b.p-a.p);
-  return{d:today(),best:(best&&best.top3)||[],locked:!!(best&&best.locked),record:R,top10:subTop10(),banker:subBanker(),chars};}
+  let props=[];try{const PC=cpropToday();props=CPROP_VOICES.map(v=>{const c=cpropOfDay(v,PC);return c?{v,...c}:null;}).filter(Boolean).sort((a,b)=>b.cal-a.cal);}catch(e){}
+  return{d:today(),best:(best&&best.top3)||[],locked:!!(best&&best.locked),record:R,top10:subTop10(),banker:subBanker(),chars,props};}
 const subPct=p=>p==null?'':(p*100<10?(p*100).toFixed(1):Math.round(p*100))+'%';
 const subLeg=x=>`${x.pick} (${tcSgn(x.price)}) · ${(SP_LAB[x.sp]||'').split(' ')[0]} ${gameLabel(x.sp,x.game)}`;
 /* Telegram: HTML parse mode, split under the 4096-character limit */
@@ -21287,6 +21408,7 @@ function subTelegramText(C){const e=txtEsc,day=new Date(C.d+'T12:00:00').toLocal
   if(C.top10.length)blocks.push(`<b>🔟 TOP ${C.top10.length} PLAYS</b>\n`+C.top10.map((x,i)=>`${i+1}. ${x.play?'✅ ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n')+`\n<i>✅ = passes every rule: whole crowd agrees, good lane, model not fighting the market</i>`);
   if(C.banker)blocks.push(`<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>'• '+e(subLeg(l))).join('\n'));
   C.chars.forEach(P=>blocks.push(`<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>'• '+e(subLeg(l))+(l.spec?`\n   <i>🎯 ${e(l.spec)}</i>`:'')).join('\n')));
+  if((C.props||[]).length)blocks.push(`<b>🎯 CHARACTER PROPS OF THE DAY</b>\n`+C.props.map(c=>`• ${e(charName(c.v))}: <b>${e(cpropLine(c))}</b> · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
   blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
   const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
 /* channel IDs are negative (-100…) — a copied ID often loses its minus; a bare name needs its @ */
@@ -21322,6 +21444,7 @@ function subCardHtml(){const C=subCard();const e=txtEsc;const pc=subPct;const po
     ${C.banker?sec(`🏦 Banker's parlay ${e(decimalToAmerican(C.banker.dec))}`,`${pc(C.banker.p)} to cash${C.banker.locked?' · 🔒':''}`,C.banker.legs.map(l=>legRow(l)).join('')):''}
     ${C.chars.length?C.chars.map(P=>sec(`🎭 ${e(charName(P.v))} · ${P.legs.length}-leg ${e(decimalToAmerican(P.dec))}`,`${pc(P.p)} to cash${P.dropped?` · ${P.dropped} weak-spot call${P.dropped>1?'s':''} left off`:''}`,P.legs.map(l=>legRow(l,l.spec?` · <span style="color:var(--win)">🎯 ${e(l.spec)}</span>`:'')).join(''))).join('')
       :sec('🎭 Character parlays','','<div class="sub">Each character needs 3+ priced, unstarted calls outside its weak spots. Open today\'s boards.</div>')}
+    ${(C.props||[]).length?sec('🎯 Character props of the day','each character\'s best player call',C.props.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--rule)"><div><b style="font-size:13px">${e(cpropLine(c))}</b><div class="mono" style="font-size:9.5px;color:var(--mute)">${e(charName(c.v))} · ${e((SP_LAB[c.sp]||'').split(' ')[0])} ${e(c.team)}${c.fav==='fav'?` · ⭐ ${e(c.rec||'')} on him`:''}${c.why?' · '+e(c.why):''}</div></div><span class="mono" style="font-size:11.5px;font-weight:800">${pc(c.cal)}</span></div>`).join('')):''}
     <div class="sub mono" style="font-size:9.5px;color:var(--mute);margin:4px 2px 10px">5-leg tickets are long shots by nature — the cash chance on each is what the record says, not a promise.</div>
     <details class="tkt"${setupOpen?' open':''}><summary><b>⚙️ Whop + Telegram setup</b></summary>
       <div class="sub" style="font-size:10.5px;line-height:1.6;margin:6px 0">1. Whop: create the product with two prices (${e(SUB_PRICE_DEFAULT)}), add Whop's Telegram app and connect your <b>private</b> channel — Whop adds members when they pay and removes them when they cancel.<br>

@@ -1406,6 +1406,8 @@ function simNFLGame(g,N){
   awayExp*=surf; homeExp*=surf;
   const env=nflEnvMult(g);                                  // 1.00 unless weather is known
   awayExp*=env; homeExp*=env;
+  /* v2.02 · roster-aware: the injury report costs each offense what it's missing */
+  try{const IA=typeof injAdj==='function'?injAdj('nfl',g):null;if(IA){awayExp+=IA.away.off;homeExp+=IA.home.off;}}catch(e){}
   if(g.away.abbr===g.home.abbr)awayExp=homeExp=22;
 
   const nflCalib=hotGet(NFL_CALIB_KEY,{});
@@ -2693,6 +2695,8 @@ function simNCAAFGame(g,N){
     awayExp=((awayPow.offPPG+homePow.defPPG)/2)*reg+leagueAvg*(1-reg);
     homeExp=((homePow.offPPG+awayPow.defPPG)/2)*reg+leagueAvg*(1-reg)+NCAAF_HFA;
   }
+  /* v2.02 · roster-aware: the injury report costs each offense what it's missing */
+  try{const IA=typeof injAdj==='function'?injAdj('ncaaf',g):null;if(IA){awayExp+=IA.away.off;homeExp+=IA.home.off;}}catch(e){}
   awayExp=Math.max(3,awayExp);homeExp=Math.max(3,homeExp);
   const std=14; // wider variance in college
   /* Was two 10,000-element arrays, a comparator sort on each, and an O(N)
