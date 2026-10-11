@@ -1,6 +1,6 @@
 {
  "v": 3,
- "generated": 1791748363841,
+ "generated": 1791749153345,
  "brand": "TheDesk",
  "price": "$19.99/mo · $9.99/wk",
  "social": {
@@ -21,9 +21,33 @@
   "lockedAt": 1791732639617,
   "picks": [
    {
-    "hidden": true,
     "sp": "nfl",
-    "start": "2026-10-11T20:05Z"
+    "game": "DEN@LAC",
+    "pick": "Over 41.5",
+    "price": -115,
+    "p": 0.553,
+    "ev": 3.3,
+    "start": "2026-10-11T20:05Z",
+    "tier": "STRONG",
+    "voices": [
+     "The Simulator",
+     "The Judge",
+     "The Oracle",
+     "The Coach"
+    ],
+    "hit": null,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Sim: 55% across 10,000 runs vs 53% the price implies.",
+      "Expected value +3.3% per bet at -115.",
+      "The uploaded projection has it DEN 23.17–20.77 LAC — a 43.9-point total vs 41.5.",
+      "The Judge, weighing every witness by its graded accuracy, is on this side.",
+      "4 of 8 characters on it, 2 independent of the sim: The Simulator (6-8 NFL over), The Judge (6-8 NFL over), The Oracle (5-5 NFL over), The Coach (6-8 NFL over).",
+      "Against: The Scorekeeper, The Historian."
+     ],
+     "script": "DEN at LAC — I'm on Over 41.5 (-115). We ran this game 10,000 times: the over hits 55% of the time; the price says 53%. The uploaded projection projects DEN 23.17, LAC 20.77 — a 43.9-point total vs 41.5. 4 of our 8 analysts are on the over — The Simulator is 6-8 NFL over."
+    }
    },
    {
     "hidden": true,
@@ -59,8 +83,24 @@
     "sp": "nfl"
    },
    {
-    "hidden": true,
-    "sp": "nfl"
+    "sp": "nfl",
+    "game": "DEN@LAC",
+    "pick": "DEN ML",
+    "price": -192,
+    "p": 0.6504,
+    "by": "The Oracle",
+    "hit": null,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Sim: 48% across 10,000 runs vs 66% the price implies.",
+      "Desk number after calibration and market blend: 65%.",
+      "Expected value -1.1% per bet at -192.",
+      "The uploaded projection has it DEN 23.17–20.77 LAC — DEN winning by 2.4.",
+      "The Judge, weighing every witness by its graded accuracy, is on this side."
+     ],
+     "script": "DEN at LAC — I'm on DEN ML (-192). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects DEN 23.17, LAC 20.77 — DEN winning by 2.4. 3 of our 8 analysts are on DEN — The Judge is 13-6 NFL ML."
+    }
    }
   ]
  },
