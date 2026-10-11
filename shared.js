@@ -1592,9 +1592,19 @@ const CHARS={
   'Pred':       {chip:'ORACLE',color:'#e8c15a',label:'The Oracle',school:'outside predicted scores you upload (non-Covers)',quiet:'no outside prediction uploaded'},
   'Covers':     {chip:'COVERS',color:'#ff7a1a',label:'Covers',school:'Covers / OddsShark computer predicted score',quiet:'no Covers prediction uploaded'},
   'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'situational trend records, shrunk for small samples',quiet:'no uploaded trends lean'},
-  'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'}
+  'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
+  'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the Sim, the market and every character\'s graded vote, weighed together',quiet:'still learning — needs graded character history'},
+  'Blend':      {chip:'BLEND',color:'#a3e635',label:'The Blend',school:'the Sim\'s chance blended with the market\'s, weighted by which has predicted better',quiet:'no sim chance on this market'}
 };
 const CHAR_ORDER=Object.keys(CHARS);
+/* v1.99 · Brain and Blend are full characters: they call every game like the rest,
+   get locked, graded, recorded, and build their own parlays. They are DERIVED from
+   the others (Blend = Sim + market, Brain = Blend + every character's vote), so they
+   never vote in the squares, the crowd counts or the Banker's consensus — that
+   would count the same opinion twice and let the Brain grade itself. */
+const META_VOICES=new Set(['Brain','Blend']);
+const VOTER_ORDER=CHAR_ORDER.filter(v=>!META_VOICES.has(v));
+const isVoter=v=>!!CHARS[v]&&!META_VOICES.has(v);
 /* Independent reads: not derived from the app's own simulation. */
 const INDEP_VOICES=new Set(['Trends','Consensus','Coach','Pred','Covers']);
 const charName=v=>(CHARS[v]&&CHARS[v].label)||v;
@@ -1694,9 +1704,38 @@ function characterCalls(sp,g,s){
   // Books' favorite (ledger only — the book price is already its own signal on the square)
   if(Ln.mlH&&Ln.mlA&&Ln.mlH.price!=null&&Ln.mlA.price!=null&&+Ln.mlH.price!==+Ln.mlA.price)add('Books','ml',+Ln.mlH.price<+Ln.mlA.price?'home':'away');
   if(hl!=null&&hl!==0&&!hlSim)add('Books','spread',hl<0?'home':'away');
+  try{metaCalls(sp,g,calls,Ln,add);}catch(e){}
   CHAR_CACHE[ck]={ts:Date.now(),s,calls};
   return calls;
 }
+/* The Brain's chance on one side: the Sim's chance, blended with the market,
+   then nudged by every voting character's learned record (the same math the
+   squares show as "brain N%"). null until some character has 6+ graded calls. */
+function brainSideP(sp,g,voters,market,side,modelP,line,price){if(modelP==null)return null;
+  let base=modelP;try{const mf=marketFair(sp,g,market,side,line);if(mf)base=blendProb(sp,market,base,mf.p);}catch(e){}
+  const ctx=market==='total'?side:(price!=null?(price<0?'fav':'dog'):(line!=null?(line<0?'fav':'dog'):null));
+  let z=logit(base),learned=false;
+  voters.forEach(c=>{if(c.voice==='Sim'||!isVoter(c.voice))return;const on=c.side===side;const r=charRate(sp,c.voice,market,on?ctx:null);
+    if(r.n>=6){learned=true;z+=0.5*(on?1:-1)*logit(r.p);}});
+  return learned?sigm(z):null;}
+/* The Blend's chance on one side: Sim + market, weighted by which has predicted
+   better, plus the learned situation adjustments (same as the card's "blend N%"). */
+function blendSideP(sp,g,market,side,modelP,line,price){if(modelP==null)return null;
+  let mk=null;try{const mf=marketFair(sp,g,market,side,line);if(mf)mk=mf.p;}catch(e){}
+  const b=blendProb(sp,market,modelP,mk);if(b==null)return null;
+  let fa=0;try{fa=factorAdj(sp,factorsFor(sp,g,{market,side,line,price}));}catch(e){}
+  return Math.max(0.01,Math.min(0.99,b+fa));}
+function metaCalls(sp,g,calls,Ln,add){
+  const opp={home:'away',away:'home',over:'under',under:'over'};
+  ['ml','spread','total'].forEach(m=>{const sim=calls.find(c=>c.voice==='Sim'&&c.market===m);if(!sim||sim.simP==null)return;
+    const voters=calls.filter(c=>c.market===m&&isVoter(c.voice));
+    const sides=[sim.side,opp[sim.side]].map(sd=>{const line=m==='spread'?(sd===sim.side?sim.line:(sim.line!=null?-sim.line:null)):m==='total'?sim.line:null;
+      const pr=m==='ml'?(sd==='home'?Ln.mlH:Ln.mlA):m==='spread'?(sd==='home'?Ln.spH:Ln.spA):(sd==='over'?Ln.ov:Ln.un);
+      const price=pr?amerOk(pr.price):null;const mp=sd===sim.side?sim.simP:1-sim.simP;
+      let mk=null;try{const mf=marketFair(sp,g,m,sd,line);if(mf)mk=mf.p;}catch(e){}
+      return{sd,line,price,mk,brain:brainSideP(sp,g,voters,m,sd,mp,line,price),blend:blendSideP(sp,g,m,sd,mp,line,price)};});
+    [['Brain','brain'],['Blend','blend']].forEach(([v,k])=>{const a=sides[0][k],b=sides[1][k];if(a==null||b==null||Math.abs(a-b)<1e-9)return;
+      const w=a>b?sides[0]:sides[1];add(v,m,w.sd,{simP:+w[k].toFixed(4),mktP:w.mk!=null?+w.mk.toFixed(4):null});});});}
 function voicesLog(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
@@ -1707,7 +1746,8 @@ function voicesLog(sp){
     // a character's call is locked at first pitch / puck drop / kickoff; drop a
     // stale pre-game call from another side if the character flipped before then
     if(pre)calls.forEach(c=>{try{c.f=factorsFor(sp,g,c);}catch(e){}if(c.voice==='Sim'){try{c.f=c.f||factorsFor(sp,g,c);const b=blendProb(sp,c.market,c.simP,c.mktP>0?c.mktP:null);c.pUsed=b!=null?Math.max(0.01,Math.min(0.99,b+factorAdj(sp,c.f))):null;}catch(e){}}});
-    calls.forEach(c=>{const i=idx[c.id];if(i!=null){if(!pre||V[i].graded)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
+    calls.forEach(c=>{if(META_VOICES.has(c.voice)&&idx[[c.voice,sp,c.game,c.date,c.market].join('|')]!=null)return;   // already logged under the pre-v1.99 70%+ rule
+      const i=idx[c.id];if(i!=null){if(!pre||V[i].graded)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
   });
   if(n){if(V.length>8000)V.splice(0,V.length-8000);set(VOICES_KEY,V);}return n;
 }
@@ -1741,7 +1781,7 @@ function charBrain(){
     const p=((B.all[x.voice]||(B.all[x.voice]={}))[x.market]||(B.all[x.voice][x.market]={n:0,w:0}));bump(p,x.hit);
   });
   // how the crowd behaves around the Sim, per game-market
-  const ev={};G.forEach(x=>{if(!CHARS[x.voice])return;(ev[x.sp+'|'+x.game+'|'+x.date+'|'+x.market]||(ev[x.sp+'|'+x.game+'|'+x.date+'|'+x.market]=[])).push(x);});
+  const ev={};G.forEach(x=>{if(!isVoter(x.voice))return;(ev[x.sp+'|'+x.game+'|'+x.date+'|'+x.market]||(ev[x.sp+'|'+x.game+'|'+x.date+'|'+x.market]=[])).push(x);});
   Object.values(ev).forEach(arr=>{
     const sim=arr.find(x=>x.voice==='Sim');if(!sim)return;
     const others=arr.filter(x=>x.voice!=='Sim');if(!others.length)return;
@@ -1800,7 +1840,7 @@ function charSitMult(sp,voice,market,fs){const B=charSitTable()[sp+'|'+voice+'|'
 /* the sport's best characters by graded record (15+ calls), for the 💎/🔥 check */
 let CTOP_C={},CTOP_SIG='';
 function charTop(sp){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.filter(x=>x.graded).length;if(CTOP_SIG!==sig){CTOP_C={};CTOP_SIG=sig;}if(CTOP_C[sp])return CTOP_C[sp];
-  const R={};V.forEach(x=>{if(x.sp!==sp||!x.graded||x.hit==null||!CHARS[x.voice]||x.voice==='Sim')return;const o=R[x.voice]||(R[x.voice]={n:0,w:0});o.n++;if(x.hit)o.w++;});
+  const R={};V.forEach(x=>{if(x.sp!==sp||!x.graded||x.hit==null||!isVoter(x.voice)||x.voice==='Sim')return;const o=R[x.voice]||(R[x.voice]={n:0,w:0});o.n++;if(x.hit)o.w++;});
   const lb=o=>{const p=o.w/o.n,z=1.28;return(p+z*z/(2*o.n)-z*Math.sqrt(p*(1-p)/o.n+z*z/(4*o.n*o.n)))/(1+z*z/o.n);};   // Wilson lower bound
   return(CTOP_C[sp]=Object.entries(R).filter(([v,o])=>o.n>=15).sort((a,b)=>lb(b[1])-lb(a[1])).slice(0,3).map(([v,o])=>({v,n:o.n,p:o.w/o.n})));}
 /* Strengths & weaknesses per character, across sport × market × side and situations */
@@ -1848,7 +1888,7 @@ function charAsOutside(ci,against){ci=ci||{};const n=(ci.nOthers||0)+(ci.simHere
 function charSquare(sp,g,s,pick,opts){
   opts=opts||{};const none={chips:'',meter:'',simHere:false,support:null,nOthers:0,unanimous:false,charsAgree:false,charsAgainst:false,brainP:null};
   const k=sqKey(sp,g,pick);if(!k||!s)return none;
-  let calls=[];try{calls=characterCalls(sp,g,s).filter(c=>c.market===k.market&&CHARS[c.voice])}catch(e){return none;}
+  let calls=[];try{calls=characterCalls(sp,g,s).filter(c=>c.market===k.market&&isVoter(c.voice))}catch(e){return none;}
   if(!calls.length)return none;
   const ctx=k.market==='total'?k.side:(opts.price!=null?(opts.price<0?'fav':'dog'):(opts.line!=null?(opts.line<0?'fav':'dog'):null));
   const sim=calls.find(c=>c.voice==='Sim'),others=calls.filter(c=>c.voice!=='Sim');
@@ -1857,7 +1897,7 @@ function charSquare(sp,g,s,pick,opts){
   let wOn=0,wAll=0,z=base!=null?logit(base):null,learned=false;
   let fs=[];try{fs=factorsFor(sp,g,{m:k.market,sd:k.side,line:opts.line,price:opts.price});}catch(e){}
   const chipHtml=[];
-  CHAR_ORDER.forEach(v=>{const c=calls.find(x=>x.voice===v);if(!c)return;
+  VOTER_ORDER.forEach(v=>{const c=calls.find(x=>x.voice===v);if(!c)return;
     const r0=charWeight(sp,v,k.market,c.side===k.side?ctx:null);const sm=v==='Sim'?{m:1,why:[]}:charSitMult(sp,v,k.market,fs);const r={...r0,w:r0.w*sm.m};const on=c.side===k.side;
     if(v!=='Sim'){wAll+=r.w;if(on)wOn+=r.w;
       if(z!=null&&r.n>=6){learned=true;z+=0.5*(on?1:-1)*logit(r.p);}}
@@ -1876,8 +1916,8 @@ function charSquare(sp,g,s,pick,opts){
      this side, and at least two of them are independent of the simulation. */
   const unanimous=calls.length>=5&&onN===calls.length&&indepOn>=2;
   const brainP=learned&&z!=null?sigm(z):null;
-  const silent=CHAR_ORDER.filter(v=>!calls.some(c=>c.voice===v));const against=calls.length-onN;
-  const meter=`<div class="ch-meter" title="${esc(silent.map(v=>charName(v)+': '+charQuiet(v,k.market)).join(' · '))}">${onN} of ${CHAR_ORDER.length} on this side${against?` · ${against} against`:''}${silent.length?` · ${silent.length} no call`:''}${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`+
+  const silent=VOTER_ORDER.filter(v=>!calls.some(c=>c.voice===v));const against=calls.length-onN;
+  const meter=`<div class="ch-meter" title="${esc(silent.map(v=>charName(v)+': '+charQuiet(v,k.market)).join(' · '))}">${onN} of ${VOTER_ORDER.length} on this side${against?` · ${against} against`:''}${silent.length?` · ${silent.length} no call`:''}${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`+
     (silent.length?`<div class="ch-meter" style="opacity:.7;font-size:8.5px">silent: ${silent.map(v=>esc(charName(v).replace(/^The /,''))).join(', ')}</div>`:'');
   let rh='';try{rh=rulesHtml(rulesFor(sp,g,pick))}catch(e){}
   /* double evaluation: the brain and the sport's proven-best characters on the same side */
@@ -2092,7 +2132,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17462,7 +17502,7 @@ function todayCandidates(sp){
       const color=tier===' supreme'||tier===' strong'?tier:modelEdgeHere?'value':os.agree?'source':null;
       if(!color)return;
       const rank={' supreme':4,' strong':3,value:2,source:1.5}[color]+(ci.brainP!=null?ci.brainP:(mp||0.5))+(gap!=null?Math.max(0,gap)/100:0);
-      const chars=calls.filter(x=>x.market===c.m&&x.side===c.sd&&CHARS[x.voice]).map(x=>x.voice);
+      const chars=calls.filter(x=>x.market===c.m&&x.side===c.sd&&isVoter(x.voice)).map(x=>x.voice);
       let rules=[];try{rules=rulesFor(sp,g,c.pick)}catch(e){}
       const rk=rank+0.15*rules.filter(r=>r.icon==='🔥'||r.icon==='🤝'||r.icon==='💰').length-0.3*rules.filter(r=>r.icon==='🧊').length;
       out.push({sp,gid:g.id,game:gl,start:g.start||g.date||g.gameDate||'',m:c.m,sd:c.sd,pick:c.pick,price,dbl:ci.dbl||'',unan:!!ci.unanimous,line:c.L&&c.L.line!=null?+c.L.line:null,mp,brainP:ci.brainP,gap,color,rank:rk,rules,chars,
@@ -17500,9 +17540,8 @@ function todayProps(sp){
    kept, so it never grows. */
 let TC_T=null;
 function todaySnapshotSoon(){clearTimeout(TC_T);TC_T=setTimeout(todaySnapshot,1200);}
-/* Brain and Blend are characters too: anything either rates 70%+ is logged
-   once as their pick (first price seen), graded like every other voice, and
-   shows up in Records with its own win-loss line. */
+/* RETIRED in v1.99 — Brain and Blend now call every game through characterCalls
+   (metaCalls) and lock like the rest. Kept only so older 70%+ entries read the same. */
 function voiceLog70(sp,picks,d){const V=get(VOICES_KEY,[]);const have=new Set(V.map(x=>x.id));let n=0;
   (picks||[]).forEach(x=>{const mk=x.m==='moneyline'?'ml':x.m;if(!['ml','spread','total'].includes(mk))return;if((mk==='spread'||mk==='total')&&x.line==null)return;
     [['Brain',x.brainP],['Blend',x.blend]].forEach(([voice,pv])=>{if(pv==null||pv<0.70)return;const id=[voice,sp,x.game,d,mk].join('|');if(have.has(id))return;
@@ -17524,7 +17563,6 @@ function todaySnapshot(){
   let standout=B0.standout||null;
   if(!standout){try{standout=pstStandout(sp,sportGames(sp).length?sportGames(sp):(typeof GAMES!=='undefined'?GAMES:[]));}catch(e){}}
   T.by[sp]={ts:Date.now(),picks:merged,props,standout};set(TC_KEY,T);
-  try{voiceLog70(sp,merged,d);}catch(e){console.warn('brain/blend voices',e);}
   const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
 }
 function onTicketMatch(sp,game,m,sd){
@@ -17742,7 +17780,7 @@ function bkSlateRaw(D){const by=D.by||{};const L=bkLedger();
   pick.forEach(x=>{x.stakeF=x.f*sc;x.stake=Math.max(1,Math.round(B*x.stakeF*2)/2);});
   return{picks:pick,passed:cand.filter(c=>!pick.includes(c)),bankroll:B,locked:D.locked};}
 /* Dynamic rules so challenges can be built around a character or the Banker */
-CHAR_ORDER.forEach(v=>{MS_FILTERS_EXTRA['ch_'+v.replace(/\s+/g,'_')]={lab:charName(v)+'\'s picks',desc:charName(v)+' is on every leg',f:x=>(x.chars||[]).includes(v)};});
+VOTER_ORDER.forEach(v=>{MS_FILTERS_EXTRA['ch_'+v.replace(/\s+/g,'_')]={lab:charName(v)+'\'s picks',desc:charName(v)+' is on every leg',f:x=>(x.chars||[]).includes(v)};});
 MS_FILTERS_EXTRA.banker={lab:'Banker\'s slate',desc:'every leg is in one of the Banker\'s parlays',f:x=>{try{return bkSlateKeys().has(x.game+'|'+x.pick);}catch(e){return false;}}};
 function bkChallenges(){const L=bkLedger();const prev=L.weeks[1]&&L.weeks[1].leader?L.weeks[1]:L.weeks[0];const lead=prev&&prev.leader;
   const act=Object.values(L.weeks[0].R).filter(x=>x.n).sort((a,b)=>a.br-b.br);const cold=act[0];
@@ -19832,7 +19870,7 @@ function trendBacks(text,x){const t=String(text||'');const mk=mkNorm(x.m||x.mark
    points plus a short script written to be read on camera. */
 function pickWhy(x0){const x={...x0,m:mkNorm(x0.m||x0.market),sd:x0.sd||x0.side};const d=x.date||x.d||today();
   const [A,H]=String(x.game).split('@');const team=x.m==='total'?null:(x.sd==='home'?H:A),opp=x.m==='total'?null:(x.sd==='home'?A:H);
-  const V=roGet(VOICES_KEY,[],30e3)||[];const calls=V.filter(c=>c.sp===x.sp&&c.game===x.game&&c.market===x.m&&String(c.date).slice(0,10)===String(d).slice(0,10)&&CHARS[c.voice]);
+  const V=roGet(VOICES_KEY,[],30e3)||[];const calls=V.filter(c=>c.sp===x.sp&&c.game===x.game&&c.market===x.m&&String(c.date).slice(0,10)===String(d).slice(0,10)&&isVoter(c.voice));
   const on=calls.filter(c=>c.side===x.sd),off=calls.filter(c=>c.side!==x.sd);
   const B=[];const S=[];
   const price=x.price!=null?+x.price:null;const mktP=price!=null?imp(price):null;
@@ -19854,9 +19892,9 @@ function pickWhy(x0){const x={...x0,m:mkNorm(x0.m||x0.market),sd:x0.sd||x0.side}
   const recTxt=c=>{try{const h=charHist(V,c);const best=['h2h','team','where','role','sport'].map(k=>({k,...h.H[k],lab:h.lab[k]})).filter(o=>o.n>=4).sort((a,b)=>b.r-a.r)[0];return best?`${best.w}-${best.l} ${best.lab}`:null;}catch(e){return null;}};
   const indep=on.filter(c=>INDEP_VOICES.has(c.voice)).length;
   if(on.length){const names=on.map(c=>{const r=recTxt(c);return charName(c.voice)+(r?` (${r})`:'');});
-    B.push(`${on.length} of ${CHAR_ORDER.length} characters on it${indep?`, ${indep} independent of the sim`:''}: ${names.join(', ')}.`);
+    B.push(`${on.length} of ${VOTER_ORDER.length} characters on it${indep?`, ${indep} independent of the sim`:''}: ${names.join(', ')}.`);
     const lead=on.map(c=>({c,r:recTxt(c)})).filter(o=>o.r)[0];
-    S.push(`${on.length} of our ${CHAR_ORDER.length} analysts are on ${team||'the '+x.sd}${lead?` — ${charName(lead.c.voice)} is ${lead.r}`:''}.`);}
+    S.push(`${on.length} of our ${VOTER_ORDER.length} analysts are on ${team||'the '+x.sd}${lead?` — ${charName(lead.c.voice)} is ${lead.r}`:''}.`);}
   if(off.length)B.push(`Against: ${off.map(c=>charName(c.voice)).join(', ')}.`);
   /* trends */
   try{const T=(roGet(INTEL_KEY,[],30e3)||[]).filter(t=>t.sp===x.sp&&t.kind==='trend'&&t.game===x.game&&String(t.date||'').slice(0,10)===String(d).slice(0,10));
@@ -19906,7 +19944,7 @@ function bkStake(f,B){return f>0?Math.max(1,Math.round(B*f*2)/2):0;}
 function bkDayBuild(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const C=bkDayCands(V,d);const L=bkLedger();const{B,cap,fromLimit}=bkBudget();
   const used=new Set();const legOut=x=>({sp:x.sp,game:x.game,m:x.m,sd:x.sd,line:x.line,pick:x.pick,price:x.price,p:+(+x.p).toFixed(4),score:+(+x.score).toFixed(4),v:x.v,by:x.by||[x.v]});
   /* 1 · the Banker's own: pool every character's call by game+market+side */
-  const pool={};Object.values(C).flat().forEach(x=>{const k=x.sp+'|'+x.game+'|'+x.m+'|'+x.sd;const o=pool[k]||(pool[k]={...x,by:[],sc:[]});o.by.push(x.v);o.sc.push(x.score*Math.min(1.15,Math.max(0.85,L.mult[x.v]||1)));});
+  const pool={};Object.values(C).flat().forEach(x=>{if(META_VOICES.has(x.v))return;const k=x.sp+'|'+x.game+'|'+x.m+'|'+x.sd;const o=pool[k]||(pool[k]={...x,by:[],sc:[]});o.by.push(x.v);o.sc.push(x.score*Math.min(1.15,Math.max(0.85,L.mult[x.v]||1)));});
   const ranked=Object.values(pool).map(o=>{const indep=o.by.filter(v=>INDEP_VOICES.has(v)).length;const sc=o.sc.reduce((a,b)=>a+b,0)/o.sc.length+0.01*Math.min(4,o.by.length-1)+0.01*Math.min(2,indep);return{...o,score:sc};})
     .filter(o=>o.by.length>=2).sort((a,b)=>b.score-a.score);
   const own=[];for(const o of ranked){if(own.some(y=>y.sp===o.sp&&y.game===o.game))continue;own.push(o);if(own.length===5)break;}
@@ -20002,7 +20040,7 @@ function sgpSideProb(sp,g,s,mk,side,line){try{
   if(mk==='spread'){if(typeof s.homeCover==='function'&&typeof s.awayCover==='function')return side==='home'?s.homeCover(line):s.awayCover(line);
     if(sp==='mlb'&&typeof rlProb==='function')return side==='home'?rlProb(g,s,'home',-line):rlProb(g,s,'away',line);return null;}
   if(mk==='total'){if(typeof s.over!=='function')return null;const o=s.over(line);return side==='over'?o:(typeof s.under==='function'?s.under(line):1-o);}}catch(e){}return null;}
-function sgpBacking(V,calls,mk,side){const on=calls.filter(c=>c.market===mk&&c.side===side&&CHARS[c.voice]);
+function sgpBacking(V,calls,mk,side){const on=calls.filter(c=>c.market===mk&&c.side===side&&isVoter(c.voice));
   const scored=on.map(c=>{let h=null;try{h=charHist(V,c);}catch(e){}const best=h?['h2h','team','where','role','sport'].map(k=>({k,...h.H[k],lab:h.lab[k]})).filter(o=>o.n>=4).sort((a,b)=>b.r-a.r)[0]:null;return{c,best,r:best?best.r:0.5};})
     .sort((a,b)=>b.r-a.r);return{n:on.length,w:scored.reduce((a,o)=>a+o.r,0),top:scored[0]||null};}
 /* the most aggressive rung at 70%+ whose fair price is still -300 or better (≤75%);
@@ -20673,7 +20711,7 @@ let LANE_C=null,LANE_SIG='';
 function laneTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+V.filter(x=>x.graded).length;if(LANE_C&&LANE_SIG===sig)return LANE_C;
   const G={},BYV={};const voices=new Set([...(typeof CHAR_ORDER!=='undefined'?CHAR_ORDER:[]),'Sim']);
   V.forEach(x=>{if(!x.graded||x.hit==null||!voices.has(x.voice))return;const k=laneKey(x.sp,x.market,x.side,x.price,x.line);if(!k)return;
-    [G[k]||(G[k]={n:0,w:0,u:0}),(BYV[x.voice]||(BYV[x.voice]={}))[k]||(BYV[x.voice][k]={n:0,w:0,u:0})].forEach(o=>{o.n++;if(x.hit)o.w++;o.u+=x.units||0;});});
+    [META_VOICES.has(x.voice)?null:(G[k]||(G[k]={n:0,w:0,u:0})),(BYV[x.voice]||(BYV[x.voice]={}))[k]||(BYV[x.voice][k]={n:0,w:0,u:0})].filter(Boolean).forEach(o=>{o.n++;if(x.hit)o.w++;o.u+=x.units||0;});});
   const judge=o=>{o.roi=o.u/o.n;o.shr=o.u/(o.n+LANE_MIN);o.st=o.n<LANE_MIN?'thin':o.shr<=-0.05?'blocked':o.shr>=0.03?'proven':'neutral';return o;};
   Object.values(G).forEach(judge);Object.values(BYV).forEach(T=>Object.values(T).forEach(judge));
   LANE_C={G,BYV};LANE_SIG=sig;return LANE_C;}
