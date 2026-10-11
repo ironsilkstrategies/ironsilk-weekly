@@ -2135,7 +2135,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -20969,17 +20969,29 @@ function pwrParseEvent(sp,ev,B){const st=((ev.season||{}).type);if(st===1||st===
   const ab=x=>pwrAbbr(sp,(x.team||{}).abbreviation||'');if(!ab(A)||!ab(H))return null;
   [A,H].forEach(x=>{const tm=x.team||{};const k=ab(x);if(B&&!B.meta[k])B.meta[k]={n:tm.displayName||'',loc:tm.location||'',c:tm.color||'',l:tm.logo||((tm.logos||[])[0]||{}).href||''};});
   return[String(ev.date||'').slice(0,10),ab(A),ab(H),as,hs,c.neutralSite?1:0];}
+/* ESPN accepts a date RANGE for some leagues and answers 400 for others (seen live on
+   the NFL board). Try the range once; if it's refused, ask day by day — a single-day
+   scoreboard always works — and remember not to try the range again for that league. */
+const PWR_NORANGE={};
+async function pwrWindowEvents(sp,d,e){const base=FBP_ESPN[sp]+'/scoreboard';const d8=x=>x.replace(/-/g,'');
+  if(!PWR_NORANGE[sp]){try{const r=await fetch(base+'?dates='+d8(d)+'-'+d8(e)+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000'));
+      if(r.ok){const j=await r.json();if(j&&Array.isArray(j.events))return{events:j.events,calls:1};}
+      PWR_NORANGE[sp]=r.status||1;}catch(err){PWR_NORANGE[sp]=1;}}
+  const out=[];let calls=0;for(let x=d;x<=e;x=dayShift(x,1)){calls++;const r=await fetch(base+'?dates='+d8(x)+(sp==='ncaaf'?'&groups=80&limit=300':''));
+    if(!r.ok)throw new Error('ESPN answered '+r.status+' for '+x);const j=await r.json();(j.events||[]).forEach(ev=>out.push(ev));await new Promise(z=>setTimeout(z,120));}
+  return{events:out,calls};}
+/* baseball's season is long; ratings weigh recent games anyway — the last 9 weeks are plenty */
+const PWR_LOOKBACK={mlb:63};
 async function pwrFetch(sp,maxCalls,force){if(PWR_BUSY[sp]||!FBP_ESPN[sp])return 0;PWR_BUSY[sp]=1;let calls=0,added=0;const t=today();
   let D=PWR_DIAG[sp]||(PWR_DIAG[sp]={calls:0,events:0,kept:0,err:''});
   try{const ss=pwrSeasonStart(sp);let B=pwrB(sp);if(!B||B.season!==ss){B=PWR_MEMO[sp]={season:ss,w:{},meta:{},day:null};}
     if(ss>t){B.day=t;B.complete=true;D.err='season hasn\'t started';return 0;}
     if(!force&&B.day===t&&B.complete)return 0;            /* already built today */
     if(!D.run||D.run!==t+'|'+(force?1:0)||!D.calls){D=PWR_DIAG[sp]={calls:0,events:0,kept:0,err:'',ts:Date.now(),run:t+'|'+(force?1:0)};}
-    let d=B.season;
+    let d=B.season;if(PWR_LOOKBACK[sp]){const lb=dayShift(t,-PWR_LOOKBACK[sp]);while(dayShift(d,7)<=lb)d=dayShift(d,7);}
     while(d<=t&&calls<(maxCalls||8)){const e=dayShift(d,6)<t?dayShift(d,6):t;const W=B.w[d];
       if(!(W&&W.done)){calls++;D.calls++;
-        try{const url=FBP_ESPN[sp]+'/scoreboard?dates='+d.replace(/-/g,'')+'-'+e.replace(/-/g,'')+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000');
-          const r=await fetch(url);if(!r.ok)throw new Error('ESPN answered '+r.status);const j=await r.json();const evs=j.events||[];D.events+=evs.length;
+        try{const W2=await pwrWindowEvents(sp,d,e);const evs=W2.events;D.events+=evs.length;if(W2.calls>1)D.calls+=W2.calls-1;
           const G=evs.map(ev=>pwrParseEvent(sp,ev,B)).filter(Boolean);D.kept+=G.length;
           B.w[d]={ts:Date.now(),done:dayShift(e,2)<t,g:G};added+=G.length;}
         catch(err){D.err=String(err&&err.message||err);}
@@ -21060,7 +21072,7 @@ function pwrStrip(sp,g){try{if(!g||!g.away||!g.home)return'';const gk=g.away.abb
 function pwrPanelHtml(sp){const R=pwrRank(sp);const lab=(SP_LAB[sp]||sp.toUpperCase());
   if(!R){const D=PWR_DIAG[sp]||{};const B=pwrB(sp);const n=pwrGames(sp).length;const busy=PWR_BUSY[sp];
     const st=busy?`pulling this season's finals from ESPN… (${D.calls||0} week${D.calls===1?'':'s'} so far)`:D.err?`couldn't finish: ${D.err}`:n?`only ${n} finals so far — needs 8`:D.ts?`ESPN returned ${D.events||0} games, ${D.kept||0} finished`:'starting…';
-    return`<details class="tkt" id="pwrPanel" open><summary><b>🏆 ${txtEsc(lab)} power rankings</b> <span class="mono" style="font-size:9.5px;color:${D.err?'var(--rust)':'var(--mute)'}">${txtEsc(st)}</span></summary>
+    return`<details class="tkt" id="pwrPanel"${D.err&&!busy?' open':''}><summary><b>🏆 ${txtEsc(lab)} power rankings</b> <span class="mono" style="font-size:9.5px;color:${D.err?'var(--rust)':'var(--mute)'}">${txtEsc(st)}</span></summary>
       <div class="sub" style="font-size:10px">Built once a day from every final this season.${B&&B.day?` Last build ${txtEsc(B.day)}.`:''}</div>${busy?'':`<div class="bar" style="margin-top:6px"><button onclick="pwrBoot(true)">↻ Build now</button></div>`}</details>`;}
   const C=PWR_CFG[sp];const dp=sp==='nhl'||sp==='mlb'?2:1;const A=R.acc;
   const accLine=A?`Walk-forward check: these ratings picked <b>${Math.round(A.acc*100)}%</b> of winners in ${A.n} games they hadn't seen yet${A.accRec!=null?` · records alone: ${Math.round(A.accRec*100)}%`:''}.`:'Accuracy check starts after a few weeks of games.';
@@ -21078,7 +21090,8 @@ function pwrPanelHtml(sp){const R=pwrRank(sp);const lab=(SP_LAB[sp]||sp.toUpperC
 function pwrMount(){if(typeof document==='undefined')return;const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!PWR_CFG[sp])return;
   const slate=document.getElementById('slate');if(!slate)return;let box=document.getElementById('pwrBox');
   if(!box){box=document.createElement('div');box.id='pwrBox';slate.parentNode.insertBefore(box,slate);}
-  const open=!!(document.getElementById('pwrPanel')||{}).open;box.innerHTML=pwrPanelHtml(sp);if(open){const p=document.getElementById('pwrPanel');if(p)p.open=true;}}
+  const cur=document.getElementById('pwrPanel');const open=!!(cur&&cur.open&&cur.dataset.user);box.innerHTML=pwrPanelHtml(sp);
+  const p=document.getElementById('pwrPanel');if(p){if(open){p.open=true;p.dataset.user='1';}p.addEventListener('toggle',()=>{if(p.open)p.dataset.user='1';else delete p.dataset.user;});}}
 async function pwrBoot(force){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!PWR_CFG[sp])return;
   try{localStorage.removeItem(PWR_KEY);}catch(e){}   /* pre-v2.04 single key */
   const before=(pwrB(sp)||{}).ts;pwrMount();const tick=setInterval(pwrMount,1500);

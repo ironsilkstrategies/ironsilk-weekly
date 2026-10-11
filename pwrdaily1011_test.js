@@ -8,7 +8,10 @@ const mkEv=(d,a,h,as,hs)=>({date:d+'T23:00Z',season:{type:2},status:{type:{state
 const EV=[];for(let day=1;day<=40;day+=2){const d=new Date(Date.UTC(2026,7,day));const ds=d.toISOString().slice(0,10);const sh=[...TM].sort(()=>rnd()-0.5);for(let i=0;i<8;i+=2)EV.push(mkEv(ds,sh[i],sh[i+1],Math.floor(rnd()*6),Math.floor(rnd()*6)+(TM.indexOf(sh[i+1])<3?1:0)));}
 EV.forEach(e=>{const c=e.competitions[0].competitors;if(c[0].score.value===c[1].score.value)c[1].score.value++;});
 const W0=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nhl.html',pretendToBeVisual:true,beforeParse(w){w.__NO_GRADELOOP__=true;w.__NO_BACKFILL__=true;w.__calls=0;w.__fail=false;
-  w.fetch=(u)=>{u=String(u);if(/scoreboard\?dates=/.test(u)){w.__calls++;if(w.__fail)return Promise.resolve({ok:false,status:503,json:()=>Promise.resolve({})});const m=u.match(/dates=(\d{8})-(\d{8})/);const f=m[1].replace(/(\d{4})(\d\d)(\d\d)/,'$1-$2-$3'),e=m[2].replace(/(\d{4})(\d\d)(\d\d)/,'$1-$2-$3');
+  w.fetch=(u)=>{u=String(u);if(/scoreboard\?dates=/.test(u)){w.__calls++;if(w.__fail)return Promise.resolve({ok:false,status:503,json:()=>Promise.resolve({})});
+      if(w.__norange&&/dates=\d{8}-\d{8}/.test(u))return Promise.resolve({ok:false,status:400,json:()=>Promise.resolve({})});
+      const one=u.match(/dates=(\d{8})(?:&|$)/);if(one){const d=one[1].replace(/(\d{4})(\d\d)(\d\d)/,'$1-$2-$3');w.__days=(w.__days||0)+1;return Promise.resolve({ok:true,json:()=>Promise.resolve({events:EV.filter(ev=>ev.date.slice(0,10)===d)})});}
+      const m=u.match(/dates=(\d{8})-(\d{8})/);const f=m[1].replace(/(\d{4})(\d\d)(\d\d)/,'$1-$2-$3'),e=m[2].replace(/(\d{4})(\d\d)(\d\d)/,'$1-$2-$3');
       return Promise.resolve({ok:true,json:()=>Promise.resolve({events:EV.filter(ev=>{const d=ev.date.slice(0,10);return d>=f&&d<=e;})})});}
     return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});};
   w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
@@ -35,6 +38,14 @@ setTimeout(async()=>{try{
   w.__fail=false;w.eval(`window.__set=set;window.set=(k,v)=>String(k).startsWith('d4.pwr')?false:__set(k,v);`);
   for(let i=0;i<6;i++){if(!await w.eval(`pwrFetch('nhl',8,true)`))break;}
   T('storage full: rankings still show this visit, and it says so',!!w.eval(`pwrRank('nhl')`)&&/storage is full/.test(w.eval(`PWR_DIAG.nhl.err`)));
+  /* ESPN refuses date ranges (HTTP 400, as seen live): falls back to one day at a time */
+  w.eval(`window.set=__set;Object.keys(PWR_MEMO).forEach(k=>delete PWR_MEMO[k]);PWR_C={};Object.keys(PWR_DIAG).forEach(k=>delete PWR_DIAG[k]);Object.keys(PWR_NORANGE).forEach(k=>delete PWR_NORANGE[k]);localStorage.removeItem('d4.pwrg.nhl');localStorage.removeItem('d4.pwrrank');`);w.__norange=true;w.__days=0;
+  for(let i=0;i<6;i++){if(!await w.eval(`pwrFetch('nhl',8)`))break;}
+  const Rn=w.eval(`pwrRank('nhl')`);const nr=w.eval(`PWR_NORANGE.nhl`);
+  T('a 400 on the date range falls back to day-by-day and still builds',Rn&&Rn.teams.length===8&&w.eval(`pwrGames('nhl').length`)===EV.length&&nr===400,`${w.__days} day calls · range status ${nr}`);
+  const rg=w.__calls;w.eval(`pwrB('nhl').day=dayShift(today(),-1);`);w.__calls=0;await w.eval(`pwrFetch('nhl',8)`);
+  T('…and never retries the refused range for that league',w.__calls>0&&w.__calls<=14,w.__calls+' calls next day');
+  T('baseball only pulls the last 9 weeks',w.eval(`PWR_LOOKBACK.mlb`)===63);
   T('power caches never ride the sync',w.eval(`syncSkip('d4.pwrg.nhl')&&syncSkip('d4.pwrrank')&&syncSkip('d4.inj')`));
 }catch(e){out.push('CRASH '+e.stack);}
 console.log(out.join('\n'));process.exit(0);},1500);
