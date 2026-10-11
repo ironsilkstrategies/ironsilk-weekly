@@ -2092,7 +2092,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010l';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2350,7 +2350,9 @@ function paintMeter(){
   document.getElementById('credText').textContent=c.n+' / 24';
   const b=document.getElementById('oddsBtn');if(b)b.disabled=c.n>=24||!get(LS.key,'');
   const lp=get(LS.pull,0);
-  document.getElementById('lastPull').textContent=lp?fmtTime(lp):'no pull';
+  /* v1.95: say what it is — the last odds pull — and when it wasn't today, say the day */
+  {const el=document.getElementById('lastPull');if(el){if(!lp)el.textContent='no odds pull';else{const d=new Date(lp),dd=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+    el.textContent='odds '+(dd===today()?'':dd===dayShift(today(),-1)?'yest ':d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:APP_TZ})+' ')+fmtTime(lp);}}}
 }
 // credentials never leave the browser in any backup — a file that could sit in a git
 // repo should never carry live API keys. Re-paste them in Settings after a restore;
@@ -18024,7 +18026,9 @@ function clearStaleFromFinals(){
   Object.keys(F).forEach(fk=>{const i=fk.indexOf(':');const sp=fk.slice(0,i),game=fk.slice(i+1);
     const list=((MG_LIVE[sp]||{})[mgKey(sp,game)])||[];const E=F[fk];
     const day=E.d||tdDay(E.ts||0);
-    const bad=list.some(e=>e.state!=='post'&&e.date===day);
+    /* only an event fetched AFTER the final was written can contradict it — a cached
+       "in progress" snapshot from before the final must never delete a real result */
+    const bad=list.some(e=>e.state!=='post'&&e.date===day&&e.fetchedAt&&e.fetchedAt>(E.ts||0));
     if(bad){delete F[fk];delete SYNC_SEEN[fk];n++;}});
   if(n){set(LS.allfinals,F);console.info('TheDesk: cleared '+n+' stale score(s) — live games were marked as final');}
   return n;
@@ -18046,6 +18050,7 @@ async function mgRefresh(force,deep){
        which cut off the newest games — exactly the ones still waiting on a grade. */
     const need={};const floor=deep?'2000-01-01':dayShift(today(),-30);   /* the sweeper goes back as far as any open leg */
     try{tcSportsLoaded().forEach(sp=>{(need[sp]=need[sp]||new Set()).add(today());});}catch(e){} // Today tab: live scores for every pick on the card
+    try{Object.entries(MG_LIVE).forEach(([sp,M])=>Object.values(M||{}).forEach(list=>(list||[]).forEach(e=>{if(e.state==='in'&&e.date&&e.date>=floor)(need[sp]=need[sp]||new Set()).add(e.date);})));}catch(e){}
     mgPending().forEach(x=>{const d=String(x.d).slice(0,10);if(d<floor)return;const S=(need[x.sp]=need[x.sp]||new Set());S.add(d);
       if(x.l.gdApprox||!x.l.gameDate)for(let i=1;i<=3;i++)S.add(dayShift(d,i));});
     const jobs=Object.entries(need).map(async([sp,ds])=>{
@@ -18062,7 +18067,7 @@ async function mgRefresh(force,deep){
           const ls=x=>(x.linescores||[]).map(v=>+(v.value!=null?v.value:v.displayValue)||0);const la=ls(aw),lh=ls(hm);
           const k=mgKey(sp,aw.team.abbreviation+'@'+hm.team.abbreviation);
           const nm=t=>[t.abbreviation,t.location,t.displayName,t.shortDisplayName,t.name].filter(Boolean);
-          (M[k]=M[k]||[]).push({an:nm(aw.team),hn:nm(hm.team),espnId:String(ev.id),date:ev.date?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date)):'',
+          (M[k]=M[k]||[]).push({fetchedAt:Date.now(),an:nm(aw.team),hn:nm(hm.team),espnId:String(ev.id),date:ev.date?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date)):'',
             start:ev.date,state,detail:(st.type||{}).shortDetail||'',period:st.period||0,clock:st.clock!=null?+st.clock:null,
             a:aw.score!=null&&aw.score!==''?+aw.score:null,h:hm.score!=null&&hm.score!==''?+hm.score:null,
             h1a:la.length>=2?la[0]+la[1]:null,h1h:lh.length>=2?lh[0]+lh[1]:null,p1a:la.length?la[0]:null,p1h:lh.length?lh[0]:null});});
@@ -18078,8 +18083,14 @@ async function mgRefresh(force,deep){
 }
 /* The ESPN event for a leg: same teams, on (or just after) the leg's date. */
 function mgEventFor(sp,game,d,approx){
-  const L=(MG_LIVE[sp]||{})[mgKey(sp,game)];if(!L||!L.length)return null;
   const day=String(d||'').slice(0,10);
+  /* v1.95: a stored final for that day beats whatever the live cache last saw — a page
+     resumed the next morning still held last night's "in progress" events */
+  let F=null;try{const f=allFinals()[finalsKey(sp,game)];if(f&&day&&f.d===day&&f.a!=null&&f.h!=null)F=f;}catch(e){}
+  const L=(MG_LIVE[sp]||{})[mgKey(sp,game)];
+  if(F){const h0=(L||[]).find(e=>e.date===day);if(!h0||h0.state!=='post'||h0.a!==F.a||h0.h!==F.h)
+    return{...(h0||{}),date:day,state:'post',detail:'Final',a:F.a,h:F.h,h1a:F.h1a!=null?F.h1a:(h0||{}).h1a,h1h:F.h1h!=null?F.h1h:(h0||{}).h1h,p1a:F.p1a,p1h:F.p1h,fromFinal:true};}
+  if(!L||!L.length)return null;
   const hit=L.find(e=>e.date===day);if(hit||!day)return hit||L[0]||null;
   if(!approx)return null;   // real game date and no game that day → not this event
   return L.filter(e=>dayOk(e.date,day,true)).sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
@@ -18088,9 +18099,16 @@ function mgResolve(leg,ticketDate){
   const e=mgEventFor(leg.sport||'mlb',leg.game,leg.gameDate||ticketDate,!!leg.gdApprox||!leg.gameDate);if(!e||e.a==null||e.state==='pre')return null;
   return{a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,period:e.period,gid:leg.gid,live:e.state==='in',source:'espn-live',completed:e.state==='post'?true:null};
 }
+function mgTicketOpen(t){try{if(settledAll()[String(t.id)])return false;let dead=false,done=true;
+    (t.legs||[]).forEach(l=>{const r=gradeLeg(l,t.date);if(r&&!r.live&&r.hit===false&&!r.push)dead=true;if(!r||r.live||(r.hit==null&&!r.push))done=false;});return!dead&&!done;}catch(e){return true;}}
+let MG_HIDDEN_AT=0;
+if(typeof document!=='undefined')document.addEventListener('visibilitychange',()=>{if(document.hidden){MG_HIDDEN_AT=Date.now();return;}
+  if(MG_HIDDEN_AT&&Date.now()-MG_HIDDEN_AT>5*60e3){MG_TS=0;mgRefresh(true).then(()=>{try{const on=id=>{const v=document.getElementById(id);return v&&v.classList.contains('on');};
+      if(on('v-mine'))renderMyGames();if(on('v-today'))renderToday(true);if(on('v-tickets'))renderTickets();}catch(e){}}).catch(()=>{});}});
 function renderMyGames(){
   const el=document.getElementById('mineBody');if(!el)return;
-  const P=mgPending(true);
+  /* v1.95: a settled or already-dead ticket has nothing left to follow */
+  const P=mgPending(true).filter(x=>mgTicketOpen(x.t));
   if(!P.length){el.innerHTML='<div class="empty">No pending tickets. Paste a ticket into Intake and its games show up here.</div>';return;}
   const G={};P.forEach(x=>{const k=x.sp+'|'+x.l.game+'|'+String(x.d).slice(0,10);(G[k]=G[k]||{sp:x.sp,game:x.l.game,d:String(x.d).slice(0,10),rows:[]}).rows.push(x);});
   const list=Object.values(G).map(b=>{

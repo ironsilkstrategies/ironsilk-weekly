@@ -74,7 +74,10 @@ const w=dom.window;
   const mine=w.document.getElementById('mineBody').innerHTML;const txt=mine.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
   T('My Games no longer prints each detail twice',!/(MIA 16–24 KC · margin \+8)[^|]*\1/.test(txt),(txt.match(/KC -0\.5[^T]*/)||[''])[0].slice(0,90));
   T('no "100%" glued onto team legs',!/\+8100%|40100%/.test(txt));
-  T('prop legs show their progress bars',/38\/40|231\/175/.test(mine));
+  /* v1.95: a ticket that has already lost no longer sits on My Games — check the prop bar on the leg card itself */
+  const card=w.eval(`legLiveCard(get(LS.locked,[])[0],get(LS.locked,[])[0].legs[0],{link:true})`);
+  T('prop legs show their progress bars',/38\/40/.test(card));
+  T('a settled (lost) ticket drops off My Games',!/Kelce|1000054317/.test(mine));
   T('no uncaught errors',errors.length===0,errors.slice(0,3).join(' || '));
   console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length}/${out.length} passed`);
   process.exit(out.some(x=>x.startsWith('FAIL'))?1:0);
