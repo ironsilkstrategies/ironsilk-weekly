@@ -1,6 +1,6 @@
 {
  "v": 3,
- "generated": 1791762142482,
+ "generated": 1791762881927,
  "brand": "TheDesk",
  "price": "$25/mo · $10/wk",
  "social": {
@@ -10,10 +10,10 @@
  "handle": "RuleTheWorldKid",
  "subscribe": "https://whop.com/ironsilkweekly/thedesk-vip",
  "record": {
-  "w": 8,
+  "w": 9,
   "l": 1,
   "pu": 0,
-  "u": 6.217569065395153,
+  "u": 7.126659974486063,
   "first": "2026-10-06"
  },
  "today": {
@@ -44,10 +44,10 @@
       "Expected value +3.3% per bet at -115.",
       "The uploaded projection has it DEN 23.17–20.77 LAC — a 43.9-point total vs 41.5.",
       "The Judge, weighing every witness by its graded accuracy, is on this side.",
-      "4 of 8 characters on it, 2 independent of the sim: The Simulator (12-12 NFL over), The Judge (12-10 NFL over), The Oracle (6-8 NFL over), The Coach (12-12 NFL over).",
+      "4 of 8 characters on it, 2 independent of the sim: The Simulator (13-12 NFL over), The Judge (13-10 NFL over), The Oracle (7-8 NFL over), The Coach (13-12 NFL over).",
       "Against: The Scorekeeper, The Historian."
      ],
-     "script": "DEN at LAC — I'm on Over 41.5 (-115). We ran this game 10,000 times: the over hits 55% of the time; the price says 53%. The uploaded projection projects DEN 23.17, LAC 20.77 — a 43.9-point total vs 41.5. 4 of our 8 analysts are on the over — The Simulator is 12-12 NFL over."
+     "script": "DEN at LAC — I'm on Over 41.5 (-115). We ran this game 10,000 times: the over hits 55% of the time; the price says 53%. The uploaded projection projects DEN 23.17, LAC 20.77 — a 43.9-point total vs 41.5. 4 of our 8 analysts are on the over — The Simulator is 13-12 NFL over."
     }
    },
    {
@@ -75,7 +75,7 @@
       "Expected value +3.2% per bet at -115.",
       "The uploaded projection has it DET 27.92–24.15 ARI — a 52.1-point total vs 54.5 (disagrees).",
       "The Judge, weighing every witness by its graded accuracy, is on this side.",
-      "5 of 8 characters on it, 2 independent of the sim: The Simulator (4-0 these teams over), The Judge (12-10 NFL over), The Scorekeeper (4-0 these teams over), The Historian (4-0 these teams over), The Coach (4-0 these teams over).",
+      "5 of 8 characters on it, 2 independent of the sim: The Simulator (4-0 these teams over), The Judge (13-10 NFL over), The Scorekeeper (4-0 these teams over), The Historian (4-0 these teams over), The Coach (4-0 these teams over).",
       "Against: The Oracle."
      ],
      "script": "DET at ARI — I'm on Over 54.5 (-115). We ran this game 10,000 times: the over hits 56% of the time; the price says 53%. 5 of our 8 analysts are on the over — The Simulator is 4-0 these teams over."
@@ -96,7 +96,7 @@
      "The Judge",
      "The Historian"
     ],
-    "hit": null,
+    "hit": true,
     "push": false,
     "why": {
      "bullets": [
@@ -104,10 +104,10 @@
       "Expected value +11.2% per bet at -110.",
       "The uploaded projection has it SF 22.95–26.53 SEA — SF by -3.6, short of +3 (disagrees).",
       "The Judge, weighing every witness by its graded accuracy, is on this side.",
-      "3 of 8 characters on it, 1 independent of the sim: The Simulator (9-4 road spread), The Judge (7-6 road spread), The Historian (3-6 road spread).",
+      "3 of 8 characters on it, 1 independent of the sim: The Simulator (4-0 underdog spread), The Judge (8-6 road spread), The Historian (2-3 underdog spread).",
       "Against: The Scorekeeper, The Oracle."
      ],
-     "script": "SF at SEA — I'm on SF +3 (-110). We ran this game 10,000 times: SF covers 57% of the time; the price says 52%. 3 of our 8 analysts are on SF — The Simulator is 9-4 road spread."
+     "script": "SF at SEA — I'm on SF +3 (-110). We ran this game 10,000 times: SF covers 57% of the time; the price says 52%. 3 of our 8 analysts are on SF — The Simulator is 4-0 underdog spread."
     }
    }
   ],
@@ -147,7 +147,7 @@
       "The uploaded projection has it DET 27.92–24.15 ARI — DET winning by 3.8.",
       "The Judge, weighing every witness by its graded accuracy, is on this side."
      ],
-     "script": "DET at ARI — I'm on DET ML (-258). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects DET 27.92, ARI 24.15 — DET winning by 3.8. 3 of our 8 analysts are on DET — The Simulator is 16-6 favorite ML."
+     "script": "DET at ARI — I'm on DET ML (-258). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects DET 27.92, ARI 24.15 — DET winning by 3.8. 3 of our 8 analysts are on DET — The Simulator is 16-7 favorite ML."
     }
    },
    {
@@ -168,7 +168,7 @@
       "The uploaded projection has it DEN 23.17–20.77 LAC — DEN winning by 2.4.",
       "The Judge, weighing every witness by its graded accuracy, is on this side."
      ],
-     "script": "DEN at LAC — I'm on DEN ML (-192). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects DEN 23.17, LAC 20.77 — DEN winning by 2.4. 3 of our 8 analysts are on DEN — The Judge is 16-9 favorite ML."
+     "script": "DEN at LAC — I'm on DEN ML (-192). The price is close to fair here — this one rides on who's backing it. RJ Harvey 34 rec yds/g, and lately 48 lately. The uploaded projection projects DEN 23.17, LAC 20.77 — DEN winning by 2.4. 3 of our 8 analysts are on DEN — The Judge is 16-10 favorite ML."
     }
    }
   ]
@@ -236,7 +236,7 @@
       "The Judge",
       "The Historian"
      ],
-     "hit": null,
+     "hit": true,
      "push": false
     }
    ]
