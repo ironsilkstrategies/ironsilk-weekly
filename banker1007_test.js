@@ -7,6 +7,8 @@ function boot(page,extraFetch){let html=fs.readFileSync(path.join(W,page),'utf8'
     const RD=w.Date;class FD extends RD{constructor(...a){super(...(a.length?a:[RD.parse('2026-10-07T20:30:00Z')]))}static now(){return RD.parse('2026-10-07T20:30:00Z')}}w.Date=FD;
     w.fetch=(u,o)=>{u=String(u);if(extraFetch){const r=extraFetch(u,o);if(r)return r;}
       if(/api\.github\.com/.test(u)){if(o&&o.method==='PUT'){puts.push({u,body:JSON.parse(o.body)});return Promise.resolve({ok:true,status:201,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});}
+        /* like GitHub: the repo itself answers 200 when the token can see it; a missing file is 404 */
+        if(/api\.github\.com\/repos\/[^/]+\/[^/?]+$/.test(u))return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});
         return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});}
       return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});};
     w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;}
