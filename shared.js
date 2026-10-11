@@ -2092,7 +2092,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2645,11 +2645,26 @@ async function pushToGitHub(manual){
    The locked Best card, its graded track record and your subscribe link are
    published to public/picks.json in your repo — picks.html renders it for
    anyone. Auto-publishes when the card locks (and again as picks grade). */
-async function ghPut(path,text,msg){const token=get(LS.ghtoken,''),repo=get(LS.ghrepo,'');if(!token||!repo)return{ok:false,reason:'not configured'};
-  const api=`https://api.github.com/repos/${repo}/contents/${path}`;const H={'Authorization':'token '+token,'Accept':'application/vnd.github+json'};
-  try{let sha=null;const g=await fetch(api,{headers:H});if(g.status===200)sha=(await g.json()).sha;else if(g.status!==404)return{ok:false,reason:'HTTP '+g.status};
-    const r=await fetch(api,{method:'PUT',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify({message:msg,content:b64u(text),...(sha?{sha}:{})})});
-    return r.ok?{ok:true}:{ok:false,reason:'HTTP '+r.status+' '+(await r.text()).slice(0,160)};}catch(e){return{ok:false,reason:e.message||String(e)};}}
+/* v1.96 · the public picks page lives in the repo this site is served from. A typo'd repo
+   ("ironsilkweekly" for "ironsilk-weekly") or a token without access both come back as a
+   bare 404 — fix the known name, try every token the device holds, and say which it was. */
+const SITE_REPO='ironsilkstrategies/ironsilk-weekly';
+function pubRepo(){let r=String(get(LS.ghrepo,'')||'').trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/+$/,'');
+  if(!r||/^ironsilkstrategies\/ironsilk[\s_]?weekly$/i.test(r))r=SITE_REPO;return r;}
+async function ghPut(path,text,msg){const repo=pubRepo();
+  const toks=[...new Set([get(LS.ghtoken,''),get(SYNC.token,'')].filter(Boolean))];if(!toks.length)return{ok:false,reason:'no GitHub token on this device'};
+  let last=null;
+  for(const token of toks){const api=`https://api.github.com/repos/${repo}/contents/${path}`;const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
+    try{let sha=null;const g=await fetch(api,{headers:H});
+      if(g.status===401||g.status===403||(g.status===404&&!(await ghRepoVisible(repo,H)))){last={ok:false,status:g.status,reason:`this token can't write to ${repo}`};continue;}
+      if(g.status===200)sha=(await g.json()).sha;else if(g.status!==404){last={ok:false,reason:'HTTP '+g.status};continue;}
+      const r=await fetch(api,{method:'PUT',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify({message:msg,content:b64u(text),...(sha?{sha}:{})})});
+      if(r.ok){if(get(LS.ghrepo,'')!==repo)set(LS.ghrepo,repo);if(token!==get(LS.ghtoken,''))set(LS.ghtoken,token);return{ok:true};}
+      last={ok:false,status:r.status,reason:r.status===404||r.status===403?`this token can't write to ${repo}`:'HTTP '+r.status+' '+(await r.text()).slice(0,120)};}
+    catch(e){last={ok:false,reason:e.message||String(e)};}}
+  return last||{ok:false,reason:'publish failed'};}
+/* a repo the token can see answers the repo endpoint even when the file doesn't exist yet */
+async function ghRepoVisible(repo,H){try{const r=await fetch(`https://api.github.com/repos/${repo}`,{headers:H});return r.ok;}catch(e){return false;}}
 function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();
   const slim=x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
     tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,
@@ -2662,14 +2677,16 @@ function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log
     const RR=bkDayRecord().cut;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
   return{v:2,generated:Date.now(),brand:'TheDesk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
 async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual)alert('The Best card publishes once it locks — run the master evaluation or tap Lock now.');return{ok:false,reason:'not locked'};}
-  if(!get(LS.ghtoken,'')||!get(LS.ghrepo,'')){if(manual)alert('Add your GitHub token and owner/repo in Settings → Backup first. Publishing uses the same connection.');return{ok:false,reason:'not configured'};}
+  if(!get(LS.ghtoken,'')&&!get(SYNC.token,'')){if(manual)alert('Add a GitHub token in Settings → Public picks page first.');return{ok:false,reason:'not configured'};}
   const F=publicFeed();const txt=JSON.stringify(F,null,1);
   const a=await ghPut('public/picks.json',txt,'Publish picks — '+S.d);const b=a.ok?await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d):a;
   set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:JSON.stringify(F.today&&F.today.picks.map(x=>x.hit))});
-  if(manual)alert(a.ok&&b.ok?'Published. Your public page updates in about a minute: '+location.origin+location.pathname.replace(/[^/]*$/,'')+'picks.html':'Publish failed: '+(a.reason||b.reason));
+  if(manual)alert(a.ok&&b.ok?'Published. Your public page updates in about a minute: '+location.origin+location.pathname.replace(/[^/]*$/,'')+'picks.html'
+    :/can't write/.test(a.reason||b.reason||'')?`Publish failed: ${a.reason||b.reason}.\n\nFix: on github.com → Settings → Developer settings → Fine-grained tokens → "TheDesk sync" → Edit → Repository access → add ironsilk-weekly → Save. No new token needed — this device already has it.`
+    :'Publish failed: '+(a.reason||b.reason));
   try{renderBest();}catch(e){}return{ok:a.ok&&b.ok};}
 /* auto: once when the card locks, and again whenever a pick grades */
-async function publishAuto(){try{const S=get(BEST5_KEY,{});if(!S.locked||!get(LS.ghtoken,''))return;const P=get('d4.pubstate',{})||{};
+async function publishAuto(){try{const S=get(BEST5_KEY,{});if(!S.locked||!(get(LS.ghtoken,'')||get(SYNC.token,'')))return;const P=get('d4.pubstate',{})||{};
   const F=publicFeed();const sig=JSON.stringify(F.today&&F.today.picks.map(x=>x.hit));
   if(P.d===S.d&&P.ok&&P.sig===sig)return;await publishPicks(false);}catch(e){}}
 // runs once at boot — if this device has no graded history at all (fresh install, wiped
