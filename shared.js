@@ -2135,7 +2135,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2710,7 +2710,7 @@ async function ghPut(path,text,msg){const repo=pubRepo();
 /* a repo the token can see answers the repo endpoint even when the file doesn't exist yet */
 async function ghRepoVisible(repo,H){try{const r=await fetch(`https://api.github.com/repos/${repo}`,{headers:H});return r.ok;}catch(e){return false;}}
 function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();
-  const slim=x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
+  const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
     tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,
     why:(()=>{if(!x.whyOn)return undefined;try{const W=pickWhy({...x,date:x.d0});return{bullets:W.bullets.slice(0,6),script:W.script};}catch(e){return undefined;}})()});
   const hist=Object.keys(log).sort().reverse().slice(0,30).map(d=>({d,picks:(log[d].picks||[]).filter(x=>x.main).map(slim)})).filter(x=>x.picks.length);
@@ -2722,7 +2722,7 @@ function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log
       const L=logOf(x);return slim({...x,hit:L?L.hit:null,push:L?L.push:false,whyOn:true,d0:S.d});}),
     allStarted:(S.top3||[]).every(open_)}:null;
   let parlay=null,prec=null;try{const B=get(BKDAY_KEY,{})||{};if(B.locked&&B.d===today()&&B.roll&&B.roll.cut.length){const cut=B.roll.legs.filter(l=>B.roll.cut.includes(l.sp+'|'+l.game));
-      parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(B.roll.cutDec),p:B.roll.cutP,result:tixDone(cut),legs:cut.map(l=>{if(!(typeof cbStarted==='function'&&cbStarted(l.sp,l.game))&&l.hit==null&&!l.push)return{hidden:true,sp:l.sp};let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}return{sp:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,by:charName(l.v),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
+      parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(B.roll.cutDec),p:B.roll.cutP,result:tixDone(cut),legs:cut.map(l=>{if(!(typeof cbStarted==='function'&&cbStarted(l.sp,l.game))&&l.hit==null&&!l.push)return{hidden:true,sp:l.sp};let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}return{sp:l.sp,game:l.game,gl:gameLabel(l.sp,l.game),pick:l.pick,price:l.price,p:l.p,by:charName(l.v),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
     const RR=bkDayRecord().cut;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
   return{v:3,generated:Date.now(),brand:'TheDesk',price:get('d4.pricetext','')||'$19.99/mo · $9.99/wk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
 /* the fingerprint: SHA-256 of the exact locked picks + a secret key. Published at lock (git timestamps it);
@@ -6889,7 +6889,7 @@ function card(g){
     ?`<span class="flag elite" title="Top ${getPercentileThreshold()}% league-wide HR park factor">⭐ HR park</span>`:'';
   return pwrStrip('mlb',g)+`<div class="game ${edge>=3&&!done?'edge':''} ${done?'done':''} ${isLive?'in-play':''}" id="g${g.id}">
    <div class="ghd">
-    <div class="grow1"><div class="teams">${g.away.abbr}<span class="at">@</span>${g.home.abbr}
+    <div class="grow1"><div class="teams">${teamNameHtml('mlb',g.away.abbr)}<span class="at">@</span>${teamNameHtml('mlb',g.home.abbr)}
       ${recBadgeHtml(awayRecBadge,g.away.abbr)}${recBadgeHtml(homeRecBadge,g.home.abbr)}</div>
      <div class="meta">${fmtTime(g.time)}<br>${g.away.w}-${g.away.l} · ${g.home.w}-${g.home.l}</div></div>
     <div class="env">Park <span class="pf">${pf[0]}</span>r / <span class="pf">${pf[1]}</span>hr${parkBadge}${w?` · <b>${w.temp}°</b> ${w.cond||''} ${w.wind||''}`:DOME[g.home.abbr]?' · dome':''}${s&&s.hAdj!==1?` · h2h ×${s.hAdj.toFixed(3)}`:''}</div>
@@ -12692,7 +12692,7 @@ function trackedPicksHtml(){
       if(r===true)w++;else if(r===false)l++;else pd++;
       const gid=legGameId(x,t.date);
       const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
-      return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span>
+      return `<li${jumpTo}>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>
         <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
     }).join('');
     const rec=(w+l||pd===0)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' pending':''}`:' · pending';
@@ -12967,7 +12967,7 @@ function systemPicksHtml(){
     if(r===true)w++;else if(r===false)l++;else pd++;
     const gid=legGameId(x,t.date);
     const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
-    return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span> ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
+    return `<li${jumpTo}>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span> ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
   }).join('');
   const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
   return head+`<div class="tkt hi"><h3>${t.date}</h3>
@@ -13244,7 +13244,7 @@ function genTickets(mode){
             <button onclick="removeLegFromTicket(${t.id},'${esc(x.id)}')" title="Remove"
               style="flex:0 0 auto;background:none;border:1px solid var(--rust);color:var(--rust);
               border-radius:4px;padding:1px 7px;cursor:pointer;font-size:11px">✕</button>
-            <span style="flex:1">${x.pick} <span class="m">${x.game}</span></span>
+            <span style="flex:1">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span></span>
             ${legPctHtml(x,gr)}
           </li>`;
         }
@@ -13254,7 +13254,7 @@ function genTickets(mode){
         const sportTag=x.sport?`<span style="font-family:'IBM Plex Mono';font-size:8px;
           letter-spacing:.06em;color:var(--mute);border:1px solid var(--rule);
           border-radius:3px;padding:0 4px;margin-left:4px">${x.sport==='ncaaf'?'CFB':x.sport.toUpperCase()}</span>`:'';
-        return `<li${jumpTo}>${x.pick} <span class="m">${x.game}</span>${sportTag} ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
+        return `<li${jumpTo}>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${sportTag} ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
       }).join('');
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
       const lockBadge=t.finalized
@@ -13345,7 +13345,7 @@ function genTickets(mode){
     const payload=encodeURIComponent(JSON.stringify(legs.map(x=>({game:x.game,pick:x.pick,p:x.p,isProp:x.isProp||false,sport:x.sport||'mlb',gid:x.gid||null,kind:x.kind||null,price:x.price!=null?x.price:null}))));
     h+=`<div class="tkt ${i<2?'hi':''}"><h3>${lab}</h3>
       <div class="sub"><b>${(c*100).toFixed(c<.01?3:1)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs</div>
-      <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${x.game}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
+      <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
       <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}','${PRESET_MODE}')">Confirm &amp; save</button></div></div>`;
   });
   const pu=new Set();
@@ -18269,7 +18269,7 @@ function renderMyGames(){
   list.map(b=>{const [aw,hm]=b.game.split('@');
     /* v1.93: a pregame 0–0 isn't a score; a finished game ESPN no longer lists falls back to the stored final */
     let fin=null;if(b.state!=='in'&&b.state!=='post'){try{const F=allFinals()[b.sp+':'+b.game];if(F&&F.d===b.d)fin=F;}catch(e){}}
-    const rk=t=>b.sp==='ncaaf'?cfbRankTag(t):'';const AW=rk(aw)+aw,HM=rk(hm)+hm;
+    const rk=t=>teamTag(b.sp,t);const AW=rk(aw)+aw,HM=rk(hm)+hm;
     const sc=fin?`${AW} <b>${fin.a}</b> – <b>${fin.h}</b> ${HM}`:(b.a!=null&&(b.state==='in'||b.state==='post'))?`${AW} <b>${b.a}</b> – <b>${b.h}</b> ${HM}`:`${AW} @ ${HM}`;
     if(fin)b={...b,state:'post'};
     const st=b.state==='in'?`<span style="color:var(--rust)">● LIVE</span> ${esc(b.detail)}`:b.state==='post'?'FINAL':(b.start?new Date(b.start).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}):b.d);
@@ -20068,7 +20068,7 @@ function bkDayRecord(){const H={...(get(BKDAYS_KEY,{})||{})};const S=get(BKDAY_K
   return R;}
 function bkLegRow(l,opts){opts=opts||{};const mark=l.push?'↔ ':l.hit===true?'✅ ':l.hit===false?'❌ ':'';const C=CHARS[l.v]||{};
   return`<div style="padding:5px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
-    <div>${mark}<b>${txtEsc(l.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(l.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[l.sp]||'').split(' ')[0]} ${txtEsc(l.game)}</span>${opts.cut===false?' <span class="mono" style="font-size:9px;color:var(--mute)">(longshot leg)</span>':''}</div>
+    <div>${mark}<b>${txtEsc(l.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(l.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[l.sp]||'').split(' ')[0]} ${gameLabelHtml(l.sp,l.game)}</span>${opts.cut===false?' <span class="mono" style="font-size:9px;color:var(--mute)">(longshot leg)</span>':''}</div>
     <div class="mono" style="font-size:10px;white-space:nowrap">${Math.round(l.p*100)}%</div></div>
     <div class="mono" style="font-size:9.5px;color:var(--mute)">${(l.by||[l.v]).map(v=>`<span style="color:${(CHARS[v]||{}).color||'var(--mute)'}">${(CHARS[v]||{}).chip||v}</span>`).join(' ')}${opts.rank>1?` · its #${opts.rank} pick (top one was a game already taken)`:''}</div>
     ${opts.why!==false?whyHtml({...l,date:opts.d}):''}</div>`;}
@@ -20306,7 +20306,7 @@ function legLiveCard(t,l,opts){opts=opts||{};let g=null;try{g=gradeLeg(l,t.date)
   const [aw,hm]=String(l.game).split('@');
   const res=done?(g.push?['↔ PUSH','var(--mute)']:g.hit?['✅ WON','var(--win)']:['❌ LOST','var(--rust)']):state==='in'?['● LIVE','#ff4b5c']:[e&&e.start?new Date(e.start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'PREGAME','var(--mute)'];
   const border=done?(g.push?'var(--rule)':g.hit?'var(--win)':'var(--rust)'):state==='in'?'#ff4b5c':'var(--rule)';
-  const sc=e&&e.a!=null?`${txtEsc(aw)} <b>${e.a}</b> – <b>${e.h}</b> ${txtEsc(hm)}${state==='in'&&e.detail?` · <span style="color:var(--mute)">${txtEsc(e.detail)}</span>`:state==='post'?' · FINAL':''}`:`${txtEsc(aw)} @ ${txtEsc(hm)}`;
+  const sc=e&&e.a!=null?`${teamNameHtml(sp,aw)} <b>${e.a}</b> – <b>${e.h}</b> ${teamNameHtml(sp,hm)}${state==='in'&&e.detail?` · <span style="color:var(--mute)">${txtEsc(e.detail)}</span>`:state==='post'?' · FINAL':''}`:`${teamNameHtml(sp,aw)} @ ${teamNameHtml(sp,hm)}`;
   const col=lp==null?'var(--mute)':lp>=0.6?'var(--win)':lp>=0.4?'var(--gold)':'var(--rust)';const mv=p0!=null&&lp!=null&&state==='in'?Math.round((lp-p0)*100):null;
   let bar='';
   if(g&&g.prog&&g.prog.thr){try{bar=legProgressBarHtml(g.prog);}catch(err){}}
@@ -20544,10 +20544,10 @@ function gcBets(sp,game,d){const out=[];const k=x=>{try{return mgKey(sp,x)}catch
   return(out.length?out.join(''):'<div class="sub">No tickets on this game.</div>')+(props?`<div class="mktlab" style="margin-top:8px">Character props in this game</div>${props}`:'');}
 function gcHtml(sp,j){const G=gcTeams(j);const T=G.T;const a=T.away||{},h=T.home||{};
   const live=G.state==='in',fin=G.state==='post';
-  const team=(t,right)=>`<div style="flex:1;text-align:${right?'right':'left'};min-width:0"><div style="display:flex;align-items:center;gap:6px;justify-content:${right?'flex-end':'flex-start'}">${!right&&t.logo?`<img src="${t.logo}" alt="" style="width:30px;height:30px">`:''}<b style="font-size:16px">${txtEsc(t.abbr||'')}</b>${t.poss?'<span title="possession">🏈</span>':''}${right&&t.logo?`<img src="${t.logo}" alt="" style="width:30px;height:30px">`:''}</div>
+  const team=(t,right)=>`<div style="flex:1;text-align:${right?'right':'left'};min-width:0"><div style="display:flex;align-items:center;gap:6px;justify-content:${right?'flex-end':'flex-start'}">${!right&&t.logo?`<img src="${t.logo}" alt="" style="width:30px;height:30px">`:''}<b style="font-size:16px">${teamNameHtml(GC.sp,t.abbr||'')}</b>${t.poss?'<span title="possession">🏈</span>':''}${right&&t.logo?`<img src="${t.logo}" alt="" style="width:30px;height:30px">`:''}</div>
     <div class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(t.record||'')}</div></div>`;
   const head=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="mono" style="font-size:10px;color:${live?'#ff4b5c':'var(--mute)'};font-weight:800">${live?'● LIVE':fin?'FINAL':'PREGAME'} · ${txtEsc((SP_LAB[sp]||'').split(' ').slice(1).join(' ')||sp.toUpperCase())}</div>
-      <button onclick="closeGamecast()" style="font-size:16px;padding:3px 10px">✕</button></div>
+      <div>${radioBtn(sp,GC.game)}<button onclick="closeGamecast()" style="font-size:16px;padding:3px 10px;margin-left:6px">✕</button></div></div>
     <div style="display:flex;align-items:center;gap:8px;padding:8px 6px;border-radius:12px;background:linear-gradient(90deg,${a.color||'#333'}40,rgba(255,255,255,.03) 40%,rgba(255,255,255,.03) 60%,${h.color||'#333'}40);border:1px solid var(--rule)">${team(a,false)}
       <div style="text-align:center;flex:0 0 auto"><div style="font-family:'Archivo';font-weight:900;font-size:30px;letter-spacing:.02em">${txtEsc(a.score)}<span style="color:var(--mute);margin:0 6px">–</span>${txtEsc(h.score)}</div>
         <div class="mono" style="font-size:10.5px;color:${live?'#ff4b5c':'var(--mute)'}">${txtEsc(G.detail||'')}</div></div>${team(h,true)}</div>`;
@@ -20876,7 +20876,20 @@ function cfbRankOf(team){const R=cfbRanks();if(!R||!team)return null;const a=Str
 function cfbRankTag(abbr){const o=cfbRankOf({abbr});return o?'#'+o.r+' ':'';}
 /* "#11 ISU@#24 BYU" for any CFB game string */
 function cfbGameLabel(game){const[a,h]=String(game||'').split('@');return a&&h?cfbRankTag(a)+a+'@'+cfbRankTag(h)+h:String(game||'');}
-function gameLabel(sp,game){return sp==='ncaaf'?cfbGameLabel(game):String(game||'');}
+/* v2.03 · a rank next to every team name, every sport: CFB shows its AP/CFP poll rank
+   (power rank when unranked), every other league its power rank. */
+function teamRk(sp,abbr){if(!abbr)return null;let ap=null;if(sp==='ncaaf'){try{const o=cfbRankOf({abbr});if(o)ap=o.r;}catch(e){}}
+  let pw=null;try{const R=typeof pwrRank==='function'?pwrRank(sp):null;const x=R&&R.by[abbr];if(x)pw=x.rank;}catch(e){}
+  if(ap==null&&pw==null)return null;return{r:ap!=null?ap:pw,ap,pw};}
+function teamTag(sp,abbr){const k=teamRk(sp,abbr);return k?'#'+k.r+' ':'';}
+function teamTagHtml(sp,abbr){const k=teamRk(sp,abbr);if(!k)return'';
+  return`<span class="rk-tag" title="${k.ap!=null?'AP/CFP poll #'+k.ap+(k.pw!=null?' · power #'+k.pw:''):'power ranking #'+k.pw}">#${k.r}${k.ap!=null&&k.pw!=null&&k.pw!==k.ap?`<sup>P${k.pw}</sup>`:''}</span> `;}
+function teamNameHtml(sp,abbr){return teamTagHtml(sp,abbr)+txtEsc(abbr||'');}
+function gameLabelHtml(sp,game){const[a,h]=String(game||'').split('@');return a&&h?teamNameHtml(sp,a)+'@'+teamNameHtml(sp,h):txtEsc(game||'');}
+function gameLabel(sp,game){const[a,h]=String(game||'').split('@');return a&&h?teamTag(sp,a)+a+'@'+teamTag(sp,h)+h:String(game||'');}
+(function(){try{if(typeof document!=='undefined'&&!document.getElementById('rk-css')){const st=document.createElement('style');st.id='rk-css';
+  st.textContent='.rk-tag{font-family:"IBM Plex Mono",monospace;font-size:.72em;font-weight:800;color:var(--gold,#FFC72C);letter-spacing:-.02em;vertical-align:.08em}.rk-tag sup{font-size:.7em;color:var(--mute);margin-left:1px}';
+  (document.head||document.documentElement).appendChild(st);}}catch(e){}})();
 /* ── crowd agreement, measured the way the record measured it: every character that made a
    call on this game+market is on this side (2+ voices). On the graded history that ran
    216-125 (+13.5u); "most agree" ran 80-81 (-10.1u). ── */
@@ -21009,11 +21022,12 @@ function pwrAccuracy(sp,G){const C=PWR_CFG[sp];const days=[...new Set(G.map(g=>g
 function pwrLine(sp,away,home,neutral){const R=pwrRank(sp);if(!R)return null;const a=R.by[away],h=R.by[home];if(!a||!h)return null;const m=h.r-a.r+(neutral?0:R.h);return{a,h,m};}
 function pwrSgn(v,dp){return(v>=0?'+':'−')+Math.abs(v).toFixed(dp==null?1:dp);}
 /* the strip above every game card */
-function pwrStrip(sp,g){try{if(!g||!g.away||!g.home)return'';const P=pwrLine(sp,g.away.abbr,g.home.abbr,!!g.neutral);if(!P)return'';const C=PWR_CFG[sp];
+function pwrStrip(sp,g){try{if(!g||!g.away||!g.home)return'';const gk=g.away.abbr+'@'+g.home.abbr;const P=pwrLine(sp,g.away.abbr,g.home.abbr,!!g.neutral);
+  if(!P)return`<div class="mono pwr-strip" style="font-size:9.5px;padding:3px 8px;margin:6px 0 -4px;border-left:2px solid var(--rule);border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center"><span style="color:var(--mute)">🏆 power rankings loading…</span>${radioBtn(sp,gk)}</div>`;const C=PWR_CFG[sp];
   const fav=P.m>=0?P.h:P.a;const mv=x=>x.prev&&x.prev!==x.rank?`<span style="color:${x.prev>x.rank?'var(--win)':'var(--rust)'}">${x.prev>x.rank?'▲':'▼'}${Math.abs(x.prev-x.rank)}</span>`:'';
   const tm=x=>`<b style="color:${x.color||'var(--chalk)'}">#${x.rank} ${txtEsc(x.abbr)}</b>${mv(x)} <span style="color:var(--mute)">${x.w}-${x.l}${x.t?'-'+x.t:''} · ${pwrSgn(x.r)}</span>`;
   const dp=sp==='nhl'||sp==='mlb'?2:1;
-  return`<div class="mono pwr-strip" style="font-size:9.5px;padding:3px 8px;margin:6px 0 -4px;border-left:2px solid var(--gold);background:rgba(255,199,44,.05);border-radius:0 6px 6px 0">🏆 ${tm(P.a)} @ ${tm(P.h)} · power line <b>${txtEsc(fav.abbr)} by ${Math.abs(P.m).toFixed(dp)}</b> ${C.unit}</div>`;}catch(e){return'';}}
+  return`<div class="mono pwr-strip" style="font-size:9.5px;padding:3px 8px;margin:6px 0 -4px;border-left:2px solid var(--gold);background:rgba(255,199,44,.05);border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center;gap:6px"><span>🏆 ${tm(P.a)} @ ${tm(P.h)} · power line <b>${txtEsc(fav.abbr)} by ${Math.abs(P.m).toFixed(dp)}</b> ${C.unit}</span>${radioBtn(sp,gk)}</div>`;}catch(e){return'';}}
 function pwrPanelHtml(sp){const R=pwrRank(sp);const lab=(SP_LAB[sp]||sp.toUpperCase());
   if(!R)return`<details class="tkt" id="pwrPanel"><summary><b>🏆 ${txtEsc(lab)} power rankings</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">building from this season's finals…</span></summary><div class="sub">Pulling every final from ESPN a week at a time — this fills in within a minute.</div></details>`;
   const C=PWR_CFG[sp];const dp=sp==='nhl'||sp==='mlb'?2:1;const A=R.acc;
@@ -21034,8 +21048,55 @@ function pwrMount(){if(typeof document==='undefined')return;const sp=window.__PA
   const open=!!(document.getElementById('pwrPanel')||{}).open;box.innerHTML=pwrPanelHtml(sp);if(open){const p=document.getElementById('pwrPanel');if(p)p.open=true;}}
 async function pwrBoot(){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!PWR_CFG[sp])return;
   pwrMount();for(let i=0;i<6;i++){const n=await pwrFetch(sp,8);pwrMount();if(!n)break;}
+  for(const o of Object.keys(PWR_CFG)){if(o===sp)continue;for(let i=0;i<5;i++){const n=await pwrFetch(o,8);if(!n)break;}}
   try{const v=document.getElementById('v-games');if(v&&v.classList.contains('on')){const r=sp==='nfl'?renderNFL:sp==='ncaaf'?renderNCAAF:sp==='nhl'?renderNHL:sp==='nba'&&typeof renderNBA==='function'?renderNBA:render;if(typeof r==='function')r();}}catch(e){}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pwrBoot,3500));
+/* ══ 📻 GAME RADIO (v2.03) ════════════════════════════════════════════════════
+   Live broadcasts are licensed, so the app can't carry them itself. What it does:
+     · 📻 on every game opens the broadcast finder for both teams — TuneIn's team
+       search, plus the league's official audio (NFL+, team apps)
+     · paste a stream link once per team and it plays in a mini-player docked
+       above the nav — it keeps playing while you move between tabs, shows on the
+       lock screen, and offers to resume on the next page (a new page can't
+       auto-start audio; one tap does). */
+const RADIO_KEY='d4.radio',RADIO_NOW='td.radionow';
+const RADIO_OFFICIAL={nfl:['NFL+ (official game audio)','https://www.nfl.com/plus/'],ncaaf:['Varsity Network (college radio)','https://www.varsitynetwork.com/'],nhl:['NHL app — team radio','https://www.nhl.com/info/nhl-app'],mlb:['MLB app — Gameday audio','https://www.mlb.com/app'],nba:['NBA app — team radio','https://www.nba.com/apps']};
+function radioName(sp,abbr){try{const m=(pwrStore()[sp]||{}).meta||{};if(m[abbr]&&m[abbr].n)return m[abbr].n;}catch(e){}try{const g=(sportGames(sp)||[]).find(z=>z.away.abbr===abbr||z.home.abbr===abbr);const t=g&&(g.away.abbr===abbr?g.away:g.home);if(t&&t.name&&t.name!==abbr)return t.name;}catch(e){}return abbr;}
+function radioSaved(sp,abbr){return((get(RADIO_KEY,{})||{})[sp+':'+abbr])||'';}
+function radioBtn(sp,game){const g=String(game||'').replace(/'/g,'');return`<button class="radio-btn" onclick="event.stopPropagation();radioOpen('${sp}','${g}')" title="Listen to the game" style="font-size:10px;padding:2px 7px;margin-left:6px">📻</button>`;}
+function radioOpen(sp,game){const [A,H]=String(game).split('@');let ov=document.getElementById('radioSheet');
+  if(!ov){ov=document.createElement('div');ov.id='radioSheet';ov.style.cssText='position:fixed;inset:0;z-index:9200;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;justify-content:center';ov.onclick=e=>{if(e.target===ov)ov.remove();};document.body.appendChild(ov);}
+  const off=RADIO_OFFICIAL[sp];const q=s=>encodeURIComponent(s);
+  const team=ab=>{const nm=radioName(sp,ab);const url=radioSaved(sp,ab);const id='rad_'+sp+'_'+ab.replace(/\W/g,'');
+    return`<div style="padding:8px 0;border-top:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>${teamNameHtml(sp,ab)} <span style="font-weight:500;color:var(--mute);font-size:11px">${txtEsc(nm)}</span></b>
+        ${url?`<button class="primary" onclick="radioPlay('${sp}','${ab}')">▶ Listen</button>`:''}</div>
+      <div class="mono" style="font-size:10px;margin-top:4px"><a href="https://tunein.com/search/?query=${q(nm+' radio')}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">🔎 Find ${txtEsc(ab)} radio on TuneIn ↗</a></div>
+      <div style="display:flex;gap:6px;margin-top:5px"><input id="${id}" placeholder="paste a stream link for ${txtEsc(ab)}" value="${txtEsc(url)}" style="flex:1;min-width:0;font-size:11px"><button onclick="radioSave('${sp}','${ab}','${id}')">Save</button></div></div>`;};
+  ov.innerHTML=`<div style="background:var(--panel,#12151c);width:min(100vw,560px);border-radius:16px 16px 0 0;padding:14px 14px 24px;border:1px solid var(--rule)">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:15px">📻 Listen · ${gameLabelHtml(sp,game)}</b><button onclick="document.getElementById('radioSheet').remove()">✕</button></div>
+    <div class="sub" style="font-size:10.5px;margin:4px 0 6px">Game broadcasts are licensed — the app can't stream them itself. Find your station below; paste its stream link once and the ▶ button plays it here, docked above the nav while you work.</div>
+    ${team(A)}${team(H)}${off?`<div class="mono" style="font-size:10px;padding-top:8px;border-top:1px solid var(--rule)">Official: <a href="${off[1]}" target="_blank" rel="noopener" style="color:var(--gold)">${txtEsc(off[0])} ↗</a></div>`:''}</div>`;}
+function radioSave(sp,ab,id){const v=String((document.getElementById(id)||{}).value||'').trim();const M=get(RADIO_KEY,{})||{};
+  if(v&&!/^https?:\/\//i.test(v)){alert('That needs to be a link starting with http.');return;}if(v)M[sp+':'+ab]=v;else delete M[sp+':'+ab];set(RADIO_KEY,M);
+  const g=document.querySelector('#radioSheet b');if(v)radioPlay(sp,ab);else{const ov=document.getElementById('radioSheet');if(ov)ov.remove();}}
+function radioBar(){let el=document.getElementById('radioBar');if(el)return el;el=document.createElement('div');el.id='radioBar';
+  el.style.cssText='position:fixed;left:8px;right:8px;bottom:70px;z-index:9050;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:12px;background:rgba(18,21,28,.97);border:1px solid var(--gold,#FFC72C);box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:12px';
+  el.innerHTML=`<span style="font-size:16px">📻</span><div style="flex:1;min-width:0"><b id="radioLab" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block"></b><span id="radioSt" class="mono" style="font-size:9.5px;color:var(--mute)"></span></div>
+    <button id="radioPP" onclick="radioToggle()">⏸</button><button onclick="radioStop()">✕</button><audio id="radioAud" preload="none" playsinline></audio>`;
+  document.body.appendChild(el);const a=el.querySelector('audio');
+  a.addEventListener('playing',()=>{radioState('● live');});a.addEventListener('waiting',()=>radioState('buffering…'));a.addEventListener('pause',()=>radioState('paused'));
+  a.addEventListener('error',()=>radioState('this link won\'t play here — try the station\'s direct stream URL'));return el;}
+function radioState(t){const s=document.getElementById('radioSt');if(s)s.textContent=t;const b=document.getElementById('radioPP');const a=document.getElementById('radioAud');if(b&&a)b.textContent=a.paused?'▶':'⏸';}
+function radioPlay(sp,ab,url){url=url||radioSaved(sp,ab);if(!url)return;const ov=document.getElementById('radioSheet');if(ov)ov.remove();const el=radioBar();const a=el.querySelector('audio');
+  const lab=`${radioName(sp,ab)} radio`;document.getElementById('radioLab').textContent=lab;if(a.src!==url)a.src=url;a.play().catch(()=>radioState('tap ▶ to start'));
+  try{localStorage.setItem(RADIO_NOW,JSON.stringify({sp,ab,url,lab,ts:Date.now()}));}catch(e){}
+  try{if('mediaSession' in navigator){navigator.mediaSession.metadata=new MediaMetadata({title:lab,artist:'TheDesk'});navigator.mediaSession.setActionHandler('pause',()=>a.pause());navigator.mediaSession.setActionHandler('play',()=>a.play());}}catch(e){}}
+function radioToggle(){const a=document.getElementById('radioAud');if(!a)return;if(a.paused)a.play().catch(()=>{});else a.pause();radioState(a.paused?'paused':'● live');}
+function radioStop(){const a=document.getElementById('radioAud');if(a){a.pause();a.removeAttribute('src');}const el=document.getElementById('radioBar');if(el)el.remove();try{localStorage.removeItem(RADIO_NOW);}catch(e){}}
+/* a new page can't start audio on its own — offer one-tap resume */
+function radioResumeOffer(){try{const o=JSON.parse(localStorage.getItem(RADIO_NOW)||'null');if(!o||Date.now()-o.ts>4*3600e3)return;const el=radioBar();
+  document.getElementById('radioLab').textContent=o.lab;const a=el.querySelector('audio');a.src=o.url;radioState('tap ▶ to keep listening');}catch(e){}}
+if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(radioResumeOffer,1200));
 /* ══ ROSTERS, INJURIES & THE DEEPER "WHY" (v2.02) ═══════════════════════════
    Injury reports come from ESPN's own game summary for every upcoming game
    (refreshed every 3 hours). The football sims now cost a team what it's missing,

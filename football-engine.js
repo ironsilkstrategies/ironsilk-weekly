@@ -1347,7 +1347,7 @@ function nflRankingsBlock(){
       <td>${f(t.rawOffPPG??t.offPPG)}/${f(t.rawDefPPG??t.defPPG)}</td><td>${t.priorOff!=null?f(t.priorOff)+'/'+f(t.priorDef):'—'}</td>
       <td style="color:${net>=0?'var(--win)':'var(--rust)'}">${f(t.offPPG)}/${f(t.defPPG)} <b>${net>=0?'+':''}${f(net)}</b></td>
       <td style="color:var(--mute)">${t.priorW?Math.round(t.priorW*100)+'%':'0%'}</td></tr>`;}).join('');
-  return`<details style="margin:0 0 10px"><summary style="cursor:pointer;font-weight:800;padding:8px 0">🏆 Power Rankings <span class="sub mono" style="font-size:10px">— what the sim uses</span></summary>
+  return`<details style="margin:0 0 10px"><summary style="cursor:pointer;font-weight:800;padding:8px 0">📊 Sim inputs — team scoring rates <span class="sub mono" style="font-size:10px">— what the sim uses</span></summary>
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:'IBM Plex Mono';font-size:10px;line-height:1.7">
     <tr style="color:var(--mute)"><td>#</td><td>Team</td><td>W-L</td><td>This yr PF/PA</td><td>Last yr</td><td>Used PF/PA · net</td><td>History wt</td></tr>${rows}</table></div>
     <div class="sub" style="font-size:10px;margin-top:4px">Per game. Last season counts as ${NFL_PRIOR_K} games of evidence, so early weeks lean on history and this season takes over as games are played.</div></details>`;
@@ -2148,7 +2148,7 @@ function nflCardFull(g){
   return`<div class="tkt" id="nfl-card-${id}" style="margin-bottom:10px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
       <div>
-        <div style="font-size:18px;font-weight:800;color:var(--chalk)">${g.away.abbr} <span style="color:var(--mute);font-size:14px">@</span> ${g.home.abbr}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--chalk)">${typeof teamNameHtml==='function'?teamNameHtml('nfl',g.away.abbr):g.away.abbr} <span style="color:var(--mute);font-size:14px">@</span> ${typeof teamNameHtml==='function'?teamNameHtml('nfl',g.home.abbr):g.home.abbr}</div>
         <div style="font-size:10px;color:var(--mute);font-family:'IBM Plex Mono'">${g.day||''} ${g.time||''}${divGame?' · <span style="color:var(--gold)">DIV</span>':''}</div>
       </div>
       <div style="text-align:right;font-family:'IBM Plex Mono';font-size:10px;color:var(--mute)">
@@ -4063,7 +4063,7 @@ function ncaafCard(g){
   return`<div class="tkt" id="ncaaf-card-${id}" style="margin-bottom:10px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
       <div>
-        <div style="font-size:16px;font-weight:800;color:var(--chalk)">${awayRank}${g.away.abbr} <span style="color:var(--mute);font-size:13px">@</span> ${homeRank}${g.home.abbr}</div>
+        <div style="font-size:16px;font-weight:800;color:var(--chalk)">${typeof teamNameHtml==='function'?teamNameHtml('ncaaf',g.away.abbr):awayRank+g.away.abbr} <span style="color:var(--mute);font-size:13px">@</span> ${typeof teamNameHtml==='function'?teamNameHtml('ncaaf',g.home.abbr):homeRank+g.home.abbr}</div>
         <div style="font-size:10px;color:var(--mute);font-family:'IBM Plex Mono'">${g.day||''} ${g.time||''}</div>
         <div style="font-size:10px;color:var(--chalk-dim)">${g.away.name} @ ${g.home.name}</div>
       </div>

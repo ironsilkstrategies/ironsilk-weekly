@@ -566,7 +566,7 @@ function nhlCard(g){
   const btn=(k,t)=>`<button onclick="nhlPan('${g.id}','${k}',this)">${t}</button>`;
   return`<div class="tkt" id="nhl-card-${g.id}" style="margin-bottom:10px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
-      <div><div style="font-size:16px;font-weight:800;color:var(--chalk)">${A} <span style="color:var(--mute);font-size:13px">@</span> ${H}</div>
+      <div><div style="font-size:16px;font-weight:800;color:var(--chalk)">${typeof teamNameHtml==='function'?teamNameHtml('nhl',A):A} <span style="color:var(--mute);font-size:13px">@</span> ${typeof teamNameHtml==='function'?teamNameHtml('nhl',H):H}</div>
       <div style="font-size:10px;color:var(--mute);font-family:'IBM Plex Mono'">${nhlEsc(g.time)}${g.venue?' · '+nhlEsc(g.venue):''}</div></div>
       <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${A} ${nhlEsc(g.away.record)}<br>${H} ${nhlEsc(g.home.record)}</div></div>
     ${head}<div class="sig">${chips.join('')}${extra}</div>

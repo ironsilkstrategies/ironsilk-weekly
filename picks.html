@@ -118,7 +118,7 @@ async function load(){
       const tier=x.tier==='UNANIMOUS'?'<span class="pill u">★ UNANIMOUS</span>':x.tier==='SUPREME'?'<span class="pill s">SUPREME</span>':x.tier?'<span class="pill t">'+esc(x.tier)+'</span>':'';
       return`<div class="pick ${c==='open'?'':c}"><div class="num">${i+1}</div><div class="res ${c}">${l}</div>
         <div class="pk">${esc(x.pick)}<span class="pr">${sgn(x.price)}</span></div>
-        <div class="meta">${em[x.sp]||''} ${esc((x.sp||'').toUpperCase())} · ${esc(x.game)}${t?' · '+t:''}</div>
+        <div class="meta">${em[x.sp]||''} ${esc((x.sp||'').toUpperCase())} · ${esc(x.gl||x.game)}${t?' · '+t:''}</div>
         <div class="meta">${tier}${x.voices&&x.voices.length?esc(x.voices.length)+' of our analysts agree':''}</div>
         <div class="pct">${Math.round(x.p*100)}%<small>to hit</small></div>${whyBlock(x.why)}</div>`;}).join('');}
   else $('today').innerHTML='<div class="empty">Today\'s card locks before first game. Nothing forced — some days the answer is pass.</div>';
@@ -145,7 +145,7 @@ function renderParlay(){const P=FEED&&FEED.parlay;const box=$('parlayBox');if(!P
     <div class="pl"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>${P.legs.length}-leg Roll Call ${res}</h3><div class="px">${esc(P.price)}</div></div>
     <div class="meta">${Math.round(P.p*1000)/10}% to cash · each leg is a different analyst's best pick · 🔒 locked ${new Date(P.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</div>
     ${P.legs.map(l=>{if(l.hidden)return`<div class="leg"><b>🔒 Locked leg</b> <span class="meta">${em[l.sp]||''} ${esc((l.sp||'').toUpperCase())} · revealed at kickoff</span></div>`;const [c,lab]=res2(l);return`<div class="leg"><b>${esc(l.pick)}</b> <span class="pr">${sgn(l.price)}</span> <span class="res ${c}" style="position:static;margin-left:6px">${c==='open'?'':lab}</span>
-      <div class="meta">${em[l.sp]||''} ${esc(l.game)} · ${esc(l.by)}'s pick · ${Math.round(l.p*100)}%</div>${whyBlock(l.why)}</div>`;}).join('')}</div>`;}
+      <div class="meta"> ${em[l.sp]||''} ${esc(l.gl||l.game)} · ${esc(l.by)}'s pick · ${Math.round(l.p*100)}%</div>${whyBlock(l.why)}</div>`;}).join('')}</div>`;}
 const res2=x=>x.push?['push','PUSH']:x.hit===true?['hit','✓']:x.hit===false?['miss','✗']:['open',''];
 function share(){if(!FEED||!FEED.today)return;const t=FEED.today.picks.map((x,i)=>x.hidden?`${i+1}. 🔒 locked — revealed at kickoff`:`${i+1}. ${x.pick} ${sgn(x.price)}`).join('\n');
   const txt=`TheDesk — ${day(FEED.today.d)}\n${t}\n${location.href}`;if(navigator.share)navigator.share({title:'TheDesk',text:txt,url:location.href}).catch(()=>{});else{navigator.clipboard&&navigator.clipboard.writeText(txt);alert('Copied to clipboard');}}
