@@ -3437,6 +3437,7 @@ function _parseNCAAFEvents(j){
         offRating:26,defRating:26,record:home.records&&home.records[0]&&home.records[0].summary||''},
     };
   }).filter(Boolean);
+  try{cfbApplyRanks(NCAAF_GAMES);}catch(err){}
 
   /* A hardcoded allowlist of one past week's ~46 matchups used to sit here as
      a freeze workaround — it silently deleted every game on every other week.
@@ -4355,7 +4356,24 @@ function ncaafOnActivate(){
   const cache=get(LS.ncaafgames,{});
   const keys=Object.keys(cache).sort((a,b)=>(cache[b].ts||0)-(cache[a].ts||0));
   if(keys.length){const latest=cache[keys[0]];if(latest.v&&latest.v.length){NCAAF_GAMES=latest.v;NCAAF_WEEK=latest.week||null;NCAAF_SEASON=latest.season||null;}}
+  try{cfbApplyRanks(NCAAF_GAMES);}catch(e){}
 })();
+/* ── CFB RANKINGS (v1.94) ─────────────────────────────────────────────────
+   The scoreboard's curatedRank came back empty for whole weeks, so no team
+   ever showed a ranking. The poll now comes from ESPN's own rankings feed:
+   the CFP ranking once it exists, the AP Top 25 until then. Refreshed every
+   6 hours, applied to every game on the board. */
+async function fetchCFBRankings(force){const c=cfbRanks();if(!force&&c&&Date.now()-c.ts<6*36e5)return c;
+  try{const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings');if(!r.ok)return c;const j=await r.json();
+    const polls=j.rankings||[];const P=polls.find(p=>/cfp|playoff/i.test(String(p.type||'')+' '+String(p.name||'')))||polls.find(p=>p.type==='ap'||/AP/.test(p.name||''))||polls[0];
+    if(!P||!(P.ranks||[]).length)return c;const byAbbr={},byName={};
+    P.ranks.forEach(x=>{const t=x.team||{};const o={r:+x.current,prev:+x.previous||null};if(t.abbreviation)byAbbr[String(t.abbreviation).toUpperCase()]=o;
+      [t.location,t.nickname,t.displayName,(t.location||'')+' '+(t.name||'')].filter(Boolean).forEach(n=>{byName[String(n).toLowerCase()]=o;});});
+    const v={ts:Date.now(),poll:P.shortName||P.name||'Top 25',byAbbr,byName};set('d4.cfbranks',v);return v;}catch(e){return c;}}
+/* once the poll is loaded it's the authority: a team that fell out loses its old number */
+function cfbApplyRanks(games){const R=cfbRanks();if(!R)return;(games||[]).forEach(g=>['away','home'].forEach(s=>{const t=g[s];if(!t)return;const o=cfbRankOf(t);t.ranking=o?'#'+o.r+' ':'';}));}
+if(typeof window!=='undefined'&&window.__PAGE_SPORT__==='ncaaf'){setTimeout(()=>fetchCFBRankings().then(R=>{if(!R)return;const before=JSON.stringify(NCAAF_GAMES.map(g=>[g.away.ranking,g.home.ranking]));cfbApplyRanks(NCAAF_GAMES);
+  if(JSON.stringify(NCAAF_GAMES.map(g=>[g.away.ranking,g.home.ranking]))!==before)try{renderNCAAF();}catch(e){}}).catch(()=>{}),1500);}
 /* restoreNCAAFGames() above is the path that runs on every NORMAL app reopen
    — a fresh network load through _parseNCAAFEvents is the rare case (only
    when the user explicitly loads a week). The live-score refresh trigger was

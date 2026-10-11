@@ -2092,7 +2092,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010l';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17905,7 +17905,7 @@ function todayBestHero(){let S=null;try{S=best5State();}catch(e){return'';}const
     <div class="sub mono" style="font-size:9.5px;margin:2px 0 6px">Straight bets${S.locked?' · 🔒 locked':''} — the steadiest thing the app makes.</div>
     ${top.map((x,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--rule)"><span style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold);width:16px">${i+1}</span>
       <div style="flex:1;min-width:0"><b style="font-size:14px">${txtEsc(x.pick)}</b> <span class="mono" style="font-size:11px;color:var(--gold)">${x.price!=null?tcSgn(x.price):''}</span>
-      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game)}${x.unan?' · <span style="color:#ff6fae">★ unanimous</span>':''}</div></div>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(x.sp,x.game))}${x.unan?' · <span style="color:#ff6fae">★ unanimous</span>':''}</div></div>
       <div style="text-align:right"><div class="mono" style="font-size:12px;font-weight:800">${Math.round((best5Prob(x)||0)*100)}%</div><div class="mono" style="font-size:10px">${res(x)}</div></div></div>`).join('')}</div>`;}
 function renderToday(noSnap){
   const el=document.getElementById('todayBody');if(!el)return;
@@ -17948,7 +17948,7 @@ function renderToday(noSnap){
             <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${pct(lp)} to win</span>${mv!=null&&mv!==0?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${pct(L.p0)}</span>`:''}</div>`:''}`;}}
       return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${L&&L.state==='in'?'#ff4b5c':c};background:rgba(255,255,255,.02);${on&&!(L&&L.state==='in')?'opacity:.55':''}">
         <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${x.dbl?x.dbl+' ':''}${esc(x.pick)} <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${pr}</span>${x.unan?' <span class="src-tag unanimous" style="display:inline">★ unanimous</span>':''}</div>
-          <div class="mono" style="font-size:9.5px;color:var(--mute)">${L&&L.state==='in'?SP_LAB[sp]+' · ':''}${esc(x.game)} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${x.blend!=null&&x.mkt!=null?` · blend ${Math.round(x.blend*100)}% (mkt ${Math.round(x.mkt*100)}%)`:''}${x.evCal!=null?` · EV ${x.evCal>=0?'+':''}${x.evCal.toFixed(1)}% calibrated`:''}${x.suspect?` · <span style="color:var(--rust)">⚠️ ${esc(x.suspect)} — EV suspect</span>`:''}${x.incoherent?` · <span style="color:var(--rust)">⚠️ ${esc(x.incoherent)}</span>`:''}${x.stakeF>0?` · <b style="color:var(--win)">stake ${x.stakeAmt!=null?'$'+x.stakeAmt.toFixed(2):(x.stakeF*100).toFixed(1)+'% of bankroll'}</b>${x.capped?' <span style="color:var(--mute)">(day capped at 10%)</span>':''}`:''}</div>
+          <div class="mono" style="font-size:9.5px;color:var(--mute)">${L&&L.state==='in'?SP_LAB[sp]+' · ':''}${txtEsc(gameLabel(sp,x.game))} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${x.blend!=null&&x.mkt!=null?` · blend ${Math.round(x.blend*100)}% (mkt ${Math.round(x.mkt*100)}%)`:''}${x.evCal!=null?` · EV ${x.evCal>=0?'+':''}${x.evCal.toFixed(1)}% calibrated`:''}${x.suspect?` · <span style="color:var(--rust)">⚠️ ${esc(x.suspect)} — EV suspect</span>`:''}${x.incoherent?` · <span style="color:var(--rust)">⚠️ ${esc(x.incoherent)}</span>`:''}${x.stakeF>0?` · <b style="color:var(--win)">stake ${x.stakeAmt!=null?'$'+x.stakeAmt.toFixed(2):(x.stakeF*100).toFixed(1)+'% of bankroll'}</b>${x.capped?' <span style="color:var(--mute)">(day capped at 10%)</span>':''}`:''}</div>
           ${live}
           <div class="hs-row" style="justify-content:flex-start">${(x.chars||[]).map(chip).join('')}</div>${tcHotLine(sp,x)}${x.rules&&x.rules.length?`<div class="rule-row" style="justify-content:flex-start">${x.rules.slice(0,3).map(r=>`<span class="rule ${r.kind}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:''}</div>
         <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:${c};font-weight:800">${l}${on?'<br><span style="color:var(--win)">✓ ON A TICKET</span>':''}</div></div>`;};
@@ -18109,7 +18109,8 @@ function renderMyGames(){
   list.map(b=>{const [aw,hm]=b.game.split('@');
     /* v1.93: a pregame 0–0 isn't a score; a finished game ESPN no longer lists falls back to the stored final */
     let fin=null;if(b.state!=='in'&&b.state!=='post'){try{const F=allFinals()[b.sp+':'+b.game];if(F&&F.d===b.d)fin=F;}catch(e){}}
-    const sc=fin?`${aw} <b>${fin.a}</b> – <b>${fin.h}</b> ${hm}`:(b.a!=null&&(b.state==='in'||b.state==='post'))?`${aw} <b>${b.a}</b> – <b>${b.h}</b> ${hm}`:`${aw} @ ${hm}`;
+    const rk=t=>b.sp==='ncaaf'?cfbRankTag(t):'';const AW=rk(aw)+aw,HM=rk(hm)+hm;
+    const sc=fin?`${AW} <b>${fin.a}</b> – <b>${fin.h}</b> ${HM}`:(b.a!=null&&(b.state==='in'||b.state==='post'))?`${AW} <b>${b.a}</b> – <b>${b.h}</b> ${HM}`:`${AW} @ ${HM}`;
     if(fin)b={...b,state:'post'};
     const st=b.state==='in'?`<span style="color:var(--rust)">● LIVE</span> ${esc(b.detail)}`:b.state==='post'?'FINAL':(b.start?new Date(b.start).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}):b.d);
     const legs=b.rows.map(x=>{try{return legLiveCard(x.t,x.l,{link:true});}catch(e){return`<div class="sub">${txtEsc(x.l.pick)}</div>`;}}).join('');
@@ -20634,6 +20635,14 @@ function pickLane(x,sp){return laneKey(x.sp||sp,x.m||x.market,x.sd||x.side,x.pri
 /* model fighting the market by 8+ pts, in a lane that hasn't proven it can */
 function pickDisagrees(x,sp){if(x.mp==null||x.mkt==null)return false;return Math.abs(x.mp-x.mkt)>=DISAGREE_PTS&&laneStatus(pickLane(x,sp))!=='proven';}
 
+/* ── CFB rankings (v1.94) — the poll lives in d4.cfbranks (fetched on the CFB page, synced everywhere) ── */
+function cfbRanks(){return get('d4.cfbranks',null);}
+function cfbRankOf(team){const R=cfbRanks();if(!R||!team)return null;const a=String(team.abbr||'').toUpperCase(),n=String(team.name||'').toLowerCase();
+  const o=(R.byAbbr||{})[a]||(R.byName||{})[n]||(R.byName||{})[n.replace(/\s+\S+$/,'')];return o&&o.r>=1&&o.r<=25?o:null;}
+function cfbRankTag(abbr){const o=cfbRankOf({abbr});return o?'#'+o.r+' ':'';}
+/* "#11 ISU@#24 BYU" for any CFB game string */
+function cfbGameLabel(game){const[a,h]=String(game||'').split('@');return a&&h?cfbRankTag(a)+a+'@'+cfbRankTag(h)+h:String(game||'');}
+function gameLabel(sp,game){return sp==='ncaaf'?cfbGameLabel(game):String(game||'');}
 /* ── crowd agreement, measured the way the record measured it: every character that made a
    call on this game+market is on this side (2+ voices). On the graded history that ran
    216-125 (+13.5u); "most agree" ran 80-81 (-10.1u). ── */
