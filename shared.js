@@ -2135,7 +2135,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -20879,7 +20879,7 @@ function cfbGameLabel(game){const[a,h]=String(game||'').split('@');return a&&h?c
 /* v2.03 · a rank next to every team name, every sport: CFB shows its AP/CFP poll rank
    (power rank when unranked), every other league its power rank. */
 function teamRk(sp,abbr){if(!abbr)return null;let ap=null;if(sp==='ncaaf'){try{const o=cfbRankOf({abbr});if(o)ap=o.r;}catch(e){}}
-  let pw=null;try{const R=typeof pwrRank==='function'?pwrRank(sp):null;const x=R&&R.by[abbr];if(x)pw=x.rank;}catch(e){}
+  let pw=null;try{const R=typeof pwrRank==='function'?pwrRank(sp):null;const x=R&&(R.by[abbr]||R.by[pwrAbbr(sp,abbr)]);if(x)pw=x.rank;}catch(e){}
   if(ap==null&&pw==null)return null;return{r:ap!=null?ap:pw,ap,pw};}
 function teamTag(sp,abbr){const k=teamRk(sp,abbr);return k?'#'+k.r+' ':'';}
 function teamTagHtml(sp,abbr){const k=teamRk(sp,abbr);if(!k)return'';
@@ -20949,25 +20949,46 @@ const PWR_KEY='d4.pwrgames';
 function pwrSeasonStart(sp){const t=today();const y=+t.slice(0,4),m=+t.slice(5,7);const C=PWR_CFG[sp];
   const start={nfl:'-09-01',ncaaf:'-08-20',nhl:'-10-01',mlb:'-03-18',nba:'-10-15'}[sp];
   let yr=y;if(sp==='mlb'){if(m<3)yr=y-1;}else if(m<C.mo)yr=y-1;return yr+start;}
-function pwrStore(){const S=get(PWR_KEY,{})||{};return S&&typeof S==='object'?S:{};}
+/* v2.04 · one key per league, held in memory first: if a save ever fails (storage
+   full on a phone) the rankings still show for the session instead of vanishing.
+   Built ONCE A DAY — the first visit of the day pulls the newest finals and ranks;
+   every other page load that day reads the saved table. */
+const PWR_MEMO={},PWR_DIAG={};
+function pwrB(sp){if(PWR_MEMO[sp])return PWR_MEMO[sp];let B=null;try{B=get('d4.pwrg.'+sp,null);}catch(e){}
+  if(!B){try{const old=get(PWR_KEY,null);if(old&&old[sp])B=old[sp];}catch(e){}}
+  if(B&&typeof B==='object')PWR_MEMO[sp]=B;return PWR_MEMO[sp]||null;}
+function pwrSaveB(sp){const ok=set('d4.pwrg.'+sp,PWR_MEMO[sp]);const D=PWR_DIAG[sp]||(PWR_DIAG[sp]={});D.saved=ok;if(!ok)D.err='phone storage is full — rankings kept for this visit only';return ok;}
+function pwrStore(){const o={};Object.keys(PWR_CFG).forEach(sp=>{const B=pwrB(sp);if(B)o[sp]=B;});return o;}
 let PWR_BUSY={};
-/* pulls the season a week at a time; finished weeks are kept for good */
-async function pwrFetch(sp,maxCalls){if(PWR_BUSY[sp]||!FBP_ESPN[sp])return 0;PWR_BUSY[sp]=1;let calls=0,added=0;
-  try{const S=pwrStore();const B=S[sp]&&S[sp].season===pwrSeasonStart(sp)?S[sp]:(S[sp]={season:pwrSeasonStart(sp),w:{},meta:{}});
-    const t=today();let d=B.season;
-    while(d<=t&&calls<(maxCalls||8)){const e=dayShift(d,6)<t?dayShift(d,6):t;const W=B.w[d];const settled=W&&W.done;
-      if(!settled){calls++;try{const url=FBP_ESPN[sp]+'/scoreboard?dates='+d.replace(/-/g,'')+'-'+e.replace(/-/g,'')+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000');
-          const j=await fetch(url).then(r=>r.json());const G=[];
-          (j.events||[]).forEach(ev=>{const st=((ev.season||{}).type);if(st===1)return;const c=(ev.competitions||[])[0]||{};if(!((c.status||{}).type||{}).completed)return;
-            const cs=c.competitors||[];const A=cs.find(x=>x.homeAway==='away'),H=cs.find(x=>x.homeAway==='home');if(!A||!H)return;
-            const ab=x=>(x.team||{}).abbreviation||'';[A,H].forEach(x=>{const tm=x.team||{};if(ab(x)&&!B.meta[ab(x)])B.meta[ab(x)]={n:tm.displayName||'',loc:tm.location||'',c:tm.color||'',l:tm.logo||''};});
-            G.push([String(ev.date||'').slice(0,10),ab(A),ab(H),+A.score||0,+H.score||0,c.neutralSite?1:0]);});
-          B.w[d]={ts:Date.now(),done:dayShift(e,2)<t,g:G};added+=G.length;}catch(err){}
-        await new Promise(r=>setTimeout(r,250));}
+const pwrAbbr=(sp,x)=>{try{return typeof mgAb==='function'?mgAb(sp,x):String(x||'').toUpperCase();}catch(e){return String(x||'').toUpperCase();}};
+/* one ESPN event → [day, away, home, awayScore, homeScore, neutral] if it's a finished regular/postseason game */
+function pwrParseEvent(sp,ev,B){const st=((ev.season||{}).type);if(st===1||st==='1')return null;const c=(ev.competitions||[])[0]||{};
+  const S=c.status||ev.status||{};const ty=S.type||{};if(!(ty.completed===true||ty.state==='post'||/final/i.test(ty.name||ty.description||'')))return null;
+  const cs=c.competitors||[];const A=cs.find(x=>x.homeAway==='away'),H=cs.find(x=>x.homeAway==='home');if(!A||!H)return null;
+  const sc=x=>{const v=x.score;return v&&typeof v==='object'?+(v.value!=null?v.value:v.displayValue):+v;};const as=sc(A),hs=sc(H);if(!isFinite(as)||!isFinite(hs))return null;
+  const ab=x=>pwrAbbr(sp,(x.team||{}).abbreviation||'');if(!ab(A)||!ab(H))return null;
+  [A,H].forEach(x=>{const tm=x.team||{};const k=ab(x);if(B&&!B.meta[k])B.meta[k]={n:tm.displayName||'',loc:tm.location||'',c:tm.color||'',l:tm.logo||((tm.logos||[])[0]||{}).href||''};});
+  return[String(ev.date||'').slice(0,10),ab(A),ab(H),as,hs,c.neutralSite?1:0];}
+async function pwrFetch(sp,maxCalls,force){if(PWR_BUSY[sp]||!FBP_ESPN[sp])return 0;PWR_BUSY[sp]=1;let calls=0,added=0;const t=today();
+  let D=PWR_DIAG[sp]||(PWR_DIAG[sp]={calls:0,events:0,kept:0,err:''});
+  try{const ss=pwrSeasonStart(sp);let B=pwrB(sp);if(!B||B.season!==ss){B=PWR_MEMO[sp]={season:ss,w:{},meta:{},day:null};}
+    if(ss>t){B.day=t;B.complete=true;D.err='season hasn\'t started';return 0;}
+    if(!force&&B.day===t&&B.complete)return 0;            /* already built today */
+    if(!D.run||D.run!==t+'|'+(force?1:0)||!D.calls){D=PWR_DIAG[sp]={calls:0,events:0,kept:0,err:'',ts:Date.now(),run:t+'|'+(force?1:0)};}
+    let d=B.season;
+    while(d<=t&&calls<(maxCalls||8)){const e=dayShift(d,6)<t?dayShift(d,6):t;const W=B.w[d];
+      if(!(W&&W.done)){calls++;D.calls++;
+        try{const url=FBP_ESPN[sp]+'/scoreboard?dates='+d.replace(/-/g,'')+'-'+e.replace(/-/g,'')+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000');
+          const r=await fetch(url);if(!r.ok)throw new Error('ESPN answered '+r.status);const j=await r.json();const evs=j.events||[];D.events+=evs.length;
+          const G=evs.map(ev=>pwrParseEvent(sp,ev,B)).filter(Boolean);D.kept+=G.length;
+          B.w[d]={ts:Date.now(),done:dayShift(e,2)<t,g:G};added+=G.length;}
+        catch(err){D.err=String(err&&err.message||err);}
+        await new Promise(r=>setTimeout(r,200));}
       d=dayShift(d,7);}
-    B.ts=Date.now();set(PWR_KEY,S);}finally{PWR_BUSY[sp]=0;}
-  if(added)PWR_C[sp]=null;return calls;}
-function pwrGames(sp){const B=pwrStore()[sp];if(!B)return[];const out=[];Object.values(B.w||{}).forEach(W=>(W.g||[]).forEach(g=>out.push(g)));
+    if(d>t&&!D.err){B.complete=true;B.day=t;}
+    B.ts=Date.now();pwrSaveB(sp);}finally{PWR_BUSY[sp]=0;}
+  PWR_C[sp]=null;return calls;}
+function pwrGames(sp){const B=pwrB(sp);if(!B)return[];const out=[];Object.values(B.w||{}).forEach(W=>(W.g||[]).forEach(g=>out.push(g)));
   const seen=new Set();return out.filter(g=>{const k=g[0]+g[1]+g[2];if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>a[0].localeCompare(b[0]));}
 /* preseason prior, in rating points */
 function pwrPrior(sp,abbr,meta){try{
@@ -20995,7 +21016,12 @@ function pwrOffDef(sp,G,r0){const C=PWR_CFG[sp];const tot=G.reduce((a,g)=>a+g[3]
       no+=pf-mu+def[o];nd+=mu-pa+off[o];d++;});off[t]=no/d;def[t]=nd/d;});}
   return{off,def,mu};}
 let PWR_C={};
-function pwrRank(sp){const B=pwrStore()[sp];if(!B)return null;const sig=(B.ts||0)+'|'+today();if(PWR_C[sp]&&PWR_C[sp].sig===sig)return PWR_C[sp].v;
+const PWR_RANK_KEY='d4.pwrrank';
+/* every naming style finds the team: ESPN's (TB, NJ, ARI) and the boards' (TBL, NJD, AZ) */
+function pwrIndex(sp,teams){const by={};teams.forEach(x=>{by[x.abbr]=x;});const A=(typeof MG_ALIAS!=='undefined'&&MG_ALIAS[sp])||{};
+  Object.entries(A).forEach(([alias,canon])=>{if(by[canon]&&!by[alias])by[alias]=by[canon];});return by;}
+function pwrRank(sp){const B=pwrB(sp);if(!B)return null;const sig=(B.ts||0)+'|'+(B.day||'');if(PWR_C[sp]&&PWR_C[sp].sig===sig)return PWR_C[sp].v;
+  try{const P=(get(PWR_RANK_KEY,{})||{})[sp];if(P&&P.sig===sig&&P.v&&Array.isArray(P.v.teams)){const v={...P.v,by:pwrIndex(sp,P.v.teams)};PWR_C[sp]={sig,v};return v;}}catch(e){}
   const G=pwrGames(sp);if(G.length<8)return null;const C=PWR_CFG[sp];const meta=B.meta||{};
   const {r,h}=pwrSolve(sp,G);const wk=dayShift(today(),-7);const prevG=G.filter(g=>g[0]<wk);const prev=prevG.length>=8?pwrSolve(sp,prevG,wk).r:null;
   const OD=pwrOffDef(sp,G,r);
@@ -21008,7 +21034,10 @@ function pwrRank(sp){const B=pwrStore()[sp];if(!B)return null;const sig=(B.ts||0
   L.sort((a,b)=>b.r-a.r);L.forEach((x,i)=>x.rank=i+1);
   if(prev){const P=Object.keys(prev).filter(t=>rec[t]&&eligible(t)).sort((a,b)=>prev[b]-prev[a]);const pr={};P.forEach((t,i)=>pr[t]=i+1);L.forEach(x=>x.prev=pr[x.abbr]||null);}
   const sosR=[...L].sort((a,b)=>b.sos-a.sos);sosR.forEach((x,i)=>x.sosRank=i+1);
-  const v={sp,teams:L,by:Object.fromEntries(L.map(x=>[x.abbr,x])),h,n:G.length,acc:pwrAccuracy(sp,G)};PWR_C[sp]={sig,v};return v;}
+  const mu=G.reduce((a,g)=>a+g[3]+g[4],0)/(2*G.length);
+  const v={sp,teams:L,by:pwrIndex(sp,L),h,n:G.length,mu,day:B.day||today(),acc:pwrAccuracy(sp,G)};PWR_C[sp]={sig,v};
+  try{const all=get(PWR_RANK_KEY,{})||{};all[sp]={sig,v:{...v,by:undefined}};set(PWR_RANK_KEY,all);}catch(e){}
+  return v;}
 /* walk-forward: each week predicted from only the games before it — ratings vs records alone */
 function pwrAccuracy(sp,G){const C=PWR_CFG[sp];const days=[...new Set(G.map(g=>g[0]))];if(days.length<4)return null;
   const step=sp==='nfl'||sp==='ncaaf'?7:sp==='mlb'?7:5;const first=G[0][0];let d=dayShift(first,step*2);const end=today();let n=0,ok=0,okRec=0,nR=0;
@@ -21019,7 +21048,7 @@ function pwrAccuracy(sp,G){const C=PWR_CFG[sp];const days=[...new Set(G.map(g=>g
     d=dayShift(d,step);}
   return n>=10?{n,acc:ok/n,nR,accRec:nR?okRec/nR:null}:null;}
 /* projected margin for a game (home perspective) and the power line */
-function pwrLine(sp,away,home,neutral){const R=pwrRank(sp);if(!R)return null;const a=R.by[away],h=R.by[home];if(!a||!h)return null;const m=h.r-a.r+(neutral?0:R.h);return{a,h,m};}
+function pwrLine(sp,away,home,neutral){const R=pwrRank(sp);if(!R)return null;const a=R.by[away]||R.by[pwrAbbr(sp,away)],h=R.by[home]||R.by[pwrAbbr(sp,home)];if(!a||!h)return null;const m=h.r-a.r+(neutral?0:R.h);return{a,h,m};}
 function pwrSgn(v,dp){return(v>=0?'+':'−')+Math.abs(v).toFixed(dp==null?1:dp);}
 /* the strip above every game card */
 function pwrStrip(sp,g){try{if(!g||!g.away||!g.home)return'';const gk=g.away.abbr+'@'+g.home.abbr;const P=pwrLine(sp,g.away.abbr,g.home.abbr,!!g.neutral);
@@ -21029,7 +21058,10 @@ function pwrStrip(sp,g){try{if(!g||!g.away||!g.home)return'';const gk=g.away.abb
   const dp=sp==='nhl'||sp==='mlb'?2:1;
   return`<div class="mono pwr-strip" style="font-size:9.5px;padding:3px 8px;margin:6px 0 -4px;border-left:2px solid var(--gold);background:rgba(255,199,44,.05);border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center;gap:6px"><span>🏆 ${tm(P.a)} @ ${tm(P.h)} · power line <b>${txtEsc(fav.abbr)} by ${Math.abs(P.m).toFixed(dp)}</b> ${C.unit}</span>${radioBtn(sp,gk)}</div>`;}catch(e){return'';}}
 function pwrPanelHtml(sp){const R=pwrRank(sp);const lab=(SP_LAB[sp]||sp.toUpperCase());
-  if(!R)return`<details class="tkt" id="pwrPanel"><summary><b>🏆 ${txtEsc(lab)} power rankings</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">building from this season's finals…</span></summary><div class="sub">Pulling every final from ESPN a week at a time — this fills in within a minute.</div></details>`;
+  if(!R){const D=PWR_DIAG[sp]||{};const B=pwrB(sp);const n=pwrGames(sp).length;const busy=PWR_BUSY[sp];
+    const st=busy?`pulling this season's finals from ESPN… (${D.calls||0} week${D.calls===1?'':'s'} so far)`:D.err?`couldn't finish: ${D.err}`:n?`only ${n} finals so far — needs 8`:D.ts?`ESPN returned ${D.events||0} games, ${D.kept||0} finished`:'starting…';
+    return`<details class="tkt" id="pwrPanel" open><summary><b>🏆 ${txtEsc(lab)} power rankings</b> <span class="mono" style="font-size:9.5px;color:${D.err?'var(--rust)':'var(--mute)'}">${txtEsc(st)}</span></summary>
+      <div class="sub" style="font-size:10px">Built once a day from every final this season.${B&&B.day?` Last build ${txtEsc(B.day)}.`:''}</div>${busy?'':`<div class="bar" style="margin-top:6px"><button onclick="pwrBoot(true)">↻ Build now</button></div>`}</details>`;}
   const C=PWR_CFG[sp];const dp=sp==='nhl'||sp==='mlb'?2:1;const A=R.acc;
   const accLine=A?`Walk-forward check: these ratings picked <b>${Math.round(A.acc*100)}%</b> of winners in ${A.n} games they hadn't seen yet${A.accRec!=null?` · records alone: ${Math.round(A.accRec*100)}%`:''}.`:'Accuracy check starts after a few weeks of games.';
   const show=sp==='ncaaf'?R.teams.slice(0,25):R.teams;
@@ -21038,6 +21070,7 @@ function pwrPanelHtml(sp){const R=pwrRank(sp);const lab=(SP_LAB[sp]||sp.toUpperC
     <td>${x.w}-${x.l}${x.t?'-'+x.t:''}</td><td><b style="color:${x.r>=0?'var(--win)':'var(--rust)'}">${pwrSgn(x.r,dp)}</b></td><td>${pwrSgn(x.off,dp)}</td><td>${pwrSgn(x.def,dp)}</td><td>${x.sosRank}</td>
     <td style="color:${Math.abs(x.luck)<0.6?'var(--mute)':x.luck>0?'var(--gold)':'var(--cold)'}">${x.luck>=0?'+':'−'}${Math.abs(x.luck).toFixed(1)}</td><td style="letter-spacing:-.05em">${x.last5.split('').map(c=>`<span style="color:${c==='W'?'var(--win)':c==='L'?'var(--rust)':'var(--mute)'}">${c}</span>`).join('')}</td></tr>`;}).join('');
   return`<details class="tkt" id="pwrPanel"><summary><b>🏆 ${txtEsc(lab)} power rankings</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">#1 ${txtEsc(R.teams[0].abbr)} ${pwrSgn(R.teams[0].r,dp)} · ${R.n} games${A?` · ${Math.round(A.acc*100)}% walk-forward`:''}</span></summary>
+    <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Updated once a day · built ${txtEsc(R.day||'')} from ${R.n} finals</div>
     <div class="sub" style="font-size:10px;margin:4px 0">Rating = ${C.unit} better than an average team on a neutral field: every margin this season (capped at ${C.cap} so blowouts don't distort), adjusted for who they played, recent games weighted more${sp==='ncaaf'?', SP+ as the early-season prior':sp==='nfl'?', last season as a fading prior':''}. Home edge this season: ${R.h.toFixed(dp)} ${C.unit}. Off/Def = ${C.unit} scored/allowed vs average. Luck = wins above what the scoring says (Pythagorean) — big + regresses.</div>
     <div class="sub mono" style="font-size:9.5px;color:var(--win)">${accLine}</div>
     <div style="overflow-x:auto"><table class="mono" style="width:100%;font-size:10px;text-align:center;border-collapse:collapse"><tr style="color:var(--mute)"><td>#</td><td style="text-align:left">team</td><td>rec</td><td>rating</td><td>off</td><td>def</td><td>sos</td><td>luck</td><td>last 5</td></tr>${rows}</table></div>
@@ -21046,9 +21079,13 @@ function pwrMount(){if(typeof document==='undefined')return;const sp=window.__PA
   const slate=document.getElementById('slate');if(!slate)return;let box=document.getElementById('pwrBox');
   if(!box){box=document.createElement('div');box.id='pwrBox';slate.parentNode.insertBefore(box,slate);}
   const open=!!(document.getElementById('pwrPanel')||{}).open;box.innerHTML=pwrPanelHtml(sp);if(open){const p=document.getElementById('pwrPanel');if(p)p.open=true;}}
-async function pwrBoot(){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!PWR_CFG[sp])return;
-  pwrMount();for(let i=0;i<6;i++){const n=await pwrFetch(sp,8);pwrMount();if(!n)break;}
+async function pwrBoot(force){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!PWR_CFG[sp])return;
+  try{localStorage.removeItem(PWR_KEY);}catch(e){}   /* pre-v2.04 single key */
+  const before=(pwrB(sp)||{}).ts;pwrMount();const tick=setInterval(pwrMount,1500);
+  try{for(let i=0;i<6;i++){const n=await pwrFetch(sp,8,force&&i===0);pwrMount();if(!n)break;}}finally{clearInterval(tick);}pwrMount();
+  if((pwrB(sp)||{}).ts===before&&!force){/* nothing new today — no re-render needed */}
   for(const o of Object.keys(PWR_CFG)){if(o===sp)continue;for(let i=0;i<5;i++){const n=await pwrFetch(o,8);if(!n)break;}}
+  try{const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);}catch(e){}
   try{const v=document.getElementById('v-games');if(v&&v.classList.contains('on')){const r=sp==='nfl'?renderNFL:sp==='ncaaf'?renderNCAAF:sp==='nhl'?renderNHL:sp==='nba'&&typeof renderNBA==='function'?renderNBA:render;if(typeof r==='function')r();}}catch(e){}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pwrBoot,3500));
 /* ══ 📻 GAME RADIO (v2.03) ════════════════════════════════════════════════════
@@ -21158,7 +21195,7 @@ function pickWhyDeep(x,team,opp,A,H){const sp=x.sp;const B=[],S=[];let R=null;tr
     B.push(`Standing: ${ap(A)}${A} (${rec(a)}, #${a.rank} in power, ${pwrSgn(a.r,dp)}) at ${ap(H)}${H} (${rec(h)}, #${h.rank}, ${pwrSgn(h.r,dp)}) — power line ${m>=0?H:A} by ${Math.abs(m).toFixed(dp)} ${U}.`);
     if(x.m==='spread'&&x.line!=null&&team){const mT=team===H?m:-m;const cov=mT+(+x.line);B.push(`Power vs the number: ${team} ${mT>=0?'by '+mT.toFixed(dp):'losing by '+Math.abs(mT).toFixed(dp)} on power, ${x.line>0?'+':''}${x.line} on the ticket → ${cov>0?'covers by '+cov.toFixed(dp)+' ✓':'short by '+Math.abs(cov).toFixed(dp)+' ✗'}.`);if(cov>0)S.push(`On power ratings alone ${team} covers this number by ${cov.toFixed(dp)}.`);}
     if(x.m==='ml'&&team){const mT=team===H?m:-m;B.push(`Power says ${mT>=0?team+' wins':opp+' wins'} by ${Math.abs(mT).toFixed(dp)}${mT>=0?' ✓':' ✗'}.`);}
-    if(x.m==='total'&&x.line!=null){let mu=0;try{const G=pwrGames(sp);mu=G.length?G.reduce((s,q)=>s+q[3]+q[4],0)/(2*G.length):0;}catch(e){}if(mu){const pt=2*mu+(a.off-h.def)+(h.off-a.def);const ok=x.sd==='over'?pt>x.line:pt<x.line;B.push(`Power total: ${pt.toFixed(dp)} (${A} offense ${pwrSgn(a.off,dp)} vs ${H} defense ${pwrSgn(h.def,dp)}; ${H} offense ${pwrSgn(h.off,dp)} vs ${A} defense ${pwrSgn(a.def,dp)}) vs ${x.line} → ${ok?'✓':'✗'} ${x.sd}.`);}}
+    if(x.m==='total'&&x.line!=null){let mu=R.mu||0;if(!mu){try{const G=pwrGames(sp);mu=G.length?G.reduce((s,q)=>s+q[3]+q[4],0)/(2*G.length):0;}catch(e){}}if(mu){const pt=2*mu+(a.off-h.def)+(h.off-a.def);const ok=x.sd==='over'?pt>x.line:pt<x.line;B.push(`Power total: ${pt.toFixed(dp)} (${A} offense ${pwrSgn(a.off,dp)} vs ${H} defense ${pwrSgn(h.def,dp)}; ${H} offense ${pwrSgn(h.off,dp)} vs ${A} defense ${pwrSgn(a.def,dp)}) vs ${x.line} → ${ok?'✓':'✗'} ${x.sd}.`);}}
     if(team){const T=team===H?h:a,O=team===H?a:h;const odr=[...R.teams].sort((p,q)=>q.def-p.def).findIndex(t=>t.abbr===O.abbr)+1,tor=[...R.teams].sort((p,q)=>q.off-p.off).findIndex(t=>t.abbr===T.abbr)+1;
       B.push(`Matchup: ${team} offense #${tor} (${pwrSgn(T.off,dp)}) into ${opp} defense #${odr} (${pwrSgn(O.def,dp)}).`);
       B.push(`Form: ${team} last 5 ${T.last5||'—'} · ${opp} ${O.last5||'—'}.`);
@@ -21292,7 +21329,7 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
    Credentials never sync. The old public data-backup.json is retired.        */
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
 const SYNC_NEVER=new Set(['d4.tgbot',LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
-const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k);
+const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$)/.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
 function syncKts(){if(!SYNC_KTS){try{SYNC_KTS=JSON.parse(localStorage.getItem(SYNC.ts)||'{}')||{};}catch(e){SYNC_KTS={};}}return SYNC_KTS;}
