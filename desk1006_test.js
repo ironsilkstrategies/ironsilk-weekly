@@ -38,11 +38,12 @@ setTimeout(()=>{try{
     {game:'SJ@DAL',m:'ml',sd:'home',pick:'DAL ML',price:-150,color:' strong',chars:['Sim','Judge'],brainP:.66,start:st(23)},
     {game:'PHI@TB',m:'ml',sd:'home',pick:'TB ML',price:-140,color:'value',chars:['Sim','Trends'],brainP:.62,start:st(17)},
     {game:'WPG@PIT',m:'spread',sd:'away',pick:'WPG +1.5',price:-170,color:'source',chars:['Pred'],brainP:.7,start:st(18)}];
-  w.eval(`set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify(P)},props:[]}}});set(TF_KEY,{});
+  w.eval(`set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify(P)},props:[]}}});set(TF_KEY,{tier:"all"});
     MG_TS=Date.now();MG_LIVE={nhl:{[mgKey('nhl','PHI@TB')]:[{date:today(),state:'in',a:1,h:3,period:3,clock:300,detail:'5:00 - 3rd'}],
       [mgKey('nhl','SJ@DAL')]:[{date:today(),state:'post',a:2,h:4,period:3,clock:0,detail:'Final'}]}};
     if(!document.getElementById('todayBody')){const d=document.createElement('div');d.id='todayBody';document.body.appendChild(d);}renderToday(true);`);
-  const tb=()=>w.document.getElementById('todayBody').innerHTML;
+  /* the Best-3 hero (v1.93) sits above the filtered list; filters apply to the list */
+  const tb=()=>{const c=w.document.getElementById('todayBody').cloneNode(true);const h=c.querySelector('#todayBestHero');if(h)h.remove();return c.innerHTML;};
   const h0=tb();
   T('live game pinned at the top with score',h0.indexOf('Live now')>-1&&h0.indexOf('TB ML')<h0.indexOf('Over 5.5'),'');
   T('live pick shows a live win % moved from pre-game',/to win/.test(h0)&&/from 62%/.test(h0)&&/PHI <b>1<\/b> – <b>3<\/b> TB/.test(h0));

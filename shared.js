@@ -507,7 +507,7 @@ function pstCardHtml(sp,g){try{
   const teams=[g.away.abbr,g.home.abbr];const rows=[];const KEYS={nhl:['g','a','s'],mlb:['h','hr','rbi','k'],nfl:['py','ry','rec','wy','td'],ncaaf:['py','ry','rec','wy','td'],nba:['pts','reb','ast','fg3']}[sp]||[];
   teams.forEach(tm=>pstTeam(sp,tm,6).forEach(P=>{const cells=KEYS.map(k=>{const S=P.s[k];if(!S||!S.gp||!S.sum)return'';const J=pstProj(sp,P.name,k);
       return`${(PST_STATS[sp][k]||k).replace(/ \(P\)/,'')} <b>${J.mu.toFixed(J.mu<10?2:0)}</b>`;}).filter(Boolean);
-    if(cells.length)rows.push(`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${esc(P.name)}</b> <span style="color:var(--mute)">${tm} · ${P.n}G</span><br>${cells.join(' · ')}</div>`);}));
+    if(cells.length)rows.push(`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(P.name)}</b> <span style="color:var(--mute)">${tm} · ${P.n}G</span><br>${cells.join(' · ')}</div>`);}));
   const pb=(()=>{try{return propBoardHtml(sp,g.away.abbr+'@'+g.home.abbr,12)}catch(e){return''}})();
   if(!rows.length)return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">Player stats</summary><div class="sub" style="font-size:10px">No finals tracked for these teams yet — the season backfill fills this in the background.</div></details>`;
   return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">Player stats (season, form-weighted)</summary>${rows.join('')}</details>`;}catch(e){return'';}}
@@ -587,9 +587,9 @@ function propBoard(sp,game){const day=((get(PROPLINES_KEY,{})||{})[today()]||[])
     const pU=1-r.p;const evO=x.over!=null?(r.p*dec(x.over)-1)*100:null,evU=x.under!=null?(pU*dec(x.under)-1)*100:null;
     const best=evU!=null&&(evO==null||evU>evO)?{side:'under',ev:evU,p:pU,price:x.under}:evO!=null?{side:'over',ev:evO,p:r.p,price:x.over}:null;
     return{...x,matched:true,pOver:r.p,mu:r.mu,n:r.n,team:r.team,player:r.player,evO,evU,best};}).sort((a,b)=>((b.best&&b.best.ev)||-99)-((a.best&&a.best.ev)||-99));}
-function propRowHtml(x){if(!x.matched)return`<div class="mono" style="font-size:10.5px;padding:3px 0;color:var(--mute)">${esc(x.player)} ${esc(x.stat)} ${x.thr} — no stats tracked yet for this player</div>`;
+function propRowHtml(x){if(!x.matched)return`<div class="mono" style="font-size:10.5px;padding:3px 0;color:var(--mute)">${txtEsc(x.player)} ${esc(x.stat)} ${x.thr} — no stats tracked yet for this player</div>`;
   const ev=v=>v==null?'—':`<span style="color:${v>=3?'var(--win)':v<=-5?'var(--rust)':'var(--chalk)'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
-  return`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)">${x.best&&x.best.ev>=3?'⭐ ':''}<b>${esc(x.player)}</b> <span style="color:var(--mute)">${(x.sp||'').toUpperCase()} ${esc(x.team||'')}</span> · ${esc(x.stat)} <b>${x.thr}</b>
+  return`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)">${x.best&&x.best.ev>=3?'⭐ ':''}<b>${txtEsc(x.player)}</b> <span style="color:var(--mute)">${(x.sp||'').toUpperCase()} ${esc(x.team||'')}</span> · ${esc(x.stat)} <b>${x.thr}</b>
     <br>model ${x.mu.toFixed(x.mu<10?2:1)} avg (${x.n}G) · P(over) <b>${Math.round(x.pOver*100)}%</b> · over ${x.over!=null?(x.over>0?'+':'')+x.over:'—'} EV ${ev(x.evO)} · under ${x.under!=null?(x.under>0?'+':'')+x.under:'—'} EV ${ev(x.evU)}</div>`;}
 /* NFL and NHL cards already price uploaded props with their own engines —
    on a game card, show only the props that engine is NOT already showing. */
@@ -735,7 +735,8 @@ function parseMyTicketText(text){
     if(!pick){skipped.push(line+(h1?'  (1st-half moneyline not supported yet)':'  (leg text not understood)'));return;}
     const dm=whenText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     const gameDate=dm?`${dm[3]}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`:today();
-    legs.push({id:'ext'+ticketNo+'_'+legs.length,game:gl,pick,p:ticketAmerToProb(price),sport,gameDate,price,book:'external'});
+    if(price!=null&&!(Math.abs(+price)>=100)){price=null;}   /* v1.93: a "-2" is a misread, not a price */
+    legs.push({id:'ext'+ticketNo+'_'+legs.length,game:gl,pick,p:price!=null?ticketAmerToProb(price):0.5,sport,gameDate,price,book:'external'});
   });
   if(!legs.length)return{ok:false,note:'found Ticket Number '+ticketNo+' but no legs parsed'+(skipped.length?' — '+skipped.length+' line(s) unrecognized: '+(skipped[0].match(/\(([^()]+)\)\s*$/)||[,'leg text not understood'])[1]:'')};
   const L=get(LS.locked,[]);
@@ -1833,7 +1834,7 @@ function charProfilesHtml(){const P=charProfiles();const rows=Object.entries(P).
     const cats=Object.entries(C.cats).filter(([k,o])=>o.n>=12).map(([k,o])=>({k,n:o.n,p:o.w/o.n,clout:Math.max(0.25,Math.min(2.5,1+6*((o.w+5)/(o.n+10)-0.5)))}));
     const best=cats.filter(c=>c.p>=0.55).sort((a,b)=>b.p-a.p).slice(0,3),worst=cats.filter(c=>c.p<=0.47).sort((a,b)=>a.p-b.p).slice(0,3);const L=CHARS[v]||{};
     const line=(c,good)=>`<div class="mono" style="font-size:10px;color:${good?'var(--win)':'var(--rust)'}">${good?'💪':'⚠️'} ${esc(c.k)} — ${Math.round(c.p*100)}% over ${c.n} · clout ×${c.clout.toFixed(2)}</div>`;
-    return`<details style="margin:4px 0"><summary><b style="color:${L.color||'var(--chalk)'}">${esc(L.label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${C.all.w}-${C.all.n-C.all.w} (${Math.round(C.all.w/C.all.n*100)}%)</span></summary>
+    return`<details style="margin:4px 0"><summary><b style="color:${L.color||'var(--chalk)'}">${txtEsc(L.label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${C.all.w}-${C.all.n-C.all.w} (${Math.round(C.all.w/C.all.n*100)}%)</span></summary>
       ${best.map(c=>line(c,true)).join('')||'<div class="sub" style="font-size:10px">No proven strength yet (needs 12+ calls at 55%+)</div>'}${worst.map(c=>line(c,false)).join('')}</details>`;}).join('');
   return rows?`<div class="tkt" style="margin-bottom:8px"><h3>🧬 Character strengths & weaknesses</h3><div class="sub" style="font-size:10px">Each character is a person with a record. Where one is proven strong it carries more clout in Supreme/Strong; where it's weak, less. Situations count once a character has 12+ graded calls in them.</div>${rows}</div>`:'';}
 /* Characters ARE outside pickers (each one a person with a record): 2+ of them
@@ -2091,7 +2092,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261010j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261010k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2657,7 +2658,7 @@ function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log
   let parlay=null,prec=null;try{const B=get(BKDAY_KEY,{})||{};if(B.locked&&B.d===today()&&B.roll&&B.roll.cut.length){const cut=B.roll.legs.filter(l=>B.roll.cut.includes(l.sp+'|'+l.game));
       parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(B.roll.cutDec),p:B.roll.cutP,result:tixDone(cut),legs:cut.map(l=>{let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}return{sp:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,by:charName(l.v),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
     const RR=bkDayRecord().cut;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
-  return{v:2,generated:Date.now(),brand:'TheDesk',handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
+  return{v:2,generated:Date.now(),brand:'TheDesk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
 async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual)alert('The Best card publishes once it locks — run the master evaluation or tap Lock now.');return{ok:false,reason:'not locked'};}
   if(!get(LS.ghtoken,'')||!get(LS.ghrepo,'')){if(manual)alert('Add your GitHub token and owner/repo in Settings → Backup first. Publishing uses the same connection.');return{ok:false,reason:'not configured'};}
   const F=publicFeed();const txt=JSON.stringify(F,null,1);
@@ -8023,7 +8024,7 @@ function legSetManual(tid,i,res){const L=get(LS.locked,[]);const t=L.find(x=>Str
 function gradeDoctorHtml(t){if(t.finalized||t.archived)return'';const rows=[];
   (t.legs||[]).forEach((l,i)=>{let r=null;try{r=gradeLeg(l,t.date);}catch(e){}if(r&&(r.live||r.hit===true||r.hit===false||r.push))return;if(!legOverdue(l,t))return;
     const D=legDiagnose(l,t);const id=JSON.stringify(String(t.id)).replace(/"/g,'&quot;');
-    rows.push(`<div class="mono" style="font-size:10px;padding:4px 0;border-top:1px dashed var(--rule)"><b>${esc(l.pick)}</b> <span style="color:var(--mute)">${esc(l.game)}</span><br><span style="color:var(--gold)">🩺 ${esc(D.msg)}</span><br>
+    rows.push(`<div class="mono" style="font-size:10px;padding:4px 0;border-top:1px dashed var(--rule)"><b>${txtEsc(l.pick)}</b> <span style="color:var(--mute)">${txtEsc(l.game)}</span><br><span style="color:var(--gold)">🩺 ${esc(D.msg)}</span><br>
       ${D.code==='rekey'?`<button onclick="legRekey(${id},${i},'${D.to}')">↻ Match to ${esc(D.to)}</button>`:''}
       <button onclick="legSetManual(${id},${i},'won')">✅ Won</button><button onclick="legSetManual(${id},${i},'lost')">❌ Lost</button><button onclick="legSetManual(${id},${i},'push')">↔ Push</button></div>`);});
   return rows.length?`<div class="tkt" style="margin-top:6px;border-color:var(--gold)"><b style="font-size:11px">🩺 ${rows.length} leg${rows.length>1?'s':''} should be over but aren't graded</b>${rows.join('')}
@@ -9486,7 +9487,7 @@ function renderMoneyTab(){
     <div style="font-family:'Archivo';font-weight:900;font-size:44px;line-height:1.1;
       color:${balColor};margin:4px 0">$${balance.toFixed(2)}</div>
     <div style="font-family:'IBM Plex Mono';font-size:12px;color:${balColor}">
-      ${b.profit>0?'+':''}$${b.profit.toFixed(2)} this month
+      ${b.profit>=0?'+$':'-$'}${Math.abs(b.profit).toFixed(2)} this month
     </div>
   </div>`;
 
@@ -9505,7 +9506,7 @@ function renderMoneyTab(){
           <div class="m" style="margin-top:2px">$${latest.stake.toFixed(2)} staked → balance $${latest.runningBalance.toFixed(2)}</div>
         </div>
         <div style="font-family:'Archivo';font-weight:900;font-size:20px;color:${lc}">
-          ${lArrow} ${latest.profit>=0?'+':''}$${latest.profit.toFixed(2)}
+          ${lArrow} ${latest.profit>=0?'+$':'-$'}${Math.abs(latest.profit).toFixed(2)}
         </div>
       </div>
     </div>`;
@@ -9569,7 +9570,7 @@ function renderMoneyTab(){
         </div>
         <div style="text-align:right">
           <div style="font-family:'Archivo';font-weight:900;font-size:18px;color:${color}">
-            ${arrow} ${rec.profit>=0?'+':''}$${rec.profit.toFixed(2)}</div>
+            ${arrow} ${rec.profit>=0?'+$':'-$'}${Math.abs(rec.profit).toFixed(2)}</div>
           <div class="m" style="font-size:10px">balance $${rec.runningBalance.toFixed(2)}</div>
         </div>
       </div>
@@ -12217,7 +12218,7 @@ function minePicksHtml(){
   setTimeout(()=>genTickets('mine'),0);
   let SR=null;try{SR=settledRecord('mine');}catch(e){}
   return `<div class="sbar" style="margin-top:0"><h2>Your tickets</h2><div class="ln"></div></div>
-    ${SR&&SR.n?`<div class="note" id="lifeRec">🔒 Lifetime ticket record <b>${SR.w}-${SR.l}${SR.p?'-'+SR.p:''}</b>${SR.staked?` · ${SR.profit>=0?'+':''}$${SR.profit.toFixed(2)} on $${SR.staked.toFixed(2)} staked`:''} — frozen at settlement, never re-graded or pruned.</div>`:''}
+    ${SR&&SR.n?`<div class="note" id="lifeRec">🔒 Lifetime ticket record <b>${SR.w}-${SR.l}${SR.p?'-'+SR.p:''}</b>${SR.staked?` · ${SR.profit>=0?'+$':'-$'}${Math.abs(SR.profit).toFixed(2)} on $${SR.staked.toFixed(2)} staked`:''} — frozen at settlement, never re-graded or pruned.</div>`:''}
     <div class="subnav">
       <button class="${MINE_VIEW==='pending'?'on':''}" onclick="MINE_VIEW='pending';ARCHIVE_SELECTED.clear();renderTickets()">Pending <span class="m">${pending.length}</span></button>
       <button class="${MINE_VIEW==='archived'?'on':''}" onclick="MINE_VIEW='archived';ARCHIVE_SELECTED.clear();renderTickets()">Archived <span class="m">${archived.length}</span></button>
@@ -15185,7 +15186,7 @@ async function send(){
     +`Per-source breakdown: ${Object.keys(srcStats).length?Object.keys(srcStats).map(s=>{
       const o=srcStats[s];return `${s} ${o.w}-${o.l}`}).join('; '):'none uploaded yet'}\n\n`
     +`6) LOCKED PARLAYS:\n${L.length?L.map(t=>`${t.date} (${(t.p*100).toFixed(2)}%): ${t.legs.map(x=>x.pick+' '+x.game).join(', ')}`).join('\n'):'none'}\n\n`
-    +`7) BANKROLL: $${(BR_BASELINE+b.profit).toFixed(2)} balance this month, ${b.profit>=0?'+':''}$${b.profit.toFixed(2)} net, `
+    +`7) BANKROLL: $${(BR_BASELINE+b.profit).toFixed(2)} balance this month, ${b.profit>=0?'+$':'-$'}${Math.abs(b.profit).toFixed(2)} net, `
     +`${b.history.length} tickets settled, limit multiplier ${b.limitMult.toFixed(2)}x.\n\n`
     +`Rules: PLAYER PROPS at the user's book are X+ ladders only — never recommend an under on a player prop. `
     +`Game totals, run lines and F5 totals DO offer both directions, so unders are fully in play there and you `
@@ -15534,12 +15535,12 @@ function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const tea
 function likelyHtml(){const lab={pts:'pts',reb:'reb',ast:'ast',fg3:'threes',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'receptions',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'strikeouts',s:'SOG',g:'goal'};
   const secs=['nfl','ncaaf','nba','nhl','mlb'].map(sp=>{const R=propLikely(sp,10);if(!R.length)return'';
     return`<details class="tkt" style="margin:6px 0"><summary><b>${SP_LAB[sp]}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${R.length} likely</span></summary>${R.map(x=>
-      `<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${esc(x.player)}</b> <span style="color:var(--mute)">${esc(x.team)}</span> · <b>${x.thr}+ ${lab[x.k]||x.k}</b> · <span style="color:var(--win)">${Math.round(x.p*100)}%</span> · avg ${x.mu.toFixed(x.mu<10?2:0)} (${x.n}G)</div>`).join('')}</details>`;}).join('');
+      `<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.player)}</b> <span style="color:var(--mute)">${txtEsc(x.team)}</span> · <b>${x.thr}+ ${lab[x.k]||x.k}</b> · <span style="color:var(--win)">${Math.round(x.p*100)}%</span> · avg ${x.mu.toFixed(x.mu<10?2:0)} (${x.n}G)</div>`).join('')}</details>`;}).join('');
   return secs?`<div class="mktlab">🔮 Likely outcomes today <span class="sub" style="font-size:9px">— highest standard line each player clears ≥65%, from his game logs</span></div>${secs}`:'';}
 function highPctLinesHtml(){const R=propBoard(null,null).filter(x=>x.matched&&x.best).map(x=>{const pO=x.pOver,side=pO>=0.5?'over':'under',p=side==='over'?pO:1-pO;
     const price=side==='over'?x.over:x.under;const ev=side==='over'?x.evO:x.evU;return{...x,side,p,price,ev};}).filter(x=>x.p>=0.6).sort((a,b)=>b.p-a.p).slice(0,10);
   if(!R.length)return'';
-  return`<div class="mktlab">📈 High-% props from your lines</div>${R.map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${esc(x.player)}</b> ${x.side} ${x.thr} ${esc(x.stat)} <span style="color:var(--mute)">${x.sp.toUpperCase()}</span>
+  return`<div class="mktlab">📈 High-% props from your lines</div>${R.map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.player)}</b> ${x.side} ${x.thr} ${esc(x.stat)} <span style="color:var(--mute)">${x.sp.toUpperCase()}</span>
     · <b style="color:var(--win)">${Math.round(x.p*100)}%</b> · ${x.price!=null?(x.price>0?'+':'')+x.price:'no price'}${x.ev!=null?` · EV <span style="color:${x.ev>=0?'var(--win)':'var(--rust)'}">${x.ev>=0?'+':''}${x.ev.toFixed(1)}%</span>${x.ev<0?' (likely, but priced too short)':''}`:''}</div>`).join('')}`;}
 /* ══ BEST TAB — one card for every sport ═══════════════════════════════════
    Built from today's card (all sports you've opened today). Five best picks
@@ -15551,8 +15552,8 @@ function highPctLinesHtml(){const R=propBoard(null,null).filter(x=>x.matched&&x.
 const BEST5_KEY='d4.best5',BEST5_LO=-350,BEST5_HI=400;
 function bestStandout(by){let b=null;Object.values(by||{}).forEach(B=>{const s=B&&B.standout;if(s&&(!b||s.p>b.p))b=s;});return b;}
 function standoutHtml(s){return`<div class="tkt" style="margin-bottom:8px;border-color:var(--gold)"><b>🌟 Standout prop</b> <span class="mono" style="font-size:10px;color:var(--mute)">${(s.sp||'').toUpperCase()}</span>
-  <div style="font-size:15px;font-weight:800;margin-top:2px">${esc(s.player)} ${esc(s.label)}</div>
-  <div class="sub mono">${esc(s.team)} · ${esc(s.game)} · model ${Math.round(s.p*100)}% · ${s.avg.toFixed(2)}/game over ${s.n} games</div></div>`;}
+  <div style="font-size:15px;font-weight:800;margin-top:2px">${txtEsc(s.player)} ${esc(s.label)}</div>
+  <div class="sub mono">${txtEsc(s.team)} · ${esc(s.game)} · model ${Math.round(s.p*100)}% · ${s.avg.toFixed(2)}/game over ${s.n} games</div></div>`;}
 function best5ProbRaw(x){return x.blend!=null?x.blend:x.brainP!=null?x.brainP:x.mp;}
 /* v1.90: through the truth map — what this range has actually hit */
 function best5Prob(x,sp){const p=best5ProbRaw(x);try{return truthP(x.sp||sp,p);}catch(e){return p;}}
@@ -15640,7 +15641,7 @@ function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈'
   const res=opts.res||(()=>'');
   const rows=list.map((x,i)=>{const [tl,tc]=BEST_TIER_LAB(x);const ch=(x.chars||[]).length;
     return`<div class="b3-row"><div class="b3-n">${i+1}</div><div style="flex:1;min-width:0">
-      <div class="b3-pick">${esc(x.pick)} <span class="b3-price">${x.price>0?'+':''}${x.price}</span>${res(x)}</div>
+      <div class="b3-pick">${txtEsc(x.pick)} <span class="b3-price">${x.price>0?'+':''}${x.price}</span>${res(x)}</div>
       <div class="b3-meta">${em[x.sp]||''} ${(x.sp||'').toUpperCase()} · ${esc(x.game)}${t(x)?' · '+t(x):''}</div>
       <div class="b3-meta">${tl?`<b style="color:${tc}">${tl}</b> · `:''}${ch?ch+' of the desk\'s voices agree · ':''}EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%</div></div>
       <div class="b3-pct">${Math.round(x.p*100)}%<div class="b3-pl">to hit</div></div></div>`;}).join('');
@@ -15655,18 +15656,18 @@ function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈'
       <div class="rc-date">${fmtDate(new Date(S.d+'T12:00:00'))}<br>${S.locked?'🔒 locked':'building'}</div></div>
     ${rows||empty}
     <div class="rc-foot"><div class="cal">Today's games only · priced -200 or longer · ${S.locked?'locked '+(S.lockedAt?new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'')+' — never changes, graded at the final':'locks when the master evaluation runs'}</div>
-      <div class="cta">Follow <span>${esc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>`;}
+      <div class="cta">Follow <span>${txtEsc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>`;}
 function best5Lock(){const S=best5State();if(!(S.picks||[]).length){alert('Nothing to lock yet — open each sport board today first.');return;}
   S.locked=true;S.lockedAt=Date.now();S.why='locked by you';set(BEST5_KEY,S);renderBest();}
 function bestRowsHtml(title,arr,res,emptyMsg){const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
   if(!arr||!arr.length)return`<div class="rc-list"><h5>${title}</h5><div class="rc-empty-slot">${emptyMsg||'Not enough data yet'}</div></div>`;
   return`<div class="rc-list"><h5>${title}</h5>${arr.map((x,i)=>{const r=res?res(x,i):'';
     return`<div class="rc-row"><div><div class="g">${em[x.sp]||''} ${esc(x.pick||(x.player+' '+(x.side==='under'?'u':'o')+x.thr+' '+x.stat))}${r}</div>
-      <div class="p">${esc(x.game||x.team||'')}${x.price!=null?` · ${x.price>0?'+':''}${x.price}`:''}${x.ev!=null?` · EV ${x.ev>=0?'+':''}${x.ev.toFixed(1)}%`:''}${x.likely?' · from game logs':''}</div></div>
+      <div class="p">${txtEsc(x.game||x.team||'')}${x.price!=null?` · ${x.price>0?'+':''}${x.price}`:''}${x.ev!=null?` · EV ${x.ev>=0?'+':''}${x.ev.toFixed(1)}%`:''}${x.likely?' · from game logs':''}</div></div>
       <div class="r" style="color:var(--gold)">${(x.p*100).toFixed(1)}%</div></div>`;}).join('')}</div>`;}
 function bestDeepCardHtml(S,opts){opts=opts||{};const st=S.standout;const res=opts.res||{};
   const rec=opts.record?`<div class="rc-tag" style="font-size:12px;margin-top:2px">${opts.record}</div>`:'';
-  const hero=st?`<div class="rc-hero"><div class="pct" style="font-size:30px">${esc(st.player)}</div><div class="rec">${esc(st.label)} · ${(st.p*100).toFixed(1)}%${res.standout||''}</div><div class="lab">Standout prop of the day · ${esc(st.team)} · ${esc(st.game)}</div></div>`
+  const hero=st?`<div class="rc-hero"><div class="pct" style="font-size:30px">${txtEsc(st.player)}</div><div class="rec">${txtEsc(st.label)} · ${(st.p*100).toFixed(1)}%${res.standout||''}</div><div class="lab">Standout prop of the day · ${esc(st.team)} · ${esc(st.game)}</div></div>`
     :`<div class="rc-hero"><div class="lab">Standout prop builds as player game logs load</div></div>`;
   return`<div class="recapwrap" id="${opts.id||'bestShareTarget'}"><div class="recapcard">
     <div class="rc-head"><div><div class="rc-brand">THE<span>DESK</span></div><div class="rc-tag">${opts.title||"Today's top plays · every sport · model-ranked"}</div>${rec}</div>
@@ -15676,7 +15677,7 @@ function bestDeepCardHtml(S,opts){opts=opts||{};const st=S.standout;const res=op
     ${bestRowsHtml('Best 5 totals',S.totals||(S.picks||[]).filter(x=>x.m==='total'),res.pick,'No qualifying totals yet')}
     ${bestRowsHtml('Best 5 props',S.props,res.prop,'Paste prop lines or open a board — props fill from game logs')}
     <div class="rc-foot"><div class="cal">Locked ${S.lockedAt?new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'—'} · never changes after · graded in Recap</div>
-      <div class="cta">Follow <span>${esc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>`;}
+      <div class="cta">Follow <span>${txtEsc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>`;}
 let BEST_VIEW='all';
 function bestView(v){BEST_VIEW=v;renderBest();}
 function renderBest(){
@@ -17504,13 +17505,19 @@ function onTicketMatch(sp,game,m,sd){
 const SP_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
 /* ── Today filters + live state ─────────────────────────────────────────── */
 const TF_KEY='d4.todayfilter';
-function tfGet(){const f=get(TF_KEY,null)||{};return{tier:f.tier||'all',ch:f.ch||'all',sp:f.sp||'all',view:f.view||'picks'};}
+/* v1.93 · PLAYABLE = passes every strategy rule: whole crowd behind it (or SUPREME), lane not
+   blocked, model not fighting the market, not flagged, priced -300 or longer, EV ≥ 0 on the truth map */
+function tfPlayable(x,sp){try{if(!(x.unan||String(x.color||'').trim()==='supreme'||crowdAllAgree(sp,x.game,x.m,x.sd)))return false;if(x.incoherent||x.suspect)return false;
+    if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR)return false;   /* no book price → no way to know it's worth it */if(laneStatus(pickLane(x,sp))==='blocked')return false;if(pickDisagrees(x,sp))return false;
+    const p=best5Prob({...x,sp});if(x.price!=null&&amerOk(x.price)!=null&&p!=null&&p*americanToDecimal(amerOk(x.price))-1<0)return false;return true;}catch(e){return false;}}
+function tfGet(){const f=get(TF_KEY,null)||{};return{tier:f.tier||'play',ch:f.ch||'all',sp:f.sp||'all',view:f.view||'picks'};}
 function tfSet(k,v){const f=tfGet();f[k]=v;set(TF_KEY,f);renderToday(true);}
 /* tier test: unanimous is a flag on any color; the rest are the card's colors */
 function tfPass(x,sp,F){
   if(F.sp!=='all'&&F.sp!==sp)return false;
   if(F.tier==='unan'&&!x.unan)return false;
-  if(F.tier!=='all'&&F.tier!=='unan'&&String(x.color||'').trim()!==F.tier)return false;
+  if(F.tier==='play'&&!tfPlayable(x,sp))return false;
+  if(F.tier!=='all'&&F.tier!=='unan'&&F.tier!=='play'&&String(x.color||'').trim()!==F.tier)return false;
   if(F.ch!=='all'&&!(x.chars||[]).includes(F.ch))return false;
   return true;}
 /* one pick's live read: ESPN event + the same live model the tickets use */
@@ -17599,7 +17606,7 @@ function charSplitsHtml(F){const sp=F&&F.sp&&F.sp!=='all'?F.sp:(typeof ACTIVE_SP
     const teams=Object.entries(X.ml.team).concat(Object.entries(X.spread.team)).reduce((o,[t,a])=>{const c=o[t]||(o[t]=[0,0,0]);c[0]+=a[0];c[1]+=a[1];return o;},{});
     const best=Object.entries(teams).filter(([t,a])=>a[0]+a[1]>=5).sort((a,b)=>(b[1][0]+2)/(b[1][0]+b[1][1]+4)-(a[1][0]+2)/(a[1][0]+a[1][1]+4));
     const tl=(L)=>L.map(([t,a])=>`${t} ${a[0]}-${a[1]}`).join(' · ')||'—';
-    return`<details style="margin:4px 0"><summary><b>${esc(charName(v))}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${n} graded ${sp.toUpperCase()} calls</span></summary>
+    return`<details style="margin:4px 0"><summary><b>${txtEsc(charName(v))}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${n} graded ${sp.toUpperCase()} calls</span></summary>
       <table class="mono" style="font-size:10px;width:100%;margin-top:4px"><tr style="color:var(--mute)"><td></td><td>all</td><td>home</td><td>road</td><td>fav</td><td>dog</td></tr>
       ${['ml','spread'].map(m=>`<tr><td>${m==='ml'?'ML':'Spread'}</td>${cell(X[m].all)}${cell(X[m].side.home)}${cell(X[m].side.away)}${cell(X[m].role.fav)}${cell(X[m].role.dog)}</tr>`).join('')}
       <tr><td>Total</td>${cell(X.total.all)}<td colspan="2">O ${cell(X.total.side.over).replace(/<\/?td[^>]*>/g,'')}</td><td colspan="2">U ${cell(X.total.side.under).replace(/<\/?td[^>]*>/g,'')}</td></tr></table>
@@ -17619,7 +17626,7 @@ function charDeskHtml(F){
   const hot=[];calls.forEach(c=>{const h=charHist(V,c);if(h.hot.length)hot.push({c,h});});
   hot.sort((a,b)=>b.h.hot[0].r-a.h.hot[0].r||b.h.hot.length-a.h.hot.length);
   const hotHtml=hot.length?hot.slice(0,12).map(({c,h})=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)">${chip(c.voice)}
-      <div style="flex:1"><b>${esc(charPickText(c))}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[c.sp]||''} · ${esc(c.game)}</span>
+      <div style="flex:1"><b>${txtEsc(charPickText(c))}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[c.sp]||''} · ${esc(c.game)}</span>
       <div class="mono" style="font-size:9.5px">${h.hot.map(x=>`<span style="color:var(--win)">🔥 ${esc(x.lab)} ${fmt(x)}</span>`).join(' · ')}</div></div></div>`).join('')
     :'<div class="sub">No character has a 60%+ record (6+ games) on today\'s teams, matchups or markets yet.</div>';
   /* 2 · agree / disagree per game-market */
@@ -17631,12 +17638,12 @@ function charDeskHtml(F){
     const tot=Object.keys(g.by).length,top=sides[ks[0]].length;
     const verdict=split?`<span style="color:var(--rust)">split ${top}-${tot-top}</span>`:`<span style="color:var(--win)">all ${tot} agree</span>`;
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div class="mono" style="font-size:10px;color:var(--mute)">${SP_LAB[g.sp]||''} · ${esc(g.game)} · ${mLab[g.m]||g.m} · ${verdict}</div>
-      ${ks.map(k=>`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><b style="min-width:90px;font-size:12px">${esc(charPickText(sides[k][0]))}</b>${sides[k].map(c=>{const h=charHist(V,c);return chip(c.voice)+(h.hot.length?'<span style="font-size:10px">🔥</span>':'');}).join('')}</div>`).join('')}</div>`;}).join('');
+      ${ks.map(k=>`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><b style="min-width:90px;font-size:12px">${txtEsc(charPickText(sides[k][0]))}</b>${sides[k].map(c=>{const h=charHist(V,c);return chip(c.voice)+(h.hot.length?'<span style="font-size:10px">🔥</span>':'');}).join('')}</div>`).join('')}</div>`;}).join('');
   /* 3 · each character's slate */
   const byV={};calls.forEach(c=>(byV[c.voice]=byV[c.voice]||[]).push(c));
   const cards=CHAR_ORDER.filter(v=>byV[v]).map(v=>{const all=V.filter(x=>x.voice===v&&x.graded&&!x.push);const w=all.filter(x=>x.hit).length;
-    return`<details style="margin:4px 0"><summary>${chip(v)} <b>${esc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${byV[v].length} calls today · ${w}-${all.length-w} all-time</span></summary>
-      ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${esc(charPickText(c))} <span style="color:var(--mute)">${esc(c.game)}</span> · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${esc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
+    return`<details style="margin:4px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${byV[v].length} calls today · ${w}-${all.length-w} all-time</span></summary>
+      ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}</span> · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${txtEsc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
   return`<div class="tkt" style="border-color:var(--win)"><h3>🔥 Hot hands today</h3><div class="sub" style="font-size:10px">A character on a 60%+ run (6+ graded games) in this sport+market, on this team, or in this exact matchup.</div>${hotHtml}</div>
     <div class="tkt"><h3>Who agrees, who doesn't</h3>${rows}</div>
     <div class="tkt"><h3>Each character's slate</h3>${cards}</div>`;}
@@ -17750,7 +17757,7 @@ function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','
   /* v1.90 gate + lanes + disagreement */
   let gate=null;try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);
     const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);
-    gate=!x?'not on today\'s card':!x.unan?'crowd not unanimous':laneStatus(lk,c.voice)==='blocked'?'lane blocked: '+laneName(lk):pickDisagrees(x,c.sp)?'model fighting the market':null;}catch(e){}
+    gate=!x?'not on today\'s card':!(x.unan||crowdAllAgree(c.sp,c.game,c.market,c.side,c.date))?'crowd split':laneStatus(lk,c.voice)==='blocked'?'lane blocked: '+laneName(lk):pickDisagrees(x,c.sp)?'model fighting the market':null;}catch(e){}
   return{score:0.5*p+0.5*hr,p,hr,why,weak:sw>=6&&hr<0.5,gate};}
 /* Sensible tickets only: no leg priced shorter than -300 (a -450 favorite adds almost
    nothing to the payout and is the leg that quietly sinks parlays). Underdogs: any price. */
@@ -17795,8 +17802,8 @@ function cparHtml(){const D=cparState();const vs=Object.keys(D.by||{});
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
   return`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Each character's own ticket from its strongest spots today — the Banker picks how many legs. ${D.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation — graded at the finals.</b>':'Building — freezes when the master evaluation runs.'}</div>
     ${vs.map(v=>{const P=D.by[v],R=cparRecord(v);const rec=R.w+R.l?`${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}`:'no graded parlays yet';
-      return`<details style="margin:5px 0"><summary>${chip(v)} <b>${esc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${P.legs.length}-leg · ${decimalToAmerican(P.dec)}</span>${P.size?` <span class="mono" style="font-size:9px;color:#c9a227">🏦 ${esc(P.size.why)}</span>`:''} <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${(P.p*100).toFixed(P.p<0.1?1:0)}% · ${rec}</span></summary>
-        ${P.legs.map(l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}<b>${esc(l.pick)}</b> <span style="color:var(--gold)">${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} ${esc(l.game)} · ${Math.round(l.p*100)}%</span>${l.why.length?`<br><span style="color:var(--win)">↳ ${esc(l.why.join(' · '))}</span>`:''}</div>`).join('')}</details>`;}).join('')}</div>`;}
+      return`<details style="margin:5px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${P.legs.length}-leg · ${decimalToAmerican(P.dec)}</span>${P.size?` <span class="mono" style="font-size:9px;color:#c9a227">🏦 ${esc(P.size.why)}</span>`:''} <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${(P.p*100).toFixed(P.p<0.1?1:0)}% · ${rec}</span></summary>
+        ${P.legs.map(l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}<b>${txtEsc(l.pick)}</b> <span style="color:var(--gold)">${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} ${esc(l.game)} · ${Math.round(l.p*100)}%</span>${l.why.length?`<br><span style="color:var(--win)">↳ ${esc(l.why.join(' · '))}</span>`:''}</div>`).join('')}</details>`;}).join('')}</div>`;}
 
 /* ══ CHARACTER PROPS — 70%+ calls, graded, calibrated ══════════════════════
    Four characters read every player on today's slate, each its own way:
@@ -17867,7 +17874,7 @@ function cpropHtml(F){let calls=[];try{calls=cpropToday();cpropLog(calls);}catch
   const body=list.length?list.map(x=>{const id=x.sp+'|'+pstId(x.player);
     const byStat={};x.calls.forEach(c=>{const k=c.k+'|'+c.thr;(byStat[k]=byStat[k]||[]).push(c);});
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;align-items:baseline">
-      <a href="#" onclick="cpropFocus('${esc(id)}');return false" style="color:var(--chalk);font-weight:800;text-decoration:none">${esc(x.player)} ${CPROP_FOCUS===id?'▾':'▸'}</a>
+      <a href="#" onclick="cpropFocus('${esc(id)}');return false" style="color:var(--chalk);font-weight:800;text-decoration:none">${txtEsc(x.player)} ${CPROP_FOCUS===id?'▾':'▸'}</a>
       <span class="mono" style="font-size:9.5px;color:var(--mute)">${x.yours?'<b style="color:var(--gold)">💰 your game</b> · ':''}${SP_LAB[x.sp]||''} · ${esc(x.team)}</span></div>
       ${Object.values(byStat).map(cs=>{const c0=cs[0];const best=cs.reduce((a,c)=>c.cal>a.cal?c:a,cs[0]);
         return`<div class="mono" style="font-size:10.5px;margin-top:2px"><b>${c0.thr}+ ${CPROP_LAB[c0.k]||c0.k}</b>${(()=>{try{return cpropLiveChip(best)}catch(e){return''}})()} ${cs.map(c=>chip(c.voice)+cpropFavTag(c)).join('')} <span style="color:var(--win);font-weight:800">${Math.round(best.cal*100)}%</span> <span style="color:var(--mute)">calibrated · says ${Math.round(best.p*100)}% · proj ${best.mu.toFixed(1)}</span></div>`;}).join('')}
@@ -17882,13 +17889,24 @@ function charRosterHtml(){const L=bkLedger();const W=L.weeks[0].R;const V=get(VO
     const n=V.filter(c=>c.date===d&&c.voice===v).length;const all=V.filter(c=>c.voice===v&&c.graded&&c.hit!=null);const aw=all.filter(c=>c.hit).length;
     return`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--rule)">
       <span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color};margin-top:2px">${C.chip}</span>
-      <div style="flex:1;min-width:0"><b>${esc(C.label)}</b> <span class="mono" style="font-size:10px;color:${x.br>=100?'var(--win)':'var(--rust)'}">$${x.br.toFixed(2)} this week</span>
-        <div class="sub" style="font-size:10px">${esc(C.school)}</div>
+      <div style="flex:1;min-width:0"><b>${txtEsc(C.label)}</b> <span class="mono" style="font-size:10px;color:${x.br>=100?'var(--win)':'var(--rust)'}">$${x.br.toFixed(2)} this week</span>
+        <div class="sub" style="font-size:10px">${txtEsc(C.school)}</div>
         <div class="mono" style="font-size:9.5px;color:var(--mute)">${n?n+' calls today':'silent today — '+esc(C.quiet)} · all-time ${aw}-${all.length-aw}${(L.mult[v]||1)!==1?` · Banker weight ×${L.mult[v].toFixed(2)}`:''}${x.best?' · best: '+esc(x.best):''}</div></div></div>`;}).join('')}</div>`;}
 let TODAY_LIVE_TIMER=null;
 function todayLiveLoop(){if(TODAY_LIVE_TIMER)return;
   TODAY_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-today');if(!v||!v.classList.contains('on'))return;
     try{await mgRefresh(false);}catch(e){}renderToday(true);},30000);}
+/* v1.93 · the Best 3 lead the Today tab — straight bets, the app's most consistent product */
+function todayBestHero(){let S=null;try{S=best5State();}catch(e){return'';}const top=(S&&S.top3)||[];if(!top.length)return'';
+  const R=best3Record();const rec=R.w+R.l?`${R.w}-${R.l}${R.pu?'-'+R.pu:''} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u`:'new';
+  const res=x=>{try{const g=gradeLeg({sport:x.sp,game:x.game,pick:x.pick,gameDate:S.d},S.d);if(g&&!g.live){if(g.push)return'<span style="color:var(--mute)">PUSH</span>';if(g.hit===true)return'<span style="color:var(--win)">✓</span>';if(g.hit===false)return'<span style="color:var(--rust)">✗</span>';}if(g&&g.live)return'<span style="color:#ff4b5c">● live</span>';}catch(e){}return'';};
+  return`<div class="tkt" id="todayBestHero" style="border:1px solid rgba(255,199,44,.45);background:linear-gradient(180deg,rgba(255,199,44,.08),rgba(255,199,44,0) 70%);margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h3 style="margin:0">🏆 Today's Best ${top.length}</h3><span class="mono" style="font-size:10.5px;color:${R.u>=0?'var(--win)':'var(--rust)'}">${rec}</span></div>
+    <div class="sub mono" style="font-size:9.5px;margin:2px 0 6px">Straight bets${S.locked?' · 🔒 locked':''} — the steadiest thing the app makes.</div>
+    ${top.map((x,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--rule)"><span style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold);width:16px">${i+1}</span>
+      <div style="flex:1;min-width:0"><b style="font-size:14px">${txtEsc(x.pick)}</b> <span class="mono" style="font-size:11px;color:var(--gold)">${x.price!=null?tcSgn(x.price):''}</span>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game)}${x.unan?' · <span style="color:#ff6fae">★ unanimous</span>':''}</div></div>
+      <div style="text-align:right"><div class="mono" style="font-size:12px;font-weight:800">${Math.round((best5Prob(x)||0)*100)}%</div><div class="mono" style="font-size:10px">${res(x)}</div></div></div>`).join('')}</div>`;}
 function renderToday(noSnap){
   const el=document.getElementById('todayBody');if(!el)return;
   if(!noSnap)todaySnapshot();
@@ -17911,7 +17929,7 @@ function renderToday(noSnap){
   const fb=(k,v,lab,col)=>`<button class="msg-chip${F[k]===v?' on':''}" style="${col?`color:${col};`:''}" onclick="tfSet('${k}','${v}')">${lab} <span style="opacity:.6">${cnt({[k]:v})}</span></button>`;
   const usedCh=CHAR_ORDER.filter(v=>allP.some(({x})=>(x.chars||[]).includes(v)));
   const bar=`<div style="margin:4px 0 8px">
-    <div>${fb('tier','all','All')}${fb('tier','unan','★ Unanimous','#ff6fae')}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,c)).join('')}</div>
+    <div>${fb('tier','play','✅ Playable','#3DDC84')}${fb('tier','all','All')}${fb('tier','unan','★ Unanimous','#ff6fae')}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,c)).join('')}</div>
     <div>${fb('ch','all','Any character')}${usedCh.map(v=>fb('ch',v,`${CHARS[v].chip} ${CHARS[v].label||v}`,CHARS[v].color)).join('')}</div>
     ${sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:''}</div>`;
   const pct=v=>Math.round(v*100)+'%';
@@ -17925,7 +17943,7 @@ function renderToday(noSnap){
           live=`<div class="mono" style="font-size:10px;margin-top:2px">FINAL · ${sc} ${r}</div>`;}
         else{const lp=L.p,col=lp==null?'var(--mute)':lp>=0.6?'var(--win)':lp>=0.4?'var(--gold)':'var(--rust)';
           const mv=L.p0!=null&&lp!=null?Math.round((lp-L.p0)*100):null;
-          live=`<div class="mono" style="font-size:10.5px;margin-top:3px"><span style="color:#ff4b5c;font-weight:800">● LIVE</span> ${sc} · <span style="color:var(--mute)">${esc(E.detail||'')}</span> ${gcBtn(sp,x.game,today())}</div>
+          live=`<div class="mono" style="font-size:10.5px;margin-top:3px"><span style="color:#ff4b5c;font-weight:800">● LIVE</span> ${sc} · <span style="color:var(--mute)">${txtEsc(E.detail||'')}</span> ${gcBtn(sp,x.game,today())}</div>
             ${lp!=null?`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><div style="flex:1;height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${Math.round(lp*100)}%;background:${col}"></div></div>
             <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${pct(lp)} to win</span>${mv!=null&&mv!==0?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${pct(L.p0)}</span>`:''}</div>`:''}`;}}
       return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${L&&L.state==='in'?'#ff4b5c':c};background:rgba(255,255,255,.02);${on&&!(L&&L.state==='in')?'opacity:.55':''}">
@@ -17945,7 +17963,7 @@ function renderToday(noSnap){
     const P=(B.picks||[]).filter(x=>tfPass(x,sp,F)).map(x=>({x,L:tcLive(sp,x)})).filter(o=>o.L.state!=='in');
     const pre=P.filter(o=>o.L.state!=='post').sort((a,b)=>tcSort(a.x,b.x)),done=P.filter(o=>o.L.state==='post').sort((a,b)=>tcSort(a.x,b.x));
     const rows=pre.map(o=>row(sp,o.x,o.L)).join('')+(done.length?`<div class="mktlab" style="margin-top:8px">Final</div>`+done.map(o=>row(sp,o.x,o.L)).join(''):'');
-    const props=(B.props||[]).map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${esc(x.name)}</b> ${x.line}+ ${esc(x.lab)} <b style="color:var(--win)">${Math.round(x.p*100)}%</b> <span style="color:var(--mute)">· proj ${x.proj} · ${esc(x.game)}${x.book?' · book '+tcSgn(x.price):''}</span></div>`).join('');
+    const props=(B.props||[]).map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.name)}</b> ${x.line}+ ${esc(x.lab)} <b style="color:var(--win)">${Math.round(x.p*100)}%</b> <span style="color:var(--mute)">· proj ${x.proj} · ${esc(x.game)}${x.book?' · book '+tcSgn(x.price):''}</span></div>`).join('');
     const total=(B.picks||[]).length,shown=pre.length+done.length;
     return`<div class="sbar" style="margin-top:10px"><h2>${SP_LAB[sp]} · ${shown}${shown!==total?' of '+total:''} pick${total===1?'':'s'}</h2><div class="ln"></div></div>
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
@@ -17956,7 +17974,8 @@ function renderToday(noSnap){
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
     el.innerHTML=vw+spBar+safe(bankerHtml)+safe(charRosterHtml)+safe(cparHtml)+charDeskHtml(F);return;}
   if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
-  el.innerHTML=vw+legend+bar+liveHtml+sdHtml+body;
+  let hero='';try{hero=todayBestHero();}catch(e){console.warn('best hero',e);}
+  el.innerHTML=vw+hero+legend+bar+(F.tier==='play'?`<div class="sub mono" style="font-size:9.5px;margin:-2px 0 8px;color:var(--win)">✅ Playable = every character on this side (or SUPREME), lane not blocked, model not fighting the market, has a book price no shorter than -300, +EV on what picks like it have actually hit. ${cnt({tier:'play'})} of ${allP.length} today.</div>`:'')+liveHtml+sdHtml+body;
 }
 
 /* ── 3. My Games: every game you have money on, all sports ────────────────── */
@@ -18083,12 +18102,15 @@ function renderMyGames(){
     return{...b,state,a,h,detail,start};
   }).sort((x,y)=>({in:0,pre:1,post:2}[x.state]-{in:0,pre:1,post:2}[y.state])||String(x.start||x.d).localeCompare(String(y.start||y.d)));
   const [A,H]=['',''];
-  const hedges=get(LS.locked,[]).map(t=>{try{return hedgeHtml(t)?`<div class="sub" style="margin-top:6px"><b>${esc(t.name||('Ticket #'+t.id))}</b></div>`+hedgeHtml(t):''}catch(e){return''}}).join('');
+  const hedges=get(LS.locked,[]).map(t=>{try{return hedgeHtml(t)?`<div class="sub" style="margin-top:6px"><b>${txtEsc(t.name||('Ticket #'+t.id))}</b></div>`+hedgeHtml(t):''}catch(e){return''}}).join('');
   const btNeed=(()=>{try{return btUngraded().length}catch(e){return 0}})();
   let cpl='';try{cpl=cpropLiveHtml();}catch(e){}
   el.innerHTML=cpl+(btNeed?btBarHtml():'')+hedges+`<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin-bottom:6px">${list.length} game${list.length>1?'s':''} with money on them · live scores refresh every 45s while this tab is open</div>`+
   list.map(b=>{const [aw,hm]=b.game.split('@');
-    const sc=b.a!=null?`${aw} <b>${b.a}</b> – <b>${b.h}</b> ${hm}`:`${aw} @ ${hm}`;
+    /* v1.93: a pregame 0–0 isn't a score; a finished game ESPN no longer lists falls back to the stored final */
+    let fin=null;if(b.state!=='in'&&b.state!=='post'){try{const F=allFinals()[b.sp+':'+b.game];if(F&&F.d===b.d)fin=F;}catch(e){}}
+    const sc=fin?`${aw} <b>${fin.a}</b> – <b>${fin.h}</b> ${hm}`:(b.a!=null&&(b.state==='in'||b.state==='post'))?`${aw} <b>${b.a}</b> – <b>${b.h}</b> ${hm}`:`${aw} @ ${hm}`;
+    if(fin)b={...b,state:'post'};
     const st=b.state==='in'?`<span style="color:var(--rust)">● LIVE</span> ${esc(b.detail)}`:b.state==='post'?'FINAL':(b.start?new Date(b.start).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}):b.d);
     const legs=b.rows.map(x=>{try{return legLiveCard(x.t,x.l,{link:true});}catch(e){return`<div class="sub">${txtEsc(x.l.pick)}</div>`;}}).join('');
     const tix=new Set(b.rows.map(x=>x.t.id)).size;
@@ -18171,18 +18193,22 @@ let HUB_CACHE=null,HUB_SIG='';
    with the same leg count once), graded, split by sport. */
 /* v1.89 · price-aware break-even. Each pick adds the win rate its own price needs
    (a -300 leg needs 75%, a +150 leg 40%); unpriced picks are treated as -110. */
+/* your legs: only PRICED legs can be judged against break-even — same-game-parlay and alt legs
+   carry no individual price, and their high hit rate (alt lines at -300…-1000) inflated the record */
+function hubYouLeg(o,price,won){const a=+price;if(price==null||!isFinite(a)||Math.abs(a)<100){o.un=(o.un||0)+1;if(won)o.uw=(o.uw||0)+1;return;}
+  const q=imp(a);o.pn=(o.pn||0)+1;if(won)o.pw=(o.pw||0)+1;o.be+=q;o.bv+=q*(1-q);}
 function hubBE(o,price){const a=+price;const q=isFinite(a)&&Math.abs(a)>=100?imp(a):0.524;o.be+=q;o.bv+=q*(1-q);}
 function hubYou(){
   const L=get(LS.locked,[]).filter(t=>!TRACKED_ONLY_SOURCES.has(t.source));
   const seen={},R={};const SR=settledRecord('mine');const tw=SR.w,tl=SR.l,units=SR.profit;
   /* frozen legs first, so a pick graded once never drops out of the tally */
   settledList('mine').forEach(e=>(e.legs||[]).forEach(l=>{if(l.h!=='W'&&l.h!=='L')return;const k=l.sp+'|'+l.g+'|'+l.gd+'|'+String(l.pk).trim();if(seen[k])return;seen[k]=1;
-    const o=R[l.sp]||(R[l.sp]={w:0,n:0,be:0,bv:0});o.n++;if(l.h==='W')o.w++;hubBE(o,l.pr);}));
+    const o=R[l.sp]||(R[l.sp]={w:0,n:0,be:0,bv:0});o.n++;if(l.h==='W')o.w++;hubYouLeg(o,l.pr,l.h==='W');}));
   let FZ={};try{FZ=settledAll();}catch(e){}
   L.forEach(t=>{if(t.archived&&FZ[String(t.id)]&&(FZ[String(t.id)].legs||[]).length)return;   /* frozen: its legs were counted above */
     (t.legs||[]).forEach(l=>{const sp=l.sport||'mlb',k=sp+'|'+l.game+'|'+(l.gameDate||t.date)+'|'+String(l.pick).trim();if(seen[k])return;
       let g=null;try{g=gradeLeg(l,t.date)}catch(e){}if(!g||g.hit==null)return;seen[k]=1;
-      const o=R[sp]||(R[sp]={w:0,n:0,be:0,bv:0});o.n++;if(g.hit)o.w++;hubBE(o,l.price);});
+      const o=R[sp]||(R[sp]={w:0,n:0,be:0,bv:0});o.n++;if(g.hit)o.w++;hubYouLeg(o,l.price,!!g.hit);});
   });
   return{tickets:{w:tw,l:tl,units},picks:R};
 }
@@ -18200,7 +18226,7 @@ function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
   if(REC_VIEW==='chars'){let h='';try{try{cpropGrade();cparGrade();}catch(e){}
       const P=CHAR_ORDER.map(v=>({v,R:cparRecord(v)})).filter(x=>x.R.w+x.R.l);
-      h=(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${esc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
+      h=(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
     catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
@@ -18210,7 +18236,7 @@ function renderRecordsHub(){
   const cell=(o)=>{if(!o||!o.n)return'<td style="color:var(--mute)">—</td>';const p=o.w/o.n,need=o.be?o.be/o.n:0.524;
     const c=o.n>=10?(p>=need+0.03?'var(--win)':p<need-0.02?'var(--rust)':'var(--chalk)'):'var(--mute)';
     return`<td style="color:${c}" title="needed ${Math.round(need*100)}%">${o.w}-${o.n-o.w}<br><b>${Math.round(p*100)}%</b></td>`;};
-  const sum=obj=>{const o={w:0,n:0,be:0,bv:0};Object.values(obj||{}).forEach(x=>{o.w+=x.w;o.n+=x.n;o.be+=x.be||0;o.bv+=x.bv||0;});return o;};
+  const sum=obj=>{const o={w:0,n:0,be:0,bv:0,pn:0,pw:0,un:0,uw:0};Object.values(obj||{}).forEach(x=>{o.w+=x.w;o.n+=x.n;o.be+=x.be||0;o.bv+=x.bv||0;o.pn+=x.pn||0;o.pw+=x.pw||0;o.un+=x.un||0;o.uw+=x.uw||0;});return o;};
   const row=(label,obj,color)=>`<tr><td style="text-align:left;white-space:nowrap"><b style="color:${color||'var(--chalk)'}">${label}</b></td>${cell(sum(obj))}${SPS.map(sp=>cell((obj||{})[sp])).join('')}</tr>`;
   const Y=D.you;
   const rows=[row('You (picks)',Y.picks,'var(--gold)')].concat(
@@ -18223,11 +18249,12 @@ function renderRecordsHub(){
   const mktBtn=(k,l)=>'<button class="'+((_mkt===k)?'on':'')+'" onclick="REC_FILTER_MKT=\''+k+'\';renderRecordsHub()">'+l+'</button>';
   const filterBar='<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+spBtn('all','All Sports')+spBtn('mlb','⚾ MLB')+spBtn('nfl','🏈 NFL')+spBtn('ncaaf','🏟 CFB')+spBtn('nhl','🏒 NHL')+spBtn('nba','🏀 NBA')+'</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+mktBtn('all','All bets')+mktBtn('ml','Sides')+mktBtn('spread','Spreads')+mktBtn('total','Totals')+'</div>';
   el.innerHTML=recViewBar()+filterBar+`<div class="tkt hi" style="margin-bottom:8px"><h3>Records hub — everyone, every sport</h3>
-    <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+':''}$${Y.tickets.units.toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
+    <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+$':'-$'}${Math.abs(Y.tickets.units).toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
     <div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;border-collapse:collapse;text-align:center">
       <tr style="color:var(--mute)"><td></td><td>ALL</td><td>MLB</td><td>NFL</td><td>CFB</td><td>NHL</td></tr>${rows.join('')}</table></div>
     <div class="sub mono" style="font-size:9px;color:var(--mute);margin-top:4px">Green = beating the break-even its prices needed (10+ calls), red = below it. Your picks count each distinct leg once, however many tickets carried it. Sport detail is below.</div>
-    <div style="margin-top:6px">${[['You (picks)',sum(Y.picks)]].concat(HUB_VOICES.filter(v=>D.M[v]).map(v=>[(CHARS[v]?CHARS[v].chip+' ':'')+v,sum(D.M[v])])).map(([nm,o])=>{const L=luckSkillPriced(o);
+    <div style="margin-top:6px">${[['You (picks)',sum(Y.picks)]].concat(HUB_VOICES.filter(v=>D.M[v]).map(v=>[(CHARS[v]?CHARS[v].chip+' ':'')+v,sum(D.M[v])])).map(([nm,o])=>{const you=nm==='You (picks)';const P=you?{w:o.pw,n:o.pn,be:o.be,bv:o.bv}:o;const L=luckSkillPriced(P);
+      if(you&&o.n)return`<div class="mono" style="font-size:9.5px">You — priced legs: ${o.pw}-${o.pn-o.pw} <span style="color:var(--mute)">(${o.pn?Math.round(o.pw/o.pn*100):0}% · prices needed ${o.pn?Math.round(o.be/o.pn*100):0}%)</span> → <b style="color:${L.lab==='strong sign of skill'?'var(--win)':L.lab==='leaning skill'?'var(--cold)':L.lab==='below breakeven'?'var(--rust)':'var(--mute)'}">${L.lab}</b>${L.p!=null?` <span style="color:var(--mute)">(p=${L.p.toFixed(2)})</span>`:''}${o.un?`<br><span style="color:var(--mute)">+ ${o.uw}-${o.un-o.uw} on legs with no price of their own (same-game parlay / alt lines) — not judged, their prices weren't recorded</span>`:''}</div>`;
       return o.n?`<div class="mono" style="font-size:9.5px">${txtEsc(nm)}: ${o.w}-${o.n-o.w} <span style="color:var(--mute)">(${Math.round(o.w/o.n*100)}% · prices needed ${o.be?Math.round(o.be/o.n*100):52}%)</span> → <b style="color:${L.lab==='strong sign of skill'?'var(--win)':L.lab==='leaning skill'?'var(--cold)':L.lab==='below breakeven'?'var(--rust)':'var(--mute)'}">${L.lab}</b>${L.p!=null?` <span style="color:var(--mute)">(p=${L.p.toFixed(2)})</span>`:''}</div>`:'';}).join('')}
     <div class="sub mono" style="font-size:9px;color:var(--mute)">Luck vs skill: graded against what each pick's own price needed to break even — a -300 favorite has to hit 75%, not 52%. p under 0.05 is real evidence.</div></div></div>`+(()=>{try{const _eb=typeof explainBtn==='function'?explainBtn():'';return strategyHtml()+learnHealthHtml()+clvHtml()+calibrationHtml()+calOffsetsHtml()+_eb+charProfilesHtml()+playbooksHtml();}catch(e){console.warn('clv/playbooks',e);return''}})();
 }
@@ -18267,8 +18294,8 @@ function storageMeterHtml(){
   const col=pct>85?'var(--rust)':pct>65?'var(--gold)':'var(--win)';
   return`<div class="sub"><b>${(R.tot/1048576).toFixed(2)} MB</b> of ~5 MB used (${pct.toFixed(0)}%)</div>
     <div style="height:7px;background:var(--rule);border-radius:4px;margin:4px 0"><div style="height:7px;width:${pct}%;background:${col};border-radius:4px"></div></div>
-    ${R.rows.slice(0,8).map(([k,n])=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${esc(k)}</span><span>${(n/1024).toFixed(0)} KB</span></div>`).join('')}
-    ${PERF_LOG.length?`<div class="mktlab" style="margin-top:8px">Speed on this device</div>${PERF_LOG.slice(-10).reverse().map(x=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${esc(x.what)}</span><span style="color:${x.ms>800?'var(--rust)':x.ms>250?'var(--gold)':'var(--win)'}">${x.ms} ms</span></div>`).join('')}`:''}
+    ${R.rows.slice(0,8).map(([k,n])=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${txtEsc(k)}</span><span>${(n/1024).toFixed(0)} KB</span></div>`).join('')}
+    ${PERF_LOG.length?`<div class="mktlab" style="margin-top:8px">Speed on this device</div>${PERF_LOG.slice(-10).reverse().map(x=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${txtEsc(x.what)}</span><span style="color:${x.ms>800?'var(--rust)':x.ms>250?'var(--gold)':'var(--win)'}">${x.ms} ms</span></div>`).join('')}`:''}
     <div class="bar" style="margin-top:6px"><button onclick="storageTidy(true);document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Tidy now</button>
       <button onclick="freeStorageNow();document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Free space (drops rebuildable caches)</button></div>`;
 }
@@ -18316,7 +18343,7 @@ function hedgeHtml(t){
   const H=hedgeInfo(t);if(!H)return'';
   const $=x=>'$'+x.toFixed(2);
   return`<div style="margin-top:6px;padding:8px 10px;border-radius:9px;border:1.5px solid #FFD75E;background:rgba(255,215,94,.07);font-family:'IBM Plex Mono';font-size:10.5px;line-height:1.55">
-    <b style="color:#FFD75E">HEDGE WINDOW</b> — one leg left: <b>${esc(H.leg.pick)}</b>. Ticket pays ${$(H.P)}${H.real?'':' (est.)'}.<br>
+    <b style="color:#FFD75E">HEDGE WINDOW</b> — one leg left: <b>${txtEsc(H.leg.pick)}</b>. Ticket pays ${$(H.P)}${H.real?'':' (est.)'}.<br>
     ${H.lock>0?`<b>Lock profit:</b> bet ${$(H.Heq)} on ${esc(H.oppLabel)} at ${H.opp>0?'+':''}${H.opp} → <b style="color:var(--win)">+${$(H.lock)} guaranteed</b> either way.<br>`:''}
     <b>Protect the stake:</b> bet ${$(H.Hbe)} on ${esc(H.oppLabel)} → lose nothing if it misses, <b>+${$(H.ifWin)}</b> if it hits.<br>
     <span style="color:var(--mute)">${H.assumed?'Opposite price assumed -110 — use the real number from your book.':'Opposite price from your uploaded lines.'} Riding it unhedged: +${$(H.P-H.S)} or −${$(H.S)}.</span></div>`;
@@ -18386,7 +18413,7 @@ function msLiveHtml(m){const open=msOpenTickets(m);if(!open.length)return'';
       const st=r&&r.push?'↔':r&&!r.live&&r.hit===true?'✅':r&&!r.live&&r.hit===false?'❌':e&&e.state==='in'?'⏳':'·';
       const qc=q==null?'var(--mute)':q>=0.6?'var(--win)':q>=0.4?'var(--gold)':'var(--rust)';
       return`<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--rule)"><span style="width:16px;text-align:center">${st}</span>
-        <div style="flex:1;min-width:0"><b style="font-size:11.5px">${esc(l.pick||'')}</b>${l.price!=null?` <span class="mono" style="font-size:10px;color:var(--gold)">${l.price>0?'+':''}${l.price}</span>`:''}
+        <div style="flex:1;min-width:0"><b style="font-size:11.5px">${txtEsc(l.pick||'')}</b>${l.price!=null?` <span class="mono" style="font-size:10px;color:var(--gold)">${l.price>0?'+':''}${l.price}</span>`:''}
           <div class="mono" style="font-size:9.5px;color:${e&&e.state==='in'?'var(--chalk)':'var(--mute)'}">${e&&e.state==='in'?'<span style="color:#ff4b5c">● </span>':''}${sc}</div></div>
         ${q!=null&&!(r&&!r.live&&(r.hit!=null||r.push))?`<span class="mono" style="font-size:10.5px;font-weight:800;color:${qc}">${Math.round(q*100)}%</span>`:''}</div>`;}).join('');
     const p=C?C.p:null;const pc=p==null?'':p===0?'busted':(p*100<1?(p*100).toFixed(2):(p*100).toFixed(1))+'%';
@@ -18906,6 +18933,8 @@ function msXP(){let g=0;try{g=msgGet().xp||0;}catch(e){}return msAll().reduce((a
 function msRank(xp){let r=MS_RANKS[0];MS_RANKS.forEach(x=>{if(xp>=x[0])r=x;});const nx=MS_RANKS.find(x=>x[0]>xp);return{name:r[1],next:nx};}
 function msStart(id,scope){
   const T=MS_TEMPLATES[id]||MS_TEMPLATES[{ladder:'ladder',heist:'heist',grind:'grind',weekend:'weekend_warrior',custom:'custom'}[id]];if(!T)return;
+  /* v1.93: the same challenge twice just doubles the stake on one plan — ask first */
+  if(T.id!=='custom'&&msAll().some(x=>x.status==='active'&&x.type===T.id&&x.name===T.name)&&!confirm(`"${T.name}" is already running. Start a second copy anyway?`))return;
   let start=T.start,goal=T.goal,days=T.days;
   if(T.id==='custom'){start=+prompt('Starting balance $',T.start)||T.start;goal=+prompt('Goal $',T.goal)||T.goal;days=+prompt('Days',T.days)||T.days;}
   const m={id:Date.now()+Math.floor(Math.random()*1000),type:T.id,name:T.name,start,goal,days,startDate:today(),balance:start,attempt:1,steps:[],status:'active',
@@ -18991,7 +19020,7 @@ function msRoadmapHtml(m){
     Object.keys(bal).filter(x=>x<=date).forEach(x=>{last=bal[x];});
     const past=d<=pc.t;const cp=cps.find(c=>c.amt>=m.start*Math.pow(G,Math.max(0,d-step)/days)&&c.amt<=tgt);
     rows.push(`<tr style="${d===pc.t?'background:rgba(245,165,36,.12)':''}"><td>${d===pc.t?'▶ ':''}Day ${d}</td><td>${date.slice(5)}</td><td>$${tgt.toFixed(tgt<100?2:0)}</td>
-      <td style="color:${!past?'var(--mute)':last>=tgt?'var(--win)':'var(--rust)'}">${past?'$'+last.toFixed(2):'—'}</td><td style="color:var(--gold)">${cp?esc(cp.name):''}</td></tr>`);}
+      <td style="color:${!past?'var(--mute)':last>=tgt?'var(--win)':'var(--rust)'}">${past?'$'+last.toFixed(2):'—'}</td><td style="color:var(--gold)">${cp?txtEsc(cp.name):''}</td></tr>`);}
   const lane=(()=>{try{const o=msOrders(m);return o.lanes.map(x=>`${x.lab}: $${x.stake} on ${x.k}-leg${x.minDec?` at ${decimalToAmerican(x.minDec)} or better`:''}`).join(' · ');}catch(e){return'';}})();
   return`<div class="tkt" style="margin-top:6px"><h3>🗺 Roadmap · $${m.start} → $${m.goal.toLocaleString()} in ${days} days</h3>
     <div class="sub mono">Path needs ×${daily.toFixed(3)} per day (${((daily-1)*100).toFixed(1)}%/day). Today: day ${pc.t}, target $${pc.ideal.toFixed(2)}, you have $${pc.have.toFixed(2)} (${Math.round(pc.ratio*100)}% of pace).
@@ -19099,7 +19128,7 @@ function msSetMut(id,key){const A=msAll();const m=A.find(x=>String(x.id)===Strin
 function msgMutHtml(m){if(m.status!=='active')return(m.mut||[]).length?`<div class="sub mono" style="font-size:9.5px">mutators: ${m.mut.map(k=>(MSG_MUT[k]||{}).icon+' '+(MSG_MUT[k]||{}).name).join(' · ')}${m.mutWin?' — <b style="color:var(--win)">bonus earned</b>':''}</div>`:'';
   const locked=(m.steps||[]).length>0;const broken=(m.steps||[]).some(s=>s.mutOk===false);
   return`<div class="msg-mut">${Object.entries(MSG_MUT).map(([k,M])=>{const on=(m.mut||[]).includes(k);
-    return`<button class="msg-chip${on?' on':''}" ${locked?'disabled':''} title="${esc(M.desc)}" onclick="msSetMut(${m.id},'${k}')">${M.icon} ${esc(M.name)} ×${M.mult}</button>`;}).join('')}
+    return`<button class="msg-chip${on?' on':''}" ${locked?'disabled':''} title="${txtEsc(M.desc)}" onclick="msSetMut(${m.id},'${k}')">${M.icon} ${txtEsc(M.name)} ×${M.mult}</button>`;}).join('')}
     <div class="sub mono" style="font-size:9.5px">${locked?((m.mut||[]).length?(broken?'<span style="color:var(--rust)">a mutator rule was broken — bonus lost</span>':`mutators locked in · win for ×${msgMutMult(m).toFixed(2)} XP`):'mutators lock once a ticket is attached'):'Optional: add rules before your first ticket for bonus XP'}</div></div>`;}
 /* ── the tick: evaluate everything, grant what's newly earned (idempotent) ── */
 function msgTick(){const G=msgGet();const td=today();
@@ -19130,7 +19159,7 @@ function msgBuilderHtml(){const routes=['stairs|1|0.1','stairs|2|0.2','compound|
   const rules=Object.keys(MS_FILTERS||{});
   return`<details class="tkt msg-card"><summary><b>🛠 Build your own run</b> <span class="sub mono" style="font-size:10px">— set the numbers, see the real odds before you commit</span></summary>
     <div class="msg-grid"><label>Start $<input id="mbS" type="number" value="100" min="1"></label><label>Goal $<input id="mbG" type="number" value="500" min="2"></label><label>Days<input id="mbD" type="number" value="30" min="1" max="365"></label>
-    <label>Route<select id="mbR">${routes.map(r=>`<option value="${r}">${esc(msRouteLabel(msParse(r)))}</option>`).join('')}</select></label>
+    <label>Route<select id="mbR">${routes.map(r=>`<option value="${r}">${txtEsc(msRouteLabel(msParse(r)))}</option>`).join('')}</select></label>
     <label>Rule<select id="mbU"><option value="">none</option>${rules.map(r=>`<option>${r}</option>`).join('')}</select></label>
     <label>Sport<select id="mbP"><option value="">any</option>${['mlb','nfl','ncaaf','nhl','nba'].map(s=>`<option>${s}</option>`).join('')}</select></label>
     <label>Name<input id="mbN" type="text" placeholder="My run"></label></div>
@@ -19153,17 +19182,17 @@ function msgHubHtml(){let G;try{G=msgTick();}catch(e){console.warn('game tick',e
   const ds=msgDailyState();const B=msgBoss();const St=msgStats();const camp=msgCampaign();const S=G.streak;
   const fx=MSG_FX.splice(0).slice(-3);
   const daily=`<div class="msg-card tkt"><div class="msg-row"><b>Daily 3</b><span class="mono msg-streak" title="process days (2 of 3 objectives); freezes protect a missed day">🔥 ${S.live||0} day${S.live===1?'':'s'} · best ${S.best} · 🧊×${S.freezes}</span></div>
-    ${ds.map(o=>`<div class="msg-obj${o.ok?' ok':''}">${o.ok?'✅':o.icon} <b>${esc(o.name)}</b> <span class="sub">${esc(o.desc)}</span> <span class="mono">+40</span></div>`).join('')}
+    ${ds.map(o=>`<div class="msg-obj${o.ok?' ok':''}">${o.ok?'✅':o.icon} <b>${txtEsc(o.name)}</b> <span class="sub">${txtEsc(o.desc)}</span> <span class="mono">+40</span></div>`).join('')}
     <div class="sub mono" style="font-size:9.5px">2 of 3 keeps the streak alive · all 3 = +60 bonus · a 7-day streak earns a freeze (max 3)</div></div>`;
   const hp=1-B.dealt/B.hp;
-  const boss=`<div class="msg-card tkt msg-boss${B.dead?' dead':''}"><div class="msg-row"><b>${B.icon} Weekly boss: ${esc(B.name)}</b><span class="mono">+400 XP</span></div>
-    <div class="sub">${esc(B.desc)} · week of ${B.wk.slice(5)}</div>
+  const boss=`<div class="msg-card tkt msg-boss${B.dead?' dead':''}"><div class="msg-row"><b>${B.icon} Weekly boss: ${txtEsc(B.name)}</b><span class="mono">+400 XP</span></div>
+    <div class="sub">${txtEsc(B.desc)} · week of ${B.wk.slice(5)}</div>
     <div class="msg-hp"><div style="width:${(hp*100).toFixed(0)}%"></div></div><div class="sub mono" style="font-size:10px">${B.dead?'💀 DEFEATED':`${B.hp-B.dealt} hit${B.hp-B.dealt===1?'':'s'} left (${B.dealt}/${B.hp})`}</div></div>`;
-  const map=`<div class="msg-card tkt"><b>🗺 Campaign</b><div class="msg-map">${camp.map(c=>`<div class="msg-node${c.clear?' clear':c.open?' open':''}" title="${esc(c.name)}: win 3 to clear (+${300*(c.i+1)} XP)">
-      ${msgRing(c.w/3,c.clear?'var(--win)':'var(--gold)',c.icon,52)}<div class="mono" style="font-size:9px">${esc(c.name)}<br>${Math.min(c.w,3)}/3${c.open?'':' 🔒'}</div></div>`).join('<div class="msg-path"></div>')}</div>
+  const map=`<div class="msg-card tkt"><b>🗺 Campaign</b><div class="msg-map">${camp.map(c=>`<div class="msg-node${c.clear?' clear':c.open?' open':''}" title="${txtEsc(c.name)}: win 3 to clear (+${300*(c.i+1)} XP)">
+      ${msgRing(c.w/3,c.clear?'var(--win)':'var(--gold)',c.icon,52)}<div class="mono" style="font-size:9px">${txtEsc(c.name)}<br>${Math.min(c.w,3)}/3${c.open?'':' 🔒'}</div></div>`).join('<div class="msg-path"></div>')}</div>
     <div class="sub" style="font-size:9.5px">Clear a chapter by winning 3 of its missions. Chapters unlock in order (2 wins opens the next) — free play is always available on the board below.</div></div>`;
   const tro=MSG_ACH.map(([id,icon,name,rar,desc,fn,tgt])=>{const got=G.ach[id];let v=0;try{v=fn(St)||0;}catch(e){}const R=MSG_RAR[rar];
-    return`<div class="msg-tro${got?' got':''}" style="--rc:${R[1]}" title="${esc(desc)} · ${R[0]} · +${R[2]} XP"><div class="i">${got?icon:'🔒'}</div><div class="n">${esc(name)}</div>
+    return`<div class="msg-tro${got?' got':''}" style="--rc:${R[1]}" title="${esc(desc)} · ${R[0]} · +${R[2]} XP"><div class="i">${got?icon:'🔒'}</div><div class="n">${txtEsc(name)}</div>
       ${got?`<div class="r">${R[0]}</div>`:`<div class="msg-bar"><div style="width:${Math.min(100,v/tgt*100).toFixed(0)}%"></div></div><div class="r">${Math.min(v,tgt)}/${tgt}</div>`}</div>`;}).join('');
   const nGot=Object.keys(G.ach).length;
   const trophies=`<details class="msg-card tkt"${nGot?'':' open'}><summary><b>🏆 Trophy case</b> <span class="mono" style="font-size:10px">${nGot}/${MSG_ACH.length}</span></summary><div class="msg-tros">${tro}</div></details>`;
@@ -19296,7 +19325,7 @@ function msCard(m){
     <div class="sub">$${m.start} → <b>$${m.goal.toLocaleString()}</b> in ${m.days} days · balance <b style="color:var(--gold)">${ms$(m.balance)}</b>${m.safe?` · safe <b style="color:var(--win)">${ms$(m.safe)}</b>`:''} · ${X.daysLeft} day${X.daysLeft>1?'s':''} left</div>
     ${m.status==='won'?`<div class="sub" style="color:var(--win)"><b>MISSION COMPLETE</b>${m.clean?' · clean run bonus':''}</div>`:''}
     ${map}${orders}<div id="msLive_${m.id}">${msLiveHtml(m)}</div>${msFitHtml(m)}${steps}
-    <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${esc(T.note||'')}</div>
+    <div class="sub" style="font-size:10px;color:var(--mute);margin-top:4px">${txtEsc(T.note||'')}</div>
     ${active?msAdaptHtml(m):''}${typeof msgMutHtml==='function'?msgMutHtml(m):''}
     <div class="bar" style="margin-top:4px"><button onclick="msRoadmapToggle(${m.id})">🗺 Roadmap</button>${!active?`<button onclick="msRestart(${m.id})">Run it back</button>`:''}<button onclick="msDelete(${m.id})">Delete</button></div>
     <div id="msRM_${m.id}" style="display:none"></div></div>`;
@@ -19320,10 +19349,10 @@ function msBoardHtml(){
     const route=T.pots?'🧺 '+T.pots.map(x=>x[0]).join(' · '):T.route?msRouteLabel(msParse(T.route)):'planner picks';
     const first=T.pots?'':T.route?(()=>{const q=msParse(T.route);return' · first bet $'+Math.max(1,Math.round(Math.min(T.start,msStakeFor(q.route,q.cfg,T.start,T.start))*2)/2);})():'';
     return`<div class="tkt" style="margin:6px 0;padding:10px">
-      <div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline"><b>${esc(T.name)}</b>${D?`<span class="mono" style="font-size:9px;color:${D[2]}">${D[1].toUpperCase()} · ${(S.p*100).toFixed(S.p<0.01?2:1)}%</span>`:''}</div>
+      <div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline"><b>${txtEsc(T.name)}</b>${D?`<span class="mono" style="font-size:9px;color:${D[2]}">${D[1].toUpperCase()} · ${(S.p*100).toFixed(S.p<0.01?2:1)}%</span>`:''}</div>
       <div class="mono" style="font-size:10.5px">$${T.start} → $${T.goal.toLocaleString()} · ${T.days} days${first}</div>
       <div class="mono" style="font-size:9.5px;color:var(--mute)">${route}${T.rule?' · '+MS_FILTERS[T.rule].lab:''}${T.sport?' · '+SPORT_LAB[T.sport]:''}</div>
-      <div class="sub" style="font-size:11px;margin:3px 0">${esc(T.note)}</div>
+      <div class="sub" style="font-size:11px;margin:3px 0">${txtEsc(T.note)}</div>
       <div class="bar" style="align-items:center">${T.pots&&T.pots.every(x=>x[4])?'':msSportSelect(T.sport,'',`msSp-${T.id}`)}<button class="primary" onclick="msStart('${T.id}',(document.getElementById('msSp-${T.id}')||{}).value)">Start</button></div></div>`;}).join('');
   const tiers=`<div class="subnav" style="flex-wrap:wrap;margin-bottom:4px"><button class="${MS_TIER==='all'?'on':''}" onclick="MS_TIER='all';msRender()">By category</button>${MS_DIFF.slice().reverse().reverse().map(d=>`<button class="${MS_TIER===d[1]?'on':''}" style="color:${d[2]}" onclick="MS_TIER='${d[1]}';msRender()">${d[1]}</button>`).join('')}</div>`;
   const cats=MS_TIER==='all'?`<div class="subnav" style="flex-wrap:wrap">${Object.entries(MS_CATS).map(([k,l])=>`<button class="${MS_CAT===k?'on':''}" onclick="MS_CAT='${k}';msRender()">${l}</button>`).join('')}</div>`:
@@ -19336,8 +19365,8 @@ function missionsHtml(inner){
   const head=`<div class="mono" style="font-size:10.5px;margin:2px 0 6px">RANK <b style="color:#FFD75E">${R.name.toUpperCase()}</b> · ${xp} XP${R.next?` · ${R.next[0]-xp} to ${R.next[1]}`:''}${act.length?` · ${act.length} running · today's stakes across missions <b style="color:var(--gold)">${ms$(exposure)}</b>`:''}</div>`;
   const hub=(()=>{try{return msgHubHtml()}catch(e){console.warn('game hub',e);return''}})();
   const bkc=(()=>{try{const T=bkChallenges();return`<div class="tkt" style="border-color:#c9a227;margin:8px 0"><h3>🏦 The Banker's challenges this week</h3>
-      <div class="sub" style="font-size:10px">Written from the characters' $100 bankroll race. They change every Monday.</div>${T.map(t=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${esc(t.name)}</b> <span class="mono" style="font-size:10px">$${t.start} → $${t.goal} in ${t.days} days</span>
-        <div class="sub" style="font-size:10.5px">${esc(t.note)}</div><div class="bar" style="margin-top:3px"><button style="font-size:10px" onclick="msStart('${t.id}')">Start</button></div></div>`).join('')}</div>`;}catch(e){console.warn('banker challenges',e);return''}})();
+      <div class="sub" style="font-size:10px">Written from the characters' $100 bankroll race. They change every Monday.</div>${T.map(t=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(t.name)}</b> <span class="mono" style="font-size:10px">$${t.start} → $${t.goal} in ${t.days} days</span>
+        <div class="sub" style="font-size:10.5px">${txtEsc(t.note)}</div><div class="bar" style="margin-top:3px">${msAll().some(x=>x.status==='active'&&x.type===t.id)?'<span class="mono" style="font-size:10px;color:var(--win)">✓ running</span>':`<button style="font-size:10px" onclick="msStart('${t.id}')">Start</button>`}</div></div>`).join('')}</div>`;}catch(e){console.warn('banker challenges',e);return''}})();
   const body=`${head}${hub}<div class="lasStatus sub mono" style="font-size:10px"></div>${(()=>{try{return msMatcherHtml()}catch(e){return''}})()}${bkc}${A.length?A.map(msCard).join(''):'<div class="empty">No missions running. Pick one below — the planner does the math and writes your orders every day.</div>'}
     <div class="sbar" style="margin-top:12px"><h2>Mission board · ${MS_LIB.length}</h2><div class="ln"></div></div>
     <div class="sub mono" style="font-size:9.5px;color:var(--mute)">Difficulty and finish % are simulated on ${myLegRate().src}. They move as your record grows.</div>
@@ -19489,13 +19518,17 @@ function marketFair(sp,g,market,side,line){
 
 /* ── 5. Model + market blend, weighted by what has actually predicted better ── */
 let BLEND_C=null,BLEND_SIG='';
+const BLEND_PRIOR=0.2;
 function blendWeight(sp,market){
   const V=roGet(VOICES_KEY,[]);const sig=V.length;if(!BLEND_C||BLEND_SIG!==sig){BLEND_C={};BLEND_SIG=sig;}
   const k=sp+'|'+market;if(BLEND_C[k])return BLEND_C[k];
   const R=V.filter(x=>x.voice==='Sim'&&x.sp===sp&&x.market===market&&x.graded&&x.hit!=null&&x.simP>0&&x.mktP>0);
   let best=0.5,bestB=Infinity;
   for(let w=0;w<=1.0001;w+=0.05){let b=0;R.forEach(x=>{const p=w*x.simP+(1-w)*x.mktP;b+=Math.pow((x.hit?1:0)-p,2);});if(R.length&&b<bestB){bestB=b;best=w;}}
-  const n=R.length;const w=(n*best+25*0.5)/(n+25);   // few graded games → stay near an even blend
+  /* v1.93: start market-heavy. On Chris's graded history the book's price out-predicted the Sim
+     in NHL and in CFB ML/totals (best Sim weight ≈ 0); a sport+market earns Sim weight only by
+     beating the line on graded games. The old prior assumed an even 50/50 split. */
+  const n=R.length;const w=(n*best+25*BLEND_PRIOR)/(n+25);
   return(BLEND_C[k]={w,n});
 }
 function blendProb(sp,market,simP,mktP){if(simP==null)return null;if(mktP==null)return simP;const {w}=blendWeight(sp,market);return w*simP+(1-w)*mktP;}
@@ -19622,7 +19655,7 @@ function factorTable(sp){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.f
   return(FAC_C[sp]=T);}
 function factorAdj(sp,fs){if(!fs||!fs.length)return 0;const T=factorTable(sp);const a=fs.reduce((s,k)=>s+((T[k]||{}).adj||0),0);return Math.max(-0.04,Math.min(0.04,a));}
 function factorHtml(sp){const T=factorTable(sp);const rows=Object.entries(T).sort((a,b)=>b[1].n-a[1].n).map(([k,o])=>
-  `<tr><td style="text-align:left">${esc(FAC_LAB[k]||k)}</td><td>${o.n}</td><td>${Math.round(o.pred*100)}%</td><td>${Math.round(o.rate*100)}%</td><td style="color:${o.adj?'var(--gold)':'var(--mute)'}">${o.adj?(o.adj>0?'+':'')+(o.adj*100).toFixed(1)+' pts':o.n<30?'needs '+(30-o.n)+' more':'not significant'}</td></tr>`).join('');
+  `<tr><td style="text-align:left">${txtEsc(FAC_LAB[k]||k)}</td><td>${o.n}</td><td>${Math.round(o.pred*100)}%</td><td>${Math.round(o.rate*100)}%</td><td style="color:${o.adj?'var(--gold)':'var(--mute)'}">${o.adj?(o.adj>0?'+':'')+(o.adj*100).toFixed(1)+' pts':o.n<30?'needs '+(30-o.n)+' more':'not significant'}</td></tr>`).join('');
   if(!rows)return'';return`<div style="overflow-x:auto;margin-top:6px"><div class="sub" style="font-size:9.5px"><b>Situations the brain is testing</b> — it only adjusts once a pattern is statistically real (30+ games, z ≥ 1.5), and never by more than 4 pts.</div>
   <table class="mono" style="width:100%;font-size:10px;text-align:center"><tr style="color:var(--mute)"><td style="text-align:left">situation</td><td>n</td><td>model said</td><td>won</td><td>learned adj</td></tr>${rows}</table></div>`;}
 /* ══ CALIBRATION — shown per sport, day by day, with the reasons ══════════
@@ -19723,7 +19756,7 @@ try{if(typeof renderToday==='function'&&!renderToday.__hp){const _rt=renderToday
 /* ══════════════════════════════════════════════════════════════════════════
    v1.85 · WHY WE LIKE IT · THE BANKER'S DESK · THE ROLL CALL · PERFECT SGP
    ══════════════════════════════════════════════════════════════════════════ */
-const txtEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function txtEsc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 const fairAmer=p=>p==null||!(p>0&&p<1)?null:p>=0.5?-Math.round(p/(1-p)*100):Math.round((1-p)/p*100);
 const sgnP=n=>n==null?'':(n>0?'+':'')+n;
 const mkNorm=m=>m==='moneyline'?'ml':m==='pl'?'spread':m;
@@ -19892,7 +19925,7 @@ function renderBankerTab(){const el=document.getElementById('bankerBody');if(!el
     <div><div style="font-family:'Archivo';font-weight:900;font-size:18px">$${D.B.toFixed(0)}</div><div class="m">bankroll</div></div>
     <div><div style="font-family:'Archivo';font-weight:900;font-size:18px">$${D.cap.toFixed(2)}</div><div class="m">${D.fromLimit?'daily limit':'10% day cap'}</div></div>
     <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${D.spent.toFixed(2)}</div><div class="m">on the desk</div></div>
-    <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:${R.money>=0?'var(--win)':'var(--rust)'}">${R.money>=0?'+':''}$${R.money.toFixed(2)}</div><div class="m">desk P/L</div></div></div>
+    <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:${R.money>=0?'var(--win)':'var(--rust)'}">${R.money>=0?'+$':'-$'}${Math.abs(R.money).toFixed(2)}</div><div class="m">desk P/L</div></div></div>
     <div class="mono" style="font-size:9.5px;color:var(--mute);text-align:center;margin-top:6px">Banker's own ${u(R.own)} · slate ${u(R.slate)} · roll call cut ${u(R.cut)} · full roll call ${u(R.roll)}</div></div>`;
   const own=D.own?bkTicketHtml('🏦 The Banker\'s parlay',D.own,txtEsc(D.own.why),D.d):`<div class="tkt"><h3>🏦 The Banker's parlay</h3><div class="sub">Needs 2+ games where at least two characters agree. Open more boards.</div></div>`;
   const slate=(D.slate||[]).map(t=>bkTicketHtml(`${(CHARS[t.v]||{}).chip||''} ${txtEsc(charName(t.v))}'s parlay`,t,'no game repeats anything above',D.d)).join('');
@@ -20041,10 +20074,14 @@ function cbPool(v){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
   let L;if(v==='__roll'){let R=null;try{const S=bkDayState();R=(S.locked?S:S.preview||{}).roll;}catch(e){}L=((R&&R.legs)||[]).map(x=>({...x,by:[x.v]}));}
   else L=(bkDayCands(V,d)[v]||[]);
   L=L.filter(x=>bkPriceOk(x.price)&&!cbStarted(x.sp,x.game)&&(CB_SP==='all'||x.sp===CB_SP));
-  const seen=new Set(),out=[];for(const x of L){const k=x.sp+'|'+x.game;if(seen.has(k))continue;seen.add(k);out.push({...x,k:k+'|'+x.m+'|'+x.sd});}
+  const seen=new Set(),out=[];for(const x of L){const k=x.sp+'|'+x.game;if(seen.has(k))continue;seen.add(k);
+    /* v1.93: chances through the truth map; blocked lanes left off */
+    let p=x.p;try{p=truthP(x.sp,x.p);}catch(e){}let lane='thin';try{lane=laneStatus(laneKey(x.sp,x.m,x.sd,x.price,x.line),x.v);}catch(e){}
+    if(lane==='blocked')continue;out.push({...x,p,lane,k:k+'|'+x.m+'|'+x.sd});}
   return out;}
 function cbDefault(pool){if(!pool.length)return[];if(CB_N!=='auto')return pool.slice(0,Math.min(+CB_N,pool.length)).map(x=>x.k);
-  if(pool.length<2)return pool.map(x=>x.k);const top=pool.slice(0,6);const sz=bkSize(top.map(x=>({p:x.score!=null?x.score:x.p,dec:americanToDecimal(x.price)})),2,Math.min(6,top.length));return top.slice(0,sz.k).map(x=>x.k);}
+  if(pool.length<2)return pool.map(x=>x.k);const top=pool.slice(0,6);const sz=bkSize(top.map(x=>({p:x.score!=null?x.score:x.p,dec:americanToDecimal(x.price)})),2,Math.min(6,top.length));
+  const k=legBudget(top.map(x=>x.p),sz.k);return top.slice(0,k).map(x=>x.k);}
 function cbSetV(v){CB_V=v;CB_SEL=null;renderTickets();}
 function cbSetN(n){CB_N=n;CB_SEL=null;renderTickets();}
 function cbSetSp(sp){CB_SP=sp;CB_SEL=null;renderTickets();}
@@ -20077,6 +20114,7 @@ function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const to
   let stake=0;try{const {B}=bkBudget();const sz=sel.length>=2?bkSize(sel.map(x=>({p:x.score!=null?x.score:x.p,dec:americanToDecimal(x.price)})),sel.length,sel.length):null;stake=sz&&sz.f>0?bkStake(sz.f,B):0;}catch(e){}
   const sum=sel.length?`<div class="tkt" style="border-left:3px solid var(--gold);margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:baseline"><b>${txtEsc(who)}'s ${sel.length}-leg ticket</b>
       <span style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold)">${sel.length>1?decimalToAmerican(dec):sgnP(sel[0].price)}</span></div>
+    ${sel.length>2&&pc<CORE_CASH_MIN?`<div class="mono" style="font-size:10px;color:var(--rust);margin:2px 0">⚠ ${(pc*100).toFixed(1)}% to cash is under the ${Math.round(CORE_CASH_MIN*100)}% leg budget — the best ${Math.max(2,legBudget(sel.map(x=>x.p).sort((a,b)=>b-a),sel.length))} of these cash ${(sel.map(x=>x.p).sort((a,b)=>b-a).slice(0,Math.max(2,legBudget(sel.map(x=>x.p).sort((a,b)=>b-a),sel.length))).reduce((a,p)=>a*p,1)*100).toFixed(0)}%</div>`:''}
     <div class="mono" style="font-size:10px;color:var(--mute)">${(pc*100).toFixed(1)}% to cash · EV ${pc*dec-1>=0?'+':''}${((pc*dec-1)*100).toFixed(1)}% at the leg chances${stake?` · Banker size $${stake.toFixed(2)} (¼-Kelly)`:''}</div>
     <div class="bar" style="margin-top:6px"><button class="primary" onclick="cbLock()">🔒 Lock this ticket</button></div></div>`:'<div class="sub" style="margin-top:6px">Check at least one pick to build a ticket.</div>';
   return`<div class="tkt"><h3>🎭 Build from a character</h3><div class="sub" style="font-size:10px;margin-bottom:6px">${intro}</div>${chips}${spRow}${nRow}
@@ -20457,6 +20495,13 @@ body.bnav main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
 #bnMore .bn-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:14px;background:var(--panel2);border:1px solid var(--rule);font-weight:700;font-size:11.5px;color:var(--chalk)}
 #bnMore .bn-tile span{font-size:22px}
+.bn-soc{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;border:1px solid var(--rule);background:var(--panel2,#18212C);color:var(--chalk);text-decoration:none;font:700 13px Inter,sans-serif}.bn-soc b{font-size:16px}
+/* brand (v1.93): the logo's yellow becomes the app's gold, badge in the header */
+:root{--gold:#FFC72C}
+.brand{align-items:center!important}
+.brand-badge{width:34px;height:34px;border-radius:50%;margin-right:9px;flex:none;box-shadow:0 0 0 1px rgba(255,199,44,.4),0 0 14px rgba(255,199,44,.22)}
+.brand>h1{margin-right:auto!important}
+.bar button.primary,button.primary{background:linear-gradient(135deg,#FFD84D 0%,#F5B000 100%)!important;color:#0B0F14!important}
 /* game-card button rows wrap instead of widening the page (v1.88) — an unwrapped
    row of 9–11 buttons made the layout ~600px wide and iOS zoomed the whole site out */
 .exprow{flex-wrap:wrap;gap:5px;padding:8px 0 2px}
@@ -20467,6 +20512,10 @@ body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
 /* backstop: nothing inside the page may push it wider than the screen */
 html,body{max-width:100%;overflow-x:clip}
 main{overflow-x:clip;min-width:0}
+/* intake fold (v1.93) */
+.intake-closed>*:not(.sbar):not(#bookStatus):not(#bookShotResult){display:none!important}
+.intake-closed .sbar{margin-bottom:0}.intake-box .sbar h2:after{content:' ▾';color:var(--mute)}.intake-closed .sbar h2:after{content:' ▸'}
+.intake-hint{font-size:9.5px;color:var(--mute);letter-spacing:.06em;margin-left:6px;font-weight:600;text-transform:none}
 /* challenge fit cards (v1.87) */
 .fit-panel>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
 .fit-sum{display:inline-flex;flex-wrap:wrap;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute)}.fit-sum i{font-style:normal;font-weight:700}
@@ -20492,7 +20541,12 @@ button.fit-at.go{background:linear-gradient(135deg,#3DDC84,#21a865);color:#0B0F1
 const BN_PRIMARY=['games','today','banker','mine','tickets'];
 const BN_ICO={games:'🏟',today:'⚡',banker:'🏦',mine:'📡',tickets:'🎟',grades:'📊',money:'💰',best:'🏆',coach:'🧠',chat:'💬',settings:'⚙️',recap:'🧾',sharp:'🦈',intel:'🛰',more:'☰'};
 function skinNavName(b){return((b.getAttribute('onclick')||'').match(/tab\('(\w+)'/)||[])[1]||(b.id==='navMore'?'more':'');}
-function skinSetup(){try{if(!document.getElementById('skinCss')){const st=document.createElement('style');st.id='skinCss';st.textContent=SKIN_CSS;document.head.appendChild(st);}
+/* v1.93 · the Intake box folds to one line so the games come first; tap to open, choice remembered */
+function intakeCollapse(){const ta=document.getElementById('intakePaste');if(!ta)return;const tk=ta.closest('.tkt');if(!tk||tk.__ic)return;tk.__ic=1;tk.classList.add('intake-box');
+  let open=false;try{open=localStorage.getItem('d4.intakeOpen')==='1';}catch(e){}tk.classList.toggle('intake-closed',!open);
+  const head=tk.querySelector('.sbar');if(head){head.style.cursor='pointer';const h2=head.querySelector('h2');if(h2)h2.innerHTML='＋ Intake <span class="intake-hint">odds · trends · screenshots · tickets</span>';
+    head.onclick=()=>{const c=tk.classList.toggle('intake-closed');try{localStorage.setItem('d4.intakeOpen',c?'0':'1');}catch(e){}};}}
+function skinSetup(){try{intakeCollapse();}catch(e){}try{if(!document.getElementById('skinCss')){const st=document.createElement('style');st.id='skinCss';st.textContent=SKIN_CSS;document.head.appendChild(st);}
   try{['mlb','nfl','ncaaf','nhl','nba'].forEach(s=>{const b=document.getElementById('sportBtn-'+s);if(b)b.classList.toggle('on',s===(window.__PAGE_SPORT__||ACTIVE_SPORT));});}catch(e){}
   const nav=document.querySelector('nav');if(!nav)return;
   const phone=window.matchMedia&&window.matchMedia('(max-width: 760px)').matches;document.body.classList.toggle('bnav',!!phone);
@@ -20504,12 +20558,18 @@ function skinSetup(){try{if(!document.getElementById('skinCss')){const st=docume
   const more=document.getElementById('navMore');if(more&&phone&&!more.__bn){more.__bn=1;more.textContent='More';more.setAttribute('data-ico','☰');more.onclick=bnMoreOpen;}
   /* keep More last on the bar */
   if(more&&phone)nav.appendChild(more);}catch(e){console.warn('skin',e);}}
+/* TheDesk socials (v1.93) — shown in the More sheet, the launcher and the public picks page */
+const THEDESK_SOCIAL={fb:'https://www.facebook.com/share/1FCDFdUvRp/',tg:'https://t.me/TheDeskApp'};
+function socialHtml(){const S=THEDESK_SOCIAL;const a=[];
+  if(S.fb)a.push(`<a class="bn-soc" href="${txtEsc(S.fb)}" target="_blank" rel="noopener" style="border-color:#1877f255"><b style="color:#1877F2">f</b> Facebook</a>`);
+  if(S.tg)a.push(`<a class="bn-soc" href="${txtEsc(S.tg)}" target="_blank" rel="noopener" style="border-color:#29a9eb55"><b style="color:#29A9EB">✈</b> Telegram</a>`);
+  return a.length?`<div style="display:flex;gap:8px;margin-top:12px">${a.join('')}</div>`:'';}
 function bnMoreOpen(){const nav=document.querySelector('nav');if(!nav)return;const items=[...nav.querySelectorAll('button')].filter(b=>{const n=skinNavName(b);return n&&n!=='more'&&!BN_PRIMARY.includes(n);});
   let ov=document.getElementById('bnMore');if(ov){ov.remove();return;}
   ov=document.createElement('div');ov.id='bnMore';ov.style.cssText='position:fixed;inset:0;z-index:85;background:rgba(0,0,0,.5);display:flex;align-items:flex-end';ov.onclick=ev=>{if(ev.target===ov)ov.remove();};
   ov.innerHTML=`<div style="width:100%;background:var(--panel,#111820);border-radius:18px 18px 0 0;padding:14px 14px calc(96px + env(safe-area-inset-bottom));border-top:1px solid var(--rule)">
     <div class="mono" style="font-size:9.5px;letter-spacing:.12em;color:var(--mute);margin-bottom:10px">MORE</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${items.map((b,i)=>`<button class="bn-tile" data-i="${i}"><span>${BN_ICO[skinNavName(b)]||'•'}</span>${txtEsc((b.textContent||'').replace(/\d+$/,'').trim())}</button>`).join('')}</div></div>`;
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${items.map((b,i)=>`<button class="bn-tile" data-i="${i}"><span>${BN_ICO[skinNavName(b)]||'•'}</span>${txtEsc((b.textContent||'').replace(/\d+$/,'').trim())}</button>`).join('')}</div>${socialHtml()}</div>`;
   ov.querySelectorAll('.bn-tile').forEach(t=>t.onclick=()=>{const b=items[+t.getAttribute('data-i')];ov.remove();if(b){const n=skinNavName(b);tab(n,b);}});
   document.body.appendChild(ov);}
 if(typeof window!=='undefined'){const go=()=>setTimeout(skinSetup,50);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();window.addEventListener('load',()=>setTimeout(skinSetup,300));
@@ -20574,6 +20634,15 @@ function pickLane(x,sp){return laneKey(x.sp||sp,x.m||x.market,x.sd||x.side,x.pri
 /* model fighting the market by 8+ pts, in a lane that hasn't proven it can */
 function pickDisagrees(x,sp){if(x.mp==null||x.mkt==null)return false;return Math.abs(x.mp-x.mkt)>=DISAGREE_PTS&&laneStatus(pickLane(x,sp))!=='proven';}
 
+/* ── crowd agreement, measured the way the record measured it: every character that made a
+   call on this game+market is on this side (2+ voices). On the graded history that ran
+   216-125 (+13.5u); "most agree" ran 80-81 (-10.1u). ── */
+const CROWD_V=new Set(['Sim','Judge','Coach','Most common','Pred','Trends']);
+let CROWD_C=null,CROWD_SIG='';
+function crowdIndex(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+today();if(CROWD_C&&CROWD_SIG===sig)return CROWD_C;const I={};
+  V.forEach(x=>{if(!CROWD_V.has(x.voice))return;const k=x.sp+'|'+x.game+'|'+String(x.date).slice(0,10)+'|'+x.market;(I[k]||(I[k]=[])).push(x);});CROWD_C=I;CROWD_SIG=sig;return I;}
+function crowdAllAgree(sp,game,market,side,d){market=market==='moneyline'?'ml':market;const L=crowdIndex()[sp+'|'+game+'|'+(d||today())+'|'+market]||[];
+  const by={};L.forEach(x=>{by[x.voice]=x.side;});const sides=Object.values(by);return sides.length>=2&&sides.every(s0=>s0===side);}
 /* ── leg budget ── */
 function legBudget(ps,kMax,kMin){kMin=kMin||2;let k=Math.min(kMax,ps.length);while(k>kMin&&ps.slice(0,k).reduce((a,p)=>a*p,1)<CORE_CASH_MIN)k--;return k;}
 function legTaxHtml(t){try{const L=t.legs||[];if(L.length<4)return'';
@@ -20583,6 +20652,14 @@ function legTaxHtml(t){try{const L=t.legs||[];if(L.length<4)return'';
     const pc=p=>p<0.01?(p*100).toFixed(2)+'%':(p*100).toFixed(p<0.1?1:0)+'%';
     return`<div class="mono" style="font-size:9.5px;margin-top:3px;color:var(--gold)">🧮 Leg tax: ${L.length} legs → ${pc(all)} on what these legs have actually hit · the best 3 alone → <b>${pc(b3)}</b> (${Math.round(b3/Math.max(all,1e-9))}× likelier)${k<3?` · the leg budget would stop at ${k}`:''}</div>`;}catch(e){return'';}}
 
+/* ── one-time repair (v1.93): legs imported before the "buying -2" fix carry a price of -2 ── */
+function repairBadPrices(){try{if(localStorage.getItem('d4.fix.badprice'))return 0;let n=0;
+  const L=get(LS.locked,[])||[];L.forEach(t=>(t.legs||[]).forEach(l=>{if(l.price!=null&&isFinite(+l.price)&&Math.abs(+l.price)<100){l.price=null;l.p=0.5;n++;}}));if(n)set(LS.locked,L);
+  const S=settledAll();let m=0;Object.values(S).forEach(e=>(e.legs||[]).forEach(l=>{if(l.pr!=null&&isFinite(+l.pr)&&Math.abs(+l.pr)<100){l.pr=null;m++;}}));if(m)set(SETTLED_KEY,S);
+  localStorage.setItem('d4.fix.badprice',String(Date.now()));return n+m;}catch(e){return 0;}}
+if(typeof window!=='undefined')setTimeout(()=>{try{repairBadPrices();}catch(e){}},1500);
+/* one-time: open Today on ✅ Playable (your later choice sticks) */
+if(typeof window!=='undefined')setTimeout(()=>{try{if(!localStorage.getItem('d4.fix.tfplay')){const f=get(TF_KEY,null)||{};f.tier='play';set(TF_KEY,f);localStorage.setItem('d4.fix.tfplay','1');}}catch(e){}},1200);
 /* ── the Records-hub panel ── */
 function strategyHtml(){const M=truthMaps(),T=laneTable();
   const marks=[0.55,0.6,0.65,0.7,0.75,0.8,0.85];
