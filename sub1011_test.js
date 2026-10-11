@@ -51,6 +51,9 @@ setTimeout(async()=>{try{
   T('a Telegram refusal is reported with the fix',r.ok===false&&/chat not found/.test(w.__al[0])&&/admin/.test(w.__al[0]));
   tgMode='cors';w.__al=[];r=await w.eval('subPostTelegram()');
   T('browser blocks the reply → still sent once, told to check the channel',r.ok&&r.unconfirmed&&/check the channel/.test(w.__al[0]));
+  T('channel id without its minus is fixed (1003937155725 → -1003937155725); names get their @',w.eval(`tgChatNorm('1003937155725')`)==='-1003937155725'&&w.eval(`tgChatNorm('-1003937155725')`)==='-1003937155725'&&w.eval(`tgChatNorm('TheDeskVIP')`)==='@TheDeskVIP'&&w.eval(`tgChatNorm('https://t.me/TheDeskApp')`)==='@TheDeskApp');
+  w.eval(`set('d4.tgchat','1003937155725')`);tgMode='ok';tg.length=0;await w.eval('subPostTelegram()');
+  T('posting with a minus-less id sends to the right channel',tg[0]&&tg[0].b.chat_id==='-1003937155725');
   T('bot token never syncs and never backs up',!('d4.tgbot' in w.eval('syncSnapshot().keys'))&&!('d4.tgbot' in w.eval('backupData()')));
   /* ── public page: hidden until kickoff, fingerprint ── */
   const top3=[{sp:'nfl',game:'DEN@LAC',pick:'Over 41.5',price:-115,blend:.55,start:'2026-10-11T20:05:00Z'},{sp:'nfl',game:'NYG@WSH',pick:'WSH ML',price:-190,blend:.66,start:'2026-10-11T17:00:00Z'}];

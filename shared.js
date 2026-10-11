@@ -2092,7 +2092,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -20955,7 +20955,9 @@ function subTelegramText(C){const e=txtEsc,day=new Date(C.d+'T12:00:00').toLocal
   C.chars.forEach(P=>blocks.push(`<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>'• '+e(subLeg(l))+(l.spec?`\n   <i>🎯 ${e(l.spec)}</i>`:'')).join('\n')));
   blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
   const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
-async function subPostTelegram(){const tok=String(get('d4.tgbot','')||'').trim(),chat=String(get('d4.tgchat','')||'').trim();
+/* channel IDs are negative (-100…) — a copied ID often loses its minus; a bare name needs its @ */
+function tgChatNorm(c){c=String(c||'').trim().replace(/^https?:\/\/t\.me\//,'');if(!c)return'';if(/^\d{10,}$/.test(c))return'-'+c;if(/^-?\d+$/.test(c))return c;return c.startsWith('@')?c:'@'+c;}
+async function subPostTelegram(){const tok=String(get('d4.tgbot','')||'').trim(),chat=tgChatNorm(get('d4.tgchat',''));
   if(!tok||!chat){alert('Add your Telegram bot token and private channel in the setup box below first.');return{ok:false};}
   const parts=subTelegramText(subCard());let unconfirmed=false;
   for(const text of parts){const body=new URLSearchParams({chat_id:chat,text,parse_mode:'HTML',disable_web_page_preview:'true'});
@@ -20969,7 +20971,7 @@ async function subPostTelegram(){const tok=String(get('d4.tgbot','')||'').trim()
 function subCopy(){const t=subTelegramText(subCard()).join('\n\n').replace(/<\/?(b|i)>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
   try{navigator.clipboard.writeText(t).then(()=>alert('Copied — paste it into Telegram.'),()=>prompt('Copy this:',t));}catch(e){prompt('Copy this:',t);}}
 function subSaveSetup(){const g=id=>(document.getElementById(id)||{}).value;const tok=g('subTgTok'),ch=g('subTgChat'),lk=g('subWhop'),pr=g('subPrice');
-  if(tok!=null&&tok.trim())set('d4.tgbot',tok.trim());if(ch!=null)set('d4.tgchat',ch.trim());if(lk!=null)set('d4.sublink',lk.trim());if(pr!=null)set('d4.pricetext',pr.trim()||SUB_PRICE_DEFAULT);
+  if(tok!=null&&tok.trim())set('d4.tgbot',tok.trim());if(ch!=null)set('d4.tgchat',tgChatNorm(ch));if(lk!=null)set('d4.sublink',lk.trim());if(pr!=null)set('d4.pricetext',pr.trim()||SUB_PRICE_DEFAULT);
   alert('Saved.');try{renderToday(true);}catch(e){}}
 function subCardHtml(){const C=subCard();const e=txtEsc;const pc=subPct;const posted=get('d4.tgposted',null);
   const legRow=(x,extra)=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--rule)"><div style="min-width:0"><b style="font-size:13px">${e(x.pick)}</b> <span class="mono" style="font-size:11px;color:var(--gold)">${e(tcSgn(x.price))}</span>
