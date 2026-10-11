@@ -49,7 +49,11 @@ setTimeout(()=>{try{
     T('why: covers prediction, characters, backing + opposing trends',Wy.bullets.some(b=>/Covers/.test(b))&&Wy.bullets.some(b=>/characters on it/.test(b))&&Wy.bullets.some(b=>/Trend ✓ Under is 4-0/.test(b))&&Wy.bullets.some(b=>/Trend ✗ Over is 7-2-1/.test(b)),Wy.bullets.join(' | ').slice(0,300));
     T('why: a reel script that names the pick',/Under 6\.5/.test(Wy.script)&&Wy.script.length>60,Wy.script.slice(0,200));
     T('Banker tab renders tickets + roll call',(()=>{let el=w.document.getElementById('bankerBody');if(!el){el=w.document.createElement('div');el.id='bankerBody';w.document.body.appendChild(el);}w.eval('renderBankerTab()');return/Roll Call/.test(el.innerHTML)&&/Why we like it/.test(el.innerHTML);})());
+    /* v1.97: parlay legs stay hidden publicly until their games start */
+    T('before kickoff the parlay legs are hidden publicly',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay&&F.parlay.legs.every(l=>l.hidden&&!l.pick);})());
+    w.eval('window.__cbS=cbStarted;cbStarted=()=>true');
     T('public feed carries tonight\'s parlay with reasons',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay&&F.parlay.legs.length===L.roll.cut.length&&F.parlay.legs.every(l=>l.why&&l.why.script);})());
+    w.eval('cbStarted=window.__cbS');
     /* SGP on an NHL card */
     const g={id:'n1',abstract:'pre',away:{abbr:'PIT',name:'Pittsburgh Penguins'},home:{abbr:'CBJ',name:'Columbus Blue Jackets'}};
     const html=w.eval(`(()=>{const g=${JSON.stringify(g)};const s=simNHLGame(g,4000);return sgpCardHtml('nhl',g,s)})()`);

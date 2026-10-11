@@ -19,6 +19,8 @@ setTimeout(()=>{try{
   /* lanes */
   const J=[];for(let i=0;i<36;i++)J.push({id:'j'+i,voice:'Judge',sp:'nhl',date:'2026-10-05',game:'J'+i,market:'total',side:'over',line:6.5,price:-110,graded:true,hit:i<15,units:i<15?0.909:-1});
   const S=[];for(let i=0;i<36;i++)S.push({id:'s'+i,voice:'Scorekeeper',sp:'nhl',date:'2026-10-05',game:'S'+i,market:'ml',side:'home',price:-150,graded:true,hit:i<27,units:i<27?0.667:-1});
+  /* v1.97: the Judge also has a real record on NHL home-fav MLs, so his weak NHL overs don't sink those */
+  for(let i=0;i<16;i++)J.push({id:'jm'+i,voice:'Judge',sp:'nhl',date:'2026-10-06',game:'M'+i,market:'ml',side:'home',price:-130,graded:true,hit:i<11,units:i<11?0.769:-1});
   w.eval(`set(VOICES_KEY,get(VOICES_KEY,[]).concat(${JSON.stringify(J.concat(S))}))`);
   T('lane judged on units: NHL overs (15-21) blocked',w.eval(`laneStatus('nhl|total|over','Judge')`)==='blocked');
   T('a voice-specific blocked lane follows that voice',w.eval(`laneTable().BYV.Judge['nhl|total|over'].st`)==='blocked');

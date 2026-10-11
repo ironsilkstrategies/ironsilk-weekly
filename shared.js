@@ -2092,7 +2092,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2361,7 +2361,7 @@ function paintMeter(){
 // one place that decides what's safe to leave the device.
 function backupData(){
   const data={};
-  const EXCLUDE=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,'d4.synctoken']);
+  const EXCLUDE=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,'d4.synctoken','d4.tgbot']);
   Object.keys(localStorage).forEach(k=>{
     if(k.startsWith('d4.')&&!EXCLUDE.has(k))data[k]=localStorage.getItem(k);
   });
@@ -2670,24 +2670,35 @@ function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log
     tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,
     why:(()=>{if(!x.whyOn)return undefined;try{const W=pickWhy({...x,date:x.d0});return{bullets:W.bullets.slice(0,6),script:W.script};}catch(e){return undefined;}})()});
   const hist=Object.keys(log).sort().reverse().slice(0,30).map(d=>({d,picks:(log[d].picks||[]).filter(x=>x.main).map(slim)})).filter(x=>x.picks.length);
-  const today_=S.locked?{d:S.d,lockedAt:S.lockedAt,picks:(S.top3||[]).map(x=>{const L=(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);return slim({...x,hit:L?L.hit:null,push:L?L.push:false,whyOn:true,d0:S.d});}),
-    bySport:Object.fromEntries(Object.entries(S.bySport||{}).map(([k,v])=>[k,v.map(slim)]))}:null;
+  /* v1.97: today's plays are what subscribers pay for — each stays hidden on the public page until its game starts */
+  const pubStarted=x=>{const t=Date.parse(x&&x.start||'');return isFinite(t)&&Date.now()>=t;};
+  const logOf=x=>(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);
+  const open_=x=>{const L=logOf(x);return pubStarted(x)||!!(L&&(L.hit!=null||L.push));};
+  const today_=S.locked?{d:S.d,lockedAt:S.lockedAt,picks:(S.top3||[]).map(x=>{if(!open_(x))return{hidden:true,sp:x.sp,start:x.start||''};
+      const L=logOf(x);return slim({...x,hit:L?L.hit:null,push:L?L.push:false,whyOn:true,d0:S.d});}),
+    allStarted:(S.top3||[]).every(open_)}:null;
   let parlay=null,prec=null;try{const B=get(BKDAY_KEY,{})||{};if(B.locked&&B.d===today()&&B.roll&&B.roll.cut.length){const cut=B.roll.legs.filter(l=>B.roll.cut.includes(l.sp+'|'+l.game));
-      parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(B.roll.cutDec),p:B.roll.cutP,result:tixDone(cut),legs:cut.map(l=>{let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}return{sp:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,by:charName(l.v),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
+      parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(B.roll.cutDec),p:B.roll.cutP,result:tixDone(cut),legs:cut.map(l=>{if(!(typeof cbStarted==='function'&&cbStarted(l.sp,l.game))&&l.hit==null&&!l.push)return{hidden:true,sp:l.sp};let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}return{sp:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,by:charName(l.v),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
     const RR=bkDayRecord().cut;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
-  return{v:2,generated:Date.now(),brand:'TheDesk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
+  return{v:3,generated:Date.now(),brand:'TheDesk',price:get('d4.pricetext','')||'$19.99/mo · $9.99/wk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
+/* the fingerprint: SHA-256 of the exact locked picks + a secret key. Published at lock (git timestamps it);
+   the key is published once every game has started, so anyone can recompute it and see nothing changed. */
+function pickCommitText(top3,salt){return JSON.stringify((top3||[]).map(x=>[x.sp,x.game,x.pick,x.price]))+'|'+salt;}
+async function sha256hex(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function pickCommit(S,reveal){let salt=S.salt;if(!salt){salt=[...crypto.getRandomValues(new Uint8Array(16))].map(x=>x.toString(16).padStart(2,'0')).join('');const S2=get(BEST5_KEY,{});if(S2.d===S.d){S2.salt=salt;set(BEST5_KEY,S2);}}
+  return{alg:'sha256',hash:await sha256hex(pickCommitText(S.top3,salt)),salt:reveal?salt:null};}
 async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual)alert('The Best card publishes once it locks — run the master evaluation or tap Lock now.');return{ok:false,reason:'not locked'};}
   if(!get(LS.ghtoken,'')&&!get(SYNC.token,'')){if(manual)alert('Add a GitHub token in Settings → Public picks page first.');return{ok:false,reason:'not configured'};}
-  const F=publicFeed();const txt=JSON.stringify(F,null,1);
+  const F=publicFeed();try{if(F.today)F.today.commit=await pickCommit(S,F.today.allStarted);}catch(e){}const txt=JSON.stringify(F,null,1);
   const a=await ghPut('public/picks.json',txt,'Publish picks — '+S.d);const b=a.ok?await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d):a;
-  set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:JSON.stringify(F.today&&F.today.picks.map(x=>x.hit))});
+  set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:JSON.stringify(F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit))});
   if(manual)alert(a.ok&&b.ok?'Published. Your public page updates in about a minute: '+location.origin+location.pathname.replace(/[^/]*$/,'')+'picks.html'
     :/can't write/.test(a.reason||b.reason||'')?`Publish failed: ${a.reason||b.reason}.\n\nFix: on github.com → Settings → Developer settings → Fine-grained tokens → "TheDesk sync" → Edit → Repository access → add ironsilk-weekly → Save. No new token needed — this device already has it.`
     :'Publish failed: '+(a.reason||b.reason));
   try{renderBest();}catch(e){}return{ok:a.ok&&b.ok};}
 /* auto: once when the card locks, and again whenever a pick grades */
 async function publishAuto(){try{const S=get(BEST5_KEY,{});if(!S.locked||!(get(LS.ghtoken,'')||get(SYNC.token,'')))return;const P=get('d4.pubstate',{})||{};
-  const F=publicFeed();const sig=JSON.stringify(F.today&&F.today.picks.map(x=>x.hit));
+  const F=publicFeed();const sig=JSON.stringify(F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit));   /* republish as each game starts (reveal) and grades */
   if(P.d===S.d&&P.ok&&P.sig===sig)return;await publishPicks(false);}catch(e){}}
 // runs once at boot — if this device has no graded history at all (fresh install, wiped
 // site data, new domain) it tries to silently pull the last known-good snapshot back from
@@ -17773,11 +17784,13 @@ function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','
   if(p==null&&c.price!=null)p=imp(+c.price)*0.955+0.0225;
   if(p==null)p=0.5;
   const why=['sport','team','h2h'].filter(k=>h.H[k].n>=3).map(k=>`${h.lab[k]} ${h.H[k].w}-${h.H[k].l}`);
+  /* v1.97: the character's specialties — weak spots stay off every parlay, strengths move up */
+  let spec={weak:false,adj:0,why:[]};try{spec=charSpecialty(c.voice,c.sp,c.market,c.side,c.price,c.line);}catch(e){}
   /* v1.90 gate + lanes + disagreement */
   let gate=null;try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);
     const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);
     gate=!x?'not on today\'s card':!(x.unan||crowdAllAgree(c.sp,c.game,c.market,c.side,c.date))?'crowd split':laneStatus(lk,c.voice)==='blocked'?'lane blocked: '+laneName(lk):pickDisagrees(x,c.sp)?'model fighting the market':null;}catch(e){}
-  return{score:0.5*p+0.5*hr,p,hr,why,weak:sw>=6&&hr<0.5,gate};}
+  return{score:(0.5*p+0.5*hr)*(1+spec.adj),p,hr,why:spec.why.concat(why),weak:(sw>=6&&hr<0.5)||spec.weak,gate,spec};}
 /* Sensible tickets only: no leg priced shorter than -300 (a -450 favorite adds almost
    nothing to the payout and is the leg that quietly sinks parlays). Underdogs: any price. */
 const BK_FLOOR=-300;const bkPriceOk=pr=>pr!=null&&isFinite(+pr)&&+pr>=BK_FLOOR;
@@ -17988,11 +18001,12 @@ function renderToday(noSnap){
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
       ${rows||`<div class="empty">${total?'Nothing here matches the filter'+(P.length<total?' (live games are pinned above)':'')+'.':'No colored, non-conflicted picks on this board yet.'}</div>`}
       ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
-  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['props','🎯 Props']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
+  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
     el.innerHTML=vw+spBar+safe(bankerHtml)+safe(charRosterHtml)+safe(cparHtml)+charDeskHtml(F);return;}
   if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
+  if(F.view==='subs'){let h='';try{h=subCardHtml();}catch(e){console.warn('subscriber card',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   let hero='';try{hero=todayBestHero();}catch(e){console.warn('best hero',e);}
   el.innerHTML=vw+hero+legend+bar+(F.tier==='play'?`<div class="sub mono" style="font-size:9.5px;margin:-2px 0 8px;color:var(--win)">✅ Playable = every character on this side (or SUPREME), lane not blocked, model not fighting the market, has a book price no shorter than -300, +EV on what picks like it have actually hit. ${cnt({tier:'play'})} of ${allP.length} today.</div>`:'')+liveHtml+sdHtml+body;
 }
@@ -20687,6 +20701,38 @@ function crowdIndex(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'
   V.forEach(x=>{if(!CROWD_V.has(x.voice))return;const k=x.sp+'|'+x.game+'|'+String(x.date).slice(0,10)+'|'+x.market;(I[k]||(I[k]=[])).push(x);});CROWD_C=I;CROWD_SIG=sig;return I;}
 function crowdAllAgree(sp,game,market,side,d){market=market==='moneyline'?'ml':market;const L=crowdIndex()[sp+'|'+game+'|'+(d||today())+'|'+market]||[];
   const by={};L.forEach(x=>{by[x.voice]=x.side;});const sides=Object.values(by);return sides.length>=2&&sides.every(s0=>s0===side);}
+/* ── CHARACTER SPECIALTIES (v1.97) ────────────────────────────────────────
+   What each character is actually good and bad at, in UNITS (so a dog record is
+   judged against dog prices): the sport overall, the bet type (NHL dog MLs, NFL
+   overs…), and the bet type by venue (road dog spreads, home fav MLs…). Shrunk
+   hard toward zero until a spot has real volume. Every parlay builder reads it:
+   a weak spot is kept off the ticket, a proven one moves the leg up. ── */
+const SPEC_MIN=12,SPEC_K=20;
+let SPEC_C=null,SPEC_SIG='';
+function specVenue(m,sd){return m==='total'?'':(sd==='home'?'home':sd==='away'?'road':'');}
+function specKeys(sp,m,sd,price,line){m=m==='moneyline'?'ml':m;const t=laneType(m,sd,price,line);const v=specVenue(m,sd);
+  return{sport:sp+'|*',type:t?sp+'|'+m+'|'+t:null,venue:t&&v?sp+'|'+m+'|'+t+'|'+v:null};}
+function specTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+V.filter(x=>x.graded).length;if(SPEC_C&&SPEC_SIG===sig)return SPEC_C;const T={};
+  V.forEach(x=>{if(!x.graded||x.hit==null||!CHARS[x.voice])return;const K=specKeys(x.sp,x.market,x.side,x.price,x.line);const B=T[x.voice]||(T[x.voice]={});
+    [K.sport,K.type,K.venue].forEach(k=>{if(!k)return;const o=B[k]||(B[k]={n:0,w:0,u:0});o.n++;if(x.hit)o.w++;o.u+=x.units||0;});});
+  SPEC_C=T;SPEC_SIG=sig;return T;}
+const SPEC_LAB=k=>{const[sp,m,t,v]=String(k).split('|');if(m==='*')return(SP_LAB[sp]||sp).replace(/^\S+\s/,'')+' overall';
+  const mk={ml:'ML',spread:'spread',total:'total'}[m]||m;return(SP_LAB[sp]||sp).replace(/^\S+\s/,'')+' '+(v?v+' ':'')+(t==='fav'?'fav':t==='dog'?'dog':t)+' '+(m==='total'?'':mk);};
+/* for one character's call: weak (keep off), strong (boost), adj (score multiplier), why */
+function charSpecialty(voice,sp,m,sd,price,line){const T=(specTable()[voice])||{};const K=specKeys(sp,m,sd,price,line);const out={weak:false,strong:false,adj:0,why:[],worst:null,best:null};
+  const look=[['venue',K.venue],['type',K.type],['sport',K.sport]].map(([lvl,k])=>{const o=k&&T[k];if(!o||o.n<SPEC_MIN)return null;return{lvl,k,n:o.n,w:o.w,u:o.u,shr:o.u/(o.n+SPEC_K)};}).filter(Boolean);
+  if(!look.length)return out;
+  /* the most specific spot with real volume decides: "bad in NHL overall" doesn't sink a
+     character who is proven on NHL home favorites */
+  const top=look[0];
+  const bad=top.shr<=(top.lvl==='sport'?-0.05:-0.06)?top:null;
+  const good=!bad?look.filter(x=>x.lvl!=='sport'&&x.shr>=0.04).sort((a,b)=>b.shr-a.shr)[0]:null;
+  const fmt=x=>`${SPEC_LAB(x.k)} ${x.w}-${x.n-x.w} ${x.u>=0?'+':''}${x.u.toFixed(1)}u`;
+  if(bad){out.weak=true;out.worst=bad;out.why.push('⛔ weak spot: '+fmt(bad));}
+  else if(good){out.strong=true;out.best=good;out.why.push('🎯 specialty: '+fmt(good));}
+  /* the most specific level with volume drives the size of the nudge */
+  out.adj=Math.max(-0.15,Math.min(0.15,look[0].shr*1.5));return out;}
+
 /* ── leg budget ── */
 function legBudget(ps,kMax,kMin){kMin=kMin||2;let k=Math.min(kMax,ps.length);while(k>kMin&&ps.slice(0,k).reduce((a,p)=>a*p,1)<CORE_CASH_MIN)k--;return k;}
 function legTaxHtml(t){try{const L=t.legs||[];if(L.length<4)return'';
@@ -20735,7 +20781,7 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
    · everything else: the newest write wins, per key
    Credentials never sync. The old public data-backup.json is retired.        */
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
-const SYNC_NEVER=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
+const SYNC_NEVER=new Set(['d4.tgbot',LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
 const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
@@ -20872,3 +20918,81 @@ if(typeof window!=='undefined'&&!window.__NO_SYNC_LOOP__){
   setInterval(()=>{if(!document.hidden&&syncOn())syncNow(false);},180e3);
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&syncOn())syncNow(false);else if(!document.hidden&&syncOn())syncNow(false);});
   window.addEventListener('load',()=>setTimeout(()=>{try{sessionStorage.removeItem('d4.syncReload');}catch(e){}},60e3));}
+
+/* ══ SUBSCRIBERS (v1.97) ══════════════════════════════════════════════════
+   The paid daily card: the Best 3, the Top 10 plays, the Banker's parlay and a
+   5-leg parlay from every character — each built from that character's own
+   strengths (weak spots never make a ticket). Posted to the private Telegram
+   channel that Whop manages; the public page shows the record and keeps
+   today's picks hidden until kickoff, with a fingerprint anyone can verify. */
+const SUB_PRICE_DEFAULT='$19.99/mo · $9.99/wk';
+function subTop10(){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
+  Object.entries(T.by||{}).forEach(([sp,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||sp};
+    if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR||+x.price>400)return;if(!tcIsToday(x)||best5Started(x))return;if(x.incoherent||x.suspect)return;
+    if(laneStatus(pickLane(x,sp))==='blocked')return;const p=best5Prob(x);if(p==null)return;const ev=(p*americanToDecimal(amerOk(x.price))-1)*100;
+    out.push({...x,p,ev,play:tfPlayable(x,sp)});}));
+  const seen=new Set();return out.sort((a,b)=>(b.play-a.play)||(b.ev-a.ev)).filter(x=>{const k=x.sp+'|'+x.game+'|'+x.m;if(seen.has(k))return false;seen.add(k);return x.play||x.ev>=0;}).slice(0,10);}
+/* a character's 5-leg ticket: its strongest spots today, never a weak spot or blocked lane, one leg per game */
+function subCharParlay(v,n){n=n||5;const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
+  const calls=V.filter(x=>String(x.date).slice(0,10)===d&&x.voice===v&&bkPriceOk(x.price)&&['ml','spread','total'].includes(x.market)&&!cbStarted(x.sp,x.game));
+  const C=calls.map(c=>({c,...cparLegScore(V,c)})).filter(x=>!x.weak&&laneStatus(laneKey(x.c.sp,x.c.market,x.c.side,x.c.price,x.c.line),v)!=='blocked').sort((a,b)=>b.score-a.score);
+  const used=new Set(),legs=[];for(const x of C){const g=x.c.sp+'|'+x.c.game;if(used.has(g))continue;used.add(g);legs.push(x);if(legs.length===n)break;}
+  if(legs.length<3)return null;const dec=legs.reduce((a,x)=>a*americanToDecimal(x.c.price),1),p=legs.reduce((a,x)=>a*x.p,1);
+  return{v,legs:legs.map(x=>({sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,p:x.p,spec:x.spec&&x.spec.strong?x.spec.why[0].replace(/^🎯 specialty: /,''):''})),dec,p,dropped:calls.length-C.length};}
+function subBanker(){let S=null;try{S=bkDayState();}catch(e){return null;}const D=S&&(S.locked?S:S.preview);if(!D||!D.own||!(D.own.legs||[]).length)return null;return{...D.own,locked:!!S.locked};}
+function subCard(){let best=null;try{best=best5State();}catch(e){}const R=(()=>{try{return best3Record();}catch(e){return null;}})();
+  const chars=CHAR_ORDER.map(v=>{try{return subCharParlay(v,5);}catch(e){return null;}}).filter(Boolean).sort((a,b)=>b.p-a.p);
+  return{d:today(),best:(best&&best.top3)||[],locked:!!(best&&best.locked),record:R,top10:subTop10(),banker:subBanker(),chars};}
+const subPct=p=>p==null?'':(p*100<10?(p*100).toFixed(1):Math.round(p*100))+'%';
+const subLeg=x=>`${x.pick} (${tcSgn(x.price)}) · ${(SP_LAB[x.sp]||'').split(' ')[0]} ${gameLabel(x.sp,x.game)}`;
+/* Telegram: HTML parse mode, split under the 4096-character limit */
+function subTelegramText(C){const e=txtEsc,day=new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const head=`<b>🏆 TheDesk — ${e(day)}</b>${C.record&&(C.record.w+C.record.l)?`\nBest 3 record: <b>${C.record.w}-${C.record.l}${C.record.pu?'-'+C.record.pu:''}</b> (${C.record.u>=0?'+':''}${C.record.u.toFixed(1)}u)`:''}`;
+  const blocks=[head];
+  if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. <b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(best5Prob(x))}`).join('\n'));
+  if(C.top10.length)blocks.push(`<b>🔟 TOP ${C.top10.length} PLAYS</b>\n`+C.top10.map((x,i)=>`${i+1}. ${x.play?'✅ ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n')+`\n<i>✅ = passes every rule: whole crowd agrees, good lane, model not fighting the market</i>`);
+  if(C.banker)blocks.push(`<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>'• '+e(subLeg(l))).join('\n'));
+  C.chars.forEach(P=>blocks.push(`<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>'• '+e(subLeg(l))+(l.spec?`\n   <i>🎯 ${e(l.spec)}</i>`:'')).join('\n')));
+  blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
+  const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
+async function subPostTelegram(){const tok=String(get('d4.tgbot','')||'').trim(),chat=String(get('d4.tgchat','')||'').trim();
+  if(!tok||!chat){alert('Add your Telegram bot token and private channel in the setup box below first.');return{ok:false};}
+  const parts=subTelegramText(subCard());let unconfirmed=false;
+  for(const text of parts){const body=new URLSearchParams({chat_id:chat,text,parse_mode:'HTML',disable_web_page_preview:'true'});
+    try{const r=await fetch(`https://api.telegram.org/bot${tok}/sendMessage`,{method:'POST',body});const j=await r.json().catch(()=>null);
+      if(j&&j.ok===false){alert('Telegram refused it: '+(j.description||('HTTP '+r.status))+'\n\nCheck that the bot is an admin of the channel and the channel name is right.');return{ok:false};}}
+    catch(e){unconfirmed=true;}   /* the browser can block reading Telegram's reply even though the post went through */
+    await new Promise(z=>setTimeout(z,450));}
+  set('d4.tgposted',{d:today(),ts:Date.now(),n:parts.length,unconfirmed});
+  alert(unconfirmed?`Sent ${parts.length} message${parts.length>1?'s':''} — your browser couldn't read Telegram's reply, so check the channel.`:`Posted to Telegram (${parts.length} message${parts.length>1?'s':''}).`);
+  try{renderToday(true);}catch(e){}return{ok:true,parts:parts.length,unconfirmed};}
+function subCopy(){const t=subTelegramText(subCard()).join('\n\n').replace(/<\/?(b|i)>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
+  try{navigator.clipboard.writeText(t).then(()=>alert('Copied — paste it into Telegram.'),()=>prompt('Copy this:',t));}catch(e){prompt('Copy this:',t);}}
+function subSaveSetup(){const g=id=>(document.getElementById(id)||{}).value;const tok=g('subTgTok'),ch=g('subTgChat'),lk=g('subWhop'),pr=g('subPrice');
+  if(tok!=null&&tok.trim())set('d4.tgbot',tok.trim());if(ch!=null)set('d4.tgchat',ch.trim());if(lk!=null)set('d4.sublink',lk.trim());if(pr!=null)set('d4.pricetext',pr.trim()||SUB_PRICE_DEFAULT);
+  alert('Saved.');try{renderToday(true);}catch(e){}}
+function subCardHtml(){const C=subCard();const e=txtEsc;const pc=subPct;const posted=get('d4.tgposted',null);
+  const legRow=(x,extra)=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--rule)"><div style="min-width:0"><b style="font-size:13px">${e(x.pick)}</b> <span class="mono" style="font-size:11px;color:var(--gold)">${e(tcSgn(x.price))}</span>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${e(gameLabel(x.sp,x.game))}${extra||''}</div></div><span class="mono" style="font-size:11.5px;font-weight:800">${pc(x.p!=null?x.p:best5Prob(x))}</span></div>`;
+  const sec=(title,sub,body)=>`<div class="tkt" style="margin:8px 0"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h3 style="margin:0">${title}</h3><span class="mono" style="font-size:10px;color:var(--mute)">${sub||''}</span></div>${body}</div>`;
+  const setupOpen=!get('d4.tgbot','')||!get('d4.tgchat','')||!get('d4.sublink','');
+  return`<div class="tkt" style="border:1px solid rgba(255,199,44,.45);background:linear-gradient(180deg,rgba(255,199,44,.09),transparent 70%)">
+      <h3 style="margin:0">💎 Subscriber card — ${e(new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}))}</h3>
+      <div class="sub" style="font-size:10.5px;margin:3px 0 8px">What paying members get in the private Telegram. ${e(get('d4.pricetext','')||SUB_PRICE_DEFAULT)}.</div>
+      <div class="bar"><button class="primary" onclick="subPostTelegram()">📣 Post to Telegram</button><button onclick="subCopy()">Copy text</button></div>
+      ${posted&&posted.d===C.d?`<div class="sub mono" style="font-size:9.5px;color:var(--win);margin-top:4px">✓ posted ${new Date(posted.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}${posted.unconfirmed?' (check the channel)':''}</div>`:''}</div>
+    ${C.best.length?sec(`⭐ Best ${C.best.length}`,C.locked?'🔒 locked':'not locked yet',C.best.map(x=>legRow(x)).join('')):''}
+    ${sec(`🔟 Top ${C.top10.length} plays`,`${C.top10.filter(x=>x.play).length} ✅ playable`,C.top10.length?C.top10.map(x=>legRow(x,` · EV ${x.ev>=0?'+':''}${x.ev.toFixed(1)}%${x.play?' · <span style="color:var(--win)">✅</span>':''}`)).join(''):'<div class="sub">Load today\'s boards — nothing priced and unstarted yet.</div>')}
+    ${C.banker?sec(`🏦 Banker's parlay ${e(decimalToAmerican(C.banker.dec))}`,`${pc(C.banker.p)} to cash${C.banker.locked?' · 🔒':''}`,C.banker.legs.map(l=>legRow(l)).join('')):''}
+    ${C.chars.length?C.chars.map(P=>sec(`🎭 ${e(charName(P.v))} · ${P.legs.length}-leg ${e(decimalToAmerican(P.dec))}`,`${pc(P.p)} to cash${P.dropped?` · ${P.dropped} weak-spot call${P.dropped>1?'s':''} left off`:''}`,P.legs.map(l=>legRow(l,l.spec?` · <span style="color:var(--win)">🎯 ${e(l.spec)}</span>`:'')).join(''))).join('')
+      :sec('🎭 Character parlays','','<div class="sub">Each character needs 3+ priced, unstarted calls outside its weak spots. Open today\'s boards.</div>')}
+    <div class="sub mono" style="font-size:9.5px;color:var(--mute);margin:4px 2px 10px">5-leg tickets are long shots by nature — the cash chance on each is what the record says, not a promise.</div>
+    <details class="tkt"${setupOpen?' open':''}><summary><b>⚙️ Whop + Telegram setup</b></summary>
+      <div class="sub" style="font-size:10.5px;line-height:1.6;margin:6px 0">1. Whop: create the product with two prices (${e(SUB_PRICE_DEFAULT)}), add Whop's Telegram app and connect your <b>private</b> channel — Whop adds members when they pay and removes them when they cancel.<br>
+        2. Telegram: message <b>@BotFather</b> → /newbot → copy the token. Add the bot to the private channel as an <b>admin</b> who can post.<br>
+        3. Paste below. The token stays on this device — it never syncs or backs up.</div>
+      <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Telegram bot token</div><input id="subTgTok" type="password" placeholder="${get('d4.tgbot','')?'saved — paste to replace':'123456:ABC…'}" autocomplete="off">
+      <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Private channel (@name or -100… id)</div><input id="subTgChat" value="${e(get('d4.tgchat','')||'')}" placeholder="@TheDeskVIP">
+      <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Whop checkout link (shown on the public page)</div><input id="subWhop" value="${e(get('d4.sublink','')||'')}" placeholder="https://whop.com/…">
+      <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Price line</div><input id="subPrice" value="${e(get('d4.pricetext','')||SUB_PRICE_DEFAULT)}">
+      <div class="bar" style="margin-top:8px"><button class="primary" onclick="subSaveSetup()">Save</button></div></details>`;}

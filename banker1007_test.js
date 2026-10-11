@@ -91,6 +91,10 @@ setTimeout(async()=>{try{
   w.eval(`localStorage.removeItem(BEST5_KEY);set(LS_EVAL,{date:today()});set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:[
     {game:'C@D',m:'ml',sd:'home',pick:'D ML',price:-120,color:' supreme',chars:['Sim','Judge'],blend:.6,evCal:4,start:today()+'T23:59:00-05:00'}],props:[]}}});
     set(LS.ghtoken,'tok');set(LS.ghrepo,'ironsilkstrategies/ironsilk-weekly');set('d4.sublink','https://whop.com/thedesk');set(LS.handle,'@DLinkPicks');`);
+  /* v1.97: before kickoff the play is subscriber-only — hidden on the public feed */
+  const F0=w.eval('publicFeed()');
+  T('before kickoff: the play is hidden publicly (no pick, no price)',F0.today&&F0.today.picks[0].hidden===true&&!F0.today.picks[0].pick&&!F0.today.picks[0].price);
+  w.eval(`(()=>{const S=get(BEST5_KEY,{});S.top3.forEach(x=>x.start=new Date(Date.now()-60e3).toISOString());set(BEST5_KEY,S);})()`);   /* kickoff */
   const F=w.eval('publicFeed()');
   T('public feed: locked card, record, handle, subscribe link',F.today&&F.today.picks[0].pick==='D ML'&&F.subscribe==='https://whop.com/thedesk'&&F.handle==='@DLinkPicks'&&F.record);
   T('public feed names the analysts, not initials',F.today.picks[0].voices.includes('The Judge'));
