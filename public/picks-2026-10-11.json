@@ -1,7 +1,8 @@
 {
- "v": 2,
- "generated": 1791738845995,
+ "v": 3,
+ "generated": 1791748363841,
  "brand": "TheDesk",
+ "price": "$19.99/mo · $9.99/wk",
  "social": {
   "fb": "https://www.facebook.com/share/1FCDFdUvRp/",
   "tg": "https://t.me/TheDeskApp"
@@ -20,151 +21,26 @@
   "lockedAt": 1791732639617,
   "picks": [
    {
+    "hidden": true,
     "sp": "nfl",
-    "game": "DEN@LAC",
-    "pick": "Over 41.5",
-    "price": -115,
-    "p": 0.553,
-    "ev": 3.3,
-    "start": "2026-10-11T20:05Z",
-    "tier": "STRONG",
-    "voices": [
-     "The Simulator",
-     "The Judge",
-     "The Oracle",
-     "The Coach"
-    ],
-    "hit": null,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 55% across 10,000 runs vs 53% the price implies.",
-      "Expected value +3.3% per bet at -115.",
-      "The uploaded projection has it DEN 23.17–20.77 LAC — a 43.9-point total vs 41.5.",
-      "The Judge, weighing every witness by its graded accuracy, is on this side.",
-      "4 of 8 characters on it, 2 independent of the sim: The Simulator (6-5 NFL over), The Judge (6-6 NFL over), The Oracle (5-3 NFL over), The Coach (6-5 NFL over).",
-      "Against: The Scorekeeper, The Historian."
-     ],
-     "script": "DEN at LAC — I'm on Over 41.5 (-115). We ran this game 10,000 times: the over hits 55% of the time; the price says 53%. The uploaded projection projects DEN 23.17, LAC 20.77 — a 43.9-point total vs 41.5. 4 of our 8 analysts are on the over — The Simulator is 6-5 NFL over."
-    }
+    "start": "2026-10-11T20:05Z"
    },
    {
+    "hidden": true,
     "sp": "nfl",
-    "game": "DET@ARI",
-    "pick": "Over 54.5",
-    "price": -115,
-    "p": 0.552,
-    "ev": 3.2,
-    "start": "2026-10-11T20:25Z",
-    "tier": "STRONG",
-    "voices": [
-     "The Simulator",
-     "The Judge",
-     "The Scorekeeper",
-     "The Historian",
-     "The Coach"
-    ],
-    "hit": null,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 56% across 10,000 runs vs 53% the price implies.",
-      "Expected value +3.2% per bet at -115.",
-      "The uploaded projection has it DET 27.92–24.15 ARI — a 52.1-point total vs 54.5 (disagrees).",
-      "The Judge, weighing every witness by its graded accuracy, is on this side.",
-      "5 of 8 characters on it, 2 independent of the sim: The Simulator (6-5 NFL over), The Judge (6-6 NFL over), The Scorekeeper (7-6 NFL over), The Historian (4-3 NFL over), The Coach (6-5 NFL over).",
-      "Against: The Oracle."
-     ],
-     "script": "DET at ARI — I'm on Over 54.5 (-115). We ran this game 10,000 times: the over hits 56% of the time; the price says 53%. 5 of our 8 analysts are on the over — The Simulator is 6-5 NFL over."
-    }
+    "start": "2026-10-11T20:25Z"
    },
    {
+    "hidden": true,
     "sp": "nfl",
-    "game": "SF@SEA",
-    "pick": "SF +3",
-    "price": -110,
-    "p": 0.583,
-    "ev": 11.2,
-    "start": "2026-10-11T20:25Z",
-    "tier": "VALUE",
-    "voices": [
-     "The Simulator",
-     "The Judge",
-     "The Historian"
-    ],
-    "hit": null,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 57% across 10,000 runs vs 52% the price implies.",
-      "Expected value +11.2% per bet at -110.",
-      "The uploaded projection has it SF 22.95–26.53 SEA — SF by -3.6, short of +3 (disagrees).",
-      "The Judge, weighing every witness by its graded accuracy, is on this side.",
-      "3 of 8 characters on it, 1 independent of the sim: The Simulator (6-1 road spread), The Judge (5-0 road spread), The Historian (5-5 NFL spread).",
-      "Against: The Scorekeeper, The Oracle."
-     ],
-     "script": "SF at SEA — I'm on SF +3 (-110). We ran this game 10,000 times: SF covers 57% of the time; the price says 52%. 3 of our 8 analysts are on SF — The Simulator is 6-1 road spread."
-    }
+    "start": "2026-10-11T20:25Z"
    }
   ],
-  "bySport": {
-   "nfl": [
-    {
-     "sp": "nfl",
-     "game": "DEN@LAC",
-     "pick": "Over 41.5",
-     "price": -115,
-     "p": 0.553,
-     "ev": 3.3,
-     "start": "2026-10-11T20:05Z",
-     "tier": "STRONG",
-     "voices": [
-      "The Simulator",
-      "The Judge",
-      "The Oracle",
-      "The Coach"
-     ],
-     "hit": null,
-     "push": false
-    },
-    {
-     "sp": "nfl",
-     "game": "DET@ARI",
-     "pick": "Over 54.5",
-     "price": -115,
-     "p": 0.552,
-     "ev": 3.2,
-     "start": "2026-10-11T20:25Z",
-     "tier": "STRONG",
-     "voices": [
-      "The Simulator",
-      "The Judge",
-      "The Scorekeeper",
-      "The Historian",
-      "The Coach"
-     ],
-     "hit": null,
-     "push": false
-    },
-    {
-     "sp": "nfl",
-     "game": "SF@SEA",
-     "pick": "SF +3",
-     "price": -110,
-     "p": 0.583,
-     "ev": 11.2,
-     "start": "2026-10-11T20:25Z",
-     "tier": "VALUE",
-     "voices": [
-      "The Simulator",
-      "The Judge",
-      "The Historian"
-     ],
-     "hit": null,
-     "push": false
-    }
-   ],
-   "ncaaf": []
+  "allStarted": false,
+  "commit": {
+   "alg": "sha256",
+   "hash": "1634057d1f40f98bea27e1926f34bac147ac8dc6031adcba6247c5d5088eb2f7",
+   "salt": null
   }
  },
  "parlay": {
@@ -175,64 +51,16 @@
   "result": null,
   "legs": [
    {
-    "sp": "nfl",
-    "game": "BUF@LAR",
-    "pick": "LAR ML",
-    "price": -180,
-    "p": 0.6364,
-    "by": "The Historian",
-    "hit": null,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 56% across 10,000 runs vs 64% the price implies.",
-      "Desk number after calibration and market blend: 64%.",
-      "Expected value -1.0% per bet at -180.",
-      "The uploaded projection has it BUF 25.1–30.79 LAR — LAR winning by 5.7.",
-      "The Judge, weighing every witness by its graded accuracy, is on this side."
-     ],
-     "script": "BUF at LAR — I'm on LAR ML (-180). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects BUF 25.1, LAR 30.79 — LAR winning by 5.7. 5 of our 8 analysts are on LAR — The Simulator is 11-5 NFL ML."
-    }
+    "hidden": true,
+    "sp": "nfl"
    },
    {
-    "sp": "nfl",
-    "game": "DET@ARI",
-    "pick": "DET ML",
-    "price": -258,
-    "p": 0.7107,
-    "by": "The Simulator",
-    "hit": null,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 53% across 10,000 runs vs 72% the price implies.",
-      "Desk number after calibration and market blend: 71%.",
-      "Expected value -1.4% per bet at -258.",
-      "The uploaded projection has it DET 27.92–24.15 ARI — DET winning by 3.8.",
-      "The Judge, weighing every witness by its graded accuracy, is on this side."
-     ],
-     "script": "DET at ARI — I'm on DET ML (-258). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects DET 27.92, ARI 24.15 — DET winning by 3.8. 3 of our 8 analysts are on DET — The Simulator is 11-5 NFL ML."
-    }
+    "hidden": true,
+    "sp": "nfl"
    },
    {
-    "sp": "nfl",
-    "game": "DEN@LAC",
-    "pick": "DEN ML",
-    "price": -192,
-    "p": 0.6504,
-    "by": "The Oracle",
-    "hit": null,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 48% across 10,000 runs vs 66% the price implies.",
-      "Desk number after calibration and market blend: 65%.",
-      "Expected value -1.1% per bet at -192.",
-      "The uploaded projection has it DEN 23.17–20.77 LAC — DEN winning by 2.4.",
-      "The Judge, weighing every witness by its graded accuracy, is on this side."
-     ],
-     "script": "DEN at LAC — I'm on DEN ML (-192). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects DEN 23.17, LAC 20.77 — DEN winning by 2.4. 3 of our 8 analysts are on DEN — The Judge is 10-6 NFL ML."
-    }
+    "hidden": true,
+    "sp": "nfl"
    }
   ]
  },
