@@ -2132,7 +2132,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2197,6 +2197,7 @@ function doSportSwitch(sport){
         you switched sport from Grades or Tickets, the tap appeared to do
         nothing at all. Send the user to the board they just asked for. */
   try{localStorage.setItem('d4.activeSport',sport)}catch(e){}
+  tabForget();
   const gv=document.getElementById('v-games');
   if(gv&&!gv.classList.contains('on')&&typeof tab==='function')tab('games');
 }
@@ -3470,7 +3471,24 @@ function tabRaw(n,b){
   if(n==='grades')renderRecordsHub();
   if(n==='mine')openMyGames();
   window.scrollTo(0,0);
+  tabRemember(n);
 }
+/* v2.00 · iOS drops a home-screen app from memory in the background, and the relaunch
+   always opened on Games. The last tab + scroll are kept per page (device-only, never
+   synced) and restored on a relaunch within 3 hours. Tapping a sport still opens its board. */
+const LASTTAB_KEY='td.lastTab';
+function tabRemember(n){try{localStorage.setItem(LASTTAB_KEY,JSON.stringify({n,p:location.pathname,ts:Date.now(),y:0}));}catch(e){}}
+function tabRememberScroll(){try{const o=JSON.parse(localStorage.getItem(LASTTAB_KEY)||'null');if(!o||o.p!==location.pathname)return;o.y=Math.round(window.scrollY||0);o.ts=Date.now();localStorage.setItem(LASTTAB_KEY,JSON.stringify(o));}catch(e){}}
+function tabForget(){try{localStorage.removeItem(LASTTAB_KEY);}catch(e){}}
+function tabRestore(){try{const o=JSON.parse(localStorage.getItem(LASTTAB_KEY)||'null');
+  if(!o||o.p!==location.pathname||!o.n||o.n==='games'||Date.now()-o.ts>3*3600e3||location.hash)return false;
+  if(!document.getElementById('v-'+o.n))return false;
+  const b=[...document.querySelectorAll('nav button')].find(x=>new RegExp("tab\\('"+o.n+"'").test(x.getAttribute('onclick')||''));
+  tab(o.n,b||null);if(o.y)setTimeout(()=>window.scrollTo(0,o.y),400);return true;}catch(e){return false;}}
+if(typeof window!=='undefined'){let _st=null;
+  window.addEventListener('scroll',()=>{clearTimeout(_st);_st=setTimeout(tabRememberScroll,500);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)tabRememberScroll();});
+  window.addEventListener('load',()=>setTimeout(tabRestore,700));}
 
 /* ================= MATH ================= */
 /* ══ DETERMINISTIC SIMS (v1.85) ════════════════════════════════════════════
@@ -7702,6 +7720,14 @@ function fbpFindRow(rows,player){
   if(byLast.length===1&&wp.length<2)return byLast[0];
   return byLast.length===1&&!withInit.length?null:null;
 }
+/* v2.00 · a player who isn't anywhere in a FINAL box score didn't play: books void
+   that leg (it drops out of the parlay), so it grades as a push instead of sitting
+   open forever. Before voiding, one looser look: a unique last-name match anywhere
+   in the box — so "R. Rice" vs "Rashee Rice" can't turn a real result into a void.
+   A wrong void can always be overridden with ✅/❌ on the leg. */
+function propLastNameRow(rows,player){const p=fbpNorm(player).split(' ');const last=p[p.length-1];if(!last||last.length<3)return null;
+  const hits=(rows||[]).filter(r=>{const q=fbpNorm(r&&r.name).split(' ');return q[q.length-1]===last;});return hits.length===1?hits[0]:null;}
+function propDnpVoid(player){return{hit:null,push:true,dnp:true,detail:`${player} isn't in the final box score — didn't play, leg voided (book rule)`,live:false};}
 function gradeFBPropLeg(leg,ticketDate){
   const sp=leg.sport==='ncaaf'?'ncaaf':'nfl';
   const R=resolveLeg(leg,ticketDate); // may be null (not started / not yet in any store)
@@ -7724,7 +7750,12 @@ function gradeFBPropLeg(leg,ticketDate){
     const raw=isRec?(found.REC??found.rec??'0'):(found.YDS??found.yds??found.Yds??'0');
     val=parseFloat(String(raw).replace(/[^0-9.\-]/g,''))||0;
   }else if(!live&&anywhere){val=0; // played, just recorded nothing in this category
-  }else return{hit:null,detail:live?'player not in box yet':'player not in box score (DNP / void?)',live};
+  }else if(!live&&box.state==='post'){
+    let res=null;Object.values(box.teamStats).forEach(st=>{if(!res){const r=propLastNameRow(st[catKey]||[],leg.fbProp.player);if(r)res=r;}});
+    if(res){const raw=isRec?(res.REC??res.rec??'0'):(res.YDS??res.yds??res.Yds??'0');val=parseFloat(String(raw).replace(/[^0-9.\-]/g,''))||0;found=res;}
+    else{let any=false;Object.values(box.teamStats).forEach(st=>{['passing','rushing','receiving'].forEach(c=>{if(propLastNameRow(st[c]||[],leg.fbProp.player))any=true;});});
+      if(any)val=0;else return propDnpVoid(leg.fbProp.player);}
+  }else return{hit:null,detail:live?'player not in box yet':'player box not final yet',live};
   const {dir,thr}=leg.fbProp;
   // Counting stats only go up: an over/at-least prop is a LOCKED WIN the instant
   // it clears; an under prop is a LOCKED LOSS the instant it busts.
@@ -7756,7 +7787,8 @@ function gradeNHLPropShared(leg,ticketDate){
   if(box.state==='pre')return{hit:null,detail:null,live:false};
   const live=box.state==='in';const {player,stat,thr,dir}=leg.nhlProp;
   let row=null;Object.values(box.teams).forEach(t=>{if(!row)row=fbpFindRow([...(t.skaters||[]),...(t.goalies||[])],player);});
-  if(!row)return{hit:null,detail:live?'player not in box yet':'player not in final box — check the name',live};
+  if(!row&&!live&&box.state==='post'){Object.values(box.teams).forEach(t=>{if(!row)row=propLastNameRow([...(t.skaters||[]),...(t.goalies||[])],player);});if(!row)return propDnpVoid(player);}
+  if(!row)return{hit:null,detail:live?'player not in box yet':'player box not final yet',live};
   const v=nhlPropVal(row,stat);let hit=null;const overHit=dir==='atleast'?v>=thr:v>thr;
   if(dir==='under'){if(v>thr)hit=false;else if(!live)hit=true;}else{if(overHit)hit=true;else if(!live)hit=false;}
   return{hit,detail:`${row.name} ${v} ${stat}${live?' so far':''}`,live,prog:{val:v,thr,dir}};
@@ -7770,7 +7802,8 @@ function gradeMLBPropShared(leg,ticketDate){
   if(box.state==='pre')return{hit:null,detail:null,live:false};
   const live=box.state==='in';const {player,stat,role,thr,dir}=leg.mlbProp;
   let row=null;Object.values(box.teams).forEach(t=>{if(!row)row=fbpFindRow(role==='pitcher'?t.pitchers:t.batters,player);});
-  if(!row)return{hit:null,detail:live?(role==='pitcher'?'pitcher not in box yet':'not in the box yet'):'player not in final box — check the name (or he did not play)',live};
+  if(!row&&!live&&box.state==='post'){Object.values(box.teams).forEach(t=>{if(!row)row=propLastNameRow(role==='pitcher'?t.pitchers:t.batters,player);});if(!row)return propDnpVoid(player);}
+  if(!row)return{hit:null,detail:live?(role==='pitcher'?'pitcher not in box yet':'not in the box yet'):'player box not final yet',live};
   const F={strikeouts:'K',hitsallowed:'H',hits:'H',homeruns:'HR',rbis:'RBI',runs:'R',walks:'BB'}[stat];
   const v=parseFloat(String(row[F]==null?0:row[F]).replace(/[^0-9.\-]/g,''))||0;
   let hit=null;
@@ -8068,7 +8101,7 @@ function pregameWrap(sp,g,html){try{if(!g||!g.id||!html)return html;const key=sp
    · the game is final but the pick text couldn't be read → set it yourself
    Manual results (Won / Lost / Push) are stored on the leg and always win.  */
 function legOverdue(l,t){const d=legDay(l,t.date);if(!d)return false;if(d<today())return true;
-  try{const e=mgEventFor(l.sport||'mlb',l.game,d,!!l.gdApprox||!l.gameDate);if(e&&e.start)return Date.now()-Date.parse(e.start)>5*3600e3;}catch(err){}return false;}
+  try{const e=mgEventFor(l.sport||'mlb',l.game,d,!!l.gdApprox||!l.gameDate);if(e&&e.state==='post')return true;if(e&&e.start)return Date.now()-Date.parse(e.start)>4*3600e3;}catch(err){}return false;}
 function legDiagnose(l,t){const sp=l.sport||'mlb',d=legDay(l,t.date),ap=!!l.gdApprox||!l.gameDate;const L=MG_LIVE[sp]||{};
   const e=mgEventFor(sp,l.game,d,ap);
   if(e){if(e.state==='in')return{code:'live',msg:`ESPN still shows it in progress (${e.detail||'live'})`};
@@ -12079,6 +12112,10 @@ function settledMoneyIndex(){const m={};
   try{(getBankroll().history||[]).forEach(h=>{if(h&&h.id!=null)m[String(h.id)]=Object.assign({src:'mine'},h);});}catch(e){}
   try{const T=get('d4.trackedhistory',{})||{};Object.keys(T).forEach(s=>(T[s]||[]).forEach(h=>{if(h&&h.id!=null&&!m[String(h.id)])m[String(h.id)]=Object.assign({src:s},h);}));}catch(e){}
   return m;}
+function settledFillLegs(e,t){if(!Array.isArray(e.legs)||!e.legs.some(l=>l&&l.h==null))return false;let n=0;
+  e.legs.forEach((l,i)=>{if(!l||l.h!=null)return;const x=(t.legs||[])[i];if(!x)return;let g=null;try{g=gradeLeg(x,t.date);}catch(err){}
+    if(!g||g.live)return;const h=g.push?'P':g.hit===true?'W':g.hit===false?'L':null;if(!h)return;l.h=h;n++;});
+  if(!n)return false;e.w=e.legs.filter(l=>l&&l.h==='W').length;e.l=e.legs.filter(l=>l&&l.h==='L').length;e.p=e.legs.filter(l=>l&&l.h==='P').length;e.filled=Date.now();return true;}
 let SETL_SIG='';
 function settledSync(force){
   const L=get(LS.locked,[])||[];
@@ -12086,7 +12123,7 @@ function settledSync(force){
   if(!force&&sig===SETL_SIG)return 0;
   const S=settledAll(),money=settledMoneyIndex();let ch=0;const live=new Set();
   L.forEach(t=>{if(!t||!t.legs||!t.legs.length)return;const id=String(t.id);live.add(id);
-    const e=S[id];if(e&&!e.recovered)return;          // frozen — never re-graded
+    const e=S[id];if(e&&!e.recovered){if(settledFillLegs(e,t))ch++;return;}          // frozen — money never re-graded; open legs filled in
     const rec=settledRec(t);if(!rec)return;
     S[id]=settledEntry(t,rec,money);ch++;});
   // tickets purged before the ledger existed: rebuild from the money history
@@ -20104,7 +20141,8 @@ const GHEALTH_KEY='d4.gradehealth';let SWEEP_BUSY=false,SWEEP_TS=0;
 function sweepOverdue(){const out=[];(get(LS.locked,[])||[]).forEach(t=>{let FZ=null;
   (t.legs||[]).forEach((l,i)=>{if(l.manual)return;let r=null;try{r=gradeLeg(l,t.date);}catch(e){}
     if(r&&(r.live||r.hit===true||r.hit===false||r.push))return;let od=false;try{od=legOverdue(l,t);}catch(e){}if(!od)return;
-    if(t.archived){if(FZ==null)try{FZ=settledAll()[String(t.id)]||0;}catch(e){FZ=0;}if(FZ&&!FZ.recovered)return;}   /* frozen = settled for good */
+    /* v2.00: a frozen (settled) ticket's money never changes, but a leg that was still open when
+       it froze — a dead parlay archived mid-slate — still gets swept and graded */
     out.push({t,l,i,sp:l.sport||'mlb',d:legDay(l,t.date)});});});return out;}
 function sweepAutoRekey(list){let n=0;list.forEach(x=>{try{const D=legDiagnose(x.l,x.t);if(D.code!=='rekey'||!D.to)return;
     const [oa,oh]=String(x.l.game).split('@'),[na,nh]=D.to.split('@');const sp=x.sp;
@@ -20902,12 +20940,17 @@ async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your pri
       if(!need)break;const p=await syncPush(M,sha);if(p.ok)break;if(attempt===2)throw new Error('another device kept saving at the same moment — try again');}
     localStorage.setItem(SYNC.last,String(Date.now()));SYNC_STATE={ok:true,ts:Date.now(),msg:changed?`pulled ${changed} change${changed===1?'':'s'} from your other devices`:'up to date'};
     if(manual)toastSync(SYNC_STATE.msg);
-    if(changed&&!manual){try{if(!sessionStorage.getItem('d4.syncReload')){sessionStorage.setItem('d4.syncReload','1');location.reload();}}catch(e){}}
+    /* v2.00: an automatic sync used to RELOAD the page when it pulled anything, which threw you
+       back to Games mid-research. Now the data lands quietly; every view reads it the next time it paints. */
+    if(changed&&!manual)toastSync(`synced ${changed} change${changed===1?'':'s'} from your other device`);
     return{ok:true,changed};}
   catch(e){SYNC_STATE={ok:false,ts:Date.now(),msg:e.message||String(e)};if(manual)alert('Sync failed: '+SYNC_STATE.msg);return{ok:false,reason:SYNC_STATE.msg};}
   finally{SYNC_BUSY=null;try{renderSyncStatus();}catch(e){}}})();
   return SYNC_BUSY;}
-function toastSync(m){try{if(typeof toast==='function')return toast('☁️ '+m);}catch(e){}}
+function deskToast(m,ms){if(typeof document==='undefined')return;try{let el=document.getElementById('deskToast');
+  if(!el){el=document.createElement('div');el.id='deskToast';el.style.cssText='position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:9999;background:rgba(20,20,20,.94);color:#fff;border:1px solid var(--gold,#FFC72C);border-radius:20px;padding:7px 14px;font:600 11px/1.3 "IBM Plex Mono",monospace;max-width:86vw;text-align:center;pointer-events:none;transition:opacity .3s';document.body.appendChild(el);}
+  el.textContent=m;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.opacity='0';},ms||2600);}catch(e){}}
+function toastSync(m){deskToast('☁️ '+m);}
 function renderSyncStatus(){const el=document.getElementById('syncStatus');if(!el)return;const last=+localStorage.getItem(SYNC.last)||0;
   el.innerHTML=!syncOn()?'<span style="color:var(--mute)">Not connected.</span>'
     :SYNC_STATE.ok===false?`<span style="color:var(--rust)">⚠ ${txtEsc(SYNC_STATE.msg)}</span>`
