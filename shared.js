@@ -2154,7 +2154,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011p';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011q';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -21648,7 +21648,8 @@ function syncSettingsHtml(){const on=syncOn();
     <input id="syncRepoIn" placeholder="ironsilkstrategies/thedesk-data" autocomplete="off" spellcheck="false" value="ironsilkstrategies/thedesk-data">
     <div class="mono" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">Fine-grained token</div>
     <input id="syncTokIn" type="password" placeholder="github_pat_…  (this repo only · Contents: read and write)" autocomplete="off" spellcheck="false">`}
-    <div class="bar" style="margin-top:8px">${on?`<button class="primary" onclick="syncNow(true)">Sync now</button><button onclick="syncDisconnect()">Disconnect</button>`:`<button class="primary" onclick="syncConnect()">Connect this device</button>`}</div>
+    <div class="bar" style="margin-top:8px">${on?`<button class="primary" onclick="syncNow(true)">Sync now</button><button onclick="copyText(String(get(SYNC.token,'')||''),'Sync token copied — paste it into the new app (or Notes for safekeeping).')">📋 Copy sync token</button><button onclick="syncDisconnect()">Disconnect</button>`:`<button class="primary" onclick="syncConnect()">Connect this device</button>`}</div>
+    ${on?`<div class="sub" style="font-size:10px;margin-top:4px">Moving to a new home-screen icon or another device? Copy the token here, then on the new one enter <b>${txtEsc(get(SYNC.repo,''))}</b> + the token and connect — everything comes back.</div>`:''}
     <div class="sub mono" id="syncStatus" style="font-size:10px;margin-top:6px"></div>
     ${on?'':`<div class="sub" style="font-size:10.5px;margin-top:8px"><b>Set up once (2 minutes, on your phone):</b></div>
     <div class="bar" style="margin-top:4px;flex-wrap:wrap"><a class="gc-btn" style="text-decoration:none;padding:9px 12px" href="https://github.com/new?name=thedesk-data&visibility=private&description=TheDesk+private+sync" target="_blank" rel="noopener">① Create private repo</a>
