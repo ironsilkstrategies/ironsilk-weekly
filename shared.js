@@ -2177,7 +2177,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8425,8 +8425,11 @@ function paintSlip(){
   el.classList.add('on');
   const c=SLIP.reduce((a,x)=>a*x.p,1);
   const gs=new Set(SLIP.map(x=>x.game));
-  document.getElementById('slN').innerHTML='<span class="chev">▲</span> '+SLIP.length+' legs · '+gs.size+' games';
-  document.getElementById('slO').textContent=(c*100).toFixed(c<.01?3:1)+'% · 1 in '+Math.round(1/c).toLocaleString();
+  document.getElementById('slN').innerHTML='<span class="chev">▲</span> '+SLIP.length+' leg'+(SLIP.length===1?'':'s')+' · '+gs.size+' game'+(gs.size===1?'':'s');
+  let M=null;try{M=slipMath();}catch(e){}
+  document.getElementById('slO').textContent=(M&&M.dec?decimalToAmerican(M.dec)+' · ':'')+(c*100).toFixed(c<.01?2:1)+'%';
+  if(!document.getElementById('slipRevBtn')){const b=document.createElement('button');b.id='slipRevBtn';b.className='c';b.textContent='Review ▲';b.onclick=ev=>{ev.stopPropagation();openSlipSheet();};
+    const k=el.querySelector('button');if(k)el.insertBefore(b,k);else el.appendChild(b);}
   // keep the sheet's own contents in sync any time paintSlip runs — covers the
   // case where a leg gets removed from inside the sheet itself and the summary/
   // list both need to reflect that immediately, not just on next open
@@ -8457,29 +8460,56 @@ function closeSlipSheet(){
   const sheet=document.getElementById('slipSheet');
   if(sheet)sheet.classList.remove('on');
 }
+/* v2.21 · the review sheet is the ticket builder: every leg with its price and chance, remove any
+   one, see the parlay price, cash chance, EV and same-game warnings, set the stake (to-win updates
+   live), name it, lock it. */
+function slipLegPrice(x){if(x.price!=null&&isFinite(+x.price))return +x.price;try{const sp=x.sport||window.__PAGE_SPORT__||'mlb';const[a,h]=String(x.game).split('@');
+    const g=(sportGames(sp)||[]).find(z=>z.id===x.gid)||{away:{abbr:a},home:{abbr:h},id:x.gid};const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},x.pick);if(!k)return null;
+    const L=sportLinesFor(sp,g)||[];const mk=k.market==='ml'?'moneyline':k.market;const ln=(String(x.pick).match(/([+-]?\d+(?:\.\d+)?)\s*$/)||[])[1];
+    const c=L.filter(y=>(y.market===mk||(mk==='spread'&&(y.market==='runline'||y.market==='puckline')))&&y.side===k.side&&(ln==null||y.line==null||Math.abs(Math.abs(+y.line)-Math.abs(+ln))<0.01));
+    if(c.length&&c[0].price!=null)return +c[0].price;
+    /* fallback: the day's saved book lines by game key (MLB lines are filed without a game id) */
+    const key={mlb:LS.bookshots,nfl:'d4.nflshots',ncaaf:'d4.ncaafshots',nhl:'d4.nhlshots',nba:'d4.nbashots'}[sp];const day=String(x.date||today()).slice(0,10);
+    const S=(roGet(key,{},30e3)||{})[day]||[];const mk2=mk==='spread'&&sp==='mlb'?'runline':mk;
+    const d=S.filter(y=>(y.game===x.game||(y.away+'@'+y.home)===x.game)&&(y.market===mk2||y.market===mk||(mk==='spread'&&(y.market==='runline'||y.market==='puckline')))&&y.side===k.side&&(ln==null||y.line==null||Math.abs(Math.abs(+y.line)-Math.abs(+ln))<0.01)&&y.price!=null);
+    return d.length?+d[d.length-1].price:null;}catch(e){return null;}}
+function slipMath(){const legs=SLIP.map(x=>({x,price:slipLegPrice(x)}));const priced=legs.every(l=>l.price!=null);
+  const dec=priced?legs.reduce((a,l)=>a*americanToDecimal(l.price),1):null;const p=SLIP.reduce((a,x)=>a*(x.p>0&&x.p<1?x.p:0.5),1);
+  return{legs,priced,dec,p,ev:dec?(p*dec-1)*100:null};}
+function slipStake(){const el=document.getElementById('slipStakeIn');let v=el?parseFloat(el.value):NaN;if(!(v>0)){try{v=+get('d4.slipstake',0)||0;}catch(e){v=0;}}return v>0?v:null;}
+function slipStakeInput(el){const v=parseFloat(el.value);try{if(v>0)set('d4.slipstake',v);}catch(e){}const M=slipMath();const o=document.getElementById('slipToWin');
+  if(o)o.textContent=v>0&&M.dec?`to win ${ms$(v*(M.dec-1))} · pays ${ms$(v*M.dec)}`:(v>0?'to win — (a leg has no price)':'');}
 function renderSlipSheetBody(){
   const body=document.getElementById('slipSheetBody');
   const summary=document.getElementById('slipSheetSummary');
   if(!body||!summary)return;
   if(!SLIP.length){closeSlipSheet();return}
-  const c=SLIP.reduce((a,x)=>a*x.p,1);
-  const gs=new Set(SLIP.map(x=>x.game));
-  summary.textContent=(c*100).toFixed(c<.01?3:1)+'% · 1 in '+Math.round(1/c).toLocaleString();
-  // Coach checks each leg for duplicate exposure the moment you're reviewing
-  // the slip — never blocks the tap itself, just flags it right where you're
-  // already looking before you lock anything in.
-  const coach=coachHtml({legs:SLIP});
-  body.innerHTML=coach+SLIP.map(x=>{
-    const dup=coachDuplicateCheck(x.pick,x.game);
-    return `<div class="slip-leg">
+  const M=slipMath();const gs=new Set(SLIP.map(x=>x.game));const prevName=(document.getElementById('slipNameIn')||{}).value||'';
+  summary.innerHTML=`${SLIP.length} leg${SLIP.length===1?'':'s'} · ${M.dec?`<b style="color:var(--gold)">${decimalToAmerican(M.dec)}</b> · `:''}${(M.p*100).toFixed(M.p<.01?2:1)}% to cash`;
+  const cnt={};SLIP.forEach(x=>{cnt[x.game]=(cnt[x.game]||0)+1;});
+  const coach=(()=>{try{return coachHtml({legs:SLIP})}catch(e){return''}})();
+  const rows=M.legs.map(({x,price},i)=>{const dup=(()=>{try{return coachDuplicateCheck(x.pick,x.game)}catch(e){return null}})();const sg=cnt[x.game]>1;
+    return`<div class="slip-leg">
+      <div class="slip-leg-n">${i+1}</div>
       <div class="slip-leg-info">
-        <div class="slip-leg-pick">${x.pick}${dup?` <span class="flag hot" title="${esc(dup.text)}">⚠ dup ×${(pendingLegExposure().filter(r=>r.pick===x.pick&&r.game===x.game).length)}</span>`:''}</div>
-        <div class="slip-leg-game">${x.game}${x.pname?' · '+x.pname:''}</div>
+        <div class="slip-leg-pick">${txtEsc(x.pick)}${price!=null?` <span class="slip-leg-price">${price>0?'+':''}${price}</span>`:' <span class="slip-leg-price" style="color:var(--mute)">no price</span>'}</div>
+        <div class="slip-leg-game">${(SP_LAB[x.sport||window.__PAGE_SPORT__||'mlb']||'').split(' ')[0]} ${txtEsc(x.game)}${x.pname?' · '+txtEsc(x.pname):''}${x.date&&x.date!==today()?' · '+txtEsc(String(x.date).slice(5)):''}</div>
+        ${sg||dup?`<div class="slip-leg-warn">${sg?'⚠ same game as another leg — correlated':''}${sg&&dup?' · ':''}${dup?'⚠ already on a pending ticket':''}</div>`:''}
       </div>
-      <div class="slip-leg-prob">${(x.p*100).toFixed(0)}%</div>
-      <button class="slip-leg-rm" onclick="removeSlipLeg('${esc(x.id)}')" title="Remove">✕</button>
+      <div class="slip-leg-prob">${x.p>0&&x.p<1?(x.p*100).toFixed(0)+'%':'—'}</div>
+      <button class="slip-leg-rm" onclick="removeSlipLeg('${esc(x.id)}')" title="Remove this leg" aria-label="Remove ${esc(x.pick)}">✕</button>
+    </div>`;}).join('');
+  const st=slipStake();
+  const money=`<div class="slip-money">
+      <div class="slip-money-row"><span>Ticket price</span><b>${M.dec?decimalToAmerican(M.dec):'— <span style="font-weight:400;font-size:10px;color:var(--mute)">(a leg has no price)</span>'}</b></div>
+      <div class="slip-money-row"><span>Cash chance (model)</span><b>${(M.p*100).toFixed(M.p<.01?2:1)}% · 1 in ${Math.max(1,Math.round(1/M.p)).toLocaleString()}</b></div>
+      ${M.ev!=null?`<div class="slip-money-row"><span>EV</span><b style="color:${M.ev>=0?'var(--win)':'var(--rust)'}">${M.ev>=0?'+':''}${M.ev.toFixed(1)}%</b></div>`:''}
+      <div class="slip-money-row" style="gap:8px"><span>Stake $</span><input id="slipStakeIn" type="number" inputmode="decimal" min="0" step="0.5" value="${st!=null?st:''}" placeholder="0.00" oninput="slipStakeInput(this)" style="font-size:16px;width:96px;text-align:right"></div>
+      <div class="slip-money-row"><span></span><span id="slipToWin" class="mono" style="font-size:11px;color:var(--win)">${st&&M.dec?`to win ${ms$(st*(M.dec-1))} · pays ${ms$(st*M.dec)}`:''}</span></div>
+      <input id="slipNameIn" type="text" placeholder="Ticket name (optional)" autocomplete="off" value="${txtEsc(prevName)}" style="font-size:16px;width:100%;margin-top:6px">
+      ${gs.size<SLIP.length?'<div class="slip-leg-warn" style="margin-top:6px">Two or more legs share a game — books often won\'t take that as a regular parlay (it\'s a same-game parlay).</div>':''}
     </div>`;
-  }).join('');
+  body.innerHTML=rows+money+coach;
 }
 // Removing a leg from inside the sheet reuses tog()'s own removal branch —
 // tog(id) with no other args still correctly removes, since the removal path
@@ -8496,13 +8526,17 @@ function lockSlip(){
   // custom Build-tab tickets never had a name at all before — optional prompt,
   // blank/cancel just leaves it unnamed (falls back to date-only display, same
   // as always), nothing forces a name on a quick lock-in
-  const name=(prompt('Name this ticket? (optional — leave blank to skip)','')||'').trim()||null;
+  const nIn=document.getElementById('slipNameIn');
+  const name=(SLIP_SHEET_OPEN&&nIn?nIn.value:(prompt('Name this ticket? (optional — leave blank to skip)','')||'')).trim()||null;
   const L=get(LS.locked,[]);
-  const d0=today();
-  L.unshift({id:Date.now(),date:d0,name,source:'mine',
+  const d0=today();const M=slipMath();const stake=SLIP_SHEET_OPEN?slipStake():null;const tid=Date.now();
+  const money=stake&&M.dec?{stake:String(stake),toWin:String(+(stake*(M.dec-1)).toFixed(2))}:{};
+  SLIP.forEach((x,i)=>{if(x.price==null&&M.legs[i].price!=null)x.price=M.legs[i].price;});
+  L.unshift({id:tid,date:d0,name,source:'mine',...money,
     legs:SLIP.map(x=>({...x,sport:x.sport||(window.__PAGE_SPORT__||'mlb'),gameDate:String(x.gameDate||x.date||d0).slice(0,10)})),   /* a Saturday game keeps its Saturday */
     p:SLIP.reduce((a,x)=>a*x.p,1)});
   set(LS.locked,L);
+  if(money.stake){try{saveWager(tid,+money.stake);}catch(e){}}
   SLIP=[];set(LS.slip,SLIP);renderActiveBoard();paintSlip();closeSlipSheet();
   alert(`Locked${name?' — "'+name+'"':''}. See Tickets → My Parlays.`);
 }
@@ -20917,6 +20951,15 @@ body.bnav .slip{bottom:var(--bnh,64px)!important;z-index:79!important;padding-bo
 .slip-scrim{z-index:85!important}.slip-sheet{z-index:86!important}
 body.bnav.slipon main{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
 body.bnav.slipon #dToastBox{bottom:calc(150px + env(safe-area-inset-bottom))!important}
+.slip-leg-n{flex:0 0 auto;width:20px;font-family:"IBM Plex Mono";font-size:11px;color:var(--mute);text-align:center}
+.slip-leg-price{font-family:"IBM Plex Mono";font-size:12px;font-weight:700;color:var(--gold);margin-left:4px}
+.slip-leg-warn{font-family:"IBM Plex Mono";font-size:9.5px;color:#ffb43d;margin-top:3px}
+.slip-leg-rm{width:34px!important;height:34px!important;font-size:15px}
+.slip-money{margin:10px 0 6px;padding:10px 12px;border:1px solid var(--rule);border-radius:12px;background:rgba(255,255,255,.02)}
+.slip-money-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0}
+.slip-money-row>span:first-child{color:var(--mute)}
+.slip-sheet{max-height:86vh!important}
+.slip .sl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #bnMore .bn-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:14px;background:var(--panel2);border:1px solid var(--rule);font-weight:700;font-size:11.5px;color:var(--chalk)}
 #bnMore .bn-tile span{font-size:22px}
 .bn-soc{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;border:1px solid var(--rule);background:var(--panel2,#18212C);color:var(--chalk);text-decoration:none;font:700 13px Inter,sans-serif}.bn-soc b{font-size:16px}

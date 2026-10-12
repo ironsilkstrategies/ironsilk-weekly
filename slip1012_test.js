@@ -16,7 +16,17 @@ setTimeout(()=>{try{
   w.eval(`sportSlipToggle('nfl','g1','BUF 1H spread',-105)`);T('1st-half too: "BUF 1H +2.5"',w.eval('SLIP[1].pick')==='BUF 1H +2.5');
   w.eval(`sportSlipToggle('nfl','g1','BUF spread',-103)`);T('tapping the same square again takes it off',w.eval('SLIP.length')===1&&w.eval('SLIP[0].pick')==='BUF 1H +2.5');
   T('the board repaints its own sport (never the MLB board over football)',w.eval('window.__r')>=3);
-  w.eval(`sportSlipToggle('nfl','g1','LAR ML',-165);lockSlip();`);const t=w.eval('get(LS.locked,[])[0]');
+  /* v2.21: the review sheet is the ticket builder */
+  w.eval(`sportSlipToggle('nfl','g1','LAR ML',-165);openSlipSheet();`);
+  const sh=w.document.getElementById('slipSheetBody').innerHTML;
+  T('review sheet: every leg with its price and a remove button, ticket price, cash chance, stake and name',/BUF 1H \+2\.5/.test(sh)&&/-165/.test(sh)&&(sh.match(/slip-leg-rm/g)||[]).length===2&&/Ticket price/.test(sh)&&/Cash chance/.test(sh)&&/slipStakeIn/.test(sh)&&/slipNameIn/.test(sh));
+  T('same-game legs are flagged as correlated',/same game as another leg/.test(sh));
+  T('the bar has a real Review button',!!w.document.getElementById('slipRevBtn'));
+  w.eval(`document.getElementById('slipStakeIn').value='4';slipStakeInput(document.getElementById('slipStakeIn'));document.getElementById('slipNameIn').value='MNF';`);
+  T('stake shows to-win live',/to win \$/.test(w.document.getElementById('slipToWin').textContent));
+  w.eval(`renderSlipSheetBody()`);T('the typed name survives a repaint',w.document.getElementById('slipNameIn').value==='MNF');
+  w.eval(`lockSlip();`);const t=w.eval('get(LS.locked,[])[0]');
+  T('Lock in: My Tickets gets the name, the stake and to-win',t&&t.name==='MNF'&&t.stake==='4'&&+t.toWin>0,JSON.stringify(t&&{n:t.name,s:t.stake,w:t.toWin}));
   T('Lock in: My Tickets gets the legs with their sport and game day',t&&t.legs.length===2&&t.legs.every(l=>l.sport==='nfl'&&l.gameDate===w.eval('today()'))&&w.eval('SLIP.length')===0,JSON.stringify(t&&t.legs.map(l=>l.pick+' '+l.gameDate)));
   w.eval(`set(LS.allfinals,{[finalsKey('nfl','BUF@LAR')]:{sport:'nfl',a:24,h:25,d:today(),ts:Date.now()}})`);
   T('…and the spread leg grades (BUF +3 covers a 1-pt loss)',w.eval(`gradeLeg({pick:'BUF +3',game:'BUF@LAR',sport:'nfl',gameDate:today()},today()).hit`)===true);
