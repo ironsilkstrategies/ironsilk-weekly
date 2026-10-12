@@ -1,6 +1,6 @@
 {
  "v": 3,
- "generated": 1791792917089,
+ "generated": 1791831792588,
  "brand": "TheDesk",
  "price": "$25/mo · $10/wk",
  "social": {
@@ -21,9 +21,33 @@
   "lockedAt": 1791792755817,
   "picks": [
    {
-    "hidden": true,
     "sp": "nhl",
-    "start": "2026-10-12T17:00Z"
+    "game": "FLA@BUF",
+    "gl": "#22 FLA@#27 BUF",
+    "pick": "BUF ML",
+    "price": -108,
+    "p": 0.525,
+    "ev": 1,
+    "start": "2026-10-12T17:00Z",
+    "tier": "STRONG",
+    "voices": [
+     "The Simulator",
+     "The Judge",
+     "The Scorekeeper"
+    ],
+    "hit": null,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Expected value +1.0% per bet at -108.",
+      "Covers' computer has it FLA 3.06–3.34 BUF — BUF winning by 0.28.",
+      "1 of 9 characters on it, 1 independent of the sim: Covers (1-3 NHL ML).",
+      "Trend ✗ Panthers are 4-0 in their last 4 vs. Eastern Conference.",
+      "Trend ✗ Panthers are 4-0 in their last 4 games as an underdog.",
+      "Standing: FLA (2-1-2, #22 in power, −0.15) at BUF (2-3, #27, −0.40) — power line FLA by 0.08 goals."
+     ],
+     "script": "FLA at BUF — I'm on BUF ML (-108). Covers' computer projects FLA 3.06, BUF 3.34 — BUF winning by 0.28. 1 of our 9 analysts are on BUF — Covers is 1-3 NHL ML."
+    }
    },
    {
     "hidden": true,
@@ -50,8 +74,25 @@
     "sp": "nfl"
    },
    {
-    "hidden": true,
-    "sp": "nhl"
+    "sp": "nhl",
+    "game": "FLA@BUF",
+    "gl": "#22 FLA@#27 BUF",
+    "pick": "FLA +1.5",
+    "price": -275,
+    "p": 0.6628,
+    "by": "The Commissioner",
+    "hit": null,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Expected value -9.6% per bet at -275.",
+      "Covers' computer has it FLA 3.06–3.34 BUF — FLA by -0.3, clearing +1.5.",
+      "1 of 9 characters on it, 1 independent of the sim: Covers (3-1 road spread).",
+      "Trend ✓ Panthers are 4-0 in their last 4 vs. Eastern Conference.",
+      "Trend ✓ Panthers are 4-0 in their last 4 games as an underdog."
+     ],
+     "script": "FLA at BUF — I'm on FLA +1.5 (-275). On power ratings alone FLA covers this number by 1.58. Covers' computer projects FLA 3.06, BUF 3.34 — FLA by -0.3, clearing +1.5. 1 of our 9 analysts are on FLA — Covers is 3-1 road spread. Panthers are 4-0 in their last 4 vs. Eastern Conference."
+    }
    }
   ]
  },
