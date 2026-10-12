@@ -242,8 +242,8 @@ function intakeParseGrammar(text,fallbackSport){
   const sections=[];let cur=null;
   stripBOM(text).split('\n').forEach(line=>{
     const l=line.replace(/^[\s\-*•>]+/,'').trim();
-    const hs=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB|NHL|HOCKEY)(?:\s+(?:ODDS|LINES|BOARD|SLATE))?\s*$/i);
-    if(hs){cur={sport:/^(NCAAF|CFB|COLLEGE)/i.test(hs[1])?'ncaaf':/^(NHL|HOCKEY)/i.test(hs[1])?'nhl':hs[1].toLowerCase(),lines:[]};sections.push(cur);return;}
+    const hs=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB|NHL|HOCKEY|NBA|BASKETBALL)(?:\s+(?:ODDS|LINES|BOARD|SLATE))?\s*$/i);
+    if(hs){cur={sport:/^(NCAAF|CFB|COLLEGE)/i.test(hs[1])?'ncaaf':/^(NHL|HOCKEY)/i.test(hs[1])?'nhl':/^(NBA|BASKETBALL)/i.test(hs[1])?'nba':hs[1].toLowerCase(),lines:[]};sections.push(cur);return;}
     if(!cur){cur={sport:null,lines:[]};sections.push(cur);}
     cur.lines.push(l);
   });
@@ -2163,7 +2163,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /

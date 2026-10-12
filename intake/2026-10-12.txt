@@ -1,0 +1,126 @@
+SOURCE: covers
+# Mon Oct 12, 2026 — book lines: sportsbetting.ag (1:15 AM CT) · predictions + trends: Covers (1:16–1:18 AM CT)
+
+NFL
+
+Buffalo Bills @ Los Angeles Rams
+ML: Buffalo Bills +152 / Los Angeles Rams -173
+SPREAD: Buffalo Bills +3.5 (-115) / Los Angeles Rams -3.5 (-105)
+OU: o54.5 (-108) / u54.5 (-112)
+H1SPREAD: Buffalo Bills +2.5 (-105) / Los Angeles Rams -2.5 (-115)
+H1ML: Buffalo Bills +135 / Los Angeles Rams -155
+H1OU: o26.5 (-120) / u26.5 (+100)
+Q1SPREAD: Buffalo Bills +0.5 (-135) / Los Angeles Rams -0.5 (+115)
+Q1ML: Buffalo Bills +115 / Los Angeles Rams -135
+Q1OU: o10 (-120) / u10 (+100)
+PRED: Buffalo Bills 25.04 / Los Angeles Rams 30.75
+TREND: Under is 4-0 in Bills last 4 games in Week 5.
+TREND: Bills are 4-0 ATS in their last 4 games after allowing more than 250 yards passing in their previous game.
+TREND: Bills are 4-0 ATS in their last 4 games following a straight up loss.
+TREND: Bills are 6-1 ATS in their last 7 games following a ATS loss.
+TREND: Over is 4-0 in Rams last 4 games as an underdog.
+TREND: Rams are 9-1 ATS in their last 10 games following a straight up loss.
+TREND: Over is 6-1 in Rams last 7 games after allowing less than 250 total yards in their previous game.
+TREND: Over is 6-1 in Rams last 7 games following a ATS win.
+
+MLB
+
+Los Angeles Dodgers @ Milwaukee Brewers
+ML: Los Angeles Dodgers -135 / Milwaukee Brewers +122
+RL: Los Angeles Dodgers -1.5 (+133) / Milwaukee Brewers +1.5 (-153)
+OU: o7 (+108) / u7 (-128)
+F5 ML: Los Angeles Dodgers -137 / Milwaukee Brewers +117
+F5 RL: Los Angeles Dodgers -0.5 (+108) / Milwaukee Brewers +0.5 (-128)
+F5 OU: o3.5 (-112) / u3.5 (-108)
+PRED: Los Angeles Dodgers 5.08 / Milwaukee Brewers 4.00
+TREND: Dodgers are 6-0 in their last 6 road games.
+TREND: Dodgers are 5-0 in their last 5 games as a road favorite.
+TREND: Under is 6-0 in Yamamotos last 6 starts vs. a team with a winning record.
+TREND: Dodgers are 5-0 in their last 5 League Championship games.
+TREND: Under is 5-0 in Brewers last 5 League Championship games.
+TREND: Brewers are 5-1 in their last 6 vs. National League West.
+TREND: Brewers are 6-1 in their last 7 games vs. a right-handed starter.
+TREND: Under is 4-1-1 in Brewers last 6 vs. National League West.
+
+Cleveland Guardians @ Tampa Bay Rays
+ML: Cleveland Guardians +149 / Tampa Bay Rays -165
+RL: Cleveland Guardians +1.5 (-152) / Tampa Bay Rays -1.5 (+132)
+OU: o6.5 (-120) / u6.5 (+100)
+F5 ML: Cleveland Guardians +135 / Tampa Bay Rays -155
+F5 RL: Cleveland Guardians +0.5 (-110) / Tampa Bay Rays -0.5 (-110)
+F5 OU: o3.5 (-110) / u3.5 (-110)
+
+NHL
+
+Florida Panthers @ Buffalo Sabres
+ML: Florida Panthers -107 / Buffalo Sabres -107
+PL: Florida Panthers +1.5 (-275) / Buffalo Sabres -1.5 (+226)
+OU: o6 (-111) / u6 (-105)
+P1ML: Florida Panthers -110 / Buffalo Sabres -110
+P1PL: Florida Panthers -0.5 (+178) / Buffalo Sabres +0.5 (-207)
+P1OU: o1.5 (-124) / u1.5 (+104)
+PRED: Florida Panthers 3.06 / Buffalo Sabres 3.34
+TREND: Panthers are 4-0 in their last 4 vs. Eastern Conference.
+TREND: Panthers are 4-0 in their last 4 games as an underdog.
+TREND: Under is 4-0 in Panthers last 4 vs. a team with a losing record.
+TREND: Panthers are 8-1 in their last 9 games following a home loss of 3 or more goals.
+TREND: Over is 3-0-2 in Sabres last 5 games as a favorite.
+TREND: Over is 4-1 in Sabres last 5 overall.
+TREND: Over is 4-1-2 in Sabres last 7 vs. Eastern Conference.
+TREND: Over is 4-1-1 in Sabres last 6 games playing on 1 days rest.
+
+Ottawa Senators @ New Jersey Devils
+ML: Ottawa Senators +116 / New Jersey Devils -132
+PL: Ottawa Senators +1.5 (-235) / New Jersey Devils -1.5 (+195)
+OU: o6 (+100) / u6 (-116)
+P1ML: Ottawa Senators +102 / New Jersey Devils -122
+P1PL: Ottawa Senators +0.5 (-193) / New Jersey Devils -0.5 (+168)
+P1OU: o1.5 (-120) / u1.5 (+100)
+PRED: Ottawa Senators 2.95 / New Jersey Devils 3.15
+TREND: Under is 6-0 in Senators last 6 games as a favorite.
+TREND: Under is 3-0-1 in Senators last 4 vs. Metropolitan.
+TREND: Under is 3-0-1 in Senators last 4 road games vs. a team with a home winning % of greater than .600.
+TREND: Under is 7-1-1 in Senators last 9 overall.
+TREND: Over is 4-1-2 in Devils last 7 games playing on 1 days rest.
+TREND: Over is 4-1-1 in Devils last 6 games as a home favorite.
+TREND: Over is 8-2-1 in Devils last 11 home games.
+TREND: Under is 3-1-1 in Devils last 5 overall.
+
+Vegas Golden Knights @ Minnesota Wild
+ML: Vegas Golden Knights -102 / Minnesota Wild -112
+PL: Vegas Golden Knights +1.5 (-265) / Minnesota Wild -1.5 (+219)
+OU: o6 (+104) / u6 (-120)
+P1ML: Vegas Golden Knights -105 / Minnesota Wild -115
+P1PL: Vegas Golden Knights +0.5 (-202) / Minnesota Wild -0.5 (+175)
+P1OU: o1.5 (-122) / u1.5 (+102)
+PRED: Vegas Golden Knights 2.98 / Minnesota Wild 3.13
+TREND: Golden Knights are 8-0 in their last 8 vs. Central.
+TREND: Over is 5-0-1 in Golden Knights last 6 vs. Central.
+TREND: Over is 3-0-2 in Golden Knights last 5 games as a road underdog.
+TREND: Golden Knights are 5-0 in their last 5 games as a road favorite.
+TREND: Wild are 7-0 in their last 7 vs. Pacific.
+TREND: Wild are 8-2 in their last 10 home games.
+TREND: Wild are 8-2 in their last 10 games as a home underdog.
+TREND: Under is 4-1 in Wild last 5 games as a favorite.
+
+NBA
+
+Oklahoma City Thunder @ Atlanta Hawks
+ML: Oklahoma City Thunder +230 / Atlanta Hawks -280
+SPREAD: Oklahoma City Thunder +8 (-105) / Atlanta Hawks -8 (-115)
+OU: o222 (-110) / u222 (-110)
+
+Brooklyn Nets @ Washington Wizards
+ML: Brooklyn Nets +115 / Washington Wizards -135
+SPREAD: Brooklyn Nets +3 (-110) / Washington Wizards -3 (-110)
+OU: o222 (-110) / u222 (-110)
+
+Minnesota Timberwolves @ New York Knicks
+ML: Minnesota Timberwolves +110 / New York Knicks -130
+SPREAD: Minnesota Timberwolves +2.5 (-110) / New York Knicks -2.5 (-110)
+OU: o227.5 (-110) / u227.5 (-110)
+
+San Antonio Spurs @ Utah Jazz
+ML: San Antonio Spurs -150 / Utah Jazz +130
+SPREAD: San Antonio Spurs -3.5 (-110) / Utah Jazz +3.5 (-110)
+OU: o227.5 (-110) / u227.5 (-110)
