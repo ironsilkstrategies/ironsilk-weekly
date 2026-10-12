@@ -23,6 +23,18 @@ setTimeout(async()=>{try{
   fresh.localStorage.removeItem('d4.key');
   const n=fresh.eval(`moveApply(${JSON.stringify('  '+m.code.slice(0,30)+'\n'+m.code.slice(30)+' ')})`);
   T('restore (with stray spaces/newlines from Notes) brings back exact values',n===7&&fresh.eval(`get(LS.key,'')`)==='odds-abc123'&&fresh.eval(`get(LS.cfbd,'')`)==='cfbd+/=key'&&fresh.eval(`get('d4.tgbot','')`)==='123456:ABC-def'&&fresh.eval('syncOn()')===true,n);
+  T('connected app can ALSO restore (collapsed box)',/moveRestore\('moveSyncIn'\)/.test(sh)&&/<details/.test(sh));
+  /* front door (TheDesk.html) restore — no shared.js on that page */
+  const fd=new JSDOM(fs.readFileSync(path.join(W,'TheDesk.html'),'utf8'),{runScripts:'dangerously',url:'https://ironsilkweekly.com/TheDesk.html'}).window;
+  T('front door shows "Moving from another TheDesk app?"',/Moving from another TheDesk app/.test(fd.document.body.textContent)&&!!fd.document.getElementById('mvIn'));
+  let went='';fd.eval(`location.replace=u=>{window.__went=u}`);
+  fd.document.getElementById('mvIn').value=m.code;fd.eval('tdMove()');
+  T('front door restore writes the keys exactly',fd.localStorage.getItem('d4.key')===oldApp.localStorage.getItem('d4.key')&&fd.localStorage.getItem('d4.synctoken')===oldApp.localStorage.getItem('d4.synctoken')&&fd.localStorage.getItem('d4.setupDone')==='1');
+  fd.document.getElementById('mvIn').value=evil;fd.localStorage.clear();fd.eval('tdMove()');
+  T('front door whitelist holds too',fd.localStorage.getItem('d4.locked')===null&&fd.localStorage.getItem('d4.key')==='k');
+  const fdKeys=(fs.readFileSync(path.join(W,'TheDesk.html'),'utf8').match(/var K=\[([^\]]+)\]/)||[])[1].replace(/'/g,'').split(',').sort().join();
+  T('front door whitelist matches the app\u2019s MOVE_KEYS',fdKeys===fresh.eval('MOVE_KEYS.slice().sort().join()'),fdKeys);
+  T('sport page pulls the cloud copy on arrival (?moved=1)',/moved=1/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8'))&&/moved=1/.test(fs.readFileSync(path.join(W,'TheDesk.html'),'utf8')));
   T('API keys still never sync',fresh.eval(`['d4.key','d4.tgbot','d4.ai'].every(k=>syncSkip(k))`));
 }catch(e){T('crash',false,e.stack)}
 console.log(out.join('\n'));process.exit(0);},1500);

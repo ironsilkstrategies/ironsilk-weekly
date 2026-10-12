@@ -2154,7 +2154,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011r';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011s';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -21681,7 +21681,7 @@ function syncSettingsHtml(){const on=syncOn();
     <div class="mono" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">Fine-grained token</div>
     <input id="syncTokIn" type="password" placeholder="github_pat_…  (this repo only · Contents: read and write)" autocomplete="off" spellcheck="false">`}
     <div class="bar" style="margin-top:8px">${on?`<button class="primary" onclick="syncNow(true)">Sync now</button><button onclick="moveCopy()">🔑 Copy transfer code</button><button onclick="copyText(String(get(SYNC.token,'')||''),'Sync token copied — paste it into the new app (or Notes for safekeeping).')">📋 Sync token only</button><button onclick="syncDisconnect()">Disconnect</button>`:`<button class="primary" onclick="syncConnect()">Connect this device</button>`}</div>
-    ${on?`<div class="sub" style="font-size:10px;margin-top:4px">Moving to a new home-screen icon or another device? Tap <b>🔑 Copy transfer code</b> — it carries every API key, the bot token and sync in one paste. On the new app, paste it into <b>Restore from transfer code</b> (first screen, or here) — everything comes back.</div>`:moveBoxHtml('moveSyncIn')}
+    ${on?`<div class="sub" style="font-size:10px;margin-top:4px">Moving to a new home-screen icon or another device? Tap <b>🔑 Copy transfer code</b> — it carries every API key, the bot token and sync in one paste. On the new app, paste it into <b>Restore from transfer code</b> (first screen, or here) — everything comes back.</div><details style="margin-top:8px"><summary class="mono" style="font-size:10px;color:var(--gold);cursor:pointer">🔑 Restore from a transfer code</summary>${moveBoxHtml('moveSyncIn')}</details>`:moveBoxHtml('moveSyncIn')}
     <div class="sub mono" id="syncStatus" style="font-size:10px;margin-top:6px"></div>
     ${on?'':`<div class="sub" style="font-size:10.5px;margin-top:8px"><b>Set up once (2 minutes, on your phone):</b></div>
     <div class="bar" style="margin-top:4px;flex-wrap:wrap"><a class="gc-btn" style="text-decoration:none;padding:9px 12px" href="https://github.com/new?name=thedesk-data&visibility=private&description=TheDesk+private+sync" target="_blank" rel="noopener">① Create private repo</a>
@@ -21700,7 +21700,13 @@ function syncSettingsPaint(){const anchor=document.getElementById('ghrepoIn');le
 pushToGitHub=async function(manual){if(syncOn())return syncNow(manual);if(manual)alert('Backups no longer go to the public site repo. Connect a private repo under ☁️ Sync across devices.');return{ok:false,reason:'use private sync'};};
 pullFromGitHubIfEmpty=async function(){if(syncOn()){try{await syncNow(false);}catch(e){}}};
 if(typeof window!=='undefined'&&!window.__NO_SYNC_LOOP__){
-  const boot=()=>{try{syncSettingsPaint();}catch(e){}if(syncOn())setTimeout(()=>syncNow(false),2500);};
+  const boot=()=>{try{syncSettingsPaint();}catch(e){}
+    /* v2.13: arrived from the front-door restore — pull the cloud copy now and reload into it */
+    if(/[?&]moved=1/.test(location.search)&&syncOn()){try{history.replaceState(null,'',location.pathname+location.search.replace(/[?&]moved=1/,'').replace(/^&/,'?')+location.hash);}catch(e){}
+      try{deskToast('🔑 Keys restored — pulling your cloud copy…',5000);}catch(e){}
+      const hasLocal=(get(LS.locked,[])||[]).length+Object.keys(get(LS.arc,{})||{}).length>0;
+      syncNow(true,hasLocal?'local':'remote').then(r=>{if(r&&r.ok&&r.changed)setTimeout(()=>location.reload(),700);}).catch(()=>{});return;}
+    if(syncOn())setTimeout(()=>syncNow(false),2500);};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else setTimeout(boot,0);
   setInterval(()=>{if(!document.hidden&&syncOn())syncNow(false);},180e3);
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&syncOn())syncNow(false);else if(!document.hidden&&syncOn())syncNow(false);});
