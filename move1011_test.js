@@ -35,6 +35,18 @@ setTimeout(async()=>{try{
   const fdKeys=(fs.readFileSync(path.join(W,'TheDesk.html'),'utf8').match(/var K=\[([^\]]+)\]/)||[])[1].replace(/'/g,'').split(',').sort().join();
   T('front door whitelist matches the app\u2019s MOVE_KEYS',fdKeys===fresh.eval('MOVE_KEYS.slice().sort().join()'),fdKeys);
   T('sport page pulls the cloud copy on arrival (?moved=1)',/moved=1/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8'))&&/moved=1/.test(fs.readFileSync(path.join(W,'TheDesk.html'),'utf8')));
+  /* v2.14 paste button: clipboard first, native prompt fallback — no typing in a page field */
+  fresh.localStorage.removeItem('d4.key');fresh.eval('window.__rl=0;location.reload=()=>{}');
+  Object.defineProperty(fresh.navigator,'clipboard',{value:{readText:()=>Promise.resolve(m.code)},configurable:true});
+  await fresh.eval(`movePaste('moveSyncIn')`).catch(()=>{});
+  T('📋 Paste reads the clipboard and restores',fresh.eval(`get(LS.key,'')`)==='odds-abc123');
+  fresh.localStorage.removeItem('d4.key');
+  Object.defineProperty(fresh.navigator,'clipboard',{value:{readText:()=>Promise.reject(new Error('denied'))},configurable:true});
+  fresh.prompt=()=>m.code;await fresh.eval(`movePaste('moveSyncIn')`).catch(()=>{});
+  T('clipboard blocked → native paste box fallback restores',fresh.eval(`get(LS.key,'')`)==='odds-abc123');
+  const fd2=new JSDOM(fs.readFileSync(path.join(W,'TheDesk.html'),'utf8'),{runScripts:'dangerously',url:'https://ironsilkweekly.com/TheDesk.html'}).window;
+  fd2.eval(`location.replace=u=>{window.__went=u}`);fd2.prompt=()=>m.code;fd2.eval('tdMovePaste()');await new Promise(r=>setTimeout(r,1200));
+  T('front door 📋 Paste restores and heads to the desk with ?moved=1',fd2.localStorage.getItem('d4.key')===oldApp.localStorage.getItem('d4.key')&&/keys restored/.test(fd2.document.getElementById('mvMsg').textContent)&&/&moved=1'/.test(fs.readFileSync(path.join(W,'TheDesk.html'),'utf8')),fd2.document.getElementById('mvMsg').textContent);
   T('API keys still never sync',fresh.eval(`['d4.key','d4.tgbot','d4.ai'].every(k=>syncSkip(k))`));
 }catch(e){T('crash',false,e.stack)}
 console.log(out.join('\n'));process.exit(0);},1500);

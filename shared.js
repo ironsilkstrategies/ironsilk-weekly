@@ -2154,7 +2154,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011s';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011t';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -21656,7 +21656,13 @@ function moveParse(code){code=String(code||'').replace(/\s+/g,'');const i=code.i
 function moveApply(code){const k=moveParse(code);if(!k)return 0;Object.keys(k).forEach(x=>localStorage.setItem(x,k[x]));return Object.keys(k).length;}
 function moveCopy(){const m=moveCode();if(!m.n){alert('No keys saved on this device yet.');return;}
   copyText(m.code,`Transfer code copied — ${m.n} key${m.n===1?'':'s'}${localStorage.getItem(SYNC.token)?' + sync':''}.\n\nOpen the new app, paste it into "Restore from transfer code" and tap Restore.\n\nIt holds every key you own — don't paste it anywhere public, and delete it from Notes once you're moved.`);}
-async function moveRestore(inputId){const el=document.getElementById(inputId);const code=el?el.value:'';
+/* v2.14: no typing needed — read the clipboard (iOS shows a "Paste" bubble), fall back to the
+   native prompt box, which always accepts a paste even when a page field won't. */
+async function movePaste(inputId){let c='';
+  try{if(navigator.clipboard&&navigator.clipboard.readText)c=await navigator.clipboard.readText();}catch(e){c='';}
+  if(!moveParse(c)){c=prompt('Paste your transfer code (long-press → Paste):','')||'';}
+  if(!c)return;const el=document.getElementById(inputId);if(el)el.value=c;return moveRestore(inputId,c);}
+async function moveRestore(inputId,given){const el=document.getElementById(inputId);const code=given||(el?el.value:'');
   const k=moveParse(code);if(!k){alert('That isn\'t a TheDesk transfer code. On the old app: Settings → ☁️ Sync → 🔑 Copy transfer code.');return;}
   const hasLocal=(get(LS.locked,[])||[]).length+Object.keys(get(LS.arc,{})||{}).length>0;
   const n=moveApply(code);localStorage.setItem('d4.setupDone','1');if(el)el.value='';
@@ -21665,8 +21671,8 @@ async function moveRestore(inputId){const el=document.getElementById(inputId);co
   else alert(n+' keys restored.');
   setTimeout(()=>location.reload(),700);}
 function moveBoxHtml(id){return`<div class="mono" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin:10px 0 4px">🔑 Restore from transfer code</div>
-  <input id="${id}" placeholder="TDMOVE1.…  (old app: Settings → ☁️ Sync → Copy transfer code)" autocomplete="off" spellcheck="false" autocapitalize="off">
-  <div class="bar" style="margin-top:6px"><button class="primary" onclick="moveRestore('${id}')">Restore keys + sync</button></div>
+  <input id="${id}" type="text" inputmode="text" style="font-size:16px" placeholder="TDMOVE1.…  (or just tap Paste below)" autocomplete="off" autocorrect="off" spellcheck="false" autocapitalize="off">
+  <div class="bar" style="margin-top:6px"><button class="primary" onclick="movePaste('${id}')">📋 Paste code &amp; restore</button><button onclick="moveRestore('${id}')">Restore typed code</button></div>
   <div class="sub" style="font-size:10px;margin-top:4px">One paste brings back every API key, the Telegram bot token and sync — then your tickets and history pull down from the cloud.</div>`;}
 function moveSetupMount(){const su=document.getElementById('setup');if(!su||document.getElementById('moveSetupBox'))return;
   const d=document.createElement('div');d.id='moveSetupBox';d.className='tkt';d.style.cssText='margin:0 0 14px;border-color:var(--gold)';
