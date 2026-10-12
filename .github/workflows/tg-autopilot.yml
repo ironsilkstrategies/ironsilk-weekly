@@ -3,6 +3,9 @@ on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['autopilot/**', '.github/workflows/tg-autopilot.yml']
 permissions:
   contents: write
 concurrency:

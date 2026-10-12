@@ -10,6 +10,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
+const VERSION = 'worker v2.08.1';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -129,7 +130,9 @@ export { decrypt, encrypt, gradePick, gradeProp };
 /* ── main ── */
 if (import.meta.url === 'file://' + process.argv[1]) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  log(VERSION, '· repo', REPO, '· today', today);
   const cur = await readState(); if (!cur) { log('no card handed over yet'); process.exit(0); }
+  log('posts on file:', Object.entries(cur.state.posts || {}).map(([d, p]) => `${d} ${Object.keys(p.st || {}).length}/${(p.legs || []).length} graded${p.recap ? ' · recap done' : ''}`).join(' · '));
   const state = cur.state; const acted = await runOnce(state, today); state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1;
   for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readState() : cur; const merged = tries ? mergeState(state, latest.state) : state;
     const st = await writeState(merged, latest.sha); if (st === 200 || st === 201) { log('ok ·', acted, 'update(s) sent'); process.exit(0); } log('write conflict', st, '— merging and retrying'); }
