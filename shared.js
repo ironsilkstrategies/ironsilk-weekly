@@ -2135,7 +2135,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011l';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011m';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18192,6 +18192,7 @@ async function mgRefresh(force,deep){
        which cut off the newest games — exactly the ones still waiting on a grade. */
     const need={};const floor=deep?'2000-01-01':dayShift(today(),-30);   /* the sweeper goes back as far as any open leg */
     try{tcSportsLoaded().forEach(sp=>{(need[sp]=need[sp]||new Set()).add(today());});}catch(e){} // Today tab: live scores for every pick on the card
+    try{tgAutoNeeds().forEach(([sp,d])=>{if(MG_URL[sp])(need[sp]=need[sp]||new Set()).add(d);});}catch(e){}   // the Telegram autopilot's posted card
     try{Object.entries(MG_LIVE).forEach(([sp,M])=>Object.values(M||{}).forEach(list=>(list||[]).forEach(e=>{if(e.state==='in'&&e.date&&e.date>=floor)(need[sp]=need[sp]||new Set()).add(e.date);})));}catch(e){}
     mgPending().forEach(x=>{const d=String(x.d).slice(0,10);if(d<floor)return;const S=(need[x.sp]=need[x.sp]||new Set());S.add(d);
       if(x.l.gdApprox||!x.l.gameDate)for(let i=1;i<=3;i++)S.add(dayShift(d,i));});
@@ -20197,6 +20198,7 @@ async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY)return null;if(!opts
     }
     try{settleLockedTickets();}catch(e){}try{settledSync(true);}catch(e){}
     try{gradeVoices();}catch(e){}try{cparGrade();}catch(e){}try{best5Grade();}catch(e){}try{bkDayGrade();}catch(e){}try{cpropGrade();}catch(e){}try{msSync();}catch(e){}
+    try{tgAutoTick().catch(()=>{});}catch(e){}
   }finally{SWEEP_BUSY=false;}
   const left=sweepOverdue().map(x=>{let D={code:'?',msg:'no result found yet'};try{D=legDiagnose(x.l,x.t);}catch(e){}
     return{tid:String(x.t.id),i:x.i,name:x.t.name||null,pick:x.l.pick,game:x.l.game,sp:x.sp,d:x.d,code:D.code,msg:D.msg};});
@@ -21617,27 +21619,110 @@ function subCard(){let best=null;try{best=best5State();}catch(e){}const R=(()=>{
 const subPct=p=>p==null?'':(p*100<10?(p*100).toFixed(1):Math.round(p*100))+'%';
 const subLeg=x=>`${x.pick} (${tcSgn(x.price)}) · ${(SP_LAB[x.sp]||'').split(' ')[0]} ${gameLabel(x.sp,x.game)}`;
 /* Telegram: HTML parse mode, split under the 4096-character limit */
-function subTelegramText(C){const e=txtEsc,day=new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{try{return tgParlayMark(P.legs,mk);}catch(err){return'';}};const e=txtEsc,day=new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   const head=`<b>🏆 TheDesk — ${e(day)}</b>${C.record&&(C.record.w+C.record.l)?`\nBest 3 record: <b>${C.record.w}-${C.record.l}${C.record.pu?'-'+C.record.pu:''}</b> (${C.record.u>=0?'+':''}${C.record.u.toFixed(1)}u)`:''}`;
   const blocks=[head];
-  if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. <b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(best5Prob(x))}`).join('\n'));
-  if(C.top10.length)blocks.push(`<b>🔟 TOP ${C.top10.length} PLAYS</b>\n`+C.top10.map((x,i)=>`${i+1}. ${x.play?'✅ ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n')+`\n<i>✅ = passes every rule: whole crowd agrees, good lane, model not fighting the market</i>`);
-  if(C.banker)blocks.push(`<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>'• '+e(subLeg(l))).join('\n'));
-  C.chars.forEach(P=>blocks.push(`<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>'• '+e(subLeg(l))+(l.spec?`\n   <i>🎯 ${e(l.spec)}</i>`:'')).join('\n')));
-  if((C.props||[]).length)blocks.push(`<b>🎯 CHARACTER PROPS OF THE DAY</b>\n`+C.props.map(c=>`• ${e(charName(c.v))}: <b>${e(cpropLine(c))}</b> · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
+  if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. ${mk(x)}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(best5Prob(x))}`).join('\n'));
+  if(C.top10.length)blocks.push(`<b>🔟 TOP ${C.top10.length} PLAYS</b>\n`+C.top10.map((x,i)=>`${i+1}. ${mk(x)}${x.play?'✔️ ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n')+`\n<i>✔️ = passes every rule: whole crowd agrees, good lane, model not fighting the market</i>`);
+  if(C.banker)blocks.push(`${pm(C.banker)}<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>(mk(l)||'• ')+e(subLeg(l))).join('\n'));
+  C.chars.forEach(P=>blocks.push(`${pm(P)}<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>(mk(l)||'• ')+e(subLeg(l))+(l.spec?`\n   <i>🎯 ${e(l.spec)}</i>`:'')).join('\n')));
+  if((C.props||[]).length)blocks.push(`<b>🎯 CHARACTER PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mk(c)||'• '}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b> · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
   blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
   const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
+/* ══ 🤖 TELEGRAM AUTOPILOT (v2.07) ═════════════════════════════════════════════
+   After the card is posted, the app keeps the message ids and a frozen copy of the
+   card. Every few minutes while the app is open (any tab, any page) it:
+     1 · edits the original posts in place — ✅ / ❌ / ➖ next to every pick as it
+         settles, CASHED or ❌ on each parlay
+     2 · replies under the post with each new result and the final score, so members
+         get a notification
+     3 · when everything's graded, posts the day's recap (Best 3, Top 10, Banker,
+         character parlays, props) — once
+   Runs on the device that posted (or any device you switch it on for), so nothing
+   is announced twice. Leave the app open on a computer and it runs itself. */
+const TGP_KEY='d4.tgposts',TG_MARK={W:'✅ ',L:'❌ ',P:'➖ '};
+function tgLegKey(x){return[x.sp,x.game||x.team||'',x.pick||((x.player||'')+'|'+x.k+'|'+x.thr),x.v||''].join('|');}
+function tgLegStatus(x,d){
+  if(x.player&&x.k!=null){const L=get(CPROP_KEY,[])||[];const e=L.find(z=>z.id===x.id)||L.find(z=>z.voice===x.v&&z.player===x.player&&z.k===x.k&&+z.thr===+x.thr&&z.d===(x.d||d));
+    if(!e||e.hit==null)return null;return e.hit?'W':'L';}
+  let g=null;try{g=gradeLeg({sport:x.sp,game:x.game,pick:x.pick,price:x.price,gameDate:d},d);}catch(err){}
+  if(!g||g.live)return null;if(g.push)return'P';return g.hit===true?'W':g.hit===false?'L':null;}
+function tgParlayMark(legs,mk){const m=(legs||[]).map(l=>mk(l));if(!m.some(Boolean))return'';
+  if(m.some(x=>x===TG_MARK.L))return'❌ ';if(m.every(x=>x===TG_MARK.W||x===TG_MARK.P))return'✅ CASHED · ';return'';}
+function tgAllLegs(C){const L=[];(C.best||[]).forEach(x=>L.push({x,kind:'Best 3'}));(C.top10||[]).forEach(x=>L.push({x,kind:'Top 10'}));
+  if(C.banker)(C.banker.legs||[]).forEach(x=>L.push({x,kind:'Banker'}));(C.chars||[]).forEach(P=>(P.legs||[]).forEach(x=>L.push({x:{...x,v:x.v||P.v},kind:charName(P.v)})));
+  (C.props||[]).forEach(x=>L.push({x,kind:'Prop'}));return L;}
+function tgPosts(){const P=get(TGP_KEY,{})||{};return P&&typeof P==='object'?P:{};}
+function tgTrackPost(card,chat,ids){const P=tgPosts();P[card.d]={d:card.d,chat,ids,card,ts:Date.now(),dev:syncDevice(),auto:get('d4.tgauto',true)!==false,st:{},sent:{},recap:false};
+  Object.keys(P).sort().slice(0,-4).forEach(k=>delete P[k]);set(TGP_KEY,P);setTimeout(()=>tgAutoTick().catch(()=>{}),30e3);}
+function tgAutoHere(p){try{return p.dev===syncDevice()||localStorage.getItem('td.tgauto')==='1';}catch(e){return false;}}
+function tgAutoNeeds(){const out=[];Object.values(tgPosts()).forEach(p=>{if(!p||p.recap||!p.card)return;tgAllLegs(p.card).forEach(({x})=>{if(x.sp)out.push([x.sp,p.d]);});});return out;}
+async function tgApi(method,params){const tok=String(get('d4.tgbot','')||'').trim();if(!tok)return null;
+  try{const r=await fetch(`https://api.telegram.org/bot${tok}/${method}`,{method:'POST',body:new URLSearchParams(params)});return await r.json().catch(()=>({ok:true,unread:true}));}
+  catch(e){/* online but the reply couldn't be read (the post usually still lands) → count it as sent, never spam; offline → try again later */
+    try{if(navigator.onLine===false)return null;}catch(err){}return{ok:true,unread:true};}}
+function tgScore(x,d){try{const e=mgEventFor(x.sp,x.game,d,true);if(e&&e.a!=null&&e.h!=null){const[a,h]=String(x.game).split('@');return` · ${a} ${e.a}–${e.h} ${h}`;}}catch(err){}return'';}
+function tgUnits(x,s){if(s==='P')return 0;if(s==='L')return-1;const pr=x.price!=null?+x.price:-110;return pr>0?pr/100:100/Math.abs(pr);}
+let TG_BUSY=false;
+async function tgAutoTick(force){if(TG_BUSY)return 0;TG_BUSY=true;let acted=0;
+  try{const P=tgPosts();const chat=tgChatNorm(get('d4.tgchat',''));if(!chat||!get('d4.tgbot',''))return 0;
+    for(const d of Object.keys(P).sort()){const p=P[d];if(!p||!p.card||p.recap||p.auto===false||!tgAutoHere(p))continue;
+      const legs=tgAllLegs(p.card);const st={};legs.forEach(({x})=>{const k=tgLegKey(x);const s0=(p.st||{})[k]||tgLegStatus(x,p.d);if(s0)st[k]=s0;});
+      const fresh=legs.filter(({x})=>st[tgLegKey(x)]&&!(p.sent||{})[tgLegKey(x)]);
+      if(!fresh.length&&!force)continue;
+      const mk=x=>{const s0=st[tgLegKey(x)];return s0?TG_MARK[s0]:'';};
+      /* 1 · edit the original posts in place */
+      if(p.ids&&p.ids.length){const parts=subTelegramText(p.card,mk);if(parts.length===p.ids.length){for(let i=0;i<parts.length;i++){await tgApi('editMessageText',{chat_id:p.chat||chat,message_id:p.ids[i],text:parts[i],parse_mode:'HTML',disable_web_page_preview:'true'});await new Promise(z=>setTimeout(z,350));}}}
+      /* 2 · one reply with everything that settled since the last update (dedupe the same pick listed twice) */
+      const seen=new Set();const lines=[];fresh.forEach(({x,kind})=>{const k=x.sp+'|'+(x.game||'')+'|'+(x.pick||x.player+x.k+x.thr);if(seen.has(k))return;seen.add(k);const s0=st[tgLegKey(x)];
+        const nm=x.player?`${charName(x.v)}: ${cpropLine(x)}`:`${x.pick}${x.price!=null?' ('+tcSgn(x.price)+')':''}`;lines.push(`${TG_MARK[s0]}<b>${txtEsc(nm)}</b> <i>${txtEsc(kind)}</i>${x.player?'':txtEsc(tgScore(x,p.d))}`);});
+      if(lines.length){const reply={chat_id:p.chat||chat,text:`<b>📣 Results</b>\n`+lines.join('\n'),parse_mode:'HTML',disable_web_page_preview:'true'};
+        if(p.ids&&p.ids[0]){reply.reply_to_message_id=p.ids[0];reply.allow_sending_without_reply='true';}const r=await tgApi('sendMessage',reply);
+        if(r){fresh.forEach(({x})=>{(p.sent||(p.sent={}))[tgLegKey(x)]=st[tgLegKey(x)];});acted++;}}
+      p.st={...(p.st||{}),...st};
+      /* 3 · the recap, once everything is graded */
+      const nonProp=legs.filter(({x})=>!x.player);const allDone=legs.every(({x})=>st[tgLegKey(x)]);
+      const ready=legs.length&&(allDone||(p.d<today()&&nonProp.every(({x})=>st[tgLegKey(x)]))||p.d<dayShift(today(),-1));
+      if(ready){const pend=legs.filter(({x})=>!st[tgLegKey(x)]).length;const rec=(arr)=>{const w=arr.filter(x=>st[tgLegKey(x)]==='W').length,l=arr.filter(x=>st[tgLegKey(x)]==='L').length,pu=arr.length-w-l;return`${w}-${l}${pu?'-'+pu:''}`;};
+        const u=arr=>arr.reduce((a,x)=>a+tgUnits(x,st[tgLegKey(x)]),0);const C=p.card;const pmk=Pl=>tgParlayMark(Pl.legs,mk);
+        const out=[`<b>📊 Day recap — ${txtEsc(new Date(p.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}))}</b>`];
+        if((C.best||[]).length)out.push(`⭐ Best ${C.best.length}: <b>${rec(C.best)}</b> (${u(C.best)>=0?'+':''}${u(C.best).toFixed(2)}u)`);
+        if((C.top10||[]).length)out.push(`🔟 Top ${C.top10.length}: <b>${rec(C.top10)}</b> (${u(C.top10)>=0?'+':''}${u(C.top10).toFixed(2)}u)`);
+        if(C.banker)out.push(`🏦 Banker's parlay: ${pmk(C.banker)||'❌ '}${txtEsc(decimalToAmerican(C.banker.dec))}`);
+        const cashed=(C.chars||[]).filter(Pl=>/CASHED/.test(pmk(Pl)));out.push(`🎭 Character parlays: <b>${cashed.length} of ${(C.chars||[]).length} cashed</b>${cashed.length?' — '+cashed.map(Pl=>txtEsc(charName(Pl.v))+' '+txtEsc(decimalToAmerican(Pl.dec))).join(', '):''}`);
+        if((C.props||[]).length)out.push(`🎯 Props: <b>${rec(C.props)}</b>`);
+        if(pend)out.push(`<i>${pend} pick${pend>1?'s':''} still pending (postponed / player didn't play) — not counted.</i>`);
+        out.push('<i>Every pick was locked and posted before kickoff.</i>');
+        const r=await tgApi('sendMessage',{chat_id:p.chat||chat,text:out.join('\n'),parse_mode:'HTML',disable_web_page_preview:'true'});if(r){p.recap=true;acted++;}}
+      P[d]=p;}
+    set(TGP_KEY,P);}finally{TG_BUSY=false;}
+  return acted;}
+if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){window.addEventListener('load',()=>setTimeout(()=>tgAutoTick().catch(()=>{}),20e3));setInterval(()=>tgAutoTick().catch(()=>{}),4*60e3);}
+function tgAutoSet(on){set('d4.tgauto',!!on);const P=tgPosts();Object.values(P).forEach(p=>{if(p&&!p.recap)p.auto=!!on;});set(TGP_KEY,P);try{renderToday(true);}catch(e){}}
+function tgAutoDevice(on){try{if(on)localStorage.setItem('td.tgauto','1');else localStorage.removeItem('td.tgauto');}catch(e){}try{renderToday(true);}catch(e){}}
+function tgAutoHtml(){const on=get('d4.tgauto',true)!==false;const P=tgPosts();const ds=Object.keys(P).sort();const p=ds.length?P[ds[ds.length-1]]:null;let here=false;try{here=localStorage.getItem('td.tgauto')==='1';}catch(e){}
+  let line='Post the card once — the autopilot takes it from there.';
+  if(p){const legs=tgAllLegs(p.card||{});const done=legs.filter(({x})=>(p.st||{})[tgLegKey(x)]).length;
+    line=`${p.d===today()?'Today':p.d}: ${done} of ${legs.length} picks graded${p.recap?' · recap posted ✓':''}${p.ids&&p.ids.length?'':' · ⚠️ couldn\'t read the post ids, so results go out as new messages instead of edits'}${tgAutoHere(p)?' · <b style="color:var(--win)">running on this device</b>':' · running on '+txtEsc(p.dev||'the device that posted')}`;}
+  return`<div class="tkt" style="margin:8px 0"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">🤖 Telegram autopilot</h3>
+      <button class="${on?'primary':''}" onclick="tgAutoSet(${!on})">${on?'ON':'OFF'}</button></div>
+    <div class="sub" style="font-size:10.5px;margin:4px 0">Edits your posts with ✅/❌ as games finish, replies under them with every result and final score, and posts the day's recap when everything's graded. Runs whenever the app is open — leave it open on a computer and it runs itself.</div>
+    <div class="sub mono" style="font-size:9.5px">${line}</div>
+    <label class="mono" style="font-size:10px;display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" ${here?'checked':''} onchange="tgAutoDevice(this.checked)"> also run it on this device</label>
+    <div class="bar" style="margin-top:6px"><button onclick="this.textContent='Checking…';tgAutoTick(true).then(n=>{this.textContent=n?'Sent ✓':'Nothing new yet';setTimeout(()=>renderToday(true),1200);})">↻ Update now</button></div></div>`;}
 /* channel IDs are negative (-100…) — a copied ID often loses its minus; a bare name needs its @ */
 function tgChatNorm(c){c=String(c||'').trim().replace(/^https?:\/\/t\.me\//,'');if(!c)return'';if(/^\d{10,}$/.test(c))return'-'+c;if(/^-?\d+$/.test(c))return c;return c.startsWith('@')?c:'@'+c;}
 async function subPostTelegram(){const tok=String(get('d4.tgbot','')||'').trim(),chat=tgChatNorm(get('d4.tgchat',''));
   if(!tok||!chat){alert('Add your Telegram bot token and private channel in the setup box below first.');return{ok:false};}
-  const parts=subTelegramText(subCard());let unconfirmed=false;
+  const card=subCard();const parts=subTelegramText(card);let unconfirmed=false;const ids=[];
   for(const text of parts){const body=new URLSearchParams({chat_id:chat,text,parse_mode:'HTML',disable_web_page_preview:'true'});
     try{const r=await fetch(`https://api.telegram.org/bot${tok}/sendMessage`,{method:'POST',body});const j=await r.json().catch(()=>null);
-      if(j&&j.ok===false){alert('Telegram refused it: '+(j.description||('HTTP '+r.status))+'\n\nCheck that the bot is an admin of the channel and the channel name is right.');return{ok:false};}}
+      if(j&&j.ok===false){alert('Telegram refused it: '+(j.description||('HTTP '+r.status))+'\n\nCheck that the bot is an admin of the channel and the channel name is right.');return{ok:false};}
+      if(j&&j.ok&&j.result&&j.result.message_id)ids.push(j.result.message_id);else unconfirmed=true;}
     catch(e){unconfirmed=true;}   /* the browser can block reading Telegram's reply even though the post went through */
     await new Promise(z=>setTimeout(z,450));}
   set('d4.tgposted',{d:today(),ts:Date.now(),n:parts.length,unconfirmed});
+  try{tgTrackPost(card,chat,ids.length===parts.length?ids:[]);}catch(e){console.warn('tg autopilot',e);}
   alert(unconfirmed?`Sent ${parts.length} message${parts.length>1?'s':''} — your browser couldn't read Telegram's reply, so check the channel.`:`Posted to Telegram (${parts.length} message${parts.length>1?'s':''}).`);
   try{renderToday(true);}catch(e){}return{ok:true,parts:parts.length,unconfirmed};}
 function subCopy(){const t=subTelegramText(subCard()).join('\n\n').replace(/<\/?(b|i)>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');
@@ -21654,9 +21739,10 @@ function subCardHtml(){const C=subCard();const e=txtEsc;const pc=subPct;const po
       <h3 style="margin:0">💎 Subscriber card — ${e(new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}))}</h3>
       <div class="sub" style="font-size:10.5px;margin:3px 0 8px">What paying members get in the private Telegram. ${e(get('d4.pricetext','')||SUB_PRICE_DEFAULT)}.</div>
       <div class="bar"><button class="primary" onclick="subPostTelegram()">📣 Post to Telegram</button><button onclick="subCopy()">Copy text</button></div>
+      ${(()=>{try{return tgAutoHtml();}catch(e){return'';}})()}
       ${posted&&posted.d===C.d?`<div class="sub mono" style="font-size:9.5px;color:var(--win);margin-top:4px">✓ posted ${new Date(posted.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}${posted.unconfirmed?' (check the channel)':''}</div>`:''}</div>
     ${C.best.length?sec(`⭐ Best ${C.best.length}`,C.locked?'🔒 locked':'not locked yet',C.best.map(x=>legRow(x)).join('')):''}
-    ${sec(`🔟 Top ${C.top10.length} plays`,`${C.top10.filter(x=>x.play).length} ✅ playable`,C.top10.length?C.top10.map(x=>legRow(x,` · EV ${x.ev>=0?'+':''}${x.ev.toFixed(1)}%${x.play?' · <span style="color:var(--win)">✅</span>':''}`)).join(''):'<div class="sub">Load today\'s boards — nothing priced and unstarted yet.</div>')}
+    ${sec(`🔟 Top ${C.top10.length} plays`,`${C.top10.filter(x=>x.play).length} ✅ playable`,C.top10.length?C.top10.map(x=>legRow(x,`${x.ev!=null&&isFinite(x.ev)?` · EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%`:''}${x.play?' · <span style="color:var(--win)">✅</span>':''}`)).join(''):'<div class="sub">Load today\'s boards — nothing priced and unstarted yet.</div>')}
     ${C.banker?sec(`🏦 Banker's parlay ${e(decimalToAmerican(C.banker.dec))}`,`${pc(C.banker.p)} to cash${C.banker.locked?' · 🔒':''}`,C.banker.legs.map(l=>legRow(l)).join('')):''}
     ${C.chars.length?C.chars.map(P=>sec(`🎭 ${e(charName(P.v))} · ${P.legs.length}-leg ${e(decimalToAmerican(P.dec))}`,`${pc(P.p)} to cash${P.dropped?` · ${P.dropped} weak-spot call${P.dropped>1?'s':''} left off`:''}`,P.legs.map(l=>legRow(l,l.spec?` · <span style="color:var(--win)">🎯 ${e(l.spec)}</span>`:'')).join(''))).join('')
       :sec('🎭 Character parlays','','<div class="sub">Each character needs 3+ priced, unstarted calls outside its weak spots. Open today\'s boards.</div>')}
