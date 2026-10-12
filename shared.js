@@ -2165,7 +2165,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -19169,19 +19169,57 @@ function msSetSport(id,v){const A=msAll();const m=A.find(x=>x.id===id);if(!m)ret
 function msPickRoute(id,key){const A=msAll();const m=A.find(x=>x.id===id);if(!m)return;m.routeKey=key;msSave(A);msRender();}
 function msCheckpoints(m){const G=m.goal/m.start;return MS_CHECKPOINTS.map((n,i)=>({name:n,amt:Math.round(m.start*Math.pow(G,(i+1)/MS_CHECKPOINTS.length))}));}
 function msDifficulty(p){return MS_DIFF.find(d=>p>=d[0]);}
-/* Build a ticket from Today's card that obeys the mission's rule and sport. */
+/* Build a ticket from Today's card that obeys the mission's rule and sport.
+   v2.19 · the challenge picks its own legs from the Today menu, best first:
+     ★ unanimous → SUPREME → STRONG, plus any pick the desk's best characters are on
+     (a character on a 65%+ run on that exact spot, or the Commissioner where he reigns).
+   Never: EV-suspect / incoherent picks, blocked lanes, the model fighting the market,
+   a leg shorter than -300, or a leg whose calibrated EV is worse than −3%. One leg per game. Of every combination that clears the
+   challenge's price bar, it takes the one most likely to CASH (calibrated chances). */
+function msLegWhy(x,V){const why=[];if(x.unan)why.push('★ unanimous');else if(x.color===' supreme')why.push('SUPREME');else if(x.color===' strong')why.push('STRONG');
+  let hot=[];try{(V||[]).forEach(c=>{if(c.sp!==x.sp||c.game!==x.game||c.market!==x.m||c.side!==x.sd||c.graded||!CHARS[c.voice])return;if(hot.some(o=>o.v===c.voice))return;const h=charHist(V,c);if(h.hot.length)hot.push({v:c.voice,t:h.hot[0]});});}catch(e){}
+  hot.sort((a,b)=>b.t.r-a.t.r).slice(0,2).forEach(o=>why.push(`🔥 ${charName(o.v).replace(/^The /,'')} ${o.t.lab} ${o.t.w}-${o.t.l}`));
+  try{if((x.chars||[]).includes('Power')){const R=pwrReign(x.sp);if(R.supreme)why.push(`⚡ Commissioner (${Math.round(R.acc*100)}% in ${(SP_LAB[x.sp]||'').replace(/^\S+\s/,'')})`);}}catch(e){}
+  return{why,hot:hot.length};}
 function msBuildTicket(k,minDec,rule,sport){
-  const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};const F=MS_FILTERS[rule];
-  const pool=[];Object.entries(by).forEach(([sp,B])=>{if(sport&&sp!==sport)return;(B.picks||[]).forEach(x=>{if(x.price==null)return;if(!tcIsToday(x))return;if(onTicketMatch(sp,x.game,x.m,x.sd))return;
-    const X={...x,sp};if(F&&!F.f(X))return;pool.push(X);});});
-  pool.sort((a,b)=>b.rank-a.rank);const top=pool.slice(0,10);
-  let best=null;const pick=(start,cur)=>{if(cur.length===k){if(new Set(cur.map(x=>x.sp+x.game)).size<k)return;
-      if(F&&F.cross&&new Set(cur.map(x=>x.sp)).size<2)return;
-      const d=cur.reduce((a,x)=>a*americanToDecimal(x.price),1),q=cur.reduce((a,x)=>a+x.rank,0),okP=d>=minDec*0.999;
-      if(!best||(okP&&!best.ok)||(okP===best.ok&&(okP?q>best.q:d>best.d)))best={legs:[...cur],d,q,ok:okP};return;}
-    for(let i=start;i<top.length;i++){cur.push(top[i]);pick(i+1,cur);cur.pop();}};
-  pick(0,[]);return{best,poolN:pool.length};
+  const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};const F=MS_FILTERS[rule];const V=roGet(VOICES_KEY,[],30e3)||[];
+  const build=minTier=>{const pool=[];Object.entries(by).forEach(([sp,B])=>{if(sport&&sp!==sport)return;(B.picks||[]).forEach(x=>{if(x.price==null||!tcIsToday(x))return;if(onTicketMatch(sp,x.game,x.m,x.sd))return;
+      const X={...x,sp};if(F&&!F.f(X))return;if(best5Started(X)||X.suspect||X.incoherent)return;if(+X.price<BK_FLOOR)return;
+      try{if(laneStatus(pickLane(X,sp))==='blocked')return;if(pickDisagrees(X,sp))return;}catch(e){}
+      const W=msLegWhy(X,V);const tier=best3Tier(X);const proven=W.hot>0||W.why.some(w=>/Commissioner/.test(w));
+      if(tier<minTier&&!proven)return;   /* unanimous / supreme / strong, or a proven character on it */
+      if(tier===2&&!proven)W.why.unshift('VALUE');
+      let p=null;try{p=best5Prob(X);}catch(e){}if(p==null)p=X.blend!=null?X.blend:X.mp;
+      if(p==null){p=imp(+X.price);W.why.push('priced by the market — no model chance');}
+      /* a leg has to make sense at its price: calibrated EV no worse than −3% (a coin flip at -110 is −4.5%) */
+      const ev=(p*americanToDecimal(X.price)-1)*100;if(ev<-3)return;
+      pool.push({...X,p,why:W.why,score:p+0.02*Math.max(0,tier-2)+0.015*W.hot});});});
+    pool.sort((a,b)=>b.score-a.score);const top=pool.slice(0,12);
+    let best=null;const pick=(start,cur)=>{if(cur.length===k){if(new Set(cur.map(x=>x.sp+x.game)).size<k)return;
+        if(F&&F.cross&&new Set(cur.map(x=>x.sp)).size<2)return;
+        const d=cur.reduce((a,x)=>a*americanToDecimal(x.price),1),pc=cur.reduce((a,x)=>a*Math.max(0.01,Math.min(0.99,x.score)),1),q=cur.reduce((a,x)=>a+x.score,0),okP=d>=minDec*0.999;
+        if(!best||(okP&&!best.ok)||(okP===best.ok&&(okP?pc>best.pc:d>best.d)))best={legs:[...cur],d,q,pc,ok:okP,p:cur.reduce((a,x)=>a*x.p,1)};return;}
+      for(let i=start;i<top.length;i++){cur.push(top[i]);pick(i+1,cur);cur.pop();}};
+    pick(0,[]);return{best,poolN:pool.length,pool:pool.slice(0,6).map(x=>x.pick+' '+(x.price>0?'+':'')+x.price)};};
+  /* strongest tiers first; only if they can't make a ticket that clears the bar does it widen to VALUE picks */
+  const strict=build(3);if(strict.best&&strict.best.ok)return strict;
+  const wide=build(2);if(wide.best&&wide.best.ok){wide.widened=true;return wide;}
+  return strict.poolN>=wide.poolN?strict:wide;
 }
+/* ✅ Accept: the built ticket goes straight to My Tickets (pending), staked at the plan, and onto the challenge */
+function msAcceptBuild(mid,pi,li){const A=msAll();const m=A.find(x=>x.id===mid);if(!m)return;const P=msPotsOf(m)[pi||0];if(!P)return;
+  const ro=m.pots?msParse(P.routeKey):msActiveRoute(m);const lanes=msPotOrders(m,P,ro);const L=lanes[li||0];const B=L&&L.build&&L.build.best;
+  if(!B||!B.ok){alert('Nothing on Today\'s card clears this challenge\'s bar right now — sit it out or check back as boards update.');return;}
+  const pr=decimalToAmerican(B.d);
+  if(!confirm(`Accept for "${m.name}${m.pots?' · '+P.name:''}"?\n\n${B.legs.map(x=>`• ${x.pick} ${x.price>0?'+':''}${x.price}`).join('\n')}\n\n${B.legs.length}-leg ticket at ${pr} · stake ${ms$(L.stake)} → pays ${ms$(L.stake*B.d)}\n\nIt goes to My Tickets as pending and counts toward this challenge. Place it at your book at these prices.`))return;
+  const id=Date.now();const toWin=+(L.stake*(B.d-1)).toFixed(2);
+  const T=get(LS.locked,[])||[];T.unshift({id,date:today(),name:`🎯 ${m.name}${m.pots?' · '+P.name:''}`,presetKey:'challenge',source:'mine',stake:String(L.stake),toWin:String(toWin),fromChallenge:mid,
+    legs:B.legs.map(x=>({id:id+'|'+x.pick,pick:x.pick,game:x.game,sport:x.sp,p:x.p,price:x.price,m:x.m,sd:x.sd,line:x.line,gid:x.gid||null,gameDate:String(x.start||'').slice(0,10)&&tdDay(x.start)||today(),why:(x.why||[]).join(' · ')})),
+    p:B.p});
+  set(LS.locked,T);try{saveWager(id,L.stake);}catch(e){}
+  msAttach(mid,{value:String(id)},pi||0);
+  try{const A2=msAll();const m2=A2.find(x=>x.id===mid);const st=m2&&m2.steps.find(x=>String(x.ticketId)===String(id));if(st){st.lane=li||0;msSave(A2);msRender();}}catch(e){}
+  try{renderTickets();}catch(e){}try{deskToast(`🎯 Accepted — ${B.legs.length}-leg ${pr} ticket is on My Tickets and the challenge`,4000);}catch(e){}}
 function msLegInfo(l){const sp=l.sport||'mlb';const[a,h]=String(l.game).split('@');const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);
   const T=get(TC_KEY,{})||{};const B=((T.by||{})[sp])||{};const x=k?(B.picks||[]).find(p=>p.game===l.game&&p.m===k.market&&p.sd===k.side):null;return{sp,k,x:x?{...x,sp}:null};}
 /* Does an attached ticket follow the mission's rule? */
@@ -19482,7 +19520,7 @@ function msgHubHtml(){let G;try{G=msgTick();}catch(e){console.warn('game tick',e
       ${got?`<div class="r">${R[0]}</div>`:`<div class="msg-bar"><div style="width:${Math.min(100,v/tgt*100).toFixed(0)}%"></div></div><div class="r">${Math.min(v,tgt)}/${tgt}</div>`}</div>`;}).join('');
   const nGot=Object.keys(G.ach).length;
   const trophies=`<details class="msg-card tkt"${nGot?'':' open'}><summary><b>🏆 Trophy case</b> <span class="mono" style="font-size:10px">${nGot}/${MSG_ACH.length}</span></summary><div class="msg-tros">${tro}</div></details>`;
-  const toast=fx.length?`<div class="msg-toast">${fx.map(f=>`<div>${f.xp>0?'+'+f.xp+' XP':f.xp+' XP'} · ${esc(f.why)}</div>`).join('')}<div class="msg-confetti">${'<i></i>'.repeat(18)}</div></div>`:'';
+  const toast=fx.length?`<div class="msg-toast">${fx.map(f=>`<div>${f.xp>0?'+'+f.xp+' XP':f.xp+' XP'} · ${txtEsc(f.why)}</div>`).join('')}<div class="msg-confetti">${'<i></i>'.repeat(18)}</div></div>`:'';
   return msgCss()+toast+daily+boss+map+msgBuilderHtml()+trophies;}
 function msgCss(){return`<style>
 .msg-card{position:relative;overflow:hidden}.msg-row{display:flex;justify-content:space-between;align-items:center;gap:6px}
@@ -19554,12 +19592,14 @@ async function seasonCalLoad(sp){const C=get('d4.seasoncal',{})||{};if(C[sp]&&C[
   return C[sp]||null;}
 function liveSports(){return['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>spInSeason(sp));}
 function tcSportsLoaded(){const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};return['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>by[sp]&&(by[sp].picks||[]).length);}
-function msLaneHtml(L){const B=L.build.best;
-  const legs=B?B.legs.map(x=>`<div class="mono" style="font-size:10.5px;padding-left:8px">• ${esc(x.pick)} <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> <span style="color:${(TC_COL[x.color]||['var(--mute)',''])[0]}">${(TC_COL[x.color]||['',''])[1]}</span>${(x.rules||[]).slice(0,1).map(r=>' '+r.icon).join('')} <span style="color:var(--mute)">${SP_LAB[x.sp]||''} ${esc(x.game)}</span></div>`).join(''):'';
+function msLaneHtml(L,m,pi,li){const B=L.build.best;
+  const done=m&&(m.steps||[]).find(s=>s.date===today()&&(s.pot||0)===(pi||0)&&(s.lane==null||s.lane===(li||0)));
+  const legs=B?B.legs.map(x=>`<div class="mono" style="font-size:10.5px;padding-left:8px">• ${txtEsc(x.pick)} <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> <span style="color:var(--win)">${x.p!=null?Math.round(x.p*100)+'%':''}</span> <span style="color:var(--mute)">${SP_LAB[x.sp]||''} ${txtEsc(x.game)}</span>${(x.why||[]).length?`<div style="font-size:9.5px;color:#a78bfa;padding-left:10px">${txtEsc(x.why.join(' · '))}</div>`:''}</div>`).join(''):'';
   return`<div class="sub" style="margin-top:5px"><b>${L.lab}:</b> stake <b style="color:var(--gold)">${ms$(L.stake)}</b> on ${L.k===1?'a <b>single</b>':`a <b>${L.k}-team parlay</b>`} priced <b>${decimalToAmerican(L.minDec)} or longer</b> → pays ${ms$(L.stake*L.minDec)}+.</div>
-    ${B?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">Built from Today's card:</div>${legs}
-      <div class="mono" style="font-size:10px;padding-left:8px;color:${B.ok?'var(--win)':'var(--rust)'}">= ${decimalToAmerican(B.d)} ${B.ok?'✓ clears the bar':'✗ short of '+decimalToAmerican(L.minDec)+' — add a leg or swap in a plus-money side'}</div>`
-      :`<div class="mono" style="font-size:9.5px;color:var(--mute)">${L.build.poolN?'Not enough qualifying picks for this rule today — sit it out; skipping a day is a legal move.':'Upload today\'s lines and open a Games board — the planner builds the ticket from Today\'s card.'}</div>`}`;}
+    ${B?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">Built from Today's card — ${L.build.widened?'not enough unanimous / SUPREME / STRONG picks at a price today, so it widened to VALUE':'unanimous, SUPREME and STRONG picks plus the best characters\' spots'}:</div>${legs}
+      <div class="mono" style="font-size:10px;padding-left:8px;color:${B.ok?'var(--win)':'var(--rust)'}">= ${decimalToAmerican(B.d)} ${B.ok?`✓ clears the bar · ${(B.p*100).toFixed(B.p<0.1?1:0)}% to cash`:'✗ short of '+decimalToAmerican(L.minDec)+' — not enough strong picks at a price today'}</div>
+      ${m&&B.ok?(done?`<div class="mono" style="font-size:10px;padding-left:8px;color:var(--win);margin-top:3px">✓ Today's step is in — ticket #${txtEsc(String(done.ticketId))} on My Tickets</div>`:`<div class="bar" style="margin-top:5px"><button class="primary" onclick="msAcceptBuild(${m.id},${pi||0},${li||0})">✅ Accept → My Tickets</button></div>`):''}`
+      :`<div class="mono" style="font-size:9.5px;color:var(--mute)">${L.build.poolN?`Only ${L.build.poolN} pick${L.build.poolN===1?'':'s'} on Today's card make${L.build.poolN===1?'s':''} sense for this today (${txtEsc((L.build.pool||[]).join(', '))}) — not enough for ${L.k} legs. Sit it out; skipping a day is a legal move.`:'Upload today\'s lines and open a Games board — the planner builds the ticket from Today\'s card.'}</div>`}`;}
 function msAfter(route,m){return{snowball:'Win → roll it all tomorrow. Miss → the run ends; run it back, never add money to chase.',
   heist:`Win → 25% of the profit goes to the safe house. Miss → the run ends${(m.safe||0)>0?`, the safe keeps ${ms$(m.safe)}`:''}.`,
   elevator:'Win → if you passed a checkpoint, half the balance goes to the safe. Miss → the run ends, the safe doesn\'t.',
@@ -19585,7 +19625,7 @@ function msCard(m){
       const rule=P.rule?`<span class="mono" style="font-size:9px;color:#a78bfa"> · RULE: ${MS_FILTERS[P.rule].lab} (${MS_FILTERS[P.rule].desc})</span>`:'';
       const sport=P.sport?`<span class="mono" style="font-size:9px;color:#a78bfa"> · ${SPORT_LAB[P.sport]}</span>`:'';
       return`${m.pots?`<div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--rule)"><b>${txtEsc(P.name)}</b> <span class="mono" style="font-size:10px">${ms$(P.balance)}${P.safe?` + safe ${ms$(P.safe)}`:''} · ${msRouteLabel(ro)}</span>${rule}${sport}</div>`:(rule||sport?`<div>${rule}${sport}</div>`:'')}
-        ${P.balance<1?'<div class="sub" style="color:var(--rust)">This pot is spent.</div>':lanes.map(msLaneHtml).join('')}
+        ${P.balance<1?'<div class="sub" style="color:var(--rust)">This pot is spent.</div>':lanes.map((L,li)=>msLaneHtml(L,m,pi,li)).join('')}
         ${m.pots&&P.balance>=1?`<div class="bar" style="margin-top:4px">${attach(pi)}</div>`:''}`;}).join('');
     const fin=m.pots?S.p:r.p;
     orders=`<div style="margin-top:8px;padding:10px;border-radius:10px;background:rgba(95,211,232,.06);border:1px solid rgba(95,211,232,.35)">

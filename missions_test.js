@@ -24,7 +24,8 @@ const w=dom.window;
   T('builds a 3-leg ticket, one leg per game',b3.best&&b3.best.legs.length===3&&new Set(b3.best.legs.map(x=>x.game)).size===3);
   T('the built ticket clears the +596 bar',b3.best.ok&&b3.best.d>=6.96,w.eval(`decimalToAmerican(${b3.best.d})`)+' · '+b3.best.legs.map(x=>x.pick).join(' + '));
   const b2=w.eval('msBuildTicket(2,Math.pow(americanToDecimal(-110),2))');
-  T('2-leg build prefers the strongest pair that still clears +264',b2.best.ok&&b2.best.legs.map(x=>x.pick).includes('CHI +3.5'),b2.best.legs.map(x=>x.pick).join(' + '));
+  /* v2.19: of the pairs that clear the bar, the one most likely to CASH (BUF ML -150 + CHI ML +208 beats CHI +3.5 + CHI ML) */
+  T('2-leg build takes the pair most likely to cash that still clears +264',b2.best.ok&&b2.best.legs.map(x=>x.pick).sort().join()==='BUF ML,CHI ML',b2.best.legs.map(x=>x.pick).join(' + '));
   const hard=w.eval('msBuildTicket(2,50)');
   T('when nothing clears the bar it says so (longest available shown)',hard.best&&!hard.best.ok);
   // ── heist mission ──
@@ -65,7 +66,7 @@ const w=dom.window;
   T('two-lane: $24 anchor (2-leg) + $16 moonshot (4-leg) = 20% of $200',tl.lanes.length===2&&tl.lanes[0].stake===24&&tl.lanes[1].stake===16&&tl.lanes[1].k===4);
   // ── the Money tab ──
   w.eval("tab('money',null)");await wait(300);const mb=w.document.getElementById('moneyBody').innerHTML;
-  T("Money tab: rank, TODAY'S ORDERS, built legs, side quests, route planner, map",/RANK/.test(mb)&&/TODAY'S ORDERS/.test(mb)&&/Built from Today's card/.test(mb)&&/SIDE QUESTS/.test(mb)&&/Route planner/.test(mb)&&/The Vault/.test(mb));
+  T("Money tab: rank, TODAY'S ORDERS, built legs, side quests, route planner, map",/RANK/.test(mb)&&/TODAY'S ORDERS/.test(mb)&&/Built from Today's card|on Today's card makes? sense/.test(mb)&&/SIDE QUESTS/.test(mb)&&/Route planner/.test(mb)&&/The Vault/.test(mb),['RANK',"TODAY'S ORDERS","Built from Today's card",'SIDE QUESTS','Route planner','The Vault'].filter(k=>!mb.includes(k)).join(','));
   T('safe house shown on the heist card',/safe <b[^>]*>\$29\.80/.test(mb));
   T('no uncaught errors',errors.length===0,errors.slice(0,3).join(' || '));
   console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length}/${out.length} passed`);
