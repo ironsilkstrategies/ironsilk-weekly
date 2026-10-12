@@ -2131,7 +2131,7 @@ function nflCardFull(g){
     const tierBadge=charTierTag(tierCls);
 
     const id=g.id+'|'+pick;
-    const on=(typeof SLIP!=='undefined'&&SLIP.some?SLIP.some(x=>x.id===id):false);
+    const on=(typeof SLIP!=='undefined'&&SLIP.some?SLIP.some(x=>x.id===id||x.sq===id):false);
     return`<div class="bet${cls}${srcCls}${tierCls} ${on?'on':''}" role="button" tabindex="0"
       onclick="nflSlipToggle('${g.id}','${pick.replace(/'/g,"\\'")}',${e.price})">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>

@@ -508,7 +508,7 @@ function nhlTile(g,s,label,pick,line,modelP,simStr,mkt){
   let srcTag=outsideAgrees?`<div class="src-tag${outsideUnanimous?' unanimous':''}">${outsideUnanimous?'★ unanimous':srcOn.size+' source'+(srcOn.size>1?'s':'')}</div>`:'';
   {const _co=charAsOutside(cInfo,outsideAgainst);if(_co.unanimous){outsideAgrees=true;outsideUnanimous=true;srcTag=_co.badge;}else if(_co.agrees&&!outsideAgrees){outsideAgrees=true;srcTag=_co.badge;}}
   const srcCls=outsideAgrees?(outsideUnanimous?' consensus-pick':' source-pick'):'';
-  const on2=SLIP.some(x=>x.id===g.id+'|'+pick);
+  const on2=SLIP.some(x=>x.id===g.id+'|'+pick||x.sq===g.id+'|'+pick);
   return`<div class="bet${cls}${srcCls}${tier} ${on2?'on':''}" role="button" tabindex="0" onclick="sportSlipToggle('nhl','${g.id}','${nhlQ(pick)}',${line.price})">
     <div class="bl">${label}</div><div class="sim-chip">sim ${simStr}</div><div class="bo">${nhlSgn(line.price)}</div>
     <div class="bs">${badge||Math.round(kp*100)+'%'}</div>

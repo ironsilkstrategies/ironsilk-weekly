@@ -2155,17 +2155,29 @@ function renderActiveBoard(){const ps=window.__PAGE_SPORT__||ACTIVE_SPORT;
    leg with no id (so the tile never showed selected and a second tap added a
    duplicate) and then called renderSlip(), which does not exist anywhere —
    so every football tile tap threw after saving. */
+/* v2.20 · a board square says "BUF spread" — the ticket needs the number ("BUF +3"), or the leg can
+   never grade. Read it off the book line behind the square (same price first). */
+function slipSpreadLabel(sport,g,label,price){const m=String(label).match(/^(\S+)\s+(?:(1H|H1|P1)\s+)?spread$/i);if(!m)return{label};   /* forms the grader reads: "BUF +3", "BUF 1H +2.5", "FLA P1 -0.5" */
+  const team=m[1].toUpperCase(),per=m[2]?m[2].toUpperCase():null;const side=team===g.home.abbr?'home':team===g.away.abbr?'away':null;if(!side)return{label};
+  const mk=per==='1H'||per==='H1'?'h1spread':per==='Q1'?'q1spread':per==='P1'?'p1spread':'spread';
+  let L=[];try{L=sportLinesFor(sport,g)||[];}catch(e){}
+  const c=L.filter(x=>(x.market===mk||(mk==='spread'&&(x.market==='runline'||x.market==='puckline')))&&x.side===side&&x.line!=null&&isFinite(+x.line));
+  const x=c.find(y=>price!=null&&+y.price===+price)||c[0];if(!x)return{label};
+  const ln=+x.line;const sg=ln>0?'+'+ln:ln===0?(side==='home'?'-0':'+0'):String(ln);
+  return{label:team+' '+(per?(per==='H1'?'1H':per)+' ':'')+sg,line:ln};}
 function sportSlipToggle(sport,gid,label,price,extra){
   const g=sportGames(sport).find(x=>x.id===gid);if(!g)return;
+  {const S2=slipSpreadLabel(sport,g,label,price);if(S2.line!=null){const old=gid+'|'+label;const j=SLIP.findIndex(x=>x.id===old||x.sq===old);if(j>=0){SLIP.splice(j,1);set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();return;}
+    extra=Object.assign({line:S2.line,sq:old},extra||{});label=S2.label;}}
   const id=gid+'|'+label;const i=SLIP.findIndex(x=>x.id===id);
   if(i>=0)SLIP.splice(i,1);
-  else SLIP.push(Object.assign({id,gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport,date:today(),
+  else SLIP.push(Object.assign({id,gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport,date:(()=>{for(const v of [g.date,g.start,g.gameDate]){if(v){const t=tdDay(v);if(/^\d{4}-\d{2}-\d{2}$/.test(t))return t;}}return today();})(),
     p:price!=null&&Math.abs(price)>=100?Math.min(.95,Math.max(.05,price>0?100/(price+100):-price/(-price+100))):0.5},extra||{}));
   set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8384,23 +8396,27 @@ function pan(gid,which,btn){
 }
 
 /* ================= SLIP ================= */
-function loadSlip(){SLIP=get(LS.slip,[])}
+/* v2.20 · a slip leg whose game day has passed is dead weight (yesterday's JAX spread kept
+   riding along into today) — drop it on load */
+function loadSlip(){SLIP=(get(LS.slip,[])||[]).filter(x=>{const d=String(x.gameDate||x.date||'').slice(0,10);return!d||d>=today();});try{set(LS.slip,SLIP);}catch(e){}}
 function tog(id,game,pick,prob,gid,ptype,pname,pmkt){
   const i=SLIP.findIndex(x=>x.id===id);
   if(i>=0)SLIP.splice(i,1);
   else{
-    const leg={id,game,pick,p:prob,gid};
+    const leg={id,game,pick,p:prob,gid,date:today()};
     if(ptype){leg.ptype=ptype;leg.isProp=1;leg.pname=pname;leg.pmkt=pmkt;
       const src=PROPS.find(z=>z.gid===gid&&z.name===pname&&z.mkt===pmkt);
       if(src){leg.pid=src.pid;leg.thr=src.thr}}
     SLIP.push(leg);
   }
-  set(LS.slip,SLIP);render();paintSlip();
+  set(LS.slip,SLIP);renderActiveBoard();paintSlip();
 }
-function clearSlip(){SLIP=[];set(LS.slip,SLIP);render();paintSlip()}
+function clearSlip(){SLIP=[];set(LS.slip,SLIP);renderActiveBoard();paintSlip()}
 let SLIP_SHEET_OPEN=false;
 function paintSlip(){
   const el=document.getElementById('slip');
+  if(!el)return;
+  try{document.body.classList.toggle('slipon',!!SLIP.length);}catch(e){}
   if(!SLIP.length){
     el.classList.remove('on');
     closeSlipSheet(); // no legs left — the sheet has nothing to show, so drop it too
@@ -8484,10 +8500,10 @@ function lockSlip(){
   const L=get(LS.locked,[]);
   const d0=today();
   L.unshift({id:Date.now(),date:d0,name,source:'mine',
-    legs:SLIP.map(x=>({...x,gameDate:d0})),
+    legs:SLIP.map(x=>({...x,sport:x.sport||(window.__PAGE_SPORT__||'mlb'),gameDate:String(x.gameDate||x.date||d0).slice(0,10)})),   /* a Saturday game keeps its Saturday */
     p:SLIP.reduce((a,x)=>a*x.p,1)});
   set(LS.locked,L);
-  SLIP=[];set(LS.slip,SLIP);render();paintSlip();
+  SLIP=[];set(LS.slip,SLIP);renderActiveBoard();paintSlip();closeSlipSheet();
   alert(`Locked${name?' — "'+name+'"':''}. See Tickets → My Parlays.`);
 }
 // ── Modify a pending ticket — add or remove legs before it's locked in ──
@@ -20894,6 +20910,13 @@ body.bnav nav>button .n{position:absolute;top:3px;right:16%;font-size:8.5px;opac
 body.bnav nav>button.bn-hide,body.bnav nav>button.nav-sec{display:none!important}
 body.bnav main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
+/* v2.20 · the ticket slip sits ON TOP of the bottom nav, not under it; the review sheet covers the nav;
+   while the sheet is up the bar hides so it can't sit over the sheet's own Clear / Lock in buttons */
+body.bnav .slip{bottom:var(--bnh,64px)!important;z-index:79!important;padding-bottom:11px!important;border-radius:14px 14px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.45)}
+.slip.expanded{display:none!important}
+.slip-scrim{z-index:85!important}.slip-sheet{z-index:86!important}
+body.bnav.slipon main{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
+body.bnav.slipon #dToastBox{bottom:calc(150px + env(safe-area-inset-bottom))!important}
 #bnMore .bn-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:14px;background:var(--panel2);border:1px solid var(--rule);font-weight:700;font-size:11.5px;color:var(--chalk)}
 #bnMore .bn-tile span{font-size:22px}
 .bn-soc{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;border:1px solid var(--rule);background:var(--panel2,#18212C);color:var(--chalk);text-decoration:none;font:700 13px Inter,sans-serif}.bn-soc b{font-size:16px}
@@ -20958,7 +20981,9 @@ function skinSetup(){try{intakeCollapse();}catch(e){}try{if(!document.getElement
     if(phone&&n!=='more')b.classList.toggle('bn-hide',!BN_PRIMARY.includes(n));});
   const more=document.getElementById('navMore');if(more&&phone&&!more.__bn){more.__bn=1;more.textContent='More';more.setAttribute('data-ico','☰');more.onclick=bnMoreOpen;}
   /* keep More last on the bar */
-  if(more&&phone)nav.appendChild(more);}catch(e){console.warn('skin',e);}}
+  if(more&&phone)nav.appendChild(more);
+  /* the slip bar docks just above the nav, whatever height the nav ends up on this phone */
+  try{const set=()=>{const h=phone?Math.round(nav.getBoundingClientRect().height):0;document.documentElement.style.setProperty('--bnh',(h||64)+'px');};set();requestAnimationFrame(set);setTimeout(set,600);}catch(e){}}catch(e){console.warn('skin',e);}}
 /* TheDesk socials (v1.93) — shown in the More sheet, the launcher and the public picks page */
 const THEDESK_SOCIAL={fb:'https://www.facebook.com/share/1FCDFdUvRp/',tg:'https://t.me/TheDeskApp'};
 function socialHtml(){const S=THEDESK_SOCIAL;const a=[];

@@ -117,7 +117,7 @@ function nbaTile(g,s,label,pick,line,r,simStr,mkt){
   const cInfo=(()=>{try{return charSquare('nba',g,s,pick,{price:line.price,modelP:pw,line:line.line})}catch(e){return{}}})();
   const tier=charTier({hasLine:true,bookLeans:kp>=0.58,modelEdgeHere:cls===' value',modelAgainstHere:cls===' avoid',outsideAgrees:false,outsideUnanimous:false,outsideAgainst:false},cInfo);
   const co=charAsOutside(cInfo,false);const srcCls=co.unanimous?' consensus-pick':co.agrees?' source-pick':'';
-  const on=typeof SLIP!=='undefined'&&SLIP.some(x=>x.id===g.id+'|'+pick);
+  const on=typeof SLIP!=='undefined'&&SLIP.some(x=>x.id===g.id+'|'+pick||x.sq===g.id+'|'+pick);
   return`<div class="bet${cls}${srcCls}${tier} ${on?'on':''}" role="button" tabindex="0" onclick="sportSlipToggle('nba','${g.id}','${nbaQ(pick)}',${line.price})">
     <div class="bl">${esc(label)}</div><div class="sim-chip">sim ${esc(simStr)}</div><div class="bo">${nbaSgn(line.price)}</div>
     <div class="bs">${badge||Math.round(kp*100)+'%'}</div>
