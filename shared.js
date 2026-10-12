@@ -2154,7 +2154,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011q';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011r';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16395,6 +16395,7 @@ async function boot(){
     }else{
       renderUsage();renderBackupStatus();renderStorageStatus();renderDataFeedStatus();renderGeminiModel();renderPctThresholdBtns();renderAutoParlayToggles();renderColorLegend();
       document.getElementById('setup').classList.remove('hide');
+      try{moveSetupMount();}catch(e){}
     }
   }catch(e){
     console.error('Setup gate failed — failing open so the app is never permanently blocked:',e);
@@ -21640,6 +21641,37 @@ async function syncConnect(){const repo=(document.getElementById('syncRepoIn')||
   else first='remote';
   const r=await syncNow(true,first);if(r&&r.ok&&r.changed){setTimeout(()=>location.reload(),900);}}
 function syncDisconnect(){if(!confirm('Disconnect this device from sync? Nothing is deleted — it just stops syncing.'))return;localStorage.removeItem(SYNC.repo);localStorage.removeItem(SYNC.token);renderSyncStatus();syncSettingsPaint();}
+/* v2.12 MOVE CODE — one copy/paste carries every never-synced key (odds/AI/sharp/
+   rundown/oddspapi/CFBD/GitHub publish token, Telegram bot token) plus the sync
+   repo+token to a new home-screen icon or device. Values travel raw (exact
+   localStorage strings) and restore is whitelisted: a pasted code can only ever
+   write these keys, nothing else. Clipboard only — never synced, never sent. */
+const MOVE_KEYS=[LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.cfbd,LS.ghtoken,LS.ghrepo,'d4.tgbot',SYNC.repo,SYNC.token];
+const MOVE_PFX='TDMOVE1.';
+function moveCode(){const k={};MOVE_KEYS.forEach(x=>{const r=localStorage.getItem(x);if(r!==null&&r!=='')k[x]=r;});
+  return{code:MOVE_PFX+btoa(unescape(encodeURIComponent(JSON.stringify({v:1,ts:Date.now(),k})))),n:Object.keys(k).length};}
+function moveParse(code){code=String(code||'').replace(/\s+/g,'');const i=code.indexOf(MOVE_PFX);if(i<0)return null;
+  try{const o=JSON.parse(decodeURIComponent(escape(atob(code.slice(i+MOVE_PFX.length)))));if(!o||!o.k||typeof o.k!=='object')return null;
+    const k={};Object.keys(o.k).forEach(x=>{if(MOVE_KEYS.includes(x)&&typeof o.k[x]==='string')k[x]=o.k[x];});return Object.keys(k).length?k:null;}catch(e){return null;}}
+function moveApply(code){const k=moveParse(code);if(!k)return 0;Object.keys(k).forEach(x=>localStorage.setItem(x,k[x]));return Object.keys(k).length;}
+function moveCopy(){const m=moveCode();if(!m.n){alert('No keys saved on this device yet.');return;}
+  copyText(m.code,`Transfer code copied — ${m.n} key${m.n===1?'':'s'}${localStorage.getItem(SYNC.token)?' + sync':''}.\n\nOpen the new app, paste it into "Restore from transfer code" and tap Restore.\n\nIt holds every key you own — don't paste it anywhere public, and delete it from Notes once you're moved.`);}
+async function moveRestore(inputId){const el=document.getElementById(inputId);const code=el?el.value:'';
+  const k=moveParse(code);if(!k){alert('That isn\'t a TheDesk transfer code. On the old app: Settings → ☁️ Sync → 🔑 Copy transfer code.');return;}
+  const hasLocal=(get(LS.locked,[])||[]).length+Object.keys(get(LS.arc,{})||{}).length>0;
+  const n=moveApply(code);localStorage.setItem('d4.setupDone','1');if(el)el.value='';
+  if(syncOn()){try{deskToast('🔑 '+n+' keys restored — pulling your cloud copy…',4000);}catch(e){}
+    try{await syncNow(true,hasLocal?'local':'remote');}catch(e){alert('Keys restored, but sync could not reach the repo: '+e.message+'\nTry Settings → ☁️ Sync → Sync now.');}}
+  else alert(n+' keys restored.');
+  setTimeout(()=>location.reload(),700);}
+function moveBoxHtml(id){return`<div class="mono" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin:10px 0 4px">🔑 Restore from transfer code</div>
+  <input id="${id}" placeholder="TDMOVE1.…  (old app: Settings → ☁️ Sync → Copy transfer code)" autocomplete="off" spellcheck="false" autocapitalize="off">
+  <div class="bar" style="margin-top:6px"><button class="primary" onclick="moveRestore('${id}')">Restore keys + sync</button></div>
+  <div class="sub" style="font-size:10px;margin-top:4px">One paste brings back every API key, the Telegram bot token and sync — then your tickets and history pull down from the cloud.</div>`;}
+function moveSetupMount(){const su=document.getElementById('setup');if(!su||document.getElementById('moveSetupBox'))return;
+  const d=document.createElement('div');d.id='moveSetupBox';d.className='tkt';d.style.cssText='margin:0 0 14px;border-color:var(--gold)';
+  d.innerHTML=`<div class="sub" style="font-size:11px"><b>Moving from another TheDesk app?</b> Skip the keys below — paste your transfer code.</div>`+moveBoxHtml('moveSetupIn');
+  const h=su.querySelector('h2');if(h&&h.nextSibling)su.insertBefore(d,h.nextSibling);else su.insertBefore(d,su.firstChild);}
 function syncSettingsHtml(){const on=syncOn();
   return`<div class="sbar"><h2>☁️ Sync across devices</h2><div class="ln"></div></div><div class="tkt" id="syncTkt">
     <div class="sub" style="font-size:10.5px">Everything you do here — tickets, grades, uploads, challenges — shows up on every browser you connect. Stored in a <b>private</b> GitHub repo only you can read. API keys never sync.</div>
@@ -21648,8 +21680,8 @@ function syncSettingsHtml(){const on=syncOn();
     <input id="syncRepoIn" placeholder="ironsilkstrategies/thedesk-data" autocomplete="off" spellcheck="false" value="ironsilkstrategies/thedesk-data">
     <div class="mono" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:10px 0 4px">Fine-grained token</div>
     <input id="syncTokIn" type="password" placeholder="github_pat_…  (this repo only · Contents: read and write)" autocomplete="off" spellcheck="false">`}
-    <div class="bar" style="margin-top:8px">${on?`<button class="primary" onclick="syncNow(true)">Sync now</button><button onclick="copyText(String(get(SYNC.token,'')||''),'Sync token copied — paste it into the new app (or Notes for safekeeping).')">📋 Copy sync token</button><button onclick="syncDisconnect()">Disconnect</button>`:`<button class="primary" onclick="syncConnect()">Connect this device</button>`}</div>
-    ${on?`<div class="sub" style="font-size:10px;margin-top:4px">Moving to a new home-screen icon or another device? Copy the token here, then on the new one enter <b>${txtEsc(get(SYNC.repo,''))}</b> + the token and connect — everything comes back.</div>`:''}
+    <div class="bar" style="margin-top:8px">${on?`<button class="primary" onclick="syncNow(true)">Sync now</button><button onclick="moveCopy()">🔑 Copy transfer code</button><button onclick="copyText(String(get(SYNC.token,'')||''),'Sync token copied — paste it into the new app (or Notes for safekeeping).')">📋 Sync token only</button><button onclick="syncDisconnect()">Disconnect</button>`:`<button class="primary" onclick="syncConnect()">Connect this device</button>`}</div>
+    ${on?`<div class="sub" style="font-size:10px;margin-top:4px">Moving to a new home-screen icon or another device? Tap <b>🔑 Copy transfer code</b> — it carries every API key, the bot token and sync in one paste. On the new app, paste it into <b>Restore from transfer code</b> (first screen, or here) — everything comes back.</div>`:moveBoxHtml('moveSyncIn')}
     <div class="sub mono" id="syncStatus" style="font-size:10px;margin-top:6px"></div>
     ${on?'':`<div class="sub" style="font-size:10.5px;margin-top:8px"><b>Set up once (2 minutes, on your phone):</b></div>
     <div class="bar" style="margin-top:4px;flex-wrap:wrap"><a class="gc-btn" style="text-decoration:none;padding:9px 12px" href="https://github.com/new?name=thedesk-data&visibility=private&description=TheDesk+private+sync" target="_blank" rel="noopener">① Create private repo</a>
