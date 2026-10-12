@@ -71,6 +71,13 @@ setTimeout(()=>{try{
   T('⚡ Power plays: only the Commissioner\'s calls, with why',legs.length===2&&legs.every(l=>/TROY|ARK/.test(l.pick)&&/Commissioner/.test(l.hotWhy)),legs.map(l=>l.pick+' · '+l.hotWhy).join(' | '));
   w.eval('TARGET_LEGS=1');T('leg count picker is honored',w.eval(`buildPreset('power')`).length===1);
   T('listed, named, files under My picks',w.eval(`PRESETS.some(p=>p[0]==='power')&&PRESET_SOURCE.power==='mine'&&PRESET_DISPLAY_NAME.power==='Power plays'`));
+  /* ── v2.16: Records shows the Commissioner from day one ── */
+  w.eval(`set(VOICES_KEY,[{id:'s1',voice:'Sim',sp:'ncaaf',date:'2026-10-03',game:'A@B',market:'ml',side:'home',graded:true,hit:true,units:0.5},{id:'pq',voice:'Power',sp:'ncaaf',date:dayShift(today(),3),game:'C@D',market:'ml',side:'home',pP:0.6}]);PWR_REIGN_C={};`);
+  const rep=w.eval(`voicesReportCore('ncaaf')`).replace(/<[^>]+>/g,' ');
+  T('Who to listen to lists the whole roster — the Commissioner included before its first grade',/Commissioner/.test(rep)&&/Brain/.test(rep)&&/Covers/.test(rep));
+  const pr=w.eval('pwrRecordsHtml()').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
+  T('Records → Characters gets a Commissioner card: straight-up rate, say, record, pending',/The Commissioner/.test(pr)&&/75%/.test(pr)&&/pending/.test(pr),pr.slice(0,240));
+  T('the splits table names it even with no graded calls yet',/Commissioner/.test(w.eval(`charSplitsHtml({sp:'ncaaf'})`)));
   /* ── housekeeping ── */
   T('history and self-tune stores stay off the sync file',w.eval(`syncSkip('d4.h2hx.nfl')&&syncSkip('d4.feeltune')&&!syncSkip('d4.voices')`));
   w.eval(`set('d4.allfinals',{'nfl:A@B':{sport:'nfl',d:'2026-08-20',a:10,h:13},'nfl:C@D':{sport:'nfl',a:21,h:14,ts:Date.parse('2026-09-21T03:00:00Z')},'nfl:E@F':{sport:'nfl',d:'2099-01-01',a:1,h:2}});`);

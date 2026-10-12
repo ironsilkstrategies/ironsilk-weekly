@@ -2018,13 +2018,14 @@ function voicesReportCore(sp){
   const V=get(VOICES_KEY,[]).filter(x=>(!sp||sp==='all'||x.sp===sp)&&x.graded&&x.hit!=null);
   const mk={ml:'Moneyline',spread:sp==='mlb'?'Run line':'Spread',total:'Total'};
   if(!V.length)return`<div class="tkt hi"><h3>Who to listen to</h3><div class="sub">Every voice — Sim, Judge, Most-common score, Coach, Books, and any predicted scores you upload from an outside source (e.g. Covers) — gets its call locked at first pitch/kickoff and graded here, by market. Fills in as games go final.</div></div>`;
-  const voices=['Sim','Judge','Most common','Pred','Trends','Consensus','Coach','Books'];
+  /* v2.16 · the whole roster, every time — a new character shows from day one, not after its first grade */
+  const voices=[...CHAR_ORDER,'Books'];const vName=v=>v==='Books'?'Books':(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');
   const cell=a=>{if(!a.length)return'<td class="m" style="color:var(--mute)">—</td>';const w=a.filter(x=>x.hit).length,u=a.reduce((s,x)=>s+(x.units||0),0);
     const pc=w/a.length;return`<td class="m" style="color:${a.length>=10?(pc>=0.55?'var(--win)':pc<0.47?'var(--rust)':'var(--chalk)'):'var(--mute)'}">${w}-${a.length-w} <b>${Math.round(pc*100)}%</b><br><span style="font-size:9.5px">${u>=0?'+':''}${u.toFixed(1)}u</span></td>`;};
-  const rows=voices.map(v=>`<tr><td><b>${v}</b></td>${['ml','spread','total'].map(m=>cell(V.filter(x=>x.voice===v&&x.market===m))).join('')}</tr>`).join('');
+  const rows=voices.map(v=>`<tr><td><b style="color:${(CHARS[v]||{}).color||'var(--chalk)'}">${txtEsc(vName(v))}</b></td>${['ml','spread','total'].map(m=>cell(V.filter(x=>x.voice===v&&x.market===m))).join('')}</tr>`).join('');
   const best=['ml','spread','total'].map(m=>{let top=null;voices.forEach(v=>{const a=V.filter(x=>x.voice===v&&x.market===m);if(a.length<10)return;
     const u=a.reduce((s,x)=>s+(x.units||0),0)/a.length;if(!top||u>top.u)top={v,u,n:a.length};});
-    return top?`<b>${mk[m]}:</b> ${top.v} (${top.u>=0?'+':''}${(top.u*100).toFixed(1)}% ROI over ${top.n})`:`<b>${mk[m]}:</b> need 10+ graded`;}).join(' · ');
+    return top?`<b>${mk[m]}:</b> ${txtEsc(vName(top.v))} (${top.u>=0?'+':''}${(top.u*100).toFixed(1)}% ROI over ${top.n})`:`<b>${mk[m]}:</b> need 10+ graded`;}).join(' · ');
   const bySport=(!sp||sp==='all')?['mlb','nfl','ncaaf'].filter(s=>V.some(x=>x.sp===s)).map(s=>{const a=V.filter(x=>x.sp===s);const w=a.filter(x=>x.hit).length;return`${s.toUpperCase()} ${w}-${a.length-w}`;}).join(' · '):'';
   return`<div class="tkt hi"><h3>Who to listen to</h3><div class="sub" style="margin-bottom:6px">Each voice's call, locked at first pitch/kickoff, graded on the final against your line. Green = 55%+ on 10+ calls.</div>
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;line-height:1.5"><tr style="color:var(--mute);font-size:10px"><td></td><td>${mk.ml}</td><td>${mk.spread}</td><td>${mk.total}</td></tr>${rows}</table></div>
@@ -2162,7 +2163,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17785,10 +17786,11 @@ function charSplitsFor(v,sp){const S=splitsGet();const V=roGet(VOICES_KEY,[],30e
     out[mk]=R;});return out;}
 function charSplitsHtml(F){const sp=F&&F.sp&&F.sp!=='all'?F.sp:(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb');const pc=a=>a&&a[0]+a[1]?Math.round(a[0]/(a[0]+a[1])*100)+'%':'—';
   const cell=a=>a&&a[0]+a[1]?`<td style="color:${a[0]/(a[0]+a[1])>=0.55?'var(--win)':a[0]/(a[0]+a[1])<0.45?'var(--rust)':'var(--chalk)'}">${a[0]}-${a[1]}${a[2]?'-'+a[2]:''} <span style="color:var(--mute)">${pc(a)}</span></td>`:'<td style="color:var(--mute)">—</td>';
-  const rows=CHAR_ORDER.map(v=>{const X=charSplitsFor(v,sp);const n=['ml','spread','total'].reduce((s,m)=>s+X[m].all[0]+X[m].all[1],0);if(!n)return'';
+  const rows=CHAR_ORDER.map(v=>{const X=charSplitsFor(v,sp);const n=['ml','spread','total'].reduce((s,m)=>s+X[m].all[0]+X[m].all[1],0);
     const teams=Object.entries(X.ml.team).concat(Object.entries(X.spread.team)).reduce((o,[t,a])=>{const c=o[t]||(o[t]=[0,0,0]);c[0]+=a[0];c[1]+=a[1];return o;},{});
     const best=Object.entries(teams).filter(([t,a])=>a[0]+a[1]>=5).sort((a,b)=>(b[1][0]+2)/(b[1][0]+b[1][1]+4)-(a[1][0]+2)/(a[1][0]+a[1][1]+4));
     const tl=(L)=>L.map(([t,a])=>`${t} ${a[0]}-${a[1]}`).join(' · ')||'—';
+    if(!n)return v==='Power'?`<div class="mono" style="font-size:10px;padding:4px 0;color:var(--mute)"><b style="color:var(--chalk)">${txtEsc(charName(v))}</b> — no graded ${sp.toUpperCase()} calls yet; its splits start with its first finals.</div>`:'';
     return`<details style="margin:4px 0"><summary><b>${txtEsc(charName(v))}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${n} graded ${sp.toUpperCase()} calls</span></summary>
       <table class="mono" style="font-size:10px;width:100%;margin-top:4px"><tr style="color:var(--mute)"><td></td><td>all</td><td>home</td><td>road</td><td>fav</td><td>dog</td></tr>
       ${['ml','spread'].map(m=>`<tr><td>${m==='ml'?'ML':'Spread'}</td>${cell(X[m].all)}${cell(X[m].side.home)}${cell(X[m].side.away)}${cell(X[m].role.fav)}${cell(X[m].role.dog)}</tr>`).join('')}
@@ -18499,7 +18501,7 @@ function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
   if(REC_VIEW==='chars'){let h='';try{try{cpropGrade();cparGrade();}catch(e){}
       const P=CHAR_ORDER.map(v=>({v,R:cparRecord(v)})).filter(x=>x.R.w+x.R.l);
-      h=(()=>{try{return charDayHtml('all')}catch(e){return''}})()+(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
+      h=(()=>{try{return charDayHtml('all')}catch(e){return''}})()+(()=>{try{return pwrRecordsHtml()}catch(e){return''}})()+(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
     catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
@@ -21443,6 +21445,17 @@ function pwrEvalHtml(sp){let R=null;try{R=pwrReign(sp);}catch(e){}if(!R)return''
     ${R.roi!=null?` Money record: ${(R.roi*100).toFixed(1)}% ROI over ${R.un} graded calls.`:''}</div>
     ${list?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:6px">Strongest calls ${fb?'this week':'today'} (${calls.length} in all):</div><div>${list}</div>`:`<div class="sub" style="font-size:10px;margin-top:4px">No calls logged ${fb?'this week':'today'} — open the board once.</div>`}</div>`;}
 
+/* v2.16 · the Commissioner's record card for Records → Characters: every league side by side */
+function pwrRecordsHtml(){const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const C=CHARS.Power;
+  const rows=['nfl','ncaaf','nhl','mlb','nba'].map(sp=>{let R=null;try{R=pwrReign(sp);}catch(e){}
+    const g=V.filter(x=>x.voice==='Power'&&x.sp===sp&&x.graded&&!x.push&&x.hit!=null);const rec=m=>{const a=g.filter(x=>x.market===m);const w=a.filter(x=>x.hit).length;return a.length?`${w}-${a.length-w}`:'—';};
+    const u=g.reduce((s,x)=>s+(+x.units||0),0);const up=V.filter(x=>x.voice==='Power'&&x.sp===sp&&!x.graded&&String(x.date).slice(0,10)>=d).length;
+    if(!R||(R.acc==null&&!g.length&&!up))return'';
+    return`<tr><td style="text-align:left">${SP_LAB[sp]||sp.toUpperCase()}</td><td style="color:${R&&R.supreme?'var(--win)':'var(--chalk)'};font-weight:700">${R&&R.acc!=null?Math.round(R.acc*100)+'%':'—'}<span style="color:var(--mute);font-weight:400;font-size:8.5px"> ${R&&R.n?R.n:''}</span></td>
+      <td>${R&&R.w?Math.round(R.w*100)+'%':'<span style="color:var(--mute)">none</span>'}</td><td>${rec('ml')}</td><td>${rec('spread')}</td><td style="color:${u>0?'var(--win)':u<0?'var(--rust)':'var(--mute)'}">${g.length?(u>=0?'+':'')+u.toFixed(1)+'u':'—'}</td><td>${up||'—'}</td></tr>`;}).join('');
+  return`<div class="tkt" style="border-color:${C.color}"><h3><span class="hs-chip" style="color:${C.color};border-color:${C.color}">${C.chip}</span> The Commissioner</h3>
+    <div class="sub" style="font-size:10px">${txtEsc(C.school)}. Season straight-up rate is the walk-forward test until its own graded calls take over; 70%+ earns it a say in calibration ("say"). Its graded record fills in as its first calls go final.</div>
+    <div style="overflow-x:auto"><table class="mono" style="width:100%;font-size:10px;text-align:center;border-collapse:collapse;margin-top:6px"><tr style="color:var(--mute)"><td style="text-align:left">league</td><td>straight-up</td><td>say</td><td>ML</td><td>spread</td><td>units</td><td>pending</td></tr>${rows||'<tr><td colspan="7" class="sub">Open a board once to load its power ratings.</td></tr>'}</table></div></div>`;}
 /* ══ 💭 INNER FEELING — every character's own sense of its chances (v2.15) ════════════
    The Brain reads everyone; this is each character reading ITSELF. Before a pick goes
    out, the character checks its own history on this exact spot:
