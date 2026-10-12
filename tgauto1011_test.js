@@ -37,6 +37,6 @@ setTimeout(async()=>{try{
   /* only the posting device (or one switched on) runs it */
   w.eval(`(()=>{const P=tgPosts();P['2026-01-01']={d:'2026-01-01',chat:'-100',ids:[5],card:subCard(),dev:'other-device',auto:true,st:{},sent:{},recap:false};set(TGP_KEY,P);})()`);
   T('another device does not run it unless switched on',!w.eval(`tgAutoHere(tgPosts()['2026-01-01'])`)&&(w.eval(`tgAutoDevice(true),tgAutoHere(tgPosts()['2026-01-01'])`)));
-  T('subscriber card shows the autopilot controls',/Telegram autopilot/.test(w.eval('subCardHtml()')));
+  T('subscriber card shows the autopilot controls',/VIP autopilot/.test(w.eval('subCardHtml()')));
 }catch(e){out.push('CRASH '+e.stack);}
 console.log(out.join('\n'));process.exit(0);},1500);

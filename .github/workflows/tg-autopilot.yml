@@ -1,0 +1,26 @@
+name: Telegram autopilot
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: tg-autopilot
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: autopilot
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node autopilot/worker.mjs
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          AUTOPILOT_KEY: ${{ secrets.AUTOPILOT_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

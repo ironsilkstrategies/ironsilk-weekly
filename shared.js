@@ -2135,7 +2135,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011m';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011n';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -21619,14 +21619,15 @@ function subCard(){let best=null;try{best=best5State();}catch(e){}const R=(()=>{
 const subPct=p=>p==null?'':(p*100<10?(p*100).toFixed(1):Math.round(p*100))+'%';
 const subLeg=x=>`${x.pick} (${tcSgn(x.price)}) · ${(SP_LAB[x.sp]||'').split(' ')[0]} ${gameLabel(x.sp,x.game)}`;
 /* Telegram: HTML parse mode, split under the 4096-character limit */
-function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{try{return tgParlayMark(P.legs,mk);}catch(err){return'';}};const e=txtEsc,day=new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦p:${(P.legs||[]).map(tgLegKey).join('¦')}⟧`;try{return tgParlayMark(P.legs,mk);}catch(err){return'';}};
+  const mb=l=>mk.tpl?`⟦b:${tgLegKey(l)}⟧`:(mk(l)||'• ');const e=txtEsc,day=new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   const head=`<b>🏆 TheDesk — ${e(day)}</b>${C.record&&(C.record.w+C.record.l)?`\nBest 3 record: <b>${C.record.w}-${C.record.l}${C.record.pu?'-'+C.record.pu:''}</b> (${C.record.u>=0?'+':''}${C.record.u.toFixed(1)}u)`:''}`;
   const blocks=[head];
   if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. ${mk(x)}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(best5Prob(x))}`).join('\n'));
   if(C.top10.length)blocks.push(`<b>🔟 TOP ${C.top10.length} PLAYS</b>\n`+C.top10.map((x,i)=>`${i+1}. ${mk(x)}${x.play?'✔️ ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n')+`\n<i>✔️ = passes every rule: whole crowd agrees, good lane, model not fighting the market</i>`);
-  if(C.banker)blocks.push(`${pm(C.banker)}<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>(mk(l)||'• ')+e(subLeg(l))).join('\n'));
-  C.chars.forEach(P=>blocks.push(`${pm(P)}<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>(mk(l)||'• ')+e(subLeg(l))+(l.spec?`\n   <i>🎯 ${e(l.spec)}</i>`:'')).join('\n')));
-  if((C.props||[]).length)blocks.push(`<b>🎯 CHARACTER PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mk(c)||'• '}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b> · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
+  if(C.banker)blocks.push(`${pm(C.banker)}<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>mb(l)+e(subLeg(l))).join('\n'));
+  C.chars.forEach(P=>blocks.push(`${pm(P)}<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>mb(l)+e(subLeg(l))+(l.spec?`\n   <i>🎯 ${e(l.spec)}</i>`:'')).join('\n')));
+  if((C.props||[]).length)blocks.push(`<b>🎯 CHARACTER PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mb(c)}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b> · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
   blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
   const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
 /* ══ 🤖 TELEGRAM AUTOPILOT (v2.07) ═════════════════════════════════════════════
@@ -21641,7 +21642,7 @@ function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{try{return tgParlayM
    Runs on the device that posted (or any device you switch it on for), so nothing
    is announced twice. Leave the app open on a computer and it runs itself. */
 const TGP_KEY='d4.tgposts',TG_MARK={W:'✅ ',L:'❌ ',P:'➖ '};
-function tgLegKey(x){return[x.sp,x.game||x.team||'',x.pick||((x.player||'')+'|'+x.k+'|'+x.thr),x.v||''].join('|');}
+function tgLegKey(x){return[x.sp,x.game||x.team||'',x.pick||((x.player||'')+'|'+x.k+'|'+x.thr)].join('|');}
 function tgLegStatus(x,d){
   if(x.player&&x.k!=null){const L=get(CPROP_KEY,[])||[];const e=L.find(z=>z.id===x.id)||L.find(z=>z.voice===x.v&&z.player===x.player&&z.k===x.k&&+z.thr===+x.thr&&z.d===(x.d||d));
     if(!e||e.hit==null)return null;return e.hit?'W':'L';}
@@ -21653,8 +21654,78 @@ function tgAllLegs(C){const L=[];(C.best||[]).forEach(x=>L.push({x,kind:'Best 3'
   if(C.banker)(C.banker.legs||[]).forEach(x=>L.push({x,kind:'Banker'}));(C.chars||[]).forEach(P=>(P.legs||[]).forEach(x=>L.push({x:{...x,v:x.v||P.v},kind:charName(P.v)})));
   (C.props||[]).forEach(x=>L.push({x,kind:'Prop'}));return L;}
 function tgPosts(){const P=get(TGP_KEY,{})||{};return P&&typeof P==='object'?P:{};}
-function tgTrackPost(card,chat,ids){const P=tgPosts();P[card.d]={d:card.d,chat,ids,card,ts:Date.now(),dev:syncDevice(),auto:get('d4.tgauto',true)!==false,st:{},sent:{},recap:false};
-  Object.keys(P).sort().slice(0,-4).forEach(k=>delete P[k]);set(TGP_KEY,P);setTimeout(()=>tgAutoTick().catch(()=>{}),30e3);}
+function tgTrackPost(card,chat,ids){const P=tgPosts();const W=tgwOn()&&ids.length>0;
+  P[card.d]={d:card.d,chat,ids,card,ts:Date.now(),dev:syncDevice(),auto:get('d4.tgauto',true)!==false,st:{},sent:{},recap:false,worker:W};
+  Object.keys(P).sort().slice(0,-4).forEach(k=>delete P[k]);set(TGP_KEY,P);
+  if(W)tgwHandOff(P[card.d]).then(r=>{if(!r||!r.ok){P[card.d].worker=false;set(TGP_KEY,P);deskToast('🛰️ Couldn\'t hand the card to the 24/7 worker ('+((r&&r.reason)||'error')+') — the app will run the autopilot instead',5000);}else deskToast('🛰️ Handed to the 24/7 worker');}).catch(()=>{});
+  else setTimeout(()=>tgAutoTick().catch(()=>{}),30e3);}
+/* ══ 🛰️ 24/7 WORKER HANDOFF (v2.08) ═══════════════════════════════════════════
+   A free GitHub Actions job (.github/workflows/tg-autopilot.yml) runs every 10 minutes
+   whether or not any device is on. The app hands it the VIP post — message ids, a
+   template of the post with result slots, and every pick — ENCRYPTED (AES-256-GCM)
+   with a key only this app and the worker's secret know, on a separate branch
+   (autopilot-state) so the website never rebuilds and the public repo never shows a
+   paid pick. The worker grades from ESPN and edits / replies / recaps in the VIP
+   channel; both sides merge, so nothing is announced twice. */
+const TGW_BRANCH='autopilot-state',TGW_FILE='tg.enc';
+function tgwOn(){return get('d4.tgworker',false)===true;}
+function tgwKey(){let k=get('d4.tgautokey','');if(!k){const b=new Uint8Array(32);crypto.getRandomValues(b);k=btoa(String.fromCharCode(...b));set('d4.tgautokey',k);}return k;}
+const tgwB64=u=>btoa(String.fromCharCode(...new Uint8Array(u)));const tgwUnb64=s0=>Uint8Array.from(atob(s0),c=>c.charCodeAt(0));
+async function tgwAes(){return crypto.subtle.importKey('raw',tgwUnb64(tgwKey()),'AES-GCM',false,['encrypt','decrypt']);}
+async function tgwEncrypt(obj){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},await tgwAes(),new TextEncoder().encode(JSON.stringify(obj)));return'v1.'+tgwB64(iv)+'.'+tgwB64(ct);}
+async function tgwDecrypt(str0){const [v,iv,ct]=String(str0).trim().split('.');if(v!=='v1')throw new Error('unknown format');const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:tgwUnb64(iv)},await tgwAes(),tgwUnb64(ct));return JSON.parse(new TextDecoder().decode(pt));}
+/* the post as the worker needs it: template + one row per pick + the recap plan */
+function tgwPayload(p){const C=p.card;const tplMk=x=>`⟦m:${tgLegKey(x)}⟧`;tplMk.tpl=true;const parts=subTelegramText(C,tplMk);
+  const seen=new Set();const legs=[];tgAllLegs(C).forEach(({x,kind})=>{const k=tgLegKey(x);if(seen.has(k))return;seen.add(k);
+    /* k = the result slot; a prop's stat type travels as "stat" */
+    legs.push({k,kind,sp:x.sp,game:x.game||null,pick:x.pick||null,price:x.price!=null?+x.price:null,player:x.player||null,team:x.team||null,thr:x.thr!=null?+x.thr:null,
+      stat:x.player?(x.k||null):null,label:x.player?`${charName(x.v)}: ${cpropLine(x)}`:`${x.pick}${x.price!=null?' ('+tcSgn(x.price)+')':''}`});});
+  const recapPlan={day:new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),
+    best:(C.best||[]).map(x=>({k:tgLegKey(x),price:x.price!=null?+x.price:null})),top10:(C.top10||[]).map(x=>({k:tgLegKey(x),price:x.price!=null?+x.price:null})),
+    banker:C.banker?{keys:C.banker.legs.map(tgLegKey),price:decimalToAmerican(C.banker.dec)}:null,
+    chars:(C.chars||[]).map(P=>({name:charName(P.v),keys:P.legs.map(tgLegKey),price:decimalToAmerican(P.dec)})),props:(C.props||[]).map(tgLegKey)};
+  return{d:p.d,chat:p.chat,ids:p.ids,parts,legs,recapPlan,postedTs:p.ts,st:{},sent:{},recap:false,worker:true};}
+function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0)};
+  const ds=new Set([...Object.keys((a&&a.posts)||{}),...Object.keys((b&&b.posts)||{})]);
+  ds.forEach(d=>{const x=a&&a.posts&&a.posts[d],y=b&&b.posts&&b.posts[d];if(!x||!y){out.posts[d]=x||y;return;}const base=(x.postedTs||0)>=(y.postedTs||0)?x:y;
+    out.posts[d]={...base,st:{...(y.st||{}),...(x.st||{})},sent:{...(y.sent||{}),...(x.sent||{})},recap:!!(x.recap||y.recap),worker:x.worker!==false&&y.worker!==false};});
+  Object.keys(out.posts).sort().slice(0,-5).forEach(d=>delete out.posts[d]);return out;}
+async function tgwGh(){const repo=pubRepo();const toks=[...new Set([get(LS.ghtoken,''),get(SYNC.token,'')].filter(Boolean))];return{repo,toks};}
+async function tgwRead(){const{repo,toks}=await tgwGh();for(const token of toks){const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
+    try{const r=await fetch(`https://api.github.com/repos/${repo}/contents/${TGW_FILE}?ref=${TGW_BRANCH}`,{headers:H});if(r.status===404)return{ok:true,state:null,sha:null,token,H,repo};
+      if(!r.ok)continue;const j=await r.json();const txt=new TextDecoder().decode(Uint8Array.from(atob(String(j.content).replace(/\s/g,'')),c=>c.charCodeAt(0)));
+      return{ok:true,state:await tgwDecrypt(txt),sha:j.sha,token,H,repo};}catch(e){}}return{ok:false,reason:'no GitHub token here can read '+repo};}
+async function tgwEnsureBranch(repo,H){const r=await fetch(`https://api.github.com/repos/${repo}/git/ref/heads/${TGW_BRANCH}`,{headers:H});if(r.ok)return true;
+  const m=await fetch(`https://api.github.com/repos/${repo}`,{headers:H}).then(x=>x.json()).catch(()=>({}));const def=m.default_branch||'main';
+  const base=await fetch(`https://api.github.com/repos/${repo}/git/ref/heads/${def}`,{headers:H}).then(x=>x.json()).catch(()=>null);if(!base||!base.object)return false;
+  const c=await fetch(`https://api.github.com/repos/${repo}/git/refs`,{method:'POST',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify({ref:'refs/heads/'+TGW_BRANCH,sha:base.object.sha})});return c.ok||c.status===422;}
+async function tgwHandOff(p){for(let tries=0;tries<3;tries++){const R=await tgwRead();if(!R.ok)return R;
+    if(!R.sha&&!(await tgwEnsureBranch(R.repo,R.H)))return{ok:false,reason:'couldn\'t create the autopilot branch'};
+    const mine={v:1,posts:{[p.d]:tgwPayload(p)}};const merged=tgwMerge(mine,R.state||{posts:{}});
+    const body={message:'autopilot handoff '+p.d,branch:TGW_BRANCH,content:b64u(await tgwEncrypt(merged)),...(R.sha?{sha:R.sha}:{})};
+    const w=await fetch(`https://api.github.com/repos/${R.repo}/contents/${TGW_FILE}`,{method:'PUT',headers:{...R.H,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(w.ok){set('d4.tgwlast',{ts:Date.now(),d:p.d});return{ok:true};}if(w.status!==409&&w.status!==422)return{ok:false,reason:'HTTP '+w.status};}
+  return{ok:false,reason:'kept colliding with the worker — try again'};}
+async function tgwRunNow(){const{repo,toks}=await tgwGh();for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204))return true;}return false;}
+let TGW_STATUS=null;
+async function tgwRefreshStatus(){const R=await tgwRead();TGW_STATUS=R.ok?{ts:Date.now(),state:R.state}:{ts:Date.now(),err:R.reason};try{renderToday(true);}catch(e){}}
+function tgwSet(on){set('d4.tgworker',!!on);if(on){tgwKey();tgwRefreshStatus();}try{renderToday(true);}catch(e){}}
+function tgwHtml(){const on=tgwOn();const key=on?tgwKey():'';const repo=pubRepo();
+  if(on&&!TGW_STATUS&&!window.__tgwAsk){window.__tgwAsk=1;setTimeout(tgwRefreshStatus,50);}
+  const S=TGW_STATUS;let stat='';if(on&&S){if(S.err)stat=`<span style="color:var(--rust)">${txtEsc(S.err)}</span>`;else if(!S.state)stat='No card handed over yet — post the VIP card and it goes to the worker.';
+    else{const ds=Object.keys(S.state.posts||{}).sort();const p=S.state.posts[ds[ds.length-1]];const g=p?Object.keys(p.st||{}).length:0;
+      stat=`${p?`${txtEsc(p.d)}: ${g} of ${(p.legs||[]).length} graded${p.recap?' · recap posted ✓':''}`:''}${S.state.lastRun?` · worker last ran ${new Date(S.state.lastRun).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${S.state.runs||0} runs)`:' · <b style="color:var(--gold)">worker hasn\'t run yet — check the secrets</b>'}`;}}
+  return`<div class="tkt" style="margin:8px 0;border-color:var(--gold)"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">🛰️ 24/7 VIP worker</h3>
+      <button class="${on?'primary':''}" onclick="tgwSet(${!on})">${on?'ON':'OFF'}</button></div>
+    <div class="sub" style="font-size:10.5px;margin:4px 0">Runs the VIP autopilot every 10 minutes on GitHub — no device needs to be on. The VIP card is handed over encrypted; only the worker can read it, so the public repo never shows a paid pick. Posts only to your VIP channel.</div>
+    ${on?`<details${S&&S.state&&S.state.lastRun?'':' open'} style="margin-top:4px"><summary class="mono" style="font-size:10.5px;color:var(--gold)">One-time setup (2 secrets)</summary>
+      <div class="sub" style="font-size:10.5px;line-height:1.5">On GitHub open <a href="https://github.com/${txtEsc(repo)}/settings/secrets/actions/new" target="_blank" rel="noopener" style="color:var(--gold)">${txtEsc(repo)} → Settings → Secrets → Actions → New secret</a> and add:</div>
+      <div class="mono" style="font-size:10px;margin:4px 0">1 · Name <b>TG_BOT_TOKEN</b> — value: your bot token <button style="font-size:9.5px" onclick="copyText(String(get('d4.tgbot','')||''),'Bot token copied.')">copy</button></div>
+      <div class="mono" style="font-size:10px;margin:4px 0">2 · Name <b>AUTOPILOT_KEY</b> — value: <button style="font-size:9.5px" onclick="copyText('${key}','Autopilot key copied.')">copy key</button> <span style="color:var(--mute)">(keep it private — it unlocks the VIP card)</span></div>
+      <div class="sub" style="font-size:10px">Then post the VIP card as usual. "Run now" kicks the worker immediately instead of waiting for the next 10-minute tick.</div></details>
+    <div class="sub mono" style="font-size:9.5px;margin-top:4px">${stat||'Checking the worker…'}</div>
+    <div class="bar" style="margin-top:6px"><button onclick="this.textContent='Starting…';tgwRunNow().then(ok=>{this.textContent=ok?'Started ✓ — results in ~1 min':'Couldn\'t start it (token needs Actions access)';setTimeout(tgwRefreshStatus,70e3);})">▶ Run now</button><button onclick="tgwRefreshStatus()">↻ Status</button>
+      ${(()=>{const P=tgPosts();const d=Object.keys(P).sort().pop();const p=d&&P[d];return p&&p.ids&&p.ids.length&&!p.worker?`<button onclick="(async()=>{const P=tgPosts();const p=P['${d}'];const r=await tgwHandOff(p);if(r.ok){p.worker=true;set(TGP_KEY,P);deskToast('🛰️ Handed to the 24/7 worker');}else alert(r.reason);tgwRefreshStatus();})()">Hand today's post to the worker</button>`:'';})()}</div>`:''}</div>`;}
 function tgAutoHere(p){try{return p.dev===syncDevice()||localStorage.getItem('td.tgauto')==='1';}catch(e){return false;}}
 function tgAutoNeeds(){const out=[];Object.values(tgPosts()).forEach(p=>{if(!p||p.recap||!p.card)return;tgAllLegs(p.card).forEach(({x})=>{if(x.sp)out.push([x.sp,p.d]);});});return out;}
 async function tgApi(method,params){const tok=String(get('d4.tgbot','')||'').trim();if(!tok)return null;
@@ -21666,7 +21737,7 @@ function tgUnits(x,s){if(s==='P')return 0;if(s==='L')return-1;const pr=x.price!=
 let TG_BUSY=false;
 async function tgAutoTick(force){if(TG_BUSY)return 0;TG_BUSY=true;let acted=0;
   try{const P=tgPosts();const chat=tgChatNorm(get('d4.tgchat',''));if(!chat||!get('d4.tgbot',''))return 0;
-    for(const d of Object.keys(P).sort()){const p=P[d];if(!p||!p.card||p.recap||p.auto===false||!tgAutoHere(p))continue;
+    for(const d of Object.keys(P).sort()){const p=P[d];if(!p||!p.card||p.recap||p.auto===false||p.worker||!tgAutoHere(p))continue;
       const legs=tgAllLegs(p.card);const st={};legs.forEach(({x})=>{const k=tgLegKey(x);const s0=(p.st||{})[k]||tgLegStatus(x,p.d);if(s0)st[k]=s0;});
       const fresh=legs.filter(({x})=>st[tgLegKey(x)]&&!(p.sent||{})[tgLegKey(x)]);
       if(!fresh.length&&!force)continue;
@@ -21703,10 +21774,10 @@ function tgAutoDevice(on){try{if(on)localStorage.setItem('td.tgauto','1');else l
 function tgAutoHtml(){const on=get('d4.tgauto',true)!==false;const P=tgPosts();const ds=Object.keys(P).sort();const p=ds.length?P[ds[ds.length-1]]:null;let here=false;try{here=localStorage.getItem('td.tgauto')==='1';}catch(e){}
   let line='Post the card once — the autopilot takes it from there.';
   if(p){const legs=tgAllLegs(p.card||{});const done=legs.filter(({x})=>(p.st||{})[tgLegKey(x)]).length;
-    line=`${p.d===today()?'Today':p.d}: ${done} of ${legs.length} picks graded${p.recap?' · recap posted ✓':''}${p.ids&&p.ids.length?'':' · ⚠️ couldn\'t read the post ids, so results go out as new messages instead of edits'}${tgAutoHere(p)?' · <b style="color:var(--win)">running on this device</b>':' · running on '+txtEsc(p.dev||'the device that posted')}`;}
-  return`<div class="tkt" style="margin:8px 0"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">🤖 Telegram autopilot</h3>
+    line=p.worker?`${p.d===today()?'Today':p.d}: handed to the 🛰️ 24/7 worker — it's running this one`:`${p.d===today()?'Today':p.d}: ${done} of ${legs.length} picks graded${p.recap?' · recap posted ✓':''}${p.ids&&p.ids.length?'':' · ⚠️ couldn\'t read the post ids, so results go out as new messages instead of edits'}${tgAutoHere(p)?' · <b style="color:var(--win)">running on this device</b>':' · running on '+txtEsc(p.dev||'the device that posted')}`;}
+  return`<div class="tkt" style="margin:8px 0"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">🤖 VIP autopilot (in the app)</h3>
       <button class="${on?'primary':''}" onclick="tgAutoSet(${!on})">${on?'ON':'OFF'}</button></div>
-    <div class="sub" style="font-size:10.5px;margin:4px 0">Edits your posts with ✅/❌ as games finish, replies under them with every result and final score, and posts the day's recap when everything's graded. Runs whenever the app is open — leave it open on a computer and it runs itself.</div>
+    <div class="sub" style="font-size:10.5px;margin:4px 0">VIP channel only. Edits your posts with ✅/❌ as games finish, replies under them with every result and final score, and posts the day's recap when everything's graded. Runs whenever the app is open — leave it open on a computer and it runs itself.</div>
     <div class="sub mono" style="font-size:9.5px">${line}</div>
     <label class="mono" style="font-size:10px;display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" ${here?'checked':''} onchange="tgAutoDevice(this.checked)"> also run it on this device</label>
     <div class="bar" style="margin-top:6px"><button onclick="this.textContent='Checking…';tgAutoTick(true).then(n=>{this.textContent=n?'Sent ✓':'Nothing new yet';setTimeout(()=>renderToday(true),1200);})">↻ Update now</button></div></div>`;}
@@ -21739,7 +21810,7 @@ function subCardHtml(){const C=subCard();const e=txtEsc;const pc=subPct;const po
       <h3 style="margin:0">💎 Subscriber card — ${e(new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}))}</h3>
       <div class="sub" style="font-size:10.5px;margin:3px 0 8px">What paying members get in the private Telegram. ${e(get('d4.pricetext','')||SUB_PRICE_DEFAULT)}.</div>
       <div class="bar"><button class="primary" onclick="subPostTelegram()">📣 Post to Telegram</button><button onclick="subCopy()">Copy text</button></div>
-      ${(()=>{try{return tgAutoHtml();}catch(e){return'';}})()}
+      ${(()=>{try{return tgAutoHtml()+tgwHtml();}catch(e){return'';}})()}
       ${posted&&posted.d===C.d?`<div class="sub mono" style="font-size:9.5px;color:var(--win);margin-top:4px">✓ posted ${new Date(posted.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}${posted.unconfirmed?' (check the channel)':''}</div>`:''}</div>
     ${C.best.length?sec(`⭐ Best ${C.best.length}`,C.locked?'🔒 locked':'not locked yet',C.best.map(x=>legRow(x)).join('')):''}
     ${sec(`🔟 Top ${C.top10.length} plays`,`${C.top10.filter(x=>x.play).length} ✅ playable`,C.top10.length?C.top10.map(x=>legRow(x,`${x.ev!=null&&isFinite(x.ev)?` · EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%`:''}${x.play?' · <span style="color:var(--win)">✅</span>':''}`)).join(''):'<div class="sub">Load today\'s boards — nothing priced and unstarted yet.</div>')}
