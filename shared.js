@@ -1084,7 +1084,9 @@ function intakeReplay(tries){
      rather than filing half the upload against an empty slate. */
   if(sp==='ncaaf'&&!(typeof NCAAF_GAMES!=='undefined'&&NCAAF_GAMES.length)){
     if((tries||0)<30)setTimeout(()=>intakeReplay((tries||0)+1),1000);return;}
-  const acc={};p[sp].forEach(x=>intakeMerge(acc,intakeParseGrammar(x.t,sp)));
+  /* v2.18 · lines older than 36 hours are stale — never file last week's board under today */
+  const fresh=p[sp].filter(x=>!x.ts||Date.now()-x.ts<36*3600e3);
+  const acc={};fresh.forEach(x=>intakeMerge(acc,intakeParseGrammar(x.t,sp)));
   delete p[sp];set('d4.intakepending',p);
   if(intakeCount(acc)){INTAKE.result=acc;intakeSave();}
 }
@@ -2163,7 +2165,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15762,6 +15764,14 @@ function best3Props(){let props=[];
     for(const x of L){if(props.length>=3)break;if(props.some(y=>y.player===x.player))continue;
       props.push({sp:x.sp,player:x.player,team:x.team,stat:lab[x.k]||x.k,keys:[x.k],thr:x.thr-0.5,side:'over',price:null,p:x.p,ev:null,mu:x.mu,n:x.n,likely:true});}}catch(e){}}
   return props;}
+/* v2.18 · the closest calls that DIDN'T make the card, and exactly what stopped each one */
+function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
+  Object.entries(T.by||{}).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const p=best5Prob(x),ev=best3Ev(x);let why=null;
+    try{if(x.price==null)why='no book price';else if(x.price<BEST3_LO)why=`priced ${x.price} — shorter than -200`;else if(x.price>BEST3_HI)why='longer than +400';else if(x.incoherent||x.suspect)why='flagged: '+(x.suspect||'incoherent with its other markets');
+      else if(laneStatus(pickLane(x,s0))==='blocked')why='lane blocked: '+laneName(pickLane(x,s0));else if(pickDisagrees(x,s0))why='model fighting the market';else if(best3Tier(x)<1)why='below VALUE';
+      else if(p==null||p<0.45)why='under 45% after calibration';else if(ev==null||ev<1)why=`EV ${ev==null?'—':(ev>=0?'+':'')+ev.toFixed(1)+'%'} after calibration (needs +1%)`;}catch(e){}
+    if(why)out.push({sp:s0,game:x.game,pick:x.pick,price:x.price,p,ev,why,tier:best3Tier(x)});}));
+  return out.sort((a,b)=>(b.ev==null?-99:b.ev)-(a.ev==null?-99:a.ev)).slice(0,n||5);}
 function best5Build(){
   const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
   const top3=best3Pool(by,null).map(x=>({...x,main:true}));
@@ -15813,7 +15823,7 @@ function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈'
       <div class="b3-meta">${em[x.sp]||''} ${(x.sp||'').toUpperCase()} · ${esc(x.game)}${t(x)?' · '+t(x):''}</div>
       <div class="b3-meta">${tl?`<b style="color:${tc}">${tl}</b> · `:''}${ch?ch+' of the desk\'s voices agree · ':''}EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%</div></div>
       <div class="b3-pct">${Math.round(x.p*100)}%<div class="b3-pl">to hit</div></div></div>`;}).join('');
-  const empty=`<div class="rc-empty-slot">${S.locked?'No play cleared the bar today — we don\'t force picks.':'Builds from today\'s boards — open each sport once.'}</div>`;
+  const empty=`<div class="rc-empty-slot">${S.locked?'No play cleared the bar today — we don\'t force picks.':(S.why3&&S.why3.total?'Nothing clears the bar yet — still checking as lines move.':'Builds from today\'s boards — open each sport once.')}</div>`;
   return`<div class="recapwrap" id="${opts.id||'bestShareTarget'}"><div class="recapcard">
     <style>.b3-row{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}
     .b3-n{font-weight:900;font-size:22px;color:var(--gold);width:22px;text-align:center}.b3-pick{font-weight:900;font-size:17px}
@@ -15858,8 +15868,9 @@ function renderBest(){
   const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price','priced shorter than -200'],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['tier','below VALUE'],['prob','under 45%'],['ev','EV under +1%']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
     :(!(S.top3||[]).length&&!(W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Today's card is empty — open each sport's Games board (or Load all sports on Today) so it has picks to choose from.</div>`:'');
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
-    <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:'Building — freezes the moment the master evaluation runs (or 30 min before the first game)'}</b>
-    ${S.locked?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${diag}</div>`;
+    <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:(evalRanToday()&&!(S.top3||[]).length&&W3&&W3.total?'Master evaluation ran — no play clears the bar yet. It keeps re-checking as lines and boards update, locks the moment one qualifies, and locks empty 30 min before the last game.':'Building — freezes the moment the master evaluation runs (or 30 min before the first game)')}</b>
+    ${S.locked||(evalRanToday()&&!(S.top3||[]).length)?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${diag}${(()=>{if(S.locked||(S.top3||[]).length)return'';let N=[];try{N=best3Near(5);}catch(e){}if(!N.length)return'';
+      return`<div class="mono" style="font-size:9.5px;margin-top:6px;color:var(--mute)">Closest calls today (not on the card):</div>${N.map(x=>`<div class="mono" style="font-size:10px;padding:2px 0">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> ${x.price!=null?(x.price>0?'+':'')+x.price:''} · ${x.p!=null?Math.round(x.p*100)+'%':'—'} · <span style="color:var(--rust)">${txtEsc(x.why)}</span></div>`).join('')}`;})()}</div>`;
   /* yesterday's card stays up until it's fully graded */
   let prev='';try{const P=get('d4.best5prev',null);const L=P&&(get('d4.best5log',{})||{})[P.d];
     if(L){const main=(L.picks||[]).filter(x=>x.main);const open=main.filter(x=>x.hit==null&&!x.push);
@@ -21813,7 +21824,7 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
    Credentials never sync. The old public data-backup.json is retired.        */
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
 const SYNC_NEVER=new Set(['d4.tgbot',LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
-const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune)/.test(k);
+const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$)/.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
 function syncKts(){if(!SYNC_KTS){try{SYNC_KTS=JSON.parse(localStorage.getItem(SYNC.ts)||'{}')||{};}catch(e){SYNC_KTS={};}}return SYNC_KTS;}
