@@ -1620,7 +1620,11 @@ function characterCalls(sp,g,s){
   const ck=sp+'|'+g.id,c=CHAR_CACHE[ck];
   if(c&&Date.now()-c.ts<4000&&c.s===s)return c.calls;
   const gl=g.away.abbr+'@'+g.home.abbr,A=g.away.abbr,H=g.home.abbr,Ln=voicesLines(sp,g);
-  const d=g.__date||today();
+  /* v2.09 · a call belongs to the GAME's day. Football boards show the whole week, and every
+     call used to be stamped with the day it was logged — Saturday's game got a Monday copy,
+     a Tuesday copy… only the game-day copy could ever grade. */
+  const gd=(()=>{for(const v of [g.date,g.start,g.gameDate]){if(v&&/T|\d{4}-\d{2}-\d{2}/.test(String(v))){const t=tdDay(v);if(t)return t;}}return'';})();
+  const d=g.__date||gd||today();
   let hl=Ln.spH&&Ln.spH.line!=null?+Ln.spH.line:null,tl=Ln.ov&&Ln.ov.line!=null?+Ln.ov.line:null;
   let hlSim=false,tlSim=false;
   // No posted line yet: characters still pick against the line the card shows
@@ -1976,7 +1980,22 @@ function charBrainReport(sp){
    +'.hs-chip.god{background:rgba(255,215,94,.18);font-size:9.5px}.hs-chip.weak{opacity:.45}.hs-chip.hot{box-shadow:0 0 6px currentColor}'
    +'.ch-meter{font-family:"IBM Plex Mono",monospace;font-size:8px;color:var(--mute);margin-top:2px;letter-spacing:.03em}';
   (document.head||document.documentElement).appendChild(st);}}catch(e){}})();
-function gradeVoices(){const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
+/* v2.09 · repair the copies the old dating stranded: move each to its game's real date (the
+   final says when it was played) or drop it when that day already has the call. The copy
+   logged closest to kickoff wins — it's the call that was locked. */
+function voicesRepairDates(force){const t=today();if(!force&&get('d4.vrepair','')===t)return 0;const V=get(VOICES_KEY,[])||[];if(!V.length)return 0;let F={};try{F=allFinals();}catch(e){}
+  const k5=x=>[x.voice,x.sp,x.game,x.market].join('|');const have=new Set(V.filter(x=>x.graded||String(x.date)>=t).map(x=>k5(x)+'|'+String(x.date).slice(0,10)));
+  let moved=0,dropped=0;const keep=[];
+  const order=V.map((x,i)=>({x,i})).sort((a,b)=>String(b.x.date).localeCompare(String(a.x.date)));const drop=new Set();
+  order.forEach(({x,i})=>{if(x.graded||String(x.date).slice(0,10)>=t)return;const f=F[finalsKey(x.sp,x.game)];const d0=String(x.date).slice(0,10);
+    if(f&&f.d&&f.d>d0&&f.d<=dayShift(d0,8)){const key=k5(x)+'|'+f.d;if(have.has(key)){drop.add(i);dropped++;return;}
+      have.add(key);x.date=f.d;if(String(x.id).startsWith(x.sp+'|'))x.id=[x.sp,x.game,f.d,x.voice,x.market].join('|');else x.id=[x.voice,x.sp,x.game,f.d,x.market].join('|');moved++;return;}
+    /* logged AFTER its game was played (a stale board still showed it as upcoming) — never a real pregame call */
+    if(f&&f.d&&f.d<d0){drop.add(i);dropped++;return;}
+    if(!f&&d0<dayShift(t,-10)){drop.add(i);dropped++;}});
+  if(moved||dropped){const out=V.filter((x,i)=>!drop.has(i));set(VOICES_KEY,out);}
+  set('d4.vrepair',t);return moved+dropped;}
+function gradeVoices(){try{voicesRepairDates();}catch(e){console.warn('voices repair',e);}const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
   V.forEach(x=>{if(x.graded)return;const R=finalsFor(x.sp,x.game,String(x.date||'').slice(0,10),false);if(!R)return;const a=+R.a,h=+R.h;let hit=null;
     if(x.market==='ml'){if(a!==h)hit=(x.side==='home')===(h>a);}
     else if(x.market==='spread'&&x.line!=null){const m=(x.side==='home'?h-a:a-h)+x.line;if(m!==0)hit=m>0;}
@@ -2135,7 +2154,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011n';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011o';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17727,6 +17746,43 @@ function charSplitsHtml(F){const sp=F&&F.sp&&F.sp!=='all'?F.sp:(typeof ACTIVE_SP
 function charPickText(c){if(c.pick)return c.pick;const [a,h]=String(c.game).split('@');
   if(c.market==='total')return(c.side==='over'?'Over ':'Under ')+(c.line!=null?c.line:'');
   const t=c.side==='home'?h:a;if(c.market==='ml')return t+' ML';const L=c.line!=null?(c.side==='home'?+c.line:-c.line):null;return t+(L!=null?' '+(L>0?'+':'')+L:' spread');}
+/* ══ DAILY CHARACTER SCOREBOARD (v2.09) ════════════════════════════════════════
+   Every character's record for one day — wins, losses, pushes, units and what's still
+   pending — ranked by units, with ‹ › to step back through earlier days. Reads the
+   locked, graded ledger, so it fills in live as games go final. */
+let CDAY_D=null;
+function cdayStep(n){const d=CDAY_D||today();const nd=dayShift(d,n);CDAY_D=nd>today()?today():nd;try{renderToday(true);}catch(e){}try{renderRecordsHub();}catch(e){}}
+const CDAY_COLS=[['spread','ATS'],['ml','ML'],['total','O/U'],['prop','Props']];
+function charDayRecord(d,sp){const V=roGet(VOICES_KEY,[],5000)||[];const R={};
+  const row=v=>R[v]||(R[v]={v,w:0,l:0,p:0,pend:0,u:0,by:{spread:{w:0,l:0,p:0,pend:0},ml:{w:0,l:0,p:0,pend:0},total:{w:0,l:0,p:0,pend:0},prop:{w:0,l:0,p:0,pend:0}}});
+  V.forEach(x=>{if(String(x.date).slice(0,10)!==d||!CHARS[x.voice]||(sp&&sp!=='all'&&x.sp!==sp))return;const m=x.market==='moneyline'?'ml':x.market;if(!['ml','spread','total'].includes(m))return;
+    const o=row(x.voice),b=o.by[m];if(!x.graded){o.pend++;b.pend++;return;}
+    if(x.hit===true){o.w++;b.w++;}else if(x.hit===false){o.l++;b.l++;}else{o.p++;b.p++;}o.u+=+x.units||0;});
+  /* character player props (graded off the box score) */
+  try{(get(CPROP_KEY,[])||[]).forEach(x=>{if(String(x.d).slice(0,10)!==d||!CHARS[x.voice]||(sp&&sp!=='all'&&x.sp!==sp))return;const o=row(x.voice),b=o.by.prop;
+    if(x.hit==null){o.pend++;b.pend++;return;}if(x.hit){o.w++;b.w++;}else{o.l++;b.l++;}});}catch(e){}
+  return Object.values(R).sort((a,b)=>b.u-a.u||(b.w-b.l)-(a.w-a.l));}
+const CDAY_SPORTS=['nfl','ncaaf','nhl','mlb','nba'];
+function charDayTable(L){const C=v=>CHARS[v]||{};const rec=b=>b.w+b.l+b.p?`${b.w}-${b.l}${b.p?'-'+b.p:''}`:(b.pend?'⏳':'—');
+  const col=b=>b.w+b.l?(b.w>b.l?'var(--win)':b.w<b.l?'var(--rust)':'var(--chalk)'):'var(--mute)';
+  const tot={};CDAY_COLS.forEach(([k])=>{tot[k]={w:0,l:0,p:0,pend:0};L.forEach(o=>['w','l','p','pend'].forEach(f=>tot[k][f]+=o.by[k][f]));});
+  const T={w:0,l:0,p:0,u:0};L.forEach(o=>{T.w+=o.w;T.l+=o.l;T.p+=o.p;T.u+=o.u;});
+  const rows=L.map((o,i)=>`<tr><td style="text-align:left;white-space:nowrap">${i===0&&o.u>0?'👑 ':''}<span class="hs-chip" style="color:${C(o.v).color};border-color:${C(o.v).color}">${C(o.v).chip||o.v}</span></td>
+      ${CDAY_COLS.map(([k])=>`<td style="color:${col(o.by[k])};font-weight:700;white-space:nowrap">${rec(o.by[k])}${o.by[k].pend&&o.by[k].w+o.by[k].l+o.by[k].p?`<sup style="color:var(--mute);font-weight:400;font-size:7.5px">+${o.by[k].pend}</sup>`:''}</td>`).join('')}
+      <td><b>${o.w}-${o.l}${o.p?'-'+o.p:''}</b></td><td style="color:${o.u>0?'var(--win)':o.u<0?'var(--rust)':'var(--mute)'};font-weight:800">${o.w+o.l+o.p?(o.u>=0?'+':'')+o.u.toFixed(2)+'u':'—'}</td></tr>`).join('');
+  const totRow=`<tr style="border-top:1px solid var(--rule);color:var(--mute)"><td style="text-align:left">All</td>${CDAY_COLS.map(([k])=>`<td style="color:${col(tot[k])}">${rec(tot[k])}</td>`).join('')}<td style="white-space:nowrap">${T.w}-${T.l}${T.p?'-'+T.p:''}</td><td style="white-space:nowrap;color:${T.u>0?'var(--win)':T.u<0?'var(--rust)':'var(--mute)'}">${T.w+T.l+T.p?(T.u>=0?'+':'')+T.u.toFixed(2)+'u':'—'}</td></tr>`;
+  return`<div style="overflow-x:auto"><table class="mono" style="width:100%;font-size:10.5px;text-align:center;border-collapse:collapse"><tr style="color:var(--mute);font-size:9px"><td style="text-align:left">character</td>${CDAY_COLS.map(([,l])=>`<td>${l}</td>`).join('')}<td>day</td><td>units</td></tr>${rows}${totRow}</table></div>`;}
+function charDayHtml(sp){const d=CDAY_D||today();const isToday=d===today();
+  const lab=isToday?'Today':new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const one=sp&&sp!=='all';const L=charDayRecord(d,one?sp:'all');
+  /* every sport played that day gets its own table under the combined one */
+  const per=one?[]:CDAY_SPORTS.map(s0=>({s0,L:charDayRecord(d,s0)})).filter(x=>x.L.length);
+  const body=!L.length?`<div class="sub">No character calls logged for ${isToday?'today yet — open a sport\'s board once':'that day'}.</div>`
+    :(one?charDayTable(L):`${per.length>1?'<div class="mktlab" style="margin-top:2px">All sports</div>':''}${charDayTable(L)}${per.length>1?per.map(({s0,L:Ls})=>`<details style="margin-top:6px" open><summary class="mktlab" style="cursor:pointer">${txtEsc(SP_LAB[s0]||s0.toUpperCase())}</summary>${charDayTable(Ls)}</details>`).join(''):''}`);
+  return`<div class="tkt" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><h3 style="margin:0">📅 Character scoreboard · ${txtEsc(lab)}</h3>
+      <div><button onclick="cdayStep(-1)" style="padding:2px 9px">‹</button><button onclick="cdayStep(1)" style="padding:2px 9px"${isToday?' disabled':''}>›</button></div></div>
+    <div class="sub mono" style="font-size:9.5px;margin:3px 0 6px">ATS · moneyline · over/under · player props — every call locked at kickoff, graded at the final · ⏳ / small number = still pending · units at the posted price${one?' · '+txtEsc((SP_LAB[sp]||sp).split(' ').slice(1).join(' ')||sp):' · each sport broken out below'}</div>
+    ${body}</div>`;}
 function charDeskHtml(F){
   const V=get(VOICES_KEY,[])||[];const d=today();
   const calls=V.filter(x=>x.date===d&&CHARS[x.voice]&&(F.sp==='all'||F.sp===x.sp));
@@ -18115,7 +18171,7 @@ function renderToday(noSnap){
   const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
-    el.innerHTML=vw+spBar+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+safe(cparHtml)+charDeskHtml(F);return;}
+    el.innerHTML=vw+spBar+safe(()=>charDayHtml(F.sp))+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+safe(cparHtml)+charDeskHtml(F);return;}
   if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
   if(F.view==='subs'){let h='';try{h=subCardHtml();}catch(e){console.warn('subscriber card',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   let hero='';try{hero=todayBestHero();}catch(e){console.warn('best hero',e);}
@@ -18388,7 +18444,7 @@ function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
   if(REC_VIEW==='chars'){let h='';try{try{cpropGrade();cparGrade();}catch(e){}
       const P=CHAR_ORDER.map(v=>({v,R:cparRecord(v)})).filter(x=>x.R.w+x.R.l);
-      h=(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
+      h=(()=>{try{return charDayHtml('all')}catch(e){return''}})()+(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
     catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
