@@ -2154,7 +2154,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011o';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261011p';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -5524,6 +5524,19 @@ function _buildPresetRaw(mode){
   if(mode==='popular'){
     return buildPopularPreset(n);
   }
+  if(mode==='hothands'){
+    /* every leg on the board that a character backs today while on a 65%+ run on that spot */
+    const V=roGet(VOICES_KEY,[],5000)||[];const d=today();const page=window.__PAGE_SPORT__||ACTIVE_SPORT||'mlb';const idx={};
+    V.forEach(c=>{if(String(c.date).slice(0,10)!==d||!CHARS[c.voice]||c.graded)return;(idx[c.sp+'|'+c.game+'|'+c.market+'|'+c.side]||(idx[c.sp+'|'+c.game+'|'+c.market+'|'+c.side]=[])).push(c);});
+    const out=[];pool.forEach(l=>{if(l.kind==='prop'||l.kind==='hr'||/^(F5|P1|1H|H1|Q\d)\b/i.test(String(l.pick||'')))return;const sp=l.sport||page;const [A,H]=String(l.game||'').split('@');if(!A||!H)return;
+      let k=null;try{k=sqKey(sp,{away:{abbr:A},home:{abbr:H}},l.pick);}catch(e){}if(!k)return;
+      const calls=idx[sp+'|'+l.game+'|'+k.market+'|'+k.side]||[];const hot=[];
+      calls.forEach(c=>{let h=null;try{h=charHist(V,c);}catch(e){}if(h&&h.hot.length)hot.push({v:c.voice,top:h.hot[0],all:h.hot});});
+      if(!hot.length)return;hot.sort((a,b)=>b.top.r-a.top.r);
+      const score=hot[0].top.r+0.02*(hot.length-1)+0.0001*(l.p||0);
+      out.push({...l,hotScore:score,hotBy:hot.map(x=>x.v),hotWhy:`🔥 ${charName(hot[0].v)} ${hot[0].top.lab} ${hot[0].top.w}-${hot[0].top.l}${hot.length>1?` · +${hot.length-1} more hot`:''}`});});
+    return out.sort((a,b)=>b.hotScore-a.hotScore).slice(0,n);
+  }
   return [];
 }
 
@@ -5597,6 +5610,7 @@ const PRESETS=[
   ['armageddon','Armageddon','Deliberately takes the picks with the worst edge — everything the model warns against. Chaos mode, not a recommendation. Files under Specialty — tracked daily at a flat $1, no bankroll impact.'],
   ['edgeplus','EDGE+','The picks where the model disagrees with the market hardest IN THE MODEL\'S favor — highest edge on the board, mirror image of Armageddon. Files under System — tracked daily at a flat $1, no bankroll impact.'],
   ['calibchamp','Calibration Champ','Only picks from a market/situation/confidence-band (or prop type) with a real, sample-backed record of NOT underperforming what it claimed — best odds within that proven set. Files under System — tracked daily at a flat $1, no bankroll impact.'],
+  ['hothands','🔥 Hot hands','Today\'s legs backed by a character on a 65%+ run (6+ graded games) in that sport and market, on that team, in that role or in that exact matchup — strongest run first, one leg per game. Pick the number of legs with the leg count. Files under My picks.'],
   ['popular','Popular','Picks that independently show up across multiple OTHER presets at once — the strongest cross-agreement on the board, and the same signal that flags which games are most likely to duplicate across your tickets. Files under System — tracked daily at a flat $1, no bankroll impact.']
 ];
 // ── Every preset routes to exactly ONE of four buckets. Only 'mine' ever
@@ -5612,7 +5626,7 @@ const PRESETS=[
 const PRESET_SOURCE={
   sysbest:'system',booklean:'market',outside:'outside',fucksystem:'specialty',
   easy:'mine',tailbooks:'market',fadebooks:'specialty',tailsystem:'system',
-  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty',edgeplus:'system',calibchamp:'system',popular:'system'
+  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty',edgeplus:'system',calibchamp:'system',popular:'system',hothands:'mine'
 };
 // Human-readable ticket name per preset — stamped onto the saved ticket so it
 // shows up labeled in the UI instead of a bare date, which was the whole
@@ -5622,7 +5636,7 @@ const PRESET_DISPLAY_NAME={
   sysbest:'Systems best',booklean:'Books lean',outside:'Outside picks',
   fucksystem:'Fuck the system',easy:'Easy wins',tailbooks:'Tail the books',
   fadebooks:'Fade the books',tailsystem:'Tail the system',fadesystem:'Fade the system',
-  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon',edgeplus:'EDGE+',calibchamp:'Calibration Champ',popular:'Popular'
+  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon',edgeplus:'EDGE+',calibchamp:'Calibration Champ',popular:'Popular',hothands:'Hot hands'
 };
 // which sources are tracked-only (flat $1, never touch the bankroll) — checked
 // everywhere staking and settlement happen so this is the single source of truth
@@ -5722,7 +5736,7 @@ function presetTabHtml(){
         color:${held?'var(--gold)':'var(--mute)'}">
         ${held?'HELD':'HOLD'}
       </button>
-      <span style="flex:1">${l.pick} <span class="m">${l.game}</span>${srcTag}</span>
+      <span style="flex:1">${l.pick} <span class="m">${gameLabelHtml(l.sport||(window.__PAGE_SPORT__||'mlb'),l.game)}</span>${srcTag}${l.hotWhy?`<div class="mono" style="font-size:9.5px;color:var(--win)">${txtEsc(l.hotWhy)}</div>`:''}</span>
       <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}
     </li>`;
   }).join('');
@@ -17680,7 +17694,17 @@ function tcLive(sp,x){
    "hot hand", the Banker, the SGP builder and calibration. Never trimmed. */
 const SPLIT_KEY='d4.charsplits';
 const splitRole=x=>{const p=x.price!=null?+x.price:null;if(x.market==='total')return null;
-  if(p!=null&&isFinite(p)&&Math.abs(p)>=100)return p<0?'fav':'dog';if(x.market==='spread'&&x.line!=null)return +x.line<0?'fav':+x.line>0?'dog':null;return null;};
+  /* v2.10 · a spread's role is its LINE — NYG +3.5 at -120 juice is an underdog, not a favorite */
+  if(x.market==='spread'&&x.line!=null&&isFinite(+x.line))return +x.line<0?'fav':+x.line>0?'dog':null;
+  if(p!=null&&isFinite(p)&&Math.abs(p)>=100)return p<0?'fav':'dog';return null;};
+/* one-time: rebuild the permanent spread fav/dog records from the graded calls still in the ledger
+   (they were filed by juice, so minus-juice dogs counted as favorites) */
+function splitRoleRebuild(){if(get('d4.migr.splitrole2',false))return 0;const S=get(SPLIT_KEY,{})||{};const V=get(VOICES_KEY,[])||[];let n=0;
+  Object.values(S).forEach(BV=>Object.values(BV||{}).forEach(M=>{if(M&&M.spread)M.spread.role={};}));
+  V.forEach(x=>{if(!x||!x.sr||x.market!=='spread'||!x.graded)return;const M=((S[x.sp]||{})[x.voice]||{}).spread;if(!M)return;const ro=splitRole(x);if(!ro)return;
+    splitInc(M.role,ro,x.push?2:x.hit===true?0:1);n++;});
+  set(SPLIT_KEY,S);set('d4.migr.splitrole2',true);if(typeof CH_IDX!=='undefined')CH_IDX=null;return n;}
+if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(()=>{try{splitRoleRebuild();}catch(e){console.warn('split role rebuild',e);}},2500));
 const splitTeam=x=>{const [a,h]=String(x.game).split('@');return x.side==='home'?h:x.side==='away'?a:null;};
 const splitPair=g=>String(g).split('@').slice().sort().join('-');
 function splitInc(o,k,r){const c=o[k]||(o[k]=[0,0,0]);c[r]++;}
@@ -17702,6 +17726,8 @@ function charIdx(V){const sig=charIdxSig(V);if(CH_IDX&&CH_IDX.sig===sig)return C
   const B={};for(const x of V){if(!x||!x.graded||x.push||x.sr)continue;const k=x.voice+'|'+x.sp+'|'+x.market;(B[k]||(B[k]=[])).push(x);}
   CH_IDX={sig,B,H:new Map(),S:splitsGet()};return CH_IDX;}
 const recOf=(w,l)=>({w,l,n:w+l,r:(w+2)/(w+l+4)});
+/* v2.10 · Hot hands = 65%+ (shrunk toward 50%: (w+2)/(n+4)) over 6+ graded games */
+const HOT_MIN=0.65,HOT_N=6;
 function charHist(V,c){const I=charIdx(V);const ck=c.id+'|'+c.voice+'|'+c.sp+'|'+c.market+'|'+c.side+'|'+c.game+'|'+c.price;const hit0=I.H.get(ck);if(hit0)return hit0;
   const r0=charHistRaw(I.B[c.voice+'|'+c.sp+'|'+c.market]||[],c,(((I.S[c.sp]||{})[c.voice]||{})[c.market])||null);I.H.set(ck,r0);return r0;}
 function charHistRaw(V,c,M){const [aw,hm]=String(c.game).split('@');const tot=c.market==='total';const team=tot?null:(c.side==='home'?hm:aw);const role=splitRole(c);
@@ -17721,7 +17747,7 @@ function charHistRaw(V,c,M){const [aw,hm]=String(c.game).split('@');const tot=c.
   const mk=c.market==='ml'?'ML':c.market==='spread'?'spread':'total';
   const lab={sport:`${c.sp.toUpperCase()} ${tot?c.side:mk}`,team:team?team+' '+mk:'these teams '+c.side,h2h:'H2H',
     where:tot?'':(c.side==='home'?'home':'road')+' '+mk,role:role?(role==='fav'?'favorite':'underdog')+' '+mk:''};
-  const hot=Object.entries(H).filter(([k,x])=>x.n>=6&&x.r>=0.6).map(([k,x])=>({k,lab:lab[k],...x})).sort((a,b)=>b.r-a.r);
+  const hot=Object.entries(H).filter(([k,x])=>x.n>=HOT_N&&x.r>=HOT_MIN).map(([k,x])=>({k,lab:lab[k],...x})).sort((a,b)=>b.r-a.r);
   return{H,lab,hot,team};}
 /* one character's splits for the Records → Characters table */
 function charSplitsFor(v,sp){const S=splitsGet();const V=roGet(VOICES_KEY,[],30e3)||[];
@@ -17795,7 +17821,7 @@ function charDeskHtml(F){
   const hotHtml=hot.length?hot.slice(0,12).map(({c,h})=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)">${chip(c.voice)}
       <div style="flex:1"><b>${txtEsc(charPickText(c))}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[c.sp]||''} · ${esc(c.game)}</span>
       <div class="mono" style="font-size:9.5px">${h.hot.map(x=>`<span style="color:var(--win)">🔥 ${esc(x.lab)} ${fmt(x)}</span>`).join(' · ')}</div></div></div>`).join('')
-    :'<div class="sub">No character has a 60%+ record (6+ games) on today\'s teams, matchups or markets yet.</div>';
+    :'<div class="sub">No character has a 65%+ record (6+ games) on today\'s teams, matchups or markets yet.</div>';
   /* 2 · agree / disagree per game-market */
   const G={};calls.forEach(c=>{const k=c.sp+'|'+c.game+'|'+c.market;(G[k]=G[k]||{sp:c.sp,game:c.game,m:c.market,by:{}}).by[c.voice]=c;});
   const mLab={ml:'Moneyline',spread:'Spread',total:'Total'};
@@ -17811,7 +17837,7 @@ function charDeskHtml(F){
   const cards=CHAR_ORDER.filter(v=>byV[v]).map(v=>{const all=V.filter(x=>x.voice===v&&x.graded&&!x.push);const w=all.filter(x=>x.hit).length;
     return`<details style="margin:4px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${byV[v].length} calls today · ${w}-${all.length-w} all-time</span></summary>
       ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}</span> · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${txtEsc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
-  return`<div class="tkt" style="border-color:var(--win)"><h3>🔥 Hot hands today</h3><div class="sub" style="font-size:10px">A character on a 60%+ run (6+ graded games) in this sport+market, on this team, or in this exact matchup.</div>${hotHtml}</div>
+  return`<div class="tkt" style="border-color:var(--win)"><h3>🔥 Hot hands today</h3><div class="sub" style="font-size:10px">A character on a 65%+ run (6+ graded games, small samples shrunk toward 50%) in this sport+market, on this team, or in this exact matchup. Build it as a parlay: Tickets → Build → 🔥 Hot hands.</div>${hotHtml}</div>
     <div class="tkt"><h3>Who agrees, who doesn't</h3>${rows}</div>
     <div class="tkt"><h3>Each character's slate</h3>${cards}</div>`;}
 /* on a Today pick: which of its characters are hot on this team / matchup / market */
