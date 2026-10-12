@@ -35,7 +35,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
   T('character chips render on the card squares',(slate.match(/hs-chip/g)||[]).length>=4,(slate.match(/hs-chip/g)||[]).length+' chips');
   T('sim-only squares now carry a tier outline',/class="bet (lean|strong|supreme|conflict)/.test(slate));
   T('the ★ Sim chip is drawn',/hs-chip god/.test(slate));
-  T('agreement meter renders (N of the roster, silent named)',/of 8 on this side/.test(slate));
+  T('agreement meter renders (N of the roster, silent named)',/of 9 on this side/.test(slate));
   // tier rule
   const tier=(o,c)=>w.eval(`charTier(${JSON.stringify(o)},${JSON.stringify(c)})`);
   T('app vs crowd = CONFLICT',tier({hasLine:false},{simHere:true,charsAgainst:true})===' conflict');

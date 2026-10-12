@@ -37,7 +37,7 @@ setTimeout(async()=>{try{
   w.eval(`window.__C=${JSON.stringify(['Sim','Judge','Most common'].map(mk))}`);
   const a=w.eval(`charSquare('nhl',${JSON.stringify(g)},{aw:.4,hw:.6},'WPG ML',{price:-150})`);
   T('3 agreeing characters is never unanimous',a.unanimous===false);
-  T('meter counts the whole roster and names who stayed silent',/3 of 8 on this side/.test(a.meter)&&/5 no call/.test(a.meter)&&/silent: .*Historian/.test(a.meter),a.meter.replace(/<[^>]+>/g,' ').slice(0,160));
+  T('meter counts the whole roster and names who stayed silent',/3 of 9 on this side/.test(a.meter)&&/6 no call/.test(a.meter)&&/silent: .*Historian/.test(a.meter),a.meter.replace(/<[^>]+>/g,' ').slice(0,160));
   w.eval(`window.__C=${JSON.stringify(['Sim','Judge','Most common','Covers','Trends'].map(mk))}`);
   T('5 called, all agree, 2 independent → unanimous',w.eval(`charSquare('nhl',${JSON.stringify(g)},{aw:.4,hw:.6},'WPG ML',{price:-150}).unanimous`)===true);
   w.eval(`window.__C=${JSON.stringify(['Sim','Judge','Most common','Pred','Covers'].map(mk))}`);

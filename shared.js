@@ -1593,6 +1593,7 @@ const CHARS={
   'Covers':     {chip:'COVERS',color:'#ff7a1a',label:'Covers',school:'Covers / OddsShark computer predicted score',quiet:'no Covers prediction uploaded'},
   'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'situational trend records, shrunk for small samples',quiet:'no uploaded trends lean'},
   'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
+  'Power':      {chip:'⚡ POWER',color:'#818cf8',label:'The Commissioner',school:'TheDesk Power Index — who\'s better and by how much, plus prestige and the all-time series',quiet:'no power rating for one of these teams, or no real edge on this number'},
   'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the Sim, the market and every character\'s graded vote, weighed together',quiet:'still learning — needs graded character history'},
   'Blend':      {chip:'BLEND',color:'#a3e635',label:'The Blend',school:'the Sim\'s chance blended with the market\'s, weighted by which has predicted better',quiet:'no sim chance on this market'}
 };
@@ -1606,7 +1607,7 @@ const META_VOICES=new Set(['Brain','Blend']);
 const VOTER_ORDER=CHAR_ORDER.filter(v=>!META_VOICES.has(v));
 const isVoter=v=>!!CHARS[v]&&!META_VOICES.has(v);
 /* Independent reads: not derived from the app's own simulation. */
-const INDEP_VOICES=new Set(['Trends','Consensus','Coach','Pred','Covers']);
+const INDEP_VOICES=new Set(['Trends','Consensus','Coach','Pred','Covers','Power']);
 const charName=v=>(CHARS[v]&&CHARS[v].label)||v;
 /* why a character is silent on this market */
 function charQuiet(v,market){if(v==='Coach'&&market==='spread')return'doesn\'t call spreads';return(CHARS[v]||{}).quiet||'no call';}
@@ -1708,6 +1709,8 @@ function characterCalls(sp,g,s){
   // Books' favorite (ledger only — the book price is already its own signal on the square)
   if(Ln.mlH&&Ln.mlA&&Ln.mlH.price!=null&&Ln.mlA.price!=null&&+Ln.mlH.price!==+Ln.mlA.price)add('Books','ml',+Ln.mlH.price<+Ln.mlA.price?'home':'away');
   if(hl!=null&&hl!==0&&!hlSim)add('Books','spread',hl<0?'home':'away');
+  /* ⚡ the Commissioner — power ratings + history (v2.15) */
+  try{pwrCharCalls(sp,g,hl,tl,hlSim,tlSim,add);}catch(e){}
   try{metaCalls(sp,g,calls,Ln,add);}catch(e){}
   CHAR_CACHE[ck]={ts:Date.now(),s,calls};
   return calls;
@@ -1720,15 +1723,19 @@ function brainSideP(sp,g,voters,market,side,modelP,line,price){if(modelP==null)r
   const ctx=market==='total'?side:(price!=null?(price<0?'fav':'dog'):(line!=null?(line<0?'fav':'dog'):null));
   let z=logit(base),learned=false;
   voters.forEach(c=>{if(c.voice==='Sim'||!isVoter(c.voice))return;const on=c.side===side;const r=charRate(sp,c.voice,market,on?ctx:null);
-    if(r.n>=6){learned=true;z+=0.5*(on?1:-1)*logit(r.p);}});
+    if(r.n>=6){learned=true;z+=0.5*(on?1:-1)*logit(voterP(c,r));}});
   return learned?sigm(z):null;}
+/* v2.15 · a voter's reliability on THIS pick: its inner feeling once the daily self-tune has
+   proven the feeling beats the plain record on unseen days, the plain record until then */
+function voterP(c,r){try{const T=roGet(FEEL_TUNE_KEY,null,60e3);if(T&&T.trusted&&c&&c.id){const F=charFeel(c);if(F&&F.n>=6)return F.p;}}catch(e){}return r.p;}
 /* The Blend's chance on one side: Sim + market, weighted by which has predicted
    better, plus the learned situation adjustments (same as the card's "blend N%"). */
 function blendSideP(sp,g,market,side,modelP,line,price){if(modelP==null)return null;
   let mk=null;try{const mf=marketFair(sp,g,market,side,line);if(mf)mk=mf.p;}catch(e){}
   const b=blendProb(sp,market,modelP,mk);if(b==null)return null;
   let fa=0;try{fa=factorAdj(sp,factorsFor(sp,g,{market,side,line,price}));}catch(e){}
-  return Math.max(0.01,Math.min(0.99,b+fa));}
+  let pa=0;try{pa=pwrCalAdj(sp,g,market,side,line,b+fa);}catch(e){}
+  return Math.max(0.01,Math.min(0.99,b+fa+pa));}
 function metaCalls(sp,g,calls,Ln,add){
   const opp={home:'away',away:'home',over:'under',under:'over'};
   ['ml','spread','total'].forEach(m=>{const sim=calls.find(c=>c.voice==='Sim'&&c.market===m);if(!sim||sim.simP==null)return;
@@ -1749,7 +1756,7 @@ function voicesLog(sp){
     let calls=[];try{calls=characterCalls(sp,g,s)}catch(e){return;}
     // a character's call is locked at first pitch / puck drop / kickoff; drop a
     // stale pre-game call from another side if the character flipped before then
-    if(pre)calls.forEach(c=>{try{c.f=factorsFor(sp,g,c);}catch(e){}if(c.voice==='Sim'){try{c.f=c.f||factorsFor(sp,g,c);const b=blendProb(sp,c.market,c.simP,c.mktP>0?c.mktP:null);c.pUsed=b!=null?Math.max(0.01,Math.min(0.99,b+factorAdj(sp,c.f))):null;}catch(e){}}});
+    if(pre)calls.forEach(c=>{try{c.f=factorsFor(sp,g,c);}catch(e){}if(c.voice==='Sim'){try{c.f=c.f||factorsFor(sp,g,c);const b=blendProb(sp,c.market,c.simP,c.mktP>0?c.mktP:null);let q=b!=null?b+factorAdj(sp,c.f):null;if(q!=null){try{q+=pwrCalAdj(sp,g,c.market,c.side,c.line,q);}catch(e){}}c.pUsed=q!=null?Math.max(0.01,Math.min(0.99,q)):null;}catch(e){}}});
     calls.forEach(c=>{if(META_VOICES.has(c.voice)&&idx[[c.voice,sp,c.game,c.date,c.market].join('|')]!=null)return;   // already logged under the pre-v1.99 70%+ rule
       const i=idx[c.id];if(i!=null){if(!pre||V[i].graded)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
   });
@@ -1811,6 +1818,7 @@ function charWeight(sp,voice,market,ctx){
   let w=Math.max(0.25,Math.min(2.5,1+6*(r.p-0.5)));
   if(voice==='Sim')w=Math.max(2,w*2);          // the app reigns
   w*=bankerMult(voice);                         // the Banker's say: money results over the last 4 weeks
+  if(voice==='Power'){try{w*=1+pwrReign(sp).w;}catch(e){}}   // v2.15: the more it reigns in this league, the more it counts
   return{...r,w};
 }
 /* Parse a square's pick into {market, side} for the character layer. */
@@ -1904,7 +1912,7 @@ function charSquare(sp,g,s,pick,opts){
   VOTER_ORDER.forEach(v=>{const c=calls.find(x=>x.voice===v);if(!c)return;
     const r0=charWeight(sp,v,k.market,c.side===k.side?ctx:null);const sm=v==='Sim'?{m:1,why:[]}:charSitMult(sp,v,k.market,fs);const r={...r0,w:r0.w*sm.m};const on=c.side===k.side;
     if(v!=='Sim'){wAll+=r.w;if(on)wOn+=r.w;
-      if(z!=null&&r.n>=6){learned=true;z+=0.5*(on?1:-1)*logit(r.p);}}
+      if(z!=null&&r.n>=6){learned=true;z+=0.5*(on?1:-1)*logit(voterP(c,r));}}
     if(on){const C=CHARS[v],weak=v!=='Sim'&&r.n>=RULE_MIN&&r.p<0.47,hot=v!=='Sim'&&r.n>=RULE_MIN&&r.p>=0.56;
       chipHtml.push(`<span class="hs-chip${v==='Sim'?' god':''}${weak?' weak':''}${hot?' hot':''}" title="${C.label}${r.n?` · ${sp.toUpperCase()} ${k.market} ${r.rec} (${Math.round(r.p*100)}% learned)`:' · no graded history yet'}${c.score?' · '+c.score:''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`);}
   });
@@ -2154,7 +2162,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261011t';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -5524,6 +5532,20 @@ function _buildPresetRaw(mode){
   if(mode==='popular'){
     return buildPopularPreset(n);
   }
+  if(mode==='power'){
+    /* v2.15 · the Commissioner's own calls on today's board, strongest feeling first; blacklisted spots stay off */
+    const V=roGet(VOICES_KEY,[],5000)||[];const d=today();const page=window.__PAGE_SPORT__||ACTIVE_SPORT||'mlb';const idx={};
+    V.forEach(c=>{if(String(c.date).slice(0,10)!==d||c.voice!=='Power'||c.graded)return;idx[c.sp+'|'+c.game+'|'+c.market+'|'+c.side]=c;});
+    const out=[];pool.forEach(l=>{if(l.kind==='prop'||l.kind==='hr'||/^(F5|P1|1H|H1|Q\d)\b/i.test(String(l.pick||'')))return;const sp=l.sport||page;const [A,H]=String(l.game||'').split('@');if(!A||!H)return;
+      let k=null;try{k=sqKey(sp,{away:{abbr:A},home:{abbr:H}},l.pick);}catch(e){}if(!k)return;const c=idx[sp+'|'+l.game+'|'+k.market+'|'+k.side];if(!c)return;
+      /* the leg's own number must match the Commissioner's (a spread leg at a different line isn't his call) */
+      {const ln=l.line!=null&&isFinite(+l.line)?+l.line:(()=>{const m=String(l.pick||'').match(/([+-]?\d+(?:\.\d+)?)\s*$/);return m?+m[1]:null;})();
+        if(k.market!=='ml'&&c.line!=null&&ln!=null&&Math.abs(Math.abs(ln)-Math.abs(c.line))>0.01)return;}
+      let F=null;try{F=charFeel(c,V);}catch(e){}if(F&&F.black)return;const R=pwrReign(sp);
+      const score=(F?F.p:(c.pP||0.5))+0.05*R.w+0.0001*(l.p||0);
+      out.push({...l,hotScore:score,hotBy:['Power'],hotWhy:`⚡ Commissioner ${Math.round((c.pP||0)*100)}%${c.edge!=null?` · edge ${c.edge>0?'+':''}${c.edge}`:''}${F?` · 💭 ${Math.round(F.p*100)}%`:''}${R.supreme?` · reigns ${Math.round(R.acc*100)}% in ${(SP_LAB[sp]||sp).replace(/^\S+\s/,'')}`:''}`});});
+    return out.sort((a,b)=>b.hotScore-a.hotScore).slice(0,n);
+  }
   if(mode==='hothands'){
     /* every leg on the board that a character backs today while on a 65%+ run on that spot */
     const V=roGet(VOICES_KEY,[],5000)||[];const d=today();const page=window.__PAGE_SPORT__||ACTIVE_SPORT||'mlb';const idx={};
@@ -5611,6 +5633,7 @@ const PRESETS=[
   ['edgeplus','EDGE+','The picks where the model disagrees with the market hardest IN THE MODEL\'S favor — highest edge on the board, mirror image of Armageddon. Files under System — tracked daily at a flat $1, no bankroll impact.'],
   ['calibchamp','Calibration Champ','Only picks from a market/situation/confidence-band (or prop type) with a real, sample-backed record of NOT underperforming what it claimed — best odds within that proven set. Files under System — tracked daily at a flat $1, no bankroll impact.'],
   ['hothands','🔥 Hot hands','Today\'s legs backed by a character on a 65%+ run (6+ graded games) in that sport and market, on that team, in that role or in that exact matchup — strongest run first, one leg per game. Pick the number of legs with the leg count. Files under My picks.'],
+  ['power','⚡ Power plays','The Commissioner\'s calls on today\'s board — power ratings plus prestige and the all-time series — strongest inner feeling first, blacklisted spots left off. Pick the number of legs with the leg count. In leagues where it reigns (70%+ straight up) it also moves the calibrated chances. Files under My picks — counts against your bankroll.'],
   ['popular','Popular','Picks that independently show up across multiple OTHER presets at once — the strongest cross-agreement on the board, and the same signal that flags which games are most likely to duplicate across your tickets. Files under System — tracked daily at a flat $1, no bankroll impact.']
 ];
 // ── Every preset routes to exactly ONE of four buckets. Only 'mine' ever
@@ -5626,7 +5649,7 @@ const PRESETS=[
 const PRESET_SOURCE={
   sysbest:'system',booklean:'market',outside:'outside',fucksystem:'specialty',
   easy:'mine',tailbooks:'market',fadebooks:'specialty',tailsystem:'system',
-  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty',edgeplus:'system',calibchamp:'system',popular:'system',hothands:'mine'
+  fadesystem:'specialty',combo:'mine',lucky10:'mine',armageddon:'specialty',edgeplus:'system',calibchamp:'system',popular:'system',hothands:'mine',power:'mine'
 };
 // Human-readable ticket name per preset — stamped onto the saved ticket so it
 // shows up labeled in the UI instead of a bare date, which was the whole
@@ -5636,7 +5659,7 @@ const PRESET_DISPLAY_NAME={
   sysbest:'Systems best',booklean:'Books lean',outside:'Outside picks',
   fucksystem:'Fuck the system',easy:'Easy wins',tailbooks:'Tail the books',
   fadebooks:'Fade the books',tailsystem:'Tail the system',fadesystem:'Fade the system',
-  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon',edgeplus:'EDGE+',calibchamp:'Calibration Champ',popular:'Popular',hothands:'Hot hands'
+  combo:'Combination+',lucky10:'Lucky 10',armageddon:'Armageddon',edgeplus:'EDGE+',calibchamp:'Calibration Champ',popular:'Popular',hothands:'Hot hands',power:'Power plays'
 };
 // which sources are tracked-only (flat $1, never touch the bankroll) — checked
 // everywhere staking and settlement happen so this is the single source of truth
@@ -9980,7 +10003,8 @@ function evalSportStrip(cur){const t=x=>new Date(x).toLocaleTimeString([],{hour:
     return`<button class="msg-chip${on?' on':''}" ${click} style="${!on&&!url?'opacity:.45':''}">${l} <span class="mono" style="font-size:9px;color:${at?'var(--win)':'var(--mute)'}">${at?'✓ '+t(at):sp==='nba'?'soon':'not run'}</span></button>`;}).join('')}</div>`;}
 function masterEvalFor(sp){sp=sp||ACTIVE_SPORT||'mlb';
   const fn=sp==='nfl'?renderNFLMasterEval:sp==='ncaaf'?renderNCAAFMasterEval:sp==='nhl'&&typeof renderNHLMasterEval==='function'?renderNHLMasterEval:sp==='mlb'?renderMasterEval:null;
-  return evalSportStrip(sp)+(fn?fn():`<div class="tkt"><h3>${sp.toUpperCase()} master evaluation</h3><div class="sub">Not built for this sport yet — the other sports' evals are one tap away above.</div></div>`);}
+  let pw='';try{pw=pwrEvalHtml(sp);}catch(e){}
+  return evalSportStrip(sp)+pw+(fn?fn():`<div class="tkt"><h3>${sp.toUpperCase()} master evaluation</h3><div class="sub">Not built for this sport yet — the other sports' evals are one tap away above.</div></div>`);}
 /* open straight to the eval when a page is reached through the strip (…#eval) */
 if(typeof window!=='undefined')window.addEventListener('load',()=>{try{if(location.hash!=='#eval')return;REC_VIEW='eval';
   const b=[...document.querySelectorAll('nav>button')].find(x=>/'grades'/.test(x.getAttribute('onclick')||''));tab('grades',b);
@@ -17589,7 +17613,8 @@ function todayCandidates(sp){
   const best={};out.forEach(x=>{const k=x.game+'|'+x.m;if(!best[k]||x.rank>best[k].rank)best[k]=x;});
   const res=Object.values(best).sort((a,b)=>b.rank-a.rank);
   res.forEach(x=>{try{const g=games.find(z=>z.id===x.gid);const mf=g?marketFair(sp,g,x.m,x.sd,null):null;x.mkt=mf?mf.p:null;x.blend=x.mp!=null?blendProb(sp,x.m,x.mp,x.mkt):null;
-    if(x.blend!=null&&g){x.f=factorsFor(sp,g,{m:x.m,sd:x.sd,line:x.line,price:x.price});const fa=factorAdj(sp,x.f);if(fa){x.fAdj=fa;x.blend=Math.max(0.01,Math.min(0.99,x.blend+fa));}}
+    if(x.blend!=null&&g){x.f=factorsFor(sp,g,{m:x.m,sd:x.sd,line:x.line,price:x.price});const fa=factorAdj(sp,x.f);if(fa){x.fAdj=fa;x.blend=Math.max(0.01,Math.min(0.99,x.blend+fa));}
+      try{const pa=pwrCalAdj(sp,g,x.m,x.sd,x.line,x.blend);if(pa){x.pwrAdj=pa;x.blend=Math.max(0.01,Math.min(0.99,x.blend+pa));}}catch(e){}}
     /* EV from the CALIBRATED probability (blend), not the raw sim number */
     if(x.blend!=null&&x.price!=null&&amerOk(x.price)!=null)x.evCal=(x.blend*americanToDecimal(amerOk(x.price))-1)*100;
     if(x.mp!=null&&x.mkt!=null&&Math.abs(x.mp-x.mkt)>0.12)x.suspect=`model ${Math.round(x.mp*100)}% vs market ${Math.round(x.mkt*100)}%`;}catch(e){}});
@@ -17717,6 +17742,7 @@ function splitRoll(V){if(!Array.isArray(V))return 0;let S=null,n=0;
     const pr=splitPair(x.game),h=M.h2h[pr]||(M.h2h[pr]={});
     if(x.market==='total'){String(x.game).split('@').forEach(t=>{const T=M.team[t]||(M.team[t]={});splitInc(T,x.side,r);});splitInc(h,x.side,r);}
     else{const t=splitTeam(x);if(t){splitInc(M.team,t,r);splitInc(h,t,r);}}
+    try{feelRoll(M,x,r);}catch(e){}
     x.sr=1;n++;}
   if(n)set(SPLIT_KEY,S);return n;}
 function splitsGet(){return roGet(SPLIT_KEY,{},30e3)||{};}
@@ -17820,7 +17846,7 @@ function charDeskHtml(F){
   const hot=[];calls.forEach(c=>{const h=charHist(V,c);if(h.hot.length)hot.push({c,h});});
   hot.sort((a,b)=>b.h.hot[0].r-a.h.hot[0].r||b.h.hot.length-a.h.hot.length);
   const hotHtml=hot.length?hot.slice(0,12).map(({c,h})=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)">${chip(c.voice)}
-      <div style="flex:1"><b>${txtEsc(charPickText(c))}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[c.sp]||''} · ${esc(c.game)}</span>
+      <div style="flex:1"><b>${txtEsc(charPickText(c))}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[c.sp]||''} · ${esc(c.game)}</span> ${feelChip(c,V)}
       <div class="mono" style="font-size:9.5px">${h.hot.map(x=>`<span style="color:var(--win)">🔥 ${esc(x.lab)} ${fmt(x)}</span>`).join(' · ')}</div></div></div>`).join('')
     :'<div class="sub">No character has a 65%+ record (6+ games) on today\'s teams, matchups or markets yet.</div>';
   /* 2 · agree / disagree per game-market */
@@ -17837,7 +17863,7 @@ function charDeskHtml(F){
   const byV={};calls.forEach(c=>(byV[c.voice]=byV[c.voice]||[]).push(c));
   const cards=CHAR_ORDER.filter(v=>byV[v]).map(v=>{const all=V.filter(x=>x.voice===v&&x.graded&&!x.push);const w=all.filter(x=>x.hit).length;
     return`<details style="margin:4px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${byV[v].length} calls today · ${w}-${all.length-w} all-time</span></summary>
-      ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}</span> · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${txtEsc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
+      ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}</span> · ${feelChip(c,V)} · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${txtEsc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
   return`<div class="tkt" style="border-color:var(--win)"><h3>🔥 Hot hands today</h3><div class="sub" style="font-size:10px">A character on a 65%+ run (6+ graded games, small samples shrunk toward 50%) in this sport+market, on this team, or in this exact matchup. Build it as a parlay: Tickets → Build → 🔥 Hot hands.</div>${hotHtml}</div>
     <div class="tkt"><h3>Who agrees, who doesn't</h3>${rows}</div>
     <div class="tkt"><h3>Each character's slate</h3>${cards}</div>`;}
@@ -17954,7 +17980,9 @@ function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','
   let gate=null;try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);
     const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);
     gate=!x?'not on today\'s card':!(x.unan||crowdAllAgree(c.sp,c.game,c.market,c.side,c.date))?'crowd split':laneStatus(lk,c.voice)==='blocked'?'lane blocked: '+laneName(lk):pickDisagrees(x,c.sp)?'model fighting the market':null;}catch(e){}
-  return{score:(0.5*p+0.5*hr)*(1+spec.adj),p,hr,why:spec.why.concat(why),weak:(sw>=6&&hr<0.5)||spec.weak,gate,spec};}
+  let F=null;try{F=charFeel(c,V);}catch(e){}const T=roGet(FEEL_TUNE_KEY,null,60e3);const hr2=F&&T&&T.trusted?F.p:hr;
+  if(F&&F.black)why.unshift(`🚫 ${F.black.lab} ${F.black.rec}`);
+  return{score:(0.5*p+0.5*hr2)*(1+spec.adj),p,hr:hr2,feel:F?F.p:null,why:spec.why.concat(why),weak:(sw>=6&&hr<0.5)||spec.weak||!!(F&&F.black),gate,spec};}
 /* Sensible tickets only: no leg priced shorter than -300 (a -450 favorite adds almost
    nothing to the payout and is the leg that quietly sinks parlays). Underdogs: any price. */
 const BK_FLOOR=-300;const bkPriceOk=pr=>pr!=null&&isFinite(+pr)&&+pr>=BK_FLOOR;
@@ -18198,7 +18226,7 @@ function renderToday(noSnap){
   const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
-    el.innerHTML=vw+spBar+safe(()=>charDayHtml(F.sp))+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+safe(cparHtml)+charDeskHtml(F);return;}
+    el.innerHTML=vw+spBar+safe(()=>charDayHtml(F.sp))+safe(feelTuneHtml)+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+safe(cparHtml)+charDeskHtml(F);return;}
   if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
   if(F.view==='subs'){let h='';try{h=subCardHtml();}catch(e){console.warn('subscriber card',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   let hero='';try{hero=todayBestHero();}catch(e){console.warn('best hero',e);}
@@ -21032,7 +21060,7 @@ const PWR_CFG={nfl:{cap:24,hfa:1.8,lam:3,hl:63,pyth:2.37,unit:'pts',mo:8},ncaaf:
   nhl:{cap:4,hfa:0.15,lam:12,hl:45,pyth:2.0,unit:'goals',mo:9},mlb:{cap:6,hfa:0.15,lam:25,hl:45,pyth:1.83,unit:'runs',mo:2},nba:{cap:25,hfa:2.2,lam:8,hl:45,pyth:14,unit:'pts',mo:9}};
 const PWR_KEY='d4.pwrgames';
 function pwrSeasonStart(sp){const t=today();const y=+t.slice(0,4),m=+t.slice(5,7);const C=PWR_CFG[sp];
-  const start={nfl:'-09-01',ncaaf:'-08-20',nhl:'-10-01',mlb:'-03-18',nba:'-10-15'}[sp];
+  const start={nfl:'-09-01',ncaaf:'-08-20',nhl:'-09-25',mlb:'-03-18',nba:'-10-15'}[sp];   /* v2.15: NHL 2026-27 opened Sep 29 */
   let yr=y;if(sp==='mlb'){if(m<3)yr=y-1;}else if(m<C.mo)yr=y-1;return yr+start;}
 /* v2.04 · one key per league, held in memory first: if a save ever fails (storage
    full on a phone) the rankings still show for the session instead of vanishing.
@@ -21143,24 +21171,32 @@ function pwrIndex(sp,teams){const by={};teams.forEach(x=>{by[x.abbr]=x;});const 
    Built once a day. */
 const PIDX_CFG={nfl:{reg:4,slope:0.033,full:8},ncaaf:{reg:3,slope:0.028,full:6},nhl:{reg:15,slope:0.15,full:30},mlb:{reg:30,slope:0.10,full:60},nba:{reg:10,slope:0.033,full:25}};
 const PIDX_W={res:0.40,mpg:0.12,rec:0.10,mkt:0.28,form:0.06,prior:0.30};
+/* CFB week N (archive key w2026-N) → that week's Saturday; week 1 Saturday ≈ first Saturday after Labor Day weekend begins */
+function pwrCfbWeekDate(k){const m=String(k).match(/(\d{4}).*?(\d{1,2})$/);if(!m)return null;const y=+m[1];let d=new Date(Date.UTC(y,8,1));while(d.getUTCDay()!==1)d=new Date(+d+864e5);
+  return new Date(+d-2*864e5+(+m[2]-1)*7*864e5).toISOString().slice(0,10);}
 function pwrNflWeekDate(k){const m=String(k).match(/(\d{4}).*?(\d{1,2})$/);if(!m)return null;const base=Date.UTC(+m[1],8,10);return new Date(base+(+m[2]-1)*7*864e5).toISOString().slice(0,10);}
 /* every final the app already holds for a league */
-function pwrLocalGames(sp){const out=[];const add=(d,a,h,as,hs,neu)=>{a=pwrAbbr(sp,a);h=pwrAbbr(sp,h);as=+as;hs=+hs;if(!a||!h||a===h||!isFinite(as)||!isFinite(hs))return;out.push([d?String(d).slice(0,10):'',a,h,as,hs,neu?1:0]);};
-  try{const F=allFinals();Object.entries(F).forEach(([k,v])=>{if(!k.startsWith(sp+':')||!v||v.a==null||v.h==null)return;const [a,h]=k.slice(sp.length+1).split('@');add(v.d,a,h,v.a,v.h,0);});}catch(e){}
+function pwrLocalGames(sp){const out=[];const add=(d,a,h,as,hs,neu,syn)=>{a=pwrAbbr(sp,a);h=pwrAbbr(sp,h);as=+as;hs=+hs;if(!a||!h||a===h||!isFinite(as)||!isFinite(hs))return;const r=[d?String(d).slice(0,10):'',a,h,as,hs,neu?1:0];if(syn)r.push(1);out.push(r);};
+  try{const F=allFinals();Object.entries(F).forEach(([k,v])=>{if(!k.startsWith(sp+':')||!v||v.a==null||v.h==null)return;const [a,h]=k.slice(sp.length+1).split('@');let d=v.d,syn=0;if(!d&&v.ts){try{d=tdDay(new Date(v.ts).toISOString());syn=1;}catch(e){}}add(d,a,h,v.a,v.h,0,syn);});}catch(e){}
   const weeks=k=>{try{const C=get(k,{})||{};Object.values(C).forEach(W=>{const L=W&&(Array.isArray(W)?W:W.v);(L||[]).forEach(g=>{if(!g||g.abstract!=='post'||!g.away||!g.home)return;add(g.date,g.away.abbr,g.home.abbr,g.awayScore,g.homeScore,g.neutral||g.neutralSite);});});}catch(e){}};
   if(sp==='nfl')weeks('d4.nflgames');if(sp==='ncaaf')weeks('d4.ncaafgames');
   const arcKey={nfl:'d4.nflarc',ncaaf:'d4.ncaafarc',nhl:'d4.nhlarc',mlb:'d4.arc'}[sp];
-  if(arcKey){try{const A=get(arcKey,{})||{};Object.entries(A).forEach(([k,x])=>{const day=/^\d{4}-\d{2}-\d{2}$/.test(k)?k:sp==='nfl'?pwrNflWeekDate(k):null;
-      if(Array.isArray(x)){x.forEach(r=>{if(r&&r.game&&r.awayScore!=null&&r.homeScore!=null){const [a,h]=String(r.game).split('@');add(day,a,h,r.awayScore,r.homeScore,0);}});}
-      else if(x&&Array.isArray(x.rows)&&x.finals){x.rows.forEach(r=>{const f=x.finals[r.id]||x.finals[r.gid];if(!f||f.a==null||f.h==null)return;let a,h;if(r.game)[a,h]=String(r.game).split('@');else{a=r.a;h=r.h;}add(day,a,h,f.a,f.h,0);});}});}catch(e){}}
+  /* an archive week can carry last week's games over at the rollover — one row per game id, at its earliest date */
+  if(arcKey){try{const A=get(arcKey,{})||{};const idDay={};const dk=k=>/^\d{4}-\d{2}-\d{2}$/.test(k)?k:sp==='nfl'?pwrNflWeekDate(k):sp==='ncaaf'?pwrCfbWeekDate(k):null;
+    Object.entries(A).forEach(([k,x])=>{const d=dk(k);const rows=Array.isArray(x)?x:(x&&x.rows)||[];rows.forEach(r=>{const id=r&&(r.id||r.gid);if(!id||!d)return;if(!idDay[id]||d<idDay[id].d)idDay[id]={d,k};});});
+    Object.entries(A).forEach(([k,x])=>{const keep=r=>{const id=r&&(r.id||r.gid);return!id||!idDay[id]||idDay[id].k===k;};if(Array.isArray(x))x=x.filter(keep);else if(x&&Array.isArray(x.rows))x={...x,rows:x.rows.filter(keep)};const real=/^\d{4}-\d{2}-\d{2}$/.test(k);const day=real?k:sp==='nfl'?pwrNflWeekDate(k):sp==='ncaaf'?pwrCfbWeekDate(k):null;const syn=!real;
+      if(Array.isArray(x)){x.forEach(r=>{if(r&&r.game&&r.awayScore!=null&&r.homeScore!=null){const [a,h]=String(r.game).split('@');add(day,a,h,r.awayScore,r.homeScore,0,syn);}});}
+      else if(x&&Array.isArray(x.rows)&&x.finals){x.rows.forEach(r=>{const f=x.finals[r.id]||x.finals[r.gid];if(!f||f.a==null||f.h==null)return;let a,h;if(r.game)[a,h]=String(r.game).split('@');else{a=r.a;h=r.h;}add(day,a,h,f.a,f.h,0,syn);});}});}catch(e){}}
   try{(sportGames(sp)||[]).forEach(g=>{const st=String(g.abstract||'').toLowerCase();if(st!=='post'&&st!=='final')return;add(g.date||g.__date||g.start,g.away.abbr,g.home.abbr,g.awayScore,g.homeScore,g.neutral);});}catch(e){}
   return out;}
 /* union with the ESPN pull; one row per meeting (same teams within a day = same game) */
-function pwrAllGames(sp){const L=[...pwrGames(sp),...pwrLocalGames(sp)];const seen=new Map();const out=[];
+function pwrAllGames(sp){const L=[...pwrGames(sp),...pwrLocalGames(sp)].sort((p,q)=>(p[6]?1:0)-(q[6]?1:0)||(p[0]?0:1)-(q[0]?0:1));const seen=new Map();const out=[];
+  const st0=pwrSeasonStart(sp),tdy=today();   /* v2.15: preseason games never count toward the rankings */
   const dn=d=>d?Math.round(Date.parse(d)/864e5):null;
   L.forEach(g=>{const k=g[1]+'@'+g[2];const day=dn(g[0]);const list=seen.get(k)||[];
-    const dup=list.some(o=>(o.day==null||day==null)?(sp==='nfl'||sp==='ncaaf')&&(o.s===g[3]+'-'+g[4]||o.day==null||day==null):Math.abs(o.day-day)<=1);
-    if(dup)return;list.push({day,s:g[3]+'-'+g[4]});seen.set(k,list);out.push(g[0]?g:[pwrSeasonStart(sp),g[1],g[2],g[3],g[4],g[5]]);});
+    const fb=sp==='nfl'||sp==='ncaaf',sc=g[3]+'-'+g[4];   /* football: one meeting a week, and the same final twice within 3 weeks is one game logged twice */
+    const dup=list.some(o=>(o.day==null||day==null)?fb&&(o.s===sc||o.day==null||day==null):fb?(Math.abs(o.day-day)<=6||(o.s===sc&&Math.abs(o.day-day)<=21)):Math.abs(o.day-day)<=1);
+    if(dup)return;if(g[0]&&g[0]<st0&&sp!=='ncaaf')return;if(g[0]&&g[0]>tdy)return;list.push({day,s:g[3]+'-'+g[4]});seen.set(k,list);out.push(g[0]?g:[st0,g[1],g[2],g[3],g[4],g[5],1]);});
   return out.sort((a,b)=>a[0].localeCompare(b[0]));}
 function pwrStandings(sp){try{const S=get('d4.seasonstats',{})||{};const o=S[sp];return o&&o.teams?{d:o.d,teams:o.teams,meta:o.meta||{}}:null;}catch(e){return null;}}
 /* market: what the line says about each team — this week's pregame line, or its most
@@ -21225,8 +21261,8 @@ function pwrIndexBuild(sp){const C=PIDX_CFG[sp];const G=pwrAllGames(sp);const ST
   const lg=out.reduce((a,x)=>a+x.pf,0)/out.length;let OD=null;try{if(G.length>=12)OD=pwrOffDef(sp,G,res);}catch(e){}
   out.forEach(x=>{x.off=OD&&OD.off[x.abbr]!=null&&(log[x.abbr]||[]).length>=2?OD.off[x.abbr]:x.pf-lg;x.def=OD&&OD.def[x.abbr]!=null&&(log[x.abbr]||[]).length>=2?OD.def[x.abbr]:lg-x.pa;});
   const prev=pwrHistPrev(sp,Object.fromEntries(out.map(x=>[x.abbr,x.rank])));if(prev)out.forEach(x=>{x.prev=prev.r[x.abbr]||null;});
-  return{sp,teams:out,h,n:G.length,mu:lg,day:today(),prevDay:prev&&prev.d,std:!!ST,stdDay:ST&&ST.d,mktN:Object.keys(mkt).length,acc:G.length>=20?pwrAccuracy(sp,G):null};}
-function pwrRank(sp){const ST=pwrStandings(sp);const sig=today()+'|'+(ST&&ST.d===today()?'s':'-');if(PWR_C[sp]&&PWR_C[sp].sig===sig)return PWR_C[sp].v;
+  return{sp,teams:out,h,n:G.length,mu:lg,muG:OD&&OD.mu?OD.mu:null,day:today(),prevDay:prev&&prev.d,std:!!ST,stdDay:ST&&ST.d,mktN:Object.keys(mkt).length,acc:G.length>=20?pwrAccuracy(sp,G):null};}
+function pwrRank(sp){const ST=pwrStandings(sp);const sig=today()+'|'+(ST&&ST.d===today()?'s':'-')+'|v215';if(PWR_C[sp]&&PWR_C[sp].sig===sig)return PWR_C[sp].v;
   try{const P=(get(PWR_RANK_KEY,{})||{})[sp];if(P&&P.sig===sig&&P.v&&Array.isArray(P.v.teams)){const v={...P.v,by:pwrIndex(sp,P.v.teams)};PWR_C[sp]={sig,v};return v;}}catch(e){}
   let v=null;try{v=pwrIndexBuild(sp);}catch(e){console.warn('power index',e);}if(!v)return null;
   v.by=pwrIndex(sp,v.teams);PWR_C[sp]={sig,v};
@@ -21291,6 +21327,238 @@ async function pwrBoot(force){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPO
   try{const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);}catch(e){}
   try{const v=document.getElementById('v-games');if(v&&v.classList.contains('on')){const r=sp==='nfl'?renderNFL:sp==='ncaaf'?renderNCAAF:sp==='nhl'?renderNHL:sp==='nba'&&typeof renderNBA==='function'?renderNBA:render;if(typeof r==='function')r();}}catch(e){}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pwrBoot,3500));
+/* ══ ⚡ THE COMMISSIONER — POWER AS A CHARACTER (v2.15) ═══════════════════════════
+   The Power Index gets a voice. The Commissioner calls every game off the ratings —
+   who's better and by how much (home field included) — then folds in what a fan
+   would call history: the program's PRESTIGE and the ALL-TIME SERIES between the two.
+   Both are small, capped nudges in points: ratings already carry most of what history
+   knows, so history only tips a close call. Whether it helps is tracked, not assumed —
+   every call is tagged (siding with the blue blood or against, with the series leader
+   or against) and those tags feed the Commissioner's own inner feeling below.
+     ML      the team with the higher power margin
+     SPREAD  only when the power line beats the posted number by a real margin
+     TOTAL   silent — tested walk-forward against closing totals it had no skill (CFB 51%)
+   Walk-forward on this season (each day predicted from only the games before it):
+   NFL 70.5% straight up (31-13), CFB 73.2% (131-48), NHL 55%, MLB 49%. */
+const PWR_SIG={nfl:13.5,ncaaf:15.5,nba:12,nhl:2.4,mlb:4.3};
+const PWR_TSIG={nfl:13,ncaaf:16,nba:18,nhl:2.3,mlb:4.4};
+const PWR_EDGE_SP={nfl:1,ncaaf:1.5,nba:1.5,nhl:0.2,mlb:0.25};
+const PWR_EDGE_TOT={nfl:2.5,ncaaf:3,nba:4,nhl:0.35,mlb:0.6};
+/* prestige tiers: 5 royalty … 2 established … 1 small program. Soft by design. */
+const PWR_PRESTIGE={
+  nfl:{GB:5,PIT:5,DAL:5,SF:5,NE:5,KC:4,NYG:4,CHI:4,DEN:4,WSH:4,LV:4,MIA:4,PHI:4,BAL:4,IND:3,SEA:3,LAR:3,TB:3,MIN:3,BUF:3,NYJ:3,NO:3,CLE:3,DET:3,CIN:2,ATL:2,CAR:2,ARI:2,TEN:2,LAC:2,JAX:2,HOU:2},
+  ncaaf:{IU:2,ALA:5,OSU:5,ND:5,MICH:5,USC:5,OU:5,TEX:5,UGA:5,LSU:5,PSU:4,NEB:4,FLA:4,FSU:4,CLEM:4,TENN:4,AUB:4,MIA:4,ORE:4,
+    WIS:3,IOWA:3,UCLA:3,WASH:3,MSU:3,'TA&M':3,ARK:3,MISS:3,VT:3,UTAH:3,BYU:3,OKST:3,TCU:3,BAY:3,SC:3,LOU:3,PITT:3,GT:3,SYR:3,
+    VAN:2,MSST:2,UK:2,MIZ:2,ILL:2,IND:2,PUR:2,NU:2,RUTG:2,MD:2,MINN:2,CAL:2,STAN:2,SMU:2,WAKE:2,DUKE:2,UNC:2,NCST:2,UVA:2,BC:2,ARIZ:2,ASU:2,COLO:2,UCF:2,CIN:2,HOU:2,TTU:2,ISU:2,KU:2,KSU:2,WVU:2,BSU:2},
+  nhl:{MTL:5,TOR:5,DET:5,BOS:5,CHI:5,NYR:5,EDM:4,PIT:4,NYI:4,COL:4,NJ:4,TB:4,LA:3,PHI:3,DAL:3,STL:3,VGK:3,FLA:3,CAR:3,WSH:3,CGY:3,ANA:3},
+  mlb:{NYY:5,BOS:5,LAD:5,STL:5,SF:5,ATH:4,PHI:4,CHC:4,DET:4,PIT:4,BAL:4,CIN:4,ATL:4,NYM:4,HOU:4,CLE:3,MIN:3,KC:3,TOR:3,LAA:3,AZ:3,MIA:3,CWS:3,TEX:3},
+  nba:{BOS:5,LAL:5,GS:5,CHI:5,SA:5,MIA:4,PHI:4,DET:4,NY:4,HOU:3,MIL:3,DAL:3,CLE:3,DEN:3,OKC:3,TOR:3,WSH:3,POR:3,UTAH:3,PHX:3,IND:3,ATL:3}};
+const pwrPrestige=(sp,ab)=>{const T=PWR_PRESTIGE[sp]||{};const k=pwrAbbr(sp,ab);return T[k]!=null?T[k]:(sp==='ncaaf'?1:2);};
+const PWR_PRES_PT={nfl:0.25,ncaaf:0.3,nba:0.25,nhl:0.02,mlb:0.03};
+const PWR_SER_CAP={nfl:1,ncaaf:1.5,nba:1,nhl:0.12,mlb:0.15};
+/* ── the all-time series: every past season's meetings, pulled once and kept on the phone ──
+   Football: league-wide weekly scoreboards (proven endpoint). NHL/MLB/NBA: the home team's
+   season schedules. Past seasons never change, so each pull happens once. Not synced
+   (rebuildable), never blocks the board: a few calls per visit, in the background. */
+const PWR_HIST_SEASONS={nfl:6,ncaaf:8,nhl:4,mlb:3,nba:4};
+const pwrHxKey=sp=>'d4.h2hx.'+sp;
+let PWR_HX_MEM={};
+function pwrHx(sp){if(PWR_HX_MEM[sp])return PWR_HX_MEM[sp];let H=null;try{H=get(pwrHxKey(sp),null);}catch(e){}if(!H||!H.g)H={g:{},done:{}};PWR_HX_MEM[sp]=H;return H;}
+function pwrHxEvent(sp,ev,H){try{const c=(ev.competitions||[])[0]||{};const st=((c.status||ev.status||{}).type||{});if(st.completed===false)return;
+  const T=c.competitors||[];const ho=T.find(x=>x.homeAway==='home'),aw=T.find(x=>x.homeAway==='away');if(!ho||!aw)return;
+  const sc=x=>{const s=x.score;const v=s&&typeof s==='object'?(s.value!=null?s.value:s.displayValue):s;return v==null||v===''?NaN:+v;};
+  const hs=sc(ho),as=sc(aw);if(!isFinite(hs)||!isFinite(as))return;
+  const ab=x=>pwrAbbr(sp,((x.team||{}).abbreviation)||'');const A=ab(aw),Hh=ab(ho);if(!A||!Hh)return;
+  const d=String(ev.date||c.date||'').slice(0,10);if(!d||d>=pwrSeasonStart(sp))return;   /* this season's meetings come from the live results */
+  H.g[ev.id||d+A+Hh]=[d,A,Hh,as,hs,c.neutralSite?1:0];}catch(e){}}
+let PWR_HX_BUSY={};
+async function pwrHistFetch(sp,max){if(PWR_HX_BUSY[sp])return 0;const base=FBP_ESPN[sp];if(!base)return 0;PWR_HX_BUSY[sp]=1;let calls=0;const H=pwrHx(sp);
+  try{const y0=+pwrSeasonStart(sp).slice(0,4);const N=PWR_HIST_SEASONS[sp]||3;const jobs=[];
+    if(sp==='nfl'||sp==='ncaaf'){const wk=sp==='nfl'?18:15;for(let y=y0-1;y>=y0-N;y--)for(let w=1;w<=wk;w++)jobs.push({k:`w|${y}|${w}`,u:`${base}/scoreboard?dates=${y}&seasontype=2&week=${w}${sp==='ncaaf'?'&groups=80&limit=300':''}`});}
+    else{const teams=new Set();try{(sportGames(sp)||[]).forEach(g=>{if(g&&g.home)teams.add(pwrAbbr(sp,g.home.abbr));});}catch(e){}
+      teams.forEach(t=>{for(let y=y0;y>=y0-N+1;y--)jobs.push({k:`t|${t}|${y}`,u:`${base}/teams/${String(t).toLowerCase()}/schedule?season=${y}`});});}
+    for(const j of jobs){if(calls>=max)break;if(H.done[j.k])continue;calls++;
+      try{const r=await fetch(j.u);if(r.ok){const x=await r.json();(x.events||[]).forEach(ev=>pwrHxEvent(sp,ev,H));H.done[j.k]=1;}else if(r.status===404||r.status===400)H.done[j.k]=-1;}catch(e){}
+      await new Promise(z=>setTimeout(z,200));}
+    if(calls){H.ts=Date.now();PWR_SER_IDX[sp]=null;try{set(pwrHxKey(sp),H);}catch(e){}}}finally{PWR_HX_BUSY[sp]=0;}return calls;}
+async function pwrHistBoot(){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!PWR_CFG[sp])return;
+  try{await pwrHistFetch(sp,24);}catch(e){}}
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pwrHistBoot,12000));
+/* the series between two teams: past seasons (kept) + this season (live results) */
+let PWR_SER_IDX={};
+function pwrSerIdx(sp){const c=PWR_SER_IDX[sp];if(c&&Date.now()-c.ts<300e3)return c.m;const m=new Map();const put=g=>{const k=[g[1],g[2]].sort().join('|');let a=m.get(k);if(!a){a=[];m.set(k,a);}a.push(g);};
+  try{Object.values(pwrHx(sp).g||{}).forEach(put);}catch(e){}try{pwrAllGames(sp).forEach(put);}catch(e){}PWR_SER_IDX[sp]={ts:Date.now(),m};return m;}
+function pwrSeries(sp,A,H){A=pwrAbbr(sp,A);H=pwrAbbr(sp,H);const L=(pwrSerIdx(sp).get([A,H].sort().join('|'))||[]).slice();
+  L.sort((p,q)=>String(p[0]).localeCompare(String(q[0])));let a=0,h=0,t=0,mH=0;
+  L.forEach(g=>{const sA=g[1]===A?g[3]:g[4],sH=g[1]===A?g[4]:g[3];if(sA>sH)a++;else if(sH>sA)h++;else t++;mH+=sH-sA;});
+  return{n:L.length,a,h,t,mH:L.length?mH/L.length:0,since:L.length?String(L[0][0]).slice(0,4):null,last:L.slice(-3).reverse().map(g=>({d:g[0],A:g[1],H:g[2],as:g[3],hs:g[4]}))};}
+/* history's nudge in points (home perspective), with the tags its record is kept under */
+function pwrHistAdj(sp,A,H){const pa=pwrPrestige(sp,A),ph=pwrPrestige(sp,H);let pts=(ph-pa)*(PWR_PRES_PT[sp]||0.25);const S=pwrSeries(sp,A,H);let ser=0;
+  if(S.n>=3){const share=(S.h-S.a)/S.n;ser=share*(PWR_SER_CAP[sp]||1)*S.n/(S.n+6);}pts+=ser;
+  return{pts,pa,ph,S,ser};}
+const pwrPhi=z=>normCdf(z);
+/* the Commissioner's chance on any side of any market (null when it has no rating) */
+function pwrSideP(sp,g,market,side,line){try{const A=g.away.abbr,H=g.home.abbr;const L=pwrLine(sp,A,H,!!g.neutral);if(!L)return null;const hx=pwrHistAdj(sp,A,H);const m=L.m+hx.pts;const s=PWR_SIG[sp]||13;
+    if(market==='ml'){const p=pwrPhi(m/s);return side==='home'?p:1-p;}
+    if(market==='spread'){if(line==null||!isFinite(+line))return null;const hl=side==='home'?+line:-line;const p=pwrPhi((m+hl)/s);return side==='home'?p:1-p;}
+    /* totals: no proven skill (see pwrCharCalls) — no opinion */}catch(e){}return null;}
+function pwrCharCalls(sp,g,hl,tl,hlSim,tlSim,add){const A=g.away.abbr,H=g.home.abbr;const L=pwrLine(sp,A,H,!!g.neutral);if(!L)return;
+  const hx=pwrHistAdj(sp,A,H);const m=L.m+hx.pts;const s=PWR_SIG[sp]||13;const dp=sp==='nhl'||sp==='mlb'?2:1;
+  const tags=side=>{const T=[];const team=side==='home'?H:A;const pt=side==='home'?hx.ph:hx.pa,po=side==='home'?hx.pa:hx.ph;
+    if(pt!==po)T.push(pt>po?'pres:up':'pres:down');if(hx.S.n>=3&&hx.S.h!==hx.S.a){const lead=hx.S.h>hx.S.a?'home':'away';T.push(lead===side?'ser:with':'ser:against');}
+    return T;};
+  const ex=(p,side,extra)=>({pP:+p.toFixed(4),pm:+m.toFixed(dp),hist:+hx.pts.toFixed(dp),tags:tags(side),...(extra||{})});
+  if(Math.abs(m)>1e-6){const side=m>0?'home':'away';const p=pwrPhi(Math.abs(m)/s);add('Power','ml',side,ex(p,side));}
+  if(hl!=null&&!hlSim){const edge=m+hl;if(Math.abs(edge)>=(PWR_EDGE_SP[sp]||1)){const side=edge>0?'home':'away';const p=pwrPhi(Math.abs(edge)/s);add('Power','spread',side,ex(p,side,{edge:+edge.toFixed(dp)}));}}
+  /* no totals: walk-forward, power offense-vs-defense totals went 51% vs CFB closing totals and 41-50% elsewhere — no skill, so it stays silent */
+}
+/* ── REIGN: how supreme the Commissioner is in a league ──────────────────────────────
+   Straight-up accuracy over this season — its own graded ML calls once there are enough,
+   the walk-forward test until then. Below 70% it has NO say in calibration. From 70% up the
+   say grows (75% ≈ three-quarters, 80%+ full), scaled by sample size, and halved while its money
+   record (graded ML + spread units) runs worse than −5% ROI over 40+ calls. */
+const PWR_REIGN_MIN=0.70;let PWR_REIGN_C={};
+function pwrReign(sp){const c=PWR_REIGN_C[sp];if(c&&Date.now()-c.ts<60e3)return c.v;
+  let gn=0,gw=0,un=0,uu=0;try{(roGet(VOICES_KEY,[],30e3)||[]).forEach(x=>{if(x.voice!=='Power'||x.sp!==sp||!x.graded||x.push||x.hit==null)return;
+      if(x.market==='ml'){gn++;if(x.hit)gw++;}if(x.market==='ml'||x.market==='spread'){un++;uu+=+x.units||0;}});}catch(e){}
+  try{const M=(((splitsGet()[sp]||{}).Power)||{}).ml;if(M&&M.all){/* permanent record covers calls that aged out of the ledger */const n2=M.all[0]+M.all[1];if(n2>gn){gw=M.all[0];gn=n2;}}}catch(e){}
+  let wf=null;try{const R=pwrRank(sp);wf=R&&R.acc;}catch(e){}
+  const src=gn>=30&&(!wf||gn>=wf.n*0.5)?'graded':wf&&wf.n>=10?'walk-forward':gn?'graded':null;
+  const n=src==='graded'?gn:src?wf.n:0,acc=src==='graded'?gw/gn:src?wf.acc:null;
+  let w=0;if(acc!=null&&acc>=PWR_REIGN_MIN)w=Math.min(1,(acc-PWR_REIGN_MIN)/0.10+0.25)*n/(n+50);
+  const roi=un>=40?uu/un:null;const cut=roi!=null&&roi<-0.05;if(cut)w*=0.5;
+  const v={sp,acc,n,src,w:+w.toFixed(3),roi,un,cut,supreme:acc!=null&&acc>=PWR_REIGN_MIN};PWR_REIGN_C[sp]={ts:Date.now(),v};return v;}
+/* the calibration nudge: pull the calibrated chance toward the Commissioner's, by its reign */
+function pwrCalAdj(sp,g,market,side,line,p){if(p==null||!g)return 0;const R=pwrReign(sp);if(!R.w)return 0;const q=pwrSideP(sp,g,market,side,line);if(q==null)return 0;
+  return Math.max(-0.04,Math.min(0.04,R.w*0.5*(q-p)));}
+function pwrEvalHtml(sp){let R=null;try{R=pwrReign(sp);}catch(e){}if(!R)return'';const lab=SP_LAB[sp]||sp.toUpperCase();
+  const pct=x=>x==null?'—':Math.round(x*100)+'%';const d=today();
+  const fb=sp==='nfl'||sp==='ncaaf';const end=dayShift(d,fb?7:0);   /* football boards show the week; calls are dated to game day */
+  const calls=(roGet(VOICES_KEY,[],30e3)||[]).filter(x=>x.voice==='Power'&&x.sp===sp&&!x.graded&&String(x.date).slice(0,10)>=d&&String(x.date).slice(0,10)<=end);
+  const list=calls.slice().sort((a,b)=>(b.pP||0)-(a.pP||0)).slice(0,10).map(c=>{let f=null;try{f=charFeel(c);}catch(e){}
+    return`<div class="mono" style="font-size:10px;padding:2px 0">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}</span> · power ${Math.round((c.pP||0)*100)}%${f?` · feel ${Math.round(f.p*100)}%${f.black?' 🚫':''}`:''}${c.edge!=null?` · edge ${c.edge>0?'+':''}${c.edge}`:''}</div>`;}).join('');
+  return`<div class="tkt" style="border-color:${R.supreme?'var(--win)':'var(--rule)'}"><h3>⚡ The Commissioner · ${lab}</h3>
+    <div class="sub" style="font-size:10.5px">Straight-up this season: <b style="color:${R.supreme?'var(--win)':'var(--chalk)'}">${pct(R.acc)}</b> over ${R.n||0} games (${R.src||'no data yet'}).
+    ${R.supreme?`Reigns supreme here (70%+) — it pulls calibrated chances toward its own with weight <b>${Math.round(R.w*100)}%</b>${R.cut?' (halved: its money record is under −5% ROI)':''}.`:'Under 70% — no say in calibration here until it earns it.'}
+    ${R.roi!=null?` Money record: ${(R.roi*100).toFixed(1)}% ROI over ${R.un} graded calls.`:''}</div>
+    ${list?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:6px">Strongest calls ${fb?'this week':'today'} (${calls.length} in all):</div><div>${list}</div>`:`<div class="sub" style="font-size:10px;margin-top:4px">No calls logged ${fb?'this week':'today'} — open the board once.</div>`}</div>`;}
+
+/* ══ 💭 INNER FEELING — every character's own sense of its chances (v2.15) ════════════
+   The Brain reads everyone; this is each character reading ITSELF. Before a pick goes
+   out, the character checks its own history on this exact spot:
+     · how it's doing — last 3 days, last 7, last 30 — against its all-time rate
+     · its current streak
+     · this team · this team at home / on the road · this team as favorite / underdog
+     · home vs road · favorite vs underdog · over vs under · this matchup
+     · the Commissioner also checks: siding with the blue blood or not, with the series leader or not
+   Each check shrinks toward its all-time rate until there's volume, and a BLACKLIST
+   kicks in on its own: 5+ losses on a team (or that team at home/road, or as fav/dog)
+   at 30% or worse and the character won't put that team on its tickets.
+   How much each check is TRUSTED is earned, not assumed: once a day it replays its own
+   graded ledger walk-forward (learn on the older days, test on the newer) and gives each
+   check exactly the weight that improved its accuracy. A check that hasn't proven itself
+   — streaks, so far — is shown but carries zero weight. */
+const FEEL_K0=60,FEEL_KB=30,FEEL_MIN=4,FEEL_CAP=0.5;
+const FEEL_KEYS=['d3','d7','d30','streak','team','tw','tr','where','role','h2h','tag'];
+const FEEL_LAB={d3:'last 3 days',d7:'last 7 days',d30:'last 30 days',streak:'streak',team:'this team',tw:'team home/road',tr:'team fav/dog',where:'home/road',role:'fav/dog',h2h:'this matchup',tag:'history read'};
+const FEEL_TUNE_KEY='d4.feeltune';
+const FEEL_DEFAULT_W={d3:0,d7:0.15,d30:0.15,streak:0,team:0.2,tw:0.1,tr:0.1,where:0.3,role:0.3,h2h:0.1,tag:0.2};
+function feelW(){const T=roGet(FEEL_TUNE_KEY,null,60e3);return T&&T.W?T.W:FEEL_DEFAULT_W;}
+/* pure: base chance + buckets {k:[w,l]} → feeling */
+function feelCore(base,B,W){W=W||feelW();let dz=0;const why=[];let black=null;
+  Object.entries(B).forEach(([k,v])=>{if(!v)return;const w=v[0],l=v[1],n=w+l;if(k!=='streak'&&n<FEEL_MIN)return;
+    if(k==='streak'){if(Math.abs(v.s||0)>=3)why.push({k,lab:FEEL_LAB.streak,txt:(v.s>0?'W':'L')+Math.abs(v.s),d:0,wt:W.streak||0});if(!(W.streak>0)||Math.abs(v.s||0)<3)return;
+      const q=v.s>0?Math.min(0.62,0.5+0.02*v.s):Math.max(0.38,0.5+0.02*v.s);const d=(W.streak||0)*(logit(q)-logit(0.5));dz+=d;why[why.length-1].d=d;return;}
+    const q=(w+FEEL_KB*base)/(n+FEEL_KB);const d=(W[k]||0)*(logit(q)-logit(base));dz+=d;why.push({k,lab:v.lab||FEEL_LAB[k],txt:`${w}-${l}`,d,wt:W[k]||0});
+    if((k==='team'||k==='tw'||k==='tr')&&l>=5&&(w+1)/(n+2)<=0.30&&!black)black={k,lab:v.lab||FEEL_LAB[k],rec:`${w}-${l}`};});
+  dz=Math.max(-FEEL_CAP,Math.min(FEEL_CAP,dz));let p=sigm(logit(base)+dz);if(black)p=Math.min(p,0.45);
+  return{p,base,dz,why:why.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)),black};}
+/* the permanent record behind the feeling — kept in the splits table (never trimmed) */
+function feelRoll(M,x,r){try{const d=String(x.date).slice(0,10);if(d){const D=M.day||(M.day={});const c=D[d]||(D[d]=[0,0,0]);c[r]++;
+      const ks=Object.keys(D);if(ks.length>400)ks.sort().slice(0,ks.length-400).forEach(k=>delete D[k]);}
+    if(r<2)M.seq=((M.seq||'')+(r===0?'W':'L')).slice(-30);
+    if(x.market!=='total'){const t=splitTeam(x);if(t){splitInc(M.tw||(M.tw={}),t+'|'+x.side,r);const ro=splitRole(x);if(ro)splitInc(M.tr||(M.tr={}),t+'|'+ro,r);}}
+    (x.tags||[]).forEach(tg=>splitInc(M.tg||(M.tg={}),tg,r));}catch(e){}}
+/* one-time: the calls still in the ledger seed the new day / streak / team-split records */
+function feelBackfill(){if(get('d4.migr.feel1',false))return 0;const S=get(SPLIT_KEY,{})||{};const V=(get(VOICES_KEY,[])||[]).filter(x=>x&&x.sr&&x.graded).sort((a,b)=>String(a.date).localeCompare(String(b.date)));let n=0;
+  V.forEach(x=>{const M=((S[x.sp]||{})[x.voice]||{})[x.market];if(!M)return;feelRoll(M,x,x.push?2:x.hit===true?0:1);n++;});set(SPLIT_KEY,S);set('d4.migr.feel1',true);if(typeof CH_IDX!=='undefined')CH_IDX=null;return n;}
+if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(()=>{try{feelBackfill();}catch(e){console.warn('feel backfill',e);}},3000));
+/* the buckets for one call, from the permanent record + whatever hasn't rolled yet */
+function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet()[c.sp]||{})[c.voice]||{})[c.market]||{};const tot=c.market==='total';
+  const [aw,hm]=String(c.game).split('@');const team=tot?null:(c.side==='home'?hm:aw);const role=splitRole(c);const pair=splitPair(c.game);const d0=String(c.date||today()).slice(0,10);
+  const B={};const acc=(k,w,l,lab)=>{const o=B[k]||(B[k]=[0,0]);o[0]+=w;o[1]+=l;if(lab)o.lab=lab;};const cell=a=>a?[a[0],a[1]]:[0,0];
+  const all=cell(M.all);
+  /* windows from the dated record */
+  const D=M.day||{};const win=(k,n)=>{const from=dayShift(d0,-n);Object.entries(D).forEach(([d,a])=>{if(d>=from&&d<d0)acc(k,a[0],a[1]);});};
+  win('d3',3);win('d7',7);win('d30',30);
+  if(team){const t=cell((M.team||{})[team]);acc('team',t[0],t[1],team+' '+(c.market==='ml'?'ML':'spread'));const a=cell((M.tw||{})[team+'|'+c.side]);acc('tw',a[0],a[1],team+(c.side==='home'?' at home':' on the road'));
+    if(role){const b=cell((M.tr||{})[team+'|'+role]);acc('tr',b[0],b[1],team+' as '+(role==='fav'?'favorite':'underdog'));}}
+  else if(tot){[aw,hm].forEach(t=>{const T=(M.team||{})[t];const a=cell(T&&T[c.side]);acc('team',a[0],a[1],'these teams '+c.side);});}
+  if(!tot){const a=cell((M.side||{})[c.side]);acc('where',a[0],a[1],c.side==='home'?'home picks':'road picks');}else{const a=cell((M.side||{})[c.side]);acc('where',a[0],a[1],c.side+'s');}
+  if(role){const a=cell((M.role||{})[role]);acc('role',a[0],a[1],role==='fav'?'favorites':'underdogs');}
+  {const h=(M.h2h||{})[pair];const a=cell(h&&h[tot?c.side:team]);acc('h2h',a[0],a[1],'this matchup');}
+  (c.tags||[]).forEach(tg=>{const a=cell((M.tg||{})[tg]);const lab={'pres:up':'siding with the bigger name','pres:down':'siding against the bigger name','ser:with':'with the series leader','ser:against':'against the series leader'}[tg]||tg;
+    if(!B.tag||a[0]+a[1]>B.tag[0]+B.tag[1])B.tag=Object.assign(a,{lab});});
+  /* calls graded but not yet rolled into the permanent record */
+  let seq=M.seq||'';V.forEach(x=>{if(x.sr||!x.graded||x.push||x.hit==null||x.voice!==c.voice||x.sp!==c.sp||x.market!==c.market||x.id===c.id)return;const w=x.hit?1:0,l=1-w;all[0]+=w;all[1]+=l;
+    const xd=String(x.date).slice(0,10);if(xd<d0){if(xd>=dayShift(d0,-3))acc('d3',w,l);if(xd>=dayShift(d0,-7))acc('d7',w,l);if(xd>=dayShift(d0,-30))acc('d30',w,l);seq+=w?'W':'L';}
+    if(team&&splitTeam(x)===team){acc('team',w,l);if(x.side===c.side)acc('tw',w,l);if(role&&splitRole(x)===role)acc('tr',w,l);}
+    if(x.side===c.side)acc('where',w,l);if(role&&splitRole(x)===role)acc('role',w,l);});
+  let s=0;for(let i=seq.length-1;i>=0;i--){const h=seq[i]==='W'?1:-1;if(!s)s=h;else if(Math.sign(s)===h)s+=h;else break;}
+  B.streak=Object.assign([0,0],{s});
+  return{B,all};}
+/* the character's stated chance where it has one; otherwise its own all-time rate here */
+function feelBase(c,all){const st=c.voice==='Power'?c.pP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
+  const rate=(all[0]+FEEL_K0*0.5)/(all[0]+all[1]+FEEL_K0);
+  if(st>0&&st<1){/* a stated chance is tempered by how reliable the character has actually been */const n=all[0]+all[1];const k=n/(n+FEEL_K0);return Math.max(0.02,Math.min(0.98,(1-k*0.5)*st+k*0.5*rate));}
+  return rate;}
+let FEEL_MEMO=new Map(),FEEL_SIG='';
+function charFeel(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+(typeof _LSGEN!=='undefined'?_LSGEN:0);if(sig!==FEEL_SIG){FEEL_MEMO=new Map();FEEL_SIG=sig;}
+  const ck=[c.id,c.voice,c.sp,c.market,c.side,c.game,c.line,c.price].join('|');const hit=FEEL_MEMO.get(ck);if(hit)return hit;
+  const {B,all}=feelBuckets(c,V);const base=feelBase(c,all);const F=feelCore(base,B);F.n=all[0]+all[1];FEEL_MEMO.set(ck,F);return F;}
+function feelWhyText(F){if(!F)return'';const top=F.why.filter(x=>x.wt>0&&Math.abs(x.d)>=0.01).slice(0,3).map(x=>`${x.lab} ${x.txt} ${x.d>0?'▲':'▼'}`);
+  const noted=F.why.filter(x=>!(x.wt>0)).slice(0,2).map(x=>`${x.lab} ${x.txt}`);
+  return(F.black?`🚫 blacklisted — ${F.black.lab} ${F.black.rec}. `:'')+(top.length?top.join(' · '):'no proven split moves it')+(noted.length?` (noted, not trusted yet: ${noted.join(', ')})`:'');}
+function feelChip(c,V){let F=null;try{F=charFeel(c,V);}catch(e){return'';}if(!F)return'';const up=F.p-F.base;
+  return`<span class="mono" title="${esc('inner feeling — '+feelWhyText(F))}" style="font-size:9.5px;color:${F.black?'var(--rust)':up>=0.02?'var(--win)':up<=-0.02?'var(--rust)':'var(--mute)'}">💭 ${Math.round(F.p*100)}%${F.black?' 🚫':''}</span>`;}
+/* ── SELF-TUNING: replay the ledger, learn which checks actually helped ───────────────
+   Walk-forward and incremental (one pass per character+sport+market, day by day, each call
+   judged on only the days before it). Weights are learned on the older 60% of days and
+   checked on the newer 40%; they're trusted in the Brain only if that holdout improved. */
+function feelReplay(V){const G={};V.forEach(x=>{if(!x||!x.graded||x.push||x.hit==null||!CHARS[x.voice]||!['ml','spread','total'].includes(x.market))return;(G[x.voice+'|'+x.sp+'|'+x.market]||(G[x.voice+'|'+x.sp+'|'+x.market]=[])).push(x);});
+  const rows=[];Object.values(G).forEach(L=>{L.sort((a,b)=>String(a.date).localeCompare(String(b.date)));const C={all:[0,0],team:{},tw:{},tr:{},where:{},role:{},h2h:{},tg:{},day:{}};let seq='';
+    const inc=(o,k,w)=>{const a=o[k]||(o[k]=[0,0]);a[w?0:1]++;};const get2=(o,k)=>o[k]?[o[k][0],o[k][1]]:[0,0];
+    let i=0;while(i<L.length){const d=String(L[i].date).slice(0,10);let j=i;while(j<L.length&&String(L[j].date).slice(0,10)===d)j++;
+      for(let q=i;q<j;q++){const c=L[q];if(C.all[0]+C.all[1]>=8){const tot=c.market==='total';const [aw,hm]=String(c.game).split('@');const team=tot?null:(c.side==='home'?hm:aw);const role=splitRole(c);const B={};
+          const win=n=>{const from=dayShift(d,-n);let w=0,l=0;Object.entries(C.day).forEach(([dd,a])=>{if(dd>=from){w+=a[0];l+=a[1];}});return[w,l];};
+          B.d3=win(3);B.d7=win(7);B.d30=win(30);
+          if(team){B.team=get2(C.team,team);B.tw=get2(C.tw,team+'|'+c.side);if(role)B.tr=get2(C.tr,team+'|'+role);}
+          B.where=get2(C.where,c.side);if(role)B.role=get2(C.role,role);B.h2h=get2(C.h2h,splitPair(c.game)+'|'+(tot?c.side:team));
+          if(c.tags&&c.tags.length)B.tag=get2(C.tg,c.tags[0]);
+          let s=0;for(let z=seq.length-1;z>=0;z--){const h=seq[z]==='W'?1:-1;if(!s)s=h;else if(Math.sign(s)===h)s+=h;else break;}B.streak=Object.assign([0,0],{s});
+          rows.push({d,y:c.hit?1:0,base:feelBase(c,C.all),B});}}
+      for(let q=i;q<j;q++){const c=L[q];const w=!!c.hit;C.all[w?0:1]++;inc(C.day,d,w);seq+=w?'W':'L';const tot=c.market==='total';const [aw,hm]=String(c.game).split('@');const team=tot?null:(c.side==='home'?hm:aw);const role=splitRole(c);
+        if(team){inc(C.team,team,w);inc(C.tw,team+'|'+c.side,w);if(role)inc(C.tr,team+'|'+role,w);}inc(C.where,c.side,w);if(role)inc(C.role,role,w);inc(C.h2h,splitPair(c.game)+'|'+(tot?c.side:team),w);(c.tags||[]).forEach(tg=>inc(C.tg,tg,w));}
+      i=j;}});
+  return rows;}
+function feelTune(force){const T=get(FEEL_TUNE_KEY,null);if(!force&&T&&T.day===today())return T;
+  const rows=feelReplay(get(VOICES_KEY,[])||[]);const days=[...new Set(rows.map(r=>r.d))].sort();
+  const br=(R,W)=>{let s=0;R.forEach(r=>{const p=feelCore(r.base,r.B,W).p;s+=(r.y-p)**2;});return R.length?s/R.length:null;};
+  const fit=R=>{const W={};FEEL_KEYS.forEach(k=>W[k]=0);FEEL_KEYS.forEach(k=>{let best=0,bb=Infinity;for(let a=0;a<=1.0001;a+=0.1){const W2={...W,[k]:a};const b=br(R,W2);if(b<bb-1e-7){bb=b;best=+a.toFixed(1);}}W[k]=best;});return W;};
+  let out={day:today(),n:rows.length,W:{...FEEL_DEFAULT_W},trusted:false,gain:null,why:'not enough graded history yet'};
+  if(rows.length>=400&&days.length>=4){const cut=days[Math.floor(days.length*0.6)];const tr=rows.filter(r=>r.d<cut),te=rows.filter(r=>r.d>=cut);const Wt=fit(tr);
+    const b0=br(te,Object.fromEntries(FEEL_KEYS.map(k=>[k,0]))),b1=br(te,Wt);const gain=b0-b1;const Wfull=fit(rows);
+    /* live weights: only checks that earned weight on the older days (and so were tested on the newer ones), at their full-history strength */
+    const Wall=Object.fromEntries(FEEL_KEYS.map(k=>[k,Wt[k]>0?Wfull[k]:0]));
+    out={day:today(),n:rows.length,nTest:te.length,W:Wall,Wtrain:Wt,gain:+(gain*1e4).toFixed(1),trusted:gain>=0.0005&&te.length>=300,base:+b0.toFixed(4),feel:+b1.toFixed(4),
+      why:gain>=0.0005?`checks improved the newer days' accuracy by ${(gain*1e4).toFixed(1)} bp`:`checks didn't beat the plain record on the newer days (${(gain*1e4).toFixed(1)} bp) — shown, not used by the Brain`};}
+  try{set(FEEL_TUNE_KEY,out);}catch(e){}return out;}
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(()=>{try{feelTune();}catch(e){console.warn('feel tune',e);}},20000));
+function feelTuneHtml(){const T=roGet(FEEL_TUNE_KEY,null,60e3);if(!T)return'';const W=T.W||{};
+  const cells=FEEL_KEYS.map(k=>`<span style="color:${(W[k]||0)>0?'var(--win)':'var(--mute)'}">${FEEL_LAB[k]} ${(W[k]||0).toFixed(1)}</span>`).join(' · ');
+  return`<div class="tkt"><h3>💭 Inner feeling — what the characters trust about themselves</h3><div class="sub" style="font-size:10px">Re-learned daily from ${T.n||0} graded calls, walk-forward. ${txtEsc(T.why||'')}${T.trusted?' — the Brain now listens to it.':''}</div>
+    <div class="mono" style="font-size:9.5px;margin-top:4px;line-height:1.6">${cells}</div></div>`;}
+
 /* ══ 📻 GAME RADIO (v2.03) ════════════════════════════════════════════════════
    Live broadcasts are licensed, so the app can't carry them itself. What it does:
      · 📻 on every game opens the broadcast finder for both teams — TuneIn's team
@@ -21532,7 +21800,7 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
    Credentials never sync. The old public data-backup.json is retired.        */
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
 const SYNC_NEVER=new Set(['d4.tgbot',LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
-const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$)/.test(k);
+const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune)/.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
 function syncKts(){if(!SYNC_KTS){try{SYNC_KTS=JSON.parse(localStorage.getItem(SYNC.ts)||'{}')||{};}catch(e){SYNC_KTS={};}}return SYNC_KTS;}
