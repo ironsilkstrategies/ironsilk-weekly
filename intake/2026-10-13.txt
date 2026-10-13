@@ -1,5 +1,6 @@
-SOURCE: sportsbetting.ag
-# Tue Oct 13, 2026 — book lines: sportsbetting.ag (1:43–1:44 AM CT) · odds only, no predictions/trends
+SOURCE: covers
+# Tue Oct 13, 2026 — book lines: sportsbetting.ag (1:43–1:44 AM CT) · predictions, trends + Covers leader/consensus picks: Covers (3:34 AM CT)
+# Covers model ML/total/puck-line %s and its 52% props are left out: they come from the same model as PRED, and percentages aren't prices.
 
 NHL
 
@@ -154,3 +155,273 @@ Cleveland Guardians @ Tampa Bay Rays
 ML: Cleveland Guardians +122 / Tampa Bay Rays -134
 RL: Cleveland Guardians +1.5 (-190) / Tampa Bay Rays -1.5 (+165)
 OU: o7 (+102) / u7 (-122)
+
+# ── Covers: predicted scores, trends, leader & consensus picks ──
+NHL
+
+New Jersey Devils @ Detroit Red Wings
+PRED: New Jersey Devils 3.00 / Detroit Red Wings 3.04
+TREND New Jersey Devils: Under is 3-0-1 in Devils last 4 games vs losing-record teams.
+TREND New Jersey Devils: Devils are 4-1 in their last 5 games on 0 days rest.
+TREND New Jersey Devils: Under is 3-1-1 in Devils last 5 games road.
+TREND New Jersey Devils: Under is 3-1-1 in Devils last 5 games overall.
+TREND Detroit Red Wings: Over is 6-1 in Red Wings last 7 games as favorite.
+TREND Detroit Red Wings: Under is 4-0 in Red Wings last 4 games home vs road win% <.400.
+TREND Detroit Red Wings: Over is 7-2 in Red Wings last 9 games home.
+TREND Detroit Red Wings: Over is 6-2 in Red Wings last 8 games vs Eastern Conf.
+XPICK Covers TML: Detroit Red Wings ML
+# Covers TML 81%, 16 picks
+XPICK Covers TML: Under 6.5
+# Covers TML 71%
+
+Florida Panthers @ Columbus Blue Jackets
+PRED: Florida Panthers 2.91 / Columbus Blue Jackets 3.23
+TREND Florida Panthers: Panthers are 4-0 in their last 4 games vs Eastern Conf.
+TREND Florida Panthers: Panthers are 4-0 in their last 4 games as underdog.
+TREND Florida Panthers: Under is 4-1 in Panthers last 5 games overall.
+TREND Florida Panthers: Over is 7-1 in Panthers last 8 games in 3rd game of 3-in-4.
+TREND Columbus Blue Jackets: Under is 4-0 in Blue Jackets last 4 games as favorite.
+TREND Columbus Blue Jackets: Under is 4-0 in Blue Jackets last 4 games as home favorite.
+TREND Columbus Blue Jackets: Under is 5-1 in Blue Jackets last 6 games home.
+TREND Columbus Blue Jackets: Over is 4-1 in Blue Jackets last 5 games as underdog.
+XPICK Covers Top 10: Columbus Blue Jackets ML
+# Covers Top 10 72%, 32 picks
+
+Buffalo Sabres @ Montreal Canadiens
+PRED: Buffalo Sabres 3.10 / Montreal Canadiens 3.60
+TREND Buffalo Sabres: Over is 3-0-2 in Sabres last 5 games as favorite.
+TREND Buffalo Sabres: Sabres are 6-0 in their last 6 games road vs home win% <.400.
+TREND Buffalo Sabres: Over is 4-1-2 in Sabres last 7 games vs Eastern Conf.
+TREND Buffalo Sabres: Under is 8-2 in Sabres last 10 games vs losing-record teams.
+TREND Montreal Canadiens: Over is 2-0-2 in Canadiens last 4 games as underdog.
+TREND Montreal Canadiens: Canadiens are 4-1 in their last 5 games vs Atlantic.
+TREND Montreal Canadiens: Under is 4-1 in Canadiens last 5 games as home underdog.
+TREND Montreal Canadiens: Under is 3-1-1 in Canadiens last 5 games on 2 days rest.
+XPICK Covers Top 10: Montreal Canadiens ML
+# Covers Top 10 74%, 34 picks
+XPICK Covers TML: Under 6.5
+# Covers TML 70%
+
+Washington Capitals @ Carolina Hurricanes
+PRED: Washington Capitals 2.96 / Carolina Hurricanes 3.54
+TREND Washington Capitals: Capitals are 6-0 in their last 6 games vs Metropolitan.
+TREND Washington Capitals: Capitals are 7-1 in their last 8 games vs Eastern Conf.
+TREND Washington Capitals: Capitals are 6-1 in their last 7 games as underdog.
+TREND Washington Capitals: Capitals are 6-1 in their last 7 games vs winning-record teams.
+TREND Carolina Hurricanes: Under is 4-0 in Hurricanes last 4 games as underdog.
+TREND Carolina Hurricanes: Over is 3-0-1 in Hurricanes last 4 games on 1 day rest.
+TREND Carolina Hurricanes: Hurricanes are 4-0 in their last 4 games in 4th game of 4-in-6.
+TREND Carolina Hurricanes: Over is 6-1-1 in Hurricanes last 8 games vs winning-record teams.
+XPICK Covers TML: Carolina Hurricanes ML
+# Covers TML 88%, 8 picks
+XPICK Covers Top 10: Carolina Hurricanes ML
+# Covers Top 10 75%, 28 picks
+
+Seattle Kraken @ Philadelphia Flyers
+PRED: Seattle Kraken 2.83 / Philadelphia Flyers 3.07
+TREND Seattle Kraken: Over is 4-0 in Kraken last 4 games overall.
+TREND Seattle Kraken: Kraken are 5-1 in their last 6 games vs Metropolitan.
+TREND Seattle Kraken: Over is 5-1-1 in Kraken last 7 games when opponent scored 2 or fewer last game.
+TREND Seattle Kraken: Under is 4-1-2 in Kraken last 7 games as favorite.
+TREND Philadelphia Flyers: Flyers are 7-0 in their last 7 games vs Western Conf.
+TREND Philadelphia Flyers: Under is 6-0-2 in Flyers last 8 games as home underdog.
+TREND Philadelphia Flyers: Under is 3-0-1 in Flyers last 4 games home vs road win% >.600.
+TREND Philadelphia Flyers: Under is 4-0 in Flyers last 4 games after a loss by 3+ goals.
+XPICK Covers TML: Seattle Kraken ML
+# Covers TML 71%, 7 picks
+
+Tampa Bay Lightning @ New York Rangers
+PRED: Tampa Bay Lightning 3.42 / New York Rangers 2.72
+TREND Tampa Bay Lightning: Under is 7-0 in Lightning last 7 games vs winning-record teams.
+TREND Tampa Bay Lightning: Lightning are 4-0 in their last 4 games overall.
+TREND Tampa Bay Lightning: Over is 3-0-1 in Lightning last 4 games as underdog.
+TREND Tampa Bay Lightning: Under is 8-2 in Lightning last 10 games overall.
+TREND New York Rangers: Over is 6-0 in Rangers last 6 games home.
+TREND New York Rangers: Rangers are 5-0 in their last 5 games as home favorite.
+TREND New York Rangers: Rangers are 5-0 in their last 5 games on 1 day rest.
+TREND New York Rangers: Rangers are 4-0 in their last 4 games home.
+XPICK Covers TML: Tampa Bay Lightning ML
+# Covers TML 75%, 8 picks
+XPICK Covers Top 10: Tampa Bay Lightning ML
+# Covers Top 10 74%, 27 picks
+XPICK Covers consensus: Over 5.5
+# Covers consensus 74%
+
+St. Louis Blues @ Ottawa Senators
+PRED: St. Louis Blues 2.86 / Ottawa Senators 3.00
+TREND St. Louis Blues: Blues are 5-0 in their last 5 games vs Eastern Conf.
+TREND St. Louis Blues: Blues are 4-0 in their last 4 games vs Atlantic.
+TREND St. Louis Blues: Over is 7-1 in Blues last 8 games overall.
+TREND St. Louis Blues: Over is 5-1 in Blues last 6 games vs winning-record teams.
+TREND Ottawa Senators: Under is 4-0-1 in Senators last 5 games home.
+TREND Ottawa Senators: Under is 6-0 in Senators last 6 games as favorite.
+TREND Ottawa Senators: Over is 2-0-2 in Senators last 4 games as home underdog.
+TREND Ottawa Senators: Under is 4-0 in Senators last 4 games as home favorite.
+
+Vancouver Canucks @ New York Islanders
+PRED: Vancouver Canucks 2.55 / New York Islanders 3.73
+TREND Vancouver Canucks: Over is 4-0-1 in Canucks last 5 games road vs home win% >.600.
+TREND Vancouver Canucks: Over is 4-1-1 in Canucks last 6 games road.
+TREND Vancouver Canucks: Over is 4-1-1 in Canucks last 6 games as road underdog.
+TREND Vancouver Canucks: Under is 4-1 in Canucks last 5 games as road favorite.
+TREND New York Islanders: Islanders are 8-2 in their last 10 games after allowing 5+ goals.
+TREND New York Islanders: Under is 4-1 in Islanders last 5 games when opponent allowed 5+ last game.
+TREND New York Islanders: Under is 4-1 in Islanders last 5 games when opponent scored 2 or fewer last game.
+TREND New York Islanders: Islanders are 12-3 in their last 15 games as home underdog.
+XPICK Covers TML: New York Islanders ML
+# Covers TML 92%, 12 picks
+XPICK Covers Top 10: New York Islanders ML
+# Covers Top 10 82%, 33 picks
+
+Pittsburgh Penguins @ Chicago Blackhawks
+PRED: Pittsburgh Penguins 3.63 / Chicago Blackhawks 3.07
+TREND Pittsburgh Penguins: Penguins are 5-0 in their last 5 games when opponent allowed 5+ last game.
+TREND Pittsburgh Penguins: Under is 4-0 in Penguins last 4 games as favorite.
+TREND Pittsburgh Penguins: Penguins are 4-0 in their last 4 games on 2 days rest.
+TREND Pittsburgh Penguins: Over is 7-2 in Penguins last 9 games vs Central.
+TREND Chicago Blackhawks: Over is 8-0-1 in Blackhawks last 9 games vs Metropolitan.
+TREND Chicago Blackhawks: Under is 5-0-1 in Blackhawks last 6 games as favorite.
+TREND Chicago Blackhawks: Over is 5-0 in Blackhawks last 5 games on 2 days rest.
+TREND Chicago Blackhawks: Under is 3-0-1 in Blackhawks last 4 games as home favorite.
+XPICK Covers Top 10: Pittsburgh Penguins ML
+# Covers Top 10 78%, 32 picks
+XPICK Covers TML: Over 6.5
+# Covers TML 92%
+
+Minnesota Wild @ Winnipeg Jets
+PRED: Minnesota Wild 3.28 / Winnipeg Jets 3.10
+TREND Minnesota Wild: Wild are 4-0 in their last 4 games in 3rd game of 3-in-4.
+TREND Minnesota Wild: Over is 5-1-1 in Wild last 7 games on 0 days rest.
+TREND Minnesota Wild: Under is 4-1 in Wild last 5 games as favorite.
+TREND Minnesota Wild: Wild are 4-1 in their last 5 games as favorite.
+TREND Winnipeg Jets: Over is 4-1 in Jets last 5 games home.
+TREND Winnipeg Jets: Over is 4-1 in Jets last 5 games as home favorite.
+TREND Winnipeg Jets: Under is 6-2-1 in Jets last 9 games as underdog.
+TREND Winnipeg Jets: Over is 5-1-2 in Jets last 8 games on 3+ days rest.
+XPICK Covers TML: Under 6.5
+# Covers TML 83%
+
+Colorado Avalanche @ Dallas Stars
+PRED: Colorado Avalanche 3.05 / Dallas Stars 3.04
+TREND Colorado Avalanche: Over is 5-0 in Avalanche last 5 games vs Western Conf.
+TREND Colorado Avalanche: Over is 6-0 in Avalanche last 6 games when opponent allowed 2 or fewer last game.
+TREND Colorado Avalanche: Over is 4-0 in Avalanche last 4 games vs losing-record teams.
+TREND Colorado Avalanche: Over is 10-1 in Avalanche last 11 games overall.
+TREND Dallas Stars: Under is 4-0 in Stars last 4 games overall.
+TREND Dallas Stars: Under is 4-0 in Stars last 4 games as favorite.
+TREND Dallas Stars: Over is 6-2-1 in Stars last 9 games vs winning-record teams.
+TREND Dallas Stars: Stars are 0-5 in their last 5 games vs Central.
+
+Vegas Golden Knights @ Nashville Predators
+PRED: Vegas Golden Knights 3.30 / Nashville Predators 3.12
+TREND Vegas Golden Knights: Golden Knights are 8-0 in their last 8 games vs Central.
+TREND Vegas Golden Knights: Over is 5-0-1 in Golden Knights last 6 games vs Central.
+TREND Vegas Golden Knights: Over is 3-0-2 in Golden Knights last 5 games as road underdog.
+TREND Vegas Golden Knights: Golden Knights are 5-0 in their last 5 games as road favorite.
+TREND Nashville Predators: Over is 8-1-1 in Predators last 10 games on 2 days rest.
+TREND Nashville Predators: Under is 7-1 in Predators last 8 games vs Western Conf.
+TREND Nashville Predators: Under is 5-1-1 in Predators last 7 games home.
+TREND Nashville Predators: Under is 5-1 in Predators last 6 games as home underdog.
+
+Toronto Maple Leafs @ Utah Mammoth
+PRED: Toronto Maple Leafs 3.02 / Utah Mammoth 3.75
+TREND Toronto Maple Leafs: Under is 3-0-1 in Maple Leafs last 4 games after a win.
+TREND Toronto Maple Leafs: Under is 3-0-1 in Maple Leafs last 4 games after scoring 5+ goals.
+TREND Toronto Maple Leafs: Under is 8-1-1 in Maple Leafs last 10 games on 2 days rest.
+TREND Toronto Maple Leafs: Over is 8-1-3 in Maple Leafs last 12 games vs Central.
+TREND Utah Mammoth: Over is 5-0-1 in Mammoth last 6 games as underdog.
+TREND Utah Mammoth: Over is 2-0-2 in Mammoth last 4 games as home underdog.
+TREND Utah Mammoth: Over is 3-0-1 in Mammoth last 4 games on 2 days rest.
+TREND Utah Mammoth: Over is 4-1-1 in Mammoth last 6 games home.
+XPICK Covers Top 10: Utah Mammoth ML
+# Covers Top 10 82%, 28 picks
+
+Calgary Flames @ Anaheim Ducks
+PRED: Calgary Flames 2.71 / Anaheim Ducks 3.68
+TREND Calgary Flames: Over is 4-0-1 in Flames last 5 games as favorite.
+TREND Calgary Flames: Under is 7-2 in Flames last 9 games overall.
+TREND Calgary Flames: Under is 7-2 in Flames last 9 games vs Western Conf.
+TREND Calgary Flames: Over is 4-1 in Flames last 5 games as road favorite.
+TREND Anaheim Ducks: Over is 3-0-1 in Ducks last 4 games home vs road win% <.400.
+TREND Anaheim Ducks: Under is 4-1-1 in Ducks last 6 games overall.
+TREND Anaheim Ducks: Under is 5-1-1 in Ducks last 7 games after a win.
+TREND Anaheim Ducks: Ducks are 4-1 in their last 5 games overall.
+XPICK Covers consensus: Anaheim Ducks ML
+# Covers consensus 71%, 158 picks
+XPICK Covers TML: Anaheim Ducks ML
+# Covers TML 100%, 9 picks
+XPICK Covers Top 10: Anaheim Ducks ML
+# Covers Top 10 85%, 27 picks
+
+Edmonton Oilers @ Los Angeles Kings
+PRED: Edmonton Oilers 3.30 / Los Angeles Kings 3.02
+TREND Edmonton Oilers: Under is 5-0-1 in Oilers last 6 games when opponent allowed 2 or fewer last game.
+TREND Edmonton Oilers: Oilers are 4-0 in their last 4 games overall.
+TREND Edmonton Oilers: Oilers are 4-0 in their last 4 games vs Pacific.
+TREND Edmonton Oilers: Oilers are 4-0 in their last 4 games vs Western Conf.
+TREND Los Angeles Kings: Kings are 4-0 in their last 4 games as home favorite.
+TREND Los Angeles Kings: Over is 3-0-1 in Kings last 4 games home vs road win% >.600.
+TREND Los Angeles Kings: Over is 4-1 in Kings last 5 games vs Western Conf.
+TREND Los Angeles Kings: Kings are 0-4 in their last 4 games vs Pacific.
+XPICK Covers TML: Edmonton Oilers ML
+# Covers TML 85%, 13 picks
+XPICK Covers Top 10: Edmonton Oilers ML
+# Covers Top 10 80%, 30 picks
+XPICK Covers TML: Over 6.5
+# Covers TML 73%
+
+Boston Bruins @ San Jose Sharks
+PRED: Boston Bruins 3.29 / San Jose Sharks 3.17
+TREND Boston Bruins: Bruins are 5-1 in their last 6 games vs Western Conf.
+TREND Boston Bruins: Over is 4-1 in Bruins last 5 games vs Western Conf.
+TREND Boston Bruins: Bruins are 4-1 in their last 5 games vs Pacific.
+TREND Boston Bruins: Under is 4-1-1 in Bruins last 6 games as underdog.
+TREND San Jose Sharks: Under is 4-0 in Sharks last 4 games vs teams with win% above.600.
+TREND San Jose Sharks: Under is 4-1 in Sharks last 5 games when opponent allowed 2 or fewer last game.
+TREND San Jose Sharks: Over is 3-1-1 in Sharks last 5 games home.
+TREND San Jose Sharks: Over is 11-3-1 in Sharks last 15 games as home underdog.
+XPICK Covers TML: San Jose Sharks ML
+# Covers TML 88%, 8 picks
+XPICK Covers Top 10: San Jose Sharks ML
+# Covers Top 10 71%, 24 picks
+
+NCAAF
+
+Delaware @ Middle Tennessee State
+PRED: Delaware 24.30 / Middle Tennessee State 23.58
+TREND Delaware: Delaware are 4-0 ATS in their last 4 games after allowing 40+ points.
+TREND Delaware: Under is 5-1 in Delaware last 6 games overall.
+TREND Delaware: Delaware are 5-1 ATS in their last 6 games after scoring under 20.
+TREND Delaware: Over is 4-1 in Delaware last 5 games after allowing 200+ rushing yards.
+TREND Middle Tennessee State: Middle Tennessee are 4-0 ATS in their last 4 games on turf.
+TREND Middle Tennessee State: Under is 4-0 in Middle Tennessee last 4 games after allowing 450+ total yards.
+TREND Middle Tennessee State: Under is 5-1 in Middle Tennessee last 6 games home.
+TREND Middle Tennessee State: Middle Tennessee are 5-1 ATS in their last 6 games home.
+
+Florida International @ Jacksonville State
+PRED: Florida International 19.65 / Jacksonville State 23.09
+TREND Florida International: Over is 8-0 in FIU last 8 games as road favorite.
+TREND Florida International: Over is 5-0 in FIU last 5 games after passing for under 170 yards.
+TREND Florida International: Over is 5-0 in FIU last 5 games after allowing under 170 passing yards.
+TREND Florida International: FIU are 4-0 ATS in their last 4 games conference games.
+TREND Jacksonville State: Jacksonville State are 5-0 ATS in their last 5 games as favorite.
+TREND Jacksonville State: Jacksonville State are 4-0 ATS in their last 4 games home vs teams with winning road record.
+TREND Jacksonville State: Jacksonville State are 8-1 ATS vs winning-record teams.
+TREND Jacksonville State: Jacksonville State are 6-1 ATS in their last 7 games after gaining 450+ total yards.
+
+Kennesaw State @ Missouri State
+PRED: Kennesaw State 26.52 / Missouri State 24.20
+TREND Kennesaw State: Kennesaw State are 5-0 ATS in their last 5 games after passing for 280+ yards.
+TREND Kennesaw State: Under is 4-0 in Kennesaw State last 4 games overall.
+TREND Kennesaw State: Over is 4-0 in Kennesaw State last 4 games after passing for 280+ yards.
+TREND Kennesaw State: Kennesaw State are 4-0 ATS in their last 4 games after allowing 280+ passing yards.
+TREND Missouri State: Over is 4-0 in Missouri State last 4 games home.
+TREND Missouri State: Over is 4-0 in Missouri State last 4 games home vs teams with losing road record.
+TREND Missouri State: Missouri State are 6-1 ATS in their last 7 games after rushing for under 100 yards.
+TREND Missouri State: Missouri State are 7-1 ATS vs losing-record teams.
+
+MLB
+
+Cleveland Guardians @ Tampa Bay Rays
+XPICK Covers Top 10: Tampa Bay Rays ML
+# Covers Top 10 100%, 2 picks

@@ -235,8 +235,9 @@ function intakeBoardToGrammar(text,sport){
      PRED: AWAY 20 / HOME 27        (Proj: accepted too — it used to be skipped)
      CONS: AWAY 38% / HOME 62%      (optionally  CONS$: for money %)
      CONSTOT: O 55% / U 45% | 47.5
-     TREND: any sentence            (TREND TEAM: sentence also works) */
-const INTAKE_EXTRA=/^(PRED|PROJ|CONS\$?|CONSTOT|TREND)\b/i;
+     TREND: any sentence            (TREND TEAM: sentence also works)
+     XPICK SOURCE: TEAM ML | TEAM +3.5 | Over 6.5   (v2.28 · an outside pick, graded by source) */
+const INTAKE_EXTRA=/^(PRED|PROJ|CONS\$?|CONSTOT|TREND|XPICK)\b/i;
 function intakeParseGrammar(text,fallbackSport){
   const res={};const bucket=sp=>res[sp]||(res[sp]={picks:[],trends:[],consensus:[],preds:[],raw:[],xpicks:[],unread:[],props:[]});
   const sections=[];let cur=null;
@@ -306,6 +307,11 @@ function intakeParseGrammar(text,fallbackSport){
         let ap=+m[3],hp=+m[5];const t1=intakeAbbr(sport,m[2]);if(t1&&t1===H){[ap,hp]=[hp,ap];}
         B.consensus.push({src:'upload',game,away:A,home:H,market:'moneyline',metric:m[1]?'money':'bets',
           awayPct:ap,homePct:hp,overPct:null,underPct:null,line:null});return;}
+      if((m=l.match(/^XPICK(?:\s+([^:]{2,40}))?:\s*(.+)$/i))){const t=m[2].trim();let pick=null,q;
+        if((q=t.match(/^(over|under)\s+([\d.]+)$/i)))pick=(q[1][0].toUpperCase()+q[1].slice(1).toLowerCase())+' '+q[2];
+        else if((q=t.match(/^(.+?)\s+ML$/i))){const ab=intakeAbbr(sport,q[1]);if(ab)pick=ab+' ML';}
+        else if((q=t.match(/^(.+?)\s+([+\-]\d+(?:\.\d+)?)$/))){const ab=intakeAbbr(sport,q[1]);if(ab)pick=ab+' '+q[2];}
+        if(pick)(B.xpicks=B.xpicks||[]).push({game,away:A,home:H,pick,text:l,src:(m[1]||'upload').trim()});else(B.unread=B.unread||[]).push(l);return;}
       if((m=l.match(/^TREND(?:\s+([^:]{2,30}))?:\s*(.{6,})$/i))){
         const tm=m[1]?intakeAbbr(sport,m[1]):null;
         B.trends.push({game,away:A,home:H,team:tm||null,text:m[2].trim(),src:'upload'});return;}
@@ -2434,7 +2440,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261013c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261013d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /

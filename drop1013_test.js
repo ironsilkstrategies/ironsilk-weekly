@@ -11,5 +11,10 @@ setTimeout(()=>{try{
   T('"Middle Tennessee St" too',w.eval(`ncaafAbbrFor('Middle Tennessee St')`)==='MTSU');
   T('ESPN name still resolves',w.eval(`ncaafAbbrFor('Middle Tennessee')`)==='MTSU');
   T('Florida International → FIU, Jacksonville State → JXST',w.eval(`ncaafAbbrFor('Florida International')`)==='FIU'&&w.eval(`ncaafAbbrFor('Jacksonville State')`)==='JXST');
+  /* v2.29 · XPICK: an outside pick in the drop grammar, kept by source */
+  const G=w.eval(`intakeParseGrammar('NCAAF\\nDelaware @ Middle Tennessee State\\nXPICK Covers TML: Middle Tennessee State ML\\nXPICK Covers Top 10: Delaware -1.5\\nXPICK Covers TML: Over 47.5\\nXPICK Covers TML: Nobody Real ML','ncaaf')`).ncaaf;
+  const xp=(G.xpicks||[]).map(x=>x.pick+'|'+x.src);
+  T('XPICK lines become outside picks graded by source',xp.join(',')==='MTSU ML|Covers TML,DEL -1.5|Covers Top 10,Over 47.5|Covers TML',JSON.stringify(xp));
+  T('an XPICK it can\'t resolve is reported, never guessed',(G.unread||[]).some(l=>/Nobody Real/.test(l))&&G.picks.length===0);
 }catch(e){T('harness',false,e.stack);}
 console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(0);},2500);
