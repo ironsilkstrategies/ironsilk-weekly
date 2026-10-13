@@ -2201,7 +2201,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -20281,14 +20281,14 @@ function whyHtml(x,open){const W=pickWhy(x);const id='w'+Math.abs(simHash(x.sp+x
 const BKDAY_KEY='d4.bankerday',BKDAYS_KEY='d4.bankerdays';
 function bkDayCands(V,d){const out={};
   CHAR_ORDER.forEach(v=>{const calls=V.filter(x=>String(x.date).slice(0,10)===d&&x.voice===v&&x.price!=null&&['ml','spread','total'].includes(x.market));
-    out[v]=calls.filter(c=>bkPriceOk(c.price)).map(c=>{const s=cparLegScore(V,c);return{v,sp:c.sp,game:c.game,m:c.market,sd:c.side,line:c.line,pick:charPickText(c),price:c.price,p:s.p,score:s.score,hr:s.hr,why:s.why,weak:s.weak};})
+    out[v]=calls.filter(c=>bkPriceOk(c.price)).map(c=>{const s=cparLegScore(V,c);return{v,sp:c.sp,game:c.game,gd:String(c.date||'').slice(0,10)||null,m:c.market,sd:c.side,line:c.line,pick:charPickText(c),price:c.price,p:s.p,score:s.score,hr:s.hr,why:s.why,weak:s.weak};})
       .filter(x=>!x.weak&&x.p>0).sort((a,b)=>b.score-a.score);});
   return out;}
 function bkBudget(){const B=brAmount()||100;let lim=null;try{lim=typeof dailyLimit==='function'?+dailyLimit():null;}catch(e){}
   const cap=lim>0?Math.min(lim,B*0.10):B*0.10;return{B,cap:+cap.toFixed(2),fromLimit:lim>0};}
 function bkStake(f,B){return f>0?Math.max(1,Math.round(B*f*2)/2):0;}
 function bkDayBuild(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const C=bkDayCands(V,d);const L=bkLedger();const{B,cap,fromLimit}=bkBudget();
-  const used=new Set();const legOut=x=>({sp:x.sp,game:x.game,m:x.m,sd:x.sd,line:x.line,pick:x.pick,price:x.price,p:+(+x.p).toFixed(4),score:+(+x.score).toFixed(4),v:x.v,by:x.by||[x.v]});
+  const used=new Set();const legOut=x=>({sp:x.sp,game:x.game,gd:x.gd||null,m:x.m,sd:x.sd,line:x.line,pick:x.pick,price:x.price,p:+(+x.p).toFixed(4),score:+(+x.score).toFixed(4),v:x.v,by:x.by||[x.v]});
   /* 1 · the Banker's own: pool every character's call by game+market+side */
   const pool={};Object.values(C).flat().forEach(x=>{if(META_VOICES.has(x.v))return;const k=x.sp+'|'+x.game+'|'+x.m+'|'+x.sd;const o=pool[k]||(pool[k]={...x,by:[],sc:[]});o.by.push(x.v);o.sc.push(x.score*Math.min(1.15,Math.max(0.85,L.mult[x.v]||1)));});
   const ranked=Object.values(pool).map(o=>{const indep=o.by.filter(v=>INDEP_VOICES.has(v)).length;const sc=o.sc.reduce((a,b)=>a+b,0)/o.sc.length+0.01*Math.min(4,o.by.length-1)+0.01*Math.min(2,indep);return{...o,score:sc};})
@@ -20325,7 +20325,7 @@ function bkDayState(){const d=today();let S=get(BKDAY_KEY,{})||{};
   if(S.preview&&Date.now()-S.preview.ts<60e3)return S;
   S.preview=bkDayBuild();set(BKDAY_KEY,S);return S;}
 function bkDayGrade(){let n=0;const one=S=>{const legs=[...((S.own||{}).legs||[]),...(S.slate||[]).flatMap(t=>t.legs),...((S.roll||{}).legs||[])];
-    legs.forEach(l=>{if(l.hit!=null||l.push)return;let r=null;try{r=gradeLeg({sport:l.sp,game:l.game,pick:l.pick,gameDate:S.d},S.d);}catch(e){}
+    legs.forEach(l=>{if(l.hit!=null||l.push)return;let r=null;try{r=gradeLeg({sport:l.sp,game:l.game,pick:l.pick,gameDate:l.gd||S.d,gdApprox:l.gd?0:1},l.gd||S.d);   /* v2.24: a football desk holds games later in the week (Sunday's desk had Monday night) */}catch(e){}
       if(!r||r.live)return;if(r.push){l.push=true;n++;}else if(r.hit===true||r.hit===false){l.hit=r.hit;n++;}});};
   const S=get(BKDAY_KEY,{})||{};if(S.locked){one(S);if(n)set(BKDAY_KEY,S);}
   const H=get(BKDAYS_KEY,{})||{};let hn=n;Object.values(H).forEach(one);if(n>hn)set(BKDAYS_KEY,H);return n;}
@@ -20345,9 +20345,30 @@ function bkLegRow(l,opts){opts=opts||{};const mark=l.push?'↔ ':l.hit===true?'�
     ${opts.why!==false?whyHtml({...l,date:opts.d}):''}</div>`;}
 function bkTicketHtml(title,t,sub,d){if(!t)return'';const r=tixDone(t.legs);
   return`<div class="tkt" style="border-left:3px solid ${r===true?'var(--win)':r===false?'var(--rust)':'#c9a227'}"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h3 style="margin:0">${title}</h3>
-    <div style="text-align:right"><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">${decimalToAmerican(t.dec)}</div>${t.stake?`<div class="mono" style="font-size:10px">stake <b>$${t.stake.toFixed(2)}</b> → wins $${t.toWin.toFixed(2)}</div>`:''}</div></div>
+    <div style="text-align:right"><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">${decimalToAmerican(t.dec)}</div>${t.dec?`<div class="mono" style="font-size:10px">1u → <b>+${(t.dec-1).toFixed(2)}u</b></div>`:''}</div></div>
     <div class="mono" style="font-size:9.5px;color:var(--mute);margin:2px 0 4px">${t.legs.length} legs · ${(t.p*100).toFixed(1)}% to cash · EV ${t.p*t.dec-1>=0?'+':''}${((t.p*t.dec-1)*100).toFixed(1)}% at the leg chances${sub?' · '+sub:''}${r===true?' · <b style="color:var(--win)">CASHED</b>':r===false?' · <b style="color:var(--rust)">LOST</b>':''}</div>
     ${t.legs.map(l=>bkLegRow(l,{d})).join('')}</div>`;}
+/* v2.24 · 🏆 the Banker cashed — a share card in UNITS (never dollars), with the honest record under it */
+function bkUnits(t){const live=(t.legs||[]).filter(l=>!l.push);return live.reduce((a,l)=>a*americanToDecimal(l.price),1)-1;}
+function bkRecordSince(){const H={...(get(BKDAYS_KEY,{})||{})};const S=get(BKDAY_KEY,{})||{};if(S.locked)H[S.d]=S;const ds=Object.keys(H).filter(d=>H[d]&&H[d].own).sort();return ds[0]||null;}
+function bkShareText(t,d){const R=bkDayRecord().own;const u=bkUnits(t);const since=bkRecordSince();const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
+  return`🏦 THE BANKER CASHED ✅\n${decimalToAmerican(u+1)} · ${t.legs.filter(l=>!l.push).length} for ${t.legs.filter(l=>!l.push).length}\n\n${t.legs.map(l=>`${l.push?'↔':'✅'} ${em[l.sp]||''} ${l.pick} (${l.price>0?'+':''}${l.price})`).join('\n')}\n\n+${u.toFixed(2)}u on a 1-unit play\nBanker's parlays: ${R.w}-${R.l} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u${since?' since '+fmtDate(new Date(since+'T12:00:00')):''}\n\nTheDesk — Picks · Analysis · Edge`;}
+function bkShareHtml(t,d){if(!t||tixDone(t.legs)!==true)return'';const R=bkDayRecord().own;const u=bkUnits(t);const since=bkRecordSince();const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
+  const n=t.legs.filter(l=>!l.push).length;
+  const rows=t.legs.map(l=>`<div class="b3-row" style="padding:8px 0"><div class="b3-n" style="font-size:18px">${l.push?'↔':'✅'}</div><div style="flex:1;min-width:0"><div class="b3-pick" style="font-size:16px">${txtEsc(l.pick)} <span class="b3-price">${l.price>0?'+':''}${l.price}</span></div>
+      <div class="b3-meta">${em[l.sp]||''} ${(l.sp||'').toUpperCase()} · ${txtEsc(l.game)}</div></div></div>`).join('');
+  return`<div class="mktlab" style="margin-top:10px">🏆 Share the hit</div><div class="recapwrap" id="bkShareCard"><div class="recapcard">
+    <style>.b3-row{display:flex;gap:10px;align-items:center;border-bottom:1px solid rgba(255,255,255,.08)}.b3-n{width:24px;text-align:center}.b3-pick{font-weight:900}.b3-price{font-family:'IBM Plex Mono';font-size:12px;color:var(--gold)}.b3-meta{font-family:'IBM Plex Mono';font-size:10px;color:var(--mute);margin-top:2px}</style>
+    <div class="rc-head"><div><div class="rc-brand">THE<span>DESK</span></div><div class="rc-tag">🏦 The Banker's parlay</div></div><div class="rc-date">${fmtDate(new Date(d+'T12:00:00'))}</div></div>
+    <div style="text-align:center;margin:-6px 0 12px"><div style="font-family:'Archivo';font-weight:900;font-size:15px;letter-spacing:.14em;color:var(--win)">✅ CASHED · ${n} FOR ${n}</div>
+      <div style="font-family:'Archivo';font-weight:900;font-size:46px;line-height:1.05;color:var(--gold)">${decimalToAmerican(u+1)}</div>
+      <div style="font-family:'IBM Plex Mono';font-size:14px;color:var(--chalk);margin-top:2px"><b style="color:var(--win)">+${u.toFixed(2)} units</b> on a 1-unit play</div></div>
+    ${rows}
+    <div class="rc-foot"><div class="cal">Banker's parlays: <b>${R.w}-${R.l}</b> · <b style="color:${R.u>=0?'var(--win)':'var(--rust)'}">${R.u>=0?'+':''}${R.u.toFixed(1)}u</b>${since?' since '+fmtDate(new Date(since+'T12:00:00')):''} · locked before the games, graded at the finals</div>
+      <div class="cta">Follow <span>${txtEsc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>
+    <div class="bar"><button class="primary" id="bkShareBtn" onclick="exportImage('bkShareCard','bkShareBtn','thedesk-banker-${d}','The Banker cashed ${decimalToAmerican(u+1)}')">📸 Share as image</button>
+      <button onclick="copyText(bkShareText(BK_SHARE_T,'${d}'),'Caption copied — paste it with the image.')">📋 Copy caption</button></div>`;}
+let BK_SHARE_T=null;
 function renderBankerTab(){const el=document.getElementById('bankerBody');if(!el)return;
   try{bkDayGrade();}catch(e){}
   let S;try{S=bkDayState();}catch(e){el.innerHTML='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';return;}
@@ -20361,7 +20382,8 @@ function renderBankerTab(){const el=document.getElementById('bankerBody');if(!el
     <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:var(--gold)">$${D.spent.toFixed(2)}</div><div class="m">on the desk</div></div>
     <div><div style="font-family:'Archivo';font-weight:900;font-size:18px;color:${R.money>=0?'var(--win)':'var(--rust)'}">${R.money>=0?'+$':'-$'}${Math.abs(R.money).toFixed(2)}</div><div class="m">desk P/L</div></div></div>
     <div class="mono" style="font-size:9.5px;color:var(--mute);text-align:center;margin-top:6px">Banker's own ${u(R.own)} · slate ${u(R.slate)} · roll call cut ${u(R.cut)} · full roll call ${u(R.roll)}</div></div>`;
-  const own=D.own?bkTicketHtml('🏦 The Banker\'s parlay',D.own,txtEsc(D.own.why),D.d):`<div class="tkt"><h3>🏦 The Banker's parlay</h3><div class="sub">Needs 2+ games where at least two characters agree. Open more boards.</div></div>`;
+  BK_SHARE_T=D.own||null;
+  const own=D.own?bkTicketHtml('🏦 The Banker\'s parlay',D.own,txtEsc(D.own.why),D.d)+(()=>{try{return bkShareHtml(D.own,D.d);}catch(e){return'';}})():`<div class="tkt"><h3>🏦 The Banker's parlay</h3><div class="sub">Needs 2+ games where at least two characters agree. Open more boards.</div></div>`;
   const slate=(D.slate||[]).map(t=>bkTicketHtml(`${(CHARS[t.v]||{}).chip||''} ${txtEsc(charName(t.v))}'s parlay`,t,'no game repeats anything above',D.d)).join('');
   const rc=D.roll;const cutSet=new Set(rc.cut||[]);
   const roll=rc&&rc.legs.length?`<div class="tkt" style="border-left:3px solid #ff6fae"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="margin:0">📣 The Roll Call</h3>
