@@ -1,0 +1,156 @@
+SOURCE: sportsbetting.ag
+# Tue Oct 13, 2026 — book lines: sportsbetting.ag (1:43–1:44 AM CT) · odds only, no predictions/trends
+
+NHL
+
+New Jersey Devils @ Detroit Red Wings
+ML: New Jersey Devils -104 / Detroit Red Wings -110
+PL: New Jersey Devils +1.5 (-260) / Detroit Red Wings -1.5 (+215)
+OU: o6 (-108) / u6 (-108)
+P1ML: New Jersey Devils -109 / Detroit Red Wings -111
+P1PL: New Jersey Devils +0.5 (-205) / Detroit Red Wings -0.5 (+177)
+P1OU: o1.5 (-125) / u1.5 (+105)
+
+Florida Panthers @ Columbus Blue Jackets
+ML: Florida Panthers +110 / Columbus Blue Jackets -125
+PL: Florida Panthers +1.5 (-245) / Columbus Blue Jackets -1.5 (+203)
+OU: o6 (-108) / u6 (-108)
+P1ML: Florida Panthers -101 / Columbus Blue Jackets -119
+P1PL: Florida Panthers +0.5 (-195) / Columbus Blue Jackets -0.5 (+170)
+P1OU: o1.5 (-124) / u1.5 (+104)
+
+Buffalo Sabres @ Montreal Canadiens
+ML: Buffalo Sabres +136 / Montreal Canadiens -155
+PL: Buffalo Sabres +1.5 (-192) / Montreal Canadiens -1.5 (+167)
+OU: o6.5 (-103) / u6.5 (-113)
+P1ML: Buffalo Sabres +116 / Montreal Canadiens -136
+P1PL: Buffalo Sabres +0.5 (-170) / Montreal Canadiens -0.5 (+149)
+P1OU: o1.5 (-133) / u1.5 (+113)
+
+Washington Capitals @ Carolina Hurricanes
+ML: Washington Capitals +136 / Carolina Hurricanes -155
+PL: Washington Capitals +1.5 (-185) / Carolina Hurricanes -1.5 (+161)
+OU: o6.5 (+109) / u6.5 (-125)
+P1ML: Washington Capitals +116 / Carolina Hurricanes -136
+P1PL: Washington Capitals +0.5 (-171) / Carolina Hurricanes -0.5 (+150)
+P1OU: o1.5 (-131) / u1.5 (+111)
+
+Seattle Kraken @ Philadelphia Flyers
+ML: Seattle Kraken +101 / Philadelphia Flyers -115
+PL: Seattle Kraken +1.5 (-257) / Philadelphia Flyers -1.5 (+212)
+OU: o6 (-106) / u6 (-110)
+P1ML: Seattle Kraken -102 / Philadelphia Flyers -118
+P1PL: Seattle Kraken +0.5 (-200) / Philadelphia Flyers -0.5 (+174)
+P1OU: o1.5 (-122) / u1.5 (+102)
+
+Tampa Bay Lightning @ New York Rangers
+ML: Tampa Bay Lightning -159 / New York Rangers +140
+PL: Tampa Bay Lightning -1.5 (+161) / New York Rangers +1.5 (-185)
+OU: o6 (+100) / u6 (-116)
+P1ML: Tampa Bay Lightning -140 / New York Rangers +120
+P1PL: Tampa Bay Lightning -0.5 (+149) / New York Rangers +0.5 (-170)
+P1OU: o1.5 (-124) / u1.5 (+104)
+
+St. Louis Blues @ Ottawa Senators
+ML: St. Louis Blues -101 / Ottawa Senators -113
+PL: St. Louis Blues +1.5 (-260) / Ottawa Senators -1.5 (+215)
+OU: o5.5 (-121) / u5.5 (+105)
+P1ML: St. Louis Blues -106 / Ottawa Senators -114
+P1PL: St. Louis Blues +0.5 (-205) / Ottawa Senators -0.5 (+177)
+P1OU: o1.5 (-117) / u1.5 (-103)
+
+Vancouver Canucks @ New York Islanders
+ML: Vancouver Canucks +187 / New York Islanders -215
+PL: Vancouver Canucks +1.5 (-140) / New York Islanders -1.5 (+120)
+OU: o6 (-110) / u6 (-106)
+P1ML: Vancouver Canucks +145 / New York Islanders -165
+P1PL: Vancouver Canucks +0.5 (-150) / New York Islanders -0.5 (+130)
+P1OU: o1.5 (-127) / u1.5 (+107)
+
+Pittsburgh Penguins @ Chicago Blackhawks
+ML: Pittsburgh Penguins -139 / Chicago Blackhawks +123
+PL: Pittsburgh Penguins -1.5 (+183) / Chicago Blackhawks +1.5 (-215)
+OU: o6.5 (-110) / u6.5 (-106)
+P1ML: Pittsburgh Penguins -129 / Chicago Blackhawks +109
+P1PL: Pittsburgh Penguins -0.5 (+157) / Chicago Blackhawks +0.5 (-180)
+P1OU: o1.5 (-133) / u1.5 (+113)
+
+Minnesota Wild @ Winnipeg Jets
+ML: Minnesota Wild -103 / Winnipeg Jets -111
+PL: Minnesota Wild +1.5 (-265) / Winnipeg Jets -1.5 (+219)
+OU: o6.5 (+113) / u6.5 (-130)
+P1ML: Minnesota Wild -109 / Winnipeg Jets -111
+P1PL: Minnesota Wild +0.5 (-205) / Winnipeg Jets -0.5 (+177)
+P1OU: o1.5 (-130) / u1.5 (+110)
+
+Colorado Avalanche @ Dallas Stars
+ML: Colorado Avalanche -114 / Dallas Stars +100
+PL: Colorado Avalanche -1.5 (+215) / Dallas Stars +1.5 (-260)
+OU: o6 (-109) / u6 (-107)
+P1ML: Colorado Avalanche -110 / Dallas Stars -110
+P1PL: Colorado Avalanche -0.5 (+177) / Dallas Stars +0.5 (-205)
+P1OU: o1.5 (-121) / u1.5 (+101)
+
+Vegas Golden Knights @ Nashville Predators
+ML: Vegas Golden Knights -125 / Nashville Predators +110
+PL: Vegas Golden Knights -1.5 (+192) / Nashville Predators +1.5 (-230)
+OU: o6.5 (+113) / u6.5 (-130)
+P1ML: Vegas Golden Knights -120 / Nashville Predators +100
+P1PL: Vegas Golden Knights -0.5 (+168) / Nashville Predators +0.5 (-193)
+P1OU: o1.5 (-128) / u1.5 (+108)
+
+Toronto Maple Leafs @ Utah Mammoth
+ML: Toronto Maple Leafs +130 / Utah Mammoth -148
+PL: Toronto Maple Leafs +1.5 (-180) / Utah Mammoth -1.5 (+157)
+OU: o6.5 (-108) / u6.5 (-108)
+P1ML: Toronto Maple Leafs +115 / Utah Mammoth -135
+P1PL: Toronto Maple Leafs +0.5 (-170) / Utah Mammoth -0.5 (+149)
+P1OU: o1.5 (-137) / u1.5 (+117)
+
+Calgary Flames @ Anaheim Ducks
+ML: Calgary Flames +171 / Anaheim Ducks -195
+PL: Calgary Flames +1.5 (-145) / Anaheim Ducks -1.5 (+125)
+OU: o6 (-120) / u6 (+104)
+P1ML: Calgary Flames +138 / Anaheim Ducks -158
+P1PL: Calgary Flames +0.5 (-155) / Anaheim Ducks -0.5 (+135)
+P1OU: o1.5 (-129) / u1.5 (+109)
+
+Edmonton Oilers @ Los Angeles Kings
+ML: Edmonton Oilers -125 / Los Angeles Kings +110
+PL: Edmonton Oilers -1.5 (+195) / Los Angeles Kings +1.5 (-235)
+OU: o6 (-106) / u6 (-106)
+P1ML: Edmonton Oilers -119 / Los Angeles Kings -101
+P1PL: Edmonton Oilers -0.5 (+170) / Los Angeles Kings +0.5 (-195)
+P1OU: o1.5 (-127) / u1.5 (+107)
+
+Boston Bruins @ San Jose Sharks
+ML: Boston Bruins -105 / San Jose Sharks -109
+PL: Boston Bruins +1.5 (-265) / San Jose Sharks -1.5 (+219)
+OU: o6 (-110) / u6 (-106)
+P1ML: Boston Bruins -108 / San Jose Sharks -112
+P1PL: Boston Bruins +0.5 (-205) / San Jose Sharks -0.5 (+177)
+P1OU: o1.5 (-127) / u1.5 (+107)
+
+NCAAF
+
+Delaware @ Middle Tennessee State
+ML: Delaware -125 / Middle Tennessee State +105
+SPREAD: Delaware -1 (-115) / Middle Tennessee State +1 (-105)
+OU: o48 (-110) / u48 (-110)
+H1SPREAD: Delaware -0.5 (+100) / Middle Tennessee State +0.5 (-120)
+H1OU: o23.5 (-120) / u23.5 (+100)
+
+Florida International @ Jacksonville State
+ML: Florida International +118 / Jacksonville State -138
+SPREAD: Florida International +3 (-115) / Jacksonville State -3 (-105)
+OU: o43.5 (-110) / u43.5 (-110)
+H1SPREAD: Florida International +1.5 (-110) / Jacksonville State -1.5 (-110)
+H1OU: o21.5 (-120) / u21.5 (+100)
+
+MLB
+
+# probables: P. Messick (L) vs F. Peralta (R)
+Cleveland Guardians @ Tampa Bay Rays
+ML: Cleveland Guardians +122 / Tampa Bay Rays -134
+RL: Cleveland Guardians +1.5 (-190) / Tampa Bay Rays -1.5 (+165)
+OU: o7 (+102) / u7 (-122)

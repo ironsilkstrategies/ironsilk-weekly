@@ -1053,6 +1053,8 @@ function ncaafAbbrFor(raw){
     'TEXASAM':'TEXASAM',
     'GEORGIA SOUTHERN':'GEORGIASOUTHERN',
     'CENTRALFLORIDA':'UCF',        // sportsbook "Central Florida" → ESPN "UCF Knights"
+    'MIDDLETENNESSEESTATE':'MIDDLETENNESSEE', // sportsbetting.ag "Middle Tennessee State" → ESPN "Middle Tennessee Blue Raiders"
+    'MIDDLETENNESSEEST':'MIDDLETENNESSEE',
   };
   const aliasKey=NCAAF_SB_ALIASES[k];
   if(aliasKey){
