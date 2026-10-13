@@ -10,7 +10,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.08.1';
+const VERSION = 'worker v2.30';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -109,6 +109,19 @@ export function recapText(p, st) { const R = p.recapPlan || {}; const rec = keys
   const pend = (p.legs || []).filter(l => !st[l.k]).length; if (pend) out.push(`<i>${pend} pick${pend > 1 ? 's' : ''} still pending (postponed / player didn't play) — not counted.</i>`);
   out.push('<i>Every pick was locked and posted before kickoff.</i>'); return out.join('\n'); }
 
+/* ── v2.30 · a cashed Banker / character parlay gets its own post (identical tickets share one) ── */
+export function cashedParlays(p) { const R = p.recapPlan || {}, st = p.st || {}; const L = [];
+  if (R.banker) L.push({ who: '🏦 The Banker', keys: R.banker.keys || [] }); (R.chars || []).forEach(c => L.push({ who: '🎭 ' + c.name, keys: c.keys || [] }));
+  const G = {}; L.forEach(x => { if (!x.keys.length) return; const m = x.keys.map(k => st[k]); if (m.some(s => !s) || m.includes('L') || !m.includes('W')) return;
+    const sig = [...x.keys].sort().join('¦'); (G[sig] = G[sig] || { sig, keys: x.keys, who: [] }).who.push(x.who); });
+  return Object.values(G); }
+const toDec = pr => pr == null ? 1 + 100 / 110 : pr > 0 ? 1 + pr / 100 : 1 + 100 / Math.abs(pr);
+const toAmer = d => d >= 2 ? '+' + Math.round((d - 1) * 100) : '-' + Math.round(100 / (d - 1));
+export function cashText(p, g) { const st = p.st || {}; const by = {}; (p.legs || []).forEach(l => { by[l.k] = l; });
+  const D = g.keys.filter(k => st[k] === 'W').reduce((a, k) => a * toDec(by[k] && by[k].price), 1); const day = (p.recapPlan && p.recapPlan.day) || p.d;
+  return [`🎉 <b>CASHED</b> — <b>${g.who.map(esc).join(' + ')}</b>`, `<b>${g.keys.length}-leg parlay · ${toAmer(D)}</b> · 1 unit → <b>+${(D - 1).toFixed(2)}u</b>`, '',
+    ...g.keys.map(k => { const l = by[k] || {}; return `${MARK[st[k]] || ''}<b>${esc(l.label || k)}</b>${l.__fin ? ' · ' + esc(l.__fin) : ''}`; }), '', `<i>Locked and posted before the first game · ${esc(day)}</i>`].join('\n'); }
+
 /* ── one pass ── */
 export async function runOnce(state, today, deps) { const T = deps?.tg || tg; let acted = 0;
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.recap || p.worker === false || !p.chat) continue;
@@ -123,6 +136,11 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
     const legs = p.legs || []; const allDone = legs.every(l => p.st[l.k]); const games = legs.filter(l => !l.player);
     const ready = legs.length && (allDone || (p.d < today && games.every(l => p.st[l.k])) || p.d < shift(today, -1));
     if (ready) { const r = await T('sendMessage', { chat_id: p.chat, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.recap = true; acted++; } }
+    state.posts[d] = p; }
+  /* cashed tickets — also for days already recapped (the last 4), each announced once */
+  for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || !p.chat || d < shift(today, -4)) continue; p.sent = p.sent || {};
+    for (const g of cashedParlays(p)) { const key = 'cash|' + g.sig; if (p.sent[key]) continue;
+      const r = await T('sendMessage', { chat_id: p.chat, text: cashText(p, g), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.sent[key] = 'W'; acted++; } }
     state.posts[d] = p; }
   return acted; }
 

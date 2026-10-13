@@ -2440,7 +2440,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261013d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261013e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3034,7 +3034,8 @@ function publicFeed(){const S=best5State();try{best5Grade();}catch(e){}const log
   let parlay=null,prec=null;try{const B=get(BKDAY_KEY,{})||{};if(B.locked&&B.d===today()&&B.roll&&B.roll.cut.length){const cut=B.roll.legs.filter(l=>B.roll.cut.includes(l.sp+'|'+l.game));
       parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(B.roll.cutDec),p:B.roll.cutP,result:tixDone(cut),legs:cut.map(l=>{if(!(typeof cbStarted==='function'&&cbStarted(l.sp,l.game))&&l.hit==null&&!l.push)return{hidden:true,sp:l.sp};let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}return{sp:l.sp,game:l.game,gl:gameLabel(l.sp,l.game),pick:l.pick,price:l.price,p:l.p,by:charName(l.v),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
     const RR=bkDayRecord().cut;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
-  return{v:3,generated:Date.now(),brand:'TheDesk',price:get('d4.pricetext','')||'$19.99/mo · $9.99/wk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
+  let cashed=[];try{cashed=cashedList(14).filter(c=>c.units>=1).slice(0,12);}catch(e){}   /* the public showcase: tickets that paid even money or better (VIP Telegram gets every one) */
+  return{v:3,generated:Date.now(),cashed,brand:'TheDesk',price:get('d4.pricetext','')||'$19.99/mo · $9.99/wk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,history:hist};}
 /* the fingerprint: SHA-256 of the exact locked picks + a secret key. Published at lock (git timestamps it);
    the key is published once every game has started, so anyone can recompute it and see nothing changed. */
 function pickCommitText(top3,salt){return JSON.stringify((top3||[]).map(x=>[x.sp,x.game,x.pick,x.price]))+'|'+salt;}
@@ -3046,14 +3047,48 @@ async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual
   const F=publicFeed();try{if(F.today)F.today.commit=await pickCommit(S,F.today.allStarted);}catch(e){}const txt=JSON.stringify(F,null,1);
   const a=await ghPut('public/picks.json',txt,'Publish picks — '+S.d);const b=a.ok?await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d):a;
   if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{const m=await ghPut('public/picks.json',txt,'Publish picks — '+S.d,LEGACY_PUB_REPO);if(m.ok)await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d,LEGACY_PUB_REPO);}catch(e){}}
-  set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:JSON.stringify(F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit))});
+  set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:pubSig(F),csig:pubSig(F)});
   if(manual)alert(a.ok&&b.ok?'Published. Your public page updates in about a minute: '+PUB_URL
     :/can't write/.test(a.reason||b.reason||'')?`Publish failed: ${a.reason||b.reason}.\n\nFix: on github.com → Settings → Developer settings → Fine-grained tokens → "TheDesk sync" → Edit → Repository access → add ironsilk-weekly-site → Save. No new token needed — this device already has it.`
     :'Publish failed: '+(a.reason||b.reason));
   try{renderBest();}catch(e){}return{ok:a.ok&&b.ok};}
 /* auto: once when the card locks, and again whenever a pick grades */
-async function publishAuto(){try{const S=get(BEST5_KEY,{});if(!S.locked||!(get(LS.ghtoken,'')||get(SYNC.token,'')))return;const P=get('d4.pubstate',{})||{};
-  const F=publicFeed();const sig=JSON.stringify(F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit));   /* republish as each game starts (reveal) and grades */
+/* ══ v2.30 · CASHED — every winning Banker / character parlay gets its own box ═══
+   On the public page (a 🎉 Cashed section, newest first, last 14 days) and in the
+   VIP Telegram (its own post the moment the last leg lands — the 24/7 worker does
+   it even with every device off). Identical tickets on the same day (the Sim and
+   the Scorekeeper often build the same one) share a box. Legs are shown only once
+   every game on the ticket is over, so nothing paid is given away early.        */
+function cashedList(days){const from=dayShift(today(),-(days||14));const raw=[];
+  try{const H={...(get(BKDAYS_KEY,{})||{})};const S=get(BKDAY_KEY,{})||{};if(S.locked)H[S.d]=S;
+    Object.values(H).forEach(S=>{if(S&&S.own&&S.d>=from&&tixDone(S.own.legs)===true)raw.push({d:S.d,v:'Banker',kind:'banker',legs:S.own.legs});});}catch(e){}
+  [[CPAR_KEY,'game'],[CPX_KEY,'props']].forEach(([K,kind])=>{const S=get(K,{})||{};Object.entries(S).forEach(([d,D])=>{if(d<from||!D||!D.locked)return;
+    Object.entries(D.by||{}).forEach(([v,P])=>{if(P&&P.done&&P.won)raw.push({d,v,kind,legs:P.legs});});});});
+  const G={};raw.forEach(x=>{const sig=x.d+'|'+x.legs.map(l=>l.sp+':'+l.game+':'+l.pick).sort().join('¦');const g=G[sig]||(G[sig]={sig,d:x.d,legs:x.legs,who:[]});
+    if(!g.who.some(o=>o.v===x.v))g.who.push({v:x.v,kind:x.kind});});
+  const recOf=o=>{try{const R=o.kind==='banker'?bkDayRecord().own:o.kind==='props'?cpxRecord(o.v):cparRecord(o.v);return`${charName(o.v).replace(/^The /,'')} ${R.w}-${R.l} ${R.u>=0?'+':''}${R.u.toFixed(1)}u`;}catch(e){return'';}};
+  return Object.values(G).map(g=>{const live=g.legs.filter(l=>!l.push);const D=live.reduce((a,l)=>a*americanToDecimal(l.price),1);
+    return{id:dropHash(g.sig),d:g.d,who:g.who.map(o=>charName(o.v)),banker:g.who.some(o=>o.v==='Banker'),props:g.who.some(o=>o.kind==='props'),price:decimalToAmerican(D),units:+(D-1).toFixed(2),
+      rec:g.who.map(recOf).filter(Boolean).join(' · '),legs:g.legs.map(l=>({sp:l.sp,game:l.game,gl:(()=>{try{return gameLabel(l.sp,l.game);}catch(e){return l.game;}})(),pick:l.pick,price:l.price!=null?+l.price:null,push:!!l.push}))};})
+    .sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:b.units-a.units);}
+function pubSig(F){return JSON.stringify([F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),(F.cashed||[]).map(c=>c.id)]);}
+/* a cash can land before today's card locks (last night's late game) — publish it on its own */
+async function publishCash(){try{if(!(get(LS.ghtoken,'')||get(SYNC.token,'')))return null;const F=publicFeed();const P=get('d4.pubstate',{})||{};const sig=pubSig(F);
+    if(P.csig===sig||!(F.cashed||[]).length)return null;const a=await ghPut('public/picks.json',JSON.stringify(F,null,1),'Cashed — '+today());
+    if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{await ghPut('public/picks.json',JSON.stringify(F,null,1),'Cashed — '+today(),LEGACY_PUB_REPO);}catch(e){}}
+    if(a.ok)set('d4.pubstate',{...P,csig:sig,cts:Date.now()});return a;}catch(e){return null;}}
+/* Telegram: one post per cashed ticket */
+function tgCashGroups(C,st){const L=[];if(C.banker)L.push({who:'🏦 The Banker',legs:C.banker.legs,dec:C.banker.dec});(C.chars||[]).forEach(P=>L.push({who:'🎭 '+charName(P.v),legs:P.legs,dec:P.dec}));
+  const G={};L.forEach(x=>{const ks=(x.legs||[]).map(tgLegKey);if(!ks.length)return;const m=ks.map(k=>st[k]);if(m.some(s=>!s)||m.includes('L')||!m.includes('W'))return;
+    const sig=[...ks].sort().join('¦');(G[sig]=G[sig]||{sig,legs:x.legs,who:[]}).who.push(x.who);});return Object.values(G);}
+function tgCashText(p,g,st){const live=g.legs.filter(l=>st[tgLegKey(l)]==='W');const D=live.reduce((a,l)=>a*americanToDecimal(l.price!=null?l.price:-110),1);
+  const day=new Date(p.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  return[`🎉 <b>CASHED</b> — <b>${g.who.map(txtEsc).join(' + ')}</b>`,`<b>${g.legs.length}-leg parlay · ${txtEsc(decimalToAmerican(D))}</b> · 1 unit → <b>+${(D-1).toFixed(2)}u</b>`,'',
+    ...g.legs.map(l=>`${TG_MARK[st[tgLegKey(l)]]||''}<b>${txtEsc(l.pick)}</b>${l.price!=null?' ('+txtEsc(tcSgn(l.price))+')':''}${txtEsc(tgScore(l,p.d))}`),'',`<i>Locked and posted before the first game · ${txtEsc(day)}</i>`].join('\n');}
+
+async function publishAuto(){try{try{cparGrade();cpxGrade();bkDayGrade();}catch(e){}
+  const S=get(BEST5_KEY,{});if(!(get(LS.ghtoken,'')||get(SYNC.token,'')))return;if(!S.locked||S.d!==today()){await publishCash();return;}const P=get('d4.pubstate',{})||{};
+  const F=publicFeed();const sig=pubSig(F);   /* republish as each game starts (reveal) and grades */
   if(P.d===S.d&&P.ok&&P.sig===sig)return;await publishPicks(false);}catch(e){}}
 // runs once at boot — if this device has no graded history at all (fresh install, wiped
 // site data, new domain) it tries to silently pull the last known-good snapshot back from
@@ -23022,6 +23057,9 @@ async function tgAutoTick(force){if(TG_BUSY)return 0;TG_BUSY=true;let acted=0;
         if(p.ids&&p.ids[0]){reply.reply_to_message_id=p.ids[0];reply.allow_sending_without_reply='true';}const r=await tgApi('sendMessage',reply);
         if(r){fresh.forEach(({x})=>{(p.sent||(p.sent={}))[tgLegKey(x)]=st[tgLegKey(x)];});acted++;}}
       p.st={...(p.st||{}),...st};
+      /* 2b · v2.30 · a cashed Banker / character parlay gets its own post */
+      try{for(const g of tgCashGroups(p.card,p.st)){const key='cash|'+g.sig;if((p.sent||{})[key])continue;
+        const r=await tgApi('sendMessage',{chat_id:p.chat||chat,text:tgCashText(p,g,p.st),parse_mode:'HTML',disable_web_page_preview:'true'});if(r){(p.sent||(p.sent={}))[key]='W';acted++;}}}catch(e){console.warn('tg cash',e);}
       /* 3 · the recap, once everything is graded */
       const nonProp=legs.filter(({x})=>!x.player);const allDone=legs.every(({x})=>st[tgLegKey(x)]);
       const ready=legs.length&&(allDone||(p.d<today()&&nonProp.every(({x})=>st[tgLegKey(x)]))||p.d<dayShift(today(),-1));
