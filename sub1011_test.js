@@ -73,5 +73,10 @@ setTimeout(async()=>{try{
   T('picks page: locked tile for the hidden play, subscribe button with the price',/LOCKED PLAY/.test(h1)&&!/Over 41\.5/.test(h1)&&/\$19\.99\/mo/.test(h1)&&/whop\.com\/thedesk/.test(h1));
   T('picks page: fingerprint shown before reveal',/Fingerprint of today's locked plays/.test(h1));
   T('picks page: after reveal it verifies the plays match the lock',/✓ Verified/.test(h2),(p2.document.getElementById('fp')||{}).textContent);
+  /* the public page reads its own copy AND the site repo — the newest card wins (while the domain moves) */
+  const old={...feed,generated:1,today:{...feed.today,d:'2026-10-12'}},neu={...feed,generated:2};
+  const p3=new JSDOM(load('picks.html'),{runScripts:'dangerously',url:'https://ironsilkweekly.com/picks.html',pretendToBeVisual:true,beforeParse(pw){Object.defineProperty(pw,'crypto',{value:webcrypto});pw.TextEncoder=TextEncoder;
+    pw.fetch=u=>Promise.resolve(/raw\.githubusercontent\.com\/ironsilkstrategies\/ironsilk-weekly-site/.test(String(u))?{ok:true,json:()=>Promise.resolve(neu)}:/picks\.json/.test(String(u))?{ok:true,json:()=>Promise.resolve(old)}:{ok:false,json:()=>Promise.resolve({})});}}).window;
+  await new Promise(z=>setTimeout(z,900));T('picks page shows the newest card of the two copies',p3.eval('FEED&&FEED.generated')===2);
 }catch(e){T('harness',false,e.stack);}
 console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(0);},3000);

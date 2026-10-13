@@ -1,6 +1,6 @@
 {
  "v": 3,
- "generated": 1791852221821,
+ "generated": 1791882141524,
  "brand": "TheDesk",
  "price": "$25/mo · $10/wk",
  "social": {
@@ -17,140 +17,128 @@
   "first": "2026-10-06"
  },
  "today": {
-  "d": "2026-10-12",
-  "lockedAt": 1791792755817,
+  "d": "2026-10-13",
+  "lockedAt": 1791881836918,
   "picks": [
    {
+    "hidden": true,
     "sp": "nhl",
-    "game": "FLA@BUF",
-    "gl": "#22 FLA@#27 BUF",
-    "pick": "BUF ML",
-    "price": -108,
-    "p": 0.525,
-    "ev": 1,
-    "start": "2026-10-12T17:00Z",
-    "tier": "STRONG",
-    "voices": [
-     "The Simulator",
-     "The Judge",
-     "The Scorekeeper"
-    ],
-    "hit": true,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 54% across 10,000 runs vs 52% the price implies.",
-      "Desk number after calibration and market blend: 52%.",
-      "Expected value +1.0% per bet at -108.",
-      "Covers' computer has it FLA 3.06–3.34 BUF — BUF winning by 0.28.",
-      "The Judge, weighing every witness by its graded accuracy, is on the other side.",
-      "3 of 9 characters on it, 1 independent of the sim: Covers (2-2 home ML), The Simulator (31-16 favorite ML), The Scorekeeper (32-14 favorite ML)."
-     ],
-     "script": "FLA at BUF — I'm on BUF ML (-108). We ran this game 10,000 times: BUF wins 54% of the time; the price says 52%. Covers' computer projects FLA 3.06, BUF 3.34 — BUF winning by 0.28. 3 of our 9 analysts are on BUF — Covers is 2-2 home ML."
-    }
+    "start": "2026-10-14T02:30Z"
    },
    {
-    "sp": "mlb",
-    "game": "LAD@MIL",
-    "gl": "#1 LAD@#4 MIL",
-    "pick": "Under 7",
-    "price": -128,
-    "p": 0.567,
-    "ev": 1,
-    "start": "",
-    "tier": "STRONG",
-    "voices": [
-     "The Simulator",
-     "The Judge",
-     "The Scorekeeper",
-     "The Coach"
-    ],
-    "hit": false,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 61% across 10,000 runs vs 56% the price implies.",
-      "Desk number after calibration and market blend: 57%.",
-      "Expected value +1.0% per bet at -128.",
-      "Covers' computer has it LAD 5.08–4 MIL — a 9.1-point total vs 7 (disagrees).",
-      "The Judge, weighing every witness by its graded accuracy, is on this side.",
-      "4 of 9 characters on it, 1 independent of the sim: The Simulator (4-3 these teams under), The Judge (7-2 these teams under), The Scorekeeper (9-3 these teams under), The Coach (4-3 these teams under)."
-     ],
-     "script": "LAD at MIL — I'm on Under 7 (-128). We ran this game 10,000 times: the under hits 61% of the time; the price says 56%. 4 of our 9 analysts are on the under — The Simulator is 4-3 these teams under. Under is 6-0 in Yamamotos last 6 starts vs. a team with a winning record."
-    }
+    "hidden": true,
+    "sp": "nhl",
+    "start": "2026-10-14T00:15Z"
+   },
+   {
+    "hidden": true,
+    "sp": "nhl",
+    "start": "2026-10-13T22:00Z"
    }
   ],
-  "allStarted": true,
+  "allStarted": false,
   "commit": {
    "alg": "sha256",
-   "hash": "5076c83ea0fa3950db5ec5ea2a269145d368aabcca933157860bbe57ba10c9d1",
-   "salt": "b046b1a16a17f8008c6fe5ef1bc672f1"
+   "hash": "1064e73850fb508047072a5126d8d2f95bd2217ea369347f329d10513ea08fae",
+   "salt": null
   }
  },
  "parlay": {
-  "d": "2026-10-12",
-  "lockedAt": 1791787974635,
-  "price": "+119",
-  "p": 0.40901,
-  "result": false,
+  "d": "2026-10-13",
+  "lockedAt": 1791881639309,
+  "price": "+191",
+  "p": 0.27657,
+  "result": null,
   "legs": [
    {
-    "sp": "nfl",
-    "game": "BUF@LAR",
-    "gl": "#5 BUF@#4 LAR",
-    "pick": "LAR ML",
-    "price": -165,
-    "p": 0.6171,
-    "by": "The Historian",
-    "hit": null,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 57% across 10,000 runs vs 62% the price implies.",
-      "Desk number after calibration and market blend: 62%.",
-      "Expected value -0.9% per bet at -165.",
-      "The uploaded projection has it BUF 25.1–30.79 LAR — LAR winning by 5.7.",
-      "The Judge, weighing every witness by its graded accuracy, is on this side."
-     ],
-     "script": "BUF at LAR — I'm on LAR ML (-165). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects BUF 25.1, LAR 30.79 — LAR winning by 5.7. 6 of our 9 analysts are on LAR — The Simulator is 11-7 NFL ML."
-    }
+    "hidden": true,
+    "sp": "mlb"
    },
    {
-    "sp": "nhl",
-    "game": "FLA@BUF",
-    "gl": "#22 FLA@#27 BUF",
-    "pick": "FLA +1.5",
-    "price": -275,
-    "p": 0.6628,
-    "by": "The Commissioner",
-    "hit": false,
-    "push": false,
-    "why": {
-     "bullets": [
-      "Sim: 68% across 10,000 runs vs 73% the price implies.",
-      "Expected value -9.6% per bet at -275.",
-      "Covers' computer has it FLA 3.06–3.34 BUF — FLA by -0.3, clearing +1.5.",
-      "The Judge, weighing every witness by its graded accuracy, is on this side.",
-      "5 of 9 characters on it, 2 independent of the sim: Covers (3-2 road spread), The Simulator (36-28 NHL spread), The Judge (35-29 NHL spread), The Scorekeeper (35-29 NHL spread), The Commissioner."
-     ],
-     "script": "FLA at BUF — I'm on FLA +1.5 (-275). The price is close to fair here — this one rides on who's backing it. On power ratings alone FLA covers this number by 1.58. Covers' computer projects FLA 3.06, BUF 3.34 — FLA by -0.3, clearing +1.5. 5 of our 9 analysts are on FLA — Covers is 3-2 road spread."
-    }
+    "hidden": true,
+    "sp": "nhl"
+   },
+   {
+    "hidden": true,
+    "sp": "nhl"
    }
   ]
  },
  "parlayRecord": {
   "w": 0,
-  "l": 3,
-  "u": -3
+  "l": 4,
+  "u": -4
  },
  "history": [
+  {
+   "d": "2026-10-13",
+   "picks": [
+    {
+     "sp": "nhl",
+     "game": "EDM@LA",
+     "gl": "#3 EDM@#25 LA",
+     "pick": "EDM ML",
+     "price": -125,
+     "p": 0.581,
+     "ev": 4.5,
+     "start": "2026-10-14T02:30Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper",
+      "The Commissioner"
+     ],
+     "hit": null,
+     "push": false
+    },
+    {
+     "sp": "nhl",
+     "game": "MIN@WPG",
+     "gl": "#6 MIN@#16 WPG",
+     "pick": "Under 6.5",
+     "price": -130,
+     "p": 0.583,
+     "ev": 3.1,
+     "start": "2026-10-14T00:15Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper",
+      "The Coach"
+     ],
+     "hit": null,
+     "push": false
+    },
+    {
+     "sp": "nhl",
+     "game": "NJ@DET",
+     "gl": "#26 NJ@#27 DET",
+     "pick": "DET ML",
+     "price": -110,
+     "p": 0.539,
+     "ev": 2.9,
+     "start": "2026-10-13T22:00Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper",
+      "The Commissioner"
+     ],
+     "hit": null,
+     "push": false
+    }
+   ]
+  },
   {
    "d": "2026-10-12",
    "picks": [
     {
      "sp": "nhl",
      "game": "FLA@BUF",
-     "gl": "#22 FLA@#27 BUF",
+     "gl": "#24 FLA@#28 BUF",
      "pick": "BUF ML",
      "price": -108,
      "p": 0.525,
@@ -192,7 +180,7 @@
     {
      "sp": "nfl",
      "game": "DEN@LAC",
-     "gl": "#10 DEN@#23 LAC",
+     "gl": "#9 DEN@#23 LAC",
      "pick": "Over 41.5",
      "price": -115,
      "p": 0.553,
@@ -211,7 +199,7 @@
     {
      "sp": "nfl",
      "game": "DET@ARI",
-     "gl": "#11 DET@#30 ARI",
+     "gl": "#10 DET@#30 ARI",
      "pick": "Over 54.5",
      "price": -115,
      "p": 0.552,
@@ -272,7 +260,7 @@
     {
      "sp": "ncaaf",
      "game": "KENT@WMU",
-     "gl": "#129 KENT@#75 WMU",
+     "gl": "#129 KENT@#76 WMU",
      "pick": "WMU -13.5",
      "price": -112,
      "p": 0.547,

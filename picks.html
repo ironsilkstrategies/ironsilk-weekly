@@ -102,7 +102,10 @@ function renderSocial(){const S={...SOCIAL,...((FEED&&FEED.social)||{})};const o
   $('soc').innerHTML=out.join('');$('soc').style.display=out.length?'flex':'none';}
 renderSocial();
 async function load(){
-  try{const r=await fetch('public/picks.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw 0;FEED=await r.json();}catch(e){$('today').innerHTML='<div class="empty">No card published yet. Check back before first pitch.</div>';return;}
+  /* the card can live in this site's own copy or the public site repo (while the domain moves) — read both, show the newest */
+  try{const src=['public/picks.json?t='+Date.now(),'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/picks.json?t='+Date.now()];
+    const got=(await Promise.allSettled(src.map(u=>fetch(u,{cache:'no-store'}).then(r=>r.ok?r.json():null)))).map(x=>x.status==='fulfilled'?x.value:null).filter(j=>j&&typeof j==='object');
+    if(!got.length)throw 0;FEED=got.sort((p,q)=>(q.generated||0)-(p.generated||0))[0];}catch(e){$('today').innerHTML='<div class="empty">No card published yet. Check back before first pitch.</div>';return;}
   const R=FEED.record||{};const n=(R.w||0)+(R.l||0);
   $('rec').innerHTML=`<div class="stat"><b>${R.w||0}-${R.l||0}${R.pu?'-'+R.pu:''}</b><small>record</small></div>
     <div class="stat"><b class="${(R.u||0)>=0?'w':'l'}">${(R.u||0)>=0?'+':''}${(R.u||0).toFixed(1)}u</b><small>units</small></div>
