@@ -780,7 +780,7 @@ function parseSGPTicketText(text){
   if(!ticketNo)return{ok:false,note:'no Ticket Number found'};
   const descIdx=lines.findIndex(l=>/^Description\s*:?$/i.test(l));
   const body=descIdx>=0?lines.slice(descIdx+1):lines;
-  const legs=[];const skipped=[];let propSkipped=0;
+  const legs=[];const skipped=[];let propSkipped=0;const gameDates={};
   let cur=null; // {sport, gl}
   /* This book has two SGP dialects. The older one writes "(Game)" and lists AWAY v HOME. The newer
      one writes "(Match)", says Handicap / Total goals / Anytime point, and lists HOME v AWAY.
@@ -798,9 +798,13 @@ function parseSGPTicketText(text){
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
       let A=awayAb,H=homeAb;if(matchStyle){A=homeAb;H=awayAb;}
       try{const wk=sport==='nfl'||sport==='ncaaf'?Object.values(get(sport==='nfl'?'d4.nflgames':'d4.ncaafgames',{})||{}).flatMap(W=>(W&&(Array.isArray(W)?W:W.v))||[]).filter(g=>g&&g.away&&g.home):[];
-        const known=new Set([...(sportGames(sport)||[]),...wk,...(sport==='nhl'&&typeof NHL_UPCOMING!=='undefined'?NHL_UPCOMING:[])].map(g=>g.away.abbr+'@'+g.home.abbr));
-        if(known.size&&!known.has(A+'@'+H)&&known.has(H+'@'+A)){const t=A;A=H;H=t;}}catch(e){}
-      cur={sport,gl:A+'@'+H,away:A,home:H,names:[sgpHdr[3],sgpHdr[4]].map(x=>String(x).trim())};return;
+        const allG=[...(sportGames(sport)||[]),...wk,...(sport==='nhl'&&typeof NHL_UPCOMING!=='undefined'?NHL_UPCOMING:[])];
+        const known=new Set(allG.map(g=>g.away.abbr+'@'+g.home.abbr));
+        if(known.size&&!known.has(A+'@'+H)&&known.has(H+'@'+A)){const t=A;A=H;H=t;}
+        /* v2.23 · a ticket bet days early (accepted 10/7 for a 10/12 game) takes the game's own date */
+        const near=allG.filter(g=>g.away.abbr+'@'+g.home.abbr===A+'@'+H).map(g=>{for(const v of [g.date,g.start,g.gameDate]){if(v){const t=tdDay(v);if(/^\d{4}-\d{2}-\d{2}$/.test(t))return t;}}return null;}).filter(d=>d&&d>=accepted&&d<=dayShift(accepted,10)).sort();
+        var gDate=near[0]||null;}catch(e){}
+      cur={sport,gl:A+'@'+H,away:A,home:H,names:[sgpHdr[3],sgpHdr[4]].map(x=>String(x).trim()),date:typeof gDate!=='undefined'?gDate:null};if(cur.date)gameDates[cur.gl]=cur.date;return;
     }
     if(/^\d+\s+Leg Parlay/i.test(line))return; // the summary line — not a leg
     if(!cur){skipped.push(line+'  (no SGP header seen yet)');return;}
@@ -885,6 +889,10 @@ function parseSGPTicketText(text){
       legs.push({game:cur.gl,pick:`${m[1].trim()} ${m[2]}+ sacks`,p:0.5,sport:cur.sport,gameDate:accepted,price:null,book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:'sacks',thr:+m[2],dir:'atleast'}});return;}
     if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(over|under)\s+([\d.]+)\s+Sacks(?: made)?\s*\(Game\)\s*$/i))){
       legs.push({game:cur.gl,pick:`${m[1].trim()} ${m[2].toLowerCase()} ${m[3]} sacks`,p:0.5,sport:cur.sport,gameDate:accepted,price:null,book:'external',isProp:1,fbProp:{player:m[1].trim(),stat:'sacks',thr:+m[3],dir:m[2].toLowerCase()}});return;}
+    if((m=line.match(/^Player stats\s*-\s*(.+?)\s+(?:(over|under)\s+([\d.]+)|(\d+(?:\.5)?)\+)\s+(.+?)\s*\(Game\)\s*$/i))){const G=fbGenStat(m[5]);
+      if(G){const dir=m[2]?m[2].toLowerCase():'atleast',thr=+(m[3]||m[4]);
+        legs.push({game:cur.gl,pick:`${m[1].trim()} ${dir==='atleast'?thr+'+':dir+' '+thr} ${G.label}`,p:0.5,sport:cur.sport,gameDate:accepted,price:null,book:'external',isProp:1,
+          fbProp:{player:m[1].trim(),stat:'gen',cat:G.cat,field:G.field,part:G.part,label:G.label,thr,dir}});return;}}
     if(/^Player stats\s*-/i.test(line)){propSkipped++;skipped.push(line+'  (player-stat phrasing not recognized)');return;}
     if((m=line.match(/^Spread\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(Game\)\s*$/i))){
       const ab=intakeAbbr(cur.sport,m[1]);
@@ -900,7 +908,7 @@ function parseSGPTicketText(text){
   legs.forEach((l,i)=>l.id='ext'+ticketNo+'_'+i);
   const L=get(LS.locked,[]);
   const idx=L.findIndex(t=>String(t.id)==='ext'+ticketNo);
-  legs.forEach(l=>{l.gdApprox=1;});
+  legs.forEach(l=>{const d=gameDates[l.game];if(d)l.gameDate=d;else l.gdApprox=1;});
   const ticket={id:'ext'+ticketNo,date:accepted,name:'Ticket #'+ticketNo,source:'mine',imported:true,
     stake:moneyStr(kv.amount),toWin:moneyStr(kv.towin),status:kv.status||null,
     legs,p:legs.length?legs.reduce((a,x)=>a*x.p,1):null};
@@ -2193,7 +2201,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -7823,7 +7831,23 @@ function propLastNameRow(rows,player){const p=fbpNorm(player).split(' ');const l
 function propDnpVoid(player){return{hit:null,push:true,dnp:true,detail:`${player} isn't in the final box score — didn't play, leg voided (book rule)`,live:false};}
 /* v2.22 · anytime TD = rushing + receiving + return + defensive TDs (a QB's passing TDs don't count);
    sacks from the defensive table */
-function gradeFBSpecialProp(leg,box,R){const live=box.state==='in';const P=leg.fbProp;const cats=P.stat==='td'?['rushing','receiving','kr','pr','ints','defensive']:['defensive'];
+/* v2.23 · every other box-score stat a book writes as a player prop */
+const FB_GEN=[[/^passing\s+(?:tds?|touchdowns?)(?:\s+thrown)?$/i,'passing','TD',null,'passing TDs'],[/^(?:interceptions?|ints?)\s+thrown$/i,'passing','INT',null,'INTs thrown'],[/^(?:interceptions?|ints?)(?:\s+caught)?$/i,'ints','INT',null,'interceptions'],
+  [/^(?:pass(?:ing)?\s+)?completions$/i,'passing','C/ATT',0,'completions'],[/^pass(?:ing)?\s+attempts$/i,'passing','C/ATT',1,'pass attempts'],
+  [/^(?:rushing|rush)\s+(?:tds?|touchdowns?)$/i,'rushing','TD',null,'rushing TDs'],[/^(?:(?:rushing|rush)\s+attempts|carries)$/i,'rushing','CAR',null,'carries'],[/^longest\s+rush$/i,'rushing','LONG',null,'longest rush'],
+  [/^receiving\s+(?:tds?|touchdowns?)$/i,'receiving','TD',null,'receiving TDs'],[/^longest\s+reception$/i,'receiving','LONG',null,'longest reception'],[/^targets$/i,'receiving','TGTS',null,'targets'],
+  [/^(?:total\s+)?tackles(?:\s*(?:\+|and)\s*assists)?$/i,'defensive','TOT',null,'tackles'],[/^solo\s+tackles$/i,'defensive','SOLO',null,'solo tackles'],[/^tackles\s+for\s+loss$/i,'defensive','TFL',null,'TFL'],
+  [/^(?:passes\s+defended|pass\s+deflections)$/i,'defensive','PD',null,'passes defended']];
+function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'');for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
+function gradeFBSpecialProp(leg,box,R){
+  if(leg.fbProp.stat==='gen'){const P=leg.fbProp;const live=box.state==='in';let val=0,found=null,anywhere=false;
+    Object.values(box.teamStats).forEach(st=>{['passing','rushing','receiving','defensive','kr','pr','ints'].forEach(c=>{if(fbpFindRow(st[c]||[],P.player))anywhere=true;});
+      const r=fbpFindRow(st[P.cat]||[],P.player);if(r){found=r;let v=r[P.field];if(v==null&&P.field==='C/ATT')v=r['C/ATT']||r.CMP;if(P.part!=null)v=String(v||'0').split('/')[P.part];val=parseFloat(String(v==null?'0':v).replace(/[^0-9.\-]/g,''))||0;}});
+    if(!found&&!anywhere){if(live)return{hit:null,detail:'player not in box yet',live};if(box.state==='post')return propDnpVoid(P.player);}
+    const thr=P.thr,dir=P.dir||'atleast';let hit;if(dir==='under')hit=val>thr?false:(live?null:true);else{const ok=dir==='atleast'?val>=thr:val>thr;hit=ok?true:(live?null:false);}
+    /* "longest" isn't a running count that only climbs — an under is never locked early either way */
+    if(/LONG/.test(P.field)&&live)hit=dir==='under'?(val>thr?false:null):(val>thr||(dir==='atleast'&&val>=thr)?true:null);
+    return{hit,detail:`${(found&&found.name)||P.player} ${val} ${P.label}${live?' so far':''}`,live,prog:{val,thr,dir}};}const live=box.state==='in';const P=leg.fbProp;const cats=P.stat==='td'?['rushing','receiving','kr','pr','ints','defensive']:['defensive'];
   let val=0,found=null,anywhere=false;const num=v=>parseFloat(String(v==null?'0':v).replace(/[^0-9.\-]/g,''))||0;
   Object.values(box.teamStats).forEach(st=>{['passing','rushing','receiving','defensive','kr','pr','ints'].forEach(c=>{if(fbpFindRow(st[c]||[],P.player))anywhere=true;});
     cats.forEach(c=>{const r=fbpFindRow(st[c]||[],P.player);if(r){found=found||r;val+=P.stat==='td'?num(r.TD??r.td):num(r.SACKS??r.sacks??r.SCK);}});});
@@ -7837,8 +7861,8 @@ function gradeFBPropLeg(leg,ticketDate){
   const R=resolveLeg(leg,ticketDate); // may be null (not started / not yet in any store)
   const ev=fbpEventId(leg,ticketDate);
   if(!ev.id)return{hit:null,detail:ev.pending?'looking up game…':'game not found (checked your archive + ESPN weeks & days around '+(leg.gameDate||ticketDate||'that date')+')',live:!!(R&&R.live)};
-  const special=leg.fbProp.stat==='td'||leg.fbProp.stat==='sacks';
-  const box=fbpBox(ev.id,sp,special);
+  const special=leg.fbProp.stat==='td'||leg.fbProp.stat==='sacks'||leg.fbProp.stat==='gen';
+  const box=fbpBox(ev.id,sp,special&&(leg.fbProp.stat!=='gen'||leg.fbProp.cat==='defensive'));
   if(special&&box&&box.teamStats&&Object.keys(box.teamStats).length&&box.state!=='pre')return gradeFBSpecialProp(leg,box,R);
   if(!box||!box.teamStats||!Object.keys(box.teamStats).length)
     return{hit:null,detail:box&&box.state==='pre'?null:'player box loading — check back shortly',live:!!(R&&R.live)};

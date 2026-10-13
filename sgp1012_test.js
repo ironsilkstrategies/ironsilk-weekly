@@ -27,7 +27,7 @@ Player stats - Khalil Shakir 35+ Receiving yds (Game)
 Player stats - Keon Coleman 25+ Receiving yds (Game)
 Spread - Bills +7.5 (Game)`;
 setTimeout(async()=>{try{
-  w.__T=TXT;w.eval(`set(LS.locked,[]);set('d4.nflgames',{'2026w5':{v:[{id:'401872994',away:{abbr:'BUF'},home:{abbr:'LAR'},date:'2026-10-13T00:15Z'}]}});`);
+  w.__T=TXT;w.eval(`set(LS.locked,[]);set('d4.nflgames',{'2026w5':{v:[{id:'401872994',away:{abbr:'BUF'},home:{abbr:'LAR'},date:'2026-10-12T19:15:00-05:00'}]}});`);
   const r=await w.eval(`intakeText(window.__T,null,'auto','')`);
   const t=w.eval(`get(LS.locked,[])[0]`);
   T('a single-game SGP paste (no "SGP 1:" line) is read: all 8 legs',t&&t.legs.length===8,r.how);
@@ -47,5 +47,54 @@ setTimeout(async()=>{try{
   T('anytime TD: a QB\'s passing TDs don\'t (Allen ✗ with 3 passing, 0 rushing)',g('Josh Allen','td',1).hit===false);
   T('anytime TD: receiving TD counts (Coleman ✓)',g('Keon Coleman','td',1).hit===true);
   T('sacks: "G. Rousseau" finds Gregory Rousseau, 1.5 sacks clears 1+',g('G. Rousseau','sacks',1).hit===true,JSON.stringify(g('G. Rousseau','sacks',1)));
+  /* v2.23: the second ticket — passing TDs thrown */
+  w.__T2=`Ticket Number:
+1004799266
+Accepted Date:
+10/12/26
+Amount:
+$6.00
+Status:
+Pending
+To win:
+$72.00
+Type:
+Same Game Parlay
+Description:
+FOOTBALL - NFL - Los Angeles Rams v Buffalo Bills
+Player TDs - Puka Nacua Score anytime (Game)
+Player stats - Josh Allen over 1.5 Passing TDs thrown (Game)
+Player TDs - D. Adams Score anytime (Game)
+Player stats - Puka Nacua 100+ Receiving yds (Game)
+Player stats - Blake Corum 30+ Rushing yds (Game)
+Total points - Over 48.5 (Game)`;
+  const r2=await w.eval(`intakeText(window.__T2,null,'auto','')`);const t2=w.eval(`get(LS.locked,[]).find(x=>x.id==='ext1004799266')`);
+  T('ticket 2: all 6 legs, including "Josh Allen over 1.5 Passing TDs thrown"',t2&&t2.legs.length===6&&t2.legs.some(l=>l.pick==='Josh Allen over 1.5 passing TDs'),r2.how);
+  const gg=(pl,stat,thr,dir)=>w.eval(`gradeFBSpecialProp({fbProp:${JSON.stringify(Object.assign({player:pl,thr,dir},stat))}},${JSON.stringify(box)},null)`);
+  T('passing TDs: Allen 3 thrown clears over 1.5',gg('Josh Allen',{stat:'gen',cat:'passing',field:'TD',label:'passing TDs'},1.5,'over').hit===true);
+  T('completions read from C/ATT (22/31 → 22)',gg('Josh Allen',{stat:'gen',cat:'passing',field:'C/ATT',part:0,label:'completions'},20.5,'over').hit===true);
+  T('tackles from the defensive table (Rousseau 4 tackles, under 3.5 loses)',gg('G. Rousseau',{stat:'gen',cat:'defensive',field:'TOT',label:'tackles'},3.5,'under').hit===false);
+  T('stat phrases map: carries, longest reception, tackles + assists, INTs thrown',w.eval(`['Carries','Longest Reception','Tackles + Assists','Interceptions thrown'].every(x=>!!fbGenStat(x))`)&&w.eval(`fbGenStat('Interceptions thrown').cat`)==='passing'&&w.eval(`fbGenStat('Interceptions').cat`)==='ints');
+  w.__T3=`Ticket Number:
+1003279121
+Accepted Date:
+10/7/26
+Amount:
+$5.00
+Status:
+Pending
+To win:
+$45.00
+Type:
+Same Game Parlay
+Description:
+FOOTBALL - NFL - Los Angeles Rams v Buffalo Bills
+Player TDs - Josh Allen Score anytime (Game)
+Player stats - James Cook over 75.5 Rushing yds (Game)
+Player stats - Josh Allen over 36.5 Rushing yds (Game)
+Player stats - Josh Allen over 20.5 Pass completions (Game)`;
+  const r3=await w.eval(`intakeText(window.__T3,null,'auto','')`);const t3=w.eval(`get(LS.locked,[]).find(x=>x.id==='ext1003279121')`);
+  T('ticket 3: all 4 legs incl. "over 20.5 Pass completions", BUF@LAR, $5 to win $45',t3&&t3.legs.length===4&&t3.legs.some(l=>/completions/.test(l.pick)&&l.fbProp.part===0)&&t3.legs.every(l=>l.game==='BUF@LAR')&&t3.stake==='5'&&t3.toWin==='45',r3.how);
+  T('bet on 10/7 for the 10/12 game: legs carry the game\'s own date',t3.legs.every(l=>l.gameDate==='2026-10-12'&&!l.gdApprox),JSON.stringify(t3.legs.map(l=>l.gameDate)));
 }catch(e){out.push('CRASH '+e.stack);}
 console.log(out.join('\n'));process.exit(0);},1500);
