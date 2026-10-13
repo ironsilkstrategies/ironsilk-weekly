@@ -461,7 +461,7 @@ function pstAdd(sp,name,team,line,eventId){
 }
 /* Feed a parsed box exactly once, and only when it is FINAL */
 function pstatFeed(sp,eventId,box){
-  if(!box||box.state!=='post'||!eventId)return 0;const D=pstDb(sp);if(D.fed[eventId])return 0;
+  if(!box||box.state!=='post'||!eventId)return 0;try{scoutFeed(sp,eventId,box);}catch(e){}const D=pstDb(sp);if(D.fed[eventId])return 0;
   const lines={};const L=(name,team)=>{const k=pstId(name);if(!k)return null;return lines[k]||(lines[k]={name,team,v:{}});};
   if(sp==='nhl'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.skaters||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;
       const g=pstNum(r.G),a=pstNum(r.A);Object.assign(x.v,{g,a,pts:g+a,s:pstNum(r.S!=null?r.S:r.SOG)});}));}
@@ -543,6 +543,224 @@ async function pstBackfillLoop(){
     if(more&&PST_SESSION<60)setTimeout(pstBackfillLoop,90e3);}catch(e){}
 }
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pstBackfillLoop,8000));
+/* v2.27 */
+/* ══ STARS & BUSTS — the scouting department (v2.27) ══════════════════════════
+   Every FINAL box score the app reads (grading, My Games, and its own season
+   backfill) now also feeds a scouting ledger that the prop engine never kept:
+   QB efficiency (passer rating, yards/attempt, INT and sack rates), the pass
+   rush (sacks, QB hits, TFL), ball hawks (INTs), and in hockey shooting %,
+   +/-, blocks, hits, takeaways and goalie save %. Teams keep the same numbers
+   both ways — what they do, and what they allow.
+   Everything is ranked inside its own league. ⭐ = top 5%, 🤡 = bottom 5%
+   (only where the bottom means something — nobody is a "bust" for having 0
+   sacks as a cornerback). 📉 Fading = a season star whose last 3 games sit in
+   the bottom third; 🔥 Heating = the reverse. 🎭 Over-hyped = the book prices
+   a player's anytime TD well above how often he actually scores.
+   Preseason games never count. The Scout reads these as matchups.         */
+const SCOUT_KEY=sp=>'d4.scout.'+sp,SCOUT_SP=['nfl','ncaaf','nhl','nba'];
+const SCOUT_CAP={nfl:1600,ncaaf:2600,nhl:1000,nba:600};
+const SCOUT_MEM={};
+function scoutDb(sp){if(!SCOUT_MEM[sp]){const R=get(SCOUT_KEY(sp),null);SCOUT_MEM[sp]=R&&R.v===1?R:{v:1,p:{},t:{},fed:{},bf:null};
+    if(sp==='nfl'||sp==='ncaaf'){try{const C=get('d4.fbbox',{})||{};Object.entries(C).forEach(([k,o])=>{const[s,id]=k.split(':');if(s===sp&&o&&o.final&&o.box)scoutFeed(sp,id,{...o.box,state:'post'},true);});}catch(e){}}}
+  return SCOUT_MEM[sp];}
+function scoutSave(sp){const D=scoutDb(sp);const ids=Object.keys(D.p),cap=SCOUT_CAP[sp]||1500;
+  if(ids.length>cap)ids.sort((a,b)=>D.p[a].n-D.p[b].n).slice(0,ids.length-cap).forEach(k=>delete D.p[k]);
+  const fk=Object.keys(D.fed);if(fk.length>3000)fk.slice(0,fk.length-3000).forEach(k=>delete D.fed[k]);
+  try{set(SCOUT_KEY(sp),D);}catch(e){console.warn('scout save',e);}SCOUT_BOARD[sp]=null;}
+const scN=v=>{const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:0;};
+const scPair=v=>{const m=String(v||'').match(/(-?\d+)\s*[\/-]\s*(-?\d+)/);return m?[+m[1],+m[2]]:[0,0];};
+const scToi=v=>{const m=String(v||'').match(/(\d+):(\d+)/);return m?+m[1]+m[2]/60:scN(v);};
+function scRating(s){const att=s.att||0;if(!att)return null;const c=x=>Math.max(0,Math.min(2.375,x));
+  return(c(((s.cmp||0)/att-0.3)*5)+c(((s.pyd||0)/att-3)*0.25)+c((s.ptd||0)/att*20)+c(2.375-(s.pint||0)/att*25))/6*100;}
+/* one game → per-player lines + per-team totals */
+function scoutLines(sp,box){const P={},T={};const L=(name,team)=>{const k=pstId(name);if(!k)return null;return P[k]||(P[k]={name,team,v:{}});};
+  const add=(o,k,x)=>{if(x)o[k]=(o[k]||0)+x;};
+  if(sp==='nfl'||sp==='ncaaf'){Object.entries(box.teamStats||{}).forEach(([team,t])=>{const tf=T[team]={};
+      (t.passing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;const[c,a]=scPair(r['C/ATT']);const[sk]=scPair(r.SACKS);
+        Object.entries({cmp:c,att:a,pyd:scN(r.YDS),ptd:scN(r.TD),pint:scN(r.INT),sk}).forEach(([k,v])=>{add(x.v,k,v);add(tf,k,v);});});
+      (t.rushing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;Object.entries({car:scN(r.CAR),ryd:scN(r.YDS),rtd:scN(r.TD)}).forEach(([k,v])=>{add(x.v,k,v);add(tf,k,v);});});
+      (t.receiving||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;Object.entries({rec:scN(r.REC),tgt:scN(r.TGTS),wyd:scN(r.YDS),wtd:scN(r.TD)}).forEach(([k,v])=>{add(x.v,k,v);});});
+      (t.defensive||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;const q=r['QB HTS']!=null?r['QB HTS']:r['QB HUR'];
+        Object.entries({tkl:scN(r.TOT),dsk:scN(r.SACKS),tfl:scN(r.TFL),qbh:scN(q),pd:scN(r.PD)}).forEach(([k,v])=>{add(x.v,k,v);if(k!=='tkl'&&k!=='pd')add(tf,k,v);});x.v.def=1;});
+      (t.ints||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;const v=scN(r.INT);add(x.v,'dint',v);add(tf,'dint',v);x.v.def=1;});});
+    Object.values(P).forEach(x=>{const v=x.v;x.role=(v.att||0)>=5?'QB':(v.car||0)>=5?'RB':((v.tgt||0)>=2||(v.rec||0)>=1)?'WR':v.def?'DEF':(v.car?'RB':null);
+      x.head=x.role==='QB'?scRating(v):x.role==='RB'?(v.ryd||0):x.role==='WR'?(v.wyd||0):x.role==='DEF'?(v.dsk||0)*2+(v.qbh||0)+(v.tfl||0)+(v.dint||0)*3:null;delete v.def;});}
+  else if(sp==='nhl'){Object.entries(box.teams||{}).forEach(([team,t])=>{const tf=T[team]={};
+      (t.skaters||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;const v={g:scN(r.G),a:scN(r.A),pm:scN(r['+/-']),s:scN(r.S!=null?r.S:r.SOG),bs:scN(r.BS),ht:scN(r.HT),tk:scN(r.TK),gv:scN(r.GV),toi:scToi(r.TOI)};
+        Object.entries(v).forEach(([k,y])=>{add(x.v,k,y);if(['g','s','bs','ht','tk'].includes(k))add(tf,k,y);});x.role='SK';x.head=v.g+v.a;});
+      (t.goalies||[]).forEach(r=>{const sa=scN(r.SA),ga=scN(r.GA),sv=r.SV!=null?scN(r.SV):sa-ga;if(!sa)return;const x=L(r.name,team);if(!x)return;
+        add(x.v,'sa',sa);add(x.v,'ga',ga);add(x.v,'sv',sv);add(x.v,'gp',1);add(tf,'sa',sa);add(tf,'ga',ga);x.role='G';x.head=sv/sa;x.hw=sa;});});}
+  else if(sp==='nba'){Object.entries(box.teams||{}).forEach(([team,t])=>{const tf=T[team]={};
+      (t.players||[]).forEach(r=>{if(!scN(r.MIN)&&!scN(r.PTS))return;const x=L(r.name,team);if(!x)return;
+        const v={pts:scN(r.PTS),reb:scN(r.REB),ast:scN(r.AST),stl:scN(r.STL),blk:scN(r.BLK),tov:scN(r.TO),fg3:scPair(r['3PT'])[0],min:scN(r.MIN)};
+        Object.entries(v).forEach(([k,y])=>{add(x.v,k,y);if(k==='pts')add(tf,k,y);});x.role='P';x.head=v.pts;});});}
+  return{P,T};}
+/* feed one FINAL box once */
+function scoutFeed(sp,eventId,box,quiet){if(!SCOUT_SP.includes(sp)||!box||box.state!=='post'||!eventId)return 0;const D=SCOUT_MEM[sp]||scoutDb(sp);if(D.fed[eventId])return 0;
+  const{P,T}=scoutLines(sp,box);const tms=Object.keys(T);if(tms.length!==2||!Object.keys(P).length)return 0;
+  Object.values(P).forEach(x=>{if(!x.role)return;const id=pstId(x.name);const R=D.p[id]||(D.p[id]={nm:x.name,tm:x.team,n:0,rc:{},s:{},f:[]});
+    R.tm=x.team;R.n++;R.rc[x.role]=(R.rc[x.role]||0)+1;Object.entries(x.v).forEach(([k,v])=>{if(v)R.s[k]=Math.round(((R.s[k]||0)+v)*100)/100;});
+    if(x.head!=null&&isFinite(x.head)){R.f.push(x.hw?[+x.head.toFixed(4),x.hw]:+(+x.head).toFixed(2));if(R.f.length>3)R.f=R.f.slice(-3);}});
+  tms.forEach((tm,i)=>{const o=tms[1-i];const R=D.t[tm]||(D.t[tm]={n:0,f:{},a:{}});R.n++;
+    Object.entries(T[tm]).forEach(([k,v])=>{R.f[k]=Math.round(((R.f[k]||0)+v)*100)/100;});
+    Object.entries(T[o]).forEach(([k,v])=>{R.a[k]=Math.round(((R.a[k]||0)+v)*100)/100;});});
+  D.fed[eventId]=1;if(!quiet)scoutSave(sp);return 1;}
+const scRole=R=>{const e=Object.entries(R.rc||{}).sort((a,b)=>b[1]-a[1])[0];return e?e[0]:null;};
+const scPer=(R,k)=>(R.s[k]||0)/Math.max(1,R.n);
+/* the categories — v(record) → number; hi = bigger is better; bust = the bottom 5% means something */
+const SC_FB_P=[
+  {id:'qb_rtg',lab:'Passer rating',role:'QB',q:R=>(R.s.att||0)>=40&&R.n>=2,v:R=>scRating(R.s),hi:1,bust:1,d:1,head:1},
+  {id:'qb_ypa',lab:'Yards / attempt',role:'QB',q:R=>(R.s.att||0)>=40&&R.n>=2,v:R=>(R.s.pyd||0)/R.s.att,hi:1,bust:1,d:2},
+  {id:'qb_int',lab:'INT rate',role:'QB',q:R=>(R.s.att||0)>=40&&R.n>=2,v:R=>(R.s.pint||0)/R.s.att,hi:0,bust:1,pct:1},
+  {id:'qb_sk',lab:'Sacked rate',role:'QB',q:R=>(R.s.att||0)>=40&&R.n>=2,v:R=>(R.s.sk||0)/((R.s.att||0)+(R.s.sk||0)),hi:0,bust:1,pct:1},
+  {id:'rb_ypc',lab:'Yards / carry',role:'RB',q:R=>(R.s.car||0)>=25&&R.n>=2,v:R=>(R.s.ryd||0)/R.s.car,hi:1,bust:1,d:2},
+  {id:'rb_ypg',lab:'Rush yds / game',role:'RB',q:R=>(R.s.car||0)>=20&&R.n>=2,v:R=>scPer(R,'ryd'),hi:1,bust:1,d:1,head:1},
+  {id:'wr_ypg',lab:'Rec yds / game',role:'WR',q:R=>(R.s.tgt||0)>=10&&R.n>=2,v:R=>scPer(R,'wyd'),hi:1,bust:1,d:1,head:1},
+  {id:'wr_ctch',lab:'Catch rate',role:'WR',q:R=>(R.s.tgt||0)>=15&&R.n>=2,v:R=>(R.s.rec||0)/R.s.tgt,hi:1,bust:1,pct:1},
+  {id:'td_g',lab:'Scrimmage TDs / game',role:null,q:R=>((R.s.car||0)+(R.s.tgt||0))>=20&&R.n>=2,v:R=>((R.s.rtd||0)+(R.s.wtd||0))/R.n,hi:1,bust:0,d:2},
+  {id:'d_sk',lab:'Sacks / game',role:'DEF',q:R=>R.n>=2,v:R=>scPer(R,'dsk'),hi:1,bust:0,d:2,head:1},
+  {id:'d_qbh',lab:'QB hits / game',role:'DEF',q:R=>R.n>=2,v:R=>scPer(R,'qbh'),hi:1,bust:0,d:2},
+  {id:'d_tfl',lab:'Tackles for loss / game',role:'DEF',q:R=>R.n>=2,v:R=>scPer(R,'tfl'),hi:1,bust:0,d:2},
+  {id:'d_int',lab:'INTs / game',role:'DEF',q:R=>R.n>=2,v:R=>scPer(R,'dint'),hi:1,bust:0,d:2}];
+const SC_FB_T=[
+  {id:'off_rtg',lab:'Passer rating',side:'O',v:T=>scRating(T.f),hi:1,d:1},
+  {id:'off_ypa',lab:'Pass yds / attempt',side:'O',v:T=>(T.f.pyd||0)/Math.max(1,T.f.att||0),hi:1,d:2},
+  {id:'off_ypc',lab:'Rush yds / carry',side:'O',v:T=>(T.f.ryd||0)/Math.max(1,T.f.car||0),hi:1,d:2},
+  {id:'sk_alw',lab:'Sacks allowed / game',side:'O',v:T=>(T.f.sk||0)/T.n,hi:0,d:2},
+  {id:'int_thr',lab:'INTs thrown / game',side:'O',v:T=>(T.f.pint||0)/T.n,hi:0,d:2},
+  {id:'def_rtg',lab:'Passer rating allowed',side:'D',v:T=>scRating(T.a),hi:0,d:1},
+  {id:'def_ypa',lab:'Pass yds / att allowed',side:'D',v:T=>(T.a.pyd||0)/Math.max(1,T.a.att||0),hi:0,d:2},
+  {id:'def_ypc',lab:'Rush yds / carry allowed',side:'D',v:T=>(T.a.ryd||0)/Math.max(1,T.a.car||0),hi:0,d:2},
+  {id:'sk_made',lab:'Sacks / game',side:'D',v:T=>(T.f.dsk||0)/T.n,hi:1,d:2},
+  {id:'qbh',lab:'QB hits / game',side:'D',v:T=>(T.f.qbh||0)/T.n,hi:1,d:1},
+  {id:'takeaway',lab:'INTs / game',side:'D',v:T=>(T.f.dint||0)/T.n,hi:1,d:2}];
+const SCOUT_CATS={
+  nfl:{p:SC_FB_P,t:SC_FB_T},ncaaf:{p:SC_FB_P,t:SC_FB_T},
+  nhl:{p:[
+    {id:'pts_g',lab:'Points / game',role:'SK',q:R=>R.n>=3,v:R=>((R.s.g||0)+(R.s.a||0))/R.n,hi:1,bust:0,d:2,head:1},
+    {id:'g_g',lab:'Goals / game',role:'SK',q:R=>R.n>=3,v:R=>scPer(R,'g'),hi:1,bust:0,d:2},
+    {id:'s_g',lab:'Shots / game',role:'SK',q:R=>R.n>=3,v:R=>scPer(R,'s'),hi:1,bust:0,d:1},
+    {id:'shp',lab:'Shooting %',role:'SK',q:R=>(R.s.s||0)>=12,v:R=>(R.s.g||0)/R.s.s,hi:1,bust:1,pct:1},
+    {id:'pm',lab:'+/- per game',role:'SK',q:R=>R.n>=3&&(R.s.toi||0)/R.n>=14,v:R=>scPer(R,'pm'),hi:1,bust:1,d:2},
+    {id:'bs',lab:'Blocks / game',role:'SK',q:R=>R.n>=3,v:R=>scPer(R,'bs'),hi:1,bust:0,d:2},
+    {id:'ht',lab:'Hits / game',role:'SK',q:R=>R.n>=3,v:R=>scPer(R,'ht'),hi:1,bust:0,d:2},
+    {id:'tk',lab:'Takeaways / game',role:'SK',q:R=>R.n>=3,v:R=>scPer(R,'tk'),hi:1,bust:0,d:2},
+    {id:'svp',lab:'Save % (goalies)',role:'G',q:R=>(R.s.sa||0)>=60,v:R=>(R.s.sv||0)/R.s.sa,hi:1,bust:1,d:3,head:1},
+    {id:'gaa',lab:'Goals against / game (goalies)',role:'G',q:R=>(R.s.gp||0)>=2,v:R=>(R.s.ga||0)/R.s.gp,hi:0,bust:1,d:2}],
+   t:[{id:'gf',lab:'Goals / game',side:'O',v:T=>(T.f.g||0)/T.n,hi:1,d:2},{id:'sf',lab:'Shots / game',side:'O',v:T=>(T.f.s||0)/T.n,hi:1,d:1},
+    {id:'shp_t',lab:'Shooting %',side:'O',v:T=>(T.f.g||0)/Math.max(1,T.f.s||0),hi:1,pct:1},
+    {id:'ga',lab:'Goals against / game',side:'D',v:T=>(T.a.g||0)/T.n,hi:0,d:2},{id:'sa',lab:'Shots against / game',side:'D',v:T=>(T.a.s||0)/T.n,hi:0,d:1},
+    {id:'svp_t',lab:'Save %',side:'D',v:T=>1-(T.f.ga||0)/Math.max(1,T.f.sa||0),hi:1,d:3},
+    {id:'bs_t',lab:'Blocks / game',side:'D',v:T=>(T.f.bs||0)/T.n,hi:1,d:1},{id:'ht_t',lab:'Hits / game',side:'D',v:T=>(T.f.ht||0)/T.n,hi:1,d:1}]},
+  nba:{p:[
+    {id:'pts',lab:'Points / game',role:'P',q:R=>R.n>=3,v:R=>scPer(R,'pts'),hi:1,bust:0,d:1,head:1},{id:'reb',lab:'Rebounds / game',role:'P',q:R=>R.n>=3,v:R=>scPer(R,'reb'),hi:1,bust:0,d:1},
+    {id:'ast',lab:'Assists / game',role:'P',q:R=>R.n>=3,v:R=>scPer(R,'ast'),hi:1,bust:0,d:1},{id:'stk',lab:'Steals + blocks / game',role:'P',q:R=>R.n>=3,v:R=>((R.s.stl||0)+(R.s.blk||0))/R.n,hi:1,bust:0,d:1},
+    {id:'fg3',lab:'3s / game',role:'P',q:R=>R.n>=3,v:R=>scPer(R,'fg3'),hi:1,bust:0,d:1},{id:'tov',lab:'Turnovers / 36 min',role:'P',q:R=>R.n>=3&&(R.s.min||0)>=60,v:R=>(R.s.tov||0)/R.s.min*36,hi:0,bust:1,d:1}],
+   t:[{id:'pf',lab:'Points / game',side:'O',v:T=>(T.f.pts||0)/T.n,hi:1,d:1},{id:'pa',lab:'Points allowed / game',side:'D',v:T=>(T.a.pts||0)/T.n,hi:0,d:1}]}};
+const SCOUT_MIN_TG={nfl:3,ncaaf:3,nhl:3,nba:3};
+let SCOUT_BOARD={};
+/* rank a list: oriented percentile (1 = best) + top/bottom 5% by count */
+function scRank(rows,hi){const vals=rows.map(r=>r.val).sort((a,b)=>a-b);const N=vals.length;
+  rows.forEach(r=>{let lo=0,eq=0;for(const x of vals){if(x<r.val)lo++;else if(x===r.val)eq++;}const p=(lo+0.5*eq)/N;r.pct=hi?p:1-p;});
+  const k=Math.max(1,Math.ceil(0.05*N));const ord=rows.slice().sort((a,b)=>b.pct-a.pct);
+  return{N,k,top:ord.slice(0,k),bot:ord.slice(-k).reverse(),vals};}
+function scoutBoard(sp){const B0=SCOUT_BOARD[sp];if(B0&&Date.now()-B0.ts<120e3)return B0;
+  const D=scoutDb(sp),C=SCOUT_CATS[sp];const out={ts:Date.now(),sp,games:Object.keys(D.fed).length,players:Object.keys(D.p).length,cats:[],tcats:[],tag:{},ttag:{},tp:{},form:[],hype:[]};if(!C){SCOUT_BOARD[sp]=out;return out;}
+  const tagP=(id,t)=>{(out.tag[id]=out.tag[id]||[]).push(t);};
+  C.p.forEach(c=>{const rows=[];Object.entries(D.p).forEach(([id,R])=>{if(c.role&&scRole(R)!==c.role)return;if(!c.q(R))return;const v=c.v(R);if(v==null||!isFinite(v))return;rows.push({id,R,val:v});});
+    if(rows.length<10)return;const K=scRank(rows,c.hi);const top=K.top.filter(r=>c.hi?r.val>0:true);
+    top.forEach(r=>tagP(r.id,{c,star:1,pct:r.pct,val:r.val}));if(c.bust)K.bot.forEach(r=>tagP(r.id,{c,star:0,pct:r.pct,val:r.val}));
+    out.cats.push({c,N:K.N,top,bot:c.bust?K.bot:[],rows,vals:K.vals});});
+  const TE=Object.entries(D.t).filter(([tm,T])=>T.n>=(SCOUT_MIN_TG[sp]||3));
+  if(TE.length>=8)C.t.forEach(c=>{const rows=TE.map(([tm,T])=>({id:tm,T,val:c.v(T)})).filter(r=>r.val!=null&&isFinite(r.val));if(rows.length<8)return;
+    const K=scRank(rows,c.hi);rows.forEach(r=>{(out.tp[r.id]=out.tp[r.id]||{})[c.id]=r.pct;});
+    K.top.forEach(r=>(out.ttag[r.id]=out.ttag[r.id]||[]).push({c,star:1,pct:r.pct,val:r.val}));K.bot.forEach(r=>(out.ttag[r.id]=out.ttag[r.id]||[]).push({c,star:0,pct:r.pct,val:r.val}));
+    out.tcats.push({c,N:K.N,top:K.top,bot:K.bot});});
+  /* form: last 3 vs the season, on each role's headline stat */
+  out.cats.filter(x=>x.c.head).forEach(X=>{const vals=X.vals,N=vals.length;const pctOf=v=>{let lo=0;for(const x of vals)if(x<v)lo++;const p=lo/N;return X.c.hi?p:1-p;};
+    X.rows.forEach(r=>{const f=r.R.f||[];if(r.R.n<4||f.length<3)return;let l3;
+      if(Array.isArray(f[0])){const w=f.reduce((a,x)=>a+x[1],0);l3=w?f.reduce((a,x)=>a+x[0]*x[1],0)/w:null;}
+      else if(X.c.id==='qb_rtg')l3=f.reduce((a,x)=>a+x,0)/3;else l3=f.reduce((a,x)=>a+x,0)/3;
+      if(l3==null)return;const lp=pctOf(l3);
+      if(r.pct>=0.8&&lp<=0.33)out.form.push({id:r.id,R:r.R,c:X.c,dir:'fade',season:r.val,l3,sp_:r.pct,lp});
+      else if(r.pct<=0.5&&lp>=0.85)out.form.push({id:r.id,R:r.R,c:X.c,dir:'heat',season:r.val,l3,sp_:r.pct,lp});});});
+  /* the market's view: anytime-TD prices vs how often he really scores (football) */
+  if(sp==='nfl'||sp==='ncaaf'){try{const PR=get(sp==='nfl'?'d4.nflprops':'d4.ncaafprops',{})||{};const from=dayShift(today(),-21);const imp0={};
+    Object.entries(PR).forEach(([d,arr])=>{if(d<from)return;(arr||[]).forEach(x=>{if(x.stat!=='anytime_td'||x.price==null)return;const id=pstId(x.side);if(!id)return;(imp0[id]=imp0[id]||[]).push(imp(+x.price));});});
+    Object.entries(imp0).forEach(([id,a])=>{const R=D.p[id];if(!R||R.n<4)return;const td=((R.s.rtd||0)+(R.s.wtd||0))/R.n;const act=1-Math.exp(-td);
+      const mk=a.reduce((s,x)=>s+x,0)/a.length/1.08;   /* TD markets carry ~8% hold */
+      if(mk-act>=0.12)out.hype.push({id,R,mk,act,dir:'hype'});else if(act-mk>=0.12)out.hype.push({id,R,mk,act,dir:'value'});});}catch(e){}}
+  SCOUT_BOARD[sp]=out;return out;}
+const scFmt=(c,v)=>v==null||!isFinite(v)?'—':c.pct?(v*100).toFixed(1)+'%':(+v).toFixed(c.d==null?1:c.d);
+/* one game, both teams: composite offense / defense and the mismatches */
+function scoutGame(sp,A,H){const B=scoutBoard(sp);const ta=B.tp[A],th=B.tp[H];if(!ta||!th)return null;const C=SCOUT_CATS[sp];if(!C)return null;
+  const comp=(tp,side)=>{const ks=C.t.filter(c=>c.side===side).map(c=>tp[c.id]).filter(x=>x!=null);return ks.length?ks.reduce((a,x)=>a+x,0)/ks.length:null;};
+  const OA=comp(ta,'O'),DA=comp(ta,'D'),OH=comp(th,'O'),DH=comp(th,'D');if([OA,DA,OH,DH].some(x=>x==null))return null;
+  const edge=(OH-DA)-(OA-DH),tot=(OH+OA)-(DH+DA);
+  const MM={nfl:[['off_rtg','def_rtg','pass game'],['sk_alw','sk_made','pass protection vs pass rush'],['off_ypc','def_ypc','run game'],['int_thr','takeaway','ball security vs ball hawks']],
+    nhl:[['gf','ga','scoring'],['sf','sa','shot volume'],['shp_t','svp_t','finishing vs goaltending']],nba:[['pf','pa','scoring']]};MM.ncaaf=MM.nfl;
+  const flags=[];(MM[sp]||[]).forEach(([o,d,lab])=>{[[H,th,A,ta],[A,ta,H,th]].forEach(([X,tx,Y,ty])=>{const po=tx[o],pd=ty[d];if(po==null||pd==null)return;
+    if(po>=0.8&&pd<=0.2)flags.push({team:X,good:1,txt:`${X} ${lab}: top ${Math.max(1,Math.round((1-po)*100))}% offense vs ${Y} bottom ${Math.max(1,Math.round(pd*100))}% defense`});
+    else if(po<=0.2&&pd>=0.8)flags.push({team:Y,good:1,txt:`${Y} defense top ${Math.max(1,Math.round((1-pd)*100))}% vs ${X} bottom ${Math.max(1,Math.round(po*100))}% ${lab}`});});});
+  const ppl=t=>Object.entries(B.tag).filter(([id])=>(scoutDb(sp).p[id]||{}).tm===t).map(([id,T])=>({nm:scoutDb(sp).p[id].nm,T}));
+  return{A,H,OA,DA,OH,DH,edge,tot,flags,pa:ppl(A),ph:ppl(H)};}
+/* 🔭 the Scout — on probation: logged, graded, recorded; it only votes once its record proves it */
+const SCOUT_ML={nfl:0.12,ncaaf:0.15,nhl:0.12,nba:0.12},SCOUT_SPR={nfl:0.25,ncaaf:0.3,nhl:0.3,nba:0.25},SCOUT_TOT=0.3;
+function scoutCharCalls(sp,g,hl,tl,hlSim,tlSim,add){if(!SCOUT_SP.includes(sp))return;const S=scoutGame(sp,g.away.abbr,g.home.abbr);if(!S)return;
+  const sP=e=>+(0.5+0.2*Math.min(1,Math.abs(e)/0.8)).toFixed(4);
+  const ex=e=>({sP:sP(e),sc:+e.toFixed(3),mm:S.flags.length});
+  if(Math.abs(S.edge)>=(SCOUT_ML[sp]||0.12)){const side=S.edge>0?'home':'away';add('Scout','ml',side,ex(S.edge));
+    if(hl!=null&&!hlSim&&Math.abs(S.edge)>=(SCOUT_SPR[sp]||0.25))add('Scout','spread',side,ex(S.edge));}
+  if(tl!=null&&!tlSim&&Math.abs(S.tot)>=SCOUT_TOT)add('Scout','total',S.tot>0?'over':'under',ex(S.tot));}
+const PROB_OK={};
+function scoutProbation(){try{const V=roGet(VOICES_KEY,[],60e3)||[];let w=0,n=0,u=0;V.forEach(x=>{if(x.voice!=='Scout'||!x.graded||x.push||x.hit==null)return;n++;if(x.hit)w++;u+=+x.units||0;});
+  const r=(w+20*0.5)/(n+20);const ok=n>=40&&r>=0.53&&u>=0;PROB_OK.Scout=ok;
+  if(ok&&!VOTER_ORDER.includes('Scout'))VOTER_ORDER.splice(Math.max(0,VOTER_ORDER.indexOf('Power')+1),0,'Scout');return{w,n,u,r,ok};}catch(e){return{w:0,n:0,u:0,r:0.5,ok:false};}}
+/* backfill: walk the season's finals for this page's sport (preseason skipped), a few boxes per pass */
+const SCOUT_BF_DAYS={nfl:120,ncaaf:75,nhl:60,nba:30};let SCOUT_BF_BUSY=false,SCOUT_SESSION=0;
+async function scoutBackfill(sp,max){if(SCOUT_BF_BUSY||!FBP_ESPN[sp]||!SCOUT_SP.includes(sp))return 0;SCOUT_BF_BUSY=true;let done=0;
+  try{const D=scoutDb(sp);const end=today(),from=dayShift(end,-(SCOUT_BF_DAYS[sp]||60));
+    const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000');
+    const j=await fetch(url).then(r=>r.json()).catch(()=>({events:[]}));
+    const ids=(j.events||[]).filter(ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1)).map(ev=>String(ev.id)).filter(id=>!D.fed[id]);
+    for(const id of ids.slice(0,max||8)){
+      try{const s=await fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json());
+        const box=sp==='nhl'?fbpParseHockey(s):sp==='nba'?fbpParseBasketball(s):fbpParseBox(s);
+        if(box){box.state='post';box.date=(((s.header||{}).competitions||[])[0]||{}).date||null;scoutFeed(sp,id,box,true);try{pstatFeed(sp,id,box);}catch(e){}}done++;}catch(e){}
+      await new Promise(r=>setTimeout(r,500));}
+    D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};scoutSave(sp);}
+  finally{SCOUT_BF_BUSY=false;}return done;}
+async function scoutBackfillLoop(){try{const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'');if(!SCOUT_SP.includes(sp)||SCOUT_SESSION>=48)return;
+  const n=await scoutBackfill(sp,8);SCOUT_SESSION+=n;if((scoutDb(sp).bf||{}).remaining&&SCOUT_SESSION<48)setTimeout(scoutBackfillLoop,45e3);}catch(e){}}
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(scoutBackfillLoop,15000));
+function starsHtml(spF){const sps=SCOUT_SP.filter(sp=>(spF==='all'||!spF||spF===sp));
+  const pr=scoutProbation();
+  const head=`<div class="tkt"><h3>⭐ Stars & Busts</h3><div class="sub" style="font-size:10px">Every final box the app reads is ranked inside its own league. ⭐ top 5% · 🤡 bottom 5% (only where the bottom means something) · 📉 fading = season star, last 3 games in the bottom third · 🔥 heating = the reverse · 🎭 over-hyped = the book prices his anytime TD well above how often he scores. Preseason never counts.</div>
+    <div class="mono" style="font-size:10px;margin-top:4px">🔭 <b>The Scout</b> reads these as matchups and calls games. ${pr.ok?`<b style="color:var(--win)">Graduated — it votes (${pr.w}-${pr.n-pr.w}, ${pr.u>=0?'+':''}${pr.u.toFixed(1)}u).</b>`:`<span style="color:var(--gold)">On probation: ${pr.n?`${pr.w}-${pr.n-pr.w} · ${pr.u>=0?'+':''}${pr.u.toFixed(1)}u`:'no graded calls yet'} — it votes once it has 40+ graded calls at 53%+ (shrunk) and isn't losing money.</span>`}</div></div>`;
+  const body=sps.map(sp=>{const B=scoutBoard(sp);const D=scoutDb(sp);const bf=D.bf||{};
+    if(!B.games)return`<div class="tkt"><h3>${SP_LAB[sp]}</h3><div class="sub" style="font-size:10px">Nothing tracked yet — open ${SP_LAB[sp]} and the season backfill starts (about 48 games per visit).</div></div>`;
+    const nm=id=>{const R=D.p[id];return R?`${txtEsc(R.nm)} <span style="color:var(--mute)">${txtEsc(R.tm||'')}</span>`:esc(id);};
+    const games=(sportGames(sp)||[]).filter(g=>{const a=String(g.abstract||'').toLowerCase();return !a||a==='pre'||a==='preview';}).map(g=>({g,S:scoutGame(sp,g.away.abbr,g.home.abbr)})).filter(x=>x.S);
+    const gameHtml=games.map(({g,S})=>{const lean=Math.abs(S.edge)>=(SCOUT_ML[sp]||0.12)?`🔭 Scout: <b>${S.edge>0?S.H:S.A}</b> (edge ${S.edge>0?'+':''}${S.edge.toFixed(2)})`:'🔭 Scout: no side';
+      const tl=Math.abs(S.tot)>=SCOUT_TOT?` · ${S.tot>0?'over':'under'} lean (${S.tot>0?'+':''}${S.tot.toFixed(2)})`:'';
+      const ppl=[...S.pa,...S.ph].map(o=>o.T.map(t=>`${t.star?'⭐':'🤡'} ${txtEsc(o.nm)} ${esc(t.c.lab)}`).join(' · ')).filter(Boolean).slice(0,6);
+      return`<div class="mono" style="font-size:10px;padding:5px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(S.A)} @ ${esc(S.H)}</b> <span style="color:var(--mute)">off ${Math.round(S.OA*100)}/${Math.round(S.OH*100)} · def ${Math.round(S.DA*100)}/${Math.round(S.DH*100)} (percentile, away/home)</span><br>${lean}${tl}
+        ${S.flags.map(f=>`<div style="color:var(--win)">⚔️ ${txtEsc(f.txt)}</div>`).join('')}${ppl.length?`<div style="color:var(--mute)">${ppl.join('<br>')}</div>`:''}</div>`;}).join('');
+    const catHtml=X=>`<div class="mono" style="font-size:10px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(X.c.lab)}</b> <span style="color:var(--mute)">(${X.N} qualified)</span><br>
+      ${X.top.map(r=>`⭐ ${nm(r.id)} <b style="color:var(--win)">${scFmt(X.c,r.val)}</b>`).join(' · ')}${X.bot.length?`<br>${X.bot.map(r=>`🤡 ${nm(r.id)} <b style="color:var(--rust)">${scFmt(X.c,r.val)}</b>`).join(' · ')}`:''}</div>`;
+    const tcatHtml=X=>`<div class="mono" style="font-size:10px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(X.c.lab)}</b> <span style="color:var(--mute)">${X.c.side==='O'?'offense':'defense'}</span><br>
+      ${X.top.map(r=>`⭐ ${esc(r.id)} <b style="color:var(--win)">${scFmt(X.c,r.val)}</b>`).join(' · ')}<br>${X.bot.map(r=>`🤡 ${esc(r.id)} <b style="color:var(--rust)">${scFmt(X.c,r.val)}</b>`).join(' · ')}</div>`;
+    const form=B.form.sort((a,b)=>(a.dir===b.dir?0:a.dir==='fade'?-1:1)).slice(0,14).map(f=>`<div class="mono" style="font-size:10px;padding:3px 0">${f.dir==='fade'?'📉':'🔥'} ${nm(f.id)} — ${esc(f.c.lab)}: season <b>${scFmt(f.c,f.season)}</b> → last 3 <b style="color:${f.dir==='fade'?'var(--rust)':'var(--win)'}">${scFmt(f.c,f.l3)}</b></div>`).join('');
+    const hype=B.hype.sort((a,b)=>Math.abs(b.mk-b.act)-Math.abs(a.mk-a.act)).slice(0,10).map(h=>`<div class="mono" style="font-size:10px;padding:3px 0">${h.dir==='hype'?'🎭 over-hyped':'💎 undervalued'} ${nm(h.id)} — book prices an anytime TD like <b>${Math.round(h.mk*100)}%</b>; he scores in about <b style="color:${h.dir==='hype'?'var(--rust)':'var(--win)'}">${Math.round(h.act*100)}%</b> of games (${h.R.n} tracked)</div>`).join('');
+    return`<div class="sbar" style="margin-top:10px"><h2>${SP_LAB[sp]} · ${B.games} games · ${B.players} players</h2><div class="ln"></div></div>
+      <div class="sub mono" style="font-size:9px;color:var(--mute)">${!D.bf?`season backfill starts the next time you open ${SP_LAB[sp]} (about 48 finals per visit)`:bf.remaining?`backfill: ${bf.remaining} more finals to read — keeps going each time you open ${SP_LAB[sp]}`:'season backfill complete'}</div>
+      ${gameHtml?`<div class="tkt"><h3>⚔️ Today's matchups</h3>${gameHtml}</div>`:''}
+      ${B.tcats.length?`<div class="tkt"><h3>🏟 Teams — top and bottom 5%</h3>${B.tcats.map(tcatHtml).join('')}</div>`:`<div class="tkt"><div class="sub" style="font-size:10px">Team rankings start once 8+ teams have ${SCOUT_MIN_TG[sp]}+ games read.</div></div>`}
+      ${B.cats.length?`<div class="tkt"><h3>⭐ Superstars & 🤡 busts</h3>${B.cats.map(catHtml).join('')}</div>`:''}
+      ${form?`<div class="tkt"><h3>📉 Fading · 🔥 Heating</h3>${form}</div>`:''}
+      ${hype?`<div class="tkt"><h3>🎭 What the market believes vs what he does</h3>${hype}</div>`:''}`;}).join('');
+  return head+body;}
+
 function pstatStatus(sp){const D=pstDb(sp);return{players:Object.keys(D.p).length,games:Object.keys(D.fed).length,remaining:(D.bf||{}).remaining};}
 /* ══ PROP LINES vs THE MODEL — every sport ═══════════════════════════════════
    One format for all sports (the Gemini prompt writes it):
@@ -1620,6 +1838,7 @@ const CHARS={
   'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'situational trend records, shrunk for small samples',quiet:'no uploaded trends lean'},
   'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
   'Power':      {chip:'⚡ POWER',color:'#818cf8',label:'The Commissioner',school:'TheDesk Power Index — who\'s better and by how much, plus prestige and the all-time series',quiet:'no power rating for one of these teams, or no real edge on this number'},
+  'Scout':      {chip:'🔭 SCOUT',color:'#fb7185',label:'The Scout',school:'talent: superstars vs busts — QB efficiency, pass rush, ball hawks, shooters, goalies — read as matchups',quiet:'not enough of either team\'s games read yet, or no real talent edge'},
   'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the Sim, the market and every character\'s graded vote, weighed together',quiet:'still learning — needs graded character history'},
   'Blend':      {chip:'BLEND',color:'#a3e635',label:'The Blend',school:'the Sim\'s chance blended with the market\'s, weighted by which has predicted better',quiet:'no sim chance on this market'}
 };
@@ -1630,10 +1849,13 @@ const CHAR_ORDER=Object.keys(CHARS);
    never vote in the squares, the crowd counts or the Banker's consensus — that
    would count the same opinion twice and let the Brain grade itself. */
 const META_VOICES=new Set(['Brain','Blend']);
-const VOTER_ORDER=CHAR_ORDER.filter(v=>!META_VOICES.has(v));
-const isVoter=v=>!!CHARS[v]&&!META_VOICES.has(v);
+const VOTER_ORDER=CHAR_ORDER.filter(v=>!META_VOICES.has(v)&&v!=='Scout');
+/* v2.27 · on probation: a new character is logged, graded and recorded, but only votes
+   (squares, unanimity, the Brain) once its record proves it — see scoutProbation */
+const PROBATION=new Set(['Scout']);
+const isVoter=v=>!!CHARS[v]&&!META_VOICES.has(v)&&!(PROBATION.has(v)&&!(typeof PROB_OK!=='undefined'&&PROB_OK[v]));
 /* Independent reads: not derived from the app's own simulation. */
-const INDEP_VOICES=new Set(['Trends','Consensus','Coach','Pred','Covers','Power']);
+const INDEP_VOICES=new Set(['Trends','Consensus','Coach','Pred','Covers','Power','Scout']);
 const charName=v=>(CHARS[v]&&CHARS[v].label)||v;
 /* why a character is silent on this market */
 function charQuiet(v,market){if(v==='Coach'&&market==='spread')return'doesn\'t call spreads';return(CHARS[v]||{}).quiet||'no call';}
@@ -1737,6 +1959,8 @@ function characterCalls(sp,g,s){
   if(hl!=null&&hl!==0&&!hlSim)add('Books','spread',hl<0?'home':'away');
   /* ⚡ the Commissioner — power ratings + history (v2.15) */
   try{pwrCharCalls(sp,g,hl,tl,hlSim,tlSim,add);}catch(e){}
+  /* 🔭 the Scout — stars vs busts (v2.27) */
+  try{scoutCharCalls(sp,g,hl,tl,hlSim,tlSim,add);}catch(e){}
   try{metaCalls(sp,g,calls,Ln,add);}catch(e){}
   CHAR_CACHE[ck]={ts:Date.now(),s,calls};
   return calls;
@@ -2201,7 +2425,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261013a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261013b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18107,13 +18331,17 @@ function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','
     gate=!x?'not on today\'s card':!(x.unan||crowdAllAgree(c.sp,c.game,c.market,c.side,c.date))?'crowd split':laneStatus(lk,c.voice)==='blocked'?'lane blocked: '+laneName(lk):pickDisagrees(x,c.sp)?'model fighting the market':null;}catch(e){}
   let F=null;try{F=charFeel(c,V);}catch(e){}const T=roGet(FEEL_TUNE_KEY,null,60e3);const hr2=F&&T&&T.trusted?F.p:hr;
   if(F&&F.black)why.unshift(`🚫 ${F.black.lab} ${F.black.rec}`);
-  return{score:(0.5*p+0.5*hr2)*(1+spec.adj),p,hr:hr2,feel:F?F.p:null,why:spec.why.concat(why),weak:(sw>=6&&hr<0.5)||spec.weak||!!(F&&F.black),gate,spec};}
+  /* v2.27 · chemistry: a proven partner on the same side helps, a nemesis on the other side hurts (±3 pts max) */
+  let CH={adj:0,why:[]};try{CH=chemLegAdj(c,V);}catch(e){}
+  return{score:(0.5*p+0.5*hr2)*(1+spec.adj)+CH.adj,chem:CH.adj,p,hr:hr2,feel:F?F.p:null,why:spec.why.concat(why,CH.why),weak:(sw>=6&&hr<0.5)||spec.weak||!!(F&&F.black),gate,spec};}
 /* Sensible tickets only: no leg priced shorter than -300 (a -450 favorite adds almost
    nothing to the payout and is the leg that quietly sinks parlays). Underdogs: any price. */
 const BK_FLOOR=-300;const bkPriceOk=pr=>pr!=null&&isFinite(+pr)&&+pr>=BK_FLOOR;
+function cparCandsAll(voice,V,d){const calls=V.filter(x=>x.date===d&&x.voice===voice&&bkPriceOk(x.price)&&['ml','spread','total'].includes(x.market));
+  const all=calls.map(c=>({c,...cparLegScore(V,c)}));return{all,cand:all.filter(x=>!x.weak&&!x.gate).sort((a,b)=>b.score-a.score)};}
+function cparCands(voice,V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];return cparCandsAll(voice,V,d||today()).cand;}
 function cparBuild(voice,V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();
-  const calls=V.filter(x=>x.date===d&&x.voice===voice&&bkPriceOk(x.price)&&['ml','spread','total'].includes(x.market));
-  const all=calls.map(c=>({c,...cparLegScore(V,c)}));const cand=all.filter(x=>!x.weak&&!x.gate).sort((a,b)=>b.score-a.score);
+  const {all,cand}=cparCandsAll(voice,V,d);
   const used=new Set(),top=[];for(const x of cand){const g=x.c.sp+'|'+x.c.game;if(used.has(g))continue;used.add(g);top.push(x);if(top.length===5)break;}
   if(top.length<2)return null;
   /* the Banker decides how many legs: the length with the most Kelly growth */
@@ -18153,6 +18381,141 @@ function cparHtml(){const D=cparState();const vs=Object.keys(D.by||{});
     ${vs.map(v=>{const P=D.by[v],R=cparRecord(v);const rec=R.w+R.l?`${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}`:'no graded parlays yet';
       return`<details style="margin:5px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${P.legs.length}-leg · ${decimalToAmerican(P.dec)}</span>${P.size?` <span class="mono" style="font-size:9px;color:#c9a227">🏦 ${esc(P.size.why)}</span>`:''} <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${(P.p*100).toFixed(P.p<0.1?1:0)}% · ${rec}</span></summary>
         ${P.legs.map(l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}<b>${txtEsc(l.pick)}</b> <span style="color:var(--gold)">${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} ${esc(l.game)} · ${Math.round(l.p*100)}%</span>${l.why.length?`<br><span style="color:var(--win)">↳ ${esc(l.why.join(' · '))}</span>`:''}</div>`).join('')}</details>`;}).join('')}</div>`;}
+
+/* ══ CHEMISTRY — who each character wins with, and who beats it (v2.27) ═══════
+   Every graded market where two characters both made a call is a data point:
+   they AGREED (same side) or SPLIT. For each pair we keep the first
+   character's record both ways, separately for the older and newer half of
+   the graded days. A partner is a character whose agreement lifts this one's
+   hit rate; a nemesis wins most of the time when the two split. A pair only
+   counts once the lift points the same way in BOTH halves, so it held up
+   out of sample. Shrunk toward the character's own rate (20 games of
+   weight). It moves a parlay leg's score by ±3 points at most. */
+const CHEM_K=20;let CHEM_C=null;
+const chemZ=()=>({w:0,n:0,u:0});
+function chemIdx(V){V=V||roGet(VOICES_KEY,[],30e3)||[];const sig=charIdxSig(V);if(CHEM_C&&CHEM_C.sig===sig)return CHEM_C.I;
+  const G=new Map();V.forEach(x=>{if(!CHARS[x.voice]||x.hit==null||x.push)return;const k=x.sp+'|'+x.game+'|'+x.date+'|'+x.market;let m=G.get(k);if(!m){m={d:x.date,c:{}};G.set(k,m);}
+    m.c[x.voice]={sd:x.side,hit:!!x.hit,u:+x.units||0};});
+  const ds=[...new Set([...G.values()].map(m=>m.d))].sort();const mid=ds[Math.floor(ds.length/2)]||'';
+  const P={},B={};const add=(s,c)=>{s.n++;if(c.hit)s.w++;s.u+=c.u;};
+  G.forEach(m=>{const vs=Object.keys(m.c);const h=m.d<mid?0:1;vs.forEach(a=>{add(B[a]||(B[a]=chemZ()),m.c[a]);
+    vs.forEach(b=>{if(a===b)return;const o=P[a+'>'+b]||(P[a+'>'+b]={ag:chemZ(),sp:chemZ(),h:[{ag:chemZ(),sp:chemZ()},{ag:chemZ(),sp:chemZ()}]});
+      const t=m.c[a].sd===m.c[b].sd?'ag':'sp';add(o[t],m.c[a]);add(o.h[h][t],m.c[a]);});});});
+  const I={P,B,markets:G.size,days:ds.length};CHEM_C={sig,I};return I;}
+function chemPair(a,b,I){I=I||chemIdx();return I.P[a+'>'+b]||{ag:chemZ(),sp:chemZ(),h:[{ag:chemZ(),sp:chemZ()},{ag:chemZ(),sp:chemZ()}]};}
+const chemShr=(s,base)=>(s.w+CHEM_K*base)/(s.n+CHEM_K);
+const chemRec=s=>`${s.w}-${s.n-s.w}`;
+/* lift = shrunk hit rate when b agrees minus when b splits; held = same sign in both halves */
+function chemLift(a,b,I){I=I||chemIdx();const b0=I.B[a];if(!b0||b0.n<20)return null;const base=b0.w/b0.n;const o=chemPair(a,b,I);
+  if(o.ag.n<25||o.sp.n<15)return null;const lift=chemShr(o.ag,base)-chemShr(o.sp,base);
+  const hl=o.h.map(H=>H.ag.n>=8&&H.sp.n>=6?H.ag.w/H.ag.n-H.sp.w/H.sp.n:null);
+  const held=hl[0]!=null&&hl[1]!=null&&Math.sign(hl[0])===Math.sign(lift)&&Math.sign(hl[1])===Math.sign(lift);
+  return{b,lift,held,ag:o.ag,sp:o.sp,base};}
+function chemRead(a,I){I=I||chemIdx();const b0=I.B[a];if(!b0||b0.n<20)return null;
+  let partner=null,drag=null,nemesis=null,prey=null;
+  CHAR_ORDER.forEach(b=>{if(b===a)return;const L=chemLift(a,b,I);
+    if(L&&L.held&&L.lift>=0.04&&(!partner||L.lift>partner.lift))partner=L;
+    if(L&&L.held&&L.lift<=-0.04&&(!drag||L.lift<drag.lift))drag=L;
+    const them=chemPair(b,a,I).sp,us=chemPair(a,b,I).sp;
+    if(them.n>=15){const r=chemShr(them,0.5);if(r>=0.54&&(!nemesis||r>nemesis.rate))nemesis={b,rate:r,rec:chemRec(them),n:them.n};}
+    if(us.n>=15){const r=chemShr(us,0.5);if(r>=0.54&&(!prey||r>prey.rate))prey={b,rate:r,rec:chemRec(us),n:us.n};}});
+  return{base:b0.w/b0.n,n:b0.n,rec:chemRec(b0),u:b0.u,partner,drag,nemesis,prey};}
+/* today's leg: who else is on it, and does that history help or hurt */
+function chemLegAdj(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];let R=null;try{R=chemRead(c.voice);}catch(e){}if(!R)return{adj:0,why:[]};
+  const by={};V.forEach(x=>{if(x.date===c.date&&x.sp===c.sp&&x.game===c.game&&x.market===c.market&&x.voice!==c.voice)by[x.voice]=x.side;});
+  let adj=0;const why=[];
+  if(R.partner&&by[R.partner.b]!=null){if(by[R.partner.b]===c.side){adj+=R.partner.lift/2;why.push(`🤝 ${charName(R.partner.b)} agrees (${chemRec(R.partner.ag)} together)`);}
+    else{adj-=R.partner.lift/2;why.push(`⚠️ partner ${charName(R.partner.b)} disagrees (${chemRec(R.partner.sp)} when split)`);}}
+  if(R.drag&&by[R.drag.b]===c.side){adj+=R.drag.lift/2;why.push(`🪫 ${charName(R.drag.b)} agrees — ${chemRec(R.drag.ag)} together`);}
+  if(R.nemesis&&by[R.nemesis.b]!=null&&by[R.nemesis.b]!==c.side){adj-=(R.nemesis.rate-0.5)/2;why.push(`🥊 nemesis ${charName(R.nemesis.b)} on the other side (wins ${R.nemesis.rec} when they split)`);}
+  adj=Math.max(-0.03,Math.min(0.03,adj));return{adj,why};}
+function chemHtml(){const I=chemIdx();const vs=CHAR_ORDER.filter(v=>(I.B[v]||{}).n>=20);
+  if(vs.length<2)return'<div class="tkt"><h3>🧪 Chemistry</h3><div class="sub">Needs 20+ graded calls from at least two characters.</div></div>';
+  const pct=x=>Math.round(x*100);
+  const cell=(a,b)=>{if(a===b)return'<td style="color:var(--mute)">·</td>';const L=chemLift(a,b,I);const o=chemPair(a,b,I);
+    if(!o.ag.n)return'<td style="color:var(--mute)">—</td>';const r=o.ag.w/o.ag.n;
+    const col=L&&L.held?(L.lift>=0.04?'var(--win)':L.lift<=-0.04?'var(--rust)':'var(--chalk)'):'var(--mute)';
+    return`<td style="color:${col}" title="${esc(charName(a))} with ${esc(charName(b))}: ${chemRec(o.ag)} agreeing, ${chemRec(o.sp)} split">${pct(r)}<span style="font-size:8px">·${o.ag.n}</span></td>`;};
+  const head=vs.map(v=>`<td>${txtEsc((CHARS[v].chip||v).replace(/^[^A-Z★⚡🧠]*/,'').slice(0,6))}</td>`).join('');
+  const reads=vs.map(a=>{const R=chemRead(a,I);if(!R)return'';const bits=[];
+    if(R.partner)bits.push(`<span style="color:var(--win)">🤝 best with ${esc(charName(R.partner.b))}: ${chemRec(R.partner.ag)} together vs ${chemRec(R.partner.sp)} split</span>`);
+    if(R.drag)bits.push(`<span style="color:var(--rust)">🪫 worse with ${esc(charName(R.drag.b))}: ${chemRec(R.drag.ag)} together</span>`);
+    if(R.nemesis)bits.push(`<span style="color:var(--rust)">🥊 nemesis ${esc(charName(R.nemesis.b))} wins ${R.nemesis.rec} of their splits</span>`);
+    if(R.prey)bits.push(`<span style="color:var(--gold)">🎯 beats ${esc(charName(R.prey.b))} ${R.prey.rec} in splits</span>`);
+    return`<div class="mono" style="font-size:10px;padding:4px 0;border-bottom:1px solid var(--rule)"><b style="color:${CHARS[a].color}">${txtEsc(charName(a))}</b> <span style="color:var(--mute)">${R.rec} overall</span><br>${bits.join('<br>')||'<span style="color:var(--mute)">no pairing has held up in both halves yet</span>'}</div>`;}).join('');
+  return`<div class="tkt"><h3>🧪 Chemistry — who wins together, who wins the argument</h3>
+    <div class="sub" style="font-size:10px">${I.markets} graded markets over ${I.days} days. Each cell: the ROW character's hit % on calls where the COLUMN character took the same side (small number = how many). Green = agreeing lifts the row character, red = it drags; grey = not proven in both halves of the history yet. Parlay legs move ±3 points at most on this.</div>
+    <div style="overflow-x:auto"><table class="mono" style="font-size:9.5px;text-align:center;border-collapse:collapse;margin-top:4px;min-width:100%"><tr style="color:var(--mute)"><td></td>${head}</tr>
+    ${vs.map(a=>`<tr><td style="text-align:left;color:${CHARS[a].color};white-space:nowrap">${txtEsc(charName(a))}</td>${vs.map(b=>cell(a,b)).join('')}</tr>`).join('')}</table></div>
+    <div style="margin-top:6px">${reads}</div></div>`;}
+
+/* ══ PARLAY HUB — every character's two tickets: game lines, and with props ══
+   The game-line ticket is the one each character has built since v1.97. The
+   props ticket starts from the same strongest game legs and swaps in the
+   character's own best 70%+ prop calls (calibrated %, one leg per game, no
+   prop on a game already in the ticket — no same-game correlation). Props
+   without a book line are priced at a fair price plus a normal 4.5% hold and
+   marked ≈. Frozen at the master evaluation, graded at the finals, and kept
+   apart so each character's "with props" record can be compared with its
+   "without props" record. */
+const CPX_KEY='d4.charparlaysx',CPX_HOLD=0.045;
+function cpxPropPrice(p){const dec=1/Math.min(0.97,p*(1+CPX_HOLD));return +decimalToAmerican(dec);}
+function cpxPropGame(sp,team){const o=cpropOpp(sp,team);if(!o)return null;return o.home?o.opp+'@'+team:team+'@'+o.opp;}
+function cpxBuild(voice,V,d,calls){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();
+  if(!CPROP_VOICES.includes(voice))return null;
+  const props=(calls||[]).filter(c=>c.voice===voice&&c.fav!=='fade'&&c.cal>=0.72).map(c=>({c,game:cpxPropGame(c.sp,c.team)})).filter(x=>x.game)
+    .sort((a,b)=>(b.c.cal+(b.c.fav==='fav'?0.03:0))-(a.c.cal+(a.c.fav==='fav'?0.03:0)));
+  if(!props.length)return null;
+  const gl=cparCands(voice,V,d);const legs=[],used=new Set();
+  gl.slice(0,3).forEach(x=>{const g=x.c.sp+'|'+x.c.game;if(used.has(g))return;used.add(g);
+    legs.push({kind:'game',sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,m:x.c.market,sd:x.c.side,p:x.p,score:x.score,why:x.why});});
+  for(const x of props){if(legs.filter(l=>l.kind==='prop').length>=2)break;const g=x.c.sp+'|'+x.game;if(used.has(g))continue;used.add(g);
+    legs.push({kind:'prop',sp:x.c.sp,game:x.game,player:x.c.player,team:x.c.team,k:x.c.k,thr:x.c.thr,pick:cpropLine(x.c),price:cpxPropPrice(x.c.cal),est:true,p:x.c.cal,score:x.c.cal,
+      why:[`${Math.round(x.c.cal*100)}% calibrated`+(x.c.rec?` · ${x.c.rec} on this player`:'')+(x.c.why?` · ${x.c.why}`:'')]});}
+  if(legs.length<2||!legs.some(l=>l.kind==='prop'))return null;
+  legs.sort((a,b)=>b.score-a.score);
+  const sz=bkSize(legs.map(l=>({p:l.score,dec:americanToDecimal(l.price)})),2,Math.min(5,legs.length));
+  const kB=legBudget(legs.map(l=>l.p),sz.k);if(kB<sz.k)sz.k=kB;
+  let pick=legs.slice(0,sz.k);if(!pick.some(l=>l.kind==='prop')){const pr=legs.find(l=>l.kind==='prop');pick=pick.slice(0,sz.k-1).concat(pr);}
+  const dec=pick.reduce((a,l)=>a*americanToDecimal(l.price),1),p=pick.reduce((a,l)=>a*l.p,1);
+  return{voice,d,legs:pick,dec,p,props:pick.filter(l=>l.kind==='prop').length};}
+let CPX_MEM=null;
+function cpxState(){const d=today();const locked=evalRanToday();const V0=roGet(VOICES_KEY,[],30e3)||[];const msig=d+'|'+locked+'|'+charIdxSig(V0);
+  if(CPX_MEM&&CPX_MEM.sig===msig&&Date.now()-CPX_MEM.ts<60e3)return CPX_MEM.v;
+  const S=get(CPX_KEY,{})||{};
+  if(!S[d]||!S[d].locked){let calls=[];try{calls=cpropToday();}catch(e){}const day={locked,by:{}};
+    CPROP_VOICES.forEach(v=>{try{const P=cpxBuild(v,V0,d,calls);if(P)day.by[v]=P;}catch(e){}});
+    S[d]=day;if(locked){Object.keys(S).sort().slice(0,-60).forEach(k=>delete S[k]);set(CPX_KEY,S);}}
+  CPX_MEM={sig:msig,ts:Date.now(),v:S[d]};return S[d];}
+function cpxGradeLeg(l,d){if(l.kind==='prop'){const g=(get('d4.pstlast.'+l.sp,{})||{})[pstId(l.player)];
+    if(g&&g.d>=d&&g.d<=dayShift(d,1)&&g.v[l.k]!=null){l.actual=+g.v[l.k];l.hit=l.actual>=l.thr;return true;}
+    if(today()>dayShift(d,2)){l.push=true;l.void='no box line for this player';return true;}return false;}
+  let r=null;try{r=gradeLeg({sport:l.sp,game:l.game,pick:l.pick,gameDate:d},d);}catch(e){}
+  if(!r||r.live)return false;if(r.push){l.push=true;return true;}if(r.hit===true||r.hit===false){l.hit=r.hit;return true;}return false;}
+function cpxGrade(){const S=get(CPX_KEY,{})||{};let n=0;
+  Object.entries(S).forEach(([d,D])=>{if(!D||!D.locked)return;Object.values(D.by||{}).forEach(P=>{if(P.done)return;
+    P.legs.forEach(l=>{if(l.hit!=null||l.push)return;if(cpxGradeLeg(l,d))n++;});
+    const live=P.legs.filter(l=>!l.push);if(live.some(l=>l.hit===false)){P.done=true;P.won=false;}else if(live.length&&live.every(l=>l.hit===true)){P.done=true;P.won=true;}});});
+  if(n)set(CPX_KEY,S);return n;}
+function cpxRecord(voice){const S=get(CPX_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=0,pw=0,pl=0;
+  Object.values(S).forEach(D=>{const P=D&&D.locked&&(D.by||{})[voice];if(!P)return;
+    P.legs.forEach(x=>{if(x.hit===true){lw++;if(x.kind==='prop')pw++;}else if(x.hit===false){ll++;if(x.kind==='prop')pl++;}});
+    if(P.done){if(P.won){w++;u+=P.legs.filter(x=>!x.push).reduce((a,x)=>a*americanToDecimal(x.price),1)-1;}else{l++;u-=1;}}});
+  return{w,l,u,lw,ll,pw,pl};}
+function phTicketHtml(P,title){const leg=l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}${l.kind==='prop'?'🎯 ':''}<b>${txtEsc(l.pick)}</b> <span style="color:var(--gold)">${l.est?'≈':''}${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} · ${esc(l.game||'')} · ${Math.round((l.p||0)*100)}%</span>${(l.why||[]).length?`<div style="color:var(--mute);font-size:9px">${l.why.map(txtEsc).join(' · ')}</div>`:''}</div>`;
+  return`<div style="margin:4px 0 2px"><span class="mono" style="font-size:9.5px;color:var(--mute)">${title}</span> <b class="mono" style="font-size:11px;color:var(--gold)">${P.legs.length}-leg ${decimalToAmerican(P.dec)}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${Math.round(P.p*100)}% to cash${P.done?(P.won?' · <b style="color:var(--win)">CASHED</b>':' · <b style="color:var(--rust)">lost</b>'):''}</span></div>${P.legs.map(leg).join('')}`;}
+function parlayHubHtml(){let A={by:{}},X={by:{}};try{cparGrade();cpxGrade();}catch(e){}try{A=cparState();}catch(e){}try{X=cpxState();}catch(e){}
+  const rec=R=>R.w+R.l?`${R.w}-${R.l} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u`:'—';
+  const vs=CHAR_ORDER.filter(v=>(A.by||{})[v]||(X.by||{})[v]||cparRecord(v).w+cparRecord(v).l||cpxRecord(v).w+cpxRecord(v).l);
+  const cards=vs.map(v=>{const C=CHARS[v],a=(A.by||{})[v],x=(X.by||{})[v],Ra=cparRecord(v),Rx=cpxRecord(v);let R=null;try{R=chemRead(v);}catch(e){}
+    const chem=R?[R.partner?`🤝 ${esc(charName(R.partner.b))}`:'',R.nemesis?`🥊 ${esc(charName(R.nemesis.b))}`:''].filter(Boolean).join(' · '):'';
+    return`<div class="tkt" style="border-left:3px solid ${C.color}"><h3 style="color:${C.color}">${txtEsc(charName(v))}</h3>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">no props ${rec(Ra)} · with props ${CPROP_VOICES.includes(v)?rec(Rx):'n/a (no prop reads)'}${chem?' · '+chem:''}</div>
+      ${a?phTicketHtml(a,'🎲 GAME LINES'):'<div class="sub" style="font-size:10px">No game-line ticket today — fewer than 2 legs pass its rules.</div>'}
+      ${CPROP_VOICES.includes(v)?(x?phTicketHtml(x,'🎯 WITH PROPS'):'<div class="sub" style="font-size:10px;margin-top:4px">No props ticket today — no 72%+ prop call on a game it isn\'t already in.</div>'):''}</div>`;}).join('');
+  const tbl=vs.map(v=>{const Ra=cparRecord(v),Rx=cpxRecord(v);return`<tr><td style="text-align:left;color:${CHARS[v].color}">${txtEsc(charName(v))}</td><td>${rec(Ra)}</td><td>${Ra.lw+Ra.ll?Ra.lw+'-'+Ra.ll:'—'}</td><td>${CPROP_VOICES.includes(v)?rec(Rx):'n/a'}</td><td>${Rx.pw+Rx.pl?Rx.pw+'-'+Rx.pl:'—'}</td></tr>`;}).join('');
+  return`<div class="tkt"><h3>🎲 Parlay Hub</h3><div class="sub" style="font-size:10px">Every character builds its own tickets from its strongest spots: one on game lines only, one that adds its best prop calls (the prop readers: Sim, Judge, Scorekeeper, Historian, Coach). Legs carry the character's specialty, inner feeling and chemistry. ${A.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation.</b>':'Still building — freezes when the master evaluation runs.'}</div>
+    <table class="mono" style="width:100%;font-size:9.5px;text-align:center;border-collapse:collapse;margin-top:6px"><tr style="color:var(--mute)"><td style="text-align:left">character</td><td>no props</td><td>legs</td><td>with props</td><td>prop legs</td></tr>${tbl}</table></div>${cards||'<div class="empty">No character has a ticket yet today.</div>'}`;}
 
 /* ══ CHARACTER PROPS — 70%+ calls, graded, calibrated ══════════════════════
    Four characters read every player on today's slate, each its own way:
@@ -18348,11 +18711,13 @@ function renderToday(noSnap){
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
       ${rows||`<div class="empty">${total?'Nothing here matches the filter'+(P.length<total?' (live games are pinned above)':'')+'.':'No colored, non-conflicted picks on this board yet.'}</div>`}
       ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
-  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
+  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['parlays','🎲 Parlays'],['stars','⭐ Stars & Busts'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
-    el.innerHTML=vw+spBar+safe(()=>charDayHtml(F.sp))+safe(feelTuneHtml)+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+safe(cparHtml)+charDeskHtml(F);return;}
+    el.innerHTML=vw+spBar+safe(()=>charDayHtml(F.sp))+safe(feelTuneHtml)+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Every character's tickets — game lines and with props — and their records live in the Parlay Hub.</div><button class="msg-chip on" onclick="tfSet('view','parlays')">🎲 Open the Parlay Hub</button></div>`+charDeskHtml(F);return;}
   if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
+  if(F.view==='parlays'){let h='';try{h=parlayHubHtml();}catch(e){console.warn('parlay hub',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
+  if(F.view==='stars'){let h='';try{h=starsHtml(F.sp);}catch(e){console.warn('stars',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+spBar+h;return;}
   if(F.view==='subs'){let h='';try{h=subCardHtml();}catch(e){console.warn('subscriber card',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   let hero='';try{hero=todayBestHero();}catch(e){console.warn('best hero',e);}
   el.innerHTML=vw+hero+legend+bar+(F.tier==='play'?`<div class="sub mono" style="font-size:9.5px;margin:-2px 0 8px;color:var(--win)">✅ Playable = every character on this side (or SUPREME), lane not blocked, model not fighting the market, has a book price no shorter than -300, +EV on what picks like it have actually hit. ${cnt({tier:'play'})} of ${allP.length} today.</div>`:'')+liveHtml+sdHtml+body;
@@ -18624,7 +18989,7 @@ function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
   if(REC_VIEW==='chars'){let h='';try{try{cpropGrade();cparGrade();}catch(e){}
       const P=CHAR_ORDER.map(v=>({v,R:cparRecord(v)})).filter(x=>x.R.w+x.R.l);
-      h=(()=>{try{return charDayHtml('all')}catch(e){return''}})()+(()=>{try{return pwrRecordsHtml()}catch(e){return''}})()+(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
+      h=(()=>{try{return charDayHtml('all')}catch(e){return''}})()+(()=>{try{return chemHtml()}catch(e){return''}})()+(()=>{try{return pwrRecordsHtml()}catch(e){return''}})()+(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
     catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
@@ -20495,7 +20860,7 @@ async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY)return null;if(!opts
       try{if(btUngraded().some(x=>String(x.l.gameDate||x.t.date).slice(0,10)<=today()))await regradeAllProps(document.getElementById('btStatus'));}catch(e){}
     }
     try{settleLockedTickets();}catch(e){}try{settledSync(true);}catch(e){}
-    try{gradeVoices();}catch(e){}try{cparGrade();}catch(e){}try{best5Grade();}catch(e){}try{bkDayGrade();}catch(e){}try{cpropGrade();}catch(e){}try{msSync();}catch(e){}
+    try{gradeVoices();}catch(e){}try{cparGrade();}catch(e){}try{cpxGrade();}catch(e){}try{best5Grade();}catch(e){}try{bkDayGrade();}catch(e){}try{cpropGrade();}catch(e){}try{msSync();}catch(e){}
     try{tgAutoTick().catch(()=>{});}catch(e){}
   }finally{SWEEP_BUSY=false;}
   const left=sweepOverdue().map(x=>{let D={code:'?',msg:'no result found yet'};try{D=legDiagnose(x.l,x.t);}catch(e){}
@@ -21724,7 +22089,7 @@ function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet
   B.streak=Object.assign([0,0],{s});
   return{B,all};}
 /* the character's stated chance where it has one; otherwise its own all-time rate here */
-function feelBase(c,all){const st=c.voice==='Power'?c.pP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
+function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
   const rate=(all[0]+FEEL_K0*0.5)/(all[0]+all[1]+FEEL_K0);
   if(st>0&&st<1){/* a stated chance is tempered by how reliable the character has actually been */const n=all[0]+all[1];const k=n/(n+FEEL_K0);return Math.max(0.02,Math.min(0.98,(1-k*0.5)*st+k*0.5*rate));}
   return rate;}
