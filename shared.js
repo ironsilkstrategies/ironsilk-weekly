@@ -2201,7 +2201,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261012j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261012k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2758,10 +2758,15 @@ async function pushToGitHub(manual){
 /* v1.96 · the public picks page lives in the repo this site is served from. A typo'd repo
    ("ironsilkweekly" for "ironsilk-weekly") or a token without access both come back as a
    bare 404 — fix the known name, try every token the device holds, and say which it was. */
-const SITE_REPO='ironsilkstrategies/ironsilk-weekly';
+/* v2.25 · the publication moved to its own public repo; the app's repo goes private. Any
+   setting that still names the old app repo (or its new name, thedesk) publishes to the site. */
+const SITE_REPO='ironsilkstrategies/ironsilk-weekly-site';
+const PUB_URL='https://ironsilkweekly.com/picks.html';
+/* while the domain moves, the old app repo may still be serving picks.html — mirror there, best effort, never blocking */
+const LEGACY_PUB_REPO='ironsilkstrategies/ironsilk-weekly';
 function pubRepo(){let r=String(get(LS.ghrepo,'')||'').trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/+$/,'');
-  if(!r||/^ironsilkstrategies\/ironsilk[\s_]?weekly$/i.test(r))r=SITE_REPO;return r;}
-async function ghPut(path,text,msg){const repo=pubRepo();
+  if(!r||/^ironsilkstrategies\/(ironsilk[\s_-]?weekly(-site)?|thedesk)$/i.test(r))r=SITE_REPO;return r;}
+async function ghPut(path,text,msg,repoOver){const repo=repoOver||pubRepo();
   const toks=[...new Set([get(LS.ghtoken,''),get(SYNC.token,'')].filter(Boolean))];if(!toks.length)return{ok:false,reason:'no GitHub token on this device'};
   let last=null;
   for(const token of toks){const api=`https://api.github.com/repos/${repo}/contents/${path}`;const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
@@ -2769,7 +2774,7 @@ async function ghPut(path,text,msg){const repo=pubRepo();
       if(g.status===401||g.status===403||(g.status===404&&!(await ghRepoVisible(repo,H)))){last={ok:false,status:g.status,reason:`this token can't write to ${repo}`};continue;}
       if(g.status===200)sha=(await g.json()).sha;else if(g.status!==404){last={ok:false,reason:'HTTP '+g.status};continue;}
       const r=await fetch(api,{method:'PUT',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify({message:msg,content:b64u(text),...(sha?{sha}:{})})});
-      if(r.ok){if(get(LS.ghrepo,'')!==repo)set(LS.ghrepo,repo);if(token!==get(LS.ghtoken,''))set(LS.ghtoken,token);return{ok:true};}
+      if(r.ok){if(!repoOver&&get(LS.ghrepo,'')!==repo)set(LS.ghrepo,repo);if(token!==get(LS.ghtoken,''))set(LS.ghtoken,token);return{ok:true};}
       last={ok:false,status:r.status,reason:r.status===404||r.status===403?`this token can't write to ${repo}`:'HTTP '+r.status+' '+(await r.text()).slice(0,120)};}
     catch(e){last={ok:false,reason:e.message||String(e)};}}
   return last||{ok:false,reason:'publish failed'};}
@@ -2801,9 +2806,10 @@ async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual
   if(!get(LS.ghtoken,'')&&!get(SYNC.token,'')){if(manual)alert('Add a GitHub token in Settings → Public picks page first.');return{ok:false,reason:'not configured'};}
   const F=publicFeed();try{if(F.today)F.today.commit=await pickCommit(S,F.today.allStarted);}catch(e){}const txt=JSON.stringify(F,null,1);
   const a=await ghPut('public/picks.json',txt,'Publish picks — '+S.d);const b=a.ok?await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d):a;
+  if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{const m=await ghPut('public/picks.json',txt,'Publish picks — '+S.d,LEGACY_PUB_REPO);if(m.ok)await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d,LEGACY_PUB_REPO);}catch(e){}}
   set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:JSON.stringify(F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit))});
-  if(manual)alert(a.ok&&b.ok?'Published. Your public page updates in about a minute: '+location.origin+location.pathname.replace(/[^/]*$/,'')+'picks.html'
-    :/can't write/.test(a.reason||b.reason||'')?`Publish failed: ${a.reason||b.reason}.\n\nFix: on github.com → Settings → Developer settings → Fine-grained tokens → "TheDesk sync" → Edit → Repository access → add ironsilk-weekly → Save. No new token needed — this device already has it.`
+  if(manual)alert(a.ok&&b.ok?'Published. Your public page updates in about a minute: '+PUB_URL
+    :/can't write/.test(a.reason||b.reason||'')?`Publish failed: ${a.reason||b.reason}.\n\nFix: on github.com → Settings → Developer settings → Fine-grained tokens → "TheDesk sync" → Edit → Repository access → add ironsilk-weekly-site → Save. No new token needed — this device already has it.`
     :'Publish failed: '+(a.reason||b.reason));
   try{renderBest();}catch(e){}return{ok:a.ok&&b.ok};}
 /* auto: once when the card locks, and again whenever a pick grades */
@@ -15988,7 +15994,7 @@ function renderBest(){
   let rcT='';try{const B=bkDayState();const D=B.locked?B:B.preview;if(D&&D.roll&&D.roll.cut.length){const cut=D.roll.legs.filter(l=>D.roll.cut.includes(l.sp+'|'+l.game));
     rcT=`<div class="tkt" style="margin-top:8px;border-left:3px solid #ff6fae"><h3>📣 Tonight's Roll Call parlay ${B.locked?'🔒':''}</h3><div class="mono" style="font-size:10.5px">${cut.map(l=>`${txtEsc(l.pick)} <span style="color:var(--gold)">${sgnP(l.price)}</span>`).join(' · ')}</div>
       <div class="mono" style="font-size:10px;color:var(--mute)">${cut.length} legs · ${decimalToAmerican(D.roll.cutDec)} · ${(D.roll.cutP*100).toFixed(1)}% to cash</div><div class="bar" style="margin-top:4px"><button onclick="tab('banker',document.getElementById('navBanker'))">Open the Banker's desk →</button></div></div>`;}}catch(e){}
-  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button><a href="picks.html" target="_blank" style="font-size:11px;color:var(--cold);align-self:center">open public page ↗</a></div>
+  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button><a href="${PUB_URL}" target="_blank" style="font-size:11px;color:var(--cold);align-self:center">open public page ↗</a></div>
     <div class="sub mono" style="font-size:9.5px">${pubTxt||'The public page (picks.html) shows only the locked card, its graded record and your subscribe link. It publishes itself when the card locks.'}</div>
     <div class="sub" style="font-size:10px;margin-top:4px">Subscribe link for the public page <input id="subLinkIn" placeholder="https://… (Whop, Patreon, Stripe link)" value="${esc(get('d4.sublink',''))}" onchange="set('d4.sublink',this.value.trim())" style="width:100%;margin-top:2px"></div>`+
     ((S.props||[]).length?`<details class="tkt" style="margin-top:8px"><summary><b>Bonus props</b> <span class="mono" style="font-size:10px;color:var(--mute)">not part of the record</span></summary>${bestRowsHtml('Top props',S.props,null,'')}</details>`:'');
