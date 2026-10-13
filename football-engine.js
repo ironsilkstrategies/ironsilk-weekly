@@ -4504,7 +4504,7 @@ function fbEvalInputs(sp){
     stats:nfl?Object.keys(NFL_SEASONSTATS||{}).length:0,brain:(b.log||[]).length};
 }
 function fbEvalFingerprint(sp){return JSON.stringify(fbEvalInputs(sp))}
-function runFootballEval(sp){
+function runFootballEval(sp){try{if(typeof evalPrep==='function')evalPrep(sp);}catch(err){console.warn('eval prep',err);}   /* v2.28: absorb, calibrate, re-sim, re-read — then lock */
   const nfl=sp==='nfl',G=(nfl?NFL_GAMES:NCAAF_GAMES)||[],S=nfl?NFL_SIMS:NCAAF_SIMS;
   const lf=nfl?nflBookLinesFor:ncaafBookLinesFor,sim=nfl?simNFLGame:simNCAAFGame;
   const evals=[];

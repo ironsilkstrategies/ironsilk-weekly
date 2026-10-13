@@ -600,7 +600,9 @@ function scoutFeed(sp,eventId,box,quiet){if(!SCOUT_SP.includes(sp)||!box||box.st
   const{P,T}=scoutLines(sp,box);const tms=Object.keys(T);if(tms.length!==2||!Object.keys(P).length)return 0;
   Object.values(P).forEach(x=>{if(!x.role)return;const id=pstId(x.name);const R=D.p[id]||(D.p[id]={nm:x.name,tm:x.team,n:0,rc:{},s:{},f:[]});
     R.tm=x.team;R.n++;R.rc[x.role]=(R.rc[x.role]||0)+1;Object.entries(x.v).forEach(([k,v])=>{if(v)R.s[k]=Math.round(((R.s[k]||0)+v)*100)/100;});
-    if(x.head!=null&&isFinite(x.head)){R.f.push(x.hw?[+x.head.toFixed(4),x.hw]:+(+x.head).toFixed(2));if(R.f.length>3)R.f=R.f.slice(-3);}});
+    if(x.head!=null&&isFinite(x.head)){R.f.push(x.hw?[+x.head.toFixed(4),x.hw]:+(+x.head).toFixed(2));if(R.f.length>3)R.f=R.f.slice(-3);}
+    /* v2.28 · last 5 games, compact, for the reasons */
+    const lv={};(SC_L5K[x.role]||[]).forEach(k=>{if(x.v[k])lv[k]=Math.round(x.v[k]*100)/100;});R.l5=R.l5||[];R.l5.push({o:tms.find(t=>t!==x.team)||'',d:box.date?String(box.date).slice(0,10):null,v:lv});if(R.l5.length>5)R.l5=R.l5.slice(-5);});
   tms.forEach((tm,i)=>{const o=tms[1-i];const R=D.t[tm]||(D.t[tm]={n:0,f:{},a:{}});R.n++;
     Object.entries(T[tm]).forEach(([k,v])=>{R.f[k]=Math.round(((R.f[k]||0)+v)*100)/100;});
     Object.entries(T[o]).forEach(([k,v])=>{R.a[k]=Math.round(((R.a[k]||0)+v)*100)/100;});});
@@ -693,7 +695,9 @@ function scoutBoard(sp){const B0=SCOUT_BOARD[sp];if(B0&&Date.now()-B0.ts<120e3)r
   SCOUT_BOARD[sp]=out;return out;}
 const scFmt=(c,v)=>v==null||!isFinite(v)?'—':c.pct?(v*100).toFixed(1)+'%':(+v).toFixed(c.d==null?1:c.d);
 /* one game, both teams: composite offense / defense and the mismatches */
-function scoutGame(sp,A,H){const B=scoutBoard(sp);const ta=B.tp[A],th=B.tp[H];if(!ta||!th)return null;const C=SCOUT_CATS[sp];if(!C)return null;
+let SCOUT_GC={};
+function scoutGame(sp,A,H){const B=scoutBoard(sp);const ck=sp+'|'+A+'|'+H;const c0=SCOUT_GC[ck];if(c0&&c0.ts===B.ts)return c0.v;const v=scoutGameCore(sp,A,H,B);SCOUT_GC[ck]={ts:B.ts,v};return v;}
+function scoutGameCore(sp,A,H,B){const ta=B.tp[A],th=B.tp[H];if(!ta||!th)return null;const C=SCOUT_CATS[sp];if(!C)return null;
   const comp=(tp,side)=>{const ks=C.t.filter(c=>c.side===side).map(c=>tp[c.id]).filter(x=>x!=null);return ks.length?ks.reduce((a,x)=>a+x,0)/ks.length:null;};
   const OA=comp(ta,'O'),DA=comp(ta,'D'),OH=comp(th,'O'),DH=comp(th,'D');if([OA,DA,OH,DH].some(x=>x==null))return null;
   const edge=(OH-DA)-(OA-DH),tot=(OH+OA)-(DH+DA);
@@ -1133,7 +1137,7 @@ function parseSGPTicketText(text){
   if(legs.length){if(idx>=0)L[idx]=keepRealMoney(ticket,L[idx]);else L.unshift(ticket);set(LS.locked,L);}
   return{ok:true,ticketNo,legCount:legs.length,propSkipped,skipped,replaced:idx>=0,noneTracked:!legs.length};
 }
-async function intakeText(text,sig,type,src){
+async function intakeText(text,sig,type,src){try{preIntakeSnap();}catch(e){}
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;type=type||'auto';src=src||'';
   text=sgpNormalize(text);
   if(/Ticket Number\s*:/i.test(text)&&/SGP\s*\d+\s*:/i.test(text)){
@@ -1839,6 +1843,7 @@ const CHARS={
   'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
   'Power':      {chip:'⚡ POWER',color:'#818cf8',label:'The Commissioner',school:'TheDesk Power Index — who\'s better and by how much, plus prestige and the all-time series',quiet:'no power rating for one of these teams, or no real edge on this number'},
   'Scout':      {chip:'🔭 SCOUT',color:'#fb7185',label:'The Scout',school:'talent: superstars vs busts — QB efficiency, pass rush, ball hawks, shooters, goalies — read as matchups',quiet:'not enough of either team\'s games read yet, or no real talent edge'},
+  'Banker':     {chip:'🏦 BANKER',color:'#d4af37',label:'The Banker',school:'only a price the calibrated chance beats — +3% EV or no bet, never shorter than -300',quiet:'no price beats the calibrated chance by 3%+'},
   'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the Sim, the market and every character\'s graded vote, weighed together',quiet:'still learning — needs graded character history'},
   'Blend':      {chip:'BLEND',color:'#a3e635',label:'The Blend',school:'the Sim\'s chance blended with the market\'s, weighted by which has predicted better',quiet:'no sim chance on this market'}
 };
@@ -1848,7 +1853,7 @@ const CHAR_ORDER=Object.keys(CHARS);
    the others (Blend = Sim + market, Brain = Blend + every character's vote), so they
    never vote in the squares, the crowd counts or the Banker's consensus — that
    would count the same opinion twice and let the Brain grade itself. */
-const META_VOICES=new Set(['Brain','Blend']);
+const META_VOICES=new Set(['Brain','Blend','Banker']);
 const VOTER_ORDER=CHAR_ORDER.filter(v=>!META_VOICES.has(v)&&v!=='Scout');
 /* v2.27 · on probation: a new character is logged, graded and recorded, but only votes
    (squares, unanimity, the Brain) once its record proves it — see scoutProbation */
@@ -1996,7 +2001,11 @@ function metaCalls(sp,g,calls,Ln,add){
       let mk=null;try{const mf=marketFair(sp,g,m,sd,line);if(mf)mk=mf.p;}catch(e){}
       return{sd,line,price,mk,brain:brainSideP(sp,g,voters,m,sd,mp,line,price),blend:blendSideP(sp,g,m,sd,mp,line,price)};});
     [['Brain','brain'],['Blend','blend']].forEach(([v,k])=>{const a=sides[0][k],b=sides[1][k];if(a==null||b==null||Math.abs(a-b)<1e-9)return;
-      const w=a>b?sides[0]:sides[1];add(v,m,w.sd,{simP:+w[k].toFixed(4),mktP:w.mk!=null?+w.mk.toFixed(4):null});});});}
+      const w=a>b?sides[0]:sides[1];add(v,m,w.sd,{simP:+w[k].toFixed(4),mktP:w.mk!=null?+w.mk.toFixed(4):null});});
+    /* 🏦 the Banker (v2.28) — derived from the Blend, so it never votes: the side whose price the calibrated chance beats by 3%+ */
+    try{const ev=sides.map(o=>o.blend==null||o.price==null||!bkPriceOk(o.price)?null:o.blend*americanToDecimal(o.price)-1);
+      const i=ev[0]!=null&&(ev[1]==null||ev[0]>=ev[1])?0:1;
+      if(ev[i]!=null&&ev[i]>=0.03)add('Banker',m,sides[i].sd,{simP:+sides[i].blend.toFixed(4),mktP:sides[i].mk!=null?+sides[i].mk.toFixed(4):null,ev:+ev[i].toFixed(4)});}catch(e){}});}
 function voicesLog(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
@@ -2008,7 +2017,7 @@ function voicesLog(sp){
     // stale pre-game call from another side if the character flipped before then
     if(pre)calls.forEach(c=>{try{c.f=factorsFor(sp,g,c);}catch(e){}if(c.voice==='Sim'){try{c.f=c.f||factorsFor(sp,g,c);const b=blendProb(sp,c.market,c.simP,c.mktP>0?c.mktP:null);let q=b!=null?b+factorAdj(sp,c.f):null;if(q!=null){try{q+=pwrCalAdj(sp,g,c.market,c.side,c.line,q);}catch(e){}}c.pUsed=q!=null?Math.max(0.01,Math.min(0.99,q)):null;}catch(e){}}});
     calls.forEach(c=>{if(META_VOICES.has(c.voice)&&idx[[c.voice,sp,c.game,c.date,c.market].join('|')]!=null)return;   // already logged under the pre-v1.99 70%+ rule
-      const i=idx[c.id];if(i!=null){if(!pre||V[i].graded)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
+      const i=idx[c.id];if(i!=null){if(!pre||V[i].graded||V[i].lk)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
   });
   if(n){if(V.length>8000)V.splice(0,V.length-8000);set(VOICES_KEY,V);}return n;
 }
@@ -2425,7 +2434,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261013b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261013c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -10327,7 +10336,7 @@ function evalInputFingerprint(){
    today, not only baseball's, so a football-and-hockey night still locks. */
 const EVAL_LOCK_KEY='d4.evallock';
 const EVAL_SPORTS=[['mlb','MLB'],['nfl','NFL'],['ncaaf','CFB'],['nhl','NHL'],['nba','NBA']];
-function evalLockMark(sp){const L=get(EVAL_LOCK_KEY,{})||{};if(L.date!==today())Object.assign(L,{date:today(),by:{}});L.by=L.by||{};L.by[sp]=Date.now();set(EVAL_LOCK_KEY,L);
+function evalLockMark(sp){try{evalFreeze(sp);}catch(e){console.warn('eval freeze',e);}const L=get(EVAL_LOCK_KEY,{})||{};if(L.date!==today())Object.assign(L,{date:today(),by:{}});L.by=L.by||{};L.by[sp]=Date.now();set(EVAL_LOCK_KEY,L);
   /* the Banker commits his desk the moment any master evaluation runs */
   setTimeout(()=>{try{bkDayState()}catch(e){}},300);}
 function evalRanToday(){const d=today();const E=roGet(LS_EVAL,{},10e3)||{};if(E.date===d)return true;
@@ -10479,7 +10488,7 @@ function runMasterEval(){
   const btn=document.getElementById('evalRunBtn');
   if(btn){btn.disabled=true;btn.textContent='Evaluating…'}
   // let the button paint before the work blocks the thread
-  setTimeout(()=>{
+  setTimeout(()=>{try{evalPrep('mlb');}catch(e){}
     const evals=masterEvaluation();
     const d=today();
     set(LS_EVAL,{date:d,ts:Date.now(),fingerprint:evalInputFingerprint(),
@@ -18329,6 +18338,7 @@ function cparLegScore(V,c){const h=charHist(V,c);let sw=0,sr=0;['sport','team','
   let gate=null;try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[c.sp]||{});const x=(B.picks||[]).find(y=>y.game===c.game&&(y.m===c.market||(y.m==='moneyline'&&c.market==='ml'))&&y.sd===c.side);
     const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);
     gate=!x?'not on today\'s card':!(x.unan||crowdAllAgree(c.sp,c.game,c.market,c.side,c.date))?'crowd split':laneStatus(lk,c.voice)==='blocked'?'lane blocked: '+laneName(lk):pickDisagrees(x,c.sp)?'model fighting the market':null;}catch(e){}
+  if(!gate){const lo=ideoLow(c);if(lo)gate='below its own proven confidence floor';}   /* v2.28 */
   let F=null;try{F=charFeel(c,V);}catch(e){}const T=roGet(FEEL_TUNE_KEY,null,60e3);const hr2=F&&T&&T.trusted?F.p:hr;
   if(F&&F.black)why.unshift(`🚫 ${F.black.lab} ${F.black.rec}`);
   /* v2.27 · chemistry: a proven partner on the same side helps, a nemesis on the other side hurts (±3 pts max) */
@@ -18428,6 +18438,9 @@ function chemLegAdj(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];let R=null;try{R=che
     else{adj-=R.partner.lift/2;why.push(`⚠️ partner ${charName(R.partner.b)} disagrees (${chemRec(R.partner.sp)} when split)`);}}
   if(R.drag&&by[R.drag.b]===c.side){adj+=R.drag.lift/2;why.push(`🪫 ${charName(R.drag.b)} agrees — ${chemRec(R.drag.ag)} together`);}
   if(R.nemesis&&by[R.nemesis.b]!=null&&by[R.nemesis.b]!==c.side){adj-=(R.nemesis.rate-0.5)/2;why.push(`🥊 nemesis ${charName(R.nemesis.b)} on the other side (wins ${R.nemesis.rec} when they split)`);}
+  /* v2.28 · proven squads */
+  try{const Q=squadOn(c.sp,c.game,c.date,c.market,c.side,V);if(Q&&Q.best&&Q.best.m.includes(c.voice)){adj+=Math.min(0.02,(Q.best.r-Q.base)/2);why.push(`🏆 squad ${squadName(Q.best)} ${Q.best.w}-${Q.best.n-Q.best.w}`);}
+    if(Q&&Q.worst&&Q.worst.m.includes(c.voice)){adj-=Math.min(0.02,(Q.base-Q.worst.r)/2);why.push(`💀 squad ${squadName(Q.worst)} ${Q.worst.w}-${Q.worst.n-Q.worst.w}`);}}catch(e){}
   adj=Math.max(-0.03,Math.min(0.03,adj));return{adj,why};}
 function chemHtml(){const I=chemIdx();const vs=CHAR_ORDER.filter(v=>(I.B[v]||{}).n>=20);
   if(vs.length<2)return'<div class="tkt"><h3>🧪 Chemistry</h3><div class="sub">Needs 20+ graded calls from at least two characters.</div></div>';
@@ -18447,7 +18460,7 @@ function chemHtml(){const I=chemIdx();const vs=CHAR_ORDER.filter(v=>(I.B[v]||{})
     <div class="sub" style="font-size:10px">${I.markets} graded markets over ${I.days} days. Each cell: the ROW character's hit % on calls where the COLUMN character took the same side (small number = how many). Green = agreeing lifts the row character, red = it drags; grey = not proven in both halves of the history yet. Parlay legs move ±3 points at most on this.</div>
     <div style="overflow-x:auto"><table class="mono" style="font-size:9.5px;text-align:center;border-collapse:collapse;margin-top:4px;min-width:100%"><tr style="color:var(--mute)"><td></td>${head}</tr>
     ${vs.map(a=>`<tr><td style="text-align:left;color:${CHARS[a].color};white-space:nowrap">${txtEsc(charName(a))}</td>${vs.map(b=>cell(a,b)).join('')}</tr>`).join('')}</table></div>
-    <div style="margin-top:6px">${reads}</div></div>`;}
+    <div style="margin-top:6px">${reads}</div>${(()=>{try{return squadsHtml();}catch(e){return'';}})()}</div>`;}
 
 /* ══ PARLAY HUB — every character's two tickets: game lines, and with props ══
    The game-line ticket is the one each character has built since v1.97. The
@@ -18516,6 +18529,270 @@ function parlayHubHtml(){let A={by:{}},X={by:{}};try{cparGrade();cpxGrade();}cat
   const tbl=vs.map(v=>{const Ra=cparRecord(v),Rx=cpxRecord(v);return`<tr><td style="text-align:left;color:${CHARS[v].color}">${txtEsc(charName(v))}</td><td>${rec(Ra)}</td><td>${Ra.lw+Ra.ll?Ra.lw+'-'+Ra.ll:'—'}</td><td>${CPROP_VOICES.includes(v)?rec(Rx):'n/a'}</td><td>${Rx.pw+Rx.pl?Rx.pw+'-'+Rx.pl:'—'}</td></tr>`;}).join('');
   return`<div class="tkt"><h3>🎲 Parlay Hub</h3><div class="sub" style="font-size:10px">Every character builds its own tickets from its strongest spots: one on game lines only, one that adds its best prop calls (the prop readers: Sim, Judge, Scorekeeper, Historian, Coach). Legs carry the character's specialty, inner feeling and chemistry. ${A.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation.</b>':'Still building — freezes when the master evaluation runs.'}</div>
     <table class="mono" style="width:100%;font-size:9.5px;text-align:center;border-collapse:collapse;margin-top:6px"><tr style="color:var(--mute)"><td style="text-align:left">character</td><td>no props</td><td>legs</td><td>with props</td><td>prop legs</td></tr>${tbl}</table></div>${cards||'<div class="empty">No character has a ticket yet today.</div>'}`;}
+
+/* ══ v2.28 · SQUADS — which teams of 3, 4 and 5 characters win together ══════
+   For every graded market, the characters on each side form a group. Every
+   3-, 4- and 5-character subset of that group gets the result (majority of its
+   members' grades). A squad is PROVEN when it has 20+ markets together and is
+   above (or below) the all-character hit rate in BOTH halves of the history.
+   Rebuilt by the autopilot; read from storage everywhere else.               */
+const SQUAD_KEY='d4.squads',SQUAD_K=20;
+function squadCompute(){const V=roGet(VOICES_KEY,[],30e3)||[];const G=new Map();
+  V.forEach(x=>{if(!CHARS[x.voice]||x.hit==null||x.push)return;const k=x.sp+'|'+x.game+'|'+x.date+'|'+x.market;let m=G.get(k);if(!m){m={d:x.date,by:{}};G.set(k,m);}
+    (m.by[x.side]=m.by[x.side]||[]).push({v:x.voice,hit:!!x.hit,u:+x.units||0});});
+  const ds=[...new Set([...G.values()].map(m=>m.d))].sort();const mid=ds[Math.floor(ds.length/2)]||'';
+  const T={};let bw=0,bn=0;
+  const comb=(arr,k,st,cur,fn)=>{if(cur.length===k){fn(cur);return;}for(let i=st;i<arr.length;i++){cur.push(arr[i]);comb(arr,k,i+1,cur,fn);cur.pop();}};
+  G.forEach(m=>{const h=m.d<mid?0:1;Object.values(m.by).forEach(grp=>{grp.forEach(o=>{bn++;if(o.hit)bw++;});if(grp.length<3)return;
+    const by={};grp.forEach(o=>by[o.v]=o);const vs=Object.keys(by).sort();
+    for(let k=3;k<=Math.min(5,vs.length);k++)comb(vs,k,0,[],sub=>{let w=0,u=0;sub.forEach(v=>{if(by[v].hit)w++;u+=by[v].u;});const hit=w*2>=sub.length;
+      const key=sub.join('+');const o=T[key]||(T[key]={k,w:0,n:0,u:0,h:[[0,0],[0,0]]});o.n++;if(hit)o.w++;o.u+=u/sub.length;o.h[h][1]++;if(hit)o.h[h][0]++;});});});
+  const base=bn?bw/bn:0.5;const out={ts:Date.now(),base,markets:G.size,tested:0,best:{},worst:{}};
+  [3,4,5].forEach(k=>{const L=Object.entries(T).filter(([s,o])=>o.k===k&&o.n>=20).map(([s,o])=>{const r=(o.w+SQUAD_K*base)/(o.n+SQUAD_K);
+      const hr=o.h.map(([w,n])=>n>=6?w/n:null);const dir=Math.sign(r-base);const held=hr[0]!=null&&hr[1]!=null&&Math.sign(hr[0]-base)===dir&&Math.sign(hr[1]-base)===dir;
+      return{m:s.split('+'),w:o.w,n:o.n,u:+o.u.toFixed(2),r:+r.toFixed(4),held};});out.tested+=L.length;
+    out.best[k]=L.filter(x=>x.held&&x.r>base+0.03).sort((a,b)=>b.r-a.r).slice(0,5);out.worst[k]=L.filter(x=>x.held&&x.r<base-0.03).sort((a,b)=>a.r-b.r).slice(0,5);});
+  set(SQUAD_KEY,out);return out;}
+function squadsGet(){return roGet(SQUAD_KEY,null,60e3);}
+/* the strongest proven squad (and any losing one) fully on this side today */
+function squadOn(sp,game,date,market,side,V){const Q=squadsGet();if(!Q)return null;V=V||roGet(VOICES_KEY,[],30e3)||[];
+  const on=new Set(V.filter(x=>x.sp===sp&&x.game===game&&String(x.date).slice(0,10)===String(date).slice(0,10)&&x.market===market&&x.side===side).map(x=>x.voice));if(on.size<3)return null;
+  const fit=L=>(L||[]).filter(s=>s.m.every(v=>on.has(v)));
+  const best=[5,4,3].flatMap(k=>fit(Q.best[k])).sort((a,b)=>b.r-a.r)[0]||null,worst=[5,4,3].flatMap(k=>fit(Q.worst[k])).sort((a,b)=>a.r-b.r)[0]||null;
+  return best||worst?{best,worst,base:Q.base}:null;}
+const squadName=s=>s.m.map(v=>charName(v).replace(/^The /,'')).join(' + ');
+function squadsHtml(){const Q=squadsGet();if(!Q)return'<div class="sub" style="font-size:10px">Squads are built by the autopilot — first run is a few seconds after the app opens.</div>';
+  const row=(s,good)=>`<div class="mono" style="font-size:10px;padding:3px 0;border-bottom:1px solid var(--rule)">${good?'🏆':'💀'} <b>${txtEsc(squadName(s))}</b> <span style="color:${good?'var(--win)':'var(--rust)'}">${s.w}-${s.n-s.w} (${Math.round(s.w/s.n*100)}%)</span> <span style="color:var(--mute)">${s.u>=0?'+':''}${s.u.toFixed(1)}u</span></div>`;
+  return`<div style="margin-top:8px"><div class="mktlab">🏆 Squads — 3, 4 and 5 characters all on the same side</div>
+    <div class="sub" style="font-size:9.5px">${Q.markets} graded markets · ${Q.tested} squads with 20+ games together · all-character hit rate ${Math.round(Q.base*100)}%. Only squads that beat (or trail) that rate in BOTH halves of the history are listed.</div>
+    ${[3,4,5].map(k=>`<div style="margin-top:4px"><b class="mono" style="font-size:10px">${k}-character squads</b>${(Q.best[k]||[]).map(s=>row(s,1)).join('')||'<div class="sub" style="font-size:9.5px">no proven winners yet</div>'}${(Q.worst[k]||[]).slice(0,3).map(s=>row(s,0)).join('')}</div>`).join('')}</div>`;}
+
+/* ══ v2.28 · THE MASTER EVALUATION FREEZE ═════════════════════════════════════
+   1. The first time an intake lands each day, every character's current call
+      is saved as its PRE-INTAKE read.
+   2. Running a master evaluation now first absorbs every final (learn + the
+      whole autopilot), unlocks today's calls for that sport, re-simulates every
+      game on the fresh calibration, and lets every character re-read.
+   3. Then it FREEZES: the sim's numbers and every character's call are locked
+      for the day (re-running the eval re-opens and re-locks them). Each locked
+      call remembers its pre-intake side, so we grade whether the intake made
+      that character better or worse.                                          */
+const PREINT_KEY='d4.preintake',SIMLOCK_KEY='d4.simlock',EVPREP_KEY='d4.evalprep';
+function preIntakeSnap(){try{const d=today();try{const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(sp)voicesLog(sp);}catch(e){}
+  const P=get(PREINT_KEY,{})||{};const D=P[d]||(P[d]={ts:Date.now(),c:{}});const V=get(VOICES_KEY,[])||[];let n=0;
+  V.forEach(x=>{if(x.date!==d||x.graded||x.lk||D.c[x.id]!=null)return;D.c[x.id]=x.side+'|'+(x.line!=null?x.line:'');n++;});
+  if(n){Object.keys(P).sort().slice(0,-10).forEach(k=>delete P[k]);set(PREINT_KEY,P);}return n;}catch(e){return 0;}}
+function evalResim(sp){const G=sportGames(sp)||[],S=sportSims(sp);if(!S)return 0;let n=0;
+  const sim=sp==='nfl'&&typeof simNFLGame==='function'?simNFLGame:sp==='ncaaf'&&typeof simNCAAFGame==='function'?simNCAAFGame
+    :sp==='nhl'&&typeof simNHLGame==='function'?(g=>{const s=simNHLGame(g);try{s._sig=NHL_RATINGS?NHL_RATINGS.ts:0;}catch(e){}return s;}):null;
+  if(!sim)return 0;G.forEach(g=>{if((g.abstract||'pre')!=='pre')return;try{S[g.id]=sim(g);n++;}catch(e){}});
+  Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);return n;}
+function evalPrep(sp){const t0=Date.now(),steps=[];const st=(k,f)=>{try{const v=f();steps.push({k,ok:1,n:apNum(v)});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,100)});}};
+  st('learn',()=>brainLearnAll(true));st('autopilot',()=>apRun(true,'eval '+sp));
+  st('unlock',()=>{const V=get(VOICES_KEY,[]);let n=0;V.forEach(x=>{if(x.sp===sp&&x.date===today()&&x.lk&&!x.graded){delete x.lk;n++;}});if(n)set(VOICES_KEY,V);return n;});
+  st('resim',()=>evalResim(sp));st('reread',()=>voicesLog(sp));
+  const L=get(EVPREP_KEY,[])||[];L.unshift({sp,ts:t0,ms:Date.now()-t0,steps});set(EVPREP_KEY,L.slice(0,30));return steps;}
+function evalFreeze(sp){const d=today(),ts=Date.now();try{voicesLog(sp);}catch(e){}const V=get(VOICES_KEY,[]);const P=(get(PREINT_KEY,{})||{})[d]||{c:{}};let n=0,fl=0;
+  V.forEach(x=>{if(x.sp!==sp||x.date!==d||x.graded)return;x.lk=ts;n++;const pre=P.c[x.id];if(pre!=null){const ps=String(pre).split('|')[0];x.pi=ps;if(ps!==x.side)fl++;}});
+  if(n)set(VOICES_KEY,V);
+  const G=sportGames(sp)||[],S=sportSims(sp)||{};const L=get(SIMLOCK_KEY,{})||{};const D=L[d]||(L[d]={});const games={};
+  G.forEach(g=>{const s=S[g.id];if(!s)return;const r=v=>v!=null&&isFinite(+v)?+(+v).toFixed(3):null;
+    games[g.away.abbr+'@'+g.home.abbr]={a:r(s.awayProj),h:r(s.homeProj),aw:r(s.aw),hw:r(s.hw)};});
+  D[sp]={ts,games,calls:n,flips:fl};Object.keys(L).sort().slice(0,-45).forEach(k=>delete L[k]);set(SIMLOCK_KEY,L);return{n,fl};}
+function simLockFor(sp,game,d){const L=(get(SIMLOCK_KEY,{})||{})[d||today()];return L&&L[sp]&&L[sp].games[game]||null;}
+/* did the intake help? per character: calls it flipped after the intake, and how the flips graded */
+function intakeEffect(){const V=roGet(VOICES_KEY,[],30e3)||[];const R={};
+  V.forEach(x=>{if(!x.pi||!x.graded||x.hit==null||x.push)return;const o=R[x.voice]||(R[x.voice]={n:0,flip:0,fw:0,kw:0});o.n++;if(x.pi!==x.side){o.flip++;if(x.hit)o.fw++;}else if(x.hit)o.kw++;});return R;}
+
+/* ══ v2.28 · IDEOLOGY TUNING — each character learns its own confidence floor ═══
+   Every character that states HOW sure it is (the Sim's edge over the market,
+   the Commissioner's %, the Scout's edge, the Banker's EV, the predicted margin
+   behind the Scorekeeper / Oracle / Covers scores) gets a floor per sport and
+   market: below it, its calls have lost money. Weekly: fit on the older 70% of
+   its graded calls, then the floor is ADOPTED only if it also improves units
+   per call on the newest 30% it never saw. Calls under an adopted floor stay
+   on the board but are kept out of every parlay and flagged in the reasons.  */
+const IDEO_KEY='d4.ideo';
+const scoreMargin=x=>{const m=String(x.score||'').match(/(-?\d+(?:\.\d+)?)\s*[-–]\s*(-?\d+(?:\.\d+)?)/);if(!m)return null;const a=+m[1],h=+m[2];
+  if(x.market==='total')return x.line==null?null:(x.side==='over'?(a+h)-x.line:x.line-(a+h));const mg=x.side==='home'?h-a:a-h;return x.market==='spread'?(x.line==null?null:mg+(+x.line)):mg;};
+const IDEO_STR={Sim:x=>x.mktP>0?(x.pUsed!=null?x.pUsed:x.simP)-x.mktP:null,Brain:x=>x.mktP>0&&x.simP!=null?x.simP-x.mktP:null,Blend:x=>x.mktP>0&&x.simP!=null?x.simP-x.mktP:null,
+  Power:x=>x.pP!=null?x.pP-(x.price!=null?imp(+x.price):0.5):null,Scout:x=>x.sP!=null?x.sP:null,Banker:x=>x.ev!=null?x.ev:null,
+  'Most common':scoreMargin,Pred:scoreMargin,Covers:scoreMargin};
+function ideoTune(force){const I=get(IDEO_KEY,null);if(!force&&I&&Date.now()-I.ts<7*864e5)return I.n||0;
+  const V=roGet(VOICES_KEY,[],30e3)||[];const G={};
+  V.forEach(x=>{const f=IDEO_STR[x.voice];if(!f||!x.graded||x.hit==null||x.push)return;const s=f(x);if(s==null||!isFinite(s))return;(G[x.voice+'|'+x.sp+'|'+x.market]=G[x.voice+'|'+x.sp+'|'+x.market]||[]).push({d:x.date,s,u:+x.units||0,hit:!!x.hit});});
+  const out={ts:Date.now(),n:0,by:{}};
+  Object.entries(G).forEach(([k,R])=>{if(R.length<40)return;R.sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);const cut=Math.floor(R.length*0.7);const fit=R.slice(0,cut),ho=R.slice(cut);
+    const ss=fit.map(r=>r.s).sort((a,b)=>a-b);const qs=[0.2,0.35,0.5].map(q=>ss[Math.floor(q*(ss.length-1))]);const avg=A=>A.length?A.reduce((a,r)=>a+r.u,0)/A.length:0;
+    let best={fl:null,u:avg(fit)};qs.forEach(fl=>{const A=fit.filter(r=>r.s>=fl);if(A.length>=15&&avg(A)>best.u+1e-9)best={fl,u:avg(A)};});
+    const hoAll=avg(ho),hoA=best.fl==null?ho:ho.filter(r=>r.s>=best.fl);const adopted=best.fl!=null&&hoA.length>=12&&avg(hoA)-hoAll>=0.03;
+    out.by[k]={n:R.length,fl:best.fl,fitU:+best.u.toFixed(3),fitAll:+avg(fit).toFixed(3),hoU:+avg(hoA).toFixed(3),hoAll:+hoAll.toFixed(3),hoN:hoA.length,adopted};out.n++;});
+  set(IDEO_KEY,out);return out.n;}
+function ideoLow(c){try{const I=roGet(IDEO_KEY,null,60e3);const f=IDEO_STR[c.voice];if(!I||!f)return null;const T=I.by[c.voice+'|'+c.sp+'|'+c.market];if(!T||!T.adopted)return null;
+  const s=f(c);return s!=null&&s<T.fl?T:null;}catch(e){return null;}}
+
+/* ══ v2.28 · RESEARCHED SITUATIONS + PLAYER MATCHUPS → the factor library ══════
+   Each tag below is a HYPOTHESIS from published work or the scouting ledger.
+   Every call is tagged at the moment it's made, and the brain tests each tag
+   on real results: it only moves the Sim once a tag is statistically real
+   (30+ graded, z ≥ 1.5, capped), and each character learns its own record in
+   each situation. Nothing here changes a probability on day one.
+   Sources: rest/bye and short-week work (Harvard Sports Analysis Collective;
+   Frontiers in Behavioral Economics 2024), the NFL circadian studies (Smith et
+   al., SLEEP — west-coast teams in night games), the NHL back-to-back tax,
+   divisional-game market tests (Sports Economics & Finance 2019), and the
+   decline of the home-underdog edge (Kennesaw State).                         */
+const NFL_DIV={BUF:'AE',MIA:'AE',NE:'AE',NYJ:'AE',BAL:'AN',CIN:'AN',CLE:'AN',PIT:'AN',HOU:'AS',IND:'AS',JAX:'AS',TEN:'AS',DEN:'AW',KC:'AW',LV:'AW',LAC:'AW',
+  DAL:'NE',NYG:'NE',PHI:'NE',WSH:'NE',CHI:'NN',DET:'NN',GB:'NN',MIN:'NN',ATL:'NS',CAR:'NS',NO:'NS',TB:'NS',ARI:'NW',LAR:'NW',SF:'NW',SEA:'NW'};
+const NFL_WEST=new Set(['LAR','LAC','SF','SEA','LV']),NFL_ET=new Set(['BUF','MIA','NE','NYJ','NYG','BAL','CIN','CLE','PIT','IND','JAX','DET','ATL','CAR','TB','PHI','WSH']);
+const etHour=iso=>{try{const t=new Date(iso);if(isNaN(t))return null;return+new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',hour12:false}).format(t)%24;}catch(e){return null;}};
+const dDiff=(a,b)=>Math.round((Date.parse(a+'T12:00:00Z')-Date.parse(b+'T12:00:00Z'))/864e5);
+function facTeamLog(sp,team,before){try{const S=facIndex()[sp];const L=(S&&S.tg&&S.tg[team])||[];return L.filter(x=>x.d&&x.d<before).sort((a,b)=>a.d<b.d?-1:1);}catch(e){return[];}}
+function facMore(sp,g,side,m,team,opp,line,price,f){const day=gameDayOf(g)||today();const A=g.away.abbr,H=g.home.abbr;
+  if(team&&(m==='ml'||m==='moneyline'||m==='spread')){const dog=m==='spread'?(line!=null&&line>0):(price!=null&&price>0);const fav=m==='spread'?(line!=null&&line<0):(price!=null&&price<0);
+    if(dog&&side==='home')f.push('homedog');if(fav&&side==='away')f.push('roadfav');}
+  if(team){const T=facTeamLog(sp,team,day),O=facTeamLog(sp,opp,day);const rest=L=>L.length?dDiff(day,L[L.length-1].d):null;const rt=rest(T),ro=rest(O);
+    if(sp==='nfl'||sp==='ncaaf'){if(rt!=null&&rt<=5)f.push('shortweek');if(rt!=null&&rt>=13)f.push('offbye');if(ro!=null&&ro<=5)f.push('oppshort');if(ro!=null&&ro>=13)f.push('oppoffbye');
+      if(rt!=null&&ro!=null&&rt-ro>=3)f.push('restplus');}
+    if(sp==='nhl'||sp==='nba'){const in3=L=>L.filter(x=>dDiff(day,x.d)>=1&&dDiff(day,x.d)<=3).length;if(in3(T)>=2)f.push('3in4');if(in3(O)>=2)f.push('opp3in4');}
+    if(side==='away'&&T.length>=2&&T.slice(-2).every(x=>!x.home))f.push('road3');
+    if(T.length>=5){const w=T.slice(-5).filter(x=>x.me>x.op).length;if(w>=4)f.push('hot5');if(w<=1)f.push('cold5');}
+    if(sp==='nfl'&&NFL_DIV[A]&&NFL_DIV[A]===NFL_DIV[H])f.push('divgame');
+    if(sp==='nfl'){const hr=etHour(g.date);if(hr!=null){if(NFL_WEST.has(team)&&side==='away'&&NFL_ET.has(H)&&hr<14)f.push('westearly');
+      if(NFL_WEST.has(team)&&NFL_ET.has(opp)&&hr>=20)f.push('westnight');if(NFL_ET.has(team)&&NFL_WEST.has(opp)&&hr>=20)f.push('eastnight');}}}
+  if(!SCOUT_SP.includes(sp))return;const S=scoutGame(sp,A,H);if(!S)return;
+  if(team){const e=side==='home'?S.edge:-S.edge;if(e>=0.25)f.push('talent+');if(e<=-0.25)f.push('talent-');
+    if(S.flags.some(x=>x.team===team))f.push('mismatch+');if(S.flags.some(x=>x.team===opp))f.push('mismatch-');
+    const P=scoutPrim(sp);const tagOf=(id,cid)=>((scoutBoard(sp).tag[id]||[]).find(t=>t.c.id===cid)||null);
+    if(sp==='nfl'||sp==='ncaaf'){const q=(P[team]||{}).QB,oq=(P[opp]||{}).QB;const t=q&&tagOf(q,'qb_rtg'),o=oq&&tagOf(oq,'qb_rtg');
+      if(t)f.push(t.star?'qbstar':'qbbust');if(o)f.push(o.star?'oppqbstar':'oppqbbust');if(q&&scoutBoard(sp).form.some(x=>x.id===q&&x.dir==='fade'))f.push('qbfading');}
+    if(sp==='nhl'){const gp=id=>{const X=scoutBoard(sp).cats.find(c=>c.c.id==='svp');const r=X&&X.rows.find(r=>r.id===id);return r?r.pct:null;};
+      const a=gp((P[team]||{}).G),b=gp((P[opp]||{}).G);if(a!=null&&a>=0.8)f.push('goaliestar');if(a!=null&&a<=0.2)f.push('goaliebust');if(b!=null&&b>=0.8)f.push('oppgoaliestar');if(b!=null&&b<=0.2)f.push('oppgoaliebust');}}
+  if(m==='total'){if(S.tot>=0.3)f.push('offedge');if(S.tot<=-0.3)f.push('defedge');}}
+/* each team's main QB / goalie in the scouting ledger */
+let SCOUT_PRIM={};
+function scoutPrim(sp){const B=scoutBoard(sp);const C=SCOUT_PRIM[sp];if(C&&C.ts===B.ts)return C.P;const P={};
+  Object.entries(scoutDb(sp).p).forEach(([id,R])=>{const role=scRole(R);if(!R.tm)return;const T=P[R.tm]||(P[R.tm]={});
+    if(role==='QB'&&(!T.QB||(R.s.att||0)>(scoutDb(sp).p[T.QB].s.att||0)))T.QB=id;if(role==='G'&&(!T.G||(R.s.sa||0)>(scoutDb(sp).p[T.G].s.sa||0)))T.G=id;});
+  SCOUT_PRIM[sp]={ts:B.ts,P};return P;}
+
+/* ══ v2.28 · THE REASONS GET PLAYERS ═════════════════════════════════════════
+   Projected final (the locked sim when the eval ran), the matchup's stars and
+   busts, each side's key players over their LAST 5 games, how each team plays,
+   player projections for tonight, the researched situations in play (and
+   whether the brain has proven them yet), and any proven squad on the pick. */
+const SC_L5K={QB:['cmp','att','pyd','ptd','pint','sk'],RB:['car','ryd','rtd','rec','wyd'],WR:['rec','tgt','wyd','wtd'],DEF:['tkl','dsk','qbh','dint'],SK:['g','a','s','pm'],G:['sa','sv','ga'],P:['pts','reb','ast','min']};
+function scL5(R){const L=R.l5||[];if(!L.length)return null;const s={};L.forEach(x=>Object.entries(x.v||{}).forEach(([k,v])=>s[k]=(s[k]||0)+v));return{n:L.length,s,opps:L.map(x=>x.o)};}
+function scL5Txt(sp,R){const X=scL5(R);if(!X)return'';const n=X.n,s=X.s,pg=k=>((s[k]||0)/n),f=(v,d)=>(+v).toFixed(d==null?(v<10?1:0):d);const role=scRole(R);
+  if(role==='QB'){const r=scRating(s);return`last ${n}: ${f(pg('pyd'),0)} pass yds, ${f(pg('ptd'))} TD, ${f(pg('pint'))} INT a game${r!=null?`, ${f(r,0)} rating`:''}`;}
+  if(role==='RB')return`last ${n}: ${f(pg('car'))} carries, ${f(pg('ryd'),0)} rush yds, ${f(pg('rtd'))} TD a game`;
+  if(role==='WR')return`last ${n}: ${f(pg('rec'))} catches on ${f(pg('tgt'))} targets, ${f(pg('wyd'),0)} yds a game`;
+  if(role==='DEF')return`last ${n}: ${f(pg('dsk'))} sacks, ${f(pg('qbh'))} QB hits, ${f(pg('tkl'))} tackles a game`;
+  if(role==='SK')return`last ${n}: ${f(pg('g'),1)} G, ${f(pg('a'),1)} A, ${f(pg('s'),1)} shots a game, ${(s.pm||0)>=0?'+':''}${s.pm||0} overall`;
+  if(role==='G')return s.sa?`last ${n}: ${(s.sv/s.sa*100).toFixed(1)}% saves, ${f(pg('ga'),1)} goals allowed a game`:'';
+  if(role==='P')return`last ${n}: ${f(pg('pts'))} pts, ${f(pg('reb'))} reb, ${f(pg('ast'))} ast`;return'';}
+function scKeyPlayers(sp,team,k){const D=scoutDb(sp);const R=Object.entries(D.p).filter(([id,P])=>P.tm===team&&(P.l5||[]).length);const by=role=>R.filter(([id,P])=>scRole(P)===role);
+  const top=(role,key)=>by(role).sort((a,b)=>(b[1].s[key]||0)-(a[1].s[key]||0))[0];
+  const pick=sp==='nhl'?[top('G','sa'),...by('SK').sort((a,b)=>((b[1].s.g||0)+(b[1].s.a||0))/b[1].n-((a[1].s.g||0)+(a[1].s.a||0))/a[1].n).slice(0,2)]
+    :sp==='nba'?by('P').sort((a,b)=>(b[1].s.pts||0)/b[1].n-(a[1].s.pts||0)/a[1].n).slice(0,3):[top('QB','att'),top('RB','ryd'),top('WR','wyd'),top('DEF','dsk')];
+  return pick.filter(Boolean).slice(0,k||4).map(([id,P])=>({id,P}));}
+function scStyle(sp,team){const B=scoutBoard(sp),D=scoutDb(sp);const T=D.t[team];if(!T||T.n<2)return'';
+  if(sp==='nfl'||sp==='ncaaf'){const pr=x=>(x.f.att||0)/Math.max(1,(x.f.att||0)+(x.f.car||0));const all=Object.values(D.t).filter(x=>x.n>=2).map(pr).sort((a,b)=>a-b);const v=pr(T);const pct=all.filter(x=>x<v).length/Math.max(1,all.length);
+    return`${team} throws on ${Math.round(v*100)}% of its plays${pct>=0.8?' — one of the most pass-heavy teams':pct<=0.2?' — one of the most run-heavy teams':''}`;}
+  if(sp==='nhl'){const tp=B.tp[team]||{};const sf=(T.f.s||0)/T.n,ht=(T.f.ht||0)/T.n;return`${team} fires ${sf.toFixed(1)} shots a game${tp.sf>=0.8?' (top 20%)':tp.sf<=0.2?' (bottom 20%)':''} and throws ${ht.toFixed(0)} hits${tp.ht_t>=0.8?' — a physical team':''}`;}
+  return'';}
+function pickWhyPlayers(x,team,opp,A,H){const sp=x.sp,B=[],S=[];const d=String(x.date||x.d||today()).slice(0,10);
+  const g=(()=>{try{return(sportGames(sp)||[]).find(z=>z.away.abbr+'@'+z.home.abbr===x.game);}catch(e){return null;}})();
+  /* projected final */
+  try{const fr=simLockFor(sp,x.game,d);let s=null;try{s=g?sportSims(sp)[g.id]:null;}catch(e){}
+    const a=fr&&fr.a!=null?fr.a:s&&s.awayProj!=null?+s.awayProj:null,h=fr&&fr.h!=null?fr.h:s&&s.homeProj!=null?+s.homeProj:null;
+    if(a!=null&&h!=null){const dp=sp==='nhl'||sp==='mlb'?1:0;const lead=h>a?H:A,mg=Math.abs(h-a);
+      B.push(`Projected final${fr?' (locked at the evaluation)':''}: ${A} ${a.toFixed(dp)}, ${H} ${h.toFixed(dp)} — ${lead} by ${mg.toFixed(sp==='nhl'?1:1)}, ${(a+h).toFixed(1)} total.`);
+      S.push(`Our projected final is ${A} ${a.toFixed(dp)}, ${H} ${h.toFixed(dp)}.`);}}catch(e){}
+  if(!SCOUT_SP.includes(sp))return{B,S};
+  /* matchup: stars, busts, mismatches */
+  try{const G=scoutGame(sp,A,H);if(G){G.flags.slice(0,3).forEach(f=>B.push(`⚔️ ${f.txt}.`));const fl=G.flags.find(f=>f.team===team);if(fl)S.push(`The matchup favors ${team}: ${fl.txt.replace(/^\S+ /,'')}.`);
+      const tags=[...G.pa,...G.ph].flatMap(o=>o.T.map(t=>({nm:o.nm,t}))).sort((p,q)=>Math.abs(q.t.pct-0.5)-Math.abs(p.t.pct-0.5)).slice(0,5);
+      if(tags.length)B.push(`Stars & busts in this game: ${tags.map(o=>`${o.t.star?'⭐':'🤡'} ${o.nm} — ${o.t.c.lab.toLowerCase()} ${scFmt(o.t.c,o.t.val)}`).join(' · ')}.`);}}catch(e){}
+  /* key players, last 5 */
+  try{[team||A,opp||H].forEach((tm,i)=>{const K=scKeyPlayers(sp,tm,i?3:4);if(!K.length)return;const tg=id=>{const L=scoutBoard(sp).tag[id]||[];return(L.some(t=>t.star)?'⭐':'')+(L.some(t=>!t.star)?'🤡':'');};
+      B.push(`${tm} key players — ${K.map(({id,P})=>`${P.nm}${tg(id)?' '+tg(id):''}: ${scL5Txt(sp,P)}`).filter(t=>!/: $/.test(t)).join(' · ')}.`);});}catch(e){}
+  /* how they play */
+  try{const st=[A,H].map(t=>scStyle(sp,t)).filter(Boolean);if(st.length)B.push(`Style: ${st.join('; ')}.`);}catch(e){}
+  /* tonight's player projections */
+  try{const K={nfl:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],ncaaf:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],nhl:[['pts','points'],['s','shots']],nba:[['pts','pts']]}[sp]||[];
+    const proj=[];[team||A,opp||H].forEach(tm=>{K.forEach(([k,lab])=>{const P=Object.values(pstDb(sp).p).filter(p=>p.team===tm&&p.s[k]&&p.s[k].gp>=2).sort((a,b)=>b.s[k].sum/b.s[k].gp-a.s[k].sum/a.s[k].gp)[0];
+      if(!P)return;const J=pstProj(sp,P.name,k);if(!J||!J.mu)return;let extra='';if(sp==='nhl'&&k==='pts'){const r=pstProb(sp,P.name,'g',1,'over');if(r)extra=`, ${Math.round(r.p*100)}% to score`;}
+      if(!proj.some(q=>q.n===P.name))proj.push({n:P.name,t:`${P.name} ~${J.mu.toFixed(J.mu<10?1:0)} ${lab}${extra}`});});});
+    if(proj.length)B.push(`Tonight's player projections: ${proj.slice(0,6).map(q=>q.t).join(' · ')}.`);}catch(e){}
+  /* researched situations in play, and whether they're proven */
+  try{if(g){const fs=factorsFor(sp,g,{side:x.sd,market:x.m,line:x.line,price:x.price}).filter(k=>!['fav','dog','bigfav','longdog','home','road','over','under','hitot','lotot'].includes(k));
+      const T=factorTable(sp);if(fs.length)B.push(`Situations: ${fs.map(k=>{const o=T[k];return`${FAC_LAB[k]||k}${o&&o.adj?` (proven: ${o.adj>0?'+':''}${(o.adj*100).toFixed(1)} pts)`:o&&o.n?` (testing, ${o.n} graded)`:' (new — testing)'}`;}).join(' · ')}.`);}}catch(e){}
+  /* proven squad */
+  try{const Q=squadOn(sp,x.game,d,x.m,x.sd);if(Q&&Q.best){B.push(`🏆 Proven squad on it: ${squadName(Q.best)} — ${Q.best.w}-${Q.best.n-Q.best.w} when they all agree (${Math.round(Q.best.w/Q.best.n*100)}% vs ${Math.round(Q.base*100)}% for everyone).`);S.push(`${squadName(Q.best)} are all on it — they're ${Q.best.w}-${Q.best.n-Q.best.w} together.`);}
+    if(Q&&Q.worst)B.push(`💀 Losing squad also on it: ${squadName(Q.worst)} — ${Q.worst.w}-${Q.worst.n-Q.worst.w} together.`);}catch(e){}
+  return{B,S};}
+
+/* ══ v2.28 · AUTOPILOT — every learning loop, once every 6 hours and before every eval ═══ */
+const AP_KEY='d4.autopilot';let AP_BUSY=false;
+const apNum=v=>typeof v==='number'?v:v&&typeof v==='object'?(v.n!=null?v.n:v.markets!=null?v.markets:Object.keys(v).length):v?1:0;
+const AP_STEPS=[
+  ['learn','Absorb finals','Every final from every sport: team biases, source weights, volatility, character calls, outside picks, the Best card, props.',()=>brainLearnAll(true)],
+  ['voices','Grade characters','Each character\'s calls graded against the finals.',()=>gradeVoices()],
+  ['factors','Situation tests','Re-tests every situation tag (rest, travel, talent, form…) on graded results; proven ones adjust the Sim.',()=>{FAC_C=null;let n=0;LEARN_SPS.forEach(sp=>{try{n+=Object.keys(factorTable(sp)).length;}catch(e){}});return n;}],
+  ['feel','Inner feeling','Re-tunes how much each character\'s self-awareness (streaks, blacklists, splits) is trusted.',()=>feelTune()],
+  ['chem','Chemistry','Pairs: who wins together, who wins the argument.',()=>{CHEM_C=null;return chemIdx().markets;}],
+  ['squads','Squads','3-, 4- and 5-character squads, proven in both halves of the history.',()=>squadCompute()],
+  ['scout','Scout probation','Checks whether the Scout has earned a vote.',()=>scoutProbation().n],
+  ['ideo','Ideology floors','Weekly: each character\'s confidence floor per sport and market, kept only if it holds on unseen games.',()=>ideoTune(false)],
+  ['parlays','Grade parlays','Every character\'s game-line and props tickets.',()=>cparGrade()+cpxGrade()],
+  ['props','Grade props','Prop calls graded from real box lines.',()=>cpropGrade()+propCalGrade()],
+  ['banker','Banker\'s desk','The Banker\'s day tickets.',()=>bkDayGrade()],
+  ['cal','Calibration snapshot','Daily: is "60%" still winning 60%? Blend weights per market.',()=>{calSnapshot();return 1;}],
+  ['mlbcal','Baseball calibration','Segmented calibration, drift and velocity (baseball page).',()=>{if(typeof GAMES==='undefined'||!GAMES.length)return 0;computeCalibration();computeGlobalDrift();computeSegmentedCalibration();return 1;}]];
+function apRun(force,why){if(AP_BUSY)return null;const L=get(AP_KEY,[])||[];const last=L[0];if(!force&&last&&Date.now()-last.ts<6*36e5)return null;AP_BUSY=true;const t0=Date.now();const steps=[];
+  try{AP_STEPS.forEach(([k,,,f])=>{const t=Date.now();try{const v=f();steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}});}
+  finally{AP_BUSY=false;}const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps};L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__){window.addEventListener('load',()=>setTimeout(()=>{try{apRun(false,'daily');}catch(e){}},20000));setInterval(()=>{try{if(!document.hidden)apRun(false,'every 6h');}catch(e){}},36e5);}
+
+/* ══ v2.28 · THE ENGINE ROOM — the complex stuff, proving it's absorbing ═════ */
+function engineData(){const V=roGet(VOICES_KEY,[],30e3)||[];const g=V.filter(x=>x.graded);const F=(()=>{try{return Object.keys(allFinals()).length;}catch(e){return 0;}})();
+  const pst=LEARN_SPS.map(sp=>({sp,...pstatStatus(sp)}));const sc=SCOUT_SP.map(sp=>({sp,games:Object.keys(scoutDb(sp).fed).length,players:Object.keys(scoutDb(sp).p).length,rem:(scoutDb(sp).bf||{}).remaining}));
+  const fac=LEARN_SPS.map(sp=>{let T={};try{T=factorTable(sp);}catch(e){}const E=Object.entries(T);return{sp,tags:E.length,active:E.filter(([k,o])=>o.adj).map(([k,o])=>({k,adj:o.adj,n:o.n})),n:E.reduce((a,[k,o])=>a+o.n,0)};});
+  const I=roGet(IDEO_KEY,null,60e3),Q=squadsGet(),AP=(get(AP_KEY,[])||[]),EP=get(EVPREP_KEY,[])||[];let FT=null;try{FT=roGet(FEEL_TUNE_KEY,null,60e3);}catch(e){}
+  const P=get(PREINT_KEY,{})||{},SL=get(SIMLOCK_KEY,{})||{};
+  return{calls:V.length,graded:g.length,finals:F,pst,sc,fac,ideo:I,squads:Q,ap:AP,ep:EP,feel:FT,pre:Object.keys(P).length,locks:Object.keys(SL).length,chem:(()=>{try{return chemIdx().markets;}catch(e){return 0;}})(),
+    cpx:Object.keys(get(CPX_KEY,{})||{}).length,cpar:Object.keys(get(CPAR_KEY,{})||{}).length,ie:intakeEffect()};}
+function engineRoomHtml(){const D=engineData();const t=x=>x?new Date(x).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'never';
+  const last=D.ap[0];const fails=last?last.steps.filter(s=>!s.ok):[];
+  const stuck=(()=>{try{const H=learnHealth();return LEARN_SPS.reduce((a,sp)=>a+(H[sp].stuck||0),0);}catch(e){return 0;}})();
+  const ok=last&&!fails.length&&!stuck&&Date.now()-last.ts<8*36e5;
+  const plain=[`The app has ${D.graded.toLocaleString()} graded character calls and ${D.finals.toLocaleString()} finals on file, and every one of them feeds the learning loops below.`,
+    last?`The autopilot last ran ${t(last.ts)} (${last.why}) — ${last.steps.length-fails.length} of ${last.steps.length} loops finished${fails.length?`; ${fails.map(s=>s.k).join(', ')} failed`:''}.`:'The autopilot hasn\'t run yet — it runs 20 seconds after the app opens.',
+    stuck?`${stuck} graded results are waiting to be learned — open Records → Characters → Learn now.`:'Nothing is stuck: every final that exists has been learned.',
+    (()=>{const a=D.fac.reduce((s,x)=>s+x.active.length,0),n=D.fac.reduce((s,x)=>s+x.tags,0);return`${n} situations are being tested across the sports; ${a} have proven themselves and are adjusting the Sim right now.`;})(),
+    D.ideo?(()=>{const A=Object.entries(D.ideo.by).filter(([k,x])=>x.adopted);const who=[...new Set(A.map(([k])=>charName(k.split('|')[0])))];return A.length?`${A.length} confidence floors are active (${who.join(', ')}) — calls under them stay out of parlays. Checked weekly.`:'No confidence floor has held up on unseen games yet — checked weekly.';})():'Ideology floors: first weekly check pending.'];
+  const tbl=(head,rows)=>`<table class="mono" style="width:100%;font-size:9.5px;border-collapse:collapse;margin-top:4px"><tr style="color:var(--mute)">${head.map(h=>`<td>${h}</td>`).join('')}</tr>${rows.join('')}</table>`;
+  const apRows=AP_STEPS.map(([k,lab,desc])=>{const s=last&&last.steps.find(x=>x.k===k);return`<tr style="border-top:1px solid var(--rule)"><td style="padding:3px 0"><b>${txtEsc(lab)}</b><div style="color:var(--mute);font-size:9px">${txtEsc(desc)}</div></td><td style="text-align:right;white-space:nowrap;color:${!s?'var(--mute)':s.ok?'var(--win)':'var(--rust)'}">${!s?'—':s.ok?`✓ ${s.n}`:'✗ '+txtEsc(s.err||'')}</td><td style="text-align:right;color:var(--mute)">${s?s.ms+'ms':''}</td></tr>`;});
+  const absorb=[['Character calls logged',D.calls],['…graded',D.graded],['Finals on file (all sports)',D.finals],
+    ...D.pst.filter(x=>x.games).map(x=>[`Player box games — ${SP_LAB[x.sp]}`,`${x.games} games · ${x.players} players`]),
+    ...D.sc.filter(x=>x.games).map(x=>[`Scouting ledger — ${SP_LAB[x.sp]}`,`${x.games} games · ${x.players} players${x.rem?` · ${x.rem} to backfill`:''}`]),
+    ['Chemistry markets',D.chem],['Squads tested',D.squads?D.squads.tested:0],['Character parlay days',D.cpar],['Props parlay days',D.cpx],['Pre-intake snapshots (days)',D.pre],['Locked sim days',D.locks]];
+  const facRows=D.fac.filter(x=>x.tags).map(x=>`<tr style="border-top:1px solid var(--rule)"><td>${SP_LAB[x.sp]}</td><td>${x.tags}</td><td>${x.n}</td><td>${x.active.length?x.active.map(a=>`${txtEsc(FAC_LAB[a.k]||a.k)} ${a.adj>0?'+':''}${(a.adj*100).toFixed(1)}`).join('<br>'):'<span style="color:var(--mute)">none proven yet</span>'}</td></tr>`);
+  const ideoRows=D.ideo?Object.entries(D.ideo.by).sort((a,b)=>(b[1].adopted-a[1].adopted)||b[1].n-a[1].n).slice(0,14).map(([k,o])=>{const[v,sp,m]=k.split('|');return`<tr style="border-top:1px solid var(--rule)"><td>${txtEsc(charName(v))} · ${(SP_LAB[sp]||sp).replace(/^\S+\s/,'')} ${m}</td><td>${o.n}</td><td>${o.fl==null?'none':(+o.fl).toFixed(3)}</td><td style="color:${o.adopted?'var(--win)':'var(--mute)'}">${o.adopted?`✓ ${o.hoAll>=0?'+':''}${o.hoAll.toFixed(2)}→${o.hoU>=0?'+':''}${o.hoU.toFixed(2)}u`:'kept off'}</td></tr>`;}):[];
+  const ieRows=Object.entries(D.ie).filter(([v,o])=>o.n).map(([v,o])=>`<tr style="border-top:1px solid var(--rule)"><td>${txtEsc(charName(v))}</td><td>${o.n}</td><td>${o.flip}</td><td style="color:${o.fw*2>o.flip?'var(--win)':o.flip?'var(--rust)':'var(--mute)'}">${o.flip?`${o.fw}-${o.flip-o.fw}`:'—'}</td></tr>`);
+  const ep=D.ep[0];
+  return`<div class="tkt" style="border-left:3px solid ${ok?'var(--win)':'var(--gold)'}"><h3>🛠 Engine Room</h3><div style="font-size:11.5px;line-height:1.5">${plain.map(p=>`<div style="padding:2px 0">• ${txtEsc(p)}</div>`).join('')}</div>
+    <div class="bar"><button class="primary" onclick="apRun(true,'manual');renderRecordsHub()">↻ Run every loop now</button></div></div>
+    <div class="tkt"><h3>🔁 Autopilot loops</h3><div class="sub" style="font-size:10px">Every 6 hours, and again at the start of every master evaluation. ✓ number = what that loop absorbed or produced.</div>${tbl(['loop','',''],apRows)}</div>
+    <div class="tkt"><h3>📥 What's been absorbed</h3>${tbl(['source','count'],absorb.map(([a,b])=>`<tr style="border-top:1px solid var(--rule)"><td>${txtEsc(a)}</td><td style="text-align:right">${typeof b==='number'?b.toLocaleString():txtEsc(String(b))}</td></tr>`))}</div>
+    <div class="tkt"><h3>🧭 Situations being tested</h3><div class="sub" style="font-size:10px">Rest, travel, body clock, division games, form, talent mismatches, star/bust QBs and goalies — each one only moves the Sim once 30+ graded games prove it (z ≥ 1.5, never more than 2.5 pts each, 4 pts total).</div>${tbl(['sport','tags','graded uses','proven & active (pts)'],facRows)}</div>
+    <div class="tkt"><h3>🎚 Ideology floors</h3><div class="sub" style="font-size:10px">Weekly. Each character's confidence floor per sport and market — kept only if it improves units per call on the newest 30% of games it never trained on. Last check ${t(D.ideo&&D.ideo.ts)}.</div>${ideoRows.length?tbl(['character · market','graded','floor','unseen games'],ideoRows):'<div class="sub" style="font-size:10px">Needs 40+ graded calls with a stated confidence in a market.</div>'}</div>
+    <div class="tkt"><h3>🧊 Master evaluation freeze</h3><div class="sub" style="font-size:10px">Each eval: absorb → autopilot → unlock → re-simulate → every character re-reads → lock. Then: did the intake help each character? (calls it flipped after the intake, and how those flips graded)</div>
+      ${ep?`<div class="mono" style="font-size:10px;margin-top:4px">Last eval prep: ${SP_LAB[ep.sp]||ep.sp} ${t(ep.ts)} · ${ep.steps.map(s=>`${s.ok?'✓':'✗'} ${s.k}${s.n!=null?' '+s.n:''}`).join(' · ')}</div>`:'<div class="sub" style="font-size:10px">No evaluation has run since this build.</div>'}
+      ${ieRows.length?tbl(['character','graded since freeze','flipped after intake','flips W-L'],ieRows):''}</div>
+    <div class="tkt"><h3>🧪 Chemistry & squads</h3>${(()=>{try{return squadsHtml();}catch(e){return'';}})()}</div>
+    ${(()=>{try{return learnHealthHtml();}catch(e){return'';}})()}`;}
 
 /* ══ CHARACTER PROPS — 70%+ calls, graded, calibrated ══════════════════════
    Four characters read every player on today's slate, each its own way:
@@ -18983,7 +19260,7 @@ function hubData(){
   HUB_CACHE={M,you:hubYou()};HUB_SIG=sig;return HUB_CACHE;
 }
 let REC_VIEW='overview';
-function recViewBar(){const V=[['overview','📊 Overview'],['tickets','🎟 My tickets'],['chars','🎭 Characters'],['eval','🧪 Model eval']];
+function recViewBar(){const V=[['overview','📊 Overview'],['tickets','🎟 My tickets'],['chars','🎭 Characters'],['eval','🧪 Model eval'],['engine','🛠 Engine Room']];
   return'<div class="subnav" style="margin-bottom:8px">'+V.map(([k,l])=>'<button class="'+(REC_VIEW===k?'on':'')+'" onclick="REC_VIEW=\''+k+'\';renderRecordsHub()">'+l+'</button>').join('')+'</div>';}
 function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
@@ -18991,6 +19268,7 @@ function renderRecordsHub(){
       const P=CHAR_ORDER.map(v=>({v,R:cparRecord(v)})).filter(x=>x.R.w+x.R.l);
       h=(()=>{try{return charDayHtml('all')}catch(e){return''}})()+(()=>{try{return chemHtml()}catch(e){return''}})()+(()=>{try{return pwrRecordsHtml()}catch(e){return''}})()+(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
     catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
+  if(REC_VIEW==='engine'){let h='';try{h=engineRoomHtml();}catch(e){h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   let D;try{D=hubData()}catch(e){el.innerHTML='';return;}
@@ -20405,14 +20683,23 @@ const FAC_LAB={fav:'favorite',bigfav:'big favorite (-200 or shorter)',dog:'under
   key3:'spread on the 3 (2.5–3.5)',key7:'spread on the 7 (6.5–7.5)',bigline:'big spread (10+)',over:'over',under:'under',hitot:'high total',lotot:'low total',
   b2b:'picked team on 2nd night of back-to-back',oppb2b:'opponent on back-to-back',restedge:'picked team rested, opponent on back-to-back',
   pythlucky:'picked team over-performing its scoring (Pythagorean)',pythunlucky:'picked team under-performing its scoring (Pythagorean)'};
+Object.assign(FAC_LAB,{homedog:'home underdog',roadfav:'road favorite',shortweek:'picked team on a short week (≤5 days rest)',offbye:'picked team off a bye (13+ days rest)',
+  oppshort:'opponent on a short week',oppoffbye:'opponent off a bye',restplus:'picked team has 3+ more days of rest',
+  '3in4':'picked team playing its 3rd game in 4 nights','opp3in4':'opponent on its 3rd game in 4 nights',road3:'picked team on its 3rd straight road game',
+  hot5:'picked team won 4+ of its last 5',cold5:'picked team won 1 or fewer of its last 5',divgame:'division game',
+  westearly:'west-coast team at a 1pm ET kickoff (body clock says 10am)',westnight:'west-coast team in a night game vs an Eastern team (circadian edge)',eastnight:'Eastern team in a night game vs a west-coast team',
+  'talent+':'picked team has the clear talent edge (Scout)','talent-':'opponent has the clear talent edge (Scout)','mismatch+':'picked team owns a top-vs-bottom unit mismatch','mismatch-':'opponent owns a top-vs-bottom unit mismatch',
+  qbstar:'picked team\'s QB is top 5% in passer rating',qbbust:'picked team\'s QB is bottom 5% in passer rating',oppqbstar:'opponent QB is top 5%',oppqbbust:'opponent QB is bottom 5%',qbfading:'picked team\'s QB is fading (last 3 games)',
+  goaliestar:'picked team\'s main goalie is top 20% in save %',goaliebust:'picked team\'s main goalie is bottom 20%',oppgoaliestar:'opponent\'s main goalie is top 20%',oppgoaliebust:'opponent\'s main goalie is bottom 20%',
+  offedge:'both offenses outclass the defenses (Scout)',defedge:'both defenses outclass the offenses (Scout)'});
 const FAC_HI={nfl:48,ncaaf:58,nba:232,mlb:9.5,nhl:6.5},FAC_LO={nfl:40,ncaaf:45,nba:215,mlb:7.5,nhl:5.5};
 const FAC_PYTH={mlb:1.83,nfl:2.37,ncaaf:2.37,nhl:2.05,nba:13.91};
 /* one index over the finals store per update (not a full scan per square) */
 let FAC_IDX=null,FAC_IDX_SRC=null;
 function facIndex(){const F=allFinals();if(FAC_IDX&&FAC_IDX_SRC===F)return FAC_IDX;const I={};
-  Object.keys(F).forEach(k=>{const i=k.indexOf(':');const sp=k.slice(0,i),[a,h]=k.slice(i+1).split('@');const E=F[k];const S=I[sp]||(I[sp]={day:{},agg:{}});
+  Object.keys(F).forEach(k=>{const i=k.indexOf(':');const sp=k.slice(0,i),[a,h]=k.slice(i+1).split('@');const E=F[k];const S=I[sp]||(I[sp]={day:{},agg:{},tg:{}});
     if(E.d){const D=S.day[E.d]||(S.day[E.d]=new Set());D.add(a);D.add(h);}
-    [[a,+E.a,+E.h],[h,+E.h,+E.a]].forEach(([t,me,op])=>{if(!isFinite(me)||!isFinite(op))return;const o=S.agg[t]||(S.agg[t]={w:0,n:0,pf:0,pa:0});o.n++;o.pf+=me;o.pa+=op;if(me>op)o.w++;});});
+    [[a,+E.a,+E.h,0,h],[h,+E.h,+E.a,1,a]].forEach(([t,me,op,home,oppT])=>{if(!isFinite(me)||!isFinite(op))return;if(E.d)(S.tg[t]=S.tg[t]||[]).push({d:E.d,home:!!home,me,op,opp:oppT});const o=S.agg[t]||(S.agg[t]={w:0,n:0,pf:0,pa:0});o.n++;o.pf+=me;o.pa+=op;if(me>op)o.w++;});});
   FAC_IDX=I;FAC_IDX_SRC=F;return I;}
 function facPlayedOn(sp,team,day){try{const S=facIndex()[sp];return!!(S&&S.day[day]&&S.day[day].has(team));}catch(e){return false;}}
 /* Pythagorean luck from the brain's own season ledger of finals */
@@ -20447,6 +20734,7 @@ function factorsFor(sp,g,c){const f=[];const side=c.sd||c.side,m=c.m||c.market,l
   if(team&&(sp==='nba'||sp==='nhl')){const y=dayShift(gameDayOf(g)||today(),-1);const tb=facPlayedOn(sp,team,y),ob=facPlayedOn(sp,opp,y);
     if(tb)f.push('b2b');if(ob)f.push('oppb2b');if(ob&&!tb)f.push('restedge');}
   if(team){const P=facPyth(sp,team);if(P){if(P.actual-P.exp>=0.08)f.push('pythlucky');if(P.exp-P.actual>=0.08)f.push('pythunlucky');}}
+  try{facMore(sp,g,side,m,team,opp,line,price,f);}catch(e){}   /* v2.28 · researched situations + player matchups */
   return f;}
 let FAC_C=null,FAC_SIG='';
 function factorTable(sp){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.filter(x=>x.graded).length;if(!FAC_C||FAC_SIG!==sig){FAC_C={};FAC_SIG=sig;}
@@ -20624,6 +20912,7 @@ function pickWhy(x0){const x={...x0,m:mkNorm(x0.m||x0.market),sd:x0.sd||x0.side}
       if(mine<=35)S.push(`Only ${Math.round(mine)}% of the public is with us — we\'re fading the crowd.`);}}}catch(e){}
   /* v2.02 · the deeper read: standing, matchup, form, history, players, injuries, conditions, props */
   try{const D=pickWhyDeep(x,team,opp,A,H);D.B.forEach(b=>B.push(b));S.unshift(...D.S.slice(0,2));}catch(e){console.warn('why deep',e);}
+  try{const P=pickWhyPlayers(x,team,opp,A,H);P.B.forEach(b=>B.push(b));S.unshift(...P.S.slice(0,3));}catch(e){console.warn('why players',e);}
   const head=`${lineTxt}${p!=null?` — ${Math.round(p*100)}% to hit`:''}${ev!=null?`, ${ev>=0?'+':''}${ev.toFixed(1)}% EV`:''}.`;
   if(simP!=null&&mktP!=null&&simP>mktP)S.unshift(`We ran this game 10,000 times: ${team||'the '+x.sd} ${x.m==='ml'?'wins':x.m==='total'?'hits':'covers'} ${Math.round(simP*100)}% of the time; the price says ${Math.round(mktP*100)}%.`);
   else if(on.length>=3)S.unshift(`The price is close to fair here — this one rides on who's backing it.`);

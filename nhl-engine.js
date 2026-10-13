@@ -798,7 +798,7 @@ function nhlEvalInputs(){
     preds:Object.keys(P).length,trends:I.filter(x=>x.kind==='trend').length,cons:I.filter(x=>x.kind==='cons').length,brain};
 }
 function nhlEvalFingerprint(){return JSON.stringify(nhlEvalInputs())}
-function runNHLMasterEval(){
+function runNHLMasterEval(){try{if(typeof evalPrep==='function')evalPrep('nhl');}catch(e){console.warn('eval prep',e);}
   const evals=[];const evOf=(p,price)=>(p*(nhlProfit(price!=null?+price:-110)??100/110)-(1-p))*100;
   (NHL_GAMES||[]).forEach(g=>{
     if((g.abstract||'pre')!=='pre')return;
