@@ -2524,7 +2524,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261016b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261016c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2597,7 +2597,9 @@ function doSportSwitch(sport){
   const gv=document.getElementById('v-games');
   if(gv&&!gv.classList.contains('on')&&typeof tab==='function')tab('games');
 }
-let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build';
+let GRADETAB='sides',PICKSDAY=null,TICKETTAB='build',TICKETTAB_USER=false;
+/* v2.33 · Tickets opens where you are in the day: watching your games → My picks; nothing riding → Build */
+function ticketsDefaultTab(){if(TICKETTAB_USER)return;try{const L=get(LS.locked,[])||[];const live=L.some(t=>!t.archived&&(t.legs||[]).length&&String(t.date||'').slice(0,10)>=dayShift(today(),-1));TICKETTAB=live?'mine':'build';}catch(e){}}
 let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
 
 /* today(): formatter built once per timezone; result cached for 1s (it's called thousands of times per render) */
@@ -3901,7 +3903,7 @@ function tabRaw(n,b){
   if(n==='games'&&ACTIVE_SPORT==='nhl'&&typeof renderNHL==='function')renderNHL();
   if(n==='games'&&ACTIVE_SPORT==='nba'&&typeof renderNBA==='function')renderNBA();
   if(n==='games'&&ACTIVE_SPORT==='ncaab'&&typeof renderNCAAB==='function')renderNCAAB();
-  if(n==='tickets'){renderTickets();btAutoOnce();try{const tv=document.getElementById('v-tickets');if(tv&&!document.getElementById('btStatus')&&btUngraded().length){const d=document.createElement('div');d.innerHTML=btBarHtml();tv.insertBefore(d,tv.firstChild);}}catch(e){}}
+  if(n==='tickets'){ticketsDefaultTab();renderTickets();btAutoOnce();try{const tv=document.getElementById('v-tickets');if(tv&&!document.getElementById('btStatus')&&btUngraded().length){const d=document.createElement('div');d.innerHTML=btBarHtml();tv.insertBefore(d,tv.firstChild);}}catch(e){}}
   if(n==='grades')renderGrades(true);
   if(n==='recap')renderRecap();
   if(n==='best'){bestTab(BESTTAB||'today');}
@@ -7376,19 +7378,23 @@ function card(g){
     <button class="expbtn" onclick="pan(${g.id},'trend',this)">Trends</button>
     <button class="expbtn" onclick="pan(${g.id},'ag',this)">A–G</button>
     <button class="expbtn" onclick="pan(${g.id},'alt',this)">Alt lines</button>
+    <button class="expbtn" onclick="pan(${g.id},'projbox',this)">Proj. Box</button>
     <button class="expbtn" onclick="pan(${g.id},'props',this)">Props</button>
+    <button class="expbtn" onclick="pan(${g.id},'verdict',this)">Take/Fade</button>
     <button class="expbtn" onclick="pan(${g.id},'mybets',this)">My bets</button>
     ${isLive?`<button class="expbtn" onclick="pan(${g.id},'livebox',this)">Live box</button>`:''}
-    ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button>`:''}
+    ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button><button class="expbtn" onclick="pan(${g.id},'post',this)" style="color:var(--cold)">📊 Analysis</button>`:''}
    </div>
    <div class="panel" id="p-coach-${g.id}">${coachBriefing(g,s,'mlb')}</div>
    <div class="panel" id="p-trend-${g.id}">${trendPanel(g,s)}</div>
    <div class="panel" id="p-ag-${g.id}">${agPanel(g,s,M,topReasons(),realLineRead())}</div>
    <div class="panel" id="p-alt-${g.id}">${altPanel(g,s)}</div>
+   <div class="panel" id="p-projbox-${g.id}">${(()=>{try{return typeof mlbProjBoxHtml==='function'?mlbProjBoxHtml(g,s):''}catch(e){return''}})()}</div>
+   <div class="panel" id="p-verdict-${g.id}">${(()=>{try{return typeof parVerdictHtml==='function'?parVerdictHtml('mlb',g,s):''}catch(e){return''}})()}</div>
    <div class="panel" id="p-props-${g.id}">${propPanel(g)}</div>
    <div class="panel" id="p-mybets-${g.id}">${myBetsPanel(g,s,M)}</div>
    ${isLive?`<div class="panel" id="p-livebox-${g.id}">${liveBoxPanel(g.id,g)}</div>`:''}
-   ${done?`<div class="panel" id="p-box-${g.id}">${boxPanel(g)}</div>`:''}
+   ${done?`<div class="panel" id="p-box-${g.id}">${boxPanel(g)}</div><div class="panel" id="p-post-${g.id}">${(()=>{try{return typeof parPostGame==='function'?parPostGame('mlb',g,s):''}catch(e){return''}})()}</div>`:''}
   </div>`;
 }
 
@@ -8816,7 +8822,7 @@ function gradePropFromBox(g,x){
   return null;
 }
 function pan(gid,which,btn){
-  ['trend','ag','alt','props','box','livebox','mybets'].forEach(k=>{
+  ['coach','trend','ag','alt','projbox','props','verdict','box','livebox','mybets','post'].forEach(k=>{
     const p=document.getElementById('p-'+k+'-'+gid);
     if(p&&k!==which)p.classList.remove('on');
   });
@@ -12538,7 +12544,7 @@ function renderTicketsRaw(){
   const body=document.getElementById('ticketBody');
   if(!nav||!body)return;
   nav.innerHTML=TTABS.map(([k,l])=>
-    `<button class="${TICKETTAB===k?'on':''}" onclick="TICKETTAB='${k}';renderTickets()">${l}</button>`).join('');
+    `<button class="${TICKETTAB===k?'on':''}" onclick="TICKETTAB='${k}';TICKETTAB_USER=true;renderTickets()">${l}</button>`).join('');
   const modeRow=(cur,opts,setter)=>`<div class="subnav" style="margin-bottom:10px">${
     opts.map(([k,l])=>`<button class="${cur===k?'on':''}" onclick="${setter}='${k}';renderTickets()">${l}</button>`).join('')}</div>`;
   if(TICKETTAB==='eval'){
@@ -16367,7 +16373,7 @@ function renderBest(){
   const pub=get('d4.pubstate',{})||{};const pubTxt=pub.d===S.d?(pub.ok?`<span style="color:var(--win)">✓ public page updated ${new Date(pub.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span>`:`<span style="color:var(--rust)">publish failed: ${esc(pub.reason||'')}</span>`):'';
   const L3=BEST_VIEW==='all'?(S.top3||[]):((S.bySport||{})[BEST_VIEW]||[]);
   const notes=L3.length?`<div class="tkt" style="margin-top:8px"><h3>🎬 Reel notes — why each pick</h3><div class="sub" style="font-size:10px">Everything behind each play, plus a script you can read on camera.</div>${L3.map((x,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10px;color:var(--gold)">${sgnP(x.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(x.game)}</span>${whyHtml({...x,date:S.d},i===0)}</div>`).join('')}</div>`:'';
-  let rcT='';try{const B=bkDayState();const D=B.locked?B:B.preview;if(D&&D.roll&&D.roll.cut.length){const cut=D.roll.legs.filter(l=>D.roll.cut.includes(l.sp+'|'+l.game));
+  let rcT='';try{const B=bkDayState();const D=B.locked?B:B.preview;if(false&&D&&D.roll&&D.roll.cut.length){   /* v2.33 · the Roll Call is retired (no pick on more than 3 tickets) */const cut=D.roll.legs.filter(l=>D.roll.cut.includes(l.sp+'|'+l.game));
     rcT=`<div class="tkt" style="margin-top:8px;border-left:3px solid #ff6fae"><h3>📣 Tonight's Roll Call parlay ${B.locked?'🔒':''}</h3><div class="mono" style="font-size:10.5px">${cut.map(l=>`${txtEsc(l.pick)} <span style="color:var(--gold)">${sgnP(l.price)}</span>`).join(' · ')}</div>
       <div class="mono" style="font-size:10px;color:var(--mute)">${cut.length} legs · ${decimalToAmerican(D.roll.cutDec)} · ${(D.roll.cutP*100).toFixed(1)}% to cash</div><div class="bar" style="margin-top:4px"><button onclick="tab('banker',document.getElementById('navBanker'))">Open the Banker's desk →</button></div></div>`;}}catch(e){}
   el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button><a href="${PUB_URL}" target="_blank" style="font-size:11px;color:var(--cold);align-self:center">open public page ↗</a></div>
@@ -19154,7 +19160,7 @@ function renderToday(noSnap){
   if(F.view==='parlays'){let h='';try{h=parlayHubHtml();}catch(e){console.warn('parlay hub',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   if(F.view==='stars'){let h='';try{h=starsHtml(F.sp);}catch(e){console.warn('stars',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+spBar+h;return;}
   if(F.view==='subs'){let h='';try{h=subCardHtml();}catch(e){console.warn('subscriber card',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
-  let hero='';try{hero=todayBestHero();}catch(e){console.warn('best hero',e);}
+  let hero='';try{if(typeof todayTopHtml!=='function')hero=todayBestHero();}catch(e){console.warn('best hero',e);}   /* v2.33 · the Best card sits at the top of Today, in every view */
   el.innerHTML=vw+hero+legend+bar+(F.tier==='play'?`<div class="sub mono" style="font-size:9.5px;margin:-2px 0 8px;color:var(--win)">✅ Playable = every character on this side (or SUPREME), lane not blocked, model not fighting the market, has a book price no shorter than -300, +EV on what picks like it have actually hit. ${cnt({tier:'play'})} of ${allP.length} today.</div>`:'')+liveHtml+sdHtml+body;
 }
 
@@ -19350,10 +19356,12 @@ function dailyLoopInject(){
     const main=document.querySelector('main');
     if(main&&!document.getElementById('v-today')){
       const v1=document.createElement('div');v1.className='view';v1.id='v-today';
-      v1.innerHTML=`<div class="sbar" style="margin-top:0"><h2>Today's card</h2><div class="ln"></div></div>
-        <div class="sub" style="margin-bottom:6px">Every gold, cyan, green and purple pick on today's boards — one per game and market, strongest first, conflicts left off. The letters are the characters on that side. Faded rows are already on a ticket.</div>
-        <div class="bar"><button onclick="loadAllSports()">⟳ Load all sports</button><button onclick="(async()=>{const e=document.querySelector('.sharpStatus');try{e.textContent='Pulling Pinnacle…';const r=await pullSharp();e.innerHTML='<span style=\'color:var(--win)\'>✓ '+r.n+' sharp prices ('+r.sports.map(x=>x.toUpperCase()).join(', ')+') — ⚡ badges now show where your book is behind</span>';renderToday(true);}catch(x){e.innerHTML='<span style=\'color:var(--rust)\'>'+x.message+'</span>';}})()">⚡ Pull sharp lines</button></div><div class="sharpStatus sub mono" style="font-size:10px"></div><div class="lasStatus sub mono" style="font-size:10px"></div>
-        <div id="todayBody"></div><div class="bar"><button class="primary" onclick="renderToday()">Refresh</button></div>`;
+      v1.innerHTML=`<div class="sbar" style="margin-top:0"><h2>Today</h2><div class="ln"></div></div>
+        <div id="todayBody"></div>
+        <details class="tkt today-tools" style="margin-top:10px"><summary class="mono" style="cursor:pointer;font-size:10.5px;color:var(--mute)">🧰 Tools — load every sport · pull sharp lines · what the colors mean</summary>
+        <div class="sub" style="margin:8px 0 6px">The full board lists every gold, cyan, green and purple pick on today's boards — one per game and market, strongest first, conflicts left off. The letters are the characters on that side. Faded rows are already on a ticket.</div>
+        <div class="bar"><button onclick="loadAllSports()">⟳ Load all sports</button><button onclick="(async()=>{const e=document.querySelector('.sharpStatus');try{e.textContent='Pulling Pinnacle…';const r=await pullSharp();e.innerHTML='<span style=\'color:var(--win)\'>✓ '+r.n+' sharp prices ('+r.sports.map(x=>x.toUpperCase()).join(', ')+') — ⚡ badges now show where your book is behind</span>';renderToday(true);}catch(x){e.innerHTML='<span style=\'color:var(--rust)\'>'+x.message+'</span>';}})()">⚡ Pull sharp lines</button></div><div class="sharpStatus sub mono" style="font-size:10px"></div><div class="lasStatus sub mono" style="font-size:10px"></div></details>
+        <div class="bar"><button class="primary" onclick="renderToday()">Refresh</button></div>`;
       const v2=document.createElement('div');v2.className='view';v2.id='v-mine';
       v2.innerHTML=`<div class="sbar" style="margin-top:0"><h2>My games</h2><div class="ln"></div></div><div id="mineBody"></div>
         <div class="bar"><button class="primary" onclick="openMyGames()">Refresh scores</button></div>`;
@@ -21344,7 +21352,7 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){
    leg per game, nothing shorter than -300, games already started are left
    off. "📣 Roll Call" builds one pick from each character instead. Lock it and
    it's a normal ticket — graded, settled and on your record like any other. */
-let CB_V=null,CB_N='auto',CB_SP='all',CB_SEL=null,CB_SIG='';
+let CB_V=null,CB_N='auto',CB_SP='all',CB_SEL=null,CB_SIG='',CB_ALL=false;
 function cbStarted(sp,game){try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[sp]||{});const x=(B.picks||[]).find(y=>y.game===game&&y.start);
   if(x&&isFinite(Date.parse(x.start)))return Date.parse(x.start)<=Date.now();}catch(e){}
   try{const g=(sportGames(sp)||[]).find(z=>(z.away.abbr+'@'+z.home.abbr)===game);if(g){const a=String(g.abstract||g.state||'').toLowerCase();return!!a&&a!=='pre'&&a!=='preview'&&a!=='scheduled';}}catch(e){}return false;}
@@ -21352,9 +21360,12 @@ function cbPool(v){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
   let L;if(v==='__roll'){let R=null;try{const S=bkDayState();R=(S.locked?S:S.preview||{}).roll;}catch(e){}L=((R&&R.legs)||[]).map(x=>({...x,by:[x.v]}));}
   else L=(bkDayCands(V,d)[v]||[]);
   L=L.filter(x=>bkPriceOk(x.price)&&!cbStarted(x.sp,x.game)&&(CB_SP==='all'||x.sp===CB_SP));
+  /* v2.33 · the 70% rule: a character's ticket takes its OFFICIAL calls only, unless you ask for the learning calls too */
+  if(typeof isOfficial==='function'){const M=new Map();V.forEach(c=>{if(String(c.date).slice(0,10)===d&&CHARS[c.voice])M.set(c.voice+'|'+c.sp+'|'+c.game+'|'+c.market+'|'+c.side,c);});
+    L=L.map(x=>{const c=M.get(x.v+'|'+x.sp+'|'+x.game+'|'+x.m+'|'+x.sd);return{...x,off:!!(c&&isOfficial(c)),cf:c?confOf(c):null};}).filter(x=>CB_ALL||x.off);}
   const seen=new Set(),out=[];for(const x of L){const k=x.sp+'|'+x.game;if(seen.has(k))continue;seen.add(k);
-    /* v1.93: chances through the truth map; blocked lanes left off */
-    let p=x.p;try{p=truthP(x.sp,x.p);}catch(e){}let lane='thin';try{lane=laneStatus(laneKey(x.sp,x.m,x.sd,x.price,x.line),x.v);}catch(e){}
+    /* v1.93: chances through the truth map; blocked lanes left off · v2.33: an official call carries its confidence */
+    let p=x.p;try{p=x.off&&x.cf!=null?x.cf:truthP(x.sp,x.p);}catch(e){}let lane='thin';try{lane=laneStatus(laneKey(x.sp,x.m,x.sd,x.price,x.line),x.v);}catch(e){}
     if(lane==='blocked')continue;out.push({...x,p,lane,k:k+'|'+x.m+'|'+x.sd});}
   return out;}
 function cbDefault(pool){if(!pool.length)return[];if(CB_N!=='auto')return pool.slice(0,Math.min(+CB_N,pool.length)).map(x=>x.k);
@@ -21367,10 +21378,12 @@ function cbToggle(k){if(!CB_SEL)return;const i=CB_SEL.indexOf(k);if(i>=0)CB_SEL.
 function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const todays=V.filter(x=>String(x.date).slice(0,10)===d&&CHARS[x.voice]);
   if(!todays.length)return'<div class="empty">No character picks logged for today yet — open each sport\'s Games board once, then come back.</div>';
   let L=null;try{L=bkLedger();}catch(e){}
-  const counts={};todays.forEach(x=>{if(bkPriceOk(x.price))counts[x.voice]=(counts[x.voice]||0)+1;});
-  if(!CB_V||(CB_V!=='__roll'&&!counts[CB_V]))CB_V=CHAR_ORDER.filter(v=>counts[v]).sort((a,b)=>((L&&L.mult[b])||1)-((L&&L.mult[a])||1))[0]||'__roll';
+  const counts={};todays.forEach(x=>{if(bkPriceOk(x.price)&&!x.graded&&(CB_ALL||typeof isOfficial!=='function'||isOfficial(x)))counts[x.voice]=(counts[x.voice]||0)+1;});
+  if(!CB_V||CB_V==='__roll'||!counts[CB_V])CB_V=CHAR_ORDER.filter(v=>counts[v]).sort((a,b)=>((L&&L.mult[b])||1)-((L&&L.mult[a])||1))[0]||null;
+  const allTog=`<label class="mono" style="display:flex;gap:6px;align-items:center;font-size:10px;color:var(--mute);margin:2px 0 8px"><input type="checkbox" ${CB_ALL?'checked':''} onchange="CB_ALL=this.checked;CB_V=null;CB_SEL=null;renderTickets()" style="width:16px;height:16px;min-width:16px;margin:0">include the learning calls (under 70% — never official)</label>`;
+  if(!CB_V)return`<div class="tkt"><h3>🎭 Build from a character</h3>${allTog}<div class="sub">No official (70%+) character picks are open right now.${CB_ALL?'':' Tick the box above to build from the learning calls anyway.'}</div></div>`;
   const chip=v=>{const C=CHARS[v]||{};const W=L&&L.weeks[0].R[v];return`<button class="${CB_V===v?'on':''}" onclick="cbSetV('${v}')" style="${CB_V===v?'':'color:'+C.color}">${C.chip} <span class="mono" style="font-size:9px">${counts[v]||0}${W&&W.n?` · ${W.w}-${W.l}`:''}</span></button>`;};
-  const chips=`<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${CHAR_ORDER.filter(v=>counts[v]).map(chip).join('')}<button class="${CB_V==='__roll'?'on':''}" onclick="cbSetV('__roll')" style="${CB_V==='__roll'?'':'color:#ff6fae'}">📣 Roll Call</button></div>`;
+  const chips=`<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${CHAR_ORDER.filter(v=>counts[v]).map(chip).join('')}</div>`;
   const sps=[...new Set(todays.map(x=>x.sp))];
   const spRow=sps.length>1?`<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${['all',...sps].map(sp=>`<button class="${CB_SP===sp?'on':''}" onclick="cbSetSp('${sp}')">${sp==='all'?'All sports':(SP_LAB[sp]||sp)}</button>`).join('')}</div>`:'';
   const nRow=`<div class="mktlab" style="margin-top:4px">Legs</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${['auto',2,3,4,5,6].map(n=>`<button class="${String(CB_N)===String(n)?'on':''}" onclick="cbSetN('${n}')">${n==='auto'?'🏦 Banker picks':n}</button>`).join('')}</div>`;
@@ -21385,7 +21398,7 @@ function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const to
   const rows=pool.map((x,i)=>{const on=CB_SEL.includes(x.k);const r=rec(x);const C=CHARS[x.v]||{};
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule);${on?'':'opacity:.55'}"><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
       <input type="checkbox" ${on?'checked':''} onchange="cbToggle('${x.k.replace(/'/g,"\\'")}')" style="width:20px;height:20px;min-width:20px;flex:0 0 20px;margin:2px 0 0;padding:0">
-      <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(x.price)}</span></span><span class="mono" style="font-size:10.5px">${Math.round(x.p*100)}%</span></div>
+      <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(x.price)}</span></span><span class="mono" style="font-size:10.5px;color:${x.off?'var(--win)':'var(--mute)'}">${x.off?'✅ ':''}${Math.round(x.p*100)}%</span></div>
         <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game)}${CB_V==='__roll'?` · <span style="color:${C.color}">${C.chip||''}</span>`:''}${r?` · <span style="color:var(--win)">${txtEsc(r)}</span>`:''}</div></div></label>
       ${whyHtml({...x,date:d})}</div>`;}).join('');
   const dec=sel.reduce((a,x)=>a*americanToDecimal(x.price),1),pc=sel.reduce((a,x)=>a*x.p,1);
@@ -21395,7 +21408,7 @@ function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const to
     ${sel.length>2&&pc<CORE_CASH_MIN?`<div class="mono" style="font-size:10px;color:var(--rust);margin:2px 0">⚠ ${(pc*100).toFixed(1)}% to cash is under the ${Math.round(CORE_CASH_MIN*100)}% leg budget — the best ${Math.max(2,legBudget(sel.map(x=>x.p).sort((a,b)=>b-a),sel.length))} of these cash ${(sel.map(x=>x.p).sort((a,b)=>b-a).slice(0,Math.max(2,legBudget(sel.map(x=>x.p).sort((a,b)=>b-a),sel.length))).reduce((a,p)=>a*p,1)*100).toFixed(0)}%</div>`:''}
     <div class="mono" style="font-size:10px;color:var(--mute)">${(pc*100).toFixed(1)}% to cash · EV ${pc*dec-1>=0?'+':''}${((pc*dec-1)*100).toFixed(1)}% at the leg chances${stake?` · Banker size $${stake.toFixed(2)} (¼-Kelly)`:''}</div>
     <div class="bar" style="margin-top:6px"><button class="primary" onclick="cbLock()">🔒 Lock this ticket</button></div></div>`:'<div class="sub" style="margin-top:6px">Check at least one pick to build a ticket.</div>';
-  return`<div class="tkt"><h3>🎭 Build from a character</h3><div class="sub" style="font-size:10px;margin-bottom:6px">${intro}</div>${chips}${spRow}${nRow}
+  return`<div class="tkt"><h3>🎭 Build from a character</h3><div class="sub" style="font-size:10px;margin-bottom:6px">${intro}</div>${allTog}${chips}${spRow}${nRow}
     ${pool.length?rows:`<div class="sub">No open picks for ${txtEsc(who)} right now (priced -300 or better, game not started).</div>`}</div>${sum}`;}
 function cbLock(){const d=today();const pool=cbPool(CB_V);const sel=pool.filter(x=>(CB_SEL||[]).includes(x.k));if(!sel.length)return;
   const who=CB_V==='__roll'?'Roll Call':charName(CB_V);const id=Date.now();
@@ -21526,15 +21539,23 @@ async function openGamecast(sp,game,d,id){d=d||today();id=id||gcEventId(sp,game,
   GC={...GC,sp,game,d,id,j:null,tab:GC.tab||'plays'};
   let ov=document.getElementById('gcSheet');if(!ov){ov=document.createElement('div');ov.id='gcSheet';ov.style.cssText='position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center';
     ov.onclick=ev=>{if(ev.target===ov)closeGamecast();};document.body.appendChild(ov);}
-  ov.innerHTML=`<div id="gcIn" style="background:var(--panel,#12151c);width:min(100vw,640px);height:94vh;overflow:auto;border-radius:16px 16px 0 0;padding:12px 12px 26px;border:1px solid var(--rule)"><div class="empty">${id?'Loading the gamecast…':'No ESPN game found for '+txtEsc(game)+' on '+txtEsc(d)+' yet.'}</div></div>`;
-  document.body.style.overflow='hidden';clearInterval(GC.T);if(!id)return;
+  ov.innerHTML=`<div id="gcIn" style="background:var(--panel,#12151c);width:min(100vw,640px);height:94vh;height:94dvh;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:16px 16px 0 0;padding:12px 12px calc(26px + env(safe-area-inset-bottom));border:1px solid var(--rule);box-sizing:border-box"><div class="empty">${id?'Loading the gamecast…':'No ESPN game found for '+txtEsc(game)+' on '+txtEsc(d)+' yet.'}</div></div>`;
+  document.body.style.overflow='hidden';clearInterval(GC.T);GC.sig=null;GC.touchAt=0;if(!id)return;
+  /* v2.33 · on a phone the 15-second refresh never fights your finger: it waits while you're touching or scrolling */
+  const inn=document.getElementById('gcIn');if(inn){['touchstart','touchmove','scroll','wheel'].forEach(ev=>inn.addEventListener(ev,()=>{GC.touchAt=Date.now();},{passive:true}));
+    inn.addEventListener('touchend',()=>{GC.touchAt=Date.now();if(GC.pend){setTimeout(()=>{if(Date.now()-GC.touchAt>=650&&GC.pend)gcPaint();},700);}},{passive:true});}
   await gcLoad();GC.T=setInterval(()=>{if(!document.hidden)gcLoad();},15000);}
 function closeGamecast(){clearInterval(GC.T);GC.T=null;const ov=document.getElementById('gcSheet');if(ov)ov.remove();if(!document.getElementById('tkSheet'))document.body.style.overflow='';}
-async function gcLoad(){if(!GC.id||!FBP_ESPN[GC.sp])return;try{const r=await fetch(FBP_ESPN[GC.sp]+'/summary?event='+GC.id);const j=await r.json();GC.j=j;GC.ts=Date.now();
+async function gcLoad(){if(!GC.id||!FBP_ESPN[GC.sp])return;const want=GC.id;try{const r=await fetch(FBP_ESPN[GC.sp]+'/summary?event='+GC.id);const j=await r.json();if(GC.id!==want)return;GC.j=j;GC.ts=Date.now();
     try{const box=GC.sp==='nhl'?fbpParseHockey(j):GC.sp==='mlb'?fbpParseBaseball(j):(GC.sp==='nba'||GC.sp==='ncaab')?fbpParseBasketball(j):fbpParseBox(j);FBP_MEM[GC.id]={ts:Date.now(),box};}catch(e){}}catch(e){}
-  gcPaint();}
-function gcTab(t){GC.tab=t;gcPaint();}
-function gcPaint(){const inn=document.getElementById('gcIn');if(!inn)return;const y=inn.scrollTop;let h='';try{h=gcHtml(GC.sp,GC.j);}catch(e){h=`<div class="empty">Gamecast error: ${txtEsc(e.message)}</div>`;}inn.innerHTML=h;inn.scrollTop=y;}
+  /* repaint only when something actually changed; otherwise just tick the clock stamp */
+  let sig='';try{const j=GC.j||{};const c=((j.header||{}).competitions||[])[0]||{};const st=(c.status||{});
+    sig=JSON.stringify([st.period,st.displayClock,(st.type||{}).state,(c.competitors||[]).map(x=>x.score),j.situation||null,(j.plays||[]).length,((j.drives||{}).current||{}).description||'',((j.drives||{}).previous||[]).length,(j.winprobability||[]).length]);}catch(e){}
+  if(sig&&sig===GC.sig&&document.getElementById('gcStamp')){const s=document.getElementById('gcStamp');s.textContent='updated '+new Date(GC.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});return;}
+  GC.sig=sig;gcPaint();}
+function gcTab(t){GC.tab=t;GC.pend=false;gcPaintNow();}
+function gcPaint(){if(Date.now()-(GC.touchAt||0)<650){GC.pend=true;return;}gcPaintNow();}
+function gcPaintNow(){GC.pend=false;const inn=document.getElementById('gcIn');if(!inn)return;const y=inn.scrollTop;let h='';try{h=gcHtml(GC.sp,GC.j);}catch(e){h=`<div class="empty">Gamecast error: ${txtEsc(e.message)}</div>`;}inn.innerHTML=h;inn.scrollTop=y;}
 /* ── pieces ── */
 function gcTeams(j){const c=(((j||{}).header||{}).competitions||[])[0]||{};const cs=c.competitors||[];const T={};
   cs.forEach(x=>{const t=x.team||{};T[x.homeAway]={id:String(t.id||''),abbr:t.abbreviation||'',name:t.displayName||t.name||'',color:t.color?('#'+String(t.color).replace('#','')):null,logo:t.logo||((t.logos||[])[0]||{}).href||'',score:x.score!=null?x.score:'',record:((x.record||[])[0]||{}).summary||'',poss:!!x.possession};});
@@ -21669,10 +21690,12 @@ function gcHtml(sp,j){const G=gcTeams(j);const T=G.T;const a=T.away||{},h=T.home
   const fb=sp==='nfl'||sp==='ncaaf';
   let situ='';if(live&&sit){situ=fb?gcFieldPro(sit,T,j):sp==='mlb'?gcDiamond(sit):'';
     const lp=(sit.lastPlay||{}).text;if(lp)situ+=`<div style="font-size:12px;padding:6px 8px;border-left:3px solid var(--gold);margin:6px 0;background:rgba(245,184,46,.06)">${txtEsc(lp)}</div>`;}
+  /* v2.33 · basketball and hockey get their own surface too: the court / rink, the run, the momentum */
+  if((live||fin)&&(sp==='nba'||sp==='ncaab'||sp==='nhl')&&typeof gcPulse==='function'){try{situ+=gcPulse(sp,j||{},T,G);}catch(e){}}
   const tabs=[['plays','Play-by-play'],['bets','💰 My bets'],['leaders','Leaders']];
   const tb=`<div class="subnav" style="margin:10px 0 6px">${tabs.map(([k,l])=>`<button class="${GC.tab===k?'on':''}" onclick="gcTab('${k}')">${l}</button>`).join('')}</div>`;
   const body=GC.tab==='bets'?gcBets(sp,GC.game,GC.d):GC.tab==='leaders'?gcLeaders(j):gcPlays(sp,j||{},T);
-  return head+situ+gcWinProb(j,T)+(fb?gcDriveChart(j,T):'')+tb+body+`<div class="mono" style="font-size:9px;color:var(--mute);margin-top:8px">ESPN feed · updated ${GC.ts?new Date(GC.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'}):'—'} · refreshes every 15s</div>`;}
+  return head+situ+gcWinProb(j,T)+(fb?gcDriveChart(j,T):'')+tb+body+`<div class="mono" style="font-size:9px;color:var(--mute);margin-top:8px">ESPN feed · <span id="gcStamp">updated ${GC.ts?new Date(GC.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'}):'—'}</span> · refreshes every 15s</div>`;}
 function gcBtn(sp,game,d,label){return`<button class="gc-btn" onclick="event.stopPropagation();openGamecast('${sp}','${String(game).replace(/'/g,'')}','${d||today()}')" style="font-size:10px;padding:3px 8px">📺 ${label||'Gamecast'}</button>`;}
 
 /* ══ THE WEB — interactive bubble map (v1.86) ═══════════════════════════════

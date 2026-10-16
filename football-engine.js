@@ -2248,6 +2248,7 @@ function nflCardFull(g){
       <button onclick="nflTogglePanel('verdict','${id}',this)">Take/Fade</button>
       ${(isLive||isFinal)?`<button onclick="nflTogglePanel('livebox','${id}',this)">${isLive?'Live box':'Box score'}</button>`:''}
       <button onclick="nflTogglePanel('mybets','${id}',this)">My Bets</button>
+      ${isFinal?`<button onclick="nflTogglePanel('analysis','${id}',this)" style="background:rgba(95,211,232,.1);color:var(--cold)">📊 Analysis</button>`:''}
     </div>
     <div class="panel" id="p-nflcoach-${id}">${coachBriefing(g,s,'nfl')}</div>
     <div class="panel" id="p-nfltrends-${id}">${nflTrendPanel(g,s)}</div>
@@ -2258,6 +2259,7 @@ function nflCardFull(g){
     <div class="panel" id="p-nflverdict-${id}">${takeFadePanel(g,s,'nfl')}</div>
     <div class="panel" id="p-nfllivebox-${id}"><div id="p-fb-livebox-${id}">${(isLive||isFinal)?fbLiveBoxPanel(g,'nfl'):''}</div></div>
     <div class="panel" id="p-nflmybets-${id}"></div>
+    <div class="panel" id="p-nflanalysis-${id}">${isFinal?(()=>{try{return fbAnalysisPanel(g,s,'nfl')+(typeof parPostGame==='function'?parPostGame('nfl',g,s,{charsOnly:true}):'')}catch(e){return''}})():''}</div>
   </div>`;
 }
 
@@ -4158,7 +4160,7 @@ function ncaafCard(g){
     <div class="panel" id="p-ncaafportal-${id}">${cfbPortalPanel(g)}</div>
     <div class="panel" id="p-ncaafverdict-${id}">${takeFadePanel(g,s,'ncaaf')}</div>
     <div class="panel" id="p-ncaaflivebox-${id}"><div id="p-fb-livebox-${id}">${(cfbLive||cfbFinal)?fbLiveBoxPanel(g,'ncaaf'):''}</div></div>
-    <div class="panel" id="p-ncaafanalysis-${id}">${cfbFinal?fbAnalysisPanel(g,s,'ncaaf'):''}</div>
+    <div class="panel" id="p-ncaafanalysis-${id}">${cfbFinal?(()=>{try{return fbAnalysisPanel(g,s,'ncaaf')+(typeof parPostGame==='function'?parPostGame('ncaaf',g,s,{charsOnly:true}):'')}catch(e){return''}})():''}</div>
     <div class="panel" id="p-ncaafmybets-${id}"></div>
   </div>`;
 }
@@ -4657,6 +4659,7 @@ function fbProjBoxPanel(g,s,sport){
       const act=A&&A.players&&A.players[x.pid]?A.players[x.pid][x.k]:null;
       return`<div class="mono" style="font-size:10px;line-height:1.7">${x.team} ${x.name} <span style="color:var(--mute)">${x.pos}</span> · ${x.lab} <b style="color:var(--gold)">${x.proj}</b>${act!=null?` → <b>${act}</b>`:''}</div>`;}).join('');}
     else h2+=`<div class="sub" style="margin-top:8px;color:var(--mute)">Player lines appear once depth charts load (Props tab → Refresh depth charts).</div>`;}catch(err){}}
+  try{if(typeof parPlayersHtml==='function')h2+=parPlayersHtml(sport,g);}catch(err){}   /* v2.33 · every player: season · last 5 · last 10 */
   return h2;
 }
 

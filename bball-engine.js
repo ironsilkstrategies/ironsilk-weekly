@@ -347,7 +347,7 @@ function bbCard(C,g){const sp=C.sp;const L=bbLinesFor(C,bbKey(g),g.__date);const
     ${!L.length&&g.abstract!=='post'?`<div class="sub" style="font-size:10px;margin-top:4px">No book lines yet — paste your sportsbook's ${C.lab} lines in Intake (ESPN's fill in when posted).</div>`:L.length&&L.every(x=>x.src==='espn')&&g.abstract!=='post'?`<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin-top:4px">Lines from ESPN${L[0].book?' ('+bbEsc(L[0].book)+')':''} — your uploads replace them.</div>`:''}
     ${typeof pstCardHtml==='function'?pstCardHtml(sp,g):''}
     <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
-    <div class="exprow" style="margin-top:10px">${btn('coach','Coach')}${btn('trends','Trends')}${btn('ag','A–G')}${btn('alt','Alt Lines')}${btn('box','Proj. Box')}${btn('props','Props')}${btn('verdict','Take/Fade')}${g.abstract!=='pre'?btn('live',g.abstract==='post'?'Final Box':'Live Box'):''}${btn('mybets','My Bets')}${btn('roster','Roster')}</div>
+    <div class="exprow" style="margin-top:10px">${btn('coach','Coach')}${btn('trends','Trends')}${btn('ag','A–G')}${btn('alt','Alt Lines')}${btn('box','Proj. Box')}${btn('props','Props')}${btn('verdict','Take/Fade')}${g.abstract!=='pre'?btn('live',g.abstract==='post'?'Final Box':'Live Box'):''}${btn('mybets','My Bets')}${btn('roster','Roster')}${g.abstract==='post'?btn('analysis','📊 Analysis'):''}</div>
     <div class="panel" id="${sp}p-${g.id}"></div></div>`;}
 function bbCardWrapped(C,g){const h=bbCard(C,g);try{return typeof pregameWrap==='function'&&(C.sp!=='ncaab'||bbWorkable(C.sp,g))?pregameWrap(C.sp,g,h):h;}catch(e){return h;}}
 /* one-line row for the games that aren't opened yet — a tap opens the full card in place */
@@ -420,6 +420,7 @@ const BB_PANELS={
     if(own.length)out.push('<div class="sub" style="margin:6px 0 4px"><b>From the results on file</b></div>'+own.map(x=>`<div class="sub">• ${x}</div>`).join(''));
     return out.join('')||'<div class="sub">No trends, consensus or outside picks uploaded for this game yet — paste a Covers doc in Intake.</div>';},
   ag:(C,g,s)=>bbAG(C,g,s),
+  analysis:(C,g,s)=>typeof parPostGame==='function'?parPostGame(C.sp,g,s):'<div class="sub">No breakdown yet.</div>',
   alt:(C,g,s)=>{const A=g.away.abbr,H=g.home.abbr;const base=Math.round(s.margin*2)/2;const r=[];const st=C.sp==='ncaab'?[-5,-2.5,0,2.5,5]:[-6,-3,0,3,6];
     st.forEach(d=>{const l=-(base+d)||0.5;r.push([`${H} ${bbSgn(l)}`,(s.homeCover(l)*100).toFixed(0)+'%',bbSgn(bbFair(s.homeCover(l))),`${A} ${bbSgn(-l)}`,(s.awayCover(-l)*100).toFixed(0)+'%',bbSgn(bbFair(s.awayCover(-l)))]);});
     const tb=Math.round(s.total);const t=[];(C.sp==='ncaab'?[-8,-4,0,4,8]:[-10,-5,0,5,10]).forEach(d=>{const l=tb+d+0.5;t.push([l,(s.over(l)*100).toFixed(0)+'%',bbSgn(bbFair(s.over(l))),(s.under(l)*100).toFixed(0)+'%',bbSgn(bbFair(s.under(l)))]);});
@@ -438,7 +439,8 @@ const BB_PANELS={
     const head=['PTS','REB','AST','3PM','L5 pts','L10 pts'];
     const side=(ab,proj)=>{const rows=bbPlayerRows(C,g,ab,proj);return rows.length?bbTable([bbEsc(ab)+' '+proj.toFixed(0),...head],rows):`<div class="sub">${bbEsc(ab)}: no player logs yet — they fill in as box scores and game logs arrive.</div>`;};
     let lines;if(C.sp==='ncaab'){const h1=bbSimFor(C,g,'h1');lines=[['1st half',h1.awayProj,h1.homeProj],['2nd half',(s.awayProj-h1.awayProj).toFixed(1),(s.homeProj-h1.homeProj).toFixed(1)]];}
-    else{const q1=bbSimFor(C,g,'q1'),h1=bbSimFor(C,g,'h1');lines=[['Q1',q1.awayProj,q1.homeProj],['Q2',(h1.awayProj-q1.awayProj).toFixed(1),(h1.homeProj-q1.homeProj).toFixed(1)],['2nd half',(s.awayProj-h1.awayProj).toFixed(1),(s.homeProj-h1.homeProj).toFixed(1)]];}
+    else{const q1=bbSimFor(C,g,'q1'),h1=bbSimFor(C,g,'h1');const h2a=s.awayProj-h1.awayProj,h2h=s.homeProj-h1.homeProj;
+      lines=[['Q1',q1.awayProj,q1.homeProj],['Q2',(h1.awayProj-q1.awayProj).toFixed(1),(h1.homeProj-q1.homeProj).toFixed(1)],['Q3',(h2a*0.49).toFixed(1),(h2h*0.49).toFixed(1)],['Q4',(h2a*0.51).toFixed(1),(h2h*0.51).toFixed(1)],['1st half',h1.awayProj,h1.homeProj],['2nd half',h2a.toFixed(1),h2h.toFixed(1)]];}
     lines.push(['Final',s.awayProj,s.homeProj]);
     return`<div class="sub">Projected ${bbEsc(g.away.abbr)} ${pa.toFixed(1)} – ${ph.toFixed(1)} ${bbEsc(g.home.abbr)}${L?' (live: the score now + the rest of the game)':''}. Player lines are form-weighted and scaled to the team's projection; L5 / L10 = his last 5 and 10 games.</div>`+
       bbTable(['',bbEsc(g.away.abbr),bbEsc(g.home.abbr)],lines)+side(g.away.abbr,pa)+side(g.home.abbr,ph);},

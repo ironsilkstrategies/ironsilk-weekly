@@ -868,9 +868,10 @@ if(typeof renderRecordsHub==='function'){const REC_HUB0=renderRecordsHub;renderR
 /* ── 16 · TODAY — the day at a glance: where the process stands, the official card,
    the strength plays. The board's full list is still there, under the filters. */
 function todayTopHtml(){let h='';try{h+=deskProcessHtml();}catch(e){}
+  try{h+=todayBestHero();}catch(e){console.warn('best hero',e);}
   try{const S=best5State();if(!(S.top3||[]).length&&deskFrozen())h+=`<div class="tkt"><b>⭐ No Best 3 today</b><div class="sub" style="font-size:10.5px">Nothing cleared the 70% rule at a fair price. We don't force picks.</div></div>`;}catch(e){}
-  try{const{plays}=strengthPlays();if(plays.length)h+=`<details class="tkt"${plays.length<=4?' open':''}><summary><b>💪 Strength plays</b> <span class="mono" style="font-size:10px;color:var(--mute)">${plays.length} — characters inside their proven lanes</span></summary>${plays.slice(0,6).map(strengthRow).join('')}
-      ${plays.length>6?`<div class="bar"><button onclick="REC_VIEW='strengths';tab('grades',document.querySelector('nav button[onclick*=grades]'))">All ${plays.length} + the parlay builder →</button></div>`:''}</details>`;}catch(e){}
+  try{const{plays}=strengthPlays();const G=strengthGroups(plays);if(G.length)h+=`<details class="tkt"${G.length<=4?' open':''}><summary><b>💪 Strength plays</b> <span class="mono" style="font-size:10px;color:var(--mute)">${G.length} pick${G.length===1?'':'s'} — characters inside their proven lanes</span></summary>${G.slice(0,6).map(strengthGroupRow).join('')}
+      ${G.length>6||plays.length>G.length?`<div class="bar"><button onclick="REC_VIEW='strengths';tab('grades',document.querySelector('nav button[onclick*=grades]'))">Every character's strength plays + the parlay builder →</button></div>`:''}</details>`;}catch(e){}
   return h;}
 /* the Best 3 on Today: each pick's % is the confidence that made it official, and who's behind it */
 function todayBestHero(){let S=null;try{S=best5State();}catch(e){return'';}const top=(S&&S.top3)||[];if(!top.length)return'';
@@ -940,3 +941,144 @@ try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='conf')){const i=
 /* hidden frames never post to Telegram */
 if(typeof tgAutoTick==='function'&&typeof BG_MODE!=='undefined'&&BG_MODE){tgAutoTick=async function(){return 0;};}
 try{if(typeof SPORT_PAGE!=='undefined'&&!SPORT_PAGE.ncaab)SPORT_PAGE.ncaab='ncaab.html';}catch(e){}
+
+/* ── 18 · CARD PARITY (v2.33) ──────────────────────────────────────────────────
+   Every sport's card carries the same set: Coach · Trends · A–G · Alt Lines ·
+   Proj. Box (with the players — season, last 5, last 10) · Props · Take/Fade ·
+   Live/Final Box · My Bets · Analysis once it's final. Per-period projections
+   match across sports: MLB innings ↔ hockey periods ↔ football and NBA quarters
+   ↔ college halves. */
+const PAR_KEYS={mlb:[['h','H'],['hr','HR'],['rbi','RBI'],['tb','TB'],['k','K (P)']],nfl:[['py','Pass'],['ry','Rush'],['rec','Rec'],['wy','Rec yds'],['td','TD']],
+  nhl:[['g','G'],['a','A'],['pts','PTS'],['s','SOG']],nba:[['pts','PTS'],['reb','REB'],['ast','AST'],['fg3','3PM']]};
+PAR_KEYS.ncaaf=PAR_KEYS.nfl;PAR_KEYS.ncaab=PAR_KEYS.nba;
+const parEsc=s=>typeof txtEsc==='function'?txtEsc(s):String(s==null?'':s);
+const parSgn=x=>x==null||!isFinite(+x)?'—':(+x>0?'+':'')+(+x);
+function parLines(sp,g){try{return sportLinesFor(sp,g)||[];}catch(e){return[];}}
+const parF=(L,m,sd)=>L.find(x=>(x.market===m||(m==='spread'&&(x.market==='runline'||x.market==='puckline'))||(m==='moneyline'&&x.market==='ml'))&&x.side===sd);
+function parProj(s){if(!s)return null;const a=s.awayProj!=null?+s.awayProj:s.aR!=null?+s.aR:null,h=s.homeProj!=null?+s.homeProj:s.hR!=null?+s.hR:null;return a==null||h==null||!isFinite(a)||!isFinite(h)?null:{a,h};}
+const parTable=(head,rows)=>`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="par-t"><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table></div>`;
+const parEV=(p,price)=>{const a=amerOk(price);if(p==null||a==null)return null;const d=a>0?a/100+1:100/(-a)+1;return(p*(d-1)-(1-p))*100;};
+/* the players behind the projection: season average · last 5 (green hot / red cold) · last 10 */
+function parPlayersHtml(sp,g){const K=PAR_KEYS[sp];if(!K||typeof pstTeam!=='function'||typeof pstForm!=='function')return'';
+  const fmt=v=>v==null||!isFinite(v)?'—':v.toFixed(v<10?1:0);
+  const side=ab=>{const P=pstTeam(sp,ab,sp==='nfl'||sp==='ncaaf'?6:8);if(!P.length)return`<div class="sub" style="font-size:10px;margin:4px 0">${parEsc(ab)}: no player logs yet — they fill in as box scores arrive.</div>`;
+    const rows=P.map(x=>{const cells=K.map(([k])=>{const S=x.s[k];if(!S||!S.gp)return'<span style="color:var(--mute)">—</span>';const J=pstProj(sp,x.name,k);const mu=J?J.mu:S.sum/S.gp;const f5=pstForm(sp,x.name,k,5);
+        const col=f5?(f5.avg>=mu*1.15&&f5.avg-mu>=0.3?'var(--win)':f5.avg<=mu*0.8&&mu-f5.avg>=0.3?'var(--rust)':'var(--mute)'):'';
+        return`${fmt(mu)}${f5?`<span style="color:${col}"> · ${fmt(f5.avg)}</span>`:''}`;});
+      const hk=K.find(([k])=>x.s[k]&&x.s[k].gp&&x.s[k].sum);const f10=hk?pstForm(sp,x.name,hk[0],10):null;
+      return[`${parEsc(x.name)} <span style="color:var(--mute)">${x.n}G</span>`,...cells,f10?`${fmt(f10.avg)} <span style="color:var(--mute)">${hk[1]}</span>`:'—'];});
+    return parTable([parEsc(ab),...K.map(k=>k[1]),'L10'],rows);};
+  return`<div class="mktlab" style="margin-top:10px">Players — season avg · last 5 (green = hot, red = cold) · last 10</div>`+side(g.away.abbr)+side(g.home.abbr);}
+/* A–G for any sport: A my line · B outside range · C vs the market · D my picks · E props · F props vs the market · G confidence */
+function parAG(sp,g,s){const A=g.away.abbr,H=g.home.abbr,game=A+'@'+H;const P=parProj(s);if(!P)return'<div class="sub">No projection yet.</div>';const L=parLines(sp,g);const f=(m,sd)=>parF(L,m,sd);
+  const pc=x=>Math.round(x*100)+'%';const dg=sp==='mlb'||sp==='nhl'?2:1;const unit=sp==='mlb'?'runs':sp==='nhl'?'goals':'pts';
+  let J=null;try{J=brainJudge(g,s,sp);}catch(e){}let pred=null;try{pred=predFor(sp,game);}catch(e){}
+  const out=[];const hw=s.hw!=null?s.hw:null;
+  out.push(`<b>A) My line:</b> ${A} ${P.a.toFixed(dg)} – ${P.h.toFixed(dg)} ${H} · margin ${H} ${parSgn(+(P.h-P.a).toFixed(1))} · total ${(P.a+P.h).toFixed(dg)} ${unit}${hw!=null?` · ${H} ${pc(hw)} to win`:''}`);
+  const rng=[['Model',P.a,P.h]];if(J)rng.push(['Judge',J.a,J.h]);if(pred)rng.push(['Prediction',+pred.a,+pred.h]);
+  out.push(`<b>B) Outside range:</b> ${rng.map(([n,a,h])=>`${n} ${(+a).toFixed(dg)}–${(+h).toFixed(dg)}`).join(' · ')}${rng.length>1?` → ${H} margin ${Math.min(...rng.map(x=>x[2]-x[1])).toFixed(1)} to ${Math.max(...rng.map(x=>x[2]-x[1])).toFixed(1)}`:''}`);
+  const cand=[],cm=[];const imp0=pr=>{const a=amerOk(pr);return a==null?null:(a>0?100/(a+100):-a/(-a+100));};
+  const mA=f('moneyline','away'),mH=f('moneyline','home');if(mA&&mH&&hw!=null){cand.push({lab:`${A} ML`,p:1-hw,price:mA.price},{lab:`${H} ML`,p:hw,price:mH.price});const ka=imp0(mA.price),kh=imp0(mH.price);if(ka&&kh)cm.push(`moneyline: book ${H} ${pc(kh/(ka+kh))} vs my ${pc(hw)}`);}
+  const sA=f('spread','away'),sH=f('spread','home');if(sA&&sH&&typeof s.homeCover==='function'){const ph=s.homeCover(+sH.line),pa=s.awayCover(+sA.line);cand.push({lab:`${A} ${parSgn(sA.line)}`,p:pa,price:sA.price},{lab:`${H} ${parSgn(sH.line)}`,p:ph,price:sH.price});
+    cm.push(`spread ${H} ${parSgn(sH.line)}: I have ${H} covering ${pc(ph)} (book ${pc(imp0(sH.price)||0.5)})`);}
+  const oV=f('total','over'),uN=f('total','under');if(oV&&uN&&typeof s.over==='function'){const po=s.over(+oV.line);cand.push({lab:`Over ${oV.line}`,p:po,price:oV.price},{lab:`Under ${uN.line}`,p:typeof s.under==='function'?s.under(+uN.line):1-po,price:uN.price});
+    cm.push(`total ${oV.line} vs my ${(P.a+P.h).toFixed(dg)} → <b>${P.a+P.h>+oV.line?'Over':'Under'}</b> (${pc(Math.max(po,1-po))})`);}
+  out.push(`<b>C) Vs the market:</b> ${cm.join(' · ')||'no book line yet'}`);
+  const best=cand.map(x=>({...x,ev:parEV(x.p,x.price)})).filter(x=>x.ev!=null&&isFinite(x.ev)).sort((a,b)=>b.ev-a.ev).slice(0,2);
+  out.push(`<b>D) My picks:</b> ${best.length?best.map(x=>`${parEsc(x.lab)} (${parSgn(amerOk(x.price))}) ${pc(x.p)} · ${x.ev>=0?'+':''}${x.ev.toFixed(1)}% EV`).join(' · '):'no line to price'}`);
+  let pr=[];try{pr=propLikely(sp,60).filter(x=>x.team===A||x.team===H).slice(0,4);}catch(e){}
+  out.push(`<b>E) Props:</b> ${pr.length?pr.map(x=>{let f5=null;try{f5=pstForm(sp,x.player,x.k,5);}catch(e){}return`${parEsc(x.player)} ${x.thr}+ ${x.k} ${pc(x.p)}${f5?` (L5 ${f5.avg.toFixed(1)})`:''}`;}).join(' · '):'no player logs yet'}`);
+  let pb=[];try{pb=propBoard(sp,game).slice(0,3);}catch(e){}
+  out.push(`<b>F) Props vs the market:</b> ${pb.length?pb.map(x=>`${parEsc(x.player)} ${x.thr} ${parEsc(x.stat)} → model ${pc(x.pOver>=0.5?x.pOver:1-x.pOver)} ${x.pOver>=0.5?'over':'under'}`).join(' · '):'no prop lines uploaded'}`);
+  let cf=null,who=[];try{pickConfIdx().forEach((o,k)=>{if(k.startsWith(sp+'|'+game+'|')&&o.n&&(cf==null||o.cf>cf)){cf=o.cf;who=o.who;}});}catch(e){}
+  out.push(`<b>G) Confidence:</b> ${g.pre||g.preseason?'preseason — tracked for learning, never official':cf!=null?`<span style="color:var(--win)">${pc(cf)} — official</span> (${who.map(v=>parEsc(String(charName(v)).replace(/^The /,''))).join(', ')})`:'nothing on this game clears the 70% rule'}`);
+  return`<div class="sub" style="line-height:1.75">${out.join('<br>')}</div>`;}
+/* after the final: what the model, the book and the characters said — and what happened */
+function parPostGame(sp,g,s,opt){opt=opt||{};const A=g.away.abbr,H=g.home.abbr,game=A+'@'+H;const a=+g.awayScore,h=+g.homeScore;if(!isFinite(a)||!isFinite(h)||g.awayScore==null||g.awayScore==='')return'<div class="empty">No final score yet.</div>';
+  const P=parProj(s);const L=parLines(sp,g);const f=(m,sd)=>parF(L,m,sd);const dg=sp==='mlb'||sp==='nhl'?1:0;const row=(lab,ok,det)=>`<div class="par-row"><div><div class="g">${lab}</div><div class="p">${det||''}</div></div><div class="r" style="color:${ok===true?'var(--win)':ok===false?'var(--rust)':'var(--mute)'}">${ok===true?'✓ HIT':ok===false?'✗ MISS':'—'}</div></div>`;
+  const out=[];const W=h>a?H:a>h?A:null;
+  if(P){const mw=P.h>=P.a?H:A;out.push(row(`Model winner: ${mw}`,W?mw===W:null,`model ${P.a.toFixed(dg)}–${P.h.toFixed(dg)} · actual ${a}–${h} · margin off by ${Math.abs((P.h-P.a)-(h-a)).toFixed(1)}`));
+    out.push(row(`Model total: ${(P.a+P.h).toFixed(dg)}`,null,`actual ${a+h} · off by ${Math.abs(P.a+P.h-(a+h)).toFixed(1)}`));}
+  const mH=f('moneyline','home'),mA=f('moneyline','away');if(mH&&mA){const fav=amerOk(mH.price)<amerOk(mA.price)?H:A;out.push(row(`Book favorite: ${fav} (${parSgn(amerOk(fav===H?mH.price:mA.price))})`,W?fav===W:null,''));}
+  const sH=f('spread','home');if(sH&&sH.line!=null){const m=(h-a)+(+sH.line);out.push(row(`Spread: ${H} ${parSgn(sH.line)}`,m===0?null:m>0,m===0?'push':`${m>0?H:A} covered by ${Math.abs(m).toFixed(1)}`));}
+  const oV=f('total','over');if(oV&&oV.line!=null){const t=a+h;out.push(row(`Total ${oV.line}`,null,t===+oV.line?'push':`went ${t>+oV.line?'OVER':'UNDER'} (${t})`+(P?` · model said ${P.a+P.h>+oV.line?'Over':'Under'} — ${(P.a+P.h>+oV.line)===(t>+oV.line)?'right':'wrong'}`:'')));}
+  /* every character's call on this game, graded */
+  let V=[];try{const d=String(g.__date||tdDay(g.start||g.date||g.gameDate||'')||today()).slice(0,10);V=(roGet(VOICES_KEY,[],30e3)||[]).filter(x=>x.sp===sp&&x.game===game&&String(x.date).slice(0,10)===d&&CHARS[x.voice]);}catch(e){}
+  const vc=V.length?`<div class="mktlab" style="margin-top:8px">The characters on this game</div>`+V.sort((x,y)=>(isOfficial(y)?1:0)-(isOfficial(x)?1:0)).map(x=>{const res=x.graded?(x.push?'push':x.hit?'✓':'✗'):'…';
+      return`<div class="mono" style="font-size:10.5px;padding:2px 0;color:${x.graded&&!x.push?(x.hit?'var(--win)':'var(--rust)'):'var(--mute)'}">${res} ${parEsc(String(charName(x.voice)).replace(/^The /,''))}: ${parEsc(charPickText(x))}${isOfficial(x)?' <span style="color:var(--gold)">· official '+confPct(confOf(x))+'</span>':''}</div>`;}).join(''):'';
+  if(opt.charsOnly)return vc;
+  return`<div class="par-post"><div class="mktlab">Post-game breakdown</div>${out.join('')}${vc}</div>`;}
+/* MLB's projected box: runs by inning (↔ periods / quarters / halves elsewhere), F5, hits, the players */
+const MLB_INN=[0.12,0.10875,0.10875,0.10875,0.10875,0.11125,0.11125,0.11125,0.11125];
+function mlbProjBoxHtml(g,s){const P=parProj(s);if(!P)return'<div class="empty">No projection yet — it needs both lineups.</div>';const A=g.away.abbr,H=g.home.abbr;
+  let J=null;try{J=brainJudge(g,s,'mlb');}catch(e){}const hits=J&&J.box&&J.box.away?[J.box.away.hits,J.box.home.hits]:[null,null];
+  const row=(ab,r,hh)=>[`<b>${parEsc(ab)}</b>`,...MLB_INN.map(f=>(r*f).toFixed(2)),`<b>${(r*0.555).toFixed(1)}</b>`,`<b>${r.toFixed(1)}</b>`,hh!=null?hh:'—'];
+  return`<div class="sub">Projected runs by inning — the 1st inning runs a little hot (top of the order), F5 = innings 1–5.${J?` Judge ${A} ${J.final[0]}–${J.final[1]} ${H}.`:''}</div>`+
+    parTable(['',1,2,3,4,5,6,7,8,9,'F5','R','H≈'],[row(A,P.a,hits[0]),row(H,P.h,hits[1])])+parPlayersHtml('mlb',g);}
+/* the shared table look */
+try{if(typeof document!=='undefined'&&!document.getElementById('parCss')){const st=document.createElement('style');st.id='parCss';
+  st.textContent=`.par-t{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:10px;margin:4px 0}.par-t th{text-align:left;color:var(--mute);padding:3px 4px;border-bottom:1px solid var(--rule);white-space:nowrap;font-weight:600}
+.par-t td{padding:3px 4px;border-bottom:1px solid var(--rule);white-space:nowrap}.par-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--rule)}
+.par-row .g{font-weight:700;font-size:12.5px}.par-row .p{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute)}.par-row .r{font-weight:800;font-size:11px;white-space:nowrap}`;
+  (document.head||document.documentElement).appendChild(st);}}catch(e){}
+function parVerdictHtml(sp,g,s){let v=null;try{v=takeFadeVerdict(g,s,sp)}catch(e){}if(!v)return'<div class="sub">No take/fade read yet.</div>';
+  return`<div class="sub"><b>${parEsc(v.verdict)}</b>${!(v.reasons||[]).length?' — no strong take or fade signals on this game.':''}</div>`+(v.reasons||[]).map(x=>`<div class="sub">• ${parEsc(typeof x==='string'?x:(x.text||''))}</div>`).join('');}
+
+/* ── 19 · GAMECAST FOR BASKETBALL + HOCKEY (v2.33) ─────────────────────────────
+   Football has the field and baseball the diamond; basketball now gets the court
+   and hockey the rink — with the current run, the momentum of the last ten
+   scores, the score by period, and shots on goal in hockey. Everything is read
+   from ESPN's play-by-play scores, so it never guesses. */
+function gcScoring(j,T){const P=((j&&j.plays)||[]).filter(p=>p&&p.awayScore!=null&&p.homeScore!=null);const out=[];let pa=0,ph=0;
+  P.forEach(p=>{const a=+p.awayScore,h=+p.homeScore;if(!isFinite(a)||!isFinite(h))return;if(a>pa||h>ph){const side=a-pa>=h-ph?'away':'home';const pts=side==='away'?a-pa:h-ph;
+      out.push({side,pts,a,h,text:p.text||'',per:(p.period||{}).number||0,clk:(p.clock||{}).displayValue||''});}pa=Math.max(pa,a);ph=Math.max(ph,h);});
+  return out;}
+function gcRun(S){if(!S.length)return null;const last=S[S.length-1].side;let pts=0,n=0;for(let i=S.length-1;i>=0;i--){if(S[i].side!==last)break;pts+=S[i].pts;n++;}return{side:last,pts,n};}
+function gcCourtSvg(a,h,run,sp){const W=940,H=500;const col=c=>c||'#445';const side=(left)=>{const x0=left?0:W,s=left?1:-1,bx=x0+s*52.5;
+    return`<rect x="${left?0:W-190}" y="170" width="190" height="160" fill="${col(left?a.color:h.color)}" opacity=".55"/>
+    <circle cx="${x0+s*190}" cy="250" r="60" fill="none" stroke="#fff" stroke-width="4"/>
+    <path d="M${x0},30 L${x0+s*140},30 A237.5,237.5 0 0,${left?1:0} ${x0+s*140},470 L${x0},470" fill="none" stroke="#fff" stroke-width="4"/>
+    <line x1="${x0+s*40}" y1="220" x2="${x0+s*40}" y2="280" stroke="#fff" stroke-width="6"/><circle cx="${bx}" cy="250" r="9" fill="none" stroke="#ff7a1a" stroke-width="4"/>
+    <text x="${x0+s*120}" y="150" font-size="36" font-weight="900" fill="#fff" stroke="rgba(0,0,0,.45)" stroke-width="7" paint-order="stroke" text-anchor="middle" font-family="Archivo,Inter,sans-serif">${parEsc(left?a.abbr:h.abbr)}</text>`;};
+  const banner=run&&run.pts>=6?`<g><rect x="${run.side==='away'?80:530}" y="360" width="330" height="80" rx="16" fill="${col(run.side==='away'?a.color:h.color)}" stroke="#fff" stroke-width="3" opacity=".95"/>
+    <text x="${run.side==='away'?245:695}" y="412" font-size="36" font-weight="900" fill="#fff" text-anchor="middle" font-family="Archivo,Inter,sans-serif">${parEsc(run.side==='away'?a.abbr:h.abbr)} ${run.pts}-0 RUN</text></g>`:'';
+  return`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;border-radius:10px;border:2px solid #8a5a2b" role="img" aria-label="court">
+    <defs><linearGradient id="gcWood" x1="0" x2="1"><stop offset="0" stop-color="#d4a26a"/><stop offset=".5" stop-color="#c9935a"/><stop offset="1" stop-color="#d4a26a"/></linearGradient></defs>
+    <rect width="${W}" height="${H}" fill="url(#gcWood)"/>${Array.from({length:12},(_,i)=>`<line x1="0" y1="${i*42}" x2="${W}" y2="${i*42}" stroke="rgba(120,70,30,.18)" stroke-width="2"/>`).join('')}
+    <rect x="3" y="3" width="${W-6}" height="${H-6}" fill="none" stroke="#fff" stroke-width="5"/><line x1="470" y1="0" x2="470" y2="${H}" stroke="#fff" stroke-width="4"/><circle cx="470" cy="250" r="60" fill="none" stroke="#fff" stroke-width="4"/>
+    ${side(true)}${side(false)}${banner}</svg>`;}
+function gcRinkSvg(a,h,run){const W=1000,H=425;const col=c=>c||'#445';
+  const circ=(x,y)=>`<circle cx="${x}" cy="${y}" r="70" fill="none" stroke="#d33" stroke-width="4"/><circle cx="${x}" cy="${y}" r="6" fill="#d33"/>`;
+  const end=(left)=>{const gx=left?60:W-60;return`<line x1="${gx}" y1="40" x2="${gx}" y2="${H-40}" stroke="#d33" stroke-width="4"/><path d="M${gx},180 A45,45 0 0,${left?1:0} ${gx},245" fill="rgba(80,150,230,.35)" stroke="#d33" stroke-width="3"/>
+    <rect x="${left?gx-22:gx}" y="192" width="22" height="41" fill="none" stroke="#333" stroke-width="3"/>
+    <text x="${left?150:W-150}" y="222" font-size="34" font-weight="900" fill="${col(left?a.color:h.color)}" opacity=".85" text-anchor="middle" dominant-baseline="central" font-family="Archivo,Inter,sans-serif">${parEsc(left?a.abbr:h.abbr)}</text>`;};
+  const banner=run&&run.n>=2?`<g><rect x="${run.side==='away'?60:520}" y="20" width="420" height="70" rx="14" fill="${col(run.side==='away'?a.color:h.color)}" opacity=".92"/>
+    <text x="${run.side==='away'?270:730}" y="64" font-size="30" font-weight="900" fill="#fff" text-anchor="middle" font-family="Archivo,Inter,sans-serif">${parEsc(run.side==='away'?a.abbr:h.abbr)} · ${run.n} UNANSWERED</text></g>`:'';
+  return`<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block" role="img" aria-label="rink">
+    <rect x="4" y="4" width="${W-8}" height="${H-8}" rx="150" fill="#eef5fa" stroke="#9fb3c4" stroke-width="8"/>
+    <line x1="500" y1="10" x2="500" y2="${H-10}" stroke="#d33" stroke-width="8"/><line x1="335" y1="10" x2="335" y2="${H-10}" stroke="#2b5fd9" stroke-width="12"/><line x1="665" y1="10" x2="665" y2="${H-10}" stroke="#2b5fd9" stroke-width="12"/>
+    <circle cx="500" cy="212" r="70" fill="none" stroke="#2b5fd9" stroke-width="4"/><circle cx="500" cy="212" r="7" fill="#2b5fd9"/>
+    ${circ(190,105)}${circ(190,320)}${circ(810,105)}${circ(810,320)}${end(true)}${end(false)}${banner}</svg>`;}
+function gcPulse(sp,j,T,G){const a=T.away||{},h=T.home||{};const S=gcScoring(j,T);const run=gcRun(S);const hockey=sp==='nhl';
+  const surf=hockey?gcRinkSvg(a,h,run):gcCourtSvg(a,h,run,sp);
+  /* the last ten scores, oldest → newest */
+  const last=S.slice(-10);const mom=last.length?`<div style="display:flex;gap:3px;align-items:flex-end;height:${hockey?18:34}px;margin:6px 0 2px">${last.map(x=>`<div title="${parEsc(x.text)}" style="flex:1;height:${hockey?100:Math.min(100,34*x.pts)}%;min-height:6px;border-radius:3px;border:1px solid rgba(255,255,255,.28);box-sizing:border-box;background:${(x.side==='away'?a.color:h.color)||'var(--gold)'}"></div>`).join('')}</div>
+    <div class="mono" style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--mute)"><span>last ${last.length} ${hockey?'goals':'scores'} →</span><span>${run?`${parEsc(run.side==='away'?a.abbr:h.abbr)} ${hockey?(run.n+' straight'):(run.pts+'-0 run')}`:''}</span></div>`:'';
+  /* score by period */
+  const c=(((j||{}).header||{}).competitions||[])[0]||{};const cs=c.competitors||[];const A=cs.find(x=>x.homeAway==='away')||{},Hh=cs.find(x=>x.homeAway==='home')||{};
+  const la=(A.linescores||[]).map(x=>x.displayValue!=null?x.displayValue:x.value),lh=(Hh.linescores||[]).map(x=>x.displayValue!=null?x.displayValue:x.value);const np=Math.max(la.length,lh.length);
+  const lab=i=>hockey?(i<3?'P'+(i+1):i===3?'OT':'SO'):sp==='ncaab'?(i<2?(i?'2H':'1H'):'OT'):(i<4?'Q'+(i+1):'OT'+(i>4?i-3:''));
+  const per=np?parTable(['',...Array.from({length:np},(_,i)=>lab(i)),'T'],[[parEsc(a.abbr),...la,`<b>${parEsc(a.score)}</b>`],[parEsc(h.abbr),...lh,`<b>${parEsc(h.score)}</b>`]]):'';
+  /* hockey: shots on goal from the box */
+  let sog='';if(hockey){try{const bt=((j.boxscore||{}).teams)||[];const v=t=>{const s=(t.statistics||[]).find(x=>/^(shotsTotal|shots)$/i.test(x.name||'')||/^(SOG|S)$/i.test(x.abbreviation||x.label||''));return s?(s.displayValue||s.value):null;};
+      const sa=bt.find(t=>String((t.team||{}).id)===a.id),sh=bt.find(t=>String((t.team||{}).id)===h.id);if(sa&&sh&&v(sa)!=null)sog=`<div class="mono" style="font-size:11px;margin-top:4px">Shots on goal · <b>${parEsc(a.abbr)} ${parEsc(v(sa))}</b> – <b>${parEsc(v(sh))} ${parEsc(h.abbr)}</b></div>`;}catch(e){}}
+  const lp=S.length?S[S.length-1]:null;const lpH=lp&&G.state==='in'?`<div style="font-size:12px;padding:6px 8px;border-left:3px solid ${(lp.side==='away'?a.color:h.color)||'var(--gold)'};margin:6px 0;background:rgba(255,255,255,.03)">${hockey?'🚨 ':'🏀 '}${parEsc(lp.text)}${lp.clk?` <span class="mono" style="color:var(--mute);font-size:10px">${hockey?'P':sp==='ncaab'?'H':'Q'}${lp.per} · ${parEsc(lp.clk)}</span>`:''}</div>`:'';
+  return`<div class="gcpulse" style="margin:8px 0">${surf}${mom}${lpH}${sog}${per}</div>`;}
+/* one row per pick on Today, every character that backs it inside its proven lane listed together */
+function strengthGroups(plays){const M=new Map();(plays||[]).forEach(o=>{const c=o.c;const k=c.sp+'|'+c.game+'|'+c.market+'|'+c.side;let g=M.get(k);if(!g){g={k,c,cf:o.cf,who:[]};M.set(k,g);}
+    g.who.push(o);if(o.cf>g.cf){g.cf=o.cf;g.c=c;}});return[...M.values()].sort((a,b)=>b.cf*b.who.length-a.cf*a.who.length||b.cf-a.cf);}
+function strengthGroupRow(g){const c=g.c;const pick=charPickText(c);const inSlip=SLIP.some(x=>x.game===c.game&&x.pick===pick);let ex=0;try{ex=deskExposure({sp:c.sp,game:c.game,m:c.market,sd:c.side});}catch(e){}
+  const who=g.who.map(o=>{const C=CHARS[o.c.voice]||{};return`<b style="color:${C.color}">${txtEsc(charName(o.c.voice).replace(/^The /,''))}</b> <b style="color:${recColor(o.lane.p,o.lane.n)}">${o.lane.w}-${o.lane.l}</b>`;}).join(' · ');
+  return`<div class="str-row"><div style="flex:1;min-width:0"><b>${txtEsc(pick)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${sgnP(c.price)}</span> <span class="cf-chip on" style="color:${recColor(g.cf,9)};border-color:${recColor(g.cf,9)}">${Math.round(g.cf*100)}%</span>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[c.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(c.sp,c.game))} · ${who} on ${CONF_SP_LAB[c.sp]} ${({ml:'ML',spread:'ATS',total:'O/U'})[c.market]}${ex?` · on ${ex} ticket${ex===1?'':'s'}`:''}</div></div>
+    <button class="${inSlip?'primary':''}" onclick="deskSlipAdd('${c.sp}','${esc(c.game)}','${esc(pick)}',${c.price!=null?+c.price:'null'},${(+g.cf).toFixed(3)},'${String(c.date).slice(0,10)}')">${inSlip?'✓ on slip':'＋ slip'}</button></div>`;}

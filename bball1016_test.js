@@ -90,7 +90,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const alt=E("BB_PANELS.alt(BB_CFG.nba,NBA_GAMES.find(x=>x.id==='n3'),bbSim(BB_CFG.nba,NBA_GAMES.find(x=>x.id==='n3')))");
   T('Alt Lines: spreads, totals and the period table',/1st half/.test(alt)&&/1st quarter/.test(alt)&&(alt.match(/<tr>/g)||[]).length>=13);
   const box=E("BB_PANELS.box(BB_CFG.nba,NBA_GAMES.find(x=>x.id==='n3'),bbSim(BB_CFG.nba,NBA_GAMES.find(x=>x.id==='n3')))");
-  T('Proj. Box: Q1, Q2, 2nd half, final',/>Q1</.test(box)&&/>Q2</.test(box)&&/2nd half/.test(box)&&/>Final</.test(box));
+  T('Proj. Box: Q1–Q4, both halves, final',/>Q1</.test(box)&&/>Q2</.test(box)&&/>Q3</.test(box)&&/>Q4</.test(box)&&/2nd half/.test(box)&&/>Final</.test(box));
   /* the Judge works for the NBA now (it never had a config) */
   const J=E("(()=>{const g=NBA_GAMES.find(x=>x.id==='n3');const J=brainJudge(g,bbSim(BB_CFG.nba,g),'nba');return J?J.a+'-'+J.h:null})()");
   T('the Judge reads NBA games',J&&/^\d+(\.\d)?-\d+(\.\d)?$/.test(J),J);

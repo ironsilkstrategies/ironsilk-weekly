@@ -575,7 +575,7 @@ function nhlCard(g){
     ${typeof pstCardHtml==='function'?pstCardHtml('nhl',g):''}
     <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
     <div class="legend" style="margin-top:2px"><span>◆ SUPREME = book price, model edge and outside sources all agree</span><span>STRONG = two of three</span><span>⚠ CONFLICT = they disagree</span></div>
-    <div class="exprow" style="margin-top:10px">${btn('coach','Coach')}${btn('trends','Trends')}${btn('alt','Alt Lines')}${btn('roster','Roster')}${btn('props','Props')}${btn('box','Proj. Box')}${btn('verdict','Take/Fade')}${g.abstract!=='pre'?btn('live',g.abstract==='in'?'Live box':'Box score'):''}${btn('mybets','My Bets')}</div>
+    <div class="exprow" style="margin-top:10px">${btn('coach','Coach')}${btn('trends','Trends')}${btn('ag','A–G')}${btn('alt','Alt Lines')}${btn('box','Proj. Box')}${btn('props','Props')}${btn('verdict','Take/Fade')}${g.abstract!=='pre'?btn('live',g.abstract==='in'?'Live box':'Box score'):''}${btn('mybets','My Bets')}${btn('roster','Roster')}${g.abstract==='post'?btn('analysis','📊 Analysis'):''}</div>
     <div class="panel" id="nhlp-${g.id}"></div></div>`;
 }
 
@@ -649,7 +649,10 @@ const NHL_PANELS={
       (body||'<div class="sub">No player stats loaded and no PROP: lines uploaded. Upload lines as <code>PROP: Name SOG 2.5 (-120/+100)</code>.</div>');},
   box:(g,s)=>{const t=(ab,x)=>{const p=[NHL_P1,0.33,0.36].map(f=>(x*f).toFixed(2));return[ab,...p,x.toFixed(2),Math.round(x/0.098)];};
     return nhlTable(['team','P1','P2','P3','G','SOG≈'],[t(g.away.abbr,s.awayProj),t(g.home.abbr,s.homeProj)])+
-      `<div class="sub" style="margin-top:4px">Win ${g.away.abbr} ${(s.aw*100).toFixed(0)}% / ${g.home.abbr} ${(s.hw*100).toFixed(0)}% · OT/SO ${(s.otP*100).toFixed(0)}% · shots ≈ goals ÷ league shooting % (estimate).</div>`;},
+      `<div class="sub" style="margin-top:4px">Win ${g.away.abbr} ${(s.aw*100).toFixed(0)}% / ${g.home.abbr} ${(s.hw*100).toFixed(0)}% · OT/SO ${(s.otP*100).toFixed(0)}% · shots ≈ goals ÷ league shooting % (estimate).</div>`+
+      (typeof parPlayersHtml==='function'?parPlayersHtml('nhl',g):'');},
+  ag:(g,s)=>typeof parAG==='function'?parAG('nhl',g,s):'',
+  analysis:(g,s)=>typeof parPostGame==='function'?parPostGame('nhl',g,s):'',
   live:async(g)=>{if(g.abstract==='pre')return'<div class="sub">Box score appears once the puck drops.</div>';
     const b=await fetchNHLBox(g.espnId);if(!b)return'<div class="sub">Box score unavailable.</div>';
     const per=[g.away,g.home].map((t,i)=>[t.abbr,...(i?g.lsH:g.lsA).map(v=>v??'–'),i?g.homeScore:g.awayScore]);
