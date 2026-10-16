@@ -99,6 +99,21 @@ function nbaAbbrFor(raw){const t=String(raw||'').toUpperCase().replace(/[^A-Z0-9
   Object.entries(NBA_TEAMS).forEach(([ab,names])=>names.split('|').forEach(n=>{const N=n.toUpperCase();
     if(t===N||t.endsWith(' '+N)||t.startsWith(N+' ')||t===N.replace(/ /g,'')){if(!best||N.length>best[1])best=[ab,N.length];}}));
   return best?best[0]:null;}
+/* v2.32 · college basketball: every D1 school. The NCAAB page keeps ESPN's team index
+   (d4.ncaabteams: abbr, id, location, name, display, short, nickname); the CFB
+   resolver covers a page that hasn't loaded it yet. */
+let NCAAB_IDX=null;
+const ncaabNorm=s=>String(s||'').toUpperCase().replace(/&/g,' AND ').replace(/['’.]/g,'').replace(/[^A-Z0-9 ]/g,' ').replace(/\bSAINT\b/g,'ST').replace(/\bSTATE\b/g,'ST').replace(/\s+/g,' ').trim();
+function ncaabIdx(){const T=get('d4.ncaabteams',null);if(!T||!Array.isArray(T.t)||!T.t.length)return null;if(NCAAB_IDX&&NCAAB_IDX.ts===T.ts)return NCAAB_IDX;
+  const ab=new Set(),by=new Map();const put=(k,a,pri)=>{k=ncaabNorm(k);if(!k)return;const o=by.get(k);if(!o||pri>o[1])by.set(k,[a,pri]);};
+  T.t.forEach(([a,id,loc,nm,disp,short,nick])=>{ab.add(a);put(a,a,7);put(disp,a,6);put((loc||'')+' '+(nm||''),a,6);put(loc,a,5);put(short,a,4);put(nick,a,3);});
+  NCAAB_IDX={ts:T.ts,ab,by};return NCAAB_IDX;}
+function ncaabAbbrFor(raw){const t=String(raw||'').replace(/^\s*(?:#|No\.?\s*)\d{1,2}\s+/i,'').replace(/\s*\(\d+-\d+\)\s*$/,'').trim();if(!t)return null;const I=ncaabIdx();
+  if(I){const u=t.toUpperCase();if(I.ab.has(u))return u;const k=ncaabNorm(t);const o=I.by.get(k);if(o)return o[0];
+    /* "Duke Blue Devils" / "Michigan St Spartans" → the longest known name the text starts with */
+    let best=null;I.by.forEach((v,n)=>{if(n.length>=3&&k.startsWith(n+' ')&&(!best||n.length>best[1]))best=[v[0],n.length];});if(best)return best[0];}
+  if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;}
+  try{return cfbFallbackAbbr(t);}catch(e){return null;}}
 function intakeAbbr(sport,raw){
   const t=String(raw||'').trim();if(!t)return null;
   if(sport==='nfl')return intakeNFLAbbr(t);
@@ -106,6 +121,7 @@ function intakeAbbr(sport,raw){
   if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;}return cfbFallbackAbbr(t);}
   if(sport==='nhl')return intakeNHLAbbr(t);
   if(sport==='nba')return nbaAbbrFor(t);
+  if(sport==='ncaab')return ncaabAbbrFor(t);
   return null;
 }
 /* A sport's team names only resolve where that sport's engine is loaded. */
@@ -135,19 +151,22 @@ function ticketKV(lines,kv){
 /* Re-uploading a ticket never erases a real stake/to-win the first upload had. */
 function keepRealMoney(ticket,old){if(old){if(ticket.stake==null&&old.stake!=null)ticket.stake=old.stake;if(ticket.toWin==null&&old.toWin!=null)ticket.toWin=old.toWin;}return ticket;}
 /* Can this page turn a TICKET's team names into abbreviations? (Slate text needs the sport's parser too; a ticket doesn't.) */
-const intakeCanNameResolve=sp=>sp==='mlb'||sp==='nhl'||sp==='nba'||sp==='nfl'||(sp==='ncaaf'&&typeof ncaafAbbrFor==='function');
-const intakeCanResolve=sp=>sp==='mlb'||(sp==='nba'&&typeof parseNBASlateText==='function')||(sp==='nhl'&&typeof parseNHLSlateText==='function'&&typeof nhlAbbrFor==='function')||(sp==='nfl'&&typeof parseNFLSlateText==='function')||
+const intakeCanNameResolve=sp=>sp==='mlb'||sp==='nhl'||sp==='nba'||sp==='nfl'||(sp==='ncaaf'&&typeof ncaafAbbrFor==='function')||sp==='ncaab';
+const intakeCanResolve=sp=>sp==='mlb'||(sp==='nba'&&typeof parseNBASlateText==='function')||(sp==='ncaab'&&typeof parseNCAABSlateText==='function')||(sp==='nhl'&&typeof parseNHLSlateText==='function'&&typeof nhlAbbrFor==='function')||(sp==='nfl'&&typeof parseNFLSlateText==='function')||
   (sp==='ncaaf'&&typeof parseNCAAFSlateText==='function'&&typeof ncaafAbbrFor==='function');
 function intakeGuessSport(text,fallback){
   const l=text.toLowerCase();let nfl=0,mlb=0;
   /* an explicit sport header line wins outright */
   const first=(text.split('\n').map(x=>x.trim()).find(Boolean)||'').toUpperCase();
+  if(/^(NCAAB|NCAAM|CBB|COLLEGE BASKETBALL|MEN'?S COLLEGE BASKETBALL)\b/.test(first))return'ncaab';
   if(/^NBA\b/.test(first))return'nba';if(/^NHL\b/.test(first))return'nhl';if(/^MLB\b/.test(first))return'mlb';
   if(/^(NCAAF|CFB|COLLEGE FOOTBALL)\b/.test(first))return'ncaaf';if(/^NFL\b/.test(first))return'nfl';
   let nba=0;['celtics','knicks','lakers','warriors','nuggets','bucks','76ers','sixers','cavaliers','thunder','timberwolves','mavericks','grizzlies',
    'pelicans','spurs','trail blazers','raptors','pistons','hornets','wizards','pacers','magic','clippers','suns','nets','hawks','rockets'].forEach(n=>{if(new RegExp('\\b'+n+'\\b').test(l))nba++;});
   if(/\b(rebounds|three[- ]pointers|1st quarter|q1spread)\b/.test(l))nba+=2;
   if(nba>=2&&!/\b(touchdown|run ?line|puck ?line)\b/.test(l))return'nba';
+  /* three-digit totals are basketball; college games sit around 120–175, the NBA 200+ */
+  {const T=[...l.matchAll(/\b(?:o|u|over|under|total)\s*:?\s*(\d{3}(?:\.5)?)\b/g)].map(m=>+m[1]).sort((a,b)=>a-b);if(T.length){const md=T[T.length>>1];if(md>=100&&md<=185)return'ncaab';if(md>185&&md<=280)return'nba';}}
   Object.values(INTAKE_NFL).forEach(v=>{if(new RegExp('\\b'+v.split(' ')[0]+'\\b').test(l))nfl++;});
   ['yankees','red sox','dodgers','mets','cubs','astros','braves','phillies','padres','mariners','guardians','orioles','rays','blue jays',
    'twins','tigers','royals','white sox','rangers','angels','athletics','giants ','brewers','cardinals ','reds','pirates','marlins','nationals','rockies','diamondbacks']
@@ -243,8 +262,8 @@ function intakeParseGrammar(text,fallbackSport){
   const sections=[];let cur=null;
   stripBOM(text).split('\n').forEach(line=>{
     const l=line.replace(/^[\s\-*•>]+/,'').trim();
-    const hs=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB|NHL|HOCKEY|NBA|BASKETBALL)(?:\s+(?:ODDS|LINES|BOARD|SLATE))?\s*$/i);
-    if(hs){cur={sport:/^(NCAAF|CFB|COLLEGE)/i.test(hs[1])?'ncaaf':/^(NHL|HOCKEY)/i.test(hs[1])?'nhl':/^(NBA|BASKETBALL)/i.test(hs[1])?'nba':hs[1].toLowerCase(),lines:[]};sections.push(cur);return;}
+    const hs=l.match(/^(NFL|NCAAF|CFB|COLLEGE FOOTBALL|MLB|NHL|HOCKEY|NBA|BASKETBALL|NCAAB|NCAAM|CBB|COLLEGE BASKETBALL)(?:\s+(?:ODDS|LINES|BOARD|SLATE))?\s*$/i);
+    if(hs){cur={sport:/^(NCAAB|NCAAM|CBB|COLLEGE BASKETBALL)/i.test(hs[1])?'ncaab':/^(NCAAF|CFB|COLLEGE)/i.test(hs[1])?'ncaaf':/^(NHL|HOCKEY)/i.test(hs[1])?'nhl':/^(NBA|BASKETBALL)/i.test(hs[1])?'nba':hs[1].toLowerCase(),lines:[]};sections.push(cur);return;}
     if(!cur){cur={sport:null,lines:[]};sections.push(cur);}
     cur.lines.push(l);
   });
@@ -284,7 +303,7 @@ function intakeParseGrammar(text,fallbackSport){
     if(/^(ML|SPREAD|RL|PL|OU|H1\w*|Q1\w*|P1\w*|F5\s*\w+|PROP):/im.test(oddsText)){
       try{
         const hdr=sport==='ncaaf'?'NCAAF':sport.toUpperCase();
-        const r=(sport==='nba'&&typeof parseNBASlateText==='function')?parseNBASlateText(oddsText):parseSlateText(hdr+'\n'+oddsText);
+        const r=(sport==='nba'&&typeof parseNBASlateText==='function')?parseNBASlateText(oddsText):(sport==='ncaab'&&typeof parseNCAABSlateText==='function')?parseNCAABSlateText(oddsText):parseSlateText(hdr+'\n'+oddsText);
         (r&&r.picks||[]).forEach(p=>{p.sport=sport;B.picks.push(p)});
       }catch(e){console.warn('intake odds parse',e)}
     }
@@ -433,12 +452,13 @@ function intakeNormalizeKV(text){
    receptions), Normal for yardage/points.                                   */
 const PST_KEY=sp=>'d4.pst.'+sp, PST_ALPHA=0.3;
 /* per-sport player caps sized to real rosters (players who actually record stats) */
-const PST_CAP={mlb:1300,nfl:1700,ncaaf:2200,nhl:950,nba:560};
-/* compact on-disk format: {v:2,p:{id:[name,team,n,{k:[sum,sq,ema,gp]}]},fed,bf} — rounded, ~3x smaller */
+const PST_CAP={mlb:1300,nfl:1700,ncaaf:2200,nhl:950,nba:560,ncaab:1500};
+/* compact on-disk format: {v:2,p:{id:[name,team,n,{k:[sum,sq,ema,gp]},ev,glAt,eid,r]},fed,bf} — rounded, ~3x smaller.
+   v2.32 · r = the player's last 10 games, one row each: [yymmdd, value per stat in PST_STATS order] (the L5 / L10 numbers) */
 const pstR=x=>Math.round(x*100)/100;
-function pstPack(D){const p={};Object.entries(D.p).forEach(([id,P])=>{const s={};Object.entries(P.s).forEach(([k,S])=>{s[k]=[pstR(S.sum),pstR(S.sq),S.ema==null?null:pstR(S.ema),S.gp];});p[id]=[P.name,P.team,P.n,s,P.ev||null,P.glAt||null,P.eid||null];});
+function pstPack(D){const p={};Object.entries(D.p).forEach(([id,P])=>{const s={};Object.entries(P.s).forEach(([k,S])=>{s[k]=[pstR(S.sum),pstR(S.sq),S.ema==null?null:pstR(S.ema),S.gp];});p[id]=[P.name,P.team,P.n,s,P.ev||null,P.glAt||null,P.eid||null,P.r&&P.r.length?P.r:null];});
   return{v:2,p,fed:D.fed,bf:D.bf};}
-function pstUnpack(R){if(!R||R.v!==2)return R;const p={};Object.entries(R.p||{}).forEach(([id,a])=>{const s={};Object.entries(a[3]||{}).forEach(([k,v])=>{s[k]={sum:v[0],sq:v[1],ema:v[2],gp:v[3]};});p[id]={name:a[0],team:a[1],n:a[2],s,ev:a[4]||undefined,glAt:a[5]||undefined,eid:a[6]||undefined};});
+function pstUnpack(R){if(!R||R.v!==2)return R;const p={};Object.entries(R.p||{}).forEach(([id,a])=>{const s={};Object.entries(a[3]||{}).forEach(([k,v])=>{s[k]={sum:v[0],sq:v[1],ema:v[2],gp:v[3]};});p[id]={name:a[0],team:a[1],n:a[2],s,ev:a[4]||undefined,glAt:a[5]||undefined,eid:a[6]||undefined,r:Array.isArray(a[7])?a[7]:undefined};});
   return{p,fed:R.fed||{},bf:R.bf};}
 const PST_MEM={};
 const PST_STATS={
@@ -447,6 +467,7 @@ const PST_STATS={
   nfl:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs'},
   ncaaf:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs'},
   nba:{pts:'points',reb:'rebounds',ast:'assists',fg3:'3-pointers',stl:'steals',blk:'blocks'}};
+PST_STATS.ncaab=PST_STATS.nba;
 const PST_COUNT=new Set(['g','a','s','h','hr','rbi','r','bb','tb','k','ha','er','ptd','rtd','wtd','td','rec','fg3','stl','blk']);
 function pstDb(sp){if(!PST_MEM[sp]){const R=pstUnpack(get(PST_KEY(sp),null));PST_MEM[sp]=R&&R.p?R:{p:{},fed:{}};}return PST_MEM[sp];}
 function pstSave(sp,cap){const D=pstDb(sp);const ids=Object.keys(D.p);const MAX=cap||PST_CAP[sp]||1500;
@@ -455,16 +476,25 @@ function pstSave(sp,cap){const D=pstDb(sp);const ids=Object.keys(D.p);const MAX=
   try{set(PST_KEY(sp),pstPack(D));}catch(e){console.warn('pstat save',e);}}
 const pstId=n=>String(n||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const pstNum=v=>{const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:0;};
-/* add ONE game's line for one player */
-function pstAdd(sp,name,team,line,eventId){
+/* add ONE game's line for one player (date: the game's day, for the last-5 / last-10 log) */
+const pstYmd=d=>{const s=d?tdDay(d):'';return /^\d{4}-\d{2}-\d{2}$/.test(s)?+s.slice(2).replace(/-/g,''):0;};
+function pstAdd(sp,name,team,line,eventId,date){
   const D=pstDb(sp);const id=pstId(name);if(!id)return false;
   const P=D.p[id]||(D.p[id]={name,team,n:0,s:{}});
   if(eventId){const h=String(eventId).slice(-6);P.ev=P.ev||[];if(P.ev.includes(h))return false;P.ev.push(h);if(P.ev.length>24)P.ev=P.ev.slice(-24);}
   P.team=team||P.team;P.n++;
   Object.entries(line).forEach(([k,v])=>{v=+v||0;const S=P.s[k]||(P.s[k]={sum:0,sq:0,ema:null,gp:0});
     S.sum+=v;S.sq+=v*v;S.gp++;S.ema=S.ema==null?v:(1-PST_ALPHA)*S.ema+PST_ALPHA*v;});
+  try{const K=Object.keys(PST_STATS[sp]||{});if(K.length){const row=[pstYmd(date),...K.map(k=>line[k]==null?null:pstR(+line[k]||0))];
+    const r=P.r||(P.r=[]);r.push(row);r.sort((a,b)=>a[0]-b[0]);if(r.length>10)r.splice(0,r.length-10);}}catch(e){}
   return true;
 }
+/* v2.32 · a player's last N games for one stat: average, the values, and how many cleared a number */
+function pstForm(sp,name,k,n){const P=pstDb(sp).p[pstId(name)];if(!P||!Array.isArray(P.r)||!P.r.length)return null;const K=Object.keys(PST_STATS[sp]||{});const i=K.indexOf(k);
+  const R=P.r.slice(-(n||5)).map(row=>{if(i>=0)return row[i+1];const parts=PST_COMBO[k];return parts?parts.reduce((a,x)=>{const j=K.indexOf(x);return a+(j>=0&&row[j+1]!=null?row[j+1]:0);},0):null;}).filter(v=>v!=null);
+  if(!R.length)return null;const avg=R.reduce((a,v)=>a+v,0)/R.length;
+  return{n:R.length,avg,vals:R,hit:thr=>R.filter(v=>v>=thr).length,last:R[R.length-1]};}
+const PST_COMBO={pra:['pts','reb','ast'],pr:['pts','reb'],pa:['pts','ast'],ra:['reb','ast']};
 /* Feed a parsed box exactly once, and only when it is FINAL */
 function pstatFeed(sp,eventId,box){
   if(!box||box.state!=='post'||!eventId)return 0;try{scoutFeed(sp,eventId,box);}catch(e){}const D=pstDb(sp);if(D.fed[eventId])return 0;
@@ -480,11 +510,11 @@ function pstatFeed(sp,eventId,box){
       (t.rushing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.ry=pstNum(r.YDS);x.v.rtd=pstNum(r.TD);});
       (t.receiving||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.rec=pstNum(r.REC);x.v.wy=pstNum(r.YDS);x.v.wtd=pstNum(r.TD);});});
     Object.values(lines).forEach(x=>{['py','ptd','ry','rtd','rec','wy','wtd'].forEach(k=>{if(x.v[k]==null)x.v[k]=0;});x.v.td=x.v.rtd+x.v.wtd;});}
-  else if(sp==='nba'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.players||[]).forEach(r=>{
+  else if(sp==='nba'||sp==='ncaab'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.players||[]).forEach(r=>{
       if(!pstNum(r.MIN)&&!pstNum(r.PTS))return;const x=L(r.name,team);if(!x)return;
       Object.assign(x.v,{pts:pstNum(r.PTS),reb:pstNum(r.REB),ast:pstNum(r.AST),fg3:pstNum(String(r['3PT']||'').split('-')[0]),stl:pstNum(r.STL),blk:pstNum(r.BLK)});}));}
   const all=Object.values(lines);if(!all.length)return 0;
-  all.forEach(x=>pstAdd(sp,x.name,x.team,x.v,eventId));D.fed[eventId]=1;pstSave(sp);
+  const gday=box.date?tdDay(box.date):today();all.forEach(x=>pstAdd(sp,x.name,x.team,x.v,eventId,gday));D.fed[eventId]=1;pstSave(sp);
   try{if(!box.date)throw 0;const LK='d4.pstlast.'+sp,last=get(LK,{})||{};const d=tdDay(box.date);all.forEach(x=>{const k=pstId(x.name);if(!last[k]||last[k].d<=d)last[k]={d,v:x.v};});
     const ks=Object.keys(last);if(ks.length>3000)ks.slice(0,ks.length-3000).forEach(k=>delete last[k]);set(LK,last);}catch(e){}
   return all.length;
@@ -510,28 +540,37 @@ function pstTeam(sp,team,limit){const D=pstDb(sp);const key=Object.keys(PST_STAT
   return Object.values(D.p).filter(x=>x.team===team&&x.n>=1).map(x=>({x,score:Object.values(x.s).reduce((a,s)=>a+(s.gp?s.sum/s.gp:0),0)}))
     .sort((a,b)=>b.score-a.score).slice(0,limit||8).map(o=>o.x);}
 function pstCardHtml(sp,g){try{
-  const teams=[g.away.abbr,g.home.abbr];const rows=[];const KEYS={nhl:['g','a','s'],mlb:['h','hr','rbi','k'],nfl:['py','ry','rec','wy','td'],ncaaf:['py','ry','rec','wy','td'],nba:['pts','reb','ast','fg3']}[sp]||[];
+  const teams=[g.away.abbr,g.home.abbr];const rows=[];const KEYS={nhl:['g','a','s'],mlb:['h','hr','rbi','k'],nfl:['py','ry','rec','wy','td'],ncaaf:['py','ry','rec','wy','td'],nba:['pts','reb','ast','fg3'],ncaab:['pts','reb','ast','fg3']}[sp]||[];
   teams.forEach(tm=>pstTeam(sp,tm,6).forEach(P=>{const cells=KEYS.map(k=>{const S=P.s[k];if(!S||!S.gp||!S.sum)return'';const J=pstProj(sp,P.name,k);
       return`${(PST_STATS[sp][k]||k).replace(/ \(P\)/,'')} <b>${J.mu.toFixed(J.mu<10?2:0)}</b>`;}).filter(Boolean);
-    if(cells.length)rows.push(`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(P.name)}</b> <span style="color:var(--mute)">${tm} · ${P.n}G</span><br>${cells.join(' · ')}</div>`);}));
+    /* v2.32 · how he's playing lately: the headline stat over his last 5 and last 10 */
+    const hk=KEYS.find(k=>P.s[k]&&P.s[k].gp&&P.s[k].sum);const f5=hk?pstForm(sp,P.name,hk,5):null,f10=hk?pstForm(sp,P.name,hk,10):null;
+    const fd=v=>v.toFixed(v<10?1:0);const trend=f5&&hk&&P.s[hk].gp?(f5.avg>=P.s[hk].sum/P.s[hk].gp*1.1?' <span style="color:var(--win)">▲ hot</span>':f5.avg<=P.s[hk].sum/P.s[hk].gp*0.85?' <span style="color:var(--rust)">▼ cold</span>':''):'';
+    const form=f5?`<br><span style="color:var(--mute)">${(PST_STATS[sp][hk]||hk).replace(/ \(P\)/,'')}: last 5 <b style="color:var(--chalk)">${fd(f5.avg)}</b>${f10&&f10.n>f5.n?` · last 10 <b style="color:var(--chalk)">${fd(f10.avg)}</b>`:''}</span>${trend}`:'';
+    if(cells.length)rows.push(`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(P.name)}</b> <span style="color:var(--mute)">${tm} · ${P.n}G</span><br>${cells.join(' · ')}${form}</div>`);}));
   const pb=(()=>{try{return propBoardHtml(sp,g.away.abbr+'@'+g.home.abbr,12)}catch(e){return''}})();
   if(!rows.length)return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">Player stats</summary><div class="sub" style="font-size:10px">No finals tracked for these teams yet — the season backfill fills this in the background.</div></details>`;
-  return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">Player stats (season, form-weighted)</summary>${rows.join('')}</details>`;}catch(e){return'';}}
+  return pb+`<details style="margin-top:4px"><summary class="sub mono" style="cursor:pointer;font-size:10px;color:var(--mute)">Player stats — season, last 5, last 10</summary>${rows.join('')}</details>`;}catch(e){return'';}}
 /* ── Season backfill: walk recent completed ESPN events, feed each final box once.
    Throttled (a few boxes per run) so it never stalls the page; it resumes
    where it left off on the next page open until the window is covered. */
-const PST_BF_DAYS={mlb:45,nhl:60,nfl:120,ncaaf:60,nba:60};
+const PST_BF_DAYS={mlb:45,nhl:60,nfl:120,ncaaf:60,nba:60,ncaab:30};
+/* ESPN scoreboard query tail per sport: college leagues need the D1 group or ESPN returns a sliver */
+const espnQ=(sp,lim)=>sp==='ncaaf'?'&groups=80&limit='+(lim||900):sp==='ncaab'?'&groups=50&limit='+(lim||900):'&limit='+(lim||1000);
 let PST_BF_BUSY=false;
 async function pstatBackfill(sp,maxBoxes){
   if(PST_BF_BUSY||!FBP_ESPN[sp])return 0;PST_BF_BUSY=true;let done=0;
   try{const D=pstDb(sp);const cur=D.bf||{};const end=today();
     const from=cur.from||dayShift(end,-(PST_BF_DAYS[sp]||45));
-    const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000');
+    const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+espnQ(sp,sp==='ncaab'?1500:null);
     const j=await fetch(url).then(r=>r.json()).catch(()=>({events:[]}));
-    const ids=(j.events||[]).filter(ev=>((ev.status||{}).type||{}).state==='post').map(ev=>String(ev.id)).filter(id=>!D.fed[id]);
+    let evs=(j.events||[]).filter(ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1));   /* preseason never feeds a player's numbers */
+    /* college basketball plays ~150 games a night: the games on today's board come first */
+    if(sp==='ncaab'){try{const T=teamsToday(sp);evs.sort((a,b)=>{const on=e=>(((e.competitions||[])[0]||{}).competitors||[]).some(c=>T.has(String((c.team||{}).abbreviation||'').toUpperCase()))?0:1;return on(a)-on(b);});}catch(e){}}
+    const ids=evs.map(ev=>String(ev.id)).filter(id=>!D.fed[id]);
     for(const id of ids.slice(0,maxBoxes||6)){
       try{const s=await fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json());
-        const box=sp==='nhl'?fbpParseHockey(s):sp==='mlb'?fbpParseBaseball(s):sp==='nba'?fbpParseBasketball(s):fbpParseBox(s);
+        const box=sp==='nhl'?fbpParseHockey(s):sp==='mlb'?fbpParseBaseball(s):(sp==='nba'||sp==='ncaab')?fbpParseBasketball(s):fbpParseBox(s);
         if(box){box.state='post';box.date=(((s.header||{}).competitions||[])[0]||{}).date||null;}pstatFeed(sp,id,box);done++;}catch(e){}
       await new Promise(r=>setTimeout(r,600));}
     D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};pstSave(sp);
@@ -563,8 +602,8 @@ if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener(
    the bottom third; 🔥 Heating = the reverse. 🎭 Over-hyped = the book prices
    a player's anytime TD well above how often he actually scores.
    Preseason games never count. The Scout reads these as matchups.         */
-const SCOUT_KEY=sp=>'d4.scout.'+sp,SCOUT_SP=['nfl','ncaaf','nhl','nba'];
-const SCOUT_CAP={nfl:1600,ncaaf:2600,nhl:1000,nba:600};
+const SCOUT_KEY=sp=>'d4.scout.'+sp,SCOUT_SP=['nfl','ncaaf','nhl','nba','ncaab'];
+const SCOUT_CAP={nfl:1600,ncaaf:2600,nhl:1000,nba:600,ncaab:1500};
 const SCOUT_MEM={};
 function scoutDb(sp){if(!SCOUT_MEM[sp]){const R=get(SCOUT_KEY(sp),null);SCOUT_MEM[sp]=R&&R.v===1?R:{v:1,p:{},t:{},fed:{},bf:null};
     if(sp==='nfl'||sp==='ncaaf'){try{const C=get('d4.fbbox',{})||{};Object.entries(C).forEach(([k,o])=>{const[s,id]=k.split(':');if(s===sp&&o&&o.final&&o.box)scoutFeed(sp,id,{...o.box,state:'post'},true);});}catch(e){}}}
@@ -596,7 +635,7 @@ function scoutLines(sp,box){const P={},T={};const L=(name,team)=>{const k=pstId(
         Object.entries(v).forEach(([k,y])=>{add(x.v,k,y);if(['g','s','bs','ht','tk'].includes(k))add(tf,k,y);});x.role='SK';x.head=v.g+v.a;});
       (t.goalies||[]).forEach(r=>{const sa=scN(r.SA),ga=scN(r.GA),sv=r.SV!=null?scN(r.SV):sa-ga;if(!sa)return;const x=L(r.name,team);if(!x)return;
         add(x.v,'sa',sa);add(x.v,'ga',ga);add(x.v,'sv',sv);add(x.v,'gp',1);add(tf,'sa',sa);add(tf,'ga',ga);x.role='G';x.head=sv/sa;x.hw=sa;});});}
-  else if(sp==='nba'){Object.entries(box.teams||{}).forEach(([team,t])=>{const tf=T[team]={};
+  else if(sp==='nba'||sp==='ncaab'){Object.entries(box.teams||{}).forEach(([team,t])=>{const tf=T[team]={};
       (t.players||[]).forEach(r=>{if(!scN(r.MIN)&&!scN(r.PTS))return;const x=L(r.name,team);if(!x)return;
         const v={pts:scN(r.PTS),reb:scN(r.REB),ast:scN(r.AST),stl:scN(r.STL),blk:scN(r.BLK),tov:scN(r.TO),fg3:scPair(r['3PT'])[0],min:scN(r.MIN)};
         Object.entries(v).forEach(([k,y])=>{add(x.v,k,y);if(k==='pts')add(tf,k,y);});x.role='P';x.head=v.pts;});});}
@@ -665,7 +704,8 @@ const SCOUT_CATS={
     {id:'ast',lab:'Assists / game',role:'P',q:R=>R.n>=3,v:R=>scPer(R,'ast'),hi:1,bust:0,d:1},{id:'stk',lab:'Steals + blocks / game',role:'P',q:R=>R.n>=3,v:R=>((R.s.stl||0)+(R.s.blk||0))/R.n,hi:1,bust:0,d:1},
     {id:'fg3',lab:'3s / game',role:'P',q:R=>R.n>=3,v:R=>scPer(R,'fg3'),hi:1,bust:0,d:1},{id:'tov',lab:'Turnovers / 36 min',role:'P',q:R=>R.n>=3&&(R.s.min||0)>=60,v:R=>(R.s.tov||0)/R.s.min*36,hi:0,bust:1,d:1}],
    t:[{id:'pf',lab:'Points / game',side:'O',v:T=>(T.f.pts||0)/T.n,hi:1,d:1},{id:'pa',lab:'Points allowed / game',side:'D',v:T=>(T.a.pts||0)/T.n,hi:0,d:1}]}};
-const SCOUT_MIN_TG={nfl:3,ncaaf:3,nhl:3,nba:3};
+SCOUT_CATS.ncaab=SCOUT_CATS.nba;
+const SCOUT_MIN_TG={nfl:3,ncaaf:3,nhl:3,nba:3,ncaab:3};
 let SCOUT_BOARD={};
 /* rank a list: oriented percentile (1 = best) + top/bottom 5% by count */
 function scRank(rows,hi){const vals=rows.map(r=>r.val).sort((a,b)=>a-b);const N=vals.length;
@@ -708,14 +748,14 @@ function scoutGameCore(sp,A,H,B){const ta=B.tp[A],th=B.tp[H];if(!ta||!th)return 
   const OA=comp(ta,'O'),DA=comp(ta,'D'),OH=comp(th,'O'),DH=comp(th,'D');if([OA,DA,OH,DH].some(x=>x==null))return null;
   const edge=(OH-DA)-(OA-DH),tot=(OH+OA)-(DH+DA);
   const MM={nfl:[['off_rtg','def_rtg','pass game'],['sk_alw','sk_made','pass protection vs pass rush'],['off_ypc','def_ypc','run game'],['int_thr','takeaway','ball security vs ball hawks']],
-    nhl:[['gf','ga','scoring'],['sf','sa','shot volume'],['shp_t','svp_t','finishing vs goaltending']],nba:[['pf','pa','scoring']]};MM.ncaaf=MM.nfl;
+    nhl:[['gf','ga','scoring'],['sf','sa','shot volume'],['shp_t','svp_t','finishing vs goaltending']],nba:[['pf','pa','scoring']]};MM.ncaaf=MM.nfl;MM.ncaab=MM.nba;
   const flags=[];(MM[sp]||[]).forEach(([o,d,lab])=>{[[H,th,A,ta],[A,ta,H,th]].forEach(([X,tx,Y,ty])=>{const po=tx[o],pd=ty[d];if(po==null||pd==null)return;
     if(po>=0.8&&pd<=0.2)flags.push({team:X,good:1,txt:`${X} ${lab}: top ${Math.max(1,Math.round((1-po)*100))}% offense vs ${Y} bottom ${Math.max(1,Math.round(pd*100))}% defense`});
     else if(po<=0.2&&pd>=0.8)flags.push({team:Y,good:1,txt:`${Y} defense top ${Math.max(1,Math.round((1-pd)*100))}% vs ${X} bottom ${Math.max(1,Math.round(po*100))}% ${lab}`});});});
   const ppl=t=>Object.entries(B.tag).filter(([id])=>(scoutDb(sp).p[id]||{}).tm===t).map(([id,T])=>({nm:scoutDb(sp).p[id].nm,T}));
   return{A,H,OA,DA,OH,DH,edge,tot,flags,pa:ppl(A),ph:ppl(H)};}
 /* 🔭 the Scout — on probation: logged, graded, recorded; it only votes once its record proves it */
-const SCOUT_ML={nfl:0.12,ncaaf:0.15,nhl:0.12,nba:0.12},SCOUT_SPR={nfl:0.25,ncaaf:0.3,nhl:0.3,nba:0.25},SCOUT_TOT=0.3;
+const SCOUT_ML={nfl:0.12,ncaaf:0.15,nhl:0.12,nba:0.12,ncaab:0.15},SCOUT_SPR={nfl:0.25,ncaaf:0.3,nhl:0.3,nba:0.25,ncaab:0.3},SCOUT_TOT=0.3;
 function scoutCharCalls(sp,g,hl,tl,hlSim,tlSim,add){if(!SCOUT_SP.includes(sp))return;const S=scoutGame(sp,g.away.abbr,g.home.abbr);if(!S)return;
   const sP=e=>+(0.5+0.2*Math.min(1,Math.abs(e)/0.8)).toFixed(4);
   const ex=e=>({sP:sP(e),sc:+e.toFixed(3),mm:S.flags.length});
@@ -727,15 +767,15 @@ function scoutProbation(){try{const V=roGet(VOICES_KEY,[],60e3)||[];let w=0,n=0,
   const r=(w+20*0.5)/(n+20);const ok=n>=40&&r>=0.53&&u>=0;PROB_OK.Scout=ok;
   if(ok&&!VOTER_ORDER.includes('Scout'))VOTER_ORDER.splice(Math.max(0,VOTER_ORDER.indexOf('Power')+1),0,'Scout');return{w,n,u,r,ok};}catch(e){return{w:0,n:0,u:0,r:0.5,ok:false};}}
 /* backfill: walk the season's finals for this page's sport (preseason skipped), a few boxes per pass */
-const SCOUT_BF_DAYS={nfl:120,ncaaf:75,nhl:60,nba:30};let SCOUT_BF_BUSY=false,SCOUT_SESSION=0;
+const SCOUT_BF_DAYS={nfl:120,ncaaf:75,nhl:60,nba:30,ncaab:30};let SCOUT_BF_BUSY=false,SCOUT_SESSION=0;
 async function scoutBackfill(sp,max){if(SCOUT_BF_BUSY||!FBP_ESPN[sp]||!SCOUT_SP.includes(sp))return 0;SCOUT_BF_BUSY=true;let done=0;
   try{const D=scoutDb(sp);const end=today(),from=dayShift(end,-(SCOUT_BF_DAYS[sp]||60));
-    const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000');
+    const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+espnQ(sp,sp==='ncaab'?1500:null);
     const j=await fetch(url).then(r=>r.json()).catch(()=>({events:[]}));
     const ids=(j.events||[]).filter(ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1)).map(ev=>String(ev.id)).filter(id=>!D.fed[id]);
     for(const id of ids.slice(0,max||8)){
       try{const s=await fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json());
-        const box=sp==='nhl'?fbpParseHockey(s):sp==='nba'?fbpParseBasketball(s):fbpParseBox(s);
+        const box=sp==='nhl'?fbpParseHockey(s):(sp==='nba'||sp==='ncaab')?fbpParseBasketball(s):fbpParseBox(s);
         if(box){box.state='post';box.date=(((s.header||{}).competitions||[])[0]||{}).date||null;scoutFeed(sp,id,box,true);try{pstatFeed(sp,id,box);}catch(e){}}done++;}catch(e){}
       await new Promise(r=>setTimeout(r,500));}
     D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};scoutSave(sp);}
@@ -786,7 +826,7 @@ const PROP_STATS={
   mlb:[[/^(H|HITS)$/,['h']],[/^(HR|HOME RUNS?)$/,['hr']],[/^(RBI|RBIS)$/,['rbi']],[/^(R|RUNS)$/,['r']],[/^(TB|TOTAL BASES)$/,['tb']],[/^(BB|WALKS)$/,['bb']],
     [/^(K|KS|SO|STRIKEOUTS|PITCHER STRIKEOUTS)$/,['k']],[/^(HA|HITS ALLOWED)$/,['ha']],[/^(ER|EARNED RUNS)$/,['er']],[/^(H\+R\+RBI|HRR)$/,['h','r','rbi']]],
   nhl:[[/^(G|GOALS?)$/,['g']],[/^(A|ASSISTS?)$/,['a']],[/^(PTS|POINTS?)$/,['pts']],[/^(SOG|SHOTS( ON GOAL)?)$/,['s']]]};
-PROP_STATS.ncaaf=PROP_STATS.nfl;
+PROP_STATS.ncaaf=PROP_STATS.nfl;PROP_STATS.ncaab=PROP_STATS.nba;
 function propStatKeys(sp,stat){const S=String(stat||'').toUpperCase().replace(/\s+/g,' ').trim();for(const [re,k] of (PROP_STATS[sp]||[]))if(re.test(S))return k;return null;}
 function propParseLine(sp,line){
   const m=String(line).match(/^PROP:\s*(.+?)\s+([+-]?\d+(?:\.\d+)?)\s*\+?\s*(?:\(\s*([+-]?\d+|even|ev)\s*(?:\/\s*([+-]?\d+|even|ev))?\s*\))?\s*$/i);if(!m)return null;
@@ -835,13 +875,13 @@ function propBoardHtml(sp,game,limit){let R=propBoard(sp,game);if(game)R=R.filte
    this season, line by line — real distribution, not just an average.
    Each (player, game) is counted once, whether it arrived from a box score or
    a game log. Fetches are throttled and capped per session.               */
-const RS_PATH={mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba'};
-const RS_SKILL={nfl:/^(QB|RB|FB|WR|TE)$/,ncaaf:/^(QB|RB|FB|WR|TE)$/,nba:/./,nhl:/^(C|LW|RW|F|D)$/,mlb:/^(?!P$|SP$|RP$)/};
+const RS_PATH={mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba',ncaab:'basketball/mens-college-basketball'};
+const RS_SKILL={nfl:/^(QB|RB|FB|WR|TE)$/,ncaaf:/^(QB|RB|FB|WR|TE)$/,nba:/./,ncaab:/./,nhl:/^(C|LW|RW|F|D)$/,mlb:/^(?!P$|SP$|RP$)/};
 let RS_SESSION=0;const RS_CAP=60,RS_MEM={};
 async function rsJson(u){try{const r=await fetch(u);return await r.json();}catch(e){return null;}}
 /* team abbreviation → ESPN team id (weekly cache) */
 async function rsTeamIds(sp){const C=get('d4.rsteams',{})||{};if(C[sp]&&C[sp].ts>Date.now()-7*864e5)return C[sp].ids;
-  const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+RS_PATH[sp]+'/teams?limit=1000'+(sp==='ncaaf'?'&groups=80':''));const ids={};
+  const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+RS_PATH[sp]+'/teams?limit=1000'+(sp==='ncaaf'?'&groups=80':sp==='ncaab'?'&groups=50':''));const ids={};
   ((((j||{}).sports||[])[0]||{}).leagues||[]).forEach(L=>(L.teams||[]).forEach(t=>{const T=t.team||t;if(T&&T.abbreviation&&T.id)ids[String(T.abbreviation).toUpperCase()]=String(T.id);}));
   if(Object.keys(ids).length){C[sp]={ts:Date.now(),ids};set('d4.rsteams',C);}return ids;}
 function rsAthletes(j){const out=[];const add=a=>{if(a&&a.id&&(a.displayName||a.fullName))out.push({id:String(a.id),name:a.displayName||a.fullName,pos:String(((a.position||{}).abbreviation)||'').toUpperCase()});};
@@ -857,11 +897,11 @@ const GL_MAP={
   nhl:{goals:'g',assists:'a',points:'pts',shotsTotal:'s',shots:'s',shotsOnGoal:'s'},
   mlb:{hits:'h',homeRuns:'hr',RBIs:'rbi',runsBattedIn:'rbi',runs:'r',walks:'bb',doubles:'d2',triples:'d3',strikeouts:'k'}};
 /* tolerant game-log parser: names[] + seasonTypes[].categories[].events[{eventId,stats[]}] */
-function glParse(sp,j){const fam=sp==='nfl'||sp==='ncaaf'?'football':sp;const M=GL_MAP[fam]||{};const names=(j&&(j.names||j.labels))||[];const games={};
+function glParse(sp,j){const fam=sp==='nfl'||sp==='ncaaf'?'football':sp==='ncaab'?'nba':sp;const M=GL_MAP[fam]||{};const names=(j&&(j.names||j.labels))||[];const games={};
   const walk=o=>{if(!o||typeof o!=='object')return;if(Array.isArray(o)){o.forEach(walk);return;}
     if(o.eventId&&Array.isArray(o.stats)){const nm=Array.isArray(o.names)?o.names:names;const g=games[o.eventId]||(games[o.eventId]={});
       o.stats.forEach((v,i)=>{const k=M[nm[i]];if(k&&g[k]==null)g[k]=pstNum(String(v).split('-')[0]);});return;}
-    Object.values(o).forEach(walk);};walk(j&&j.seasonTypes);
+    Object.values(o).forEach(walk);};walk(((j&&j.seasonTypes)||[]).filter(t=>!/pre-?season/i.test(String(t&&t.displayName||''))));   /* preseason never feeds a player's numbers */
   Object.values(games).forEach(g=>{if(fam==='football'){['py','ptd','ry','rtd','rec','wy','wtd'].forEach(k=>{if(g[k]==null)g[k]=0;});g.td=g.rtd+g.wtd;}
     if(fam==='mlb'&&g.h!=null){g.tb=g.h+(g.d2||0)+2*(g.d3||0)+3*(g.hr||0);delete g.d2;delete g.d3;}
     if(fam==='nhl'&&g.pts==null&&g.g!=null)g.pts=(g.g||0)+(g.a||0);});
@@ -870,7 +910,14 @@ function glParse(sp,j){const fam=sp==='nfl'||sp==='ncaaf'?'football':sp;const M=
 async function rsGamelog(sp,ath,team){if(RS_SESSION>=RS_CAP)return 0;const D=pstDb(sp);const P=D.p[pstId(ath.name)];
   if(P&&P.glAt&&P.glAt>Date.now()-864e5)return 0;RS_SESSION++;
   const j=await rsJson('https://site.web.api.espn.com/apis/common/v3/sports/'+RS_PATH[sp]+'/athletes/'+ath.id+'/gamelog');const G=glParse(sp,j);let n=0;
-  Object.entries(G).forEach(([eid,line])=>{if(!Object.keys(line).length)return;if(pstAdd(sp,ath.name,team,line,eid))n++;});
+  /* game dates ride along so the last-5 / last-10 log lands in order */
+  const evd=id=>{try{const e=(j&&j.events||{})[id];return e&&(e.gameDate||e.date)||null;}catch(x){return null;}};
+  Object.entries(G).sort((a,b)=>String(evd(a[0])||'').localeCompare(String(evd(b[0])||''))).forEach(([eid,line])=>{if(!Object.keys(line).length)return;if(pstAdd(sp,ath.name,team,line,eid,evd(eid)))n++;});
+  /* v2.32 · a new basketball season: seed a player with the end of last season, so his last 5 / last 10 mean something on opening night */
+  if((sp==='nba'||sp==='ncaab')&&RS_SESSION<RS_CAP){const Q0=D.p[pstId(ath.name)];if(!Q0||(Q0.n||0)<5){RS_SESSION++;const d=today();const y=+d.slice(0,4),m=+d.slice(5,7);const yr=(m>=7?y+1:y)-1;
+    const j2=await rsJson('https://site.web.api.espn.com/apis/common/v3/sports/'+RS_PATH[sp]+'/athletes/'+ath.id+'/gamelog?season='+yr);const G2=glParse(sp,j2);
+    const ev2=id=>{try{const e=(j2&&j2.events||{})[id];return e&&(e.gameDate||e.date)||null;}catch(x){return null;}};
+    Object.entries(G2).filter(([id])=>ev2(id)).sort((a,b)=>String(ev2(a[0])).localeCompare(String(ev2(b[0])))).slice(-10).forEach(([eid,line])=>{if(Object.keys(line).length&&pstAdd(sp,ath.name,team,line,eid,ev2(eid)))n++;});}}
   const Q=D.p[pstId(ath.name)];if(Q){Q.glAt=Date.now();Q.eid=ath.id;}pstSave(sp);return n;}
 /* find a player (by book-style name) on the teams of a game, then load his log */
 async function rsFindAndLoad(sp,name,teams){for(const tm of teams){const R=await rsRoster(sp,tm);
@@ -884,17 +931,18 @@ async function rsLoadPropPlayers(){const day=((get(PROPLINES_KEY,{})||{})[today(
     try{n+=await rsFindAndLoad(x.sp,x.player,teams);}catch(e){}}
   return n;}
 /* slate: key players on teams playing today (background, capped) */
-async function rsLoadSlate(sp,perTeam){const games=(sportGames(sp)||[]).filter(g=>{const a=String(g.abstract||'').toLowerCase();return !a||a==='pre'||a==='preview';});let n=0;
+async function rsLoadSlate(sp,perTeam){let games=(sportGames(sp)||[]).filter(g=>{const a=String(g.abstract||'').toLowerCase();return !a||a==='pre'||a==='preview';});let n=0;
+  if(sp==='ncaab')games=games.filter(g=>ncaabWorks(g));   /* college: the players in the games we work */
   for(const g of games){for(const tm of [g.away.abbr,g.home.abbr]){if(RS_SESSION>=RS_CAP)return n;const R=(await rsRoster(sp,tm)).filter(a=>(RS_SKILL[sp]||/./).test(a.pos));
       const D=pstDb(sp);const need=R.filter(a=>{const P=D.p[pstId(a.name)];return !P||!P.glAt||P.glAt<Date.now()-864e5;}).slice(0,perTeam||6);
       for(const a of need){if(RS_SESSION>=RS_CAP)return n;try{n+=await rsGamelog(sp,a,tm);}catch(e){}await new Promise(r=>setTimeout(r,250));}}}
   return n;}
-async function rsBoot(){try{await rsLoadPropPlayers();const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb');await rsLoadSlate(sp,sp==='ncaaf'?5:6);}catch(e){console.warn('rosters',e);}}
+async function rsBoot(){try{await rsLoadPropPlayers();const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb');await rsLoadSlate(sp,sp==='ncaaf'||sp==='ncaab'?5:6);}catch(e){console.warn('rosters',e);}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(rsBoot,9000));
 /* Standout prop of the day for one sport: the highest-probability "scorer"
    prop (goal / home run / TD / 25+ pts) among players in games not yet started. */
 function pstStandout(sp,games){
-  const K={nhl:['g',1,'anytime goal'],mlb:['hr',1,'to hit a home run'],nfl:['td',1,'anytime TD'],ncaaf:['td',1,'anytime TD'],nba:['pts',25,'25+ points']}[sp];if(!K)return null;
+  const K={nhl:['g',1,'anytime goal'],mlb:['hr',1,'to hit a home run'],nfl:['td',1,'anytime TD'],ncaaf:['td',1,'anytime TD'],nba:['pts',25,'25+ points'],ncaab:['pts',20,'20+ points']}[sp];if(!K)return null;
   const open=(games||[]).filter(g=>{const a=String(g.abstract||'').toLowerCase();return !a||a==='pre'||a==='preview';});
   const teams=new Map();open.forEach(g=>{teams.set(g.away.abbr,g);teams.set(g.home.abbr,g);});
   let best=null;Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.s[K[0]]||{}).gp<3)return;
@@ -930,7 +978,7 @@ function parseMyTicketText(text){
     const hm=head.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs\.?\s+(.+?)\s*-\s*/i);
     if(!hm){skipped.push(line);return;}
     const sportWord=hm[2].toUpperCase();
-    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':sportWord==='NBA'?'nba':null;
+    const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':sportWord==='NBA'?'nba':(sportWord==='NCAAB'||sportWord==='CBB'||sportWord==='NCAAM')?'ncaab':null;
     if(!sport||(sport!=='ncaaf'&&!intakeCanNameResolve(sport))){skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names may resolve later':'sport not recognized')+')');return;}
     const awayAb=intakeAbbr(sport,hm[3]),homeAb=intakeAbbr(sport,hm[4]);
     if(!awayAb||!homeAb){skipped.push(line+'  (team name not recognized)');return;}
@@ -1020,7 +1068,7 @@ function parseSGPTicketText(text){
     const sgpHdr=line.match(/^SGP\s*\d+\s*:\s*([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs?\.?\s+(.+)$/i);
     if(sgpHdr){
       const sportWord=sgpHdr[2].toUpperCase();
-      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':sportWord==='NBA'?'nba':null;
+      const sport=sportWord==='NFL'?'nfl':(sportWord==='NCAAF'||sportWord==='CFB'||sportWord==='NCAA')?'ncaaf':sportWord==='MLB'?'mlb':sportWord==='NHL'?'nhl':sportWord==='NBA'?'nba':(sportWord==='NCAAB'||sportWord==='CBB'||sportWord==='NCAAM')?'ncaab':null;
       if(!sport||(sport!=='ncaaf'&&!intakeCanNameResolve(sport))){cur=null;skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
       const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
@@ -1265,7 +1313,7 @@ function intakePreview(el,st){
   const log=st.map(x=>`<div class="sub mono" style="font-size:10px">${x.s==='ok'?'✅':'❌'} ${x.name}${x.note?' — '+x.note:''}</div>`).join('');
   if(!sports.length){el.innerHTML=`<div class="tkt"><h3>Nothing usable found</h3>${log}
     <div class="sub" style="margin-top:6px">Tip: select the board on the site, copy, and paste it here — that path never touches Gemini.</div></div>`;return;}
-  const lab={nfl:'🏈 NFL',ncaaf:'🏟 CFB',mlb:'⚾ MLB',nhl:'🏒 NHL',nba:'🏀 NBA'};
+  const lab={nfl:'🏈 NFL',ncaaf:'🏟 CFB',mlb:'⚾ MLB',nhl:'🏒 NHL',nba:'🏀 NBA',ncaab:'🏀 CBB'};
   const games=b=>{const m={};b.picks.forEach(p=>{const k=(p.away||'')+'@'+(p.home||'');(m[k]=m[k]||new Set()).add(p.market)});
     [['preds','PRED'],['consensus','CONS'],['trends','TREND']].forEach(([f,t])=>b[f].forEach(x=>(m[x.game]=m[x.game]||new Set()).add(t)));return m;};
   el.innerHTML=`<div class="tkt hi"><h3>Check it, then save</h3>${sports.map(sp=>{const b=r[sp];const g=games(b);
@@ -1306,6 +1354,7 @@ function intakeSave(){
   if(typeof render==='function'&&ACTIVE_SPORT==='mlb')render();
   if(typeof renderNHL==='function'&&ACTIVE_SPORT==='nhl')renderNHL();
   if(typeof renderNBA==='function'&&ACTIVE_SPORT==='nba')renderNBA();
+  if(typeof renderNCAAB==='function'&&ACTIVE_SPORT==='ncaab')renderNCAAB();
 }
 /* ── AUTO-INTAKE DROP ───────────────────────────────────────────────────────
    The site is served from the repo, so a file at intake/<YYYY-MM-DD>.txt is
@@ -1368,11 +1417,15 @@ const BR_CFG={
   nfl:  {sd0:13.5,sdK:0.00,blow:17,close:7,prior:{sim:15,market:11.5,pred:13},trTot:6,trTotCap:2.5,trMar:8,trMarCap:2,money:0.75,floor:3,unit:'pts',label:'blowout 17+'},
   ncaaf:{sd0:14.5,sdK:0.22,blow:21,close:8,prior:{sim:17,market:13.5,pred:15},trTot:6,trTotCap:2.5,trMar:8,trMarCap:2,money:0.75,floor:3,unit:'pts',label:'blowout 21+'},
   nhl:  {sd0:2.35,sdK:0.05,blow:3,close:1,prior:{sim:2.4,market:2.2,pred:2.5},trTot:0.5,trTotCap:0.3,trMar:0.6,trMarCap:0.25,money:0.12,floor:0.8,unit:'goals',label:'3+ goal win'},
-  mlb:  {sd0:4.3,sdK:0.08,blow:5,close:1,prior:{sim:4.5,market:4.2,pred:4.6},trTot:1.2,trTotCap:0.6,trMar:1.5,trMarCap:0.5,money:0.2,floor:0.5,unit:'runs',label:'5+ run win'}};
+  mlb:  {sd0:4.3,sdK:0.08,blow:5,close:1,prior:{sim:4.5,market:4.2,pred:4.6},trTot:1.2,trTotCap:0.6,trMar:1.5,trMarCap:0.5,money:0.2,floor:0.5,unit:'runs',label:'5+ run win'},
+  /* v2.32 · basketball — the Judge never had an NBA entry, so it silently sat out every NBA game */
+  nba:  {sd0:12.0,sdK:0.03,blow:15,close:5,prior:{sim:12.5,market:11,pred:12},trTot:8,trTotCap:3,trMar:6,trMarCap:2,money:1.0,floor:70,unit:'pts',label:'blowout 15+'},
+  ncaab:{sd0:10.8,sdK:0.03,blow:15,close:5,prior:{sim:10.5,market:9.5,pred:10.5},trTot:7,trTotCap:2.5,trMar:5,trMarCap:2,money:1.0,floor:40,unit:'pts',label:'blowout 15+'}};
 /* Everything sport-specific in one place — the Judge itself never branches. */
 function brainAdapter(sport){
   if(sport==='nhl'&&typeof nhlBrainAdapter==='function')return nhlBrainAdapter();
   if(sport==='nba')return typeof nbaBrainAdapter==='function'?nbaBrainAdapter():{key:g=>g.away.abbr+'@'+g.home.abbr,lines:()=>[],flat:()=>false,sim:()=>null,trends:()=>[],cons:()=>[],snap:x=>Math.round(x),market:()=>null,box:null,boxCols:[],boxStats:[]};
+  if(sport==='ncaab')return typeof ncaabBrainAdapter==='function'?ncaabBrainAdapter():{key:g=>g.away.abbr+'@'+g.home.abbr,lines:()=>[],flat:()=>false,sim:()=>null,trends:()=>[],cons:()=>[],snap:x=>Math.round(x),market:()=>null,box:null,boxCols:[],boxStats:[]};
   if(sport==='mlb')return{
     key:g=>g.away.abbr+'@'+g.home.abbr,
     lines:g=>typeof bookLinesFor==='function'?bookLinesFor(g.id):[],
@@ -1487,7 +1540,8 @@ function brainJudge(g,s,sport){
   const P=x=>brainNorm((x-mu)/sd);const half=sport==='mlb'?0.5:0.5;
   const pHome=1-P(0),close=P(C.close+half)-P(-C.close-half);
   const blowH=1-P(C.blow-half),blowA=P(-C.blow+half);
-  let fa=AD.snap(A),fh=AD.snap(H);if(fa===fh){if(mu>=0)fh=AD.snap(fh+(sport==='mlb'||sport==='nhl'?1:3));else fa=AD.snap(fa+(sport==='mlb'||sport==='nhl'?1:3));}
+  const tieStep=sport==='mlb'||sport==='nhl'||sport==='nba'||sport==='ncaab'?1:3;
+  let fa=AD.snap(A),fh=AD.snap(H);if(fa===fh){if(mu>=0)fh=AD.snap(fh+tieStep);else fa=AD.snap(fa+tieStep);}
   const disputes=[],dM=sport==='mlb'||sport==='nhl'?(sport==='nhl'?0.75:1):3,dT=sport==='mlb'?1.5:sport==='nhl'?1:4;
   for(let i=0;i<W.length;i++)for(let j=i+1;j<W.length;j++){
     const dm=(W[i].h-W[i].a)-(W[j].h-W[j].a),dt=(W[i].h+W[i].a)-(W[j].h+W[j].a);
@@ -1541,10 +1595,12 @@ function brainLearn(sport){
       if(!r.actualBox&&(r.boxTried||0)<3&&!(/^\d{4}-\d{2}-\d{2}$/.test(dk)&&dk<stale))return;
       brainLearnOne('nhl',b,r.game,r.judge,+r.final.a,+r.final.h,r.actualBox||null);r.learned=true;ch=true;}));
     if(ch){brainPut('nhl',b);set('d4.nhlarc',arc);}return ch;}
-  if(sport==='nba'){const L=get('d4.nbajudge',{})||{};const b=brainGet('nba');let ch=false;
-    Object.keys(L).forEach(d=>Object.values(L[d]).forEach(J=>{if(J.learned)return;const F=finalsFor('nba',J.game,d,false);if(!F)return;
-      brainLearnOne('nba',b,J.game,J,+F.a,+F.h,null);J.learned=true;J.final={a:+F.a,h:+F.h};ch=true;}));
-    if(ch){brainPut('nba',b);set('d4.nbajudge',L);}return ch;}
+  if(sport==='nba'||sport==='ncaab'){const JK='d4.'+sport+'judge';const L=get(JK,{})||{};const b=brainGet(sport);let ch=false;
+    /* basketball finals: the shared store, or the engine's own results ledger (every final it has seen) */
+    const own=(game,d)=>{try{const R=get('d4.'+sport+'res',{})||{};const[a,h]=String(game).split('@');for(const k in R){const r=R[k];if(r[0]===d&&r[1]===a&&r[2]===h)return{a:r[3],h:r[4]};}}catch(e){}return null;};
+    Object.keys(L).forEach(d=>Object.values(L[d]).forEach(J=>{if(J.learned)return;const F=finalsFor(sport,J.game,d,false)||own(J.game,d);if(!F)return;
+      brainLearnOne(sport,b,J.game,J,+F.a,+F.h,null);J.learned=true;J.final={a:+F.a,h:+F.h};ch=true;}));
+    if(ch){brainPut(sport,b);set(JK,L);}return ch;}
   const key=sport==='nfl'?LS.nflarc:'d4.ncaafarc';const arc=get(key,{});const b=brainGet(sport);let ch=false;
   Object.values(arc).forEach(A=>{if(!A||!A.rows||!A.finals)return;A.rows.forEach(r=>{
     if(r.learned||!r.judge)return;const F=A.finals[r.id];if(!F||F.a==null)return;
@@ -1616,7 +1672,7 @@ function predBoxGradeHtml(sport,g,pred,act){
     <b style="color:${col(G.letter)}">PREDICTED BOX ${G.letter}</b> <span style="color:var(--mute)">(off ${Math.round(G.avg*100)}% avg)</span><br>${cells}</div>`;
 }
 function boxAccuracyHtml(){
-  const out=[];['mlb','nfl','ncaaf','nhl','nba'].forEach(sp=>{const E=(brainGet(sp).boxErr)||{};
+  const out=[];['mlb','nfl','ncaaf','nhl','nba','ncaab'].forEach(sp=>{const E=(brainGet(sp).boxErr)||{};
     Object.entries(E).forEach(([st,o])=>{if(o.n<3)return;out.push(`<div class="sub">${sp.toUpperCase()} ${BOX_LAB[st]||st}: grade <b>${boxLetter(o.ape)}</b> · off ${Math.round(o.ape*100)}% avg · runs ${o.bias>=0?'high':'low'} by ${Math.abs(Math.round(o.bias*100))}% (n=${o.n}) — auto-corrected going forward</div>`);});});
   return out.length?`<div class="tkt hi"><h3>Predicted box scores — graded</h3>${out.join('')}</div>`:'';
 }
@@ -1889,7 +1945,7 @@ function characterCalls(sp,g,s){
   let hlSim=false,tlSim=false;
   // No posted line yet: characters still pick against the line the card shows
   // (the sim's own number) so sim-only squares get picks and colors too.
-  if(hl==null){const fb=sp==='nfl'||sp==='ncaaf';
+  if(hl==null){const fb=sp==='nfl'||sp==='ncaaf'||sp==='nba'||sp==='ncaab';   /* basketball spreads are margins too, never a ±1.5 run/puck line */
     if(fb&&s.homeProj!=null&&s.awayProj!=null){const m=halfRound(s.homeProj-s.awayProj);if(m!==0){hl=-m;hlSim=true;}}
     else if(!fb){hl=s.hw>=s.aw?-1.5:1.5;hlSim=true;}}
   if(tl==null&&s.med!=null){tl=sp==='nfl'||sp==='ncaaf'?Math.round(s.med):halfRound(s.med);tlSim=true;}
@@ -2012,13 +2068,34 @@ function metaCalls(sp,g,calls,Ln,add){
     try{const ev=sides.map(o=>o.blend==null||o.price==null||!bkPriceOk(o.price)?null:o.blend*americanToDecimal(o.price)-1);
       const i=ev[0]!=null&&(ev[1]==null||ev[0]>=ev[1])?0:1;
       if(ev[i]!=null&&ev[i]>=IDEO_P('Banker','ev',0.03))add('Banker',m,sides[i].sd,{simP:+sides[i].blend.toFixed(4),mktP:sides[i].mk!=null?+sides[i].mk.toFixed(4):null,ev:+ev[i].toFixed(4)});}catch(e){}});}
+/* v2.32 · the ledger keeps every sport's history without outgrowing a phone:
+   ungraded calls older than 14 days go (they can't grade — mostly the old per-day
+   copies of football calls from before v2.09), college basketball keeps
+   its own rolling window, and the whole ledger is capped. The SAME rule runs after a
+   sync merge, so a trimmed call can't come back from the other device's copy. */
+const VOICES_CAP=16000,VOICES_SP_CAP={ncaab:6000};
+function voicesTrim(V){if(!Array.isArray(V))return V;const old=dayShift(today(),-14);let drop=new Set();
+  V.forEach((x,i)=>{if(x&&!x.graded&&String(x.date||'').slice(0,10)<old)drop.add(i);});
+  const byDate=idx=>idx.sort((a,b)=>String(V[a].date||'').localeCompare(String(V[b].date||''))||a-b);
+  Object.entries(VOICES_SP_CAP).forEach(([sp,cap])=>{const I=[];V.forEach((x,i)=>{if(x&&x.sp===sp&&!drop.has(i))I.push(i);});if(I.length>cap)byDate(I).slice(0,I.length-cap).forEach(i=>drop.add(i));});
+  const keep=V.length-drop.size;if(keep>VOICES_CAP){const I=[];V.forEach((x,i)=>{if(!drop.has(i))I.push(i);});byDate(I).slice(0,keep-VOICES_CAP).forEach(i=>drop.add(i));}
+  return drop.size?V.filter((x,i)=>!drop.has(i)):V;}
+/* the college games the characters work: your lined games + ranked teams (the engine decides; lines-only fallback) */
+function ncaabWorks(g){try{if(typeof bbWorkable==='function')return bbWorkable('ncaab',g);return(sportLinesFor('ncaab',g)||[]).length>0;}catch(e){return false;}}
+/* preseason / exhibition games are tracked for learning only — never official */
+const PRE_START={nba:d=>{const y=+d.slice(0,4),m=+d.slice(5,7);const yr=m>=7?y:y-1;const o=new Date(Date.UTC(yr,9,20));while(o.getUTCDay()!==2)o.setUTCDate(o.getUTCDate()+1);return o.toISOString().slice(0,10);},
+  ncaab:d=>{const y=+d.slice(0,4),m=+d.slice(5,7);const yr=m>=7?y:y-1;const o=new Date(Date.UTC(yr,10,1));while(o.getUTCDay()!==1)o.setUTCDate(o.getUTCDate()+1);return o.toISOString().slice(0,10);}};
+function seasonPre(sp,d){try{const f=PRE_START[sp];if(!f)return false;d=String(d||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return false;const m=+d.slice(5,7);if(m>=5&&m<=7)return false;return d<f(d)&&m>=8;}catch(e){return false;}}
 function voicesLog(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
   if(!G||!G.length)return 0;const V=get(VOICES_KEY,[]);const idx={};V.forEach((x,i)=>idx[x.id]=i);let n=0;
   G.forEach(g=>{
     const s=S[g.id];if(!s||s.aw==null)return;const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');
+    /* college basketball plays ~150 games a night: the characters work the games that carry a real line */
+    if(sp==='ncaab'&&!ncaabWorks(g))return;
     let calls=[];try{calls=characterCalls(sp,g,s)}catch(e){return;}
+    if(g.pre||g.preseason||seasonPre(sp,g.__date||gameDayOf(g)))calls.forEach(c=>{c.pre=1;});
     // a character's call is locked at first pitch / puck drop / kickoff; drop a
     // stale pre-game call from another side if the character flipped before then
     if(pre)calls.forEach(c=>{try{c.f=factorsFor(sp,g,c);}catch(e){}if(c.voice==='Sim'){try{c.f=c.f||factorsFor(sp,g,c);const b=blendProb(sp,c.market,c.simP,c.mktP>0?c.mktP:null);let q=b!=null?b+factorAdj(sp,c.f):null;if(q!=null){try{q+=pwrCalAdj(sp,g,c.market,c.side,c.line,q);}catch(e){}}c.pUsed=q!=null?Math.max(0.01,Math.min(0.99,q)):null;}catch(e){}}});
@@ -2026,7 +2103,7 @@ function voicesLog(sp){
     calls.forEach(c=>{if(META_VOICES.has(c.voice)&&idx[[c.voice,sp,c.game,c.date,c.market].join('|')]!=null)return;   // already logged under the pre-v1.99 70%+ rule
       const i=idx[c.id];if(i!=null){if(!pre||V[i].graded||V[i].lk)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
   });
-  if(n){if(V.length>8000)V.splice(0,V.length-8000);set(VOICES_KEY,V);}return n;
+  if(n){set(VOICES_KEY,voicesTrim(V));}return n;
 }
 
 /* ══ THE CHARACTER BRAIN ═════════════════════════════════════════════════════
@@ -2135,14 +2212,14 @@ function charProfiles(){const V=roGet(VOICES_KEY,[]);const P={};
    margin miss, market's margin miss). Per day: games, avg total miss with the
    arrow vs the day before, signed bias (⬇️ = model over-projected → the
    corrections shave it down), and model vs market on the margin.          */
-const CAL_UNIT={mlb:'runs',nhl:'goals',nfl:'pts',ncaaf:'pts',nba:'pts'};
+const CAL_UNIT={mlb:'runs',nhl:'goals',nfl:'pts',ncaaf:'pts',nba:'pts',ncaab:'pts'};
 function calOffsetsData(sp){const b=brainGet(sp);const byD={};
   (b.log||[]).forEach(r=>{const c=String(r.call||'').split('-').map(Number),f=String(r.final||'').split('-').map(Number);if(c.length!==2||f.length!==2||c.some(isNaN)||f.some(isNaN))return;
     const D=byD[r.d]||(byD[r.d]={n:0,tot:0,bias:0,mar:0,mkt:0,mn:0});D.n++;const ct=c[0]+c[1],ft=f[0]+f[1];D.tot+=Math.abs(ct-ft);D.bias+=ct-ft;D.mar+=+r.err||0;if(r.mkt!=null){D.mkt+=+r.mkt;D.mn++;}});
   const days=Object.keys(byD).sort().slice(-10).map(d=>{const D=byD[d];return{d,n:D.n,tot:D.tot/D.n,bias:D.bias/D.n,mar:D.mar/D.n,mkt:D.mn?D.mkt/D.mn:null};});
   const T=Object.values(b.team||{});const adj=T.length?T.reduce((a,t)=>a+Math.abs(((t.off||{}).r)||0)+Math.abs(((t.def||{}).r)||0),0)/T.length:0;
   return{days,adj,teams:T.length};}
-function calOffsetsHtml(){const lab={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
+function calOffsetsHtml(){const lab={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA',ncaab:'🏀 CBB'};
   const secs=LEARN_SPS.map(sp=>{const R=calOffsetsData(sp);if(!R.days.length)return'';const u=CAL_UNIT[sp];
     const rows=R.days.slice().reverse().map((x,i,arr)=>{const prev=arr[i+1];const ar=prev?(x.tot<prev.tot?'<span style="color:var(--win)">↓</span>':x.tot>prev.tot?'<span style="color:var(--rust)">↑</span>':'→'):'';
       const bias=Math.abs(x.bias)<0.05?'on target':`${x.bias>0?'⬇️':'⬆️'} ${Math.abs(x.bias).toFixed(2)} ${u} (${x.bias>0?'over':'under'}-projected)`;
@@ -2331,8 +2408,11 @@ async function pullLiveOdds(){
       if(typeof fetchNFLLiveOdds!=='function')throw new Error('NFL odds live on nfl.html');
       await fetchNFLLiveOdds();
       el.innerHTML='<div class="tkt hi"><h3>NFL odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
-    }else if(ACTIVE_SPORT==='nba'){
-      el.innerHTML='<div class="tkt"><h3>NBA lines</h3><div class="sub">Paste your sportsbook\'s NBA lines in Intake — they file to this board.</div></div>';
+    }else if(ACTIVE_SPORT==='nba'||ACTIVE_SPORT==='ncaab'){
+      const lab=ACTIVE_SPORT==='nba'?'NBA':'college basketball';el.innerHTML='<div class="empty">Pulling '+lab+' odds…</div>';
+      if(typeof bbFetchLiveOdds!=='function')throw new Error('basketball odds live on the NBA / CBB pages');
+      const n=await bbFetchLiveOdds(ACTIVE_SPORT);
+      el.innerHTML='<div class="tkt hi"><h3>'+lab+' odds updated</h3><div class="sub">'+(n||0)+' lines from The Odds API. Your own uploaded lines are never overwritten.</div></div>';
     }else if(ACTIVE_SPORT==='nhl'){
       el.innerHTML='<div class="empty">Pulling NHL odds…</div>';
       if(typeof fetchNHLLiveOdds!=='function')throw new Error('NHL odds live on nhl.html');
@@ -2403,11 +2483,11 @@ async function fetchMLBLiveOdds(){
    Shared features used to inline sportGames(sp)
    — any new sport silently fell through to the MLB slate. */
 function sportGames(sp){return sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES:[]):sp==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES:[])
-  :sp==='nhl'?(typeof NHL_GAMES!=='undefined'?NHL_GAMES:[]):sp==='nba'?(typeof NBA_GAMES!=='undefined'?NBA_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);}
+  :sp==='nhl'?(typeof NHL_GAMES!=='undefined'?NHL_GAMES:[]):sp==='nba'?(typeof NBA_GAMES!=='undefined'?NBA_GAMES:[]):sp==='ncaab'?(typeof NCAAB_GAMES!=='undefined'?NCAAB_GAMES:[]):(typeof GAMES!=='undefined'?GAMES:[]);}
 function sportSims(sp){return sp==='nfl'?(typeof NFL_SIMS!=='undefined'?NFL_SIMS:{}):sp==='ncaaf'?(typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{})
-  :sp==='nhl'?(typeof NHL_SIMS!=='undefined'?NHL_SIMS:{}):sp==='nba'?(typeof NBA_SIMS!=='undefined'?NBA_SIMS:{}):(typeof SIMS!=='undefined'?SIMS:{});}
+  :sp==='nhl'?(typeof NHL_SIMS!=='undefined'?NHL_SIMS:{}):sp==='nba'?(typeof NBA_SIMS!=='undefined'?NBA_SIMS:{}):sp==='ncaab'?(typeof NCAAB_SIMS!=='undefined'?NCAAB_SIMS:{}):(typeof SIMS!=='undefined'?SIMS:{});}
 function sportLinesFor(sp,g){const k=g.away.abbr+'@'+g.home.abbr;
-  return sp==='nfl'?nflBookLinesFor(k):sp==='ncaaf'?ncaafBookLinesFor(k):sp==='nhl'?nhlBookLinesFor(k):sp==='nba'?(typeof nbaBookLinesFor==='function'?nbaBookLinesFor(k):[]):bookLinesFor(g.id);}
+  return sp==='nfl'?nflBookLinesFor(k):sp==='ncaaf'?ncaafBookLinesFor(k):sp==='nhl'?nhlBookLinesFor(k):sp==='nba'?(typeof nbaBookLinesFor==='function'?nbaBookLinesFor(k):[]):sp==='ncaab'?(typeof ncaabBookLinesFor==='function'?ncaabBookLinesFor(k):[]):bookLinesFor(g.id);}
 /* One place that repaints the active sport's board. render() is the MLB
    board; calling it on a football/hockey page (clearSlip, tog, etc. do)
    used to overwrite that page's slate with "No games today." */
@@ -2416,6 +2496,7 @@ function renderActiveBoard(){const ps=window.__PAGE_SPORT__||ACTIVE_SPORT;
   if(ps==='ncaaf'&&typeof renderNCAAF==='function')return renderNCAAF();
   if(ps==='nhl'&&typeof renderNHL==='function')return renderNHL();
   if(ps==='nba'&&typeof renderNBA==='function')return renderNBA();
+  if(ps==='ncaab'&&typeof renderNCAAB==='function')return renderNCAAB();
   if(typeof render==='function')return render();}
 /* Slip toggle shared by every non-MLB board. The football versions pushed a
    leg with no id (so the tile never showed selected and a second tap added a
@@ -2441,9 +2522,9 @@ function sportSlipToggle(sport,gid,label,price,extra){
     p:price!=null&&Math.abs(price)>=100?Math.min(.95,Math.max(.05,price>0?100/(price+100):-price/(-price+100))):0.5},extra||{}));
   set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();
 }
-const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
+const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261016a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261016b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2458,6 +2539,7 @@ function doSportSwitch(sport){
                   :sport==='ncaaf'?typeof renderNCAAF==='function'
                   :sport==='nhl'?typeof renderNHL==='function'
                   :sport==='nba'?typeof renderNBA==='function'
+                  :sport==='ncaab'?typeof renderNCAAB==='function'
                   :typeof render==='function';
   /* Each sport owns its page. A football page has BOTH football engines
      loaded, so the engine-present check alone let CFB render inside nfl.html
@@ -2476,7 +2558,7 @@ function doSportSwitch(sport){
     return;
   }
   ACTIVE_SPORT=sport;
-  ['mlb','nfl','ncaaf','nhl','nba'].forEach(s=>{
+  ['mlb','nfl','ncaaf','nhl','nba','ncaab'].forEach(s=>{
     const btn=document.getElementById('sportBtn-'+s);
     if(!btn)return;
     btn.style.background=s===sport?'var(--gold)':'#1c1c1c';
@@ -2493,6 +2575,8 @@ function doSportSwitch(sport){
     if(typeof renderNHL==='function')renderNHL();
   }else if(sport==='nba'){
     if(typeof renderNBA==='function')renderNBA();
+  }else if(sport==='ncaab'){
+    if(typeof renderNCAAB==='function')renderNCAAB();
   }else{
     if(typeof render==='function')render();
   }
@@ -2500,6 +2584,7 @@ function doSportSwitch(sport){
   if(nG)nG.textContent=
     sport==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GAMES.length:0):
     sport==='ncaaf'?(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES.length:0):
+    (sport==='nba'||sport==='ncaab')?sportGames(sport).length:
     (typeof GAMES!=='undefined'?GAMES.length:0);
   /* Two things were missing here.
      1) The choice never persisted, so every reload silently snapped back to
@@ -2610,8 +2695,8 @@ function bookKeyOf(x){return x.market==='prop'?[x.game,x.market,x.side,x.line,x.
 function bookDedupe(arr){arr=(arr||[]).filter(x=>x.market==='prop'||x.price==null||amerOk(x.price)!=null);const last={};(arr||[]).forEach((x,i)=>{const k=bookKeyOf(x);const p=last[k];
   if(p==null||(x.capturedAt||i)>=(arr[p].capturedAt||p))last[k]=i;});const keep=new Set(Object.values(last));return(arr||[]).filter((x,i)=>keep.has(i));}
 function pruneList(key,keep){try{const a=_dec(localStorage.getItem(key));if(!Array.isArray(a)||a.length<=keep)return false;localStorage.setItem(key,_enc(JSON.stringify(a.slice(-keep))));return true;}catch(e){return false}}
-function prunePlayers(frac){let any=false;['ncaaf','nfl','mlb','nhl','nba'].forEach(sp=>{try{const D=pstDb(sp);const n=Object.keys(D.p).length;if(n<50)return;pstSave(sp,Math.floor(n*frac));any=true;}catch(e){}});return any;}
-function prunePstLast(keep){let any=false;['ncaaf','nfl','mlb','nhl','nba'].forEach(sp=>{try{const k='d4.pstlast.'+sp,L=_dec(localStorage.getItem(k));if(!L)return;const ks=Object.keys(L);if(ks.length<=keep)return;
+function prunePlayers(frac){let any=false;['ncaab','ncaaf','nfl','mlb','nhl','nba'].forEach(sp=>{try{const D=pstDb(sp);const n=Object.keys(D.p).length;if(n<50)return;pstSave(sp,Math.floor(n*frac));any=true;}catch(e){}});return any;}
+function prunePstLast(keep){let any=false;['ncaab','ncaaf','nfl','mlb','nhl','nba'].forEach(sp=>{try{const k='d4.pstlast.'+sp,L=_dec(localStorage.getItem(k));if(!L)return;const ks=Object.keys(L);if(ks.length<=keep)return;
   ks.sort((a,b)=>String(L[a].d).localeCompare(String(L[b].d))).slice(0,ks.length-keep).forEach(x=>delete L[x]);localStorage.setItem(k,_enc(JSON.stringify(L)));any=true;}catch(e){}});return any;}
 const PRUNE_LADDER=[
   ()=>{try{if(localStorage.getItem('d4.simcore')==null)return false;localStorage.removeItem('d4.simcore');SIMC=null;return true;}catch(e){return false}},   // sim histograms — re-simmed on demand
@@ -2626,6 +2711,8 @@ const PRUNE_LADDER=[
   ()=>pruneDatedMap('d4.oddsdate',7),
   ()=>pruneKeyedCache('d4.boxcache',10),
   ()=>pruneDatedMap('d4.nbashots',3),
+  ()=>pruneDatedMap('d4.ncaabshots',2),
+  ()=>{try{if(localStorage.getItem('d4.ncaabsched')==null)return false;localStorage.removeItem('d4.ncaabsched');return true;}catch(e){return false}},   // re-pulled from ESPN on the next open
   ()=>{try{localStorage.removeItem('d4.pregame');return true;}catch(e){return false}},
   ()=>pruneDatedMap('d4.calhist',30),
   ()=>pruneList('d4.propcal',600),
@@ -3610,7 +3697,7 @@ function saveBookOdds(picks,el,fileSport){
     sports.forEach(sp=>{
       const rows=groups[sp];
       if(sp==='nhl'){if(typeof saveNHLBookOdds==='function')saveNHLBookOdds(rows,null);}
-      else if(sp==='nba'){if(typeof saveNBABookOdds==='function')saveNBABookOdds(rows,null);else{const all=get('d4.nbashots',{})||{};(all[today()]=all[today()]||[]).push(...rows.map(r=>({...r,src:'mine',capturedAt:Date.now()})));set('d4.nbashots',all);}}
+      else if(sp==='nba'||sp==='ncaab'){if(typeof bbSaveOdds==='function')bbSaveOdds(sp,rows,null);else{const k='d4.'+sp+'shots';const all=get(k,{})||{};(all[today()]=all[today()]||[]).push(...rows.map(r=>({...r,src:'mine',capturedAt:Date.now()})));set(k,all);}}
       else if(sp==='nfl'){
         if(typeof saveNFLBookOdds==='function')saveNFLBookOdds(rows,null);
         else saveFootballOddsToStorage('nfl',rows);
@@ -3629,7 +3716,7 @@ function saveBookOdds(picks,el,fileSport){
   }
   const sport=sports[0]||fileSport||ACTIVE_SPORT;
   if(sport==='nhl'){if(typeof saveNHLBookOdds==='function')saveNHLBookOdds(picks,el);return;}
-  if(sport==='nba'){if(typeof saveNBABookOdds==='function')saveNBABookOdds(picks,el);else{const all=get('d4.nbashots',{})||{};(all[today()]=all[today()]||[]).push(...picks.map(r=>({...r,src:'mine',capturedAt:Date.now()})));set('d4.nbashots',all);if(el)el.innerHTML='<div class="tkt"><h3>NBA lines saved</h3><div class="sub">Open the NBA board to see them.</div></div>';}return;}
+  if(sport==='nba'||sport==='ncaab'){if(typeof bbSaveOdds==='function')bbSaveOdds(sport,picks,el);else{const k='d4.'+sport+'shots';const all=get(k,{})||{};(all[today()]=all[today()]||[]).push(...picks.map(r=>({...r,src:'mine',capturedAt:Date.now()})));set(k,all);if(el)el.innerHTML=`<div class="tkt"><h3>${sport==='nba'?'NBA':'College basketball'} lines saved</h3><div class="sub">Open that board to see them.</div></div>`;}return;}
   if(sport==='nfl'){
     if(typeof saveNFLBookOdds==='function')saveNFLBookOdds(picks,el);
     else{const n=saveFootballOddsToStorage('nfl',picks);
@@ -3813,6 +3900,7 @@ function tabRaw(n,b){
   if(n==='games'&&ACTIVE_SPORT==='ncaaf')renderNCAAF();
   if(n==='games'&&ACTIVE_SPORT==='nhl'&&typeof renderNHL==='function')renderNHL();
   if(n==='games'&&ACTIVE_SPORT==='nba'&&typeof renderNBA==='function')renderNBA();
+  if(n==='games'&&ACTIVE_SPORT==='ncaab'&&typeof renderNCAAB==='function')renderNCAAB();
   if(n==='tickets'){renderTickets();btAutoOnce();try{const tv=document.getElementById('v-tickets');if(tv&&!document.getElementById('btStatus')&&btUngraded().length){const d=document.createElement('div');d.innerHTML=btBarHtml();tv.insertBefore(d,tv.firstChild);}}catch(e){}}
   if(n==='grades')renderGrades(true);
   if(n==='recap')renderRecap();
@@ -6763,6 +6851,7 @@ async function diagnoseRundown(){
 }
 async function refreshEverything(){
   if(ACTIVE_SPORT==='nba'){if(typeof nbaBoot==='function')await nbaBoot(true);return;}
+  if(ACTIVE_SPORT==='ncaab'){if(typeof ncaabBoot==='function')await ncaabBoot(true);return;}
   if(ACTIVE_SPORT==='nhl'){
     const el=document.getElementById('slate');if(el)el.innerHTML='<div class="empty">Refreshing NHL data…</div>';
     if(typeof nhlBoot==='function')await nhlBoot(true);return;
@@ -7784,7 +7873,7 @@ function resolveLeg(leg,ticketDate){
      against ITS OWN schedule. Previously every leg was looked up in the MLB
      GAMES array only — a football leg matched nothing, returned null forever,
      and produced a ticket that could never be graded either way. */
-  if(leg.sport==='nfl'||leg.sport==='ncaaf'||leg.sport==='nhl'||leg.sport==='nba'){
+  if(leg.sport==='nfl'||leg.sport==='ncaaf'||leg.sport==='nhl'||leg.sport==='nba'||leg.sport==='ncaab'){
     /* Prefer the live array when the football engine is loaded (gives live
        in-progress scores), but fall through to the SHARED finals store when
        it isn't — so a football leg on a locked ticket grades correctly from
@@ -7820,7 +7909,7 @@ function resolveLeg(leg,ticketDate){
     /* Finished football games also live in the sport archive, in two shapes:
        date → [rows] (finals mirror) and week → {rows,finals} (snapshots).
        Treating a week object as a list threw here instead of finding the score. */
-    const farc=arcRead(leg.sport==='nfl'?LS.nflarc:leg.sport==='nhl'?'d4.nhlarc':leg.sport==='nba'?'d4.nbaarc':'d4.ncaafarc');
+    const farc=arcRead(leg.sport==='nfl'?LS.nflarc:leg.sport==='nhl'?'d4.nhlarc':leg.sport==='nba'?'d4.nbaarc':leg.sport==='ncaab'?'d4.ncaabarc':'d4.ncaafarc');
     for(const d of Object.keys(farc)){
       const E=farc[d];
       const isDay=/^\d{4}-\d{2}-\d{2}$/.test(d);
@@ -7986,6 +8075,7 @@ const fbpGameKey=(gl,sp)=>{const [a,h]=String(gl||'').split('@');return fbpAb(a,
 FBP_ESPN.nhl='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl';
 FBP_ESPN.mlb='https://site.api.espn.com/apis/site/v2/sports/baseball/mlb';
 FBP_ESPN.nba='https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+FBP_ESPN.ncaab='https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball';
 function fbpParseBasketball(j){
   const hc=((j.header||{}).competitions||[])[0]||{};const st=hc.status||{};const state=(st.type||{}).state||'pre';const teams={};
   ((j.boxscore||{}).players||[]).forEach(T=>{const ab=String(T.team&&T.team.abbreviation||'').toUpperCase();if(!ab)return;
@@ -8085,7 +8175,7 @@ function fbpBox(id,sp,needDef){
   if(!FBP_INFLIGHT['box:'+id]){
     FBP_INFLIGHT['box:'+id]=1;
     fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json()).then(j=>{
-      const box=sp==='nhl'?fbpParseHockey(j):sp==='mlb'?fbpParseBaseball(j):sp==='nba'?fbpParseBasketball(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
+      const box=sp==='nhl'?fbpParseHockey(j):sp==='mlb'?fbpParseBaseball(j):(sp==='nba'||sp==='ncaab')?fbpParseBasketball(j):fbpParseBox(j);FBP_MEM[id]={ts:Date.now(),box};
       try{if(box)box.date=(((j.header||{}).competitions||[])[0]||{}).date||null;pstatFeed(sp,String(id),box);}catch(e){}   // finals only, once per game
       if(box.state==='post'&&Object.keys(box.teamStats||box.teams||{}).length){
         const S=get(FBP_BOX_KEY,{})||{};S[sp+':'+id]={ts:Date.now(),final:true,box};
@@ -8441,9 +8531,9 @@ function legProgressBarHtml(prog){
    Totals the same way with τ = X + σT·Φ⁻¹(p_over). Settled legs are 1 or 0,
    unstarted legs keep their pre-game number, a push drops out of the parlay.
    σ per sport = the spread of real results around closing lines.          */
-const LIVE_SIG={nfl:[13.5,13.5],ncaaf:[16,17],nba:[12,18.5],nhl:[2.3,2.3],mlb:[4.3,4.3]};
+const LIVE_SIG={nfl:[13.5,13.5],ncaaf:[16,17],nba:[12,18.5],ncaab:[10.8,15.5],nhl:[2.3,2.3],mlb:[4.3,4.3]};
 function liveFracLeft(e,sp){if(!e||e.state==='pre')return 1;if(e.state==='post')return 0;const per=Math.max(1,e.period||1);
-  const Q={nfl:[4,15],ncaaf:[4,15],nba:[4,12],nhl:[3,20]}[sp];
+  const Q={nfl:[4,15],ncaaf:[4,15],nba:[4,12],ncaab:[2,20],nhl:[3,20]}[sp];
   if(Q){const [np,len]=Q;if(per>np)return 0.03;const left=e.clock!=null?e.clock/60:len/2;return Math.max(0.01,Math.min(1,((np-per)*len+left)/(np*len)));}
   if(sp==='mlb'){const d=String(e.detail||'').toLowerCase();let half=(per-1)*2;
     if(/bot/.test(d))half+=1.5;else if(/mid/.test(d))half+=1;else if(/end/.test(d))half+=2;else half+=0.5;
@@ -8458,7 +8548,7 @@ function liveLegProb(x,r,td){
   /* period legs (P1 / 1H / Q1 / F5): same model scoped to the period — time left IN
      the period, σ shrunk to the period's share of the game, score so far in it */
   const pm=pick.match(/^(P1|1H|H1|Q1|F5)\s+(.+)$/i);
-  if(pm){const kind=pm[1].toUpperCase();pick=pm[2];const Q={nfl:[4,15],ncaaf:[4,15],nba:[4,12],nhl:[3,20]}[sp];
+  if(pm){const kind=pm[1].toUpperCase();pick=pm[2];const Q={nfl:[4,15],ncaaf:[4,15],nba:[4,12],ncaab:[2,20],nhl:[3,20]}[sp];
     let span,share,per=Math.max(1,e.period||1);
     if(kind==='F5'){if(sp!=='mlb')return p0;share=5/9;const d=String(e.detail||'').toLowerCase();let half=(per-1)*2+(/bot/.test(d)?1.5:/mid/.test(d)?1:/end/.test(d)?2:0.5);
       f=e.state==='post'||half>=10?0.001:Math.max(0.01,(10-half)/10);}
@@ -8811,7 +8901,7 @@ function slipLegPrice(x){if(x.price!=null&&isFinite(+x.price))return +x.price;tr
     const c=L.filter(y=>(y.market===mk||(mk==='spread'&&(y.market==='runline'||y.market==='puckline')))&&y.side===k.side&&(ln==null||y.line==null||Math.abs(Math.abs(+y.line)-Math.abs(+ln))<0.01));
     if(c.length&&c[0].price!=null)return +c[0].price;
     /* fallback: the day's saved book lines by game key (MLB lines are filed without a game id) */
-    const key={mlb:LS.bookshots,nfl:'d4.nflshots',ncaaf:'d4.ncaafshots',nhl:'d4.nhlshots',nba:'d4.nbashots'}[sp];const day=String(x.date||today()).slice(0,10);
+    const key={mlb:LS.bookshots,nfl:'d4.nflshots',ncaaf:'d4.ncaafshots',nhl:'d4.nhlshots',nba:'d4.nbashots',ncaab:'d4.ncaabshots'}[sp];const day=String(x.date||today()).slice(0,10);
     const S=(roGet(key,{},30e3)||{})[day]||[];const mk2=mk==='spread'&&sp==='mlb'?'runline':mk;
     const d=S.filter(y=>(y.game===x.game||(y.away+'@'+y.home)===x.game)&&(y.market===mk2||y.market===mk||(mk==='spread'&&(y.market==='runline'||y.market==='puckline')))&&y.side===k.side&&(ln==null||y.line==null||Math.abs(Math.abs(+y.line)-Math.abs(+ln))<0.01)&&y.price!=null);
     return d.length?+d[d.length-1].price:null;}catch(e){return null;}}
@@ -10382,7 +10472,7 @@ function evalInputFingerprint(){
    character parlays and the Best card freeze — now means ANY sport's eval ran
    today, not only baseball's, so a football-and-hockey night still locks. */
 const EVAL_LOCK_KEY='d4.evallock';
-const EVAL_SPORTS=[['mlb','MLB'],['nfl','NFL'],['ncaaf','CFB'],['nhl','NHL'],['nba','NBA']];
+const EVAL_SPORTS=[['mlb','MLB'],['nfl','NFL'],['ncaaf','CFB'],['nhl','NHL'],['nba','NBA'],['ncaab','CBB']];
 function evalLockMark(sp){try{evalFreeze(sp);}catch(e){console.warn('eval freeze',e);}const L=get(EVAL_LOCK_KEY,{})||{};if(L.date!==today())Object.assign(L,{date:today(),by:{}});L.by=L.by||{};L.by[sp]=Date.now();set(EVAL_LOCK_KEY,L);
   /* the Banker commits his desk the moment any master evaluation runs */
   setTimeout(()=>{try{bkDayState()}catch(e){}},300);}
@@ -10391,13 +10481,14 @@ function evalRanToday(){const d=today();const E=roGet(LS_EVAL,{},10e3)||{};if(E.
 function evalRunAt(sp){const d=today();try{
   if(sp==='mlb'){const E=get(LS_EVAL,null);return E&&E.date===d?E.ts:null;}
   const L=get(EVAL_LOCK_KEY,{})||{};if(L.date===d&&L.by&&L.by[sp])return L.by[sp];
-  const k=sp==='nhl'?'d4.nhleval':'d4.fbeval.'+sp;const R=get(k,null);return R&&R.ts&&new Date(R.ts).toDateString()===new Date().toDateString()?R.ts:null;}catch(e){return null;}}
+  const k=sp==='nhl'?'d4.nhleval':(sp==='nba'||sp==='ncaab')?'d4.'+sp+'eval':'d4.fbeval.'+sp;const R=get(k,null);return R&&R.ts&&new Date(R.ts).toDateString()===new Date().toDateString()?R.ts:null;}catch(e){return null;}}
 function evalSportStrip(cur){const t=x=>new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
   return`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px">${EVAL_SPORTS.map(([sp,l])=>{const at=evalRunAt(sp),on=sp===cur;
     const url=typeof pageUrl==='function'?pageUrl(sp):null;const click=on?'':url?`onclick="location.href='${url}#eval'"`:'';
-    return`<button class="msg-chip${on?' on':''}" ${click} style="${!on&&!url?'opacity:.45':''}">${l} <span class="mono" style="font-size:9px;color:${at?'var(--win)':'var(--mute)'}">${at?'✓ '+t(at):sp==='nba'?'soon':'not run'}</span></button>`;}).join('')}</div>`;}
+    return`<button class="msg-chip${on?' on':''}" ${click} style="${!on&&!url?'opacity:.45':''}">${l} <span class="mono" style="font-size:9px;color:${at?'var(--win)':'var(--mute)'}">${at?'✓ '+t(at):'not run'}</span></button>`;}).join('')}</div>`;}
 function masterEvalFor(sp){sp=sp||ACTIVE_SPORT||'mlb';
-  const fn=sp==='nfl'?renderNFLMasterEval:sp==='ncaaf'?renderNCAAFMasterEval:sp==='nhl'&&typeof renderNHLMasterEval==='function'?renderNHLMasterEval:sp==='mlb'?renderMasterEval:null;
+  const fn=sp==='nfl'?renderNFLMasterEval:sp==='ncaaf'?renderNCAAFMasterEval:sp==='nhl'&&typeof renderNHLMasterEval==='function'?renderNHLMasterEval:sp==='mlb'?renderMasterEval
+    :(sp==='nba'||sp==='ncaab')&&typeof renderBasketballEval==='function'?()=>renderBasketballEval(sp):null;
   let pw='';try{pw=pwrEvalHtml(sp);}catch(e){}
   return evalSportStrip(sp)+pw+(fn?fn():`<div class="tkt"><h3>${sp.toUpperCase()} master evaluation</h3><div class="sub">Not built for this sport yet — the other sports' evals are one tap away above.</div></div>`);}
 /* open straight to the eval when a page is reached through the strip (…#eval) */
@@ -12006,6 +12097,10 @@ function parseSlateText(text){
   if(sport==='nba'){
     if(typeof parseNBASlateText!=='function')return{picks:[],trends:[],consensus:[],sport:'nba',unavailable:true};
     const r=parseNBASlateText(text);return{picks:r.picks,trends:[],consensus:[],sport:'nba'};
+  }
+  if(sport==='ncaab'){
+    if(typeof parseNCAABSlateText!=='function')return{picks:[],trends:[],consensus:[],sport:'ncaab',unavailable:true};
+    const r=parseNCAABSlateText(text);return{picks:r.picks,trends:[],consensus:[],sport:'ncaab'};
   }
   if(sport==='nhl'){
     if(typeof parseNHLSlateText!=='function')
@@ -16019,7 +16114,7 @@ function buildBestCard(){
    character/Sim calls (gradeVoices → calibration + blend weights),
    outside picks/preds/consensus (gradeIntel), the Best card (best5 ledger),
    and prop probabilities (prop ledger, graded from real box scores).       */
-const LEARN_SPS=['mlb','nfl','ncaaf','nhl','nba'],LEARN_KEY='d4.learnlog';
+const LEARN_SPS=['mlb','nfl','ncaaf','nhl','nba','ncaab'],LEARN_KEY='d4.learnlog';
 let LEARN_T=0,LEARN_BUSY=false;
 function brainLearnAll(force){
   if(LEARN_BUSY||(!force&&Date.now()-LEARN_T<30e3))return null;LEARN_BUSY=true;const res={ts:Date.now(),by:{}};
@@ -16068,7 +16163,7 @@ function learnHealth(){const out={};const y=dayShift(today(),-1);
   const P=get(PROPCAL_KEY,[])||[];out.props={logged:P.length,graded:P.filter(x=>x.hit!=null).length};
   const B=get('d4.best5log',{})||{};const bp=Object.values(B).flatMap(e=>e.picks||[]);out.best={picks:bp.length,graded:bp.filter(x=>x.hit!=null).length,won:bp.filter(x=>x.hit).length};
   out.last=(get(LEARN_KEY,[])||[])[0]||null;return out;}
-function learnHealthHtml(){const H=learnHealth();const lab={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
+function learnHealthHtml(){const H=learnHealth();const lab={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA',ncaab:'🏀 CBB'};
   const rows=LEARN_SPS.map(sp=>{const x=H[sp];return`<tr><td>${lab[sp]}</td><td>${x.graded}/${x.calls}</td><td>${x.games}</td><td>${x.teams}</td><td style="color:${x.stuck?'var(--rust)':'var(--win)'}">${x.stuck?x.stuck+' ⚠':'✓'}</td></tr>`;}).join('');
   const L=H.last;const errs=L?Object.entries(L.by||{}).filter(([k,v])=>typeof v==='string').map(([k,v])=>k+': '+v):[];
   return`<div class="tkt" style="margin-bottom:8px"><h3>🧠 Learning health</h3>
@@ -16085,7 +16180,8 @@ if(typeof window!=='undefined'&&!/[?&]bg=1/.test(location.search||''))window.add
    2) "likely outcomes": for players on today's slate, the highest standard
       threshold each clears ≥65% of the time — for every sport, no lines needed. */
 const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4]},nfl:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},
-  ncaaf:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},mlb:{h:[1,2],tb:[2,3],hr:[1],k:[5,6,7]},nhl:{s:[2,3,4],pts:[1],g:[1]}};
+  ncaaf:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},mlb:{h:[1,2],tb:[2,3],hr:[1],k:[5,6,7]},nhl:{s:[2,3,4],pts:[1],g:[1]},
+  ncaab:{pts:[10,15,20,25],reb:[5,7,10],ast:[3,5,7],fg3:[1,2,3]}};
 function teamsToday(sp){const s=new Set();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(!a||a==='pre'||a==='preview'){s.add(g.away.abbr);s.add(g.home.abbr);}});}catch(e){}
   try{const T=get(TC_KEY,{})||{};if(T.d===today())(((T.by||{})[sp]||{}).picks||[]).forEach(x=>String(x.game).split('@').forEach(t=>s.add(t)));}catch(e){}return s;}
 function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const teams=teamsToday(sp);if(!teams.size)return[];const out=[];
@@ -16095,7 +16191,7 @@ function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const tea
       if(best)out.push(best);});});
   return out.sort((a,b)=>b.p-a.p).slice(0,limit||12);}
 function likelyHtml(){const lab={pts:'pts',reb:'reb',ast:'ast',fg3:'threes',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'receptions',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'strikeouts',s:'SOG',g:'goal'};
-  const secs=['nfl','ncaaf','nba','nhl','mlb'].map(sp=>{const R=propLikely(sp,10);if(!R.length)return'';
+  const secs=['nfl','ncaaf','nba','ncaab','nhl','mlb'].map(sp=>{const R=propLikely(sp,10);if(!R.length)return'';
     return`<details class="tkt" style="margin:6px 0"><summary><b>${SP_LAB[sp]}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${R.length} likely</span></summary>${R.map(x=>
       `<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.player)}</b> <span style="color:var(--mute)">${txtEsc(x.team)}</span> · <b>${x.thr}+ ${lab[x.k]||x.k}</b> · <span style="color:var(--win)">${Math.round(x.p*100)}%</span> · avg ${x.mu.toFixed(x.mu<10?2:0)} (${x.n}G)</div>`).join('')}</details>`;}).join('');
   return secs?`<div class="mktlab">🔮 Likely outcomes today <span class="sub" style="font-size:9px">— highest standard line each player clears ≥65%, from his game logs</span></div>${secs}`:'';}
@@ -16152,7 +16248,7 @@ function best3Props(){let props=[];
     for(const c of C){if(props.length>=3)break;if(props.some(y=>y.player===c.player))continue;
       props.push({sp:c.sp,player:c.player,team:c.team,stat:CPROP_LAB[c.k]||c.k,keys:[c.k],thr:c.thr-0.5,side:'over',price:null,p:c.cal,ev:null,mu:c.mu,n:null,likely:true,voice:c.voice});}}catch(e){}}
   if(props.length<3){try{const lab={pts:'PTS',reb:'REB',ast:'AST',fg3:'3PM',py:'PASS YDS',ry:'RUSH YDS',wy:'REC YDS',rec:'REC',td:'ATD',h:'H',tb:'TB',hr:'HR',k:'K',s:'SOG',g:'G'};
-    const L=['nfl','ncaaf','nba','nhl','mlb'].flatMap(sp=>propLikely(sp,8)).sort((a,b)=>b.p-a.p);
+    const L=['nfl','ncaaf','nba','ncaab','nhl','mlb'].flatMap(sp=>propLikely(sp,8)).sort((a,b)=>b.p-a.p);
     for(const x of L){if(props.length>=3)break;if(props.some(y=>y.player===x.player))continue;
       props.push({sp:x.sp,player:x.player,team:x.team,stat:lab[x.k]||x.k,keys:[x.k],thr:x.thr-0.5,side:'over',price:null,p:x.p,ev:null,mu:x.mu,n:x.n,likely:true});}}catch(e){}}
   return props;}
@@ -16204,7 +16300,7 @@ function best3Record(){const log=get('d4.best5log',{})||{};let w=0,l=0,pu=0,u=0,
     M.forEach(x=>{if(x.push)pu++;else if(x.hit===true){w++;u+=_vProfit(x.price);}else if(x.hit===false){l++;u-=1;}});});
   return{w,l,pu,u,first};}
 const BEST_TIER_LAB=x=>x.unan?['★ UNANIMOUS','#ff6fae']:(TC_COL[x.color]||['var(--mute)',''])[1]?[(TC_COL[x.color])[1],(TC_COL[x.color])[0]]:['',''];
-function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
+function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀'};
   const view=opts.sp||'all';const list=view==='all'?(S.top3||[]):((S.bySport||{})[view]||[]);
   const R=best3Record();const recTxt=R.w+R.l?`${R.w}-${R.l}${R.pu?'-'+R.pu:''} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u since ${fmtDate(new Date(R.first+'T12:00:00'))}`:'Record starts with the first graded card';
   const t=x=>{const d=Date.parse(x.start||'');return isFinite(d)?new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';};
@@ -16229,7 +16325,7 @@ function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈'
       <div class="cta">Follow <span>${txtEsc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>`;}
 function best5Lock(){const S=best5State();if(!(S.picks||[]).length){alert('Nothing to lock yet — open each sport board today first.');return;}
   S.locked=true;S.lockedAt=Date.now();S.why='locked by you';set(BEST5_KEY,S);renderBest();}
-function bestRowsHtml(title,arr,res,emptyMsg){const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
+function bestRowsHtml(title,arr,res,emptyMsg){const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀'};
   if(!arr||!arr.length)return`<div class="rc-list"><h5>${title}</h5><div class="rc-empty-slot">${emptyMsg||'Not enough data yet'}</div></div>`;
   return`<div class="rc-list"><h5>${title}</h5>${arr.map((x,i)=>{const r=res?res(x,i):'';
     return`<div class="rc-row"><div><div class="g">${em[x.sp]||''} ${esc(x.pick||(x.player+' '+(x.side==='under'?'u':'o')+x.thr+' '+x.stat))}${r}</div>
@@ -16726,6 +16822,10 @@ async function boot(){
   }else if(pageSport==='nba'){
     ACTIVE_SPORT='nba';
     (function go(n){if(typeof nbaBoot==='function'){nbaBoot().catch(e=>console.warn('nba boot',e));return;}
+      if(n<100)setTimeout(()=>go(n+1),50);})(0);
+  }else if(pageSport==='ncaab'){
+    ACTIVE_SPORT='ncaab';
+    (function go(n){if(typeof ncaabBoot==='function'){ncaabBoot().catch(e=>console.warn('ncaab boot',e));return;}
       if(n<100)setTimeout(()=>go(n+1),50);})(0);
   }else if(pageSport==='nhl'){
     ACTIVE_SPORT='nhl';
@@ -17272,6 +17372,9 @@ function syncFinalsToShared(){
   if(typeof NCAAF_GAMES!=='undefined')sweep(NCAAF_GAMES,'ncaaf');
   if(typeof NHL_GAMES!=='undefined')sweep(NHL_GAMES,'nhl');
   if(typeof NBA_GAMES!=='undefined')sweep(NBA_GAMES,'nba');
+  /* college basketball: ~150 finals a night — only the games that carried a line, and only three weeks of them */
+  if(typeof NCAAB_GAMES!=='undefined'){sweep(NCAAB_GAMES.filter(g=>ncaabWorks(g)),'ncaab');
+    const old=dayShift(today(),-21);Object.keys(all).forEach(k=>{if(k.startsWith('ncaab:')&&all[k]&&all[k].d&&all[k].d<old){delete all[k];changed=true;}});}
   if(changed)set(LS.allfinals,all);
   return all;
 }
@@ -17971,6 +18074,8 @@ function todayCandidates(sp){
   const games=sportGames(sp);const S=sportSims(sp);const out=[];
   games.forEach(g=>{
     const pre=sp==='mlb'?(!g.abstract||g.abstract==='Preview'):((g.abstract||'pre')==='pre');if(!pre)return;
+    if(sp==='ncaab'&&!ncaabWorks(g))return;   /* ~150 games a night: only the ones the characters work */
+    if(g.pre||g.preseason)return;   /* preseason is learning only — never a pick on Today's card */
     let s=S[g.id];if(!s&&sp==='nhl'&&typeof nhlSimFor==='function'){try{s=nhlSimFor(g)}catch(e){}}if(!s||s.aw==null)return;
     const gl=g.away.abbr+'@'+g.home.abbr,A=g.away.abbr,H=g.home.abbr,Ln=voicesLines(sp,g);
     let calls=[];try{calls=characterCalls(sp,g,s)}catch(e){}
@@ -18076,7 +18181,7 @@ function onTicketMatch(sp,game,m,sd){
   return L.some(t=>(t.legs||[]).some(l=>{if((l.sport||'mlb')!==sp||l.game!==game)return false;
     const [a,h]=game.split('@');const k=sqKey(sp,{away:{abbr:a},home:{abbr:h}},l.pick);return k&&k.market===m&&k.side===sd;}));
 }
-const SP_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
+const SP_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA',ncaab:'🏀 CBB'};
 /* ── Today filters + live state ─────────────────────────────────────────── */
 const TF_KEY='d4.todayfilter';
 /* v1.93 · PLAYABLE = passes every strategy rule: whole crowd behind it (or SUPREME), lane not
@@ -18220,7 +18325,7 @@ function charDayRecord(d,sp){const V=roGet(VOICES_KEY,[],5000)||[];const R={};
   try{(get(CPROP_KEY,[])||[]).forEach(x=>{if(String(x.d).slice(0,10)!==d||!CHARS[x.voice]||(sp&&sp!=='all'&&x.sp!==sp))return;const o=row(x.voice),b=o.by.prop;
     if(x.hit==null){o.pend++;b.pend++;return;}if(x.hit){o.w++;b.w++;}else{o.l++;b.l++;}});}catch(e){}
   return Object.values(R).sort((a,b)=>b.u-a.u||(b.w-b.l)-(a.w-a.l));}
-const CDAY_SPORTS=['nfl','ncaaf','nhl','mlb','nba'];
+const CDAY_SPORTS=['nfl','ncaaf','nhl','mlb','nba','ncaab'];
 function charDayTable(L){const C=v=>CHARS[v]||{};const rec=b=>b.w+b.l+b.p?`${b.w}-${b.l}${b.p?'-'+b.p:''}`:(b.pend?'⏳':'—');
   const col=b=>b.w+b.l?(b.w>b.l?'var(--win)':b.w<b.l?'var(--rust)':'var(--chalk)'):'var(--mute)';
   const tot={};CDAY_COLS.forEach(([k])=>{tot[k]={w:0,l:0,p:0,pend:0};L.forEach(o=>['w','l','p','pend'].forEach(f=>tot[k][f]+=o.by[k][f]));});
@@ -18631,7 +18736,8 @@ function preIntakeSnap(){try{const d=today();try{const sp=window.__PAGE_SPORT__|
   if(n){Object.keys(P).sort().slice(0,-10).forEach(k=>delete P[k]);set(PREINT_KEY,P);}return n;}catch(e){return 0;}}
 function evalResim(sp){const G=sportGames(sp)||[],S=sportSims(sp);if(!S)return 0;let n=0;
   const sim=sp==='nfl'&&typeof simNFLGame==='function'?simNFLGame:sp==='ncaaf'&&typeof simNCAAFGame==='function'?simNCAAFGame
-    :sp==='nhl'&&typeof simNHLGame==='function'?(g=>{const s=simNHLGame(g);try{s._sig=NHL_RATINGS?NHL_RATINGS.ts:0;}catch(e){}return s;}):null;
+    :sp==='nhl'&&typeof simNHLGame==='function'?(g=>{const s=simNHLGame(g);try{s._sig=NHL_RATINGS?NHL_RATINGS.ts:0;}catch(e){}return s;})
+    :(sp==='nba'||sp==='ncaab')&&typeof bbResim==='function'?(g=>bbResim(sp,g)):null;
   if(!sim)return 0;G.forEach(g=>{if((g.abstract||'pre')!=='pre')return;try{S[g.id]=sim(g);n++;}catch(e){}});
   Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);return n;}
 function evalPrep(sp){const t0=Date.now(),steps=[];const st=(k,f)=>{try{const v=f();steps.push({k,ok:1,n:apNum(v)});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,100)});}};
@@ -18701,7 +18807,7 @@ function facMore(sp,g,side,m,team,opp,line,price,f){const day=gameDayOf(g)||toda
   if(team){const T=facTeamLog(sp,team,day),O=facTeamLog(sp,opp,day);const rest=L=>L.length?dDiff(day,L[L.length-1].d):null;const rt=rest(T),ro=rest(O);
     if(sp==='nfl'||sp==='ncaaf'){if(rt!=null&&rt<=5)f.push('shortweek');if(rt!=null&&rt>=13)f.push('offbye');if(ro!=null&&ro<=5)f.push('oppshort');if(ro!=null&&ro>=13)f.push('oppoffbye');
       if(rt!=null&&ro!=null&&rt-ro>=3)f.push('restplus');}
-    if(sp==='nhl'||sp==='nba'){const in3=L=>L.filter(x=>dDiff(day,x.d)>=1&&dDiff(day,x.d)<=3).length;if(in3(T)>=2)f.push('3in4');if(in3(O)>=2)f.push('opp3in4');}
+    if(sp==='nhl'||sp==='nba'||sp==='ncaab'){const in3=L=>L.filter(x=>dDiff(day,x.d)>=1&&dDiff(day,x.d)<=3).length;if(in3(T)>=2)f.push('3in4');if(in3(O)>=2)f.push('opp3in4');}
     if(side==='away'&&T.length>=2&&T.slice(-2).every(x=>!x.home))f.push('road3');
     if(T.length>=5){const w=T.slice(-5).filter(x=>x.me>x.op).length;if(w>=4)f.push('hot5');if(w<=1)f.push('cold5');}
     if(sp==='nfl'&&NFL_DIV[A]&&NFL_DIV[A]===NFL_DIV[H])f.push('divgame');
@@ -18746,7 +18852,7 @@ function scL5Txt(sp,R){const X=scL5(R);if(!X)return'';const n=X.n,s=X.s,pg=k=>((
 function scKeyPlayers(sp,team,k){const D=scoutDb(sp);const R=Object.entries(D.p).filter(([id,P])=>P.tm===team&&(P.l5||[]).length);const by=role=>R.filter(([id,P])=>scRole(P)===role);
   const top=(role,key)=>by(role).sort((a,b)=>(b[1].s[key]||0)-(a[1].s[key]||0))[0];
   const pick=sp==='nhl'?[top('G','sa'),...by('SK').sort((a,b)=>((b[1].s.g||0)+(b[1].s.a||0))/b[1].n-((a[1].s.g||0)+(a[1].s.a||0))/a[1].n).slice(0,2)]
-    :sp==='nba'?by('P').sort((a,b)=>(b[1].s.pts||0)/b[1].n-(a[1].s.pts||0)/a[1].n).slice(0,3):[top('QB','att'),top('RB','ryd'),top('WR','wyd'),top('DEF','dsk')];
+    :(sp==='nba'||sp==='ncaab')?by('P').sort((a,b)=>(b[1].s.pts||0)/b[1].n-(a[1].s.pts||0)/a[1].n).slice(0,3):[top('QB','att'),top('RB','ryd'),top('WR','wyd'),top('DEF','dsk')];
   return pick.filter(Boolean).slice(0,k||4).map(([id,P])=>({id,P}));}
 function scStyle(sp,team){const B=scoutBoard(sp),D=scoutDb(sp);const T=D.t[team];if(!T||T.n<2)return'';
   if(sp==='nfl'||sp==='ncaaf'){const pr=x=>(x.f.att||0)/Math.max(1,(x.f.att||0)+(x.f.car||0));const all=Object.values(D.t).filter(x=>x.n>=2).map(pr).sort((a,b)=>a-b);const v=pr(T);const pct=all.filter(x=>x<v).length/Math.max(1,all.length);
@@ -18772,7 +18878,7 @@ function pickWhyPlayers(x,team,opp,A,H){const sp=x.sp,B=[],S=[];const d=String(x
   /* how they play */
   try{const st=[A,H].map(t=>scStyle(sp,t)).filter(Boolean);if(st.length)B.push(`Style: ${st.join('; ')}.`);}catch(e){}
   /* tonight's player projections */
-  try{const K={nfl:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],ncaaf:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],nhl:[['pts','points'],['s','shots']],nba:[['pts','pts']]}[sp]||[];
+  try{const K={nfl:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],ncaaf:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],nhl:[['pts','points'],['s','shots']],nba:[['pts','pts']],ncaab:[['pts','pts']]}[sp]||[];
     const proj=[];[team||A,opp||H].forEach(tm=>{K.forEach(([k,lab])=>{const P=Object.values(pstDb(sp).p).filter(p=>p.team===tm&&p.s[k]&&p.s[k].gp>=2).sort((a,b)=>b.s[k].sum/b.s[k].gp-a.s[k].sum/a.s[k].gp)[0];
       if(!P)return;const J=pstProj(sp,P.name,k);if(!J||!J.mu)return;let extra='';if(sp==='nhl'&&k==='pts'){const r=pstProb(sp,P.name,'g',1,'over');if(r)extra=`, ${Math.round(r.p*100)}% to score`;}
       if(!proj.some(q=>q.n===P.name))proj.push({n:P.name,t:`${P.name} ~${J.mu.toFixed(J.mu<10?1:0)} ${lab}${extra}`});});});
@@ -18861,7 +18967,7 @@ const CPROP_KEY='d4.charprops',CPROP_VOICES=['Sim','Most common','Trends','Coach
 /* v2.02 · the Coach reads the MATCHUP: tonight's opponent's defense (team power ratings,
    schedule-adjusted) and home/road shift the player's projection, ±15% at most. Pitcher
    lines read the opposing OFFENSE instead. */
-const CPROP_BASE={nfl:22,ncaaf:28,nhl:3,mlb:4.5,nba:112};
+const CPROP_BASE={nfl:22,ncaaf:28,nhl:3,mlb:4.5,nba:112,ncaab:71};
 function cpropOpp(sp,team){try{const g=(sportGames(sp)||[]).find(z=>z.away.abbr===team||z.home.abbr===team);if(!g)return null;const home=g.home.abbr===team;return{opp:home?g.away.abbr:g.home.abbr,home,g};}catch(e){return null;}}
 function cpropMatch(sp,team,k){const o=cpropOpp(sp,team);if(!o)return{m:1,why:''};let R=null;try{R=pwrRank(sp);}catch(e){}const x=R&&R.by[o.opp];const base=CPROP_BASE[sp]||20;let m=1,why='';
   if(x){const pitch=sp==='mlb'&&['k','ha','er'].includes(k);
@@ -18885,7 +18991,7 @@ function cpropCalib(){const L=get(CPROP_KEY,[])||[];const C={};
     return{lo,hi,n:g.length,h,rate:g.length?h/g.length:null,avgP:g.length?g.reduce((a,x)=>a+x.p,0)/g.length:(lo+Math.min(hi,1))/2};});});return C;}
 function cpropCal(C,v,p){const b=(C[v]||[]).find(x=>p>=x.lo&&p<x.hi);if(!b||!b.n)return p;return(b.h+p*12)/(b.n+12);}
 function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C=cpropCalib();const REC=cpropRecIdx();
-  ['nfl','ncaaf','nba','nhl','mlb'].forEach(sp=>{const L=LIKELY_LADDER[sp];if(!L)return;const teams=teamsToday(sp);if(!teams.size)return;
+  ['nfl','ncaaf','nba','ncaab','nhl','mlb'].forEach(sp=>{const L=LIKELY_LADDER[sp];if(!L)return;const teams=teamsToday(sp);if(!teams.size)return;
     const last=get('d4.pstlast.'+sp,{})||{};
     Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<4)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
       Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<4)return;
@@ -18982,7 +19088,7 @@ function renderToday(noSnap){
   const el=document.getElementById('todayBody');if(!el)return;
   if(!noSnap)todaySnapshot();
   const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
-  const sports=['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>by[sp]);
+  const sports=['nfl','ncaaf','mlb','nhl','nba','ncaab'].filter(sp=>by[sp]);
   const legend=`<div class="sub mono" style="font-size:9.5px;margin-bottom:6px">${Object.values(TC_COL).map(([c,l])=>`<span style="color:${c};margin-right:8px">■ ${l}</span>`).join('')}· conflicts and red are left off</div>`;
   if(!sports.length){el.innerHTML=legend+'<div class="empty">Open a sport\'s Games board once today and its picks land here.</div>';return;}
   try{todayLiveLoop();if(Date.now()-MG_TS>40e3&&!MG_BUSY)mgRefresh(false).then(()=>{const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);}).catch(()=>{});}catch(e){}
@@ -19055,7 +19161,7 @@ function renderToday(noSnap){
 /* ── 3. My Games: every game you have money on, all sports ────────────────── */
 const MG_URL={mlb:'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard',nfl:'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
   ncaaf:'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard',nhl:'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard',
-  nba:'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard'};
+  nba:'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard',ncaab:'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard'};
 const MG_ALIAS={mlb:{CHW:'CWS',ARI:'AZ',OAK:'ATH',WAS:'WSH'},nfl:{WAS:'WSH',JAC:'JAX',LA:'LAR',LVR:'LV',OAK:'LV',ARZ:'ARI'},ncaaf:{},
   nhl:{LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV:'VGK',MON:'MTL',UTA:'UTAH',WAS:'WSH'},nba:{GSW:'GS',NYK:'NY',NOP:'NO',SAS:'SA',UTA:'UTAH',WAS:'WSH',BRK:'BKN',PHO:'PHX',CHO:'CHA'}};
 const mgAb=(sp,x)=>{x=String(x||'').toUpperCase();return(MG_ALIAS[sp]||{})[x]||x;};
@@ -19128,7 +19234,7 @@ async function mgRefresh(force,deep){
       if(x.l.gdApprox||!x.l.gameDate)for(let i=1;i<=3;i++)S.add(dayShift(d,i));});
     const jobs=Object.entries(need).map(async([sp,ds])=>{
       const arr=[...ds].filter(d=>d<=dayShift(today(),1)).sort().slice(deep?-150:-21);
-      try{const urls=arr.map(d=>MG_URL[sp]+'?dates='+fbpYmd(d)+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=400'));
+      try{const urls=arr.map(d=>MG_URL[sp]+'?dates='+fbpYmd(d)+(sp==='ncaaf'?'&groups=80&limit=900':sp==='ncaab'?'&groups=50&limit=900':'&limit=400'));
         try{const S=sp==='nfl'?(typeof NFL_SEASON!=='undefined'?NFL_SEASON:''):sp==='ncaaf'?(typeof NCAAF_SEASON!=='undefined'?NCAAF_SEASON:''):'';
           const W=+(sp==='nfl'?(typeof NFL_WEEK!=='undefined'?NFL_WEEK:0):sp==='ncaaf'?(typeof NCAAF_WEEK!=='undefined'?NCAAF_WEEK:0):0);
           if(S&&W)[W,W-1].filter(x=>x>0).forEach(x=>urls.push(MG_URL[sp]+`?dates=${S}&seasontype=2&week=${x}`+(sp==='ncaaf'?'&groups=80&limit=900':'')));}catch(e){}
@@ -19324,7 +19430,7 @@ function renderRecordsHub(){
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='eval'){let h='';try{h=masterEvalFor(ACTIVE_SPORT);}catch(e){h='<div class="tkt"><h3>Eval error</h3><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   let D;try{D=hubData()}catch(e){el.innerHTML='';return;}
-  const SPS=['mlb','nfl','ncaaf','nhl','nba'];
+  const SPS=['mlb','nfl','ncaaf','nhl','nba','ncaab'];
   /* colored against break-even for the prices actually taken, not a flat 55% */
   const cell=(o)=>{if(!o||!o.n)return'<td style="color:var(--mute)">—</td>';const p=o.w/o.n,need=o.be?o.be/o.n:0.524;
     const c=o.n>=10?(p>=need+0.03?'var(--win)':p<need-0.02?'var(--rust)':'var(--chalk)'):'var(--mute)';
@@ -19340,7 +19446,7 @@ function renderRecordsHub(){
   const _mkt=typeof REC_FILTER_MKT!=='undefined'?REC_FILTER_MKT:'all';
   const spBtn=(k,l)=>'<button class="'+((_sp===k)?'on':'')+'" onclick="REC_FILTER_SP=\''+k+'\';renderRecordsHub()">'+l+'</button>';
   const mktBtn=(k,l)=>'<button class="'+((_mkt===k)?'on':'')+'" onclick="REC_FILTER_MKT=\''+k+'\';renderRecordsHub()">'+l+'</button>';
-  const filterBar='<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+spBtn('all','All Sports')+spBtn('mlb','⚾ MLB')+spBtn('nfl','🏈 NFL')+spBtn('ncaaf','🏟 CFB')+spBtn('nhl','🏒 NHL')+spBtn('nba','🏀 NBA')+'</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+mktBtn('all','All bets')+mktBtn('ml','Sides')+mktBtn('spread','Spreads')+mktBtn('total','Totals')+'</div>';
+  const filterBar='<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+spBtn('all','All Sports')+spBtn('mlb','⚾ MLB')+spBtn('nfl','🏈 NFL')+spBtn('ncaaf','🏟 CFB')+spBtn('nhl','🏒 NHL')+spBtn('nba','🏀 NBA')+spBtn('ncaab','🏀 CBB')+'</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">'+mktBtn('all','All bets')+mktBtn('ml','Sides')+mktBtn('spread','Spreads')+mktBtn('total','Totals')+'</div>';
   el.innerHTML=recViewBar()+filterBar+`<div class="tkt hi" style="margin-bottom:8px"><h3>Records hub — everyone, every sport</h3>
     <div class="sub">Your tickets: <b>${Y.tickets.w}-${Y.tickets.l}</b>${Y.tickets.units?` · ${Y.tickets.units>=0?'+$':'-$'}${Math.abs(Y.tickets.units).toFixed(2)} on tickets with a real stake`:''}${best?` · hottest voice: <b>${best.v}</b> ${Math.round(best.o.w/best.o.n*100)}% over ${best.o.n}`:''}</div>
     <div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;border-collapse:collapse;text-align:center">
@@ -19789,7 +19895,7 @@ const MS_FILTERS={
   cross:{lab:'World tour',desc:'every ticket spans 2+ sports',f:()=>true,cross:true}
 };
 Object.assign(MS_FILTERS,MS_FILTERS_EXTRA);
-const SPORT_LAB={nfl:'NFL only',ncaaf:'CFB only',mlb:'MLB only',nhl:'NHL only',nba:'NBA only'};
+const SPORT_LAB={nfl:'NFL only',ncaaf:'CFB only',mlb:'MLB only',nhl:'NHL only',nba:'NBA only',ncaab:'CBB only'};
 const R_=(route,k,f,unit)=>[route,k||'',f||''].join('|')+(unit?'|'+unit:'');
 /* The board. [id, category, name, start, goal, days, route, rule, sport, hook] or pots. */
 const MS_LIB=[
@@ -20387,7 +20493,7 @@ const MS_SP_OPTS=[['all','All sports'],['nfl','NFL only'],['ncaaf','CFB only'],[
 function msSportSelect(cur,onchange,id){return`<select ${id?`id="${id}"`:''} ${onchange?`onchange="${onchange}"`:''} style="font-size:11px;padding:4px 6px">${MS_SP_OPTS.map(([v,l])=>`<option value="${v}" ${(cur||'all')===v?'selected':''}>${l}</option>`).join('')}</select>`;}
 /* Which sports Today's card has picks for right now. */
 /* which sports are in season today (regular season + playoffs, by calendar) */
-const SP_SEASON={mlb:['03-15','11-10'],nfl:['09-01','02-15'],ncaaf:['08-20','01-25'],nhl:['10-01','06-30'],nba:['10-18','06-25']};
+const SP_SEASON={mlb:['03-15','11-10'],nfl:['09-01','02-15'],ncaaf:['08-20','01-25'],nhl:['10-01','06-30'],nba:['10-18','06-25'],ncaab:['11-01','04-10']};
 /* ESPN publishes each league's calendar on its scoreboard; read it once a day.
    The hard-coded month ranges above are only the fallback. */
 function spInSeason(sp,d){const day=String(d||today()).slice(0,10);
@@ -20397,8 +20503,8 @@ async function seasonCalLoad(sp){const C=get('d4.seasoncal',{})||{};if(C[sp]&&C[
   try{const j=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+SEASON_PATH[sp]+'/scoreboard?limit=1').then(r=>r.json());const L=(j.leagues||[])[0]||{};
     const s=L.calendarStartDate,e=L.calendarEndDate;if(s&&e){C[sp]={start:tdDay(s),end:tdDay(e),fetched:today()};set('d4.seasoncal',C);}}catch(e){}
   return C[sp]||null;}
-function liveSports(){return['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>spInSeason(sp));}
-function tcSportsLoaded(){const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};return['nfl','ncaaf','mlb','nhl','nba'].filter(sp=>by[sp]&&(by[sp].picks||[]).length);}
+function liveSports(){return['nfl','ncaaf','mlb','nhl','nba','ncaab'].filter(sp=>spInSeason(sp));}
+function tcSportsLoaded(){const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};return['nfl','ncaaf','mlb','nhl','nba','ncaab'].filter(sp=>by[sp]&&(by[sp].picks||[]).length);}
 function msLaneHtml(L,m,pi,li){const B=L.build.best;
   const done=m&&(m.steps||[]).find(s=>s.date===today()&&(s.pot||0)===(pi||0)&&(s.lane==null||s.lane===(li||0)));
   const legs=B?B.legs.map(x=>`<div class="mono" style="font-size:10.5px;padding-left:8px">• ${txtEsc(x.pick)} <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> <span style="color:var(--win)">${x.p!=null?Math.round(x.p*100)+'%':''}</span> <span style="color:var(--mute)">${SP_LAB[x.sp]||''} ${txtEsc(x.game)}</span>${(x.why||[]).length?`<div style="font-size:9.5px;color:#a78bfa;padding-left:10px">${txtEsc(x.why.join(' · '))}</div>`:''}</div>`).join(''):'';
@@ -20606,12 +20712,12 @@ function fairPair(pa,pb){const a=amerOk(pa),b=amerOk(pb);if(a==null||b==null)ret
 
 /* ── 1. Sharp reference lines from Pinnacle via your Odds API key ── */
 const SHARP_KEY='d4.sharpref';
-const ODDS_SPORT={mlb:'baseball_mlb',nfl:'americanfootball_nfl',ncaaf:'americanfootball_ncaaf',nhl:'icehockey_nhl'};
+const ODDS_SPORT={mlb:'baseball_mlb',nfl:'americanfootball_nfl',ncaaf:'americanfootball_ncaaf',nhl:'icehockey_nhl',nba:'basketball_nba',ncaab:'basketball_ncaab'};
 function sharpStore(){return roGet(SHARP_KEY,{},15e3)||{};}
 async function pullSharp(sports){
   const key=typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,'');if(!key)throw new Error('add your Odds API key in Settings first');
   const all=get(SHARP_KEY,{})||{};let n=0;const done=[];
-  for(const sp of sports||['mlb','nfl','ncaaf','nhl','nba']){
+  for(const sp of sports||['mlb','nfl','ncaaf','nhl','nba','ncaab']){if(!ODDS_SPORT[sp])continue;
     let j;try{const r=await fetch(`https://api.the-odds-api.com/v4/sports/${ODDS_SPORT[sp]}/odds/?apiKey=${key}&regions=eu&bookmakers=pinnacle&markets=h2h,spreads,totals&oddsFormat=american`);
       if(r.status===401)throw new Error('Odds API 401 — bad key or out of credits');j=await r.json();}catch(e){if(/401/.test(e.message))throw e;continue;}
     if(!Array.isArray(j))continue;
@@ -20628,7 +20734,7 @@ async function pullSharp(sports){
     done.push(sp);
   }
   Object.keys(all).sort().slice(0,-4).forEach(k=>delete all[k]);
-  set(SHARP_KEY,all);try{Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);}catch(e){}try{['mlb','nfl','ncaaf','nhl','nba'].forEach(sp=>clvCapture(sp));}catch(e){}
+  set(SHARP_KEY,all);try{Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);}catch(e){}try{['mlb','nfl','ncaaf','nhl','nba','ncaab'].forEach(sp=>clvCapture(sp));}catch(e){}
   return{n,sports:done};
 }
 function sharpRows(sp,gl,date){const D=((sharpStore()[date||today()]||{})[sp]);return D?D.rows.filter(x=>x.game===gl):[];}
@@ -20745,8 +20851,8 @@ Object.assign(FAC_LAB,{homedog:'home underdog',roadfav:'road favorite',shortweek
   goaliestar:'picked team\'s main goalie is top 20% in save %',goaliebust:'picked team\'s main goalie is bottom 20%',oppgoaliestar:'opponent\'s main goalie is top 20%',oppgoaliebust:'opponent\'s main goalie is bottom 20%',
   offedge:'both offenses outclass the defenses (Scout)',defedge:'both defenses outclass the offenses (Scout)',
   wind15:'wind 15+ mph',cold32:'freezing (32°F or colder)',dome:'indoors (dome)',h2hedge:'picked team leads the head-to-head series',h2hfade:'picked team trails the head-to-head series'});
-const FAC_HI={nfl:48,ncaaf:58,nba:232,mlb:9.5,nhl:6.5},FAC_LO={nfl:40,ncaaf:45,nba:215,mlb:7.5,nhl:5.5};
-const FAC_PYTH={mlb:1.83,nfl:2.37,ncaaf:2.37,nhl:2.05,nba:13.91};
+const FAC_HI={nfl:48,ncaaf:58,nba:232,ncaab:152,mlb:9.5,nhl:6.5},FAC_LO={nfl:40,ncaaf:45,nba:215,ncaab:132,mlb:7.5,nhl:5.5};
+const FAC_PYTH={mlb:1.83,nfl:2.37,ncaaf:2.37,nhl:2.05,nba:13.91,ncaab:11.5};
 /* one index over the finals store per update (not a full scan per square) */
 let FAC_IDX=null,FAC_IDX_SRC=null;
 function facIndex(){const F=allFinals();if(FAC_IDX&&FAC_IDX_SRC===F)return FAC_IDX;const I={};
@@ -20759,8 +20865,8 @@ function facPlayedOn(sp,team,day){try{const S=facIndex()[sp];return!!(S&&S.day[d
 /* Full-season W/L and points for/against from ESPN standings — once a day per sport.
    Field names differ by sport (NHL "points" are standings points, not goals), so
    each candidate field is accepted only if its per-game value is a sane score. */
-const SEASON_PATH={mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba'};
-const SEASON_RANGE={mlb:[2,8],nfl:[10,40],ncaaf:[8,55],nhl:[1.5,5],nba:[85,135]};
+const SEASON_PATH={mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba',ncaab:'basketball/mens-college-basketball'};
+const SEASON_RANGE={mlb:[2,8],nfl:[10,40],ncaaf:[8,55],nhl:[1.5,5],nba:[85,135],ncaab:[45,100]};
 function seasonParse(sp,j){const teams={};const META={};const R=SEASON_RANGE[sp];
   const walk=n=>{(n.children||[]).forEach(walk);((n.standings||{}).entries||[]).forEach(e=>{const ab=e.team&&e.team.abbreviation;if(!ab)return;
     const st=k=>{const s=(e.stats||[]).find(x=>x.name===k||x.type===k);return s&&isFinite(+s.value)?+s.value:null;};
@@ -20784,7 +20890,7 @@ function factorsFor(sp,g,c){const f=[];const side=c.sd||c.side,m=c.m||c.market,l
   if(team)f.push(side==='home'?'home':'road');
   if((m==='spread')&&line!=null){const a=Math.abs(line);if(sp==='nfl'||sp==='ncaaf'){if(a>=2.5&&a<=3.5)f.push('key3');if(a>=6.5&&a<=7.5)f.push('key7');}if(a>=10)f.push('bigline');}
   if(m==='total'&&line!=null){f.push(side==='over'?'over':'under');if(line>=(FAC_HI[sp]||1e9))f.push('hitot');if(line<=(FAC_LO[sp]||-1))f.push('lotot');}
-  if(team&&(sp==='nba'||sp==='nhl')){const y=dayShift(gameDayOf(g)||today(),-1);const tb=facPlayedOn(sp,team,y),ob=facPlayedOn(sp,opp,y);
+  if(team&&(sp==='nba'||sp==='nhl'||sp==='ncaab')){const y=dayShift(gameDayOf(g)||today(),-1);const tb=facPlayedOn(sp,team,y),ob=facPlayedOn(sp,opp,y);
     if(tb)f.push('b2b');if(ob)f.push('oppb2b');if(ob&&!tb)f.push('restedge');}
   if(team){const P=facPyth(sp,team);if(P){if(P.actual-P.exp>=0.08)f.push('pythlucky');if(P.exp-P.actual>=0.08)f.push('pythunlucky');}}
   try{facMore(sp,g,side,m,team,opp,line,price,f);}catch(e){}   /* v2.28 · researched situations + player matchups */
@@ -20811,8 +20917,8 @@ function factorHtml(sp){const T=factorTable(sp);const rows=Object.entries(T).sor
      results (search 0..1 for the weight with the lowest Brier, shrunk toward
      50/50 until there are enough games). A daily snapshot lets it explain
      what moved and why.                                                     */
-const CAL_HIST='d4.calhist',CAL_SPS=['mlb','nfl','ncaaf','nhl','nba'];
-const CAL_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA'};
+const CAL_HIST='d4.calhist',CAL_SPS=['mlb','nfl','ncaaf','nhl','nba','ncaab'];
+const CAL_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA',ncaab:'🏀 CBB'};
 function calRows(){return roGet(VOICES_KEY,[]).filter(x=>x.voice==='Sim'&&x.graded&&x.hit!=null&&x.simP>0);}
 const calBrier=(R,f)=>R.length?R.reduce((a,x)=>a+Math.pow((x.hit?1:0)-f(x),2),0)/R.length:null;
 function calECE(R){if(!R.length)return null;const B={};R.forEach(x=>{const k=Math.min(9,Math.floor(x.simP*10));(B[k]=B[k]||[]).push(x);});
@@ -21065,9 +21171,9 @@ function bkTicketHtml(title,t,sub,d){if(!t)return'';const r=tixDone(t.legs);
 /* v2.24 · 🏆 the Banker cashed — a share card in UNITS (never dollars), with the honest record under it */
 function bkUnits(t){const live=(t.legs||[]).filter(l=>!l.push);return live.reduce((a,l)=>a*americanToDecimal(l.price),1)-1;}
 function bkRecordSince(){const H={...(get(BKDAYS_KEY,{})||{})};const S=get(BKDAY_KEY,{})||{};if(S.locked)H[S.d]=S;const ds=Object.keys(H).filter(d=>H[d]&&H[d].own).sort();return ds[0]||null;}
-function bkShareText(t,d){const R=bkDayRecord().own;const u=bkUnits(t);const since=bkRecordSince();const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
+function bkShareText(t,d){const R=bkDayRecord().own;const u=bkUnits(t);const since=bkRecordSince();const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀'};
   return`🏦 THE BANKER CASHED ✅\n${decimalToAmerican(u+1)} · ${t.legs.filter(l=>!l.push).length} for ${t.legs.filter(l=>!l.push).length}\n\n${t.legs.map(l=>`${l.push?'↔':'✅'} ${em[l.sp]||''} ${l.pick} (${l.price>0?'+':''}${l.price})`).join('\n')}\n\n+${u.toFixed(2)}u on a 1-unit play\nBanker's parlays: ${R.w}-${R.l} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u${since?' since '+fmtDate(new Date(since+'T12:00:00')):''}\n\nTheDesk — Picks · Analysis · Edge`;}
-function bkShareHtml(t,d){if(!t||tixDone(t.legs)!==true)return'';const R=bkDayRecord().own;const u=bkUnits(t);const since=bkRecordSince();const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
+function bkShareHtml(t,d){if(!t||tixDone(t.legs)!==true)return'';const R=bkDayRecord().own;const u=bkUnits(t);const since=bkRecordSince();const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀'};
   const n=t.legs.filter(l=>!l.push).length;
   const rows=t.legs.map(l=>`<div class="b3-row" style="padding:8px 0"><div class="b3-n" style="font-size:18px">${l.push?'↔':'✅'}</div><div style="flex:1;min-width:0"><div class="b3-pick" style="font-size:16px">${txtEsc(l.pick)} <span class="b3-price">${l.price>0?'+':''}${l.price}</span></div>
       <div class="b3-meta">${em[l.sp]||''} ${(l.sp||'').toUpperCase()} · ${txtEsc(l.game)}</div></div></div>`).join('');
@@ -21137,7 +21243,7 @@ function sgpCardHtml(sp,g,s){try{
   const sd=pickSide('spread','home','away')||pickSide('ml','home','away');
   if(sd){const side=sd.side,team=side==='home'?H:A;const mlP=sgpSideProb(sp,g,s,'ml',side);
     const main=calls.find(c=>c.market==='spread'&&c.voice==='Sim');const base=main&&main.line!=null?(main.side===side?+main.line:-main.line):(fb?0:-1.5);
-    const step=fb?[0,1,2.5,3.5,6.5,7.5,10.5,14]:sp==='nba'?[0,2,4,6,8,10]:[0,1,1.5,2.5,3];
+    const step=fb?[0,1,2.5,3.5,6.5,7.5,10.5,14]:(sp==='nba'||sp==='ncaab')?[0,2,4,6,8,10]:[0,1,1.5,2.5,3];
     const ladder=[...new Set(step.map(k=>+(base+k).toFixed(1)))].map(L=>({L,p:sgpSideProb(sp,g,s,'spread',side,L)})).filter(o=>o.p!=null);
     const alt=sgpPickRung(ladder);
     if(mlP!=null)legs.push({kind:'ML',txt:`${team} ML`,p:mlP,ref:true,by:sgpBacking(V,calls,'ml',side)});
@@ -21145,7 +21251,7 @@ function sgpCardHtml(sp,g,s){try{
   /* total */
   const tt=pickSide('total','over','under');
   if(tt){const side=tt.side;const main=calls.find(c=>c.market==='total'&&c.line!=null);const base=main?+main.line:(s.med||0);
-    const step=fb?[0,3,6,9,12]:sp==='nba'?[0,4,8,12]:[0,1,2];const ladder=step.map(k=>{const L=+(side==='over'?base-k:base+k).toFixed(1);return{L,p:sgpSideProb(sp,g,s,'total',side,L)};}).filter(o=>o.p!=null);
+    const step=fb?[0,3,6,9,12]:(sp==='nba'||sp==='ncaab')?[0,4,8,12]:[0,1,2];const ladder=step.map(k=>{const L=+(side==='over'?base-k:base+k).toFixed(1);return{L,p:sgpSideProb(sp,g,s,'total',side,L)};}).filter(o=>o.p!=null);
     const alt=sgpPickRung(ladder);
     if(alt)legs.push({kind:'Alt total',txt:`${side==='over'?'Over':'Under'} ${alt.L}`,p:alt.p,by:tt.B,ladder:ladder.map(o=>`${side==='over'?'o':'u'}${o.L} ${Math.round(o.p*100)}%`).join(' · ')});}
   /* props: the characters' calibrated 70%+ calls on this game's players, one per player */
@@ -21425,7 +21531,7 @@ async function openGamecast(sp,game,d,id){d=d||today();id=id||gcEventId(sp,game,
   await gcLoad();GC.T=setInterval(()=>{if(!document.hidden)gcLoad();},15000);}
 function closeGamecast(){clearInterval(GC.T);GC.T=null;const ov=document.getElementById('gcSheet');if(ov)ov.remove();if(!document.getElementById('tkSheet'))document.body.style.overflow='';}
 async function gcLoad(){if(!GC.id||!FBP_ESPN[GC.sp])return;try{const r=await fetch(FBP_ESPN[GC.sp]+'/summary?event='+GC.id);const j=await r.json();GC.j=j;GC.ts=Date.now();
-    try{const box=GC.sp==='nhl'?fbpParseHockey(j):GC.sp==='mlb'?fbpParseBaseball(j):GC.sp==='nba'?fbpParseBasketball(j):fbpParseBox(j);FBP_MEM[GC.id]={ts:Date.now(),box};}catch(e){}}catch(e){}
+    try{const box=GC.sp==='nhl'?fbpParseHockey(j):GC.sp==='mlb'?fbpParseBaseball(j):(GC.sp==='nba'||GC.sp==='ncaab')?fbpParseBasketball(j):fbpParseBox(j);FBP_MEM[GC.id]={ts:Date.now(),box};}catch(e){}}catch(e){}
   gcPaint();}
 function gcTab(t){GC.tab=t;gcPaint();}
 function gcPaint(){const inn=document.getElementById('gcIn');if(!inn)return;const y=inn.scrollTop;let h='';try{h=gcHtml(GC.sp,GC.j);}catch(e){h=`<div class="empty">Gamecast error: ${txtEsc(e.message)}</div>`;}inn.innerHTML=h;inn.scrollTop=y;}
@@ -21806,7 +21912,7 @@ function intakeCollapse(){const ta=document.getElementById('intakePaste');if(!ta
   const head=tk.querySelector('.sbar');if(head){head.style.cursor='pointer';const h2=head.querySelector('h2');if(h2)h2.innerHTML='＋ Intake <span class="intake-hint">odds · trends · screenshots · tickets</span>';
     head.onclick=()=>{const c=tk.classList.toggle('intake-closed');try{localStorage.setItem('d4.intakeOpen',c?'0':'1');}catch(e){}};}}
 function skinSetup(){try{intakeCollapse();}catch(e){}try{if(!document.getElementById('skinCss')){const st=document.createElement('style');st.id='skinCss';st.textContent=SKIN_CSS;document.head.appendChild(st);}
-  try{['mlb','nfl','ncaaf','nhl','nba'].forEach(s=>{const b=document.getElementById('sportBtn-'+s);if(b)b.classList.toggle('on',s===(window.__PAGE_SPORT__||ACTIVE_SPORT));});}catch(e){}
+  try{['mlb','nfl','ncaaf','nhl','nba','ncaab'].forEach(s=>{const b=document.getElementById('sportBtn-'+s);if(b)b.classList.toggle('on',s===(window.__PAGE_SPORT__||ACTIVE_SPORT));});}catch(e){}
   const nav=document.querySelector('nav');if(!nav)return;
   const phone=window.matchMedia&&window.matchMedia('(max-width: 760px)').matches;document.body.classList.toggle('bnav',!!phone);
   /* the header's blur makes position:fixed relative to the header, so the bar lives at the end of <body> on phones */
@@ -21970,10 +22076,11 @@ function charSpecialty(voice,sp,m,sd,price,line){const T=(specTable()[voice])||{
    since last week. Its accuracy is checked walk-forward — every week is predicted
    from only the games before it — and shown next to "records alone". */
 const PWR_CFG={nfl:{cap:24,hfa:1.8,lam:3,hl:63,pyth:2.37,unit:'pts',mo:8},ncaaf:{cap:28,hfa:2.5,lam:3,hl:63,pyth:2.37,unit:'pts',mo:7},
-  nhl:{cap:4,hfa:0.15,lam:12,hl:45,pyth:2.0,unit:'goals',mo:9},mlb:{cap:6,hfa:0.15,lam:25,hl:45,pyth:1.83,unit:'runs',mo:2},nba:{cap:25,hfa:2.2,lam:8,hl:45,pyth:14,unit:'pts',mo:9}};
+  nhl:{cap:4,hfa:0.15,lam:12,hl:45,pyth:2.0,unit:'goals',mo:9},mlb:{cap:6,hfa:0.15,lam:25,hl:45,pyth:1.83,unit:'runs',mo:2},nba:{cap:25,hfa:2.2,lam:8,hl:45,pyth:14,unit:'pts',mo:9},
+  ncaab:{cap:25,hfa:3.0,lam:6,hl:40,pyth:11.5,unit:'pts',mo:10}};
 const PWR_KEY='d4.pwrgames';
 function pwrSeasonStart(sp){const t=today();const y=+t.slice(0,4),m=+t.slice(5,7);const C=PWR_CFG[sp];
-  const start={nfl:'-09-01',ncaaf:'-08-20',nhl:'-09-25',mlb:'-03-18',nba:'-10-15'}[sp];   /* v2.15: NHL 2026-27 opened Sep 29 */
+  const start={nfl:'-09-01',ncaaf:'-08-20',nhl:'-09-25',mlb:'-03-18',nba:'-10-15',ncaab:'-11-01'}[sp];   /* v2.15: NHL 2026-27 opened Sep 29 */
   let yr=y;if(sp==='mlb'){if(m<3)yr=y-1;}else if(m<C.mo)yr=y-1;return yr+start;}
 /* v2.04 · one key per league, held in memory first: if a save ever fails (storage
    full on a phone) the rankings still show for the session instead of vanishing.
@@ -22000,10 +22107,10 @@ function pwrParseEvent(sp,ev,B){const st=((ev.season||{}).type);if(st===1||st===
    scoreboard always works — and remember not to try the range again for that league. */
 const PWR_NORANGE={};
 async function pwrWindowEvents(sp,d,e){const base=FBP_ESPN[sp]+'/scoreboard';const d8=x=>x.replace(/-/g,'');
-  if(!PWR_NORANGE[sp]){try{const r=await fetch(base+'?dates='+d8(d)+'-'+d8(e)+(sp==='ncaaf'?'&groups=80&limit=900':'&limit=1000'));
+  if(!PWR_NORANGE[sp]){try{const r=await fetch(base+'?dates='+d8(d)+'-'+d8(e)+espnQ(sp,sp==='ncaab'?1500:null));
       if(r.ok){const j=await r.json();if(j&&Array.isArray(j.events))return{events:j.events,calls:1};}
       PWR_NORANGE[sp]=r.status||1;}catch(err){PWR_NORANGE[sp]=1;}}
-  const out=[];let calls=0;for(let x=d;x<=e;x=dayShift(x,1)){calls++;const r=await fetch(base+'?dates='+d8(x)+(sp==='ncaaf'?'&groups=80&limit=300':''));
+  const out=[];let calls=0;for(let x=d;x<=e;x=dayShift(x,1)){calls++;const r=await fetch(base+'?dates='+d8(x)+(sp==='ncaaf'?'&groups=80&limit=300':sp==='ncaab'?'&groups=50&limit=400':''));
     if(!r.ok)throw new Error('ESPN answered '+r.status+' for '+x);const j=await r.json();(j.events||[]).forEach(ev=>out.push(ev));await new Promise(z=>setTimeout(z,120));}
   return{events:out,calls};}
 /* baseball's season is long; ratings weigh recent games anyway — the last 9 weeks are plenty */
@@ -22082,7 +22189,7 @@ function pwrIndex(sp,teams){const by={};teams.forEach(x=>{by[x.abbr]=x;});const 
    Everything is in points (goals, runs) vs an average team on a neutral field, blended
    with weights that shift from priors/market early to results as the season matures.
    Built once a day. */
-const PIDX_CFG={nfl:{reg:4,slope:0.033,full:8},ncaaf:{reg:3,slope:0.028,full:6},nhl:{reg:15,slope:0.15,full:30},mlb:{reg:30,slope:0.10,full:60},nba:{reg:10,slope:0.033,full:25}};
+const PIDX_CFG={nfl:{reg:4,slope:0.033,full:8},ncaaf:{reg:3,slope:0.028,full:6},nhl:{reg:15,slope:0.15,full:30},mlb:{reg:30,slope:0.10,full:60},nba:{reg:10,slope:0.033,full:25},ncaab:{reg:6,slope:0.03,full:18}};
 const PIDX_W={res:0.40,mpg:0.12,rec:0.10,mkt:0.28,form:0.06,prior:0.30};
 /* CFB week N (archive key w2026-N) → that week's Saturday; week 1 Saturday ≈ first Saturday after Labor Day weekend begins */
 function pwrCfbWeekDate(k){const m=String(k).match(/(\d{4}).*?(\d{1,2})$/);if(!m)return null;const y=+m[1];let d=new Date(Date.UTC(y,8,1));while(d.getUTCDay()!==1)d=new Date(+d+864e5);
@@ -22115,12 +22222,12 @@ function pwrStandings(sp){try{const S=get('d4.seasonstats',{})||{};const o=S[sp]
 /* market: what the line says about each team — this week's pregame line, or its most
    recent CLOSING line the app saved (never a live in-game number). Read against the
    opponent's results rating: "favored by 7 over a +2 team" = a +9 team on that day. */
-const PIDX_MKT_CAP={nfl:14,ncaaf:30,nhl:1.2,mlb:1.5,nba:15};
+const PIDX_MKT_CAP={nfl:14,ncaaf:30,nhl:1.2,mlb:1.5,nba:15,ncaab:20};
 function pwrMarket(sp,base,h){const out={},seen={};const C=PIDX_CFG[sp];const cap=PIDX_MKT_CAP[sp]||14;
   const put=(A,H,M,neu,d)=>{if(M==null||!isFinite(M))return;const hm=neu?0:h;const cl=v=>Math.max(-cap,Math.min(cap,v));
     if(base[A]!=null&&!seen[H]){out[H]=cl(M-hm+base[A]);seen[H]=d||1;}if(base[H]!=null&&!seen[A]){out[A]=cl(-(M-hm)+base[H]);seen[A]=d||1;}};
   const fromML=(ph,pa)=>{if(!(ph>0&&pa>0))return null;const p=ph/(ph+pa);return Math.max(-3/C.slope*0.3,Math.min(3/C.slope*0.3,(p-0.5)/C.slope));};
-  const spreadSport=sp==='nfl'||sp==='ncaaf'||sp==='nba';
+  const spreadSport=sp==='nfl'||sp==='ncaaf'||sp==='nba'||sp==='ncaab';
   /* 1 · this week's games that haven't started */
   try{(sportGames(sp)||[]).forEach(g=>{const st=String(g.abstract||'pre').toLowerCase();if(!(st==='pre'||st==='preview'||st==='scheduled'))return;let Ln=null;try{Ln=voicesLines(sp,g);}catch(e){}if(!Ln)return;
       let M=null;if(spreadSport&&Ln.spH&&Ln.spH.line!=null&&isFinite(+Ln.spH.line))M=-(+Ln.spH.line);
@@ -22153,7 +22260,7 @@ function pwrIndexBuild(sp){const C=PIDX_CFG[sp];const G=pwrAllGames(sp);const ST
     const pf=s?s.pf/gp:L.reduce((a,x)=>a+x.pf,0)/L.length,pa=s?s.pa/gp:L.reduce((a,x)=>a+x.pa,0)/L.length;
     const shr=gp/(gp+C.reg);const comp={};
     const cov=s?Math.min(1,L.length/gp):1;if(res[t]!=null&&L.length>=2)comp.res=res[t];
-    {const cp={nfl:17,ncaaf:21,nhl:2.5,mlb:3,nba:15}[sp]||20;const dpg=pf-pa;comp.mpg=cp*Math.tanh(dpg/cp)*shr;}
+    {const cp={nfl:17,ncaaf:21,nhl:2.5,mlb:3,nba:15,ncaab:15}[sp]||20;const dpg=pf-pa;comp.mpg=cp*Math.tanh(dpg/cp)*shr;}
     comp.rec=Math.max(-12/(C.slope*30),Math.min(12/(C.slope*30),((w+ti/2)/gp-0.5)/C.slope))*shr;
     if(mkt[t]!=null)comp.mkt=mkt[t];
     const last=L.slice().sort((a,b)=>String(a.d).localeCompare(String(b.d))).slice(-3);if(last.length>=2)comp.form=0.5*last.reduce((a,x)=>a+(x.pf-x.pa)+(res[x.o]||0)-(x.neu?0:(x.home?h:-h)),0)/last.length;
@@ -22227,7 +22334,7 @@ function pwrMount(){if(typeof document==='undefined')return;const sp=window.__PA
   if(!box){box=document.createElement('div');box.id='pwrBox';slate.parentNode.insertBefore(box,slate);}
   const cur=document.getElementById('pwrPanel');const open=!!(cur&&cur.open&&cur.dataset.user);box.innerHTML=pwrPanelHtml(sp);
   const p=document.getElementById('pwrPanel');if(p){if(open){p.open=true;p.dataset.user='1';}p.addEventListener('toggle',()=>{if(p.open)p.dataset.user='1';else delete p.dataset.user;});}}
-function pwrRepaintBoard(sp){try{const v=document.getElementById('v-games');if(!v||!v.classList.contains('on'))return;const r=sp==='nfl'?renderNFL:sp==='ncaaf'?renderNCAAF:sp==='nhl'?renderNHL:sp==='nba'&&typeof renderNBA==='function'?renderNBA:render;if(typeof r==='function')r();}catch(e){}}
+function pwrRepaintBoard(sp){try{const v=document.getElementById('v-games');if(!v||!v.classList.contains('on'))return;const r=sp==='nfl'?renderNFL:sp==='ncaaf'?renderNCAAF:sp==='nhl'?renderNHL:sp==='nba'&&typeof renderNBA==='function'?renderNBA:sp==='ncaab'&&typeof renderNCAAB==='function'?renderNCAAB:render;if(typeof r==='function')r();}catch(e){}}
 async function pwrBoot(force){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!PWR_CFG[sp])return;
   try{localStorage.removeItem(PWR_KEY);}catch(e){}   /* pre-v2.04 single key */
   /* the index is built from what the app already holds — show it right away, then let ESPN's season pull top it up */
@@ -22238,7 +22345,7 @@ async function pwrBoot(force){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPO
   if((pwrB(sp)||{}).ts===before&&!force){/* nothing new today — no re-render needed */}
   for(const o of Object.keys(PWR_CFG)){if(o===sp)continue;for(let i=0;i<5;i++){const n=await pwrFetch(o,8);if(!n)break;}}
   try{const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);}catch(e){}
-  try{const v=document.getElementById('v-games');if(v&&v.classList.contains('on')){const r=sp==='nfl'?renderNFL:sp==='ncaaf'?renderNCAAF:sp==='nhl'?renderNHL:sp==='nba'&&typeof renderNBA==='function'?renderNBA:render;if(typeof r==='function')r();}}catch(e){}}
+  try{const v=document.getElementById('v-games');if(v&&v.classList.contains('on')){const r=sp==='nfl'?renderNFL:sp==='ncaaf'?renderNCAAF:sp==='nhl'?renderNHL:sp==='nba'&&typeof renderNBA==='function'?renderNBA:sp==='ncaab'&&typeof renderNCAAB==='function'?renderNCAAB:render;if(typeof r==='function')r();}}catch(e){}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(pwrBoot,3500));
 /* ══ ⚡ THE COMMISSIONER — POWER AS A CHARACTER (v2.15) ═══════════════════════════
    The Power Index gets a voice. The Commissioner calls every game off the ratings —
@@ -22253,10 +22360,10 @@ if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener(
      TOTAL   silent — tested walk-forward against closing totals it had no skill (CFB 51%)
    Walk-forward on this season (each day predicted from only the games before it):
    NFL 70.5% straight up (31-13), CFB 73.2% (131-48), NHL 55%, MLB 49%. */
-const PWR_SIG={nfl:13.5,ncaaf:15.5,nba:12,nhl:2.4,mlb:4.3};
-const PWR_TSIG={nfl:13,ncaaf:16,nba:18,nhl:2.3,mlb:4.4};
-const PWR_EDGE_SP={nfl:1,ncaaf:1.5,nba:1.5,nhl:0.2,mlb:0.25};
-const PWR_EDGE_TOT={nfl:2.5,ncaaf:3,nba:4,nhl:0.35,mlb:0.6};
+const PWR_SIG={nfl:13.5,ncaaf:15.5,nba:12,ncaab:10.8,nhl:2.4,mlb:4.3};
+const PWR_TSIG={nfl:13,ncaaf:16,nba:18,ncaab:15.5,nhl:2.3,mlb:4.4};
+const PWR_EDGE_SP={nfl:1,ncaaf:1.5,nba:1.5,ncaab:2,nhl:0.2,mlb:0.25};
+const PWR_EDGE_TOT={nfl:2.5,ncaaf:3,nba:4,ncaab:4,nhl:0.35,mlb:0.6};
 /* prestige tiers: 5 royalty … 2 established … 1 small program. Soft by design. */
 const PWR_PRESTIGE={
   nfl:{GB:5,PIT:5,DAL:5,SF:5,NE:5,KC:4,NYG:4,CHI:4,DEN:4,WSH:4,LV:4,MIA:4,PHI:4,BAL:4,IND:3,SEA:3,LAR:3,TB:3,MIN:3,BUF:3,NYJ:3,NO:3,CLE:3,DET:3,CIN:2,ATL:2,CAR:2,ARI:2,TEN:2,LAC:2,JAX:2,HOU:2},
@@ -22266,9 +22373,11 @@ const PWR_PRESTIGE={
   nhl:{MTL:5,TOR:5,DET:5,BOS:5,CHI:5,NYR:5,EDM:4,PIT:4,NYI:4,COL:4,NJ:4,TB:4,LA:3,PHI:3,DAL:3,STL:3,VGK:3,FLA:3,CAR:3,WSH:3,CGY:3,ANA:3},
   mlb:{NYY:5,BOS:5,LAD:5,STL:5,SF:5,ATH:4,PHI:4,CHC:4,DET:4,PIT:4,BAL:4,CIN:4,ATL:4,NYM:4,HOU:4,CLE:3,MIN:3,KC:3,TOR:3,LAA:3,AZ:3,MIA:3,CWS:3,TEX:3},
   nba:{BOS:5,LAL:5,GS:5,CHI:5,SA:5,MIA:4,PHI:4,DET:4,NY:4,HOU:3,MIL:3,DAL:3,CLE:3,DEN:3,OKC:3,TOR:3,WSH:3,POR:3,UTAH:3,PHX:3,IND:3,ATL:3}};
-const pwrPrestige=(sp,ab)=>{const T=PWR_PRESTIGE[sp]||{};const k=pwrAbbr(sp,ab);return T[k]!=null?T[k]:(sp==='ncaaf'?1:2);};
-const PWR_PRES_PT={nfl:0.25,ncaaf:0.3,nba:0.25,nhl:0.02,mlb:0.03};
-const PWR_SER_CAP={nfl:1,ncaaf:1.5,nba:1,nhl:0.12,mlb:0.15};
+/* college basketball bluebloods and perennial powers (soft, like the rest) */
+PWR_PRESTIGE.ncaab={DUKE:5,UK:5,UNC:5,KU:5,UCLA:5,IU:4,UCONN:5,CONN:5,VILL:4,MSU:4,ARIZ:4,LOU:4,SYR:4,GONZ:4,MICH:3,OSU:3,FLA:3,WIS:3,PUR:3,TENN:3,BAY:3,HOU:4,AUB:3,ALA:3,TEX:3,ARK:3,IOWA:3,ILL:3,UVA:3,MARQ:3,CREI:3,XAV:3,SDSU:3,MD:3,ORE:3,TTU:3,ISU:3,KSU:2,MEM:3,CIN:3,GTWN:3,STJ:3,SJU:3,PROV:2,SMC:3,BYU:2,USC:2,ND:2,WAKE:2,MIZ:2,LSU:2,MSST:2,MISS:2,'TA&M':2};
+const pwrPrestige=(sp,ab)=>{const T=PWR_PRESTIGE[sp]||{};const k=pwrAbbr(sp,ab);return T[k]!=null?T[k]:(sp==='ncaaf'||sp==='ncaab'?1:2);};
+const PWR_PRES_PT={nfl:0.25,ncaaf:0.3,nba:0.25,ncaab:0.3,nhl:0.02,mlb:0.03};
+const PWR_SER_CAP={nfl:1,ncaaf:1.5,nba:1,ncaab:1,nhl:0.12,mlb:0.15};
 /* ── the all-time series: every past season's meetings, pulled once and kept on the phone ──
    Football: league-wide weekly scoreboards (proven endpoint). NHL/MLB/NBA: the home team's
    season schedules. Past seasons never change, so each pull happens once. Not synced
@@ -22285,7 +22394,7 @@ function pwrHxEvent(sp,ev,H){try{const c=(ev.competitions||[])[0]||{};const st=(
   const d=String(ev.date||c.date||'').slice(0,10);if(!d||d>=pwrSeasonStart(sp))return;   /* this season's meetings come from the live results */
   H.g[ev.id||d+A+Hh]=[d,A,Hh,as,hs,c.neutralSite?1:0];}catch(e){}}
 let PWR_HX_BUSY={};
-async function pwrHistFetch(sp,max){if(PWR_HX_BUSY[sp])return 0;const base=FBP_ESPN[sp];if(!base)return 0;PWR_HX_BUSY[sp]=1;let calls=0;const H=pwrHx(sp);
+async function pwrHistFetch(sp,max){if(PWR_HX_BUSY[sp]||sp==='ncaab')return 0;   /* college rosters turn over: last season's meetings say little, and 360 teams × seasons won't fit on a phone */const base=FBP_ESPN[sp];if(!base)return 0;PWR_HX_BUSY[sp]=1;let calls=0;const H=pwrHx(sp);
   try{const y0=+pwrSeasonStart(sp).slice(0,4);const N=PWR_HIST_SEASONS[sp]||3;const jobs=[];
     if(sp==='nfl'||sp==='ncaaf'){const wk=sp==='nfl'?18:15;for(let y=y0-1;y>=y0-N;y--)for(let w=1;w<=wk;w++)jobs.push({k:`w|${y}|${w}`,u:`${base}/scoreboard?dates=${y}&seasontype=2&week=${w}${sp==='ncaaf'?'&groups=80&limit=300':''}`});}
     else{const teams=new Set();try{(sportGames(sp)||[]).forEach(g=>{if(g&&g.home)teams.add(pwrAbbr(sp,g.home.abbr));});}catch(e){}
@@ -22358,7 +22467,7 @@ function pwrEvalHtml(sp){let R=null;try{R=pwrReign(sp);}catch(e){}if(!R)return''
 
 /* v2.16 · the Commissioner's record card for Records → Characters: every league side by side */
 function pwrRecordsHtml(){const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const C=CHARS.Power;
-  const rows=['nfl','ncaaf','nhl','mlb','nba'].map(sp=>{let R=null;try{R=pwrReign(sp);}catch(e){}
+  const rows=['nfl','ncaaf','nhl','mlb','nba','ncaab'].map(sp=>{let R=null;try{R=pwrReign(sp);}catch(e){}
     const g=V.filter(x=>x.voice==='Power'&&x.sp===sp&&x.graded&&!x.push&&x.hit!=null);const rec=m=>{const a=g.filter(x=>x.market===m);const w=a.filter(x=>x.hit).length;return a.length?`${w}-${a.length-w}`:'—';};
     const u=g.reduce((s,x)=>s+(+x.units||0),0);const up=V.filter(x=>x.voice==='Power'&&x.sp===sp&&!x.graded&&String(x.date).slice(0,10)>=d).length;
     if(!R||(R.acc==null&&!g.length&&!up))return'';
@@ -22492,7 +22601,7 @@ function feelTuneHtml(){const T=roGet(FEEL_TUNE_KEY,null,60e3);if(!T)return'';co
        lock screen, and offers to resume on the next page (a new page can't
        auto-start audio; one tap does). */
 const RADIO_KEY='d4.radio',RADIO_NOW='td.radionow';
-const RADIO_OFFICIAL={nfl:['NFL+ (official game audio)','https://www.nfl.com/plus/'],ncaaf:['Varsity Network (college radio)','https://www.varsitynetwork.com/'],nhl:['NHL app — team radio','https://www.nhl.com/info/nhl-app'],mlb:['MLB app — Gameday audio','https://www.mlb.com/app'],nba:['NBA app — team radio','https://www.nba.com/apps']};
+const RADIO_OFFICIAL={nfl:['NFL+ (official game audio)','https://www.nfl.com/plus/'],ncaaf:['Varsity Network (college radio)','https://www.varsitynetwork.com/'],nhl:['NHL app — team radio','https://www.nhl.com/info/nhl-app'],mlb:['MLB app — Gameday audio','https://www.mlb.com/app'],nba:['NBA app — team radio','https://www.nba.com/apps'],ncaab:['Varsity Network (college radio)','https://www.varsitynetwork.com/']};
 function radioName(sp,abbr){try{const m=(pwrStore()[sp]||{}).meta||{};if(m[abbr]&&m[abbr].n)return m[abbr].n;}catch(e){}try{const g=(sportGames(sp)||[]).find(z=>z.away.abbr===abbr||z.home.abbr===abbr);const t=g&&(g.away.abbr===abbr?g.away:g.home);if(t&&t.name&&t.name!==abbr)return t.name;}catch(e){}return abbr;}
 function radioSaved(sp,abbr){return((get(RADIO_KEY,{})||{})[sp+':'+abbr])||'';}
 function radioBtn(sp,game){const g=String(game||'').replace(/'/g,'');return`<button class="radio-btn" onclick="event.stopPropagation();radioOpen('${sp}','${g}')" title="Listen to the game" style="font-size:10px;padding:2px 7px;margin-left:6px">📻</button>`;}
@@ -22576,7 +22685,7 @@ async function injBoot(){const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!==
   for(let i=0;i<3;i++){const n=await injFetch(sp,24);if(!n)break;}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__){window.addEventListener('load',()=>setTimeout(injBoot,6000));setInterval(()=>{if(!document.hidden)injBoot();},INJ_TTL);}
 /* players who matter for this pick, with form: season average vs recent */
-function whyPlayers(sp,team,n){const K={nfl:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],ncaaf:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],nhl:[['pts','pts'],['g','goals']],nba:[['pts','pts']],mlb:[['tb','total bases']]}[sp]||[];
+function whyPlayers(sp,team,n){const K={nfl:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],ncaaf:[['py','pass yds'],['ry','rush yds'],['wy','rec yds']],nhl:[['pts','pts'],['g','goals']],nba:[['pts','pts']],ncaab:[['pts','pts']],mlb:[['tb','total bases']]}[sp]||[];
   const D=pstDb(sp);const out=[];K.forEach(([k,lab])=>{const P=Object.values(D.p).filter(x=>x.team===team&&x.s[k]&&x.s[k].gp>=2).sort((a,b)=>(b.s[k].sum/b.s[k].gp)-(a.s[k].sum/a.s[k].gp))[0];
     if(!P||out.some(o=>o.name===P.name))return;const S=P.s[k];const mean=S.sum/S.gp,ema=S.ema;if(!mean)return;const hot=ema>=mean*1.15,cold=ema<=mean*0.85;
     out.push({name:P.name,txt:`${P.name} ${mean.toFixed(mean<10?1:0)} ${lab}/g${hot?` 🔥 ${ema.toFixed(ema<10?1:0)} lately`:cold?` 🧊 ${ema.toFixed(ema<10?1:0)} lately`:''}`});});return out.slice(0,n||3);}
@@ -22750,8 +22859,9 @@ function syncMergeVal(k,L,R,tomb){const N=L.t>=R.t?L:R,O=N===L?R:L;const a=N.v,b
       a.forEach(x=>{const id=syncIdOf(x),o=m.get(id);m.set(id,o&&syncGraded(o)&&!syncGraded(x)?o:x);});
       let out=[...m.values()];if(k===LS.locked&&tomb)out=out.filter(x=>!tomb[syncIdOf(x)]);
       /* newest-first order of the newer copy, then anything only the older copy had */
-      const seen=new Set(),ord=[];a.forEach(x=>{const id=syncIdOf(x);if(!seen.has(id)&&m.has(id)&&out.includes(m.get(id))){seen.add(id);ord.push(m.get(id));}});
+      const seen=new Set(),ord=[];const inOut=new Set(out);a.forEach(x=>{const id=syncIdOf(x);if(!seen.has(id)&&m.has(id)&&inOut.has(m.get(id))){seen.add(id);ord.push(m.get(id));}});
       out.forEach(x=>{const id=syncIdOf(x);if(!seen.has(id)){seen.add(id);ord.push(x);}});
+      if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof voicesTrim==='function')return voicesTrim(ord);
       return ord;}
     return a;}
   if(a&&b&&typeof a==='object'&&typeof b==='object'&&!Array.isArray(a)&&!Array.isArray(b)&&k===SYNC.tomb)return{...b,...a};

@@ -16,11 +16,11 @@
    Each sport lives on its own page; this just routes. The ?b= build tag
    makes Safari fetch the current page after a deploy instead of a cached one. */
 (function(){
-  var BUILD='20261016a';
-  var PAGES={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
+  var BUILD='20261016b';
+  var PAGES={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
   var last='';try{last=localStorage.getItem('d4.activeSport')||''}catch(e){}
-  var q=(location.search.match(/[?&]sport=(mlb|nfl|ncaaf|cfb|nhl|nba)/)||[])[1];
-  if(q==='cfb')q='ncaaf';
+  var q=(location.search.match(/[?&]sport=(mlb|nfl|ncaaf|cfb|nhl|nba|ncaab|cbb)/)||[])[1];
+  if(q==='cfb')q='ncaaf';if(q==='cbb')q='ncaab';
   var dest=PAGES[q||last];
   if(dest)location.replace(dest+'?b='+BUILD);
   document.addEventListener('DOMContentLoaded',function(){[].forEach.call(document.querySelectorAll('a[href$=".html"]'),function(a){a.href=a.getAttribute('href')+'?b='+BUILD;});});
@@ -49,6 +49,7 @@
 <a href="nhl.html">🏒 NHL</a>
 <a href="cfb.html">🏟 CFB</a>
 <a href="nba.html">🏀 NBA</a>
+<a href="ncaab.html">🏀 College Basketball</a>
 <div class="soc"><a href="https://www.facebook.com/share/1FCDFdUvRp/" target="_blank" rel="noopener" style="border-color:#1877f266"><b style="color:#1877F2">f</b>&nbsp;Facebook</a><a href="https://t.me/TheDeskApp" target="_blank" rel="noopener" style="border-color:#29a9eb66"><b style="color:#29A9EB">✈</b>&nbsp;Telegram</a></div>
 <a href="picks.html" style="margin-top:4px;font-size:13px;padding:12px">📣 Public picks page</a>
 <details class="mv"><summary>🔑 Moving from another TheDesk app?</summary>
@@ -71,6 +72,6 @@ function tdMove(){var K=['d4.key','d4.ai','d4.sharp','d4.rundown','d4.oddspapi',
   localStorage.setItem('d4.setupDone','1');document.getElementById('mvIn').value='';
   msg.style.color='#5fd38d';msg.textContent=n+' keys restored — opening the desk and pulling your cloud copy…';
   var sp=localStorage.getItem('d4.activeSport')||'nfl',P={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
-  setTimeout(function(){location.replace((P[sp]||'nfl.html')+'?b='+'20261016a'+'&moved=1');},900);}
+  setTimeout(function(){location.replace((P[sp]||'nfl.html')+'?b='+'20261016b'+'&moved=1');},900);}
 </script>
 </body></html>

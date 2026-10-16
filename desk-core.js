@@ -57,7 +57,7 @@ function confSims(V){const M=new Map();V.forEach(x=>{if(x.voice==='Sim'&&(x.simP
 function confRebuild(force){const C0=get(CONF_KEY,null);const V=get(VOICES_KEY,[])||[];let gN=0;V.forEach(x=>{if(x.graded)gN++;});const sig=V.length+'|'+gN;
   if(!force&&C0&&C0.sig===sig&&Date.now()-C0.ts<6*36e5)return C0;
   const sims=confSims(V);const rows=[];
-  V.forEach(x=>{if(!CHARS[x.voice]||!x.graded||x.hit==null||x.push)return;const d=String(x.date).slice(0,10);const base=confBase(x,sims.get(x.sp+'|'+x.game+'|'+d+'|'+x.market));if(base==null)return;rows.push({x,d,base,hit:x.hit?1:0});});
+  V.forEach(x=>{if(!CHARS[x.voice]||!x.graded||x.hit==null||x.push||confPre(x))return;const d=String(x.date).slice(0,10);const base=confBase(x,sims.get(x.sp+'|'+x.game+'|'+d+'|'+x.market));if(base==null)return;rows.push({x,d,base,hit:x.hit?1:0});});
   rows.sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);
   const skill={},bins={ml:confFreshBins(),spread:confFreshBins(),total:confFreshBins()};let changed=0,j=0;
   while(j<rows.length){const d=rows[j].d,day=[];while(j<rows.length&&rows[j].d===d)day.push(rows[j++]);
@@ -84,8 +84,12 @@ function confStamp(calls){const sim={};calls.forEach(c=>{if(c.voice==='Sim')sim[
   calls.forEach(c=>{if(!CHARS[c.voice])return;let r=null;try{r=confFor(c,sim[c.market]);}catch(e){}if(!r)return;c.cf=r.cf;c.cfb=r.base;
     c.cfw=r.why.map(w=>w.k.split('|').slice(1).join(' ')+' '+(w.d>0?'+':'')+Math.round(w.d*100)/100);if(r.flags.length)c.cff=r.flags;else delete c.cff;if(!confKnobOk(c))c.kof=1;else delete c.kof;});}
 const confOf=x=>x&&x.cf!=null?x.cf:x&&x.cfr!=null?x.cfr:null;
-/* OFFICIAL = at or above the floor for its market, not capped, not switched off */
-function isOfficial(x){const c=confOf(x);return c!=null&&c>=confFloor(x.market)-1e-9&&!x.kof;}
+/* OFFICIAL = at or above the floor for its market, not capped, not switched off —
+   v2.32 · and a real bet: it carries a book price (a sim-only lean can't be taken),
+   and it isn't a preseason / exhibition game (tracked for learning only) */
+const confPre=x=>!!(x&&(x.pre||(typeof seasonPre==='function'&&seasonPre(x.sp,x.date))));
+const confPriced=x=>x&&x.price!=null&&x.price!==''&&(typeof amerOk==='function'?amerOk(x.price)!=null:isFinite(+x.price)&&Math.abs(+x.price)>=100);
+function isOfficial(x){const c=confOf(x);return c!=null&&c>=confFloor(x.market)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
 const officialOnly=V=>(V||[]).filter(isOfficial);
 const confPct=c=>c==null?'—':Math.round(c*100)+'%';
 /* calls logged before the meter existed (or locked before it loaded) get their
