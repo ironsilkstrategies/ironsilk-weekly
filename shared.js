@@ -719,9 +719,9 @@ const SCOUT_ML={nfl:0.12,ncaaf:0.15,nhl:0.12,nba:0.12},SCOUT_SPR={nfl:0.25,ncaaf
 function scoutCharCalls(sp,g,hl,tl,hlSim,tlSim,add){if(!SCOUT_SP.includes(sp))return;const S=scoutGame(sp,g.away.abbr,g.home.abbr);if(!S)return;
   const sP=e=>+(0.5+0.2*Math.min(1,Math.abs(e)/0.8)).toFixed(4);
   const ex=e=>({sP:sP(e),sc:+e.toFixed(3),mm:S.flags.length});
-  if(Math.abs(S.edge)>=(SCOUT_ML[sp]||0.12)){const side=S.edge>0?'home':'away';add('Scout','ml',side,ex(S.edge));
-    if(hl!=null&&!hlSim&&Math.abs(S.edge)>=(SCOUT_SPR[sp]||0.25))add('Scout','spread',side,ex(S.edge));}
-  if(tl!=null&&!tlSim&&Math.abs(S.tot)>=SCOUT_TOT)add('Scout','total',S.tot>0?'over':'under',ex(S.tot));}
+  if(Math.abs(S.edge)>=IDEO_P('Scout','ml_'+sp,SCOUT_ML[sp]||0.12)){const side=S.edge>0?'home':'away';add('Scout','ml',side,ex(S.edge));
+    if(hl!=null&&!hlSim&&Math.abs(S.edge)>=IDEO_P('Scout','spread_'+sp,SCOUT_SPR[sp]||0.25))add('Scout','spread',side,ex(S.edge));}
+  if(tl!=null&&!tlSim&&Math.abs(S.tot)>=IDEO_P('Scout','total',SCOUT_TOT))add('Scout','total',S.tot>0?'over':'under',ex(S.tot));}
 const PROB_OK={};
 function scoutProbation(){try{const V=roGet(VOICES_KEY,[],60e3)||[];let w=0,n=0,u=0;V.forEach(x=>{if(x.voice!=='Scout'||!x.graded||x.push||x.hit==null)return;n++;if(x.hit)w++;u+=+x.units||0;});
   const r=(w+20*0.5)/(n+20);const ok=n>=40&&r>=0.53&&u>=0;PROB_OK.Scout=ok;
@@ -1940,8 +1940,8 @@ function characterCalls(sp,g,s){
   }catch(e){}
   // Trends — the net lean of every uploaded trend on this game, as the Judge reads them
   try{const tr=brainTrendEvidence(g,sp);
-    if(Math.abs(tr.dMar)>=0.05){const sd=tr.dMar>0?'home':'away';add('Trends','ml',sd);if(hl!=null)add('Trends','spread',sd);}
-    if(Math.abs(tr.dTot)>=0.05&&tl!=null)add('Trends','total',tr.dTot>0?'over':'under');}catch(e){}
+    const tlean=IDEO_P('Trends','lean',0.05);if(Math.abs(tr.dMar)>=tlean){const sd=tr.dMar>0?'home':'away';add('Trends','ml',sd);if(hl!=null)add('Trends','spread',sd);}
+    if(Math.abs(tr.dTot)>=tlean&&tl!=null)add('Trends','total',tr.dTot>0?'over':'under');}catch(e){}
   /* The Crowd — rebuilt on Levitt (2004): books don't balance action, they shade
      lines AGAINST the public, so a lopsided public side is a fade, not a follow.
        1) money and tickets both uploaded and money runs 10+ pts ahead of tickets
@@ -1952,10 +1952,10 @@ function characterCalls(sp,g,s){
     const rows=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='cons'&&x.game===gl);
     const pick=mk=>{const r=rows.filter(x=>x.market===mk);return{bets:r.filter(x=>x.metric!=='money').pop()||null,money:r.filter(x=>x.metric==='money').pop()||null};};
     const read=(o,key,hi,lo)=>{const b=o.bets&&o.bets[key]!=null?+o.bets[key]:null,m=o.money&&o.money[key]!=null?+o.money[key]:null;
-      if(b!=null&&m!=null&&Math.abs(m-b)>=10)return{side:m>b?hi:lo,why:'sharp money',metric:'money'};
+      const SH=IDEO_P('Consensus','sharp',10),FD=IDEO_P('Consensus','fade',65);if(b!=null&&m!=null&&Math.abs(m-b)>=SH)return{side:m>b?hi:lo,why:'sharp money',metric:'money'};
       const x=b!=null?b:m;if(x==null)return null;
-      if(x>=65)return{side:lo,why:'fade public '+Math.round(x)+'%',metric:b!=null?'bets':'money'};
-      if(x<=35)return{side:hi,why:'fade public '+Math.round(100-x)+'%',metric:b!=null?'bets':'money'};return null;};
+      if(x>=FD)return{side:lo,why:'fade public '+Math.round(x)+'%',metric:b!=null?'bets':'money'};
+      if(x<=100-FD)return{side:hi,why:'fade public '+Math.round(100-x)+'%',metric:b!=null?'bets':'money'};return null;};
     const ml=pick('moneyline'),spc=pick('spread'),to=pick('total');
     const rm=read(ml,'homePct','home','away');if(rm)add('Consensus','ml',rm.side,{metric:rm.metric,why:rm.why});
     const rs=read(spc.bets||spc.money?spc:ml,'homePct','home','away');if(hl!=null&&rs)add('Consensus','spread',rs.side,{metric:rs.metric,why:rs.why});
@@ -2011,7 +2011,7 @@ function metaCalls(sp,g,calls,Ln,add){
     /* 🏦 the Banker (v2.28) — derived from the Blend, so it never votes: the side whose price the calibrated chance beats by 3%+ */
     try{const ev=sides.map(o=>o.blend==null||o.price==null||!bkPriceOk(o.price)?null:o.blend*americanToDecimal(o.price)-1);
       const i=ev[0]!=null&&(ev[1]==null||ev[0]>=ev[1])?0:1;
-      if(ev[i]!=null&&ev[i]>=0.03)add('Banker',m,sides[i].sd,{simP:+sides[i].blend.toFixed(4),mktP:sides[i].mk!=null?+sides[i].mk.toFixed(4):null,ev:+ev[i].toFixed(4)});}catch(e){}});}
+      if(ev[i]!=null&&ev[i]>=IDEO_P('Banker','ev',0.03))add('Banker',m,sides[i].sd,{simP:+sides[i].blend.toFixed(4),mktP:sides[i].mk!=null?+sides[i].mk.toFixed(4):null,ev:+ev[i].toFixed(4)});}catch(e){}});}
 function voicesLog(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
@@ -2022,6 +2022,7 @@ function voicesLog(sp){
     // a character's call is locked at first pitch / puck drop / kickoff; drop a
     // stale pre-game call from another side if the character flipped before then
     if(pre)calls.forEach(c=>{try{c.f=factorsFor(sp,g,c);}catch(e){}if(c.voice==='Sim'){try{c.f=c.f||factorsFor(sp,g,c);const b=blendProb(sp,c.market,c.simP,c.mktP>0?c.mktP:null);let q=b!=null?b+factorAdj(sp,c.f):null;if(q!=null){try{q+=pwrCalAdj(sp,g,c.market,c.side,c.line,q);}catch(e){}}c.pUsed=q!=null?Math.max(0.01,Math.min(0.99,q)):null;}catch(e){}}});
+    if(pre&&typeof confStamp==='function'){try{confStamp(calls);}catch(e){console.warn('confidence',e);}}   /* v2.31 · every call gets its calibrated confidence */
     calls.forEach(c=>{if(META_VOICES.has(c.voice)&&idx[[c.voice,sp,c.game,c.date,c.market].join('|')]!=null)return;   // already logged under the pre-v1.99 70%+ rule
       const i=idx[c.id];if(i!=null){if(!pre||V[i].graded||V[i].lk)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
   });
@@ -2096,6 +2097,8 @@ function sqKey(sp,g,pick){
   if(/[+-]\d/.test(p.replace(/\bML\b/i,'')))return{market:'spread',side};
   return{market:'ml',side};
 }
+/* v2.31 · a character's editable ideology setting (Records → Ideology), with its built-in default */
+const IDEO_P=(v,k,d)=>{try{const K=get('d4.ideoknobs',null)||{};const x=K[v]&&K[v].p&&K[v].p[k];return x!=null&&x!==''&&isFinite(+x)?+x:d;}catch(e){return d;}};
 const logit=p=>Math.log(Math.max(1e-4,Math.min(1-1e-4,p))/(1-Math.max(1e-4,Math.min(1-1e-4,p))));
 const sigm=z=>1/(1+Math.exp(-z));
 /* Everything a square needs from the characters. */
@@ -2440,7 +2443,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261013e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261016a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2514,9 +2517,12 @@ let TRACKED_VIEW='pending',TRACKED_SOURCE='all';
 
 /* today(): formatter built once per timezone; result cached for 1s (it's called thousands of times per render) */
 let TODAY_FMT=null,TODAY_TZ=null,TODAY_V='',TODAY_T=0;
+/* v2.31 · SLATE DAY — the desk's day turns over at 5 AM Central, not midnight, so a late
+   game that ends after 12 still belongs to its slate: graded, posted and recorded there. */
+const DAY_CUT_H=5;
 const today=()=>{const n=Date.now();if(n-TODAY_T<1000&&TODAY_TZ===APP_TZ)return TODAY_V;
   if(!TODAY_FMT||TODAY_TZ!==APP_TZ){TODAY_FMT=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'});TODAY_TZ=APP_TZ;}
-  TODAY_V=TODAY_FMT.format(new Date(n));TODAY_T=n;return TODAY_V;};
+  TODAY_V=TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5));TODAY_T=n;return TODAY_V;};
 const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
 const fmtDate=d=>new Date(d).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',timeZone:APP_TZ});
 /* ── STORAGE COMPRESSION ────────────────────────────────────────────────────
@@ -16251,7 +16257,7 @@ function renderBest(){
   const views=['all',...(S.sports||[]).filter(sp=>((S.bySport||{})[sp]||[]).length||!S.locked)];
   if(!views.includes(BEST_VIEW))BEST_VIEW='all';
   const tabs=`<div style="margin-bottom:8px">${views.map(v=>`<button class="msg-chip${BEST_VIEW===v?' on':''}" onclick="bestView('${v}')">${v==='all'?'Whole slate':SP_LAB[v]||v.toUpperCase()}</button>`).join('')}</div>`;
-  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price','priced shorter than -200'],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['tier','below VALUE'],['prob','under 45%'],['ev','EV under +1%']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
+  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price','priced shorter than -300 or longer than +400'],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['conf','under the 70% confidence rule'],['tier','below VALUE'],['prob','under 45%'],['ev','priced past what the confidence supports']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
     :(!(S.top3||[]).length&&!(W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Today's card is empty — open each sport's Games board (or Load all sports on Today) so it has picks to choose from.</div>`:'');
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
     <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:(evalRanToday()&&!(S.top3||[]).length&&W3&&W3.total?'Master evaluation ran — no play clears the bar yet. It keeps re-checking as lines and boards update, locks the moment one qualifies, and locks empty 30 min before the last game.':'Building — freezes the moment the master evaluation runs (or 30 min before the first game)')}</b>
@@ -18289,7 +18295,7 @@ const MS_FILTERS_EXTRA={};
                squares, the brain and the tiers (×0.6 – ×1.4), once 30+ bets prove it.
    5. CHALLENGES  He writes new challenges every week from the standings.        */
 const BANKER_KEY='d4.banker';
-const bkWeekStart=d=>{const t=new Date((d||today())+'T12:00:00');const wd=(t.getDay()+6)%7;return dayShift(String(d||today()).slice(0,10),-wd);};
+const bkWeekStart=d=>{const t=new Date(String(d||today()).slice(0,10)+'T12:00:00');const wd=(t.getDay()+5)%7;return dayShift(String(d||today()).slice(0,10),-wd);};   /* v2.31 · weeks run Tuesday → Tuesday */
 function bkRunWeek(ws,V,CP,BYV){const we=dayShift(ws,6);const out={};
   CHAR_ORDER.forEach(v=>{const calls=(BYV?BYV[v]||[]:V).filter(x=>x.voice===v&&x.graded&&x.date>=ws&&x.date<=we).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     let br=100,peak=100,dd=0,w=0,l=0,p=0,staked=0;const byM={};
@@ -18710,6 +18716,11 @@ function facMore(sp,g,side,m,team,opp,line,price,f){const day=gameDayOf(g)||toda
     if(sp==='nhl'){const gp=id=>{const X=scoutBoard(sp).cats.find(c=>c.c.id==='svp');const r=X&&X.rows.find(r=>r.id===id);return r?r.pct:null;};
       const a=gp((P[team]||{}).G),b=gp((P[opp]||{}).G);if(a!=null&&a>=0.8)f.push('goaliestar');if(a!=null&&a<=0.2)f.push('goaliebust');if(b!=null&&b>=0.8)f.push('oppgoaliestar');if(b!=null&&b<=0.2)f.push('oppgoaliebust');}}
   if(m==='total'){if(S.tot>=0.3)f.push('offedge');if(S.tot<=-0.3)f.push('defedge');}}
+/* v2.31 · weather + head-to-head, as situations the brain tests */
+function facWx(sp,g,side,team,f){if(sp!=='nfl'&&sp!=='ncaaf')return;const H=g.home.abbr;
+  if(sp==='nfl'&&typeof NFL_DOME!=='undefined'&&NFL_DOME.has(String(H).toUpperCase())){f.push('dome');return;}const w=g.weather;if(!w)return;
+  const wind=parseFloat((String(w.wind||'').match(/(\d+)/)||[])[1]);const t=parseFloat(w.temp);if(wind>=15)f.push('wind15');if(isFinite(t)&&t<=32)f.push('cold32');}
+function facH2H(sp,g,team,f){if(!team)return;try{const S=pwrSeries(sp,g.away.abbr,g.home.abbr);if(!S||S.n<3||S.h===S.a)return;const lead=S.h>S.a?g.home.abbr:g.away.abbr;f.push(lead===team?'h2hedge':'h2hfade');}catch(e){}}
 /* each team's main QB / goalie in the scouting ledger */
 let SCOUT_PRIM={};
 function scoutPrim(sp){const B=scoutBoard(sp);const C=SCOUT_PRIM[sp];if(C&&C.ts===B.ts)return C.P;const P={};
@@ -18989,7 +19000,7 @@ function renderToday(noSnap){
   const fb=(k,v,lab,col)=>`<button class="msg-chip${F[k]===v?' on':''}" style="${col?`color:${col};`:''}" onclick="tfSet('${k}','${v}')">${lab} <span style="opacity:.6">${cnt({[k]:v})}</span></button>`;
   const usedCh=CHAR_ORDER.filter(v=>allP.some(({x})=>(x.chars||[]).includes(v)));
   const bar=`<div style="margin:4px 0 8px">
-    <div>${fb('tier','play','✅ Playable','#3DDC84')}${fb('tier','all','All')}${fb('tier','unan','★ Unanimous','#ff6fae')}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,c)).join('')}</div>
+    <div>${fb('tier','play','✅ Official (70%+)','#3DDC84')}${fb('tier','all','All')}${fb('tier','unan','★ Unanimous','#ff6fae')}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,c)).join('')}</div>
     <div>${fb('ch','all','Any character')}${usedCh.map(v=>fb('ch',v,`${CHARS[v].chip} ${CHARS[v].label||v}`,CHARS[v].color)).join('')}</div>
     ${sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:''}</div>`;
   const pct=v=>Math.round(v*100)+'%';
@@ -19007,7 +19018,7 @@ function renderToday(noSnap){
             ${lp!=null?`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><div style="flex:1;height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${Math.round(lp*100)}%;background:${col}"></div></div>
             <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${pct(lp)} to win</span>${mv!=null&&mv!==0?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${pct(L.p0)}</span>`:''}</div>`:''}`;}}
       return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${L&&L.state==='in'?'#ff4b5c':c};background:rgba(255,255,255,.02);${on&&!(L&&L.state==='in')?'opacity:.55':''}">
-        <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${x.dbl?x.dbl+' ':''}${esc(x.pick)} <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${pr}</span>${x.unan?' <span class="src-tag unanimous" style="display:inline">★ unanimous</span>':''}</div>
+        <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${x.dbl?x.dbl+' ':''}${esc(x.pick)} <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${pr}</span>${typeof tcConfChip==='function'?tcConfChip(sp,x):''}${x.unan?' <span class="src-tag unanimous" style="display:inline">★ unanimous</span>':''}</div>
           <div class="mono" style="font-size:9.5px;color:var(--mute)">${L&&L.state==='in'?SP_LAB[sp]+' · ':''}${txtEsc(gameLabel(sp,x.game))} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${x.blend!=null&&x.mkt!=null?` · blend ${Math.round(x.blend*100)}% (mkt ${Math.round(x.mkt*100)}%)`:''}${x.evCal!=null?` · EV ${x.evCal>=0?'+':''}${x.evCal.toFixed(1)}% calibrated`:''}${x.suspect?` · <span style="color:var(--rust)">⚠️ ${esc(x.suspect)} — EV suspect</span>`:''}${x.incoherent?` · <span style="color:var(--rust)">⚠️ ${esc(x.incoherent)}</span>`:''}${x.stakeF>0?` · <b style="color:var(--win)">stake ${x.stakeAmt!=null?'$'+x.stakeAmt.toFixed(2):(x.stakeF*100).toFixed(1)+'% of bankroll'}</b>${x.capped?' <span style="color:var(--mute)">(day capped at 10%)</span>':''}`:''}</div>
           ${live}
           <div class="hs-row" style="justify-content:flex-start">${(x.chars||[]).map(chip).join('')}</div>${tcHotLine(sp,x)}${(()=>{try{return prTagHtml(prRead(sp,x.game,today(),x.m,x.sd,x.price,x.line),false);}catch(e){return'';}})()}${x.rules&&x.rules.length?`<div class="rule-row" style="justify-content:flex-start">${x.rules.slice(0,3).map(r=>`<span class="rule ${r.kind}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:''}</div>
@@ -19384,7 +19395,7 @@ function storageMeterHtml(){
 
 /* ══ BANKROLL ADVISOR ════════════════════════════════════════════════════════ */
 const BR_AMT='d4.brAmount';
-const brAmount=()=>{const v=parseFloat(get(BR_AMT,''));return v>0?v:null;};
+const brAmount=()=>{try{if(typeof bankBalance==='function'){const v=bankBalance();return v>0?+(+v).toFixed(2):null;}}catch(e){}const v=parseFloat(get(BR_AMT,''));return v>0?v:null;};   /* v2.31 · one bankroll */
 const dec=a=>americanToDecimal(a);
 /* Quarter-Kelly off your bankroll, capped at 3% — full Kelly is too swingy
    when the probability itself is an estimate. */
@@ -20732,7 +20743,8 @@ Object.assign(FAC_LAB,{homedog:'home underdog',roadfav:'road favorite',shortweek
   'talent+':'picked team has the clear talent edge (Scout)','talent-':'opponent has the clear talent edge (Scout)','mismatch+':'picked team owns a top-vs-bottom unit mismatch','mismatch-':'opponent owns a top-vs-bottom unit mismatch',
   qbstar:'picked team\'s QB is top 5% in passer rating',qbbust:'picked team\'s QB is bottom 5% in passer rating',oppqbstar:'opponent QB is top 5%',oppqbbust:'opponent QB is bottom 5%',qbfading:'picked team\'s QB is fading (last 3 games)',
   goaliestar:'picked team\'s main goalie is top 20% in save %',goaliebust:'picked team\'s main goalie is bottom 20%',oppgoaliestar:'opponent\'s main goalie is top 20%',oppgoaliebust:'opponent\'s main goalie is bottom 20%',
-  offedge:'both offenses outclass the defenses (Scout)',defedge:'both defenses outclass the offenses (Scout)'});
+  offedge:'both offenses outclass the defenses (Scout)',defedge:'both defenses outclass the offenses (Scout)',
+  wind15:'wind 15+ mph',cold32:'freezing (32°F or colder)',dome:'indoors (dome)',h2hedge:'picked team leads the head-to-head series',h2hfade:'picked team trails the head-to-head series'});
 const FAC_HI={nfl:48,ncaaf:58,nba:232,mlb:9.5,nhl:6.5},FAC_LO={nfl:40,ncaaf:45,nba:215,mlb:7.5,nhl:5.5};
 const FAC_PYTH={mlb:1.83,nfl:2.37,ncaaf:2.37,nhl:2.05,nba:13.91};
 /* one index over the finals store per update (not a full scan per square) */
@@ -20776,6 +20788,7 @@ function factorsFor(sp,g,c){const f=[];const side=c.sd||c.side,m=c.m||c.market,l
     if(tb)f.push('b2b');if(ob)f.push('oppb2b');if(ob&&!tb)f.push('restedge');}
   if(team){const P=facPyth(sp,team);if(P){if(P.actual-P.exp>=0.08)f.push('pythlucky');if(P.exp-P.actual>=0.08)f.push('pythunlucky');}}
   try{facMore(sp,g,side,m,team,opp,line,price,f);}catch(e){}   /* v2.28 · researched situations + player matchups */
+  try{facWx(sp,g,side,team,f);facH2H(sp,g,team,f);}catch(e){}
   return f;}
 let FAC_C=null,FAC_SIG='';
 function factorTable(sp){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.filter(x=>x.graded).length;if(!FAC_C||FAC_SIG!==sig){FAC_C={};FAC_SIG=sig;}
@@ -22309,7 +22322,7 @@ function pwrCharCalls(sp,g,hl,tl,hlSim,tlSim,add){const A=g.away.abbr,H=g.home.a
     return T;};
   const ex=(p,side,extra)=>({pP:+p.toFixed(4),pm:+m.toFixed(dp),hist:+hx.pts.toFixed(dp),tags:tags(side),...(extra||{})});
   if(Math.abs(m)>1e-6){const side=m>0?'home':'away';const p=pwrPhi(Math.abs(m)/s);add('Power','ml',side,ex(p,side));}
-  if(hl!=null&&!hlSim){const edge=m+hl;if(Math.abs(edge)>=(PWR_EDGE_SP[sp]||1)){const side=edge>0?'home':'away';const p=pwrPhi(Math.abs(edge)/s);add('Power','spread',side,ex(p,side,{edge:+edge.toFixed(dp)}));}}
+  if(hl!=null&&!hlSim){const edge=m+hl;if(Math.abs(edge)>=IDEO_P('Power','edge_'+sp,PWR_EDGE_SP[sp]||1)){const side=edge>0?'home':'away';const p=pwrPhi(Math.abs(edge)/s);add('Power','spread',side,ex(p,side,{edge:+edge.toFixed(dp)}));}}
   /* no totals: walk-forward, power offense-vs-defense totals went 51% vs CFB closing totals and 41-50% elsewhere — no skill, so it stays silent */
 }
 /* ── REIGN: how supreme the Commissioner is in a league ──────────────────────────────
@@ -22991,10 +23004,11 @@ function tgwPayload(p){const C=p.card;const tplMk=x=>`⟦m:${tgLegKey(x)}⟧`;tp
     banker:C.banker?{keys:C.banker.legs.map(tgLegKey),price:decimalToAmerican(C.banker.dec)}:null,
     chars:(C.chars||[]).map(P=>({name:charName(P.v),keys:P.legs.map(tgLegKey),price:decimalToAmerican(P.dec)})),props:(C.props||[]).map(tgLegKey)};
   return{d:p.d,chat:p.chat,ids:p.ids,parts,legs,recapPlan,postedTs:p.ts,st:{},sent:{},recap:false,worker:true};}
-function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0)};
+function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
   const ds=new Set([...Object.keys((a&&a.posts)||{}),...Object.keys((b&&b.posts)||{})]);
   ds.forEach(d=>{const x=a&&a.posts&&a.posts[d],y=b&&b.posts&&b.posts[d];if(!x||!y){out.posts[d]=x||y;return;}const base=(x.postedTs||0)>=(y.postedTs||0)?x:y;
-    out.posts[d]={...base,st:{...(y.st||{}),...(x.st||{})},sent:{...(y.sent||{}),...(x.sent||{})},recap:!!(x.recap||y.recap),worker:x.worker!==false&&y.worker!==false};});
+    const fx=(x.feedTs||0)>=(y.feedTs||0)?x:y;   /* v2.31 · the newest public card wins */
+    out.posts[d]={...base,st:{...(y.st||{}),...(x.st||{})},sent:{...(y.sent||{}),...(x.sent||{})},recap:!!(x.recap||y.recap),worker:x.worker!==false&&y.worker!==false,...(fx.feedTs?{feed:fx.feed,pub:fx.pub,bc:fx.bc,site:fx.site,feedTs:fx.feedTs}:{})};});
   Object.keys(out.posts).sort().slice(0,-5).forEach(d=>delete out.posts[d]);return out;}
 async function tgwGh(){const repo=pubRepo();const toks=[...new Set([get(LS.ghtoken,''),get(SYNC.token,'')].filter(Boolean))];return{repo,toks};}
 async function tgwRead(){const{repo,toks}=await tgwGh();for(const token of toks){const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};

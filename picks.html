@@ -6,96 +6,119 @@
 <link rel="manifest" href="brand/thedesk.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="brand/favicon-32.png">
 <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#07090d">
 <meta property="og:title" content="TheDesk — Today's Best">
-<meta property="og:description" content="Picks · Analysis · Edge. Three plays a day, locked before kickoff, graded at the final.">
+<meta property="og:description" content="Picks · Analysis · Edge. Locked every morning, opened 30 minutes before each game, graded at the final.">
 <meta property="og:image" content="https://ironsilkweekly.com/brand/thedesk-logo.png">
 <meta property="og:url" content="https://ironsilkweekly.com/picks.html">
 <meta name="twitter:card" content="summary">
 <title>TheDesk — Today's Best</title>
-<meta name="description" content="Three plays a day. Locked before kickoff, graded at the final, every result public.">
+<meta name="description" content="Locked every morning. Opened 30 minutes before each game. Graded at the final, every result public.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0a0c10;--card:#12151c;--line:#232835;--ink:#eef1f6;--mute:#8a93a6;--gold:#FFC72C;--win:#2ecc71;--loss:#ff5a5f;--push:#9aa3b5}
+:root{--bg:#07090d;--card:#10141b;--card2:#141a23;--line:#222a37;--ink:#eef1f6;--mute:#8a93a6;--gold:#FFC72C;--gold2:#F5B000;--win:#2ecc71;--loss:#ff5a5f;--push:#9aa3b5;--live:#ff4b5c;--cold:#5fd3e8}
 *{box-sizing:border-box}
-body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,#1b2030 0%,var(--bg) 60%);background-color:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;min-height:100vh}
-.wrap{max-width:560px;margin:0 auto;padding:28px 16px 64px}
+html,body{margin:0}
+body{background:radial-gradient(1000px 520px at 50% -180px,#1d2333 0%,var(--bg) 62%) fixed,var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
+.wrap{max-width:580px;margin:0 auto;padding:26px 16px 120px}
+a{color:inherit}
 .top{display:flex;align-items:center;gap:14px}
-.logo{width:72px;height:72px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(255,199,44,.4),0 0 22px rgba(255,199,44,.25)}
+.logo{width:68px;height:68px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(255,199,44,.45),0 0 26px rgba(255,199,44,.22)}
 .brand{font-family:'Archivo Black',sans-serif;font-size:30px;letter-spacing:.02em;line-height:1}
-.soc{display:flex;gap:8px;margin-top:14px}.soc a{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);text-decoration:none;font:700 13px Inter,sans-serif}
-.soc a.fb{border-color:#1877f255}.soc a.tg{border-color:#29a9eb55}.soc svg{width:18px;height:18px}
 .brand span{color:var(--gold)}
-.tag{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin-top:6px}
-.record{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:22px 0 18px}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 10px;text-align:center}
-.stat b{display:block;font-family:'Archivo Black',sans-serif;font-size:24px}
+.tag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin-top:6px}
+.promise{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.promise span{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;color:#cdd3de;border:1px solid var(--line);background:rgba(255,255,255,.02);border-radius:20px;padding:5px 9px}
+.soc{display:flex;gap:8px;margin-top:14px}.soc a{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border-radius:12px;border:1px solid var(--line);background:var(--card);text-decoration:none;font:700 13px Inter,sans-serif}
+.soc a.fb{border-color:#1877f255}.soc a.tg{border-color:#29a9eb55}.soc svg{width:18px;height:18px}
+.hero{margin:20px 0 6px;padding:18px 16px;border-radius:20px;background:linear-gradient(150deg,#1a1709 0%,#121722 55%);border:1px solid rgba(255,199,44,.28);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.hero .k{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+.record{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.stat{text-align:center;padding:6px 0}
+.stat b{display:block;font-family:'Archivo Black',sans-serif;font-size:26px;line-height:1.1}
 .stat small{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:var(--mute);text-transform:uppercase}
-.hd{display:flex;justify-content:space-between;align-items:baseline;margin:26px 0 10px}
-.hd h2{font-family:'Archivo Black',sans-serif;font-size:17px;margin:0;letter-spacing:.02em}
+.hero .sub2{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--mute);margin-top:8px;text-align:center}
+.hd{display:flex;justify-content:space-between;align-items:baseline;margin:26px 2px 10px}
+.hd h2{font-family:'Archivo Black',sans-serif;font-size:18px;letter-spacing:.02em;margin:0}
 .hd span{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--mute)}
-.pick{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 16px 14px 58px;margin-bottom:10px;overflow:hidden}
-.pick::before{content:'';position:absolute;inset:0 auto 0 0;width:4px;background:var(--gold)}
-.pick.hit::before{background:var(--win)}.pick.miss::before{background:var(--loss)}.pick.push::before{background:var(--push)}
+.pick{position:relative;background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:18px;padding:16px 16px 14px 58px;margin-bottom:10px;overflow:hidden}
+.pick::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--gold)}
+.pick.hit::before{background:var(--win)}.pick.miss::before{background:var(--loss)}.pick.push::before{background:var(--push)}.pick.live::before{background:var(--live)}
 .num{position:absolute;left:16px;top:14px;font-family:'Archivo Black',sans-serif;font-size:28px;color:var(--gold);line-height:1}
-.pk{font-family:'Archivo Black',sans-serif;font-size:21px;line-height:1.15}
+.pk{font-family:'Archivo Black',sans-serif;font-size:21px;line-height:1.15;padding-right:64px}
 .pr{font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--gold);margin-left:6px}
 .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mute);margin-top:6px;line-height:1.6}
-.pill{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.08em;padding:3px 7px;border-radius:20px;border:1px solid var(--line);margin-right:4px}
-.pill.u{color:#ff6fae;border-color:#ff6fae55}.pill.s{color:var(--gold);border-color:#f5b82e55}.pill.t{color:#5fd3e8;border-color:#5fd3e855}
 .res{position:absolute;right:14px;top:14px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em}
-.res.hit{color:var(--win)}.res.miss{color:var(--loss)}.res.push{color:var(--push)}.res.open{color:var(--mute)}
-.pct{position:absolute;right:14px;bottom:14px;text-align:right;font-family:'Archivo Black',sans-serif;font-size:20px;color:var(--win)}
+.res.hit{color:var(--win)}.res.miss{color:var(--loss)}.res.push{color:var(--push)}.res.open{color:var(--mute)}.res.live{color:var(--live)}
+.pct{position:absolute;right:14px;bottom:13px;text-align:right;font-family:'Archivo Black',sans-serif;font-size:20px;color:var(--win)}
 .pct small{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mute);font-weight:400}
-.lock{position:relative;background:linear-gradient(135deg,#15130b,#0f1218);border:1px dashed rgba(255,199,44,.45);border-radius:16px;padding:16px 16px 14px 58px;margin-bottom:10px}
+.score{display:inline-flex;gap:6px;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11.5px;margin-top:7px;padding:3px 8px;border-radius:8px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.score .dot{width:7px;height:7px;border-radius:50%;background:var(--live);box-shadow:0 0 8px var(--live);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.lock{position:relative;background:linear-gradient(135deg,#15130b,#0e1219);border:1px dashed rgba(255,199,44,.45);border-radius:18px;padding:16px 16px 14px 58px;margin-bottom:10px}
 .lock .num{color:#6b5a1e}.lock b{font-family:'Archivo Black',sans-serif;font-size:17px;letter-spacing:.02em}
 .lock .meta{margin-top:4px}.lock .key{position:absolute;right:14px;top:14px;font-size:20px}
-.fp{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);line-height:1.6;margin:-2px 0 10px;word-break:break-all}.fp b{color:var(--ink)}.fp .ok{color:var(--win)}.fp .bad{color:var(--loss)}
-.empty{background:var(--card);border:1px dashed var(--line);border-radius:16px;padding:22px;text-align:center;color:var(--mute);font-size:14px}
-.cta{display:block;text-align:center;margin:26px 0 8px;padding:16px;border-radius:14px;background:linear-gradient(135deg,#FFD84D,#F5B000);color:#14100a;font-family:'Archivo Black',sans-serif;font-size:17px;text-decoration:none;letter-spacing:.02em}
+.cd{display:inline-block;margin-top:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--gold);background:rgba(255,199,44,.08);border:1px solid rgba(255,199,44,.3);border-radius:20px;padding:3px 9px}
+.pill{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.08em;padding:3px 7px;border-radius:20px;border:1px solid var(--line);margin-right:4px}
+.pill.u{color:#ff6fae;border-color:#ff6fae55}
+.mini{display:grid;grid-template-columns:1fr;gap:8px}
+.prop{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.prop b{font-size:15px}.prop .pct{font-size:17px;bottom:auto;top:12px}
+.fp{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);line-height:1.6;margin:4px 2px 10px;word-break:break-all}.fp b{color:var(--ink)}.fp .ok{color:var(--win)}.fp .bad{color:var(--loss)}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:16px;padding:20px;text-align:center;color:var(--mute);font-size:14px;line-height:1.5}
+.cta{display:block;text-align:center;margin:24px 0 8px;padding:16px;border-radius:16px;background:linear-gradient(135deg,#FFD84D,var(--gold2));color:#14100a;font-family:'Archivo Black',sans-serif;font-size:17px;text-decoration:none;letter-spacing:.02em;box-shadow:0 10px 26px rgba(245,176,0,.25)}
 .cta small{display:block;font-family:Inter,sans-serif;font-weight:600;font-size:12px;opacity:.8;margin-top:2px}
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(7,9,13,0),rgba(7,9,13,.92) 35%);display:none}
+.dock a{display:block;max-width:548px;margin:0 auto;text-align:center;padding:13px;border-radius:14px;background:linear-gradient(135deg,#FFD84D,var(--gold2));color:#14100a;font-family:'Archivo Black',sans-serif;font-size:15px;text-decoration:none}
 .day{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
 .day b{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mute);min-width:62px}
 .day .ps{flex:1}.day .ps span{margin-right:10px;white-space:nowrap}
 .w{color:var(--win)}.l{color:var(--loss)}.p{color:var(--push)}
 .foot{margin-top:28px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);line-height:1.7;text-align:center}
 .why{margin-top:8px;font-size:12.5px;line-height:1.5;color:#cfd5e2}.why summary{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--gold);cursor:pointer;letter-spacing:.06em}
-.why li{margin:2px 0}.pl{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px}
+.why li{margin:2px 0}
+.pl{background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin-bottom:10px}
 .pl h3{margin:0;font-family:'Archivo Black',sans-serif;font-size:17px}.pl .px{font-family:'Archivo Black',sans-serif;font-size:22px;color:var(--gold)}
-.leg{padding:8px 0;border-top:1px solid var(--line)}.leg b{font-size:15px}
+.leg{padding:9px 0;border-top:1px solid var(--line)}.leg b{font-size:15px}
 .pl.cash{border-color:rgba(46,204,113,.5);box-shadow:0 0 22px rgba(46,204,113,.12);background:linear-gradient(160deg,#0f1c15,#12151c 55%)}
 .pl.cash .tagc{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;color:#0a0c10;background:var(--win);border-radius:20px;padding:3px 8px;margin-bottom:6px}
+.upd{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--cold);border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:13.5px;line-height:1.5}
+.upd .t{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);margin-bottom:2px}
 .share{display:flex;gap:8px;margin-top:6px}
 .share button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:11px;font:600 13px Inter,sans-serif}
-@media (max-width:380px){.pk{font-size:18px}.pct{font-size:17px}}
+@media (max-width:380px){.pk{font-size:18px}.pct{font-size:17px}.stat b{font-size:22px}}
 </style>
 </head><body><div class="wrap">
   <div class="top"><img class="logo" src="brand/badge-320.png" alt="TheDesk"><div><div class="brand">THE<span>DESK</span></div>
   <div class="tag" id="tag">Picks · Analysis · Edge</div></div></div>
-  <div class="tag" style="margin-top:12px">Three plays a day · locked before kickoff · graded at the final</div>
+  <div class="promise"><span>🔒 locked every morning</span><span>🔓 opens 30 min before each game</span><span>✅ graded at the final</span></div>
   <div class="soc" id="soc"></div>
-  <div class="record" id="rec"></div>
+  <div class="hero"><div class="k">The Best 3 · track record</div><div class="record" id="rec"></div><div class="sub2" id="rec2"></div></div>
+  <div id="updBox"></div>
   <div class="hd"><h2 id="todayH">Today's 3</h2><span id="lock"></span></div>
   <div id="today"><div class="empty">Loading…</div></div>
+  <div id="propBox"></div>
   <div id="parlayBox"></div>
-  <div id="cashBox"></div>
   <div class="fp" id="fp"></div>
   <a class="cta" id="cta" href="#" style="display:none" target="_blank" rel="noopener">GET TODAY'S PLAYS NOW<small id="ctaSub">Best 3 · Top 10 · every character's parlay · private Telegram</small></a>
+  <div id="cashBox"></div>
   <div class="share"><button onclick="share()">Share today's card</button></div>
   <div class="hd"><h2>Every result</h2><span>last 30 cards</span></div>
   <div id="hist"></div>
-  <div class="foot" id="foot">Records count only the three locked plays per card. Nothing is edited after lock.<br>For entertainment. Bet responsibly — 1-800-GAMBLER.</div>
+  <div class="foot" id="foot">Records count only the three locked plays per card. Nothing is edited after lock.<br>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</div>
 </div>
+<div class="dock" id="dock"><a id="dockA" href="#" target="_blank" rel="noopener">Get today's plays now →</a></div>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const sgn=p=>p==null?'':(p>0?'+':'')+p;
-const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀'};
+const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀'};
+const LAB={mlb:'MLB',nfl:'NFL',ncaaf:'CFB',nhl:'NHL',nba:'NBA',ncaab:'CBB'};
 const day=d=>new Date(d+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+const tm=t=>{const x=Date.parse(t||'');return isFinite(x)?new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';};
 const res=x=>x.push?['push','PUSH']:x.hit===true?['hit','✓ WIN']:x.hit===false?['miss','✗ LOSS']:['open','PENDING'];
-let FEED=null;
-/* TheDesk socials — fixed links, with the feed able to override */
+let FEED=null;const LIVE={};
 const SOCIAL={fb:'https://www.facebook.com/share/1FCDFdUvRp/',tg:'https://t.me/TheDeskApp'};
 const ICO={fb:'<svg viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12a12 12 0 1 0-13.9 11.9v-8.4H7.1V12h3V9.4c0-3 1.8-4.7 4.5-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 .9-2 1.9V12h3.4l-.5 3.5h-2.9v8.4A12 12 0 0 0 24 12z"/></svg>',
   tg:'<svg viewBox="0 0 24 24" fill="#29A9EB"><path d="M12 0a12 12 0 1 0 0 24 12 12 0 0 0 0-24zm5.6 8.2-1.9 9c-.1.6-.5.8-1.1.5l-3-2.2-1.4 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5c.2-.2 0-.3-.4-.1l-6.9 4.3-3-.9c-.6-.2-.7-.6.1-.9l11.7-4.5c.5-.2 1 .1.7.9z"/></svg>'};
@@ -104,55 +127,64 @@ function renderSocial(){const S={...SOCIAL,...((FEED&&FEED.social)||{})};const o
   if(S.tg)out.push(`<a class="tg" href="${esc(S.tg)}" target="_blank" rel="noopener">${ICO.tg}Telegram</a>`);
   $('soc').innerHTML=out.join('');$('soc').style.display=out.length?'flex':'none';}
 renderSocial();
+/* the countdown on a locked play: it opens 30 minutes before its game */
+function countdown(x){const u=x.unlockAt||(isFinite(Date.parse(x.start||''))?Date.parse(x.start)-(((FEED&&FEED.unlockMin)||30)*60e3):null);if(!u)return'opens 30 minutes before the game';
+  const ms=u-Date.now();if(ms<=0)return'opening now — refresh in a minute';const h=Math.floor(ms/36e5),m=Math.ceil((ms%36e5)/6e4);return`opens in ${h?h+'h ':''}${m}m · ${tm(new Date(u).toISOString())}`;}
 async function load(){
   /* the card can live in this site's own copy or the public site repo (while the domain moves) — read both, show the newest */
   try{const src=['public/picks.json?t='+Date.now(),'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/picks.json?t='+Date.now()];
     const got=(await Promise.allSettled(src.map(u=>fetch(u,{cache:'no-store'}).then(r=>r.ok?r.json():null)))).map(x=>x.status==='fulfilled'?x.value:null).filter(j=>j&&typeof j==='object');
-    if(!got.length)throw 0;FEED=got.sort((p,q)=>(q.generated||0)-(p.generated||0))[0];}catch(e){$('today').innerHTML='<div class="empty">No card published yet. Check back before first pitch.</div>';return;}
-  const R=FEED.record||{};const n=(R.w||0)+(R.l||0);
+    if(!got.length)throw 0;FEED=got.sort((p,q)=>(q.generated||0)-(p.generated||0))[0];}catch(e){$('today').innerHTML='<div class="empty">No card published yet. Check back before the first game.</div>';return;}
+  render();liveTick();}
+function render(){const F=FEED;if(!F)return;
+  const R=F.record||{};const n=(R.w||0)+(R.l||0);
   $('rec').innerHTML=`<div class="stat"><b>${R.w||0}-${R.l||0}${R.pu?'-'+R.pu:''}</b><small>record</small></div>
-    <div class="stat"><b class="${(R.u||0)>=0?'w':'l'}">${(R.u||0)>=0?'+':''}${(R.u||0).toFixed(1)}u</b><small>units</small></div>
+    <div class="stat"><b class="${(R.u||0)>=0?'w':'l'}">${(R.u||0)>=0?'+':''}${(+R.u||0).toFixed(1)}u</b><small>units</small></div>
     <div class="stat"><b>${n?Math.round(R.w/n*100)+'%':'—'}</b><small>hit rate</small></div>`;
-  if(FEED.handle)$('tag').textContent='Follow '+FEED.handle+' · locked before kickoff · graded at the final';
-  const T=FEED.today;
-  if(T&&T.picks&&T.picks.length){$('todayH').textContent=day(T.d)+' — the 3';$('lock').textContent='🔒 locked '+new Date(T.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
-    $('today').innerHTML=T.picks.map((x,i)=>{if(x.hidden){const t=x.start&&isFinite(Date.parse(x.start))?new Date(x.start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
-        return`<div class="lock"><div class="num">${i+1}</div><div class="key">🔒</div><b>LOCKED PLAY</b>
-          <div class="meta">${em[x.sp]||''} ${esc((x.sp||'').toUpperCase())}${t?' · revealed at kickoff, '+t:' · revealed at kickoff'}</div>
-          <div class="meta" style="color:var(--gold)">Subscribers have it now ↓</div></div>`;}
-      const [c,l]=res(x);const t=x.start&&isFinite(Date.parse(x.start))?new Date(x.start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
-      const tier=x.tier==='UNANIMOUS'?'<span class="pill u">★ UNANIMOUS</span>':x.tier==='SUPREME'?'<span class="pill s">SUPREME</span>':x.tier?'<span class="pill t">'+esc(x.tier)+'</span>':'';
-      return`<div class="pick ${c==='open'?'':c}"><div class="num">${i+1}</div><div class="res ${c}">${l}</div>
-        <div class="pk">${esc(x.pick)}<span class="pr">${sgn(x.price)}</span></div>
-        <div class="meta">${em[x.sp]||''} ${esc((x.sp||'').toUpperCase())} · ${esc(x.gl||x.game)}${t?' · '+t:''}</div>
-        <div class="meta">${tier}${x.voices&&x.voices.length?esc(x.voices.length)+' of our analysts agree':''}</div>
-        <div class="pct">${Math.round(x.p*100)}%<small>to hit</small></div>${whyBlock(x.why)}</div>`;}).join('');}
-  else $('today').innerHTML='<div class="empty">Today\'s card locks before first game. Nothing forced — some days the answer is pass.</div>';
-  try{renderParlay();}catch(e){}
-  try{renderCashed();}catch(e){}
-  try{renderSocial();}catch(e){}
-  if(FEED.subscribe){const a=$('cta');a.href=FEED.subscribe;a.style.display='block';const any=T&&T.picks&&T.picks.some(x=>x.hidden);
-    a.firstChild.textContent=any?"GET TODAY'S PLAYS NOW":'GET EVERY PLAY';$('ctaSub').textContent=(FEED.price?FEED.price+' · ':'')+'Best 3 · Top 10 · every character\'s parlay · private Telegram';}
+  const PR=F.parlayRecord;$('rec2').textContent=(R.first?'since '+day(R.first):'')+(PR&&PR.w+PR.l?` · the Banker's parlays ${PR.w}-${PR.l} (${PR.u>=0?'+':''}${(+PR.u).toFixed(1)}u)`:'');
+  if(F.handle)$('tag').textContent='Follow '+F.handle;
+  const T=F.today;
+  if(T&&T.picks&&T.picks.length){$('todayH').textContent=day(T.d)+' — the '+T.picks.length;$('lock').textContent='🔒 locked '+tm(new Date(T.lockedAt).toISOString());
+    $('today').innerHTML=T.picks.map((x,i)=>pickHtml(x,i)).join('');}
+  else if(T)$('today').innerHTML=`<div class="empty">No play cleared the bar today — every pick has to be one a character is 70%+ sure of, at a fair price. We don't force picks.</div>`;
+  else $('today').innerHTML='<div class="empty">Today\'s card locks every morning. Nothing forced — some days the answer is pass.</div>';
+  try{renderProps();}catch(e){}try{renderParlay();}catch(e){}try{renderCashed();}catch(e){}try{renderUpdates();}catch(e){}try{renderSocial();}catch(e){}
+  if(F.subscribe){const a=$('cta');a.href=F.subscribe;a.style.display='block';const any=T&&((T.picks||[]).some(x=>x.hidden)||(T.props||[]).some(x=>x.hidden));
+    a.firstChild.textContent=any?"GET TODAY'S PLAYS NOW":'GET EVERY PLAY';$('ctaSub').textContent=(F.price?F.price+' · ':'')+'Best 3 · Top 10 · every character\'s parlay · private Telegram';
+    $('dockA').href=F.subscribe;$('dockA').textContent=(any?'🔓 Get today\'s plays now':'Get every play')+(F.price?' · '+F.price.split('·')[0].trim():'');$('dock').style.display='block';}
   try{fingerprint(T);}catch(e){}
-  $('hist').innerHTML=(FEED.history||[]).map(h=>`<div class="day"><b>${esc(day(h.d).replace(/^\w+, /,''))}</b><div class="ps">${h.picks.map(x=>{const [c]=res(x);return`<span class="${c==='hit'?'w':c==='miss'?'l':'p'}">${c==='hit'?'✓':c==='miss'?'✗':c==='push'?'↔':'·'} ${esc(x.pick)} ${sgn(x.price)}</span>`;}).join('')}</div></div>`).join('')||'<div class="empty">The record starts with the first graded card.</div>';
-}
-/* proof the card wasn't changed after lock: the hash went out at lock time; once every game
-   has started the key is published and this page recomputes it */
-async function fingerprint(T){const el=$('fp');if(!T||!T.commit||!T.commit.hash){el.innerHTML='';return;}const C=T.commit;
-  const short=C.hash.slice(0,12)+'…'+C.hash.slice(-6);
-  if(!C.salt){el.innerHTML=`🔐 Fingerprint of today's locked plays: <b>${esc(short)}</b><br>Published at lock. Once every game has started, the key is revealed here and anyone can check the plays match.`;return;}
-  try{const txt=JSON.stringify(T.picks.map(x=>[x.sp,x.game,x.pick,x.price]))+'|'+C.salt;const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(txt));
-    const h=[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
-    el.innerHTML=h===C.hash?`<span class="ok">✓ Verified</span> — these are exactly the plays locked at ${esc(new Date(T.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))}. Fingerprint <b>${esc(short)}</b>, key <b>${esc(C.salt)}</b>.`
-      :`<span class="bad">Fingerprint does not match.</span>`;}catch(e){el.innerHTML='';}}
+  $('hist').innerHTML=(F.history||[]).map(h=>`<div class="day"><b>${esc(day(h.d).replace(/^\w+, /,''))}</b><div class="ps">${h.picks.map(x=>{const [c]=res(x);return`<span class="${c==='hit'?'w':c==='miss'?'l':'p'}">${c==='hit'?'✓':c==='miss'?'✗':c==='push'?'↔':'·'} ${esc(x.pick)} ${sgn(x.price)}</span>`;}).join('')}</div></div>`).join('')||'<div class="empty">The record starts with the first graded card.</div>';}
+function liveLine(x){const L=LIVE[x.sp+'|'+x.game];if(!L)return'';const [a,h]=String(x.game).split('@');
+  if(L.state==='in')return`<div class="score"><span class="dot"></span>${esc(a)} ${L.a} – ${L.h} ${esc(h)} · ${esc(L.detail||'')}</div>`;
+  if(L.state==='post')return`<div class="score">FINAL · ${esc(a)} ${L.a} – ${L.h} ${esc(h)}</div>`;return'';}
+function liveGrade(x){if(x.hit!=null||x.push)return x;const L=LIVE[x.sp+'|'+x.game];if(!L||L.state!=='post')return x;const [ga,gh]=String(x.game).split('@');const A=L.a,H=L.h,p=String(x.pick||'').trim();let m;
+  if((m=p.match(/^(Over|Under)\s+([\d.]+)$/i))){const t=A+H,ln=+m[2];if(t===ln)return{...x,push:true};return{...x,hit:/over/i.test(m[1])?t>ln:t<ln};}
+  if((m=p.match(/^(\S+)\s+ML$/i))){if(A===H)return{...x,push:true};const home=m[1]===gh;return{...x,hit:home?H>A:A>H};}
+  if((m=p.match(/^(\S+)\s+([+-]\d+(?:\.\d+)?)$/))){const home=m[1]===gh;const mar=(home?H-A:A-H)+(+m[2]);return mar===0?{...x,push:true}:{...x,hit:mar>0};}
+  return x;}
+function pickHtml(x0,i){if(x0.hidden)return`<div class="lock"><div class="num">${i+1}</div><div class="key">🔒</div><b>LOCKED PLAY</b>
+      <div class="meta">${em[x0.sp]||''} ${esc(LAB[x0.sp]||(x0.sp||'').toUpperCase())}${x0.start?' · game at '+tm(x0.start):''}</div><div class="cd" data-cd="1" data-u="${x0.unlockAt||''}" data-s="${esc(x0.start||'')}">${countdown(x0)}</div>
+      <div class="meta" style="color:var(--gold)">Subscribers have it now ↓</div></div>`;
+  const x=liveGrade(x0);const L=LIVE[x.sp+'|'+x.game];let [c,l]=res(x);if(c==='open'&&L&&L.state==='in'){c='live';l='● LIVE';}
+  const tier=x.tier==='UNANIMOUS'?'<span class="pill u">★ UNANIMOUS</span> ':'';
+  return`<div class="pick ${c==='open'?'':c}"><div class="num">${i+1}</div><div class="res ${c}">${l}</div>
+    <div class="pk">${esc(x.pick)}<span class="pr">${sgn(x.price)}</span></div>
+    <div class="meta">${em[x.sp]||''} ${esc(LAB[x.sp]||(x.sp||'').toUpperCase())} · ${esc(x.gl||x.game)}${x.start?' · '+tm(x.start):''}</div>
+    <div class="meta">${tier}${x.voices&&x.voices.length?esc(x.voices.join(', '))+(x.voices.length===1?' is':' are')+' 70%+ sure':''}</div>${liveLine(x)}
+    <div class="pct">${Math.round(x.p*100)}%<small>to hit</small></div>${whyBlock(x.why)}</div>`;}
+function renderProps(){const P=(FEED.today&&FEED.today.props)||[];const box=$('propBox');if(!P.length){box.innerHTML='';return;}
+  box.innerHTML=`<div class="hd"><h2>Best 3 props</h2><span>70%+ only</span></div><div class="mini">${P.map((x,i)=>{if(x.hidden)return`<div class="lock" style="padding-left:16px"><div class="key">🔒</div><b>LOCKED PROP</b><div class="meta">${em[x.sp]||''} ${esc(LAB[x.sp]||'')}${x.start?' · game at '+tm(x.start):''}</div><div class="cd" data-cd="1" data-u="${x.unlockAt||''}" data-s="${esc(x.start||'')}">${countdown(x)}</div></div>`;
+    const [c,l]=res(x);return`<div class="prop"><b>${esc(x.label||((x.player||'')+' '+(x.side||'over')+' '+x.thr+' '+(x.stat||'')))}</b>${x.price!=null?` <span class="pr">${sgn(x.price)}</span>`:''}<div class="pct">${Math.round((x.p||0)*100)}%<small>to hit</small></div>
+      <div class="meta">${em[x.sp]||''} ${esc(x.team||'')}${x.start?' · '+tm(x.start):''}${x.actual!=null?' · finished with '+esc(x.actual):''} ${c!=='open'?`<b class="${c==='hit'?'w':c==='miss'?'l':'p'}">${l}</b>`:''}</div></div>`;}).join('')}</div>`;}
 function whyBlock(W){if(!W||!W.bullets||!W.bullets.length)return'';return`<details class="why"><summary>WHY WE LIKE IT</summary><ul style="padding-left:16px;margin:6px 0">${W.bullets.map(b=>`<li>${esc(b)}</li>`).join('')}</ul></details>`;}
 function renderParlay(){const P=FEED&&FEED.parlay;const box=$('parlayBox');if(!P||!P.legs||!P.legs.length){box.innerHTML='';return;}
-  const R=FEED.parlayRecord;const res=P.result===true?'<span class="res hit" style="position:static">✓ CASHED</span>':P.result===false?'<span class="res miss" style="position:static">✗ LOST</span>':'';
-  box.innerHTML=`<div class="hd"><h2>Tonight's parlay</h2><span>${R&&R.w+R.l?R.w+'-'+R.l+' all-time':'the Roll Call'}</span></div>
-    <div class="pl"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>${P.legs.length}-leg Roll Call ${res}</h3><div class="px">${esc(P.price)}</div></div>
-    <div class="meta">${Math.round(P.p*1000)/10}% to cash · each leg is a different analyst's best pick · 🔒 locked ${new Date(P.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</div>
-    ${P.legs.map(l=>{if(l.hidden)return`<div class="leg"><b>🔒 Locked leg</b> <span class="meta">${em[l.sp]||''} ${esc((l.sp||'').toUpperCase())} · revealed at kickoff</span></div>`;const [c,lab]=res2(l);return`<div class="leg"><b>${esc(l.pick)}</b> <span class="pr">${sgn(l.price)}</span> <span class="res ${c}" style="position:static;margin-left:6px">${c==='open'?'':lab}</span>
-      <div class="meta"> ${em[l.sp]||''} ${esc(l.gl||l.game)} · ${esc(l.by)}'s pick · ${Math.round(l.p*100)}%</div>${whyBlock(l.why)}</div>`;}).join('')}</div>`;}
+  const R=FEED.parlayRecord;const rs=P.result===true?'<span class="res hit" style="position:static">✓ CASHED</span>':P.result===false?'<span class="res miss" style="position:static">✗ LOST</span>':'';
+  box.innerHTML=`<div class="hd"><h2>The Banker's parlay</h2><span>${R&&R.w+R.l?R.w+'-'+R.l+' all-time':'his own ticket'}</span></div>
+    <div class="pl"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>🏦 ${P.legs.length}-leg ${rs}</h3><div class="px">${esc(P.price)}</div></div>
+    <div class="meta">${Math.round(P.p*1000)/10}% to cash · every leg backed by 2+ characters at 70%+ · 🔒 locked ${tm(new Date(P.lockedAt).toISOString())}</div>
+    ${P.legs.map(l=>{if(l.hidden)return`<div class="leg"><b>🔒 Locked leg</b> <span class="meta">${em[l.sp]||''} ${esc(LAB[l.sp]||'')} · </span><span class="cd" data-cd="1" data-u="${l.unlockAt||''}" data-s="${esc(l.start||'')}">${countdown(l)}</span></div>`;
+      const x=liveGrade(l);const [c,lab]=res2(x);return`<div class="leg"><b>${esc(x.pick)}</b> <span class="pr">${sgn(x.price)}</span> <span class="res ${c}" style="position:static;margin-left:6px">${c==='open'?'':lab}</span>
+      <div class="meta"> ${em[x.sp]||''} ${esc(x.gl||x.game)}${x.by?' · '+esc(x.by):''} · ${Math.round(x.p*100)}%</div>${liveLine(x)}${whyBlock(x.why)}</div>`;}).join('')}</div>`;}
 /* every winning Banker / character parlay, newest first — its own box */
 function renderCashed(){const L=(FEED&&FEED.cashed)||[];const box=$('cashBox');if(!L.length){box.innerHTML='';return;}
   box.innerHTML=`<div class="hd"><h2>🎉 Cashed</h2><span>every winning parlay, as it hits</span></div>`+L.slice(0,8).map(c=>`<div class="pl cash"><div class="tagc">CASHED</div>
@@ -160,9 +192,35 @@ function renderCashed(){const L=(FEED&&FEED.cashed)||[];const box=$('cashBox');i
     <div class="meta">${esc(day(c.d))} · ${c.legs.length}-leg parlay${c.props?' with props':''} · 1 unit → <b class="w">+${(+c.units).toFixed(2)}u</b></div>
     ${c.legs.map(l=>`<div class="leg"><span class="${l.push?'p':'w'}">${l.push?'↔':'✓'}</span> <b>${esc(l.pick)}</b> <span class="pr">${sgn(l.price)}</span><div class="meta">${em[l.sp]||''} ${esc(l.gl||l.game)}</div></div>`).join('')}
     ${c.rec?`<div class="meta" style="margin-top:6px">Parlay record: ${esc(c.rec)}</div>`:''}</div>`).join('')+(L.length>8?`<div class="meta" style="text-align:center">+${L.length-8} more in the last two weeks</div>`:'');}
+const UICO={update:'📣',weather:'🌧',injury:'🚑',line:'🔁',result:'🏁'};
+function renderUpdates(){const U=(FEED&&FEED.updates)||[];const box=$('updBox');if(!U.length){box.innerHTML='';return;}
+  box.innerHTML=`<div class="hd"><h2>Slate updates</h2><span>from the desk</span></div>`+U.slice(0,5).map(u=>`<div class="upd"><div class="t">${UICO[u.kind]||'📣'} ${esc(new Date(u.ts).toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit'}))}</div>${esc(u.text)}</div>`).join('');}
 const res2=x=>x.push?['push','PUSH']:x.hit===true?['hit','✓']:x.hit===false?['miss','✗']:['open',''];
-function share(){if(!FEED||!FEED.today)return;const t=FEED.today.picks.map((x,i)=>x.hidden?`${i+1}. 🔒 locked — revealed at kickoff`:`${i+1}. ${x.pick} ${sgn(x.price)}`).join('\n');
+/* proof the card wasn't changed after lock: the hash went out at lock time; once every game
+   has started the key is published and this page recomputes it */
+async function fingerprint(T){const el=$('fp');if(!T||!T.commit||!T.commit.hash){el.innerHTML='';return;}const C=T.commit;
+  const short=C.hash.slice(0,12)+'…'+C.hash.slice(-6);
+  if(!C.salt){el.innerHTML=`🔐 Fingerprint of today's locked plays: <b>${esc(short)}</b><br>Published at lock. Once every game has started, the key is revealed here and anyone can check the plays match.`;return;}
+  try{const txt=JSON.stringify(T.picks.map(x=>[x.sp,x.game,x.pick,x.price]))+'|'+C.salt;const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(txt));
+    const h=[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+    el.innerHTML=h===C.hash?`<span class="ok">✓ Verified</span> — these are exactly the plays locked at ${esc(tm(new Date(T.lockedAt).toISOString()))}. Fingerprint <b>${esc(short)}</b>, key <b>${esc(C.salt)}</b>.`
+      :`<span class="bad">Fingerprint does not match.</span>`;}catch(e){el.innerHTML='';}}
+/* live scores for the open picks, straight from ESPN, every minute */
+const ESPN={nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',mlb:'baseball/mlb',nba:'basketball/nba',ncaab:'basketball/mens-college-basketball'};
+const ALIAS={mlb:{CHW:'CWS',ARI:'AZ',OAK:'ATH',WAS:'WSH'},nfl:{WAS:'WSH',JAC:'JAX',LA:'LAR',LVR:'LV',OAK:'LV',ARZ:'ARI'},nhl:{LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV:'VGK',MON:'MTL',UTA:'UTAH',WAS:'WSH'},nba:{GSW:'GS',NYK:'NY',NOP:'NO',SAS:'SA',UTA:'UTAH',WAS:'WSH',BRK:'BKN',PHO:'PHX',CHO:'CHA'}};
+const ab=(sp,x)=>{x=String(x||'').toUpperCase();return(ALIAS[sp]||{})[x]||x;};
+async function liveTick(){const T=FEED&&FEED.today;if(!T)return;const all=[...(T.picks||[]),...((FEED.parlay||{}).legs||[])].filter(x=>!x.hidden&&x.game&&ESPN[x.sp]&&x.hit==null&&!x.push);
+  const need=[...new Set(all.map(x=>x.sp))];if(!need.length)return;const ymd=String(T.d||'').replace(/-/g,'');
+  await Promise.all(need.map(async sp=>{try{const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${ESPN[sp]}/scoreboard?dates=${ymd}&limit=300${sp==='ncaaf'?'&groups=80':sp==='ncaab'?'&groups=50':''}`);if(!r.ok)return;const j=await r.json();
+    (j.events||[]).forEach(ev=>{const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];const A=cs.find(z=>z.homeAway==='away'),H=cs.find(z=>z.homeAway==='home');if(!A||!H)return;
+      const st=((c.status||ev.status||{}).type)||{};const key=sp+'|'+ab(sp,A.team&&A.team.abbreviation)+'@'+ab(sp,H.team&&H.team.abbreviation);
+      LIVE[key]={a:+(A.score&&A.score.value!=null?A.score.value:A.score),h:+(H.score&&H.score.value!=null?H.score.value:H.score),state:st.state==='post'||st.completed?'post':st.state==='in'?'in':'pre',detail:st.shortDetail||st.detail||''};});}catch(e){}}));
+  /* match a pick written with the book's abbreviations to ESPN's */
+  all.forEach(x=>{const k=x.sp+'|'+x.game;if(LIVE[k])return;const[a,h]=String(x.game).split('@');const alt=x.sp+'|'+ab(x.sp,a)+'@'+ab(x.sp,h);if(LIVE[alt])LIVE[k]=LIVE[alt];});
+  render();}
+function tickCountdowns(){document.querySelectorAll('[data-cd]').forEach(el=>{el.textContent=countdown({unlockAt:+el.getAttribute('data-u')||null,start:el.getAttribute('data-s')});});}
+function share(){if(!FEED||!FEED.today)return;const t=FEED.today.picks.map((x,i)=>x.hidden?`${i+1}. 🔒 locked — opens 30 min before the game`:`${i+1}. ${x.pick} ${sgn(x.price)}`).join('\n');
   const txt=`TheDesk — ${day(FEED.today.d)}\n${t}\n${location.href}`;if(navigator.share)navigator.share({title:'TheDesk',text:txt,url:location.href}).catch(()=>{});else{navigator.clipboard&&navigator.clipboard.writeText(txt);alert('Copied to clipboard');}}
-load();setInterval(load,120000);
+load();setInterval(load,120000);setInterval(liveTick,60000);setInterval(tickCountdowns,30000);
 </script>
 </body></html>

@@ -60,18 +60,21 @@ setTimeout(()=>{try{
   // ── Best card ──
   const tom=w.eval('dayShift(today(),4)');
   const B=[
-    {game:'A@B',m:'ml',sd:'home',pick:'B ML',price:-250,color:' supreme',unan:true,chars:['Sim'],blend:.75,evCal:2,start:st(23)},       // too short
+    {game:'A@B',m:'ml',sd:'home',pick:'B ML',price:-320,color:' supreme',unan:true,chars:['Sim'],blend:.75,evCal:2,start:st(23)},       // too short (v2.31: -300 is the floor)
     {game:'C@D',m:'ml',sd:'home',pick:'D ML',price:-120,color:' supreme',chars:['Sim','Judge'],blend:.6,evCal:4,start:st(23)},
     {game:'E@F',m:'total',sd:'over',pick:'Over 6.5',price:105,color:' strong',chars:['Sim'],blend:.52,evCal:6.6,start:st(23)},
     {game:'G@H',m:'ml',sd:'away',pick:'G ML',price:120,color:'value',chars:['Sim'],blend:.5,evCal:10,start:st(23)},
     {game:'I@J',m:'ml',sd:'away',pick:'I ML',price:110,color:' supreme',unan:true,chars:['Sim'],blend:.55,evCal:15.5,start:tom+'T19:00:00-05:00'}, // not today
     {game:'K@L',m:'ml',sd:'home',pick:'L ML',price:-105,color:' strong',chars:['Sim'],blend:.49,evCal:-4,start:st(23)},   // negative EV
     {game:'M@N',m:'ml',sd:'home',pick:'N ML',price:-110,color:'value',chars:['Sim'],blend:.55,evCal:5,start:st(23)}];
+  /* v2.31: a pick makes the Best card only when a character is 70%+ sure of it */
+  const CF={'A@B':0.8,'C@D':0.76,'E@F':0.71,'G@H':0.70,'I@J':0.9,'K@L':0.62,'M@N':0.69};
+  w.eval(`set(VOICES_KEY,${JSON.stringify(B.map((x,i)=>({id:'b'+i,voice:'Sim',sp:'nhl',game:x.game,market:x.m,side:x.sd,price:x.price,date:'__D__',cf:CF[x.game]})))}.map(v=>({...v,date:today()})))`);
   w.eval(`localStorage.removeItem(BEST5_KEY);localStorage.removeItem('d4.best5log');set(LS_EVAL,{});set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify(B)},props:[]},ncaaf:{ts:Date.now(),picks:${JSON.stringify(B.slice(4,5).map(x=>({...x,game:'X@Y'})))},props:[]}}})`);
   const S=w.eval('best5State()');const top=S.top3.map(x=>x.pick);
   T('Best card: exactly 3 picks',S.top3.length===3,top.join(', '));
-  T('Best: nothing shorter than -200, nothing from another day, no negative EV',!top.includes('B ML')&&!top.includes('I ML')&&!top.includes('L ML'));
-  T('Best: ranked agreement first, then EV (D ML supreme, Over 6.5 strong, then the best value)',top[0]==='D ML'&&top[1]==='Over 6.5'&&top[2]==='G ML',top.join(' > '));
+  T('Best: nothing shorter than -300, nothing from another day, nothing under 70% confidence',!top.includes('B ML')&&!top.includes('I ML')&&!top.includes('L ML'));
+  T('Best: ranked by confidence × the character\'s record in that lane (D 76%, Over 6.5 71%, G 70%)',top[0]==='D ML'&&top[1]==='Over 6.5'&&top[2]==='G ML',top.join(' > '));
   T('Best: CFB game that isn\'t today stays off the card',!(S.bySport.ncaaf||[]).length);
   T('Best: not locked before the master evaluation',!S.locked);
   w.eval(`set(LS_EVAL,{date:today()})`);const S2=w.eval('best5State()');

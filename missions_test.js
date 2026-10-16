@@ -66,8 +66,8 @@ const w=dom.window;
   T('two-lane: $24 anchor (2-leg) + $16 moonshot (4-leg) = 20% of $200',tl.lanes.length===2&&tl.lanes[0].stake===24&&tl.lanes[1].stake===16&&tl.lanes[1].k===4);
   // ── the Money tab ──
   w.eval("tab('money',null)");await wait(300);const mb=w.document.getElementById('moneyBody').innerHTML;
-  T("Money tab: rank, TODAY'S ORDERS, built legs, side quests, route planner, map",/RANK/.test(mb)&&/TODAY'S ORDERS/.test(mb)&&/Built from Today's card|on Today's card makes? sense/.test(mb)&&/SIDE QUESTS/.test(mb)&&/Route planner/.test(mb)&&/The Vault/.test(mb),['RANK',"TODAY'S ORDERS","Built from Today's card",'SIDE QUESTS','Route planner','The Vault'].filter(k=>!mb.includes(k)).join(','));
-  T('safe house shown on the heist card',/safe <b[^>]*>\$29\.80/.test(mb));
+  /* v2.31: the mission board is retired — the tab is Bankroll: one balance, the character league, the rebuilt challenges */
+  T('Bankroll tab: one balance, the league and the rebuilt challenges (the old mission board is gone)',/Your bankroll/.test(mb)&&/Character League/.test(mb)&&/Challenges/.test(mb)&&!/Route planner/.test(mb)&&!/SIDE QUESTS/.test(mb));
   T('no uncaught errors',errors.length===0,errors.slice(0,3).join(' || '));
   console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length}/${out.length} passed`);
   process.exit(out.some(x=>x.startsWith('FAIL'))?1:0);

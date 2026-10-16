@@ -48,8 +48,8 @@ setTimeout(async()=>{try{
   const o2=nfl.eval('JSON.stringify(msOrders(msAll()[0]))');
   T('mission plan re-sizes when the balance drops (path follows current balance)',o1!==o2,`start $${m0.start} → $${m0.start/2}`);
   // 5. bankroll is read live
-  nfl.eval("set(BR_AMT,'50')");const b50=nfl.eval('brAmount()');nfl.eval("set(BR_AMT,'80')");
-  T('bankroll entry is read immediately (no stale cache)',b50===50&&nfl.eval('brAmount()')===80);
+  nfl.eval("bankSetBalance(50)");const b50=nfl.eval('brAmount()');nfl.eval("bankSetBalance(80)");
+  T('v2.31 · one bankroll: setting it moves every reader at once (no stale cache)',b50===50&&nfl.eval('brAmount()')===80&&nfl.eval('bankBalance()')===80);
   // 6. CFB props: leaders parse + ladder like NFL
   const sum={leaders:[
     {team:{abbreviation:'UGA',id:'61'},leaders:[{name:'passingYards',leaders:[{value:1500,athlete:{id:'11',displayName:'Gunner Stockton',position:{abbreviation:'QB'}}}]},

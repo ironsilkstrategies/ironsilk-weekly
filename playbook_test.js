@@ -68,7 +68,7 @@ const L=(ml,spA,spH,spL)=>JSON.stringify([{away:'PHI',home:'CHI',game:'PHI@CHI',
   const slate=w.document.getElementById('slate').innerHTML;
   T('rule badges render on the live board squares',/class="rule learned"/.test(slate)&&/class="rule principle"/.test(slate));
   // ── playbooks + CLV in the Records hub ──
-  w.eval(`set(LS.locked,[${JSON.stringify(t)}])`);w.eval("tab('grades',null)");await wait(300);
+  w.eval(`set(LS.locked,[${JSON.stringify(t)}])`);w.eval("REC_VIEW='deep';tab('grades',null)");await wait(300);   /* v2.31: Records → Engine Room → Deep stats */
   const hub=w.document.getElementById('recordsHub').innerHTML;
   T('Records hub shows Closing line value',/Closing line value/.test(hub)&&/You: <b[^>]*>\+/.test(hub));
   T('Playbooks list Judge edges and Coach as a fade',/Playbooks/.test(hub)&&/🔥 play: NFL side/.test(hub)&&/🧊 fade: NFL side/.test(hub));

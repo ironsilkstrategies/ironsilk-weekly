@@ -23,7 +23,7 @@ setTimeout(()=>{try{
   const pod=w.eval(`cpropOfDay('Judge')`);T('each character has a prop of the day',pod&&pod.player==='Travis Kelce');
   T('fades never become the prop of the day',!w.eval(`cpropOfDay('Trends')`)||w.eval(`cpropOfDay('Trends')`).fav!=='fade');
   const ros=w.eval('charRosterHtml()');T('roster shows prop of the day + favorite players',/Prop of the day/.test(ros)&&/Favorite players/.test(ros));
-  const tg=w.eval('subTelegramText(subCard()).join("\\n")');T('subscriber Telegram post carries each character prop of the day',/CHARACTER PROPS OF THE DAY/.test(tg)&&/Travis Kelce/.test(tg));
+  const tg=w.eval('subTelegramText(subCard()).join("\\n")');T('subscriber Telegram post carries the props of the day (one character per player, 70%+)',/PROPS OF THE DAY/.test(tg)&&/Travis Kelce/.test(tg),tg.slice(tg.indexOf('PROPS')).slice(0,200));
   T('props are logged automatically on every board refresh, not only when the props tab is opened',/cpropLog\(cpropToday\(\)/.test(w.eval('todaySnapshot.toString()')));
 }catch(e){out.push('CRASH '+e.stack);}
 console.log(out.join('\n'));process.exit(0);},1500);

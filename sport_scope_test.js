@@ -20,11 +20,7 @@ const w=dom.window;
   // ── the board: a sport picker on every mission
   w.eval("tab('money',null)");await wait(200);
   const sel=id=>{const e=w.document.getElementById('msSp-'+id);return e&&e.value;};
-  T('every mission card has an All-sports / one-sport picker',!!sel('dollar_grand')||true);
-  w.eval("MS_CAT='sprint';msRender()");
-  T('Hockey Night defaults to NHL only',sel('hockey_night')==='nhl',sel('hockey_night'));
-  w.eval("MS_CAT='penny';msRender()");
-  T('Dollar to a Grand defaults to all sports',sel('dollar_grand')==='all',sel('dollar_grand'));
+  /* v2.31: the old mission board (and its sport pickers) is retired from the screen; the engine below still scopes by sport */
   // ── start Hockey Night as ALL sports
   w.eval("msStart('hockey_night','all')");let m=w.eval('msAll()[0]');
   T('Hockey Night started on all sports',m.sport===null);
@@ -42,11 +38,7 @@ const w=dom.window;
   w.eval("msStart('three_pockets','nhl')");const po=w.eval("msAll()[2].pots.map(P=>msPotOrders(msAll()[2],P).map(L=>L.build.best?L.build.best.legs.map(x=>x.sp).join(','):'-'))");
   T('Three Pockets on NHL only: every pot builds from NHL',JSON.stringify(po).indexOf('nfl')<0,JSON.stringify(po));
   w.eval("msStart('four_seasons')");
-  w.eval("MS_CAT='multi';msRender()");const mb=w.document.getElementById('missionsBody').innerHTML;
-  T('Four Seasons (one pot per sport) has no picker — its pots already own a sport',!w.document.getElementById('msSp-four_seasons'));
-  // ── coverage line + attach rule check respects scope
-  T('running card says which sports Today\'s card is missing',/no 🏟 CFB, ⚾ MLB picks yet/.test(mb),(mb.match(/no [^<]*picks yet/)||[''])[0]);
-  T('…with a link to load them',/loadAllSports\(\)/.test(mb));
+  // ── attach rule check respects scope
   w.eval(`set(LS.locked,[{id:901,date:today(),source:'mine',legs:[{game:'PHI@CHI',pick:'CHI ML',sport:'nfl',price:164}]}])`);
   w.eval(`msAttach(msAll()[0].id,{value:'901'})`);
   T('attaching an NFL ticket to all-sports Hockey Night breaks no rule',w.eval('msAll()[0].steps[0].rule.ok')===true);

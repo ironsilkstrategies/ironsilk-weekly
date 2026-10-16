@@ -25,24 +25,25 @@ setTimeout(async()=>{try{
   T('weak-spot label reads like a scout report',/CFB road fav spread 7-16/.test(fav.why[0])&&/CFB road dog spread 18-5/.test(dog.why[0]),fav.why[0]+' | '+dog.why[0]);
   /* today's calls: 2 road-fav spreads (weak) + 6 road-dog / other spots */
   const games=['A1@B1','A2@B2','A3@B3','A4@B4','A5@B5','A6@B6','A7@B7','A8@B8'];
-  const calls=games.map((gm,k)=>({id:'t'+k,voice:'Judge',sp:'ncaaf',market:'spread',side:'away',line:k<2?-6.5:6.5,price:-110,date:td,game:gm,pick:gm.split('@')[0]+(k<2?' -6.5':' +6.5')}));
+  const calls=games.map((gm,k)=>({id:'t'+k,voice:'Judge',sp:'ncaaf',market:'spread',side:'away',line:k<2?-6.5:6.5,price:-110,date:td,game:gm,pick:gm.split('@')[0]+(k<2?' -6.5':' +6.5'),cf:k<2?0.58:0.72+0.005*k}));   /* v2.31: the weak spots aren't official */
   w.eval(`set(VOICES_KEY,get(VOICES_KEY,[]).concat(${JSON.stringify(calls)}))`);
   const sc=w.eval(`(()=>{const V=roGet(VOICES_KEY,[]);return get(VOICES_KEY,[]).filter(x=>x.date===today()).map(c=>({g:c.game,weak:cparLegScore(V,c).weak}));})()`);
   T('the shared leg scorer flags weak-spot calls for every builder',sc.filter(x=>x.weak).map(x=>x.g).join()==='A1@B1,A2@B2',JSON.stringify(sc));
   const C=w.eval(`bkDayCands(roGet(VOICES_KEY,[]),today()).Judge.map(x=>x.game)`);
   T('Banker / Roll Call candidates leave the weak spots out',!C.includes('A1@B1')&&!C.includes('A2@B2')&&C.length===6,C.join());
-  const P=w.eval(`subCharParlay('Judge',5)`);
-  T('subscriber 5-leg: five legs, one per game, no weak spots, strengths labelled',P&&P.legs.length===5&&new Set(P.legs.map(l=>l.game)).size===5&&!P.legs.some(l=>/A1@B1|A2@B2/.test(l.game))&&P.legs.every(l=>/road dog spread/.test(l.spec))&&P.dropped===2,JSON.stringify(P&&P.legs.map(l=>l.game)));
-  T('its cash chance is the product of the leg chances',Math.abs(P.p-P.legs.reduce((a,l)=>a*l.p,1))<1e-9&&P.p<0.25);
+  const P=w.eval(`subCharParlay('Judge')`);
+  T('subscriber ticket = the one the Banker placed: 2–4 official legs, one per game, no weak spots (no more 5-leg dumps)',P&&P.legs.length>=2&&P.legs.length<=4&&new Set(P.legs.map(l=>l.game)).size===P.legs.length&&!P.legs.some(l=>/A1@B1|A2@B2/.test(l.game)),JSON.stringify(P&&P.legs.map(l=>l.game)));
+  T('its cash chance is the product of the leg chances, never under 30%',Math.abs(P.p-P.legs.reduce((a,l)=>a*l.p,1))<1e-9&&P.p>=0.3);
   /* ── top 10 ── */
   const pk=(gm,extra)=>({game:gm,m:'ml',sd:'home',pick:gm.split('@')[1]+' ML',price:110,color:' strong',blend:.52,mp:.52,mkt:.48,start:'2026-10-11T23:00:00Z',...(extra||{})});
   const TC=[pk('C1@D1'),pk('C2@D2',{blend:.58,mp:.58}),pk('C3@D3',{price:-400,blend:.85,mp:.85,mkt:.8}),pk('C4@D4',{start:'2026-10-11T17:00:00Z'}),pk('C5@D5',{blend:.40,mp:.40})];
-  w.eval(`set(TC_KEY,{d:'${td}',by:{ncaaf:{picks:${JSON.stringify(TC)}}}})`);
-  const top=w.eval('subTop10().map(x=>x.game)');
-  T('top 10: best value first; no -400 chalk, no started games, no -EV',top[0]==='C2@D2'&&!top.includes('C3@D3')&&!top.includes('C4@D4')&&!top.includes('C5@D5'),top.join());
+  w.eval(`set(TC_KEY,{d:'${td}',by:{ncaaf:{picks:${JSON.stringify(TC)}}}});localStorage.removeItem(BEST5_KEY);
+    set(VOICES_KEY,get(VOICES_KEY,[]).concat(${JSON.stringify(TC.map((x,i)=>({id:'tc'+i,voice:'Judge',sp:'ncaaf',game:x.game,market:'ml',side:'home',price:x.price,cf:[0.72,0.75,0.9,0.8,0.6][i]})))}.map(v=>({...v,date:today()}))))`);
+  const b3=w.eval('best5State().top3.map(x=>x.game)'),top=w.eval('subTop10().map(x=>x.game)');
+  T('Best 3 + the rest of the Top 10: never the same pick twice; no -400 chalk, no started games, no model-vs-market fight, nothing under 70%',b3.join()==='C1@D1'&&!top.some(g=>b3.includes(g))&&![...b3,...top].some(g=>/C2@D2|C3@D3|C4@D4|C5@D5/.test(g)),b3.join()+' | '+top.join());
   /* ── Telegram ── */
   const parts=w.eval('subTelegramText(subCard())');
-  T('Telegram card: Top plays + each character parlay + 21+ line, every part under the limit',parts.every(p=>p.length<=3800)&&/TOP \d+ PLAYS/.test(parts.join())&&/The Judge — 5-leg/.test(parts.join())&&/1-800-GAMBLER/.test(parts.join()));
+  T('Telegram card: the Best 3 + each placed character ticket + 21+ line, every part under the limit',parts.every(p=>p.length<=3800)&&/TODAY'S BEST/.test(parts.join())&&/The Judge — [234]-leg/.test(parts.join())&&/1-800-GAMBLER/.test(parts.join())&&!/5-leg/.test(parts.join()),parts.join().replace(/<[^>]+>/g,'').slice(0,300));
   T('HTML-safe (team names escaped)',!/<(?!\/?(b|i)>)/.test(parts.join('').replace(/<b>|<\/b>|<i>|<\/i>/g,'')));
   w.eval(`set('d4.tgbot','123:ABC');set('d4.tgchat','@TheDeskVIP')`);
   let r=await w.eval('subPostTelegram()');

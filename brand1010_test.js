@@ -27,17 +27,17 @@ setTimeout(()=>{try{
   T('one-time repair: "-2" prices become unpriced, real prices untouched',n===2&&w.eval('get(LS.locked,[])[0].legs[0].price')===null&&w.eval('get(LS.locked,[])[0].legs[1].price')===-150&&w.eval('settledAll().x2.legs[0].pr')===null&&w.eval('settledAll().x2.legs[1].pr')===-130);
   T('repair runs once',w.eval('repairBadPrices()')===0);
   w.eval(`set(SETTLED_KEY,{t1:{id:'t1',src:'mine',d:'${td}',legs:[{sp:'nhl',g:'A@B',pk:'B ML',pr:-150,h:'W'},{sp:'nhl',g:'C@D',pk:'D ML',pr:-150,h:'L'},{sp:'nhl',g:'E@F',pk:'F +2.5',pr:null,h:'W'},{sp:'nhl',g:'G@H',pk:'H +3.5',pr:null,h:'W'}]}});set(LS.locked,[]);HUB_CACHE=null`);
-  const hub=D.createElement('div');hub.id='recordsHub';D.body.appendChild(hub);w.eval("REC_VIEW='overview';renderRecordsHub()");
+  const hub=D.createElement('div');hub.id='recordsHub';D.body.appendChild(hub);w.eval("REC_VIEW='deep';renderRecordsHub()");   /* v2.31: the old overview lives under Engine Room → Deep stats */
   const H=D.getElementById('recordsHub').innerHTML;
   T('your record splits priced legs (judged on break-even) from unpriced SGP/alt legs',/You — priced legs: 1-1/.test(H)&&/prices needed 60%/.test(H)&&/\+ 2-0 on legs with no price of their own/.test(H),(H.match(/You — priced[^<]*/)||[''])[0]);
   /* playable + crowd */
-  const V=[['Sim','home'],['Judge','home'],['Most common','home']].map(([v,sd],i)=>({id:'c'+i,voice:v,sp:'nhl',date:td,game:'A1@B1',market:'ml',side:sd,price:120}));
-  V.push(...[['Sim','home'],['Judge','away']].map(([v,sd],i)=>({id:'d'+i,voice:v,sp:'nhl',date:td,game:'A2@B2',market:'ml',side:sd,price:110})));
+  const V=[['Sim','home'],['Judge','home'],['Most common','home']].map(([v,sd],i)=>({id:'c'+i,voice:v,sp:'nhl',date:td,game:'A1@B1',market:'ml',side:sd,price:120,cf:0.71+i*0.01}));
+  V.push(...[['Sim','home'],['Judge','away']].map(([v,sd],i)=>({id:'d'+i,voice:v,sp:'nhl',date:td,game:'A2@B2',market:'ml',side:sd,price:110,cf:0.62})));   /* v2.31: official = a character 70%+ sure */
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)});CROWD_C=null`);
   T('crowd agreement: all characters on the side = agree; a split = not',w.eval(`crowdAllAgree('nhl','A1@B1','ml','home')`)===true&&w.eval(`crowdAllAgree('nhl','A2@B2','ml','home')`)===false);
   const pk=(g,extra)=>JSON.stringify({game:g,m:'ml',sd:'home',pick:g.split('@')[1]+' ML',price:120,color:' strong',blend:.5,mp:.5,mkt:.47,...(extra||{})});
-  T('Playable: crowd behind it, priced, +EV → in',w.eval(`tfPlayable(${pk('A1@B1')},'nhl')`)===true);
-  T('Playable: crowd split → out',w.eval(`tfPlayable(${pk('A2@B2')},'nhl')`)===false);
+  T('Official: a character 70%+ sure, priced, worth the price → in',w.eval(`tfPlayable(${pk('A1@B1')},'nhl')`)===true);
+  T('Official: nobody 70%+ sure → out',w.eval(`tfPlayable(${pk('A2@B2')},'nhl')`)===false);
   T('Playable: no book price → out',w.eval(`tfPlayable(${pk('A1@B1',{price:null})},'nhl')`)===false);
   T('Playable: priced shorter than -300 → out',w.eval(`tfPlayable(${pk('A1@B1',{price:-350,blend:.85,mp:.85,mkt:.8})},'nhl')`)===false);
   T('Playable: model fighting the market by 8+ pts → out',w.eval(`tfPlayable(${pk('A1@B1',{mp:.62,mkt:.47})},'nhl')`)===false);

@@ -21,15 +21,14 @@ setTimeout(()=>{try{
   T('a ticket matching the plan scores a full fit',fg.full,fg.checks.map(c=>(c.ok?'✓':'✗')+c.lab).join(' '));
   T('a ticket breaking legs/price/stake scores low with reasons',fb.score<=2&&fb.checks.filter(c=>!c.ok).every(c=>c.why),fb.checks.filter(c=>!c.ok).map(c=>c.lab+': '+c.why).join(' | '));
   T('upcoming-game ticket (4 days out) fits when inside the window',ff.checks.find(c=>/window/.test(c.lab)).ok===(w.eval(`dayShift(msAll()[0].startDate,msAll()[0].days-1)`)>=tom));
-  const panel=w.eval('msMatcherHtml()');
-  T('Money tab lists where each loaded ticket fits',/Where your tickets fit/.test(panel)&&/#good/.test(panel)&&/Attach/.test(panel));
-  T('ticket card gets a "fits <challenge>" chip',/🎯 fits/.test(w.eval(`msFitChip(get(LS.locked,[])[0])`)));
+  /* v2.31: the old matcher panel and fit chips are retired with the old challenges (the engine underneath still works) */
+  T('the rebuilt Bankroll tab shows the new challenges instead of the old matcher',/Challenges/.test(w.eval('renderMoneyTab()'))&&!/Where your tickets fit/.test(w.eval('renderMoneyTab()'))&&w.eval(`msFitChip(get(LS.locked,[])[0])`)==='');
   w.eval(`msAttachId(msAll()[0].id,'good',0)`);
   T('attach from the matcher puts it on the challenge and drops it from the free list',w.eval(`msAll()[0].steps.some(s=>s.ticketId==='good')`)&&!w.eval('msFreeTickets()').some(t=>t.id==='good'));
   // ── character parlays ──
   const V=[];const hist=(voice,game,market,side,n,wins)=>{for(let i=0;i<n;i++)V.push({id:voice+game+market+i,sp:'nhl',date:'2026-09-'+String(1+i).padStart(2,'0'),game,voice,market,side,graded:true,hit:i<wins});};
   hist('Coach','A@B','total','under',10,8);hist('Coach','X@Y','ml','home',20,15);hist('Coach','C@D','ml','home',10,3);
-  ['A@B','C@D','E@F','G@H','I@J','K@L'].forEach((g,i)=>{const mkt=i===0?'total':'ml',side=i===0?'under':'home';V.push({id:'t'+i,sp:'nhl',date:td,game:g,voice:'Coach',market:mkt,side,price:i===0?-110:-120,pick:i===0?'Under 5.5':g.split('@')[1]+' ML'});});
+  ['A@B','C@D','E@F','G@H','I@J','K@L'].forEach((g,i)=>{const mkt=i===0?'total':'ml',side=i===0?'under':'home';V.push({id:'t'+i,sp:'nhl',date:td,game:g,voice:'Coach',market:mkt,side,price:i===0?-110:-120,pick:i===0?'Under 5.5':g.split('@')[1]+' ML',cf:g==='C@D'?0.6:0.78-0.01*i});});   /* v2.31: official (70%+) except its weak spot */
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)});set(TC_KEY,{d:today(),by:{nhl:{picks:${JSON.stringify(['A@B','C@D','E@F','G@H','I@J','K@L'].map((g,i)=>({game:g,m:i===0?'total':'ml',sd:i===0?'under':'home',unan:true,blend:0.6,mp:0.6,mkt:0.57})))}}}});set(LS_EVAL,{});localStorage.removeItem(CPAR_KEY)`);
   /* v1.90: character parlays only take legs the whole crowd backs on today's card */
   const pb=w.eval(`cparBuild('Coach')`);
@@ -38,10 +37,10 @@ setTimeout(()=>{try{
   T('parlay price is the product of its legs',Math.abs(pb.dec-pb.legs.reduce((a,l)=>a*w.eval(`americanToDecimal(${l.price})`),1))<1e-9);
   T('not frozen before the master evaluation',!w.eval('cparState().locked'));
   w.eval(`set(LS_EVAL,{date:today()})`);const s1=w.eval('cparState()');
-  T('frozen at the master evaluation',s1.locked&&s1.by.Coach);
-  w.eval(`(()=>{const F=get(LS.allfinals,{});${JSON.stringify(pb.legs)}.forEach((l,i)=>{F[finalsKey('nhl',l.game)]={sport:'nhl',a:1,h:i===0?2:4,d:today(),ts:Date.now()};});set(LS.allfinals,F);})()`);
+  T('frozen at the master evaluation — the Banker placed Coach\'s ticket (official legs only, its weak spot left off)',s1.locked&&s1.by.Coach&&!s1.by.Coach.legs.some(l=>l.game==='C@D'),s1.by.Coach&&s1.by.Coach.legs.map(l=>l.pick).join(', '));
+  const L1=s1.by.Coach.legs;w.eval(`(()=>{const F=get(LS.allfinals,{});${JSON.stringify(L1)}.forEach((l,i)=>{F[finalsKey('nhl',l.game)]={sport:'nhl',a:1,h:/Under/.test(l.pick)?2:4,d:today(),ts:Date.now()};});set(LS.allfinals,F);})()`);
   w.eval('cparGrade()');const R=w.eval(`cparRecord('Coach')`);
-  T('graded at the finals and tallied in the record',R.w===1&&R.lw===pb.legs.length,JSON.stringify(R));
+  T('graded at the finals and tallied in the record',R.w===1&&R.lw===L1.length,JSON.stringify(R));
   // ── character props ──
   w.eval(`(()=>{const D=pstDb('nhl');D.p[pstId('Connor McDavid')]={name:'Connor McDavid',team:'EDM',n:20,s:{s:{sum:80,sq:360,ema:5.2,gp:20},pts:{sum:34,sq:80,ema:2.1,gp:20},g:{sum:12,sq:14,ema:0.8,gp:20}}};
     set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:[{game:'VAN@EDM',m:'ml',sd:'home',pick:'EDM ML',price:-150,color:' strong',chars:['Sim'],brainP:.6,start:'${td}T23:59:00-05:00'}],props:[]}}});localStorage.removeItem(CPROP_KEY);})()`);

@@ -9,9 +9,10 @@ setTimeout(()=>{try{
   const P=[{game:'OTT@NJ',m:'spread',sd:'away',pick:'OTT +1.5',price:-225,color:' supreme',chars:['Sim'],blend:.68,start:st(23)},
     {game:'FLA@BUF',m:'ml',sd:'home',pick:'BUF ML',price:-108,color:' strong',chars:['Sim'],blend:.50,start:st(23)},
     {game:'VGK@MIN',m:'total',sd:'over',pick:'Over 6',price:104,color:' strong',chars:['Sim'],blend:.47,start:st(23),suspect:'model 72% vs market 49%'}];
-  w.eval(`localStorage.removeItem(BEST5_KEY);set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify(P)},props:[]}}});set(EVAL_LOCK_KEY,{date:today(),by:{nhl:Date.now()}});`);
+  w.eval(`localStorage.removeItem(BEST5_KEY);set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify(P)},props:[]}}});set(EVAL_LOCK_KEY,{date:today(),by:{nhl:Date.now()}});
+    set(VOICES_KEY,[{id:'v1',voice:'Sim',sp:'nhl',game:'OTT@NJ',market:'spread',side:'away',line:1.5,price:-225,date:today(),cf:0.66}]);`);   /* v2.31: the Sim is 66% sure of OTT +1.5 — under the 70% rule */
   const S=w.eval('best5State()');T('nothing qualifies → card stays open (not locked empty) while games are ahead',!S.locked&&!S.top3.length);
-  const N=w.eval('best3Near(5)');T('closest calls listed with the exact reason each missed',N.length===3&&N.some(x=>/shorter than -200/.test(x.why))&&N.some(x=>/EV .* after calibration/.test(x.why))&&N.some(x=>/flagged/.test(x.why)),N.map(x=>x.pick+': '+x.why).join(' | '));
+  const N=w.eval('best3Near(5)');T('closest calls listed with the exact reason each missed',N.length===3&&N.some(x=>/66% — under the 70% rule/.test(x.why))&&N.some(x=>/no character confidence/.test(x.why))&&N.some(x=>/flagged/.test(x.why)),N.map(x=>x.pick+': '+x.why).join(' | '));
   w.eval(`document.body.insertAdjacentHTML('beforeend','<div id="bestCard"></div>');renderBest();`);const h=w.document.getElementById('bestCard').textContent;
   T('banner says the eval ran and nothing clears the bar, and shows the closest calls',/Master evaluation ran — no play clears the bar yet/.test(h)&&/Closest calls today/.test(h)&&/OTT \+1\.5/.test(h));
   T('the card itself no longer says "open each sport once" when it has picks to judge',/Nothing clears the bar yet/.test(h)&&!/open each sport once/.test(h));

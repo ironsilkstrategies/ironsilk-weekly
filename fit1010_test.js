@@ -29,6 +29,6 @@ setTimeout(()=>{try{
   T('duplicate "Ticket #id" name and ext prefix collapse to #77',/#77</.test(H)&&!/#ext77/.test(H));
   const card=w.eval('msFitHtml(msAll()[0])');
   T('challenge card lists only tickets that can count',/'ready'/.test(card)&&!/'ext77'/.test(card));
-  T('ticket chip only for ready/close',/fits/.test(w.eval(`msFitChip(get(LS.locked,[])[0])`))&&w.eval(`msFitChip(get(LS.locked,[])[2])`)==='');
+  T('v2.31: the old "fits a challenge" chips are retired with the old challenges',w.eval(`msFitChip(get(LS.locked,[])[0])`)===''&&w.eval(`msFitChip(get(LS.locked,[])[2])`)==='');
 }catch(e){T('harness',false,e.stack);}
 console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(0);},2500);

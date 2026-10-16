@@ -37,6 +37,7 @@ setTimeout(()=>{try{
     {game:'X1@Y1',m:'total',sd:'over',pick:'Over 6.5',price:-110,line:6.5,color:' strong',blend:0.6,mp:0.6,mkt:0.52,start:'2026-10-10T23:00:00Z'},
     {game:'X2@Y2',m:'ml',sd:'home',pick:'Y2 ML',price:120,color:' strong',blend:0.56,mp:0.64,mkt:0.45,start:'2026-10-10T23:00:00Z'},
     {game:'X3@Y3',m:'ml',sd:'home',pick:'Y3 ML',price:110,color:' strong',unan:true,blend:0.55,mp:0.55,mkt:0.5,start:'2026-10-10T23:00:00Z'}]}};
+  w.eval(`set(VOICES_KEY,get(VOICES_KEY,[]).concat(${JSON.stringify(by.nhl.picks.map((x,i)=>({id:'bp'+i,voice:'Coach',sp:'nhl',game:x.game,market:x.m,side:x.sd,price:x.price,line:x.line,date:'__TD__',cf:0.74})))}.map(v=>({...v,date:today()}))))`);   /* v2.31: all three are official */
   const pool=w.eval(`(()=>{const r=best3Pool(${JSON.stringify(by)},null);return{picks:r.map(x=>x.pick),why:r.why};})()`);
   T('Best card drops the blocked-lane over and the model-vs-market fight, keeps the clean pick',pool.picks.join()==='Y3 ML'&&pool.why.lane===1&&pool.why.flag>=1,JSON.stringify(pool));
   /* character parlay gate */

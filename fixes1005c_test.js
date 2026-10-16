@@ -14,7 +14,7 @@ setTimeout(()=>{try{
     F[finalsKey('nhl','Q'+i+'@Z')]={sport:'nhl',a:i<10?2:(i===10?1:3),h:i<10?1:(i===10?3:1),d,ts:Date.now()};}set(LS.allfinals,F);set(LS.locked,L);})()`);
   const X=nfl.eval('(ROR_C=null,riskOfRuin())');
   T('risk of ruin: push-only tickets return the stake (0%), not a full win',X.wl&&X.wl.p===10&&X.wl.w===1&&X.wl.l===1&&Math.abs(X.roi-((1.82/2)-1)/12)<1e-6,JSON.stringify(X.wl)+' roi '+(X.roi*100).toFixed(1)+'%');
-  T('risk card shows the W-L-P behind the ROI',/1-1-10\)/.test(nfl.eval('riskHtml()')));
+  T('risk check (Bankroll tab) shows the W-L-P behind the ROI',/1-1-10\)/.test(nfl.eval('renderMoneyTab()')));
   // CFB season year
   const y=cfb.eval('cfbSeasonYear()');T('CFB season year follows the calendar (no hard-coded 2025)',y===new Date().getMonth()<2?new Date().getFullYear()-1:new Date().getFullYear(),String(y));
   T('CFB standings URL never asks for season=2025 in 2026',!fs.readFileSync(path.join(W,'football-engine.js'),'utf8').includes('standings?season=2025'));

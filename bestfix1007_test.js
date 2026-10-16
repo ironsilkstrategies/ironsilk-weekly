@@ -28,7 +28,7 @@ setTimeout(()=>{try{
   const S2=w.eval('best5State()');
   T('master eval with nothing qualifying does NOT freeze an empty card',!S2.locked&&!(S2.top3||[]).length);
   w.eval('renderBest()');const h2=w.document.getElementById('bestCard').innerHTML;
-  T('empty card explains itself (1 priced shorter than -200, 1 EV under +1%)',/Why it's empty/.test(h2)&&/1 priced shorter than -200/.test(h2)&&/1 EV under \+1%/.test(h2),h2.match(/Why it's empty[^<]*/)&&h2.match(/Why it's empty[^<]*/)[0]);
+  T('empty card explains itself (v2.31: nothing official → "under the 70% confidence rule")',/Why it's empty/.test(h2)&&/2 under the 70% confidence rule/.test(h2),h2.match(/Why it's empty[^<]*/)&&h2.match(/Why it's empty[^<]*/)[0]);
   // props fall back to character calls / game logs when no prop lines pasted
   w.eval(`(()=>{const D=pstDb('nhl');D.p[pstId('Connor McDavid')]={name:'Connor McDavid',team:'EDM',n:20,s:{s:{sum:80,sq:360,ema:5.2,gp:20},pts:{sum:34,sq:80,ema:2.1,gp:20}}};
     set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify([pk('nhl','EDM@ANA','EDM ML',-130,'value',.58,4.1,'21:07')])},props:[]}}});})()`);

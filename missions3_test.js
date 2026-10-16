@@ -79,12 +79,8 @@ const w=dom.window;
   T('mission complete → XP for its difficulty + clean-run bonus',done.status==='won'&&done.clean&&done.xp-xp0>=base*1.5,`${diff}: +${done.xp-xp0} XP`);
   // ── the board ──
   w.eval("tab('money',null)");await wait(300);let mb=w.document.getElementById('moneyBody').innerHTML;
-  T('Money tab: mission board with categories and Start buttons (opens on Warm-ups)',/Mission board · 1\d\d/.test(mb)&&/Penny stocks/.test(mb)&&/Warm-ups/.test(mb)&&/First Win/.test(mb)&&/Start/.test(mb));
-  T('board shows difficulty + finish % per mission',/(EASY|MEDIUM|HARD|LEGENDARY) · [\d.]+%/.test(mb));
-  T("header totals today's stakes across running missions",/today's stakes across missions/.test(mb));
-  w.eval("MS_CAT='multi';msRender()");mb=w.document.getElementById('missionsBody').innerHTML;
-  T('switching category shows multi-bankroll missions',/Three Pockets/.test(mb)&&/Barbell/.test(mb)&&/Four Seasons/.test(mb));
-  T('pot missions show a block per pot with its own attach box',/Safe<\/b>/.test(mb)&&/Attach the ticket to Moon/.test(mb));
+  /* v2.31: the 100+ mission board is retired; four clear challenges replace it on the Bankroll tab */
+  T('Bankroll tab: four clear challenges instead of the old board',(mb.match(/class="ch-preset"/g)||[]).length===4&&!/Mission board/.test(mb)&&/Steady Climb/.test(mb)&&/Banker's Table/.test(mb));
   T('no uncaught errors',errors.length===0,errors.slice(0,3).join(' || '));
   console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length}/${out.length} passed`);
   process.exit(out.some(x=>x.startsWith('FAIL'))?1:0);

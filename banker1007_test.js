@@ -47,17 +47,19 @@ setTimeout(async()=>{try{
   T('Historian ignores 4-0 "trends" (n<5) and keeps a 7-1',w.eval(`(()=>{const L=['Over is 4-0 in Jets last 4 home games.','Over is 7-1 in Jets last 8 overall.'];const g={away:{abbr:'COL',name:'Colorado Avalanche'},home:{abbr:'WPG',name:'Winnipeg Jets'}};
     const save=brainAdapter;brainAdapter=sp=>({...save(sp),trends:()=>L.map(text=>({text}))});const r=brainTrendEvidence(g,'nhl');brainAdapter=save;return r.items.length===1&&r.items[0].rec==='7-1';})()`));
   // ── Banker ledger ──
-  const ws=w.eval('bkWeekStart()');T('Banker weeks start Monday',ws==='2026-10-05',ws);
-  const V=[];const add=(v,d,hit,price,m)=>V.push({id:v+d+V.length,voice:v,sp:'nhl',market:m||'ml',date:d,graded:true,hit,price});
-  add('Coach','2026-10-05',true,100);add('Coach','2026-10-06',true,100);add('Coach','2026-10-06',false,-110);
-  add('Judge','2026-10-05',false,-110);add('Judge','2026-10-06',null,-110);
+  /* v2.31: the league week runs Tuesday → Tuesday, and only OFFICIAL calls (70%+) are bets */
+  const ws=w.eval('bkWeekStart()');T('league weeks start Tuesday',ws==='2026-10-06',ws);
+  const V=[];const add=(v,d,hit,price,m,cf)=>V.push({id:v+d+V.length,voice:v,sp:'nhl',market:m||'ml',date:d,graded:true,hit,price,cf:cf==null?0.75:cf});
+  add('Coach','2026-10-06',true,100);add('Coach','2026-10-06',true,100);add('Coach','2026-10-07',false,-110);add('Coach','2026-10-07',true,100,'ml',0.6);
+  add('Judge','2026-10-06',false,-110);add('Judge','2026-10-07',null,-110);add('Judge','2026-10-05',true,100);
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)});localStorage.removeItem(CPAR_KEY);`);
   const L=w.eval('bkLedger(true)');const C=L.weeks[0].R.Coach,J=L.weeks[0].R.Judge;
   /* Coach: 100 → +2 → 102 → +2.04 → 104.04 → −2.08 = 101.96 */
-  T('Coach: 2% of the CURRENT roll each bet → $101.96',Math.abs(C.br-101.96)<0.011&&C.w===2&&C.l===1,String(C.br));
-  T('Judge: loss −$2, push stakes nothing → $98.00',Math.abs(J.br-98)<0.011&&J.p===1,String(J.br));
+  T('Coach: 2% of the CURRENT roll each bet → $101.96 (its 60% call doesn\'t count)',Math.abs(C.br-101.96)<0.011&&C.w===2&&C.l===1,String(C.br));
+  T('Judge: loss −$2, push stakes nothing, last week\'s win doesn\'t count → $98.00',Math.abs(J.br-98)<0.011&&J.p===1,String(J.br));
+  T('every bet must pay at least $1: a -300 favorite stakes $3',w.eval('lgStake(100,americanToDecimal(-300))')===3&&w.eval('lgStake(100,americanToDecimal(-130))')===2&&w.eval('lgStake(40,americanToDecimal(-130))')===1.3);
   T('Banker gives no weight change without 30+ bets',L.mult.Coach===1);
-  for(let i=0;i<40;i++)V.push({id:'x'+i,voice:'Coach',sp:'nhl',market:'ml',date:'2026-10-0'+(5+i%3),graded:true,hit:i%4!==0,price:100});
+  for(let i=0;i<40;i++)V.push({id:'x'+i,voice:'Coach',sp:'nhl',market:'ml',date:'2026-10-0'+(6+i%2),graded:true,hit:i%4!==0,price:100,cf:0.8});
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)})`);const L2=w.eval('bkLedger(true)');
   T('a winning character (30+ bets) gets a louder voice, capped ×1.4',L2.mult.Coach>1&&L2.mult.Coach<=1.4,String(L2.mult.Coach));
   T('charWeight includes the Banker\'s multiplier',/bankerMult\(voice\)/.test(w.eval('charWeight.toString()')));
@@ -69,12 +71,14 @@ setTimeout(async()=>{try{
   // ── character parlays sized by the Banker + slate ──
   const td=w.eval('today()');const V2=[];const games=['A@B','C@D','E@F','G@H','I@J','K@L'];
   ['Coach','Judge','Sim'].forEach((v,vi)=>{for(let i=0;i<14;i++)V2.push({id:v+'h'+i,voice:v,sp:'nhl',market:'ml',side:'home',date:'2026-09-'+String(10+i).padStart(2,'0'),game:'Z@Y',graded:true,hit:i<10});
-    games.forEach((g0,i)=>V2.push({id:v+g0,voice:v,sp:'nhl',market:'ml',side:'home',date:td,game:g0,price:vi===2&&i<3?-105:120,pick:g0.split('@')[1]+' ML'}));});
+    games.forEach((g0,i)=>V2.push({id:v+g0,voice:v,sp:'nhl',market:'ml',side:'home',date:td,game:g0,price:vi===2&&i<3?-105:120,pick:g0.split('@')[1]+' ML',cf:0.72+0.01*i}));});
   w.eval(`set(VOICES_KEY,${JSON.stringify(V2)});set(TC_KEY,{d:today(),by:{nhl:{picks:${JSON.stringify(games.map(g=>({game:g,m:'ml',sd:'home',unan:true,blend:0.6,mp:0.6,mkt:0.57})))}}}});set(LS_EVAL,{});localStorage.removeItem(CPAR_KEY);set(BR_AMT,'100');BK_C=null;`);
   const pb=w.eval(`cparBuild('Coach')`);
   T('character parlay length chosen by the Banker (Kelly, capped by the v1.90 leg budget), with his reason',pb&&pb.size&&pb.legs.length===pb.size.k&&/Kelly|leg budget/.test(pb.size.why)&&pb.legs.reduce((a,l)=>a*l.p,1)>=0.2-1e-9,pb&&pb.size.why);
   const S=w.eval('bkSlate()');
   T('Banker\'s slate: up to 5 parlays, each +growth',S.picks.length>=1&&S.picks.length<=5&&S.picks.every(x=>x.g>0),S.picks.map(x=>x.v+' '+x.P.legs.length).join(', '));
+  const PL=w.eval('deskAllocate(null,today())');
+  T('no pick lands on more than 3 tickets, and no ticket copies another',Math.max(...Object.values(PL.use))<=3&&(()=>{const T2=[PL.own,...Object.values(PL.chars)].filter(Boolean).map(t=>t.legs.map(l=>l.game).sort().join(','));return new Set(T2).size===T2.length;})(),JSON.stringify(PL.use));
   T('slate never risks more than 10% of the bankroll in total',S.picks.reduce((a,x)=>a+x.stakeF,0)<=0.1001);
   T('no two parlays on the slate share more than one leg',S.picks.every((a,i)=>S.picks.every((b,j)=>i===j||[...a.keys].filter(k=>b.keys.has(k)).length<=1)));
   // ── challenges ──
@@ -88,16 +92,19 @@ setTimeout(async()=>{try{
   const hub=w.document.getElementById('todayBody').innerHTML;
   T('Characters hub: Banker standings, slate, named roster, parlays',/The Banker/.test(hub)&&/The characters/.test(hub)&&/The Historian/.test(hub)&&/The Crowd/.test(hub)&&/Character parlays/.test(hub));
   // ── public feed ──
-  w.eval(`localStorage.removeItem(BEST5_KEY);set(LS_EVAL,{date:today()});set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:[
+  w.eval(`set(VOICES_KEY,get(VOICES_KEY,[]).concat(['Sim','Judge'].map(v=>({id:v+'CD',voice:v,sp:'nhl',market:'ml',side:'home',date:today(),game:'C@D',price:-120,cf:0.78}))));`);
+  w.eval(`localStorage.removeItem(BEST5_KEY);localStorage.removeItem(FREEZE_KEY);set(LS_EVAL,{date:today()});set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:[
     {game:'C@D',m:'ml',sd:'home',pick:'D ML',price:-120,color:' supreme',chars:['Sim','Judge'],blend:.6,evCal:4,start:today()+'T23:59:00-05:00'}],props:[]}}});
     set(LS.ghtoken,'tok');set(LS.ghrepo,'ironsilkstrategies/ironsilk-weekly');set('d4.sublink','https://whop.com/thedesk');set(LS.handle,'@DLinkPicks');`);
-  /* v1.97: before kickoff the play is subscriber-only — hidden on the public feed */
+  /* v2.31: subscriber-only until 30 minutes before the game */
   const F0=w.eval('publicFeed()');
-  T('before kickoff: the play is hidden publicly (no pick, no price)',F0.today&&F0.today.picks[0].hidden===true&&!F0.today.picks[0].pick&&!F0.today.picks[0].price);
+  T('more than 30 min before the game: the play is hidden publicly (no pick, no price)',F0.today&&F0.today.picks[0].hidden===true&&!F0.today.picks[0].pick&&!F0.today.picks[0].price);
+  w.eval(`(()=>{const S=get(BEST5_KEY,{});S.top3.forEach(x=>x.start=new Date(Date.now()+29*60e3).toISOString());set(BEST5_KEY,S);})()`);
+  T('29 minutes before the game it unlocks',w.eval('publicFeed().today.picks[0].pick')==='D ML');
   w.eval(`(()=>{const S=get(BEST5_KEY,{});S.top3.forEach(x=>x.start=new Date(Date.now()-60e3).toISOString());set(BEST5_KEY,S);})()`);   /* kickoff */
   const F=w.eval('publicFeed()');
   T('public feed: locked card, record, handle, subscribe link',F.today&&F.today.picks[0].pick==='D ML'&&F.subscribe==='https://whop.com/thedesk'&&F.handle==='@DLinkPicks'&&F.record);
-  T('public feed names the analysts, not initials',F.today.picks[0].voices.includes('The Judge'));
+  T('public feed names the analysts, not initials',F.today.picks[0].voices.includes('The Judge'),JSON.stringify(F.today.picks[0].voices));
   const r=await w.eval('publishPicks(false)');
   T('publish writes public/picks.json and a dated archive to the repo',r.ok&&puts.some(p=>/public\/picks\.json$/.test(p.u))&&puts.some(p=>/public\/picks-2026-10-07\.json$/.test(p.u)));
   // picks.html renders the feed

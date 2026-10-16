@@ -13,7 +13,7 @@ setTimeout(()=>{try{
   /* history: graded calls (for records) */
   for(let i=0;i<300;i++){const g=games[i%6];V.push({id:'h'+(id++),voice:voices[i%8],sp:'nhl',market:['ml','total','spread'][i%3],side:['home','over','away'][i%3],game:g,date:'2026-09-'+String(1+i%28).padStart(2,'0'),price:-115,line:i%3===1?6.5:i%3===2?1.5:null,graded:true,hit:(i%5)!==0});}
   /* today: every character calls every game */
-  games.forEach((g,gi)=>voices.forEach((v,vi)=>{['ml','total'].forEach(m=>V.push({id:['nhl',g,d,v,m].join('|'),voice:v,sp:'nhl',market:m,side:m==='ml'?((gi+vi)%3?'home':'away'):((gi+vi)%2?'over':'under'),game:g,date:d,price:m==='ml'?(-120+gi*10):-110,line:m==='total'?6.5:null,simP:0.55+gi*0.02,graded:false,hit:null,pick:null}));}));
+  games.forEach((g,gi)=>voices.forEach((v,vi)=>{['ml','total'].forEach(m=>V.push({id:['nhl',g,d,v,m].join('|'),voice:v,sp:'nhl',market:m,side:m==='ml'?((gi+vi)%3?'home':'away'):((gi+vi)%2?'over':'under'),game:g,date:d,price:m==='ml'?(-120+gi*10):-110,line:m==='total'?6.5:null,simP:0.55+gi*0.02,graded:false,hit:null,pick:null,cf:m==='ml'?0.70+gi*0.01+vi*0.002:0.6}));}));   /* v2.31: the moneylines are official (70%+), the totals aren't */
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)})`);
   /* splits: graded history rolled permanently, flagged so it never counts twice */
   const S=w.eval('JSON.stringify(get(SPLIT_KEY,{}))');const n=w.eval('get(VOICES_KEY,[]).filter(x=>x.sr).length');
@@ -35,25 +35,23 @@ setTimeout(()=>{try{
     T('master eval locks the Banker\'s desk',L.locked===true);
     const games0=[...(L.own?L.own.legs:[]),...L.slate.flatMap(t=>t.legs)].map(l=>l.game);
     T('no game repeats across the Banker\'s tickets',new Set(games0).size===games0.length,games0.join(','));
-    T('Banker\'s own parlay: 2–5 legs, each backed by 2+ characters',L.own&&L.own.legs.length>=2&&L.own.legs.length<=5&&L.own.legs.every(l=>l.by.length>=2));
-    T('desk spend never exceeds the day cap',L.spent<=L.cap+1e-9,`$${L.spent} of $${L.cap}`);
-    const R=L.roll;T('roll call: one pick per character, never two from one game',R.legs.length===new Set(R.legs.map(l=>l.v)).size&&new Set(R.legs.map(l=>l.game)).size===R.legs.length,R.legs.length+' legs');
-    T('roll call: a character whose top game was taken uses its next pick',R.legs.some(l=>l.rank>1)||R.legs.length<=games.length);
-    T('the cut is the hittable part (2–5 legs, ≥25% or the 2 strongest)',R.cut.length>=2&&R.cut.length<=5&&(R.cutP>=0.25||R.cut.length===2),R.cut.length+' legs '+(R.cutP*100).toFixed(1)+'%');
+    T('Banker\'s own parlay: 2–4 legs, every leg official and backed by 2+ characters',L.own&&L.own.legs.length>=2&&L.own.legs.length<=4&&L.own.legs.every(l=>l.by.length>=2&&/ML$/.test(l.pick)),L.own&&L.own.legs.map(l=>l.pick+' '+l.by.length).join(', '));
+    T('desk spend never exceeds the day cap (10% of the one bankroll)',L.spent<=L.cap+1e-9&&Math.abs(L.cap-L.B*0.1)<0.01,`$${L.spent} of $${L.cap}`);
+    T('every stake on the desk wins at least $1',[L.own,...L.slate].filter(t=>t&&t.stake).every(t=>t.stake*(t.dec-1)>=0.999),[L.own,...L.slate].filter(Boolean).map(t=>t.stake+'@'+t.dec.toFixed(2)).join(', '));
+    T('the roll call is retired — it put the same picks on more tickets',L.roll==null);
     w.eval(`(()=>{const V=get(VOICES_KEY,[]);V.forEach(x=>{if(x.market==='ml')x.side=x.side==='home'?'away':'home'});set(VOICES_KEY,V);})()`);
     const L2=JSON.parse(w.eval('JSON.stringify(bkDayState())'));
-    T('once locked, the desk never changes',JSON.stringify(L2.roll)===JSON.stringify(L.roll)&&JSON.stringify(L2.own)===JSON.stringify(L.own));
+    T('once locked, the desk never changes',JSON.stringify(L2.slate)===JSON.stringify(L.slate)&&JSON.stringify(L2.own)===JSON.stringify(L.own));
     /* why */
     w.eval(`(()=>{const P=get('d4.preds',{});P.nhl={'${d}':{'PIT@CBJ':{a:3.36,h:3.31,src:'covers'}}};set('d4.preds',P);set(INTEL_KEY,[{sp:'nhl',kind:'trend',game:'PIT@CBJ',date:'${d}',text:'Under is 4-0 in Penguins last 4 games as a favorite.'},{sp:'nhl',kind:'trend',game:'PIT@CBJ',date:'${d}',text:'Over is 7-2-1 in Penguins last 10 games as a road underdog.'}]);})()`);
     const Wy=JSON.parse(w.eval(`JSON.stringify(pickWhy({sp:'nhl',game:'PIT@CBJ',m:'total',sd:'under',line:6.5,pick:'Under 6.5',price:-106,p:0.56,date:'${d}'}))`));
     T('why: covers prediction, characters, backing + opposing trends',Wy.bullets.some(b=>/Covers/.test(b))&&Wy.bullets.some(b=>/characters on it/.test(b))&&Wy.bullets.some(b=>/Trend ✓ Under is 4-0/.test(b))&&Wy.bullets.some(b=>/Trend ✗ Over is 7-2-1/.test(b)),Wy.bullets.join(' | ').slice(0,300));
     T('why: a reel script that names the pick',/Under 6\.5/.test(Wy.script)&&Wy.script.length>60,Wy.script.slice(0,200));
-    T('Banker tab renders tickets + roll call',(()=>{let el=w.document.getElementById('bankerBody');if(!el){el=w.document.createElement('div');el.id='bankerBody';w.document.body.appendChild(el);}w.eval('renderBankerTab()');return/Roll Call/.test(el.innerHTML)&&/Why we like it/.test(el.innerHTML);})());
-    /* v1.97: parlay legs stay hidden publicly until their games start */
-    T('before kickoff the parlay legs are hidden publicly',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay&&F.parlay.legs.every(l=>l.hidden&&!l.pick);})());
-    w.eval('window.__cbS=cbStarted;cbStarted=()=>true');
-    T('public feed carries tonight\'s parlay with reasons',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay&&F.parlay.legs.length===L.roll.cut.length&&F.parlay.legs.every(l=>l.why&&l.why.script);})());
-    w.eval('cbStarted=window.__cbS');
+    T('Banker tab renders his parlay, the character tickets and the exposure map',(()=>{let el=w.document.getElementById('bankerBody');if(!el){el=w.document.createElement('div');el.id='bankerBody';w.document.body.appendChild(el);}w.eval('renderBankerTab()');return/The Banker's parlay/.test(el.innerHTML)&&/Character tickets/.test(el.innerHTML)&&/Exposure/.test(el.innerHTML)&&/Why we like it/.test(el.innerHTML);})());
+    /* v2.31: the public parlay is the Banker's own; each leg opens 30 minutes before its game */
+    T('more than 30 min out, the parlay legs are hidden publicly',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay&&F.parlay.legs.every(l=>l.hidden&&!l.pick);})());
+    w.eval(`(()=>{const S=get(BKDAY_KEY,{});S.own.legs.forEach(l=>l.start=new Date(Date.now()+20*60e3).toISOString());set(BKDAY_KEY,S);})()`);
+    T('public feed carries the Banker\'s parlay with reasons once its legs unlock',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay&&F.parlay.legs.length===L.own.legs.length&&F.parlay.legs.every(l=>l.pick&&l.why&&l.why.script);})());
     /* SGP on an NHL card */
     const g={id:'n1',abstract:'pre',away:{abbr:'PIT',name:'Pittsburgh Penguins'},home:{abbr:'CBJ',name:'Columbus Blue Jackets'}};
     const html=w.eval(`(()=>{const g=${JSON.stringify(g)};const s=simNHLGame(g,4000);return sgpCardHtml('nhl',g,s)})()`);
