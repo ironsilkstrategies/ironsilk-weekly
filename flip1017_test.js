@@ -9,6 +9,7 @@ function board(sp){const e=[];
   if(sp==='nhl')e.push(ev('PIT @ VGK','2026-10-17T02:00Z',S.late),        /* Fri 9:00 PM CT — the late one */
     ev('NJ @ WSH','2026-10-17T16:07Z','pre'),                               /* Sat noon — tomorrow, ignored */
     ev('OLD @ ONE','2026-10-16T09:30Z','in'));                              /* Fri 4:30 AM CT — the slate before, ignored */
+  if(sp==='mlb'&&S.rain)e.push(ev('TB @ CLE','2026-10-24T00:10Z','pre','STATUS_SCHEDULED'),ev('LIVE @ NOW','2026-10-24T04:30Z',S.late2||'post'));
   if(sp==='ncaaf')e.push(ev('SJSU @ UTEP','2026-10-17T01:00Z','post'),ev('PPD @ X','2026-10-17T00:00Z','pre','STATUS_POSTPONED'));
   return{events:e};}
 function boot(page){let html=fs.readFileSync(path.join(W,page),'utf8');
@@ -44,6 +45,11 @@ setTimeout(async()=>{try{
   T('next night: an old flip never carries over (12:30 AM Sunday = Saturday)',w.eval('today()')==='2026-10-17');
   NOW=Date.parse('2026-10-18T10:01:00Z');w.eval('TODAY_T=0');
   T('5 AM backstop unchanged',w.eval('today()')==='2026-10-18');
+  /* v2.38 · Cleveland: the Friday game was rained out but ESPN still lists it 'pre' at first pitch */
+  NOW=Date.parse('2026-10-24T05:45:00Z');w.eval('TODAY_T=0');S.late='post';S.rain=true;
+  r=await w.eval('slateFlipCheck()');
+  T('a game that never started 2h past first pitch does not block the turnover',r.flipped&&r.day==='2026-10-24',JSON.stringify(r));
+  S.rain=false;
   NOW=Date.parse('2026-11-08T06:30:00Z');w.eval('TODAY_T=0');   /* after the DST change (UTC-6) */
   const [a,b]=w.eval(`slateFlipWindow('2026-10-31')`);
   T('night window follows the clock change (Oct 31 5 AM CDT → Nov 1 5 AM CST)',new Date(a).toISOString()==='2026-10-31T10:00:00.000Z'&&new Date(b).toISOString()==='2026-11-01T11:00:00.000Z',new Date(a).toISOString()+' '+new Date(b).toISOString());

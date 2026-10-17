@@ -2595,7 +2595,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261017b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261017c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2703,17 +2703,24 @@ async function slateFlipCheck(){try{
     if(!r.ok)return{flipped:false,why:sp+' scoreboard unreachable'};   /* never flip on a guess */
     const j=await r.json();(j.events||[]).forEach(e=>{const t=Date.parse(e.date);if(!(t>=t0&&t<t1))return;
       const st=(e.status&&e.status.type)||((e.competitions||[])[0]||{}).status&&e.competitions[0].status.type||{};
-      if(!(st.completed||st.state==='post'||/POSTPONED|CANCEL|SUSPENDED|FORFEIT/i.test(st.name||'')))open.push(sp+' '+(e.shortName||e.id));});}
+      if(st.completed||st.state==='post'||/POSTPONED|CANCEL|SUSPENDED|FORFEIT/i.test(st.name||''))return;
+      /* a game that never started 2h past first pitch (rained out, moved, ESPN not yet marking it postponed),
+         or one still "going" 6h after it started, isn't being played tonight — it can't hold the board hostage */
+      if((st.state==='pre'&&n-t>2*36e5)||n-t>6*36e5)return;
+      open.push(sp+' '+(e.shortName||e.id));});}
   if(open.length)return{flipped:false,why:open.length+' still going',open};
   localStorage.setItem(SLATE_FLIP_KEY,cal);TODAY_T=0;
   try{deskToast(`🌅 Last night's slate is final — ${fmtDate(cal+'T17:00:00Z')} is up`,3500);}catch(e){}
   if(typeof location!=='undefined'&&!window.__NO_FLIP_RELOAD__)setTimeout(()=>location.reload(),2500);
   return{flipped:true,day:cal};}catch(e){return{flipped:false,why:String(e&&e.message||e)};}}
-let SLATE_FLIP_TIMER=null;
+let SLATE_FLIP_TIMER=null,SLATE_BOOT_DAY=null,SLATE_FLIP_LAST=0;
 function slateFlipLoop(){if(SLATE_FLIP_TIMER||typeof window==='undefined'||window.__NO_GRADELOOP__)return;
+  SLATE_BOOT_DAY=today();
   const tick=()=>{const n=Date.now();if(!TODAY_FMT)today();
-    if(TODAY_FMT.format(new Date(n))!==TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5)))slateFlipCheck();};
-  tick();SLATE_FLIP_TIMER=setInterval(tick,4*60e3);}
+    /* the day moved under an open page (a turnover synced from another device, or the 5 AM backstop): reload onto it */
+    TODAY_T=0;if(SLATE_BOOT_DAY&&today()!==SLATE_BOOT_DAY&&!window.__NO_FLIP_RELOAD__){SLATE_BOOT_DAY=null;try{deskToast('🌅 New slate — loading '+fmtDate(today()+'T17:00:00Z'),2500);}catch(e){}setTimeout(()=>location.reload(),1500);return;}
+    if(TODAY_FMT.format(new Date(n))!==TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5))&&n-SLATE_FLIP_LAST>=4*60e3){SLATE_FLIP_LAST=n;slateFlipCheck();}};
+  tick();SLATE_FLIP_TIMER=setInterval(tick,60e3);}
 const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
 const fmtDate=d=>new Date(d).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',timeZone:APP_TZ});
 /* ── STORAGE COMPRESSION ────────────────────────────────────────────────────
