@@ -2673,6 +2673,11 @@ function cfbKeyWeights(){if(CFB_KEY_W&&Date.now()-CFB_KEY_T<3600e3)return CFB_KE
   const cnt=new Array(22).fill(0);let n=0;try{const F=typeof allFinals==='function'?allFinals():{};Object.keys(F).forEach(k=>{if(!k.startsWith('ncaaf:'))return;const m=Math.abs(+F[k].a-+F[k].h);if(!isFinite(m))return;n++;if(m<22)cnt[m]++;});}catch(e){}
   const K=300;CFB_KEY_W=CFB_KEY_PRIOR.map((p,i)=>{const real=(p/100*K+cnt[i])/(K+n);return Math.max(0.03,Math.min(3,real/(CFB_KEY_SIM[i]/100)));});
   CFB_KEY_T=Date.now();return CFB_KEY_W;}
+const CFB_TOT_AVG=51,CFB_TOT_SLOPE=0.65;let CFB_SPM=null;
+/* league means of the SP+ offense/defense ratings (an average-vs-average matchup scores CFB_TOT_AVG) */
+function cfbSpMeans(){if(CFB_SPM&&CFB_SPM.n===Object.keys(NCAAF_POWER).length)return CFB_SPM;const seen=new Set();let o=0,d=0,k=0;
+  Object.values(NCAAF_POWER).forEach(r=>{if(!r||r.src!=='SP+'||seen.has(r))return;seen.add(r);if(isFinite(r.offPPG)&&isFinite(r.defPPG)){o+=r.offPPG;d+=r.defPPG;k++;}});
+  CFB_SPM={off:k?o/k:26.5,def:k?d/k:26,n:Object.keys(NCAAF_POWER).length};return CFB_SPM;}
 function simNCAAFGame(g,N){
   N=N||10000;
   const awayPow=ncaafPowerFor(g.away)||{offPPG:26,defPPG:26,wins:0,losses:0,unrated:true};
@@ -2704,10 +2709,20 @@ function simNCAAFGame(g,N){
   const bothSP=awayPow.sp!=null&&homePow.sp!=null;
   let awayExp,homeExp;
   if(bothSP){
-    const avgTotal=55;                    // approx combined FBS scoring average
+    /* v2.41 · the TOTAL used to be a flat 55 (+ home field) for EVERY game — Massachusetts @
+       Buffalo and Cincinnati @ West Virginia both projected ~57.5, so the sim "loved" the over on
+       every low total and the under on every high one (it took the over on 446 of 468 totals,
+       hitting 49%, and ran +5.7 points hot against the finals). Now built from the SP+
+       offense/defense ratings each team carries: the matchup's combined (off + opposing def)
+       relative to an average-vs-average game, shrunk 0.65 — the slope Saturday's market itself
+       puts on that number (corr 0.88). The MARGIN still comes from the overall SP+ gap, which is
+       the documented point-spread-equivalent use; the total no longer moves with home field. */
     const neutralMargin=awayPow.sp-homePow.sp;   // positive = away rated better
-    awayExp=avgTotal/2+neutralMargin/2;
-    homeExp=avgTotal/2-neutralMargin/2+NCAAF_HFA;
+    const M=cfbSpMeans();
+    const raw=awayPow.offPPG+homePow.defPPG+homePow.offPPG+awayPow.defPPG;
+    const T=Math.max(30,Math.min(85,CFB_TOT_AVG+CFB_TOT_SLOPE*(raw-2*(M.off+M.def))));
+    awayExp=T/2+neutralMargin/2-NCAAF_HFA/2;
+    homeExp=T/2-neutralMargin/2+NCAAF_HFA/2;
   }else{
     // ESPN standings fallback: offPPG/defPPG here are real season points-for
     // and points-against, so averaging them is valid — shrunk toward league
@@ -2857,16 +2872,20 @@ async function cfbdGet(path,key){
 /* SP+ names ("Alabama") differ from ESPN schedule names ("Alabama Crimson
    Tide"), so index under several forms and let ncaafPowerFor resolve. */
 function applyCFBDRatings(map){
-  Object.keys(map).forEach(team=>{
-    const rec=map[team];
-    NCAAF_POWER[team]=rec;
-    (NCAAF_GAMES||[]).forEach(g=>{
-      [g.away,g.home].forEach(t=>{
-        const nm=String(t&&t.name||'');
-        if(nm&&(nm===team||nm.startsWith(team+' ')))NCAAF_POWER[nm]=rec;
-      });
+  Object.keys(map).forEach(team=>{NCAAF_POWER[team]=map[team];});
+  /* v2.41 · a schedule name takes the LONGEST SP+ team it starts with. It used to take whichever
+     matched last: "Ohio State Buckeyes" also starts with "Ohio", so Ohio State carried the Ohio
+     Bobcats' rating (SP+ -6.7 instead of 29.5) and the sim called Indiana 97% to beat them. Same
+     for Kansas State/Kansas, Virginia Tech/Virginia, Oklahoma State/Oklahoma, Michigan State… */
+  const teams=Object.keys(map).sort((a,b)=>b.length-a.length);
+  (NCAAF_GAMES||[]).forEach(g=>{
+    [g.away,g.home].forEach(t=>{
+      const nm=String(t&&t.name||'');if(!nm)return;
+      const team=teams.find(x=>nm===x||nm.startsWith(x+' '));
+      if(team)NCAAF_POWER[nm]=map[team];
     });
   });
+  CFB_SPM=null;
   ncaafPowerFlags();
   NCAAF_SIMS={};
   if(ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();

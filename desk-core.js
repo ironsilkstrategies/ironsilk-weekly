@@ -1129,3 +1129,38 @@ function strengthGroupRow(g){const c=g.c;const pick=charPickText(c);const inSlip
   return`<div class="str-row"><div style="flex:1;min-width:0"><b>${txtEsc(pick)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${sgnP(c.price)}</span> <span class="cf-chip on" style="color:${recColor(g.cf,9)};border-color:${recColor(g.cf,9)}">${Math.round(g.cf*100)}%</span>
       <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[c.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(c.sp,c.game))} · ${who} on ${CONF_SP_LAB[c.sp]} ${({ml:'ML',spread:'ATS',total:'O/U'})[c.market]}${ex?` · on ${ex} ticket${ex===1?'':'s'}`:''}</div></div>
     <button class="${inSlip?'primary':''}" onclick="deskSlipAdd('${c.sp}','${esc(c.game)}','${esc(pick)}',${c.price!=null?+c.price:'null'},${(+g.cf).toFixed(3)},'${String(c.date).slice(0,10)}')">${inSlip?'✓ on slip':'＋ slip'}</button></div>`;}
+
+/* ══ v2.41 · REOPEN A FROZEN DAY ════════════════════════════════════════════
+   A day frozen on bad inputs (Saturday's CFB card priced off Thursday's lines,
+   with a sim that rated Ohio State as Ohio) can be reopened from outside the
+   phone: a d4.reopen {d, ts, why} arrives by sync, and the first page that sees
+   it clears that day's frozen state — the freeze, the eval locks, the Best 3,
+   the Today card's unstarted picks, the Banker, the plan and the character
+   parlays — then re-runs the master evaluation on its own. Started games keep
+   their picks. Each reopen runs once (by ts); a day that already went out on
+   Telegram is never reopened. */
+const REOPEN_KEY='d4.reopen',REOPEN_DONE='d4.reopendone';
+function deskReopenCheck(){let R=null;try{R=get(REOPEN_KEY,null);}catch(e){}if(!R||!R.d||R.d!==today()||!R.ts)return false;
+  const done=+(String(localStorage.getItem(REOPEN_DONE)||'0').replace(/"/g,''))||0;if(done>=+R.ts)return false;
+  localStorage.setItem(REOPEN_DONE,String(R.ts));const d=R.d;
+  try{const P=get('d4.tgposts',{})||{};if(P[d]&&(P[d].ids||[]).length)return false;}catch(e){}   /* already posted: never reopen */
+  try{const F=get(FREEZE_KEY,null);if(F&&F.d===d)set(FREEZE_KEY,{d:null,ts:Date.now(),why:'reopened · '+(R.why||'')});}catch(e){}
+  try{const L=get(EVAL_LOCK_KEY,{})||{};if(L.date===d)set(EVAL_LOCK_KEY,{});}catch(e){}
+  try{const E=get(LS_EVAL,{})||{};if(E.date===d)set(LS_EVAL,{});}catch(e){}
+  try{const S=get(BEST5_KEY,{})||{};if(S.d===d)set(BEST5_KEY,{d,locked:false});}catch(e){}
+  try{const T=get(TC_KEY,{})||{};if(T.d===d){Object.values(T.by||{}).forEach(B=>{B.picks=(B.picks||[]).filter(x=>best5Started(x));});delete T.frozen;set(TC_KEY,T);}}catch(e){}
+  try{const B=get(BKDAY_KEY,{})||{};if(B.d===d)set(BKDAY_KEY,{});}catch(e){}
+  try{const P=get(DESK_KEY,{})||{};if(P.d===d)set(DESK_KEY,{});}catch(e){}
+  /* date-keyed stores merge by union across devices, so the day is overwritten with an
+     unlocked marker rather than deleted (a deletion would come back from the other copy) */
+  [CPAR_KEY,CPX_KEY].forEach(k=>{try{const M=get(k,{})||{};if(M[d]){M[d]={locked:false,reopened:+R.ts};set(k,M);}}catch(e){}});
+  try{const L=get('d4.best5log',{})||{};if(L[d]){L[d]={picks:[],reopened:+R.ts};set('d4.best5log',L);}}catch(e){}
+  try{DESK_MEM=null;CPAR_MEM=null;CPX_MEM=null;}catch(e){}
+  return true;}
+let DESK_REOPEN_RUN=false;
+function deskReopenRun(){if(DESK_REOPEN_RUN||DESK_BG_EVAL||(typeof BG_MODE!=='undefined'&&BG_MODE))return false;if(!deskReopenCheck())return false;DESK_REOPEN_RUN=true;
+  try{deskToast('🔁 Today was reopened — re-running the master evaluation…',4000);}catch(e){}
+  const t0=Date.now();const iv=setInterval(()=>{const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;let ready=false;try{ready=(sportGames(sp)||[]).length>0;}catch(e){}
+    if(!ready&&Date.now()-t0<45000)return;clearInterval(iv);try{const r=masterEvalAll();if(r&&r.catch)r.catch(e=>console.warn('reopen eval',e));}catch(e){console.warn('reopen eval',e);}},1500);
+  return true;}
+if(typeof window!=='undefined'&&!window.__NO_REOPEN__)setTimeout(()=>{try{deskReopenRun();}catch(e){}},2500);

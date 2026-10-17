@@ -2595,7 +2595,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261017e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261017f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16255,7 +16255,7 @@ function brainLearnAll(force){
    ledger as "Best", so Records, calibration and the blend all see them. */
 function best5Grade(){const S=get(BEST5_KEY,{});const log=get('d4.best5log',{})||{};let n=0;
   const slim=x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:x.p,m:x.m,sd:x.sd,line:x.line,gid:x.gid,main:!!x.main,ev:x.ev,color:x.color,unan:!!x.unan,chars:x.chars||[],start:x.start||''});
-  if(S&&S.d&&S.locked&&!log[S.d]){const sides=(S.sides||[]).map(slim),totals=(S.totals||[]).map(slim);
+  if(S&&S.d&&S.locked&&(!log[S.d]||log[S.d].reopened)){const sides=(S.sides||[]).map(slim),totals=(S.totals||[]).map(slim);
     log[S.d]={sides,totals,picks:sides.length||totals.length?[...sides,...totals]:(S.picks||[]).map(slim),props:(S.props||[]).map(x=>({...x})),standout:S.standout||null,v:S.top3?2:1};n++;} // persist the card the moment it locks — not only once a pick grades
   const V=get(VOICES_KEY,[]);const ids=new Set(V.map(x=>x.id));let vch=false;
   Object.entries(log).forEach(([d,E])=>(E.picks||[]).forEach(x=>{if(x.hit!=null||x.push)return;
@@ -16471,15 +16471,17 @@ function renderBest(){
   const el=document.getElementById('bestCard');if(!el)return;
   try{best5Grade();}catch(e){}
   const S=best5State();
-  const views=['all',...(S.sports||[]).filter(sp=>((S.bySport||{})[sp]||[]).length||!S.locked)];
+  /* v2.41 · every sport on today's card gets its own tab — an empty one says why nothing cleared */
+  const views=['all',...(S.sports||[])];
   if(!views.includes(BEST_VIEW))BEST_VIEW='all';
   const tabs=`<div style="margin-bottom:8px">${views.map(v=>`<button class="msg-chip${BEST_VIEW===v?' on':''}" onclick="bestView('${v}')">${v==='all'?'Whole slate':SP_LAB[v]||v.toUpperCase()}</button>`).join('')}</div>`;
   const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price','priced shorter than -300 or longer than +400'],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['conf','under the 70% confidence rule'],['tier','below VALUE'],['prob','under 45%'],['ev','priced past what the confidence supports']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
     :(!(S.top3||[]).length&&!(W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Today's card is empty — open each sport's Games board (or Load all sports on Today) so it has picks to choose from.</div>`:'');
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
     <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:(evalRanToday()&&!(S.top3||[]).length&&W3&&W3.total?'Master evaluation ran — no play clears the bar yet. It keeps re-checking as lines and boards update, locks the moment one qualifies, and locks empty 30 min before the last game.':'Building — freezes the moment the master evaluation runs (or 30 min before the first game)')}</b>
-    ${S.locked||(evalRanToday()&&!(S.top3||[]).length)?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${diag}${(()=>{if(S.locked||(S.top3||[]).length)return'';let N=[];try{N=best3Near(5);}catch(e){}if(!N.length)return'';
-      return`<div class="mono" style="font-size:9.5px;margin-top:6px;color:var(--mute)">Closest calls today (not on the card):</div>${N.map(x=>`<div class="mono" style="font-size:10px;padding:2px 0">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> ${x.price!=null?(x.price>0?'+':'')+x.price:''} · ${x.p!=null?Math.round(x.p*100)+'%':'—'} · <span style="color:var(--rust)">${txtEsc(x.why)}</span></div>`).join('')}`;})()}</div>`;
+    ${S.locked||(evalRanToday()&&!(S.top3||[]).length)?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${diag}${(()=>{const sv=BEST_VIEW!=='all'?BEST_VIEW:null;const L0=sv?((S.bySport||{})[sv]||[]):(S.top3||[]);if(L0.length||(S.locked&&!sv))return'';
+      let N=[];try{N=best3Near(sv?60:5).filter(x=>!sv||x.sp===sv).slice(0,5);}catch(e){}if(!N.length)return'';
+      return`<div class="mono" style="font-size:9.5px;margin-top:6px;color:var(--mute)">Closest ${sv?(SP_LAB[sv]||sv)+' ':''}calls today (not on the card):</div>${N.map(x=>`<div class="mono" style="font-size:10px;padding:2px 0">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> ${x.price!=null?(x.price>0?'+':'')+x.price:''} · ${x.p!=null?Math.round(x.p*100)+'%':'—'} · <span style="color:var(--rust)">${txtEsc(x.why)}</span></div>`).join('')}`;})()}</div>`;
   /* yesterday's card stays up until it's fully graded */
   let prev='';try{const P=get('d4.best5prev',null);const L=P&&(get('d4.best5log',{})||{})[P.d];
     if(L){const main=(L.picks||[]).filter(x=>x.main);const open=main.filter(x=>x.hit==null&&!x.push);
@@ -18288,9 +18290,17 @@ function todaySnapshot(){
   /* Daily lock: keep picks for games that have already started so picks
      don't vanish mid-day when the board refreshes post-kickoff. Only add
      new picks for games not yet in today's list. */
-  const B0=T.by[sp]||{};const prev=B0.picks||[];
+  const B0=T.by[sp]||{};let prev=B0.picks||[];
   /* a pick, once on today's card, keeps its price and side for the day —
-     games that start stay listed. New game-markets are added, never swapped. */
+     games that start stay listed. New game-markets are added, never swapped.
+     v2.41 · …but only once the day is FROZEN. Before the master evaluation freezes it, a game
+     that hasn't started rebuilds from the current lines every refresh — an overnight card
+     priced off a stale capture used to stay stuck all day (Saturday's CFB kept Thursday's
+     IU +3.5 after the real IU +3 was loaded, so every CFB pick looked like it fought the market). */
+  let dayFrozen=false;try{dayFrozen=typeof deskFrozen==='function'&&deskFrozen(d);}catch(e){}
+  if(!dayFrozen){let fresh=new Set();try{const SS=sportSims(sp)||{};(sportGames(sp)||[]).forEach(g=>{if(SS[g.id]||(sp==='nhl'&&typeof nhlSimFor==='function'))fresh.add(g.away.abbr+'@'+g.home.abbr);});}catch(e){}
+    /* only games THIS page has loaded and simmed are re-read; anything else keeps what it had */
+    prev=prev.filter(x=>best5Started(x)||!fresh.has(x.game));delete T.frozen;}
   const kOf=x=>x.game+'|'+x.m;const have=new Set(prev.map(kOf));
   const merged=[...prev,...(picks||[]).filter(x=>!have.has(kOf(x)))];
   let standout=B0.standout||null;
@@ -23062,6 +23072,7 @@ async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your pri
     /* v2.00: an automatic sync used to RELOAD the page when it pulled anything, which threw you
        back to Games mid-research. Now the data lands quietly; every view reads it the next time it paints. */
     if(changed&&!manual)toastSync(`synced ${changed} change${changed===1?'':'s'} from your other device`);
+    if(changed)try{if(typeof deskReopenRun==='function')deskReopenRun();}catch(e){}   /* v2.41 · a reopen that arrives by sync */
     return{ok:true,changed};}
   catch(e){SYNC_STATE={ok:false,ts:Date.now(),msg:e.message||String(e)};if(manual)alert('Sync failed: '+SYNC_STATE.msg);return{ok:false,reason:SYNC_STATE.msg};}
   finally{SYNC_BUSY=null;try{renderSyncStatus();}catch(e){}}})();
