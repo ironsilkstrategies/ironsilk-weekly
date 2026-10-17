@@ -2524,7 +2524,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261016d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261016e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23120,6 +23120,9 @@ function tgTrackPost(card,chat,ids){const P=tgPosts();const W=tgwOn()&&ids.lengt
    paid pick. The worker grades from ESPN and edits / replies / recaps in the VIP
    channel; both sides merge, so nothing is announced twice. */
 const TGW_BRANCH='autopilot-state',TGW_FILE='tg.enc';
+/* v2.35 · the card is handed to the site repo (pubRepo), but the worker itself — its workflow and its two
+   secrets — lives in the app repo. It reads the card from the site. Secrets and "Run now" go to the worker's repo. */
+const TGW_WORKER_REPO='ironsilkstrategies/ironsilk-weekly';
 function tgwOn(){return get('d4.tgworker',false)===true;}
 function tgwKey(){let k=get('d4.tgautokey','');if(!k){const b=new Uint8Array(32);crypto.getRandomValues(b);k=btoa(String.fromCharCode(...b));set('d4.tgautokey',k);}return k;}
 const tgwB64=u=>btoa(String.fromCharCode(...new Uint8Array(u)));const tgwUnb64=s0=>Uint8Array.from(atob(s0),c=>c.charCodeAt(0));
@@ -23160,25 +23163,25 @@ async function tgwHandOff(p){for(let tries=0;tries<3;tries++){const R=await tgwR
     const w=await fetch(`https://api.github.com/repos/${R.repo}/contents/${TGW_FILE}`,{method:'PUT',headers:{...R.H,'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(w.ok){set('d4.tgwlast',{ts:Date.now(),d:p.d});return{ok:true};}if(w.status!==409&&w.status!==422)return{ok:false,reason:'HTTP '+w.status};}
   return{ok:false,reason:'kept colliding with the worker — try again'};}
-async function tgwRunNow(){const{repo,toks}=await tgwGh();for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204))return true;}return false;}
+async function tgwRunNow(){const{toks}=await tgwGh();const repo=TGW_WORKER_REPO;for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204))return true;}return false;}
 let TGW_STATUS=null;
 async function tgwRefreshStatus(){const R=await tgwRead();TGW_STATUS=R.ok?{ts:Date.now(),state:R.state}:{ts:Date.now(),err:R.reason};try{renderToday(true);}catch(e){}}
 function tgwSet(on){set('d4.tgworker',!!on);if(on){tgwKey();tgwRefreshStatus();}try{renderToday(true);}catch(e){}}
-function tgwHtml(){const on=tgwOn();const key=on?tgwKey():'';const repo=pubRepo();
+function tgwHtml(){const on=tgwOn();const key=on?tgwKey():'';const repo=TGW_WORKER_REPO;
   if(on&&!TGW_STATUS&&!window.__tgwAsk){window.__tgwAsk=1;setTimeout(tgwRefreshStatus,50);}
   const S=TGW_STATUS;let stat='';if(on&&S){if(S.err)stat=`<span style="color:var(--rust)">${txtEsc(S.err)}</span>`;else if(!S.state)stat='No card handed over yet — post the VIP card and it goes to the worker.';
     else{const ds=Object.keys(S.state.posts||{}).sort();const p=S.state.posts[ds[ds.length-1]];const g=p?Object.keys(p.st||{}).length:0;
       stat=`${p?`${txtEsc(p.d)}: ${g} of ${(p.legs||[]).length} graded${p.recap?' · recap posted ✓':''}`:''}${S.state.lastRun?` · worker last ran ${new Date(S.state.lastRun).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${S.state.runs||0} runs)`:' · <b style="color:var(--gold)">worker hasn\'t run yet — check the secrets</b>'}`;}}
   return`<div class="tkt" style="margin:8px 0;border-color:var(--gold)"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">🛰️ 24/7 VIP worker</h3>
       <button class="${on?'primary':''}" onclick="tgwSet(${!on})">${on?'ON':'OFF'}</button></div>
-    <div class="sub" style="font-size:10.5px;margin:4px 0">Runs the VIP autopilot every 10 minutes on GitHub — no device needs to be on. The VIP card is handed over encrypted; only the worker can read it, so the public repo never shows a paid pick. Posts only to your VIP channel.</div>
+    <div class="sub" style="font-size:10.5px;margin:4px 0">Runs on GitHub — no device needs to be on. While games are live it checks about every 75 seconds and posts each result as it goes final, then rests. The VIP card is handed over encrypted; only the worker can read it, so no repo ever shows a paid pick. Posts to your VIP channel, plus the public channel and lounges set in Broadcast.</div>
     ${on?`<details${S&&S.state&&S.state.lastRun?'':' open'} style="margin-top:4px"><summary class="mono" style="font-size:10.5px;color:var(--gold)">One-time setup (2 secrets)</summary>
       <div class="sub" style="font-size:10.5px;line-height:1.5">On GitHub open <a href="https://github.com/${txtEsc(repo)}/settings/secrets/actions/new" target="_blank" rel="noopener" style="color:var(--gold)">${txtEsc(repo)} → Settings → Secrets → Actions → New secret</a> and add:</div>
       <div class="mono" style="font-size:10px;margin:4px 0">1 · Name <b>TG_BOT_TOKEN</b> — value: your bot token <button style="font-size:9.5px" onclick="copyText(String(get('d4.tgbot','')||''),'Bot token copied.')">copy</button></div>
       <div class="mono" style="font-size:10px;margin:4px 0">2 · Name <b>AUTOPILOT_KEY</b> — value: <button style="font-size:9.5px" onclick="copyText('${key}','Autopilot key copied.')">copy key</button> <span style="color:var(--mute)">(keep it private — it unlocks the VIP card)</span></div>
-      <div class="sub" style="font-size:10px">Then post the VIP card as usual. "Run now" kicks the worker immediately instead of waiting for the next 10-minute tick.</div></details>
+      <div class="sub" style="font-size:10px">Then post the VIP card as usual. "Run now" kicks the worker immediately instead of waiting for GitHub's schedule (it only works if this phone's GitHub token can reach ${txtEsc(repo)}).</div></details>
     <div class="sub mono" style="font-size:9.5px;margin-top:4px">${stat||'Checking the worker…'}</div>
-    <div class="bar" style="margin-top:6px"><button onclick="this.textContent='Starting…';tgwRunNow().then(ok=>{this.textContent=ok?'Started ✓ — results in ~1 min':'Couldn\'t start it (token needs Actions access)';setTimeout(tgwRefreshStatus,70e3);})">▶ Run now</button><button onclick="tgwRefreshStatus()">↻ Status</button>
+    <div class="bar" style="margin-top:6px"><button onclick="this.textContent='Starting…';tgwRunNow().then(ok=>{this.textContent=ok?'Started ✓ — results in ~1 min':'Can\'t start it from this phone — it runs on its own schedule';setTimeout(tgwRefreshStatus,70e3);})">▶ Run now</button><button onclick="tgwRefreshStatus()">↻ Status</button>
       ${(()=>{const P=tgPosts();const d=Object.keys(P).sort().pop();const p=d&&P[d];return p&&p.ids&&p.ids.length&&!p.worker?`<button onclick="(async()=>{const P=tgPosts();const p=P['${d}'];const r=await tgwHandOff(p);if(r.ok){p.worker=true;set(TGP_KEY,P);deskToast('🛰️ Handed to the 24/7 worker');}else alert(r.reason);tgwRefreshStatus();})()">Hand today's post to the worker</button>`:'';})()}</div>`:''}</div>`;}
 function tgAutoHere(p){try{return p.dev===syncDevice()||localStorage.getItem('td.tgauto')==='1';}catch(e){return false;}}
 function tgAutoNeeds(){const out=[];Object.values(tgPosts()).forEach(p=>{if(!p||p.recap||!p.card)return;tgAllLegs(p.card).forEach(({x})=>{if(x.sp)out.push([x.sp,p.d]);});});return out;}

@@ -95,6 +95,10 @@ try {
   /* 9 · a private repo never relays (Actions minutes) */
   const Pv = run('private', { MOCK_PRIVATE: '1' });
   if (Pv.o) T('private repo: no relay, the schedule carries on', Pv.o.dispatch.length === 0 && /private/.test(Pv.log) && Pv.code === 0); else T('private run produced output', false, Pv.log.slice(-400));
+  /* 10 · Telegram refuses the results post once (rate limit): it isn't marked sent, the next pass delivers it, once */
+  const Q = run('refused', { MOCK_FINAL_FROM: 'COL@BOS:1', MOCK_TG_FAIL: '2' });
+  if (Q.o) { const R2 = results(Q.o); T('a refused send retries next pass and lands once', R2.length === 1 && Q.o.final.posts[day].sent.a === 'W' && /sendMessage said Too Many Requests/.test(Q.log), R2.length + ' · ' + Q.log.slice(-300)); }
+  else T('refused run produced output', false, Q.log.slice(-400));
   /* the mock never ships with the workflow */
   const wf = fs.readFileSync(path.join(W, '.github/workflows/tg-autopilot.yml'), 'utf8'); T('the workflow runs the worker alone (no test double)', !/relayloop_mock/.test(wf));
 } catch (e) { T('harness', false, e.stack); }

@@ -29,6 +29,9 @@ const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d
   /* merges keep the counter */
   const M=Wk.mergeState({posts:{},relay:{d:day,n:5}},{posts:{},relay:{d:day,n:9}});T('the worker\'s merge keeps the higher count',M.relay&&M.relay.n===9);
   const src=require('fs').readFileSync(path.join(W,'shared.js'),'utf8');T('the app\'s merge carries the relay too',/out\.relay=!x\?y:!y\?x:/.test(src));
+  /* v2.35 · the app hands the card to the site repo; the worker (workflow + secrets) lives in the app repo */
+  T('app: the secrets link and Run now point at the worker\'s repo',/const TGW_WORKER_REPO='ironsilkstrategies\/ironsilk-weekly'/.test(src)&&/function tgwHtml\(\)\{[^\n]*const repo=TGW_WORKER_REPO;/.test(src)&&/async function tgwRunNow\(\)\{const\{toks\}=await tgwGh\(\);const repo=TGW_WORKER_REPO;/.test(src));
+  T('app: the card is still handed to the site repo (where the worker now reads it)',/async function tgwGh\(\)\{const repo=pubRepo\(\);/.test(src)&&/const SITE = String\(env\.STATE_REPO \|\| 'ironsilkstrategies\/ironsilk-weekly-site'\)/.test(wsrc));
   const wf=require('fs').readFileSync(path.join(W,'.github/workflows/tg-autopilot.yml'),'utf8');T('the workflow may start its own next run',/actions: write/.test(wf)&&/workflow_dispatch/.test(wf));
 }catch(e){T('harness',false,e.stack);}
 console.log(out.join('\n'));const p=out.filter(x=>x.startsWith('PASS')).length;console.log(`\n${p} pass / ${out.length-p} fail`);process.exit(0);})();

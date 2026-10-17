@@ -36,6 +36,8 @@ globalThis.fetch = async (url, o = {}) => { url = String(url); const m = (o.meth
     const events = Object.keys(SCORE).map((g, i) => { const [a, h] = g.split('@'); const fin = pass >= (FINAL[g] || 1e9); const [as, hs] = SCORE[g];
       return { id: 'e' + i, competitions: [{ status: { type: { completed: fin, state: fin ? 'post' : 'in' } }, competitors: [{ homeAway: 'away', team: { abbreviation: a }, score: String(as) }, { homeAway: 'home', team: { abbreviation: h }, score: String(hs) }] }] }; });
     return res(200, { events }); }
-  if (/api\.telegram\.org/.test(url)) { const meth = url.split('/').pop(); const params = Object.fromEntries(new URLSearchParams(o.body)); R.tg.push({ meth, params }); return res(200, { ok: true, result: { message_id: 500 + R.tg.length } }); }
+  if (/api\.telegram\.org/.test(url)) { const meth = url.split('/').pop(); const params = Object.fromEntries(new URLSearchParams(o.body)); R.tgTries = (R.tgTries || 0) + 1;
+    if (nums(process.env.MOCK_TG_FAIL).includes(R.tgTries)) return res(429, { ok: false, description: 'Too Many Requests: retry after 5' });
+    R.tg.push({ meth, params }); return res(200, { ok: true, result: { message_id: 500 + R.tg.length } }); }
   return res(404, {}); };
 process.on('exit', () => { try { fs.writeFileSync(path.join(DIR, 'out.json'), JSON.stringify({ ...R, final: store[OWN].plain, siteFinal: store[SITE] && store[SITE].plain })); } catch (e) { } });

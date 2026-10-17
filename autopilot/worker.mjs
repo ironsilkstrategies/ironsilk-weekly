@@ -112,7 +112,7 @@ async function gradeProp(x, d) { const team = x.team; if (!team) return null; le
   return val >= +x.thr ? 'W' : 'L'; }
 
 /* ── Telegram ── */
-async function tg(method, params) { try { const r = await fetch(`https://api.telegram.org/bot${TG}/${method}`, { method: 'POST', body: new URLSearchParams(params) }); const j = await r.json().catch(() => ({})); if (!j.ok) log(method, 'said', j.description || r.status); return j; } catch (e) { log(method, 'failed', e.message); return null; } }
+async function tg(method, params) { try { const r = await fetch(`https://api.telegram.org/bot${TG}/${method}`, { method: 'POST', body: new URLSearchParams(params) }); const j = await r.json().catch(() => ({})); if (!j.ok) { log(method, 'said', j.description || r.status); return null; } return j; } catch (e) { log(method, 'failed', e.message); return null; } }   /* v2.35 · a refused send is not "sent" — it retries next pass */
 const MARK = { W: '✅ ', L: '❌ ', P: '➖ ' };
 export function fillTemplate(text, st) { return String(text)
   .replace(/⟦m:([^⟧]*)⟧/g, (_, k) => st[k] ? MARK[st[k]] : '')
