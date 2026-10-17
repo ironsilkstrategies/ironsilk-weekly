@@ -2595,7 +2595,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261017a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261017b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2678,9 +2678,42 @@ let TODAY_FMT=null,TODAY_TZ=null,TODAY_V='',TODAY_T=0;
 /* v2.31 · SLATE DAY — the desk's day turns over at 5 AM Central, not midnight, so a late
    game that ends after 12 still belongs to its slate: graded, posted and recorded there. */
 const DAY_CUT_H=5;
+/* v2.37 · EARLY TURNOVER — 5 AM is now the latest the day turns, not the only time.
+   Between midnight and 5 AM, once every game on the night's slate (all six sports)
+   is final, slateFlipCheck() writes the new date here and the desk moves to it. */
+const SLATE_FLIP_KEY='d4.slateflip';
 const today=()=>{const n=Date.now();if(n-TODAY_T<1000&&TODAY_TZ===APP_TZ)return TODAY_V;
   if(!TODAY_FMT||TODAY_TZ!==APP_TZ){TODAY_FMT=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'});TODAY_TZ=APP_TZ;}
-  TODAY_V=TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5));TODAY_T=n;return TODAY_V;};
+  TODAY_V=TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5));
+  const cal=TODAY_FMT.format(new Date(n));
+  if(cal!==TODAY_V){let f=null;try{f=localStorage.getItem(SLATE_FLIP_KEY);}catch(e){}if(f===cal)TODAY_V=cal;}
+  TODAY_T=n;return TODAY_V;};
+const SLATE_FLIP_SB={mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba',ncaab:'basketball/mens-college-basketball'};
+/* the night's slate = games that started between 5 AM on the slate day and 5 AM today (CT) */
+function slateFlipWindow(slate){const off=d=>{const p=new Intl.DateTimeFormat('en-US',{timeZone:APP_TZ,timeZoneName:'shortOffset'}).formatToParts(new Date(d+'T12:00:00Z')).find(x=>x.type==='timeZoneName');
+    const m=String(p&&p.value||'GMT-5').match(/([+-]\d+)/);return m?+m[1]:-5;};
+  const at=d=>Date.parse(d+'T05:00:00Z')-off(d)*36e5;return[at(slate),at(dayShift(slate,1))];}
+async function slateFlipCheck(){try{
+  const n=Date.now();if(!TODAY_FMT)today();const cal=TODAY_FMT.format(new Date(n)),slate=TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5));
+  if(cal===slate||localStorage.getItem(SLATE_FLIP_KEY)===cal)return{flipped:false,why:'not in the overnight window'};
+  const [t0,t1]=slateFlipWindow(slate);const D=x=>x.replace(/-/g,'');const open=[];
+  for(const [sp,path] of Object.entries(SLATE_FLIP_SB)){
+    const g=sp==='ncaaf'?'&groups=80':sp==='ncaab'?'&groups=50':'';
+    const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${D(slate)}-${D(cal)}&limit=400${g}`,{cache:'no-store'});
+    if(!r.ok)return{flipped:false,why:sp+' scoreboard unreachable'};   /* never flip on a guess */
+    const j=await r.json();(j.events||[]).forEach(e=>{const t=Date.parse(e.date);if(!(t>=t0&&t<t1))return;
+      const st=(e.status&&e.status.type)||((e.competitions||[])[0]||{}).status&&e.competitions[0].status.type||{};
+      if(!(st.completed||st.state==='post'||/POSTPONED|CANCEL|SUSPENDED|FORFEIT/i.test(st.name||'')))open.push(sp+' '+(e.shortName||e.id));});}
+  if(open.length)return{flipped:false,why:open.length+' still going',open};
+  localStorage.setItem(SLATE_FLIP_KEY,cal);TODAY_T=0;
+  try{deskToast(`🌅 Last night's slate is final — ${fmtDate(cal+'T17:00:00Z')} is up`,3500);}catch(e){}
+  if(typeof location!=='undefined'&&!window.__NO_FLIP_RELOAD__)setTimeout(()=>location.reload(),2500);
+  return{flipped:true,day:cal};}catch(e){return{flipped:false,why:String(e&&e.message||e)};}}
+let SLATE_FLIP_TIMER=null;
+function slateFlipLoop(){if(SLATE_FLIP_TIMER||typeof window==='undefined'||window.__NO_GRADELOOP__)return;
+  const tick=()=>{const n=Date.now();if(!TODAY_FMT)today();
+    if(TODAY_FMT.format(new Date(n))!==TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5)))slateFlipCheck();};
+  tick();SLATE_FLIP_TIMER=setInterval(tick,4*60e3);}
 const fmtTime=d=>new Date(d).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})+' CT';
 const fmtDate=d=>new Date(d).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',timeZone:APP_TZ});
 /* ── STORAGE COMPRESSION ────────────────────────────────────────────────────
@@ -16888,6 +16921,7 @@ async function boot(){
   try{replayPendingUploads()}catch(e){}
   try{intakeReplay()}catch(e){console.warn('intake replay',e)}
   try{intakeAutoDrop().then(x=>{if(x&&x.saved)try{intakeReplay()}catch(e){}}).catch(()=>{});}catch(e){}
+  try{slateFlipLoop()}catch(e){}
   /* Sweep whatever finals this page's engines know about into the shared store
      on boot, so every page contributes to (and benefits from) the unified
      cross-sport view of results. */

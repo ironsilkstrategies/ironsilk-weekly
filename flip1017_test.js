@@ -1,0 +1,51 @@
+/* v2.37 · early day turnover: between midnight and 5 AM CT the desk moves to the new date
+   as soon as every game on the night's slate (all six sports) is final; 5 AM stays the backstop. */
+const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path');const W='/home/claude/work';
+const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d:''}`);
+let NOW=Date.parse('2026-10-17T05:30:00Z');            /* 12:30 AM CT Saturday */
+const S={late:'in',down:null};const asked=[];
+const ev=(id,date,state,name)=>({id,date,shortName:id,status:{type:{state,completed:state==='post',name:name||(state==='post'?'STATUS_FINAL':'STATUS_IN_PROGRESS')}}});
+function board(sp){const e=[];
+  if(sp==='nhl')e.push(ev('PIT @ VGK','2026-10-17T02:00Z',S.late),        /* Fri 9:00 PM CT — the late one */
+    ev('NJ @ WSH','2026-10-17T16:07Z','pre'),                               /* Sat noon — tomorrow, ignored */
+    ev('OLD @ ONE','2026-10-16T09:30Z','in'));                              /* Fri 4:30 AM CT — the slate before, ignored */
+  if(sp==='ncaaf')e.push(ev('SJSU @ UTEP','2026-10-17T01:00Z','post'),ev('PPD @ X','2026-10-17T00:00Z','pre','STATUS_POSTPONED'));
+  return{events:e};}
+function boot(page){let html=fs.readFileSync(path.join(W,page),'utf8');
+  html=html.replace(/<script src="([^"?]+)\?v=[^"]+"><\/script>/g,(m,f)=>`<script>${fs.readFileSync(path.join(W,f),'utf8')}</script>`);
+  return new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/'+page,pretendToBeVisual:true,beforeParse(w){
+    const RD=w.Date;class FD extends RD{constructor(...a){super(...(a.length?a:[NOW]))}static now(){return NOW}}w.Date=FD;
+    w.__NO_GRADELOOP__=true;w.__NO_FLIP_RELOAD__=true;
+    w.fetch=u=>{u=String(u);asked.push(u);const m=u.match(/sports\/(.+?)\/scoreboard/);
+      if(m){const sp=Object.entries({mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba',ncaab:'basketball/mens-college-basketball'}).find(([k,v])=>v===m[1])[0];
+        if(S.down===sp)return Promise.resolve({ok:false,status:503,json:()=>Promise.resolve({})});
+        return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(board(sp))});}
+      return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});};
+    w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;}
+const w=boot('nhl.html');
+setTimeout(async()=>{try{
+  T('12:30 AM with a game still going: the desk is still on Friday',w.eval('today()')==='2026-10-16',w.eval('today()'));
+  let r=await w.eval('slateFlipCheck()');
+  T('a live Friday game holds the turnover',!r.flipped&&r.open&&r.open.length===1&&/PIT @ VGK/.test(r.open[0]),JSON.stringify(r));
+  T('asks for the whole night across both dates, every sport',asked.filter(u=>/dates=20261016-20261017/.test(u)).length===6&&asked.some(u=>/college-football.*groups=80/.test(u))&&asked.some(u=>/mens-college-basketball.*groups=50/.test(u)));
+  T('Saturday games and the slate before are not counted',!JSON.stringify(r.open).includes('NJ @ WSH')&&!JSON.stringify(r.open).includes('OLD'));
+  S.late='post';S.down='nba';NOW+=1000*60*30;w.eval('TODAY_T=0');
+  r=await w.eval('slateFlipCheck()');
+  T('one scoreboard unreachable: never flips on a guess',!r.flipped&&/nba/.test(r.why)&&w.eval('today()')==='2026-10-16',JSON.stringify(r));
+  S.down=null;r=await w.eval('slateFlipCheck()');
+  T('everything final (postponed counts as done): flips to Saturday',r.flipped&&r.day==='2026-10-17',JSON.stringify(r));
+  T('today() now answers Saturday before 5 AM',w.eval('today()')==='2026-10-17'&&w.localStorage.getItem('d4.slateflip')==='2026-10-17');
+  T('yesterday is still Friday for grading',w.eval('dayShift(today(),-1)')==='2026-10-16');
+  const n=asked.length;r=await w.eval('slateFlipCheck()');
+  T('already flipped: no more scoreboard calls',!r.flipped&&asked.length===n);
+  NOW=Date.parse('2026-10-17T15:00:00Z');w.eval('TODAY_T=0');
+  T('10 AM Saturday: plain calendar day',w.eval('today()')==='2026-10-17');
+  NOW=Date.parse('2026-10-18T05:30:00Z');w.eval('TODAY_T=0');
+  T('next night: an old flip never carries over (12:30 AM Sunday = Saturday)',w.eval('today()')==='2026-10-17');
+  NOW=Date.parse('2026-10-18T10:01:00Z');w.eval('TODAY_T=0');
+  T('5 AM backstop unchanged',w.eval('today()')==='2026-10-18');
+  NOW=Date.parse('2026-11-08T06:30:00Z');w.eval('TODAY_T=0');   /* after the DST change (UTC-6) */
+  const [a,b]=w.eval(`slateFlipWindow('2026-10-31')`);
+  T('night window follows the clock change (Oct 31 5 AM CDT → Nov 1 5 AM CST)',new Date(a).toISOString()==='2026-10-31T10:00:00.000Z'&&new Date(b).toISOString()==='2026-11-01T11:00:00.000Z',new Date(a).toISOString()+' '+new Date(b).toISOString());
+}catch(e){T('no crash',false,e.stack.slice(0,400));}
+const p=out.filter(x=>x.startsWith('PASS')).length;console.log(out.join('\n'));console.log(`${p} pass / ${out.length-p} fail`);process.exit(0);},2500);
