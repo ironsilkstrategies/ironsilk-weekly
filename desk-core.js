@@ -89,7 +89,19 @@ const confOf=x=>x&&x.cf!=null?x.cf:x&&x.cfr!=null?x.cfr:null;
    and it isn't a preseason / exhibition game (tracked for learning only) */
 const confPre=x=>!!(x&&(x.pre||(typeof seasonPre==='function'&&seasonPre(x.sp,x.date))));
 const confPriced=x=>x&&x.price!=null&&x.price!==''&&(typeof amerOk==='function'?amerOk(x.price)!=null:isFinite(+x.price)&&Math.abs(+x.price)>=100);
-function isOfficial(x){const c=confOf(x);return c!=null&&c>=confFloor(x.market)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
+/* v2.43 · SPORT FALLBACK FLOOR — the 70% rule stands. On a day a sport has NO 70% call
+   (priced, not preseason, not switched off), that sport's floor drops to 65% for that day.
+   Counted from Oct 17 on: every earlier day keeps the floor its calls were graded under,
+   so past records don't move. Props keep their own 70% rule. */
+const CONF_FALLBACK=0.65,CONF_FALLBACK_FROM='2026-10-17';let CONF_FB_C=null;
+function confHas70(){const V=roGet(VOICES_KEY,[],30e3)||[];const last=V.length?V[V.length-1]:null;const sig=V.length+'|'+(last?last.id+'|'+(last.cf==null?'':last.cf):'');
+  if(CONF_FB_C&&CONF_FB_C.sig===sig&&Date.now()-CONF_FB_C.ts<30e3)return CONF_FB_C.S;const S=new Set();
+  V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const d=String(c.date||'').slice(0,10);if(d<CONF_FALLBACK_FROM)return;const cf=confOf(c);
+    if(cf==null||cf<confFloor(c.market)-1e-9||c.kof||!confPriced(c)||confPre(c))return;S.add(c.sp+'|'+d);});
+  CONF_FB_C={sig,ts:Date.now(),S};return S;}
+function confFloorFor(x){const base=confFloor(x&&x.market);const d=String((x&&x.date)||'').slice(0,10);if(!x||!x.sp||!d||d<CONF_FALLBACK_FROM)return base;
+  return confHas70().has(x.sp+'|'+d)?base:Math.min(base,CONF_FALLBACK);}
+function isOfficial(x){const c=confOf(x);return c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
 const officialOnly=V=>(V||[]).filter(isOfficial);
 const confPct=c=>c==null?'—':Math.round(c*100)+'%';
 /* calls logged before the meter existed (or locked before it loaded) get their
@@ -211,7 +223,7 @@ function ideoCardHtml(v){const C=CHARS[v];const T=IDEO_TXT[v]||{};const K=ideoKn
       ${params}<div class="bar"><button onclick="ideoReset('${v}')">Reset to defaults</button></div></div></details>`;}
 function ideologyHtml(){const fl=['ml','spread','total'].map(m=>`<div class="ideo-p"><span>Confidence floor — ${({ml:'moneyline',spread:'spread',total:'total'})[m]}</span><input type="number" min="0.5" max="0.95" step="0.01" value="${confFloor(m)}" onchange="(()=>{const F=get(CONF_FLOOR_KEY,null)||{};F['${m}']=+this.value;set(CONF_FLOOR_KEY,F);deskToast('Saved',1500);})()"></div>`).join('');
   return`<div class="tkt"><h3>🧠 Ideology — why each character picks what it picks</h3><div class="sub" style="font-size:10.5px">Tap a character to see its school of thought, its official record by league, what it's best and worst at, why it loses, and the dials that shape its calls. Changes apply to its next calls; nothing already locked moves.</div>
-    <details style="margin-top:6px"><summary class="mono" style="font-size:10.5px;color:var(--gold)">The 70% rule (applies to every character)</summary><div class="sub" style="font-size:10px">A call is official only when its calibrated confidence clears the floor. Books price spreads and totals close to 50/50, so most official calls are moneylines and +1.5 lines; the floor can be set per market here.</div>${fl}</details></div>
+    <details style="margin-top:6px"><summary class="mono" style="font-size:10.5px;color:var(--gold)">The 70% rule (applies to every character)</summary><div class="sub" style="font-size:10px">A call is official only when its calibrated confidence clears the floor. Books price spreads and totals close to 50/50, so most official calls are moneylines and +1.5 lines; the floor can be set per market here. On a day a sport has no call at the floor, that sport drops to ${Math.round(CONF_FALLBACK*100)}% for the day.</div>${fl}</details></div>
     ${CHAR_ORDER.map(ideoCardHtml).join('')}`;}
 
 /* ── 4 · THE BANKER'S ALLOCATION — no pick on more than 3 tickets ─────────────
@@ -227,7 +239,7 @@ function ideologyHtml(){const fl=['ml','spread','total'].map(m=>`<div class="ide
      one with fewer than 2 official legs sits the day out;
    · ticket length is the Banker's call: 2–4 legs by Kelly growth, never under a
      30% chance to cash. */
-const EXPO_CAP=3,DESK_KEY='d4.deskplan',DESK_MAXLEG=4,DESK_CASH_MIN=0.30,DESK_PROP_MIN=0.70;
+const EXPO_CAP=3,DESK_KEY='d4.deskplan',DESK_MAXLEG=4,DESK_CASH_MIN=0.30,DESK_PROP_MIN=0.70,DESK_SKILL_MIN=0.55;
 const deskKey=x=>x.sp+'|'+x.game+'|'+mkNorm(x.m||x.market)+'|'+(x.sd||x.side);
 const deskPropKey=c=>'prop|'+c.sp+'|'+pstId(c.player)+'|'+c.k+'|'+c.thr;
 const deskStarted=x=>{try{return typeof cbStarted==='function'&&cbStarted(x.sp,x.game);}catch(e){return false;}};
@@ -247,7 +259,7 @@ function deskSize(legs,kMax){const L=legs.slice(0,Math.min(kMax||DESK_MAXLEG,leg
   while(k>2&&L.slice(0,k).reduce((a,x)=>a*x.p,1)<DESK_CASH_MIN)k--;return k;}
 function deskTicket(legs,v){const dec=legs.reduce((a,x)=>a*americanToDecimal(x.price),1),p=legs.reduce((a,x)=>a*(+(+x.p).toFixed(4)),1);
   return{voice:v,legs:legs.map(x=>({kind:x.kind||'game',sp:x.sp,game:x.game,gd:x.gd,start:x.start||'',pick:x.pick,price:x.price,m:x.m,sd:x.sd,line:x.line,p:+(+x.p).toFixed(4),score:+(+(x.fit!=null?x.fit:x.p)).toFixed(4),v:x.v,why:x.why||[],
-    ...(x.kind==='prop'?{player:x.player,team:x.team,k:x.k,thr:x.thr,est:true}:{})})),dec:+dec.toFixed(4),p,alloc:true};}
+    ...(x.kind==='prop'?{player:x.player,team:x.team,k:x.k,thr:x.thr,est:true}:{}),...(x.skill?{skill:true}:{})})),dec:+dec.toFixed(4),p,alloc:true};}
 /* the character props the desk can use: official (70%+ calibrated), never a player the character fades */
 function deskPropCands(){let C=[];try{C=cpropToday();}catch(e){}
   return C.filter(c=>c.cal>=DESK_PROP_MIN&&c.fav!=='fade').map(c=>({...c,kind:'prop',game:cpxPropGame(c.sp,c.team),pick:cpropLine(c),price:cpxPropPrice(c.cal),p:c.cal,fit:c.cal+(c.fav==='fav'?0.03:0),key:deskPropKey(c),
@@ -285,6 +297,14 @@ function deskAllocate(V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();const
       if(!rep)break;const i=t.map((y,j)=>[y,j]).filter(([y])=>dup.keys.has(y.key)).sort((a,b)=>a[0].fit-b[0].fit)[0][1];release(t[i],v);t[i]=rep;take(rep.key,charName(v));}
     if(issued.some(I=>t.every(x=>I.keys.has(x.key)))){t.forEach(x=>release(x,v));dupOut[v]=1;return;}
     issued.push({v,keys:new Set(t.map(x=>x.key))});chars[v]=deskTicket(t.sort((a,b)=>b.fit-a.fit),v);});
+  /* 4b · v2.43 · SKILL TICKETS — a character with no official ticket still plays: its most
+     confident priced calls today, ranked by its own record in that lane (its skill set).
+     Never a lane blocked for it, never priced shorter than -300 or longer than +400, never a
+     leg it would bet at negative value, never a pick the sim reads wildly off the market
+     unless that lane is proven for it. Same 2–4 legs / 30%-to-cash sizing and the same
+     3-ticket cap. Labeled as under the 70% rule, graded on its own record, and kept off
+     the VIP card (whose promise is 70%+). */
+  Object.assign(chars,deskSkillTickets(V,d,{free,take,issued,chars}));
   /* 5 · props tickets: a character's best official props plus its official game legs that still have room */
   const px={};CPROP_VOICES.forEach(v=>{const mine=PC.filter(c=>c.voice===v);if(!mine.length)return;const legs=[],games=new Set();
     for(const c of mine){if(legs.filter(l=>l.kind==='prop').length>=2)break;if(!free(c.key)||games.has(c.sp+'|'+c.game))continue;games.add(c.sp+'|'+c.game);legs.push({...c,v});}
@@ -293,12 +313,58 @@ function deskAllocate(V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();const
     legs.sort((a,b)=>b.fit-a.fit);const k=deskSize(legs);if(k<2)return;let pick=legs.slice(0,k);if(!pick.some(l=>l.kind==='prop')){const pr=legs.find(l=>l.kind==='prop');pick=pick.slice(0,k-1).concat(pr);}
     pick.forEach(l=>take(l.key,charName(v)+' (props)'));px[v]=deskTicket(pick,v);px[v].props=pick.filter(l=>l.kind==='prop').length;});
   return{d,ts:Date.now(),own,chars,px,props:props.map(c=>({v:c.voice,sp:c.sp,player:c.player,team:c.team,k:c.k,thr:c.thr,cal:c.cal,fav:c.fav,rec:c.rec,why:c.why,game:c.game,start:deskTeamStart(c.sp,c.team)})),
-    use,where,cands:C.length,sat:Object.keys(byV).filter(v=>!chars[v]).map(v=>({v,why:(target[v]||0)<2?'fewer than 2 official legs today':dupOut[v]?'its ticket would have copied another one':'its picks were already on 3 tickets'}))};}
+    use,where,cands:C.length,skill:Object.keys(chars).filter(v=>chars[v].skill),sat:Object.keys(byV).filter(v=>!chars[v]).map(v=>({v,why:(target[v]||0)<2?'fewer than 2 official legs today':dupOut[v]?'its ticket would have copied another one':'its picks were already on 3 tickets'}))};}
+/* v2.43 · SKILL TICKETS — a character with no official ticket still plays: its most confident
+   priced calls today, ranked by its own record in that lane (its skill set). Never a lane
+   blocked for it, never priced shorter than -300 or longer than +400, never a leg it would bet
+   at negative value, never a pick the sim reads wildly off the market unless that lane is
+   proven. Same 2–4 legs / 30%-to-cash sizing and the same 3-ticket cap. Labeled as under the
+   70% rule, graded on their own record, kept off the VIP card (its promise is 70%+) and off
+   the public cashed showcase. */
+/* the line on YOUR book for a market/side (your uploads outrank the API feeds; newest capture wins) */
+function deskBookRow(sp,game,m,side,d){const K={ncaaf:'d4.ncaafshots',nfl:'d4.nflshots',nhl:'d4.nhlshots'}[sp];if(!K)return null;const all=roGet(K,{},60e3)||{};let best=null;
+  [dayShift(d,-1),d,dayShift(d,1)].forEach(dd=>(all[dd]||[]).forEach(r=>{if((r.game||(r.away+'@'+r.home))!==game)return;const mk=r.market==='moneyline'?'ml':r.market;if(mk!==m||r.side!==side||r.price==null)return;
+    const api=/^(espn|odds|oddsapi|sharp|rundown|oddspapi|api)/i.test(r.src||'');const sc=[api?0:1,+r.capturedAt||0];if(!best||sc[0]>best.sc[0]||(sc[0]===best.sc[0]&&sc[1]>=best.sc[1]))best={r,sc};}));
+  return best?best.r:null;}
+function deskSkillTickets(V,d,ctx){const {free,take,issued,chars}=ctx;
+  const BYV=(()=>{try{return laneTable().BYV||{};}catch(e){return{};}})();const G=(()=>{try{return laneTable().G||{};}catch(e){return{};}})();
+  const TCd=(()=>{try{const T=roGet(TC_KEY,{},30e3)||{};return T.d===d?T.by||{}:{};}catch(e){return{};}})();
+  const cardPick=c=>{const B=TCd[c.sp]||{};return(B.picks||[]).find(y=>y.game===c.game&&mkNorm(y.m||y.market)===c.market&&(y.sd||y.side)===c.side)||null;};
+  const skillCands=v=>V.filter(c=>c.voice===v&&String(c.date).slice(0,10)===d&&!c.graded&&['ml','spread','total'].includes(c.market)&&c.price!=null&&!c.kof&&!confPre(c)&&!deskStarted(c))
+    .map(c=>{const cf=confOf(c);if(cf==null||cf<DESK_SKILL_MIN)return null;
+      /* priced off YOUR book: a call made at another line is skipped; at the same line it takes your price */
+      const row=deskBookRow(c.sp,c.game,c.market,c.side,d);if(row&&c.market!=='ml'&&row.line!=null&&c.line!=null&&Math.abs(+row.line-(+c.line))>0.01)return null;
+      const price=row?+row.price:+c.price;if(!bkPriceOk(price)||price>400)return null;if(cf*americanToDecimal(price)-1<0)return null;
+      const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);const st=lk?laneStatus(lk,v):'thin';if(st==='blocked')return null;
+      const x=cardPick(c);if(x&&x.suspect&&(st!=='proven'||(x.mp!=null&&x.mkt!=null&&Math.abs(x.mp-x.mkt)>0.25)))return null;
+      const o=(BYV[v]||{})[lk]||{n:0,w:0};const q=(o.w+5)/(o.n+10);const g=G[lk];
+      const rec=lk?[o.n?`${charName(v).replace(/^The /,'')} ${o.w}-${o.n-o.w} here`:'',g&&g.st==='proven'?`lane ✓ proven (${g.w}-${g.n-g.w} all characters)`:''].filter(Boolean).join(' · '):'';
+      return{v,sp:c.sp,game:c.game,gd:String(c.date||'').slice(0,10)||null,m:c.market,sd:c.side,line:c.line,pick:charPickText(c),price,p:cf,cf,fit:cf*(0.8+0.4*q),key:deskKey(c),start:deskGameStart(c.sp,c.game),skill:true,
+        why:[`skill pick · ${Math.round(cf*100)}%`+(lk?` · ${laneName(lk)}`:'')+(rec?` · ${rec}`:'')]};}).filter(Boolean).sort((a,b)=>b.fit-a.fit);
+  const out={};
+  CHAR_ORDER.filter(v=>v!=='Banker'&&!chars[v]).forEach(v=>{const L=[],games=new Set();
+    for(const x of skillCands(v)){if(!free(x.key)||games.has(x.sp+'|'+x.game))continue;games.add(x.sp+'|'+x.game);L.push(x);if(L.length===DESK_MAXLEG)break;}
+    const k=deskSize(L);if(k<2)return;const t=L.slice(0,k);
+    if(issued.some(I=>t.every(x=>I.keys.has(x.key))))return;   /* never a copy of another ticket */
+    t.forEach(x=>take(x.key,charName(v)+' (skill)'));issued.push({v,keys:new Set(t.map(x=>x.key))});
+    const T=deskTicket(t,v);T.skill=true;out[v]=T;});
+  return out;}
+/* a day frozen before skill tickets existed gets them once, added only: games not started,
+   the frozen official tickets, Best 3, Banker and VIP card untouched */
+function deskSkillAddOn(S){try{if(!S||S.skillDone||!S.locked)return S;const d=S.d;const V=roGet(VOICES_KEY,[],30e3)||[];
+    const use={...(S.use||{})},where={...(S.where||{})};const take=(k,place)=>{use[k]=(use[k]||0)+1;(where[k]=where[k]||[]).push(place);};const free=k=>(use[k]||0)<EXPO_CAP;
+    const issued=[];if(S.own)issued.push({v:'Banker',keys:new Set((S.own.legs||[]).map(l=>deskKey(l)))});Object.entries(S.chars||{}).forEach(([v,T])=>issued.push({v,keys:new Set((T.legs||[]).map(l=>deskKey(l)))}));
+    const add=deskSkillTickets(V,d,{free,take,issued,chars:S.chars||{}});
+    S.chars={...(S.chars||{}),...add};S.use=use;S.where=where;S.skillDone=Date.now();S.skill=Object.keys(S.chars).filter(v=>S.chars[v].skill);set(DESK_KEY,S);
+    const C=get(CPAR_KEY,{})||{};const D=C[d];if(D&&D.locked){Object.entries(add).forEach(([v,T])=>{if(D.by[v])return;D.by[v]=cparFromDesk(v,d,T);});D.skillDone=S.skillDone;set(CPAR_KEY,C);}}catch(e){console.warn('skill add-on',e);}
+  return S;}
+function cparFromDesk(v,d,T){return{voice:v,d,legs:T.legs.map(l=>({sp:l.sp,game:l.game,gd:l.gd,start:l.start||'',pick:l.pick,price:l.price,m:l.m,sd:l.sd,line:l.line,p:l.p,score:l.score,why:l.why||[],...(l.skill?{skill:true}:{})})),dec:T.dec,p:T.p,
+    size:{k:T.legs.length,why:T.skill?`${T.legs.length} legs — ${Math.round(T.p*100)}% to cash · skill ticket: its most confident picks in its best lanes (under the 70% rule)`:`${T.legs.length} legs — ${Math.round(T.p*100)}% to cash, every leg official and on no more than 3 tickets`},alloc:true,...(T.skill?{skill:true}:{})};}
 /* the day's plan: a live preview until the master evaluation, frozen from then on */
 let DESK_MEM=null;
-function deskPlan(){const d=today();const S=get(DESK_KEY,{})||{};if(S.d===d&&S.locked)return S;
+function deskPlan(){const d=today();const S=get(DESK_KEY,{})||{};if(S.d===d&&S.locked)return S.skillDone?S:deskSkillAddOn(S);
   const locked=evalRanToday();if(!locked&&DESK_MEM&&DESK_MEM.d===d&&Date.now()-DESK_MEM.t<60e3)return DESK_MEM.P;
-  const P=deskAllocate(null,d);P.locked=locked;if(locked){P.lockedAt=Date.now();set(DESK_KEY,P);}DESK_MEM={d,t:Date.now(),P};return P;}
+  const P=deskAllocate(null,d);P.locked=locked;if(locked){P.lockedAt=Date.now();P.skillDone=P.lockedAt;set(DESK_KEY,P);}DESK_MEM={d,t:Date.now(),P};return P;}
 /* how many tickets a pick is on today (the frozen plan + your own tickets) */
 function deskExposure(x){const P=deskPlan();const k=deskKey({...x,m:mkNorm(x.m||x.market)});let n=(P.use||{})[k]||0;
   try{(roGet(LS.locked,[],5e3)||[]).forEach(t=>{if(t.archived||String(t.date||'').slice(0,10)!==today())return;(t.legs||[]).forEach(l=>{if((l.sport||'mlb')!==x.sp||l.game!==x.game)return;
@@ -313,10 +379,9 @@ function deskTeamStart(sp,team){try{const T=roGet(TC_KEY,{},30e3)||{};const B=((
 
 /* the plan's tickets become the character parlays (game lines, and with props) —
    a day that already locked is never rebuilt */
-function cparState(){const d=today();const S=get(CPAR_KEY,{})||{};if(S[d]&&S[d].locked)return S[d];
-  const P=deskPlan();const day={locked:!!P.locked,by:{},floor:BK_FLOOR,alloc:true};
-  Object.entries(P.chars||{}).forEach(([v,T])=>{day.by[v]={voice:v,d,legs:T.legs.map(l=>({sp:l.sp,game:l.game,gd:l.gd,start:l.start||'',pick:l.pick,price:l.price,m:l.m,sd:l.sd,line:l.line,p:l.p,score:l.score,why:l.why||[]})),dec:T.dec,p:T.p,
-    size:{k:T.legs.length,why:`${T.legs.length} legs — ${Math.round(T.p*100)}% to cash, every leg official and on no more than 3 tickets`},alloc:true};});
+function cparState(){const d=today();const S=get(CPAR_KEY,{})||{};if(S[d]&&S[d].locked){if(!S[d].skillDone){try{deskPlan();}catch(e){}const S2=get(CPAR_KEY,{})||{};if(S2[d])return S2[d];}return S[d];}
+  const P=deskPlan();const day={locked:!!P.locked,by:{},floor:BK_FLOOR,alloc:true,...(P.skillDone?{skillDone:P.skillDone}:{})};
+  Object.entries(P.chars||{}).forEach(([v,T])=>{day.by[v]=cparFromDesk(v,d,T);});
   if(P.locked){S[d]=day;Object.keys(S).sort().slice(0,-60).forEach(k=>delete S[k]);set(CPAR_KEY,S);}
   return day;}
 function cpxState(){const d=today();const S=get(CPX_KEY,{})||{};if(S[d]&&S[d].locked)return S[d];
@@ -356,7 +421,7 @@ function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const
     try{if(x.price==null)why='no book price';else if(+x.price<DESK_B3_LO)why=`priced ${x.price} — shorter than -300`;else if(+x.price>BEST3_HI)why='longer than +400';
       else if(x.incoherent||x.suspect)why='flagged: '+(x.suspect||'incoherent with its other markets');else if(laneStatus(pickLane(x,s0))==='blocked')why='lane blocked: '+laneName(pickLane(x,s0));
       else if(pickDisagrees(x,s0))why='model fighting the market';
-      else if(!o)why=p!=null?`most confident character: ${Math.round(p*100)}% — under the ${Math.round(confFloor(mkNorm(x.m))*100)}% rule`:'no character confidence on it yet';
+      else if(!o)why=p!=null?`most confident character: ${Math.round(p*100)}% — under the ${Math.round(confFloorFor({sp:s0,market:mkNorm(x.m),date:today()})*100)}% rule`:'no character confidence on it yet';
       else if(ev<0.5)why=`${Math.round(p*100)}% sure, but the price needs ${Math.round(imp(+x.price)*100)}% — no value`;}catch(e){}
     if(why)out.push({sp:s0,game:x.game,pick:x.pick,price:x.price,p,ev,why,tier:best3Tier(x)});}));
   return out.sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,n||5);}
@@ -619,7 +684,7 @@ function deskRiskHtml(){try{const X=riskOfRuin();if(X.need)return`<div class="su
    ticket (2–4 legs, never the old 5-leg dumps) → the props of the day. */
 function subCharParlay(v){const P=deskPlan();const T=(P.chars||{})[v];if(!T)return null;return{v,legs:T.legs.map(l=>({sp:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,spec:''})),dec:T.dec,p:T.p};}
 function subCard(){let best=null;try{best=best5State();}catch(e){}const R=(()=>{try{return best3Record();}catch(e){return null;}})();const P=deskPlan();
-  const chars=Object.keys(P.chars||{}).map(v=>subCharParlay(v)).filter(Boolean).sort((a,b)=>b.p-a.p);
+  const chars=Object.keys(P.chars||{}).filter(v=>!(P.chars[v]||{}).skill).map(v=>subCharParlay(v)).filter(Boolean).sort((a,b)=>b.p-a.p);   /* v2.43 · skill tickets stay off the 70%+ VIP card */
   const props=(P.props||[]).map(c=>({...c,cal:c.cal}));
   return{d:today(),best:(best&&best.top3)||[],locked:!!(best&&best.locked),record:R,top10:subTop10(),banker:subBanker(),chars,props,alloc:true};}
 function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦p:${(P.legs||[]).map(tgLegKey).join('¦')}⟧`;try{return tgParlayMark(P.legs,mk);}catch(err){return'';}};

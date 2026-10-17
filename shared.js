@@ -2595,7 +2595,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261017g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261017h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3268,7 +3268,7 @@ function cashedList(days){const from=dayShift(today(),-(days||14));const raw=[];
   try{const H={...(get(BKDAYS_KEY,{})||{})};const S=get(BKDAY_KEY,{})||{};if(S.locked)H[S.d]=S;
     Object.values(H).forEach(S=>{if(S&&S.own&&S.d>=from&&tixDone(S.own.legs)===true)raw.push({d:S.d,v:'Banker',kind:'banker',legs:S.own.legs});});}catch(e){}
   [[CPAR_KEY,'game'],[CPX_KEY,'props']].forEach(([K,kind])=>{const S=get(K,{})||{};Object.entries(S).forEach(([d,D])=>{if(d<from||!D||!D.locked)return;
-    Object.entries(D.by||{}).forEach(([v,P])=>{if(P&&P.done&&P.won)raw.push({d,v,kind,legs:P.legs});});});});
+    Object.entries(D.by||{}).forEach(([v,P])=>{if(P&&P.done&&P.won&&!P.skill)raw.push({d,v,kind,legs:P.legs});});});});   /* v2.43 · skill tickets never went to VIP, so they're not showcased */
   const G={};raw.forEach(x=>{const sig=x.d+'|'+x.legs.map(l=>l.sp+':'+l.game+':'+l.pick).sort().join('¦');const g=G[sig]||(G[sig]={sig,d:x.d,legs:x.legs,who:[]});
     if(!g.who.some(o=>o.v===x.v))g.who.push({v:x.v,kind:x.kind});});
   const recOf=o=>{try{const R=o.kind==='banker'?bkDayRecord().own:o.kind==='props'?cpxRecord(o.v):cparRecord(o.v);return`${charName(o.v).replace(/^The /,'')} ${R.w}-${R.l} ${R.u>=0?'+':''}${R.u.toFixed(1)}u`;}catch(e){return'';}};
@@ -18664,8 +18664,9 @@ function cparGrade(){const S=get(CPAR_KEY,{})||{};let n=0;
       if(!r||r.live)return;if(r.push){l.push=true;n++;}else if(r.hit===true||r.hit===false){l.hit=r.hit;n++;}});
     const live=P.legs.filter(l=>!l.push);if(live.some(l=>l.hit===false)){P.done=true;P.won=false;}else if(live.every(l=>l.hit===true)){P.done=true;P.won=live.length>0;}});});
   if(n)set(CPAR_KEY,S);return n;}
-function cparRecord(voice){const S=get(CPAR_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=0;
-  Object.values(S).forEach(D=>{const P=D&&D.locked&&(D.by||{})[voice];if(!P)return;
+function cparRecord(voice,skill){const S=get(CPAR_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=0;
+  /* v2.43 · skill tickets (under the 70% rule) keep their own record; the official one is untouched */
+  Object.values(S).forEach(D=>{const P=D&&D.locked&&(D.by||{})[voice];if(!P||!!P.skill!==!!skill)return;
     P.legs.forEach(x=>{if(x.hit===true)lw++;else if(x.hit===false)ll++;});
     if(P.done){if(P.won){w++;u+=P.legs.filter(x=>!x.push).reduce((a,x)=>a*americanToDecimal(x.price),1)-1;}else{l++;u-=1;}}});
   return{w,l,u,lw,ll};}
@@ -18674,7 +18675,7 @@ function cparHtml(){const D=cparState();const vs=Object.keys(D.by||{});
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
   return`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Each character's own ticket from its strongest spots today — the Banker picks how many legs. ${D.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation — graded at the finals.</b>':'Building — freezes when the master evaluation runs.'}</div>
     ${vs.map(v=>{const P=D.by[v],R=cparRecord(v);const rec=R.w+R.l?`${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}`:'no graded parlays yet';
-      return`<details style="margin:5px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${P.legs.length}-leg · ${decimalToAmerican(P.dec)}</span>${P.size?` <span class="mono" style="font-size:9px;color:#c9a227">🏦 ${esc(P.size.why)}</span>`:''} <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${(P.p*100).toFixed(P.p<0.1?1:0)}% · ${rec}</span></summary>
+      return`<details style="margin:5px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b>${P.skill?' <span class="mono" style="font-size:9.5px;color:var(--cold)">🎯 skill ticket · under 70%</span>':''} <span class="mono" style="font-size:10.5px;color:var(--gold)">${P.legs.length}-leg · ${decimalToAmerican(P.dec)}</span>${P.size?` <span class="mono" style="font-size:9px;color:#c9a227">🏦 ${esc(P.size.why)}</span>`:''} <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${(P.p*100).toFixed(P.p<0.1?1:0)}% · ${rec}</span></summary>
         ${P.legs.map(l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}<b>${txtEsc(l.pick)}</b> <span style="color:var(--gold)">${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} ${esc(l.game)} · ${Math.round(l.p*100)}%</span>${l.why.length?`<br><span style="color:var(--win)">↳ ${esc(l.why.join(' · '))}</span>`:''}</div>`).join('')}</details>`;}).join('')}</div>`;}
 
 /* ══ CHEMISTRY — who each character wins with, and who beats it (v2.27) ═══════
@@ -18804,12 +18805,12 @@ function phTicketHtml(P,title){const leg=l=>`<div class="mono" style="font-size:
   return`<div style="margin:4px 0 2px"><span class="mono" style="font-size:9.5px;color:var(--mute)">${title}</span> <b class="mono" style="font-size:11px;color:var(--gold)">${P.legs.length}-leg ${decimalToAmerican(P.dec)}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${Math.round(P.p*100)}% to cash${P.done?(P.won?' · <b style="color:var(--win)">CASHED</b>':' · <b style="color:var(--rust)">lost</b>'):''}</span></div>${P.legs.map(leg).join('')}`;}
 function parlayHubHtml(){let A={by:{}},X={by:{}};try{cparGrade();cpxGrade();}catch(e){}try{A=cparState();}catch(e){}try{X=cpxState();}catch(e){}
   const rec=R=>R.w+R.l?`${R.w}-${R.l} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u`:'—';
-  const vs=CHAR_ORDER.filter(v=>(A.by||{})[v]||(X.by||{})[v]||cparRecord(v).w+cparRecord(v).l||cpxRecord(v).w+cpxRecord(v).l);
+  const vs=CHAR_ORDER.filter(v=>(A.by||{})[v]||(X.by||{})[v]||cparRecord(v).w+cparRecord(v).l||cparRecord(v,true).w+cparRecord(v,true).l||cpxRecord(v).w+cpxRecord(v).l);
   const cards=vs.map(v=>{const C=CHARS[v],a=(A.by||{})[v],x=(X.by||{})[v],Ra=cparRecord(v),Rx=cpxRecord(v);let R=null;try{R=chemRead(v);}catch(e){}
     const chem=R?[R.partner?`🤝 ${esc(charName(R.partner.b))}`:'',R.nemesis?`🥊 ${esc(charName(R.nemesis.b))}`:''].filter(Boolean).join(' · '):'';
     return`<div class="tkt" style="border-left:3px solid ${C.color}"><h3 style="color:${C.color}">${txtEsc(charName(v))}</h3>
-      <div class="mono" style="font-size:9.5px;color:var(--mute)">no props ${rec(Ra)} · with props ${CPROP_VOICES.includes(v)?rec(Rx):'n/a (no prop reads)'}${chem?' · '+chem:''}</div>
-      ${a?phTicketHtml(a,'🎲 GAME LINES'):'<div class="sub" style="font-size:10px">No game-line ticket today — fewer than 2 legs pass its rules.</div>'}
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">no props ${rec(Ra)} · with props ${CPROP_VOICES.includes(v)?rec(Rx):'n/a (no prop reads)'}${(()=>{const Rs=cparRecord(v,true);return Rs.w+Rs.l?' · skill tickets '+rec(Rs):'';})()}${chem?' · '+chem:''}</div>
+      ${a?phTicketHtml(a,a.skill?'🎯 SKILL TICKET · its best lanes, under the 70% rule':'🎲 GAME LINES'):'<div class="sub" style="font-size:10px">No game-line ticket today — fewer than 2 legs pass its rules.</div>'}
       ${CPROP_VOICES.includes(v)?(x?phTicketHtml(x,'🎯 WITH PROPS'):'<div class="sub" style="font-size:10px;margin-top:4px">No props ticket today — no 72%+ prop call on a game it isn\'t already in.</div>'):''}</div>`;}).join('');
   const tbl=vs.map(v=>{const Ra=cparRecord(v),Rx=cpxRecord(v);return`<tr><td style="text-align:left;color:${CHARS[v].color}">${txtEsc(charName(v))}</td><td>${rec(Ra)}</td><td>${Ra.lw+Ra.ll?Ra.lw+'-'+Ra.ll:'—'}</td><td>${CPROP_VOICES.includes(v)?rec(Rx):'n/a'}</td><td>${Rx.pw+Rx.pl?Rx.pw+'-'+Rx.pl:'—'}</td></tr>`;}).join('');
   return`<div class="tkt"><h3>🎲 Parlay Hub</h3><div class="sub" style="font-size:10px">Every character builds its own tickets from its strongest spots: one on game lines only, one that adds its best prop calls (the prop readers: Sim, Judge, Scorekeeper, Historian, Coach). Legs carry the character's specialty, inner feeling and chemistry. ${A.locked?'<b style="color:var(--win)">🔒 Frozen at the master evaluation.</b>':'Still building — freezes when the master evaluation runs.'}</div>
