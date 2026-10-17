@@ -1,0 +1,606 @@
+SOURCE: covers
+# Sat Oct 17, 2026 — book lines: sportsbetting.ag (Oct 16, 11:43 PM–12:01 AM CT) · NHL predicted scores + trends: Covers (12:04–12:05 AM CT)
+# Army full-game prices were cut off in the screenshot, so FAU @ Army carries 1H/1Q only. Covers model %s are left out: same model as PRED, and not prices.
+
+NCAAF
+
+Ohio State @ Indiana
+ML: Ohio State -158 / Indiana +138
+SPREAD: Ohio State -3 (-105) / Indiana +3 (-115)
+OU: o50.5 (-105) / u50.5 (-115)
+H1SPREAD: Ohio State -1.5 (-110) / Indiana +1.5 (-110)
+H1OU: o24 (-120) / u24 (+100)
+Q1SPREAD: Ohio State -0.5 (+130) / Indiana +0.5 (-150)
+
+Northwestern @ Michigan State
+ML: Northwestern -280 / Michigan State +230
+SPREAD: Northwestern -7 (-115) / Michigan State +7 (-105)
+OU: o50 (-110) / u50 (-110)
+H1SPREAD: Northwestern -4 (-115) / Michigan State +4 (-105)
+H1OU: o24.5 (-110) / u24.5 (-110)
+Q1SPREAD: Northwestern -0.5 (-115) / Michigan State +0.5 (-105)
+
+Ball State @ Bowling Green
+ML: Ball State +195 / Bowling Green -235
+SPREAD: Ball State +6 (-110) / Bowling Green -6 (-110)
+OU: o47 (-110) / u47 (-110)
+H1SPREAD: Ball State +3.5 (-110) / Bowling Green -3.5 (-110)
+H1OU: o23.5 (-115) / u23.5 (-105)
+Q1SPREAD: Ball State +0.5 (-110) / Bowling Green -0.5 (-110)
+
+Florida Atlantic @ Army
+H1SPREAD: Florida Atlantic +0.5 (-110) / Army -0.5 (-110)
+H1OU: o27.5 (-105) / u27.5 (-115)
+Q1SPREAD: Florida Atlantic +0.5 (-170) / Army -0.5 (+149)
+
+Pittsburgh @ Boston College
+ML: Pittsburgh -230 / Boston College +192
+SPREAD: Pittsburgh -6 (-116) / Boston College +6 (-104)
+OU: o42.5 (-110) / u42.5 (-110)
+H1SPREAD: Pittsburgh -3.5 (-105) / Boston College +3.5 (-115)
+H1OU: o20.5 (-125) / u20.5 (+105)
+Q1SPREAD: Pittsburgh -0.5 (+100) / Boston College +0.5 (-120)
+
+Georgia State @ James Madison
+ML: Georgia State +289 / James Madison -360
+SPREAD: Georgia State +9 (-105) / James Madison -9 (-115)
+OU: o58 (-112) / u58 (-108)
+H1SPREAD: Georgia State +6.5 (-115) / James Madison -6.5 (-105)
+H1OU: o29.5 (-110) / u29.5 (-110)
+Q1SPREAD: Georgia State +3.5 (-120) / James Madison -3.5 (+100)
+
+Cincinnati @ West Virginia
+ML: Cincinnati +100 / West Virginia -120
+SPREAD: Cincinnati +1 (-105) / West Virginia -1 (-115)
+OU: o63.5 (-110) / u63.5 (-110)
+H1SPREAD: Cincinnati +0.5 (-125) / West Virginia -0.5 (+105)
+H1OU: o31.5 (-110) / u31.5 (-110)
+Q1SPREAD: Cincinnati -0.5 (+149) / West Virginia +0.5 (-170)
+
+Florida @ Texas
+ML: Florida +334 / Texas -425
+SPREAD: Florida +11 (-108) / Texas -11 (-112)
+OU: o51.5 (-111) / u51.5 (-109)
+H1SPREAD: Florida +6.5 (+100) / Texas -6.5 (-120)
+H1OU: o27 (-105) / u27 (-115)
+Q1SPREAD: Florida +2.5 (+105) / Texas -2.5 (-125)
+
+Kansas @ Kansas State
+ML: Kansas +145 / Kansas State -165
+SPREAD: Kansas +3.5 (-112) / Kansas State -3.5 (-108)
+OU: o55 (-110) / u55 (-110)
+H1SPREAD: Kansas +3 (-115) / Kansas State -3 (-105)
+H1OU: o28.5 (+100) / u28.5 (-120)
+Q1SPREAD: Kansas +0.5 (-125) / Kansas State -0.5 (+105)
+
+Virginia @ SMU
+ML: Virginia +280 / SMU -350
+SPREAD: Virginia +9.5 (-103) / SMU -9.5 (-117)
+OU: o51.5 (-113) / u51.5 (-107)
+H1SPREAD: Virginia +6.5 (-105) / SMU -6.5 (-115)
+H1OU: o26.5 (-115) / u26.5 (-105)
+Q1SPREAD: Virginia +3.5 (-115) / SMU -3.5 (-105)
+
+Mississippi State @ LSU
+ML: Mississippi State +586 / LSU -850
+SPREAD: Mississippi State +17 (-110) / LSU -17 (-110)
+OU: o56 (-110) / u56 (-110)
+H1SPREAD: Mississippi State +10 (-115) / LSU -10 (-105)
+H1OU: o29 (-105) / u29 (-115)
+Q1SPREAD: Mississippi State +3.5 (+100) / LSU -3.5 (-120)
+
+Rutgers @ Maryland
+ML: Rutgers +170 / Maryland -195
+SPREAD: Rutgers +4.5 (-105) / Maryland -4.5 (-115)
+OU: o57 (-103) / u57 (-117)
+H1SPREAD: Rutgers +3 (-105) / Maryland -3 (-115)
+H1OU: o28.5 (+100) / u28.5 (-120)
+Q1SPREAD: Rutgers +0.5 (-125) / Maryland -0.5 (+105)
+
+Charlotte @ Temple
+ML: Charlotte +945 / Temple -1700
+SPREAD: Charlotte +20 (-110) / Temple -20 (-110)
+OU: o46.5 (-105) / u46.5 (-115)
+H1SPREAD: Charlotte +10.5 (-103) / Temple -10.5 (-117)
+H1OU: o24 (-110) / u24 (-110)
+H1ML: Charlotte +600 / Temple -879
+
+Massachusetts @ Buffalo
+ML: Massachusetts +222 / Buffalo -270
+SPREAD: Massachusetts +7 (-105) / Buffalo -7 (-115)
+OU: o42 (-110) / u42 (-110)
+H1SPREAD: Massachusetts +4 (-105) / Buffalo -4 (-115)
+H1OU: o20.5 (-110) / u20.5 (-110)
+Q1SPREAD: Massachusetts +0.5 (+100) / Buffalo -0.5 (-120)
+
+Western Michigan @ Central Michigan
+ML: Western Michigan -260 / Central Michigan +215
+SPREAD: Western Michigan -7 (-115) / Central Michigan +7 (-105)
+OU: o43 (-110) / u43 (-110)
+H1SPREAD: Western Michigan -4 (-115) / Central Michigan +4 (-105)
+H1OU: o20.5 (-125) / u20.5 (+105)
+Q1SPREAD: Western Michigan -0.5 (-115) / Central Michigan +0.5 (-105)
+
+Georgia Tech @ Virginia Tech
+ML: Georgia Tech +278 / Virginia Tech -345
+SPREAD: Georgia Tech +8.5 (-110) / Virginia Tech -8.5 (-110)
+OU: o56.5 (-110) / u56.5 (-110)
+H1SPREAD: Georgia Tech +6 (-110) / Virginia Tech -6 (-110)
+H1OU: o28.5 (-105) / u28.5 (-115)
+Q1SPREAD: Georgia Tech +2.5 (+105) / Virginia Tech -2.5 (-125)
+
+Toledo @ Eastern Michigan
+ML: Toledo -240 / Eastern Michigan +200
+SPREAD: Toledo -6.5 (-120) / Eastern Michigan +6.5 (+100)
+OU: o52.5 (-105) / u52.5 (-115)
+H1SPREAD: Toledo -3.5 (-115) / Eastern Michigan +3.5 (-105)
+H1OU: o27 (-110) / u27 (-110)
+Q1SPREAD: Toledo -0.5 (-110) / Eastern Michigan +0.5 (-110)
+
+Akron @ Miami (OH)
+ML: Akron +280 / Miami (OH) -350
+SPREAD: Akron +10 (-117) / Miami (OH) -10 (-103)
+OU: o46 (-116) / u46 (-104)
+H1SPREAD: Akron +6.5 (-110) / Miami (OH) -6.5 (-110)
+H1OU: o23.5 (-120) / u23.5 (+100)
+Q1SPREAD: Akron +3.5 (-125) / Miami (OH) -3.5 (+105)
+
+Penn State @ Michigan
+ML: Penn State +183 / Michigan -215
+SPREAD: Penn State +6 (-110) / Michigan -6 (-110)
+OU: o42.5 (-105) / u42.5 (-115)
+H1SPREAD: Penn State +3.5 (-110) / Michigan -3.5 (-110)
+H1OU: o20.5 (-120) / u20.5 (+100)
+Q1SPREAD: Penn State +1.5 (-115) / Michigan -1.5 (-105)
+
+North Carolina @ Duke
+ML: North Carolina +135 / Duke -155
+SPREAD: North Carolina +3 (-106) / Duke -3 (-114)
+OU: o47.5 (-105) / u47.5 (-115)
+H1SPREAD: North Carolina +1.5 (-110) / Duke -1.5 (-110)
+H1OU: o23.5 (-115) / u23.5 (-105)
+Q1SPREAD: North Carolina +0.5 (-155) / Duke -0.5 (+135)
+
+Arizona State @ Texas Tech
+ML: Arizona State +491 / Texas Tech -675
+SPREAD: Arizona State +15.5 (-110) / Texas Tech -15.5 (-110)
+OU: o50 (-110) / u50 (-110)
+H1SPREAD: Arizona State +7.5 (-102) / Texas Tech -7.5 (-118)
+H1OU: o24.5 (-110) / u24.5 (-110)
+Q1SPREAD: Arizona State +3.5 (-105) / Texas Tech -3.5 (-115)
+
+Alabama @ Tennessee
+ML: Alabama -350 / Tennessee +280
+SPREAD: Alabama -8 (-107) / Tennessee +8 (-113)
+OU: o51 (-110) / u51 (-110)
+H1SPREAD: Alabama -6.5 (+102) / Tennessee +6.5 (-122)
+H1OU: o26.5 (-105) / u26.5 (-115)
+Q1SPREAD: Alabama -2.5 (-115) / Tennessee +2.5 (-105)
+
+Auburn @ Georgia
+ML: Auburn +817 / Georgia -1350
+SPREAD: Auburn +19 (-110) / Georgia -19 (-110)
+OU: o50 (-110) / u50 (-110)
+H1SPREAD: Auburn +10.5 (-110) / Georgia -10.5 (-110)
+H1OU: o26.5 (-115) / u26.5 (-105)
+Q1SPREAD: Auburn +4.5 (-110) / Georgia -4.5 (-110)
+
+Missouri @ Ole Miss
+ML: Missouri +177 / Ole Miss -205
+SPREAD: Missouri +5 (-110) / Ole Miss -5 (-110)
+OU: o59 (-105) / u59 (-115)
+H1SPREAD: Missouri +3.5 (-110) / Ole Miss -3.5 (-110)
+H1OU: o30.5 (-110) / u30.5 (-110)
+Q1SPREAD: Missouri +0.5 (-110) / Ole Miss -0.5 (-110)
+
+Northern Illinois @ Wyoming
+ML: Northern Illinois +245 / Wyoming -300
+SPREAD: Northern Illinois +7.5 (-110) / Wyoming -7.5 (-110)
+OU: o41 (-115) / u41 (-105)
+H1SPREAD: Northern Illinois +4.5 (-115) / Wyoming -4.5 (-105)
+H1OU: o20.5 (-115) / u20.5 (-105)
+Q1SPREAD: Northern Illinois +0.5 (-120) / Wyoming -0.5 (+100)
+
+UNLV @ Air Force
+SPREAD: UNLV +0 (-113) / Air Force -0 (-107)
+OU: o48 (-110) / u48 (-110)
+H1SPREAD: UNLV +0 (-110) / Air Force -0 (-110)
+H1OU: o23.5 (-120) / u23.5 (+100)
+Q1SPREAD: UNLV -0.5 (+140) / Air Force +0.5 (-160)
+
+Tulsa @ Rice
+ML: Tulsa -200 / Rice +174
+SPREAD: Tulsa -4.5 (-110) / Rice +4.5 (-110)
+OU: o46.5 (-115) / u46.5 (-105)
+H1SPREAD: Tulsa -3 (-105) / Rice +3 (-115)
+H1OU: o23.5 (-110) / u23.5 (-110)
+Q1SPREAD: Tulsa -0.5 (+105) / Rice +0.5 (-125)
+
+Troy @ Louisiana
+ML: Troy +130 / Louisiana -150
+SPREAD: Troy +3 (-105) / Louisiana -3 (-115)
+OU: o49 (-110) / u49 (-110)
+H1SPREAD: Troy +1.5 (-110) / Louisiana -1.5 (-110)
+H1OU: o24.5 (+100) / u24.5 (-120)
+Q1SPREAD: Troy +0.5 (-150) / Louisiana -0.5 (+130)
+
+Washington State @ Oregon State
+ML: Washington State +709 / Oregon State -1100
+SPREAD: Washington State +18 (+100) / Oregon State -18 (-120)
+OU: o52.5 (-105) / u52.5 (-115)
+H1SPREAD: Washington State +10.5 (+100) / Oregon State -10.5 (-120)
+H1OU: o27.5 (-110) / u27.5 (-110)
+Q1SPREAD: Washington State +6.5 (-110) / Oregon State -6.5 (-110)
+
+Florida State @ Miami
+ML: Florida State +979 / Miami -1800
+SPREAD: Florida State +21 (-115) / Miami -21 (-105)
+OU: o57 (-110) / u57 (-110)
+H1SPREAD: Florida State +11.5 (-110) / Miami -11.5 (-110)
+H1OU: o28.5 (-110) / u28.5 (-110)
+Q1SPREAD: Florida State +6.5 (-110) / Miami -6.5 (-110)
+
+Kent State @ South Florida
+ML: Kent State +836 / South Florida -1400
+SPREAD: Kent State +20.5 (-110) / South Florida -20.5 (-110)
+OU: o45.5 (-105) / u45.5 (-115)
+H1SPREAD: Kent State +12 (-110) / South Florida -12 (-110)
+H1OU: o23.5 (-120) / u23.5 (+100)
+Q1SPREAD: Kent State +6.5 (-110) / South Florida -6.5 (-110)
+
+Arkansas State @ Southern Miss
+ML: Arkansas State -235 / Southern Miss +195
+SPREAD: Arkansas State -6 (-118) / Southern Miss +6 (-102)
+OU: o62 (-105) / u62 (-115)
+H1SPREAD: Arkansas State -3.5 (-110) / Southern Miss +3.5 (-110)
+H1OU: o31.5 (+105) / u31.5 (-125)
+Q1SPREAD: Arkansas State -0.5 (+100) / Southern Miss +0.5 (-120)
+
+TCU @ Baylor
+ML: TCU +186 / Baylor -220
+SPREAD: TCU +5 (-108) / Baylor -5 (-112)
+OU: o49 (-110) / u49 (-110)
+H1SPREAD: TCU +3.5 (-115) / Baylor -3.5 (-105)
+H1OU: o24.5 (+105) / u24.5 (-125)
+Q1SPREAD: TCU +0.5 (-125) / Baylor -0.5 (+105)
+
+Arkansas @ Vanderbilt
+ML: Arkansas +200 / Vanderbilt -240
+SPREAD: Arkansas +6 (-106) / Vanderbilt -6 (-114)
+OU: o50 (-105) / u50 (-115)
+H1SPREAD: Arkansas +3.5 (-115) / Vanderbilt -3.5 (-105)
+H1OU: o24.5 (-110) / u24.5 (-110)
+Q1SPREAD: Arkansas +0.5 (-130) / Vanderbilt -0.5 (+110)
+
+Nevada @ North Dakota State
+ML: Nevada +476 / North Dakota State -650
+SPREAD: Nevada +14.5 (-118) / North Dakota State -14.5 (-102)
+OU: o42.5 (-110) / u42.5 (-110)
+H1SPREAD: Nevada +7.5 (-110) / North Dakota State -7.5 (-110)
+H1OU: o21.5 (-105) / u21.5 (-115)
+Q1SPREAD: Nevada +3.5 (-115) / North Dakota State -3.5 (-105)
+
+Louisville @ Syracuse
+ML: Louisville -600 / Syracuse +446
+SPREAD: Louisville -15 (-107) / Syracuse +15 (-113)
+OU: o56 (-105) / u56 (-115)
+H1SPREAD: Louisville -7.5 (-115) / Syracuse +7.5 (-105)
+H1OU: o28.5 (-115) / u28.5 (-105)
+Q1SPREAD: Louisville -3.5 (-105) / Syracuse +3.5 (-115)
+
+Oklahoma State @ Houston
+ML: Oklahoma State +170 / Houston -195
+SPREAD: Oklahoma State +4.5 (-113) / Houston -4.5 (-107)
+OU: o62.5 (-110) / u62.5 (-110)
+H1SPREAD: Oklahoma State +3 (-105) / Houston -3 (-115)
+H1OU: o31.5 (+100) / u31.5 (-120)
+Q1SPREAD: Oklahoma State +0.5 (-125) / Houston -0.5 (+105)
+
+Notre Dame @ BYU
+ML: Notre Dame -415 / BYU +327
+SPREAD: Notre Dame -10.5 (-110) / BYU +10.5 (-110)
+OU: o46 (-118) / u46 (-102)
+H1SPREAD: Notre Dame -6.5 (-110) / BYU +6.5 (-110)
+H1OU: o23.5 (-110) / u23.5 (-110)
+Q1SPREAD: Notre Dame -2.5 (-120) / BYU +2.5 (+100)
+
+Wisconsin @ UCLA
+ML: Wisconsin +119 / UCLA -139
+SPREAD: Wisconsin +2.5 (-110) / UCLA -2.5 (-110)
+OU: o43.5 (-105) / u43.5 (-115)
+H1SPREAD: Wisconsin +1.5 (-115) / UCLA -1.5 (-105)
+H1OU: o21.5 (-110) / u21.5 (-110)
+Q1SPREAD: Wisconsin +0.5 (-150) / UCLA -0.5 (+130)
+
+Kentucky @ Oklahoma
+ML: Kentucky +211 / Oklahoma -255
+SPREAD: Kentucky +6 (-102) / Oklahoma -6 (-118)
+OU: o43 (-110) / u43 (-110)
+H1SPREAD: Kentucky +3.5 (-110) / Oklahoma -3.5 (-110)
+H1OU: o21.5 (-110) / u21.5 (-110)
+Q1SPREAD: Kentucky +0.5 (-115) / Oklahoma -0.5 (-105)
+
+Navy @ UTSA
+ML: Navy +207 / UTSA -250
+SPREAD: Navy +6.5 (+101) / UTSA -6.5 (-121)
+OU: o54.5 (-110) / u54.5 (-110)
+H1SPREAD: Navy +4 (-110) / UTSA -4 (-110)
+H1OU: o27.5 (-110) / u27.5 (-110)
+Q1SPREAD: Navy +0.5 (-115) / UTSA -0.5 (-105)
+
+Louisiana Tech @ UL Monroe
+ML: Louisiana Tech -750 / UL Monroe +534
+SPREAD: Louisiana Tech -15.5 (-110) / UL Monroe +15.5 (-110)
+OU: o56 (-110) / u56 (-110)
+H1SPREAD: Louisiana Tech -9.5 (-105) / UL Monroe +9.5 (-115)
+H1OU: o28.5 (-105) / u28.5 (-115)
+Q1SPREAD: Louisiana Tech -3.5 (-120) / UL Monroe +3.5 (+100)
+
+San Jose State @ UTEP
+ML: San Jose State -255 / UTEP +211
+SPREAD: San Jose State -7 (-102) / UTEP +7 (-118)
+OU: o45.5 (-110) / u45.5 (-110)
+H1SPREAD: San Jose State -4 (-105) / UTEP +4 (-115)
+H1OU: o23.5 (-110) / u23.5 (-110)
+Q1SPREAD: San Jose State -2.5 (-115) / UTEP +2.5 (-105)
+
+Ohio @ Sacramento State
+ML: Ohio -675 / Sacramento State +491
+SPREAD: Ohio -15.5 (-110) / Sacramento State +15.5 (-110)
+OU: o46.5 (-105) / u46.5 (-115)
+H1SPREAD: Ohio -7.5 (-115) / Sacramento State +7.5 (-105)
+H1OU: o24.5 (-105) / u24.5 (-115)
+Q1SPREAD: Ohio -3.5 (-105) / Sacramento State +3.5 (-115)
+
+Utah @ Colorado
+ML: Utah -725 / Colorado +520
+SPREAD: Utah -14.5 (-111) / Colorado +14.5 (-109)
+OU: o49.5 (-110) / u49.5 (-110)
+H1SPREAD: Utah -9.5 (-110) / Colorado +9.5 (-110)
+H1OU: o26.5 (-110) / u26.5 (-110)
+Q1SPREAD: Utah -3.5 (+100) / Colorado +3.5 (-120)
+
+Wake Forest @ California
+ML: Wake Forest -375 / California +299
+SPREAD: Wake Forest -10 (-110) / California +10 (-110)
+OU: o53.5 (-110) / u53.5 (-110)
+H1SPREAD: Wake Forest -6 (-110) / California +6 (-110)
+H1OU: o27 (-110) / u27 (-110)
+Q1SPREAD: Wake Forest -2.5 (-120) / California +2.5 (+100)
+
+New Mexico @ Hawaii
+ML: New Mexico -680 / Hawaii +494
+SPREAD: New Mexico -15 (-110) / Hawaii +15 (-110)
+OU: o44.5 (-108) / u44.5 (-112)
+H1SPREAD: New Mexico -7.5 (-115) / Hawaii +7.5 (-105)
+H1OU: o23.5 (-105) / u23.5 (-115)
+Q1SPREAD: New Mexico -3.5 (+100) / Hawaii +3.5 (-120)
+
+Fresno State @ San Diego State
+ML: Fresno State -300 / San Diego State +245
+SPREAD: Fresno State -7.5 (-105) / San Diego State +7.5 (-115)
+OU: o46 (-110) / u46 (-110)
+H1SPREAD: Fresno State -4 (-110) / San Diego State +4 (-110)
+H1OU: o23 (-110) / u23 (-110)
+Q1SPREAD: Fresno State -0.5 (-115) / San Diego State +0.5 (-105)
+
+Nebraska @ Oregon
+ML: Nebraska +207 / Oregon -250
+SPREAD: Nebraska +7 (-123) / Oregon -7 (+103)
+OU: o52 (-105) / u52 (-115)
+H1SPREAD: Nebraska +4 (-115) / Oregon -4 (-105)
+H1OU: o26.5 (-115) / u26.5 (-105)
+Q1SPREAD: Nebraska +2.5 (-105) / Oregon -2.5 (-115)
+
+NHL
+
+New Jersey Devils @ Washington Capitals
+ML: New Jersey Devils +106 / Washington Capitals -120
+PL: New Jersey Devils +1.5 (-265) / Washington Capitals -1.5 (+219)
+OU: o6 (-119) / u6 (+103)
+P1ML: New Jersey Devils -105 / Washington Capitals -115
+P1PL: New Jersey Devils +0.5 (-200) / Washington Capitals -0.5 (+174)
+P1OU: o1.5 (-127) / u1.5 (+107)
+PRED: New Jersey Devils 3.03 / Washington Capitals 3.29
+TREND New Jersey Devils: Under is 2-0-2 in Devils last 4 after allowing 2 goals or less in their previous game.
+TREND New Jersey Devils: Over is 3-0-1 in Devils last 4 when their opponent scores 5 goals or more in their previous game.
+TREND New Jersey Devils: Over is 5-1 in Devils last 6 vs. a team with a winning record.
+TREND New Jersey Devils: Devils are 5-1 in their last 6 when their opponent scores 5 goals or more in their previous game.
+TREND Washington Capitals: Capitals are 6-1 in their last 7 home games.
+TREND Washington Capitals: Under is 4-1-1 in Capitals last 6 vs. Eastern Conference.
+TREND Washington Capitals: Capitals are 6-1 in their last 7 vs. Metropolitan.
+TREND Washington Capitals: Under is 5-1 in Capitals last 6 games as a home underdog.
+
+Carolina Hurricanes @ Winnipeg Jets
+ML: Carolina Hurricanes -179 / Winnipeg Jets +157
+PL: Carolina Hurricanes -1.5 (+149) / Winnipeg Jets +1.5 (-170)
+OU: o6 (-117) / u6 (+101)
+P1ML: Carolina Hurricanes -145 / Winnipeg Jets +125
+P1PL: Carolina Hurricanes -0.5 (+145) / Winnipeg Jets +0.5 (-165)
+P1OU: o1.5 (-126) / u1.5 (+106)
+PRED: Carolina Hurricanes 3.61 / Winnipeg Jets 2.70
+TREND Carolina Hurricanes: Hurricanes are 5-0 in their last 5 vs. Western Conference.
+TREND Carolina Hurricanes: Under is 4-0 in Hurricanes last 4 games as a road underdog.
+TREND Carolina Hurricanes: Under is 4-0 in Hurricanes last 4 games as an underdog.
+TREND Carolina Hurricanes: Over is 6-1-1 in Hurricanes last 8 vs. Western Conference.
+TREND Winnipeg Jets: Over is 11-2-1 in Jets last 14 vs. Metropolitan.
+TREND Winnipeg Jets: Under is 4-1 in Jets last 5 overall.
+TREND Winnipeg Jets: Jets are 4-1 in their last 5 overall.
+TREND Winnipeg Jets: Under is 7-2-1 in Jets last 10 games as an underdog.
+
+Vancouver Canucks @ Tampa Bay Lightning
+ML: Vancouver Canucks +306 / Tampa Bay Lightning -365
+PL: Vancouver Canucks +1.5 (+116) / Tampa Bay Lightning -1.5 (-136)
+OU: o6.5 (-103) / u6.5 (-113)
+P1ML: Vancouver Canucks +196 / Tampa Bay Lightning -236
+P1PL: Vancouver Canucks +0.5 (-120) / Tampa Bay Lightning -0.5 (+100)
+P1OU: o1.5 (-137) / u1.5 (+117)
+PRED: Vancouver Canucks 2.34 / Tampa Bay Lightning 4.40
+TREND Vancouver Canucks: Under is 4-0 in Canucks last 4 games playing on 1 days rest.
+TREND Vancouver Canucks: Under is 4-1 in Canucks last 5 games as a road favorite.
+TREND Vancouver Canucks: Over is 4-1-1 in Canucks last 6 road games vs. a team with a home winning % of greater than .600.
+TREND Vancouver Canucks: Canucks are 10-3 in their last 13 games as a road favorite.
+TREND Tampa Bay Lightning: Over is 3-0-1 in Lightning last 4 games as an underdog.
+TREND Tampa Bay Lightning: Under is 4-0-1 in Lightning last 5 home games vs. a team with a road winning % of less than .400.
+TREND Tampa Bay Lightning: Under is 6-1 in Lightning last 7 home games.
+TREND Tampa Bay Lightning: Over is 6-1 in Lightning last 7 vs. Pacific.
+
+Seattle Kraken @ Florida Panthers
+ML: Seattle Kraken +158 / Florida Panthers -180
+PL: Seattle Kraken +1.5 (-163) / Florida Panthers -1.5 (+143)
+OU: o6 (-115) / u6 (-101)
+P1ML: Seattle Kraken +130 / Florida Panthers -150
+P1PL: Seattle Kraken +0.5 (-160) / Florida Panthers -0.5 (+140)
+P1OU: o1.5 (-127) / u1.5 (+107)
+PRED: Seattle Kraken 2.89 / Florida Panthers 3.62
+TREND Seattle Kraken: Kraken are 4-0 in their last 4 vs. a team with a losing record.
+TREND Seattle Kraken: Over is 4-0 in Kraken last 4 games as an underdog.
+TREND Seattle Kraken: Over is 5-1 in Kraken last 6 overall.
+TREND Seattle Kraken: Kraken are 4-1 in their last 5 overall.
+TREND Florida Panthers: Under is 4-0 in Panthers last 4 vs. Western Conference.
+TREND Florida Panthers: Under is 4-0 in Panthers last 4 games as a favorite.
+TREND Florida Panthers: Panthers are 4-0 in their last 4 games as a home underdog.
+TREND Florida Panthers: Panthers are 4-0 in their last 4 home games vs. a team with a road winning % of greater than .600.
+
+Ottawa Senators @ Philadelphia Flyers
+ML: Ottawa Senators -144 / Philadelphia Flyers +127
+PL: Ottawa Senators -1.5 (+186) / Philadelphia Flyers +1.5 (-220)
+OU: o5.5 (-111) / u5.5 (-105)
+P1ML: Ottawa Senators -130 / Philadelphia Flyers +110
+P1PL: Ottawa Senators -0.5 (+161) / Philadelphia Flyers +0.5 (-185)
+P1OU: o1.5 (-115) / u1.5 (-105)
+PRED: Ottawa Senators 3.03 / Philadelphia Flyers 2.70
+TREND Ottawa Senators: Under is 6-0-1 in Senators last 7 vs. Metropolitan.
+TREND Ottawa Senators: Under is 6-0-1 in Senators last 7 after scoring 2 goals or less in their previous game.
+TREND Ottawa Senators: Senators are 5-0 in their last 5 games playing on 1 days rest.
+TREND Ottawa Senators: Senators are 4-0 in their last 4 games as a favorite.
+TREND Philadelphia Flyers: Under is 6-0-2 in Flyers last 8 games as a home underdog.
+TREND Philadelphia Flyers: Under is 4-0-1 in Flyers last 5 home games vs. a team with a road winning % of greater than .600.
+TREND Philadelphia Flyers: Under is 8-1 in Flyers last 9 games playing on 1 days rest.
+TREND Philadelphia Flyers: Under is 8-1-2 in Flyers last 11 when their opponent scores 2 goals or less in their previous game.
+
+San Jose Sharks @ Detroit Red Wings
+ML: San Jose Sharks +116 / Detroit Red Wings -132
+PL: San Jose Sharks +1.5 (-220) / Detroit Red Wings -1.5 (+186)
+OU: o6.5 (+102) / u6.5 (-118)
+P1ML: San Jose Sharks +107 / Detroit Red Wings -127
+P1PL: San Jose Sharks +0.5 (-183) / Detroit Red Wings -0.5 (+160)
+P1OU: o1.5 (-131) / u1.5 (+111)
+PRED: San Jose Sharks 3.12 / Detroit Red Wings 3.38
+TREND San Jose Sharks: Under is 6-1-1 in Sharks last 8 games as a road underdog.
+TREND San Jose Sharks: Under is 4-1 in Sharks last 5 overall.
+TREND San Jose Sharks: Under is 4-1 in Sharks last 5 games as an underdog.
+TREND San Jose Sharks: Over is 4-1 in Sharks last 5 vs. a team with a losing record.
+TREND Detroit Red Wings: Over is 5-1 in Red Wings last 6 vs. a team with a winning record.
+TREND Detroit Red Wings: Over is 7-2 in Red Wings last 9 when their opponent allows 2 goals or less in their previous game.
+TREND Detroit Red Wings: Over is 6-2 in Red Wings last 8 games as a favorite.
+TREND Detroit Red Wings: Over is 6-2 in Red Wings last 8 games as a home favorite.
+
+New York Rangers @ Columbus Blue Jackets
+ML: New York Rangers +116 / Columbus Blue Jackets -132
+PL: New York Rangers +1.5 (-227) / Columbus Blue Jackets -1.5 (+190)
+OU: o6.5 (+107) / u6.5 (-123)
+P1ML: New York Rangers +105 / Columbus Blue Jackets -125
+P1PL: New York Rangers +0.5 (-185) / Columbus Blue Jackets -0.5 (+161)
+P1OU: o1.5 (-130) / u1.5 (+110)
+PRED: New York Rangers 2.97 / Columbus Blue Jackets 3.34
+TREND New York Rangers: Rangers are 4-0 in their last 4 after scoring 2 goals or less in their previous game.
+TREND New York Rangers: Under is 6-1 in Rangers last 7 road games.
+TREND New York Rangers: Rangers are 6-1 in their last 7 games playing on 1 days rest.
+TREND New York Rangers: Rangers are 5-1 in their last 6 games as a favorite.
+TREND Columbus Blue Jackets: Under is 4-0-1 in Blue Jackets last 5 following a home loss of 3 or more goals.
+TREND Columbus Blue Jackets: Under is 5-1 in Blue Jackets last 6 vs. Metropolitan.
+TREND Columbus Blue Jackets: Under is 5-1 in Blue Jackets last 6 following a loss of 3 or more goals.
+TREND Columbus Blue Jackets: Under is 4-1 in Blue Jackets last 5 games as a favorite.
+
+Dallas Stars @ Chicago Blackhawks
+ML: Dallas Stars -191 / Chicago Blackhawks +167
+PL: Dallas Stars -1.5 (+140) / Chicago Blackhawks +1.5 (-160)
+OU: o6 (-115) / u6 (-101)
+P1ML: Dallas Stars -154 / Chicago Blackhawks +134
+P1PL: Dallas Stars -0.5 (+138) / Chicago Blackhawks +0.5 (-158)
+P1OU: o1.5 (-123) / u1.5 (+103)
+PRED: Dallas Stars 3.54 / Chicago Blackhawks 2.58
+TREND Dallas Stars: Under is 7-0 in Stars last 7 overall.
+TREND Dallas Stars: Under is 6-0 in Stars last 6 games as a favorite.
+TREND Dallas Stars: Under is 5-0 in Stars last 5 vs. Western Conference.
+TREND Dallas Stars: Under is 5-0 in Stars last 5 after allowing 2 goals or less in their previous game.
+TREND Chicago Blackhawks: Under is 5-0-1 in Blackhawks last 6 games as a favorite.
+TREND Chicago Blackhawks: Under is 3-0-1 in Blackhawks last 4 games as a home favorite.
+TREND Chicago Blackhawks: Over is 10-1 in Blackhawks last 11 home games.
+TREND Chicago Blackhawks: Over is 10-1 in Blackhawks last 11 games a home underdog.
+
+New York Islanders @ Toronto Maple Leafs
+ML: New York Islanders +119 / Toronto Maple Leafs -135
+PL: New York Islanders +1.5 (-220) / Toronto Maple Leafs -1.5 (+186)
+OU: o6 (-120) / u6 (+104)
+P1ML: New York Islanders +107 / Toronto Maple Leafs -127
+P1PL: New York Islanders +0.5 (-185) / Toronto Maple Leafs -0.5 (+161)
+P1OU: o1.5 (-127) / u1.5 (+107)
+PRED: New York Islanders 3.13 / Toronto Maple Leafs 3.38
+TREND New York Islanders: Under is 4-0-1 in Islanders last 5 after scoring 2 goals or less in their previous game.
+TREND New York Islanders: Under is 4-0 in Islanders last 4 games as a favorite.
+TREND New York Islanders: Under is 4-0 in Islanders last 4 road games vs. a team with a losing home record.
+TREND New York Islanders: Under is 6-1 in Islanders last 7 when their opponent allows 5 goals or more in their previous game.
+TREND Toronto Maple Leafs: Over is 5-0 in Maple Leafs last 5 overall.
+TREND Toronto Maple Leafs: Over is 5-1 in Maple Leafs last 6 games as an underdog.
+TREND Toronto Maple Leafs: Under is 4-1 in Maple Leafs last 5 vs. Eastern Conference.
+TREND Toronto Maple Leafs: Over is 19-7-2 in Maple Leafs last 28 games playing on 1 days rest.
+
+Buffalo Sabres @ Montreal Canadiens
+ML: Buffalo Sabres +127 / Montreal Canadiens -144
+PL: Buffalo Sabres +1.5 (-210) / Montreal Canadiens -1.5 (+180)
+OU: o6.5 (-108) / u6.5 (-108)
+P1ML: Buffalo Sabres +108 / Montreal Canadiens -128
+P1PL: Buffalo Sabres +0.5 (-180) / Montreal Canadiens -0.5 (+157)
+P1OU: o1.5 (-136) / u1.5 (+116)
+PRED: Buffalo Sabres 3.18 / Montreal Canadiens 3.51
+TREND Buffalo Sabres: Over is 6-0 in Sabres last 6 vs. Eastern Conference.
+TREND Buffalo Sabres: Over is 4-0-2 in Sabres last 6 games as a favorite.
+TREND Buffalo Sabres: Over is 5-0 in Sabres last 5 vs. Atlantic.
+TREND Buffalo Sabres: Over is 4-0 in Sabres last 4 road games.
+TREND Montreal Canadiens: Canadiens are 4-0 in their last 4 vs. Atlantic.
+TREND Montreal Canadiens: Over is 2-0-2 in Canadiens last 4 games as an underdog.
+TREND Montreal Canadiens: Over is 5-1 in Canadiens last 6 overall.
+TREND Montreal Canadiens: Over is 4-1 in Canadiens last 5 home games.
+
+St. Louis Blues @ Nashville Predators
+ML: St. Louis Blues -115 / Nashville Predators +101
+PL: St. Louis Blues -1.5 (+226) / Nashville Predators +1.5 (-275)
+OU: o6 (-108) / u6 (-108)
+P1ML: St. Louis Blues -111 / Nashville Predators -109
+P1PL: St. Louis Blues -0.5 (+178) / Nashville Predators +0.5 (-206)
+P1OU: o1.5 (-124) / u1.5 (+104)
+PRED: St. Louis Blues 3.07 / Nashville Predators 3.11
+TREND St. Louis Blues: Over is 4-0 in Blues last 4 road games.
+TREND St. Louis Blues: Over is 6-1 in Blues last 7 vs. Central.
+TREND St. Louis Blues: Over is 5-1 in Blues last 6 overall.
+TREND St. Louis Blues: Over is 5-1 in Blues last 6 games playing on 1 days rest.
+TREND Nashville Predators: Under is 6-0 in Predators last 6 vs. Central.
+TREND Nashville Predators: Under is 7-1 in Predators last 8 games playing on 1 days rest.
+TREND Nashville Predators: Under is 7-1 in Predators last 8 when their opponent allows 5 goals or more in their previous game.
+TREND Nashville Predators: Under is 8-2 in Predators last 10 vs. Western Conference.
+
+Edmonton Oilers @ Utah Mammoth
+ML: Edmonton Oilers +119 / Utah Mammoth -135
+PL: Edmonton Oilers +1.5 (-215) / Utah Mammoth -1.5 (+183)
+OU: o6.5 (-115) / u6.5 (-101)
+P1ML: Edmonton Oilers +107 / Utah Mammoth -127
+P1PL: Edmonton Oilers +0.5 (-180) / Utah Mammoth -0.5 (+157)
+P1OU: o1.5 (-138) / u1.5 (+118)
+PRED: Edmonton Oilers 3.15 / Utah Mammoth 3.62
+TREND Edmonton Oilers: Under is 4-0-1 in Oilers last 5 overall.
+TREND Edmonton Oilers: Under is 4-0-1 in Oilers last 5 vs. Western Conference.
+TREND Edmonton Oilers: Oilers are 5-0 in their last 5 games as a favorite.
+TREND Edmonton Oilers: Under is 6-0-2 in Oilers last 8 when their opponent allows 2 goals or less in their previous game.
+TREND Utah Mammoth: Over is 5-0-1 in Mammoth last 6 games as an underdog.
+TREND Utah Mammoth: Mammoth are 6-0 in their last 6 home games vs. a team with a road winning % of greater than .600.
+TREND Utah Mammoth: Over is 2-0-2 in Mammoth last 4 games a home underdog.
+TREND Utah Mammoth: Under is 6-1-1 in Mammoth last 8 vs. a team with a winning % above .600.
+
+MLB
+
+Tampa Bay Rays @ Cleveland Guardians
+ML: Tampa Bay Rays -112 / Cleveland Guardians +102
+RL: Tampa Bay Rays -1.5 (+161) / Cleveland Guardians +1.5 (-185)
+OU: o6.5 (-110) / u6.5 (-110)
