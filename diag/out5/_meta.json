@@ -1,0 +1,30 @@
+[
+ {
+  "name": "core-depth-12",
+  "url": "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/2026/teams/12/depthcharts",
+  "status": 200,
+  "acao": "*",
+  "bytes": 20827
+ },
+ {
+  "name": "web-depth-12",
+  "url": "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/depthcharts",
+  "status": 200,
+  "acao": null,
+  "bytes": 213317
+ },
+ {
+  "name": "site-depth-12-params",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/depthcharts?region=us&lang=en",
+  "status": 200,
+  "acao": null,
+  "bytes": 213317
+ },
+ {
+  "name": "cdn-depth-kc",
+  "url": "https://cdn.espn.com/core/nfl/team/depth/_/name/kc?xhr=1",
+  "status": 404,
+  "acao": null,
+  "bytes": 581
+ }
+]
