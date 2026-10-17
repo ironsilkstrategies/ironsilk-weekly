@@ -112,6 +112,18 @@ const fbDedupeTrend=x=>(x.game||'')+'|'+String(x.text||'').trim().toLowerCase();
 const fbDedupeCons=x=>[x.game,x.market,x.metric,x.src||''].join('|');
 const fbDedupeExt=x=>[x.game,x.pick||x.market,x.src||''].join('|');
 function getNFLBookLines(){return fbWindow(LS.nflshots,bookKeyOf);}
+/* v2.40 · ONE line per market and side. The window keeps every source and every
+   capture, so a game could carry Thursday's IU +3.5 (-112) next to Saturday's
+   uploaded IU +3 (-115) — and every reader takes the FIRST match, the stale one.
+   Your own lines outrank the APIs; among yours the newest capture wins.
+   Props and alternate rungs keep their own line in the key, untouched. */
+const FB_API_SRC=/^(espn|odds|oddsapi|sharp|rundown|oddspapi|api)/i;
+function fbFreshest(rows){if(!rows||rows.length<2)return rows;const best=new Map(),order=[];
+  const key=x=>x.market==='prop'||/alt/i.test(x.market||'')?[x.market,x.side,x.line,x.player||'',x.stat||''].join('|'):[x.market,x.side].join('|');
+  const rank=x=>[FB_API_SRC.test(x.src||'')?0:1,+x.capturedAt||0];
+  const better=(a,b)=>{const A=rank(a),B=rank(b);return A[0]!==B[0]?A[0]>B[0]:A[1]>=B[1];};
+  rows.forEach(x=>{const k=key(x);const cur=best.get(k);if(!cur){best.set(k,x);order.push(k);}else if(better(x,cur))best.set(k,x);});
+  return order.map(k=>best.get(k));}
 function repairNFLKeys(){
   if(!(NFL_GAMES||[]).length)return 0;
   const all=get(LS.nflshots,{});let fixed=0;
@@ -128,7 +140,8 @@ function repairNFLKeys(){
   if(fixed)set(LS.nflshots,all);
   return fixed;
 }
-function nflBookLinesFor(gameKey){
+function nflBookLinesFor(gameKey){return fbFreshest(_nflBookLinesForRaw(gameKey));}
+function _nflBookLinesForRaw(gameKey){
   const all=getNFLBookLines();
   // exact match first
   const exact=all.filter(x=>x.game===gameKey);
@@ -2584,7 +2597,7 @@ function ncaafBookLinesFor(gameKey){
   const sig=all.length+'|'+mx+'|'+(typeof NCAAF_GAMES!=='undefined'?NCAAF_GAMES.length:0);
   if(_NCAAF_BL_MEMO.sig!==sig)_NCAAF_BL_MEMO={sig,map:new Map()};
   if(_NCAAF_BL_MEMO.map.has(gameKey))return _NCAAF_BL_MEMO.map.get(gameKey);
-  const res=_ncaafBookLinesForRaw(gameKey,all);
+  const res=fbFreshest(_ncaafBookLinesForRaw(gameKey,all));
   _NCAAF_BL_MEMO.map.set(gameKey,res);
   return res;
 }
