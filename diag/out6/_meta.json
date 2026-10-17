@@ -1,0 +1,38 @@
+[
+ {
+  "name": "cfb-current",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100",
+  "status": 200,
+  "bytes": 1129061
+ },
+ {
+  "name": "cfb-w8",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=2026&seasontype=2&week=8",
+  "status": 200,
+  "bytes": 816951
+ },
+ {
+  "name": "cfb-w9",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=100&dates=2026&seasontype=2&week=9",
+  "status": 200,
+  "bytes": 674698
+ },
+ {
+  "name": "cfb-20261017",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20261017&groups=80&limit=300",
+  "status": 200,
+  "bytes": 981732
+ },
+ {
+  "name": "nhl-20261017",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261017",
+  "status": 200,
+  "bytes": 287903
+ },
+ {
+  "name": "mlb-20261017",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=20261017",
+  "status": 200,
+  "bytes": 22105
+ }
+]
