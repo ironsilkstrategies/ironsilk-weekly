@@ -23,6 +23,9 @@ setTimeout(()=>{try{
   T('Ohio State Buckeyes carries Ohio State\'s SP+ (29.5), not Ohio\'s (-6.7)',sp({name:'Ohio State Buckeyes'})===29.5,String(sp({name:'Ohio State Buckeyes'})));
   T('Ohio Bobcats still carries Ohio\'s',sp({name:'Ohio Bobcats'})===-6.7);
   T('Kansas State Wildcats carries Kansas State\'s (11)',sp({name:'Kansas State Wildcats'})===11);
+  /* v2.42 · a cached power map that saved the old collision can't bring it back */
+  w.eval(`set('d4.cfbdsp',{ts:Date.now(),v:window.__M});NCAAF_POWER['Ohio State Buckeyes']=window.__M['Ohio'];CFB_SP_IDX=null;RO_CACHE['d4.cfbdsp']=null;`);
+  T('a stale cached "Ohio State Buckeyes → Ohio" entry is ignored',sp({name:'Ohio State Buckeyes'})===29.5,String(sp({name:'Ohio State Buckeyes'})));
   const S=id=>w.eval(`(()=>{const s=simNCAAFGame(NCAAF_GAMES.find(g=>g.id==='${id}'),10000);return{hw:s.hw,aw:s.aw,a:s.awayProj,h:s.homeProj,t:s.awayProj+s.homeProj,o42:s.over(42.5),o63:s.over(63.5),o50:s.over(50.5)};})()`);
   const osu=S('1');T('OSU @ IU is a real game now (IU 40–65%, was 97%)',osu.hw>0.40&&osu.hw<0.65,JSON.stringify(osu));
   const um=S('3'),cw=S('4');

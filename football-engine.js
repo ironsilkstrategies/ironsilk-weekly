@@ -2802,8 +2802,19 @@ function simNCAAFGame(g,N){
 
 // Resolve a team object to its rating by trying every identifier ESPN uses.
 simNCAAFGame=simSeeded(simNCAAFGame,(g,N)=>simGameKey('ncaaf',g,N));
+/* v2.41 · SP+ is resolved HERE, by the longest SP+ team name the schedule name starts with —
+   not through the cached power map, which had saved the old collision ("Ohio State Buckeyes" →
+   Ohio's record) to the phone and restored it on every boot. */
+let CFB_SP_IDX=null;
+function cfbSpFor(t){let map=null;try{map=(roGet('d4.cfbdsp',{},60e3)||{}).v;}catch(e){}if(!map)return null;
+  if(!CFB_SP_IDX||CFB_SP_IDX.m!==map)CFB_SP_IDX={m:map,keys:Object.keys(map).sort((a,b)=>b.length-a.length),memo:new Map()};
+  for(const raw of [t.name,t.displayName,t.location,t.shortDisplayName]){const nm=String(raw||'').trim();if(!nm)continue;
+    if(CFB_SP_IDX.memo.has(nm)){const r=CFB_SP_IDX.memo.get(nm);if(r)return r;continue;}
+    const team=CFB_SP_IDX.keys.find(x=>nm===x||nm.startsWith(x+' '));const r=team?map[team]:null;CFB_SP_IDX.memo.set(nm,r);if(r)return r;}
+  return null;}
 function ncaafPowerFor(t){
   if(!t)return null;
+  try{const sp=cfbSpFor(t);if(sp)return sp;}catch(e){}
   for(const k of [t.id,t.name,t.displayName,t.shortName,t.location,t.abbr,t.abbreviation]){
     if(k&&NCAAF_POWER[String(k).trim()])return NCAAF_POWER[String(k).trim()];
   }
@@ -3409,7 +3420,9 @@ async function fetchNCAAFPowerRatings(){
 // Restore cached power ratings
 (function restoreNCAAFPower(){
   const c=get('d4.ncaafpower',{});
-  if(c.v&&Object.keys(c.v).length)NCAAF_POWER=c.v;
+  /* v2.41 · SP+ rows are re-applied fresh from their own cache; a saved copy keyed by schedule
+     name could carry the old prefix collision, so they're not restored from here */
+  if(c.v&&Object.keys(c.v).length){NCAAF_POWER={};Object.entries(c.v).forEach(([k,r])=>{if(!(r&&r.src==='SP+'))NCAAF_POWER[k]=r;});}
   ncaafPowerFlags();
 })();
 
@@ -4062,8 +4075,8 @@ function ncaafCard(g){
     const pctile=(arr,val)=>arr.filter(v=>v<=val).length/arr.length;
     const chip=(txt,hi)=>`<span class="sigchip" style="background:${hi?'rgba(95,211,232,.12)':'rgba(240,86,60,.12)'};color:${hi?'var(--cold)':'var(--rust)'};">${txt}</span>`;
     const chips=[];
-    const aPow=NCAAF_POWER[g.away.name]||NCAAF_POWER[g.away.abbr];
-    const hPow=NCAAF_POWER[g.home.name]||NCAAF_POWER[g.home.abbr];
+    const aPow=ncaafPowerFor(g.away)||NCAAF_POWER[g.away.abbr];
+    const hPow=ncaafPowerFor(g.home)||NCAAF_POWER[g.home.abbr];
     if(aPow){
       const offP=pctile(offs,aPow.offPPG);const defP=pctile(defs,aPow.defPPG);
       if(offP>=.95)chips.push(chip('🔥 '+g.away.abbr+' OFFENSE TOP 5%',true));
