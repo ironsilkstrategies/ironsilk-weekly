@@ -15,7 +15,7 @@ setTimeout(()=>{try{
   let C=w.eval(`cpropToday()`);const ck=C.filter(c=>c.player==='Travis Kelce');
   T('characters make 70%+ calls on him, the Coach among them',ck.length>=3&&ck.some(c=>c.voice==='Coach'),ck.map(c=>c.voice+' '+c.thr+'+'+c.k).join(', '));
   /* the Judge is 5-0 on Kelce → favorite, its number on him moves up */
-  w.eval(`set(CPROP_KEY,Array.from({length:5},(_,i)=>({id:'h'+i,sp:'nfl',voice:'Judge',player:'Travis Kelce',team:'KC',k:'rec',thr:4,p:0.72,d:'2026-09-0'+(i+1),hit:true})).concat(Array.from({length:5},(_,i)=>({id:'m'+i,sp:'nfl',voice:'Trends',player:'Travis Kelce',team:'KC',k:'rec',thr:4,p:0.72,d:'2026-09-0'+(i+1),hit:i<1}))));CPR_C=null;`);
+  w.eval(`set(CPROP_KEY,Array.from({length:5},(_,i)=>({id:'h'+i,sp:'nfl',voice:'Judge',player:'Travis Kelce',team:'KC',k:'rec',thr:4,p:0.72,d:'2026-09-0'+(i+1),hit:true,mv:2})).concat(Array.from({length:5},(_,i)=>({id:'m'+i,sp:'nfl',voice:'Trends',player:'Travis Kelce',team:'KC',k:'rec',thr:4,p:0.72,d:'2026-09-0'+(i+1),hit:i<1,mv:2}))));CPR_C=null;`);
   C=w.eval(`cpropToday()`);const j=C.find(c=>c.player==='Travis Kelce'&&c.voice==='Judge');const tr=C.find(c=>c.player==='Travis Kelce'&&c.voice==='Trends');
   T('a character that is 5-0 on a player marks him ⭐ favorite and trusts its number on him more',j&&j.fav==='fav'&&j.rec==='5-0',j&&`${Math.round(j.cal*100)}% (${j.rec})`);
   T('a character that is 1-4 on him marks him a fade',!tr||tr.fav==='fade');

@@ -123,7 +123,8 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   NOW=Date.parse('2026-11-14T18:00:00Z');   // Saturday noon CT
   const c=boot('ncaab.html');const C=s=>c.eval(s);await sleep(3500);
   T('the college page boots its own board',C("ACTIVE_SPORT==='ncaab'&&window.__PAGE_SPORT__==='ncaab'")&&C('NCAAB_GAMES.length')===20,C('NCAAB_LOAD_NOTE'));
-  T('every D1 team is indexed for names → abbreviations',C("(get('d4.ncaabteams',{}).t||[]).length")===40);
+  /* v2.36 · ESPN's team list has no CORS header (a phone can't read it) — every D1 school ships with the app instead */
+  T('every D1 team is indexed for names → abbreviations',C("ncaabStatic().t.length")>=360&&C("ncaabAbbrFor('Kentucky Wildcats')")==='UK');
   const nm=C("['Duke Blue Devils','duke','Michigan State','Michigan St Spartans','St. John\\'s','Saint John\\'s Red Storm','#3 Duke','UConn Huskies'].map(ncaabAbbrFor).join(',')");
   T('college names resolve (mascots, St./State, rankings)',nm==='DUKE,DUKE,MSU,MSU,SJU,SJU,DUKE,CONN',nm);
   const cs=C("document.getElementById('slate').innerHTML");

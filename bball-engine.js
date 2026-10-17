@@ -54,7 +54,7 @@ function bbThresh(mu,sd,t){const isInt=Math.abs(t-Math.round(t))<1e-9;
 const bbSeasonYear=()=>{const d=today();const y=+d.slice(0,4),m=+d.slice(5,7);return m>=7?y+1:y;};
 const bbAbbr=(C,tm)=>{const ab=String((tm&&tm.abbreviation)||'').toUpperCase();return ab||String((tm&&tm.id)||'?');};
 /* ── every D1 school, for the intake (names → ESPN abbreviations) ── */
-async function bbLoadTeams(C){if(C.sp!=='ncaab')return;const old=get('d4.ncaabteams',null);const n0=old&&(old.t||[]).length||0;
+async function bbLoadTeams(C){if(C.sp!=='ncaab')return;if(typeof ncaabStatic==='function'&&!get('d4.ncaabteams',null))return;   /* v2.36 · every D1 school ships in shared.js — ESPN's team list can't be read from a browser anyway */const old=get('d4.ncaabteams',null);const n0=old&&(old.t||[]).length||0;
   if(old&&old.ts>Date.now()-(n0>=300?7:1)*864e5&&n0>=30)return;   /* the full D1 list refreshes weekly; a short one tomorrow */
   try{const j=await fetch(C.espn+'/teams?limit=1000&groups=50').then(r=>r.json());const t=[];
     ((((j||{}).sports||[])[0]||{}).leagues||[]).forEach(L=>(L.teams||[]).forEach(x=>{const T=x.team||x;if(!T||!T.abbreviation)return;
@@ -426,10 +426,7 @@ const BB_PANELS={
     const tb=Math.round(s.total);const t=[];(C.sp==='ncaab'?[-8,-4,0,4,8]:[-10,-5,0,5,10]).forEach(d=>{const l=tb+d+0.5;t.push([l,(s.over(l)*100).toFixed(0)+'%',bbSgn(bbFair(s.over(l))),(s.under(l)*100).toFixed(0)+'%',bbSgn(bbFair(s.under(l)))]);});
     const pr=Object.keys(C.per).filter(k=>k!=='full').map(k=>{const x=bbSimFor(C,g,k);return[C.perLab[k].toLowerCase(),`${x.awayProj}–${x.homeProj}`,x.total.toFixed(1),Math.round(x.hw*100)+'%'];});
     return'<div class="sub">Model fair prices — compare against your book\'s alt board.</div>'+bbTable(['home','model','fair','away','model','fair'],r)+bbTable(['total','over','fair','under','fair'],t)+bbTable(['period','model score','total',H+' win'],pr);},
-  roster:async(C,g)=>{const side=async ab=>{let Rr=[];try{Rr=await rsRoster(C.sp,ab);}catch(e){}if(!Rr.length)return`<div class="sub">${bbEsc(ab)}: roster unavailable</div>`;
-      return`<div style="flex:1;min-width:150px"><div class="sub"><b>${bbEsc(ab)}</b></div>${Rr.map(a=>{const J=pstProj(C.sp,a.name,'pts');const f5=pstForm(C.sp,a.name,'pts',5);
-        return`<div style="font-size:11px">${bbEsc(a.name)} <span style="color:var(--mute)">${bbEsc(a.pos)}</span>${J?` <span class="mono" style="font-size:9.5px;color:var(--gold)">${J.mu.toFixed(1)} pts${f5?` · L5 ${f5.avg.toFixed(1)}`:''}</span>`:''}</div>`;}).join('')}</div>`;};
-    const [a,h]=await Promise.all([side(g.away.abbr),side(g.home.abbr)]);return`<div style="display:flex;gap:12px;flex-wrap:wrap">${a}${h}</div>`;},
+  roster:async(C,g)=>rosterPanel(C.sp,g),   /* v2.36 · the shared roster: injuries, numbers, 70%+ lines; loads logs on open */
   props:(C,g)=>{const sp=C.sp,game=bbKey(g);let h='';try{h+=propBoardHtml(sp,game,20)||'';}catch(e){}
     try{const L=propLikely(sp,60).filter(x=>x.team===g.away.abbr||x.team===g.home.abbr);if(L.length)h+='<div class="mktlab">Likely outcomes (from game logs)</div>'+L.map(x=>{const f5=pstForm(sp,x.player,x.k,5),f10=pstForm(sp,x.player,x.k,10);
       return`<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${bbEsc(x.player)}</b> ${bbEsc(x.team)} · <b>${x.thr}+ ${x.k}</b> · <span style="color:var(--win)">${Math.round(x.p*100)}%</span> · avg ${x.mu.toFixed(1)}${f5?` · L5 <b>${f5.avg.toFixed(1)}</b> (${f5.hit(x.thr)}/${f5.n} cleared)`:''}${f10?` · L10 ${f10.avg.toFixed(1)} (${f10.hit(x.thr)}/${f10.n})`:''}</div>`;}).join('');}catch(e){}

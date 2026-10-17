@@ -51,7 +51,7 @@ setTimeout(()=>{try{
   w.eval('cpropLog(cpropToday())');const n0=w.eval('get(CPROP_KEY,[]).length');w.eval('cpropLog(cpropToday())');
   T('calls are logged once',w.eval('get(CPROP_KEY,[]).length')===n0&&n0>0);
   /* calibration: Judge stated 70-73% on 10 graded calls and hit 9 */
-  w.eval(`(()=>{const L=get(CPROP_KEY,[]);for(let i=0;i<10;i++)L.push({id:'cal'+i,sp:'nhl',voice:'Judge',player:'X'+i,team:'T',k:'s',thr:2,p:0.715,d:'2026-09-01',hit:i<9});set(CPROP_KEY,L);})()`);
+  w.eval(`(()=>{const L=get(CPROP_KEY,[]);for(let i=0;i<10;i++)L.push({id:'cal'+i,sp:'nhl',voice:'Judge',player:'X'+i,team:'T',k:'s',thr:2,p:0.715,d:'2026-09-01',hit:i<9,mv:2});set(CPROP_KEY,L);})()`);
   const C=w.eval('cpropCalib()');const b=C.Judge[0];
   T('confidence buckets: "Judge hits 9/10 of his 70–73% calls"',b.n===10&&b.h===9&&Math.abs(b.rate-0.9)<1e-9);
   const cal=w.eval('cpropCal(cpropCalib(),"Judge",0.715)');

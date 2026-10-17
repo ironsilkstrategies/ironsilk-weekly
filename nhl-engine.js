@@ -609,11 +609,7 @@ const NHL_PANELS={
     if(C.length)out.push('<div class="sub" style="margin:6px 0 4px"><b>Consensus</b></div>'+C.map(c=>`<div class="sub">${c.market==='total'?`O ${c.overPct}% / U ${c.underPct}%`:`${g.away.abbr} ${c.awayPct}% / ${g.home.abbr} ${c.homePct}%`} <span style="color:var(--mute)">${c.metric||''}</span></div>`).join(''));
     try{out.push(intelPicksFor('nhl',game)||'')}catch(e){}
     return out.join('')||'<div class="sub">No trends, consensus or outside picks uploaded for this game yet.</div>';},
-  roster:async(g)=>{const [a,h]=await Promise.all([nhlFetchRoster(g.away.tid),nhlFetchRoster(g.home.tid)]);
-    const side=(ab,R)=>!R?`<div class="sub">${ab}: roster unavailable</div>`:`<div style="flex:1;min-width:150px"><div class="sub"><b>${ab}</b></div>${R.groups.map(G=>
-      `<div style="font-family:'IBM Plex Mono';font-size:9px;color:var(--mute);margin-top:4px">${nhlEsc(G.pos)}</div>`+G.players.map(p=>
-      `<div style="font-size:11px">${p.num?'#'+nhlEsc(p.num)+' ':''}${nhlEsc(p.name)} <span style="color:var(--mute)">${nhlEsc(p.pos)}</span>${p.inj?` <span style="color:var(--rust)">${nhlEsc(p.inj)}</span>`:''}</div>`).join('')).join('')}</div>`;
-    return`<div style="display:flex;gap:12px;flex-wrap:wrap">${side(g.away.abbr,a)}${side(g.home.abbr,h)}</div>`;},
+  roster:async(g)=>{try{return await rosterPanel('nhl',g);}catch(e){return'<div class="sub">Roster unavailable right now.</div>';}},   /* v2.36 · the shared roster panel */
   /* Props — same shape as the NFL card: grouped by team, one block per player
      with the projection, season rate and a tappable ladder. Book PROP: lines
      price against the model underneath each player. Every ladder rung and book

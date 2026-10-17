@@ -446,8 +446,8 @@ function _parseNFLEvents(j){
       awayScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='away')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
       h1a:(()=>{const c=comp.competitors.find(x=>x.homeAway==='away')||{};const q=c.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),h1h:(()=>{const c=comp.competitors.find(x=>x.homeAway==='home')||{};const q=c.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       homeScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='home')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
-      away:{abbr:awayAbbr,name:away.team.displayName||awayAbbr,offRating:24,defRating:24,record:away.records&&away.records[0]&&away.records[0].summary||''},
-      home:{abbr:homeAbbr,name:home.team.displayName||homeAbbr,offRating:24,defRating:24,record:home.records&&home.records[0]&&home.records[0].summary||''},
+      away:{abbr:awayAbbr,tid:String(away.team.id||''),name:away.team.displayName||awayAbbr,offRating:24,defRating:24,record:away.records&&away.records[0]&&away.records[0].summary||''},
+      home:{abbr:homeAbbr,tid:String(home.team.id||''),name:home.team.displayName||homeAbbr,offRating:24,defRating:24,record:home.records&&home.records[0]&&home.records[0].summary||''},
     };
   }).filter(Boolean);
   const cacheKey=(NFL_SEASON||'')+'w'+(NFL_WEEK||'');
@@ -911,7 +911,8 @@ async function fetchNFLDepthCharts(force){
            join against the roster we already have. Two calls per team total. */
         const byId={};players.forEach(p=>{if(p.id)byId[String(p.id)]=p});
         try{
-          const dr=await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${t.id}/depthcharts`);
+          /* v2.36 · the site API's depth chart sends no CORS header (a phone can't read it); ESPN's core API serves the same chart with CORS */
+          const dr=await fetch(`https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${(typeof NFL_SEASON!=='undefined'&&+NFL_SEASON)||rsSeasonYear('nfl',today())}/teams/${t.id}/depthcharts`);
           const dj=await dr.json();
           (dj.items||dj.depthchart||[]).forEach(unit=>{
             const posns=unit.positions||{};
@@ -2248,6 +2249,7 @@ function nflCardFull(g){
       <button onclick="nflTogglePanel('verdict','${id}',this)">Take/Fade</button>
       ${(isLive||isFinal)?`<button onclick="nflTogglePanel('livebox','${id}',this)">${isLive?'Live box':'Box score'}</button>`:''}
       <button onclick="nflTogglePanel('mybets','${id}',this)">My Bets</button>
+      <button onclick="nflTogglePanel('roster','${id}',this)">Roster</button>
       ${isFinal?`<button onclick="nflTogglePanel('analysis','${id}',this)" style="background:rgba(95,211,232,.1);color:var(--cold)">📊 Analysis</button>`:''}
     </div>
     <div class="panel" id="p-nflcoach-${id}">${coachBriefing(g,s,'nfl')}</div>
@@ -2259,6 +2261,7 @@ function nflCardFull(g){
     <div class="panel" id="p-nflverdict-${id}">${takeFadePanel(g,s,'nfl')}</div>
     <div class="panel" id="p-nfllivebox-${id}"><div id="p-fb-livebox-${id}">${(isLive||isFinal)?fbLiveBoxPanel(g,'nfl'):''}</div></div>
     <div class="panel" id="p-nflmybets-${id}"></div>
+    <div class="panel" id="p-nflroster-${id}"></div>
     <div class="panel" id="p-nflanalysis-${id}">${isFinal?(()=>{try{return fbAnalysisPanel(g,s,'nfl')+(typeof parPostGame==='function'?parPostGame('nfl',g,s,{charsOnly:true}):'')}catch(e){return''}})():''}</div>
   </div>`;
 }
@@ -2496,6 +2499,8 @@ function fbRefreshLiveBox(sport,gid){
     if(p&&p.classList.contains('on'))p.innerHTML=fbLiveBoxPanel(g,sport);
   }).catch(()=>{});
 }
+/* v2.36 · a football game for the shared roster panel: the ESPN team ids ride on the game when the scoreboard had them */
+function fbRosterGame(sp,G){return{id:G.id,away:{abbr:G.away.abbr,tid:G.away.tid||(sp==='nfl'&&typeof NFL_ESPN_IDS!=='undefined'?NFL_ESPN_IDS[G.away.abbr]:null)},home:{abbr:G.home.abbr,tid:G.home.tid||(sp==='nfl'&&typeof NFL_ESPN_IDS!=='undefined'?NFL_ESPN_IDS[G.home.abbr]:null)}};}
 function nflTogglePanel(which,gid,btn){
   if(which==='props'){const G=NFL_GAMES.find(x=>String(x.id)===String(gid));if(G)setTimeout(()=>nflLoadForm(G).catch(()=>{}),0);}
   const p=document.getElementById('p-nfl'+which+'-'+gid);
@@ -2508,6 +2513,7 @@ function nflTogglePanel(which,gid,btn){
   if(FB_LIVEBOX_TIMER[gid]){clearInterval(FB_LIVEBOX_TIMER[gid]);delete FB_LIVEBOX_TIMER[gid];}
   if(!wasOn){
     p.classList.add('on');btn.classList.add('on');
+    if(which==='roster'){const G=NFL_GAMES.find(x=>String(x.id)===String(gid));if(G){p.innerHTML='<div class="empty">Loading…</div>';rosterPanel('nfl',fbRosterGame('nfl',G)).then(h=>{p.innerHTML=h;}).catch(()=>{p.innerHTML='<div class="sub">Roster unavailable right now.</div>';});}}
     if(which==='livebox'){
       fbRefreshLiveBox('nfl',gid);
       const G=NFL_GAMES.find(x=>String(x.id)===String(gid));
@@ -3439,9 +3445,9 @@ function _parseNCAAFEvents(j){
       h1a:(()=>{const q=away.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       h1h:(()=>{const q=home.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       homeScore:(()=>{const sc=home.score;return sc!=null&&sc!==''?+sc:null})(),
-      away:{abbr:awayAbbr,name:awayName,ranking:ranking(away.team),
+      away:{abbr:awayAbbr,tid:String(away.team.id||''),name:awayName,ranking:ranking(away.team),
         offRating:26,defRating:26,record:away.records&&away.records[0]&&away.records[0].summary||''},
-      home:{abbr:homeAbbr,name:homeName,ranking:ranking(home.team),
+      home:{abbr:homeAbbr,tid:String(home.team.id||''),name:homeName,ranking:ranking(home.team),
         offRating:26,defRating:26,record:home.records&&home.records[0]&&home.records[0].summary||''},
     };
   }).filter(Boolean);
@@ -4150,6 +4156,7 @@ function ncaafCard(g){
       ${(cfbLive||cfbFinal)?`<button onclick="ncaafTogglePanel('livebox','${id}',this)">${cfbLive?'Live box':'Box score'}</button>`:''}
       ${cfbFinal?`<button onclick="ncaafTogglePanel('analysis','${id}',this)" style="background:rgba(95,211,232,.1);color:var(--cold)">📊 Analysis</button>`:''}
       <button onclick="ncaafTogglePanel('mybets','${id}',this)">My Bets</button>
+      <button onclick="ncaafTogglePanel('roster','${id}',this)">Roster</button>
     </div>
     <div class="panel" id="p-ncaafcoach-${id}">${coachBriefing(g,s,'ncaaf')}</div>
     <div class="panel" id="p-ncaaftrends-${id}">${ncaafTrendPanel(g,s)}</div>
@@ -4162,6 +4169,7 @@ function ncaafCard(g){
     <div class="panel" id="p-ncaaflivebox-${id}"><div id="p-fb-livebox-${id}">${(cfbLive||cfbFinal)?fbLiveBoxPanel(g,'ncaaf'):''}</div></div>
     <div class="panel" id="p-ncaafanalysis-${id}">${cfbFinal?(()=>{try{return fbAnalysisPanel(g,s,'ncaaf')+(typeof parPostGame==='function'?parPostGame('ncaaf',g,s,{charsOnly:true}):'')}catch(e){return''}})():''}</div>
     <div class="panel" id="p-ncaafmybets-${id}"></div>
+    <div class="panel" id="p-ncaafroster-${id}"></div>
   </div>`;
 }
 
@@ -4174,6 +4182,7 @@ function ncaafTogglePanel(which,gid,btn){
   if(FB_LIVEBOX_TIMER[gid]){clearInterval(FB_LIVEBOX_TIMER[gid]);delete FB_LIVEBOX_TIMER[gid];}
   if(!wasOn){
     p.classList.add('on');btn.classList.add('on');
+    if(which==='roster'){const G=(NCAAF_GAMES||[]).find(x=>String(x.id)===String(gid));if(G){p.innerHTML='<div class="empty">Loading…</div>';rosterPanel('ncaaf',fbRosterGame('ncaaf',G)).then(h=>{p.innerHTML=h;}).catch(()=>{p.innerHTML='<div class="sub">Roster unavailable right now.</div>';});}}
     if(which==='livebox'){
       fbRefreshLiveBox('ncaaf',gid);
       const G=NCAAF_GAMES.find(x=>String(x.id)===String(gid));

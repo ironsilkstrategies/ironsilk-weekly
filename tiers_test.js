@@ -16,6 +16,8 @@ setTimeout(async()=>{try{
   T('every tier has missions in it (coin-flip legs)',['Cakewalk','Easy','Normal','Hard','Legendary'].every(k=>counts[k]>=3),JSON.stringify(counts));
   T('16 Warm-ups, board opens on them',w.eval("MS_LIB.filter(r=>r[1]==='warmup').length")===16&&w.eval('MS_CAT')==='warmup');
   w.eval("tab('money',null)");await new Promise(r=>setTimeout(r,200));
+  /* v2.31 retired the missions board from the Money tab (one bankroll, no dead features) — its tiers stay tested above */
+  if(!w.document.getElementById('missionsBody')){T('missions board retired with the v2.31 Money rebuild (the board no longer renders)',w.eval('missionsHtml()')==='');console.log(out.join('\n'));const p=out.filter(x=>x.startsWith('PASS')).length;console.log(`\n${p}/${out.length} passed`);process.exit(0);}
   let mb=w.document.getElementById('missionsBody').innerHTML;
   T('tier filter row on the board',['By category','Cakewalk','Easy','Normal','Hard','Legendary'].every(x=>mb.includes('>'+x+'<')));
   w.eval("MS_TIER='Cakewalk';msRender()");mb=w.document.getElementById('missionsBody').innerHTML;

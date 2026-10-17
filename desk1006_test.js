@@ -3,6 +3,9 @@ const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d
 function boot(page){let html=fs.readFileSync(path.join(W,page),'utf8');
   html=html.replace(/<script src="([^"?]+)\?v=[^"]+"><\/script>/g,(m,f)=>`<script>${fs.readFileSync(path.join(W,f),'utf8')}</script>`);
   return new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/'+page,pretendToBeVisual:true,beforeParse(w){
+    /* the card's games sit at 23:59 tonight — pin the clock to 2 PM so a late-night run doesn't land inside their 30-minute lock */
+    {const RD=w.Date;const d=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new RD());const T0=RD.parse(d+'T14:00:00-05:00'),R0=RD.now();
+      class FD extends RD{constructor(...a){super(...(a.length?a:[T0+(RD.now()-R0)]))}static now(){return T0+(RD.now()-R0)}}w.Date=FD;}
     w.fetch=()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});
     w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.prompt=()=>null;w.localStorage.setItem('d4.setupDone','1');}}).window;}
 const w=boot('nhl.html');

@@ -103,8 +103,13 @@ function nbaAbbrFor(raw){const t=String(raw||'').toUpperCase().replace(/[^A-Z0-9
    (d4.ncaabteams: abbr, id, location, name, display, short, nickname); the CFB
    resolver covers a page that hasn't loaded it yet. */
 let NCAAB_IDX=null;
+/* v2.36 · ESPN's team list can't be read from a browser (no CORS), so the index the NCAAB page tried to fetch never
+   arrived. Every active D1 school ships here (abbr|id|location|name|display|short|nickname, Oct 2026). */
+const NCAAB_TEAMS_STR='ACU|2000|Abilene Christian|Wildcats|Abilene Christian Wildcats|Abilene Chrstn|Abilene Chrstn;AF|2005|Air Force|Falcons|Air Force Falcons|Air Force|Air Force;AKR|2006|Akron|Zips|Akron Zips|Akron|Akron;AAMU|2010|Alabama A&M|Bulldogs|Alabama A&M Bulldogs|Alabama A&M|Alabama A&M;ALA|333|Alabama|Crimson Tide|Alabama Crimson Tide|Alabama|Alabama;ALST|2011|Alabama State|Hornets|Alabama State Hornets|Alabama St|Alabama St;ALCN|2016|Alcorn State|Braves|Alcorn State Braves|Alcorn St|Alcorn St;AMER|44|American University|Eagles|American University Eagles|American|American;APP|2026|App State|Mountaineers|App State Mountaineers|App State|App State;ASU|9|Arizona State|Sun Devils|Arizona State Sun Devils|Arizona St|Arizona St;ARIZ|12|Arizona|Wildcats|Arizona Wildcats|Arizona|Arizona;ARK|8|Arkansas|Razorbacks|Arkansas Razorbacks|Arkansas|Arkansas;ARST|2032|Arkansas State|Red Wolves|Arkansas State Red Wolves|Arkansas St|Arkansas St;UAPB|2029|Arkansas-Pine Bluff|Golden Lions|Arkansas-Pine Bluff Golden Lions|AR-Pine Bluff|AR-Pine Bluff;ARMY|349|Army|Black Knights|Army Black Knights|Army|Army;AUB|2|Auburn|Tigers|Auburn Tigers|Auburn|Auburn;APSU|2046|Austin Peay|Governors|Austin Peay Governors|Austin Peay|Austin Peay;BYU|252|BYU|Cougars|BYU Cougars|BYU|BYU;BALL|2050|Ball State|Cardinals|Ball State Cardinals|Ball State|Ball State;BAY|239|Baylor|Bears|Baylor Bears|Baylor|Baylor;BELL|91|Bellarmine|Knights|Bellarmine Knights|Bellarmine|Bellarmine;BEL|2057|Belmont|Bruins|Belmont Bruins|Belmont|Belmont;BCU|2065|Bethune-Cookman|Wildcats|Bethune-Cookman Wildcats|Bethune|Bethune;BING|2066|Binghamton|Bearcats|Binghamton Bearcats|Binghamton|Binghamton;BOIS|68|Boise State|Broncos|Boise State Broncos|Boise St|Boise St;BC|103|Boston College|Eagles|Boston College Eagles|Boston College|Boston College;BU|104|Boston University|Terriers|Boston University Terriers|Boston U|Boston U;BGSU|189|Bowling Green|Falcons|Bowling Green Falcons|Bowling Green|Bowling Green;BRAD|71|Bradley|Braves|Bradley Braves|Bradley|Bradley;BRWN|225|Brown|Bears|Brown Bears|Brown|Brown;BRY|2803|Bryant|Bulldogs|Bryant Bulldogs|Bryant|Bryant;BUCK|2083|Bucknell|Bison|Bucknell Bison|Bucknell|Bucknell;BUF|2084|Buffalo|Bulls|Buffalo Bulls|Buffalo|Buffalo;BTLR|2086|Butler|Bulldogs|Butler Bulldogs|Butler|Butler;CP|13|Cal Poly|Mustangs|Cal Poly Mustangs|Cal Poly|Cal Poly;CSUB|2934|Cal State Bakersfield|Roadrunners|Cal State Bakersfield Roadrunners|Bakersfield|Bakersfield;CSUF|2239|Cal State Fullerton|Titans|Cal State Fullerton Titans|Fullerton|Fullerton;CSUN|2463|Cal State Northridge|Matadors|Cal State Northridge Matadors|CSU Northridge|CSU Northridge;CBU|2856|California Baptist|Lancers|California Baptist Lancers|CA Baptist|CA Baptist;CAL|25|California|Golden Bears|California Golden Bears|California|California;CAM|2097|Campbell|Fighting Camels|Campbell Fighting Camels|Campbell|Campbell;CAN|2099|Canisius|Golden Griffins|Canisius Golden Griffins|Canisius|Canisius;CARK|2110|Central Arkansas|Bears|Central Arkansas Bears|C Arkansas|C Arkansas;CCSU|2115|Central Connecticut|Blue Devils|Central Connecticut Blue Devils|C Connecticut|C Connecticut;CMU|2117|Central Michigan|Chippewas|Central Michigan Chippewas|C Michigan|C Michigan;COFC|232|Charleston|Cougars|Charleston Cougars|Charleston|Charleston;CHSO|2127|Charleston Southern|Buccaneers|Charleston Southern Buccaneers|Charleston So|Charleston So;CLT|2429|Charlotte|49ers|Charlotte 49ers|Charlotte|Charlotte;UTC|236|Chattanooga|Mocs|Chattanooga Mocs|Chattanooga|Chattanooga;CHST|2130|Chicago State|Cougars|Chicago State Cougars|Chicago St|Chicago St;CIN|2132|Cincinnati|Bearcats|Cincinnati Bearcats|Cincinnati|Cincinnati;CLEM|228|Clemson|Tigers|Clemson Tigers|Clemson|Clemson;CLE|325|Cleveland State|Vikings|Cleveland State Vikings|Cleveland St|Cleveland St;CCU|324|Coastal Carolina|Chanticleers|Coastal Carolina Chanticleers|Coastal|Coastal;COLG|2142|Colgate|Raiders|Colgate Raiders|Colgate|Colgate;COLO|38|Colorado|Buffaloes|Colorado Buffaloes|Colorado|Colorado;CSU|36|Colorado State|Rams|Colorado State Rams|Colorado St|Colorado St;COLU|171|Columbia|Lions|Columbia Lions|Columbia|Columbia;COPP|2154|Coppin State|Eagles|Coppin State Eagles|Coppin St|Coppin St;COR|172|Cornell|Big Red|Cornell Big Red|Cornell|Cornell;CREI|156|Creighton|Bluejays|Creighton Bluejays|Creighton|Creighton;DART|159|Dartmouth|Big Green|Dartmouth Big Green|Dartmouth|Dartmouth;DAV|2166|Davidson|Wildcats|Davidson Wildcats|Davidson|Davidson;DAY|2168|Dayton|Flyers|Dayton Flyers|Dayton|Dayton;DEP|305|DePaul|Blue Demons|DePaul Blue Demons|DePaul|DePaul;DEL|48|Delaware|Blue Hens|Delaware Blue Hens|Delaware|Delaware;DSU|2169|Delaware State|Hornets|Delaware State Hornets|Delaware St|Delaware St;DEN|2172|Denver|Pioneers|Denver Pioneers|Denver|Denver;DETM|2174|Detroit Mercy|Titans|Detroit Mercy Titans|Detroit Mercy|Detroit Mercy;DRKE|2181|Drake|Bulldogs|Drake Bulldogs|Drake|Drake;DREX|2182|Drexel|Dragons|Drexel Dragons|Drexel|Drexel;DUKE|150|Duke|Blue Devils|Duke Blue Devils|Duke|Duke;DUQ|2184|Duquesne|Dukes|Duquesne Dukes|Duquesne|Duquesne;ECU|151|East Carolina|Pirates|East Carolina Pirates|East Carolina|East Carolina;ETSU|2193|East Tennessee State|Buccaneers|East Tennessee State Buccaneers|ETSU|ETSU;ETAM|2837|East Texas A&M|Lions|East Texas A&M Lions|East Texas A&M|East Texas A&M;EIU|2197|Eastern Illinois|Panthers|Eastern Illinois Panthers|E Illinois|E Illinois;EKU|2198|Eastern Kentucky|Colonels|Eastern Kentucky Colonels|E Kentucky|E Kentucky;EMU|2199|Eastern Michigan|Eagles|Eastern Michigan Eagles|E Michigan|E Michigan;EWU|331|Eastern Washington|Eagles|Eastern Washington Eagles|E Washington|E Washington;ELON|2210|Elon|Phoenix|Elon Phoenix|Elon|Elon;EVAN|339|Evansville|Purple Aces|Evansville Purple Aces|Evansville|Evansville;FAIR|2217|Fairfield|Stags|Fairfield Stags|Fairfield|Fairfield;FDU|161|Fairleigh Dickinson|Knights|Fairleigh Dickinson Knights|FDU|FDU;FAMU|50|Florida A&M|Rattlers|Florida A&M Rattlers|Florida A&M|Florida A&M;FAU|2226|Florida Atlantic|Owls|Florida Atlantic Owls|FAU|FAU;FLA|57|Florida|Gators|Florida Gators|Florida|Florida;FGCU|526|Florida Gulf Coast|Eagles|Florida Gulf Coast Eagles|FGCU|FGCU;FIU|2229|Florida International|Panthers|Florida International Panthers|FIU|FIU;FSU|52|Florida State|Seminoles|Florida State Seminoles|Florida St|Florida St;FOR|2230|Fordham|Rams|Fordham Rams|Fordham|Fordham;FRES|278|Fresno State|Bulldogs|Fresno State Bulldogs|Fresno St|Fresno St;FUR|231|Furman|Paladins|Furman Paladins|Furman|Furman;GWEB|2241|Gardner-Webb|Runnin\' Bulldogs|Gardner-Webb Runnin\' Bulldogs|Gardner-Webb|Gardner-Webb;GMU|2244|George Mason|Patriots|George Mason Patriots|George Mason|George Mason;GW|45|George Washington|Revolutionaries|George Washington Revolutionaries|G Washington|G Washington;GTWN|46|Georgetown|Hoyas|Georgetown Hoyas|Georgetown|Georgetown;UGA|61|Georgia|Bulldogs|Georgia Bulldogs|Georgia|Georgia;GASO|290|Georgia Southern|Eagles|Georgia Southern Eagles|GA Southern|GA Southern;GAST|2247|Georgia State|Panthers|Georgia State Panthers|Georgia St|Georgia St;GT|59|Georgia Tech|Yellow Jackets|Georgia Tech Yellow Jackets|Georgia Tech|Georgia Tech;GONZ|2250|Gonzaga|Bulldogs|Gonzaga Bulldogs|Gonzaga|Gonzaga;GRAM|2755|Grambling|Tigers|Grambling Tigers|Grambling|Grambling;GCU|2253|Grand Canyon|Lopes|Grand Canyon Lopes|Grand Canyon|Grand Canyon;GB|2739|Green Bay|Phoenix|Green Bay Phoenix|Green Bay|Green Bay;HAMP|2261|Hampton|Pirates|Hampton Pirates|Hampton|Hampton;HARV|108|Harvard|Crimson|Harvard Crimson|Harvard|Harvard;HAW|62|Hawai\'i|Rainbow Warriors|Hawai\'i Rainbow Warriors|Hawai\'i|Hawai\'i;HPU|2272|High Point|Panthers|High Point Panthers|High Point|High Point;HOF|2275|Hofstra|Pride|Hofstra Pride|Hofstra|Hofstra;HC|107|Holy Cross|Crusaders|Holy Cross Crusaders|Holy Cross|Holy Cross;HCU|2277|Houston Christian|Huskies|Houston Christian Huskies|Hou Christian|Hou Christian;HOU|248|Houston|Cougars|Houston Cougars|Houston|Houston;HOW|47|Howard|Bison|Howard Bison|Howard|Howard;IUIN|85|IU Indianapolis|Jaguars|IU Indianapolis Jaguars|IU Indy|IU Indy;IDST|304|Idaho State|Bengals|Idaho State Bengals|Idaho St|Idaho St;IDHO|70|Idaho|Vandals|Idaho Vandals|Idaho|Idaho;ILL|356|Illinois|Fighting Illini|Illinois Fighting Illini|Illinois|Illinois;ILST|2287|Illinois State|Redbirds|Illinois State Redbirds|Illinois St|Illinois St;UIW|2916|Incarnate Word|Cardinals|Incarnate Word Cardinals|Incarnate Word|Incarnate Word;IU|84|Indiana|Hoosiers|Indiana Hoosiers|Indiana|Indiana;INST|282|Indiana State|Sycamores|Indiana State Sycamores|Indiana St|Indiana St;IONA|314|Iona|Gaels|Iona Gaels|Iona|Iona;IOWA|2294|Iowa|Hawkeyes|Iowa Hawkeyes|Iowa|Iowa;ISU|66|Iowa State|Cyclones|Iowa State Cyclones|Iowa State|Iowa State;JKST|2296|Jackson State|Tigers|Jackson State Tigers|Jackson St|Jackson St;JAX|294|Jacksonville|Dolphins|Jacksonville Dolphins|Jacksonville|Jacksonville;JXST|55|Jacksonville State|Gamecocks|Jacksonville State Gamecocks|Jax State|Jax State;JMU|256|James Madison|Dukes|James Madison Dukes|James Madison|James Madison;KC|140|Kansas City|Roos|Kansas City Roos|Kansas City|Kansas City;KU|2305|Kansas|Jayhawks|Kansas Jayhawks|Kansas|Kansas;KSU|2306|Kansas State|Wildcats|Kansas State Wildcats|Kansas St|Kansas St;KENN|338|Kennesaw State|Owls|Kennesaw State Owls|Kennesaw St|Kennesaw St;KENT|2309|Kent State|Golden Flashes|Kent State Golden Flashes|Kent State|Kent State;UK|96|Kentucky|Wildcats|Kentucky Wildcats|Kentucky|Kentucky;NOLA|2443|LSU New Orleans|Privateers|LSU New Orleans Privateers|LSU N Orleans|LSU N Orleans;LSU|99|LSU|Tigers|LSU Tigers|LSU|LSU;LAS|2325|La Salle|Explorers|La Salle Explorers|La Salle|La Salle;LAF|322|Lafayette|Leopards|Lafayette Leopards|Lafayette|Lafayette;LAM|2320|Lamar|Cardinals|Lamar Cardinals|Lamar|Lamar;LEM|2330|Le Moyne|Dolphins|Le Moyne Dolphins|Le Moyne|Le Moyne;LEH|2329|Lehigh|Mountain Hawks|Lehigh Mountain Hawks|Lehigh|Lehigh;LIB|2335|Liberty|Flames|Liberty Flames|Liberty|Liberty;LIP|288|Lipscomb|Bisons|Lipscomb Bisons|Lipscomb|Lipscomb;LR|2031|Little Rock|Trojans|Little Rock Trojans|Little Rock|Little Rock;LBSU|299|Long Beach State|Beach|Long Beach State Beach|Long Beach St|Long Beach St;LIU|112358|Long Island University|Sharks|Long Island University Sharks|Long Island|Long Island;LONG|2344|Longwood|Lancers|Longwood Lancers|Longwood|Longwood;UL|309|Louisiana|Ragin\' Cajuns|Louisiana Ragin\' Cajuns|Louisiana|Louisiana;LT|2348|Louisiana Tech|Bulldogs|Louisiana Tech Bulldogs|Louisiana Tech|Louisiana Tech;LOU|97|Louisville|Cardinals|Louisville Cardinals|Louisville|Louisville;LUC|2350|Loyola Chicago|Ramblers|Loyola Chicago Ramblers|Loyola Chicago|Loyola Chicago;L-MD|2352|Loyola Maryland|Greyhounds|Loyola Maryland Greyhounds|Loyola MD|Loyola MD;LMU|2351|Loyola Marymount|Lions|Loyola Marymount Lions|LMU|LMU;ME|311|Maine|Black Bears|Maine Black Bears|Maine|Maine;MAN|2363|Manhattan|Jaspers|Manhattan Jaspers|Manhattan|Manhattan;MRST|2368|Marist|Red Foxes|Marist Red Foxes|Marist|Marist;MARQ|269|Marquette|Golden Eagles|Marquette Golden Eagles|Marquette|Marquette;MRSH|276|Marshall|Thundering Herd|Marshall Thundering Herd|Marshall|Marshall;UMES|2379|Maryland Eastern Shore|Hawks|Maryland Eastern Shore Hawks|MD Eastern|MD Eastern;MD|120|Maryland|Terrapins|Maryland Terrapins|Maryland|Maryland;MASS|113|Massachusetts|Minutemen|Massachusetts Minutemen|UMass|UMass;MCN|2377|McNeese|Cowboys|McNeese Cowboys|McNeese|McNeese;MEM|235|Memphis|Tigers|Memphis Tigers|Memphis|Memphis;MER|2382|Mercer|Bears|Mercer Bears|Mercer|Mercer;MERC|2385|Mercyhurst|Lakers|Mercyhurst Lakers|Mercyhurst|Mercyhurst;MRMK|2771|Merrimack|Warriors|Merrimack Warriors|Merrimack|Merrimack;M-OH|193|Miami (OH)|RedHawks|Miami (OH) RedHawks|Miami OH|Miami OH;MIA|2390|Miami|Hurricanes|Miami Hurricanes|Miami|Miami;MSU|127|Michigan State|Spartans|Michigan State Spartans|Michigan St|Michigan St;MICH|130|Michigan|Wolverines|Michigan Wolverines|Michigan|Michigan;MTSU|2393|Middle Tennessee|Blue Raiders|Middle Tennessee Blue Raiders|MTSU|MTSU;MILW|270|Milwaukee|Panthers|Milwaukee Panthers|Milwaukee|Milwaukee;MINN|135|Minnesota|Golden Gophers|Minnesota Golden Gophers|Minnesota|Minnesota;MSST|344|Mississippi State|Bulldogs|Mississippi State Bulldogs|Mississippi St|Mississippi St;MVSU|2400|Mississippi Valley State|Delta Devils|Mississippi Valley State Delta Devils|Miss Valley St|Miss Valley St;MOST|2623|Missouri State|Bears|Missouri State Bears|Missouri St|Missouri St;MIZ|142|Missouri|Tigers|Missouri Tigers|Missouri|Missouri;MONM|2405|Monmouth|Hawks|Monmouth Hawks|Monmouth|Monmouth;MONT|149|Montana|Grizzlies|Montana Grizzlies|Montana|Montana;MTST|147|Montana State|Bobcats|Montana State Bobcats|Montana St|Montana St;MORE|2413|Morehead State|Eagles|Morehead State Eagles|Morehead St|Morehead St;MORG|2415|Morgan State|Bears|Morgan State Bears|Morgan St|Morgan St;MSM|116|Mount St. Mary\'s|Mountaineers|Mount St. Mary\'s Mountaineers|Mount St Marys|Mount St Marys;MUR|93|Murray State|Racers|Murray State Racers|Murray St|Murray St;NCSU|152|NC State|Wolfpack|NC State Wolfpack|NC State|NC State;NJIT|2885|NJIT|Highlanders|NJIT Highlanders|NJIT|NJIT;NAVY|2426|Navy|Midshipmen|Navy Midshipmen|Navy|Navy;NEB|158|Nebraska|Cornhuskers|Nebraska Cornhuskers|Nebraska|Nebraska;NEV|2440|Nevada|Wolf Pack|Nevada Wolf Pack|Nevada|Nevada;UNH|160|New Hampshire|Wildcats|New Hampshire Wildcats|New Hampshire|New Hampshire;NHVN|2441|New Haven|Chargers|New Haven Chargers|New Haven|New Haven;UNM|167|New Mexico|Lobos|New Mexico Lobos|New Mexico|New Mexico;NMSU|166|New Mexico State|Aggies|New Mexico State Aggies|New Mexico St|New Mexico St;NIA|315|Niagara|Purple Eagles|Niagara Purple Eagles|Niagara|Niagara;NICH|2447|Nicholls|Colonels|Nicholls Colonels|Nicholls|Nicholls;NORF|2450|Norfolk State|Spartans|Norfolk State Spartans|Norfolk St|Norfolk St;UNA|2453|North Alabama|Lions|North Alabama Lions|North Alabama|North Alabama;NCAT|2448|North Carolina A&T|Aggies|North Carolina A&T Aggies|NC A&T|NC A&T;NCCU|2428|North Carolina Central|Eagles|North Carolina Central Eagles|NC Central|NC Central;UNC|153|North Carolina|Tar Heels|North Carolina Tar Heels|North Carolina|North Carolina;UND|155|North Dakota|Fighting Hawks|North Dakota Fighting Hawks|North Dakota|North Dakota;NDSU|2449|North Dakota State|Bison|North Dakota State Bison|N Dakota St|N Dakota St;UNF|2454|North Florida|Ospreys|North Florida Ospreys|North Florida|North Florida;UNT|249|North Texas|Mean Green|North Texas Mean Green|North Texas|North Texas;NE|111|Northeastern|Huskies|Northeastern Huskies|Northeastern|Northeastern;NAU|2464|Northern Arizona|Lumberjacks|Northern Arizona Lumberjacks|N Arizona|N Arizona;UNCO|2458|Northern Colorado|Bears|Northern Colorado Bears|N Colorado|N Colorado;NIU|2459|Northern Illinois|Huskies|Northern Illinois Huskies|N Illinois|N Illinois;UNI|2460|Northern Iowa|Panthers|Northern Iowa Panthers|Northern Iowa|Northern Iowa;NKU|94|Northern Kentucky|Norse|Northern Kentucky Norse|N Kentucky|N Kentucky;NWST|2466|Northwestern State|Demons|Northwestern State Demons|N\'Western St|N\'Western St;NU|77|Northwestern|Wildcats|Northwestern Wildcats|Northwestern|Northwestern;ND|87|Notre Dame|Fighting Irish|Notre Dame Fighting Irish|Notre Dame|Notre Dame;OAK|2473|Oakland|Golden Grizzlies|Oakland Golden Grizzlies|Oakland|Oakland;OHIO|195|Ohio|Bobcats|Ohio Bobcats|Ohio|Ohio;OSU|194|Ohio State|Buckeyes|Ohio State Buckeyes|Ohio State|Ohio State;OU|201|Oklahoma|Sooners|Oklahoma Sooners|Oklahoma|Oklahoma;OKST|197|Oklahoma State|Cowboys|Oklahoma State Cowboys|Oklahoma St|Oklahoma St;ODU|295|Old Dominion|Monarchs|Old Dominion Monarchs|Old Dominion|Old Dominion;MISS|145|Ole Miss|Rebels|Ole Miss Rebels|Ole Miss|Ole Miss;OMA|2437|Omaha|Mavericks|Omaha Mavericks|Omaha|Omaha;ORU|198|Oral Roberts|Golden Eagles|Oral Roberts Golden Eagles|Oral Roberts|Oral Roberts;ORE|2483|Oregon|Ducks|Oregon Ducks|Oregon|Oregon;ORST|204|Oregon State|Beavers|Oregon State Beavers|Oregon St|Oregon St;PAC|279|Pacific|Tigers|Pacific Tigers|Pacific|Pacific;PSU|213|Penn State|Nittany Lions|Penn State Nittany Lions|Penn State|Penn State;PENN|219|Pennsylvania|Quakers|Pennsylvania Quakers|Penn|Penn;PEPP|2492|Pepperdine|Waves|Pepperdine Waves|Pepperdine|Pepperdine;PITT|221|Pittsburgh|Panthers|Pittsburgh Panthers|Pitt|Pitt;PORT|2501|Portland|Pilots|Portland Pilots|Portland|Portland;PRST|2502|Portland State|Vikings|Portland State Vikings|Portland St|Portland St;PV|2504|Prairie View A&M|Panthers|Prairie View A&M Panthers|Prairie View|Prairie View;PRES|2506|Presbyterian|Blue Hose|Presbyterian Blue Hose|Presbyterian|Presbyterian;PRIN|163|Princeton|Tigers|Princeton Tigers|Princeton|Princeton;PROV|2507|Providence|Friars|Providence Friars|Providence|Providence;PUR|2509|Purdue|Boilermakers|Purdue Boilermakers|Purdue|Purdue;PFW|2870|Purdue Fort Wayne|Mastodons|Purdue Fort Wayne Mastodons|Purdue FW|Purdue FW;QUIN|2514|Quinnipiac|Bobcats|Quinnipiac Bobcats|Quinnipiac|Quinnipiac;RAD|2515|Radford|Highlanders|Radford Highlanders|Radford|Radford;URI|227|Rhode Island|Rams|Rhode Island Rams|Rhode Island|Rhode Island;RICE|242|Rice|Owls|Rice Owls|Rice|Rice;RICH|257|Richmond|Spiders|Richmond Spiders|Richmond|Richmond;RID|2520|Rider|Broncs|Rider Broncs|Rider|Rider;RMU|2523|Robert Morris|Colonials|Robert Morris Colonials|Robert Morris|Robert Morris;RUTG|164|Rutgers|Scarlet Knights|Rutgers Scarlet Knights|Rutgers|Rutgers;SELA|2545|SE Louisiana|Lions|SE Louisiana Lions|SE Louisiana|SE Louisiana;SIUE|2565|SIU Edwardsville|Cougars|SIU Edwardsville Cougars|SIUE|SIUE;SMU|2567|SMU|Mustangs|SMU Mustangs|SMU|SMU;SAC|16|Sacramento State|Hornets|Sacramento State Hornets|Sacramento St|Sacramento St;SHU|2529|Sacred Heart|Pioneers|Sacred Heart Pioneers|Sacred Heart|Sacred Heart;JOES|2603|Saint Joseph\'s|Hawks|Saint Joseph\'s Hawks|Saint Joseph\'s|Saint Joseph\'s;SLU|139|Saint Louis|Billikens|Saint Louis Billikens|Saint Louis|Saint Louis;SMC|2608|Saint Mary\'s|Gaels|Saint Mary\'s Gaels|Saint Mary\'s|Saint Mary\'s;SPU|2612|Saint Peter\'s|Peacocks|Saint Peter\'s Peacocks|Saint Peter\'s|Saint Peter\'s;SHSU|2534|Sam Houston|Bearkats|Sam Houston Bearkats|Sam Houston|Sam Houston;SAM|2535|Samford|Bulldogs|Samford Bulldogs|Samford|Samford;SDSU|21|San Diego State|Aztecs|San Diego State Aztecs|San Diego St|San Diego St;USD|301|San Diego|Toreros|San Diego Toreros|San Diego|San Diego;SF|2539|San Francisco|Dons|San Francisco Dons|San Francisco|San Francisco;SJSU|23|San José State|Spartans|San José State Spartans|San José St|San José St;SCU|2541|Santa Clara|Broncos|Santa Clara Broncos|Santa Clara|Santa Clara;SEA|2547|Seattle U|Redhawks|Seattle U Redhawks|Seattle U|Seattle U;HALL|2550|Seton Hall|Pirates|Seton Hall Pirates|Seton Hall|Seton Hall;SIE|2561|Siena|Saints|Siena Saints|Siena|Siena;USA|6|South Alabama|Jaguars|South Alabama Jaguars|South Alabama|South Alabama;SC|2579|South Carolina|Gamecocks|South Carolina Gamecocks|South Carolina|South Carolina;SCST|2569|South Carolina State|Bulldogs|South Carolina State Bulldogs|SC State|SC State;UPST|2908|South Carolina Upstate|Spartans|South Carolina Upstate Spartans|SC Upstate|SC Upstate;SDAK|233|South Dakota|Coyotes|South Dakota Coyotes|South Dakota|South Dakota;SDST|2571|South Dakota State|Jackrabbits|South Dakota State Jackrabbits|S Dakota St|S Dakota St;USF|58|South Florida|Bulls|South Florida Bulls|South Florida|South Florida;SEMO|2546|Southeast Missouri State|Redhawks|Southeast Missouri State Redhawks|SE Missouri|SE Missouri;SIU|79|Southern Illinois|Salukis|Southern Illinois Salukis|S Illinois|S Illinois;SOU|2582|Southern|Jaguars|Southern Jaguars|Southern|Southern;USM|2572|Southern Miss|Golden Eagles|Southern Miss Golden Eagles|Southern Miss|Southern Miss;SUU|253|Southern Utah|Thunderbirds|Southern Utah Thunderbirds|Southern Utah|Southern Utah;SBU|179|St. Bonaventure|Bonnies|St. Bonaventure Bonnies|St Bonaventure|St Bonaventure;SJU|2599|St. John\'s|Red Storm|St. John\'s Red Storm|St John\'s|St John\'s;STMN|2900|St. Thomas|Tommies|St. Thomas Tommies|St Thomas|St Thomas;STAN|24|Stanford|Cardinal|Stanford Cardinal|Stanford|Stanford;SFA|2617|Stephen F. Austin|Lumberjacks|Stephen F. Austin Lumberjacks|SF Austin|SF Austin;STET|56|Stetson|Hatters|Stetson Hatters|Stetson|Stetson;STO|284|Stonehill|Skyhawks|Stonehill Skyhawks|Stonehill|Stonehill;STBK|2619|Stony Brook|Seawolves|Stony Brook Seawolves|Stony Brook|Stony Brook;SYR|183|Syracuse|Orange|Syracuse Orange|Syracuse|Syracuse;TCU|2628|TCU|Horned Frogs|TCU Horned Frogs|TCU|TCU;TAR|2627|Tarleton State|Texans|Tarleton State Texans|Tarleton St|Tarleton St;TEM|218|Temple|Owls|Temple Owls|Temple|Temple;TNST|2634|Tennessee State|Tigers|Tennessee State Tigers|Tennessee St|Tennessee St;TNTC|2635|Tennessee Tech|Golden Eagles|Tennessee Tech Golden Eagles|Tennessee Tech|Tennessee Tech;TENN|2633|Tennessee|Volunteers|Tennessee Volunteers|Tennessee|Tennessee;TA&M|245|Texas A&M|Aggies|Texas A&M Aggies|Texas A&M|Texas A&M;AMCC|357|Texas A&M-Corpus Christi|Islanders|Texas A&M-Corpus Christi Islanders|Texas A&M-CC|Texas A&M-CC;TEX|251|Texas|Longhorns|Texas Longhorns|Texas|Texas;TXSO|2640|Texas Southern|Tigers|Texas Southern Tigers|Texas Southern|Texas Southern;TXST|326|Texas State|Bobcats|Texas State Bobcats|Texas St|Texas St;TTU|2641|Texas Tech|Red Raiders|Texas Tech Red Raiders|Texas Tech|Texas Tech;CIT|2643|The Citadel|Bulldogs|The Citadel Bulldogs|The Citadel|The Citadel;TOL|2649|Toledo|Rockets|Toledo Rockets|Toledo|Toledo;TOW|119|Towson|Tigers|Towson Tigers|Towson|Towson;TROY|2653|Troy|Trojans|Troy Trojans|Troy|Troy;TULN|2655|Tulane|Green Wave|Tulane Green Wave|Tulane|Tulane;TLSA|202|Tulsa|Golden Hurricane|Tulsa Golden Hurricane|Tulsa|Tulsa;UAB|5|UAB|Blazers|UAB Blazers|UAB|UAB;UALB|399|UAlbany|Great Danes|UAlbany Great Danes|UAlbany|UAlbany;UCD|302|UC Davis|Aggies|UC Davis Aggies|UC Davis|UC Davis;UCI|300|UC Irvine|Anteaters|UC Irvine Anteaters|UC Irvine|UC Irvine;UCR|27|UC Riverside|Highlanders|UC Riverside Highlanders|UC Riverside|UC Riverside;UCSD|28|UC San Diego|Tritons|UC San Diego Tritons|UC San Diego|UC San Diego;UCSB|2540|UC Santa Barbara|Gauchos|UC Santa Barbara Gauchos|Santa Barbara|Santa Barbara;UCF|2116|UCF|Knights|UCF Knights|UCF|UCF;UCLA|26|UCLA|Bruins|UCLA Bruins|UCLA|UCLA;CONN|41|UConn|Huskies|UConn Huskies|UConn|UConn;UIC|82|UIC|Flames|UIC Flames|UIC|UIC;ULM|2433|UL Monroe|Warhawks|UL Monroe Warhawks|UL Monroe|UL Monroe;UMBC|2378|UMBC|Retrievers|UMBC Retrievers|UMBC|UMBC;UML|2349|UMass Lowell|River Hawks|UMass Lowell River Hawks|UMass Lowell|UMass Lowell;UNCA|2427|UNC Asheville|Bulldogs|UNC Asheville Bulldogs|UNC Asheville|UNC Asheville;UNCG|2430|UNC Greensboro|Spartans|UNC Greensboro Spartans|UNC Greensboro|UNC Greensboro;UNCW|350|UNC Wilmington|Seahawks|UNC Wilmington Seahawks|UNC Wilmington|UNC Wilmington;UNLV|2439|UNLV|Rebels|UNLV Rebels|UNLV|UNLV;USC|30|USC|Trojans|USC Trojans|USC|USC;UTA|250|UT Arlington|Mavericks|UT Arlington Mavericks|UT Arlington|UT Arlington;UTM|2630|UT Martin|Skyhawks|UT Martin Skyhawks|UT Martin|UT Martin;RGV|292|UT Rio Grande Valley|Vaqueros|UT Rio Grande Valley Vaqueros|UT Rio Grande|UT Rio Grande;UTEP|2638|UTEP|Miners|UTEP Miners|UTEP|UTEP;UTSA|2636|UTSA|Roadrunners|UTSA Roadrunners|UTSA|UTSA;USU|328|Utah State|Aggies|Utah State Aggies|Utah State|Utah State;UTU|3101|Utah Tech|Trailblazers|Utah Tech Trailblazers|Utah Tech|Utah Tech;UTAH|254|Utah|Utes|Utah Utes|Utah|Utah;UVU|3084|Utah Valley|Wolverines|Utah Valley Wolverines|Utah Valley|Utah Valley;VCU|2670|VCU|Rams|VCU Rams|VCU|VCU;VMI|2678|VMI|Keydets|VMI Keydets|VMI|VMI;VAL|2674|Valparaiso|Beacons|Valparaiso Beacons|Valparaiso|Valparaiso;VAN|238|Vanderbilt|Commodores|Vanderbilt Commodores|Vanderbilt|Vanderbilt;UVM|261|Vermont|Catamounts|Vermont Catamounts|Vermont|Vermont;VILL|222|Villanova|Wildcats|Villanova Wildcats|Villanova|Villanova;UVA|258|Virginia|Cavaliers|Virginia Cavaliers|Virginia|Virginia;VT|259|Virginia Tech|Hokies|Virginia Tech Hokies|Virginia Tech|Virginia Tech;WAG|2681|Wagner|Seahawks|Wagner Seahawks|Wagner|Wagner;WAKE|154|Wake Forest|Demon Deacons|Wake Forest Demon Deacons|Wake Forest|Wake Forest;WASH|264|Washington|Huskies|Washington Huskies|Washington|Washington;WSU|265|Washington State|Cougars|Washington State Cougars|Washington St|Washington St;WEB|2692|Weber State|Wildcats|Weber State Wildcats|Weber St|Weber St;UWF|2697|West Florida|Argonauts|West Florida Argonauts|West Florida|West Florida;WGA|2698|West Georgia|Wolves|West Georgia Wolves|West Georgia|West Georgia;WVU|277|West Virginia|Mountaineers|West Virginia Mountaineers|West Virginia|West Virginia;WCU|2717|Western Carolina|Catamounts|Western Carolina Catamounts|W Carolina|W Carolina;WIU|2710|Western Illinois|Leathernecks|Western Illinois Leathernecks|W Illinois|W Illinois;WKU|98|Western Kentucky|Hilltoppers|Western Kentucky Hilltoppers|Western KY|Western KY;WMU|2711|Western Michigan|Broncos|Western Michigan Broncos|W Michigan|W Michigan;WICH|2724|Wichita State|Shockers|Wichita State Shockers|Wichita St|Wichita St;W&M|2729|William & Mary|Tribe|William & Mary Tribe|William & Mary|William & Mary;WIN|2737|Winthrop|Eagles|Winthrop Eagles|Winthrop|Winthrop;WIS|275|Wisconsin|Badgers|Wisconsin Badgers|Wisconsin|Wisconsin;WOF|2747|Wofford|Terriers|Wofford Terriers|Wofford|Wofford;WRST|2750|Wright State|Raiders|Wright State Raiders|Wright St|Wright St;WYO|2751|Wyoming|Cowboys|Wyoming Cowboys|Wyoming|Wyoming;XAV|2752|Xavier|Musketeers|Xavier Musketeers|Xavier|Xavier;YALE|43|Yale|Bulldogs|Yale Bulldogs|Yale|Yale;YSU|2754|Youngstown State|Penguins|Youngstown State Penguins|Youngstown St|Youngstown St';
+let NCAAB_STATIC=null;function ncaabStatic(){if(!NCAAB_STATIC)NCAAB_STATIC={ts:1,t:NCAAB_TEAMS_STR.split(';').map(r=>r.split('|'))};return NCAAB_STATIC;}
+function ncaabIdOf(ab){try{const T=get('d4.ncaabteams',null);const L=(T&&Array.isArray(T.t)&&T.t.length>=30?T:ncaabStatic()).t;const r=L.find(x=>x[0]===String(ab||'').toUpperCase());return r?r[1]:null;}catch(e){return null;}}
 const ncaabNorm=s=>String(s||'').toUpperCase().replace(/&/g,' AND ').replace(/['’.]/g,'').replace(/[^A-Z0-9 ]/g,' ').replace(/\bSAINT\b/g,'ST').replace(/\bSTATE\b/g,'ST').replace(/\s+/g,' ').trim();
-function ncaabIdx(){const T=get('d4.ncaabteams',null);if(!T||!Array.isArray(T.t)||!T.t.length)return null;if(NCAAB_IDX&&NCAAB_IDX.ts===T.ts)return NCAAB_IDX;
+function ncaabIdx(){let T=get('d4.ncaabteams',null);if(!T||!Array.isArray(T.t)||T.t.length<30)T=ncaabStatic();if(NCAAB_IDX&&NCAAB_IDX.ts===T.ts)return NCAAB_IDX;
   const ab=new Set(),by=new Map();const put=(k,a,pri)=>{k=ncaabNorm(k);if(!k)return;const o=by.get(k);if(!o||pri>o[1])by.set(k,[a,pri]);};
   T.t.forEach(([a,id,loc,nm,disp,short,nick])=>{ab.add(a);put(a,a,7);put(disp,a,6);put((loc||'')+' '+(nm||''),a,6);put(loc,a,5);put(short,a,4);put(nick,a,3);});
   NCAAB_IDX={ts:T.ts,ab,by};return NCAAB_IDX;}
@@ -456,9 +461,9 @@ const PST_CAP={mlb:1300,nfl:1700,ncaaf:2200,nhl:950,nba:560,ncaab:1500};
 /* compact on-disk format: {v:2,p:{id:[name,team,n,{k:[sum,sq,ema,gp]},ev,glAt,eid,r]},fed,bf} — rounded, ~3x smaller.
    v2.32 · r = the player's last 10 games, one row each: [yymmdd, value per stat in PST_STATS order] (the L5 / L10 numbers) */
 const pstR=x=>Math.round(x*100)/100;
-function pstPack(D){const p={};Object.entries(D.p).forEach(([id,P])=>{const s={};Object.entries(P.s).forEach(([k,S])=>{s[k]=[pstR(S.sum),pstR(S.sq),S.ema==null?null:pstR(S.ema),S.gp];});p[id]=[P.name,P.team,P.n,s,P.ev||null,P.glAt||null,P.eid||null,P.r&&P.r.length?P.r:null];});
+function pstPack(D){const p={};Object.entries(D.p).forEach(([id,P])=>{const s={};Object.entries(P.s).forEach(([k,S])=>{s[k]=[pstR(S.sum),pstR(S.sq),S.ema==null?null:pstR(S.ema),S.gp];});p[id]=[P.name,P.team,P.n,s,P.ev||null,P.glAt||null,P.eid||null,P.r&&P.r.length?P.r:null,P.gl||null,P.pos||null];});   /* v2.36 · 8 gl = last game-log day read, 9 position */
   return{v:2,p,fed:D.fed,bf:D.bf};}
-function pstUnpack(R){if(!R||R.v!==2)return R;const p={};Object.entries(R.p||{}).forEach(([id,a])=>{const s={};Object.entries(a[3]||{}).forEach(([k,v])=>{s[k]={sum:v[0],sq:v[1],ema:v[2],gp:v[3]};});p[id]={name:a[0],team:a[1],n:a[2],s,ev:a[4]||undefined,glAt:a[5]||undefined,eid:a[6]||undefined,r:Array.isArray(a[7])?a[7]:undefined};});
+function pstUnpack(R){if(!R||R.v!==2)return R;const p={};Object.entries(R.p||{}).forEach(([id,a])=>{const s={};Object.entries(a[3]||{}).forEach(([k,v])=>{s[k]={sum:v[0],sq:v[1],ema:v[2],gp:v[3]};});p[id]={name:a[0],team:a[1],n:a[2],s,ev:a[4]||undefined,glAt:a[5]||undefined,eid:a[6]||undefined,r:Array.isArray(a[7])?a[7]:undefined,gl:a[8]||undefined,pos:a[9]||undefined};});
   return{p,fed:R.fed||{},bf:R.bf};}
 const PST_MEM={};
 const PST_STATS={
@@ -512,18 +517,49 @@ function pstatFeed(sp,eventId,box){
     Object.values(lines).forEach(x=>{['py','ptd','ry','rtd','rec','wy','wtd'].forEach(k=>{if(x.v[k]==null)x.v[k]=0;});x.v.td=x.v.rtd+x.v.wtd;});}
   else if(sp==='nba'||sp==='ncaab'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.players||[]).forEach(r=>{
       if(!pstNum(r.MIN)&&!pstNum(r.PTS))return;const x=L(r.name,team);if(!x)return;
-      Object.assign(x.v,{pts:pstNum(r.PTS),reb:pstNum(r.REB),ast:pstNum(r.AST),fg3:pstNum(String(r['3PT']||'').split('-')[0]),stl:pstNum(r.STL),blk:pstNum(r.BLK)});}));}
+      Object.assign(x.v,{pts:pstNum(r.PTS),reb:pstNum(r.REB),ast:pstNum(r.AST),fg3:pstNum(String(r['3PT']||'').split('-')[0]),stl:pstNum(r.STL),blk:pstNum(r.BLK),min:pstNum(String(r.MIN||'').split(':')[0])});}));}
   const all=Object.values(lines);if(!all.length)return 0;
   const gday=box.date?tdDay(box.date):today();all.forEach(x=>pstAdd(sp,x.name,x.team,x.v,eventId,gday));D.fed[eventId]=1;pstSave(sp);
   try{if(!box.date)throw 0;const LK='d4.pstlast.'+sp,last=get(LK,{})||{};const d=tdDay(box.date);all.forEach(x=>{const k=pstId(x.name);if(!last[k]||last[k].d<=d)last[k]={d,v:x.v};});
     const ks=Object.keys(last);if(ks.length>3000)ks.slice(0,ks.length-3000).forEach(k=>delete last[k]);set(LK,last);}catch(e){}
   return all.length;
 }
-/* Projection for one stat: shrink small samples toward a recency-weighted mean */
+/* ══ v2.36 · THE PROP MODEL — honest about what a few games can say ══════════════════════════════
+   Backtested on real 2025-26 game logs (NHL 168 players / 13k games, NBA 100 / 7k, MLB 128 / 14k, NFL, college),
+   every game called only from the games before it. The old reads stated ~78% on their 70%+ calls and hit ~63% on
+   five-game samples (~70% on a full season); calls from this one hit what they state (77% on 76.5% stated, full logs;
+   83% on 75% from five games — it says less when it knows less).
+   • the season rate is pulled toward the league (or the player's role: QBs, rushers, receivers, starting pitchers)
+     by b games of prior — a hot five-game start no longer reads like a career;
+   • recent form takes a tuned share (w), itself pulled toward the season;
+   • counts (shots, goals, hits, threes, TDs, receptions…) use a negative binomial — the stat's real game-to-game
+     spread (phi) plus not knowing his true rate; yards / points / boards use a normal with the spread shrunk the same way.
+   Per stat: b prior games · w form share · phi (count) or cv2 (spread²/mean²) · m0 league mean · role/rm0/rcv2 for a role prior. */
+const PROP_MODEL={
+  nhl:{s:{b:3,w:.25,phi:1.1,m0:1.75},pts:{b:6,w:.25,phi:1,m0:.56},g:{b:10,w:.25,phi:1,m0:.21},a:{b:6,w:.25,phi:1,m0:.35}},
+  nba:{pts:{b:3,w:.75,cv2:.5,m0:11.7},reb:{b:3,w:.5,cv2:.5,m0:4.3},ast:{b:3,w:.75,cv2:.62,m0:2.8},fg3:{b:3,w:.5,phi:1.22,m0:1.38},stl:{b:6,w:.25,phi:1.1,m0:.75},blk:{b:6,w:.25,phi:1.3,m0:.45},min:{b:3,w:.75,cv2:.15,m0:22}},
+  ncaab:{pts:{b:3,w:.75,cv2:.51,m0:10.7},reb:{b:3,w:.75,cv2:.31,m0:3.9},ast:{b:6,w:.75,cv2:.5,m0:2.05},fg3:{b:3,w:.25,phi:1.32,m0:.97},stl:{b:6,w:.25,phi:1.1,m0:.7},blk:{b:6,w:.25,phi:1.3,m0:.4},min:{b:3,w:.75,cv2:.15,m0:20}},
+  mlb:{h:{b:25,w:.75,phi:1,m0:.84},tb:{b:25,w:.25,phi:2.18,m0:1.38},hr:{b:40,w:.25,phi:1,m0:.12},rbi:{b:25,w:.25,phi:1.5,m0:.45},r:{b:25,w:.25,phi:1.2,m0:.5},bb:{b:25,w:.25,phi:1.1,m0:.35},
+    k:{b:6,w:.25,phi:1.3,m0:1,role:2.5,rm0:5},ha:{b:10,w:.25,phi:1.1,m0:.8,role:3,rm0:5.2},er:{b:10,w:.25,phi:1.6,m0:.35,role:1.5,rm0:2.6}},
+  nfl:{py:{b:1,w:.75,cv2:.16,m0:16,role:100,rm0:220},ry:{b:3,w:.75,cv2:2.5,m0:13,role:25,rm0:55,rcv2:.38},wy:{b:6,w:.25,cv2:1.8,m0:21.5,role:20,rm0:45,rcv2:.59},
+    rec:{b:1,w:0,phi:1.29,m0:1.95,role:1.5,rm0:3.6},td:{b:3,w:0,phi:1.03,m0:.27},ptd:{b:3,w:.25,phi:1.1,m0:1.4},rtd:{b:3,w:0,phi:1,m0:.15},wtd:{b:3,w:0,phi:1,m0:.15}},
+  ncaaf:{py:{b:1,w:.75,cv2:.12,m0:23,role:100,rm0:225},ry:{b:3,w:.75,cv2:1.2,m0:21,role:25,rm0:54,rcv2:.61},wy:{b:3,w:.75,cv2:1.1,m0:26,role:20,rm0:48,rcv2:.44},
+    rec:{b:3,w:.75,phi:1.11,m0:2.05,role:1.5,rm0:3.1},td:{b:6,w:0,phi:1,m0:.39},ptd:{b:3,w:.25,phi:1.1,m0:1.8},rtd:{b:6,w:0,phi:1,m0:.25},wtd:{b:6,w:0,phi:1,m0:.2}}};
+function pstModel(sp,k,raw){const T=(PROP_MODEL[sp]||{})[k];const cnt=PST_COUNT.has(k)||(sp==='nhl'&&k==='pts');
+  if(!T)return{b:4,w:.25,phi:cnt?1.1:null,cv2:cnt?null:.4,m0:raw||0};const role=T.role!=null&&raw>=T.role;
+  return{b:T.b,w:T.w,phi:T.phi!=null?T.phi:null,cv2:T.phi!=null?null:(role&&T.rcv2!=null?T.rcv2:T.cv2),m0:role&&T.rm0!=null?T.rm0:T.m0};}
+/* one stat's projection: season (shrunk), form (shrunk), and the blends each character reads */
 function pstProj(sp,name,k){const P=pstDb(sp).p[pstId(name)];if(!P||!P.s[k]||!P.s[k].gp)return null;
-  const S=P.s[k],n=S.gp,mean=S.sum/n,ema=S.ema;const w=Math.min(1,n/10)*0.5;   // recent form gets up to 50%
-  const mu=(1-w)*mean+w*ema;const v=n>1?Math.max(0,(S.sq-n*mean*mean)/(n-1)):null;
-  return{mu,mean,ema,n,sd:v!=null?Math.sqrt(v):null,team:P.team,name:P.name};}
+  const S=P.s[k],n=S.gp,mean=S.sum/n,ema=S.ema==null?mean:S.ema;const v=n>1?Math.max(0,(S.sq-n*mean*mean)/(n-1)):null;
+  const M=pstModel(sp,k,mean);const season=(S.sum+M.b*M.m0)/(n+M.b);const nf=Math.min(n,3.3);const form=(ema*nf+M.b*season)/(nf+M.b);const ramp=Math.min(1,n/10);
+  const mu=(1-M.w*ramp)*season+M.w*ramp*form;const tw=Math.max(.75,M.w)*ramp;
+  return{mu,mean,ema,n,sd:v!=null?Math.sqrt(v):null,v,team:P.team,name:P.name,season,form,trend:(1-tw)*season+tw*form,M};}
+/* the predictive spread at a projected mean — counts: game-to-game (phi) + not knowing his rate; continuous: shrunk sample spread */
+function pstVar(J,mu){const M=J.M,n=J.n;if(M.phi!=null)return mu*M.phi+mu*mu/(n+M.b);const vp=M.cv2*mu*mu;const m1=Math.max(n-1,0);const v=((J.v!=null?J.v:vp)*m1+vp*6)/(m1+6);return v*(1+1/(n+M.b));}
+function pstNbOver(need,mu,V){if(need<=0)return 1;if(V<=mu*1.02)return 1-pstPoisCdf(need-1,mu);const r=mu*mu/(V-mu),q=mu/V;let t=Math.pow(q,r),s=t;for(let i=1;i<=need-1;i++){t*=(i-1+r)/i*(1-q);s+=t;}return 1-Math.min(1,s);}
+/* P(stat ≥ thr) at mean mu (an integer threshold is "thr or more"; a half-point line is the line itself) */
+function pstPAt(J,mu,thr){mu=Math.max(0.001,mu);const V=pstVar(J,mu);if(J.M.phi!=null)return pstNbOver(Math.ceil(thr-1e-9),mu,V);
+  return 1-pstNormCdf((thr-(Number.isInteger(+thr)?0.5:0)-mu)/Math.max(Math.sqrt(V),1e-6));}
 function pstPoisCdf(k,l){if(l<=0)return k>=0?1:0;let t=Math.exp(-l),s=t;for(let i=1;i<=k;i++){t*=l/i;s+=t;}return Math.min(1,s);}
 function pstNormCdf(x){   // Marsaglia (2004) series — ~15 significant digits
   if(!isFinite(x))return x>0?1:0;if(x<-8.5)return 0;if(x>8.5)return 1;
@@ -531,10 +567,7 @@ function pstNormCdf(x){   // Marsaglia (2004) series — ~15 significant digits
   return 0.5+s*Math.exp(-0.5*q-0.91893853320467274178);}
 /* P(stat >= thr) — e.g. thr 1 for "anytime goal", 2 for "2+ hits", 49.5 for "o49.5 yds" */
 function pstProb(sp,name,k,thr,dir){const J=pstProj(sp,name,k);if(!J)return null;dir=dir||'over';
-  let pOver;
-  if(PST_COUNT.has(k)||(sp==='nhl'&&k==='pts')){const need=Math.ceil(thr-1e-9);pOver=1-pstPoisCdf(need-1,J.mu);}
-  else{const sd=Math.max(J.sd!=null&&J.n>=4?J.sd:J.mu*0.45,J.mu*0.25,1);pOver=1-pstNormCdf((thr-J.mu)/sd);}
-  const p=dir==='under'?1-pOver:pOver;return{p:Math.max(0.001,Math.min(0.999,p)),proj:J};}
+  const pOver=pstPAt(J,J.mu,thr);const p=dir==='under'?1-pOver:pOver;return{p:Math.max(0.001,Math.min(0.999,p)),proj:J};}
 /* Top players for a team (used by the cards' Player stats panel) */
 function pstTeam(sp,team,limit){const D=pstDb(sp);const key=Object.keys(PST_STATS[sp]||{})[0];
   return Object.values(D.p).filter(x=>x.team===team&&x.n>=1).map(x=>({x,score:Object.values(x.s).reduce((a,s)=>a+(s.gp?s.sum/s.gp:0),0)}))
@@ -842,7 +875,7 @@ function propFindPlayer(sp,name){const D=pstDb(sp);const id=pstId(name);if(D.p[i
 /* P(sum of keys ≥ thr): one key → the engine's own distribution; combos → Normal on summed mean/variance */
 function propProb(sp,name,keys,thr){const P=propFindPlayer(sp,name);if(!P)return null;
   if(keys.length===1){const r=pstProb(sp,P.name,keys[0],thr,'over');return r?{p:r.p,mu:r.proj.mu,n:r.proj.n,player:P.name,team:P.team}:null;}
-  let mu=0,v=0,n=1e9;for(const k of keys){const J=pstProj(sp,P.name,k);if(!J)return null;mu+=J.mu;const sd=J.sd!=null&&J.n>=4?J.sd:Math.max(J.mu*0.45,1);v+=sd*sd;n=Math.min(n,J.n);}
+  let mu=0,v=0,n=1e9;for(const k of keys){const J=pstProj(sp,P.name,k);if(!J)return null;mu+=J.mu;v+=pstVar(J,J.mu);n=Math.min(n,J.n);}   /* v2.36 · combos: summed means, summed honest spreads */
   const p=1-pstNormCdf((thr-mu)/Math.sqrt(Math.max(v,1)));return{p:Math.max(0.001,Math.min(0.999,p)),mu,n,player:P.name,team:P.team};}
 const PROPLINES_KEY='d4.proplines';
 function propLinesPut(sp,rows){const all=get(PROPLINES_KEY,{})||{};const d=today();const day=all[d]||(all[d]=[]);
@@ -877,48 +910,80 @@ function propBoardHtml(sp,game,limit){let R=propBoard(sp,game);if(game)R=R.filte
    a game log. Fetches are throttled and capped per session.               */
 const RS_PATH={mlb:'baseball/mlb',nfl:'football/nfl',ncaaf:'football/college-football',nhl:'hockey/nhl',nba:'basketball/nba',ncaab:'basketball/mens-college-basketball'};
 const RS_SKILL={nfl:/^(QB|RB|FB|WR|TE)$/,ncaaf:/^(QB|RB|FB|WR|TE)$/,nba:/./,ncaab:/./,nhl:/^(C|LW|RW|F|D)$/,mlb:/^(?!P$|SP$|RP$)/};
-let RS_SESSION=0;const RS_CAP=60,RS_MEM={};
-async function rsJson(u){try{const r=await fetch(u);return await r.json();}catch(e){return null;}}
-/* team abbreviation → ESPN team id (weekly cache) */
-async function rsTeamIds(sp){const C=get('d4.rsteams',{})||{};if(C[sp]&&C[sp].ts>Date.now()-7*864e5)return C[sp].ids;
-  const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+RS_PATH[sp]+'/teams?limit=1000'+(sp==='ncaaf'?'&groups=80':sp==='ncaab'?'&groups=50':''));const ids={};
-  ((((j||{}).sports||[])[0]||{}).leagues||[]).forEach(L=>(L.teams||[]).forEach(t=>{const T=t.team||t;if(T&&T.abbreviation&&T.id)ids[String(T.abbreviation).toUpperCase()]=String(T.id);}));
-  if(Object.keys(ids).length){C[sp]={ts:Date.now(),ids};set('d4.rsteams',C);}return ids;}
-function rsAthletes(j){const out=[];const add=a=>{if(a&&a.id&&(a.displayName||a.fullName))out.push({id:String(a.id),name:a.displayName||a.fullName,pos:String(((a.position||{}).abbreviation)||'').toUpperCase()});};
+/* v2.36 · ESPN's team LIST (/teams) sends no CORS header, so a browser can never read it — which is why no roster and
+   no game log ever loaded on the phone, in any sport. The roster URL itself carries CORS and takes a team's id or its
+   abbreviation: the pro leagues' ids ship here, everyone else resolves by abbreviation, and every id ESPN hands back is kept. */
+const RS_TEAM_IDS={nba:{ATL:1,BOS:2,BKN:17,CHA:30,CHI:4,CLE:5,DAL:6,DEN:7,DET:8,GS:9,HOU:10,IND:11,LAC:12,LAL:13,MEM:29,MIA:14,MIL:15,MIN:16,NO:3,NY:18,OKC:25,ORL:19,PHI:20,PHX:21,POR:22,SAC:23,SA:24,TOR:28,UTAH:26,WSH:27},nhl:{ANA:25,BOS:1,BUF:2,CGY:3,CAR:7,CHI:4,COL:17,CBJ:29,DAL:9,DET:5,EDM:6,FLA:26,LA:8,MIN:30,MTL:10,NSH:27,NJ:11,NYI:12,NYR:13,OTT:14,PHI:15,PIT:16,SJ:18,SEA:124292,STL:19,TB:20,TOR:21,UTAH:129764,VAN:22,VGK:37,WSH:23,WPG:28},mlb:{ARI:29,ATH:11,ATL:15,BAL:1,BOS:2,CHC:16,CHW:4,CIN:17,CLE:5,COL:27,DET:6,HOU:18,KC:7,LAA:3,LAD:19,MIA:28,MIL:8,MIN:9,NYM:21,NYY:10,PHI:22,PIT:23,SD:25,SF:26,SEA:12,STL:24,TB:30,TEX:13,TOR:14,WSH:20},nfl:{ARI:22,ATL:1,BAL:33,BUF:2,CAR:29,CHI:3,CIN:4,CLE:5,DAL:6,DEN:7,DET:8,GB:9,HOU:34,IND:11,JAX:30,KC:12,LV:13,LAC:24,LAR:14,MIA:15,MIN:16,NE:17,NO:18,NYG:19,NYJ:20,PHI:21,PIT:23,SF:25,SEA:26,TB:27,TEN:10,WSH:28}};
+const RS_ALIAS={nba:{GSW:'GS',NYK:'NY',SAS:'SA',NOP:'NO',UTA:'UTAH',PHO:'PHX',BRK:'BKN',WAS:'WSH'},nhl:{LAK:'LA',NJD:'NJ',SJS:'SJ',TBL:'TB',VEG:'VGK',LV:'VGK',MON:'MTL',UTA:'UTAH',WAS:'WSH'},
+  mlb:{AZ:'ARI',CWS:'CHW',OAK:'ATH',WAS:'WSH'},nfl:{WAS:'WSH',JAC:'JAX',LA:'LAR',LVR:'LV',OAK:'LV',ARZ:'ARI'}};
+let RS_SESSION=0,RS_EXTRA=0;const RS_CAP=60,RS_MEM={};function RS_MEM_CLEAR(){for(const k in RS_MEM)delete RS_MEM[k];RS_INJ=null;}
+async function rsJson(u){try{const r=await fetch(u);if(r&&r.ok===false)return null;return await r.json();}catch(e){return null;}}
+const rsAb=(sp,team)=>{const t=String(team||'').toUpperCase();return(RS_ALIAS[sp]||{})[t]||t;};
+/* abbreviation → ESPN team id: the shipped table plus every id learned from a roster */
+async function rsTeamIds(sp){const C=get('d4.rsteams',{})||{};return Object.assign({},RS_TEAM_IDS[sp]||{},(C[sp]&&C[sp].ids)||{});}
+function rsLearnId(sp,ab,id){try{if(!sp||!ab||!id||(RS_TEAM_IDS[sp]||{})[ab]==+id)return;const C=get('d4.rsteams',{})||{};const o=C[sp]||(C[sp]={ids:{}});o.ids=o.ids||{};if(o.ids[ab]===String(id))return;o.ids[ab]=String(id);o.ts=Date.now();set('d4.rsteams',C);}catch(e){}}
+function rsGameTid(sp,ab){try{const g=(sportGames(sp)||[]).find(z=>z&&z.away&&z.home&&(z.away.abbr===ab||z.home.abbr===ab));if(!g)return null;const t=g.away.abbr===ab?g.away:g.home;return t.tid||(/^\d+$/.test(String(t.id||''))?t.id:null);}catch(e){return null;}}
+/* a roster entry, kept compact: [id, name, position, injury status, salary, jersey] */
+function rsAthletes(j){const out=[];const add=a=>{if(!a||!a.id||!(a.displayName||a.fullName))return;const inj=((a.injuries||[])[0]||{}).status||'';const st=String(((a.status||{}).type)||'');
+    out.push({id:String(a.id),name:a.displayName||a.fullName,pos:String(((a.position||{}).abbreviation)||'').toUpperCase(),inj:inj||(/injur|suspen/i.test(st)?st:''),sal:+((a.contract||{}).salary)||0,jer:String(a.jersey||'')});};
   ((j||{}).athletes||[]).forEach(g=>{if(Array.isArray(g.items))g.items.forEach(add);else add(g);});return out;}
-async function rsRoster(sp,team){const k=sp+':'+team;const C=get('d4.rsroster',{})||{};if(C[k]&&C[k].ts>Date.now()-3*864e5)return C[k].a;
-  const ids=await rsTeamIds(sp);const id=ids[String(team).toUpperCase()];if(!id)return[];
-  const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+RS_PATH[sp]+'/teams/'+id+'/roster');const a=rsAthletes(j);
-  if(a.length){C[k]={ts:Date.now(),a};const ks=Object.keys(C);if(ks.length>120)ks.sort((x,y)=>C[x].ts-C[y].ts).slice(0,ks.length-120).forEach(x=>delete C[x]);set('d4.rsroster',C);}return a;}
-/* ESPN stat names → this app's stat keys */
+const rsPack=a=>[a.id,a.name,a.pos,a.inj||'',a.sal||0,a.jer||''],rsUnpack=x=>Array.isArray(x)?{id:x[0],name:x[1],pos:x[2],inj:x[3]||'',sal:x[4]||0,jer:x[5]||''}:x;
+/* one team's roster — 12-hour cache, injuries move. team = the app's abbreviation; tid = ESPN's id when the card has it */
+async function rsRoster(sp,team,tid){const ab=rsAb(sp,team);const k=sp+':'+ab;if(RS_MEM[k]&&RS_MEM[k].ts>Date.now()-12*36e5)return RS_MEM[k].a;
+  const C=get('d4.rsroster',{})||{};if(C[k]&&C[k].ts>Date.now()-12*36e5){const a=(C[k].a||[]).map(rsUnpack);RS_MEM[k]={ts:C[k].ts,a};return a;}
+  const ids=await rsTeamIds(sp);const id=tid||ids[ab]||rsGameTid(sp,team)||(sp==='ncaab'&&typeof ncaabIdOf==='function'?ncaabIdOf(ab):null);
+  const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+RS_PATH[sp]+'/teams/'+encodeURIComponent(String(id||ab.toLowerCase()))+'/roster');let a=rsAthletes(j);
+  if(j&&j.team&&j.team.id&&!ids[ab])rsLearnId(sp,ab,j.team.id);
+  if(sp==='nfl'||sp==='ncaaf')a=a.filter(x=>RS_SKILL[sp].test(x.pos)||/^(K|PK)$/.test(x.pos));   /* football: the players props are written on */
+  if(a.length){RS_MEM[k]={ts:Date.now(),a};C[k]={ts:Date.now(),a:a.map(rsPack)};const ks=Object.keys(C);if(ks.length>60)ks.sort((x,y)=>C[x].ts-C[y].ts).slice(0,ks.length-60).forEach(x=>delete C[x]);set('d4.rsroster',C);}
+  return a;}
+/* who's hurt: the status ESPN's roster lists for a player ("Out", "Doubtful", "Day-To-Day"…) — '' when healthy or unknown */
+let RS_INJ=null;
+function rsInjury(sp,name){try{const C=get('d4.rsroster',{})||{};const n=Object.keys(C).length;if(!RS_INJ||RS_INJ.ts<Date.now()-60e3||RS_INJ.n!==n){const m={};
+      Object.entries(C).forEach(([k,o])=>{const s=k.split(':')[0];(o.a||[]).forEach(x=>{const a=rsUnpack(x);if(a.inj)(m[s]=m[s]||{})[pstId(a.name)]=a.inj;});});RS_INJ={ts:Date.now(),n,m};}
+    return((RS_INJ.m[sp]||{})[pstId(name)])||'';}catch(e){return'';}}
+const rsOut=s=>/^(out|injured|ir\b|suspen|doubtful)/i.test(String(s||''));
+/* ESPN stat names → this app's stat keys (the names are exactly what the game-log API sends) */
 const GL_MAP={
   football:{passingYards:'py',passingTouchdowns:'ptd',rushingYards:'ry',rushingTouchdowns:'rtd',receptions:'rec',receivingYards:'wy',receivingTouchdowns:'wtd'},
-  nba:{points:'pts',totalRebounds:'reb',rebounds:'reb',assists:'ast',threePointFieldGoalsMade:'fg3',steals:'stl',blocks:'blk'},
+  /* v2.36 · threes arrive as "threePointFieldGoalsMade-threePointFieldGoalsAttempted" ("3-7") — they were never read before */
+  nba:{points:'pts',totalRebounds:'reb',rebounds:'reb',assists:'ast',threePointFieldGoalsMade:'fg3','threePointFieldGoalsMade-threePointFieldGoalsAttempted':'fg3',steals:'stl',blocks:'blk',minutes:'min'},
   nhl:{goals:'g',assists:'a',points:'pts',shotsTotal:'s',shots:'s',shotsOnGoal:'s'},
-  mlb:{hits:'h',homeRuns:'hr',RBIs:'rbi',runsBattedIn:'rbi',runs:'r',walks:'bb',doubles:'d2',triples:'d3',strikeouts:'k'}};
+  mlb:{hits:'h',homeRuns:'hr',RBIs:'rbi',runsBattedIn:'rbi',runs:'r',walks:'bb',doubles:'d2',triples:'d3'},
+  /* v2.36 · a PITCHER's log uses the same names for what he allowed — it used to land as a hitter's line */
+  mlbPitch:{strikeouts:'k',hits:'ha',earnedRuns:'er'}};
 /* tolerant game-log parser: names[] + seasonTypes[].categories[].events[{eventId,stats[]}] */
-function glParse(sp,j){const fam=sp==='nfl'||sp==='ncaaf'?'football':sp==='ncaab'?'nba':sp;const M=GL_MAP[fam]||{};const names=(j&&(j.names||j.labels))||[];const games={};
+function glParse(sp,j){const fam=sp==='nfl'||sp==='ncaaf'?'football':sp==='ncaab'?'nba':sp;const names=(j&&(j.names||j.labels))||[];const games={};
+  const mapFor=nm=>fam==='mlb'&&(nm.includes('innings')||nm.includes('earnedRuns'))?GL_MAP.mlbPitch:(GL_MAP[fam]||{});
   const walk=o=>{if(!o||typeof o!=='object')return;if(Array.isArray(o)){o.forEach(walk);return;}
-    if(o.eventId&&Array.isArray(o.stats)){const nm=Array.isArray(o.names)?o.names:names;const g=games[o.eventId]||(games[o.eventId]={});
+    if(o.eventId&&Array.isArray(o.stats)){const nm=Array.isArray(o.names)?o.names:names;const M=mapFor(nm);const g=games[o.eventId]||(games[o.eventId]={});
       o.stats.forEach((v,i)=>{const k=M[nm[i]];if(k&&g[k]==null)g[k]=pstNum(String(v).split('-')[0]);});return;}
     Object.values(o).forEach(walk);};walk(((j&&j.seasonTypes)||[]).filter(t=>!/pre-?season/i.test(String(t&&t.displayName||''))));   /* preseason never feeds a player's numbers */
   Object.values(games).forEach(g=>{if(fam==='football'){['py','ptd','ry','rtd','rec','wy','wtd'].forEach(k=>{if(g[k]==null)g[k]=0;});g.td=g.rtd+g.wtd;}
-    if(fam==='mlb'&&g.h!=null){g.tb=g.h+(g.d2||0)+2*(g.d3||0)+3*(g.hr||0);delete g.d2;delete g.d3;}
+    if(fam==='mlb'&&g.h!=null){g.tb=g.h+(g.d2||0)+2*(g.d3||0)+3*(g.hr||0);}if(fam==='mlb'){delete g.d2;delete g.d3;}
     if(fam==='nhl'&&g.pts==null&&g.g!=null)g.pts=(g.g||0)+(g.a||0);});
   return games;}
-/* feed one player's game log — skips games already counted from box scores */
-async function rsGamelog(sp,ath,team){if(RS_SESSION>=RS_CAP)return 0;const D=pstDb(sp);const P=D.p[pstId(ath.name)];
-  if(P&&P.glAt&&P.glAt>Date.now()-864e5)return 0;RS_SESSION++;
-  const j=await rsJson('https://site.web.api.espn.com/apis/common/v3/sports/'+RS_PATH[sp]+'/athletes/'+ath.id+'/gamelog');const G=glParse(sp,j);let n=0;
-  /* game dates ride along so the last-5 / last-10 log lands in order */
-  const evd=id=>{try{const e=(j&&j.events||{})[id];return e&&(e.gameDate||e.date)||null;}catch(x){return null;}};
-  Object.entries(G).sort((a,b)=>String(evd(a[0])||'').localeCompare(String(evd(b[0])||''))).forEach(([eid,line])=>{if(!Object.keys(line).length)return;if(pstAdd(sp,ath.name,team,line,eid,evd(eid)))n++;});
-  /* v2.32 · a new basketball season: seed a player with the end of last season, so his last 5 / last 10 mean something on opening night */
-  if((sp==='nba'||sp==='ncaab')&&RS_SESSION<RS_CAP){const Q0=D.p[pstId(ath.name)];if(!Q0||(Q0.n||0)<5){RS_SESSION++;const d=today();const y=+d.slice(0,4),m=+d.slice(5,7);const yr=(m>=7?y+1:y)-1;
-    const j2=await rsJson('https://site.web.api.espn.com/apis/common/v3/sports/'+RS_PATH[sp]+'/athletes/'+ath.id+'/gamelog?season='+yr);const G2=glParse(sp,j2);
-    const ev2=id=>{try{const e=(j2&&j2.events||{})[id];return e&&(e.gameDate||e.date)||null;}catch(x){return null;}};
-    Object.entries(G2).filter(([id])=>ev2(id)).sort((a,b)=>String(ev2(a[0])).localeCompare(String(ev2(b[0])))).slice(-10).forEach(([eid,line])=>{if(Object.keys(line).length&&pstAdd(sp,ath.name,team,line,eid,ev2(eid)))n++;});}}
-  const Q=D.p[pstId(ath.name)];if(Q){Q.glAt=Date.now();Q.eid=ath.id;}pstSave(sp);return n;}
+/* the ESPN season a game log asks for: basketball and hockey name a season by the year it ends, the rest by the year it starts */
+function rsSeasonYear(sp,d,back){const y=+String(d).slice(0,4),m=+String(d).slice(5,7);const ends=sp==='nba'||sp==='ncaab'||sp==='nhl';return(ends?(m>=7?y+1:y):(m>=3?y:y-1))-(back||0);}
+/* the day the current season opened (roughly) — anything earlier counts as last season's prior */
+function rsSeasonStart(sp,d){const y=+String(d).slice(0,4),m=+String(d).slice(5,7);if(sp==='mlb')return(m>=3?y:y-1)+'-03-01';if(sp==='nfl'||sp==='ncaaf')return(m>=3?y:y-1)+'-08-15';return(m>=7?y:y-1)+'-09-15';}   /* hockey opened Sep 30 this year; basketball preseason never feeds a log */
+const RS_SEED={nba:25,ncaab:20,nhl:30,mlb:40,nfl:12,ncaaf:10};
+/* one player's game log. v2.36: early in a season the end of last season rides along as his prior; games go in oldest first;
+   a refresh only adds games newer than the last one it read (the old 24-game check let a long log double-count every day) */
+async function rsGamelog(sp,ath,team){if(RS_SESSION>=RS_CAP+RS_EXTRA)return 0;const D=pstDb(sp);const id=pstId(ath.name);const P0=D.p[id];
+  if(P0&&P0.glAt&&P0.glAt>Date.now()-864e5)return 0;RS_SESSION++;
+  const base='https://site.web.api.espn.com/apis/common/v3/sports/'+RS_PATH[sp]+'/athletes/'+ath.id+'/gamelog';const rows=new Map();
+  const take=j=>{const G=glParse(sp,j);const ev=(j&&j.events)||{};Object.entries(G).forEach(([eid,line])=>{const e=ev[eid]||{};const d=tdDay(e.gameDate||e.date||'');if(d&&Object.keys(line).length&&!rows.has(eid))rows.set(eid,{eid,line,d});});};
+  take(await rsJson(base));const d0=today(),start=rsSeasonStart(sp,d0);
+  /* the default log is this season once it has begun (before that ESPN serves last season — then there's nothing more to ask) */
+  const V0=[...rows.values()];if(V0.filter(r=>r.d>=start).length<10&&!V0.some(r=>r.d<start)&&RS_SESSION<RS_CAP+RS_EXTRA){RS_SESSION++;take(await rsJson(base+'?season='+rsSeasonYear(sp,d0,1)));}
+  let all=[...rows.values()].sort((a,b)=>a.d.localeCompare(b.d));const cur=all.filter(r=>r.d>=start),prev=all.filter(r=>r.d<start).slice(-(RS_SEED[sp]||20));all=[...prev,...cur];
+  const P1=D.p[id];const gl=P1&&P1.gl||0;let n=0;
+  all.forEach(r=>{if(pstYmd(r.d)<=gl)return;if(pstAdd(sp,ath.name,team,r.line,r.eid,r.d))n++;});
+  const Q=D.p[id];if(Q){Q.glAt=Date.now();Q.eid=ath.id;if(all.length)Q.gl=Math.max(gl,pstYmd(all[all.length-1].d));if(ath.pos)Q.pos=ath.pos;if(n)pstReform(Q,sp);}pstSave(sp);return n;}
+/* recent form re-read from the last-10 log in date order (games can arrive out of order — a log behind a box score) */
+function pstReform(P,sp){try{const K=Object.keys(PST_STATS[sp]||{});if(!Array.isArray(P.r)||!P.r.length)return;const R=[...P.r].sort((a,b)=>a[0]-b[0]);
+  K.forEach((k,i)=>{const S=P.s[k];if(!S)return;let e=null;R.forEach(row=>{const v=row[i+1];if(v==null)return;e=e==null?v:(1-PST_ALPHA)*e+PST_ALPHA*v;});if(e!=null)S.ema=e;});}catch(e){}}
 /* find a player (by book-style name) on the teams of a game, then load his log */
 async function rsFindAndLoad(sp,name,teams){for(const tm of teams){const R=await rsRoster(sp,tm);
     const parts=String(name).replace(/\./g,' ').trim().split(/\s+/);const last=pstId(parts[parts.length-1]),fi=pstId(parts[0]).charAt(0);
@@ -926,18 +991,24 @@ async function rsFindAndLoad(sp,name,teams){for(const tm of teams){const R=await
     if(hit)return await rsGamelog(sp,hit,tm);}return 0;}
 /* on demand: every pasted prop line for a player we don't know yet */
 async function rsLoadPropPlayers(){const day=((get(PROPLINES_KEY,{})||{})[today()]||[]);let n=0;
-  for(const x of day){if(RS_SESSION>=RS_CAP)break;if(propFindPlayer(x.sp,x.player)&&(propFindPlayer(x.sp,x.player).n||0)>=3)continue;
+  for(const x of day){if(RS_SESSION>=RS_CAP+RS_EXTRA)break;if(propFindPlayer(x.sp,x.player)&&(propFindPlayer(x.sp,x.player).n||0)>=8)continue;
     let teams=x.game?String(x.game).split('@'):[];if(!teams.length){teams=[...new Set(sportGames(x.sp).flatMap(g=>[g.away.abbr,g.home.abbr]))].slice(0,40);}
     try{n+=await rsFindAndLoad(x.sp,x.player,teams);}catch(e){}}
   return n;}
+/* the players worth loading first on a team: known producers, then (basketball) the payroll, then the roster order — the injured last */
+function rsPriority(sp,R){const D=pstDb(sp);const use=a=>{const P=D.p[pstId(a.name)];if(!P||!P.n)return 0;return Object.values(P.s).reduce((x,S)=>x+(S.gp?S.sum/S.gp:0),0);};
+  return R.filter(a=>(RS_SKILL[sp]||/./).test(a.pos)).map((a,i)=>({a,i,u:use(a),out:rsOut(a.inj)?1:0})).sort((x,y)=>x.out-y.out||(y.a.sal||0)-(x.a.sal||0)||y.u-x.u||x.i-y.i).map(o=>o.a);}
+/* one team's top players: roster + their game logs (the card's Roster tab calls this) */
+async function rsLoadTeam(sp,team,n,tid){const R=rsPriority(sp,await rsRoster(sp,team,tid));const D=pstDb(sp);let got=0;
+  for(const a of R.slice(0,n||8)){if(RS_SESSION>=RS_CAP+RS_EXTRA)break;const P=D.p[pstId(a.name)];if(P&&P.glAt&&P.glAt>Date.now()-864e5)continue;try{got+=await rsGamelog(sp,a,team);}catch(e){}await new Promise(r=>setTimeout(r,200));}
+  return got;}
 /* slate: key players on teams playing today (background, capped) */
+const RS_PER_TEAM={nba:6,ncaab:5,nhl:8,mlb:6,nfl:6,ncaaf:5};
 async function rsLoadSlate(sp,perTeam){let games=(sportGames(sp)||[]).filter(g=>{const a=String(g.abstract||'').toLowerCase();return !a||a==='pre'||a==='preview';});let n=0;
   if(sp==='ncaab')games=games.filter(g=>ncaabWorks(g));   /* college: the players in the games we work */
-  for(const g of games){for(const tm of [g.away.abbr,g.home.abbr]){if(RS_SESSION>=RS_CAP)return n;const R=(await rsRoster(sp,tm)).filter(a=>(RS_SKILL[sp]||/./).test(a.pos));
-      const D=pstDb(sp);const need=R.filter(a=>{const P=D.p[pstId(a.name)];return !P||!P.glAt||P.glAt<Date.now()-864e5;}).slice(0,perTeam||6);
-      for(const a of need){if(RS_SESSION>=RS_CAP)return n;try{n+=await rsGamelog(sp,a,tm);}catch(e){}await new Promise(r=>setTimeout(r,250));}}}
+  for(const g of games){for(const side of [g.away,g.home]){if(RS_SESSION>=RS_CAP+RS_EXTRA)return n;n+=await rsLoadTeam(sp,side.abbr,perTeam||RS_PER_TEAM[sp]||6,side.tid||null);}}
   return n;}
-async function rsBoot(){try{await rsLoadPropPlayers();const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb');await rsLoadSlate(sp,sp==='ncaaf'||sp==='ncaab'?5:6);}catch(e){console.warn('rosters',e);}}
+async function rsBoot(){try{await rsLoadPropPlayers();const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb');await rsLoadSlate(sp);}catch(e){console.warn('rosters',e);}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(rsBoot,9000));
 /* Standout prop of the day for one sport: the highest-probability "scorer"
    prop (goal / home run / TD / 25+ pts) among players in games not yet started. */
@@ -2524,7 +2595,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261016e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261017a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2702,6 +2773,7 @@ function prunePstLast(keep){let any=false;['ncaab','ncaaf','nfl','mlb','nhl','nb
   ks.sort((a,b)=>String(L[a].d).localeCompare(String(L[b].d))).slice(0,ks.length-keep).forEach(x=>delete L[x]);localStorage.setItem(k,_enc(JSON.stringify(L)));any=true;}catch(e){}});return any;}
 const PRUNE_LADDER=[
   ()=>{try{if(localStorage.getItem('d4.simcore')==null)return false;localStorage.removeItem('d4.simcore');SIMC=null;return true;}catch(e){return false}},   // sim histograms — re-simmed on demand
+  ()=>{try{if(localStorage.getItem('d4.rsroster')==null)return false;localStorage.removeItem('d4.rsroster');RS_MEM_CLEAR();return true;}catch(e){return false}},   // v2.36 · rosters — re-pulled from ESPN on demand
   ()=>pruneDatedMap('d4.proplines',3),          // today's prop lines — re-pasteable
   ()=>pruneList('d4.learnlog',15),
   ()=>prunePstLast(800),                        // last-game lines (only needed ~2 days)
@@ -2908,14 +2980,10 @@ async function runFeedSelfTest(){
   el.innerHTML='<div class="empty">Running self-test — this makes a few real API calls…</div>';
   const peek=o=>{try{return String(JSON.stringify(o)).slice(0,220).replace(/</g,'&lt;')}catch(e){return''}};
 
-  // 1) ESPN NFL teams
+  // 1) ESPN NFL team ids — v2.36: ESPN's /teams list sends no CORS header (a phone can't read it), so the ids ship with the app
   try{
-    const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams');
-    const j=await r.json();
-    const teams=((j.sports||[])[0]||{}).leagues?.[0]?.teams||[];
-    row('ESPN NFL team list',teams.length>=32,
-      `HTTP ${r.status} · ${teams.length} teams · parser path sports[0].leagues[0].teams`,
-      teams.length?peek(teams[0].team):'shape did not match — send me this: '+peek(j).slice(0,180));
+    const teams=Object.entries(RS_TEAM_IDS.nfl).map(([abbreviation,id])=>({team:{id:String(id),abbreviation}}));
+    row('NFL team ids (built in — ESPN\'s team list can\'t be read from a phone)',teams.length>=32,`${teams.length} teams`,'');
     // 2) roster shape (one team only)
     if(teams.length){
       const id=teams[0].team.id;
@@ -2927,7 +2995,7 @@ async function runFeedSelfTest(){
       row('ESPN NFL roster',n>0,`HTTP ${rr.status} · ${n} athletes parsed from athletes[]`,
         ex?peek(ex):'no athletes matched — send me: '+peek(rj).slice(0,180));
       // 3) depth chart shape
-      const dr=await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${id}/depthcharts`);
+      const dr=await fetch(`https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${rsSeasonYear('nfl',today())}/teams/${id}/depthcharts`);   /* v2.36 · the core API's copy carries CORS */
       const dj=await dr.json();
       let ranked=0;
       (dj.items||dj.depthchart||[]).forEach(u=>Object.values(u.positions||{}).forEach(p=>
@@ -7382,6 +7450,7 @@ function card(g){
     <button class="expbtn" onclick="pan(${g.id},'props',this)">Props</button>
     <button class="expbtn" onclick="pan(${g.id},'verdict',this)">Take/Fade</button>
     <button class="expbtn" onclick="pan(${g.id},'mybets',this)">My bets</button>
+    <button class="expbtn" onclick="pan(${g.id},'roster',this)">Roster</button>
     ${isLive?`<button class="expbtn" onclick="pan(${g.id},'livebox',this)">Live box</button>`:''}
     ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button><button class="expbtn" onclick="pan(${g.id},'post',this)" style="color:var(--cold)">📊 Analysis</button>`:''}
    </div>
@@ -7393,6 +7462,7 @@ function card(g){
    <div class="panel" id="p-verdict-${g.id}">${(()=>{try{return typeof parVerdictHtml==='function'?parVerdictHtml('mlb',g,s):''}catch(e){return''}})()}</div>
    <div class="panel" id="p-props-${g.id}">${propPanel(g)}</div>
    <div class="panel" id="p-mybets-${g.id}">${myBetsPanel(g,s,M)}</div>
+   <div class="panel" id="p-roster-${g.id}"></div>
    ${isLive?`<div class="panel" id="p-livebox-${g.id}">${liveBoxPanel(g.id,g)}</div>`:''}
    ${done?`<div class="panel" id="p-box-${g.id}">${boxPanel(g)}</div><div class="panel" id="p-post-${g.id}">${(()=>{try{return typeof parPostGame==='function'?parPostGame('mlb',g,s):''}catch(e){return''}})()}</div>`:''}
   </div>`;
@@ -8822,12 +8892,15 @@ function gradePropFromBox(g,x){
   return null;
 }
 function pan(gid,which,btn){
-  ['coach','trend','ag','alt','projbox','props','verdict','box','livebox','mybets','post'].forEach(k=>{
+  ['coach','trend','ag','alt','projbox','props','verdict','box','livebox','mybets','post','roster'].forEach(k=>{
     const p=document.getElementById('p-'+k+'-'+gid);
     if(p&&k!==which)p.classList.remove('on');
   });
   const p=document.getElementById('p-'+which+'-'+gid);
   if(p)p.classList.toggle('on');
+  /* v2.36 · the roster fills when it opens (ESPN's roster + the players' numbers) */
+  if(which==='roster'&&p&&p.classList.contains('on')&&typeof rosterPanel==='function'){const g=(typeof GAMES!=='undefined'?GAMES:[]).find(x=>String(x.id)===String(gid));
+    if(g){p.innerHTML='<div class="empty">Loading…</div>';rosterPanel('mlb',{id:g.id,away:{abbr:g.away.abbr,tid:g.away.espnId||null},home:{abbr:g.home.abbr,tid:g.home.espnId||null}}).then(h=>{p.innerHTML=h;}).catch(()=>{p.innerHTML='<div class="sub">Roster unavailable right now.</div>';});}}
   const row=btn.parentElement;
   [...row.children].forEach(b=>b.classList.remove('on'));
   if(p&&p.classList.contains('on'))btn.classList.add('on');
@@ -11752,7 +11825,7 @@ function legRowHtml(x,isOutside){
       <div style="font-size:12.5px;font-weight:600">${x.pick}${confTag}${parlayTag}</div>
       <div class="m">${x.game} · ${x.date}${x.p?' · '+(x.p*100).toFixed(0)+'%':''}</div>
     </div>
-    <div style="text-align:right;flex:0 0 auto">
+    <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:62%;overflow-wrap:anywhere">
       <span style="color:${color}">${icon}</span>${detail}
     </div>
   </div>`;
@@ -16191,7 +16264,7 @@ const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4]
 function teamsToday(sp){const s=new Set();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(!a||a==='pre'||a==='preview'){s.add(g.away.abbr);s.add(g.home.abbr);}});}catch(e){}
   try{const T=get(TC_KEY,{})||{};if(T.d===today())(((T.by||{})[sp]||{}).picks||[]).forEach(x=>String(x.game).split('@').forEach(t=>s.add(t)));}catch(e){}return s;}
 function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const teams=teamsToday(sp);if(!teams.size)return[];const out=[];
-  Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<3)return;
+  Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<3)return;if(rsOut(rsInjury(sp,P.name)))return;
     Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<3)return;let best=null;
       ths.forEach(t=>{const r=pstProb(sp,P.name,k,t,'over');if(r&&r.p>=0.65)best={sp,player:P.name,team:P.team,k,thr:t,p:r.p,mu:r.proj.mu,n:r.proj.n};});
       if(best)out.push(best);});});
@@ -16376,8 +16449,9 @@ function renderBest(){
   let rcT='';try{const B=bkDayState();const D=B.locked?B:B.preview;if(false&&D&&D.roll&&D.roll.cut.length){   /* v2.33 · the Roll Call is retired (no pick on more than 3 tickets) */const cut=D.roll.legs.filter(l=>D.roll.cut.includes(l.sp+'|'+l.game));
     rcT=`<div class="tkt" style="margin-top:8px;border-left:3px solid #ff6fae"><h3>📣 Tonight's Roll Call parlay ${B.locked?'🔒':''}</h3><div class="mono" style="font-size:10.5px">${cut.map(l=>`${txtEsc(l.pick)} <span style="color:var(--gold)">${sgnP(l.price)}</span>`).join(' · ')}</div>
       <div class="mono" style="font-size:10px;color:var(--mute)">${cut.length} legs · ${decimalToAmerican(D.roll.cutDec)} · ${(D.roll.cutP*100).toFixed(1)}% to cash</div><div class="bar" style="margin-top:4px"><button onclick="tab('banker',document.getElementById('navBanker'))">Open the Banker's desk →</button></div></div>`;}}catch(e){}
-  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button><a href="${PUB_URL}" target="_blank" style="font-size:11px;color:var(--cold);align-self:center">open public page ↗</a></div>
-    <div class="sub mono" style="font-size:9.5px">${pubTxt||'The public page (picks.html) shows only the locked card, its graded record and your subscribe link. It publishes itself when the card locks.'}</div>
+  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button></div>
+    <div class="sub mono pub-row">${pubTxt?`<span>${pubTxt}</span>`:''}<a href="${PUB_URL}" target="_blank" rel="noopener">open public page ↗</a></div>
+    ${pubTxt?'':'<div class="sub mono" style="font-size:10px">The public page (picks.html) shows only the locked card, its graded record and your subscribe link. It publishes itself when the card locks.</div>'}
     <div class="sub" style="font-size:10px;margin-top:4px">Subscribe link for the public page <input id="subLinkIn" placeholder="https://… (Whop, Patreon, Stripe link)" value="${esc(get('d4.sublink',''))}" onchange="set('d4.sublink',this.value.trim())" style="width:100%;margin-top:2px"></div>`+
     ((S.props||[]).length?`<details class="tkt" style="margin-top:8px"><summary><b>Bonus props</b> <span class="mono" style="font-size:10px;color:var(--mute)">not part of the record</span></summary>${bestRowsHtml('Top props',S.props,null,'')}</details>`:'');
 }
@@ -18374,7 +18448,7 @@ function charDeskHtml(F){
     const tot=Object.keys(g.by).length,top=sides[ks[0]].length;
     const verdict=split?`<span style="color:var(--rust)">split ${top}-${tot-top}</span>`:`<span style="color:var(--win)">all ${tot} agree</span>`;
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div class="mono" style="font-size:10px;color:var(--mute)">${SP_LAB[g.sp]||''} · ${esc(g.game)} · ${mLab[g.m]||g.m} · ${verdict}</div>
-      ${ks.map(k=>`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><b style="min-width:90px;font-size:12px">${txtEsc(charPickText(sides[k][0]))}</b>${sides[k].map(c=>{const h=charHist(V,c);return chip(c.voice)+(h.hot.length?'<span style="font-size:10px">🔥</span>':'');}).join('')}</div>`).join('')}</div>`;}).join('');
+      ${ks.map(k=>`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:2px"><b style="min-width:90px;font-size:12px">${txtEsc(charPickText(sides[k][0]))}</b>${sides[k].map(c=>{const h=charHist(V,c);return chip(c.voice)+(h.hot.length?'<span style="font-size:10px">🔥</span>':'');}).join('')}</div>`).join('')}</div>`;}).join('');
   /* 3 · each character's slate */
   const byV={};calls.forEach(c=>(byV[c.voice]=byV[c.voice]||[]).push(c));
   const cards=CHAR_ORDER.filter(v=>byV[v]).map(v=>{const all=V.filter(x=>x.voice===v&&x.graded&&!x.push);const w=all.filter(x=>x.hit).length;
@@ -18982,25 +19056,28 @@ function cpropMatch(sp,team,k){const o=cpropOpp(sp,team);if(!o)return{m:1,why:''
   else return{m:1,why:''};   /* no rating for the opponent yet → the Coach stays quiet rather than guess */
   m*=o.home?1.02:0.98;m=Math.max(0.85,Math.min(1.15,m));return{m,why:(why?why+' · ':'')+(o.home?'home':'road'),opp:o.opp,home:o.home};}
 const CPROP_BKT=[[0.70,0.73],[0.73,0.76],[0.76,0.80],[0.80,0.85],[0.85,0.90],[0.90,1.01]];
-function cpropPAt(sp,k,mu,sd,n,thr){if(mu==null)return null;
-  if(PST_COUNT.has(k)||(sp==='nhl'&&k==='pts')){const need=Math.ceil(thr-1e-9);return 1-pstPoisCdf(need-1,mu);}
-  const s=Math.max(sd!=null&&n>=4?sd:mu*0.45,mu*0.25,1);return 1-pstNormCdf((thr-mu)/s);}
-function cpropBrier(){const L=get(CPROP_KEY,[])||[];const B={};CPROP_VOICES.forEach(v=>{const g=L.filter(x=>x.voice===v&&x.hit!=null);
+/* v2.36 · every character reads the same honest distribution — they differ in WHAT they believe the mean is */
+function cpropPAt(J,mu,thr){if(mu==null||!J)return null;return pstPAt(J,mu,thr);}
+/* v2.36 · calibration and form only learn from calls the new model made (mv 2) — the old reads' misses aren't this model's */
+const CPROP_MV=2,cpropNew=x=>(x&&x.mv||1)>=CPROP_MV;
+function cpropBrier(){const L=(get(CPROP_KEY,[])||[]).filter(cpropNew);const B={};CPROP_VOICES.forEach(v=>{const g=L.filter(x=>x.voice===v&&x.hit!=null);
   B[v]=g.length>=10?g.reduce((a,x)=>a+Math.pow(x.p-(x.hit?1:0),2),0)/g.length:0.2;});return B;}
-function cpropReads(sp,name,k,thr,BR){const J=pstProj(sp,name,k);if(!J||J.n<4)return null;
-  const sim=pstProb(sp,name,k,thr,'over');const r={Sim:sim?sim.p:null,'Most common':cpropPAt(sp,k,J.mean,J.sd,J.n,thr),Trends:cpropPAt(sp,k,J.ema,J.sd,J.n,thr)};
-  let M={m:1,why:''};try{M=cpropMatch(sp,J.team,k);}catch(e){}r.Coach=M.m!==1?cpropPAt(sp,k,J.mu*M.m,J.sd!=null?J.sd*Math.sqrt(M.m):null,J.n,thr):null;J.match=M;
+function cpropReads(sp,name,k,thr,BR){const J=pstProj(sp,name,k);if(!J||J.n<5)return null;
+  /* Sim: season + tuned form · Most common: the season alone · Trends: form-heavy · Coach: Sim × tonight's matchup */
+  const r={Sim:cpropPAt(J,J.mu,thr),'Most common':cpropPAt(J,J.season,thr),Trends:cpropPAt(J,J.trend,thr)};
+  let M={m:1,why:''};try{M=cpropMatch(sp,J.team,k);}catch(e){}r.Coach=M.m!==1?cpropPAt(J,J.mu*M.m,thr):null;J.match=M;
   BR=BR||cpropBrier();let sw=0,sp_=0;['Sim','Most common','Trends','Coach'].forEach(v=>{if(r[v]==null)return;const w=1/(BR[v]+0.02);sw+=w;sp_+=w*r[v];});
   r.Judge=sw?sp_/sw:null;Object.keys(r).forEach(v=>{if(r[v]!=null)r[v]=Math.max(0.001,Math.min(0.999,r[v]));});return{r,J};}
-function cpropCalib(){const L=get(CPROP_KEY,[])||[];const C={};
+function cpropCalib(){const L=(get(CPROP_KEY,[])||[]).filter(cpropNew);const C={};
   CPROP_VOICES.forEach(v=>{C[v]=CPROP_BKT.map(([lo,hi])=>{const g=L.filter(x=>x.voice===v&&x.hit!=null&&x.p>=lo&&x.p<hi);const h=g.filter(x=>x.hit).length;
     return{lo,hi,n:g.length,h,rate:g.length?h/g.length:null,avgP:g.length?g.reduce((a,x)=>a+x.p,0)/g.length:(lo+Math.min(hi,1))/2};});});return C;}
 function cpropCal(C,v,p){const b=(C[v]||[]).find(x=>p>=x.lo&&p<x.hi);if(!b||!b.n)return p;return(b.h+p*12)/(b.n+12);}
 function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C=cpropCalib();const REC=cpropRecIdx();
   ['nfl','ncaaf','nba','ncaab','nhl','mlb'].forEach(sp=>{const L=LIKELY_LADDER[sp];if(!L)return;const teams=teamsToday(sp);if(!teams.size)return;
     const last=get('d4.pstlast.'+sp,{})||{};
-    Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<4)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
-      Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<4)return;
+    Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<5)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
+      if(rsOut(rsInjury(sp,P.name)))return;   /* v2.36 · listed Out / Doubtful / on IR: no call on a player who won't play */
+      Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<5)return;
         const best={};ths.forEach(t=>{const R0=cpropReads(sp,P.name,k,t,BR);if(!R0)return;
           CPROP_VOICES.forEach(v=>{const p=R0.r[v];if(p!=null&&p>=0.70)best[v]={p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:''};});});
         Object.entries(best).forEach(([v,b])=>{let cal=cpropCal(C,v,b.p);const o=REC[v+'|'+sp+'|'+pstId(P.name)];let fav=null;
@@ -19010,7 +19087,7 @@ function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C
   return out;}
 /* every character's record on every player it has called */
 let CPR_C=null;
-function cpropRecIdx(){if(CPR_C&&Date.now()-CPR_C.ts<60e3)return CPR_C.R;const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null)return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0,player:x.player,sp:x.sp,team:x.team,voice:x.voice});o.n++;if(x.hit)o.w++;});CPR_C={ts:Date.now(),R};return R;}
+function cpropRecIdx(){if(CPR_C&&Date.now()-CPR_C.ts<60e3)return CPR_C.R;const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null||!cpropNew(x))return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0,player:x.player,sp:x.sp,team:x.team,voice:x.voice});o.n++;if(x.hit)o.w++;});CPR_C={ts:Date.now(),R};return R;}
 /* a character's favorite players (4+ calls, 70%+) and the ones it should stop calling (≤40%) */
 function cpropFavs(v){const L=Object.values(cpropRecIdx()).filter(o=>o.voice===v&&o.n>=4);const sc=o=>(o.w+1)/(o.n+2);
   return{fav:L.filter(o=>o.w/o.n>=0.7).sort((a,b)=>sc(b)-sc(a)||b.n-a.n).slice(0,5),fade:L.filter(o=>o.w/o.n<=0.4).sort((a,b)=>sc(a)-sc(b)).slice(0,3)};}
@@ -19019,7 +19096,7 @@ function cpropOfDay(v,calls){calls=(calls||cpropToday()).filter(c=>c.voice===v&&
   return calls.sort((a,b)=>(b.cal+(b.fav==='fav'?0.03:0))-(a.cal+(a.fav==='fav'?0.03:0)))[0];}
 function cpropLine(c){return`${c.player} ${c.thr}+ ${CPROP_LAB[c.k]||c.k}`;}
 function cpropLog(calls){const L=get(CPROP_KEY,[])||[];const have=new Set(L.map(x=>x.id));let n=0;
-  calls.forEach(c=>{if(have.has(c.id))return;L.push({id:c.id,sp:c.sp,voice:c.voice,player:c.player,team:c.team,k:c.k,thr:c.thr,p:c.p,d:c.d,hit:null});n++;});
+  calls.forEach(c=>{if(have.has(c.id))return;L.push({id:c.id,sp:c.sp,voice:c.voice,player:c.player,team:c.team,k:c.k,thr:c.thr,p:c.p,d:c.d,hit:null,mv:CPROP_MV});n++;});
   if(n)set(CPROP_KEY,L.slice(-6000));return n;}
 function cpropGrade(){const L=get(CPROP_KEY,[])||[];let n=0;const LAST={};
   L.forEach(x=>{if(x.hit!=null)return;const g=(LAST[x.sp]=LAST[x.sp]||get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];
@@ -19031,7 +19108,7 @@ function cpropCalibHtml(){const C=cpropCalib();
     const all=C[v].reduce((a,b)=>({n:a.n+b.n,h:a.h+b.h}),{n:0,h:0});
     return`<tr><td style="text-align:left">${CHARS[v].chip} ${esc(v)}</td>${cells}<td>${all.n?Math.round(all.h/all.n*100)+'%':'—'}</td></tr>`;}).join('');
   return`<div class="tkt"><h3>📐 Prop confidence — does it mean what it says?</h3>
-    <div class="sub" style="font-size:10px">Each character's graded 70%+ prop calls, bucketed by the confidence it stated. Green = hitting at or above what it claimed; red = overconfident. Every displayed % is pulled toward these real rates.</div>
+    <div class="sub" style="font-size:10px">Each character's graded 70%+ prop calls, bucketed by the confidence it stated — counted from the Oct 17 model rebuild (real game logs, honest spreads). Green = hitting at or above what it claimed; red = overconfident. Every displayed % is pulled toward these real rates.<br>Backtest on last season's game logs (NHL, NBA, MLB, NFL, college — each game called from the games before it): 70%+ calls hit <b>77%</b> on <b>76.5%</b> stated; the old reads hit 63% on five-game samples.</div>
     <table class="mono" style="width:100%;font-size:9.5px;text-align:center;margin-top:4px;border-collapse:collapse"><tr style="color:var(--mute)"><td></td>${CPROP_BKT.map(([lo,hi])=>`<td>${Math.round(lo*100)}–${hi>1?'100':Math.round(hi*100)}%</td>`).join('')}<td>all</td></tr>${rows}</table></div>`;}
 let CPROP_FOCUS=null;
 function cpropFocus(id){CPROP_FOCUS=CPROP_FOCUS===id?null:id;renderToday(true);}
@@ -21519,7 +21596,7 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__)window.addEventListener
 
 /* a character's favorite players: its graded record on THIS player (any stat) */
 let CPF_C=null;
-function cpropFavTag(c){if(!CPF_C||Date.now()-CPF_C.ts>60e3){const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null)return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0});o.n++;if(x.hit)o.w++;});CPF_C={ts:Date.now(),R};}
+function cpropFavTag(c){if(!CPF_C||Date.now()-CPF_C.ts>60e3){const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null||!cpropNew(x))return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0});o.n++;if(x.hit)o.w++;});CPF_C={ts:Date.now(),R};}
   const o=CPF_C.R[c.voice+'|'+c.sp+'|'+pstId(c.player)];if(!o||o.n<3)return'';const fav=o.n>=4&&o.w/o.n>=0.7,fade=o.n>=4&&o.w/o.n<=0.4;
   return`<span class="mono" style="font-size:9px;color:${fav?'var(--gold)':fade?'var(--cold)':'var(--mute)'}">${fav?'⭐ favorite ':fade?'🧊 ':''}${o.w}-${o.n-o.w} on him</span> `;}
 

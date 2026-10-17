@@ -929,6 +929,16 @@ const DESK_CSS=`
 .desk-modal{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
 .desk-sheet{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--hair);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:var(--sh-lg)}
 .bc-opt{display:flex;gap:5px;align-items:center;font-size:10.5px;padding:5px 8px;border:1px solid var(--rule);border-radius:20px}.bc-opt.off{opacity:.4}
+/* v2.36 · a checkbox is never a full-width input — the page-wide input{width:100%} rule stretched every checkbox and crushed its label into a sliver */
+input[type=checkbox],input[type=radio]{width:18px;height:18px;min-width:18px;max-width:18px;flex:0 0 18px;margin:0;padding:0;border-radius:4px;accent-color:#F0A01E;vertical-align:middle}
+label:has(>input[type=checkbox]),label:has(>input[type=radio]){line-height:1.35}
+.pub-row{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin-top:6px;font-size:10.5px}.pub-row a{color:var(--cold);white-space:nowrap}
+.ros-wrap{display:flex;gap:12px;flex-wrap:wrap}.ros-team{flex:1 1 160px;min-width:0}.ros-hd{font-size:11.5px;margin-bottom:2px}
+.ros-grp{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:8px 0 2px}
+.ros-row{padding:4px 0;border-top:1px solid var(--rule);font-size:11.5px;line-height:1.35}.ros-row.out{opacity:.55}.ros-nm{overflow-wrap:anywhere}.ros-j{color:var(--mute);font-size:10px}.ros-pos{color:var(--mute);font-size:10px}
+.ros-inj{font-size:9px;border:1px solid;border-radius:4px;padding:0 3px;white-space:nowrap}
+.ros-st{display:flex;flex-wrap:wrap;gap:2px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--chalk)}.ros-st i{font-style:normal;color:var(--mute)}.ros-gp{color:var(--mute)}
+.ros-sw{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--win)}
 `;
 function deskBoot(){try{if(!document.getElementById('deskCss')){const st=document.createElement('style');st.id='deskCss';st.textContent=DESK_CSS;document.head.appendChild(st);}}catch(e){}
   /* Money → Bankroll */
@@ -1018,6 +1028,41 @@ function mlbProjBoxHtml(g,s){const P=parProj(s);if(!P)return'<div class="empty">
   return`<div class="sub">Projected runs by inning — the 1st inning runs a little hot (top of the order), F5 = innings 1–5.${J?` Judge ${A} ${J.final[0]}–${J.final[1]} ${H}.`:''}</div>`+
     parTable(['',1,2,3,4,5,6,7,8,9,'F5','R','H≈'],[row(A,P.a,hits[0]),row(H,P.h,hits[1])])+parPlayersHtml('mlb',g);}
 /* the shared table look */
+/* ── §20 · ROSTERS — every sport, one panel (v2.36) ─────────────────────────────────────────
+   Straight from ESPN's team roster (the one team endpoint a phone can read): who's on it, who's hurt, each player's
+   key numbers (projection · last 5) and the line our model gives him 70%+ on. Opening it loads the top players'
+   game logs in the background and redraws when they land. */
+const ROS_KEYS={nba:['pts','reb','ast','fg3'],ncaab:['pts','reb','ast','fg3'],nhl:['g','a','s'],mlb:['h','tb','hr','k'],nfl:['py','ry','rec','wy','td'],ncaaf:['py','ry','rec','wy','td']};
+const ROS_LAB={pts:'PTS',reb:'REB',ast:'AST',fg3:'3PM',g:'G',a:'A',s:'SOG',h:'H',tb:'TB',hr:'HR',k:'K',py:'Pass',ry:'Rush',rec:'Rec',wy:'RecYd',td:'TD'};
+const ROS_GRP={nfl:p=>p==='QB'?'Quarterbacks':/^(RB|FB)$/.test(p)?'Running backs':p==='WR'?'Receivers':p==='TE'?'Tight ends':'Kickers',
+  nhl:p=>p==='D'?'Defense':p==='G'?'Goalies':'Forwards',mlb:p=>/P$/.test(p)?'Pitchers':'Hitters',nba:p=>/C/.test(p)?'Bigs':/F/.test(p)?'Forwards':'Guards'};
+ROS_GRP.ncaaf=ROS_GRP.nfl;ROS_GRP.ncaab=ROS_GRP.nba;
+const rosEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+function rosInjChip(s){if(!s)return'';const c=rsOut(s)?'var(--rust)':/question|day|probable/i.test(s)?'var(--gold)':'var(--mute)';return` <span class="mono ros-inj" style="color:${c};border-color:${c}">${rosEsc(s)}</span>`;}
+/* his best 70%+ line in the model (the Sim read) — the same ladder the characters call from */
+function rosSweet(sp,name){try{const L=(typeof LIKELY_LADDER!=='undefined'&&LIKELY_LADDER[sp])||{};let out=null;
+    Object.entries(L).forEach(([k,ths])=>{let b=null;ths.forEach(t=>{const r=pstProb(sp,name,k,t,'over');if(r&&r.proj.n>=5&&r.p>=0.70)b={k,t,p:r.p};});if(b&&(!out||b.p>out.p))out=b;});return out;}catch(e){return null;}}
+function rosRow(sp,a){const K=ROS_KEYS[sp]||[];const pit=sp==='mlb'&&/P$/.test(a.pos);const keys=sp==='mlb'?(pit?['k','ha','er']:['h','tb','hr']):K;
+  const cells=keys.map(k=>{const J=pstProj(sp,a.name,k);if(!J||!J.n||(!J.mean&&!J.ema))return'';const f=pstForm(sp,a.name,k,5);const d=v=>v.toFixed(v<10?1:0);
+    return`<span>${(ROS_LAB[k]||k.toUpperCase())} <b>${d(J.mu)}</b>${f?`<i> L5 ${d(f.avg)}</i>`:''}</span>`;}).filter(Boolean);
+  const sw=rsOut(a.inj)?null:rosSweet(sp,a.name);const n=(()=>{try{const P=pstDb(sp).p[pstId(a.name)];return P?P.n||0:0;}catch(e){return 0;}})();
+  return`<div class="ros-row${rsOut(a.inj)?' out':''}"><div class="ros-nm">${a.jer?`<span class="ros-j">#${rosEsc(a.jer)}</span> `:''}<b>${rosEsc(a.name)}</b> <span class="ros-pos">${rosEsc(a.pos)}</span>${rosInjChip(a.inj)}</div>
+    ${cells.length?`<div class="ros-st">${cells.join('')}<span class="ros-gp">${n}G</span></div>`:''}${sw?`<div class="ros-sw">🎯 ${sw.t}+ ${rosEsc(ROS_LAB[sw.k]||sw.k)} · <b>${Math.round(sw.p*100)}%</b></div>`:''}</div>`;}
+async function rosterPanelHtml(sp,g){const side=async t=>{let R=[];try{R=await rsRoster(sp,t.abbr,t.tid||null);}catch(e){}
+    if(!R.length)return`<div class="ros-team"><div class="sub"><b>${rosEsc(t.abbr)}</b> · roster unavailable right now — try again in a minute</div></div>`;
+    const grp=ROS_GRP[sp]||(()=>'Roster');const pri=rsPriority(sp,R);const seen=new Set(pri.map(a=>a.id));const order=pri.concat(R.filter(a=>!seen.has(a.id)));const G={};
+    order.forEach(a=>{(G[grp(a.pos)]=G[grp(a.pos)]||[]).push(a);});const outN=R.filter(a=>rsOut(a.inj)).length;
+    return`<div class="ros-team"><div class="ros-hd"><b>${rosEsc(t.abbr)}</b> · ${R.length} players${outN?` · <span style="color:var(--rust)">${outN} out</span>`:''}</div>
+      ${Object.entries(G).map(([k,arr])=>`<div class="ros-grp">${rosEsc(k)}</div>${arr.slice(0,sp==='nfl'||sp==='ncaaf'?7:16).map(a=>rosRow(sp,a)).join('')}`).join('')}</div>`;};
+  const [a,h]=await Promise.all([side(g.away),side(g.home)]);return`<div class="ros-wrap">${a}${h}</div>`;}
+/* the panel: draw now, load the top players' logs, redraw once they're in */
+let ROS_SEQ=0;
+async function rosterPanel(sp,g){const id='ros'+(++ROS_SEQ);const html=await rosterPanelHtml(sp,g);
+  setTimeout(async()=>{let n=0;try{RS_EXTRA=Math.min(240,(RS_EXTRA||0)+40);n=(await rsLoadTeam(sp,g.away.abbr,8,g.away.tid||null))+(await rsLoadTeam(sp,g.home.abbr,8,g.home.tid||null));}catch(e){}
+    const el=document.getElementById(id);if(!el)return;try{if(n>0)el.innerHTML=await rosterPanelHtml(sp,g);}catch(e){}
+    const st=document.getElementById(id+'s');if(st)st.textContent=n>0?`Updated — ${n} games of history just loaded.`:'Numbers are current (each player refreshes once a day).';},30);
+  return`<div id="${id}">${html}</div><div class="sub mono" id="${id}s" style="font-size:9.5px;margin-top:6px">Loading each starter's game log…</div>`;}
+
 try{if(typeof document!=='undefined'&&!document.getElementById('parCss')){const st=document.createElement('style');st.id='parCss';
   st.textContent=`.par-t{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:10px;margin:4px 0}.par-t th{text-align:left;color:var(--mute);padding:3px 4px;border-bottom:1px solid var(--rule);white-space:nowrap;font-weight:600}
 .par-t td{padding:3px 4px;border-bottom:1px solid var(--rule);white-space:nowrap}.par-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--rule)}
