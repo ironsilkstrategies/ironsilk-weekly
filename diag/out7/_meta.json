@@ -1,0 +1,270 @@
+[
+ {
+  "name": "nhl-sb-20261017",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261017",
+  "status": 200,
+  "bytes": 290289,
+  "cors": "*"
+ },
+ {
+  "name": "nhl-sum-post",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892519",
+  "status": 200,
+  "bytes": 503861,
+  "cors": "*"
+ },
+ {
+  "name": "nhl-sum-pre",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892522",
+  "status": 200,
+  "bytes": 154769,
+  "cors": "*"
+ },
+ {
+  "name": "nhl-sum-in",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892520",
+  "status": 200,
+  "bytes": 363770,
+  "cors": "*"
+ },
+ {
+  "name": "nfl-sb-20261012",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261012",
+  "status": 200,
+  "bytes": 14124,
+  "cors": "*"
+ },
+ {
+  "name": "nfl-sum-post",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872994",
+  "status": 200,
+  "bytes": 630807,
+  "cors": "*"
+ },
+ {
+  "name": "ncaaf-sb-20261017",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20261017&groups=80&limit=300",
+  "status": 200,
+  "bytes": 784851,
+  "cors": "*"
+ },
+ {
+  "name": "ncaaf-sum-post",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401858488",
+  "status": 200,
+  "bytes": 475572,
+  "cors": "*"
+ },
+ {
+  "name": "ncaaf-sum-pre",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401860903",
+  "status": 200,
+  "bytes": 97534,
+  "cors": "*"
+ },
+ {
+  "name": "ncaaf-sum-in",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401856719",
+  "status": 200,
+  "bytes": 324580,
+  "cors": "*"
+ },
+ {
+  "name": "nba-sb-20261016",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=20261016",
+  "status": 200,
+  "bytes": 213265,
+  "cors": "*"
+ },
+ {
+  "name": "nba-sum-post",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401898406",
+  "status": 200,
+  "bytes": 439256,
+  "cors": "*"
+ },
+ {
+  "name": "mlb-sb-20261016",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=20261016",
+  "status": 200,
+  "bytes": 12447,
+  "cors": "*"
+ },
+ {
+  "name": "mlb-sum-post",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401908026",
+  "status": 200,
+  "bytes": 151184,
+  "cors": "*"
+ },
+ {
+  "name": "ncaab-sb-20260310",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=20260310&groups=50&limit=300",
+  "status": 200,
+  "bytes": 492766,
+  "cors": "*"
+ },
+ {
+  "name": "ncaab-sum-post",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401851762",
+  "status": 200,
+  "bytes": 439789,
+  "cors": "*"
+ },
+ {
+  "name": "gl-baker-2019",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3052587/gamelog?season=2019",
+  "status": 200,
+  "bytes": 154787,
+  "cors": "*"
+ },
+ {
+  "name": "gl-baker-2021",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3052587/gamelog?season=2021",
+  "status": 200,
+  "bytes": 135482,
+  "cors": "*"
+ },
+ {
+  "name": "gl-baker-2022",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3052587/gamelog?season=2022",
+  "status": 200,
+  "bytes": 116668,
+  "cors": "*"
+ },
+ {
+  "name": "gl-baker-2026",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3052587/gamelog?season=2026",
+  "status": 200,
+  "bytes": 31056,
+  "cors": "*"
+ },
+ {
+  "name": "gl-kyler-2019",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3917315/gamelog?season=2019",
+  "status": 200,
+  "bytes": 154183,
+  "cors": "*"
+ },
+ {
+  "name": "gl-kyler-2021",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3917315/gamelog?season=2021",
+  "status": 200,
+  "bytes": 151749,
+  "cors": "*"
+ },
+ {
+  "name": "gl-kyler-2022",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3917315/gamelog?season=2022",
+  "status": 200,
+  "bytes": 107281,
+  "cors": "*"
+ },
+ {
+  "name": "gl-kyler-2026",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3917315/gamelog?season=2026",
+  "status": 200,
+  "bytes": 40457,
+  "cors": "*"
+ },
+ {
+  "name": "ath-kyler-bio",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3917315",
+  "status": 200,
+  "bytes": 71065,
+  "cors": "*"
+ },
+ {
+  "name": "ath-kyler-overview",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/3917315/overview",
+  "status": 200,
+  "bytes": 146511,
+  "cors": "*"
+ },
+ {
+  "name": "ath-kyler-statlog",
+  "url": "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/athletes/3917315/statisticslog",
+  "status": 200,
+  "bytes": 4966,
+  "cors": "*"
+ },
+ {
+  "name": "ath-kyler-core",
+  "url": "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/athletes/3917315",
+  "status": 200,
+  "bytes": 4904,
+  "cors": "*"
+ },
+ {
+  "name": "sched-tb-2025",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/27/schedule?season=2025",
+  "status": 200,
+  "bytes": 366748,
+  "cors": "*"
+ },
+ {
+  "name": "sched-nhl-2025",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/25/schedule?season=2025",
+  "status": 200,
+  "bytes": 1856846,
+  "cors": "*"
+ },
+ {
+  "name": "nhl-range-oct2025",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20251001-20251031&limit=400",
+  "status": 400,
+  "bytes": 55,
+  "cors": "*"
+ },
+ {
+  "name": "nhl-range-count",
+  "n": null
+ },
+ {
+  "name": "nfl-2025-w3",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=2025&seasontype=2&week=3",
+  "status": 200,
+  "bytes": 141606,
+  "cors": "*"
+ },
+ {
+  "name": "nfl-2025-w3-count",
+  "n": 16
+ },
+ {
+  "name": "nba-range-nov2025",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=20251101-20251130&limit=400",
+  "status": 400,
+  "bytes": 55,
+  "cors": "*"
+ },
+ {
+  "name": "nba-range-count",
+  "n": null
+ },
+ {
+  "name": "cfb-2025-w8",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=2025&seasontype=2&week=8&groups=80&limit=300",
+  "status": 200,
+  "bytes": 985807,
+  "cors": "*"
+ },
+ {
+  "name": "cfb-2025-w8-count",
+  "n": 60
+ },
+ {
+  "name": "nba-ref-assign",
+  "url": "https://official.nba.com/referee-assignments/",
+  "status": 200,
+  "bytes": 117524,
+  "cors": null
+ },
+ {
+  "name": "nhl-standings",
+  "url": "https://site.api.espn.com/apis/v2/sports/hockey/nhl/standings",
+  "status": 200,
+  "bytes": 202485,
+  "cors": "*"
+ }
+]
