@@ -10,7 +10,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.32';
+const VERSION = 'worker v2.34';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -31,7 +31,8 @@ async function writeState(state, sha) { const body = { message: 'autopilot ' + n
   const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE}`, { method: 'PUT', headers: { ...ghH, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return r.status; }
 /* the same merge the app uses: statuses and announcements only ever accumulate */
-export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) } };
+const relayMerge = (x, y) => !x ? y : !y ? x : x.d > y.d ? x : x.d < y.d ? y : { d: x.d, n: Math.max(x.n || 0, y.n || 0) };
+export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}) };
   const ds = new Set([...Object.keys(a?.posts || {}), ...Object.keys(b?.posts || {})]);
   ds.forEach(d => { const x = a?.posts?.[d], y = b?.posts?.[d]; if (!x || !y) { out.posts[d] = x || y; return; }
     const base = (x.postedTs || 0) >= (y.postedTs || 0) ? x : y;
@@ -218,17 +219,59 @@ export async function publishPublic(state, deps) { const now = deps?.now || Date
   if (!d) return 0; const p = state.posts[d]; const V = publicView(p.feed, p.st, now); const sig = JSON.stringify({ ...V, generated: 0 });
   state.pubSig = state.pubSig || {}; if (state.pubSig[d] === sig) return 0; const r = await sitePut(p.site, JSON.stringify(V, null, 1), deps);
   if (r.ok) { state.pubSig[d] = sig; return 1; } log('public page', r.reason || r.status); return 0; }
+/* ── v2.33 · the relay ─────────────────────────────────────────────────────────
+   GitHub only fires the 10-minute schedule every few hours, so per-game results
+   could wait hours when the app is closed. While today's slate is live, the worker
+   now keeps itself going: it checks every 75 seconds inside its run, then starts
+   the next run itself (a workflow dispatch, which the job's own token may do).
+   The chain rests once every pick on today's card is graded — and it's capped. */
+export function relayPending(state, now) { const today = chicagoDay(now);
+  for (const d of Object.keys(state.posts || {})) { const p = state.posts[d]; if (!p || p.worker === false || d !== today) continue; const st = p.st || {}, sent = p.sent || {};
+    const vip = (p.legs || []).filter(l => !st[l.k]); const pub = ((p.pub && p.pub.legs) || []).filter(l => !st[l.k]);
+    if (!vip.length && !pub.length) continue;
+    /* the earliest game still open — when the card knows its start times */
+    const starts = pub.map(l => Date.parse(l.start || '') || (l.unlockAt ? l.unlockAt + 30 * 60e3 : NaN)).filter(isFinite);
+    const first = starts.length ? Math.min(...starts) : null;
+    if (first == null) return true;                                  /* no times on file: the slate is live until it's graded */
+    if (first - now <= 4 * 36e5) return true;                          /* a game is on, or the first one starts within 4 hours (its unlock posts at T-30) */
+    if (pub.some(l => l.unlockAt && !sent['unlock|' + l.k] && l.unlockAt - now <= 4 * 36e5)) return true; }
+  return false; }
+/* the next leg of the relay: one more run of this workflow */
+export async function relayNext(state, deps) { if ((env.RELAY || '') === 'off') return false; const today = chicagoDay(deps?.now || Date.now());
+  const F = deps?.fetch || fetch; const wf = env.RELAY_WORKFLOW || 'tg-autopilot.yml';
+  /* the cap: count today's relayed runs straight from GitHub (nothing extra written to the state branch) */
+  let n = state && state.relay && state.relay.d === today ? state.relay.n || 0 : 0;
+  try { const since = new Date((deps?.now || Date.now()) - 20 * 36e5).toISOString().slice(0, 19) + 'Z';
+    const c = await F(`https://api.github.com/repos/${REPO}/actions/workflows/${wf}/runs?event=workflow_dispatch&created=%3E%3D${since}&per_page=1`, { headers: ghH });
+    if (c && c.status === 200 && typeof c.json === 'function') { const j = await c.json(); if (isFinite(+j.total_count)) n = Math.max(n, +j.total_count); } } catch (e) { }
+  if (n >= 150) { log('relay cap reached (' + n + ' runs today)'); return false; }
+  const r = await F(`https://api.github.com/repos/${REPO}/actions/workflows/${wf}/dispatches`, { method: 'POST', headers: { ...ghH, 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: env.GITHUB_REF_NAME || 'main' }) });
+  log('relay → next run', r.status); return r.status === 204; }
 /* the slate day turns over at 5 AM Central — a game ending after midnight still belongs to its day */
 export function chicagoDay(now) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date((now || Date.now()) - 5 * 36e5)); }
 export { decrypt, encrypt, gradePick, gradeProp };
 /* ── main ── */
 if (import.meta.url === 'file://' + process.argv[1]) {
-  const today = chicagoDay(Date.now());
-  log(VERSION, '· repo', REPO, '· today', today);
-  const cur = await readState(); if (!cur) { log('no card handed over yet'); process.exit(0); }
-  log('posts on file:', Object.entries(cur.state.posts || {}).map(([d, p]) => `${d} ${Object.keys(p.st || {}).length}/${(p.legs || []).length} graded${p.recap ? ' · recap done' : ''}`).join(' · '));
-  const state = cur.state; let acted = await runOnce(state, today); try { acted += await publishPublic(state); } catch (e) { log('public page', e.message || e); }
-  state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1;
-  for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readState() : cur; const merged = tries ? mergeState(state, latest.state) : state;
-    const st = await writeState(merged, latest.sha); if (st === 200 || st === 201) { log('ok ·', acted, 'update(s) sent'); process.exit(0); } log('write conflict', st, '— merging and retrying'); }
-  process.exit(1); }
+  const t0 = Date.now(), BUDGET = +(env.RELAY_BUDGET_MS || 6.5 * 60e3), STEP = +(env.RELAY_STEP_MS || 75e3), MARGIN = +(env.RELAY_MARGIN_MS || 25e3);
+  log(VERSION, '· repo', REPO, '· today', chicagoDay(t0), '·', env.GITHUB_EVENT_NAME || 'manual');
+  const save = async (state, cur) => { for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readState() : cur; const merged = tries ? mergeState(state, latest.state) : state;
+      const st = await writeState(merged, latest.sha); if (st === 200 || st === 201) return true; log('write conflict', st, '— merging and retrying'); } return false; };
+  /* v2.34 · a hiccup (GitHub or ESPN) costs one pass, not the chain. What this run already sent stays in
+     memory and is merged into every fresh read, so a failed save can never make a result post twice. */
+  let state = null, total = 0, dirty = false;
+  const flush = async () => { if (!dirty || !state) return; try { const c = await readState(); if (c) dirty = !(await save(mergeState(state, c.state), c)); } catch (e) { log('final save', e.message || e); } };
+  for (let pass = 0; ; pass++) { const today = chicagoDay(Date.now());
+    try { const cur = await readState(); if (!cur) { log('no card handed over yet'); process.exit(0); }
+      if (!pass) log('posts on file:', Object.entries(cur.state.posts || {}).map(([d, p]) => `${d} ${Object.keys(p.st || {}).length}/${(p.legs || []).length} graded${p.recap ? ' · recap done' : ''}`).join(' · '));
+      state = state ? mergeState(state, cur.state) : cur.state; for (const k in SB) delete SB[k];   /* fresh scoreboards every pass */
+      let acted = await runOnce(state, today); try { acted += await publishPublic(state); } catch (e) { log('public page', e.message || e); }
+      /* the state branch only gets a commit when something was sent — or an hourly heartbeat */
+      const beat = !state.lastRun || Date.now() - state.lastRun > 60 * 60e3;
+      if (acted || beat || dirty) { state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1; dirty = !(await save(state, cur)); if (dirty) log('couldn\'t save this pass — kept in memory, retrying next pass'); }
+      total += acted; if (acted) log('pass', pass + 1, '·', acted, 'update(s) sent');
+    } catch (e) { log('pass', pass + 1, 'hiccup:', e.message || e); }
+    if (state && !relayPending(state, Date.now())) { await flush(); log('ok ·', total, 'update(s) · nothing live — the relay rests'); process.exit(dirty ? 1 : 0); }
+    if (BUDGET - (Date.now() - t0) < STEP + MARGIN) { await flush();
+      if (!state) { log('couldn\'t read the card this run — the schedule will try again'); process.exit(1); }
+      await relayNext(state); log('ok ·', total, 'update(s) · relay handed off'); process.exit(dirty ? 1 : 0); }
+    await new Promise(r => setTimeout(r, STEP)); } }

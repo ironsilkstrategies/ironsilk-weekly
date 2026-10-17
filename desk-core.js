@@ -813,7 +813,9 @@ if(typeof tgwPayload==='function'){const TGW_PAYLOAD0=tgwPayload;tgwPayload=func
     o.pub={legs:pubLegs,parlay:F.parlay?{price:F.parlay.price,keys:F.parlay.legs.map(l=>tgLegKey(l))}:null,day:o.recapPlan&&o.recapPlan.day};
     const tok=B.siteByWorker?(get(LS.ghtoken,'')||get(SYNC.token,'')):'';o.site={repo:pubRepo(),path:'public/picks.json',tok:tok||''};o.feedTs=Date.now();}catch(e){console.warn('worker public payload',e);}return o;};}
 /* keep the worker's copy of the page current whenever the app publishes */
-async function deskWorkerSync(){try{if(!tgwOn())return;const P=tgPosts();const d=today();const p=P[d];if(!p||!p.worker)return;const R=await tgwHandOff(p);return R;}catch(e){}}
+async function deskWorkerSync(){try{if(!tgwOn())return;const P=tgPosts();const d=today();const p=P[d];if(!p||!p.worker)return;const R=await tgwHandOff(p);
+    /* v2.33 · wake the worker now — GitHub's schedule can sit for hours; the worker then relays itself through the slate */
+    if(R&&R.ok&&typeof tgwRunNow==='function'){try{tgwRunNow().catch(()=>{});}catch(e){}}return R;}catch(e){}}
 /* auto-publish: as each pick unlocks (30 min before its game) and as each one grades */
 async function publishAuto(){try{try{cparGrade();cpxGrade();bkDayGrade();}catch(e){}
   if(!(get(LS.ghtoken,'')||get(SYNC.token,'')))return;const S=get(BEST5_KEY,{});const P=get('d4.pubstate',{})||{};

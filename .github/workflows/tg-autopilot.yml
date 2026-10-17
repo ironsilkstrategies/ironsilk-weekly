@@ -8,6 +8,7 @@ on:
     paths: ['autopilot/**', '.github/workflows/tg-autopilot.yml']
 permissions:
   contents: write
+  actions: write   # v2.33 · the relay: a live slate starts its own next run (GitHub's schedule only fires every few hours)
 concurrency:
   group: tg-autopilot
   cancel-in-progress: false
@@ -27,3 +28,4 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           AUTOPILOT_KEY: ${{ secrets.AUTOPILOT_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELAY: ${{ vars.RELAY }}   # set the repo variable RELAY=off to stop the live-slate relay

@@ -2524,7 +2524,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261016c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261016d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23138,6 +23138,7 @@ function tgwPayload(p){const C=p.card;const tplMk=x=>`⟦m:${tgLegKey(x)}⟧`;tp
     chars:(C.chars||[]).map(P=>({name:charName(P.v),keys:P.legs.map(tgLegKey),price:decimalToAmerican(P.dec)})),props:(C.props||[]).map(tgLegKey)};
   return{d:p.d,chat:p.chat,ids:p.ids,parts,legs,recapPlan,postedTs:p.ts,st:{},sent:{},recap:false,worker:true};}
 function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
+  {const x=a&&a.relay,y=b&&b.relay;if(x||y)out.relay=!x?y:!y?x:x.d>y.d?x:x.d<y.d?y:{d:x.d,n:Math.max(x.n||0,y.n||0)};}   /* v2.33 · the worker's relay counter rides along */
   const ds=new Set([...Object.keys((a&&a.posts)||{}),...Object.keys((b&&b.posts)||{})]);
   ds.forEach(d=>{const x=a&&a.posts&&a.posts[d],y=b&&b.posts&&b.posts[d];if(!x||!y){out.posts[d]=x||y;return;}const base=(x.postedTs||0)>=(y.postedTs||0)?x:y;
     const fx=(x.feedTs||0)>=(y.feedTs||0)?x:y;   /* v2.31 · the newest public card wins */
