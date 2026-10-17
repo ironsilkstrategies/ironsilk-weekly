@@ -10,7 +10,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.34';
+const VERSION = 'worker v2.35';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -24,12 +24,30 @@ async function encrypt(obj) { const iv = crypto.getRandomValues(new Uint8Array(1
 
 /* ── GitHub contents API on the state branch ── */
 const ghH = { Authorization: 'Bearer ' + GH, Accept: 'application/vnd.github+json', 'User-Agent': 'thedesk-autopilot' };
-async function readState() { const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE}?ref=${BRANCH}`, { headers: ghH });
-  if (r.status === 404) return null; if (!r.ok) throw new Error('read state HTTP ' + r.status);
-  const j = await r.json(); return { sha: j.sha, state: await decrypt(Buffer.from(j.content, 'base64').toString('utf8')) }; }
-async function writeState(state, sha) { const body = { message: 'autopilot ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(state), 'utf8').toString('base64'), ...(sha ? { sha } : {}) };
-  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE}`, { method: 'PUT', headers: { ...ghH, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+/* v2.35 · the card lives where the app hands it over. Since the publication moved (v2.25) that is the
+   site repo, not this one — the worker never saw a card after Oct 12. It now reads both, merges them, and
+   writes its progress to both: here with its own token, there with the site token the app put inside
+   the encrypted card (so the app's status sees every grade). STATE_REPO overrides the site repo. */
+const SITE = String(env.STATE_REPO || 'ironsilkstrategies/ironsilk-weekly-site').trim();
+let SITE_TOK = '';
+const siteTokOf = s => { let t = ''; for (const d of Object.keys((s && s.posts) || {}).sort()) { const x = s.posts[d] && s.posts[d].site; if (x && x.tok && x.repo === SITE) t = x.tok; } return t; };
+async function readStateAt(repo) { const url = `https://api.github.com/repos/${repo}/contents/${FILE}?ref=${BRANCH}`; const own = repo === REPO;
+  let r = await fetch(url, { headers: { ...ghH, Authorization: 'Bearer ' + (own ? GH : (SITE_TOK || GH)) } });
+  if (!own && (r.status === 401 || r.status === 403 || r.status === 404)) r = await fetch(url, { headers: { Accept: ghH.Accept, 'User-Agent': ghH['User-Agent'] } });   /* a public repo reads without a token */
+  if (r.status === 404) return null; if (!r.ok) throw new Error('read state ' + (own ? '' : repo + ' ') + 'HTTP ' + r.status);
+  const j = await r.json(); const state = await decrypt(Buffer.from(j.content, 'base64').toString('utf8'));
+  if (!own) { const t = siteTokOf(state); if (t && t !== SITE_TOK) { SITE_TOK = t; if (env.GITHUB_ACTIONS === 'true') console.log('::add-mask::' + t); } }   /* this repo's logs are public — the runner blanks the token everywhere */
+  return { repo, sha: j.sha, state }; }
+async function readState() { return readStateAt(REPO); }
+/* this repo's copy never carries the site token — the site's own copy already holds it */
+const stripTok = s => { const o = JSON.parse(JSON.stringify(s)); for (const d in o.posts || {}) { const p = o.posts[d]; if (p && p.site && p.site.tok) p.site = { ...p.site, tok: '' }; } return o; };
+async function writeStateAt(repo, state, sha) { const own = repo === REPO; const tok = own ? GH : SITE_TOK; if (!tok) return 0;
+  const body = { message: 'autopilot ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(own ? stripTok(state) : state), 'utf8').toString('base64'), ...(sha ? { sha } : {}) };
+  const r = await fetch(`https://api.github.com/repos/${repo}/contents/${FILE}`, { method: 'PUT', headers: { ...ghH, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return r.status; }
+async function writeState(state, sha) { return writeStateAt(REPO, state, sha); }
+/* site copy first, so on a tie its version (with the token) wins; then this repo's; then what this run holds */
+export function combineStates(...xs) { return xs.filter(Boolean).reduce((a, s) => a ? mergeState(a, s) : s, null); }
 /* the same merge the app uses: statuses and announcements only ever accumulate */
 const relayMerge = (x, y) => !x ? y : !y ? x : x.d > y.d ? x : x.d < y.d ? y : { d: x.d, n: Math.max(x.n || 0, y.n || 0) };
 export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}) };
@@ -128,9 +146,24 @@ export function cashText(p, g) { const st = p.st || {}; const by = {}; (p.legs |
     ...g.keys.map(k => { const l = by[k] || {}; return `${MARK[st[k]] || ''}<b>${esc(l.label || k)}</b>${l.__fin ? ' · ' + esc(l.__fin) : ''}`; }), '', `<i>Locked and posted before the first game · ${esc(day)}</i>`].join('\n'); }
 
 /* ── one pass ── */
-export async function runOnce(state, today, deps) { const T = deps?.tg || tg; let acted = 0;
+/* v2.35 · history: a past day's card no worker ever touched, first seen 20+ hours after it was posted (the cards
+   of Oct 13–15 sat where the worker wasn't looking). Its ✅/❌ go into the original post as a quiet edit — no
+   notification — and the day closes: no late replies, recaps, cash posts or public posts days after the fact. */
+export function isHistory(p, d, today, now) { return d < today && !p.recap && !Object.keys(p.sent || {}).length && (p.postedTs || 0) < now - 20 * 36e5; }
+async function retireQuiet(p, deps, T) { p.st = p.st || {}; p.sent = p.sent || {};
+  for (const l of p.legs || []) { if (p.st[l.k]) continue; let s = null; try { s = l.player ? await (deps?.gradeProp || gradeProp)(l, p.d) : await (deps?.gradePick || gradePick)(l, p.d); } catch (e) { } if (s) p.st[l.k] = s; }
+  if (Object.keys(p.st).length && (p.ids || []).length && (p.ids || []).length === (p.parts || []).length)
+    for (let i = 0; i < p.parts.length; i++) await T('editMessageText', { chat_id: p.chat, message_id: p.ids[i], text: fillTemplate(p.parts[i], p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' });
+  for (const l of p.legs || []) if (p.st[l.k]) p.sent[l.k] = p.st[l.k];
+  for (const g of cashedParlays(p)) { const key = 'cash|' + g.sig; for (const k of [key, key + '|vl', key + '|pub', key + '|pl']) p.sent[k] = p.sent[k] || 'q'; }
+  for (const l of (p.pub && p.pub.legs) || []) { p.sent['unlock|' + l.k] = p.sent['unlock|' + l.k] || 'q'; p.sent['pres|' + l.k] = p.sent['pres|' + l.k] || 'q'; }
+  p.sent.precap = p.sent.precap || 'q'; p.sent['~quiet'] = 1; p.recap = true; }
+const quiet = p => !!(p && p.sent && p.sent['~quiet']);
+export async function runOnce(state, today, deps) { const T = deps?.tg || tg; let acted = 0; const now = deps?.now || Date.now();
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.recap || p.worker === false || !p.chat) continue;
     p.st = p.st || {}; p.sent = p.sent || {};
+    if (isHistory(p, d, today, now)) { await retireQuiet(p, deps, T); state.posts[d] = p; acted++; log('closed', d, 'quietly ·', (p.legs || []).filter(l => p.st[l.k]).length + '/' + (p.legs || []).length, 'graded into the original post'); continue; }
+    p.sent['~wk'] = p.sent['~wk'] || 1;   /* this card is live with a worker — it never counts as history */
     for (const l of p.legs || []) { if (p.st[l.k]) continue; let s = null; try { s = l.player ? await (deps?.gradeProp || gradeProp)(l, p.d) : await (deps?.gradePick || gradePick)(l, p.d); } catch (e) { } if (s) p.st[l.k] = s; }
     const fresh = (p.legs || []).filter(l => p.st[l.k] && !p.sent[l.k]);
     if (fresh.length) {
@@ -146,10 +179,10 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
         if (p.bc && p.bc.vipLounge) await T('sendMessage', { chat_id: p.bc.vipLounge, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); } }
     state.posts[d] = p; }
   /* v2.31 · the public side: unlocks 30 min before each game, results, the public recap */
-  for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || !p.pub || d < shift(today, -2)) continue;
+  for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || !p.pub || quiet(p) || d < shift(today, -2)) continue;
     try { acted += await runPublic(p, deps); } catch (e) { log('public side', e.message || e); } state.posts[d] = p; }
   /* cashed tickets — also for days already recapped (the last 4), each announced once */
-  for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || !p.chat || d < shift(today, -4)) continue; p.sent = p.sent || {};
+  for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || !p.chat || quiet(p) || d < shift(today, -4)) continue; p.sent = p.sent || {};
     for (const g of cashedParlays(p)) { const key = 'cash|' + g.sig; if (p.sent[key]) continue;
       const r = await T('sendMessage', { chat_id: p.chat, text: cashText(p, g), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.sent[key] = 'W'; acted++;
         /* v2.31 · a cash goes everywhere: the VIP lounge, the public channel and its lounge (it's after the fact) */
@@ -174,8 +207,11 @@ export async function runPublic(p, deps) { const T = deps?.tg || tg; const now =
   /* unlocks */
   const open = legs.filter(l => l.unlockAt && now >= l.unlockAt && !p.sent['unlock|' + l.k] && !p.st[l.k]);
   if (open.length) { const day = (p.pub && p.pub.day) || DAYFMT(p.d);
-    const txt = [`🔓 <b>UNLOCKED — TheDesk · ${esc(day)}</b>`, ...open.map(l => `${KIND[l.kind] || l.kind}${l.n && l.kind !== 'Prop' ? ' #' + l.n : ''}: <b>${esc(l.label)}</b>${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${l.start ? ' · ' + tStr(l.start) : ''}`),
-      '', '<i>Locked this morning, posted 30 minutes before each game. Graded at the final.</i>'].join('\n');
+    /* v2.35 · an unlock that goes out after its game has started says so — the post never claims a time it missed */
+    const late = l => { const t = Date.parse(l.start || ''); return isFinite(t) && now >= t; };
+    const txt = [`🔓 <b>UNLOCKED — TheDesk · ${esc(day)}</b>`, ...open.map(l => `${KIND[l.kind] || l.kind}${l.n && l.kind !== 'Prop' ? ' #' + l.n : ''}: <b>${esc(l.label)}</b>${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${l.start ? ' · ' + tStr(l.start) : ''}${late(l) ? ' · <i>underway</i>' : ''}`),
+      '', open.some(late) ? '<i>Locked before the games. This post is late — the game marked underway has already started. Graded at the final.</i>'
+        : '<i>Locked before the games, posted 30 minutes before each start. Graded at the final.</i>'].join('\n');
     if (await send(txt)) { open.forEach(l => { p.sent['unlock|' + l.k] = 1; }); acted++; } }
   /* results (only what's been unlocked or is final) */
   const fresh = legs.filter(l => p.st[l.k] && !p.sent['pres|' + l.k]);
@@ -199,18 +235,20 @@ export async function runPublic(p, deps) { const T = deps?.tg || tg; const now =
 export function publicView(feed, st, now) { const F = JSON.parse(JSON.stringify(feed || {})); st = st || {}; const T0 = F.today; if (!T0) { F.generated = now; return F; }
   const key = x => [x.sp, x.game || x.team || '', x.pick || ''].join('|');
   const hide = x => ({ hidden: true, sp: x.sp, start: x.start || '', unlockAt: x.unlockAt || null });
+  /* v2.35 · open = graded, or past its unlock (T-30 from the start when only the start is known). No time at all → stays hidden. */
+  const shut = x => { if (x.hit != null || x.push) return false; const t = x.unlockAt || (Date.parse(x.start || '') - 30 * 60e3); return !(isFinite(t) && now >= t); };
   const R = F.record || { w: 0, l: 0, pu: 0, u: 0 };
   T0.picks = (T0.picks || []).map(x => { if (x.hidden) return x; const s = st[key(x)];
     if (x.hit == null && !x.push && s) { if (s === 'P') x.push = true; else { x.hit = s === 'W'; if (x.hit) { R.w++; R.u += units(x.price, 'W'); } else { R.l++; R.u -= 1; } } }
-    return x.hit == null && !x.push && x.unlockAt && now < x.unlockAt ? hide(x) : x; });
+    return shut(x) ? hide(x) : x; });
   T0.props = (T0.props || []).map(x => { if (x.hidden) return x; const s = st['pprop|' + x.sp + '|' + x.player + '|' + x.stat + '|' + x.thr];
-    if (x.hit == null && !x.push && s) { if (s === 'P') x.push = true; else x.hit = s === 'W'; } return x.hit == null && !x.push && x.unlockAt && now < x.unlockAt ? hide(x) : x; });
+    if (x.hit == null && !x.push && s) { if (s === 'P') x.push = true; else x.hit = s === 'W'; } return shut(x) ? hide(x) : x; });
   T0.allStarted = (T0.picks || []).every(x => !x.hidden);
   if (F.parlay && F.parlay.legs) { F.parlay.legs = F.parlay.legs.map(l => { if (l.hidden) return l; const s = st[key(l)]; if (l.hit == null && !l.push && s) { if (s === 'P') l.push = true; else l.hit = s === 'W'; }
-      return l.hit == null && !l.push && l.unlockAt && now < l.unlockAt ? hide(l) : l; });
+      return shut(l) ? hide(l) : l; });
     const live = F.parlay.legs.filter(l => !l.push); F.parlay.result = live.some(l => l.hit === false) ? false : live.length && live.every(l => l.hit === true) ? true : null; }
   F.record = { ...R, u: +(+R.u).toFixed(2) }; F.generated = now; F.by = 'worker'; return F; }
-async function sitePut(site, text, deps) { const tok = (site && site.tok) || env.SITE_TOKEN; if (!tok || !site || !site.repo) return { ok: false, reason: 'no site token' };
+async function sitePut(site, text, deps) { const tok = (site && site.tok) || (site && site.repo === SITE ? SITE_TOK : '') || env.SITE_TOKEN; if (!tok || !site || !site.repo) return { ok: false, reason: 'no site token' };
   const F = deps?.fetch || fetch; const api = `https://api.github.com/repos/${site.repo}/contents/${site.path || 'public/picks.json'}`; const H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'User-Agent': 'thedesk-autopilot' };
   let sha = null; try { const g = await F(api, { headers: H }); if (g.status === 200) sha = (await g.json()).sha; } catch (e) { }
   const r = await F(api, { method: 'PUT', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Public page — worker update', content: Buffer.from(text, 'utf8').toString('base64'), ...(sha ? { sha } : {}) }) });
@@ -226,19 +264,22 @@ export async function publishPublic(state, deps) { const now = deps?.now || Date
    the next run itself (a workflow dispatch, which the job's own token may do).
    The chain rests once every pick on today's card is graded — and it's capped. */
 export function relayPending(state, now) { const today = chicagoDay(now);
-  for (const d of Object.keys(state.posts || {})) { const p = state.posts[d]; if (!p || p.worker === false || d !== today) continue; const st = p.st || {}, sent = p.sent || {};
+  for (const d of Object.keys(state.posts || {})) { const p = state.posts[d]; if (!p || p.worker === false || p.recap || d !== today) continue; const st = p.st || {}, sent = p.sent || {};
     const vip = (p.legs || []).filter(l => !st[l.k]); const pub = ((p.pub && p.pub.legs) || []).filter(l => !st[l.k]);
     if (!vip.length && !pub.length) continue;
     /* the earliest game still open — when the card knows its start times */
     const starts = pub.map(l => Date.parse(l.start || '') || (l.unlockAt ? l.unlockAt + 30 * 60e3 : NaN)).filter(isFinite);
     const first = starts.length ? Math.min(...starts) : null;
     if (first == null) return true;                                  /* no times on file: the slate is live until it's graded */
-    if (first - now <= 4 * 36e5) return true;                          /* a game is on, or the first one starts within 4 hours (its unlock posts at T-30) */
-    if (pub.some(l => l.unlockAt && !sent['unlock|' + l.k] && l.unlockAt - now <= 4 * 36e5)) return true; }
+    if (first - now <= 6 * 36e5) return true;                          /* a game is on, or the first one starts within 6 hours (GitHub's schedule can sit ~4 h) */
+    if (pub.some(l => l.unlockAt && !sent['unlock|' + l.k] && l.unlockAt - now <= 6 * 36e5)) return true; }
   return false; }
 /* the next leg of the relay: one more run of this workflow */
+let VIS = null;   /* is this repo public? Actions minutes are free there — a private repo would pay for every relayed run */
+async function repoPublic(F) { if (VIS != null) return VIS; try { const r = await F(`https://api.github.com/repos/${REPO}`, { headers: ghH }); if (r && r.status === 200 && typeof r.json === 'function') { const j = await r.json(); if (typeof j.private === 'boolean') VIS = !j.private; } } catch (e) { } return VIS !== false; }
 export async function relayNext(state, deps) { if ((env.RELAY || '') === 'off') return false; const today = chicagoDay(deps?.now || Date.now());
   const F = deps?.fetch || fetch; const wf = env.RELAY_WORKFLOW || 'tg-autopilot.yml';
+  if (!(await repoPublic(F))) { log('this repo is private — the relay stays off so it never spends Actions minutes; the schedule still runs'); return false; }
   /* the cap: count today's relayed runs straight from GitHub (nothing extra written to the state branch) */
   let n = state && state.relay && state.relay.d === today ? state.relay.n || 0 : 0;
   try { const since = new Date((deps?.now || Date.now()) - 20 * 36e5).toISOString().slice(0, 19) + 'Z';
@@ -253,22 +294,29 @@ export { decrypt, encrypt, gradePick, gradeProp };
 /* ── main ── */
 if (import.meta.url === 'file://' + process.argv[1]) {
   const t0 = Date.now(), BUDGET = +(env.RELAY_BUDGET_MS || 6.5 * 60e3), STEP = +(env.RELAY_STEP_MS || 75e3), MARGIN = +(env.RELAY_MARGIN_MS || 25e3);
-  log(VERSION, '· repo', REPO, '· today', chicagoDay(t0), '·', env.GITHUB_EVENT_NAME || 'manual');
-  const save = async (state, cur) => { for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readState() : cur; const merged = tries ? mergeState(state, latest.state) : state;
-      const st = await writeState(merged, latest.sha); if (st === 200 || st === 201) return true; log('write conflict', st, '— merging and retrying'); } return false; };
+  log(VERSION, '· repo', REPO, '· card from', SITE === REPO ? 'here' : SITE + ' + here', '· today', chicagoDay(t0), '·', env.GITHUB_EVENT_NAME || 'manual');
+  /* write one copy: on a collision, re-read that copy, merge, retry */
+  const saveAt = async (repo, state, cur) => { for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readStateAt(repo) : cur;
+      const merged = tries && latest ? mergeState(state, latest.state) : state; const st = await writeStateAt(repo, merged, latest && latest.sha);
+      if (st === 200 || st === 201) return true; if (!st) return false; log('write conflict', repo === REPO ? 'here' : repo, st, '— merging and retrying'); } return false; };
+  const readSite = async () => { if (SITE === REPO) return null; try { return await readStateAt(SITE); } catch (e) { log('the site\'s copy:', e.message || e); return undefined; } };
   /* v2.34 · a hiccup (GitHub or ESPN) costs one pass, not the chain. What this run already sent stays in
      memory and is merged into every fresh read, so a failed save can never make a result post twice. */
-  let state = null, total = 0, dirty = false;
-  const flush = async () => { if (!dirty || !state) return; try { const c = await readState(); if (c) dirty = !(await save(mergeState(state, c.state), c)); } catch (e) { log('final save', e.message || e); } };
+  let state = null, total = 0, dirty = false, siteDirty = false;
+  const flush = async () => { if (!state) return; try { if (dirty) { const c = await readState(); dirty = !(await saveAt(REPO, c ? mergeState(state, c.state) : state, c)); }
+      if (siteDirty && SITE_TOK) { const c = await readSite(); if (c !== undefined) siteDirty = !(await saveAt(SITE, c ? mergeState(state, c.state) : state, c)); } } catch (e) { log('final save', e.message || e); } };
   for (let pass = 0; ; pass++) { const today = chicagoDay(Date.now());
-    try { const cur = await readState(); if (!cur) { log('no card handed over yet'); process.exit(0); }
-      if (!pass) log('posts on file:', Object.entries(cur.state.posts || {}).map(([d, p]) => `${d} ${Object.keys(p.st || {}).length}/${(p.legs || []).length} graded${p.recap ? ' · recap done' : ''}`).join(' · '));
-      state = state ? mergeState(state, cur.state) : cur.state; for (const k in SB) delete SB[k];   /* fresh scoreboards every pass */
+    try { const cur = await readState(); const sc = await readSite();
+      if (!cur && !sc) { log('no card handed over yet'); process.exit(0); }
+      state = combineStates(sc && sc.state, cur && cur.state, state); for (const k in SB) delete SB[k];   /* fresh scoreboards every pass */
+      if (!pass) log('posts on file:', Object.entries(state.posts || {}).map(([d, p]) => `${d} ${Object.keys(p.st || {}).length}/${(p.legs || []).length} graded${p.recap ? ' · closed' : ''}`).join(' · '));
       let acted = await runOnce(state, today); try { acted += await publishPublic(state); } catch (e) { log('public page', e.message || e); }
       /* the state branch only gets a commit when something was sent — or an hourly heartbeat */
       const beat = !state.lastRun || Date.now() - state.lastRun > 60 * 60e3;
-      if (acted || beat || dirty) { state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1; dirty = !(await save(state, cur)); if (dirty) log('couldn\'t save this pass — kept in memory, retrying next pass'); }
-      total += acted; if (acted) log('pass', pass + 1, '·', acted, 'update(s) sent');
+      if (acted || beat || dirty) { state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1; dirty = !(await saveAt(REPO, state, cur)); if (dirty) log('couldn\'t save this pass — kept in memory, retrying next pass'); }
+      /* the site's copy too, so the app sees every grade (its token rides inside the card) */
+      if (SITE !== REPO && SITE_TOK && sc !== undefined && (acted || siteDirty)) { siteDirty = !(await saveAt(SITE, state, sc)); if (siteDirty) log('couldn\'t update the site\'s copy — next pass'); }
+      total += acted; if (acted) log('pass', pass + 1, '·', acted, 'update(s)');
     } catch (e) { log('pass', pass + 1, 'hiccup:', e.message || e); }
     if (state && !relayPending(state, Date.now())) { await flush(); log('ok ·', total, 'update(s) · nothing live — the relay rests'); process.exit(dirty ? 1 : 0); }
     if (BUDGET - (Date.now() - t0) < STEP + MARGIN) { await flush();
