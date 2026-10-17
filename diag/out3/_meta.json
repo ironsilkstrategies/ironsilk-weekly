@@ -1,0 +1,570 @@
+[
+ {
+  "name": "nfl-depthcharts",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/depthcharts",
+  "status": 200,
+  "acao": null,
+  "bytes": 212969,
+  "keys": [
+   "depthchart",
+   "season",
+   "status",
+   "team",
+   "timestamp"
+  ]
+ },
+ {
+  "name": "nfl-schedule",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/kc/schedule?season=2025",
+  "status": 200,
+  "acao": "*",
+  "bytes": 366707,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "team",
+   "events",
+   "requestedSeason",
+   "byeWeek"
+  ]
+ },
+ {
+  "name": "nhl-schedule",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/col/schedule?season=2026",
+  "status": 200,
+  "acao": "*",
+  "bytes": 1854143,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "team",
+   "events",
+   "requestedSeason"
+  ]
+ },
+ {
+  "name": "nba-schedule",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/bos/schedule?season=2026",
+  "status": 200,
+  "acao": "*",
+  "bytes": 1459755,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "team",
+   "events",
+   "requestedSeason"
+  ]
+ },
+ {
+  "name": "ncaaf-site-standings",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season=2026",
+  "status": 404,
+  "acao": "*",
+  "bytes": 95,
+  "keys": [
+   "code",
+   "message"
+  ]
+ },
+ {
+  "name": "ncaaf-rankings",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings",
+  "status": 200,
+  "acao": "*",
+  "bytes": 577889,
+  "keys": [
+   "sports",
+   "leagues",
+   "rankings",
+   "latestSeason",
+   "latestWeek",
+   "weekCounts",
+   "weeks",
+   "requestedSeason",
+   "availableRankings"
+  ]
+ },
+ {
+  "name": "ncaab-rankings",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/rankings",
+  "status": 200,
+  "acao": "*",
+  "bytes": 292039,
+  "keys": [
+   "sports",
+   "leagues",
+   "rankings",
+   "latestSeason",
+   "latestWeek",
+   "weekCounts",
+   "weeks",
+   "requestedSeason",
+   "availableRankings"
+  ]
+ },
+ {
+  "name": "nfl-byathlete",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&page=1&limit=50&category=offense:passing&season=2026&seasontype=2",
+  "status": 200,
+  "acao": "*",
+  "bytes": 742169,
+  "keys": [
+   "pagination",
+   "league",
+   "athletes",
+   "currentSeason",
+   "requestedSeason",
+   "glossary",
+   "categories"
+  ]
+ },
+ {
+  "name": "nhl-byathlete",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/hockey/nhl/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&page=1&limit=50&season=2027&seasontype=2",
+  "status": 200,
+  "acao": "*",
+  "bytes": 346697,
+  "keys": [
+   "pagination",
+   "league",
+   "athletes",
+   "currentSeason",
+   "requestedSeason",
+   "glossary",
+   "categories"
+  ]
+ },
+ {
+  "name": "nba-byathlete",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&page=1&limit=50&season=2026&seasontype=2",
+  "status": 200,
+  "acao": "*",
+  "bytes": 669396,
+  "keys": [
+   "pagination",
+   "league",
+   "athletes",
+   "currentSeason",
+   "requestedSeason",
+   "glossary",
+   "categories"
+  ]
+ },
+ {
+  "name": "roster-lad",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/lad/roster",
+  "status": 200,
+  "acao": "*",
+  "bytes": 155602,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "athletes",
+   "coach",
+   "team"
+  ]
+ },
+ {
+  "name": "mlb-bat-gamelog-41801",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/41801/gamelog",
+  "status": 200,
+  "acao": "*",
+  "bytes": 803803,
+  "keys": [
+   "filters",
+   "labels",
+   "names",
+   "displayNames",
+   "events",
+   "seasonTypes",
+   "glossary"
+  ]
+ },
+ {
+  "name": "mlb-bat-gamelog-38309",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/38309/gamelog",
+  "status": 200,
+  "acao": "*",
+  "bytes": 733991,
+  "keys": [
+   "filters",
+   "labels",
+   "names",
+   "displayNames",
+   "events",
+   "seasonTypes",
+   "glossary"
+  ]
+ },
+ {
+  "picked": [
+   {
+    "id": "41801",
+    "name": "Hunter Feduccia",
+    "pos": "C"
+   },
+   {
+    "id": "38309",
+    "name": "Will Smith",
+    "pos": "C"
+   }
+  ]
+ },
+ {
+  "name": "roster-kc",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/kc/roster",
+  "status": 200,
+  "acao": "*",
+  "bytes": 353467,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "athletes",
+   "coach",
+   "team"
+  ]
+ },
+ {
+  "name": "nfl-qb-gamelog-4362887",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/4362887/gamelog",
+  "status": 200,
+  "acao": "*",
+  "bytes": 12097,
+  "keys": [
+   "categories",
+   "filters",
+   "labels",
+   "names",
+   "displayNames",
+   "events",
+   "seasonTypes",
+   "glossary"
+  ]
+ },
+ {
+  "picked": [
+   {
+    "id": "4362887",
+    "name": "Justin Fields",
+    "pos": "QB"
+   }
+  ]
+ },
+ {
+  "name": "roster-ala",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/ala/roster",
+  "status": 200,
+  "acao": "*",
+  "bytes": 440179,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "athletes",
+   "coach",
+   "team"
+  ]
+ },
+ {
+  "name": "ncaaf-qb-gamelog-5225235",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/athletes/5225235/gamelog",
+  "status": 200,
+  "acao": "*",
+  "bytes": 235,
+  "keys": [
+   "filters"
+  ]
+ },
+ {
+  "picked": [
+   {
+    "id": "5225235",
+    "name": "John Cooper",
+    "pos": "QB"
+   }
+  ]
+ },
+ {
+  "name": "roster-col",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/col/roster",
+  "status": 200,
+  "acao": "*",
+  "bytes": 96231,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "athletes",
+   "coach",
+   "team"
+  ]
+ },
+ {
+  "name": "nhl-f-gamelog-5136614",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/hockey/nhl/athletes/5136614/gamelog",
+  "status": 200,
+  "acao": "*",
+  "bytes": 19538,
+  "keys": [
+   "filters",
+   "labels",
+   "names",
+   "displayNames",
+   "events",
+   "seasonTypes",
+   "glossary"
+  ]
+ },
+ {
+  "picked": [
+   {
+    "id": "5136614",
+    "name": "Gavin Brindley",
+    "pos": "C"
+   }
+  ]
+ },
+ {
+  "name": "roster-den",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/den/roster",
+  "status": 200,
+  "acao": "*",
+  "bytes": 108187,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "athletes",
+   "coach",
+   "team"
+  ]
+ },
+ {
+  "name": "nba-star-gamelog-3112335",
+  "url": "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/3112335/gamelog",
+  "status": 200,
+  "acao": "*",
+  "bytes": 724514,
+  "keys": [
+   "filters",
+   "labels",
+   "names",
+   "displayNames",
+   "events",
+   "seasonTypes",
+   "glossary"
+  ]
+ },
+ {
+  "star": "Nikola Jokic",
+  "id": "3112335",
+  "injuries": [],
+  "status": {
+   "id": "1",
+   "name": "Active",
+   "type": "active",
+   "abbreviation": "Active"
+  }
+ },
+ {
+  "name": "roster-bos",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/bos/roster",
+  "status": 200,
+  "acao": "*",
+  "bytes": 102464,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "athletes",
+   "coach",
+   "team"
+  ]
+ },
+ {
+  "team": "bos",
+  "injured": [
+   {
+    "n": "Devin Carter",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:09Z"
+     }
+    ]
+   },
+   {
+    "n": "Mike Conley",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:05Z"
+     }
+    ]
+   },
+   {
+    "n": "Paul George",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:07Z"
+     }
+    ]
+   },
+   {
+    "n": "Sam Hauser",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:12Z"
+     }
+    ]
+   },
+   {
+    "n": "Payton Pritchard",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:06Z"
+     }
+    ]
+   },
+   {
+    "n": "Neemias Queta",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:08Z"
+     }
+    ]
+   },
+   {
+    "n": "Mitchell Robinson",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:09Z"
+     }
+    ]
+   },
+   {
+    "n": "Jayson Tatum",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:04Z"
+     }
+    ]
+   },
+   {
+    "n": "Derrick White",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-16T23:05Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "roster-lal",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/lal/roster",
+  "status": 200,
+  "acao": "*",
+  "bytes": 103695,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "athletes",
+   "coach",
+   "team"
+  ]
+ },
+ {
+  "team": "lal",
+  "injured": [
+   {
+    "n": "Cameron Carr",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-17T00:59Z"
+     }
+    ]
+   },
+   {
+    "n": "Collin Sexton",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-17T00:57Z"
+     }
+    ]
+   },
+   {
+    "n": "Adou Thiero",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-17T00:56Z"
+     }
+    ]
+   },
+   {
+    "n": "Jarred Vanderbilt",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-17T02:52Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "roster-mil",
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/mil/roster",
+  "status": 200,
+  "acao": "*",
+  "bytes": 105482,
+  "keys": [
+   "timestamp",
+   "status",
+   "season",
+   "athletes",
+   "coach",
+   "team"
+  ]
+ },
+ {
+  "team": "mil",
+  "injured": [
+   {
+    "n": "Nate Ament",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-17T02:01Z"
+     }
+    ]
+   },
+   {
+    "n": "Jericho Sims",
+    "inj": [
+     {
+      "s": "Day-To-Day",
+      "d": "2026-10-17T02:09Z"
+     }
+    ]
+   }
+  ]
+ }
+]
