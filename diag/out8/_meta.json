@@ -1,0 +1,97 @@
+[
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261016",
+  "status": 200,
+  "bytes": 64487
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892517",
+  "status": 200,
+  "bytes": 494947
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892518",
+  "status": 200,
+  "bytes": 479656
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20261017",
+  "status": 200,
+  "bytes": 293604
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892519",
+  "status": 200,
+  "bytes": 503860
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892520",
+  "status": 200,
+  "bytes": 435379
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892521",
+  "status": 200,
+  "bytes": 365529
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261012",
+  "status": 200,
+  "bytes": 14124
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872994",
+  "status": 200,
+  "bytes": 631159
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20261010&groups=80&limit=300",
+  "status": 200,
+  "bytes": 742109
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401856717",
+  "status": 200,
+  "bytes": 554970
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401856712",
+  "status": 200,
+  "bytes": 496441
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401858257",
+  "status": 200,
+  "bytes": 449337
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=20261016",
+  "status": 200,
+  "bytes": 213265
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401898406",
+  "status": 200,
+  "bytes": 440851
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401898407",
+  "status": 200,
+  "bytes": 471755
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401908946",
+  "status": 200,
+  "bytes": 503831
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=20261016",
+  "status": 200,
+  "bytes": 12447
+ },
+ {
+  "url": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401908026",
+  "status": 200,
+  "bytes": 151212
+ }
+]
