@@ -35,7 +35,7 @@ setTimeout(async()=>{try{
   T('one scoreboard unreachable: never flips on a guess',!r.flipped&&/nba/.test(r.why)&&w.eval('today()')==='2026-10-16',JSON.stringify(r));
   S.down=null;r=await w.eval('slateFlipCheck()');
   T('everything final (postponed counts as done): flips to Saturday',r.flipped&&r.day==='2026-10-17',JSON.stringify(r));
-  T('today() now answers Saturday before 5 AM',w.eval('today()')==='2026-10-17'&&w.localStorage.getItem('d4.slateflip')==='2026-10-17');
+  T('today() now answers Saturday before 5 AM',w.eval('today()')==='2026-10-17'&&w.eval("get('d4.slateflip',null)")==='2026-10-17');
   T('yesterday is still Friday for grading',w.eval('dayShift(today(),-1)')==='2026-10-16');
   const n=asked.length;r=await w.eval('slateFlipCheck()');
   T('already flipped: no more scoreboard calls',!r.flipped&&asked.length===n);
@@ -50,6 +50,11 @@ setTimeout(async()=>{try{
   r=await w.eval('slateFlipCheck()');
   T('a game that never started 2h past first pitch does not block the turnover',r.flipped&&r.day==='2026-10-24',JSON.stringify(r));
   S.rain=false;
+  /* v2.39 · the turnover that arrives through SYNC is stored JSON-quoted — it must count */
+  NOW=Date.parse('2026-10-25T05:40:00Z');w.eval('TODAY_T=0');w.localStorage.removeItem('d4.slateflip');
+  T('before the synced turnover: still the old slate',w.eval('today()')==='2026-10-24');
+  w.eval(`_syncSetRaw('d4.slateflip','2026-10-25')`);w.eval('TODAY_T=0');
+  T('a turnover synced from another device moves this one too',w.localStorage.getItem('d4.slateflip')==='"2026-10-25"'&&w.eval('today()')==='2026-10-25',w.localStorage.getItem('d4.slateflip')+' → '+w.eval('today()'));
   NOW=Date.parse('2026-11-08T06:30:00Z');w.eval('TODAY_T=0');   /* after the DST change (UTC-6) */
   const [a,b]=w.eval(`slateFlipWindow('2026-10-31')`);
   T('night window follows the clock change (Oct 31 5 AM CDT → Nov 1 5 AM CST)',new Date(a).toISOString()==='2026-10-31T10:00:00.000Z'&&new Date(b).toISOString()==='2026-11-01T11:00:00.000Z',new Date(a).toISOString()+' '+new Date(b).toISOString());
