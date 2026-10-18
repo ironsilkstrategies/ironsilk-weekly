@@ -60,9 +60,18 @@ function closeOf(sp,game,d){try{const k=sp+'|'+game;const p=((CLOSE_PEND||{})[d]
 function marketMove(x){const cl=closeOf(x.sp,x.game,String(x.date||'').slice(0,10));if(!cl)return null;const o=(cl[x.market]||{})[x.side];if(!o||o.open==null||o.close==null)return null;
   if(x.market!=='ml'&&o.ol!=null&&o.cl!=null&&Math.abs(o.ol-o.cl)>0.01){const pts=x.market==='total'?(x.side==='over'?o.cl-o.ol:o.ol-o.cl):(o.ol-o.cl);return +(pts*(CLV_PER_PT[x.sp]||4)).toFixed(2);}
   if(amerOk(o.open)==null||amerOk(o.close)==null)return null;const v=(imp(amerOk(o.close))-imp(amerOk(o.open)))*100;return Math.abs(v)<0.05?0:+v.toFixed(2);}
-/* a call's CLV: its own price against a line that moved after its lock, else the market's open → close */
+/* v2.47 · the honest CLV: the price the call took at its lock against where the market closed at game time
+   (DraftKings' close, from the app's own capture or the feeds). A close is always after the lock: calls lock
+   at the master evaluation, before the games. Spreads and totals that closed at a different number count the
+   points, like the call's own line. */
+function closeClv(x){try{if(!x||x.price==null||!x.lk)return null;const cl=closeOf(x.sp,x.game,String(x.date||'').slice(0,10));if(!cl)return null;const o=(cl[x.market]||{})[x.side];if(!o||o.close==null)return null;
+    const pr=amerOk(x.price),pc=amerOk(o.close);if(pr==null||pc==null)return null;
+    const same=x.market==='ml'||o.cl==null||x.line==null||Math.abs(+o.cl-(+x.line))<0.01;
+    if(same)return +((imp(pc)-imp(pr))*100).toFixed(2);
+    const pts=x.market==='total'?(x.side==='over'?o.cl-x.line:x.line-o.cl):(+x.line-(+o.cl));return +(pts*(CLV_PER_PT[x.sp]||4)).toFixed(2);}catch(e){return null;}}
+/* a call's CLV: its own price against a line that moved after its lock, else against the close, else (shown, never judged on) the market's open → close */
 function clvStampAll(){const V=get(VOICES_KEY,[])||[];let n=0,ch=0;const old=dayShift(today(),-4);
-  V.forEach(x=>{if(!x||!x.graded||x.clvk===2||!CHARS[x.voice])return;let c=callClv(x),src='own';if(c==null){c=marketMove(x);src='mkt';}
+  V.forEach(x=>{if(!x||!x.graded||x.clvk===2||!CHARS[x.voice])return;let c=callClv(x),src='own';if(c==null){c=closeClv(x);src='close';}if(c==null){c=marketMove(x);src='mkt';}
     if(c!=null){x.clv=c;x.clvs=src;x.clvk=2;ch++;n++;}else if(String(x.date||'').slice(0,10)<old){x.clvk=2;ch++;}});   /* no read after 4 days: stop looking */
   if(ch)set(VOICES_KEY,V);return n;}
 if(typeof gradeVoices==='function'&&typeof window!=='undefined'&&!window.__MIND_GV__){window.__MIND_GV__=1;const GV0=gradeVoices;
@@ -102,7 +111,7 @@ function statusStats(V,d){const from=dayShift(d,-STATUS_WIN);const S={},POOL={};
   (V||[]).forEach(x=>{if(!x||!CHARS[x.voice]||!x.graded||x.hit==null||x.push||x.price==null)return;const dd=String(x.date||'').slice(0,10);if(dd<from||dd>=d||x.pre)return;if(statusSkip(x,dd,QJ))return;
     try{if(confPre(x))return;}catch(e){}const p=confOf(x);if(p==null||!(p>0&&p<1))return;
     const k=x.voice+'|'+x.sp;const o=S[k]||(S[k]={v:x.voice,sp:x.sp,n:0,w:0,e:0,var:0,u:0,cn:0,cs:0,cs2:0,mn:0,ms:0,lanes:{}});const pk=x.sp;const Pq=POOL[pk]||(POOL[pk]={w:0,e:0});Pq.e+=p;if(x.hit)Pq.w++;o.n++;if(x.hit)o.w++;o.e+=p;o.var+=p*(1-p);o.u+=+x.units||0;
-    if(x.clv!=null&&isFinite(x.clv)){if(x.clvs==='own'){o.cn++;o.cs+=+x.clv;o.cs2+=x.clv*x.clv;}else{o.mn++;o.ms+=+x.clv;}}
+    if(x.clv!=null&&isFinite(x.clv)){if(x.clvs==='own'||x.clvs==='close'){o.cn++;o.cs+=+x.clv;o.cs2+=x.clv*x.clv;}else{o.mn++;o.ms+=+x.clv;}}
     try{const lk=laneKey(x.sp,x.market,x.side,x.price,x.line);if(lk){const L=o.lanes[lk]||(o.lanes[lk]={w:0,n:0,u:0});L.n++;if(x.hit)L.w++;L.u+=+x.units||0;}}catch(e){}});
   /* judged against the pool: k = what every character in the sport won over what their confidence promised */
   Object.values(S).forEach(o=>{const Pq=POOL[o.sp];o.k=Pq&&Pq.e>0?Math.max(0.5,Math.min(1.5,Pq.w/Pq.e)):1;o.zr=o.var>0?(o.w-o.e)/Math.sqrt(o.var):0;o.z=o.var>0?(o.w-o.k*o.e)/Math.sqrt(o.var):0;o.mclv=o.mn?o.ms/o.mn:null;o.clv=o.cn?o.cs/o.cn:null;const sd=o.cn>1?Math.max(1,Math.sqrt(Math.max(0,(o.cs2-o.cs*o.cs/o.cn)/(o.cn-1)))):null;o.tclv=o.cn>1&&sd?o.clv/(sd/Math.sqrt(o.cn)):0;});   /* a 1-point floor on the spread, so a few identical moves can't look like certainty */
