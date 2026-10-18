@@ -2598,7 +2598,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261018a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261018b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2716,12 +2716,20 @@ async function slateFlipCheck(){try{
          or one still "going" 6h after it started, isn't being played tonight — it can't hold the board hostage */
       if((st.state==='pre'&&n-t>2*36e5)||n-t>6*36e5)return;
       open.push(sp+' '+(e.shortName||e.id));});}
-  if(open.length)return{flipped:false,why:open.length+' still going',open};
+  if(open.length){SLATE_FLIP_R={ts:n,why:open.length+' still going',open};return{flipped:false,why:open.length+' still going',open};}
   localStorage.setItem(SLATE_FLIP_KEY,JSON.stringify(cal));TODAY_T=0;
   try{deskToast(`🌅 Last night's slate is final — ${fmtDate(cal+'T17:00:00Z')} is up`,3500);}catch(e){}
   if(typeof location!=='undefined'&&!window.__NO_FLIP_RELOAD__)setTimeout(()=>location.reload(),2500);
   return{flipped:true,day:cal};}catch(e){return{flipped:false,why:String(e&&e.message||e)};}}
-let SLATE_FLIP_TIMER=null,SLATE_BOOT_DAY=null,SLATE_FLIP_LAST=0;
+let SLATE_FLIP_TIMER=null,SLATE_BOOT_DAY=null,SLATE_FLIP_LAST=0,SLATE_FLIP_R=null;
+/* v2.46.2 · between midnight and 5 AM you can start the new day yourself (a game still live keeps grading on its own night) */
+function slateOvernight(){try{const n=Date.now();if(!TODAY_FMT)today();const cal=TODAY_FMT.format(new Date(n)),slate=TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5));return cal!==slate&&slateFlipVal()!==cal?{cal,slate}:null;}catch(e){return null;}}
+function slateFlipNow(){const o=slateOvernight();if(!o)return false;localStorage.setItem(SLATE_FLIP_KEY,JSON.stringify(o.cal));TODAY_T=0;
+  try{deskToast(`🌅 ${fmtDate(o.cal+'T17:00:00Z')} is up`,2500);}catch(e){}if(typeof location!=='undefined'&&!window.__NO_FLIP_RELOAD__)setTimeout(()=>location.reload(),1200);return true;}
+function slateBannerHtml(){const o=slateOvernight();if(!o)return'';const R=SLATE_FLIP_R&&Date.now()-SLATE_FLIP_R.ts<15*60e3?SLATE_FLIP_R:null;
+  const day=s=>new Date(s+'T17:00:00Z').toLocaleDateString('en-US',{weekday:'long'});
+  return`<div class="tkt" style="border-left:3px solid var(--gold)"><b>🌙 ${day(o.slate)}'s slate is still up</b><div class="sub" style="font-size:10.5px">The day turns by itself once every game from last night is final${R&&R.open&&R.open.length?` (still going: ${txtEsc(R.open.slice(0,3).join(', '))})`:''}, or at 5 AM.</div>
+    <div class="bar" style="margin-top:6px"><button class="primary" onclick="if(confirm('Start ${day(o.cal)} now? Last night\'s games still grade on their own night.'))slateFlipNow()">🌅 Start ${day(o.cal)} now</button></div></div>`;}
 function slateFlipLoop(){if(SLATE_FLIP_TIMER||typeof window==='undefined'||window.__NO_GRADELOOP__)return;
   SLATE_BOOT_DAY=today();
   const tick=()=>{const n=Date.now();if(!TODAY_FMT)today();

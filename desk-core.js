@@ -764,7 +764,8 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
   let odds=0;try{const T=get(TC_KEY,{})||{};odds=T.d===d?Object.values(T.by||{}).reduce((a,B)=>a+(B.picks||[]).filter(x=>x.price!=null).length,0):0;}catch(e){}
   const F=get(FREEZE_KEY,null);const fz=F&&F.d===d;let pub=null;try{pub=get('d4.pubstate',null);}catch(e){}const posted=get('d4.tgposted',null);
   const step=(n,ok,t,s)=>`<div class="ps-step ${ok?'ok':''}"><div class="ps-n">${ok?'✓':n}</div><div><b>${t}</b><div class="mono">${s}</div></div></div>`;
-  return`<div class="tkt ps-card"><div class="ps-row">
+  let night='';try{night=typeof slateBannerHtml==='function'?slateBannerHtml():'';}catch(e){}
+  return`${night}<div class="tkt ps-card"><div class="ps-row">
     ${step(1,cal&&Date.now()-cal<18*36e5,'Grade & calibrate',cal?'last '+deskT(cal):'runs when the app opens')}
     ${step(2,intake>0||odds>0,'Intake',`${odds} priced pick${odds===1?'':'s'}${intake?' · '+intake+' outside reads':''}`)}
     ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):'not yet — freezes everything')}
