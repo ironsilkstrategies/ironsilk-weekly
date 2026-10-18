@@ -2598,7 +2598,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261017k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261018a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2702,11 +2702,14 @@ async function slateFlipCheck(){try{
   const n=Date.now();if(!TODAY_FMT)today();const cal=TODAY_FMT.format(new Date(n)),slate=TODAY_FMT.format(new Date(n-DAY_CUT_H*36e5));
   if(cal===slate||slateFlipVal()===cal)return{flipped:false,why:'not in the overnight window'};
   const [t0,t1]=slateFlipWindow(slate);const D=x=>x.replace(/-/g,'');const open=[];
+  /* v2.46.1 · one day at a time, in the query forms the app already reads every day: ESPN refuses a date RANGE
+     with limit=400 for the NHL and NBA (HTTP 400), which kept this check from ever turning the day early */
   for(const [sp,path] of Object.entries(SLATE_FLIP_SB)){
-    const g=sp==='ncaaf'?'&groups=80':sp==='ncaab'?'&groups=50':'';
-    const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${D(slate)}-${D(cal)}&limit=400${g}`,{cache:'no-store'});
-    if(!r.ok)return{flipped:false,why:sp+' scoreboard unreachable'};   /* never flip on a guess */
-    const j=await r.json();(j.events||[]).forEach(e=>{const t=Date.parse(e.date);if(!(t>=t0&&t<t1))return;
+    const g=sp==='ncaaf'?'&groups=80&limit=900':sp==='ncaab'?'&groups=50&limit=900':'&limit=400';const ev=[];
+    for(const day of [slate,cal]){const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${D(day)}${g}`,{cache:'no-store'});
+      if(!r.ok)return{flipped:false,why:sp+' scoreboard unreachable ('+r.status+')'};   /* never flip on a guess */
+      const j=await r.json();(j.events||[]).forEach(e=>{if(!ev.some(x=>x.id===e.id))ev.push(e);});}
+    ev.forEach(e=>{const t=Date.parse(e.date);if(!(t>=t0&&t<t1))return;
       const st=(e.status&&e.status.type)||((e.competitions||[])[0]||{}).status&&e.competitions[0].status.type||{};
       if(st.completed||st.state==='post'||/POSTPONED|CANCEL|SUSPENDED|FORFEIT/i.test(st.name||''))return;
       /* a game that never started 2h past first pitch (rained out, moved, ESPN not yet marking it postponed),

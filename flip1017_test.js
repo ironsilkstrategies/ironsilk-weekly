@@ -28,7 +28,7 @@ setTimeout(async()=>{try{
   T('12:30 AM with a game still going: the desk is still on Friday',w.eval('today()')==='2026-10-16',w.eval('today()'));
   let r=await w.eval('slateFlipCheck()');
   T('a live Friday game holds the turnover',!r.flipped&&r.open&&r.open.length===1&&/PIT @ VGK/.test(r.open[0]),JSON.stringify(r));
-  T('asks for the whole night across both dates, every sport',asked.filter(u=>/dates=20261016-20261017/.test(u)).length===6&&asked.some(u=>/college-football.*groups=80/.test(u))&&asked.some(u=>/mens-college-basketball.*groups=50/.test(u)));
+  T('asks for the whole night, one date at a time (ESPN refuses a range with limit=400 for the NHL and NBA), every sport',asked.filter(u=>/scoreboard\?dates=20261016&(groups=\d+&)?limit=(400|900)$/.test(u)).length===6&&asked.filter(u=>/scoreboard\?dates=20261017&(groups=\d+&)?limit=(400|900)$/.test(u)).length===6&&!asked.some(u=>/dates=\d{8}-\d{8}&limit=400/.test(u))&&asked.some(u=>/college-football.*groups=80/.test(u))&&asked.some(u=>/mens-college-basketball.*groups=50/.test(u)),asked.slice(0,3).join(' | '));
   T('Saturday games and the slate before are not counted',!JSON.stringify(r.open).includes('NJ @ WSH')&&!JSON.stringify(r.open).includes('OLD'));
   S.late='post';S.down='nba';NOW+=1000*60*30;w.eval('TODAY_T=0');
   r=await w.eval('slateFlipCheck()');
