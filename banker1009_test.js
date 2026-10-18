@@ -29,6 +29,9 @@ setTimeout(()=>{try{
   const P=w.eval('JSON.stringify(bkDayState())');const p=JSON.parse(P);
   T('before the master eval: preview only, not locked',!p.locked&&!!p.preview);
   w.eval(`localStorage.setItem('d4.br.amt','200')`);
+  /* v2.44 · the freeze now runs through the Book, which reads the other sports in the background first (an iframe
+     each on the phone): here those reads come back at once, so the Book reaches its freeze inside the wait below */
+  w.eval("bookBgEval=async function(sp){set('d4.bgeval.'+sp,{ts:Date.now(),ok:true,d:today()});return{ok:true};}");
   w.eval("evalLockMark('nhl')");
   setTimeout(()=>{try{
     const L=JSON.parse(w.eval('JSON.stringify(bkDayState())'));

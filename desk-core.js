@@ -741,7 +741,9 @@ async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confir
       try{f.remove();}catch(e){}if(got&&got.ok)done.push(sp);else miss.push(sp);}
     deskSay('③ Freezing the day…');await new Promise(r=>setTimeout(r,30));DESK_EVAL_BUSY=false;
     const F=await deskFreezeAll('master evaluation · '+done.map(s=>(SP_LAB[s]||s).split(' ').pop()).join(', '));
-    deskSay(`<span style="color:var(--win)">✓ Frozen ${deskT(F&&F.ts)} — ${done.length} sport${done.length===1?'':'s'} evaluated${miss.length?` · couldn't load ${miss.map(s=>SP_LAB[s]||s).join(', ')} (no games or no lines yet)`:''}. Publishing…</span>`);
+    /* v2.44 · the Book can hold the freeze (a sport missing from the card, broken inputs) — say so instead of "Frozen" */
+    if(!deskFrozen()){let H=null;try{H=typeof bookHold==='function'?bookHold():null;}catch(e){}deskSay(`<span style="color:var(--gold)">⏳ Not frozen yet — the Book is holding it: ${txtEsc((H&&H.why)||'see Records → 📖 The Book')}</span>`);}
+    else deskSay(`<span style="color:var(--win)">✓ Frozen ${deskT(F&&F.ts)} — ${done.length} sport${done.length===1?'':'s'} evaluated${miss.length?` · couldn't load ${miss.map(s=>SP_LAB[s]||s).join(', ')} (no games or no lines yet)`:''}. Publishing…</span>`);
   }finally{DESK_EVAL_BUSY=false;}
   try{renderToday(true);}catch(e){}deskRerender();return{done,miss,ms:Date.now()-t0};}
 const deskT=ts=>ts?new Date(ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';

@@ -76,7 +76,7 @@ a{color:inherit}
 .day .ps{flex:1}.day .ps span{margin-right:10px;white-space:nowrap}
 .w{color:var(--win)}.l{color:var(--loss)}.p{color:var(--push)}
 .foot{margin-top:28px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mute);line-height:1.7;text-align:center}
-.why{margin-top:8px;font-size:12.5px;line-height:1.5;color:#cfd5e2}.why summary{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--gold);cursor:pointer;letter-spacing:.06em}
+.why{margin-top:8px;font-size:12.5px;line-height:1.5;color:#cfd5e2}.why .read{margin:6px 0 4px;padding:8px 10px;border-left:3px solid var(--gold);background:rgba(255,255,255,.03);border-radius:6px}.why .read b{color:var(--gold)}.why .read p{margin:4px 0}.why .also{font-size:11.5px;opacity:.85;margin-top:3px}.why .math{margin-top:4px}.why summary{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--gold);cursor:pointer;letter-spacing:.06em}
 .why li{margin:2px 0}
 .pl{background:linear-gradient(160deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin-bottom:10px}
 .pl h3{margin:0;font-family:'Archivo Black',sans-serif;font-size:17px}.pl .px{font-family:'Archivo Black',sans-serif;font-size:22px;color:var(--gold)}
@@ -176,7 +176,10 @@ function renderProps(){const P=(FEED.today&&FEED.today.props)||[];const box=$('p
   box.innerHTML=`<div class="hd"><h2>Best 3 props</h2><span>70%+ only</span></div><div class="mini">${P.map((x,i)=>{if(x.hidden)return`<div class="lock" style="padding-left:16px"><div class="key">🔒</div><b>LOCKED PROP</b><div class="meta">${em[x.sp]||''} ${esc(LAB[x.sp]||'')}${x.start?' · game at '+tm(x.start):''}</div><div class="cd" data-cd="1" data-u="${x.unlockAt||''}" data-s="${esc(x.start||'')}">${countdown(x)}</div></div>`;
     const [c,l]=res(x);return`<div class="prop"><b>${esc(x.label||((x.player||'')+' '+(x.side||'over')+' '+x.thr+' '+(x.stat||'')))}</b>${x.price!=null?` <span class="pr">${sgn(x.price)}</span>`:''}<div class="pct">${Math.round((x.p||0)*100)}%<small>to hit</small></div>
       <div class="meta">${em[x.sp]||''} ${esc(x.team||'')}${x.start?' · '+tm(x.start):''}${x.actual!=null?' · finished with '+esc(x.actual):''} ${c!=='open'?`<b class="${c==='hit'?'w':c==='miss'?'l':'p'}">${l}</b>`:''}</div></div>`;}).join('')}</div>`;}
-function whyBlock(W){if(!W||!W.bullets||!W.bullets.length)return'';return`<details class="why"><summary>WHY WE LIKE IT</summary><ul style="padding-left:16px;margin:6px 0">${W.bullets.map(b=>`<li>${esc(b)}</li>`).join('')}</ul></details>`;}
+/* v2.44 · the character who made the pick explains it in plain words; the numbers sit underneath */
+function whyBlock(W){if(!W)return'';const R=W.read,B=W.bullets||[];if(!R&&!B.length)return'';const ul=`<ul style="padding-left:16px;margin:6px 0">${B.map(b=>`<li>${esc(b)}</li>`).join('')}</ul>`;
+  if(!R)return`<details class="why"><summary>WHY WE LIKE IT</summary>${ul}</details>`;
+  return`<details class="why"><summary>WHY WE LIKE IT</summary><div class="read"><b>${esc(R.who)}</b><p>${esc(R.text)}</p>${(R.also||[]).map(a=>`<div class="also"><b>${esc(a.who)}:</b> “${esc(a.take)}”</div>`).join('')}</div>${B.length?`<details class="math"><summary>THE NUMBERS</summary>${ul}</details>`:''}</details>`;}
 function renderParlay(){const P=FEED&&FEED.parlay;const box=$('parlayBox');if(!P||!P.legs||!P.legs.length){box.innerHTML='';return;}
   const R=FEED.parlayRecord;const rs=P.result===true?'<span class="res hit" style="position:static">✓ CASHED</span>':P.result===false?'<span class="res miss" style="position:static">✗ LOST</span>':'';
   box.innerHTML=`<div class="hd"><h2>The Banker's parlay</h2><span>${R&&R.w+R.l?R.w+'-'+R.l+' all-time':'his own ticket'}</span></div>
