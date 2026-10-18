@@ -99,8 +99,13 @@ function confHas70(){const V=roGet(VOICES_KEY,[],30e3)||[];const last=V.length?V
   V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const d=String(c.date||'').slice(0,10);if(d<CONF_FALLBACK_FROM)return;const cf=confOf(c);
     if(cf==null||cf<confFloor(c.market)-1e-9||c.kof||!confPriced(c)||confPre(c))return;S.add(c.sp+'|'+d);});
   CONF_FB_C={sig,ts:Date.now(),S};return S;}
+/* v2.47.2 · a second step down, from Oct 18: a sport with no 65% call either plays its 60% calls that day */
+const CONF_FALLBACK2=0.60,CONF_FALLBACK2_FROM='2026-10-18';let CONF_FB2_C=null;
+function confHas65(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+(V.length?V[V.length-1].id+'|'+V[V.length-1].cf:'');if(CONF_FB2_C&&CONF_FB2_C.sig===sig&&Date.now()-CONF_FB2_C.ts<30e3)return CONF_FB2_C.S;const S=new Set();
+  V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const d=String(c.date||'').slice(0,10);if(d<CONF_FALLBACK2_FROM)return;const cf=confOf(c);
+    if(cf==null||cf<CONF_FALLBACK-1e-9||c.kof||!confPriced(c)||confPre(c))return;S.add(c.sp+'|'+d);});CONF_FB2_C={sig,ts:Date.now(),S};return S;}
 function confFloorFor(x){const base=confFloor(x&&x.market);const d=String((x&&x.date)||'').slice(0,10);if(!x||!x.sp||!d||d<CONF_FALLBACK_FROM)return base;
-  return confHas70().has(x.sp+'|'+d)?base:Math.min(base,CONF_FALLBACK);}
+  if(confHas70().has(x.sp+'|'+d))return base;if(d<CONF_FALLBACK2_FROM||confHas65().has(x.sp+'|'+d))return Math.min(base,CONF_FALLBACK);return Math.min(base,CONF_FALLBACK2);}
 function isOfficial(x){const c=confOf(x);return c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
 const officialOnly=V=>(V||[]).filter(isOfficial);
 const confPct=c=>c==null?'—':Math.round(c*100)+'%';
