@@ -2047,9 +2047,10 @@ function characterCalls(sp,g,s){
     const mf=marketFair(sp,g,c.market,c.side,c.line);if(mf)c.mktP=+mf.p.toFixed(4),c.mktSrc=mf.src;});}catch(e){}
   // Judge
   let J=null;try{J=brainJudge(g,s,sp)}catch(e){}
-  if(J){add('Judge','ml',J.pHome>=0.5?'home':'away');
-    if(hl!=null){const m=(J.h-J.a)+hl;if(m!==0)add('Judge','spread',m>0?'home':'away');}
-    if(tl!=null){const t=J.a+J.h;if(t!==tl)add('Judge','total',t>tl?'over':'under');}}
+  /* v2.45 · from Oct 18 on the Judge's call carries its own read (weighed score, measured spread) for its worldview */
+  if(J){const jx=d>='2026-10-18'&&isFinite(+J.a)&&isFinite(+J.h)?{ja:+J.a,jh:+J.h,jsd:+J.sd||null}:null;add('Judge','ml',J.pHome>=0.5?'home':'away',jx);
+    if(hl!=null){const m=(J.h-J.a)+hl;if(m!==0)add('Judge','spread',m>0?'home':'away',jx);}
+    if(tl!=null){const t=J.a+J.h;if(t!==tl)add('Judge','total',t>tl?'over':'under',jx);}}
   // Most common score
   const ms=String(s.modeScore||'').match(/(\d+)\D+(\d+)/);
   if(ms)byMargin('Most common',+ms[1],+ms[2],{score:ms[1]+'-'+ms[2]});
@@ -2067,8 +2068,10 @@ function characterCalls(sp,g,s){
   }catch(e){}
   // Trends — the net lean of every uploaded trend on this game, as the Judge reads them
   try{const tr=brainTrendEvidence(g,sp);
-    const tlean=IDEO_P('Trends','lean',0.05);if(Math.abs(tr.dMar)>=tlean){const sd=tr.dMar>0?'home':'away';add('Trends','ml',sd);if(hl!=null)add('Trends','spread',sd);}
-    if(Math.abs(tr.dTot)>=tlean&&tl!=null)add('Trends','total',tr.dTot>0?'over':'under');}catch(e){}
+    /* v2.45 · from Oct 18 on each Trends call carries its net lean in points toward its side (its worldview's own read) */
+    const tx=v=>d>='2026-10-18'&&isFinite(v)?{tlp:+Math.abs(v).toFixed(2)}:null;
+    const tlean=IDEO_P('Trends','lean',0.05);if(Math.abs(tr.dMar)>=tlean){const sd=tr.dMar>0?'home':'away';add('Trends','ml',sd,tx(tr.dMar));if(hl!=null)add('Trends','spread',sd,tx(tr.dMar));}
+    if(Math.abs(tr.dTot)>=tlean&&tl!=null)add('Trends','total',tr.dTot>0?'over':'under',tx(tr.dTot));}catch(e){}
   /* The Crowd — rebuilt on Levitt (2004): books don't balance action, they shade
      lines AGAINST the public, so a lopsided public side is a fade, not a follow.
        1) money and tickets both uploaded and money runs 10+ pts ahead of tickets
@@ -2595,7 +2598,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261017i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261017j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /

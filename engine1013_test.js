@@ -91,7 +91,7 @@ setTimeout(async()=>{try{
   const er=w.eval('engineRoomHtml()');
   T('Engine Room renders the plain-English summary and every section',/Engine Room/.test(er)&&/Autopilot loops/.test(er)&&/absorbed/.test(er)&&/Situations being tested/.test(er)&&/Ideology floors/.test(er)&&/freeze/.test(er));
   T('Records has an Engine Room tab',/'engine','🛠 Engine Room'/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8')));
-  T('autopilot runs 15 loops in order (v2.31: the confidence meter learns right after grading; v2.44: the health check right after it)',w.eval('AP_STEPS.map(s=>s[0]).join(",")')==='learn,voices,conf,status,factors,feel,chem,squads,scout,ideo,parlays,props,banker,cal,mlbcal');
+  T('autopilot runs 16 loops in order (v2.31: the confidence meter learns right after grading; v2.44: the health check right after it; v2.45: the generations after that)',w.eval('AP_STEPS.map(s=>s[0]).join(",")')==='learn,voices,conf,status,heirs,factors,feel,chem,squads,scout,ideo,parlays,props,banker,cal,mlbcal');
   T('no uncaught errors',errors.length===0,errors.slice(0,3).join(' || '));
 }catch(e){T('harness',false,e.stack);}
 console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(0);},3000);
