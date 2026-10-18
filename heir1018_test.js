@@ -27,7 +27,7 @@ function ledger(seed,{from='2026-09-18',days=49,per=10,cf=0.75}={}){const R=rng(
     const X=w.eval('bookExplore(BOOKS.generation,heirRules)');
     T(`every combination (${X.n}) ends, and none breaks a rule (no chair changes without clearing every bar, no heir promised without room)`,X.bad.length===0&&X.broke.length===0,JSON.stringify(X.broke.slice(0,2)));
     T('every generation ending is reachable',['KEEP','PROMOTE','RETIRE','SPAWN'].every(e=>X.ends[e]>0),JSON.stringify(X.ends));
-    T('the daily pass runs right after the health check',w.eval(`(()=>{const i=AP_STEPS.findIndex(s=>s[0]==='status');return i>=0&&AP_STEPS[i+1]&&AP_STEPS[i+1][0]==='heirs';})()`));}
+    T('the daily pass runs after the health check (and after the world\'s weather, when that\'s loaded)',w.eval(`(()=>{const i=AP_STEPS.findIndex(s=>s[0]==='status'),j=AP_STEPS.findIndex(s=>s[0]==='heirs'),k=AP_STEPS.findIndex(s=>s[0]==='world');return i>=0&&j>i&&(k<0||(k>i&&k===j-1));})()`));}
   /* ── walk-forward: a day is predicted only from the days before it ── */
   {const w=boot({},Date.parse('2026-10-18T14:00:00Z'));await wait(1000);const V=ledger(7,{days:30});
     const r=w.eval(`(()=>{const V=${JSON.stringify(V)};const D='2026-10-02';const full=wvRun(V,WV_DEF),cut=wvRun(V.filter(x=>x.date<=D),WV_DEF);
