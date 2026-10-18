@@ -2592,13 +2592,13 @@ function sportSlipToggle(sport,gid,label,price,extra){
     extra=Object.assign({line:S2.line,sq:old},extra||{});label=S2.label;}}
   const id=gid+'|'+label;const i=SLIP.findIndex(x=>x.id===id);
   if(i>=0)SLIP.splice(i,1);
-  else SLIP.push(Object.assign({id,gid,pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport,date:(()=>{for(const v of [g.date,g.start,g.gameDate]){if(v){const t=tdDay(v);if(/^\d{4}-\d{2}-\d{2}$/.test(t))return t;}}return today();})(),
+  else SLIP.push(Object.assign({id,gid,at:Date.now(),pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport,date:(()=>{for(const v of [g.date,g.start,g.gameDate]){if(v){const t=tdDay(v);if(/^\d{4}-\d{2}-\d{2}$/.test(t))return t;}}return today();})(),
     p:price!=null&&Math.abs(price)>=100?Math.min(.95,Math.max(.05,price>0?100/(price+100):-price/(-price+100))):0.5},extra||{}));
   set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261018c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261018d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8965,12 +8965,14 @@ function pan(gid,which,btn){
 /* ================= SLIP ================= */
 /* v2.20 · a slip leg whose game day has passed is dead weight (yesterday's JAX spread kept
    riding along into today) — drop it on load */
-function loadSlip(){SLIP=(get(LS.slip,[])||[]).filter(x=>{const d=String(x.gameDate||x.date||'').slice(0,10);return!d||d>=today();});try{set(LS.slip,SLIP);}catch(e){}}
+function loadSlip(){const on=new Map();try{(get(LS.locked,[])||[]).forEach(t=>{const at=+t.id||Date.parse(t.date||'')||0;(t.legs||[]).forEach(l=>{if(l&&l.id&&at>(on.get(l.id)||0))on.set(l.id,at);});});}catch(e){}
+  /* v2.47.1 · a leg already locked into a ticket (after it was added here) has left the slip — it never pops back up */
+  SLIP=(get(LS.slip,[])||[]).filter(x=>{const d=String(x.gameDate||x.date||'').slice(0,10);if(d&&d<today())return false;const t=on.get(x.id);return!(t&&t>(+x.at||0));});try{set(LS.slip,SLIP);}catch(e){}}
 function tog(id,game,pick,prob,gid,ptype,pname,pmkt){
   const i=SLIP.findIndex(x=>x.id===id);
   if(i>=0)SLIP.splice(i,1);
   else{
-    const leg={id,game,pick,p:prob,gid,date:today()};
+    const leg={id,game,pick,p:prob,gid,date:today(),at:Date.now()};
     if(ptype){leg.ptype=ptype;leg.isProp=1;leg.pname=pname;leg.pmkt=pmkt;
       const src=PROPS.find(z=>z.gid===gid&&z.name===pname&&z.mkt===pmkt);
       if(src){leg.pid=src.pid;leg.thr=src.thr}}
@@ -21452,7 +21454,8 @@ function sweepAutoRekey(list){let n=0;list.forEach(x=>{try{const D=legDiagnose(x
     const [oa,oh]=String(x.l.game).split('@'),[na,nh]=D.to.split('@');const sp=x.sp;
     const same=(o,n2)=>o===n2||mgAb(sp,o)===n2||mgAb(sp,n2)===o;
     if((same(oa,na)&&same(oh,nh))||(same(oa,nh)&&same(oh,na))){legRekey(x.t.id,x.i,D.to);n++;}}catch(e){}});return n;}
-async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY)return null;if(!opts.force&&Date.now()-SWEEP_TS<9.5*60e3)return null;
+let SWEEP_AGAIN=false;
+async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY){if(opts.force)SWEEP_AGAIN=true;return null;}if(!opts.force&&Date.now()-SWEEP_TS<9.5*60e3)return null;
   SWEEP_BUSY=true;SWEEP_TS=Date.now();const before=sweepOverdue().length;
   try{
     if(before||opts.force){
@@ -21469,17 +21472,22 @@ async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY)return null;if(!opts
     return{tid:String(x.t.id),i:x.i,name:x.t.name||null,pick:x.l.pick,game:x.l.game,sp:x.sp,d:x.d,code:D.code,msg:D.msg};});
   const H={ts:Date.now(),before,graded:Math.max(0,before-left.length),left};set(GHEALTH_KEY,H);
   try{gradeBannerPaint();}catch(e){}
+  if(SWEEP_AGAIN){SWEEP_AGAIN=false;setTimeout(()=>{gradeSweep({force:true}).catch(()=>{});},300);}   /* "Sweep again" tapped mid-sweep: one more pass, not silence */
   try{const on=id=>{const v=document.getElementById(id);return v&&v.classList.contains('on');};if(on('v-tickets'))renderTickets();if(on('v-mine'))renderMyGames();if(on('v-banker'))renderBankerTab();}catch(e){}
   return H;}
-function gradeBannerPaint(){if(typeof document==='undefined')return;const H=get(GHEALTH_KEY,null);let el=document.getElementById('gradeBanner');
+/* one tap grades the leg right away: it leaves the list at once and the list stays open for the next one */
+function gradeBannerSet(tid,i,res){try{legSetManual(tid,i,res);}catch(e){}try{const H=get(GHEALTH_KEY,null);if(H&&H.left){H.left=H.left.filter(x=>!(String(x.tid)===String(tid)&&+x.i===+i));set(GHEALTH_KEY,H);}}catch(e){}
+  try{gradeBannerPaint(true);}catch(e){}setTimeout(()=>{gradeSweep({force:true}).catch(()=>{});},400);}
+function gradeBannerPaint(keepOpen){if(typeof document==='undefined')return;const H=get(GHEALTH_KEY,null);let el=document.getElementById('gradeBanner');
+  const wasOpen=keepOpen===true||!!(el&&el.querySelector('details[open]'));
   const left=(H&&H.left)||[];
   if(!left.length){if(el)el.remove();return;}
   if(!el){el=document.createElement('div');el.id='gradeBanner';el.style.cssText='margin:8px 3px 4px;padding:10px 12px;border-radius:10px;border:1px solid var(--gold);background:rgba(245,184,46,.08);font-size:12px';
     const anchor=document.getElementById('storageBanner')||document.querySelector('nav');if(anchor&&anchor.parentNode)anchor.parentNode.insertBefore(el,anchor.nextSibling);else document.body.prepend(el);}
   const rows=left.slice(0,12).map(x=>{const id=JSON.stringify(x.tid).replace(/"/g,'&quot;');return`<div class="mono" style="font-size:10px;padding:5px 0;border-top:1px dashed var(--rule)">
       <b>${txtEsc(x.pick)}</b> <span style="color:var(--mute)">${(x.sp||'').toUpperCase()} ${txtEsc(x.game)} · ${txtEsc(x.d)}${x.name?' · '+txtEsc(x.name):''}</span><br><span style="color:var(--gold)">🩺 ${txtEsc(x.msg)}</span><br>
-      <button onclick="legSetManual(${id},${x.i},'won');gradeSweep({force:true})">✅ Won</button><button onclick="legSetManual(${id},${x.i},'lost');gradeSweep({force:true})">❌ Lost</button><button onclick="legSetManual(${id},${x.i},'push');gradeSweep({force:true})">↔ Push</button></div>`;}).join('');
-  el.innerHTML=`<details><summary><b style="color:var(--gold)">🩺 ${left.length} leg${left.length>1?'s':''} past game day without a grade</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">checked ${new Date(H.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></summary>
+      <button onclick="gradeBannerSet(${id},${x.i},'won')">✅ Won</button><button onclick="gradeBannerSet(${id},${x.i},'lost')">❌ Lost</button><button onclick="gradeBannerSet(${id},${x.i},'push')">↔ Push</button></div>`;}).join('');
+  el.innerHTML=`<details${wasOpen?' open':''}><summary><b style="color:var(--gold)">🩺 ${left.length} leg${left.length>1?'s':''} past game day without a grade</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">checked ${new Date(H.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></summary>
     <div class="sub" style="font-size:10px;margin:4px 0">The sweeper pulled every date these games were on and still couldn't settle them. Each one says why. If the reason is a pick it can't read or a game ESPN doesn't list, set the result once and it's locked in.</div>
     ${rows}${left.length>12?`<div class="sub" style="font-size:10px">+${left.length-12} more on Tickets → My picks</div>`:''}
     <div class="bar" style="margin-top:6px"><button class="primary" onclick="this.textContent='Sweeping…';gradeSweep({force:true})">↻ Sweep again now</button></div></details>`;}
@@ -23000,7 +23008,7 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
    · everything else: the newest write wins, per key
    Credentials never sync. The old public data-backup.json is retired.        */
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
-const SYNC_NEVER=new Set(['d4.tgbot',LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
+const SYNC_NEVER=new Set(['d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
 const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$)/.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
