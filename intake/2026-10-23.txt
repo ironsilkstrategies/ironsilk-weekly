@@ -1,0 +1,143 @@
+SOURCE: sportsbetting
+# Fri Oct 23, 2026 — book lines: sportsbetting.ag screenshots (4:54–4:56 PM CT). Pick'em written as 0.
+
+NCAAF
+
+Massachusetts @ Connecticut
+ML: Massachusetts +383 / Connecticut -500
+SPREAD: Massachusetts +11.5 (-105) / Connecticut -11.5 (-115)
+OU: o53 (-115) / u53 (-105)
+H1SPREAD: Massachusetts +6.5 (-104) / Connecticut -6.5 (-116)
+H1ML: Massachusetts +289 / Connecticut -360
+H1OU: o27.5 (-105) / u27.5 (-115)
+
+Duke @ Virginia
+ML: Duke +107 / Virginia -127
+SPREAD: Duke +2 (-110) / Virginia -2 (-110)
+OU: o47.5 (-110) / u47.5 (-110)
+H1SPREAD: Duke +0.5 (-116) / Virginia -0.5 (-104)
+H1ML: Duke +105 / Virginia -125
+H1OU: o23.5 (-110) / u23.5 (-110)
+
+Army @ Tulsa
+ML: Army -105 / Tulsa -115
+SPREAD: Army +1 (-110) / Tulsa -1 (-110)
+OU: o53 (-112) / u53 (-108)
+H1SPREAD: Army +0.5 (-135) / Tulsa -0.5 (+115)
+H1OU: o26.5 (-118) / u26.5 (-102)
+Q1SPREAD: Army +0.5 (-160) / Tulsa -0.5 (+140)
+
+Air Force @ Wyoming
+ML: Air Force -240 / Wyoming +200
+SPREAD: Air Force -6 (-115) / Wyoming +6 (-105)
+OU: o46.5 (-115) / u46.5 (-105)
+H1SPREAD: Air Force -3.5 (-105) / Wyoming +3.5 (-115)
+H1ML: Air Force -185 / Wyoming +161
+H1OU: o23 (-115) / u23 (-105)
+
+NC State @ Stanford
+ML: NC State -300 / Stanford +245
+SPREAD: NC State -7.5 (-110) / Stanford +7.5 (-110)
+OU: o55 (-108) / u55 (-112)
+H1SPREAD: NC State -4.5 (-110) / Stanford +4.5 (-110)
+H1ML: NC State -220 / Stanford +186
+H1OU: o27.5 (-115) / u27.5 (-105)
+
+NBA
+
+New York Knicks @ Boston Celtics
+ML: New York Knicks +120 / Boston Celtics -140
+SPREAD: New York Knicks +2.5 (-109) / Boston Celtics -2.5 (-111)
+OU: o220.5 (-110) / u220.5 (-110)
+H1SPREAD: New York Knicks +1 (-102) / Boston Celtics -1 (-118)
+H1ML: New York Knicks +115 / Boston Celtics -135
+H1OU: o114 (-110) / u114 (-110)
+
+Atlanta Hawks @ Charlotte Hornets
+ML: Atlanta Hawks -140 / Charlotte Hornets +120
+SPREAD: Atlanta Hawks -2.5 (-112) / Charlotte Hornets +2.5 (-108)
+OU: o227 (-108) / u227 (-112)
+H1SPREAD: Atlanta Hawks -1 (-115) / Charlotte Hornets +1 (-105)
+H1ML: Atlanta Hawks -130 / Charlotte Hornets +110
+H1OU: o116.5 (-110) / u116.5 (-110)
+
+Dallas Mavericks @ Indiana Pacers
+ML: Dallas Mavericks +215 / Indiana Pacers -260
+SPREAD: Dallas Mavericks +7 (-105) / Indiana Pacers -7 (-115)
+OU: o239.5 (-110) / u239.5 (-110)
+H1SPREAD: Dallas Mavericks +4 (-115) / Indiana Pacers -4 (-105)
+H1ML: Dallas Mavericks +170 / Indiana Pacers -195
+H1OU: o123.5 (-115) / u123.5 (-105)
+
+Minnesota Timberwolves @ Orlando Magic
+ML: Minnesota Timberwolves -103 / Orlando Magic -117
+SPREAD: Minnesota Timberwolves +1 (-108) / Orlando Magic -1 (-112)
+OU: o234 (-110) / u234 (-110)
+H1SPREAD: Minnesota Timberwolves +0 (-105) / Orlando Magic -0 (-115)
+H1OU: o113.5 (-110) / u113.5 (-110)
+Q1SPREAD: Minnesota Timberwolves +0 (-110) / Orlando Magic -0 (-110)
+
+Toronto Raptors @ Washington Wizards
+ML: Toronto Raptors -335 / Washington Wizards +270
+SPREAD: Toronto Raptors -8.5 (-115) / Washington Wizards +8.5 (-105)
+OU: o237 (-113) / u237 (-107)
+H1SPREAD: Toronto Raptors -4.5 (-105) / Washington Wizards +4.5 (-115)
+H1ML: Toronto Raptors -220 / Washington Wizards +186
+H1OU: o115 (-110) / u115 (-110)
+
+Detroit Pistons @ Miami Heat
+ML: Detroit Pistons -125 / Miami Heat +105
+SPREAD: Detroit Pistons -2 (-108) / Miami Heat +2 (-112)
+OU: o235 (-107) / u235 (-113)
+H1SPREAD: Detroit Pistons +0 (-115) / Miami Heat -0 (-105)
+H1OU: o121.5 (-110) / u121.5 (-110)
+Q1SPREAD: Detroit Pistons +0 (-110) / Miami Heat -0 (-110)
+
+Houston Rockets @ San Antonio Spurs
+ML: Houston Rockets +165 / San Antonio Spurs -190
+SPREAD: Houston Rockets +5 (-110) / San Antonio Spurs -5 (-110)
+OU: o224 (-110) / u224 (-110)
+H1SPREAD: Houston Rockets +3 (-110) / San Antonio Spurs -3 (-110)
+H1ML: Houston Rockets +155 / San Antonio Spurs -177
+H1OU: o109 (-105) / u109 (-115)
+
+New Orleans Pelicans @ Utah Jazz
+SPREAD: New Orleans Pelicans +0 (-110) / Utah Jazz -0 (-110)
+OU: o239.5 (-110) / u239.5 (-110)
+H1SPREAD: New Orleans Pelicans +0 (+100) / Utah Jazz -0 (-120)
+H1OU: o123 (-110) / u123 (-110)
+Q1SPREAD: New Orleans Pelicans +0 (-110) / Utah Jazz -0 (-110)
+
+Memphis Grizzlies @ Golden State Warriors
+ML: Memphis Grizzlies +151 / Golden State Warriors -172
+SPREAD: Memphis Grizzlies +4.5 (-105) / Golden State Warriors -4.5 (-115)
+OU: o237.5 (-110) / u237.5 (-110)
+H1SPREAD: Memphis Grizzlies +2.5 (-110) / Golden State Warriors -2.5 (-110)
+H1ML: Memphis Grizzlies +135 / Golden State Warriors -155
+H1OU: o122 (-115) / u122 (-105)
+
+Los Angeles Clippers @ Los Angeles Lakers
+ML: Los Angeles Clippers +280 / Los Angeles Lakers -350
+SPREAD: Los Angeles Clippers +8.5 (-110) / Los Angeles Lakers -8.5 (-110)
+OU: o225.5 (-113) / u225.5 (-107)
+H1SPREAD: Los Angeles Clippers +5.5 (-115) / Los Angeles Lakers -5.5 (-105)
+H1ML: Los Angeles Clippers +230 / Los Angeles Lakers -280
+H1OU: o109.5 (-115) / u109.5 (-105)
+
+Portland Trail Blazers @ Sacramento Kings
+ML: Portland Trail Blazers -450 / Sacramento Kings +350
+SPREAD: Portland Trail Blazers -10 (-115) / Sacramento Kings +10 (-105)
+OU: o232 (-110) / u232 (-110)
+H1SPREAD: Portland Trail Blazers -5 (-110) / Sacramento Kings +5 (-110)
+H1ML: Portland Trail Blazers -250 / Sacramento Kings +207
+H1OU: o119.5 (-110) / u119.5 (-110)
+
+MLB
+
+Tampa Bay Rays @ Milwaukee Brewers
+ML: Tampa Bay Rays +165 / Milwaukee Brewers -183
+RL: Tampa Bay Rays +1.5 (-145) / Milwaukee Brewers -1.5 (+125)
+OU: o6.5 (-117) / u6.5 (-103)
+F5 ML: Tampa Bay Rays +170 / Milwaukee Brewers -195
+F5 RL: Tampa Bay Rays +0.5 (+105) / Milwaukee Brewers -0.5 (-125)
+F5 OU: o3 (-135) / u3 (+115)
