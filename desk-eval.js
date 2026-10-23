@@ -52,3 +52,13 @@ if(typeof renderTicketsRaw==='function'&&typeof window!=='undefined'&&!window.__
   renderTicketsRaw=function(){const r=RT0.apply(this,arguments);try{const b=document.getElementById('ticketBody');if(b&&!document.getElementById('evPaste')){const d=document.createElement('div');d.innerHTML=evCardHtml();b.insertBefore(d.firstChild,b.firstChild);}}catch(e){}return r;};}
 const EV_CSS=`.ev-leg{padding:6px 0;border-top:1px solid var(--rule);font-size:12px}.ev-sum{font-size:12.5px;padding:4px 0}`;
 if(typeof window!=='undefined'&&!window.__EV_BOOT__){window.__EV_BOOT__=1;window.addEventListener('load',()=>{try{const st=document.createElement('style');st.textContent=EV_CSS;document.head.appendChild(st);}catch(e){}});}
+/* ═══ THE PUBLIC PAGE, SIMPLE (v2.49) — only the Best 3 goes out, in plain words ═══════════════
+   What the phone publishes after the master evaluation: the Best 3 (locked until 30 minutes before
+   each game, as always), the Best 3 record and history, and each pick's lead character's plain read.
+   No props, no parlays, no cashed-ticket showcase, no model numbers, no "show the math" — the answers
+   leave the phone; the machinery that made them never does. Your own app keeps everything. */
+if(typeof publicFeed==='function'&&typeof window!=='undefined'&&!window.__EV_PUB__){window.__EV_PUB__=1;const PF1=publicFeed;
+  publicFeed=function(){const F=PF1.apply(this,arguments);try{const simple=x=>{if(!x)return x;const o={...x};delete o.voices;
+      if(o.why){const r=o.why.read;o.why=r?{read:{who:r.who,take:r.take,text:r.text}}:undefined;}return o;};
+    if(F.today){F.today={...F.today,picks:(F.today.picks||[]).map(simple),props:[]};}F.parlay=null;F.parlayRecord=null;F.cashed=[];
+    F.history=(F.history||[]).map(h=>({...h,picks:(h.picks||[]).map(simple)}));F.simple=1;}catch(e){}return F;};}

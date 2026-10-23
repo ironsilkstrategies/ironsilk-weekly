@@ -16,6 +16,8 @@ setTimeout(()=>{try{
   T('…a leg the desk fades reads under 50%',L[1].p<0.5&&L[2].p<0.5,JSON.stringify(L.map(x=>x.p)));
   T('…an unknown leg is said plainly, not guessed',L[3].miss===true);
   const h=w.eval(`evHtml(evTicket('Chiefs -3.5\\nOver 44.5 Bills'))`);T('the read shows chance to cash, keep/cut per leg',/Chance to cash/.test(h)&&/Cut it/.test(h),h.slice(0,200));
+  const F=w.eval(`(()=>{const F=publicFeed();return{props:(F.today&&F.today.props||[]).length,parlay:F.parlay,cashed:(F.cashed||[]).length,simple:F.simple,bullets:JSON.stringify(F).includes('"bullets"')};})()`);
+  T('the public page gets the Best 3 only, in plain words (no props, parlays, showcase or math)',F.props===0&&F.parlay===null&&F.cashed===0&&F.simple===1&&!F.bullets,JSON.stringify(F));
   w.eval(`TICKETTAB=TTABS[0][0];renderTickets()`);T('Tickets shows the evaluator card',!!w.document.getElementById('evPaste'));
 }catch(e){T('crashed',false,String(e&&e.stack||e).slice(0,300));}
   console.log(out.join('\n'));const f=out.filter(x=>x.startsWith('FAIL')).length;console.log(`${out.length-f} pass / ${f} fail`);process.exit(0);},2500);
