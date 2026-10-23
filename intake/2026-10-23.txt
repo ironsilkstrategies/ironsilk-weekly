@@ -102,6 +102,7 @@ H1ML: Houston Rockets +155 / San Antonio Spurs -177
 H1OU: o109 (-105) / u109 (-115)
 
 New Orleans Pelicans @ Utah Jazz
+ML: New Orleans Pelicans -110 / Utah Jazz -110
 SPREAD: New Orleans Pelicans +0 (-110) / Utah Jazz -0 (-110)
 OU: o239.5 (-110) / u239.5 (-110)
 H1SPREAD: New Orleans Pelicans +0 (+100) / Utah Jazz -0 (-120)
