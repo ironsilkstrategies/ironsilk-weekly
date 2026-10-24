@@ -16,7 +16,7 @@
    Each sport lives on its own page; this just routes. The ?b= build tag
    makes Safari fetch the current page after a deploy instead of a cached one. */
 (function(){
-  var BUILD='20261024e';
+  var BUILD='20261024f';
   var PAGES={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
   var last='';try{last=localStorage.getItem('d4.activeSport')||''}catch(e){}
   var q=(location.search.match(/[?&]sport=(mlb|nfl|ncaaf|cfb|nhl|nba|ncaab|cbb)/)||[])[1];
@@ -72,6 +72,6 @@ function tdMove(){var K=['d4.key','d4.ai','d4.sharp','d4.rundown','d4.oddspapi',
   localStorage.setItem('d4.setupDone','1');document.getElementById('mvIn').value='';
   msg.style.color='#5fd38d';msg.textContent=n+' keys restored — opening the desk and pulling your cloud copy…';
   var sp=localStorage.getItem('d4.activeSport')||'nfl',P={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
-  setTimeout(function(){location.replace((P[sp]||'nfl.html')+'?b='+'20261024e'+'&moved=1');},900);}
+  setTimeout(function(){location.replace((P[sp]||'nfl.html')+'?b='+'20261024f'+'&moved=1');},900);}
 </script>
 </body></html>

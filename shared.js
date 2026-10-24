@@ -2637,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16562,7 +16562,7 @@ function renderBest(){
   const views=['all',...(S.sports||[])];
   if(!views.includes(BEST_VIEW))BEST_VIEW='all';
   const tabs=`<div style="margin-bottom:8px">${views.map(v=>`<button class="msg-chip${BEST_VIEW===v?' on':''}" onclick="bestView('${v}')">${v==='all'?'Whole slate':SP_LAB[v]||v.toUpperCase()}</button>`).join('')}</div>`;
-  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price','priced shorter than -300 or longer than +400'],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['conf','under the 70% confidence rule'],['tier','below VALUE'],['prob','under 45%'],['ev','priced past what the confidence supports']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
+  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price',`priced shorter than ${typeof DESK_B3_LO!=='undefined'?DESK_B3_LO:-300} or longer than +400`],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['conf','under the 70% confidence rule'],['tier','below VALUE'],['prob','under 45%'],['ev','priced past what the confidence supports']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
     :(!(S.top3||[]).length&&!(W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Today's card is empty — open each sport's Games board (or Load all sports on Today) so it has picks to choose from.</div>`:'');
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
     <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:(evalRanToday()&&!(S.top3||[]).length&&W3&&W3.total?'Master evaluation ran — no play clears the bar yet. It keeps re-checking as lines and boards update, locks the moment one qualifies, and locks empty 30 min before the last game.':'Building — freezes the moment the master evaluation runs (or 30 min before the first game)')}</b>

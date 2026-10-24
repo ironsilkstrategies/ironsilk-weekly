@@ -97,7 +97,7 @@ const CONF_FALLBACK=0.65,CONF_FALLBACK_FROM='2026-10-17';let CONF_FB_C=null;
 function confHas70(){const V=roGet(VOICES_KEY,[],30e3)||[];const last=V.length?V[V.length-1]:null;const sig=V.length+'|'+(last?last.id+'|'+(last.cf==null?'':last.cf):'');
   if(CONF_FB_C&&CONF_FB_C.sig===sig&&Date.now()-CONF_FB_C.ts<30e3)return CONF_FB_C.S;const S=new Set();
   V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const d=String(c.date||'').slice(0,10);if(d<CONF_FALLBACK_FROM)return;const cf=confOf(c);
-    if(cf==null||cf<confFloor(c.market)-1e-9||c.kof||!confPriced(c)||confPre(c))return;S.add(c.sp+'|'+d);});
+    if(cf==null||cf<confFloor(c.market)-1e-9||c.kof||!confPriced(c)||confPre(c)||!confPays(c))return;S.add(c.sp+'|'+d);});
   CONF_FB_C={sig,ts:Date.now(),S};return S;}
 /* v2.47.2 · a second step down, from Oct 18: a sport with no 65% call either plays its 60% calls that day */
 const CONF_FALLBACK2=0.60,CONF_FALLBACK2_FROM='2026-10-18';let CONF_FB2_C=null;
@@ -111,7 +111,13 @@ function confFloorFor(x){const base=confFloor(x&&x.market);const d=String((x&&x.
    57-47 for -18.3 units — a winning record that loses money, because each win pays half a unit. The
    fallback floors (65%, then 60%) were letting exactly that chalk in. 70%+ calls are unchanged. */
 const CONF_PAY_FROM='2026-10-24',CONF_PAY_MIN=-150;
-function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_PAY_FROM)return true;const c=confOf(x);if(c==null||c>=0.70-1e-9)return true;
+/* v2.56 · …and from Oct 25, at ANY confidence, no call is official at a price its own number says loses
+   (confidence × payout has to reach 1). On the ledger, official calls priced above their own confidence
+   went 85-20 — an 81% record — for -4.8 units. Without them: 256-109, +5.2u instead of +0.4u. */
+const CONF_EV_FROM='2026-10-25';
+const confEvOk=(x,c,d)=>{const p=+x.price;if(!d||d<CONF_EV_FROM||!isFinite(p)||Math.abs(p)<100)return true;return c*americanToDecimal(p)-1>=-1e-9;};
+function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_PAY_FROM)return true;const c=confOf(x);if(c==null)return true;
+  if(!confEvOk(x,c,d))return false;if(c>=0.70-1e-9)return true;
   const p=+x.price;return isFinite(p)&&p>=CONF_PAY_MIN;}
 function isOfficial(x){if(x&&x.voice==='Dog')return!!(typeof PROB_OK!=='undefined'&&PROB_OK.Dog)&&+x.dEdge>=DOG_ML_EDGE-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);
   const c=confOf(x);return c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x);}
@@ -409,8 +415,11 @@ function cpxState(){const d=today();const S=get(CPX_KEY,{})||{};if(S[d]&&S[d].lo
    A pick makes a card only when at least one character made it officially (70%+
    calibrated confidence). Its % is that confidence. Ranked by fit: the most
    confident character's confidence × its official record in that league ×
-   market. Priced -300 to +400 and the confidence has to beat the price. */
-const DESK_B3_LO=-300;
+   market. Priced -300 to +400 and the confidence has to beat the price.
+   v2.56 · the Best 3 lays -200 at most again (the original window; v2.31 widened it to -300). Its picks
+   shorter than -200 went 2-4 for -3.2 units; everything lighter went 16-9 for +3.7. At -250 one loss
+   erases two and a half wins, and the calls priced there beat the closing line by the least. */
+const DESK_B3_LO=-200;
 function pickFit(x,sp,o,R){o=o||pickConf(x,sp);if(!o)return 0;return o.cf*deskLaneMult(o.best,x.sp||sp,mkNorm(x.m||x.market),R||deskLaneRec());}
 /* a card locked by a pre-v1.73 build keeps the rules it was locked under */
 function best3PoolLegacy(by,sp){const pool=[];Object.entries(by).forEach(([s0,B])=>{if(sp&&s0!==sp)return;(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};const p=best5Prob(x);const ev=best3Ev(x);
@@ -435,11 +444,12 @@ function best3Pool(by,sp,opts){opts=opts||{};if(opts.ignoreTime)return best3Pool
 function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
   Object.entries(T.by||{}).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0);const p=o?o.cf:pickConfAny(x,s0);
     const ev=p!=null&&x.price!=null?(p*americanToDecimal(+x.price)-1)*100:null;let why=null;
-    try{if(x.price==null)why='no book price';else if(+x.price<DESK_B3_LO)why=`priced ${x.price} — shorter than -300`;else if(+x.price>BEST3_HI)why='longer than +400';
+    try{if(x.price==null)why='no book price';else if(+x.price<DESK_B3_LO)why=`priced ${x.price} — the Best 3 lays ${DESK_B3_LO} at most`;else if(+x.price>BEST3_HI)why='longer than +400';
       else if(x.incoherent||x.suspect)why='flagged: '+(x.suspect||'incoherent with its other markets');else if(laneStatus(pickLane(x,s0))==='blocked')why='lane blocked: '+laneName(pickLane(x,s0));
       else if(pickDisagrees(x,s0))why='model fighting the market';
       else if(!o){const fl=confFloorFor({sp:s0,market:mkNorm(x.m),date:today()});
-        why=p==null?'no character confidence on it yet':p>=fl-1e-9&&p<0.70&&+x.price<CONF_PAY_MIN&&today()>=CONF_PAY_FROM?`${Math.round(p*100)}% sure at ${x.price} — under 70%, a pick has to pay ${CONF_PAY_MIN} or better`
+        why=p==null?'no character confidence on it yet':p>=fl-1e-9&&!confEvOk(x,p,today())?`${Math.round(p*100)}% sure, but ${x.price} needs ${Math.round(imp(+x.price)*100)}% — never official at a price its own number says loses`
+          :p>=fl-1e-9&&p<0.70&&+x.price<CONF_PAY_MIN&&today()>=CONF_PAY_FROM?`${Math.round(p*100)}% sure at ${x.price} — under 70%, a pick has to pay ${CONF_PAY_MIN} or better`
           :`most confident character: ${Math.round(p*100)}% — under the ${Math.round(fl*100)}% rule`;}
       else if(ev<0.5)why=`${Math.round(p*100)}% sure, but the price needs ${Math.round(imp(+x.price)*100)}% — no value`;}catch(e){}
     if(why)out.push({sp:s0,game:x.game,pick:x.pick,price:x.price,p,ev,why,tier:best3Tier(x)});}));

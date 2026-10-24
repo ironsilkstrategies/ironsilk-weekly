@@ -6,14 +6,15 @@ const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com
   w.fetch=()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(()=>{try{
   const st=h=>w.eval(`today()`)+'T'+String(h).padStart(2,'0')+':59:00-05:00';
-  const P=[{game:'OTT@NJ',m:'spread',sd:'away',pick:'OTT +1.5',price:-225,color:' supreme',chars:['Sim'],blend:.68,start:st(23)},
+  /* v2.56 · OTT +1.5 at -180 (was -225: the Best 3 lays -200 at most now, and this test is about the confidence reasons) */
+  const P=[{game:'OTT@NJ',m:'spread',sd:'away',pick:'OTT +1.5',price:-180,color:' supreme',chars:['Sim'],blend:.68,start:st(23)},
     {game:'FLA@BUF',m:'ml',sd:'home',pick:'BUF ML',price:-108,color:' strong',chars:['Sim'],blend:.50,start:st(23)},
     {game:'VGK@MIN',m:'total',sd:'over',pick:'Over 6',price:104,color:' strong',chars:['Sim'],blend:.47,start:st(23),suspect:'model 72% vs market 49%'}];
   w.eval(`localStorage.removeItem(BEST5_KEY);set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify(P)},props:[]}}});set(EVAL_LOCK_KEY,{date:today(),by:{nhl:Date.now()}});
-    set(VOICES_KEY,[{id:'v1',voice:'Sim',sp:'nhl',game:'OTT@NJ',market:'spread',side:'away',line:1.5,price:-225,date:today(),cf:0.66}]);`);   /* v2.31: the Sim is 66% sure of OTT +1.5 — under the 70% rule */
+    set(VOICES_KEY,[{id:'v1',voice:'Sim',sp:'nhl',game:'OTT@NJ',market:'spread',side:'away',line:1.5,price:-180,date:today(),cf:0.66}]);`);   /* v2.31: the Sim is 66% sure of OTT +1.5 — under the 70% rule */
   const S=w.eval('best5State()');T('nothing qualifies → card stays open (not locked empty) while games are ahead',!S.locked&&!S.top3.length);
-  const N=w.eval('best3Near(5)');/* v2.43 · no 70% call that day, so the 65% fallback applies; v2.53 · but under 70% a pick has to pay -150 or better — the 66% call at -225 misses on that */
-  T('closest calls listed with the exact reason each missed',N.length===3&&N.some(x=>/66% sure at -225 — under 70%, a pick has to pay -150 or better/.test(x.why))&&N.some(x=>/no character confidence/.test(x.why))&&N.some(x=>/flagged/.test(x.why)),N.map(x=>x.pick+': '+x.why).join(' | '));
+  const N=w.eval('best3Near(5)');/* v2.43 · no 70% call that day, so the 65% fallback applies; v2.53 · but under 70% a pick has to pay -150 or better — the 66% call at -180 misses on that */
+  T('closest calls listed with the exact reason each missed',N.length===3&&N.some(x=>/66% sure at -180 — under 70%, a pick has to pay -150 or better/.test(x.why))&&N.some(x=>/no character confidence/.test(x.why))&&N.some(x=>/flagged/.test(x.why)),N.map(x=>x.pick+': '+x.why).join(' | '));
   w.eval(`document.body.insertAdjacentHTML('beforeend','<div id="bestCard"></div>');renderBest();`);const h=w.document.getElementById('bestCard').textContent;
   T('banner says the eval ran and nothing clears the bar, and shows the closest calls',/Master evaluation ran — no play clears the bar yet/.test(h)&&/Closest calls today/.test(h)&&/OTT \+1\.5/.test(h));
   T('the card itself no longer says "open each sport once" when it has picks to judge',/Nothing clears the bar yet/.test(h)&&!/open each sport once/.test(h));
