@@ -31,15 +31,15 @@ setTimeout(()=>{try{
     set(FREEZE_KEY,{d:today(),ts:Date.now()});best5State();`);
   T('the Best 3 is official-only: the two 70%+ picks',w.eval('best5State().top3.map(x=>x.pick).join(",")')==='B ML,D ML',w.eval('best5State().top3.map(x=>x.pick+" "+Math.round(x.p*100)).join(",")'));
   w.eval(`ch2Start('climb')`);const C=w.eval('ch2All()');
-  T('a challenge starts with a pot from the bankroll (no second balance)',C.length===1&&C[0].pot===20&&C[0].src==='best3'&&w.eval('bankState().ear')===20);
+  T('a challenge starts with a pot from the bankroll (no second balance)',C.length===1&&C[0].pot===C[0].start&&C[0].start>=10&&C[0].src==='best3'&&w.eval('bankState().ear')===C[0].start);
   w.eval(`ch2Start('climb')`);T('one copy of each challenge at a time',w.eval('ch2All().length')===1);
   const pl=w.eval('ch2Plays(ch2All()[0])');
-  T("today's move: the Best 3 as singles, 10% of the pot, every bet wins at least $1",pl.length===2&&pl.every(o=>o.stake>=2&&o.stake*(o.dec-1)>=0.999),pl.map(o=>o.label+' $'+o.stake).join(', '));
+  T("today's move: the Best 3 as singles, 12% of the pot, every bet wins at least $1",pl.length===2&&pl.every(o=>o.stake>=1&&o.stake*(o.dec-1)>=0.999),pl.map(o=>o.label+' $'+o.stake).join(', '));
   w.eval(`ch2Lock(ch2All()[0].id,0)`);const L2=w.eval('get(LS.locked,[])');
   T('Lock it → on My Tickets with the stake, attached to the challenge',L2.length===1&&/Steady Climb/.test(L2[0].name)&&L2[0].legs[0].pick==='B ML'&&+L2[0].stake===pl[0].stake&&w.eval('ch2All()[0].steps.length')===1);
   w.eval(`ch2Lock(ch2All()[0].id,0)`);T('…and it can\'t be locked twice',w.eval('get(LS.locked,[]).length')===1);
   T('the stake shows as "in play" on the one bankroll',Math.abs(w.eval('bankState().open')-pl[0].stake)<1e-9);
   w.eval(`settleTicket(get(LS.locked,[])[0].id,${pl[0].stake},${+(pl[0].stake*(pl[0].dec-1)).toFixed(2)},true);ch2Sync();`);
-  T('the ticket settles → the pot moves by exactly what the bankroll booked',Math.abs(w.eval('ch2All()[0].pot')-(20+ +(pl[0].stake*(pl[0].dec-1)).toFixed(2)))<0.011,String(w.eval('ch2All()[0].pot')));
+  T('the ticket settles → the pot moves by exactly what the bankroll booked',Math.abs(w.eval('ch2All()[0].pot')-(w.eval('ch2All()[0].start')+ +(pl[0].stake*(pl[0].dec-1)).toFixed(2)))<0.011,String(w.eval('ch2All()[0].pot')));
 }catch(e){out.push('CRASH '+e.stack);}
 console.log(out.join('\n'));process.exit(0);},1500);
