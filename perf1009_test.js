@@ -5,7 +5,8 @@ const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com
   w.fetch=()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});w.scrollTo=()=>{};w.alert=()=>{};w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(async()=>{try{
   w.eval(`set('d4.big',Array.from({length:4000},(_,i)=>({i,t:'row '+i+' '+'x'.repeat(20)})))`);
-  T('large store is compressed on disk',w.localStorage.getItem('d4.big').startsWith('\u0001LZ'));
+  await new Promise(r=>setTimeout(r,2600));   /* v2.51 · big stores are packed in the background a moment after the write */
+  T('large store is compressed on disk',(w.localStorage.getItem('d4.big')||'').startsWith('\u0001LZ'));
   const n=w.eval(`(()=>{let n=0;const f=LZString.decompressFromUTF16;LZString.decompressFromUTF16=s=>{n++;return f(s)};for(let i=0;i<200;i++)get('d4.big');LZString.decompressFromUTF16=f;return n})()`);
   T('200 reads of an unchanged store decompress once (was 200)',n<=1,String(n));
   T('every read is still its own copy (mutating one never leaks)',w.eval(`(()=>{const a=get('d4.big');a[0].i=-1;return get('d4.big')[0].i===0})()`));

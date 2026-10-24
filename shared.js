@@ -1895,9 +1895,14 @@ function intelLog(sp,kind,items,src){
       a:x.a??null,h:x.h??null,market:x.market||null,metric:x.metric||null,awayPct:x.awayPct??null,homePct:x.homePct??null,overPct:x.overPct??null,graded:false});});
   if(L.length>4000)L.splice(0,L.length-4000);set(INTEL_KEY,L);
 }
+/* v2.51 · the baseball line snapshots indexed once per read, by game — grading the intel used to parse
+   and flatten the whole store once PER intel line (~1,800 parses, 3+ seconds frozen at every boot) */
+let ILF_IDX=null;
+function intelShotsIdx(){const all=roGet(LS.bookshots,{},60e3)||{};if(ILF_IDX&&ILF_IDX.src===all)return ILF_IDX.M;const M=new Map();
+  Object.values(all).forEach(day=>(Array.isArray(day)?day:[]).forEach(x=>{if(!x||!x.game)return;let a=M.get(x.game);if(!a)M.set(x.game,a=[]);a.push(x);}));ILF_IDX={src:all,M};return M;}
 function intelLineFor(sp,game,market,side){
   const f=sp==='nfl'&&typeof nflBookLinesFor==='function'?nflBookLinesFor:sp==='ncaaf'&&typeof ncaafBookLinesFor==='function'?ncaafBookLinesFor:null;
-  let L=[];try{if(f)L=f(game)||[];else{const all=get(LS.bookshots,{});L=Object.values(all).flat().filter(x=>x.game===game);}}catch(e){}
+  let L=[];try{if(f)L=f(game)||[];else L=intelShotsIdx().get(game)||[];}catch(e){}
   const mk=sp==='mlb'&&market==='spread'?'runline':market;return L.find(x=>x.market===mk&&(side==null||x.side===side));
 }
 function gradeIntel(){
@@ -2178,7 +2183,7 @@ function voicesLog(sp){
     if(pre)calls.forEach(c=>{try{c.f=factorsFor(sp,g,c);}catch(e){}if(c.voice==='Sim'){try{c.f=c.f||factorsFor(sp,g,c);const b=blendProb(sp,c.market,c.simP,c.mktP>0?c.mktP:null);let q=b!=null?b+factorAdj(sp,c.f):null;if(q!=null){try{q+=pwrCalAdj(sp,g,c.market,c.side,c.line,q);}catch(e){}}c.pUsed=q!=null?Math.max(0.01,Math.min(0.99,q)):null;}catch(e){}}});
     if(pre&&typeof confStamp==='function'){try{confStamp(calls);}catch(e){console.warn('confidence',e);}}   /* v2.31 · every call gets its calibrated confidence */
     calls.forEach(c=>{if(META_VOICES.has(c.voice)&&idx[[c.voice,sp,c.game,c.date,c.market].join('|')]!=null)return;   // already logged under the pre-v1.99 70%+ rule
-      const i=idx[c.id];if(i!=null){if(!pre||V[i].graded||V[i].lk)return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});
+      const i=idx[c.id];if(i!=null){if(!pre||V[i].graded||V[i].lk)return;if(JSON.stringify(V[i])===JSON.stringify(c))return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});   /* v2.51 · an unchanged call isn't a write */
   });
   if(n){set(VOICES_KEY,voicesTrim(V));}return n;
 }
@@ -2601,7 +2606,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261023c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261023d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2747,7 +2752,7 @@ const fmtDate=d=>new Date(d).toLocaleDateString([],{weekday:'short',month:'short
    text, so large values are stored LZ-compressed (lz-string, UTF-16 safe),
    typically a fraction of the size. Reads detect the marker and decompress;
    everything else in the app sees plain JSON exactly as before. */
-var LZString=function(){var r=String.fromCharCode,o="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",n="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$",e={};function t(r,o){if(!e[r]){e[r]={};for(var n=0;n<r.length;n++)e[r][r.charAt(n)]=n}return e[r][o]}var i={compressToBase64:function(r){if(null==r)return"";var n=i._compress(r,6,function(r){return o.charAt(r)});switch(n.length%4){default:case 0:return n;case 1:return n+"===";case 2:return n+"==";case 3:return n+"="}},decompressFromBase64:function(r){return null==r?"":""==r?null:i._decompress(r.length,32,function(n){return t(o,r.charAt(n))})},compressToUTF16:function(o){return null==o?"":i._compress(o,15,function(o){return r(o+32)})+" "},decompressFromUTF16:function(r){return null==r?"":""==r?null:i._decompress(r.length,16384,function(o){return r.charCodeAt(o)-32})},compressToUint8Array:function(r){for(var o=i.compress(r),n=new Uint8Array(2*o.length),e=0,t=o.length;e<t;e++){var s=o.charCodeAt(e);n[2*e]=s>>>8,n[2*e+1]=s%256}return n},decompressFromUint8Array:function(o){if(null==o)return i.decompress(o);for(var n=new Array(o.length/2),e=0,t=n.length;e<t;e++)n[e]=256*o[2*e]+o[2*e+1];var s=[];return n.forEach(function(o){s.push(r(o))}),i.decompress(s.join(""))},compressToEncodedURIComponent:function(r){return null==r?"":i._compress(r,6,function(r){return n.charAt(r)})},decompressFromEncodedURIComponent:function(r){return null==r?"":""==r?null:(r=r.replace(/ /g,"+"),i._decompress(r.length,32,function(o){return t(n,r.charAt(o))}))},compress:function(o){return i._compress(o,16,function(o){return r(o)})},_compress:function(r,o,n){if(null==r)return"";var e,t,i,s={},u={},a="",p="",c="",l=2,f=3,h=2,d=[],m=0,v=0;for(i=0;i<r.length;i+=1)if(a=r.charAt(i),Object.prototype.hasOwnProperty.call(s,a)||(s[a]=f++,u[a]=!0),p=c+a,Object.prototype.hasOwnProperty.call(s,p))c=p;else{if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;e<h;e++)m<<=1,v==o-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;e<8;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;e<h;e++)m=m<<1|t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;e<16;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}0==--l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;0==--l&&(l=Math.pow(2,h),h++),s[p]=f++,c=String(a)}if(""!==c){if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;e<h;e++)m<<=1,v==o-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;e<8;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;e<h;e++)m=m<<1|t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;e<16;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}0==--l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;0==--l&&(l=Math.pow(2,h),h++)}for(t=2,e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;for(;;){if(m<<=1,v==o-1){d.push(n(m));break}v++}return d.join("")},decompress:function(r){return null==r?"":""==r?null:i._decompress(r.length,32768,function(o){return r.charCodeAt(o)})},_decompress:function(o,n,e){var t,i,s,u,a,p,c,l=[],f=4,h=4,d=3,m="",v=[],g={val:e(0),position:n,index:1};for(t=0;t<3;t+=1)l[t]=t;for(s=0,a=Math.pow(2,2),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;switch(s){case 0:for(s=0,a=Math.pow(2,8),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;c=r(s);break;case 1:for(s=0,a=Math.pow(2,16),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;c=r(s);break;case 2:return""}for(l[3]=c,i=c,v.push(c);;){if(g.index>o)return"";for(s=0,a=Math.pow(2,d),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;switch(c=s){case 0:for(s=0,a=Math.pow(2,8),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;l[h++]=r(s),c=h-1,f--;break;case 1:for(s=0,a=Math.pow(2,16),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;l[h++]=r(s),c=h-1,f--;break;case 2:return v.join("")}if(0==f&&(f=Math.pow(2,d),d++),l[c])m=l[c];else{if(c!==h)return null;m=i+i.charAt(0)}v.push(m),l[h++]=i+m.charAt(0),i=m,0==--f&&(f=Math.pow(2,d),d++)}}};return i}();"function"==typeof define&&define.amd?define(function(){return LZString}):"undefined"!=typeof module&&null!=module?module.exports=LZString:"undefined"!=typeof angular&&null!=angular&&angular.module("LZString",[]).factory("LZString",function(){return LZString});
+function __LZF(){var r=String.fromCharCode,o="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",n="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$",e={};function t(r,o){if(!e[r]){e[r]={};for(var n=0;n<r.length;n++)e[r][r.charAt(n)]=n}return e[r][o]}var i={compressToBase64:function(r){if(null==r)return"";var n=i._compress(r,6,function(r){return o.charAt(r)});switch(n.length%4){default:case 0:return n;case 1:return n+"===";case 2:return n+"==";case 3:return n+"="}},decompressFromBase64:function(r){return null==r?"":""==r?null:i._decompress(r.length,32,function(n){return t(o,r.charAt(n))})},compressToUTF16:function(o){return null==o?"":i._compress(o,15,function(o){return r(o+32)})+" "},decompressFromUTF16:function(r){return null==r?"":""==r?null:i._decompress(r.length,16384,function(o){return r.charCodeAt(o)-32})},compressToUint8Array:function(r){for(var o=i.compress(r),n=new Uint8Array(2*o.length),e=0,t=o.length;e<t;e++){var s=o.charCodeAt(e);n[2*e]=s>>>8,n[2*e+1]=s%256}return n},decompressFromUint8Array:function(o){if(null==o)return i.decompress(o);for(var n=new Array(o.length/2),e=0,t=n.length;e<t;e++)n[e]=256*o[2*e]+o[2*e+1];var s=[];return n.forEach(function(o){s.push(r(o))}),i.decompress(s.join(""))},compressToEncodedURIComponent:function(r){return null==r?"":i._compress(r,6,function(r){return n.charAt(r)})},decompressFromEncodedURIComponent:function(r){return null==r?"":""==r?null:(r=r.replace(/ /g,"+"),i._decompress(r.length,32,function(o){return t(n,r.charAt(o))}))},compress:function(o){return i._compress(o,16,function(o){return r(o)})},_compress:function(r,o,n){if(null==r)return"";var e,t,i,s={},u={},a="",p="",c="",l=2,f=3,h=2,d=[],m=0,v=0;for(i=0;i<r.length;i+=1)if(a=r.charAt(i),Object.prototype.hasOwnProperty.call(s,a)||(s[a]=f++,u[a]=!0),p=c+a,Object.prototype.hasOwnProperty.call(s,p))c=p;else{if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;e<h;e++)m<<=1,v==o-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;e<8;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;e<h;e++)m=m<<1|t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;e<16;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}0==--l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;0==--l&&(l=Math.pow(2,h),h++),s[p]=f++,c=String(a)}if(""!==c){if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;e<h;e++)m<<=1,v==o-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;e<8;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;e<h;e++)m=m<<1|t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;e<16;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}0==--l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;0==--l&&(l=Math.pow(2,h),h++)}for(t=2,e=0;e<h;e++)m=m<<1|1&t,v==o-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;for(;;){if(m<<=1,v==o-1){d.push(n(m));break}v++}return d.join("")},decompress:function(r){return null==r?"":""==r?null:i._decompress(r.length,32768,function(o){return r.charCodeAt(o)})},_decompress:function(o,n,e){var t,i,s,u,a,p,c,l=[],f=4,h=4,d=3,m="",v=[],g={val:e(0),position:n,index:1};for(t=0;t<3;t+=1)l[t]=t;for(s=0,a=Math.pow(2,2),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;switch(s){case 0:for(s=0,a=Math.pow(2,8),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;c=r(s);break;case 1:for(s=0,a=Math.pow(2,16),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;c=r(s);break;case 2:return""}for(l[3]=c,i=c,v.push(c);;){if(g.index>o)return"";for(s=0,a=Math.pow(2,d),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;switch(c=s){case 0:for(s=0,a=Math.pow(2,8),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;l[h++]=r(s),c=h-1,f--;break;case 1:for(s=0,a=Math.pow(2,16),p=1;p!=a;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*p,p<<=1;l[h++]=r(s),c=h-1,f--;break;case 2:return v.join("")}if(0==f&&(f=Math.pow(2,d),d++),l[c])m=l[c];else{if(c!==h)return null;m=i+i.charAt(0)}v.push(m),l[h++]=i+m.charAt(0),i=m,0==--f&&(f=Math.pow(2,d),d++)}}};return i}var LZString=__LZF();"function"==typeof define&&define.amd?define(function(){return LZString}):"undefined"!=typeof module&&null!=module?module.exports=LZString:"undefined"!=typeof angular&&null!=angular&&angular.module("LZString",[]).factory("LZString",function(){return LZString});
 const _LZM='\u0001LZ';
 function _dec(raw){if(raw==null||raw==='')return undefined;
   if(raw.charCodeAt(0)===1&&raw.startsWith(_LZM)){const j=LZString.decompressFromUTF16(raw.slice(_LZM.length));return j==null?undefined:JSON.parse(j);}
@@ -2763,7 +2768,31 @@ function _enc(json){if(json.length<8000)return json;
    code path or another tab is picked up immediately). Every caller still gets
    its own freshly parsed copy, so nothing that mutates a result is affected. */
 const _DEC_C=new Map();
-function get(k,d){try{const raw=localStorage.getItem(k);if(raw==null||raw==='')return d;let j=raw;
+/* ── v2.51 · WRITE-BEHIND FOR THE BIG STORES ────────────────────────────────
+   Saving a big store (the call ledger is ~3.7 MB) meant packing it with LZ on the main
+   thread: 1-3 seconds of frozen screen after every board refresh that touched a call.
+   Now a big write lands in memory at once — every read, every page function and the
+   sync see it immediately — and the packing runs in the background worker; storage gets
+   the packed copy a moment later. Leaving the page (or the app going to the background)
+   writes anything still pending right away, so nothing is lost. Small writes are unchanged. */
+const WB_MIN=150000,WB_PEND=new Map(),WB_WROTE=new Map();let WB_T=null,WB_SYNC=0,WB_VER=0;
+function wbPut(k,json){const p={json,ver:++WB_VER,at:Date.now()};WB_PEND.set(k,p);if(!WB_T)WB_T=setTimeout(wbFlushSoon,1200);}
+function wbDrop(k){WB_PEND.delete(k);}
+/* every stored key, plus any big write still on its way to storage */
+function lsKeys(){const ks=[];for(let i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));if(WB_PEND.size){const S=new Set(ks);WB_PEND.forEach((p,k)=>{if(!S.has(k))ks.push(k);});}return ks;}
+function wbStore(k,json,packed){const stored=packed!=null&&(_LZM+packed).length<json.length*0.9?_LZM+packed:json;localStorage.setItem(k,stored);_DEC_C.set(k,{raw:stored,j:json});}
+function wbFlushSoon(){WB_T=null;WB_PEND.forEach((p,k)=>{if(p.busy===p.ver)return;p.busy=p.ver;const ver=p.ver,json=p.json;
+    (typeof lzOff==='function'?lzOff('c16',json):Promise.resolve(LZString.compressToUTF16(json))).then(packed=>{
+      if((WB_WROTE.get(k)||0)>=ver)return;const cur=WB_PEND.get(k);if(!cur||cur.ver<ver)return;   /* written already, or dropped */
+      try{wbStore(k,json,packed);WB_WROTE.set(k,ver);if(cur.ver===ver)WB_PEND.delete(k);else if(!WB_T)WB_T=setTimeout(wbFlushSoon,1200);}
+      catch(e){wbFallback(k);}}).catch(()=>wbFallback(k));});}
+/* everything pending, written now on this thread (leaving the page, or before a quota recovery) */
+function wbFlushNow(){const all=[...WB_PEND.entries()];all.forEach(([k,p])=>{try{if((WB_WROTE.get(k)||0)>=p.ver){WB_PEND.delete(k);return;}wbStore(k,p.json,LZString.compressToUTF16(p.json));WB_WROTE.set(k,p.ver);WB_PEND.delete(k);}catch(e){wbFallback(k);}});}
+/* a packed write that failed (storage full): the old synchronous path, which frees space step by step */
+function wbFallback(k){const p=WB_PEND.get(k);if(!p)return;WB_PEND.delete(k);WB_SYNC++;try{_setPayload(k,p.json);WB_WROTE.set(k,p.ver);}finally{WB_SYNC--;}}
+if(typeof window!=='undefined'){window.addEventListener('pagehide',wbFlushNow);window.addEventListener('beforeunload',wbFlushNow);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)wbFlushNow();});}
+function get(k,d){try{const wp=WB_PEND.get(k);if(wp){const v=JSON.parse(wp.json);return v===undefined?d:v;}const raw=localStorage.getItem(k);if(raw==null||raw==='')return d;let j=raw;
   if(raw.charCodeAt(0)===1&&raw.startsWith(_LZM)){const c=_DEC_C.get(k);if(c&&c.raw===raw)j=c.j;else{j=LZString.decompressFromUTF16(raw.slice(_LZM.length));_DEC_C.set(k,{raw,j});}}
   if(j==null)return d;const v=JSON.parse(j);return v===undefined?d:v}catch(e){return d}}
 /* Read-only cached reads of big stores (ledger, intel, tickets). Cleared the
@@ -2800,7 +2829,7 @@ function bumpStorageGen(){_LSGEN++;_hotCache=Object.create(null);_hotGen=_LSGEN}
 function hotGet(k,d){
   if(_hotGen!==_LSGEN){_hotCache=Object.create(null);_hotGen=_LSGEN}
   if(k in _hotCache){const v=_hotCache[k];return v===undefined?d:v}
-  let v;try{v=_dec(localStorage.getItem(k))}catch(e){v=undefined}
+  let v;try{const wp=WB_PEND.get(k);v=wp?JSON.parse(wp.json):_dec(localStorage.getItem(k))}catch(e){v=undefined}
   _hotCache[k]=v;
   return v===undefined?d:v;
 }
@@ -2831,8 +2860,8 @@ function prunePlayers(frac){let any=false;['ncaab','ncaaf','nfl','mlb','nhl','nb
 function prunePstLast(keep){let any=false;['ncaab','ncaaf','nfl','mlb','nhl','nba'].forEach(sp=>{try{const k='d4.pstlast.'+sp,L=_dec(localStorage.getItem(k));if(!L)return;const ks=Object.keys(L);if(ks.length<=keep)return;
   ks.sort((a,b)=>String(L[a].d).localeCompare(String(L[b].d))).slice(0,ks.length-keep).forEach(x=>delete L[x]);localStorage.setItem(k,_enc(JSON.stringify(L)));any=true;}catch(e){}});return any;}
 const PRUNE_LADDER=[
-  ()=>{try{if(localStorage.getItem('d4.simcore')==null)return false;localStorage.removeItem('d4.simcore');SIMC=null;return true;}catch(e){return false}},   // sim histograms — re-simmed on demand
-  ()=>{try{if(localStorage.getItem('d4.rsroster')==null)return false;localStorage.removeItem('d4.rsroster');RS_MEM_CLEAR();return true;}catch(e){return false}},   // v2.36 · rosters — re-pulled from ESPN on demand
+  ()=>{try{if(localStorage.getItem('d4.simcore')==null)return false;localStorage.removeItem('d4.simcore');wbDrop('d4.simcore');SIMC=null;return true;}catch(e){return false}},   // sim histograms — re-simmed on demand
+  ()=>{try{if(localStorage.getItem('d4.rsroster')==null)return false;localStorage.removeItem('d4.rsroster');wbDrop('d4.rsroster');RS_MEM_CLEAR();return true;}catch(e){return false}},   // v2.36 · rosters — re-pulled from ESPN on demand
   ()=>pruneDatedMap('d4.proplines',3),          // today's prop lines — re-pasteable
   ()=>pruneList('d4.learnlog',15),
   ()=>prunePstLast(800),                        // last-game lines (only needed ~2 days)
@@ -2845,8 +2874,8 @@ const PRUNE_LADDER=[
   ()=>pruneKeyedCache('d4.boxcache',10),
   ()=>pruneDatedMap('d4.nbashots',3),
   ()=>pruneDatedMap('d4.ncaabshots',2),
-  ()=>{try{if(localStorage.getItem('d4.ncaabsched')==null)return false;localStorage.removeItem('d4.ncaabsched');return true;}catch(e){return false}},   // re-pulled from ESPN on the next open
-  ()=>{try{localStorage.removeItem('d4.pregame');return true;}catch(e){return false}},
+  ()=>{try{if(localStorage.getItem('d4.ncaabsched')==null)return false;localStorage.removeItem('d4.ncaabsched');wbDrop('d4.ncaabsched');return true;}catch(e){return false}},   // re-pulled from ESPN on the next open
+  ()=>{try{localStorage.removeItem('d4.pregame');wbDrop('d4.pregame');return true;}catch(e){return false}},
   ()=>pruneDatedMap('d4.calhist',30),
   ()=>pruneList('d4.propcal',600),
   ()=>prunePlayers(0.7),                         // player stats rebuild via the season backfill
@@ -2876,10 +2905,13 @@ function set(k,v){
   if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof splitRoll==='function')try{splitRoll(v)}catch(e){}   /* graded calls → permanent splits before they can age out */   // new grades → the brain relearns now
   let payload;
   try{payload=JSON.stringify(v)}catch(e){console.warn('set: unserializable',k,e);return false}
-  payload=_enc(payload);
+  if(payload.length>=WB_MIN&&!WB_SYNC&&typeof window!=='undefined'&&!window.__NO_WB__){wbPut(k,payload);bumpStorageGen();return true;}
+  WB_PEND.delete(k);return _setPayload(k,payload);}
+function _setPayload(k,json){let payload=_enc(json);
   try{localStorage.setItem(k,payload);bumpStorageGen();return true}
   catch(e){
     if(!isQuotaErr(e)){console.warn('set failed',k,e);return false}
+    WB_SYNC++;try{wbFlushNow();}catch(_){}finally{WB_SYNC--;}   /* v2.51 · pending big writes land first, so pruning works on what's current */
     for(const step of PRUNE_LADDER){
       let freed=false;try{freed=step()}catch(_){}
       if(!freed)continue;
@@ -2904,7 +2936,7 @@ function storageRecovered(){
 // user-facing hard reclaim: dumps every rebuildable cache, keeps graded history
 function freeStorageNow(){
   ['d4.boxcache','d4.oddsdate','d4.nflgames','d4.ncaafgames','d4.h2h','d4.splits']
-    .forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
+    .forEach(k=>{try{localStorage.removeItem(k);wbDrop(k);}catch(e){}});
   storageRecovered();
   try{alert('Rebuildable caches cleared. Graded history, tickets and bankroll were kept.')}catch(e){}
   location.reload();
@@ -2935,6 +2967,7 @@ function paintMeter(){
 // export and automatic GitHub sync route through this one function, so there's exactly
 // one place that decides what's safe to leave the device.
 function backupData(){
+  try{wbFlushNow();}catch(e){}   /* v2.51 · pending big writes land before anything leaves the device */
   const data={};
   const EXCLUDE=new Set([LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,'d4.synctoken','d4.tgbot']);
   Object.keys(localStorage).forEach(k=>{
@@ -8301,7 +8334,7 @@ function fbpBox(id,sp,needDef){
   const hasDef=b=>!!(b&&b.teamStats&&Object.values(b.teamStats).some(t=>t&&t.defensive));
   let mem=((sp==='nfl'||sp==='ncaaf')&&typeof FB_BOX_CACHE!=='undefined'&&FB_BOX_CACHE[id]&&FB_BOX_CACHE[id].teamStats)?FB_BOX_CACHE[id]:null;
   if(needDef&&mem&&!hasDef(mem))mem=null;
-  const store=get(FBP_BOX_KEY,{})||{};const saved=store[sp+':'+id];
+  const store=roGet(FBP_BOX_KEY,{},60e3)||{};const saved=store[sp+':'+id];   /* v2.51 · read once, not once per leg (165 parses of a 0.8 MB store on every regrade) */
   if(saved&&saved.box&&saved.final&&(!needDef||hasDef(saved.box)))return saved.box; // FINAL boxes never change
   const m=FBP_MEM[id];
   const fresh=m&&Date.now()-m.ts<45000;
@@ -8727,13 +8760,13 @@ const PREG_KEY='d4.pregame',PREG_MEM={};let PREG_DIRTY={},PREG_T=null;
 function pregFlush(){const D=PREG_DIRTY;PREG_DIRTY={};if(!Object.keys(D).length)return;try{const S=get(PREG_KEY,{})||{};Object.assign(S,D);
   Object.keys(S).filter(k=>S[k].d<dayShift(today(),-3)).forEach(k=>delete S[k]);const k2=Object.keys(S);if(k2.length>60)k2.sort((a,b)=>S[a].ts-S[b].ts).slice(0,k2.length-60).forEach(k=>delete S[k]);
   set(PREG_KEY,S);}catch(e){}}
-if(typeof window!=='undefined')window.addEventListener('pagehide',pregFlush);
+if(typeof window!=='undefined'){window.addEventListener('pagehide',pregFlush);document.addEventListener('visibilitychange',()=>{if(document.hidden)pregFlush();});}
 function pregIsPre(g){const a=String(g&&(g.abstract||g.state)||'').toLowerCase();return !a||a==='pre'||a==='preview'||a==='scheduled';}
 function pregameWrap(sp,g,html){try{if(!g||!g.id||!html)return html;const key=sp+':'+g.id;
     if(pregIsPre(g)){if(PREG_MEM[key]!==html){PREG_MEM[key]=html;PREG_DIRTY[key]={h:html.replace(/\sid="[^"]*"/g,'').replace(/\s{2,}/g,' '),d:today(),ts:Date.now()};
-        /* one write after the render settles — never a compress per card */
-        clearTimeout(PREG_T);PREG_T=setTimeout(pregFlush,2000);}return html;}
-    const S=PREG_MEM[key]?{h:PREG_MEM[key].replace(/\sid="[^"]*"/g,'')}:((get(PREG_KEY,{})||{})[key]);if(!S||!S.h)return html;
+        /* v2.51 · at most one write a minute (and on leaving the page) — every odds tick used to rewrite the whole store */
+        if(!PREG_T)PREG_T=setTimeout(()=>{PREG_T=null;pregFlush();},60e3);}return html;}
+    const S=PREG_MEM[key]?{h:PREG_MEM[key].replace(/\sid="[^"]*"/g,'')}:((roGet(PREG_KEY,{},60e3)||{})[key]);if(!S||!S.h)return html;
     return html+`<details class="tkt" style="margin:-4px 0 10px;opacity:.92"><summary class="sub mono" style="cursor:pointer;font-size:10.5px">Pregame numbers (locked at start)</summary><div style="pointer-events:none">${S.h}</div></details>`;}catch(e){return html;}}
 /* ══ GRADING DOCTOR ════════════════════════════════════════════════════════
    A leg that should be over but has no grade gets a diagnosis and a fix:
@@ -19065,7 +19098,17 @@ const AP_STEPS=[
 function apRun(force,why){if(AP_BUSY)return null;const L=get(AP_KEY,[])||[];const last=L[0];if(!force&&last&&Date.now()-last.ts<6*36e5)return null;AP_BUSY=true;const t0=Date.now();const steps=[];
   try{AP_STEPS.forEach(([k,,,f])=>{const t=Date.now();try{const v=f();steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}});}
   finally{AP_BUSY=false;}const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps};L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
-if(typeof window!=='undefined'&&!window.__NO_BACKFILL__){window.addEventListener('load',()=>setTimeout(()=>{try{apRun(false,'daily');}catch(e){}},20000));setInterval(()=>{try{if(!document.hidden)apRun(false,'every 6h');}catch(e){}},36e5);}
+/* v2.51 · the background loop runs one step per task (with idle time between), so the screen stays live —
+   the whole loop in one go froze the phone for 5+ seconds. A run that starts while it's going stops it (no double work). */
+async function apRunSoft(why){if(AP_BUSY||AP_SOFT)return null;const L0=get(AP_KEY,[])||[];if(L0[0]&&Date.now()-L0[0].ts<6*36e5)return null;
+  AP_SOFT=true;const t0=Date.now();const steps=[];
+  const idle=()=>new Promise(r=>{try{if(typeof requestIdleCallback==='function'){requestIdleCallback(()=>r(),{timeout:2000});return;}}catch(e){}setTimeout(r,40);});
+  try{for(const[k,,,f]of AP_STEPS.slice()){await idle();const L=get(AP_KEY,[])||[];if(L[0]&&L[0].ts>t0)return null;if(AP_BUSY)return null;
+      const t=Date.now();try{const v=f();steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}}}
+  finally{AP_SOFT=false;}
+  const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps,soft:1};const L=get(AP_KEY,[])||[];L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
+let AP_SOFT=false;
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__){window.addEventListener('load',()=>setTimeout(()=>{apRunSoft('daily').catch(()=>{});},20000));setInterval(()=>{if(!document.hidden)apRunSoft('every 6h').catch(()=>{});},36e5);}
 
 /* ══ v2.28 · THE ENGINE ROOM — the complex stuff, proving it's absorbing ═════ */
 function engineData(){const V=roGet(VOICES_KEY,[],30e3)||[];const g=V.filter(x=>x.graded);const F=(()=>{try{return Object.keys(allFinals()).length;}catch(e){return 0;}})();
@@ -22322,7 +22365,7 @@ function pwrGames(sp){const B=pwrB(sp);if(!B)return[];const out=[];Object.values
 /* preseason prior, in rating points */
 function pwrPrior(sp,abbr,meta){try{
   if(sp==='nfl'&&typeof NFL_POWER!=='undefined'){const P=NFL_POWER[abbr]||(get('d4.nflpower',{}).v||{})[abbr];if(P&&P.priorOff!=null&&P.priorDef!=null)return 0.5*(P.priorOff-P.priorDef);}
-  if(sp==='ncaaf'){const P=(get('d4.ncaafpower',{}).v)||{};let o=meta&&meta.loc?P[meta.loc]:null;
+  if(sp==='ncaaf'){const P=((roGet('d4.ncaafpower',{},60e3)||{}).v)||{};let o=meta&&meta.loc?P[meta.loc]:null;
     if(!o){const full=(meta&&meta.n)||pwrCfbName(abbr);if(full){let best=null;Object.keys(P).forEach(k=>{if(k!==full&&full.startsWith(k+' ')&&(!best||k.length>best.length))best=k;});if(best)o=P[best];}}
     if(o&&o.sp!=null&&isFinite(+o.sp))return 0.8*(+o.sp);}
   }catch(e){}return null;}
@@ -22402,7 +22445,7 @@ function pwrAllGames(sp){const L=[...pwrGames(sp),...pwrLocalGames(sp)].sort((p,
     const dup=list.some(o=>(o.day==null||day==null)?fb&&(o.s===sc||o.day==null||day==null):fb?(Math.abs(o.day-day)<=6||(o.s===sc&&Math.abs(o.day-day)<=21)):Math.abs(o.day-day)<=1);
     if(dup)return;if(g[0]&&g[0]<st0&&sp!=='ncaaf')return;if(g[0]&&g[0]>tdy)return;list.push({day,s:g[3]+'-'+g[4]});seen.set(k,list);out.push(g[0]?g:[st0,g[1],g[2],g[3],g[4],g[5],1]);});
   return out.sort((a,b)=>a[0].localeCompare(b[0]));}
-function pwrStandings(sp){try{const S=get('d4.seasonstats',{})||{};const o=S[sp];return o&&o.teams?{d:o.d,teams:o.teams,meta:o.meta||{}}:null;}catch(e){return null;}}
+function pwrStandings(sp){try{const S=roGet('d4.seasonstats',{},60e3)||{};const o=S[sp];return o&&o.teams?{d:o.d,teams:o.teams,meta:o.meta||{}}:null;}catch(e){return null;}}
 /* market: what the line says about each team — this week's pregame line, or its most
    recent CLOSING line the app saved (never a live in-game number). Read against the
    opponent's results rating: "favored by 7 over a +2 team" = a +9 team on that day. */
@@ -23016,13 +23059,14 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
    · everything else: the newest write wins, per key
    Credentials never sync. The old public data-backup.json is retired.        */
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
-const SYNC_NEVER=new Set(['d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
+let CLOUD_SEEN=null,SYNC_LOCAL_N=0;   /* v2.51 · the cloud commit this device last saw, and a count of its own synced writes */
+const SYNC_NEVER=new Set(['d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
 const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$)/.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
 function syncKts(){if(!SYNC_KTS){try{SYNC_KTS=JSON.parse(localStorage.getItem(SYNC.ts)||'{}')||{};}catch(e){SYNC_KTS={};}}return SYNC_KTS;}
 function syncSaveKts(){try{localStorage.setItem(SYNC.ts,JSON.stringify(syncKts()));}catch(e){}}
-function syncMark(k){if(SYNC_APPLY||syncSkip(k))return;syncKts()[k]=Date.now();syncSaveKts();
+function syncMark(k){if(SYNC_APPLY||syncSkip(k))return;SYNC_LOCAL_N++;syncKts()[k]=Date.now();syncSaveKts();
   if(syncOn()){clearTimeout(SYNC_T);const last=+localStorage.getItem(SYNC.last)||0;SYNC_T=setTimeout(()=>syncNow(false),Math.max(20e3,last+180e3-Date.now()));}}
 /* every write is stamped, so the merge knows which copy is newer */
 const _syncSetRaw=set;
@@ -23032,7 +23076,7 @@ function syncTomb(){return get(SYNC.tomb,{})||{};}
 if(typeof delLocked==='function'){const _delL=delLocked;delLocked=function(id){const b=new Set((get(LS.locked,[])||[]).map(t=>String(t.id)));const r=_delL.apply(this,arguments);
   const a=new Set((get(LS.locked,[])||[]).map(t=>String(t.id)));const T=syncTomb();let ch=false;b.forEach(x=>{if(!a.has(x)){T[x]=Date.now();ch=true;}});if(ch)set(SYNC.tomb,T);return r;};}
 function syncSnapshot(){const keys={};const K=syncKts();
-  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(syncSkip(k))continue;const v=get(k,undefined);if(v===undefined)continue;keys[k]={t:K[k]||0,v};}
+  for(const k of lsKeys()){if(syncSkip(k))continue;const v=get(k,undefined);if(v===undefined)continue;keys[k]={t:K[k]||0,v};}
   return{v:1,dev:syncDevice(),ts:Date.now(),keys};}
 const syncIdOf=x=>x&&typeof x==='object'&&(x.id!=null?String(x.id):null);
 const syncGraded=x=>!!(x&&typeof x==='object'&&(x.graded===true||x.hit===true||x.hit===false||x.finalized||x.done));
@@ -23072,33 +23116,66 @@ function syncGit(path){return`https://api.github.com/repos/${get(SYNC.repo,'')}/
 async function syncRef(){const r=await fetch(syncGit('ref/heads/main')+'?t='+Date.now(),{headers:syncHeaders(),cache:'no-store'});
   if(r.status===404||r.status===409)return null;if(r.status===401||r.status===403)throw new Error('token rejected (HTTP '+r.status+') — it needs Contents: read and write on '+get(SYNC.repo,''));
   if(!r.ok)throw new Error('HTTP '+r.status+' reading the repo');const j=await r.json();return j.object&&j.object.sha||null;}
+/* ── v2.51 · THE SYNC NEVER FREEZES THE SCREEN ──────────────────────────────
+   The cloud copy is ~24 MB of state packed to ~6 MB. Packing it took ~8 seconds and
+   unpacking ~1 second of frozen main thread — every 3 minutes and on every app switch.
+   Now: (1) the packing runs in a background worker (same format, same output — every
+   device and the worker on GitHub read it as before); (2) a sync with nothing new on
+   either side is one tiny request; (3) a sync with only this device's changes skips the
+   download and pushes straight from storage (no parse, no merge). */
+let LZW=null,LZW_N=0;const LZW_P=new Map();
+function lzWorkerSrc(){return'var LZString=('+__LZF.toString()+')();onmessage=function(e){var d=e.data;try{var r=d.op==="c64"?LZString.compressToBase64(d.s):d.op==="c16"?LZString.compressToUTF16(d.s):LZString.decompressFromBase64(d.s);postMessage({id:d.id,r:r});}catch(err){postMessage({id:d.id,err:String(err&&err.message||err)});}};';}
+function lzWorker(){if(LZW!==null)return LZW||null;
+  try{if(typeof Worker==='undefined'||typeof Blob==='undefined'||typeof URL==='undefined'||!URL.createObjectURL)throw new Error('no workers');
+    LZW=new Worker(URL.createObjectURL(new Blob([lzWorkerSrc()],{type:'text/javascript'})));
+    LZW.onmessage=e=>{const d=e.data||{};const p=LZW_P.get(d.id);if(!p)return;LZW_P.delete(d.id);clearTimeout(p.t);if(d.err!=null)p.no(new Error(d.err));else p.ok(d.r);};
+    LZW.onerror=()=>{LZW_P.forEach(p=>{clearTimeout(p.t);p.no(new Error('worker failed'));});LZW_P.clear();try{LZW.terminate();}catch(e){}LZW=false;};
+    return LZW;}catch(e){LZW=false;return null;}}
+/* c64 = pack for the cloud, d64 = unpack; on a device without workers (or if one fails) it runs here as before */
+function lzOff(op,str){const inline=()=>op==='c64'?LZString.compressToBase64(str):op==='c16'?LZString.compressToUTF16(str):LZString.decompressFromBase64(str);const W=lzWorker();
+  if(!W)return Promise.resolve().then(inline);
+  return new Promise((ok,no)=>{const id=++LZW_N;const t=setTimeout(()=>{LZW_P.delete(id);no(new Error('timeout'));},120e3);LZW_P.set(id,{ok,no,t});
+    try{W.postMessage({id,op,s:str});}catch(e){clearTimeout(t);LZW_P.delete(id);no(e);}}).catch(()=>inline());}
+/* this device's storage as the cloud's JSON, straight from the stored text (no parse, no re-serialize) */
+function syncRawJson(k){const wp=WB_PEND.get(k);if(wp)return wp.json;const raw=localStorage.getItem(k);if(raw==null||raw==='')return null;let j=raw;
+  if(raw.charCodeAt(0)===1&&raw.startsWith(_LZM)){const c=_DEC_C.get(k);if(c&&c.raw===raw)j=c.j;else{j=LZString.decompressFromUTF16(raw.slice(_LZM.length));if(j!=null)_DEC_C.set(k,{raw,j});}}
+  if(j==null||j==='')return null;if(j.length<8000||!/^[\[{"]/.test(j)){try{if(JSON.parse(j)===undefined)return null;}catch(e){return null;}}return j;}
+function syncSnapshotJson(){const K=syncKts();const parts=[];
+  for(const k of lsKeys()){if(syncSkip(k))continue;const j=syncRawJson(k);if(j==null)continue;parts.push(JSON.stringify(k)+':{"t":'+(+K[k]||0)+',"v":'+j+'}');}
+  return'{"v":1,"dev":'+JSON.stringify(syncDevice())+',"ts":'+Date.now()+',"keys":{'+parts.join(',')+'}}';}
 async function syncPull(){const ref=await syncRef();if(!ref)return{snap:null,sha:null};
   const r=await fetch(syncApi(SYNC.file)+'?ref='+ref,{headers:syncHeaders({'Accept':'application/vnd.github.raw'}),cache:'no-store'});
   if(r.status===404)return{snap:null,sha:ref};if(!r.ok)throw new Error('HTTP '+r.status+' reading the sync file');
-  const raw=await r.text();const json=LZString.decompressFromBase64(raw.trim());if(!json)throw new Error('sync file is unreadable');return{snap:JSON.parse(json),sha:ref};}
+  const raw=await r.text();const json=await lzOff('d64',raw.trim());if(!json)throw new Error('sync file is unreadable');return{snap:JSON.parse(json),sha:ref};}
 /* The repo is kept at ONE commit: each save is a fresh parentless commit and the
    branch is moved onto it, so months of syncing don't pile up hundreds of MB of history. */
-async function syncPush(snap,ref){const content=LZString.compressToBase64(JSON.stringify(snap));
+async function syncPush(snap,ref){const content=await lzOff('c64',typeof snap==='string'?snap:JSON.stringify(snap));
   if(!ref){/* empty repo: the contents API makes the first commit */
     const r=await fetch(syncApi(SYNC.file),{method:'PUT',headers:syncHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:'TheDesk sync — first save',content:btoa(content)})});
     if(r.status===409||r.status===422)return{conflict:true};if(!r.ok)throw new Error('HTTP '+r.status+' creating the sync file');return{ok:true};}
   const post=async(path,body)=>{const r=await fetch(syncGit(path),{method:'POST',headers:syncHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)});if(!r.ok)throw new Error('HTTP '+r.status+' saving ('+path+')');return r.json();};
   const blob=await post('blobs',{content,encoding:'utf-8'});
   const tree=await post('trees',{tree:[{path:SYNC.file,mode:'100644',type:'blob',sha:blob.sha}]});
-  const commit=await post('commits',{message:'TheDesk sync — '+snap.dev+' — '+new Date(snap.ts).toISOString(),tree:tree.sha,parents:[]});
+  const commit=await post('commits',{message:'TheDesk sync — '+syncDevice()+' — '+new Date().toISOString(),tree:tree.sha,parents:[]});
   if(await syncRef()!==ref)return{conflict:true};   /* someone saved while we merged — re-pull */
   const r=await fetch(syncGit('refs/heads/main'),{method:'PATCH',headers:syncHeaders({'Content-Type':'application/json'}),body:JSON.stringify({sha:commit.sha,force:true})});
-  if(!r.ok)throw new Error('HTTP '+r.status+' moving the branch');return{ok:true};}
+  if(!r.ok)throw new Error('HTTP '+r.status+' moving the branch');return{ok:true,sha:commit.sha||null};}
 /* first: undefined (normal) · 'local' (this device is the master copy) · 'remote' (take the cloud copy) */
 async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your private repo and token first.');return{ok:false};}
   if(SYNC_BUSY)return SYNC_BUSY;
   SYNC_BUSY=(async()=>{let changed=0;try{
+    let fast=null;
     for(let attempt=0;attempt<3;attempt++){
-      const{snap:remote,sha}=await syncPull();const local=syncSnapshot();
+      /* v2.51 · the cloud hasn't moved since this device last saw it: nothing new → done; only our changes → push them as they are */
+      if(!manual&&!first&&attempt===0&&CLOUD_SEEN){const ref=await syncRef();
+        if(ref&&ref===CLOUD_SEEN.sha){if(SYNC_LOCAL_N<=CLOUD_SEEN.n){fast='idle';break;}
+          const n0=SYNC_LOCAL_N;const p=await syncPush(syncSnapshotJson(),ref);if(p.ok){CLOUD_SEEN=p.sha?{sha:p.sha,n:n0}:null;fast='push';break;}}}
+      const{snap:remote,sha}=await syncPull();const n0=SYNC_LOCAL_N;const local=syncSnapshot();
       const M=syncMerge(local,remote,first);changed=syncApply(M);
       const need=!remote||JSON.stringify(Object.fromEntries(Object.entries(M.keys).map(([k,o])=>[k,o.v])))!==JSON.stringify(Object.fromEntries(Object.entries(remote.keys||{}).map(([k,o])=>[k,o.v])));
-      if(!need)break;const p=await syncPush(M,sha);if(p.ok)break;if(attempt===2)throw new Error('another device kept saving at the same moment — try again');}
-    localStorage.setItem(SYNC.last,String(Date.now()));SYNC_STATE={ok:true,ts:Date.now(),msg:changed?`pulled ${changed} change${changed===1?'':'s'} from your other devices`:'up to date'};
+      if(!need){CLOUD_SEEN=sha?{sha,n:n0}:null;break;}const p=await syncPush(M,sha);if(p.ok){CLOUD_SEEN=p.sha?{sha:p.sha,n:n0}:null;break;}if(attempt===2)throw new Error('another device kept saving at the same moment — try again');}
+
+    localStorage.setItem(SYNC.last,String(Date.now()));SYNC_STATE={ok:true,ts:Date.now(),fast,msg:changed?`pulled ${changed} change${changed===1?'':'s'} from your other devices`:'up to date'};
     if(manual)toastSync(SYNC_STATE.msg);
     /* v2.00: an automatic sync used to RELOAD the page when it pulled anything, which threw you
        back to Games mid-research. Now the data lands quietly; every view reads it the next time it paints. */

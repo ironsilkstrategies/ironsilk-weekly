@@ -73,7 +73,7 @@ setTimeout(async()=>{try{
   const fz=w.eval(`evalFreeze('nfl')`);
   T('eval freeze locks every call and counts the flips',fz.n===2&&fz.fl===1&&w.eval(`get(VOICES_KEY,[]).filter(x=>x.date==='2026-10-13').every(x=>x.lk&&x.pi)`),J(fz));
   T('the sim\'s numbers are locked with the eval',J(w.eval(`simLockFor('nfl','BST@ELT','2026-10-13')`))===J({a:13.4,h:30.2,aw:0.12,hw:0.88}));
-  T('locked calls are never overwritten by a later re-read',/V\[i\]\.lk\)return;V\[i\]=c;/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8')));
+  T('locked calls are never overwritten by a later re-read',/V\[i\]\.lk\)return;(if\(JSON\.stringify\(V\[i\]\)===JSON\.stringify\(c\)\)return;)?V\[i\]=c;/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8')));
   w.eval(`apRun=function(){return{steps:[]}};brainLearnAll=function(){return{}};`);
   const prep=w.eval(`evalPrep('nfl')`);T('re-running the eval re-opens today\'s calls before it re-locks',prep.find(s=>s.k==='unlock').n===2&&prep.map(s=>s.k).join(',')==='learn,autopilot,unlock,resim,reread',J(prep));
   w.eval(`evalFreeze('nfl');(function(){const V=get(VOICES_KEY,[]);V.forEach(x=>{if(x.date==='2026-10-13'){x.graded=true;x.hit=x.side==='home';x.units=x.hit?0.5:-1;}});set(VOICES_KEY,V);})()`);clr();
