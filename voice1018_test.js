@@ -19,7 +19,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const w=boot({'d4.voices':V,'d4.todaycard':TC,'d4.seasonstats':{nhl:{d:D,teams:{},meta:{CAR:{n:'Carolina Hurricanes'},WPG:{n:'Winnipeg Jets'}}}}});await wait(1500);
   const before=w.eval(`JSON.stringify(get(VOICES_KEY,[]))`);
   const reads=w.eval(`CHAR_ORDER.map(v=>charRead(v,{sp:'nhl',game:'CAR@WPG',m:'ml',sd:'away',price:-179,pick:'CAR ML',date:'${D}',gid:'401'}))`);
-  T('every character speaks (13 voices)',reads.length===13&&reads.every(Boolean),reads.filter(r=>!r).length+' missing');
+  T('every character speaks (14 voices — v2.54 adds the Underdog Spotter)',reads.length===14&&reads.every(Boolean),reads.filter(r=>!r).length+' missing of '+reads.length);
   T('…each with a take, a worry and the price',reads.every(r=>r.take&&r.worry&&r.priceLine),JSON.stringify(reads.find(r=>!(r.take&&r.worry&&r.priceLine))));
   const bad=reads.flatMap(r=>[r.take,...r.story,...r.proof,r.worry,r.priceLine]).filter(t=>/undefined|NaN|null|\[object/.test(String(t)));
   T('…never a broken sentence (no undefined / NaN / null)',bad.length===0,bad.slice(0,2).join(' | '));

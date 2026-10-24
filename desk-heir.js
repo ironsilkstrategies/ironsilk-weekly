@@ -36,7 +36,7 @@ function wvFromScore(x,a,h,sm,st){let p=null;
   else if(x.market==='spread'&&x.line!=null){const mg=(x.side==='home'?h-a:a-h)+(+x.line);p=normCdf(mg/sm);}
   else if(x.market==='ml'){const mg=x.side==='home'?h-a:a-h;p=normCdf(mg/sm);}
   return p!=null&&isFinite(p)?Math.max(0.05,Math.min(0.95,p)):null;}
-function wvOwn(x){try{if(x.simP!=null&&isFinite(+x.simP))return+x.simP;if(x.pP!=null&&isFinite(+x.pP))return+x.pP;if(x.sP!=null&&isFinite(+x.sP))return+x.sP;
+function wvOwn(x){try{if(x.dP!=null&&isFinite(+x.dP))return+x.dP;if(x.simP!=null&&isFinite(+x.simP))return+x.simP;if(x.pP!=null&&isFinite(+x.pP))return+x.pP;if(x.sP!=null&&isFinite(+x.sP))return+x.sP;
     const sm=WV_SIG[x.sp]||12,st=WV_TSIG[x.sp]||14;
     /* the Judge: its weighed score and its own measured spread */
     if(x.ja!=null&&x.jh!=null&&isFinite(+x.ja)&&isFinite(+x.jh))return wvFromScore(x,+x.ja,+x.jh,+x.jsd>0?+x.jsd:sm,st);

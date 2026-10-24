@@ -150,6 +150,7 @@ const VOICES={
   Power:{story:['power','matchup','met','form','luck'],proof:['powerLine'],take:F=>F.pw&&F.T?(F.pw.mT>0?`On paper, ${F.Tn} is the better team — No. ${F.pw.me.rank} against No. ${F.pw.op.rank}.`:`${F.Tn} is the lower-rated team, but the number gives it enough room.`):null},
   Scout:{story:['players','flags','injO'],proof:['sim'],take:F=>{const p=(F.pl||[]).find(q=>q.hot);return p?`This one comes down to players, and ${p.name} is hot.`:F.T?`I watch the talent, and the talent edge is ${F.Tn}'s.`:`I watch the talent — and the talent says ${F.sd}.`;}},
   Banker:{story:['sim'],proof:['others'],take:F=>`I don't care who wins. I care about the price — and this price is wrong.`},
+  Dog:{story:['sim','pub','sit'],proof:['others'],take:(F,c)=>c&&c.dP!=null&&F.T?`Everybody wants the favorite. At this price ${F.Tn} only has to win ${vxPct(+c.dP-(+c.dEdge||0))} — I have it at ${vxPct(+c.dP)}.`:F.T?`The dog is the value here, and the dog is ${F.Tn}.`:null},
   Brain:{story:['others','squad','players'],proof:['sim','powerLine'],take:F=>`Everyone has had their say. When I weigh them by who's been right, it comes out ${F.T?F.Tn:'the '+F.sd}.`},
   Blend:{story:['sim','pub'],proof:['others'],take:F=>F.sim!=null&&F.imp!=null?`The Sim says ${vxPct(F.sim)}, the market says ${vxPct(F.imp)}. I blend them by who's been sharper lately, and it still comes out ${F.T?F.Tn:'the '+F.sd}.`:null}};
 /* one character's read on one pick */

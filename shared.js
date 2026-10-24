@@ -796,6 +796,34 @@ function scoutCharCalls(sp,g,hl,tl,hlSim,tlSim,add){if(!SCOUT_SP.includes(sp))re
     if(hl!=null&&!hlSim&&Math.abs(S.edge)>=IDEO_P('Scout','spread_'+sp,SCOUT_SPR[sp]||0.25))add('Scout','spread',side,ex(S.edge));}
   if(tl!=null&&!tlSim&&Math.abs(S.tot)>=IDEO_P('Scout','total',SCOUT_TOT))add('Scout','total',S.tot>0?'over':'under',ex(S.tot));}
 const PROB_OK={};
+/* 🐕 THE UNDERDOG SPOTTER (v2.54) — the next generation's first new caller, and an experiment with a
+   thesis: when the Sim gives a dog clearly more chance than its price does, the dog pays. It only ever
+   takes a dog — the moneyline side priced plus money (5+ points of chance over the price, nothing past
+   +350, never under a 20% chance), or the spread side getting points (4+ points of cover chance over the
+   price). The market-weighted Blend already speaks for the price; the Spotter tests the Sim's dogs on their
+   own. On probation: logged, graded on UNITS (a dog that wins 40% at +180 is a winner), and it earns a vote
+   only when its record pays. Until then nothing it says is official. */
+const DOG_ML_EDGE=0.05,DOG_SPR_EDGE=0.04,DOG_MAX=350,DOG_SIG={nfl:13.5,ncaaf:16,nba:12,ncaab:10.5};
+function dogCharCalls(sp,g,s,Ln,hl,hlSim,add){if(!s||!g)return;const ex=(p,q)=>({dP:+p.toFixed(4),dEdge:+(p-q).toFixed(4)});
+  try{const pa=Ln.mlA&&amerOk(Ln.mlA.price),ph=Ln.mlH&&amerOk(Ln.mlH.price);
+    if(pa!=null&&ph!=null&&pa!==ph){const side=pa>ph?'away':'home',pr=Math.max(pa,ph);const pS=side==='home'?s.hw:s.aw;
+      if(pr>0&&pr<=IDEO_P('Dog','max',DOG_MAX)&&pS!=null&&isFinite(+pS)&&+pS>=0.2){const q=imp(pr);if(+pS-q>=IDEO_P('Dog','ml_edge',DOG_ML_EDGE))add('Dog','ml',side,ex(+pS,q));}}}catch(e){}
+  try{const sig=DOG_SIG[sp];if(sig&&hl!=null&&!hlSim&&+hl!==0&&s.homeProj!=null&&s.awayProj!=null){const side=+hl<0?'away':'home',pts=Math.abs(+hl);
+      const mg=(side==='home'?s.homeProj-s.awayProj:s.awayProj-s.homeProj)+pts;const p=normCdf(mg/sig);const L=side==='home'?Ln.spH:Ln.spA;const pr=L&&amerOk(L.price)!=null?amerOk(L.price):-110;
+      const q=imp(pr);if(p-q>=IDEO_P('Dog','spr_edge',DOG_SPR_EDGE))add('Dog','spread',side,ex(p,q));}}catch(e){}}
+/* graduation: 40+ graded calls and units that pay — shrunk toward nothing, so a hot week can't fake it */
+function dogProbation(){try{const V=roGet(VOICES_KEY,[],60e3)||[];let w=0,n=0,u=0;V.forEach(x=>{if(x.voice!=='Dog'||!x.graded||x.push||x.hit==null)return;n++;if(x.hit)w++;u+=+x.units||0;});
+  const roi=u/(n+20);const ok=n>=40&&roi>=0.02;PROB_OK.Dog=ok;
+  if(ok&&!VOTER_ORDER.includes('Dog'))VOTER_ORDER.push('Dog');return{w,n,u,roi,ok};}catch(e){return{w:0,n:0,u:0,roi:0,ok:false};}}
+/* the Spotter's card: today's dogs, its record in units, where it stands on probation */
+function dogCardHtml(){try{const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const pr=dogProbation();
+  const L=V.filter(x=>x&&x.voice==='Dog'&&String(x.date).slice(0,10)===d&&!x.graded&&x.price!=null).sort((a,b)=>(+b.dEdge||0)-(+a.dEdge||0)).slice(0,6);
+  const t=x=>{const g=(sportGames(x.sp)||[]).find(z=>z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x.game);const s=g&&(g.start||g.date);const v=Date.parse(s||'');return isFinite(v)?new Date(v).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';};
+  const rows=L.map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> · ${txtEsc(x.game)}${t(x)?' · '+t(x):''}<br><span style="color:var(--mute)">its chance ${Math.round(+x.dP*100)}% vs the price's ${Math.round((+x.dP-(+x.dEdge||0))*100)}% · edge +${(+x.dEdge*100).toFixed(1)} pts</span></div>`).join('');
+  const rec=pr.n?`${pr.w}-${pr.n-pr.w} · ${pr.u>=0?'+':''}${pr.u.toFixed(1)}u`:'no graded calls yet';
+  return`<div class="tkt" style="margin-top:8px;border-left:3px solid #2dd4bf"><h3 style="margin:0 0 2px">🐕 The Underdog Spotter</h3>
+    <div class="mono" style="font-size:10px;color:${pr.ok?'var(--win)':'var(--gold)'}">${pr.ok?`Graduated — it votes · ${rec}`:`On probation · ${rec} — these are tracked, not official, until 40+ graded dogs pay`}</div>
+    ${rows||'<div class="sub" style="font-size:10.5px;margin-top:4px">No dog priced better than its chance today. Silence is a call.</div>'}</div>`;}catch(e){return'';}}
 function scoutProbation(){try{const V=roGet(VOICES_KEY,[],60e3)||[];let w=0,n=0,u=0;V.forEach(x=>{if(x.voice!=='Scout'||!x.graded||x.push||x.hit==null)return;n++;if(x.hit)w++;u+=+x.units||0;});
   const r=(w+20*0.5)/(n+20);const ok=n>=40&&r>=0.53&&u>=0;PROB_OK.Scout=ok;
   if(ok&&!VOTER_ORDER.includes('Scout'))VOTER_ORDER.splice(Math.max(0,VOTER_ORDER.indexOf('Power')+1),0,'Scout');return{w,n,u,r,ok};}catch(e){return{w:0,n:0,u:0,r:0.5,ok:false};}}
@@ -1983,6 +2011,7 @@ const CHARS={
   'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'situational trend records, shrunk for small samples',quiet:'no uploaded trends lean'},
   'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
   'Power':      {chip:'⚡ POWER',color:'#818cf8',label:'The Commissioner',school:'TheDesk Power Index — who\'s better and by how much, plus prestige and the all-time series',quiet:'no power rating for one of these teams, or no real edge on this number'},
+  'Dog':        {chip:'🐕 DOG',color:'#2dd4bf',label:'The Underdog Spotter',school:'plus-money value only — a dog the Sim gives clearly more chance than its price (5+ points on a moneyline, 4+ on a spread); silent on every favorite',quiet:'no dog the Sim rates clearly above its price'},
   'Scout':      {chip:'🔭 SCOUT',color:'#fb7185',label:'The Scout',school:'talent: superstars vs busts — QB efficiency, pass rush, ball hawks, shooters, goalies — read as matchups',quiet:'not enough of either team\'s games read yet, or no real talent edge'},
   'Banker':     {chip:'🏦 BANKER',color:'#d4af37',label:'The Banker',school:'only a price the calibrated chance beats — +3% EV or no bet, never shorter than -300',quiet:'no price beats the calibrated chance by 3%+'},
   'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the Sim, the market and every character\'s graded vote, weighed together',quiet:'still learning — needs graded character history'},
@@ -1995,10 +2024,10 @@ const CHAR_ORDER=Object.keys(CHARS);
    never vote in the squares, the crowd counts or the Banker's consensus — that
    would count the same opinion twice and let the Brain grade itself. */
 const META_VOICES=new Set(['Brain','Blend','Banker']);
-const VOTER_ORDER=CHAR_ORDER.filter(v=>!META_VOICES.has(v)&&v!=='Scout');
 /* v2.27 · on probation: a new character is logged, graded and recorded, but only votes
-   (squares, unanimity, the Brain) once its record proves it — see scoutProbation */
-const PROBATION=new Set(['Scout']);
+   (squares, unanimity, the Brain) once its record proves it — see scoutProbation, dogProbation */
+const PROBATION=new Set(['Scout','Dog']);
+const VOTER_ORDER=CHAR_ORDER.filter(v=>!META_VOICES.has(v)&&!PROBATION.has(v));
 const isVoter=v=>!!CHARS[v]&&!META_VOICES.has(v)&&!(PROBATION.has(v)&&!(typeof PROB_OK!=='undefined'&&PROB_OK[v]));
 /* Independent reads: not derived from the app's own simulation. */
 const INDEP_VOICES=new Set(['Trends','Consensus','Coach','Pred','Covers','Power','Scout']);
@@ -2110,6 +2139,8 @@ function characterCalls(sp,g,s){
   try{pwrCharCalls(sp,g,hl,tl,hlSim,tlSim,add);}catch(e){}
   /* 🔭 the Scout — stars vs busts (v2.27) */
   try{scoutCharCalls(sp,g,hl,tl,hlSim,tlSim,add);}catch(e){}
+  /* 🐕 the Underdog Spotter — plus-money value only (v2.54) */
+  try{dogCharCalls(sp,g,s,Ln,hl,hlSim,add);}catch(e){}
   try{metaCalls(sp,g,calls,Ln,add);}catch(e){}
   CHAR_CACHE[ck]={ts:Date.now(),s,calls};
   return calls;
@@ -2606,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16552,7 +16583,8 @@ function renderBest(){
   /* v2.53 · the price check: what these prices need to break even, against what the card is hitting */
   let priceTxt='';try{const R3=best3Record();if(R3.be!=null&&R3.w+R3.l>=5){const hr=R3.w/(R3.w+R3.l);
     priceTxt=`<div class="mono" style="font-size:10px;margin:6px 2px;color:${hr>=R3.be?'var(--win)':'var(--rust)'}">💲 Price check: the Best 3 has averaged ${R3.ap>0?'+':''}${R3.ap}, which needs ${Math.round(R3.be*100)}% to profit — it's hitting ${Math.round(hr*100)}%.</div>`;}}catch(e){}
-  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+priceTxt+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button></div>
+  let dogTxt='';try{dogTxt=dogCardHtml();}catch(e){}
+  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+priceTxt+dogTxt+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button></div>
     <div class="sub mono pub-row">${pubTxt?`<span>${pubTxt}</span>`:''}<a href="${PUB_URL}" target="_blank" rel="noopener">open public page ↗</a>${typeof shareHub==='function'?' · <a href="#" onclick="shareHub();return false">📤 share</a>':''}</div>
     ${pubTxt?'':'<div class="sub mono" style="font-size:10px">The public page (picks.html) shows only the locked card, its graded record and your subscribe link. It publishes itself when the card locks.</div>'}
     <div class="sub" style="font-size:10px;margin-top:4px">Subscribe link for the public page <input id="subLinkIn" placeholder="https://… (Whop, Patreon, Stripe link)" value="${esc(get('d4.sublink',''))}" onchange="set('d4.sublink',this.value.trim())" style="width:100%;margin-top:2px"></div>`+
@@ -18962,7 +18994,7 @@ const IDEO_KEY='d4.ideo';
 const scoreMargin=x=>{const m=String(x.score||'').match(/(-?\d+(?:\.\d+)?)\s*[-–]\s*(-?\d+(?:\.\d+)?)/);if(!m)return null;const a=+m[1],h=+m[2];
   if(x.market==='total')return x.line==null?null:(x.side==='over'?(a+h)-x.line:x.line-(a+h));const mg=x.side==='home'?h-a:a-h;return x.market==='spread'?(x.line==null?null:mg+(+x.line)):mg;};
 const IDEO_STR={Sim:x=>x.mktP>0?(x.pUsed!=null?x.pUsed:x.simP)-x.mktP:null,Brain:x=>x.mktP>0&&x.simP!=null?x.simP-x.mktP:null,Blend:x=>x.mktP>0&&x.simP!=null?x.simP-x.mktP:null,
-  Power:x=>x.pP!=null?x.pP-(x.price!=null?imp(+x.price):0.5):null,Scout:x=>x.sP!=null?x.sP:null,Banker:x=>x.ev!=null?x.ev:null,
+  Power:x=>x.pP!=null?x.pP-(x.price!=null?imp(+x.price):0.5):null,Scout:x=>x.sP!=null?x.sP:null,Dog:x=>x.dEdge!=null?+x.dEdge:null,Banker:x=>x.ev!=null?x.ev:null,
   'Most common':scoreMargin,Pred:scoreMargin,Covers:scoreMargin};
 function ideoTune(force){const I=get(IDEO_KEY,null);if(!force&&I&&Date.now()-I.ts<7*864e5)return I.n||0;
   const V=roGet(VOICES_KEY,[],30e3)||[];const G={};
@@ -19095,6 +19127,7 @@ const AP_STEPS=[
   ['chem','Chemistry','Pairs: who wins together, who wins the argument.',()=>{CHEM_C=null;return chemIdx().markets;}],
   ['squads','Squads','3-, 4- and 5-character squads, proven in both halves of the history.',()=>squadCompute()],
   ['scout','Scout probation','Checks whether the Scout has earned a vote.',()=>scoutProbation().n],
+  ['dog','Underdog Spotter probation','Checks whether the Underdog Spotter\'s dogs have paid enough to earn a vote.',()=>dogProbation().n],
   ['ideo','Ideology floors','Weekly: each character\'s confidence floor per sport and market, kept only if it holds on unseen games.',()=>ideoTune(false)],
   ['parlays','Grade parlays','Every character\'s game-line and props tickets.',()=>cparGrade()+cpxGrade()],
   ['props','Grade props','Prop calls graded from real box lines.',()=>cpropGrade()+propCalGrade()],
@@ -22774,7 +22807,7 @@ function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet
   B.streak=Object.assign([0,0],{s});
   return{B,all};}
 /* the character's stated chance where it has one; otherwise its own all-time rate here */
-function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
+function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
   const rate=(all[0]+FEEL_K0*0.5)/(all[0]+all[1]+FEEL_K0);
   if(st>0&&st<1){/* a stated chance is tempered by how reliable the character has actually been */const n=all[0]+all[1];const k=n/(n+FEEL_K0);return Math.max(0.02,Math.min(0.98,(1-k*0.5)*st+k*0.5*rate));}
   return rate;}

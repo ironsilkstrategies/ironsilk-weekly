@@ -113,7 +113,8 @@ function confFloorFor(x){const base=confFloor(x&&x.market);const d=String((x&&x.
 const CONF_PAY_FROM='2026-10-24',CONF_PAY_MIN=-150;
 function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_PAY_FROM)return true;const c=confOf(x);if(c==null||c>=0.70-1e-9)return true;
   const p=+x.price;return isFinite(p)&&p>=CONF_PAY_MIN;}
-function isOfficial(x){const c=confOf(x);return c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x);}
+function isOfficial(x){if(x&&x.voice==='Dog')return!!(typeof PROB_OK!=='undefined'&&PROB_OK.Dog)&&+x.dEdge>=DOG_ML_EDGE-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);
+  const c=confOf(x);return c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x);}
 const officialOnly=V=>(V||[]).filter(isOfficial);
 const confPct=c=>c==null?'—':Math.round(c*100)+'%';
 /* calls logged before the meter existed (or locked before it loaded) get their
@@ -208,6 +209,8 @@ const IDEO_TXT={
     params:[['edge_nfl','NFL: spread edge needed (points)',1,0.5,7,0.5],['edge_ncaaf','CFB: spread edge needed (points)',1.5,0.5,10,0.5],['edge_nhl','NHL: puck-line edge needed (goals)',0.2,0.05,1,0.05],['edge_nba','NBA: spread edge needed (points)',1.5,0.5,8,0.5]]},
   Scout:{how:'Reads talent as matchups: superstars against busts — QB efficiency, the pass rush, ball hawks, shooters, goalies. It only votes once its own record proves it.',reads:'the Stars & Busts ledger',
     params:[['ml_nfl','NFL: talent edge for a side',0.12,0.05,0.5,0.01],['ml_ncaaf','CFB: talent edge for a side',0.15,0.05,0.5,0.01],['ml_nhl','NHL: talent edge for a side',0.12,0.05,0.5,0.01],['total','Talent edge for a total',0.3,0.1,0.8,0.05]]},
+  Dog:{how:'Only ever takes a dog — the moneyline side priced plus money, or the spread side getting points — and only when the Sim gives it clearly more chance than the price does. On probation: graded on units, it votes once its dogs pay.',reads:'the Sim\'s chance against the dog\'s price',
+    params:[['ml_edge','Moneyline: chance over the price (0.05 = 5 pts)',0.05,0.02,0.15,0.005],['spr_edge','Spread: cover chance over the price',0.04,0.02,0.15,0.005],['max','Longest price it will take',350,150,600,10]]},
   Banker:{how:'Only bets a price the calibrated chance beats — a minimum expected value or no bet — and never shorter than -300. Built from the Blend, so it never votes.',reads:'the Blend\'s calibrated chance against the book price',params:[['ev','Minimum expected value (0.03 = +3%)',0.03,0.01,0.2,0.01]]},
   Brain:{how:'Starts from the Sim and the market, then lets every character\'s graded vote move it — the better a character\'s record, the bigger its say.',reads:'the Sim, the market and every character\'s vote'},
   Blend:{how:'The Sim\'s chance blended with the market\'s, weighted by which has predicted better lately, plus any situation adjustments that have proven real.',reads:'the Sim and the market'}};
