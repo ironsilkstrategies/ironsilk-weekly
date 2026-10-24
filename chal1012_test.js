@@ -2,7 +2,7 @@ const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path')
 const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d:''}`);
 let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');
 html=html.replace(/<script src="([^"?]+)\?v=[^"]+"><\/script>/g,(m,f)=>`<script>${fs.readFileSync(path.join(W,f),'utf8')}</script>`);
-const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nhl.html',pretendToBeVisual:true,beforeParse(w){w.__NO_GRADELOOP__=true;w.__NO_BACKFILL__=true;w.__NO_SYNC_LOOP__=true;
+const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nhl.html',pretendToBeVisual:true,beforeParse(w){/* v2.55 · a fixed afternoon clock: these fixtures put games late "today", which read as already played between midnight and the 5 AM day turn */const RD=w.Date;const T0=RD.parse('2026-10-24T19:00:00Z'),t0=RD.now();class FD extends RD{constructor(...a){super(...(a.length?a:[T0+(RD.now()-t0)]))}static now(){return T0+(RD.now()-t0)}}w.Date=FD;w.__NO_GRADELOOP__=true;w.__NO_BACKFILL__=true;w.__NO_SYNC_LOOP__=true;
   w.fetch=()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});w.scrollTo=()=>{};w.alert=m=>{w.__al=String(m)};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(()=>{try{
   const st=w.eval(`today()`)+'T23:59:00-05:00';

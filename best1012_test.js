@@ -2,7 +2,7 @@ const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path')
 const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d:''}`);
 let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');
 html=html.replace(/<script src="([^"?]+)\?v=[^"]+"><\/script>/g,(m,f)=>`<script>${fs.readFileSync(path.join(W,f),'utf8')}</script>`);
-const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nhl.html',pretendToBeVisual:true,beforeParse(w){w.__NO_GRADELOOP__=true;w.__NO_BACKFILL__=true;w.__NO_SYNC_LOOP__=true;
+const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nhl.html',pretendToBeVisual:true,beforeParse(w){/* v2.55 · a fixed afternoon clock: these fixtures put games late "today", which read as already played between midnight and the 5 AM day turn */const RD=w.Date;const T0=RD.parse('2026-10-24T19:00:00Z'),t0=RD.now();class FD extends RD{constructor(...a){super(...(a.length?a:[T0+(RD.now()-t0)]))}static now(){return T0+(RD.now()-t0)}}w.Date=FD;w.__NO_GRADELOOP__=true;w.__NO_BACKFILL__=true;w.__NO_SYNC_LOOP__=true;
   w.fetch=()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(()=>{try{
   const st=h=>w.eval(`today()`)+'T'+String(h).padStart(2,'0')+':59:00-05:00';
@@ -12,8 +12,8 @@ setTimeout(()=>{try{
   w.eval(`localStorage.removeItem(BEST5_KEY);set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify(P)},props:[]}}});set(EVAL_LOCK_KEY,{date:today(),by:{nhl:Date.now()}});
     set(VOICES_KEY,[{id:'v1',voice:'Sim',sp:'nhl',game:'OTT@NJ',market:'spread',side:'away',line:1.5,price:-225,date:today(),cf:0.66}]);`);   /* v2.31: the Sim is 66% sure of OTT +1.5 — under the 70% rule */
   const S=w.eval('best5State()');T('nothing qualifies → card stays open (not locked empty) while games are ahead',!S.locked&&!S.top3.length);
-  const N=w.eval('best3Near(5)');/* v2.43 · the fixture has no 70% call that day, so the 65% fallback applies: the 66% call clears the floor and misses on price */
-  T('closest calls listed with the exact reason each missed',N.length===3&&N.some(x=>/66% sure, but the price needs/.test(x.why))&&N.some(x=>/no character confidence/.test(x.why))&&N.some(x=>/flagged/.test(x.why)),N.map(x=>x.pick+': '+x.why).join(' | '));
+  const N=w.eval('best3Near(5)');/* v2.43 · no 70% call that day, so the 65% fallback applies; v2.53 · but under 70% a pick has to pay -150 or better — the 66% call at -225 misses on that */
+  T('closest calls listed with the exact reason each missed',N.length===3&&N.some(x=>/66% sure at -225 — under 70%, a pick has to pay -150 or better/.test(x.why))&&N.some(x=>/no character confidence/.test(x.why))&&N.some(x=>/flagged/.test(x.why)),N.map(x=>x.pick+': '+x.why).join(' | '));
   w.eval(`document.body.insertAdjacentHTML('beforeend','<div id="bestCard"></div>');renderBest();`);const h=w.document.getElementById('bestCard').textContent;
   T('banner says the eval ran and nothing clears the bar, and shows the closest calls',/Master evaluation ran — no play clears the bar yet/.test(h)&&/Closest calls today/.test(h)&&/OTT \+1\.5/.test(h));
   T('the card itself no longer says "open each sport once" when it has picks to judge',/Nothing clears the bar yet/.test(h)&&!/open each sport once/.test(h));

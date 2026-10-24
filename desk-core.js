@@ -438,7 +438,9 @@ function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const
     try{if(x.price==null)why='no book price';else if(+x.price<DESK_B3_LO)why=`priced ${x.price} — shorter than -300`;else if(+x.price>BEST3_HI)why='longer than +400';
       else if(x.incoherent||x.suspect)why='flagged: '+(x.suspect||'incoherent with its other markets');else if(laneStatus(pickLane(x,s0))==='blocked')why='lane blocked: '+laneName(pickLane(x,s0));
       else if(pickDisagrees(x,s0))why='model fighting the market';
-      else if(!o)why=p!=null?`most confident character: ${Math.round(p*100)}% — under the ${Math.round(confFloorFor({sp:s0,market:mkNorm(x.m),date:today()})*100)}% rule`:'no character confidence on it yet';
+      else if(!o){const fl=confFloorFor({sp:s0,market:mkNorm(x.m),date:today()});
+        why=p==null?'no character confidence on it yet':p>=fl-1e-9&&p<0.70&&+x.price<CONF_PAY_MIN&&today()>=CONF_PAY_FROM?`${Math.round(p*100)}% sure at ${x.price} — under 70%, a pick has to pay ${CONF_PAY_MIN} or better`
+          :`most confident character: ${Math.round(p*100)}% — under the ${Math.round(fl*100)}% rule`;}
       else if(ev<0.5)why=`${Math.round(p*100)}% sure, but the price needs ${Math.round(imp(+x.price)*100)}% — no value`;}catch(e){}
     if(why)out.push({sp:s0,game:x.game,pick:x.pick,price:x.price,p,ev,why,tier:best3Tier(x)});}));
   return out.sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,n||5);}
