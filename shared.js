@@ -2637,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024o';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024p';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23413,7 +23413,8 @@ const TGW_BRANCH='autopilot-state',TGW_FILE='tg.enc';
 const TGW_WORKER_REPO='ironsilkstrategies/ironsilk-weekly';
 function tgwOn(){return get('d4.tgworker',false)===true;}
 function tgwKey(){let k=get('d4.tgautokey','');if(!k){const b=new Uint8Array(32);crypto.getRandomValues(b);k=btoa(String.fromCharCode(...b));set('d4.tgautokey',k);}return k;}
-const tgwB64=u=>btoa(String.fromCharCode(...new Uint8Array(u)));const tgwUnb64=s0=>Uint8Array.from(atob(s0),c=>c.charCodeAt(0));
+/* v2.62.2 · in chunks: spreading a 120 KB+ card into one call blew the stack — every hand-off since Oct 18 died here */
+const tgwB64=u=>{const b=new Uint8Array(u);let s0='';for(let i=0;i<b.length;i+=8192)s0+=String.fromCharCode.apply(null,b.subarray(i,i+8192));return btoa(s0);};const tgwUnb64=s0=>Uint8Array.from(atob(s0),c=>c.charCodeAt(0));
 async function tgwAes(){return crypto.subtle.importKey('raw',tgwUnb64(tgwKey()),'AES-GCM',false,['encrypt','decrypt']);}
 async function tgwEncrypt(obj){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},await tgwAes(),new TextEncoder().encode(JSON.stringify(obj)));return'v1.'+tgwB64(iv)+'.'+tgwB64(ct);}
 async function tgwDecrypt(str0){const [v,iv,ct]=String(str0).trim().split('.');if(v!=='v1')throw new Error('unknown format');const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:tgwUnb64(iv)},await tgwAes(),tgwUnb64(ct));return JSON.parse(new TextDecoder().decode(pt));}
