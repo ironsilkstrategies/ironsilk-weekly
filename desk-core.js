@@ -1346,3 +1346,16 @@ function deskReopenRun(){if(DESK_REOPEN_RUN||DESK_BG_EVAL||(typeof BG_MODE!=='un
     if(!ready&&Date.now()-t0<45000)return;clearInterval(iv);try{const r=masterEvalAll();if(r&&r.catch)r.catch(e=>console.warn('reopen eval',e));}catch(e){console.warn('reopen eval',e);}},1500);
   return true;}
 if(typeof window!=='undefined'&&!window.__NO_REOPEN__)setTimeout(()=>{try{deskReopenRun();}catch(e){}},2500);
+
+/* ══ v2.57 · 🔓 UNFREEZE & RE-EVALUATE — the reopen above, from a button on the Best card. Clears today's
+   freeze (eval locks, Best 3, unstarted Today picks, Banker, plan, character parlays) and re-runs the
+   master evaluation across every sport. Started games keep their picks. A day already posted to VIP asks
+   first: the new card goes out as a fresh post. */
+function deskUnfreezeNow(){const d=today();let posted=false;try{const P=get('d4.tgposts',{})||{};posted=!!(P[d]&&(P[d].ids||[]).length);}catch(e){}
+  if(!confirm('Unfreeze today and re-evaluate every sport for a new Best 3?\n\nGames already started keep their picks.'+(posted?'\n\n⚠️ Today\'s card already went to VIP — the new one will post as an update.':'')))return false;
+  if(posted){try{const P=get('d4.tgposts',{})||{};P[d]={...P[d],ids:[],reopenedFrom:P[d].ids||[]};set('d4.tgposts',P);}catch(e){}}
+  set(REOPEN_KEY,{d,ts:Date.now(),why:'manual unfreeze'});DESK_REOPEN_RUN=false;
+  const ok=deskReopenRun();if(!ok){try{deskToast('Nothing to unfreeze for today.',3000);}catch(e){}}return ok;}
+function deskUnfreezeBtn(){return`<button class="primary" style="width:100%;margin:8px 0 2px" onclick="deskUnfreezeNow()">🔓 Unfreeze &amp; re-evaluate every sport</button>`;}
+if(typeof window!=='undefined'&&typeof renderBest==='function'&&!window.__UNFRZ__){window.__UNFRZ__=1;const _rbU=renderBest;
+  renderBest=function(){const r=_rbU.apply(this,arguments);try{const el=document.getElementById('bestCard');if(el&&!el.querySelector('.unfrz')){const w=document.createElement('div');w.className='unfrz';w.innerHTML=deskUnfreezeBtn();el.appendChild(w);}}catch(e){}return r;};}
