@@ -807,7 +807,7 @@ function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦
   if(C.top10.length)blocks.push(`<b>🔟 THE REST OF THE TOP 10</b>\n`+C.top10.map((x,i)=>`${i+1+C.best.length}. ${mk(x)}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n'));
   if(C.banker)blocks.push(`${pm(C.banker)}<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>mb(l)+e(subLeg(l))).join('\n'));
   C.chars.forEach(P=>blocks.push(`${pm(P)}<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>mb(l)+e(subLeg(l))).join('\n')));
-  if((C.props||[]).length)blocks.push(`<b>🎯 PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mb(c)}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b> · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
+  if((C.props||[]).length)blocks.push(`<b>🎯 PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mb(c)}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b>${e(propWhere(c))} · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
   blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
   const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
 
@@ -1359,3 +1359,8 @@ function deskUnfreezeNow(){const d=today();let posted=false;try{const P=get('d4.
 function deskUnfreezeBtn(){return`<button class="primary" style="width:100%;margin:8px 0 2px" onclick="deskUnfreezeNow()">🔓 Unfreeze &amp; re-evaluate every sport</button>`;}
 if(typeof window!=='undefined'&&typeof renderBest==='function'&&!window.__UNFRZ__){window.__UNFRZ__=1;const _rbU=renderBest;
   renderBest=function(){const r=_rbU.apply(this,arguments);try{const el=document.getElementById('bestCard');if(el&&!el.querySelector('.unfrz')){const w=document.createElement('div');w.className='unfrz';w.innerHTML=deskUnfreezeBtn();el.appendChild(w);}}catch(e){}return r;};}
+
+/* v2.58 · a prop says whose player it is and which game: "Jalen Hurts 200+ pass yds (PHI · PHI@NYG 3:25 PM)" */
+function propWhere(c){if(!c)return'';let g=c.game||'';try{if(!g&&typeof cpxPropGame==='function')g=cpxPropGame(c.sp,c.team)||'';}catch(e){}
+  let t='';try{const st=c.start||(typeof deskTeamStart==='function'?deskTeamStart(c.sp,c.team):'');if(st){const d=new Date(st);if(isFinite(d))t=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'})+' CT';}}catch(e){}
+  const bits=[c.team||'',g&&g!==c.team?g:'',t].filter(Boolean);return bits.length?` (${bits.join(' · ')})`:'';}

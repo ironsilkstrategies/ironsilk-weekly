@@ -2637,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23366,7 +23366,7 @@ function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦
   if(C.top10.length)blocks.push(`<b>🔟 TOP ${C.top10.length} PLAYS</b>\n`+C.top10.map((x,i)=>`${i+1}. ${mk(x)}${x.play?'✔️ ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${e((SP_LAB[x.sp]||'').split(' ')[0])} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n')+`\n<i>✔️ = passes every rule: whole crowd agrees, good lane, model not fighting the market</i>`);
   if(C.banker)blocks.push(`${pm(C.banker)}<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>mb(l)+e(subLeg(l))).join('\n'));
   C.chars.forEach(P=>blocks.push(`${pm(P)}<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>mb(l)+e(subLeg(l))+(l.spec?`\n   <i>🎯 ${e(l.spec)}</i>`:'')).join('\n')));
-  if((C.props||[]).length)blocks.push(`<b>🎯 CHARACTER PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mb(c)}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b> · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
+  if((C.props||[]).length)blocks.push(`<b>🎯 CHARACTER PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mb(c)}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b>${e(typeof propWhere==='function'?propWhere(c):'')} · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
   blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
   const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
 /* ══ 🤖 TELEGRAM AUTOPILOT (v2.07) ═════════════════════════════════════════════
@@ -23421,7 +23421,7 @@ function tgwPayload(p){const C=p.card;const tplMk=x=>`⟦m:${tgLegKey(x)}⟧`;tp
   const seen=new Set();const legs=[];tgAllLegs(C).forEach(({x,kind})=>{const k=tgLegKey(x);if(seen.has(k))return;seen.add(k);
     /* k = the result slot; a prop's stat type travels as "stat" */
     legs.push({k,kind,sp:x.sp,game:x.game||null,pick:x.pick||null,price:x.price!=null?+x.price:null,player:x.player||null,team:x.team||null,thr:x.thr!=null?+x.thr:null,
-      stat:x.player?(x.k||null):null,label:x.player?`${charName(x.v)}: ${cpropLine(x)}`:`${x.pick}${x.price!=null?' ('+tcSgn(x.price)+')':''}`});});
+      stat:x.player?(x.k||null):null,label:x.player?`${charName(x.v)}: ${cpropLine(x)}${typeof propWhere==='function'?propWhere(x):''}`:`${x.pick}${x.price!=null?' ('+tcSgn(x.price)+')':''}`});});
   const recapPlan={day:new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),
     best:(C.best||[]).map(x=>({k:tgLegKey(x),price:x.price!=null?+x.price:null})),top10:(C.top10||[]).map(x=>({k:tgLegKey(x),price:x.price!=null?+x.price:null})),
     banker:C.banker?{keys:C.banker.legs.map(tgLegKey),price:decimalToAmerican(C.banker.dec)}:null,
@@ -23490,7 +23490,7 @@ async function tgAutoTick(force){if(TG_BUSY)return 0;TG_BUSY=true;let acted=0;
       if(p.ids&&p.ids.length){const parts=subTelegramText(p.card,mk);if(parts.length===p.ids.length){for(let i=0;i<parts.length;i++){await tgApi('editMessageText',{chat_id:p.chat||chat,message_id:p.ids[i],text:parts[i],parse_mode:'HTML',disable_web_page_preview:'true'});await new Promise(z=>setTimeout(z,350));}}}
       /* 2 · one reply with everything that settled since the last update (dedupe the same pick listed twice) */
       const seen=new Set();const lines=[];fresh.forEach(({x,kind})=>{const k=x.sp+'|'+(x.game||'')+'|'+(x.pick||x.player+x.k+x.thr);if(seen.has(k))return;seen.add(k);const s0=st[tgLegKey(x)];
-        const nm=x.player?`${charName(x.v)}: ${cpropLine(x)}`:`${x.pick}${x.price!=null?' ('+tcSgn(x.price)+')':''}`;lines.push(`${TG_MARK[s0]}<b>${txtEsc(nm)}</b> <i>${txtEsc(kind)}</i>${x.player?'':txtEsc(tgScore(x,p.d))}`);});
+        const nm=x.player?`${charName(x.v)}: ${cpropLine(x)}${typeof propWhere==='function'?propWhere(x):''}`:`${x.pick}${x.price!=null?' ('+tcSgn(x.price)+')':''}`;lines.push(`${TG_MARK[s0]}<b>${txtEsc(nm)}</b> <i>${txtEsc(kind)}</i>${x.player?'':txtEsc(tgScore(x,p.d))}`);});
       if(lines.length){const reply={chat_id:p.chat||chat,text:`<b>📣 Results</b>\n`+lines.join('\n'),parse_mode:'HTML',disable_web_page_preview:'true'};
         if(p.ids&&p.ids[0]){reply.reply_to_message_id=p.ids[0];reply.allow_sending_without_reply='true';}const r=await tgApi('sendMessage',reply);
         if(r){fresh.forEach(({x})=>{(p.sent||(p.sent={}))[tgLegKey(x)]=st[tgLegKey(x)];});acted++;}}
