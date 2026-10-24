@@ -2637,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18647,9 +18647,9 @@ function bkRunWeek(ws,V,CP,BYV){const we=dayShift(ws,6);const out={};
   return out;}
 let BK_C=null;
 function bkLedger(force){if(!force&&BK_C&&Date.now()-BK_C.ts<60e3)return BK_C.v;
-  const V=roGet(VOICES_KEY,[],30e3)||[],CP=roGet(CPAR_KEY,{},30e3)||{};const ws=bkWeekStart();const lo=dayShift(ws,-49);
+  const V=roGet(VOICES_KEY,[],30e3)||[],CP=roGet(CPAR_KEY,{},30e3)||{},CPX=(typeof CPX_KEY!=='undefined'?roGet(CPX_KEY,{},30e3):null)||{};const ws=bkWeekStart();const lo=dayShift(ws,-49);
   const BYV={};for(const x of V){if(x&&x.graded&&x.date>=lo)(BYV[x.voice]||(BYV[x.voice]=[])).push(x);}
-  const weeks=[];for(let i=0;i<8;i++){const w0=dayShift(ws,-7*i);const R=bkRunWeek(w0,V,CP,BYV);const act=Object.values(R).filter(x=>x.n);
+  const weeks=[];for(let i=0;i<8;i++){const w0=dayShift(ws,-7*i);const R=bkRunWeek(w0,V,CP,BYV,CPX);const act=Object.values(R).filter(x=>x.n);
     weeks.push({ws:w0,R,leader:act.sort((a,b)=>b.br-a.br)[0]||null});}
   /* the Banker's verdict: pooled last 4 weeks, only with proof */
   const mult={};CHAR_ORDER.forEach(v=>{let n=0,pnl=0;weeks.slice(0,4).forEach(W=>{const x=W.R[v];n+=x.n;pnl+=x.br-100;});
@@ -23391,6 +23391,7 @@ function tgParlayMark(legs,mk){const m=(legs||[]).map(l=>mk(l));if(!m.some(Boole
   if(m.some(x=>x===TG_MARK.L))return'❌ ';if(m.every(x=>x===TG_MARK.W||x===TG_MARK.P))return'✅ CASHED · ';return'';}
 function tgAllLegs(C){const L=[];(C.best||[]).forEach(x=>L.push({x,kind:'Best 3'}));(C.top10||[]).forEach(x=>L.push({x,kind:'Top 10'}));
   if(C.banker)(C.banker.legs||[]).forEach(x=>L.push({x,kind:'Banker'}));(C.chars||[]).forEach(P=>(P.legs||[]).forEach(x=>L.push({x:{...x,v:x.v||P.v},kind:charName(P.v)})));
+  (C.px||[]).forEach(P=>(P.legs||[]).forEach(x=>L.push({x:{...x,v:x.v||P.v},kind:charName(P.v)+' props'})));
   (C.props||[]).forEach(x=>L.push({x,kind:'Prop'}));return L;}
 function tgPosts(){const P=get(TGP_KEY,{})||{};return P&&typeof P==='object'?P:{};}
 function tgTrackPost(card,chat,ids){const P=tgPosts();const W=tgwOn()&&ids.length>0;
@@ -23425,7 +23426,7 @@ function tgwPayload(p){const C=p.card;const tplMk=x=>`⟦m:${tgLegKey(x)}⟧`;tp
   const recapPlan={day:new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),
     best:(C.best||[]).map(x=>({k:tgLegKey(x),price:x.price!=null?+x.price:null})),top10:(C.top10||[]).map(x=>({k:tgLegKey(x),price:x.price!=null?+x.price:null})),
     banker:C.banker?{keys:C.banker.legs.map(tgLegKey),price:decimalToAmerican(C.banker.dec)}:null,
-    chars:(C.chars||[]).map(P=>({name:charName(P.v),keys:P.legs.map(tgLegKey),price:decimalToAmerican(P.dec)})),props:(C.props||[]).map(tgLegKey)};
+    chars:[...(C.chars||[]),...(C.px||[])].map(P=>({name:charName(P.v)+(P.px?' (props)':P.skill?' (strong suit)':''),keys:P.legs.map(tgLegKey),price:decimalToAmerican(P.dec)})),props:(C.props||[]).map(tgLegKey)};
   return{d:p.d,chat:p.chat,ids:p.ids,parts,legs,recapPlan,postedTs:p.ts,st:{},sent:{},recap:false,worker:true};}
 function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
   {const x=a&&a.relay,y=b&&b.relay;if(x||y)out.relay=!x?y:!y?x:x.d>y.d?x:x.d<y.d?y:{d:x.d,n:Math.max(x.n||0,y.n||0)};}   /* v2.33 · the worker's relay counter rides along */

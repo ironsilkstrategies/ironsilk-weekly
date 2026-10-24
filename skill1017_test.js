@@ -35,7 +35,8 @@ setTimeout(()=>{try{
   T('…every leg labeled as a skill pick',J&&J.legs.every(l=>l.skill&&/skill pick/.test((l.why||[]).join(' '))));
   T('…sized like any ticket: 30%+ to cash',J&&J.p>=0.30,J&&J.p.toFixed(3));
   T('the Coach with one qualifying call still sits out (a parlay needs 2)',!P.chars.Coach);
-  T('the VIP card carries the official tickets only (its promise is 70%+)',w.eval(`(()=>{const C=subCard();return C.chars.map(x=>x.v).join(',')})()`)==='Sim');
+  /* v2.59 · every character's parlay goes on the VIP card now: the 70%+ tickets first, the strong-suit (skill) tickets after, labelled */
+  T('the VIP card lists the official tickets first, then the strong-suit tickets, marked as such',w.eval(`(()=>{const C=subCard();return C.chars.length>1&&C.chars[0].v==='Sim'&&!C.chars[0].skill&&C.chars.slice(1).every(x=>x.skill)})()`));
   /* frozen day from before skill tickets: added once, official untouched */
   const off={d:D,locked:true,lockedAt:NOW-3600e3,own:null,chars:{Sim:S},use:{},where:{}};
   const w2=boot({'d4.voices':V,'d4.todaycard':TCcard,'d4.deskplan':off,'d4.charparlays':{[D]:{locked:true,by:{Sim:{voice:'Sim',d:D,legs:S.legs,dec:S.dec,p:S.p}}}}});

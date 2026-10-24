@@ -539,27 +539,28 @@ const deskMoney=x=>(x<0?'-$':'$')+Math.abs(+x||0).toFixed(2);
    the next bet is busted for the week. Most units ($1 = 1u) on Monday night wins. */
 const LG_START=100;
 function lgStake(br,dec,frac){if(!(dec>1))return 0;const st=Math.max(1,Math.round(br*(frac||0.02)*100)/100,Math.ceil(100/(dec-1)-1e-6)/100);return st>br+1e-9?0:+st.toFixed(2);}
-function bkRunWeek(ws,V,CP,BYV){const we=dayShift(ws,6);const out={};
+function bkRunWeek(ws,V,CP,BYV,CPX){const we=dayShift(ws,6);const out={};
   CHAR_ORDER.forEach(v=>{const calls=(BYV?BYV[v]||[]:V).filter(x=>x.voice===v&&x.graded&&x.date>=ws&&x.date<=we&&isOfficial(x)).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     let br=LG_START,peak=LG_START,dd=0,w=0,l=0,p=0,staked=0,bust=0;const byM={};
     const bet=(dec,hit,m,frac)=>{if(hit==null){p++;return;}const st=lgStake(br,dec,frac);if(!st){bust++;return;}staked+=st;const pnl=hit?st*(dec-1):-st;br=+(br+pnl).toFixed(2);
       if(hit)w++;else l++;const M=byM[m]=byM[m]||{pnl:0,n:0};M.pnl+=pnl;M.n++;peak=Math.max(peak,br);dd=Math.max(dd,(peak-br)/peak);};
     calls.forEach(c=>{if(c.push){p++;return;}bet(americanToDecimal(c.price!=null?c.price:-110),c.hit,c.sp+' '+c.market,0.02);});
-    Object.entries(CP||{}).forEach(([d,D])=>{if(d<ws||d>we||!D||!D.locked)return;const P=(D.by||{})[v];if(!P||!P.done)return;
-      const dec=P.legs.filter(x=>!x.push).reduce((a,x)=>a*americanToDecimal(x.price),1);bet(dec,P.won,'parlay',0.01);});
+    /* v2.59 · every parlay counts: the game ticket and the prop ticket (1% each, $1 rule) */
+    let pw=0,pL=0,pp=0;[[CP,'parlay'],[typeof CPX!=='undefined'?CPX:null,'prop parlay']].forEach(([M,lab])=>Object.entries(M||{}).forEach(([d,D])=>{if(d<ws||d>we||!D||!D.locked)return;const P=(D.by||{})[v];if(!P||!P.done)return;
+      const dec=P.legs.filter(x=>!x.push).reduce((a,x)=>a*americanToDecimal(x.price),1);const b0=br;bet(dec,P.won,lab,0.01);if(br!==b0){if(P.won)pw++;else pL++;pp+=br-b0;}}));
     const ms=Object.entries(byM).filter(([k,x])=>x.n>=3).sort((a,b)=>b[1].pnl-a[1].pnl);
-    out[v]={v,br,w,l,p,n:w+l,u:+(br-LG_START).toFixed(2),roi:staked?(br-LG_START)/staked:0,dd,bust,best:ms[0]?ms[0][0]:null,worst:ms.length>1?ms[ms.length-1][0]:null};});
+    out[v]={v,br,w,l,p,n:w+l,par:{w:pw,l:pL,pnl:+pp.toFixed(2)},u:+(br-LG_START).toFixed(2),roi:staked?(br-LG_START)/staked:0,dd,bust,best:ms[0]?ms[0][0]:null,worst:ms.length>1?ms[ms.length-1][0]:null};});
   return out;}
 function lgLabel(ws){const f=d=>new Date(d+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});return`${f(ws)} → ${f(dayShift(ws,7))}`;}
 function leagueHtml(compact){let L;try{L=bkLedger(true);}catch(e){return'';}const W=L.weeks[0];const rows=Object.values(W.R).filter(x=>x.n||!compact).sort((a,b)=>b.br-a.br||b.n-a.n);
   const medal=i=>['🥇','🥈','🥉'][i]||`<span class="mono" style="color:var(--mute)">${i+1}</span>`;
   const body=rows.length?rows.map((x,i)=>{const C=CHARS[x.v]||{};const col=x.u>0?'var(--win)':x.u<0?'var(--rust)':'var(--chalk)';
-    return`<div class="lg-row"><div class="lg-rank">${medal(i)}</div><div class="lg-who"><b style="color:${C.color}">${txtEsc(charName(x.v).replace(/^The /,''))}</b><div class="mono lg-sub">${x.w}-${x.l}${x.p?'-'+x.p:''}${x.best?' · best: '+txtEsc(x.best):''}${x.bust?' · <span style="color:var(--rust)">busted</span>':''}</div></div>
+    return`<div class="lg-row"><div class="lg-rank">${medal(i)}</div><div class="lg-who"><b style="color:${C.color}">${txtEsc(charName(x.v).replace(/^The /,''))}</b><div class="mono lg-sub">${x.w}-${x.l}${x.p?'-'+x.p:''}${x.par&&(x.par.w+x.par.l)?` · parlays ${x.par.w}-${x.par.l} ${x.par.pnl>=0?'+':'-'}$${Math.abs(x.par.pnl).toFixed(2)}`:''}${x.best?' · best: '+txtEsc(x.best):''}${x.bust?' · <span style="color:var(--rust)">busted</span>':''}</div></div>
       <div class="lg-roll"><b style="color:${col}">${deskMoney(x.br)}</b><div class="mono lg-sub" style="color:${col}">${x.u>=0?'+':''}${x.u.toFixed(2)}u</div></div></div>`;}).join('')
     :'<div class="sub" style="font-size:11px">No official calls graded yet this week — the race starts with the first one.</div>';
   const hist=L.weeks.slice(1).filter(x=>x.leader).slice(0,4).map(x=>`<span class="mono" style="font-size:10px;margin-right:10px">${new Date(x.ws+'T12:00:00').toLocaleDateString([],{month:'short',day:'numeric'})}: <b style="color:${(CHARS[x.leader.v]||{}).color}">${txtEsc(charName(x.leader.v).replace(/^The /,''))}</b> ${deskMoney(x.leader.br)}</span>`).join('');
   return`<div class="tkt lg-card"><div class="lg-head"><h3>🏁 Character League</h3><span class="mono" style="font-size:10px;color:var(--mute)">${lgLabel(W.ws)}</span></div>
-    <div class="sub" style="font-size:10.5px">$100 each, Tuesday to Tuesday. Official calls only (70%+). Every bet must pay at least $1. Most units wins the week.</div>${body}
+    <div class="sub" style="font-size:10.5px">$100 each, Tuesday to Tuesday. Official calls (70%+) plus every parlay the character puts out (game and prop tickets, 1% each). Every bet must pay at least $1. Most units wins the week.</div>${body}
     ${hist?`<div style="margin-top:6px"><span class="sub" style="font-size:10px">Past winners: </span>${hist}</div>`:''}</div>`;}
 
 /* ── 8 · CHALLENGES — rebuilt: one goal, one pot, one move a day ──────────────
@@ -793,20 +794,29 @@ function deskRiskHtml(){try{const X=riskOfRuin();if(X.need)return`<div class="su
 /* ── 11 · THE VIP CARD — built from the Banker's placed tickets ────────────────
    Best 3 → the rest of the Top 10 → the Banker's parlay → each character's placed
    ticket (2–4 legs, never the old 5-leg dumps) → the props of the day. */
-function subCharParlay(v){const P=deskPlan();const T=(P.chars||{})[v];if(!T)return null;return{v,legs:T.legs.map(l=>({sp:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,spec:''})),dec:T.dec,p:T.p};}
+function subCharParlay(v,T){const P=deskPlan();T=T||(P.chars||{})[v];if(!T)return null;return{v,skill:!!T.skill,legs:T.legs.map(l=>({sp:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,m:l.m,sd:l.sd,line:l.line,kind:l.kind,player:l.player,team:l.team,k:l.k,thr:l.thr,spec:''})),dec:T.dec,p:T.p};}
 function subCard(){let best=null;try{best=best5State();}catch(e){}const R=(()=>{try{return best3Record();}catch(e){return null;}})();const P=deskPlan();
-  const chars=Object.keys(P.chars||{}).filter(v=>!(P.chars[v]||{}).skill).map(v=>subCharParlay(v)).filter(Boolean).sort((a,b)=>b.p-a.p);   /* v2.43 · skill tickets stay off the 70%+ VIP card */
+  /* v2.59 · every character's parlay goes on the VIP card — the 70%+ tickets first, then the strong-suit (skill) tickets, then the prop parlays */
+  const chars=Object.keys(P.chars||{}).map(v=>subCharParlay(v)).filter(Boolean).sort((a,b)=>(a.skill-b.skill)||b.p-a.p);
+  const px=Object.entries(P.px||{}).map(([v,T])=>subCharParlay(v,T)).filter(Boolean).map(x=>({...x,px:true})).sort((a,b)=>b.p-a.p);
   const props=(P.props||[]).map(c=>({...c,cal:c.cal}));
-  return{d:today(),best:(best&&best.top3)||[],locked:!!(best&&best.locked),record:R,top10:subTop10(),banker:subBanker(),chars,props,alloc:true};}
+  return{d:today(),best:(best&&best.top3)||[],locked:!!(best&&best.locked),record:R,top10:subTop10(),banker:subBanker(),chars,px,props,alloc:true};}
 function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦p:${(P.legs||[]).map(tgLegKey).join('¦')}⟧`;try{return tgParlayMark(P.legs,mk);}catch(err){return'';}};
   const mb=l=>mk.tpl?`⟦b:${tgLegKey(l)}⟧`:(mk(l)||'• ');const e=txtEsc,day=new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   const sp=x=>e((SP_LAB[x.sp]||'').split(' ')[0]);const pc=x=>subPct(x.p!=null?x.p:best5Prob(x));
-  const head=`<b>🏆 TheDesk — ${e(day)}</b>${C.record&&(C.record.w+C.record.l)?`\nBest 3 record: <b>${C.record.w}-${C.record.l}${C.record.pu?'-'+C.record.pu:''}</b> (${C.record.u>=0?'+':''}${C.record.u.toFixed(1)}u)`:''}\n<i>Every pick below is official: a character is 70%+ sure, and no pick rides more than ${EXPO_CAP} tickets.</i>`;
+  const head=`<b>🏆 TheDesk — ${e(day)}</b>${C.record&&(C.record.w+C.record.l)?`\nBest 3 record: <b>${C.record.w}-${C.record.l}${C.record.pu?'-'+C.record.pu:''}</b> (${C.record.u>=0?'+':''}${C.record.u.toFixed(1)}u)`:''}\n<i>The Best 3 and Top 10 are official: a character is 70%+ sure. No pick rides more than ${EXPO_CAP} tickets.</i>`;
   const blocks=[head];
   if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. ${mk(x)}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${pc(x)}`).join('\n'));
   if(C.top10.length)blocks.push(`<b>🔟 THE REST OF THE TOP 10</b>\n`+C.top10.map((x,i)=>`${i+1+C.best.length}. ${mk(x)}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n'));
   if(C.banker)blocks.push(`${pm(C.banker)}<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>mb(l)+e(subLeg(l))).join('\n'));
-  C.chars.forEach(P=>blocks.push(`${pm(P)}<b>🎭 ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(l=>mb(l)+e(subLeg(l))).join('\n')));
+  const pl=l=>mb(l)+e(l.player?`${cpropLine(l)}${propWhere(l)}`:subLeg(l))+e(subStrength(l));
+  const par=(P,tag)=>`${pm(P)}<b>${tag} ${e(charName(P.v))} — ${P.legs.length}-leg</b> ${e(decimalToAmerican(P.dec))} · ${subPct(P.p)} to cash\n`+P.legs.map(pl).join('\n');
+  const C70=(C.chars||[]).filter(P=>!P.skill),CSK=(C.chars||[]).filter(P=>P.skill);
+  if(C70.length||CSK.length||(C.px||[]).length)blocks.push(`<b>🎭 EVERY CHARACTER'S PARLAY</b>\n<i>Under each leg: 💪 = characters with a PROVEN record in that sport and bet type who are on it · 🚫 = proven characters who are on the other side. More 💪, fewer 🚫 = stronger leg.</i>`);
+  C70.forEach(P=>blocks.push(par(P,'🎭')));
+  if(CSK.length)blocks.push(`<b>💪 STRONG-SUIT PARLAYS</b>\n<i>Built only from each character's best lanes (where its record is proven). Not every leg is 70%+ — these ride the character's track record.</i>`);
+  CSK.forEach(P=>blocks.push(par(P,'💪')));
+  (C.px||[]).forEach(P=>blocks.push(par(P,'🎯')));
   if((C.props||[]).length)blocks.push(`<b>🎯 PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mb(c)}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b>${e(propWhere(c))} · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
   blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
   const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
@@ -1364,3 +1374,12 @@ if(typeof window!=='undefined'&&typeof renderBest==='function'&&!window.__UNFRZ_
 function propWhere(c){if(!c)return'';let g=c.game||'';try{if(!g&&typeof cpxPropGame==='function')g=cpxPropGame(c.sp,c.team)||'';}catch(e){}
   let t='';try{const st=c.start||(typeof deskTeamStart==='function'?deskTeamStart(c.sp,c.team):'');if(st){const d=new Date(st);if(isFinite(d))t=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'})+' CT';}}catch(e){}
   const bits=[c.team||'',g&&g!==c.team?g:'',t].filter(Boolean);return bits.length?` (${bits.join(' · ')})`:'';}
+
+/* v2.59 · who of the PROVEN characters (their lane in this sport and bet type is proven) is on this leg, and who is on the other side */
+function legStrength(l){const on=[],fade=[];if(!l||l.player||!l.game)return{on,fade};try{const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const m=l.m||l.market;
+    let sd=l.sd||l.side;if(!sd){const ab=String(l.pick||'').split(' ')[0];const[a,h]=String(l.game).split('@');sd=/^over/i.test(l.pick)?'over':/^under/i.test(l.pick)?'under':ab===a?'away':ab===h?'home':null;}
+    if(!m||!sd)return{on,fade};const opp={away:'home',home:'away',over:'under',under:'over'}[sd];const seen=new Set();
+    V.forEach(c=>{if(!c||String(c.date).slice(0,10)!==d||c.game!==l.game||c.sp!==l.sp||(c.market!==m)||!CHARS[c.voice]||META_VOICES.has(c.voice)||seen.has(c.voice))return;
+      const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);if(!lk||laneStatus(lk,c.voice)!=='proven')return;seen.add(c.voice);
+      const nm=charName(c.voice).replace(/^The /,'');if(c.side===sd)on.push(nm);else if(c.side===opp)fade.push(nm);});}catch(e){}return{on,fade};}
+function subStrength(l){const S=legStrength(l);if(!S.on.length&&!S.fade.length)return'';return'\n    '+(S.on.length?'💪 '+S.on.join(', '):'💪 none')+(S.fade.length?' · 🚫 '+S.fade.join(', '):'');}
