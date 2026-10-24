@@ -577,7 +577,7 @@ const CH2_PRESETS=[
 const CH2_SRC={best3:'the Best 3 (singles)',banker:"the Banker's parlay",leader:"the league leader's ticket",official:'the official Top 10 (singles)',
   b3lock:"the Best 3's #1 pick",b3par2:"the Best 3's top two (one parlay)",b3par3:'the Best 3 (one parlay)',dog:"the Underdog Spotter's dogs",
   'price:chalk':'official favorites -150 or shorter','price:value':'official picks from -149 to even','price:plus':'official plus-money picks'};
-function ch2SrcLab(src){if(CH2_SRC[src])return CH2_SRC[src];const[k,v]=String(src).split(':');
+function ch2SrcLab(src){if(src==='road')return'the roadmap (official picks, sized each day)';if(CH2_SRC[src])return CH2_SRC[src];const[k,v]=String(src).split(':');
   if(k==='char')return`${charName(v)}'s ticket`;if(k==='sp')return`official ${(SP_LAB[v]||v).replace(/^\S+\s/,'')} singles`;if(k==='mk')return`official ${v==='ml'?'moneyline':v} singles`;return src;}
 function ch2All(){return get(CH2_KEY,[])||[];}
 function ch2Save(A){set(CH2_KEY,A);}
@@ -591,7 +591,7 @@ function ch2Earmarked(){return ch2All().filter(c=>c.status==='active').reduce((a
 function ch2Stop(id){const A=ch2All();const c=A.find(x=>x.id===id);if(!c)return;if(!confirm(`End "${c.name}"? The pot (${deskMoney(c.pot)}) stays in your bankroll — it was always part of it.`))return;
   c.status='ended';c.endDate=today();ch2Save(A);deskRerender();}
 /* today's plays for a challenge, straight from the frozen card */
-function ch2Plays(c){const out=[];const P=deskPlan();const pot=Math.max(0,c.pot);const single=x=>({label:x.pick,legs:[{sp:x.sp,game:x.game,pick:x.pick,price:+x.price,gd:String(x.start||'').slice(0,10)||today()}],dec:americanToDecimal(+x.price),p:x.p});
+function ch2Plays(c){if(c.road)return ch2RoadPlays(c);const out=[];const P=deskPlan();const pot=Math.max(0,c.pot);const single=x=>({label:x.pick,legs:[{sp:x.sp,game:x.game,pick:x.pick,price:+x.price,gd:String(x.start||'').slice(0,10)||today()}],dec:americanToDecimal(+x.price),p:x.p});
   const par=(L,label)=>{if(!L.length)return;const legs=L.map(x=>single(x).legs[0]);out.push({label,legs,dec:L.reduce((a,x)=>a*americanToDecimal(+x.price),1),p:L.reduce((a,x)=>a*(x.p||0.5),1)});};
   const offToday=()=>[...(best5State().top3||[]),...subTop10()];const src=String(c.src||'');
   try{if(c.src==='best3')(best5State().top3||[]).forEach(x=>out.push(single(x)));
@@ -641,7 +641,9 @@ function ch2Card(c){const pct=Math.max(0,Math.min(100,(c.pot-0)/(c.goal)*100));c
     <div class="ch-nums"><span><b style="color:${col}">${deskMoney(c.pot)}</b> pot</span><span>goal <b>${deskMoney(c.goal)}</b></span><span class="mono" style="font-size:10px;color:var(--mute)">from ${deskMoney(c.start)} · ${ch2SrcLab(c.src)}</span></div>
     <div class="ch-bar"><div style="width:${pct}%;background:${col}"></div></div>
     <div class="mono" style="font-size:9.5px;margin:3px 0">${ch2Miles(c.start,c.goal).map(m=>`<span style="margin-right:8px;color:${c.pot>=m?'var(--win)':'var(--mute)'}">${c.pot>=m?'✓':'○'} ${deskMoney(m)}</span>`).join('')}</div>
+    ${c.road&&c.status==='active'?ch2RoadHtml(c):''}
     ${c.status==='active'?`<div class="mktlab">Today's move</div>${playHtml}`:''}
+    ${open.length?`<div id="ch2Live_${c.id}">${ch2LiveHtml(c)}</div>`:''}
     ${open.length?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:4px">${open.length} ticket${open.length===1?'':'s'} riding: ${open.map(s=>txtEsc(s.label)+' '+deskMoney(s.stake)).join(' · ')}</div>`:''}
     ${c.status==='active'?`<div class="bar" style="margin-top:6px"><button onclick="ch2Stop(${c.id})">End it</button></div>`:''}</div>`;}
 function ch2Html(){const A=ch2Sync();const act=A.filter(c=>c.status==='active'),done=A.filter(c=>c.status!=='active').slice(-4).reverse();
@@ -1401,3 +1403,57 @@ function legStrength(l){const on=[],fade=[];if(!l||l.player||!l.game)return{on,f
       const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);if(!lk||laneStatus(lk,c.voice)!=='proven')return;seen.add(c.voice);
       const nm=charName(c.voice).replace(/^The /,'');if(c.side===sd)on.push(nm);else if(c.side===opp)fade.push(nm);});}catch(e){}return{on,fade};}
 function subStrength(l){const S=legStrength(l);if(!S.on.length&&!S.fade.length)return'';return'\n    '+(S.on.length?'💪 '+S.on.join(', '):'💪 none')+(S.fade.length?' · 🚫 '+S.fade.join(', '):'');}
+
+/* ══ v2.62 · ROADMAP CHALLENGES — a choose-your-path trail, not a flat stake ════════════════════════════
+   $100 over 20 days means $5 a day is the most the day can risk. Every morning the roadmap works out what it
+   takes from here: the profit still needed ÷ the days left, against the day's budget, gives the price the
+   ticket has to pay. Behind the pace → it reaches for a longer ticket (2-, 3-, 4-teamer) with the same capped
+   stake. Ahead of the pace (an early win) → it does NOT double down: it shrinks the stake and drops to the
+   shortest ticket that still keeps it on pace. Each card shows the trail ("on pace", "ahead", "behind") and
+   both branches — what tomorrow looks like if today wins, and if it loses — so you watch the game knowing
+   exactly what's next. */
+const CH2_ROADS=[
+  {id:'road:trail',ico:'🗺️',name:'The Trail',pct:0.04,mult:3,days:20,desc:'3X in 20 days. Never more than 1/20th of the starting pot on a day.'},
+  {id:'road:week',ico:'🧭',name:'Week Quest',pct:0.10,mult:2,days:7,desc:'Double in 7 days. A day risks at most 1/7th of the start.'},
+  {id:'road:climb',ico:'⛰️',name:'The Summit',pct:0.05,mult:5,days:14,desc:'5X in 14 days. Small steps, longer tickets when it falls behind.'},
+  {id:'road:heist',ico:'🦹',name:'The Heist',pct:0.02,mult:10,days:10,desc:'10X in 10 days. Starts on 2-teamers, goes to 4-teamers if it has to.'}];
+const CH2_SHAPE_TXT=D=>D<=1.95?'a single favorite':D<=2.7?'a single or a 2-teamer':D<=4.2?'a 2-teamer':D<=7.5?'a 3-teamer':D<=13?'a 4-teamer':'a 5-leg longshot';
+function ch2RoadDays(c){return Math.max(1,c.days-Math.floor((Date.parse(today())-Date.parse(c.startDate))/864e5));}
+function ch2RoadPace(c,daysIn){return c.start*Math.pow(c.goal/c.start,Math.min(1,daysIn/c.days));}
+/* what one day needs: the capped budget, the profit to find, the price that makes it in one win */
+function ch2RoadNeed(c,pot,left){const cap=Math.min(pot,Math.max(1,+(c.start/c.days).toFixed(2)));   /* the day's budget never grows with a win — the win buys an easier path, not a bigger bet */
+  const daysIn=c.days-left;const pace=ch2RoadPace(c,daysIn+1);const pn=ch2RoadPace(c,daysIn);const want=Math.max(0,Math.min(c.goal-pot,(c.goal-pot)/left*(pot<pn*0.92?1.25:pot>=pn*1.08?0.5:1)));   /* behind → reach; ahead → ask half as much */
+  if(want<=0.01)return{cap:0,want:0,D:1,stake:0,pace};let stake=cap,D=1+want/stake;
+  if(D<1.55){D=1.55;stake=Math.max(1,Math.min(cap,+(want/(D-1)).toFixed(2)));}   /* ahead: don't double down — a smaller stake on a short price */
+  return{cap,want,D,stake:+stake.toFixed(2),pace};}
+/* the candidates: official picks ranked by confidence, as singles and 2-4-teamers (one leg per game) */
+function ch2RoadCands(){let L=[];try{L=[...(best5State().top3||[]),...subTop10()];}catch(e){}const seen=new Set();
+  L=L.filter(x=>x&&x.price!=null&&!deskStarted(x)&&!seen.has(x.sp+x.game)&&seen.add(x.sp+x.game)).sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,8);
+  const leg=x=>({sp:x.sp,game:x.game,pick:x.pick,price:+x.price,gd:String(x.start||'').slice(0,10)||today(),p:x.p||0.5});
+  const C=L.map(x=>({legs:[leg(x)],dec:americanToDecimal(+x.price),p:x.p||0.5}));
+  for(let k=2;k<=Math.min(4,L.length);k++){const S=L.slice(0,k);C.push({legs:S.map(leg),dec:S.reduce((a,x)=>a*americanToDecimal(+x.price),1),p:S.reduce((a,x)=>a*(x.p||0.5),1)});}
+  return C;}
+function ch2RoadPick(C,D){const ok=C.filter(o=>o.dec>=D-0.05).sort((a,b)=>b.p-a.p);if(ok.length)return{o:ok[0],stretch:false};const top=[...C].sort((a,b)=>b.dec-a.dec)[0];return top?{o:top,stretch:true}:null;}
+function ch2RoadPlays(c){const pot=Math.max(0,c.pot);const left=ch2RoadDays(c);const N=ch2RoadNeed(c,pot,left);if(!N.stake||pot<1)return[];
+  const pk=ch2RoadPick(ch2RoadCands(),N.D);if(!pk)return[];const o=pk.o;const stake=Math.max(deskMinStake(o.dec),N.stake);if(stake>pot)return[];
+  const sig=o.legs.map(l=>l.sp+':'+l.game+':'+l.pick).join('¦');const done=new Set(c.steps.filter(s=>s.d===today()).map(s=>s.sig));
+  return[{label:o.legs.length>1?`${o.legs.length}-teamer`:o.legs[0].pick,legs:o.legs,dec:o.dec,p:o.p,stake:+stake.toFixed(2),sig,taken:done.has(sig),stretch:pk.stretch}];}
+function ch2RoadHtml(c){const pot=Math.max(0,c.pot),left=ch2RoadDays(c),daysIn=c.days-left;const pace=ch2RoadPace(c,daysIn);
+  const st=pot>=pace*1.08?['🟢 AHEAD of pace','var(--win)']:pot>=pace*0.92?['🟡 ON pace','var(--gold)']:['🔴 BEHIND pace','var(--rust)'];
+  const N=ch2RoadNeed(c,pot,left);const play=(ch2RoadPlays(c)||[])[0];
+  const branch=(p2,lab)=>{if(p2>=c.goal)return`<b>${lab}</b>: 🏁 <b>finish line</b> — ${deskMoney(p2)} clears the ${deskMoney(c.goal)} goal.`;if(p2<1||left<=1)return`<b>${lab}</b>: ${p2<1?'💀 busted':'⏱ out of days at '+deskMoney(p2)}.`;
+    const N2=ch2RoadNeed(c,p2,left-1);return`<b>${lab}</b>: pot ${deskMoney(p2)} → tomorrow ${deskMoney(N2.stake)} on ${CH2_SHAPE_TXT(N2.D)} (≈${decimalToAmerican(N2.D)})${p2>=ch2RoadPace(c,daysIn+1)*1.08?' · ahead, so it eases off':p2<ch2RoadPace(c,daysIn+1)*0.92?' · behind, so it reaches':''}.`;};
+  const tree=play?`<div class="mono" style="font-size:10px;line-height:1.5;margin-top:4px">✅ ${branch(pot+play.stake*(play.dec-1),'If today wins')}<br>❌ ${branch(pot-play.stake,'If today loses')}</div>`:'';
+  return`<div style="margin:6px 0;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.03)"><div class="mono" style="font-size:10.5px"><b style="color:${st[1]}">${st[0]}</b> · pace says ${deskMoney(pace)} by today · day ${daysIn+1} of ${c.days}</div>
+    <div class="mono" style="font-size:10px;color:var(--mute)">Needs ${deskMoney(Math.max(0,c.goal-pot))} more in ${left} day${left===1?'':'s'} · today's budget ${deskMoney(N.cap)} → ${N.want>0?`a ticket around ${decimalToAmerican(N.D)} (${CH2_SHAPE_TXT(N.D)})`:'nothing — sit tight'}${play&&play.stretch?' · <span style="color:var(--rust)">stretch: the card has nothing that long, so it takes the longest it has</span>':''}</div>${tree}</div>`;}
+/* the tickets riding on a challenge, live: score, clock and each leg's chance, without leaving the screen */
+function ch2LiveHtml(c){const L=roGet(LS.locked,[],5e3)||[];return c.steps.filter(s=>!s.done).map(s=>{const t=L.find(x=>String(x.id)===String(s.tid));if(!t)return'';
+    let lc='';try{lc=liveTicketHtml(t);}catch(e){}return`<div class="mktlab" style="margin-top:6px">📺 Live · ${txtEsc(s.label)} · ${deskMoney(s.stake)}</div>${lc}${(t.legs||[]).map(l=>{try{return legLiveCard(t,l);}catch(e){return'';}}).join('')}`;}).join('');}
+let CH2_LIVE_T=null;
+function ch2LiveLoop(){if(CH2_LIVE_T||typeof window==='undefined'||window.__NO_GRADELOOP__)return;CH2_LIVE_T=setInterval(async()=>{if(document.hidden)return;const act=ch2All().filter(c=>c.status==='active'&&c.steps.some(s=>!s.done));if(!act.length)return;
+    const els=act.map(c=>[c,document.getElementById('ch2Live_'+c.id)]).filter(x=>x[1]);if(!els.length)return;try{await mgRefresh(false);}catch(e){}els.forEach(([c,el])=>{el.innerHTML=ch2LiveHtml(c);});},30000);}
+if(typeof window!=='undefined')setTimeout(()=>{try{ch2LiveLoop();}catch(e){}},4000);
+/* the roadmaps join the board (their own category) and start like any challenge */
+if(!window.__CH2ROAD__){window.__CH2ROAD__=1;CH2_CATS.splice(1,0,['road','🗺️ Roadmaps']);const _lib=ch2Lib;
+  ch2Lib=function(){const L=_lib();if(!L.some(x=>x.road))CH2_ROADS.forEach(R=>{const Z=ch2Size(R.pct,R.mult);L.push({...R,...Z,road:true,cat:'road',src:'road',frac:0,kind:'single'});});return L;};
+  const _start=ch2Start;ch2Start=function(id,custom){_start(id,custom);const T=ch2Tpl(id);if(!T||!T.road)return;const A=ch2All();const c=A.filter(x=>x.preset===id&&x.status==='active').pop();if(c&&!c.road){c.road=true;ch2Save(A);deskRerender();}};}
