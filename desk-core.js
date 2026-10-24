@@ -777,7 +777,7 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
     ${step(2,intake>0||odds>0,'Intake',`${odds} priced pick${odds===1?'':'s'}${intake?' · '+intake+' outside reads':''}`)}
     ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):'not yet — freezes everything')}
     ${step(4,fz&&pub&&pub.d===d&&pub.ok,'Published',fz?((pub&&pub.d===d&&pub.ok?'page ✓':'page …')+' · '+(posted&&posted.d===d?'VIP ✓':'VIP …')):'after the freeze')}</div>
-    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:`<button class="primary" onclick="masterEvalAll()">🔒 Run the master evaluation — all sports</button>`}<button onclick="bcComposer()">📣 Post a slate update</button></div>
+    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:`<button class="primary" onclick="masterEvalAll()">🔒 Run the master evaluation — all sports</button>`}<button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
     <div class="deskStatus sub mono" style="font-size:10px;margin-top:4px"></div></div>`;}
 
 /* ── 13 · THE PUBLIC PAGE — premium, honest, and live ──────────────────────────
@@ -835,7 +835,7 @@ function bcSettingsHtml(){const B=bcCfg();const inp=(k,lab,ph)=>`<div class="mon
     ${inp('pub','Public channel','@TheDeskApp')}${inp('vipLounge','VIP lounge (group chat id, -100…)','-100…')}${inp('pubLounge','Public lounge (group chat id, -100…)','-100…')}
     <label class="mono" style="font-size:10px;display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" ${B.autoPost?'checked':''} onchange="bcSave('autoPost',this.checked)"> post the VIP card by itself at the master evaluation</label>
     <label class="mono" style="font-size:10px;display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" ${B.siteByWorker?'checked':''} onchange="bcSave('siteByWorker',this.checked)"> let the 24/7 worker update the public page (sends it your site token, encrypted)</label>
-    <div class="bar" style="margin-top:6px"><button onclick="bcComposer()">📣 Post a slate update</button></div></div>`;}
+    <div class="bar" style="margin-top:6px"><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share hub</button></div></div>`;}
 if(typeof subCardHtml==='function'){const SUBCARD0=subCardHtml;subCardHtml=function(){return SUBCARD0()+bcSettingsHtml();};}
 /* a slate update: weather, injuries, a line move — to the places you tick */
 function bcComposer(){let ov=document.getElementById('bcComp');if(ov){ov.remove();return;}const B=bcCfg();const vip=tgChatNorm(get('d4.tgchat',''));
