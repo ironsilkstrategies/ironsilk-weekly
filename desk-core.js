@@ -103,10 +103,17 @@ function confHas70(){const V=roGet(VOICES_KEY,[],30e3)||[];const last=V.length?V
 const CONF_FALLBACK2=0.60,CONF_FALLBACK2_FROM='2026-10-18';let CONF_FB2_C=null;
 function confHas65(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+(V.length?V[V.length-1].id+'|'+V[V.length-1].cf:'');if(CONF_FB2_C&&CONF_FB2_C.sig===sig&&Date.now()-CONF_FB2_C.ts<30e3)return CONF_FB2_C.S;const S=new Set();
   V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const d=String(c.date||'').slice(0,10);if(d<CONF_FALLBACK2_FROM)return;const cf=confOf(c);
-    if(cf==null||cf<CONF_FALLBACK-1e-9||c.kof||!confPriced(c)||confPre(c))return;S.add(c.sp+'|'+d);});CONF_FB2_C={sig,ts:Date.now(),S};return S;}
+    if(cf==null||cf<CONF_FALLBACK-1e-9||c.kof||!confPriced(c)||confPre(c)||!confPays(c))return;S.add(c.sp+'|'+d);});CONF_FB2_C={sig,ts:Date.now(),S};return S;}
 function confFloorFor(x){const base=confFloor(x&&x.market);const d=String((x&&x.date)||'').slice(0,10);if(!x||!x.sp||!d||d<CONF_FALLBACK_FROM)return base;
   if(confHas70().has(x.sp+'|'+d))return base;if(d<CONF_FALLBACK2_FROM||confHas65().has(x.sp+'|'+d))return Math.min(base,CONF_FALLBACK);return Math.min(base,CONF_FALLBACK2);}
-function isOfficial(x){const c=confOf(x);return c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
+/* v2.53 · UNDER 70%, A CALL HAS TO PAY. From Oct 24, an official call below 70% must be priced -150 or longer.
+   The graded ledger (Oct 2-21, walk-forward confidences): calls at 60-70% priced -150 or shorter went
+   57-47 for -18.3 units — a winning record that loses money, because each win pays half a unit. The
+   fallback floors (65%, then 60%) were letting exactly that chalk in. 70%+ calls are unchanged. */
+const CONF_PAY_FROM='2026-10-24',CONF_PAY_MIN=-150;
+function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_PAY_FROM)return true;const c=confOf(x);if(c==null||c>=0.70-1e-9)return true;
+  const p=+x.price;return isFinite(p)&&p>=CONF_PAY_MIN;}
+function isOfficial(x){const c=confOf(x);return c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x);}
 const officialOnly=V=>(V||[]).filter(isOfficial);
 const confPct=c=>c==null?'—':Math.round(c*100)+'%';
 /* calls logged before the meter existed (or locked before it loaded) get their

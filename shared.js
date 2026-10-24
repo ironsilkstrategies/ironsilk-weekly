@@ -2606,7 +2606,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16469,10 +16469,13 @@ function best5State(){const d=today();let S=get(BEST5_KEY,{});
     set(BEST5_KEY,S);}
   return S;}
 /* the public record: only the main three picks of each locked card */
-function best3Record(){const log=get('d4.best5log',{})||{};let w=0,l=0,pu=0,u=0,first=null;
+function best3Record(){const log=get('d4.best5log',{})||{};let w=0,l=0,pu=0,u=0,first=null,ni=0,si=0;
   Object.keys(log).sort().forEach(d=>{const M=(log[d].picks||[]).filter(x=>x.main);if(!M.length)return;if(!first)first=d;
-    M.forEach(x=>{if(x.push)pu++;else if(x.hit===true){w++;u+=_vProfit(x.price);}else if(x.hit===false){l++;u-=1;}});});
-  return{w,l,pu,u,first};}
+    M.forEach(x=>{if(x.push)pu++;else if(x.hit===true){w++;u+=_vProfit(x.price);}else if(x.hit===false){l++;u-=1;}else return;
+      const p=+x.price;if(isFinite(p)&&Math.abs(p)>=100){si+=p>0?100/(p+100):-p/(-p+100);ni++;}});});
+  /* v2.53 · be = the hit rate these prices need just to break even (the average implied chance) */
+  const be=ni?si/ni:null;const ap=be==null?null:Math.round(be>0.5?-100*be/(1-be):100*(1-be)/be);
+  return{w,l,pu,u,first,be,ap};}
 const BEST_TIER_LAB=x=>x.unan?['★ UNANIMOUS','#ff6fae']:(TC_COL[x.color]||['var(--mute)',''])[1]?[(TC_COL[x.color])[1],(TC_COL[x.color])[0]]:['',''];
 function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀'};
   const view=opts.sp||'all';const list=view==='all'?(S.top3||[]):((S.bySport||{})[view]||[]);
@@ -16546,7 +16549,10 @@ function renderBest(){
   let rcT='';try{const B=bkDayState();const D=B.locked?B:B.preview;if(false&&D&&D.roll&&D.roll.cut.length){   /* v2.33 · the Roll Call is retired (no pick on more than 3 tickets) */const cut=D.roll.legs.filter(l=>D.roll.cut.includes(l.sp+'|'+l.game));
     rcT=`<div class="tkt" style="margin-top:8px;border-left:3px solid #ff6fae"><h3>📣 Tonight's Roll Call parlay ${B.locked?'🔒':''}</h3><div class="mono" style="font-size:10.5px">${cut.map(l=>`${txtEsc(l.pick)} <span style="color:var(--gold)">${sgnP(l.price)}</span>`).join(' · ')}</div>
       <div class="mono" style="font-size:10px;color:var(--mute)">${cut.length} legs · ${decimalToAmerican(D.roll.cutDec)} · ${(D.roll.cutP*100).toFixed(1)}% to cash</div><div class="bar" style="margin-top:4px"><button onclick="tab('banker',document.getElementById('navBanker'))">Open the Banker's desk →</button></div></div>`;}}catch(e){}
-  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button></div>
+  /* v2.53 · the price check: what these prices need to break even, against what the card is hitting */
+  let priceTxt='';try{const R3=best3Record();if(R3.be!=null&&R3.w+R3.l>=5){const hr=R3.w/(R3.w+R3.l);
+    priceTxt=`<div class="mono" style="font-size:10px;margin:6px 2px;color:${hr>=R3.be?'var(--win)':'var(--rust)'}">💲 Price check: the Best 3 has averaged ${R3.ap>0?'+':''}${R3.ap}, which needs ${Math.round(R3.be*100)}% to profit — it's hitting ${Math.round(hr*100)}%.</div>`;}}catch(e){}
+  el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+priceTxt+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button></div>
     <div class="sub mono pub-row">${pubTxt?`<span>${pubTxt}</span>`:''}<a href="${PUB_URL}" target="_blank" rel="noopener">open public page ↗</a>${typeof shareHub==='function'?' · <a href="#" onclick="shareHub();return false">📤 share</a>':''}</div>
     ${pubTxt?'':'<div class="sub mono" style="font-size:10px">The public page (picks.html) shows only the locked card, its graded record and your subscribe link. It publishes itself when the card locks.</div>'}
     <div class="sub" style="font-size:10px;margin-top:4px">Subscribe link for the public page <input id="subLinkIn" placeholder="https://… (Whop, Patreon, Stripe link)" value="${esc(get('d4.sublink',''))}" onchange="set('d4.sublink',this.value.trim())" style="width:100%;margin-top:2px"></div>`+
