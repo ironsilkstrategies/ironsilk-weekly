@@ -57,7 +57,7 @@ function confSims(V){const M=new Map();V.forEach(x=>{if(x.voice==='Sim'&&(x.simP
 function confRebuild(force){const C0=get(CONF_KEY,null);const V=get(VOICES_KEY,[])||[];let gN=0;V.forEach(x=>{if(x.graded)gN++;});const sig=V.length+'|'+gN;
   if(!force&&C0&&C0.sig===sig&&Date.now()-C0.ts<6*36e5)return C0;
   const sims=confSims(V);const rows=[];
-  V.forEach(x=>{if(!CHARS[x.voice]||!x.graded||x.hit==null||x.push||confPre(x))return;const d=String(x.date).slice(0,10);const base=confBase(x,sims.get(x.sp+'|'+x.game+'|'+d+'|'+x.market));if(base==null)return;rows.push({x,d,base,hit:x.hit?1:0});});
+  V.forEach(x=>{if(!CHARS[x.voice]||!x.graded||x.hit==null||x.push||confPre(x)||(typeof inputsBroken==='function'&&inputsBroken(x)))return;const d=String(x.date).slice(0,10);const base=confBase(x,sims.get(x.sp+'|'+x.game+'|'+d+'|'+x.market));if(base==null)return;rows.push({x,d,base,hit:x.hit?1:0});});
   rows.sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);
   const skill={},bins={ml:confFreshBins(),spread:confFreshBins(),total:confFreshBins()};let changed=0,j=0;
   while(j<rows.length){const d=rows[j].d,day=[];while(j<rows.length&&rows[j].d===d)day.push(rows[j++]);
@@ -66,10 +66,10 @@ function confRebuild(force){const C0=get(CONF_KEY,null);const V=get(VOICES_KEY,[
     day.forEach(r=>{confKeys(r.x).forEach(([k])=>{const o=skill[k]||(skill[k]=[0,0]);o[0]+=r.hit-r.base;o[1]++;});
       const B=bins[r.x.market];if(B){const b=B.find(b=>r.raw>=b.lo&&r.raw<b.hi);if(b){b.w+=r.hit;b.n++;b.s+=r.raw;}}});}
   const sk={};Object.entries(skill).forEach(([k,o])=>{sk[k]=[+o[0].toFixed(3),o[1]];});
-  const M={v:1,ts:Date.now(),sig,n:rows.length,skill:sk,cal:{ml:confPav(bins.ml),spread:confPav(bins.spread),total:confPav(bins.total)}};
+  const M={v:1,rule:2,ts:Date.now(),sig,n:rows.length,skill:sk,cal:{ml:confPav(bins.ml),spread:confPav(bins.spread),total:confPav(bins.total)}};
   set(CONF_KEY,M);CONF_M=null;if(changed)set(VOICES_KEY,V);return M;}
 let CONF_M=null;
-function confModel(){if(!CONF_M||Date.now()-CONF_M.t>60e3){let M=get(CONF_KEY,null);if(!M||!M.skill)M=confRebuild(true);CONF_M={t:Date.now(),M};}return CONF_M.M;}
+function confModel(){if(!CONF_M||Date.now()-CONF_M.t>60e3){let M=get(CONF_KEY,null);if(!M||!M.skill||M.rule!==2)M=confRebuild(true);CONF_M={t:Date.now(),M};}return CONF_M.M;}
 /* ideology knobs: a character can be switched off per sport/market (see IDEOLOGY) */
 function confKnobOk(x){try{const K=get('d4.ideoknobs',null)||{};const o=K[x.voice];if(!o)return true;if(o.off)return false;
   if(o.mk&&o.mk[x.market]===false)return false;if(o.sp&&o.sp[x.sp]===false)return false;return true;}catch(e){return true;}}
@@ -418,8 +418,10 @@ function best3Pool(by,sp,opts){opts=opts||{};if(opts.ignoreTime)return best3Pool
     const p=o.cf,ev=(p*americanToDecimal(+x.price)-1)*100;if(ev<0.5){why.ev++;return;}
     pool.push({...x,p,ev,cf:p,conf:o.n,confBy:o.who,fit:pickFit(x,s0,o,R)});});});
   pool.sort((a,b)=>b.fit-a.fit||b.ev-a.ev);
-  const u=new Set(),out=[];for(const x of pool){const k=x.sp+'|'+x.game;if(u.has(k))continue;u.add(k);out.push(x);if(out.length===3)break;}
-  out.why=why;return out;}
+  /* v2.50 · one sport can't take all three while another has a qualifying pick: each sport's best first, then the best of the rest */
+  const u=new Set(),per=new Set(),out=[];for(const x of pool){if(out.length===3)break;const k=x.sp+'|'+x.game;if(u.has(k)||per.has(x.sp))continue;u.add(k);per.add(x.sp);out.push(x);}
+  for(const x of pool){if(out.length===3)break;const k=x.sp+'|'+x.game;if(u.has(k))continue;u.add(k);out.push(x);}
+  out.sort((a,b)=>b.fit-a.fit||b.ev-a.ev);out.why=why;return out;}
 function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
   Object.entries(T.by||{}).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0);const p=o?o.cf:pickConfAny(x,s0);
     const ev=p!=null&&x.price!=null?(p*americanToDecimal(+x.price)-1)*100:null;let why=null;
@@ -431,8 +433,8 @@ function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const
     if(why)out.push({sp:s0,game:x.game,pick:x.pick,price:x.price,p,ev,why,tier:best3Tier(x)});}));
   return out.sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,n||5);}
 /* the Best card's 3 props: 70%+ only — your pasted prop lines first, then the characters' calibrated calls, then game-log lines */
-function best3Props(){let props=[];
-  try{props=propBoard(null,null).filter(x=>x.matched&&x.best&&x.n>=4).map(x=>{const pO=x.pOver,side=pO>=0.5?'over':'under',p=side==='over'?pO:1-pO;
+function best3Props(){let props=[];const TT={};const plays=(sp,t)=>{const s=TT[sp]||(TT[sp]=teamsToday(sp));return!!t&&s.has(t);};
+  try{props=propBoard(null,null).filter(x=>x.matched&&x.best&&x.n>=4&&plays(x.sp,x.team)).map(x=>{const pO=x.pOver,side=pO>=0.5?'over':'under',p=side==='over'?pO:1-pO;
       return{sp:x.sp,player:x.player,team:x.team,stat:x.stat,keys:x.keys,thr:x.thr,side,price:side==='over'?x.over:x.under,p,ev:side==='over'?x.evO:x.evU,mu:x.mu,n:x.n};})
     .filter(x=>x.p>=DESK_PROP_MIN&&(x.ev==null||x.ev>=0)&&(x.price==null||x.price>=DESK_B3_LO)).sort((a,b)=>b.p-a.p).slice(0,3);}catch(e){}
   if(props.length<3){try{const C=cpropToday().filter(c=>c.cal>=DESK_PROP_MIN&&c.fav!=='fade').sort((a,b)=>b.cal-a.cal);

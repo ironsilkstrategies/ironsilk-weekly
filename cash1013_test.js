@@ -24,11 +24,11 @@ setTimeout(async()=>{try{
   T('identical tickets share one box (the Sim and the Scorekeeper)',sim&&sim.who.join('+')==='The Simulator+The Scorekeeper',sim&&J(sim.who));
   T('the Banker\'s ticket is its own box, a push leg doesn\'t count toward the payout',bk&&bk.who[0]==='The Banker'&&bk.legs.length===4&&Math.abs(bk.units-((1+100/152)*(1+100/153)*2.2-1))<0.01,bk&&J([bk.price,bk.units]));
   T('each box carries the parlay record',/Simulator \d+-\d+/.test(sim.rec)&&/Banker \d+-\d+/.test(bk.rec),sim.rec+' | '+bk.rec);
-  T('the public feed carries the cashed boxes',w.eval('publicFeed().cashed.length')===2);
+  T('v2.49 · the cashed boxes stay in the app — the public page is the Best 3 only',w.eval('publicFeed().cashed.length')===0&&w.eval('cashedList(14).length')===2);
   /* a cash publishes even before today's card locks */
   w.eval(`set(LS.ghtoken,'ghp_x');set(LS.ghrepo,'ironsilkstrategies/ironsilk-weekly-site');`);
   await w.eval('publishAuto()');const put=PUT.find(p=>/public\/picks\.json/.test(p.u));
-  T('a new cash publishes the public page on its own (card not locked yet)',!!put&&JSON.parse(Buffer.from(put.b.content,'base64').toString()).cashed.length===2,PUT.map(p=>p.u.split('/contents/')[1]).join(','));
+  T('a new cash refreshes the public page on its own (its record), and still never ships the boxes',!!put&&(j=>j.cashed.length===0&&j.simple===1)(JSON.parse(Buffer.from(put.b.content,'base64').toString())),PUT.map(p=>p.u.split('/contents/')[1]).join(','));
   PUT.length=0;await w.eval('publishAuto()');T('…once — no new cash, no re-publish',PUT.length===0);
   /* Telegram (in-app autopilot) box */
   w.eval(`window.__C={d:'2026-10-12',banker:{dec:3,legs:[{sp:'nhl',game:'FLA@BUF',pick:'BUF ML',price:-107},{sp:'nhl',game:'MIN@WPG',pick:'MIN ML',price:120}]},

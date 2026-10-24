@@ -52,9 +52,10 @@ setTimeout(()=>{try{
     T('why: a reel script that names the pick',/Under 6\.5/.test(Wy.script)&&Wy.script.length>60,Wy.script.slice(0,200));
     T('Banker tab renders his parlay, the character tickets and the exposure map',(()=>{let el=w.document.getElementById('bankerBody');if(!el){el=w.document.createElement('div');el.id='bankerBody';w.document.body.appendChild(el);}w.eval('renderBankerTab()');return/The Banker's parlay/.test(el.innerHTML)&&/Character tickets/.test(el.innerHTML)&&/Exposure/.test(el.innerHTML)&&/Why we like it/.test(el.innerHTML);})());
     /* v2.31: the public parlay is the Banker's own; each leg opens 30 minutes before its game */
-    T('more than 30 min out, the parlay legs are hidden publicly',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay&&F.parlay.legs.every(l=>l.hidden&&!l.pick);})());
+    /* v2.49 · only the Best 3 goes public: the parlay stays in the app */
+    T('the public page never carries the parlay (only the Best 3 goes out)',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay==null&&F.parlayRecord==null&&F.simple===1;})());
     w.eval(`(()=>{const S=get(BKDAY_KEY,{});S.own.legs.forEach(l=>l.start=new Date(Date.now()+20*60e3).toISOString());set(BKDAY_KEY,S);})()`);
-    T('public feed carries the Banker\'s parlay with reasons once its legs unlock',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay&&F.parlay.legs.length===L.own.legs.length&&F.parlay.legs.every(l=>l.pick&&l.why&&l.why.script);})());
+    T('…not even once its legs unlock — the Banker\'s parlay and its reasons stay in your app',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay==null&&L.own.legs.length>0;})());
     /* SGP on an NHL card */
     const g={id:'n1',abstract:'pre',away:{abbr:'PIT',name:'Pittsburgh Penguins'},home:{abbr:'CBJ',name:'Columbus Blue Jackets'}};
     const html=w.eval(`(()=>{const g=${JSON.stringify(g)};const s=simNHLGame(g,4000);return sgpCardHtml('nhl',g,s)})()`);

@@ -104,7 +104,7 @@ setTimeout(async()=>{try{
   w.eval(`(()=>{const S=get(BEST5_KEY,{});S.top3.forEach(x=>x.start=new Date(Date.now()-60e3).toISOString());set(BEST5_KEY,S);})()`);   /* kickoff */
   const F=w.eval('publicFeed()');
   T('public feed: locked card, record, handle, subscribe link',F.today&&F.today.picks[0].pick==='D ML'&&F.subscribe==='https://whop.com/thedesk'&&F.handle==='@DLinkPicks'&&F.record);
-  T('public feed names the analysts, not initials',F.today.picks[0].voices.includes('The Judge'),JSON.stringify(F.today.picks[0].voices));
+  T('v2.49 · the public pick carries no roster of analysts and no model numbers (only the Best 3, in plain words)',F.simple===1&&!('voices' in F.today.picks[0]),JSON.stringify(F.today.picks[0]).slice(0,200));
   const r=await w.eval('publishPicks(false)');
   T('publish writes public/picks.json and a dated archive to the repo',r.ok&&puts.some(p=>/public\/picks\.json$/.test(p.u))&&puts.some(p=>/public\/picks-2026-10-07\.json$/.test(p.u)));
   // picks.html renders the feed

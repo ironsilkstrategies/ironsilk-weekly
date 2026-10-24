@@ -1951,7 +1951,10 @@ function intelReport(sp){
 const VOICES_KEY='d4.voices';
 const _vProfit=p=>{p=+p;return p>0?p/100:100/Math.abs(p)};
 function voicesLines(sp,g){const gl=g.away.abbr+'@'+g.home.abbr;let L=[];
-  try{L=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):sp==='nhl'?(typeof nhlBookLinesFor==='function'?nhlBookLinesFor(gl):[]):(typeof bookLinesFor==='function'?bookLinesFor(g.id):[])}catch(e){}
+  /* v2.50 · basketball reads its own book (ESPN's DraftKings lines, yours first) — it fell through to the MLB lookup, so every NBA call went unpriced and none could be official */
+  try{L=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):sp==='nhl'?(typeof nhlBookLinesFor==='function'?nhlBookLinesFor(gl):[])
+    :sp==='nba'?(typeof nbaBookLinesFor==='function'?nbaBookLinesFor(gl,g.__date||undefined):[]):sp==='ncaab'?(typeof ncaabBookLinesFor==='function'?ncaabBookLinesFor(gl,g.__date||undefined):[])
+    :(typeof bookLinesFor==='function'?bookLinesFor(g.id):[])}catch(e){}
   const f=(m,s)=>L.find(x=>(x.market===m||(m==='spread'&&x.market==='runline'))&&x.side===s);
   return{mlH:f('moneyline','home'),mlA:f('moneyline','away'),spH:f('spread','home'),spA:f('spread','away'),ov:f('total','over'),un:f('total','under')};}
 /* ══ THE CHARACTERS ══════════════════════════════════════════════════════════
@@ -2598,7 +2601,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261023b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261023c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16319,8 +16322,9 @@ if(typeof window!=='undefined'&&!/[?&]bg=1/.test(location.search||''))window.add
 const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4]},nfl:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},
   ncaaf:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},mlb:{h:[1,2],tb:[2,3],hr:[1],k:[5,6,7]},nhl:{s:[2,3,4],pts:[1],g:[1]},
   ncaab:{pts:[10,15,20,25],reb:[5,7,10],ast:[3,5,7],fg3:[1,2,3]}};
-function teamsToday(sp){const s=new Set();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(!a||a==='pre'||a==='preview'){s.add(g.away.abbr);s.add(g.home.abbr);}});}catch(e){}
-  try{const T=get(TC_KEY,{})||{};if(T.d===today())(((T.by||{})[sp]||{}).picks||[]).forEach(x=>String(x.game).split('@').forEach(t=>s.add(t)));}catch(e){}return s;}
+/* v2.50 · only teams playing TODAY: the football boards hold the whole week, so Sunday's players no longer show as Thursday props */
+function teamsToday(sp){const s=new Set();const d=today();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(a&&a!=='pre'&&a!=='preview')return;const gd=gameDayOf(g);if(gd&&gd!==d)return;s.add(g.away.abbr);s.add(g.home.abbr);});}catch(e){}
+  try{const T=get(TC_KEY,{})||{};if(T.d===today())(((T.by||{})[sp]||{}).picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;String(x.game).split('@').forEach(t=>s.add(t));});}catch(e){}return s;}
 function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const teams=teamsToday(sp);if(!teams.size)return[];const out=[];
   Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<3)return;if(rsOut(rsInjury(sp,P.name)))return;
     Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<3)return;let best=null;
@@ -22163,9 +22167,13 @@ const LANE_LAB={ml:'side',spread:'spread',total:'total'};
 function laneKey(sp,m,sd,price,line){m=m==='moneyline'?'ml':m;const t=laneType(m,sd,price,line);return t?sp+'|'+m+'|'+t:null;}
 function laneName(k){const[sp,m,t]=String(k).split('|');return`${SP_LAB[sp]||sp} ${LANE_LAB[m]||m} (${t})`;}
 let LANE_C=null,LANE_SIG='';
+/* v2.50 · days a sport's inputs were known broken (the flat-55 college sim Sep 28 → Oct 16; one-sided NFL totals
+   Oct 8-11): the lanes and the confidence meter never learn from them, so those losses can't block a lane for good */
+const BROKEN_DAYS={ncaaf:[['2026-09-28','2026-10-16',null]],nfl:[['2026-10-08','2026-10-11','total']]};
+function inputsBroken(x){const d=String((x&&x.date)||'').slice(0,10);return(BROKEN_DAYS[x&&x.sp]||[]).some(([a,b,m])=>d>=a&&d<=b&&(!m||m===x.market));}
 function laneTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+V.filter(x=>x.graded).length;if(LANE_C&&LANE_SIG===sig)return LANE_C;
   const G={},BYV={};const voices=new Set([...(typeof CHAR_ORDER!=='undefined'?CHAR_ORDER:[]),'Sim']);
-  V.forEach(x=>{if(!x.graded||x.hit==null||!voices.has(x.voice))return;const k=laneKey(x.sp,x.market,x.side,x.price,x.line);if(!k)return;
+  V.forEach(x=>{if(!x.graded||x.hit==null||!voices.has(x.voice)||inputsBroken(x))return;const k=laneKey(x.sp,x.market,x.side,x.price,x.line);if(!k)return;
     [META_VOICES.has(x.voice)?null:(G[k]||(G[k]={n:0,w:0,u:0})),(BYV[x.voice]||(BYV[x.voice]={}))[k]||(BYV[x.voice][k]={n:0,w:0,u:0})].filter(Boolean).forEach(o=>{o.n++;if(x.hit)o.w++;o.u+=x.units||0;});});
   const judge=o=>{o.roi=o.u/o.n;o.shr=o.u/(o.n+LANE_MIN);o.st=o.n<LANE_MIN?'thin':o.shr<=-0.05?'blocked':o.shr>=0.03?'proven':'neutral';return o;};
   Object.values(G).forEach(judge);Object.values(BYV).forEach(T=>Object.values(T).forEach(judge));
