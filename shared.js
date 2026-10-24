@@ -2637,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2809,6 +2809,14 @@ const _DEC_C=new Map();
 const WB_MIN=150000,WB_PEND=new Map(),WB_WROTE=new Map();let WB_T=null,WB_SYNC=0,WB_VER=0;
 function wbPut(k,json){const p={json,ver:++WB_VER,at:Date.now()};WB_PEND.set(k,p);if(!WB_T)WB_T=setTimeout(wbFlushSoon,1200);}
 function wbDrop(k){WB_PEND.delete(k);}
+/* v2.57.1 · write-behind is per page, and the master evaluation runs each sport in a hidden frame of the
+   same origin: a big write still pending in one frame was invisible to the other, and the parent's older
+   pending copy of today's card then overwrote the sports the frames had just evaluated. Hidden frames
+   write straight through; a write from another frame drops this page's cached/pending copy of that key;
+   the parent writes everything out before it opens a frame. */
+if(typeof window!=='undefined'&&typeof location!=='undefined'&&/[?&]bg=1/.test(location.search||''))window.__NO_WB__=true;
+function wbBeforeFrame(){try{wbFlushNow();}catch(e){}try{Object.keys(RO_CACHE).forEach(k=>delete RO_CACHE[k]);}catch(e){}}
+if(typeof window!=='undefined')window.addEventListener('storage',e=>{try{if(e.key){WB_PEND.delete(e.key);delete RO_CACHE[e.key];}else Object.keys(RO_CACHE).forEach(k=>delete RO_CACHE[k]);}catch(err){}});
 /* every stored key, plus any big write still on its way to storage */
 function lsKeys(){const ks=[];for(let i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));if(WB_PEND.size){const S=new Set(ks);WB_PEND.forEach((p,k)=>{if(!S.has(k))ks.push(k);});}return ks;}
 function wbStore(k,json,packed){const stored=packed!=null&&(_LZM+packed).length<json.length*0.9?_LZM+packed:json;localStorage.setItem(k,stored);_DEC_C.set(k,{raw:stored,j:json});}
@@ -3295,12 +3303,13 @@ async function ghPut(path,text,msg,repoOver){const repo=repoOver||pubRepo();
   const toks=[...new Set([get(LS.ghtoken,''),get(SYNC.token,'')].filter(Boolean))];if(!toks.length)return{ok:false,reason:'no GitHub token on this device'};
   let last=null;
   for(const token of toks){const api=`https://api.github.com/repos/${repo}/contents/${path}`;const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
-    try{let sha=null;const g=await fetch(api,{headers:H});
-      if(g.status===401||g.status===403||(g.status===404&&!(await ghRepoVisible(repo,H)))){last={ok:false,status:g.status,reason:`this token can't write to ${repo}`};continue;}
-      if(g.status===200)sha=(await g.json()).sha;else if(g.status!==404){last={ok:false,reason:'HTTP '+g.status};continue;}
+    try{for(let att=0;att<3;att++){let sha=null;const g=await fetch(api+'?t='+Date.now(),{headers:H,cache:'no-store'});   /* v2.57.1 · never a cached sha (that was the 409) */
+      if(g.status===401||g.status===403||(g.status===404&&!(await ghRepoVisible(repo,H)))){last={ok:false,status:g.status,reason:`this token can't write to ${repo}`};break;}
+      if(g.status===200)sha=(await g.json()).sha;else if(g.status!==404){last={ok:false,reason:'HTTP '+g.status};break;}
       const r=await fetch(api,{method:'PUT',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify({message:msg,content:b64u(text),...(sha?{sha}:{})})});
       if(r.ok){if(!repoOver&&get(LS.ghrepo,'')!==repo)set(LS.ghrepo,repo);if(token!==get(LS.ghtoken,''))set(LS.ghtoken,token);return{ok:true};}
-      last={ok:false,status:r.status,reason:r.status===404||r.status===403?`this token can't write to ${repo}`:'HTTP '+r.status+' '+(await r.text()).slice(0,120)};}
+      if((r.status===409||r.status===422)&&att<2){await new Promise(z=>setTimeout(z,800));continue;}   /* the file moved under us (the worker publishes too): re-read and retry */
+      last={ok:false,status:r.status,reason:r.status===404||r.status===403?`this token can't write to ${repo}`:'HTTP '+r.status+' '+(await r.text()).slice(0,120)};break;}}
     catch(e){last={ok:false,reason:e.message||String(e)};}}
   return last||{ok:false,reason:'publish failed'};}
 /* a repo the token can see answers the repo endpoint even when the file doesn't exist yet */

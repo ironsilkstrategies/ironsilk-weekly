@@ -847,9 +847,9 @@ async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confir
     try{if(deskRunSportEval(here))done.push(here);}catch(e){console.warn('eval',here,e);miss.push(here);}
     const others=liveSports().filter(sp=>sp!==here&&SPORT_PAGE[sp]);
     for(const sp of others){deskSay(`② Evaluating ${SP_LAB[sp]||sp} in the background… (${done.length+1} of ${others.length+1})`);
-      const ts=Date.now();const f=document.createElement('iframe');f.src=SPORT_PAGE[sp]+'?bg=1&eval=1&v='+Date.now();f.setAttribute('aria-hidden','true');f.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;border:0;opacity:0';
+      wbBeforeFrame();const ts=Date.now();const f=document.createElement('iframe');f.src=SPORT_PAGE[sp]+'?bg=1&eval=1&v='+Date.now();f.setAttribute('aria-hidden','true');f.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;border:0;opacity:0';
       document.body.appendChild(f);const got=await new Promise(res=>{const iv=setInterval(()=>{const R=get('d4.bgeval.'+sp,null);if(R&&R.ts>=ts){clearInterval(iv);res(R);}else if(Date.now()-ts>60000){clearInterval(iv);res(null);}},600);});
-      try{f.remove();}catch(e){}if(got&&got.ok)done.push(sp);else miss.push(sp);}
+      try{f.remove();}catch(e){}wbBeforeFrame();if(got&&got.ok)done.push(sp);else miss.push(sp);}
     deskSay('③ Freezing the day…');await new Promise(r=>setTimeout(r,30));DESK_EVAL_BUSY=false;
     const F=await deskFreezeAll('master evaluation · '+done.map(s=>(SP_LAB[s]||s).split(' ').pop()).join(', '));
     /* v2.44 · the Book can hold the freeze (a sport missing from the card, broken inputs) — say so instead of "Frozen" */

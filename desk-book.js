@@ -219,7 +219,7 @@ function bookFreezeRules(ctx,R,mode){const e=R.end;
 const BOOK_BG_MS=60e3;
 function bookBgEval(sp){return new Promise(res=>{try{if(typeof SPORT_PAGE==='undefined'||!SPORT_PAGE[sp])return res(null);const ts=Date.now();
   const f=document.createElement('iframe');f.src=SPORT_PAGE[sp]+'?bg=1&eval=1&v='+ts;f.setAttribute('aria-hidden','true');f.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;border:0;opacity:0';
-  document.body.appendChild(f);const iv=setInterval(()=>{const R=get('d4.bgeval.'+sp,null);if(R&&R.ts>=ts){clearInterval(iv);try{f.remove();}catch(e){}res(R);}else if(Date.now()-ts>BOOK_BG_MS){clearInterval(iv);try{f.remove();}catch(e){}res(null);}},600);}catch(e){res(null);}});}
+  try{wbBeforeFrame();}catch(e){}document.body.appendChild(f);const iv=setInterval(()=>{const R=get('d4.bgeval.'+sp,null);if(R&&R.ts>=ts){clearInterval(iv);try{f.remove();}catch(e){}res(R);}else if(Date.now()-ts>BOOK_BG_MS){clearInterval(iv);try{f.remove();}catch(e){}res(null);}},600);}catch(e){res(null);}});}
 async function bookReread(ctx,P){const which=P.arg==='unread'?ctx.unread:P.arg==='missing'?ctx.missing:P.arg==='critical'?[...new Set(ctx.critical.map(x=>x.sp))]:
     Object.values(ctx.by||{}).filter(o=>o.offElig>0).map(o=>o.sp);
   const here=(typeof window!=='undefined'&&window.__PAGE_SPORT__)||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);
