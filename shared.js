@@ -2637,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024n';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024o';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23397,7 +23397,7 @@ function tgPosts(){const P=get(TGP_KEY,{})||{};return P&&typeof P==='object'?P:{
 function tgTrackPost(card,chat,ids){const P=tgPosts();const W=tgwOn()&&ids.length>0;
   P[card.d]={d:card.d,chat,ids,card,ts:Date.now(),dev:syncDevice(),auto:get('d4.tgauto',true)!==false,st:{},sent:{},recap:false,worker:W};
   Object.keys(P).sort().slice(0,-4).forEach(k=>delete P[k]);set(TGP_KEY,P);
-  if(W)tgwHandOff(P[card.d]).then(r=>{if(!r||!r.ok){P[card.d].worker=false;set(TGP_KEY,P);deskToast('🛰️ Couldn\'t hand the card to the 24/7 worker ('+((r&&r.reason)||'error')+') — the app will run the autopilot instead',5000);}else deskToast('🛰️ Handed to the 24/7 worker');}).catch(()=>{});
+  if(W)tgwHandOff(P[card.d]).then(r=>{if(!r||!r.ok){P[card.d].worker=false;set(TGP_KEY,P);deskToast('🛰️ Couldn\'t hand the card to the 24/7 worker ('+((r&&r.reason)||'error')+') — the app will run the autopilot instead',5000);}else deskToast('🛰️ Handed to the 24/7 worker');}).catch(e=>{P[card.d].worker=false;set(TGP_KEY,P);deskToast('🛰️ Couldn\'t reach the 24/7 worker ('+((e&&e.message)||'error')+') — tap Re-send in the worker box',6000);});
   else setTimeout(()=>tgAutoTick().catch(()=>{}),30e3);}
 /* ══ 🛰️ 24/7 WORKER HANDOFF (v2.08) ═══════════════════════════════════════════
    A free GitHub Actions job (.github/workflows/tg-autopilot.yml) runs every 10 minutes
@@ -23428,7 +23428,7 @@ function tgwPayload(p){const C=p.card;const tplMk=x=>`⟦m:${tgLegKey(x)}⟧`;tp
     banker:C.banker?{keys:C.banker.legs.map(tgLegKey),price:decimalToAmerican(C.banker.dec)}:null,
     chars:[...(C.chars||[]),...(C.px||[])].map(P=>({name:charName(P.v)+(P.px?' (props)':P.skill?' (strong suit)':''),keys:P.legs.map(tgLegKey),price:decimalToAmerican(P.dec)})),props:(C.props||[]).map(tgLegKey)};
   return{d:p.d,chat:p.chat,ids:p.ids,parts,legs,recapPlan,postedTs:p.ts,st:{},sent:{},recap:false,worker:true};}
-function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),tgOff:Math.max((a&&a.tgOff)||0,(b&&b.tgOff)||0),cmdSig:(a&&a.cmdSig)||(b&&b.cmdSig)||'',pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
+function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),tgOff:Math.max((a&&a.tgOff)||0,(b&&b.tgOff)||0),cmdTs:Math.max((a&&a.cmdTs)||0,(b&&b.cmdTs)||0),cmdSig:(a&&a.cmdSig)||(b&&b.cmdSig)||'',pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
   {const x=a&&a.relay,y=b&&b.relay;if(x||y)out.relay=!x?y:!y?x:x.d>y.d?x:x.d<y.d?y:{d:x.d,n:Math.max(x.n||0,y.n||0)};}   /* v2.33 · the worker's relay counter rides along */
   const ds=new Set([...Object.keys((a&&a.posts)||{}),...Object.keys((b&&b.posts)||{})]);
   ds.forEach(d=>{const x=a&&a.posts&&a.posts[d],y=b&&b.posts&&b.posts[d];if(!x||!y){out.posts[d]=x||y;return;}const base=(x.postedTs||0)>=(y.postedTs||0)?x:y;
@@ -23437,7 +23437,7 @@ function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||
   Object.keys(out.posts).sort().slice(0,-5).forEach(d=>delete out.posts[d]);return out;}
 async function tgwGh(){const repo=pubRepo();const toks=[...new Set([get(LS.ghtoken,''),get(SYNC.token,'')].filter(Boolean))];return{repo,toks};}
 async function tgwRead(){const{repo,toks}=await tgwGh();for(const token of toks){const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
-    try{const r=await fetch(`https://api.github.com/repos/${repo}/contents/${TGW_FILE}?ref=${TGW_BRANCH}`,{headers:H});if(r.status===404)return{ok:true,state:null,sha:null,token,H,repo};
+    try{const r=await fetch(`https://api.github.com/repos/${repo}/contents/${TGW_FILE}?ref=${TGW_BRANCH}&t=${Date.now()}`,{headers:H,cache:'no-store'});   /* v2.62.1 · never a cached copy: a stale sha made every hand-off since Oct 18 collide (409) */if(r.status===404)return{ok:true,state:null,sha:null,token,H,repo};
       if(!r.ok)continue;const j=await r.json();const txt=new TextDecoder().decode(Uint8Array.from(atob(String(j.content).replace(/\s/g,'')),c=>c.charCodeAt(0)));
       return{ok:true,state:await tgwDecrypt(txt),sha:j.sha,token,H,repo};}catch(e){}}return{ok:false,reason:'no GitHub token here can read '+repo};}
 async function tgwEnsureBranch(repo,H){const r=await fetch(`https://api.github.com/repos/${repo}/git/ref/heads/${TGW_BRANCH}`,{headers:H});if(r.ok)return true;
@@ -23451,6 +23451,11 @@ async function tgwHandOff(p){for(let tries=0;tries<3;tries++){const R=await tgwR
     const w=await fetch(`https://api.github.com/repos/${R.repo}/contents/${TGW_FILE}`,{method:'PUT',headers:{...R.H,'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(w.ok){set('d4.tgwlast',{ts:Date.now(),d:p.d});return{ok:true};}if(w.status!==409&&w.status!==422)return{ok:false,reason:'HTTP '+w.status};}
   return{ok:false,reason:'kept colliding with the worker — try again'};}
+/* v2.62.1 · hand today's posted card to the robot again (it also carries the /command answers), then wake it */
+async function tgwResend(btn){const P=tgPosts();const d=today();const p=P[d]||P[Object.keys(P).sort().pop()];if(!p){alert('Post the VIP card first — the robot works from the posted card.');return;}
+  if(btn)btn.textContent='Sending…';p.worker=true;set(TGP_KEY,P);let r=null;try{r=await tgwHandOff(p);}catch(e){r={ok:false,reason:e.message||String(e)};}
+  if(r&&r.ok){let ok=false;try{ok=await tgwRunNow();}catch(e){}if(btn)btn.textContent=ok?'Sent ✓ — robot started':'Sent ✓ — robot runs on its schedule';try{tgwRefreshStatus();}catch(e){}}
+  else{if(btn)btn.textContent='Failed — '+((r&&r.reason)||'error');}}
 async function tgwRunNow(){const{toks}=await tgwGh();const repo=TGW_WORKER_REPO;for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204))return true;}return false;}
 let TGW_STATUS=null;
 async function tgwRefreshStatus(){const R=await tgwRead();TGW_STATUS=R.ok?{ts:Date.now(),state:R.state}:{ts:Date.now(),err:R.reason};try{renderToday(true);}catch(e){}}
@@ -23469,7 +23474,7 @@ function tgwHtml(){const on=tgwOn();const key=on?tgwKey():'';const repo=TGW_WORK
       <div class="mono" style="font-size:10px;margin:4px 0">2 · Name <b>AUTOPILOT_KEY</b> — value: <button style="font-size:9.5px" onclick="copyText('${key}','Autopilot key copied.')">copy key</button> <span style="color:var(--mute)">(keep it private — it unlocks the VIP card)</span></div>
       <div class="sub" style="font-size:10px">Then post the VIP card as usual. "Run now" kicks the worker immediately instead of waiting for GitHub's schedule (it only works if this phone's GitHub token can reach ${txtEsc(repo)}).</div></details>
     <div class="sub mono" style="font-size:9.5px;margin-top:4px">${stat||'Checking the worker…'}</div>
-    <div class="bar" style="margin-top:6px"><button onclick="this.textContent='Starting…';tgwRunNow().then(ok=>{this.textContent=ok?'Started ✓ — results in ~1 min':'Can\'t start it from this phone — it runs on its own schedule';setTimeout(tgwRefreshStatus,70e3);})">▶ Run now</button><button onclick="tgwRefreshStatus()">↻ Status</button>
+    <div class="bar" style="margin-top:6px"><button class="primary" onclick="tgwResend(this)">🛰️ Re-send today's card</button><button onclick="this.textContent='Starting…';tgwRunNow().then(ok=>{this.textContent=ok?'Started ✓ — results in ~1 min':'Can\'t start it from this phone — it runs on its own schedule';setTimeout(tgwRefreshStatus,70e3);})">▶ Run now</button><button onclick="tgwRefreshStatus()">↻ Status</button>
       ${(()=>{const P=tgPosts();const d=Object.keys(P).sort().pop();const p=d&&P[d];return p&&p.ids&&p.ids.length&&!p.worker?`<button onclick="(async()=>{const P=tgPosts();const p=P['${d}'];const r=await tgwHandOff(p);if(r.ok){p.worker=true;set(TGP_KEY,P);deskToast('🛰️ Handed to the 24/7 worker');}else alert(r.reason);tgwRefreshStatus();})()">Hand today's post to the worker</button>`:'';})()}</div>`:''}</div>`;}
 function tgAutoHere(p){try{return p.dev===syncDevice()||localStorage.getItem('td.tgauto')==='1';}catch(e){return false;}}
 function tgAutoNeeds(){const out=[];Object.values(tgPosts()).forEach(p=>{if(!p||p.recap||!p.card)return;tgAllLegs(p.card).forEach(({x})=>{if(x.sp)out.push([x.sp,p.d]);});});return out;}

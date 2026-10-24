@@ -50,7 +50,7 @@ async function writeState(state, sha) { return writeStateAt(REPO, state, sha); }
 export function combineStates(...xs) { return xs.filter(Boolean).reduce((a, s) => a ? mergeState(a, s) : s, null); }
 /* the same merge the app uses: statuses and announcements only ever accumulate */
 const relayMerge = (x, y) => !x ? y : !y ? x : x.d > y.d ? x : x.d < y.d ? y : { d: x.d, n: Math.max(x.n || 0, y.n || 0) };
-export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}) };
+export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}) };
   const ds = new Set([...Object.keys(a?.posts || {}), ...Object.keys(b?.posts || {})]);
   ds.forEach(d => { const x = a?.posts?.[d], y = b?.posts?.[d]; if (!x || !y) { out.posts[d] = x || y; return; }
     const base = (x.postedTs || 0) >= (y.postedTs || 0) ? x : y;
@@ -153,7 +153,7 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
   const sig = (C.menu || []).map(m => m.command).join(','); if (sig && state.cmdSig !== sig) { const r = await T('setMyCommands', { commands: JSON.stringify(C.menu) }); if (r) { state.cmdSig = sig; acted++; } }
   const u = await T('getUpdates', { offset: String((state.tgOff || 0) + 1), timeout: '0', allowed_updates: JSON.stringify(['message']) }); const rows = (u && u.result) || []; if (!rows.length) return acted;
   const st = {}; for (const d of ds) Object.assign(st, state.posts[d].st || {});
-  for (const x of rows) { state.tgOff = Math.max(state.tgOff || 0, x.update_id); const m = x.message; if (!m || !m.text || m.text[0] !== '/') continue;
+  for (const x of rows) { state.tgOff = Math.max(state.tgOff || 0, x.update_id); if (x.message && /^\//.test(x.message.text || '')) state.cmdTs = Date.now(); const m = x.message; if (!m || !m.text || m.text[0] !== '/') continue;
     const cmd = m.text.slice(1).split(/[\s@]/)[0].toLowerCase(); const txt = C.r[cmd] || (cmd ? `I don't know /${esc(cmd)} — tap /help for the list.` : null); if (!txt) continue;
     const stale = C.d && C.d !== chicagoDay(deps?.now || Date.now()) ? `\n<i>(from ${esc(C.d)} — today's card isn't out yet)</i>` : '';
     const r = await T('sendMessage', { chat_id: m.chat.id, text: (fillTemplate(txt, st) + stale).slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: 'true', reply_to_message_id: String(m.message_id), allow_sending_without_reply: 'true' }); if (r) acted++; }
@@ -280,6 +280,7 @@ export async function publishPublic(state, deps) { const now = deps?.now || Date
    the next run itself (a workflow dispatch, which the job's own token may do).
    The chain rests once every pick on today's card is graded — and it's capped. */
 export function relayPending(state, now) { const today = chicagoDay(now);
+  if (state.cmdTs && now - state.cmdTs < 45 * 60e3) return true;   /* v2.62.1 · someone is using the commands: stay awake 45 minutes after the last one */
   for (const d of Object.keys(state.posts || {})) { const p = state.posts[d]; if (!p || p.worker === false || p.recap || d !== today) continue; const st = p.st || {}, sent = p.sent || {};
     const vip = (p.legs || []).filter(l => !st[l.k]); const pub = ((p.pub && p.pub.legs) || []).filter(l => !st[l.k]);
     if (!vip.length && !pub.length) continue;
