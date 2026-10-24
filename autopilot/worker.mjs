@@ -10,7 +10,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.35';
+const VERSION = 'worker v2.60';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -50,13 +50,13 @@ async function writeState(state, sha) { return writeStateAt(REPO, state, sha); }
 export function combineStates(...xs) { return xs.filter(Boolean).reduce((a, s) => a ? mergeState(a, s) : s, null); }
 /* the same merge the app uses: statuses and announcements only ever accumulate */
 const relayMerge = (x, y) => !x ? y : !y ? x : x.d > y.d ? x : x.d < y.d ? y : { d: x.d, n: Math.max(x.n || 0, y.n || 0) };
-export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}) };
+export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}) };
   const ds = new Set([...Object.keys(a?.posts || {}), ...Object.keys(b?.posts || {})]);
   ds.forEach(d => { const x = a?.posts?.[d], y = b?.posts?.[d]; if (!x || !y) { out.posts[d] = x || y; return; }
     const base = (x.postedTs || 0) >= (y.postedTs || 0) ? x : y;
     const fx = (x.feedTs || 0) >= (y.feedTs || 0) ? x : y;   /* the newest public card the app handed over wins */
     out.posts[d] = { ...base, st: { ...(y.st || {}), ...(x.st || {}) }, sent: { ...(y.sent || {}), ...(x.sent || {}) }, recap: !!(x.recap || y.recap), worker: x.worker !== false && y.worker !== false,
-      ...(fx.feedTs ? { feed: fx.feed, pub: fx.pub, bc: fx.bc, site: fx.site, feedTs: fx.feedTs } : {}) }; });
+      ...(fx.feedTs ? { feed: fx.feed, pub: fx.pub, bc: fx.bc, site: fx.site, feedTs: fx.feedTs, ...(fx.cmd ? { cmd: fx.cmd } : {}) } : {}) }; });
   const keep = Object.keys(out.posts).sort().slice(-5); Object.keys(out.posts).forEach(d => { if (!keep.includes(d)) delete out.posts[d]; });
   return out; }
 
@@ -144,6 +144,20 @@ export function cashText(p, g) { const st = p.st || {}; const by = {}; (p.legs |
   const D = g.keys.filter(k => st[k] === 'W').reduce((a, k) => a * toDec(by[k] && by[k].price), 1); const day = (p.recapPlan && p.recapPlan.day) || p.d;
   return [`🎉 <b>CASHED</b> — <b>${g.who.map(esc).join(' + ')}</b>`, `<b>${g.keys.length}-leg parlay · ${toAmer(D)}</b> · 1 unit → <b>+${(D - 1).toFixed(2)}u</b>`, '',
     ...g.keys.map(k => { const l = by[k] || {}; return `${MARK[st[k]] || ''}<b>${esc(l.label || k)}</b>${l.__fin ? ' · ' + esc(l.__fin) : ''}`; }), '', `<i>Locked and posted before the first game · ${esc(day)}</i>`].join('\n'); }
+
+/* ── v2.60 · commands: anyone in the lounges (or the channels' chats) types /judge, /unanimous … and gets the
+   answer the app wrote at its last hand-off, with ✅/❌ filled in from the grades so far ── */
+export async function runCommands(state, deps) { const T = deps?.tg || tg; let acted = 0;
+  const ds = Object.keys(state.posts || {}).filter(d => state.posts[d]?.cmd).sort(); if (!ds.length) return 0; const p = state.posts[ds[ds.length - 1]]; const C = p.cmd;
+  /* the / menu, once per new list */
+  const sig = (C.menu || []).map(m => m.command).join(','); if (sig && state.cmdSig !== sig) { const r = await T('setMyCommands', { commands: JSON.stringify(C.menu) }); if (r) { state.cmdSig = sig; acted++; } }
+  const u = await T('getUpdates', { offset: String((state.tgOff || 0) + 1), timeout: '0', allowed_updates: JSON.stringify(['message']) }); const rows = (u && u.result) || []; if (!rows.length) return acted;
+  const st = {}; for (const d of ds) Object.assign(st, state.posts[d].st || {});
+  for (const x of rows) { state.tgOff = Math.max(state.tgOff || 0, x.update_id); const m = x.message; if (!m || !m.text || m.text[0] !== '/') continue;
+    const cmd = m.text.slice(1).split(/[\s@]/)[0].toLowerCase(); const txt = C.r[cmd] || (cmd ? `I don't know /${esc(cmd)} — tap /help for the list.` : null); if (!txt) continue;
+    const stale = C.d && C.d !== chicagoDay(deps?.now || Date.now()) ? `\n<i>(from ${esc(C.d)} — today's card isn't out yet)</i>` : '';
+    const r = await T('sendMessage', { chat_id: m.chat.id, text: (fillTemplate(txt, st) + stale).slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: 'true', reply_to_message_id: String(m.message_id), allow_sending_without_reply: 'true' }); if (r) acted++; }
+  return acted || 1; }   /* the offset moved: save it */
 
 /* ── one pass ── */
 /* v2.35 · history: a past day's card no worker ever touched, first seen 20+ hours after it was posted (the cards
@@ -313,6 +327,7 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       state = combineStates(sc && sc.state, cur && cur.state, state); for (const k in SB) delete SB[k];   /* fresh scoreboards every pass */
       if (!pass) log('posts on file:', Object.entries(state.posts || {}).map(([d, p]) => `${d} ${Object.keys(p.st || {}).length}/${(p.legs || []).length} graded${p.recap ? ' · closed' : ''}`).join(' · '));
       let acted = await runOnce(state, today); try { acted += await publishPublic(state); } catch (e) { log('public page', e.message || e); }
+      try { acted += await runCommands(state); } catch (e) { log('commands', e.message || e); }
       /* the state branch only gets a commit when something was sent — or an hourly heartbeat */
       const beat = !state.lastRun || Date.now() - state.lastRun > 60 * 60e3;
       if (acted || beat || dirty) { state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1; dirty = !(await saveAt(REPO, state, cur)); if (dirty) log('couldn\'t save this pass — kept in memory, retrying next pass'); }

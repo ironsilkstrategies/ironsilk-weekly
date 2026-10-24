@@ -2637,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261024l';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23428,12 +23428,12 @@ function tgwPayload(p){const C=p.card;const tplMk=x=>`⟦m:${tgLegKey(x)}⟧`;tp
     banker:C.banker?{keys:C.banker.legs.map(tgLegKey),price:decimalToAmerican(C.banker.dec)}:null,
     chars:[...(C.chars||[]),...(C.px||[])].map(P=>({name:charName(P.v)+(P.px?' (props)':P.skill?' (strong suit)':''),keys:P.legs.map(tgLegKey),price:decimalToAmerican(P.dec)})),props:(C.props||[]).map(tgLegKey)};
   return{d:p.d,chat:p.chat,ids:p.ids,parts,legs,recapPlan,postedTs:p.ts,st:{},sent:{},recap:false,worker:true};}
-function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
+function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),tgOff:Math.max((a&&a.tgOff)||0,(b&&b.tgOff)||0),cmdSig:(a&&a.cmdSig)||(b&&b.cmdSig)||'',pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
   {const x=a&&a.relay,y=b&&b.relay;if(x||y)out.relay=!x?y:!y?x:x.d>y.d?x:x.d<y.d?y:{d:x.d,n:Math.max(x.n||0,y.n||0)};}   /* v2.33 · the worker's relay counter rides along */
   const ds=new Set([...Object.keys((a&&a.posts)||{}),...Object.keys((b&&b.posts)||{})]);
   ds.forEach(d=>{const x=a&&a.posts&&a.posts[d],y=b&&b.posts&&b.posts[d];if(!x||!y){out.posts[d]=x||y;return;}const base=(x.postedTs||0)>=(y.postedTs||0)?x:y;
     const fx=(x.feedTs||0)>=(y.feedTs||0)?x:y;   /* v2.31 · the newest public card wins */
-    out.posts[d]={...base,st:{...(y.st||{}),...(x.st||{})},sent:{...(y.sent||{}),...(x.sent||{})},recap:!!(x.recap||y.recap),worker:x.worker!==false&&y.worker!==false,...(fx.feedTs?{feed:fx.feed,pub:fx.pub,bc:fx.bc,site:fx.site,feedTs:fx.feedTs}:{})};});
+    out.posts[d]={...base,st:{...(y.st||{}),...(x.st||{})},sent:{...(y.sent||{}),...(x.sent||{})},recap:!!(x.recap||y.recap),worker:x.worker!==false&&y.worker!==false,...(fx.feedTs?{feed:fx.feed,pub:fx.pub,bc:fx.bc,site:fx.site,feedTs:fx.feedTs,...(fx.cmd?{cmd:fx.cmd}:{})}:{})};});
   Object.keys(out.posts).sort().slice(0,-5).forEach(d=>delete out.posts[d]);return out;}
 async function tgwGh(){const repo=pubRepo();const toks=[...new Set([get(LS.ghtoken,''),get(SYNC.token,'')].filter(Boolean))];return{repo,toks};}
 async function tgwRead(){const{repo,toks}=await tgwGh();for(const token of toks){const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
