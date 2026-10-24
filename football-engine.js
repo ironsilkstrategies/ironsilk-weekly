@@ -2840,8 +2840,11 @@ function ncaafPowerFlags(){
 const CFBD_BASE='https://api.collegefootballdata.com';
 async function fetchCFBDRatings(force){
   const key=get(LS.cfbd,'');
-  if(!key){CFBD_STATUS='no key';return false;}
-  const cache=get('d4.cfbdsp',{});
+  const cache=get('d4.cfbdsp',{})||{};
+  /* v2.56.1 · the SP+ table syncs, the key doesn't: a phone without the key (or a failed call) still
+     plays the last table it has instead of falling to league-average placeholders */
+  const useCache=why=>{if(cache.v&&Object.keys(cache.v).length){applyCFBDRatings(cache.v);CFBD_STATUS=why+' — using saved SP+ ('+Object.keys(cache.v).length+' teams)';return true;}return false;};
+  if(!key){if(useCache('no key'))return true;CFBD_STATUS='no key';return false;}
   const fresh=cache.ts&&(Date.now()-cache.ts)<864e5;
   if(fresh&&!force&&cache.v&&Object.keys(cache.v).length){
     applyCFBDRatings(cache.v);CFBD_STATUS='cached '+Object.keys(cache.v).length+' teams';return true;
@@ -2855,7 +2858,7 @@ async function fetchCFBDRatings(force){
       rows=await cfbdGet('/ratings/sp?year='+(year-1),key);
       if(Array.isArray(rows)&&rows.length)CFBD_STATUS='using '+(year-1)+' SP+ (current year not published)';
     }
-    if(!Array.isArray(rows)||!rows.length){CFBD_STATUS='no ratings returned';return false;}
+    if(!Array.isArray(rows)||!rows.length){if(useCache('no ratings returned'))return true;CFBD_STATUS='no ratings returned';return false;}
     const map={};
     rows.forEach(r=>{
       const team=r.team; if(!team)return;
@@ -2870,7 +2873,7 @@ async function fetchCFBDRatings(force){
     applyCFBDRatings(map);
     CFBD_STATUS=(CFBD_STATUS||'')+' · loaded '+Object.keys(map).length+' teams';
     return true;
-  }catch(e){CFBD_STATUS='failed: '+(e&&e.message||e);console.warn('CFBD SP+ failed',e);return false;}
+  }catch(e){const m='failed: '+(e&&e.message||e);if(useCache(m))return true;CFBD_STATUS=m;console.warn('CFBD SP+ failed',e);return false;}
 }
 function num(v){const n=parseFloat(v);return isNaN(n)?null:n}
 async function cfbdGet(path,key){
