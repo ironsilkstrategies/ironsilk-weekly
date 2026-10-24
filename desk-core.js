@@ -810,7 +810,10 @@ function publicFeedCore(full){const S=best5State();try{best5Grade();}catch(e){}c
   let cashed=[];try{cashed=cashedList(14).filter(c=>c.units>=1).slice(0,12);}catch(e){}
   const updates=(get(PUBUPD_KEY,[])||[]).filter(u=>u.pub!==false&&now-u.ts<3*864e5).slice(-12).reverse().map(u=>({ts:u.ts,text:u.text,kind:u.kind||'update'}));
   return{v:4,generated:now,cashed,brand:'TheDesk',price:get('d4.pricetext','')||'$19.99/mo · $9.99/wk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),
-    subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,updates,history:hist,unlockMin:30};}
+    subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,updates,
+    /* v2.51.1 · today's card never rides in the history list — it showed every locked pick there (with its price) before
+       its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
+    history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30};}
 function publicFeed(){return publicFeedCore(false);}
 function pubSig(F){return JSON.stringify([F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts)]);}
 

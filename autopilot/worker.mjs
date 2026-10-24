@@ -247,6 +247,8 @@ export function publicView(feed, st, now) { const F = JSON.parse(JSON.stringify(
   if (F.parlay && F.parlay.legs) { F.parlay.legs = F.parlay.legs.map(l => { if (l.hidden) return l; const s = st[key(l)]; if (l.hit == null && !l.push && s) { if (s === 'P') l.push = true; else l.hit = s === 'W'; }
       return shut(l) ? hide(l) : l; });
     const live = F.parlay.legs.filter(l => !l.push); F.parlay.result = live.some(l => l.hit === false) ? false : live.length && live.every(l => l.hit === true) ? true : null; }
+  /* v2.51.1 · today's card never rides in the history list (an older app build handed it over in full) */
+  F.history = (F.history || []).filter(h => h && h.d && h.d < T0.d);
   F.record = { ...R, u: +(+R.u).toFixed(2) }; F.generated = now; F.by = 'worker'; return F; }
 async function sitePut(site, text, deps) { const tok = (site && site.tok) || (site && site.repo === SITE ? SITE_TOK : '') || env.SITE_TOKEN; if (!tok || !site || !site.repo) return { ok: false, reason: 'no site token' };
   const F = deps?.fetch || fetch; const api = `https://api.github.com/repos/${site.repo}/contents/${site.path || 'public/picks.json'}`; const H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'User-Agent': 'thedesk-autopilot' };
