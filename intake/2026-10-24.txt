@@ -1,0 +1,520 @@
+SOURCE: sportsbetting
+# Sat Oct 24, 2026 — book lines: sportsbetting.ag screenshots (9:40–9:45 AM CT), full slate (9:40–9:50 AM CT). Pick'em written as 0.
+
+NCAAF
+
+West Virginia @ TCU
+ML: West Virginia +306 / TCU -385
+SPREAD: West Virginia +11 (-109) / TCU -11 (-111)
+OU: o59 (-110) / u59 (-110)
+H1SPREAD: West Virginia +7 (-115) / TCU -7 (-105)
+H1ML: West Virginia +241 / TCU -295
+H1OU: o30 (-115) / u30 (-105)
+
+Rice @ Florida Atlantic
+ML: Rice +278 / Florida Atlantic -345
+SPREAD: Rice +8.5 (-105) / Florida Atlantic -8.5 (-115)
+OU: o54 (-110) / u54 (-110)
+H1SPREAD: Rice +5.5 (-105) / Florida Atlantic -5.5 (-115)
+H1ML: Rice +219 / Florida Atlantic -265
+H1OU: o27 (-110) / u27 (-110)
+
+Indiana @ Michigan
+ML: Indiana -300 / Michigan +245
+SPREAD: Indiana -7.5 (-108) / Michigan +7.5 (-112)
+OU: o42.5 (-115) / u42.5 (-105)
+H1SPREAD: Indiana -4 (-110) / Michigan +4 (-110)
+H1ML: Indiana -240 / Michigan +200
+H1OU: o20.5 (-120) / u20.5 (+100)
+
+Western Michigan @ Toledo
+ML: Western Michigan +122 / Toledo -142
+SPREAD: Western Michigan +2.5 (-105) / Toledo -2.5 (-115)
+OU: o47 (-115) / u47 (-105)
+H1SPREAD: Western Michigan +0.5 (-105) / Toledo -0.5 (-115)
+H1ML: Western Michigan +105 / Toledo -125
+H1OU: o23.5 (-110) / u23.5 (-110)
+
+Pittsburgh @ Miami Florida
+ML: Pittsburgh +979 / Miami Florida -1800
+SPREAD: Pittsburgh +20 (-105) / Miami Florida -20 (-115)
+OU: o50.5 (-115) / u50.5 (-105)
+H1SPREAD: Pittsburgh +11.5 (-110) / Miami Florida -11.5 (-110)
+H1ML: Pittsburgh +586 / Miami Florida -850
+H1OU: o27 (-110) / u27 (-110)
+
+Texas Tech @ Cincinnati
+ML: Texas Tech -450 / Cincinnati +350
+SPREAD: Texas Tech -11.5 (-108) / Cincinnati +11.5 (-112)
+OU: o57.5 (-110) / u57.5 (-110)
+H1SPREAD: Texas Tech -7 (-105) / Cincinnati +7 (-115)
+H1ML: Texas Tech -325 / Cincinnati +263
+H1OU: o28.5 (-115) / u28.5 (-105)
+
+Rutgers @ Northwestern
+ML: Rutgers +534 / Northwestern -750
+SPREAD: Rutgers +15.5 (-112) / Northwestern -15.5 (-108)
+OU: o59 (-105) / u59 (-115)
+H1SPREAD: Rutgers +9.5 (-110) / Northwestern -9.5 (-110)
+H1ML: Rutgers +380 / Northwestern -495
+H1OU: o30.5 (-105) / u30.5 (-115)
+
+LSU @ Auburn
+ML: LSU -290 / Auburn +237
+SPREAD: LSU -7 (-115) / Auburn +7 (-105)
+OU: o53 (-105) / u53 (-115)
+H1SPREAD: LSU -4 (-119) / Auburn +4 (-101)
+H1ML: LSU -225 / Auburn +189
+H1OU: o26.5 (-120) / u26.5 (+100)
+
+California @ SMU
+ML: California +754 / SMU -1200
+SPREAD: California +20 (-118) / SMU -20 (-102)
+OU: o55 (-110) / u55 (-110)
+H1SPREAD: California +10.5 (-110) / SMU -10.5 (-110)
+H1ML: California +452 / SMU -610
+H1OU: o28.5 (-105) / u28.5 (-115)
+
+Miami Ohio @ Central Michigan
+ML: Miami Ohio -167 / Central Michigan +147
+SPREAD: Miami Ohio -3.5 (-114) / Central Michigan +3.5 (-106)
+OU: o40 (-110) / u40 (-110)
+H1SPREAD: Miami Ohio -1.5 (-115) / Central Michigan +1.5 (-105)
+H1ML: Miami Ohio -150 / Central Michigan +130
+H1OU: o20 (-105) / u20 (-115)
+
+Akron @ Kent State
+ML: Akron +125 / Kent State -145
+SPREAD: Akron +3 (-115) / Kent State -3 (-105)
+OU: o48 (-110) / u48 (-110)
+H1SPREAD: Akron +1.5 (-110) / Kent State -1.5 (-110)
+H1ML: Akron +120 / Kent State -140
+H1OU: o23.5 (-115) / u23.5 (-105)
+
+Baylor @ Kansas
+ML: Baylor -115 / Kansas -105
+SPREAD: Baylor -1 (-108) / Kansas +1 (-112)
+OU: o52.5 (-110) / u52.5 (-110)
+H1SPREAD: Baylor -0.5 (+115) / Kansas +0.5 (-135)
+H1OU: o26.5 (-115) / u26.5 (-105)
+Q1SPREAD: Baylor -0.5 (+140) / Kansas +0.5 (-160)
+
+Oregon @ Illinois
+ML: Oregon -395 / Illinois +313
+SPREAD: Oregon -10 (-110) / Illinois +10 (-110)
+OU: o49 (-110) / u49 (-110)
+H1SPREAD: Oregon -6 (-110) / Illinois +6 (-110)
+H1ML: Oregon -275 / Illinois +226
+H1OU: o24 (-115) / u24 (-105)
+
+Boston College @ Georgia Tech
+ML: Boston College +195 / Georgia Tech -235
+SPREAD: Boston College +6 (-103) / Georgia Tech -6 (-117)
+OU: o50 (-110) / u50 (-110)
+H1SPREAD: Boston College +3.5 (-115) / Georgia Tech -3.5 (-105)
+H1ML: Boston College +161 / Georgia Tech -185
+H1OU: o24.5 (-105) / u24.5 (-115)
+
+Sacramento State @ Ball State
+ML: Sacramento State +443 / Ball State -595
+SPREAD: Sacramento State +14.5 (-110) / Ball State -14.5 (-110)
+OU: o51 (-110) / u51 (-110)
+H1SPREAD: Sacramento State +7.5 (-110) / Ball State -7.5 (-110)
+H1ML: Sacramento State +340 / Ball State -435
+H1OU: o26.5 (-110) / u26.5 (-110)
+
+BYU @ Central Florida
+ML: BYU -290 / Central Florida +237
+SPREAD: BYU -7.5 (+100) / Central Florida +7.5 (-120)
+OU: o43 (-110) / u43 (-110)
+H1SPREAD: BYU -4 (-105) / Central Florida +4 (-115)
+H1ML: BYU -230 / Central Florida +192
+H1OU: o21.5 (-105) / u21.5 (-115)
+
+Bowling Green @ Buffalo
+ML: Bowling Green +135 / Buffalo -155
+SPREAD: Bowling Green +3 (-110) / Buffalo -3 (-110)
+OU: o44 (-110) / u44 (-110)
+H1SPREAD: Bowling Green +1.5 (-110) / Buffalo -1.5 (-110)
+H1ML: Bowling Green +120 / Buffalo -140
+H1OU: o21.5 (-115) / u21.5 (-105)
+
+Tennessee @ South Carolina
+ML: Tennessee +115 / South Carolina -135
+SPREAD: Tennessee +2.5 (-110) / South Carolina -2.5 (-110)
+OU: o50.5 (-110) / u50.5 (-110)
+H1SPREAD: Tennessee +0.5 (-105) / South Carolina -0.5 (-115)
+H1ML: Tennessee +115 / South Carolina -135
+H1OU: o25.5 (-105) / u25.5 (-115)
+
+Hawaii @ Northern Illinois
+ML: Hawaii -171 / Northern Illinois +150
+SPREAD: Hawaii -3.5 (-110) / Northern Illinois +3.5 (-110)
+OU: o48.5 (-110) / u48.5 (-110)
+H1SPREAD: Hawaii -2.5 (-110) / Northern Illinois +2.5 (-110)
+H1ML: Hawaii -160 / Northern Illinois +140
+H1OU: o23.5 (-115) / u23.5 (-105)
+
+Iowa @ Minnesota
+ML: Iowa -280 / Minnesota +230
+SPREAD: Iowa -7.5 (-107) / Minnesota +7.5 (-113)
+OU: o40.5 (-110) / u40.5 (-110)
+H1SPREAD: Iowa -4.5 (-105) / Minnesota +4.5 (-115)
+H1ML: Iowa -250 / Minnesota +207
+H1OU: o20.5 (+100) / u20.5 (-120)
+
+Michigan State @ UCLA
+ML: Michigan State +561 / UCLA -800
+SPREAD: Michigan State +16.5 (-105) / UCLA -16.5 (-115)
+OU: o43 (-110) / u43 (-110)
+H1SPREAD: Michigan State +9.5 (-105) / UCLA -9.5 (-115)
+H1ML: Michigan State +431 / UCLA -575
+H1OU: o23 (+100) / u23 (-120)
+
+Oklahoma @ Mississippi State
+ML: Oklahoma -129 / Mississippi State +109
+SPREAD: Oklahoma -2 (-110) / Mississippi State +2 (-110)
+OU: o46 (-130) / u46 (+110)
+H1SPREAD: Oklahoma -0.5 (+105) / Mississippi State +0.5 (-125)
+H1OU: o23.5 (-115) / u23.5 (-105)
+Q1SPREAD: Oklahoma -0.5 (+140) / Mississippi State +0.5 (-160)
+
+North Texas @ Navy
+ML: North Texas -157 / Navy +137
+SPREAD: North Texas -3 (-117) / Navy +3 (-103)
+OU: o60.5 (-112) / u60.5 (-108)
+H1SPREAD: North Texas -1 (-115) / Navy +1 (-105)
+H1ML: North Texas -145 / Navy +125
+H1OU: o30.5 (-120) / u30.5 (+100)
+
+Texas A&M @ Alabama
+ML: Texas A&M +431 / Alabama -575
+SPREAD: Texas A&M +13.5 (-110) / Alabama -13.5 (-110)
+OU: o49.5 (-110) / u49.5 (-110)
+H1SPREAD: Texas A&M +7.5 (-120) / Alabama -7.5 (+100)
+H1ML: Texas A&M +327 / Alabama -415
+H1OU: o25.5 (-110) / u25.5 (-110)
+
+Kansas State @ Arizona State
+ML: Kansas State -115 / Arizona State -105
+SPREAD: Kansas State -1 (-110) / Arizona State +1 (-110)
+OU: o52 (-105) / u52 (-115)
+H1SPREAD: Kansas State 0 (-105) / Arizona State 0 (-115)
+H1OU: o26.5 (-110) / u26.5 (-110)
+Q1SPREAD: Kansas State -0.5 (+135) / Arizona State +0.5 (-155)
+
+Eastern Michigan @ Ohio
+ML: Eastern Michigan +310 / Ohio -390
+SPREAD: Eastern Michigan +10 (-115) / Ohio -10 (-105)
+OU: o48.5 (-110) / u48.5 (-110)
+H1SPREAD: Eastern Michigan +6.5 (-110) / Ohio -6.5 (-110)
+H1ML: Eastern Michigan +245 / Ohio -300
+H1OU: o24.5 (-105) / u24.5 (-115)
+
+UL Monroe @ Troy
+ML: UL Monroe +431 / Troy -575
+SPREAD: UL Monroe +12 (-110) / Troy -12 (-110)
+OU: o50.5 (-107) / u50.5 (-113)
+H1SPREAD: UL Monroe +7 (+100) / Troy -7 (-120)
+H1ML: UL Monroe +303 / Troy -380
+H1OU: o26.5 (-115) / u26.5 (-105)
+
+UL Lafayette @ Southern Miss
+ML: UL Lafayette -380 / Southern Miss +303
+SPREAD: UL Lafayette -10 (-107) / Southern Miss +10 (-113)
+OU: o52.5 (-115) / u52.5 (-105)
+H1SPREAD: UL Lafayette -6.5 (-115) / Southern Miss +6.5 (-105)
+H1ML: UL Lafayette -295 / Southern Miss +241
+H1OU: o26.5 (-125) / u26.5 (+105)
+
+San Jose State @ Nevada
+ML: San Jose State +186 / Nevada -220
+SPREAD: San Jose State +5 (-108) / Nevada -5 (-112)
+OU: o46.5 (-105) / u46.5 (-115)
+H1SPREAD: San Jose State +3 (-115) / Nevada -3 (-105)
+H1ML: San Jose State +149 / Nevada -170
+H1OU: o23.5 (-115) / u23.5 (-105)
+
+Old Dominion @ Louisiana Tech
+ML: Old Dominion +415 / Louisiana Tech -550
+SPREAD: Old Dominion +13.5 (-105) / Louisiana Tech -13.5 (-115)
+OU: o44.5 (-110) / u44.5 (-110)
+H1SPREAD: Old Dominion +7 (+102) / Louisiana Tech -7 (-122)
+H1ML: Old Dominion +340 / Louisiana Tech -435
+H1OU: o23 (-115) / u23 (-105)
+
+Boise State @ Washington State
+ML: Boise State -650 / Washington State +476
+SPREAD: Boise State -14.5 (-107) / Washington State +14.5 (-113)
+OU: o52 (-110) / u52 (-110)
+H1SPREAD: Boise State -7.5 (-115) / Washington State +7.5 (-105)
+H1ML: Boise State -450 / Washington State +350
+H1OU: o27 (-105) / u27 (-115)
+
+San Diego State @ Colorado State
+ML: San Diego State -115 / Colorado State -105
+SPREAD: San Diego State -1 (-109) / Colorado State +1 (-111)
+OU: o59 (-110) / u59 (-110)
+H1SPREAD: San Diego State -0.5 (+105) / Colorado State +0.5 (-125)
+H1OU: o31 (-105) / u31 (-115)
+Q1SPREAD: San Diego State -0.5 (+135) / Colorado State +0.5 (-155)
+
+Georgia State @ Arkansas State
+ML: Georgia State -140 / Arkansas State +120
+SPREAD: Georgia State -2.5 (-115) / Arkansas State +2.5 (-105)
+OU: o59 (-110) / u59 (-110)
+H1SPREAD: Georgia State -0.5 (-115) / Arkansas State +0.5 (-105)
+H1ML: Georgia State -125 / Arkansas State +105
+H1OU: o29.5 (-120) / u29.5 (+100)
+
+Virginia Tech @ Clemson
+ML: Virginia Tech +130 / Clemson -150
+SPREAD: Virginia Tech +3 (-107) / Clemson -3 (-113)
+OU: o49.5 (-115) / u49.5 (-105)
+H1SPREAD: Virginia Tech +1.5 (-105) / Clemson -1.5 (-115)
+H1ML: Virginia Tech +120 / Clemson -140
+H1OU: o24.5 (-105) / u24.5 (-115)
+
+Colorado @ Oklahoma State
+ML: Colorado +415 / Oklahoma State -550
+SPREAD: Colorado +13.5 (-110) / Oklahoma State -13.5 (-110)
+OU: o54.5 (-112) / u54.5 (-108)
+H1SPREAD: Colorado +7.5 (-117) / Oklahoma State -7.5 (-103)
+H1ML: Colorado +316 / Oklahoma State -400
+H1OU: o28.5 (+100) / u28.5 (-120)
+
+Syracuse @ North Carolina
+ML: Syracuse +280 / North Carolina -350
+SPREAD: Syracuse +9 (-110) / North Carolina -9 (-110)
+OU: o48.5 (-110) / u48.5 (-110)
+H1SPREAD: Syracuse +6 (-105) / North Carolina -6 (-115)
+H1ML: Syracuse +245 / North Carolina -300
+H1OU: o24 (-115) / u24 (-105)
+
+USC @ Wisconsin
+ML: USC -145 / Wisconsin +125
+SPREAD: USC -3 (-105) / Wisconsin +3 (-115)
+OU: o50 (-110) / u50 (-110)
+H1SPREAD: USC -1.5 (-110) / Wisconsin +1.5 (-110)
+H1ML: USC -140 / Wisconsin +120
+H1OU: o24.5 (-105) / u24.5 (-115)
+
+Iowa State @ Arizona
+ML: Iowa State +299 / Arizona -375
+SPREAD: Iowa State +11 (-107) / Arizona -11 (-113)
+OU: o51.5 (-110) / u51.5 (-110)
+H1SPREAD: Iowa State +7 (-120) / Arizona -7 (+100)
+H1ML: Iowa State +263 / Arizona -325
+H1OU: o25.5 (-120) / u25.5 (+100)
+
+Mississippi @ Texas
+ML: Mississippi +130 / Texas -150
+SPREAD: Mississippi +3 (-105) / Texas -3 (-115)
+OU: o54 (-110) / u54 (-110)
+H1SPREAD: Mississippi +2.5 (-110) / Texas -2.5 (-110)
+H1ML: Mississippi +120 / Texas -140
+H1OU: o27 (-115) / u27 (-105)
+
+Vanderbilt @ Kentucky
+ML: Vanderbilt +344 / Kentucky -440
+SPREAD: Vanderbilt +10.5 (-107) / Kentucky -10.5 (-113)
+OU: o51 (-105) / u51 (-115)
+H1SPREAD: Vanderbilt +6.5 (+105) / Kentucky -6.5 (-125)
+H1ML: Vanderbilt +263 / Kentucky -325
+H1OU: o26.5 (-105) / u26.5 (-115)
+
+Utah State @ Texas State
+ML: Utah State +400 / Texas State -525
+SPREAD: Utah State +13.5 (-104) / Texas State -13.5 (-116)
+OU: o60.5 (-110) / u60.5 (-110)
+H1SPREAD: Utah State +7.5 (-105) / Texas State -7.5 (-115)
+H1ML: Utah State +324 / Texas State -410
+H1OU: o30.5 (-125) / u30.5 (+105)
+
+UTSA @ Tulane
+ML: UTSA -150 / Tulane +130
+SPREAD: UTSA -3 (-110) / Tulane +3 (-110)
+OU: o52 (-115) / u52 (-105)
+H1SPREAD: UTSA -1.5 (-115) / Tulane +1.5 (-105)
+H1ML: UTSA -135 / Tulane +115
+H1OU: o24.5 (-125) / u24.5 (+105)
+
+North Dakota State @ New Mexico
+ML: North Dakota State +161 / New Mexico -185
+SPREAD: North Dakota State +4.5 (-110) / New Mexico -4.5 (-110)
+OU: o39.5 (-110) / u39.5 (-110)
+H1SPREAD: North Dakota State +2.5 (+100) / New Mexico -2.5 (-120)
+H1ML: North Dakota State +153 / New Mexico -175
+H1OU: o20 (-105) / u20 (-115)
+
+Houston @ Utah
+ML: Houston +211 / Utah -255
+SPREAD: Houston +6.5 (+100) / Utah -6.5 (-120)
+OU: o58 (-110) / u58 (-110)
+H1SPREAD: Houston +3.5 (+100) / Utah -3.5 (-120)
+H1ML: Houston +183 / Utah -215
+H1OU: o28.5 (-115) / u28.5 (-105)
+
+NHL
+
+Anaheim Ducks @ Philadelphia Flyers
+ML: Anaheim Ducks +104 / Philadelphia Flyers -118
+PL: Anaheim Ducks +1.5 (-250) / Philadelphia Flyers -1.5 (+207)
+OU: o5.5 (-125) / u5.5 (+109)
+P1PL: Anaheim Ducks +0.5 (-197) / Philadelphia Flyers -0.5 (+172)
+P1ML: Anaheim Ducks -102 / Philadelphia Flyers -118
+P1OU: o1.5 (-119) / u1.5 (-101)
+
+Los Angeles Kings @ New Jersey Devils
+ML: Los Angeles Kings +170 / New Jersey Devils -194
+PL: Los Angeles Kings +1.5 (-158) / New Jersey Devils -1.5 (+138)
+OU: o5.5 (-125) / u5.5 (+109)
+P1PL: Los Angeles Kings +0.5 (-160) / New Jersey Devils -0.5 (+140)
+P1ML: Los Angeles Kings +135 / New Jersey Devils -155
+P1OU: o1.5 (-119) / u1.5 (-101)
+
+Vegas Golden Knights @ Columbus Blue Jackets
+ML: Vegas Golden Knights -135 / Columbus Blue Jackets +119
+PL: Vegas Golden Knights -1.5 (+183) / Columbus Blue Jackets +1.5 (-215)
+OU: o6 (-115) / u6 (-101)
+P1PL: Vegas Golden Knights -0.5 (+161) / Columbus Blue Jackets +0.5 (-185)
+P1ML: Vegas Golden Knights -128 / Columbus Blue Jackets +108
+P1OU: o1.5 (-123) / u1.5 (+103)
+
+New York Rangers @ Ottawa Senators
+ML: New York Rangers +107 / Ottawa Senators -121
+PL: New York Rangers +1.5 (-245) / Ottawa Senators -1.5 (+203)
+OU: o6 (-118) / u6 (+102)
+P1PL: New York Rangers +0.5 (-193) / Ottawa Senators -0.5 (+168)
+P1ML: New York Rangers +100 / Ottawa Senators -120
+P1OU: o1.5 (-122) / u1.5 (+102)
+
+San Jose Sharks @ Boston Bruins
+ML: San Jose Sharks +168 / Boston Bruins -192
+PL: San Jose Sharks +1.5 (-150) / Boston Bruins -1.5 (+130)
+OU: o6.5 (-104) / u6.5 (-112)
+P1PL: San Jose Sharks +0.5 (-156) / Boston Bruins -0.5 (+136)
+P1ML: San Jose Sharks +131 / Boston Bruins -151
+P1OU: o1.5 (-140) / u1.5 (+120)
+
+Buffalo Sabres @ Washington Capitals
+ML: Buffalo Sabres +104 / Washington Capitals -118
+PL: Buffalo Sabres +1.5 (-240) / Washington Capitals -1.5 (+200)
+OU: o6.5 (-115) / u6.5 (-101)
+P1PL: Buffalo Sabres +0.5 (-193) / Washington Capitals -0.5 (+168)
+P1ML: Buffalo Sabres -102 / Washington Capitals -118
+P1OU: o1.5 (-142) / u1.5 (+122)
+
+Toronto Maple Leafs @ Edmonton Oilers
+ML: Toronto Maple Leafs +153 / Edmonton Oilers -175
+PL: Toronto Maple Leafs +1.5 (-155) / Edmonton Oilers -1.5 (+135)
+OU: o7 (+109) / u7 (-125)
+P1PL: Toronto Maple Leafs +0.5 (-158) / Edmonton Oilers -0.5 (+138)
+P1ML: Toronto Maple Leafs +125 / Edmonton Oilers -145
+P1OU: o1.5 (-160) / u1.5 (+140)
+
+Nashville Predators @ Pittsburgh Penguins
+ML: Nashville Predators +120 / Pittsburgh Penguins -136
+PL: Nashville Predators +1.5 (-210) / Pittsburgh Penguins -1.5 (+180)
+OU: o6.5 (-108) / u6.5 (-108)
+P1PL: Nashville Predators +0.5 (-185) / Pittsburgh Penguins -0.5 (+161)
+P1ML: Nashville Predators +106 / Pittsburgh Penguins -126
+P1OU: o1.5 (-140) / u1.5 (+120)
+
+Carolina Hurricanes @ St. Louis Blues
+ML: Carolina Hurricanes -155 / St. Louis Blues +136
+PL: Carolina Hurricanes -1.5 (+170) / St. Louis Blues +1.5 (-195)
+OU: o6 (-118) / u6 (+102)
+P1PL: Carolina Hurricanes -0.5 (+153) / St. Louis Blues +0.5 (-175)
+P1ML: Carolina Hurricanes -134 / St. Louis Blues +114
+P1OU: o1.5 (-130) / u1.5 (+110)
+
+Tampa Bay Lightning @ Utah Mammoth
+ML: Tampa Bay Lightning +125 / Utah Mammoth -142
+PL: Tampa Bay Lightning +1.5 (-193) / Utah Mammoth -1.5 (+168)
+OU: o6.5 (-118) / u6.5 (+102)
+P1PL: Tampa Bay Lightning +0.5 (-176) / Utah Mammoth -0.5 (+154)
+P1ML: Tampa Bay Lightning +110 / Utah Mammoth -130
+P1OU: o1.5 (-150) / u1.5 (+130)
+
+Detroit Red Wings @ Calgary Flames
+ML: Detroit Red Wings -145 / Calgary Flames +128
+PL: Detroit Red Wings -1.5 (+177) / Calgary Flames +1.5 (-205)
+OU: o6 (-108) / u6 (-108)
+P1PL: Detroit Red Wings -0.5 (+156) / Calgary Flames +0.5 (-178)
+P1ML: Detroit Red Wings -133 / Calgary Flames +113
+P1OU: o1.5 (-121) / u1.5 (+101)
+
+Minnesota Wild @ Seattle Kraken
+ML: Minnesota Wild -153 / Seattle Kraken +135
+PL: Minnesota Wild -1.5 (+165) / Seattle Kraken +1.5 (-190)
+OU: o6 (-118) / u6 (+102)
+P1PL: Minnesota Wild -0.5 (+152) / Seattle Kraken +0.5 (-173)
+P1ML: Minnesota Wild -138 / Seattle Kraken +118
+P1OU: o1.5 (-128) / u1.5 (+108)
+
+NBA
+
+Miami Heat @ Charlotte Hornets
+ML: Miami Heat -140 / Charlotte Hornets +120
+SPREAD: Miami Heat -3 (-110) / Charlotte Hornets +3 (-110)
+OU: o229.5 (-112) / u229.5 (-108)
+H1SPREAD: Miami Heat -1.5 (-106) / Charlotte Hornets +1.5 (-114)
+H1ML: Miami Heat -130 / Charlotte Hornets +110
+H1OU: o119 (-110) / u119 (-110)
+
+Milwaukee Bucks @ Philadelphia 76ers
+ML: Milwaukee Bucks +494 / Philadelphia 76ers -680
+SPREAD: Milwaukee Bucks +12.5 (-109) / Philadelphia 76ers -12.5 (-111)
+OU: o234 (-115) / u234 (-105)
+H1SPREAD: Milwaukee Bucks +7.5 (-105) / Philadelphia 76ers -7.5 (-115)
+H1ML: Milwaukee Bucks +316 / Philadelphia 76ers -400
+H1OU: o117 (-108) / u117 (-112)
+
+Brooklyn Nets @ Cleveland Cavaliers
+ML: Brooklyn Nets +383 / Cleveland Cavaliers -500
+SPREAD: Brooklyn Nets +11 (-105) / Cleveland Cavaliers -11 (-115)
+OU: o228 (-105) / u228 (-115)
+H1SPREAD: Brooklyn Nets +6.5 (-110) / Cleveland Cavaliers -6.5 (-110)
+H1ML: Brooklyn Nets +263 / Cleveland Cavaliers -325
+H1OU: o118 (-110) / u118 (-110)
+
+Washington Wizards @ Chicago Bulls
+ML: Washington Wizards +100 / Chicago Bulls -120
+SPREAD: Washington Wizards +1.5 (-107) / Chicago Bulls -1.5 (-113)
+OU: o244 (-105) / u244 (-115)
+H1SPREAD: Washington Wizards +0.5 (-115) / Chicago Bulls -0.5 (-105)
+H1ML: Washington Wizards -110 / Chicago Bulls -110
+H1OU: o125 (-110) / u125 (-110)
+
+San Antonio Spurs @ Dallas Mavericks
+ML: San Antonio Spurs -560 / Dallas Mavericks +421
+SPREAD: San Antonio Spurs -12.5 (-110) / Dallas Mavericks +12.5 (-110)
+OU: o232 (-110) / u232 (-110)
+H1SPREAD: San Antonio Spurs -6.5 (-110) / Dallas Mavericks +6.5 (-110)
+H1ML: San Antonio Spurs -325 / Dallas Mavericks +263
+H1OU: o119.5 (-115) / u119.5 (-105)
+
+Houston Rockets @ Atlanta Hawks
+ML: Houston Rockets -104 / Atlanta Hawks -116
+SPREAD: Houston Rockets +1 (-105) / Atlanta Hawks -1 (-115)
+OU: o227.5 (-105) / u227.5 (-115)
+H1SPREAD: Houston Rockets +0.5 (-115) / Atlanta Hawks -0.5 (-105)
+H1ML: Houston Rockets -105 / Atlanta Hawks -115
+H1OU: o110.5 (-115) / u110.5 (-105)
+
+New Orleans Pelicans @ Denver Nuggets
+ML: New Orleans Pelicans +367 / Denver Nuggets -475
+SPREAD: New Orleans Pelicans +11 (-108) / Denver Nuggets -11 (-112)
+OU: o240 (-117) / u240 (-103)
+H1SPREAD: New Orleans Pelicans +6.5 (-110) / Denver Nuggets -6.5 (-110)
+H1ML: New Orleans Pelicans +270 / Denver Nuggets -335
+H1OU: o122.5 (-110) / u122.5 (-110)
+
+Golden State Warriors @ Phoenix Suns
+ML: Golden State Warriors +303 / Phoenix Suns -380
+SPREAD: Golden State Warriors +9.5 (-112) / Phoenix Suns -9.5 (-108)
+OU: o221.5 (-115) / u221.5 (-105)
+H1SPREAD: Golden State Warriors +5.5 (-110) / Phoenix Suns -5.5 (-110)
+H1ML: Golden State Warriors +230 / Phoenix Suns -280
+H1OU: o107 (-110) / u107 (-110)
