@@ -17,7 +17,7 @@ function cmdCharTop(V,v){const d=today();const seen=new Set();
   const C=V.filter(c=>c.voice===v&&String(c.date).slice(0,10)===d&&c.price!=null&&!c.graded&&confOf(c)!=null).sort((a,b)=>confOf(b)-confOf(a))
     .filter(c=>{const k=c.sp+c.game+c.market+c.side;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,10);
   const C0=CHARS[v]||{};const head=`<b>${cmdE(C0.chip||'')} ${cmdE(charName(v))} — top ${C.length||10} today</b>\nRecord: <b>${cmdRec(V,v)&&cmdRecTxt(cmdRec(V,v))}</b>${PROBATION.has(v)&&!(PROB_OK||{})[v]?'\n<i>On probation — its calls are tracked, not official yet.</i>':''}`;
-  if(!C.length)return head+'\n\nNo calls yet today — check back after the morning evaluation.';
+  if(!C.length)return head+`\n\nNo calls today${C0.quiet?' — '+cmdE(C0.quiet):''}.${C0.school?`\n<i>${cmdE(charName(v))} reads: ${cmdE(C0.school)}.</i>`:''}`;
   return head+'\n\n'+C.map((c,i)=>`${i+1}. ${isOfficial(c)?'✅':'▫️'} <b>${cmdE(cmdCallPick(c))}</b> ${cmdE(cmdSg(c.price))} · ${cmdSp(c.sp)} ${cmdE(c.game)} · ${Math.round(confOf(c)*100)}%`).join('\n')+'\n\n<i>✅ = official (70%+ and priced to pay). ▫️ = a lean, tracked only.</i>';}
 function cmdUnanimous(){const T=get(TC_KEY,{})||{};const L=[];if(T.d===today())Object.entries(T.by||{}).forEach(([sp,B])=>(B.picks||[]).forEach(x=>{if(x.unan)L.push({...x,sp:x.sp||sp});}));
   if(!L.length)return'<b>🤝 Unanimous — today</b>\nNo game has every character on the same side yet.';
