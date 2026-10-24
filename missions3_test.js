@@ -79,8 +79,9 @@ const w=dom.window;
   T('mission complete → XP for its difficulty + clean-run bonus',done.status==='won'&&done.clean&&done.xp-xp0>=base*1.5,`${diff}: +${done.xp-xp0} XP`);
   // ── the board ──
   w.eval("tab('money',null)");await wait(300);let mb=w.document.getElementById('moneyBody').innerHTML;
-  /* v2.31: the 100+ mission board is retired; four clear challenges replace it on the Bankroll tab */
-  T('Bankroll tab: four clear challenges instead of the old board',(mb.match(/class="ch-preset"/g)||[]).length===4&&!/Mission board/.test(mb)&&/Steady Climb/.test(mb)&&/Banker's Table/.test(mb));
+  /* v2.31 retired the old mission board for four clear challenges; v2.55 brings the count back on the new
+     system — a challenge board of 100+ (every source × shape), the four originals still on it */
+  T('Bankroll tab: the challenge board (100+), the four originals still there, never the old mission board',/Challenge board · 1\d\d/.test(mb)&&!/Mission board/.test(mb)&&(mb.match(/class="ch-preset"/g)||[]).length>=4);
   T('no uncaught errors',errors.length===0,errors.slice(0,3).join(' || '));
   console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length}/${out.length} passed`);
   process.exit(out.some(x=>x.startsWith('FAIL'))?1:0);

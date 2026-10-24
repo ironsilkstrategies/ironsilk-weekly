@@ -561,10 +561,14 @@ const CH2_PRESETS=[
   {id:'table',ico:'🏦',name:"The Banker's Table",start:25,goal:75,days:21,src:'banker',frac:0.08,desc:"The Banker's own parlay, every day. 8% of the pot."},
   {id:'leader',ico:'🔥',name:'Ride the Leader',start:20,goal:50,days:14,src:'leader',frac:0.08,desc:"The league leader's ticket, every day. 8% of the pot."},
   {id:'grind',ico:'✅',name:'Official Grind',start:30,goal:60,days:21,src:'official',frac:0.05,desc:'Every official single in the Top 10. 5% of the pot on each.'}];
-const CH2_SRC={best3:'the Best 3 (singles)',banker:"the Banker's parlay",leader:"the league leader's ticket",official:'the official Top 10 (singles)'};
+const CH2_SRC={best3:'the Best 3 (singles)',banker:"the Banker's parlay",leader:"the league leader's ticket",official:'the official Top 10 (singles)',
+  b3lock:"the Best 3's #1 pick",b3par2:"the Best 3's top two (one parlay)",b3par3:'the Best 3 (one parlay)',dog:"the Underdog Spotter's dogs",
+  'price:chalk':'official favorites -150 or shorter','price:value':'official picks from -149 to even','price:plus':'official plus-money picks'};
+function ch2SrcLab(src){if(CH2_SRC[src])return CH2_SRC[src];const[k,v]=String(src).split(':');
+  if(k==='char')return`${charName(v)}'s ticket`;if(k==='sp')return`official ${(SP_LAB[v]||v).replace(/^\S+\s/,'')} singles`;if(k==='mk')return`official ${v==='ml'?'moneyline':v} singles`;return src;}
 function ch2All(){return get(CH2_KEY,[])||[];}
 function ch2Save(A){set(CH2_KEY,A);}
-function ch2Start(id,custom){const T=CH2_PRESETS.find(x=>x.id===id);if(!T)return;const A=ch2All();
+function ch2Start(id,custom){const T=ch2Tpl(id);if(!T)return;const A=ch2All();
   if(A.some(c=>c.status==='active'&&c.preset===id)){deskToast(`${T.ico} ${T.name} is already running — one at a time.`,3000);return;}
   const o=custom||{};const start=+(o.start||T.start),goal=+(o.goal||T.goal),days=+(o.days||T.days);
   if(!(start>0&&goal>start&&days>0))return;const avail=bankBalance()-ch2Earmarked();
@@ -575,8 +579,21 @@ function ch2Stop(id){const A=ch2All();const c=A.find(x=>x.id===id);if(!c)return;
   c.status='ended';c.endDate=today();ch2Save(A);deskRerender();}
 /* today's plays for a challenge, straight from the frozen card */
 function ch2Plays(c){const out=[];const P=deskPlan();const pot=Math.max(0,c.pot);const single=x=>({label:x.pick,legs:[{sp:x.sp,game:x.game,pick:x.pick,price:+x.price,gd:String(x.start||'').slice(0,10)||today()}],dec:americanToDecimal(+x.price),p:x.p});
+  const par=(L,label)=>{if(!L.length)return;const legs=L.map(x=>single(x).legs[0]);out.push({label,legs,dec:L.reduce((a,x)=>a*americanToDecimal(+x.price),1),p:L.reduce((a,x)=>a*(x.p||0.5),1)});};
+  const offToday=()=>[...(best5State().top3||[]),...subTop10()];const src=String(c.src||'');
   try{if(c.src==='best3')(best5State().top3||[]).forEach(x=>out.push(single(x)));
     else if(c.src==='official'){(best5State().top3||[]).forEach(x=>out.push(single(x)));subTop10().forEach(x=>out.push(single(x)));}
+    else if(src==='b3lock'){const x=(best5State().top3||[])[0];if(x)out.push(single(x));}
+    else if(src==='b3par2'){const L=(best5State().top3||[]).slice(0,2);if(L.length===2)par(L,"The Best 3's top two");}
+    else if(src==='b3par3'){const L=(best5State().top3||[]).slice(0,3);if(L.length===3)par(L,'The Best 3 parlay');}
+    else if(src.startsWith('char:')){const v=src.slice(5);const T=(P.chars||{})[v];if(T&&T.legs&&T.legs.length)out.push({label:`${charName(v)}'s ticket`,legs:T.legs,dec:T.dec,p:T.p});}
+    else if(src.startsWith('sp:')){const sp=src.slice(3);offToday().filter(x=>x.sp===sp).forEach(x=>out.push(single(x)));}
+    else if(src.startsWith('mk:')){const m=src.slice(3);offToday().filter(x=>mkNorm(x.m||x.market)===m).forEach(x=>out.push(single(x)));}
+    else if(src==='price:chalk')offToday().filter(x=>+x.price<=-150).forEach(x=>out.push(single(x)));
+    else if(src==='price:value')offToday().filter(x=>+x.price>-150&&(+x.price<0||+x.price===100)).forEach(x=>out.push(single(x)));
+    else if(src==='price:plus')offToday().filter(x=>+x.price>0).forEach(x=>out.push(single(x)));
+    else if(src==='dog'){const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();V.filter(x=>x.voice==='Dog'&&String(x.date).slice(0,10)===d&&!x.graded&&x.price!=null).sort((a,b)=>(+b.dEdge||0)-(+a.dEdge||0)).slice(0,3)
+      .forEach(x=>{let st='';try{const g=(sportGames(x.sp)||[]).find(z=>z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x.game);st=(g&&(g.start||g.date))||'';}catch(e){}out.push(single({...x,p:+x.dP,start:st}));});}
     else if(c.src==='banker'&&P.own)out.push({label:"The Banker's parlay",legs:P.own.legs,dec:P.own.dec,p:P.own.p});
     else if(c.src==='leader'){const L=bkLedger();const R=Object.values(L.weeks[0].R).filter(x=>x.n).sort((a,b)=>b.br-a.br);const lead=R.find(x=>(P.chars||{})[x.v]);
       if(lead){const T=P.chars[lead.v];out.push({label:`${charName(lead.v)}'s ticket (league leader)`,legs:T.legs,dec:T.dec,p:T.p});}}}catch(e){}
@@ -606,19 +623,84 @@ function ch2Card(c){const pct=Math.max(0,Math.min(100,(c.pot-0)/(c.goal)*100));c
   const playHtml=c.status!=='active'?'':plays.length?plays.map((o,i)=>`<div class="ch-play"><div style="min-width:0;flex:1"><b>${txtEsc(o.label)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${decimalToAmerican(o.dec)}</span>
         <div class="mono" style="font-size:9.5px;color:var(--mute)">${o.legs.length>1?o.legs.map(l=>txtEsc(l.pick)).join(' · ')+' · ':''}${Math.round((o.p||0)*100)}% · stake ${deskMoney(o.stake)} → wins ${deskMoney(o.stake*(o.dec-1))}</div></div>
         ${o.taken?'<span class="mono" style="color:var(--win);font-size:10px">✓ locked</span>':o.stake?`<button class="primary" onclick="ch2Lock(${c.id},${i})">Lock it</button>`:'<span class="mono" style="font-size:10px;color:var(--mute)">pot too small</span>'}</div>`).join('')
-      :`<div class="sub" style="font-size:10.5px">${deskFrozen()?'Nothing from '+CH2_SRC[c.src]+' today — no play is a play.':'Today\'s move shows up after the master evaluation.'}</div>`;
+      :`<div class="sub" style="font-size:10.5px">${deskFrozen()?'Nothing from '+ch2SrcLab(c.src)+' today — no play is a play.':'Today\'s move shows up after the master evaluation.'}</div>`;
   return`<div class="tkt ch-card" style="border-left:3px solid ${col}"><div class="ch-top"><b>${c.ico} ${txtEsc(c.name)}</b><span class="mono" style="font-size:10px;color:${col}">${c.status==='active'?left+' day'+(left===1?'':'s')+' left':c.status.toUpperCase()}</span></div>
-    <div class="ch-nums"><span><b style="color:${col}">${deskMoney(c.pot)}</b> pot</span><span>goal <b>${deskMoney(c.goal)}</b></span><span class="mono" style="font-size:10px;color:var(--mute)">from ${deskMoney(c.start)} · ${CH2_SRC[c.src]}</span></div>
+    <div class="ch-nums"><span><b style="color:${col}">${deskMoney(c.pot)}</b> pot</span><span>goal <b>${deskMoney(c.goal)}</b></span><span class="mono" style="font-size:10px;color:var(--mute)">from ${deskMoney(c.start)} · ${ch2SrcLab(c.src)}</span></div>
     <div class="ch-bar"><div style="width:${pct}%;background:${col}"></div></div>
     ${c.status==='active'?`<div class="mktlab">Today's move</div>${playHtml}`:''}
     ${open.length?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:4px">${open.length} ticket${open.length===1?'':'s'} riding: ${open.map(s=>txtEsc(s.label)+' '+deskMoney(s.stake)).join(' · ')}</div>`:''}
     ${c.status==='active'?`<div class="bar" style="margin-top:6px"><button onclick="ch2Stop(${c.id})">End it</button></div>`:''}</div>`;}
 function ch2Html(){const A=ch2Sync();const act=A.filter(c=>c.status==='active'),done=A.filter(c=>c.status!=='active').slice(-4).reverse();
-  const free=CH2_PRESETS.filter(T=>!act.some(c=>c.preset===T.id));
+  let board='';try{board=ch2BoardHtml(act);}catch(e){console.warn('challenge board',e);}
   return`<div class="sbar"><h2>Challenges</h2><div class="ln"></div></div>
     ${act.length?act.map(ch2Card).join(''):'<div class="sub" style="font-size:11px;margin:0 3px 6px">No challenge running. Pick one — it earmarks a slice of your bankroll and tells you the move each day.</div>'}
-    ${free.length?`<div class="ch-grid">${free.map(T=>`<button class="ch-preset" onclick="ch2Start('${T.id}')"><div class="ch-ico">${T.ico}</div><b>${txtEsc(T.name)}</b><div class="mono" style="font-size:10px;color:var(--gold)">${deskMoney(T.start)} → ${deskMoney(T.goal)} · ${T.days} days</div><div class="sub" style="font-size:10px">${txtEsc(T.desc)}</div></button>`).join('')}</div>`:''}
+    ${board}
     ${done.length?`<details style="margin-top:6px"><summary class="mono" style="font-size:10.5px;color:var(--mute)">Finished (${done.length})</summary>${done.map(ch2Card).join('')}</details>`:''}`;}
+/* ── 8b · THE CHALLENGE BOARD (v2.55) — every source the desk plays from, in every bankroll shape it suits ──
+   The four originals stay; around them, a challenge for each source × shape: the Best 3 (singles, the lock,
+   two- and three-teamers), every official play, each sport, each market, each price lane, the Banker, the
+   league leader, every character's own ticket, and the Underdog Spotter's dogs — warm-ups to moonshots.
+   Each card carries the record behind its source (last 30 days, from the graded ledger) and what the same
+   plan would have done with the last 14 days of real plays. Same rules as always: one copy of each at a
+   time, plays come only from the frozen card, and a challenge with no play today sits out. */
+const CH2_SHAPES={warm:{ico:'🌱',name:'Warm-up',start:10,goal:15,days:7,frac:0.10},double:{ico:'🪜',name:'Double Up',start:20,goal:40,days:14,frac:0.10},
+  grind:{ico:'🐢',name:'The Grind',start:50,goal:75,days:21,frac:0.05},triple:{ico:'🎯',name:'Triple Threat',start:20,goal:60,days:21,frac:0.12},
+  marathon:{ico:'🏃',name:'Marathon',start:100,goal:200,days:45,frac:0.04},moon:{ico:'🚀',name:'Moonshot',start:10,goal:100,days:30,frac:0.25}};
+const CH2_FOR={single:['warm','double','grind','triple','marathon'],parlay:['warm','double','triple','moon']};
+const CH2_CATS=[['hot','🔥 Hot right now'],['classic','⭐ Classics'],['best3','⭐ Best 3'],['parlay','🏦 Parlays'],['chars','🎭 Characters'],['sport','🏟 By sport'],['market','🎯 By market'],['price','💲 By price'],['dogs','🐕 Dogs']];
+let CH2_CAT='hot',CH2_LIB_C=null;
+function ch2Sources(){const S=[['best3','The Best 3','best3','single'],['b3lock','The Lock','best3','single'],['official','Every Official Play','best3','single'],
+    ['b3par2','Best 3 Two-Teamer','parlay','parlay'],['b3par3','Best 3 Three-Teamer','parlay','parlay'],['banker',"The Banker's Table",'parlay','parlay'],['leader','Ride the Leader','parlay','parlay']];
+  CHAR_ORDER.filter(v=>!META_VOICES.has(v)&&!PROBATION.has(v)).forEach(v=>S.push(['char:'+v,`${charName(v).replace(/^The /,'')}'s Ticket`,'chars','parlay']));
+  ['nfl','ncaaf','nba','ncaab','nhl','mlb'].forEach(sp=>S.push(['sp:'+sp,`${(SP_LAB[sp]||sp).replace(/^\S+\s/,'')} Only`,'sport','single']));
+  [['ml','Moneylines Only'],['spread','Spreads Only'],['total','Totals Only']].forEach(([m,l])=>S.push(['mk:'+m,l,'market','single']));
+  [['price:chalk','Chalk Walk'],['price:value','Value Lane'],['price:plus','Plus Money']].forEach(([k,l])=>S.push([k,l,'price','single']));
+  S.push(['dog','The Dog Pound','dogs','single']);return S;}
+function ch2Lib(){if(CH2_LIB_C)return CH2_LIB_C;const L=CH2_PRESETS.map(T=>({...T,cat:'classic'}));
+  ch2Sources().forEach(([src,label,cat,kind])=>CH2_FOR[kind].forEach(sh=>{const H=CH2_SHAPES[sh];if(src==='best3'&&sh==='double')return;   /* = Steady Climb */
+    const pct=Math.round(H.frac*100);L.push({id:'g:'+src+':'+sh,ico:H.ico,name:`${H.name} · ${label}`,cat,kind,shape:sh,start:H.start,goal:H.goal,days:H.days,src,frac:H.frac,
+      desc:`${kind==='parlay'?'One ticket a day — ':''}${ch2SrcLab(src)}${kind==='single'&&!/single/.test(ch2SrcLab(src))?' as singles':''}. ${pct}% of the pot on each.${src==='dog'?' (The Spotter is on probation — tracked, not official.)':''}`});}));
+  return(CH2_LIB_C=L);}
+function ch2Tpl(id){return ch2Lib().find(x=>x.id===id)||null;}
+/* the record behind a source: its graded plays by day (singles: each pick; parlays: one ticket a day) */
+let CH2_HIST_C=null;
+function ch2History(){const V=roGet(VOICES_KEY,[],30e3)||[];const log=roGet('d4.best5log',{},30e3)||{};const CP=roGet(CPAR_KEY,{},30e3)||{};const BK=roGet(BKDAYS_KEY,{},30e3)||{};
+  const sig=V.length+'|'+(V.length?V[V.length-1].id:'')+'|'+Object.keys(log).length+'|'+Object.keys(CP).length+'|'+Object.keys(BK).length+'|'+today();
+  if(CH2_HIST_C&&CH2_HIST_C.sig===sig)return CH2_HIST_C.H;const from=dayShift(today(),-30);const H={};const add=(src,d,dec,res)=>{if(!(dec>1)||res==null)return;((H[src]||(H[src]={}))[d]||(H[src][d]=[])).push({dec,res});};
+  const R=x=>x.push?'p':x.hit===true?1:x.hit===false?0:null;const D=p=>americanToDecimal(+p);
+  /* the Best 3, from its log */
+  Object.keys(log).filter(d=>d>=from&&d<today()).forEach(d=>{const M=(log[d].picks||[]).filter(x=>x.main);
+    M.forEach((x,i)=>{const r=R(x);if(r==null)return;add('best3',d,D(x.price),r);if(i===0)add('b3lock',d,D(x.price),r);});
+    [[2,'b3par2'],[3,'b3par3']].forEach(([k,src])=>{const L=M.slice(0,k);if(L.length<k)return;const t=tixDone(L);if(t==null)return;add(src,d,L.filter(x=>!x.push).reduce((a,x)=>a*D(x.price),1),t?1:0);});});
+  /* the Banker and every character's ticket */
+  Object.entries(BK).forEach(([d,S])=>{if(d<from||!S||!S.own)return;const t=tixDone(S.own.legs||[]);if(t==null)return;add('banker',d,(S.own.legs||[]).filter(x=>!x.push).reduce((a,x)=>a*D(x.price),1)||S.own.dec,t?1:0);});
+  Object.entries(CP).forEach(([d,S])=>{if(d<from||!S||!S.locked)return;Object.entries(S.by||{}).forEach(([v,T])=>{if(!T||T.skill||!T.done)return;add('char:'+v,d,(T.legs||[]).filter(x=>!x.push).reduce((a,x)=>a*D(x.price),1),T.won?1:0);});});
+  /* official singles by sport, market and price, and the Spotter's dogs — one entry per pick */
+  const seen=new Set();V.forEach(x=>{if(!x||!x.graded||x.price==null)return;const d=String(x.date).slice(0,10);if(d<from||d>=today())return;const r=R(x);if(r==null)return;
+    if(x.voice==='Dog'){add('dog',d,D(x.price),r);return;}if(!CHARS[x.voice]||META_VOICES.has(x.voice))return;let off=false;try{off=isOfficial(x);}catch(e){}if(!off)return;
+    const k=d+'|'+x.sp+'|'+x.game+'|'+x.market+'|'+x.side;if(seen.has(k))return;seen.add(k);const dec=D(x.price);
+    add('official',d,dec,r);add('sp:'+x.sp,d,dec,r);add('mk:'+x.market,d,dec,r);const p=+x.price;add(p<=-150?'price:chalk':p>0&&p!==100?'price:plus':'price:value',d,dec,r);});
+  CH2_HIST_C={sig,H};return H;}
+function ch2Record(src){const H=ch2History()[src];if(!H)return null;let w=0,l=0,u=0;Object.values(H).forEach(P=>P.forEach(o=>{if(o.res==='p')return;if(o.res){w++;u+=o.dec-1;}else{l++;u-=1;}}));return w+l?{w,l,u}:null;}
+/* what the plan would have done with the last 14 days of real plays */
+function ch2Replay(T){const H=ch2History()[T.src];if(!H)return null;const days=Object.keys(H).filter(d=>d>=dayShift(today(),-14)).sort();if(!days.length)return null;
+  let pot=T.start,hit=null,n=0;for(const d of days){if(pot<1)break;const P=H[d];let st=P.map(o=>Math.max(deskMinStake(o.dec),Math.round(pot*T.frac*100)/100));const tot=st.reduce((a,x)=>a+x,0);
+    if(tot>pot)st=st.map(x=>x*pot/tot);let ch=0;P.forEach((o,i)=>{if(o.res==='p')return;ch+=o.res?st[i]*(o.dec-1):-st[i];});pot=Math.max(0,+(pot+ch).toFixed(2));n++;if(hit==null&&pot>=T.goal)hit=n;}
+  return{end:pot,days:n,hit};}
+function ch2BoardHtml(act){const L=ch2Lib();const running=new Set(act.map(c=>c.preset));
+  const scored=L.map(T=>({T,R:ch2Record(T.src),P:ch2Replay(T)}));
+  const hot=scored.filter(o=>o.P&&o.P.days>=3).sort((a,b)=>(b.P.end/b.T.start)-(a.P.end/a.T.start)).slice(0,12);
+  const cat=CH2_CAT==='hot'&&hot.length<3?'classic':CH2_CAT;   /* nothing graded yet → open on the classics, never an empty board */
+  const list=cat==='hot'?hot:scored.filter(o=>o.T.cat===cat);
+  const chips=`<div class="subnav" style="flex-wrap:wrap;margin:4px 0 6px">${CH2_CATS.map(([k,l])=>`<button class="${cat===k?'on':''}" onclick="CH2_CAT='${k}';deskRerender()">${l}</button>`).join('')}</div>`;
+  const card=({T,R,P})=>{const run=running.has(T.id);const pr=P?`<div class="mono" style="font-size:9.5px;color:${P.end>=T.start?'var(--win)':'var(--rust)'}">Last ${P.days} play-day${P.days===1?'':'s'}: ${deskMoney(T.start)} → ${deskMoney(P.end)}${P.hit?` · goal hit on day ${P.hit}`:''}</div>`:'<div class="mono" style="font-size:9.5px;color:var(--mute)">No graded plays in the last 14 days yet</div>';
+    const rec=R?`<div class="mono" style="font-size:9.5px;color:var(--mute)">Record behind it (30 days): ${R.w}-${R.l} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u</div>`:'';
+    return`<div class="ch-preset" style="cursor:default"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px"><b>${T.ico} ${txtEsc(T.name)}</b></div>
+      <div class="mono" style="font-size:10px;color:var(--gold)">${deskMoney(T.start)} → ${deskMoney(T.goal)} · ${T.days} days</div><div class="sub" style="font-size:10px;margin:2px 0">${txtEsc(T.desc)}</div>${rec}${pr}
+      <div style="margin-top:6px">${run?'<span class="mono" style="font-size:10px;color:var(--win)">✓ running</span>':`<button class="primary" style="font-size:10.5px" onclick="ch2Start('${T.id}')">Start</button>`}</div></div>`;};
+  return`<div class="sbar" style="margin-top:10px"><h2>Challenge board · ${L.length}</h2><div class="ln"></div></div>
+    <div class="sub" style="font-size:10px;margin:0 3px">Every source the desk plays from, in every shape it suits. Each card shows the record behind it and what the same plan did with the last 14 days of real plays.</div>
+    ${chips}<div class="ch-grid">${list.map(card).join('')||'<div class="sub" style="font-size:10.5px">Nothing here yet.</div>'}</div>`;}
 
 /* ── 9 · THE BANKER'S DESK — his own parlay, the tickets he placed, the exposure ── */
 function bkDayBuild(){const d=today();const P=deskPlan();const{B,cap}=bkBudget();
