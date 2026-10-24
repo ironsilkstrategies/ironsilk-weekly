@@ -57,11 +57,17 @@ if(typeof window!=='undefined'&&!window.__EV_BOOT__){window.__EV_BOOT__=1;window
    each game, as always), the Best 3 record and history, and each pick's lead character's plain read.
    No props, no parlays, no cashed-ticket showcase, no model numbers, no "show the math" — the answers
    leave the phone; the machinery that made them never does. Your own app keeps everything. */
-if(typeof publicFeed==='function'&&typeof window!=='undefined'&&!window.__EV_PUB__){window.__EV_PUB__=1;const PF1=publicFeed;
-  publicFeed=function(){const F=PF1.apply(this,arguments);try{const simple=x=>{if(!x)return x;const o={...x};delete o.voices;
+function evSimpleFeed(F){try{if(!F)return F;const simple=x=>{if(!x)return x;const o={...x};delete o.voices;
       if(o.why){const r=o.why.read;o.why=r?{read:{who:r.who,take:r.take,text:r.text}}:undefined;}return o;};
     if(F.today){F.today={...F.today,picks:(F.today.picks||[]).map(simple),props:[]};}F.parlay=null;F.parlayRecord=null;F.cashed=[];
-    F.history=(F.history||[]).map(h=>({...h,picks:(h.picks||[]).map(simple)}));F.simple=1;}catch(e){}return F;};}
+    F.history=(F.history||[]).map(h=>({...h,picks:(h.picks||[]).map(simple)}));F.simple=1;}catch(e){}return F;}
+if(typeof publicFeed==='function'&&typeof window!=='undefined'&&!window.__EV_PUB__){window.__EV_PUB__=1;const PF1=publicFeed;
+  publicFeed=function(){return evSimpleFeed(PF1.apply(this,arguments));};}
+/* v2.52 · the 24/7 worker's copy of the public side follows the same rule: the free page it updates and the free
+   channel it posts to get the Best 3 only — props, the Banker's parlay and the cashed boxes stay VIP. */
+if(typeof tgwPayload==='function'&&typeof window!=='undefined'&&!window.__EV_TGW__){window.__EV_TGW__=1;const TGW1=tgwPayload;
+  tgwPayload=function(){return evPubOnly(TGW1.apply(this,arguments));};}
+function evPubOnly(o){try{if(o&&o.feed)o.feed=evSimpleFeed(o.feed);if(o&&o.pub){o.pub.legs=(o.pub.legs||[]).filter(l=>l&&l.kind==='Best 3');o.pub.parlay=null;}}catch(e){}return o;}
 /* ═══ THE SHARE HUB (v2.52) — VIP, free, Telegram, X, Facebook: one place, ready to go ═══════════
    Telegram runs itself: the VIP card at the master evaluation; the free channel's "card is locked"
    note, each unlock and every result from the 24/7 worker. X and Facebook have no free posting API,

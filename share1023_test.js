@@ -32,6 +32,10 @@ let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');html=html.replace(/<scr
   T('Facebook opens the share box on the free page and copies the words to paste',/facebook\.com\/sharer\/sharer\.php\?u=https%3A%2F%2Fironsilkweekly\.com%2Fpicks\.html/.test(opened[1]||'')&&/DAL ML/.test(copied[copied.length-1]||''),opened[1]);
   w.eval('shCopyAll()');await wait(50);T('copy all links: one block for a bio or a pinned post',/VIP — join: https:\/\/whop\.com/.test(copied[copied.length-1]||'')&&/Free Telegram channel: https:\/\/t\.me\/TheDeskApp/.test(copied[copied.length-1]||''));
   T('the X post of a long read drops the quote rather than run over',w.eval(`shXLen(shXFit('⭐ Best 3 · NHL · A@B\\nB ML (-120) · 7:00 PM CT\\n"'+'word '.repeat(80)+'"\\n→ https://ironsilkweekly.com/picks.html'))`)<=280);
+  /* the 24/7 worker's copy of the public side: Best 3 only (props, the Banker's parlay and cashed boxes stay VIP) */
+  const o=w.eval(`evPubOnly({feed:{today:{picks:[{pick:'DAL ML',voices:['The Judge'],why:{read:{who:'The Simulator',take:'t',text:'x'},bullets:['b']}}],props:[{player:'P'}]},parlay:{legs:[{pick:'X'}]},parlayRecord:{w:1},cashed:[{id:1}],history:[]},
+    pub:{legs:[{kind:'Best 3',k:'a'},{kind:'Prop',k:'b'},{kind:"Banker's parlay",k:'c'}],parlay:{price:300}}})`);
+  T("the worker's free page and free channel get the Best 3 only — props, the Banker's parlay and cashes stay VIP",o.pub.legs.length===1&&o.pub.legs[0].kind==='Best 3'&&o.pub.parlay===null&&o.feed.today.props.length===0&&o.feed.parlay===null&&o.feed.cashed.length===0&&!o.feed.today.picks[0].voices&&!o.feed.today.picks[0].why.bullets&&o.feed.simple===1,JSON.stringify(o).slice(0,300));
   /* the buttons that open it */
   w.eval('shareHub()');w.eval(`(()=>{const d=document.createElement('div');d.id='psTest';d.innerHTML=deskProcessHtml?deskProcessHtml():'';document.body.appendChild(d);})()`);
   T('the daily strip (grade → intake → master evaluation → published) has the Share button',/shareHub\(\)/.test(w.document.getElementById('psTest').innerHTML));
