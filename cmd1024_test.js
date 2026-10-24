@@ -15,7 +15,7 @@ setTimeout(async()=>{try{
   T('/judge lists its calls by confidence, official ones marked',/The Judge — top 2 today/.test(C.r.judge)&&/1\. ✅ <b>WPG ML<\/b> -130/.test(C.r.judge)&&/2\. ▫️/.test(C.r.judge),C.r.judge.slice(0,200));
   T('/unanimous lists the picks the whole room agrees on',/WPG ML/.test(C.r.unanimous),C.r.unanimous.slice(0,150));
   T('the / menu goes to Telegram (each command a short description)',C.menu.length>15&&C.menu.every(m=>/^[a-z0-9]+$/.test(m.command)&&m.description.length<=60));
-  const P=w.eval(`tgwPayload({d:'${D}',chat:1,ids:[1],ts:1,card:{d:'${D}',best:[],top10:[],chars:[],props:[]}})`);T('the answers ride along with the hand-off to the robot',!!(P.cmd&&P.cmd.r.judge));
+  const P=w.eval(`tgwPayload({d:'${D}',chat:1,ids:[1],ts:1,card:{d:'${D}',best:[],top10:[],chars:[],props:[]}})`);T('the answers ride along with the hand-off to the robot (with /check and today\'s call index)',!!(P.cmd&&P.cmd.r.judge&&P.cmd.r.check&&P.cmd.idx&&P.cmd.idx.calls.length===2&&P.cmd.menu[0].command==='check'));
   /* the robot */
   const Wk=await import(path.join(W,'autopilot/worker.mjs').replace(/^/,'file://')).catch(e=>({err:e}));
   if(Wk.err){T('worker loads',false,String(Wk.err));}else{

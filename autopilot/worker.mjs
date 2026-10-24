@@ -10,7 +10,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.60';
+const VERSION = 'worker v2.63';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -154,10 +154,41 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
   const u = await T('getUpdates', { offset: String((state.tgOff || 0) + 1), timeout: '0', allowed_updates: JSON.stringify(['message']) }); const rows = (u && u.result) || []; if (!rows.length) return acted;
   const st = {}; for (const d of ds) Object.assign(st, state.posts[d].st || {});
   for (const x of rows) { state.tgOff = Math.max(state.tgOff || 0, x.update_id); if (x.message && /^\//.test(x.message.text || '')) state.cmdTs = Date.now(); const m = x.message; if (!m || !m.text || m.text[0] !== '/') continue;
-    const cmd = m.text.slice(1).split(/[\s@]/)[0].toLowerCase(); const txt = C.r[cmd] || (cmd ? `I don't know /${esc(cmd)} — tap /help for the list.` : null); if (!txt) continue;
+    const cmd = m.text.slice(1).split(/[\s@]/)[0].toLowerCase(); let chk = null; if (cmd === 'check') { try { chk = checkTicket(m.text, C.idx); } catch (e) { log('check', e.message || e); } }
+    const txt = chk || C.r[cmd] || (cmd ? `I don't know /${esc(cmd)} — tap /help for the list.` : null); if (!txt) continue;
     const stale = C.d && C.d !== chicagoDay(deps?.now || Date.now()) ? `\n<i>(from ${esc(C.d)} — today's card isn't out yet)</i>` : '';
     const r = await T('sendMessage', { chat_id: m.chat.id, text: (fillTemplate(txt, st) + stale).slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: 'true', reply_to_message_id: String(m.message_id), allow_sending_without_reply: 'true' }); if (r) acted++; }
   return acted || 1; }   /* the offset moved: save it */
+
+/* ── v2.63 · /check: read a pasted slip like intake does, grade each leg with the characters ── */
+const nrm = t => ' ' + String(t || '').toLowerCase().replace(/[^a-z0-9.+\-@/ ]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+export function checkTicket(text, X) { if (!X || !X.games) return null; const body = String(text || '').replace(/^\/check(@\S+)?/i, '').trim();
+  if (!body) return null;
+  const legs = body.split(/\n|,|;|\s\+\s|\s&\s|\sand\s|\|/i).map(x => x.trim()).filter(x => x.length > 1).slice(0, 15);
+  const G = X.games.map(([sp, game, a, h]) => ({ sp, game, a: a.map(x => nrm(x).trim()).filter(Boolean), h: h.map(x => nrm(x).trim()).filter(Boolean) }));
+  const find = L => { let best = null; for (const g of G) for (const [side, al] of [['away', g.a], ['home', g.h]]) for (const n of al) {
+      const re = n.length <= 4 ? new RegExp('(^|[ @/(])' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[ @/),])') : null; const hit = re ? re.test(L) : L.includes(' ' + n + ' ') || L.includes(n);
+      if (hit && (!best || n.length > best.len)) best = { g, side, len: n.length }; } return best; };
+  const out = []; let chance = 1, nC = 0; const rows = [];
+  for (const raw of legs) { const L = nrm(raw); const T = find(L); if (!T) { rows.push({ raw, txt: `⚪ <b>${esc(raw)}</b> — not on today's board` }); continue; }
+    const tot = L.match(/ (over|under|o|u) ?(\d+(?:\.\d+)?) /); const priceM = [...L.matchAll(/(?:^| |\()([+-]\d{3,4})(?= |\)|$)/g)].pop(); const noPrice = priceM ? L.replace(priceM[1], ' ') : L;
+    const spr = !tot && noPrice.match(/ ([+-]\d{1,2}(?:\.5)?) /); const pk = / pk | pick ?em /.test(L);
+    const m = tot ? 'total' : (spr || pk) ? 'spread' : 'ml'; const sd = tot ? (tot[1][0] === 'o' ? 'over' : 'under') : T.side;
+    const opp = { away: 'home', home: 'away', over: 'under', under: 'over' }[sd];
+    const C = (X.calls || []).filter(c => c[0] === T.g.sp && c[1] === T.g.game && c[2] === m);
+    const on = C.filter(c => c[3] === sd).sort((a, b) => b[7] - a[7]), fd = C.filter(c => c[3] === opp).sort((a, b) => b[7] - a[7]);
+    const who = A => A.slice(0, 3).map(c => `${esc(c[6])} ${c[7]}%${c[8] ? '✅' : ''}${c[9] ? '💪' : ''}`).join(', ');
+    const bo = on[0] ? on[0][7] / 100 : null, bf = fd[0] ? fd[0][7] / 100 : null; const offOn = on.some(c => c[8]), pvF = fd.some(c => c[9] || c[8]);
+    const ic = !on.length && !fd.length ? '⚪' : offOn && !pvF ? '🟢' : (bf != null && (bo == null || bf > bo)) ? '🔴' : '🟡';
+    const label = m === 'total' ? `${sd === 'over' ? 'Over' : 'Under'} ${tot[2]} · ${T.g.game}` : m === 'spread' ? `${T.g.game.split('@')[sd === 'away' ? 0 : 1]} ${pk ? 'PK' : spr[1]} · ${T.g.game}` : `${T.g.game.split('@')[sd === 'away' ? 0 : 1]} ML · ${T.g.game}`;
+    const p = bo != null ? bo : bf != null ? 1 - bf : null; if (p != null) { chance *= p; nC++; }
+    rows.push({ raw, score: (bo || 0.5) - (bf || 0), txt: `${ic} <b>${esc(label)}</b>${priceM ? ' ' + esc(priceM[1]) : ''}\n   ${on.length ? '💪 on it: ' + who(on) : 'nobody on it'}${fd.length ? ' · 🚫 fading: ' + who(fd) : ''}` }); }
+  const graded = rows.filter(r => r.score != null); const weak = graded.length > 1 ? graded.reduce((a, b) => b.score < a.score ? b : a) : null;
+  out.push('<b>🧾 Your ticket, graded by the characters</b>', ...rows.map(r => r.txt));
+  if (weak) out.push('', `🔻 <b>Weakest leg:</b> ${esc(weak.raw)} — drop it or swap in a /best pick.`);
+  if (nC) out.push(`🎯 Chance it cashes (characters' read): <b>${(chance * 100).toFixed(chance < 0.1 ? 1 : 0)}%</b>`);
+  out.push('<i>🟢 official pick, nobody proven against it · 🟡 split or lean · 🔴 the stronger side is the other way · ✅ official · 💪 proven in that lane</i>');
+  return out.join('\n'); }
 
 /* ── one pass ── */
 /* v2.35 · history: a past day's card no worker ever touched, first seen 20+ hours after it was posted (the cards

@@ -58,3 +58,22 @@ function cmdBuild(){const V=roGet(VOICES_KEY,[],30e3)||[];const R={};const d=tod
   return{d,ts:Date.now(),r:R,menu:menu.slice(0,100).map(([k,t])=>({command:k,description:String(t).slice(0,60)}))};}
 /* the robot gets the answers with every hand-off */
 if(typeof tgwPayload==='function'&&!window.__CMDW__){window.__CMDW__=1;const TGW_P1=tgwPayload;tgwPayload=function(p){const o=TGW_P1(p);try{o.cmd=cmdBuild();o.feedTs=o.feedTs||Date.now();}catch(e){console.warn('commands',e);}return o;};}
+/* ══ v2.63 · /check — a subscriber pastes their ticket, any format, and the characters grade every leg ══
+   The app hands the robot today's calls (who's on which side, how sure, official or not, proven or not)
+   and every team's names; the robot reads the slip the way intake does — "WPG ML", "Jets -1.5 (-110)",
+   "o6.5 SJ/BOS", "West Virginia +11", one per line or separated by commas. */
+const CMD_NAMES_KEY='d4.teamnames';
+function cmdNames(){const S=get(CMD_NAMES_KEY,{})||{};let ch=false;['nfl','ncaaf','nhl','nba','ncaab','mlb'].forEach(sp=>{let G=[];try{G=sportGames(sp)||[];}catch(e){}
+    G.forEach(g=>[g.away,g.home].forEach(t=>{if(!t||!t.abbr)return;const N=[t.name,t.displayName,t.location,t.shortDisplayName,t.nickname,t.shortName].filter(Boolean).map(String);const M=S[sp]||(S[sp]={});
+      const cur=M[t.abbr]||[];const nu=[...new Set([...cur,...N])].slice(0,6);if(nu.length!==cur.length){M[t.abbr]=nu;ch=true;}}));});
+  if(ch)set(CMD_NAMES_KEY,S);return S;}
+function cmdIdx(){const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const N=cmdNames();const calls=[],games={};
+  V.forEach(c=>{if(!c||String(c.date).slice(0,10)!==d||c.graded||!CHARS[c.voice]||META_VOICES.has(c.voice)||c.price==null)return;const cf=confOf(c);if(cf==null)return;
+    let pv=0;try{const lk=laneKey(c.sp,c.market,c.side,c.price,c.line);pv=lk&&laneStatus(lk,c.voice)==='proven'?1:0;}catch(e){}
+    calls.push([c.sp,c.game,c.market,c.side,c.line!=null?+c.line:null,+c.price,charName(c.voice).replace(/^The /,''),Math.round(cf*100),isOfficial(c)?1:0,pv]);
+    if(!games[c.sp+'|'+c.game]){const[a,h]=String(c.game).split('@');games[c.sp+'|'+c.game]=[c.sp,c.game,[a,...((N[c.sp]||{})[a]||[])],[h,...((N[c.sp]||{})[h]||[])]];}});
+  return{d,calls,games:Object.values(games)};}
+if(!window.__CMDCHK__){window.__CMDCHK__=1;const B0=cmdBuild;cmdBuild=function(){const o=B0();try{o.idx=cmdIdx();o.r.check='<b>🧾 Check your ticket</b>\nType <b>/check</b> and your legs — one per line, or separated by commas. Any format:\n<code>/check WPG ML, Oregon -10, o6.5 SJ/BOS</code>\nEvery leg gets graded by the characters: who\'s on it, who\'s fading it, and your weakest leg.';
+    o.menu=[{command:'check',description:'Grade your ticket: /check then your legs'},...o.menu];}catch(e){console.warn('check idx',e);}return o;};}
+/* keep the team-name book fresh on every page load */
+if(typeof window!=='undefined')setTimeout(()=>{try{cmdNames();}catch(e){}},8000);
