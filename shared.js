@@ -1475,7 +1475,7 @@ function dropHash(t){let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeA
 async function intakeAutoDrop(day,ext){day=day||today();if(!ext){const r0=await intakeAutoDrop(day,'.txt');try{await intakeAutoDrop(day,'.cons.txt');}catch(e){}return r0;}if(typeof location==='undefined'||!/^https?:/.test(location.protocol))return null;
   let text='';try{const r=await fetch('intake/'+day+ext+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;text=await r.text();}catch(e){return null;}
   if(!text.trim()||/^\s*</.test(text))return null; // 404 pages come back as HTML on some hosts
-  const h=day+ext+':'+dropHash(text);const seen=get(DROP_KEY,{})||{};if(seen[h])return{skipped:true,h};
+  const h=day+(ext==='.txt'?'':ext)+':'+dropHash(text);const seen=get(DROP_KEY,{})||{};if(seen[h])return{skipped:true,h};
   const m=text.match(/^\s*SOURCE\s*:\s*(.+)$/im);const src=m?m[1].trim():'drop';
   text=text.split('\n').filter(l=>!/^\s*(#|SOURCE\s*:)/i.test(l)).join('\n');
   let res;try{res=await intakeText(text,null,'auto',src);}catch(e){console.warn('auto intake',e);return null;}
