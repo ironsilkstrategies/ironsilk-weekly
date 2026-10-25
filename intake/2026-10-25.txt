@@ -10,6 +10,14 @@ OU: o43.5 (-110) / u43.5 (-110)
 H1SPREAD: Pittsburgh Steelers -1.5 (-110) / New Orleans Saints +1.5 (-110)
 H1ML: Pittsburgh Steelers -140 / New Orleans Saints +120
 H1OU: o21.5 (-105) / u21.5 (-115)
+PRED: Pittsburgh Steelers 19.86 / New Orleans Saints 19.65
+TREND Pittsburgh Steelers: Over is 4-0 in Steelers last 4 games overall.
+TREND Pittsburgh Steelers: Over is 4-0 in Steelers last 4 games on grass.
+TREND Pittsburgh Steelers: Over is 5-0 in Steelers last 5 games in October.
+TREND Pittsburgh Steelers: Over is 7-1 in Steelers last 8 games after scoring more than 30 points in their previous game.
+TREND New Orleans Saints: Saints are 5-0 ATS in their last 5 games on grass.
+TREND New Orleans Saints: Under is 4-0 in Saints last 4 games after scoring less than 15 points in their previous game.
+TREND New Orleans Saints: Under is 7-1 in Saints last 8 games after allowing more than 150 yards rushing in their previous game.
 
 Tampa Bay Buccaneers @ Carolina Panthers
 ML: Tampa Bay Buccaneers +128 / Carolina Panthers -148
@@ -18,6 +26,11 @@ OU: o44.5 (-110) / u44.5 (-110)
 H1SPREAD: Tampa Bay Buccaneers +1.5 (-110) / Carolina Panthers -1.5 (-110)
 H1ML: Tampa Bay Buccaneers +115 / Carolina Panthers -135
 H1OU: o22 (-110) / u22 (-110)
+PRED: Tampa Bay Buccaneers 20.78 / Carolina Panthers 23.33
+TREND Tampa Bay Buccaneers: Under is 4-0 in Buccaneers last 4 vs. NFC.
+TREND Tampa Bay Buccaneers: Under is 4-0 in Buccaneers last 4 games as a road favorite.
+TREND Carolina Panthers: Under is 5-0 in Panthers last 5 games as a favorite.
+TREND Carolina Panthers: Under is 4-0 in Panthers last 4 vs. NFC South.
 
 Miami Dolphins @ New York Jets
 ML: Miami Dolphins +181 / New York Jets -211
@@ -26,6 +39,11 @@ OU: o39.5 (-110) / u39.5 (-110)
 H1SPREAD: Miami Dolphins +2.5 (+100) / New York Jets -2.5 (-120)
 H1ML: Miami Dolphins +149 / New York Jets -170
 H1OU: o19.5 (-115) / u19.5 (-105)
+PRED: Miami Dolphins 16.11 / New York Jets 22.20
+TREND Miami Dolphins: Over is 9-1 in Dolphins last 10 vs. AFC East.
+TREND Miami Dolphins: Dolphins are 7-2 ATS in their last 9 road games vs. a team with a losing home record.
+TREND New York Jets: Over is 4-0 in Jets last 4 home games.
+TREND New York Jets: Under is 5-1 in Jets last 6 games after allowing less than 15 points in their previous game.
 
 Cleveland Browns @ Tennessee Titans
 ML: Cleveland Browns -137 / Tennessee Titans +117
@@ -34,6 +52,11 @@ OU: o37 (-110) / u37 (-110)
 H1SPREAD: Cleveland Browns -0.5 (+100) / Tennessee Titans +0.5 (-120)
 H1ML: Cleveland Browns -120 / Tennessee Titans +100
 H1OU: o17.5 (-110) / u17.5 (-110)
+PRED: Cleveland Browns 18.16 / Tennessee Titans 16.24
+TREND Cleveland Browns: Browns are 4-0 ATS in their last 4 games on grass.
+TREND Cleveland Browns: Over is 6-1 in Browns last 7 games as a road favorite.
+TREND Tennessee Titans: Titans are 5-1 ATS in their last 6 games after accumulating less than 250 total yards in their previous game.
+TREND Tennessee Titans: Under is 4-1 in Titans last 5 games overall.
 
 New York Giants @ Houston Texans
 ML: New York Giants +374 / Houston Texans -485
@@ -42,6 +65,11 @@ OU: o42.5 (-112) / u42.5 (-108)
 H1SPREAD: New York Giants +6.5 (-110) / Houston Texans -6.5 (-110)
 H1ML: New York Giants +280 / Houston Texans -350
 H1OU: o21.5 (-105) / u21.5 (-115)
+PRED: New York Giants 15.88 / Houston Texans 28.24
+TREND New York Giants: Over is 6-0 in Giants last 6 games in October.
+TREND New York Giants: Under is 9-1 in Giants last 10 games in Week 7.
+TREND Houston Texans: Over is 5-0 in Texans last 5 games following a ATS win.
+TREND Houston Texans: Over is 5-1 in Texans last 6 home games.
 
 San Francisco 49ers @ Atlanta Falcons
 ML: San Francisco 49ers -140 / Atlanta Falcons +120
@@ -50,6 +78,11 @@ OU: o50.5 (-110) / u50.5 (-110)
 H1SPREAD: San Francisco 49ers -0.5 (-105) / Atlanta Falcons +0.5 (-115)
 H1ML: San Francisco 49ers -125 / Atlanta Falcons +105
 H1OU: o24.5 (-105) / u24.5 (-115)
+PRED: San Francisco 49ers 24.86 / Atlanta Falcons 26.25
+TREND San Francisco 49ers: 49ers are 6-0 ATS in their last 6 games as a road favorite.
+TREND San Francisco 49ers: 49ers are 7-1 ATS in their last 8 road games.
+TREND Atlanta Falcons: Over is 7-0 in Falcons last 7 vs. a team with a winning record.
+TREND Atlanta Falcons: Over is 4-0 in Falcons last 4 games overall.
 
 Indianapolis Colts @ Minnesota Vikings
 ML: Indianapolis Colts +249 / Minnesota Vikings -305
@@ -58,6 +91,12 @@ OU: o41.5 (-110) / u41.5 (-110)
 H1SPREAD: Indianapolis Colts +3.5 (+100) / Minnesota Vikings -3.5 (-120)
 H1ML: Indianapolis Colts +200 / Minnesota Vikings -240
 H1OU: o20.5 (-110) / u20.5 (-110)
+PRED: Indianapolis Colts 18.26 / Minnesota Vikings 25.23
+TREND Indianapolis Colts: Colts are 6-1 ATS in their last 7 games as a road underdog.
+TREND Indianapolis Colts: Colts are 4-1 ATS in their last 5 road games.
+TREND Minnesota Vikings: Under is 7-0 in Vikings last 7 home games vs. a team with a losing road record.
+TREND Minnesota Vikings: Under is 7-0 in Vikings last 7 games following a straight up win.
+TREND Minnesota Vikings: Under is 6-0 in Vikings last 6 games following a ATS win.
 
 Cincinnati Bengals @ Baltimore Ravens
 ML: Cincinnati Bengals -156 / Baltimore Ravens +136
@@ -66,6 +105,11 @@ OU: o46 (-110) / u46 (-110)
 H1SPREAD: Cincinnati Bengals -1 (-110) / Baltimore Ravens +1 (-110)
 H1ML: Cincinnati Bengals -140 / Baltimore Ravens +120
 H1OU: o23.5 (-110) / u23.5 (-110)
+PRED: Cincinnati Bengals 25.90 / Baltimore Ravens 21.21
+TREND Cincinnati Bengals: Under is 7-1 in Bengals last 8 games on fieldturf.
+TREND Cincinnati Bengals: Under is 4-0 in Bengals last 4 games after scoring more than 30 points in their previous game.
+TREND Baltimore Ravens: Over is 5-1 in Ravens last 6 games as an underdog.
+TREND Baltimore Ravens: Ravens are 5-1 ATS in their last 6 games after allowing less than 250 total yards in their previous game.
 
 Denver Broncos @ Arizona Cardinals
 ML: Denver Broncos -225 / Arizona Cardinals +189
@@ -74,6 +118,11 @@ OU: o43 (-110) / u43 (-110)
 H1SPREAD: Denver Broncos -3 (-105) / Arizona Cardinals +3 (-115)
 H1ML: Denver Broncos -175 / Arizona Cardinals +153
 H1OU: o21 (-115) / u21 (-105)
+PRED: Denver Broncos 23.46 / Arizona Cardinals 19.89
+TREND Denver Broncos: Under is 6-0 in Broncos last 6 games as a road underdog.
+TREND Denver Broncos: Under is 4-0 in Broncos last 4 road games.
+TREND Arizona Cardinals: Cardinals are 6-0-1 ATS in their last 7 games in Week 7.
+TREND Arizona Cardinals: Over is 6-1 in Cardinals last 7 games as a favorite.
 
 Green Bay Packers @ Detroit Lions
 ML: Green Bay Packers +167 / Detroit Lions -192
@@ -82,6 +131,12 @@ OU: o55 (-115) / u55 (-105)
 H1SPREAD: Green Bay Packers +3 (-115) / Detroit Lions -3 (-105)
 H1ML: Green Bay Packers +149 / Detroit Lions -170
 H1OU: o27 (-110) / u27 (-110)
+PRED: Green Bay Packers 26.78 / Detroit Lions 30.36
+TREND Green Bay Packers: Packers are 4-0-1 ATS in their last 5 games as an underdog.
+TREND Green Bay Packers: Over is 7-2 in Packers last 9 road games.
+TREND Detroit Lions: Over is 6-0 in Lions last 6 games after scoring more than 30 points in their previous game.
+TREND Detroit Lions: Over is 5-0 in Lions last 5 games following a straight up win.
+TREND Detroit Lions: Lions are 8-1 ATS in their last 9 games as a home underdog.
 
 Los Angeles Rams @ Las Vegas Raiders
 ML: Los Angeles Rams -175 / Las Vegas Raiders +153
@@ -90,6 +145,11 @@ OU: o48.5 (-110) / u48.5 (-110)
 H1SPREAD: Los Angeles Rams -2.5 (-110) / Las Vegas Raiders +2.5 (-110)
 H1ML: Los Angeles Rams -150 / Las Vegas Raiders +130
 H1OU: o23.5 (-115) / u23.5 (-105)
+PRED: Los Angeles Rams 27.07 / Las Vegas Raiders 22.67
+TREND Los Angeles Rams: Over is 4-0 in Rams last 4 games as an underdog.
+TREND Los Angeles Rams: Under is 10-1 in Rams last 11 games in Week 7.
+TREND Las Vegas Raiders: Raiders are 6-0 ATS in their last 6 games after accumulating more than 350 total yards in their previous game.
+TREND Las Vegas Raiders: Raiders are 4-0 ATS in their last 4 home games.
 
 Kansas City Chiefs @ Seattle Seahawks
 ML: Kansas City Chiefs +131 / Seattle Seahawks -151
@@ -98,6 +158,11 @@ OU: o42.5 (-110) / u42.5 (-110)
 H1SPREAD: Kansas City Chiefs +1.5 (-110) / Seattle Seahawks -1.5 (-110)
 H1ML: Kansas City Chiefs +125 / Seattle Seahawks -145
 H1OU: o20.5 (-113) / u20.5 (-107)
+PRED: Kansas City Chiefs 21.14 / Seattle Seahawks 22.87
+TREND Kansas City Chiefs: Chiefs are 4-0 ATS in their last 4 games in Week 7.
+TREND Kansas City Chiefs: Under is 7-1 in Chiefs last 8 games after accumulating more than 350 total yards in their previous game.
+TREND Seattle Seahawks: Over is 6-0 in Seahawks last 6 home games vs. a team with a winning road record.
+TREND Seattle Seahawks: Seahawks are 5-0 ATS in their last 5 games as a favorite.
 
 NBA
 
@@ -147,6 +212,9 @@ TREND Orlando Magic: Under is 7-1 in Magic last 8 when their opponent allows 100
 TREND Orlando Magic: Under is 7-1 in Magic last 8 when their opponent scores 100 points or more in their previous game.
 TREND Orlando Magic: Magic are 7-1 ATS in their last 8 games following a straight up loss of more than 10 points.
 TREND Orlando Magic: Under is 6-1 in Magic last 7 after allowing 100 points or more in their previous game.
+TREND New York Knicks: Knicks are 5-0 ATS in their last 5 games playing on 1 days rest.
+TREND New York Knicks: Under is 4-0 in Knicks last 4 vs. a team with a losing straight up record.
+TREND New York Knicks: Under is 4-0 in Knicks last 4 games following a ATS loss.
 
 Los Angeles Clippers @ Oklahoma City Thunder
 ML: Los Angeles Clippers +795 / Oklahoma City Thunder -1300
@@ -160,6 +228,8 @@ TREND Los Angeles Clippers: Clippers are 6-0 ATS in their last 6 road games vs. 
 TREND Los Angeles Clippers: Clippers are 4-0 ATS in their last 4 games as a favorite.
 TREND Los Angeles Clippers: Clippers are 6-1 ATS in their last 7 road games vs. a team with a winning home record.
 TREND Los Angeles Clippers: Under is 5-1 in Clippers last 6 games as a favorite.
+TREND Oklahoma City Thunder: Over is 5-0 in Thunder last 5 games playing on 2 days rest.
+TREND Oklahoma City Thunder: Over is 5-1 in Thunder last 6 games vs. a team with a winning % above .600.
 
 Toronto Raptors @ Minnesota Timberwolves
 SPREAD: Toronto Raptors 0 (-105) / Minnesota Timberwolves 0 (-115)
@@ -167,12 +237,22 @@ OU: o230 (-110) / u230 (-110)
 H1SPREAD: Toronto Raptors 0 (-110) / Minnesota Timberwolves 0 (-110)
 H1OU: o112 (-110) / u112 (-110)
 Q1SPREAD: Toronto Raptors 0 (-110) / Minnesota Timberwolves 0 (-110)
+PRED: Toronto Raptors 115.64 / Minnesota Timberwolves 119.06
+TREND Toronto Raptors: Raptors are 6-0 ATS in their last 6 games as a favorite.
+TREND Toronto Raptors: Raptors are 6-1 ATS in their last 7 games overall.
+TREND Minnesota Timberwolves: Over is 5-0 in Timberwolves last 5 games vs. a team with a winning % above .600.
+TREND Minnesota Timberwolves: Timberwolves are 4-0 ATS in their last 4 games as a favorite.
 
 Detroit Pistons @ Philadelphia 76ers
 SPREAD: Detroit Pistons 0 (-110) / Philadelphia 76ers 0 (-110)
 OU: o227.5 (-112) / u227.5 (-108)
 H1SPREAD: Detroit Pistons 0 (-110) / Philadelphia 76ers 0 (-110)
 Q1SPREAD: Detroit Pistons 0 (-110) / Philadelphia 76ers 0 (-110)
+PRED: Detroit Pistons 112.71 / Philadelphia 76ers 116.41
+TREND Detroit Pistons: Over is 4-0 in Pistons last 4 games as a favorite.
+TREND Detroit Pistons: Over is 6-1 in Pistons last 7 overall.
+TREND Philadelphia 76ers: Under is 5-1 in 76ers last 6 home games vs. a team with a road winning % of greater than .600.
+TREND Philadelphia 76ers: 76ers are 5-1 ATS in their last 6 games following a ATS loss.
 
 Memphis Grizzlies @ Sacramento Kings
 ML: Memphis Grizzlies -165 / Sacramento Kings +145
@@ -180,6 +260,12 @@ SPREAD: Memphis Grizzlies -3.5 (-115) / Sacramento Kings +3.5 (-105)
 OU: o235 (-110) / u235 (-110)
 H1SPREAD: Memphis Grizzlies -1.5 (-115) / Sacramento Kings +1.5 (-105)
 Q1SPREAD: Memphis Grizzlies -0.5 (-110) / Sacramento Kings +0.5 (-110)
+PRED: Memphis Grizzlies 118.58 / Sacramento Kings 116.07
+TREND Memphis Grizzlies: Under is 4-0 in Grizzlies last 4 games following a ATS win.
+TREND Memphis Grizzlies: Grizzlies are 5-1 ATS in their last 6 games as a road favorite.
+TREND Sacramento Kings: Over is 6-1 in Kings last 7 home games.
+TREND Sacramento Kings: Over is 6-1 in Kings last 7 games as a home underdog.
+TREND Sacramento Kings: Kings are 6-1 ATS in their last 7 games playing on 1 days rest.
 
 NHL
 
@@ -222,3 +308,6 @@ OU: o6.5 (-102) / u6.5 (-114)
 P1PL: Minnesota Wild -0.5 (+138) / Vancouver Canucks +0.5 (-158)
 P1ML: Minnesota Wild -155 / Vancouver Canucks +135
 P1OU: o1.5 (-138) / u1.5 (+118)
+
+# Covers consensus (Oct 25, 8:12–8:13 AM CT), sides: MIN 81% (-182) vs VAN; NYJ 79% (-3.5) vs MIA; CAR 75% (-2.5) vs TB; CIN 71% (-2.5) vs BAL; NYK 100% top-10% (-7.5) vs ORL; LAC 75% top-10% (+16.5) vs OKC; LV 72% top-10% (+3.5) vs LAR; MIN 71% top-10% (+1.5) vs TOR
+# Covers consensus totals: GB@DET Over 78–90%; MON@WPG Over 67–74%; LAR@LV Over 71–81%; MIA@NYJ Under 71–79%; ORL@NY Under 82%; LAC@OKC Over 79%; MEM@SAC Under 75%; LAL@UTA Under 73%; CLE@TEN Under 71%; CIN@BAL Over 71%; NYI@DAL Under 69–70%; COL@NSH Over 68%
