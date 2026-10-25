@@ -10,7 +10,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.63';
+const VERSION = 'worker v2.66';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -96,20 +96,21 @@ const PROP = { py: [['passing', 'YDS']], ptd: [['passing', 'TD']], ry: [['rushin
   stl: [['*', 'STL']], blk: [['*', 'BLK']], h: [['batting', 'H']], hr: [['batting', 'HR']], rbi: [['batting', 'RBI']], r: [['batting', 'R']], bb: [['batting', 'BB']], k: [['pitching', 'K']], ha: [['pitching', 'H']], er: [['pitching', 'ER']] };
 async function gradeProp(x, d) { const team = x.team; if (!team) return null; let F = null;
   for (const day of [d, shift(d, 1)]) { for (const ev of await scoreboard(x.sp, day)) { const T = evTeams(x.sp, ev); if (T && [T.a, T.h].includes(ab(x.sp, team))) { F = { ev, T }; break; } } if (F) break; }
-  if (!F || !evFinal(F.ev)) return null;
+  if (!F) return null; const fin = evFinal(F.ev);   /* v2.66 · an over that's already cleared wins mid-game; everything else waits for the final */
+  if (!fin && x.side === 'under') return null;
   let j; try { const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${PATH[x.sp]}/summary?event=${F.ev.id}`); j = await r.json(); } catch (e) { return null; }
   const rows = []; ((j.boxscore || {}).players || []).forEach(t => (t.statistics || []).forEach(g => { const labels = (g.labels || []).map(l => String(l).toUpperCase());
     (g.athletes || []).forEach(a => rows.push({ name: a.athlete?.displayName || '', grp: String(g.name || g.type || '').toLowerCase(), labels, stats: a.stats || [] })); }));
   if (!rows.length) return null;
   const want = norm(x.player), wp = want.split(' '), wl = wp[wp.length - 1], wi = (wp[0] || '')[0];
   let mine = rows.filter(r => norm(r.name) === want); if (!mine.length) { const c = rows.filter(r => { const q = norm(r.name).split(' '); return q[q.length - 1] === wl && (q[0] || '')[0] === wi; }); const names = new Set(c.map(r => r.name)); if (names.size === 1) mine = c; }
-  if (!mine.length) return 'P';   /* not in the final box → didn't play → void, the book rule */
+  if (!mine.length) return fin ? 'P' : null;   /* not in the final box → didn't play → void, the book rule */
   const stat = x.stat; const spec = PROP[stat]; if (!spec) return null; let val = 0, found = false;
   spec.forEach(([grp, lab]) => { mine.forEach(r => { if (grp !== '*' && !r.grp.includes(grp)) return; const i = r.labels.indexOf(lab); if (i < 0) return;
       const raw = String(r.stats[i] ?? ''); const v = parseFloat(raw.split('-')[0]); if (isFinite(v)) { val += v; found = true; } }); });
-  if (!found) { if (['rec', 'wy', 'ry', 'py', 'td', 'rtd', 'wtd', 'ptd'].includes(stat)) return +x.thr > 0 ? 'L' : 'W'; return null; }   /* played, recorded none in that category */
+  if (!found) { if (!fin) return null; if (['rec', 'wy', 'ry', 'py', 'td', 'rtd', 'wtd', 'ptd'].includes(stat)) return +x.thr > 0 ? 'L' : 'W'; return null; }   /* played, recorded none in that category */
   if (x.side === 'under') return val < +x.thr ? 'W' : val > +x.thr ? 'L' : 'P';
-  return val >= +x.thr ? 'W' : 'L'; }
+  if (val >= +x.thr) return 'W'; return fin ? 'L' : null; }
 
 /* ── Telegram ── */
 async function tg(method, params) { try { const r = await fetch(`https://api.telegram.org/bot${TG}/${method}`, { method: 'POST', body: new URLSearchParams(params) }); const j = await r.json().catch(() => ({})); if (!j.ok) { log(method, 'said', j.description || r.status); return null; } return j; } catch (e) { log(method, 'failed', e.message); return null; } }   /* v2.35 · a refused send is not "sent" — it retries next pass */
