@@ -2646,7 +2646,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261025c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261025d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8537,6 +8537,11 @@ function gradeMLBPropShared(leg,ticketDate){
 }
 /* v2.65 · basketball props graded from the player's final box line (d4.pstlast.<sport>, filled as box scores are read) */
 function gradeBBPropLeg(leg,ticketDate){const P=leg.bbProp;const sp=leg.sport||'nba';const d=String(leg.gameDate||ticketDate||'').slice(0,10);
+  /* v2.65.1 · live: the game's ESPN box, refreshed with the live loop — the count moves as the game goes */
+  try{const ev=fbpEventId(leg,ticketDate);if(ev&&ev.id){const box=fbpBox(ev.id,sp);if(box&&box.state&&box.state!=='pre'){const v=cpropBoxVal(sp,box,null,P.player,P.k);
+      if(v!=null){const live=box.state==='in';let hit=null;if(P.dir==='under'){if(v>P.thr)hit=false;else if(!live)hit=true;}else{const ok=P.dir==='over'?v>P.thr:v>=P.thr;if(ok)hit=true;else if(!live)hit=false;}
+        return{hit,detail:`${P.player} ${v}${live?' so far':''}`,live,prog:{val:v,thr:P.thr,dir:P.dir==='over'?'over':P.dir}};}
+      if(box.state==='post')return propDnpVoid(P.player);}}}catch(e){}
   let g=null;try{g=(get('d4.pstlast.'+sp,{})||{})[pstId(P.player)];}catch(e){}
   if(!g||!d||g.d<d||g.d>dayShift(d,1)||g.v[P.k]==null){const R=(()=>{try{return resolveLeg(leg,ticketDate);}catch(e){return null;}})();return{hit:null,detail:R&&R.live?'live — graded at the final':null,live:!!(R&&R.live)};}
   const v=+g.v[P.k];const hit=P.dir==='under'?v<P.thr:P.dir==='over'?v>P.thr:v>=P.thr;return{hit,detail:`${P.player} ${v}`,live:false,prog:{val:v,thr:P.thr,dir:P.dir}};}
@@ -11807,13 +11812,14 @@ function regradeAllTicketsNow(){
   L.forEach(t=>{
     if(t.archived&&!ticketIsComplete(t)){t.archived=false;delete t.archivedAt;unarchived++;}
     t.legs.forEach(x=>{
-      if(!(x.fbProp||x.nhlProp))return;
+      if(!(x.fbProp||x.nhlProp||x.bbProp))return;
       const key=x.sport+'|'+x.game;if(seen.has(key))return;seen.add(key);
       const g=sportGames(x.sport).find(z=>(z.away.abbr+'@'+z.home.abbr)===x.game);
       if(!g||g.abstract!=='in')return;
       const espnId=g.espnId||g.id;
       if(x.fbProp&&typeof fetchFBBoxscore==='function'){fetchFBBoxscore(espnId,x.sport).catch(()=>{});warmed++;}
       else if(x.nhlProp&&typeof fetchNHLBox==='function'){fetchNHLBox(espnId).catch(()=>{});warmed++;}
+      else if(x.bbProp){try{fbpBox(espnId,x.sport);warmed++;}catch(e){}}
     });
   });
   if(unarchived)set(LS.locked,L);
@@ -21753,6 +21759,7 @@ function closeTicketSheet(){clearInterval(TK_SHEET_T);TK_SHEET=null;const ov=doc
 const CPROP_LIVE_STAT={nhl:{s:['S','SOG'],g:['G'],pts:['PTS']},mlb:{h:['H'],hr:['HR'],k:['K'],tb:['TB']},
   nfl:{py:['passing','YDS'],ry:['rushing','YDS'],wy:['receiving','YDS'],rec:['receiving','REC'],td:['*','TD']}};
 CPROP_LIVE_STAT.ncaaf=CPROP_LIVE_STAT.nfl;
+CPROP_LIVE_STAT.nba={pts:['PTS'],reb:['REB'],ast:['AST'],fg3:['3PT','3PM'],stl:['STL'],blk:['BLK']};CPROP_LIVE_STAT.ncaab=CPROP_LIVE_STAT.nba;
 function cpropBoxVal(sp,box,team,player,k){if(!box)return null;const M=CPROP_LIVE_STAT[sp];if(!M||!M[k])return null;const num=v=>{const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:null;};
   if(sp==='nfl'||sp==='ncaaf'){const T=(box.teamStats||{})[team]||Object.values(box.teamStats||{}).find(x=>['passing','rushing','receiving'].some(c=>fbpFindRow(x[c]||[],player)))||null;if(!T)return null;
     if(k==='td'){let s=0,any=false;['rushing','receiving'].forEach(c=>{const r=fbpFindRow(T[c]||[],player);if(r){any=true;s+=num(r.TD)||0;}});return any?s:null;}
