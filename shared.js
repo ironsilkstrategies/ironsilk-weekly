@@ -2646,7 +2646,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261025d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261025e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -21724,10 +21724,13 @@ function legLiveCard(t,l,opts){opts=opts||{};let g=null;try{g=gradeLeg(l,t.date)
   else if(lp!=null&&state==='in')bar=`<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><div style="flex:1;height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${Math.round(lp*100)}%;background:${col}"></div></div>
     <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${Math.round(lp*100)}% to hit</span>${mv?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${Math.round(p0*100)}%</span>`:''}</div>`;
   const tid=JSON.stringify(String(t.id)).replace(/"/g,'&quot;');
-  return`<div ${opts.link?`onclick="openTicketSheet(${tid})" `:''}style="padding:7px 9px;margin:5px 0;border-radius:9px;border:1.5px solid ${border};background:rgba(255,255,255,.02);${opts.link?'cursor:pointer':''}">
+  /* v2.67 · a live game pops (bold, brighter, a red glow); a game not started says when it starts */
+  const liveCss=state==='in'?'border-width:2.5px;background:rgba(255,75,92,.07);box-shadow:0 0 12px rgba(255,75,92,.28);font-weight:800;':state==='pre'?'opacity:.72;':'';
+  const startTxt=state==='pre'&&e&&e.start?`<div class="mono" style="font-size:10.5px;color:var(--gold);margin-top:2px">⏰ Starts ${new Date(e.start).toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit'})}</div>`:'';
+  return`<div ${opts.link?`onclick="openTicketSheet(${tid})" `:''}style="padding:7px 9px;margin:5px 0;border-radius:9px;border:1.5px solid ${border};background:rgba(255,255,255,.02);${liveCss}${opts.link?'cursor:pointer':''}">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-weight:800;font-size:13.5px;min-width:0">${txtEsc(l.pick)}${l.price!=null?` <span class="mono" style="font-size:11px;color:var(--gold)">${sgnP(+l.price)}</span>`:''}</div>
       <div class="mono" style="font-size:10px;font-weight:800;color:${res[1]};white-space:nowrap">${res[0]}${state!=='pre'&&opts.gc!==false?' '+gcBtn(sp,l.game,d,''):''}</div></div>
-    <div class="mono" style="font-size:10.5px;margin-top:2px">${(SP_LAB[sp]||'').split(' ')[0]} ${sc}</div>${bar}${prLegHtml(l,t.date)}
+    <div class="mono" style="font-size:${state==='in'?'12px':'10.5px'};margin-top:2px;${state==='in'?'font-weight:800;color:var(--ink,#fff)':''}">${(SP_LAB[sp]||'').split(' ')[0]} ${sc}</div>${startTxt}${bar}${prLegHtml(l,t.date)}
     ${g&&g.detail&&!(e&&e.a!=null&&String(g.detail).includes(e.a+'–'+e.h))?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">${txtEsc(g.detail)}</div>`:''}
     ${opts.link?`<div class="mono" style="font-size:9.5px;color:var(--cold);margin-top:3px">${txtEsc(t.name||('Ticket #'+t.id))} · ${(t.legs||[]).length} legs · tap for the whole ticket ↗</div>`:''}</div>`;}
 /* ── the whole ticket, one tap away ───────────────────────────────────────── */
