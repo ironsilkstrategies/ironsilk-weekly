@@ -2646,7 +2646,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261025g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261025h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8874,7 +8874,10 @@ function legPctHtml(x,r){
   if(x.price==null)return'';
   if(r&&r.live){const q=liveLegProb(x,r,x.gameDate);if(q!=null&&Math.abs(q-x.p)>=0.005){const up=q>x.p;
     return`<span class="pp" style="color:${up?'var(--win)':'var(--rust)'}">${(q*100).toFixed(0)}%</span><span class="m" style="font-size:9px"> live (was ${(x.p*100).toFixed(0)}%)</span>`;}}
-  return`<span class="pp">${(x.p*100).toFixed(0)}%</span>`;
+  /* v2.67.3 · before the game, every ticket shows the desk's CURRENT number for the same pick — not whatever each ticket stored when it was built */
+  let p=x.p;try{const sp=x.sport||'mlb';const T=get(TC_KEY,{})||{};const y=(((T.by||{})[sp]||{}).picks||[]).find(z=>z.game===x.game&&String(z.pick).trim()===String(x.pick).trim());
+    if(y){const o=pickConf(y,sp);const c=o?o.cf:pickConfAny(y,sp);if(c!=null&&isFinite(c))p=c;}}catch(e){}
+  return`<span class="pp">${(p*100).toFixed(0)}%</span>`;
 }
 /* Tickets never repainted on their own — every renderTickets()/genTickets()
    call site is a manual action (tab switch, lock, archive, a button). Every
