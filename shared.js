@@ -1463,10 +1463,11 @@ function intakeSave(){
    parser lives on another page wait in the pending queue and file there. */
 const DROP_KEY='d4.intakedrop';
 function dropHash(t){let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36);}
-async function intakeAutoDrop(day){day=day||today();if(typeof location==='undefined'||!/^https?:/.test(location.protocol))return null;
-  let text='';try{const r=await fetch('intake/'+day+'.txt?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;text=await r.text();}catch(e){return null;}
+/* v2.64.1 · consensus rides in its own file (intake/<day>.cons.txt): the reader only reads consensus rows in a paste with no book lines */
+async function intakeAutoDrop(day,ext){day=day||today();if(!ext){const r0=await intakeAutoDrop(day,'.txt');try{await intakeAutoDrop(day,'.cons.txt');}catch(e){}return r0;}if(typeof location==='undefined'||!/^https?:/.test(location.protocol))return null;
+  let text='';try{const r=await fetch('intake/'+day+ext+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;text=await r.text();}catch(e){return null;}
   if(!text.trim()||/^\s*</.test(text))return null; // 404 pages come back as HTML on some hosts
-  const h=day+':'+dropHash(text);const seen=get(DROP_KEY,{})||{};if(seen[h])return{skipped:true,h};
+  const h=day+ext+':'+dropHash(text);const seen=get(DROP_KEY,{})||{};if(seen[h])return{skipped:true,h};
   const m=text.match(/^\s*SOURCE\s*:\s*(.+)$/im);const src=m?m[1].trim():'drop';
   text=text.split('\n').filter(l=>!/^\s*(#|SOURCE\s*:)/i.test(l)).join('\n');
   let res;try{res=await intakeText(text,null,'auto',src);}catch(e){console.warn('auto intake',e);return null;}
@@ -2637,7 +2638,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261025a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261025b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
