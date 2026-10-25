@@ -2637,7 +2637,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261024r';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261025a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16337,7 +16337,7 @@ function brainLearnAll(force){
     try{res.intel=typeof gradeIntel==='function'?gradeIntel():0;}catch(e){res.intel='error: '+e.message;}
     try{res.best=best5Grade();}catch(e){res.best='error: '+e.message;}
     try{res.props=propCalGrade();}catch(e){res.props='error: '+e.message;}
-    try{res.charProps=cpropGrade();}catch(e){res.charProps='error: '+e.message;}
+    try{res.charProps=cpropGrade();}catch(e){res.charProps='error: '+e.message;}try{res.likely=likelyGrade();}catch(e){}
     try{res.charParlays=cparGrade();}catch(e){res.charParlays='error: '+e.message;}
     const L=get(LEARN_KEY,[])||[];L.unshift(res);set(LEARN_KEY,L.slice(0,60));
   }finally{LEARN_T=Date.now();LEARN_BUSY=false;}
@@ -16404,11 +16404,26 @@ function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const tea
       ths.forEach(t=>{const r=pstProb(sp,P.name,k,t,'over');if(r&&r.p>=0.65)best={sp,player:P.name,team:P.team,k,thr:t,p:r.p,mu:r.proj.mu,n:r.proj.n};});
       if(best)out.push(best);});});
   return out.sort((a,b)=>b.p-a.p).slice(0,limit||12);}
-function likelyHtml(){const lab={pts:'pts',reb:'reb',ast:'ast',fg3:'threes',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'receptions',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'strikeouts',s:'SOG',g:'goal'};
-  const secs=['nfl','ncaaf','nba','ncaab','nhl','mlb'].map(sp=>{const R=propLikely(sp,10);if(!R.length)return'';
+/* v2.64 · every likely outcome is logged the day it's shown and graded from the real box line, like the character props */
+const LIKELY_KEY='d4.likelylog';
+function likelyLog(R,d){if(!R||!R.length)return;const A=get(LIKELY_KEY,{})||{};const D=A[d]||(A[d]=[]);const have=new Set(D.map(x=>x.sp+'|'+x.player+'|'+x.k));let n=0;
+  R.forEach(x=>{const k=x.sp+'|'+x.player+'|'+x.k;if(have.has(k))return;have.add(k);D.push({sp:x.sp,player:x.player,team:x.team,k:x.k,thr:x.thr,p:+(+x.p).toFixed(3),hit:null});n++;});
+  if(n){Object.keys(A).sort().slice(0,-45).forEach(k=>delete A[k]);set(LIKELY_KEY,A);}}
+function likelyGrade(){const A=get(LIKELY_KEY,{})||{};let n=0;const LAST={};
+  Object.entries(A).forEach(([d,D])=>D.forEach(x=>{if(x.hit!=null)return;const g=(LAST[x.sp]=LAST[x.sp]||get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];
+    if(!g||g.d<d||g.d>dayShift(d,1)||g.v[x.k]==null)return;x.actual=+g.v[x.k];x.hit=x.actual>=x.thr;n++;}));
+  if(n)set(LIKELY_KEY,A);return n;}
+function likelyRecord(days){const A=get(LIKELY_KEY,{})||{};const lo=dayShift(today(),-(days||30));let w=0,l=0;const by={};
+  Object.entries(A).forEach(([d,D])=>{if(d<lo)return;D.forEach(x=>{if(x.hit==null)return;if(x.hit)w++;else l++;const b=by[x.sp]||(by[x.sp]={w:0,l:0});if(x.hit)b.w++;else b.l++;});});return{w,l,by};}
+function likelyHtml(){try{likelyGrade();}catch(e){}const lab={pts:'pts',reb:'reb',ast:'ast',fg3:'threes',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'receptions',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'strikeouts',s:'SOG',g:'goal'};
+  const d=today();const LOG=(get(LIKELY_KEY,{})||{})[d]||[];const mark=x=>{const e=LOG.find(y=>y.sp===x.sp&&y.player===x.player&&y.k===x.k);return!e||e.hit==null?'':e.hit?` <span style="color:var(--win)">✅ ${e.actual}</span>`:` <span style="color:var(--rust)">❌ ${e.actual}</span>`;};
+  const secs=['nfl','ncaaf','nba','ncaab','nhl','mlb'].map(sp=>{let R=propLikely(sp,10);try{likelyLog(R,d);}catch(e){}
+    /* games that started drop out of the live list — today's logged ones stay, with their grade */
+    const keep=LOG.filter(x=>x.sp===sp&&!R.some(y=>y.player===x.player&&y.k===x.k)).map(x=>({...x,mu:NaN,n:0}));R=[...R,...keep];if(!R.length)return'';
     return`<details class="tkt" style="margin:6px 0"><summary><b>${SP_LAB[sp]}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${R.length} likely</span></summary>${R.map(x=>
-      `<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.player)}</b> <span style="color:var(--mute)">${txtEsc(x.team)}</span> · <b>${x.thr}+ ${lab[x.k]||x.k}</b> · <span style="color:var(--win)">${Math.round(x.p*100)}%</span> · avg ${x.mu.toFixed(x.mu<10?2:0)} (${x.n}G)</div>`).join('')}</details>`;}).join('');
-  return secs?`<div class="mktlab">🔮 Likely outcomes today <span class="sub" style="font-size:9px">— highest standard line each player clears ≥65%, from his game logs</span></div>${secs}`:'';}
+      `<div class="mono" style="font-size:10.5px;padding:3px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.player)}</b> <span style="color:var(--mute)">${txtEsc(x.team)}</span> · <b>${x.thr}+ ${lab[x.k]||x.k}</b> · <span style="color:var(--win)">${Math.round(x.p*100)}%</span>${isFinite(x.mu)?` · avg ${x.mu.toFixed(x.mu<10?2:0)} (${x.n}G)`:''}${mark(x)}</div>`).join('')}</details>`;}).join('');
+  const LR=likelyRecord(30);const rec=LR.w+LR.l?`<div class="mono" style="font-size:10px;margin:2px 0 4px">Graded, last 30 days: <b style="color:${LR.w/(LR.w+LR.l)>=0.65?'var(--win)':'var(--gold)'}">${LR.w}-${LR.l} (${Math.round(100*LR.w/(LR.w+LR.l))}%)</b> · ${Object.entries(LR.by).map(([sp,b])=>`${(SP_LAB[sp]||sp).split(' ')[0]} ${b.w}-${b.l}`).join(' · ')}</div>`:'';
+  return secs?`<div class="mktlab">🔮 Likely outcomes today <span class="sub" style="font-size:9px">— highest standard line each player clears ≥65%, from his game logs · every one graded</span></div>${rec}${secs}`:'';}
 function highPctLinesHtml(){const R=propBoard(null,null).filter(x=>x.matched&&x.best).map(x=>{const pO=x.pOver,side=pO>=0.5?'over':'under',p=side==='over'?pO:1-pO;
     const price=side==='over'?x.over:x.under;const ev=side==='over'?x.evO:x.evU;return{...x,side,p,price,ev};}).filter(x=>x.p>=0.6).sort((a,b)=>b.p-a.p).slice(0,10);
   if(!R.length)return'';
@@ -19139,7 +19154,7 @@ const AP_STEPS=[
   ['dog','Underdog Spotter probation','Checks whether the Underdog Spotter\'s dogs have paid enough to earn a vote.',()=>dogProbation().n],
   ['ideo','Ideology floors','Weekly: each character\'s confidence floor per sport and market, kept only if it holds on unseen games.',()=>ideoTune(false)],
   ['parlays','Grade parlays','Every character\'s game-line and props tickets.',()=>cparGrade()+cpxGrade()],
-  ['props','Grade props','Prop calls graded from real box lines.',()=>cpropGrade()+propCalGrade()],
+  ['props','Grade props','Prop calls graded from real box lines.',()=>cpropGrade()+propCalGrade()+likelyGrade()],
   ['banker','Banker\'s desk','The Banker\'s day tickets.',()=>bkDayGrade()],
   ['cal','Calibration snapshot','Daily: is "60%" still winning 60%? Blend weights per market.',()=>{calSnapshot();return 1;}],
   ['mlbcal','Baseball calibration','Segmented calibration, drift and velocity (baseball page).',()=>{if(typeof GAMES==='undefined'||!GAMES.length)return 0;computeCalibration();computeGlobalDrift();computeSegmentedCalibration();return 1;}]];
