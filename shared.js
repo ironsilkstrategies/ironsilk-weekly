@@ -2646,7 +2646,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261025h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261025i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8226,6 +8226,7 @@ function resolveLeg(leg,ticketDate){
 const FBP_BOX_KEY='d4.fbbox',FBP_IDX_KEY='d4.fbevidx';
 const FBP_ESPN={nfl:'https://site.api.espn.com/apis/site/v2/sports/football/nfl',
   ncaaf:'https://site.api.espn.com/apis/site/v2/sports/football/college-football'};
+FBP_ESPN.nba=FBP_ESPN.nba||'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';FBP_ESPN.ncaab=FBP_ESPN.ncaab||'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball';
 let FBP_MEM={},FBP_INFLIGHT={},FBP_RENDER_T=null;
 let FBP_LAST_RENDER=0;
 function fbpKick(){ // re-render the tickets board once fetched data lands — at most every 2s
@@ -8309,7 +8310,7 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    wrong day — so the search covers the ticket date through a week after it. */
 const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':'nfl';
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.67.4 · NBA legs were looked up as NFL games */
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
