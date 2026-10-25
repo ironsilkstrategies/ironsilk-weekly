@@ -2646,7 +2646,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261025e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261025f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -13473,7 +13473,7 @@ function trackedPicksHtml(){
       if(r===true)w++;else if(r===false)l++;else pd++;
       const gid=legGameId(x,t.date);
       const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
-      return `<li${jumpTo}>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>
+      return `<li${jumpTo} class="${legRowCls(x,t.date)}">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${legStartTxt(x,t.date)}
         <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
     }).join('');
     const rec=(w+l||pd===0)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' pending':''}`:' · pending';
@@ -13729,6 +13729,12 @@ function syncTrackedAutoParlay(source){
   return ticket;
 }
 
+/* v2.67.1 · on every ticket list: a live leg pops (bold, red glow), an unstarted one shows its start */
+function legRowState(x,d){try{const r=gradeLeg(x,d);if(r&&(r.hit===true||r.hit===false||r.push)&&!r.live)return{st:'post'};if(r&&r.live)return{st:'in'};
+  const e=mgEventFor(x.sport||'mlb',x.game,String(x.gameDate||d||'').slice(0,10),!!x.gdApprox||!x.gameDate);if(e&&e.state)return{st:e.state,start:e.start};}catch(e){}return{st:'pre'};}
+function legRowCls(x,d){const S=legRowState(x,d);return S.st==='in'?'leg-live':S.st==='pre'?'leg-pre':'';}
+function legStartTxt(x,d){const S=legRowState(x,d);if(S.st!=='pre'||!S.start)return'';const t=new Date(S.start);return isFinite(t)?` <span class="mono" style="font-size:10px;color:var(--gold)">⏰ ${t.toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit'})}</span>`:'';}
+if(typeof document!=='undefined'&&!document.getElementById('legRowCss')){const st=document.createElement('style');st.id='legRowCss';st.textContent='li.leg-live{font-weight:800;background:rgba(255,75,92,.08);border-left:3px solid #ff4b5c;border-radius:6px;padding:3px 6px;box-shadow:0 0 10px rgba(255,75,92,.22)}li.leg-live::before{content:"● LIVE ";color:#ff4b5c;font-size:10px;font-family:monospace}li.leg-pre{opacity:.75}';(document.head||document.documentElement).appendChild(st);}
 function systemPicksHtml(){
   // Shows today's single auto-built System top-10 ticket — same wager-row/grading
   // treatment as any locked ticket, just always exactly this one, always rebuilt
@@ -13748,7 +13754,7 @@ function systemPicksHtml(){
     if(r===true)w++;else if(r===false)l++;else pd++;
     const gid=legGameId(x,t.date);
     const jumpTo=gid&&GAMES.some(z=>z.id===gid)?` onclick="jumpToGame(${gid})" style="cursor:pointer"`:'';
-    return `<li${jumpTo}>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span> ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
+    return `<li${jumpTo} class="${legRowCls(x,t.date)}">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${legStartTxt(x,t.date)} ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
   }).join('');
   const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
   return head+`<div class="tkt hi"><h3>${t.date}</h3>
@@ -14035,7 +14041,7 @@ function genTickets(mode){
         const sportTag=x.sport?`<span style="font-family:'IBM Plex Mono';font-size:8px;
           letter-spacing:.06em;color:var(--mute);border:1px solid var(--rule);
           border-radius:3px;padding:0 4px;margin-left:4px">${x.sport==='ncaaf'?'CFB':x.sport.toUpperCase()}</span>`:'';
-        return `<li${jumpTo}>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${sportTag} ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
+        return `<li${jumpTo} class="${legRowCls(x,t.date)}">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${legStartTxt(x,t.date)}${sportTag} ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
       }).join('');
       const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
       const lockBadge=t.finalized
