@@ -923,7 +923,7 @@ async function deskFreezeAll(why){const d=today();if(deskFrozen(d))return get(FR
   return get(FREEZE_KEY,null);}
 /* any single sport's evaluation still freezes the day (the old buttons keep working) */
 function evalLockMark(sp){try{evalFreeze(sp);}catch(e){console.warn('eval freeze',e);}const L=get(EVAL_LOCK_KEY,{})||{};if(L.date!==today())Object.assign(L,{date:today(),by:{}});L.by=L.by||{};L.by[sp]=Date.now();set(EVAL_LOCK_KEY,L);
-  if(!DESK_EVAL_BUSY&&!DESK_BG_EVAL&&!(typeof BG_MODE!=='undefined'&&BG_MODE))setTimeout(()=>{deskFreezeAll('master evaluation · '+((SP_LAB[sp]||sp).split(' ').pop())).catch(()=>{});},300);}
+  /* v2.67.7 · one sport's evaluation no longer freezes the day — only the full master evaluation does, after every sport has run */}
 /* the process bar at the top of Today: where the day stands */
 function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get(AP_KEY,[])||[];cal=A[0]&&A[0].ts;}catch(e){}
   let intake=0;try{intake=(getExt()[d]||[]).length+(get(LS.exttrends,{})[d]||[]).length+(get(LS.extconsensus,{})[d]||[]).length;}catch(e){}
