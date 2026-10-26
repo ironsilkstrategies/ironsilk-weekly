@@ -889,7 +889,17 @@ async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confir
     await masterEvalFinish(done,miss);
   }finally{DESK_EVAL_BUSY=false;}
   try{renderToday(true);}catch(e){}deskRerender();return{done,miss,ms:Date.now()-t0};}
-async function masterEvalFinish(done,miss){{
+/* v2.67.8 · review mode: the master evaluation stops short of the freeze so the picks can be checked first */
+const deskReviewOn=()=>get('d4.reviewFreeze',true)!==false;
+function deskEvalReady(){const R=get('d4.evalready',null);return !!(R&&R.d===today()&&!deskFrozen());}
+async function deskReviewFreeze(){const R=get('d4.evalready',null)||{};if(!confirm('Freeze today\'s picks and publish them?'))return;
+  localStorage.removeItem('d4.evalready');DESK_EVAL_BUSY=true;try{await masterEvalFinish(R.done||[],R.miss||[],true);}finally{DESK_EVAL_BUSY=false;}
+  try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}}
+async function masterEvalFinish(done,miss,force){
+  if(!force&&deskReviewOn()){set('d4.evalready',{d:today(),ts:Date.now(),done,miss});
+    deskSay(`<span style="color:var(--gold)">✓ ${done.length} sport${done.length===1?'':'s'} evaluated${miss.length?` · no games/lines: ${miss.map(s=>SP_LAB[s]||s).join(', ')}`:''}. Review the Best card, then tap 🔒 Looks good — freeze &amp; publish.</span>`);
+    try{deskToast('Evaluation done — review the picks, then freeze',4000);}catch(e){}return;}
+  {
     deskSay('③ Freezing the day…');await new Promise(r=>setTimeout(r,30));DESK_EVAL_BUSY=false;
     const F=await deskFreezeAll('master evaluation · '+done.map(s=>(SP_LAB[s]||s).split(' ').pop()).join(', '));
     /* v2.44 · the Book can hold the freeze (a sport missing from the card, broken inputs) — say so instead of "Frozen" */
@@ -936,7 +946,8 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
     ${step(2,intake>0||odds>0,'Intake',`${odds} priced pick${odds===1?'':'s'}${intake?' · '+intake+' outside reads':''}`)}
     ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):'not yet — freezes everything')}
     ${step(4,fz&&pub&&pub.d===d&&pub.ok,'Published',fz?((pub&&pub.d===d&&pub.ok?'page ✓':'page …')+' · '+(posted&&posted.d===d?'VIP ✓':'VIP …')):'after the freeze')}</div>
-    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:`<button class="primary" onclick="masterEvalAll()">🔒 Run the master evaluation — all sports</button>`}<button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
+    ${fz?'':`<label class="sub" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" ${deskReviewOn()?'checked':''} onchange="set('d4.reviewFreeze',this.checked);deskRerender()"> Let me review the picks before freezing</label>${deskEvalReady()?`<div class="sub" style="color:var(--gold);margin-top:4px">✓ Every sport evaluated — check the Best card below, then freeze. Nothing posts until you do.</div>`:''}`}
+    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
     <div class="deskStatus sub mono" style="font-size:10px;margin-top:4px"></div></div>`;}
 
 /* ── 13 · THE PUBLIC PAGE — premium, honest, and live ──────────────────────────

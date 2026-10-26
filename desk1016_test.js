@@ -91,6 +91,10 @@ setTimeout(async()=>{try{
   /* ── the master evaluation freezes everything ── */
   E(`set('d4.tgbot','1:a');set('d4.tgchat','-100555');set(LS.ghtoken,'ghp_x');set(BCAST_KEY,{pub:'@TheDeskApp',vipLounge:'-100777',pubLounge:'',autoPost:true,siteByWorker:false});liveSports=()=>['nhl'];`);
   E(`runNHLMasterEval=function(){evalLockMark('nhl');return[];}`);
+  /* v2.67.8 · review mode (the default): the evaluation runs, nothing freezes until the freeze button */
+  const R0=await E('masterEvalAll()');
+  T('review mode: evaluation finishes without freezing, and the freeze button shows',!E('deskFrozen()')&&E('deskEvalReady()')&&/Looks good — freeze/.test(E('deskProcessHtml()')),JSON.stringify(R0));
+  E(`set('d4.reviewFreeze',false);localStorage.removeItem('d4.evalready')`);
   const R=await E('masterEvalAll()');await new Promise(z=>setTimeout(z,1500));
   T('one tap evaluates every live sport, then freezes the day',E('deskFrozen()')&&R&&R.done.includes('nhl'),JSON.stringify(R));
   const B2=E('best5State()'),P2=E('deskPlan()'),C2=E('cparState()'),K2=E('bkDayState()');
