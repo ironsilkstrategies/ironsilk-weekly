@@ -1,5 +1,5 @@
 SOURCE: covers
-# Mon Oct 26, 2026 — book lines: sportsbetting.ag (12:15–12:19 PM CT) · NBA predicted scores + trends: Covers (12:22 PM CT). Batch 1 of 3 + batch 2 (Covers predictions/trends, 12:22–12:25 PM CT).
+# Mon Oct 26, 2026 — book lines: sportsbetting.ag (12:15–12:19 PM CT) · NBA predicted scores + trends: Covers (12:22 PM CT). Batch 1 of 3 + batch 2 (Covers predictions/trends, 12:22–12:25 PM CT) + batch 3 (NFL/MLB trends, MLB prediction). Consensus in 2026-10-26.cons.txt.
 
 NBA
 
@@ -146,6 +146,14 @@ H1SPREAD: Dallas Cowboys -2.5 (-120) / Philadelphia Eagles +2.5 (+100)
 H1ML: Dallas Cowboys -170 / Philadelphia Eagles +149
 H1OU: o21.5 (-110) / u21.5 (-110)
 PRED: Dallas Cowboys 23.61 / Philadelphia Eagles 21.71
+TREND Dallas Cowboys: Over is 5-0 in Cowboys last 5 road games vs. a team with a losing home record.
+TREND Dallas Cowboys: Over is 5-0 in Cowboys last 5 games after allowing more than 250 yards passing in their previous game.
+TREND Dallas Cowboys: Over is 4-0 in Cowboys last 4 games as a road favorite.
+TREND Dallas Cowboys: Over is 4-0 in Cowboys last 4 games as a road underdog.
+TREND Philadelphia Eagles: Under is 5-0 in Eagles last 5 vs. NFC.
+TREND Philadelphia Eagles: Under is 5-0 in Eagles last 5 games as an underdog.
+TREND Philadelphia Eagles: Under is 6-0 in Eagles last 6 games following a straight up loss.
+TREND Philadelphia Eagles: Over is 4-0 in Eagles last 4 games as a home underdog.
 
 MLB
 
@@ -153,6 +161,15 @@ Milwaukee Brewers @ Tampa Bay Rays
 ML: Milwaukee Brewers +103 / Tampa Bay Rays -113
 RL: Milwaukee Brewers +1.5 (-220) / Tampa Bay Rays -1.5 (+186)
 OU: o7 (-117) / u7 (-103)
+PRED: Milwaukee Brewers 4.50 / Tampa Bay Rays 4.15
+TREND Milwaukee Brewers: Brewers are 4-0 in their last 4 games on fieldturf.
+TREND Milwaukee Brewers: Over is 4-0 in Brewers last 4 interleague road games vs. a team with a winning record.
+TREND Milwaukee Brewers: Under is 8-1 in Brewers last 9 vs. American League East.
+TREND Milwaukee Brewers: Brewers are 5-1 in their last 6 road games.
+TREND Tampa Bay Rays: Rays are 6-0 in their last 6 interleague home games vs. a team with a winning record.
+TREND Tampa Bay Rays: Over is 5-1 in Rays last 6 interleague games as a favorite.
+TREND Tampa Bay Rays: Rays are 7-2 in their last 9 games as a home underdog.
+TREND Tampa Bay Rays: Over is 4-1-1 in Rays last 6 during game 3 of a series.
 
 NHL
 
