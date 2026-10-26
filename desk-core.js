@@ -876,17 +876,42 @@ async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confir
     deskSay(`② Evaluating ${SP_LAB[here]||here}…`);await new Promise(r=>setTimeout(r,30));try{todaySnapshot();}catch(e){}
     try{if(deskRunSportEval(here))done.push(here);}catch(e){console.warn('eval',here,e);miss.push(here);}
     const others=liveSports().filter(sp=>sp!==here&&SPORT_PAGE[sp]);
+    /* v2.67.6 · RELAY, not frames. Each sport page is ~2 MB of script; loading one inside another (a hidden iframe) doubled
+       the memory and iOS killed the tab — the grey screen, then white, then "A problem repeatedly occurred". Now the app
+       walks page to page: evaluate here, open the next sport's page, evaluate, … and come back to freeze. One page alive at a time. */
+    if(others.length&&!window.__EVAL_FRAMES__){set(EVAL_CHAIN_KEY,{ts:Date.now(),d:today(),todo:others,done,miss,back:location.pathname.split('/').pop()||'TheDesk.html'});
+      DESK_EVAL_BUSY=false;deskSay(`② Evaluating ${SP_LAB[others[0]]||others[0]}… (the app hops through each sport, then comes back here)`);
+      setTimeout(()=>evalChainGo(),400);return{done,miss,relay:true};}
     for(const sp of others){deskSay(`② Evaluating ${SP_LAB[sp]||sp} in the background… (${done.length+1} of ${others.length+1})`);
       wbBeforeFrame();const ts=Date.now();const f=document.createElement('iframe');f.src=SPORT_PAGE[sp]+'?bg=1&eval=1&v='+Date.now();f.setAttribute('aria-hidden','true');f.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;border:0;opacity:0';
       document.body.appendChild(f);const got=await new Promise(res=>{const iv=setInterval(()=>{const R=get('d4.bgeval.'+sp,null);if(R&&R.ts>=ts){clearInterval(iv);res(R);}else if(Date.now()-ts>60000){clearInterval(iv);res(null);}},600);});
       try{f.remove();}catch(e){}wbBeforeFrame();if(got&&got.ok)done.push(sp);else miss.push(sp);}
+    await masterEvalFinish(done,miss);
+  }finally{DESK_EVAL_BUSY=false;}
+  try{renderToday(true);}catch(e){}deskRerender();return{done,miss,ms:Date.now()-t0};}
+async function masterEvalFinish(done,miss){{
     deskSay('③ Freezing the day…');await new Promise(r=>setTimeout(r,30));DESK_EVAL_BUSY=false;
     const F=await deskFreezeAll('master evaluation · '+done.map(s=>(SP_LAB[s]||s).split(' ').pop()).join(', '));
     /* v2.44 · the Book can hold the freeze (a sport missing from the card, broken inputs) — say so instead of "Frozen" */
     if(!deskFrozen()){let H=null;try{H=typeof bookHold==='function'?bookHold():null;}catch(e){}deskSay(`<span style="color:var(--gold)">⏳ Not frozen yet — the Book is holding it: ${txtEsc((H&&H.why)||'see Records → 📖 The Book')}</span>`);}
     else deskSay(`<span style="color:var(--win)">✓ Frozen ${deskT(F&&F.ts)} — ${done.length} sport${done.length===1?'':'s'} evaluated${miss.length?` · couldn't load ${miss.map(s=>SP_LAB[s]||s).join(', ')} (no games or no lines yet)`:''}. Publishing…</span>`);
-  }finally{DESK_EVAL_BUSY=false;}
-  try{renderToday(true);}catch(e){}deskRerender();return{done,miss,ms:Date.now()-t0};}
+  }}
+const EVAL_CHAIN_KEY='d4.evalchain';
+function evalChainNext(){const C=get(EVAL_CHAIN_KEY,null);if(!C||C.d!==today()||Date.now()-C.ts>15*60e3)return null;return C;}
+function evalChainGo(){const C=evalChainNext();if(!C)return;try{wbBeforeFrame();}catch(e){}
+  const sp=C.todo[0];location.href=sp?SPORT_PAGE[sp]+'?bg=1&eval=1&chain=1&v='+Date.now():C.back+'?evaldone=1&v='+Date.now();}
+/* a page opened by the relay: show where we are, evaluate when the board is ready, then hop on */
+const EVAL_CHAIN_HOP=typeof location!=='undefined'&&/[?&]chain=1/.test(location.search||'');
+if(EVAL_CHAIN_HOP&&typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{const C=evalChainNext();const n=C?C.done.length+C.miss.length+1:0,N=C?n+C.todo.length-1:0;
+  const d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:99999;background:#0b1220;color:#f5c542;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 16px system-ui;text-align:center;padding:24px';
+  d.innerHTML=`<div style="font-size:34px">🔒</div><div style="margin-top:10px">Master evaluation</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">Evaluating ${SP_LAB[window.__PAGE_SPORT__]||''}… (${n} of ${N})</div><div style="color:#64748b;margin-top:14px;font-size:12px;font-weight:400">Hang tight — the app comes back to Today on its own.</div>`;document.body.appendChild(d);});
+if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;const t0=Date.now();const iv=setInterval(()=>{const R=get('d4.bgeval.'+(window.__PAGE_SPORT__||sp0),null);
+  if(!(R&&R.ts>=t0)&&Date.now()-t0<65000)return;clearInterval(iv);const C=evalChainNext();if(!C)return;const sp=C.todo.shift();
+  if(R&&R.ts>=t0&&R.ok)C.done.push(sp);else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
+/* back home: freeze with what the relay gathered */
+if(typeof location!=='undefined'&&/[?&]evaldone=1/.test(location.search||'')&&!DESK_BG_EVAL)setTimeout(async()=>{const C=evalChainNext();if(!C)return;localStorage.removeItem(EVAL_CHAIN_KEY);
+  try{history.replaceState(null,'',location.pathname);}catch(e){}DESK_EVAL_BUSY=true;try{await masterEvalFinish(C.done,C.miss);}catch(e){console.warn('eval finish',e);}finally{DESK_EVAL_BUSY=false;}
+  try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}},2500);
 const deskT=ts=>ts?new Date(ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
 async function deskFreezeAll(why){const d=today();if(deskFrozen(d))return get(FREEZE_KEY,null);
   try{confBackfill(d);}catch(e){console.warn('conf backfill',e);}PCI_C=null;
