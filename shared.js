@@ -1871,11 +1871,16 @@ function intelTrendDir(text){
 /* ── typed line parser ── */
 function intelParse(text,type,src,sp){
   const out={xpicks:[],trends:[],consensus:[],preds:[],unread:[]};let ctx=null;
+  /* v2.67.5 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
+     Before, "DET 16% / EDM 84%" (hockey) on the NFL page latched onto the Lions' game — abbreviations collide across leagues. */
+  let secSp=null;const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',MLB:'mlb',NHL:'nhl',NBA:'nba',NCAAB:'ncaab',CBB:'ncaab'};
   stripBOM(text).split('\n').map(l=>l.replace(/^[\s\-*•>#]+/,'').trim()).filter(Boolean).forEach(l=>{
-    if(/^(NFL|NCAAF|CFB|MLB)(\s+\w+)?$/i.test(l)||/^source\s*:/i.test(l))return;
+    const sh=l.match(/^(NFL|NCAAF|CFB|MLB|NHL|NBA|NCAAB|CBB)$/i);if(sh){secSp=SPH[sh[1].toUpperCase()];return;}
+    if(secSp&&sp&&secSp!==sp)return;
+    if(/^(NFL|NCAAF|CFB|MLB|NHL|NBA)(\s+\w+)?$/i.test(l)||/^source\s*:/i.test(l))return;
     const hdr=l.match(/^(.+?)\s+(?:@|at|vs\.?|v)\s+(.+?)$/i);
     /* A line with a bet in it ("Over 40.5 Browns @ Jaguars", "Jets +6.5 vs Lions") is data, not a header. */
-    if(hdr&&!/\d{2,}%|\(\s*[+\-]\d/.test(l)&&!(type==='xpick'&&/\b(over|under|ml|moneyline)\b|[+\-]\d/i.test(l))&&!(type==='trend'&&/\d+-\d+/.test(l))){const t=intelTeams(sp,l);if(t.length>=2||(t.length&&t[0])){ctx=t[0].game;if(type!=='pred'||!/\d+\.\d|\b\d{1,2}\b.*\b\d{1,2}\b/.test(l))return;}}
+    if(hdr&&!/\d{2,}%|\(\s*[+\-]\d/.test(l)&&!(type==='xpick'&&/\b(over|under|ml|moneyline)\b|[+\-]\d/i.test(l))&&!(type==='trend'&&/\d+-\d+/.test(l))){const t=intelTeams(sp,l);if(type==='cons'&&!(t.length>=2&&t[0].game===t[1].game)){ctx=null;return;}if(t.length>=2||(t.length&&t[0])){ctx=t[0].game;if(type!=='pred'||!/\d+\.\d|\b\d{1,2}\b.*\b\d{1,2}\b/.test(l))return;}}
     const where=intelGameFor(sp,l,ctx);
     if(type==='pred'){
       const nums=(l.match(/\b\d{1,2}(?:\.\d+)?\b/g)||[]).map(Number).filter(x=>x<=80);
@@ -1892,9 +1897,13 @@ function intelParse(text,type,src,sp){
         .map(m=>({who:(m[1]||m[4]||'').trim(),pct:+(m[2]||m[3])}));
       const money=/money|handle|\$|dollars/i.test(l);
       const ou=pairs.filter(p=>/^(o|over|u|under)$/i.test(p.who));
+      const slash=l.match(/^([A-Za-z .'&]{2,24})\/([A-Za-z .'&]{2,24}):/);
+      if(ou.length&&slash){const a=intelTeams(sp,slash[1].trim())[0],h=intelTeams(sp,slash[2].trim())[0];if(!(a&&h&&a.game===h.game)){out.unread.push(l);return;}}
       if(ou.length&&(where||ctx)){const G=(where&&where.game)||ctx,[aw,hm]=G.split('@');const o=ou.find(p=>/^o/i.test(p.who)),u=ou.find(p=>/^u/i.test(p.who));
         out.consensus.push({src,game:G,away:aw,home:hm,market:'total',metric:money?'money':'bets',awayPct:null,homePct:null,overPct:o?o.pct:(u?100-u.pct:null),underPct:u?u.pct:(o?100-o.pct:null),line:null});return;}
       const tp=pairs.map(p=>({...p,t:intelTeams(sp,p.who)[0]})).filter(p=>p.t);
+      /* v2.67.5 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
+      if(pairs.length>=2&&!(tp.length>=2&&tp.every(p=>p.t.game===tp[0].t.game))){out.unread.push(l);return;}
       if(tp.length){const G=tp[0].t.game,[aw,hm]=G.split('@');let ap=null,hp=null;tp.forEach(p=>{if(p.t.game!==G)return;if(p.t.side==='a')ap=p.pct;else hp=p.pct;});
         if(ap==null&&hp!=null)ap=100-hp;if(hp==null&&ap!=null)hp=100-ap;
         out.consensus.push({src,game:G,away:aw,home:hm,market:/spread|ats/i.test(l)?'spread':'moneyline',metric:money?'money':'bets',awayPct:ap,homePct:hp,overPct:null,underPct:null,line:null});return;}
@@ -2646,7 +2655,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261025i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261026a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8310,7 +8319,7 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    wrong day — so the search covers the ticket date through a week after it. */
 const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.67.4 · NBA legs were looked up as NFL games */
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.67.5 · NBA legs were looked up as NFL games */
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};

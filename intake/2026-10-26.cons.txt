@@ -1,21 +1,29 @@
+NHL
 DET @ EDM
 DET 16% / EDM 84%
 LA @ NYR
 LA 23% / NYR 77%
-MIL @ TB
-MIL 29% / TB 71%
 TOR @ CAL
 TOR 78% / CAL 22%
+NBA
 IND @ MIL
 IND 75% / MIL 25%
 GS @ DEN
 GS 23% / DEN 77%
 CHI @ BOS
 CHI 71% / BOS 29%
+MLB
+MIL @ TB
+MIL 29% / TB 71%
+NHL
 TOTALS
 DET/EDM: 88% Over | Line 6.5
 TOR/CAL: 72% Over | Line 6.5
+MLB
+TOTALS
 MIL/TB: 71% Over | Line 7
+NBA
+TOTALS
 MIN/CLE: 77% Under | Line 232.5
 WAS/CHA: 71% Under | Line 228.5
 MEM/UTA: 79% Under | Line 238.5
