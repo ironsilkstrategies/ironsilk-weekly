@@ -1,0 +1,140 @@
+SOURCE: covers
+# Mon Oct 26, 2026 — book lines: sportsbetting.ag (12:15–12:19 PM CT) · NBA predicted scores + trends: Covers (12:22 PM CT). Batch 1 of 3.
+
+NBA
+
+Minnesota Timberwolves @ Cleveland Cavaliers
+ML: Minnesota Timberwolves +165 / Cleveland Cavaliers -190
+SPREAD: Minnesota Timberwolves +5.5 (-114) / Cleveland Cavaliers -5.5 (-106)
+OU: o232 (-110) / u232 (-110)
+H1SPREAD: Minnesota Timberwolves +3 (-110) / Cleveland Cavaliers -3 (-110)
+H1ML: Minnesota Timberwolves +149 / Cleveland Cavaliers -170
+H1OU: o113 (-110) / u113 (-110)
+PRED: Minnesota Timberwolves 114.20 / Cleveland Cavaliers 119.81
+TREND Minnesota Timberwolves: Timberwolves are 5-0 ATS in their last 5 games as a favorite.
+TREND Minnesota Timberwolves: Under is 5-1 in Timberwolves last 6 games as a favorite.
+TREND Cleveland Cavaliers: Over is 6-1 in Cavaliers last 7 home games.
+TREND Cleveland Cavaliers: Over is 5-1 in Cavaliers last 6 games vs. a team with a winning % above .600.
+
+Washington Wizards @ Charlotte Hornets
+ML: Washington Wizards +120 / Charlotte Hornets -140
+SPREAD: Washington Wizards +2.5 (-110) / Charlotte Hornets -2.5 (-110)
+OU: o228.5 (-110) / u228.5 (-110)
+H1SPREAD: Washington Wizards +1 (-105) / Charlotte Hornets -1 (-115)
+H1ML: Washington Wizards +112 / Charlotte Hornets -132
+H1OU: o117.5 (-110) / u117.5 (-110)
+PRED: Washington Wizards 116.75 / Charlotte Hornets 115.15
+TREND Washington Wizards: Over is 5-0 in Wizards last 5 road games vs. a team with a home winning % of less than .400.
+TREND Washington Wizards: Over is 6-2 in Wizards last 8 games as a favorite.
+TREND Charlotte Hornets: Under is 6-0 in Hornets last 6 overall.
+TREND Charlotte Hornets: Under is 5-0 in Hornets last 5 games as an underdog.
+
+Dallas Mavericks @ Miami Heat
+ML: Dallas Mavericks +230 / Miami Heat -280
+SPREAD: Dallas Mavericks +7.5 (-105) / Miami Heat -7.5 (-115)
+OU: o241 (-110) / u241 (-110)
+H1SPREAD: Dallas Mavericks +4 (-105) / Miami Heat -4 (-115)
+H1ML: Dallas Mavericks +183 / Miami Heat -215
+H1OU: o123 (-110) / u123 (-110)
+PRED: Dallas Mavericks 114.40 / Miami Heat 122.04
+TREND Dallas Mavericks: Under is 7-1 in Mavericks last 8 vs. a team with a losing straight up record.
+TREND Dallas Mavericks: Under is 9-2 in Mavericks last 11 road games vs. a team with a home winning % of less than .400.
+
+Chicago Bulls @ Boston Celtics
+ML: Chicago Bulls +511 / Boston Celtics -710
+SPREAD: Chicago Bulls +14 (-110) / Boston Celtics -14 (-110)
+OU: o232.5 (-116) / u232.5 (-104)
+H1SPREAD: Chicago Bulls +8 (-110) / Boston Celtics -8 (-110)
+H1ML: Chicago Bulls +334 / Boston Celtics -425
+H1OU: o113 (-115) / u113 (-105)
+PRED: Chicago Bulls 109.96 / Boston Celtics 122.12
+TREND Chicago Bulls: Under is 7-2 in Bulls last 9 overall.
+TREND Chicago Bulls: Bulls are 8-2 ATS in their last 10 games following a ATS loss.
+TREND Boston Celtics: Celtics are 4-0 ATS in their last 4 games vs. a team with a losing straight up record.
+TREND Boston Celtics: Celtics are 6-1 ATS in their last 7 home games vs. a team with a losing road record.
+
+Indiana Pacers @ Milwaukee Bucks
+ML: Indiana Pacers -175 / Milwaukee Bucks +153
+SPREAD: Indiana Pacers -4.5 (-110) / Milwaukee Bucks +4.5 (-110)
+OU: o238.5 (-113) / u238.5 (-107)
+H1SPREAD: Indiana Pacers -2.5 (-110) / Milwaukee Bucks +2.5 (-110)
+H1ML: Indiana Pacers -163 / Milwaukee Bucks +143
+H1OU: o116.5 (-105) / u116.5 (-115)
+
+Phoenix Suns @ Oklahoma City Thunder
+ML: Phoenix Suns +327 / Oklahoma City Thunder -415
+SPREAD: Phoenix Suns +10 (-108) / Oklahoma City Thunder -10 (-112)
+OU: o221 (-110) / u221 (-110)
+H1SPREAD: Phoenix Suns +5.5 (-105) / Oklahoma City Thunder -5.5 (-115)
+H1ML: Phoenix Suns +230 / Oklahoma City Thunder -280
+H1OU: o113 (-115) / u113 (-105)
+PRED: Phoenix Suns 105.46 / Oklahoma City Thunder 114.36
+TREND Phoenix Suns: Over is 5-0 in Suns last 5 games after scoring more than 125 points in their previous game.
+TREND Phoenix Suns: Over is 8-2 in Suns last 10 games as an underdog.
+
+Atlanta Hawks @ Houston Rockets
+ML: Atlanta Hawks +168 / Houston Rockets -193
+SPREAD: Atlanta Hawks +5 (-115) / Houston Rockets -5 (-105)
+OU: o229.5 (-113) / u229.5 (-107)
+H1SPREAD: Atlanta Hawks +2.5 (-105) / Houston Rockets -2.5 (-115)
+H1ML: Atlanta Hawks +145 / Houston Rockets -165
+H1OU: o116.5 (-110) / u116.5 (-110)
+
+Memphis Grizzlies @ Utah Jazz
+ML: Memphis Grizzlies +103 / Utah Jazz -123
+SPREAD: Memphis Grizzlies +1.5 (-110) / Utah Jazz -1.5 (-110)
+OU: o238.5 (-110) / u238.5 (-110)
+H1SPREAD: Memphis Grizzlies +0.5 (-110) / Utah Jazz -0.5 (-110)
+H1OU: o122.5 (-110) / u122.5 (-110)
+Q1SPREAD: Memphis Grizzlies +0.5 (-115) / Utah Jazz -0.5 (-105)
+
+Golden State Warriors @ Denver Nuggets
+ML: Golden State Warriors +219 / Denver Nuggets -265
+SPREAD: Golden State Warriors +7 (-110) / Denver Nuggets -7 (-110)
+OU: o236 (-110) / u236 (-110)
+H1SPREAD: Golden State Warriors +4 (-110) / Denver Nuggets -4 (-110)
+H1ML: Golden State Warriors +183 / Denver Nuggets -215
+H1OU: o115 (-110) / u115 (-110)
+
+NFL
+
+Dallas Cowboys @ Philadelphia Eagles
+ML: Dallas Cowboys -223 / Philadelphia Eagles +188
+SPREAD: Dallas Cowboys -4.5 (-107) / Philadelphia Eagles +4.5 (-113)
+OU: o44.5 (-105) / u44.5 (-115)
+H1SPREAD: Dallas Cowboys -2.5 (-120) / Philadelphia Eagles +2.5 (+100)
+H1ML: Dallas Cowboys -170 / Philadelphia Eagles +149
+H1OU: o21.5 (-110) / u21.5 (-110)
+
+MLB
+
+Milwaukee Brewers @ Tampa Bay Rays
+ML: Milwaukee Brewers +103 / Tampa Bay Rays -113
+RL: Milwaukee Brewers +1.5 (-220) / Tampa Bay Rays -1.5 (+186)
+OU: o7 (-117) / u7 (-103)
+
+NHL
+
+Los Angeles Kings @ New York Rangers
+ML: Los Angeles Kings +115 / New York Rangers -130
+PL: Los Angeles Kings +1.5 (-230) / New York Rangers -1.5 (+192)
+OU: o5.5 (-123) / u5.5 (+107)
+P1PL: Los Angeles Kings +0.5 (-186) / New York Rangers -0.5 (+162)
+P1ML: Los Angeles Kings +108 / New York Rangers -128
+P1OU: o1.5 (-116) / u1.5 (-104)
+
+Toronto Maple Leafs @ Calgary Flames
+ML: Toronto Maple Leafs -135 / Calgary Flames +119
+PL: Toronto Maple Leafs -1.5 (+176) / Calgary Flames +1.5 (-203)
+OU: o6.5 (-121) / u6.5 (+105)
+P1PL: Toronto Maple Leafs -0.5 (+161) / Calgary Flames +0.5 (-185)
+P1ML: Toronto Maple Leafs -125 / Calgary Flames +105
+P1OU: o1.5 (-157) / u1.5 (+137)
+
+Detroit Red Wings @ Edmonton Oilers
+ML: Detroit Red Wings +153 / Edmonton Oilers -175
+PL: Detroit Red Wings +1.5 (-155) / Edmonton Oilers -1.5 (+135)
+OU: o6.5 (-126) / u6.5 (+110)
+P1PL: Detroit Red Wings +0.5 (-160) / Edmonton Oilers -0.5 (+140)
+P1ML: Detroit Red Wings +128 / Edmonton Oilers -148
+P1OU: o1.5 (-155) / u1.5 (+135)
