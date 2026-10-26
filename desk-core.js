@@ -947,7 +947,7 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
     ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):'not yet — freezes everything')}
     ${step(4,fz&&pub&&pub.d===d&&pub.ok,'Published',fz?((pub&&pub.d===d&&pub.ok?'page ✓':'page …')+' · '+(posted&&posted.d===d?'VIP ✓':'VIP …')):'after the freeze')}</div>
     ${fz?'':`<label class="sub" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" ${deskReviewOn()?'checked':''} onchange="set('d4.reviewFreeze',this.checked);deskRerender()"> Let me review the picks before freezing</label>${deskEvalReady()?`<div class="sub" style="color:var(--gold);margin-top:4px">✓ Every sport evaluated — check the Best card below, then freeze. Nothing posts until you do.</div>`:''}`}
-    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
+    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="vipCardPhotos(this)">📸 VIP card → photos</button><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
     <div class="deskStatus sub mono" style="font-size:10px;margin-top:4px"></div></div>`;}
 
 /* ── 13 · THE PUBLIC PAGE — premium, honest, and live ──────────────────────────
@@ -1493,3 +1493,89 @@ if(typeof window!=='undefined')setTimeout(()=>{try{ch2LiveLoop();}catch(e){}},40
 if(!window.__CH2ROAD__){window.__CH2ROAD__=1;CH2_CATS.splice(1,0,['road','🗺️ Roadmaps']);const _lib=ch2Lib;
   ch2Lib=function(){const L=_lib();if(!L.some(x=>x.road))CH2_ROADS.forEach(R=>{const Z=ch2Size(R.pct,R.mult);L.push({...R,...Z,road:true,cat:'road',src:'road',frac:0,kind:'single'});});return L;};
   const _start=ch2Start;ch2Start=function(id,custom){_start(id,custom);const T=ch2Tpl(id);if(!T||!T.road)return;const A=ch2All();const c=A.filter(x=>x.preset===id&&x.status==='active').pop();if(c&&!c.road){c.road=true;ch2Save(A);deskRerender();}};}
+
+/* ══ v2.68 · VIP CARD → PHOTOS ════════════════════════════════════════════════
+   The VIP card drawn straight onto a canvas (no screenshot library — that one choked on long pages
+   and on iPhone). 1080 px wide, Facebook-friendly portrait pages: ① Best + Top 10 ② the Banker and every
+   character's parlay (split across pages when long) ③ props. Shares through the phone's share sheet
+   (Save Image / Facebook / Messages); falls back to a viewer you can long-press to save. */
+const VIPIMG={W:1080,PAD:56,MAXH:1920,bg0:'#070b14',bg1:'#111a2e',gold:'#f5c542',gold2:'#ffde7a',ink:'#f8fafc',mute:'#94a3b8',dim:'#475569',win:'#22c55e',line:'rgba(245,197,66,.22)'};
+function vipImgFont(w,px){return`${w} ${px}px "Helvetica Neue",Helvetica,Arial,system-ui,sans-serif`;}
+function vipImgWrap(ctx,text,maxW){const words=String(text||'').split(/\s+/);const out=[];let cur='';words.forEach(w=>{const t=cur?cur+' '+w:w;if(ctx.measureText(t).width>maxW&&cur){out.push(cur);cur=w;}else cur=t;});if(cur)out.push(cur);return out.length?out:[''];}
+/* the card as plain blocks: {kind:'section'|'row'|'parlay'|'note', …} */
+function vipImgBlocks(C){const S=x=>(SP_LAB[x.sp]||'').split(' ')[0]||'';const G=x=>{try{return gameLabel(x.sp,x.game);}catch(e){return x.game||'';}};
+  const pc=x=>{try{return subPct(x.p!=null?x.p:best5Prob(x));}catch(e){return x.p!=null?subPct(x.p):'';}};
+  const leg=l=>({pick:l.player?cpropLine(l):l.pick,price:l.player?'':tcSgn(l.price),sub:l.player?(propWhere(l)||'').replace(/^\s*·?\s*/,''):`${S(l)} ${G(l)}`});
+  const pages=[[],[],[]];
+  if(C.best.length){pages[0].push({kind:'section',t:`⭐ TODAY'S BEST ${C.best.length}`,tag:C.locked?'🔒 LOCKED':''});C.best.forEach((x,i)=>pages[0].push({kind:'row',n:i+1,pick:x.pick,price:tcSgn(x.price),sub:`${S(x)} · ${G(x)}`,pct:pc(x),hero:true}));}
+  if((C.top10||[]).length){pages[0].push({kind:'section',t:'🔟 THE REST OF THE TOP 10'});C.top10.forEach((x,i)=>pages[0].push({kind:'row',n:i+1+C.best.length,pick:x.pick,price:tcSgn(x.price),sub:`${S(x)} · ${G(x)}`,pct:subPct(x.p)}));}
+  const par=(P,icon,name)=>({kind:'parlay',t:`${icon} ${name}`,odds:decimalToAmerican(P.dec),pct:subPct(P.p),legs:P.legs.map(leg)});
+  if(C.banker)pages[1].push(par(C.banker,'🏦',"THE BANKER'S PARLAY"));
+  (C.chars||[]).forEach(P=>pages[1].push(par(P,P.skill?'💪':'🎭',`${charName(P.v)} — ${P.legs.length}-leg`)));
+  (C.px||[]).forEach(P=>pages[1].push(par(P,'🎯',`${charName(P.v)} props — ${P.legs.length}-leg`)));
+  if(pages[1].length)pages[1].unshift({kind:'section',t:"🎭 EVERY CHARACTER'S PARLAY"});
+  if((C.props||[]).length){pages[2].push({kind:'section',t:'🎯 PROPS OF THE DAY'});C.props.forEach(c=>pages[2].push({kind:'row',pick:cpropLine(c),price:'',sub:`${charName(c.v)}${(propWhere(c)||'')}`,pct:subPct(c.cal)}));}
+  return pages.filter(p=>p.length);}
+function vipImgMeasure(ctx,b){const V=VIPIMG,IW=V.W-V.PAD*2;
+  if(b.kind==='section')return 96;
+  if(b.kind==='row'){ctx.font=vipImgFont(800,b.hero?46:38);const L=vipImgWrap(ctx,b.pick+'  '+b.price,IW-(b.n?84:0)-170);return 30+L.length*(b.hero?54:46)+40+(b.hero?14:6);}
+  if(b.kind==='parlay'){ctx.font=vipImgFont(600,32);let h=40+48+16;b.legs.forEach(l=>{h+=vipImgWrap(ctx,l.pick+'  '+l.price,IW-80).length*40+34+14;});return h+30;}
+  return 60;}
+function vipImgDraw(ctx,b,y){const V=VIPIMG,X=V.PAD,IW=V.W-V.PAD*2;
+  if(b.kind==='section'){ctx.fillStyle=V.gold;ctx.font=vipImgFont(900,34);ctx.fillText(b.t,X,y+58);if(b.tag){ctx.font=vipImgFont(800,24);const w=ctx.measureText(b.tag).width+28;ctx.fillStyle='rgba(245,197,66,.14)';vipImgRR(ctx,V.W-X-w,y+28,w,42,21);ctx.fill();ctx.fillStyle=V.gold;ctx.fillText(b.tag,V.W-X-w+14,y+57);}
+    ctx.fillStyle=V.line;ctx.fillRect(X,y+78,IW,2);return;}
+  if(b.kind==='row'){const fs=b.hero?46:38,lh=b.hero?54:46;let tx=X;
+    if(b.n){ctx.font=vipImgFont(900,b.hero?56:40);ctx.fillStyle=b.hero?V.gold:V.dim;ctx.fillText(String(b.n),X,y+30+lh-8);tx=X+84;}
+    ctx.font=vipImgFont(800,fs);const L=vipImgWrap(ctx,b.pick+'  '+b.price,IW-(tx-X)-170);
+    L.forEach((ln,i)=>{const yy=y+30+(i+1)*lh-8;const pi=ln.lastIndexOf(b.price);ctx.fillStyle=V.ink;
+      if(b.price&&pi>0&&i===L.length-1){const a=ln.slice(0,pi);ctx.fillText(a,tx,yy);ctx.fillStyle=V.gold2;ctx.fillText(b.price,tx+ctx.measureText(a).width,yy);}else ctx.fillText(ln,tx,yy);});
+    ctx.font=vipImgFont(500,26);ctx.fillStyle=V.mute;ctx.fillText(String(b.sub||'').slice(0,60),tx,y+30+L.length*lh+26);
+    if(b.pct){ctx.font=vipImgFont(900,b.hero?40:32);const w=ctx.measureText(b.pct).width+36,h=b.hero?64:54;ctx.fillStyle='rgba(34,197,94,.14)';vipImgRR(ctx,V.W-X-w,y+28,w,h,h/2);ctx.fill();ctx.strokeStyle='rgba(34,197,94,.55)';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=V.win;ctx.fillText(b.pct,V.W-X-w+18,y+28+h/2+(b.hero?14:11));}
+    ctx.fillStyle='rgba(148,163,184,.12)';ctx.fillRect(X,y+vipImgMeasure(ctx,b)-2,IW,1);return;}
+  if(b.kind==='parlay'){const h=vipImgMeasure(ctx,b);ctx.fillStyle='rgba(255,255,255,.035)';vipImgRR(ctx,X,y+14,IW,h-24,26);ctx.fill();ctx.strokeStyle=V.line;ctx.lineWidth=2;ctx.stroke();
+    ctx.font=vipImgFont(800,32);ctx.fillStyle=V.ink;ctx.fillText(b.t.slice(0,40),X+28,y+70);
+    ctx.font=vipImgFont(900,30);const tag=`${b.odds}${b.pct?' · '+b.pct:''}`;const tw=ctx.measureText(tag).width;ctx.fillStyle=V.gold;ctx.fillText(tag,V.W-X-28-tw,y+70);
+    let yy=y+104;b.legs.forEach(l=>{ctx.font=vipImgFont(600,32);const L=vipImgWrap(ctx,l.pick+'  '+l.price,IW-80);
+      ctx.fillStyle=V.gold;ctx.beginPath();ctx.arc(X+40,yy+22,6,0,7);ctx.fill();
+      L.forEach((ln,i)=>{ctx.fillStyle=V.ink;ctx.fillText(ln,X+60,yy+(i+1)*40-6);});yy+=L.length*40;
+      ctx.font=vipImgFont(500,24);ctx.fillStyle=V.mute;ctx.fillText(String(l.sub||'').slice(0,64),X+60,yy+22);yy+=34+14;});return;}}
+function vipImgRR(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function vipImgPage(blocks,meta){const V=VIPIMG;const c=document.createElement('canvas');const m=c.getContext('2d');const HEAD=260,FOOT=150;
+  const H=Math.max(1350,HEAD+blocks.reduce((a,b)=>a+vipImgMeasure(m,b),0)+FOOT+20);c.width=V.W;c.height=H;const ctx=c.getContext('2d');ctx.textBaseline='alphabetic';
+  const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,V.bg1);g.addColorStop(1,V.bg0);ctx.fillStyle=g;ctx.fillRect(0,0,V.W,H);
+  const rg=ctx.createRadialGradient(V.W*.85,0,20,V.W*.85,0,620);rg.addColorStop(0,'rgba(245,197,66,.20)');rg.addColorStop(1,'rgba(245,197,66,0)');ctx.fillStyle=rg;ctx.fillRect(0,0,V.W,700);
+  ctx.fillStyle=V.gold;ctx.fillRect(0,0,V.W,10);
+  ctx.font=vipImgFont(900,84);ctx.fillStyle=V.ink;ctx.fillText('THE',V.PAD,128);const tw=ctx.measureText('THE').width;ctx.fillStyle=V.gold;ctx.fillText('DESK',V.PAD+tw,128);
+  ctx.font=vipImgFont(800,28);ctx.fillStyle=V.gold2;ctx.fillText('VIP CARD',V.PAD,174);ctx.fillStyle=V.mute;ctx.font=vipImgFont(600,28);ctx.fillText(meta.day+(meta.pages>1?`  ·  ${meta.i}/${meta.pages}`:''),V.PAD+150,174);
+  if(meta.rec){ctx.font=vipImgFont(900,30);const w=ctx.measureText(meta.rec).width+40;ctx.fillStyle='rgba(34,197,94,.14)';vipImgRR(ctx,V.W-V.PAD-w,88,w,56,28);ctx.fill();ctx.strokeStyle='rgba(34,197,94,.5)';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle=V.win;ctx.fillText(meta.rec,V.W-V.PAD-w+20,126);
+    ctx.font=vipImgFont(600,20);ctx.fillStyle=V.mute;const s='BEST 3 RECORD';ctx.fillText(s,V.W-V.PAD-ctx.measureText(s).width,74);}
+  ctx.font=vipImgFont(500,24);ctx.fillStyle=V.dim;ctx.fillText('Official picks: a character is 70%+ sure.',V.PAD,218);
+  let y=HEAD-30;blocks.forEach(b=>{vipImgDraw(ctx,b,y);y+=vipImgMeasure(ctx,b);});
+  ctx.fillStyle=V.line;ctx.fillRect(V.PAD,H-FOOT+20,V.W-V.PAD*2,2);
+  ctx.font=vipImgFont(800,30);ctx.fillStyle=V.gold;const hd=meta.handle||'';ctx.fillText(hd?('Follow '+hd):'TheDesk',V.PAD,H-FOOT+78);
+  ctx.font=vipImgFont(500,22);ctx.fillStyle=V.dim;ctx.fillText('For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.',V.PAD,H-FOOT+120);
+  return c;}
+function vipImgCanvases(){const C=subCard();const pages=vipImgBlocks(C);if(!pages.length)return[];
+  const m=document.createElement('canvas').getContext('2d');const budget=VIPIMG.MAXH-260-150;const out=[];
+  pages.forEach(bl=>{let cur=[],h=0;bl.forEach(b=>{const bh=vipImgMeasure(m,b);if(cur.length&&h+bh>budget&&!(cur.length===1&&cur[0].kind==='section')){out.push(cur);cur=b.kind==='section'?[]:[];h=0;}cur.push(b);h+=bh;});if(cur.length)out.push(cur);});
+  const day=new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+  const R=C.record;const rec=R&&(R.w+R.l)?`${R.w}-${R.l}${R.pu?'-'+R.pu:''}  ${R.u>=0?'+':''}${R.u.toFixed(1)}u`:'';let handle='';try{handle=get(LS.handle,'')||'';}catch(e){}
+  return out.map((bl,i)=>vipImgPage(bl,{day,rec,handle,i:i+1,pages:out.length}));}
+async function vipCardPhotos(btn){const o=btn?btn.textContent:'';if(btn){btn.textContent='Drawing…';btn.disabled=true;}
+  try{const cs=vipImgCanvases();if(!cs.length){alert('Nothing on the VIP card yet — run the master evaluation first.');return;}
+    const blobs=await Promise.all(cs.map(c=>new Promise(r=>c.toBlob(r,'image/png'))));const d=today();
+    const files=blobs.map((b,i)=>new File([b],`TheDesk-VIP-${d}-${i+1}.png`,{type:'image/png'}));
+    vipImgViewer(cs,files);
+  }catch(e){console.warn('vip photos',e);alert("Couldn't draw the card: "+(e&&e.message||e));}
+  finally{if(btn){btn.textContent=o;btn.disabled=false;}}}
+/* a full-screen viewer: every page, a Share button (Save Image / Facebook), and long-press to save */
+function vipImgViewer(cs,files){const old=document.getElementById('vipImgView');if(old)old.remove();
+  const v=document.createElement('div');v.id='vipImgView';v.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(3,6,12,.96);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px 90px';
+  const urls=cs.map(c=>c.toDataURL('image/png'));
+  v.innerHTML=`<div style="display:flex;gap:8px;position:sticky;top:0;z-index:2;padding-bottom:10px;background:rgba(3,6,12,.96)">
+    <button class="primary" style="flex:1" id="vipImgShare">📤 Share / Save ${files.length>1?`all ${files.length} photos`:'photo'}</button><button onclick="document.getElementById('vipImgView').remove()">✕ Close</button></div>
+    <div class="sub" style="color:#94a3b8;margin:0 0 10px">Tip: Share → "Save ${files.length>1?files.length+' Images':'Image'}" puts them in Photos for Facebook groups. Or long-press any page to save it.</div>
+    ${urls.map((u,i)=>`<img src="${u}" alt="VIP card page ${i+1}" style="width:100%;border-radius:14px;margin-bottom:14px;display:block;box-shadow:0 10px 40px rgba(0,0,0,.6)">`).join('')}`;
+  document.body.appendChild(v);
+  v.querySelector('#vipImgShare').onclick=async()=>{try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files,title:'TheDesk VIP card'});return;}}catch(e){if(e&&e.name==='AbortError')return;}
+    files.forEach((f,i)=>{const a=document.createElement('a');a.href=urls[i];a.download=f.name;document.body.appendChild(a);a.click();a.remove();});};}
