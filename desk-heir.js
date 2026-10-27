@@ -169,7 +169,7 @@ function heirsRun(force){const d=today();if(!force&&HEIR_MEMO&&HEIR_MEMO.d===d&&
     /* the Generation Book, on the strongest heir */
     const shadow=res.heirs.filter(h=>h.st==='shadow').sort((a,b)=>b.z-a.z);const best=shadow[0];const tried=H.tried[C.v+'|'+C.m]||1;
     const ctx={heirs:shadow.length,room:heirRoom(C),n:best?best.n:0,days:best?best.days:0,z:best?best.z:0,bar:HEIR_BAR+0.5*Math.log2(Math.max(1,tried)),tried,du:best?best.off.u-best.offC.u:0};
-    const R=bookWalkSync(BOOKS.generation,ctx,null);res.book={end:R.end,why:R.why,path:R.path.map(s=>s.p+'>'+s.to).join(' ')};
+    const R=bookWalkSync(BOOKS.generation,ctx,null);res.book={end:R.end,why:R.why,path:R.path.map(s=>s.p+'>'+s.to).join(' '),steps:R.path.map(s=>({p:s.p,to:s.to,why:s.why||''}))};res.ctx=ctx;res.best=best?best.id:null;
     if(R.end==='PROMOTE'&&best&&d>=HEIR_BORN){const h=C.heirs.find(x=>x.id===best.id&&x.st==='shadow');const old=C.champ;C.hist.push({gen:C.gen,champ:old.id,lab:old.lab,from:old.since,to:d,why:`retired — ${h.lab} beat it: ${R.why}`});
       C.gen++;C.champ={id:h.id,lab:h.lab,since:dayShift(d,1),gen:C.gen,p:h.p};h.st='champion';C.heirs.filter(x=>x.st==='champion'&&x.id!==h.id).forEach(x=>x.st='retired');changed=true;
       journalAdd({kind:'generation',sig:'gen-promote',v:C.v,sev:'info',title:`👑 ${charName(C.v)}, ${({ml:'moneylines',spread:'spreads',total:'totals'})[C.m]}: Generation ${C.gen} takes the chair`,
