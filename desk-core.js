@@ -120,7 +120,30 @@ function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_P
   if(!confEvOk(x,c,d))return false;if(c>=0.70-1e-9)return true;
   const p=+x.price;return isFinite(p)&&p>=CONF_PAY_MIN;}
 function isOfficial(x){if(x&&x.voice==='Dog')return!!(typeof PROB_OK!=='undefined'&&PROB_OK.Dog)&&+x.dEdge>=DOG_ML_EDGE-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);
-  const c=confOf(x);return c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x);}
+  const c=confOf(x);if(c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x))return true;
+  return isCounterPunch(x);}
+/* ══ v2.73 · 🥊 THE COUNTER-PUNCH — conservative by default, aggressive when everything lines up ══════════
+   A call under the bar still goes official when ALL of these hit (judged pre-game, then remembered):
+     · confidence 64%+ on a side (56%+ on a total)  · the price pays: chance × payout beats the book by 4%+
+     · 3+ PROVEN characters (proven record in that sport + bet type) on the same side, none against
+     · sharp money isn't on the other side
+   Every counter-punch is logged with its own record, so we can see if the aggression earns its keep. */
+const CP_KEY='d4.counterpunch',CP_RULE={side:0.64,total:0.56,ev:0.04,proven:3};
+const cpId=x=>[x.sp,x.game,String(x.date).slice(0,10),x.voice,x.market].join('|');
+function isCounterPunch(x){try{if(!x||!CHARS[x.voice]||META_VOICES.has(x.voice)&&x.voice!=='Brain'||x.kof||!confPriced(x)||confPre(x))return false;
+  const L=roGet(CP_KEY,{},20e3)||{};const id=cpId(x);const d=String(x.date).slice(0,10);if(d!==today())return !!L[id];if(L[id])return true;
+  const c=confOf(x);if(c==null||c>=confFloorFor(x)-1e-9)return false;if(c<(x.market==='total'?CP_RULE.total:CP_RULE.side))return false;
+  if(c*americanToDecimal(x.price)-1<CP_RULE.ev)return false;
+  const S=legStrength({sp:x.sp,game:x.game,market:x.market,side:x.side});if(S.on.length<CP_RULE.proven||S.fade.length)return false;
+  const V=roGet(VOICES_KEY,[],30e3)||[];const opp={home:'away',away:'home',over:'under',under:'over'}[x.side];
+  if(V.some(v=>v.voice==='Consensus'&&v.sp===x.sp&&v.game===x.game&&String(v.date).slice(0,10)===d&&v.market===x.market&&v.side===opp&&/sharp/.test(v.why||'')))return false;
+  const g=x.start||(typeof deskGameStart==='function'?deskGameStart(x.sp,x.game):null);if(g&&Date.parse(g)<Date.now())return false;
+  const M=get(CP_KEY,{})||{};M[id]={d,sp:x.sp,game:x.game,voice:x.voice,market:x.market,side:x.side,pick:x.pick,price:x.price,cf:c,on:S.on};set(CP_KEY,M);return true;}catch(e){return false;}}
+const isCP=x=>{try{return!!(roGet(CP_KEY,{},20e3)||{})[cpId(x)];}catch(e){return false;}};
+function cpRecordHtml(){const M=get(CP_KEY,{})||{};const V=get(VOICES_KEY,[])||[];const ix={};V.forEach(v=>{if(v&&v.graded)ix[cpId(v)]=v;});let w=0,l=0,u=0;const td=[];
+  Object.entries(M).forEach(([id,x])=>{const g=ix[id];if(g&&g.hit!=null){g.hit?w++:l++;u+=g.units||0;}if(x.d===today())td.push(x);});
+  return`<div class="tkt"><h3>🥊 Counter-punches</h3><div class="sub">Under the bar, but ${CP_RULE.proven}+ proven characters agree, the price pays ${Math.round(CP_RULE.ev*100)}%+ and sharp money isn't against it.</div>
+    <div style="margin-top:4px">Record: <b>${w}-${l}</b> (${u>=0?'+':''}${u.toFixed(1)}u)</div>${td.length?`<div class="mono" style="font-size:10.5px;margin-top:4px">Today: ${td.map(x=>`🥊 ${txtEsc(x.pick)} ${tcSgn(x.price)} (${Math.round(x.cf*100)}% · ${x.on.length} proven)`).join(' · ')}</div>`:''}</div>`;}
 const officialOnly=V=>(V||[]).filter(isOfficial);
 const confPct=c=>c==null?'—':Math.round(c*100)+'%';
 /* calls logged before the meter existed (or locked before it loaded) get their
