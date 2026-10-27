@@ -7,11 +7,29 @@ Delaware @ Western Kentucky
 ML: Delaware +106 / Western Kentucky -126
 SPREAD: Delaware +1.5 (-110) / Western Kentucky -1.5 (-110)
 OU: o56 (-103) / u56 (-117)
+PRED: Delaware 28.22 / Western Kentucky 28.06
+TREND Delaware: Fightin' Blue Hens are 4-0 ATS in their last 4 games after allowing more than 40 points in their previous game.
+TREND Delaware: Fightin' Blue Hens are 5-1 ATS in their last 6 games after scoring less than 20 points in their previous game.
+TREND Delaware: Under is 6-1 in Fightin' Blue Hens last 7 games following a ATS win.
+TREND Delaware: Fightin' Blue Hens are 5-1 ATS in their last 6 games on fieldturf.
+TREND Western Kentucky: Hilltoppers are 4-0 ATS in their last 4 home games.
+TREND Western Kentucky: Hilltoppers are 4-0 ATS in their last 4 home games vs. a team with a losing road record.
+TREND Western Kentucky: Under is 4-0 in Hilltoppers last 4 games after accumulating more than 200 yards rushing in their previous game.
+TREND Western Kentucky: Hilltoppers are 6-1 ATS in their last 7 games as a home favorite.
 
 Sam Houston State @ Missouri State
 ML: Sam Houston State +189 / Missouri State -225
 SPREAD: Sam Houston State +6 (-110) / Missouri State -6 (-110)
 OU: o52.5 (-110) / u52.5 (-110)
+PRED: Sam Houston State 22.43 / Missouri State 28.22
+TREND Sam Houston State: Under is 6-0 in Bearkats last 6 games after allowing more than 40 points in their previous game.
+TREND Sam Houston State: Under is 5-1 in Bearkats last 6 games as a favorite.
+TREND Sam Houston State: Under is 4-1 in Bearkats last 5 road games.
+TREND Sam Houston State: Under is 4-1 in Bearkats last 5 games as a road underdog.
+TREND Missouri State: Under is 4-0 in Bears last 4 games after allowing less than 100 yards rushing in their previous game.
+TREND Missouri State: Under is 5-1 in Bears last 6 games as a home underdog.
+TREND Missouri State: Bears are 5-1 ATS in their last 6 games as a home favorite.
+TREND Missouri State: Over is 4-1 in Bears last 5 home games.
 
 NBA
 
@@ -22,6 +40,15 @@ OU: o222.5 (-110) / u222.5 (-110)
 H1SPREAD: Brooklyn Nets +7.5 (-110) / Boston Celtics -7.5 (-110)
 H1ML: Brooklyn Nets +303 / Boston Celtics -380
 H1OU: o113.5 (-112) / u113.5 (-108)
+PRED: Brooklyn Nets 105.74 / Boston Celtics 116.39
+TREND Brooklyn Nets: Nets are 6-0 ATS in their last 6 games as a favorite.
+TREND Brooklyn Nets: Over is 6-1 in Nets last 7 games following a straight up loss.
+TREND Brooklyn Nets: Over is 4-1 in Nets last 5 overall.
+TREND Brooklyn Nets: Over is 5-1 in Nets last 6 games following a ATS loss.
+TREND Boston Celtics: Celtics are 4-0 ATS in their last 4 games vs. a team with a losing straight up record.
+TREND Boston Celtics: Celtics are 6-1 ATS in their last 7 home games vs. a team with a losing road record.
+TREND Boston Celtics: Celtics are 5-1 ATS in their last 6 home games vs. a team with a road winning % of less than .400.
+TREND Boston Celtics: Under is 4-1 in Celtics last 5 games vs. a team with a winning % below .400.
 
 Detroit Pistons @ New York Knicks
 ML: Detroit Pistons +145 / New York Knicks -165
@@ -65,6 +92,14 @@ H1SPREAD: Portland Trail Blazers +1 (-110) / Los Angeles Lakers -1 (-110)
 H1ML: Portland Trail Blazers +110 / Los Angeles Lakers -130
 H1OU: o120.5 (-115) / u120.5 (-105)
 PRED: Portland Trail Blazers 115.59 / Los Angeles Lakers 116.92
+TREND Portland Trail Blazers: Under is 4-0 in Trailblazers last 4 road games vs. a team with a home winning % of greater than .600.
+TREND Portland Trail Blazers: Under is 7-1 in Trailblazers last 8 after allowing 100 points or more in their previous game.
+TREND Portland Trail Blazers: Under is 6-1 in Trailblazers last 7 vs. a team with a winning straight up record.
+TREND Portland Trail Blazers: Under is 5-1 in Trailblazers last 6 games vs. a team with a winning % above .600.
+TREND Los Angeles Lakers: Over is 5-0 in Lakers last 5 games playing on 1 days rest.
+TREND Los Angeles Lakers: Over is 5-1 in Lakers last 6 overall.
+TREND Los Angeles Lakers: Over is 5-1 in Lakers last 6 games vs. a team with a winning % above .600.
+TREND Los Angeles Lakers: Over is 6-1 in Lakers last 7 after scoring 100 points or more in their previous game.
 
 MLB
 
@@ -82,6 +117,15 @@ OU: o5.5 (-115) / u5.5 (-101)
 P1PL: Columbus Blue Jackets -0.5 (+180) / Philadelphia Flyers +0.5 (-210)
 P1ML: Columbus Blue Jackets -116 / Philadelphia Flyers -104
 P1OU: o1.5 (-118) / u1.5 (-102)
+PRED: Columbus Blue Jackets 3.01 / Philadelphia Flyers 2.80
+TREND Columbus Blue Jackets: Under is 4-0 in Blue Jackets last 4 vs. Metropolitan.
+TREND Columbus Blue Jackets: Over is 4-0 in Blue Jackets last 4 vs. a team with a losing record.
+TREND Columbus Blue Jackets: Under is 5-1-1 in Blue Jackets last 7 games as a road favorite.
+TREND Columbus Blue Jackets: Blue Jackets are 8-2 in their last 10 when their opponent allows 5 goals or more in their previous game.
+TREND Philadelphia Flyers: Under is 5-1-2 in Flyers last 8 games playing on 2 days rest.
+TREND Philadelphia Flyers: Under is 8-1-2 in Flyers last 11 games as a home underdog.
+TREND Philadelphia Flyers: Under is 19-4-4 in Flyers last 27 vs. Eastern Conference.
+TREND Philadelphia Flyers: Under is 19-5-2 in Flyers last 26 overall.
 
 Boston Bruins @ Carolina Hurricanes
 ML: Boston Bruins +164 / Carolina Hurricanes -187
@@ -90,6 +134,15 @@ OU: o6 (-125) / u6 (+109)
 P1PL: Boston Bruins +0.5 (-160) / Carolina Hurricanes -0.5 (+140)
 P1ML: Boston Bruins +130 / Carolina Hurricanes -150
 P1OU: o1.5 (-135) / u1.5 (+115)
+PRED: Boston Bruins 2.70 / Carolina Hurricanes 3.50
+TREND Boston Bruins: Over is 4-0-1 in Bruins last 5 games as a favorite.
+TREND Boston Bruins: Bruins are 4-0 in their last 4 vs. Metropolitan.
+TREND Boston Bruins: Bruins are 4-0 in their last 4 games as a favorite.
+TREND Boston Bruins: Bruins are 4-0 in their last 4 after scoring 5 goals or more in their previous game.
+TREND Carolina Hurricanes: Over is 6-0-1 in Hurricanes last 7 vs. a team with a winning % above .600.
+TREND Carolina Hurricanes: Under is 4-0 in Hurricanes last 4 games as an underdog.
+TREND Carolina Hurricanes: Over is 4-0 in Hurricanes last 4 home games vs. a team with a road winning % of greater than .600.
+TREND Carolina Hurricanes: Under is 12-2-2 in Hurricanes last 16 vs. Eastern Conference.
 
 Florida Panthers @ Winnipeg Jets
 ML: Florida Panthers -127 / Winnipeg Jets +112
@@ -98,6 +151,15 @@ OU: o6 (-113) / u6 (-103)
 P1PL: Florida Panthers -0.5 (+170) / Winnipeg Jets +0.5 (-195)
 P1ML: Florida Panthers -121 / Winnipeg Jets +101
 P1OU: o1.5 (-125) / u1.5 (+105)
+PRED: Florida Panthers 3.13 / Winnipeg Jets 2.80
+TREND Florida Panthers: Over is 6-1 in Panthers last 7 road games vs. a team with a losing home record.
+TREND Florida Panthers: Under is 4-0 in Panthers last 4 games as a road favorite.
+TREND Florida Panthers: Under is 7-1 in Panthers last 8 vs. a team with a losing record.
+TREND Florida Panthers: Under is 6-1 in Panthers last 7 games as a favorite.
+TREND Winnipeg Jets: Under is 6-0 in Jets last 6 games as an underdog.
+TREND Winnipeg Jets: Under is 5-0 in Jets last 5 games as a home underdog.
+TREND Winnipeg Jets: Under is 4-0 in Jets last 4 overall.
+TREND Winnipeg Jets: Under is 4-0 in Jets last 4 vs. Eastern Conference.
 
 New York Islanders @ Nashville Predators
 ML: New York Islanders +103 / Nashville Predators -117
@@ -106,6 +168,15 @@ OU: o5.5 (-118) / u5.5 (+102)
 P1PL: New York Islanders +0.5 (-198) / Nashville Predators -0.5 (+173)
 P1ML: New York Islanders -101 / Nashville Predators -119
 P1OU: o1.5 (-120) / u1.5 (+100)
+PRED: New York Islanders 2.82 / Nashville Predators 3.04
+TREND New York Islanders: Under is 5-0 in Islanders last 5 games as a favorite.
+TREND New York Islanders: Under is 6-0 in Islanders last 6 vs. a team with a losing record.
+TREND New York Islanders: Under is 6-1 in Islanders last 7 games playing on 1 days rest.
+TREND New York Islanders: Under is 5-0 in Islanders last 5 road games vs. a team with a losing home record.
+TREND Nashville Predators: Under is 8-2 in Predators last 10 games playing on 1 days rest.
+TREND Nashville Predators: Under is 4-1-1 in Predators last 6 games as a favorite.
+TREND Nashville Predators: Under is 4-1-1 in Predators last 6 games as a home favorite.
+TREND Nashville Predators: Under is 4-1-1 in Predators last 6 games following a win.
 
 New Jersey Devils @ Dallas Stars
 ML: New Jersey Devils -102 / Dallas Stars -112
@@ -114,6 +185,15 @@ OU: o5.5 (-113) / u5.5 (-103)
 P1PL: New Jersey Devils +0.5 (-210) / Dallas Stars -0.5 (+180)
 P1ML: New Jersey Devils -106 / Dallas Stars -114
 P1OU: o1.5 (-116) / u1.5 (-104)
+PRED: New Jersey Devils 2.87 / Dallas Stars 3.04
+TREND New Jersey Devils: Over is 4-0-1 in Devils last 5 vs. Central.
+TREND New Jersey Devils: Under is 3-0-3 in Devils last 6 after allowing 2 goals or less in their previous game.
+TREND New Jersey Devils: Over is 3-0-1 in Devils last 4 overall.
+TREND New Jersey Devils: Over is 3-0-2 in Devils last 5 when their opponent scores 5 goals or more in their previous game.
+TREND Dallas Stars: Stars are 5-0 in their last 5 overall.
+TREND Dallas Stars: Under is 5-0 in Stars last 5 when their opponent allows 2 goals or less in their previous game.
+TREND Dallas Stars: Stars are 4-0 in their last 4 games as a favorite.
+TREND Dallas Stars: Under is 4-0 in Stars last 4 vs. a team with a winning record.
 
 Montreal Canadiens @ St. Louis Blues
 ML: Montreal Canadiens -117 / St. Louis Blues +103
@@ -122,6 +202,15 @@ OU: o6 (-125) / u6 (+109)
 P1PL: Montreal Canadiens -0.5 (+180) / St. Louis Blues +0.5 (-210)
 P1ML: Montreal Canadiens -115 / St. Louis Blues -105
 P1OU: o1.5 (-130) / u1.5 (+110)
+PRED: Montreal Canadiens 2.97 / St. Louis Blues 3.13
+TREND Montreal Canadiens: Over is 2-0-2 in Canadiens last 4 games as an underdog.
+TREND Montreal Canadiens: Canadiens are 5-1 in their last 6 games as a favorite.
+TREND Montreal Canadiens: Over is 2-0-2 in Canadiens last 4 road games vs. a team with a home winning % of greater than .600.
+TREND Montreal Canadiens: Canadiens are 5-1 in their last 6 vs. a team with a losing record.
+TREND St. Louis Blues: Blues are 5-0 in their last 5 vs. Atlantic.
+TREND St. Louis Blues: Blues are 6-1 in their last 7 vs. Eastern Conference.
+TREND St. Louis Blues: Blues are 8-2 in their last 10 games as a home favorite.
+TREND St. Louis Blues: Under is 3-0-2 in Blues last 5 home games vs. a team with a road winning % of less than .400.
 
 Los Angeles Kings @ Chicago Blackhawks
 ML: Los Angeles Kings -103 / Chicago Blackhawks -111
@@ -130,6 +219,15 @@ OU: o5.5 (-130) / u5.5 (+113)
 P1PL: Los Angeles Kings +0.5 (-220) / Chicago Blackhawks -0.5 (+186)
 P1ML: Los Angeles Kings -110 / Chicago Blackhawks -110
 P1OU: o1.5 (-124) / u1.5 (+104)
+PRED: Los Angeles Kings 3.01 / Chicago Blackhawks 3.01
+TREND Los Angeles Kings: Under is 6-2 in Kings last 8 overall.
+TREND Los Angeles Kings: Kings are 0-5 in their last 5 vs. Central.
+TREND Los Angeles Kings: Under is 15-5 in Kings last 20 games as a road underdog.
+TREND Los Angeles Kings: Under is 9-2 in Kings last 11 road games vs. a team with a winning home record.
+TREND Chicago Blackhawks: Under is 5-0-1 in Blackhawks last 6 games as a favorite.
+TREND Chicago Blackhawks: Under is 3-0-1 in Blackhawks last 4 games as a home favorite.
+TREND Chicago Blackhawks: Blackhawks are 0-5 in their last 5 games as a favorite.
+TREND Chicago Blackhawks: Over is 10-4 in Blackhawks last 14 home games.
 
 Minnesota Wild @ Utah Mammoth
 ML: Minnesota Wild +106 / Utah Mammoth -120
