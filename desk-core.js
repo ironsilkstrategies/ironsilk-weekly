@@ -21,7 +21,7 @@
            bins, so "70%" has to have actually hit 70%.
    caps  = a blocked lane or a blacklisted spot caps it at 55% (never official). */
 const CONF_KEY='d4.conf',CONF_FLOOR_KEY='d4.conffloor',CONF_K=30;
-const CONF_FLOOR_DEF={ml:0.70,spread:0.70,total:0.70};
+const CONF_FLOOR_DEF={ml:0.70,spread:0.70,total:0.60};   /* v2.72 · totals: the book prices both sides near 52%, so a 70% total almost never exists — 60% is their bar */
 const CONF_TAGS=new Set(['b2b','oppb2b','restedge','3in4','opp3in4','road3','shortweek','offbye','oppshort','oppoffbye','restplus','hot5','cold5','divgame','westearly','westnight','eastnight',
   'talent+','talent-','mismatch+','mismatch-','qbstar','qbbust','oppqbstar','oppqbbust','qbfading','goaliestar','goaliebust','oppgoaliestar','oppgoaliebust','offedge','defedge',
   'homedog','roadfav','key3','key7','bigline','hitot','lotot','pythlucky','pythunlucky','wind15','cold32','dome','h2hedge','h2hfade','bigfav','longdog']);
@@ -1424,7 +1424,7 @@ function deskUnfreezeNow(){const d=today();let posted=false;try{const P=get('d4.
   const ok=deskReopenRun();if(!ok){try{deskToast('Nothing to unfreeze for today.',3000);}catch(e){}}return ok;}
 function deskUnfreezeBtn(){return`<button class="primary" style="width:100%;margin:8px 0 2px" onclick="deskUnfreezeNow()">🔓 Unfreeze &amp; re-evaluate every sport</button>`;}
 if(typeof window!=='undefined'&&typeof renderBest==='function'&&!window.__UNFRZ__){window.__UNFRZ__=1;const _rbU=renderBest;
-  renderBest=function(){const r=_rbU.apply(this,arguments);try{const el=document.getElementById('bestCard');if(el&&!el.querySelector('.unfrz')){const w=document.createElement('div');w.className='unfrz';w.innerHTML=deskUnfreezeBtn();el.appendChild(w);}}catch(e){}return r;};}
+  renderBest=function(){const r=_rbU.apply(this,arguments);try{const el=document.getElementById('bestCard');if(el&&!el.querySelector('.unfrz')){const w=document.createElement('div');w.className='unfrz';w.innerHTML=deskUnfreezeBtn();el.appendChild(w);}if(el&&!el.querySelector('.halfc')){try{const hc=halfCardHtml();if(hc){const w2=document.createElement('div');w2.className='halfc';w2.innerHTML=hc;el.appendChild(w2);}}catch(e){}}}catch(e){}return r;};}
 
 /* v2.58 · a prop says whose player it is and which game: "Jalen Hurts 200+ pass yds (PHI · PHI@NYG 3:25 PM)" */
 function propWhere(c){if(!c)return'';let g=c.game||'';try{if(!g&&typeof cpxPropGame==='function')g=cpxPropGame(c.sp,c.team)||'';}catch(e){}
@@ -1641,7 +1641,7 @@ async function fbpText(){const C=subCard();const I=await fbpIntel();const day=ne
   if(picks.length){L.push(`⭐ TODAY'S BEST BETS ⭐`,'');
     picks.forEach((x,i)=>{L.push(`${FBP_N[i]} ${FBP_SP[x.sp]||'🎯'} ${x.pick} (${tcSgn(x.price)}) — ${gl(x)}${i<C.best.length?'  🔒':''}`);
       L.push(`   ✅ Confidence: ${pc(x)}`);fbpReasons(x,I).forEach(r=>L.push('   '+r));L.push('');});}
-  const pars=[];if(C.banker)pars.push({t:'🏦 THE BANKER',P:C.banker});(C.chars||[]).filter(P=>!P.skill).slice(0,2).forEach((P,i)=>pars.push({t:i?'🎲 THE LONG SHOT':'🚀 THE BOOSTER',P}));
+  const pars=[];if(C.banker)pars.push({t:'🏦 THE BANKER',P:C.banker});(C.chars||[]).filter(P=>!P.skill).slice(0,2).forEach(P=>pars.push({t:'🎭 '+charName(P.v).toUpperCase()+"'S PARLAY",P}));
   if(pars.length){L.push('━━━━━━━━━━━━━━━',`💸 PARLAYS OF THE DAY 💸`,'');
     pars.forEach(({t,P})=>{L.push(`${t} — ${P.legs.length} legs @ ${decimalToAmerican(P.dec)} (${Math.round(P.p*100)}% to cash)`);
       P.legs.forEach(l=>L.push(`   ▫️ ${l.player?cpropLine(l):l.pick+' ('+tcSgn(l.price)+')'} ${FBP_SP[l.sp]||''}`));L.push('');});}

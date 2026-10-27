@@ -1438,7 +1438,7 @@ function intakePreview(el,st){
     <div class="bar" style="margin-top:8px"><button class="primary" onclick="intakeSave()">Save all</button><button onclick="INTAKE.result=null;document.getElementById('bookShotResult').innerHTML=''">Discard</button></div>
     <details style="margin-top:6px"><summary class="sub">What each item gave</summary>${log}</details></div>`;
 }
-function intakeSave(){
+function intakeSave(){try{setTimeout(()=>halfLinesRefresh().catch(()=>{}),500);}catch(e){}
   const r=INTAKE.result;if(!r)return;const el=document.getElementById('bookShotResult')||{set innerHTML(v){}};const done=[];
   Object.entries(r).forEach(([sp,b])=>{
     if(b.raw.length){const p=get('d4.intakepending',{});p[sp]=(p[sp]||[]).concat(b.raw.map(t=>({t,ts:Date.now()})));set('d4.intakepending',p);done.push(sp==='ncaaf'?'CFB':sp.toUpperCase()+' lines waiting — they file automatically the moment you tap '+(sp==='ncaaf'?'CFB':sp.toUpperCase()));}
@@ -1871,7 +1871,7 @@ function intelTrendDir(text){
 /* ── typed line parser ── */
 function intelParse(text,type,src,sp){
   const out={xpicks:[],trends:[],consensus:[],preds:[],unread:[]};let ctx=null;
-  /* v2.71.0 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
+  /* v2.72.0 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
      Before, "DET 16% / EDM 84%" (hockey) on the NFL page latched onto the Lions' game — abbreviations collide across leagues. */
   let secSp=null;const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',MLB:'mlb',NHL:'nhl',NBA:'nba',NCAAB:'ncaab',CBB:'ncaab'};
   stripBOM(text).split('\n').map(l=>l.replace(/^[\s\-*•>#]+/,'').trim()).filter(Boolean).forEach(l=>{
@@ -1902,7 +1902,7 @@ function intelParse(text,type,src,sp){
       if(ou.length&&(where||ctx)){const G=(where&&where.game)||ctx,[aw,hm]=G.split('@');const o=ou.find(p=>/^o/i.test(p.who)),u=ou.find(p=>/^u/i.test(p.who));
         out.consensus.push({src,game:G,away:aw,home:hm,market:'total',metric:money?'money':'bets',awayPct:null,homePct:null,overPct:o?o.pct:(u?100-u.pct:null),underPct:u?u.pct:(o?100-o.pct:null),line:null});return;}
       const tp=pairs.map(p=>({...p,t:intelTeams(sp,p.who)[0]})).filter(p=>p.t);
-      /* v2.71.0 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
+      /* v2.72.0 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
       if(pairs.length>=2&&!(tp.length>=2&&tp.every(p=>p.t.game===tp[0].t.game))){out.unread.push(l);return;}
       if(tp.length){const G=tp[0].t.game,[aw,hm]=G.split('@');let ap=null,hp=null;tp.forEach(p=>{if(p.t.game!==G)return;if(p.t.side==='a')ap=p.pct;else hp=p.pct;});
         if(ap==null&&hp!=null)ap=100-hp;if(hp==null&&ap!=null)hp=100-ap;
@@ -2262,7 +2262,7 @@ function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)r
       const d=(need-mg)/2;h+=d;a-=d;}
     out[v]=fix(a,h,sd);});
   return Object.entries(out).map(([voice,x])=>({voice,a:x.a,h:x.h}));}
-function scoreCallsLog(sp,g,s,calls,pre){if(!pre)return 0;let L=null;try{L=get(SCORECALL_KEY,{})||{};}catch(e){return 0;}
+function scoreCallsLog(sp,g,s,calls,pre){if(!pre)return 0;try{halfCallsLog(sp,g,calls,scoreCallsFor(sp,g,s,calls));}catch(e){console.warn('half calls',e);}let L=null;try{L=get(SCORECALL_KEY,{})||{};}catch(e){return 0;}
   const gl=g.away.abbr+'@'+g.home.abbr,d=(calls[0]&&calls[0].date)||g.__date||today();let n=0;
   scoreCallsFor(sp,g,s,calls).forEach(x=>{const id=[sp,gl,d,x.voice].join('|');const o=L[id];if(o&&(o.graded||(o.a===x.a&&o.h===x.h)))return;L[id]={sp,game:gl,date:d,voice:x.voice,a:x.a,h:x.h};n++;});
   if(n){const ks=Object.keys(L);if(ks.length>12000){ks.sort((p,q)=>String(L[p].date).localeCompare(String(L[q].date))).slice(0,ks.length-12000).forEach(k=>delete L[k]);}set(SCORECALL_KEY,L);}return n;}
@@ -2317,6 +2317,58 @@ function scoreTrustHtml(sp){const T=scoreTrust(sp);const rows=Object.entries(T).
   return`<div class="sub" style="margin-top:8px;padding:8px;border:1px dashed var(--rule);border-radius:8px">⚙️ <b>Trigger</b> — a character's scores start moving the odds in ${txtEsc((SP_LAB[sp]||sp))} once it has ${SC_TRIG.n}+ graded calls, misses by ${Math.round(SC_TRIG.beat*100)}%+ less than the Simulator, and picks winners at least as well. Max push ±${Math.round(SC_TRIG.cap*100)} pts.<br>
     ${on.length?`<span style="color:var(--win)">✅ LIVE: ${on.map(([v,r])=>txtEsc(nm(v))+' ('+Math.round(r.imp*100)+'% sharper)').join(', ')}</span>`:'<span style="color:var(--gold)">⏳ Not live yet — nobody has earned it.</span>'}
     ${rows.length?'<br>'+rows.slice(0,8).map(([v,r])=>`${txtEsc(nm(v))}: ${Math.min(r.n,SC_TRIG.n)}/${SC_TRIG.n} games · ${r.imp>=0?Math.round(r.imp*100)+'% sharper':Math.round(-r.imp*100)+'% worse'} than Sim${r.winOk?'':' · winners behind'}`).join('<br>'):''}</div>`;}
+
+/* ══ v2.72 · HALVES — every character calls the 1st half (1st period in hockey) ═════════════════════════════
+   Lines come from the day's intake file (H1SPREAD/H1ML/H1OU, P1PL/P1ML/P1OU). Each character's half read is its own
+   final-score call scaled to the half (basketball/football ≈ half the points, hockey's 1st period ≈ 31% of the goals),
+   so its half picks agree with its game picks. Graded on the halftime / 1st-period score from the finals store.
+   OFFICIAL: a half call counts once that character has PROVEN it in that sport + half market — 20+ graded calls at
+   57%+ and in profit. Until then it's tracked for learning, like any new character. */
+const HALF_KEY='d4.halfcalls',HALFLN_KEY='d4.halflines',HALF_OK={n:20,p:0.57};
+const HALF_FRAC={nba:[0.49,0.5],ncaab:[0.47,0.5],nfl:[0.49,0.5],ncaaf:[0.49,0.5],nhl:[0.31,0.33]};   /* [share of total, share of margin] */
+const halfTag=sp=>sp==='nhl'?'P1':'1H';
+async function halfLinesRefresh(){if(typeof fetch==='undefined'||typeof location==='undefined'||!/^https?:/.test(location.protocol))return;const d=today();
+  let t='';try{const r=await fetch('intake/'+d+'.txt?v='+Date.now(),{cache:'no-store'});if(!r.ok)return;t=await r.text();}catch(e){return;}
+  const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',NHL:'nhl',NBA:'nba',NCAAB:'ncaab'};const out={d,g:{}};let sp=null,G=null;
+  t.split('\n').forEach(l=>{l=l.trim();if(SPH[l]){sp=SPH[l];G=null;return;}if(/^MLB$/.test(l)){sp=null;return;}if(!sp||!l||l[0]==='#')return;
+    const g=l.match(/^(.+?)\s+@\s+(.+)$/);if(g&&!/:/.test(l)){const a=intakeAbbr(sp,g[1]),h=intakeAbbr(sp,g[2]);G=a&&h?(out.g[sp+'|'+a+'@'+h]={}):null;return;}
+    if(!G)return;let m;
+    if((m=l.match(/^(H1SPREAD|P1PL):\s*.+?\s+([+\-]?[\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*.+?\s+([+\-]?[\d.]+)\s*\(([+\-]\d+)\)/i)))G.sp={a:{line:+m[2],price:+m[3]},h:{line:+m[4],price:+m[5]}};
+    else if((m=l.match(/^(H1ML|P1ML):\s*.+?\s+([+\-]\d+)\s*\/\s*.+?\s+([+\-]\d+)/i)))G.ml={a:{price:+m[2]},h:{price:+m[3]}};
+    else if((m=l.match(/^(H1OU|P1OU):\s*o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i)))G.ou={line:+m[2],o:+m[3],u:+m[5]};});
+  set(HALFLN_KEY,out);}
+function halfCallsLog(sp,g,calls,scores){const F=HALF_FRAC[sp];if(!F)return 0;const LN=get(HALFLN_KEY,null);const gl=g.away.abbr+'@'+g.home.abbr;
+  const ln=LN&&LN.d===today()?LN.g[sp+'|'+gl]:null;if(!ln)return 0;const d=(calls[0]&&calls[0].date)||today();if(d!==today())return 0;
+  const L=get(HALF_KEY,{})||{};let n=0;const tag=halfTag(sp),pre=sp==='nhl'?'p1':'h1';
+  scores.forEach(x=>{const tot=(x.a+x.h)*F[0],mar=(x.h-x.a)*F[1],ha=(tot-mar)/2,hh=(tot+mar)/2;const put=(mk,side,line,price,pick)=>{const id=[sp,gl,d,x.voice,mk].join('|');const o=L[id];
+      if(o&&(o.graded||o.side===side&&o.line===line))return;L[id]={sp,game:gl,date:d,voice:x.voice,mk,side,line,price,pick,pa:+ha.toFixed(2),ph:+hh.toFixed(2)};n++;};
+    if(ln.ml&&Math.abs(mar)>=0.05){const sd=mar>0?'home':'away';put(pre+'ml',sd,null,ln.ml[sd==='home'?'h':'a'].price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ML`);}
+    if(ln.sp){const hl=ln.sp.h.line,m=mar+hl;if(Math.abs(m)>=0.1){const sd=m>0?'home':'away',o=ln.sp[sd==='home'?'h':'a'];put(pre+'spread',sd,o.line,o.price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ${o.line>0?'+':''}${o.line}`);}}
+    if(ln.ou&&Math.abs(tot-ln.ou.line)>=0.1){const sd=tot>ln.ou.line?'over':'under';put(pre+'total',sd,ln.ou.line,sd==='over'?ln.ou.o:ln.ou.u,`${tag} ${sd==='over'?'Over':'Under'} ${ln.ou.line}`);}});
+  if(n)set(HALF_KEY,L);return n;}
+function gradeHalfCalls(){const L=get(HALF_KEY,{})||{};let n=0;
+  Object.values(L).forEach(x=>{if(x.graded)return;let R=null;try{R=finalsFor(x.sp,x.game,String(x.date).slice(0,10),false);}catch(e){}if(!R)return;
+    const p1=x.sp==='nhl';const a=p1?R.p1a:R.h1a,h=p1?R.p1h:R.h1h;if(a==null||h==null)return;let hit=null;const A=+a,H=+h;
+    if(/ml$/.test(x.mk)){if(A!==H)hit=(x.side==='home')===(H>A);}
+    else if(/spread$/.test(x.mk)){const m=(x.side==='home'?H-A:A-H)+x.line;if(m!==0)hit=m>0;}
+    else{const t=A+H;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
+    x.graded=1;x.fa=A;x.fh=H;x.hit=hit;if(hit!=null)x.units=hit?_vProfit(x.price!=null?x.price:-110):-1;n++;});
+  if(n)set(HALF_KEY,L);return n;}
+function halfRecord(sp,voice,mk){const r={w:0,l:0,u:0};Object.values(get(HALF_KEY,{})||{}).forEach(x=>{if(!x.graded||x.hit==null||x.sp!==sp||x.voice!==voice||x.mk!==mk)return;x.hit?r.w++:r.l++;r.u+=x.units||0;});r.n=r.w+r.l;r.p=r.n?r.w/r.n:null;r.ok=r.n>=HALF_OK.n&&r.p>=HALF_OK.p&&r.u>0;return r;}
+/* today's half calls, official first */
+function halfToday(){const d=today();return Object.values(get(HALF_KEY,{})||{}).filter(x=>x.date===d&&CHARS[x.voice]).map(x=>{const R=halfRecord(x.sp,x.voice,x.mk);return{...x,rec:R,official:R.ok&&x.price!=null};});}
+function halfCardHtml(){const T=halfToday();if(!T.length)return'';const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');
+  const off=T.filter(x=>x.official);const by={};T.forEach(x=>{const k=x.sp+'|'+x.pick+'|'+x.game;(by[k]=by[k]||{x,v:[]}).v.push(x.voice);});
+  const top=Object.values(by).sort((a,b)=>b.v.length-a.v.length).slice(0,6);
+  return`<div class="tkt" style="margin-top:8px"><h3>🕐 Halves & 1st periods</h3>
+    ${off.length?off.map(x=>`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)} — ${txtEsc(nm(x.voice))} ${x.rec.w}-${x.rec.l} in this market</div>`).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls at ${Math.round(HALF_OK.p*100)}%+ in profit, per sport and market. Learning from tonight.</div>`}
+    <details style="margin-top:4px"><summary class="sub">Most-agreed half calls today (${T.length} calls)</summary><div class="mono" style="font-size:10.5px">${top.map(o=>`<div>${txtEsc(o.x.pick)} ${tcSgn(o.x.price)} · ${txtEsc(o.x.game)} — ${o.v.length} characters</div>`).join('')}</div></details></div>`;}
+function halfRecordsHtml(sp){const L=Object.values(get(HALF_KEY,{})||{}).filter(x=>x.graded&&x.hit!=null&&(!sp||sp==='all'||x.sp===sp));
+  const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');const by={};L.forEach(x=>{const k=x.voice;const r=by[k]=by[k]||{};const m=x.mk.replace(/^(h1|p1)/,'');const c=r[m]=r[m]||{w:0,l:0,u:0};x.hit?c.w++:c.l++;c.u+=x.units||0;});
+  const cell=c=>c?`${c.w}-${c.l} <span style="font-size:9.5px">${c.u>=0?'+':''}${c.u.toFixed(1)}u</span>`:'—';
+  return`<div class="tkt"><h3>🕐 Half / 1st-period records</h3><div class="sub">Official once a character goes ${HALF_OK.n}+ calls at ${Math.round(HALF_OK.p*100)}%+ in profit in that sport and market.</div>
+    ${Object.keys(by).length?`<table class="mono" style="width:100%;font-size:11px;margin-top:6px"><tr style="color:var(--mute)"><td></td><td>ML</td><td>Spread</td><td>O/U</td></tr>${Object.entries(by).map(([v,r])=>`<tr><td><b>${txtEsc(nm(v))}</b></td><td>${cell(r.ml)}</td><td>${cell(r.spread)}</td><td>${cell(r.total)}</td></tr>`).join('')}</table>`:'<div class="sub" style="margin-top:6px">Starts grading tonight.</div>'}</div>`;}
+if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__)setTimeout(()=>{halfLinesRefresh().catch(()=>{});},1500);
 
 /* ══ THE CHARACTER BRAIN ═════════════════════════════════════════════════════
    Learns from every graded character call: how often each character hits, per
@@ -2566,9 +2618,9 @@ function gradeVoices(){try{voicesRepairDates();}catch(e){console.warn('voices re
     else if(x.market==='spread'&&x.line!=null){const m=(x.side==='home'?h-a:a-h)+x.line;if(m!==0)hit=m>0;}
     else if(x.market==='total'&&x.line!=null){const t=a+h;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
     x.graded=true;x.hit=hit;if(hit!==null)x.units=hit?_vProfit(x.price!=null?x.price:-110):-1;n++;});
-  if(n)set(VOICES_KEY,V);try{gradeScoreCalls();}catch(e){console.warn('score grade',e);}return n;}
+  if(n)set(VOICES_KEY,V);try{gradeScoreCalls();}catch(e){console.warn('score grade',e);}try{gradeHalfCalls();}catch(e){console.warn('half grade',e);}return n;}
 function voicesReport(sp){
-  let extra='';try{extra=scoreCallsHtml(sp)+charBrainReport(sp)+boxAccuracyHtml();}catch(e){}
+  let extra='';try{extra=scoreCallsHtml(sp)+halfRecordsHtml(sp)+charBrainReport(sp)+boxAccuracyHtml();}catch(e){}
   return voicesReportCore(sp)+extra;
 }
 function voicesReportCore(sp){
@@ -2736,7 +2788,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261027d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261027e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8400,7 +8452,7 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    wrong day — so the search covers the ticket date through a week after it. */
 const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.71.0 · NBA legs were looked up as NFL games */
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.72.0 · NBA legs were looked up as NFL games */
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
@@ -8522,7 +8574,7 @@ const FB_GEN=[[/^passing\s+(?:tds?|touchdowns?)(?:\s+thrown)?$/i,'passing','TD',
   [/^receiving\s+(?:tds?|touchdowns?)$/i,'receiving','TD',null,'receiving TDs'],[/^longest\s+reception$/i,'receiving','LONG',null,'longest reception'],[/^targets$/i,'receiving','TGTS',null,'targets'],
   [/^(?:total\s+)?tackles(?:\s*(?:\+|and)\s*assists)?$/i,'defensive','TOT',null,'tackles'],[/^solo\s+tackles$/i,'defensive','SOLO',null,'solo tackles'],[/^tackles\s+for\s+loss$/i,'defensive','TFL',null,'TFL'],
   [/^(?:passes\s+defended|pass\s+deflections)$/i,'defensive','PD',null,'passes defended']];
-function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.71.0 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
+function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.72.0 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
 function gradeFBSpecialProp(leg,box,R){
   if(leg.fbProp.stat==='gen'){const P=leg.fbProp;const live=box.state==='in';let val=0,found=null,anywhere=false;
     Object.values(box.teamStats).forEach(st=>{['passing','rushing','receiving','defensive','kr','pr','ints'].forEach(c=>{if(fbpFindRow(st[c]||[],P.player))anywhere=true;});
@@ -23609,7 +23661,7 @@ async function tgwResend(btn){const P=tgPosts();const d=today();const p=P[d]||P[
   else{if(btn)btn.textContent='Failed — '+((r&&r.reason)||'error');}}
 async function tgwRunNow(){const{toks}=await tgwGh();const repo=TGW_WORKER_REPO;let why=toks.length?'':'no GitHub token saved on this phone';for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204)){window.__tgwWhy='';return true;}
     why=!r?'no connection':r.status===403||r.status===404?'your GitHub token needs the "Actions: Read and write" permission':r.status===401?'GitHub token expired or wrong':'GitHub said '+r.status;}window.__tgwWhy=why;return false;}
-/* v2.71.0 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
+/* v2.72.0 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
 async function tgwRunNowTap(btn){if(btn){btn.disabled=true;btn.textContent='Starting…';}let ok=false;try{ok=await tgwRunNow();}catch(e){window.__tgwWhy=String(e&&e.message||e);}
   const msg=ok?'▶ Robot started — results in about a minute':"Couldn't start the robot: "+(window.__tgwWhy||'unknown')+'. It still runs on its own schedule.';
   try{deskToast(msg,ok?3500:7000);}catch(e){alert(msg);}if(btn){btn.disabled=false;btn.textContent='▶ Run now';}setTimeout(()=>{try{tgwRefreshStatus();}catch(e){}},70e3);}
