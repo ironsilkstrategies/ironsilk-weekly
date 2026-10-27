@@ -1618,9 +1618,9 @@ function fbpReasons(x,I){const out=[];const g=I.g[(x.sp||'')+'|'+x.game];const p
   const tm=pk.match(/^Over|^Under/i)?null:pk.split(' ')[0];const isTot=!tm;const dir=isTot?pk.split(' ')[0].toLowerCase():null;const line=parseFloat((pk.match(/([+\-]?\d+(?:\.\d+)?)\s*$/)||[])[1]);
   if(g){const myName=tm===g.a?g.an:tm===g.h?g.hn:null,opName=tm===g.a?g.hn:g.an;
     if(g.pred){const P=g.pred,tot=P.a+P.h;
-      if(isTot){if(!isNaN(line)&&((dir==="over"&&tot>line+0.25)||(dir==="under"&&tot<line-0.25)))out.push(`📐 Projected ${fbpNick(g.an)} ${P.a.toFixed(1)} – ${fbpNick(g.hn)} ${P.h.toFixed(1)} = ${tot.toFixed(1)} total, ${Math.abs(tot-line).toFixed(1)} ${dir==='over'?'over':'under'} the number`);}
+      if(isTot){const rt=Math.round(P.a)+Math.round(P.h);if(!isNaN(line)&&((dir==="over"&&rt>line)||(dir==="under"&&rt<line)))out.push(`📐 Projected ${fbpNick(g.an)} ${Math.round(P.a)} – ${fbpNick(g.hn)} ${Math.round(P.h)} (${Math.round(P.a)+Math.round(P.h)} total vs the ${line} line)`);}
       else if(myName){const mine=tm===g.a?P.a:P.h,theirs=tm===g.a?P.h:P.a,mg=mine-theirs;
-        if(/ML$/.test(pk)?mg>0:(!isNaN(line)&&mg+line>0))out.push(`📐 Projected ${fbpNick(myName)} ${mine.toFixed(1)} – ${theirs.toFixed(1)} ${fbpNick(opName)}${!/ML$/.test(pk)&&!isNaN(line)?` (covers by ${(mg+line).toFixed(1)})`:''}`);}}
+        if(/ML$/.test(pk)?mg>0:(!isNaN(line)&&mg+line>0))out.push(`📐 Projected ${fbpNick(myName)} ${Math.round(mine)} – ${Math.round(theirs)} ${fbpNick(opName)}`);}}
     const tr=g.tr.map(t=>{let d=null;try{d=intelTrendDir(t.t);}catch(e){}return{...t,d};}).filter(t=>t.d);
     const sup=tr.filter(t=>{if(isTot)return t.d.kind===dir&&!t.d.fade;if(t.d.kind==='over'||t.d.kind==='under')return false;return t.team===tm?!t.d.fade:t.d.fade;})
       .sort((a,b)=>(b.d.W-b.d.L)/b.d.n-(a.d.W-a.d.L)/a.d.n||b.d.n-a.d.n);
