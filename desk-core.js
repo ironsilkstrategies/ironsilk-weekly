@@ -947,7 +947,7 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
     ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):'not yet — freezes everything')}
     ${step(4,fz&&pub&&pub.d===d&&pub.ok,'Published',fz?((pub&&pub.d===d&&pub.ok?'page ✓':'page …')+' · '+(posted&&posted.d===d?'VIP ✓':'VIP …')):'after the freeze')}</div>
     ${fz?'':`<label class="sub" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" ${deskReviewOn()?'checked':''} onchange="set('d4.reviewFreeze',this.checked);deskRerender()"> Let me review the picks before freezing</label>${deskEvalReady()?`<div class="sub" style="color:var(--gold);margin-top:4px">✓ Every sport evaluated — check the Best card below, then freeze. Nothing posts until you do.</div>`:''}`}
-    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="vipCardPhotos(this)">📸 VIP card → photos</button><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
+    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="vipCardPhotos(this)">📸 VIP card → photos</button><button onclick="fbpOpen()">📣 Facebook post</button><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
     <div class="deskStatus sub mono" style="font-size:10px;margin-top:4px"></div></div>`;}
 
 /* ── 13 · THE PUBLIC PAGE — premium, honest, and live ──────────────────────────
@@ -1592,3 +1592,72 @@ function vipImgViewer(cs,files){const old=document.getElementById('vipImgView');
   document.body.appendChild(v);
   v.querySelector('#vipImgShare').onclick=async()=>{try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files,title:'TheDesk VIP card'});return;}}catch(e){if(e&&e.name==='AbortError')return;}
     files.forEach((f,i)=>{const a=document.createElement('a');a.href=urls[i];a.download=f.name;document.body.appendChild(a);a.click();a.remove();});};}
+
+/* ══ v2.69 · FACEBOOK POST — the day's best picks + parlays in one message, with real reasons ══════════════
+   Reasons come from the published intake for today (predicted score, the teams' own trends, consensus/money),
+   matched to each pick's game and side — so a pick reads "Lakers 6-1 O/U after scoring 100+… projected 116.9–115.6",
+   not just "the Simulator likes it". Available from every sport page (📣 button) and the Today panel. */
+let FBP_INTEL=null;
+async function fbpIntel(){const d=today();if(FBP_INTEL&&FBP_INTEL.d===d)return FBP_INTEL;const I={d,g:{}};
+  const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',MLB:'mlb',NHL:'nhl',NBA:'nba',NCAAB:'ncaab'};
+  const rd=async f=>{try{const r=await fetch('intake/'+d+f+'?v='+Date.now(),{cache:'no-store'});return r.ok?await r.text():'';}catch(e){return'';}};
+  const ab=(sp,n)=>{try{return intakeAbbr(sp,n)||null;}catch(e){return null;}};
+  let sp=null,G=null;(await rd('.txt')).split('\n').forEach(l=>{l=l.trim();if(SPH[l]){sp=SPH[l];return;}if(!sp||!l||l[0]==='#')return;
+    const g=l.match(/^(.+?)\s+@\s+(.+)$/);if(g&&!/:/.test(l)){const a=ab(sp,g[1]),h=ab(sp,g[2]);G=a&&h?(I.g[sp+'|'+a+'@'+h]={sp,a,h,an:g[1],hn:g[2],tr:[],pred:null,cons:null,tot:null}):null;return;}
+    if(!G)return;let m;
+    if((m=l.match(/^PRED:\s*(.+?)\s+([\d.]+)\s*\/\s*(.+?)\s+([\d.]+)$/)))G.pred={a:+m[2],h:+m[4]};
+    else if((m=l.match(/^TREND\s+(.+?):\s*(.+)$/)))G.tr.push({team:ab(sp,m[1]),name:m[1],t:m[2]});});
+  sp=null;let tot=false;(await rd('.cons.txt')).split('\n').forEach(l=>{l=l.trim();if(SPH[l]){sp=SPH[l];tot=false;return;}if(l==='TOTALS'){tot=true;return;}if(!sp)return;let m;
+    const find=(x,y)=>{const a=ab(sp,x),h=ab(sp,y);return a&&h?I.g[sp+'|'+a+'@'+h]:null;};
+    if(!tot&&(m=l.match(/^(\S+)\s+(\d+)%\s*\/\s*(\S+)\s+(\d+)%$/))){const g=find(m[1],m[3]);if(g)g.cons={a:+m[2],h:+m[4]};}
+    else if(tot&&(m=l.match(/^(\S+)\/(\S+):\s*(\d+)%\s*(Over|Under)/i))){const g=find(m[1],m[2]);if(g)g.tot={pct:+m[3],dir:m[4].toLowerCase()};}});
+  FBP_INTEL=I;return I;}
+const fbpNick=n=>String(n||'').split(' ').pop();
+/* up to 3 short, real reasons for one pick */
+function fbpReasons(x,I){const out=[];const g=I.g[(x.sp||'')+'|'+x.game];const pk=String(x.pick||'');
+  const tm=pk.match(/^Over|^Under/i)?null:pk.split(' ')[0];const isTot=!tm;const dir=isTot?pk.split(' ')[0].toLowerCase():null;const line=parseFloat((pk.match(/([+\-]?\d+(?:\.\d+)?)\s*$/)||[])[1]);
+  if(g){const myName=tm===g.a?g.an:tm===g.h?g.hn:null,opName=tm===g.a?g.hn:g.an;
+    if(g.pred){const P=g.pred,tot=P.a+P.h;
+      if(isTot){if(!isNaN(line)&&((dir==="over"&&tot>line+0.25)||(dir==="under"&&tot<line-0.25)))out.push(`📐 Projected ${fbpNick(g.an)} ${P.a.toFixed(1)} – ${fbpNick(g.hn)} ${P.h.toFixed(1)} = ${tot.toFixed(1)} total, ${Math.abs(tot-line).toFixed(1)} ${dir==='over'?'over':'under'} the number`);}
+      else if(myName){const mine=tm===g.a?P.a:P.h,theirs=tm===g.a?P.h:P.a,mg=mine-theirs;
+        if(/ML$/.test(pk)?mg>0:(!isNaN(line)&&mg+line>0))out.push(`📐 Projected ${fbpNick(myName)} ${mine.toFixed(1)} – ${theirs.toFixed(1)} ${fbpNick(opName)}${!/ML$/.test(pk)&&!isNaN(line)?` (covers by ${(mg+line).toFixed(1)})`:''}`);}}
+    const tr=g.tr.map(t=>{let d=null;try{d=intelTrendDir(t.t);}catch(e){}return{...t,d};}).filter(t=>t.d);
+    const sup=tr.filter(t=>{if(isTot)return t.d.kind===dir&&!t.d.fade;if(t.d.kind==='over'||t.d.kind==='under')return false;return t.team===tm?!t.d.fade:t.d.fade;})
+      .sort((a,b)=>(b.d.W-b.d.L)/b.d.n-(a.d.W-a.d.L)/a.d.n||b.d.n-a.d.n);
+    sup.slice(0,2).forEach(t=>out.push('📈 '+t.t.replace(/\.$/,'')));
+    if(isTot&&g.tot&&g.tot.dir===dir)out.push(`💰 ${g.tot.pct}% of sharp money on the ${dir}`);
+    if(!isTot&&g.cons&&myName){const p=tm===g.a?g.cons.a:g.cons.h;if(p>=60)out.push(`💰 ${p}% of the sharp side is with ${fbpNick(myName)}`);else if(p<=35)out.push(`🧠 Contrarian: fading the ${100-p}% on ${fbpNick(opName)}`);}}
+  if(!out.length&&x.p!=null)out.push(`🎯 Our model makes this a ${Math.round(x.p*100)}% shot at this price`);
+  return out.slice(0,3);}
+const FBP_SP={nfl:'🏈',ncaaf:'🏈',nba:'🏀',ncaab:'🏀',nhl:'🏒',mlb:'⚾'};
+const FBP_N=['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+async function fbpText(){const C=subCard();const I=await fbpIntel();const day=new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}).toUpperCase();
+  const pc=x=>{try{return Math.round((x.p!=null?x.p:best5Prob(x))*100)+'%';}catch(e){return'';}};const gl=x=>{try{return gameLabel(x.sp,x.game).replace(/#\d+\s*/g,'');}catch(e){return x.game;}};
+  const L=[];const R=C.record;
+  L.push(`🔥🔥 THEDESK — ${day} 🔥🔥`);
+  if(R&&(R.w+R.l))L.push(`📊 Best Bets record: ${R.w}-${R.l}${R.pu?'-'+R.pu:''} (${R.u>=0?'+':''}${R.u.toFixed(1)}u) — every pick graded in public`);
+  L.push('━━━━━━━━━━━━━━━');
+  const picks=[...C.best,...(C.top10||[])].slice(0,5);
+  if(picks.length){L.push(`⭐ TODAY'S BEST BETS ⭐`,'');
+    picks.forEach((x,i)=>{L.push(`${FBP_N[i]} ${FBP_SP[x.sp]||'🎯'} ${x.pick} (${tcSgn(x.price)}) — ${gl(x)}${i<C.best.length?'  🔒':''}`);
+      L.push(`   ✅ Confidence: ${pc(x)}`);fbpReasons(x,I).forEach(r=>L.push('   '+r));L.push('');});}
+  const pars=[];if(C.banker)pars.push({t:'🏦 THE BANKER',P:C.banker});(C.chars||[]).filter(P=>!P.skill).slice(0,2).forEach((P,i)=>pars.push({t:i?'🎲 THE LONG SHOT':'🚀 THE BOOSTER',P}));
+  if(pars.length){L.push('━━━━━━━━━━━━━━━',`💸 PARLAYS OF THE DAY 💸`,'');
+    pars.forEach(({t,P})=>{L.push(`${t} — ${P.legs.length} legs @ ${decimalToAmerican(P.dec)} (${Math.round(P.p*100)}% to cash)`);
+      P.legs.forEach(l=>L.push(`   ▫️ ${l.player?cpropLine(l):l.pick+' ('+tcSgn(l.price)+')'} ${FBP_SP[l.sp]||''}`));L.push('');});}
+  L.push('━━━━━━━━━━━━━━━');
+  let handle='';try{handle=get(LS.handle,'')||'';}catch(e){}
+  L.push(`📲 Full card, live tracking + every parlay in the VIP${handle?' → '+handle:''}`,`👇 Tail or fade — drop your picks below`,'',`#SportsBetting #GamblingTwitter #NBA #NHL #CFB #Parlay #BestBets #TheDesk`,`21+ · For entertainment · Bet responsibly · 1-800-GAMBLER`);
+  return L.join('\n');}
+async function fbpOpen(){const old=document.getElementById('fbpView');if(old)old.remove();let t='';try{t=await fbpText();}catch(e){t='Could not build the post: '+(e&&e.message||e);}
+  const v=document.createElement('div');v.id='fbpView';v.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(3,6,12,.97);overflow-y:auto;padding:14px 14px 90px';
+  v.innerHTML=`<div style="display:flex;gap:8px;position:sticky;top:0;padding-bottom:10px;background:rgba(3,6,12,.97)"><button class="primary" style="flex:1" id="fbpCopy">📋 Copy post</button><button id="fbpShare">📤 Share</button><button id="fbpImg">📸 + photos</button><button onclick="document.getElementById('fbpView').remove()">✕</button></div>
+    <div class="sub" style="color:#94a3b8;margin:0 0 8px">Edit anything below before copying. Paste into Facebook, then add the 📸 card photos for max reach.</div>
+    <textarea id="fbpTxt" style="width:100%;min-height:70vh;background:#0b1220;color:#f8fafc;border:1px solid #334155;border-radius:12px;padding:12px;font:15px/1.45 system-ui">${txtEsc(t)}</textarea>`;
+  document.body.appendChild(v);const tx=()=>document.getElementById('fbpTxt').value;
+  v.querySelector('#fbpCopy').onclick=async()=>{try{await navigator.clipboard.writeText(tx());deskToast('Copied — paste it into Facebook',2500);}catch(e){const a=document.getElementById('fbpTxt');a.select();document.execCommand('copy');deskToast('Copied',2000);}};
+  v.querySelector('#fbpShare').onclick=async()=>{try{await navigator.share({text:tx()});}catch(e){}};
+  v.querySelector('#fbpImg').onclick=()=>{try{vipCardPhotos();}catch(e){}};}
+/* a 📣 button on every sport page */
+if(typeof document!=='undefined'&&!DESK_BG_EVAL&&!(typeof BG_MODE!=='undefined'&&BG_MODE)&&!EVAL_CHAIN_HOP)document.addEventListener('DOMContentLoaded',()=>{if(document.getElementById('fbpFab'))return;const b=document.createElement('button');b.id='fbpFab';b.textContent='📣';b.title='Facebook post — best picks + parlays';
+  b.style.cssText='position:fixed;right:14px;bottom:96px;z-index:9000;width:52px;height:52px;border-radius:26px;border:2px solid #f5c542;background:#111a2e;font-size:24px;box-shadow:0 6px 20px rgba(0,0,0,.5)';b.onclick=fbpOpen;document.body.appendChild(b);});
