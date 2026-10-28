@@ -7,7 +7,7 @@
    Without IndexedDB (or under the test harness) nothing changes — plain localStorage, exactly as before. */
 (function(){
   var RLS;try{RLS=window.localStorage;}catch(e){RLS=null;}
-  var BIG=40000,MEM=new Map(),INIDB=new Set(),DB=null,ON=false,PEND=new Map(),TIMER=null,FLUSHING=Promise.resolve(),LOADED=false,BC=null;
+  var BIG=16000,MEM=new Map(),INIDB=new Set(),DB=null,ON=false,PEND=new Map(),TIMER=null,FLUSHING=Promise.resolve(),LOADED=false,BC=null;
   window.addEventListener('load',function(){LOADED=true;});
   function open(){return new Promise(function(res,rej){var r=indexedDB.open('thedesk',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv');};r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};r.onblocked=function(){rej(new Error('blocked'));};});}
   function all(db){return new Promise(function(res,rej){var out=new Map();var c=db.transaction('kv','readonly').objectStore('kv').openCursor();c.onsuccess=function(){var x=c.result;if(x){out.set(String(x.key),x.value);x.continue();}else res(out);};c.onerror=function(){rej(c.error);};});}
