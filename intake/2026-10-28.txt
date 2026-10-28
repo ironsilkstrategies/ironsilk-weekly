@@ -1,5 +1,5 @@
 SOURCE: covers
-# Wed Oct 28, 2026 — book lines: sportsbetting.ag (9:02–9:03 AM CT) · predicted scores + trends: Covers (9:06–9:07 AM CT). Batch 1 + batch 2 (Covers NBA/NHL).
+# Wed Oct 28, 2026 — book lines: sportsbetting.ag (9:02–9:03 AM CT) · predicted scores + trends: Covers (9:06–9:07 AM CT). Batch 1 + batch 2 (Covers NBA/NHL) + batch 3. Consensus in 2026-10-28.cons.txt.
 
 NCAAF
 
@@ -199,6 +199,15 @@ OU: o233.5 (-110) / u233.5 (-110)
 H1SPREAD: San Antonio Spurs -7 (-115) / Utah Jazz +7 (-105)
 H1ML: San Antonio Spurs -375 / Utah Jazz +299
 H1OU: o119.5 (-110) / u119.5 (-110)
+PRED: San Antonio Spurs 121.56 / Utah Jazz 111.58
+TREND San Antonio Spurs: Spurs are 4-0 ATS in their last 4 road games vs. a team with a losing home record.
+TREND San Antonio Spurs: Spurs are 4-0 ATS in their last 4 road games vs. a team with a home winning % of less than .400.
+TREND San Antonio Spurs: Over is 4-0 in Spurs last 4 games as a road underdog.
+TREND San Antonio Spurs: Over is 7-1 in Spurs last 8 road games.
+TREND Utah Jazz: Under is 5-1 in Jazz last 6 overall.
+TREND Utah Jazz: Over is 8-2 in Jazz last 10 games as a home favorite.
+TREND Utah Jazz: Under is 4-1 in Jazz last 5 home games vs. a team with a road winning % of greater than .600.
+TREND Utah Jazz: Jazz are 0-5 ATS in their last 5 games overall.
 
 Oklahoma City Thunder @ Dallas Mavericks
 ML: Oklahoma City Thunder -220 / Dallas Mavericks +186
@@ -207,6 +216,15 @@ OU: o229 (-110) / u229 (-110)
 H1SPREAD: Oklahoma City Thunder -3.5 (-110) / Dallas Mavericks +3.5 (-110)
 H1ML: Oklahoma City Thunder -190 / Dallas Mavericks +165
 H1OU: o111.5 (-110) / u111.5 (-110)
+PRED: Oklahoma City Thunder 116.41 / Dallas Mavericks 111.90
+TREND Oklahoma City Thunder: Over is 5-1 in Thunder last 6 games as an underdog.
+TREND Oklahoma City Thunder: Over is 5-1 in Thunder last 6 games as a road favorite.
+TREND Oklahoma City Thunder: Over is 8-2 in Thunder last 10 games playing on 1 days rest.
+TREND Oklahoma City Thunder: Under is 4-1 in Thunder last 5 road games vs. a team with a losing home record.
+TREND Dallas Mavericks: Over is 4-0 in Mavericks last 4 games vs. a team with a winning % above .600.
+TREND Dallas Mavericks: Under is 4-0 in Mavericks last 4 games following a straight up win.
+TREND Dallas Mavericks: Over is 5-1 in Mavericks last 6 games as a home favorite.
+TREND Dallas Mavericks: Mavericks are 8-2 ATS in their last 10 home games vs. a team with a road winning % of greater than .600.
 
 Los Angeles Lakers @ Los Angeles Clippers
 ML: Los Angeles Lakers -195 / Los Angeles Clippers +170
@@ -215,6 +233,15 @@ OU: o229 (-107) / u229 (-113)
 H1SPREAD: Los Angeles Lakers -2.5 (-110) / Los Angeles Clippers +2.5 (-110)
 H1ML: Los Angeles Lakers -160 / Los Angeles Clippers +140
 H1OU: o117 (-115) / u117 (-105)
+PRED: Los Angeles Lakers 115.89 / Los Angeles Clippers 111.62
+TREND Los Angeles Lakers: Lakers are 5-0 ATS in their last 5 games playing on 0 days rest.
+TREND Los Angeles Lakers: Over is 5-1 in Lakers last 6 overall.
+TREND Los Angeles Lakers: Lakers are 10-3 ATS in their last 13 games vs. a team with a losing straight up record.
+TREND Los Angeles Lakers: Over is 25-11 in Lakers last 36 games vs. a team with a winning % below .400.
+TREND Los Angeles Clippers: Under is 6-0 in Clippers last 6 games as a home favorite.
+TREND Los Angeles Clippers: Clippers are 6-0 ATS in their last 6 games playing on 2 days rest.
+TREND Los Angeles Clippers: Clippers are 4-0 ATS in their last 4 games as a favorite.
+TREND Los Angeles Clippers: Under is 6-1 in Clippers last 7 home games.
 
 NHL
 

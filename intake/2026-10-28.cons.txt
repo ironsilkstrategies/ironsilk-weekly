@@ -1,0 +1,41 @@
+NHL
+PHI @ WAS
+PHI 10% / WAS 90%
+CAL @ EDM
+CAL 20% / EDM 80%
+NJ @ COL
+NJ 21% / COL 79%
+TOR @ SEA
+TOR 29% / SEA 71%
+NBA
+SA @ UTA
+SA 71% / UTA 29%
+PHI @ IND
+PHI 83% / IND 17%
+MIA @ ATL
+MIA 25% / ATL 75%
+OKC @ DAL
+OKC 29% / DAL 71%
+DEN @ NO
+DEN 71% / NO 29%
+NCAAF
+KENN @ MTU
+KENN 26% / MTU 74%
+NHL
+TOTALS
+CAL/EDM: 82% Over | Line 6.5
+TOR/SEA: 78% Over | Line 6.5
+NBA
+TOTALS
+MIA/ATL: 74% Under | Line 240.5
+WAS/CLE: 65% Under | Line 238.5
+NY/CHI: 64% Under | Line 235.5
+DEN/NO: 62% Over | Line 240.5
+OKC/DAL: 88% Under | Line 229
+CHA/DET: 75% Under | Line 215.5
+LAL/LAC: 71% Under | Line 227.5
+HOU/MIL: 70% Over | Line 226.5
+NCAAF
+TOTALS
+KENN/MTU: 70% Over | Line 50.5
+JVST/NMSU: 72% Over | Line 49.5
