@@ -155,10 +155,7 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
   const u = await T('getUpdates', { offset: String((state.tgOff || 0) + 1), timeout: '0', allowed_updates: JSON.stringify(['message']) }); const rows = (u && u.result) || []; if (!rows.length) return acted;
   const st = {}; for (const d of ds) Object.assign(st, state.posts[d].st || {});
   for (const x of rows) { state.tgOff = Math.max(state.tgOff || 0, x.update_id); if (x.message && /^\//.test(x.message.text || '')) state.cmdTs = Date.now(); const m = x.message; if (!m || !m.chat) continue;
-    /* v2.76 · only YOUR chats: VIP, the lounges and the public channel. Anyone who adds the bot to another group gets no answers, and the bot leaves. */
-    { const ok = new Set([p.chat, p.bc && p.bc.vipLounge, p.bc && p.bc.pubLounge, p.bc && p.bc.pub].filter(Boolean).map(String)); const cid = String(m.chat.id), un = m.chat.username ? '@' + String(m.chat.username).toLowerCase() : null;
-      const mine = m.chat.type === 'private' || ok.has(cid) || (un && [...ok].some(c => c.toLowerCase() === un));
-      if (!mine) { state.left = state.left || {}; if (!state.left[cid]) { state.left[cid] = Date.now(); try { await T('leaveChat', { chat_id: cid }); log('left a chat that is not yours', cid, m.chat.title || ''); } catch (e) {} acted++; } continue; } }
+    /* v2.76.1 · the auto-leave is OFF: it couldn't tell the public lounge was yours and left it. Stopping strangers is BotFather's /setjoingroups. */
     if (!m.text || m.text[0] !== '/') continue;
     const cmd = m.text.slice(1).split(/[\s@]/)[0].toLowerCase(); let chk = null; if (cmd === 'check') { try { chk = checkTicket(m.text, C.idx); } catch (e) { log('check', e.message || e); } }
     const txt = chk || C.r[cmd] || (cmd ? `I don't know /${esc(cmd)} — tap /help for the list.` : null); if (!txt) continue;
