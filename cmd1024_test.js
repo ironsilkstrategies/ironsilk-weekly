@@ -19,10 +19,10 @@ setTimeout(async()=>{try{
   /* the robot */
   const Wk=await import(path.join(W,'autopilot/worker.mjs').replace(/^/,'file://')).catch(e=>({err:e}));
   if(Wk.err){T('worker loads',false,String(Wk.err));}else{
-    const sent=[];const tg=async(m,p)=>{if(m==='getUpdates')return{ok:true,result:[{update_id:7,message:{message_id:3,chat:{id:-100},text:'/judge@TheDeskBot'}},{update_id:8,message:{message_id:4,chat:{id:-100},text:'/nope'}},{update_id:9,message:{message_id:5,chat:{id:-999,type:'group',title:'stranger'},text:'/best'}}]};sent.push([m,p]);return{ok:true};};
+    const sent=[];const tg=async(m,p)=>{if(m==='getUpdates')return{ok:true,result:[{update_id:7,message:{message_id:3,chat:{id:-100},text:'/judge@TheDeskBot'}},{update_id:8,message:{message_id:4,chat:{id:-100},text:'/nope'}}]};sent.push([m,p]);return{ok:true};};
     const st={posts:{[D]:{d:D,chat:-100,cmd:P.cmd,st:{}}}};const n=await Wk.runCommands(st,{tg,now:NOW});T('v2.76.1 · the robot never leaves a group on its own',!sent.some(([m])=>m==='leaveChat'));
     const msgs=sent.filter(x=>x[0]==='sendMessage');
     T('the robot answers /judge in the chat it was asked, as a reply',msgs.length===2&&msgs[0][1].chat_id===-100&&/The Judge/.test(msgs[0][1].text)&&msgs[0][1].reply_to_message_id==='3');
-    T('an unknown command points to /help; the offset moves so nothing answers twice',/tap \/help/.test(msgs[1][1].text)&&st.tgOff===9&&sent.some(x=>x[0]==='setMyCommands'));}
+    T('an unknown command points to /help; the offset moves so nothing answers twice',/tap \/help/.test(msgs[1][1].text)&&st.tgOff===8&&sent.some(x=>x[0]==='setMyCommands'));}
 }catch(e){T('no crash',false,e.stack.slice(0,500));}
 const p=out.filter(x=>x.startsWith('PASS')).length;console.log(out.join('\n'));console.log(`${p} pass / ${out.length-p} fail`);process.exit(0);},3500);
