@@ -1871,7 +1871,7 @@ function intelTrendDir(text){
 /* ── typed line parser ── */
 function intelParse(text,type,src,sp){
   const out={xpicks:[],trends:[],consensus:[],preds:[],unread:[]};let ctx=null;
-  /* v2.76.0 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
+  /* v2.77.0 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
      Before, "DET 16% / EDM 84%" (hockey) on the NFL page latched onto the Lions' game — abbreviations collide across leagues. */
   let secSp=null;const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',MLB:'mlb',NHL:'nhl',NBA:'nba',NCAAB:'ncaab',CBB:'ncaab'};
   stripBOM(text).split('\n').map(l=>l.replace(/^[\s\-*•>#]+/,'').trim()).filter(Boolean).forEach(l=>{
@@ -1902,7 +1902,7 @@ function intelParse(text,type,src,sp){
       if(ou.length&&(where||ctx)){const G=(where&&where.game)||ctx,[aw,hm]=G.split('@');const o=ou.find(p=>/^o/i.test(p.who)),u=ou.find(p=>/^u/i.test(p.who));
         out.consensus.push({src,game:G,away:aw,home:hm,market:'total',metric:money?'money':'bets',awayPct:null,homePct:null,overPct:o?o.pct:(u?100-u.pct:null),underPct:u?u.pct:(o?100-o.pct:null),line:null});return;}
       const tp=pairs.map(p=>({...p,t:intelTeams(sp,p.who)[0]})).filter(p=>p.t);
-      /* v2.76.0 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
+      /* v2.77.0 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
       if(pairs.length>=2&&!(tp.length>=2&&tp.every(p=>p.t.game===tp[0].t.game))){out.unread.push(l);return;}
       if(tp.length){const G=tp[0].t.game,[aw,hm]=G.split('@');let ap=null,hp=null;tp.forEach(p=>{if(p.t.game!==G)return;if(p.t.side==='a')ap=p.pct;else hp=p.pct;});
         if(ap==null&&hp!=null)ap=100-hp;if(hp==null&&ap!=null)hp=100-ap;
@@ -2788,7 +2788,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261027j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261028a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8452,7 +8452,7 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    wrong day — so the search covers the ticket date through a week after it. */
 const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.76.0 · NBA legs were looked up as NFL games */
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.77.0 · NBA legs were looked up as NFL games */
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
@@ -8574,7 +8574,7 @@ const FB_GEN=[[/^passing\s+(?:tds?|touchdowns?)(?:\s+thrown)?$/i,'passing','TD',
   [/^receiving\s+(?:tds?|touchdowns?)$/i,'receiving','TD',null,'receiving TDs'],[/^longest\s+reception$/i,'receiving','LONG',null,'longest reception'],[/^targets$/i,'receiving','TGTS',null,'targets'],
   [/^(?:total\s+)?tackles(?:\s*(?:\+|and)\s*assists)?$/i,'defensive','TOT',null,'tackles'],[/^solo\s+tackles$/i,'defensive','SOLO',null,'solo tackles'],[/^tackles\s+for\s+loss$/i,'defensive','TFL',null,'TFL'],
   [/^(?:passes\s+defended|pass\s+deflections)$/i,'defensive','PD',null,'passes defended']];
-function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.76.0 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
+function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.77.0 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
 function gradeFBSpecialProp(leg,box,R){
   if(leg.fbProp.stat==='gen'){const P=leg.fbProp;const live=box.state==='in';let val=0,found=null,anywhere=false;
     Object.values(box.teamStats).forEach(st=>{['passing','rushing','receiving','defensive','kr','pr','ints'].forEach(c=>{if(fbpFindRow(st[c]||[],P.player))anywhere=true;});
@@ -18847,10 +18847,13 @@ let BK_C=null;
 function bkLedger(force){if(!force&&BK_C&&Date.now()-BK_C.ts<60e3)return BK_C.v;
   const V=roGet(VOICES_KEY,[],30e3)||[],CP=roGet(CPAR_KEY,{},30e3)||{},CPX=(typeof CPX_KEY!=='undefined'?roGet(CPX_KEY,{},30e3):null)||{};const ws=bkWeekStart();const lo=dayShift(ws,-49);
   const BYV={};for(const x of V){if(x&&x.graded&&x.date>=lo)(BYV[x.voice]||(BYV[x.voice]=[])).push(x);}
-  const weeks=[];for(let i=0;i<8;i++){const w0=dayShift(ws,-7*i);const R=bkRunWeek(w0,V,CP,BYV,CPX);const act=Object.values(R).filter(x=>x.n);
-    weeks.push({ws:w0,R,leader:act.sort((a,b)=>b.br-a.br)[0]||null});}
+  const weeks=[];for(let i=0;i<8;i++){const w0=dayShift(ws,-7*i);const RF=bkRunWeek(w0,V,CP,BYV,CPX);
+    /* v2.77 · the weekly race is played to WIN the week (money resets Tuesday): aggressive staking, leans included, trailers press, every parlay booked.
+       The Banker's multiplier still reads the flat 2% ledger (RF), so real-money weighting doesn't swing with the race. */
+    let R=RF;try{if(typeof lgChaseWeek==='function')R=lgChaseWeek(w0,BYV,CP,CPX)||RF;}catch(e){console.warn('chase week',e);}
+    const act=Object.values(R).filter(x=>x.n);weeks.push({ws:w0,R,RF,leader:act.sort((a,b)=>b.br-a.br)[0]||null});}
   /* the Banker's verdict: pooled last 4 weeks, only with proof */
-  const mult={};CHAR_ORDER.forEach(v=>{let n=0,pnl=0;weeks.slice(0,4).forEach(W=>{const x=W.R[v];n+=x.n;pnl+=x.br-100;});
+  const mult={};CHAR_ORDER.forEach(v=>{let n=0,pnl=0;weeks.slice(0,4).forEach(W=>{const x=(W.RF||W.R)[v];n+=x.n;pnl+=x.br-100;});
     const roi=n?pnl/(n*2):0;mult[v]=n>=30?Math.max(0.6,Math.min(1.4,1+roi*3)):1;});
   const v={ws,weeks,mult};BK_C={ts:Date.now(),v};return v;}
 function bankerMult(v){try{return bkLedger().mult[v]||1;}catch(e){return 1;}}
@@ -18889,7 +18892,7 @@ function bkChallenges(){const L=bkLedger();const prev=L.weeks[1]&&L.weeks[1].lea
 function bankerHtml(){const L=bkLedger(true);const W=L.weeks[0];const rows=Object.values(W.R).sort((a,b)=>b.br-a.br);
   const chip=v=>{const C=CHARS[v];return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
   const money=x=>`<b style="color:${x>=100?'var(--win)':'var(--rust)'}">$${x.toFixed(2)}</b>`;
-  const stand=rows.map((x,i)=>`<tr><td style="text-align:left">${i+1}. ${chip(x.v)} ${esc(charName(x.v))}</td><td>${money(x.br)}</td><td>${x.w}-${x.l}${x.p?'-'+x.p:''}</td><td>${x.n?(x.roi>=0?'+':'')+(x.roi*100).toFixed(1)+'%':'—'}</td><td>×${(L.mult[x.v]||1).toFixed(2)}</td></tr>`).join('');
+  const stand=rows.map((x,i)=>`<tr><td style="text-align:left">${i+1}. ${chip(x.v)} ${esc(charName(x.v))}</td><td>${money(x.br)}</td><td>${x.w}-${x.l}${x.p?'-'+x.p:''}${x.par&&(x.par.w+x.par.l)?`<br><span style="font-size:9px">🎟 ${x.par.w}-${x.par.l} · $${(x.par.cost||0).toFixed(0)}→${x.par.pnl>=0?'+':'-'}$${Math.abs(x.par.pnl).toFixed(0)}</span>`:''}</td><td>${x.n?(x.roi>=0?'+':'')+(x.roi*100).toFixed(1)+'%':'—'}</td><td>×${(L.mult[x.v]||1).toFixed(2)}</td></tr>`).join('');
   const hist=L.weeks.slice(1).filter(x=>x.leader).map(x=>`<span class="mono" style="font-size:9.5px;margin-right:8px">${fmtDate(new Date(x.ws+'T12:00:00'))}: ${chip(x.leader.v)} $${x.leader.br.toFixed(0)}</span>`).join('');
   let S=null;try{S=bkSlate();}catch(e){}
   const slate=S&&S.picks.length?S.picks.map((o,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)">
@@ -18898,7 +18901,7 @@ function bankerHtml(){const L=bkLedger(true);const W=L.weeks[0];const rows=Objec
       <div class="mono" style="font-size:10px">${o.P.legs.map(l=>esc(l.pick)+' <span style="color:var(--gold)">'+(l.price>0?'+':'')+l.price+'</span>').join(' · ')}</div></div>`).join('')
     :'<div class="sub">The Banker passes today — no character parlay has positive Kelly growth. Sitting out is a position.</div>';
   return`<div class="tkt" style="border-color:#c9a227"><h3>🏦 The Banker</h3>
-    <div class="sub" style="font-size:10px">Every character starts each week with $100. Every graded call is a 2% bet of its current roll; its daily parlay rides at 1%. Money talks — the multiplier is the Banker's say in how loud each character is (needs 30+ bets).</div>
+    <div class="sub" style="font-size:10px">The weekly race: every character gets $100 on Tuesday and plays to WIN the week — the money resets, so they swing. Official calls 5–8% of the roll, 60%+ leans 2.5%, every parlay 4%; behind the leader late in the week they press, out front they protect. The weight (×) is the Banker's say in how loud each character is, read from a separate flat-2% ledger (needs 30+ bets).</div>
     <table class="mono" style="width:100%;font-size:10px;text-align:center;margin-top:6px;border-collapse:collapse"><tr style="color:var(--mute)"><td style="text-align:left">week of ${fmtDate(new Date(W.ws+'T12:00:00'))}</td><td>roll</td><td>W-L</td><td>ROI</td><td>weight</td></tr>${stand}</table>
     ${hist?`<div style="margin-top:6px"><span class="sub" style="font-size:10px">Past weekly winners: </span>${hist}</div>`:''}
     <div class="mktlab" style="margin-top:8px">The Banker's slate — up to 5 parlays he'd actually play ${S&&S.locked?'<span style="color:var(--win)">· 🔒 frozen</span>':''}</div>${slate}</div>`;}
@@ -23661,7 +23664,7 @@ async function tgwResend(btn){const P=tgPosts();const d=today();const p=P[d]||P[
   else{if(btn)btn.textContent='Failed — '+((r&&r.reason)||'error');}}
 async function tgwRunNow(){const{toks}=await tgwGh();const repo=TGW_WORKER_REPO;let why=toks.length?'':'no GitHub token saved on this phone';for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204)){window.__tgwWhy='';return true;}
     why=!r?'no connection':r.status===403||r.status===404?'your GitHub token needs the "Actions: Read and write" permission':r.status===401?'GitHub token expired or wrong':'GitHub said '+r.status;}window.__tgwWhy=why;return false;}
-/* v2.76.0 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
+/* v2.77.0 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
 async function tgwRunNowTap(btn){if(btn){btn.disabled=true;btn.textContent='Starting…';}let ok=false;try{ok=await tgwRunNow();}catch(e){window.__tgwWhy=String(e&&e.message||e);}
   const msg=ok?'▶ Robot started — results in about a minute':"Couldn't start the robot: "+(window.__tgwWhy||'unknown')+'. It still runs on its own schedule.';
   try{deskToast(msg,ok?3500:7000);}catch(e){alert(msg);}if(btn){btn.disabled=false;btn.textContent='▶ Run now';}setTimeout(()=>{try{tgwRefreshStatus();}catch(e){}},70e3);}
