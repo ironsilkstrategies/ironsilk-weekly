@@ -932,7 +932,7 @@ async function masterEvalFinish(done,miss,force){
 const EVAL_CHAIN_KEY='d4.evalchain';
 function evalChainNext(){const C=get(EVAL_CHAIN_KEY,null);if(!C||C.d!==today()||Date.now()-C.ts>15*60e3)return null;return C;}
 function evalChainGo(){const C=evalChainNext();if(!C)return;try{wbBeforeFrame();}catch(e){}
-  const sp=C.todo[0];location.href=sp?SPORT_PAGE[sp]+'?bg=1&eval=1&chain=1&v='+Date.now():C.back+'?evaldone=1&v='+Date.now();}
+  const sp=C.todo[0];const go=()=>{location.href=sp?SPORT_PAGE[sp]+'?bg=1&eval=1&chain=1&v='+Date.now():C.back+'?evaldone=1&v='+Date.now();};try{if(typeof wbFlushNow==='function')wbFlushNow();}catch(e){}(window.D4_FLUSH?window.D4_FLUSH():Promise.resolve()).then(go,go);}
 /* a page opened by the relay: show where we are, evaluate when the board is ready, then hop on */
 const EVAL_CHAIN_HOP=typeof location!=='undefined'&&/[?&]chain=1/.test(location.search||'');
 if(EVAL_CHAIN_HOP&&typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{const C=evalChainNext();const n=C?C.done.length+C.miss.length+1:0,N=C?n+C.todo.length-1:0;
