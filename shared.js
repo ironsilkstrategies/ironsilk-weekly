@@ -1871,7 +1871,7 @@ function intelTrendDir(text){
 /* ── typed line parser ── */
 function intelParse(text,type,src,sp){
   const out={xpicks:[],trends:[],consensus:[],preds:[],unread:[]};let ctx=null;
-  /* v2.77.1 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
+  /* v2.77.2 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
      Before, "DET 16% / EDM 84%" (hockey) on the NFL page latched onto the Lions' game — abbreviations collide across leagues. */
   let secSp=null;const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',MLB:'mlb',NHL:'nhl',NBA:'nba',NCAAB:'ncaab',CBB:'ncaab'};
   stripBOM(text).split('\n').map(l=>l.replace(/^[\s\-*•>#]+/,'').trim()).filter(Boolean).forEach(l=>{
@@ -1902,7 +1902,7 @@ function intelParse(text,type,src,sp){
       if(ou.length&&(where||ctx)){const G=(where&&where.game)||ctx,[aw,hm]=G.split('@');const o=ou.find(p=>/^o/i.test(p.who)),u=ou.find(p=>/^u/i.test(p.who));
         out.consensus.push({src,game:G,away:aw,home:hm,market:'total',metric:money?'money':'bets',awayPct:null,homePct:null,overPct:o?o.pct:(u?100-u.pct:null),underPct:u?u.pct:(o?100-o.pct:null),line:null});return;}
       const tp=pairs.map(p=>({...p,t:intelTeams(sp,p.who)[0]})).filter(p=>p.t);
-      /* v2.77.1 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
+      /* v2.77.2 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
       if(pairs.length>=2&&!(tp.length>=2&&tp.every(p=>p.t.game===tp[0].t.game))){out.unread.push(l);return;}
       if(tp.length){const G=tp[0].t.game,[aw,hm]=G.split('@');let ap=null,hp=null;tp.forEach(p=>{if(p.t.game!==G)return;if(p.t.side==='a')ap=p.pct;else hp=p.pct;});
         if(ap==null&&hp!=null)ap=100-hp;if(hp==null&&ap!=null)hp=100-ap;
@@ -2788,7 +2788,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261028b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261028c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8452,7 +8452,7 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    wrong day — so the search covers the ticket date through a week after it. */
 const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.77.1 · NBA legs were looked up as NFL games */
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.77.2 · NBA legs were looked up as NFL games */
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
@@ -8574,7 +8574,7 @@ const FB_GEN=[[/^passing\s+(?:tds?|touchdowns?)(?:\s+thrown)?$/i,'passing','TD',
   [/^receiving\s+(?:tds?|touchdowns?)$/i,'receiving','TD',null,'receiving TDs'],[/^longest\s+reception$/i,'receiving','LONG',null,'longest reception'],[/^targets$/i,'receiving','TGTS',null,'targets'],
   [/^(?:total\s+)?tackles(?:\s*(?:\+|and)\s*assists)?$/i,'defensive','TOT',null,'tackles'],[/^solo\s+tackles$/i,'defensive','SOLO',null,'solo tackles'],[/^tackles\s+for\s+loss$/i,'defensive','TFL',null,'TFL'],
   [/^(?:passes\s+defended|pass\s+deflections)$/i,'defensive','PD',null,'passes defended']];
-function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.77.1 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
+function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.77.2 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
 function gradeFBSpecialProp(leg,box,R){
   if(leg.fbProp.stat==='gen'){const P=leg.fbProp;const live=box.state==='in';let val=0,found=null,anywhere=false;
     Object.values(box.teamStats).forEach(st=>{['passing','rushing','receiving','defensive','kr','pr','ints'].forEach(c=>{if(fbpFindRow(st[c]||[],P.player))anywhere=true;});
@@ -22323,7 +22323,7 @@ body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
 body.bnav .slip{bottom:var(--bnh,64px)!important;z-index:79!important;padding-bottom:11px!important;border-radius:14px 14px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.45)}
 .slip.expanded{display:none!important}
 .slip-scrim{z-index:85!important}.slip-sheet{z-index:86!important}
-/* v2.77.1 · a closed sheet is hidden outright (not just slid below the screen): when the page got zoomed out it showed mid-screen on every tab. And nothing may widen the page sideways. */
+/* v2.77.2 · a closed sheet is hidden outright (not just slid below the screen): when the page got zoomed out it showed mid-screen on every tab. And nothing may widen the page sideways. */
 .slip-sheet:not(.on){visibility:hidden;transition:transform .3s,visibility 0s .3s}.slip-sheet.on{visibility:visible}
 html,body{overflow-x:hidden;max-width:100%}
 body.bnav.slipon main{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
@@ -23667,7 +23667,7 @@ async function tgwResend(btn){const P=tgPosts();const d=today();const p=P[d]||P[
   else{if(btn)btn.textContent='Failed — '+((r&&r.reason)||'error');}}
 async function tgwRunNow(){const{toks}=await tgwGh();const repo=TGW_WORKER_REPO;let why=toks.length?'':'no GitHub token saved on this phone';for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204)){window.__tgwWhy='';return true;}
     why=!r?'no connection':r.status===403||r.status===404?'your GitHub token needs the "Actions: Read and write" permission':r.status===401?'GitHub token expired or wrong':'GitHub said '+r.status;}window.__tgwWhy=why;return false;}
-/* v2.77.1 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
+/* v2.77.2 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
 async function tgwRunNowTap(btn){if(btn){btn.disabled=true;btn.textContent='Starting…';}let ok=false;try{ok=await tgwRunNow();}catch(e){window.__tgwWhy=String(e&&e.message||e);}
   const msg=ok?'▶ Robot started — results in about a minute':"Couldn't start the robot: "+(window.__tgwWhy||'unknown')+'. It still runs on its own schedule.';
   try{deskToast(msg,ok?3500:7000);}catch(e){alert(msg);}if(btn){btn.disabled=false;btn.textContent='▶ Run now';}setTimeout(()=>{try{tgwRefreshStatus();}catch(e){}},70e3);}
