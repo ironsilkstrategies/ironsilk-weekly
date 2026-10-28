@@ -77,3 +77,33 @@ if(!window.__CMDCHK__){window.__CMDCHK__=1;const B0=cmdBuild;cmdBuild=function()
     o.menu=[{command:'check',description:'Grade your ticket: /check then your legs'},...o.menu];}catch(e){console.warn('check idx',e);}return o;};}
 /* keep the team-name book fresh on every page load */
 if(typeof window!=='undefined')setTimeout(()=>{try{cmdNames();}catch(e){}},8000);
+/* ══ v2.75 · more lounge commands: /last5, each character's last 5 under its own command, /bloodlines, /deadon, /halves, /counterpunch ══ */
+function cmdLast(V,v,n){return V.filter(c=>c&&c.voice===v&&c.graded&&c.price!=null&&(c.hit!=null||c.push)&&!confPre(c))
+  .sort((a,b)=>String(b.date).localeCompare(String(a.date))||((b.lk||0)-(a.lk||0))).slice(0,n||5);}
+const cmdRes=c=>c.push?'➖':c.hit?'✅':'❌';
+function cmdLast5All(V){const rows=CMD_CHARS().map(v=>{const L=cmdLast(V,v,5);if(!L.length)return null;const w=L.filter(c=>c.hit).length,l=L.filter(c=>c.hit===false).length,u=L.reduce((s,c)=>s+(+c.units||0),0);
+    return{v,L,w,l,u};}).filter(Boolean).sort((a,b)=>b.u-a.u);
+  return cmdList('🔁 Last 5 calls — every character',rows,(x,i)=>`${['🥇','🥈','🥉'][i]||'▪️'} <b>${cmdE(charName(x.v).replace(/^The /,''))}</b> ${x.L.map(cmdRes).join('')} ${x.w}-${x.l} · ${x.u>=0?'+':''}${x.u.toFixed(1)}u · /${cmdSlug(x.v)}`,'No graded calls yet.')+'\n<i>Newest first is on the left. Tap a name for its last 5 picks and today\'s top 10.</i>';}
+function cmdLast5One(V,v){const L=cmdLast(V,v,5);if(!L.length)return'';
+  return`\n\n<b>🔁 Last 5 calls</b>\n`+L.map(c=>`${cmdRes(c)} ${cmdE(cmdCallPick(c))} ${cmdE(cmdSg(c.price))} · ${cmdSp(c.sp)} ${cmdE(c.game)} · ${cmdE(String(c.date).slice(5,10))}${isOfficial(c)?' ⭐':''}`).join('\n');}
+function cmdBloodlines(){try{const R=heirsRun();const H=heirsAll();const race=[];Object.entries(R.cells||{}).forEach(([k,c])=>{const C=H.cells[k];if(!C)return;const bar=(c.ctx||{}).bar||HEIR_BAR;
+      (c.heirs||[]).filter(h=>h.st==='shadow').forEach(h=>race.push({C,h,bar,s:(Math.min(1,h.n/HEIR_MIN_N)+Math.min(1,h.days/HEIR_MIN_DAYS)+2*Math.max(0,Math.min(1,h.z/bar)))/4}));});
+    race.sort((a,b)=>b.s-a.s);const cells=Object.values(H.cells);const crowned=cells.filter(C=>C.gen>1);const live=cells.reduce((n,C)=>n+(C.heirs||[]).filter(h=>h.st==='shadow').length,0);
+    const mk={ml:'ML',spread:'Spreads',total:'Totals'};
+    return`<b>🧬 Bloodlines</b>\n${cells.length} bloodlines · ${live} heirs in the shadows · ${crowned.length} crowned\n\n<b>👑 Closest to the crown</b>\n`+
+      (race.slice(0,6).map((x,i)=>`${i+1}. <b>${cmdE(charName(x.C.v).replace(/^The /,''))}</b> ${mk[x.C.m]} — ${Math.min(x.h.n,HEIR_MIN_N)}/${HEIR_MIN_N} games · ${Math.min(x.h.days,HEIR_MIN_DAYS)}/${HEIR_MIN_DAYS} days · ${x.h.z>=0?'+':''}${x.h.z.toFixed(1)}σ of ${x.bar.toFixed(1)}σ`).join('\n')||'No heirs reading yet.')+
+      (crowned.length?`\n\n<b>Reigning heirs</b>\n`+crowned.map(C=>`👑 ${cmdE(charName(C.v).replace(/^The /,''))} ${mk[C.m]} — Gen ${C.gen} since ${cmdE(C.champ.since||'')}`).join('\n'):'')+
+      '\n<i>An heir takes the chair after 150+ unseen games, 14+ days, beating its parent past the bar without making less money. Full family trees in the app.</i>';}catch(e){return'<b>🧬 Bloodlines</b>\nNot ready yet.';}}
+function cmdDeadOn(){try{const S=scoreCallStats('all');const rows=Object.entries(S).filter(([,r])=>r.n).sort((a,b)=>b[1].exact-a[1].exact||a[1].err/a[1].n-b[1].err/b[1].n);
+    return cmdList('🎯 Score callers — who\'s dead on',rows.slice(0,10),([v,r],i)=>`${i+1}. <b>${cmdE(charName(v).replace(/^The /,''))}</b> 🎯 ${r.exact} exact of ${r.n} · winner ${r.wn?Math.round(r.win/r.wn*100):0}% · misses by ${(r.err/r.n).toFixed(1)}${r.last?` · last: ${cmdE(r.last.game)} ${r.last.a}-${r.last.h}`:''}`,'Score calls started Oct 27 — the board fills as games go final.');}catch(e){return'<b>🎯 Score callers</b>\nNot ready yet.';}}
+function cmdHalves(){try{const T=halfToday();const by={};T.forEach(x=>{const k=x.sp+'|'+x.pick+'|'+x.game;(by[k]=by[k]||{x,n:0,off:false}).n++;if(x.official)by[k].off=true;});
+    const L=Object.values(by).sort((a,b)=>b.off-a.off||b.n-a.n).slice(0,10);
+    return cmdList('🕐 1st halves & 1st periods — today',L,o=>`${o.off?'✅':'▫️'} <b>${cmdE(o.x.pick)}</b> ${cmdE(cmdSg(o.x.price))} · ${cmdSp(o.x.sp)} ${cmdE(o.x.game)} · ${o.n} character${o.n===1?'':'s'}`,'No half lines on today\'s card.')+'\n<i>✅ = a character that has proven itself in that half market (20+ calls, 57%+, in profit).</i>';}catch(e){return'<b>🕐 Halves</b>\nNot ready yet.';}}
+function cmdCounter(){try{const M=get(CP_KEY,{})||{};const d=today();const L=Object.values(M).filter(x=>x.d===d);
+    return cmdList('🥊 Counter-punches — today',L,x=>`🥊 <b>${cmdE(x.pick)}</b> ${cmdE(cmdSg(x.price))} · ${cmdSp(x.sp)} ${cmdE(x.game)} · ${Math.round(x.cf*100)}% · ${x.on.length} proven characters on it`,'None today — they only fire when everything lines up.')+'\n<i>Under the 70% bar, but 3+ proven characters agree, the price pays and sharp money isn\'t against it.</i>';}catch(e){return'<b>🥊 Counter-punches</b>\nNot ready yet.';}}
+if(!window.__CMDL5__){window.__CMDL5__=1;const B1=cmdBuild;cmdBuild=function(){const o=B1();try{const V=roGet(VOICES_KEY,[],30e3)||[];const R=o.r;
+    R.last5=cmdLast5All(V);CMD_CHARS().forEach(v=>{const k=cmdSlug(v);if(R[k])R[k]=R[k]+cmdLast5One(V,v);});
+    R.bloodlines=cmdBloodlines();R.deadon=cmdDeadOn();R.halves=cmdHalves();R.counterpunch=cmdCounter();
+    const add=[['last5','Every character\'s last 5 calls'],['bloodlines','Generations: who\'s closest to the crown'],['deadon','Score callers: who\'s dead on'],['halves','1st half / 1st period calls'],['counterpunch','Today\'s counter-punches']];
+    const i=o.menu.findIndex(x=>x.command==='leaders');o.menu.splice(i<0?o.menu.length:i+1,0,...add.map(([command,description])=>({command,description})));o.menu=o.menu.slice(0,100);
+    R.help=R.help.replace('/leaders — ',add.map(([k,t])=>`/${k} — ${cmdE(t)}`).join('\n')+'\n/leaders — ');R.start=R.help;R.menu=R.help;}catch(e){console.warn('last5 cmds',e);}return o;};}
