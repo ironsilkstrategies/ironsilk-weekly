@@ -1,0 +1,181 @@
+SOURCE: covers
+# Wed Oct 28, 2026 — book lines: sportsbetting.ag (9:02–9:03 AM CT) · predicted scores + trends: Covers (9:06–9:07 AM CT). Batch 1.
+
+NCAAF
+
+Kennesaw State @ Middle Tennessee State
+ML: Kennesaw State -105 / Middle Tennessee State -115
+SPREAD: Kennesaw State +1 (-110) / Middle Tennessee State -1 (-110)
+OU: o50.5 (-105) / u50.5 (-115)
+H1SPREAD: Kennesaw State +0 (-110) / Middle Tennessee State -0 (-110)
+H1OU: o25.5 (-102) / u25.5 (-118)
+Q1SPREAD: Kennesaw State +0.5 (-150) / Middle Tennessee State -0.5 (+130)
+PRED: Kennesaw State 22.86 / Middle Tennessee State 26.07
+TREND Kennesaw State: Owls are 5-0 ATS in their last 5 games after accumulating more than 280 yards passing in their previous game.
+TREND Kennesaw State: Under is 4-0 in Owls last 4 games as a favorite.
+TREND Kennesaw State: Owls are 4-0 ATS in their last 4 games after scoring less than 20 points in their previous game.
+TREND Kennesaw State: Over is 4-0 in Owls last 4 games after accumulating more than 280 yards passing in their previous game.
+TREND Middle Tennessee State: Blue Raiders are 5-0 ATS in their last 5 games on turf.
+TREND Middle Tennessee State: Blue Raiders are 5-0 ATS in their last 5 games after allowing more than 280 yards passing in their previous game.
+TREND Middle Tennessee State: Blue Raiders are 4-0 ATS in their last 4 home games.
+TREND Middle Tennessee State: Blue Raiders are 4-0 ATS in their last 4 games as a home underdog.
+
+Jacksonville State @ New Mexico State
+ML: Jacksonville State -157 / New Mexico State +137
+SPREAD: Jacksonville State -3.5 (+100) / New Mexico State +3.5 (-120)
+OU: o49.5 (-110) / u49.5 (-110)
+H1SPREAD: Jacksonville State -2 (-105) / New Mexico State +2 (-115)
+H1ML: Jacksonville State -140 / New Mexico State +120
+H1OU: o24.5 (-105) / u24.5 (-115)
+PRED: Jacksonville State 25.82 / New Mexico State 23.20
+TREND Jacksonville State: Over is 4-0 in Gamecocks last 4 vs. a team with a losing record.
+TREND Jacksonville State: Over is 5-1 in Gamecocks last 6 games overall.
+TREND Jacksonville State: Gamecocks are 6-1 ATS in their last 7 games after accumulating more than 450 total yards in their previous game.
+TREND Jacksonville State: Gamecocks are 5-1-1 ATS in their last 7 games as a favorite.
+TREND New Mexico State: Under is 4-0 in Aggies last 4 games after accumulating more than 200 yards rushing in their previous game.
+TREND New Mexico State: Over is 7-1 in Aggies last 8 games after allowing more than 200 yards rushing in their previous game.
+TREND New Mexico State: Aggies are 6-1 ATS in their last 7 games after accumulating less than 170 yards passing in their previous game.
+TREND New Mexico State: Aggies are 5-1 ATS in their last 6 games following a straight up loss.
+
+NBA
+
+Miami Heat @ Atlanta Hawks
+ML: Miami Heat +115 / Atlanta Hawks -135
+SPREAD: Miami Heat +2.5 (-115) / Atlanta Hawks -2.5 (-105)
+OU: o242 (-105) / u242 (-115)
+H1SPREAD: Miami Heat +1.5 (-110) / Atlanta Hawks -1.5 (-110)
+H1ML: Miami Heat +122 / Atlanta Hawks -142
+H1OU: o123 (-110) / u123 (-110)
+
+Washington Wizards @ Cleveland Cavaliers
+ML: Washington Wizards +330 / Cleveland Cavaliers -420
+SPREAD: Washington Wizards +9.5 (-110) / Cleveland Cavaliers -9.5 (-110)
+OU: o238.5 (-115) / u238.5 (-105)
+H1SPREAD: Washington Wizards +5.5 (-105) / Cleveland Cavaliers -5.5 (-115)
+H1ML: Washington Wizards +230 / Cleveland Cavaliers -280
+H1OU: o122.5 (-110) / u122.5 (-110)
+
+Philadelphia 76ers @ Indiana Pacers
+ML: Philadelphia 76ers -195 / Indiana Pacers +170
+SPREAD: Philadelphia 76ers -5.5 (-110) / Indiana Pacers +5.5 (-110)
+OU: o236.5 (-110) / u236.5 (-110)
+H1SPREAD: Philadelphia 76ers -2 (-112) / Indiana Pacers +2 (-108)
+H1ML: Philadelphia 76ers -147 / Indiana Pacers +127
+H1OU: o121.5 (-110) / u121.5 (-110)
+
+Charlotte Hornets @ Detroit Pistons
+ML: Charlotte Hornets +245 / Detroit Pistons -300
+SPREAD: Charlotte Hornets +7.5 (-105) / Detroit Pistons -7.5 (-115)
+OU: o214.5 (-105) / u214.5 (-115)
+H1SPREAD: Charlotte Hornets +4 (-110) / Detroit Pistons -4 (-110)
+H1ML: Charlotte Hornets +180 / Detroit Pistons -210
+H1OU: o104.5 (-110) / u104.5 (-110)
+
+Orlando Magic @ Toronto Raptors
+ML: Orlando Magic +164 / Toronto Raptors -188
+SPREAD: Orlando Magic +5 (-113) / Toronto Raptors -5 (-107)
+OU: o222.5 (-110) / u222.5 (-110)
+H1SPREAD: Orlando Magic +2.5 (-110) / Toronto Raptors -2.5 (-110)
+H1ML: Orlando Magic +140 / Toronto Raptors -160
+H1OU: o114.5 (-115) / u114.5 (-105)
+
+Denver Nuggets @ New Orleans Pelicans
+ML: Denver Nuggets -190 / New Orleans Pelicans +165
+SPREAD: Denver Nuggets -5 (-110) / New Orleans Pelicans +5 (-110)
+OU: o241 (-115) / u241 (-105)
+H1SPREAD: Denver Nuggets -2.5 (-110) / New Orleans Pelicans +2.5 (-110)
+H1ML: Denver Nuggets -160 / New Orleans Pelicans +140
+H1OU: o117.5 (-110) / u117.5 (-110)
+
+Golden State Warriors @ Minnesota Timberwolves
+ML: Golden State Warriors +142 / Minnesota Timberwolves -162
+SPREAD: Golden State Warriors +3.5 (-107) / Minnesota Timberwolves -3.5 (-113)
+OU: o227.5 (-110) / u227.5 (-110)
+H1SPREAD: Golden State Warriors +1.5 (-105) / Minnesota Timberwolves -1.5 (-115)
+H1ML: Golden State Warriors +120 / Minnesota Timberwolves -140
+H1OU: o111.5 (-105) / u111.5 (-115)
+
+New York Knicks @ Chicago Bulls
+ML: New York Knicks -275 / Chicago Bulls +226
+SPREAD: New York Knicks -7 (-110) / Chicago Bulls +7 (-110)
+OU: o232.5 (-105) / u232.5 (-115)
+H1SPREAD: New York Knicks -3.5 (-110) / Chicago Bulls +3.5 (-110)
+H1ML: New York Knicks -190 / Chicago Bulls +165
+H1OU: o119.5 (-110) / u119.5 (-110)
+
+Houston Rockets @ Milwaukee Bucks
+ML: Houston Rockets -340 / Milwaukee Bucks +274
+SPREAD: Houston Rockets -8 (-115) / Milwaukee Bucks +8 (-105)
+OU: o225.5 (-105) / u225.5 (-115)
+H1SPREAD: Houston Rockets -4.5 (-110) / Milwaukee Bucks +4.5 (-110)
+H1ML: Houston Rockets -225 / Milwaukee Bucks +189
+H1OU: o110 (-110) / u110 (-110)
+
+San Antonio Spurs @ Utah Jazz
+ML: San Antonio Spurs -650 / Utah Jazz +476
+SPREAD: San Antonio Spurs -13 (-115) / Utah Jazz +13 (-105)
+OU: o233.5 (-110) / u233.5 (-110)
+H1SPREAD: San Antonio Spurs -7 (-115) / Utah Jazz +7 (-105)
+H1ML: San Antonio Spurs -375 / Utah Jazz +299
+H1OU: o119.5 (-110) / u119.5 (-110)
+
+Oklahoma City Thunder @ Dallas Mavericks
+ML: Oklahoma City Thunder -220 / Dallas Mavericks +186
+SPREAD: Oklahoma City Thunder -6 (-110) / Dallas Mavericks +6 (-110)
+OU: o229 (-110) / u229 (-110)
+H1SPREAD: Oklahoma City Thunder -3.5 (-110) / Dallas Mavericks +3.5 (-110)
+H1ML: Oklahoma City Thunder -190 / Dallas Mavericks +165
+H1OU: o111.5 (-110) / u111.5 (-110)
+
+Los Angeles Lakers @ Los Angeles Clippers
+ML: Los Angeles Lakers -195 / Los Angeles Clippers +170
+SPREAD: Los Angeles Lakers -4.5 (-115) / Los Angeles Clippers +4.5 (-105)
+OU: o229 (-107) / u229 (-113)
+H1SPREAD: Los Angeles Lakers -2.5 (-110) / Los Angeles Clippers +2.5 (-110)
+H1ML: Los Angeles Lakers -160 / Los Angeles Clippers +140
+H1OU: o117 (-115) / u117 (-105)
+
+NHL
+
+Philadelphia Flyers @ Washington Capitals
+ML: Philadelphia Flyers +192 / Washington Capitals -221
+PL: Philadelphia Flyers +1.5 (-132) / Washington Capitals -1.5 (+112)
+OU: o6 (-120) / u6 (+104)
+P1PL: Philadelphia Flyers +0.5 (-150) / Washington Capitals -0.5 (+130)
+P1ML: Philadelphia Flyers +153 / Washington Capitals -175
+P1OU: o1.5 (-135) / u1.5 (+115)
+PRED: Philadelphia Flyers 2.46 / Washington Capitals 3.74
+TREND Philadelphia Flyers: Under is 4-0-1 in Flyers last 5 games playing on 0 days rest.
+TREND Philadelphia Flyers: Under is 10-1 in Flyers last 11 road games.
+TREND Philadelphia Flyers: Under is 10-1 in Flyers last 11 games as a road underdog.
+TREND Philadelphia Flyers: Under is 19-4-4 in Flyers last 27 vs. Eastern Conference.
+TREND Washington Capitals: Over is 4-0-2 in Capitals last 6 overall.
+TREND Washington Capitals: Over is 4-0-1 in Capitals last 5 home games.
+TREND Washington Capitals: Over is 2-0-2 in Capitals last 4 vs. Eastern Conference.
+TREND Washington Capitals: Over is 3-0-1 in Capitals last 4 games as a favorite.
+
+Calgary Flames @ Edmonton Oilers
+ML: Calgary Flames +156 / Edmonton Oilers -178
+PL: Calgary Flames +1.5 (-155) / Edmonton Oilers -1.5 (+135)
+OU: o6.5 (-115) / u6.5 (-101)
+P1PL: Calgary Flames +0.5 (-165) / Edmonton Oilers -0.5 (+145)
+P1ML: Calgary Flames +135 / Edmonton Oilers -155
+P1OU: o1.5 (-145) / u1.5 (+125)
+PRED: Calgary Flames 2.77 / Edmonton Oilers 3.57
+
+New Jersey Devils @ Colorado Avalanche
+ML: New Jersey Devils +125 / Colorado Avalanche -142
+PL: New Jersey Devils +1.5 (-195) / Colorado Avalanche -1.5 (+170)
+OU: o6.5 (+105) / u6.5 (-121)
+P1PL: New Jersey Devils +0.5 (-185) / Colorado Avalanche -0.5 (+161)
+P1ML: New Jersey Devils +110 / Colorado Avalanche -130
+P1OU: o1.5 (-135) / u1.5 (+115)
+PRED: New Jersey Devils 2.71 / Colorado Avalanche 3.53
+
+Toronto Maple Leafs @ Seattle Kraken
+ML: Toronto Maple Leafs -135 / Seattle Kraken +119
+PL: Toronto Maple Leafs -1.5 (+186) / Seattle Kraken +1.5 (-220)
+OU: o6.5 (-120) / u6.5 (+104)
+P1PL: Toronto Maple Leafs -0.5 (+165) / Seattle Kraken +0.5 (-190)
+P1ML: Toronto Maple Leafs -125 / Seattle Kraken +105
+P1OU: o1.5 (-150) / u1.5 (+130)
