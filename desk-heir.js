@@ -149,7 +149,7 @@ function heirRules(c,R){const e=R.end;if(e==='PROMOTE'&&!(c.heirs>=1&&(c.heirs>=
 let HEIR_MEMO=null,WV_MEMO={};
 function wvRunMemo(p,force){const sig=JSON.stringify(p);const o=WV_MEMO[sig];const d=today();if(!force&&o&&o.d===d&&Date.now()-o.ts<30*60e3)return o.R;
   const R=wvRun(roGet(VOICES_KEY,[],30e3)||[],p);WV_MEMO[sig]={d,ts:Date.now(),R};return R;}
-function heirsRun(force){const d=today();if(!force&&HEIR_MEMO&&HEIR_MEMO.d===d&&Date.now()-HEIR_MEMO.ts<30*60e3)return HEIR_MEMO;
+function heirsRun(force){const d=today();if(SAFE_MODE&&!force)return HEIR_MEMO||{d,ts:Date.now(),cells:{},runs:{}};if(!force&&HEIR_MEMO&&HEIR_MEMO.d===d&&Date.now()-HEIR_MEMO.ts<30*60e3)return HEIR_MEMO;
   const V=roGet(VOICES_KEY,[],30e3)||[];const H=heirsAll();const cellsSeen=new Set();
   V.forEach(x=>{if(x&&CHARS[x.voice]&&['ml','spread','total'].includes(x.market))cellsSeen.add(x.voice+'|'+x.market);});
   /* the first generation's definitions were fixed in the build before Oct 18, so every game from

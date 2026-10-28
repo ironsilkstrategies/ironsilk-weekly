@@ -62,7 +62,9 @@ function tmRunTeam(team,ws,upto){const T=tmTop2();const out={team,days:[],sw:0,s
     if(G.done&&G.hit+G.miss>0){if(G.cashed){out.pw++;out.ppnl+=TM_PARLAY*(G.dec-1);}else{out.pl++;out.ppnl-=TM_PARLAY;if(G.miss===1&&G.n>=6)out.near++;}}
     out.days.push({d,legs,G});}
   out.total=+(out.spnl+out.ppnl).toFixed(2);out.spnl=+out.spnl.toFixed(2);out.ppnl=+out.ppnl.toFixed(2);return out;}
-function tmWeek(ws){ws=ws||bkWeekStart();const C=tmCaptains(ws);if(!C)return null;const D=tmDraft(ws,C.A,C.B);return{ws,C,D,A:tmRunTeam(D.A,ws),B:tmRunTeam(D.B,ws)};}
+let TMW_C=null;
+function tmWeek(ws){if(!ws&&TMW_C&&Date.now()-TMW_C.ts<120e3)return TMW_C.v;const v=tmWeek0(ws);if(!ws)TMW_C={ts:Date.now(),v};return v;}
+function tmWeek0(ws){ws=ws||bkWeekStart();const C=tmCaptains(ws);if(!C)return null;const D=tmDraft(ws,C.A,C.B);return{ws,C,D,A:tmRunTeam(D.A,ws),B:tmRunTeam(D.B,ws)};}
 /* ── 3 · the lab: every 4-character team, last 8 finished weeks ── */
 function tmLab(force){const L0=get(TM_KEY,null);const ws=bkWeekStart();if(!force&&L0&&L0.ws===ws&&Date.now()-L0.ts<6*36e5)return L0;
   const T=tmTop2();const lo=dayShift(ws,-56);const days=Object.keys(T).filter(d=>d>=lo&&d<ws).sort();const R=TM_ROSTER().filter(v=>days.some(d=>(T[d][v]||[]).length));
@@ -83,13 +85,13 @@ function tmTeamBox(lab,R,cap,lead){const today_=R.days.find(x=>x.d===today());
     <div style="font-weight:800">${lead?'🏆 ':''}${lab}</div><div class="mono" style="font-size:10.5px;margin-top:2px">👑 ${tmChip(cap)} · ${R.team.slice(1).map(tmChip).join(' · ')}</div>
     <div class="mono" style="font-size:11px;margin-top:6px">Total ${tmMoney(R.total)}<br>Singles ${R.sw}-${R.sl} ${tmMoney(R.spnl)}<br>8-leggers ${R.pw}-${R.pl} ${tmMoney(R.ppnl)}${R.near?` · ${R.near} one leg short`:''}<br>Legs hit ${R.legs?Math.round(R.legHit/R.legs*100):0}%</div>
     ${today_?`<details style="margin-top:6px"><summary class="sub" style="font-size:10.5px">Today's ${today_.legs.length}-leg parlay · ${decimalToAmerican(today_.G.full)}</summary><div class="mono" style="font-size:10px">${today_.legs.map(({v,c})=>`${!c.graded?'⏳':c.push?'➖':c.hit?'✅':'❌'} ${txtEsc(typeof charPickText==='function'?charPickText(c):c.pick||'')} ${c.price>0?'+':''}${c.price} · ${tmNm(v)}`).join('<br>')}</div></details>`:''}</div>`;}
-function teamHtml(){let W=null;try{W=tmWeek();}catch(e){return'';}
+function teamHtml(){if(SAFE_MODE)return'';let W=null;try{W=tmWeek();}catch(e){return'';}
   const head=`<div class="tkt lg-card" style="margin-top:8px"><h3>🤝 Team Parlay Challenge</h3><div class="sub" style="font-size:10.5px">Last week's winner and runner-up captain a team and draft 1-by-1 (winner first) to 4 each. Every day each teammate gives its 2 best singles → an 8-leg team parlay. Singles $${TM_SINGLE}, parlay $${TM_PARLAY}. Most money by Monday night wins.</div>`;
   if(!W)return head+`<div class="sub" style="margin-top:6px">Needs last week's race to have a winner and runner-up — starts with the next week.</div></div>`+tmLabHtml();
   const lead=W.A.total>=W.B.total;
   return head+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${tmTeamBox('Team '+tmNm(W.C.A),W.A,W.C.A,lead&&(W.A.days.length>0))}${tmTeamBox('Team '+tmNm(W.C.B),W.B,W.C.B,!lead&&(W.B.days.length>0))}</div>
     <details style="margin-top:6px"><summary class="sub">The draft</summary><div class="mono" style="font-size:10.5px">${W.D.log.map((x,i)=>`${i+1}. ${tmChip(x.cap)} took ${tmChip(x.v)} — ${txtEsc(x.why)}`).join('<br>')}</div></details></div>`+tmLabHtml();}
-function tmLabHtml(){let L=null;try{L=tmLab();}catch(e){return'';}if(!L||!L.top)return'';const pc=x=>Math.round(x*100)+'%';
+function tmLabHtml(){let L=get(TM_KEY,null);if(!L||!L.top||L.ws!==bkWeekStart())return`<div class="tkt"><h3>🧪 The Parlay Lab</h3><div class="sub" style="font-size:10.5px">Replays every 4-character team on the last 8 weeks. Runs on demand (it's heavy).</div><button style="margin-top:6px" onclick="this.textContent='Running…';setTimeout(()=>{try{tmLab(true);}catch(e){}try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}},50)">🧪 Run the lab</button></div>`;const pc=x=>Math.round(x*100)+'%';
   const imp=Object.entries(L.imp).sort((a,b)=>b[1].clift-a[1].clift||b[1].lift-a[1].lift);const anchors=imp.filter(([,x])=>x.lift>0).slice(0,4),wash=imp.filter(([,x])=>x.lift<0).slice(-4).reverse();
   return`<div class="tkt"><h3>🧪 The Parlay Lab</h3><div class="sub" style="font-size:10.5px">Every possible 4-character team (${L.tried}), replayed on the last ${L.days} days of real calls: each teammate's 2 best picks a day → an 8-leg parlay. Looking for the big parlays we can actually hit.</div>
     ${L.top.length?`<div class="mktlab">Best teams on history</div><div class="mono" style="font-size:10.5px">${L.top.map((t,i)=>`${i+1}. ${t.tm.map(tmChip).join(' · ')}<br>&nbsp;&nbsp;&nbsp;cashed ${t.cash}/${t.n}${t.big?` (best ${decimalToAmerican(t.big)})`:''} · one leg short ${t.near} · legs ${pc(t.lr)} · ${t.pnl>=0?'+':'-'}$${Math.abs(t.pnl).toFixed(0)} at $${TM_PARLAY}`).join('<br>')}</div>`:'<div class="sub">Not enough graded days yet.</div>'}

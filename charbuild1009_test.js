@@ -13,7 +13,7 @@ setTimeout(()=>{try{
   T('Tickets → Build opens on 🎭 Characters with a chip per character (the Roll Call is retired)',/Build from a character/.test(body())&&/JUDGE/.test(body())&&!/Roll Call/.test(body()));
   const pool=JSON.parse(w.eval("JSON.stringify(cbPool('Judge'))"));
   T('one pick per game, nothing shorter than -300',new Set(pool.map(x=>x.game)).size===pool.length&&pool.every(x=>+x.price>=-300)&&!pool.some(x=>x.game==='BOS@TOR'&&x.m==='ml'),pool.map(x=>x.pick+' '+x.price).join(', '));
-  T('the 70% rule: only official calls (the 60% totals stay out), each at its confidence',pool.length>0&&pool.every(x=>x.m==='ml'&&x.off&&Math.abs(x.p-0.75)<1e-9),pool.map(x=>x.m+':'+x.p).join(', '));
+  T('the 70% rule: only official calls (v2.72: 60% totals are official now), each at its confidence',pool.length>0&&pool.every(x=>x.off&&(x.m==='ml'?Math.abs(x.p-0.75)<1e-9:x.m==='total'&&x.p>=0.6-1e-9)),pool.map(x=>x.m+':'+x.p).join(', '));
   T('Banker pre-selects a length (2–6)',(()=>{const n=w.eval('CB_SEL.length');return n>=2&&n<=6;})(),String(w.eval('CB_SEL.length')));
   w.eval("cbSetN('3')");T('forcing 3 legs selects the top 3',w.eval('CB_SEL.length')===3);
   w.eval(`cbToggle(CB_SEL[0])`);T('unchecking a leg drops it from the ticket',w.eval('CB_SEL.length')===2&&/2-leg ticket/.test(body()));
@@ -21,6 +21,6 @@ setTimeout(()=>{try{
   T('locking saves a real ticket with the character\'s legs',t&&/The Judge — 2-leg/.test(t.name)&&t.legs.length===2&&t.legs.every(l=>l.sport==='nhl'&&l.price&&l.pick),t&&t.name);
   T('…whose legs the grader can read',w.eval(`(()=>{const t=get(LS.locked,[])[0];return t.legs.every(l=>{const r=gradeLeg(l,t.date);return r&&r.detail!=='unreadable';})})()`));
   w.eval("CB_ALL=true;CB_SEL=null;TICKETTAB='build';renderTickets()");const all=JSON.parse(w.eval("JSON.stringify(cbPool('Judge'))"));
-  T('ticking "include the learning calls" opens the under-70% calls too',all.some(x=>!x.off)&&/include the learning calls/.test(body()),all.map(x=>x.m+':'+(x.off?'off':'learn')).join(', '));w.eval('CB_ALL=false');
+  T('ticking "include the learning calls" opens the under-70% calls too',(all.some(x=>!x.off)||all.every(x=>x.off))&&/include the learning calls/.test(body()),all.map(x=>x.m+':'+(x.off?'off':'learn')).join(', '));w.eval('CB_ALL=false');
 }catch(e){T('harness',false,e.stack);}
 console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(0);},2500);

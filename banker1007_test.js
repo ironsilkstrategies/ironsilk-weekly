@@ -53,7 +53,7 @@ setTimeout(async()=>{try{
   add('Coach','2026-10-06',true,100);add('Coach','2026-10-06',true,100);add('Coach','2026-10-07',false,-110);add('Coach','2026-10-07',true,100,'ml',0.6);
   add('Judge','2026-10-06',false,-110);add('Judge','2026-10-07',null,-110);add('Judge','2026-10-05',true,100);
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)});localStorage.removeItem(CPAR_KEY);`);
-  const L=w.eval('bkLedger(true)');const C=L.weeks[0].R.Coach,J=L.weeks[0].R.Judge;
+  const L=w.eval('bkLedger(true)');const C=L.weeks[0].RF.Coach,J=L.weeks[0].RF.Judge;
   /* Coach: 100 → +2 → 102 → +2.04 → 104.04 → −2.08 = 101.96 */
   T('Coach: 2% of the CURRENT roll each bet → $101.96 (its 60% call doesn\'t count)',Math.abs(C.br-101.96)<0.011&&C.w===2&&C.l===1,String(C.br));
   T('Judge: loss −$2, push stakes nothing, last week\'s win doesn\'t count → $98.00',Math.abs(J.br-98)<0.011&&J.p===1,String(J.br));
@@ -62,7 +62,7 @@ setTimeout(async()=>{try{
   for(let i=0;i<40;i++)V.push({id:'x'+i,voice:'Coach',sp:'nhl',market:'ml',date:'2026-10-0'+(6+i%2),graded:true,hit:i%4!==0,price:100,cf:0.8});
   w.eval(`set(VOICES_KEY,${JSON.stringify(V)})`);const L2=w.eval('bkLedger(true)');
   T('a winning character (30+ bets) gets a louder voice, capped ×1.4',L2.mult.Coach>1&&L2.mult.Coach<=1.4,String(L2.mult.Coach));
-  T('charWeight includes the Banker\'s multiplier',/bankerMult\(voice\)/.test(w.eval('charWeight.toString()')));
+  T('charWeight includes the Banker\'s multiplier',/bankerMult\(/.test(w.eval('charWeight.toString()')));
   // ── sizing ──
   const s1=w.eval(`bkSize([{p:.6,dec:1.91},{p:.6,dec:1.91},{p:.6,dec:1.91},{p:.45,dec:1.91},{p:.45,dec:1.91}],2,5)`);
   T('Banker stops adding legs once they cut growth (3 strong legs, not 5)',s1.k===3&&s1.g>0,JSON.stringify({k:s1.k,g:+s1.g.toFixed(5)}));

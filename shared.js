@@ -1,3 +1,16 @@
+/* ══ v2.78 · CRASH-LOOP GUARD ══════════════════════════════════════════════════════════════════════
+   If the page reloads twice inside a minute without ever settling (iOS killing the tab for memory, then reopening
+   it), the next load runs in SAFE MODE: the heavy optional extras (score/half call logging, generations, the team
+   lab) pause for 10 minutes, and a banner says so. Picks, grading, intake and the card keep working. */
+var SAFE_MODE=false;
+(function(){try{if(typeof localStorage==='undefined'||typeof window==='undefined'||/[?&]bg=1/.test(location.search||''))return;const K='d4.bootguard';const now=Date.now();
+  let B={};try{B=JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){}
+  if(B.safeUntil&&now<B.safeUntil)SAFE_MODE=true;
+  else{const recent=(B.boots||[]).filter(t=>now-t<60e3&&!B.ok);if(recent.length>=2){SAFE_MODE=true;B.safeUntil=now+10*60e3;}}
+  B.boots=[...(B.boots||[]).filter(t=>now-t<60e3),now].slice(-5);B.ok=false;localStorage.setItem(K,JSON.stringify(B));
+  setTimeout(()=>{try{const C=JSON.parse(localStorage.getItem(K)||'{}');C.ok=true;C.boots=[];localStorage.setItem(K,JSON.stringify(C));}catch(e){}},25e3);
+  if(SAFE_MODE)document.addEventListener('DOMContentLoaded',()=>{const d=document.createElement('div');d.style.cssText='position:fixed;left:8px;right:8px;top:8px;z-index:99999;background:#3b2a06;color:#fde68a;border:1px solid #f5c542;border-radius:10px;padding:8px 10px;font:600 12px system-ui';
+    d.innerHTML='🛟 Safe mode — the page kept restarting, so the heavy extras are paused for 10 minutes. Picks and grading still work. <u onclick="this.parentNode.remove()">OK</u>';document.body.appendChild(d);setTimeout(()=>d.remove(),12000);});}catch(e){}})();
 
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
@@ -1871,7 +1884,7 @@ function intelTrendDir(text){
 /* ── typed line parser ── */
 function intelParse(text,type,src,sp){
   const out={xpicks:[],trends:[],consensus:[],preds:[],unread:[]};let ctx=null;
-  /* v2.77.2 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
+  /* v2.78.0 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
      Before, "DET 16% / EDM 84%" (hockey) on the NFL page latched onto the Lions' game — abbreviations collide across leagues. */
   let secSp=null;const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',MLB:'mlb',NHL:'nhl',NBA:'nba',NCAAB:'ncaab',CBB:'ncaab'};
   stripBOM(text).split('\n').map(l=>l.replace(/^[\s\-*•>#]+/,'').trim()).filter(Boolean).forEach(l=>{
@@ -1902,7 +1915,7 @@ function intelParse(text,type,src,sp){
       if(ou.length&&(where||ctx)){const G=(where&&where.game)||ctx,[aw,hm]=G.split('@');const o=ou.find(p=>/^o/i.test(p.who)),u=ou.find(p=>/^u/i.test(p.who));
         out.consensus.push({src,game:G,away:aw,home:hm,market:'total',metric:money?'money':'bets',awayPct:null,homePct:null,overPct:o?o.pct:(u?100-u.pct:null),underPct:u?u.pct:(o?100-o.pct:null),line:null});return;}
       const tp=pairs.map(p=>({...p,t:intelTeams(sp,p.who)[0]})).filter(p=>p.t);
-      /* v2.77.2 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
+      /* v2.78.0 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
       if(pairs.length>=2&&!(tp.length>=2&&tp.every(p=>p.t.game===tp[0].t.game))){out.unread.push(l);return;}
       if(tp.length){const G=tp[0].t.game,[aw,hm]=G.split('@');let ap=null,hp=null;tp.forEach(p=>{if(p.t.game!==G)return;if(p.t.side==='a')ap=p.pct;else hp=p.pct;});
         if(ap==null&&hp!=null)ap=100-hp;if(hp==null&&ap!=null)hp=100-ap;
@@ -2218,7 +2231,8 @@ function ncaabWorks(g){try{if(typeof bbWorkable==='function')return bbWorkable('
 const PRE_START={nba:d=>{const y=+d.slice(0,4),m=+d.slice(5,7);const yr=m>=7?y:y-1;const o=new Date(Date.UTC(yr,9,20));while(o.getUTCDay()!==2)o.setUTCDate(o.getUTCDate()+1);return o.toISOString().slice(0,10);},
   ncaab:d=>{const y=+d.slice(0,4),m=+d.slice(5,7);const yr=m>=7?y:y-1;const o=new Date(Date.UTC(yr,10,1));while(o.getUTCDay()!==1)o.setUTCDate(o.getUTCDate()+1);return o.toISOString().slice(0,10);}};
 function seasonPre(sp,d){try{const f=PRE_START[sp];if(!f)return false;d=String(d||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return false;const m=+d.slice(5,7);if(m>=5&&m<=7)return false;return d<f(d)&&m>=8;}catch(e){return false;}}
-function voicesLog(sp){
+function voicesLog(sp){const own=scTxBegin();try{return voicesLog0(sp);}finally{if(own)scTxEnd();}}
+function voicesLog0(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
   if(!G||!G.length)return 0;const V=get(VOICES_KEY,[]);const idx={};V.forEach((x,i)=>idx[x.id]=i);let n=0;
@@ -2262,10 +2276,17 @@ function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)r
       const d=(need-mg)/2;h+=d;a-=d;}
     out[v]=fix(a,h,sd);});
   return Object.entries(out).map(([voice,x])=>({voice,a:x.a,h:x.h}));}
-function scoreCallsLog(sp,g,s,calls,pre){if(!pre)return 0;try{halfCallsLog(sp,g,calls,scoreCallsFor(sp,g,s,calls));}catch(e){console.warn('half calls',e);}let L=null;try{L=get(SCORECALL_KEY,{})||{};}catch(e){return 0;}
+/* v2.78 · one read + one write per sport pass (was a full parse + rewrite of both stores for EVERY game — 60+ CFB games
+   meant 120+ multi-MB JSON round-trips on load, enough for iOS to kill the tab) */
+let SC_TX=null;
+function scTxBegin(){if(SC_TX)return false;try{SC_TX={L:get(SCORECALL_KEY,{})||{},H:get(HALF_KEY,{})||{},dl:0,dh:0};}catch(e){SC_TX=null;}return!!SC_TX;}
+function scTxEnd(){const T=SC_TX;SC_TX=null;if(!T)return;try{if(T.dl){const ks=Object.keys(T.L);if(ks.length>8000)ks.sort((p,q)=>String(T.L[p].date).localeCompare(String(T.L[q].date))).slice(0,ks.length-8000).forEach(k=>delete T.L[k]);set(SCORECALL_KEY,T.L);}
+  if(T.dh){const ks=Object.keys(T.H);if(ks.length>6000)ks.sort((p,q)=>String(T.H[p].date).localeCompare(String(T.H[q].date))).slice(0,ks.length-6000).forEach(k=>delete T.H[k]);set(HALF_KEY,T.H);}}catch(e){console.warn('score tx',e);}}
+function scoreCallsLog(sp,g,s,calls,pre){if(!pre||(typeof SAFE_MODE!=='undefined'&&SAFE_MODE))return 0;const own=scTxBegin();try{return scoreCallsLog0(sp,g,s,calls);}finally{if(own)scTxEnd();}}
+function scoreCallsLog0(sp,g,s,calls){const SC=scoreCallsFor(sp,g,s,calls);try{halfCallsLog(sp,g,calls,SC);}catch(e){console.warn('half calls',e);}const L=SC_TX.L;
   const gl=g.away.abbr+'@'+g.home.abbr,d=(calls[0]&&calls[0].date)||g.__date||today();let n=0;
-  scoreCallsFor(sp,g,s,calls).forEach(x=>{const id=[sp,gl,d,x.voice].join('|');const o=L[id];if(o&&(o.graded||(o.a===x.a&&o.h===x.h)))return;L[id]={sp,game:gl,date:d,voice:x.voice,a:x.a,h:x.h};n++;});
-  if(n){const ks=Object.keys(L);if(ks.length>12000){ks.sort((p,q)=>String(L[p].date).localeCompare(String(L[q].date))).slice(0,ks.length-12000).forEach(k=>delete L[k]);}set(SCORECALL_KEY,L);}return n;}
+  SC.forEach(x=>{const id=[sp,gl,d,x.voice].join('|');const o=L[id];if(o&&(o.graded||(o.a===x.a&&o.h===x.h)))return;L[id]={sp,game:gl,date:d,voice:x.voice,a:x.a,h:x.h};n++;});
+  if(n)SC_TX.dl++;return n;}
 function gradeScoreCalls(){const L=get(SCORECALL_KEY,{})||{};let n=0;
   Object.values(L).forEach(x=>{if(x.graded)return;let R=null;try{R=finalsFor(x.sp,x.game,String(x.date).slice(0,10),false);}catch(e){}if(!R)return;const fa=+R.a,fh=+R.h;
     x.graded=1;x.fa=fa;x.fh=fh;x.exact=x.a===fa&&x.h===fh?1:0;x.mar=(x.h-x.a)===(fh-fa)?1:0;x.tot=(x.a+x.h)===(fa+fh)?1:0;x.win=fa===fh?null:((x.h>x.a)===(fh>fa)?1:0);x.err=Math.abs(x.a-fa)+Math.abs(x.h-fh);n++;});
@@ -2339,13 +2360,13 @@ async function halfLinesRefresh(){if(typeof fetch==='undefined'||typeof location
   set(HALFLN_KEY,out);}
 function halfCallsLog(sp,g,calls,scores){const F=HALF_FRAC[sp];if(!F)return 0;const LN=get(HALFLN_KEY,null);const gl=g.away.abbr+'@'+g.home.abbr;
   const ln=LN&&LN.d===today()?LN.g[sp+'|'+gl]:null;if(!ln)return 0;const d=(calls[0]&&calls[0].date)||today();if(d!==today())return 0;
-  const L=get(HALF_KEY,{})||{};let n=0;const tag=halfTag(sp),pre=sp==='nhl'?'p1':'h1';
+  const L=SC_TX?SC_TX.H:(get(HALF_KEY,{})||{});let n=0;const tag=halfTag(sp),pre=sp==='nhl'?'p1':'h1';
   scores.forEach(x=>{const tot=(x.a+x.h)*F[0],mar=(x.h-x.a)*F[1],ha=(tot-mar)/2,hh=(tot+mar)/2;const put=(mk,side,line,price,pick)=>{const id=[sp,gl,d,x.voice,mk].join('|');const o=L[id];
       if(o&&(o.graded||o.side===side&&o.line===line))return;L[id]={sp,game:gl,date:d,voice:x.voice,mk,side,line,price,pick,pa:+ha.toFixed(2),ph:+hh.toFixed(2)};n++;};
     if(ln.ml&&Math.abs(mar)>=0.05){const sd=mar>0?'home':'away';put(pre+'ml',sd,null,ln.ml[sd==='home'?'h':'a'].price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ML`);}
     if(ln.sp){const hl=ln.sp.h.line,m=mar+hl;if(Math.abs(m)>=0.1){const sd=m>0?'home':'away',o=ln.sp[sd==='home'?'h':'a'];put(pre+'spread',sd,o.line,o.price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ${o.line>0?'+':''}${o.line}`);}}
     if(ln.ou&&Math.abs(tot-ln.ou.line)>=0.1){const sd=tot>ln.ou.line?'over':'under';put(pre+'total',sd,ln.ou.line,sd==='over'?ln.ou.o:ln.ou.u,`${tag} ${sd==='over'?'Over':'Under'} ${ln.ou.line}`);}});
-  if(n)set(HALF_KEY,L);return n;}
+  if(n){if(SC_TX)SC_TX.dh++;else set(HALF_KEY,L);}return n;}
 function gradeHalfCalls(){const L=get(HALF_KEY,{})||{};let n=0;
   Object.values(L).forEach(x=>{if(x.graded)return;let R=null;try{R=finalsFor(x.sp,x.game,String(x.date).slice(0,10),false);}catch(e){}if(!R)return;
     const p1=x.sp==='nhl';const a=p1?R.p1a:R.h1a,h=p1?R.p1h:R.h1h;if(a==null||h==null)return;let hit=null;const A=+a,H=+h;
@@ -2788,7 +2809,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261028c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261028d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8452,7 +8473,7 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    wrong day — so the search covers the ticket date through a week after it. */
 const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.77.2 · NBA legs were looked up as NFL games */
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.78.0 · NBA legs were looked up as NFL games */
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
@@ -8574,7 +8595,7 @@ const FB_GEN=[[/^passing\s+(?:tds?|touchdowns?)(?:\s+thrown)?$/i,'passing','TD',
   [/^receiving\s+(?:tds?|touchdowns?)$/i,'receiving','TD',null,'receiving TDs'],[/^longest\s+reception$/i,'receiving','LONG',null,'longest reception'],[/^targets$/i,'receiving','TGTS',null,'targets'],
   [/^(?:total\s+)?tackles(?:\s*(?:\+|and)\s*assists)?$/i,'defensive','TOT',null,'tackles'],[/^solo\s+tackles$/i,'defensive','SOLO',null,'solo tackles'],[/^tackles\s+for\s+loss$/i,'defensive','TFL',null,'TFL'],
   [/^(?:passes\s+defended|pass\s+deflections)$/i,'defensive','PD',null,'passes defended']];
-function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.77.2 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
+function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.78.0 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
 function gradeFBSpecialProp(leg,box,R){
   if(leg.fbProp.stat==='gen'){const P=leg.fbProp;const live=box.state==='in';let val=0,found=null,anywhere=false;
     Object.values(box.teamStats).forEach(st=>{['passing','rushing','receiving','defensive','kr','pr','ints'].forEach(c=>{if(fbpFindRow(st[c]||[],P.player))anywhere=true;});
@@ -22323,7 +22344,7 @@ body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
 body.bnav .slip{bottom:var(--bnh,64px)!important;z-index:79!important;padding-bottom:11px!important;border-radius:14px 14px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.45)}
 .slip.expanded{display:none!important}
 .slip-scrim{z-index:85!important}.slip-sheet{z-index:86!important}
-/* v2.77.2 · a closed sheet is hidden outright (not just slid below the screen): when the page got zoomed out it showed mid-screen on every tab. And nothing may widen the page sideways. */
+/* v2.78.0 · a closed sheet is hidden outright (not just slid below the screen): when the page got zoomed out it showed mid-screen on every tab. And nothing may widen the page sideways. */
 .slip-sheet:not(.on){visibility:hidden;transition:transform .3s,visibility 0s .3s}.slip-sheet.on{visibility:visible}
 html,body{overflow-x:hidden;max-width:100%}
 body.bnav.slipon main{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
@@ -23667,7 +23688,7 @@ async function tgwResend(btn){const P=tgPosts();const d=today();const p=P[d]||P[
   else{if(btn)btn.textContent='Failed — '+((r&&r.reason)||'error');}}
 async function tgwRunNow(){const{toks}=await tgwGh();const repo=TGW_WORKER_REPO;let why=toks.length?'':'no GitHub token saved on this phone';for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204)){window.__tgwWhy='';return true;}
     why=!r?'no connection':r.status===403||r.status===404?'your GitHub token needs the "Actions: Read and write" permission':r.status===401?'GitHub token expired or wrong':'GitHub said '+r.status;}window.__tgwWhy=why;return false;}
-/* v2.77.2 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
+/* v2.78.0 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
 async function tgwRunNowTap(btn){if(btn){btn.disabled=true;btn.textContent='Starting…';}let ok=false;try{ok=await tgwRunNow();}catch(e){window.__tgwWhy=String(e&&e.message||e);}
   const msg=ok?'▶ Robot started — results in about a minute':"Couldn't start the robot: "+(window.__tgwWhy||'unknown')+'. It still runs on its own schedule.';
   try{deskToast(msg,ok?3500:7000);}catch(e){alert(msg);}if(btn){btn.disabled=false;btn.textContent='▶ Run now';}setTimeout(()=>{try{tgwRefreshStatus();}catch(e){}},70e3);}
