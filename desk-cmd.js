@@ -107,3 +107,13 @@ if(!window.__CMDL5__){window.__CMDL5__=1;const B1=cmdBuild;cmdBuild=function(){c
     const add=[['last5','Every character\'s last 5 calls'],['bloodlines','Generations: who\'s closest to the crown'],['deadon','Score callers: who\'s dead on'],['halves','1st half / 1st period calls'],['counterpunch','Today\'s counter-punches']];
     const i=o.menu.findIndex(x=>x.command==='leaders');o.menu.splice(i<0?o.menu.length:i+1,0,...add.map(([command,description])=>({command,description})));o.menu=o.menu.slice(0,100);
     R.help=R.help.replace('/leaders — ',add.map(([k,t])=>`/${k} — ${cmdE(t)}`).join('\n')+'\n/leaders — ');R.start=R.help;R.menu=R.help;}catch(e){console.warn('last5 cmds',e);}return o;};}
+/* v2.75.1 · /props never answers "nothing" when characters have prop calls: the frozen card's Props of the day first
+   (70%+ calibrated, locked at the master evaluation); if that's empty, today's live character prop calls (65%+, games
+   not started), labeled as such; if THAT's empty, say why (the phone that sent the card had no player logs loaded). */
+if(!window.__CMDPROPS__){window.__CMDPROPS__=1;const B2=cmdBuild;cmdBuild=function(){const o=B2();try{let C=null;try{C=subCard();}catch(e){}
+    if(!((C&&C.props)||[]).length){let L=[];try{L=cpropToday();}catch(e){}const seen=new Set();
+      L=L.filter(c=>c.cal>=0.65&&c.fav!=='fade').sort((a,b)=>b.cal-a.cal).filter(c=>{const k=c.player+'|'+c.k;if(seen.has(k))return false;seen.add(k);return true;})
+        .filter(c=>{try{return!deskStarted({...c,game:cpxPropGame(c.sp,c.team)});}catch(e){return true;}}).slice(0,10);
+      const dbN=['nba','nhl','nfl','ncaaf','ncaab'].reduce((n,sp)=>{try{return n+Object.keys(pstDb(sp).p||{}).length;}catch(e){return n;}},0);
+      o.r.props=L.length?cmdList('🎯 Character prop calls — today',L,c=>`${cmdSp(c.sp)} <b>${cmdE(cpropLine(c))}</b>${cmdE(propWhere(c))} · ${cmdE(charName(c.voice).replace(/^The /,''))} · ${subPct(c.cal)}${c.rec?' · '+cmdE(c.rec):''}`)+'\n<i>None cleared 70% for the official Props of the day, so these are the strongest calls still on the board.</i>'
+        :`<b>🎯 Props of the day</b>\nNo character prop call today${dbN?' cleared 65%':''}.${dbN?'':'\n<i>The phone that sent today\'s card had no player game logs loaded — open the NBA / NHL / NFL pages once, then tap 🛰️ Re-send.</i>'}`;}}catch(e){console.warn('props cmd',e);}return o;};}
