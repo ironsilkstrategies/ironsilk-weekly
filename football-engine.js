@@ -4700,8 +4700,8 @@ function fbPresetLegs(sport){
 function fbProjBoxPanel(g,s,sport){
   let J=null;try{J=brainJudge(g,s,sport)}catch(err){}
   if(!J)return'<div class="empty">No projection yet — needs ratings or a book line.</div>';
-  const a=g.away.abbr,h=g.home.abbr,B=J.box,pc=x=>Math.round(x*100)+'%';
-  let A=null,F=null;
+  const a=g.away.abbr,h=g.home.abbr,pc=x=>Math.round(x*100)+'%';
+  let B=J.box,A=null,F=null;   /* v2.80 · B was a const: re-pointing it at the archived box threw (silently), so a finished game's actual box and final never showed */
   try{const arc=get(sport==='nfl'?LS.nflarc:'d4.ncaafarc',{});Object.values(arc).forEach(W=>{if(!W||!W.rows)return;
     const r=W.rows.find(x=>x.id===g.id);if(r){if(r.judge&&r.judge.box)B=r.judge.box;A=r.actualBox||null;F=(W.finals||{})[g.id]||null;}});}catch(err){}
   const c=(p,v)=>v==null?`${p}`:`${p} <span style="color:var(--mute)">→</span> <b>${v}</b>`;
