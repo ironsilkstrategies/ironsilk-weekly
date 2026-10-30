@@ -1,0 +1,30 @@
+name: Harness snapshot
+# Snapshots public ESPN/MLB data for the local performance harness → the harness-data branch. Temporary.
+on:
+  push:
+    branches: [harness]
+permissions:
+  contents: write
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch every URL
+        run: |
+          mkdir -p out
+          : > out/index.tsv
+          while read -r u; do
+            [ -z "$u" ] && continue
+            h=$(printf '%s' "$u" | sha1sum | cut -c1-16)
+            code=$(curl -sS -L --compressed --retry 2 --max-time 60 -A "Mozilla/5.0" -o "out/$h.json" -w '%{http_code}' "$u" || echo 000)
+            printf '%s\t%s\t%s\n' "$u" "$h" "$code" >> out/index.tsv
+          done < harness/urls.txt
+          du -sh out; awk -F'\t' '{print $3}' out/index.tsv | sort | uniq -c
+      - name: Publish
+        run: |
+          cd out
+          git init -q && git config user.name "harness" && git config user.email "harness@users.noreply.github.com"
+          git checkout -q -b harness-data && git add -A && git commit -qm "snapshot $(date -u +%FT%TZ)"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" harness-data
