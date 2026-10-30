@@ -170,7 +170,7 @@ function pickHtml(x0,i){if(x0.hidden)return`<div class="lock"><div class="num">$
   return`<div class="pick ${c==='open'?'':c}"><div class="num">${i+1}</div><div class="res ${c}">${l}</div>
     <div class="pk">${esc(x.pick)}<span class="pr">${sgn(x.price)}</span></div>
     <div class="meta">${em[x.sp]||''} ${esc(LAB[x.sp]||(x.sp||'').toUpperCase())} · ${esc(x.gl||x.game)}${x.start?' · '+tm(x.start):''}</div>
-    <div class="meta">${tier}${x.voices&&x.voices.length?esc(x.voices.join(', '))+(x.voices.length===1?' is':' are')+' 70%+ sure':''}</div>${liveLine(x)}
+    <div class="meta">${tier}${x.spread?'🌐 spread pick — below our 70% bar, on the card so every sport gets a play':x.voices&&x.voices.length?esc(x.voices.join(', '))+(x.voices.length===1?' is':' are')+' 70%+ sure':''}</div>${liveLine(x)}
     <div class="pct">${Math.round(x.p*100)}%<small>to hit</small></div>${whyBlock(x.why)}</div>`;}
 function renderProps(){const P=(FEED.today&&FEED.today.props)||[];const box=$('propBox');if(!P.length){box.innerHTML='';return;}
   box.innerHTML=`<div class="hd"><h2>Best 3 props</h2><span>70%+ only</span></div><div class="mini">${P.map((x,i)=>{if(x.hidden)return`<div class="lock" style="padding-left:16px"><div class="key">🔒</div><b>LOCKED PROP</b><div class="meta">${em[x.sp]||''} ${esc(LAB[x.sp]||'')}${x.start?' · game at '+tm(x.start):''}</div><div class="cd" data-cd="1" data-u="${x.unlockAt||''}" data-s="${esc(x.start||'')}">${countdown(x)}</div></div>`;

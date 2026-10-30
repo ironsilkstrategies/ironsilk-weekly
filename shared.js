@@ -2912,7 +2912,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261030e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261030f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16814,12 +16814,13 @@ function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const
   return out.sort((a,b)=>(b.ev==null?-99:b.ev)-(a.ev==null?-99:a.ev)).slice(0,n||5);}
 function best5Build(){
   const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
-  const top3=best3Pool(by,null).map(x=>({...x,main:true}));
+  const T3=best3Pool(by,null);let pick3=T3;try{if(typeof b3SpreadOn==='function'&&b3SpreadOn())pick3=best3Spread(by,T3);}catch(e){}   /* v2.80.5 · the optional 🌐 spread */
+  const top3=pick3.map(x=>({...x,main:true}));
   const bySport={};Object.keys(by).forEach(sp=>{bySport[sp]=best3Pool(by,sp);});
   const props=best3Props();
   /* every pick on the card is graded: the main three plus each sport's own three */
   const seen=new Set(),picks=[];[...top3,...Object.values(bySport).flat()].forEach(x=>{const k=x.sp+'|'+x.game+'|'+x.pick;if(seen.has(k))return;seen.add(k);picks.push(x);});
-  return{top3,bySport,picks,props,standout:bestStandout(by),sports:Object.keys(by),why:best3Pool(by,null).why};
+  return{top3,bySport,picks,props,standout:bestStandout(by),sports:Object.keys(by),why:T3.why};
 }
 function best5State(){const d=today();let S=get(BEST5_KEY,{});
   if(S.d!==d){if(S.d&&S.locked)set('d4.best5prev',S);S={d,locked:false};}
@@ -16864,7 +16865,7 @@ function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈'
     return`<div class="b3-row"><div class="b3-n">${i+1}</div><div style="flex:1;min-width:0">
       <div class="b3-pick">${txtEsc(x.pick)} <span class="b3-price">${x.price>0?'+':''}${x.price}</span>${res(x)}</div>
       <div class="b3-meta">${em[x.sp]||''} ${(x.sp||'').toUpperCase()} · ${esc(x.game)}${t(x)?' · '+t(x):''}</div>
-      <div class="b3-meta">${tl?`<b style="color:${tc}">${tl}</b> · `:''}${ch?ch+' of the desk\'s voices agree · ':''}EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%</div></div>
+      <div class="b3-meta">${x.spread?'<b style="color:#7dd3fc">🌐 spread pick · below the 70% bar</b> · ':''}${tl?`<b style="color:${tc}">${tl}</b> · `:''}${ch?ch+' of the desk\'s voices agree · ':''}EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%</div></div>
       <div class="b3-pct">${Math.round(x.p*100)}%<div class="b3-pl">to hit</div></div></div>`;}).join('');
   const empty=`<div class="rc-empty-slot">${S.locked?'No play cleared the bar today — we don\'t force picks.':(S.why3&&S.why3.total?'Nothing clears the bar yet — still checking as lines move.':'Builds from today\'s boards — open each sport once.')}</div>`;
   return`<div class="recapwrap" id="${opts.id||'bestShareTarget'}"><div class="recapcard">
@@ -16913,7 +16914,7 @@ function renderBest(){
     :(!(S.top3||[]).length&&!(W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Today's card is empty — open each sport's Games board (or Load all sports on Today) so it has picks to choose from.</div>`:'');
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
     <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:(evalRanToday()&&!(S.top3||[]).length&&W3&&W3.total?'Master evaluation ran — no play clears the bar yet. It keeps re-checking as lines and boards update, locks the moment one qualifies, and locks empty 30 min before the last game.':'Building — freezes the moment the master evaluation runs (or 30 min before the first game)')}</b>
-    ${S.locked||(evalRanToday()&&!(S.top3||[]).length)?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${diag}${(()=>{const sv=BEST_VIEW!=='all'?BEST_VIEW:null;const L0=sv?((S.bySport||{})[sv]||[]):(S.top3||[]);if(L0.length||(S.locked&&!sv))return'';
+    ${S.locked||(evalRanToday()&&!(S.top3||[]).length)?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${typeof b3SpreadOn==='function'?` <button onclick="b3SpreadToggle()" style="font-size:10px" title="Optional: when a sport has no play that clears the bar, its best near-miss can take a slot (marked 🌐)">🌐 Spread across sports: <b>${b3SpreadOn()?'ON':'off'}</b></button>${S.locked?'<span class="sub" style="font-size:9.5px"> (today\'s card is locked — a change applies to the next one)</span>':''}`:''}${diag}${(()=>{const sv=BEST_VIEW!=='all'?BEST_VIEW:null;const L0=sv?((S.bySport||{})[sv]||[]):(S.top3||[]);if(L0.length||(S.locked&&!sv))return'';
       let N=[];try{N=best3Near(sv?60:5).filter(x=>!sv||x.sp===sv).slice(0,5);}catch(e){}if(!N.length)return'';
       return`<div class="mono" style="font-size:9.5px;margin-top:6px;color:var(--mute)">Closest ${sv?(SP_LAB[sv]||sv)+' ':''}calls today (not on the card):</div>${N.map(x=>`<div class="mono" style="font-size:10px;padding:2px 0">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> ${x.price!=null?(x.price>0?'+':'')+x.price:''} · ${x.p!=null?Math.round(x.p*100)+'%':'—'} · <span style="color:var(--rust)">${txtEsc(x.why)}</span></div>`).join('')}`;})()}</div>`;
   /* yesterday's card stays up until it's fully graded */

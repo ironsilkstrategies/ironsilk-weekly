@@ -467,6 +467,30 @@ function best3Pool(by,sp,opts){opts=opts||{};if(opts.ignoreTime)return best3Pool
   const u=new Set(),per=new Set(),out=[];for(const x of pool){if(out.length===3)break;const k=x.sp+'|'+x.game;if(u.has(k)||per.has(x.sp))continue;u.add(k);per.add(x.sp);out.push(x);}
   for(const x of pool){if(out.length===3)break;const k=x.sp+'|'+x.game;if(u.has(k))continue;u.add(k);out.push(x);}
   out.sort((a,b)=>b.fit-a.fit||b.ev-a.ev);out.why=why;return out;}
+/* v2.80.5 · OPTIONAL — spread the Best 3 across sports (the 🌐 switch on the Best tab). Off by default: the card never
+   forces a pick. On: when a sport with games still to play today has no pick that clears the full bar, its best
+   near-miss can take the slot of the weakest pick from a sport holding two. The near-miss must pass every safety rule
+   the card has (priced -200 to +400, today, not started, not flagged, lane open, model not fighting the market,
+   EV +0.5%+) and a character must have it at 55%+ — it just lacks the official 70% call. Marked 🌐 everywhere it shows. */
+const B3_SPREAD_KEY='d4.b3spread';
+function b3SpreadOn(){try{return get(B3_SPREAD_KEY,false)===true;}catch(e){return false;}}
+function b3SpreadToggle(){set(B3_SPREAD_KEY,!b3SpreadOn());try{const S=best5State();if(!S.locked&&typeof renderBest==='function')renderBest();}catch(e){}
+  try{if(typeof deskToast==='function')deskToast(b3SpreadOn()?'🌐 Best 3 spread ON — a sport with no qualifying play can take a slot with its best near-miss (marked 🌐)':'Best 3 spread OFF — strict card, no forced picks');}catch(e){}}
+function best3Spread(by,top){const out=(top||[]).slice();const have=new Set(out.map(x=>x.sp));const cands=[];
+  Object.entries(by||{}).forEach(([s0,B])=>{if(have.has(s0))return;let best=null;
+    (B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};
+      if(x.price==null||+x.price<DESK_B3_LO||+x.price>BEST3_HI)return;
+      if(!tcIsToday(x)||best5Started(x)||x.incoherent||x.suspect)return;
+      try{if(laneStatus(pickLane(x,s0))==='blocked'||pickDisagrees(x,s0))return;}catch(e){return;}
+      const p=pickConfAny(x,s0);if(p==null||p<0.55)return;
+      const ev=(p*americanToDecimal(+x.price)-1)*100;if(ev<0.5)return;
+      const c={...x,p,ev,cf:p,conf:0,confBy:[],fit:0,spread:true};if(!best||c.p>best.p||(c.p===best.p&&c.ev>best.ev))best=c;});
+    if(best)cands.push(best);});
+  cands.sort((a,b)=>b.p-a.p||b.ev-a.ev);
+  for(const c of cands){if(out.length<3){out.push(c);continue;}
+    const cnt={};out.forEach(x=>{cnt[x.sp]=(cnt[x.sp]||0)+1;});const donors=out.filter(x=>!x.spread&&cnt[x.sp]>=2);if(!donors.length)break;
+    const weak=donors.reduce((a,b)=>((a.fit||0)<=(b.fit||0)?a:b));out.splice(out.indexOf(weak),1,c);}
+  const real=out.filter(x=>!x.spread).sort((a,b)=>b.fit-a.fit||b.ev-a.ev),sp=out.filter(x=>x.spread);const r=real.concat(sp);r.why=top&&top.why;return r;}
 function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
   Object.entries(T.by||{}).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0);const p=o?o.cf:pickConfAny(x,s0);
     const ev=p!=null&&x.price!=null?(p*americanToDecimal(+x.price)-1)*100:null;let why=null;
@@ -852,7 +876,7 @@ function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦
   const sp=x=>e((SP_LAB[x.sp]||'').split(' ')[0]);const pc=x=>subPct(x.p!=null?x.p:best5Prob(x));
   const head=`<b>🏆 TheDesk — ${e(day)}</b>${C.record&&(C.record.w+C.record.l)?`\nBest 3 record: <b>${C.record.w}-${C.record.l}${C.record.pu?'-'+C.record.pu:''}</b> (${C.record.u>=0?'+':''}${C.record.u.toFixed(1)}u)`:''}\n<i>The Best 3 and Top 10 are official: a character is 70%+ sure. No pick rides more than ${EXPO_CAP} tickets.</i>`;
   const blocks=[head];
-  if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. ${mk(x)}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${pc(x)}`).join('\n'));
+  if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. ${mk(x)}${x.spread?'🌐 ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${pc(x)}`).join('\n')+(C.best.some(x=>x.spread)?`\n<i>🌐 = spread pick: below the 70% bar, on the card so every sport gets a play</i>`:''));
   if(C.top10.length)blocks.push(`<b>🔟 THE REST OF THE TOP 10</b>\n`+C.top10.map((x,i)=>`${i+1+C.best.length}. ${mk(x)}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n'));
   if(C.banker)blocks.push(`${pm(C.banker)}<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>mb(l)+e(subLeg(l))).join('\n'));
   const pl=l=>mb(l)+e(l.player?`${cpropLine(l)}${propWhere(l)}`:subLeg(l))+e(subStrength(l));
@@ -988,7 +1012,7 @@ function deskPropResult(x,d){try{if(x.hit!=null||x.push)return x;const g=(get('d
   if(g&&g.d>=d&&g.d<=dayShift(d,1)&&g.v&&g.v[k]!=null){const a=+g.v[k];return{...x,actual:a,hit:x.side==='under'?a<+x.thr:a>+x.thr};}}catch(e){}return x;}
 function publicFeedCore(full){const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();
   const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
-    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,
+    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,
     why:(()=>{if(!x.whyOn)return undefined;try{const W=pickWhy({...x,date:x.d0});return{bullets:W.bullets.slice(0,6),script:W.script};}catch(e){return undefined;}})()});
   const hist=Object.keys(log).sort().reverse().slice(0,30).map(d=>({d,picks:(log[d].picks||[]).filter(x=>x.main).map(slim)})).filter(x=>x.picks.length);
   const logOf=x=>(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);
