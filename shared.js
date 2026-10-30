@@ -6,7 +6,7 @@ var SAFE_MODE=false;
 (function(){try{if(typeof localStorage==='undefined'||typeof window==='undefined'||/[?&]bg=1/.test(location.search||''))return;const K='d4.bootguard';const now=Date.now();
   let B={};try{B=JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){}
   if(B.safeUntil&&now<B.safeUntil)SAFE_MODE=true;
-  else{/* v2.79.1 · reloads that bring a new build (updates, Hard Reload) don't count as crashes; it takes 3 unsettled loads */
+  else{/* v2.80.0 · reloads that bring a new build (updates, Hard Reload) don't count as crashes; it takes 3 unsettled loads */
     const bm=(document.currentScript&&document.currentScript.src||'').match(/[?&]v=([^&]+)/);const bv=bm?bm[1]:(document.querySelector('script[src*="shared.js"]')||{src:''}).src.replace(/.*v=/,'');
     if(bv&&B.bv!==bv){B.boots=[];B.bv=bv;}
     const recent=(B.boots||[]).filter(t=>now-t<60e3&&!B.ok);if(recent.length>=3){SAFE_MODE=true;B.safeUntil=now+10*60e3;}}
@@ -1887,7 +1887,7 @@ function intelTrendDir(text){
 /* ── typed line parser ── */
 function intelParse(text,type,src,sp){
   const out={xpicks:[],trends:[],consensus:[],preds:[],unread:[]};let ctx=null;
-  /* v2.79.1 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
+  /* v2.80.0 · sport sections: a bare "NHL"/"NBA"/… line scopes what follows, and a page reads only its own sport's rows.
      Before, "DET 16% / EDM 84%" (hockey) on the NFL page latched onto the Lions' game — abbreviations collide across leagues. */
   let secSp=null;const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',MLB:'mlb',NHL:'nhl',NBA:'nba',NCAAB:'ncaab',CBB:'ncaab'};
   stripBOM(text).split('\n').map(l=>l.replace(/^[\s\-*•>#]+/,'').trim()).filter(Boolean).forEach(l=>{
@@ -1918,7 +1918,7 @@ function intelParse(text,type,src,sp){
       if(ou.length&&(where||ctx)){const G=(where&&where.game)||ctx,[aw,hm]=G.split('@');const o=ou.find(p=>/^o/i.test(p.who)),u=ou.find(p=>/^u/i.test(p.who));
         out.consensus.push({src,game:G,away:aw,home:hm,market:'total',metric:money?'money':'bets',awayPct:null,homePct:null,overPct:o?o.pct:(u?100-u.pct:null),underPct:u?u.pct:(o?100-o.pct:null),line:null});return;}
       const tp=pairs.map(p=>({...p,t:intelTeams(sp,p.who)[0]})).filter(p=>p.t);
-      /* v2.79.1 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
+      /* v2.80.0 · a row naming two teams must land both on the same game — one stray abbreviation match is another league's team */
       if(pairs.length>=2&&!(tp.length>=2&&tp.every(p=>p.t.game===tp[0].t.game))){out.unread.push(l);return;}
       if(tp.length){const G=tp[0].t.game,[aw,hm]=G.split('@');let ap=null,hp=null;tp.forEach(p=>{if(p.t.game!==G)return;if(p.t.side==='a')ap=p.pct;else hp=p.pct;});
         if(ap==null&&hp!=null)ap=100-hp;if(hp==null&&ap!=null)hp=100-ap;
@@ -1987,10 +1987,10 @@ function gradeIntel(){
   if(n)set(INTEL_KEY,L);return n;
 }
 /* Per-team trend reliability for the Judge: shrunk hit rate → 0 (ignore) .. 2 (double). */
-function intelTrendFactor(sp,team){if(!team)return 1;const L=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='trend'&&x.team===team&&x.graded&&x.hit!=null);
+function intelTrendFactor(sp,team){if(!team)return 1;const L=(roGet(INTEL_KEY,[])||[]).filter(x=>x.sp===sp&&x.kind==='trend'&&x.team===team&&x.graded&&x.hit!=null);
   const w=L.filter(x=>x.hit).length;return Math.max(0,Math.min(2,((w+5)/(L.length+10))*2));}
 /* Outside picks on a game, each with its source's graded record — for Eval. */
-function intelPicksFor(sp,game){const L=get(INTEL_KEY,[]);const rec=src=>{const g=L.filter(x=>x.sp===sp&&x.kind==='xpick'&&x.src===src&&x.graded&&x.hit!=null);return{w:g.filter(x=>x.hit).length,n:g.length};};
+function intelPicksFor(sp,game){const L=roGet(INTEL_KEY,[])||[];const rec=src=>{const g=L.filter(x=>x.sp===sp&&x.kind==='xpick'&&x.src===src&&x.graded&&x.hit!=null);return{w:g.filter(x=>x.hit).length,n:g.length};};
   return L.filter(x=>x.sp===sp&&x.kind==='xpick'&&x.game===game&&!x.graded).map(x=>({...x,rec:rec(x.src)}));}
 function intelReport(sp){
   const L=get(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.graded);if(!L.length)return`<div class="tkt"><h3>Intel record</h3><div class="sub">Picks, trends, consensus and predictions you upload are graded here once games go final — by source, by team and by trend type.</div></div>`;
@@ -2073,10 +2073,13 @@ const halfRound=x=>Math.round(x*2)/2;
    lines on the board and the intake stores — nothing needs to be saved first,
    so it works on today's games and on upcoming days alike. */
 const CHAR_CACHE={};
+/* v2.80 · a cached read of the characters lives a minute, but any write that can change a call (lines, intake, picks,
+   settings…) retires it at once; the call ledger and the logs it writes itself don't count */
+var CHAR_GEN=0;var CHAR_KEEP=new Set(['d4.voices','d4.scorecalls','d4.halfcalls','d4.syslog','d4.perf','d4.autopilot','d4.bootguard','d4.todaycard','d4.feeltune','d4.conf','d4.heirs','d4.__kts','d4.__lastsync','d4.halflines','d4.best5log','d4.evalready','d4.bgeval.nba','d4.bgeval.nhl','d4.bgeval.nfl','d4.bgeval.ncaaf','d4.bgeval.ncaab','d4.bgeval.mlb']);
 function characterCalls(sp,g,s){
   if(!g||!s||s.aw==null)return[];
   const ck=sp+'|'+g.id,c=CHAR_CACHE[ck];
-  if(c&&Date.now()-c.ts<4000&&c.s===s)return c.calls;
+  if(c&&Date.now()-c.ts<60000&&c.s===s&&c.g===CHAR_GEN)return c.calls;
   const gl=g.away.abbr+'@'+g.home.abbr,A=g.away.abbr,H=g.home.abbr,Ln=voicesLines(sp,g);
   /* v2.09 · a call belongs to the GAME's day. Football boards show the whole week, and every
      call used to be stamped with the day it was logged — Saturday's game got a Monday copy,
@@ -2176,7 +2179,7 @@ function characterCalls(sp,g,s){
   /* 🐕 the Underdog Spotter — plus-money value only (v2.54) */
   try{dogCharCalls(sp,g,s,Ln,hl,hlSim,add);}catch(e){}
   try{metaCalls(sp,g,calls,Ln,add);}catch(e){}
-  CHAR_CACHE[ck]={ts:Date.now(),s,calls};
+  CHAR_CACHE[ck]={ts:Date.now(),s,calls,g:CHAR_GEN};
   return calls;
 }
 /* The Brain's chance on one side: the Sim's chance, blended with the market,
@@ -2295,12 +2298,12 @@ function gradeScoreCalls(){const L=get(SCORECALL_KEY,{})||{};let n=0;
     x.graded=1;x.fa=fa;x.fh=fh;x.exact=x.a===fa&&x.h===fh?1:0;x.mar=(x.h-x.a)===(fh-fa)?1:0;x.tot=(x.a+x.h)===(fa+fh)?1:0;x.win=fa===fh?null:((x.h>x.a)===(fh>fa)?1:0);x.err=Math.abs(x.a-fa)+Math.abs(x.h-fh);n++;});
   if(n){set(SCORECALL_KEY,L);SC_TRUST_C=null;}return n;}
 /* how good a character is at calling the score in one sport (also what a future weighting can read) */
-function scoreCallStats(sp){const L=get(SCORECALL_KEY,{})||{};const S={};
+function scoreCallStats(sp){const L=roGet(SCORECALL_KEY,{})||{};const S={};
   Object.values(L).forEach(x=>{if(!x.graded||(sp&&sp!=='all'&&x.sp!==sp))return;const r=S[x.voice]||(S[x.voice]={n:0,exact:0,mar:0,tot:0,win:0,wn:0,err:0,last:null});
     r.n++;r.exact+=x.exact;r.mar+=x.mar;r.tot+=x.tot;if(x.win!=null){r.wn++;r.win+=x.win;}r.err+=x.err;if(x.exact&&(!r.last||x.date>r.last.date))r.last=x;});return S;}
 function scoreCallsHtml(sp){const trig=(()=>{try{return sp&&sp!=='all'?scoreTrustHtml(sp):'';}catch(e){return'';}})();const S=scoreCallStats(sp);const rows=Object.entries(S).filter(([,r])=>r.n).sort((a,b)=>b[1].exact/b[1].n-a[1].exact/a[1].n||a[1].err/a[1].n-b[1].err/b[1].n);
   const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');const pc=(k,n)=>n?Math.round(k/n*100)+'%':'—';
-  const today_=Object.values(get(SCORECALL_KEY,{})||{}).filter(x=>x.date===today()&&(!sp||sp==='all'||x.sp===sp));
+  const today_=Object.values(roGet(SCORECALL_KEY,{})||{}).filter(x=>x.date===today()&&(!sp||sp==='all'||x.sp===sp));
   return`<div class="tkt"><h3>🎯 Score callers — who's dead on</h3><div class="sub">Every character calls a final score before the game; graded at the final. Dead on = exact score.</div>
     ${rows.length?`<table class="mono" style="width:100%;font-size:11px;margin-top:6px"><tr style="color:var(--mute)"><td>Character</td><td>Games</td><td>🎯 Dead on</td><td>Margin</td><td>Total</td><td>Winner</td><td>Avg miss</td></tr>
     ${rows.map(([v,r])=>`<tr><td><b>${txtEsc(nm(v))}</b>${r.last?`<br><span style="font-size:9px;color:var(--win)">last: ${txtEsc(r.last.game)} ${r.last.a}-${r.last.h}</span>`:''}</td><td>${r.n}</td><td style="color:${r.exact?'var(--win)':'inherit'}"><b>${r.exact}</b> · ${pc(r.exact,r.n)}</td><td>${pc(r.mar,r.n)}</td><td>${pc(r.tot,r.n)}</td><td>${pc(r.win,r.wn)}</td><td>${(r.err/r.n).toFixed(1)}</td></tr>`).join('')}</table>`
@@ -2321,7 +2324,7 @@ const SC_TRIG={n:40,beat:0.05,cap:0.04};
 const SC_SD={nfl:[13,13],ncaaf:[15,15],nba:[12,18],ncaab:[11,16],nhl:[2.2,2.3],mlb:[3.5,4.2]};   /* [margin, total] spread of finals */
 let SC_TRUST_C=null;
 function scoreTrust(sp){const now=Date.now();if(SC_TRUST_C&&now-SC_TRUST_C.ts<60e3&&SC_TRUST_C[sp])return SC_TRUST_C[sp];
-  const L=Object.values(get(SCORECALL_KEY,{})||{}).filter(x=>x.graded&&x.sp===sp);const sim={};L.forEach(x=>{if(x.voice==='Sim')sim[x.game+'|'+x.date]=x;});
+  const L=Object.values(roGet(SCORECALL_KEY,{})||{}).filter(x=>x.graded&&x.sp===sp);const sim={};L.forEach(x=>{if(x.voice==='Sim')sim[x.game+'|'+x.date]=x;});
   const by={};L.forEach(x=>{if(x.voice==='Sim')return;const S=sim[x.game+'|'+x.date];if(!S)return;const r=by[x.voice]||(by[x.voice]={n:0,e:0,se:0,w:0,sw:0,wn:0});
     r.n++;r.e+=x.err;r.se+=S.err;if(x.win!=null&&S.win!=null){r.wn++;r.w+=x.win;r.sw+=S.win;}});
   const T={};Object.entries(by).forEach(([v,r])=>{const imp=r.se>0?1-r.e/r.se:0;const prog={n:r.n,imp,winOk:r.w>=r.sw};
@@ -2329,7 +2332,7 @@ function scoreTrust(sp){const now=Date.now();if(SC_TRUST_C&&now-SC_TRUST_C.ts<60
   SC_TRUST_C=SC_TRUST_C&&now-SC_TRUST_C.ts<60e3?SC_TRUST_C:{ts:now};SC_TRUST_C[sp]=T;return T;}
 /* the trusted callers' read on one game vs the Sim's: {dMar (home margin), dTot} in points, or null */
 function scoreTrustRead(sp,game,date){const T=scoreTrust(sp);const tv=Object.entries(T).filter(([,r])=>r.ok);if(!tv.length)return null;
-  const L=get(SCORECALL_KEY,{})||{};const id=v=>[sp,game,date,v].join('|');const S=L[id('Sim')];if(!S)return null;
+  const L=roGet(SCORECALL_KEY,{})||{};const id=v=>[sp,game,date,v].join('|');const S=L[id('Sim')];if(!S)return null;
   let W=0,M=0,Tt=0;tv.forEach(([v,r])=>{const x=L[id(v)];if(!x)return;W+=r.w;M+=r.w*(x.h-x.a);Tt+=r.w*(x.a+x.h);});if(!W)return null;
   return{dMar:M/W-(S.h-S.a),dTot:Tt/W-(S.a+S.h),who:tv.map(([v])=>v)};}
 function scoreTrustAdj(sp,g,market,side){try{if(!g||!g.away||!g.home)return 0;const gl=g.away.abbr+'@'+g.home.abbr;const d=g.__date||(typeof gameDayOf==='function'?gameDayOf(g):null)||today();
@@ -2378,16 +2381,16 @@ function gradeHalfCalls(){const L=get(HALF_KEY,{})||{};let n=0;
     else{const t=A+H;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
     x.graded=1;x.fa=A;x.fh=H;x.hit=hit;if(hit!=null)x.units=hit?_vProfit(x.price!=null?x.price:-110):-1;n++;});
   if(n)set(HALF_KEY,L);return n;}
-function halfRecord(sp,voice,mk){const r={w:0,l:0,u:0};Object.values(get(HALF_KEY,{})||{}).forEach(x=>{if(!x.graded||x.hit==null||x.sp!==sp||x.voice!==voice||x.mk!==mk)return;x.hit?r.w++:r.l++;r.u+=x.units||0;});r.n=r.w+r.l;r.p=r.n?r.w/r.n:null;r.ok=r.n>=HALF_OK.n&&r.p>=HALF_OK.p&&r.u>0;return r;}
+function halfRecord(sp,voice,mk){const r={w:0,l:0,u:0};Object.values(roGet(HALF_KEY,{})||{}).forEach(x=>{if(!x.graded||x.hit==null||x.sp!==sp||x.voice!==voice||x.mk!==mk)return;x.hit?r.w++:r.l++;r.u+=x.units||0;});r.n=r.w+r.l;r.p=r.n?r.w/r.n:null;r.ok=r.n>=HALF_OK.n&&r.p>=HALF_OK.p&&r.u>0;return r;}
 /* today's half calls, official first */
-function halfToday(){const d=today();return Object.values(get(HALF_KEY,{})||{}).filter(x=>x.date===d&&CHARS[x.voice]).map(x=>{const R=halfRecord(x.sp,x.voice,x.mk);return{...x,rec:R,official:R.ok&&x.price!=null};});}
+function halfToday(){const d=today();return Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.date===d&&CHARS[x.voice]).map(x=>{const R=halfRecord(x.sp,x.voice,x.mk);return{...x,rec:R,official:R.ok&&x.price!=null};});}
 function halfCardHtml(){const T=halfToday();if(!T.length)return'';const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');
   const off=T.filter(x=>x.official);const by={};T.forEach(x=>{const k=x.sp+'|'+x.pick+'|'+x.game;(by[k]=by[k]||{x,v:[]}).v.push(x.voice);});
   const top=Object.values(by).sort((a,b)=>b.v.length-a.v.length).slice(0,6);
   return`<div class="tkt" style="margin-top:8px"><h3>🕐 Halves & 1st periods</h3>
     ${off.length?off.map(x=>`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)} — ${txtEsc(nm(x.voice))} ${x.rec.w}-${x.rec.l} in this market</div>`).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls at ${Math.round(HALF_OK.p*100)}%+ in profit, per sport and market. Learning from tonight.</div>`}
     <details style="margin-top:4px"><summary class="sub">Most-agreed half calls today (${T.length} calls)</summary><div class="mono" style="font-size:10.5px">${top.map(o=>`<div>${txtEsc(o.x.pick)} ${tcSgn(o.x.price)} · ${txtEsc(o.x.game)} — ${o.v.length} characters</div>`).join('')}</div></details></div>`;}
-function halfRecordsHtml(sp){const L=Object.values(get(HALF_KEY,{})||{}).filter(x=>x.graded&&x.hit!=null&&(!sp||sp==='all'||x.sp===sp));
+function halfRecordsHtml(sp){const L=Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.graded&&x.hit!=null&&(!sp||sp==='all'||x.sp===sp));
   const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');const by={};L.forEach(x=>{const k=x.voice;const r=by[k]=by[k]||{};const m=x.mk.replace(/^(h1|p1)/,'');const c=r[m]=r[m]||{w:0,l:0,u:0};x.hit?c.w++:c.l++;c.u+=x.units||0;});
   const cell=c=>c?`${c.w}-${c.l} <span style="font-size:9.5px">${c.u>=0?'+':''}${c.u.toFixed(1)}u</span>`:'—';
   return`<div class="tkt"><h3>🕐 Half / 1st-period records</h3><div class="sub">Official once a character goes ${HALF_OK.n}+ calls at ${Math.round(HALF_OK.p*100)}%+ in profit in that sport and market.</div>
@@ -2812,7 +2815,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261028f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261030a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -2963,7 +2966,11 @@ const _LZM='\u0001LZ';
 function _dec(raw){if(raw==null||raw==='')return undefined;
   if(raw.charCodeAt(0)===1&&raw.startsWith(_LZM)){const j=LZString.decompressFromUTF16(raw.slice(_LZM.length));return j==null?undefined:JSON.parse(j);}
   return JSON.parse(raw);}
-function _enc(json){if(json.length<8000)return json;
+/* v2.80 · with the big store on there's no 5 MB shelf to squeeze into, so big values are stored as plain text:
+   no LZ packing on write (200 ms+ on a phone for the ledger) and no unpacking on every page load (~1 s on a phone).
+   Packed values already stored still read fine and are written back plain the next time they change. */
+const _NOPACK=()=>{try{return typeof window!=='undefined'&&!!window.D4_STORE&&window.D4_STORE.on();}catch(e){return false;}};
+function _enc(json){if(json.length<8000||_NOPACK())return json;
   try{const c=_LZM+LZString.compressToUTF16(json);return c.length<json.length*0.9?c:json;}catch(e){return json;}}
 /* v1.85 · the decompression cache. Every get() of a compressed store ran the
    full LZ decompressor — and grading reads the game archive once PER LEG, so a
@@ -2996,12 +3003,12 @@ if(typeof window!=='undefined')window.addEventListener('storage',e=>{try{if(e.ke
 function lsKeys(){const ks=[];for(let i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));if(WB_PEND.size){const S=new Set(ks);WB_PEND.forEach((p,k)=>{if(!S.has(k))ks.push(k);});}return ks;}
 function wbStore(k,json,packed){const stored=packed!=null&&(_LZM+packed).length<json.length*0.9?_LZM+packed:json;localStorage.setItem(k,stored);_DEC_C.set(k,{raw:stored,j:json});}
 function wbFlushSoon(){WB_T=null;WB_PEND.forEach((p,k)=>{if(p.busy===p.ver)return;p.busy=p.ver;const ver=p.ver,json=p.json;
-    (typeof lzOff==='function'?lzOff('c16',json):Promise.resolve(LZString.compressToUTF16(json))).then(packed=>{
+    (_NOPACK()?Promise.resolve(null):typeof lzOff==='function'?lzOff('c16',json):Promise.resolve(LZString.compressToUTF16(json))).then(packed=>{
       if((WB_WROTE.get(k)||0)>=ver)return;const cur=WB_PEND.get(k);if(!cur||cur.ver<ver)return;   /* written already, or dropped */
       try{wbStore(k,json,packed);WB_WROTE.set(k,ver);if(cur.ver===ver)WB_PEND.delete(k);else if(!WB_T)WB_T=setTimeout(wbFlushSoon,1200);}
       catch(e){wbFallback(k);}}).catch(()=>wbFallback(k));});}
 /* everything pending, written now on this thread (leaving the page, or before a quota recovery) */
-function wbFlushNow(){const all=[...WB_PEND.entries()];all.forEach(([k,p])=>{try{if((WB_WROTE.get(k)||0)>=p.ver){WB_PEND.delete(k);return;}wbStore(k,p.json,LZString.compressToUTF16(p.json));WB_WROTE.set(k,p.ver);WB_PEND.delete(k);}catch(e){wbFallback(k);}});}
+function wbFlushNow(){const all=[...WB_PEND.entries()];all.forEach(([k,p])=>{try{if((WB_WROTE.get(k)||0)>=p.ver){WB_PEND.delete(k);return;}wbStore(k,p.json,_NOPACK()?null:LZString.compressToUTF16(p.json));WB_WROTE.set(k,p.ver);WB_PEND.delete(k);}catch(e){wbFallback(k);}});}
 /* a packed write that failed (storage full): the old synchronous path, which frees space step by step */
 function wbFallback(k){const p=WB_PEND.get(k);if(!p)return;WB_PEND.delete(k);WB_SYNC++;try{_setPayload(k,p.json);WB_WROTE.set(k,p.ver);}finally{WB_SYNC--;}}
 if(typeof window!=='undefined'){window.addEventListener('pagehide',wbFlushNow);window.addEventListener('beforeunload',wbFlushNow);
@@ -3013,10 +3020,13 @@ function get(k,d){try{const wp=WB_PEND.get(k);if(wp){const v=JSON.parse(wp.json)
    moment set() writes that key, so it's never stale. Callers must not mutate
    what they get back — use get() when you intend to change and save. */
 const RO_CACHE={};
-function roGet(k,d,ttl){const c=RO_CACHE[k];if(c&&Date.now()-c.ts<(ttl||30e3))return c.v===undefined?d:c.v;const v=get(k,d);RO_CACHE[k]={ts:Date.now(),v};return v;}
+/* v2.80 · valid for exactly as long as the stored text is unchanged (not a 30-second timer): the ledger was being
+   re-parsed every 30 s by whoever asked next — a quarter-second stall each time on a desktop, a second on a phone. */
+function roGet(k,d,ttl){let raw=null;try{const wp=WB_PEND.get(k);raw=wp?wp.json:localStorage.getItem(k);}catch(e){}const c=RO_CACHE[k];
+  if(c&&c.raw===raw&&raw!==null)return c.v===undefined?d:c.v;const v=get(k,d);RO_CACHE[k]={ts:Date.now(),v,raw};return v;}
 /* One-time on load: re-save large uncompressed values compressed, which
    frees space immediately on a device that is already full. */
-function compactStorage(){let saved=0;
+function compactStorage(){let saved=0;if(_NOPACK())return 0;
   try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||!k.startsWith('d4.'))continue;
     const raw=localStorage.getItem(k);if(!raw||raw.length<8000||raw.startsWith(_LZM))continue;
     const c=_enc(raw);if(c!==raw){try{localStorage.setItem(k,c);saved+=raw.length-c.length;}catch(e){}}}}catch(e){}
@@ -3112,6 +3122,7 @@ function pruneDatedMap(key,keepDays){
   }catch(e){return false}
 }
 function set(k,v){
+  if(typeof CHAR_KEEP!=='undefined'&&CHAR_KEEP&&!CHAR_KEEP.has(k))CHAR_GEN++;
   if(typeof LS!=='undefined'&&k===LS.allfinals&&typeof ALLF_C!=='undefined')ALLF_C=null;
   if(RO_CACHE[k])delete RO_CACHE[k];if(typeof ARC_RO!=='undefined'&&ARC_RO[k])delete ARC_RO[k];
   if(typeof VOICES_KEY!=='undefined'&&k===VOICES_KEY&&typeof CHAR_BRAIN_TS!=='undefined')CHAR_BRAIN_TS=0;
@@ -8476,7 +8487,7 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    wrong day — so the search covers the ticket date through a week after it. */
 const FBP_FOUND={},FBP_MISS={};
 function fbpEventId(leg,ticketDate){
-  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.79.1 · NBA legs were looked up as NFL games */
+  const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.80.0 · NBA legs were looked up as NFL games */
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
@@ -8598,7 +8609,7 @@ const FB_GEN=[[/^passing\s+(?:tds?|touchdowns?)(?:\s+thrown)?$/i,'passing','TD',
   [/^receiving\s+(?:tds?|touchdowns?)$/i,'receiving','TD',null,'receiving TDs'],[/^longest\s+reception$/i,'receiving','LONG',null,'longest reception'],[/^targets$/i,'receiving','TGTS',null,'targets'],
   [/^(?:total\s+)?tackles(?:\s*(?:\+|and)\s*assists)?$/i,'defensive','TOT',null,'tackles'],[/^solo\s+tackles$/i,'defensive','SOLO',null,'solo tackles'],[/^tackles\s+for\s+loss$/i,'defensive','TFL',null,'TFL'],
   [/^(?:passes\s+defended|pass\s+deflections)$/i,'defensive','PD',null,'passes defended']];
-function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.79.1 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
+function fbGenStat(phrase){const t=String(phrase||'').trim().replace(/\s+made$/i,'').replace(/^(?:yds|yards)\s+(?=longest)/i,'');   /* v2.80.0 · "C. Lamb 25+ yds Longest reception" */for(const [re,cat,field,part,label] of FB_GEN)if(re.test(t))return{cat,field,part,label};return null;}
 function gradeFBSpecialProp(leg,box,R){
   if(leg.fbProp.stat==='gen'){const P=leg.fbProp;const live=box.state==='in';let val=0,found=null,anywhere=false;
     Object.values(box.teamStats).forEach(st=>{['passing','rushing','receiving','defensive','kr','pr','ints'].forEach(c=>{if(fbpFindRow(st[c]||[],P.player))anywhere=true;});
@@ -18874,13 +18885,23 @@ function bkLedger(force){if(!force&&BK_C&&Date.now()-BK_C.ts<60e3)return BK_C.v;
   const weeks=[];for(let i=0;i<8;i++){const w0=dayShift(ws,-7*i);const RF=bkRunWeek(w0,V,CP,BYV,CPX);
     /* v2.77 · the weekly race is played to WIN the week (money resets Tuesday): aggressive staking, leans included, trailers press, every parlay booked.
        The Banker's multiplier still reads the flat 2% ledger (RF), so real-money weighting doesn't swing with the race. */
-    let R=RF;try{if(typeof lgChaseWeek==='function')R=lgChaseWeek(w0,BYV,CP,CPX)||RF;}catch(e){console.warn('chase week',e);}
+    let R=RF;try{if(i<2&&typeof lgChaseWeek==='function')R=lgChaseWeek(w0,BYV,CP,CPX)||RF;}catch(e){console.warn('chase week',e);}   /* the race matters for this week and last week's captains; older weeks keep the flat ledger */
     const act=Object.values(R).filter(x=>x.n);weeks.push({ws:w0,R,RF,leader:act.sort((a,b)=>b.br-a.br)[0]||null});}
   /* the Banker's verdict: pooled last 4 weeks, only with proof */
   const mult={};CHAR_ORDER.forEach(v=>{let n=0,pnl=0;weeks.slice(0,4).forEach(W=>{const x=(W.RF||W.R)[v];n+=x.n;pnl+=x.br-100;});
     const roi=n?pnl/(n*2):0;mult[v]=n>=30?Math.max(0.6,Math.min(1.4,1+roi*3)):1;});
   const v={ws,weeks,mult};BK_C={ts:Date.now(),v};return v;}
-function bankerMult(v){try{return bkLedger().mult[v]||1;}catch(e){return 1;}}
+/* v2.80 · the Banker's weight needs only the last 4 weeks of the flat ledger — not the whole 8-week race board, which
+   every board paint was rebuilding (0.4 s on a phone) */
+let BKM_C=null;
+function bkMultTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+bkWeekStart();if(BKM_C&&BKM_C.sig===sig&&Date.now()-BKM_C.ts<10*60e3)return BKM_C.m;
+  if(BK_C&&Date.now()-BK_C.ts<60e3&&BK_C.v&&BK_C.v.mult){BKM_C={sig,ts:Date.now(),m:BK_C.v.mult};return BKM_C.m;}
+  const CP=roGet(CPAR_KEY,{},30e3)||{},CPX=(typeof CPX_KEY!=='undefined'?roGet(CPX_KEY,{},30e3):null)||{};const ws=bkWeekStart();const lo=dayShift(ws,-28);
+  const BYV={};for(const x of V){if(x&&x.graded&&x.date>=lo)(BYV[x.voice]||(BYV[x.voice]=[])).push(x);}
+  const W=[];for(let i=0;i<4;i++)W.push(bkRunWeek(dayShift(ws,-7*i),V,CP,BYV,CPX));
+  const m={};CHAR_ORDER.forEach(v=>{let n=0,pnl=0;W.forEach(R=>{const x=R[v];if(x){n+=x.n;pnl+=x.br-100;}});const roi=n?pnl/(n*2):0;m[v]=n>=30?Math.max(0.6,Math.min(1.4,1+roi*3)):1;});
+  BKM_C={sig,ts:Date.now(),m};return m;}
+function bankerMult(v){try{return bkMultTable()[v]||1;}catch(e){return 1;}}
 /* Kelly-growth sizing for a list of legs {p,dec} already ranked best-first */
 function bkSize(legs,kMin,kMax){kMin=kMin||2;kMax=Math.min(kMax||5,legs.length);let best=null;
   for(let k=kMin;k<=kMax;k++){const L=legs.slice(0,k);const P=L.reduce((a,x)=>a*x.p,1),D=L.reduce((a,x)=>a*x.dec,1);
@@ -18989,7 +19010,7 @@ function cparGrade(){const S=get(CPAR_KEY,{})||{};let n=0;
       if(!r||r.live)return;if(r.push){l.push=true;n++;}else if(r.hit===true||r.hit===false){l.hit=r.hit;n++;}});
     const live=P.legs.filter(l=>!l.push);if(live.some(l=>l.hit===false)){P.done=true;P.won=false;}else if(live.every(l=>l.hit===true)){P.done=true;P.won=live.length>0;}});});
   if(n)set(CPAR_KEY,S);return n;}
-function cparRecord(voice,skill){const S=get(CPAR_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=0;
+function cparRecord(voice,skill){const S=roGet(CPAR_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=0;
   /* v2.43 · skill tickets (under the 70% rule) keep their own record; the official one is untouched */
   Object.values(S).forEach(D=>{const P=D&&D.locked&&(D.by||{})[voice];if(!P||!!P.skill!==!!skill)return;
     P.legs.forEach(x=>{if(x.hit===true)lw++;else if(x.hit===false)ll++;});
@@ -19351,13 +19372,35 @@ function pickWhyPlayers(x,team,opp,A,H){const sp=x.sp,B=[],S=[];const d=String(x
   return{B,S};}
 
 /* ══ v2.28 · AUTOPILOT — every learning loop, once every 6 hours and before every eval ═══ */
+/* ══ v2.80 · COOPERATIVE SLICING ═══════════════════════════════════════════════════════════════════════
+   A long job written as a generator yields at natural break points (a day, a group); genSlice runs it ~25 ms at a
+   time and hands the screen back in between, so the phone never freezes. genDrain runs the same job straight through
+   (the old synchronous behaviour, kept for every existing caller and test). */
+function deskIdle(ms){return new Promise(r=>{try{if(typeof requestIdleCallback==='function'&&!document.hidden){requestIdleCallback(()=>r(),{timeout:ms||500});return;}}catch(e){}setTimeout(r,8);});}
+/* v2.80 · PROGRESSIVE CARDS — a board paints its first few game cards at once and the rest one per idle slot (each
+   card is the full read: every character, the brain, the blend… ~0.3 s apiece on a phone; ten at once froze the
+   board for 3 s). A card shows its previous paint (or a quick row) until its fresh one lands, so nothing jumps. */
+var LZ={tok:0,n:0,first:3,q:[],prev:{}};
+function lzBegin(first){LZ.tok++;LZ.n=0;LZ.q=[];LZ.first=first==null?3:first;return LZ.tok;}
+function lzCard(id,fn,ph,now){if(now||LZ.n++<LZ.first||typeof document==='undefined'||/jsdom/i.test(navigator.userAgent||'')){const h=fn();LZ.prev[id]=h;return h;}
+  const k='lz'+LZ.tok+'_'+LZ.q.length;LZ.q.push({k,id,fn});return`<div id="${k}">${LZ.prev[id]||ph||'<div class="tkt" style="opacity:.55;padding:12px">Loading…</div>'}</div>`;}
+function lzFlush(after){const tok=LZ.tok,Q=LZ.q.slice();(async()=>{for(const it of Q){await deskIdle(250);if(LZ.tok!==tok)return;const el=document.getElementById(it.k);if(!el)continue;
+    let h='';try{h=it.fn();}catch(e){console.warn('card',e);continue;}if(LZ.tok!==tok)return;LZ.prev[it.id]=h;const y=window.scrollY;el.outerHTML=h;if(window.scrollY!==y)window.scrollTo(0,y);}
+  if(after&&LZ.tok===tok)try{after();}catch(e){}})();}
+/* the bookkeeping after a board paints (snapshot, archive, call ledger, grading): each chore in its own idle slot, in
+   order; a newer paint of the same board takes over the queue */
+var CHORE_TOK={};
+function deskChores(key,fns){const tok=(CHORE_TOK[key]=(CHORE_TOK[key]||0)+1);(async()=>{for(const f of fns){await deskIdle(400);if(CHORE_TOK[key]!==tok)return;try{f();}catch(e){console.warn(key+' chore',e);}}})();}
+function genDrain(g){let r;while(!(r=g.next()).done){}return r.value;}
+async function genSlice(g,budget){budget=budget||25;const now=()=>(typeof performance!=='undefined'?performance.now():Date.now());let t=now();
+  for(;;){const r=g.next();if(r.done)return r.value;if(now()-t>budget){await deskIdle();t=now();}}}
 const AP_KEY='d4.autopilot';let AP_BUSY=false;
 const apNum=v=>typeof v==='number'?v:v&&typeof v==='object'?(v.n!=null?v.n:v.markets!=null?v.markets:Object.keys(v).length):v?1:0;
 const AP_STEPS=[
   ['learn','Absorb finals','Every final from every sport: team biases, source weights, volatility, character calls, outside picks, the Best card, props.',()=>brainLearnAll(true)],
   ['voices','Grade characters','Each character\'s calls graded against the finals.',()=>gradeVoices()],
   ['factors','Situation tests','Re-tests every situation tag (rest, travel, talent, form…) on graded results; proven ones adjust the Sim.',()=>{FAC_C=null;let n=0;LEARN_SPS.forEach(sp=>{try{n+=Object.keys(factorTable(sp)).length;}catch(e){}});return n;}],
-  ['feel','Inner feeling','Re-tunes how much each character\'s self-awareness (streaks, blacklists, splits) is trusted.',()=>feelTune()],
+  ['feel','Inner feeling','Re-tunes how much each character\'s self-awareness (streaks, blacklists, splits) is trusted.',()=>feelTuneSoon()],
   ['chem','Chemistry','Pairs: who wins together, who wins the argument.',()=>{CHEM_C=null;return chemIdx().markets;}],
   ['squads','Squads','3-, 4- and 5-character squads, proven in both halves of the history.',()=>squadCompute()],
   ['scout','Scout probation','Checks whether the Scout has earned a vote.',()=>scoutProbation().n],
@@ -19377,10 +19420,17 @@ async function apRunSoft(why){if(AP_BUSY||AP_SOFT)return null;const L0=get(AP_KE
   AP_SOFT=true;const t0=Date.now();const steps=[];
   const idle=()=>new Promise(r=>{try{if(typeof requestIdleCallback==='function'){requestIdleCallback(()=>r(),{timeout:2000});return;}}catch(e){}setTimeout(r,40);});
   try{for(const[k,,,f]of AP_STEPS.slice()){await idle();const L=get(AP_KEY,[])||[];if(L[0]&&L[0].ts>t0)return null;if(AP_BUSY)return null;
-      const t=Date.now();try{const v=f();steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}}}
+      const t=Date.now();try{let v=f();if(v&&typeof v.then==='function')v=await v;steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}}}
   finally{AP_SOFT=false;}
   const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps,soft:1};const L=get(AP_KEY,[])||[];L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
 let AP_SOFT=false;
+/* v2.80 · the master evaluation's full run, step by step with the screen breathing in between (the old apRun did
+   every learning loop in one go — several seconds frozen on a phone right when you tap the button) */
+async function apRunAsync(force,why){if(AP_BUSY)return null;const L0=get(AP_KEY,[])||[];if(!force&&L0[0]&&Date.now()-L0[0].ts<6*36e5)return null;
+  while(AP_SOFT){await deskIdle(300);}AP_BUSY=true;const t0=Date.now();const steps=[];
+  try{for(const[k,,,f]of AP_STEPS.slice()){await deskIdle();const t=Date.now();try{let v=f();if(v&&typeof v.then==='function')v=await v;steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}
+      catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}}}
+  finally{AP_BUSY=false;}const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps,async:1};const L=get(AP_KEY,[])||[];L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__){window.addEventListener('load',()=>setTimeout(()=>{apRunSoft('daily').catch(()=>{});},20000));setInterval(()=>{if(!document.hidden)apRunSoft('every 6h').catch(()=>{});},36e5);}
 
 /* ══ v2.28 · THE ENGINE ROOM — the complex stuff, proving it's absorbing ═════ */
@@ -21355,7 +21405,7 @@ function seasonParse(sp,j){const teams={};const META={};const R=SEASON_RANGE[sp]
 async function seasonStatsLoad(sp,force){const S=get('d4.seasonstats',{})||{};if(!force&&S[sp]&&S[sp].d===today())return S[sp].teams;
   const y=new Date().getFullYear();const url='https://site.api.espn.com/apis/v2/sports/'+SEASON_PATH[sp]+'/standings'+(sp==='ncaaf'?'?group=80':'');
   try{const j=await fetch(url).then(r=>r.json());const teams=seasonParse(sp,j);if(Object.keys(teams).length){S[sp]={d:today(),teams,meta:teams.__meta||{}};set('d4.seasonstats',S);try{if(typeof PWR_C!=='undefined')PWR_C[sp]=null;}catch(e){}}return teams;}catch(e){return(S[sp]||{}).teams||{};}}
-function seasonTeam(sp,team){const S=get('d4.seasonstats',{})||{};return((S[sp]||{}).teams||{})[team]||null;}
+function seasonTeam(sp,team){const S=roGet('d4.seasonstats',{})||{};return((S[sp]||{}).teams||{})[team]||null;}
 if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(async()=>{try{for(const sp of Object.keys(SEASON_PATH))await seasonCalLoad(sp);liveSports().forEach(sp=>seasonStatsLoad(sp));}catch(e){}},6000));
 function facPyth(sp,team){const T=seasonTeam(sp,team);
   if(T&&T.gp>=8&&T.pf>0&&T.pa>0){const x=FAC_PYTH[sp]||2;const exp=Math.pow(T.pf,x)/(Math.pow(T.pf,x)+Math.pow(T.pa,x));return{actual:T.w/T.gp,exp,n:T.gp,src:'season'};}
@@ -22349,7 +22399,7 @@ body.bnav #dToastBox{bottom:calc(84px + env(safe-area-inset-bottom))!important}
 body.bnav .slip{bottom:var(--bnh,64px)!important;z-index:79!important;padding-bottom:11px!important;border-radius:14px 14px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.45)}
 .slip.expanded{display:none!important}
 .slip-scrim{z-index:85!important}.slip-sheet{z-index:86!important}
-/* v2.79.1 · a closed sheet is hidden outright (not just slid below the screen): when the page got zoomed out it showed mid-screen on every tab. And nothing may widen the page sideways. */
+/* v2.80.0 · a closed sheet is hidden outright (not just slid below the screen): when the page got zoomed out it showed mid-screen on every tab. And nothing may widen the page sideways. */
 .slip-sheet:not(.on){visibility:hidden;transition:transform .3s,visibility 0s .3s}.slip-sheet.on{visibility:visible}
 html,body{overflow-x:hidden;max-width:100%}
 body.bnav.slipon main{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
@@ -23025,6 +23075,10 @@ function feelRoll(M,x,r){try{const d=String(x.date).slice(0,10);if(d){const D=M.
 function feelBackfill(){if(get('d4.migr.feel1',false))return 0;const S=get(SPLIT_KEY,{})||{};const V=(get(VOICES_KEY,[])||[]).filter(x=>x&&x.sr&&x.graded).sort((a,b)=>String(a.date).localeCompare(String(b.date)));let n=0;
   V.forEach(x=>{const M=((S[x.sp]||{})[x.voice]||{})[x.market];if(!M)return;feelRoll(M,x,x.push?2:x.hit===true?0:1);n++;});set(SPLIT_KEY,S);set('d4.migr.feel1',true);if(typeof CH_IDX!=='undefined')CH_IDX=null;return n;}
 if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(()=>{try{feelBackfill();}catch(e){console.warn('feel backfill',e);}},3000));
+/* v2.80 · graded calls not yet rolled into the permanent record, grouped once per ledger (every call's feeling used to
+   walk the whole ledger to find its own few — 15,000 × every call on the board) */
+const FEEL_UNR=new WeakMap();
+function feelUnrolled(V){let G=FEEL_UNR.get(V);if(G)return G;G={};V.forEach(x=>{if(!x||x.sr||!x.graded||x.push||x.hit==null)return;(G[x.voice+'|'+x.sp+'|'+x.market]||(G[x.voice+'|'+x.sp+'|'+x.market]=[])).push(x);});FEEL_UNR.set(V,G);return G;}
 /* the buckets for one call, from the permanent record + whatever hasn't rolled yet */
 function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet()[c.sp]||{})[c.voice]||{})[c.market]||{};const tot=c.market==='total';
   const [aw,hm]=String(c.game).split('@');const team=tot?null:(c.side==='home'?hm:aw);const role=splitRole(c);const pair=splitPair(c.game);const d0=String(c.date||today()).slice(0,10);
@@ -23042,7 +23096,7 @@ function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet
   (c.tags||[]).forEach(tg=>{const a=cell((M.tg||{})[tg]);const lab={'pres:up':'siding with the bigger name','pres:down':'siding against the bigger name','ser:with':'with the series leader','ser:against':'against the series leader'}[tg]||tg;
     if(!B.tag||a[0]+a[1]>B.tag[0]+B.tag[1])B.tag=Object.assign(a,{lab});});
   /* calls graded but not yet rolled into the permanent record */
-  let seq=M.seq||'';V.forEach(x=>{if(x.sr||!x.graded||x.push||x.hit==null||x.voice!==c.voice||x.sp!==c.sp||x.market!==c.market||x.id===c.id)return;const w=x.hit?1:0,l=1-w;all[0]+=w;all[1]+=l;
+  let seq=M.seq||'';(feelUnrolled(V)[c.voice+'|'+c.sp+'|'+c.market]||[]).forEach(x=>{if(x.id===c.id)return;const w=x.hit?1:0,l=1-w;all[0]+=w;all[1]+=l;
     const xd=String(x.date).slice(0,10);if(xd<d0){if(xd>=dayShift(d0,-3))acc('d3',w,l);if(xd>=dayShift(d0,-7))acc('d7',w,l);if(xd>=dayShift(d0,-30))acc('d30',w,l);seq+=w?'W':'L';}
     if(team&&splitTeam(x)===team){acc('team',w,l);if(x.side===c.side)acc('tw',w,l);if(role&&splitRole(x)===role)acc('tr',w,l);}
     if(x.side===c.side)acc('where',w,l);if(role&&splitRole(x)===role)acc('role',w,l);});
@@ -23067,8 +23121,9 @@ function feelChip(c,V){let F=null;try{F=charFeel(c,V);}catch(e){return'';}if(!F)
    Walk-forward and incremental (one pass per character+sport+market, day by day, each call
    judged on only the days before it). Weights are learned on the older 60% of days and
    checked on the newer 40%; they're trusted in the Brain only if that holdout improved. */
-function feelReplay(V){const G={};V.forEach(x=>{if(!x||!x.graded||x.push||x.hit==null||!CHARS[x.voice]||!['ml','spread','total'].includes(x.market))return;(G[x.voice+'|'+x.sp+'|'+x.market]||(G[x.voice+'|'+x.sp+'|'+x.market]=[])).push(x);});
-  const rows=[];Object.values(G).forEach(L=>{L.sort((a,b)=>String(a.date).localeCompare(String(b.date)));const C={all:[0,0],team:{},tw:{},tr:{},where:{},role:{},h2h:{},tg:{},day:{}};let seq='';
+function feelReplay(V){return genDrain(feelReplayG(V));}
+function* feelReplayG(V){const G={};V.forEach(x=>{if(!x||!x.graded||x.push||x.hit==null||!CHARS[x.voice]||!['ml','spread','total'].includes(x.market))return;(G[x.voice+'|'+x.sp+'|'+x.market]||(G[x.voice+'|'+x.sp+'|'+x.market]=[])).push(x);});
+  const rows=[];for(const L of Object.values(G)){yield;L.sort((a,b)=>String(a.date).localeCompare(String(b.date)));const C={all:[0,0],team:{},tw:{},tr:{},where:{},role:{},h2h:{},tg:{},day:{}};let seq='';
     const inc=(o,k,w)=>{const a=o[k]||(o[k]=[0,0]);a[w?0:1]++;};const get2=(o,k)=>o[k]?[o[k][0],o[k][1]]:[0,0];
     let i=0;while(i<L.length){const d=String(L[i].date).slice(0,10);let j=i;while(j<L.length&&String(L[j].date).slice(0,10)===d)j++;
       for(let q=i;q<j;q++){const c=L[q];if(C.all[0]+C.all[1]>=8){const tot=c.market==='total';const [aw,hm]=String(c.game).split('@');const team=tot?null:(c.side==='home'?hm:aw);const role=splitRole(c);const B={};
@@ -23081,21 +23136,32 @@ function feelReplay(V){const G={};V.forEach(x=>{if(!x||!x.graded||x.push||x.hit=
           rows.push({d,y:c.hit?1:0,base:feelBase(c,C.all),B});}}
       for(let q=i;q<j;q++){const c=L[q];const w=!!c.hit;C.all[w?0:1]++;inc(C.day,d,w);seq+=w?'W':'L';const tot=c.market==='total';const [aw,hm]=String(c.game).split('@');const team=tot?null:(c.side==='home'?hm:aw);const role=splitRole(c);
         if(team){inc(C.team,team,w);inc(C.tw,team+'|'+c.side,w);if(role)inc(C.tr,team+'|'+role,w);}inc(C.where,c.side,w);if(role)inc(C.role,role,w);inc(C.h2h,splitPair(c.game)+'|'+(tot?c.side:team),w);(c.tags||[]).forEach(tg=>inc(C.tg,tg,w));}
-      i=j;}});
+      i=j;}}
   return rows;}
-function feelTune(force){const T=get(FEEL_TUNE_KEY,null);if(!force&&T&&T.day===today())return T;
-  const rows=feelReplay(get(VOICES_KEY,[])||[]);const days=[...new Set(rows.map(r=>r.d))].sort();
-  const br=(R,W)=>{let s=0;R.forEach(r=>{const p=feelCore(r.base,r.B,W).p;s+=(r.y-p)**2;});return R.length?s/R.length:null;};
-  const fit=R=>{const W={};FEEL_KEYS.forEach(k=>W[k]=0);FEEL_KEYS.forEach(k=>{let best=0,bb=Infinity;for(let a=0;a<=1.0001;a+=0.1){const W2={...W,[k]:a};const b=br(R,W2);if(b<bb-1e-7){bb=b;best=+a.toFixed(1);}}W[k]=best;});return W;};
+function feelTune(force){return genDrain(feelTuneG(force));}
+function feelTuneSoon(force){return genSlice(feelTuneG(force));}
+function* feelTuneG(force){const T=get(FEEL_TUNE_KEY,null);if(!force&&T&&T.day===today())return T;
+  const rows=yield* feelReplayG(roGet(VOICES_KEY,[])||[]);const days=[...new Set(rows.map(r=>r.d))].sort();yield;
+  /* v2.80 · each row's per-check pull is fixed — only the weights change during the search — so it's worked out once.
+     Same answer as feelCore, ~20x less work (the grid search ran 1.8M feelCore calls: a 20-second freeze on a phone). */
+  const NK=FEEL_KEYS.length,KI={};FEEL_KEYS.forEach((k,i)=>KI[k]=i);
+  let ri=0;for(const r of rows){if(++ri%1500===0)yield;const D=new Float64Array(NK);const lb=logit(r.base);let black=false;
+    Object.entries(r.B).forEach(([k,v])=>{if(!v||KI[k]==null)return;const w=v[0],l=v[1],n=w+l;
+      if(k==='streak'){if(Math.abs(v.s||0)>=3){const q=v.s>0?Math.min(0.62,0.5+0.02*v.s):Math.max(0.38,0.5+0.02*v.s);D[KI.streak]=logit(q)-logit(0.5);}return;}
+      if(n<FEEL_MIN)return;const q=(w+FEEL_KB*r.base)/(n+FEEL_KB);D[KI[k]]=logit(q)-lb;
+      if((k==='team'||k==='tw'||k==='tr')&&l>=5&&(w+1)/(n+2)<=0.30)black=true;});
+    r.D=D;r.lb=lb;r.black=black;}
+  const br=(R,W)=>{const wv=FEEL_KEYS.map(k=>W[k]||0);let s=0;for(const r of R){let dz=0;for(let i=0;i<NK;i++)if(wv[i])dz+=wv[i]*r.D[i];dz=Math.max(-FEEL_CAP,Math.min(FEEL_CAP,dz));let p=sigm(r.lb+dz);if(r.black)p=Math.min(p,0.45);s+=(r.y-p)**2;}return R.length?s/R.length:null;};
+  function* fit(R){const W={};FEEL_KEYS.forEach(k=>W[k]=0);for(const k of FEEL_KEYS){yield;let best=0,bb=Infinity;for(let a=0;a<=1.0001;a+=0.1){const W2={...W,[k]:a};const b=br(R,W2);if(b<bb-1e-7){bb=b;best=+a.toFixed(1);}}W[k]=best;}return W;}
   let out={day:today(),n:rows.length,W:{...FEEL_DEFAULT_W},trusted:false,gain:null,why:'not enough graded history yet'};
-  if(rows.length>=400&&days.length>=4){const cut=days[Math.floor(days.length*0.6)];const tr=rows.filter(r=>r.d<cut),te=rows.filter(r=>r.d>=cut);const Wt=fit(tr);
-    const b0=br(te,Object.fromEntries(FEEL_KEYS.map(k=>[k,0]))),b1=br(te,Wt);const gain=b0-b1;const Wfull=fit(rows);
+  if(rows.length>=400&&days.length>=4){const cut=days[Math.floor(days.length*0.6)];const tr=rows.filter(r=>r.d<cut),te=rows.filter(r=>r.d>=cut);const Wt=yield* fit(tr);
+    const b0=br(te,Object.fromEntries(FEEL_KEYS.map(k=>[k,0]))),b1=br(te,Wt);const gain=b0-b1;const Wfull=yield* fit(rows);
     /* live weights: only checks that earned weight on the older days (and so were tested on the newer ones), at their full-history strength */
     const Wall=Object.fromEntries(FEEL_KEYS.map(k=>[k,Wt[k]>0?Wfull[k]:0]));
     out={day:today(),n:rows.length,nTest:te.length,W:Wall,Wtrain:Wt,gain:+(gain*1e4).toFixed(1),trusted:gain>=0.0005&&te.length>=300,base:+b0.toFixed(4),feel:+b1.toFixed(4),
       why:gain>=0.0005?`checks improved the newer days' accuracy by ${(gain*1e4).toFixed(1)} bp`:`checks didn't beat the plain record on the newer days (${(gain*1e4).toFixed(1)} bp) — shown, not used by the Brain`};}
   try{set(FEEL_TUNE_KEY,out);}catch(e){}return out;}
-if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(()=>{try{feelTune();}catch(e){console.warn('feel tune',e);}},20000));
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__)window.addEventListener('load',()=>setTimeout(()=>{feelTuneSoon().catch(e=>console.warn('feel tune',e));},20000));
 function feelTuneHtml(){const T=roGet(FEEL_TUNE_KEY,null,60e3);if(!T)return'';const W=T.W||{};
   const cells=FEEL_KEYS.map(k=>`<span style="color:${(W[k]||0)>0?'var(--win)':'var(--mute)'}">${FEEL_LAB[k]} ${(W[k]||0).toFixed(1)}</span>`).join(' · ');
   return`<div class="tkt"><h3>💭 Inner feeling — what the characters trust about themselves</h3><div class="sub" style="font-size:10px">Re-learned daily from ${T.n||0} graded calls, walk-forward. ${txtEsc(T.why||'')}${T.trusted?' — the Brain now listens to it.':''}</div>
@@ -23693,7 +23759,7 @@ async function tgwResend(btn){const P=tgPosts();const d=today();const p=P[d]||P[
   else{if(btn)btn.textContent='Failed — '+((r&&r.reason)||'error');}}
 async function tgwRunNow(){const{toks}=await tgwGh();const repo=TGW_WORKER_REPO;let why=toks.length?'':'no GitHub token saved on this phone';for(const token of toks){const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/tg-autopilot.yml/dispatches`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})}).catch(()=>null);if(r&&(r.ok||r.status===204)){window.__tgwWhy='';return true;}
     why=!r?'no connection':r.status===403||r.status===404?'your GitHub token needs the "Actions: Read and write" permission':r.status===401?'GitHub token expired or wrong':'GitHub said '+r.status;}window.__tgwWhy=why;return false;}
-/* v2.79.1 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
+/* v2.80.0 · Run now answers in a toast (the card re-renders every few seconds, which wiped the button's text — it looked like nothing happened) */
 async function tgwRunNowTap(btn){if(btn){btn.disabled=true;btn.textContent='Starting…';}let ok=false;try{ok=await tgwRunNow();}catch(e){window.__tgwWhy=String(e&&e.message||e);}
   const msg=ok?'▶ Robot started — results in about a minute':"Couldn't start the robot: "+(window.__tgwWhy||'unknown')+'. It still runs on its own schedule.';
   try{deskToast(msg,ok?3500:7000);}catch(e){alert(msg);}if(btn){btn.disabled=false;btn.textContent='▶ Run now';}setTimeout(()=>{try{tgwRefreshStatus();}catch(e){}},70e3);}

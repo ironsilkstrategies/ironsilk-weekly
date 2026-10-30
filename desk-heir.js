@@ -66,12 +66,16 @@ const wvZ=(H,oc,mk)=>(oc!=null?H.a*wvLg(oc):0)+(mk!=null?(oc!=null?H.b:H.a+H.b)*
 const wvBins=()=>CONF_EDGES.slice(0,-1).map((lo,i)=>({lo,hi:CONF_EDGES[i+1],w:0,n:0,s:0}));
 /* walk-forward: every day is predicted only from the days before it; returns each call's
    prediction (graded and live) and the fitted state (beliefs, bias) for the family tree */
-function wvRun(V,H){const rows=V.filter(x=>x&&CHARS[x.voice]&&['ml','spread','total'].includes(x.market)&&x.price!=null&&!x.pre&&!x.push&&(x.graded?x.hit!=null:true))
+function wvRun(V,H){return genDrain(wvRunG(V,H));}
+function* wvRunG(V,H){const rows=V.filter(x=>x&&CHARS[x.voice]&&['ml','spread','total'].includes(x.market)&&x.price!=null&&!x.pre&&!x.push&&(x.graded?x.hit!=null:true))
     .map(x=>({x,d:String(x.date||'').slice(0,10)})).filter(r=>r.d).sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);
   const bias={},w={},cnt={},ownBins={},finBins={},pred=new Map();let lastD=null;const keep=Math.pow(0.5,1/Math.max(1,H.hl));
   const prior=(v,t)=>wvPrior(H,v,t);
-  const cal=(B,raw,K)=>{if(!B)return raw;const P=confPav(B);if(!P.length)return raw;const b=P.find(b=>raw>=b.lo&&raw<b.hi)||(raw<P[0].lo?P[0]:P[P.length-1]);return(b.w+K*raw)/(b.n+K);};
-  let i=0;while(i<rows.length){const d=rows[i].d,day=[];while(i<rows.length&&rows[i].d===d)day.push(rows[i++]);
+  /* v2.80 · the bins only change after a whole day is read, so each cell's pooled bins are worked out once per day
+     (they were re-pooled for every call — the bulk of a 5-second freeze on a phone). Same numbers. */
+  let PAVC=new Map();const pav=B=>{let P=PAVC.get(B);if(!P){P=confPav(B);PAVC.set(B,P);}return P;};
+  const cal=(B,raw,K)=>{if(!B)return raw;const P=pav(B);if(!P.length)return raw;const b=P.find(b=>raw>=b.lo&&raw<b.hi)||(raw<P[0].lo?P[0]:P[P.length-1]);return(b.w+K*raw)/(b.n+K);};
+  let i=0;while(i<rows.length){yield;const d=rows[i].d,day=[];while(i<rows.length&&rows[i].d===d)day.push(rows[i++]);PAVC=new Map();
     if(lastD){const gap=Math.max(1,Math.round((Date.parse(d)-Date.parse(lastD))/864e5));const f=Math.pow(keep,gap);
       Object.keys(bias).forEach(k=>{bias[k]*=f;});Object.keys(w).forEach(k=>{const[v,,t]=k.split('|');const p0=prior(v,t);w[k]=p0+(w[k]-p0)*f;});}
     lastD=d;
@@ -149,6 +153,18 @@ function heirRules(c,R){const e=R.end;if(e==='PROMOTE'&&!(c.heirs>=1&&(c.heirs>=
 let HEIR_MEMO=null,WV_MEMO={};
 function wvRunMemo(p,force){const sig=JSON.stringify(p);const o=WV_MEMO[sig];const d=today();if(!force&&o&&o.d===d&&Date.now()-o.ts<30*60e3)return o.R;
   const R=wvRun(roGet(VOICES_KEY,[],30e3)||[],p);WV_MEMO[sig]={d,ts:Date.now(),R};return R;}
+/* v2.80 · the walk-forwards run sliced (the screen breathes between days); then the judging reads them from memory */
+async function heirsRunAsync(force){if(typeof SAFE_MODE!=='undefined'&&SAFE_MODE)return heirsRun(false);const d=today();
+  if(!force&&HEIR_MEMO&&HEIR_MEMO.d===d&&Date.now()-HEIR_MEMO.ts<30*60e3)return HEIR_MEMO;
+  const V=roGet(VOICES_KEY,[],30e3)||[];const H=heirsAll();
+  /* the same births heirsRun would do, first — so every walk-forward it needs is already in memory */
+  {const seen=new Set();V.forEach(x=>{if(x&&CHARS[x.voice]&&['ml','spread','total'].includes(x.market))seen.add(x.voice+'|'+x.market);});let born=0;
+    seen.forEach(k=>{const[v,m]=k.split('|');const C=heirCell(H,v,m);const first=!(C.heirs||[]).length;
+      while((C.heirs||[]).filter(h=>h.st==='shadow').length<2){if(!heirSpawn(C,H,first||HEIR_BORN>d?HEIR_BORN:d,first?'the first generation of heirs':'keeping two heirs in the shadows'))break;born++;}});
+    if(born)set(HEIR_KEY,H);}
+  const P=new Map();P.set(JSON.stringify(WV_DEF),WV_DEF);Object.values(H.cells).forEach(C=>(C.heirs||[]).forEach(h=>{if(h.st!=='retired'&&h.p)P.set(JSON.stringify(h.p),h.p);}));
+  for(const[sig,p]of P){const o=WV_MEMO[sig];if(!force&&o&&o.d===d&&Date.now()-o.ts<30*60e3)continue;const R=await genSlice(wvRunG(V,p));WV_MEMO[sig]={d,ts:Date.now(),R};}
+  await deskIdle();return heirsRun(false);}
 function heirsRun(force){const d=today();if(SAFE_MODE&&!force)return HEIR_MEMO||{d,ts:Date.now(),cells:{},runs:{}};if(!force&&HEIR_MEMO&&HEIR_MEMO.d===d&&Date.now()-HEIR_MEMO.ts<30*60e3)return HEIR_MEMO;
   const V=roGet(VOICES_KEY,[],30e3)||[];const H=heirsAll();const cellsSeen=new Set();
   V.forEach(x=>{if(x&&CHARS[x.voice]&&['ml','spread','total'].includes(x.market))cellsSeen.add(x.voice+'|'+x.market);});
@@ -191,7 +207,7 @@ if(typeof confStamp==='function'&&typeof window!=='undefined'&&!window.__HEIR_CS
         const run=wvRunMemo(C.champ.p||heirParams(C.champ.id,C)||WV_DEF);let p=run.pred.get(c.id);if(p==null)p=wvPredictOne(c,run);p=heirCap(p,c);
         if(p!=null&&isFinite(p)){c.cfo=c.cf;c.cf=+(+p).toFixed(4);c.cfg=C.gen;}});}catch(e){console.warn('heir stamp',e);}};}
 try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='heirs')){const i=AP_STEPS.findIndex(s=>s[0]==='status');
-  AP_STEPS.splice(i>=0?i+1:AP_STEPS.length,0,['heirs','Generations','Every heir re-reads every game walk-forward; the Generation Book decides who holds each chair.',()=>Object.keys(heirsRun().cells).length]);}}catch(e){}   /* memoized (30 min): never slows the master evaluation */
+  AP_STEPS.splice(i>=0?i+1:AP_STEPS.length,0,['heirs','Generations','Every heir re-reads every game walk-forward; the Generation Book decides who holds each chair.',()=>heirsRunAsync().then(R=>Object.keys(R.cells||{}).length)]);}}catch(e){}   /* memoized (30 min): never slows the master evaluation */
 
 /* ── sync: the newer copy no longer simply wins the whole family ── */
 function heirMerge(a,b){if(!a||a.v!==1)return b||a;if(!b||b.v!==1)return a;const out={...b,...a,v:1,cells:{},tried:{}};   /* any other field: the newer copy's */
@@ -215,7 +231,7 @@ function heirBeliefs(v,R){const out=[];try{const by=heirLedgerMap().B[v]||{};
 function heirScars(v){const out=[];try{const T=laneTable();const L=T.BYV[v]||{};const Rv=heirLedgerMap().Rc[v]||[];
     Object.entries(L).forEach(([k,o])=>{if(o.st!=='blocked')return;let w=0,n=0;Rv.forEach(x=>{if(laneKey(x.sp,x.market,x.side,x.price,x.line)!==k)return;n++;if(x.hit)w++;});
       out.push({k,lab:typeof vxLane==='function'?vxLane(k):k,w:o.w,l:o.n-o.w,u:o.u,rw:w,rl:n-w,healing:n>=8&&w/n>=0.58});});}catch(e){}return out;}
-function familyHtml(){let R=null;try{R=heirsRun();}catch(e){return`<div class="tkt"><div class="sub">${txtEsc(e.message)}</div></div>`;}const H=heirsAll();const d=today();const ch={};['nfl','ncaaf','nhl','nba','ncaab','mlb'].forEach(sp=>{const c=wvChapter(sp,d);if(c&&c!=='off')ch[sp]=c;});
+function familyHtml(){let R=null;if(!HEIR_MEMO||HEIR_MEMO.d!==today()){heirsRunAsync().then(()=>{try{if(REC_VIEW==='family')renderRecordsHub();}catch(e){}}).catch(()=>{});return`<div class="tkt"><div class="sub">🧬 Reading the bloodlines… (a few seconds)</div></div>`;}try{R=heirsRun();}catch(e){return`<div class="tkt"><div class="sub">${txtEsc(e.message)}</div></div>`;}const H=heirsAll();const d=today();const ch={};['nfl','ncaaf','nhl','nba','ncaab','mlb'].forEach(sp=>{const c=wvChapter(sp,d);if(c&&c!=='off')ch[sp]=c;});
   const card=v=>{const C=CHARS[v]||{};const cells=['ml','spread','total'].map(m=>H.cells[v+'|'+m]).filter(Boolean);if(!cells.length)return'';const run=R.runs[JSON.stringify(WV_DEF)];const B=heirBeliefs(v,run);const S=heirScars(v);
     const rows=cells.map(c=>{const r=R.cells[c.v+'|'+c.m]||{heirs:[]};const mk=({ml:'Moneylines',spread:'Spreads',total:'Totals'})[c.m];
       return`<div class="fm-cell"><div><b>${mk}</b> · <span class="mono">Gen ${c.gen}</span> — ${txtEsc(c.champ.lab)}${c.champ.since?` <span class="mono" style="color:var(--mute)">since ${txtEsc(c.champ.since)}</span>`:''}</div>

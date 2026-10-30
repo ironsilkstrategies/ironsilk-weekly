@@ -409,7 +409,7 @@ function bbPlayerRows(C,g,team,proj){const sp=C.sp;const P=(typeof pstTeam==='fu
 const BB_PANELS={
   coach:(C,g,s)=>{try{return coachBriefing(g,s,C.sp)||'<div class="sub">Coach has no read on this game yet.</div>'}catch(e){return'<div class="sub">Coach has no read on this game yet.</div>'}},
   trends:(C,g)=>{const game=bbKey(g);const out=[];const d=g.__date||today();
-    try{const I=(get(INTEL_KEY,[])||[]).filter(x=>x&&x.sp===C.sp&&x.game===game&&String(x.date||'').slice(0,10)===d);const T=I.filter(x=>x.kind==='trend'),K=I.filter(x=>x.kind==='cons');
+    try{const I=(roGet(INTEL_KEY,[])||[]).filter(x=>x&&x.sp===C.sp&&x.game===game&&String(x.date||'').slice(0,10)===d);const T=I.filter(x=>x.kind==='trend'),K=I.filter(x=>x.kind==='cons');
       if(T.length)out.push('<div class="sub" style="margin-bottom:4px"><b>Trends</b></div>'+T.map(t=>{const m=String(t.text).match(/(\d+)-(\d+)/);const fade=m&&+m[1]<+m[2];return`<div class="sub" style="color:${fade?'var(--rust)':'var(--chalk)'}">• ${bbEsc(String(t.text||'').replace(/\[span_\d+\]\((?:start|end)_span\)/g,''))}${fade?' — fade':''}</div>`;}).join(''));
       if(K.length)out.push('<div class="sub" style="margin:6px 0 4px"><b>Consensus</b></div>'+K.map(c=>`<div class="sub">${c.market==='total'?`O ${c.overPct??'—'}% / U ${c.overPct!=null?100-c.overPct:'—'}%`:`${g.away.abbr} ${c.awayPct??'—'}% / ${g.home.abbr} ${c.homePct??'—'}%`} <span style="color:var(--mute)">${bbEsc(c.metric||'')}</span></div>`).join(''));}catch(e){}
     try{out.push(intelPicksFor(C.sp,game)||'');}catch(e){}
@@ -501,10 +501,10 @@ function bbRender(sp,keepFocus){const C=bbC(sp);const el=document.getElementById
     const qv=bbEsc(V.q||'');const chip=(k,l)=>`<button class="${V.f===k&&!V.q?'on':''}" onclick="bbSetView('${sp}','f','${k}')">${l} <span class="mono" style="font-size:9px">${n(k)}</span></button>`;
     h+=`<div class="subnav" style="flex-wrap:wrap;gap:6px;margin-bottom:8px">${chip('lined','With lines')}${chip('top','Top 25')}${chip('live','Live')}${chip('all','All')}
       <input id="bbQ-${sp}" type="search" placeholder="Find a team" value="${qv}" oninput="bbSearch('${sp}',this.value)" style="flex:1;min-width:120px;background:var(--panel2);color:var(--chalk);border:1px solid var(--rule);border-radius:8px;padding:6px 10px;font-size:13px"></div>`;}
-  const G=bbFilterGames(C);const order={in:0,pre:1,post:2};G.sort((a,b)=>order[a.abstract]-order[b.abstract]||String(a.start).localeCompare(String(b.start)));
+  lzBegin(3);const G=bbFilterGames(C);const order={in:0,pre:1,post:2};G.sort((a,b)=>order[a.abstract]-order[b.abstract]||String(a.start).localeCompare(String(b.start)));
   const full=g=>g.abstract!=='post'||BB_EXP[sp].has(g.id);let shown=0;const lim=V.n;
   [['in','LIVE'],['pre','TODAY'],['post','FINAL']].forEach(([k,l])=>{const L=G.filter(g=>g.abstract===k);if(!L.length)return;h+=`<div class="mktlab">${l} · ${L.length}</div>`;
-    L.forEach(g=>{if(full(g)&&shown<lim){shown++;h+=bbCardSafe(C,g);}else h+=bbRow(C,g);});});
+    L.forEach(g=>{if(full(g)&&shown<lim){shown++;const ok=Object.keys(open).some(k=>open[k]&&k.indexOf(String(g.id))>=0||open[k]&&k.indexOf(bbKey(g))>=0);h+=lzCard(sp+':'+g.id,()=>bbCardSafe(C,g),bbRow(C,g),ok);}else h+=bbRow(C,g);});});
   if(!C.games.length)h+=`<div class="empty" style="padding:10px 0">No ${C.lab} games today.${C.up.length?' Next games below.':' Nothing scheduled yet — the board fills in as the schedule posts.'}${(sp==='nba'?NBA_LOAD_NOTE:NCAAB_LOAD_NOTE)?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:4px">${bbEsc(sp==='nba'?NBA_LOAD_NOTE:NCAAB_LOAD_NOTE)}</div>`:''}</div>`;
   else if(!G.length)h+=`<div class="empty" style="padding:10px 0">Nothing matches — try All.</div>`;
   if(G.filter(full).length>lim)h+=`<div class="bar" style="margin:4px 0 12px"><button onclick="bbSetView('${sp}','n',${lim+(sp==='ncaab'?10:12)})">Show ${sp==='ncaab'?10:12} more games</button></div>`;
@@ -512,10 +512,9 @@ function bbRender(sp,keepFocus){const C=bbC(sp);const el=document.getElementById
   days.slice(0,sp==='ncaab'?1:C.upDays).forEach(d=>{const U=C.up.filter(g=>g.__date===d);const show=sp==='ncaab'&&!V.q?U.filter(g=>g.away.rank||g.home.rank||bbLinesFor(C,bbKey(g),d).some(x=>x.src!=='espn')).slice(0,25):U;
     h+=`<div class="mktlab">UPCOMING · ${new Date(d+'T12:00:00').toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'})} · ${U.length} game${U.length>1?'s':''}${show.length<U.length?` (showing ${show.length}: ranked teams and games you have lines on)`:''}</div>`+
       show.map(g=>BB_EXP[sp].has(g.id)?bbCardSafe(C,g):bbRow(C,g)).join('');});
-  el.innerHTML=h;Object.entries(open).forEach(([k,v])=>{if(!v||!k.startsWith(sp+'|'))return;BB_OPEN[k]=null;bbPan(sp,k.slice(sp.length+1),v,null);});
+  el.innerHTML=h;lzFlush();Object.entries(open).forEach(([k,v])=>{if(!v||!k.startsWith(sp+'|'))return;BB_OPEN[k]=null;bbPan(sp,k.slice(sp.length+1),v,null);});
   if(keepFocus){const q=document.getElementById('bbQ-'+sp);if(q){q.focus();try{q.setSelectionRange(q.value.length,q.value.length);}catch(e){}}}else window.scrollTo(0,y);
-  setTimeout(()=>{try{bbSnapshot(C);bbArchiveFinals(C);syncFinalsToShared();voicesLog(sp);gradeVoices();gradeIntel();}catch(e){console.warn(sp+' bookkeeping',e)}
-    try{if(typeof todaySnapshotSoon==='function')todaySnapshotSoon();}catch(e){}},0);}
+  deskChores('bb-'+sp,[()=>bbSnapshot(C),()=>bbArchiveFinals(C),()=>syncFinalsToShared(),()=>voicesLog(sp),()=>gradeVoices(),()=>gradeIntel(),()=>{if(typeof todaySnapshotSoon==='function')todaySnapshotSoon();}]);}
 /* ── live loop + boot ─────────────────────────────────────────────────────── */
 const BB_LIVE_T={};
 function bbLiveLoop(sp){const C=bbC(sp);if(BB_LIVE_T[sp])clearInterval(BB_LIVE_T[sp]);
@@ -547,7 +546,7 @@ function bbLockJudge(sp){const C=bbC(sp);const d=today(),L=get(C.judge,{})||{};L
   if(ch){Object.keys(L).sort().slice(0,-(sp==='ncaab'?21:45)).forEach(k=>delete L[k]);set(C.judge,L);}}
 /* ── the master evaluation (same shape as hockey and football) ── */
 function bbEvalInputs(sp){const C=bbC(sp);const G=(C.games||[]).filter(g=>!g.pre);let book=0,espn=0,lined=0;G.forEach(g=>{const L=bbLinesFor(C,bbKey(g));if(L.length)lined++;L.forEach(x=>{x.src==='espn'?espn++:book++});});
-  const d=today();const I=(get(INTEL_KEY,[])||[]).filter(x=>x.sp===sp&&String(x.date||'').slice(0,10)===d);const P=((get('d4.preds',{})||{})[sp]||{})[d]||{};
+  const d=today();const I=(roGet(INTEL_KEY,[])||[]).filter(x=>x.sp===sp&&String(x.date||'').slice(0,10)===d);const P=((get('d4.preds',{})||{})[sp]||{})[d]||{};
   let brain=0;try{brain=(brainGet(sp).log||[]).length;}catch(e){}
   return{games:G.length,sims:G.length,lined,book,espn,rated:Object.keys(C.rt).length,finals:Object.keys(bbRes(C)).length,preds:Object.keys(P).length,trends:I.filter(x=>x.kind==='trend').length,cons:I.filter(x=>x.kind==='cons').length,brain};}
 function runBasketballEval(sp){const C=bbC(sp);try{if(typeof evalPrep==='function')evalPrep(sp);}catch(e){console.warn('eval prep',e);}

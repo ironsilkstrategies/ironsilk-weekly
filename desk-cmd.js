@@ -86,7 +86,7 @@ function cmdLast5All(V){const rows=CMD_CHARS().map(v=>{const L=cmdLast(V,v,5);if
   return cmdList('🔁 Last 5 calls — every character',rows,(x,i)=>`${['🥇','🥈','🥉'][i]||'▪️'} <b>${cmdE(charName(x.v).replace(/^The /,''))}</b> ${x.L.map(cmdRes).join('')} ${x.w}-${x.l} · ${x.u>=0?'+':''}${x.u.toFixed(1)}u · /${cmdSlug(x.v)}`,'No graded calls yet.')+'\n<i>Newest first is on the left. Tap a name for its last 5 picks and today\'s top 10.</i>';}
 function cmdLast5One(V,v){const L=cmdLast(V,v,5);if(!L.length)return'';
   return`\n\n<b>🔁 Last 5 calls</b>\n`+L.map(c=>`${cmdRes(c)} ${cmdE(cmdCallPick(c))} ${cmdE(cmdSg(c.price))} · ${cmdSp(c.sp)} ${cmdE(c.game)} · ${cmdE(String(c.date).slice(5,10))}${isOfficial(c)?' ⭐':''}`).join('\n');}
-function cmdBloodlines(){try{const R=heirsRun();const H=heirsAll();const race=[];Object.entries(R.cells||{}).forEach(([k,c])=>{const C=H.cells[k];if(!C)return;const bar=(c.ctx||{}).bar||HEIR_BAR;
+function cmdBloodlines(){try{const R=(typeof HEIR_MEMO!=='undefined'&&HEIR_MEMO)||((typeof heirsRunAsync==='function'&&heirsRunAsync().catch(()=>{})),{cells:{}});const H=heirsAll();const race=[];Object.entries(R.cells||{}).forEach(([k,c])=>{const C=H.cells[k];if(!C)return;const bar=(c.ctx||{}).bar||HEIR_BAR;
       (c.heirs||[]).filter(h=>h.st==='shadow').forEach(h=>race.push({C,h,bar,s:(Math.min(1,h.n/HEIR_MIN_N)+Math.min(1,h.days/HEIR_MIN_DAYS)+2*Math.max(0,Math.min(1,h.z/bar)))/4}));});
     race.sort((a,b)=>b.s-a.s);const cells=Object.values(H.cells);const crowned=cells.filter(C=>C.gen>1);const live=cells.reduce((n,C)=>n+(C.heirs||[]).filter(h=>h.st==='shadow').length,0);
     const mk={ml:'ML',spread:'Spreads',total:'Totals'};

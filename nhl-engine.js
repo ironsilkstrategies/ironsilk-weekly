@@ -343,11 +343,11 @@ function saveNHLExtData(picks,trends,consensus,el){
   put(NHL_LS.ext,picks);put(NHL_LS.trends,trends);put(NHL_LS.cons,consensus);
   if(ACTIVE_SPORT==='nhl')renderNHL();
 }
-const nhlTrendsFor=game=>(get(NHL_LS.trends,{})[today()]||[]).filter(x=>x.game===game);
-const nhlConsFor=game=>(get(NHL_LS.cons,{})[today()]||[]).filter(x=>x.game===game);
+const nhlTrendsFor=game=>((roGet(NHL_LS.trends,{})||{})[today()]||[]).filter(x=>x.game===game);
+const nhlConsFor=game=>((roGet(NHL_LS.cons,{})||{})[today()]||[]).filter(x=>x.game===game);
 /* Outside computer picks for this game (Covers etc.), from the Intel log. */
 function nhlOutsideFor(game){
-  return get(INTEL_KEY,[]).filter(x=>x.sp==='nhl'&&x.kind==='xpick'&&x.game===game&&x.date===today()&&x.pick);
+  return(roGet(INTEL_KEY,[])||[]).filter(x=>x.sp==='nhl'&&x.kind==='xpick'&&x.game===game&&x.date===today()&&x.pick);
 }
 async function fetchNHLLiveOdds(){
   const key=typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,'');if(!key)throw new Error('Add your Odds API key in Settings');
@@ -754,10 +754,10 @@ function renderNHL(){
   if(!NHL_GAMES.length){el.innerHTML=status+'<div class="empty">No NHL games today.</div>'+upcoming;return;}
   const y=window.scrollY,open={...NHL_OPEN};
   const order={in:0,pre:1,post:2};
-  el.innerHTML=status+[...NHL_GAMES].sort((a,b)=>order[a.abstract]-order[b.abstract]||String(a.start).localeCompare(String(b.start))).map(g=>{try{return (typeof pwrStrip==='function'?pwrStrip('nhl',g):'')+nhlCard(g)}catch(e){console.warn('nhl card',e);return`<div class="tkt"><div class="sub">${g.away.abbr} @ ${g.home.abbr}: card error — ${nhlEsc(e.message)}</div></div>`;}}).join('')+upcoming;
-  Object.entries(open).forEach(([gid,k])=>{if(!k)return;NHL_OPEN[gid]=null;const b=null;nhlPan(gid,k,b);});
+  lzBegin(3);el.innerHTML=status+[...NHL_GAMES].sort((a,b)=>order[a.abstract]-order[b.abstract]||String(a.start).localeCompare(String(b.start))).map(g=>{try{return lzCard('nhl:'+g.id,()=>{try{return (typeof pwrStrip==='function'?pwrStrip('nhl',g):'')+nhlCard(g);}catch(e){console.warn('nhl card',e);return'';}},`<div class="tkt" style="opacity:.6;padding:12px"><b>${nhlEsc(g.away.abbr)}</b> @ <b>${nhlEsc(g.home.abbr)}</b></div>`,!!open[g.id])}catch(e){console.warn('nhl card',e);return`<div class="tkt"><div class="sub">${g.away.abbr} @ ${g.home.abbr}: card error — ${nhlEsc(e.message)}</div></div>`;}}).join('')+upcoming;
+  lzFlush();Object.entries(open).forEach(([gid,k])=>{if(!k)return;NHL_OPEN[gid]=null;const b=null;nhlPan(gid,k,b);});
   window.scrollTo(0,y);
-  setTimeout(()=>{try{nhlSnapshot();nhlArchiveFinals();syncFinalsToShared();voicesLog('nhl');gradeVoices();gradeIntel();}catch(e){console.warn('nhl bookkeeping',e)}},0);
+  deskChores('nhl',[()=>nhlSnapshot(),()=>nhlArchiveFinals(),()=>syncFinalsToShared(),()=>voicesLog('nhl'),()=>gradeVoices(),()=>gradeIntel()]);
 }
 let NHL_LIVE_TIMER=null;
 function nhlLiveLoop(){
@@ -790,7 +790,7 @@ const NHL_EVAL_KEY='d4.nhleval';
 function nhlEvalInputs(){
   const G=NHL_GAMES||[];let book=0,espn=0,lined=0;
   G.forEach(g=>{const L=nhlBookLinesFor(g.away.abbr+'@'+g.home.abbr)||[];if(L.length)lined++;L.forEach(x=>{x.src==='espn'?espn++:book++});});
-  const d=today();const I=(get(INTEL_KEY,[])||[]).filter(x=>x.sp==='nhl'&&String(x.date||'').slice(0,10)===d);
+  const d=today();const I=(roGet(INTEL_KEY,[])||[]).filter(x=>x.sp==='nhl'&&String(x.date||'').slice(0,10)===d);
   const P=((get('d4.preds',{})||{}).nhl||{})[d]||{};
   let brain=0;try{brain=(brainGet('nhl').log||[]).length;}catch(e){}
   return{games:G.length,sims:G.filter(g=>NHL_SIMS[g.id]).length,lined,book,espn,rated:NHL_RATINGS&&NHL_RATINGS.teams?Object.keys(NHL_RATINGS.teams).length:0,

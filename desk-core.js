@@ -54,20 +54,23 @@ function confCalApply(B,raw){if(!B||!B.length)return raw;const b=B.find(b=>raw>=
 function confSims(V){const M=new Map();V.forEach(x=>{if(x.voice==='Sim'&&(x.simP!=null||x.pUsed!=null))M.set(x.sp+'|'+x.game+'|'+String(x.date).slice(0,10)+'|'+x.market,x);});return M;}
 /* rebuild the model from every graded call (time-ordered), and give older calls a
    retro confidence ("cfr") computed only from what was known before their day */
-function confRebuild(force){const C0=get(CONF_KEY,null);const V=get(VOICES_KEY,[])||[];let gN=0;V.forEach(x=>{if(x.graded)gN++;});const sig=V.length+'|'+gN;
-  if(!force&&C0&&C0.sig===sig&&Date.now()-C0.ts<6*36e5)return C0;
+function confRebuild(force){return genDrain(confRebuildG(force));}
+/* v2.80 · a generator so the autopilot and the master evaluation can run it sliced; the ledger is written back by id at
+   the end (re-read fresh), so calls logged while it was working are never overwritten */
+function* confRebuildG(force){const C0=get(CONF_KEY,null);const V=roGet(VOICES_KEY,[])||[];let gN=0;V.forEach(x=>{if(x.graded)gN++;});const sig=V.length+'|'+gN;
+  if(!force&&C0&&C0.sig===sig&&Date.now()-C0.ts<6*36e5)return C0;const CFR=new Map();
   const sims=confSims(V);const rows=[];
   V.forEach(x=>{if(!CHARS[x.voice]||!x.graded||x.hit==null||x.push||confPre(x)||(typeof inputsBroken==='function'&&inputsBroken(x)))return;const d=String(x.date).slice(0,10);const base=confBase(x,sims.get(x.sp+'|'+x.game+'|'+d+'|'+x.market));if(base==null)return;rows.push({x,d,base,hit:x.hit?1:0});});
   rows.sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);
   const skill={},bins={ml:confFreshBins(),spread:confFreshBins(),total:confFreshBins()};let changed=0,j=0;
-  while(j<rows.length){const d=rows[j].d,day=[];while(j<rows.length&&rows[j].d===d)day.push(rows[j++]);
+  while(j<rows.length){yield;const d=rows[j].d,day=[];while(j<rows.length&&rows[j].d===d)day.push(rows[j++]);
     const cal={ml:confPav(bins.ml),spread:confPav(bins.spread),total:confPav(bins.total)};
-    day.forEach(r=>{r.raw=confRaw(r.x,r.base,skill).raw;if(r.x.cf==null){const c=+confCalApply(cal[r.x.market],r.raw).toFixed(4);if(r.x.cfr!==c){r.x.cfr=c;changed++;}}});
+    day.forEach(r=>{r.raw=confRaw(r.x,r.base,skill).raw;if(r.x.cf==null){const c=+confCalApply(cal[r.x.market],r.raw).toFixed(4);if(r.x.cfr!==c){CFR.set(r.x.id,c);changed++;}}});
     day.forEach(r=>{confKeys(r.x).forEach(([k])=>{const o=skill[k]||(skill[k]=[0,0]);o[0]+=r.hit-r.base;o[1]++;});
       const B=bins[r.x.market];if(B){const b=B.find(b=>r.raw>=b.lo&&r.raw<b.hi);if(b){b.w+=r.hit;b.n++;b.s+=r.raw;}}});}
   const sk={};Object.entries(skill).forEach(([k,o])=>{sk[k]=[+o[0].toFixed(3),o[1]];});
   const M={v:1,rule:2,ts:Date.now(),sig,n:rows.length,skill:sk,cal:{ml:confPav(bins.ml),spread:confPav(bins.spread),total:confPav(bins.total)}};
-  set(CONF_KEY,M);CONF_M=null;if(changed)set(VOICES_KEY,V);return M;}
+  set(CONF_KEY,M);CONF_M=null;if(changed){const V2=get(VOICES_KEY,[])||[];let w=0;V2.forEach(x=>{if(x&&x.cf==null&&CFR.has(x.id)){const c=CFR.get(x.id);if(x.cfr!==c){x.cfr=c;w++;}}});if(w)set(VOICES_KEY,V2);}return M;}
 let CONF_M=null;
 function confModel(){if(!CONF_M||Date.now()-CONF_M.t>60e3){let M=get(CONF_KEY,null);if(!M||!M.skill||M.rule!==2)M=confRebuild(true);CONF_M={t:Date.now(),M};}return CONF_M.M;}
 /* ideology knobs: a character can be switched off per sport/market (see IDEOLOGY) */
@@ -895,7 +898,7 @@ function deskSay(h){try{document.querySelectorAll('.deskStatus').forEach(e=>e.in
 async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confirm('Today is already frozen. Run the evaluations again? (Nothing frozen will change — only the eval reports refresh.)'))return;
   DESK_EVAL_BUSY=true;const t0=Date.now();const here=window.__PAGE_SPORT__||ACTIVE_SPORT;const done=[],miss=[];
   try{deskSay('① Grading yesterday and calibrating…');await new Promise(r=>setTimeout(r,30));
-    try{apRun(true,'master evaluation');}catch(e){}try{confRebuild(true);}catch(e){}
+    try{await apRunAsync(true,'master evaluation');}catch(e){}try{await genSlice(confRebuildG(true));}catch(e){}
     deskSay(`② Evaluating ${SP_LAB[here]||here}…`);await new Promise(r=>setTimeout(r,30));try{todaySnapshot();}catch(e){}
     try{if(deskRunSportEval(here))done.push(here);}catch(e){console.warn('eval',here,e);miss.push(here);}
     const others=liveSports().filter(sp=>sp!==here&&SPORT_PAGE[sp]);
@@ -1220,7 +1223,7 @@ function deskBoot(){try{if(!document.getElementById('deskCss')){const st=documen
   try{bankCfg();}catch(e){}}
 if(typeof window!=='undefined'){window.addEventListener('load',()=>{deskBoot();setTimeout(()=>{try{confBackfill();}catch(e){}},4000);});}
 /* the autopilot learns the confidence meter right after grading */
-try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='conf')){const i=AP_STEPS.findIndex(s=>s[0]==='voices');AP_STEPS.splice(i>=0?i+1:AP_STEPS.length,0,['conf','Confidence meter','Re-learns every character\'s confidence from its graded calls (time-ordered, calibrated per market) so 70% has to have actually hit 70%.',()=>{const M=confRebuild(true);try{confBackfill();}catch(e){}PCI_C=null;return M.n;}]);}}catch(e){}
+try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='conf')){const i=AP_STEPS.findIndex(s=>s[0]==='voices');AP_STEPS.splice(i>=0?i+1:AP_STEPS.length,0,['conf','Confidence meter','Re-learns every character\'s confidence from its graded calls (time-ordered, calibrated per market) so 70% has to have actually hit 70%.',()=>genSlice(confRebuildG(true)).then(M=>{try{confBackfill();}catch(e){}PCI_C=null;return M.n;})]);}}catch(e){}
 /* hidden frames never post to Telegram */
 if(typeof tgAutoTick==='function'&&typeof BG_MODE!=='undefined'&&BG_MODE){tgAutoTick=async function(){return 0;};}
 try{if(typeof SPORT_PAGE!=='undefined'&&!SPORT_PAGE.ncaab)SPORT_PAGE.ncaab='ncaab.html';}catch(e){}

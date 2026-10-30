@@ -106,6 +106,6 @@ function genRender(){const v=document.getElementById('genView');if(!v)return;con
     <div class="tabs">${tabs.map(([k,l])=>`<button class="${GEN_TAB===k?'on':''}" onclick="GEN_TAB='${k}';genRender()">${l}</button>`).join('')}</div></div><div class="gb">${body}</div>`;v.scrollTop=GEN_TAB==='tree'?st:0;}
 function genOpen(){if(!document.getElementById('genCss')){const s=document.createElement('style');s.id='genCss';s.textContent=GEN_CSS;document.head.appendChild(s);}
   let v=document.getElementById('genView');if(!v){v=document.createElement('div');v.id='genView';document.body.appendChild(v);}v.innerHTML='<div style="padding:40px;text-align:center;color:#f5c542;font-weight:800">🧬 Reading the bloodlines…</div>';
-  setTimeout(()=>{genData();genRender();},30);}
+  heirsRunAsync().then(R=>{GEN_R=R;genRender();}).catch(e=>{GEN_R={cells:{},err:e.message};genRender();});}
 /* doors in: the Records 🧬 tab opens the book, plus a button on Today */
 if(typeof familyHtml==='function'){const FH0=familyHtml;familyHtml=function(){return`<div class="tkt hi" style="text-align:center"><button class="primary" style="font-size:16px;padding:14px 18px" onclick="genOpen()">🧬 Open the Bloodlines</button><div class="sub" style="margin-top:6px">Throne race · family trees · the chronicle · heirlooms & scars</div></div>`+FH0();};}
