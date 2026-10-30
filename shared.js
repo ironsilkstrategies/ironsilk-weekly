@@ -11,9 +11,62 @@ var SAFE_MODE=false;
     if(bv&&B.bv!==bv){B.boots=[];B.bv=bv;}
     const recent=(B.boots||[]).filter(t=>now-t<60e3&&!B.ok);if(recent.length>=3){SAFE_MODE=true;B.safeUntil=now+10*60e3;}}
   B.boots=[...(B.boots||[]).filter(t=>now-t<60e3),now].slice(-5);B.ok=false;localStorage.setItem(K,JSON.stringify(B));
-  setTimeout(()=>{try{const C=JSON.parse(localStorage.getItem(K)||'{}');C.ok=true;C.boots=[];localStorage.setItem(K,JSON.stringify(C));}catch(e){}},25e3);
+  const settle=()=>{try{const C=JSON.parse(localStorage.getItem(K)||'{}');C.ok=true;C.boots=[];localStorage.setItem(K,JSON.stringify(C));}catch(e){}};
+  setTimeout(settle,25e3);
+  /* v2.80.3 · leaving the page on purpose (tapping to another sport, the master-eval relay, a reload) fires pagehide;
+     iOS killing the tab never does. So only real crashes count — hopping NBA→NHL→CFB→NFL quickly no longer trips safe mode. */
+  window.addEventListener('pagehide',settle);
   if(SAFE_MODE)document.addEventListener('DOMContentLoaded',()=>{const d=document.createElement('div');d.style.cssText='position:fixed;left:8px;right:8px;top:8px;z-index:99999;background:#3b2a06;color:#fde68a;border:1px solid #f5c542;border-radius:10px;padding:8px 10px;font:600 12px system-ui';
     d.innerHTML='🛟 Safe mode — the page kept restarting, so the heavy extras are paused for 10 minutes. Picks and grading still work. <u onclick="this.parentNode.remove()">OK</u>';document.body.appendChild(d);setTimeout(()=>d.remove(),12000);});}catch(e){}})();
+/* ══ v2.80.3 · THE FREEZE RECORDER ══════════════════════════════════════════════════════════════════════
+   A heartbeat ticks every second. When a tick lands 2.5 s+ late while the page is on screen, the screen was stuck:
+   it's written down — how long, which page and tab, the last thing tapped, the last timed step. A page that dies on
+   screen without unloading (iOS killing the tab: the gray-then-white restart) is written down on the next load.
+   Settings → 🩺 Freezes lists them. The log stays on this phone (keys with "perf" never sync) and keeps the last 40. */
+var FRZ_KEY='d4.perfstalls',FRZ_LIVE='d4.perflive',FRZ={act:'',actAt:0,t0:Date.now()};
+(function(){try{if(typeof window==='undefined'||typeof document==='undefined'||typeof localStorage==='undefined')return;
+  if(/jsdom/i.test((typeof navigator!=='undefined'&&navigator.userAgent)||'')&&!window.__FRZ_TEST__)return;
+  const bm=(document.currentScript&&document.currentScript.src||'').match(/[?&]v=([^&]+)/);const BV=bm?bm[1]:'';
+  const rd=k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}};
+  const wr=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+  const EV=/[?&]chain=1/.test(location.search||'')?' (master eval)':'';
+  const pg=()=>(window.__PAGE_SPORT__||((location.pathname||'').split('/').pop()||'').replace(/\.html$/,'')||'home')+EV;
+  const view=()=>{try{const v=document.querySelector('.view.on');return v?v.id.replace(/^v-/,''):'';}catch(e){return'';}};
+  const step=()=>{try{const L=typeof PERF_LOG!=='undefined'?PERF_LOG:null;const x=L&&L[L.length-1];return x&&Date.now()-x.at<20000?x.what+' '+x.ms+'ms':'';}catch(e){return'';}};
+  const note=o=>{const L=rd(FRZ_KEY)||[];L.push(Object.assign({ts:Date.now(),page:pg(),tab:view(),act:FRZ.act&&Date.now()-FRZ.actAt<90e3?FRZ.act:'',step:step(),b:BV},o));wr(FRZ_KEY,L.slice(-40));};
+  FRZ.note=note;
+  /* the last thing tapped, in words a person can read back */
+  const lab=el=>{try{for(let e=el,i=0;e&&e.getAttribute&&i<6;e=e.parentElement,i++){const oc=e.getAttribute('onclick');
+      if(oc||e.tagName==='BUTTON'||e.tagName==='A'||e.tagName==='SUMMARY'){const t=(e.textContent||'').replace(/\s+/g,' ').trim().slice(0,40);return t+(oc?' ['+oc.replace(/\s+/g,' ').slice(0,50)+']':'');}}
+    return(el&&el.textContent||'').replace(/\s+/g,' ').trim().slice(0,40);}catch(e){return'';}};
+  document.addEventListener('click',e=>{FRZ.act=lab(e.target);FRZ.actAt=Date.now();},true);
+  /* the page before this one died while on screen (no pagehide, no going to the background) */
+  const prev=rd(FRZ_LIVE);
+  if(prev&&prev.t&&Date.now()-prev.t<90e3)note({kind:'restart',ms:0,page:prev.page||'',tab:prev.tab||'',act:prev.act||'',step:'',b:prev.b||''});
+  const live=on=>wr(FRZ_LIVE,on?{t:Date.now(),page:pg(),tab:view(),act:FRZ.act,b:BV}:{t:0});
+  live(true);
+  let last=performance.now(),away=document.hidden,liveAt=Date.now();
+  /* a dialog (alert/confirm) holds the thread while you read it — that's not a freeze */
+  ['alert','confirm','prompt'].forEach(f=>{const o=window[f];if(typeof o!=='function')return;window[f]=function(){const t=performance.now();try{return o.apply(window,arguments);}finally{last+=performance.now()-t;}};});
+  setInterval(()=>{const now=performance.now(),gap=now-last;last=now;
+    if(document.hidden){away=true;return;}
+    if(away){away=false;return;}   /* first beat back on screen: that gap was background time */
+    if(gap>=2500)note({kind:Date.now()-FRZ.t0<15e3?'boot':'stall',ms:Math.round(gap-1000)});
+    if(Date.now()-liveAt>5000){liveAt=Date.now();live(true);}},1000);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){away=true;live(false);}else{last=performance.now();live(true);}});
+  window.addEventListener('pagehide',()=>live(false));
+}catch(e){}})();
+function frzList(){try{return JSON.parse(localStorage.getItem(FRZ_KEY)||'[]')||[];}catch(e){return[];}}
+function frzClear(){try{localStorage.removeItem(FRZ_KEY);}catch(e){}const m=document.getElementById('storageMeter');if(m&&typeof storageMeterHtml==='function')m.innerHTML=storageMeterHtml();}
+function frzHtml(){const L=frzList().slice().reverse();const wk=Date.now()-7*864e5;const W=L.filter(x=>x.ts>=wk);
+  const st=W.filter(x=>x.kind==='stall'),bt=W.filter(x=>x.kind==='boot'),rs=W.filter(x=>x.kind==='restart');
+  const t=x=>{try{return new Date(x.ts).toLocaleString('en-US',{timeZone:APP_TZ,month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'});}catch(e){return'';}};
+  const esc=s=>typeof txtEsc==='function'?txtEsc(s):String(s||'');
+  const row=x=>`<div class="mono" style="font-size:9.5px;padding:3px 0;border-top:1px solid var(--rule)"><b style="color:${x.kind==='restart'?'var(--rust)':x.kind==='boot'?'var(--gold)':'var(--cold)'}">${x.kind==='restart'?'💥 restart':x.kind==='boot'?'⏳ slow load '+(x.ms/1000).toFixed(1)+'s':'🧊 stuck '+(x.ms/1000).toFixed(1)+'s'}</b> · ${t(x)} · ${esc(x.page)}${x.tab?' › '+esc(x.tab):''}${x.b?' · '+esc(x.b):''}
+    ${x.act?`<div style="color:var(--mute)">last tap: ${esc(x.act)}</div>`:''}${x.step?`<div style="color:var(--mute)">last step: ${esc(x.step)}</div>`:''}</div>`;
+  return`<div class="mktlab" style="margin-top:10px">🩺 Freezes &amp; restarts on this phone — last 7 days</div>
+    <div class="sub" style="font-size:10.5px">${W.length?`${st.length} stuck screen${st.length===1?'':'s'} · ${bt.length} slow load${bt.length===1?'':'s'} · ${rs.length} restart${rs.length===1?'':'s'}`:'None recorded. The recorder writes down any 2.5 s+ freeze and any crash-restart, with what you tapped.'}</div>
+    ${L.slice(0,12).map(row).join('')}${L.length?`<div class="bar" style="margin-top:4px"><button onclick="frzClear()">Clear the list</button></div>`:''}`;}
 
 const LS={key:'d4.key',ai:'d4.ai',cred:'d4.cred',open:'d4.open',odds:'d4.odds',pull:'d4.pull',
 arc:'d4.arc',mine:'d4.mine',slip:'d4.slip',locked:'d4.locked',calib:'d4.calib',projlu:'d4.projlu',
@@ -2816,7 +2869,7 @@ function sportGames(sp){return sp==='nfl'?(typeof NFL_GAMES!=='undefined'?NFL_GA
 function sportSims(sp){return sp==='nfl'?(typeof NFL_SIMS!=='undefined'?NFL_SIMS:{}):sp==='ncaaf'?(typeof NCAAF_SIMS!=='undefined'?NCAAF_SIMS:{})
   :sp==='nhl'?(typeof NHL_SIMS!=='undefined'?NHL_SIMS:{}):sp==='nba'?(typeof NBA_SIMS!=='undefined'?NBA_SIMS:{}):sp==='ncaab'?(typeof NCAAB_SIMS!=='undefined'?NCAAB_SIMS:{}):(typeof SIMS!=='undefined'?SIMS:{});}
 function sportLinesFor(sp,g){const k=g.away.abbr+'@'+g.home.abbr;
-  return sp==='nfl'?nflBookLinesFor(k):sp==='ncaaf'?ncaafBookLinesFor(k):sp==='nhl'?nhlBookLinesFor(k):sp==='nba'?(typeof nbaBookLinesFor==='function'?nbaBookLinesFor(k):[]):sp==='ncaab'?(typeof ncaabBookLinesFor==='function'?ncaabBookLinesFor(k):[]):bookLinesFor(g.id);}
+  return sp==='nfl'||sp==='ncaaf'||sp==='nhl'||sp==='nba'||sp==='ncaab'?linesByKey(sp,k):(typeof bookLinesFor==='function'?bookLinesFor(g.id):[]);}
 /* One place that repaints the active sport's board. render() is the MLB
    board; calling it on a football/hockey page (clearSlip, tog, etc. do)
    used to overwrite that page's slate with "No games today." */
@@ -2853,7 +2906,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261030c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261030d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3298,13 +3351,18 @@ function importBackup(input){
    legible before it is hit. */
 async function reloadCFBD(){
   const el=document.getElementById('dataFeedStatus');
+  /* v2.80.3 · the button shows on pages without the football engine too — it used to sit on "Fetching…" forever there */
+  if(typeof fetchCFBDRatings!=='function'){if(el)el.innerHTML='CFB ratings load on the College Football page — open it there.';return;}
   if(el)el.innerHTML='Fetching SP+ ratings…';
-  await fetchCFBDRatings(true);await fetchCFBPortal(true);renderDataFeedStatus();
+  try{await fetchCFBDRatings(true);if(typeof fetchCFBPortal==='function')await fetchCFBPortal(true);}catch(e){if(el)el.innerHTML='CFB ratings failed: '+txtEsc(String(e&&e.message||e));return;}
+  renderDataFeedStatus();
 }
 async function reloadNFLDepth(){
   const el=document.getElementById('dataFeedStatus');
+  if(typeof fetchNFLDepthCharts!=='function'){if(el)el.innerHTML='NFL depth charts load on the NFL page — open it there.';return;}
   if(el)el.innerHTML='Fetching 32 rosters + depth charts (about 15s)…';
-  await fetchNFLDepthCharts(true);renderDataFeedStatus();
+  try{await fetchNFLDepthCharts(true);}catch(e){if(el)el.innerHTML='Depth charts failed: '+txtEsc(String(e&&e.message||e));return;}
+  renderDataFeedStatus();
 }
 let SCRIPT_READY=false;
 function whenScriptReady(fn,extraDelay){
@@ -3381,6 +3439,8 @@ async function runFeedSelfTest(){
   const key=get(LS.cfbd,'');
   if(!key){
     row('CollegeFootballData',false,'no API key saved — add one above, then rerun','');
+  }else if(typeof cfbdGet!=='function'){
+    row('CollegeFootballData',true,'key saved — this feed is read on the College Football page; run the test there','');
   }else{
     const Y=new Date().getFullYear();
     try{
@@ -4333,7 +4393,7 @@ function tabRaw(n,b){
   if(n==='best'){bestTab(BESTTAB||'today');}
   if(n==='settings')fillSettingsTab();
   if(n==='settings'){const m=document.getElementById('storageMeter');if(m)m.innerHTML=storageMeterHtml();}
-  if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+missionsHtml()}catch(e){console.warn('missions',e)}try{h=msRoadmapSection()+h;}catch(e){}el.innerHTML=h+renderMoneyTab();}}
+  if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+missionsHtml()}catch(e){console.warn('missions',e)}el.innerHTML=h+renderMoneyTab();}}
   if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
   if(n==='today')renderToday();
   if(n==='banker')renderBankerTab();
@@ -13185,7 +13245,8 @@ function runBankrollCorrection(){
   correctBankrollBalance(80,0);
   alert('Done — bankroll corrected to $80.00, daily spend reset to $0.');
   renderTickets();
-  try{renderMoney();}catch(e){}
+  /* v2.80.3 · was renderMoney() — a function that doesn't exist; repaint the Money tab if it's open */
+  try{const v=document.getElementById('v-money');if(v&&v.classList.contains('on'))tab('money');}catch(e){}
 }
 
 function runPushBugRepairManually(){
@@ -17656,6 +17717,25 @@ function frozenChip(g,s,sport){
       stale?` · drift ${drift.toFixed(1)}`:''}</div>`;
 }
 
+/* ── price math, shared by every page ──────────────────────────────────────
+   v2.80.3 · these lived in football-engine.js only, so on the NHL, NBA, CBB and MLB pages every caller in this
+   file (the Take/Fade verdict's model edge) threw "evPct is not defined" — swallowed, so the edge just never showed. */
+function amerToProb(a){if(a==null||isNaN(a))return null;return a>0?100/(a+100):(-a)/((-a)+100)}
+function amerProfit(a){return a>0?a/100:100/(-a)}          // profit per 1 unit staked
+function evPct(p,a){                                        // expected return %, e.g. +4.2
+  if(p==null||a==null||isNaN(a))return null;
+  return (p*amerProfit(a)-(1-p))*100;
+}
+/* v2.80.3 · one safe door to a sport's book lines by game key ("AWAY@HOME"). Each page carries only its own engine,
+   so a bare nflBookLinesFor() on the NBA page is a ReferenceError — this answers [] instead of throwing. */
+function linesByKey(sp,k,date){try{
+  if(sp==='nfl')return typeof nflBookLinesFor==='function'?(nflBookLinesFor(k)||[]):[];
+  if(sp==='ncaaf')return typeof ncaafBookLinesFor==='function'?(ncaafBookLinesFor(k)||[]):[];
+  if(sp==='nhl')return typeof nhlBookLinesFor==='function'?(nhlBookLinesFor(k,date)||[]):[];
+  if(sp==='nba')return typeof nbaBookLinesFor==='function'?(nbaBookLinesFor(k,date)||[]):[];
+  if(sp==='ncaab')return typeof ncaabBookLinesFor==='function'?(ncaabBookLinesFor(k,date)||[]):[];}catch(e){}
+  return[];}
+
 /* ── 3. TAKE / FADE VERDICT ────────────────────────────────────────────────
    Three inputs, stated separately so you can see WHY, never blended into one
    opaque score: model edge, calibration at this confidence band, and your own
@@ -17666,9 +17746,7 @@ function takeFadeVerdict(g,s,sport){
   // (a) model edge vs the posted number
   let edge=null;
   try{
-    const ln=sp==='nfl'?nflBookLinesFor(g.away.abbr+'@'+g.home.abbr)
-            :sp==='ncaaf'?ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr)
-            :sp==='nhl'&&typeof nhlBookLinesFor==='function'?nhlBookLinesFor(g.away.abbr+'@'+g.home.abbr):[];
+    const ln=linesByKey(sp,g.away.abbr+'@'+g.home.abbr,g.__date||undefined);
     const aw=ln.find(x=>x.market==='spread'&&x.side==='away');
     if(aw&&s.awayCover){
       const p=s.awayCover(aw.line);
@@ -18150,7 +18228,11 @@ function coachTotalRead(g,s,sport){
   }
   try{
     const gl=g.away.abbr+'@'+g.home.abbr;
-    const lines=sport==='nfl'?nflBookLinesFor(gl):sport==='nhl'?(typeof nhlBookLinesFor==='function'?nhlBookLinesFor(gl):[]):ncaafBookLinesFor(gl);
+    /* v2.80.3 · NBA and CBB fell through to ncaafBookLinesFor (not on their pages) and threw — so the Coach has never
+       read a basketball total. That stays the behavior (switching it on would add a vote to every hoops total) until
+       Chris says so; it just no longer throws. */
+    if(sport!=='nfl'&&sport!=='ncaaf'&&sport!=='nhl')return null;
+    const lines=linesByKey(sport,gl,g.__date||undefined);
     const ov=lines.find(x=>x.market==='total'&&x.side==='over');
     if(ov&&ov.line!=null&&s.over){
       const p=s.over(ov.line);
@@ -20061,7 +20143,7 @@ function storageMeterHtml(){
     ${R.rows.slice(0,8).map(([k,n])=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${txtEsc(k)}</span><span>${(n/1024).toFixed(0)} KB</span></div>`).join('')}
     ${PERF_LOG.length?`<div class="mktlab" style="margin-top:8px">Speed on this device</div>${PERF_LOG.slice(-10).reverse().map(x=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${txtEsc(x.what)}</span><span style="color:${x.ms>800?'var(--rust)':x.ms>250?'var(--gold)':'var(--win)'}">${x.ms} ms</span></div>`).join('')}`:''}
     <div class="bar" style="margin-top:6px"><button onclick="storageTidy(true);document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Tidy now</button>
-      <button onclick="freeStorageNow();document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Free space (drops rebuildable caches)</button></div>`;
+      <button onclick="freeStorageNow();document.getElementById('storageMeter').innerHTML=storageMeterHtml()">Free space (drops rebuildable caches)</button></div>${(()=>{try{return frzHtml();}catch(e){return'';}})()}`;
 }
 
 /* ══ BANKROLL ADVISOR ════════════════════════════════════════════════════════ */
@@ -23446,7 +23528,8 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
    Credentials never sync. The old public data-backup.json is retired.        */
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
 let CLOUD_SEEN=null,SYNC_LOCAL_N=0;   /* v2.51 · the cloud commit this device last saw, and a count of its own synced writes */
-const SYNC_NEVER=new Set(['d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
+/* v2.80.3 · + the crash guard and the master-eval relay: both describe THIS device's last few minutes — another phone's copy could trip safe mode here */
+const SYNC_NEVER=new Set(['d4.bootguard','d4.evalchain','d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
 const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$)/.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};

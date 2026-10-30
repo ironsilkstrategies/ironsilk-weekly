@@ -77,12 +77,7 @@ function randn(){
 
    The right measures are probability difference and expected value, both of
    which are linear and comparable across markets. */
-function amerToProb(a){if(a==null||isNaN(a))return null;return a>0?100/(a+100):(-a)/((-a)+100)}
-function amerProfit(a){return a>0?a/100:100/(-a)}          // profit per 1 unit staked
-function evPct(p,a){                                        // expected return %, e.g. +4.2
-  if(p==null||a==null||isNaN(a))return null;
-  return (p*amerProfit(a)-(1-p))*100;
-}
+/* amerToProb · amerProfit · evPct now live in shared.js (v2.80.3) — every page needs them */
 /* Pólya normal-tail approximation: P(Z > z).
    NOTE the constant is 2/PI. The commonly copied form uses 8/PI, which is for
    erf on a different argument scaling; using 8/PI here overstates confidence by
