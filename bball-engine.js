@@ -119,13 +119,22 @@ function bbRecordResults(C,games){const R=get(C.res,{})||{};let n=0;(games||[]).
   if(n){const ks=Object.keys(R);if(ks.length>C.resCap)ks.sort((a,b)=>String(R[a][0]).localeCompare(String(R[b][0]))).slice(0,ks.length-C.resCap).forEach(k=>delete R[k]);set(C.res,R);BB_RES_SIG[C.sp]=null;}
   return n;}
 let BB_BF_TS={};
+/* v2.80.2 · the backfill walks the DAYS it hasn't covered yet (newest first), not "from the latest final on file":
+   a late-night open filed tonight's finals first and the days before them were skipped for good. A refused range
+   no longer reads as an empty week either — espnRange walks those days one at a time. */
 async function bbBackfill(C,force){if(!force&&Date.now()-(BB_BF_TS[C.sp]||0)<30*60e3)return 0;BB_BF_TS[C.sp]=Date.now();const td=today();const y=dayShift(td,-1);
-  const have=Object.values(get(C.res,{})||{}).map(r=>r[0]).sort();const floor=dayShift(td,-C.bfDays);
-  let from=have.length?have[have.length-1]:floor;if(from<floor)from=floor;let n=0,calls=0;
-  while(from<=y&&calls<6){const to=dayShift(from,C.bfChunk-1)<y?dayShift(from,C.bfChunk-1):y;calls++;
-    let j=null;try{j=await fetch(C.espn+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+to.replace(/-/g,'')+(C.sp==='ncaab'?'&limit=1500':'&limit=600')+C.groups).then(r=>r.json());}catch(e){break;}
-    const G=(j&&j.events||[]).map(ev=>bbParseEvent(C,ev)).filter(Boolean);n+=bbRecordResults(C,G);try{bbArchiveBackfill(C,G);}catch(e){}
-    from=dayShift(to,1);}
+  const floor=dayShift(td,-C.bfDays),CK=C.res+'.cov';const cov=new Set((get(CK,[])||[]).filter(d=>d>=floor&&d<td));
+  const want=[];for(let d=y;d>=floor;d=dayShift(d,-1))if(!cov.has(d))want.push(d);
+  let n=0,calls=0,miss=false;const n0=cov.size;
+  /* chunks of at most bfChunk calendar days (a range never outgrows its limit), at most 6 asks per run */
+  for(let i=0;i<want.length&&calls<6;){const hi=want[i],edge=dayShift(hi,-(C.bfChunk-1));let j=i;while(j+1<want.length&&want[j+1]>=edge)j++;
+    const part=want.slice(i,j+1),lo=part[part.length-1];i=j+1;calls++;
+    const R=await espnRange(C.espn+'/scoreboard?dates='+lo.replace(/-/g,'')+'-'+hi.replace(/-/g,'')+(C.sp==='ncaab'?'&limit=1500':'&limit=600')+C.groups,{map:ev=>bbParseEvent(C,ev),only:part});
+    if(!R.ok){miss=true;break;}
+    const G=R.events.filter(Boolean);n+=bbRecordResults(C,G);try{bbArchiveBackfill(C,G);}catch(e){}
+    const P=new Set(part);R.covered.forEach(d=>{if(P.has(d))cov.add(d);});}
+  if(cov.size!==n0)set(CK,[...cov].sort());
+  if(miss)BB_BF_TS[C.sp]=Date.now()-25*60e3;   /* nothing answered: try again in 5 minutes, not 30 */
   BB_STATUS[C.sp].res=`${Object.keys(get(C.res,{})||{}).length} finals on file`;return n;}
 /* team logs from the results (one index per results change) */
 function bbIdx(C){const R=bbRes(C);const sig=Object.keys(R).length;const c=BB_RES_SIG[C.sp];if(c&&c.sig===sig)return c;

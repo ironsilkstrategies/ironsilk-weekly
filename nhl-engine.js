@@ -120,9 +120,10 @@ async function loadNHLUpcoming(days){
   const t0=new Date(today()+'T12:00:00');const fmt=d=>d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
   const a=new Date(t0);a.setDate(a.getDate()+1);const b=new Date(t0);b.setDate(b.getDate()+days);
   try{
-    const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${fmt(a)}-${fmt(b)}`);
-    const j=await r.json();const td=today();
-    NHL_UPCOMING=(j.events||[]).map(nhlParseEvent).filter(Boolean).map(g=>({...g,__date:nhlLocalDate(g.start)})).filter(g=>g.__date>td);
+    /* v2.80.2 · through espnRange: a refused range used to read as "no games" and wipe the saved upcoming list */
+    const R=await espnRange(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${fmt(a)}-${fmt(b)}`,{map:nhlParseEvent});
+    if(!R.ok)throw new Error('ESPN gave no upcoming days');const td=today();
+    NHL_UPCOMING=R.events.filter(Boolean).map(g=>({...g,__date:nhlLocalDate(g.start)})).filter(g=>g.__date>td);
     set('d4.nhlupcoming',{d:td,games:NHL_UPCOMING,ts:Date.now()});
   }catch(e){const c=get('d4.nhlupcoming',null);if(c&&Array.isArray(c.games))NHL_UPCOMING=c.games.filter(g=>g.__date>today());}
   return NHL_UPCOMING;
@@ -700,8 +701,10 @@ async function nhlBackfillFinals(force){
   const arc=get(NHL_LS.arc,{}),td=today(),lo=dayShift(td,-30);
   const open=Object.keys(arc).filter(d=>d<td&&d>=lo&&(arc[d].rows||[]).some(r=>!r.final)).sort();if(!open.length)return 0;
   const f=d=>d.replace(/-/g,'');
-  let j=null;try{const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${f(open[0])}-${f(dayShift(td,-1))}&limit=300`);j=await r.json();}catch(e){return 0;}
-  const G={};(j&&j.events||[]).map(nhlParseEvent).filter(Boolean).forEach(g=>{G[g.id]=g;});
+  /* v2.80.2 · through espnRange: refused, it asks only the open days one at a time (a 400 used to leave every past pick ungraded) */
+  const R=await espnRange(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${f(open[0])}-${f(dayShift(td,-1))}&limit=300`,{map:nhlParseEvent,only:open,maxRange:31});
+  if(!R.ok){NHL_BACKFILL_TS=Date.now()-540e3;return 0;}   /* try again in a minute, not ten */
+  const G={};R.events.forEach(g=>{if(g)G[g.id]=g;});
   let n=0;open.forEach(d=>(arc[d].rows||[]).forEach(r=>{if(r.final)return;const g=G[String(r.gid)];if(!g||g.abstract!=='post'||g.awayScore==null)return;
     r.final={a:+g.awayScore,h:+g.homeScore,p1a:g.p1a,p1h:g.p1h};r.awayScore=+g.awayScore;r.homeScore=+g.homeScore;n++;}));
   if(n){set(NHL_LS.arc,arc);try{brainLearn('nhl')}catch(e){}try{if(document.getElementById('gradeBody')&&typeof renderNHLRecord==='function'&&ACTIVE_SPORT==='nhl')renderNHLRecord();}catch(e){}}

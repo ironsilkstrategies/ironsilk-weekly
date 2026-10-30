@@ -606,17 +606,54 @@ function pstCardHtml(sp,g){try{
 const PST_BF_DAYS={mlb:45,nhl:60,nfl:120,ncaaf:60,nba:60,ncaab:30};
 /* ESPN scoreboard query tail per sport: college leagues need the D1 group or ESPN returns a sliver */
 const espnQ=(sp,lim)=>sp==='ncaaf'?'&groups=80&limit='+(lim||900):sp==='ncaab'?'&groups=50&limit='+(lim||900):'&limit='+(lim||1000);
+/* v2.80.2 · ONE DOOR FOR ESPN DATE RANGES. ESPN answers a range (dates=A-B) with a 400 for some leagues and sizes —
+   seen live and from the robot's servers — and every backfill that asked for one came back empty without a word
+   (upcoming NHL games, past finals, player stats, the Scout). A single day always works. espnRange() asks for the
+   range once per league per session; refused (or longer than opt.maxRange days), it walks the days instead —
+   3 at a time, newest first when asked, only the days asked for, stopping once opt.enough() says so — and keeps
+   only what opt.map() boils each event down to (a night of college hoops is ~2 MB of JSON; nobody holds it all).
+   Past days are remembered for the session per opt.tag, so repeat passes cost nothing. Never throws.
+   → {events, ok, split, calls, covered:[days answered]} */
+const ESPN_NORANGE={},ESPN_DAY_MEMO=new Map(),ESPN_RNG_MEMO=new Map();
+async function espnRange(url,opt){opt=opt||{};url=String(url);const map=opt.map||(e=>e),tag=opt.tag||'';
+  const one=async u=>{try{const r=await fetch(u);if(!r)return{j:null,s:0};if(!r.ok)return{j:null,s:r.status||0};const j=await r.json();return{j:j&&Array.isArray(j.events)?j:null,s:200};}catch(e){return{j:null,s:0};}};
+  const boil=evs=>{const o=[];(evs||[]).forEach(ev=>{let v=null;try{v=map(ev);}catch(e){}if(v!=null)o.push(v);});return o;};
+  const m=url.match(/([?&]dates=)(\d{8})-(\d{8})/);
+  if(!m){const x=await one(url);return{events:x.j?boil(x.j.events):[],ok:!!x.j,split:false,calls:1,covered:[]};}
+  const iso=s=>s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);let days=[];
+  for(let x=iso(m[2]),z=iso(m[3]);x<=z&&days.length<400;x=dayShift(x,1))days.push(x);
+  /* the refusal can depend on the size asked (limit), so "no ranges" is remembered per league AND limit — and only
+     for a real refusal (400, or an answer with no events), never for being offline or a server hiccup */
+  const lg=((url.match(/\/sports\/([a-z-]+\/[a-z-]+)\//)||[])[1]||'?')+'|'+((url.match(/[?&]limit=(\d+)/)||[])[1]||'');let calls=0;
+  const rk=tag+'|'+url,rm=ESPN_RNG_MEMO.get(rk);if(rm&&Date.now()-rm.ts<(opt.ttl||10*60e3))return rm.r;
+  if(!ESPN_NORANGE[lg]&&days.length<=(opt.maxRange||21)){calls++;const x=await one(url);
+    if(x.j){const r={events:boil(x.j.events),ok:true,split:false,calls,covered:days};if(tag)ESPN_RNG_MEMO.set(rk,{ts:Date.now(),r});return r;}
+    if(x.s===400||x.s===200)ESPN_NORANGE[lg]=Date.now();}
+  if(opt.only){const O=new Set(opt.only);days=days.filter(d=>O.has(d));}
+  if(opt.newestFirst)days.reverse();days=days.slice(0,opt.cap||31);
+  const td=today(),dayUrl=d=>url.replace(m[0],m[1]+d.replace(/-/g,'')).replace(/([?&]limit=)(\d+)/,(s,p,n)=>p+Math.min(+n,900));
+  const out=[],seen=new Set(),covered=[];let i=0,stop=false;
+  const add=L=>L.forEach(v=>{const id=v&&typeof v==='object'&&v.id!=null?String(v.id):null;if(id){if(seen.has(id))return;seen.add(id);}out.push(v);});
+  const worker=async()=>{while(i<days.length&&!stop){const d=days[i++];const k=tag+'|'+dayUrl(d),c=tag?ESPN_DAY_MEMO.get(k):null;let L=null;
+      if(c&&(d<td||Date.now()-c.ts<120e3))L=c.L;else{calls++;const x=await one(dayUrl(d));if(x.j){L=boil(x.j.events);if(tag)ESPN_DAY_MEMO.set(k,{ts:Date.now(),L});}}
+      if(L){covered.push(d);add(L);}
+      if(opt.enough){try{if(opt.enough(out))stop=true;}catch(e){}}}};
+  await Promise.all(Array.from({length:Math.max(1,Math.min(opt.conc||3,days.length))},worker));
+  return{events:out,ok:covered.length>0,split:true,calls,covered};}
 let PST_BF_BUSY=false;
 async function pstatBackfill(sp,maxBoxes){
   if(PST_BF_BUSY||!FBP_ESPN[sp])return 0;PST_BF_BUSY=true;let done=0;
   try{const D=pstDb(sp);const cur=D.bf||{};const end=today();
     const from=cur.from||dayShift(end,-(PST_BF_DAYS[sp]||45));
     const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+espnQ(sp,sp==='ncaab'?1500:null);
-    const j=await fetch(url).then(r=>r.json()).catch(()=>({events:[]}));
-    let evs=(j.events||[]).filter(ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1));   /* preseason never feeds a player's numbers */
+    /* finals only, preseason never feeds a player's numbers; each event boiled down to its id and teams */
+    const R=await espnRange(url,{tag:'pst',newestFirst:true,cap:PST_BF_DAYS[sp]||45,map:ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1)
+        ?{id:String(ev.id),t:(((ev.competitions||[])[0]||{}).competitors||[]).map(c=>String((c.team||{}).abbreviation||'').toUpperCase())}:null,
+      enough:L=>L.reduce((n,x)=>n+(D.fed[x.id]?0:1),0)>=(maxBoxes||6)*3});
+    let evs=R.events;
     /* college basketball plays ~150 games a night: the games on today's board come first */
-    if(sp==='ncaab'){try{const T=teamsToday(sp);evs.sort((a,b)=>{const on=e=>(((e.competitions||[])[0]||{}).competitors||[]).some(c=>T.has(String((c.team||{}).abbreviation||'').toUpperCase()))?0:1;return on(a)-on(b);});}catch(e){}}
-    const ids=evs.map(ev=>String(ev.id)).filter(id=>!D.fed[id]);
+    if(sp==='ncaab'){try{const T=teamsToday(sp);evs=evs.slice().sort((a,b)=>(a.t.some(x=>T.has(x))?0:1)-(b.t.some(x=>T.has(x))?0:1));}catch(e){}}
+    const ids=evs.map(x=>x.id).filter(id=>!D.fed[id]);
     for(const id of ids.slice(0,maxBoxes||6)){
       try{const s=await fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json());
         const box=sp==='nhl'?fbpParseHockey(s):sp==='mlb'?fbpParseBaseball(s):(sp==='nba'||sp==='ncaab')?fbpParseBasketball(s):fbpParseBox(s);
@@ -848,8 +885,9 @@ const SCOUT_BF_DAYS={nfl:120,ncaaf:75,nhl:60,nba:30,ncaab:30};let SCOUT_BF_BUSY=
 async function scoutBackfill(sp,max){if(SCOUT_BF_BUSY||!FBP_ESPN[sp]||!SCOUT_SP.includes(sp))return 0;SCOUT_BF_BUSY=true;let done=0;
   try{const D=scoutDb(sp);const end=today(),from=dayShift(end,-(SCOUT_BF_DAYS[sp]||60));
     const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+espnQ(sp,sp==='ncaab'?1500:null);
-    const j=await fetch(url).then(r=>r.json()).catch(()=>({events:[]}));
-    const ids=(j.events||[]).filter(ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1)).map(ev=>String(ev.id)).filter(id=>!D.fed[id]);
+    const R=await espnRange(url,{tag:'scout',newestFirst:true,cap:SCOUT_BF_DAYS[sp]||60,map:ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1)?{id:String(ev.id)}:null,
+      enough:L=>L.reduce((n,x)=>n+(D.fed[x.id]?0:1),0)>=(max||8)*3});
+    const ids=R.events.map(x=>x.id).filter(id=>!D.fed[id]);
     for(const id of ids.slice(0,max||8)){
       try{const s=await fetch(FBP_ESPN[sp]+'/summary?event='+id).then(r=>r.json());
         const box=sp==='nhl'?fbpParseHockey(s):(sp==='nba'||sp==='ncaab')?fbpParseBasketball(s):fbpParseBox(s);
@@ -2815,7 +2853,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261030b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261030c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
