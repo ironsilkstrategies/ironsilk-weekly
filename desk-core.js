@@ -1626,7 +1626,7 @@ function vipImgViewer(cs,files){const old=document.getElementById('vipImgView');
 let FBP_INTEL=null;
 async function fbpIntel(){const d=today();if(FBP_INTEL&&FBP_INTEL.d===d)return FBP_INTEL;const I={d,g:{}};
   const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',MLB:'mlb',NHL:'nhl',NBA:'nba',NCAAB:'ncaab'};
-  const rd=async f=>{try{const r=await fetch('intake/'+d+f+'?v='+Date.now(),{cache:'no-store'});return r.ok?await r.text():'';}catch(e){return'';}};
+  const rd=async f=>{try{return(typeof intakeFile==='function'?await intakeFile(d,f):null)||'';}catch(e){return'';}};
   const ab=(sp,n)=>{try{return intakeAbbr(sp,n)||null;}catch(e){return null;}};
   let sp=null,G=null;(await rd('.txt')).split('\n').forEach(l=>{l=l.trim();if(SPH[l]){sp=SPH[l];return;}if(!sp||!l||l[0]==='#')return;
     const g=l.match(/^(.+?)\s+@\s+(.+)$/);if(g&&!/:/.test(l)){const a=ab(sp,g[1]),h=ab(sp,g[2]);G=a&&h?(I.g[sp+'|'+a+'@'+h]={sp,a,h,an:g[1],hn:g[2],tr:[],pred:null,cons:null,tot:null}):null;return;}

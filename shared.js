@@ -1579,8 +1579,14 @@ function intakeSave(){try{setTimeout(()=>halfLinesRefresh().catch(()=>{}),500);}
 const DROP_KEY='d4.intakedrop';
 function dropHash(t){let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36);}
 /* v2.64.1 · consensus rides in its own file (intake/<day>.cons.txt): the reader only reads consensus rows in a paste with no book lines */
+/* v2.80.4 · one download of a day's intake file serves every reader for 30 s — the filer, the half-lines reader and the
+   FB-post intel each fetched the same file at boot (three downloads). A miss is never remembered. */
+const INTAKE_FILE_MEMO=new Map();
+function intakeFile(day,ext){const k=day+(ext||'.txt');const c=INTAKE_FILE_MEMO.get(k);if(c&&Date.now()-c.ts<30e3)return c.p;
+  const p=(async()=>{if(typeof fetch==='undefined')return null;try{const r=await fetch('intake/'+k+'?t='+Date.now(),{cache:'no-store'});if(!r||!r.ok)return null;return await r.text();}catch(e){return null;}})();
+  INTAKE_FILE_MEMO.set(k,{ts:Date.now(),p});p.then(t=>{if(t==null&&INTAKE_FILE_MEMO.get(k)&&INTAKE_FILE_MEMO.get(k).p===p)INTAKE_FILE_MEMO.delete(k);});return p;}
 async function intakeAutoDrop(day,ext){day=day||today();if(!ext){const r0=await intakeAutoDrop(day,'.txt');try{await intakeAutoDrop(day,'.cons.txt');}catch(e){}return r0;}if(typeof location==='undefined'||!/^https?:/.test(location.protocol))return null;
-  let text='';try{const r=await fetch('intake/'+day+ext+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;text=await r.text();}catch(e){return null;}
+  let text=await intakeFile(day,ext);if(text==null)return null;
   if(!text.trim()||/^\s*</.test(text))return null; // 404 pages come back as HTML on some hosts
   const h=day+(ext==='.txt'?'':ext)+':'+dropHash(text);const seen=get(DROP_KEY,{})||{};if(seen[h])return{skipped:true,h};
   const m=text.match(/^\s*SOURCE\s*:\s*(.+)$/im);const src=m?m[1].trim():'drop';
@@ -2446,7 +2452,7 @@ const HALF_KEY='d4.halfcalls',HALFLN_KEY='d4.halflines',HALF_OK={n:20,p:0.57};
 const HALF_FRAC={nba:[0.49,0.5],ncaab:[0.47,0.5],nfl:[0.49,0.5],ncaaf:[0.49,0.5],nhl:[0.31,0.33]};   /* [share of total, share of margin] */
 const halfTag=sp=>sp==='nhl'?'P1':'1H';
 async function halfLinesRefresh(){if(typeof fetch==='undefined'||typeof location==='undefined'||!/^https?:/.test(location.protocol))return;const d=today();
-  let t='';try{const r=await fetch('intake/'+d+'.txt?v='+Date.now(),{cache:'no-store'});if(!r.ok)return;t=await r.text();}catch(e){return;}
+  const t=await intakeFile(d,'.txt');if(t==null)return;
   const SPH={NFL:'nfl',NCAAF:'ncaaf',CFB:'ncaaf',NHL:'nhl',NBA:'nba',NCAAB:'ncaab'};const out={d,g:{}};let sp=null,G=null;
   t.split('\n').forEach(l=>{l=l.trim();if(SPH[l]){sp=SPH[l];G=null;return;}if(/^MLB$/.test(l)){sp=null;return;}if(!sp||!l||l[0]==='#')return;
     const g=l.match(/^(.+?)\s+@\s+(.+)$/);if(g&&!/:/.test(l)){const a=intakeAbbr(sp,g[1]),h=intakeAbbr(sp,g[2]);G=a&&h?(out.g[sp+'|'+a+'@'+h]={}):null;return;}
@@ -2906,7 +2912,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261030d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261030e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /

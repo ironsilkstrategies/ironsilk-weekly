@@ -27,7 +27,7 @@ setTimeout(()=>{try{
   const n=w.eval('voicesRepairDates(true)');w.eval('gradeVoices()');
   const left=w.eval(`get(VOICES_KEY,[]).filter(x=>x.game==='AAA@BBB')`);
   T('stranded copies: the latest pre-game call moves to game day and grades, the older copy and the post-game call are dropped',n===3&&left.length===1&&left[0].side==='away'&&left[0].date===w.eval('dayShift(today(),-2)')&&left[0].graded&&left[0].hit===false,JSON.stringify(left.map(x=>[x.date,x.side,x.graded,x.hit])));
-  T('new calls are dated by the game, not the day they were logged',/const d=g\.__date\|\|gd\|\|today\(\)/.test(w.eval('characterCalls.toString()')));
+  T('new calls are dated by the game, not the day they were logged',/=[\w$]+\.__date\|\|[\w$]+\|\|today\(\)/.test(w.eval('characterCalls.toString()'))   /* v2.80.4 · the page runs the minified build: names are shortened */);
   w.eval('cdayStep(-1)');T('‹ steps back a day',w.eval('CDAY_D')===w.eval('dayShift(today(),-1)'));w.eval('cdayStep(1)');w.eval('cdayStep(1)');T('› stops at today',w.eval('CDAY_D')===d);
 }catch(e){out.push('CRASH '+e.stack);}
 console.log(out.join('\n'));process.exit(0);},1500);
