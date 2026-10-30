@@ -2912,7 +2912,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261030f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261030g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23637,8 +23637,27 @@ async function syncPush(snap,ref){const content=await lzOff('c64',typeof snap===
   const r=await fetch(syncGit('refs/heads/main'),{method:'PATCH',headers:syncHeaders({'Content-Type':'application/json'}),body:JSON.stringify({sha:commit.sha,force:true})});
   if(!r.ok)throw new Error('HTTP '+r.status+' moving the branch');return{ok:true,sha:commit.sha||null};}
 /* first: undefined (normal) · 'local' (this device is the master copy) · 'remote' (take the cloud copy) */
+/* v2.80.6 · THE SYNC REPO MUST BE PRIVATE, AND NOT THE APP'S. A save replaces that repo's whole main branch with one
+   file holding every ticket, every call and the card — pointed at the public app/site repo it would wipe the site and
+   publish the paid picks. Checked once per session (a failed check retries in 5 min); until it passes, nothing syncs. */
+let SYNC_SAFE=null,SYNC_SAFE_WARNED=false;
+async function syncRepoSafe(force){const norm=r=>String(r||'').trim().replace(/^https?:\/\/github\.com\//i,'').replace(/\.git$/i,'').replace(/\/+$/,'').toLowerCase();
+  const repo=norm(get(SYNC.repo,''));if(!repo)return{ok:false,why:'no sync repo set'};
+  const tk=String(get(SYNC.token,'')||'').slice(-6);
+  if(SYNC_SAFE&&SYNC_SAFE.repo===repo&&SYNC_SAFE.tk===tk&&(SYNC_SAFE.ok||(!force&&Date.now()-SYNC_SAFE.ts<5*60e3)))return SYNC_SAFE;
+  const own=new Set([norm(typeof TGW_WORKER_REPO!=='undefined'?TGW_WORKER_REPO:''),norm(get(LS.ghrepo,'')),norm(typeof SITE_REPO!=='undefined'?SITE_REPO:''),norm((()=>{try{return pubRepo();}catch(e){return'';}})())].filter(Boolean));
+  let R;
+  if(own.has(repo))R={ok:false,why:`${repo} is the app/site repo — a sync save would replace its whole branch and publish your picks. Use a separate PRIVATE repo for sync.`};
+  else{try{const r=await fetch('https://api.github.com/repos/'+repo,{headers:syncHeaders(),cache:'no-store'});
+      if(r.status===401||r.status===403)R={ok:false,why:'token rejected (HTTP '+r.status+') — it needs Contents: read and write on '+repo};
+      else if(!r.ok)R={ok:false,soft:true,why:`GitHub didn't confirm ${repo} is private (HTTP ${r.status}) — sync waits and checks again`};
+      else{const j=await r.json();R=j&&j.private===true?{ok:true}:{ok:false,why:`${repo} is PUBLIC — your tickets, calls and the card would be readable by anyone. Make it private on GitHub (Settings → Change visibility) or use a private repo.`};}}
+    catch(e){R={ok:false,soft:true,why:'couldn\'t reach GitHub to check the sync repo — sync waits and checks again'};}}
+  SYNC_SAFE={...R,repo,tk,ts:Date.now()};return SYNC_SAFE;}
 async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your private repo and token first.');return{ok:false};}
   if(SYNC_BUSY)return SYNC_BUSY;
+  {const safe=await syncRepoSafe(!!manual);if(!safe.ok){SYNC_STATE={ok:false,ts:Date.now(),msg:'⛔ '+safe.why};try{renderSyncStatus();}catch(e){}
+    if(manual)alert('Sync is stopped: '+safe.why);else if(!safe.soft&&!SYNC_SAFE_WARNED){SYNC_SAFE_WARNED=true;try{toastSync('⛔ Sync stopped — '+safe.why);}catch(e){}}return{ok:false,reason:safe.why};}}
   SYNC_BUSY=(async()=>{let changed=0;try{
     let fast=null;
     for(let attempt=0;attempt<3;attempt++){

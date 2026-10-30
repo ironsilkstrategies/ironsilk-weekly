@@ -48,6 +48,7 @@ function page(file,fetchImpl,extra){let html=fs.readFileSync(path.join(W,file),'
   {let CUR='r1',REMOTE=LZ.compressToBase64(JSON.stringify({v:1,dev:'Desktop-x',ts:1,keys:{'d4.remoteonly':{t:5,v:{a:1}}}}));const C={ref:0,pull:0,push:0,blob:null};let cn=0;
     const json=o=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(o),text:()=>Promise.resolve(JSON.stringify(o))});
     const F=(u,o)=>{u=String(u);o=o||{};
+      if(/repos\/me\/thedesk-data$/.test(u))return json({private:true});   /* v2.80.6 · the sync repo's privacy check */
       if(/\/git\/ref\/heads\/main/.test(u)){C.ref++;return json({object:{sha:CUR}});}
       if(/\/contents\/thedesk-sync\.json/.test(u)){C.pull++;return Promise.resolve({ok:true,status:200,text:()=>Promise.resolve(REMOTE)});}
       if(/\/git\/blobs$/.test(u)){C.push++;C.blob=JSON.parse(o.body).content;return json({sha:'b'+C.push});}

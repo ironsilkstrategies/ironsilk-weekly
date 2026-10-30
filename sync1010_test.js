@@ -6,6 +6,7 @@ const G={ref:null,objs:{},n:0,commits:[],publicWrites:0,log:[]};const sha=()=>'s
 function gh(u,o){o=o||{};const m=(o.method||'GET').toUpperCase();u=String(u);const J=(st,b)=>Promise.resolve({ok:st<300,status:st,json:()=>Promise.resolve(b),text:()=>Promise.resolve(typeof b==='string'?b:JSON.stringify(b))});
   const auth=(o.headers||{}).Authorization||'';if(/repos\/me\/thedesk-data/.test(u)&&auth!=='Bearer github_pat_TESTTOKEN_123456789')return J(401,{});
   if(/repos\/me\/ironsilk-weekly\/contents/.test(u)&&m==='PUT'){G.publicWrites++;return J(201,{});}
+  if(/repos\/me\/thedesk-data$/.test(u)&&m==='GET')return J(200,{private:!G.publicRepo});   /* v2.80.6 · the privacy check */
   if(!/repos\/me\/thedesk-data/.test(u))return J(404,{});G.log.push(m+' '+u.replace(/.*thedesk-data\//,'').replace(/\?.*/,''));
   if(/git\/ref\/heads\/main/.test(u))return G.ref?J(200,{object:{sha:G.ref}}):J(409,{message:'Git Repository is empty.'});
   if(/contents\/thedesk-sync\.json/.test(u)&&m==='GET'){const c=G.ref&&G.objs[G.objs[G.ref].tree];return c?J(200,G.objs[c[0].sha].content):J(404,{});}
@@ -60,5 +61,14 @@ setTimeout(async()=>{try{
   /* public repo no longer receives your data */
   const fresh=mk('Desktop-2');await new Promise(z=>setTimeout(z,2600));fresh.eval(`set(LS.ghrepo,'me/ironsilk-weekly');set(LS.ghtoken,'x')`);await fresh.eval('pushToGitHub(false)');
   T('old public backup path is retired (no write to the site repo)',G.publicWrites===0);
+  /* v2.80.6 · the sync repo must be private, and never the app's own repo (a save replaces its whole branch) */
+  G.publicRepo=true;const pub=mk('Desktop-3');await new Promise(z=>setTimeout(z,2600));
+  pub.eval(`localStorage.setItem('d4.syncrepo',JSON.stringify('me/thedesk-data'));localStorage.setItem('d4.synctoken',JSON.stringify('github_pat_TESTTOKEN_123456789'))`);
+  const c0=G.commits.length;let rr=await pub.eval('syncNow(false)');
+  T('a PUBLIC sync repo is refused — nothing is written',rr.ok===false&&/PUBLIC/.test(rr.reason)&&G.commits.length===c0,rr.reason);
+  G.publicRepo=false;pub.eval(`localStorage.setItem('d4.syncrepo',JSON.stringify('ironsilkstrategies/ironsilk-weekly'))`);rr=await pub.eval('syncNow(true)');
+  T('the app/site repo is refused as a sync target',rr.ok===false&&/app\/site repo/.test(rr.reason)&&G.commits.length===c0,rr.reason);
+  pub.eval(`localStorage.setItem('d4.syncrepo',JSON.stringify('me/thedesk-data'))`);rr=await pub.eval('syncNow(true)');
+  T('a private repo syncs again right away',rr.ok===true,JSON.stringify(rr));
 }catch(e){T('harness',false,e.stack);}
 console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(0);},2600);
