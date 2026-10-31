@@ -1,0 +1,328 @@
+SOURCE: sportsbetting
+# Sat Oct 31, 2026 — book lines: sportsbetting.ag screenshots (9:18–9:20 AM CT). Full games only (spread, moneyline, total); UConn @ Air Force also has the 1st-half spread. Pick'em written as 0. FCS-only Bucknell @ Lehigh left out (not on the FBS board). Team names written the way ESPN lists them where the book differs (Miami, UConn, App State).
+
+NCAAF
+
+California @ NC State
+ML: California +260 / NC State -320
+SPREAD: California +9.5 (-105) / NC State -9.5 (-115)
+OU: o56.5 (-110) / u56.5 (-110)
+
+Illinois @ Maryland
+ML: Illinois -137 / Maryland +117
+SPREAD: Illinois -2.5 (-113) / Maryland +2.5 (-107)
+OU: o54 (-110) / u54 (-110)
+
+UAB @ South Florida
+ML: UAB +260 / South Florida -320
+SPREAD: UAB +7.5 (-110) / South Florida -7.5 (-110)
+OU: o43 (-105) / u43 (-115)
+
+SMU @ Syracuse
+ML: SMU -345 / Syracuse +278
+SPREAD: SMU -9.5 (-110) / Syracuse +9.5 (-110)
+OU: o59 (-110) / u59 (-110)
+
+Bowling Green @ Western Michigan
+ML: Bowling Green +464 / Western Michigan -630
+SPREAD: Bowling Green +14 (-110) / Western Michigan -14 (-110)
+OU: o43.5 (-130) / u43.5 (+110)
+
+Boston College @ Duke
+ML: Boston College +222 / Duke -270
+SPREAD: Boston College +7 (-114) / Duke -7 (-106)
+OU: o49 (-112) / u49 (-108)
+
+Notre Dame @ Navy
+ML: Notre Dame -10000 / Navy +1800
+SPREAD: Notre Dame -30.5 (-113) / Navy +30.5 (-107)
+OU: o55 (-102) / u55 (-118)
+
+Arizona @ Texas Tech
+ML: Arizona +153 / Texas Tech -175
+SPREAD: Arizona +3.5 (-106) / Texas Tech -3.5 (-114)
+OU: o54.5 (-110) / u54.5 (-110)
+
+Wisconsin @ Iowa
+ML: Wisconsin +117 / Iowa -137
+SPREAD: Wisconsin +2.5 (-110) / Iowa -2.5 (-110)
+OU: o36.5 (-110) / u36.5 (-110)
+
+Michigan @ Rutgers
+ML: Michigan -700 / Rutgers +505
+SPREAD: Michigan -16 (-110) / Rutgers +16 (-110)
+OU: o47.5 (-110) / u47.5 (-110)
+
+Auburn @ Mississippi
+ML: Auburn +350 / Mississippi -450
+SPREAD: Auburn +11 (-110) / Mississippi -11 (-110)
+OU: o58 (-115) / u58 (-105)
+
+Marshall @ Old Dominion
+ML: Marshall -142 / Old Dominion +122
+SPREAD: Marshall -2.5 (-118) / Old Dominion +2.5 (-102)
+OU: o46.5 (-110) / u46.5 (-110)
+
+Coastal Carolina @ Georgia State
+ML: Coastal Carolina +149 / Georgia State -170
+SPREAD: Coastal Carolina +3.5 (-105) / Georgia State -3.5 (-115)
+OU: o56 (-110) / u56 (-110)
+
+Kansas State @ Colorado
+ML: Kansas State +130 / Colorado -150
+SPREAD: Kansas State +3 (-116) / Colorado -3 (-104)
+OU: o47 (-108) / u47 (-112)
+
+Temple @ East Carolina
+ML: Temple +165 / East Carolina -190
+SPREAD: Temple +4 (-109) / East Carolina -4 (-111)
+OU: o50.5 (-110) / u50.5 (-110)
+
+Louisiana Tech @ South Alabama
+ML: Louisiana Tech -245 / South Alabama +203
+SPREAD: Louisiana Tech -6 (-116) / South Alabama +6 (-104)
+OU: o58.5 (+100) / u58.5 (-120)
+
+UConn @ Air Force
+SPREAD: UConn +0 (-110) / Air Force -0 (-110)
+OU: o52 (-110) / u52 (-110)
+H1SPREAD: UConn +0 (-115) / Air Force -0 (-105)
+
+Stanford @ Louisville
+ML: Stanford +1041 / Louisville -2000
+SPREAD: Stanford +23 (-113) / Louisville -23 (-107)
+OU: o61 (-110) / u61 (-110)
+
+Florida @ Georgia
+ML: Florida +344 / Georgia -440
+SPREAD: Florida +12 (-110) / Georgia -12 (-110)
+OU: o57 (-110) / u57 (-110)
+
+Minnesota @ Indiana
+ML: Minnesota +836 / Indiana -1400
+SPREAD: Minnesota +20.5 (-105) / Indiana -20.5 (-115)
+OU: o41 (-105) / u41 (-115)
+
+Kansas @ TCU
+ML: Kansas +195 / TCU -235
+SPREAD: Kansas +6 (-105) / TCU -6 (-115)
+OU: o45.5 (-110) / u45.5 (-110)
+
+Arizona State @ BYU
+ML: Arizona State +561 / BYU -800
+SPREAD: Arizona State +16.5 (-110) / BYU -16.5 (-110)
+OU: o46.5 (-125) / u46.5 (+105)
+
+Northwestern @ Oregon
+ML: Northwestern +153 / Oregon -175
+SPREAD: Northwestern +3.5 (+100) / Oregon -3.5 (-120)
+OU: o48 (-110) / u48 (-110)
+
+UTEP @ North Dakota State
+ML: UTEP +1216 / North Dakota State -2800
+SPREAD: UTEP +23.5 (+100) / North Dakota State -23.5 (-120)
+OU: o43.5 (-108) / u43.5 (-112)
+
+Southern Miss @ UL Monroe
+ML: Southern Miss -165 / UL Monroe +145
+SPREAD: Southern Miss -3.5 (-105) / UL Monroe +3.5 (-115)
+OU: o54.5 (-110) / u54.5 (-110)
+
+Florida International @ Liberty
+ML: Florida International +415 / Liberty -550
+SPREAD: Florida International +14 (-113) / Liberty -14 (-107)
+OU: o45.5 (-110) / u45.5 (-110)
+
+Colorado State @ Utah State
+ML: Colorado State +234 / Utah State -285
+SPREAD: Colorado State +7.5 (-110) / Utah State -7.5 (-110)
+OU: o61 (-105) / u61 (-115)
+
+Utah @ Cincinnati
+ML: Utah -270 / Cincinnati +222
+SPREAD: Utah -7.5 (+100) / Cincinnati +7.5 (-120)
+OU: o57 (-115) / u57 (-105)
+
+Virginia @ Wake Forest
+ML: Virginia +400 / Wake Forest -525
+SPREAD: Virginia +13 (-110) / Wake Forest -13 (-110)
+OU: o48 (-110) / u48 (-110)
+
+New Mexico @ San Jose State
+ML: New Mexico -650 / San Jose State +476
+SPREAD: New Mexico -14.5 (-115) / San Jose State +14.5 (-105)
+OU: o43 (-110) / u43 (-110)
+
+Purdue @ Penn State
+ML: Purdue +306 / Penn State -385
+SPREAD: Purdue +10.5 (-113) / Penn State -10.5 (-107)
+OU: o54.5 (-115) / u54.5 (-105)
+
+South Carolina @ Oklahoma
+ML: South Carolina +143 / Oklahoma -163
+SPREAD: South Carolina +3.5 (-112) / Oklahoma -3.5 (-108)
+OU: o44 (-115) / u44 (-105)
+
+Nevada @ UCLA
+ML: Nevada +910 / UCLA -1600
+SPREAD: Nevada +21.5 (+100) / UCLA -21.5 (-120)
+OU: o42.5 (-110) / u42.5 (-110)
+
+App State @ Georgia Southern
+ML: App State +183 / Georgia Southern -215
+SPREAD: App State +6 (-110) / Georgia Southern -6 (-110)
+OU: o56 (-105) / u56 (-115)
+
+Clemson @ Florida State
+ML: Clemson +195 / Florida State -235
+SPREAD: Clemson +6 (-105) / Florida State -6 (-115)
+OU: o49.5 (-110) / u49.5 (-110)
+
+Oklahoma State @ Iowa State
+ML: Oklahoma State -365 / Iowa State +292
+SPREAD: Oklahoma State -9.5 (-110) / Iowa State +9.5 (-110)
+OU: o58 (-112) / u58 (-108)
+
+Washington State @ San Diego State
+ML: Washington State +115 / San Diego State -135
+SPREAD: Washington State +2.5 (-110) / San Diego State -2.5 (-110)
+OU: o48 (-112) / u48 (-108)
+
+Georgia Tech @ Pittsburgh
+ML: Georgia Tech +252 / Pittsburgh -310
+SPREAD: Georgia Tech +8.5 (-115) / Pittsburgh -8.5 (-105)
+OU: o55 (-112) / u55 (-108)
+
+Miami @ North Carolina
+ML: Miami -630 / North Carolina +464
+SPREAD: Miami -14 (-112) / North Carolina +14 (-108)
+OU: o53.5 (-105) / u53.5 (-115)
+
+Ohio State @ USC
+ML: Ohio State -235 / USC +195
+SPREAD: Ohio State -6.5 (-105) / USC +6.5 (-115)
+OU: o50.5 (-115) / u50.5 (-105)
+
+Mississippi State @ Texas
+ML: Mississippi State +836 / Texas -1400
+SPREAD: Mississippi State +20 (-105) / Texas -20 (-115)
+OU: o50.5 (-115) / u50.5 (-105)
+
+Missouri @ Arkansas
+ML: Missouri -380 / Arkansas +303
+SPREAD: Missouri -10 (-113) / Arkansas +10 (-107)
+OU: o49 (-108) / u49 (-112)
+
+Army @ Memphis
+ML: Army +185 / Memphis -218
+SPREAD: Army +6 (-110) / Memphis -6 (-110)
+OU: o60 (-110) / u60 (-110)
+
+Washington @ Nebraska
+ML: Washington +241 / Nebraska -295
+SPREAD: Washington +7.5 (-110) / Nebraska -7.5 (-110)
+OU: o50 (-110) / u50 (-110)
+
+Texas State @ Boise State
+ML: Texas State +330 / Boise State -420
+SPREAD: Texas State +10.5 (-110) / Boise State -10.5 (-110)
+OU: o63.5 (-110) / u63.5 (-110)
+
+Northern Illinois @ UNLV
+ML: Northern Illinois +979 / UNLV -1800
+SPREAD: Northern Illinois +21.5 (-115) / UNLV -21.5 (-105)
+OU: o55.5 (-110) / u55.5 (-110)
+
+Oregon State @ Fresno State
+ML: Oregon State -230 / Fresno State +192
+SPREAD: Oregon State -6 (-110) / Fresno State +6 (-110)
+OU: o57.5 (-110) / u57.5 (-110)
+
+NBA
+
+Portland Trail Blazers @ Utah Jazz
+ML: Portland Trail Blazers -310 / Utah Jazz +252
+SPREAD: Portland Trail Blazers -8 (-115) / Utah Jazz +8 (-105)
+OU: o232 (-110) / u232 (-110)
+
+Philadelphia 76ers @ Charlotte Hornets
+ML: Philadelphia 76ers -123 / Charlotte Hornets +103
+SPREAD: Philadelphia 76ers -1.5 (-110) / Charlotte Hornets +1.5 (-110)
+OU: o215.5 (-105) / u215.5 (-115)
+
+Atlanta Hawks @ New Orleans Pelicans
+ML: Atlanta Hawks -175 / New Orleans Pelicans +153
+SPREAD: Atlanta Hawks -4 (-115) / New Orleans Pelicans +4 (-105)
+OU: o241.5 (-105) / u241.5 (-115)
+
+Sacramento Kings @ Memphis Grizzlies
+ML: Sacramento Kings +296 / Memphis Grizzlies -370
+SPREAD: Sacramento Kings +8 (-105) / Memphis Grizzlies -8 (-115)
+OU: o231.5 (-110) / u231.5 (-110)
+
+Cleveland Cavaliers @ Milwaukee Bucks
+ML: Cleveland Cavaliers -380 / Milwaukee Bucks +303
+SPREAD: Cleveland Cavaliers -9.5 (-110) / Milwaukee Bucks +9.5 (-110)
+OU: o235 (-115) / u235 (-105)
+
+Minnesota Timberwolves @ San Antonio Spurs
+ML: Minnesota Timberwolves +446 / San Antonio Spurs -600
+SPREAD: Minnesota Timberwolves +12.5 (-115) / San Antonio Spurs -12.5 (-105)
+OU: o226.5 (-110) / u226.5 (-110)
+
+Oklahoma City Thunder @ Houston Rockets
+ML: Oklahoma City Thunder +120 / Houston Rockets -140
+SPREAD: Oklahoma City Thunder +2 (-105) / Houston Rockets -2 (-115)
+OU: o218.5 (-108) / u218.5 (-112)
+
+NHL
+
+Chicago Blackhawks @ Boston Bruins
+ML: Chicago Blackhawks +200 / Boston Bruins -230
+PL: Chicago Blackhawks +1.5 (-127) / Boston Bruins -1.5 (+107)
+OU: o6 (-116) / u6 (+100)
+
+St. Louis Blues @ Detroit Red Wings
+ML: St. Louis Blues -115 / Detroit Red Wings +101
+PL: St. Louis Blues -1.5 (+219) / Detroit Red Wings +1.5 (-265)
+OU: o5.5 (-122) / u5.5 (+106)
+
+Tampa Bay Lightning @ Nashville Predators
+ML: Tampa Bay Lightning -165 / Nashville Predators +145
+PL: Tampa Bay Lightning -1.5 (+149) / Nashville Predators +1.5 (-170)
+OU: o6 (-114) / u6 (-102)
+
+Edmonton Oilers @ New York Islanders
+ML: Edmonton Oilers -124 / New York Islanders +110
+PL: Edmonton Oilers -1.5 (+185) / New York Islanders +1.5 (-218)
+OU: o6 (-115) / u6 (-101)
+
+Buffalo Sabres @ Los Angeles Kings
+ML: Buffalo Sabres -116 / Los Angeles Kings +102
+PL: Buffalo Sabres -1.5 (+205) / Los Angeles Kings +1.5 (-248)
+OU: o6 (-106) / u6 (-110)
+
+Ottawa Senators @ San Jose Sharks
+ML: Ottawa Senators -135 / San Jose Sharks +119
+PL: Ottawa Senators -1.5 (+185) / San Jose Sharks +1.5 (-218)
+OU: o6.5 (-108) / u6.5 (-108)
+
+Pittsburgh Penguins @ Montreal Canadiens
+ML: Pittsburgh Penguins +115 / Montreal Canadiens -130
+PL: Pittsburgh Penguins +1.5 (-210) / Montreal Canadiens -1.5 (+180)
+OU: o6.5 (-115) / u6.5 (-101)
+
+Toronto Maple Leafs @ Vancouver Canucks
+ML: Toronto Maple Leafs -180 / Vancouver Canucks +158
+PL: Toronto Maple Leafs -1.5 (+135) / Vancouver Canucks +1.5 (-155)
+OU: o6.5 (-122) / u6.5 (+106)
+
+Columbus Blue Jackets @ Dallas Stars
+ML: Columbus Blue Jackets +162 / Dallas Stars -185
+PL: Columbus Blue Jackets +1.5 (-172) / Dallas Stars -1.5 (+151)
+OU: o5.5 (+100) / u5.5 (-116)
+
+Calgary Flames @ Colorado Avalanche
+ML: Calgary Flames +347 / Colorado Avalanche -420
+PL: Calgary Flames +1.5 (+140) / Colorado Avalanche -1.5 (-160)
+OU: o6.5 (-110) / u6.5 (-106)
