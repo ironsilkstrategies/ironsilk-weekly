@@ -1066,7 +1066,8 @@ function deskRunSportEval(sp){
   return false;}
 /* the hidden frame: once its board is ready, evaluate and say so */
 if(DESK_BG_EVAL&&typeof window!=='undefined')window.addEventListener('load',()=>{const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;const t0=Date.now();
-  const iv=setInterval(()=>{let ready=false;try{const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[sp];ready=!!(B&&B.ts>=t0-1000)||(sportGames(sp)||[]).length===0&&Date.now()-t0>8000;}catch(e){}
+  const iv=setInterval(()=>{let ready=false;try{const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<40000)return;   /* v2.81.5 · the football week is still loading */
+    const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[sp];ready=!!(B&&B.ts>=Math.max(t0-1000,window.__FB_WEEK_DONE||0))||(sportGames(sp)||[]).length===0&&Date.now()-t0>8000;}catch(e){}
     if(!ready&&Date.now()-t0<40000)return;clearInterval(iv);let ok=false,err='';try{ok=deskRunSportEval(sp);}catch(e){err=String(e&&e.message||e);}
     set('d4.bgeval.'+sp,{ts:Date.now(),ok,err,d:today()});},700);});
 function deskSay(h){try{document.querySelectorAll('.deskStatus').forEach(e=>e.innerHTML=h);}catch(e){}}
@@ -1075,7 +1076,7 @@ async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confir
   try{if(typeof bolAutoMaybe==='function'&&bolAutoOn()){deskSay('⓪ Pulling BetOnline lines…');try{await bolAutoMaybe('master evaluation',2);}catch(e){}}   /* v2.81.2 · fresh book lines first (auto mode) */
     deskSay('① Grading yesterday and calibrating…');await new Promise(r=>setTimeout(r,30));
     try{await apRunAsync(true,'master evaluation');}catch(e){}try{await genSlice(confRebuildG(true));}catch(e){}
-    deskSay(`② Evaluating ${SP_LAB[here]||here}…`);await new Promise(r=>setTimeout(r,30));try{todaySnapshot();}catch(e){}
+    deskSay(`② Evaluating ${SP_LAB[here]||here}…`);await new Promise(r=>setTimeout(r,30));try{todaySnapshot(true);}catch(e){}
     try{if(deskRunSportEval(here))done.push(here);}catch(e){console.warn('eval',here,e);miss.push(here);}
     const others=liveSports().filter(sp=>sp!==here&&SPORT_PAGE[sp]);
     /* v2.67.6 · RELAY, not frames. Each sport page is ~2 MB of script; loading one inside another (a hidden iframe) doubled
@@ -1121,7 +1122,8 @@ if(EVAL_CHAIN_HOP&&typeof document!=='undefined')document.addEventListener('DOMC
   d.innerHTML=`<div style="font-size:34px">${ld?'⟳':'🔒'}</div><div style="margin-top:10px">${ld?'Loading every board':'Master evaluation'}</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">${ld?'Loading':'Evaluating'} ${SP_LAB[window.__PAGE_SPORT__]||''}… (${n} of ${N})</div><div style="color:#64748b;margin-top:14px;font-size:12px;font-weight:400">Hang tight — the app comes back on its own.</div>`;document.body.appendChild(d);});
 if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;const t0=Date.now();const iv=setInterval(()=>{const C0=evalChainNext();const ld=C0&&C0.mode==='load';const me=window.__PAGE_SPORT__||sp0;
   let ok=false,ready=false;
-  if(ld){const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[me];ready=!!(B&&B.ts>=t0);ok=ready;if(!ready&&Date.now()-t0<45000)return;}   /* the board is on Today's card */
+  if(ld){const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<45000)return;   /* v2.81.5 · wait for the football week */
+    const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[me];ready=!!(B&&B.ts>=Math.max(t0,window.__FB_WEEK_DONE||0));ok=ready;if(!ready&&Date.now()-t0<45000)return;}   /* the board is on Today's card */
   else{const R=get('d4.bgeval.'+me,null);ready=!!(R&&R.ts>=t0);ok=ready&&!!R.ok;if(!ready&&Date.now()-t0<65000)return;}
   clearInterval(iv);const C=evalChainNext();if(!C)return;const sp=C.todo.shift();
   if(ok)C.done.push(sp);else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}

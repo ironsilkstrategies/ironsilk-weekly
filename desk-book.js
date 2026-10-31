@@ -227,7 +227,7 @@ async function bookReread(ctx,P){const which=P.arg==='unread'?ctx.unread:P.arg==
   const here=(typeof window!=='undefined'&&window.__PAGE_SPORT__)||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);
   const H=get(BOOK_HOLD_KEY,null)||{};const d=ctx.d;const hold=H.d===d?H:{d,reread:{},rr:[]};hold.reread=hold.reread||{};hold.rr=(hold.rr||[]).concat(Date.now()).slice(-20);set(BOOK_HOLD_KEY,hold);const done=[];
   for(const sp of which){hold.reread[sp]=Date.now();set(BOOK_HOLD_KEY,hold);try{deskSay(`📖 The Book: re-reading ${spList([sp])} before the freeze…`);}catch(e){}
-    if(sp===here){try{todaySnapshot();}catch(e){}done.push(sp+' ✓');}   /* this page's own sport: a fresh snapshot (never its eval — that would re-trigger the freeze) */
+    if(sp===here){try{todaySnapshot(true);}catch(e){}done.push(sp+' ✓');}   /* this page's own sport: a fresh snapshot (never its eval — that would re-trigger the freeze) */
     else{const R=await bookBgEval(sp);done.push(sp+(R&&R.ok?' ✓':R&&R.skipped?' (on a phone: read on its own page by the master evaluation)':R?' (no eval)':' (timed out)'));}}
   try{PCI_C=null;}catch(e){}try{RO_CACHE[VOICES_KEY]=null;delete RO_CACHE[VOICES_KEY];}catch(e){}const c2=deskVitals(d,{override:ctx.override,retries:ctx.retries+1,heldMins:ctx.heldMins,qnow:ctx.qnow,now:ctx.now,gaps:ctx.gaps});
   c2.offTried=!!(ctx.offTried||P.arg==='official');return{ctx:c2,why:'re-read '+(done.join(', ')||'nothing')};}

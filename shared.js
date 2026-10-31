@@ -2183,7 +2183,9 @@ const halfRound=x=>Math.round(x*2)/2;
 const CHAR_CACHE={};
 /* v2.80 · a cached read of the characters lives a minute, but any write that can change a call (lines, intake, picks,
    settings…) retires it at once; the call ledger and the logs it writes itself don't count */
-var CHAR_GEN=0;var CHAR_KEEP=new Set(['d4.voices','d4.scorecalls','d4.halfcalls','d4.syslog','d4.perf','d4.autopilot','d4.bootguard','d4.todaycard','d4.feeltune','d4.conf','d4.heirs','d4.__kts','d4.__lastsync','d4.halflines','d4.best5log','d4.evalready','d4.bgeval.nba','d4.bgeval.nhl','d4.bgeval.nfl','d4.bgeval.ncaaf','d4.bgeval.ncaab','d4.bgeval.mlb']);
+var CHAR_GEN=0;var CHAR_KEEP=new Set(['d4.voices','d4.scorecalls','d4.halfcalls','d4.syslog','d4.perf','d4.autopilot','d4.bootguard','d4.todaycard','d4.feeltune','d4.conf','d4.heirs','d4.__kts','d4.__lastsync','d4.halflines','d4.best5log','d4.evalready','d4.bgeval.nba','d4.bgeval.nhl','d4.bgeval.nfl','d4.bgeval.ncaaf','d4.bgeval.ncaab','d4.bgeval.mlb',
+  /* v2.81.5 · bookkeeping that no character reads — writing it mustn't throw away every game's cached calls */
+  'd4.apsteps','d4.heallog','d4.ruletune','d4.ruleoff','d4.bolcache','d4.bolfiled','d4.bollog','d4.bolauto','d4.gradehealth','d4.best5','d4.evalchain','d4.pubstate','d4.intakedrop','d4.cred','d4.pull','d4.usage']);
 function characterCalls(sp,g,s){
   if(!g||!s||s.aw==null)return[];
   const ck=sp+'|'+g.id,c=CHAR_CACHE[ck];
@@ -2345,7 +2347,23 @@ function ncaabWorks(g){try{if(typeof bbWorkable==='function')return bbWorkable('
 const PRE_START={nba:d=>{const y=+d.slice(0,4),m=+d.slice(5,7);const yr=m>=7?y:y-1;const o=new Date(Date.UTC(yr,9,20));while(o.getUTCDay()!==2)o.setUTCDate(o.getUTCDate()+1);return o.toISOString().slice(0,10);},
   ncaab:d=>{const y=+d.slice(0,4),m=+d.slice(5,7);const yr=m>=7?y:y-1;const o=new Date(Date.UTC(yr,10,1));while(o.getUTCDay()!==1)o.setUTCDate(o.getUTCDate()+1);return o.toISOString().slice(0,10);}};
 function seasonPre(sp,d){try{const f=PRE_START[sp];if(!f)return false;d=String(d||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return false;const m=+d.slice(5,7);if(m>=5&&m<=7)return false;return d<f(d)&&m>=8;}catch(e){return false;}}
-function voicesLog(sp){const own=scTxBegin();try{return voicesLog0(sp);}finally{if(own)scTxEnd();}}
+/* v2.81.5 · the characters re-read a sport only when something they read changed: the games and their state, each
+   game's sim, the book lines, the intel (outside picks, trends, consensus), predicted scores and the confidence model.
+   Every repaint used to re-read every game — a 0.7 s freeze on a phone at each one, and the live loop repaints every
+   45 s during games. Nothing changed → skipped, but never for more than 5 minutes; the master evaluation, the freeze
+   and the pre-intake snapshot always re-read (force). */
+const VLOG_SIG={},VLOG_SIM=new WeakMap(),ST_HASH={};let VLOG_SIM_N=0;
+/* a stored value's fingerprint, re-hashed only when its text changed (the same string back costs nothing) */
+function stHash(k){try{const wp=typeof WB_PEND!=='undefined'?WB_PEND.get(k):null;const r=wp?wp.json:localStorage.getItem(k);if(!r)return'0';
+  const c=ST_HASH[k];if(c&&c.r===r)return c.h;const h=r.length+'.'+dropHash(r);ST_HASH[k]={r,h};return h;}catch(e){return'?';}}
+function vlogSig(sp){try{const G=sportGames(sp)||[],S=sportSims(sp)||{};let ids='';
+    for(const g of G){const s=S[g.id];let t='-';if(s&&typeof s==='object'){t=VLOG_SIM.get(s);if(!t){t=++VLOG_SIM_N;VLOG_SIM.set(s,t);}}ids+=g.id+':'+(g.abstract||'')+':'+t+',';}
+    const st=stHash;
+    const shots={nba:'d4.nbashots',ncaab:'d4.ncaabshots',nhl:'d4.nhlshots',nfl:LS.nflshots,ncaaf:LS.ncaafshots,mlb:LS.bookshots}[sp]||'';
+    return[today(),dropHash(ids),st(shots),st(INTEL_KEY),st('d4.preds'),typeof CONF_KEY!=='undefined'?st(CONF_KEY):'',typeof CONF_FLOOR_KEY!=='undefined'?st(CONF_FLOOR_KEY):''].join('|');}catch(e){return'';}}
+function voicesLog(sp,force){const sig=vlogSig(sp);const L=VLOG_SIG[sp];
+  if(!force&&sig&&L&&L.sig===sig&&Date.now()-L.ts<5*60e3)return 0;
+  const own=scTxBegin();try{const n=voicesLog0(sp);VLOG_SIG[sp]={sig:vlogSig(sp),ts:Date.now()};return n;}finally{if(own)scTxEnd();}}
 function voicesLog0(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
@@ -2747,7 +2765,12 @@ function voicesRepairDates(force){const t=today();if(!force&&get('d4.vrepair',''
     if(!f&&d0<dayShift(t,-10)){drop.add(i);dropped++;}});
   if(moved||dropped){const out=V.filter((x,i)=>!drop.has(i));set(VOICES_KEY,out);}
   set('d4.vrepair',t);return moved+dropped;}
-function gradeVoices(){try{voicesRepairDates();}catch(e){console.warn('voices repair',e);}const V=get(VOICES_KEY,[]);let F={};try{F=allFinals()}catch(e){}let n=0;
+function gradeVoices(){try{voicesRepairDates();}catch(e){console.warn('voices repair',e);}let F={};try{F=allFinals()}catch(e){}
+  /* v2.81.5 · look first, on the shared cached read; parse a private copy only when a call can actually be graded
+     (every football repaint graded the whole ledger: a multi-MB parse to find nothing new) */
+  let any=false;try{const R0=roGet(VOICES_KEY,[],10e3)||[];for(let i=R0.length-1;i>=0;i--){const x=R0[i];if(x&&!x.graded&&finalsFor(x.sp,x.game,String(x.date||'').slice(0,10),false)){any=true;break;}}}catch(e){any=true;}
+  if(!any){try{gradeScoreCalls();}catch(e){console.warn('score grade',e);}try{gradeHalfCalls();}catch(e){console.warn('half grade',e);}return 0;}
+  const V=get(VOICES_KEY,[]);let n=0;
   V.forEach(x=>{if(x.graded)return;const R=finalsFor(x.sp,x.game,String(x.date||'').slice(0,10),false);if(!R)return;const a=+R.a,h=+R.h;let hit=null;
     if(x.market==='ml'){if(a!==h)hit=(x.side==='home')===(h>a);}
     else if(x.market==='spread'&&x.line!=null){const m=(x.side==='home'?h-a:a-h)+x.line;if(m!==0)hit=m>0;}
@@ -2906,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261031i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261031j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17681,8 +17704,14 @@ function voiceLog70(sp,picks,d){const V=get(VOICES_KEY,[]);const have=new Set(V.
     [['Brain',x.brainP],['Blend',x.blend]].forEach(([voice,pv])=>{if(pv==null||pv<0.70)return;const id=[voice,sp,x.game,d,mk].join('|');if(have.has(id))return;
       V.push({id,sp,date:d,game:x.game,gid:x.gid,voice,market:mk,side:x.sd,line:x.line!=null?+x.line:null,price:x.price,simP:pv,mktP:x.mkt!=null?x.mkt:null,pick:x.pick});have.add(id);n++;});});
   if(n)set(VOICES_KEY,V);return n;}
-function todaySnapshot(){
+/* v2.81.5 · today's candidates are rebuilt only when something they're built from changed (the same inputs the
+   characters' re-read watches), at least every 5 minutes, and always on the master evaluation's relay pages */
+const TC_SIG={};
+function todaySnapshot(force){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;if(!sp)return;
+  const relay=(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)||(typeof EVAL_CHAIN_HOP!=='undefined'&&EVAL_CHAIN_HOP);
+  let sig='';try{sig=vlogSig(sp)+'|'+(typeof deskFrozen==='function'&&deskFrozen()?'F':'');}catch(e){}
+  const L0=TC_SIG[sp];if(!force&&!relay&&sig&&L0&&L0.sig===sig&&Date.now()-L0.ts<5*60e3){const T0=get(TC_KEY,{})||{};if(T0.d===today()&&T0.by&&T0.by[sp])return;}
   try{clvCapture(sp)}catch(e){}
   let picks=[],props=[];try{picks=todayCandidates(sp)}catch(e){console.warn('today picks',e)}try{props=todayProps(sp)}catch(e){}
   const all=get(TC_KEY,{})||{};const d=today();const T=all.d===d?all:{d,by:{}};
@@ -17704,7 +17733,7 @@ function todaySnapshot(){
   const merged=[...prev,...(picks||[]).filter(x=>!have.has(kOf(x)))];
   let standout=B0.standout||null;
   if(!standout){try{standout=pstStandout(sp,sportGames(sp).length?sportGames(sp):(typeof GAMES!=='undefined'?GAMES:[]));}catch(e){}}
-  T.by[sp]={ts:Date.now(),picks:merged,props,standout};set(TC_KEY,T);
+  T.by[sp]={ts:Date.now(),picks:merged,props,standout};set(TC_KEY,T);TC_SIG[sp]={sig,ts:Date.now()};
   try{cpropLog(cpropToday().filter(c=>c.sp===sp));}catch(e){console.warn('char props log',e);}   /* v2.02: every character's prop calls lock pregame, every refresh */
   const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
 }
@@ -18236,7 +18265,7 @@ function squadsHtml(){const Q=squadsGet();if(!Q)return'<div class="sub" style="f
       call remembers its pre-intake side, so we grade whether the intake made
       that character better or worse.                                          */
 const PREINT_KEY='d4.preintake',SIMLOCK_KEY='d4.simlock',EVPREP_KEY='d4.evalprep';
-function preIntakeSnap(){try{const d=today();try{const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(sp)voicesLog(sp);}catch(e){}
+function preIntakeSnap(){try{const d=today();try{const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(sp)voicesLog(sp,true);}catch(e){}
   const P=get(PREINT_KEY,{})||{};const D=P[d]||(P[d]={ts:Date.now(),c:{}});const V=get(VOICES_KEY,[])||[];let n=0;
   V.forEach(x=>{if(x.date!==d||x.graded||x.lk||D.c[x.id]!=null)return;D.c[x.id]=x.side+'|'+(x.line!=null?x.line:'');n++;});
   if(n){Object.keys(P).sort().slice(0,-10).forEach(k=>delete P[k]);set(PREINT_KEY,P);}return n;}catch(e){return 0;}}
@@ -18249,9 +18278,9 @@ function evalResim(sp){const G=sportGames(sp)||[],S=sportSims(sp);if(!S)return 0
 function evalPrep(sp){const t0=Date.now(),steps=[];const st=(k,f)=>{try{const v=f();steps.push({k,ok:1,n:apNum(v)});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,100)});}};
   st('learn',()=>brainLearnAll(true));st('autopilot',()=>apRun(true,'eval '+sp));
   st('unlock',()=>{const V=get(VOICES_KEY,[]);let n=0;V.forEach(x=>{if(x.sp===sp&&x.date===today()&&x.lk&&!x.graded){delete x.lk;n++;}});if(n)set(VOICES_KEY,V);return n;});
-  st('resim',()=>evalResim(sp));st('reread',()=>voicesLog(sp));
+  st('resim',()=>evalResim(sp));st('reread',()=>voicesLog(sp,true));
   const L=get(EVPREP_KEY,[])||[];L.unshift({sp,ts:t0,ms:Date.now()-t0,steps});set(EVPREP_KEY,L.slice(0,30));return steps;}
-function evalFreeze(sp){const d=today(),ts=Date.now();try{voicesLog(sp);}catch(e){}const V=get(VOICES_KEY,[]);const P=(get(PREINT_KEY,{})||{})[d]||{c:{}};let n=0,fl=0;
+function evalFreeze(sp){const d=today(),ts=Date.now();try{voicesLog(sp,true);}catch(e){}const V=get(VOICES_KEY,[]);const P=(get(PREINT_KEY,{})||{})[d]||{c:{}};let n=0,fl=0;
   V.forEach(x=>{if(x.sp!==sp||x.date!==d||x.graded)return;x.lk=ts;n++;const pre=P.c[x.id];if(pre!=null){const ps=String(pre).split('|')[0];x.pi=ps;if(ps!==x.side)fl++;}});
   if(n)set(VOICES_KEY,V);
   const G=sportGames(sp)||[],S=sportSims(sp)||{};const L=get(SIMLOCK_KEY,{})||{};const D=L[d]||(L[d]={});const games={};
@@ -18407,7 +18436,8 @@ function deskIdle(ms){return new Promise(r=>{try{if(typeof requestIdleCallback==
    card is the full read: every character, the brain, the blend… ~0.3 s apiece on a phone; ten at once froze the
    board for 3 s). A card shows its previous paint (or a quick row) until its fresh one lands, so nothing jumps. */
 var LZ={tok:0,n:0,first:3,q:[],prev:{}};
-function lzBegin(first){LZ.tok++;LZ.n=0;LZ.q=[];LZ.first=first==null?3:first;return LZ.tok;}
+/* v2.81.5 · on a phone the first paint builds ONE full card (about a screenful), not three — the rest land one per idle slot */
+function lzBegin(first){LZ.tok++;LZ.n=0;LZ.q=[];LZ.first=first==null?3:first;try{if(typeof window!=='undefined'&&window.innerWidth&&window.innerWidth<700)LZ.first=Math.min(LZ.first,1);}catch(e){}return LZ.tok;}
 function lzCard(id,fn,ph,now){if(now||LZ.n++<LZ.first||typeof document==='undefined'||/jsdom/i.test(navigator.userAgent||'')){const h=fn();LZ.prev[id]=h;return h;}
   const k='lz'+LZ.tok+'_'+LZ.q.length;LZ.q.push({k,id,fn});return`<div id="${k}">${LZ.prev[id]||ph||'<div class="tkt" style="opacity:.55;padding:12px">Loading…</div>'}</div>`;}
 function lzFlush(after){const tok=LZ.tok,Q=LZ.q.slice();(async()=>{for(const it of Q){await deskIdle(250);if(LZ.tok!==tok)return;const el=document.getElementById(it.k);if(!el)continue;
@@ -19973,11 +20003,11 @@ async function loadAllSports(opts){
   const here=window.__PAGE_SPORT__||ACTIVE_SPORT;
   const todo=(opts.sports||liveSports()).filter(sp=>sp!==here&&(opts.force||!tcSportsLoaded().includes(sp)));
   /* a phone loads the other boards by walking page to page (and comes back here), never in frames */
-  if(todo.length&&!deskFramesOK()&&typeof evalChainGo==='function'&&typeof EVAL_CHAIN_KEY!=='undefined'){try{todaySnapshot()}catch(e){}
+  if(todo.length&&!deskFramesOK()&&typeof evalChainGo==='function'&&typeof EVAL_CHAIN_KEY!=='undefined'){try{todaySnapshot(true)}catch(e){}
     set(EVAL_CHAIN_KEY,{ts:Date.now(),d:today(),todo:todo.filter(sp=>SPORT_PAGE[sp]),done:[],miss:[],back:location.pathname.split('/').pop()||'TheDesk.html',mode:'load'});
     say(`Loading ${SP_LAB[todo[0]]||todo[0]}… (the app hops through each board, then comes back here)`);LAS_BUSY=false;setTimeout(()=>evalChainGo(),300);return;}
   try{
-    try{todaySnapshot()}catch(e){}
+    try{todaySnapshot(true)}catch(e){}
     for(const sp of todo){
       say(`Loading ${SP_LAB[sp]} board in the background…`);
       const t0=Date.now();const f=document.createElement('iframe');

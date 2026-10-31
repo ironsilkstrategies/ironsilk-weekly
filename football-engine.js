@@ -99,10 +99,18 @@ function nflFairML(p){
    uploaded, every card fell back to "sim only". Read a rolling 8-day window,
    oldest first, and let the newest row for the same game+market+side win. */
 const FB_WIN_DAYS=8;
-function fbWindow(key,dedupe){const all=get(key,{})||{};const out=[];
-  for(let i=FB_WIN_DAYS-1;i>=0;i--){const d=dayShift(today(),-i);(all[d]||[]).forEach(x=>out.push(x));}
-  (all[dayShift(today(),1)]||[]).forEach(x=>out.push(x)); // a "tomorrow" upload still applies
-  if(!dedupe)return out;const last=new Map();out.forEach((x,i)=>last.set(dedupe(x),i));const keep=new Set(last.values());return out.filter((x,i)=>keep.has(i));}
+/* v2.81.5 · one parse per change, not one per call: every card asked for the lines (52 CFB games, several times each)
+   and each ask parsed the whole 8-day store — 0.8 s of a 1.6 s CFB board render on a phone. The window is remembered
+   against the stored text itself (and the day), so any save, pull or sync is seen at once. Rows are shared: read only. */
+const FB_WIN_MEMO=new Map();
+function fbWindow(key,dedupe){let raw=null;try{const wp=typeof WB_PEND!=='undefined'?WB_PEND.get(key):null;raw=wp?wp.json:localStorage.getItem(key);}catch(e){}
+  const td=today();let M=FB_WIN_MEMO.get(key);if(!M){M=new Map();FB_WIN_MEMO.set(key,M);}const dk=dedupe||fbWindow;const c=M.get(dk);
+  if(c&&c.td===td&&c.raw===raw)return c.out.slice();
+  const all=get(key,{})||{};let out=[];
+  for(let i=FB_WIN_DAYS-1;i>=0;i--){const d=dayShift(td,-i);(all[d]||[]).forEach(x=>out.push(x));}
+  (all[dayShift(td,1)]||[]).forEach(x=>out.push(x)); // a "tomorrow" upload still applies
+  if(dedupe){const last=new Map();out.forEach((x,i)=>last.set(dedupe(x),i));const keep=new Set(last.values());out=out.filter((x,i)=>keep.has(i));}
+  M.set(dk,{td,raw,out});return out.slice();}
 const fbDedupeTrend=x=>(x.game||'')+'|'+String(x.text||'').trim().toLowerCase();
 const fbDedupeCons=x=>[x.game,x.market,x.metric,x.src||''].join('|');
 const fbDedupeExt=x=>[x.game,x.pick||x.market,x.src||''].join('|');
@@ -262,7 +270,7 @@ function renderNFL(){
   // Snapshot + grade BEFORE filtering display — every final game's result
   // gets attributed to the record/calibration store regardless of whether
   // its card is still shown. Grading never depends on what's on screen.
-  try{snapshotNFL();gradeNFLResults();}catch(e){console.warn('NFL snapshot/grade:',e);}
+  fbChoreSoon('nfl');   /* v2.81.5 · snapshot + grade right after the board paints, not before it */
   // Cards for finals stay visible for 24h after kickoff, then drop off the
   // board entirely so a full season of NFL finals never piles up and drags
   // down render time. The game is still fully graded above — this only
@@ -1593,7 +1601,16 @@ function fbModelPicks(s,lines){
   }
   return Object.keys(P).length?P:null;
 }
-function fbSnapshot(sport){
+/* v2.81.5 · THE BOARD PAINTS FIRST. Snapshot + grade (every lined game's archive row, the system log, and every
+   character re-reading every game) ran inside each render, before the first card — about 1 s of a 1.6 s CFB board on a
+   phone, on every repaint. They now run as one coalesced chore right after the paint, in idle time; a relay page
+   (the master evaluation) still runs them at once; the characters' re-read skips itself when nothing it reads changed
+   (see voicesLog — the evaluation's own re-read always runs). */
+const FB_CHORE={};
+function fbChoreSoon(sp,delay){const run=()=>{FB_CHORE[sp]=0;try{if(sp==='nfl'){snapshotNFL();gradeNFLResults();}else{snapshotNCAAF();gradeNCAAFResults();}}catch(e){console.warn((sp==='nfl'?'NFL':'CFB')+' snapshot/grade:',e);}};
+  if(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL){run();return;}
+  if(FB_CHORE[sp])return;FB_CHORE[sp]=setTimeout(()=>{try{if(typeof requestIdleCallback==='function')requestIdleCallback(run,{timeout:2500});else run();}catch(e){run();}},delay||350);}
+function fbSnapshot(sport,force){
   const nfl=sport==='nfl',games=nfl?NFL_GAMES:NCAAF_GAMES;
   if(!games||!games.length)return;
   const key=nfl?LS.nflarc:'d4.ncaafarc',sims=nfl?NFL_SIMS:NCAAF_SIMS;
@@ -1620,7 +1637,7 @@ function fbSnapshot(sport){
   });
   set(key,arc);
   try{logSystemPicks(sport)}catch(err){console.warn('syslog',err)}
-  try{voicesLog(sport)}catch(err){console.warn('voices',err)}
+  try{voicesLog(sport,!!force||(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL))}catch(err){console.warn('voices',err)}   /* skips itself when nothing it reads changed */
 }
 function fbGrade(sport){
   const nfl=sport==='nfl',key=nfl?LS.nflarc:'d4.ncaafarc';
@@ -3443,7 +3460,7 @@ function renderNCAAF(){
   const scheduled=NCAAF_GAMES.filter(g=>!isFinalGame(g));
   // Snapshot + grade BEFORE filtering display — same rule as NFL: every
   // final game gets attributed to the record store regardless of card visibility.
-  try{snapshotNCAAF();gradeNCAAFResults();}catch(e){console.warn('CFB snapshot/grade:',e);}
+  fbChoreSoon('ncaaf');   /* v2.81.5 · snapshot + grade right after the board paints, not before it */
   // Cards for finals stay visible for 24h after kickoff, then drop off the
   // board so a full 99-game Week 1 slate of finals doesn't sit there forever
   // rendering sim + analysis panels that will never change. Game is still
@@ -3595,13 +3612,13 @@ function ncaafBackfillLined(){
   if(NCAAF_BACKFILL)return;
   const q=NCAAF_GAMES.filter(g=>!NCAAF_SIMS[g.id]&&(g.abstract||'pre')==='pre'&&
     ncaafBookLinesFor(g.away.abbr+'@'+g.home.abbr).length);
-  if(!q.length){try{snapshotNCAAF()}catch(e){}return;}
+  if(!q.length){fbChoreSoon('ncaaf');return;}   /* v2.81.5 · coalesced with the render's own snapshot, after the paint */
   NCAAF_BACKFILL=true;
   const step=()=>{
     const t0=performance.now();
     while(q.length&&performance.now()-t0<16){const g=q.shift();try{NCAAF_SIMS[g.id]=simNCAAFGame(g)}catch(e){}}
     if(q.length)return setTimeout(step,30);
-    NCAAF_BACKFILL=false;try{snapshotNCAAF()}catch(e){}
+    NCAAF_BACKFILL=false;fbChoreSoon('ncaaf');
   };
   setTimeout(step,250);
 }
@@ -4268,6 +4285,27 @@ if(typeof window!=='undefined'&&window.__PAGE_SPORT__==='ncaaf'){setTimeout(()=>
 if(window.__PAGE_SPORT__==='ncaaf'){
   whenScriptReady(()=>{refreshNCAAFLiveScores().catch(()=>{})},2500);
 }
+
+/* ══ v2.81.5 · THE FOOTBALL BOARD MOVES TO THE CURRENT WEEK BY ITSELF ═══════════════════════════════════════════
+   Both football pages only restored the last cached week: boot() asks for the loader while shared.js is still loading,
+   before this file exists, so the fresh pull never ran. A finished week sat on the board until someone tapped "Load
+   current week" — and the master evaluation's relay evaluated last week's games (the sport went missing from the card).
+   Now the page pulls ESPN's current week when the board is empty, every game on it is final, nothing on it is today or
+   ahead, or the cached copy is over 12 hours old. While it loads, the evaluation waits for it. */
+function fbWeekStale(sp){try{const G=(sp==='nfl'?NFL_GAMES:NCAAF_GAMES)||[];if(!G.length)return'empty';
+  if(!G.some(g=>g&&g.abstract!=='post'))return'every game final';
+  const td=today();const dOf=g=>{try{return new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(g.date));}catch(e){return'';}};
+  if(!G.some(g=>g&&g.date&&dOf(g)>=td))return'nothing today or ahead';
+  const C=get(sp==='nfl'?LS.nflgames:LS.ncaafgames,{})||{};const ts=Math.max(0,...Object.values(C).map(x=>(x&&x.ts)||0));
+  if(Date.now()-ts>12*36e5)return'cached copy is old';return null;}catch(e){return null;}}
+async function fbAutoWeek(sp,force){const why=force?'asked':fbWeekStale(sp);if(!why)return null;window.__FB_WEEK_LOADING=Date.now();
+  try{if(sp==='nfl'){await loadNFLSchedule();}else{await loadNCAAFSchedule();}}catch(e){console.warn('football week',e);}
+  finally{window.__FB_WEEK_LOADING=0;window.__FB_WEEK_DONE=Date.now();}
+  try{if(typeof bolFileHere==='function')bolFileHere(0,true);}catch(e){}   /* the last BetOnline pull's lines for the new games */
+  return why;}
+if(typeof window!=='undefined'&&(window.__PAGE_SPORT__==='nfl'||window.__PAGE_SPORT__==='ncaaf')&&!window.__NO_BACKFILL__){
+  const sp0=window.__PAGE_SPORT__;if(fbWeekStale(sp0))window.__FB_WEEK_LOADING=Date.now();   /* claim it now, before the first render reports "ready" */
+  setTimeout(()=>{fbAutoWeek(sp0).catch(()=>{window.__FB_WEEK_LOADING=0;});},50);}
 
 /* ═══════════════════════════════════════════════════════════════
    NFL ENGINE END
