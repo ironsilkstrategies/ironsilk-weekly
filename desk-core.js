@@ -959,15 +959,26 @@ async function masterEvalFinish(done,miss,force){
 const EVAL_CHAIN_KEY='d4.evalchain';
 function evalChainNext(){const C=get(EVAL_CHAIN_KEY,null);if(!C||C.d!==today()||Date.now()-C.ts>15*60e3)return null;return C;}
 function evalChainGo(){const C=evalChainNext();if(!C)return;try{wbBeforeFrame();}catch(e){}
-  const sp=C.todo[0];const go=()=>{location.href=sp?SPORT_PAGE[sp]+'?bg=1&eval=1&chain=1&v='+Date.now():C.back+'?evaldone=1&v='+Date.now();};try{if(typeof wbFlushNow==='function')wbFlushNow();}catch(e){}(window.D4_FLUSH?window.D4_FLUSH():Promise.resolve()).then(go,go);}
+  /* v2.80.7 · mode 'load' (Load all sports on a phone) walks the same way, without evaluating */
+  const ld=C.mode==='load';const sp=C.todo[0];const go=()=>{location.href=sp?SPORT_PAGE[sp]+(ld?'?bg=1&chain=1&v=':'?bg=1&eval=1&chain=1&v=')+Date.now():C.back+(ld?'?loaddone=1&v=':'?evaldone=1&v=')+Date.now();};try{if(typeof wbFlushNow==='function')wbFlushNow();}catch(e){}(window.D4_FLUSH?window.D4_FLUSH():Promise.resolve()).then(go,go);}
 /* a page opened by the relay: show where we are, evaluate when the board is ready, then hop on */
 const EVAL_CHAIN_HOP=typeof location!=='undefined'&&/[?&]chain=1/.test(location.search||'');
 if(EVAL_CHAIN_HOP&&typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{const C=evalChainNext();const n=C?C.done.length+C.miss.length+1:0,N=C?n+C.todo.length-1:0;
   const d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:99999;background:#0b1220;color:#f5c542;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 16px system-ui;text-align:center;padding:24px';
-  d.innerHTML=`<div style="font-size:34px">🔒</div><div style="margin-top:10px">Master evaluation</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">Evaluating ${SP_LAB[window.__PAGE_SPORT__]||''}… (${n} of ${N})</div><div style="color:#64748b;margin-top:14px;font-size:12px;font-weight:400">Hang tight — the app comes back to Today on its own.</div>`;document.body.appendChild(d);});
-if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;const t0=Date.now();const iv=setInterval(()=>{const R=get('d4.bgeval.'+(window.__PAGE_SPORT__||sp0),null);
-  if(!(R&&R.ts>=t0)&&Date.now()-t0<65000)return;clearInterval(iv);const C=evalChainNext();if(!C)return;const sp=C.todo.shift();
-  if(R&&R.ts>=t0&&R.ok)C.done.push(sp);else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
+  const ld=C&&C.mode==='load';
+  d.innerHTML=`<div style="font-size:34px">${ld?'⟳':'🔒'}</div><div style="margin-top:10px">${ld?'Loading every board':'Master evaluation'}</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">${ld?'Loading':'Evaluating'} ${SP_LAB[window.__PAGE_SPORT__]||''}… (${n} of ${N})</div><div style="color:#64748b;margin-top:14px;font-size:12px;font-weight:400">Hang tight — the app comes back on its own.</div>`;document.body.appendChild(d);});
+if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;const t0=Date.now();const iv=setInterval(()=>{const C0=evalChainNext();const ld=C0&&C0.mode==='load';const me=window.__PAGE_SPORT__||sp0;
+  let ok=false,ready=false;
+  if(ld){const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[me];ready=!!(B&&B.ts>=t0);ok=ready;if(!ready&&Date.now()-t0<45000)return;}   /* the board is on Today's card */
+  else{const R=get('d4.bgeval.'+me,null);ready=!!(R&&R.ts>=t0);ok=ready&&!!R.ok;if(!ready&&Date.now()-t0<65000)return;}
+  clearInterval(iv);const C=evalChainNext();if(!C)return;const sp=C.todo.shift();
+  if(ok)C.done.push(sp);else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
+/* back home after "Load all sports" */
+if(typeof location!=='undefined'&&/[?&]loaddone=1/.test(location.search||'')&&!DESK_BG_EVAL)setTimeout(()=>{const C=evalChainNext();localStorage.removeItem(EVAL_CHAIN_KEY);
+  try{history.replaceState(null,'',location.pathname);}catch(e){}
+  try{const have=tcSportsLoaded();const msg=`✓ Today's card: ${have.length?have.map(x=>SP_LAB[x]).join(' · '):'no picks yet (upload today\'s lines first)'}${C&&C.miss.length?` · couldn't load ${C.miss.map(x=>SP_LAB[x]||x).join(', ')}`:''}`;
+    document.querySelectorAll('.lasStatus').forEach(e=>e.innerHTML=`<span style="color:var(--win)">${msg}</span>`);if(typeof deskToast==='function')deskToast(msg);}catch(e){}
+  try{renderToday(true);}catch(e){}},1500);
 /* back home: freeze with what the relay gathered */
 if(typeof location!=='undefined'&&/[?&]evaldone=1/.test(location.search||'')&&!DESK_BG_EVAL)setTimeout(async()=>{const C=evalChainNext();if(!C)return;localStorage.removeItem(EVAL_CHAIN_KEY);
   try{history.replaceState(null,'',location.pathname);}catch(e){}DESK_EVAL_BUSY=true;try{await masterEvalFinish(C.done,C.miss);}catch(e){console.warn('eval finish',e);}finally{DESK_EVAL_BUSY=false;}

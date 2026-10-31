@@ -218,6 +218,8 @@ function bookFreezeRules(ctx,R,mode){const e=R.end;
 /* the real actions */
 const BOOK_BG_MS=60e3;
 function bookBgEval(sp){return new Promise(res=>{try{if(typeof SPORT_PAGE==='undefined'||!SPORT_PAGE[sp])return res(null);const ts=Date.now();
+  /* v2.80.7 · never a second sport page inside this one on a phone (that's what crashed iOS) — the master evaluation reads it on its own page */
+  if(typeof deskFramesOK==='function'&&!deskFramesOK())return res({ok:false,skipped:true});
   const f=document.createElement('iframe');f.src=SPORT_PAGE[sp]+'?bg=1&eval=1&v='+ts;f.setAttribute('aria-hidden','true');f.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;border:0;opacity:0';
   try{wbBeforeFrame();}catch(e){}document.body.appendChild(f);const iv=setInterval(()=>{const R=get('d4.bgeval.'+sp,null);if(R&&R.ts>=ts){clearInterval(iv);try{f.remove();}catch(e){}res(R);}else if(Date.now()-ts>BOOK_BG_MS){clearInterval(iv);try{f.remove();}catch(e){}res(null);}},600);}catch(e){res(null);}});}
 async function bookReread(ctx,P){const which=P.arg==='unread'?ctx.unread:P.arg==='missing'?ctx.missing:P.arg==='critical'?[...new Set(ctx.critical.map(x=>x.sp))]:
@@ -226,7 +228,7 @@ async function bookReread(ctx,P){const which=P.arg==='unread'?ctx.unread:P.arg==
   const H=get(BOOK_HOLD_KEY,null)||{};const d=ctx.d;const hold=H.d===d?H:{d,reread:{},rr:[]};hold.reread=hold.reread||{};hold.rr=(hold.rr||[]).concat(Date.now()).slice(-20);set(BOOK_HOLD_KEY,hold);const done=[];
   for(const sp of which){hold.reread[sp]=Date.now();set(BOOK_HOLD_KEY,hold);try{deskSay(`📖 The Book: re-reading ${spList([sp])} before the freeze…`);}catch(e){}
     if(sp===here){try{todaySnapshot();}catch(e){}done.push(sp+' ✓');}   /* this page's own sport: a fresh snapshot (never its eval — that would re-trigger the freeze) */
-    else{const R=await bookBgEval(sp);done.push(sp+(R&&R.ok?' ✓':R?' (no eval)':' (timed out)'));}}
+    else{const R=await bookBgEval(sp);done.push(sp+(R&&R.ok?' ✓':R&&R.skipped?' (on a phone: read on its own page by the master evaluation)':R?' (no eval)':' (timed out)'));}}
   try{PCI_C=null;}catch(e){}try{RO_CACHE[VOICES_KEY]=null;delete RO_CACHE[VOICES_KEY];}catch(e){}const c2=deskVitals(d,{override:ctx.override,retries:ctx.retries+1,heldMins:ctx.heldMins,qnow:ctx.qnow,now:ctx.now,gaps:ctx.gaps});
   c2.offTried=!!(ctx.offTried||P.arg==='official');return{ctx:c2,why:'re-read '+(done.join(', ')||'nothing')};}
 const bookScopeLab=x=>spList([x.sp])+(x.market?' '+({ml:'moneylines',spread:'spreads',total:'totals'}[x.market]||x.market):'');

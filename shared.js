@@ -26,10 +26,11 @@ var SAFE_MODE=false;
 var FRZ_KEY='d4.perfstalls',FRZ_LIVE='d4.perflive',FRZ={act:'',actAt:0,t0:Date.now()};
 (function(){try{if(typeof window==='undefined'||typeof document==='undefined'||typeof localStorage==='undefined')return;
   if(/jsdom/i.test((typeof navigator!=='undefined'&&navigator.userAgent)||'')&&!window.__FRZ_TEST__)return;
+  try{if(window.top!==window)return;}catch(e){return;}   /* a page inside a frame shares the parent's thread — the parent's heartbeat covers it */
   const bm=(document.currentScript&&document.currentScript.src||'').match(/[?&]v=([^&]+)/);const BV=bm?bm[1]:'';
   const rd=k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}};
   const wr=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
-  const EV=/[?&]chain=1/.test(location.search||'')?' (master eval)':'';
+  const EV=/[?&]chain=1/.test(location.search||'')?(/[?&]eval=1/.test(location.search||'')?' (master eval)':' (loading boards)'):'';
   const pg=()=>(window.__PAGE_SPORT__||((location.pathname||'').split('/').pop()||'').replace(/\.html$/,'')||'home')+EV;
   const view=()=>{try{const v=document.querySelector('.view.on');return v?v.id.replace(/^v-/,''):'';}catch(e){return'';}};
   const step=()=>{try{const L=typeof PERF_LOG!=='undefined'?PERF_LOG:null;const x=L&&L[L.length-1];return x&&Date.now()-x.at<20000?x.what+' '+x.ms+'ms':'';}catch(e){return'';}};
@@ -40,10 +41,16 @@ var FRZ_KEY='d4.perfstalls',FRZ_LIVE='d4.perflive',FRZ={act:'',actAt:0,t0:Date.n
       if(oc||e.tagName==='BUTTON'||e.tagName==='A'||e.tagName==='SUMMARY'){const t=(e.textContent||'').replace(/\s+/g,' ').trim().slice(0,40);return t+(oc?' ['+oc.replace(/\s+/g,' ').slice(0,50)+']':'');}}
     return(el&&el.textContent||'').replace(/\s+/g,' ').trim().slice(0,40);}catch(e){return'';}};
   document.addEventListener('click',e=>{FRZ.act=lab(e.target);FRZ.actAt=Date.now();},true);
-  /* the page before this one died while on screen (no pagehide, no going to the background) */
-  const prev=rd(FRZ_LIVE);
-  if(prev&&prev.t&&Date.now()-prev.t<90e3)note({kind:'restart',ms:0,page:prev.page||'',tab:prev.tab||'',act:prev.act||'',step:'',b:prev.b||''});
-  const live=on=>wr(FRZ_LIVE,on?{t:Date.now(),page:pg(),tab:view(),act:FRZ.act,b:BV}:{t:0});
+  /* v2.80.7 · every open page keeps its own live mark (a second tab, or the page you hop to, no longer looks like a
+     crash). A mark that stops moving — no heartbeat, no pagehide, never went to the background — is a page that died
+     on screen: checked 12 s after this page opens, so a crash-and-reload a second later is still caught. */
+  const ID=Math.random().toString(36).slice(2,9);
+  const rdL=()=>{const L=rd(FRZ_LIVE);return L&&typeof L==='object'&&typeof L.t!=='number'?L:{};};
+  const live=on=>{const L=rdL();if(on)L[ID]={t:Date.now(),page:pg(),tab:view(),act:FRZ.act,b:BV};else delete L[ID];wr(FRZ_LIVE,L);};
+  {const L0=rdL(),now0=Date.now();const cand=[];Object.keys(L0).forEach(k=>{const x=L0[k];if(!x||!x.t||now0-x.t>=90e3){delete L0[k];return;}cand.push([k,x.t]);});
+    wr(FRZ_LIVE,L0);
+    if(cand.length)setTimeout(()=>{const L1=rdL();let ch=false;cand.forEach(([k,t])=>{const y=L1[k];if(!y||y.t>t)return;   /* closed cleanly, or still beating */
+        note({kind:'restart',ms:0,page:y.page||'',tab:y.tab||'',act:y.act||'',step:'',b:y.b||''});delete L1[k];ch=true;});if(ch)wr(FRZ_LIVE,L1);},window.__FRZ_DEAD_MS||12e3);}
   live(true);
   let last=performance.now(),away=document.hidden,liveAt=Date.now();
   /* a dialog (alert/confirm) holds the thread while you read it — that's not a freeze */
@@ -2912,7 +2919,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261030g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261031a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -21318,12 +21325,22 @@ function btBarHtml(){return`<div class="bar" style="margin:6px 0"><button onclic
    Your current sport choice is saved first and put back after. */
 const BG_MODE=typeof location!=='undefined'&&/[?&]bg=1/.test(location.search||'');
 let LAS_BUSY=false;
+/* v2.80.7 · can this device afford a second sport page inside this one (a hidden frame)? Each page is ~2 MB of script
+   plus its data; on a phone that doubles the memory and iOS kills the tab (the grey-then-white restart). Phones walk
+   page to page instead (the relay); a desktop keeps the quiet background frame. */
+function deskFramesOK(){try{if(window.__EVAL_FRAMES__)return true;const ua=navigator.userAgent||'';
+  if(/iPhone|iPad|iPod|Android|Mobile/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))return false;
+  if(navigator.deviceMemory&&navigator.deviceMemory<4)return false;if(window.matchMedia&&matchMedia('(pointer: coarse)').matches)return false;return true;}catch(e){return false;}}
 async function loadAllSports(opts){
   if(LAS_BUSY||BG_MODE)return;LAS_BUSY=true;opts=opts||{};
   const say=h=>{document.querySelectorAll('.lasStatus').forEach(e=>e.innerHTML=h);};
   const keep=(()=>{try{return localStorage.getItem('d4.activeSport')}catch(e){return null}})();
   const here=window.__PAGE_SPORT__||ACTIVE_SPORT;
   const todo=(opts.sports||liveSports()).filter(sp=>sp!==here&&(opts.force||!tcSportsLoaded().includes(sp)));
+  /* a phone loads the other boards by walking page to page (and comes back here), never in frames */
+  if(todo.length&&!deskFramesOK()&&typeof evalChainGo==='function'&&typeof EVAL_CHAIN_KEY!=='undefined'){try{todaySnapshot()}catch(e){}
+    set(EVAL_CHAIN_KEY,{ts:Date.now(),d:today(),todo:todo.filter(sp=>SPORT_PAGE[sp]),done:[],miss:[],back:location.pathname.split('/').pop()||'TheDesk.html',mode:'load'});
+    say(`Loading ${SP_LAB[todo[0]]||todo[0]}… (the app hops through each board, then comes back here)`);LAS_BUSY=false;setTimeout(()=>evalChainGo(),300);return;}
   try{
     try{todaySnapshot()}catch(e){}
     for(const sp of todo){
