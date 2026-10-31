@@ -492,7 +492,7 @@ function best3Spread(by,top){const out=(top||[]).slice();const have=new Set(out.
     const weak=donors.reduce((a,b)=>((a.fit||0)<=(b.fit||0)?a:b));out.splice(out.indexOf(weak),1,c);}
   const real=out.filter(x=>!x.spread).sort((a,b)=>b.fit-a.fit||b.ev-a.ev),sp=out.filter(x=>x.spread);const r=real.concat(sp);r.why=top&&top.why;return r;}
 function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
-  Object.entries(T.by||{}).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0);const p=o?o.cf:pickConfAny(x,s0);
+  Object.entries(T.by||{}).filter(([s0])=>typeof sportOn!=='function'||sportOn(s0)).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0);const p=o?o.cf:pickConfAny(x,s0);
     const ev=p!=null&&x.price!=null?(p*americanToDecimal(+x.price)-1)*100:null;let why=null;
     try{if(x.price==null)why='no book price';else if(+x.price<DESK_B3_LO)why=`priced ${x.price} — the Best 3 lays ${DESK_B3_LO} at most`;else if(+x.price>BEST3_HI)why='longer than +400';
       else if(x.incoherent||x.suspect)why='flagged: '+(x.suspect||'incoherent with its other markets');else if(laneStatus(pickLane(x,s0))==='blocked')why='lane blocked: '+laneName(pickLane(x,s0));
@@ -521,10 +521,11 @@ function best3Props(){let props=[];const TT={};const plays=(sp,t)=>{const s=TT[s
 /* the rest of the Top 10 (the Best 3 aren't repeated) */
 function subTop10(){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];let best=[];try{best=(best5State().top3||[]).map(x=>deskKey({...x,m:mkNorm(x.m||x.market)}));}catch(e){}
   const R=deskLaneRec();const out=[];
-  Object.entries(T.by||{}).forEach(([sp,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||sp};
+  Object.entries(T.by||{}).forEach(([sp,B])=>{if(typeof sportOn==='function'&&!sportOn(sp))return;   /* v2.80.8 · hidden for its off-season */
+    (B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||sp};
     if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR||+x.price>400)return;if(!tcIsToday(x)||best5Started(x))return;if(x.incoherent||x.suspect)return;
     if(laneStatus(pickLane(x,sp))==='blocked'||pickDisagrees(x,sp))return;const o=pickConf(x,sp);if(!o)return;const p=o.cf;const ev=(p*americanToDecimal(+amerOk(x.price))-1)*100;if(ev<0)return;
-    if(best.includes(deskKey({...x,m:mkNorm(x.m)})))return;out.push({...x,p,ev,cf:p,play:true,fit:pickFit(x,sp,o,R),confBy:o.who});}));
+    if(best.includes(deskKey({...x,m:mkNorm(x.m)})))return;out.push({...x,p,ev,cf:p,play:true,fit:pickFit(x,sp,o,R),confBy:o.who});});});
   const seen=new Set();return out.sort((a,b)=>b.fit-a.fit||b.ev-a.ev).filter(x=>{const k=x.sp+'|'+x.game+'|'+x.m;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,Math.max(0,10-best.length));}
 /* Today's "Official" filter: the 70% rule + the price + the flags. Frozen at the master evaluation. */
 function tfPlayable(x,sp){if(x&&x.fz)return!!x.fz.play;try{if(x.incoherent||x.suspect)return false;if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR)return false;

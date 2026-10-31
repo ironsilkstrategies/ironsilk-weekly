@@ -1064,6 +1064,18 @@ function ncaafAbbrFor(raw){
     'CENTRALFLORIDA':'UCF',        // sportsbook "Central Florida" → ESPN "UCF Knights"
     'MIDDLETENNESSEESTATE':'MIDDLETENNESSEE', // sportsbetting.ag "Middle Tennessee State" → ESPN "Middle Tennessee Blue Raiders"
     'MIDDLETENNESSEEST':'MIDDLETENNESSEE',
+    /* v2.80.8 · more book names ESPN spells differently — these lines used to fall off the card without a word
+       (sportsbetting.ag's "Miami Florida", "Connecticut" and "Appalachian State" never matched a game) */
+    'MIAMIFLORIDA':'MIAMIHURRICANES','MIAMIFL':'MIAMIHURRICANES','MIAMIFLA':'MIAMIHURRICANES',
+    'MIAMIOHIO':'MIAMIOH',
+    'CONNECTICUT':'UCONN',
+    'APPALACHIANSTATE':'APPSTATE','APPALACHIANST':'APPSTATE',
+    'ULLAFAYETTE':'LOUISIANARAGINCAJUNS','LOUISIANALAFAYETTE':'LOUISIANARAGINCAJUNS',
+    'LOUISIANAMONROE':'ULMONROE',
+    'SOUTHERNMISSISSIPPI':'SOUTHERNMISS',
+    'SAMHOUSTONSTATE':'SAMHOUSTON',
+    'TEXASSANANTONIO':'UTSA','TEXASELPASO':'UTEP','ALABAMABIRMINGHAM':'UAB','NEVADALASVEGAS':'UNLV',
+    'BRIGHAMYOUNG':'BYU','TEXASCHRISTIAN':'TCU','SOUTHERNMETHODIST':'SMU','NORTHCAROLINASTATE':'NCSTATE',
   };
   const aliasKey=NCAAF_SB_ALIASES[k];
   if(aliasKey){
@@ -3488,9 +3500,9 @@ function _parseNCAAFEvents(j){
       h1a:(()=>{const q=away.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       h1h:(()=>{const q=home.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       homeScore:(()=>{const sc=home.score;return sc!=null&&sc!==''?+sc:null})(),
-      away:{abbr:awayAbbr,tid:String(away.team.id||''),name:awayName,ranking:ranking(away.team),
+      away:{abbr:awayAbbr,tid:String(away.team.id||''),name:awayName,location:away.team.location||'',shortName:away.team.shortDisplayName||'',ranking:ranking(away.team),
         offRating:26,defRating:26,record:away.records&&away.records[0]&&away.records[0].summary||''},
-      home:{abbr:homeAbbr,tid:String(home.team.id||''),name:homeName,ranking:ranking(home.team),
+      home:{abbr:homeAbbr,tid:String(home.team.id||''),name:homeName,location:home.team.location||'',shortName:home.team.shortDisplayName||'',ranking:ranking(home.team),
         offRating:26,defRating:26,record:home.records&&home.records[0]&&home.records[0].summary||''},
     };
   }).filter(Boolean);

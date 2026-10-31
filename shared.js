@@ -2919,7 +2919,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261031a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261031b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -4405,6 +4405,7 @@ function tabRaw(n,b){
   if(n==='recap')renderRecap();
   if(n==='best'){bestTab(BESTTAB||'today');}
   if(n==='settings')fillSettingsTab();
+  if(n==='settings'){try{const v=document.getElementById('v-settings');if(v){let box=document.getElementById('sportsOffBox');if(!box){box=document.createElement('div');box.id='sportsOffBox';v.insertBefore(box,v.firstChild);}box.innerHTML=sportsOffHtml();}}catch(e){}}
   if(n==='settings'){const m=document.getElementById('storageMeter');if(m)m.innerHTML=storageMeterHtml();}
   if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+missionsHtml()}catch(e){console.warn('missions',e)}el.innerHTML=h+renderMoneyTab();}}
   if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
@@ -16678,7 +16679,9 @@ function brainLearnAll(force){
 function best5Grade(){const S=get(BEST5_KEY,{});const log=get('d4.best5log',{})||{};let n=0;
   const slim=x=>({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:x.p,m:x.m,sd:x.sd,line:x.line,gid:x.gid,main:!!x.main,ev:x.ev,color:x.color,unan:!!x.unan,chars:x.chars||[],start:x.start||''});
   if(S&&S.d&&S.locked&&(!log[S.d]||log[S.d].reopened)){const sides=(S.sides||[]).map(slim),totals=(S.totals||[]).map(slim);
-    log[S.d]={sides,totals,picks:sides.length||totals.length?[...sides,...totals]:(S.picks||[]).map(slim),props:(S.props||[]).map(x=>({...x})),standout:S.standout||null,v:S.top3?2:1};n++;} // persist the card the moment it locks — not only once a pick grades
+    log[S.d]={sides,totals,picks:sides.length||totals.length?[...sides,...totals]:(S.picks||[]).map(slim),props:(S.props||[]).map(x=>({...x})),standout:S.standout||null,v:S.top3?2:1};n++; // persist the card the moment it locks — not only once a pick grades
+    /* v2.80.8 · an empty card keeps WHY it was empty (the rule each candidate missed), so the Recap can answer it the next day */
+    if(!(S.top3||[]).length){try{if(S.why3)log[S.d].why=S.why3;if(typeof best3Near==='function')log[S.d].near=(best3Near(8)||[]).slice(0,8).map(x=>({sp:x.sp,pick:x.pick,price:x.price,why:x.why||''}));}catch(e){}}}
   const V=get(VOICES_KEY,[]);const ids=new Set(V.map(x=>x.id));let vch=false;
   Object.entries(log).forEach(([d,E])=>(E.picks||[]).forEach(x=>{if(x.hit!=null||x.push)return;
     let r=null;try{r=gradeLeg({sport:x.sp,game:x.game,pick:x.pick,gameDate:d,gid:x.gid},d);}catch(e){}
@@ -16820,7 +16823,9 @@ function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const
     if(why)out.push({sp:s0,game:x.game,pick:x.pick,price:x.price,p,ev,why,tier:best3Tier(x)});}));
   return out.sort((a,b)=>(b.ev==null?-99:b.ev)-(a.ev==null?-99:a.ev)).slice(0,n||5);}
 function best5Build(){
-  const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
+  const T=get(TC_KEY,{})||{};const by0=T.d===today()?T.by||{}:{};
+  /* v2.80.8 · a sport hidden for its off-season stays off the card */
+  const by={};Object.keys(by0).forEach(sp=>{if(typeof sportOn!=='function'||sportOn(sp))by[sp]=by0[sp];});
   const T3=best3Pool(by,null);let pick3=T3;try{if(typeof b3SpreadOn==='function'&&b3SpreadOn())pick3=best3Spread(by,T3);}catch(e){}   /* v2.80.5 · the optional 🌐 spread */
   const top3=pick3.map(x=>({...x,main:true}));
   const bySport={};Object.keys(by).forEach(sp=>{bySport[sp]=best3Pool(by,sp);});
@@ -16947,8 +16952,17 @@ function renderBest(){
 }
 /* Recap: each past day's locked card, graded pick by pick */
 function bestRecapNewDays(){return Object.keys(get('d4.best5log',{})||{}).sort().reverse();}
+/* v2.80.8 · "why was the card empty?" — the rule each of that day's candidates missed */
+const B3_WHY_LAB={price:'priced outside −200…+400',day:'not that day',started:'already started',flag:'flagged (incoherent / suspect / model fighting the market)',ev:'no edge at the price',tier:'low tier',prob:'too unlikely',conf:'no character officially 70%+ on it',lane:'in a blocked lane'};
+function b3EmptyWhyHtml(E){try{const W=E&&E.why;const N=(E&&E.near)||[];if(!W&&!N.length)return'';
+  const parts=W?Object.keys(B3_WHY_LAB).filter(k=>W[k]).map(k=>`<b>${W[k]}</b> ${B3_WHY_LAB[k]}`):[];
+  return`<div class="tkt" style="margin-top:8px;border-left:3px solid var(--gold)"><h3 style="margin:0 0 4px">Why no Best 3 that day</h3>
+    <div class="sub" style="font-size:10.5px">${W&&W.total?`${W.total} candidate${W.total===1?'':'s'} on the board: `:''}${parts.join(' · ')||'nothing priced and official'}. The card never forces a pick.</div>
+    ${N.length?`<div class="mono" style="font-size:9.5px;margin-top:4px;color:var(--mute)">${N.map(x=>`${txtEsc(x.pick||'')} ${x.price!=null?sgnP(x.price):''} — ${txtEsc(x.why||'')}`).join('<br>')}</div>`:''}</div>`;}catch(e){return'';}}
 function renderBestRecapNew(day){const el=document.getElementById('bestRecapCard');const E=(get('d4.best5log',{})||{})[day];if(!el||!E)return false;
   try{best5Grade();}catch(e){}
+  if(E.v===2&&!(E.picks||[]).some(x=>x.main)&&(E.why||(E.near||[]).length)){const S={d:day,top3:[],locked:true,sports:[]};
+    el.innerHTML=bestPublicCardHtml(S,{id:'bestRecapShare',title:'Recap · graded against the final'})+b3EmptyWhyHtml(E);return true;}
   if(E.v===2){const main=(E.picks||[]).filter(x=>x.main);let w=0,l=0,pu=0;
     const mk=x=>x.push?(pu++,' <span style="color:var(--mute)">↔ push</span>'):x.hit===true?(w++,' <span style="color:var(--win)">✅</span>'):x.hit===false?(l++,' <span style="color:var(--rust)">❌</span>'):' <span style="color:var(--mute)">⏳</span>';
     const S={d:day,top3:main.map(x=>({...x,ev:x.ev!=null?x.ev:0})),locked:true,sports:[...new Set(main.map(x=>x.sp))]};
@@ -19745,7 +19759,7 @@ function renderToday(noSnap){
   const el=document.getElementById('todayBody');if(!el)return;
   if(!noSnap)todaySnapshot();
   const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};
-  const sports=['nfl','ncaaf','mlb','nhl','nba','ncaab'].filter(sp=>by[sp]);
+  const sports=['nfl','ncaaf','mlb','nhl','nba','ncaab'].filter(sp=>by[sp]&&(typeof sportOn!=='function'||sportOn(sp)));
   const legend=`<div class="sub mono" style="font-size:9.5px;margin-bottom:6px">${Object.values(TC_COL).map(([c,l])=>`<span style="color:${c};margin-right:8px">■ ${l}</span>`).join('')}· conflicts and red are left off</div>`;
   if(!sports.length){el.innerHTML=legend+'<div class="empty">Open a sport\'s Games board once today and its picks land here.</div>';return;}
   try{todayLiveLoop();if(Date.now()-MG_TS>40e3&&!MG_BUSY)mgRefresh(false).then(()=>{const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);}).catch(()=>{});}catch(e){}
@@ -21164,7 +21178,21 @@ async function seasonCalLoad(sp){const C=get('d4.seasoncal',{})||{};if(C[sp]&&C[
   try{const j=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+SEASON_PATH[sp]+'/scoreboard?limit=1').then(r=>r.json());const L=(j.leagues||[])[0]||{};
     const s=L.calendarStartDate,e=L.calendarEndDate;if(s&&e){C[sp]={start:tdDay(s),end:tdDay(e),fetched:today()};set('d4.seasoncal',C);}}catch(e){}
   return C[sp]||null;}
-function liveSports(){return['nfl','ncaaf','mlb','nhl','nba','ncaab'].filter(sp=>spInSeason(sp));}
+/* v2.80.8 · OFF-SEASON SWITCH — a sport you hide leaves the sport bar, the master evaluation's walk, "Load all sports",
+   Today and the Best card. Its page still opens if you go to it directly, and its history and records stay put.
+   MLB starts hidden (it's the off-season); Settings → Sports shown brings any sport back. */
+const SPORTS_OFF_KEY='d4.sportsoff',SP_ALL=['mlb','nfl','ncaaf','nhl','nba','ncaab'];
+function sportsOff(){try{const v=get(SPORTS_OFF_KEY,null);return Array.isArray(v)?v.filter(x=>SP_ALL.includes(x)):['mlb'];}catch(e){return['mlb'];}}
+function sportOn(sp){return!sportsOff().includes(sp);}
+function sportBarPaint(){try{const here=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'');
+  SP_ALL.forEach(s=>{const b=document.getElementById('sportBtn-'+s);if(b)b.style.display=sportOn(s)||s===here?'':'none';});}catch(e){}}
+function sportToggle(sp){const L=sportsOff();const i=L.indexOf(sp);if(i>=0)L.splice(i,1);else L.push(sp);set(SPORTS_OFF_KEY,L);sportBarPaint();
+  try{const box=document.getElementById('sportsOffBox');if(box)box.innerHTML=sportsOffHtml();}catch(e){}
+  try{if(typeof deskToast==='function')deskToast((SP_LAB[sp]||sp)+(sportOn(sp)?' is back':' hidden — its history stays'));}catch(e){}}
+function sportsOffHtml(){return`<div class="sbar" style="margin-top:0"><h2>Sports shown</h2><div class="ln"></div></div><div class="tkt"><div class="sub" style="font-size:10.5px;margin-bottom:6px">Hide a sport in its off-season: it leaves the sport bar, the master evaluation, Today and the Best card. History and records stay.</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px">${SP_ALL.map(s=>`<button onclick="sportToggle('${s}')" style="font-size:11px;${sportOn(s)?'':'opacity:.55'}">${SP_LAB[s]||s}: <b>${sportOn(s)?'shown':'hidden'}</b></button>`).join('')}</div></div>`;}
+if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{sportBarPaint();});
+function liveSports(){return['nfl','ncaaf','mlb','nhl','nba','ncaab'].filter(sp=>spInSeason(sp)&&sportOn(sp));}
 function tcSportsLoaded(){const T=get(TC_KEY,{})||{};const by=T.d===today()?T.by||{}:{};return['nfl','ncaaf','mlb','nhl','nba','ncaab'].filter(sp=>by[sp]&&(by[sp].picks||[]).length);}
 function msLaneHtml(L,m,pi,li){const B=L.build.best;
   const done=m&&(m.steps||[]).find(s=>s.date===today()&&(s.pot||0)===(pi||0)&&(s.lane==null||s.lane===(li||0)));
@@ -21388,7 +21416,7 @@ function sharpStore(){return roGet(SHARP_KEY,{},15e3)||{};}
 async function pullSharp(sports){
   const key=typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,'');if(!key)throw new Error('add your Odds API key in Settings first');
   const all=get(SHARP_KEY,{})||{};let n=0;const done=[];
-  for(const sp of sports||['mlb','nfl','ncaaf','nhl','nba','ncaab']){if(!ODDS_SPORT[sp])continue;
+  for(const sp of sports||['mlb','nfl','ncaaf','nhl','nba','ncaab'].filter(x=>typeof sportOn!=='function'||sportOn(x))){if(!ODDS_SPORT[sp])continue;   /* v2.80.8 · no API credits spent on a hidden sport */
     let j;try{const r=await fetch(`https://api.the-odds-api.com/v4/sports/${ODDS_SPORT[sp]}/odds/?apiKey=${key}&regions=eu&bookmakers=pinnacle&markets=h2h,spreads,totals&oddsFormat=american`);
       if(r.status===401)throw new Error('Odds API 401 — bad key or out of credits');j=await r.json();}catch(e){if(/401/.test(e.message))throw e;continue;}
     if(!Array.isArray(j))continue;

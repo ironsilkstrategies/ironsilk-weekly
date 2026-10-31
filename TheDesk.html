@@ -16,14 +16,18 @@
    Each sport lives on its own page; this just routes. The ?b= build tag
    makes Safari fetch the current page after a deploy instead of a cached one. */
 (function(){
-  var BUILD='20261031a';
+  var BUILD='20261031b';
   var PAGES={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
   var last='';try{last=localStorage.getItem('d4.activeSport')||''}catch(e){}
   var q=(location.search.match(/[?&]sport=(mlb|nfl|ncaaf|cfb|nhl|nba|ncaab|cbb)/)||[])[1];
   if(q==='cfb')q='ncaaf';if(q==='cbb')q='ncaab';
+  /* v2.80.8 · a sport hidden for its off-season (Settings → Sports shown) isn't where the app lands, and its button hides */
+  var OFF=['mlb'];try{var o=JSON.parse(localStorage.getItem('d4.sportsoff')||'null');if(Object.prototype.toString.call(o)==='[object Array]')OFF=o;}catch(e){}
+  if(!q&&OFF.indexOf(last)>=0)last='';
   var dest=PAGES[q||last];
   if(dest)location.replace(dest+'?b='+BUILD);
-  document.addEventListener('DOMContentLoaded',function(){[].forEach.call(document.querySelectorAll('a[href$=".html"]'),function(a){a.href=a.getAttribute('href')+'?b='+BUILD;});});
+  document.addEventListener('DOMContentLoaded',function(){[].forEach.call(document.querySelectorAll('a[href$=".html"]'),function(a){var f=a.getAttribute('href');
+    for(var k in PAGES){if(PAGES[k]===f&&OFF.indexOf(k)>=0)a.style.display='none';}a.href=f+'?b='+BUILD;});});
 })();
 </script>
 <style>
@@ -72,6 +76,6 @@ function tdMove(){var K=['d4.key','d4.ai','d4.sharp','d4.rundown','d4.oddspapi',
   localStorage.setItem('d4.setupDone','1');document.getElementById('mvIn').value='';
   msg.style.color='#5fd38d';msg.textContent=n+' keys restored — opening the desk and pulling your cloud copy…';
   var sp=localStorage.getItem('d4.activeSport')||'nfl',P={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
-  setTimeout(function(){location.replace((P[sp]||'nfl.html')+'?b='+'20261031a'+'&moved=1');},900);}
+  setTimeout(function(){location.replace((P[sp]||'nfl.html')+'?b='+'20261031b'+'&moved=1');},900);}
 </script>
 </body></html>
