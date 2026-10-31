@@ -163,7 +163,8 @@ let PCI_C=null;
 function pickConfIdx(d){d=d||today();const V=roGet(VOICES_KEY,[],30e3)||[];const sig=d+'|'+V.length+'|'+(V.length?V[V.length-1].id+(V[V.length-1].cf||''):'');
   if(PCI_C&&PCI_C.sig===sig&&Date.now()-PCI_C.ts<30e3)return PCI_C.M;const M=new Map();
   V.forEach(c=>{if(String(c.date).slice(0,10)!==d||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const cf=confOf(c);if(cf==null)return;
-    const k=c.sp+'|'+c.game+'|'+c.market+'|'+c.side;let o=M.get(k);if(!o){o={cf:0,n:0,who:[],mx:0,best:null};M.set(k,o);}if(cf>o.mx)o.mx=cf;
+    const k=c.sp+'|'+c.game+'|'+c.market+'|'+c.side;let o=M.get(k);if(!o){o={cf:0,n:0,who:[],mx:0,best:null,mk:0,mkBy:null};M.set(k,o);}if(cf>o.mx)o.mx=cf;
+    if(!c.kof&&cf>o.mk&&confPriced(c)&&!confPre(c)){o.mk=cf;o.mkBy=c.voice;}   /* v2.81 · best priced, switched-on confidence (the 📏 floor admission) */
     if(isOfficial(c)){o.n++;o.who.push(c.voice);if(cf>o.cf){o.cf=cf;o.best=c.voice;}}});
   PCI_C={sig,ts:Date.now(),M};return M;}
 const pickConfKey=(x,sp)=>(x.sp||sp)+'|'+x.game+'|'+mkNorm(x.m||x.market)+'|'+(x.sd||x.side);
@@ -452,16 +453,17 @@ function best3PoolLegacy(by,sp){const pool=[];Object.entries(by).forEach(([s0,B]
     if(x.price==null||x.price<-200||x.price>BEST3_HI||x.incoherent||x.suspect||best3Tier(x)<1||p==null||p<0.45||ev==null||ev<1)return;pool.push({...x,p,ev});});});
   pool.sort((a,b)=>best3Tier(b)-best3Tier(a)||b.ev-a.ev);const u=new Set(),out=[];for(const x of pool){const k=x.sp+'|'+x.game;if(u.has(k))continue;u.add(k);out.push(x);if(out.length===3)break;}out.why={};return out;}
 function best3Pool(by,sp,opts){opts=opts||{};if(opts.ignoreTime)return best3PoolLegacy(by,sp);const pool=[],why={total:0,price:0,day:0,started:0,flag:0,ev:0,tier:0,prob:0,conf:0};const R=deskLaneRec();
+  const LO=ruleNow('b3lo');   /* v2.81 · 📏 the price limit the rule audit has in force (default -200) */
   Object.entries(by).forEach(([s0,B])=>{if(sp&&s0!==sp)return;(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};why.total++;
-    if(x.price==null||+x.price<DESK_B3_LO||+x.price>BEST3_HI){why.price++;return;}
+    if(x.price==null||+x.price<LO||+x.price>BEST3_HI){why.price++;return;}
     if(!opts.ignoreTime&&!tcIsToday(x)){why.day++;return;}
     if(!opts.ignoreTime&&best5Started(x)){why.started++;return;}
     if(x.incoherent||x.suspect){why.flag++;return;}
     if(laneStatus(pickLane(x,s0))==='blocked'){why.lane=(why.lane||0)+1;return;}
     if(pickDisagrees(x,s0)){why.flag++;return;}
-    const o=pickConf(x,s0);if(!o){why.conf++;return;}
+    const o=pickConf(x,s0)||ruleFloorAdmit(x,s0);if(!o){why.conf++;return;}
     const p=o.cf,ev=(p*americanToDecimal(+x.price)-1)*100;if(ev<0.5){why.ev++;return;}
-    pool.push({...x,p,ev,cf:p,conf:o.n,confBy:o.who,fit:pickFit(x,s0,o,R)});});});
+    pool.push({...x,p,ev,cf:p,conf:o.n,confBy:o.who,fit:pickFit(x,s0,o,R),...(o.tuned?{tuned:true}:{})});});});
   pool.sort((a,b)=>b.fit-a.fit||b.ev-a.ev);
   /* v2.50 · one sport can't take all three while another has a qualifying pick: each sport's best first, then the best of the rest */
   const u=new Set(),per=new Set(),out=[];for(const x of pool){if(out.length===3)break;const k=x.sp+'|'+x.game;if(u.has(k)||per.has(x.sp))continue;u.add(k);per.add(x.sp);out.push(x);}
@@ -479,7 +481,7 @@ function b3SpreadToggle(){set(B3_SPREAD_KEY,!b3SpreadOn());try{const S=best5Stat
 function best3Spread(by,top){const out=(top||[]).slice();const have=new Set(out.map(x=>x.sp));const cands=[];
   Object.entries(by||{}).forEach(([s0,B])=>{if(have.has(s0))return;let best=null;
     (B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};
-      if(x.price==null||+x.price<DESK_B3_LO||+x.price>BEST3_HI)return;
+      if(x.price==null||+x.price<ruleNow('b3lo')||+x.price>BEST3_HI)return;
       if(!tcIsToday(x)||best5Started(x)||x.incoherent||x.suspect)return;
       try{if(laneStatus(pickLane(x,s0))==='blocked'||pickDisagrees(x,s0))return;}catch(e){return;}
       const p=pickConfAny(x,s0);if(p==null||p<0.55)return;
@@ -491,12 +493,93 @@ function best3Spread(by,top){const out=(top||[]).slice();const have=new Set(out.
     const cnt={};out.forEach(x=>{cnt[x.sp]=(cnt[x.sp]||0)+1;});const donors=out.filter(x=>!x.spread&&cnt[x.sp]>=2);if(!donors.length)break;
     const weak=donors.reduce((a,b)=>((a.fit||0)<=(b.fit||0)?a:b));out.splice(out.indexOf(weak),1,c);}
   const real=out.filter(x=>!x.spread).sort((a,b)=>b.fit-a.fit||b.ev-a.ev),sp=out.filter(x=>x.spread);const r=real.concat(sp);r.why=top&&top.why;return r;}
+/* ══ v2.81 · 📏 THE RULE AUDIT — your history decides the blocking rules ════════════════════════════════════
+   Every graded pick the desk ever had (one per game · market · side, rebuilt from the ledger: its price, its best
+   character confidence, whether it was official, the model's chance and the market's) is checked against each rule
+   that keeps picks off the Best 3. The picks a rule ALONE kept off are scored at their own prices. A rule loosens only
+   when those picks made money — 30+ of them, in profit, winning at least 2 points above their break-even — and only as
+   far as each loosened band holds up on its own. Hard limits: never past 20 points off the market, never laying more
+   than −300, never under 60% confidence. Re-judged once a day from graded games only (today never counts). */
+const RULE_KEY='d4.ruletune',RULE_DEF={disagree:0.08,b3lo:-200,floor:0.70};
+const RULE_BANDS={disagree:[0.08,0.10,0.12,0.15,0.20],b3lo:[-200,-250,-300],floor:[0.70,0.65,0.60]};
+const RULE_LAB={disagree:'Model vs market gap',b3lo:'Best 3 price limit',floor:'Confidence floor'};
+const RULE_MIN_N=30,RULE_BAND_MIN=10,RULE_MIN_EDGE=0.02,RULE_OFF_KEY='d4.ruleoff';
+const RULE_CHK={b3lo:'price',floor:'conf',disagree:'disagree'};
+let RULE_NOW_C=null,RULE_BUSY=false;
+function ruleOn(){try{return get(RULE_OFF_KEY,false)!==true;}catch(e){return true;}}
+/* the rule in force right now: re-judged the first time it's asked each day (so a card never changes rules mid-day) */
+function ruleNow(k){try{const td=today();
+    if(!RULE_NOW_C||RULE_NOW_C.d!==td||Date.now()-RULE_NOW_C.ts>60e3){let T=roGet(RULE_KEY,null,30e3);
+      if((!T||T.d!==td)&&!RULE_BUSY){RULE_BUSY=true;try{T=ruleTuneCompute();}catch(e){}RULE_BUSY=false;}
+      RULE_NOW_C={d:td,ts:Date.now(),v:ruleOn()&&T&&T.v?T.v:RULE_DEF};}
+    const v=RULE_NOW_C.v[k];return v!=null&&isFinite(v)?v:RULE_DEF[k];}catch(e){return RULE_DEF[k];}}
+const ruleSnap=()=>({disagree:ruleNow('disagree'),b3lo:ruleNow('b3lo'),floor:ruleNow('floor')});
+function ruleCands(){const V=roGet(VOICES_KEY,[],30e3)||[];const td=today();const G=new Map(),SIM=new Map();
+  for(const c of V){if(!c||!c.graded||(c.hit==null&&!c.push))continue;const d=String(c.date||'').slice(0,10);if(!d||d>=td)continue;
+    if(c.market!=='ml'&&c.market!=='spread'&&c.market!=='total')continue;
+    if(c.voice==='Sim'&&c.simP>0&&c.simP<1&&c.mktP>0&&c.mktP<1)SIM.set(d+'|'+c.sp+'|'+c.game+'|'+c.market,c);
+    if(!CHARS[c.voice]||META_VOICES.has(c.voice)||confPre(c)||!confPriced(c))continue;
+    const k=d+'|'+c.sp+'|'+c.game+'|'+c.market+'|'+c.side;let o=G.get(k);
+    if(!o){o={d,sp:c.sp,game:c.game,m:c.market,sd:c.side,pr:[],hit:!!c.hit,push:!!c.push,ocf:0,kcf:0,off:false};G.set(k,o);}
+    o.pr.push(+c.price);if(c.voice==='Sim')o.simPr=+c.price;const cf=confOf(c);if(cf==null)continue;
+    if(!c.kof&&cf>o.kcf)o.kcf=cf;let off=false;try{off=isOfficial(c);}catch(e){}if(off){o.off=true;if(cf>o.ocf)o.ocf=cf;}}
+  const out=[];G.forEach(o=>{const s=SIM.get(o.d+'|'+o.sp+'|'+o.game+'|'+o.m);if(s){const same=s.side===o.sd;o.mp=same?s.simP:1-s.simP;o.mkt=same?s.mktP:1-s.mktP;}
+    const P=o.pr.filter(isFinite).sort((a,b)=>a-b);o.price=o.simPr!=null&&isFinite(o.simPr)?o.simPr:P[Math.floor(P.length/2)];delete o.pr;
+    if(isFinite(o.price)&&Math.abs(o.price)>=100)out.push(o);});
+  return out;}
+function ruleScore(L){let w=0,l=0,p=0,u=0,be=0;L.forEach(o=>{const dec=americanToDecimal(o.price);be+=1/dec;if(o.push){p++;return;}if(o.hit){w++;u+=dec-1;}else{l++;u-=1;}});
+  const n=w+l;return{n:L.length,w,l,p,u:+u.toFixed(2),be:L.length?+(be/L.length).toFixed(4):null,wr:n?+(w/n).toFixed(4):null};}
+/* does a pick clear each rule (at the thresholds given)? — mirrors best3Pool: price window, model vs market,
+   an official call (or, loosened, a character at the tuned floor that still pays), and value at that confidence */
+function ruleChecks(o,t){const gap=o.mp!=null&&o.mkt!=null?Math.abs(o.mp-o.mkt):null;const dec=americanToDecimal(o.price);
+  const fl=t.fl?t.fl[o.m]:confFloor(o.m),k=o.kcf||0,tunedIn=!o.off&&t.floor<fl-1e-9&&k>=t.floor-1e-9&&!(o.d>=CONF_PAY_FROM&&k<0.70-1e-9&&o.price<CONF_PAY_MIN)&&k*dec-1>=-1e-9;
+  const p=o.off?o.ocf:tunedIn?k:0;
+  return{price:o.price>=t.b3lo&&o.price<=BEST3_HI,disagree:gap==null||gap<t.disagree-1e-9,conf:o.off||tunedIn,value:(p*dec-1)*100>=0.5,gap};}
+function ruleTuneCompute(){const C=ruleCands();const t0={...RULE_DEF,fl:{ml:confFloor('ml'),spread:confFloor('spread'),total:confFloor('total')}};const R={d:today(),ts:Date.now(),n:C.length,v:{...RULE_DEF},ev:{},on:true};
+  const passAll=C.filter(o=>{const k=ruleChecks(o,t0);return k.price&&k.disagree&&k.conf&&k.value;});R.base=ruleScore(passAll);
+  Object.keys(RULE_BANDS).forEach(rk=>{const B=RULE_BANDS[rk],key=RULE_CHK[rk];const rows=[];let cum=[],stop=false,best=RULE_DEF[rk];
+    for(let i=1;i<B.length;i++){const t={...t0,[rk]:B[i]},tPrev={...t0,[rk]:B[i-1]};
+      /* the picks this band lets in: blocked by this rule alone at the step before, cleared at this one, every other rule passed */
+      const band=C.filter(o=>{const a=ruleChecks(o,tPrev),b=ruleChecks(o,t);if(a[key]||!b[key])return false;
+        return['price','disagree','conf','value'].every(x=>x===key||b[x]);});
+      cum=cum.concat(band);const sb=ruleScore(band),sc=ruleScore(cum);
+      /* loosen one band only when that band holds up on its own (10+ picks, not losing) AND everything let in so far is
+         30+ picks, in profit, winning 2+ points over its break-even. The first band that fails stops the loosening. */
+      const ok=!stop&&sb.n>=RULE_BAND_MIN&&sb.u>=0&&sc.n>=RULE_MIN_N&&sc.u>0&&sc.wr!=null&&sc.be!=null&&sc.wr>=sc.be+RULE_MIN_EDGE;
+      rows.push({to:B[i],band:sb,cum:sc,ok});if(ok)best=B[i];else stop=true;}
+    R.ev[rk]=rows;R.v[rk]=best;});
+  try{set(RULE_KEY,R);}catch(e){}RULE_NOW_C=null;return R;}
+function ruleTune(force){try{const T=get(RULE_KEY,null);if(!force&&T&&T.d===today())return T;}catch(e){}return ruleTuneCompute();}
+function ruleToggle(){try{set(RULE_OFF_KEY,ruleOn());}catch(e){}RULE_NOW_C=null;try{const S=best5State();if(!S.locked&&typeof renderBest==='function')renderBest();}catch(e){}
+  try{if(typeof deskToast==='function')deskToast(ruleOn()?'📏 Rule audit ON — rules loosen only where your history says the blocked picks made money':'📏 Rule audit OFF — every rule back at its default');}catch(e){}}
+/* a pick with no official call still makes the Best 3 when the floor has been loosened by the audit:
+   a character at the tuned floor (not switched off), and the price pays — under 70% it has to be -150 or longer, and
+   confidence × payout must reach 1. Marked 📏 everywhere it shows. */
+function ruleFloorAdmit(x,s0){try{const f=ruleNow('floor');const mk=mkNorm(x.m||x.market);if(f>=confFloor(mk)-1e-9)return null;
+    const I=pickConfIdx().get(pickConfKey(x,s0));if(!I||!(I.mk>=f-1e-9))return null;const p=+x.price,c=I.mk;if(!isFinite(p)||Math.abs(p)<100)return null;
+    if(c<0.70-1e-9&&p<CONF_PAY_MIN)return null;if(c*americanToDecimal(p)-1<-1e-9)return null;
+    return{cf:c,n:0,who:[I.mkBy],best:I.mkBy,mx:I.mx,tuned:true};}catch(e){return null;}}
+const ruleFmt={disagree:v=>Math.round(v*100)+' pts',b3lo:v=>String(v),floor:v=>Math.round(v*100)+'%'};
+function ruleBandLab(rk,i,rows){const B=RULE_BANDS[rk];const a=B[i],b=rows[i].to;
+  return rk==='disagree'?`${Math.round(a*100)}–${Math.round(b*100)} pts off the market`:rk==='b3lo'?`priced ${b} to ${a-1}`:`${Math.round(b*100)}–${Math.round(a*100)}% confidence`;}
+function ruleAuditHtml(){let T=null;try{T=ruleTune(false);}catch(e){return'<div class="tkt"><div class="sub">Rule audit failed: '+txtEsc(String(e&&e.message||e))+'</div></div>';}
+  const rec=s=>s&&s.n?`${s.w}-${s.l}${s.p?'-'+s.p:''} · <b style="color:${s.u>=0?'var(--win)':'var(--rust)'}">${s.u>=0?'+':''}${s.u.toFixed(1)}u</b>${s.be!=null?` · needs ${Math.round(s.be*100)}%, hit ${s.wr!=null?Math.round(s.wr*100):'—'}%`:''}`:'none yet';
+  const blocks=Object.keys(RULE_BANDS).map(rk=>{const rows=T.ev[rk]||[];const cur=T.v[rk],def=RULE_DEF[rk];
+    return`<div class="tkt" style="margin-top:8px"><h3 style="margin:0 0 2px">${RULE_LAB[rk]}: <span style="color:${cur!==def?'var(--win)':'var(--chalk)'}">${ruleFmt[rk](cur)}</span>${cur!==def?` <span class="mono" style="font-size:10px;color:var(--mute)">(was ${ruleFmt[rk](def)})</span>`:''}</h3>
+      <div class="sub" style="font-size:10.5px">${cur!==def?'Loosened by your history — the picks it used to block made money.':'Holding — the picks it blocks haven\'t proven they make money.'}</div>
+      ${rows.map((r,i)=>`<div class="mono" style="font-size:10px;padding:3px 0;border-top:1px solid var(--rule)">${r.ok?'✅':'⛔'} ${ruleBandLab(rk,i,rows)}: ${rec(r.band)}</div>`).join('')}</div>`;}).join('');
+  return`<div class="tkt"><h3 style="margin:0 0 4px">📏 The rule audit — your history decides</h3>
+    <div class="sub" style="font-size:10.5px">${T.n} graded picks rebuilt from the ledger (one per game, market and side). Each rule below shows the picks it alone kept off the Best 3, scored at their prices. A rule loosens only when those picks made money (${RULE_MIN_N}+ picks, in profit, ${Math.round(RULE_MIN_EDGE*100)}+ points over break-even), one band at a time. Re-judged daily; today's games never count.</div>
+    <div class="mono" style="font-size:10.5px;margin-top:6px">Picks that cleared every rule: ${rec(T.base)}</div>
+    <div class="mono" style="font-size:10.5px;margin-top:3px">Audit: <b style="color:${ruleOn()?'var(--win)':'var(--rust)'}">${ruleOn()?'ON — loosened rules are in force':'OFF — every rule at its default'}</b> · judged ${T.ts?new Date(T.ts).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'}</div>
+    <div class="bar" style="margin-top:6px"><button onclick="ruleTune(true);try{renderRecordsHub()}catch(e){}">↻ Re-judge now</button><button onclick="ruleToggle();try{renderRecordsHub()}catch(e){}">${ruleOn()?'Turn the audit off':'Turn the audit on'}</button></div></div>${blocks}`;}
 function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
-  Object.entries(T.by||{}).filter(([s0])=>typeof sportOn!=='function'||sportOn(s0)).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0);const p=o?o.cf:pickConfAny(x,s0);
+  const LO=ruleNow('b3lo'),DIS=ruleNow('disagree');
+  Object.entries(T.by||{}).filter(([s0])=>typeof sportOn!=='function'||sportOn(s0)).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0)||ruleFloorAdmit(x,s0);const p=o?o.cf:pickConfAny(x,s0);
     const ev=p!=null&&x.price!=null?(p*americanToDecimal(+x.price)-1)*100:null;let why=null;
-    try{if(x.price==null)why='no book price';else if(+x.price<DESK_B3_LO)why=`priced ${x.price} — the Best 3 lays ${DESK_B3_LO} at most`;else if(+x.price>BEST3_HI)why='longer than +400';
+    try{if(x.price==null)why='no book price';else if(+x.price<LO)why=`priced ${x.price} — the Best 3 lays ${LO} at most${LO!==RULE_DEF.b3lo?' (📏 loosened by the rule audit)':''}`;else if(+x.price>BEST3_HI)why='longer than +400';
       else if(x.incoherent||x.suspect)why='flagged: '+(x.suspect||'incoherent with its other markets');else if(laneStatus(pickLane(x,s0))==='blocked')why='lane blocked: '+laneName(pickLane(x,s0));
-      else if(pickDisagrees(x,s0))why=`model ${Math.round(x.mp*100)}% vs the market's ${Math.round(x.mkt*100)}% — ${Math.round(Math.abs(x.mp-x.mkt)*100)} pts apart; 8+ is treated as a likely model miss unless that lane is ✓ proven`;
+      else if(pickDisagrees(x,s0))why=`model ${Math.round(x.mp*100)}% vs the market's ${Math.round(x.mkt*100)}% — ${Math.round(Math.abs(x.mp-x.mkt)*100)} pts apart; ${Math.round(DIS*100)}+ is treated as a likely model miss unless that lane is ✓ proven${DIS!==RULE_DEF.disagree?' (📏 loosened by the rule audit)':''}`;
       else if(!o){const fl=confFloorFor({sp:s0,market:mkNorm(x.m),date:today()});
         why=p==null?'no character confidence on it yet':p>=fl-1e-9&&!confEvOk(x,p,today())?`${Math.round(p*100)}% sure, but ${x.price} needs ${Math.round(imp(+x.price)*100)}% — never official at a price its own number says loses`
           :p>=fl-1e-9&&p<0.70&&+x.price<CONF_PAY_MIN&&today()>=CONF_PAY_FROM?`${Math.round(p*100)}% sure at ${x.price} — under 70%, a pick has to pay ${CONF_PAY_MIN} or better`
@@ -524,8 +607,8 @@ function subTop10(){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];let bes
   Object.entries(T.by||{}).forEach(([sp,B])=>{if(typeof sportOn==='function'&&!sportOn(sp))return;   /* v2.80.8 · hidden for its off-season */
     (B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||sp};
     if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR||+x.price>400)return;if(!tcIsToday(x)||best5Started(x))return;if(x.incoherent||x.suspect)return;
-    if(laneStatus(pickLane(x,sp))==='blocked'||pickDisagrees(x,sp))return;const o=pickConf(x,sp);if(!o)return;const p=o.cf;const ev=(p*americanToDecimal(+amerOk(x.price))-1)*100;if(ev<0)return;
-    if(best.includes(deskKey({...x,m:mkNorm(x.m)})))return;out.push({...x,p,ev,cf:p,play:true,fit:pickFit(x,sp,o,R),confBy:o.who});});});
+    if(laneStatus(pickLane(x,sp))==='blocked'||pickDisagrees(x,sp))return;const o=pickConf(x,sp)||ruleFloorAdmit(x,sp);if(!o)return;const p=o.cf;const ev=(p*americanToDecimal(+amerOk(x.price))-1)*100;if(ev<0)return;
+    if(best.includes(deskKey({...x,m:mkNorm(x.m)})))return;out.push({...x,p,ev,cf:p,play:true,fit:pickFit(x,sp,o,R),confBy:o.who,...(o.tuned?{tuned:true}:{})});});});
   const seen=new Set();return out.sort((a,b)=>b.fit-a.fit||b.ev-a.ev).filter(x=>{const k=x.sp+'|'+x.game+'|'+x.m;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,Math.max(0,10-best.length));}
 /* Today's "Official" filter: the 70% rule + the price + the flags. Frozen at the master evaluation. */
 function tfPlayable(x,sp){if(x&&x.fz)return!!x.fz.play;try{if(x.incoherent||x.suspect)return false;if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR)return false;
@@ -877,7 +960,7 @@ function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦
   const sp=x=>e((SP_LAB[x.sp]||'').split(' ')[0]);const pc=x=>subPct(x.p!=null?x.p:best5Prob(x));
   const head=`<b>🏆 TheDesk — ${e(day)}</b>${C.record&&(C.record.w+C.record.l)?`\nBest 3 record: <b>${C.record.w}-${C.record.l}${C.record.pu?'-'+C.record.pu:''}</b> (${C.record.u>=0?'+':''}${C.record.u.toFixed(1)}u)`:''}\n<i>The Best 3 and Top 10 are official: a character is 70%+ sure. No pick rides more than ${EXPO_CAP} tickets.</i>`;
   const blocks=[head];
-  if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. ${mk(x)}${x.spread?'🌐 ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${pc(x)}`).join('\n')+(C.best.some(x=>x.spread)?`\n<i>🌐 = spread pick: below the 70% bar, on the card so every sport gets a play</i>`:''));
+  if(C.best.length)blocks.push(`<b>⭐ TODAY'S BEST ${C.best.length}</b>${C.locked?' 🔒':''}\n`+C.best.map((x,i)=>`${i+1}. ${mk(x)}${x.spread?'🌐 ':''}${x.tuned?'📏 ':''}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${pc(x)}`).join('\n')+(C.best.some(x=>x.spread)?`\n<i>🌐 = spread pick: below the 70% bar, on the card so every sport gets a play</i>`:'')+(C.best.some(x=>x.tuned)?`\n<i>📏 = history-tuned: under the 70% bar, in because picks like it have made money</i>`:''));
   if(C.top10.length)blocks.push(`<b>🔟 THE REST OF THE TOP 10</b>\n`+C.top10.map((x,i)=>`${i+1+C.best.length}. ${mk(x)}<b>${e(x.pick)}</b> ${e(tcSgn(x.price))} · ${sp(x)} ${e(gameLabel(x.sp,x.game))} · ${subPct(x.p)}`).join('\n'));
   if(C.banker)blocks.push(`${pm(C.banker)}<b>🏦 THE BANKER'S PARLAY</b> ${e(decimalToAmerican(C.banker.dec))} · ${subPct(C.banker.p)} to cash\n`+C.banker.legs.map(l=>mb(l)+e(subLeg(l))).join('\n'));
   const pl=l=>mb(l)+e(l.player?`${cpropLine(l)}${propWhere(l)}`:subLeg(l))+e(subStrength(l));
@@ -1024,7 +1107,7 @@ function deskPropResult(x,d){try{if(x.hit!=null||x.push)return x;const g=(get('d
   if(g&&g.d>=d&&g.d<=dayShift(d,1)&&g.v&&g.v[k]!=null){const a=+g.v[k];return{...x,actual:a,hit:x.side==='under'?a<+x.thr:a>+x.thr};}}catch(e){}return x;}
 function publicFeedCore(full){const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();
   const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
-    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,
+    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,tuned:x.tuned?true:undefined,
     why:(()=>{if(!x.whyOn)return undefined;try{const W=pickWhy({...x,date:x.d0});return{bullets:W.bullets.slice(0,6),script:W.script};}catch(e){return undefined;}})()});
   const hist=Object.keys(log).sort().reverse().slice(0,30).map(d=>({d,picks:(log[d].picks||[]).filter(x=>x.main).map(slim)})).filter(x=>x.picks.length);
   const logOf=x=>(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);
@@ -1134,7 +1217,7 @@ async function publishAuto(){try{try{cparGrade();cpxGrade();bkDayGrade();}catch(
 
 /* ── 15 · RECORDS — clean up front, the deep data one tap away ─────────────────── */
 let STR_V='all',STR_SP='all',STR_M='all';
-function recViewBar(){const V=[['overview','📊 Records'],['strengths','⭐ Strengths'],['ideology','🧠 Ideology'],['tickets','🎟 My tickets'],['eval','🧪 Model eval'],['chars','🔬 Deep dive'],['engine','🛠 Engine Room']];
+function recViewBar(){const V=[['overview','📊 Records'],['strengths','⭐ Strengths'],['ideology','🧠 Ideology'],['rules','📏 Rules'],['tickets','🎟 My tickets'],['eval','🧪 Model eval'],['chars','🔬 Deep dive'],['engine','🛠 Engine Room']];
   return'<div class="subnav rec-nav">'+V.map(([k,l])=>'<button class="'+(REC_VIEW===k||(k==='engine'&&REC_VIEW==='deep')?'on':'')+'" onclick="REC_VIEW=\''+k+'\';renderRecordsHub()">'+l+'</button>').join('')+'</div>';}
 function recTile(lab,R,sub){const n=R.w+R.l,p=n?R.w/n:null;return`<div class="rec-tile"><div class="rt-k">${lab}</div><div class="rt-v" style="color:${recColor(p,n)}">${R.w}-${R.l}</div><div class="rt-s">${n?Math.round(p*100)+'%':'—'} · ${R.u>=0?'+':''}${(+R.u||0).toFixed(1)}u${sub?' · '+sub:''}</div></div>`;}
 function recOverviewHtml(){const V=recPool(REC_SP,REC_SCOPE);const all=recStats(V);let b3={w:0,l:0,u:0},bk={w:0,l:0,u:0};const cp={w:0,l:0,u:0};
@@ -1173,6 +1256,7 @@ if(typeof renderRecordsHub==='function'){const REC_HUB0=renderRecordsHub;renderR
   try{if(REC_VIEW==='overview'){el.innerHTML=recViewBar()+recOverviewHtml();return;}
     if(REC_VIEW==='strengths'){el.innerHTML=recViewBar()+recStrengthsHtml();return;}
     if(REC_VIEW==='ideology'){el.innerHTML=recViewBar()+ideologyHtml();return;}
+    if(REC_VIEW==='rules'){el.innerHTML=recViewBar()+ruleAuditHtml();return;}
     if(REC_VIEW==='engine'){REC_HUB0();el.insertAdjacentHTML('beforeend',`<div class="bar" style="margin:8px 3px"><button onclick="REC_VIEW='deep';renderRecordsHub()">📚 Deep stats — luck vs skill, calibration, CLV, every table</button></div>`);return;}}
   catch(e){console.warn('records',e);el.innerHTML=recViewBar()+'<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';return;}
   return REC_HUB0();};}

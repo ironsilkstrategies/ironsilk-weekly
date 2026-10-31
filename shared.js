@@ -2921,7 +2921,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261031d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261031e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16850,6 +16850,7 @@ function best5State(){const d=today();let S=get(BEST5_KEY,{});
       (E.picks||[]).forEach(x=>{x.main=keys.has(x.sp+'|'+x.game+'|'+x.pick);});S.top3.forEach(x=>{if(!(E.picks||[]).some(y=>y.sp===x.sp&&y.game===x.game&&y.pick===x.pick))(E.picks=E.picks||[]).push({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:x.p,m:x.m,sd:x.sd,line:x.line,gid:x.gid,main:true,ev:x.ev,color:x.color,unan:!!x.unan,chars:x.chars||[],start:x.start||''});});
       E.v=2;set('d4.best5log',log);}}catch(e){}}
   if(!S.locked){const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,why3:b.why,ts:Date.now()});
+    try{if(typeof ruleSnap==='function')S.rules=ruleSnap();}catch(e){}   /* v2.81 · the rules this card was built under */
     delete S.sides;delete S.totals;
     const masterRan=evalRanToday();
     const first=Math.min(...b.picks.map(x=>Date.parse(x.start||'')).filter(isFinite),Infinity);
@@ -16879,7 +16880,7 @@ function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈'
     return`<div class="b3-row"><div class="b3-n">${i+1}</div><div style="flex:1;min-width:0">
       <div class="b3-pick">${txtEsc(x.pick)} <span class="b3-price">${x.price>0?'+':''}${x.price}</span>${res(x)}</div>
       <div class="b3-meta">${em[x.sp]||''} ${(x.sp||'').toUpperCase()} · ${esc(x.game)}${t(x)?' · '+t(x):''}</div>
-      <div class="b3-meta">${x.spread?'<b style="color:#7dd3fc">🌐 spread pick · below the 70% bar</b> · ':''}${tl?`<b style="color:${tc}">${tl}</b> · `:''}${ch?ch+' of the desk\'s voices agree · ':''}EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%</div></div>
+      <div class="b3-meta">${x.spread?'<b style="color:#7dd3fc">🌐 spread pick · below the 70% bar</b> · ':''}${x.tuned?'<b style="color:#c4b5fd">📏 history-tuned · under 70%, picks like it have paid</b> · ':''}${tl?`<b style="color:${tc}">${tl}</b> · `:''}${ch?ch+' of the desk\'s voices agree · ':''}EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%</div></div>
       <div class="b3-pct">${Math.round(x.p*100)}%<div class="b3-pl">to hit</div></div></div>`;}).join('');
   const empty=`<div class="rc-empty-slot">${S.locked?'No play cleared the bar today — we don\'t force picks.':(S.why3&&S.why3.total?'Nothing clears the bar yet — still checking as lines move.':'Builds from today\'s boards — open each sport once.')}</div>`;
   return`<div class="recapwrap" id="${opts.id||'bestShareTarget'}"><div class="recapcard">
@@ -16891,7 +16892,7 @@ function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈'
       <div class="rc-tag" style="font-size:11px;margin-top:2px;color:var(--win)">Track record: ${recTxt}</div></div>
       <div class="rc-date">${fmtDate(new Date(S.d+'T12:00:00'))}<br>${S.locked?'🔒 locked':'building'}</div></div>
     ${rows||empty}
-    <div class="rc-foot"><div class="cal">Today's games only · priced -200 or longer · ${S.locked?'locked '+(S.lockedAt?new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'')+' — never changes, graded at the final':'locks when the master evaluation runs'}</div>
+    <div class="rc-foot"><div class="cal">Today's games only · lays ${(S.rules&&S.rules.b3lo)||(typeof ruleNow==='function'?ruleNow('b3lo'):-200)} at most · ${S.locked?'locked '+(S.lockedAt?new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'')+' — never changes, graded at the final':'locks when the master evaluation runs'}</div>
       <div class="cta">Follow <span>${txtEsc(get(LS.handle,'@YourHandle'))}</span></div></div></div></div>`;}
 function best5Lock(){const S=best5State();if(!(S.picks||[]).length){alert('Nothing to lock yet — open each sport board today first.');return;}
   S.locked=true;S.lockedAt=Date.now();S.why='locked by you';set(BEST5_KEY,S);renderBest();}
@@ -16924,11 +16925,12 @@ function renderBest(){
   const views=['all',...(S.sports||[])];
   if(!views.includes(BEST_VIEW))BEST_VIEW='all';
   const tabs=`<div style="margin-bottom:8px">${views.map(v=>`<button class="msg-chip${BEST_VIEW===v?' on':''}" onclick="bestView('${v}')">${v==='all'?'Whole slate':SP_LAB[v]||v.toUpperCase()}</button>`).join('')}</div>`;
-  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price',`priced shorter than ${typeof DESK_B3_LO!=='undefined'?DESK_B3_LO:-300} or longer than +400`],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['conf','under the 70% confidence rule'],['tier','below VALUE'],['prob','under 45%'],['ev','priced past what the confidence supports']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
+  const W3=S.why3||null;const diag=(!(S.top3||[]).length&&W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Why it's empty — ${W3.total} picks on Today's card: ${[['price',`priced shorter than ${(S.rules&&S.rules.b3lo)||(typeof DESK_B3_LO!=='undefined'?DESK_B3_LO:-300)} or longer than +400`],['day','not today'],['started','already started'],['flag','flagged EV-suspect or fighting the market'],['lane','in a blocked lane'],['conf',`under the ${Math.round(((S.rules&&S.rules.floor)||0.70)*100)}% confidence rule`],['tier','below VALUE'],['prob','under 45%'],['ev','priced past what the confidence supports']].filter(([k])=>W3[k]).map(([k,l])=>W3[k]+' '+l).join(' · ')}</div>`
     :(!(S.top3||[]).length&&!(W3&&W3.total)?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--gold)">Today's card is empty — open each sport's Games board (or Load all sports on Today) so it has picks to choose from.</div>`:'');
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
     <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:(evalRanToday()&&!(S.top3||[]).length&&W3&&W3.total?'Master evaluation ran — no play clears the bar yet. It keeps re-checking as lines and boards update, locks the moment one qualifies, and locks empty 30 min before the last game.':'Building — freezes the moment the master evaluation runs (or 30 min before the first game)')}</b>
-    ${S.locked||(evalRanToday()&&!(S.top3||[]).length)?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${typeof b3SpreadOn==='function'?` <button onclick="b3SpreadToggle()" style="font-size:10px" title="Optional: when a sport has no play that clears the bar, its best near-miss can take a slot (marked 🌐)">🌐 Spread across sports: <b>${b3SpreadOn()?'ON':'off'}</b></button>${S.locked?'<span class="sub" style="font-size:9.5px"> (today\'s card is locked — a change applies to the next one)</span>':''}`:''}${diag}${(()=>{const sv=BEST_VIEW!=='all'?BEST_VIEW:null;const L0=sv?((S.bySport||{})[sv]||[]):(S.top3||[]);
+    ${S.locked||(evalRanToday()&&!(S.top3||[]).length)?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${typeof b3SpreadOn==='function'?` <button onclick="b3SpreadToggle()" style="font-size:10px" title="Optional: when a sport has no play that clears the bar, its best near-miss can take a slot (marked 🌐)">🌐 Spread across sports: <b>${b3SpreadOn()?'ON':'off'}</b></button>${S.locked?'<span class="sub" style="font-size:9.5px"> (today\'s card is locked — a change applies to the next one)</span>':''}`:''}${typeof ruleSnap==='function'?(()=>{try{const r=S.rules||ruleSnap();const lo=(k,v,f)=>v!==RULE_DEF[k]?`<b style="color:#c4b5fd">${f(v)} 📏</b>`:f(v);
+      return`<div class="mono" style="font-size:9.5px;margin-top:4px;color:var(--mute)">Rules in force: model under ${lo('disagree',r.disagree,v=>Math.round(v*100)+' pts')} off the market · lays ${lo('b3lo',r.b3lo,v=>v)} at most · ${lo('floor',r.floor,v=>Math.round(v*100)+'%')} confidence or an official call · <a href="#" onclick="REC_VIEW='rules';tab('grades',document.querySelector('nav button[onclick*=grades]'));return false" style="color:var(--gold)">📏 how history set these</a></div>`;}catch(e){return'';}})():''}${diag}${(()=>{const sv=BEST_VIEW!=='all'?BEST_VIEW:null;const L0=sv?((S.bySport||{})[sv]||[]):(S.top3||[]);
       /* v2.80.9 · always: a gold SUPREME tile that isn't on the card must say which rule kept it off (it used to show only on an empty card) */
       let N=[];try{N=best3Near(80).filter(x=>(!sv||x.sp===sv)&&!L0.some(y=>y.sp===x.sp&&y.game===x.game&&y.pick===x.pick)).slice(0,8);}catch(e){}if(!N.length)return'';
       return`<div class="mono" style="font-size:9.5px;margin-top:6px;color:var(--mute)">${L0.length?'Strong calls NOT on the card — the rule each one missed':'Closest '+(sv?(SP_LAB[sv]||sv)+' ':'')+'calls today (not on the card)'}:</div>${N.map(x=>`<div class="mono" style="font-size:10px;padding:2px 0">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> ${x.price!=null?(x.price>0?'+':'')+x.price:''} · ${x.p!=null?Math.round(x.p*100)+'%':'—'} · <span style="color:var(--rust)">${txtEsc(x.why)}</span></div>`).join('')}`;})()}</div>`;
@@ -19561,7 +19563,8 @@ const AP_STEPS=[
   ['props','Grade props','Prop calls graded from real box lines.',()=>cpropGrade()+propCalGrade()+likelyGrade()],
   ['banker','Banker\'s desk','The Banker\'s day tickets.',()=>bkDayGrade()],
   ['cal','Calibration snapshot','Daily: is "60%" still winning 60%? Blend weights per market.',()=>{calSnapshot();return 1;}],
-  ['mlbcal','Baseball calibration','Segmented calibration, drift and velocity (baseball page).',()=>{if(typeof GAMES==='undefined'||!GAMES.length)return 0;computeCalibration();computeGlobalDrift();computeSegmentedCalibration();return 1;}]];
+  ['mlbcal','Baseball calibration','Segmented calibration, drift and velocity (baseball page).',()=>{if(typeof GAMES==='undefined'||!GAMES.length)return 0;computeCalibration();computeGlobalDrift();computeSegmentedCalibration();return 1;}],
+  ['rules','Rule audit','Daily: re-judges the rules that keep picks off the Best 3 from graded picks — a rule loosens only where the picks it blocked made money.',()=>{if(typeof ruleTune!=='function')return 0;const T=ruleTune(false);return T?T.n:0;}]];
 function apRun(force,why){if(AP_BUSY)return null;const L=get(AP_KEY,[])||[];const last=L[0];if(!force&&last&&Date.now()-last.ts<6*36e5)return null;AP_BUSY=true;const t0=Date.now();const steps=[];
   try{AP_STEPS.forEach(([k,,,f])=>{const t=Date.now();try{const v=f();steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}});}
   finally{AP_BUSY=false;}const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps};L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
@@ -22739,7 +22742,8 @@ function laneStatus(k,voice){if(!k)return'thin';const T=laneTable();const v=voic
   if((v&&v.st==='proven')||(g&&g.st==='proven'))return'proven';return(g&&g.st)||'thin';}
 function pickLane(x,sp){return laneKey(x.sp||sp,x.m||x.market,x.sd||x.side,x.price,x.line);}
 /* model fighting the market by 8+ pts, in a lane that hasn't proven it can */
-function pickDisagrees(x,sp){if(x.mp==null||x.mkt==null)return false;return Math.abs(x.mp-x.mkt)>=DISAGREE_PTS&&laneStatus(pickLane(x,sp))!=='proven';}
+function pickDisagrees(x,sp){if(x.mp==null||x.mkt==null)return false;const D=typeof ruleNow==='function'?ruleNow('disagree'):DISAGREE_PTS;   /* v2.81 · 📏 the rule audit can loosen it */
+  return Math.abs(x.mp-x.mkt)>=D-1e-9&&laneStatus(pickLane(x,sp))!=='proven';}
 
 /* ── CFB rankings (v1.94) — the poll lives in d4.cfbranks (fetched on the CFB page, synced everywhere) ── */
 function cfbRanks(){return get('d4.cfbranks',null);}
@@ -23575,7 +23579,7 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
     <div class="mktlab" style="margin-top:8px">4 · Lanes — judged on units</div>
     ${lanes.length?lanes.map(lrow).join(''):'<div class="sub">No lane has 30 graded calls yet.</div>'}
     ${vb.length?`<div class="sub mono" style="font-size:9.5px;margin-top:4px;color:var(--rust)">Blocked for one character: ${vb.map(x=>`${txtEsc(charName(x.v))} · ${txtEsc(laneName(x.k))} (${x.o.w}-${x.o.n-x.o.w})`).join(' · ')}</div>`:''}
-    <div class="mktlab" style="margin-top:8px">5 · Disagreement flag</div><div class="sub" style="font-size:10.5px">Model ${Math.round(DISAGREE_PTS*100)}+ pts away from the market is treated as a likely model miss, unless that lane is ✓ proven.</div></div>`;}
+    <div class="mktlab" style="margin-top:8px">5 · Disagreement flag</div><div class="sub" style="font-size:10.5px">Model ${Math.round((typeof ruleNow==='function'?ruleNow('disagree'):DISAGREE_PTS)*100)}+ pts away from the market is treated as a likely model miss, unless that lane is ✓ proven.</div></div>`;}
 
 /* ══ PRIVATE SYNC (v1.90) ═══════════════════════════════════════════════════
    One private GitHub repo holds thedesk-sync.json. Every device pulls it when the
@@ -23590,7 +23594,7 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
 let CLOUD_SEEN=null,SYNC_LOCAL_N=0;   /* v2.51 · the cloud commit this device last saw, and a count of its own synced writes */
 /* v2.80.3 · + the crash guard and the master-eval relay: both describe THIS device's last few minutes — another phone's copy could trip safe mode here */
-const SYNC_NEVER=new Set(['d4.bootguard','d4.evalchain','d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
+const SYNC_NEVER=new Set(['d4.bootguard','d4.evalchain','d4.ruletune','d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
 const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$)/.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
