@@ -37,9 +37,11 @@ var FRZ_KEY='d4.perfstalls',FRZ_LIVE='d4.perflive',FRZ={act:'',actAt:0,t0:Date.n
   const note=o=>{const L=rd(FRZ_KEY)||[];L.push(Object.assign({ts:Date.now(),page:pg(),tab:view(),act:FRZ.act&&Date.now()-FRZ.actAt<90e3?FRZ.act:'',step:step(),b:BV},o));wr(FRZ_KEY,L.slice(-40));};
   FRZ.note=note;
   /* the last thing tapped, in words a person can read back */
+  /* v2.80.10 · words a person can read: an element's text without any <style>/<script> inside it (a tap on a card used to log its CSS) */
+  const own=e=>{try{if(!e)return'';if(e.getElementsByTagName&&e.getElementsByTagName('*').length>200)return[].map.call(e.childNodes,n=>n.nodeType===3?n.textContent:'').join(' ').replace(/\s+/g,' ').trim();const c=e.cloneNode(true);if(c.querySelectorAll)c.querySelectorAll('style,script,svg').forEach(n=>n.remove());return(c.textContent||'').replace(/\s+/g,' ').trim();}catch(_){return'';}};
   const lab=el=>{try{for(let e=el,i=0;e&&e.getAttribute&&i<6;e=e.parentElement,i++){const oc=e.getAttribute('onclick');
-      if(oc||e.tagName==='BUTTON'||e.tagName==='A'||e.tagName==='SUMMARY'){const t=(e.textContent||'').replace(/\s+/g,' ').trim().slice(0,40);return t+(oc?' ['+oc.replace(/\s+/g,' ').slice(0,50)+']':'');}}
-    return(el&&el.textContent||'').replace(/\s+/g,' ').trim().slice(0,40);}catch(e){return'';}};
+      if(oc||e.tagName==='BUTTON'||e.tagName==='A'||e.tagName==='SUMMARY'){const t=own(e).slice(0,40);return t+(oc?' ['+oc.replace(/\s+/g,' ').slice(0,50)+']':'');}}
+    return own(el).slice(0,40)||(el&&el.tagName?el.tagName.toLowerCase()+(el.id?'#'+el.id:el.className&&typeof el.className==='string'?'.'+el.className.split(' ')[0]:''):'');}catch(e){return'';}};
   document.addEventListener('click',e=>{FRZ.act=lab(e.target);FRZ.actAt=Date.now();},true);
   /* v2.80.7 · every open page keeps its own live mark (a second tab, or the page you hop to, no longer looks like a
      crash). A mark that stops moving — no heartbeat, no pagehide, never went to the background — is a page that died
@@ -2919,7 +2921,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261031c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261031d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17188,7 +17190,7 @@ async function forceGradeEverything(){
   try{gradeSystemLog()}catch(err){console.warn('syslog grade',err)}
   // NFL grades on the same trigger as MLB, into its own archive (LS.nflarc).
   try{if(typeof gradeNFLResults==='function')gradeNFLResults()}catch(e){console.warn('NFL grading:',e)}
-  try{await gradeSweep({force:true});}catch(e){console.warn('sweep',e)}   /* every overdue leg, every sport, every date */
+  try{await gradeSweep({force:true,user:true});}catch(e){console.warn('sweep',e)}   /* every overdue leg, every sport, every date */
   const btn=document.getElementById('forceGradeBtn');
   const status=document.getElementById('forceGradeStatus');
   if(btn)btn.disabled=true;
@@ -22000,10 +22002,14 @@ function sweepAutoRekey(list){let n=0;list.forEach(x=>{try{const D=legDiagnose(x
     const same=(o,n2)=>o===n2||mgAb(sp,o)===n2||mgAb(sp,n2)===o;
     if((same(oa,na)&&same(oh,nh))||(same(oa,nh)&&same(oh,na))){legRekey(x.t.id,x.i,D.to);n++;}}catch(e){}});return n;}
 let SWEEP_AGAIN=false;
-async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY){if(opts.force)SWEEP_AGAIN=true;return null;}if(!opts.force&&Date.now()-SWEEP_TS<9.5*60e3)return null;
-  SWEEP_BUSY=true;SWEEP_TS=Date.now();const before=sweepOverdue().length;
+async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY){if(opts.force)SWEEP_AGAIN=opts.user||SWEEP_AGAIN==='user'?'user':true;return null;}if(!opts.force&&Date.now()-SWEEP_TS<9.5*60e3)return null;
+  SWEEP_BUSY=true;SWEEP_TS=Date.now();const od0=sweepOverdue(),before=od0.length;
+  /* v2.80.10 · legs the sweeper already couldn't settle don't get the heavy pass (every date re-pulled, every box re-read)
+     again on every page load — once per 30 min for the same stuck set, unless you tap "Sweep again" */
+  const sig=od0.map(x=>String(x.t&&x.t.id)+':'+x.i).sort().join(',');let stale=false;
+  try{const H0=get(GHEALTH_KEY,null);stale=!opts.user&&!!H0&&H0.sig===sig&&!!sig&&Date.now()-(+H0.ts||0)<30*60e3;}catch(e){}
   try{
-    if(before||opts.force){
+    if((before||opts.force)&&!stale){
       try{await mgRefresh(true,true);}catch(e){}
       try{sweepAutoRekey(sweepOverdue());}catch(e){}
       if(sweepOverdue().some(x=>x.sp==='mlb'))try{await backfillGrading(true);}catch(e){}
@@ -22015,14 +22021,14 @@ async function gradeSweep(opts){opts=opts||{};if(SWEEP_BUSY){if(opts.force)SWEEP
   }finally{SWEEP_BUSY=false;}
   const left=sweepOverdue().map(x=>{let D={code:'?',msg:'no result found yet'};try{D=legDiagnose(x.l,x.t);}catch(e){}
     return{tid:String(x.t.id),i:x.i,name:x.t.name||null,pick:x.l.pick,game:x.l.game,sp:x.sp,d:x.d,code:D.code,msg:D.msg};});
-  const H={ts:Date.now(),before,graded:Math.max(0,before-left.length),left};set(GHEALTH_KEY,H);
+  const H={ts:stale?((get(GHEALTH_KEY,null)||{}).ts||Date.now()):Date.now(),before,graded:Math.max(0,before-left.length),left,sig:left.map(x=>x.tid+':'+x.i).sort().join(',')};set(GHEALTH_KEY,H);
   try{gradeBannerPaint();}catch(e){}
-  if(SWEEP_AGAIN){SWEEP_AGAIN=false;setTimeout(()=>{gradeSweep({force:true}).catch(()=>{});},300);}   /* "Sweep again" tapped mid-sweep: one more pass, not silence */
+  if(SWEEP_AGAIN){const u=SWEEP_AGAIN==='user';SWEEP_AGAIN=false;setTimeout(()=>{gradeSweep({force:true,user:u}).catch(()=>{});},300);}   /* "Sweep again" tapped mid-sweep: one more pass, not silence */
   try{const on=id=>{const v=document.getElementById(id);return v&&v.classList.contains('on');};if(on('v-tickets'))renderTickets();if(on('v-mine'))renderMyGames();if(on('v-banker'))renderBankerTab();}catch(e){}
   return H;}
 /* one tap grades the leg right away: it leaves the list at once and the list stays open for the next one */
 function gradeBannerSet(tid,i,res){try{legSetManual(tid,i,res);}catch(e){}try{const H=get(GHEALTH_KEY,null);if(H&&H.left){H.left=H.left.filter(x=>!(String(x.tid)===String(tid)&&+x.i===+i));set(GHEALTH_KEY,H);}}catch(e){}
-  try{gradeBannerPaint(true);}catch(e){}setTimeout(()=>{gradeSweep({force:true}).catch(()=>{});},400);}
+  try{gradeBannerPaint(true);}catch(e){}setTimeout(()=>{gradeSweep({force:true,user:true}).catch(()=>{});},400);}
 function gradeBannerPaint(keepOpen){if(typeof document==='undefined')return;const H=get(GHEALTH_KEY,null);let el=document.getElementById('gradeBanner');
   const wasOpen=keepOpen===true||!!(el&&el.querySelector('details[open]'));
   const left=(H&&H.left)||[];
@@ -22035,8 +22041,10 @@ function gradeBannerPaint(keepOpen){if(typeof document==='undefined')return;cons
   el.innerHTML=`<details${wasOpen?' open':''}><summary><b style="color:var(--gold)">🩺 ${left.length} leg${left.length>1?'s':''} past game day without a grade</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">checked ${new Date(H.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></summary>
     <div class="sub" style="font-size:10px;margin:4px 0">The sweeper pulled every date these games were on and still couldn't settle them. Each one says why. If the reason is a pick it can't read or a game ESPN doesn't list, set the result once and it's locked in.</div>
     ${rows}${left.length>12?`<div class="sub" style="font-size:10px">+${left.length-12} more on Tickets → My picks</div>`:''}
-    <div class="bar" style="margin-top:6px"><button class="primary" onclick="this.textContent='Sweeping…';gradeSweep({force:true})">↻ Sweep again now</button></div></details>`;}
-if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){
+    <div class="bar" style="margin-top:6px"><button class="primary" onclick="this.textContent='Sweeping…';gradeSweep({force:true,user:true})">↻ Sweep again now</button></div></details>`;}
+/* v2.80.10 · not on the master evaluation's relay pages (bg=1): they're there to evaluate and hop on — a full grading
+   sweep on every hop was heavy network and parsing in the middle of the evaluation */
+if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__&&!(typeof location!=='undefined'&&/[?&]bg=1/.test(location.search||''))){
   window.addEventListener('load',()=>{try{gradeBannerPaint();}catch(e){}setTimeout(()=>{gradeSweep({force:true}).catch(()=>{});},4000);
     setInterval(()=>{if(document.hidden)return;let n=0;try{n=sweepOverdue().length;}catch(e){}if(n)gradeSweep().catch(()=>{});},10*60e3);});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)gradeSweep().catch(()=>{});});}

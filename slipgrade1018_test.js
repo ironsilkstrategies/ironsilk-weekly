@@ -22,6 +22,6 @@ setTimeout(async()=>{try{
   const r=w.eval(`(()=>{const el=document.getElementById('gradeBanner');const L=get(LS.locked,[]).find(t=>String(t.id)==='${tid}');return{open:!!el.querySelector('details[open]'),rows:(el.innerHTML.match(/gradeBannerSet\\(/g)||[]).length/3,leg:L.legs[0].manual};})()`);
   T('grade one leg: it leaves the list at once and the list stays open for the next',r.open&&r.rows===1&&r.leg&&r.leg.hit===true,JSON.stringify(r));
   await new Promise(z=>setTimeout(z,600));
-  T('"Sweep again" tapped while a sweep is running queues one more pass instead of doing nothing',w.eval('SWEEP_AGAIN')===true);
+  T('"Sweep again" tapped while a sweep is running queues one more pass instead of doing nothing',!!w.eval('SWEEP_AGAIN'),String(w.eval('SWEEP_AGAIN')));   /* v2.80.10 · 'user' when you tapped it: the re-run is never skipped as already-tried */
 }catch(e){T('crashed',false,String(e&&e.stack||e).slice(0,300));}
   console.log(out.join('\n'));const f=out.filter(x=>x.startsWith('FAIL')).length;console.log(`${out.length-f} pass / ${f} fail`);process.exit(0);},2500);
