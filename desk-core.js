@@ -496,7 +496,7 @@ function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const
     const ev=p!=null&&x.price!=null?(p*americanToDecimal(+x.price)-1)*100:null;let why=null;
     try{if(x.price==null)why='no book price';else if(+x.price<DESK_B3_LO)why=`priced ${x.price} — the Best 3 lays ${DESK_B3_LO} at most`;else if(+x.price>BEST3_HI)why='longer than +400';
       else if(x.incoherent||x.suspect)why='flagged: '+(x.suspect||'incoherent with its other markets');else if(laneStatus(pickLane(x,s0))==='blocked')why='lane blocked: '+laneName(pickLane(x,s0));
-      else if(pickDisagrees(x,s0))why='model fighting the market';
+      else if(pickDisagrees(x,s0))why=`model ${Math.round(x.mp*100)}% vs the market's ${Math.round(x.mkt*100)}% — ${Math.round(Math.abs(x.mp-x.mkt)*100)} pts apart; 8+ is treated as a likely model miss unless that lane is ✓ proven`;
       else if(!o){const fl=confFloorFor({sp:s0,market:mkNorm(x.m),date:today()});
         why=p==null?'no character confidence on it yet':p>=fl-1e-9&&!confEvOk(x,p,today())?`${Math.round(p*100)}% sure, but ${x.price} needs ${Math.round(imp(+x.price)*100)}% — never official at a price its own number says loses`
           :p>=fl-1e-9&&p<0.70&&+x.price<CONF_PAY_MIN&&today()>=CONF_PAY_FROM?`${Math.round(p*100)}% sure at ${x.price} — under 70%, a pick has to pay ${CONF_PAY_MIN} or better`

@@ -1021,11 +1021,24 @@ const NFL_PROP_MODEL={
 /* College names carry diacritics the book strips: the schedule says
    "San Jose State" with an accent, the upload says "San Jose State" without.
    Decompose and drop combining marks so the two forms compare equal. */
-function cfbKeyOf(x){
-  return String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .toUpperCase().replace(/[^A-Z0-9]/g,'');
+/* v2.80.9 · SPEED — a 52-game Saturday spent 25 s (4x-throttled; ~15 s on a phone, then iOS killed the page) inside
+   these two: every card's line lookup re-resolved every stored row's team names, and every resolve re-normalized every
+   team's every name. cfbKeyOf is a pure function, so it's remembered; ncaafAbbrFor answers from a memo per board. */
+const CFB_KEY_MEMO=new Map();
+function cfbKeyOf(x){const s0=String(x||'');let k=CFB_KEY_MEMO.get(s0);if(k!==undefined)return k;
+  k=s0.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(CFB_KEY_MEMO.size>20000)CFB_KEY_MEMO.clear();CFB_KEY_MEMO.set(s0,k);return k;
 }
+let CFB_ABBR_MEMO={games:null,n:-1,m:new Map()};
 function ncaafAbbrFor(raw){
+  if(!raw)return null;const G=(typeof NCAAF_GAMES!=='undefined'&&NCAAF_GAMES)||[];
+  /* keyed on the board's teams, not the array (renderNCAAF re-filters NCAAF_GAMES into a new array every paint) */
+  if(CFB_ABBR_MEMO.games!==G){const sig=G.length+'|'+G.map(g=>g&&g.away&&g.home?g.away.abbr+g.home.abbr:'').join(',');
+    if(CFB_ABBR_MEMO.n!==sig)CFB_ABBR_MEMO={games:G,n:sig,m:new Map()};else CFB_ABBR_MEMO.games=G;}
+  const mk=String(raw);if(CFB_ABBR_MEMO.m.has(mk))return CFB_ABBR_MEMO.m.get(mk);
+  const a=ncaafAbbrFor0(raw);CFB_ABBR_MEMO.m.set(mk,a);return a;
+}
+function ncaafAbbrFor0(raw){
   if(!raw)return null;
   const k=cfbKeyOf(raw);
   if(!k)return null;
@@ -2596,7 +2609,7 @@ function getNCAAFBookLines(){return fbWindow(LS.ncaafshots,bookKeyOf);}
    ran ~100 times per pass, twice per render — about a second of frozen UI the
    moment any CFB lines existed. Results are memoized against a signature of
    the stored lines, so any upload, pull or edit invalidates the cache. */
-let _NCAAF_BL_MEMO={sig:'',map:new Map()};
+let _NCAAF_BL_MEMO={sig:'',map:new Map()},_NCAAF_REPAIR_SIG=null;
 function ncaafBookLinesFor(gameKey){
   const all=getNCAAFBookLines();
   if(!all.length)return[];
@@ -2633,7 +2646,9 @@ function _ncaafBookLinesForRaw(gameKey,all){
     return ra&&rh&&ra===ak&&rh===hk;
   });
   if(hit.length)return hit;
-  try{repairNCAAFKeys()}catch(e){}
+  /* v2.80.9 · the repair rewrites stored keys for good — once per set of lines is enough (it used to run again for
+     every game without a line, the whole history each time) */
+  if(_NCAAF_REPAIR_SIG!==_NCAAF_BL_MEMO.sig){_NCAAF_REPAIR_SIG=_NCAAF_BL_MEMO.sig;let f=0;try{f=repairNCAAFKeys();}catch(e){}if(f)_NCAAF_BL_MEMO.map.clear();}
   const all2=getNCAAFBookLines();
   return all2.filter(x=>{
     if(x.game===gameKey)return true;
