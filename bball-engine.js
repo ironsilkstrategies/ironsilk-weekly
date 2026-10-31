@@ -469,15 +469,6 @@ function bbArchiveFinals(C){const arc=get(C.arc,{})||{},d=today(),day=arc[d];let
 function bbArchiveBackfill(C,G){const arc=get(C.arc,{})||{};const by={};G.forEach(g=>{by[g.id]=g;});let n=0;
   Object.keys(arc).forEach(d=>(arc[d].rows||[]).forEach(r=>{if(r.final)return;const g=by[String(r.gid)];if(!g||g.abstract!=='post'||g.awayScore==null)return;r.final={a:+g.awayScore,h:+g.homeScore,h1a:g.h1a,h1h:g.h1h};n++;}));
   if(n){set(C.arc,arc);try{brainLearn(C.sp);}catch(e){}}return n;}
-function bbRecordHtml(sp){const C=bbC(sp);const arc=get(C.arc,{})||{};const T={ml:{W:0,L:0,P:0,u:0},spread:{W:0,L:0,P:0,u:0},total:{W:0,L:0,P:0,u:0}};let pend=0;
-  Object.values(arc).forEach(D=>(D.rows||[]).forEach(r=>(r.picks||[]).forEach(p=>{if(!r.final){pend++;return;}const a=r.final.a,h=r.final.h;let res=null;
-    if(p.m==='ml')res=a===h?null:(p.side==='home')===(h>a);else if(p.m==='total'){const t=a+h;res=t===p.line?null:(p.side==='over')===(t>p.line);}else{const m=(p.side==='home'?h-a:a-h)+p.line;res=m===0?null:m>0;}
-    const b=T[p.m];if(res===null)b.P++;else if(res){b.W++;b.u+=bbDec(+p.price)-1;}else{b.L++;b.u-=1;}})));
-  const lab={ml:'Moneyline',spread:'Spread',total:'Total'};const col=(w,l)=>{const n=w+l;if(!n)return'var(--mute)';const p=w/n;return typeof recColor==='function'?recColor(p,n):(p>=0.6?'var(--win)':p<0.5?'var(--rust)':'var(--chalk)');};
-  return`<div class="tkt hi"><h3>${C.name} system picks — best-EV side per market (≥2% EV, locked pregame)</h3>`+Object.entries(T).map(([k,b])=>`<div class="sub">${lab[k]}: <b style="color:${col(b.W,b.L)}">${b.W}-${b.L}${b.P?'-'+b.P:''}</b> · ${b.u>=0?'+':''}${b.u.toFixed(2)}u</div>`).join('')+
-    (pend?`<div class="sub" style="color:var(--mute)">${pend} pick${pend>1?'s':''} waiting on finals</div>`:'')+`<div class="sub mono" style="font-size:9.5px;color:var(--mute)">${bbEsc(BB_STATUS[sp].res||'')}</div></div>`;}
-function renderBBRecord(sp){const nav=document.getElementById('gradeNav');if(nav)nav.innerHTML=`<button class="on">🏀 ${bbC(sp).lab} record</button>`;
-  const body=document.getElementById('gradeBody');if(!body)return;let h=bbRecordHtml(sp);try{h+=voicesReport(sp)}catch(e){}try{h+=intelReport(sp)}catch(e){}body.innerHTML=h;}
 /* ── the board ────────────────────────────────────────────────────────────── */
 const BB_VIEW={nba:{f:'all',q:'',n:12},ncaab:{f:'lined',q:'',n:10}};
 function bbFilterGames(C){const V=BB_VIEW[C.sp];const q=String(V.q||'').trim().toUpperCase();let G=C.games.slice();
@@ -583,28 +574,15 @@ function renderBasketballEval(sp){const C=bbC(sp);const I=bbEvalInputs(sp);let r
 /* ── the names every page and every test knows ────────────────────────────── */
 function nbaSimFor(g,period){return bbSimFor(BB_CFG.nba,g,period);}
 function nbaLive(g){return bbLive(BB_CFG.nba,g);}
-function nbaParseEvent(ev){return bbParseEvent(BB_CFG.nba,ev);}
-function nbaCard(g){return bbCard(BB_CFG.nba,g);}
-function nbaPan(gid,k,btn){return bbPan('nba',gid,k,btn);}
 function renderNBA(){return bbRender('nba');}
 async function nbaBoot(force){return bbBoot('nba',force);}
-async function loadNBAScoreboard(){return bbLoadSchedule(BB_CFG.nba);}
-async function loadNBARatings(){return bbLoadRatings(BB_CFG.nba);}
 function nbaBookLinesFor(game,date){return bbLinesFor(BB_CFG.nba,game,date);}
 function saveNBABookOdds(picks,el){return bbSaveOdds('nba',picks,el);}
 function parseNBASlateText(text){return bbParseSlate('nba',text);}
 function nbaBrainAdapter(){return bbBrainAdapter('nba');}
-function nbaLockJudge(){return bbLockJudge('nba');}
-function renderNBAMasterEval(){return renderBasketballEval('nba');}
-function renderNBARecord(){return renderBBRecord('nba');}
-function ncaabSimFor(g,period){return bbSimFor(BB_CFG.ncaab,g,period);}
-function ncaabCard(g){return bbCard(BB_CFG.ncaab,g);}
 function renderNCAAB(){return bbRender('ncaab');}
 async function ncaabBoot(force){return bbBoot('ncaab',force);}
 function ncaabBookLinesFor(game,date){return bbLinesFor(BB_CFG.ncaab,game,date);}
 function saveNCAABBookOdds(picks,el){return bbSaveOdds('ncaab',picks,el);}
 function parseNCAABSlateText(text){return bbParseSlate('ncaab',text);}
 function ncaabBrainAdapter(){return bbBrainAdapter('ncaab');}
-function ncaabLockJudge(){return bbLockJudge('ncaab');}
-function renderNCAABMasterEval(){return renderBasketballEval('ncaab');}
-function renderNCAABRecord(){return renderBBRecord('ncaab');}

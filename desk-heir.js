@@ -198,8 +198,6 @@ function heirsRun(force){const d=today();if(SAFE_MODE&&!force)return HEIR_MEMO||
   set(HEIR_KEY,H);HEIR_MEMO=out;return out;}
 /* a call's confidence under its cell's champion: the original, or a promoted heir from its day on */
 const heirsRO=()=>{const H=roGet(HEIR_KEY,null,10e3);return H&&H.v===1&&H.cells?H:null;};
-function heirChampPred(x){try{const H=heirsRO();const C=H&&H.cells[x.voice+'|'+x.market];if(!C||C.champ.id==='base'||!C.champ.since||String(x.date).slice(0,10)<C.champ.since)return null;
-    const run=wvRunMemo(C.champ.p||heirParams(C.champ.id,C)||WV_DEF);const p=run.pred.get(x.id);return p!=null?heirCap(p,x):heirCap(wvPredictOne(x,run),x);}catch(e){return null;}}
 /* when an heir holds the chair, the calls it stamps carry its confidence (the original kept beside it) */
 if(typeof confStamp==='function'&&typeof window!=='undefined'&&!window.__HEIR_CS__){window.__HEIR_CS__=1;const CS0=confStamp;
   confStamp=function(calls){CS0(calls);try{const H=heirsRO();if(!H||!Object.values(H.cells).some(C=>C.champ&&C.champ.id!=='base'))return;

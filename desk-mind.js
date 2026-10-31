@@ -146,9 +146,6 @@ function statusOf(v,sp,d){try{d=String(d||'').slice(0,10)||today();if(d<STATUS_F
 try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='status')){const i=AP_STEPS.findIndex(s=>s[0]==='conf');
   AP_STEPS.splice(i>=0?i+1:AP_STEPS.length,0,['status','Health check','Each character × sport, from its last 4 weeks: winning what it promised (against its sport\'s pool)? beating the close? Watching only — nothing is benched or trimmed.',()=>{clvStampAll();return Object.keys((statusSnap(today())||{}).by||{}).length;}]);}}catch(e){}
 
-/* ── what you see ── */
-function statusChip(v,sp,d){const s=statusOf(v,sp,d||today());if(!s)return'';const E=BOOK_ENDS[s]||{};const o=((statusSnap(d||today())||{}).by||{})[v+'|'+sp]||{};
-  return`<span class="st-chip" title="${txtEsc(E.lab+' — '+(o.why||''))}">${E.ico}</span>`;}
 function statusBoardHtml(){const S=statusSnap(today());const by=(S&&S.by)||{};const sps=['mlb','nfl','ncaaf','nhl','nba','ncaab'].filter(sp=>Object.keys(by).some(k=>k.endsWith('|'+sp)));
   if(!sps.length)return'<div class="tkt"><h3 style="margin:0">🫀 Health</h3><div class="sub" style="font-size:10.5px">Fills in once characters have graded calls.</div></div>';
   const cell=(v,sp)=>{const o=by[v+'|'+sp];if(!o)return'<td style="color:var(--mute)">—</td>';const E=BOOK_ENDS[o.st]||{};

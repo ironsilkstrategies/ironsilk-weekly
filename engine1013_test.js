@@ -90,7 +90,7 @@ setTimeout(async()=>{try{
   /* ── 🛠 autopilot + engine room ───────────────────────────── */
   const er=w.eval('engineRoomHtml()');
   T('Engine Room renders the plain-English summary and every section',/Engine Room/.test(er)&&/Autopilot loops/.test(er)&&/absorbed/.test(er)&&/Situations being tested/.test(er)&&/Ideology floors/.test(er)&&/freeze/.test(er));
-  T('Records has an Engine Room tab',/'engine','🛠 Engine Room'/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8')));
+  T('Records has an Engine Room tab',/'engine','🛠 Engine Room'/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8')));   /* v2.81.4 · the live Records bar is desk-core's (shared.js's copy was never reached) */
   T('autopilot runs 20 loops in order (v2.81: the rule audit last; v2.31: the confidence meter learns right after grading; v2.44: the health check right after it; v2.46: the world\'s weather, then v2.45: the generations; v2.47: the feeds after the voices grade; v2.54: the Underdog Spotter\'s probation after the Scout\'s)',w.eval('AP_STEPS.map(s=>s[0]).join(",")')==='learn,voices,feeds,conf,status,world,heirs,factors,feel,chem,squads,scout,dog,ideo,parlays,props,banker,cal,mlbcal,rules');
   T('no uncaught errors',errors.length===0,errors.slice(0,3).join(' || '));
 }catch(e){T('harness',false,e.stack);}

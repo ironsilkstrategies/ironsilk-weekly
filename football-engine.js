@@ -152,9 +152,6 @@ function _nflBookLinesForRaw(gameKey){
     return norm(xa)+'@'+norm(xh)===normKey;
   });
 }
-function nflBookLine(gameKey,market,side){
-  return nflBookLinesFor(gameKey).find(x=>x.market===market&&x.side===side)||null;
-}
 
 // ── NFL ext picks/trends/consensus ───────────────────────────────────────────
 function getNFLExt(){return fbWindow(LS.nflext,fbDedupeExt);}
@@ -1203,11 +1200,6 @@ function buildNFLProps(g,s){
 function nflIsDivisionGame(g){
   return NFL_DIVISION[g.away.abbr]&&NFL_DIVISION[g.away.abbr]===NFL_DIVISION[g.home.abbr];
 }
-function nflIsConferenceGame(g){
-  const da=NFL_DIVISION[g.away.abbr],dh=NFL_DIVISION[g.home.abbr];
-  if(!da||!dh)return null;
-  return da.slice(0,3)===dh.slice(0,3);
-}
 
 // ── NFL Power Ratings ────────────────────────────────────────────────────────
 // Fetches from ESPN's team stats API — real offensive/defensive ratings.
@@ -1567,16 +1559,6 @@ function nflTotalCalibAdj(raw,situation){
   const k=Math.min(1,(entry.n-8)/20);
   return raw*(1-k)+hitRate*k;
 }
-function nflSpreadCalibAdj(raw,situation){
-  const c=getNFLCalib();
-  const band=nflBandOf(raw);
-  const key=`spread|${situation||'any'}|${band}`;
-  const entry=c[key];
-  if(!entry||entry.n<8)return raw;
-  const hitRate=entry.hits/entry.n;
-  const k=Math.min(1,(entry.n-8)/20);
-  return raw*(1-k)+hitRate*k;
-}
 
 // Grade NFL results and update calibration
 // ── NFL Snapshot — populates arc[week].rows/finals so gradeNFLResults has
@@ -1783,21 +1765,6 @@ function evaluateNFLGame(g){
   };
 }
 
-// ── NFL Master Evaluation ─────────────────────────────────────────────────────
-function nflMasterEvaluation(){
-  // Include all games — during preseason all may be Final, still useful for review
-  const games=NFL_GAMES.length?NFL_GAMES:[];
-  return games
-    .map(g=>{
-      if(!NFL_SIMS[g.id])NFL_SIMS[g.id]=simNFLGame(g);
-      return evaluateNFLGame(g);
-    })
-    .filter(Boolean)
-    .sort((a,b)=>{
-      const rank={strong:0,lean:1,split:2};
-      return (rank[a.verdict]||2)-(rank[b.verdict]||2)||b.confidence-a.confidence;
-    });
-}
 
 /* old renderNFLMasterEval replaced by renderFootballEval */
 
@@ -2846,50 +2813,6 @@ async function fetchCFBPortal(force){
   const c=get('d4.cfbportal',{});
   if(c.v&&Object.keys(c.v).length){CFB_PORTAL=c.v;CFB_PORTAL_STATUS='cached '+Object.keys(c.v).length+' players';}
 })();
-// Season stats for one team, cached per team+year (a call each, so cache hard).
-async function fetchCFBPlayerSeason(team,year){
-  const key=get(LS.cfbd,'');if(!key||!team)return null;
-  const ck=cfbNameKey(team)+':'+year;
-  if(CFB_PLAYER_STATS[ck])return CFB_PLAYER_STATS[ck];
-  const disk=get('d4.cfbpstats',{});
-  if(disk[ck]&&disk[ck].ts&&(Date.now()-disk[ck].ts)<6048e5){
-    CFB_PLAYER_STATS[ck]=disk[ck].v;return disk[ck].v;
-  }
-  try{
-    const rows=await cfbdGet('/stats/player/season?year='+year+'&team='+encodeURIComponent(team),key);
-    if(!Array.isArray(rows))return null;
-    const byPlayer={};
-    rows.forEach(r=>{
-      const k=cfbNameKey(r.player);if(!k)return;
-      (byPlayer[k]=byPlayer[k]||{player:r.player,team,year,stats:{}});
-      byPlayer[k].stats[(r.category||'')+'.'+(r.statType||'')]=+r.stat;
-    });
-    CFB_PLAYER_STATS[ck]=byPlayer;
-    disk[ck]={ts:Date.now(),v:byPlayer};set('d4.cfbpstats',disk);
-    return byPlayer;
-  }catch(e){console.warn('CFB player stats failed',e);return null;}
-}
-/* The lookup the rest of the app should use for a college player: returns
-   their production and says plainly WHICH team earned it. */
-async function cfbPlayerContext(name,currentTeam){
-  const k=cfbNameKey(name);
-  const moves=(CFB_PORTAL[k]||[]).slice().sort((a,b)=>(b.season||0)-(a.season||0));
-  const move=moves.find(m=>!currentTeam||cfbNameKey(m.to)===cfbNameKey(currentTeam))||moves[0]||null;
-  const year=new Date().getFullYear();
-  // current team first — a returning starter needs no portal lookup at all
-  let cur=await fetchCFBPlayerSeason(currentTeam,year-1);
-  if(cur&&cur[k])return{player:cur[k].player,team:currentTeam,statsTeam:currentTeam,
-    transferred:false,stats:cur[k].stats,year:year-1,note:null};
-  if(move&&move.from){
-    const prior=await fetchCFBPlayerSeason(move.from,year-1);
-    if(prior&&prior[k])return{player:prior[k].player,team:currentTeam,statsTeam:move.from,
-      transferred:true,stats:prior[k].stats,year:year-1,pos:move.pos,
-      note:'Prior-team production at '+move.from+' — earned against a different schedule.'};
-    return{player:name,team:currentTeam,statsTeam:move.from,transferred:true,stats:null,
-      year:year-1,pos:move.pos,note:'Transferred from '+move.from+'; no season stats found.'};
-  }
-  return{player:name,team:currentTeam,statsTeam:null,transferred:false,stats:null,note:'No prior production found.'};
-}
 // Everyone who transferred INTO a given school this cycle.
 function cfbPortalPanel(g){
   if(!Object.keys(CFB_PORTAL||{}).length)

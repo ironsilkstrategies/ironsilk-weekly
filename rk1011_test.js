@@ -15,7 +15,7 @@ setTimeout(()=>{try{
   const row=w.eval(`legLiveCard({id:'t1',date:today(),legs:[]},{sport:'nfl',game:'KC@LV',pick:'KC -6.5',price:-110,gameDate:today()},{})`);
   T('ticket live leg card carries ranks',/#2/.test(row)&&/#30/.test(row));
   const src=fs.readFileSync(path.join(W,'shared.js'),'utf8');
-  T('ticket lists, Banker legs, My Games, gamecast and MLB cards use the ranked names',(src.match(/gameLabelHtml\(x\.sport\|\|'mlb',x\.game\)/g)||[]).length===5&&/gameLabelHtml\(l\.sp,l\.game\)/.test(src)&&/const rk=t=>teamTag\(b\.sp,t\)/.test(src)&&/teamNameHtml\(GC\.sp/.test(src)&&/teamNameHtml\('mlb',g\.away\.abbr\)/.test(src));
+  T('ticket lists, Banker legs, My Games, gamecast and MLB cards use the ranked names (v2.81.4: the 5th copy was in systemPicksHtml, which nothing called — removed)',(src.match(/gameLabelHtml\(x\.sport\|\|'mlb',x\.game\)/g)||[]).length===4&&/gameLabelHtml\(l\.sp,l\.game\)/.test(src)&&/const rk=t=>teamTag\(b\.sp,t\)/.test(src)&&/teamNameHtml\(GC\.sp/.test(src)&&/teamNameHtml\('mlb',g\.away\.abbr\)/.test(src));
   const fe=fs.readFileSync(path.join(W,'football-engine.js'),'utf8'),ne=fs.readFileSync(path.join(W,'nhl-engine.js'),'utf8');
   T('NFL, CFB and NHL card headers use the ranked names',/teamNameHtml\('nfl',g\.away\.abbr\)/.test(fe)&&/teamNameHtml\('ncaaf',g\.away\.abbr\)/.test(fe)&&/teamNameHtml\('nhl',A\)/.test(ne));
   T('public picks page shows ranked matchups',/x\.gl\|\|x\.game/.test(fs.readFileSync(path.join(W,'picks.html'),'utf8')));

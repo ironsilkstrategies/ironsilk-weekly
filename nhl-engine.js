@@ -260,7 +260,6 @@ function nhlDateOf(game){
   Object.keys(all).forEach(d=>{const before=(all[d]||[]).length;all[d]=(all[d]||[]).filter(x=>amerOk(x.price)!=null);bad+=before-all[d].length;});
   if(bad){set('d4.nhlshots',all);console.info('NHL: removed '+bad+' stored line(s) with an impossible price');}}catch(e){}})();
 function nhlLinesOn(d){return get(NHL_LS.shots,{})[d||today()]||[];}
-function nhlLinesToday(){return nhlLinesOn(today());}
 function nhlPutLines(rows){
   rows=(rows||[]).map(r=>({...r,price:r.price==null?null:amerOk(r.price)})).filter(r=>r.price!=null);
   const all=get(NHL_LS.shots,{});
@@ -440,16 +439,6 @@ function gradeNHLPropLeg(leg,ticketDate){
   return{hit,detail:`${row.name} ${v} ${stat}${R.live?' so far':''}`,live:!!R.live,prog:{val:v,thr,dir}};
 }
 
-/* ── Rosters ───────────────────────────────────────────────────────────── */
-async function nhlFetchRoster(tid){
-  const c=NHL_ROSTERS[tid];if(c&&Date.now()-c.ts<6*3600e3)return c;
-  try{const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/${tid}/roster`);const j=await r.json();
-    let groups=[];const A=j.athletes||[];
-    if(A.length&&A[0].items)groups=A.map(x=>({pos:x.position||'',items:x.items}));else groups=[{pos:'Roster',items:A}];
-    const out={ts:Date.now(),groups:groups.map(G=>({pos:G.pos,players:(G.items||[]).map(p=>({name:p.fullName||p.displayName,num:p.jersey||'',
-      pos:(p.position||{}).abbreviation||'',inj:((p.injuries||[])[0]||{}).status||''}))}))};
-    NHL_ROSTERS[tid]=out;return out;}catch(e){return null;}
-}
 
 /* ── Judge adapter (shared Judge, hockey inputs) ────────────────────────── */
 function nhlBrainAdapter(){

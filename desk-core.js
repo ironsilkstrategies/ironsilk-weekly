@@ -142,12 +142,10 @@ function isCounterPunch(x){try{if(!x||!CHARS[x.voice]||META_VOICES.has(x.voice)&
   if(V.some(v=>v.voice==='Consensus'&&v.sp===x.sp&&v.game===x.game&&String(v.date).slice(0,10)===d&&v.market===x.market&&v.side===opp&&/sharp/.test(v.why||'')))return false;
   const g=x.start||(typeof deskGameStart==='function'?deskGameStart(x.sp,x.game):null);if(g&&Date.parse(g)<Date.now())return false;
   const M=get(CP_KEY,{})||{};M[id]={d,sp:x.sp,game:x.game,voice:x.voice,market:x.market,side:x.side,pick:x.pick,price:x.price,cf:c,on:S.on};set(CP_KEY,M);return true;}catch(e){return false;}}
-const isCP=x=>{try{return!!(roGet(CP_KEY,{},20e3)||{})[cpId(x)];}catch(e){return false;}};
 function cpRecordHtml(){const M=get(CP_KEY,{})||{};const V=get(VOICES_KEY,[])||[];const ix={};V.forEach(v=>{if(v&&v.graded)ix[cpId(v)]=v;});let w=0,l=0,u=0;const td=[];
   Object.entries(M).forEach(([id,x])=>{const g=ix[id];if(g&&g.hit!=null){g.hit?w++:l++;u+=g.units||0;}if(x.d===today())td.push(x);});
   return`<div class="tkt"><h3>🥊 Counter-punches</h3><div class="sub">Under the bar, but ${CP_RULE.proven}+ proven characters agree, the price pays ${Math.round(CP_RULE.ev*100)}%+ and sharp money isn't against it.</div>
     <div style="margin-top:4px">Record: <b>${w}-${l}</b> (${u>=0?'+':''}${u.toFixed(1)}u)</div>${td.length?`<div class="mono" style="font-size:10.5px;margin-top:4px">Today: ${td.map(x=>`🥊 ${txtEsc(x.pick)} ${tcSgn(x.price)} (${Math.round(x.cf*100)}% · ${x.on.length} proven)`).join(' · ')}</div>`:''}</div>`;}
-const officialOnly=V=>(V||[]).filter(isOfficial);
 const confPct=c=>c==null?'—':Math.round(c*100)+'%';
 /* calls logged before the meter existed (or locked before it loaded) get their
    confidence once, from what's known now — the pick itself never changes */
