@@ -38,7 +38,7 @@ const ncaabEvents=u=>{const m=u.match(/dates=(\d{8})(?:-(\d{8}))?/);const a=m?m[
   return{events:E};};
 const TEAMS={sports:[{leagues:[{teams:CT.map(t=>({team:{abbreviation:t[0],id:t[2],location:t[1].split(' ').slice(0,-1).join(' ').replace(/ (Blue|Tar|Red)$/,''),name:t[1].split(' ').slice(-1)[0],displayName:t[1],shortDisplayName:t[1].replace(/ State /,' St ').split(' ').slice(0,2).join(' '),nickname:t[1].split(' ')[0]}}))}]}]};
 const SUMMARY={header:{competitions:[{status:{type:{state:'post'}},date:'2026-11-14T23:00Z'}]},boxscore:{players:[{team:{abbreviation:'T16'},statistics:[{labels:['MIN','PTS','REB','AST','3PT','STL','BLK','TO'],athletes:[{athlete:{displayName:'Sam Owl'},stats:['30','21','6','3','3-7','1','0','2']}]}]}]}};
-const ODDSAPI=[{away_team:'Los Angeles Lakers',home_team:'Golden State Warriors',bookmakers:[{key:'draftkings',markets:[{key:'h2h',outcomes:[{name:'Los Angeles Lakers',price:150},{name:'Golden State Warriors',price:-175}]},
+const ODDSAPI=[{away_team:'Los Angeles Lakers',home_team:'Golden State Warriors',commence_time:'2026-10-22T00:00:00Z',bookmakers:[{key:'betonlineag',markets:[{key:'h2h',outcomes:[{name:'Los Angeles Lakers',price:150},{name:'Golden State Warriors',price:-175}]},
   {key:'spreads',outcomes:[{name:'Los Angeles Lakers',price:-108,point:4},{name:'Golden State Warriors',price:-112,point:-4}]},{key:'totals',outcomes:[{name:'Over',price:-110,point:227.5},{name:'Under',price:-110,point:227.5}]}]}]}];
 const boot=(page)=>new JSDOM(load(page),{runScripts:'dangerously',url:'https://ironsilkweekly.com/'+page,pretendToBeVisual:true,virtualConsole:vc,beforeParse(w){
   const RD=w.Date;class FD extends RD{constructor(...a){super(...(a.length?a:[NOW]))}static now(){return NOW}}w.Date=FD;
@@ -101,9 +101,13 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const card=E("document.getElementById('slate').innerHTML");
   T('the card shows the 1st-half spread as a REAL LINE section',/1ST HALF · SPREAD/.test(card));
   /* Odds API */
-  E("set(LS.key,'k')");const nOdds=await E("bbFetchLiveOdds('nba')");
-  const L3=JSON.parse(E("JSON.stringify(get('d4.nbashots',{})[today()].filter(x=>x.src==='live'))"));
-  T('the Odds API pull files DraftKings lines as live (yours still win)',nOdds===6&&L3.length===6&&JSON.parse(E("JSON.stringify(nbaBookLinesFor('LAL@GS'))")).find(x=>x.market==='spread').src==='mine',`${nOdds} rows`);
+  /* v2.81.2 · the one-tap pull is BetOnline (SportsBetting's sister book), filed as your book's lines: the newest of yours wins */
+  NOW+=60e3;E("set(LS.key,'k')");const R0=await E("bolPull({sports:['nba']})");const nOdds=R0&&R0.here?R0.here.n:0;
+  const L3=JSON.parse(E("JSON.stringify(get('d4.nbashots',{})[today()].filter(x=>x.src==='bol'))"));
+  const sp3=JSON.parse(E("JSON.stringify(nbaBookLinesFor('LAL@GS'))")).find(x=>x.market==='spread'&&x.side==='home');
+  T('the BetOnline pull files your book\'s lines (newer than the upload, so they lead)',nOdds===6&&L3.length===6&&sp3.src==='bol'&&sp3.line===-4,`${nOdds} rows · ${JSON.stringify(sp3)}`);
+  NOW+=60e3;E(`saveNBABookOdds(parseNBASlateText("NBA\\nLakers @ Warriors\\nSPREAD: Lakers +5 (-110) / Warriors -5 (-110)").picks,null)`);
+  T('…and a screenshot after the pull leads again (newest of yours wins; ESPN never does)',JSON.parse(E("JSON.stringify(nbaBookLinesFor('LAL@GS'))")).find(x=>x.market==='spread'&&x.side==='home').line===-5);
   /* calls: regular season official only with a price; preseason never */
   E('voicesLog("nba")');const V=JSON.parse(E("JSON.stringify(get(VOICES_KEY,[]).filter(x=>x.sp==='nba'))"));
   T('the characters call tonight\'s NBA games',V.length>=6&&V.some(x=>x.voice==='Sim'),V.length+' calls');

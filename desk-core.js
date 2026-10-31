@@ -1005,7 +1005,8 @@ if(DESK_BG_EVAL&&typeof window!=='undefined')window.addEventListener('load',()=>
 function deskSay(h){try{document.querySelectorAll('.deskStatus').forEach(e=>e.innerHTML=h);}catch(e){}}
 async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confirm('Today is already frozen. Run the evaluations again? (Nothing frozen will change — only the eval reports refresh.)'))return;
   DESK_EVAL_BUSY=true;const t0=Date.now();const here=window.__PAGE_SPORT__||ACTIVE_SPORT;const done=[],miss=[];
-  try{deskSay('① Grading yesterday and calibrating…');await new Promise(r=>setTimeout(r,30));
+  try{if(typeof bolAutoMaybe==='function'&&bolAutoOn()){deskSay('⓪ Pulling BetOnline lines…');try{await bolAutoMaybe('master evaluation',2);}catch(e){}}   /* v2.81.2 · fresh book lines first (auto mode) */
+    deskSay('① Grading yesterday and calibrating…');await new Promise(r=>setTimeout(r,30));
     try{await apRunAsync(true,'master evaluation');}catch(e){}try{await genSlice(confRebuildG(true));}catch(e){}
     deskSay(`② Evaluating ${SP_LAB[here]||here}…`);await new Promise(r=>setTimeout(r,30));try{todaySnapshot();}catch(e){}
     try{if(deskRunSportEval(here))done.push(here);}catch(e){console.warn('eval',here,e);miss.push(here);}

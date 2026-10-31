@@ -215,7 +215,7 @@ function bbLive(C,g){if(g.abstract!=='in'||g.awayScore==null)return null;const p
   const f=Math.max(0.02,(C.mins-played)/C.mins);const s=bbSim(C,g);const cur=g.homeScore-g.awayScore;
   const hw=1-bbPhi((0-(cur+s.margin*f))/(C.per.full.sm*Math.sqrt(f)));return{hw,aw:1-hw,f,projA:g.awayScore+s.awayProj*f,projH:g.homeScore+s.homeProj*f};}
 /* ── book lines: yours first, then live odds, then ESPN's ─────────────────── */
-const BB_SRC_RANK={mine:3,live:2,espn:1};
+const BB_SRC_RANK={mine:3,bol:3,live:2,espn:1};   /* v2.81.2 · bol = your BetOnline pull: ranks with your own lines, newest wins */
 function bbDateOf(C,game){if(C.games.some(z=>bbKey(z)===game))return today();const u=C.up.find(z=>bbKey(z)===game);return u?u.__date:today();}
 function bbLinesOn(C,d){return(roGet(C.shots,{},3e3)||{})[d||today()]||[];}
 function bbPutLines(C,rows){const all=get(C.shots,{})||{};const key=x=>[x.game,x.market,x.side,x.player||'',x.stat||'',x.src].join('|');let n=0;
@@ -234,29 +234,16 @@ function bbStoreEspnLines(C){const rows=[];const last=dayShift(today(),C.lineDay
   /* written only when ESPN's numbers actually moved — not every 45 seconds */
   const sig=rows.map(r=>[r.date,r.game,r.market,r.side,r.line,r.price].join(',')).join(';');if(!rows.length||BB_ESPN_SIG[C.sp]===sig)return 0;BB_ESPN_SIG[C.sp]=sig;return bbPutLines(C,rows);}
 function bbSaveOdds(sp,picks,el){const C=bbC(sp);const rows=(picks||[]).map(x=>({away:x.away,home:x.home,game:x.game||(x.away+'@'+x.home),market:x.market==='ml'?'moneyline':x.market,side:x.side,
-    line:x.line!=null&&x.line!==''?+x.line:null,price:x.price,src:'mine',capturedAt:Date.now(),...(x.player?{player:x.player,stat:x.stat}:{})}));const n=bbPutLines(C,rows);
+    line:x.line!=null&&x.line!==''?+x.line:null,price:x.price,src:x.src==='bol'?'bol':'mine',...(x.book?{book:x.book}:{}),...(x.date?{date:x.date}:{}),capturedAt:Date.now(),...(x.player?{player:x.player,stat:x.stat}:{})}));const n=bbPutLines(C,rows);
   if(el)el.innerHTML=`<div class="tkt hi"><h3>${C.name} lines saved</h3><div class="sub">${n} line${n===1?'':'s'} filed — they replace ESPN's numbers on those games.</div></div>`;
   Object.keys(C.sims).forEach(k=>delete C.sims[k]);if(typeof ACTIVE_SPORT!=='undefined'&&ACTIVE_SPORT===sp)bbRender(sp);return n;}
-/* The Odds API (the key in Settings) — DraftKings first */
-async function bbFetchLiveOdds(sp){const C=bbC(sp);const key=typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,'');if(!key)throw new Error('Add your Odds API key in Settings');
-  const r=await fetch(`https://api.the-odds-api.com/v4/sports/${C.odds}/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`);
-  if(r.status===401)throw new Error('Odds API 401 — bad key or credits used up');const j=await r.json();if(!Array.isArray(j))throw new Error((j&&j.message)||'unexpected Odds API response');
-  const ab=n=>sp==='nba'?nbaAbbrFor(n):ncaabAbbrFor(n);const rows=[];
-  j.forEach(ev=>{const a=ab(ev.away_team),h=ab(ev.home_team);if(!a||!h)return;const game=a+'@'+h;const g=[...C.games,...C.up].find(z=>bbKey(z)===game);if(!g)return;
-    const bk=(ev.bookmakers||[]).find(b=>b.key==='draftkings')||(ev.bookmakers||[]).find(b=>b.key==='fanduel')||(ev.bookmakers||[])[0];if(!bk)return;
-    const base={away:a,home:h,game,gid:g.id,src:'live',book:bk.key,capturedAt:Date.now(),date:g.__date};
-    (bk.markets||[]).forEach(mk=>(mk.outcomes||[]).forEach(o=>{const sd=ab(o.name)===a?'away':'home';
-      if(mk.key==='h2h')rows.push({...base,market:'moneyline',side:sd,line:null,price:o.price});
-      if(mk.key==='spreads')rows.push({...base,market:'spread',side:sd,line:o.point,price:o.price});
-      if(mk.key==='totals')rows.push({...base,market:'total',side:/over/i.test(o.name)?'over':'under',line:o.point,price:o.price});}));});
-  const n=bbPutLines(C,rows);Object.keys(C.sims).forEach(k=>delete C.sims[k]);bbRender(sp);return n;}
 /* the games the characters work: the NBA's whole slate; in college, the games with YOUR lines,
    plus ESPN-lined games with a ranked team (or the first 25 lined games when nothing's ranked) */
 const BB_WORK={};
 function bbWorkSet(sp){const C=bbC(sp);const n=C.games.length+C.up.length;const w=BB_WORK[sp];if(w&&w.n===n&&Date.now()-w.ts<3000)return w.s;
   const s=new Set();let espnOnly=0;const td=today();
   [...C.games,...C.up].sort((a,b)=>String(a.start).localeCompare(String(b.start))).forEach(g=>{const L=bbLinesFor(C,bbKey(g),g.__date);if(!L.length)return;
-    if(sp!=='ncaab'||L.some(x=>x.src!=='espn')||g.away.rank||g.home.rank){s.add(g.id);return;}
+    if(sp!=='ncaab'||L.some(x=>x.src!=='espn'&&x.src!=='bol')||g.away.rank||g.home.rank){s.add(g.id);return;}   /* a BetOnline pull covers the whole college board — it doesn't make every game a workload */
     if(espnOnly<25&&g.__date===td){espnOnly++;s.add(g.id);}});
   BB_WORK[sp]={ts:Date.now(),n,s};return s;}
 function bbWorkable(sp,g){try{return!!g&&bbWorkSet(sp).has(g.id);}catch(e){return false;}}

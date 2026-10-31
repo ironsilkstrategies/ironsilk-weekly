@@ -248,7 +248,7 @@ function nhlSimFor(g){const sig=NHL_RATINGS?NHL_RATINGS.ts:0;let s=NHL_SIMS[g.id
   if(!s||s._sig!==sig){s=simNHLGame(g);s._sig=sig;NHL_SIMS[g.id]=s;}return s;}
 
 /* ── Lines: storage, priority, intake grammar, live pull ────────────────── */
-const NHL_SRC_RANK={mine:3,live:2,espn:1};
+const NHL_SRC_RANK={mine:3,bol:3,live:2,espn:1};   /* v2.81.2 · bol = your BetOnline pull */
 /* Lines are filed under the GAME's date, not the day they were entered, so
    lines for Tuesday's games entered on Monday are waiting on Tuesday's cards. */
 const nhlLocalDate=iso=>{try{return new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso))}catch(e){return today()}};
@@ -333,7 +333,7 @@ function parseNHLSlateText(text){
 function saveNHLBookOdds(picks,el){
   const rows=(picks||[]).map(x=>{const game=x.game||(x.away+'@'+x.home);const g=NHL_GAMES.find(z=>z.away.abbr+'@'+z.home.abbr===game)||NHL_UPCOMING.find(z=>z.away.abbr+'@'+z.home.abbr===game);
     return{away:x.away,home:x.home,game,market:x.market,side:x.side,line:x.line!=null?x.line:null,price:x.price,
-      player:x.player||null,stat:x.stat||null,gid:g?g.id:null,src:'mine',capturedAt:Date.now()};});
+      player:x.player||null,stat:x.stat||null,gid:g?g.id:null,src:x.src==='bol'?'bol':'mine',...(x.book?{book:x.book}:{}),...(x.date?{date:x.date}:{}),capturedAt:Date.now()};});
   nhlPutLines(rows);
   if(el)el.innerHTML=`<div class="tkt hi"><h3>NHL lines saved</h3><div class="sub">${rows.length} lines filed — these outrank live and ESPN lines on every card.</div></div>`;
   if(ACTIVE_SPORT==='nhl')renderNHL();
@@ -349,23 +349,6 @@ const nhlConsFor=game=>((roGet(NHL_LS.cons,{})||{})[today()]||[]).filter(x=>x.ga
 /* Outside computer picks for this game (Covers etc.), from the Intel log. */
 function nhlOutsideFor(game){
   return(roGet(INTEL_KEY,[])||[]).filter(x=>x.sp==='nhl'&&x.kind==='xpick'&&x.game===game&&x.date===today()&&x.pick);
-}
-async function fetchNHLLiveOdds(){
-  const key=typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,'');if(!key)throw new Error('Add your Odds API key in Settings');
-  const r=await fetch(`https://api.the-odds-api.com/v4/sports/icehockey_nhl/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`);
-  if(r.status===401)throw new Error('Odds API 401 — bad key or credits used up');
-  const j=await r.json();if(!Array.isArray(j))throw new Error((j&&j.message)||'unexpected Odds API response');
-  const rows=[];
-  j.forEach(ev=>{const a=nhlAbbrFor(ev.away_team),h=nhlAbbrFor(ev.home_team);if(!a||!h)return;const game=a+'@'+h;
-    const bk=(ev.bookmakers||[]).find(b=>b.key==='draftkings')||(ev.bookmakers||[]).find(b=>b.key==='fanduel')||(ev.bookmakers||[])[0];if(!bk)return;
-    const g=NHL_GAMES.find(z=>z.away.abbr+'@'+z.home.abbr===game);
-    const base={away:a,home:h,game,gid:g?g.id:null,src:'live',book:bk.key,capturedAt:Date.now()};
-    (bk.markets||[]).forEach(mk=>(mk.outcomes||[]).forEach(o=>{
-      if(mk.key==='h2h')rows.push({...base,market:'moneyline',side:nhlAbbrFor(o.name)===a?'away':'home',line:null,price:o.price});
-      if(mk.key==='spreads')rows.push({...base,market:'spread',side:nhlAbbrFor(o.name)===a?'away':'home',line:o.point,price:o.price});
-      if(mk.key==='totals')rows.push({...base,market:'total',side:/over/i.test(o.name)?'over':'under',line:o.point,price:o.price});
-    }));});
-  nhlPutLines(rows);return rows.length;
 }
 
 /* ── Player season stats (props model) ──────────────────────────────────── */
@@ -774,7 +757,6 @@ async function nhlBoot(force){
   const fresh=await loadNHLSchedule();season=fresh||season||new Date().getFullYear()+1;
   try{await loadNHLUpcoming(3);nhlApplySeed();}catch(e){console.warn('nhl upcoming',e)}
   await loadNHLRatings(season,force);NHL_SIMS={};renderNHL();
-  if(force&&(typeof theOddsApiKey==='function'?theOddsApiKey():get(LS.key,''))){try{await fetchNHLLiveOdds()}catch(e){console.warn(e)}}
   loadNHLPlayers(season,force).then(()=>renderNHL()).catch(()=>{});
   try{if(typeof intakeReplay==='function')intakeReplay()}catch(e){}
   nhlLiveLoop();

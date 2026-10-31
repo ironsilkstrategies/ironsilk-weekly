@@ -23,7 +23,7 @@ const summary={boxscore:{players:[{team:{displayName:'Edmonton Oilers'},statisti
   {name:'forwards',labels:['G','A','SOG','TOI'],athletes:[{athlete:{displayName:'Connor McDavid'},stats:['1','1','4','14:02']},{athlete:{displayName:'Leon Draisaitl'},stats:['1','0','2','13:40']}]},
   {name:'goalies',labels:['SA','GA','SV','SV%'],athletes:[{athlete:{displayName:'Stuart Skinner'},stats:['15','1','14','.933']}]}]},
  {team:{displayName:'Vegas Golden Knights'},statistics:[{name:'forwards',labels:['G','A','SOG','TOI'],athletes:[{athlete:{displayName:'Jack Eichel'},stats:['1','0','3','15:00']}]}]}]}};
-const oddsApi=[{away_team:'Toronto Maple Leafs',home_team:'Boston Bruins',bookmakers:[{key:'draftkings',markets:[
+const oddsApi=[{away_team:'Toronto Maple Leafs',home_team:'Boston Bruins',commence_time:'2026-10-10T23:00:00Z',bookmakers:[{key:'betonlineag',markets:[
   {key:'h2h',outcomes:[{name:'Toronto Maple Leafs',price:-102},{name:'Boston Bruins',price:-118}]},
   {key:'totals',outcomes:[{name:'Over',point:6.5,price:-105},{name:'Under',point:6.5,price:-115}]}]}]}];
 const roster={athletes:[{position:'Centers',items:[{fullName:'Auston Matthews',jersey:'34',position:{abbreviation:'C'},injuries:[]}]},{position:'Goalies',items:[{fullName:'Joseph Woll',jersey:'60',position:{abbreviation:'G'},injuries:[{status:'Day-To-Day'}]}]}]};
@@ -68,11 +68,16 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
   T('P1 goals ~31% of total',Math.abs(S.p1/(S.a+S.h)-0.31)<0.03,S.p1);
   // Odds API pull — live must not overwrite my own upload
   w.eval("saveNHLBookOdds(parseNHLSlateText(`NHL\\nToronto Maple Leafs @ Boston Bruins\\nML: TOR +120 / BOS -140\\nP1OU: o1.5 (-125) / u1.5 (+105)\\nPROP: Auston Matthews SOG 3.5 (-120/+100)`).picks,null)");
-  const n=await w.eval('fetchNHLLiveOdds()');
-  T('Odds API pull stored lines',n===4,n);
-  const L=JSON.parse(w.eval("JSON.stringify(nhlLineObj('TOR@BOS'))"));
-  T('my ML outranks live + ESPN',L.awayML.price===120&&L.awayML.src==='mine',JSON.stringify(L.awayML));
-  T('live total outranks ESPN',L.over.src==='live'&&L.over.price===-105);
+  /* v2.81.2 · the one-tap pull is BetOnline, filed as your book's lines (newest of yours wins; ESPN never does) */
+  const age=src=>w.eval(`(()=>{const all=get('d4.nhlshots',{});Object.values(all).forEach(L=>L.forEach(x=>{if(x.src==='${src}')x.capturedAt-=60000;}));set('d4.nhlshots',all);})()`);   /* the test clock is frozen: make one side older */
+  age('mine');w.eval("set(LS.key,'k')");const R0=await w.eval("bolPull({sports:['nhl']})");const n=R0&&R0.here?R0.here.n:0;
+  T('BetOnline pull stored lines',n===4,JSON.stringify(R0&&R0.here));
+  let L=JSON.parse(w.eval("JSON.stringify(nhlLineObj('TOR@BOS'))"));
+  T('the pull (newer than my upload) leads the ML',L.awayML.price===-102&&L.awayML.src==='bol',JSON.stringify(L.awayML));
+  T('BetOnline total outranks ESPN',L.over.src==='bol'&&L.over.price===-105);
+  age('bol');w.eval("saveNHLBookOdds(parseNHLSlateText(`NHL\\nToronto Maple Leafs @ Boston Bruins\\nML: TOR +120 / BOS -140`).picks,null)");
+  L=JSON.parse(w.eval("JSON.stringify(nhlLineObj('TOR@BOS'))"));
+  T('my newer upload leads again',L.awayML.price===120&&L.awayML.src==='mine',JSON.stringify(L.awayML));
   T('P1 total + prop parsed',L.p1over&&L.p1over.line===1.5&&L.props.length===2);
   // Intake through the SHARED pipeline (sport header routing)
   const r=await w.eval("intakeText(`NHL\\nEdmonton Oilers @ Vegas Golden Knights\\nPL: EDM -1.5 (+170) / VGK +1.5 (-200)\\nOU: o6 (-110) / u6 (-110)\\nPRED: EDM 3.4 / VGK 2.9\\nTREND EDM: Over is 5-1 in Oilers last 6 road games.`,null,'auto','Covers')");

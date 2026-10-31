@@ -745,45 +745,7 @@ function saveNFLExtData(picks,trends,consensus,el){
 const _origSaveExtPicks=typeof saveExtPicks==='function'?saveExtPicks:null;
 const _origSaveBookOdds=typeof saveBookOdds==='function'?saveBookOdds:null;
 
-// pullLiveOdds / fetchMLBLiveOdds moved to shared.js — mlb.html never loads this file.
-
-
-
-
-// ── NCAAF Live Odds (The Odds API) ───────────────────────────────────────────
-async function fetchNCAAFLiveOdds(){
-  const key=theOddsApiKey();if(!key)return;
-  const url=`https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
-  const r=await fetch(url);const j=await r.json();
-  if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
-  const d=today();const all=get(LS.ncaafshots,{});all[d]=all[d]||[];
-  j.forEach(game=>{
-    const home=game.home_team;const away=game.away_team;
-    // Match to ESPN game by full name
-    const gm=NCAAF_GAMES.find(g=>g.home.name===home||g.home.name.includes(home.split(' ').pop()));
-    const homeAb=gm?gm.home.abbr:home.toUpperCase().replace(/\s+/g,'-').slice(0,8);
-    const awayGm=NCAAF_GAMES.find(g=>g.away.name===away||g.away.name.includes(away.split(' ').pop()));
-    const awayAb=awayGm?awayGm.away.abbr:away.toUpperCase().replace(/\s+/g,'-').slice(0,8);
-    const gid=gm?gm.id:null;const gameKey=awayAb+'@'+homeAb;
-    const book=game.bookmakers.find(b=>b.key==='draftkings')||game.bookmakers.find(b=>b.key==='fanduel')||game.bookmakers[0];
-    if(!book)return;
-    book.markets.forEach(mkt=>{
-      mkt.outcomes.forEach(o=>{
-        let market,side,line=null;
-        if(mkt.key==='h2h'){market='moneyline';side=o.name===home?'home':'away';}
-        else if(mkt.key==='spreads'){market='spread';side=o.name===home?'home':'away';line=o.point;}
-        else if(mkt.key==='totals'){market='total';side=o.name.toLowerCase()==='over'?'over':'under';line=o.point;}
-        else return;
-        const rec={away:awayAb,home:homeAb,game:gameKey,market,side,line,price:o.price,gid,capturedAt:Date.now()};
-        const k=[rec.game,rec.market,rec.side,rec.line].join('|');
-        const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
-        if(i>=0)all[d][i]=rec;else all[d].push(rec);
-      });
-    });
-  });
-  set(LS.ncaafshots,all);   /* book lines never feed the sim — the sim stays, the card re-reads the lines */
-  if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
-}
+/* odds: the one-tap BetOnline pull lives in shared.js (pullLiveOdds → bolPull) */
 
 // ── Boot: restore NFL games from cache ────────────────────────────────────────
 (function restoreNFLGames(){
@@ -1718,94 +1680,6 @@ function gradeNCAAFResults(){fbGrade('ncaaf')}
 
 function gradeNFLResults(){fbGrade('nfl')}
 
-// ── NFL Live Odds (The Odds API — free tier 500 req/month) ───────────────────
-// Augments uploaded txt odds with live market data when key is available.
-// Uses same LS.oddspapi key as MLB to avoid requiring a second key.
-async function fetchNFLLiveOdds(){
-  const key=theOddsApiKey();
-  if(!key)return;
-  try{
-    const url=`https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
-    const r=await fetch(url);
-    const j=await r.json();
-    if(!Array.isArray(j))return;
-    const d=today();
-    const all=get(LS.nflshots,{});
-    all[d]=all[d]||[];
-    j.forEach(game=>{
-      const home=(game.home_team||'').toUpperCase();
-      const away=(game.away_team||'').toUpperCase();
-      // map full team names to abbreviations
-      const homeAb=nflTeamNameToAbbr(home);
-      const awayAb=nflTeamNameToAbbr(away);
-      if(!homeAb||!awayAb)return;
-      const gameKey=awayAb+'@'+homeAb;
-      const gm=NFL_GAMES.find(g=>g.away.abbr===awayAb&&g.home.abbr===homeAb);
-      const gid=gm?gm.id:null;
-      // use DraftKings or FanDuel as primary book, fall back to first available
-      const book=game.bookmakers.find(b=>b.key==='draftkings')||
-                 game.bookmakers.find(b=>b.key==='fanduel')||
-                 game.bookmakers[0];
-      if(!book)return;
-      book.markets.forEach(mkt=>{
-        if(mkt.key==='h2h'){
-          mkt.outcomes.forEach(o=>{
-            const teamAb=nflTeamNameToAbbr((o.name||'').toUpperCase());
-            const side=teamAb===awayAb?'away':'home';
-            const rec={away:awayAb,home:homeAb,game:gameKey,market:'moneyline',
-              side,line:null,price:o.price,gid,capturedAt:Date.now(),src:'live'};
-            const k=[rec.game,rec.market,rec.side,rec.line].join('|');
-            const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
-            if(i>=0)all[d][i]=rec;else all[d].push(rec);
-          });
-        }
-        if(mkt.key==='spreads'){
-          mkt.outcomes.forEach(o=>{
-            const teamAb=nflTeamNameToAbbr((o.name||'').toUpperCase());
-            const side=teamAb===awayAb?'away':'home';
-            const rec={away:awayAb,home:homeAb,game:gameKey,market:'spread',
-              side,line:o.point,price:o.price,gid,capturedAt:Date.now(),src:'live'};
-            const k=[rec.game,rec.market,rec.side,rec.line].join('|');
-            const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
-            if(i>=0)all[d][i]=rec;else all[d].push(rec);
-          });
-        }
-        if(mkt.key==='totals'){
-          mkt.outcomes.forEach(o=>{
-            const side=o.name.toLowerCase()==='over'?'over':'under';
-            const rec={away:awayAb,home:homeAb,game:gameKey,market:'total',
-              side,line:o.point,price:o.price,gid,capturedAt:Date.now(),src:'live'};
-            const k=[rec.game,rec.market,rec.side,rec.line].join('|');
-            const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
-            if(i>=0)all[d][i]=rec;else all[d].push(rec);
-          });
-        }
-      });
-    });
-    set(LS.nflshots,all);   /* lines don't feed the sim — no re-sim on upload */
-    if(ACTIVE_SPORT==='nfl')renderNFL();
-    console.log('NFL live odds loaded from The Odds API');
-  }catch(e){console.warn('NFL live odds failed:',e.message);}
-}
-
-// Full team name → abbreviation map for Odds API
-function nflTeamNameToAbbr(name){
-  const MAP={
-    'ARIZONA CARDINALS':'ARI','ATLANTA FALCONS':'ATL','BALTIMORE RAVENS':'BAL',
-    'BUFFALO BILLS':'BUF','CAROLINA PANTHERS':'CAR','CHICAGO BEARS':'CHI',
-    'CINCINNATI BENGALS':'CIN','CLEVELAND BROWNS':'CLE','DALLAS COWBOYS':'DAL',
-    'DENVER BRONCOS':'DEN','DETROIT LIONS':'DET','GREEN BAY PACKERS':'GB',
-    'HOUSTON TEXANS':'HOU','INDIANAPOLIS COLTS':'IND','JACKSONVILLE JAGUARS':'JAX',
-    'KANSAS CITY CHIEFS':'KC','LOS ANGELES CHARGERS':'LAC','LOS ANGELES RAMS':'LAR',
-    'LAS VEGAS RAIDERS':'LV','MIAMI DOLPHINS':'MIA','MINNESOTA VIKINGS':'MIN',
-    'NEW ENGLAND PATRIOTS':'NE','NEW ORLEANS SAINTS':'NO','NEW YORK GIANTS':'NYG',
-    'NEW YORK JETS':'NYJ','PHILADELPHIA EAGLES':'PHI','PITTSBURGH STEELERS':'PIT',
-    'SEATTLE SEAHAWKS':'SEA','SAN FRANCISCO 49ERS':'SF','TAMPA BAY BUCCANEERS':'TB',
-    'TENNESSEE TITANS':'TEN','WASHINGTON COMMANDERS':'WSH',
-  };
-  return MAP[name.toUpperCase()]||null;
-}
-
 // ── NFL A-G Evaluation ────────────────────────────────────────────────────────
 // Full 7-section evaluation mirroring MLB master evaluation.
 // Sections: A) My line  B) Outside projection range  C) Market comparison
@@ -2019,8 +1893,7 @@ function nflOnActivate(){
   if(_nflDataLoaded)return;
   _nflDataLoaded=true;
   if(window.__PAGE_SPORT__==='nfl'){
-    fetchNFLPowerRatings();
-    fetchNFLLiveOdds();
+    fetchNFLPowerRatings();   /* v2.81.2 · no silent DraftKings pull here — it cost 3 credits on every NFL page open */
   }
 }
 

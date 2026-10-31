@@ -1612,6 +1612,7 @@ async function intakeAutoDrop(day,ext){day=day||today();if(!ext){const r0=await 
 /* CFB team names can only be resolved where the CFB engine lives. Anything
    uploaded elsewhere waits here and is filed the next time cfb.html opens. */
 function intakeReplay(tries){
+  if(!tries){try{bolFileHere();}catch(e){}}   /* v2.81.2 · this sport's part of the last BetOnline pull */
   const p=get('d4.intakepending',{});const sp=window.__PAGE_SPORT__;if(!sp||!p[sp]||!p[sp].length||!intakeCanResolve(sp))return;
   /* CFB names resolve against the loaded schedule — wait for it (up to ~30s)
      rather than filing half the upload against an empty slate. */
@@ -2788,94 +2789,94 @@ function presetPublish(sp,legs){try{
   const out=legs.filter(l=>(l.sport||'mlb')===sp).map(l=>({...l,sport:sp,start:l.start||t(l.game)}));
   set('d4.xpool.'+sp,{ts:Date.now(),legs:out.slice(0,600)});}catch(e){}}
 
-/* ── ODDS PULL (all pages) ────────────────────────────────────────────────
-   These lived in football-engine.js, which mlb.html never loads — so the MLB
-   page's ⚡ Pull odds button called a function that did not exist. */
-async function pullLiveOdds(){
-  const btn=document.getElementById('pullOddsBtn');
-  const key=theOddsApiKey();
-  if(!key){
-    document.getElementById('bookShotResult').innerHTML=
-      '<div class="tkt"><h3>Odds API key needed</h3><div class="sub">Add your The Odds API key in Settings → “The Odds API” field. Free tier: 500 req/month.</div></div>';
-    return;
-  }
-  if(btn){btn.textContent='⏳ Pulling…';btn.disabled=true;}
-  const el=document.getElementById('bookShotResult');
-  try{
-    if(ACTIVE_SPORT==='nfl'){
-      el.innerHTML='<div class="empty">Pulling NFL odds…</div>';
-      if(typeof fetchNFLLiveOdds!=='function')throw new Error('NFL odds live on nfl.html');
-      await fetchNFLLiveOdds();
-      el.innerHTML='<div class="tkt hi"><h3>NFL odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
-    }else if(ACTIVE_SPORT==='nba'||ACTIVE_SPORT==='ncaab'){
-      const lab=ACTIVE_SPORT==='nba'?'NBA':'college basketball';el.innerHTML='<div class="empty">Pulling '+lab+' odds…</div>';
-      if(typeof bbFetchLiveOdds!=='function')throw new Error('basketball odds live on the NBA / CBB pages');
-      const n=await bbFetchLiveOdds(ACTIVE_SPORT);
-      el.innerHTML='<div class="tkt hi"><h3>'+lab+' odds updated</h3><div class="sub">'+(n||0)+' lines from The Odds API. Your own uploaded lines are never overwritten.</div></div>';
-    }else if(ACTIVE_SPORT==='nhl'){
-      el.innerHTML='<div class="empty">Pulling NHL odds…</div>';
-      if(typeof fetchNHLLiveOdds!=='function')throw new Error('NHL odds live on nhl.html');
-      const n=await fetchNHLLiveOdds();
-      el.innerHTML='<div class="tkt hi"><h3>NHL odds updated</h3><div class="sub">'+(n||0)+' lines from The Odds API. Your own uploaded lines are never overwritten.</div></div>';
-      if(typeof renderNHL==='function')renderNHL();
-    }else if(ACTIVE_SPORT==='ncaaf'){
-      el.innerHTML='<div class="empty">Pulling CFB odds…</div>';
-      if(typeof fetchNCAAFLiveOdds!=='function')throw new Error('CFB odds live on cfb.html');
-      await fetchNCAAFLiveOdds();
-      el.innerHTML='<div class="tkt hi"><h3>CFB odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
-    }else{
-      el.innerHTML='<div class="empty">Pulling MLB odds…</div>';
-      await fetchMLBLiveOdds();
-      el.innerHTML='<div class="tkt hi"><h3>MLB odds updated</h3><div class="sub">Live lines from The Odds API.</div></div>';
-    }
-  }catch(e){
-    el.innerHTML=`<div class="tkt"><h3>Pull failed</h3><div class="sub">${e.message}</div></div>`;
-  }
-  if(btn){btn.textContent='⚡ Pull odds';btn.disabled=false;}
-}
-async function fetchMLBLiveOdds(){
-  const key=theOddsApiKey();if(!key)return;
-  const url=`https://api.the-odds-api.com/v4/sports/baseball_mlb/odds/?apiKey=${key}&regions=us&markets=h2h,spreads,totals&oddsFormat=american`;
-  const r=await fetch(url);const j=await r.json();
-  if(!Array.isArray(j))throw new Error(j.message||'Bad API response');
-  const d=today();const all=get(LS.bookshots,{});all[d]=all[d]||[];
-  const NAME_MAP={'Oakland Athletics':'ATH','Athletics':'ATH','Chicago White Sox':'CWS',
-    'Arizona Diamondbacks':'ARI','Washington Nationals':'WSH','San Diego Padres':'SD',
-    'San Francisco Giants':'SF','Tampa Bay Rays':'TB','Kansas City Royals':'KC',
-    'Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD','New York Mets':'NYM',
-    'New York Yankees':'NYY','St. Louis Cardinals':'STL','Colorado Rockies':'COL',
-    'Detroit Tigers':'DET','Minnesota Twins':'MIN','Milwaukee Brewers':'MIL',
-    'Baltimore Orioles':'BAL','Texas Rangers':'TEX','Houston Astros':'HOU',
-    'Seattle Mariners':'SEA','Miami Marlins':'MIA','Atlanta Braves':'ATL',
-    'Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Pittsburgh Pirates':'PIT',
-    'Philadelphia Phillies':'PHI','Toronto Blue Jays':'TOR','Chicago Cubs':'CHC',
-    'Boston Red Sox':'BOS','New York Mets':'NYM'};
-  function mlbAbbr(name){return NAME_MAP[name]||abbr(name)||name.slice(0,3).toUpperCase();}
-  let count=0;
-  j.forEach(game=>{
-    const homeAb=mlbAbbr(game.home_team);const awayAb=mlbAbbr(game.away_team);
-    const gm=GAMES.find(g=>g.home.abbr===homeAb&&g.away.abbr===awayAb);
-    const gid=gm?gm.id:null;const gameKey=awayAb+'@'+homeAb;
-    const book=game.bookmakers.find(b=>b.key==='draftkings')||game.bookmakers.find(b=>b.key==='fanduel')||game.bookmakers[0];
-    if(!book)return;
-    book.markets.forEach(mkt=>{
-      mkt.outcomes.forEach(o=>{
-        let market,side,line=null;
-        if(mkt.key==='h2h'){market='moneyline';side=mlbAbbr(o.name)===awayAb?'away':'home';}
-        else if(mkt.key==='spreads'){market='runline';side=mlbAbbr(o.name)===awayAb?'away':'home';line=o.point;}
-        else if(mkt.key==='totals'){market='total';side=o.name.toLowerCase()==='over'?'over':'under';line=o.point;}
-        else return;
-        const rec={away:awayAb,home:homeAb,game:gameKey,market,side,line,price:o.price,gid,capturedAt:Date.now()};
-        const k=[rec.game,rec.market,rec.side,rec.line].join('|');
-        const i=all[d].findIndex(x=>[x.game,x.market,x.side,x.line].join('|')===k);
-        if(i>=0)all[d][i]=rec;else{all[d].push(rec);count++;}
-      });
-    });
-  });
-  set(LS.bookshots,all);BOOKSHOT_UPLOAD_DATE=d;
-  renderBookStatus();render();
-  console.log('MLB live odds:',count,'new lines');
-}
+/* ══ v2.81.2 · ⚡ ONE-TAP BOOK LINES — BetOnline through The Odds API ══════════════════════════════════════════
+   SportsBetting.ag isn't on The Odds API; its sister book BetOnline (same company, the same board) is — bookmaker key
+   "betonlineag". One tap pulls every sport you show that's in season (3 credits a sport: moneyline, spread, total —
+   one request each) and files them through the same reader as a screenshot, as YOUR book's lines (source "bol"): they
+   outrank ESPN and every API, and the newest of yours wins. Games BetOnline doesn't list keep ESPN's numbers.
+   Each sport files on its own page (that's where its team names resolve): the pull keeps a compact copy of the board,
+   and every sport page files its part the moment its schedule is loaded — including the master evaluation's relay.
+   The old DraftKings pulls are gone: they ran silently on every NFL page open and NHL refresh and burned credits. */
+const BOL_BOOK='betonlineag',BOL_CACHE='d4.bolcache',BOL_FILED='d4.bolfiled',BOL_AUTO='d4.bolauto';
+const BOL_HDR={nfl:'NFL',ncaaf:'NCAAF',nba:'NBA',ncaab:'NCAAB',nhl:'NHL',mlb:'MLB'};
+const BOL_DAYS={nfl:7,ncaaf:7,nba:2,ncaab:1,nhl:2,mlb:1};   /* how far ahead each board is kept (football is weekly) */
+let BOL_BUSY=false;
+const bolDayOf=iso=>{try{return new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));}catch(e){return String(iso||'').slice(0,10);}};
+const bolAutoOn=()=>{try{return get(BOL_AUTO,false)===true;}catch(e){return false;}};
+/* one event → a compact row: names, start, and BetOnline's three markets (null when the book has none) */
+function bolCompact(sp,ev){const bk=(ev.bookmakers||[]).find(b=>b.key===BOL_BOOK);if(!bk)return null;
+  const M={};(bk.markets||[]).forEach(m=>{M[m.key]=m.outcomes||[];});const A=ev.away_team,H=ev.home_team;const pick=(L,n)=>(L||[]).find(o=>o.name===n);
+  const ml=M.h2h?[pick(M.h2h,A),pick(M.h2h,H)]:null,spd=M.spreads?[pick(M.spreads,A),pick(M.spreads,H)]:null,
+    ov=M.totals?pick(M.totals,'Over'):null,un=M.totals?pick(M.totals,'Under'):null;
+  const ok=v=>v!=null&&isFinite(+v);
+  const r={a:A,h:H,t:ev.commence_time,d:bolDayOf(ev.commence_time),up:bk.last_update||null};
+  if(ml&&ml[0]&&ml[1]&&ok(ml[0].price)&&ok(ml[1].price))r.ml=[+ml[0].price,+ml[1].price];
+  if(spd&&spd[0]&&spd[1]&&ok(spd[0].point)&&ok(spd[0].price)&&ok(spd[1].point)&&ok(spd[1].price))r.sp=[+spd[0].point,+spd[0].price,+spd[1].point,+spd[1].price];
+  if(ov&&un&&ok(ov.point)&&ok(ov.price)&&ok(un.price))r.ou=[+ov.point,+ov.price,+un.price];
+  return r.ml||r.sp||r.ou?r:null;}
+/* compact rows → the intake grammar every screenshot is read with */
+function bolGrammar(sp,rows){const sg=v=>(v>0?'+':'')+v,pt=v=>v>0?'+'+v:v===0?'+0':String(v);const key=sp==='nhl'?'PL':sp==='mlb'?'RL':'SPREAD';
+  const out=[BOL_HDR[sp]||sp.toUpperCase(),''];
+  rows.forEach(r=>{out.push(`${r.a} @ ${r.h}`);if(r.ml)out.push(`ML: ${r.a} ${sg(r.ml[0])} / ${r.h} ${sg(r.ml[1])}`);
+    if(r.sp)out.push(`${key}: ${r.a} ${pt(r.sp[0])} (${sg(r.sp[1])}) / ${r.h} ${pt(r.sp[2])} (${sg(r.sp[3])})`);
+    if(r.ou)out.push(`OU: o${r.ou[0]} (${sg(r.ou[1])}) / u${r.ou[0]} (${sg(r.ou[2])})`);out.push('');});
+  return out.join('\n');}
+async function bolFetch(sp,key){const ctl=typeof AbortController!=='undefined'?new AbortController():null;const tm=setTimeout(()=>{try{ctl&&ctl.abort();}catch(e){}},20000);
+  try{try{trackCall('odds');}catch(e){}
+    const r=await fetch(`https://api.the-odds-api.com/v4/sports/${ODDS_SPORT[sp]}/odds/?apiKey=${encodeURIComponent(key)}&bookmakers=${BOL_BOOK}&markets=h2h,spreads,totals&oddsFormat=american&dateFormat=iso`,ctl?{signal:ctl.signal}:{});
+    const hd=n=>{try{return r.headers&&r.headers.get?r.headers.get(n):null;}catch(e){return null;}};
+    const cr={left:hd('x-requests-remaining'),used:hd('x-requests-used'),last:hd('x-requests-last')};
+    if(r.status===401)return{err:'key rejected or out of credits (401)',cr};if(r.status===429)return{err:'too many requests — try again in a minute (429)',cr};
+    if(!r.ok)return{err:'Odds API '+r.status,cr};const j=await r.json();if(!Array.isArray(j))return{err:(j&&j.message)||'unexpected Odds API response',cr};return{events:j,cr};}
+  catch(e){return{err:/abort/i.test(String(e&&e.name||e))?'timed out after 20 s':String(e&&e.message||e)};}finally{clearTimeout(tm);}}
+/* the one tap: every shown, in-season sport (or the ones asked for) */
+async function bolPull(opts){opts=opts||{};if(BOL_BUSY)return{busy:true};const key=theOddsApiKey();if(!key)return{err:'Add your Odds API key in Settings → The Odds API.'};
+  const want=(opts.sports&&opts.sports.length?opts.sports:(typeof liveSports==='function'?liveSports():Object.keys(ODDS_SPORT))).filter(sp=>ODDS_SPORT[sp]&&(typeof sportOn!=='function'||sportOn(sp)));
+  if(!want.length)return{err:'No sport is in season and shown.'};BOL_BUSY=true;
+  const C=get(BOL_CACHE,null)||{};const td=today();const R={ts:Date.now(),by:{},err:{},why:opts.why||'tap'};let cr=null;
+  try{for(const sp of want){const x=await bolFetch(sp,key);if(x.cr&&x.cr.left!=null)cr=x.cr;if(x.err){R.err[sp]=x.err;continue;}
+      const last=dayShift(td,(BOL_DAYS[sp]||1)-1);const seen=new Set();
+      const rows=x.events.slice().sort((a,b)=>String(a.commence_time).localeCompare(String(b.commence_time))).map(ev=>bolCompact(sp,ev)).filter(r=>{if(!r||r.d<td||r.d>last)return false;
+        const k=r.a+'@'+r.h;if(seen.has(k))return false;seen.add(k);return true;});   /* the same matchup twice (a series): the first game only */
+      R.by[sp]={n:rows.length,all:x.events.length};C[sp]={ts:R.ts,d:td,rows};}}
+  finally{BOL_BUSY=false;}
+  C.ts=R.ts;C.d=td;if(cr)C.cr={...cr,ts:R.ts};try{set(BOL_CACHE,C);}catch(e){}try{burn();}catch(e){}try{set(LS.pull,R.ts);paintMeter();}catch(e){}
+  R.cr=cr;R.here=bolFileHere(0,true);try{const L=get('d4.bollog',[])||[];L.unshift({ts:R.ts,why:R.why,by:R.by,err:R.err,left:cr&&cr.left});set('d4.bollog',L.slice(0,20));}catch(e){}
+  return R;}
+/* file this page's sport from the last pull (once per pull per device), as soon as its schedule is loaded */
+function bolFileHere(tries,now){try{const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null);if(!sp||!BOL_HDR[sp])return null;
+    const C=get(BOL_CACHE,null);const E=C&&C[sp];if(!E||!E.rows||!E.rows.length||E.d!==today())return null;
+    const F=get(BOL_FILED,{})||{};if(F[sp]===E.ts)return null;
+    if(!intakeCanResolve(sp)||!(sportGames(sp)||[]).length){if((tries||0)<30)setTimeout(()=>bolFileHere((tries||0)+1),1000);return null;}
+    const byD={};E.rows.forEach(r=>{(byD[r.d]=byD[r.d]||[]).push(r);});const picks=[];
+    Object.keys(byD).forEach(d=>{let res={};try{res=intakeParseGrammar(bolGrammar(sp,byD[d]),sp);}catch(e){console.warn('bol parse',sp,e);}
+      ((res[sp]||{}).picks||[]).forEach(p=>{p.sport=sp;p.src='bol';p.book=BOL_BOOK;p.date=d;picks.push(p);});});
+    F[sp]=E.ts;set(BOL_FILED,F);if(!picks.length)return{sp,n:0};
+    saveBookOdds(picks,null,sp);const games=new Set(picks.map(p=>p.game)).size;
+    try{if(!now){const el=document.getElementById('bookShotResult');if(el)el.innerHTML=`<div class="tkt hi"><h3>⚡ BetOnline lines filed</h3><div class="sub">${games} ${BOL_HDR[sp]} game${games===1?'':'s'} from the last pull (${new Date(E.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}).</div></div>`;}}catch(e){}
+    return{sp,n:picks.length,games};}catch(e){console.warn('bolFileHere',e);return null;}}
+function bolAutoToggle(){try{set(BOL_AUTO,!bolAutoOn());}catch(e){}try{if(typeof deskToast==='function')deskToast(bolAutoOn()?'⚡ Auto BetOnline ON — lines refresh before the master evaluation (and once each morning)':'Auto BetOnline OFF — tap ⚡ when you want lines');}catch(e){}
+  try{const b=document.getElementById('bolAutoBtn');if(b)b.innerHTML='Auto: <b>'+(bolAutoOn()?'ON':'off')+'</b>';}catch(e){}}
+/* auto mode: before the master evaluation when the last pull is 2+ hours old, and once on the first open after 8 AM */
+async function bolAutoMaybe(why,maxAgeH){if(!bolAutoOn()||!theOddsApiKey()||BOL_BUSY)return null;if(typeof location!=='undefined'&&/[?&]bg=1/.test(location.search||''))return null;
+  const C=get(BOL_CACHE,null);const age=C&&C.ts?(Date.now()-C.ts)/36e5:1e9;if(C&&C.d===today()&&age<(maxAgeH||2))return null;return bolPull({why:why||'auto'});}
+function bolStatusHtml(){const C=get(BOL_CACHE,null);const L=(get('d4.bollog',[])||[])[0];
+  if(!C||!C.ts)return'<span style="color:var(--mute)">No BetOnline pull yet.</span>';
+  const sp=Object.keys(BOL_HDR).filter(k=>C[k]&&C[k].ts===C.ts).map(k=>`${BOL_HDR[k]} ${C[k].rows.length}`).join(' · ');
+  const errs=L&&L.ts===C.ts?Object.entries(L.err||{}).map(([k,v])=>`${BOL_HDR[k]||k}: ${txtEsc(v)}`).join(' · '):'';
+  return`Last BetOnline pull ${new Date(C.ts).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}${sp?' — '+sp+' games':''}${C.cr&&C.cr.left!=null?` · <b>${txtEsc(String(C.cr.left))}</b> credits left`:''}${errs?` · <span style="color:var(--rust)">${errs}</span>`:''}`;}
+async function pullLiveOdds(){const btn=document.getElementById('pullOddsBtn');const el=document.getElementById('bookShotResult')||{set innerHTML(v){}};
+  if(!theOddsApiKey()){el.innerHTML='<div class="tkt"><h3>Odds API key needed</h3><div class="sub">Add your The Odds API key in Settings → “The Odds API”. One tap then pulls BetOnline — SportsBetting.ag\'s sister book, same board — for every sport you show. 3 credits a sport.</div></div>';return;}
+  if(btn){btn.textContent='⏳ Pulling…';btn.disabled=true;}el.innerHTML='<div class="empty">Pulling BetOnline lines for every sport you show…</div>';
+  let R=null;try{R=await bolPull({why:'tap'});}catch(e){R={err:String(e&&e.message||e)};}
+  if(btn){btn.textContent='⚡ BetOnline lines';btn.disabled=false;}
+  if(!R||R.busy)return;if(R.err&&!R.by){el.innerHTML=`<div class="tkt"><h3>Pull failed</h3><div class="sub">${txtEsc(R.err)}</div></div>`;return;}
+  const rows=Object.entries(R.by).map(([sp,x])=>`${BOL_HDR[sp]}: <b>${x.n}</b> game${x.n===1?'':'s'}${x.n<x.all?` <span style="color:var(--mute)">(of ${x.all} listed — later days wait for their own pull)</span>`:''}`);
+  const errs=Object.entries(R.err).map(([sp,e])=>`${BOL_HDR[sp]}: <span style="color:var(--rust)">${txtEsc(e)}</span>`);
+  const here=R.here&&R.here.n?`${R.here.games} ${BOL_HDR[R.here.sp]} game${R.here.games===1?'':'s'} filed on this page now`:'';
+  el.innerHTML=`<div class="tkt hi"><h3>⚡ BetOnline lines pulled</h3><div class="sub">${rows.concat(errs).join(' · ')||'BetOnline has no lines up yet.'}</div>
+    <div class="sub" style="margin-top:4px">${here?here+' · ':''}every other sport files the moment its page opens (the master evaluation's relay opens them all). Filed as your book's lines — they outrank ESPN; games BetOnline doesn't list keep ESPN's numbers.${R.cr&&R.cr.left!=null?` · <b>${txtEsc(String(R.cr.left))}</b> credits left`:''}</div></div>`;
+  try{if(typeof renderBookStatus==='function')renderBookStatus();}catch(e){}}
 
 /* Which HTML page owns each sport's engine, for the cross-page nav below. */
 /* One place that answers "which slate / which sims belong to sport X".
@@ -2923,7 +2924,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261031f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261031g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -4316,6 +4317,7 @@ function saveBookShots(){
   render();
 }
 function renderBookStatus(){
+  try{const bs=document.getElementById('bolStatus');if(bs)bs.innerHTML=bolStatusHtml()+` <button id="bolAutoBtn" onclick="bolAutoToggle()" style="font-size:9.5px;padding:2px 7px" title="Pull BetOnline automatically before the master evaluation and once each morning (3 credits a sport)">Auto: <b>${bolAutoOn()?'ON':'off'}</b></button>`;}catch(e){}
   const el=document.getElementById('bookStatus');if(!el)return;
   // Reflects the date currently selected on the upload panel, not always "today" —
   // otherwise uploading tomorrow's screenshots looked like it silently failed here
@@ -7366,14 +7368,14 @@ async function refreshEverything(){
     if(el)el.innerHTML='<div class="empty">Refreshing NFL data…</div>';
     await loadNFLSchedule();
     await fetchNFLPowerRatings();
-    await fetchNFLLiveOdds();
+    try{bolFileHere(0,true);}catch(e){}   /* v2.81.2 · lines: ESPN's, plus your last BetOnline pull (no silent DraftKings pull) */
     return;
   }
   if(ACTIVE_SPORT==='ncaaf'){
     const el=document.getElementById('slate');
     if(el)el.innerHTML='<div class="empty">Refreshing CFB data…</div>';
     await loadNCAAFSchedule();
-    await fetchNCAAFLiveOdds();
+    try{bolFileHere(0,true);}catch(e){}
     return;
   }
   const st=document.getElementById('refreshAllStatus');
@@ -17401,6 +17403,8 @@ async function boot(){
   try{replayPendingUploads()}catch(e){}
   try{intakeReplay()}catch(e){console.warn('intake replay',e)}
   try{intakeAutoDrop().then(x=>{if(x&&x.saved)try{intakeReplay()}catch(e){}}).catch(()=>{});}catch(e){}
+  /* v2.81.2 · auto BetOnline (opt-in): the first open after 8 AM pulls today's lines */
+  try{setTimeout(()=>{try{if(+new Intl.DateTimeFormat('en-US',{timeZone:APP_TZ,hour:'numeric',hour12:false}).format(new Date())>=8)bolAutoMaybe('morning',12).catch(()=>{});}catch(e){}},15000);}catch(e){}
   try{slateFlipLoop()}catch(e){}
   /* Sweep whatever finals this page's engines know about into the shared store
      on boot, so every page contributes to (and benefits from) the unified
@@ -23598,7 +23602,7 @@ function strategyHtml(){const M=truthMaps(),T=laneTable();
 const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tomb',dev:'d4.__dev',last:'d4.__lastsync',file:'thedesk-sync.json'};
 let CLOUD_SEEN=null,SYNC_LOCAL_N=0;   /* v2.51 · the cloud commit this device last saw, and a count of its own synced writes */
 /* v2.80.3 · + the crash guard and the master-eval relay: both describe THIS device's last few minutes — another phone's copy could trip safe mode here */
-const SYNC_NEVER=new Set(['d4.bootguard','d4.evalchain','d4.ruletune','d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
+const SYNC_NEVER=new Set(['d4.bootguard','d4.evalchain','d4.ruletune','d4.bolcache','d4.bolfiled','d4.bollog','d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
 const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$)/.test(k);
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
