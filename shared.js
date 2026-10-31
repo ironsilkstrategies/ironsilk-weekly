@@ -2924,7 +2924,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261031g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261031h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16936,7 +16936,7 @@ function renderBest(){
   const bar=`<div class="note" style="margin:0 0 10px;border-left:3px solid ${S.locked?'var(--win)':'var(--gold)'};padding-left:10px">
     <b style="color:${S.locked?'var(--win)':'var(--gold)'}">${S.locked?`🔒 Locked ${new Date(S.lockedAt).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})} (${esc(S.why||'')}) — frozen until every pick is graded`:(evalRanToday()&&!(S.top3||[]).length&&W3&&W3.total?'Master evaluation ran — no play clears the bar yet. It keeps re-checking as lines and boards update, locks the moment one qualifies, and locks empty 30 min before the last game.':'Building — freezes the moment the master evaluation runs (or 30 min before the first game)')}</b>
     ${S.locked||(evalRanToday()&&!(S.top3||[]).length)?'':` <button onclick="best5Lock()" style="font-size:10px">Lock now</button>`}${typeof b3SpreadOn==='function'?` <button onclick="b3SpreadToggle()" style="font-size:10px" title="Optional: when a sport has no play that clears the bar, its best near-miss can take a slot (marked 🌐)">🌐 Spread across sports: <b>${b3SpreadOn()?'ON':'off'}</b></button>${S.locked?'<span class="sub" style="font-size:9.5px"> (today\'s card is locked — a change applies to the next one)</span>':''}`:''}${typeof ruleSnap==='function'?(()=>{try{const r=S.rules||ruleSnap();const lo=(k,v,f)=>v!==RULE_DEF[k]?`<b style="color:#c4b5fd">${f(v)} 📏</b>`:f(v);
-      return`<div class="mono" style="font-size:9.5px;margin-top:4px;color:var(--mute)">Rules in force: model under ${lo('disagree',r.disagree,v=>Math.round(v*100)+' pts')} off the market · lays ${lo('b3lo',r.b3lo,v=>v)} at most · ${lo('floor',r.floor,v=>Math.round(v*100)+'%')} confidence or an official call · <a href="#" onclick="REC_VIEW='rules';tab('grades',document.querySelector('nav button[onclick*=grades]'));return false" style="color:var(--gold)">📏 how history set these</a></div>`;}catch(e){return'';}})():''}${diag}${(()=>{const sv=BEST_VIEW!=='all'?BEST_VIEW:null;const L0=sv?((S.bySport||{})[sv]||[]):(S.top3||[]);
+      return`<div class="mono" style="font-size:9.5px;margin-top:4px;color:var(--mute)">Rules in force: model under ${lo('disagree',r.disagree,v=>Math.round(v*100)+' pts')} off the market · lays ${lo('b3lo',r.b3lo,v=>v)} at most · ${lo('floor',r.floor,v=>Math.round(v*100)+'%')} confidence or an official call · <a href="#" onclick="REC_VIEW='rules';tab('grades',document.querySelector('nav button[onclick*=grades]'));return false" style="color:var(--gold)">📏 how history set these</a>${typeof healthChipHtml==='function'?' · '+healthChipHtml():''}</div>`;}catch(e){return'';}})():''}${diag}${(()=>{const sv=BEST_VIEW!=='all'?BEST_VIEW:null;const L0=sv?((S.bySport||{})[sv]||[]):(S.top3||[]);
       /* v2.80.9 · always: a gold SUPREME tile that isn't on the card must say which rule kept it off (it used to show only on an empty card) */
       let N=[];try{N=best3Near(80).filter(x=>(!sv||x.sp===sv)&&!L0.some(y=>y.sp===x.sp&&y.game===x.game&&y.pick===x.pick)).slice(0,8);}catch(e){}if(!N.length)return'';
       return`<div class="mono" style="font-size:9.5px;margin-top:6px;color:var(--mute)">${L0.length?'Strong calls NOT on the card — the rule each one missed':'Closest '+(sv?(SP_LAB[sv]||sv)+' ':'')+'calls today (not on the card)'}:</div>${N.map(x=>`<div class="mono" style="font-size:10px;padding:2px 0">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> ${x.price!=null?(x.price>0?'+':'')+x.price:''} · ${x.p!=null?Math.round(x.p*100)+'%':'—'} · <span style="color:var(--rust)">${txtEsc(x.why)}</span></div>`).join('')}`;})()}</div>`;
@@ -19575,7 +19575,7 @@ const AP_STEPS=[
   ['rules','Rule audit','Daily: re-judges the rules that keep picks off the Best 3 from graded picks — a rule loosens only where the picks it blocked made money.',()=>{if(typeof ruleTune!=='function')return 0;const T=ruleTune(false);return T?T.n:0;}]];
 function apRun(force,why){if(AP_BUSY)return null;const L=get(AP_KEY,[])||[];const last=L[0];if(!force&&last&&Date.now()-last.ts<6*36e5)return null;AP_BUSY=true;const t0=Date.now();const steps=[];
   try{AP_STEPS.forEach(([k,,,f])=>{const t=Date.now();try{const v=f();steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}});}
-  finally{AP_BUSY=false;}const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps};L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
+  finally{AP_BUSY=false;}const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps};L.unshift(R);set(AP_KEY,L.slice(0,40));try{if(typeof apStepsNote==='function')apStepsNote(steps);}catch(e){}return R;}
 /* v2.51 · the background loop runs one step per task (with idle time between), so the screen stays live —
    the whole loop in one go froze the phone for 5+ seconds. A run that starts while it's going stops it (no double work). */
 async function apRunSoft(why){if(AP_BUSY||AP_SOFT)return null;const L0=get(AP_KEY,[])||[];if(L0[0]&&Date.now()-L0[0].ts<6*36e5)return null;
@@ -19584,7 +19584,7 @@ async function apRunSoft(why){if(AP_BUSY||AP_SOFT)return null;const L0=get(AP_KE
   try{for(const[k,,,f]of AP_STEPS.slice()){await idle();const L=get(AP_KEY,[])||[];if(L[0]&&L[0].ts>t0)return null;if(AP_BUSY)return null;
       const t=Date.now();try{let v=f();if(v&&typeof v.then==='function')v=await v;steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}}}
   finally{AP_SOFT=false;}
-  const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps,soft:1};const L=get(AP_KEY,[])||[];L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
+  const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps,soft:1};const L=get(AP_KEY,[])||[];L.unshift(R);set(AP_KEY,L.slice(0,40));try{if(typeof apStepsNote==='function')apStepsNote(steps);}catch(e){}return R;}
 let AP_SOFT=false;
 /* v2.80 · the master evaluation's full run, step by step with the screen breathing in between (the old apRun did
    every learning loop in one go — several seconds frozen on a phone right when you tap the button) */
@@ -19592,7 +19592,7 @@ async function apRunAsync(force,why){if(AP_BUSY)return null;const L0=get(AP_KEY,
   while(AP_SOFT){await deskIdle(300);}AP_BUSY=true;const t0=Date.now();const steps=[];
   try{for(const[k,,,f]of AP_STEPS.slice()){await deskIdle();const t=Date.now();try{let v=f();if(v&&typeof v.then==='function')v=await v;steps.push({k,ok:1,n:apNum(v),ms:Date.now()-t});}
       catch(e){steps.push({k,ok:0,err:String(e&&e.message||e).slice(0,120),ms:Date.now()-t});}}}
-  finally{AP_BUSY=false;}const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps,async:1};const L=get(AP_KEY,[])||[];L.unshift(R);set(AP_KEY,L.slice(0,40));return R;}
+  finally{AP_BUSY=false;}const R={ts:t0,why:why||'auto',ms:Date.now()-t0,steps,async:1};const L=get(AP_KEY,[])||[];L.unshift(R);set(AP_KEY,L.slice(0,40));try{if(typeof apStepsNote==='function')apStepsNote(steps);}catch(e){}return R;}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__){window.addEventListener('load',()=>setTimeout(()=>{apRunSoft('daily').catch(()=>{});},20000));setInterval(()=>{if(!document.hidden)apRunSoft('every 6h').catch(()=>{});},36e5);}
 
 /* ══ v2.28 · THE ENGINE ROOM — the complex stuff, proving it's absorbing ═════ */

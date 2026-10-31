@@ -573,6 +573,75 @@ function ruleAuditHtml(){let T=null;try{T=ruleTune(false);}catch(e){return'<div 
     <div class="mono" style="font-size:10.5px;margin-top:6px">Picks that cleared every rule: ${rec(T.base)}</div>
     <div class="mono" style="font-size:10.5px;margin-top:3px">Audit: <b style="color:${ruleOn()?'var(--win)':'var(--rust)'}">${ruleOn()?'ON — loosened rules are in force':'OFF — every rule at its default'}</b> · judged ${T.ts?new Date(T.ts).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'}</div>
     <div class="bar" style="margin-top:6px"><button onclick="ruleTune(true);try{renderRecordsHub()}catch(e){}">↻ Re-judge now</button><button onclick="ruleToggle();try{renderRecordsHub()}catch(e){}">${ruleOn()?'Turn the audit off':'Turn the audit on'}</button></div></div>${blocks}`;}
+/* ══ v2.81.3 · 🩺 SYSTEM HEALTH — every loop that keeps the picks honest: its last good run, what's wrong, and a
+   self-healing pass. A loop that failed re-runs on its own (one per 15 minutes, while a page is open); the rule audit
+   and the autopilot are re-run when they go stale. Everything shows in Records → 🛠 Engine Room, with a one-line chip
+   on the Best tab. Nothing here can run while every page is closed — the app has no server; the robots on GitHub
+   (Telegram posts, the data feeds) are the only parts that run on their own. */
+const AP_STEPS_KEY='d4.apsteps',HEAL_KEY='d4.heallog';let HEAL_BUSY=false,HEAL_TS=0;
+function apStepsNote(steps){try{const M=get(AP_STEPS_KEY,{})||{};const t=Date.now();
+  (steps||[]).forEach(x=>{if(!x||!x.k)return;const o=M[x.k]||(M[x.k]={});if(x.ok)o.ok={ts:t,n:x.n,ms:x.ms};else o.fail={ts:t,err:String(x.err||'').slice(0,160)};});set(AP_STEPS_KEY,M);}catch(e){}}
+async function apStepRun(k,why){const S=(typeof AP_STEPS!=='undefined'?AP_STEPS:[]).find(x=>x[0]===k);if(!S)return null;const t=Date.now();let r;
+  try{let v=S[3]();if(v&&typeof v.then==='function')v=await v;r={k,ok:1,n:typeof apNum==='function'?apNum(v):null,ms:Date.now()-t};}catch(e){r={k,ok:0,err:String(e&&e.message||e).slice(0,160),ms:Date.now()-t};}
+  apStepsNote([r]);healLog(why||'rerun '+k,r.ok?'ok':'failed: '+r.err);return r;}
+function healLog(what,res){try{const L=get(HEAL_KEY,[])||[];L.unshift({ts:Date.now(),what,res});set(HEAL_KEY,L.slice(0,30));}catch(e){}}
+const hAgo=ts=>{if(!ts)return'never';const m=Math.round((Date.now()-ts)/60e3);return m<1?'just now':m<60?m+' min ago':m<48*60?Math.round(m/60)+' h ago':Math.round(m/1440)+' days ago';};
+const ctHour=()=>{try{return+new Intl.DateTimeFormat('en-US',{timeZone:APP_TZ,hour:'numeric',hour12:false}).format(new Date())%24;}catch(e){return 12;}};
+/* every check: st = ok | warn | bad | info, with the fix that heals it (when one exists) */
+function healthChecks(deep){const C=[];const add=(k,lab,st,note,fix,last)=>C.push({k,lab,st,note,fix:fix||null,last:last||null});
+  /* the autopilot and each of its loops */
+  let L=[];try{L=roGet(AP_KEY,[],10e3)||[];}catch(e){}const last=L[0];const age=last?(Date.now()-last.ts)/36e5:1e9;
+  add('ap','Autopilot (every learning loop)',!last?'bad':age<8?'ok':age<24?'warn':'bad',last?`last full run ${hAgo(last.ts)} (${last.why}) — ${last.steps.filter(x=>x.ok).length}/${last.steps.length} loops ok`:'has not run on this device',age>=8?"apRunSoft('health').then(()=>healthRepaint())":null,last&&last.ts);
+  const M=get(AP_STEPS_KEY,{})||{};(typeof AP_STEPS!=='undefined'?AP_STEPS:[]).forEach(([k,lab])=>{const o=M[k];if(!o)return;
+    if(o.fail&&(!o.ok||o.fail.ts>o.ok.ts))add('ap:'+k,'Loop · '+lab,'bad',`failed ${hAgo(o.fail.ts)}: ${o.fail.err||'error'}${o.ok?` · last good ${hAgo(o.ok.ts)}`:''}`,`apStepRun('${k}','manual').then(()=>healthRepaint())`,o.fail.ts);});
+  /* today's evaluation and card */
+  let ran=false,frozen=false,S=null;try{ran=evalRanToday();frozen=deskFrozen();S=roGet(BEST5_KEY,null,5e3);if(S&&S.d!==today())S=null;}catch(e){}   /* read, never rebuild, the card */
+  const anyToday=(()=>{try{const T=roGet(TC_KEY,{},10e3)||{};return T.d===today()&&Object.values(T.by||{}).some(B=>(B.picks||[]).length);}catch(e){return false;}})();
+  add('eval','Master evaluation',ran?'ok':anyToday&&ctHour()>=11?'warn':'info',ran?(frozen?'ran and frozen today':'ran today — waiting for your 🔒 freeze'):anyToday?'has not run today — tap 🧠 Master evaluation (the card still locks itself 30 min before the first game)':'no games on today\'s boards yet',null);
+  if(S)add('best','Best 3 card',S.locked?((S.top3||[]).length?'ok':'info'):'info',S.locked?((S.top3||[]).length?`locked with ${(S.top3||[]).length} pick${(S.top3||[]).length===1?'':'s'}`:'locked empty — no play cleared the bar (Best → why)'):'building — locks at the master evaluation or 30 min before the first game',null);
+  /* grading */
+  try{const G=get(GHEALTH_KEY,null);const left=(G&&G.left||[]).length;add('grade','Grading (tickets & legs)',left?'warn':'ok',left?`${left} leg${left===1?'':'s'} can't settle yet: ${txtEsc(String((G.left[0]||{}).msg||(G.left[0]||{}).why||'see My Tickets'))}`:'every finished leg is graded',left?"gradeSweep({force:true,user:true}).then(()=>healthRepaint())":null,G&&G.ts);}catch(e){}
+  if(deep){try{const H=learnHealth();const stuck=LEARN_SPS.reduce((a,sp)=>a+((H[sp]||{}).stuck||0),0);add('learn','Characters learn every final',stuck?'bad':'ok',stuck?`${stuck} graded results are waiting to be learned`:'nothing stuck',stuck?"brainLearnAll(true);healthRepaint()":null);}catch(e){}}
+  /* calibration, confidence, rules */
+  try{const H=roGet(CAL_HIST,{},60e3)||{};add('cal','Calibration snapshot',H[today()]?'ok':'warn',H[today()]?'taken today':'not taken today',H[today()]?null:"calSnapshot();healthRepaint()");}catch(e){}
+  try{const M2=roGet(CONF_KEY,null,60e3);const a=M2&&M2.ts?(Date.now()-M2.ts)/36e5:1e9;add('conf','Confidence meter (is 70% really 70%?)',a<24?'ok':a<72?'warn':'bad',M2&&M2.ts?`re-learned ${hAgo(M2.ts)} from ${(M2.n||0).toLocaleString()} graded calls`:'not built yet',a>=24?"genSlice(confRebuildG(true)).then(()=>healthRepaint())":null,M2&&M2.ts);}catch(e){}
+  try{const R=roGet(RULE_KEY,null,30e3);add('rules','📏 Rule audit',R&&R.d===today()?'ok':'warn',R&&R.d===today()?`judged today from ${R.n} graded picks${ruleOn()?'':' (audit switched off)'}`:'not judged today',R&&R.d===today()?null:"ruleTune(true);healthRepaint()",R&&R.ts);}catch(e){}
+  /* lines in */
+  try{const B=roGet('d4.bolcache',null,30e3);const k=typeof theOddsApiKey==='function'&&!!theOddsApiKey();
+    add('bol','⚡ BetOnline lines',!k?'info':B&&B.d===today()?'ok':'info',!k?'no Odds API key — screenshots and the intake file still work':B&&B.ts?`last pull ${hAgo(B.ts)}${B.cr&&B.cr.left!=null?` · ${B.cr.left} credits left`:''}${typeof bolAutoOn==='function'&&bolAutoOn()?' · auto ON':''}`:'not pulled yet — tap ⚡ BetOnline lines on Games',null,B&&B.ts);
+    if(B&&B.cr&&B.cr.left!=null&&+B.cr.left<30)add('credits','Odds API credits','warn',`only ${B.cr.left} credits left — each pull costs 3 a sport`,null);}catch(e){}
+  try{const D=get(DROP_KEY,{})||{};const n=Object.keys(D).filter(h=>h.startsWith(today())).length;if(n)add('drop','Intake file (site drop)','ok',`today's file filed (${n} version${n===1?'':'s'})`,null);}catch(e){}
+  try{if(typeof feedHealth==='function'){const F=feedHealth();add('feeds','📡 Closing-line feed (robot)',F.st==='ok'?'ok':F.st==='stale'?'warn':F.st==='down'?'bad':'info',F.lab,F.st==='ok'?null:"feedsTick(true).then(()=>healthRepaint())");}}catch(e){}
+  /* sync, publish, freezes */
+  try{const has=!!(get(SYNC.repo,'')&&get(SYNC.token,''));const ls=+get(SYNC.last,0)||0;const a=ls?(Date.now()-ls)/36e5:1e9;
+    add('sync','Private sync',!has?'info':a<12?'ok':a<48?'warn':'bad',!has?'not set up on this device':`last sync ${hAgo(ls)}`,has&&a>=12?"syncNow().then(()=>healthRepaint())":null,ls);}catch(e){}
+  try{const P=get('d4.pubstate',{})||{};if(P.d===today())add('pub','Public page / Telegram handoff',P.ok?'ok':'bad',P.ok?`updated ${hAgo(P.ts)}`:`publish failed: ${txtEsc(String(P.reason||''))}`,P.ok?null:"publishAuto&&publishAuto();setTimeout(healthRepaint,3000)",P.ts);}catch(e){}
+  try{const F=(frzList()||[]).filter(x=>x&&x.ts&&Date.now()-x.ts<24*36e5);const rs=F.filter(x=>x.kind==='restart').length;const W=F.filter(x=>x.kind!=='restart').sort((a,b)=>(+b.ms||0)-(+a.ms||0))[0];
+    const lab=x=>`${x.kind==='boot'?'slow load':'stuck'} ${((+x.ms||0)/1000).toFixed(1)} s on ${txtEsc(String(x.page||''))}${x.step?' · '+txtEsc(String(x.step)):''}`;
+    add('frz','Freeze recorder (last 24 h)',!F.length?'ok':rs||(W&&+W.ms>=5000)?'bad':'warn',!F.length?'no stalls or restarts':`${F.length} event${F.length===1?'':'s'}${rs?` · ${rs} restart${rs===1?'':'s'}`:''}${W?` · worst: ${lab(W)}`:''} — details in Settings → storage`,null);}catch(e){}
+  return C;}
+const HEALTH_ICO={ok:'🟢',warn:'🟡',bad:'🔴',info:'⚪'};
+function healthSummary(){let C=[];try{C=healthChecks(false);}catch(e){}const bad=C.filter(x=>x.st==='bad').length,warn=C.filter(x=>x.st==='warn').length;return{bad,warn,n:C.length,C};}
+function healthChipHtml(){const H=healthSummary();const lab=H.bad?`🔴 ${H.bad} need${H.bad===1?'s':''} attention`:H.warn?`🟡 ${H.warn} to check`:'🟢 all systems go';
+  return`<a href="#" onclick="REC_VIEW='engine';tab('grades',document.querySelector('nav button[onclick*=grades]'));return false" style="color:${H.bad?'var(--rust)':H.warn?'var(--gold)':'var(--win)'};text-decoration:none">🩺 ${lab}</a>`;}
+function healthBoardHtml(){let C=[];try{C=healthChecks(true);}catch(e){return'';}const rank={bad:0,warn:1,info:2,ok:3};C.sort((a,b)=>rank[a.st]-rank[b.st]);
+  const H=get(HEAL_KEY,[])||[];const bad=C.filter(x=>x.st==='bad').length,warn=C.filter(x=>x.st==='warn').length;
+  return`<div class="tkt" id="healthBoard" style="border-left:3px solid ${bad?'var(--rust)':warn?'var(--gold)':'var(--win)'}"><h3 style="margin:0 0 4px">🩺 System health</h3>
+    <div class="sub" style="font-size:10.5px">${bad?`${bad} need attention`:warn?`${warn} to check`:'Everything that feeds the picks ran when it should.'} A loop that fails re-runs on its own every 15 minutes while a page is open; tap ↻ to run one now.</div>
+    ${C.map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-top:1px solid var(--rule);display:flex;gap:6px;align-items:flex-start"><span>${HEALTH_ICO[x.st]}</span><div style="flex:1"><b>${txtEsc(x.lab)}</b><div style="color:var(--mute);font-size:9.5px">${x.note}</div></div>${x.fix?`<button style="font-size:9.5px;padding:2px 8px" onclick="${x.fix.replace(/"/g,'&quot;')}">↻</button>`:''}</div>`).join('')}
+    ${H.length?`<details style="margin-top:6px"><summary class="mono" style="font-size:10px;color:var(--mute)">Self-healing log (${H.length})</summary>${H.slice(0,12).map(h=>`<div class="mono" style="font-size:9.5px;color:var(--mute)">${new Date(h.ts).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})} · ${txtEsc(h.what)} → ${txtEsc(h.res)}</div>`).join('')}</details>`:''}</div>`;}
+function healthRepaint(){try{const el=document.getElementById('healthBoard');if(el)el.outerHTML=healthBoardHtml();}catch(e){}}
+/* the self-healing pass: one fix per tick, idle time only, never on a relay page */
+async function healthTick(force){if(HEAL_BUSY)return null;if(!force&&(Date.now()-HEAL_TS<14*60e3||(typeof document!=='undefined'&&document.hidden)))return null;
+  if(typeof location!=='undefined'&&/[?&]bg=1/.test(location.search||''))return null;if(typeof DESK_EVAL_BUSY!=='undefined'&&DESK_EVAL_BUSY)return null;
+  HEAL_BUSY=true;HEAL_TS=Date.now();try{
+    const M=get(AP_STEPS_KEY,{})||{};const failed=Object.entries(M).filter(([k,o])=>o.fail&&(!o.ok||o.fail.ts>o.ok.ts)&&Date.now()-o.fail.ts>10*60e3).sort((a,b)=>a[1].fail.ts-b[1].fail.ts);
+    if(failed.length){await deskIdle();return await apStepRun(failed[0][0],'self-heal: '+failed[0][0]);}
+    const R=get(RULE_KEY,null);if(!R||R.d!==today()){await deskIdle();try{ruleTune(true);healLog('self-heal: rule audit','ok');}catch(e){healLog('self-heal: rule audit','failed: '+e.message);}return{k:'rules'};}
+    const L=get(AP_KEY,[])||[];if(!L[0]||Date.now()-L[0].ts>8*36e5){const r=await apRunSoft('self-heal');if(r)healLog('self-heal: autopilot',`${r.steps.filter(x=>x.ok).length}/${r.steps.length} loops ok`);return{k:'ap'};}
+    return null;}finally{HEAL_BUSY=false;}}
+if(typeof window!=='undefined'&&!window.__NO_BACKFILL__&&!window.__NO_HEAL__){window.addEventListener('load',()=>setTimeout(()=>{healthTick(true).catch(()=>{});},90e3));setInterval(()=>{healthTick().catch(()=>{});},5*60e3);}
+if(typeof engineRoomHtml==='function'&&typeof window!=='undefined'&&!window.__HEALTH_ER__){window.__HEALTH_ER__=1;const ER0=engineRoomHtml;engineRoomHtml=function(){let h='';try{h=healthBoardHtml();}catch(e){}return h+ER0();};}
 function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
   const LO=ruleNow('b3lo'),DIS=ruleNow('disagree');
   Object.entries(T.by||{}).filter(([s0])=>typeof sportOn!=='function'||sportOn(s0)).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0)||ruleFloorAdmit(x,s0);const p=o?o.cf:pickConfAny(x,s0);
