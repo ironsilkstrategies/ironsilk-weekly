@@ -68,7 +68,7 @@
   function inline(){var tpl=document.getElementById('d4s');if(!tpl)return false;return[].slice.call((tpl.content||tpl).querySelectorAll('script')).every(function(x){return!x.getAttribute('src');});}
   window.D4_BOOT=function(){
     if(!RLS||typeof indexedDB==='undefined'||!window.Promise||inline()||/jsdom/i.test(navigator.userAgent||'')){if(inline()){var tpl=document.getElementById('d4s');[].slice.call((tpl.content||tpl).querySelectorAll('script')).forEach(function(it){var s=document.createElement('script');s.text=it.textContent;document.body.appendChild(s);});}else run();return;}
-    var done=false;var go=function(){if(done)return;done=true;run();};
+    var done=false;window.__D4_WAIT=Date.now();var go=function(){if(done)return;done=true;window.__D4_WAIT=0;run();};   /* v2.82.3 · the pages' "code did not load" check waits while this is set */
     hydrate(function(){return done;}).then(go,function(e){try{console.warn('store: staying on localStorage —',e&&e.message);}catch(_){}go();});
     setTimeout(function(){if(!done){try{console.warn('store: IndexedDB too slow — staying on localStorage this load');}catch(_){}go();}},/[?&]bg=1/.test(location.search||'')?20000:6000);};   /* v2.82.2 · a background page waits longer: one that runs without the big store can't see today's card and writes over it */
 })();
