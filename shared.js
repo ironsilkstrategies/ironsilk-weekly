@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261101k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261101l';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8212,19 +8212,19 @@ function fbpShift(d,n){const x=new Date(String(d).slice(0,10)+'T12:00:00');x.set
    page's slate. Tickets stamp the import day as gameDate, and a Saturday import
    of a Sunday game (or a Thursday ticket for Monday night) was looked up on the
    wrong day — so the search covers the ticket date through a week after it. */
-const FBP_FOUND={},FBP_MISS={};
+const FBP_FOUND={},FBP_MISS={},FBP_BAD={};
 function fbpEventId(leg,ticketDate){
   const sp=leg.sport==='ncaaf'?'ncaaf':leg.sport==='nhl'?'nhl':leg.sport==='mlb'?'mlb':leg.sport==='nba'?'nba':leg.sport==='ncaab'?'ncaab':'nfl';   /* v2.80.0 · NBA legs were looked up as NFL games */
   const want=fbpGameKey(leg.game,sp);
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
   const m=FBP_MISS[fk];if(m&&Date.now()-m.ts<3000)return m.r;   // same game, same answer — 13 legs don't search 13 times
-  const r=fbpEventIdCore(leg,ticketDate,sp,want);if(r.id)FBP_FOUND[fk]=r.id;else FBP_MISS[fk]={ts:Date.now(),r};return r;
+  const r=fbpEventIdCore(leg,ticketDate,sp,want);const bad=FBP_BAD[String(leg.gameDate||ticketDate||'').slice(0,10)];if(r.id&&bad&&bad[String(r.id)])r.id=null,r.pending=false;if(r.id)FBP_FOUND[fk]=r.id;else FBP_MISS[fk]={ts:Date.now(),r};return r;
 }
 function fbpEventIdCore(leg,ticketDate,sp,want){
   const arr=sportGames(sp);
   const rev=want.split('@').reverse().join('@');
-  const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>{const k=fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp);return k===want||k===rev;});
+  const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>{const k=fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp);if(k!==want&&k!==rev)return false;const zd=String(z.date||z.start||z.kickoff||'').slice(0,10),ld=String(leg.gameDate||ticketDate||'').slice(0,10);return !zd||!ld||!isFinite(Date.parse(zd))||Math.abs(Date.parse(zd)-Date.parse(ld))<=1.5*864e5;});
   if(g)return{id:String(g.espnId||g.id),pending:false};
   const base=[leg.gameDate,ticketDate].filter(Boolean).sort()[0];
   // 1) the app's own archive: every game that was ever on the board kept its
@@ -8354,13 +8354,34 @@ function gradeFBSpecialProp(leg,box,R){
   if(dir==='under')hit=val>thr?false:(live?null:true);else{const ok=dir==='atleast'?val>=thr:val>thr;hit=ok?true:(live?null:false);}
   const lab=P.stat==='td'?(val===1?'TD':'TDs'):'sacks';
   return{hit,detail:`${(found&&found.name)||P.player} ${val} ${lab}${live?' so far':''}`,live,prog:{val,thr,dir}};}
+/* v2.84.3 · a box only grades a leg if it is that leg's game: the box's own kickoff
+   date must sit within a day and a half of the leg's day. A box from another
+   meeting (an earlier KC–DEN) is thrown out with every cached pointer to it. */
+function fbpBoxDay(box){const d=box&&box.date;if(!d)return null;try{return new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(d));}catch(e){return String(d).slice(0,10);}}
+function fbpWrongGame(box,leg,ticketDate,sp,id){
+  const want=String(leg.gameDate||ticketDate||'').slice(0,10);const bd=fbpBoxDay(box);
+  if(!want||!bd||!isFinite(Date.parse(want))||!isFinite(Date.parse(bd)))return false;
+  if(Math.abs(Date.parse(bd)-Date.parse(want))<=1.5*864e5)return false;
+  try{Object.keys(FBP_FOUND).forEach(k=>{if(String(FBP_FOUND[k])===String(id))delete FBP_FOUND[k];});
+    const I=get(FBP_IDX_KEY,{})||{};let ch=0;Object.keys(I).forEach(k=>{if(String(I[k])===String(id)&&k.split(':')[2]!==bd){delete I[k];ch=1;}});if(ch)set(FBP_IDX_KEY,I);
+    const B=get(FBP_BOX_KEY,{})||{};const bk=sp+':'+id;if(B[bk]&&want>=today()){/* keep the real final for its own day; nothing to delete */}
+    (FBP_BAD[want]=FBP_BAD[want]||{})[String(id)]=1;}catch(e){}
+  return true;
+}
+
+/* the leg's game is still on today's board and hasn't kicked off: nothing to grade */
+function fbpNotStarted(leg,sp){const want=fbpGameKey(leg.game,sp);const rev=want.split('@').reverse().join('@');const d=String(leg.gameDate||'').slice(0,10);
+  const g=sportGames(sp).find(z=>{const k=fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp);if(k!==want&&k!==rev)return false;const zd=z.date||z.start||z.kickoff;return !d||!zd||String(zd).slice(0,10)===d||Math.abs(Date.parse(String(zd).slice(0,10))-Date.parse(d))<=1.5*864e5;});
+  if(!g)return false;const st=g.abstract||g.state||(g.status&&g.status.state);if(st==='pre')return true;const t=Date.parse(g.date||g.start||g.kickoff||'');return isFinite(t)&&t>Date.now()+60e3&&st!=='in'&&st!=='post';}
 function gradeFBPropLeg(leg,ticketDate){
   const sp=leg.sport==='ncaaf'?'ncaaf':'nfl';
   const R=resolveLeg(leg,ticketDate); // may be null (not started / not yet in any store)
+  if(fbpNotStarted(leg,sp))return{hit:null,detail:null,live:false};
   const ev=fbpEventId(leg,ticketDate);
   if(!ev.id)return{hit:null,detail:ev.pending?'looking up game…':'game not found (checked your archive + ESPN weeks & days around '+(leg.gameDate||ticketDate||'that date')+')',live:!!(R&&R.live)};
   const special=leg.fbProp.stat==='td'||leg.fbProp.stat==='sacks'||leg.fbProp.stat==='gen';
   const box=fbpBox(ev.id,sp,special&&(leg.fbProp.stat!=='gen'||leg.fbProp.cat==='defensive'));
+  if(box&&fbpWrongGame(box,leg,ticketDate,sp,ev.id))return{hit:null,detail:'looking up game…',live:false};
   if(special&&box&&box.teamStats&&Object.keys(box.teamStats).length&&box.state!=='pre')return gradeFBSpecialProp(leg,box,R);
   if(!box||!box.teamStats||!Object.keys(box.teamStats).length)
     return{hit:null,detail:box&&box.state==='pre'?null:'player box loading — check back shortly',live:!!(R&&R.live)};
