@@ -3,7 +3,8 @@
    MOCK_DIR: folder with init.json (this repo's plain state) and optionally site.json (the site repo's) — results land in out.json.
    MOCK_FAIL_READS / MOCK_CONFLICT_WRITES: comma lists of 1-based call numbers (this repo's state) that fail.
    MOCK_FINAL_FROM: per game, the pass (= this repo's state reads) from which it reads final: "COL@BOS:3,NYR@PIT:99".
-   MOCK_PRIVATE=1: this repo reports private. MOCK_RUNS: relayed runs GitHub reports today. */
+   MOCK_PRIVATE=1: this repo reports private. MOCK_RUNS: relayed runs GitHub reports today.
+   MOCK_UPDATES / MOCK_UPDATES_FROM: the Telegram updates waiting (JSON list), served from the Nth getUpdates call on. */
 const fs = require('fs'), path = require('path'), wc = require('crypto').webcrypto;
 const DIR = process.env.MOCK_DIR, KEYB = Buffer.from(process.env.AUTOPILOT_KEY, 'base64');
 const OWN = process.env.GITHUB_REPOSITORY, SITE = process.env.STATE_REPO || 'ironsilkstrategies/ironsilk-weekly-site';
@@ -38,6 +39,8 @@ globalThis.fetch = async (url, o = {}) => { url = String(url); const m = (o.meth
     return res(200, { events }); }
   if (/api\.telegram\.org/.test(url)) { const meth = url.split('/').pop(); const params = Object.fromEntries(new URLSearchParams(o.body)); R.tgTries = (R.tgTries || 0) + 1;
     if (nums(process.env.MOCK_TG_FAIL).includes(R.tgTries)) return res(429, { ok: false, description: 'Too Many Requests: retry after 5' });
+    if (meth === 'getUpdates') { R.polls = (R.polls || 0) + 1; (R.pollArgs = R.pollArgs || []).push({ ...params, at: R.tg.length }); const U = process.env.MOCK_UPDATES ? JSON.parse(process.env.MOCK_UPDATES) : [];
+      const off = +params.offset || 0; return res(200, { ok: true, result: R.polls >= +(process.env.MOCK_UPDATES_FROM || 1) ? U.filter(u => u.update_id >= off) : [] }); }   /* v2.82 · MOCK_UPDATES: what Telegram holds, from the Nth poll on */
     R.tg.push({ meth, params }); return res(200, { ok: true, result: { message_id: 500 + R.tg.length } }); }
   return res(404, {}); };
 process.on('exit', () => { try { fs.writeFileSync(path.join(DIR, 'out.json'), JSON.stringify({ ...R, final: store[OWN].plain, siteFinal: store[SITE] && store[SITE].plain })); } catch (e) { } });

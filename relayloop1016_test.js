@@ -12,7 +12,7 @@ const card = () => ({ v: 1, lastRun: Date.now() - 10 * 60e3, runs: 7, pubSig: {}
 function run(name, envx, files) { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-' + name + '-'));
   const F = files || { 'init.json': card() }; for (const [f, v] of Object.entries(F)) if (v) fs.writeFileSync(path.join(dir, f), JSON.stringify(v));
   const env = { PATH: process.env.PATH, AUTOPILOT_KEY: KEY, TG_BOT_TOKEN: 't', GITHUB_REPOSITORY: 'o/r', GITHUB_TOKEN: 'g', GITHUB_EVENT_NAME: 'schedule', STATE_REPO: 's/site',
-    RELAY_BUDGET_MS: '1300', RELAY_STEP_MS: '110', RELAY_MARGIN_MS: '40', MOCK_DIR: dir, ...envx };
+    RELAY_BUDGET_MS: '1300', RELAY_STEP_MS: '110', RELAY_MARGIN_MS: '40', LOUNGE: 'off', MOCK_DIR: dir, ...envx };
   const r = spawnSync(process.execPath, ['-r', path.join(W, 'relayloop_mock.cjs'), path.join(W, 'autopilot/worker.mjs')], { env, encoding: 'utf8', timeout: 30000 });
   let o = null; try { o = JSON.parse(fs.readFileSync(path.join(dir, 'out.json'), 'utf8')); } catch (e) { }
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { }
@@ -49,8 +49,8 @@ try {
   if (D.o) T('RELAY=off: posted, but started no next run', results(D.o).length === 1 && D.o.dispatch.length === 0 && D.o.runsAsked === 0 && D.code === 0);
   else T('off run produced output', false, D.log.slice(-400));
   /* 5 · at the cap: no next run */
-  const E = run('cap', { MOCK_RUNS: '150' });
-  if (E.o) T('150 relayed runs today: it stops relaying', E.o.dispatch.length === 0 && E.o.runsAsked === 1 && /relay cap reached/.test(E.log));
+  const E = run('cap', { MOCK_RUNS: '240' });
+  if (E.o) T('240 relayed runs today: it stops relaying', E.o.dispatch.length === 0 && E.o.runsAsked === 1 && /relay cap reached/.test(E.log));
   else T('cap run produced output', false, E.log.slice(-400));
   /* 6 · GitHub down for the whole run: no card read → exit non-zero, no blind relay */
   const F = run('down', { MOCK_FAIL_READS: Array.from({ length: 40 }, (_, i) => i + 1).join(',') });
@@ -99,6 +99,20 @@ try {
   const Q = run('refused', { MOCK_FINAL_FROM: 'COL@BOS:1', MOCK_TG_FAIL: '2' });
   if (Q.o) { const R2 = results(Q.o); T('a refused send retries next pass and lands once', R2.length === 1 && Q.o.final.posts[day].sent.a === 'W' && /sendMessage said Too Many Requests/.test(Q.log), R2.length + ' · ' + Q.log.slice(-300)); }
   else T('refused run produced output', false, Q.log.slice(-400));
+  /* 11 · v2.82 · lounge hours: nothing live, everything graded, but the lounge is open → the relay keeps going */
+  const Lh = run('lounge', { LOUNGE: '0-24', MOCK_FINAL_FROM: 'COL@BOS:1,NYR@PIT:1' });
+  if (Lh.o) T('lounge hours: all graded but the lounge is open → it hands off instead of resting', Lh.o.dispatch.length === 1 && !/the relay rests/.test(Lh.log) && /relay handed off/.test(Lh.log) && /lounge hours 0-24/.test(Lh.log), Lh.log.slice(-300));
+  else T('lounge run produced output', false, Lh.log.slice(-400));
+  /* 12 · v2.82 · a /command typed between passes is answered inside the listening window, saved, and confirmed before the run ends */
+  const cmdCard = card(); cmdCard.posts[day].cmd = { d: day, r: { best: '<b>⭐ Best</b> ⟦m:a⟧COL ML' }, menu: [{ command: 'best', description: 'Best' }] };
+  const ups = [{ update_id: 5, message: { message_id: 9, chat: { id: -100, type: 'supergroup' }, from: { id: 1 }, text: '/best@TheDeskAppBot', date: Math.floor(Date.now() / 1000) } }];
+  const Lp = run('listen', { LOUNGE: '0-24', RELAY_BUDGET_MS: '9000', RELAY_STEP_MS: '4200', RELAY_MARGIN_MS: '300', MOCK_UPDATES: JSON.stringify(ups), MOCK_UPDATES_FROM: '2' }, { 'init.json': cmdCard });
+  if (Lp.o) { const ans = Lp.o.tg.filter(x => x.meth === 'sendMessage' && /⭐ Best/.test(x.params.text)); const P = Lp.o.pollArgs || [];
+    T('listening: the command is answered once, as a reply, between passes', ans.length === 1 && ans[0].params.reply_to_message_id === '9' && P.length >= 3 && +P[1].timeout >= 1, JSON.stringify(P).slice(0, 300) + ' · ' + Lp.log.slice(-300));
+    T('listening: the long-poll waits (timeout ≤ 50 s) instead of spinning', P.filter(x => +x.timeout > 0).every(x => +x.timeout <= 50) && P.length < 12, P.length + ' polls');
+    T('listening: the offset is saved and confirmed before the run ends', Lp.o.final.tgOff === 5 && P.some(x => x.offset === '6' && x.limit === '1') && Lp.code === 0, 'tgOff ' + Lp.o.final.tgOff);
+    T('listening: the menu went to Telegram with the robot\'s own commands', Lp.o.tg.some(x => x.meth === 'setMyCommands' && /"live"/.test(x.params.commands))); }
+  else T('listen run produced output', false, Lp.log.slice(-400));
   /* the mock never ships with the workflow */
   const wf = fs.readFileSync(path.join(W, '.github/workflows/tg-autopilot.yml'), 'utf8'); T('the workflow runs the worker alone (no test double)', !/relayloop_mock/.test(wf));
 } catch (e) { T('harness', false, e.stack); }

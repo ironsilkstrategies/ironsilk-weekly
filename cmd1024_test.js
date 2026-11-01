@@ -15,11 +15,21 @@ setTimeout(async()=>{try{
   T('/judge lists its calls by confidence, official ones marked',/The Judge — top 2 today/.test(C.r.judge)&&/1\. ✅ <b>WPG ML<\/b> -130/.test(C.r.judge)&&/2\. ✅ <b>Under 6\.5/.test(C.r.judge),C.r.judge);
   T('/unanimous lists the picks the whole room agrees on',/WPG ML/.test(C.r.unanimous),C.r.unanimous.slice(0,150));
   T('the / menu goes to Telegram (each command a short description)',C.menu.length>15&&C.menu.every(m=>/^[a-z0-9]+$/.test(m.command)&&m.description.length<=60));
+  /* v2.82 · /why /week /vip /howitworks, the robot's own commands on the menu, the rules and the join link ride along */
+  T('v2.82 · /why explains each Best 3 pick (chance vs price, who\'s on it); /week, /vip, /howitworks answer',!!(C.r.why&&C.r.week&&/Best 3, last 7 days/.test(C.r.week)&&/TheDesk VIP/.test(C.r.vip)&&/How TheDesk works/.test(C.r.howitworks)&&/70%\+/.test(C.r.howitworks)),C.r.why&&C.r.why.slice(0,120));
+  T('v2.82 · the menu has /live /next /why /week /rules /vip /howitworks /status (no duplicates, under 100)',['live','next','why','week','rules','vip','howitworks','status'].every(c=>C.menu.filter(m=>m.command===c).length===1)&&C.menu.length<=100&&new Set(C.menu.map(m=>m.command)).size===C.menu.length);
+  T('v2.82 · /help lists them, says when the robot answers, and tells admins about /warn and /ban',/\/live — /.test(C.r.help)&&/in seconds from 8 AM to midnight CT/.test(C.r.help)&&/\/warn or \/ban/.test(C.r.help)&&!/on its next run/.test(C.r.help)&&C.r.help.length<4000,String(C.r.help.length));
+  T('v2.82 · the join link for the welcome rides along; no custom rules → the robot uses the default six',C.join==='https://t.me/TheDeskApp'&&!C.rules);
+  w.eval(`tgRulesSave('No politics.\\n\\n  Be cool.  ')`);const C2=w.eval('cmdBuild()');
+  T('v2.82 · rules written in Settings go to the robot, one per line, blanks dropped',JSON.stringify(C2.rules)==='["No politics.","Be cool."]'&&JSON.stringify(w.eval("get('d4.tgrules')"))==='["No politics.","Be cool."]');
+  w.eval(`set('d4.sublink','https://whop.com/thedesk')`);T('v2.82 · /vip carries the VIP link once it\'s saved',/whop\.com\/thedesk/.test(w.eval('cmdBuild()').r.vip));
+  T('v2.82 · Settings shows the rules box',/Lounge rules, one per line/.test(w.eval('bcSettingsHtml()'))&&/Be cool\./.test(w.eval('bcSettingsHtml()')));
+  w.eval(`tgRulesSave('')`);
   const P=w.eval(`tgwPayload({d:'${D}',chat:1,ids:[1],ts:1,card:{d:'${D}',best:[],top10:[],chars:[],props:[]}})`);T('the answers ride along with the hand-off to the robot (with /check and today\'s call index)',!!(P.cmd&&P.cmd.r.judge&&P.cmd.r.check&&P.cmd.idx&&P.cmd.idx.calls.length===2&&P.cmd.menu[0].command==='check'));
   /* the robot */
   const Wk=await import(path.join(W,'autopilot/worker.mjs').replace(/^/,'file://')).catch(e=>({err:e}));
   if(Wk.err){T('worker loads',false,String(Wk.err));}else{
-    const sent=[];const tg=async(m,p)=>{if(m==='getUpdates')return{ok:true,result:[{update_id:7,message:{message_id:3,chat:{id:-100},text:'/judge@TheDeskBot'}},{update_id:8,message:{message_id:4,chat:{id:-100},text:'/nope'}}]};sent.push([m,p]);return{ok:true};};
+    const sent=[];const tg=async(m,p)=>{if(m==='getUpdates')return{ok:true,result:[{update_id:7,message:{message_id:3,chat:{id:-100},text:'/judge@TheDeskBot'}},{update_id:8,message:{message_id:4,chat:{id:-100},text:'/nope@TheDeskBot'}}]};sent.push([m,p]);return{ok:true};};
     const st={posts:{[D]:{d:D,chat:-100,cmd:P.cmd,st:{}}}};const n=await Wk.runCommands(st,{tg,now:NOW});T('v2.76.1 · the robot never leaves a group on its own',!sent.some(([m])=>m==='leaveChat'));
     const msgs=sent.filter(x=>x[0]==='sendMessage');
     T('the robot answers /judge in the chat it was asked, as a reply',msgs.length===2&&msgs[0][1].chat_id===-100&&/The Judge/.test(msgs[0][1].text)&&msgs[0][1].reply_to_message_id==='3');

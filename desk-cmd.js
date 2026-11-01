@@ -117,3 +117,40 @@ if(!window.__CMDPROPS__){window.__CMDPROPS__=1;const B2=cmdBuild;cmdBuild=functi
       const dbN=['nba','nhl','nfl','ncaaf','ncaab'].reduce((n,sp)=>{try{return n+Object.keys(pstDb(sp).p||{}).length;}catch(e){return n;}},0);
       o.r.props=L.length?cmdList('🎯 Character prop calls — today',L,c=>`${cmdSp(c.sp)} <b>${cmdE(cpropLine(c))}</b>${cmdE(propWhere(c))} · ${cmdE(charName(c.voice).replace(/^The /,''))} · ${subPct(c.cal)}${c.rec?' · '+cmdE(c.rec):''}`)+'\n<i>None cleared 70% for the official Props of the day, so these are the strongest calls still on the board.</i>'
         :`<b>🎯 Props of the day</b>\nNo character prop call today${dbN?' cleared 65%':''}.${dbN?'':'\n<i>The phone that sent today\'s card had no player game logs loaded — open the NBA / NHL / NFL pages once, then tap 🛰️ Re-send.</i>'}`;}}catch(e){console.warn('props cmd',e);}return o;};}
+/* ══ v2.82 · lounge commands, round 3: /why (why each Best 3 pick made the card), /week, /vip, /howitworks — plus the
+   robot's own /live /next /rules /status on the menu, the lounge rules and the join link for the welcome. The robot now
+   answers in seconds during lounge hours and only inside TheDesk's own chats. ══ */
+function cmdWhyOne(x,i,V){const sp=x.sp;let o=null;try{o=pickConf(x,sp);}catch(e){}let W={why:[]};try{W=msLegWhy({...x,m:x.m||x.market,sd:x.sd||x.side},V);}catch(e){}
+  const pi=x.price!=null&&isFinite(+x.price)?imp(+x.price):null;const p=x.p!=null?+x.p:null;const L=[];
+  L.push(`<b>🧠 Why #${i+1}: ${cmdMk(x)}${cmdE(x.pick)}</b> ${cmdE(cmdSg(x.price))} · ${cmdSp(sp)} ${cmdE(x.game)}${x.start?' · '+cmdT(x.start):''}`);
+  if(p!=null&&pi!=null)L.push(`• Our chance <b>${Math.round(p*100)}%</b> vs the price's ${Math.round(pi*100)}% → <b>${p>=pi?'+':''}${Math.round((p-pi)*100)} pts</b> of edge`);
+  if(o&&(o.who||[]).length)L.push(`• On it: <b>${cmdE(o.who.map(v=>charName(v).replace(/^The /,'')).join(', '))}</b>${o.best?` · lead ${cmdE(charName(o.best).replace(/^The /,''))} at ${Math.round((o.mx||o.cf||0)*100)}%`:''}`);
+  if((W.why||[]).length)L.push('• '+W.why.map(cmdE).join(' · '));
+  return L.join('\n');}
+function cmdWhyAll(){const V=roGet(VOICES_KEY,[],30e3)||[];let best=[];try{best=best5State().top3||[];}catch(e){}const R={};
+  best.slice(0,9).forEach((x,i)=>{try{R['why'+(i+1)]=cmdWhyOne(x,i,V);}catch(e){}});
+  R.why=best.length?best.slice(0,3).map((x,i)=>R['why'+(i+1)]).filter(Boolean).join('\n\n')+'\n\n<i>One pick at a time: /why 2</i>':'<b>🧠 Why</b>\nNo Best 3 today… no play cleared the bar, and we don\'t force picks.';
+  return R;}
+function cmdWeek(){try{const E=get('d4.best5log',{})||{};const d=today();let w=0,l=0,pu=0,u=0;const rows=[];
+    for(let i=7;i>=1;i--){const k=dayShift(d,-i);const L=((E[k]&&E[k].picks)||[]).filter(x=>x&&x.main);if(!L.length)continue;let dw=0,dl=0;
+      L.forEach(x=>{if(x.push){pu++;return;}if(x.hit===true){w++;dw++;const pr=+x.price;u+=pr>0?pr/100:100/Math.abs(pr||110);}else if(x.hit===false){l++;dl++;u-=1;}});
+      rows.push(`${cmdE(new Date(k+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'}))} ${L.map(x=>x.push?'➖':x.hit?'✅':x.hit===false?'❌':'⏳').join('')} ${dw}-${dl}`);}
+    return`<b>📅 The Best 3, last 7 days</b>\n<b>${w}-${l}${pu?'-'+pu:''}</b> · ${u>=0?'+':''}${u.toFixed(2)}u at 1 unit a pick\n`+(rows.length?rows.join('\n'):'No graded days yet.')+'\n<i>/record has the full record and the price check.</i>';}catch(e){return'<b>📅 This week</b>\nNot ready yet.';}}
+function cmdVip(){const link=String(get('d4.sublink','')||'').trim();
+  return`<b>💎 TheDesk VIP</b>\nThe full card every morning: the Best 3, the Top 10, props, every character parlay and the Banker… locked before the games and graded live, right here.`+(link?`\n\nJoin: ${cmdE(link)}`:'\n\nAsk an admin for the VIP link.');}
+const CMD_HOW='<b>🧠 How TheDesk works</b>\n• A room of AI characters reads every game, each with its own school: sharp money, form, matchups, prices.\n• A call is <b>official</b> only at 70%+ calibrated confidence, at a price that pays.\n• The <b>Best 3</b> are the strongest official calls of the day, locked at the morning evaluation and never changed.\n• Every pick is posted before its game and graded at the final… wins and losses, in the open.\n• The public channel gets each Best 3 pick 30 minutes before its game. VIP gets the whole card in the morning.\n<i>/help lists every command.</i>';
+if(!window.__CMD82__){window.__CMD82__=1;const B3=cmdBuild;cmdBuild=function(){const o=B3();try{const R=o.r;Object.assign(R,cmdWhyAll());R.week=cmdWeek();R.vip=cmdVip();R.howitworks=CMD_HOW;
+    const rules=(get('d4.tgrules',[])||[]).filter(x=>typeof x==='string'&&x.trim());if(rules.length)o.rules=rules.slice(0,15);
+    o.join=(typeof THEDESK_SOCIAL!=='undefined'&&THEDESK_SOCIAL.tg)||'https://t.me/TheDeskApp';
+    const at=(after,add)=>{const i=o.menu.findIndex(x=>x.command===after);o.menu.splice(i<0?o.menu.length:i+1,0,...add.filter(([c])=>!o.menu.some(x=>x.command===c)).map(([command,description])=>({command,description})));};
+    at('top10',[['live','Live scores of today\'s picks'],['next','The next game on the card'],['why','Why the Best 3 made the card (/why 2)']]);
+    at('results',[['week','The Best 3, last 7 days']]);
+    at('challenges',[['rules','The lounge rules'],['vip','Join TheDesk VIP'],['howitworks','How TheDesk works'],['status','Is the robot on?']]);
+    o.menu=o.menu.slice(0,100);
+    R.help=`<b>🤖 TheDesk commands</b>, tap one:\n`+o.menu.map(m=>`/${m.command} — ${cmdE(m.description)}`).join('\n')+'\n<i>The robot answers in seconds from 8 AM to midnight CT (overnight, when it next wakes). Admins: reply to a message with /warn or /ban.</i>';
+    R.start=R.help;R.menu=R.help;}catch(e){console.warn('v2.82 cmds',e);}return o;};}
+/* v2.82 · opening the app in lounge hours wakes the robot (at most every 2 hours per device), so /commands answer in seconds */
+if(typeof window!=='undefined'&&!window.__TGWAKE__){window.__TGWAKE__=1;setTimeout(()=>{try{if(window.__NO_GRADELOOP__||(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)||typeof tgwOn!=='function'||!tgwOn())return;
+    const h=+new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',hour:'numeric',hourCycle:'h23'}).format(new Date())%24;if(h<8)return;
+    let last=0;try{last=+localStorage.getItem('d4.tgwake')||0;}catch(e){}if(Date.now()-last<2*36e5)return;try{localStorage.setItem('d4.tgwake',String(Date.now()));}catch(e){}
+    tgwRunNow().catch(()=>{});}catch(e){}},25e3);}

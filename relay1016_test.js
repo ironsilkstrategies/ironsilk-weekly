@@ -4,7 +4,7 @@
 const path=require('path');const W='/home/claude/work';
 const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d:''}`);
 (async()=>{try{
-  process.env.AUTOPILOT_KEY='k';process.env.TG_BOT_TOKEN='t';process.env.GITHUB_REPOSITORY='o/r';process.env.GITHUB_TOKEN='g';
+  process.env.LOUNGE='off';process.env.AUTOPILOT_KEY='k';process.env.TG_BOT_TOKEN='t';process.env.GITHUB_REPOSITORY='o/r';process.env.GITHUB_TOKEN='g';
   const Wk=await import(path.join(W,'autopilot/worker.mjs'));
   const now=Date.parse('2026-10-16T23:40:00Z');   /* 6:40 PM CT Friday */
   const day=Wk.chicagoDay(now);
@@ -23,7 +23,7 @@ const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d
   const calls=[];let RUNS=12;const fetch=(u,o)=>{if(/\/runs\?/.test(u))return Promise.resolve({status:200,json:()=>Promise.resolve({total_count:RUNS})});if(/\/repos\/o\/r$/.test(u))return Promise.resolve({status:200,json:()=>Promise.resolve({private:false})});calls.push({u,o});return Promise.resolve({status:204});};
   const ok=await Wk.relayNext({relay:{d:day,n:3}},{fetch,now});
   T('hand-off = one workflow dispatch on this repo',ok&&calls.length===1&&/\/repos\/o\/r\/actions\/workflows\/tg-autopilot\.yml\/dispatches$/.test(calls[0].u)&&calls[0].o.method==='POST'&&JSON.parse(calls[0].o.body).ref,calls[0]&&calls[0].u);
-  RUNS=150;const capped=await Wk.relayNext({},{fetch,now});T('capped at 150 relayed runs a day (counted from GitHub, nothing extra written)',capped===false&&calls.length===1);
+  RUNS=240;const capped=await Wk.relayNext({},{fetch,now});T('v2.82 · capped at 240 relayed runs a day (lounge hours fit) (counted from GitHub, nothing extra written)',capped===false&&calls.length===1);
   RUNS=3;const fresh=await Wk.relayNext({},{fetch,now});T('under the cap it hands off again',fresh===true&&calls.length===2);
   const wsrc=require('fs').readFileSync(path.join(W,'autopilot/worker.mjs'),'utf8');T('the state branch only gets a commit when something was sent (or an hourly heartbeat)',/if \(acted \|\| beat/.test(wsrc)&&/60 \* 60e3/.test(wsrc));
   /* merges keep the counter */

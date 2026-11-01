@@ -2,6 +2,7 @@ name: Telegram autopilot
 on:
   schedule:
     - cron: '*/10 * * * *'
+    - cron: '7 13,14 * * *'   # v2.82 · wake for lounge hours (8:07 AM Central in summer and in winter)
   workflow_dispatch:
   push:
     branches: [main]
@@ -29,3 +30,4 @@ jobs:
           AUTOPILOT_KEY: ${{ secrets.AUTOPILOT_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELAY: ${{ vars.RELAY }}   # set the repo variable RELAY=off to stop the live-slate relay
+          LOUNGE: ${{ vars.LOUNGE }}   # v2.82 · lounge hours, Central: "8-24" when unset, "0-24" round the clock, "off" = game time only
