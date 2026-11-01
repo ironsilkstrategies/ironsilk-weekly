@@ -677,6 +677,18 @@ function subTop10(){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];let bes
     if(laneStatus(pickLane(x,sp))==='blocked'||pickDisagrees(x,sp))return;const o=pickConf(x,sp)||ruleFloorAdmit(x,sp);if(!o)return;const p=o.cf;const ev=(p*americanToDecimal(+amerOk(x.price))-1)*100;if(ev<0)return;
     if(best.includes(deskKey({...x,m:mkNorm(x.m)})))return;out.push({...x,p,ev,cf:p,play:true,fit:pickFit(x,sp,o,R),confBy:o.who,...(o.tuned?{tuned:true}:{})});});});
   const seen=new Set();return out.sort((a,b)=>b.fit-a.fit||b.ev-a.ev).filter(x=>{const k=x.sp+'|'+x.game+'|'+x.m;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,Math.max(0,10-best.length));}
+/* v2.82.1 · when the rest of the Top 10 comes up empty, why — counted, never named (the same tests as subTop10, first one that fails) */
+function subTop10Why(){const T=get(TC_KEY,{})||{};const W={n:0,best:0,started:0,price:0,flag:0,lane:0,market:0,off:0,ev:0,sports:[]};if(T.d!==today())return W;
+  let best=[];try{best=(best5State().top3||[]).map(x=>deskKey({...x,m:mkNorm(x.m||x.market)}));}catch(e){}
+  Object.entries(T.by||{}).forEach(([sp,B])=>{if(typeof sportOn==='function'&&!sportOn(sp))return;const P=(B.picks||[]).filter(x=>tcIsToday({...x,sp:x.sp||sp}));if(P.length)W.sports.push(sp);
+    P.forEach(x0=>{const x={...x0,sp:x0.sp||sp};W.n++;
+      if(best.includes(deskKey({...x,m:mkNorm(x.m)}))){W.best++;return;}if(best5Started(x)){W.started++;return;}
+      if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR||+x.price>400){W.price++;return;}if(x.incoherent||x.suspect){W.flag++;return;}
+      let bl=false;try{bl=laneStatus(pickLane(x,sp))==='blocked';}catch(e){}if(bl){W.lane++;return;}
+      let dis=false;try{dis=pickDisagrees(x,sp);}catch(e){}if(dis){W.market++;return;}
+      let o=null;try{o=pickConf(x,sp)||ruleFloorAdmit(x,sp);}catch(e){}if(!o){W.off++;return;}
+      if((o.cf*americanToDecimal(+amerOk(x.price))-1)*100<0){W.ev++;return;}});});
+  return W;}
 /* Today's "Official" filter: the 70% rule + the price + the flags. Frozen at the master evaluation. */
 function tfPlayable(x,sp){if(x&&x.fz)return!!x.fz.play;try{if(x.incoherent||x.suspect)return false;if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR)return false;
     if(laneStatus(pickLane(x,sp))==='blocked')return false;if(pickDisagrees(x,sp))return false;const o=pickConf(x,sp);if(!o)return false;return o.cf*americanToDecimal(+amerOk(x.price))-1>=0;}catch(e){return false;}}
@@ -1053,7 +1065,7 @@ function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦
 const FREEZE_KEY='d4.freeze';let DESK_EVAL_BUSY=false;
 const DESK_BG_EVAL=typeof location!=='undefined'&&/[?&]bg=1/.test(location.search||'')&&/[?&]eval=1/.test(location.search||'');
 function deskFrozen(d){const F=roGet(FREEZE_KEY,null,3e3);return!!(F&&F.d===(d||today()));}
-function evalRanToday(){if(deskFrozen())return true;if(DESK_EVAL_BUSY||DESK_BG_EVAL)return false;const d=today();const E=roGet(LS_EVAL,{},10e3)||{};if(E.date===d)return true;
+function evalRanToday(){if(deskFrozen())return true;if(DESK_EVAL_BUSY||DESK_BG_EVAL)return false;try{const C=evalChainNext();if(C&&C.mode!=='load')return false;}catch(e){}   /* v2.82.1 · mid-relay the evaluation hasn't run yet: Nov 1 the Best 3 locked at 8:18 with one sport read, before NFL */const d=today();const E=roGet(LS_EVAL,{},10e3)||{};if(E.date===d)return true;
   const L=roGet(EVAL_LOCK_KEY,{},10e3)||{};return L.date===d&&Object.keys(L.by||{}).length>0;}
 /* one sport's evaluation, without touching the screen */
 function deskRunSportEval(sp){
@@ -1065,10 +1077,16 @@ function deskRunSportEval(sp){
   if(sp==='nba'||sp==='ncaab'){if(typeof runBasketballEval!=='function')return false;runBasketballEval(sp);return true;}
   return false;}
 /* the hidden frame: once its board is ready, evaluate and say so */
+/* v2.82.1 · …and the page puts its own board on today's card when the board is up (games in, sims done or 15 s), instead of
+   waiting for a paint hook that can miss on a relay page — then once more right before it evaluates, like the home page does */
+function tcKickBoard(sp,t0){try{const g=(sportGames(sp)||[]).length;if(!g||Date.now()-t0<3000)return false;const k=window.__TC_KICK||0;if(k&&k>=(window.__FB_WEEK_DONE||0))return false;
+  let sims=0;try{sims=Object.keys(sportSims(sp)||{}).length;}catch(e){}if(!(sims>=g||sp==='nhl'||Date.now()-t0>15000))return false;
+  window.__TC_KICK=Date.now();todaySnapshot(true);return true;}catch(e){return false;}}
 if(DESK_BG_EVAL&&typeof window!=='undefined')window.addEventListener('load',()=>{const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;const t0=Date.now();
   const iv=setInterval(()=>{let ready=false;try{const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<40000)return;   /* v2.81.5 · the football week is still loading */
-    const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[sp];ready=!!(B&&B.ts>=Math.max(t0-1000,window.__FB_WEEK_DONE||0))||(sportGames(sp)||[]).length===0&&Date.now()-t0>8000;}catch(e){}
-    if(!ready&&Date.now()-t0<40000)return;clearInterval(iv);let ok=false,err='';try{ok=deskRunSportEval(sp);}catch(e){err=String(e&&e.message||e);}
+    const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[sp];ready=!!(B&&B.ts>=Math.max(t0-1000,window.__FB_WEEK_DONE||0))||(sportGames(sp)||[]).length===0&&Date.now()-t0>8000;
+    if(!ready&&tcKickBoard(sp,t0))return;}catch(e){}
+    if(!ready&&Date.now()-t0<40000)return;clearInterval(iv);let ok=false,err='';try{if((sportGames(sp)||[]).length)todaySnapshot(true);}catch(e){}try{ok=deskRunSportEval(sp);}catch(e){err=String(e&&e.message||e);}
     set('d4.bgeval.'+sp,{ts:Date.now(),ok,err,d:today()});},700);});
 function deskSay(h){try{document.querySelectorAll('.deskStatus').forEach(e=>e.innerHTML=h);}catch(e){}}
 async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confirm('Today is already frozen. Run the evaluations again? (Nothing frozen will change — only the eval reports refresh.)'))return;
@@ -1123,7 +1141,7 @@ if(EVAL_CHAIN_HOP&&typeof document!=='undefined')document.addEventListener('DOMC
 if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;const t0=Date.now();const iv=setInterval(()=>{const C0=evalChainNext();const ld=C0&&C0.mode==='load';const me=window.__PAGE_SPORT__||sp0;
   let ok=false,ready=false;
   if(ld){const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<45000)return;   /* v2.81.5 · wait for the football week */
-    const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[me];ready=!!(B&&B.ts>=Math.max(t0,window.__FB_WEEK_DONE||0));ok=ready;if(!ready&&Date.now()-t0<45000)return;}   /* the board is on Today's card */
+    const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[me];ready=!!(B&&B.ts>=Math.max(t0,window.__FB_WEEK_DONE||0));ok=ready;if(!ready&&tcKickBoard(me,t0))return;if(!ready&&Date.now()-t0<45000)return;}   /* the board is on Today's card */
   else{const R=get('d4.bgeval.'+me,null);ready=!!(R&&R.ts>=t0);ok=ready&&!!R.ok;if(!ready&&Date.now()-t0<65000)return;}
   clearInterval(iv);const C=evalChainNext();if(!C)return;const sp=C.todo.shift();
   if(ok)C.done.push(sp);else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
@@ -1391,6 +1409,7 @@ const DESK_CSS=`
 .ps-card .ps-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.ps-step{display:flex;gap:6px;align-items:flex-start;padding:6px;border-radius:10px;background:rgba(255,255,255,.025);font-size:11px;line-height:1.3}
 .ps-step .mono{font-size:9px;color:var(--mute)}.ps-n{flex:none;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;background:var(--rule);color:var(--mute)}
 .ps-step.ok .ps-n{background:var(--win);color:#06120a}@media(max-width:560px){.ps-card .ps-row{grid-template-columns:1fr 1fr}}
+.ps-card .bar{flex-wrap:wrap}.ps-card .bar button{flex:1 1 calc(50% - 6px);min-width:0}.ps-card .bar button.primary{flex-basis:100%}   /* v2.82.1 · seven buttons in one row ran off a phone screen: the main action gets its own row, the tools two by two */
 .today-best .tb-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--rule)}.tb-n{font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold);width:20px;text-align:center}.tb-p{font-family:'Archivo';font-weight:900;font-size:18px}
 .desk-modal{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
 .desk-sheet{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--hair);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:var(--sh-lg)}

@@ -141,6 +141,7 @@ html.th .trow.agree,html.th .trow.conflict{background:var(--panel2)}
 
 /* ── controls ── */
 html.th :where(button){font-family:"Barlow",sans-serif;font-weight:600;border-radius:8px;background:var(--panel2);border:1px solid var(--rule)}
+html.th .bar{flex-wrap:wrap}   /* v2.82.1 · the bigger condensed type made long button rows run off a phone screen: they wrap instead */
 html.th .bar button{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:14px;letter-spacing:.04em;border-radius:8px;
   background:var(--panel2);border:1px solid var(--rule);color:var(--chalk);box-shadow:none}
 html.th .bar button:hover{transform:none;border-color:#3a3a3a}

@@ -139,7 +139,13 @@ function cmdWeek(){try{const E=get('d4.best5log',{})||{};const d=today();let w=0
 function cmdVip(){const link=String(get('d4.sublink','')||'').trim();
   return`<b>💎 TheDesk VIP</b>\nThe full card every morning: the Best 3, the Top 10, props, every character parlay and the Banker… locked before the games and graded live, right here.`+(link?`\n\nJoin: ${cmdE(link)}`:'\n\nAsk an admin for the VIP link.');}
 const CMD_HOW='<b>🧠 How TheDesk works</b>\n• A room of AI characters reads every game, each with its own school: sharp money, form, matchups, prices.\n• A call is <b>official</b> only at 70%+ calibrated confidence, at a price that pays.\n• The <b>Best 3</b> are the strongest official calls of the day, locked at the morning evaluation and never changed.\n• Every pick is posted before its game and graded at the final… wins and losses, in the open.\n• The public channel gets each Best 3 pick 30 minutes before its game. VIP gets the whole card in the morning.\n<i>/help lists every command.</i>';
+/* v2.82.1 · an empty "rest of the Top 10" says why, in counts, and which sports are on today's card (Nov 1 it said only
+   "Nothing yet today." — the reason was a full NFL slate that never reached the card) */
+function cmdTop10Empty(){let W=null;try{W=subTop10Why();}catch(e){}if(!W||!W.n)return'<b>🔟 The rest of the Top 10</b>\nToday\'s card isn\'t built yet.';
+  const parts=[[W.best,'in the Best 3'],[W.off,'no character at its official bar'],[W.flag,'held for a suspect line'],[W.market,'fight the market too hard'],[W.lane,'in a blocked lane'],[W.price,'priced out'],[W.ev,'no value at the price'],[W.started,'already started']].filter(([n])=>n>0).map(([n,t])=>`${n} ${t}`);
+  return`<b>🔟 The rest of the Top 10</b>\nNo other pick qualified today. Of ${W.n} on today's card: ${parts.join(' · ')}.\nOn today's card: ${W.sports.map(sp=>SP_LAB[sp]||sp).join(' · ')||'nothing yet'}\n<i>We don't force picks. /why explains the Best 3.</i>`;}
 if(!window.__CMD82__){window.__CMD82__=1;const B3=cmdBuild;cmdBuild=function(){const o=B3();try{const R=o.r;Object.assign(R,cmdWhyAll());R.week=cmdWeek();R.vip=cmdVip();R.howitworks=CMD_HOW;
+    {let t10=[];try{t10=subTop10();}catch(e){}if(!t10.length)R.top10=cmdTop10Empty();}
     const rules=(get('d4.tgrules',[])||[]).filter(x=>typeof x==='string'&&x.trim());if(rules.length)o.rules=rules.slice(0,15);
     o.join=(typeof THEDESK_SOCIAL!=='undefined'&&THEDESK_SOCIAL.tg)||'https://t.me/TheDeskApp';
     const at=(after,add)=>{const i=o.menu.findIndex(x=>x.command===after);o.menu.splice(i<0?o.menu.length:i+1,0,...add.filter(([c])=>!o.menu.some(x=>x.command===c)).map(([command,description])=>({command,description})));};

@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261101a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261101b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17696,8 +17696,10 @@ function todayProps(sp){
 /* Today's snapshot per sport — each board refreshes its own sport when it
    renders, so the Today tab shows every sport from any page. Only today is
    kept, so it never grows. */
-let TC_T=null;
-function todaySnapshotSoon(){clearTimeout(TC_T);TC_T=setTimeout(todaySnapshot,1200);}
+let TC_T=null,TC_FIRST=0;
+/* v2.82.1 · debounced, but never starved: a board that keeps repainting (sims landing one by one) still gets on today's
+   card within 6 seconds of its first change — on Nov 1 the NFL board repainted through the whole relay and never made it */
+function todaySnapshotSoon(){const now=Date.now();if(!TC_FIRST)TC_FIRST=now;clearTimeout(TC_T);TC_T=setTimeout(()=>{TC_FIRST=0;todaySnapshot();},now-TC_FIRST>=6000?0:1200);}
 /* RETIRED in v1.99 — Brain and Blend now call every game through characterCalls
    (metaCalls) and lock like the rest. Kept only so older 70%+ entries read the same. */
 function voiceLog70(sp,picks,d){const V=get(VOICES_KEY,[]);const have=new Set(V.map(x=>x.id));let n=0;
@@ -18951,11 +18953,17 @@ function dailyLoopInject(){
       d.innerHTML='<div class="sbar" style="margin-top:0"><h2>Storage</h2><div class="ln"></div></div><div id="storageMeter"></div>';setv.appendChild(d);}
     navTidy();try{storageTidy()}catch(e){}
     const n=document.getElementById('nMine');if(n){const c=new Set(mgPending().map(x=>x.sp+x.l.game)).size;n.textContent=c||'';}
-    ['render','renderNFL','renderNCAAF','renderNHL','renderNBA'].forEach(fn=>{const f=window[fn];if(typeof f!=='function'||f.__tc)return;
-      const w=function(){const r=f.apply(this,arguments);try{todaySnapshotSoon()}catch(e){}return r;};w.__tc=1;window[fn]=w;});
+    tcWrapRenders();
   }catch(e){console.warn('daily loop inject',e);}
 }
-if(typeof document!=='undefined'){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',dailyLoopInject);else setTimeout(dailyLoopInject,0);}
+/* every board's paint puts it on today's card. v2.82.1 · the engines (football, hockey, basketball) load AFTER this file, so
+   the hook is set again once every script is in — before, a page whose engine loaded late never got it, and in the master
+   evaluation's relay that sport never reached the card (Nov 1: no NFL on a full Sunday) */
+function tcWrapRenders(){['render','renderNFL','renderNCAAF','renderNHL','renderNBA'].forEach(fn=>{const f=window[fn];if(typeof f!=='function'||f.__tc)return;
+  const w=function(){const r=f.apply(this,arguments);try{todaySnapshotSoon()}catch(e){}return r;};w.__tc=1;window[fn]=w;});}
+if(typeof document!=='undefined'){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',dailyLoopInject);else setTimeout(dailyLoopInject,0);
+  document.addEventListener('DOMContentLoaded',()=>{try{tcWrapRenders();}catch(e){}});window.addEventListener('load',()=>{try{tcWrapRenders();}catch(e){}});
+  [800,2500,6000].forEach(t=>setTimeout(()=>{try{tcWrapRenders();}catch(e){}},t));}
 
 /* ══ RECORDS HUB · NAVIGATION · STORAGE ══════════════════════════════════════ */
 const HUB_VOICES=['Sim','Brain','Blend','Best','Judge','Coach','Most common','Pred','Trends','Consensus','Books'];
