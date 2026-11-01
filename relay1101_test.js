@@ -60,6 +60,15 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   T('a background page waits up to 20 s for the big store before running without it',/\[\?&\]bg=1\/\.test\(location\.search\|\|''\)\?20000:6000/.test(sj));
   T('the Book, the freeze, the Best 3 and the end of the relay all read the healed card',/tcHeal\(\):get\(TC_KEY,\{\}\)\)\|\|\{\};/.test(fs.readFileSync(path.join(W,'desk-book.js'),'utf8'))&&/function tcFreeze\(\)\{const T=\(typeof tcHeal==='function'\?tcHeal\(false\)/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8'))&&/if\(!S\.locked\)\{try\{tcHeal\(\);\}catch\(e\)\{\}const b=best5Build\(\);/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8')));
   h.close();
+  /* ── v2.82.4 · step 3 says where the day stands ── */
+  const u=page('nba.html');await sleep(2500);
+  u.eval(`localStorage.removeItem('d4.freeze');localStorage.removeItem('d4.evalready');`);
+  T('step 3 before the evaluation: not yet',/not yet — freezes everything/.test(u.eval('deskProcessHtml()')));
+  u.eval(`set('d4.evalready',{d:today(),ts:Date.now(),done:['nba'],miss:[]});localStorage.removeItem('d4.freeze');`);
+  const ph=u.eval('deskProcessHtml()');
+  T('evaluated, not frozen: step 3 says it\'s waiting for your OK (gold, not a failure)',/✓ evaluated [^<]* — waiting for your OK/.test(ph)&&/ps-step half/.test(ph),ph.match(/Master evaluation[\s\S]{0,120}/)&&ph.match(/Master evaluation[\s\S]{0,120}/)[0]);
+  u.eval(`set('d4.freeze',{d:today(),ts:Date.now(),why:'test'})`);T('frozen: step 3 lit with the time',/🔒 frozen /.test(u.eval('deskProcessHtml()'))&&/ps-step ok/.test(u.eval('deskProcessHtml()')));
+  u.close();
   /* ── a relay page puts its own board on the card, then evaluates ── */
   const c=page('cfb.html','?bg=1&eval=1&chain=1&v=1',x=>{x.localStorage.setItem('d4.evalchain',JSON.stringify({ts:Date.parse(NOW),d:'2026-10-31',todo:['ncaaf','nhl'],done:['nba'],miss:[],back:'nba.html'}));
     x.localStorage.setItem('d4.todaycard',JSON.stringify({d:'2026-10-31',by:{nba:{ts:Date.parse(NOW)-60e3,picks:[],props:[]}}}));});

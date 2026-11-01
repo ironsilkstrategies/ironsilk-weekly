@@ -1173,12 +1173,15 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
   let intake=0;try{intake=(getExt()[d]||[]).length+(get(LS.exttrends,{})[d]||[]).length+(get(LS.extconsensus,{})[d]||[]).length;}catch(e){}
   let odds=0;try{const T=get(TC_KEY,{})||{};odds=T.d===d?Object.values(T.by||{}).reduce((a,B)=>a+(B.picks||[]).filter(x=>x.price!=null).length,0):0;}catch(e){}
   const F=get(FREEZE_KEY,null);const fz=F&&F.d===d;let pub=null;try{pub=get('d4.pubstate',null);}catch(e){}const posted=get('d4.tgposted',null);
-  const step=(n,ok,t,s)=>`<div class="ps-step ${ok?'ok':''}"><div class="ps-n">${ok?'✓':n}</div><div><b>${t}</b><div class="mono">${s}</div></div></div>`;
+  const step=(n,ok,t,s,half)=>`<div class="ps-step ${ok?'ok':half?'half':''}"><div class="ps-n">${ok?'✓':half?'…':n}</div><div><b>${t}</b><div class="mono">${s}</div></div></div>`;
+  /* v2.82.4 · step 3 says where the day stands: evaluated and waiting for your OK, held by the Book, or frozen (Nov 1: "no light"
+     after a finished evaluation read as a failure — the light only comes on at the freeze, which waits for you) */
+  let held=null;try{held=!fz&&typeof bookHold==='function'?bookHold(d):null;}catch(e){}const ER=(()=>{try{return deskEvalReady()?get('d4.evalready',null):null;}catch(e){return null;}})();
   let night='';try{night=typeof slateBannerHtml==='function'?slateBannerHtml():'';}catch(e){}
   return`${night}<div class="tkt ps-card"><div class="ps-row">
     ${step(1,cal&&Date.now()-cal<18*36e5,'Grade & calibrate',cal?'last '+deskT(cal):'runs when the app opens')}
     ${step(2,intake>0||odds>0,'Intake',`${odds} priced pick${odds===1?'':'s'}${intake?' · '+intake+' outside reads':''}`)}
-    ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):'not yet — freezes everything')}
+    ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):held?'⏳ held by the Book — see below':ER?'✓ evaluated '+deskT(ER.ts)+' — waiting for your OK':'not yet — freezes everything',!fz&&(held||ER))}
     ${step(4,fz&&pub&&pub.d===d&&pub.ok,'Published',fz?((pub&&pub.d===d&&pub.ok?'page ✓':'page …')+' · '+(posted&&posted.d===d?'VIP ✓':'VIP …')):'after the freeze')}</div>
     ${fz?'':`<label class="sub" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" ${deskReviewOn()?'checked':''} onchange="set('d4.reviewFreeze',this.checked);deskRerender()"> Let me review the picks before freezing</label>${deskEvalReady()?`<div class="sub" style="color:var(--gold);margin-top:4px">✓ Every sport evaluated — check the Best card below, then freeze. Nothing posts until you do.</div>`:''}`}
     <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="vipCardPhotos(this)">📸 VIP card → photos</button><button onclick="fbpOpen()">📣 Facebook post</button><button onclick="genOpen()">🧬 Bloodlines</button><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
@@ -1410,6 +1413,7 @@ const DESK_CSS=`
 .ps-card .ps-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.ps-step{display:flex;gap:6px;align-items:flex-start;padding:6px;border-radius:10px;background:rgba(255,255,255,.025);font-size:11px;line-height:1.3}
 .ps-step .mono{font-size:9px;color:var(--mute)}.ps-n{flex:none;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;background:var(--rule);color:var(--mute)}
 .ps-step.ok .ps-n{background:var(--win);color:#06120a}@media(max-width:560px){.ps-card .ps-row{grid-template-columns:1fr 1fr}}
+.ps-step.half .ps-n{background:var(--gold);color:#000}.ps-step.half .mono{color:var(--gold)}.ps-card .deskStatus{font-size:12px!important;color:var(--gold)}   /* v2.82.4 · evaluated, waiting for your OK; the freeze's progress line readable */
 .ps-card .bar{flex-wrap:wrap}.ps-card .bar button{flex:1 1 calc(50% - 6px);min-width:0}.ps-card .bar button.primary{flex-basis:100%}   /* v2.82.1 · seven buttons in one row ran off a phone screen: the main action gets its own row, the tools two by two */
 .today-best .tb-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--rule)}.tb-n{font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold);width:20px;text-align:center}.tb-p{font-family:'Archivo';font-weight:900;font-size:18px}
 .desk-modal{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
