@@ -290,13 +290,51 @@ function renderNFL(){
      overwrite whatever board the user is actually looking at. */
   document.getElementById('nG').textContent=NFL_GAMES.length;
   if(ACTIVE_SPORT!=='nfl')return;
+  /* v2.83.1 · TIME SLOTS, like the CFB board: the week splits into kickoff windows (Sunday morning / early / late / SNF,
+     TNF, MNF, Saturday) plus Live Now and My Lines. Only the chosen window's cards are on the page — 14 full cards with
+     props at once made the page heavy and the phone cut it off mid-scroll. Sims still run for every game above. */
+  const slates=nflBuildSlates([...scheduled,...final]);const wk=String(season)+'-'+String(week);
+  if(NFL_SLATE_WEEK!==wk){NFL_SLATE_WEEK=wk;NFL_SLATE=null;}
+  if(!NFL_SLATE||!slates.some(x=>x.key===NFL_SLATE))NFL_SLATE=ncaafDefaultSlate(slates);
+  const cur=slates.find(x=>x.key===NFL_SLATE)||slates[0];const games=cur?cur.games:[];
+  /* a repaint from the live-score poller while you're scrolling waits until you stop (it used to yank the page) */
+  if(fbScrollBusy()){clearTimeout(NFL_DEFER);NFL_DEFER=setTimeout(()=>{try{renderNFL();}catch(e){}},1600);return;}
   let h=weekNav;
+  h+=fbSlateChips(slates,NFL_SLATE,'nflPickSlate');
   h+=`<div class="bar" style="margin:-4px 0 10px"><button onclick="refreshNFLLiveScores()">↻ Refresh scores</button></div>`;
-  if(scheduled.length)h+=sbar('Upcoming / Live',scheduled.length)+scheduled.map(nflCardWithProps).join('');
-  if(final.length)h+=sbar('Final',final.length)+final.map(nflCardWithProps).join('');
+  h+=`<div id="nflSlateBody">`;
+  const lv=games.filter(ncaafIsLive),fn=games.filter(ncaafIsFinal),up=games.filter(g=>!ncaafIsLive(g)&&!ncaafIsFinal(g));
+  [['Live',lv],['Upcoming',up],['Final',fn]].forEach(([t,arr])=>{if(arr.length)h+=sbar(t,arr.length)+arr.map(nflCardWithProps).join('');});
+  if(!games.length)h+='<div class="empty">No games in this window.</div>';
+  h+=`</div>`;
   try{h=nflRankingsBlock()+h;}catch(err){}
-  el.innerHTML=h;
+  fbPaintKeepScroll(el,h);
 }
+let NFL_SLATE=null,NFL_SLATE_WEEK=null,NFL_DEFER=null;
+/* NFL kickoff windows, Central time */
+function nflWindowOf(g){const k=ncaafKickParts(g);if(!k)return{key:'tbd',label:'TBD',order:99999};
+  const dayOrder={Thu:0,Fri:1,Sat:2,Sun:3,Mon:4,Tue:5,Wed:6};const base=(dayOrder[k.day]!=null?dayOrder[k.day]:7)*10000;
+  if(k.day==='Sun'){if(k.mins<11*60)return{key:'sun-am',label:'Morning',order:base+1};if(k.mins<14*60)return{key:'sun-early',label:'Early',order:base+2};
+    if(k.mins<18*60)return{key:'sun-late',label:'Late',order:base+3};return{key:'sun-night',label:'SNF',order:base+4};}
+  return{key:'d-'+k.date,label:k.day==='Mon'?'MNF':k.day==='Thu'?'TNF':k.day,order:base};}
+function nflBuildSlates(games){const map={};games.forEach(g=>{const w=nflWindowOf(g);(map[w.key]||(map[w.key]={key:w.key,label:w.label,order:w.order,games:[]})).games.push(g);});
+  const out=Object.values(map).sort((a,b)=>a.order-b.order);
+  out.forEach(x=>{x.live=x.games.some(ncaafIsLive);x.done=x.games.every(ncaafIsFinal);x.games.sort((a,b)=>(new Date(a.date)-new Date(b.date))||((ncaafIsLive(b)?1:0)-(ncaafIsLive(a)?1:0)));});
+  let withLines=[];try{withLines=games.filter(g=>nflBookLinesFor(g.away.abbr+'@'+g.home.abbr).length);}catch(e){}
+  if(withLines.length&&withLines.length<games.length)out.unshift({key:'lines',label:'My Lines',order:-2,games:withLines,live:withLines.some(ncaafIsLive),done:withLines.every(ncaafIsFinal)});
+  const live=games.filter(ncaafIsLive);if(live.length)out.unshift({key:'live',label:'Live Now',order:-3,games:live,live:true,done:false});
+  return out;}
+function nflPickSlate(key){NFL_SLATE=key;try{TK_TAP_T=Date.now();}catch(e){}renderNFL();const b=document.getElementById('nflSlateBody');if(b&&b.scrollIntoView)try{b.scrollIntoView({block:'start',behavior:'smooth'})}catch(e){}}
+/* the slot chips, shared by both football boards */
+function fbSlateChips(slates,curKey,fn){const chip=x=>{const on=x.key===curKey;const n=x.games.length;
+    return`<button onclick="${fn}('${x.key}')" style="flex:0 0 auto;min-width:74px;padding:7px 10px;border-radius:9px;cursor:pointer;border:1px solid ${on?'var(--gold)':'var(--rule)'};background:${on?'var(--gold)':'var(--panel2)'};color:${on?'#000':'var(--chalk)'};font-weight:800;font-size:12px;line-height:1.2;text-align:center">${x.label}
+      <div style="font-family:'IBM Plex Mono';font-size:9.5px;font-weight:600;opacity:.8">${n} game${n===1?'':'s'}${x.live?' · <span style="color:'+(on?'#000':'var(--rust)')+'">●LIVE</span>':x.done?' · final':''}</div></button>`;};
+  return`<div style="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 10px;scrollbar-width:none">${slates.map(chip).join('')}</div>`;}
+/* v2.83.1 · are you scrolling? (a background repaint waits) */
+function fbScrollBusy(){try{return Date.now()-TK_SCROLL_T<1500&&TK_SCROLL_T>TK_TAP_T;}catch(e){return false;}}
+/* repaint a board without the page jumping: hold its height until the new content settles (unless you just tapped) */
+function fbPaintKeepScroll(el,h){let tapped=false;try{tapped=Date.now()-TK_TAP_T<1200;}catch(e){}const h0=tapped?0:el.offsetHeight;if(h0)el.style.minHeight=h0+'px';
+  el.innerHTML=h;if(h0)setTimeout(()=>{try{el.style.minHeight='';}catch(e){}},1500);}
 
 /* ── NFL LIVE SCORE REFRESH ────────────────────────────────────────────────
    Same fix as the CFB poller, same two root causes: (1) the refresh trigger
@@ -3502,9 +3540,11 @@ function renderNCAAF(){
     ${slates.map(x=>chip(x.key,x.label,x.games.length,x.live?'<span style="color:'+(x.key===NCAAF_SLATE?'#000':'var(--rust)')+'">●LIVE</span>':'')).join('')}</div>`;
   h+=`<div class="bar" style="margin:-4px 0 10px"><button onclick="refreshNCAAFLiveScores()">↻ Refresh scores</button></div>`;
   h+=`<div id="cfbSlateBody"></div>`;
-  el.innerHTML=h;
+  if(fbScrollBusy()){clearTimeout(NCAAF_DEFER);NCAAF_DEFER=setTimeout(()=>{try{renderNCAAF();}catch(e){}},1600);return;}   /* v2.83.1 · not mid-scroll */
+  fbPaintKeepScroll(el,h);
   ncaafPaintSlate(games);
 }
+let NCAAF_DEFER=null;
 
 let NCAAF_SLATE=null,NCAAF_SLATE_WEEK=null,NCAAF_PAINT_TOKEN=0;
 const NCAAF_TZ='America/Chicago';
