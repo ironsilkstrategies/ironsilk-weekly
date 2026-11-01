@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261101g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261101h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -19066,8 +19066,25 @@ function storageReport(){
   const S=typeof window!=='undefined'&&window.D4_STORE;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(S&&S.on()&&!S.inLS(k))continue;const n=(localStorage.getItem(k)||'').length*2;tot+=n;rows.push([k,n]);}
   return{tot,rows:rows.sort((a,b)=>b[1]-a[1])};
 }
+/* v2.83.2 · THE MEMORY TIDY. With the big store on there's no 5 MB wall, so the quota ladder below never ran and the date-keyed
+   caches only grew: 25.8 MB of history (a 1 MB props cache from Sept 7, line snapshots back to July) loaded into memory on
+   every page and every hop of the master evaluation — the phone ran out and reset. Once a day, what's past its use goes:
+   props after 3 days, line snapshots / intake / system log after 10, trends after 21, closing-line records after 30, box
+   scores after 10 (graded long ago; refetchable). Records, calls, calibration and archives are never touched. */
+const MEM_TIDY=[['d4.nflprops',3],['d4.ncaafprops',3],['d4.nflshots',10],['d4.ncaafshots',10],['d4.nhlshots',10],['d4.nbashots',10],['d4.ncaabshots',10],['d4.bookshots',10],['d4.syslog',10],['d4.preintake',10],['d4.nhltrends',21],['d4.clv',30]];
+function pruneOlderThan(key,days){try{const m=get(key,null);if(!m||typeof m!=='object'||Array.isArray(m))return 0;const cut=dayShift(today(),-days);let n=0;
+  Object.keys(m).forEach(k=>{const d=(k.match(/^\d{4}-\d{2}-\d{2}/)||[])[0];if(d&&d<cut){delete m[k];n++;}});if(n)set(key,m);return n;}catch(e){return 0;}}
+function pruneByTs(key,days){try{const m=get(key,null);if(!m||typeof m!=='object'||Array.isArray(m))return 0;const cut=Date.now()-days*864e5;let n=0;
+  Object.keys(m).forEach(k=>{const v=m[k];if(v&&+v.ts&&+v.ts<cut){delete m[k];n++;}});if(n)set(key,m);return n;}catch(e){return 0;}}
+function memTidy(){let n=0;MEM_TIDY.forEach(([k,d])=>{n+=pruneOlderThan(k,d);});n+=pruneByTs('d4.fbbox',10);return n;}
+/* the same rules when a sync merges two copies — date-keyed maps merge by union, so a pruned day would come straight back */
+function memRetain(k,m){try{if(!m||typeof m!=='object'||Array.isArray(m))return m;const R=MEM_TIDY.find(x=>x[0]===k);
+  if(R){const cut=dayShift(today(),-R[1]);Object.keys(m).forEach(x=>{const d=(x.match(/^\d{4}-\d{2}-\d{2}/)||[])[0];if(d&&d<cut)delete m[x];});}
+  else if(k==='d4.fbbox'){const cut=Date.now()-10*864e5;Object.keys(m).forEach(x=>{const v=m[x];if(v&&+v.ts&&+v.ts<cut)delete m[x];});}
+  return m;}catch(e){return m;}}
 function storageTidy(force){
-  const d=today();if(!force&&get('d4.tidyDay','')===d)return 0;let n=0;
+  const d=today();try{if(force||get('d4.memtidy','')!==d){memTidy();set('d4.memtidy',d);}}catch(e){}   /* its own daily mark, so it runs today too */
+  if(!force&&get('d4.tidyDay','')===d)return 0;let n=0;
   const dated=[LS.extpicks,LS.exttrends,LS.extconsensus,LS.nflext,LS.nfltrends,LS.nflconsensus].filter(Boolean);
   dated.forEach(k=>{try{if(pruneDatedMap(k,45))n++;}catch(e){}});
   try{const I=get(FBP_IDX_KEY,{})||{};const cut=fbpShift(d,-30);let ch=false;
@@ -22210,7 +22227,7 @@ function syncMergeVal(k,L,R,tomb){const N=L.t>=R.t?L:R,O=N===L?R:L;const a=N.v,b
   if(a&&b&&typeof a==='object'&&typeof b==='object'&&!Array.isArray(a)&&!Array.isArray(b)){const ka=Object.keys(a),kb=Object.keys(b);
     const rec=v=>v!==null&&typeof v==='object';
     const mapLike=[...ka,...kb].length>0&&([...ka,...kb].every(x=>/^\d{4}-\d{2}-\d{2}/.test(x)||/^(ext)?\d{5,}$/.test(x)||/^[a-z]+\|/.test(x))||(Object.values(a).every(rec)&&Object.values(b).every(rec)));
-    if(mapLike)return{...b,...a};}
+    if(mapLike){const m={...b,...a};return typeof memRetain==='function'?memRetain(k,m):m;}}   /* v2.83.2 · past-retention days stay gone */
   return a;}
 function syncMerge(local,remote,firstAsMaster){const out={};const all=new Set([...Object.keys(local.keys||{}),...Object.keys((remote&&remote.keys)||{})]);
   const tomb={...(((remote&&remote.keys||{})[SYNC.tomb]||{}).v||{}),...((local.keys[SYNC.tomb]||{}).v||{})};
