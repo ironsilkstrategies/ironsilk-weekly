@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261101j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261101k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -11486,23 +11486,28 @@ function purgeOldArchivedTickets(days){
   const frozen=settledAll();                       // never drop a ticket the ledger hasn't frozen
   const L=get(LS.locked,[]);const keep=[];let purged=0;
   L.forEach(t=>{
-    const stamp=t.archived?(t.archivedAt||Date.parse(t.date)||0):Infinity; // never touches a non-archived ticket
-    if(t.archived&&stamp<cutoff&&frozen[String(t.id)]){rollTicketIntoLifetimeLog(t);purged++;}
+    /* v2.84.2 · a ticket's age is its LAST game day, not when it was archived; and an old ticket goes once its data is
+       in, archived or not (open tickets from weeks ago never fell off). Results are kept in the lifetime log first. */
+    let last=String(t.date||'').slice(0,10);try{(t.legs||[]).forEach(l=>{const d=legDay(l,t.date);if(d&&d>last)last=d;});}catch(e){}
+    const old=last&&last<dayShift(today(),-days);
+    if(old&&(t.archived?frozen[String(t.id)]||Date.now()-(t.archivedAt||0)>86400e3:true)){
+      try{if(!t.archived){t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);}}catch(e){}
+      try{rollTicketIntoLifetimeLog(t);}catch(e){}purged++;}
     else keep.push(t);
   });
-  if(purged)set(LS.locked,keep);
+  if(purged){set(LS.locked,keep);try{const kp=new Set(keep.map(t=>String(t.id)));const Tb=get(SYNC.tomb,{})||{};L.forEach(t=>{if(!kp.has(String(t.id)))Tb[String(t.id)]=Date.now();});set(SYNC.tomb,Tb);}catch(e){}}   /* v2.84.2 · tombstoned, so a sync can't bring them back */
   return purged;
 }
 /* Runs once per calendar day, not on every render -- purging is a maintenance
    task, not something that needs to happen 50 times while you sit on a tab. */
 function maybeRunDailyMaintenance(){
-  const last=localStorage.getItem('d4.lastMaint')||'';
+  const last=localStorage.getItem('d4.lastMaint3')||'';   /* v2.84.2 · new mark so the 3-day rule runs today */
   if(last===today())return;
   try{
-    const n=purgeOldArchivedTickets(45);
-    if(n)console.log(`Daily maintenance: rolled up and purged ${n} archived ticket(s) older than 45 days.`);
+    const n=purgeOldArchivedTickets(3);
+    if(n)console.log(`Daily maintenance: rolled up ${n} ticket(s) whose games ended over 3 days ago.`);
   }catch(e){console.warn('daily maintenance',e)}
-  localStorage.setItem('d4.lastMaint',today());
+  localStorage.setItem('d4.lastMaint3',today());
 }
 /* ── Regrade everything right now ────────────────────────────────────────
    1) Every currently-pending ticket gets graded fresh under whatever the
