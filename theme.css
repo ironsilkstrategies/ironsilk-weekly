@@ -1,0 +1,171 @@
+/* ══ TheDesk · game-night look (v2.81.6) ═══════════════════════════════════════════════════════════════════════
+   Built from the logo: true black, signal yellow, a heavy italic wordmark — broadcast score-bug energy.
+   · Barlow for reading. Barlow Semi Condensed, with tabular figures, for numbers and the small stat lines (it
+     replaces the monospace). Barlow Condensed italic for what a score bug shows: the wordmark, team names, scores.
+   · Flat carbon cards on true black — no gradients, glows or drop shadows. Radii follow role: cards 12, controls 8,
+     chips round. Yellow only where the money or the current choice is: prices, the primary action, the sport
+     you're on, the tab you're on (a slanted bar — the logo's swoosh).
+   · The app's own styles still name Inter / Archivo / IBM Plex Mono / IBM Plex Sans. Those names are mapped to
+     Barlow below, so every screen (including the thousands of inline styles) changes at once.
+   · Fonts are served from this site (fonts/, SIL Open Font License — see fonts/OFL.txt): no Google Fonts trip.
+   · Settings → Look → Classic switches this whole file off (the page's head script disables the <link>). */
+
+@font-face{font-family:"Barlow";font-style:normal;font-weight:400;font-display:swap;src:url(fonts/barlow-400.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-style:normal;font-weight:500;font-display:swap;src:url(fonts/barlow-500.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/barlow-600.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-style:normal;font-weight:700;font-display:swap;src:url(fonts/barlow-700.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-style:normal;font-weight:800 900;font-display:swap;src:url(fonts/barlow-800.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-style:normal;font-weight:100 400;font-display:swap;src:url(fonts/barlow-sc-400.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-style:normal;font-weight:500;font-display:swap;src:url(fonts/barlow-sc-500.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/barlow-sc-600.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-style:normal;font-weight:700 900;font-display:swap;src:url(fonts/barlow-sc-700.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-style:normal;font-weight:100 600;font-display:swap;src:url(fonts/barlow-c-600.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-style:normal;font-weight:700;font-display:swap;src:url(fonts/barlow-c-700.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-style:normal;font-weight:800 900;font-display:swap;src:url(fonts/barlow-c-800.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-style:italic;font-weight:100 700;font-display:swap;src:url(fonts/barlow-c-700-italic.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-style:italic;font-weight:800 900;font-display:swap;src:url(fonts/barlow-c-800-italic.woff2) format("woff2")}
+/* the old names → the new faces (UI sans → Barlow, display → Barlow Condensed, monospace → Barlow Semi Condensed) */
+@font-face{font-family:"Inter";font-weight:100 400;font-display:swap;src:url(fonts/barlow-400.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:500;font-display:swap;src:url(fonts/barlow-500.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:600;font-display:swap;src:url(fonts/barlow-600.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:700;font-display:swap;src:url(fonts/barlow-700.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:800 900;font-display:swap;src:url(fonts/barlow-800.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans";font-weight:100 400;font-display:swap;src:url(fonts/barlow-400.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans";font-weight:500;font-display:swap;src:url(fonts/barlow-500.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans";font-weight:600 900;font-display:swap;src:url(fonts/barlow-600.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-weight:100 400;font-display:swap;src:url(fonts/barlow-sc-400.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-weight:500;font-display:swap;src:url(fonts/barlow-sc-500.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-weight:600;font-display:swap;src:url(fonts/barlow-sc-600.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-weight:700 900;font-display:swap;src:url(fonts/barlow-sc-700.woff2) format("woff2")}
+@font-face{font-family:"Archivo";font-weight:100 600;font-display:swap;src:url(fonts/barlow-c-600.woff2) format("woff2")}
+@font-face{font-family:"Archivo";font-weight:700;font-display:swap;src:url(fonts/barlow-c-700.woff2) format("woff2")}
+@font-face{font-family:"Archivo";font-weight:800 900;font-display:swap;src:url(fonts/barlow-c-800.woff2) format("woff2")}
+
+/* ── tokens: the page's variables, re-set (every inline style reads these) ── */
+html.th{
+  --ink:#000000;--panel:#121212;--panel2:#1b1b1b;--panel3:#242424;--rule:#2b2b2b;--hair:rgba(255,255,255,.07);
+  --chalk:#f4f2ec;--chalk-dim:#c9c6bd;--mute:#9b988f;--gold:#ffc61a;--cold:#62c6f0;--rust:#ff5a4c;--moss:#79b863;--win:#3bd07e;
+  --violet:#b39dfa;--pink:#f48fc0;
+  --sh-sm:none;--sh-md:none;--sh-lg:none;
+  --grad-card:#121212;--grad-card-hi:#151515;--grad-bet:#1b1b1b;
+  --glow-gold:0 0 0 1px #ffc61a;--glow-win:0 0 0 1px rgba(59,208,126,.7);--glow-rust:0 0 0 1px rgba(255,90,76,.6);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --skew:-24deg}
+html.th body{background:#000;background-image:none;color:var(--chalk);font-family:"Barlow",system-ui,-apple-system,sans-serif;
+  font-size:15px;line-height:1.5;letter-spacing:0;font-feature-settings:"tnum" 1,"lnum" 1}
+html.th .mono{font-family:"Barlow Semi Condensed",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+html.th ::selection{background:rgba(255,198,26,.32)}
+html.th *{scrollbar-color:#333 transparent}
+
+/* ── header: the wordmark, set like the logo ── */
+html.th header{background:rgba(0,0,0,.92);border-bottom:1px solid var(--rule);box-shadow:none;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+html.th .brand h1{font-family:"Barlow Condensed",sans-serif;font-style:italic;font-weight:800;font-size:27px;line-height:1;
+  letter-spacing:.005em;text-transform:none;background:none;-webkit-text-fill-color:currentColor;color:var(--chalk)}
+html.th .brand h1 span{color:var(--gold)}
+html.th .dateline{font-family:"Barlow Semi Condensed";font-size:12px;letter-spacing:.02em;text-transform:none;color:var(--mute)}
+html.th .meterlab{font-family:"Barlow Semi Condensed";font-size:11px;letter-spacing:.03em;text-transform:none}
+html.th .meter{height:3px;gap:3px}
+html.th .tick{border-radius:0;background:#262626}
+html.th .tick.spent{background:var(--gold)}html.th .tick.now{background:var(--chalk);box-shadow:none}
+
+/* ── sport switch: slanted tabs, the sport you're on in yellow ── */
+html.th div:has(> #sportBtn-mlb){background:#000!important;padding:8px 14px 8px!important;gap:6px!important;border-bottom:1px solid #161616}
+html.th [id^="sportBtn-"]{height:34px!important;border-radius:4px!important;border:0!important;background:#1a1a1a!important;color:var(--mute)!important;
+  font-family:"Barlow Condensed",sans-serif!important;font-style:italic;font-weight:800!important;font-size:15px!important;letter-spacing:.03em!important;
+  clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%);box-shadow:none!important;transition:background .15s var(--ease),color .15s var(--ease)}
+html.th [id^="sportBtn-"].on,html.th [id^="sportBtn-"][style*="background:var(--gold)"]{background:var(--gold)!important;color:#000!important}
+
+/* ── tabs: condensed caps; the current one carries the slanted bar ── */
+html.th nav>button{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:13px;letter-spacing:.05em;color:var(--mute)}
+html.th nav>button.on{color:var(--chalk);border-bottom-color:transparent;text-shadow:none}
+html.th nav>button.on::after{content:"";position:absolute;left:28%;right:28%;bottom:3px;height:3px;background:var(--gold);transform:skewX(var(--skew))}
+html.th body.bnav nav{background:rgba(0,0,0,.95);border-top:1px solid var(--rule);box-shadow:none}
+html.th body.bnav nav>button{font-size:11.5px;letter-spacing:.04em;border-radius:0}
+html.th body.bnav nav>button:before{font-size:17px;filter:grayscale(1);opacity:.5}
+html.th body.bnav nav>button.on{color:var(--chalk);background:none}
+html.th body.bnav nav>button.on:before{filter:none;opacity:1;transform:none}
+html.th body.bnav nav>button.on::after{top:0;bottom:auto;left:32%;right:32%}
+html.th body.bnav nav>button .n{color:var(--gold);font-family:"Barlow Semi Condensed"}
+
+/* ── section labels ── */
+html.th .sbar h2{font-family:"Barlow Condensed";font-weight:700;font-size:14px;letter-spacing:.05em;color:var(--chalk-dim)}
+html.th .sbar .ln{background:#222}
+html.th .mktlab{font-family:"Barlow Condensed";font-weight:700;font-size:12.5px;letter-spacing:.05em;color:var(--mute)}
+
+/* ── cards ── */
+html.th .tkt,html.th .game{background:var(--panel);border:1px solid var(--rule);border-radius:12px;box-shadow:none}
+html.th .tkt.hi{background:var(--panel);border-color:rgba(255,198,26,.5)}
+html.th .game.edge{border-color:rgba(255,198,26,.45);box-shadow:none}
+html.th .game.in-play{border-color:rgba(59,208,126,.45);box-shadow:none}
+html.th .game:hover{box-shadow:none}
+html.th .tkt h3{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:19px;line-height:1.15;letter-spacing:.005em;text-transform:none}
+html.th .tkt .sub{font-family:"Barlow";font-size:12.5px;color:var(--mute)}
+html.th .teams{font-family:"Barlow Condensed",sans-serif;font-style:italic;font-weight:800;font-size:23px;letter-spacing:.005em}
+html.th .teams .at{font-style:normal;font-weight:600}
+html.th .proj .sc{font-family:"Barlow Condensed",sans-serif;font-style:italic;font-weight:800;font-size:31px;letter-spacing:0}
+html.th .proj .md{background:rgba(255,198,26,.08);border-color:rgba(255,198,26,.35)}
+html.th .meta,html.th .env{font-size:11px}
+html.th .badge{font-family:"Barlow Condensed";font-size:12px;letter-spacing:.04em;border-radius:4px}
+html.th .live-bar{background:rgba(59,208,126,.06);border-color:rgba(59,208,126,.35);border-radius:10px;box-shadow:none}
+html.th .note{border-left-color:#333}
+html.th .empty{color:var(--mute)}
+
+/* ── the bet board ── */
+html.th .bet{background:var(--panel2);border:1px solid var(--rule);border-radius:8px;box-shadow:none}
+html.th .bet::before{display:none}
+html.th .bet .bl{font-family:"Barlow";font-weight:600;font-size:13.5px}
+html.th .bet .bo{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:23px;color:var(--gold);letter-spacing:0}
+html.th .bet .bs,html.th .bet .bf{font-size:10.5px}
+html.th .bet.on{background:rgba(255,198,26,.12);border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold);transform:none}
+html.th .bet.on::after{background:var(--gold);color:#000;box-shadow:none}
+html.th .bet.on .bo{color:var(--gold)}
+html.th .bet.value{background:rgba(59,208,126,.07);border-color:rgba(59,208,126,.6);box-shadow:none}
+html.th .bet.value .bo{color:#7fe3a9}
+html.th .bet.avoid{background:var(--panel2)}
+html.th .bet.lean{border-color:rgba(98,198,240,.5)}
+html.th .bet.strong{border-color:var(--cold);box-shadow:none}
+html.th .bet.supreme{background:rgba(255,198,26,.08);border-color:var(--gold);box-shadow:none}
+html.th .bet.supreme .bl{color:var(--gold)}
+html.th .bet.conflict{background:rgba(255,90,76,.06)}
+html.th .bet.value.on,html.th .bet.avoid.on,html.th .bet.source-pick.on,html.th .bet.consensus-pick.on,
+html.th .bet.supreme.on,html.th .bet.strong.on,html.th .bet.conflict.on{background:rgba(255,198,26,.12);box-shadow:inset 0 0 0 1px var(--gold)}
+html.th .bet .sim-chip{font-family:"Barlow Semi Condensed";font-size:10px;letter-spacing:.03em;border-radius:3px}
+html.th .tier-tag,html.th .src-tag{font-family:"Barlow Condensed";font-size:10.5px;letter-spacing:.05em}
+html.th .expbtn{font-family:"Barlow Condensed";font-weight:700;font-size:13px;letter-spacing:.05em;position:relative}
+html.th .expbtn.on{color:var(--chalk);background:none;box-shadow:none}
+html.th .expbtn.on::after{content:"";position:absolute;left:30%;right:30%;bottom:0;height:3px;background:var(--gold);transform:skewX(var(--skew))}
+html.th .panel{background:#0b0b0b;border-top:1px solid var(--rule);box-shadow:none}
+html.th .prop,html.th .trow{background:var(--panel2);border-color:var(--rule)}
+html.th .trow.agree,html.th .trow.conflict{background:var(--panel2)}
+
+/* ── controls ── */
+html.th :where(button){font-family:"Barlow",sans-serif;font-weight:600;border-radius:8px;background:var(--panel2);border:1px solid var(--rule)}
+html.th .bar button{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:14px;letter-spacing:.04em;border-radius:8px;
+  background:var(--panel2);border:1px solid var(--rule);color:var(--chalk);box-shadow:none}
+html.th .bar button:hover{transform:none;border-color:#3a3a3a}
+html.th .bar button.primary,html.th button.primary{background:var(--gold)!important;color:#000!important;border-color:var(--gold);box-shadow:none}
+html.th .bar button.primary:hover{box-shadow:none;filter:brightness(1.06)}
+html.th .subnav button,html.th .rc-picker button{font-family:"Barlow",sans-serif;font-weight:600;font-size:13px;text-transform:none;letter-spacing:.01em;border-radius:999px;background:#151515;border:1px solid var(--rule);color:var(--chalk-dim)}
+html.th .subnav button.on,html.th .rc-picker button.on{background:var(--chalk);color:#000;border-color:var(--chalk);box-shadow:none}
+html.th .msg-chip{font-family:"Barlow",sans-serif;font-size:12.5px;background:#151515;border-color:var(--rule)}
+html.th .msg-chip.on{background:var(--chalk);color:#000;border-color:var(--chalk)}
+html.th input,html.th select,html.th textarea{background:#0d0d0d;border:1px solid var(--rule);border-radius:8px;color:var(--chalk);font-family:"Barlow",sans-serif}
+html.th input:focus,html.th select:focus,html.th textarea:focus{border-color:var(--gold);outline:none}
+html.th button:focus-visible,html.th .bet:focus-visible,html.th [id^="sportBtn-"]:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+html.th details>summary:before{color:var(--gold)}
+
+/* ── the ticket slip ── */
+html.th .slip{background:#121212;border-top:2px solid var(--gold);backdrop-filter:none}
+html.th .slip .so{font-family:"Barlow Condensed";font-style:italic;font-weight:800;font-size:19px}
+html.th .slip button{font-family:"Barlow Condensed";font-weight:700;font-size:13px;letter-spacing:.04em}
+html.th .slip .k{background:var(--gold);color:#000}
+html.th .slip-sheet{background:#121212}
+
+/* ── the shareable Best 3 card ── */
+html.th .recapwrap{background:#0a0a0a;border-color:var(--rule)}
+html.th .rc-brand{font-family:"Barlow Condensed";font-style:italic;font-weight:800;font-size:26px;text-transform:none;letter-spacing:.005em}
+html.th .rc-hero .pct{font-family:"Barlow Condensed";font-style:italic;font-weight:800}
+html.th .rc-stat{background:#141414}
+
+@media (prefers-reduced-motion:reduce){html.th *{animation:none!important;transition:none!important}}

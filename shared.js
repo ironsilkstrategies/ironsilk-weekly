@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261031j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261031k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -4387,7 +4387,8 @@ function tabRaw(n,b){
   if(n==='recap')renderRecap();
   if(n==='best'){bestTab(BESTTAB||'today');}
   if(n==='settings')fillSettingsTab();
-  if(n==='settings'){try{const v=document.getElementById('v-settings');if(v){let box=document.getElementById('sportsOffBox');if(!box){box=document.createElement('div');box.id='sportsOffBox';v.insertBefore(box,v.firstChild);}box.innerHTML=sportsOffHtml();}}catch(e){}}
+  if(n==='settings'){try{const v=document.getElementById('v-settings');if(v){let box=document.getElementById('sportsOffBox');if(!box){box=document.createElement('div');box.id='sportsOffBox';v.insertBefore(box,v.firstChild);}box.innerHTML=sportsOffHtml();
+    let lb=document.getElementById('lookBox');if(!lb){lb=document.createElement('div');lb.id='lookBox';box.insertAdjacentElement('afterend',lb);}lb.innerHTML=lookHtml();}}catch(e){}}
   if(n==='settings'){const m=document.getElementById('storageMeter');if(m)m.innerHTML=storageMeterHtml();}
   if(n==='money'){const el=document.getElementById('moneyBody');if(el){let h='';try{h=bankrollSetHtml()+riskHtml()+missionsHtml()}catch(e){console.warn('missions',e)}el.innerHTML=h+renderMoneyTab();}}
   if(n==='coach'){const el=document.getElementById('coachBody');if(el)el.innerHTML=renderCoachTab();}
@@ -19931,6 +19932,14 @@ function sportBarPaint(){try{const here=window.__PAGE_SPORT__||(typeof ACTIVE_SP
 function sportToggle(sp){const L=sportsOff();const i=L.indexOf(sp);if(i>=0)L.splice(i,1);else L.push(sp);set(SPORTS_OFF_KEY,L);sportBarPaint();
   try{const box=document.getElementById('sportsOffBox');if(box)box.innerHTML=sportsOffHtml();}catch(e){}
   try{if(typeof deskToast==='function')deskToast((SP_LAB[sp]||sp)+(sportOn(sp)?' is back':' hidden — its history stays'));}catch(e){}}
+/* v2.81.6 · LOOK — the game-night look (theme.css) or the classic one. Stored on this device; the page's head script
+   reads it before the first paint, so a switch reloads the page. */
+function lookIsClassic(){try{return window.localStorage.getItem('d4.classic')==='1';}catch(e){return false;}}
+function lookReload(){try{location.reload();}catch(e){}}
+function lookSet(classic){try{if(classic)window.localStorage.setItem('d4.classic','1');else window.localStorage.removeItem('d4.classic');}catch(e){}lookReload();}
+function lookHtml(){const c=lookIsClassic();
+  return`<div class="tkt" style="margin-bottom:10px"><h3 style="margin:0 0 4px">Look</h3><div class="sub">Game night is the black-and-yellow look built from the logo. Classic is the look the app had before v2.81.6.</div>
+    <div class="subnav" style="margin:6px 0 0"><button class="${c?'':'on'}" onclick="lookSet(false)">Game night</button><button class="${c?'on':''}" onclick="lookSet(true)">Classic</button></div></div>`;}
 function sportsOffHtml(){return`<div class="sbar" style="margin-top:0"><h2>Sports shown</h2><div class="ln"></div></div><div class="tkt"><div class="sub" style="font-size:10.5px;margin-bottom:6px">Hide a sport in its off-season: it leaves the sport bar, the master evaluation, Today and the Best card. History and records stay.</div>
   <div style="display:flex;flex-wrap:wrap;gap:6px">${SP_ALL.map(s=>`<button onclick="sportToggle('${s}')" style="font-size:11px;${sportOn(s)?'':'opacity:.55'}">${SP_LAB[s]||s}: <b>${sportOn(s)?'shown':'hidden'}</b></button>`).join('')}</div></div>`;}
 if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{sportBarPaint();});
