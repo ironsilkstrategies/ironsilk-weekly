@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261101i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261101j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8234,7 +8234,7 @@ function fbpEventIdCore(leg,ticketDate,sp,want){
   if(!base)return{id:null,pending:false};
   const hits=Object.keys(idx).filter(k=>k.startsWith(sp+':'+want+':')||k.startsWith(sp+':'+want.split('@').reverse().join('@')+':')).map(k=>({d:k.split(':')[2],id:idx[k]}));
   const lo=fbpShift(base,-1),hi=fbpShift(base,7);
-  const inWin=hits.filter(h=>h.d>=lo&&h.d<=hi).sort((a,b)=>a.d.localeCompare(b.d));
+  const inWin=hits.filter(h=>h.d>=lo&&h.d<=fbpShift(base,1)).sort((a,b)=>a.d.localeCompare(b.d));
   if(inWin.length)return{id:inWin[0].id,pending:false};
   // 2) ESPN scoreboards: the game's own day (and the days either side) one at a
   //    time — single dates work on every ESPN sport — then the full window.
@@ -8275,14 +8275,14 @@ function fbpArcIndex(sp){
   if(key){const arc=get(key,{})||{};
     Object.entries(arc).forEach(([k,A])=>{if(!A||!Array.isArray(A.rows))return;const dated=/^\d{4}-\d{2}-\d{2}$/.test(k)?Date.parse(k):null;
       A.rows.forEach((r,i)=>{if(!r||!r.game)return;const id=String(r.id||r.gid||'');if(!id)return;const g=fbpGameKey(r.game,sp);
-        {const e={id,fin:!!((A.finals&&A.finals[r.id])||r.final),dated,ord:i};(map[g]=map[g]||[]).push(e);const gr=g.split('@').reverse().join('@');(map[gr]=map[gr]||[]).push(e);}});});}
+        {const rd=r.date||r.start||r.gameDate;const e={id,fin:!!((A.finals&&A.finals[r.id])||r.final),dated:rd&&isFinite(Date.parse(String(rd).slice(0,10)))?Date.parse(String(rd).slice(0,10)):dated,ord:i};(map[g]=map[g]||[]).push(e);const gr=g.split('@').reverse().join('@');(map[gr]=map[gr]||[]).push(e);}});});}
   FBP_ARC_IDX[sp]={ts:Date.now(),map};return map;
 }
 function fbpArchiveId(sp,want,base){
   const L=fbpArcIndex(sp)[want];if(!L||!L.length)return null;const t0=base?Date.parse(String(base).slice(0,10)):Date.now();
   const hits=L.map(h=>({...h,dist:h.dated!=null?Math.abs(h.dated-t0):null}));
   hits.sort((x,y)=>(x.dist!=null&&y.dist!=null?x.dist-y.dist:0)||(y.fin-x.fin)||(y.ord-x.ord));
-  return hits[0].dist!=null&&hits[0].dist>10*864e5?null:hits[0].id;
+  const near=hits.find(h=>h.dist!=null&&h.dist<=1.5*864e5);if(near)return near.id;const und=hits.find(h=>h.dist==null);return und&&!(und.fin&&String(base||'').slice(0,10)>=today())&&!hits.some(h=>h.dist!=null&&h.dist<=8*864e5)?und.id:null;   /* a finished game is never today's game */   /* v2.84.1 · a leg's game is on its own day (±1): the 10-day window graded today's KC@DEN props off an earlier KC–DEN box */
 }
 function fbpBox(id,sp,needDef){
   const hasDef=b=>!!(b&&b.teamStats&&Object.values(b.teamStats).some(t=>t&&t.defensive));
