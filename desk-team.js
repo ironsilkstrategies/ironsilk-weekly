@@ -91,13 +91,74 @@ function teamHtml(){if(SAFE_MODE)return'';let W=null;try{W=tmWeek();}catch(e){re
   const lead=W.A.total>=W.B.total;
   return head+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${tmTeamBox('Team '+tmNm(W.C.A),W.A,W.C.A,lead&&(W.A.days.length>0))}${tmTeamBox('Team '+tmNm(W.C.B),W.B,W.C.B,!lead&&(W.B.days.length>0))}</div>
     <details style="margin-top:6px"><summary class="sub">The draft</summary><div class="mono" style="font-size:10.5px">${W.D.log.map((x,i)=>`${i+1}. ${tmChip(x.cap)} took ${tmChip(x.v)} — ${txtEsc(x.why)}`).join('<br>')}</div></details></div>`+tmLabHtml();}
-function tmLabHtml(){let L=get(TM_KEY,null);if(!L||!L.top||L.ws!==bkWeekStart())return`<div class="tkt"><h3>🧪 The Parlay Lab</h3><div class="sub" style="font-size:10.5px">Replays every 4-character team on the last 8 weeks. Runs on demand (it's heavy).</div><button style="margin-top:6px" onclick="this.textContent='Running…';setTimeout(()=>{try{tmLab(true);}catch(e){}try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}},50)">🧪 Run the lab</button></div>`;const pc=x=>Math.round(x*100)+'%';
+function tmLabHtml(){let L=get(TM_KEY,null);if(!L||!L.top||L.ws!==bkWeekStart())return`<div class="tkt"><h3>🧪 The Parlay Lab</h3><div class="sub" style="font-size:10.5px">Replays every 4-character team on the last 8 weeks. Runs on demand (it's heavy).</div><button style="margin-top:6px" onclick="this.textContent='Running…';setTimeout(()=>{try{tmLab(true);}catch(e){}try{tmLabStr(true);}catch(e){}try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}},50)">🧪 Run the lab</button></div>`;const pc=x=>Math.round(x*100)+'%';
   const imp=Object.entries(L.imp).sort((a,b)=>b[1].clift-a[1].clift||b[1].lift-a[1].lift);const anchors=imp.filter(([,x])=>x.lift>0).slice(0,4),wash=imp.filter(([,x])=>x.lift<0).slice(-4).reverse();
   return`<div class="tkt"><h3>🧪 The Parlay Lab</h3><div class="sub" style="font-size:10.5px">Every possible 4-character team (${L.tried}), replayed on the last ${L.days} days of real calls: each teammate's 2 best picks a day → an 8-leg parlay. Looking for the big parlays we can actually hit.</div>
     ${L.top.length?`<div class="mktlab">Best teams on history</div><div class="mono" style="font-size:10.5px">${L.top.map((t,i)=>`${i+1}. ${t.tm.map(tmChip).join(' · ')}<br>&nbsp;&nbsp;&nbsp;cashed ${t.cash}/${t.n}${t.big?` (best ${decimalToAmerican(t.big)})`:''} · one leg short ${t.near} · legs ${pc(t.lr)} · ${t.pnl>=0?'+':'-'}$${Math.abs(t.pnl).toFixed(0)} at $${TM_PARLAY}`).join('<br>')}</div>`:'<div class="sub">Not enough graded days yet.</div>'}
     ${anchors.length?`<div class="mktlab">⚓ Anchors — teams with them hit more legs</div><div class="mono" style="font-size:10.5px">${anchors.map(([v,x])=>`${tmChip(v)} +${(x.lift*100).toFixed(1)} pts · own top-2 ${x.f.w}-${x.f.n-x.f.w}`).join('<br>')}</div>`:''}
     ${wash.length?`<div class="mktlab">🌊 Wash-outs — teams with them hit fewer</div><div class="mono" style="font-size:10.5px">${wash.map(([v,x])=>`${tmChip(v)} ${(x.lift*100).toFixed(1)} pts · own top-2 ${x.f.w}-${x.f.n-x.f.w}`).join('<br>')}</div>`:''}
+    ${(()=>{try{return tmStrHtml();}catch(e){console.warn('strength teams',e);return'';}})()}
+    <div class="bar" style="margin-top:6px"><button onclick="this.textContent='Running…';setTimeout(()=>{try{tmLab(true);}catch(e){}try{tmLabStr(true);}catch(e){}try{deskRerender();}catch(e){}},50)">↻ Re-run the lab</button></div>
     ${L.past.length?`<div class="mktlab">How the real drafts would have done</div><div class="mono" style="font-size:10.5px">${L.past.map(p=>`${txtEsc(p.ws)}: ${tmNm(p.A.tm[0])}'s team ${p.A.t>=0?'+':'-'}$${Math.abs(p.A.t).toFixed(0)} (${p.A.pw} cashed, legs ${pc(p.A.lr)}) vs ${tmNm(p.B.tm[0])}'s ${p.B.t>=0?'+':'-'}$${Math.abs(p.B.t).toFixed(0)} (${p.B.pw} cashed, legs ${pc(p.B.lr)})`).join('<br>')}</div>`:''}</div>`;}
+/* ══ v2.84 · STRENGTH TEAMS — every 4-character team again, but each character only plays its dominant strengths ══════════
+   A strength is a lane (sport × market: NHL ML, NFL ATS, NBA O/U …) where the character's graded calls over the prior 45 days
+   hit 58%+ and made money at the posted prices, on 8+ calls; its best 3 lanes count. The replay is honest: each day uses only
+   the lanes it had BEFORE that day. Each teammate gives its 2 most confident calls that day inside its lanes (one per game) →
+   an 8-leg parlay. Then today's 8-leggers for the best teams, ready to load into the slip. */
+const TM_STR_KEY='d4.teamlab.str',TM_STR_DAYS=45;
+const tmLaneOf=c=>c.sp+'|'+mkNorm(c.market);
+const tmLaneLab=k=>{const[sp,m]=String(k).split('|');return((SP_LAB[sp]||sp).replace(/^\S+\s/,''))+' '+({ml:'ML',spread:'ATS',total:'O/U'}[m]||m);};
+let TM_POOL=null;
+/* every priced call by day and character, most confident first (no per-game cut yet — the lane filter comes first) */
+function tmPool(){const V=roGet(VOICES_KEY,[],30e3)||[];if(TM_POOL&&TM_POOL.n===V.length&&Date.now()-TM_POOL.ts<120e3)return TM_POOL;const P={},D={};
+  V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice)||c.price==null||confPre(c))return;const cf=confOf(c);if(cf==null)return;const d=String(c.date).slice(0,10);
+    ((P[d]=P[d]||{})[c.voice]=P[d][c.voice]||[]).push(c);
+    if(c.graded&&!c.push&&c.hit!=null){const k=tmLaneOf(c);const o=((D[d]=D[d]||{})[c.voice]=D[d][c.voice]||{})[k]=D[d][c.voice][k]||{w:0,n:0,u:0};o.n++;if(c.hit){o.w++;o.u+=americanToDecimal(+c.price)-1;}else o.u-=1;}});
+  Object.values(P).forEach(byV=>Object.keys(byV).forEach(v=>byV[v].sort((a,b)=>confOf(b)-confOf(a))));
+  TM_POOL={ts:Date.now(),n:V.length,P,D};return TM_POOL;}
+/* each character's dominant lanes as of a day (only what was graded before it) */
+function tmStrengths(D,before,days){const lo=dayShift(before,-(days||TM_STR_DAYS));const acc={};
+  Object.entries(D).forEach(([d,byV])=>{if(d<lo||d>=before)return;Object.entries(byV).forEach(([v,L])=>Object.entries(L).forEach(([k,o])=>{const a=(acc[v]=acc[v]||{})[k]=acc[v][k]||{w:0,n:0,u:0};a.w+=o.w;a.n+=o.n;a.u+=o.u;}));});
+  const S={};Object.entries(acc).forEach(([v,L])=>{const top=Object.entries(L).filter(([,o])=>o.n>=8&&o.w/o.n>=0.58&&o.u>=0).map(([k,o])=>({k,w:o.w,n:o.n,u:+o.u.toFixed(2),r:(o.w+3)/(o.n+6)})).sort((a,b)=>b.r-a.r).slice(0,3);if(top.length)S[v]=top;});return S;}
+/* a team's day: each member's 2 most confident calls inside its lanes, one per game, no game/market twice */
+function tmDayStr(team,d,P,S,open){const byV=(P[d]||{});const legs=[];const used=new Set();
+  team.forEach(v=>{const lanes=new Map((S[v]||[]).map(x=>[x.k,x]));if(!lanes.size)return;let n=0;const games=new Set();
+    (byV[v]||[]).forEach(c=>{if(n>=2)return;const ln=lanes.get(tmLaneOf(c));if(!ln||games.has(c.sp+c.game))return;if(open&&(c.graded||(typeof deskStarted==='function'&&deskStarted(c))))return;
+      const k=c.sp+'|'+c.game+'|'+c.market;if(used.has(k))return;used.add(k);games.add(c.sp+c.game);legs.push({v,c,lane:ln});n++;});});return legs;}
+function tmLabStr(force){const L0=get(TM_STR_KEY,null);const d0=today();if(!force&&L0&&L0.d===d0&&Date.now()-L0.ts<6*36e5)return L0;
+  const {P,D}=tmPool();const all=Object.keys(P).sort();if(!all.length)return null;const lo=dayShift(d0,-56),first=dayShift(all[0],14);
+  const days=all.filter(d=>d>=lo&&d<d0&&d>=first);const SD={};days.forEach(d=>{SD[d]=tmStrengths(D,d);});
+  const R=TM_ROSTER().filter(v=>days.some(d=>SD[d][v]));const teams=[];
+  for(let a=0;a<R.length;a++)for(let b=a+1;b<R.length;b++)for(let c=b+1;c<R.length;c++)for(let e=c+1;e<R.length;e++){const tm=[R[a],R[b],R[c],R[e]];
+    let n=0,cash=0,near=0,legs=0,hit=0,pnl=0,big=0;days.forEach(d=>{const lg=tmDayStr(tm,d,P,SD[d]);if(lg.length<6)return;const G=tmGradeDay(lg);if(!G.done||G.hit+G.miss===0)return;n++;legs+=G.hit+G.miss;hit+=G.hit;
+      if(G.cashed){cash++;pnl+=TM_PARLAY*(G.dec-1);big=Math.max(big,G.dec);}else{pnl-=TM_PARLAY;if(G.miss===1)near++;}});
+    if(n>=4)teams.push({tm,n,cash,near,lr:legs?hit/legs:0,pnl:+pnl.toFixed(2),big:+big.toFixed(1)});}
+  teams.sort((x,y)=>y.cash-x.cash||y.near-x.near||y.lr-x.lr);
+  /* the same teams playing everything (the plain lab's rule), over the same days — what the strength rule buys */
+  const T2=tmTop2();const plain=tm=>{let legs=0,hit=0;days.forEach(d=>{const lg=tmDay(tm,d,T2);if(lg.length<6)return;const G=tmGradeDay(lg);if(!G.done)return;legs+=G.hit+G.miss;hit+=G.hit;});return legs?hit/legs:null;};
+  const top=teams.slice(0,10).map(t=>({...t,plr:plain(t.tm)}));
+  const L={d:d0,ts:Date.now(),days:days.length,tried:teams.length,top};set(TM_STR_KEY,L);return L;}
+/* today's 8-leggers for the best strength teams (live: the calls move all day) */
+function tmStrToday(L,k){if(!L||!L.top)return[];const {P,D}=tmPool();const S=tmStrengths(D,today());const out=[];const seen=new Set();
+  for(const t of L.top){if(out.length>=(k||3))break;const legs=tmDayStr(t.tm,today(),P,S,true);if(legs.length<6)continue;const sig=legs.map(x=>x.c.sp+x.c.game+x.c.market+x.c.side).sort().join('|');if(seen.has(sig))continue;seen.add(sig);
+    const dec=legs.reduce((a,x)=>a*americanToDecimal(+x.c.price),1);const pr=legs.reduce((a,x)=>a*(confOf(x.c)||0.5),1);out.push({t,legs,dec,p:pr});}
+  return out;}
+function tmStrSlip(i){const L=get(TM_STR_KEY,null);const X=tmStrToday(L,3)[i];if(!X)return;let n=0;
+  X.legs.forEach(({c})=>{const pick=typeof charPickText==='function'?charPickText(c):c.pick;if(SLIP.some(x=>x.game===c.game&&x.pick===pick))return;
+    SLIP.push({id:'tm|'+c.sp+'|'+c.game+'|'+pick,game:c.game,pick,price:+c.price,sport:c.sp,date:today(),gameDate:String(c.date).slice(0,10),p:confOf(c)||0.5});n++;});
+  set(LS.slip,SLIP);try{paintSlip();}catch(e){}try{deskToast(`🎟 ${n} leg${n===1?'':'s'} loaded into the slip — set your stake and lock it`,3200);}catch(e){}}
+function tmStrHtml(){const L=get(TM_STR_KEY,null);const pc=x=>Math.round(x*100)+'%';
+  if(!L||!L.top||L.d!==today())return`<div class="mktlab">💪 Strength teams</div><div class="sub" style="font-size:10.5px">Each character only plays its best lanes. Runs with the lab.</div>`;
+  const X=tmStrToday(L,3);
+  return`<div class="mktlab">💪 Strength teams — each character only plays its best lanes</div><div class="sub" style="font-size:10px;margin-bottom:4px">A lane counts once it's 58%+ and in profit on 8+ graded calls over the 45 days before that day (no peeking). ${L.days} days replayed.</div>
+    ${L.top.length?`<div class="mono" style="font-size:10.5px">${L.top.map((t,i)=>`${i+1}. ${t.tm.map(tmChip).join(' · ')}<br>&nbsp;&nbsp;&nbsp;cashed ${t.cash}/${t.n}${t.big?` (best ${decimalToAmerican(t.big)})`:''} · one leg short ${t.near} · legs ${pc(t.lr)}${t.plr!=null?` <span style="color:${t.lr>=t.plr?'var(--win)':'var(--rust)'}">(${t.lr>=t.plr?'+':''}${Math.round((t.lr-t.plr)*100)} vs playing everything)</span>`:''} · ${t.pnl>=0?'+':'-'}$${Math.abs(t.pnl).toFixed(0)} at $${TM_PARLAY}`).join('<br>')}</div>`:'<div class="sub">Not enough graded days in the lanes yet.</div>'}
+    ${(()=>{try{const S=tmStrengths(tmPool().D,today());const rows=TM_ROSTER().filter(v=>S[v]).map(v=>`${tmChip(v)} ${S[v].map(x=>`${txtEsc(tmLaneLab(x.k))} ${x.w}-${x.n-x.w}`).join(' · ')}`);
+      return rows.length?`<details style="margin-top:6px"><summary class="sub" style="font-size:10.5px">Each character's lanes today (${rows.length} characters have one)</summary><div class="mono" style="font-size:10px;line-height:1.6">${rows.join('<br>')}</div></details>`:'';}catch(e){return'';}})()}
+    <div class="mktlab">🎟 Today's 8-leggers</div>${X.length?X.map((x,i)=>`<div style="border:1px solid var(--rule);border-radius:10px;padding:8px;margin:6px 0">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:12px">${x.t.tm.map(tmChip).join(' · ')}</b><b style="color:var(--gold);white-space:nowrap">${decimalToAmerican(x.dec)}</b></div>
+      <div class="mono" style="font-size:10px;color:var(--mute)">${x.legs.length} legs · history: cashed ${x.t.cash}/${x.t.n}, legs ${pc(x.t.lr)}</div>
+      <div class="mono" style="font-size:10.5px;margin-top:4px">${x.legs.map(({v,c,lane})=>`${txtEsc(typeof charPickText==='function'?charPickText(c):c.pick||'')} <span style="color:var(--gold)">${c.price>0?'+':''}${c.price}</span> · ${tmNm(v)} <span style="color:var(--mute)">(${txtEsc(tmLaneLab(lane.k))} ${lane.w}-${lane.n-lane.w})</span>`).join('<br>')}</div>
+      <div class="bar" style="margin-top:6px"><button class="primary" onclick="tmStrSlip(${i})">🎟 Load into the slip</button></div></div>`).join(''):'<div class="sub" style="font-size:10.5px">No strength team has 6+ open legs in its lanes right now.</div>'}`;}
 /* on the league card and the Banker card */
 if(typeof leagueHtml==='function'&&!window.__TMH__){window.__TMH__=1;const LH0=leagueHtml;leagueHtml=function(compact){const h=LH0(compact);if(compact)return h;let t='';try{t=teamHtml();}catch(e){console.warn('team card',e);}return h+t;};
   if(typeof bankerHtml==='function'){const BH0=bankerHtml;bankerHtml=function(){const h=BH0();let t='';try{t=teamHtml();}catch(e){}return h+t;};}}
