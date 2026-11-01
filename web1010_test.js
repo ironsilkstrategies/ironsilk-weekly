@@ -25,18 +25,18 @@ setTimeout(()=>{try{
   w.eval(`BMAP.f='one'`);T('filter "one leg away" finds ticket A only',w.eval('bmapData().tickets.filter(bmPass).map(t=>t.id).join()')==='A');
   w.eval(`BMAP.f='all'`);
   const S=w.eval('bmapSvg(bmapData()).svg');
-  T('svg draws game hubs, bubbles and strands',/id="bmSvg"/.test(S)&&/id="bmWorld"/.test(S)&&(S.match(/<line /g)||[]).length===5);
-  T('dead strands are colored dead, pending ones dashed',S.includes(w.eval('BM_COL.dead'))&&/stroke-dasharray="4 4"/.test(S));
+  T('v2.83 · svg draws game rows and ticket rows, no strands until something is tapped',/id="bmSvg"/.test(S)&&(S.match(/data-k="g"/g)||[]).length>=2&&(S.match(/data-k="t"/g)||[]).length===3&&!/<path d="M/.test(S));
+  w.eval(`BMAP.sel={type:'t',id:'C'}`);const Sc=w.eval('bmapSvg(bmapData()).svg');w.eval(`BMAP.sel={type:'t',id:'B'}`);const Sb=w.eval('bmapSvg(bmapData()).svg');w.eval(`BMAP.sel=null`);
+  T('dead strands are colored dead, pending ones dashed',Sc.includes(w.eval('BM_COL.dead'))&&/stroke-dasharray="4 4"/.test(Sb));
   w.eval(`TICKETTAB='elimmap';renderTickets&&renderTickets()`);
   const body=()=>D.body.innerHTML;
   T('tab renders The Web with header stats + filters',/Still alive/i.test(body())&&/bmSvg/.test(body()),'');
   w.eval(`BMAP.sel={type:'t',id:'A'};bmPaint()`);
   T('selecting a bubble opens its ticket card with an open-ticket button',/openTicketSheet\('A'\)/.test(D.getElementById('bmDetail').innerHTML));
-  T('selection dims everything not on that ticket',/opacity="\.13"/.test(D.getElementById('bmSvg').outerHTML));
+  T('selection dims everything not on that ticket',/opacity="\.25"/.test(D.getElementById('bmSvg').outerHTML));
   w.eval(`BMAP.sel={type:'g',id:bmapData().games.find(g=>/PIT/.test(g.game)).key};bmPaint()`);
   T('selecting a game hub lists every ticket riding on it',/Ticket #A|>A<|'A'/.test(D.getElementById('bmDetail').innerHTML)&&/'B'|Ticket #B/.test(D.getElementById('bmDetail').innerHTML));
-  w.eval(`BMAP.sel=null;bmZoom(1.5)`);T('zoom changes the world transform',/scale\(1\.5/.test(D.getElementById('bmWorld').getAttribute('transform')||''));
-  w.eval('bmZoom(0)');T('reset zoom',/scale\(1\)/.test(D.getElementById('bmWorld').getAttribute('transform')||''));
+  w.eval(`BMAP.sel=null;bmPaint()`);T('v2.83 · no pan/zoom: the page scrolls normally over the web',!/touch-action:none/.test(D.getElementById('bmSvg').outerHTML)&&!D.getElementById('bmWorld'));
   w.eval('gradeLeg=window.__realGrade');
   /* ---------- Skin ---------- */
   w.eval('skinSetup()');
