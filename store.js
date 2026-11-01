@@ -70,5 +70,5 @@
     if(!RLS||typeof indexedDB==='undefined'||!window.Promise||inline()||/jsdom/i.test(navigator.userAgent||'')){if(inline()){var tpl=document.getElementById('d4s');[].slice.call((tpl.content||tpl).querySelectorAll('script')).forEach(function(it){var s=document.createElement('script');s.text=it.textContent;document.body.appendChild(s);});}else run();return;}
     var done=false;var go=function(){if(done)return;done=true;run();};
     hydrate(function(){return done;}).then(go,function(e){try{console.warn('store: staying on localStorage —',e&&e.message);}catch(_){}go();});
-    setTimeout(function(){if(!done){try{console.warn('store: IndexedDB too slow — staying on localStorage this load');}catch(_){}go();}},6000);};
+    setTimeout(function(){if(!done){try{console.warn('store: IndexedDB too slow — staying on localStorage this load');}catch(_){}go();}},/[?&]bg=1/.test(location.search||'')?20000:6000);};   /* v2.82.2 · a background page waits longer: one that runs without the big store can't see today's card and writes over it */
 })();

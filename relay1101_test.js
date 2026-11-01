@@ -41,6 +41,25 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   w.eval(`localStorage.removeItem(EVAL_CHAIN_KEY)`);T('relay done: it has run',w.eval('evalRanToday()')===true);
   w.eval(`set(EVAL_CHAIN_KEY,{ts:Date.now()-16*60e3,d:today(),todo:['nfl'],done:[],miss:[],back:'nba.html'})`);T('an abandoned relay (15 min+) stops blocking',w.eval('evalRanToday()')===true);
   w.close();
+  /* ── v2.82.2 · each board's own slice heals the shared card ── */
+  const h=page('nba.html');await sleep(2500);
+  h.eval(`window.__TD=today();set(TC_KEY,{d:__TD,by:{nba:{ts:Date.now()-5000,picks:[{game:'ATL@BOS',m:'ml',sd:'home',pick:'BOS ML',price:-150}],props:[]}}});
+    set('d4.tcs.nfl',{d:__TD,B:{ts:Date.now()-3000,picks:[{game:'KC@BUF',m:'spread',sd:'away',pick:'KC +2.5',price:-110,start:'2026-11-01T18:00:00Z'}],props:[]}});
+    set('d4.tcs.nhl',{d:'2026-10-30',B:{ts:Date.now(),picks:[{game:'OLD@DAY'}]}});
+    set('d4.tcs.nba',{d:__TD,B:{ts:Date.now()-60000,picks:[]}});`);
+  const H1=h.eval('tcHeal()');
+  T('a sport dropped from the shared card comes back from its own slice',!!(H1.by.nfl&&H1.by.nfl.picks[0].pick==='KC +2.5')&&!!h.eval('get(TC_KEY,{}).by.nfl'));
+  T('…a slice from another day is ignored, and an older slice never replaces a newer card entry',!H1.by.nhl&&H1.by.nba.picks.length===1);
+  h.eval(`set(TC_KEY,{d:__TD,by:{nba:{ts:Date.now()-5000,picks:[]}}});todaySnapshot(true);`);
+  const H2=h.eval('get(TC_KEY,{})');
+  T('a page writing its own sport keeps every other sport (it builds on the healed card)',!!(H2.by.nba&&H2.by.nfl));
+  T('…and saves its own slice',h.eval(`(get('d4.tcs.nba',null)||{}).d===__TD`));
+  h.eval(`set(REOPEN_KEY,{d:__TD,ts:Date.now(),why:'test'});localStorage.removeItem(REOPEN_DONE);deskReopenCheck();`);
+  T('unfreeze clears the slices\' unstarted picks too (the heal can\'t bring them back)',h.eval(`(get('d4.tcs.nfl',null).B.picks||[]).length`)===0&&!(h.eval('tcHeal()').by.nfl.picks||[]).length);
+  const sj=fs.readFileSync(path.join(W,'store.js'),'utf8');
+  T('a background page waits up to 20 s for the big store before running without it',/\[\?&\]bg=1\/\.test\(location\.search\|\|''\)\?20000:6000/.test(sj));
+  T('the Book, the freeze, the Best 3 and the end of the relay all read the healed card',/tcHeal\(\):get\(TC_KEY,\{\}\)\)\|\|\{\};/.test(fs.readFileSync(path.join(W,'desk-book.js'),'utf8'))&&/function tcFreeze\(\)\{const T=\(typeof tcHeal==='function'\?tcHeal\(false\)/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8'))&&/if\(!S\.locked\)\{try\{tcHeal\(\);\}catch\(e\)\{\}const b=best5Build\(\);/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8')));
+  h.close();
   /* ── a relay page puts its own board on the card, then evaluates ── */
   const c=page('cfb.html','?bg=1&eval=1&chain=1&v=1',x=>{x.localStorage.setItem('d4.evalchain',JSON.stringify({ts:Date.parse(NOW),d:'2026-10-31',todo:['ncaaf','nhl'],done:['nba'],miss:[],back:'nba.html'}));
     x.localStorage.setItem('d4.todaycard',JSON.stringify({d:'2026-10-31',by:{nba:{ts:Date.parse(NOW)-60e3,picks:[],props:[]}}}));});

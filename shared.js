@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261101b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261101c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15814,7 +15814,7 @@ function best5State(){const d=today();let S=get(BEST5_KEY,{});
     try{const log=get('d4.best5log',{})||{};const E=log[S.d];if(E){const keys=new Set(S.top3.map(x=>x.sp+'|'+x.game+'|'+x.pick));
       (E.picks||[]).forEach(x=>{x.main=keys.has(x.sp+'|'+x.game+'|'+x.pick);});S.top3.forEach(x=>{if(!(E.picks||[]).some(y=>y.sp===x.sp&&y.game===x.game&&y.pick===x.pick))(E.picks=E.picks||[]).push({sp:x.sp,game:x.game,pick:x.pick,price:x.price,p:x.p,m:x.m,sd:x.sd,line:x.line,gid:x.gid,main:true,ev:x.ev,color:x.color,unan:!!x.unan,chars:x.chars||[],start:x.start||''});});
       E.v=2;set('d4.best5log',log);}}catch(e){}}
-  if(!S.locked){const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,why3:b.why,ts:Date.now()});
+  if(!S.locked){try{tcHeal();}catch(e){}const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,why3:b.why,ts:Date.now()});
     try{if(typeof ruleSnap==='function')S.rules=ruleSnap();}catch(e){}   /* v2.81 · the rules this card was built under */
     delete S.sides;delete S.totals;
     const masterRan=evalRanToday();
@@ -17710,6 +17710,15 @@ function voiceLog70(sp,picks,d){const V=get(VOICES_KEY,[]);const have=new Set(V.
 /* v2.81.5 · today's candidates are rebuilt only when something they're built from changed (the same inputs the
    characters' re-read watches), at least every 5 minutes, and always on the master evaluation's relay pages */
 const TC_SIG={};
+/* v2.82.2 · each board also keeps its own slice of today's card under its own key, written only by that sport's page, so no
+   other page can drop it; the shared card is healed from the slices before anything builds on it. Nov 1 the NFL and NHL
+   boards reached the card on their relay pages and were gone two pages later (a page that couldn't see the shared card
+   wrote a fresh one with only its own sport). */
+const TCS_PRE='d4.tcs.';
+function tcHeal(save){try{const d=today();const all=get(TC_KEY,{})||{};const T=all.d===d?all:{d,by:{}};T.by=T.by||{};let ch=false;
+  ['nfl','ncaaf','mlb','nhl','nba','ncaab'].forEach(sp=>{const S=get(TCS_PRE+sp,null);if(!S||S.d!==d||!S.B)return;const cur=T.by[sp];if(!cur||(!(cur.picks||[]).length&&(S.B.picks||[]).length&&(+S.B.ts||0)>(+cur.ts||0))){T.by[sp]=S.B;ch=true;}   /* a sport that vanished (or came back empty) — an entry on the card is never overruled */});
+  if(ch&&save!==false)set(TC_KEY,T);return T;}catch(e){return get(TC_KEY,{})||{};}}
+if(typeof window!=='undefined')setTimeout(()=>{try{tcHeal();}catch(e){}},2500);
 function todaySnapshot(force){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;if(!sp)return;
   const relay=(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)||(typeof EVAL_CHAIN_HOP!=='undefined'&&EVAL_CHAIN_HOP);
@@ -17717,7 +17726,7 @@ function todaySnapshot(force){
   const L0=TC_SIG[sp];if(!force&&!relay&&sig&&L0&&L0.sig===sig&&Date.now()-L0.ts<5*60e3){const T0=get(TC_KEY,{})||{};if(T0.d===today()&&T0.by&&T0.by[sp])return;}
   try{clvCapture(sp)}catch(e){}
   let picks=[],props=[];try{picks=todayCandidates(sp)}catch(e){console.warn('today picks',e)}try{props=todayProps(sp)}catch(e){}
-  const all=get(TC_KEY,{})||{};const d=today();const T=all.d===d?all:{d,by:{}};
+  const d=today();const all=tcHeal(false);const T=all.d===d?all:{d,by:{}};
   /* Daily lock: keep picks for games that have already started so picks
      don't vanish mid-day when the board refreshes post-kickoff. Only add
      new picks for games not yet in today's list. */
@@ -17736,7 +17745,7 @@ function todaySnapshot(force){
   const merged=[...prev,...(picks||[]).filter(x=>!have.has(kOf(x)))];
   let standout=B0.standout||null;
   if(!standout){try{standout=pstStandout(sp,sportGames(sp).length?sportGames(sp):(typeof GAMES!=='undefined'?GAMES:[]));}catch(e){}}
-  T.by[sp]={ts:Date.now(),picks:merged,props,standout};set(TC_KEY,T);TC_SIG[sp]={sig,ts:Date.now()};
+  T.by[sp]={ts:Date.now(),picks:merged,props,standout};set(TC_KEY,T);set(TCS_PRE+sp,{d,B:T.by[sp]});TC_SIG[sp]={sig,ts:Date.now()};
   try{cpropLog(cpropToday().filter(c=>c.sp===sp));}catch(e){console.warn('char props log',e);}   /* v2.02: every character's prop calls lock pregame, every refresh */
   const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
 }

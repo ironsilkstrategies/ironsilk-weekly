@@ -124,7 +124,7 @@ function bookQuarantine(d){return bookQuarAll()[d||today()]||{};}
 /* a held-back scope is a whole sport, or one market of it (one-sided totals hold back that sport's totals only) */
 function bookIsQuarantined(sp,d,market){try{const Q=bookQuarAll();if(!BOOK_Q_MEMO.any)return false;const q=(Q[String(d||'').slice(0,10)||today()]||{})[sp];if(!q)return false;
   if(q.all)return true;const m=market==='moneyline'?'ml':market;return!!(m&&q.markets&&q.markets[m]);}catch(e){return false;}}
-function deskVitals(d,opt){d=d||today();opt=opt||{};const now=Date.now();const T=get(TC_KEY,{})||{};const TC=T.d===d?(T.by||{}):{};
+function deskVitals(d,opt){d=d||today();opt=opt||{};const now=Date.now();const T=((typeof tcHeal==='function'&&d===today())?tcHeal():get(TC_KEY,{}))||{};const TC=T.d===d?(T.by||{}):{};
   const V=roGet(VOICES_KEY,[],opt.fresh?1:5e3)||[];const live=(()=>{try{return liveSports();}catch(e){return[];}})();const ST=bookStarts(d);const H=get(BOOK_HOLD_KEY,null);const reread=(H&&H.d===d&&H.reread)||{};
   const Q0=bookQuarantine(d);const Q={};Object.entries(Q0).forEach(([sp,q])=>{if(q&&q.all)Q[sp]=1;});const qm=(sp,m)=>!!(Q0[sp]&&(Q0[sp].all||(Q0[sp].markets||{})[m]));const by={};const mk=sp=>by[sp]||(by[sp]={sp,calls:0,priced:0,official:0,offElig:0,card:0,cardOpen:0,read:false,ts:0,fresh:false,totals:{over:0,under:0}});
   live.forEach(mk);

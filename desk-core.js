@@ -692,7 +692,7 @@ function subTop10Why(){const T=get(TC_KEY,{})||{};const W={n:0,best:0,started:0,
 /* Today's "Official" filter: the 70% rule + the price + the flags. Frozen at the master evaluation. */
 function tfPlayable(x,sp){if(x&&x.fz)return!!x.fz.play;try{if(x.incoherent||x.suspect)return false;if(x.price==null||amerOk(x.price)==null||+x.price<BK_FLOOR)return false;
     if(laneStatus(pickLane(x,sp))==='blocked')return false;if(pickDisagrees(x,sp))return false;const o=pickConf(x,sp);if(!o)return false;return o.cf*americanToDecimal(+amerOk(x.price))-1>=0;}catch(e){return false;}}
-function tcFreeze(){const T=get(TC_KEY,{})||{};if(T.d!==today())return 0;let n=0;
+function tcFreeze(){const T=(typeof tcHeal==='function'?tcHeal(false):get(TC_KEY,{}))||{};if(T.d!==today())return 0;let n=0;
   Object.entries(T.by||{}).forEach(([sp,B])=>(B.picks||[]).forEach(x=>{if(x.fz)return;const o=pickConf(x,sp);x.fz={play:tfPlayable(x,sp),cf:o?o.cf:pickConfAny(x,sp),off:!!o,by:o?o.who:[],ts:Date.now()};n++;}));
   T.frozen=T.frozen||Date.now();set(TC_KEY,T);return n;}
 /* the confidence chip on a pick (Today, game cards) */
@@ -1117,6 +1117,7 @@ async function deskReviewFreeze(){const R=get('d4.evalready',null)||{};if(!confi
   localStorage.removeItem('d4.evalready');DESK_EVAL_BUSY=true;try{await masterEvalFinish(R.done||[],R.miss||[],true);}finally{DESK_EVAL_BUSY=false;}
   try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}}
 async function masterEvalFinish(done,miss,force){
+  try{if(typeof tcHeal==='function')tcHeal();}catch(e){}   /* v2.82.2 · every board the relay read is on the card before anything is reviewed or frozen */
   if(!force&&deskReviewOn()){set('d4.evalready',{d:today(),ts:Date.now(),done,miss});
     deskSay(`<span style="color:var(--gold)">✓ ${done.length} sport${done.length===1?'':'s'} evaluated${miss.length?` · no games/lines: ${miss.map(s=>SP_LAB[s]||s).join(', ')}`:''}. Review the Best card, then tap 🔒 Looks good — freeze &amp; publish.</span>`);
     try{deskToast('Evaluation done — review the picks, then freeze',4000);}catch(e){}return;}
@@ -1634,6 +1635,7 @@ function deskReopenCheck(){let R=null;try{R=get(REOPEN_KEY,null);}catch(e){}if(!
   try{const E=get(LS_EVAL,{})||{};if(E.date===d)set(LS_EVAL,{});}catch(e){}
   try{const S=get(BEST5_KEY,{})||{};if(S.d===d)set(BEST5_KEY,{d,locked:false});}catch(e){}
   try{const T=get(TC_KEY,{})||{};if(T.d===d){Object.values(T.by||{}).forEach(B=>{B.picks=(B.picks||[]).filter(x=>best5Started(x));});delete T.frozen;set(TC_KEY,T);}}catch(e){}
+  try{['nfl','ncaaf','mlb','nhl','nba','ncaab'].forEach(sp=>{const S=get('d4.tcs.'+sp,null);if(S&&S.d===d&&S.B){S.B.picks=(S.B.picks||[]).filter(x=>best5Started(x));set('d4.tcs.'+sp,S);}});}catch(e){}   /* v2.82.2 · the slices too, or the heal brings the old picks back */
   try{const B=get(BKDAY_KEY,{})||{};if(B.d===d)set(BKDAY_KEY,{});}catch(e){}
   try{const P=get(DESK_KEY,{})||{};if(P.d===d)set(DESK_KEY,{});}catch(e){}
   /* date-keyed stores merge by union across devices, so the day is overwritten with an
