@@ -11,3 +11,5 @@ ok(!fbpWrongGame({date:'2026-11-01T21:25Z'},leg,'2026-11-01','nfl','222'),'same-
 GAMES=[{away:{abbr:'KC'},home:{abbr:'DEN'},date:'2026-11-01T21:25Z',abstract:'pre'}];ok(fbpNotStarted(leg,'nfl'),'not-started game stays pending');
 GAMES[0].abstract='in';ok(!fbpNotStarted(leg,'nfl'),'live game grades');
 console.log(pass+' pass / '+fail+' fail');
+{const s2=src;const i=s2.indexOf('function fbpArchiveId(');ok(/filter\(h=>!\(BAD&&BAD\[String\(h\.id\)\]\)\)/.test(s2.slice(i,i+300)),'archive skips rejected ids');
+ ok(/const arr=sportGames\(sp\)\.filter\(z=>ok/.test(s2),'board skips rejected ids');ok(/hits\.filter\(h=>ok\(h\.id\)/.test(s2),'index skips rejected ids');}

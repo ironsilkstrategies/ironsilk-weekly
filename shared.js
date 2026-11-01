@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261101l';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261101m';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8219,22 +8219,23 @@ function fbpEventId(leg,ticketDate){
   const fk=sp+'|'+want+'|'+String(leg.gameDate||ticketDate||'').slice(0,10);
   if(FBP_FOUND[fk])return{id:FBP_FOUND[fk],pending:false};
   const m=FBP_MISS[fk];if(m&&Date.now()-m.ts<3000)return m.r;   // same game, same answer — 13 legs don't search 13 times
-  const r=fbpEventIdCore(leg,ticketDate,sp,want);const bad=FBP_BAD[String(leg.gameDate||ticketDate||'').slice(0,10)];if(r.id&&bad&&bad[String(r.id)])r.id=null,r.pending=false;if(r.id)FBP_FOUND[fk]=r.id;else FBP_MISS[fk]={ts:Date.now(),r};return r;
+  const r=fbpEventIdCore(leg,ticketDate,sp,want);if(r.id)FBP_FOUND[fk]=r.id;else FBP_MISS[fk]={ts:Date.now(),r};return r;
 }
 function fbpEventIdCore(leg,ticketDate,sp,want){
-  const arr=sportGames(sp);
+  const BAD=FBP_BAD[String(leg.gameDate||ticketDate||'').slice(0,10)]||{};const ok=id=>id&&!BAD[String(id)];   /* v2.84.4 · a rejected id is skipped and the search goes on to the next source */
+  const arr=sportGames(sp).filter(z=>ok(z.espnId||z.id));
   const rev=want.split('@').reverse().join('@');
   const g=(leg.gid&&arr.find(z=>String(z.id)===String(leg.gid)))||arr.find(z=>{const k=fbpGameKey(z.away.abbr+'@'+z.home.abbr,sp);if(k!==want&&k!==rev)return false;const zd=String(z.date||z.start||z.kickoff||'').slice(0,10),ld=String(leg.gameDate||ticketDate||'').slice(0,10);return !zd||!ld||!isFinite(Date.parse(zd))||Math.abs(Date.parse(zd)-Date.parse(ld))<=1.5*864e5;});
   if(g)return{id:String(g.espnId||g.id),pending:false};
   const base=[leg.gameDate,ticketDate].filter(Boolean).sort()[0];
   // 1) the app's own archive: every game that was ever on the board kept its
   //    ESPN event id there — no network needed, works for any past week.
-  const fromArc=fbpArchiveId(sp,want,base);if(fromArc)return{id:fromArc,pending:false};
+  const fromArc=fbpArchiveId(sp,want,base,BAD);if(fromArc)return{id:fromArc,pending:false};
   const idx=get(FBP_IDX_KEY,{})||{};
   if(!base)return{id:null,pending:false};
   const hits=Object.keys(idx).filter(k=>k.startsWith(sp+':'+want+':')||k.startsWith(sp+':'+want.split('@').reverse().join('@')+':')).map(k=>({d:k.split(':')[2],id:idx[k]}));
   const lo=fbpShift(base,-1),hi=fbpShift(base,7);
-  const inWin=hits.filter(h=>h.d>=lo&&h.d<=fbpShift(base,1)).sort((a,b)=>a.d.localeCompare(b.d));
+  const inWin=hits.filter(h=>ok(h.id)&&h.d>=lo&&h.d<=fbpShift(base,1)).sort((a,b)=>a.d.localeCompare(b.d));
   if(inWin.length)return{id:inWin[0].id,pending:false};
   // 2) ESPN scoreboards: the game's own day (and the days either side) one at a
   //    time — single dates work on every ESPN sport — then the full window.
@@ -8278,8 +8279,8 @@ function fbpArcIndex(sp){
         {const rd=r.date||r.start||r.gameDate;const e={id,fin:!!((A.finals&&A.finals[r.id])||r.final),dated:rd&&isFinite(Date.parse(String(rd).slice(0,10)))?Date.parse(String(rd).slice(0,10)):dated,ord:i};(map[g]=map[g]||[]).push(e);const gr=g.split('@').reverse().join('@');(map[gr]=map[gr]||[]).push(e);}});});}
   FBP_ARC_IDX[sp]={ts:Date.now(),map};return map;
 }
-function fbpArchiveId(sp,want,base){
-  const L=fbpArcIndex(sp)[want];if(!L||!L.length)return null;const t0=base?Date.parse(String(base).slice(0,10)):Date.now();
+function fbpArchiveId(sp,want,base,BAD){
+  const L=(fbpArcIndex(sp)[want]||[]).filter(h=>!(BAD&&BAD[String(h.id)]));if(!L||!L.length)return null;const t0=base?Date.parse(String(base).slice(0,10)):Date.now();
   const hits=L.map(h=>({...h,dist:h.dated!=null?Math.abs(h.dated-t0):null}));
   hits.sort((x,y)=>(x.dist!=null&&y.dist!=null?x.dist-y.dist:0)||(y.fin-x.fin)||(y.ord-x.ord));
   const near=hits.find(h=>h.dist!=null&&h.dist<=1.5*864e5);if(near)return near.id;const und=hits.find(h=>h.dist==null);return und&&!(und.fin&&String(base||'').slice(0,10)>=today())&&!hits.some(h=>h.dist!=null&&h.dist<=8*864e5)?und.id:null;   /* a finished game is never today's game */   /* v2.84.1 · a leg's game is on its own day (±1): the 10-day window graded today's KC@DEN props off an earlier KC–DEN box */
