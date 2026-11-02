@@ -28,7 +28,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   T('…so the page pulls the current week by itself',why==='every game final'&&c.eval('NCAAF_GAMES.length')===2&&c.eval('NCAAF_WEEK')===10,JSON.stringify({why,n:c.eval('NCAAF_GAMES.length')}));
   T('the evaluation\'s wait flag is cleared and the load time stamped',!c.eval('window.__FB_WEEK_LOADING')&&c.eval('window.__FB_WEEK_DONE')>0);
   T('a fresh current week is left alone',c.eval("fbWeekStale('ncaaf')")===null);
-  T('the relay page waits while a football week loads',/__FB_WEEK_LOADING/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8').match(/if\(DESK_BG_EVAL&&typeof window!=='undefined'\)window\.addEventListener\('load'[\s\S]{0,400}/)[0]));
+  T('the relay page waits while a football week loads',/__FB_WEEK_LOADING/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8').match(/if\(DESK_BG_EVAL&&typeof window!=='undefined'\)deskOnReady\(\(\)=>[\s\S]{0,400}/)[0]));
   /* the line window: one parse per change */
   c.eval(`set(LS.ncaafshots,{[today()]:[{game:'ILL@MD',market:'spread',side:'away',line:-2.5,price:-113,src:'mine',capturedAt:1}]}) ;window.__GETN=0;const G0=get;get=function(k){if(k===LS.ncaafshots)window.__GETN++;return G0.apply(this,arguments);};`);
   c.eval(`for(let i=0;i<40;i++)ncaafBookLinesFor('ILL@MD');`);

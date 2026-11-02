@@ -1082,7 +1082,11 @@ function deskRunSportEval(sp){
 function tcKickBoard(sp,t0){try{const g=(sportGames(sp)||[]).length;if(!g||Date.now()-t0<3000)return false;const k=window.__TC_KICK||0;if(k&&k>=(window.__FB_WEEK_DONE||0))return false;
   let sims=0;try{sims=Object.keys(sportSims(sp)||{}).length;}catch(e){}if(!(sims>=g||sp==='nhl'||Date.now()-t0>15000))return false;
   window.__TC_KICK=Date.now();todaySnapshot(true);return true;}catch(e){return false;}}
-if(DESK_BG_EVAL&&typeof window!=='undefined')window.addEventListener('load',()=>{const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;const t0=Date.now();
+/* v2.85.3 · 'load' waits for every image on the page — on a phone, hundreds of team logos and player headshots on the NBA board —
+   so a relay page could sit for over a minute before it even started evaluating ("stuck on 4 of 5"). Start when the page's code is in. */
+function deskOnReady(fn){if(typeof window==='undefined')return;let done=false;const go=()=>{if(done)return;done=true;try{fn();}catch(e){console.warn('ready',e);}};
+  window.addEventListener('load',go);const dcl=()=>setTimeout(go,2500);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',dcl);else dcl();}
+if(DESK_BG_EVAL&&typeof window!=='undefined')deskOnReady(()=>{const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;const t0=Date.now();
   const iv=setInterval(()=>{let ready=false;try{const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<40000)return;   /* v2.81.5 · the football week is still loading */
     const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[sp];ready=!!(B&&B.ts>=Math.max(t0-1000,window.__FB_WEEK_DONE||0))||(sportGames(sp)||[]).length===0&&Date.now()-t0>8000;
     if(!ready&&tcKickBoard(sp,t0))return;}catch(e){}
@@ -1146,15 +1150,16 @@ const EVAL_CHAIN_HOP=typeof location!=='undefined'&&/[?&]chain=1/.test(location.
 if(EVAL_CHAIN_HOP&&typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{const C=evalChainNext();const n=C?C.done.length+C.miss.length+1:0,N=C?n+C.todo.length-1:0;
   const d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:99999;background:#0b1220;color:#f5c542;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 16px system-ui;text-align:center;padding:24px';
   const ld=C&&C.mode==='load';
-  d.innerHTML=`<div style="font-size:34px">${ld?'⟳':'🔒'}</div><div style="margin-top:10px">${ld?'Loading every board':'Master evaluation'}</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">${ld?'Loading':'Evaluating'} ${SP_LAB[window.__PAGE_SPORT__]||''}… (${n} of ${N})</div><div style="color:#64748b;margin-top:14px;font-size:12px;font-weight:400">Hang tight — the app comes back on its own.</div>`;document.body.appendChild(d);});
+  d.innerHTML=`<div style="font-size:34px">${ld?'⟳':'🔒'}</div><div style="margin-top:10px">${ld?'Loading every board':'Master evaluation'}</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">${ld?'Loading':'Evaluating'} ${SP_LAB[window.__PAGE_SPORT__]||''}… (${n} of ${N})</div><div style="color:#64748b;margin-top:14px;font-size:12px;font-weight:400">Hang tight — the app comes back on its own.</div><button id="chainSkip" style="margin-top:18px;padding:10px 18px;border-radius:10px;border:1px solid #f5c542;background:transparent;color:#f5c542;font:600 14px system-ui">Skip this sport →</button>`;document.body.appendChild(d);});
+  try{setTimeout(()=>{const b=document.getElementById('chainSkip');if(b)b.onclick=()=>{window.__CHAIN_SKIP=1;b.textContent='Skipping…';};},0);if(C&&(C.retried||[]).includes(window.__PAGE_SPORT__)){const q=d.querySelector('div:nth-child(3)');if(q)q.textContent+=' — second try';}}catch(e){}
 if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;const t0=Date.now();const iv=setInterval(()=>{const C0=evalChainNext();const ld=C0&&C0.mode==='load';const me=window.__PAGE_SPORT__||sp0;
   let ok=false,ready=false;
   if(ld){const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<45000)return;   /* v2.81.5 · wait for the football week */
     const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[me];ready=!!(B&&B.ts>=Math.max(t0,window.__FB_WEEK_DONE||0));ok=ready;if(!ready&&tcKickBoard(me,t0))return;if(!ready&&Date.now()-t0<45000)return;}   /* the board is on Today's card */
-  else{const R=get('d4.bgeval.'+me,null);ready=!!(R&&R.ts>=t0);ok=ready&&!!R.ok;if(!ready&&Date.now()-t0<65000)return;}
+  else{const R=get('d4.bgeval.'+me,null);ready=!!(R&&R.ts>=t0);ok=ready&&!!R.ok;if(!ready&&!window.__CHAIN_SKIP&&Date.now()-t0<((C0&&(C0.retried||[]).includes(me))?40000:55000))return;}
   clearInterval(iv);const C=evalChainNext();if(!C)return;const sp=C.todo.shift();
   /* v2.85.2 · a sport whose board didn't come up gets one more try at the end of the relay, instead of the card going out without it */
-  if(ok)C.done.push(sp);else if(!ld&&!(C.retried||[]).includes(sp)){(C.retried=C.retried||[]).push(sp);C.todo.push(sp);}else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
+  if(ok)C.done.push(sp);else if(!ld&&!window.__CHAIN_SKIP&&!(C.retried||[]).includes(sp)){(C.retried=C.retried||[]).push(sp);C.todo.push(sp);}else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
 /* back home after "Load all sports" */
 if(typeof location!=='undefined'&&/[?&]loaddone=1/.test(location.search||'')&&!DESK_BG_EVAL)setTimeout(()=>{const C=evalChainNext();localStorage.removeItem(EVAL_CHAIN_KEY);
   try{history.replaceState(null,'',location.pathname);}catch(e){}
@@ -1446,7 +1451,7 @@ function deskBoot(){try{if(!document.getElementById('deskCss')){const st=documen
   /* the old missions: retired once (their XP is kept) — challenges are rebuilt */
   try{if(!get('d4.msRetired',null)){const A=msAll();let n=0;A.forEach(m=>{if(m.status==='active'){m.status='retired';m.retiredOn=today();n++;}});if(n)msSave(A);set('d4.msRetired',{d:today(),n});}}catch(e){}
   try{bankCfg();}catch(e){}}
-if(typeof window!=='undefined'){window.addEventListener('load',()=>{deskBoot();setTimeout(()=>{try{confBackfill();}catch(e){}},4000);});}
+if(typeof window!=='undefined'){deskOnReady(()=>{deskBoot();setTimeout(()=>{try{confBackfill();}catch(e){}},4000);});}
 /* the autopilot learns the confidence meter right after grading */
 try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='conf')){const i=AP_STEPS.findIndex(s=>s[0]==='voices');AP_STEPS.splice(i>=0?i+1:AP_STEPS.length,0,['conf','Confidence meter','Re-learns every character\'s confidence from its graded calls (time-ordered, calibrated per market) so 70% has to have actually hit 70%.',()=>genSlice(confRebuildG(true)).then(M=>{try{confBackfill();}catch(e){}PCI_C=null;return M.n;})]);}}catch(e){}
 /* hidden frames never post to Telegram */
@@ -1647,8 +1652,9 @@ function deskReopenCheck(){let R=null;try{R=get(REOPEN_KEY,null);}catch(e){}if(!
   try{const L=get(EVAL_LOCK_KEY,{})||{};if(L.date===d)set(EVAL_LOCK_KEY,{});}catch(e){}
   try{const E=get(LS_EVAL,{})||{};if(E.date===d)set(LS_EVAL,{});}catch(e){}
   try{const S=get(BEST5_KEY,{})||{};if(S.d===d){if((S.top3||[]).length)set('d4.b3keep',{d,keys:S.top3.map(x=>x.sp+'|'+x.game+'|'+x.pick)});set(BEST5_KEY,{d,locked:false});}}catch(e){}   /* v2.85.2 · remember the card so a re-run keeps what still qualifies */
-  try{const T=get(TC_KEY,{})||{};if(T.d===d){Object.values(T.by||{}).forEach(B=>{B.picks=(B.picks||[]).filter(x=>best5Started(x));});delete T.frozen;set(TC_KEY,T);}}catch(e){}
-  try{['nfl','ncaaf','mlb','nhl','nba','ncaab'].forEach(sp=>{const S=get('d4.tcs.'+sp,null);if(S&&S.d===d&&S.B){S.B.picks=(S.B.picks||[]).filter(x=>best5Started(x));set('d4.tcs.'+sp,S);}});}catch(e){}   /* v2.82.2 · the slices too, or the heal brings the old picks back */
+  /* v2.85.3 · each sport's board stays on Today's card until that sport is re-evaluated and replaces it — wiping them meant a sport
+     that didn't come back in the re-run lost every pick ("picks that were on the Best 3 just vanished") */
+  try{const T=get(TC_KEY,{})||{};if(T.d===d){delete T.frozen;set(TC_KEY,T);}}catch(e){}
   try{const B=get(BKDAY_KEY,{})||{};if(B.d===d)set(BKDAY_KEY,{});}catch(e){}
   try{const P=get(DESK_KEY,{})||{};if(P.d===d)set(DESK_KEY,{});}catch(e){}
   /* date-keyed stores merge by union across devices, so the day is overwritten with an

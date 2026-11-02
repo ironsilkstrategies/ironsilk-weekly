@@ -55,7 +55,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   T('a page writing its own sport keeps every other sport (it builds on the healed card)',!!(H2.by.nba&&H2.by.nfl));
   T('…and saves its own slice',h.eval(`(get('d4.tcs.nba',null)||{}).d===__TD`));
   h.eval(`set(REOPEN_KEY,{d:__TD,ts:Date.now(),why:'test'});localStorage.removeItem(REOPEN_DONE);deskReopenCheck();`);
-  T('unfreeze clears the slices\' unstarted picks too (the heal can\'t bring them back)',h.eval(`(get('d4.tcs.nfl',null).B.picks||[]).length`)===0&&!(h.eval('tcHeal()').by.nfl.picks||[]).length);
+  T('unfreeze keeps each sport\'s board until that sport is re-evaluated (v2.85.3)',h.eval(`(get('d4.tcs.nfl',null).B.picks||[]).length`)>0);
   const sj=fs.readFileSync(path.join(W,'store.js'),'utf8');
   T('a background page waits up to 20 s for the big store before running without it',/\[\?&\]bg=1\/\.test\(location\.search\|\|''\)\?20000:6000/.test(sj));
   T('the Book, the freeze, the Best 3 and the end of the relay all read the healed card',/tcHeal\(\):get\(TC_KEY,\{\}\)\)\|\|\{\};/.test(fs.readFileSync(path.join(W,'desk-book.js'),'utf8'))&&/function tcFreeze\(\)\{const T=\(typeof tcHeal==='function'\?tcHeal\(false\)/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8'))&&/if\(!S\.locked\)\{try\{tcHeal\(\);\}catch\(e\)\{\}const b=best5Build\(\);/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8')));

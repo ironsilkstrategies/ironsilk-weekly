@@ -27,7 +27,7 @@ setTimeout(async()=>{try{
   T('the day is no longer frozen and no eval counts as run',w.eval('deskFrozen()')===false&&w.eval('evalRanToday()')===false);
   const S=w.eval(`get(BEST5_KEY,{})`);T('Best 3 unlocked for the same day',S.d===D&&S.locked===false&&!(S.top3||[]).length);
   const TC=w.eval(`get(TC_KEY,{})`);const P=TC.by.ncaaf.picks;
-  T('Today card: the started game keeps its pick, the unstarted one is cleared',P.length===1&&P[0].game==='EARLY@GAME'&&!TC.frozen,JSON.stringify(P.map(x=>x.game)));
+  T('Today card: every pick stays until its sport is re-evaluated (v2.85.3)',P.length===2&&P.some(x=>x.game==='EARLY@GAME')&&!TC.frozen,JSON.stringify(P.map(x=>x.game)));
   const C=w.eval(`get(CPAR_KEY,{})`),X=w.eval(`get(CPX_KEY,{})`);
   T('character parlays reopened (marker, not a deletion), yesterday untouched',C[D].locked===false&&C[D].reopened&&C['2026-10-16'].locked===true&&X[D].locked===false);
   const L=w.eval(`get('d4.best5log',{})`);T('Best log: today emptied with a marker, yesterday kept',(L[D].picks||[]).length===0&&L[D].reopened&&L['2026-10-16'].picks.length===1);
