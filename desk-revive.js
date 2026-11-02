@@ -110,10 +110,23 @@ function revMissionsHtml(){const B=revBoss();const all=revTicketsDone();const wi
     <div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">${B.dealt}/${B.hp} damage · ${B.st.won}-${B.st.n-B.st.won} this week</div></div></div>
     <div class="mktlab" style="margin-top:8px">Trophies</div><div>${tro}</div></div>`;}
 
+
+/* ── v2.85.4 · evaluation audit: every sport, every pick on today's card, and the rule that kept it off ── */
+function evalAuditHtml(){let N=[];try{N=best3Near(600)||[];}catch(e){}let B=null;try{B=best5State();}catch(e){}const on=new Set(((B&&B.top3)||[]).map(x=>x.sp+'|'+x.game+'|'+x.pick));
+  const T=get(TC_KEY,{})||{};const tt=x=>{try{return new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}catch(e){return'';}};
+  const rows=SPS.map(sp=>{let ev=null;try{ev=get('d4.bgeval.'+sp,null);}catch(e){}const sl=(T.d===today()&&T.by&&T.by[sp])||null;const mine=N.filter(x=>x.sp===sp);
+    if(!sl&&!mine.length)return'';const r={};mine.forEach(x=>{const k=String(x.why||'qualifies').replace(/-?\d+(\.\d+)?%?/g,'#').replace(/\s*\(.*?\)\s*/g,' ').slice(0,64).trim();r[k]=(r[k]||0)+1;});
+    const top=mine.filter(x=>x.price!=null).sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,4);const n3=((B&&B.top3)||[]).filter(x=>x.sp===sp).length;
+    return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between"><b>${SPL(sp)}</b><span class="mono" style="font-size:10px;color:${ev&&ev.d===today()&&ev.ok?'var(--win)':'var(--rust)'}">${ev&&ev.d===today()?(ev.ok?'✓ evaluated '+tt(ev.ts):'✗ evaluation failed'):'not evaluated today'} · board ${sl?tt(sl.ts):'—'}</span></div>
+      <div class="mono" style="font-size:10px;color:var(--mute)">${mine.length} picks today · ${n3} on the Best 3</div>
+      ${Object.entries(r).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`<div class="mono" style="font-size:9.5px">${n} × ${E(k)}</div>`).join('')}
+      ${top.map(x=>`<div style="font-size:11px;margin-top:2px">${E(x.pick)} ${x.price>0?'+':''}${x.price} · ${x.p!=null?Math.round(x.p*100)+'%':''} — <span style="color:var(--gold)">${E(x.why||'qualifies')}</span></div>`).join('')}</div>`;}).join('');
+  return`<div class="tkt"><h3>🔎 Evaluation audit</h3><div class="sub" style="font-size:10px">Proof every sport was evaluated: each pick on today's card and the rule that kept it off the Best 3 (# = a number).</div>${rows||'<div class="sub">No boards on today\'s card yet.</div>'}</div>`;}
+
 /* ── the Edge Desk view ─────────────────────────────────────────────── */
 function edgeDeskHtml(){const safe=f=>{try{return f();}catch(e){console.warn('edge desk',e);return'';}};
   const C=safe(revAllConflicts)||[];
   const conf=`<div class="tkt"><h3>⚠️ Source conflicts</h3><div class="sub" style="font-size:10px">An outside site whose pick goes against most of its own trends — treat that pick as weaker.</div>${Array.isArray(C)&&C.length?C.map(c=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${SPL(c.sp)} · ${E(c.game)} — ${E(c.src)} picks <b>${E(c.pick)}</b>, ${c.against} trends say otherwise</div>`).join(''):'<div class="sub">No conflicts in today\'s outside picks.</div>'}</div>`;
-  return safe(revExposureHtml)+safe(revCrowdHtml)+conf+safe(ctxBoardHtml)+safe(revMortemHtml)+safe(revMissionsHtml);}
-Object.assign(W,{revExposure,revSwap,revSourceConflicts,revAllConflicts,ctxTagsFor,ctxGaugesHtml,ctxBoardHtml,revCrowd,revMortems,revBoss,edgeDeskHtml,revExposureHtml,revMissionsHtml,revMortemHtml});
+  return safe(evalAuditHtml)+safe(revExposureHtml)+safe(revCrowdHtml)+conf+safe(ctxBoardHtml)+safe(revMortemHtml)+safe(revMissionsHtml);}
+Object.assign(W,{evalAuditHtml,revExposure,revSwap,revSourceConflicts,revAllConflicts,ctxTagsFor,ctxGaugesHtml,ctxBoardHtml,revCrowd,revMortems,revBoss,edgeDeskHtml,revExposureHtml,revMissionsHtml,revMortemHtml});
 })();
