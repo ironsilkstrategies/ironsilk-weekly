@@ -14,3 +14,4 @@ setTimeout(()=>{try{
   T('…and the banner is gone (nothing left to turn)',!/still up/.test(w.eval('deskProcessHtml()')));
 }catch(e){T('crashed',false,String(e&&e.stack||e).slice(0,300));}
   console.log(out.join('\n'));const f=out.filter(x=>x.startsWith('FAIL')).length;console.log(`${out.length-f} pass / ${f} fail`);process.exit(0);},2500);
+;(()=>{const src=require('fs').readFileSync(__dirname+'/shared.js','utf8');const m=src.match(/onclick="(if\(confirm\('Start \$\{day\(o\.cal\)\}[^"]*)"/);let ok=false;try{new Function(m[1].replace('${day(o.cal)}','Monday'));ok=true;}catch(e){}console.log((ok?'PASS':'FAIL')+'  start-now button onclick is valid JS');})();
