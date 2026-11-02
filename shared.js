@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261102c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261102d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15826,8 +15826,13 @@ function best5Build(){
   /* v2.80.8 · a sport hidden for its off-season stays off the card */
   const by={};Object.keys(by0).forEach(sp=>{if(typeof sportOn!=='function'||sportOn(sp))by[sp]=by0[sp];});
   const T3=best3Pool(by,null);let pick3=T3;try{if(typeof b3SpreadOn==='function'&&b3SpreadOn())pick3=best3Spread(by,T3);}catch(e){}   /* v2.80.5 · the optional 🌐 spread */
-  const top3=pick3.map(x=>({...x,main:true}));
   const bySport={};Object.keys(by).forEach(sp=>{bySport[sp]=best3Pool(by,sp);});
+  /* v2.85.2 · a re-run keeps what still qualifies: a pick from the card before the unfreeze stays on
+     the Best 3 while it's still one of its sport's qualifying picks, instead of trading places on noise */
+  try{const K=get('d4.b3keep',null);if(K&&K.d===today()&&(K.keys||[]).length){const k=x=>x.sp+'|'+x.game+'|'+x.pick;
+    const still=K.keys.map(key=>Object.values(bySport).flat().find(x=>k(x)===key)).filter(x=>x&&!best5Started(x));
+    if(still.length){const keep=new Set(still.map(k));const rest=pick3.filter(x=>!keep.has(k(x)));pick3=[...still,...rest].slice(0,Math.max(3,pick3.length)).slice(0,3);}}}catch(e){}
+  const top3=pick3.map(x=>({...x,main:true}));
   const props=best3Props();
   /* every pick on the card is graded: the main three plus each sport's own three */
   const seen=new Set(),picks=[];[...top3,...Object.values(bySport).flat()].forEach(x=>{const k=x.sp+'|'+x.game+'|'+x.pick;if(seen.has(k))return;seen.add(k);picks.push(x);});

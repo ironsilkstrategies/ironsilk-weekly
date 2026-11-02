@@ -1153,7 +1153,8 @@ if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;
     const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[me];ready=!!(B&&B.ts>=Math.max(t0,window.__FB_WEEK_DONE||0));ok=ready;if(!ready&&tcKickBoard(me,t0))return;if(!ready&&Date.now()-t0<45000)return;}   /* the board is on Today's card */
   else{const R=get('d4.bgeval.'+me,null);ready=!!(R&&R.ts>=t0);ok=ready&&!!R.ok;if(!ready&&Date.now()-t0<65000)return;}
   clearInterval(iv);const C=evalChainNext();if(!C)return;const sp=C.todo.shift();
-  if(ok)C.done.push(sp);else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
+  /* v2.85.2 · a sport whose board didn't come up gets one more try at the end of the relay, instead of the card going out without it */
+  if(ok)C.done.push(sp);else if(!ld&&!(C.retried||[]).includes(sp)){(C.retried=C.retried||[]).push(sp);C.todo.push(sp);}else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
 /* back home after "Load all sports" */
 if(typeof location!=='undefined'&&/[?&]loaddone=1/.test(location.search||'')&&!DESK_BG_EVAL)setTimeout(()=>{const C=evalChainNext();localStorage.removeItem(EVAL_CHAIN_KEY);
   try{history.replaceState(null,'',location.pathname);}catch(e){}
@@ -1645,7 +1646,7 @@ function deskReopenCheck(){let R=null;try{R=get(REOPEN_KEY,null);}catch(e){}if(!
   try{const F=get(FREEZE_KEY,null);if(F&&F.d===d)set(FREEZE_KEY,{d:null,ts:Date.now(),why:'reopened · '+(R.why||'')});}catch(e){}
   try{const L=get(EVAL_LOCK_KEY,{})||{};if(L.date===d)set(EVAL_LOCK_KEY,{});}catch(e){}
   try{const E=get(LS_EVAL,{})||{};if(E.date===d)set(LS_EVAL,{});}catch(e){}
-  try{const S=get(BEST5_KEY,{})||{};if(S.d===d)set(BEST5_KEY,{d,locked:false});}catch(e){}
+  try{const S=get(BEST5_KEY,{})||{};if(S.d===d){if((S.top3||[]).length)set('d4.b3keep',{d,keys:S.top3.map(x=>x.sp+'|'+x.game+'|'+x.pick)});set(BEST5_KEY,{d,locked:false});}}catch(e){}   /* v2.85.2 · remember the card so a re-run keeps what still qualifies */
   try{const T=get(TC_KEY,{})||{};if(T.d===d){Object.values(T.by||{}).forEach(B=>{B.picks=(B.picks||[]).filter(x=>best5Started(x));});delete T.frozen;set(TC_KEY,T);}}catch(e){}
   try{['nfl','ncaaf','mlb','nhl','nba','ncaab'].forEach(sp=>{const S=get('d4.tcs.'+sp,null);if(S&&S.d===d&&S.B){S.B.picks=(S.B.picks||[]).filter(x=>best5Started(x));set('d4.tcs.'+sp,S);}});}catch(e){}   /* v2.82.2 · the slices too, or the heal brings the old picks back */
   try{const B=get(BKDAY_KEY,{})||{};if(B.d===d)set(BKDAY_KEY,{});}catch(e){}
