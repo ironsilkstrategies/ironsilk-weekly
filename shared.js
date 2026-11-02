@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261102a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261102b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -5934,6 +5934,10 @@ function coachSpeak(context){
 // visual language as the rest of the app (tkt card, flag colors) but with
 // its own identity so it reads as a voice, not another stat block.
 function coachHtml(context){
+  /* v2.85.0 · matchup-context gauges ride on every game card, under the Coach */
+  let ctx='';if(context&&context.game&&context.sport&&typeof ctxGaugesHtml==='function'){try{ctx=ctxGaugesHtml(context.sport,context.game);}catch(e){}}
+  return coachHtmlCore(context)+ctx;}
+function coachHtmlCore(context){
   const v=coachSpeak(context);
   if(!v)return '';
   const toneColor={warn:'var(--rust)',bad:'var(--rust)',neutral:'var(--mute)',good:'var(--win)'};
@@ -18402,6 +18406,26 @@ function facWx(sp,g,side,team,f){if(sp!=='nfl'&&sp!=='ncaaf')return;const H=g.ho
   if(sp==='nfl'&&typeof NFL_DOME!=='undefined'&&NFL_DOME.has(String(H).toUpperCase())){f.push('dome');return;}const w=g.weather;if(!w)return;
   const wind=parseFloat((String(w.wind||'').match(/(\d+)/)||[])[1]);const t=parseFloat(w.temp);if(wind>=15)f.push('wind15');if(isFinite(t)&&t<=32)f.push('cold32');}
 function facH2H(sp,g,team,f){if(!team)return;try{const S=pwrSeries(sp,g.away.abbr,g.home.abbr);if(!S||S.n<3||S.h===S.a)return;const lead=S.h>S.a?g.home.abbr:g.away.abbr;f.push(lead===team?'h2hedge':'h2hfade');}catch(e){}}
+/* v2.85.0 · matchup context for every sport: division / conference / interleague,
+   the ballpark, altitude, the roof. Game-level tags (true whichever side you pick),
+   so each one keeps its own record and the brain only leans on it once it's proven. */
+const NHL_DIV={BOS:'A',BUF:'A',DET:'A',FLA:'A',MTL:'A',OTT:'A',TB:'A',TOR:'A',CAR:'M',CBJ:'M',NJ:'M',NJD:'M',NYI:'M',NYR:'M',PHI:'M',PIT:'M',WSH:'M',
+  CHI:'C',COL:'C',DAL:'C',MIN:'C',NSH:'C',STL:'C',UTA:'C',UTAH:'C',WPG:'C',ANA:'P',CGY:'P',EDM:'P',LA:'P',LAK:'P',SJ:'P',SJS:'P',SEA:'P',VAN:'P',VGK:'P'};
+const NHL_EAST=new Set(['A','M']);
+const NBA_DIV={BOS:'At',BKN:'At',NY:'At',NYK:'At',PHI:'At',TOR:'At',CHI:'Ce',CLE:'Ce',DET:'Ce',IND:'Ce',MIL:'Ce',ATL:'Se',CHA:'Se',MIA:'Se',ORL:'Se',WSH:'Se',WAS:'Se',
+  DEN:'Nw',MIN:'Nw',OKC:'Nw',POR:'Nw',UTA:'Nw',UTAH:'Nw',GS:'Pa',GSW:'Pa',LAC:'Pa',LAL:'Pa',PHX:'Pa',SAC:'Pa',DAL:'Sw',HOU:'Sw',MEM:'Sw',NO:'Sw',NOP:'Sw',SA:'Sw',SAS:'Sw'};
+const NBA_EAST=new Set(['At','Ce','Se']);
+const CTX_ALT={nfl:['DEN'],nba:['DEN','UTA','UTAH'],nhl:['COL','UTA','UTAH'],ncaaf:['AF','AFA','WYO','CSU','COLO','UTAH','BYU','NM','UNM'],ncaab:['AF','AFA','WYO','CSU','COLO','UTAH','BYU','UNM']};
+const CTX_KEYS=['divgame','confgame','nonconf','interleague','hitterpark','pitcherpark','roofpark','altitude'];
+function facCtx(sp,g,f){const A=String(g.away&&g.away.abbr||'').toUpperCase(),H=String(g.home&&g.home.abbr||'').toUpperCase();const push=k=>{if(!f.includes(k))f.push(k);};
+  if(sp==='mlb'){const da=DIVISION[A],dh=DIVISION[H];if(da&&dh){if(da===dh)push('divgame');else if(da.slice(0,2)!==dh.slice(0,2))push('interleague');}
+    const pf=PARK[H];if(pf){if(pf[0]>=104)push('hitterpark');if(pf[0]<=95)push('pitcherpark');}if(DOME[H])push('roofpark');}
+  if(sp==='nfl'){const a=NFL_DIV[A],h=NFL_DIV[H];if(a&&h){if(a===h)push('divgame');else if(a[0]===h[0])push('confgame');else push('nonconf');}}
+  if(sp==='nhl'){const a=NHL_DIV[A],h=NHL_DIV[H];if(a&&h){if(a===h)push('divgame');else if(NHL_EAST.has(a)===NHL_EAST.has(h))push('confgame');else push('nonconf');}}
+  if(sp==='nba'){const a=NBA_DIV[A],h=NBA_DIV[H];if(a&&h){if(a===h)push('divgame');else if(NBA_EAST.has(a)===NBA_EAST.has(h))push('confgame');else push('nonconf');}}
+  if(sp==='ncaaf'&&typeof NCAAF_CONF!=='undefined'){const ca=NCAAF_CONF[g.away.name]||NCAAF_CONF[g.away.abbr],ch=NCAAF_CONF[g.home.name]||NCAAF_CONF[g.home.abbr];
+    if(ca&&ch&&ca!=='Independent'&&ch!=='Independent')push(ca===ch?'confgame':'nonconf');}
+  if((CTX_ALT[sp]||[]).includes(H))push('altitude');}
 /* each team's main QB / goalie in the scouting ledger */
 let SCOUT_PRIM={};
 function scoutPrim(sp){const B=scoutBoard(sp);const C=SCOUT_PRIM[sp];if(C&&C.ts===B.ts)return C.P;const P={};
@@ -18756,13 +18780,14 @@ function renderToday(noSnap){
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
       ${rows||`<div class="empty">${total?'Nothing here matches the filter'+(P.length<total?' (live games are pinned above)':'')+'.':'No colored, non-conflicted picks on this board yet.'}</div>`}
       ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
-  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['parlays','🎲 Parlays'],['stars','⭐ Stars & Busts'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
+  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['parlays','🎲 Parlays'],['stars','⭐ Stars & Busts'],['props','🎯 Props'],['subs','💎 Subscribers'],['edge','🛡 Edge Desk']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
     el.innerHTML=vw+spBar+safe(()=>charDayHtml(F.sp))+safe(feelTuneHtml)+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Every character's tickets — game lines and with props — and their records live in the Parlay Hub.</div><button class="msg-chip on" onclick="tfSet('view','parlays')">🎲 Open the Parlay Hub</button></div>`+charDeskHtml(F);return;}
   if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
   if(F.view==='parlays'){let h='';try{h=parlayHubHtml();}catch(e){console.warn('parlay hub',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   if(F.view==='stars'){let h='';try{h=starsHtml(F.sp);}catch(e){console.warn('stars',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+spBar+h;return;}
+  if(F.view==='edge'){let h='';try{h=typeof edgeDeskHtml==='function'?edgeDeskHtml():'';}catch(e){console.warn('edge desk',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}   /* v2.85.0 */
   if(F.view==='subs'){let h='';try{h=subCardHtml();}catch(e){console.warn('subscriber card',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   let hero='';try{if(typeof todayTopHtml!=='function')hero=todayBestHero();}catch(e){console.warn('best hero',e);}   /* v2.33 · the Best card sits at the top of Today, in every view */
   el.innerHTML=vw+hero+legend+bar+(F.tier==='play'?`<div class="sub mono" style="font-size:9.5px;margin:-2px 0 8px;color:var(--win)">✅ Playable = every character on this side (or SUPREME), lane not blocked, model not fighting the market, has a book price no shorter than -300, +EV on what picks like it have actually hit. ${cnt({tier:'play'})} of ${allP.length} today.</div>`:'')+liveHtml+sdHtml+body;
@@ -20257,7 +20282,7 @@ Object.assign(FAC_LAB,{homedog:'home underdog',roadfav:'road favorite',shortweek
   qbstar:'picked team\'s QB is top 5% in passer rating',qbbust:'picked team\'s QB is bottom 5% in passer rating',oppqbstar:'opponent QB is top 5%',oppqbbust:'opponent QB is bottom 5%',qbfading:'picked team\'s QB is fading (last 3 games)',
   goaliestar:'picked team\'s main goalie is top 20% in save %',goaliebust:'picked team\'s main goalie is bottom 20%',oppgoaliestar:'opponent\'s main goalie is top 20%',oppgoaliebust:'opponent\'s main goalie is bottom 20%',
   offedge:'both offenses outclass the defenses (Scout)',defedge:'both defenses outclass the offenses (Scout)',
-  wind15:'wind 15+ mph',cold32:'freezing (32°F or colder)',dome:'indoors (dome)',h2hedge:'picked team leads the head-to-head series',h2hfade:'picked team trails the head-to-head series'});
+  confgame:'conference game (not division)',nonconf:'out-of-conference game',interleague:'interleague game (AL vs NL)',hitterpark:'hitter-friendly ballpark',pitcherpark:'pitcher-friendly ballpark',roofpark:'ballpark with a roof',altitude:'game at altitude (thin air, tired legs)',wind15:'wind 15+ mph',cold32:'freezing (32°F or colder)',dome:'indoors (dome)',h2hedge:'picked team leads the head-to-head series',h2hfade:'picked team trails the head-to-head series'});
 const FAC_HI={nfl:48,ncaaf:58,nba:232,ncaab:152,mlb:9.5,nhl:6.5},FAC_LO={nfl:40,ncaaf:45,nba:215,ncaab:132,mlb:7.5,nhl:5.5};
 const FAC_PYTH={mlb:1.83,nfl:2.37,ncaaf:2.37,nhl:2.05,nba:13.91,ncaab:11.5};
 /* one index over the finals store per update (not a full scan per square) */
@@ -20302,6 +20327,7 @@ function factorsFor(sp,g,c){const f=[];const side=c.sd||c.side,m=c.m||c.market,l
   if(team){const P=facPyth(sp,team);if(P){if(P.actual-P.exp>=0.08)f.push('pythlucky');if(P.exp-P.actual>=0.08)f.push('pythunlucky');}}
   try{facMore(sp,g,side,m,team,opp,line,price,f);}catch(e){}   /* v2.28 · researched situations + player matchups */
   try{facWx(sp,g,side,team,f);facH2H(sp,g,team,f);}catch(e){}
+  try{facCtx(sp,g,f);}catch(e){}
   return f;}
 let FAC_C=null,FAC_SIG='';
 function factorTable(sp){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.filter(x=>x.graded).length;if(!FAC_C||FAC_SIG!==sig){FAC_C={};FAC_SIG=sig;}
