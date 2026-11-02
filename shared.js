@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261102b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261102c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15849,7 +15849,7 @@ function best5State(){const d=today();let S=get(BEST5_KEY,{});
   if(!S.locked){try{tcHeal();}catch(e){}const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,why3:b.why,ts:Date.now()});
     try{if(typeof ruleSnap==='function')S.rules=ruleSnap();}catch(e){}   /* v2.81 · the rules this card was built under */
     delete S.sides;delete S.totals;
-    const masterRan=evalRanToday();
+    const masterRan=evalRanToday()&&!(typeof deskTooEarly==='function'&&deskTooEarly());   /* v2.85.1 · an early-morning run doesn't lock the Best 3 */
     const first=Math.min(...b.picks.map(x=>Date.parse(x.start||'')).filter(isFinite),Infinity);
     /* never freeze an empty card while games are still ahead: keep building until something
        qualifies, and only lock empty in the final 30 minutes before the last open game */

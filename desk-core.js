@@ -1116,8 +1116,16 @@ function deskEvalReady(){const R=get('d4.evalready',null);return !!(R&&R.d===tod
 async function deskReviewFreeze(){const R=get('d4.evalready',null)||{};if(!confirm('Freeze today\'s picks and publish them?'))return;
   localStorage.removeItem('d4.evalready');DESK_EVAL_BUSY=true;try{await masterEvalFinish(R.done||[],R.miss||[],true);}finally{DESK_EVAL_BUSY=false;}
   try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}}
+function deskFirstStart(){try{const T=get(TC_KEY,{})||{};return Math.min(...Object.values(T.by||{}).flatMap(B=>(B.picks||[]).map(x=>Date.parse(x.start||''))).filter(v=>isFinite(v)&&v>Date.now()-6*36e5&&v<Date.now()+30*36e5),Infinity);}catch(e){return Infinity;}}
+function deskTooEarly(){try{if(window.__NO_EARLY_HOLD__)return false;const h=+new Intl.DateTimeFormat('en-US',{timeZone:APP_TZ,hour:'numeric',hourCycle:'h23'}).format(new Date())%24;if(h>=9)return false;const f=deskFirstStart();return!(isFinite(f)&&f-Date.now()<2*36e5);}catch(e){return false;}}
 async function masterEvalFinish(done,miss,force){
   try{if(typeof tcHeal==='function')tcHeal();}catch(e){}   /* v2.82.2 · every board the relay read is on the card before anything is reviewed or frozen */
+  /* v2.85.1 · never lock the day before the books post it: before 9 AM CT (and 2+ hours before the
+     first game) the run is kept for review, not frozen — a 3 AM run froze a card with no NBA, no
+     Monday-night lines and no college-basketball prices. The card still locks itself 30 min before the first game. */
+  if(!force&&deskTooEarly()){set('d4.evalready',{d:today(),ts:Date.now(),done,miss,early:true});
+    deskSay(`<span style="color:var(--gold)">⏳ Evaluated ${done.length} sport${done.length===1?'':'s'}, but it's too early to freeze — most books post the day's lines in the morning. Run the master evaluation again after 9 AM${miss.length?` (no lines yet: ${miss.map(s=>SP_LAB[s]||s).join(', ')})`:''}. The card still locks itself 30 min before the first game.</span>`);
+    try{deskToast('Too early to freeze — run it again after 9 AM',4000);}catch(e){}return;}
   if(!force&&deskReviewOn()){set('d4.evalready',{d:today(),ts:Date.now(),done,miss});
     deskSay(`<span style="color:var(--gold)">✓ ${done.length} sport${done.length===1?'':'s'} evaluated${miss.length?` · no games/lines: ${miss.map(s=>SP_LAB[s]||s).join(', ')}`:''}. Review the Best card, then tap 🔒 Looks good — freeze &amp; publish.</span>`);
     try{deskToast('Evaluation done — review the picks, then freeze',4000);}catch(e){}return;}
@@ -1181,10 +1189,10 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
   return`${night}<div class="tkt ps-card"><div class="ps-row">
     ${step(1,cal&&Date.now()-cal<18*36e5,'Grade & calibrate',cal?'last '+deskT(cal):'runs when the app opens')}
     ${step(2,intake>0||odds>0,'Intake',`${odds} priced pick${odds===1?'':'s'}${intake?' · '+intake+' outside reads':''}`)}
-    ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):held?'⏳ held by the Book — see below':ER?'✓ evaluated '+deskT(ER.ts)+' — waiting for your OK':'not yet — freezes everything',!fz&&(held||ER))}
+    ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):held?'⏳ held by the Book — see below':ER?(ER.early?'⏳ evaluated '+deskT(ER.ts)+' — too early to freeze, run again after 9 AM':'✓ evaluated '+deskT(ER.ts)+' — waiting for your OK'):'not yet — freezes everything',!fz&&(held||ER))}
     ${step(4,fz&&pub&&pub.d===d&&pub.ok,'Published',fz?((pub&&pub.d===d&&pub.ok?'page ✓':'page …')+' · '+(posted&&posted.d===d?'VIP ✓':'VIP …')):'after the freeze')}</div>
     ${fz?'':`<label class="sub" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" ${deskReviewOn()?'checked':''} onchange="set('d4.reviewFreeze',this.checked);deskRerender()"> Let me review the picks before freezing</label>${deskEvalReady()?`<div class="sub" style="color:var(--gold);margin-top:4px">✓ Every sport evaluated — check the Best card below, then freeze. Nothing posts until you do.</div>`:''}`}
-    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="vipCardPhotos(this)">📸 VIP card → photos</button><button onclick="fbpOpen()">📣 Facebook post</button><button onclick="genOpen()">🧬 Bloodlines</button><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
+    <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button><button onclick="deskUnfreezeNow()">🔓 Unfreeze &amp; re-run</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="vipCardPhotos(this)">📸 VIP card → photos</button><button onclick="fbpOpen()">📣 Facebook post</button><button onclick="genOpen()">🧬 Bloodlines</button><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
     <div class="deskStatus sub mono" style="font-size:10px;margin-top:4px"></div></div>`;}
 
 /* ── 13 · THE PUBLIC PAGE — premium, honest, and live ──────────────────────────
