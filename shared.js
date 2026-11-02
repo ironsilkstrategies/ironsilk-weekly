@@ -2929,7 +2929,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261102f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261102g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18785,7 +18785,7 @@ function renderToday(noSnap){
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
       ${rows||`<div class="empty">${total?'Nothing here matches the filter'+(P.length<total?' (live games are pinned above)':'')+'.':'No colored, non-conflicted picks on this board yet.'}</div>`}
       ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
-  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['chars','🎭 Characters'],['parlays','🎲 Parlays'],['stars','⭐ Stars & Busts'],['props','🎯 Props'],['subs','💎 Subscribers'],['edge','🛡 Edge Desk']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
+  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['edge','🛡 Edge Desk'],['chars','🎭 Characters'],['parlays','🎲 Parlays'],['stars','⭐ Stars & Busts'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
     el.innerHTML=vw+spBar+safe(()=>charDayHtml(F.sp))+safe(feelTuneHtml)+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Every character's tickets — game lines and with props — and their records live in the Parlay Hub.</div><button class="msg-chip on" onclick="tfSet('view','parlays')">🎲 Open the Parlay Hub</button></div>`+charDeskHtml(F);return;}
