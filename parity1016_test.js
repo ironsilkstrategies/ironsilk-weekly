@@ -68,7 +68,7 @@ try{await wait(2600);
   const cells=(mb.match(/<td>([\d.]+)<\/td>/g)||[]).map(x=>+x.replace(/<\/?td>/g,''));
   T('MLB Proj. Box: 9 innings + F5 + runs, innings add up',/<th>9<\/th>/.test(mb)&&/<th>F5<\/th>/.test(mb)&&Math.abs(cells.slice(0,9).reduce((a,b)=>a+b,0)-4.4)<0.06,cells.slice(0,11).join(' '));
   const src=fs.readFileSync(path.join(W,'shared.js'),'utf8');
-  T('MLB card: Proj. Box, Take/Fade and 📊 Analysis tabs',/pan\(\$\{g\.id\},'projbox',this\)">Proj\. Box/.test(src)&&/pan\(\$\{g\.id\},'verdict',this\)">Take\/Fade/.test(src)&&/pan\(\$\{g\.id\},'post',this\)"[^>]*>📊 Analysis/.test(src));
+  T('MLB card: Proj. Box, Take/Fade and 📊 Analysis tabs',/pan\(\$\{(?:jsArg\()?g\.id\)?\},'projbox',this\)">Proj\. Box/.test(src)&&/pan\(\$\{(?:jsArg\()?g\.id\)?\},'verdict',this\)">Take\/Fade/.test(src)&&/pan\(\$\{(?:jsArg\()?g\.id\)?\},'post',this\)"[^>]*>📊 Analysis/.test(src));
   const fb=fs.readFileSync(path.join(W,'football-engine.js'),'utf8');
   T('NFL card: 📊 Analysis on finals; football Proj. Box carries the players',/nflTogglePanel\('analysis'/.test(fb)&&/p-nflanalysis-/.test(fb)&&/parPlayersHtml\(sport,g\)/.test(fb));
   /* gamecast: basketball court + hockey rink */

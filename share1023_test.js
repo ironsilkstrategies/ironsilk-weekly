@@ -18,7 +18,7 @@ let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');html=html.replace(/<scr
   const top3=[pk('WPG@DAL','DAL ML',-205,'2026-10-23T00:00Z'),pk('MIN@CGY','MIN ML',-205,'2026-10-23T01:00Z'),pk('NSH@BOS','BOS ML',-155,'2026-10-22T23:00Z')];
   w.eval(`set(BEST5_KEY,{d:'${D}',locked:true,lockedAt:Date.now()-6*36e5,top3:${JSON.stringify(top3)},bySport:{},picks:[],props:[]});
     set('d4.best5log',{'${D}':{v:2,picks:${JSON.stringify(top3)}},'2026-10-21':{v:2,picks:[{sp:'nhl',game:'TOR@MTL',pick:'TOR ML',price:-130,p:.7,main:true,hit:true,start:'2026-10-21T23:00Z'},{sp:'nhl',game:'A@B',pick:'B ML',price:-120,p:.7,main:true,hit:false,start:'2026-10-21T23:00Z'}]}});`);
-  w.eval('shareHub()');const hub=w.document.getElementById('shHub');const H=hub?hub.innerHTML:'';
+  w.eval('shareHub()');T('the sheet opens the moment it\'s tapped (v2.86.1)',!!w.document.getElementById('shHub'));w.eval("shareHubFill(document.getElementById('shHub'))");const hub=w.document.getElementById('shHub');const H=hub?hub.innerHTML:'';
   T('the hub opens with the links, the status and the ready posts',!!hub&&/Your links/.test(H)&&/Ready posts/.test(H)&&/VIP card posted/.test(H));
   const P=w.eval('SH_CUR.posts');const L=w.eval('SH_CUR.links');
   T('links: VIP join, free Telegram channel, free page, Facebook, X',L.map(l=>l[1]).join(' ')==='https://whop.com/ironsilkweekly/thedesk-vip https://t.me/TheDeskApp https://ironsilkweekly.com/picks.html https://www.facebook.com/share/1FCDFdUvRp/ https://x.com/RuleTheWorldKid',JSON.stringify(L.map(l=>l[1])));

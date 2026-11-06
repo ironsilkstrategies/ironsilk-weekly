@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261106b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261106c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -9196,8 +9196,10 @@ function lockSlip(){
     p:SLIP.reduce((a,x)=>a*x.p,1)});
   set(LS.locked,L);
   if(money.stake){try{saveWager(tid,+money.stake);}catch(e){}}
-  SLIP=[];set(LS.slip,SLIP);renderActiveBoard();paintSlip();closeSlipSheet();
+  SLIP=[];set(LS.slip,SLIP);paintSlip();closeSlipSheet();
+  /* v2.86.1 · the confirmation comes first; the board (≈0.7 s to redraw on a full slate) repaints right after it */
   alert(`Locked${name?' — "'+name+'"':''}. See Tickets → My Parlays.`);
+  setTimeout(()=>{try{renderActiveBoard();}catch(e){}},0);
 }
 // ── Modify a pending ticket — add or remove legs before it's locked in ──
 // Available on any ticket that is NOT finalized and NOT archived. A finalized
@@ -18704,7 +18706,7 @@ function cpropCalib(){const L=(get(CPROP_KEY,[])||[]).filter(cpropNew);const C={
 function cpropCal(C,v,p){const b=(C[v]||[]).find(x=>p>=x.lo&&p<x.hi);if(!b||!b.n)return p;return(b.h+p*12)/(b.n+12);}
 function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C=cpropCalib();const REC=cpropRecIdx();
   ['nfl','ncaaf','nba','ncaab','nhl','mlb'].forEach(sp=>{const L=LIKELY_LADDER[sp];if(!L)return;const teams=teamsToday(sp);if(!teams.size)return;
-    const last=get('d4.pstlast.'+sp,{})||{};
+    const last=roGet('d4.pstlast.'+sp,{})||{};
     Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<5)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
       if(rsOut(rsInjury(sp,P.name)))return;   /* v2.36 · listed Out / Doubtful / on IR: no call on a player who won't play */
       Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<5)return;

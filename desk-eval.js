@@ -123,9 +123,13 @@ function shAct(i,how){const p=SH_CUR&&SH_CUR.posts[i];if(!p||p.locked)return;con
   shCopy(text).then(ok=>deskToast(ok?'Copied':'Couldn\'t copy on this device',1600));}
 function shCopyLink(i){const l=SH_CUR&&SH_CUR.links[i];if(l)shCopy(l[1]).then(ok=>deskToast(ok?'Link copied':'Couldn\'t copy',1400));}
 function shCopyAll(){if(!SH_CUR)return;shCopy(SH_CUR.links.map(l=>`${l[0]}: ${l[1]}`).join('\n')).then(ok=>deskToast(ok?'All links copied — paste into a bio or a pinned post':'Couldn\'t copy',2400));}
-function shareHub(){let ov=document.getElementById('shHub');if(ov){ov.remove();return;}let F={};try{F=publicFeed()||{};}catch(e){}
-  const posts=shPosts(F),links=shLinks(F);SH_CUR={posts,links};const e=txtEsc;
+/* v2.86.1 · the sheet opens the moment it's tapped; the posts (built from the whole public feed) fill in a beat later */
+function shareHub(){let ov=document.getElementById('shHub');if(ov){ov.remove();return;}
   ov=document.createElement('div');ov.id='shHub';ov.className='desk-modal';ov.onclick=ev=>{if(ev.target===ov)ov.remove();};
+  ov.innerHTML=`<div class="desk-sheet sh-sheet"><h3 style="margin:0 0 6px">📤 Share</h3><div class="sub">Building your posts…</div></div>`;document.body.appendChild(ov);
+  setTimeout(()=>{if(!document.getElementById('shHub'))return;shareHubFill(ov);},30);}
+function shareHubFill(ov){let F={};try{F=publicFeed()||{};}catch(e){}
+  const posts=shPosts(F),links=shLinks(F);SH_CUR={posts,links};const e=txtEsc;
   ov.innerHTML=`<div class="desk-sheet sh-sheet"><h3 style="margin:0 0 6px">📤 Share — ${e(shDay(today()))}</h3><div class="sh-st">${shStatus(F)}</div>
     <div class="sh-h">Your links</div>${links.map((l,i)=>`<div class="sh-link"><span>${e(l[0])}</span><div><button onclick="shCopyLink(${i})">Copy</button><a class="sh-open" href="${e(l[1])}" target="_blank" rel="noopener">Open</a></div></div>`).join('')}
     <button class="sh-all" onclick="shCopyAll()">Copy all links — for a bio or a pinned post</button>
@@ -133,7 +137,7 @@ function shareHub(){let ov=document.getElementById('shHub');if(ov){ov.remove();r
       <div class="sh-acts"><button class="primary" onclick="shAct(${i},'share')">Share…</button><button onclick="shAct(${i},'x')">𝕏 Post</button><button onclick="shAct(${i},'fb')">Facebook</button><button onclick="shAct(${i},'copy')">Copy</button></div></div>`).join('')}
     <div class="sub" style="font-size:10px;margin-top:8px">Built from the free page only — a pick can be shared once it unlocks (30 minutes before its game). Telegram posts itself.</div>
     <div class="bar" style="margin-top:8px"><button onclick="document.getElementById('shHub').remove()">Close</button></div></div>`;
-  document.body.appendChild(ov);}
+  }
 const SH_CSS=`.sh-sheet{max-height:88vh;overflow-y:auto}.sh-st{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}.sh-chip{font:600 10px/1.2 'IBM Plex Mono',monospace;padding:4px 8px;border-radius:12px;border:1px solid var(--rule);color:var(--mute)}
 .sh-chip.ok{color:var(--win);border-color:var(--win)}.sh-h{font:700 10px/1 'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin:12px 0 6px}
 .sh-link{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--rule);font-size:12px}.sh-link button,.sh-open{font-size:11px;padding:4px 10px;margin-left:4px}
