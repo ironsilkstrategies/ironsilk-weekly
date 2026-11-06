@@ -25,7 +25,7 @@ const CONF_FLOOR_DEF={ml:0.70,spread:0.70,total:0.60};   /* v2.72 · totals: the
 const CONF_TAGS=new Set(['b2b','oppb2b','restedge','3in4','opp3in4','road3','shortweek','offbye','oppshort','oppoffbye','restplus','hot5','cold5','divgame','westearly','westnight','eastnight',
   'talent+','talent-','mismatch+','mismatch-','qbstar','qbbust','oppqbstar','oppqbbust','qbfading','goaliestar','goaliebust','oppgoaliestar','oppgoaliebust','offedge','defedge',
   'homedog','roadfav','key3','key7','bigline','hitot','lotot','pythlucky','pythunlucky','wind15','cold32','dome','h2hedge','h2hfade','bigfav','longdog']);
-function confFloor(m){m=m==='moneyline'?'ml':m;const F=get(CONF_FLOOR_KEY,null)||{};const v=+F[m];return v>=0.5&&v<=0.95?v:(CONF_FLOOR_DEF[m]||0.70);}
+function confFloor(m){m=m==='moneyline'?'ml':m;const F=roGet(CONF_FLOOR_KEY,null)||{};const v=+F[m];return v>=0.5&&v<=0.95?v:(CONF_FLOOR_DEF[m]||0.70);}
 function confRole(x){if(x.market==='total')return x.side==='over'?'over':'under';const p=x.price!=null&&isFinite(+x.price)?+x.price:null;if(p!=null)return p<0?'fav':'dog';
   const l=x.line!=null&&isFinite(+x.line)?+x.line:null;return l!=null?(l<0?'fav':'dog'):'na';}
 function confTeam(x){if(x.market==='total')return null;const g=String(x.game||'').split('@');return x.side==='home'?g[1]:x.side==='away'?g[0]:null;}

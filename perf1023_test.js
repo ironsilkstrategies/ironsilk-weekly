@@ -44,28 +44,9 @@ function page(file,fetchImpl,extra){let html=fs.readFileSync(path.join(W,file),'
     const src=w.eval('lzWorkerSrc()');const sent=[];const box={postMessage:m=>sent.push(m)};vm.createContext(box);vm.runInContext(src,box);
     const s='{"hello":"world","n":[1,2,3]}'.repeat(50);box.onmessage({data:{id:1,op:'c64',s}});box.onmessage({data:{id:2,op:'c16',s}});box.onmessage({data:{id:3,op:'d64',s:LZ.compressToBase64(s)}});
     T('the background worker packs exactly like the page (cloud and storage formats unchanged)',sent[0].r===LZ.compressToBase64(s)&&sent[1].r===LZ.compressToUTF16(s)&&sent[2].r===s);}
-  /* ── 2 · the sync: idle = one tiny request; only local changes = no download ── */
-  {let CUR='r1',REMOTE=LZ.compressToBase64(JSON.stringify({v:1,dev:'Desktop-x',ts:1,keys:{'d4.remoteonly':{t:5,v:{a:1}}}}));const C={ref:0,pull:0,push:0,blob:null};let cn=0;
-    const json=o=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(o),text:()=>Promise.resolve(JSON.stringify(o))});
-    const F=(u,o)=>{u=String(u);o=o||{};
-      if(/repos\/me\/thedesk-data$/.test(u))return json({private:true});   /* v2.80.6 · the sync repo's privacy check */
-      if(/\/git\/ref\/heads\/main/.test(u)){C.ref++;return json({object:{sha:CUR}});}
-      if(/\/contents\/thedesk-sync\.json/.test(u)){C.pull++;return Promise.resolve({ok:true,status:200,text:()=>Promise.resolve(REMOTE)});}
-      if(/\/git\/blobs$/.test(u)){C.push++;C.blob=JSON.parse(o.body).content;return json({sha:'b'+C.push});}
-      if(/\/git\/trees$/.test(u))return json({sha:'t'});if(/\/git\/commits$/.test(u))return json({sha:'c'+(++cn)});
-      if(/\/git\/refs\/heads\/main/.test(u)&&o.method==='PATCH'){CUR=JSON.parse(o.body).sha;REMOTE=C.blob;return json({});}
-      return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});};
-    const w=page('nhl.html',F,x=>{x.localStorage.setItem('d4.syncrepo',JSON.stringify('me/thedesk-data'));x.localStorage.setItem('d4.synctoken',JSON.stringify('github_pat_xxxxxxxxxxxxxxxxxxxxxxxx'));x.localStorage.setItem('d4.localthing',JSON.stringify({b:1}));});
-    await wait(2500);
-    let r=await w.eval('syncNow(false)');T('first sync: the full merge (pull, merge, push)',r.ok&&C.pull===1&&C.push===1&&w.eval(`get('d4.remoteonly',null).a`)===1,JSON.stringify(C));
-    r=await w.eval('syncNow(false)');T('nothing new on either side: one tiny request, no download, no upload',r.ok&&C.pull===1&&C.push===1&&w.eval('SYNC_STATE.fast')==='idle',JSON.stringify(C));
-    w.eval(`set('d4.localthing',{b:2})`);r=await w.eval('syncNow(false)');
-    const snap=JSON.parse(LZ.decompressFromBase64(C.blob));
-    T('only this device changed: pushed straight from storage, nothing downloaded',r.ok&&C.pull===1&&C.push===2&&w.eval('SYNC_STATE.fast')==='push'&&snap.keys['d4.localthing'].v.b===2&&snap.keys['d4.remoteonly'].v.a===1,JSON.stringify(C));
-    CUR='r9';REMOTE=LZ.compressToBase64(JSON.stringify({...snap,dev:'Desktop-x',keys:{...snap.keys,'d4.remoteonly':{t:Date.now()+9e9,v:{a:2}}}}));
-    r=await w.eval('syncNow(false)');T('another device saved: the full merge runs and its change lands here',r.ok&&C.pull===2&&w.eval(`get('d4.remoteonly',null).a`)===2,JSON.stringify(C));
-    T('the cloud file\'s format is unchanged (any device or worker reads it)',!!JSON.parse(LZ.decompressFromBase64(REMOTE)).keys);
-    T('display-only pregame snapshots never sync',w.eval(`syncSkip('d4.pregame')`)===true);}
+  /* ── 2 · the sync: moved to sync1106_test.js (v2.86 · one file per key, only changes travel) ── */
+  {const w=page('nhl.html');await wait(2500);T('display-only pregame snapshots never sync',w.eval(`syncSkip('d4.pregame')`)===true);
+    T('the sync engine is the per-key one',w.eval('typeof sy3Push')==='function');}
   /* ── 3 · hot loops read once ── */
   {const w=page('nhl.html');await wait(2500);
     w.eval(`set(LS.bookshots,{'2026-10-22':[{game:'CLE@TB',market:'total',side:'over',line:7.5,price:-110}],'2026-10-23':[{game:'TB@MIL',market:'total',side:'over',line:8,price:-105},{game:'TB@MIL',market:'runline',side:'home',line:-1.5,price:140}]})`);
