@@ -2978,17 +2978,17 @@ function slipSpreadLabel(sport,g,label,price){const m=String(label).match(/^(\S+
   return{label:team+' '+(per?(per==='H1'?'1H':per)+' ':'')+sg,line:ln};}
 function sportSlipToggle(sport,gid,label,price,extra){
   const g=sportGames(sport).find(x=>x.id===gid);if(!g)return;
-  {const S2=slipSpreadLabel(sport,g,label,price);if(S2.line!=null){const old=gid+'|'+label;const j=SLIP.findIndex(x=>x.id===old||x.sq===old);if(j>=0){SLIP.splice(j,1);set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();return;}
+  {const S2=slipSpreadLabel(sport,g,label,price);if(S2.line!=null){const old=gid+'|'+label;const j=SLIP.findIndex(x=>x.id===old||x.sq===old);if(j>=0){SLIP.splice(j,1);set(LS.slip,SLIP);try{paintSlip()}catch(e){}slipAfterChange();return;}
     extra=Object.assign({line:S2.line,sq:old},extra||{});label=S2.label;}}
   const id=gid+'|'+label;const i=SLIP.findIndex(x=>x.id===id);
   if(i>=0)SLIP.splice(i,1);
   else SLIP.push(Object.assign({id,gid,at:Date.now(),pick:label,game:g.away.abbr+'@'+g.home.abbr,price,sport,date:(()=>{for(const v of [g.date,g.start,g.gameDate]){if(v){const t=tdDay(v);if(/^\d{4}-\d{2}-\d{2}$/.test(t))return t;}}return today();})(),
     p:price!=null&&Math.abs(price)>=100?Math.min(.95,Math.max(.05,price>0?100/(price+100):-price/(-price+100))):0.5},extra||{}));
-  set(LS.slip,SLIP);try{paintSlip()}catch(e){}renderActiveBoard();
+  set(LS.slip,SLIP);try{paintSlip()}catch(e){}slipAfterChange();
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261106d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261106e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -7061,7 +7061,15 @@ async function diagnoseOddsPapi(){
     el.innerHTML=`<div class="tkt"><h3>Network error</h3><div class="sub">${(e&&e.message)||e}</div></div>`;
   }
 }
-async function refreshEverything(){
+/* v2.86.4 · the tap answers at once: the button reads "Refreshing…" and the screen gets a frame to paint it before the
+   refresh's own work starts. On a full NHL slate that work held the tap 1–2 s with nothing new on screen, and NBA/CBB said
+   nothing at all. A second tap while it runs does nothing. */
+let REFRESH_BUSY=false;
+async function refreshEverything(){if(REFRESH_BUSY)return;REFRESH_BUSY=true;const B=[...document.querySelectorAll('[onclick]')].filter(b=>/refreshEverything\(/.test(b.getAttribute('onclick')||''));
+  B.forEach(b=>{b.dataset.t=b.innerHTML;b.innerHTML='↻ Refreshing…';b.disabled=true;});
+  try{await new Promise(r=>setTimeout(r,40));return await refreshEverythingRaw();}
+  finally{REFRESH_BUSY=false;B.forEach(b=>{if(b.dataset.t!=null)b.innerHTML=b.dataset.t;delete b.dataset.t;b.disabled=false;});}}
+async function refreshEverythingRaw(){
   if(ACTIVE_SPORT==='nba'){if(typeof nbaBoot==='function')await nbaBoot(true);return;}
   if(ACTIVE_SPORT==='ncaab'){if(typeof ncaabBoot==='function')await ncaabBoot(true);return;}
   if(ACTIVE_SPORT==='nhl'){
@@ -7675,7 +7683,7 @@ function betGrid(g,s,M){
     const tierBadge=charTierTag(tierCls);
     return `<div class="bet${cls}${srcCls}${tierCls} ${on?'on':''}" role="button" tabindex="0"
       onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${jsArg(g.id)})"
-      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${jsArg(g.id)})}">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
       <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${cInfo.chips||''}${cInfo.meter||''}${tierBadge}</div>`;
   };
@@ -9068,10 +9076,20 @@ function tog(id,game,pick,prob,gid,ptype,pname,pmkt){
       if(src){leg.pid=src.pid;leg.thr=src.thr}}
     SLIP.push(leg);
   }
-  set(LS.slip,SLIP);renderActiveBoard();paintSlip();
+  set(LS.slip,SLIP);paintSlip();slipAfterChange();
 }
-function clearSlip(){SLIP=[];set(LS.slip,SLIP);renderActiveBoard();paintSlip()}
+function clearSlip(){SLIP=[];set(LS.slip,SLIP);paintSlip();slipAfterChange();}
 let SLIP_SHEET_OPEN=false;
+/* v2.86.4 · a slip change repaints only the pills' pressed state, in place. A pill tap (tog / sportSlipToggle), Clear and
+   a leg's ✕ used to rebuild the whole board for it — ≈0.9 s per tap on a full NHL slate with real data. The boards mark a
+   pill in the slip one way only (class "on"; an NHL prop rung turns gold with a ✓), so that is all this touches. */
+const SLIP_PILL_RE=/(?:^|[;\s{])(?:(tog)\(\s*'((?:[^'\\]|\\.)*)'|(?:sportSlipToggle\(\s*'[^']*'\s*,|nflSlipToggle\(|ncaafSlipToggle\()\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:[^'\\]|\\.)*)')/;
+function slipRepaint(){let n=0;try{const ids=new Set();(SLIP||[]).forEach(x=>{if(x&&x.id!=null)ids.add(String(x.id));if(x&&x.sq)ids.add(String(x.sq));});const un=t=>t.replace(/\\(.)/g,'$1');
+  document.querySelectorAll('[onclick]').forEach(el=>{const oc=el.getAttribute('onclick')||'';if(oc.indexOf('tog(')<0&&oc.indexOf('SlipToggle(')<0)return;const m=SLIP_PILL_RE.exec(oc);if(!m)return;
+    const on=m[1]?ids.has(un(m[2])):ids.has(un(m[3])+'|'+un(m[4]));
+    if(el.classList.contains('nhl-rung')){el.style.color=on?'var(--gold)':'';const t=el.firstChild;if(t&&t.nodeType===3){const v=t.nodeValue.replace(/^✓ /,'');t.nodeValue=(on?'✓ ':'')+v;}}
+    else el.classList.toggle('on',on);n++;});}catch(e){n=-1;}return n;}
+function slipAfterChange(){if(slipRepaint()<0)setTimeout(()=>{try{renderActiveBoard();}catch(e){}},30);}
 function paintSlip(){
   const el=document.getElementById('slip');
   if(!el)return;
@@ -9196,7 +9214,7 @@ function lockSlip(){
     p:SLIP.reduce((a,x)=>a*x.p,1)});
   set(LS.locked,L);
   if(money.stake){try{saveWager(tid,+money.stake);}catch(e){}}
-  SLIP=[];set(LS.slip,SLIP);paintSlip();closeSlipSheet();
+  SLIP=[];set(LS.slip,SLIP);paintSlip();closeSlipSheet();try{slipRepaint();}catch(e){}
   /* v2.86.1 · the confirmation comes first; the board (≈0.7 s to redraw on a full slate) repaints right after it */
   alert(`Locked${name?' — "'+name+'"':''}. See Tickets → My Parlays.`);
   setTimeout(()=>{try{renderActiveBoard();}catch(e){}},0);

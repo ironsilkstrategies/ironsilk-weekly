@@ -1920,4 +1920,11 @@ async function fbpOpen(){const old=document.getElementById('fbpView');if(old)old
   v.querySelector('#fbpImg').onclick=()=>{try{vipCardPhotos();}catch(e){}};}
 /* a 📣 button on every sport page */
 if(typeof document!=='undefined'&&!DESK_BG_EVAL&&!(typeof BG_MODE!=='undefined'&&BG_MODE)&&!EVAL_CHAIN_HOP)document.addEventListener('DOMContentLoaded',()=>{if(document.getElementById('fbpFab'))return;const b=document.createElement('button');b.id='fbpFab';b.textContent='📣';b.title='Facebook post — best picks + parlays';
-  b.style.cssText='position:fixed;right:14px;bottom:96px;z-index:9000;width:52px;height:52px;border-radius:26px;border:2px solid #f5c542;background:#111a2e;font-size:24px;box-shadow:0 6px 20px rgba(0,0,0,.5)';b.onclick=fbpOpen;document.body.appendChild(b);});
+  /* v2.86.4 · the 📣 button floats ABOVE the bottom bars, never over them. It used to sit on the slip bar's LOCK IN
+     (a thumb on the top of LOCK IN opened the Facebook sheet), on Chat's Send, and over every open sheet (z 9000).
+     Now: z 70 — under the slip bar (79), the nav (80), the More menu (85) and every sheet (95+); lifted clear of the
+     slip bar while it shows; hidden in Chat, where Send lives in that corner. */
+  if(!document.getElementById('fbpFabCss')){const st=document.createElement('style');st.id='fbpFabCss';
+    st.textContent='#fbpFab{position:fixed;right:14px;bottom:calc(var(--bnh,60px) + 36px);z-index:70;width:52px;height:52px;border-radius:26px;border:2px solid #f5c542;background:#111a2e;font-size:24px;box-shadow:0 6px 20px rgba(0,0,0,.5)}'+
+      'body.slipon #fbpFab{bottom:calc(var(--bnh,60px) + 88px)}body:has(#v-chat.on) #fbpFab{display:none}';document.head.appendChild(st);}
+  b.onclick=fbpOpen;document.body.appendChild(b);});

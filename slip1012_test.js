@@ -15,7 +15,7 @@ setTimeout(()=>{try{
   T('a "BUF spread" square goes on the ticket with its number (BUF +3) so it can grade',w.eval('SLIP[0].pick')==='BUF +3'&&w.eval('SLIP[0].line')===3&&w.eval('SLIP[0].sq')==='g1|BUF spread');
   w.eval(`sportSlipToggle('nfl','g1','BUF 1H spread',-105)`);T('1st-half too: "BUF 1H +2.5"',w.eval('SLIP[1].pick')==='BUF 1H +2.5');
   w.eval(`sportSlipToggle('nfl','g1','BUF spread',-103)`);T('tapping the same square again takes it off',w.eval('SLIP.length')===1&&w.eval('SLIP[0].pick')==='BUF 1H +2.5');
-  T('the board repaints its own sport (never the MLB board over football)',w.eval('window.__r')>=3);
+  T('a square tap repaints its pills in place — no board is rebuilt, so the MLB board can never paint over football (v2.86.4)',w.eval('window.__r')===0,'renderActiveBoard ran '+w.eval('window.__r')+'×');
   /* v2.21: the review sheet is the ticket builder */
   w.eval(`sportSlipToggle('nfl','g1','LAR ML',-165);openSlipSheet();`);
   const sh=w.document.getElementById('slipSheetBody').innerHTML;
