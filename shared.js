@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261106c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261106d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15826,7 +15826,7 @@ const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4]
   ncaab:{pts:[10,15,20,25],reb:[5,7,10],ast:[3,5,7],fg3:[1,2,3]}};
 /* v2.50 · only teams playing TODAY: the football boards hold the whole week, so Sunday's players no longer show as Thursday props */
 function teamsToday(sp){const s=new Set();const d=today();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(a&&a!=='pre'&&a!=='preview')return;const gd=gameDayOf(g);if(gd&&gd!==d)return;s.add(g.away.abbr);s.add(g.home.abbr);});}catch(e){}
-  try{const T=get(TC_KEY,{})||{};if(T.d===today())(((T.by||{})[sp]||{}).picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;String(x.game).split('@').forEach(t=>s.add(t));});}catch(e){}return s;}
+  try{const T=roGet(TC_KEY,{})||{};if(T.d===today())(((T.by||{})[sp]||{}).picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;String(x.game).split('@').forEach(t=>s.add(t));});}catch(e){}return s;}
 function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const teams=teamsToday(sp);if(!teams.size)return[];const out=[];
   Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<3)return;if(rsOut(rsInjury(sp,P.name)))return;
     Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<3)return;let best=null;
@@ -18692,7 +18692,7 @@ const CPROP_BKT=[[0.70,0.73],[0.73,0.76],[0.76,0.80],[0.80,0.85],[0.85,0.90],[0.
 function cpropPAt(J,mu,thr){if(mu==null||!J)return null;return pstPAt(J,mu,thr);}
 /* v2.36 · calibration and form only learn from calls the new model made (mv 2) — the old reads' misses aren't this model's */
 const CPROP_MV=2,cpropNew=x=>(x&&x.mv||1)>=CPROP_MV;
-function cpropBrier(){const L=(get(CPROP_KEY,[])||[]).filter(cpropNew);const B={};CPROP_VOICES.forEach(v=>{const g=L.filter(x=>x.voice===v&&x.hit!=null);
+function cpropBrier(){const L=(roGet(CPROP_KEY,[])||[]).filter(cpropNew);const B={};CPROP_VOICES.forEach(v=>{const g=L.filter(x=>x.voice===v&&x.hit!=null);
   B[v]=g.length>=10?g.reduce((a,x)=>a+Math.pow(x.p-(x.hit?1:0),2),0)/g.length:0.2;});return B;}
 function cpropReads(sp,name,k,thr,BR){const J=pstProj(sp,name,k);if(!J||J.n<5)return null;
   /* Sim: season + tuned form · Most common: the season alone · Trends: form-heavy · Coach: Sim × tonight's matchup */
@@ -18700,7 +18700,7 @@ function cpropReads(sp,name,k,thr,BR){const J=pstProj(sp,name,k);if(!J||J.n<5)re
   let M={m:1,why:''};try{M=cpropMatch(sp,J.team,k);}catch(e){}r.Coach=M.m!==1?cpropPAt(J,J.mu*M.m,thr):null;J.match=M;
   BR=BR||cpropBrier();let sw=0,sp_=0;['Sim','Most common','Trends','Coach'].forEach(v=>{if(r[v]==null)return;const w=1/(BR[v]+0.02);sw+=w;sp_+=w*r[v];});
   r.Judge=sw?sp_/sw:null;Object.keys(r).forEach(v=>{if(r[v]!=null)r[v]=Math.max(0.001,Math.min(0.999,r[v]));});return{r,J};}
-function cpropCalib(){const L=(get(CPROP_KEY,[])||[]).filter(cpropNew);const C={};
+function cpropCalib(){const L=(roGet(CPROP_KEY,[])||[]).filter(cpropNew);const C={};
   CPROP_VOICES.forEach(v=>{C[v]=CPROP_BKT.map(([lo,hi])=>{const g=L.filter(x=>x.voice===v&&x.hit!=null&&x.p>=lo&&x.p<hi);const h=g.filter(x=>x.hit).length;
     return{lo,hi,n:g.length,h,rate:g.length?h/g.length:null,avgP:g.length?g.reduce((a,x)=>a+x.p,0)/g.length:(lo+Math.min(hi,1))/2};});});return C;}
 function cpropCal(C,v,p){const b=(C[v]||[]).find(x=>p>=x.lo&&p<x.hi);if(!b||!b.n)return p;return(b.h+p*12)/(b.n+12);}
@@ -18719,7 +18719,7 @@ function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C
   return out;}
 /* every character's record on every player it has called */
 let CPR_C=null;
-function cpropRecIdx(){if(CPR_C&&Date.now()-CPR_C.ts<60e3)return CPR_C.R;const R={};(get(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null||!cpropNew(x))return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0,player:x.player,sp:x.sp,team:x.team,voice:x.voice});o.n++;if(x.hit)o.w++;});CPR_C={ts:Date.now(),R};return R;}
+function cpropRecIdx(){if(CPR_C&&Date.now()-CPR_C.ts<60e3)return CPR_C.R;const R={};(roGet(CPROP_KEY,[])||[]).forEach(x=>{if(x.hit==null||!cpropNew(x))return;const k=x.voice+'|'+x.sp+'|'+pstId(x.player);const o=R[k]||(R[k]={w:0,n:0,player:x.player,sp:x.sp,team:x.team,voice:x.voice});o.n++;if(x.hit)o.w++;});CPR_C={ts:Date.now(),R};return R;}
 /* a character's favorite players (4+ calls, 70%+) and the ones it should stop calling (≤40%) */
 function cpropFavs(v){const L=Object.values(cpropRecIdx()).filter(o=>o.voice===v&&o.n>=4);const sc=o=>(o.w+1)/(o.n+2);
   return{fav:L.filter(o=>o.w/o.n>=0.7).sort((a,b)=>sc(b)-sc(a)||b.n-a.n).slice(0,5),fade:L.filter(o=>o.w/o.n<=0.4).sort((a,b)=>sc(a)-sc(b)).slice(0,3)};}
