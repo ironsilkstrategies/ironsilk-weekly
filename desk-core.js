@@ -848,7 +848,7 @@ function ch2Card(c){const pct=Math.max(0,Math.min(100,(c.pot-0)/(c.goal)*100));c
   const plays=c.status==='active'?ch2Plays(c):[];const open=c.steps.filter(s=>!s.done);
   const playHtml=c.status!=='active'?'':plays.length?plays.map((o,i)=>`<div class="ch-play"><div style="min-width:0;flex:1"><b>${txtEsc(o.label)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${decimalToAmerican(o.dec)}</span>
         <div class="mono" style="font-size:9.5px;color:var(--mute)">${o.legs.length>1?o.legs.map(l=>txtEsc(l.pick)).join(' · ')+' · ':''}${Math.round((o.p||0)*100)}% · stake ${deskMoney(o.stake)} → wins ${deskMoney(o.stake*(o.dec-1))}</div></div>
-        ${o.taken?'<span class="mono" style="color:var(--win);font-size:10px">✓ locked</span>':o.stake?`<button class="primary" onclick="ch2Lock(${c.id},${i})">Lock it</button>`:'<span class="mono" style="font-size:10px;color:var(--mute)">pot too small</span>'}</div>`).join('')
+        ${o.taken?'<span class="mono" style="color:var(--win);font-size:10px">✓ locked</span>':o.stake?`<button class="primary" onclick="ch2Lock(${jsArg(c.id)},${i})">Lock it</button>`:'<span class="mono" style="font-size:10px;color:var(--mute)">pot too small</span>'}</div>`).join('')
       :`<div class="sub" style="font-size:10.5px">${deskFrozen()?'Nothing from '+ch2SrcLab(c.src)+' today — no play is a play.':'Today\'s move shows up after the master evaluation.'}</div>`;
   return`<div class="tkt ch-card" style="border-left:3px solid ${col}"><div class="ch-top"><b>${c.ico} ${txtEsc(c.name)}</b><span class="mono" style="font-size:10px;color:${col}">${c.status==='active'?left+' day'+(left===1?'':'s')+' left':c.status.toUpperCase()}</span></div>
     <div class="ch-nums"><span><b style="color:${col}">${deskMoney(c.pot)}</b> pot</span><span>goal <b>${deskMoney(c.goal)}</b></span><span class="mono" style="font-size:10px;color:var(--mute)">from ${deskMoney(c.start)} · ${ch2SrcLab(c.src)}</span></div>
@@ -858,7 +858,7 @@ function ch2Card(c){const pct=Math.max(0,Math.min(100,(c.pot-0)/(c.goal)*100));c
     ${c.status==='active'?`<div class="mktlab">Today's move</div>${playHtml}`:''}
     ${open.length?`<div id="ch2Live_${c.id}">${ch2LiveHtml(c)}</div>`:''}
     ${open.length?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:4px">${open.length} ticket${open.length===1?'':'s'} riding: ${open.map(s=>txtEsc(s.label)+' '+deskMoney(s.stake)).join(' · ')}</div>`:''}
-    ${c.status==='active'?`<div class="bar" style="margin-top:6px"><button onclick="ch2Stop(${c.id})">End it</button></div>`:''}</div>`;}
+    ${c.status==='active'?`<div class="bar" style="margin-top:6px"><button onclick="ch2Stop(${jsArg(c.id)})">End it</button></div>`:''}</div>`;}
 function ch2Html(){const A=ch2Sync();const act=A.filter(c=>c.status==='active'),done=A.filter(c=>c.status!=='active').slice(-4).reverse();
   let board='';try{board=ch2BoardHtml(act);}catch(e){console.warn('challenge board',e);}
   return`<div class="sbar"><h2>Challenges</h2><div class="ln"></div></div>

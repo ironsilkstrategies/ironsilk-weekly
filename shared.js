@@ -1221,6 +1221,16 @@ const cfbFallbackAbbr=raw=>{if(!raw)return null;const words=String(raw).replace(
 function tktSport(cat,word){const w=String(word||'').toUpperCase(),c=String(cat||'');
   if(w==='NCAA'||w==='NCAAM'||w==='COLLEGE')return/basket/i.test(c)?'ncaab':/foot/i.test(c)?'ncaaf':w==='NCAAM'?'ncaab':'ncaaf';
   return w==='NFL'?'nfl':(w==='NCAAF'||w==='CFB')?'ncaaf':w==='MLB'?'mlb':w==='NHL'?'nhl':w==='NBA'?'nba':(w==='NCAAB'||w==='CBB')?'ncaab':null;}
+/* v2.86.1 · a value written into a button's onclick as a JS literal of the SAME type: a book ticket's id is "ext1011556038"
+   (a string) — written bare it read as a variable name, so Rename / Modify / Move / Lock / Delete / Archive on every
+   book-imported ticket threw and did nothing. Numbers stay numbers, strings stay strings. */
+/* v2.86.1 · the button's handler was written inline with quotes inside quotes — it could never run (a syntax error
+   the moment it was tapped, and the same broken handler threw on other taps on the page) */
+async function pullSharpBtn(){const e=document.querySelector('.sharpStatus');if(!e)return;try{e.textContent='Pulling Pinnacle…';const r=await pullSharp();
+    e.innerHTML='<span style="color:var(--win)">✓ '+r.n+' sharp prices ('+r.sports.map(x=>x.toUpperCase()).join(', ')+') — ⚡ badges now show where your book is behind</span>';renderToday(true);}
+  catch(x){e.innerHTML='<span style="color:var(--rust)">'+txtEsc(x.message||String(x))+'</span>';}}
+function viewOn(n){try{const v=document.getElementById('v-'+n);return!!(v&&v.classList.contains('on'));}catch(e){return false;}}
+function jsArg(v){return String(JSON.stringify(v===undefined?null:v)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function ticketAmerToProb(price){
   if(price==null||isNaN(price))return 0.5;
   return price>0?100/(price+100):(-price)/(-price+100);
@@ -2978,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261106a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261106b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -7541,17 +7551,17 @@ function card(g){
    </div>
    ${!bettingClosed&&s?betGrid(g,s,M):''}
    <div class="exprow">
-    <button class="expbtn" onclick="pan(${g.id},'coach',this)">Coach</button>
-    <button class="expbtn" onclick="pan(${g.id},'trend',this)">Trends</button>
-    <button class="expbtn" onclick="pan(${g.id},'ag',this)">A–G</button>
-    <button class="expbtn" onclick="pan(${g.id},'alt',this)">Alt lines</button>
-    <button class="expbtn" onclick="pan(${g.id},'projbox',this)">Proj. Box</button>
-    <button class="expbtn" onclick="pan(${g.id},'props',this)">Props</button>
-    <button class="expbtn" onclick="pan(${g.id},'verdict',this)">Take/Fade</button>
-    <button class="expbtn" onclick="pan(${g.id},'mybets',this)">My bets</button>
-    <button class="expbtn" onclick="pan(${g.id},'roster',this)">Roster</button>
-    ${isLive?`<button class="expbtn" onclick="pan(${g.id},'livebox',this)">Live box</button>`:''}
-    ${done?`<button class="expbtn" onclick="pan(${g.id},'box',this)">Box &amp; grades</button><button class="expbtn" onclick="pan(${g.id},'post',this)" style="color:var(--cold)">📊 Analysis</button>`:''}
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'coach',this)">Coach</button>
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'trend',this)">Trends</button>
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'ag',this)">A–G</button>
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'alt',this)">Alt lines</button>
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'projbox',this)">Proj. Box</button>
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'props',this)">Props</button>
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'verdict',this)">Take/Fade</button>
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'mybets',this)">My bets</button>
+    <button class="expbtn" onclick="pan(${jsArg(g.id)},'roster',this)">Roster</button>
+    ${isLive?`<button class="expbtn" onclick="pan(${jsArg(g.id)},'livebox',this)">Live box</button>`:''}
+    ${done?`<button class="expbtn" onclick="pan(${jsArg(g.id)},'box',this)">Box &amp; grades</button><button class="expbtn" onclick="pan(${jsArg(g.id)},'post',this)" style="color:var(--cold)">📊 Analysis</button>`:''}
    </div>
    <div class="panel" id="p-coach-${g.id}">${coachBriefing(g,s,'mlb')}</div>
    <div class="panel" id="p-trend-${g.id}">${trendPanel(g,s)}</div>
@@ -7664,7 +7674,7 @@ function betGrid(g,s,M){
     if(outsideAgrees)srcCls=outsideUnanimous?' consensus-pick':' source-pick';
     const tierBadge=charTierTag(tierCls);
     return `<div class="bet${cls}${srcCls}${tierCls} ${on?'on':''}" role="button" tabindex="0"
-      onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})"
+      onclick="tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${jsArg(g.id)})"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tog('${esc(id)}','${esc(gl)}','${esc(pick)}',${prob},${g.id})}">
       <div class="bl">${label}</div>${simChip}<div class="bo">${priceStr}</div>
       <div class="bs">${badge||pct+'%'}</div>${fair}${srcBadge}${cInfo.chips||''}${cInfo.meter||''}${tierBadge}</div>`;
@@ -7899,7 +7909,7 @@ function propPanel(g){
       const sp=(p.type==='hr'||p.type==='hits')?sharpPropFor(g.id,p.name,p.type):null;
       const spMatch=sp&&Math.floor(sp.line)+1===p.thr;
       const cmp=spMatch?`<div class="pm" style="color:var(--cold)">${sp.book} o${sp.line}: ${(sp.prob*100).toFixed(0)}% (${sp.american>0?'+':''}${sp.american}) — blended into the % above</div>`:'';
-      return `<div class="prop ${on?'on':''}" onclick="tog('${esc(id)}','${esc(gl)}','${esc(p.name+' '+p.mkt)}',${p.p},${g.id},'${esc(p.type)}','${esc(p.name)}','${esc(p.mkt)}')">
+      return `<div class="prop ${on?'on':''}" onclick="tog('${esc(id)}','${esc(gl)}','${esc(p.name+' '+p.mkt)}',${p.p},${jsArg(g.id)},'${esc(p.type)}','${esc(p.name)}','${esc(p.mkt)}')">
         <div class="pc mono ${c}">${(p.p*100).toFixed(0)}%</div>
         <div class="pw"><div class="pn">${p.name}${p.proj?' <span class="flag cool">proj</span>':''}</div>
         <div class="pm">${p.mkt} · ${p.team}</div>${cmp}</div></div>`}).join('')}</div>`;
@@ -8838,7 +8848,7 @@ function legRekey(tid,i,to){const L=get(LS.locked,[]);const t=L.find(x=>String(x
   const map={};[[oa,na],[oh,nh],[oa,nh],[oh,na]].forEach(([o,n])=>{if(mgAb(sp,o)===n)map[o]=n;});
   l.pick=String(l.pick||'').split(/(\s+)/).map(w=>map[w]||w).join('');l.game=to;set(LS.locked,L);try{renderTickets();}catch(e){}}
 function legSetManual(tid,i,res){const L=get(LS.locked,[]);const t=L.find(x=>String(x.id)===String(tid));if(!t||!t.legs[i])return;
-  t.legs[i].manual=res==='clear'?undefined:{hit:res==='won',push:res==='push',at:Date.now()};if(res==='clear')delete t.legs[i].manual;set(LS.locked,L);try{settledRefresh(tid);}catch(e){}try{renderTickets();}catch(e){}}
+  t.legs[i].manual=res==='clear'?undefined:{hit:res==='won',push:res==='push',at:Date.now()};if(res==='clear')delete t.legs[i].manual;set(LS.locked,L);try{settledRefresh(tid);}catch(e){}try{if(viewOn('tickets'))renderTickets();}catch(e){}}   /* v2.86.1 · the hidden Tickets list was redrawn on every grade tap (2.6 s) */
 function gradeDoctorHtml(t){if(t.finalized||t.archived)return'';const rows=[];
   (t.legs||[]).forEach((l,i)=>{let r=null;try{r=gradeLeg(l,t.date);}catch(e){}if(r&&(r.live||r.hit===true||r.hit===false||r.push))return;if(!legOverdue(l,t))return;
     const D=legDiagnose(l,t);const id=JSON.stringify(String(t.id)).replace(/"/g,'&quot;');
@@ -12987,7 +12997,7 @@ function trackedPicksHtml(){
     const deleteBtn=`<button onclick="if(confirm('Delete this ticket?')){const L=get(LS.locked,[]);set(LS.locked,L.filter(x=>x.id!==${t.id}));renderTickets();}"
       style="background:none;border:1px solid var(--rust);color:var(--rust);border-radius:4px;
       padding:2px 8px;font-size:11px;cursor:pointer;margin-left:8px">✕</button>`;
-    const archBtn=!t.archived&&complete?`<button onclick="archiveSingle(${t.id})"
+    const archBtn=!t.archived&&complete?`<button onclick="archiveSingle(${jsArg(t.id)})"
       style="background:none;border:1px solid var(--cold);color:var(--cold);border-radius:4px;
       padding:2px 8px;font-size:11px;cursor:pointer;margin-left:4px">Archive</button>`:'';
     html+=`<div class="tkt${t.archived?' archived':''}">
@@ -13479,7 +13489,7 @@ function genTickets(mode){
         // on a row while editing, viewing stats happens outside edit mode
         if(editing){
           return `<li style="display:flex;align-items:center;gap:8px">
-            <button onclick="removeLegFromTicket(${t.id},'${esc(x.id)}')" title="Remove"
+            <button onclick="removeLegFromTicket(${jsArg(t.id)},'${esc(x.id)}')" title="Remove"
               style="flex:0 0 auto;background:none;border:1px solid var(--rust);color:var(--rust);
               border-radius:4px;padding:1px 7px;cursor:pointer;font-size:11px">✕</button>
             <span style="flex:1">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span></span>
@@ -13512,26 +13522,26 @@ function genTickets(mode){
             text-transform:uppercase;color:var(--mute);border:1px solid var(--rule);
             border-radius:4px;padding:1px 6px;margin-left:6px">${pd} pending</span>`:'';
       let actionBtn;
-      const moveBtn=`<button onclick="moveTicket(${t.id})" title="Move to a different tracking bucket">Move</button>`;
+      const moveBtn=`<button onclick="moveTicket(${jsArg(t.id)})" title="Move to a different tracking bucket">Move</button>`;
       const archChk=t.archived?`<label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer">
           <input type="checkbox" class="arch-chk" ${ARCHIVE_SELECTED.has(t.id)?'checked':''}
-            onchange="toggleArchiveSelect(${t.id},this.checked)"> <span class="m">select</span></label>`:'';
+            onchange="toggleArchiveSelect(${jsArg(t.id)},this.checked)"> <span class="m">select</span></label>`:'';
       if(t.archived){
-        actionBtn=`${archChk}<button onclick="unarchiveTicket(${t.id})">Move back to pending</button>
+        actionBtn=`${archChk}<button onclick="unarchiveTicket(${jsArg(t.id)})">Move back to pending</button>
           ${moveBtn}
-          <button onclick="delLocked(${t.id})">Delete</button>`;
+          <button onclick="delLocked(${jsArg(t.id)})">Delete</button>`;
       }else{
         // Modify only shows while the ticket is neither finalized nor archived —
         // "Lock as final" is the explicit point where a ticket becomes permanent
         // record and stops being editable; archiving means it's already graded.
         const modifyBtn=canModifyTicket(t)
-          ?`<button onclick="toggleModifyTicket(${t.id})">${editing?'Done editing':'Modify'}</button>`:'';
-        actionBtn=`${complete?`<button class="primary" onclick="archiveTicket(${t.id})">Archive</button>`:''}
+          ?`<button onclick="toggleModifyTicket(${jsArg(t.id)})">${editing?'Done editing':'Modify'}</button>`:'';
+        actionBtn=`${complete?`<button class="primary" onclick="archiveTicket(${jsArg(t.id)})">Archive</button>`:''}
           ${modifyBtn}
           ${moveBtn}
           ${t.finalized?'':`<button style="color:var(--cold)" onclick="(async()=>{try{const el=document.querySelector('#tkt-${t.id} .rcalc');if(el)el.textContent='…';await mgRefresh(true);const n=clearStaleFromFinals();renderTickets();renderMyGames();}catch(e){}})()"><span class="rcalc">↻ Reset scores</span></button>`}
-          ${t.finalized?'':`<button onclick="finalizeLocked(${t.id})">Lock as final</button>`}
-          <button onclick="delLocked(${t.id})">Delete</button>`;
+          ${t.finalized?'':`<button onclick="finalizeLocked(${jsArg(t.id)})">Lock as final</button>`}
+          <button onclick="delLocked(${jsArg(t.id)})">Delete</button>`;
       }
       // Named tickets (built from a preset, or manually renamed) show that name
       // first, with the date demoted to a subtitle. Every ticket — named or not,
@@ -13539,7 +13549,7 @@ function genTickets(mode){
       // ticket" ability disappeared when preset auto-naming was added and needs
       // to exist independently of it: auto-naming sets a starting name, renaming
       // lets you override it on ANY ticket regardless of how it was built.
-      const renameBtn=`<button onclick="renameTicket(${t.id})" title="Rename"
+      const renameBtn=`<button onclick="renameTicket(${jsArg(t.id)})" title="Rename"
         style="background:none;border:none;color:var(--mute);cursor:pointer;padding:0 0 0 6px;
         font-size:12px;vertical-align:middle" aria-label="Rename ticket">✏️</button>`;
       const nameLine=t.name
@@ -13556,7 +13566,7 @@ function genTickets(mode){
         const addable=addableLegsFor(t);
         const addRows=addable.length?addable.map(l=>{
           const propArgs=l.isProp?`,1,'${esc(l.ptype||'')}',${l.pid!=null?`'${esc(l.pid)}'`:'null'},${l.thr!=null?l.thr:'null'}`:',0,null,null,null';
-          return `<li onclick="addLegToTicket(${t.id},'${esc(l.pick)}','${esc(l.game)}',${l.p},${l.gid!=null?l.gid:'null'}${propArgs})"
+          return `<li onclick="addLegToTicket(${jsArg(t.id)},'${esc(l.pick)}','${esc(l.game)}',${l.p},${l.gid!=null?l.gid:'null'}${propArgs})"
             style="cursor:pointer">${l.pick} <span class="m">${l.game}</span> <span class="pp">${(l.p*100).toFixed(0)}%</span></li>`;
         }).join(''):'<li class="m">Nothing available to add right now.</li>';
         h+=`<div class="tkt" style="border-color:var(--gold);border-style:dashed">
@@ -13625,7 +13635,7 @@ function genTickets(mode){
         <ol>${gl.map(x=>{
           const{r,g,badge}=gradeOfProp(x);
           if(r===true)pw++;else if(r===false)pl++;else ppd++;
-          const jumpTo=g?` onclick="jumpToGame(${g.id})" style="cursor:pointer"`:'';
+          const jumpTo=g?` onclick="jumpToGame(${jsArg(g.id)})" style="cursor:pointer"`:'';
           return `<li${jumpTo}>${x.name} <span class="m">${x.mkt}</span>${x.type==='hr'?` <span class="flag cool">${hrTierLabel(x.p)}</span>`:''} <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badge}</li>`;
         }).join('')}</ol>`;
     }).join('');
@@ -19047,7 +19057,7 @@ function dailyLoopInject(){
         <div id="todayBody"></div>
         <details class="tkt today-tools" style="margin-top:10px"><summary class="mono" style="cursor:pointer;font-size:10.5px;color:var(--mute)">🧰 Tools — load every sport · pull sharp lines · what the colors mean</summary>
         <div class="sub" style="margin:8px 0 6px">The full board lists every gold, cyan, green and purple pick on today's boards — one per game and market, strongest first, conflicts left off. The letters are the characters on that side. Faded rows are already on a ticket.</div>
-        <div class="bar"><button onclick="loadAllSports()">⟳ Load all sports</button><button onclick="(async()=>{const e=document.querySelector('.sharpStatus');try{e.textContent='Pulling Pinnacle…';const r=await pullSharp();e.innerHTML='<span style=\'color:var(--win)\'>✓ '+r.n+' sharp prices ('+r.sports.map(x=>x.toUpperCase()).join(', ')+') — ⚡ badges now show where your book is behind</span>';renderToday(true);}catch(x){e.innerHTML='<span style=\'color:var(--rust)\'>'+x.message+'</span>';}})()">⚡ Pull sharp lines</button></div><div class="sharpStatus sub mono" style="font-size:10px"></div><div class="lasStatus sub mono" style="font-size:10px"></div></details>
+        <div class="bar"><button onclick="loadAllSports()">⟳ Load all sports</button><button onclick="pullSharpBtn()">⚡ Pull sharp lines</button></div><div class="sharpStatus sub mono" style="font-size:10px"></div><div class="lasStatus sub mono" style="font-size:10px"></div></details>
         <div class="bar"><button class="primary" onclick="renderToday()">Refresh</button></div>`;
       const v2=document.createElement('div');v2.className='view';v2.id='v-mine';
       v2.innerHTML=`<div class="sbar" style="margin-top:0"><h2>My games</h2><div class="ln"></div></div><div id="mineBody"></div>
@@ -19384,7 +19394,7 @@ function msFitDates(F){return F.dates.map(d=>d===today()?'today':fmtDate(new Dat
 function msFitPips(F){return`<span class="fit-pips" title="${F.score}/${F.checks.length} checks">${F.checks.map(c=>`<i class="${c.ok?'ok':c.hard?'hard':'miss'}"></i>`).join('')}</span>`;}
 function msFitTag(F){const[l,c]=MS_TIER_LAB[F.tier];return`<span class="fit-tag" style="color:${c};border-color:${c}">${l}</span>`;}
 function msFitMisses(F){return F.misses.length?`<div class="fit-miss">${F.misses.map(c=>`<span class="${c.hard?'hard':''}" title="${txtEsc(c.why)}">${txtEsc(c.miss)}</span>`).join('')}</div>`:'<div class="fit-miss"><span class="ok">✓ clean fit — rule, legs, price, stake, dates</span></div>';}
-function msFitAttach(F,lab){return F.tier==='no'?'':`<button class="fit-at${F.tier==='ready'?' go':''}" onclick="msAttachId(${F.m.id},'${esc(String(F.t.id))}',${F.pi})">${lab||'Attach'}</button>`;}
+function msFitAttach(F,lab){return F.tier==='no'?'':`<button class="fit-at${F.tier==='ready'?' go':''}" onclick="msAttachId(${jsArg(F.m.id)},'${esc(String(F.t.id))}',${F.pi})">${lab||'Attach'}</button>`;}
 /* one challenge row (used on a ticket card, under "also fits", and on a challenge card) */
 function msFitRow(F,showMission){
   const head=showMission?`${msChalName(F,1)}`:`${msTicketLab(F.t)} <span class="fit-sub">${msLegsN(F.t)}${F.dates.length?' · '+msFitDates(F):''}</span>`;
