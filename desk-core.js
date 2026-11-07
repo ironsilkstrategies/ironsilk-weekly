@@ -1087,26 +1087,32 @@ function tcKickBoard(sp,t0){try{const g=(sportGames(sp)||[]).length;if(!g||Date.
 function deskOnReady(fn){if(typeof window==='undefined')return;let done=false;const go=()=>{if(done)return;done=true;try{fn();}catch(e){console.warn('ready',e);}};
   window.addEventListener('load',go);const dcl=()=>setTimeout(go,2500);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',dcl);else dcl();}
 if(DESK_BG_EVAL&&typeof window!=='undefined')deskOnReady(()=>{const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;const t0=Date.now();
-  const iv=setInterval(()=>{let ready=false;try{const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<40000)return;   /* v2.81.5 · the football week is still loading */
+  const iv=setInterval(()=>{if(window.__CHAIN_SKIP||(typeof CHAIN_LEAVING!=='undefined'&&CHAIN_LEAVING)){clearInterval(iv);return;}   /* v2.86.5 · skipped, or already handing off: don't start an evaluation now */
+    let ready=false;try{const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<40000)return;   /* v2.81.5 · the football week is still loading */
     const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[sp];ready=!!(B&&B.ts>=Math.max(t0-1000,window.__FB_WEEK_DONE||0))||(sportGames(sp)||[]).length===0&&Date.now()-t0>8000;
     if(!ready&&tcKickBoard(sp,t0))return;}catch(e){}
-    if(!ready&&Date.now()-t0<40000)return;clearInterval(iv);let ok=false,err='';try{if((sportGames(sp)||[]).length)todaySnapshot(true);}catch(e){}try{ok=deskRunSportEval(sp);}catch(e){err=String(e&&e.message||e);}
-    set('d4.bgeval.'+sp,{ts:Date.now(),ok,err,d:today()});},700);});
+    if(!ready&&Date.now()-t0<40000)return;clearInterval(iv);const g=(()=>{try{return(sportGames(sp)||[]).length;}catch(e){return-1;}})();try{relayLog('board',{sp,games:g,ready:ready?1:0,ms:Date.now()-t0});}catch(e){}
+    let ok=false,err='';const te=Date.now();try{if(g>0)todaySnapshot(true);}catch(e){}try{ok=deskRunSportEval(sp);}catch(e){err=String(e&&e.message||e);}
+    set('d4.bgeval.'+sp,{ts:Date.now(),ok,err,d:today(),ms:Date.now()-te,games:g});},700);});
 function deskSay(h){try{document.querySelectorAll('.deskStatus').forEach(e=>e.innerHTML=h);}catch(e){}}
 async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confirm('Today is already frozen. Run the evaluations again? (Nothing frozen will change — only the eval reports refresh.)'))return;
   DESK_EVAL_BUSY=true;const t0=Date.now();const here=window.__PAGE_SPORT__||ACTIVE_SPORT;const done=[],miss=[];
   try{if(typeof bolAutoMaybe==='function'&&bolAutoOn()){deskSay('⓪ Pulling BetOnline lines…');try{await bolAutoMaybe('master evaluation',2);}catch(e){}}   /* v2.81.2 · fresh book lines first (auto mode) */
     deskSay('① Grading yesterday and calibrating…');await new Promise(r=>setTimeout(r,30));
     try{await apRunAsync(true,'master evaluation');}catch(e){}try{await genSlice(confRebuildG(true));}catch(e){}
-    deskSay(`② Evaluating ${SP_LAB[here]||here}…`);await new Promise(r=>setTimeout(r,30));try{todaySnapshot(true);}catch(e){}
+    const others=liveSports().filter(sp=>sp!==here&&SPORT_PAGE[sp]);const hereLive=liveSports().includes(here);const N=others.length+(hereLive?1:0);
+    relayLog('start',{here,others:others.join(',')});
+    deskSay(`② Evaluating ${SP_LAB[here]||here}${hereLive?` here — sport 1 of ${N}`:''}…`);await new Promise(r=>setTimeout(r,30));try{todaySnapshot(true);}catch(e){}
     try{if(deskRunSportEval(here))done.push(here);}catch(e){console.warn('eval',here,e);miss.push(here);}
-    const others=liveSports().filter(sp=>sp!==here&&SPORT_PAGE[sp]);
     /* v2.67.6 · RELAY, not frames. Each sport page is ~2 MB of script; loading one inside another (a hidden iframe) doubled
        the memory and iOS killed the tab — the grey screen, then white, then "A problem repeatedly occurred". Now the app
        walks page to page: evaluate here, open the next sport's page, evaluate, … and come back to freeze. One page alive at a time. */
-    if(others.length&&!window.__EVAL_FRAMES__){set(EVAL_CHAIN_KEY,{ts:Date.now(),d:today(),todo:others,done,miss,back:location.pathname.split('/').pop()||'TheDesk.html'});
-      DESK_EVAL_BUSY=false;deskSay(`② Evaluating ${SP_LAB[others[0]]||others[0]}… (the app hops through each sport, then comes back here)`);
-      setTimeout(()=>evalChainGo(),400);return{done,miss,relay:true};}
+    if(others.length&&!window.__EVAL_FRAMES__){window.__CHAIN_MINE=1;set(EVAL_CHAIN_KEY,{ts:Date.now(),d:today(),todo:others,order:[...(hereLive?[here]:[]),...others],done,miss,back:location.pathname.split('/').pop()||'TheDesk.html'});
+      DESK_EVAL_BUSY=false;deskSay(`${done.includes(here)?'✓ '+(SP_LAB[here]||here)+' done · ':''}② Next: ${SP_LAB[others[0]]||others[0]} — sport ${N-others.length+1} of ${N} (the app hops through each sport, then comes back here)`);relayLog('evaluated',{sp:here,ok:done.includes(here)?1:0});
+      setTimeout(()=>evalChainGo(),400);
+      /* v2.86.5 · still on this page 12 s later: the hop didn't start — say so, with a button that goes straight there */
+      setTimeout(()=>{try{if(document.visibilityState==='visible'&&evalChainNext()){relayLog('hop-stuck');deskSay(`⏸ The hop to the next sport didn't start. <button class="primary" onclick="evalChainResume()">▶ Continue</button>`);}}catch(e){}},12000);
+      return{done,miss,relay:true};}
     for(const sp of others){deskSay(`② Evaluating ${SP_LAB[sp]||sp} in the background… (${done.length+1} of ${others.length+1})`);
       wbBeforeFrame();const ts=Date.now();const f=document.createElement('iframe');f.src=SPORT_PAGE[sp]+'?bg=1&eval=1&v='+Date.now();f.setAttribute('aria-hidden','true');f.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;border:0;opacity:0';
       document.body.appendChild(f);const got=await new Promise(res=>{const iv=setInterval(()=>{const R=get('d4.bgeval.'+sp,null);if(R&&R.ts>=ts){clearInterval(iv);res(R);}else if(Date.now()-ts>60000){clearInterval(iv);res(null);}},600);});
@@ -1130,8 +1136,8 @@ async function masterEvalFinish(done,miss,force){
   if(!force&&deskTooEarly()){set('d4.evalready',{d:today(),ts:Date.now(),done,miss,early:true});
     deskSay(`<span style="color:var(--gold)">⏳ Evaluated ${done.length} sport${done.length===1?'':'s'}, but it's too early to freeze — most books post the day's lines in the morning. Run the master evaluation again after 9 AM${miss.length?` (no lines yet: ${miss.map(s=>SP_LAB[s]||s).join(', ')})`:''}. The card still locks itself 30 min before the first game.</span>`);
     try{deskToast('Too early to freeze — run it again after 9 AM',4000);}catch(e){}return;}
-  if(!force&&deskReviewOn()){set('d4.evalready',{d:today(),ts:Date.now(),done,miss});
-    deskSay(`<span style="color:var(--gold)">✓ ${done.length} sport${done.length===1?'':'s'} evaluated${miss.length?` · no games/lines: ${miss.map(s=>SP_LAB[s]||s).join(', ')}`:''}. Review the Best card, then tap 🔒 Looks good — freeze &amp; publish.</span>`);
+  if(!force&&deskReviewOn()){const why=window.__RELAY_WHY||{};set('d4.evalready',{d:today(),ts:Date.now(),done,miss,why});relayLog('finish',{done:done.join(','),miss:miss.join(',')});
+    deskSay(`<span style="color:var(--gold)">✓ ${done.length} sport${done.length===1?'':'s'} evaluated${done.length?' ('+done.map(s=>SP_LAB[s]||s).join(' · ')+')':''}${miss.length?` · ✗ not evaluated: ${miss.map(s=>(SP_LAB[s]||s)+(why[s]?' ('+txtEsc(why[s])+')':'')).join(', ')} <button onclick='masterEvalOnly(${jsArg(miss)})'>↻ Try ${miss.length===1?SP_LAB[miss[0]]||miss[0]:'them'} again</button>`:''}. Review the Best card, then tap 🔒 Looks good — freeze &amp; publish.</span>`);
     try{deskToast('Evaluation done — review the picks, then freeze',4000);}catch(e){}return;}
   {
     deskSay('③ Freezing the day…');await new Promise(r=>setTimeout(r,30));DESK_EVAL_BUSY=false;
@@ -1141,25 +1147,69 @@ async function masterEvalFinish(done,miss,force){
     else deskSay(`<span style="color:var(--win)">✓ Frozen ${deskT(F&&F.ts)} — ${done.length} sport${done.length===1?'':'s'} evaluated${miss.length?` · couldn't load ${miss.map(s=>SP_LAB[s]||s).join(', ')} (no games or no lines yet)`:''}. Publishing…</span>`);
   }}
 const EVAL_CHAIN_KEY='d4.evalchain';
-function evalChainNext(){const C=get(EVAL_CHAIN_KEY,null);if(!C||C.d!==today()||Date.now()-C.ts>15*60e3)return null;return C;}
-function evalChainGo(){const C=evalChainNext();if(!C)return;try{wbBeforeFrame();}catch(e){}
+/* v2.86.5 · the relay's clock runs from its LAST step, not its first: a slow phone walking five boards could pass 15 minutes, and
+   every page after that found no relay and sat on its overlay for good. */
+function evalChainNext(){const C=get(EVAL_CHAIN_KEY,null);if(!C||C.d!==today()||Date.now()-(C.at||C.ts)>15*60e3)return null;return C;}
+function evalChainSave(C){C.at=Date.now();set(EVAL_CHAIN_KEY,C);}
+/* v2.86.5 · FLIGHT RECORDER — every step of the relay leaves one line in d4.relaylog. It syncs with the cloud copy (the stall log
+   stays on the phone), so a relay that stops can be read afterwards: which page, how long it took, whether a page died. */
+const RELAY_LOG='d4.relaylog';
+function relayLog(ev,x){try{const L=get(RELAY_LOG,[])||[];const o={t:Date.now(),pg:String((typeof location!=='undefined'&&location.pathname.split('/').pop())||'').replace(/\.html$/,''),ev};if(x)Object.assign(o,x);L.push(o);set(RELAY_LOG,L.slice(-120));}catch(e){}}
+/* the relay's sports in order, each with its mark: ✓ done · ✗ missed · ⏳ now · ○ still to go */
+function evalChainLine(C,me){if(!C)return'';const all=[...(C.order||[]),...(C.done||[]),...(C.miss||[]),...(C.todo||[])];const seen=new Set();const L=[];
+  all.forEach(s=>{if(!s||seen.has(s))return;seen.add(s);const m=(C.done||[]).includes(s)?'✓':s===me?'⏳':(C.miss||[]).includes(s)&&!(C.todo||[]).includes(s)?'✗':'○';L.push(m+' '+(SP_LAB[s]||s));});return L.join('  ');}
+let CHAIN_LEAVING=false;
+function evalChainGo(now){const C=evalChainNext();if(!C||CHAIN_LEAVING)return;CHAIN_LEAVING=true;try{window.__RELAY_LEAVING=Date.now();}catch(e){}try{wbBeforeFrame();}catch(e){}
   /* v2.80.7 · mode 'load' (Load all sports on a phone) walks the same way, without evaluating */
-  const ld=C.mode==='load';const sp=C.todo[0];const go=()=>{location.href=sp?SPORT_PAGE[sp]+(ld?'?bg=1&chain=1&v=':'?bg=1&eval=1&chain=1&v=')+Date.now():C.back+(ld?'?loaddone=1&v=':'?evaldone=1&v=')+Date.now();};try{if(typeof wbFlushNow==='function')wbFlushNow();}catch(e){}(window.D4_FLUSH?window.D4_FLUSH():Promise.resolve()).then(go,go);}
+  const ld=C.mode==='load';const sp=C.todo[0];
+  const url=sp?SPORT_PAGE[sp]+(ld?'?bg=1&chain=1&v=':'?bg=1&eval=1&chain=1&v=')+Date.now():C.back+(ld?'?loaddone=1&v=':'?evaldone=1&v=')+Date.now();
+  relayLog('hop',{to:sp||'home',done:(C.done||[]).join(','),miss:(C.miss||[]).join(','),todo:(C.todo||[]).join(',')});
+  /* v2.86.5 · location.replace, not a new history entry: Safari can keep a page you left alive in its back-forward cache, so a relay
+     walking five boards could hold several whole copies of the app in memory at once — the opposite of "one page alive at a time".
+     And a hop never waits more than 4 s on the storage flush: one IndexedDB write that never answers held the relay forever. */
+  let went=false;const go=()=>{if(went)return;went=true;try{location.replace(url);}catch(e){location.href=url;}};
+  try{if(typeof wbFlushNow==='function')wbFlushNow();}catch(e){}
+  setTimeout(()=>{CHAIN_LEAVING=false;},15000);   /* still here 15 s later (a navigation that didn't take): a later step can try again */
+  if(now===true){go();return;}
+  setTimeout(()=>{if(!went){relayLog('flush-slow');go();}},4000);
+  (window.D4_FLUSH?window.D4_FLUSH():Promise.resolve()).then(go,go);}
+/* one relay step: this page's sport is done (ok), or not — a first miss gets one more try at the end of the relay */
+function evalChainStep(ok,why){if(CHAIN_LEAVING)return;const C=evalChainNext();const me=window.__PAGE_SPORT__;
+  if(!C){relayLog('lost',{sp:me,why:why||''});evalChainLost();return;}
+  const ld=C.mode==='load';const i=(C.todo||[]).indexOf(me);const sp=i>=0?C.todo.splice(i,1)[0]:(C.todo.shift()||me);
+  if(ok)C.done.push(sp);
+  else if(!ld&&why!=='skipped'&&!(C.retried||[]).includes(sp)){(C.retried=C.retried||[]).push(sp);C.todo.push(sp);}
+  else{C.miss.push(sp);(C.why=C.why||{})[sp]=why||'no result';}
+  relayLog(ok?'done':'miss',{sp,why:why||'',ms:Date.now()-(window.__CHAIN_T0||Date.now())});evalChainSave(C);evalChainGo();}
+/* a relay page that can't find its relay (cleared, or from another day): back to the plain page, say so */
+function evalChainLost(){try{const ov=document.getElementById('chainOv');if(ov)ov.innerHTML='<div style="font-size:30px">⏸</div><div style="margin-top:10px">The master evaluation lost its place.</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">Open Today and tap Run the master evaluation again.</div>';}catch(e){}
+  setTimeout(()=>{try{location.replace(location.pathname);}catch(e){}},2500);}
 /* a page opened by the relay: show where we are, evaluate when the board is ready, then hop on */
 const EVAL_CHAIN_HOP=typeof location!=='undefined'&&/[?&]chain=1/.test(location.search||'');
-if(EVAL_CHAIN_HOP&&typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{const C=evalChainNext();const n=C?C.done.length+C.miss.length+1:0,N=C?n+C.todo.length-1:0;
-  const d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:99999;background:#0b1220;color:#f5c542;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 16px system-ui;text-align:center;padding:24px';
+if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){window.__CHAIN_T0=Date.now();
+  /* v2.86.5 · a page that died and came back: iOS reloads the same address (same v=), so seeing this address a second time means the
+     last attempt never finished. It isn't run a third time — it takes its one retry at the end of the relay, or is skipped. */
+  try{const C=evalChainNext();const me=window.__PAGE_SPORT__;const v=(location.search.match(/[?&]v=(\d+)/)||[])[1]||'';
+    if(C){C.seen=C.seen||[];const again=!!v&&C.seen.includes(v);if(v&&!again)C.seen=C.seen.concat(v).slice(-20);C.tries=C.tries||{};if(!again)C.tries[me]=(C.tries[me]||0)+1;   /* a reload isn't a new try: the retry at the end still gets its real run */
+      relayLog('arrive',{sp:me,try:C.tries[me],again:again?1:0,store:window.D4_STORE&&window.D4_STORE.on()?1:0});evalChainSave(C);
+      if(C.mode!=='load'&&(again||C.tries[me]>=3))setTimeout(()=>evalChainStep(false,again?'page died and reloaded':'third try'),300);}}catch(e){}}
+if(EVAL_CHAIN_HOP&&typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{const C=evalChainNext();const me=window.__PAGE_SPORT__;
+  const N=C?new Set([...(C.order||[]),...C.done,...C.miss,...C.todo]).size:0,n=C?C.done.length+C.miss.filter(s=>!C.todo.includes(s)).length+1:0;
+  const d=document.createElement('div');d.id='chainOv';d.style.cssText='position:fixed;inset:0;z-index:99999;background:#0b1220;color:#f5c542;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 16px system-ui;text-align:center;padding:24px';
   const ld=C&&C.mode==='load';
-  d.innerHTML=`<div style="font-size:34px">${ld?'⟳':'🔒'}</div><div style="margin-top:10px">${ld?'Loading every board':'Master evaluation'}</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">${ld?'Loading':'Evaluating'} ${SP_LAB[window.__PAGE_SPORT__]||''}… (${n} of ${N})</div><div style="color:#64748b;margin-top:14px;font-size:12px;font-weight:400">Hang tight — the app comes back on its own.</div><button id="chainSkip" style="margin-top:18px;padding:10px 18px;border-radius:10px;border:1px solid #f5c542;background:transparent;color:#f5c542;font:600 14px system-ui">Skip this sport →</button>`;document.body.appendChild(d);});
-  try{setTimeout(()=>{const b=document.getElementById('chainSkip');if(b)b.onclick=()=>{window.__CHAIN_SKIP=1;b.textContent='Skipping…';};},0);if(C&&(C.retried||[]).includes(window.__PAGE_SPORT__)){const q=d.querySelector('div:nth-child(3)');if(q)q.textContent+=' — second try';}}catch(e){}
-if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;const t0=Date.now();const iv=setInterval(()=>{const C0=evalChainNext();const ld=C0&&C0.mode==='load';const me=window.__PAGE_SPORT__||sp0;
+  d.innerHTML=`<div style="font-size:34px">${ld?'⟳':'🔒'}</div><div style="margin-top:10px">${ld?'Loading every board':'Master evaluation'}</div><div style="color:#cbd5e1;margin-top:6px;font-weight:400">${ld?'Loading':'Evaluating'} ${SP_LAB[me]||''} — sport ${n} of ${N}${C&&(C.retried||[]).includes(me)?' (second try)':''}</div><div style="color:#94a3b8;margin-top:10px;font-weight:400;font-size:13px;line-height:1.6">${evalChainLine(C,me)}</div><div style="color:#64748b;margin-top:14px;font-size:12px;font-weight:400">Hang tight — the app comes back on its own.</div><button id="chainSkip" style="margin-top:18px;padding:10px 18px;border-radius:10px;border:1px solid #f5c542;background:transparent;color:#f5c542;font:600 14px system-ui">Skip this sport →</button>`;document.body.appendChild(d);
+  /* v2.86.5 · Skip goes now — it used to set a flag for a timer that might never look again */
+  try{const b=document.getElementById('chainSkip');if(b)b.onclick=()=>{window.__CHAIN_SKIP=1;b.textContent='Skipping…';relayLog('skip',{sp:me});evalChainStep(false,'skipped');};}catch(e){}});
+if(EVAL_CHAIN_HOP&&typeof window!=='undefined'){const sp0=window.__PAGE_SPORT__;const t0=Date.now();
+  /* v2.86.5 · WATCHDOG — whatever happens on this page, it hands off within 3 minutes */
+  setTimeout(()=>{if(CHAIN_LEAVING)return;relayLog('watchdog',{sp:window.__PAGE_SPORT__||sp0});evalChainStep(false,'page took over 3 minutes');},180e3);
+  const iv=setInterval(()=>{if(CHAIN_LEAVING){clearInterval(iv);return;}const C0=evalChainNext();const ld=C0&&C0.mode==='load';const me=window.__PAGE_SPORT__||sp0;
   let ok=false,ready=false;
   if(ld){const W=window.__FB_WEEK_LOADING;if(W&&Date.now()-W<30000&&Date.now()-t0<45000)return;   /* v2.81.5 · wait for the football week */
     const T=get(TC_KEY,{})||{};const B=T.d===today()&&T.by&&T.by[me];ready=!!(B&&B.ts>=Math.max(t0,window.__FB_WEEK_DONE||0));ok=ready;if(!ready&&tcKickBoard(me,t0))return;if(!ready&&Date.now()-t0<45000)return;}   /* the board is on Today's card */
-  else{const R=get('d4.bgeval.'+me,null);ready=!!(R&&R.ts>=t0);ok=ready&&!!R.ok;if(!ready&&!window.__CHAIN_SKIP&&Date.now()-t0<((C0&&(C0.retried||[]).includes(me))?40000:55000))return;}
-  clearInterval(iv);const C=evalChainNext();if(!C)return;const sp=C.todo.shift();
-  /* v2.85.2 · a sport whose board didn't come up gets one more try at the end of the relay, instead of the card going out without it */
-  if(ok)C.done.push(sp);else if(!ld&&!window.__CHAIN_SKIP&&!(C.retried||[]).includes(sp)){(C.retried=C.retried||[]).push(sp);C.todo.push(sp);}else C.miss.push(sp);set(EVAL_CHAIN_KEY,C);evalChainGo();},700);}
+  else{const R=get('d4.bgeval.'+me,null);ready=!!(R&&R.ts>=t0);ok=ready&&!!R.ok;if(!ready&&Date.now()-t0<((C0&&(C0.retried||[]).includes(me))?40000:55000))return;
+    if(ready)relayLog('evaluated',{sp:me,ok:ok?1:0,err:R&&R.err?String(R.err).slice(0,80):'',ms:Date.now()-t0});}
+  clearInterval(iv);evalChainStep(ok,ready?(ok?'':((get('d4.bgeval.'+me,null)||{}).err||'no games or lines')):'no result in time');},700);}
 /* back home after "Load all sports" */
 if(typeof location!=='undefined'&&/[?&]loaddone=1/.test(location.search||'')&&!DESK_BG_EVAL)setTimeout(()=>{const C=evalChainNext();localStorage.removeItem(EVAL_CHAIN_KEY);
   try{history.replaceState(null,'',location.pathname);}catch(e){}
@@ -1168,8 +1218,27 @@ if(typeof location!=='undefined'&&/[?&]loaddone=1/.test(location.search||'')&&!D
   try{renderToday(true);}catch(e){}},1500);
 /* back home: freeze with what the relay gathered */
 if(typeof location!=='undefined'&&/[?&]evaldone=1/.test(location.search||'')&&!DESK_BG_EVAL)setTimeout(async()=>{const C=evalChainNext();if(!C)return;localStorage.removeItem(EVAL_CHAIN_KEY);
-  try{history.replaceState(null,'',location.pathname);}catch(e){}DESK_EVAL_BUSY=true;try{await masterEvalFinish(C.done,C.miss);}catch(e){console.warn('eval finish',e);}finally{DESK_EVAL_BUSY=false;}
+  try{history.replaceState(null,'',location.pathname);}catch(e){}relayLog('back',{done:C.done.join(','),miss:C.miss.join(',')});window.__RELAY_WHY=C.why||{};
+  DESK_EVAL_BUSY=true;try{await masterEvalFinish(...evalChainMerge(C));}catch(e){console.warn('eval finish',e);}finally{DESK_EVAL_BUSY=false;}
   try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}},2500);
+/* v2.86.5 · "Try CBB again" re-runs only the sports that missed; the finish then counts them with the ones already evaluated */
+function evalChainMerge(C){let done=C.done.slice(),miss=C.miss.slice();
+  if(C.only){const P=get('d4.evalready',null);if(P&&P.d===today()){done=[...new Set([...(P.done||[]),...done])];miss=[...new Set([...(P.miss||[]).filter(s=>!done.includes(s)),...miss])];}}
+  return[done,miss];}
+function masterEvalOnly(list){list=(Array.isArray(list)?list:[list]).filter(sp=>SPORT_PAGE[sp]);if(!list.length||DESK_EVAL_BUSY)return;
+  window.__CHAIN_MINE=1;set(EVAL_CHAIN_KEY,{ts:Date.now(),d:today(),todo:list.slice(),order:list.slice(),done:[],miss:[],only:1,back:location.pathname.split('/').pop()||'TheDesk.html'});
+  relayLog('start',{only:list.join(',')});deskSay(`Evaluating ${list.map(s=>SP_LAB[s]||s).join(', ')} again…`);setTimeout(()=>evalChainGo(),300);}
+/* v2.86.5 · a relay that stopped (the phone closed a page, the app was shut mid-run) says so on Today, with the two ways out */
+function evalChainStalled(){try{if(EVAL_CHAIN_HOP||DESK_BG_EVAL||DESK_EVAL_BUSY||CHAIN_LEAVING)return null;if(/[?&](evaldone|loaddone)=1/.test(location.search||''))return null;
+  if(window.__CHAIN_MINE)return null;   /* this page started the relay and is handing it off */
+  const C=evalChainNext();if(!C||C.mode==='load'||!(C.todo||[]).length)return null;return C;}catch(e){return null;}}
+function evalChainResume(){const C=evalChainNext();if(!C)return;window.__CHAIN_MINE=1;CHAIN_LEAVING=false;relayLog('resume',{todo:C.todo.join(',')});evalChainSave(C);evalChainGo(true);}
+async function evalChainFinishNow(){const C=evalChainNext();if(!C)return;localStorage.removeItem(EVAL_CHAIN_KEY);relayLog('finish-now',{done:C.done.join(','),left:C.todo.join(',')});
+  const [done,miss]=evalChainMerge({...C,miss:[...C.miss,...C.todo.filter(s=>!C.miss.includes(s))]});
+  DESK_EVAL_BUSY=true;try{await masterEvalFinish(done,miss);}catch(e){console.warn('eval finish',e);}finally{DESK_EVAL_BUSY=false;}try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}}
+function evalChainStalledHtml(){const C=evalChainStalled();if(!C)return'';const at=C.todo[0];
+  return`<div class="sub" style="color:var(--gold);margin-top:6px">⏸ The master evaluation stopped at ${SP_LAB[at]||at} — ${C.done.length} of ${new Set([...(C.order||[]),...C.done,...C.miss,...C.todo]).size} sports done.<div class="mono" style="margin-top:3px">${evalChainLine(C,'')}</div></div><div class="bar" style="margin-top:6px"><button class="primary" onclick="evalChainResume()">▶ Resume from ${SP_LAB[at]||at}</button><button onclick="evalChainFinishNow()">Finish with what's done</button></div>`;}
+if(typeof window!=='undefined'&&!EVAL_CHAIN_HOP)setTimeout(()=>{try{const C=evalChainStalled();if(C){relayLog('stalled-seen',{todo:C.todo.join(',')});if(typeof deskToast==='function')deskToast('⏸ The master evaluation stopped at '+(SP_LAB[C.todo[0]]||C.todo[0])+' — Today has Resume',5000);try{deskRerender();}catch(e){}}}catch(e){}},4000);
 const deskT=ts=>ts?new Date(ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
 async function deskFreezeAll(why){const d=today();if(deskFrozen(d))return get(FREEZE_KEY,null);
   try{confBackfill(d);}catch(e){console.warn('conf backfill',e);}PCI_C=null;
@@ -1197,9 +1266,11 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
   return`${night}<div class="tkt ps-card"><div class="ps-row">
     ${step(1,cal&&Date.now()-cal<18*36e5,'Grade & calibrate',cal?'last '+deskT(cal):'runs when the app opens')}
     ${step(2,intake>0||odds>0,'Intake',`${odds} priced pick${odds===1?'':'s'}${intake?' · '+intake+' outside reads':''}`)}
-    ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):held?'⏳ held by the Book — see below':ER?(ER.early?'⏳ evaluated '+deskT(ER.ts)+' — too early to freeze, run again after 9 AM':'✓ evaluated '+deskT(ER.ts)+' — waiting for your OK'):'not yet — freezes everything',!fz&&(held||ER))}
+    ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):evalChainStalled()?'⏸ stopped mid-run — Resume below':held?'⏳ held by the Book — see below':ER?(ER.early?'⏳ evaluated '+deskT(ER.ts)+' — too early to freeze, run again after 9 AM':'✓ evaluated '+deskT(ER.ts)+' — waiting for your OK'):'not yet — freezes everything',!fz&&(held||ER))}
     ${step(4,fz&&pub&&pub.d===d&&pub.ok,'Published',fz?((pub&&pub.d===d&&pub.ok?'page ✓':'page …')+' · '+(posted&&posted.d===d?'VIP ✓':'VIP …')):'after the freeze')}</div>
+    ${!fz&&ER&&(ER.miss||[]).length?`<div class="sub" style="margin-top:6px">✗ Not evaluated: ${ER.miss.map(x=>(SP_LAB[x]||x)+((ER.why||{})[x]?' ('+txtEsc(ER.why[x])+')':'')).join(', ')} <button onclick="masterEvalOnly(${jsArg(ER.miss)})">↻ Try ${ER.miss.length===1?SP_LAB[ER.miss[0]]||ER.miss[0]:'them'} again</button></div>`:''}
     ${fz?'':`<label class="sub" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" ${deskReviewOn()?'checked':''} onchange="set('d4.reviewFreeze',this.checked);deskRerender()"> Let me review the picks before freezing</label>${deskEvalReady()?`<div class="sub" style="color:var(--gold);margin-top:4px">✓ Every sport evaluated — check the Best card below, then freeze. Nothing posts until you do.</div>`:''}`}
+    ${fz?'':evalChainStalledHtml()}
     <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button><button onclick="deskUnfreezeNow()">🔓 Unfreeze &amp; re-run</button><button onclick="deskAuditGo()">🔎 Evaluation audit</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="vipCardPhotos(this)">📸 VIP card → photos</button><button onclick="fbpOpen()">📣 Facebook post</button><button onclick="genOpen()">🧬 Bloodlines</button><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
     <div class="deskStatus sub mono" style="font-size:10px;margin-top:4px"></div></div>`;}
 
@@ -1666,7 +1737,10 @@ function deskReopenCheck(){let R=null;try{R=get(REOPEN_KEY,null);}catch(e){}if(!
   try{DESK_MEM=null;CPAR_MEM=null;CPX_MEM=null;}catch(e){}
   return true;}
 let DESK_REOPEN_RUN=false;
-function deskReopenRun(){if(DESK_REOPEN_RUN||DESK_BG_EVAL||(typeof BG_MODE!=='undefined'&&BG_MODE))return false;if(!deskReopenCheck())return false;DESK_REOPEN_RUN=true;
+function deskReopenRun(){if(DESK_REOPEN_RUN||DESK_BG_EVAL||(typeof BG_MODE!=='undefined'&&BG_MODE))return false;
+  /* v2.86.5 · never on a relay page or the page the relay comes home to, and never on top of a relay that is still walking */
+  try{if(/[?&](evaldone|loaddone|chain)=1/.test(location.search||'')||evalChainNext())return false;}catch(e){}
+  if(!deskReopenCheck())return false;DESK_REOPEN_RUN=true;
   try{deskToast('🔁 Today was reopened — re-running the master evaluation…',4000);}catch(e){}
   const t0=Date.now();const iv=setInterval(()=>{const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;let ready=false;try{ready=(sportGames(sp)||[]).length>0;}catch(e){}
     if(!ready&&Date.now()-t0<45000)return;clearInterval(iv);try{const r=masterEvalAll();if(r&&r.catch)r.catch(e=>console.warn('reopen eval',e));}catch(e){console.warn('reopen eval',e);}},1500);
@@ -1680,6 +1754,7 @@ if(typeof window!=='undefined'&&!window.__NO_REOPEN__)setTimeout(()=>{try{deskRe
 function deskUnfreezeNow(){const d=today();let posted=false;try{const P=get('d4.tgposts',{})||{};posted=!!(P[d]&&(P[d].ids||[]).length);}catch(e){}
   if(!confirm('Unfreeze today and re-evaluate every sport for a new Best 3?\n\nGames already started keep their picks.'+(posted?'\n\n⚠️ Today\'s card already went to VIP — the new one will post as an update.':'')))return false;
   if(posted){try{const P=get('d4.tgposts',{})||{};P[d]={...P[d],ids:[],reopenedFrom:P[d].ids||[]};set('d4.tgposts',P);}catch(e){}}
+  try{localStorage.removeItem(EVAL_CHAIN_KEY);}catch(e){}   /* v2.86.5 · a stale relay must not block the re-run */
   set(REOPEN_KEY,{d,ts:Date.now(),why:'manual unfreeze'});DESK_REOPEN_RUN=false;
   const ok=deskReopenRun();if(!ok){try{deskToast('Nothing to unfreeze for today.',3000);}catch(e){}}return ok;}
 function deskUnfreezeBtn(){return`<button class="primary" style="width:100%;margin:8px 0 2px" onclick="deskUnfreezeNow()">🔓 Unfreeze &amp; re-evaluate every sport</button>`;}

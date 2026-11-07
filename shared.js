@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261106e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261106f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -22726,9 +22726,11 @@ if(typeof window!=='undefined'&&!window.__NO_SYNC_LOOP__&&!SY3_RELAY){
       syncNow(true,hasLocal?'local':'remote').then(r=>{if(r&&r.ok&&r.changed)setTimeout(()=>location.reload(),700);}).catch(()=>{});return;}
     if(syncOn())setTimeout(()=>syncNow(false),8000);};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else setTimeout(boot,0);
-  setInterval(()=>{if(!document.hidden&&syncOn())syncNow(false);},600e3);
+  /* v2.86.5 · never in the middle of a master evaluation or a relay hop — it saves when the run is done */
+  const sy3Quiet=()=>{try{return!!(window.__RELAY_LEAVING||(typeof DESK_EVAL_BUSY!=='undefined'&&DESK_EVAL_BUSY));}catch(e){return false;}};
+  setInterval(()=>{if(!document.hidden&&syncOn()&&!sy3Quiet())syncNow(false);},600e3);
   /* v2.86 · going to the background saves what changed; coming back checks the cloud at most every 10 minutes */
-  document.addEventListener('visibilitychange',()=>{if(!syncOn())return;if(document.hidden){if(Object.keys(sy3Dirty()).length)syncNow(false);}
+  document.addEventListener('visibilitychange',()=>{if(!syncOn()||sy3Quiet())return;if(document.hidden){if(Object.keys(sy3Dirty()).length)syncNow(false);}
     else if(Date.now()-(+localStorage.getItem(SYNC.last)||0)>600e3)syncNow(false);});
   window.addEventListener('load',()=>setTimeout(()=>{try{sessionStorage.removeItem('d4.syncReload');}catch(e){}},60e3));}
 

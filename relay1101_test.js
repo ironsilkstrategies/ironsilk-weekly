@@ -80,7 +80,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   T('…before the evaluation ran, and the card kept the other sports',got&&TC.by.ncaaf.ts<=got.ts&&!!TC.by.nba,JSON.stringify({card:TC.by.ncaaf&&TC.by.ncaaf.ts,eval:got&&got.ts}));
   T('it waited for the board (games in), not the 40 s timeout',got&&got.ts-c.eval('window.__LOAD0')<20000,got&&String(got.ts-c.eval('window.__LOAD0')));
   const dc=fs.readFileSync(path.join(W,'desk-core.js'),'utf8');
-  T('right before evaluating, the page snapshots its board again (as the home page does)',/try\{if\(\(sportGames\(sp\)\|\|\[\]\)\.length\)todaySnapshot\(true\);\}catch\(e\)\{\}try\{ok=deskRunSportEval\(sp\);/.test(dc));
+  T('right before evaluating, the page snapshots its board again (as the home page does)',/try\{if\((?:\(sportGames\(sp\)\|\|\[\]\)\.length|g>0)\)todaySnapshot\(true\);\}catch\(e\)\{\}try\{ok=deskRunSportEval\(sp\);/.test(dc));
   T('"Load all sports" pages kick their board too',/if\(!ready&&tcKickBoard\(me,t0\)\)return;/.test(dc));
   c.close();
   /* ── the kick's rules ── */
