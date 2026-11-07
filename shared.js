@@ -719,7 +719,10 @@ function pstCardHtml(sp,g){try{
    where it left off on the next page open until the window is covered. */
 const PST_BF_DAYS={mlb:45,nhl:60,nfl:120,ncaaf:60,nba:60,ncaab:30};
 /* ESPN scoreboard query tail per sport: college leagues need the D1 group or ESPN returns a sliver */
-const espnQ=(sp,lim)=>sp==='ncaaf'?'&groups=80&limit='+(lim||900):sp==='ncaab'?'&groups=50&limit='+(lim||900):'&limit='+(lim||1000);
+/* v2.87.7 · ESPN's college-football scoreboard ignores a page size over its cap and hands back its default 25 games —
+   limit=900 saw 25 of 47 FBS games on Oct 31 (probed live: default, 100 and 300 all return 47). 300 for every CFB ask. */
+const CFB_LIM=300;
+const espnQ=(sp,lim)=>sp==='ncaaf'?'&groups=80&limit='+Math.min(lim||CFB_LIM,CFB_LIM):sp==='ncaab'?'&groups=50&limit='+(lim||900):'&limit='+(lim||1000);
 /* v2.80.2 · ONE DOOR FOR ESPN DATE RANGES. ESPN answers a range (dates=A-B) with a 400 for some leagues and sizes —
    seen live and from the robot's servers — and every backfill that asked for one came back empty without a word
    (upcoming NHL games, past finals, player stats, the Scout). A single day always works. espnRange() asks for the
@@ -1247,6 +1250,14 @@ function ticketAmerToProb(price){
   if(price==null||isNaN(price))return 0.5;
   return price>0?100/(price+100):(-price)/(-price+100);
 }
+/* "11/07/2026 07:30:00 PM (EST)" → {start:'2026-11-08T00:30:00Z', day:'2026-11-07'} — the zone label read as the city's wall clock */
+function bolWhen(txt){const m=String(txt||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP]M)?\s*(?:\(?\s*([A-Z]{2,4})\s*\)?)?/i);if(!m)return null;
+  let h=+m[4];const ap=(m[6]||'').toUpperCase();if(ap==='PM'&&h<12)h+=12;if(ap==='AM'&&h===12)h=0;if(h>23||+m[5]>59)return null;
+  const z=String(m[7]||'').toUpperCase();const tz=/^(CST|CDT|CT)$/.test(z)?'America/Chicago':/^(MST|MDT|MT)$/.test(z)?'America/Denver':/^(PST|PDT|PT)$/.test(z)?'America/Los_Angeles':'America/New_York';
+  const wall=Date.UTC(+m[3],+m[1]-1,+m[2],h,+m[5]);
+  const off=t=>{try{const p=new Intl.DateTimeFormat('en-US',{timeZone:tz,timeZoneName:'longOffset'}).formatToParts(new Date(t)).find(x=>x.type==='timeZoneName').value;const q=p.match(/([+-])(\d{2}):?(\d{2})?/);return q?(q[1]==='-'?-1:1)*(+q[2]*60+(+q[3]||0)):0;}catch(e){return-300;}};
+  let t=wall-off(wall)*60e3;t=wall-off(t)*60e3;   /* twice, so a date near a clock change lands right */
+  if(!isFinite(t))return null;const iso=new Date(t).toISOString().replace(/\.\d{3}Z$/,'Z');return{start:iso,day:tdDay(iso)};}
 function parseMyTicketText(text){
   const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
   const kv={};
@@ -1295,9 +1306,12 @@ function parseMyTicketText(text){
     }
     if(!pick){skipped.push(line+(h1?'  (1st-half moneyline not supported yet)':'  (leg text not understood)'));return;}
     const dm=whenText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    const gameDate=dm?`${dm[3]}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`:today();
+    /* v2.87.7 · the book prints each game's start ("11/07/2026 07:30:00 PM (EST)") — keep it, and date the leg by Central
+       time: a 12:30 AM Eastern tip is the night before here, which is the day the scoreboard files it under */
+    const bw=bolWhen(whenText);
+    const gameDate=bw?bw.day:dm?`${dm[3]}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`:today();
     if(price!=null&&!(Math.abs(+price)>=100)){price=null;}   /* v1.93: a "-2" is a misread, not a price */
-    legs.push({id:'ext'+ticketNo+'_'+legs.length,game:gl,pick,p:price!=null?ticketAmerToProb(price):0.5,sport,gameDate,price,book:'external'});
+    legs.push({id:'ext'+ticketNo+'_'+legs.length,game:gl,pick,p:price!=null?ticketAmerToProb(price):0.5,sport,gameDate,price,book:'external',...(bw?{start:bw.start}:{})});
   });
   if(!legs.length)return{ok:false,note:'found Ticket Number '+ticketNo+' but no legs parsed'+(skipped.length?' — '+skipped.length+' line(s) unrecognized: '+(skipped[0].match(/\(([^()]+)\)\s*$/)||[,'leg text not understood'])[1]:'')};
   const L=get(LS.locked,[]);
@@ -3018,7 +3032,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107l';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3125,7 +3139,7 @@ async function slateFlipCheck(){try{
   /* v2.46.1 · one day at a time, in the query forms the app already reads every day: ESPN refuses a date RANGE
      with limit=400 for the NHL and NBA (HTTP 400), which kept this check from ever turning the day early */
   for(const [sp,path] of Object.entries(SLATE_FLIP_SB)){
-    const g=sp==='ncaaf'?'&groups=80&limit=900':sp==='ncaab'?'&groups=50&limit=900':'&limit=400';const ev=[];
+    const g=sp==='ncaaf'?'&groups=80&limit='+CFB_LIM:sp==='ncaab'?'&groups=50&limit=900':'&limit=400';const ev=[];
     for(const day of [slate,cal]){const r=await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${D(day)}${g}`,{cache:'no-store'});
       if(!r.ok)return{flipped:false,why:sp+' scoreboard unreachable ('+r.status+')'};   /* never flip on a guess */
       const j=await r.json();(j.events||[]).forEach(e=>{if(!ev.some(x=>x.id===e.id))ev.push(e);});}
@@ -8091,7 +8105,9 @@ function boxFor(gid){
    of weeks and dozens of prop legs that pinned the phone's CPU and froze the app. */
 const ARC_RO={};
 function arcRead(key){const c=ARC_RO[key];if(c&&Date.now()-c.ts<15e3)return c.v;const v=get(key,{})||{};ARC_RO[key]={ts:Date.now(),v};return v;}
+let RL_OVR=null;   /* v2.87.7 · the second-opinion check re-grades a leg on the league's own score */
 function resolveLeg(leg,ticketDate){
+  if(RL_OVR&&RL_OVR.leg===leg)return{a:+RL_OVR.a,h:+RL_OVR.h,gid:leg.gid,live:false,source:'check'};
   /* Tickets can now mix sports, so a leg tagged nfl/ncaaf must be resolved
      against ITS OWN schedule. Previously every leg was looked up in the MLB
      GAMES array only — a football leg matched nothing, returned null forever,
@@ -8106,6 +8122,7 @@ function resolveLeg(leg,ticketDate){
     let fg=null;
     if(leg.gid)fg=arr.find(z=>String(z.id)===String(leg.gid));
     if(!fg)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game&&dayOk(gameDayOf(z),want,approx));
+    if(!fg&&!approx)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game&&sameGameTime(z.start||z.date,gameDayOf(z),want,leg.start));
     if(fg){
       const done=fg.status==='Final'||fg.abstract==='Final'||fg.abstract==='post';
       if(done&&fg.awayScore!=null)
@@ -8119,7 +8136,7 @@ function resolveLeg(leg,ticketDate){
     // not on this page's slate: live/final from the My Games ESPN feed
     {const mg=mgResolve(leg,ticketDate);if(mg)return mg;}
     // shared cross-sport finals store — visible on every page
-    const shared=finalsFor(leg.sport,leg.game,want,approx);
+    const shared=finalsFor(leg.sport,leg.game,want,approx,leg.start);
     if(shared){
       /* Cross-check: ESPN occasionally sends a brief 'post' state mid-game
          (a known halftime glitch), which causes syncFinalsToShared to write the
@@ -8145,6 +8162,9 @@ function resolveLeg(leg,ticketDate){
       else if(E&&Array.isArray(E.rows)&&E.finals){const row=E.rows.find(r=>gidOk(r)||gameOk(r));
         const F=row&&E.finals[row.id];if(F&&F.a!=null)return{a:+F.a,h:+F.h,gid:row.id,live:false,source:'archive'};}
     }
+    /* v2.87.7 · last: the feeds robot's finals (built off the phone from ESPN every hour, checked against the leagues' own feeds) —
+       a game the phone never saw finish still grades */
+    try{if(typeof feedFinalFor==='function'){const f=feedFinalFor(leg.sport,leg.game,want,approx,leg.start);if(f)return{a:+f.as,h:+f.hs,gid:leg.gid,live:false,source:'feed'};}}catch(e){}
     return null;
   }
   // 1) in-memory GAMES — today's slate, and the only place with live in-progress scores
@@ -8351,7 +8371,7 @@ function fbpEventIdCore(leg,ticketDate,sp,want){
   if(next===undefined)return{id:null,pending:false};   // '' (the bare current-week board) is a real query, not "done"
   const k='sb:'+sp+':'+next;if(FBP_INFLIGHT[k])return{id:null,pending:true};
   FBP_INFLIGHT[k]=1;
-  fetch(FBP_ESPN[sp]+'/scoreboard?'+(next?next+'&':'')+(sp==='ncaaf'?'groups=80&limit=900':'limit=400')).then(r=>r.json()).then(j=>{
+  fetch(FBP_ESPN[sp]+'/scoreboard?'+(next?next+'&':'')+(sp==='ncaaf'?'groups=80&limit='+CFB_LIM:'limit=400')).then(r=>r.json()).then(j=>{
     fbpIndexEvents(sp,j,lo);
     const T=get('d4.fbptried',{})||{};T[sp+'|'+next]=Date.now();set('d4.fbptried',T);   // only a real answer counts as tried
     Object.keys(FBP_MISS).forEach(k=>delete FBP_MISS[k]);
@@ -8800,7 +8820,7 @@ function liveLegProb(x,r,td){
   if(r&&r.push)return 1;if(r&&!r.live&&r.hit===true)return 1;if(r&&!r.live&&r.hit===false)return 0;
   const p0=x.p>0&&x.p<1?x.p:(x.price!=null?imp(+x.price):null);if(p0==null)return null;
   const sp=x.sport||'mlb';let pick=String(x.pick||'').trim();if(x.fbProp||x.nhlProp||x.mlbProp||x.bbProp)return r&&r.live&&r.hit===true?1:p0;
-  const day=String(x.gameDate||td||'').slice(0,10);let e=null;try{e=mgEventFor(sp,x.game,day,!!x.gdApprox||!x.gameDate);}catch(err){}
+  const day=String(x.gameDate||td||'').slice(0,10);let e=null;try{e=mgEventFor(sp,x.game,day,!!x.gdApprox||!x.gameDate,x.start);}catch(err){}
   if(!e||e.state==='pre'||e.a==null)return p0;let f=e.state==='post'?0.001:liveFracLeft(e,sp);let S=LIVE_SIG[sp]||[10,10];let A=e.a,H=e.h;
   /* period legs (P1 / 1H / Q1 / F5): same model scoped to the period — time left IN
      the period, σ shrunk to the period's share of the game, score so far in it */
@@ -8864,7 +8884,7 @@ function pregameWrap(sp,g,html){try{if(!g||!g.id||!html)return html;const key=sp
    · the game is final but the pick text couldn't be read → set it yourself
    Manual results (Won / Lost / Push) are stored on the leg and always win.  */
 function legOverdue(l,t){const d=legDay(l,t.date);if(!d)return false;if(d<today())return true;
-  try{const e=mgEventFor(l.sport||'mlb',l.game,d,!!l.gdApprox||!l.gameDate);if(e&&e.state==='post')return true;if(e&&e.start)return Date.now()-Date.parse(e.start)>4*3600e3;}catch(err){}return false;}
+  try{const e=mgEventFor(l.sport||'mlb',l.game,d,!!l.gdApprox||!l.gameDate,l.start);if(e&&e.state==='post')return true;if(e&&e.start)return Date.now()-Date.parse(e.start)>4*3600e3;}catch(err){}return false;}
 function legDiagnose(l,t){const sp=l.sport||'mlb',d=legDay(l,t.date),ap=!!l.gdApprox||!l.gameDate;const L=MG_LIVE[sp]||{};
   const e=mgEventFor(sp,l.game,d,ap);
   if(e){if(e.state==='in')return{code:'live',msg:`ESPN still shows it in progress (${e.detail||'live'})`};
@@ -13032,7 +13052,7 @@ function trackedPicksHtml(){
       return `<li${jumpTo} class="${legRowCls(x,t.date)}" onclick="event.stopPropagation();legTap('${t.id}',${t.legs.indexOf(x)})" style="cursor:pointer">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${legStartTxt(x,t.date)}${legClockTxt(x,t.date)}
         <span class="pp">${(x.p*100).toFixed(0)}%</span> ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
     }).join('');
-    const rec=(w+l||pd===0)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' pending':''}`:' · pending';
+    const rec=tkPulse(t,w,l)||' · pending';
     const srcBadge=`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
       text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);
       border-radius:4px;padding:1px 6px;margin-left:6px">${srcLabels[t.source]||t.source}</span>`;
@@ -13257,10 +13277,27 @@ function syncTrackedAutoParlay(source){
 }
 
 /* v2.67.1 · on every ticket list: a live leg pops (bold, red glow), an unstarted one shows its start */
-function legRowState(x,d){try{const r=gradeLeg(x,d);if(r&&(r.hit===true||r.hit===false||r.push)&&!r.live)return{st:'post'};if(r&&r.live)return{st:'in'};
-  const e=mgEventFor(x.sport||'mlb',x.game,String(x.gameDate||d||'').slice(0,10),!!x.gdApprox||!x.gameDate);if(e&&e.state)return{st:e.state,start:e.start};}catch(e){}return{st:'pre'};}
+/* v2.87.7 · every leg knows when its game starts: the live feed → the time on the ticket itself → any sport's stored board
+   (this page or not). One read per leg per render (the row class, the time and the header all ask). */
+const LRS_MEMO=new Map();
+function legRowState(x,d){const k=(x.id||'')+'|'+x.sport+'|'+x.game+'|'+x.pick+'|'+d;const m=LRS_MEMO.get(k);if(m&&Date.now()-m.t<1500)return m.v;
+  let v={st:'pre'};try{const r=gradeLeg(x,d);if(r&&(r.hit===true||r.hit===false||r.push)&&!r.live)v={st:'post'};else if(r&&r.live)v={st:'in'};
+    else{const e=mgEventFor(x.sport||'mlb',x.game,String(x.gameDate||d||'').slice(0,10),!!x.gdApprox||!x.gameDate,x.start);
+      v=e&&e.state?{st:e.state,start:e.start||legStartOf(x,d),hold:r&&r.conflict?r.detail:null}:{st:'pre',start:legStartOf(x,d)};}}catch(e){}
+  if(LRS_MEMO.size>1500)LRS_MEMO.clear();LRS_MEMO.set(k,{t:Date.now(),v});return v;}
+function legStartOf(x,d){try{const sp=x.sport||'mlb',day=String(x.gameDate||d||'').slice(0,10);
+  const e=mgEventFor(sp,x.game,day,!!x.gdApprox||!x.gameDate,x.start);if(e&&e.start)return e.start;
+  if(x.start)return x.start;return typeof boardStart==='function'?boardStart(sp,x.game,day):null;}catch(e){return x&&x.start||null;}}
+/* " · 1-0 · ● 3 live · 18 to go · next 5:15 PM" — what a ticket is doing right now */
+function tkPulse(t,w,l){let live=0,up=0,next=null,late=0;const now=Date.now();
+  (t.legs||[]).forEach(x=>{const S=legRowState(x,t.date);if(S.st==='in')live++;else if(S.st==='pre'){up++;const ts=S.start?Date.parse(S.start):NaN;if(isFinite(ts)){if(ts>now-60e3){if(!next||ts<next)next=ts;}else late++;}}});
+  const P=[];if(w+l)P.push(`<b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>`);
+  if(live)P.push(`<b style="color:#ff4b5c">● ${live} live</b>`);
+  if(up)P.push(`${up} to go${next?` · next <b style="color:var(--gold)">${gameWhen('','',new Date(next).toISOString())}</b>`:''}${late?` · ${late} waiting on a score`:''}`);
+  return P.length?' · '+P.join(' · '):'';}
 /* v2.67.2 · clock + quarter on live rows; tap a row for the full leg card (score, clock, progress, gamecast) */
-function legClockTxt(x,d){try{const S=legRowState(x,d);if(S.st!=='in')return'';const e=mgEventFor(x.sport||'mlb',x.game,String(x.gameDate||d||'').slice(0,10),!!x.gdApprox||!x.gameDate);
+function legClockTxt(x,d){return'';   /* v2.87.7 · the live line below already carries the score and clock — the row said it twice */
+  try{const S=legRowState(x,d);if(S.st!=='in')return'';const e=mgEventFor(x.sport||'mlb',x.game,String(x.gameDate||d||'').slice(0,10),!!x.gdApprox||!x.gameDate,x.start);
   if(!e)return'';return` <span class="mono" style="font-size:10.5px;color:#ff4b5c;font-weight:800">⏱ ${txtEsc(e.detail||'')}${e.a!=null?` · ${e.a}–${e.h}`:''}</span>`;}catch(e){return'';}}
 function legTap(tid,i){try{const t=(get(LS.locked,[])||[]).find(z=>String(z.id)===String(tid));if(!t)return;const l=t.legs[i];if(!l)return;
   let el=document.getElementById('legPop');if(!el){el=document.createElement('div');el.id='legPop';el.style.cssText='position:fixed;left:8px;right:8px;bottom:80px;z-index:1600;background:var(--panel,#111);border:1px solid var(--rule);border-radius:12px;padding:8px;box-shadow:0 8px 30px rgba(0,0,0,.6)';document.body.appendChild(el);}
@@ -13268,9 +13305,13 @@ function legTap(tid,i){try{const t=(get(LS.locked,[])||[]).find(z=>String(z.id)=
 function legRowCls(x,d){const S=legRowState(x,d);return S.st==='in'?'leg-live':S.st==='pre'?'leg-pre':'';}
 function legStartTxt(x,d){const S=legRowState(x,d);
   /* v2.67.2 · live: score, quarter and clock right on the row */
-  if(S.st==='in'){try{const e=mgEventFor(x.sport||'mlb',x.game,String(x.gameDate||d||'').slice(0,10),!!x.gdApprox||!x.gameDate);
-    if(e){const [a,h]=String(x.game).split('@');return ` <span class="mono" style="font-size:11px;color:#ff4b5c;font-weight:800">🕐 ${e.a!=null?`${a} ${e.a}–${e.h} ${h} · `:''}${txtEsc(e.detail||'live')}</span>`;}}catch(err){}return'';}
-  if(S.st!=='pre'||!S.start)return'';const t=new Date(S.start);return isFinite(t)?` <span class="mono" style="font-size:10px;color:var(--gold)">⏰ ${t.toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit'})}</span>`:'';}
+  if(S.st==='in'){try{const e=mgEventFor(x.sport||'mlb',x.game,String(x.gameDate||d||'').slice(0,10),!!x.gdApprox||!x.gameDate,x.start);
+    if(e){const [a,h]=String(x.game).split('@');return ` <span class="mono lg-live" style="font-size:11px;font-weight:800">🕐 ${e.a!=null?`<span style="color:#fff">${a}</span> <b style="color:#FFE066">${e.a}</b>–<b style="color:#FFE066">${e.h}</b> <span style="color:#fff">${h}</span> · `:''}<span style="color:#7FDBFF">${txtEsc(e.detail||'live')}</span></span>`;}}catch(err){}return` <span class="mono" style="font-size:11px;color:#ff4b5c;font-weight:800">🕐 live</span>`;}
+  if(S.hold)return` <span class="mono" style="font-size:10.5px;color:var(--gold);font-weight:700">${txtEsc(S.hold)}</span>`;
+  if(S.st!=='pre'||!S.start)return'';const t=Date.parse(S.start);if(!isFinite(t))return'';
+  const mins=Math.round((t-Date.now())/60e3),when=gameWhen(x.sport||'mlb',x.game,S.start);
+  const cd=mins>0&&mins<=360?` · in ${mins>=60?Math.floor(mins/60)+'h '+String(mins%60).padStart(2,'0')+'m':mins+'m'}`:mins<=0&&mins>-300?' · started — waiting on the score feed':'';
+  return` <span class="mono" style="font-size:10.5px;color:var(--gold);font-weight:700;white-space:nowrap">⏰ ${when}${cd}</span>`;}
 if(typeof document!=='undefined'&&!document.getElementById('legRowCss')){const st=document.createElement('style');st.id='legRowCss';st.textContent='li.leg-live{font-weight:800;background:rgba(255,75,92,.08);border-left:3px solid #ff4b5c;border-radius:6px;padding:3px 6px;box-shadow:0 0 10px rgba(255,75,92,.22)}li.leg-live::before{content:"● LIVE ";color:#ff4b5c;font-size:10px;font-family:monospace}li.leg-pre{opacity:.75}';(document.head||document.documentElement).appendChild(st);}
 
 function marketPicksHtml(){
@@ -13554,7 +13595,7 @@ function genTickets(mode){
           border-radius:3px;padding:0 4px;margin-left:4px">${x.sport==='ncaaf'?'CFB':x.sport.toUpperCase()}</span>`:'';
         return `<li${jumpTo} class="${legRowCls(x,t.date)}" onclick="event.stopPropagation();legTap('${t.id}',${t.legs.indexOf(x)})" style="cursor:pointer">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${legStartTxt(x,t.date)}${legClockTxt(x,t.date)}${sportTag} ${legPctHtml(x,gr)} ${badgeHtml}${prLegHtml(x,t.date)}</li>`;
       }).join('');
-      const rec=(w+l)?` · <b style="color:${l>0?'var(--rust)':'var(--win)'}">${w}-${l}</b>${pd?' · '+pd+' live':''}`:'';
+      const rec=tkPulse(t,w,l);   /* v2.87.7 · was "21 live" for 3 live legs and 18 that hadn't started */
       const lockBadge=t.finalized
         ?`<span style="font-family:'IBM Plex Mono';font-size:9px;letter-spacing:.08em;
             text-transform:uppercase;color:var(--win);border:1px solid var(--win);
@@ -16982,12 +17023,12 @@ function legDay(leg,ticketDate){return String((leg&&leg.gameDate)||ticketDate||'
 function dayOk(day,want,approx){if(!want||!day)return true;if(day===want)return true;
   return !!approx&&day>want&&day<=dayShift(want,4);}
 /* Shared finals entry for a game, ONLY if it belongs to the requested day. */
-function finalsFor(sport,game,want,approx){
+function finalsFor(sport,game,want,approx,st){
   const A=allFinals();let F=A[finalsKey(sport,game)];
   if((!F||F.a==null)&&typeof mgKey==='function'){const k2=mgKey(sport,game);if(k2!==game)F=A[finalsKey(sport,k2)];}
   if(!F||F.a==null||F.h==null)return null;
   if(!want)return F;
-  if(F.d)return dayOk(F.d,want,approx)?F:null;
+  if(F.d)return dayOk(F.d,want,approx)||(!approx&&F.st&&sameGameTime(F.st,F.d,want,st))?F:null;
   /* legacy entry with no date: trust it only if it was written on the game day or the morning after */
   const w=tdDay(F.ts||0);return(w===want||w===dayShift(want,1)||(approx&&dayOk(w,want,true)))?F:null;
 }
@@ -19169,11 +19210,22 @@ function clearStaleFromFinals(){
 function mgWriteFinals(sp,M){const F=get(LS.allfinals,{})||{};let ch=0;
   Object.entries(M).forEach(([k,list])=>(list||[]).forEach(e=>{if(e.state!=='post'||e.a==null||e.h==null||!e.date)return;const key=finalsKey(sp,k);const prev=F[key];
     if(prev&&prev.d&&prev.d>e.date)return;
-    if(prev&&prev.d===e.date&&prev.a===e.a&&prev.h===e.h&&(prev.h1a!=null||e.h1a==null))return;
-    F[key]={sport:sp,d:e.date,a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,ts:Date.now(),src:'espn'};ch++;}));
+    if(prev&&prev.d===e.date&&prev.a===e.a&&prev.h===e.h&&(prev.h1a!=null||e.h1a==null)&&(prev.st||!e.start))return;
+    F[key]={sport:sp,d:e.date,a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,ts:Date.now(),src:'espn',st:e.start||undefined};ch++;}));
   if(ch)set(LS.allfinals,F);return ch;}
+/* v2.87.7 · a fetch that never answers (a phone put to sleep mid-request) held MG_BUSY forever — no more live scores or
+   grades until the app was reloaded, which is exactly when the late games end. Every request now gives up at 15 s, and a
+   refresh stuck past 45 s is let go. */
+let MG_BUSY_AT=0;
+function mgFetchJSON(u){const ctl=typeof AbortController!=='undefined'?new AbortController():null;const t=setTimeout(()=>{try{ctl&&ctl.abort();}catch(e){}},15000);
+  return fetch(u,ctl?{signal:ctl.signal}:undefined).then(r=>r.json()).catch(()=>({events:[]})).finally(()=>clearTimeout(t));}
+/* the college-football week to ask ESPN for, from this page or the CFB board's own stored week (any page) */
+function mgCfbWeek(){try{if(typeof NCAAF_SEASON!=='undefined'&&typeof NCAAF_WEEK!=='undefined'&&NCAAF_SEASON&&+NCAAF_WEEK)return{S:NCAAF_SEASON,W:+NCAAF_WEEK};}catch(e){}
+  try{const G=roGet('d4.ncaafgames',{},120e3)||{};let best=null;Object.values(G).forEach(w=>{if(w&&w.season&&+w.week&&(!best||(+w.ts||0)>(+best.ts||0)))best=w;});
+    if(best&&Date.now()-(+best.ts||0)<9*864e5)return{S:best.season,W:+best.week};}catch(e){}return null;}
 async function mgRefresh(force,deep){
-  if(MG_BUSY||(!force&&Date.now()-MG_TS<40e3))return;MG_BUSY=true;
+  if(MG_BUSY&&Date.now()-MG_BUSY_AT>45e3)MG_BUSY=false;
+  if(MG_BUSY||(!force&&Date.now()-MG_TS<40e3))return;MG_BUSY=true;MG_BUSY_AT=Date.now();
   try{
     /* ONE request per day that still has an ungraded leg (plus the next day for
        late/approximate dates). A single wide date range hit ESPN's 400-event limit,
@@ -19183,15 +19235,20 @@ async function mgRefresh(force,deep){
     try{tgAutoNeeds().forEach(([sp,d])=>{if(MG_URL[sp])(need[sp]=need[sp]||new Set()).add(d);});}catch(e){}   // the Telegram autopilot's posted card
     try{Object.entries(MG_LIVE).forEach(([sp,M])=>Object.values(M||{}).forEach(list=>(list||[]).forEach(e=>{if(e.state==='in'&&e.date&&e.date>=floor)(need[sp]=need[sp]||new Set()).add(e.date);})));}catch(e){}
     mgPending().forEach(x=>{const d=String(x.d).slice(0,10);if(d<floor)return;const S=(need[x.sp]=need[x.sp]||new Set());S.add(d);
-      if(x.l.gdApprox||!x.l.gameDate)for(let i=1;i<=3;i++)S.add(dayShift(d,i));});
+      if(x.l.gdApprox||!x.l.gameDate)for(let i=1;i<=3;i++)S.add(dayShift(d,i));
+      /* v2.87.7 · ESPN files a game under its Eastern date: one that starts after 11 PM Central lives on the next day's board,
+         and a leg from an earlier day still open is asked for on both sides of midnight */
+      else{try{const st=x.l.start||(typeof boardStart==='function'?boardStart(x.sp,x.l.game,d):null);
+        if(st){const et=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(st));if(et!==d)S.add(et);}
+        if(d<today())S.add(dayShift(d,1));}catch(e){}}});
     const jobs=Object.entries(need).map(async([sp,ds])=>{
       const arr=[...ds].filter(d=>d<=dayShift(today(),1)).sort().slice(deep?-150:-21);
-      try{const urls=arr.map(d=>MG_URL[sp]+'?dates='+fbpYmd(d)+(sp==='ncaaf'?'&groups=80&limit=900':sp==='ncaab'?'&groups=50&limit=900':'&limit=400'));
-        try{const S=sp==='nfl'?(typeof NFL_SEASON!=='undefined'?NFL_SEASON:''):sp==='ncaaf'?(typeof NCAAF_SEASON!=='undefined'?NCAAF_SEASON:''):'';
-          const W=+(sp==='nfl'?(typeof NFL_WEEK!=='undefined'?NFL_WEEK:0):sp==='ncaaf'?(typeof NCAAF_WEEK!=='undefined'?NCAAF_WEEK:0):0);
-          if(S&&W)[W,W-1].filter(x=>x>0).forEach(x=>urls.push(MG_URL[sp]+`?dates=${S}&seasontype=2&week=${x}`+(sp==='ncaaf'?'&groups=80&limit=900':'')));}catch(e){}
-        const js=await Promise.all(urls.map(u=>fetch(u).then(r=>r.json()).catch(()=>({events:[]}))));
-        const j={events:[].concat(...js.map(x=>x.events||[]))};
+      try{const urls=arr.map(d=>MG_URL[sp]+'?dates='+fbpYmd(d)+(sp==='ncaaf'?'&groups=80&limit='+CFB_LIM:sp==='ncaab'?'&groups=50&limit=900':'&limit=400'));
+        try{let S=sp==='nfl'?(typeof NFL_SEASON!=='undefined'?NFL_SEASON:''):'',W=+(sp==='nfl'?(typeof NFL_WEEK!=='undefined'?NFL_WEEK:0):0);
+          if(sp==='ncaaf'){const w=mgCfbWeek();if(w){S=w.S;W=w.W;}}   /* the whole week too, from any page — a second net under the day board */
+          if(S&&W&&arr.some(d=>d>=dayShift(today(),-8)))[W,W-1].filter(x=>x>0).forEach(x=>urls.push(MG_URL[sp]+`?dates=${S}&seasontype=2&week=${x}`+(sp==='ncaaf'?'&groups=80&limit=100':'')));}catch(e){}
+        const js=await Promise.all(urls.map(u=>mgFetchJSON(u)));
+        const seen=new Set();const j={events:[].concat(...js.map(x=>x.events||[])).filter(ev=>{const id=String(ev&&ev.id);if(seen.has(id))return false;seen.add(id);return true;})};
         const M={};(j.events||[]).forEach(ev=>{const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];
           const aw=cs.find(x=>x.homeAway==='away'),hm=cs.find(x=>x.homeAway==='home');if(!aw||!hm)return;
           const st=(ev.status||c.status||{});const state=(st.type||{}).state||'pre';
@@ -19210,24 +19267,39 @@ async function mgRefresh(force,deep){
     try{clearStaleFromFinals();}catch(e){}
     try{brainLearnAll();}catch(e){}
     try{mgHealOrientation();}catch(e){}
+    try{legStartBackfill();}catch(e){}
   }finally{MG_BUSY=false;}
 }
+/* v2.87.7 · tickets imported before the start was kept: write each open leg's start once it's known (live feed or a board on
+   the leg's own day), so the time shows on every page and the late-game match has it */
+function legStartBackfill(){const L=get(LS.locked,[]);let ch=0;
+  L.forEach(t=>{if(t.archived)return;(t.legs||[]).forEach(l=>{if(l.start||l.gdApprox||!l.gameDate||!l.game)return;const sp=l.sport||'mlb';
+    let st=null;try{const e=mgEventFor(sp,l.game,l.gameDate,false);if(e&&e.start&&e.date===l.gameDate)st=e.start;}catch(e){}
+    if(!st){try{const b=boardStart(sp,l.game,l.gameDate);if(b&&tdDay(b)===l.gameDate)st=b;}catch(e){}}
+    if(st){l.start=st;ch++;}});});
+  if(ch)set(LS.locked,L);return ch;}
 /* The ESPN event for a leg: same teams, on (or just after) the leg's date. */
-function mgEventFor(sp,game,d,approx){
+/* v2.87.7 · the two dates a late game can carry: the ticket says 12:30 AM Eastern (next day), the board says 11:30 PM Central.
+   A game that starts within 5 hours of the leg's own start — or, with no start on the leg, a game near midnight on the
+   day either side — is the same game. */
+function lateHour(st){try{const h=+new Intl.DateTimeFormat('en-US',{timeZone:APP_TZ,hour:'numeric',hour12:false}).format(new Date(st));return h>=22||h<5;}catch(e){return false;}}
+function sameGameTime(evSt,evDay,day,legSt){if(!evDay||!day)return false;if(Math.abs(Date.parse(evDay+'T12:00:00Z')-Date.parse(day+'T12:00:00Z'))>864e5+1)return false;
+  if(legSt&&evSt)return Math.abs(Date.parse(evSt)-Date.parse(legSt))<=5*36e5;return!!evSt&&lateHour(evSt);}
+function mgEventFor(sp,game,d,approx,legSt){
   const day=String(d||'').slice(0,10);
   /* v1.95: a stored final for that day beats whatever the live cache last saw — a page
      resumed the next morning still held last night's "in progress" events */
-  let F=null;try{const f=allFinals()[finalsKey(sp,game)];if(f&&day&&f.d===day&&f.a!=null&&f.h!=null)F=f;}catch(e){}
+  let F=null;try{const f=allFinals()[finalsKey(sp,game)];if(f&&day&&(f.d===day||(!approx&&f.st&&sameGameTime(f.st,f.d,day,legSt)))&&f.a!=null&&f.h!=null)F=f;}catch(e){}
   const L=(MG_LIVE[sp]||{})[mgKey(sp,game)];
-  if(F){const h0=(L||[]).find(e=>e.date===day);if(!h0||h0.state!=='post'||h0.a!==F.a||h0.h!==F.h)
-    return{...(h0||{}),date:day,state:'post',detail:'Final',a:F.a,h:F.h,h1a:F.h1a!=null?F.h1a:(h0||{}).h1a,h1h:F.h1h!=null?F.h1h:(h0||{}).h1h,p1a:F.p1a,p1h:F.p1h,fromFinal:true};}
+  if(F){const h0=(L||[]).find(e=>e.date===F.d);if(!h0||h0.state!=='post'||h0.a!==F.a||h0.h!==F.h)
+    return{...(h0||{}),date:F.d,start:(h0&&h0.start)||F.st,state:'post',detail:'Final',a:F.a,h:F.h,h1a:F.h1a!=null?F.h1a:(h0||{}).h1a,h1h:F.h1h!=null?F.h1h:(h0||{}).h1h,p1a:F.p1a,p1h:F.p1h,fromFinal:true};}
   if(!L||!L.length)return null;
   const hit=L.find(e=>e.date===day);if(hit||!day)return hit||L[0]||null;
-  if(!approx)return null;   // real game date and no game that day → not this event
+  if(!approx){const nb=L.find(e=>sameGameTime(e.start,e.date,day,legSt));return nb||null;}   // real game date: only the same game either side of midnight
   return L.filter(e=>dayOk(e.date,day,true)).sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
 }
 function mgResolve(leg,ticketDate){
-  const e=mgEventFor(leg.sport||'mlb',leg.game,leg.gameDate||ticketDate,!!leg.gdApprox||!leg.gameDate);if(!e||e.a==null||e.state==='pre')return null;
+  const e=mgEventFor(leg.sport||'mlb',leg.game,leg.gameDate||ticketDate,!!leg.gdApprox||!leg.gameDate,leg.start);if(!e||e.a==null||e.state==='pre')return null;
   return{a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,period:e.period,gid:leg.gid,live:e.state==='in',source:'espn-live',completed:e.state==='post'?true:null};
 }
 function mgTicketOpen(t){try{if(settledAll()[String(t.id)])return false;let dead=false,done=true;
@@ -19617,7 +19689,7 @@ function msLiveHtml(m){const open=msOpenTickets(m);if(!open.length)return'';
   return open.map(({s,t})=>{let C=null;try{C=liveTicketChance(t);}catch(e){}
     let M=null;try{M=ticketMoney(t);}catch(e){}
     const legs=(t.legs||[]).map(l=>{let r=null,q=null,e=null;try{r=gradeLeg(l,t.date);}catch(err){}try{q=liveLegProb(l,r,t.date);}catch(err){}
-      try{e=mgEventFor(l.sport||'mlb',l.game,String(l.gameDate||t.date||'').slice(0,10),!!l.gdApprox||!l.gameDate);}catch(err){}
+      try{e=mgEventFor(l.sport||'mlb',l.game,String(l.gameDate||t.date||'').slice(0,10),!!l.gdApprox||!l.gameDate,l.start);}catch(err){}
       const [aw,hm]=String(l.game||'').split('@');
       const sc=e&&e.a!=null&&e.state!=='pre'?`${esc(aw)} ${e.a}–${e.h} ${esc(hm)} · ${esc(e.state==='post'?'Final':e.detail||'')}`
         :e&&e.start?`starts ${new Date(e.start).toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit'})}`:'not started';
@@ -21166,13 +21238,14 @@ function dToast(html,ms){if(typeof document==='undefined')return;let box=documen
    carried through the score and time left, ▲▼ from where it started, and a
    progress bar for props ─────────────────────────────────────────────────── */
 function legLiveCard(t,l,opts){opts=opts||{};let g=null;try{g=gradeLeg(l,t.date);}catch(e){}
-  const sp=l.sport||'mlb',d=legDay(l,t.date);let e=null;try{e=mgEventFor(sp,l.game,d,!!l.gdApprox||!l.gameDate);}catch(err){}
+  const sp=l.sport||'mlb',d=legDay(l,t.date);let e=null;try{e=mgEventFor(sp,l.game,d,!!l.gdApprox||!l.gameDate,l.start);}catch(err){}
   const done=g&&!g.live&&(g.hit===true||g.hit===false||g.push);
   const state=done?'post':g&&g.live?'in':e?e.state:'pre';
+  const st0=(e&&e.start)||(()=>{try{return legStartOf(l,t.date);}catch(err){return null;}})();   /* v2.87.7 · a start time even when the live feed hasn't got the game */
   const p0=l.p>0&&l.p<1?+l.p:(l.price!=null?imp(+l.price):null);
   let lp=null;if(g&&g.hit===true)lp=1;else if(g&&g.hit===false&&!g.live)lp=0;else if(state==='in'){try{lp=liveLegProb(l,g,d);}catch(err){}}
   const [aw,hm]=String(l.game).split('@');
-  const res=done?(g.push?['↔ PUSH','var(--mute)']:g.hit?['✅ WON','var(--win)']:['❌ LOST','var(--rust)']):state==='in'?['● LIVE','#ff4b5c']:[e&&e.start?new Date(e.start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'PREGAME','var(--mute)'];
+  const res=done?(g.push?['↔ PUSH','var(--mute)']:g.hit?['✅ WON','var(--win)']:['❌ LOST','var(--rust)']):state==='in'?['● LIVE','#ff4b5c']:[st0?gameWhen(sp,l.game,st0):'PREGAME','var(--mute)'];
   const border=done?(g.push?'var(--rule)':g.hit?'var(--win)':'var(--rust)'):state==='in'?'#ff4b5c':'var(--rule)';
   /* v2.87.6 · the score pops: white team names, big bright numbers (they were dark on the dark card) */
   const sc=e&&e.a!=null?`<span class="lg-sc" style="color:#fff">${teamNameHtml(sp,aw)} <b style="color:#FFE066;font-size:1.15em">${e.a}</b> – <b style="color:#FFE066;font-size:1.15em">${e.h}</b> ${teamNameHtml(sp,hm)}</span>${state==='in'&&e.detail?` · <span style="color:#7FDBFF;font-weight:700">${txtEsc(e.detail)}</span>`:state==='post'?' · <b style="color:#fff">FINAL</b>':''}`:`<span style="color:#fff">${teamNameHtml(sp,aw)} @ ${teamNameHtml(sp,hm)}</span>`;
@@ -21184,11 +21257,13 @@ function legLiveCard(t,l,opts){opts=opts||{};let g=null;try{g=gradeLeg(l,t.date)
   const tid=JSON.stringify(String(t.id)).replace(/"/g,'&quot;');
   /* v2.67 · a live game pops (bold, brighter, a red glow); a game not started says when it starts */
   const liveCss=state==='in'?'border-width:2.5px;background:rgba(255,75,92,.07);box-shadow:0 0 12px rgba(255,75,92,.28);font-weight:800;':state==='pre'?'opacity:.72;':'';
-  const startTxt=state==='pre'&&e&&e.start?`<div class="mono" style="font-size:10.5px;color:var(--gold);margin-top:2px">⏰ Starts ${new Date(e.start).toLocaleString([],{weekday:'short',hour:'numeric',minute:'2-digit'})}</div>`:'';
+  const startTxt=state==='pre'&&st0?`<div class="mono" style="font-size:10.5px;color:var(--gold);margin-top:2px">⏰ Starts ${gameWhen(sp,l.game,st0)}${Date.parse(st0)<Date.now()?' · should be under way — waiting on the score feed':''}</div>`:'';
+  /* v2.87.7 · the second opinion: the league's own feed agreed with ESPN, or didn't */
+  const vfy=g&&g.verified?`<div class="mono" style="font-size:9.5px;color:var(--win);margin-top:2px">✓✓ Score checked — ESPN and ${({nhl:'NHL.com',nba:'NBA.com',ncaa:'NCAA.com'})[g.verified]||g.verified} agree</div>`:g&&g.conflict?`<div class="mono" style="font-size:9.5px;color:var(--gold);margin-top:2px">⚠ ESPN ${g.conflict.ea}–${g.conflict.eh} · ${({nhl:'NHL.com',nba:'NBA.com',ncaa:'NCAA.com'})[g.conflict.s]||g.conflict.s} ${g.conflict.a}–${g.conflict.h}${g.hit==null?' — holding the grade until they agree':''}</div>`:'';
   return`<div ${opts.link?`onclick="openTicketSheet(${tid})" `:''}style="padding:7px 9px;margin:5px 0;border-radius:9px;border:1.5px solid ${border};background:rgba(255,255,255,.02);${liveCss}${opts.link?'cursor:pointer':''}">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-weight:800;font-size:13.5px;min-width:0">${txtEsc(l.pick)}${l.price!=null?` <span class="mono" style="font-size:11px;color:var(--gold)">${sgnP(+l.price)}</span>`:''}</div>
       <div class="mono" style="font-size:10px;font-weight:800;color:${res[1]};white-space:nowrap">${res[0]}${state!=='pre'&&opts.gc!==false?' '+gcBtn(sp,l.game,d,''):''}</div></div>
-    <div class="mono" style="font-size:${state==='in'?'12px':'10.5px'};margin-top:2px;${state==='in'?'font-weight:800;color:var(--ink,#fff)':''}">${(SP_LAB[sp]||'').split(' ')[0]} ${sc}</div>${startTxt}${bar}${prLegHtml(l,t.date)}
+    <div class="mono" style="font-size:${state==='in'?'12px':'10.5px'};margin-top:2px;${state==='in'?'font-weight:800;color:var(--ink,#fff)':''}">${(SP_LAB[sp]||'').split(' ')[0]} ${sc}</div>${startTxt}${vfy}${bar}${prLegHtml(l,t.date)}
     ${g&&g.detail&&!(e&&e.a!=null&&String(g.detail).includes(e.a+'–'+e.h))?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">${txtEsc(g.detail)}</div>`:''}
     ${opts.link?`<div class="mono" style="font-size:9.5px;color:var(--cold);margin-top:3px">${txtEsc(t.name||('Ticket #'+t.id))} · ${(t.legs||[]).length} legs · tap for the whole ticket ↗</div>`:''}</div>`;}
 /* ── the whole ticket, one tap away ───────────────────────────────────────── */
@@ -21442,7 +21517,7 @@ let BMAP={k:1,x:0,y:0,sel:null,f:'all',sp:'all',T:null,today:true};
 const BM_COL={won:'#3DDC84',dead:'#F0563C',live:'#FFB43D',alive:'#4DD8F0',sched:'#6B7A8C',push:'#8593A3'};
 function bmLegState(l,t){let g=null;try{g=gradeLeg(l,t.date);}catch(e){}
   if(g&&!g.live&&g.push)return'push';if(g&&!g.live&&g.hit===true)return'won';if(g&&g.hit===false&&!g.live)return'dead';if(g&&g.live)return g.hit===true?'won':'live';
-  let e=null;try{e=mgEventFor(l.sport||'mlb',l.game,legDay(l,t.date),!!l.gdApprox||!l.gameDate);}catch(err){}
+  let e=null;try{e=mgEventFor(l.sport||'mlb',l.game,legDay(l,t.date),!!l.gdApprox||!l.gameDate,l.start);}catch(err){}
   return e&&e.state==='in'?'live':e&&e.state==='post'?'live':'sched';}
 function bmapData(){const d=today();const all=get(LS.locked,[])||[];
   /* v2.83 · today's slate only: a ticket placed today, or with a leg on today's games (older open tickets never pile up here) */
@@ -21788,7 +21863,23 @@ function gameStartIdx(){let raw='';try{raw=String(localStorage.getItem(TC_KEY)||
   try{const T=roGet(TC_KEY,{})||{};Object.entries(T.by||{}).forEach(([sp,B])=>{(B&&B.picks||[]).forEach(p=>put(sp,p.game,p.start));(B&&B.props||[]).forEach(p=>put(sp,p.game,p.start));(B&&B.games||[]).forEach(g=>put(sp,g.g,g.s));});}catch(e){}
   try{(typeof liveSports==='function'?liveSports():[]).concat(['mlb']).forEach(sp=>{(sportGames(sp)||[]).forEach(g=>{try{if(g&&g.away&&g.home)put(sp,g.away.abbr+'@'+g.home.abbr,g.start||g.date||g.gameDate);}catch(e){}});});}catch(e){}
   GSTART_C={t:Date.now(),raw,m};return m;}
-function gameStart(sp,game,fb){if(fb)return fb;try{return gameStartIdx()[sp+'|'+game]||null;}catch(e){return null;}}
+function gameStart(sp,game,fb){if(fb)return fb;try{return gameStartIdx()[sp+'|'+game]||boardStart(sp,game,null)||null;}catch(e){return null;}}
+/* v2.87.7 · every sport's stored board, read from any page — the live feed, this page's slate and Today's card miss games
+   the boards already know (the CFB board had all 63 of the week's kickoffs while the ticket showed none) */
+const BOARD_KEYS=[['nhl','d4.nhlgames'],['nhl','d4.nhlupcoming'],['nba','d4.nbasched'],['ncaab','d4.ncaabsched'],['nfl','d4.nflgames'],['ncaaf','d4.ncaafgames']];
+let BSTART_C=null;
+function boardStartIdx(){if(BSTART_C&&Date.now()-BSTART_C.t<60e3)return BSTART_C.m;const m={};
+  const put=(sp,g)=>{try{if(!g||!g.away||!g.home)return;const st=[g.start,g.date,g.gameDate].find(v=>v&&/^\d{4}-\d{2}-\d{2}T/.test(String(v)));if(!st)return;
+    const k0=g.away.abbr+'@'+g.home.abbr;[k0,typeof mgKey==='function'?mgKey(sp,k0):k0].forEach(k=>{const K=sp+'|'+k;const L=m[K]||(m[K]=[]);if(!L.includes(st))L.push(st);});}catch(e){}};
+  BOARD_KEYS.forEach(([sp,k])=>{try{const S=roGet(k,{},120e3)||{};const L=[];if(Array.isArray(S))L.push(...S);[S.games,S.up].forEach(a=>{if(Array.isArray(a))L.push(...a);});
+    if(!Array.isArray(S))Object.values(S).forEach(w=>{if(w&&typeof w==='object'&&!Array.isArray(w)){if(Array.isArray(w.v))L.push(...w.v);if(Array.isArray(w.games))L.push(...w.games);}});L.forEach(g=>put(sp,g));}catch(e){}});
+  try{(typeof liveSports==='function'?liveSports():[]).concat(['mlb']).forEach(sp=>(sportGames(sp)||[]).forEach(g=>put(sp,g)));}catch(e){}
+  try{const T=roGet(TC_KEY,{})||{};Object.entries(T.by||{}).forEach(([sp,B])=>(B&&B.games||[]).forEach(x=>{const [a,h]=String(x.g||'').split('@');if(a&&h&&x.s)put(sp,{away:{abbr:a},home:{abbr:h},start:x.s});}));}catch(e){}
+  BSTART_C={t:Date.now(),m};return m;}
+function boardStart(sp,game,day){const I=boardStartIdx();const L=I[sp+'|'+game]||(typeof mgKey==='function'?I[sp+'|'+mgKey(sp,game)]:null)||[];if(!L.length)return null;
+  const ref=day?Date.parse(day+'T18:00:00Z'):Date.now();
+  if(day){const hit=L.filter(st=>tdDay(st)===day).sort();if(hit.length)return hit[0];}
+  const best=L.map(st=>[Math.abs(Date.parse(st)-ref),st]).sort((a,b)=>a[0]-b[0])[0];return best&&best[0]<(day?20:72)*36e5?best[1]:null;}
 function gameWhen(sp,game,st){st=gameStart(sp,game,st);if(!st)return'';const t=new Date(st);if(isNaN(t))return'';
   const hm=t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:APP_TZ});const day=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(t);
   const cal=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());

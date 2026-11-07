@@ -34,15 +34,45 @@ function feedMergeCloses(data){if(!data||!data.games)return 0;const V=roGet(VOIC
     if(!want.has(g.sp+'|'+game+'|'+d))return;const D=All[d]||(All[d]={});const k=g.sp+'|'+game;if(D[k])return;const rec=feedCloseRec(g);if(!rec)return;D[k]=rec;n++;}catch(e){}});
   if(n){Object.keys(All).sort().slice(0,-40).forEach(x=>delete All[x]);set(CLOSES_KEY,All);try{RO_CACHE[CLOSES_KEY]=null;delete RO_CACHE[CLOSES_KEY];}catch(e){}}
   return n;}
+/* §2 · v2.87.7 · FINALS — the robot's finals (ESPN, every hour) are a second road to a score: a leg whose game the phone never
+   saw finish still grades. And each final carries the league's own score (NHL.com, NBA.com, NCAA.com) when the robot could get
+   it: they agree → the leg says "checked"; they disagree in a way that changes the leg → the grade waits (up to 18 hours) and
+   says why. Ten days, kept per device (a cache key — never synced). */
+const FEED_FIN_K='d4.feedcache.fin';let FEED_FIN=null;
+function feedFinIdx(){if(FEED_FIN)return FEED_FIN;const I={};try{const c=get(FEED_FIN_K,null);(c&&c.L||[]).forEach(r=>{(I[r.k]=I[r.k]||[]).push(r);});}catch(e){}FEED_FIN=I;return I;}
+const feedKey=(sp,game)=>sp+'|'+(typeof mgKey==='function'?mgKey(sp,game):game);
+function feedStoreFinals(data){if(!data||!data.games)return 0;const cut=new Date(Date.now()-10*864e5).toISOString();const L=[];let x=0,bad=0;
+  Object.values(data.games).forEach(g=>{try{if(!g||!g.st||g.st<cut||g.as==null||g.hs==null)return;const r={k:feedKey(g.sp,feedAb(g.sp,g.a)+'@'+feedAb(g.sp,g.h)),st:g.st,as:+g.as,hs:+g.hs};
+    if(g.x&&g.x.as!=null){r.x={s:g.x.s,as:+g.x.as,hs:+g.x.hs,ok:!!g.x.ok};x++;if(!g.x.ok)bad++;}L.push(r);}catch(e){}});
+  set(FEED_FIN_K,{ts:data.ts,L,x,bad});FEED_FIN=null;return L.length;}
+function feedFinalFor(sp,game,want,approx,st){if(!want)return null;const L=feedFinIdx()[feedKey(sp||'mlb',game)];if(!L||!L.length)return null;
+  let hit=L.find(r=>tdDay(r.st)===want);
+  if(!hit&&approx)hit=L.filter(r=>dayOk(tdDay(r.st),want,true)).sort((a,b)=>a.st.localeCompare(b.st))[0];
+  if(!hit&&!approx&&typeof sameGameTime==='function')hit=L.find(r=>sameGameTime(r.st,tdDay(r.st),want,st));
+  return hit||null;}
+const FEED_SRC={nhl:'NHL.com',nba:'NBA.com',ncaa:'NCAA.com'};
+const FEED_PART=/\b(1H|H1|2H|1st half|first half|half|P1|1P|Q[1-4]|[1-4]Q|period|inning|F5)\b/i;
+function feedCheck(leg,td,r,GL0){if(!r||r.live||r.manual||(r.hit==null&&!r.push))return r;
+  if(leg.mlbProp||leg.fbProp||leg.nhlProp||leg.bbProp||leg.isProp||FEED_PART.test(String(leg.pick||'')))return r;
+  const sp=leg.sport||'mlb';const f=feedFinalFor(sp,leg.game,legDay(leg,td),!!leg.gdApprox||!leg.gameDate,leg.start);if(!f||!f.x)return r;
+  if(f.x.ok)return{...r,verified:f.x.s};
+  let r2=null;RL_OVR={leg,a:f.x.as,h:f.x.hs};try{r2=GL0(leg,td);}catch(e){}finally{RL_OVR=null;}
+  const conflict={s:f.x.s,a:f.x.as,h:f.x.hs,ea:f.as,eh:f.hs};
+  if(r2&&(r2.hit!==r.hit||!!r2.push!==!!r.push)&&Date.now()-Date.parse(f.st)<18*36e5)
+    return{hit:null,push:false,live:false,conflict,detail:`⚠ ESPN ${f.as}–${f.hs} vs ${FEED_SRC[f.x.s]||f.x.s} ${f.x.as}–${f.x.hs} — holding`};
+  return{...r,conflict};}
+if(typeof gradeLeg==='function'&&typeof window!=='undefined'&&!window.__FEED_GL__){window.__FEED_GL__=1;const GL0=gradeLeg;
+  gradeLeg=function(leg,td){const r=GL0(leg,td);try{return feedCheck(leg,td,r,GL0);}catch(e){return r;}};}
 /* the background pass: fetch, merge, then stamp the CLV of every graded call that was waiting for its close */
 async function feedsTick(force){if(FEED_BUSY)return null;if(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)return null;FEED_BUSY=true;
-  try{const data=await feedFetch('closes',force);if(!data)return null;const n=feedMergeCloses(data);if(n){try{clvStampAll();}catch(e){}}return n;}finally{FEED_BUSY=false;}}
+  try{const data=await feedFetch('closes',force);if(!data)return null;try{feedStoreFinals(data);}catch(e){}const n=feedMergeCloses(data);if(n){try{clvStampAll();}catch(e){}}return n;}finally{FEED_BUSY=false;}}
 /* how fresh the feeds are (the Book view shows it; a feed stale past 12 hours goes in the journal once a day) */
 function feedHealth(){const c=get(FEED_KEY('closes'),null);if(!c)return{st:'never',lab:'not read yet'};const age=c.ts?(Date.now()-Date.parse(c.ts))/36e5:null;
   if(age!=null&&age>FEED_STALE_H){try{journalAdd({sig:'feed-stale',sev:'info',what:`the closing-line feed is ${Math.round(age)} hours old`});}catch(e){}}
   return{st:c.fail&&!c.ts?'down':age!=null&&age>FEED_STALE_H?'stale':'ok',lab:c.ts?`updated ${Math.max(0,Math.round(age*60))} min ago · ${c.n||0} finals`:'no data yet'+(c.fail?` (${c.fail})`:'')};}
 function feedBoardHtml(){const H=feedHealth();const ico={ok:'🟢',stale:'🟡',down:'🔴',never:'⚪'}[H.st]||'⚪';
-  return`<div class="tkt"><h3 style="margin:0 0 4px">📡 The feeds</h3><div class="mono" style="font-size:10.5px">${ico} Closing lines (DraftKings, every final) — ${txtEsc(H.lab)}</div><div class="sub" style="font-size:10px">Built off the phone every few hours from public ESPN data; read in the background, never synced.</div></div>`;}
+  let fin='';try{const c=get(FEED_FIN_K,null);if(c&&c.L)fin=`<div class="mono" style="font-size:10.5px">🧾 Finals for grading — ${c.L.length} from the last 10 days · ${c.x||0} double-checked against NHL.com / NBA.com / NCAA.com${c.bad?` · <b style="color:var(--gold)">${c.bad} disagree</b>`:''}</div>`;}catch(e){}
+  return`<div class="tkt"><h3 style="margin:0 0 4px">📡 The feeds</h3><div class="mono" style="font-size:10.5px">${ico} Closing lines (DraftKings, every final) — ${txtEsc(H.lab)}</div>${fin}<div class="sub" style="font-size:10px">Built off the phone every hour from public ESPN data, scores checked against the leagues' own feeds; read in the background, never synced.</div></div>`;}
 if(typeof bookViewHtml==='function'&&typeof window!=='undefined'&&!window.__FEED_BV__){window.__FEED_BV__=1;const BV2=bookViewHtml;
   bookViewHtml=function(){const h=BV2();try{const i=h.indexOf('<div class="tkt"><h3 style="margin:0 0 4px">Today\'s story');return i>=0?h.slice(0,i)+feedBoardHtml()+h.slice(i):h+feedBoardHtml();}catch(e){return h;}};}
 try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='feeds')){const i=AP_STEPS.findIndex(s=>s[0]==='voices');

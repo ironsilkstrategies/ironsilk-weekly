@@ -14,19 +14,20 @@ const SUMMARY={header:{id:'401892519',league:{slug:'nhl'},competitions:[{id:'401
 const SP={nfl:'football/nfl',ncaaf:'football/college-football',nba:'basketball/nba',ncaab:'basketball/mens-college-basketball',nhl:'hockey/nhl',mlb:'baseball/mlb'};
 const Q={ncaaf:'&groups=80&limit=300',ncaab:'&groups=50&limit=300'};
 const ymd=t=>new Date(t).toISOString().slice(0,10).replace(/-/g,'');
-function fixtures(withSummary){const F={};const now=Date.now();for(const[sp,p]of Object.entries(SP))for(let b=2;b>=0;b--){F[`https://site.api.espn.com/apis/site/v2/sports/${p}/scoreboard?dates=${ymd(now-b*864e5)}${Q[sp]||''}`]={events:[]};}
-  F[`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${ymd(now)}`]={events:[{id:'401892519',status:{type:{state:'post'}}},{id:'401892999',status:{type:{state:'in'}}}]};
+const NOW=Date.parse('2026-10-18T06:00:00Z');   /* the builder runs as of the night of the game (FEEDS_NOW) — a fixed date ages out of the 21-day window */
+function fixtures(withSummary){const F={};const now=NOW;for(const[sp,p]of Object.entries(SP))for(let b=2;b>=0;b--){F[`https://site.api.espn.com/apis/site/v2/sports/${p}/scoreboard?dates=${ymd(now-b*864e5)}${Q[sp]||''}`]={events:[]};}
+  F[`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${ymd(NOW)}`]={events:[{id:'401892519',status:{type:{state:'post'}}},{id:'401892999',status:{type:{state:'in'}}}]};
   if(withSummary)F['https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401892519']=SUMMARY;return F;}
 (async()=>{try{
   /* ── the builder (no network: saved responses) ── */
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'feeds-'));const fx=path.join(dir,'..',path.basename(dir)+'.fix.json');
-  fs.writeFileSync(path.join(dir,'closes.json'),JSON.stringify({v:1,games:{old1:{id:'old1',sp:'nhl',st:new Date(Date.now()-30*864e5).toISOString(),a:'A',h:'B'}}}));
-  fs.writeFileSync(fx,JSON.stringify(fixtures(true)));execFileSync('node',[path.join(W,'feeds/build.mjs'),dir],{env:{...process.env,FEEDS_FIXTURES:fx}});
+  fs.writeFileSync(path.join(dir,'closes.json'),JSON.stringify({v:1,games:{old1:{id:'old1',sp:'nhl',st:new Date(NOW-30*864e5).toISOString(),a:'A',h:'B'}}}));
+  fs.writeFileSync(fx,JSON.stringify(fixtures(true)));execFileSync('node',[path.join(W,'feeds/build.mjs'),dir],{env:{...process.env,FEEDS_FIXTURES:fx,FEEDS_NOW:String(NOW)}});
   const C1=JSON.parse(fs.readFileSync(path.join(dir,'closes.json'),'utf8'));const g=C1.games['401892519'];
   T('the builder stores a final: score, DraftKings open → close for every market, the officials',g&&g.as===3&&g.hs===2&&g.pc.ml.away.o===124&&g.pc.ml.away.c===-102&&g.pc.total.over.cl===6.5&&g.refs.some(r=>r.n==='Furman South'&&r.p==='Referee'),JSON.stringify(g).slice(0,300));
   T('…a game still being played is not stored',!C1.games['401892999']);
   T('…and a final older than 21 days is let go',!C1.games.old1);
-  fs.writeFileSync(fx,JSON.stringify(fixtures(false)));execFileSync('node',[path.join(W,'feeds/build.mjs'),dir],{env:{...process.env,FEEDS_FIXTURES:fx}});
+  fs.writeFileSync(fx,JSON.stringify(fixtures(false)));execFileSync('node',[path.join(W,'feeds/build.mjs'),dir],{env:{...process.env,FEEDS_FIXTURES:fx,FEEDS_NOW:String(NOW)}});
   const I=JSON.parse(fs.readFileSync(path.join(dir,'index.json'),'utf8'));const C2=JSON.parse(fs.readFileSync(path.join(dir,'closes.json'),'utf8'));
   T('incremental: a stored final is never fetched again (no summary asked, nothing lost)',I.runs[0].added===0&&I.runs[0].errors.length===0&&!!C2.games['401892519'],JSON.stringify(I.runs[0]));
   /* ── the app ── */
