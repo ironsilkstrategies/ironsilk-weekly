@@ -195,7 +195,10 @@ function ncaabIdx(){let T=get('d4.ncaabteams',null);if(!T||!Array.isArray(T.t)||
    The old "longest name the text starts with" guess turned "Fla Gulf Coast" into FLORIDA and "Southern Indiana" into
    SOUTHERN — a leg graded off the wrong game. Now: exact names → book shorthands expanded → known aliases → a prefix
    only when what follows is that school's mascot → a careful word match that must clearly beat the runner-up. */
-const NCAAB_ALIAS={'CS NORTHRIDGE':'CSUN','CAL ST NORTHRIDGE':'CSUN','CSUN':'CSUN','CS FULLERTON':'CSUF','CSUF':'CSUF','CS BAKERSFIELD':'CSUB','CSUB':'CSUB',
+const NCAAB_ALIAS={/* v2.87.3 · BetOnline writes the UC schools as "Cal Riverside", "Cal Irvine"… (Nov 7: a Denver vs Cal Riverside ticket lost both legs) */
+  'CAL RIVERSIDE':'UCR','CAL IRVINE':'UCI','CAL DAVIS':'UCD','CAL SANTA BARBARA':'UCSB','CAL SAN DIEGO':'UCSD','UC SANTA BARBARA':'UCSB','UC SAN DIEGO':'UCSD',
+  'CAL ST FULLERTON':'CSUF','CAL ST BAKERSFIELD':'CSUB','CS SACRAMENTO':'SAC','CAL ST SACRAMENTO':'SAC','CS LONG BEACH':'LBSU','LONG BEACH':'LBSU','CAL POLY SLO':'CP','CAL POLY SAN LUIS OBISPO':'CP',
+  'CS NORTHRIDGE':'CSUN','CAL ST NORTHRIDGE':'CSUN','CSUN':'CSUN','CS FULLERTON':'CSUF','CSUF':'CSUF','CS BAKERSFIELD':'CSUB','CSUB':'CSUB',
   'TENN MARTIN':'UTM','TENNESSEE MARTIN':'UTM','UT MARTIN':'UTM','UMKC':'KC','MISSOURI KANSAS CITY':'KC','UTRGV':'RGV','TEXAS RIO GRANDE VALLEY':'RGV','UT RIO GRANDE VALLEY':'RGV',
   'CAL BAPTIST':'CBU','CALIFORNIA BAPTIST':'CBU','COL OF CHARLESTON':'COFC','COLLEGE OF CHARLESTON':'COFC','UNC A AND T':'NCAT','NC A AND T':'NCAT','NORTH CAROLINA A AND T':'NCAT',
   'UNC CENTRAL':'NCCU','NC CENTRAL':'NCCU','NORTH CAROLINA CENTRAL':'NCCU','ALBANY':'UALB','SUNY ALBANY':'UALB','ALBANY NY':'UALB','LIU BROOKLYN':'LIU','IUPUI':'IUIN','IU INDY':'IUIN',
@@ -224,6 +227,7 @@ function ncaabAbbrFor(raw){const t=String(raw||'').replace(/^\s*(?:#|No\.?\s*)\d
   const u=t.toUpperCase();if(I.ab.has(u))return u;
   const k0=ncaabNorm(t.replace(/\(([^)]*)\)/g,' $1 '));const al=k=>{const a=NCAAB_ALIAS[k];return a&&(I.ab.has(a)||!I.ab.size)?a:null;};
   const forms=[k0];let k1=k0;NCAAB_SHORT.forEach(([re,to])=>{k1=k1.replace(re,to).replace(/\s+/g,' ').trim();});if(k1!==k0)forms.push(k1);
+  if(/^CAL [A-Z]/.test(k0)&&!/^CAL (POLY|BAPTIST|ST)\b/.test(k0))forms.push('UC '+k0.slice(4));   /* "Cal <campus>" → "UC <campus>" for any UC school the alias list doesn't name */
   for(const k of forms){const o=I.by.get(k);if(o)return o[0];const a=al(k);if(a)return a;}
   /* "Sam Houston St", "McNeese St", "Miami FL": a trailing State / state code the table doesn't carry */
   for(const k of forms){const m=/^(.+?) (ST|STATE|FL|FLORIDA|OH|OHIO|MN|PA|NY|CA|IL|MD|TX|NC|SC|VA|IN|KY|TN|LA|AL|GA|MO|WI|MI|MA|CT|NJ|DC)$/.exec(k);if(!m)continue;
@@ -2988,7 +2992,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
