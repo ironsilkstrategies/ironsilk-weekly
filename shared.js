@@ -3032,7 +3032,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107l';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107m';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -12652,8 +12652,8 @@ function renderTicketsRaw(){
     }
   }
   if(TICKETTAB==='build'){
-    const row=modeRow(BUILD_MODE,[['chars','🎭 Characters'],['presets','Presets'],['custom','Custom']],'BUILD_MODE');
-    body.innerHTML=row+(BUILD_MODE==='chars'?(()=>{try{return cbHtml()}catch(e){return'<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>'}})():BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
+    const row=modeRow(BUILD_MODE,[['sgp','🎯 Perfect SGPs'],['chars','🎭 Characters'],['presets','Presets'],['custom','Custom']],'BUILD_MODE');   /* v2.88.0 · Perfect SGPs (desk-sgp.js) */
+    body.innerHTML=row+(BUILD_MODE==='sgp'?(()=>{try{return typeof sgpHtml==='function'?sgpHtml():''}catch(e){return'<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>'}})():BUILD_MODE==='chars'?(()=>{try{return cbHtml()}catch(e){return'<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>'}})():BUILD_MODE==='custom'?buildTabHtml():presetTabHtml());
   }
   if(TICKETTAB==='mine')   body.innerHTML=minePicksHtml();
   if(TICKETTAB==='tracked')body.innerHTML=trackedPicksHtml();
