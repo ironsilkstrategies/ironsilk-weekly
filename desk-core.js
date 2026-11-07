@@ -2038,7 +2038,7 @@ const SLOT_DUR={nfl:3.6,ncaaf:3.9,nba:2.6,ncaab:2.3,nhl:2.8,mlb:3.3};   /* hours
 let SLOT_FORCE_BOARD=false;   /* "Open ›" on one game shows this sport's board for this visit, whatever mode is saved */
 function slotMode(){if(SLOT_FORCE_BOARD)return false;try{return localStorage.getItem(SLOT_MODE_K)==='slots';}catch(e){return false;}}
 function slotModeSet(on){SLOT_FORCE_BOARD=false;try{localStorage.setItem(SLOT_MODE_K,on?'slots':'sport');}catch(e){}slotApply();}
-function slotF(){let F={};try{F=JSON.parse(localStorage.getItem(SLOT_F_K)||'{}')||{};}catch(e){}F=Object.assign({win:'up',tier:'all',sp:'all',ch:'all',day:'today',legs:'4'},F);
+function slotF(){let F={};try{F=JSON.parse(localStorage.getItem(SLOT_F_K)||'{}')||{};}catch(e){}F=Object.assign({win:'up',tier:'all',sp:'all',ch:'all',day:'today',legs:'4',bt:'all'},F);if(F.ch!=='all'&&!CHARS[F.ch])F.ch='all';if(!BT_LIST.some(x=>x[0]===F.bt))F.bt='all';
   if(F.day!=='today'&&F.day!=='all'&&!(String(F.day)>=today()))F.day='today';return F;}
 function slotFSet(k,v){const F=slotF();F[k]=v;try{localStorage.setItem(SLOT_F_K,JSON.stringify(F));}catch(e){}slotRefresh();}
 function slotFReset(){try{localStorage.removeItem(SLOT_F_K);}catch(e){}slotRefresh();}
@@ -2049,7 +2049,11 @@ function slotDayLab(d){const t=today();return d===t?'Today':d===dayShift(t,1)?'T
 function slotIn(t){const m=Math.round((t-Date.now())/60000);return m<=0?'':m<60?`in ${m}m`:m<24*60?`in ${Math.floor(m/60)}h${m%60?' '+(m%60)+'m':''}`:'';}
 function slotPickP(x){return x.brainP!=null?x.brainP:x.blend!=null?x.blend:x.mp!=null?x.mp:0.5;}
 function slotTierOf(x){const v=SLOT_TIER[String(x&&x.color||'').trim()];return v==null?9:v;}
-function slotPass(x,sp,F){return tfPass(x,sp,{sp:'all',tier:F.tier,ch:F.ch});}
+function slotPass(x,sp,F){return tfPass(x,sp,{sp:'all',tier:F.tier,ch:'all'})&&btPass(F.bt||'all',x.m,x.price);}
+function slotSetCh(v){slotFSet('ch',v);}
+/* v2.87.0 · a character picked: the games it called (through the bet type and tier), and what it would do in each */
+function slotChIdx(F){const M=new Map();if(F.ch==='all'||!CHARS[F.ch])return M;try{charCallsFor(F.ch,{sp:'all',bt:F.bt,tier:F.tier}).forEach(o=>{if(!o.game)return;const k=o.sp+'|'+o.game;const a=M.get(k);if(a)a.push(o);else M.set(k,[o]);});}catch(e){}return M;}
+function slotHalfIdx(){const M=new Map();try{(halfToday()||[]).forEach(x=>{const k=x.sp+'|'+x.game;const a=M.get(k);if(a)a.push(x);else M.set(k,[x]);});}catch(e){}return M;}
 function slotSort(a,b){return slotTierOf(a)-slotTierOf(b)||slotPickP(b)-slotPickP(a);}
 function slotOnSlip(sp,game){try{return SLIP.some(y=>y.game===game&&(y.sport||sp)===sp);}catch(e){return false;}}
 /* every game: today's card (every sport's schedule, picks and props) + this page's own board, each with a start time and a state */
@@ -2081,15 +2085,18 @@ function slotView(F){const R=slotGames(),all=R.all,d=today();
   const dayOk=g=>F.day==='all'||(F.day==='today'?g.day===d:g.day===F.day);
   const winOk=(g,w)=>w==='all'||(w==='up'?g.st!=='post':slotWin(g.start)===w);
   const spOk=(g,s)=>s==='all'||g.sp===s;
-  const picky=F.tier!=='all'||F.ch!=='all';   /* a pick filter shows only the games with a pick that passes it */
-  const pickOk=g=>!picky||g.picks.some(x=>slotPass(x,g.sp,F));
+  /* a pick filter shows only the games with a pick that passes it; a bet type, the games that have one; a character, the games it called */
+  const CHI=slotChIdx(F),HI=slotHalfIdx();const lineBt=BT_LINES.includes(F.bt);const picky=F.tier!=='all'||(lineBt&&F.bt!=='all');
+  const typeOk=g=>F.bt==='half'?(HI.get(g.sp+'|'+g.game)||[]).some(x=>F.tier!=='play'||x.official):F.bt==='props'?(g.props.length>0||slotHasCProps(g)):(!picky||g.picks.some(x=>slotPass(x,g.sp,F)));
+  const pickOk=g=>F.ch!=='all'&&CHARS[F.ch]?CHI.has(g.sp+'|'+g.game):typeOk(g);
   const base=all.filter(g=>dayOk(g));
   const games=base.filter(g=>winOk(g,F.win)&&spOk(g,F.sp)&&pickOk(g));
   const S=new Map();games.forEach(g=>{const k=g.day+'-'+g.t;let s=S.get(k);if(!s){s={key:k,t:g.t,day:g.day,games:[]};S.set(k,s);}s.games.push(g);});
   const slots=[...S.values()].sort((a,b)=>a.t-b.t);
   slots.forEach(s=>{s.games.sort((a,b)=>a.sp.localeCompare(b.sp)||(slotBest(b,F)?1:0)-(slotBest(a,F)?1:0)||a.game.localeCompare(b.game));
     s.st=s.games.every(g=>g.st==='post')?'post':s.games.some(g=>g.st==='in')?'in':s.games.some(g=>g.st==='pre')?'pre':'in';});
-  return{all,base,games,slots,by:R.by,days:[...new Set(all.map(g=>g.day))].sort(),dayOk,winOk,spOk,pickOk};}
+  return{all,base,games,slots,by:R.by,days:[...new Set(all.map(g=>g.day))].sort(),dayOk,winOk,spOk,pickOk,CHI,HI};}
+function slotHasCProps(g){try{const[a,h]=g.game.split('@');const d=g.day;return(roGet(CPROP_KEY,[],30e3)||[]).some(x=>x&&x.sp===g.sp&&(x.team===a||x.team===h)&&String(x.d).slice(0,10)===d);}catch(e){return false;}}
 /* ── the pieces of a game card ── */
 function slotScoreHtml(g,SC){const f=v=>{for(const dd of [g.day,today()]){const x=SC[`${g.sp}|${g.game}|${dd}|${v}`];if(x&&x.a!=null&&x.h!=null)return x;}return null;};
   const s=f('Sim'),m=f('Most common'),j=f('Judge');const[a,h]=g.game.split('@');const e=txtEsc;const P=[];
@@ -2117,15 +2124,26 @@ function slotPropsHtml(g,CPI){const[a,h]=g.game.split('@');const tc=g.props.slic
 function slotGameHtml(g,F,X){const e=txtEsc;
   const P=g.picks.filter(x=>slotPass(x,g.sp,F)).sort(slotSort);const hid=g.picks.length-P.length;
   const ev=g.ev;const live=g.st!=='pre'&&ev&&ev.a!=null&&!P.length?` <span class="mono" style="font-size:10.5px;font-weight:800;color:${g.st==='in'?'#ff4b5c':'var(--mute)'}">${g.st==='in'?'● LIVE':'FINAL'} ${ev.a}–${ev.h}${g.st==='in'&&ev.detail?' · '+e(ev.detail):''}</span>`:'';
-  const rows=P.map(x=>{let L=null;try{L=tcLive(g.sp,x);}catch(err){}return tcRowHtml(g.sp,x,L,{inGame:true,slip:g.st==='pre'});}).join('');
+  const lineBt=BT_LINES.includes(F.bt||'all');
+  const rows=lineBt?P.map(x=>{let L=null;try{L=tcLive(g.sp,x);}catch(err){}return tcRowHtml(g.sp,x,L,{inGame:true,slip:g.st==='pre'});}).join(''):'';
+  /* the character you picked: what it would do in this game */
+  const CC=F.ch!=='all'&&CHARS[F.ch]?(X.CHI.get(g.sp+'|'+g.game)||[]):[];const C=CHARS[F.ch]||{};
+  const chHtml=CC.length?`<div class="mono" style="font-size:10px;margin-top:5px;color:${C.color}">🎭 ${e(C.label||F.ch)} would:</div>${CC.sort((a,b)=>(b.off-a.off)||((b.conf||0)-(a.conf||0))).map(o=>charCallRowHtml(o,{inGame:true})).join('')}`:'';
+  /* 1st half: every character's half read for this game */
+  const HH=X.HI.get(g.sp+'|'+g.game)||[];let halfHtml='';
+  if(HH.length&&(F.bt==='half'||F.bt==='all')){const G={};HH.forEach(x=>{(G[x.pick]=G[x.pick]||{x,v:[],off:false}).v.push(x.voice);if(x.official)G[x.pick].off=true;});
+    const H=Object.values(G).filter(o=>F.bt!=='half'||F.tier!=='play'||o.off).sort((a,b)=>(b.off-a.off)||(b.v.length-a.v.length));
+    halfHtml=F.bt==='half'?H.map(o=>`<div style="padding:5px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${o.off?'var(--win)':'var(--rule)'}"><b style="font-size:12.5px">${e(o.x.pick)}</b> ${o.x.price!=null?`<span class="mono" style="font-size:11px;color:var(--gold)">${tcSgn(o.x.price)}</span>`:''} <span class="mono" style="font-size:9px;font-weight:800;color:${o.off?'var(--win)':'var(--mute)'}">${o.off?'✅ OFFICIAL':'LEARNING'}</span>
+      <div class="hs-row" style="justify-content:flex-start">${o.v.map(v=>{const c=CHARS[v];return c?`<span class="hs-chip" style="color:${c.color};border-color:${c.color}">${c.chip}</span>`:'';}).join('')}</div></div>`).join('')
+      :H.length?`<div class="mono" style="font-size:10.5px;margin-top:3px">🕐 1st half: <b>${e(H[0].x.pick)}</b>${H[0].x.price!=null?' '+tcSgn(H[0].x.price):''} <span style="color:var(--mute)">· ${H[0].v.length} character${H[0].v.length===1?'':'s'}${H[0].off?' · ✅ official':''}</span></div>`:'';}
   return`<div class="slot-game" style="padding:9px 0 8px;border-top:1px solid var(--rule)">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="min-width:0"><span class="mono" style="font-size:10px;color:var(--mute)">${e(SP_LAB[g.sp]||g.sp)}</span>
       <div style="font-weight:800;font-size:14px">${gameLabelHtml(g.sp,g.game)}${gameWhenHtml(g.sp,g.game,g.start)}${live}</div></div>
       <button onclick="slotOpen(${jsArg(g.sp)},${jsArg(g.gid)})" style="flex:none;font-size:11px;padding:5px 10px" title="Open this game's full card on the ${e(SP_LAB[g.sp]||g.sp)} board">Open ›</button></div>
     ${slotScoreHtml(g,X.SC)}
-    ${rows||`<div class="sub" style="font-size:10.5px;margin-top:4px">${g.picks.length?`${hid} pick${hid===1?'':'s'} on this game — none pass this filter.`:'No pick on today\'s card for this game — Open › for the full read.'}</div>`}
+    ${lineBt?(rows||`<div class="sub" style="font-size:10.5px;margin-top:4px">${g.picks.length?`${hid} pick${hid===1?'':'s'} on today's card for this game — none pass this filter.`:'No pick on today\'s card for this game — Open › for the full read.'}</div>`):''}
     ${rows&&hid?`<div class="sub mono" style="font-size:9.5px">＋${hid} more pick${hid===1?'':'s'} outside this filter</div>`:''}
-    ${slotAgreeHtml(g,X.VI)}${slotPropsHtml(g,X.CPI)}</div>`;}
+    ${chHtml}${halfHtml}${lineBt?slotAgreeHtml(g,X.VI):''}${F.bt==='all'||F.bt==='props'?slotPropsHtml(g,X.CPI):''}</div>`;}
 function slotHeadHtml(pfx,s,F){const picks=s.games.flatMap(g=>g.picks.filter(x=>slotPass(x,g.sp,F)));
   const n=c=>picks.filter(p=>String(p.color||'').trim()===c).length,un=picks.filter(p=>p.unan).length;
   const L=slotLegs(s,F),legs=L.length,od=legs>=2?slotOdds(L):null;
@@ -2134,7 +2152,7 @@ function slotHeadHtml(pfx,s,F){const picks=s.games.flatMap(g=>g.picks.filter(x=>
   return`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
     <div style="min-width:0"><div style="font-size:17px;font-weight:800">🕒 ${s.day!==today()?slotDayLab(s.day)+' · ':''}${slotTime(s.t)}<span class="mono" style="font-size:11px;font-weight:600">${tag}</span></div>
       <div class="mono" style="font-size:10px;color:var(--mute);margin-top:1px">${s.games.length} game${s.games.length===1?'':'s'} · ${sps}</div>
-      <div class="mono" style="font-size:10px;margin-top:1px">${picks.length} pick${picks.length===1?'':'s'}${n('supreme')?` · <span style="color:${TC_COL[' supreme'][0]}">${n('supreme')} SUPREME</span>`:''}${n('strong')?` · <span style="color:${TC_COL[' strong'][0]}">${n('strong')} STRONG</span>`:''}${n('value')?` · <span style="color:${TC_COL.value[0]}">${n('value')} VALUE</span>`:''}${n('source')?` · <span style="color:${TC_COL.source[0]}">${n('source')} OUTSIDE</span>`:''}${un?` · <span style="color:#ff6fae">★ ${un} unanimous</span>`:''}</div></div>
+      ${!BT_LINES.includes(F.bt||'all')?`<div class="mono" style="font-size:10px;margin-top:1px">${F.bt==='half'?'1st-half calls':'props'} on ${s.games.length} game${s.games.length===1?'':'s'}</div>`:`<div class="mono" style="font-size:10px;margin-top:1px">${picks.length} pick${picks.length===1?'':'s'}${n('supreme')?` · <span style="color:${TC_COL[' supreme'][0]}">${n('supreme')} SUPREME</span>`:''}${n('strong')?` · <span style="color:${TC_COL[' strong'][0]}">${n('strong')} STRONG</span>`:''}${n('value')?` · <span style="color:${TC_COL.value[0]}">${n('value')} VALUE</span>`:''}${n('source')?` · <span style="color:${TC_COL.source[0]}">${n('source')} OUTSIDE</span>`:''}${un?` · <span style="color:#ff6fae">★ ${un} unanimous</span>`:''}</div>`}</div>
     ${od?`<button class="primary" onclick="slotParlay(${jsArg(s.key)})" style="flex:none;font-size:11.5px;padding:7px 10px;line-height:1.2" title="Adds the ${legs} strongest picks in this slot (one per game, passing your filter) to the slip — the model's chance all hit, and what it pays">＋ Slot parlay<br><span style="font-size:10px;font-weight:600">${legs} legs · ${tcSgn(od.am)} · ${od.p>=0.095?Math.round(od.p*100):(od.p*100).toFixed(1)}%</span></button>`:''}</div>`;}
 /* ── the board ── */
 function slotBoardHtml(pfx){pfx=pfx||'sg';const F=slotF();const V=slotView(F);const d=today();
@@ -2144,15 +2162,17 @@ function slotBoardHtml(pfx){pfx=pfx||'sg';const F=slotF();const V=slotView(F);co
   const sports=[...new Set(V.base.map(g=>g.sp))];const spCnt=s=>inWin.filter(g=>V.spOk(g,s)&&V.pickOk(g)).length;
   const winCnt=w=>inSp.filter(g=>V.winOk(g,w)&&V.pickOk(g)).length;
   const pool=V.base.filter(g=>V.winOk(g,F.win)&&V.spOk(g,F.sp)).flatMap(g=>g.picks.map(x=>({sp:g.sp,x})));
-  const tCnt=t=>pool.filter(o=>tfPass(o.x,o.sp,{sp:'all',tier:t,ch:F.ch})).length,cCnt=c=>pool.filter(o=>tfPass(o.x,o.sp,{sp:'all',tier:F.tier,ch:c})).length;
-  const usedCh=CHAR_ORDER.filter(v=>pool.some(o=>(o.x.chars||[]).includes(v)));
+  const tCnt=t=>pool.filter(o=>tfPass(o.x,o.sp,{sp:'all',tier:t,ch:'all'})&&btPass(F.bt,o.x.m,o.x.price)).length;
+  const lineN=k=>pool.filter(o=>tfPass(o.x,o.sp,{sp:'all',tier:F.tier,ch:'all'})&&btPass(k,o.x.m,o.x.price)).length;
+  const btN=k=>k==='half'?V.base.filter(g=>V.winOk(g,F.win)&&V.spOk(g,F.sp)&&(V.HI.get(g.sp+'|'+g.game)||[]).length).length:k==='props'?V.base.filter(g=>V.winOk(g,F.win)&&V.spOk(g,F.sp)&&(g.props.length||slotHasCProps(g))).length:lineN(k);
   const later=V.days.filter(x=>x>d);
   const bar=`<div style="margin:6px 0 2px">
     ${later.length?`<div class="slot-row">${fb('day','today','Today',V.all.filter(g=>g.day===d).length)}${later.map(x=>fb('day',x,slotDayLab(x),V.all.filter(g=>g.day===x).length)).join('')}${fb('day','all','All days',V.all.length)}</div>`:''}
     <div class="slot-row">${SLOT_WINS.map(([w,l])=>fb('win',w,l,winCnt(w))).join('')}</div>
     ${sports.length>1?`<div class="slot-row">${fb('sp','all','All sports',inWin.filter(V.pickOk).length)}${sports.map(s=>fb('sp',s,txtEsc(SP_LAB[s]||s),spCnt(s))).join('')}</div>`:''}
     <div class="slot-row">${fb('tier','all','Every pick',tCnt('all'))}${fb('tier','play','✅ Official (70%+)',tCnt('play'),'#3DDC84')}${fb('tier','unan','★ Unanimous',tCnt('unan'),'#ff6fae')}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,tCnt(k.trim()),c)).join('')}</div>
-    ${usedCh.length?`<div class="slot-row">${fb('ch','all','Any character')}${usedCh.map(v=>fb('ch',v,`${CHARS[v].chip} ${txtEsc(CHARS[v].label||v)}`,cCnt(v),CHARS[v].color)).join('')}</div>`:''}
+    <div class="slot-row">${BT_LIST.map(([k,l])=>fb('bt',k,l,btN(k))).join('')}</div>
+    ${charChipRow({sp:F.sp,bt:F.bt},'slotSetCh',F.ch)}
     <div class="slot-row" style="align-items:center"><span class="mono" style="font-size:9.5px;color:var(--mute);flex:none;margin:0 4px 0 2px">SLOT PARLAY</span>${['2','3','4','5','6','all'].map(n=>fb('legs',n,n==='all'?'every game':n+' legs')).join('')}</div></div>`;
   /* where the games come from, and who's missing */
   const by=V.by;const cnt={};V.all.forEach(g=>{if(g.day===d)cnt[g.sp]=(cnt[g.sp]||0)+1;});
@@ -2165,10 +2185,11 @@ function slotBoardHtml(pfx){pfx=pfx||'sg';const F=slotF();const V=slotView(F);co
   if(!V.slots.length)return head+`<div class="empty">No games match these filters${F.win==='up'?' — everything today may be over (try “All day”)':''}. <button class="msg-chip" onclick="slotFReset()">Show everything</button></div>`;
   const hh=(()=>{try{const h=document.querySelector('header');return h?Math.round(h.getBoundingClientRect().height):0;}catch(e){return 0;}})();
   const strip=V.slots.length>1?`<div class="subnav" style="margin:0 0 8px;position:sticky;top:${hh}px;z-index:30;background:var(--ink,#080B10);padding:6px 0">${V.slots.map(s=>`<button onclick="slotGo(${jsArg(pfx+'-'+s.key)})" style="flex:none;font-size:11px;padding:5px 9px;${s.st==='in'?'border-color:#ff4b5c;':s.st==='post'?'opacity:.55;':''}">${s.day!==d?slotDayLab(s.day).slice(0,3)+' ':''}${slotTime(s.t)} <span style="opacity:.6">${s.games.length}</span></button>`).join('')}</div>`:'';
-  const X={SC:roGet(SCORECALL_KEY,{},30e3)||{},VI:new Map(),CPI:new Map()};
+  const X={SC:roGet(SCORECALL_KEY,{},30e3)||{},VI:new Map(),CPI:new Map(),CHI:V.CHI,HI:V.HI};
   try{(roGet(VOICES_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.date).slice(0,10)>=d)||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const k=c.sp+'|'+c.game;const a=X.VI.get(k);if(a)a.push(c);else X.VI.set(k,[c]);});}catch(e){}
   try{(roGet(CPROP_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.d).slice(0,10)>=d))return;const k=c.sp+'|'+c.team;const a=X.CPI.get(k);if(a)a.push(c);else X.CPI.set(k,[c]);});}catch(e){}
-  return head+strip+V.slots.map(s=>`<div class="tkt slot" id="${pfx}-${s.key}" style="margin-bottom:8px;scroll-margin-top:${hh+50}px;${s.st==='post'?'opacity:.78;':''}${s.st==='in'?'border-color:#ff4b5c;':''}">
+  let prof='';if(F.ch!=='all'&&CHARS[F.ch])try{prof=charProfileHtml(F.ch,{sp:F.sp,bt:F.bt});}catch(e){}
+  return head+prof+strip+V.slots.map(s=>`<div class="tkt slot" id="${pfx}-${s.key}" style="margin-bottom:8px;scroll-margin-top:${hh+50}px;${s.st==='post'?'opacity:.78;':''}${s.st==='in'?'border-color:#ff4b5c;':''}">
     ${slotHeadHtml(pfx,s,F)}${s.games.map(g=>slotGameHtml(g,F,X)).join('')}</div>`).join('');}
 function slotGo(id){try{const el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}}
 /* ── actions ── */

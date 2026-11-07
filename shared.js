@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17884,7 +17884,7 @@ function onTicketMatch(sp,game,m,sd){
 const SP_LAB={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA',ncaab:'🏀 CBB'};
 /* ── Today filters + live state ─────────────────────────────────────────── */
 const TF_KEY='d4.todayfilter';
-function tfGet(){const f=get(TF_KEY,null)||{};return{tier:f.tier||'play',ch:f.ch||'all',sp:f.sp||'all',view:f.view||'picks'};}
+function tfGet(){const f=get(TF_KEY,null)||{};return{tier:f.tier||'play',ch:f.ch&&(f.ch==='all'||CHARS[f.ch])?f.ch:'all',sp:f.sp||'all',view:f.view||'picks',bt:f.bt&&BT_LIST.some(x=>x[0]===f.bt)?f.bt:'all'};}
 function tfSet(k,v){const f=tfGet();f[k]=v;set(TF_KEY,f);renderToday(true);}
 /* tier test: unanimous is a flag on any color; the rest are the card's colors */
 function tfPass(x,sp,F){
@@ -17893,7 +17893,165 @@ function tfPass(x,sp,F){
   if(F.tier==='play'&&!tfPlayable(x,sp))return false;
   if(F.tier!=='all'&&F.tier!=='unan'&&F.tier!=='play'&&String(x.color||'').trim()!==F.tier)return false;
   if(F.ch!=='all'&&!(x.chars||[]).includes(F.ch))return false;
+  if(F.bt&&F.bt!=='all'&&!btPass(F.bt,x.m,x.price))return false;   /* v2.87.0 · bet type */
   return true;}
+/* ══ v2.87.0 · BET TYPES — one breakdown for Today, ⏰ By time and the ticket builder ══════════════════════════════════════════════
+   Nov 7: "break it down by bet types (props, spreads, o/u, 1st half, moneyline, heavy moneylines (over -1000) and light moneylines)".
+   Heavy = a moneyline priced -1000 or shorter; light = every other moneyline. 1st half covers hockey's 1st period. */
+const BT_HEAVY=-1000;
+const BT_LIST=[['all','All bets'],['ml','Moneyline'],['heavy','Heavy ML -1000+'],['light','Light ML'],['spread','Spreads'],['total','O/U'],['half','1st half'],['props','Props']];
+const BT_LINES=['all','ml','heavy','light','spread','total'];
+function btMarket(m){m=String(m||'');return m==='moneyline'?'ml':m==='runline'||m==='puckline'?'spread':m;}
+function btHeavy(price){return price!=null&&price!==''&&isFinite(+price)&&+price<=BT_HEAVY;}
+function btPass(bt,m,price){if(!bt||bt==='all')return true;m=btMarket(m);
+  if(/^(h1|p1)/.test(m))return bt==='half';if(m==='prop')return bt==='props';if(bt==='half'||bt==='props')return false;
+  if(bt==='ml')return m==='ml';if(bt==='heavy')return m==='ml'&&btHeavy(price);if(bt==='light')return m==='ml'&&!btHeavy(price);return m===bt;}
+function btLabel(bt){return(BT_LIST.find(x=>x[0]===bt)||[0,bt])[1];}
+const BT_NOTE={heavy:'Heavy favorites: moneylines priced -1000 or shorter — risk $10+ to win $1, so one miss erases ten wins. They\'re never official (the 70% rule needs a price of -300 or better).',
+  light:'Light moneylines: every moneyline priced longer than -1000 — short favorites, pick\'ems and underdogs.',
+  half:'1st half (1st period in hockey): every character\'s half read, scaled from its own final-score call so it agrees with its game picks. Official once that character has proven that half market.',
+  props:'Props: the board\'s player props at 70%+, and each character\'s own prop calls.'};
+
+/* ══ v2.87.0 · WHY A CHARACTER'S WORD CARRIES WEIGHT — or doesn't ═══════════════════════════════════════════════════════════════
+   For a public reader: what each character's method is built to see and what it can't (fixed — it's how the method works), and what
+   its record says (live, graded calls only): the lanes (sport × bet type × fav/dog/over/under) where it has made money and where it
+   has lost it — the same lanes that let its picks onto the card or keep them off. */
+const CHAR_EDGE={
+  'Sim':['every market on every game — 10,000 runs of the full model','it only knows what it\'s fed: a late scratch, a motivation spot or news it hasn\'t seen'],
+  'Judge':['weighing every source by how accurate it has actually been','when its witnesses are wrong together, so is it — and it trusts a source\'s past more than its latest change'],
+  'Coach':['spots: matchups, rest, travel and form — when to take a team and when to fade it','silent when a game has no clear spot, and each spot rests on a small sample'],
+  'Most common':['the single most likely final score — exact scores, and totals near the number','the likeliest score is still unlikely — high-variance games swing right past it'],
+  'Pred':['the outside predicted scores you upload','only as good as the source you upload, and silent without one'],
+  'Covers':['the Covers / OddsShark computer projection','a public number the books have already seen — and silent without an upload'],
+  'Trends':['situational trend records, shrunk for small samples','trends describe the past and many are noise; silent without uploaded trends'],
+  'Consensus':['where the public tickets and money are','the public loses over time and books shade lines against it; silent without uploaded splits'],
+  'Power':['who\'s better and by how much — the Power Index, prestige and the all-time series','ratings move slowly, so injuries and sudden form swings take a while to show'],
+  'Dog':['plus-money value — underdogs the Sim rates clearly above their price','it never backs a favorite, and long prices mean long losing runs even when it\'s right'],
+  'Scout':['talent matchups — QBs, pass rush, ball hawks, shooters, goalies','it needs enough games read for both teams, so it\'s quiet early in a season'],
+  'Banker':['price discipline — it bets only when the calibrated chance beats the price by 3%+, never shorter than -300','it sits out most games, so its record moves slowly'],
+  'Brain':['the Sim, the market and every character\'s graded vote, weighed together','it\'s only as right as the voices it weighs, and still learning until they have graded history'],
+  'Blend':['the Sim\'s chance blended with the market\'s, weighted by which has predicted better','it stays close to the market by design, so it rarely finds a big edge']};
+const CW_LAB={heavy:['✅','Carries weight','var(--win)'],light:['⚠️','Light weight','var(--rust)'],mixed:['➖','Mixed record','var(--gold)'],new:['⏳','Still proving itself','var(--mute)']};
+let CPROF_C=null;
+function charProfile(v){const T=laneTable();const CP=roGet(CPROP_KEY,[],30e3)||[];const HL=roGet(HALF_KEY,{},30e3)||{};
+  if(!CPROF_C||CPROF_C.T!==T||CPROF_C.CP!==CP||CPROF_C.HL!==HL)CPROF_C={T,CP,HL,m:{}};if(CPROF_C.m[v])return CPROF_C.m[v];
+  const L=Object.entries((T.BYV||{})[v]||{}).map(([k,o])=>({k,n:o.n,w:o.w,u:o.u,roi:o.roi,shr:o.shr,st:o.st}));
+  const n=L.reduce((a,o)=>a+o.n,0),w=L.reduce((a,o)=>a+o.w,0),u=L.reduce((a,o)=>a+o.u,0),roi=n?u/n:0;
+  const proven=L.filter(o=>o.st==='proven').sort((a,b)=>b.shr-a.shr),blocked=L.filter(o=>o.st==='blocked').sort((a,b)=>a.shr-b.shr);
+  const full=L.filter(o=>o.n>=LANE_MIN);
+  const strong=proven.length?proven:full.filter(o=>o.u>0).sort((a,b)=>b.shr-a.shr),weak=blocked.length?blocked:full.filter(o=>o.u<0).sort((a,b)=>a.shr-b.shr);
+  let mult=1;try{mult=(bkLedger().mult||{})[v]||1;}catch(e){}
+  /* clearly ahead of the prices it took (+2% a bet, or more proven lanes than blocked and not losing) · clearly behind (-2.5% a bet) · otherwise mixed */
+  let verdict='mixed';if(n<LANE_MIN)verdict='new';else if(roi>=0.02||(proven.length>blocked.length&&roi>=0))verdict='heavy';else if(roi<=-0.025)verdict='light';
+  const pr={w:0,n:0};CP.forEach(x=>{if(x&&x.voice===v&&x.hit!=null){pr.n++;if(x.hit)pr.w++;}});
+  const hr={w:0,n:0,u:0};Object.values(HL).forEach(x=>{if(x&&x.voice===v&&x.graded&&x.hit!=null){hr.n++;if(x.hit)hr.w++;hr.u+=x.units||0;}});
+  return(CPROF_C.m[v]={v,n,w,l:n-w,u,roi,strong:strong.slice(0,3),weak:weak.slice(0,3),proven:proven.length,blocked:blocked.length,mult,verdict,props:pr,half:hr});}
+/* its record on the bet type and sport you're looking at — the part of its word that matters for this decision */
+function charLaneSum(v,sp,bt){const T=laneTable();const by=(T.BYV||{})[v]||{};let n=0,w=0,u=0;
+  Object.entries(by).forEach(([k,o])=>{const[s0,m,t]=k.split('|');if(sp&&sp!=='all'&&s0!==sp)return;
+    if(bt==='ml'||bt==='light'){if(m!=='ml')return;}else if(bt==='heavy'){if(m!=='ml'||t!=='fav')return;}else if(bt==='spread'||bt==='total'){if(m!==bt)return;}else if(bt&&bt!=='all')return;
+    n+=o.n;w+=o.w;u+=o.u;});return{n,w,u};}
+function charWeightIcon(v){try{return CW_LAB[charProfile(v).verdict][0];}catch(e){return'';}}
+function charProfileHtml(v,ctx){ctx=ctx||{};const C=CHARS[v];if(!C)return'';const P=charProfile(v);const E=CHAR_EDGE[v]||['',''];const [ic,lab,col]=CW_LAB[P.verdict];
+  const u=x=>`${x>=0?'+':''}${x.toFixed(1)}u`,pc=x=>`${x>=0?'+':''}${(x*100).toFixed(1)}%`;
+  const ln=x=>`${txtEsc(laneName(x.k))} ${x.w}-${x.n-x.w} ${u(x.u)}`;
+  const why=P.verdict==='new'?`Only ${P.n} graded game-line call${P.n===1?'':'s'} — its word is tracked, not trusted yet (a lane needs ${LANE_MIN}+).`
+    :P.verdict==='heavy'?`${P.w}-${P.l} on graded game lines, ${u(P.u)} (${pc(P.roi)} a bet)${P.proven?` — proven in ${P.proven} lane${P.proven===1?'':'s'}, where its picks count toward the card`:''}.`
+    :P.verdict==='light'?`${P.w}-${P.l} on graded game lines, ${u(P.u)} (${pc(P.roi)} a bet)${P.blocked?` — blocked in ${P.blocked} lane${P.blocked===1?'':'s'}, where its picks can't make the card`:''}.`
+    :`${P.w}-${P.l} on graded game lines, ${u(P.u)} (${pc(P.roi)} a bet) — not clearly ahead of the prices it took, or behind them.`;
+  let here='';try{const sp=ctx.sp||'all',bt=ctx.bt||'all';if(sp!=='all'||bt!=='all'){const lab=bt==='all'?'On game lines':bt==='heavy'?'On favorites\' moneylines':bt==='half'?'On 1st halves':bt==='props'?'On props':'On '+btLabel(bt).toLowerCase().replace('o/u','totals (O/U)');
+      const where=sp!=='all'?' in '+(SP_LAB[sp]||sp):'';let o=null;
+      if(bt==='props'){if(P.props.n)o=`${P.props.w}-${P.props.n-P.props.w} (${Math.round(P.props.w/P.props.n*100)}%)`+(sp!=='all'?' — every sport':'');}
+      else if(bt==='half'){if(P.half.n)o=`${P.half.w}-${P.half.n-P.half.w}, ${u(P.half.u)}`+(sp!=='all'?' — every sport':'');}
+      else{const S=charLaneSum(v,sp,bt);if(S.n)o=`${S.w}-${S.n-S.w}, ${u(S.u)} (${pc(S.u/S.n)} a bet)`;}
+      here=`<div class="mono" style="font-size:10.5px;margin-top:4px">📌 ${lab}${where}: ${o?`<b>${o}</b>`:'<span style="color:var(--mute)">no graded calls yet</span>'}</div>`;}}catch(e){}
+  const extra=[P.props.n?`🎯 props ${P.props.w}-${P.props.n-P.props.w} (${Math.round(P.props.w/P.props.n*100)}%)`:'',P.half.n?`🕐 1st half ${P.half.w}-${P.half.n-P.half.w} ${u(P.half.u)}`:''].filter(Boolean).join(' · ');
+  return`<div class="tkt ch-prof" style="border-left:3px solid ${C.color};margin-bottom:8px">
+    <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span class="hs-chip" style="color:${C.color};border-color:${C.color};font-size:10px">${C.chip}</span><b style="font-size:15px">${txtEsc(C.label||v)}</b>
+      <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${ic} ${lab}</span>${P.mult!==1?`<span class="mono" style="font-size:9.5px;color:var(--mute)" title="The Banker sizes this character's tickets by its last 4 weeks">last 4 weeks: Banker weight ×${P.mult.toFixed(2)}</span>`:''}</div>
+    <div class="mono" style="font-size:10.5px;margin-top:5px;color:${col}">${why}</div>
+    <div style="margin-top:5px;font-size:11.5px;line-height:1.45">🎯 <b>Built for</b> ${txtEsc(E[0])}.<br>🙈 <b>Blind spot</b>: ${txtEsc(E[1])}.</div>
+    ${P.strong.length?`<div class="mono" style="font-size:10px;margin-top:5px;color:var(--win)">💪 ${P.proven?'Proven':'Best so far'}: ${P.strong.map(ln).join(' · ')}</div>`:''}
+    ${P.weak.length?`<div class="mono" style="font-size:10px;margin-top:2px;color:var(--rust)">⚠️ ${P.blocked?'Blocked':'Weakest'}: ${P.weak.map(ln).join(' · ')}</div>`:''}
+    ${extra?`<div class="mono" style="font-size:10px;margin-top:2px;color:var(--mute)">${extra}</div>`:''}${here}</div>`;}
+
+/* ══ v2.87.0 · WHAT EACH CHARACTER WOULD DO — every character's calls today, every bet type, in one shape ═════════════════════════
+   Game lines from the call ledger, halves from the half ledger, props from the prop ledger. Marks which are official, which lane
+   each sits in and its record there, and whether the pick made Today's card (and in which color). */
+let CHC_C=null;
+function charCallsToday(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const CP=roGet(CPROP_KEY,[],30e3)||[];const HL=roGet(HALF_KEY,{},30e3)||{};const TC=roGet(TC_KEY,{},30e3)||{};
+  if(CHC_C&&CHC_C.d===d&&CHC_C.V===V&&CHC_C.CP===CP&&CHC_C.HL===HL&&CHC_C.TC===TC&&Date.now()-CHC_C.t<60e3)return CHC_C.R;
+  const by=TC.d===d?TC.by||{}:{};const tcI=new Map(),team=new Map(),start=new Map();
+  Object.entries(by).forEach(([sp,B])=>{(B&&B.picks||[]).forEach(x=>{tcI.set(sp+'|'+x.game+'|'+btMarket(x.m)+'|'+x.sd,x);if(x.start)start.set(sp+'|'+x.game,x.start);});
+    [...(B&&B.games||[]).map(g=>[g.g,g.s]),...(B&&B.picks||[]).map(x=>[x.game,x.start])].forEach(([g,s])=>{if(!g)return;const[a,h]=String(g).split('@');team.set(sp+'|'+a,g);team.set(sp+'|'+h,g);if(s&&!start.has(sp+'|'+g))start.set(sp+'|'+g,s);});});
+  const R=new Map();const put=(v,o)=>{const a=R.get(v);if(a)a.push(o);else R.set(v,[o]);};
+  V.forEach(c=>{if(!c||String(c.date).slice(0,10)!==d||!CHARS[c.voice]||c.push)return;const m=btMarket(c.market);if(m!=='ml'&&m!=='spread'&&m!=='total')return;
+    let off=false;try{off=typeof isOfficial==='function'&&isOfficial(c);}catch(e){}
+    put(c.voice,{kind:'line',v:c.voice,sp:c.sp,game:c.game,gid:c.gid,start:start.get(c.sp+'|'+c.game)||null,m,sd:c.side,line:c.line,price:c.price,pick:charPickText(c),conf:confOf(c),off,graded:!!c.graded,hit:c.graded?c.hit:null,tc:tcI.get(c.sp+'|'+c.game+'|'+m+'|'+c.side)||null,c});});
+  /* a pick on Today's card names the characters behind it; if a character's own call didn't make the ledger, the card still says it backs it */
+  const have=new Set();R.forEach(L=>L.forEach(o=>{if(o.kind==='line')have.add(o.v+'|'+o.sp+'|'+o.game+'|'+o.m+'|'+o.sd);}));
+  Object.entries(by).forEach(([sp,B])=>(B&&B.picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;const m=btMarket(x.m);(x.chars||[]).forEach(v=>{if(!CHARS[v]||have.has(v+'|'+sp+'|'+x.game+'|'+m+'|'+x.sd))return;
+    have.add(v+'|'+sp+'|'+x.game+'|'+m+'|'+x.sd);put(v,{kind:'line',v,sp,game:x.game,gid:x.gid,start:x.start||null,m,sd:x.sd,line:x.line,price:x.price,pick:x.pick,conf:null,off:false,fromCard:true,graded:false,hit:null,tc:x});});}));
+  Object.values(HL).forEach(x=>{if(!x||String(x.date).slice(0,10)!==d||!CHARS[x.voice])return;let rec=null;try{rec=halfRecord(x.sp,x.voice,x.mk);}catch(e){}
+    put(x.voice,{kind:'half',v:x.voice,sp:x.sp,game:x.game,start:start.get(x.sp+'|'+x.game)||null,m:x.mk,sd:x.side,line:x.line,price:x.price,pick:x.pick,conf:null,off:!!(rec&&rec.ok&&x.price!=null),rec,graded:!!x.graded,hit:x.graded?x.hit:null,tc:null});});
+  const seen=new Set();CP.forEach(x=>{if(!x||String(x.d).slice(0,10)!==d||!CHARS[x.voice])return;const k=x.voice+'|'+x.sp+'|'+x.player+'|'+x.k+'|'+x.thr;if(seen.has(k))return;seen.add(k);
+    const game=team.get(x.sp+'|'+x.team)||null;put(x.voice,{kind:'prop',v:x.voice,sp:x.sp,game,team:x.team,start:game?start.get(x.sp+'|'+game)||null:null,m:'prop',pick:`${x.player} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}`,conf:x.p!=null?+x.p:null,off:+x.p>=0.7,graded:x.hit!=null,hit:x.hit!=null?x.hit:null,tc:null});});
+  CHC_C={d,V,CP,HL,TC,t:Date.now(),R};return R;}
+/* a character's calls through the filters: sport, bet type, and the tier row read for a character — Official = its official calls
+   (70%+, or a proven half market, or a 70%+ prop), Unanimous/colors = the picks of its that made Today's card in that color */
+function charCallPass(o,F){if(F.sp&&F.sp!=='all'&&o.sp!==F.sp)return false;if(!btPass(F.bt||'all',o.m,o.price))return false;const t=F.tier||'all';
+  if(t==='all')return true;if(t==='play')return o.off;if(t==='unan')return!!(o.tc&&o.tc.unan);return!!(o.tc&&String(o.tc.color||'').trim()===t);}
+function charCallsFor(v,F){return(charCallsToday().get(v)||[]).filter(o=>charCallPass(o,F||{}));}
+function charCallRowHtml(o,opt){opt=opt||{};const e=txtEsc;const C=CHARS[o.v]||{};const started=o.start?Date.parse(o.start)<=Date.now():false;
+  let lane=null,rec=null;if(o.kind==='line'){try{const k=laneKey(o.sp,o.m,o.sd,o.price,o.line);lane=k?laneStatus(k,o.v):null;const T=laneTable();rec=k&&T.BYV[o.v]?T.BYV[o.v][k]:null;}catch(err){}}
+  const tag=o.tc?(TC_COL[o.tc.color]||['var(--mute)',''])[1]:'';const col=o.tc?(TC_COL[o.tc.color]||['var(--rule)'])[0]:'var(--rule)';
+  const res=o.graded?(o.hit===true?'<b style="color:var(--win)">✅ HIT</b>':o.hit===false?'<b style="color:var(--rust)">❌ MISS</b>':'<b style="color:var(--mute)">PUSH</b>'):'';
+  const meta=[o.game?`${opt.inGame?'':e(gameLabel(o.sp,o.game))}${opt.inGame?'':gameWhenHtml(o.sp,o.game,o.start)}`:o.team?e(o.team):'',
+    o.conf!=null?`${Math.round(o.conf*100)}% sure`:'',
+    o.kind==='half'&&o.rec&&o.rec.n?`${o.rec.w}-${o.rec.l} in this half market`:'',
+    rec&&rec.n?`${rec.w}-${rec.n-rec.w} ${rec.u>=0?'+':''}${rec.u.toFixed(1)}u in this lane`:'',
+    lane==='proven'?'<span style="color:var(--win)">✓ proven lane</span>':lane==='blocked'?'<span style="color:var(--rust)">⛔ blocked lane</span>':''].filter(Boolean).join(' · ');
+  let inS=false;try{inS=SLIP.some(y=>y.game===o.game&&y.pick===o.pick);}catch(err){}
+  const slip=o.kind==='line'&&o.price!=null&&!started&&!o.graded&&typeof deskSlipAdd==='function'?`<button class="${inS?'primary':''}" onclick="deskSlipAdd(${jsArg(o.sp)},${jsArg(o.game)},${jsArg(o.pick)},${jsArg(o.price)},${jsArg(o.conf!=null?o.conf:0.5)},${jsArg(today())});if(typeof slotRender0==='function')slotRender0()" title="${inS?'On your slip — tap to take it off':'Add to your slip'}" style="flex:none;padding:5px 11px;font-size:13px">${inS?'✓':'＋'}</button>`:'';
+  return`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${col};${o.off?'':'opacity:.82;'}">
+    <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:12.5px">${opt.chip?`<span class="hs-chip" style="color:${C.color};border-color:${C.color}">${C.chip}</span> `:''}${e(o.pick)} ${o.price!=null?`<span class="mono" style="font-size:11px;color:var(--gold)">${tcSgn(o.price)}</span>`:''}
+      <span class="mono" style="font-size:9px;font-weight:800;color:${o.off?'var(--win)':'var(--mute)'}">${o.fromCard?'BACKS THIS PICK':o.off?'✅ OFFICIAL':'LEARNING'}</span>${o.tc&&o.tc.unan?' <span class="src-tag unanimous" style="display:inline">★ unanimous</span>':''} ${res}</div>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${meta}</div></div>
+    ${tag?`<div class="mono" style="font-size:9px;font-weight:800;color:${col};text-align:right">${tag}<br><span style="font-size:8.5px;color:var(--mute)">ON CARD</span></div>`:''}${slip}</div>`;}
+function charCallsHtml(v,F){const C=CHARS[v];if(!C)return'';const L=charCallsFor(v,F).sort((a,b)=>(b.off-a.off)||((b.conf||0)-(a.conf||0))||String(a.game).localeCompare(String(b.game)));
+  const all=(charCallsToday().get(v)||[]).length;const bt=F.bt||'all';
+  if(!L.length)return`<div class="empty">${all?`${txtEsc(C.label||v)} has ${all} call${all===1?'':'s'} today — none ${bt!=='all'?`in ${txtEsc(btLabel(bt))}`:'that pass these filters'}.`:`${txtEsc(C.label||v)} has no calls today — ${txtEsc(C.quiet||'nothing to say yet')}.`}</div>`;
+  const off=L.filter(o=>o.off).length;
+  return`<div class="sbar" style="margin-top:6px"><h2>${txtEsc(C.label||v)} today · ${L.length} call${L.length===1?'':'s'}${bt!=='all'?' · '+txtEsc(btLabel(bt)):''}</h2><div class="ln"></div></div>
+    <div class="sub mono" style="font-size:9.5px;color:var(--mute)">${off} official · ${L.length-off} learning — official first, then by how sure it is. Colored = the pick made Today's card in that color.</div>
+    ${L.map(o=>charCallRowHtml(o)).join('')}`;}
+/* the character chip row: every character, with its weight badge and today's calls through the other filters */
+function charChipRow(F,setter,cur,o){o=o||{};const R=charCallsToday();
+  const n=o.count||(v=>(R.get(v)||[]).filter(x=>charCallPass(x,{...F,tier:'all'})).length);
+  return`<div class="slot-row ch-row">${o.noAny?'':`<button class="msg-chip${cur==='all'?' on':''}" onclick="${setter}('all')">Any character</button>`}${CHAR_ORDER.map(v=>{const C=CHARS[v];const k=n(v);
+    return`<button class="msg-chip${cur===v?' on':''}" style="${cur!==v?`color:${C.color};`:''}${k?'':'opacity:.5;'}" title="${esc((C.label||v)+' — '+(C.school||''))}" onclick="${setter}(${jsArg(v)})">${charWeightIcon(v)} ${C.chip} ${txtEsc(C.label||v)} <span style="opacity:.6">${k}</span></button>`;}).join('')}</div>`;}
+function tfSetCh(v){tfSet('ch',v);}
+/* 1st half, every character, one list (Today → 1st half): grouped by pick, official first */
+function halfListHtml(F){let T=[];try{T=halfToday();}catch(e){}T=T.filter(x=>F.sp==='all'||x.sp===F.sp);
+  if(!T.length)return`<div class="empty">No 1st-half calls today — they need the half lines in the day's intake file (H1SPREAD / H1ML / H1OU, P1PL / P1ML / P1OU).</div>`;
+  const by={};T.forEach(x=>{const k=x.sp+'|'+x.game+'|'+x.pick;(by[k]=by[k]||{x,v:[],off:false}).v.push(x.voice);if(x.official)by[k].off=true;});
+  const rows=Object.values(by).filter(o=>F.tier!=='play'||o.off).sort((a,b)=>(b.off-a.off)||(b.v.length-a.v.length));
+  const chip=v=>{const C=CHARS[v];return C?`<span class="hs-chip" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`:'';};
+  return`<div class="sbar" style="margin-top:6px"><h2>🕐 1st half · ${rows.length} pick${rows.length===1?'':'s'}</h2><div class="ln"></div></div>
+    ${rows.map(o=>`<div style="padding:6px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${o.off?'var(--win)':'var(--rule)'}"><div style="font-weight:800;font-size:12.5px">${txtEsc(o.x.pick)} ${o.x.price!=null?`<span class="mono" style="font-size:11px;color:var(--gold)">${tcSgn(o.x.price)}</span>`:''} <span class="mono" style="font-size:9px;font-weight:800;color:${o.off?'var(--win)':'var(--mute)'}">${o.off?'✅ OFFICIAL':'LEARNING'}</span></div>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(SP_LAB[o.x.sp]||o.x.sp)} · ${txtEsc(gameLabel(o.x.sp,o.x.game))}${gameWhenHtml(o.x.sp,o.x.game,o.x.start)} · ${o.v.length} character${o.v.length===1?'':'s'}</div><div class="hs-row" style="justify-content:flex-start">${o.v.map(chip).join('')}</div></div>`).join('')||'<div class="empty">No official half pick yet.</div>'}`;}
+/* props, every sport (Today → Props): the board's 70%+ props, then the characters' prop calls, grouped */
+function propsListHtml(F,by){const sps=Object.keys(by||{}).filter(sp=>F.sp==='all'||F.sp===sp);
+  const board=sps.flatMap(sp=>((by[sp]||{}).props||[]).map(x=>({sp,x}))).sort((a,b)=>(b.x.p||0)-(a.x.p||0));
+  const R=charCallsToday();const G=new Map();R.forEach((L,v)=>L.forEach(o=>{if(o.kind!=='prop'||(F.sp!=='all'&&o.sp!==F.sp))return;if(F.tier==='play'&&!o.off)return;const k=o.sp+'|'+o.pick;
+    const g=G.get(k)||{o,v:[],p:0};g.v.push(v);g.p=Math.max(g.p,o.conf||0);G.set(k,g);}));
+  const cp=[...G.values()].sort((a,b)=>b.v.length-a.v.length||b.p-a.p);
+  const chip=v=>{const C=CHARS[v];return C?`<span class="hs-chip" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`:'';};
+  if(!board.length&&!cp.length)return'<div class="empty">No props on today\'s card yet.</div>';
+  return(board.length?`<div class="sbar" style="margin-top:6px"><h2>🎯 Board props ≥70% · ${board.length}</h2><div class="ln"></div></div>${board.map(({sp,x})=>tcPropRowHtml(sp,x)).join('')}`:'')
+    +(cp.length?`<div class="sbar" style="margin-top:10px"><h2>🎭 Character prop calls · ${cp.length}</h2><div class="ln"></div></div><div class="sub mono" style="font-size:9.5px;color:var(--mute)">Most characters agreeing first. % = the surest character's chance.</div>
+      ${cp.slice(0,80).map(g=>`<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--rule)"><div style="flex:1;min-width:0"><b style="font-size:12px">${txtEsc(g.o.pick)}</b> <b class="mono" style="font-size:11px;color:var(--win)">${Math.round(g.p*100)}%</b>
+        <div class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(SP_LAB[g.o.sp]||g.o.sp)} · ${g.o.game?txtEsc(gameLabel(g.o.sp,g.o.game))+gameWhenHtml(g.o.sp,g.o.game,g.o.start):txtEsc(g.o.team||'')}</div></div><div class="hs-row">${g.v.map(chip).join('')}</div></div>`).join('')}`:'');}
 /* one pick's live read: ESPN event + the same live model the tickets use */
 function tcLive(sp,x){
   let e=null;try{e=mgEventFor(sp,x.game,today(),false)||mgEventFor(sp,x.game.split('@').reverse().join('@'),today(),false);}catch(err){}
@@ -18863,12 +19021,19 @@ function renderToday(noSnap){
   /* filter bar: tiers, characters, sport */
   const allP=sports.flatMap(sp=>(by[sp].picks||[]).map(x=>({sp,x})));
   const cnt=f=>allP.filter(({sp,x})=>tfPass(x,sp,{...F,...f})).length;
-  const fb=(k,v,lab,col)=>`<button class="msg-chip${F[k]===v?' on':''}" style="${col?`color:${col};`:''}" onclick="tfSet('${k}','${v}')">${lab} <span style="opacity:.6">${cnt({[k]:v})}</span></button>`;
-  const usedCh=CHAR_ORDER.filter(v=>allP.some(({x})=>(x.chars||[]).includes(v)));
+  const fb=(k,v,lab,col,n)=>{if(n===undefined)n=cnt({[k]:v});return`<button class="msg-chip${F[k]===v?' on':''}" style="${col?`color:${col};`:''}" onclick="tfSet('${k}','${v}')">${lab}${n!=null?` <span style="opacity:.6">${n}</span>`:''}</button>`;};
+  /* v2.87.0 · bet types, and every character — tap one to see what it would do today, and why its word carries weight or doesn't */
+  const chMode=F.ch!=='all'&&!!CHARS[F.ch];const special=F.bt==='half'||F.bt==='props';
+  const btN=k=>{try{if(chMode)return charCallsFor(F.ch,{...F,bt:k}).length;
+    if(k==='half')return(halfToday()||[]).filter(x=>(F.sp==='all'||x.sp===F.sp)&&(F.tier!=='play'||x.official)).length;
+    if(k==='props'){let n=0;sports.forEach(sp=>{if(F.sp==='all'||F.sp===sp)n+=((by[sp]||{}).props||[]).length;});const s0=new Set();charCallsToday().forEach(L=>L.forEach(o=>{if(o.kind==='prop'&&(F.sp==='all'||o.sp===F.sp)&&(F.tier!=='play'||o.off))s0.add(o.sp+'|'+o.pick);}));return n+s0.size;}
+    return cnt({bt:k});}catch(e){return null;}};
+  const tierN=t=>{try{return chMode?charCallsFor(F.ch,{...F,tier:t}).length:special?null:cnt({tier:t});}catch(e){return null;}};
   const bar=`<div style="margin:4px 0 8px">
-    <div>${fb('tier','play','✅ Official (70%+)','#3DDC84')}${fb('tier','all','All')}${fb('tier','unan','★ Unanimous','#ff6fae')}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,c)).join('')}</div>
-    <div>${fb('ch','all','Any character')}${usedCh.map(v=>fb('ch',v,`${CHARS[v].chip} ${CHARS[v].label||v}`,CHARS[v].color)).join('')}</div>
-    ${sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:''}</div>`;
+    <div class="slot-row">${BT_LIST.map(([k,l])=>fb('bt',k,l,null,btN(k))).join('')}</div>
+    <div>${fb('tier','play','✅ Official (70%+)','#3DDC84',tierN('play'))}${fb('tier','all','All',null,tierN('all'))}${fb('tier','unan','★ Unanimous','#ff6fae',tierN('unan'))}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,c,tierN(k.trim()))).join('')}</div>
+    ${charChipRow(F,'tfSetCh',F.ch)}
+    ${sports.length>1?`<div>${fb('sp','all','All sports',null,chMode||special?null:undefined)}${sports.map(sp=>fb('sp',sp,SP_LAB[sp],null,chMode||special?null:undefined)).join('')}</div>`:''}</div>`;
   const pct=v=>Math.round(v*100)+'%';
   const row=(sp,x,L)=>tcRowHtml(sp,x,L);
   /* live games, every sport, pinned to the top — closest-to-the-wire first */
@@ -18887,7 +19052,7 @@ function renderToday(noSnap){
     return`<div class="sbar" style="margin-top:10px"><h2>${SP_LAB[sp]} · ${shown}${shown!==total?' of '+total:''} pick${total===1?'':'s'}</h2><div class="ln"></div></div>
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
       ${rows||`<div class="empty">${total?'Nothing here matches the filter'+(P.length<total?' (live games are pinned above)':'')+'.':'No colored, non-conflicted picks on this board yet.'}</div>`}
-      ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
+      ${props&&F.tier==='all'&&F.ch==='all'&&F.bt==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
   const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['slots','⏰ By time'],['edge','🛡 Edge Desk'],['chars','🎭 Characters'],['parlays','🎲 Parlays'],['stars','⭐ Stars & Busts'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
@@ -18899,7 +19064,11 @@ function renderToday(noSnap){
   if(F.view==='edge'){let h='';try{h=typeof edgeDeskHtml==='function'?edgeDeskHtml():'';}catch(e){console.warn('edge desk',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}   /* v2.85.0 */
   if(F.view==='subs'){let h='';try{h=subCardHtml();}catch(e){console.warn('subscriber card',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   let hero='';try{if(typeof todayTopHtml!=='function')hero=todayBestHero();}catch(e){console.warn('best hero',e);}   /* v2.33 · the Best card sits at the top of Today, in every view */
-  el.innerHTML=vw+hero+legend+bar+(F.tier==='play'?`<div class="sub mono" style="font-size:9.5px;margin:-2px 0 8px;color:var(--win)">✅ Playable = every character on this side (or SUPREME), lane not blocked, model not fighting the market, has a book price no shorter than -300, +EV on what picks like it have actually hit. ${cnt({tier:'play'})} of ${allP.length} today.</div>`:'')+liveHtml+sdHtml+body;
+  /* v2.87.0 · a character picked → its profile and every call it made today; 1st half / props → their own lists */
+  let alt=null;try{if(chMode)alt=charProfileHtml(F.ch,{sp:F.sp,bt:F.bt})+charCallsHtml(F.ch,F);else if(F.bt==='half')alt=halfListHtml(F);else if(F.bt==='props')alt=propsListHtml(F,by);}catch(e){console.warn('today breakdown',e);alt='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}
+  const btNote=BT_NOTE[F.bt]?`<div class="sub" style="font-size:10px;margin:-2px 0 8px">${BT_NOTE[F.bt]}</div>`:'';
+  if(alt!=null){el.innerHTML=vw+hero+legend+bar+btNote+alt;return;}
+  el.innerHTML=vw+hero+legend+bar+btNote+(F.tier==='play'?`<div class="sub mono" style="font-size:9.5px;margin:-2px 0 8px;color:var(--win)">✅ Playable = every character on this side (or SUPREME), lane not blocked, model not fighting the market, has a book price no shorter than -300, +EV on what picks like it have actually hit. ${cnt({tier:'play'})} of ${allP.length} today.</div>`:'')+liveHtml+sdHtml+body;
 }
 
 /* ── 3. My Games: every game you have money on, all sports ────────────────── */
@@ -20873,17 +21042,24 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__&&!(typeof location!=='u
    leg per game, nothing shorter than -300, games already started are left
    off. "📣 Roll Call" builds one pick from each character instead. Lock it and
    it's a normal ticket — graded, settled and on your record like any other. */
-let CB_V=null,CB_N='auto',CB_SP='all',CB_SEL=null,CB_SIG='',CB_ALL=false;
+let CB_V=null,CB_N='auto',CB_SP='all',CB_SEL=null,CB_SIG='',CB_ALL=false,CB_BT='all',CB_CC=null;
+/* v2.87.0 · the candidates once per ledger change (every character asks for its pool now, to count it) */
+function cbCands(V,d){if(CB_CC&&CB_CC.V===V&&CB_CC.d===d&&Date.now()-CB_CC.t<30e3)return CB_CC.out;const out=bkDayCands(V,d);CB_CC={V,d,t:Date.now(),out};return out;}
+/* heavy favorites (-1000 or shorter) sit below the -300 floor, so they're built here, only when you ask for them */
+function cbHeavyCands(V,d,v){return V.filter(x=>String(x.date).slice(0,10)===d&&x.voice===v&&x.price!=null&&btMarket(x.market)==='ml'&&btHeavy(x.price))
+  .map(c=>{const s=cparLegScore(V,c);return{v,sp:c.sp,game:c.game,gd:String(c.date||'').slice(0,10)||null,m:'ml',sd:c.side,line:c.line,pick:charPickText(c),price:c.price,p:s.p,score:s.score,hr:s.hr,why:s.why,weak:s.weak};})
+  .filter(x=>!x.weak&&x.p>0).sort((a,b)=>b.score-a.score);}
+function cbSetBt(k){CB_BT=k;CB_SEL=null;renderTickets();}
 function cbStarted(sp,game){try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[sp]||{});const x=(B.picks||[]).find(y=>y.game===game&&y.start);
   if(x&&isFinite(Date.parse(x.start)))return Date.parse(x.start)<=Date.now();}catch(e){}
   try{const g=(sportGames(sp)||[]).find(z=>(z.away.abbr+'@'+z.home.abbr)===game);if(g){const a=String(g.abstract||g.state||'').toLowerCase();return!!a&&a!=='pre'&&a!=='preview'&&a!=='scheduled';}}catch(e){}return false;}
 function cbPool(v){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
   let L;if(v==='__roll'){let R=null;try{const S=bkDayState();R=(S.locked?S:S.preview||{}).roll;}catch(e){}L=((R&&R.legs)||[]).map(x=>({...x,by:[x.v]}));}
-  else L=(bkDayCands(V,d)[v]||[]);
-  L=L.filter(x=>bkPriceOk(x.price)&&!cbStarted(x.sp,x.game)&&(CB_SP==='all'||x.sp===CB_SP));
+  else L=CB_BT==='heavy'?cbHeavyCands(V,d,v):(cbCands(V,d)[v]||[]);const heavy=CB_BT==='heavy';
+  L=L.filter(x=>(heavy||bkPriceOk(x.price))&&btPass(CB_BT,x.m,x.price)&&!cbStarted(x.sp,x.game)&&(CB_SP==='all'||x.sp===CB_SP));
   /* v2.33 · the 70% rule: a character's ticket takes its OFFICIAL calls only, unless you ask for the learning calls too */
   if(typeof isOfficial==='function'){const M=new Map();V.forEach(c=>{if(String(c.date).slice(0,10)===d&&CHARS[c.voice])M.set(c.voice+'|'+c.sp+'|'+c.game+'|'+c.market+'|'+c.side,c);});
-    L=L.map(x=>{const c=M.get(x.v+'|'+x.sp+'|'+x.game+'|'+x.m+'|'+x.sd);return{...x,off:!!(c&&isOfficial(c)),cf:c?confOf(c):null};}).filter(x=>CB_ALL||x.off);}
+    L=L.map(x=>{const c=M.get(x.v+'|'+x.sp+'|'+x.game+'|'+x.m+'|'+x.sd);return{...x,off:!!(c&&isOfficial(c)),cf:c?confOf(c):null};}).filter(x=>CB_ALL||heavy||x.off);}
   const seen=new Set(),out=[];for(const x of L){const k=x.sp+'|'+x.game;if(seen.has(k))continue;seen.add(k);
     /* v1.93: chances through the truth map; blocked lanes left off · v2.33: an official call carries its confidence */
     let p=x.p;try{p=x.off&&x.cf!=null?x.cf:truthP(x.sp,x.p);}catch(e){}let lane='thin';try{lane=laneStatus(laneKey(x.sp,x.m,x.sd,x.price,x.line),x.v);}catch(e){}
@@ -20899,12 +21075,13 @@ function cbToggle(k){if(!CB_SEL)return;const i=CB_SEL.indexOf(k);if(i>=0)CB_SEL.
 function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const todays=V.filter(x=>String(x.date).slice(0,10)===d&&CHARS[x.voice]);
   if(!todays.length)return'<div class="empty">No character picks logged for today yet — open each sport\'s Games board once, then come back.</div>';
   let L=null;try{L=bkLedger();}catch(e){}
-  const counts={};todays.forEach(x=>{if(bkPriceOk(x.price)&&!x.graded&&(CB_ALL||typeof isOfficial!=='function'||isOfficial(x)))counts[x.voice]=(counts[x.voice]||0)+1;});
-  if(!CB_V||CB_V==='__roll'||!counts[CB_V])CB_V=CHAR_ORDER.filter(v=>counts[v]).sort((a,b)=>((L&&L.mult[b])||1)-((L&&L.mult[a])||1))[0]||null;
+  /* v2.87.0 · every character, counted through the bet type you picked (heavy favorites: every call — they're never official) */
+  const heavy=CB_BT==='heavy';const counts={};todays.forEach(x=>{if(x.price!=null&&(heavy||bkPriceOk(x.price))&&btPass(CB_BT,x.market,x.price)&&!x.graded&&(CB_ALL||heavy||typeof isOfficial!=='function'||isOfficial(x)))counts[x.voice]=(counts[x.voice]||0)+1;});
+  if(!CB_V||CB_V==='__roll'||!CHARS[CB_V])CB_V=CHAR_ORDER.filter(v=>counts[v]).sort((a,b)=>((L&&L.mult[b])||1)-((L&&L.mult[a])||1))[0]||CHAR_ORDER[0];
   const allTog=`<label class="mono" style="display:flex;gap:6px;align-items:center;font-size:10px;color:var(--mute);margin:2px 0 8px"><input type="checkbox" ${CB_ALL?'checked':''} onchange="CB_ALL=this.checked;CB_V=null;CB_SEL=null;renderTickets()" style="width:16px;height:16px;min-width:16px;margin:0">include the learning calls (under 70% — never official)</label>`;
   if(!CB_V)return`<div class="tkt"><h3>🎭 Build from a character</h3>${allTog}<div class="sub">No official (70%+) character picks are open right now.${CB_ALL?'':' Tick the box above to build from the learning calls anyway.'}</div></div>`;
-  const chip=v=>{const C=CHARS[v]||{};const W=L&&L.weeks[0].R[v];return`<button class="${CB_V===v?'on':''}" onclick="cbSetV('${v}')" style="${CB_V===v?'':'color:'+C.color}">${C.chip} <span class="mono" style="font-size:9px">${counts[v]||0}${W&&W.n?` · ${W.w}-${W.l}`:''}</span></button>`;};
-  const chips=`<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${CHAR_ORDER.filter(v=>counts[v]).map(chip).join('')}</div>`;
+  const chips=`<div style="margin-bottom:6px">${charChipRow({},'cbSetV',CB_V,{noAny:true,count:v=>counts[v]||0})}</div>`;
+  const btRow=`<div class="mktlab" style="margin-top:4px">Bet type</div><div class="slot-row" style="margin-bottom:4px">${BT_LIST.filter(([k])=>BT_LINES.includes(k)).map(([k,l])=>`<button class="msg-chip${CB_BT===k?' on':''}" onclick="cbSetBt('${k}')">${l}</button>`).join('')}</div>${BT_NOTE[CB_BT]?`<div class="sub" style="font-size:10px;margin-bottom:6px;color:${heavy?'var(--rust)':'var(--mute)'}">${BT_NOTE[CB_BT]}${heavy?' The -300 floor that guards every other ticket is lifted in this view only.':''}</div>`:''}`;
   const sps=[...new Set(todays.map(x=>x.sp))];
   const spRow=sps.length>1?`<div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${['all',...sps].map(sp=>`<button class="${CB_SP===sp?'on':''}" onclick="cbSetSp('${sp}')">${sp==='all'?'All sports':(SP_LAB[sp]||sp)}</button>`).join('')}</div>`:'';
   const nRow=`<div class="mktlab" style="margin-top:4px">Legs</div><div class="subnav" style="flex-wrap:wrap;margin-bottom:6px">${['auto',2,3,4,5,6].map(n=>`<button class="${String(CB_N)===String(n)?'on':''}" onclick="cbSetN('${n}')">${n==='auto'?'🏦 Banker picks':n}</button>`).join('')}</div>`;
@@ -20913,7 +21090,7 @@ function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const to
   const sel=pool.filter(x=>CB_SEL.includes(x.k));
   const who=CB_V==='__roll'?'The Roll Call':charName(CB_V);
   const intro=CB_V==='__roll'?'One pick from each character, best character first — a taken game goes to that character\'s next pick.'
-    :`${txtEsc(who)} — ${txtEsc((CHARS[CB_V]||{}).school||'')}. Its picks today, strongest first: its graded record on each exact spot blended with the pick's chance.`;
+    :`${txtEsc(who)}'s picks today, strongest first: its graded record on each exact spot blended with the pick's chance.`;
   const rec=c=>{try{const call=V.find(y=>y.voice===c.v&&y.sp===c.sp&&y.game===c.game&&y.market===c.m&&String(y.date).slice(0,10)===d);if(!call)return'';const h=charHist(V,call);
     const b=['h2h','team','where','role','sport'].map(k=>({...h.H[k],lab:h.lab[k]})).filter(o=>o.n>=3).sort((a,b)=>b.r-a.r)[0];return b?`${b.w}-${b.l} ${b.lab}`:'';}catch(e){return'';}};
   const rows=pool.map((x,i)=>{const on=CB_SEL.includes(x.k);const r=rec(x);const C=CHARS[x.v]||{};
@@ -20929,8 +21106,12 @@ function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const to
     ${sel.length>2&&pc<CORE_CASH_MIN?`<div class="mono" style="font-size:10px;color:var(--rust);margin:2px 0">⚠ ${(pc*100).toFixed(1)}% to cash is under the ${Math.round(CORE_CASH_MIN*100)}% leg budget — the best ${Math.max(2,legBudget(sel.map(x=>x.p).sort((a,b)=>b-a),sel.length))} of these cash ${(sel.map(x=>x.p).sort((a,b)=>b-a).slice(0,Math.max(2,legBudget(sel.map(x=>x.p).sort((a,b)=>b-a),sel.length))).reduce((a,p)=>a*p,1)*100).toFixed(0)}%</div>`:''}
     <div class="mono" style="font-size:10px;color:var(--mute)">${(pc*100).toFixed(1)}% to cash · EV ${pc*dec-1>=0?'+':''}${((pc*dec-1)*100).toFixed(1)}% at the leg chances${stake?` · Banker size $${stake.toFixed(2)} (¼-Kelly)`:''}</div>
     <div class="bar" style="margin-top:6px"><button class="primary" onclick="cbLock()">🔒 Lock this ticket</button></div></div>`:'<div class="sub" style="margin-top:6px">Check at least one pick to build a ticket.</div>';
-  return`<div class="tkt"><h3>🎭 Build from a character</h3><div class="sub" style="font-size:10px;margin-bottom:6px">${intro}</div>${allTog}${chips}${spRow}${nRow}
-    ${pool.length?rows:`<div class="sub">No open picks for ${txtEsc(who)} right now (priced -300 or better, game not started).</div>`}</div>${sum}`;}
+  /* v2.87.0 · who this character is, why its word carries weight or doesn't — and, when it has nothing to build, what it would do anyway */
+  let prof='';try{prof=CHARS[CB_V]?charProfileHtml(CB_V,{sp:CB_SP,bt:CB_BT}):'';}catch(e){}
+  let would='';if(!pool.length&&CHARS[CB_V]){try{const W=charCallsFor(CB_V,{sp:CB_SP,bt:CB_BT,tier:'all'}).filter(o=>o.kind==='line');
+    would=W.length?`<div class="mktlab" style="margin-top:8px">What ${txtEsc(who)} would do today — not buildable here</div><div class="sub" style="font-size:10px">${heavy?'':'Priced past -300, under the 70% rule, in a blocked lane or already started. '}Shown so you can see its read.</div>${W.sort((a,b)=>(b.off-a.off)||((b.conf||0)-(a.conf||0))).slice(0,30).map(o=>charCallRowHtml(o)).join('')}`:'';}catch(e){}}
+  return`${prof}<div class="tkt"><h3>🎭 Build from a character</h3><div class="sub" style="font-size:10px;margin-bottom:6px">${intro}</div>${allTog}${chips}${btRow}${spRow}${nRow}
+    ${pool.length?rows:`<div class="sub">No open picks for ${txtEsc(who)} right now${CB_BT!=='all'?' in '+txtEsc(btLabel(CB_BT)):''} (${heavy?'game not started':'priced -300 or better, game not started'}${CB_ALL||heavy?'':', official 70%+ — tick the box to include its learning calls'}).</div>${would}`}</div>${sum}`;}
 function cbLock(){const d=today();const pool=cbPool(CB_V);const sel=pool.filter(x=>(CB_SEL||[]).includes(x.k));if(!sel.length)return;
   const who=CB_V==='__roll'?'Roll Call':charName(CB_V);const id=Date.now();
   const legs=sel.map(x=>({id:id+'|'+x.pick,game:x.game,pick:x.pick,p:+(+x.p).toFixed(4),price:+x.price,sport:x.sp,gameDate:d,charVoice:x.v}));
