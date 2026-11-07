@@ -241,11 +241,18 @@ function bbSaveOdds(sp,picks,el){const C=bbC(sp);const rows=(picks||[]).map(x=>(
    plus ESPN-lined games with a ranked team (or the first 25 lined games when nothing's ranked) */
 const BB_WORK={};
 function bbWorkSet(sp){const C=bbC(sp);const n=C.games.length+C.up.length;const w=BB_WORK[sp];if(w&&w.n===n&&Date.now()-w.ts<3000)return w.s;
-  const s=new Set();let espnOnly=0;const td=today();
+  const s=new Set();const td=today();const rest=[];
   [...C.games,...C.up].sort((a,b)=>String(a.start).localeCompare(String(b.start))).forEach(g=>{const L=bbLinesFor(C,bbKey(g),g.__date);if(!L.length)return;
     if(sp!=='ncaab'||L.some(x=>x.src!=='espn'&&x.src!=='bol')||g.away.rank||g.home.rank){s.add(g.id);return;}   /* a BetOnline pull covers the whole college board — it doesn't make every game a workload */
-    if(espnOnly<25&&g.__date===td){espnOnly++;s.add(g.id);}});
+    if(g.__date===td)rest.push(g);});
+  /* v2.87.2 · the 25 extra college games are spread across the day — before 1 PM, 1–5, 5–8, 8+ in turn, earliest first in each. They
+     used to be the 25 earliest tips, so on a Saturday every evening game went unworked (Nov 7: "more CBB games after 5 PM aren't appearing"). */
+  if(rest.length){const W={};rest.forEach(g=>{const w=bbWin(g.start);(W[w]=W[w]||[]).push(g);});const lanes=['early','afternoon','evening','late'].map(k=>W[k]||[]);
+    let n2=0,i=0;while(n2<BB_EXTRA&&lanes.some(a=>a.length)){const a=lanes[i%4];i++;if(!a.length)continue;s.add(a.shift().id);n2++;}}
   BB_WORK[sp]={ts:Date.now(),n,s};return s;}
+const BB_EXTRA=25;
+function bbWin(st){let h=12;try{h=+new Intl.DateTimeFormat('en-US',{hour:'numeric',hourCycle:'h23',timeZone:typeof APP_TZ!=='undefined'?APP_TZ:'America/Chicago'}).format(new Date(st))%24;}catch(e){}
+  return h<13?'early':h<17?'afternoon':h<20?'evening':'late';}
 function bbWorkable(sp,g){try{return!!g&&bbWorkSet(sp).has(g.id);}catch(e){return false;}}
 /* ── intake grammar (same shape as every sport) ──────────────────────────────
    NBA (or NCAAB / CBB)

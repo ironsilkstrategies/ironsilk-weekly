@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17841,10 +17841,12 @@ if(typeof window!=='undefined')setTimeout(()=>{try{tcHeal();}catch(e){}},2500);
    a start time for any game, not just the ones this page loaded. Games already listed keep their place if the board drops them. */
 function tcSched(sp,prev){const d=today(),end=dayShift(d,2);const out=new Map();
   (Array.isArray(prev)?prev:[]).forEach(x=>{if(!x||!x.g||!x.s)return;const dd=tdDay(x.s);if(dd>=d&&dd<=end)out.set(x.g,x);});
-  (sportGames(sp)||[]).forEach(g=>{try{if(!g||!g.away||!g.home||g.pre||g.preseason)return;if(sp==='ncaab'&&typeof ncaabWorks==='function'&&!ncaabWorks(g))return;
+  /* v2.87.2 · college basketball: every game with a line (or a ranked team), not only the ones the characters work — w:0 marks the rest */
+  (sportGames(sp)||[]).forEach(g=>{try{if(!g||!g.away||!g.home||g.pre||g.preseason)return;let w=1;
+    if(sp==='ncaab'){w=typeof ncaabWorks==='function'&&ncaabWorks(g)?1:0;if(!w&&!(g.away.rank||g.home.rank)&&!((typeof sportLinesFor==='function'?sportLinesFor('ncaab',g):[])||[]).length)return;}
     const s=g.start||g.date||g.gameDate;const t=Date.parse(s||'');if(!isFinite(t))return;const dd=tdDay(s);if(dd<d||dd>end)return;
-    const k=g.away.abbr+'@'+g.home.abbr;out.set(k,{g:k,id:g.id!=null?String(g.id):null,s:new Date(t).toISOString()});}catch(e){}});
-  return[...out.values()].sort((a,b)=>a.s<b.s?-1:a.s>b.s?1:0).slice(0,240);}
+    const k=g.away.abbr+'@'+g.home.abbr;const o={g:k,id:g.id!=null?String(g.id):null,s:new Date(t).toISOString()};if(!w)o.w=0;out.set(k,o);}catch(e){}});
+  return[...out.values()].sort((a,b)=>a.s<b.s?-1:a.s>b.s?1:0).slice(0,320);}
 function todaySnapshot(force){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;if(!sp)return;
   const relay=(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)||(typeof EVAL_CHAIN_HOP!=='undefined'&&EVAL_CHAIN_HOP);

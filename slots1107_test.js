@@ -48,7 +48,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const W8=ms=>
   T('the predicted score (the Sim, and the most common score when it differs)',/Predicted Sim BOS 4–2 NYR · most common 3–2/.test(s0));
   T('how the characters split, per market (Banker and other blends left out)',/Characters: ML BOS ML all 3 · Total (Under|Over) 6\.5 1–1/.test(s0),(s0.match(/Characters:[^🎯🎭]*/)||[''])[0]);
   T('prop calls: the board\'s props ≥70% and the characters\' prop calls',/Stephen Curry 25\+ PTS 74%/.test(s0)&&/David Pastrnak 4\+ SOG 71% \(2 characters\)/.test(s0));
-  T('every game has its start time and an Open › to its full card',sb.querySelectorAll('.slot-game .gm-when').length===4&&sb.querySelectorAll('.slot-game button[onclick^="slotOpen("]').length===4);
+  T('every game has its start time and a Full card › to the board\'s own card',sb.querySelectorAll('.slot-game .gm-when').length===4&&sb.querySelectorAll('.slot-game button[onclick^="slotOpen("]').length===4);
   T('slot header: game count, sports, pick counts by tier, unanimous count, and how long until it starts',/3 games · 🏒 NHL · 🏀 NBA|3 games · 🏀 NBA · 🏒 NHL/.test(s0)&&/5 picks|4 picks/.test(s0)&&/1 SUPREME/.test(s0)&&/★ 1 unanimous/.test(s0)&&/in [12]h/.test(s0),s0.slice(0,260));
   /* the slot parlay */
   const pb=slots[0].querySelector('button[onclick^="slotParlay("]');
@@ -90,7 +90,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const W8=ms=>
   const src=['shared.js','desk-core.js','desk-revive.js'].map(f=>fs.readFileSync(path.join(W,f),'utf8')).join('\n');
   T('a game\'s start time is drawn wherever a game is named (Today rows and props, the Best card, hot hands, who agrees, the board list, the audit…)',(src.match(/gameWhenHtml\(/g)||[]).length>=20,String((src.match(/gameWhenHtml\(/g)||[]).length));
   /* deep link + the mode on reload */
-  T('Open › on another sport goes to that sport\'s page carrying the game',/slotOpen\(&quot;nba&quot;,&quot;9001&quot;\)/.test(sb.innerHTML)&&/game='\+encodeURIComponent\(gid\)/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8')));
+  T('Full card › on another sport goes to that sport\'s page carrying the game (and the slot to come back to)',/slotOpen\(&quot;nba&quot;,&quot;9001&quot;,&quot;\d{4}-\d{2}-\d{2}-\d+&quot;\)/.test(sb.innerHTML)&&/game='\+encodeURIComponent\(gid\)/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8'))&&/Full card ›/.test(sb.textContent));
   T('…and a page opened that way shows its own board, whatever mode was saved',/const dl=new URLSearchParams\(location\.search\|\|''\)\.get\('game'\);if\(dl\)\{SLOT_FORCE_BOARD=true;/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8')));
   T('the mode and the filters follow you to your other devices, like Today\'s filter',E(`syncSkip('d4.gmmode')`)===false&&E(`syncSkip('d4.slotf')`)===false&&E(`syncSkip('d4.todayfilter')`)===false);
   T('no errors along the way',errs.length===e0,errs.slice(e0).join(' | '));

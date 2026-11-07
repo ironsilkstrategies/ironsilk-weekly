@@ -2037,7 +2037,7 @@ const SLOT_WINS=[['up','⏭ Not over yet'],['all','Any time'],['early','Before 1
 const SLOT_DUR={nfl:3.6,ncaaf:3.9,nba:2.6,ncaab:2.3,nhl:2.8,mlb:3.3};   /* hours a game runs, when the live feed hasn't said */
 let SLOT_FORCE_BOARD=false;   /* "Open ›" on one game shows this sport's board for this visit, whatever mode is saved */
 function slotMode(){if(SLOT_FORCE_BOARD)return false;try{return localStorage.getItem(SLOT_MODE_K)==='slots';}catch(e){return false;}}
-function slotModeSet(on){SLOT_FORCE_BOARD=false;try{localStorage.setItem(SLOT_MODE_K,on?'slots':'sport');}catch(e){}slotApply();}
+function slotModeSet(on){SLOT_FORCE_BOARD=false;if(on){SLOT_BACK=null;slotBackClean();}try{localStorage.setItem(SLOT_MODE_K,on?'slots':'sport');}catch(e){}slotApply();try{slotBackPill();}catch(e){}}
 function slotF(){let F={};try{F=JSON.parse(localStorage.getItem(SLOT_F_K)||'{}')||{};}catch(e){}F=Object.assign({win:'up',tier:'all',sp:'all',ch:'all',day:'today',legs:'4',bt:'all'},F);if(F.ch!=='all'&&!CHARS[F.ch])F.ch='all';if(!BT_LIST.some(x=>x[0]===F.bt))F.bt='all';
   if(F.day!=='today'&&F.day!=='all'&&!(String(F.day)>=today()))F.day='today';return F;}
 function slotFSet(k,v){const F=slotF();F[k]=v;try{localStorage.setItem(SLOT_F_K,JSON.stringify(F));}catch(e){}slotRefresh();}
@@ -2063,10 +2063,10 @@ function slotGames(){const d=today();const T=roGet(TC_KEY,{})||{};const by=T.d==
     if(!g){g={sp,game,gid:gid!=null?String(gid):null,start:null,picks:[],props:[]};G.set(k,g);}
     if(!g.start&&st&&isFinite(Date.parse(st)))g.start=st;if(g.gid==null&&gid!=null)g.gid=String(gid);return g;};
   Object.entries(by).forEach(([sp,B])=>{if(!B||!on(sp))return;
-    (B.games||[]).forEach(x=>{if(x)add(sp,x.g,x.s,x.id);});
+    (B.games||[]).forEach(x=>{if(!x)return;const g=add(sp,x.g,x.s,x.id);if(g&&x.w===0)g.unworked=true;});
     (B.picks||[]).forEach(p=>{if(!p||!p.game)return;const g=add(sp,p.game,p.start,p.gid);if(g)g.picks.push(p);});
     (B.props||[]).forEach(p=>{if(!p||!p.game)return;const g=add(sp,p.game,p.start,null);if(g)g.props.push(p);});});
-  const here=typeof window!=='undefined'&&window.__PAGE_SPORT__;if(here&&on(here))try{tcSched(here,[]).forEach(x=>add(here,x.g,x.s,x.id));}catch(e){}
+  const here=typeof window!=='undefined'&&window.__PAGE_SPORT__;if(here&&on(here))try{tcSched(here,[]).forEach(x=>{const g=add(here,x.g,x.s,x.id);if(g)g.unworked=x.w===0;});}catch(e){}
   const out=[],now=Date.now();G.forEach(g=>{if(!g.start)g.start=gameStart(g.sp,g.game)||null;
     if(!g.start)try{const e=mgEventFor(g.sp,g.game,d,false);if(e&&e.start)g.start=e.start;}catch(x){}
     const t=Date.parse(g.start||'');if(!isFinite(t))return;g.t=t;g.day=tdDay(g.start);if(g.day<d)return;
@@ -2139,9 +2139,9 @@ function slotGameHtml(g,F,X){const e=txtEsc;
   return`<div class="slot-game" style="padding:9px 0 8px;border-top:1px solid var(--rule)">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="min-width:0"><span class="mono" style="font-size:10px;color:var(--mute)">${e(SP_LAB[g.sp]||g.sp)}</span>
       <div style="font-weight:800;font-size:14px">${gameLabelHtml(g.sp,g.game)}${gameWhenHtml(g.sp,g.game,g.start)}${live}</div></div>
-      <button onclick="slotOpen(${jsArg(g.sp)},${jsArg(g.gid)})" style="flex:none;font-size:11px;padding:5px 10px" title="Open this game's full card on the ${e(SP_LAB[g.sp]||g.sp)} board">Open ›</button></div>
+      <button onclick="slotOpen(${jsArg(g.sp)},${jsArg(g.gid)},${jsArg(g.day+'-'+g.t)})" style="flex:none;font-size:11px;padding:5px 10px" title="This game's full card — every tab — on the ${e(SP_LAB[g.sp]||g.sp)} board; ⏰ Back to time slots brings you right back">Full card ›</button></div>
     ${slotScoreHtml(g,X.SC)}
-    ${lineBt?(rows||`<div class="sub" style="font-size:10.5px;margin-top:4px">${g.picks.length?`${hid} pick${hid===1?'':'s'} on today's card for this game — none pass this filter.`:'No pick on today\'s card for this game — Open › for the full read.'}</div>`):''}
+    ${lineBt?(rows||`<div class="sub" style="font-size:10.5px;margin-top:4px">${g.picks.length?`${hid} pick${hid===1?'':'s'} on today's card for this game — none pass this filter.`:g.unworked?'The characters aren\'t working this one — college basketball works your Intake lines, ranked teams and 25 more spread across the day. Paste its line in Intake to add it, or Full card › for the board\'s read.':'No pick on today\'s card for this game — Full card › for the board\'s read.'}</div>`):''}
     ${rows&&hid?`<div class="sub mono" style="font-size:9.5px">＋${hid} more pick${hid===1?'':'s'} outside this filter</div>`:''}
     ${chHtml}${halfHtml}${lineBt?slotAgreeHtml(g,X.VI):''}${F.bt==='all'||F.bt==='props'?slotPropsHtml(g,X.CPI):''}</div>`;}
 function slotHeadHtml(pfx,s,F){const picks=s.games.flatMap(g=>g.picks.filter(x=>slotPass(x,g.sp,F)));
@@ -2199,13 +2199,32 @@ function slotParlay(key){const F=slotF();const s=slotView(F).slots.find(x=>x.key
   if(!legs.length){try{deskToast('Nothing left to add from this slot — every game is on your slip or has started',3200);}catch(e){}return;}
   let n=0;legs.forEach(o=>{try{const b=SLIP.length;deskSlipAdd(o.g.sp,o.g.game,o.p.pick,o.p.price,slotPickP(o.p),o.g.day);if(SLIP.length>b)n++;}catch(e){}});
   try{deskToast(`＋ ${n} leg${n===1?'':'s'} from the ${slotTime(s.t)} slot on your slip — Review ▲ to lock it in`,3800);}catch(e){}slotRefresh();}
-function slotJump(sp,gid){if(gid==null||gid==='')return;const ids=[sp+'-card-'+gid,'g'+gid];let n=0;
+function slotJump(sp,gid){if(gid==null||gid==='')return;const ids=[sp+'-card-'+gid,'g'+gid];let n=0,rev=false;
   try{const nb=[...document.querySelectorAll('nav>button')].find(b=>b.textContent.trim()==='Games');const v=document.getElementById('v-games');if(v&&!v.classList.contains('on'))tab('games',nb);}catch(e){}
   const tick=()=>{let c=null;for(const id of ids){c=document.getElementById(id);if(c)break;}
-    if(c){try{c.scrollIntoView({behavior:'smooth',block:'start'});c.style.transition='box-shadow .3s';c.style.boxShadow='0 0 0 2px var(--gold)';setTimeout(()=>{c.style.boxShadow='';},2200);}catch(e){}return;}
+    if(c){try{const hd=document.querySelector('header');const hh=hd?hd.getBoundingClientRect().height:0;   /* clear of the sticky header, so the card's names and time show */
+      window.scrollTo({top:Math.max(0,c.getBoundingClientRect().top+(window.scrollY||0)-hh-8),behavior:'smooth'});c.style.transition='box-shadow .3s';c.style.boxShadow='0 0 0 2px var(--gold)';setTimeout(()=>{c.style.boxShadow='';},2200);}catch(e){}return;}
+    /* the board shows a window at a time (CFB/NFL kickoff windows, CBB's lined games ten at a time): bring this game's into view */
+    if(!rev){try{if((sportGames(sp)||[]).some(g=>String(g.id)===String(gid))){rev=true;slotReveal(sp,gid);}}catch(e){}}
     if(++n<40)setTimeout(tick,500);else try{deskToast('That game isn\'t on the board right now — check the day picker above it',3500);}catch(e){}};tick();}
-function slotOpen(sp,gid){const here=window.__PAGE_SPORT__;
-  if(sp===here){SLOT_FORCE_BOARD=true;slotApply();slotJump(sp,gid);return;}
+/* v2.87.2 · "Full card ›" — the board's own card, every tab, then ⏰ Back to time slots, right where you were */
+let SLOT_BACK=null,SLOT_BBV=null;
+function slotReveal(sp,gid){try{const G=(sportGames(sp)||[]).find(g=>String(g.id)===String(gid));if(!G)return;
+  if(sp==='ncaaf'&&typeof ncaafWindowOf==='function'&&typeof ncaafPickSlate==='function'){const k=ncaafWindowOf(G).key;if(typeof NCAAF_SLATE==='undefined'||NCAAF_SLATE!==k)ncaafPickSlate(k);}
+  else if(sp==='nfl'&&typeof nflWindowOf==='function'&&typeof nflPickSlate==='function'){const k=nflWindowOf(G).key;if(typeof NFL_SLATE==='undefined'||NFL_SLATE!==k)nflPickSlate(k);}
+  else if((sp==='ncaab'||sp==='nba')&&typeof BB_VIEW!=='undefined'&&BB_VIEW[sp]&&typeof bbRender==='function'){if(!SLOT_BBV)SLOT_BBV={sp,v:Object.assign({},BB_VIEW[sp])};BB_VIEW[sp].q=G.home.abbr;BB_VIEW[sp].n=10;bbRender(sp);}}catch(e){console.warn('slot reveal',e);}}
+function slotBackPill(){if(typeof document==='undefined')return;let b=document.getElementById('slotBackPill');
+  if(!SLOT_BACK||slotMode()){if(b)b.remove();return;}
+  if(!b){b=document.createElement('button');b.id='slotBackPill';b.className='primary';b.onclick=slotBack;
+    b.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bnh,60px) + 16px);z-index:9000;padding:10px 16px;border-radius:999px;font-weight:800;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.55);white-space:nowrap';document.body.appendChild(b);}
+  let lab='';try{const t=+String(SLOT_BACK.key||'').split('-').pop();if(isFinite(t)&&t>0)lab=' · '+slotTime(t);}catch(e){}b.textContent='⏰ Back to time slots'+lab;}
+function slotBackClean(){if(SLOT_BBV){try{BB_VIEW[SLOT_BBV.sp]=SLOT_BBV.v;if(typeof bbRender==='function')bbRender(SLOT_BBV.sp);}catch(e){}SLOT_BBV=null;}try{sessionStorage.removeItem('d4.slotback');}catch(e){}}
+function slotBack(){const key=SLOT_BACK&&SLOT_BACK.key;SLOT_BACK=null;slotBackClean();SLOT_FORCE_BOARD=false;try{localStorage.setItem(SLOT_MODE_K,'slots');}catch(e){}
+  try{const nb=[...document.querySelectorAll('nav>button')].find(b=>b.textContent.trim()==='Games');const v=document.getElementById('v-games');if(v&&!v.classList.contains('on'))tab('games',nb);}catch(e){}
+  slotApply();slotBackPill();if(key)setTimeout(()=>{const el=document.getElementById('sg-'+key)||document.getElementById('slotBoard');if(el)try{el.scrollIntoView({block:'start'});}catch(e){}},60);}
+function slotOpen(sp,gid,key){const here=window.__PAGE_SPORT__;
+  if(sp===here){SLOT_BACK={key};SLOT_FORCE_BOARD=true;slotApply();slotJump(sp,gid);slotBackPill();return;}
+  try{sessionStorage.setItem('d4.slotback',JSON.stringify({key,t:Date.now()}));}catch(e){}
   try{const u=(typeof pageUrl==='function'&&pageUrl(sp))||SPORT_PAGE[sp];if(u)location.href=u+(gid!=null&&gid!==''?(u.indexOf('?')<0?'?':'&')+'game='+encodeURIComponent(gid):'');}catch(e){}}
 /* ── wiring ── */
 function slotRender0(){const el=document.getElementById('slotBoard');if(!el||!slotMode())return;
@@ -2225,7 +2244,8 @@ if(typeof document!=='undefined'&&!(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_E
     +'.slot-row{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:1px 0}.slot-row::-webkit-scrollbar{display:none}.slot-row>.msg-chip{flex:none;white-space:nowrap}';document.head.appendChild(st);
   const bar=document.createElement('div');bar.id='gmMode';bar.className='subnav';bar.style.cssText='margin:8px 0 6px';anchor.parentNode.insertBefore(bar,anchor);
   const box=document.createElement('div');box.id='slotBoard';anchor.parentNode.insertBefore(box,anchor);
-  try{const dl=new URLSearchParams(location.search||'').get('game');if(dl){SLOT_FORCE_BOARD=true;setTimeout(()=>slotJump(window.__PAGE_SPORT__,dl),700);}}catch(e){}
+  try{const dl=new URLSearchParams(location.search||'').get('game');if(dl){SLOT_FORCE_BOARD=true;let sb=null;try{sb=JSON.parse(sessionStorage.getItem('d4.slotback')||'null');}catch(e){}
+    if(sb&&Date.now()-(+sb.t||0)<2*36e5)SLOT_BACK={key:sb.key};setTimeout(()=>{slotJump(window.__PAGE_SPORT__,dl);slotBackPill();},700);}}catch(e){}
   slotApply();
   /* the view follows the board: when this page's board repaints, today's card catches up and the slots repaint */
   const sl=document.getElementById('slate');
