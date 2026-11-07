@@ -63,16 +63,39 @@ function feedCheck(leg,td,r,GL0){if(!r||r.live||r.manual||(r.hit==null&&!r.push)
   return{...r,conflict};}
 if(typeof gradeLeg==='function'&&typeof window!=='undefined'&&!window.__FEED_GL__){window.__FEED_GL__=1;const GL0=gradeLeg;
   gradeLeg=function(leg,td){const r=GL0(leg,td);try{return feedCheck(leg,td,r,GL0);}catch(e){return r;}};}
+/* §3 · v2.88.1 · PROPS — DraftKings' board through ESPN's public odds API (the robot, hourly): the "X+" milestone prices for
+   the Perfect SGP legs, and the 1st-half / 1st-period sides and moneylines for the 1st-half list when the day's paste has none.
+   Kept per device (cache key, never synced). Totals come as an untagged over/under pair, so only one-sided milestones are
+   priced — a price is never guessed. */
+const FEED_PROPS_K='d4.feedcache.propidx';let FEED_PROPS=null;
+const feedName=n=>String(n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(jr|sr|ii|iii|iv)\b\.?/g,'').replace(/[^a-z]/g,'');
+function feedStoreProps(data){if(!data||!data.ev)return 0;const P={},H={};let n=0;
+  Object.values(data.ev).forEach(E=>{if(!E||!E.sp)return;const game=feedAb(E.sp,E.a)+'@'+feedAb(E.sp,E.h);
+    (E.p||[]).forEach(r=>{const [nm,k,line,pr,kind]=r;if(kind!=='m'||line==null||!isFinite(pr))return;const key=E.sp+'|'+feedName(nm)+'|'+k;const L=P[key]||(P[key]=[]);
+      const o=L.find(x=>x[0]===line);if(!o)L.push([line,pr]);else if(o[1]!==pr)o[2]=1;n++;});
+    const h=E.half||{};const o={};if(h.ml&&h.ml.a&&h.ml.h&&isFinite(h.ml.a.price)&&isFinite(h.ml.h.price)&&h.ml.a.price&&h.ml.h.price)o.ml=h.ml;
+    if(h.sp&&h.sp.a&&h.sp.h&&h.sp.a.price&&h.sp.h.price&&isFinite(h.sp.a.line))o.sp=h.sp;if(Object.keys(o).length)H[E.sp+'|'+game]=o;});
+  Object.keys(P).forEach(k=>{P[k]=P[k].filter(x=>!x[2]);if(!P[k].length)delete P[k];});   /* a line with two different prices is two different bets — neither is priced */
+  set(FEED_PROPS_K,{ts:data.ts,P,H});FEED_PROPS=null;
+  /* the 1st-half sides and moneylines, under any the day's own paste already gave */
+  try{const d=today();const LN=get(HALFLN_KEY,null);const cur=LN&&LN.d===d?LN:{d,g:{}};let ch=0;
+    Object.entries(H).forEach(([k,h])=>{const g=cur.g[k]||(cur.g[k]={});if(!g.ml&&h.ml){g.ml=h.ml;g.src='dk';ch++;}if(!g.sp&&h.sp){g.sp=h.sp;g.src='dk';ch++;}});if(ch)set(HALFLN_KEY,cur);}catch(e){}
+  return n;}
+function feedPropsIdx(){if(FEED_PROPS)return FEED_PROPS;FEED_PROPS=get(FEED_PROPS_K,null)||{P:{},H:{}};return FEED_PROPS;}
+/* DraftKings' price on "<player> <thr>+ <stat>", when the board has that exact milestone */
+function feedPropPrice(sp,player,k,thr){try{const L=feedPropsIdx().P[sp+'|'+feedName(player)+'|'+k];if(!L)return null;const m=L.find(x=>+x[0]===+thr);return m?{price:m[1],lines:L.map(x=>x[0]).sort((a,b)=>a-b)}:{price:null,lines:L.map(x=>x[0]).sort((a,b)=>a-b)};}catch(e){return null;}}
 /* the background pass: fetch, merge, then stamp the CLV of every graded call that was waiting for its close */
 async function feedsTick(force){if(FEED_BUSY)return null;if(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)return null;FEED_BUSY=true;
-  try{const data=await feedFetch('closes',force);if(!data)return null;try{feedStoreFinals(data);}catch(e){}const n=feedMergeCloses(data);if(n){try{clvStampAll();}catch(e){}}return n;}finally{FEED_BUSY=false;}}
+  try{try{const pd=await feedFetch('props',force);if(pd)feedStoreProps(pd);}catch(e){}
+    const data=await feedFetch('closes',force);if(!data)return null;try{feedStoreFinals(data);}catch(e){}const n=feedMergeCloses(data);if(n){try{clvStampAll();}catch(e){}}return n;}finally{FEED_BUSY=false;}}
 /* how fresh the feeds are (the Book view shows it; a feed stale past 12 hours goes in the journal once a day) */
 function feedHealth(){const c=get(FEED_KEY('closes'),null);if(!c)return{st:'never',lab:'not read yet'};const age=c.ts?(Date.now()-Date.parse(c.ts))/36e5:null;
   if(age!=null&&age>FEED_STALE_H){try{journalAdd({sig:'feed-stale',sev:'info',what:`the closing-line feed is ${Math.round(age)} hours old`});}catch(e){}}
   return{st:c.fail&&!c.ts?'down':age!=null&&age>FEED_STALE_H?'stale':'ok',lab:c.ts?`updated ${Math.max(0,Math.round(age*60))} min ago · ${c.n||0} finals`:'no data yet'+(c.fail?` (${c.fail})`:'')};}
 function feedBoardHtml(){const H=feedHealth();const ico={ok:'🟢',stale:'🟡',down:'🔴',never:'⚪'}[H.st]||'⚪';
+  let prl='';try{const c=get(FEED_PROPS_K,null);if(c&&c.P)prl=`<div class="mono" style="font-size:10.5px">🎯 DraftKings props — ${Object.keys(c.P).length} player stat ladders · 1st-half lines for ${Object.keys(c.H||{}).length} games${c.ts?' · '+Math.max(0,Math.round((Date.now()-Date.parse(c.ts))/60e3))+' min old':''}</div>`;}catch(e){}
   let fin='';try{const c=get(FEED_FIN_K,null);if(c&&c.L)fin=`<div class="mono" style="font-size:10.5px">🧾 Finals for grading — ${c.L.length} from the last 10 days · ${c.x||0} double-checked against NHL.com / NBA.com / NCAA.com${c.bad?` · <b style="color:var(--gold)">${c.bad} disagree</b>`:''}</div>`;}catch(e){}
-  return`<div class="tkt"><h3 style="margin:0 0 4px">📡 The feeds</h3><div class="mono" style="font-size:10.5px">${ico} Closing lines (DraftKings, every final) — ${txtEsc(H.lab)}</div>${fin}<div class="sub" style="font-size:10px">Built off the phone every hour from public ESPN data, scores checked against the leagues' own feeds; read in the background, never synced.</div></div>`;}
+  return`<div class="tkt"><h3 style="margin:0 0 4px">📡 The feeds</h3><div class="mono" style="font-size:10.5px">${ico} Closing lines (DraftKings, every final) — ${txtEsc(H.lab)}</div>${fin}${prl}<div class="sub" style="font-size:10px">Built off the phone every hour from public ESPN data, scores checked against the leagues' own feeds; read in the background, never synced.</div></div>`;}
 if(typeof bookViewHtml==='function'&&typeof window!=='undefined'&&!window.__FEED_BV__){window.__FEED_BV__=1;const BV2=bookViewHtml;
   bookViewHtml=function(){const h=BV2();try{const i=h.indexOf('<div class="tkt"><h3 style="margin:0 0 4px">Today\'s story');return i>=0?h.slice(0,i)+feedBoardHtml()+h.slice(i):h+feedBoardHtml();}catch(e){return h;}};}
 try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='feeds')){const i=AP_STEPS.findIndex(s=>s[0]==='voices');

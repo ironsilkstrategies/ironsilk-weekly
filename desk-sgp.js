@@ -17,7 +17,7 @@
         product of calibrated chances (a same-game parlay's legs move together, so the book prices it shorter than this).
    Every leg says who it came from. */
 
-const SGP_F_K='d4.sgpf',SGP_DEF={th:0.70,coh:4,per:7,games:6,lo:20,hi:30,sp:'all'};
+const SGP_F_K='d4.sgpf',SGP_DEF={th:0.70,coh:4,per:7,games:6,lo:20,hi:30,sp:'all',dk:0};
 const SGP_SYS=new Set(['Banker','Best','Consensus','Covers','Trends']);
 function sgpF(){let f={};try{f=JSON.parse(localStorage.getItem(SGP_F_K)||'{}')||{};}catch(e){}return{...SGP_DEF,...f};}
 function sgpSet(k,v){const f=sgpF();f[k]=v;try{localStorage.setItem(SGP_F_K,JSON.stringify(f));}catch(e){}SGP_C=null;sgpRepaint();}
@@ -50,7 +50,9 @@ function sgpLegs(f){f=f||sgpF();const d=today();const games=sgpGames();const byG
     Object.values(byP).forEach(xs=>{const x0=xs[0];const G0=sgpTeamOf(x0.sp,x0.team,games);if(!G0)return;const g=byG[G0.sp+'|'+G0.game];
       let best=null;[...new Set(xs.map(x=>+x.thr))].sort((a,b)=>b-a).forEach(T=>{if(best)return;const at=xs.filter(x=>+x.thr===T);const ge=xs.filter(x=>+x.thr>=T);
         const nge=new Set(ge.map(x=>x.voice)).size;const pm=mcSig(at.reduce((a,x)=>a+mcLogit(x.p),0)/at.length);const p=mcalProp({sp:x0.sp,k:x0.k,pm,nge});
-        if(p>=f.th&&nge>=f.coh)best={kind:'p',sp:x0.sp,game:G0.game,player:x0.player,team:x0.team,k:x0.k,thr:T,p,pm,nge,by:[...new Set(ge.map(x=>x.voice))],pick:`${x0.player} ${T}+ ${(typeof CPROP_LAB!=='undefined'&&CPROP_LAB[x0.k])||x0.k}`};});
+        /* DraftKings' price on this exact line, when its board has it (and, asked for, only lines it offers) */
+        const dk=typeof feedPropPrice==='function'?feedPropPrice(x0.sp,x0.player,x0.k,T):null;if(f.dk&&!(dk&&dk.price!=null))return;
+        if(p>=f.th&&nge>=f.coh)best={kind:'p',sp:x0.sp,game:G0.game,player:x0.player,team:x0.team,k:x0.k,thr:T,p,pm,nge,dk:dk&&dk.price!=null?dk.price:null,by:[...new Set(ge.map(x=>x.voice))],pick:`${x0.player} ${T}+ ${(typeof CPROP_LAB!=='undefined'&&CPROP_LAB[x0.k])||x0.k}`};});
       xs.forEach(x=>g.chars.add(x.voice));if(best)g.legs.push(best);});}catch(e){console.warn('sgp props',e);}
   return Object.values(byG);}
 
@@ -88,22 +90,27 @@ function sgpData(){if(SGP_C&&Date.now()-SGP_C.t<60e3)return SGP_C.v;const f=sgpF
 const sgpOdds=p=>{if(!(p>0&&p<1))return'—';const a=p>=0.5?-Math.round(100*p/(1-p)):Math.round(100*(1-p)/p);return(a>0?'+':'')+a.toLocaleString();};
 const sgpOneIn=p=>p>0?'1 in '+Math.max(1,Math.round(1/p)).toLocaleString():'—';
 function sgpChips(by){return(by||[]).map(v=>{const C=CHARS[v]||{};return`<span class="mono" style="font-size:8.5px;color:${C.color||'var(--mute)'};border:1px solid ${C.color||'var(--rule)'};border-radius:3px;padding:0 3px;margin-right:2px;white-space:nowrap">${txtEsc(C.chip||v)}</span>`;}).join('');}
+const sgpAm=a=>(a>0?'+':'')+a;const sgpImp=a=>a>0?100/(a+100):(-a)/((-a)+100);const sgpDec=a=>a>0?1+a/100:1+100/(-a);
 function sgpLegHtml(x){const who=x.kind==='p'?`<b style="color:${x.nge>=5?'var(--win)':'var(--gold)'}">${x.nge}/5</b> clear it`:`${x.n} with it${x.no?` · ${x.no} against`:''}`;
-  return`<li style="margin:2px 0">${txtEsc(x.pick)} <b class="mono" style="color:var(--gold)">${Math.round(x.p*100)}%</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${who}</span><div style="margin-top:1px">${sgpChips(x.by)}</div></li>`;}
+  const pr=x.kind==='p'?x.dk:x.price;const edge=pr!=null?Math.round((x.p-sgpImp(pr))*100):null;
+  const px=pr!=null?` <span class="mono" style="font-size:9.5px;color:var(--chalk,#ddd)">${x.kind==='p'?'DK ':''}${sgpAm(pr)}</span>${edge!=null?` <span class="mono" style="font-size:9.5px;color:${edge>=0?'var(--win)':'var(--rust)'}">${edge>=0?'+':''}${edge}</span>`:''}`:'';
+  return`<li style="margin:2px 0">${txtEsc(x.pick)} <b class="mono" style="color:var(--gold)">${Math.round(x.p*100)}%</b>${px} <span class="mono" style="font-size:9.5px;color:var(--mute)">${who}</span><div style="margin-top:1px">${sgpChips(x.by)}</div></li>`;}
+/* the legs' own prices multiplied, when every leg has one — what they'd pay as a straight parlay (an SGP pays less) */
+function sgpBook(legs){const pr=legs.map(x=>x.kind==='p'?x.dk:x.price);if(!pr.length||pr.some(a=>a==null))return null;const d=pr.reduce((a,b)=>a*sgpDec(b),1);return d>2?'+'+Math.round((d-1)*100).toLocaleString():null;}
 function sgpGameHtml(G,i){const st=G.start?gameWhen(G.sp,G.game,G.start):'';
   return`<div class="tkt" style="margin:6px 0"><div style="display:flex;justify-content:space-between;gap:6px;align-items:baseline"><div style="font-weight:900">${i+1}. ${SGP_SP_LAB[G.sp]||''} ${typeof gameLabelHtml==='function'?gameLabelHtml(G.sp,G.game):txtEsc(G.game)}</div><div class="mono" style="font-size:10px;color:var(--gold)">${st?'⏰ '+st:''}</div></div>
     <div class="mono" style="font-size:9.5px;color:var(--mute);margin:2px 0">${G.sgp.length} legs · ${sgpOneIn(G.joint)} (${sgpOdds(G.joint)} fair) · ${G.chars.size} characters on this game${G.banker?' · 🏦 Banker in':''}${G.sys.size?' · systems: '+[...G.sys].map(v=>(CHARS[v]||{}).chip||v).join(', '):''}</div>
     <ol style="margin:4px 0 0 18px;padding:0">${G.sgp.map(sgpLegHtml).join('')}</ol>
     <div class="bar" style="margin-top:4px"><button onclick="sgpCopy('g',${i})">📋 Copy this SGP</button></div></div>`;}
 function sgpComboHtml(C,i){return`<details class="tkt" style="margin:5px 0"><summary><b>#${i+1}</b> · ${C.games.length} games · <b>${C.legs.length} legs</b>${C.short?' <span style="color:var(--gold)">(short of 20)</span>':''} · <b class="mono" style="color:var(--gold)">${sgpOneIn(C.joint)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${sgpOdds(C.joint)} fair</span>
-    <div class="mono" style="font-size:9.5px;color:var(--mute)">${C.games.map(g=>txtEsc(g.game)).join(' · ')}</div></summary>
+    <div class="mono" style="font-size:9.5px;color:var(--mute)">${C.games.map(g=>txtEsc(g.game)).join(' · ')}${(()=>{const b=sgpBook(C.legs);const n=C.legs.filter(x=>(x.kind==='p'?x.dk:x.price)!=null).length;return b?` · as straight legs ${b}`:n?` · ${n}/${C.legs.length} legs priced`:'';})()}</div></summary>
     ${C.games.map(g=>`<div class="mono" style="font-size:10px;margin:6px 0 2px;color:var(--gold)">${SGP_SP_LAB[g.sp]||''} ${txtEsc(g.game)}</div><ol style="margin:0 0 0 18px;padding:0">${C.legs.filter(x=>x._g===g.game).map(sgpLegHtml).join('')}</ol>`).join('')}
     <div class="bar" style="margin-top:4px"><button onclick="sgpCopy('c',${i})">📋 Copy all ${C.legs.length} legs</button></div></details>`;}
 function sgpText(legs,games){return games.map(g=>`${g.sp.toUpperCase()} ${g.game}\n`+legs.filter(x=>(x._g||x.game)===g.game).map(x=>`  • ${x.pick} (${Math.round(x.p*100)}%)`).join('\n')).join('\n');}
 function sgpCopy(kind,i){try{const D=sgpData();let t='';if(kind==='g'){const G=D.games[i];t=sgpText(G.sgp,[G]);}else{const C=D.combos[i];t=sgpText(C.legs,C.games);}
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>{try{deskToast('📋 Copied',1500);}catch(e){}}).catch(()=>{});}catch(e){console.warn('sgp copy',e);}}
 function sgpHtml(){let D;try{D=sgpData();}catch(e){return`<div class="tkt"><div class="sub">${txtEsc(e.message)}</div></div>`;}const f=D.f;
-  const chip=(k,v,lab)=>`<button class="${f[k]===v?'on':''}" onclick="sgpSet('${k}',${typeof v==='string'?`'${v}'`:v})">${lab}</button>`;
+  const chip=(k,v,lab)=>`<button class="${f[k]===v||(k==='dk'&&f.dk&&v===0)?'on':''}" onclick="sgpSet('${k}',${typeof v==='string'?`'${v}'`:v})">${lab}</button>`;
   const sps=['all',...new Set(D.games.map(g=>g.sp))];
   const M=typeof mcalModel==='function'?mcalModel():null;
   const head=`<div class="tkt" style="margin-bottom:6px"><h3 style="margin:0 0 4px">🎯 Perfect SGPs</h3>
@@ -111,8 +118,8 @@ function sgpHtml(){let D;try{D=sgpData();}catch(e){return`<div class="tkt"><div 
     <div class="subnav" style="margin-top:6px">${chip('th',0.65,'65%+')}${chip('th',0.70,'70%+')}${chip('th',0.75,'75%+')}${chip('th',0.80,'80%+')}</div>
     <div class="subnav">${chip('coh',3,'3 of 5 agree')}${chip('coh',4,'4 of 5')}${chip('coh',5,'all 5')}</div>
     <div class="subnav">${chip('per',5,'≤5 a game')}${chip('per',7,'≤7')}${chip('per',9,'≤9')}${chip('games',5,'top 5 games')}${chip('games',6,'top 6')}${chip('games',8,'top 8')}</div>
-    <div class="subnav">${sps.map(s=>chip('sp',s,s==='all'?'All sports':(SGP_SP_LAB[s]||s))).join('')}</div>
-    <div class="sub mono" style="font-size:9px;color:var(--mute)">Chances are the product of each leg's calibrated chance — a same-game parlay's legs move together, so the book prices it shorter. In the ledger, a prop all five characters clear hit 79%; one only 1–2 of them clear, about 65%.</div></div>`;
+    <div class="subnav">${sps.map(s=>chip('sp',s,s==='all'?'All sports':(SGP_SP_LAB[s]||s))).join('')}${chip('dk',f.dk?0:1,f.dk?'✓ DraftKings lines only':'Any line')}</div>
+    <div class="sub mono" style="font-size:9px;color:var(--mute)">A prop shows DraftKings' price on that exact line when its board has it (and how far the calibrated chance is above or below the price). Chances are the product of each leg's calibrated chance — a same-game parlay's legs move together, so the book prices it shorter. In the ledger, a prop all five characters clear hit 79%; one only 1–2 of them clear, about 65%.</div></div>`;
   if(!D.games.length)return head+`<div class="tkt"><div class="sub">No game today has two or more legs at ${Math.round(f.th*100)}%+ with ${f.coh} of 5 characters behind them yet${f.coh>3||f.th>0.65?' — try a lower bar above':''}. Props and sides fill in as the characters make today's calls.</div></div>`;
   const combos=D.combos.slice(0,40);
   return head+`<div class="sbar"><h2>The slates — ${D.combos.length} combos</h2><div class="ln"></div></div>${combos.length?combos.map(sgpComboHtml).join(''):`<div class="sub">Fewer than 4 games qualify — the best single-game SGPs are below.</div>`}${D.combos.length>40?`<div class="sub mono" style="font-size:9.5px">Showing the 40 likeliest of ${D.combos.length}.</div>`:''}

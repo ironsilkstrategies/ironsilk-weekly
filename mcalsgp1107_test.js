@@ -59,6 +59,16 @@ setTimeout(()=>{try{const E=s=>w.eval(s);const e0=errs.length;const J=JSON.strin
   E(`sgpSet('coh',4);sgpSet('per',7);`);
   const txt=E(`sgpText(sgpData().combos[0].legs,sgpData().combos[0].games)`);
   T('copy gives the book-ready list, game by game',/^NBA [A-Z]+@[A-Z]+\n  • /.test(txt)&&/\(\d+%\)/.test(txt),txt.slice(0,120));
+  /* DraftKings' board (the feeds robot's props.json): milestone prices on the legs, 1st-half sides into the half lines */
+  const PJ={v:1,ts:new Date().toISOString(),ev:{e1:{sp:'nba',a:'NY',h:'CLE',st:'2026-11-08T00:00Z',p:[['NY@CLE-P1','pts',11,-300,'m'],['NY@CLE-P1','pts',15,120,'m'],['NY@CLE-P1','pts',11.5,-140,'t'],['NY@CLE-P1','pts',11.5,110,'t']],
+    half:{ml:{a:{price:150},h:{price:-180}},sp:{a:{line:3.5,price:-110},h:{line:-3.5,price:-110}},ou:{line:110.5,pr:[-112,-108]}}}}};
+  E(`feedStoreProps(${J(PJ)});SGP_C=null;`);
+  T('a prop leg carries DraftKings\' price on that exact line (11+ at -300) and the calibrated edge over it',E(`(()=>{const g=sgpData().games.find(g=>g.game==='NY@CLE');const x=g.sgp.find(x=>x.player==='NY@CLE-P1');return x&&x.dk===-300;})()`));
+  T('…a total\'s untagged over/under pair is never priced (no guessing which is which)',E(`feedPropPrice('nba','NY@CLE-P1','pts',12)`).price===null);
+  T('…and the 1st-half sides and moneylines fill the half lines when the day\'s paste has none (the total stays out)',E(`(()=>{const L=get(HALFLN_KEY,null);const g=L&&L.g['nba|NY@CLE'];return!!g&&g.ml.h.price===-180&&g.sp.a.line===3.5&&!g.ou&&g.src==='dk';})()`));
+  E(`sgpSet('dk',1)`);
+  T('"DraftKings lines only": every prop leg left is one DraftKings prices',E(`sgpData().games.every(g=>g.sgp.every(x=>x.kind!=='p'||x.dk!=null))`)&&E(`sgpData().games.length`)>=1);
+  E(`sgpSet('dk',0)`);
   E(`TICKETTAB='build';BUILD_MODE='sgp';renderTickets()`);
   const tb=(w.document.getElementById('ticketBody')||{}).textContent||'';
   T('Tickets → Build → 🎯 Perfect SGPs: the slates, then the games in the Banker\'s order, every leg credited',/🎯 Perfect SGPs/.test(tb)&&/The slates — 6 combos/i.test(tb)&&/Banker's order/i.test(tb)&&/★ SIM/.test(tb),tb.slice(0,200));

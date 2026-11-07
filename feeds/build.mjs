@@ -73,10 +73,11 @@ const PROP_SP={nba:['basketball/nba','basketball/leagues/nba'],ncaab:['basketbal
   nhl:['hockey/nhl','hockey/leagues/nhl'],nfl:['football/nfl','football/leagues/nfl'],ncaaf:['football/college-football','football/leagues/college-football','&groups=80&limit=300']};
 const PROP_MAX_EV={nba:15,nhl:16,nfl:16,ncaaf:40,ncaab:60};
 /* the stat a DraftKings prop type is about (combos like "Points and Rebounds" are left out) */
-function propStat(sp,t){t=String(t||'');if(/ and |,|\+|double|triple|first|last|anytime|to score|to record|1st|2nd|3rd|4th|quarter|half|period|moneyline|spread|team|both|overtime/i.test(t))return null;
-  if(sp==='nhl'){if(/shots on goal/i.test(t))return's';if(/^total points|points milestones/i.test(t))return'pts';if(/assists/i.test(t))return'ast';if(/goals milestones/i.test(t))return'g';return null;}
-  if(sp==='nba'||sp==='ncaab'){if(/^total points|points milestones/i.test(t))return'pts';if(/rebounds/i.test(t))return'reb';if(/assists/i.test(t))return'ast';if(/3-point|three/i.test(t))return'fg3';return null;}
-  if(/passing yards/i.test(t))return'py';if(/rushing yards/i.test(t))return'ry';if(/receiving yards/i.test(t))return'wy';if(/receptions/i.test(t))return'rec';return null;}
+function propStat(sp,t){t=String(t||'').trim().replace(/\s+/g,' ');const is=(re)=>re.test(t);   /* exact names only — "Offensive Rebounds" is not rebounds */
+  const M=n=>new RegExp('^(total )?'+n+'( milestones)?$','i');
+  if(sp==='nhl'){if(is(M('shots on goal')))return's';if(is(M('points')))return'pts';if(is(M('assists')))return'ast';if(is(/^goals milestones$/i))return'g';return null;}
+  if(sp==='nba'||sp==='ncaab'){if(is(M('points')))return'pts';if(is(M('rebounds')))return'reb';if(is(M('assists')))return'ast';if(is(M('(3-point field goals|threes|3-pointers made)')))return'fg3';return null;}
+  if(is(M('passing yards')))return'py';if(is(M('rushing yards')))return'ry';if(is(M('receiving yards')))return'wy';if(is(M('receptions')))return'rec';return null;}
 const refId=(o,re)=>{const m=String((o||{}).$ref||'').match(re);return m?m[1]:null;};
 async function buildProps(diag){const now=Date.now();const ath=read('ath.json')||{v:1,a:{}};const A=ath.a||{};const out={v:1,ts:new Date(now).toISOString(),ev:{}};const D={ev:0,items:0,props:0,half:0,types:{},err:[]};
   const days=[0,1].map(b=>etDay(now+b*864e5).replace(/-/g,''));
@@ -100,7 +101,8 @@ async function buildProps(diag){const now=Date.now();const ath=read('ath.json')|
         if(/total/.test(tt)&&!/team/.test(tt)){(H.ouL=H.ouL||[]).push(x);}
         else if(/spread|puck line/.test(tt)&&side){(H.sp=H.sp||{})[side]={line:x.line,price:x.pr};}
         else if(/moneyline/.test(tt)&&side){(H.ml=H.ml||{})[side]={price:x.pr};}});
-      if(H.ouL&&H.ouL.length>=2){const L=H.ouL.filter(x=>x.line===H.ouL[0].line);if(L.length>=2)H.ou={line:L[0].line,o:L[0].pr,u:L[1].pr};}delete H.ouL;
+      /* the pair carries no over/under tag and its order isn't reliable — the line, and both prices unassigned */
+      if(H.ouL&&H.ouL.length>=2){const L=H.ouL.filter(x=>x.line===H.ouL[0].line);if(L.length>=2)H.ou={line:L[0].line,pr:[L[0].pr,L[1].pr]};}delete H.ouL;
       if(Object.keys(H).length){E.half=H;D.half++;}
       if(!D.halfSample&&half.length)D.halfSample=JSON.stringify(half.slice(0,3).map(x=>({t:x.t,pr:x.pr,line:x.line,team:x.team,keys:Object.keys(x.raw)}))).slice(0,600);
       /* names: looked up once, kept */
