@@ -94,8 +94,14 @@ async function buildProps(diag){const now=Date.now();const ath=read('ath.json')|
       const half=[];
       items.forEach(it=>{const t=(it.type||{}).name||'';D.types[sp+'|'+t]=(D.types[sp+'|'+t]||0)+1;const pr=+((it.odds||{}).american||{}).value;const line=+(((it.current||{}).target||{}).value);
         const aid=refId(it.athlete,/athletes\/(\d+)/);
-        if(aid){const k=propStat(sp,t);if(!k||!isFinite(pr))return;E.p.push([aid,k,isFinite(line)?line:null,pr,/milestone/i.test(t)?'m':'t']);return;}
+        if(aid){const k=propStat(sp,t);if(!k||!isFinite(pr))return;E.p.push([aid,k,isFinite(line)?line:null,pr,/milestone/i.test(t)?'m':'t',String((it.type||{}).id||'')]);return;}
         if(/^(1st half|1st period)/i.test(t))half.push({t,pr,line,team:refId(it.team,/teams\/(\d+)/)||refId(it.competitor,/competitors\/(\d+)/),raw:it});});
+      /* one stat name can carry two ladders (DraftKings' 1st-quarter "Rebounds Milestones" shares the full game's name, under
+         another type id): per player and stat, the full-game ladder is the one with the higher lines */
+      {const G={};E.p.forEach(r=>{const k=r[0]+'|'+r[1]+'|'+r[4];(G[k]=G[k]||{})[r[5]]=(G[k][r[5]]||[]).concat([r]);});
+        const keep=new Set();Object.values(G).forEach(byT=>{const med=L=>{const v=L.map(r=>+r[2]).filter(isFinite).sort((a,b)=>a-b);return v.length?v[Math.floor(v.length/2)]:0;};
+          const best=Object.entries(byT).sort((a,b)=>med(b[1])-med(a[1])||b[1].length-a[1].length)[0];if(best)best[1].forEach(r=>keep.add(r));});
+        E.p=E.p.filter(r=>keep.has(r)).map(r=>r.slice(0,5));}
       /* first half / first period: totals come as an over-under pair at one line; sides carry their team */
       const H={};half.forEach(x=>{const tt=x.t.toLowerCase();const side=x.team===e.ta?'a':x.team===e.th?'h':null;
         if(/total/.test(tt)&&!/team/.test(tt)){(H.ouL=H.ouL||[]).push(x);}
