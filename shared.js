@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18025,7 +18025,7 @@ function charDayHtml(sp){const d=CDAY_D||today();const isToday=d===today();
   const one=sp&&sp!=='all';const L=charDayRecord(d,one?sp:'all');
   /* every sport played that day gets its own table under the combined one */
   const per=one?[]:CDAY_SPORTS.map(s0=>({s0,L:charDayRecord(d,s0)})).filter(x=>x.L.length);
-  const body=!L.length?`<div class="sub">No character calls logged for ${isToday?'today yet — open a sport\'s board once':'that day'}.</div>`
+  const body=!L.length?(storeDegraded()?`<div class="sub" style="color:var(--gold)">Your saved history didn't load on this page (the phone's storage didn't answer in time) — nothing is lost. Force-quit TheDesk and reopen it. <button onclick="location.reload()">↻ Reload</button></div>`:`<div class="sub">No character calls logged for ${isToday?'today yet — open a sport\'s board once':'that day'}.</div>`)
     :(one?charDayTable(L):`${per.length>1?'<div class="mktlab" style="margin-top:2px">All sports</div>':''}${charDayTable(L)}${per.length>1?per.map(({s0,L:Ls})=>`<details style="margin-top:6px" open><summary class="mktlab" style="cursor:pointer">${txtEsc(SP_LAB[s0]||s0.toUpperCase())}</summary>${charDayTable(Ls)}</details>`).join(''):''}`);
   return`<div class="tkt" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><h3 style="margin:0">📅 Character scoreboard · ${txtEsc(lab)}</h3>
       <div><button onclick="cdayStep(-1)" style="padding:2px 9px">‹</button><button onclick="cdayStep(1)" style="padding:2px 9px"${isToday?' disabled':''}>›</button></div></div>
@@ -19224,7 +19224,11 @@ function memRetain(k,m){try{if(!m||typeof m!=='object'||Array.isArray(m))return 
   if(R){const cut=dayShift(today(),-R[1]);Object.keys(m).forEach(x=>{const d=(x.match(/^\d{4}-\d{2}-\d{2}/)||[])[0];if(d&&d<cut)delete m[x];});}
   else if(k==='d4.fbbox'){const cut=Date.now()-10*864e5;Object.keys(m).forEach(x=>{const v=m[x];if(v&&+v.ts&&+v.ts<cut)delete m[x];});}
   return m;}catch(e){return m;}}
-function storageTidy(force){
+/* v2.86.7 · a page running without the big store (IndexedDB didn't answer) sees only the small shelf — nothing it does may trim,
+   prune or back up "history" it can't see. True when IndexedDB exists but didn't load this time. */
+function storeDegraded(){try{return!!(typeof window!=='undefined'&&window.D4_STORE&&window.D4_STORE.degraded&&window.D4_STORE.degraded());}catch(e){return false;}}
+function storeWhyText(){try{const W=window.D4_STORE&&window.D4_STORE.why&&window.D4_STORE.why();return W&&W.why?String(W.why):'';}catch(e){return'';}}
+function storageTidy(force){if(storeDegraded())return 0;
   const d=today();try{if(force||get('d4.memtidy','')!==d){memTidy();set('d4.memtidy',d);}}catch(e){}   /* its own daily mark, so it runs today too */
   if(!force&&get('d4.tidyDay','')===d)return 0;let n=0;
   const dated=[LS.extpicks,LS.exttrends,LS.extconsensus,LS.nflext,LS.nfltrends,LS.nflconsensus].filter(Boolean);
@@ -19236,11 +19240,17 @@ function storageTidy(force){
   try{const cap=5*1024*1024;let i=0;while(storageReport().tot>cap*0.75&&i<PRUNE_LADDER.length){if(PRUNE_LADDER[i]())n++;i++;}}catch(e){}
   set('d4.tidyDay',d);return n;
 }
+/* v2.86.7 · a page that came up without the big store says so at the top: what you see is missing your history, nothing is lost,
+   and nothing will be saved over it — force-quit and reopen */
+if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{try{if(!storeDegraded()||document.getElementById('storeWarn'))return;const b=document.createElement('div');b.id='storeWarn';
+  b.style.cssText='position:sticky;top:0;z-index:90;background:#3a2a05;color:#f5c542;border-bottom:1px solid #f5c542;padding:9px 14px;font:600 13px system-ui;line-height:1.4';
+  b.innerHTML=`⚠️ Your saved history didn't load this time${storeWhyText()?' ('+txtEsc(storeWhyText())+')':''}. Nothing is lost and nothing will be saved over it — force-quit TheDesk (swipe it away) and reopen it. <button onclick="location.reload()" style="margin-left:6px">↻ Reload</button>`;
+  document.body.insertBefore(b,document.body.firstChild);}catch(e){}});
 function storageMeterHtml(){
   const R=storageReport(),cap=5*1024*1024,pct=Math.min(100,R.tot/cap*100);
   const col=pct>85?'var(--rust)':pct>65?'var(--gold)':'var(--win)';
   const SB=(typeof window!=='undefined'&&window.D4_STORE&&window.D4_STORE.on())?window.D4_STORE.bytes():null;
-  return`<div class="sub"><b>${(R.tot/1048576).toFixed(2)} MB</b> of ~5 MB used (${pct.toFixed(0)}%) on the small shelf${SB?` · <b style="color:var(--win)">${(SB.db/1048576).toFixed(2)} MB</b> of history in the big store (no cap)`:' · <span style="color:var(--gold)">big store not active on this device</span>'}</div>
+  return`<div class="sub"><b>${(R.tot/1048576).toFixed(2)} MB</b> of ~5 MB used (${pct.toFixed(0)}%) on the small shelf${SB?` · <b style="color:var(--win)">${(SB.db/1048576).toFixed(2)} MB</b> of history in the big store (no cap)`:` · <span style="color:var(--gold)">big store not active on this device${storeWhyText()?' — '+txtEsc(storeWhyText()):''}</span>${storeDegraded()?' <button onclick="location.reload()">↻ Reload</button>':''}`}</div>
     <div style="height:7px;background:var(--rule);border-radius:4px;margin:4px 0"><div style="height:7px;width:${pct}%;background:${col};border-radius:4px"></div></div>
     ${R.rows.slice(0,8).map(([k,n])=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${txtEsc(k)}</span><span>${(n/1024).toFixed(0)} KB</span></div>`).join('')}
     ${PERF_LOG.length?`<div class="mktlab" style="margin-top:8px">Speed on this device</div>${PERF_LOG.slice(-10).reverse().map(x=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${txtEsc(x.what)}</span><span style="color:${x.ms>800?'var(--rust)':x.ms>250?'var(--gold)':'var(--win)'}">${x.ms} ms</span></div>`).join('')}`:''}
@@ -22334,7 +22344,7 @@ const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tom
 let CLOUD_SEEN=null,SYNC_LOCAL_N=0;   /* v2.51 · the cloud commit this device last saw, and a count of its own synced writes */
 /* v2.80.3 · + the crash guard and the master-eval relay: both describe THIS device's last few minutes — another phone's copy could trip safe mode here */
 const SYNC_NEVER=new Set(['d4.bootguard','d4.evalchain','d4.ruletune','d4.bolcache','d4.bolfiled','d4.bollog','d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
-const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$|fbbox$|syncfail$)/.test(k);
+const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$|fbbox$|syncfail$|__storewhy$|__dgkeys$)/.test(k);
 const SY3={base:'d4.sync3base',dirty:'d4.sync3dirty',meta:'meta.json'};
 SYNC_NEVER.add(SY3.base);SYNC_NEVER.add(SY3.dirty);
 const SY3_RELAY=typeof location!=='undefined'&&/[?&](bg|chain)=1/.test(location.search||'');
@@ -22616,6 +22626,8 @@ let SYNC_FAIL_TOASTED=false;
 function syncFailNote(msg){try{localStorage.setItem('d4.syncfail',JSON.stringify({ts:Date.now(),msg:String(msg||'').slice(0,200)}));}catch(e){}
   try{const last=+localStorage.getItem(SYNC.last)||0;if(!SYNC_FAIL_TOASTED&&Date.now()-last>2*36e5){SYNC_FAIL_TOASTED=true;toastSync('Backup didn\'t save — '+String(msg||'').slice(0,90));if(typeof deskRerender==='function')deskRerender();}}catch(e){}}
 async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your private repo and token first.');return{ok:false};}
+  /* v2.86.7 · never back up a page that can't see the big store: it would save a partial copy over the full one (Nov 6) */
+  if(storeDegraded()){const m='your saved history didn\'t load on this page — the backup waits so a partial copy can\'t replace the full one';SYNC_STATE={ok:false,ts:Date.now(),msg:'⏸ '+m};try{renderSyncStatus();}catch(e){}if(manual)alert('Backup paused: '+m+'. Force-quit TheDesk and reopen it.');return{ok:false,reason:m};}
   if(SYNC_BUSY)return SYNC_BUSY;
   {const safe=await syncRepoSafe(!!manual);if(!safe.ok){SYNC_STATE={ok:false,ts:Date.now(),msg:'⛔ '+safe.why};try{renderSyncStatus();}catch(e){}syncFailNote(safe.why);
     if(manual)alert('Sync is stopped: '+safe.why);else if(!safe.soft&&!SYNC_SAFE_WARNED){SYNC_SAFE_WARNED=true;try{toastSync('⛔ Sync stopped — '+safe.why);}catch(e){}}return{ok:false,reason:safe.why};}}

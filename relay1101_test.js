@@ -57,7 +57,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   h.eval(`set(REOPEN_KEY,{d:__TD,ts:Date.now(),why:'test'});localStorage.removeItem(REOPEN_DONE);deskReopenCheck();`);
   T('unfreeze keeps each sport\'s board until that sport is re-evaluated (v2.85.3)',h.eval(`(get('d4.tcs.nfl',null).B.picks||[]).length`)>0);
   const sj=fs.readFileSync(path.join(W,'store.js'),'utf8');
-  T('a background page waits up to 20 s for the big store before running without it',/\[\?&\]bg=1\/\.test\(location\.search\|\|''\)\?20000:6000/.test(sj));
+  T('a background page waits up to 30 s for the big store (normal pages 12 s) before running without it (v2.86.7)',/\[\?&\]bg=1\/\.test\(location\.search\|\|''\)\?30000:12000/.test(sj));
   T('the Book, the freeze, the Best 3 and the end of the relay all read the healed card',/tcHeal\(\):get\(TC_KEY,\{\}\)\)\|\|\{\};/.test(fs.readFileSync(path.join(W,'desk-book.js'),'utf8'))&&/function tcFreeze\(\)\{const T=\(typeof tcHeal==='function'\?tcHeal\(false\)/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8'))&&/if\(!S\.locked\)\{try\{tcHeal\(\);\}catch\(e\)\{\}const b=best5Build\(\);/.test(fs.readFileSync(path.join(W,'shared.js'),'utf8')));
   h.close();
   /* ── v2.82.4 · step 3 says where the day stands ── */
