@@ -42,5 +42,30 @@ setTimeout(()=>{try{const E=s=>w.eval(s);const e0=errs.length;const J=JSON.strin
   T('…each one right: team, line (the bought line as shown), price',J(L)===J(want),J(L));
   T('…stake $1.00, to win $136.74, kept from the ticket',E(`(t=>t.stake==='1'&&t.toWin==='136.74')(get(LS.locked,[]).find(t=>t.id==='ext1013139688'))`));
   const r2=E(`parseMyTicketText(${J(TICKET)})`);T('pasting it again updates the same ticket (no duplicate)',r2.replaced===true&&E(`get(LS.locked,[]).filter(t=>t.id==='ext1013139688').length`)===1);
+  /* 3:07 PM: ticket #1013132577 — "Nebraska Omaha" (ESPN: Omaha) dropped a leg; the book's long-form names, all of them */
+  const T2=`Ticket Number:
+1013132577
+Amount:
+$1.00
+To win:
+$132.30
+Description:
+Basketball - NCAA - Monmouth vs Rhode Island - Parlay | 618 Rhode Island -275 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Basketball - NCAA - Monmouth vs Rhode Island - Parlay | 618 Monmouth/Rhode Island under 146½ -140 buying -2 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Basketball - NCAA - Oakland vs Cal Santa Barbara - Parlay | 624 Cal Santa Barbara -11½ -161 buying -2 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Basketball - NCAA - Oakland vs Cal Santa Barbara - Parlay | 623 Oakland/Cal Santa Barbara over 147 -140 buying 2 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Basketball - NCAA - Nebraska Omaha vs Utah State - Parlay | 619 Nebraska Omaha +31 -141 buying -2 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Basketball - NCAA - Samford vs UNLV - Parlay | 621 Samford +13 -146 buying -2 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Basketball - NCAA - Samford vs UNLV - Parlay | 621 Samford/UNLV over 156 -140 buying 2 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Football - NCAA - Louisiana Tech vs Troy - Parlay | 408 Louisiana Tech/Troy under 50 -150 buying -2 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Football - NCAA - Missouri St vs Florida International - Parlay | 406 Florida International -200 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending
+Football - NCAA - Missouri St vs Florida International - Parlay | 406 Missouri St/Florida International under 51½ -150 buying -2 for GAME | 11/07/2026 04:00:00 PM (EST) | Pending`;
+  const r3=E(`parseMyTicketText(${J(T2)})`);const L3=E(`get(LS.locked,[]).find(t=>t.id==='ext1013132577').legs.map(l=>l.game+' | '+l.pick)`);
+  T('ticket #1013132577 reads all 10 legs too — Nebraska Omaha +31 included',r3.ok&&r3.legCount===10&&r3.skipped.length===0&&L3.includes('OMA@USU | OMA +31')&&L3.includes('OAK@UCSB | UCSB -11.5'),J({legs:r3.legCount,skipped:r3.skipped,L3}));
+  const longForm={'Nebraska Omaha':'OMA','Southern Mississippi':'USM','Arkansas Little Rock':'LR','Wisconsin Milwaukee':'MILW','Wisconsin Green Bay':'GB','Central Florida':'UCF','Southern California':'USC','Detroit':'DETM',
+    'Massachusetts Lowell':'UML','North Carolina Wilmington':'UNCW','NC Greensboro':'UNCG','NC Asheville':'UNCA','Tennessee Chattanooga':'UTC','Illinois Chicago':'UIC','Alabama Birmingham':'UAB','Virginia Commonwealth':'VCU',
+    'Texas A&M Commerce':'ETAM','Southeastern Louisiana':'SELA','USC Upstate':'UPST','Citadel':'CIT','Tarleton':'TAR','Mississippi':'MISS','Mississippi St':'MSST','Connecticut':'CONN','Kennesaw':'KENN','New Orleans':'UNO'};
+  const bad=Object.entries(longForm).filter(([n,a])=>ab(n)!==a).map(([n,a])=>n+'→'+ab(n)+' (want '+a+')');
+  T('…and the book\'s long-form school names resolve (Southern Mississippi, Wisconsin Milwaukee, Central Florida, Mississippi = Ole Miss…)',bad.length===0||(bad.length===1&&/New Orleans/.test(bad[0])),bad.join(', '));
   T('no errors along the way',errs.length===e0,errs.slice(e0).join(' | '));
 }catch(e){T('crashed',false,e.stack);}console.log(pass+' pass / '+fail+' fail');process.exit(0);},2500);
