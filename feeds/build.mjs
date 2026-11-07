@@ -66,6 +66,17 @@ async function verifyFinals(games,diag){
   const wk=[...new Set(open.filter(g=>g.sp==='ncaaf'&&g.wk).map(g=>g.wk))];
   for(const w of wk){const Y=String(open.find(g=>g.wk===w).st).slice(0,4);try{await ncaa('ncaaf',`${NCAA_API}football/fbs/${Y}/${String(w).padStart(2,'0')}/all-conf`);}catch(e){(diag.err=diag.err||[]).push('ncaaf wk'+w+': '+String(e.message).slice(0,60));}}
 }
+/* one-off (push runs only): which free sources carry player-prop lines and prices */
+async function probeProps(diag){const P={};const ev=async(path)=>{try{const j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard`);return(j.events||[]).filter(e=>((e.status||{}).type||{}).state==='pre').map(e=>e.id).slice(0,2);}catch(e){return[];}};
+  for(const [lg,path,core] of [['nba','basketball/nba','basketball/leagues/nba'],['cfb','football/college-football','football/leagues/college-football'],['nhl','hockey/nhl','hockey/leagues/nhl']]){
+    const ids=await ev(path);if(!ids.length){P[lg]='no upcoming event';continue;}const id=ids[0];
+    try{const o=await getJSON(`https://sports.core.api.espn.com/v2/sports/${core}/events/${id}/competitions/${id}/odds?lang=en&region=us`);
+      const provs=(o.items||[]).map(x=>{const m=String(x.$ref||'').match(/odds\/(\d+)/);return{id:m?m[1]:'?',n:(x.provider||{}).name||''};});P[lg+'_providers']=JSON.stringify(provs).slice(0,200);
+      for(const pid of [...new Set(provs.map(x=>x.id).concat(['58','100']))].slice(0,4)){try{const pb=await getJSON(`https://sports.core.api.espn.com/v2/sports/${core}/events/${id}/competitions/${id}/odds/${pid}/propBets?lang=en&region=us&limit=1000`);
+          P[lg+'_prop_'+pid]=(pb.count||0)+' items · '+JSON.stringify((pb.items||[])[0]||{}).slice(0,360);}catch(e){P[lg+'_prop_'+pid]='err '+String(e.message).slice(0,40);}}}catch(e){P[lg]='odds err '+String(e.message).slice(0,50);}}
+  for(const [k,u] of [['prizepicks','https://api.prizepicks.com/projections?league_id=7&per_page=50&single_stat=true'],['underdog','https://api.underdogfantasy.com/beta/v5/over_under_lines']]){
+    try{const j=await getJSON(u,{...BROWSER});const L=j.data||j.over_under_lines||[];P[k]=(Array.isArray(L)?L.length:0)+' · '+JSON.stringify(Array.isArray(L)?L[0]:Object.keys(j)).slice(0,300);}catch(e){P[k]='err '+String(e.message).slice(0,60);}}
+  diag.props=P;}
 async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=read('closes.json');const games=(prev&&prev.v===1&&prev.games)||{};const log={ts:new Date(now).toISOString(),added:0,errors:[],calls:0};
   const cut=new Date(now-KEEP_DAYS*864e5).toISOString();Object.keys(games).forEach(k=>{if(String(games[k].st||'')<cut)delete games[k];});
   const todo=[];
@@ -78,6 +89,7 @@ async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=re
   const res=await pool(todo,async t=>{const j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${t.s}/${t.l}/summary?event=${t.id}`);const r=parseSummary(t.sp,j);if(r){if(t.n)r.n=t.n;if(t.wk)r.wk=t.wk;games[t.id]=r;log.added++;}return r;});
   res.forEach((r,i)=>{if(r&&r.err&&log.errors.length<20)log.errors.push(todo[i].sp+' '+todo[i].id+': '+r.err);});
   const diag={};if(!FIX||process.env.FEEDS_VERIFY){try{await verifyFinals(games,diag);}catch(e){diag.fail=String(e.message||e).slice(0,80);}}
+  if(!FIX&&/push|workflow_dispatch/.test(process.env.GITHUB_EVENT_NAME||'')){try{await probeProps(diag);}catch(e){diag.props='fail '+String(e.message).slice(0,60);}}
   log.verify=diag;
   log.calls=calls;const n=Object.keys(games).length;
   fs.writeFileSync(path.join(OUT,'closes.json'),JSON.stringify({v:1,ts:log.ts,n,games}));
