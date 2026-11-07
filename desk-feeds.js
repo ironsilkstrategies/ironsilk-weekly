@@ -71,11 +71,15 @@ const FEED_PROPS_K='d4.feedcache.propidx';let FEED_PROPS=null;
 const feedName=n=>String(n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(jr|sr|ii|iii|iv)\b\.?/g,'').replace(/[^a-z]/g,'');
 function feedStoreProps(data){if(!data||!data.ev)return 0;const P={},H={};let n=0;
   Object.values(data.ev).forEach(E=>{if(!E||!E.sp)return;const game=feedAb(E.sp,E.a)+'@'+feedAb(E.sp,E.h);
-    (E.p||[]).forEach(r=>{const [nm,k,line,pr,kind]=r;if(kind!=='m'||line==null||!isFinite(pr))return;const key=E.sp+'|'+feedName(nm)+'|'+k;const L=P[key]||(P[key]=[]);
-      const o=L.find(x=>x[0]===line);if(!o)L.push([line,pr]);else if(o[1]!==pr)o[2]=1;n++;});
+    (E.p||[]).forEach(r=>{const [nm,k,line,pr,kind]=r;if(kind!=='m'||line==null||!isFinite(pr))return;const key=E.sp+'|'+feedName(nm)+'|'+k;(P[key]=P[key]||[]).push([line,pr]);n++;});
     const h=E.half||{};const o={};if(h.ml&&h.ml.a&&h.ml.h&&isFinite(h.ml.a.price)&&isFinite(h.ml.h.price)&&h.ml.a.price&&h.ml.h.price)o.ml=h.ml;
     if(h.sp&&h.sp.a&&h.sp.h&&h.sp.a.price&&h.sp.h.price&&isFinite(h.sp.a.line))o.sp=h.sp;if(Object.keys(o).length)H[E.sp+'|'+game]=o;});
-  Object.keys(P).forEach(k=>{P[k]=P[k].filter(x=>!x[2]);if(!P[k].length)delete P[k];});   /* a line with two different prices is two different bets — neither is priced */
+  /* one stat name sometimes carries two ladders (DraftKings' 1st-quarter rebounds share the full game's name). A real ladder
+     only gets less likely as the line rises: keep the likelier price at each line, then walk down from the top and drop any
+     line that's less likely than one above it — what's left is the full-game ladder */
+  const imp=a=>a>0?100/(a+100):(-a)/((-a)+100);
+  Object.keys(P).forEach(k=>{const by={};P[k].forEach(([l,pr])=>{if(!by[l]||imp(pr)>imp(by[l]))by[l]=pr;});let top=0;const out=[];
+    Object.keys(by).map(Number).sort((a,b)=>b-a).forEach(l=>{const q=imp(by[l]);if(q+1e-9<top)return;top=q;out.push([l,by[l]]);});P[k]=out.reverse();if(!P[k].length)delete P[k];});
   set(FEED_PROPS_K,{ts:data.ts,P,H});FEED_PROPS=null;
   /* the 1st-half sides and moneylines, under any the day's own paste already gave */
   try{const d=today();const LN=get(HALFLN_KEY,null);const cur=LN&&LN.d===d?LN:{d,g:{}};let ch=0;

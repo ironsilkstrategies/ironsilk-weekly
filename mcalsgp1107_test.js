@@ -65,6 +65,9 @@ setTimeout(()=>{try{const E=s=>w.eval(s);const e0=errs.length;const J=JSON.strin
   E(`feedStoreProps(${J(PJ)});SGP_C=null;`);
   T('a prop leg carries DraftKings\' price on that exact line (11+ at -300) and the calibrated edge over it',E(`(()=>{const g=sgpData().games.find(g=>g.game==='NY@CLE');const x=g.sgp.find(x=>x.player==='NY@CLE-P1');return x&&x.dk===-300;})()`));
   T('…a total\'s untagged over/under pair is never priced (no guessing which is which)',E(`feedPropPrice('nba','NY@CLE-P1','pts',12)`).price===null);
+  E(`feedStoreProps({v:1,ev:{e2:{sp:'nba',a:'BKN',h:'ATL',p:[['Q Lad','reb',2,-400,'m'],['Q Lad','reb',3,-129,'m'],['Q Lad','reb',4,191,'m'],['Q Lad','reb',5,440,'m'],['Q Lad','reb',5,-2700,'m'],['Q Lad','reb',6,1020,'m'],['Q Lad','reb',6,-1060,'m'],['Q Lad','reb',8,-289,'m'],['Q Lad','reb',10,-107,'m']]}}})`);
+  T('two ladders under one stat name (a 1st-quarter one mixed in): only the full-game ladder is kept',J(E(`feedPropsIdx().P['nba|qlad|reb']`))===J([[5,-2700],[6,-1060],[8,-289],[10,-107]]),J(E(`feedPropsIdx().P['nba|qlad|reb']`)));
+  E(`feedStoreProps(${J(PJ)});SGP_C=null;`);
   T('…and the 1st-half sides and moneylines fill the half lines when the day\'s paste has none (the total stays out)',E(`(()=>{const L=get(HALFLN_KEY,null);const g=L&&L.g['nba|NY@CLE'];return!!g&&g.ml.h.price===-180&&g.sp.a.line===3.5&&!g.ou&&g.src==='dk';})()`));
   E(`sgpSet('dk',1)`);
   T('"DraftKings lines only": every prop leg left is one DraftKings prices',E(`sgpData().games.every(g=>g.sgp.every(x=>x.kind!=='p'||x.dk!=null))`)&&E(`sgpData().games.length`)>=1);
