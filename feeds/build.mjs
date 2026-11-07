@@ -65,7 +65,22 @@ async function verifyFinals(games,diag){
 /* how many games ESPN's college football scoreboard hands back for one Saturday at each page size (run on a push only) */
 async function probeCfb(diag){const out={};for(const q of ['','&limit=100','&limit=300','&limit=900']){try{const j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20261031&groups=80${q}`);out[q||'default']=(j.events||[]).length;}catch(e){out[q||'default']='err '+String(e.message).slice(0,40);}}
   try{const j=await getJSON('https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=2026&seasontype=2&week=9&groups=80&limit=100');out.week9=(j.events||[]).length;}catch(e){out.week9='err';}
-  diag.cfb=out;}
+  diag.cfb=out;
+  /* which other public score sources answer from here (status, size, top-level keys) */
+  const P={};const UA={'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15','accept':'application/json,text/plain,*/*'};
+  for(const [k,u,h] of [['nba_cdn_ua','https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json',{...UA,referer:'https://www.nba.com/',origin:'https://www.nba.com'}],
+      ['nba_today_ua','https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json',{...UA,referer:'https://www.nba.com/'}],
+      ['ncaa_casa_2025','https://data.ncaa.com/casablanca/scoreboard/basketball-men/d1/2025/11/07/scoreboard.json',UA],
+      ['ncaa_casa_2026_ua','https://data.ncaa.com/casablanca/scoreboard/basketball-men/d1/2026/11/06/scoreboard.json',UA],
+      ['henrygd_mbb','https://ncaa-api.henrygd.me/scoreboard/basketball-men/d1/2026/11/06/all-conf',UA],
+      ['henrygd_cfb','https://ncaa-api.henrygd.me/scoreboard/football/fbs/2026/10/all-conf',UA],
+      ['ncaa_html','https://www.ncaa.com/scoreboard/basketball-men/d1/2026/11/06/all-conf',UA],
+      ['tsdb_day','https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=2026-11-06&s=Basketball',UA],
+      ['cbs_html','https://www.cbssports.com/college-basketball/scoreboard/all/20261106/',UA]]){
+    try{const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),15000);const r=await fetch(u,{headers:h,signal:ctl.signal});clearTimeout(t);const tx=await r.text();
+      let keys='';try{const j=JSON.parse(tx);keys=Object.keys(j).slice(0,6).join(',');const g=(j.games||j.events||[]);if(Array.isArray(g)&&g.length)keys+=' | n='+g.length+' first='+JSON.stringify(g[0]).slice(0,260);}catch(e){keys='html:'+(/__NEXT_DATA__|application\/json/.test(tx)?'has-json':'no-json');}
+      P[k]=r.status+' '+tx.length+'B '+keys;}catch(e){P[k]='err '+String(e.message).slice(0,50);}}
+  diag.alt=P;}
 async function main(){const now=Date.now();const prev=read('closes.json');const games=(prev&&prev.v===1&&prev.games)||{};const log={ts:new Date(now).toISOString(),added:0,errors:[],calls:0};
   const cut=new Date(now-KEEP_DAYS*864e5).toISOString();Object.keys(games).forEach(k=>{if(String(games[k].st||'')<cut)delete games[k];});
   const todo=[];
