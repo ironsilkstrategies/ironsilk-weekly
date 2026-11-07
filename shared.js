@@ -3018,7 +3018,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -21174,7 +21174,8 @@ function legLiveCard(t,l,opts){opts=opts||{};let g=null;try{g=gradeLeg(l,t.date)
   const [aw,hm]=String(l.game).split('@');
   const res=done?(g.push?['↔ PUSH','var(--mute)']:g.hit?['✅ WON','var(--win)']:['❌ LOST','var(--rust)']):state==='in'?['● LIVE','#ff4b5c']:[e&&e.start?new Date(e.start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'PREGAME','var(--mute)'];
   const border=done?(g.push?'var(--rule)':g.hit?'var(--win)':'var(--rust)'):state==='in'?'#ff4b5c':'var(--rule)';
-  const sc=e&&e.a!=null?`${teamNameHtml(sp,aw)} <b>${e.a}</b> – <b>${e.h}</b> ${teamNameHtml(sp,hm)}${state==='in'&&e.detail?` · <span style="color:var(--mute)">${txtEsc(e.detail)}</span>`:state==='post'?' · FINAL':''}`:`${teamNameHtml(sp,aw)} @ ${teamNameHtml(sp,hm)}`;
+  /* v2.87.6 · the score pops: white team names, big bright numbers (they were dark on the dark card) */
+  const sc=e&&e.a!=null?`<span class="lg-sc" style="color:#fff">${teamNameHtml(sp,aw)} <b style="color:#FFE066;font-size:1.15em">${e.a}</b> – <b style="color:#FFE066;font-size:1.15em">${e.h}</b> ${teamNameHtml(sp,hm)}</span>${state==='in'&&e.detail?` · <span style="color:#7FDBFF;font-weight:700">${txtEsc(e.detail)}</span>`:state==='post'?' · <b style="color:#fff">FINAL</b>':''}`:`<span style="color:#fff">${teamNameHtml(sp,aw)} @ ${teamNameHtml(sp,hm)}</span>`;
   const col=lp==null?'var(--mute)':lp>=0.6?'var(--win)':lp>=0.4?'var(--gold)':'var(--rust)';const mv=p0!=null&&lp!=null&&state==='in'?Math.round((lp-p0)*100):null;
   let bar='';
   if(g&&g.prog&&g.prog.thr){try{bar=legProgressBarHtml(g.prog);}catch(err){}}
@@ -21774,6 +21775,7 @@ function teamRk(sp,abbr){if(!abbr)return null;let ap=null;if(sp==='ncaaf'){try{c
 function teamTag(sp,abbr){const k=teamRk(sp,abbr);return k?'#'+k.r+' ':'';}
 function teamTagHtml(sp,abbr){const k=teamRk(sp,abbr);if(!k)return'';
   return`<span class="rk-tag" title="${k.ap!=null?'AP/CFP poll #'+k.ap+(k.pw!=null?' · power #'+k.pw:''):'power ranking #'+k.pw}">#${k.r}${k.ap!=null&&k.pw!=null&&k.pw!==k.ap?`<sup>P${k.pw}</sup>`:''}</span> `;}
+/* .lg-sc keeps the abbreviation readable whatever the theme colors it */
 function teamNameHtml(sp,abbr){return teamTagHtml(sp,abbr)+txtEsc(abbr||'');}
 function gameLabelHtml(sp,game){const[a,h]=String(game||'').split('@');return a&&h?teamNameHtml(sp,a)+'@'+teamNameHtml(sp,h):txtEsc(game||'');}
 function gameLabel(sp,game){const[a,h]=String(game||'').split('@');return a&&h?teamTag(sp,a)+a+'@'+teamTag(sp,h)+h:String(game||'');}

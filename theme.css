@@ -170,3 +170,4 @@ html.th .rc-hero .pct{font-family:"Barlow Condensed";font-style:italic;font-weig
 html.th .rc-stat{background:#141414}
 
 @media (prefers-reduced-motion:reduce){html.th *{animation:none!important;transition:none!important}}
+.lg-sc,.lg-sc *{color:#fff!important}.lg-sc b{color:#FFE066!important}
