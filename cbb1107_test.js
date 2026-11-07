@@ -16,16 +16,16 @@ setTimeout(()=>{try{const E=s=>w.eval(s);const e0=errs.length;const J=JSON.strin
     window.bbLinesFor=(C,k)=>[{src:k.endsWith('9')?'bol':'espn',market:'moneyline',side:'home',price:-150,game:k}];delete BB_WORK.ncaab;})()`);
   const S=E(`[...bbWorkSet('ncaab')]`);const win=id=>E(`bbWin(${J((G.find(g=>g.id===id)||{}).start)})`);
   const by={early:0,afternoon:0,evening:0,late:0};S.forEach(id=>by[win(id)]++);
-  T('the 25 extra games are spread across the day, not the 25 earliest tips',S.length===25&&by.evening>=6&&by.late>=6&&by.early>=6&&by.afternoon>=6,J(by));
-  T('…the earliest game in each window goes first',S.includes('x0')&&S.includes('x10')&&S.includes('x20')&&S.includes('x30'));
-  T('…your own lines and ranked teams are still always worked, on top of the 25',E(`(()=>{NCAAB_GAMES.push({id:'rk',away:{abbr:'DUKE',rank:4},home:{abbr:'UNC'},start:${J(`${d}T19:00:00${off}`)},__date:${J(d)},abstract:'pre'});delete BB_WORK.ncaab;const s=bbWorkSet('ncaab');return s.has('rk')&&s.size===26;})()`));
+  T('v2.87.5 · every college game with a line is worked — all 40, morning to late night (was 25: first the earliest tips, then spread)',S.length===40&&by.evening===10&&by.late===10,J(by));
+  T('…your own lines and ranked teams too (a ranked game with no line is still worked)',E(`(()=>{NCAAB_GAMES.push({id:'rk',away:{abbr:'DUKE',rank:4},home:{abbr:'UNC'},start:${J(`${d}T19:00:00${off}`)},__date:${J(d)},abstract:'pre'});delete BB_WORK.ncaab;const s=bbWorkSet('ncaab');return s.has('rk')&&s.size===41;})()`));
+  T('…and if a slate ever passes the safety cap, the cap is spread across the day, never the earliest tips',/lanes=\['early','afternoon','evening','late'\]/.test(fs.readFileSync(path.join(W,'bball-engine.js'),'utf8'))&&/const BB_EXTRA=400;/.test(fs.readFileSync(path.join(W,'bball-engine.js'),'utf8')));
   /* the time-slot view lists every lined game, marking the unworked */
   const sch=E(`tcSched('ncaab',[])`);
-  T('the schedule on today\'s card has every lined college game — the unworked ones marked',sch.length===41&&sch.filter(x=>x.w===0).length===15&&sch.some(x=>x.g==='A25@H25'),J({n:sch.length,unworked:sch.filter(x=>x.w===0).length}));
+  T('the schedule on today\'s card has every lined college game, all worked',sch.length===41&&sch.filter(x=>x.w===0).length===0&&sch.some(x=>x.g==='A25@H25'),J({n:sch.length,unworked:sch.filter(x=>x.w===0).length}));
   E(`set(TC_KEY,{d:today(),by:{ncaab:{ts:Date.now(),picks:[],props:[],games:tcSched('ncaab',[])}}});localStorage.setItem('d4.gmmode','slots');localStorage.setItem('d4.slotf',JSON.stringify({win:'all',sp:'all',day:'today'}));slotApply();`);
   const sb=w.document.getElementById('slotBoard');const ev=[...sb.querySelectorAll('.tkt.slot')].filter(s=>/[5-9]:\d\d PM|1[01]:\d\d PM/.test(s.querySelector('div').textContent));
   T('…so the evening college games show in ⏰ All sports by time',ev.length>=10&&sb.querySelectorAll('.slot-game').length===41,`${ev.length} evening slots, ${sb.querySelectorAll('.slot-game').length} games`);
-  T('…and an unworked one says why, and how to add it (paste its line in Intake)',/The characters aren't working this one/.test(sb.textContent)&&/Paste its line in Intake/.test(sb.textContent));
+  T('…and a game past the safety cap would say why and how to add it',/The characters aren\\'t working this one/.test(fs.readFileSync(path.join(W,'desk-core.js'),'utf8')));
   /* Full card › on this page: the board's card, then back */
   const key=E(`(()=>{const g=slotGames().all.find(x=>x.gid==='x25');return g.day+'-'+g.t;})()`);
   E(`slotOpen('ncaab','x25',${J(key)})`);

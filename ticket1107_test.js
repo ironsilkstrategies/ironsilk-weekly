@@ -67,5 +67,36 @@ Football - NCAA - Missouri St vs Florida International - Parlay | 406 Missouri S
     'Texas A&M Commerce':'ETAM','Southeastern Louisiana':'SELA','USC Upstate':'UPST','Citadel':'CIT','Tarleton':'TAR','Mississippi':'MISS','Mississippi St':'MSST','Connecticut':'CONN','Kennesaw':'KENN','New Orleans':'UNO'};
   const bad=Object.entries(longForm).filter(([n,a])=>ab(n)!==a).map(([n,a])=>n+'→'+ab(n)+' (want '+a+')');
   T('…and the book\'s long-form school names resolve (Southern Mississippi, Wisconsin Milwaukee, Central Florida, Mississippi = Ole Miss…)',bad.length===0||(bad.length===1&&/New Orleans/.test(bad[0])),bad.join(', '));
+  /* 3:21 PM: ticket #1013064156, "SGPs Combined" in the (Match) dialect — the book's own codes "NMXST" and "SAMF" dropped two legs */
+  const T3=`Ticket Number:
+1013064156
+Accepted Date:
+11/7/26
+Amount:
+$1.00
+To win:
+$21.43
+Type:
+SGPs Combined
+Description:
+10 Leg Parlay (Includes 5 SGPs)
+SGP 1: BASKETBALL - NCAA - San Diego State v Colorado
+Handicap - SDSU +3.5 (Match)
+Total points - Over 142.5 (Match)
+SGP 2: BASKETBALL - NCAA - Gonzaga v New Mexico State
+Total points - Under 160.5 (Match)
+Handicap - NMXST +36.5 (Match)
+SGP 3: BASKETBALL - NCAA - Rhode Island v Monmouth
+Handicap - URI +0.5 (Match)
+Total points - Under 154.5 (Match)
+SGP 4: BASKETBALL - NCAA - UNLV v Samford
+Total points - Over 151.5 (Match)
+Handicap - SAMF +17.5 (Match)
+SGP 5: BASKETBALL - NCAA - Memphis v VCU
+Handicap - VCU +5.5 (Match)
+Total points - Under 167.5 (Match)`;
+  const r4=E(`parseSGPTicketText(sgpNormalize(${J(T3)}))`);const L4=E(`get(LS.locked,[]).find(t=>t.id==='ext1013064156').legs.map(l=>l.game+' | '+l.pick)`);
+  T('combined SGPs: all 10 legs — the book\'s own codes read as the game\'s team they spell (NMXST = New Mexico State, SAMF = Samford)',r4.ok&&r4.legCount===10&&r4.skipped.length===0&&L4.includes('NMSU@GONZ | NMSU +36.5')&&L4.includes('SAM@UNLV | SAM +17.5'),J({legs:r4.legCount,skipped:r4.skipped,L4}));
+  T('…home v away orientation kept (COLO@SDSU, VCU@MEM)',L4.includes('COLO@SDSU | SDSU +3.5')&&L4.includes('VCU@MEM | VCU +5.5'));
   T('no errors along the way',errs.length===e0,errs.slice(e0).join(' | '));
 }catch(e){T('crashed',false,e.stack);}console.log(pass+' pass / '+fail+' fail');process.exit(0);},2500);

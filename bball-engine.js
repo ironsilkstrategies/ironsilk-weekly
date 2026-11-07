@@ -245,12 +245,14 @@ function bbWorkSet(sp){const C=bbC(sp);const n=C.games.length+C.up.length;const 
   [...C.games,...C.up].sort((a,b)=>String(a.start).localeCompare(String(b.start))).forEach(g=>{const L=bbLinesFor(C,bbKey(g),g.__date);if(!L.length)return;
     if(sp!=='ncaab'||L.some(x=>x.src!=='espn'&&x.src!=='bol')||g.away.rank||g.home.rank){s.add(g.id);return;}   /* a BetOnline pull covers the whole college board — it doesn't make every game a workload */
     if(g.__date===td)rest.push(g);});
-  /* v2.87.2 · the 25 extra college games are spread across the day — before 1 PM, 1–5, 5–8, 8+ in turn, earliest first in each. They
-     used to be the 25 earliest tips, so on a Saturday every evening game went unworked (Nov 7: "more CBB games after 5 PM aren't appearing"). */
-  if(rest.length){const W={};rest.forEach(g=>{const w=bbWin(g.start);(W[w]=W[w]||[]).push(g);});const lanes=['early','afternoon','evening','late'].map(k=>W[k]||[]);
-    let n2=0,i=0;while(n2<BB_EXTRA&&lanes.some(a=>a.length)){const a=lanes[i%4];i++;if(!a.length)continue;s.add(a.shift().id);n2++;}}
+  /* v2.87.5 · every college game with a line today is worked (Nov 7: "I want every available game to be worked… even if that makes things
+     take a little longer"). BB_EXTRA caps the rest only if a slate ever gets too heavy for the phone — spread across the day, never the
+     earliest tips (v2.87.2: the old 25 were the 25 earliest, so a Saturday's evening games never got worked). */
+  if(rest.length){if(rest.length<=BB_EXTRA)rest.forEach(g=>s.add(g.id));
+    else{const W={};rest.forEach(g=>{const w=bbWin(g.start);(W[w]=W[w]||[]).push(g);});const lanes=['early','afternoon','evening','late'].map(k=>W[k]||[]);
+      let n2=0,i=0;while(n2<BB_EXTRA&&lanes.some(a=>a.length)){const a=lanes[i%4];i++;if(!a.length)continue;s.add(a.shift().id);n2++;}}}
   BB_WORK[sp]={ts:Date.now(),n,s};return s;}
-const BB_EXTRA=25;
+const BB_EXTRA=400;
 function bbWin(st){let h=12;try{h=+new Intl.DateTimeFormat('en-US',{hour:'numeric',hourCycle:'h23',timeZone:typeof APP_TZ!=='undefined'?APP_TZ:'America/Chicago'}).format(new Date(st))%24;}catch(e){}
   return h<13?'early':h<17?'afternoon':h<20?'evening':'late';}
 function bbWorkable(sp,g){try{return!!g&&bbWorkSet(sp).has(g.id);}catch(e){return false;}}
@@ -543,7 +545,7 @@ function bbLockJudge(sp){const C=bbC(sp);const d=today(),L=get(C.judge,{})||{};L
 /* ── the master evaluation (same shape as hockey and football) ── */
 function bbEvalInputs(sp){const C=bbC(sp);const G=(C.games||[]).filter(g=>!g.pre);let book=0,espn=0,lined=0;G.forEach(g=>{const L=bbLinesFor(C,bbKey(g));if(L.length)lined++;L.forEach(x=>{x.src==='espn'?espn++:book++});});
   const d=today();const I=(roGet(INTEL_KEY,[])||[]).filter(x=>x.sp===sp&&String(x.date||'').slice(0,10)===d);const P=((get('d4.preds',{})||{})[sp]||{})[d]||{};
-  let brain=0;try{brain=(brainGet(sp).log||[]).length;}catch(e){}
+  let brain=0;try{brain=(brainGetRO(sp).log||[]).length;}catch(e){}
   return{games:G.length,sims:G.length,lined,book,espn,rated:Object.keys(C.rt).length,finals:Object.keys(bbRes(C)).length,preds:Object.keys(P).length,trends:I.filter(x=>x.kind==='trend').length,cons:I.filter(x=>x.kind==='cons').length,brain};}
 function runBasketballEval(sp){const C=bbC(sp);try{if(typeof evalPrep==='function')evalPrep(sp);}catch(e){console.warn('eval prep',e);}
   const evals=[];let skipped=0;C.games.forEach(g=>{if(g.abstract!=='pre')return;if(g.pre){skipped++;return;}if(!bbWorkable(sp,g))return;const k=bbKey(g);const L=bbLinesFor(C,k);if(!L.length)return;const s=bbSim(C,g);

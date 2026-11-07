@@ -766,7 +766,7 @@ function nhlEvalInputs(){
   G.forEach(g=>{const L=nhlBookLinesFor(g.away.abbr+'@'+g.home.abbr)||[];if(L.length)lined++;L.forEach(x=>{x.src==='espn'?espn++:book++});});
   const d=today();const I=(roGet(INTEL_KEY,[])||[]).filter(x=>x.sp==='nhl'&&String(x.date||'').slice(0,10)===d);
   const P=((get('d4.preds',{})||{}).nhl||{})[d]||{};
-  let brain=0;try{brain=(brainGet('nhl').log||[]).length;}catch(e){}
+  let brain=0;try{brain=(brainGetRO('nhl').log||[]).length;}catch(e){}
   return{games:G.length,sims:G.filter(g=>NHL_SIMS[g.id]).length,lined,book,espn,rated:NHL_RATINGS&&NHL_RATINGS.teams?Object.keys(NHL_RATINGS.teams).length:0,
     preds:Object.keys(P).length,trends:I.filter(x=>x.kind==='trend').length,cons:I.filter(x=>x.kind==='cons').length,brain};
 }

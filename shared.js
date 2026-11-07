@@ -1124,13 +1124,15 @@ function rsAthletes(j){const out=[];const add=a=>{if(!a||!a.id||!(a.displayName|
   ((j||{}).athletes||[]).forEach(g=>{if(Array.isArray(g.items))g.items.forEach(add);else add(g);});return out;}
 const rsPack=a=>[a.id,a.name,a.pos,a.inj||'',a.sal||0,a.jer||''],rsUnpack=x=>Array.isArray(x)?{id:x[0],name:x[1],pos:x[2],inj:x[3]||'',sal:x[4]||0,jer:x[5]||''}:x;
 /* one team's roster — 12-hour cache, injuries move. team = the app's abbreviation; tid = ESPN's id when the card has it */
+/* v2.87.5 · rosters kept: every team on a full college slate (was 60 — with every game worked, a Saturday re-fetched ~190 rosters a load) */
+const RS_KEEP=400;
 async function rsRoster(sp,team,tid){const ab=rsAb(sp,team);const k=sp+':'+ab;if(RS_MEM[k]&&RS_MEM[k].ts>Date.now()-12*36e5)return RS_MEM[k].a;
-  const C=get('d4.rsroster',{})||{};if(C[k]&&C[k].ts>Date.now()-12*36e5){const a=(C[k].a||[]).map(rsUnpack);RS_MEM[k]={ts:C[k].ts,a};return a;}
+  const C0=roGet('d4.rsroster',{})||{};if(C0[k]&&C0[k].ts>Date.now()-12*36e5){const a=(C0[k].a||[]).map(rsUnpack);RS_MEM[k]={ts:C0[k].ts,a};return a;}
   const ids=await rsTeamIds(sp);const id=tid||ids[ab]||rsGameTid(sp,team)||(sp==='ncaab'&&typeof ncaabIdOf==='function'?ncaabIdOf(ab):null);
   const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+RS_PATH[sp]+'/teams/'+encodeURIComponent(String(id||ab.toLowerCase()))+'/roster');let a=rsAthletes(j);
   if(j&&j.team&&j.team.id&&!ids[ab])rsLearnId(sp,ab,j.team.id);
   if(sp==='nfl'||sp==='ncaaf')a=a.filter(x=>RS_SKILL[sp].test(x.pos)||/^(K|PK)$/.test(x.pos));   /* football: the players props are written on */
-  if(a.length){RS_MEM[k]={ts:Date.now(),a};C[k]={ts:Date.now(),a:a.map(rsPack)};const ks=Object.keys(C);if(ks.length>60)ks.sort((x,y)=>C[x].ts-C[y].ts).slice(0,ks.length-60).forEach(x=>delete C[x]);set('d4.rsroster',C);}
+  if(a.length){RS_MEM[k]={ts:Date.now(),a};const C=get('d4.rsroster',{})||{};C[k]={ts:Date.now(),a:a.map(rsPack)};const ks=Object.keys(C);if(ks.length>RS_KEEP)ks.sort((x,y)=>C[x].ts-C[y].ts).slice(0,ks.length-RS_KEEP).forEach(x=>delete C[x]);set('d4.rsroster',C);}
   return a;}
 /* who's hurt: the status ESPN's roster lists for a player ("Out", "Doubtful", "Day-To-Day"…) — '' when healthy or unknown */
 let RS_INJ=null;
@@ -1374,7 +1376,14 @@ function parseSGPTicketText(text){
     const side=nm=>{const w=String(nm).toLowerCase().replace(/[^a-z0-9 ]/g,' ').trim().split(/\s+/).pop();
       const hit=(cur.names||[]).map((x,i)=>({x,i})).filter(o=>String(o.x).toLowerCase().replace(/[^a-z0-9 ]/g,' ').trim().split(/\s+/).pop()===w);
       if(hit.length===1){const ab=intakeAbbr(cur.sport,cur.names[hit[0].i]);if(ab)return ab;}
-      return intakeAbbr(cur.sport,nm);};
+      const r=intakeAbbr(cur.sport,nm);if(r&&(r===cur.away||r===cur.home))return r;
+      /* v2.87.5 · the (Match) dialect writes the book's own team codes ("NMXST" = New Mexico State, "SAMF" = Samford): the code
+         belongs to whichever of THIS game's two teams it spells — same first letter, its letters in order through the name */
+      const c=String(nm).toUpperCase().replace(/[^A-Z0-9]/g,'');
+      if(c.length>=2){const spells=(code,txt)=>{const t=String(txt||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(!t||t[0]!==code[0])return false;let i=0;for(const ch of t){if(ch===code[i])i++;if(i===code.length)return true;}return false;};
+        const opts=(cur.names||[]).map(n0=>({ab:intakeAbbr(cur.sport,n0),n0})).filter(o=>o.ab&&(spells(c,o.n0)||spells(c,o.ab)));
+        if(opts.length===1)return opts[0].ab;}
+      return r;};
     const push=(o)=>{legs.push({p:0.5,sport:cur.sport,gameDate:gd,price:null,book:'external',game:cur.gl,...o});};
     if((m=line.match(/^Handicap\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(Game\)\s*$/i))){
       const ab=side(m[1]);if(!ab){skipped.push(line+'  (team name not recognized)');return;}
@@ -1769,6 +1778,9 @@ function brainAdapter(sport){
     boxCols:[['Q1-Q4','q'],['PTS','pts'],['YDS','yds'],['PASS','pass'],['RUSH','rush']],boxStats:['yds','pass','rush']};
 }
 function brainGet(sp){const B=get(BRAIN_KEY,{});return B[sp]||{src:{},team:{},vol:{n:0,v:0},trend:{n:0,hit:0},money:{n:0,hit:0},box:{},log:[]};}
+/* v2.87.5 · a read-only look (no fresh parse per game): the judge reads the brain for every game it rules on — 124 games was
+   124 parses of the whole brain. Learning still reads its own copy with brainGet and saves it with brainPut. */
+function brainGetRO(sp){const B=roGet(BRAIN_KEY,{})||{};return B[sp]||{src:{},team:{},vol:{n:0,v:0},trend:{n:0,hit:0},money:{n:0,hit:0},box:{},log:[]};}
 function brainPut(sp,b){const B=get(BRAIN_KEY,{});B[sp]=b;set(BRAIN_KEY,B);}
 function brainWeight(b,sp,src){
   const pr=BR_CFG[sp].prior[src],s=b.src[src]||{n:0,se:0},n0=8;
@@ -1814,7 +1826,7 @@ function brainMoney(g,sport){
   return{gap,side:gap>0?1:-1,note:(gap>0?g.home.abbr:g.away.abbr)+' getting '+Math.abs(gap)+'% more of the money than the tickets'};
 }
 function brainJudge(g,s,sport){
-  const C=BR_CFG[sport],AD=brainAdapter(sport),b=brainGet(sport),k=AD.key(g);
+  const C=BR_CFG[sport],AD=brainAdapter(sport),b=brainGetRO(sport),k=AD.key(g);
   const lines=AD.lines(g)||[];const W=[];
   const sp=AD.sim(s);if(sp&&!AD.flat())W.push({src:'sim',...sp});
   const mk=AD.market(g,lines);if(mk)W.push({src:'market',...mk});
@@ -1973,7 +1985,7 @@ function predBoxGradeHtml(sport,g,pred,act){
     <b style="color:${col(G.letter)}">PREDICTED BOX ${G.letter}</b> <span style="color:var(--mute)">(off ${Math.round(G.avg*100)}% avg)</span><br>${cells}</div>`;
 }
 function boxAccuracyHtml(){
-  const out=[];['mlb','nfl','ncaaf','nhl','nba','ncaab'].forEach(sp=>{const E=(brainGet(sp).boxErr)||{};
+  const out=[];['mlb','nfl','ncaaf','nhl','nba','ncaab'].forEach(sp=>{const E=(brainGetRO(sp).boxErr)||{};
     Object.entries(E).forEach(([st,o])=>{if(o.n<3)return;out.push(`<div class="sub">${sp.toUpperCase()} ${BOX_LAB[st]||st}: grade <b>${boxLetter(o.ape)}</b> · off ${Math.round(o.ape*100)}% avg · runs ${o.bias>=0?'high':'low'} by ${Math.abs(Math.round(o.bias*100))}% (n=${o.n}) — auto-corrected going forward</div>`);});});
   return out.length?`<div class="tkt hi"><h3>Predicted box scores — graded</h3>${out.join('')}</div>`:'';
 }
@@ -2006,7 +2018,7 @@ function brainBlock(g,s,sport){
 }
 const fbJudgeBlock=(g,s,sport)=>brainBlock(g,s,sport);
 function brainReport(sport){
-  const b=brainGet(sport);const L=b.log||[];const u=BR_CFG[sport].unit;
+  const b=brainGetRO(sport);const L=b.log||[];const u=BR_CFG[sport].unit;
   if(!L.length)return`<div class="tkt"><h3>Brain</h3><div class="sub">Learns from its first graded final. Rulings are locked at ${sport==='mlb'?'first pitch':'kickoff'} and graded automatically.</div></div>`;
   const mae=a=>a.length?(a.reduce((x,y)=>x+y,0)/a.length).toFixed(sport==='mlb'?2:1):'—';
   const vsM=L.filter(x=>x.mkt!=null),beat=vsM.filter(x=>x.err<x.mkt).length;
@@ -2403,7 +2415,15 @@ function metaCalls(sp,g,calls,Ln,add){
    copies of football calls from before v2.09), college basketball keeps
    its own rolling window, and the whole ledger is capped. The SAME rule runs after a
    sync merge, so a trimmed call can't come back from the other device's copy. */
-const VOICES_CAP=16000,VOICES_SP_CAP={ncaab:6000};
+/* v2.87.5 · ONE signature for every table built from the call ledger (lanes, factors, situations, specialties, the top characters,
+   price reads): counted once per ledger read, not once per lookup. Each of those tables re-counted the graded calls on every call
+   — 16,000 rows, thousands of lookups a pass — and working every game made that the page's biggest freeze. */
+const LEDGER_SIG=typeof WeakMap!=='undefined'?new WeakMap():null;
+function ledgerSig(V){if(!V||!V.length)return'0|0';const c=LEDGER_SIG&&LEDGER_SIG.get(V);if(c&&c.n===V.length)return c.s;let g=0;for(let i=0;i<V.length;i++){const x=V[i];if(x&&x.graded)g++;}
+  const s=V.length+'|'+g;if(LEDGER_SIG)LEDGER_SIG.set(V,{n:V.length,s});return s;}
+/* v2.87.5 · every college basketball game with a line is worked now (2,000+ calls on a Saturday), so the ledger holds 22,000 calls
+   (was 16,000) with college basketball still held to 6,000 of them — it can't push the other sports' history out */
+const VOICES_CAP=22000,VOICES_SP_CAP={ncaab:6000};
 function voicesTrim(V){if(!Array.isArray(V))return V;const old=dayShift(today(),-14);let drop=new Set();
   V.forEach((x,i)=>{if(x&&!x.graded&&String(x.date||'').slice(0,10)<old)drop.add(i);});
   const byDate=idx=>idx.sort((a,b)=>String(V[a].date||'').localeCompare(String(V[b].date||''))||a-b);
@@ -2609,7 +2629,7 @@ let CHAR_BRAIN_TS=0;
 function charBrain(){
   if(CHAR_BRAIN&&Date.now()-CHAR_BRAIN_TS<5000)return CHAR_BRAIN;
   const V=roGet(VOICES_KEY,[]);CHAR_BRAIN_TS=Date.now();
-  const sig=V.length+'|'+V.filter(x=>x.graded).length;
+  const sig=ledgerSig(V);
   if(CHAR_BRAIN&&sig===CHAR_BRAIN_SIG)return CHAR_BRAIN;
   const B={by:{},all:{},agree:{},combo:{}};
   const bump=(o,hit)=>{o.n=(o.n||0)+1;o.w=(o.w||0)+(hit?1:0);};
@@ -2671,7 +2691,7 @@ const sigm=z=>1/(1+Math.exp(-z));
    back-to-backs, big favorites…), measured against its own baseline. Only
    situations with 12+ graded calls count; shrunk toward neutral; ×0.6–×1.6. */
 let CSIT_C=null,CSIT_SIG='';
-function charSitTable(){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.filter(x=>x.graded).length;if(CSIT_C&&CSIT_SIG===sig)return CSIT_C;
+function charSitTable(){const V=roGet(VOICES_KEY,[]);const sig=ledgerSig(V);if(CSIT_C&&CSIT_SIG===sig)return CSIT_C;
   const T={};V.forEach(x=>{if(!x.graded||x.hit==null||!CHARS[x.voice]||!Array.isArray(x.f))return;const base=x.sp+'|'+x.voice+'|'+x.market;
     const b=T[base]||(T[base]={n:0,w:0,f:{}});b.n++;if(x.hit)b.w++;x.f.forEach(k=>{const o=b.f[k]||(b.f[k]={n:0,w:0});o.n++;if(x.hit)o.w++;});});
   CSIT_C=T;CSIT_SIG=sig;return T;}
@@ -2682,7 +2702,7 @@ function charSitMult(sp,voice,market,fs){const B=charSitTable()[sp+'|'+voice+'|'
   return{m:Math.max(0.5,Math.min(1.8,m)),why};}
 /* the sport's best characters by graded record (15+ calls), for the 💎/🔥 check */
 let CTOP_C={},CTOP_SIG='';
-function charTop(sp){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.filter(x=>x.graded).length;if(CTOP_SIG!==sig){CTOP_C={};CTOP_SIG=sig;}if(CTOP_C[sp])return CTOP_C[sp];
+function charTop(sp){const V=roGet(VOICES_KEY,[]);const sig=ledgerSig(V);if(CTOP_SIG!==sig){CTOP_C={};CTOP_SIG=sig;}if(CTOP_C[sp])return CTOP_C[sp];
   const R={};V.forEach(x=>{if(x.sp!==sp||!x.graded||x.hit==null||!isVoter(x.voice)||x.voice==='Sim')return;const o=R[x.voice]||(R[x.voice]={n:0,w:0});o.n++;if(x.hit)o.w++;});
   const lb=o=>{const p=o.w/o.n,z=1.28;return(p+z*z/(2*o.n)-z*Math.sqrt(p*(1-p)/o.n+z*z/(4*o.n*o.n)))/(1+z*z/o.n);};   // Wilson lower bound
   return(CTOP_C[sp]=Object.entries(R).filter(([v,o])=>o.n>=15).sort((a,b)=>lb(b[1])-lb(a[1])).slice(0,3).map(([v,o])=>({v,n:o.n,p:o.w/o.n})));}
@@ -2699,7 +2719,7 @@ function charProfiles(){const V=roGet(VOICES_KEY,[]);const P={};
    arrow vs the day before, signed bias (⬇️ = model over-projected → the
    corrections shave it down), and model vs market on the margin.          */
 const CAL_UNIT={mlb:'runs',nhl:'goals',nfl:'pts',ncaaf:'pts',nba:'pts',ncaab:'pts'};
-function calOffsetsData(sp){const b=brainGet(sp);const byD={};
+function calOffsetsData(sp){const b=brainGetRO(sp);const byD={};
   (b.log||[]).forEach(r=>{const c=String(r.call||'').split('-').map(Number),f=String(r.final||'').split('-').map(Number);if(c.length!==2||f.length!==2||c.some(isNaN)||f.some(isNaN))return;
     const D=byD[r.d]||(byD[r.d]={n:0,tot:0,bias:0,mar:0,mkt:0,mn:0});D.n++;const ct=c[0]+c[1],ft=f[0]+f[1];D.tot+=Math.abs(ct-ft);D.bias+=ct-ft;D.mar+=+r.err||0;if(r.mkt!=null){D.mkt+=+r.mkt;D.mn++;}});
   const days=Object.keys(byD).sort().slice(-10).map(d=>{const D=byD[d];return{d,n:D.n,tot:D.tot/D.n,bias:D.bias/D.n,mar:D.mar/D.n,mkt:D.mn?D.mkt/D.mn:null};});
@@ -2998,7 +3018,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15854,7 +15874,9 @@ const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4]
   ncaab:{pts:[10,15,20,25],reb:[5,7,10],ast:[3,5,7],fg3:[1,2,3]}};
 /* v2.50 · only teams playing TODAY: the football boards hold the whole week, so Sunday's players no longer show as Thursday props */
 function teamsToday(sp){const s=new Set();const d=today();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(a&&a!=='pre'&&a!=='preview')return;const gd=gameDayOf(g);if(gd&&gd!==d)return;s.add(g.away.abbr);s.add(g.home.abbr);});}catch(e){}
-  try{const T=roGet(TC_KEY,{})||{};if(T.d===today())(((T.by||{})[sp]||{}).picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;String(x.game).split('@').forEach(t=>s.add(t));});}catch(e){}return s;}
+  try{const T=roGet(TC_KEY,{})||{};if(T.d===today()){const B=(T.by||{})[sp]||{};(B.picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;String(x.game).split('@').forEach(t=>s.add(t));});
+    /* v2.87.5 · every game on the schedule today (not just the ones with a colored pick), so prop calls cover every game on every page */
+    const now=Date.now();(B.games||[]).forEach(x=>{if(!x||!x.g||!x.s||tdDay(x.s)!==d||Date.parse(x.s)<=now)return;String(x.g).split('@').forEach(t=>s.add(t));});}}catch(e){}return s;}
 function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const teams=teamsToday(sp);if(!teams.size)return[];const out=[];
   Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<3)return;if(rsOut(rsInjury(sp,P.name)))return;
     Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<3)return;let best=null;
@@ -20660,7 +20682,7 @@ function factorsFor(sp,g,c){const f=[];const side=c.sd||c.side,m=c.m||c.market,l
   try{facCtx(sp,g,f);}catch(e){}
   return f;}
 let FAC_C=null,FAC_SIG='';
-function factorTable(sp){const V=roGet(VOICES_KEY,[]);const sig=V.length+'|'+V.filter(x=>x.graded).length;if(!FAC_C||FAC_SIG!==sig){FAC_C={};FAC_SIG=sig;}
+function factorTable(sp){const V=roGet(VOICES_KEY,[]);const sig=ledgerSig(V);if(!FAC_C||FAC_SIG!==sig){FAC_C={};FAC_SIG=sig;}
   if(FAC_C[sp])return FAC_C[sp];const T={};
   V.forEach(x=>{if(x.sp!==sp||x.voice!=='Sim'||!x.graded||x.hit==null||!(x.simP>0)||!Array.isArray(x.f))return;const p=x.pUsed!=null?x.pUsed:x.simP;
     x.f.forEach(k=>{const o=T[k]||(T[k]={n:0,w:0,ps:0,vs:0});o.n++;if(x.hit)o.w++;o.ps+=p;o.vs+=p*(1-p);});});
@@ -21724,7 +21746,7 @@ let LANE_C=null,LANE_SIG='';
    Oct 8-11): the lanes and the confidence meter never learn from them, so those losses can't block a lane for good */
 const BROKEN_DAYS={ncaaf:[['2026-09-28','2026-10-16',null]],nfl:[['2026-10-08','2026-10-11','total']]};
 function inputsBroken(x){const d=String((x&&x.date)||'').slice(0,10);return(BROKEN_DAYS[x&&x.sp]||[]).some(([a,b,m])=>d>=a&&d<=b&&(!m||m===x.market));}
-function laneTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+V.filter(x=>x.graded).length;if(LANE_C&&LANE_SIG===sig)return LANE_C;
+function laneTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=ledgerSig(V);if(LANE_C&&LANE_SIG===sig)return LANE_C;
   const G={},BYV={};const voices=new Set([...(typeof CHAR_ORDER!=='undefined'?CHAR_ORDER:[]),'Sim']);
   V.forEach(x=>{if(!x.graded||x.hit==null||!voices.has(x.voice)||inputsBroken(x))return;const k=laneKey(x.sp,x.market,x.side,x.price,x.line);if(!k)return;
     [META_VOICES.has(x.voice)?null:(G[k]||(G[k]={n:0,w:0,u:0})),(BYV[x.voice]||(BYV[x.voice]={}))[k]||(BYV[x.voice][k]={n:0,w:0,u:0})].filter(Boolean).forEach(o=>{o.n++;if(x.hit)o.w++;o.u+=x.units||0;});});
@@ -21794,7 +21816,7 @@ let SPEC_C=null,SPEC_SIG='';
 function specVenue(m,sd){return m==='total'?'':(sd==='home'?'home':sd==='away'?'road':'');}
 function specKeys(sp,m,sd,price,line){m=m==='moneyline'?'ml':m;const t=laneType(m,sd,price,line);const v=specVenue(m,sd);
   return{sport:sp+'|*',type:t?sp+'|'+m+'|'+t:null,venue:t&&v?sp+'|'+m+'|'+t+'|'+v:null};}
-function specTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+V.filter(x=>x.graded).length;if(SPEC_C&&SPEC_SIG===sig)return SPEC_C;const T={};
+function specTable(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=ledgerSig(V);if(SPEC_C&&SPEC_SIG===sig)return SPEC_C;const T={};
   V.forEach(x=>{if(!x.graded||x.hit==null||!CHARS[x.voice])return;const K=specKeys(x.sp,x.market,x.side,x.price,x.line);const B=T[x.voice]||(T[x.voice]={});
     [K.sport,K.type,K.venue].forEach(k=>{if(!k)return;const o=B[k]||(B[k]={n:0,w:0,u:0});o.n++;if(x.hit)o.w++;o.u+=x.units||0;});});
   SPEC_C=T;SPEC_SIG=sig;return T;}
@@ -22531,7 +22553,7 @@ function prLegHtml(l,ticketDate){try{const sp=l.sport||'mlb';if(l.fbProp||l.nhlP
   const line=k.market==='ml'?null:num!=null?+num:null;return prTagHtml(prRead(sp,l.game,legDay(l,ticketDate),k.market,k.side,l.price!=null?+l.price:null,line),true);}catch(e){return'';}}
 /* walk-forward: what #1s (and worsts) did on calls made after they were already ranked there */
 let PRT_C=null,PRT_SIG='';
-function prTrack(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+V.filter(x=>x.graded).length;if(PRT_C&&PRT_SIG===sig)return PRT_C;
+function prTrack(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=ledgerSig(V);if(PRT_C&&PRT_SIG===sig)return PRT_C;
   const G=V.filter(x=>x.graded&&x.hit!=null&&CHARS[x.voice]).map(x=>{const K=specKeys(x.sp,x.market,x.side,x.price,x.line);return K.type?{v:x.voice,k:K.type,d:String(x.date).slice(0,10),hit:x.hit,u:x.units||0}:null;}).filter(Boolean);
   const days=[...new Set(G.map(x=>x.d))].sort();const st={};const R={king:{n:0,w:0,u:0},goat:{n:0,w:0,u:0},rest:{n:0,w:0,u:0}};
   days.forEach(d=>{const cat={};Object.entries(st).forEach(([key,o])=>{if(o.n<PR_MIN)return;const[k,v]=key.split('#');(cat[k]||(cat[k]=[])).push({v,s:o.u/(o.n+SPEC_K)});});
