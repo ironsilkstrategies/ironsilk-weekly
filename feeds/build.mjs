@@ -67,13 +67,14 @@ async function verifyFinals(games,diag){
   for(const w of wk){const Y=String(open.find(g=>g.wk===w).st).slice(0,4);try{await ncaa('ncaaf',`${NCAA_API}football/fbs/${Y}/${String(w).padStart(2,'0')}/all-conf`);}catch(e){(diag.err=diag.err||[]).push('ncaaf wk'+w+': '+String(e.message).slice(0,60));}}
 }
 /* one-off (push runs only): which free sources carry player-prop lines and prices */
-async function probeProps(diag){const P={};const ev=async(path)=>{try{const j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard`);return(j.events||[]).filter(e=>((e.status||{}).type||{}).state==='pre').map(e=>e.id).slice(0,2);}catch(e){return[];}};
+async function probeProps(diag){const P={};const ev=async(path)=>{try{const j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard`);return(j.events||[]).filter(e=>((e.status||{}).type||{}).state==='pre').map(e=>e.id).slice(0,6);}catch(e){return[];}};
   for(const [lg,path,core] of [['nba','basketball/nba','basketball/leagues/nba'],['cfb','football/college-football','football/leagues/college-football'],['nhl','hockey/nhl','hockey/leagues/nhl']]){
-    const ids=await ev(path);if(!ids.length){P[lg]='no upcoming event';continue;}const id=ids[0];
+    const ids=await ev(path);if(!ids.length){P[lg]='no upcoming event';continue;}const id=ids[ids.length-1];
     try{const o=await getJSON(`https://sports.core.api.espn.com/v2/sports/${core}/events/${id}/competitions/${id}/odds?lang=en&region=us`);
       const provs=(o.items||[]).map(x=>{const m=String(x.$ref||'').match(/odds\/(\d+)/);return{id:m?m[1]:'?',n:(x.provider||{}).name||''};});P[lg+'_providers']=JSON.stringify(provs).slice(0,200);
       for(const pid of [...new Set(provs.map(x=>x.id).concat(['58','100']))].slice(0,4)){try{const pb=await getJSON(`https://sports.core.api.espn.com/v2/sports/${core}/events/${id}/competitions/${id}/odds/${pid}/propBets?lang=en&region=us&limit=1000`);
-          P[lg+'_prop_'+pid]=(pb.count||0)+' items · '+JSON.stringify((pb.items||[])[0]||{}).slice(0,360);}catch(e){P[lg+'_prop_'+pid]='err '+String(e.message).slice(0,40);}}}catch(e){P[lg]='odds err '+String(e.message).slice(0,50);}}
+          const it=(pb.items||[]);const strip=o=>JSON.stringify(o,(k,v)=>k==='$ref'?String(v).replace(/^.*\/v2\/sports\//,''):v);
+          P[lg+'_prop_'+pid]=(pb.count||0)+' items · pages '+(pb.pageCount||'?')+' · '+strip(it[0]||{}).slice(0,900)+' ## '+strip(it[7]||{}).slice(0,500)+' ## types '+[...new Set(it.map(x=>(x.type||{}).name))].slice(0,30).join('|');}catch(e){P[lg+'_prop_'+pid]='err '+String(e.message).slice(0,40);}}}catch(e){P[lg]='odds err '+String(e.message).slice(0,50);}}
   for(const [k,u] of [['prizepicks','https://api.prizepicks.com/projections?league_id=7&per_page=50&single_stat=true'],['underdog','https://api.underdogfantasy.com/beta/v5/over_under_lines']]){
     try{const j=await getJSON(u,{...BROWSER});const L=j.data||j.over_under_lines||[];P[k]=(Array.isArray(L)?L.length:0)+' · '+JSON.stringify(Array.isArray(L)?L[0]:Object.keys(j)).slice(0,300);}catch(e){P[k]='err '+String(e.message).slice(0,60);}}
   diag.props=P;}
