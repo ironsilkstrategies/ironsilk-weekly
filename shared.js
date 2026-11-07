@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18025,7 +18025,7 @@ function charDayHtml(sp){const d=CDAY_D||today();const isToday=d===today();
   const one=sp&&sp!=='all';const L=charDayRecord(d,one?sp:'all');
   /* every sport played that day gets its own table under the combined one */
   const per=one?[]:CDAY_SPORTS.map(s0=>({s0,L:charDayRecord(d,s0)})).filter(x=>x.L.length);
-  const body=!L.length?(storeDegraded()?`<div class="sub" style="color:var(--gold)">Your saved history didn't load on this page (the phone's storage didn't answer in time) — nothing is lost. Force-quit TheDesk and reopen it. <button onclick="location.reload()">↻ Reload</button></div>`:`<div class="sub">No character calls logged for ${isToday?'today yet — open a sport\'s board once':'that day'}.</div>`)
+  const body=!L.length?(storeDegraded()?`<div class="sub" style="color:var(--gold)">Your saved history didn't load on this page (the phone's storage didn't answer in time) — nothing is lost. Force-quit TheDesk and reopen it. <button onclick="location.reload()">↻ Reload</button></div>`:`<div class="sub">No character calls logged for ${isToday?'today yet — open a sport\'s board once':'that day'}.</div>${!isToday&&d<='2026-11-05'&&typeof syncOn==='function'&&syncOn()?`<div class="sub" style="margin-top:4px">Your history before Nov 6 is in the backup: <button onclick="restoreHistory()">📦 Restore history</button> <span class="restoreStatus"></span></div>`:''}`)
     :(one?charDayTable(L):`${per.length>1?'<div class="mktlab" style="margin-top:2px">All sports</div>':''}${charDayTable(L)}${per.length>1?per.map(({s0,L:Ls})=>`<details style="margin-top:6px" open><summary class="mktlab" style="cursor:pointer">${txtEsc(SP_LAB[s0]||s0.toUpperCase())}</summary>${charDayTable(Ls)}</details>`).join(''):''}`);
   return`<div class="tkt" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><h3 style="margin:0">📅 Character scoreboard · ${txtEsc(lab)}</h3>
       <div><button onclick="cdayStep(-1)" style="padding:2px 9px">‹</button><button onclick="cdayStep(1)" style="padding:2px 9px"${isToday?' disabled':''}>›</button></div></div>
@@ -19246,11 +19246,36 @@ if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()
   b.style.cssText='position:sticky;top:0;z-index:90;background:#3a2a05;color:#f5c542;border-bottom:1px solid #f5c542;padding:9px 14px;font:600 13px system-ui;line-height:1.4';
   b.innerHTML=`⚠️ Your saved history didn't load this time${storeWhyText()?' ('+txtEsc(storeWhyText())+')':''}. Nothing is lost and nothing will be saved over it — force-quit TheDesk (swipe it away) and reopen it. <button onclick="location.reload()" style="margin-left:6px">↻ Reload</button>`;
   document.body.insertBefore(b,document.body.firstChild);}catch(e){}});
+/* v2.86.7 · RESTORE — the Nov 5, 5:01 PM copy of your history (character calls, prop calls, archives, ledgers: 44 records) sits on
+   your private sync repo's "restore" branch. This merges it UNDER what's on the phone: wherever both have an entry the phone wins;
+   the backup only adds the calls, days and records that are missing. Safe to tap twice. Never runs on its own. */
+const RESTORE_BRANCH='restore',RESTORE_FILE='history-2026-11-05.lz';
+function restoreCount(x){try{const o=JSON.parse(x);return Array.isArray(o)?o.length:o&&typeof o==='object'?Object.keys(o).length:0;}catch(e){return 0;}}
+async function restoreHistory(){const say=m=>{document.querySelectorAll('.restoreStatus').forEach(e=>e.innerHTML=m);};
+  if(!syncOn()){alert('Connect your private sync repo first (More → ☁️ Sync).');return{ok:false};}
+  if(storeDegraded()||!(window.D4_STORE&&window.D4_STORE.on&&window.D4_STORE.on())){alert('Your storage has to load first — force-quit TheDesk, reopen it, then tap Restore again.');return{ok:false};}
+  if(!confirm('Merge your Nov 5 history backup into this phone?\n\nNothing on the phone is replaced — the backup only adds the calls, days and records that are missing.'))return{ok:false};
+  try{say('📦 Downloading the backup…');
+    const r=await syncFetch(`https://api.github.com/repos/${get(SYNC.repo,'')}/contents/${RESTORE_FILE}?ref=${RESTORE_BRANCH}&t=${Date.now()}`,{headers:syncHeaders({Accept:'application/vnd.github.raw'}),cache:'no-store'});
+    if(!r.ok)throw new Error('GitHub answered '+r.status+(r.status===404?' (no backup on the restore branch)':''));
+    const txt=(await r.text()).trim();say('📦 Unpacking…');await new Promise(z=>setTimeout(z,30));
+    const P=JSON.parse(LZString.decompressFromBase64(txt));if(!P||!P.keys)throw new Error('the backup file could not be read');
+    const out=[];for(const [k,v] of Object.entries(P.keys)){const cur=localStorage.getItem(k);const bj=JSON.stringify(v);const mj=cur?window.D4_STORE.merge(bj,cur):bj;if(!mj||mj===cur)continue;
+      const add=restoreCount(mj)-restoreCount(cur);set(k,JSON.parse(mj));if(add>0)out.push([k,add]);}
+    if(out.some(x=>x[0]===VOICES_KEY))try{set(VOICES_KEY,voicesTrim(get(VOICES_KEY,[])));}catch(e){}   /* the ledger's own cap: oldest go first */
+    set('d4.restored',{ts:Date.now(),from:P.from,keys:out.length});
+    const n=k=>(out.find(x=>x[0]===k)||[0,0])[1];
+    say(`<span style="color:var(--win)">✓ Restored from the Nov 5 backup — ${n(VOICES_KEY).toLocaleString()} character calls, ${n(CPROP_KEY).toLocaleString()} prop calls, ${out.length} records filled back in. Your phone's own entries were kept.</span>`);
+    try{deskToast('✓ History restored from the Nov 5 backup',5000);}catch(e){}try{renderToday(true);}catch(e){}try{renderRecordsHub();}catch(e){}
+    return{ok:true,out};}
+  catch(e){say(`<span style="color:var(--rust)">Restore didn't finish — ${txtEsc(e.message||String(e))}. Nothing was changed that wasn't merged.</span>`);return{ok:false,err:e.message};}}
+function restoreRowHtml(){if(typeof syncOn!=='function'||!syncOn())return'';const R=get('d4.restored',null);
+  return`<div class="sub" style="margin-top:6px">📦 History backup (Nov 5, 5 PM)${R?` · restored ${new Date(R.ts).toLocaleDateString([],{month:'short',day:'numeric'})}`:''} <button onclick="restoreHistory()">${R?'Restore again':'Restore history'}</button> <span class="restoreStatus"></span></div>`;}
 function storageMeterHtml(){
   const R=storageReport(),cap=5*1024*1024,pct=Math.min(100,R.tot/cap*100);
   const col=pct>85?'var(--rust)':pct>65?'var(--gold)':'var(--win)';
   const SB=(typeof window!=='undefined'&&window.D4_STORE&&window.D4_STORE.on())?window.D4_STORE.bytes():null;
-  return`<div class="sub"><b>${(R.tot/1048576).toFixed(2)} MB</b> of ~5 MB used (${pct.toFixed(0)}%) on the small shelf${SB?` · <b style="color:var(--win)">${(SB.db/1048576).toFixed(2)} MB</b> of history in the big store (no cap)`:` · <span style="color:var(--gold)">big store not active on this device${storeWhyText()?' — '+txtEsc(storeWhyText()):''}</span>${storeDegraded()?' <button onclick="location.reload()">↻ Reload</button>':''}`}</div>
+  return`<div class="sub"><b>${(R.tot/1048576).toFixed(2)} MB</b> of ~5 MB used (${pct.toFixed(0)}%) on the small shelf${SB?` · <b style="color:var(--win)">${(SB.db/1048576).toFixed(2)} MB</b> of history in the big store (no cap)`:` · <span style="color:var(--gold)">big store not active on this device${storeWhyText()?' — '+txtEsc(storeWhyText()):''}</span>${storeDegraded()?' <button onclick="location.reload()">↻ Reload</button>':''}`}</div>${restoreRowHtml()}
     <div style="height:7px;background:var(--rule);border-radius:4px;margin:4px 0"><div style="height:7px;width:${pct}%;background:${col};border-radius:4px"></div></div>
     ${R.rows.slice(0,8).map(([k,n])=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${txtEsc(k)}</span><span>${(n/1024).toFixed(0)} KB</span></div>`).join('')}
     ${PERF_LOG.length?`<div class="mktlab" style="margin-top:8px">Speed on this device</div>${PERF_LOG.slice(-10).reverse().map(x=>`<div class="mono" style="font-size:9.5px;display:flex;justify-content:space-between"><span>${txtEsc(x.what)}</span><span style="color:${x.ms>800?'var(--rust)':x.ms>250?'var(--gold)':'var(--win)'}">${x.ms} ms</span></div>`).join('')}`:''}
