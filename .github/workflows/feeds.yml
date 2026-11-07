@@ -2,7 +2,7 @@ name: Data feeds
 # Public sports data for TheDesk (scores, closing lines, officials) → the `feeds` branch, one commit, replaced each run.
 on:
   schedule:
-    - cron: '17 */3 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
