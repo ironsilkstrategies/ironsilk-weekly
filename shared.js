@@ -2573,7 +2573,7 @@ function halfCardHtml(){const T=halfToday();if(!T.length)return'';const nm=v=>(C
   const off=T.filter(x=>x.official);const by={};T.forEach(x=>{const k=x.sp+'|'+x.pick+'|'+x.game;(by[k]=by[k]||{x,v:[]}).v.push(x.voice);});
   const top=Object.values(by).sort((a,b)=>b.v.length-a.v.length).slice(0,6);
   return`<div class="tkt" style="margin-top:8px"><h3>🕐 Halves & 1st periods</h3>
-    ${off.length?off.map(x=>`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)} — ${txtEsc(nm(x.voice))} ${x.rec.w}-${x.rec.l} in this market</div>`).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls at ${Math.round(HALF_OK.p*100)}%+ in profit, per sport and market. Learning from tonight.</div>`}
+    ${off.length?off.map(x=>`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)} — ${txtEsc(nm(x.voice))} ${x.rec.w}-${x.rec.l} in this market</div>`).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls at ${Math.round(HALF_OK.p*100)}%+ in profit, per sport and market. Learning from tonight.</div>`}
     <details style="margin-top:4px"><summary class="sub">Most-agreed half calls today (${T.length} calls)</summary><div class="mono" style="font-size:10.5px">${top.map(o=>`<div>${txtEsc(o.x.pick)} ${tcSgn(o.x.price)} · ${txtEsc(o.x.game)} — ${o.v.length} characters</div>`).join('')}</div></details></div>`;}
 function halfRecordsHtml(sp){const L=Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.graded&&x.hit!=null&&(!sp||sp==='all'||x.sp===sp));
   const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');const by={};L.forEach(x=>{const k=x.voice;const r=by[k]=by[k]||{};const m=x.mk.replace(/^(h1|p1)/,'');const c=r[m]=r[m]||{w:0,l:0,u:0};x.hit?c.w++:c.l++;c.u+=x.units||0;});
@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -6422,7 +6422,7 @@ function presetTabHtml(){
         color:${held?'var(--gold)':'var(--mute)'}">
         ${held?'HELD':'HOLD'}
       </button>
-      <span style="flex:1">${l.pick} <span class="m">${gameLabelHtml(l.sport||(window.__PAGE_SPORT__||'mlb'),l.game)}</span>${srcTag}${l.hotWhy?`<div class="mono" style="font-size:9.5px;color:var(--win)">${txtEsc(l.hotWhy)}</div>`:''}</span>
+      <span style="flex:1">${l.pick} <span class="m">${gameLabelHtml(l.sport||(window.__PAGE_SPORT__||'mlb'),l.game)}</span>${gameWhenHtml(l.sport||(window.__PAGE_SPORT__||'mlb'),l.game,l.start)}${srcTag}${l.hotWhy?`<div class="mono" style="font-size:9.5px;color:var(--win)">${txtEsc(l.hotWhy)}</div>`:''}</span>
       <span class="pp">${(l.p*100).toFixed(0)}%</span>${eTxt}
     </li>`;
   }).join('');
@@ -9170,7 +9170,7 @@ function renderSlipSheetBody(){
       <div class="slip-leg-n">${i+1}</div>
       <div class="slip-leg-info">
         <div class="slip-leg-pick">${txtEsc(x.pick)}${price!=null?` <span class="slip-leg-price">${price>0?'+':''}${price}</span>`:' <span class="slip-leg-price" style="color:var(--mute)">no price</span>'}</div>
-        <div class="slip-leg-game">${(SP_LAB[x.sport||window.__PAGE_SPORT__||'mlb']||'').split(' ')[0]} ${txtEsc(x.game)}${x.pname?' · '+txtEsc(x.pname):''}${x.date&&x.date!==today()?' · '+txtEsc(String(x.date).slice(5)):''}</div>
+        <div class="slip-leg-game">${(SP_LAB[x.sport||window.__PAGE_SPORT__||'mlb']||'').split(' ')[0]} ${txtEsc(x.game)}${gameWhenHtml(x.sport||window.__PAGE_SPORT__||'mlb',x.game,x.start)}${x.pname?' · '+txtEsc(x.pname):''}${x.date&&x.date!==today()?' · '+txtEsc(String(x.date).slice(5)):''}</div>
         ${sg||dup?`<div class="slip-leg-warn">${sg?'⚠ same game as another leg — correlated':''}${sg&&dup?' · ':''}${dup?'⚠ already on a pending ticket':''}</div>`:''}
       </div>
       <div class="slip-leg-prob">${x.p>0&&x.p<1?(x.p*100).toFixed(0)+'%':'—'}</div>
@@ -13512,7 +13512,7 @@ function genTickets(mode){
             <button onclick="removeLegFromTicket(${jsArg(t.id)},'${esc(x.id)}')" title="Remove"
               style="flex:0 0 auto;background:none;border:1px solid var(--rust);color:var(--rust);
               border-radius:4px;padding:1px 7px;cursor:pointer;font-size:11px">✕</button>
-            <span style="flex:1">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span></span>
+            <span style="flex:1">${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${gameWhenHtml(x.sport||'mlb',x.game,x.start)}</span>
             ${legPctHtml(x,gr)}
           </li>`;
         }
@@ -13613,7 +13613,7 @@ function genTickets(mode){
     const payload=encodeURIComponent(JSON.stringify(legs.map(x=>({game:x.game,pick:x.pick,p:x.p,isProp:x.isProp||false,sport:x.sport||'mlb',gid:x.gid||null,kind:x.kind||null,price:x.price!=null?x.price:null}))));
     h+=`<div class="tkt ${i<2?'hi':''}"><h3>${lab}</h3>
       <div class="sub"><b>${(c*100).toFixed(c<.01?3:1)}%</b> · 1 in ${Math.round(1/c).toLocaleString()} · ${legs.length} legs</div>
-      <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span> <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
+      <ol>${legs.map(x=>`<li>${x.pick} <span class="m">${gameLabelHtml(x.sport||'mlb',x.game)}</span>${gameWhenHtml(x.sport||'mlb',x.game,x.start)} <span class="pp">${(x.p*100).toFixed(0)}%</span></li>`).join('')}</ol>
       <div class="bar"><button class="primary" onclick="confirmSystemTicket('${payload}','${PRESET_SOURCE[PRESET_MODE]||'mine'}','${PRESET_MODE}')">Confirm &amp; save</button></div></div>`;
   });
   const pu=new Set();
@@ -16023,7 +16023,7 @@ function renderBest(){
         prev=`<div class="sub" style="margin:10px 0 4px"><b>${fmtDate(new Date(P.d+'T12:00:00'))}'s card — still grading (${open.length} open)</b></div>`+bestPublicCardHtml(P,{id:'bestPrevShare',res:mk});}}}catch(e){}
   const pub=get('d4.pubstate',{})||{};const pubTxt=pub.d===S.d?(pub.ok?`<span style="color:var(--win)">✓ public page updated ${new Date(pub.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span>`:`<span style="color:var(--rust)">publish failed: ${esc(pub.reason||'')}</span>`):'';
   const L3=BEST_VIEW==='all'?(S.top3||[]):((S.bySport||{})[BEST_VIEW]||[]);
-  const notes=L3.length?`<div class="tkt" style="margin-top:8px"><h3>🎬 Reel notes — why each pick</h3><div class="sub" style="font-size:10px">Everything behind each play, plus a script you can read on camera.</div>${L3.map((x,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10px;color:var(--gold)">${sgnP(x.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(x.game)}</span>${whyHtml({...x,date:S.d},i===0)}</div>`).join('')}</div>`:'';
+  const notes=L3.length?`<div class="tkt" style="margin-top:8px"><h3>🎬 Reel notes — why each pick</h3><div class="sub" style="font-size:10px">Everything behind each play, plus a script you can read on camera.</div>${L3.map((x,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10px;color:var(--gold)">${sgnP(x.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)}</span>${whyHtml({...x,date:S.d},i===0)}</div>`).join('')}</div>`:'';
   let rcT='';try{const B=bkDayState();const D=B.locked?B:B.preview;if(false&&D&&D.roll&&D.roll.cut.length){   /* v2.33 · the Roll Call is retired (no pick on more than 3 tickets) */const cut=D.roll.legs.filter(l=>D.roll.cut.includes(l.sp+'|'+l.game));
     rcT=`<div class="tkt" style="margin-top:8px;border-left:3px solid #ff6fae"><h3>📣 Tonight's Roll Call parlay ${B.locked?'🔒':''}</h3><div class="mono" style="font-size:10.5px">${cut.map(l=>`${txtEsc(l.pick)} <span style="color:var(--gold)">${sgnP(l.price)}</span>`).join(' · ')}</div>
       <div class="mono" style="font-size:10px;color:var(--mute)">${cut.length} legs · ${decimalToAmerican(D.roll.cutDec)} · ${(D.roll.cutP*100).toFixed(1)}% to cash</div><div class="bar" style="margin-top:4px"><button onclick="tab('banker',document.getElementById('navBanker'))">Open the Banker's desk →</button></div></div>`;}}catch(e){}
@@ -17836,6 +17836,15 @@ function tcHeal(save){try{const d=today();const all=get(TC_KEY,{})||{};const T=a
   ['nfl','ncaaf','mlb','nhl','nba','ncaab'].forEach(sp=>{const S=get(TCS_PRE+sp,null);if(!S||S.d!==d||!S.B)return;const cur=T.by[sp];if(!cur||(!(cur.picks||[]).length&&(S.B.picks||[]).length&&(+S.B.ts||0)>(+cur.ts||0))){T.by[sp]=S.B;ch=true;}   /* a sport that vanished (or came back empty) — an entry on the card is never overruled */});
   if(ch&&save!==false)set(TC_KEY,T);return T;}catch(e){return get(TC_KEY,{})||{};}}
 if(typeof window!=='undefined')setTimeout(()=>{try{tcHeal();}catch(e){}},2500);
+/* v2.86.9 · the schedule rides on today's card: every game on this board (CBB: the ones the characters work), today and the next two
+   days, as {g:'AWY@HOM', id, s:start} — a few bytes a game — so every page can lay out every sport's games by start time, and show
+   a start time for any game, not just the ones this page loaded. Games already listed keep their place if the board drops them. */
+function tcSched(sp,prev){const d=today(),end=dayShift(d,2);const out=new Map();
+  (Array.isArray(prev)?prev:[]).forEach(x=>{if(!x||!x.g||!x.s)return;const dd=tdDay(x.s);if(dd>=d&&dd<=end)out.set(x.g,x);});
+  (sportGames(sp)||[]).forEach(g=>{try{if(!g||!g.away||!g.home||g.pre||g.preseason)return;if(sp==='ncaab'&&typeof ncaabWorks==='function'&&!ncaabWorks(g))return;
+    const s=g.start||g.date||g.gameDate;const t=Date.parse(s||'');if(!isFinite(t))return;const dd=tdDay(s);if(dd<d||dd>end)return;
+    const k=g.away.abbr+'@'+g.home.abbr;out.set(k,{g:k,id:g.id!=null?String(g.id):null,s:new Date(t).toISOString()});}catch(e){}});
+  return[...out.values()].sort((a,b)=>a.s<b.s?-1:a.s>b.s?1:0).slice(0,240);}
 function todaySnapshot(force){
   const sp=window.__PAGE_SPORT__||ACTIVE_SPORT;if(!sp)return;
   const relay=(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)||(typeof EVAL_CHAIN_HOP!=='undefined'&&EVAL_CHAIN_HOP);
@@ -17862,7 +17871,8 @@ function todaySnapshot(force){
   const merged=[...prev,...(picks||[]).filter(x=>!have.has(kOf(x)))];
   let standout=B0.standout||null;
   if(!standout){try{standout=pstStandout(sp,sportGames(sp).length?sportGames(sp):(typeof GAMES!=='undefined'?GAMES:[]));}catch(e){}}
-  T.by[sp]={ts:Date.now(),picks:merged,props,standout};set(TC_KEY,T);set(TCS_PRE+sp,{d,B:T.by[sp]});TC_SIG[sp]={sig,ts:Date.now()};
+  let games=B0.games||[];try{games=tcSched(sp,B0.games);}catch(e){}
+  T.by[sp]={ts:Date.now(),picks:merged,props,standout,games};set(TC_KEY,T);set(TCS_PRE+sp,{d,B:T.by[sp]});TC_SIG[sp]={sig,ts:Date.now()};
   try{cpropLog(cpropToday().filter(c=>c.sp===sp));}catch(e){console.warn('char props log',e);}   /* v2.02: every character's prop calls lock pregame, every refresh */
   const v=document.getElementById('v-today');if(v&&v.classList.contains('on'))renderToday(true);
 }
@@ -18041,7 +18051,7 @@ function charDeskHtml(F){
   const hot=[];calls.forEach(c=>{const h=charHist(V,c);if(h.hot.length)hot.push({c,h});});
   hot.sort((a,b)=>b.h.hot[0].r-a.h.hot[0].r||b.h.hot.length-a.h.hot.length);
   const hotHtml=hot.length?hot.slice(0,12).map(({c,h})=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule)">${chip(c.voice)}
-      <div style="flex:1"><b>${txtEsc(charPickText(c))}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[c.sp]||''} · ${esc(c.game)}</span> ${feelChip(c,V)}
+      <div style="flex:1"><b>${txtEsc(charPickText(c))}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">${SP_LAB[c.sp]||''} · ${esc(c.game)}${gameWhenHtml(c.sp,c.game)}</span> ${feelChip(c,V)}
       <div class="mono" style="font-size:9.5px">${h.hot.map(x=>`<span style="color:var(--win)">🔥 ${esc(x.lab)} ${fmt(x)}</span>`).join(' · ')}</div></div></div>`).join('')
     :'<div class="sub">No character has a 65%+ record (6+ games) on today\'s teams, matchups or markets yet.</div>';
   /* 2 · agree / disagree per game-market */
@@ -18052,13 +18062,13 @@ function charDeskHtml(F){
     const ks=Object.keys(sides).sort((a,b)=>sides[b].length-sides[a].length);const split=ks.length>1;
     const tot=Object.keys(g.by).length,top=sides[ks[0]].length;
     const verdict=split?`<span style="color:var(--rust)">split ${top}-${tot-top}</span>`:`<span style="color:var(--win)">all ${tot} agree</span>`;
-    return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div class="mono" style="font-size:10px;color:var(--mute)">${SP_LAB[g.sp]||''} · ${esc(g.game)} · ${mLab[g.m]||g.m} · ${verdict}</div>
+    return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div class="mono" style="font-size:10px;color:var(--mute)">${SP_LAB[g.sp]||''} · ${esc(g.game)}${gameWhenHtml(g.sp,g.game)} · ${mLab[g.m]||g.m} · ${verdict}</div>
       ${ks.map(k=>`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:2px"><b style="min-width:90px;font-size:12px">${txtEsc(charPickText(sides[k][0]))}</b>${sides[k].map(c=>{const h=charHist(V,c);return chip(c.voice)+(h.hot.length?'<span style="font-size:10px">🔥</span>':'');}).join('')}</div>`).join('')}</div>`;}).join('');
   /* 3 · each character's slate */
   const byV={};calls.forEach(c=>(byV[c.voice]=byV[c.voice]||[]).push(c));
   const cards=CHAR_ORDER.filter(v=>byV[v]).map(v=>{const all=V.filter(x=>x.voice===v&&x.graded&&!x.push);const w=all.filter(x=>x.hit).length;
     return`<details style="margin:4px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${byV[v].length} calls today · ${w}-${all.length-w} all-time</span></summary>
-      ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}</span> · ${feelChip(c,V)} · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${txtEsc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
+      ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}${gameWhenHtml(c.sp,c.game)}</span> · ${feelChip(c,V)} · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${txtEsc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
   return`<div class="tkt" style="border-color:var(--win)"><h3>🔥 Hot hands today</h3><div class="sub" style="font-size:10px">A character on a 65%+ run (6+ graded games, small samples shrunk toward 50%) in this sport+market, on this team, or in this exact matchup. Build it as a parlay: Tickets → Build → 🔥 Hot hands.</div>${hotHtml}</div>
     <div class="tkt"><h3>Who agrees, who doesn't</h3>${rows}</div>
     <div class="tkt"><h3>Each character's slate</h3>${cards}</div>`;}
@@ -18807,6 +18817,33 @@ let TODAY_LIVE_TIMER=null;
 function todayLiveLoop(){if(TODAY_LIVE_TIMER)return;
   TODAY_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-today');if(!v||!v.classList.contains('on'))return;
     try{await mgRefresh(false);}catch(e){}renderToday(true);},30000);}
+/* v2.86.9 · ONE pick row wherever a pick is shown across sports — Today's card and the ⏰ by-time view draw the exact same row
+   (tier, price, brain %, edge, blend, EV, stake, live win %, characters, hot line, price read, rules, ✓ on a ticket).
+   o.inGame: the row sits under its game's header, so the game and time aren't repeated · o.slip: a ＋/✓ slip button. */
+function tcRowHtml(sp,x,L,o){o=o||{};const pct=v=>Math.round(v*100)+'%';
+  const chip=v=>{const C=CHARS[v];if(!C)return'';return`<span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`;};
+  const [c,l]=TC_COL[x.color]||['var(--mute)',''];const on=onTicketMatch(sp,x.game,x.m,x.sd);
+      let slip='';if(o.slip&&x.price!=null&&!(L&&L.state&&L.state!=='pre')){let inS=false;try{inS=SLIP.some(y=>y.id==='str|'+sp+'|'+x.game+'|'+x.pick||(y.game===x.game&&y.pick===x.pick));}catch(e){}
+        slip=`<br><button class="${inS?'primary':''}" onclick="slotAdd(${jsArg(sp)},${jsArg(x.game)},${jsArg(x.pick)},${jsArg(x.price)},${jsArg(x.brainP!=null?x.brainP:x.blend!=null?x.blend:x.mp!=null?x.mp:0.5)},${jsArg(tdDay(x.start||'')||today())})" title="${inS?'On your slip — tap to take it off':'Add to your slip'}" style="margin-top:4px;padding:5px 11px;font-size:13px">${inS?'✓':'＋'}</button>`;}
+      const pr=x.price!=null?tcSgn(x.price):'<span style="color:var(--mute)">sim</span>';
+      const pc=x.brainP!=null?`brain ${Math.round(x.brainP*100)}%`:x.mp!=null?`model ${Math.round(x.mp*100)}%`:'';
+      let live='';
+      if(L&&L.e&&L.state!=='pre'){const [aw,hm]=x.game.split('@');const E=L.e;
+        const sc=`${esc(aw)} <b>${E.a}</b> – <b>${E.h}</b> ${esc(hm)}`;
+        if(L.state==='post'){const r=L.p==null?'':L.p>0.99?'<b style="color:var(--win)">✅ HIT</b>':L.p<0.01?'<b style="color:var(--rust)">❌ MISS</b>':'<b style="color:var(--mute)">PUSH</b>';
+          live=`<div class="mono" style="font-size:10px;margin-top:2px">FINAL · ${sc} ${r}</div>`;}
+        else{const lp=L.p,col=lp==null?'var(--mute)':lp>=0.6?'var(--win)':lp>=0.4?'var(--gold)':'var(--rust)';
+          const mv=L.p0!=null&&lp!=null?Math.round((lp-L.p0)*100):null;
+          live=`<div class="mono" style="font-size:10.5px;margin-top:3px"><span style="color:#ff4b5c;font-weight:800">● LIVE</span> ${sc} · <span style="color:var(--mute)">${txtEsc(E.detail||'')}</span> ${gcBtn(sp,x.game,today())}</div>
+            ${lp!=null?`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><div style="flex:1;height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${Math.round(lp*100)}%;background:${col}"></div></div>
+            <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${pct(lp)} to win</span>${mv!=null&&mv!==0?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${pct(L.p0)}</span>`:''}</div>`:''}`;}}
+      return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${L&&L.state==='in'?'#ff4b5c':c};background:rgba(255,255,255,.02);${on&&!(L&&L.state==='in')?'opacity:.55':''}">
+        <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${x.dbl?x.dbl+' ':''}${esc(x.pick)} <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${pr}</span>${typeof tcConfChip==='function'?tcConfChip(sp,x):''}${x.unan?' <span class="src-tag unanimous" style="display:inline">★ unanimous</span>':''}</div>
+          <div class="mono" style="font-size:9.5px;color:var(--mute)">${o.inGame?'':`${L&&L.state==='in'?SP_LAB[sp]+' · ':''}${txtEsc(gameLabel(sp,x.game))}${gameWhenHtml(sp,x.game,x.start)} · `}${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${x.blend!=null&&x.mkt!=null?` · blend ${Math.round(x.blend*100)}% (mkt ${Math.round(x.mkt*100)}%)`:''}${x.evCal!=null?` · EV ${x.evCal>=0?'+':''}${x.evCal.toFixed(1)}% calibrated`:''}${x.suspect?` · <span style="color:var(--rust)">⚠️ ${esc(x.suspect)} — EV suspect</span>`:''}${x.incoherent?` · <span style="color:var(--rust)">⚠️ ${esc(x.incoherent)}</span>`:''}${x.stakeF>0?` · <b style="color:var(--win)">stake ${x.stakeAmt!=null?'$'+x.stakeAmt.toFixed(2):(x.stakeF*100).toFixed(1)+'% of bankroll'}</b>${x.capped?' <span style="color:var(--mute)">(day capped at 10%)</span>':''}`:''}</div>
+          ${live}
+          <div class="hs-row" style="justify-content:flex-start">${(x.chars||[]).map(chip).join('')}</div>${tcHotLine(sp,x)}${(()=>{try{return prTagHtml(prRead(sp,x.game,today(),x.m,x.sd,x.price,x.line),false);}catch(e){return'';}})()}${x.rules&&x.rules.length?`<div class="rule-row" style="justify-content:flex-start">${x.rules.slice(0,3).map(r=>`<span class="rule ${r.kind}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:''}</div>
+        <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:${c};font-weight:800">${l}${on?'<br><span style="color:var(--win)">✓ ON A TICKET</span>':''}${slip}</div></div>`;}
+function tcPropRowHtml(sp,x,o){o=o||{};return`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.name)}</b> ${x.line}+ ${esc(x.lab)} <b style="color:var(--win)">${Math.round(x.p*100)}%</b> <span style="color:var(--mute)">· proj ${x.proj}${o.inGame?'':` · ${esc(x.game)}${gameWhenHtml(sp,x.game,x.start)}`}${x.book?' · book '+tcSgn(x.price):''}</span></div>`;}
 function renderToday(noSnap){
   const el=document.getElementById('todayBody');if(!el)return;
   if(!noSnap)todaySnapshot();
@@ -18833,25 +18870,7 @@ function renderToday(noSnap){
     <div>${fb('ch','all','Any character')}${usedCh.map(v=>fb('ch',v,`${CHARS[v].chip} ${CHARS[v].label||v}`,CHARS[v].color)).join('')}</div>
     ${sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:''}</div>`;
   const pct=v=>Math.round(v*100)+'%';
-  const row=(sp,x,L)=>{const [c,l]=TC_COL[x.color]||['var(--mute)',''];const on=onTicketMatch(sp,x.game,x.m,x.sd);
-      const pr=x.price!=null?tcSgn(x.price):'<span style="color:var(--mute)">sim</span>';
-      const pc=x.brainP!=null?`brain ${Math.round(x.brainP*100)}%`:x.mp!=null?`model ${Math.round(x.mp*100)}%`:'';
-      let live='';
-      if(L&&L.e&&L.state!=='pre'){const [aw,hm]=x.game.split('@');const E=L.e;
-        const sc=`${esc(aw)} <b>${E.a}</b> – <b>${E.h}</b> ${esc(hm)}`;
-        if(L.state==='post'){const r=L.p==null?'':L.p>0.99?'<b style="color:var(--win)">✅ HIT</b>':L.p<0.01?'<b style="color:var(--rust)">❌ MISS</b>':'<b style="color:var(--mute)">PUSH</b>';
-          live=`<div class="mono" style="font-size:10px;margin-top:2px">FINAL · ${sc} ${r}</div>`;}
-        else{const lp=L.p,col=lp==null?'var(--mute)':lp>=0.6?'var(--win)':lp>=0.4?'var(--gold)':'var(--rust)';
-          const mv=L.p0!=null&&lp!=null?Math.round((lp-L.p0)*100):null;
-          live=`<div class="mono" style="font-size:10.5px;margin-top:3px"><span style="color:#ff4b5c;font-weight:800">● LIVE</span> ${sc} · <span style="color:var(--mute)">${txtEsc(E.detail||'')}</span> ${gcBtn(sp,x.game,today())}</div>
-            ${lp!=null?`<div style="display:flex;align-items:center;gap:6px;margin-top:2px"><div style="flex:1;height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${Math.round(lp*100)}%;background:${col}"></div></div>
-            <span class="mono" style="font-size:10.5px;color:${col};font-weight:800">${pct(lp)} to win</span>${mv!=null&&mv!==0?`<span class="mono" style="font-size:9.5px;color:${mv>0?'var(--win)':'var(--rust)'}">${mv>0?'▲':'▼'}${Math.abs(mv)} from ${pct(L.p0)}</span>`:''}</div>`:''}`;}}
-      return`<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${L&&L.state==='in'?'#ff4b5c':c};background:rgba(255,255,255,.02);${on&&!(L&&L.state==='in')?'opacity:.55':''}">
-        <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${x.dbl?x.dbl+' ':''}${esc(x.pick)} <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gold)">${pr}</span>${typeof tcConfChip==='function'?tcConfChip(sp,x):''}${x.unan?' <span class="src-tag unanimous" style="display:inline">★ unanimous</span>':''}</div>
-          <div class="mono" style="font-size:9.5px;color:var(--mute)">${L&&L.state==='in'?SP_LAB[sp]+' · ':''}${txtEsc(gameLabel(sp,x.game))} · ${pc}${x.gap!=null&&x.gap>0?` · edge +${x.gap.toFixed(1)}`:''}${x.blend!=null&&x.mkt!=null?` · blend ${Math.round(x.blend*100)}% (mkt ${Math.round(x.mkt*100)}%)`:''}${x.evCal!=null?` · EV ${x.evCal>=0?'+':''}${x.evCal.toFixed(1)}% calibrated`:''}${x.suspect?` · <span style="color:var(--rust)">⚠️ ${esc(x.suspect)} — EV suspect</span>`:''}${x.incoherent?` · <span style="color:var(--rust)">⚠️ ${esc(x.incoherent)}</span>`:''}${x.stakeF>0?` · <b style="color:var(--win)">stake ${x.stakeAmt!=null?'$'+x.stakeAmt.toFixed(2):(x.stakeF*100).toFixed(1)+'% of bankroll'}</b>${x.capped?' <span style="color:var(--mute)">(day capped at 10%)</span>':''}`:''}</div>
-          ${live}
-          <div class="hs-row" style="justify-content:flex-start">${(x.chars||[]).map(chip).join('')}</div>${tcHotLine(sp,x)}${(()=>{try{return prTagHtml(prRead(sp,x.game,today(),x.m,x.sd,x.price,x.line),false);}catch(e){return'';}})()}${x.rules&&x.rules.length?`<div class="rule-row" style="justify-content:flex-start">${x.rules.slice(0,3).map(r=>`<span class="rule ${r.kind}">${r.icon} ${esc(r.text)}</span>`).join('')}</div>`:''}</div>
-        <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:${c};font-weight:800">${l}${on?'<br><span style="color:var(--win)">✓ ON A TICKET</span>':''}</div></div>`;};
+  const row=(sp,x,L)=>tcRowHtml(sp,x,L);
   /* live games, every sport, pinned to the top — closest-to-the-wire first */
   const liveRows=[];
   sports.forEach(sp=>(by[sp].picks||[]).forEach(x=>{if(!tfPass(x,sp,F))return;const L=tcLive(sp,x);if(L.state==='in')liveRows.push({sp,x,L});}));
@@ -18863,17 +18882,18 @@ function renderToday(noSnap){
     const P=(B.picks||[]).filter(x=>tfPass(x,sp,F)).map(x=>({x,L:tcLive(sp,x)})).filter(o=>o.L.state!=='in');
     const pre=P.filter(o=>o.L.state!=='post').sort((a,b)=>tcSort(a.x,b.x)),done=P.filter(o=>o.L.state==='post').sort((a,b)=>tcSort(a.x,b.x));
     const rows=pre.map(o=>row(sp,o.x,o.L)).join('')+(done.length?`<div class="mktlab" style="margin-top:8px">Final</div>`+done.map(o=>row(sp,o.x,o.L)).join(''):'');
-    const props=(B.props||[]).map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.name)}</b> ${x.line}+ ${esc(x.lab)} <b style="color:var(--win)">${Math.round(x.p*100)}%</b> <span style="color:var(--mute)">· proj ${x.proj} · ${esc(x.game)}${x.book?' · book '+tcSgn(x.price):''}</span></div>`).join('');
+    const props=(B.props||[]).map(x=>tcPropRowHtml(sp,x)).join('');
     const total=(B.picks||[]).length,shown=pre.length+done.length;
     return`<div class="sbar" style="margin-top:10px"><h2>${SP_LAB[sp]} · ${shown}${shown!==total?' of '+total:''} pick${total===1?'':'s'}</h2><div class="ln"></div></div>
       <div class="sub mono" style="font-size:9px;color:var(--mute)">updated ${age(B.ts)} — open ${SP_LAB[sp]} Games to refresh</div>
       ${rows||`<div class="empty">${total?'Nothing here matches the filter'+(P.length<total?' (live games are pinned above)':'')+'.':'No colored, non-conflicted picks on this board yet.'}</div>`}
       ${props&&F.tier==='all'&&F.ch==='all'?`<div class="mktlab" style="margin-top:8px">Props ≥70%</div>${props}`:''}`;}).join('');
-  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['edge','🛡 Edge Desk'],['chars','🎭 Characters'],['parlays','🎲 Parlays'],['stars','⭐ Stars & Busts'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
+  const vw=`<div style="margin-bottom:6px">${[['picks','📋 Picks'],['slots','⏰ By time'],['edge','🛡 Edge Desk'],['chars','🎭 Characters'],['parlays','🎲 Parlays'],['stars','⭐ Stars & Busts'],['props','🎯 Props'],['subs','💎 Subscribers']].map(([k,l])=>`<button class="msg-chip${(F.view||'picks')===k?' on':''}" onclick="tfSet('view','${k}')">${l}</button>`).join('')}</div>`;
   const spBar=sports.length>1?`<div>${fb('sp','all','All sports')}${sports.map(sp=>fb('sp',sp,SP_LAB[sp])).join('')}</div>`:'';
   if(F.view==='chars'){const safe=f=>{try{return f()}catch(e){console.warn('characters hub',e);return''}};
     el.innerHTML=vw+spBar+safe(()=>charDayHtml(F.sp))+safe(feelTuneHtml)+safe(bankerHtml)+safe(()=>prPanelHtml(F.sp))+safe(charRosterHtml)+`<div class="tkt"><h3>🎲 Character parlays</h3><div class="sub" style="font-size:10px">Every character's tickets — game lines and with props — and their records live in the Parlay Hub.</div><button class="msg-chip on" onclick="tfSet('view','parlays')">🎲 Open the Parlay Hub</button></div>`+charDeskHtml(F);return;}
   if(F.view==='props'){el.innerHTML=vw+spBar+cpropHtml(F);return;}
+  if(F.view==='slots'){let h='';try{h=typeof slotBoardHtml==='function'?slotBoardHtml('st'):'';}catch(e){console.warn('by time',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}   /* v2.86.9 · every sport, by start time */
   if(F.view==='parlays'){let h='';try{h=parlayHubHtml();}catch(e){console.warn('parlay hub',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}
   if(F.view==='stars'){let h='';try{h=starsHtml(F.sp);}catch(e){console.warn('stars',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+spBar+h;return;}
   if(F.view==='edge'){let h='';try{h=typeof edgeDeskHtml==='function'?edgeDeskHtml():'';}catch(e){console.warn('edge desk',e);h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=vw+h;return;}   /* v2.85.0 */
@@ -20681,7 +20701,7 @@ function bkDayRecord(){const H={...(get(BKDAYS_KEY,{})||{})};const S=get(BKDAY_K
   return R;}
 function bkLegRow(l,opts){opts=opts||{};const mark=l.push?'↔ ':l.hit===true?'✅ ':l.hit===false?'❌ ':'';const C=CHARS[l.v]||{};
   return`<div style="padding:5px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
-    <div>${mark}<b>${txtEsc(l.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(l.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[l.sp]||'').split(' ')[0]} ${gameLabelHtml(l.sp,l.game)}</span>${opts.cut===false?' <span class="mono" style="font-size:9px;color:var(--mute)">(longshot leg)</span>':''}</div>
+    <div>${mark}<b>${txtEsc(l.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(l.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[l.sp]||'').split(' ')[0]} ${gameLabelHtml(l.sp,l.game)}${gameWhenHtml(l.sp,l.game,l.start)}</span>${opts.cut===false?' <span class="mono" style="font-size:9px;color:var(--mute)">(longshot leg)</span>':''}</div>
     <div class="mono" style="font-size:10px;white-space:nowrap">${Math.round(l.p*100)}%</div></div>
     <div class="mono" style="font-size:9.5px;color:var(--mute)">${(l.by||[l.v]).map(v=>`<span style="color:${(CHARS[v]||{}).color||'var(--mute)'}">${(CHARS[v]||{}).chip||v}</span>`).join(' ')}${opts.rank>1?` · its #${opts.rank} pick (top one was a game already taken)`:''}</div>
     ${opts.why!==false?whyHtml({...l,date:opts.d}):''}</div>`;}
@@ -20698,7 +20718,7 @@ function bkShareText(t,d){const R=bkDayRecord().own;const u=bkUnits(t);const sin
 function bkShareHtml(t,d){if(!t||tixDone(t.legs)!==true)return'';const R=bkDayRecord().own;const u=bkUnits(t);const since=bkRecordSince();const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀'};
   const n=t.legs.filter(l=>!l.push).length;
   const rows=t.legs.map(l=>`<div class="b3-row" style="padding:8px 0"><div class="b3-n" style="font-size:18px">${l.push?'↔':'✅'}</div><div style="flex:1;min-width:0"><div class="b3-pick" style="font-size:16px">${txtEsc(l.pick)} <span class="b3-price">${l.price>0?'+':''}${l.price}</span></div>
-      <div class="b3-meta">${em[l.sp]||''} ${(l.sp||'').toUpperCase()} · ${txtEsc(l.game)}</div></div></div>`).join('');
+      <div class="b3-meta">${em[l.sp]||''} ${(l.sp||'').toUpperCase()} · ${txtEsc(l.game)}${gameWhenHtml(l.sp,l.game,l.start)}</div></div></div>`).join('');
   return`<div class="mktlab" style="margin-top:10px">🏆 Share the hit</div><div class="recapwrap" id="bkShareCard"><div class="recapcard">
     <style>.b3-row{display:flex;gap:10px;align-items:center;border-bottom:1px solid rgba(255,255,255,.08)}.b3-n{width:24px;text-align:center}.b3-pick{font-weight:900}.b3-price{font-family:'IBM Plex Mono';font-size:12px;color:var(--gold)}.b3-meta{font-family:'IBM Plex Mono';font-size:10px;color:var(--mute);margin-top:2px}</style>
     <div class="rc-head"><div><div class="rc-brand">THE<span>DESK</span></div><div class="rc-tag">🏦 The Banker's parlay</div></div><div class="rc-date">${fmtDate(new Date(d+'T12:00:00'))}</div></div>
@@ -20900,7 +20920,7 @@ function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const to
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule);${on?'':'opacity:.55'}"><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
       <input type="checkbox" ${on?'checked':''} onchange="cbToggle('${x.k.replace(/'/g,"\\'")}')" style="width:20px;height:20px;min-width:20px;flex:0 0 20px;margin:2px 0 0;padding:0">
       <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(x.price)}</span></span><span class="mono" style="font-size:10.5px;color:${x.off?'var(--win)':'var(--mute)'}">${x.off?'✅ ':''}${Math.round(x.p*100)}%</span></div>
-        <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game)}${CB_V==='__roll'?` · <span style="color:${C.color}">${C.chip||''}</span>`:''}${r?` · <span style="color:var(--win)">${txtEsc(r)}</span>`:''}</div></div></label>
+        <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)}${CB_V==='__roll'?` · <span style="color:${C.color}">${C.chip||''}</span>`:''}${r?` · <span style="color:var(--win)">${txtEsc(r)}</span>`:''}</div></div></label>
       ${whyHtml({...x,date:d})}</div>`;}).join('');
   const dec=sel.reduce((a,x)=>a*americanToDecimal(x.price),1),pc=sel.reduce((a,x)=>a*x.p,1);
   let stake=0;try{const {B}=bkBudget();const sz=sel.length>=2?bkSize(sel.map(x=>({p:x.score!=null?x.score:x.p,dec:americanToDecimal(x.price)})),sel.length,sel.length):null;stake=sz&&sz.f>0?bkStake(sz.f,B):0;}catch(e){}
@@ -21537,6 +21557,22 @@ function teamTagHtml(sp,abbr){const k=teamRk(sp,abbr);if(!k)return'';
 function teamNameHtml(sp,abbr){return teamTagHtml(sp,abbr)+txtEsc(abbr||'');}
 function gameLabelHtml(sp,game){const[a,h]=String(game||'').split('@');return a&&h?teamNameHtml(sp,a)+'@'+teamNameHtml(sp,h):txtEsc(game||'');}
 function gameLabel(sp,game){const[a,h]=String(game||'').split('@');return a&&h?teamTag(sp,a)+a+'@'+teamTag(sp,h)+h:String(game||'');}
+/* v2.86.8 · EVERY GAME SHOWS WHEN IT STARTS. One index of start times for every sport — from today's card (every page has every
+   sport's board) and this page's own schedule — so a pick, a call, a hot hand or a parlay leg always says when its game goes. */
+let GSTART_C=null;
+function gameStartIdx(){let raw='';try{raw=String(localStorage.getItem(TC_KEY)||'').length+'|'+(typeof liveSports==='function'?liveSports().map(sp=>(sportGames(sp)||[]).length).join(','):'');}catch(e){}
+  if(GSTART_C&&GSTART_C.raw===raw&&Date.now()-GSTART_C.t<60e3)return GSTART_C.m;const m={};
+  const put=(sp,game,st)=>{if(!sp||!game||!st)return;const k=sp+'|'+game;if(!m[k])m[k]=st;};
+  try{const T=roGet(TC_KEY,{})||{};Object.entries(T.by||{}).forEach(([sp,B])=>{(B&&B.picks||[]).forEach(p=>put(sp,p.game,p.start));(B&&B.props||[]).forEach(p=>put(sp,p.game,p.start));(B&&B.games||[]).forEach(g=>put(sp,g.g,g.s));});}catch(e){}
+  try{(typeof liveSports==='function'?liveSports():[]).concat(['mlb']).forEach(sp=>{(sportGames(sp)||[]).forEach(g=>{try{if(g&&g.away&&g.home)put(sp,g.away.abbr+'@'+g.home.abbr,g.start||g.date||g.gameDate);}catch(e){}});});}catch(e){}
+  GSTART_C={t:Date.now(),raw,m};return m;}
+function gameStart(sp,game,fb){if(fb)return fb;try{return gameStartIdx()[sp+'|'+game]||null;}catch(e){return null;}}
+function gameWhen(sp,game,st){st=gameStart(sp,game,st);if(!st)return'';const t=new Date(st);if(isNaN(t))return'';
+  const hm=t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:APP_TZ});const day=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(t);
+  const cal=new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  return day===cal||day===today()?hm:t.toLocaleDateString('en-US',{weekday:'short',timeZone:APP_TZ})+' '+hm;}
+function gameWhenHtml(sp,game,st){const w=gameWhen(sp,game,st);if(!w)return'';const t=new Date(gameStart(sp,game,st));const past=t.getTime()<Date.now();
+  return` <span class="gm-when" style="font-family:'IBM Plex Mono',monospace;font-size:.92em;color:${past?'var(--mute)':'var(--chalk,#e8e8e8)'};white-space:nowrap">🕒 ${w}${past?' · started':''}</span>`;}
 (function(){try{if(typeof document!=='undefined'&&!document.getElementById('rk-css')){const st=document.createElement('style');st.id='rk-css';
   st.textContent='.rk-tag{font-family:"IBM Plex Mono",monospace;font-size:.72em;font-weight:800;color:var(--gold,#FFC72C);letter-spacing:-.02em;vertical-align:.08em}.rk-tag sup{font-size:.7em;color:var(--mute);margin-left:1px}';
   (document.head||document.documentElement).appendChild(st);}}catch(e){}})();
@@ -21976,7 +22012,7 @@ function pwrEvalHtml(sp){let R=null;try{R=pwrReign(sp);}catch(e){}if(!R)return''
   const fb=sp==='nfl'||sp==='ncaaf';const end=dayShift(d,fb?7:0);   /* football boards show the week; calls are dated to game day */
   const calls=(roGet(VOICES_KEY,[],30e3)||[]).filter(x=>x.voice==='Power'&&x.sp===sp&&!x.graded&&String(x.date).slice(0,10)>=d&&String(x.date).slice(0,10)<=end);
   const list=calls.slice().sort((a,b)=>(b.pP||0)-(a.pP||0)).slice(0,10).map(c=>{let f=null;try{f=charFeel(c);}catch(e){}
-    return`<div class="mono" style="font-size:10px;padding:2px 0">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}</span> · power ${Math.round((c.pP||0)*100)}%${f?` · feel ${Math.round(f.p*100)}%${f.black?' 🚫':''}`:''}${c.edge!=null?` · edge ${c.edge>0?'+':''}${c.edge}`:''}</div>`;}).join('');
+    return`<div class="mono" style="font-size:10px;padding:2px 0">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}${gameWhenHtml(c.sp,c.game)}</span> · power ${Math.round((c.pP||0)*100)}%${f?` · feel ${Math.round(f.p*100)}%${f.black?' 🚫':''}`:''}${c.edge!=null?` · edge ${c.edge>0?'+':''}${c.edge}`:''}</div>`;}).join('');
   return`<div class="tkt" style="border-color:${R.supreme?'var(--win)':'var(--rule)'}"><h3>⚡ The Commissioner · ${lab}</h3>
     <div class="sub" style="font-size:10.5px">Straight-up this season: <b style="color:${R.supreme?'var(--win)':'var(--chalk)'}">${pct(R.acc)}</b> over ${R.n||0} games (${R.src||'no data yet'}).
     ${R.supreme?`Reigns supreme here (70%+) — it pulls calibrated chances toward its own with weight <b>${Math.round(R.w*100)}%</b>${R.cut?' (halved: its money record is under −5% ROI)':''}.`:'Under 70% — no say in calibration here until it earns it.'}

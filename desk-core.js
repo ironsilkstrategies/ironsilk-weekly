@@ -1020,7 +1020,7 @@ function renderMoneyTab(){const S=bankState();const col=S.avail>=S.start+S.adj?'
   /* today's plan from the Banker */
   let D=null;try{const st=bkDayState();D=st.locked?st:st.preview;}catch(e){}
   const best=(()=>{try{return best5State().top3||[];}catch(e){return[];}})();
-  const bRow=x=>{const dec=americanToDecimal(+x.price);const t={p:x.p,dec};const s=deskStake(t,Math.max(0,S.avail));return`<div class="plan-row"><div><b>${txtEsc(x.pick)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${sgnP(x.price)}</span><div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(x.sp,x.game))} · ${Math.round(x.p*100)}% sure</div></div><div class="plan-st">${s?deskMoney(s):'—'}</div></div>`;};
+  const bRow=x=>{const dec=americanToDecimal(+x.price);const t={p:x.p,dec};const s=deskStake(t,Math.max(0,S.avail));return`<div class="plan-row"><div><b>${txtEsc(x.pick)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${sgnP(x.price)}</span><div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(x.sp,x.game))}${gameWhenHtml(x.sp,x.game,x.start)} · ${Math.round(x.p*100)}% sure</div></div><div class="plan-st">${s?deskMoney(s):'—'}</div></div>`;};
   h+=`<div class="sbar"><h2>Today's plan · from the Banker</h2><div class="ln"></div></div><div class="tkt">
     ${deskFrozen()?'':'<div class="sub" style="font-size:10.5px;margin-bottom:4px">Preview — it locks at the master evaluation.</div>'}
     ${best.length?`<div class="mktlab">⭐ Best 3 — singles</div>${best.map(bRow).join('')}`:'<div class="sub" style="font-size:10.5px">No Best 3 today.</div>'}
@@ -1439,7 +1439,7 @@ function strengthPlays(){const lanes=recLanes(recPool('all','off'),8);const LS2=
     .map(c=>({c,lane:LS2.get(c.voice+'|'+c.sp+'|'+c.market),cf:confOf(c)})).sort((a,b)=>b.cf*b.lane.p-a.cf*a.lane.p)};}
 function strengthRow(o){const c=o.c;const C=CHARS[c.voice]||{};const pick=charPickText(c);const inSlip=SLIP.some(x=>x.game===c.game&&x.pick===pick);let ex=0;try{ex=deskExposure({sp:c.sp,game:c.game,m:c.market,sd:c.side});}catch(e){}
   return`<div class="str-row"><div style="flex:1;min-width:0"><b>${txtEsc(pick)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${sgnP(c.price)}</span> <span class="cf-chip on" style="color:${recColor(o.cf,9)};border-color:${recColor(o.cf,9)}">${Math.round(o.cf*100)}%</span>
-      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[c.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(c.sp,c.game))} · <b style="color:${C.color}">${txtEsc(charName(c.voice).replace(/^The /,''))}</b> is <b style="color:${recColor(o.lane.p,o.lane.n)}">${o.lane.w}-${o.lane.l}</b> on ${CONF_SP_LAB[c.sp]} ${({ml:'ML',spread:'ATS',total:'O/U'})[c.market]}${ex?` · on ${ex} ticket${ex===1?'':'s'}`:''}</div></div>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[c.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(c.sp,c.game))}${gameWhenHtml(c.sp,c.game,c.start)} · <b style="color:${C.color}">${txtEsc(charName(c.voice).replace(/^The /,''))}</b> is <b style="color:${recColor(o.lane.p,o.lane.n)}">${o.lane.w}-${o.lane.l}</b> on ${CONF_SP_LAB[c.sp]} ${({ml:'ML',spread:'ATS',total:'O/U'})[c.market]}${ex?` · on ${ex} ticket${ex===1?'':'s'}`:''}</div></div>
     <button class="${inSlip?'primary':''}" onclick="deskSlipAdd('${c.sp}','${esc(c.game)}','${esc(pick)}',${c.price!=null?+c.price:'null'},${(+o.cf).toFixed(3)},'${String(c.date).slice(0,10)}')">${inSlip?'✓ on slip':'＋ slip'}</button></div>`;}
 function recStrengthsHtml(){const{lanes,plays}=strengthPlays();const ch=(cur,k,v,lab,fn)=>`<button class="msg-chip${cur===v?' on':''}" onclick="${k}='${v}';renderRecordsHub()">${lab}</button>`;
   const vs=[...new Set(plays.map(o=>o.c.voice))];const P=plays.filter(o=>(STR_V==='all'||o.c.voice===STR_V)&&(STR_SP==='all'||o.c.sp===STR_SP)&&(STR_M==='all'||o.c.market===STR_M));
@@ -1477,7 +1477,7 @@ function todayBestHero(){let S=null;try{S=best5State();}catch(e){return'';}const
     <div class="sub mono" style="font-size:9.5px;margin:2px 0 6px">Straight bets${S.locked?' · 🔒 locked '+deskT(S.lockedAt):' · building'} — every one official (a character 70%+ sure).</div>
     ${top.map((x,i)=>{const p=x.cf!=null?x.cf:x.p!=null?x.p:best5Prob(x);return`<div class="tb-row"><div class="tb-n">${i+1}</div>
       <div style="flex:1;min-width:0"><b style="font-size:14px">${txtEsc(x.pick)}</b> <span class="mono" style="font-size:11px;color:var(--gold)">${x.price!=null?tcSgn(x.price):''}</span>
-      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(x.sp,x.game))}${(x.confBy||[]).length?' · '+x.confBy.map(v=>txtEsc(charName(v).replace(/^The /,''))).join(', '):x.unan?' · <span style="color:#ff6fae">★ unanimous</span>':''}</div></div>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(x.sp,x.game))}${gameWhenHtml(x.sp,x.game,x.start)}${(x.confBy||[]).length?' · '+x.confBy.map(v=>txtEsc(charName(v).replace(/^The /,''))).join(', '):x.unan?' · <span style="color:#ff6fae">★ unanimous</span>':''}</div></div>
       <div style="text-align:right"><div class="tb-p" style="color:${recColor(p,9)}">${Math.round((p||0)*100)}%</div><div class="mono" style="font-size:10px">${res(x)}</div></div></div>`;}).join('')}</div>`;}
 if(typeof renderToday==='function'){const RT0=renderToday;renderToday=function(noSnap){const r=RT0(noSnap);try{const el=document.getElementById('todayBody');if(el)el.insertAdjacentHTML('afterbegin',`<div id="todayTop">${todayTopHtml()}</div>`);}catch(e){console.warn('today top',e);}return r;};}
 
@@ -1723,7 +1723,7 @@ function strengthGroups(plays){const M=new Map();(plays||[]).forEach(o=>{const c
 function strengthGroupRow(g){const c=g.c;const pick=charPickText(c);const inSlip=SLIP.some(x=>x.game===c.game&&x.pick===pick);let ex=0;try{ex=deskExposure({sp:c.sp,game:c.game,m:c.market,sd:c.side});}catch(e){}
   const who=g.who.map(o=>{const C=CHARS[o.c.voice]||{};return`<b style="color:${C.color}">${txtEsc(charName(o.c.voice).replace(/^The /,''))}</b> <b style="color:${recColor(o.lane.p,o.lane.n)}">${o.lane.w}-${o.lane.l}</b>`;}).join(' · ');
   return`<div class="str-row"><div style="flex:1;min-width:0"><b>${txtEsc(pick)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${sgnP(c.price)}</span> <span class="cf-chip on" style="color:${recColor(g.cf,9)};border-color:${recColor(g.cf,9)}">${Math.round(g.cf*100)}%</span>
-      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[c.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(c.sp,c.game))} · ${who} on ${CONF_SP_LAB[c.sp]} ${({ml:'ML',spread:'ATS',total:'O/U'})[c.market]}${ex?` · on ${ex} ticket${ex===1?'':'s'}`:''}</div></div>
+      <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[c.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(c.sp,c.game))}${gameWhenHtml(c.sp,c.game,c.start)} · ${who} on ${CONF_SP_LAB[c.sp]} ${({ml:'ML',spread:'ATS',total:'O/U'})[c.market]}${ex?` · on ${ex} ticket${ex===1?'':'s'}`:''}</div></div>
     <button class="${inSlip?'primary':''}" onclick="deskSlipAdd('${c.sp}','${esc(c.game)}','${esc(pick)}',${c.price!=null?+c.price:'null'},${(+g.cf).toFixed(3)},'${String(c.date).slice(0,10)}')">${inSlip?'✓ on slip':'＋ slip'}</button></div>`;}
 
 /* ══ v2.41 · REOPEN A FROZEN DAY ════════════════════════════════════════════
@@ -2022,3 +2022,194 @@ if(typeof document!=='undefined'&&!DESK_BG_EVAL&&!(typeof BG_MODE!=='undefined'&
     st.textContent='#fbpFab{position:fixed;right:14px;bottom:calc(var(--bnh,60px) + 36px);z-index:70;width:52px;height:52px;border-radius:26px;border:2px solid #f5c542;background:#111a2e;font-size:24px;box-shadow:0 6px 20px rgba(0,0,0,.5)}'+
       'body.slipon #fbpFab{bottom:calc(var(--bnh,60px) + 88px)}body:has(#v-chat.on) #fbpFab{display:none}';document.head.appendChild(st);}
   b.onclick=fbpOpen;document.body.appendChild(b);});
+
+
+/* ══ v2.86.9 · ⏰ ALL SPORTS BY TIME — a second mode on every sport's Games tab, and a view on Today ═════════════════════════════════
+   Nov 7: "a by-time-slot option where I can see all games across all sports … and all the stats we give". Every game on today's card,
+   every sport, grouped by the minute it starts. Each pick is the exact row Today draws (tcRowHtml: tier, price, brain %, edge, blend,
+   EV, stake, live win %, characters, hot line, rules, ✓ on a ticket) plus ＋ to the slip; each game adds its predicted score, how the
+   characters split, and its prop calls. Some bettors spread tickets across the day, some stack a whole parlay inside one slot: every
+   slot has "＋ Slot parlay". Built from today's card (which now carries every board's schedule) and the shared ledgers — never one
+   page's board — so it reads the same on every page. */
+const SLOT_MODE_K='d4.gmmode',SLOT_F_K='d4.slotf';
+const SLOT_TIER={supreme:0,strong:1,value:2,source:3};
+const SLOT_WINS=[['up','⏭ Not over yet'],['all','Any time'],['early','Before 1 PM'],['afternoon','1–5 PM'],['evening','5–8 PM'],['late','8 PM +']];
+const SLOT_DUR={nfl:3.6,ncaaf:3.9,nba:2.6,ncaab:2.3,nhl:2.8,mlb:3.3};   /* hours a game runs, when the live feed hasn't said */
+let SLOT_FORCE_BOARD=false;   /* "Open ›" on one game shows this sport's board for this visit, whatever mode is saved */
+function slotMode(){if(SLOT_FORCE_BOARD)return false;try{return localStorage.getItem(SLOT_MODE_K)==='slots';}catch(e){return false;}}
+function slotModeSet(on){SLOT_FORCE_BOARD=false;try{localStorage.setItem(SLOT_MODE_K,on?'slots':'sport');}catch(e){}slotApply();}
+function slotF(){let F={};try{F=JSON.parse(localStorage.getItem(SLOT_F_K)||'{}')||{};}catch(e){}F=Object.assign({win:'up',tier:'all',sp:'all',ch:'all',day:'today',legs:'4'},F);
+  if(F.day!=='today'&&F.day!=='all'&&!(String(F.day)>=today()))F.day='today';return F;}
+function slotFSet(k,v){const F=slotF();F[k]=v;try{localStorage.setItem(SLOT_F_K,JSON.stringify(F));}catch(e){}slotRefresh();}
+function slotFReset(){try{localStorage.removeItem(SLOT_F_K);}catch(e){}slotRefresh();}
+function slotHour(st){try{return +new Intl.DateTimeFormat('en-US',{hour:'numeric',hourCycle:'h23',timeZone:APP_TZ}).format(new Date(st))%24;}catch(e){return 12;}}
+function slotWin(st){const h=slotHour(st);return h<13?'early':h<17?'afternoon':h<20?'evening':'late';}
+function slotTime(t){try{return new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:APP_TZ});}catch(e){return'';}}
+function slotDayLab(d){const t=today();return d===t?'Today':d===dayShift(t,1)?'Tomorrow':new Date(d+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC'});}
+function slotIn(t){const m=Math.round((t-Date.now())/60000);return m<=0?'':m<60?`in ${m}m`:m<24*60?`in ${Math.floor(m/60)}h${m%60?' '+(m%60)+'m':''}`:'';}
+function slotPickP(x){return x.brainP!=null?x.brainP:x.blend!=null?x.blend:x.mp!=null?x.mp:0.5;}
+function slotTierOf(x){const v=SLOT_TIER[String(x&&x.color||'').trim()];return v==null?9:v;}
+function slotPass(x,sp,F){return tfPass(x,sp,{sp:'all',tier:F.tier,ch:F.ch});}
+function slotSort(a,b){return slotTierOf(a)-slotTierOf(b)||slotPickP(b)-slotPickP(a);}
+function slotOnSlip(sp,game){try{return SLIP.some(y=>y.game===game&&(y.sport||sp)===sp);}catch(e){return false;}}
+/* every game: today's card (every sport's schedule, picks and props) + this page's own board, each with a start time and a state */
+function slotGames(){const d=today();const T=roGet(TC_KEY,{})||{};const by=T.d===d?T.by||{}:{};
+  const on=sp=>typeof sportOn!=='function'||sportOn(sp);const G=new Map();
+  const add=(sp,game,st,gid)=>{if(!sp||!game)return null;const k=sp+'|'+game;let g=G.get(k);
+    if(!g){g={sp,game,gid:gid!=null?String(gid):null,start:null,picks:[],props:[]};G.set(k,g);}
+    if(!g.start&&st&&isFinite(Date.parse(st)))g.start=st;if(g.gid==null&&gid!=null)g.gid=String(gid);return g;};
+  Object.entries(by).forEach(([sp,B])=>{if(!B||!on(sp))return;
+    (B.games||[]).forEach(x=>{if(x)add(sp,x.g,x.s,x.id);});
+    (B.picks||[]).forEach(p=>{if(!p||!p.game)return;const g=add(sp,p.game,p.start,p.gid);if(g)g.picks.push(p);});
+    (B.props||[]).forEach(p=>{if(!p||!p.game)return;const g=add(sp,p.game,p.start,null);if(g)g.props.push(p);});});
+  const here=typeof window!=='undefined'&&window.__PAGE_SPORT__;if(here&&on(here))try{tcSched(here,[]).forEach(x=>add(here,x.g,x.s,x.id));}catch(e){}
+  const out=[],now=Date.now();G.forEach(g=>{if(!g.start)g.start=gameStart(g.sp,g.game)||null;
+    if(!g.start)try{const e=mgEventFor(g.sp,g.game,d,false);if(e&&e.start)g.start=e.start;}catch(x){}
+    const t=Date.parse(g.start||'');if(!isFinite(t))return;g.t=t;g.day=tdDay(g.start);if(g.day<d)return;
+    g.st='pre';if(t<=now){let e=null;try{e=mgEventFor(g.sp,g.game,g.day,false)||mgEventFor(g.sp,g.game.split('@').reverse().join('@'),g.day,false);}catch(x){}
+      if(e&&e.state){g.ev=e;g.st=e.state==='post'?'post':e.state==='in'?'in':'pre';}else g.st=now-t>(SLOT_DUR[g.sp]||3)*36e5?'post':'in';}
+    out.push(g);});
+  return{all:out,by};}
+function slotBest(g,F){return g.picks.filter(x=>x.price!=null&&!x.suspect&&!x.incoherent&&slotPass(x,g.sp,F)).sort(slotSort)[0]||null;}
+/* a slot's parlay: each open game's strongest pick (never a flagged one, never a game already on the slip), strongest first, up to the size you picked */
+function slotLegs(s,F){const cap=F.legs==='all'?99:Math.max(2,+F.legs||4);if(s.st==='post')return[];
+  return s.games.filter(g=>g.st==='pre'&&!slotOnSlip(g.sp,g.game)).map(g=>({g,p:slotBest(g,F)})).filter(o=>o.p).sort((a,b)=>slotSort(a.p,b.p)).slice(0,cap);}
+function slotOdds(legs){let pr=1,dec=1;legs.forEach(o=>{pr*=slotPickP(o.p);const a=+o.p.price;dec*=a>0?1+a/100:1+100/Math.abs(a);});
+  const am=dec>=2?Math.round((dec-1)*100):Math.round(-100/(dec-1));return{p:pr,am};}
+/* the filtered view: games → slots (same day, same minute) */
+function slotView(F){const R=slotGames(),all=R.all,d=today();
+  const dayOk=g=>F.day==='all'||(F.day==='today'?g.day===d:g.day===F.day);
+  const winOk=(g,w)=>w==='all'||(w==='up'?g.st!=='post':slotWin(g.start)===w);
+  const spOk=(g,s)=>s==='all'||g.sp===s;
+  const picky=F.tier!=='all'||F.ch!=='all';   /* a pick filter shows only the games with a pick that passes it */
+  const pickOk=g=>!picky||g.picks.some(x=>slotPass(x,g.sp,F));
+  const base=all.filter(g=>dayOk(g));
+  const games=base.filter(g=>winOk(g,F.win)&&spOk(g,F.sp)&&pickOk(g));
+  const S=new Map();games.forEach(g=>{const k=g.day+'-'+g.t;let s=S.get(k);if(!s){s={key:k,t:g.t,day:g.day,games:[]};S.set(k,s);}s.games.push(g);});
+  const slots=[...S.values()].sort((a,b)=>a.t-b.t);
+  slots.forEach(s=>{s.games.sort((a,b)=>a.sp.localeCompare(b.sp)||(slotBest(b,F)?1:0)-(slotBest(a,F)?1:0)||a.game.localeCompare(b.game));
+    s.st=s.games.every(g=>g.st==='post')?'post':s.games.some(g=>g.st==='in')?'in':s.games.some(g=>g.st==='pre')?'pre':'in';});
+  return{all,base,games,slots,by:R.by,days:[...new Set(all.map(g=>g.day))].sort(),dayOk,winOk,spOk,pickOk};}
+/* ── the pieces of a game card ── */
+function slotScoreHtml(g,SC){const f=v=>{for(const dd of [g.day,today()]){const x=SC[`${g.sp}|${g.game}|${dd}|${v}`];if(x&&x.a!=null&&x.h!=null)return x;}return null;};
+  const s=f('Sim'),m=f('Most common'),j=f('Judge');const[a,h]=g.game.split('@');const e=txtEsc;const P=[];
+  if(s)P.push(`Sim <b>${e(a)} ${s.a}–${s.h} ${e(h)}</b>`);
+  if(m&&(!s||m.a!==s.a||m.h!==s.h))P.push(`most common ${m.a}–${m.h}`);
+  if(j&&(!s||j.a!==s.a||j.h!==s.h))P.push(`Judge ${j.a}–${j.h}`);
+  return P.length?`<div class="mono" style="font-size:10.5px;margin-top:3px">🎯 Predicted ${P.join(' · ')}</div>`:'';}
+function slotAgreeHtml(g,VI){const C=VI.get(g.sp+'|'+g.game)||[];if(!C.length)return'';const M={};
+  C.forEach(c=>{const m=c.market==='moneyline'?'ml':c.market;if(m!=='ml'&&m!=='spread'&&m!=='total')return;const s=(M[m]=M[m]||{});(s[c.side]=s[c.side]||[]).push(c);});
+  const lab={ml:'ML',spread:'Spread',total:'Total'};
+  const P=['ml','spread','total'].filter(m=>M[m]).map(m=>{const S=M[m];const sides=Object.keys(S).sort((a,b)=>S[b].length-S[a].length);const top=S[sides[0]];const tot=sides.reduce((n,k)=>n+S[k].length,0);
+    let txt='';try{txt=charPickText(top[0]);}catch(e){txt=sides[0];}const all=sides.length===1;const col=all?'var(--win)':top.length/tot>=0.75?'var(--gold)':'var(--rust)';
+    return`${lab[m]} <b>${txtEsc(txt)}</b> <span style="color:${col}">${all?`all ${tot}`:`${top.length}–${tot-top.length}`}</span>`;});
+  return P.length?`<div class="mono" style="font-size:10.5px;margin-top:3px">🗣 Characters: ${P.join(' · ')}</div>`:'';}
+function slotPropsHtml(g,CPI){const[a,h]=g.game.split('@');const tc=g.props.slice().sort((x,y)=>(y.p||0)-(x.p||0));
+  const M=new Map();[a,h].forEach(t=>(CPI.get(g.sp+'|'+t)||[]).forEach(x=>{if(String(x.d).slice(0,10)!==g.day)return;const k=x.player+'|'+x.k+'|'+x.thr;
+    const o=M.get(k)||{player:x.player,k:x.k,thr:x.thr,p:0,n:0};o.p=Math.max(o.p,+x.p||0);o.n++;M.set(k,o);}));
+  const cp=[...M.values()].sort((x,y)=>y.p-x.p||y.n-x.n);if(!tc.length&&!cp.length)return'';
+  const cpl=o=>`${txtEsc(o.player)} ${o.thr}+ ${txtEsc(CPROP_LAB[o.k]||o.k)} <b style="color:var(--win)">${Math.round(o.p*100)}%</b>${o.n>1?` <span style="color:var(--mute)">(${o.n} characters)</span>`:''}`;
+  const more=tc.length>3||cp.length>3;
+  const top=(tc.length?`<div class="mktlab" style="margin-top:6px">Props ≥70%</div>`+tc.slice(0,3).map(x=>tcPropRowHtml(g.sp,x,{inGame:true})).join(''):'')
+    +(cp.length?`<div class="mono" style="font-size:10.5px;margin-top:4px">🎭 Character prop calls: ${cp.slice(0,3).map(cpl).join(' · ')}</div>`:'');
+  const rest=more?`<details style="margin-top:2px"><summary class="sub" style="font-size:10px">＋ ${Math.max(0,tc.length-3)+Math.max(0,cp.length-3)} more prop calls</summary>${tc.slice(3).map(x=>tcPropRowHtml(g.sp,x,{inGame:true})).join('')}${cp.length>3?`<div class="mono" style="font-size:10.5px;margin-top:4px">${cp.slice(3,15).map(cpl).join(' · ')}</div>`:''}</details>`:'';
+  return top+rest;}
+function slotGameHtml(g,F,X){const e=txtEsc;
+  const P=g.picks.filter(x=>slotPass(x,g.sp,F)).sort(slotSort);const hid=g.picks.length-P.length;
+  const ev=g.ev;const live=g.st!=='pre'&&ev&&ev.a!=null&&!P.length?` <span class="mono" style="font-size:10.5px;font-weight:800;color:${g.st==='in'?'#ff4b5c':'var(--mute)'}">${g.st==='in'?'● LIVE':'FINAL'} ${ev.a}–${ev.h}${g.st==='in'&&ev.detail?' · '+e(ev.detail):''}</span>`:'';
+  const rows=P.map(x=>{let L=null;try{L=tcLive(g.sp,x);}catch(err){}return tcRowHtml(g.sp,x,L,{inGame:true,slip:g.st==='pre'});}).join('');
+  return`<div class="slot-game" style="padding:9px 0 8px;border-top:1px solid var(--rule)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="min-width:0"><span class="mono" style="font-size:10px;color:var(--mute)">${e(SP_LAB[g.sp]||g.sp)}</span>
+      <div style="font-weight:800;font-size:14px">${gameLabelHtml(g.sp,g.game)}${gameWhenHtml(g.sp,g.game,g.start)}${live}</div></div>
+      <button onclick="slotOpen(${jsArg(g.sp)},${jsArg(g.gid)})" style="flex:none;font-size:11px;padding:5px 10px" title="Open this game's full card on the ${e(SP_LAB[g.sp]||g.sp)} board">Open ›</button></div>
+    ${slotScoreHtml(g,X.SC)}
+    ${rows||`<div class="sub" style="font-size:10.5px;margin-top:4px">${g.picks.length?`${hid} pick${hid===1?'':'s'} on this game — none pass this filter.`:'No pick on today\'s card for this game — Open › for the full read.'}</div>`}
+    ${rows&&hid?`<div class="sub mono" style="font-size:9.5px">＋${hid} more pick${hid===1?'':'s'} outside this filter</div>`:''}
+    ${slotAgreeHtml(g,X.VI)}${slotPropsHtml(g,X.CPI)}</div>`;}
+function slotHeadHtml(pfx,s,F){const picks=s.games.flatMap(g=>g.picks.filter(x=>slotPass(x,g.sp,F)));
+  const n=c=>picks.filter(p=>String(p.color||'').trim()===c).length,un=picks.filter(p=>p.unan).length;
+  const L=slotLegs(s,F),legs=L.length,od=legs>=2?slotOdds(L):null;
+  const sps=[...new Set(s.games.map(g=>g.sp))].map(sp=>txtEsc(SP_LAB[sp]||sp)).join(' · ');const inn=slotIn(s.t);
+  const tag=s.st==='in'?' <span style="color:#ff4b5c;font-weight:800">● LIVE</span>':s.st==='post'?' <span style="color:var(--mute)">· final</span>':inn?` <span style="color:var(--gold)">· ${inn}</span>`:' <span style="color:var(--mute)">· starting</span>';
+  return`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+    <div style="min-width:0"><div style="font-size:17px;font-weight:800">🕒 ${s.day!==today()?slotDayLab(s.day)+' · ':''}${slotTime(s.t)}<span class="mono" style="font-size:11px;font-weight:600">${tag}</span></div>
+      <div class="mono" style="font-size:10px;color:var(--mute);margin-top:1px">${s.games.length} game${s.games.length===1?'':'s'} · ${sps}</div>
+      <div class="mono" style="font-size:10px;margin-top:1px">${picks.length} pick${picks.length===1?'':'s'}${n('supreme')?` · <span style="color:${TC_COL[' supreme'][0]}">${n('supreme')} SUPREME</span>`:''}${n('strong')?` · <span style="color:${TC_COL[' strong'][0]}">${n('strong')} STRONG</span>`:''}${n('value')?` · <span style="color:${TC_COL.value[0]}">${n('value')} VALUE</span>`:''}${n('source')?` · <span style="color:${TC_COL.source[0]}">${n('source')} OUTSIDE</span>`:''}${un?` · <span style="color:#ff6fae">★ ${un} unanimous</span>`:''}</div></div>
+    ${od?`<button class="primary" onclick="slotParlay(${jsArg(s.key)})" style="flex:none;font-size:11.5px;padding:7px 10px;line-height:1.2" title="Adds the ${legs} strongest picks in this slot (one per game, passing your filter) to the slip — the model's chance all hit, and what it pays">＋ Slot parlay<br><span style="font-size:10px;font-weight:600">${legs} legs · ${tcSgn(od.am)} · ${od.p>=0.095?Math.round(od.p*100):(od.p*100).toFixed(1)}%</span></button>`:''}</div>`;}
+/* ── the board ── */
+function slotBoardHtml(pfx){pfx=pfx||'sg';const F=slotF();const V=slotView(F);const d=today();
+  const fb=(k,v,lab,n,col)=>`<button class="msg-chip${F[k]===v?' on':''}" style="${col&&F[k]!==v?`color:${col};`:''}" onclick="slotFSet('${k}',${jsArg(v)})">${lab}${n!=null?` <span style="opacity:.6">${n}</span>`:''}</button>`;
+  /* chip counts: each row counts what the other rows let through */
+  const inWin=V.base.filter(g=>V.winOk(g,F.win)),inSp=V.base.filter(g=>V.spOk(g,F.sp));
+  const sports=[...new Set(V.base.map(g=>g.sp))];const spCnt=s=>inWin.filter(g=>V.spOk(g,s)&&V.pickOk(g)).length;
+  const winCnt=w=>inSp.filter(g=>V.winOk(g,w)&&V.pickOk(g)).length;
+  const pool=V.base.filter(g=>V.winOk(g,F.win)&&V.spOk(g,F.sp)).flatMap(g=>g.picks.map(x=>({sp:g.sp,x})));
+  const tCnt=t=>pool.filter(o=>tfPass(o.x,o.sp,{sp:'all',tier:t,ch:F.ch})).length,cCnt=c=>pool.filter(o=>tfPass(o.x,o.sp,{sp:'all',tier:F.tier,ch:c})).length;
+  const usedCh=CHAR_ORDER.filter(v=>pool.some(o=>(o.x.chars||[]).includes(v)));
+  const later=V.days.filter(x=>x>d);
+  const bar=`<div style="margin:6px 0 2px">
+    ${later.length?`<div class="slot-row">${fb('day','today','Today',V.all.filter(g=>g.day===d).length)}${later.map(x=>fb('day',x,slotDayLab(x),V.all.filter(g=>g.day===x).length)).join('')}${fb('day','all','All days',V.all.length)}</div>`:''}
+    <div class="slot-row">${SLOT_WINS.map(([w,l])=>fb('win',w,l,winCnt(w))).join('')}</div>
+    ${sports.length>1?`<div class="slot-row">${fb('sp','all','All sports',inWin.filter(V.pickOk).length)}${sports.map(s=>fb('sp',s,txtEsc(SP_LAB[s]||s),spCnt(s))).join('')}</div>`:''}
+    <div class="slot-row">${fb('tier','all','Every pick',tCnt('all'))}${fb('tier','play','✅ Official (70%+)',tCnt('play'),'#3DDC84')}${fb('tier','unan','★ Unanimous',tCnt('unan'),'#ff6fae')}${Object.entries(TC_COL).map(([k,[c,l]])=>fb('tier',k.trim(),l,tCnt(k.trim()),c)).join('')}</div>
+    ${usedCh.length?`<div class="slot-row">${fb('ch','all','Any character')}${usedCh.map(v=>fb('ch',v,`${CHARS[v].chip} ${txtEsc(CHARS[v].label||v)}`,cCnt(v),CHARS[v].color)).join('')}</div>`:''}
+    <div class="slot-row" style="align-items:center"><span class="mono" style="font-size:9.5px;color:var(--mute);flex:none;margin:0 4px 0 2px">SLOT PARLAY</span>${['2','3','4','5','6','all'].map(n=>fb('legs',n,n==='all'?'every game':n+' legs')).join('')}</div></div>`;
+  /* where the games come from, and who's missing */
+  const by=V.by;const cnt={};V.all.forEach(g=>{if(g.day===d)cnt[g.sp]=(cnt[g.sp]||0)+1;});
+  const live=typeof liveSports==='function'?liveSports():[];const miss=live.filter(sp=>!by[sp]);
+  const src=`<div class="sub mono" style="font-size:9.5px;color:var(--mute);margin-top:4px">${Object.keys(cnt).length?'Today: '+Object.entries(cnt).map(([sp,n])=>`${txtEsc(SP_LAB[sp]||sp)} ${n}`).join(' · ')+' games':''}${miss.length?`${Object.keys(cnt).length?' · ':''}<span style="color:var(--gold)">not on today's card yet: ${miss.map(sp=>txtEsc(SP_LAB[sp]||sp)).join(', ')} — open its Games board once</span>`:''}</div>`;
+  const head=`<div class="tkt" style="margin-bottom:8px"><h3 style="margin:0 0 3px">⏰ All sports by start time</h3>
+    <div class="sub" style="font-size:10.5px">Every game on today's card, every sport, by the minute it starts — each pick shows what Today shows. Spread your tickets across the day, or stack a parlay inside one slot: <b>＋ Slot parlay</b> adds each game's strongest pick that passes your filter.</div>
+    ${bar}${src}</div>`;
+  if(!V.all.length)return head+`<div class="empty">Nothing on today's card yet — open each sport's Games board once (or run the master evaluation) and every game lands here by start time.</div>`;
+  if(!V.slots.length)return head+`<div class="empty">No games match these filters${F.win==='up'?' — everything today may be over (try “All day”)':''}. <button class="msg-chip" onclick="slotFReset()">Show everything</button></div>`;
+  const hh=(()=>{try{const h=document.querySelector('header');return h?Math.round(h.getBoundingClientRect().height):0;}catch(e){return 0;}})();
+  const strip=V.slots.length>1?`<div class="subnav" style="margin:0 0 8px;position:sticky;top:${hh}px;z-index:30;background:var(--ink,#080B10);padding:6px 0">${V.slots.map(s=>`<button onclick="slotGo(${jsArg(pfx+'-'+s.key)})" style="flex:none;font-size:11px;padding:5px 9px;${s.st==='in'?'border-color:#ff4b5c;':s.st==='post'?'opacity:.55;':''}">${s.day!==d?slotDayLab(s.day).slice(0,3)+' ':''}${slotTime(s.t)} <span style="opacity:.6">${s.games.length}</span></button>`).join('')}</div>`:'';
+  const X={SC:roGet(SCORECALL_KEY,{},30e3)||{},VI:new Map(),CPI:new Map()};
+  try{(roGet(VOICES_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.date).slice(0,10)>=d)||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const k=c.sp+'|'+c.game;const a=X.VI.get(k);if(a)a.push(c);else X.VI.set(k,[c]);});}catch(e){}
+  try{(roGet(CPROP_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.d).slice(0,10)>=d))return;const k=c.sp+'|'+c.team;const a=X.CPI.get(k);if(a)a.push(c);else X.CPI.set(k,[c]);});}catch(e){}
+  return head+strip+V.slots.map(s=>`<div class="tkt slot" id="${pfx}-${s.key}" style="margin-bottom:8px;scroll-margin-top:${hh+50}px;${s.st==='post'?'opacity:.78;':''}${s.st==='in'?'border-color:#ff4b5c;':''}">
+    ${slotHeadHtml(pfx,s,F)}${s.games.map(g=>slotGameHtml(g,F,X)).join('')}</div>`).join('');}
+function slotGo(id){try{const el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}}
+/* ── actions ── */
+function slotAdd(sp,game,pick,price,p,gd){try{deskSlipAdd(sp,game,pick,price,p,gd);}catch(e){console.warn('slot add',e);}slotRender0();}
+function slotParlay(key){const F=slotF();const s=slotView(F).slots.find(x=>x.key===key);if(!s)return;
+  const legs=slotLegs(s,F);
+  if(!legs.length){try{deskToast('Nothing left to add from this slot — every game is on your slip or has started',3200);}catch(e){}return;}
+  let n=0;legs.forEach(o=>{try{const b=SLIP.length;deskSlipAdd(o.g.sp,o.g.game,o.p.pick,o.p.price,slotPickP(o.p),o.g.day);if(SLIP.length>b)n++;}catch(e){}});
+  try{deskToast(`＋ ${n} leg${n===1?'':'s'} from the ${slotTime(s.t)} slot on your slip — Review ▲ to lock it in`,3800);}catch(e){}slotRefresh();}
+function slotJump(sp,gid){if(gid==null||gid==='')return;const ids=[sp+'-card-'+gid,'g'+gid];let n=0;
+  try{const nb=[...document.querySelectorAll('nav>button')].find(b=>b.textContent.trim()==='Games');const v=document.getElementById('v-games');if(v&&!v.classList.contains('on'))tab('games',nb);}catch(e){}
+  const tick=()=>{let c=null;for(const id of ids){c=document.getElementById(id);if(c)break;}
+    if(c){try{c.scrollIntoView({behavior:'smooth',block:'start'});c.style.transition='box-shadow .3s';c.style.boxShadow='0 0 0 2px var(--gold)';setTimeout(()=>{c.style.boxShadow='';},2200);}catch(e){}return;}
+    if(++n<40)setTimeout(tick,500);else try{deskToast('That game isn\'t on the board right now — check the day picker above it',3500);}catch(e){}};tick();}
+function slotOpen(sp,gid){const here=window.__PAGE_SPORT__;
+  if(sp===here){SLOT_FORCE_BOARD=true;slotApply();slotJump(sp,gid);return;}
+  try{const u=(typeof pageUrl==='function'&&pageUrl(sp))||SPORT_PAGE[sp];if(u)location.href=u+(gid!=null&&gid!==''?(u.indexOf('?')<0?'?':'&')+'game='+encodeURIComponent(gid):'');}catch(e){}}
+/* ── wiring ── */
+function slotRender0(){const el=document.getElementById('slotBoard');if(!el||!slotMode())return;
+  try{el.innerHTML=slotBoardHtml('sg');}catch(e){el.innerHTML='<div class="empty">Couldn\'t build the by-time view — '+txtEsc(e.message||String(e))+'</div>';console.warn('by time',e);}}
+function slotRender(){slotRender0();if(!slotMode())return;
+  try{if(typeof mgRefresh==='function'&&!MG_BUSY&&Date.now()-MG_TS>40e3)mgRefresh(false).then(()=>{try{slotRender0();}catch(e){}}).catch(()=>{});}catch(e){}}
+function slotRefresh(){slotRender0();try{const v=document.getElementById('v-today');if(v&&v.classList.contains('on')&&tfGet().view==='slots')renderToday(true);}catch(e){}}
+function slotApply(){const v=document.getElementById('v-games');if(!v)return;const on=slotMode();v.classList.toggle('slots-on',on);
+  const bar=document.getElementById('gmMode');const here=window.__PAGE_SPORT__;
+  if(bar)bar.innerHTML=`<button class="${on?'':'on'}" onclick="slotModeSet(false)" style="flex:1">${txtEsc(SP_LAB[here]||'This sport')} board</button><button class="${on?'on':''}" onclick="slotModeSet(true)" style="flex:1">⏰ All sports by time</button>`;
+  if(on)slotRender();}
+let SLOT_TIMER=null,SLOT_MO_T=null;
+if(typeof document!=='undefined'&&!(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL))document.addEventListener('DOMContentLoaded',()=>{try{const v=document.getElementById('v-games');if(!v||document.getElementById('gmMode'))return;
+  const ta=document.getElementById('intakePaste'),itk=ta&&ta.closest('.tkt');
+  const anchor=(itk&&itk.parentNode===v?itk:null)||document.getElementById('dayPicker')||document.getElementById('slate');if(!anchor)return;
+  const st=document.createElement('style');st.textContent='#v-games.slots-on #dayPicker,#v-games.slots-on #previewBanner,#v-games.slots-on #slate,#v-games.slots-on>.note{display:none!important}#slotBoard{display:none}#v-games.slots-on #slotBoard{display:block}'
+    +'.slot-row{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:1px 0}.slot-row::-webkit-scrollbar{display:none}.slot-row>.msg-chip{flex:none;white-space:nowrap}';document.head.appendChild(st);
+  const bar=document.createElement('div');bar.id='gmMode';bar.className='subnav';bar.style.cssText='margin:8px 0 6px';anchor.parentNode.insertBefore(bar,anchor);
+  const box=document.createElement('div');box.id='slotBoard';anchor.parentNode.insertBefore(box,anchor);
+  try{const dl=new URLSearchParams(location.search||'').get('game');if(dl){SLOT_FORCE_BOARD=true;setTimeout(()=>slotJump(window.__PAGE_SPORT__,dl),700);}}catch(e){}
+  slotApply();
+  /* the view follows the board: when this page's board repaints, today's card catches up and the slots repaint */
+  const sl=document.getElementById('slate');
+  if(sl&&typeof MutationObserver!=='undefined')new MutationObserver(()=>{if(!slotMode())return;clearTimeout(SLOT_MO_T);SLOT_MO_T=setTimeout(()=>{
+    try{const here=window.__PAGE_SPORT__;if(here&&(sportGames(here)||[]).length)todaySnapshot();}catch(e){}slotRender0();},900);}).observe(sl,{childList:true});
+  /* live: scores and states every 45 s while the view is on screen */
+  if(!SLOT_TIMER)SLOT_TIMER=setInterval(()=>{try{if(document.hidden||!slotMode())return;const g=document.getElementById('v-games');if(g&&g.classList.contains('on'))slotRender();}catch(e){}},45000);
+}catch(e){console.warn('slot mode',e);}});
