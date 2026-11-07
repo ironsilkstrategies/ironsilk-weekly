@@ -640,6 +640,23 @@ async function healthTick(force){if(HEAL_BUSY)return null;if(!force&&(Date.now()
     return null;}finally{HEAL_BUSY=false;}}
 if(typeof window!=='undefined'&&!window.__NO_BACKFILL__&&!window.__NO_HEAL__){window.addEventListener('load',()=>setTimeout(()=>{healthTick(true).catch(()=>{});},90e3));setInterval(()=>{healthTick().catch(()=>{});},5*60e3);}
 if(typeof engineRoomHtml==='function'&&typeof window!=='undefined'&&!window.__HEALTH_ER__){window.__HEALTH_ER__=1;const ER0=engineRoomHtml;engineRoomHtml=function(){let h='';try{h=healthBoardHtml();}catch(e){}return h+ER0();};}
+/* v2.86.6 · why a pick missed the Best 3, in plain words — the audit grouped them by swapping numbers for "#" ("model # vs market #") */
+function whyLabel(w){w=String(w||'qualifies');let m;
+  if(/^no book price/.test(w))return'no book price yet';
+  if((m=w.match(/^priced \S+ — the Best 3 lays (\S+) at most/)))return`priced past ${m[1]} — too expensive for the Best 3`;
+  if(/^longer than \+400/.test(w))return'longer than +400 — too long a shot';
+  if(/^flagged: model \d+% vs market \d+%/.test(w))return'flagged — the model and the market are far apart';
+  if((m=w.match(/^flagged: (.*)/)))return'flagged — '+m[1].replace(/-?\d+(\.\d+)?%?/g,'').replace(/\s+/g,' ').trim();
+  if((m=w.match(/^model \d+% vs the market's \d+% — \d+ pts apart; (\d+)\+/)))return`model and market ${m[1]}+ pts apart — treated as a likely model miss`;
+  if(/^no character confidence/.test(w))return'no character has a read on it yet';
+  if(/sure, but \S+ needs \d+% — never official/.test(w))return'the price asks for more certainty than the model has';
+  if((m=w.match(/^most confident character: \d+% — under the (\d+)% rule/)))return`no character is ${m[1]}%+ sure`;
+  if(/sure, but the price needs \d+% — no value/.test(w))return'no value at this price';
+  return w.replace(/-?\d+(\.\d+)?%?/g,'#').replace(/\s*\(.*?\)\s*/g,' ').slice(0,64).trim();}
+/* v2.86.6 · a cloud backup that stopped saving says so on Today, with the reason and a button (Nov 6: the phone's last save was 2:41 PM and nothing showed it) */
+function syncWarnHtml(){try{if(typeof syncOn!=='function'||!syncOn())return'';const last=+localStorage.getItem(SYNC.last)||0;let F=null;try{F=JSON.parse(localStorage.getItem('d4.syncfail')||'null');}catch(e){}
+  if(!F||!(F.ts>last)||Date.now()-last<2*36e5)return'';const when=last?deskT(last)+' '+new Date(last).toLocaleDateString([],{month:'short',day:'numeric'}):'—';
+  return`<div class="sub" style="color:var(--rust);margin-top:6px">☁️ The cloud backup hasn't saved since ${when} — ${txtEsc(String(F.msg||'unknown error').slice(0,160))} <button onclick="syncNow(true).then(()=>{try{deskRerender();}catch(e){}})">↻ Sync now</button></div>`;}catch(e){return'';}}
 function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
   const LO=ruleNow('b3lo'),DIS=ruleNow('disagree');
   Object.entries(T.by||{}).filter(([s0])=>typeof sportOn!=='function'||sportOn(s0)).forEach(([s0,B])=>(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};if(!tcIsToday(x)||best5Started(x))return;const o=pickConf(x,s0)||ruleFloorAdmit(x,s0);const p=o?o.cf:pickConfAny(x,s0);
@@ -1103,7 +1120,10 @@ async function masterEvalAll(){if(DESK_EVAL_BUSY)return;if(deskFrozen()&&!confir
     const others=liveSports().filter(sp=>sp!==here&&SPORT_PAGE[sp]);const hereLive=liveSports().includes(here);const N=others.length+(hereLive?1:0);
     relayLog('start',{here,others:others.join(',')});
     deskSay(`② Evaluating ${SP_LAB[here]||here}${hereLive?` here — sport 1 of ${N}`:''}…`);await new Promise(r=>setTimeout(r,30));try{todaySnapshot(true);}catch(e){}
-    try{if(deskRunSportEval(here))done.push(here);}catch(e){console.warn('eval',here,e);miss.push(here);}
+    /* v2.86.6 · the sport evaluated on this page writes its own result too — only relay pages did, so the audit read "not evaluated
+       today" for whichever sport you started from (Nov 7, 3:18 AM: CBB, run from the CBB page) */
+    {const te=Date.now();let ok=false,err='';try{ok=!!deskRunSportEval(here);if(ok)done.push(here);else err='no games or lines';}catch(e){err=String(e&&e.message||e);console.warn('eval',here,e);miss.push(here);}
+      if(hereLive)try{set('d4.bgeval.'+here,{ts:Date.now(),ok,err,d:today(),ms:Date.now()-te,home:1});}catch(e){}}
     /* v2.67.6 · RELAY, not frames. Each sport page is ~2 MB of script; loading one inside another (a hidden iframe) doubled
        the memory and iOS killed the tab — the grey screen, then white, then "A problem repeatedly occurred". Now the app
        walks page to page: evaluate here, open the next sport's page, evaluate, … and come back to freeze. One page alive at a time. */
@@ -1130,15 +1150,13 @@ function deskFirstStart(){try{const T=get(TC_KEY,{})||{};return Math.min(...Obje
 function deskTooEarly(){try{if(window.__NO_EARLY_HOLD__)return false;const h=+new Intl.DateTimeFormat('en-US',{timeZone:APP_TZ,hour:'numeric',hourCycle:'h23'}).format(new Date())%24;if(h>=9)return false;const f=deskFirstStart();return!(isFinite(f)&&f-Date.now()<2*36e5);}catch(e){return false;}}
 async function masterEvalFinish(done,miss,force){
   try{if(typeof tcHeal==='function')tcHeal();}catch(e){}   /* v2.82.2 · every board the relay read is on the card before anything is reviewed or frozen */
-  /* v2.85.1 · never lock the day before the books post it: before 9 AM CT (and 2+ hours before the
-     first game) the run is kept for review, not frozen — a 3 AM run froze a card with no NBA, no
-     Monday-night lines and no college-basketball prices. The card still locks itself 30 min before the first game. */
-  if(!force&&deskTooEarly()){set('d4.evalready',{d:today(),ts:Date.now(),done,miss,early:true});
-    deskSay(`<span style="color:var(--gold)">⏳ Evaluated ${done.length} sport${done.length===1?'':'s'}, but it's too early to freeze — most books post the day's lines in the morning. Run the master evaluation again after 9 AM${miss.length?` (no lines yet: ${miss.map(s=>SP_LAB[s]||s).join(', ')})`:''}. The card still locks itself 30 min before the first game.</span>`);
-    try{deskToast('Too early to freeze — run it again after 9 AM',4000);}catch(e){}return;}
-  if(!force&&deskReviewOn()){const why=window.__RELAY_WHY||{};set('d4.evalready',{d:today(),ts:Date.now(),done,miss,why});relayLog('finish',{done:done.join(','),miss:miss.join(',')});
-    deskSay(`<span style="color:var(--gold)">✓ ${done.length} sport${done.length===1?'':'s'} evaluated${done.length?' ('+done.map(s=>SP_LAB[s]||s).join(' · ')+')':''}${miss.length?` · ✗ not evaluated: ${miss.map(s=>(SP_LAB[s]||s)+(why[s]?' ('+txtEsc(why[s])+')':'')).join(', ')} <button onclick='masterEvalOnly(${jsArg(miss)})'>↻ Try ${miss.length===1?SP_LAB[miss[0]]||miss[0]:'them'} again</button>`:''}. Review the Best card, then tap 🔒 Looks good — freeze &amp; publish.</span>`);
-    try{deskToast('Evaluation done — review the picks, then freeze',4000);}catch(e){}return;}
+  /* v2.86.6 · YOU decide when to freeze. An early run (before 9 AM CT, 2+ hours before the first game) is never frozen on its own —
+     a 3 AM run once froze a card with no NBA and no college-basketball prices — it waits for your OK like any review, and
+     🔒 Looks good — freeze & publish works at any hour (weekends: lock early, games run all day). */
+  const early=!force&&deskTooEarly();
+  if(!force&&(deskReviewOn()||early)){const why=window.__RELAY_WHY||{};set('d4.evalready',{d:today(),ts:Date.now(),done,miss,why,early:early||undefined});relayLog('finish',{done:done.join(','),miss:miss.join(','),early:early?1:0});
+    deskSay(`<span style="color:var(--gold)">✓ ${done.length} sport${done.length===1?'':'s'} evaluated${done.length?' ('+done.map(s=>SP_LAB[s]||s).join(' · ')+')':''}${miss.length?` · ✗ not evaluated: ${miss.map(s=>(SP_LAB[s]||s)+(why[s]?' ('+txtEsc(why[s])+')':'')).join(', ')} <button onclick='masterEvalOnly(${jsArg(miss)})'>↻ Try ${miss.length===1?SP_LAB[miss[0]]||miss[0]:'them'} again</button>`:''}. ${early?'It\'s early — some books haven\'t posted today\'s lines yet, so prices can still move. ':''}Review the Best card, then tap 🔒 Looks good — freeze &amp; publish whenever you\'re ready.</span>`);
+    try{deskToast('Evaluation done — review the picks, then freeze whenever you\'re ready',4000);}catch(e){}return;}
   {
     deskSay('③ Freezing the day…');await new Promise(r=>setTimeout(r,30));DESK_EVAL_BUSY=false;
     const F=await deskFreezeAll('master evaluation · '+done.map(s=>(SP_LAB[s]||s).split(' ').pop()).join(', '));
@@ -1266,11 +1284,12 @@ function deskProcessHtml(){const d=today();let graded=0,cal=null;try{const A=get
   return`${night}<div class="tkt ps-card"><div class="ps-row">
     ${step(1,cal&&Date.now()-cal<18*36e5,'Grade & calibrate',cal?'last '+deskT(cal):'runs when the app opens')}
     ${step(2,intake>0||odds>0,'Intake',`${odds} priced pick${odds===1?'':'s'}${intake?' · '+intake+' outside reads':''}`)}
-    ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):evalChainStalled()?'⏸ stopped mid-run — Resume below':held?'⏳ held by the Book — see below':ER?(ER.early?'⏳ evaluated '+deskT(ER.ts)+' — too early to freeze, run again after 9 AM':'✓ evaluated '+deskT(ER.ts)+' — waiting for your OK'):'not yet — freezes everything',!fz&&(held||ER))}
+    ${step(3,fz,'Master evaluation',fz?'🔒 frozen '+deskT(F.ts):evalChainStalled()?'⏸ stopped mid-run — Resume below':held?'⏳ held by the Book — see below':ER?('✓ evaluated '+deskT(ER.ts)+(ER.early?' — early run · freeze whenever you\'re ready':' — waiting for your OK')):'not yet — freezes everything',!fz&&(held||ER))}
     ${step(4,fz&&pub&&pub.d===d&&pub.ok,'Published',fz?((pub&&pub.d===d&&pub.ok?'page ✓':'page …')+' · '+(posted&&posted.d===d?'VIP ✓':'VIP …')):'after the freeze')}</div>
     ${!fz&&ER&&(ER.miss||[]).length?`<div class="sub" style="margin-top:6px">✗ Not evaluated: ${ER.miss.map(x=>(SP_LAB[x]||x)+((ER.why||{})[x]?' ('+txtEsc(ER.why[x])+')':'')).join(', ')} <button onclick="masterEvalOnly(${jsArg(ER.miss)})">↻ Try ${ER.miss.length===1?SP_LAB[ER.miss[0]]||ER.miss[0]:'them'} again</button></div>`:''}
-    ${fz?'':`<label class="sub" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" ${deskReviewOn()?'checked':''} onchange="set('d4.reviewFreeze',this.checked);deskRerender()"> Let me review the picks before freezing</label>${deskEvalReady()?`<div class="sub" style="color:var(--gold);margin-top:4px">✓ Every sport evaluated — check the Best card below, then freeze. Nothing posts until you do.</div>`:''}`}
+    ${fz?'':`<label class="sub" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" ${deskReviewOn()?'checked':''} onchange="set('d4.reviewFreeze',this.checked);deskRerender()"> Let me review the picks before freezing</label>${deskEvalReady()?`<div class="sub" style="color:var(--gold);margin-top:4px">${ER&&(ER.miss||[]).length?`✓ ${(ER.done||[]).length} of ${(ER.done||[]).length+ER.miss.length} sports evaluated`:'✓ Every sport evaluated'} — check the Best card below, then freeze whenever you're ready. Nothing posts until you do.</div>`:''}`}
     ${fz?'':evalChainStalledHtml()}
+    ${syncWarnHtml()}
     <div class="bar" style="margin-top:8px">${fz?`<button onclick="deskPublishAll('manual').then(r=>deskToast(r&&r.msg||'Published',2600))">↻ Publish again</button><button onclick="deskUnfreezeNow()">🔓 Unfreeze &amp; re-run</button><button onclick="deskAuditGo()">🔎 Evaluation audit</button>`:(deskEvalReady()?`<button class="primary" onclick="deskReviewFreeze()">🔒 Looks good — freeze &amp; publish</button><button onclick="masterEvalAll()">↻ Re-run the evaluation</button>`:`<button class="primary" onclick="masterEvalAll()">🔍 Run the master evaluation — all sports</button>`)}<button onclick="vipCardPhotos(this)">📸 VIP card → photos</button><button onclick="fbpOpen()">📣 Facebook post</button><button onclick="genOpen()">🧬 Bloodlines</button><button onclick="bcComposer()">📣 Post a slate update</button><button onclick="shareHub()">📤 Share — X · Facebook · links</button></div>
     <div class="deskStatus sub mono" style="font-size:10px;margin-top:4px"></div></div>`;}
 

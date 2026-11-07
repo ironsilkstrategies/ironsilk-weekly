@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261106f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15933,7 +15933,8 @@ function best5State(){const d=today();let S=get(BEST5_KEY,{});
   if(!S.locked){try{tcHeal();}catch(e){}const b=best5Build();Object.assign(S,{top3:b.top3,bySport:b.bySport,picks:b.picks,props:b.props,standout:b.standout,sports:b.sports,why3:b.why,ts:Date.now()});
     try{if(typeof ruleSnap==='function')S.rules=ruleSnap();}catch(e){}   /* v2.81 · the rules this card was built under */
     delete S.sides;delete S.totals;
-    const masterRan=evalRanToday()&&!(typeof deskTooEarly==='function'&&deskTooEarly());   /* v2.85.1 · an early-morning run doesn't lock the Best 3 */
+    /* v2.85.1 · an early-morning run doesn't lock the Best 3 on its own — v2.86.6 · but a freeze you tap locks it at any hour */
+    const masterRan=evalRanToday()&&((typeof deskFrozen==='function'&&deskFrozen())||!(typeof deskTooEarly==='function'&&deskTooEarly()));
     const first=Math.min(...b.picks.map(x=>Date.parse(x.start||'')).filter(isFinite),Infinity);
     /* never freeze an empty card while games are still ahead: keep building until something
        qualifies, and only lock empty in the final 30 minutes before the last open game */
@@ -22333,7 +22334,7 @@ const SYNC={repo:'d4.syncrepo',token:'d4.synctoken',ts:'d4.__kts',tomb:'d4.__tom
 let CLOUD_SEEN=null,SYNC_LOCAL_N=0;   /* v2.51 · the cloud commit this device last saw, and a count of its own synced writes */
 /* v2.80.3 · + the crash guard and the master-eval relay: both describe THIS device's last few minutes — another phone's copy could trip safe mode here */
 const SYNC_NEVER=new Set(['d4.bootguard','d4.evalchain','d4.ruletune','d4.bolcache','d4.bolfiled','d4.bollog','d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
-const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$|fbbox$)/.test(k);
+const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$|fbbox$|syncfail$)/.test(k);
 const SY3={base:'d4.sync3base',dirty:'d4.sync3dirty',meta:'meta.json'};
 SYNC_NEVER.add(SY3.base);SYNC_NEVER.add(SY3.dirty);
 const SY3_RELAY=typeof location!=='undefined'&&/[?&](bg|chain)=1/.test(location.search||'');
@@ -22389,7 +22390,7 @@ function syncApply(M){let n=0;const K=syncKts();SYNC_APPLY=true;
 function syncApi(path){return`https://api.github.com/repos/${get(SYNC.repo,'')}/contents/${path}`;}
 function syncHeaders(extra){return{'Authorization':'Bearer '+get(SYNC.token,''),'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(extra||{})};}
 function syncGit(path){return`https://api.github.com/repos/${get(SYNC.repo,'')}/git/${path}`;}
-async function syncRef(){const r=await fetch(syncGit('ref/heads/main')+'?t='+Date.now(),{headers:syncHeaders(),cache:'no-store'});
+async function syncRef(){const r=await syncFetch(syncGit('ref/heads/main')+'?t='+Date.now(),{headers:syncHeaders(),cache:'no-store'});
   if(r.status===404||r.status===409)return null;if(r.status===401||r.status===403)throw new Error('token rejected (HTTP '+r.status+') — it needs Contents: read and write on '+get(SYNC.repo,''));
   if(!r.ok)throw new Error('HTTP '+r.status+' reading the repo');const j=await r.json();return j.object&&j.object.sha||null;}
 /* ── v2.51 · THE SYNC NEVER FREEZES THE SCREEN ──────────────────────────────
@@ -22448,7 +22449,7 @@ async function syncRepoSafe(force){const norm=r=>String(r||'').trim().replace(/^
   const own=new Set([norm(typeof TGW_WORKER_REPO!=='undefined'?TGW_WORKER_REPO:''),norm(get(LS.ghrepo,'')),norm(typeof SITE_REPO!=='undefined'?SITE_REPO:''),norm((()=>{try{return pubRepo();}catch(e){return'';}})())].filter(Boolean));
   let R;
   if(own.has(repo))R={ok:false,why:`${repo} is the app/site repo — a sync save would replace its whole branch and publish your picks. Use a separate PRIVATE repo for sync.`};
-  else{try{const r=await fetch('https://api.github.com/repos/'+repo,{headers:syncHeaders(),cache:'no-store'});
+  else{try{const r=await syncFetch('https://api.github.com/repos/'+repo,{headers:syncHeaders(),cache:'no-store'});
       if(r.status===401||r.status===403)R={ok:false,why:'token rejected (HTTP '+r.status+') — it needs Contents: read and write on '+repo};
       else if(!r.ok)R={ok:false,soft:true,why:`GitHub didn't confirm ${repo} is private (HTTP ${r.status}) — sync waits and checks again`};
       else{const j=await r.json();R=j&&j.private===true?{ok:true}:{ok:false,why:`${repo} is PUBLIC — your tickets, calls and the card would be readable by anyone. Make it private on GitHub (Settings → Change visibility) or use a private repo.`};}}
@@ -22527,8 +22528,11 @@ function sy3Join(ord,parts){
   if(ord==='a'||ord==='d'){const dated=parts.filter(p=>p.id!=='a._').sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);if(ord==='d')dated.reverse();
     const out=[];dated.concat(parts.filter(p=>p.id==='a._')).forEach(p=>{(Array.isArray(p.v)?p.v:[]).forEach(x=>out.push(x));});return out;}
   const p=parts.find(x=>x.id==='all');return p?p.v:undefined;}
+/* v2.86.6 · every sync request gives up after 60 s — a request that never answers used to hold that page's sync forever */
+function syncFetch(url,o){o=o||{};let ac=null,tm=0;try{ac=new AbortController();tm=setTimeout(()=>{try{ac.abort();}catch(e){}},60e3);o.signal=ac.signal;}catch(e){}
+  return fetch(url,o).catch(e=>{throw ac&&ac.signal&&ac.signal.aborted?new Error('GitHub didn\'t answer in 60 s'):e;}).finally(()=>clearTimeout(tm));}
 async function sy3Req(path,o){o=o||{};const h=Object.assign({},o.body?{'Content-Type':'application/json'}:{},o.h||{});
-  return fetch(syncGit(path)+(o.q||''),{method:o.m||'GET',headers:syncHeaders(h),body:o.body?JSON.stringify(o.body):undefined,cache:'no-store'});}
+  return syncFetch(syncGit(path)+(o.q||''),{method:o.m||'GET',headers:syncHeaders(h),body:o.body?JSON.stringify(o.body):undefined,cache:'no-store'});}
 async function sy3Json(path,o){const r=await sy3Req(path,o);if(!r.ok){const e=new Error('HTTP '+r.status+' ('+String(path).split('/')[0]+')');e.status=r.status;throw e;}return r.json();}
 async function sy3Tree(commitSha){const c=await sy3Json('commits/'+commitSha);const tree=c.tree&&c.tree.sha;const t=await sy3Json('trees/'+tree,{q:'?recursive=1'});
   const files={};let legacy=null;(t.tree||[]).forEach(e=>{if(e.type!=='blob')return;if(e.path===SYNC.file){legacy=e.sha;return;}files[e.path]=e.sha;});
@@ -22607,9 +22611,13 @@ async function sy3Push(B,R,ref){const D=sy3Dirty();const keys=Object.keys(D).fil
 /* the cloud's newest save, without downloading it: who saved and when (for the connect prompt) */
 async function sy3Probe(){const ref=await syncRef();if(!ref)return null;const c=await sy3Json('commits/'+ref);const m=/TheDesk sync\s*—\s*(.+?)\s*—\s*(\S+)/.exec(c.message||'');
   return{dev:m?m[1]:'another device',ts:(m&&Date.parse(m[2]))||Date.parse(((c.committer||{}).date)||'')||Date.now()};}
+/* v2.86.6 · a failed save is remembered on this device (never synced) so Today can show it; one toast per page once it's been 2 h */
+let SYNC_FAIL_TOASTED=false;
+function syncFailNote(msg){try{localStorage.setItem('d4.syncfail',JSON.stringify({ts:Date.now(),msg:String(msg||'').slice(0,200)}));}catch(e){}
+  try{const last=+localStorage.getItem(SYNC.last)||0;if(!SYNC_FAIL_TOASTED&&Date.now()-last>2*36e5){SYNC_FAIL_TOASTED=true;toastSync('Backup didn\'t save — '+String(msg||'').slice(0,90));if(typeof deskRerender==='function')deskRerender();}}catch(e){}}
 async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your private repo and token first.');return{ok:false};}
   if(SYNC_BUSY)return SYNC_BUSY;
-  {const safe=await syncRepoSafe(!!manual);if(!safe.ok){SYNC_STATE={ok:false,ts:Date.now(),msg:'⛔ '+safe.why};try{renderSyncStatus();}catch(e){}
+  {const safe=await syncRepoSafe(!!manual);if(!safe.ok){SYNC_STATE={ok:false,ts:Date.now(),msg:'⛔ '+safe.why};try{renderSyncStatus();}catch(e){}syncFailNote(safe.why);
     if(manual)alert('Sync is stopped: '+safe.why);else if(!safe.soft&&!SYNC_SAFE_WARNED){SYNC_SAFE_WARNED=true;try{toastSync('⛔ Sync stopped — '+safe.why);}catch(e){}}return{ok:false,reason:safe.why};}}
   SYNC_BUSY=(async()=>{let changed=0,sent=0,fast=null;try{
     if(first==='remote'){sy3SaveBase({commit:null,tree:null,files:{},ord:{}});sy3SaveDirty({});}
@@ -22624,13 +22632,13 @@ async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your pri
       const U=await sy3Push(B,R,ref);
       if(U.conflict){ref=await syncRef();first=undefined;continue;}
       sent=U.n;fast=R?null:(U.n?'push':'idle');break;}
-    localStorage.setItem(SYNC.last,String(Date.now()));
+    localStorage.setItem(SYNC.last,String(Date.now()));try{localStorage.removeItem('d4.syncfail');}catch(e){}
     SYNC_STATE={ok:true,ts:Date.now(),fast,msg:changed?`pulled ${changed} change${changed===1?'':'s'} from your other devices`:sent?`saved ${sent} file${sent===1?'':'s'}`:'up to date'};
     if(manual)toastSync(SYNC_STATE.msg);
     if(changed&&!manual)toastSync(`synced ${changed} change${changed===1?'':'s'} from your other device`);
     if(changed)try{if(typeof deskReopenRun==='function')deskReopenRun();}catch(e){}
     return{ok:true,changed};}
-  catch(e){SYNC_STATE={ok:false,ts:Date.now(),msg:e.message||String(e)};if(manual)alert('Sync failed: '+SYNC_STATE.msg);return{ok:false,reason:SYNC_STATE.msg};}
+  catch(e){SYNC_STATE={ok:false,ts:Date.now(),msg:e.message||String(e)};syncFailNote(SYNC_STATE.msg);if(manual)alert('Sync failed: '+SYNC_STATE.msg);return{ok:false,reason:SYNC_STATE.msg};}
   finally{SYNC_BUSY=null;try{renderSyncStatus();}catch(e){}}})();
   return SYNC_BUSY;}
 function deskToast(m,ms){if(typeof document==='undefined')return;try{let el=document.getElementById('deskToast');

@@ -114,14 +114,16 @@ function revMissionsHtml(){const B=revBoss();const all=revTicketsDone();const wi
 /* ── v2.85.4 · evaluation audit: every sport, every pick on today's card, and the rule that kept it off ── */
 function evalAuditHtml(){let N=[];try{N=best3Near(600)||[];}catch(e){}let B=null;try{B=best5State();}catch(e){}const on=new Set(((B&&B.top3)||[]).map(x=>x.sp+'|'+x.game+'|'+x.pick));
   const T=get(TC_KEY,{})||{};const tt=x=>{try{return new Date(x).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}catch(e){return'';}};
-  const rows=SPS.map(sp=>{let ev=null;try{ev=get('d4.bgeval.'+sp,null);}catch(e){}const sl=(T.d===today()&&T.by&&T.by[sp])||null;const mine=N.filter(x=>x.sp===sp);
-    if(!sl&&!mine.length)return'';const r={};mine.forEach(x=>{const k=String(x.why||'qualifies').replace(/-?\d+(\.\d+)?%?/g,'#').replace(/\s*\(.*?\)\s*/g,' ').slice(0,64).trim();r[k]=(r[k]||0)+1;});
+  const rows=SPS.map(sp=>{let ev=null;try{ev=get('d4.bgeval.'+sp,null);}catch(e){}
+    /* v2.86.6 · every evaluation stamps the eval lock — the page you start from included — so it backs up the relay's own record */
+    try{if(!(ev&&ev.d===today())){const L=get(EVAL_LOCK_KEY,{})||{};const t=L.date===today()&&L.by&&L.by[sp];const ts=t&&(typeof t==='object'?(t.ts||t.t):t);if(ts)ev={d:today(),ok:true,ts};}}catch(e){}const sl=(T.d===today()&&T.by&&T.by[sp])||null;const mine=N.filter(x=>x.sp===sp);
+    if(!sl&&!mine.length)return'';const r={};mine.forEach(x=>{const k=typeof whyLabel==='function'?whyLabel(x.why):String(x.why||'qualifies');r[k]=(r[k]||0)+1;});
     const top=mine.filter(x=>x.price!=null).sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,4);const n3=((B&&B.top3)||[]).filter(x=>x.sp===sp).length;
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between"><b>${SPL(sp)}</b><span class="mono" style="font-size:10px;color:${ev&&ev.d===today()&&ev.ok?'var(--win)':'var(--rust)'}">${ev&&ev.d===today()?(ev.ok?'✓ evaluated '+tt(ev.ts):'✗ evaluation failed'):'not evaluated today'} · board ${sl?tt(sl.ts):'—'}</span></div>
       <div class="mono" style="font-size:10px;color:var(--mute)">${mine.length} picks today · ${n3} on the Best 3</div>
       ${Object.entries(r).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`<div class="mono" style="font-size:9.5px">${n} × ${E(k)}</div>`).join('')}
       ${top.map(x=>`<div style="font-size:11px;margin-top:2px">${E(x.pick)} ${x.price>0?'+':''}${x.price} · ${x.p!=null?Math.round(x.p*100)+'%':''} — <span style="color:var(--gold)">${E(x.why||'qualifies')}</span></div>`).join('')}</div>`;}).join('');
-  return`<div class="tkt"><h3>🔎 Evaluation audit</h3><div class="sub" style="font-size:10px">Proof every sport was evaluated: each pick on today's card and the rule that kept it off the Best 3 (# = a number).</div>${rows||'<div class="sub">No boards on today\'s card yet.</div>'}</div>`;}
+  return`<div class="tkt"><h3>🔎 Evaluation audit</h3><div class="sub" style="font-size:10px">Proof every sport was evaluated: each pick on today's card and the rule that kept it off the Best 3.</div>${rows||'<div class="sub">No boards on today\'s card yet.</div>'}</div>`;}
 
 /* ── the Edge Desk view ─────────────────────────────────────────────── */
 function edgeDeskHtml(){const safe=f=>{try{return f();}catch(e){console.warn('edge desk',e);return'';}};
