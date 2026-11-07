@@ -2988,7 +2988,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261107f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17951,14 +17951,19 @@ function charLaneSum(v,sp,bt){const T=laneTable();const by=(T.BYV||{})[v]||{};le
   Object.entries(by).forEach(([k,o])=>{const[s0,m,t]=k.split('|');if(sp&&sp!=='all'&&s0!==sp)return;
     if(bt==='ml'||bt==='light'){if(m!=='ml')return;}else if(bt==='heavy'){if(m!=='ml'||t!=='fav')return;}else if(bt==='spread'||bt==='total'){if(m!==bt)return;}else if(bt&&bt!=='all')return;
     n+=o.n;w+=o.w;u+=o.u;});return{n,w,u};}
+/* the ledger keeps the newest calls (16,000 — about a month), so a character's record runs from its oldest graded call, not forever */
+let LSINCE_C=null;function ledgerSince(){const V=roGet(VOICES_KEY,[],30e3)||[];if(LSINCE_C&&LSINCE_C.V===V)return LSINCE_C.s;let m='';
+  for(const x of V){if(x&&x.graded){const d=String(x.date||'').slice(0,10);if(/^\d{4}-\d{2}-\d{2}$/.test(d)&&(!m||d<m))m=d;}}
+  const s=m?new Date(m+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'}):'';LSINCE_C={V,s};return s;}
+function sinceLab(){const s=ledgerSince();return s?`since ${s}`:'all-time';}
 function charWeightIcon(v){try{return CW_LAB[charProfile(v).verdict][0];}catch(e){return'';}}
 function charProfileHtml(v,ctx){ctx=ctx||{};const C=CHARS[v];if(!C)return'';const P=charProfile(v);const E=CHAR_EDGE[v]||['',''];const [ic,lab,col]=CW_LAB[P.verdict];
   const u=x=>`${x>=0?'+':''}${x.toFixed(1)}u`,pc=x=>`${x>=0?'+':''}${(x*100).toFixed(1)}%`;
   const ln=x=>`${txtEsc(laneName(x.k))} ${x.w}-${x.n-x.w} ${u(x.u)}`;
   const why=P.verdict==='new'?`Only ${P.n} graded game-line call${P.n===1?'':'s'} — its word is tracked, not trusted yet (a lane needs ${LANE_MIN}+).`
-    :P.verdict==='heavy'?`${P.w}-${P.l} on graded game lines, ${u(P.u)} (${pc(P.roi)} a bet)${P.proven?` — proven in ${P.proven} lane${P.proven===1?'':'s'}, where its picks count toward the card`:''}.`
-    :P.verdict==='light'?`${P.w}-${P.l} on graded game lines, ${u(P.u)} (${pc(P.roi)} a bet)${P.blocked?` — blocked in ${P.blocked} lane${P.blocked===1?'':'s'}, where its picks can't make the card`:''}.`
-    :`${P.w}-${P.l} on graded game lines, ${u(P.u)} (${pc(P.roi)} a bet) — not clearly ahead of the prices it took, or behind them.`;
+    :P.verdict==='heavy'?`${P.w}-${P.l} on graded game lines ${sinceLab()}, ${u(P.u)} (${pc(P.roi)} a bet)${P.proven?` — proven in ${P.proven} lane${P.proven===1?'':'s'}, where its picks count toward the card`:''}.`
+    :P.verdict==='light'?`${P.w}-${P.l} on graded game lines ${sinceLab()}, ${u(P.u)} (${pc(P.roi)} a bet)${P.blocked?` — blocked in ${P.blocked} lane${P.blocked===1?'':'s'}, where its picks can't make the card`:''}.`
+    :`${P.w}-${P.l} on graded game lines ${sinceLab()}, ${u(P.u)} (${pc(P.roi)} a bet) — not clearly ahead of the prices it took, or behind them.`;
   let here='';try{const sp=ctx.sp||'all',bt=ctx.bt||'all';if(sp!=='all'||bt!=='all'){const lab=bt==='all'?'On game lines':bt==='heavy'?'On favorites\' moneylines':bt==='half'?'On 1st halves':bt==='props'?'On props':'On '+btLabel(bt).toLowerCase().replace('o/u','totals (O/U)');
       const where=sp!=='all'?' in '+(SP_LAB[sp]||sp):'';let o=null;
       if(bt==='props'){if(P.props.n)o=`${P.props.w}-${P.props.n-P.props.w} (${Math.round(P.props.w/P.props.n*100)}%)`+(sp!=='all'?' — every sport':'');}
@@ -18225,7 +18230,7 @@ function charDeskHtml(F){
   /* 3 · each character's slate */
   const byV={};calls.forEach(c=>(byV[c.voice]=byV[c.voice]||[]).push(c));
   const cards=CHAR_ORDER.filter(v=>byV[v]).map(v=>{const all=V.filter(x=>x.voice===v&&x.graded&&!x.push);const w=all.filter(x=>x.hit).length;
-    return`<details style="margin:4px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${byV[v].length} calls today · ${w}-${all.length-w} all-time</span></summary>
+    return`<details style="margin:4px 0"><summary>${chip(v)} <b>${txtEsc(CHARS[v].label||v)}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${byV[v].length} calls today · ${w}-${all.length-w} ${sinceLab()}</span></summary>
       ${byV[v].map(c=>{const h=charHist(V,c);return`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px">${txtEsc(charPickText(c))} <span style="color:var(--mute)">${txtEsc(c.game)}${gameWhenHtml(c.sp,c.game)}</span> · ${feelChip(c,V)} · ${['sport','team','h2h'].map(k=>h.H[k].n?`<span style="color:${h.H[k].n>=6&&h.H[k].r>=0.6?'var(--win)':'var(--mute)'}">${txtEsc(h.lab[k])} ${fmt(h.H[k])}</span>`:'').filter(Boolean).join(' · ')||'<span style="color:var(--mute)">no history yet</span>'}</div>`;}).join('')}</details>`;}).join('');
   return`<div class="tkt" style="border-color:var(--win)"><h3>🔥 Hot hands today</h3><div class="sub" style="font-size:10px">A character on a 65%+ run (6+ graded games, small samples shrunk toward 50%) in this sport+market, on this team, or in this exact matchup. Build it as a parlay: Tickets → Build → 🔥 Hot hands.</div>${hotHtml}</div>
     <div class="tkt"><h3>Who agrees, who doesn't</h3>${rows}</div>
@@ -18965,7 +18970,7 @@ function charRosterHtml(){const L=bkLedger();const W=L.weeks[0].R;const V=get(VO
       <span class="hs-chip${v==='Sim'?' god':''}" style="color:${C.color};border-color:${C.color};margin-top:2px">${C.chip}</span>
       <div style="flex:1;min-width:0"><b>${txtEsc(C.label)}</b> <span class="mono" style="font-size:10px;color:${x.br>=100?'var(--win)':'var(--rust)'}">$${x.br.toFixed(2)} this week</span>
         <div class="sub" style="font-size:10px">${txtEsc(C.school)}</div>
-        <div class="mono" style="font-size:9.5px;color:var(--mute)">${n?n+' calls today':'silent today — '+esc(C.quiet)} · all-time ${aw}-${all.length-aw}${(L.mult[v]||1)!==1?` · Banker weight ×${L.mult[v].toFixed(2)}`:''}${x.best?' · best: '+esc(x.best):''}</div>${charPropLines(v,PC)}</div></div>`;}).join('')}</div>`;}
+        <div class="mono" style="font-size:9.5px;color:var(--mute)">${n?n+' calls today':'silent today — '+esc(C.quiet)} · ${sinceLab()} ${aw}-${all.length-aw}${(L.mult[v]||1)!==1?` · Banker weight ×${L.mult[v].toFixed(2)}`:''}${x.best?' · best: '+esc(x.best):''}</div>${charPropLines(v,PC)}</div></div>`;}).join('')}</div>`;}
 function charPropLines(v,PC){if(!CPROP_VOICES.includes(v))return'';let F={fav:[],fade:[]};try{F=cpropFavs(v);}catch(e){}let pod=null;try{pod=cpropOfDay(v,PC);}catch(e){}
   const nm=o=>`${txtEsc(o.player)} <span style="color:var(--mute)">${o.w}-${o.n-o.w}</span>`;
   return(pod?`<div class="mono" style="font-size:9.5px;margin-top:2px">🎯 Prop of the day: <b>${txtEsc(cpropLine(pod))}</b> <span style="color:var(--win)">${Math.round(pod.cal*100)}%</span>${pod.fav==='fav'?' ⭐':''}${pod.why?` <span style="color:var(--mute)">· ${txtEsc(pod.why)}</span>`:''}</div>`:'')
