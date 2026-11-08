@@ -39,7 +39,8 @@ function oracleIdx(){if(ORA_D&&Date.now()-ORA_D._t<60e3)return ORA_D.v;const v=r
 function oracleFile(sp,a,h,d){const D=oracleIdx();if(!D||!D.g)return null;d=d||today();const ab=x=>typeof mgAb==='function'?mgAb(sp,x):x;
   for(const [A,H] of [[a,h],[ab(a),ab(h)]])for(const dd of [d,dayShift(d,1),dayShift(d,-1)]){const o=D.g[sp+'|'+A+'@'+H+'|'+dd];if(o)return o;}return null;}
 const oraIsPT=k=>String(k).startsWith('pt.');
-function oraLab(k){if(k==='upload')return'your uploads';const D=oracleIdx();const s=D&&D.src&&D.src[k];return s&&s.lab||(oraIsPT(k)?k.slice(3):k);}
+const ORA_LABS={espn:'ESPN FPI/BPI',kalshi:'Kalshi',poly:'Polymarket',dr:'DRatings',os:'OddsShark computer',pw:'Pickswise experts',cbs:'CBS Sports experts',covers:'Covers contest consensus',public:'The betting public'};
+function oraLab(k){if(k==='upload')return'your uploads';const D=oracleIdx();const s=D&&D.src&&D.src[k];return s&&s.lab||ORA_LABS[k]||(oraIsPT(k)?k.slice(3):k);}
 const oraShort=k=>oraLab(k).replace(/ \(Prediction Tracker\)$/,'');
 /* your uploads' record: the old upload-driven Oracle calls in the ledger, by sport and bet type */
 let ORA_UP=null;
@@ -144,7 +145,7 @@ function oracleCardHtml(){try{const D=oracleIdx();if(!D||!D.rec)return'';const s
     const ats=o=>o.r.ats&&o.r.ats[1]>=10?o.r.ats[0]/o.r.ats[1]:-1;const fam=L.filter(o=>oraIsPT(o.k)).sort((a,b)=>ats(b)-ats(a)),oth=L.filter(o=>!oraIsPT(o.k)).sort((a,b)=>ats(b)-ats(a)||(b.r.su[0]/(b.r.su[1]||1))-(a.r.su[0]/(a.r.su[1]||1)));
     const tr=o=>`<tr><td>${txtEsc(oraShort(o.k))}</td><td>${wl(o.r.su)}</td><td>${wl(o.r.ats)}</td><td>${wl(o.r.ou)}</td><td>${o.r.br!=null?o.r.br.toFixed(3):o.r.mae!=null?'±'+o.r.mae:'—'}</td></tr>`;
     const VS=['spread','total'].map(mk=>{const v=oraVsDesk(sp,mk);return v.out!=null&&v.desk!=null?`${mk==='spread'?'spreads':'totals'}: outside ${oraPct(v.out)} vs the Desk ${oraPct(v.desk)}${v.m!==1?` → he ${v.m>1?'leans in':'pulls back'} ×${v.m.toFixed(2)}`:''}`:null;}).filter(Boolean);
-    return`<details style="margin-top:4px"><summary class="mono" style="font-size:11px"><b>${nm(sp)}</b> · ${oth.length+(fam.length?1:0)} sources${fam.length?` (${fam.length} rating systems)`:''}</summary>
+    return`<details style="margin-top:4px"><summary class="mono" style="font-size:11px"><b>${nm(sp)}</b> · ${oth.length+(fam.length?1:0)} source${oth.length+(fam.length?1:0)===1?'':'s'}${fam.length?` (${fam.length} rating system${fam.length===1?'':'s'})`:''}</summary>
       <table class="mono" style="width:100%;font-size:10px;border-collapse:collapse"><tr style="color:var(--mute)"><td>source</td><td>winner</td><td>spread</td><td>total</td><td>Brier / miss</td></tr>${oth.map(tr).join('')}
       ${fam.length?`<tr><td colspan="5" style="color:var(--mute);padding-top:4px">best rating systems against the spread (of ${fam.length})</td></tr>${fam.slice(0,5).map(tr).join('')}`:''}</table>
       ${VS.length?`<div class="sub mono" style="font-size:9.5px;margin-top:3px">${VS.join(' · ')}</div>`:''}</details>`;};
