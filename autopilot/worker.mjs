@@ -398,7 +398,7 @@ const fbFoot = deps => `\n\n💬 We talk sports in TheDesk's free Telegram loung
 export async function fbPost(text, deps, opt) { const c = fbCfg(deps); if (!c || !c.page || !c.tok) return false; const F = deps?.fetch || fetch;
   const message = fbPlain(text) + (opt && opt.bare ? '' : fbFoot(deps)); const hide = x => String(x || '').split(c.tok).join('…');
   try { const r = await F(`https://graph.facebook.com/${c.v || 'v24.0'}/${encodeURIComponent(c.page)}/feed`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ message, access_token: c.tok }).toString() });
-    if (r && r.ok) return true; let why = r ? r.status : 'no reply'; try { const j = await r.json(); const m = j && j.error && j.error.message; if (m) why += ' ' + hide(m).slice(0, 90); } catch (e) { }
+    if (r && r.ok) { log('facebook ✓', message.split('\n')[0].slice(0, 70)); return true; } let why = r ? r.status : 'no reply'; try { const j = await r.json(); const m = j && j.error && j.error.message; if (m) why += ' ' + hide(m).slice(0, 90); } catch (e) { }
     log('facebook:', why); return false; } catch (e) { log('facebook:', hide(e && e.message || e).slice(0, 60)); return false; } }
 const FB_INVITES = [
   "💬 TheDesk lounge is open… a free Telegram room where we break down the slate, argue the matchups and talk ball all day. The picks are part of it… the conversation is the point.\nPull up → {link}",
@@ -519,7 +519,7 @@ export { decrypt, encrypt, gradePick, gradeProp };
 /* ── main ── */
 if (import.meta.url === 'file://' + process.argv[1]) {
   const t0 = Date.now(), BUDGET = +(env.RELAY_BUDGET_MS || 6.5 * 60e3), STEP = +(env.RELAY_STEP_MS || 75e3), MARGIN = +(env.RELAY_MARGIN_MS || 25e3);
-  log(VERSION, '· repo', REPO, '· card from', SITE === REPO ? 'here' : SITE + ' + here', '· today', chicagoDay(t0), '·', env.GITHUB_EVENT_NAME || 'manual', '· lounge hours', (loungeHours(env.LOUNGE) || ['off']).join('-'));
+  log(VERSION, '· repo', REPO, '· card from', SITE === REPO ? 'here' : SITE + ' + here', '· today', chicagoDay(t0), '·', env.GITHUB_EVENT_NAME || 'manual', '· lounge hours', (loungeHours(env.LOUNGE) || ['off']).join('-'), '· facebook page', fbOn() ? 'on' : 'off');
   /* write one copy: on a collision, re-read that copy, merge, retry */
   const saveAt = async (repo, state, cur) => { for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readStateAt(repo) : cur;
       const merged = tries && latest ? mergeState(state, latest.state) : state; const st = await writeStateAt(repo, merged, latest && latest.sha);
