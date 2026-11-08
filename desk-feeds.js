@@ -92,6 +92,7 @@ function feedPropPrice(sp,player,k,thr){try{const L=feedPropsIdx().P[sp+'|'+feed
 async function feedsTick(force){if(FEED_BUSY)return null;if(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)return null;FEED_BUSY=true;
   try{try{const pd=await feedFetch('props',force);if(pd)feedStoreProps(pd);}catch(e){}
     try{const td=await feedFetch('teams',force);if(td&&typeof dogStoreTeams==='function')dogStoreTeams(td);}catch(e){}
+    try{const cd=await feedFetch('coach',force);if(cd&&typeof coachStore==='function')coachStore(cd);}catch(e){}
     const data=await feedFetch('closes',force);if(!data)return null;try{feedStoreFinals(data);}catch(e){}const n=feedMergeCloses(data);if(n){try{clvStampAll();}catch(e){}}return n;}finally{FEED_BUSY=false;}}
 /* how fresh the feeds are (the Book view shows it; a feed stale past 12 hours goes in the journal once a day) */
 function feedHealth(){const c=get(FEED_KEY('closes'),null);if(!c)return{st:'never',lab:'not read yet'};const age=c.ts?(Date.now()-Date.parse(c.ts))/36e5:null;

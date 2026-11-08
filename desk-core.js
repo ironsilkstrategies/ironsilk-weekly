@@ -122,10 +122,12 @@ const confEvOk=(x,c,d)=>{const p=+x.price;if(!d||d<CONF_EV_FROM||!isFinite(p)||M
 function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_PAY_FROM)return true;const c=confOf(x);if(c==null)return true;
   if(!confEvOk(x,c,d))return false;if(c>=0.70-1e-9)return true;
   const p=+x.price;return isFinite(p)&&p>=CONF_PAY_MIN;}
-function isOfficial(x){if(x&&x.voice==='Trends'&&x.hG!=null)return +x.hG>=(x.market==='ml'?75:70)&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91 · the Historian's gut */
-  if(x&&x.voice==='Dog'){if(x.dG!=null)return +x.dG>=(x.market==='ml'?78:70)&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.90 · his gut, not the price */
+/* v2.93 · the Coach's clipboard decides how much confidence each call may carry (desk-coach.js) */
+const coachOk=x=>typeof coachConf==='function'?coachConf(x):confOf(x);
+function isOfficial(x){if(x&&(x.voice==='Trends'&&x.hG!=null||x.voice==='Coach'&&x.cG!=null))return coachOk(x)*100>=(x.market==='ml'?75:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91/v2.93 · the Historian's and the Coach's gut */
+  if(x&&x.voice==='Dog'){if(x.dG!=null)return coachOk(x)*100>=(x.market==='ml'?78:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.90 · his gut, not the price */
     return!!(typeof PROB_OK!=='undefined'&&PROB_OK.Dog)&&+x.dEdge>=DOG_ML_EDGE-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
-  const c=confOf(x);if(c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x))return true;
+  const c=coachOk(x);if(c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x))return true;
   return isCounterPunch(x);}
 /* ══ v2.73 · 🥊 THE COUNTER-PUNCH — conservative by default, aggressive when everything lines up ══════════
    A call under the bar still goes official when ALL of these hit (judged pre-game, then remembered):
@@ -299,7 +301,7 @@ function deskLaneRec(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length;
 function deskCands(V,d){const R=deskLaneRec();const out=[];
   (V||[]).forEach(c=>{if(String(c.date).slice(0,10)!==d||!CHARS[c.voice]||c.graded||!['ml','spread','total'].includes(c.market))return;
     if(c.price==null||!bkPriceOk(c.price)||!isOfficial(c)||deskStarted(c))return;
-    const cf=confOf(c);out.push({v:c.voice,sp:c.sp,game:c.game,gd:String(c.date||'').slice(0,10)||null,m:c.market,sd:c.side,line:c.line,pick:charPickText(c),price:+c.price,p:cf,cf,
+    const cf=coachOk(c);out.push({v:c.voice,sp:c.sp,game:c.game,gd:String(c.date||'').slice(0,10)||null,m:c.market,sd:c.side,line:c.line,pick:charPickText(c),price:+c.price,p:cf,cf,
       fit:cf*deskLaneMult(c.voice,c.sp,c.market,R),key:deskKey(c),start:deskGameStart(c.sp,c.game)});});
   return out;}
 function deskSize(legs,kMax){const L=legs.slice(0,Math.min(kMax||DESK_MAXLEG,legs.length));if(L.length<2)return 0;

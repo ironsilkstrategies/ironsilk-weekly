@@ -2241,7 +2241,7 @@ function voicesLines(sp,g){const gl=g.away.abbr+'@'+g.home.abbr;let L=[];
 const CHARS={
   'Sim':        {chip:'★ SIM',color:'#FFD75E',label:'The Simulator',school:'10,000 Monte Carlo runs of the game',quiet:'no sim yet'},
   'Judge':      {chip:'JUDGE',color:'#f5a524',label:'The Judge',school:'weighs every witness by its graded accuracy (forecast combination)',quiet:'no witnesses'},
-  'Coach':      {chip:'COACH',color:'#5FD3E8',label:'The Coach',school:'situational take/fade — matchup, rest, form',quiet:'no take or fade'},
+  'Coach':      {chip:'COACH',color:'#5FD3E8',label:'The Coach',school:'keeps everyone honest — scales each character\'s confidence to its real hit rate; his own score from season scoring, rest, spots, revenge, weather and the news',quiet:'nothing on the clipboard clears the line'},
   'Most common':{chip:'SCORE',color:'#a78bfa',label:'The Scorekeeper',school:'the single most likely final score',quiet:'no modal score'},
   'Pred':       {chip:'ORACLE',color:'#e8c15a',label:'The Oracle',school:'outside predicted scores you upload (non-Covers)',quiet:'no outside prediction uploaded'},
   'Covers':     {chip:'COVERS',color:'#ff7a1a',label:'Covers',school:'Covers / OddsShark computer predicted score',quiet:'no Covers prediction uploaded'},
@@ -2371,8 +2371,9 @@ function characterCalls(sp,g,s){
     const rs=read(spc.bets||spc.money?spc:ml,'homePct','home','away');if(hl!=null&&rs)add('Consensus','spread',rs.side,{metric:rs.metric,why:rs.why});
     const rt=read(to,'overPct','over','under');if(tl!=null&&rt)add('Consensus','total',rt.side,{metric:rt.metric,why:rt.why});
   }catch(e){}
-  // Coach — take/fade on the model side, plus its total read
-  try{const c=coachPickFor(g,s,sp);if(c){const simSide=c.sideTeam===H?'home':'away';
+  // Coach — v2.93: his own score from his own skills (desk-coach.js); the old take/fade + the Sim's total only if that's missing
+  let coachDone=false;try{if(typeof coachCallsV2==='function'&&coachCallsV2(sp,g,Ln,hl,hlSim,tl,tlSim,add))coachDone=true;}catch(e){}
+  if(!coachDone)try{const c=coachPickFor(g,s,sp);if(c){const simSide=c.sideTeam===H?'home':'away';
     if(c.verdict==='take')add('Coach','ml',simSide);else if(c.verdict==='fade')add('Coach','ml',simSide==='home'?'away':'home');
     if(tl!=null&&(c.totalDir==='over'||c.totalDir==='under')&&c.totalReal)add('Coach','total',c.totalDir);}}catch(e){}
   // Books' favorite (ledger only — the book price is already its own signal on the square)
@@ -2502,7 +2503,8 @@ function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)r
   const J=by('Judge').find(c=>c.ja!=null);if(J)own('Judge',J.ja,J.jh);
   /* v2.90 · the Underdog Spotter calls a score on every game with a dog, official pick or not */
   try{const dp=typeof dogPredFor==='function'?dogPredFor(sp,g):null;if(dp)own('Dog',dp.a,dp.h);}catch(e){}
-  try{const hp=typeof histPredFor==='function'?histPredFor(sp,g):null;if(hp)own('Trends',hp.a,hp.h);}catch(e){}   /* v2.91 · the Historian's score on every game he reads */
+  try{const hp=typeof histPredFor==='function'?histPredFor(sp,g):null;if(hp)own('Trends',hp.a,hp.h);}catch(e){}
+  try{const cp=typeof coachPredFor==='function'?coachPredFor(sp,g):null;if(cp)own('Coach',cp.a,cp.h);}catch(e){}   /* v2.93 · the Coach's own score, every game */   /* v2.91 · the Historian's score on every game he reads */
   [['Most common'],['Covers'],['Pred']].forEach(([v])=>{const c=by(v).find(x=>x.score);if(c){const m=String(c.score).match(/([\d.]+)\D+([\d.]+)/);if(m)own(v,+m[1],+m[2]);}});
   const unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3;
   new Set(calls.map(c=>c.voice)).forEach(v=>{if(out[v]||v==='Books')return;const C=by(v);if(!C.length)return;let a=+s.awayProj,h=+s.homeProj;
@@ -3035,7 +3037,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261108d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261108e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17997,7 +17999,7 @@ const BT_NOTE={heavy:'Heavy favorites: moneylines priced -1000 or shorter — ri
 const CHAR_EDGE={
   'Sim':['every market on every game — 10,000 runs of the full model','it only knows what it\'s fed: a late scratch, a motivation spot or news it hasn\'t seen'],
   'Judge':['weighing every source by how accurate it has actually been','when its witnesses are wrong together, so is it — and it trusts a source\'s past more than its latest change'],
-  'Coach':['spots: matchups, rest, travel and form — when to take a team and when to fade it','silent when a game has no clear spot, and each spot rests on a small sample'],
+  'Coach':['the clipboard — sees when a character says more than it hits, and the situations (rest, spots, weather, news) nobody else reads','his score starts from the season\'s scoring, so a team that just changed (a new QB, a trade) takes him a few games to see'],
   'Most common':['the single most likely final score — exact scores, and totals near the number','the likeliest score is still unlikely — high-variance games swing right past it'],
   'Pred':['the outside predicted scores you upload','only as good as the source you upload, and silent without one'],
   'Covers':['the Covers / OddsShark computer projection','a public number the books have already seen — and silent without an upload'],
@@ -22415,7 +22417,7 @@ function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet
   B.streak=Object.assign([0,0],{s});
   return{B,all};}
 /* the character's stated chance where it has one; otherwise its own all-time rate here */
-function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Trends'&&c.hG!=null?+(c.hG/100).toFixed(2):c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
+function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Trends'&&c.hG!=null?+(c.hG/100).toFixed(2):c.voice==='Coach'&&c.cG!=null?+(c.cG/100).toFixed(2):c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
   const rate=(all[0]+FEEL_K0*0.5)/(all[0]+all[1]+FEEL_K0);
   if(st>0&&st<1){/* a stated chance is tempered by how reliable the character has actually been */const n=all[0]+all[1];const k=n/(n+FEEL_K0);return Math.max(0.02,Math.min(0.98,(1-k*0.5)*st+k*0.5*rate));}
   return rate;}

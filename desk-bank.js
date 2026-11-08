@@ -65,7 +65,7 @@ function bkSheetLegs(){const d=today();let C=[];try{C=deskCands(roGet(VOICES_KEY
   legs.forEach(o=>{const role=bkRole(o.m,o.sd,o.line,o.price);const cf=o.cf.reduce((a,b)=>a+b,0)/o.cf.length;
     const acc=o.by.reduce((a,v)=>{const A=bkAcct(v,o.sp,o.m,role);return a+(A?A.edge:0);},0)/o.by.length;   /* the backers' average account, not their sum — six voices aren't six times the proof */
     o.role=role;o.cf0=cf;o.acc=+Math.max(-0.03,Math.min(0.03,acc)).toFixed(4);
-    o.score=cf+o.acc+0.01*Math.min(4,o.by.length-1);
+    o.score=cf+o.acc+0.01*Math.min(4,o.by.length-1)*(typeof coachAgreeW==='function'?coachAgreeW(o.sp):1);   /* the Coach's groupthink check decides if a crowd earns extra */
     let pc=null;try{pc=typeof mcalTeam==='function'?mcalTeam({sp:o.sp,mk:o.m,price:o.price,v:Object.fromEntries(o.by.map((v,i)=>[v,o.cf[i]])),opp:[]}):null;}catch(e){}
     o.p=Math.max(0.02,Math.min(0.98,(pc!=null?pc:cf)+o.acc));if(!o.start){try{o.start=boardStart(o.sp,o.game,d)||'';}catch(e){}}});
   /* an outright dog (under a 45% calibrated chance) is a fine single but sinks a 9-leg ticket — the sheet leaves it to the singles */
