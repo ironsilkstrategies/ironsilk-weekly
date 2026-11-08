@@ -378,9 +378,37 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
       const r = await T('sendMessage', { chat_id: p.chat, text: cashText(p, g), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.sent[key] = 'W'; acted++;
         /* v2.31 · a cash goes everywhere: the VIP lounge, the public channel and its lounge (it's after the fact) */
         for (const [lab, c] of [['vl', p.bc && p.bc.vipLounge], ['pub', p.bc && p.bc.pub], ['pl', p.bc && p.bc.pubLounge]]) { if (!c || p.sent[key + '|' + lab]) continue;
-          const r2 = await T('sendMessage', { chat_id: c, text: cashText(p, g), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r2) p.sent[key + '|' + lab] = 'W'; } } }
+          const r2 = await T('sendMessage', { chat_id: c, text: cashText(p, g), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r2) p.sent[key + '|' + lab] = 'W'; }
+        if (fbOn(deps) && !p.sent[key + '|fb'] && await fbPost(cashText(p, g), deps)) p.sent[key + '|fb'] = 'W'; } }
     state.posts[d] = p; }
   return acted; }
+
+/* ── v2.97 · the Facebook page ─────────────────────────────────────────────────
+   Every public post — unlocks (30 min before each game), results, the public recap, cashed tickets — is mirrored to
+   TheDesk's Facebook page in plain text with the lounge invite, and once a day (from 10 AM Central, on a day with a card)
+   the page gets an invite to the free lounge: we talk sports there, not just picks. It only ever mirrors what already
+   went public, after Telegram took it. On only when the repo secrets FB_PAGE_ID and FB_PAGE_TOKEN are set; the token is
+   masked in the (public) Actions logs and never printed. LOUNGE_URL (a repo variable) overrides the invite link. */
+const fbCfg = deps => deps?.fb || { page: (env.FB_PAGE_ID || '').trim(), tok: (env.FB_PAGE_TOKEN || '').trim(), v: (env.FB_GRAPH_VERSION || 'v24.0').trim() };
+export const fbOn = deps => { const c = fbCfg(deps); return !!(c && c.page && c.tok); };
+if ((env.FB_PAGE_TOKEN || '').trim() && env.GITHUB_ACTIONS === 'true') console.log('::add-mask::' + env.FB_PAGE_TOKEN.trim());
+const loungeUrl = deps => (deps?.lounge || env.LOUNGE_URL || '').trim() || 'https://t.me/TheDeskApp';
+export const fbPlain = html => String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
+const fbFoot = deps => `\n\n💬 We talk sports in TheDesk's free Telegram lounge… not just picks. Pull up → ${loungeUrl(deps)}`;
+export async function fbPost(text, deps, opt) { const c = fbCfg(deps); if (!c || !c.page || !c.tok) return false; const F = deps?.fetch || fetch;
+  const message = fbPlain(text) + (opt && opt.bare ? '' : fbFoot(deps)); const hide = x => String(x || '').split(c.tok).join('…');
+  try { const r = await F(`https://graph.facebook.com/${c.v || 'v24.0'}/${encodeURIComponent(c.page)}/feed`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ message, access_token: c.tok }).toString() });
+    if (r && r.ok) return true; let why = r ? r.status : 'no reply'; try { const j = await r.json(); const m = j && j.error && j.error.message; if (m) why += ' ' + hide(m).slice(0, 90); } catch (e) { }
+    log('facebook:', why); return false; } catch (e) { log('facebook:', hide(e && e.message || e).slice(0, 60)); return false; } }
+const FB_INVITES = [
+  "💬 TheDesk lounge is open… a free Telegram room where we break down the slate, argue the matchups and talk ball all day. The picks are part of it… the conversation is the point.\nPull up → {link}",
+  "🏈🏀🏒 Talk sports with us… not just picks. TheDesk's free lounge on Telegram: live game talk, the reads behind every play, and a crew that actually watches the games.\nJoin → {link}",
+  "Every pick we post is locked before the games and graded at the final… in public. Want the why behind them? Come talk it out in the free lounge.\n→ {link}",
+  "No promises. No politics. Just sports. TheDesk's free Telegram lounge is where the real conversation happens… bring your takes.\n→ {link}"];
+export async function fbInvite(state, deps) { if (!fbOn(deps)) return 0; const now = deps?.now || Date.now(); const d = chicagoDay(now); const p = state && state.posts && state.posts[d]; if (!p) return 0;
+  const h = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now)); p.sent = p.sent || {};
+  if (h < 10 || p.sent.fbinv) return 0; const i = Math.floor(Date.parse(d + 'T12:00:00Z') / 864e5) % FB_INVITES.length;
+  if (await fbPost(FB_INVITES[i].replace('{link}', loungeUrl(deps)), deps, { bare: true })) { p.sent.fbinv = 1; return 1; } return 0; }
 
 /* ── v2.31 · the public side ──────────────────────────────────────────────────
    p.pub.legs: the Best 3, the Best 3 props and the Banker's parlay legs, each with
@@ -393,8 +421,10 @@ const KIND = { 'Best 3': '⭐ Best 3', 'Prop': '🎯 Prop', "Banker's parlay": "
 export async function runPublic(p, deps) { const T = deps?.tg || tg; const now = deps?.now || Date.now(); const legs = (p.pub && p.pub.legs) || []; if (!legs.length) return 0;
   const dests = [p.bc && p.bc.pub, p.bc && p.bc.pubLounge].filter(Boolean); let acted = 0; p.st = p.st || {}; p.sent = p.sent || {};
   for (const l of legs) { if (!l.prop || p.st[l.k]) continue; let s = null; try { s = await (deps?.gradeProp || gradeProp)({ sp: l.sp, player: l.player, team: l.team, stat: l.stat, thr: l.thr, side: l.side }, p.d); } catch (e) { } if (s) p.st[l.k] = s; }
-  if (!dests.length) return 0;
-  const send = async text => { let ok = false; for (const c of dests) { const r = await T('sendMessage', { chat_id: c, text, parse_mode: 'HTML', disable_web_page_preview: 'true' }); ok = ok || !!r; } return ok; };
+  if (!dests.length && !fbOn(deps)) return 0;
+  const send = async text => { let ok = false; for (const c of dests) { const r = await T('sendMessage', { chat_id: c, text, parse_mode: 'HTML', disable_web_page_preview: 'true' }); ok = ok || !!r; }
+    /* v2.97 · the Facebook page gets it once Telegram has it (a Telegram miss retries both next pass) */
+    if ((ok || !dests.length) && fbOn(deps)) { const fb = await fbPost(text, deps); if (!dests.length) ok = fb; } return ok; };
   /* unlocks */
   const open = legs.filter(l => l.unlockAt && now >= l.unlockAt && !p.sent['unlock|' + l.k] && !p.st[l.k]);
   if (open.length) { const day = (p.pub && p.pub.day) || DAYFMT(p.d);
@@ -507,6 +537,7 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       if (!pass) log('posts on file:', Object.entries(state.posts || {}).map(([d, p]) => `${d} ${Object.keys(p.st || {}).length}/${(p.legs || []).length} graded${p.recap ? ' · closed' : ''}`).join(' · '));
       let acted = await runOnce(state, today); try { acted += await publishPublic(state); } catch (e) { log('public page', e.message || e); }
       try { acted += await runCommands(state); } catch (e) { log('commands', e.message || e); }
+      try { acted += await fbInvite(state); } catch (e) { log('facebook invite', e.message || e); }
       /* the state branch only gets a commit when something was sent — or an hourly heartbeat */
       const beat = !state.lastRun || Date.now() - state.lastRun > 60 * 60e3;
       if (acted || beat || dirty) { state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1; dirty = !(await saveAt(REPO, state, cur)); if (dirty) log('couldn\'t save this pass — kept in memory, retrying next pass'); }
