@@ -35,7 +35,7 @@ T('the betting public: home and over splits, tickets and money',g1.s.public&&g1.
 T('DRatings: win chance and predicted score (away listed first)',g1.s.dr&&g1.s.dr.wp===0.695&&g1.s.dr.pa===17.4&&g1.s.dr.ph===24.9&&g1.s.dr.tot===42.3,JSON.stringify(g1.s.dr));
 T('the Prediction Tracker: each rating system is its own source, the sign read off the file ("NY Giants" = the Giants)',g1.s['pt.sag']&&g1.s['pt.sag'].mg===5.5&&g1.s['pt.nfelo'].mg===1&&g2.s['pt.sag'].mg===6&&!g1.s['pt.avg']&&O.src['pt.sag'].lab==='Sagarin (Prediction Tracker)',JSON.stringify([g1.s['pt.sag'],g2.s['pt.nfelo']]));
 T('OddsShark\'s computer: a predicted score per team',g1.s.os&&g1.s.os.pa===18.5&&g1.s.os.ph===25.1,JSON.stringify(g1.s.os));
-T('Pickswise: the expert\'s pick and stars — a side with its line, a total',g1.s.pw&&g1.s.pw.pk.mk==='spread'&&g1.s.pw.pk.side==='home'&&g1.s.pw.pk.line===-3&&g1.s.pw.pk.st===3&&g2.s.pw.pk.mk==='total'&&g2.s.pw.pk.side==='over',JSON.stringify([g1.s.pw,g2.s.pw]));
+T('Pickswise: the expert\'s pick and stars — a side with its line, a total',g1.s.pw&&g1.s.pw.pk[0].mk==='spread'&&g1.s.pw.pk[0].side==='home'&&g1.s.pw.pk[0].line===-3&&g1.s.pw.pk[0].st===3&&g2.s.pw.pk[0].mk==='total'&&g2.s.pw.pk[0].side==='over',JSON.stringify([g1.s.pw,g2.s.pw]));
 T('no record before anything is final',Object.keys(O.rec).length===0);
 const fs2=(f,o)=>fs.writeFileSync(path.join(dir,f),JSON.stringify(o));
 fs2('closes.json',{v:1,games:{'401':{id:'401',sp:'nfl',st,a:'CLE',h:'NO',as:17,hs:27,pc:{spread:{home:{cl:-3}},total:{over:{cl:44.5}}}},'402':{id:'402',sp:'nfl',st:st2,a:'NYG',h:'DAL',as:24,hs:20,pc:{spread:{home:{cl:-3.5}},total:{over:{cl:47.5}}}}}});

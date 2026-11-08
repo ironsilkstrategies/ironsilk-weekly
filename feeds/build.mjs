@@ -395,18 +395,19 @@ async function orDRatings(G,D){const out=[];D.dr={};
   return out;}
 /* The Prediction Tracker: dozens of computer rating systems' lines for every NFL and college football game, one column each.
    Each system is its own source and earns its own record. The sign is read off the file itself (its Vegas column vs ESPN's). */
-const PT_URL={nfl:'nflpredictions.csv',ncaaf:'ncaapredictions.csv'};
-const PT_SKIP=new Set(['line','lineopen','lineavg','linemedian','linestd','linemean','linesd']);
+const PT_URL={nfl:'nflpredictions.csv',ncaaf:'ncaapredictions.csv',nba:'nbapreds.csv',ncaab:'ncaabbpreds.csv'};
+const PT_SKIP=new Set(['line','lineopen','lineavg','linemedian','linestd','linemean','linesd','line_avgdiff']);
 const PT_LAB={mass:'Massey',massey:'Massey',pi:'Pi-ratings',pim:'Pi-ratings mean',pib:'Pi-ratings bias',piratings:'Pi-ratings',pimean:'Pi-ratings mean',pibias:'Pi-ratings bias',donchess:'Donchess',sag:'Sagarin',sagpred:'Sagarin predictor',saggm:'Sagarin golden mean',sagr:'Sagarin recent',
   nfelo:'nfelo',espn:'ESPN FPI',fei:'FEI',dok:'Dokter Entropy',dokter:'Dokter Entropy',bihl:'Bihl',cong:'Congrove',midweek:'Midweek',newbury:'Newbury',rwp:'Roundtable',excel:'Excel',gt:'GT',pve:'PVE',betbetter:'BetBetter',talis:'Talisman',pugh:'Pugh',
   clean:'Clean',hanson:'Hanson',dwig:'Dwiggins',blitz:'Blitz',ffw:'FFW',stjohn:'St. John',grid:'Grid',dial:'Dial',craig:'Craig',rithm:'Rithm',how:'Howell',agatha:'Agatha',keep:'Keeper',billings:'Billings',harville:'Harville',big200:'Big 200',wiz:'Wizard',ver:'Versus'};
 async function orPT(G,D){const out=[];D.pt={};
   for(const [sp,u] of Object.entries(PT_URL)){let txt;try{txt=await getText('https://www.thepredictiontracker.com/'+u);D.calls++;}catch(e){D.pt[sp]='err '+String(e.message||e).slice(0,20);continue;}
     const L=txt.split(/\r?\n/).filter(x=>x.trim());if(L.length<2)continue;const H=L[0].split(',').map(x=>x.trim().toLowerCase());const iR=H.indexOf('road'),iH=H.indexOf('home'),iL=H.indexOf('line');if(iR<0||iH<0)continue;
-    const rows=[];L.slice(1).forEach(l=>{const c=l.split(',');const f=orFind(G,sp,c[iR],c[iH]);if(f&&f.s1==='a')rows.push({g:f.g,c});});
+    /* a neutral-site game may list the teams the other way round from ESPN: fl turns its numbers to ESPN's home side */
+    const rows=[];L.slice(1).forEach(l=>{const c=l.split(',');const f=orFind(G,sp,c[iR],c[iH]);if(f)rows.push({g:f.g,c,fl:f.s1==='a'?1:-1});});
     /* sign: does the file's Vegas line run with ESPN's home spread (negative = home favored) or against it (a home margin)? */
-    let dot=0;rows.forEach(r=>{const v=parseFloat(r.c[iL]),s=r.g.ln&&r.g.ln.spH;if(isFinite(v)&&s!=null)dot+=v*s;});const sg=dot>=0?-1:1;
-    rows.forEach(r=>{H.forEach((h,i)=>{if(!h.startsWith('line')||PT_SKIP.has(h))return;const v=parseFloat(r.c[i]);if(!isFinite(v))return;out.push({k:'pt.'+h.slice(4),g:r.g,v:{mg:+(sg*v).toFixed(2)}});});});
+    let dot=0;rows.forEach(r=>{const v=parseFloat(r.c[iL]),s=r.g.ln&&r.g.ln.spH;if(isFinite(v)&&s!=null)dot+=v*r.fl*s;});const sg=dot>0?-1:1;
+    rows.forEach(r=>{H.forEach((h,i)=>{if(!h.startsWith('line')||PT_SKIP.has(h))return;const v=parseFloat(r.c[i]);if(!isFinite(v))return;out.push({k:'pt.'+h.slice(4),g:r.g,v:{mg:+(sg*v*r.fl).toFixed(2)}});});});
     D.pt[sp]={games:rows.length,sys:H.filter(h=>h.startsWith('line')&&!PT_SKIP.has(h)).length,sign:sg};}
   return out;}
 /* OddsShark's computer: a predicted score per team (each game its own little table, away row first) */
@@ -438,14 +439,12 @@ async function orPublic(G,D){const out=[];D.an={g:0};
     for(const d of days){let j;try{j=await getJSON(`https://api.actionnetwork.com/web/v1/scoreboard/${sp}?period=game&bookIds=15,30&date=${d}`,BROWSER);D.calls++;}catch(e){D.an.err=String(e.message||e).slice(0,60);break;}
       for(const x of (j.games||[])){const T={};(x.teams||[]).forEach(t=>T[t.id]=t);const ta=T[x.away_team_id],th=T[x.home_team_id];if(!D.an.ex)D.an.ex={k:Object.keys(x).slice(0,30),t:(x.teams||[]).slice(0,1).map(t=>Object.keys(t).slice(0,12).join(',')+' '+(t.full_name||t.display_name)),o:Object.keys((x.odds||[])[0]||{}).filter(k=>/public|money|ticket/.test(k)).slice(0,12),aw:x.away_team_id,hm:x.home_team_id};if(!ta||!th)continue;D.an.g++;
         const f=orFind(G,sp,ta.full_name||ta.display_name||'',th.full_name||th.display_name||'',x.start_time);if(!f||f.s1!=='a')continue;
-        const o=(x.odds||[]).find(o=>o&&(o.ml_home_public!=null||o.spread_home_public!=null))||null;if(!o)continue;const n=v=>v==null||!isFinite(+v)?null:+v;
+        const o=(x.odds||[]).find(o=>o&&(o.ml_home_public!=null||o.spread_home_public!=null))||null;if(!o){D.an.nul=(D.an.nul||0)+1;continue;}const n=v=>v==null||!isFinite(+v)?null:+v;
         out.push({g:f.g,v:{pub:{ml:n(o.ml_home_public),sp:n(o.spread_home_public),ou:n(o.total_over_public),mlm:n(o.ml_home_money),spm:n(o.spread_home_money),oum:n(o.total_over_money)}}});}}}
   return out;}
 /* discovery: which prediction sites the worker can read, and how their pages are shaped (removed once each has an adapter) */
-const OR_PROBE_V=2,OR_PROBE=[['dimers','nfl','https://www.dimers.com/nfl/predictions'],['dimers','nba','https://www.dimers.com/nba/predictions'],['covers','nfl','https://contests.covers.com/consensus/topconsensus/nfl/overall'],
-  ['cbs','nfl','https://www.cbssports.com/nfl/picks/experts/'],['pt','nba','https://www.thepredictiontracker.com/nbapreds.csv'],['pt','ncaab','https://www.thepredictiontracker.com/ncaabbpreds.csv'],
-  ['pt','nba','https://www.thepredictiontracker.com/basketball.php'],['dratings','ncaaf','https://www.dratings.com/predictor/ncaa-football-predictions/'],['actionpicks','nfl','https://www.actionnetwork.com/nfl/picks'],
-  ['espnpick','nfl','https://www.espn.com/nfl/picks'],['usatoday','nfl','https://www.usatoday.com/sports/nfl/picks/']];
+const OR_PROBE_V=3,OR_PROBE=[['covers','nfl','https://contests.covers.com/consensus/topconsensus/nfl/overall'],['covers','nba','https://contests.covers.com/consensus/topconsensus/nba/overall'],
+  ['cbs','nfl','https://www.cbssports.com/nfl/picks/experts/'],['oddsshark','nba','https://www.oddsshark.com/nba/computer-picks']];
 function orHint(txt,G,sp){const h={b:txt.length};const tt=txt.match(/<title[^>]*>([^<]{0,90})/i);if(tt)h.t=tt[1].trim();h.tb=(txt.match(/<table/gi)||[]).length;
   h.nd=/__NEXT_DATA__|__NUXT__|window\.__INITIAL|application\/ld\+json/i.test(txt)?1:0;h.cf=/challenge-platform|cf-chl|Just a moment|captcha/i.test(txt)?1:0;
   h.th=(txt.match(/<th[\s>][\s\S]*?<\/th>/gi)||[]).slice(0,14).map(x=>x.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,18));
@@ -454,7 +453,7 @@ function orHint(txt,G,sp){const h={b:txt.length};const tt=txt.match(/<title[^>]*
   const S=G.filter(g=>sp==='*'||g.sp===sp);const hit=new Set();let ex=null;const has=(r,t)=>{const R=pad(r);return t.nm.some(n=>{const x=norm(n);return x.length>=4&&R.includes(' '+x+' ');});};
   rows.forEach(r=>{for(const g of S)if(has(r,g.a)&&has(r,g.h)){hit.add(orKey(g));if(!ex)ex=r.slice(0,240);break;}});
   if(!hit.size)for(let i=0;i+1<rows.length;i++)for(const g of S)if(has(rows[i],g.a)&&has(rows[i+1],g.h)||has(rows[i],g.h)&&has(rows[i+1],g.a)){hit.add(orKey(g));if(!ex)ex=(rows[i]+' || '+rows[i+1]).slice(0,260);break;}
-  h.m=hit.size;if(ex)h.ex=ex;if(sp==='*'||!h.m)h.links=[...new Set((txt.match(/href="[^"]+"/gi)||[]).map(x=>x.slice(6,-1)).filter(u=>/pred|csv|pick|games|sched|json/i.test(u)))].slice(0,30);
+  h.m=hit.size;if(ex)h.ex=ex;if(!h.m&&rows.length)h.r4=rows.slice(1,5).map(r=>r.slice(0,140));if(sp==='*'||!h.m)h.links=[...new Set((txt.match(/href="[^"]+"/gi)||[]).map(x=>x.slice(6,-1)).filter(u=>/pred|csv|pick|games|sched|json/i.test(u)))].slice(0,30);
   return h;}
 /* a source's call graded against the final: straight-up, against the closing spread and total, the margin miss */
 function orGrade(s,f){const m=f.hs-f.as;const pc=f.pc||{};const cl=pc.spread&&pc.spread.home&&pc.spread.home.cl!=null?pc.spread.home.cl:null;const T=pc.total&&pc.total.over&&pc.total.over.cl!=null?pc.total.over.cl:null;const r={};
@@ -462,9 +461,9 @@ function orGrade(s,f){const m=f.hs-f.as;const pc=f.pc||{};const cl=pc.spread&&pc
   const pm=s.mg!=null?s.mg:(s.ph!=null&&s.pa!=null?s.ph-s.pa:null);
   if(pm!=null){r.ae=+Math.abs(pm-m).toFixed(1);if(cl!=null&&pm+cl!==0&&m+cl!==0)r.ats=(pm+cl>0)===(m+cl>0)?1:0;if(r.su==null&&m!==0&&pm!==0)r.su=(pm>0)===(m>0)?1:0;}
   const pt=s.tot!=null?s.tot:(s.ph!=null&&s.pa!=null?s.ph+s.pa:null);if(pt!=null&&T!=null&&pt!==T&&f.as+f.hs!==T)r.ou=(pt>T)===(f.as+f.hs>T)?1:0;
-  if(s.pk){const k=s.pk;if(k.mk==='ml'&&m!==0)r.su=(k.side==='home')===(m>0)?1:0;
+  if(s.pk)[].concat(s.pk).forEach(k=>{if(k.mk==='ml'&&m!==0)r.su=(k.side==='home')===(m>0)?1:0;
     if(k.mk==='spread'&&k.line!=null){const mm=k.side==='home'?m:-m;if(mm+k.line!==0)r.ats=mm+k.line>0?1:0;}
-    if(k.mk==='total'&&k.line!=null&&f.as+f.hs!==k.line)r.ou=(k.side==='over')===(f.as+f.hs>k.line)?1:0;}
+    if(k.mk==='total'&&k.line!=null&&f.as+f.hs!==k.line)r.ou=(k.side==='over')===(f.as+f.hs>k.line)?1:0;});
   if(s.pub){const p=s.pub;if(p.ml!=null&&p.ml!==50&&m!==0)r.su=(p.ml>50)===(m>0)?1:0;if(p.sp!=null&&p.sp!==50&&cl!=null&&m+cl!==0)r.ats=(p.sp>50)===(m+cl>0)?1:0;if(p.ou!=null&&p.ou!==50&&T!=null&&f.as+f.hs!==T)r.ou=(p.ou>50)===(f.as+f.hs>T)?1:0;}
   return r;}
 const OR_SRC={espn:{lab:'ESPN FPI/BPI',kind:'model'},kalshi:{lab:'Kalshi',kind:'market'},poly:{lab:'Polymarket',kind:'market'},dr:{lab:'DRatings',kind:'model'},os:{lab:'OddsShark computer',kind:'model'},pw:{lab:'Pickswise experts',kind:'expert'},public:{lab:'The betting public',kind:'crowd'}};
@@ -481,7 +480,8 @@ async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.n
   const out={v:1,ts:new Date(now).toISOString(),src:{},g:{},rec:{}};
   pre.forEach(g=>{out.g[orKey(g)]={sp:g.sp,st:g.st,a:g.a.ab,h:g.h.ab,ln:g.ln,s:{}};});
   Object.entries(got).forEach(([k,R])=>{const acc={};R.forEach(({g,v})=>{const K=orKey(g);(acc[K]=acc[K]||[]).push(v);});
-    Object.entries(acc).forEach(([K,L])=>{if(!out.g[K])return;const v=L.length===1?L[0]:{...L[0],wp:L.every(x=>x.wp!=null)?+(L.reduce((s,x)=>s+x.wp,0)/L.length).toFixed(4):L[0].wp};out.g[K].s[k]=v;});});
+    Object.entries(acc).forEach(([K,L])=>{if(!out.g[K])return;let v=L.length===1?L[0]:{...L[0],wp:L.every(x=>x.wp!=null)?+(L.reduce((s,x)=>s+x.wp,0)/L.length).toFixed(4):L[0].wp};
+      if(L.some(x=>x.pk)){const seen=new Set();v={pk:L.map(x=>x.pk).filter(p=>{const q=p.mk+p.side+p.line;if(seen.has(q))return false;seen.add(q);return true;})};}out.g[K].s[k]=v;});});
   /* remember every pre-game read until the final (the last read before kickoff is the one graded) */
   Object.entries(out.g).forEach(([K,o])=>{if(Object.keys(o.s).length)C.p[K]={st:o.st,s:o.s};});
   const F={};Object.values(finals||{}).forEach(f=>{if(f&&f.sp&&f.st)F[f.sp+'|'+f.a+'@'+f.h+'|'+etDay(Date.parse(f.st))]=f;});let graded=0;
