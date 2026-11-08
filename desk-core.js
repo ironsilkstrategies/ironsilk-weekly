@@ -122,7 +122,8 @@ const confEvOk=(x,c,d)=>{const p=+x.price;if(!d||d<CONF_EV_FROM||!isFinite(p)||M
 function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_PAY_FROM)return true;const c=confOf(x);if(c==null)return true;
   if(!confEvOk(x,c,d))return false;if(c>=0.70-1e-9)return true;
   const p=+x.price;return isFinite(p)&&p>=CONF_PAY_MIN;}
-function isOfficial(x){if(x&&x.voice==='Dog'){if(x.dG!=null)return +x.dG>=(x.market==='ml'?78:70)&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.90 · his gut, not the price */
+function isOfficial(x){if(x&&x.voice==='Trends'&&x.hG!=null)return +x.hG>=(x.market==='ml'?75:70)&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91 · the Historian's gut */
+  if(x&&x.voice==='Dog'){if(x.dG!=null)return +x.dG>=(x.market==='ml'?78:70)&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.90 · his gut, not the price */
     return!!(typeof PROB_OK!=='undefined'&&PROB_OK.Dog)&&+x.dEdge>=DOG_ML_EDGE-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
   const c=confOf(x);if(c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x))return true;
   return isCounterPunch(x);}

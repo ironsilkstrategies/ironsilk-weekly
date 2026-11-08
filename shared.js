@@ -2245,7 +2245,7 @@ const CHARS={
   'Most common':{chip:'SCORE',color:'#a78bfa',label:'The Scorekeeper',school:'the single most likely final score',quiet:'no modal score'},
   'Pred':       {chip:'ORACLE',color:'#e8c15a',label:'The Oracle',school:'outside predicted scores you upload (non-Covers)',quiet:'no outside prediction uploaded'},
   'Covers':     {chip:'COVERS',color:'#ff7a1a',label:'Covers',school:'Covers / OddsShark computer predicted score',quiet:'no Covers prediction uploaded'},
-  'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'situational trend records, shrunk for small samples',quiet:'no uploaded trends lean'},
+  'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'prestige, head-to-head, dynasties and pretenders, units exposed for years, the referee — ten finished seasons (plus your uploaded trends)',quiet:'nothing in the history clears his gut'},
   'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
   'Power':      {chip:'⚡ POWER',color:'#818cf8',label:'The Commissioner',school:'TheDesk Power Index — who\'s better and by how much, plus prestige and the all-time series',quiet:'no power rating for one of these teams, or no real edge on this number'},
   'Dog':        {chip:'🐕 DOG',color:'#2dd4bf',label:'The Underdog Spotter',school:'knows the dogs — who wins and covers every time they get points, favorites that drop games to dogs, power, offense vs defense, rest and injuries; official at a gut of 70+',quiet:'no dog clears his gut today'},
@@ -2345,8 +2345,9 @@ function characterCalls(sp,g,s){
     Object.entries(bySrc).forEach(([src,arr])=>{const last=arr[arr.length-1];const v=isCovers(src)?'Covers':'Pred';
       if(spoke[v])return;spoke[v]=1;byMargin(v,last.a,last.h,{score:last.a+'-'+last.h,src});});
   }catch(e){}
-  // Trends — the net lean of every uploaded trend on this game, as the Judge reads them
-  try{const tr=brainTrendEvidence(g,sp);
+  // Trends — v2.91: the Historian (desk-hist.js) reads ten seasons; the uploaded trends are one voice in his gut
+  let histDone=false;try{if(typeof histCalls==='function'){let tr=null;try{tr=brainTrendEvidence(g,sp);}catch(e){}histCalls(sp,g,Ln,hl,hlSim,tl,tlSim,add,tr);histDone=true;}}catch(e){}
+  if(!histDone)try{const tr=brainTrendEvidence(g,sp);
     /* v2.45 · from Oct 18 on each Trends call carries its net lean in points toward its side (its worldview's own read) */
     const tx=v=>d>='2026-10-18'&&isFinite(v)?{tlp:+Math.abs(v).toFixed(2)}:null;
     const tlean=IDEO_P('Trends','lean',0.05);if(Math.abs(tr.dMar)>=tlean){const sd=tr.dMar>0?'home':'away';add('Trends','ml',sd,tx(tr.dMar));if(hl!=null)add('Trends','spread',sd,tx(tr.dMar));}
@@ -2501,6 +2502,7 @@ function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)r
   const J=by('Judge').find(c=>c.ja!=null);if(J)own('Judge',J.ja,J.jh);
   /* v2.90 · the Underdog Spotter calls a score on every game with a dog, official pick or not */
   try{const dp=typeof dogPredFor==='function'?dogPredFor(sp,g):null;if(dp)own('Dog',dp.a,dp.h);}catch(e){}
+  try{const hp=typeof histPredFor==='function'?histPredFor(sp,g):null;if(hp)own('Trends',hp.a,hp.h);}catch(e){}   /* v2.91 · the Historian's score on every game he reads */
   [['Most common'],['Covers'],['Pred']].forEach(([v])=>{const c=by(v).find(x=>x.score);if(c){const m=String(c.score).match(/([\d.]+)\D+([\d.]+)/);if(m)own(v,+m[1],+m[2]);}});
   const unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3;
   new Set(calls.map(c=>c.voice)).forEach(v=>{if(out[v]||v==='Books')return;const C=by(v);if(!C.length)return;let a=+s.awayProj,h=+s.homeProj;
@@ -3033,7 +3035,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261108b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261108c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17999,7 +18001,7 @@ const CHAR_EDGE={
   'Most common':['the single most likely final score — exact scores, and totals near the number','the likeliest score is still unlikely — high-variance games swing right past it'],
   'Pred':['the outside predicted scores you upload','only as good as the source you upload, and silent without one'],
   'Covers':['the Covers / OddsShark computer projection','a public number the books have already seen — and silent without an upload'],
-  'Trends':['situational trend records, shrunk for small samples','trends describe the past and many are noise; silent without uploaded trends'],
+  'Trends':['prestige, head-to-head streaks, units exposed for years — the long memory the others don\'t have','history moves slower than this season: a rebuilt roster or a new coach can make the past wrong'],
   'Consensus':['where the public tickets and money are','the public loses over time and books shade lines against it; silent without uploaded splits'],
   'Power':['who\'s better and by how much — the Power Index, prestige and the all-time series','ratings move slowly, so injuries and sudden form swings take a while to show'],
   'Dog':['knows the dogs — season records as a dog, favorites that drop games to dogs, power vs the line, matchups, rest and injuries, all in one gut score','it never backs a favorite, and outright dogs lose more often than they win even when he\'s right'],
@@ -22413,7 +22415,7 @@ function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet
   B.streak=Object.assign([0,0],{s});
   return{B,all};}
 /* the character's stated chance where it has one; otherwise its own all-time rate here */
-function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
+function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Trends'&&c.hG!=null?+(c.hG/100).toFixed(2):c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
   const rate=(all[0]+FEEL_K0*0.5)/(all[0]+all[1]+FEEL_K0);
   if(st>0&&st<1){/* a stated chance is tempered by how reliable the character has actually been */const n=all[0]+all[1];const k=n/(n+FEEL_K0);return Math.max(0.02,Math.min(0.98,(1-k*0.5)*st+k*0.5*rate));}
   return rate;}
