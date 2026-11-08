@@ -311,7 +311,7 @@ async function buildCoach(diag){const now=Date.now();const C=read('coachcache.js
    how far off the margin was — so the app's Oracle knows what each source is good at. The Desk's own picks are never
    computed or published here: the Oracle's consensus and calls are made in the app. A source that keeps failing is rested
    (retried every 6 hours) and comes back on its own. */
-const OR_SP={nfl:['football','nfl','',3],ncaaf:['football','college-football','&groups=80&limit=300',3],nba:['basketball','nba','',1],ncaab:['basketball','mens-college-basketball','&groups=50&limit=300',1],nhl:['hockey','nhl','',1]};
+const OR_SP={nfl:['football','nfl','',4],ncaaf:['football','college-football','&groups=80&limit=300',6],nba:['basketball','nba','',1],ncaab:['basketball','mens-college-basketball','&groups=50&limit=300',1],nhl:['hockey','nhl','',1]};
 const HTML_HDR={'user-agent':BROWSER['user-agent'],'accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','accept-language':'en-US,en;q=0.9'};
 async function getText(url,hdr){calls++;if(FIX){const v=FIX[url];if(v===undefined)throw new Error('no fixture for '+url);return typeof v==='string'?v:JSON.stringify(v);}
   const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),20000);
@@ -322,7 +322,7 @@ async function orSlate(now,D){const G=[];
   for(const [sp,[s,l,q,nd]] of Object.entries(OR_SP)){const seen=new Set();
     for(let b=0;b<=nd;b++){const d=etDay(now+b*864e5).replace(/-/g,'');let sb;try{sb=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${s}/${l}/scoreboard?dates=${d}${q}`);D.calls++;}catch(e){continue;}
       for(const ev of (sb.events||[])){if(seen.has(ev.id))continue;seen.add(ev.id);const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];const A=cs.find(x=>x.homeAway==='away'),H=cs.find(x=>x.homeAway==='home');if(!A||!H||!A.team||!H.team)continue;
-        const tm=x=>({id:String(x.team.id),ab:String(x.team.abbreviation||'').toUpperCase(),nm:[x.team.displayName,x.team.shortDisplayName,x.team.location,x.team.name,x.team.nickname,x.team.abbreviation].filter(Boolean)});
+        const tm=x=>{const ab=String(x.team.abbreviation||'').toUpperCase();return{id:String(x.team.id),ab,nm:[x.team.displayName,x.team.shortDisplayName,x.team.location,x.team.name,x.team.nickname,x.team.abbreviation,...(((OR_AL[sp]||{})[ab])||[])].filter(Boolean)};};
         const g={sp,id:String(ev.id),st:ev.date,d:etDay(Date.parse(ev.date)),state:(((ev.status||{}).type)||{}).state||'',neutral:!!c.neutralSite,a:tm(A),h:tm(H)};g.ln=sbLine(c,g.a.ab,g.h.ab);G.push(g);}}}
   return G;}
 /* two names, either order → the slate game they belong to (both teams must match; the nearest start wins a tie) */
@@ -351,11 +351,17 @@ async function orKalshi(G,D){const out=[];let base=null;D.kx={ev:0};
   for(const [sp,ser] of Object.entries(KX)){let j=null;
     for(const b of (base?[base]:KX_BASE)){try{j=await getJSON(`${b}/markets?series_ticker=${ser}&status=open&limit=1000`,BROWSER);D.calls++;base=b;break;}catch(e){D.kx.err=String(e.message||e).slice(0,60);}}
     if(!j)continue;const E={};(j.markets||[]).forEach(m=>{(E[m.event_ticker]=E[m.event_ticker]||[]).push(m);});D.kx.ev+=Object.keys(E).length;
-    for(const M of Object.values(E)){const m0=M[0];const ttl=String(m0.title||'').replace(/\s*winner\??\s*$/i,'').trim();const pr=ttl.split(/\s+(?:at|vs\.?|@)\s+/i);if(pr.length!==2)continue;
-      if(!D.kx.ex)D.kx.ex=ttl+' / '+(m0.yes_sub_title||'');const f=orFind(G,sp,pr[0],pr[1]);if(!f)continue;const g=f.g;const ph=[];
+    for(const M of Object.values(E)){const m0=M[0];if(!D.kx.ex)D.kx.ex=[m0.title,m0.yes_sub_title,m0.event_ticker,m0.ticker].join(' / ').slice(0,140);
+      const ttl=String(m0.title||'').replace(/\s*winner\??\s*$/i,'').replace(/^will\s+/i,'').trim();const pr=ttl.split(/\s+(?:at|vs\.?|@)\s+/i);let f=pr.length===2?orFind(G,sp,pr[0],pr[1]):null;
+      /* else the ticker: KXNFLGAME-26NOV08CLENO = the 8th, CLE at NO; the market's own suffix is the YES team */
+      const tk=String(m0.event_ticker||'').match(/-(\d{2})([A-Z]{3})(\d{2})([A-Z]+)$/);const MO={JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
+      if(!f&&tk){const d='20'+tk[1]+'-'+MO[tk[2]]+'-'+tk[3];const al=t=>[t.ab,...(((OR_AL[sp]||{})[t.ab])||[])];
+        const g=G.find(g=>g.sp===sp&&g.d===d&&al(g.a).some(x=>al(g.h).some(y=>x+y===tk[4])));if(g)f={g,s1:'a'};}
+      if(!f)continue;const g=f.g;const ph=[];const al=t=>[t.ab,...(((OR_AL[sp]||{})[t.ab])||[])];
       M.forEach(m=>{const bid=pd(m.yes_bid_dollars,m.yes_bid),ask=pd(m.yes_ask_dollars,m.yes_ask),last=pd(m.last_price_dollars,m.last_price);
-        const p=bid>0&&ask>0&&ask-bid<=0.06?(bid+ask)/2:last>0?last:null;if(p==null||p<=0||p>=1)return;const who=String(m.yes_sub_title||m.subtitle||'');
-        const xa=nameHit([who],g.a.nm),xh=nameHit([who],g.h.nm);if(xh>xa&&xh>=0.8)ph.push(p);else if(xa>xh&&xa>=0.8)ph.push(1-p);});
+        const p=bid>0&&ask>0&&ask-bid<=0.06?(bid+ask)/2:last>0?last:null;if(p==null||p<=0||p>=1)return;const who=String(m.yes_sub_title||m.subtitle||'');const suf=String(m.ticker||'').split('-').pop();
+        let xa=nameHit([who],g.a.nm),xh=nameHit([who],g.h.nm);if(xa<0.8&&xh<0.8){if(al(g.h).includes(suf))xh=1;else if(al(g.a).includes(suf))xa=1;}
+        if(xh>xa&&xh>=0.8)ph.push(p);else if(xa>xh&&xa>=0.8)ph.push(1-p);});
       if(ph.length)out.push({g,v:{wp:+(ph.reduce((s,x)=>s+x,0)/ph.length).toFixed(4)}});}}
   D.kx.base=base;return out;}
 /* Polymarket: game moneyline markets (public, no account) */
@@ -364,30 +370,82 @@ async function orPoly(G,D){const out=[];D.pm={ev:0};
   for(const [sp,tags] of Object.entries(PM_TAG)){for(const tag of tags){let j;try{j=await getJSON(`https://gamma-api.polymarket.com/events?tag_slug=${tag}&closed=false&active=true&limit=500`,BROWSER);D.calls++;}catch(e){D.pm.err=String(e.message||e).slice(0,60);continue;}
       const E=Array.isArray(j)?j:(j.data||j.events||[]);if(!E.length)continue;D.pm.ev+=E.length;D.pm[sp]=tag;let hit=0;
       for(const e of E){for(const m of (e.markets||[])){let oc,pr;try{oc=JSON.parse(m.outcomes||'[]');pr=JSON.parse(m.outcomePrices||'[]').map(Number);}catch(x){continue;}
-          if(oc.length!==2||pr.length!==2||oc.some(o=>/^(yes|no|over|under)$/i.test(o)))continue;if(m.sportsMarketType&&m.sportsMarketType!=='moneyline')continue;
+          if(oc.length!==2||pr.length!==2||oc.some(o=>/^(yes|no|over|under)$/i.test(o)||/^[OU]\s?\d/.test(o)))continue;if(m.sportsMarketType&&m.sportsMarketType!=='moneyline')continue;
           if(/spread|o\/u|total|1st|2nd|half|quarter|period/i.test(m.question||''))continue;if(!D.pm.ex)D.pm.ex=(e.title||'')+' / '+oc.join(',');
           const f=orFind(G,sp,oc[0],oc[1]);if(!f)continue;const ph=f.s1==='h'?pr[0]:pr[1];if(!(ph>0.01&&ph<0.99))continue;out.push({g:f.g,v:{wp:+ph.toFixed(4)}});hit++;break;}}
       if(hit)break;}}
+  return out;}
+/* the other codes outside sources use for ESPN's teams */
+const OR_AL={nfl:{JAX:['JAC'],LAR:['LA'],WSH:['WAS']},nba:{GS:['GSW'],NY:['NYK'],NO:['NOP','NOR'],SA:['SAS'],UTAH:['UTA'],WSH:['WAS'],PHX:['PHO'],BKN:['BRK']},
+  nhl:{NJ:['NJD'],SJ:['SJS'],TB:['TBL'],LA:['LAK'],UTAH:['UTA'],VGK:['VEG'],MTL:['MON'],WSH:['WAS']}};
+const ent=s=>String(s||'').replace(/&#0?39;|&#x27;|&rsquo;|’/g,"'").replace(/&amp;/g,'&').replace(/&nbsp;|&#160;/g,' ').replace(/&quot;/g,'"');
+const cellsOf=row=>(row.match(/<t[dh][\s>][\s\S]*?(?=<t[dh][\s>]|<\/tr>|$)/gi)||[]).map(c=>ent(c.replace(/<(script|style)[\s\S]*?<\/\1>/gi,' ').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim());
+/* DRatings (Donchess Inference Index): win chance and predicted score for every game, away team listed first */
+const DR_URL={nfl:'nfl-football-predictions/upcoming/1',ncaaf:'ncaa-football-predictions/upcoming/1',nba:'nba-basketball-predictions/upcoming/1',ncaab:'ncaa-basketball-predictions/upcoming/1',nhl:'nhl-hockey-predictions/upcoming/1'};
+async function orDRatings(G,D){const out=[];D.dr={};
+  for(const [sp,u] of Object.entries(DR_URL)){let html;try{html=await getText('https://www.dratings.com/predictor/'+u);D.calls++;}catch(e){D.dr[sp]='err '+String(e.message||e).slice(0,20);continue;}let n=0;
+    for(const tb of html.split(/<table/i).slice(1)){const th=(tb.match(/<th[\s>][\s\S]*?<\/th>/gi)||[]).map(x=>ent(x.replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim());
+      const iT=th.indexOf('Teams'),iW=th.indexOf('Win'),iP=th.findIndex(x=>/^(Points|Goals|Runs)$/.test(x)),iO=th.findIndex(x=>/^Total (Points|Goals|Runs)$/.test(x));if(iT<0||iW<0||iP<0)continue;
+      for(const row of tb.split(/<tr[\s>]/i).slice(1)){const c=cellsOf(row);if(c.length<=iP||/<th/i.test(row.slice(0,40)))continue;
+        const nm=[...c[iT].matchAll(/(.+?)\s*\(\d+-\d+(?:-\d+)?\)/g)].map(m=>m[1].trim());if(nm.length!==2)continue;
+        const pc=(c[iW].match(/[\d.]+(?=%)/g)||[]).map(Number),pt=(c[iP].match(/\d+(?:\.\d+)?/g)||[]).map(Number);if(pc.length!==2||pt.length!==2)continue;
+        const f=orFind(G,sp,nm[0],nm[1]);if(!f)continue;const A=f.s1==='a';const pa=A?pt[0]:pt[1],ph=A?pt[1]:pt[0],wp=(A?pc[1]:pc[0])/100;
+        out.push({g:f.g,v:{wp:wp>0&&wp<1?+wp.toFixed(4):null,pa,ph,mg:+(ph-pa).toFixed(2),tot:+(pa+ph).toFixed(2)}});n++;}}
+    D.dr[sp]=n;}
+  return out;}
+/* The Prediction Tracker: dozens of computer rating systems' lines for every NFL and college football game, one column each.
+   Each system is its own source and earns its own record. The sign is read off the file itself (its Vegas column vs ESPN's). */
+const PT_URL={nfl:'nflpredictions.csv',ncaaf:'ncaapredictions.csv'};
+const PT_SKIP=new Set(['line','lineopen','lineavg','linemedian','linestd','linemean','linesd']);
+const PT_LAB={mass:'Massey',massey:'Massey',pi:'Pi-ratings',pim:'Pi-ratings mean',pib:'Pi-ratings bias',piratings:'Pi-ratings',pimean:'Pi-ratings mean',pibias:'Pi-ratings bias',donchess:'Donchess',sag:'Sagarin',sagpred:'Sagarin predictor',saggm:'Sagarin golden mean',sagr:'Sagarin recent',
+  nfelo:'nfelo',espn:'ESPN FPI',fei:'FEI',dok:'Dokter Entropy',dokter:'Dokter Entropy',bihl:'Bihl',cong:'Congrove',midweek:'Midweek',newbury:'Newbury',rwp:'Roundtable',excel:'Excel',gt:'GT',pve:'PVE',betbetter:'BetBetter',talis:'Talisman',pugh:'Pugh',
+  clean:'Clean',hanson:'Hanson',dwig:'Dwiggins',blitz:'Blitz',ffw:'FFW',stjohn:'St. John',grid:'Grid',dial:'Dial',craig:'Craig',rithm:'Rithm',how:'Howell',agatha:'Agatha',keep:'Keeper',billings:'Billings',harville:'Harville',big200:'Big 200',wiz:'Wizard',ver:'Versus'};
+async function orPT(G,D){const out=[];D.pt={};
+  for(const [sp,u] of Object.entries(PT_URL)){let txt;try{txt=await getText('https://www.thepredictiontracker.com/'+u);D.calls++;}catch(e){D.pt[sp]='err '+String(e.message||e).slice(0,20);continue;}
+    const L=txt.split(/\r?\n/).filter(x=>x.trim());if(L.length<2)continue;const H=L[0].split(',').map(x=>x.trim().toLowerCase());const iR=H.indexOf('road'),iH=H.indexOf('home'),iL=H.indexOf('line');if(iR<0||iH<0)continue;
+    const rows=[];L.slice(1).forEach(l=>{const c=l.split(',');const f=orFind(G,sp,c[iR],c[iH]);if(f&&f.s1==='a')rows.push({g:f.g,c});});
+    /* sign: does the file's Vegas line run with ESPN's home spread (negative = home favored) or against it (a home margin)? */
+    let dot=0;rows.forEach(r=>{const v=parseFloat(r.c[iL]),s=r.g.ln&&r.g.ln.spH;if(isFinite(v)&&s!=null)dot+=v*s;});const sg=dot>=0?-1:1;
+    rows.forEach(r=>{H.forEach((h,i)=>{if(!h.startsWith('line')||PT_SKIP.has(h))return;const v=parseFloat(r.c[i]);if(!isFinite(v))return;out.push({k:'pt.'+h.slice(4),g:r.g,v:{mg:+(sg*v).toFixed(2)}});});});
+    D.pt[sp]={games:rows.length,sys:H.filter(h=>h.startsWith('line')&&!PT_SKIP.has(h)).length,sign:sg};}
+  return out;}
+/* OddsShark's computer: a predicted score per team (each game its own little table, away row first) */
+const OS_URL={nfl:'nfl',ncaaf:'ncaaf',nba:'nba',ncaab:'ncaab',nhl:'nhl'};
+async function orShark(G,D){const out=[];D.os={};
+  for(const [sp,u] of Object.entries(OS_URL)){let html;try{html=await getText(`https://www.oddsshark.com/${u}/computer-picks`);D.calls++;}catch(e){D.os[sp]='err '+String(e.message||e).slice(0,20);continue;}let n=0;
+    for(const tb of html.split(/<table/i).slice(1)){if(!/Predicted Score/i.test(tb.slice(0,3000)))continue;const R=[];
+      tb.split(/<tr[\s>]/i).slice(1).forEach(row=>{const c=cellsOf(row);if(!c.length||/Predicted Score/i.test(c.join(' ')))return;const ab=(c[0].match(/^([A-Z][A-Za-z.&]{1,5})\b/)||[])[1];const sc=c.slice(1).map(x=>(x.match(/^(\d+(?:\.\d+)?)$/)||[])[1]).find(Boolean);if(ab&&sc)R.push([ab,+sc]);});
+      if(R.length!==2)continue;const f=orFind(G,sp,R[0][0],R[1][0]);if(!f)continue;const A=f.s1==='a';const pa=A?R[0][1]:R[1][1],ph=A?R[1][1]:R[0][1];
+      out.push({g:f.g,v:{pa,ph,mg:+(ph-pa).toFixed(2),tot:+(pa+ph).toFixed(2)}});n++;}
+    D.os[sp]=n;}
+  return out;}
+/* Pickswise: an expert pick per game with a star rating — a side, a total or a moneyline */
+const PW_URL={nfl:'nfl',nba:'nba',nhl:'nhl',ncaaf:'college-football',ncaab:'college-basketball'};
+async function orPickswise(G,D){const out=[];D.pw={};
+  for(const [sp,u] of Object.entries(PW_URL)){let html;try{html=await getText(`https://www.pickswise.com/${u}/picks/`);D.calls++;}catch(e){D.pw[sp]='err '+String(e.message||e).slice(0,20);continue;}let n=0;
+    for(const row of html.split(/<tr[\s>]/i).slice(1)){const c=cellsOf(row);if(c.length<3)continue;const mt=c[0].match(/^(.+?)\s+(?:vs\.?|@|at)\s+(.+)$/i);if(!mt)continue;
+      const f=orFind(G,sp,mt[1].trim(),mt[2].trim());if(!f)continue;const g=f.g;const pk=c[1];const stars=+((c[2].match(/(\d)\s*⭐/)||c.join(' ').match(/(\d)\s*⭐/)||[])[1]||0);
+      if(!D.pw.ex)D.pw.ex=c.slice(0,3).join(' | ').slice(0,90);let v=null;const tm=s=>{const xa=nameHit([s],g.a.nm),xh=nameHit([s],g.h.nm);return xh>xa&&xh>=0.8?'home':xa>xh&&xa>=0.8?'away':null;};
+      let m;if((m=pk.match(/^(over|under)\s*([\d.]+)/i)))v={mk:'total',side:m[1].toLowerCase(),line:+m[2]};
+      else if((m=pk.match(/^(.+?)\s+(ML|moneyline|to win)\b/i))||(m=pk.match(/^(.+?)\s+([+-]\d{3,4})$/))){const s=tm(m[1]);if(s)v={mk:'ml',side:s};}
+      else if((m=pk.match(/^(.+?)\s+([+-]\d+(?:\.5)?|PK|pick)$/i))){const s=tm(m[1]);if(s)v={mk:'spread',side:s,line:/pk|pick/i.test(m[2])?0:+m[2]};}
+      if(v){out.push({g,v:{pk:{...v,st:stars}}});n++;}}
+    D.pw[sp]=n;}
   return out;}
 /* the betting public: Action Network's ticket and money splits (home / over %) */
 async function orPublic(G,D){const out=[];D.an={g:0};
   for(const sp of Object.keys(OR_SP)){const days=[...new Set(G.filter(g=>g.sp===sp&&g.state==='pre').map(g=>g.d.replace(/-/g,'')))].slice(0,4);
     for(const d of days){let j;try{j=await getJSON(`https://api.actionnetwork.com/web/v1/scoreboard/${sp}?period=game&bookIds=15,30&date=${d}`,BROWSER);D.calls++;}catch(e){D.an.err=String(e.message||e).slice(0,60);break;}
-      for(const x of (j.games||[])){const T={};(x.teams||[]).forEach(t=>T[t.id]=t);const ta=T[x.away_team_id],th=T[x.home_team_id];if(!ta||!th)continue;D.an.g++;
+      for(const x of (j.games||[])){const T={};(x.teams||[]).forEach(t=>T[t.id]=t);const ta=T[x.away_team_id],th=T[x.home_team_id];if(!D.an.ex)D.an.ex={k:Object.keys(x).slice(0,30),t:(x.teams||[]).slice(0,1).map(t=>Object.keys(t).slice(0,12).join(',')+' '+(t.full_name||t.display_name)),o:Object.keys((x.odds||[])[0]||{}).filter(k=>/public|money|ticket/.test(k)).slice(0,12),aw:x.away_team_id,hm:x.home_team_id};if(!ta||!th)continue;D.an.g++;
         const f=orFind(G,sp,ta.full_name||ta.display_name||'',th.full_name||th.display_name||'',x.start_time);if(!f||f.s1!=='a')continue;
         const o=(x.odds||[]).find(o=>o&&(o.ml_home_public!=null||o.spread_home_public!=null))||null;if(!o)continue;const n=v=>v==null||!isFinite(+v)?null:+v;
         out.push({g:f.g,v:{pub:{ml:n(o.ml_home_public),sp:n(o.spread_home_public),ou:n(o.total_over_public),mlm:n(o.ml_home_money),spm:n(o.spread_home_money),oum:n(o.total_over_money)}}});}}}
   return out;}
 /* discovery: which prediction sites the worker can read, and how their pages are shaped (removed once each has an adapter) */
-const OR_PROBE=[['dratings','nfl','https://www.dratings.com/predictor/nfl-football-predictions/'],['dratings','nba','https://www.dratings.com/predictor/nba-basketball-predictions/'],
-  ['dratings','nhl','https://www.dratings.com/predictor/nhl-hockey-predictions/'],['dratings','ncaaf','https://www.dratings.com/predictor/ncaa-football-predictions/'],['dratings','ncaab','https://www.dratings.com/predictor/ncaa-basketball-predictions/'],
-  ['pt','*','https://www.thepredictiontracker.com/'],['pt','nfl','https://www.thepredictiontracker.com/nflpredictions.csv'],['pt','ncaaf','https://www.thepredictiontracker.com/ncaapredictions.csv'],
-  ['pt','nba','https://www.thepredictiontracker.com/nbapredictions.csv'],['pt','ncaab','https://www.thepredictiontracker.com/ncaabbpredictions.csv'],
-  ['torvik','ncaab','https://barttorvik.com/schedule.php'],['nfelo','nfl','https://www.nfeloapp.com/games/'],['cbs','nfl','https://www.cbssports.com/nfl/picks/experts/'],
-  ['cbs','ncaaf','https://www.cbssports.com/college-football/picks/experts/'],['covers','nfl','https://contests.covers.com/consensus/topconsensus/nfl/overall'],
-  ['oddsshark','nfl','https://www.oddsshark.com/nfl/computer-picks'],['moneypuck','nhl','https://moneypuck.com/index.html'],['massey','ncaaf','https://masseyratings.com/cf/fbs/games'],
-  ['teamrankings','nfl','https://www.teamrankings.com/nfl-win-picks/'],['pickswise','nfl','https://www.pickswise.com/nfl/picks/'],['haslam','ncaab','https://haslametrics.com/'],
-  ['sagarin','nfl','http://sagarin.com/sports/nflsend.htm'],['dimers','nfl','https://www.dimers.com/bet-hub/nfl/schedule']];
+const OR_PROBE_V=2,OR_PROBE=[['dimers','nfl','https://www.dimers.com/nfl/predictions'],['dimers','nba','https://www.dimers.com/nba/predictions'],['covers','nfl','https://contests.covers.com/consensus/topconsensus/nfl/overall'],
+  ['cbs','nfl','https://www.cbssports.com/nfl/picks/experts/'],['pt','nba','https://www.thepredictiontracker.com/nbapreds.csv'],['pt','ncaab','https://www.thepredictiontracker.com/ncaabbpreds.csv'],
+  ['pt','nba','https://www.thepredictiontracker.com/basketball.php'],['dratings','ncaaf','https://www.dratings.com/predictor/ncaa-football-predictions/'],['actionpicks','nfl','https://www.actionnetwork.com/nfl/picks'],
+  ['espnpick','nfl','https://www.espn.com/nfl/picks'],['usatoday','nfl','https://www.usatoday.com/sports/nfl/picks/']];
 function orHint(txt,G,sp){const h={b:txt.length};const tt=txt.match(/<title[^>]*>([^<]{0,90})/i);if(tt)h.t=tt[1].trim();h.tb=(txt.match(/<table/gi)||[]).length;
   h.nd=/__NEXT_DATA__|__NUXT__|window\.__INITIAL|application\/ld\+json/i.test(txt)?1:0;h.cf=/challenge-platform|cf-chl|Just a moment|captcha/i.test(txt)?1:0;
   h.th=(txt.match(/<th[\s>][\s\S]*?<\/th>/gi)||[]).slice(0,14).map(x=>x.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,18));
@@ -404,16 +462,21 @@ function orGrade(s,f){const m=f.hs-f.as;const pc=f.pc||{};const cl=pc.spread&&pc
   const pm=s.mg!=null?s.mg:(s.ph!=null&&s.pa!=null?s.ph-s.pa:null);
   if(pm!=null){r.ae=+Math.abs(pm-m).toFixed(1);if(cl!=null&&pm+cl!==0&&m+cl!==0)r.ats=(pm+cl>0)===(m+cl>0)?1:0;if(r.su==null&&m!==0&&pm!==0)r.su=(pm>0)===(m>0)?1:0;}
   const pt=s.tot!=null?s.tot:(s.ph!=null&&s.pa!=null?s.ph+s.pa:null);if(pt!=null&&T!=null&&pt!==T&&f.as+f.hs!==T)r.ou=(pt>T)===(f.as+f.hs>T)?1:0;
+  if(s.pk){const k=s.pk;if(k.mk==='ml'&&m!==0)r.su=(k.side==='home')===(m>0)?1:0;
+    if(k.mk==='spread'&&k.line!=null){const mm=k.side==='home'?m:-m;if(mm+k.line!==0)r.ats=mm+k.line>0?1:0;}
+    if(k.mk==='total'&&k.line!=null&&f.as+f.hs!==k.line)r.ou=(k.side==='over')===(f.as+f.hs>k.line)?1:0;}
   if(s.pub){const p=s.pub;if(p.ml!=null&&p.ml!==50&&m!==0)r.su=(p.ml>50)===(m>0)?1:0;if(p.sp!=null&&p.sp!==50&&cl!=null&&m+cl!==0)r.ats=(p.sp>50)===(m+cl>0)?1:0;if(p.ou!=null&&p.ou!==50&&T!=null&&f.as+f.hs!==T)r.ou=(p.ou>50)===(f.as+f.hs>T)?1:0;}
   return r;}
-const OR_SRC={espn:{lab:'ESPN FPI/BPI',kind:'model'},kalshi:{lab:'Kalshi',kind:'market'},poly:{lab:'Polymarket',kind:'market'},public:{lab:'The betting public',kind:'crowd'}};
+const OR_SRC={espn:{lab:'ESPN FPI/BPI',kind:'model'},kalshi:{lab:'Kalshi',kind:'market'},poly:{lab:'Polymarket',kind:'market'},dr:{lab:'DRatings',kind:'model'},os:{lab:'OddsShark computer',kind:'model'},pw:{lab:'Pickswise experts',kind:'expert'},public:{lab:'The betting public',kind:'crowd'}};
 async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.now();const C=read('oraclecache.json')||{v:1};['espn','p','led','h'].forEach(k=>C[k]=C[k]||{});
   const D={calls:0,src:{}};const G=await orSlate(now,D);D.slate={};G.forEach(g=>{D.slate[g.sp]=(D.slate[g.sp]||0)+1;});
   const pre=G.filter(g=>g.state==='pre'&&Date.parse(g.st)<=now+80*36e5);
   /* each source, unless it's resting after a day of failures */
   const run=async(k,fn)=>{const H=C.h[k]||(C.h[k]={ok:0,fail:0,try:0});if(H.fail>=24&&now-H.try<6*36e5){D.src[k]={rest:H.fail};return[];}H.try=now;
     let R=[];try{R=await fn();}catch(e){D.src[k]={err:String(e.message||e).slice(0,80)};}if(R.length){H.ok=now;H.fail=0;}else H.fail++;D.src[k]={...(D.src[k]||{}),n:R.length};return R;};
-  const got={espn:await run('espn',()=>orEspn(pre,C,D,now)),kalshi:await run('kalshi',()=>orKalshi(pre,D)),poly:await run('poly',()=>orPoly(pre,D)),public:await run('public',()=>orPublic(pre,D))};
+  const got={espn:await run('espn',()=>orEspn(pre,C,D,now)),kalshi:await run('kalshi',()=>orKalshi(pre,D)),poly:await run('poly',()=>orPoly(pre,D)),dr:await run('dr',()=>orDRatings(pre,D)),os:await run('os',()=>orShark(pre,D)),pw:await run('pw',()=>orPickswise(pre,D)),public:await run('public',()=>orPublic(pre,D))};
+  /* the Prediction Tracker's systems arrive together; each is filed as its own source */
+  (await run('pt',()=>orPT(pre,D))).forEach(r=>{(got[r.k]=got[r.k]||[]).push(r);});
   /* today's wire: per game, each source's numbers (a source with two reads of one game is averaged) */
   const out={v:1,ts:new Date(now).toISOString(),src:{},g:{},rec:{}};
   pre.forEach(g=>{out.g[orKey(g)]={sp:g.sp,st:g.st,a:g.a.ab,h:g.h.ab,ln:g.ln,s:{}};});
@@ -433,8 +496,9 @@ async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.n
       return{n:o.n,su:o.su,ats:o.ats,ou:o.ou,mae:o.ae[1]?+(o.ae[0]/o.ae[1]).toFixed(2):null,br:o.br[1]?+(o.br[0]/o.br[1]).toFixed(4):null};};
     (out.rec[k]=out.rec[k]||{})[sp]={all:sum(d60),d14:sum(d14)};});
   Object.entries(OR_SRC).forEach(([k,o])=>{const H=C.h[k]||{};out.src[k]={...o,ok:H.ok?new Date(H.ok).toISOString():null,rest:H.fail>=24};});
+  const ptH=C.h.pt||{};Object.keys(got).filter(k=>k.startsWith('pt.')).forEach(k=>{out.src[k]={lab:(PT_LAB[k.slice(3)]||k.slice(3))+' (Prediction Tracker)',kind:'model',ok:ptH.ok?new Date(ptH.ok).toISOString():null};});
   /* discovery, every 6 hours */
-  if(!FIX&&(!C.probeAt||now-C.probeAt>6*36e5||process.env.FEEDS_PROBE)){C.probeAt=now;D.probe=[];
+  if(!FIX&&(!C.probeAt||now-C.probeAt>6*36e5||C.probeV!==OR_PROBE_V||process.env.FEEDS_PROBE)){C.probeAt=now;C.probeV=OR_PROBE_V;D.probe=[];
     await pool(OR_PROBE,async([k,sp,u])=>{let h;try{h=orHint(await getText(u),G,sp);}catch(e){h={err:String(e.message||e).slice(0,50)};}D.probe.push({k,sp,u:u.replace(/^https?:\/\/(www\.)?/,'').slice(0,60),...h});});}
   Object.keys(C.espn).forEach(id=>{if(now-C.espn[id].at>3*864e5)delete C.espn[id];});
   fs.writeFileSync(path.join(OUT,'oraclecache.json'),JSON.stringify(C));fs.writeFileSync(path.join(OUT,'oracle.json'),JSON.stringify(out));
