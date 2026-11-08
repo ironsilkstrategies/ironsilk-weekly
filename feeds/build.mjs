@@ -275,7 +275,8 @@ async function buildCoach(diag){const now=Date.now();const C=read('coachcache.js
   const teams=new Map();games.forEach(([k,G])=>{const sp=k.split('|')[0];[G.a,G.h].forEach(t=>teams.set(sp+'|'+t.id,{sp,...t}));});
   const needN=[...teams.entries()].filter(([k])=>!C.news[k]||now-C.news[k].at>3*36e5).slice(0,220);
   await pool(needN,async([k,t])=>{const [s,l]=CO_SP[t.sp];try{const j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${s}/${l}/news?team=${t.id}&limit=15`);D.calls++;D.news++;
-      const arts=(j.articles||[]).filter(a=>a&&a.headline&&Date.parse(a.published||a.lastModified||0)>now-4*864e5).slice(0,12).map(a=>({h:String(a.headline).slice(0,140),d:String(a.description||'').slice(0,200),t:a.published||a.lastModified||''}));
+      const arts=(j.articles||[]).filter(a=>a&&a.headline&&Date.parse(a.published||a.lastModified||0)>now-4*864e5).slice(0,15).map(a=>({h:String(a.headline).slice(0,140),d:String(a.description||'').slice(0,200),t:a.published||a.lastModified||'',
+        tids:(a.categories||[]).filter(c=>c&&(c.type==='team'||c.teamId)).map(c=>String(c.teamId||(c.team||{}).id||c.id||''))}));
       C.news[k]={at:now,arts};}catch(e){C.news[k]={at:now,arts:(C.news[k]||{}).arts||[]};}});
   /* the next game on each team's schedule (look-ahead), a day */
   const needS=[...teams.entries()].filter(([k,t])=>t.sp!=='ncaab'&&(!C.sched[k]||now-C.sched[k].at>864e5)).slice(0,140);
@@ -293,7 +294,9 @@ async function buildCoach(diag){const now=Date.now();const C=read('coachcache.js
     if(C.wx[wk]){const{at,...w}=C.wx[wk];G.wx=w;}}
   /* the file: flags read off each team's news, the last result, the next opponent */
   const pw=(sp,ab)=>((TJ.t||{})[sp+'|'+ab]||{}).pw;
-  games.forEach(([k,G])=>{const sp=k.split('|')[0];[['a',G.a],['h',G.h]].forEach(([side,t])=>{const N=(C.news[sp+'|'+t.id]||{}).arts||[];const fl={};const heads=[];
+  /* a team's news is only what's about that team: tagged with it, or naming it — a league roundup on its page isn't */
+  const about=(a,t)=>{if((a.tids||[]).length)return a.tids.includes(t.id);const nick=String(t.name||'').split(' ').pop();const txt=a.h+' '+a.d;return!!nick&&nick.length>2&&new RegExp('\\b'+nick.replace(/[^A-Za-z0-9]/g,'')+'\\b','i').test(txt);};
+  games.forEach(([k,G])=>{const sp=k.split('|')[0];[['a',G.a],['h',G.h]].forEach(([side,t])=>{const N=((C.news[sp+'|'+t.id]||{}).arts||[]).filter(a=>about(a,t));const fl={};const heads=[];
       N.forEach(a=>{const txt=a.h+' '+a.d;let hit=false;Object.entries(CO_FLAGS).forEach(([f,re])=>{if(re.test(txt)){fl[f]=(fl[f]||0)+1;hit=true;}});if(hit||heads.length<2)heads.push({h:a.h,t:a.t,f:Object.keys(CO_FLAGS).filter(f=>CO_FLAGS[f].test(txt))});});
       const L=lastOf[sp+'|'+t.ab];const nx=((C.sched[sp+'|'+t.id]||{}).up||[]).find(x=>Date.parse(x.d)>Date.parse(G.st)+36e5);
       G[side]={...t,fl,heads:heads.slice(0,4),n:N.length,last:L?{d:L.d,opp:L.opp,m:L.m,opw:pw(sp,L.opp)}:null,next:nx?{d:nx.d,opp:nx.opp,opw:pw(sp,nx.opp)}:null};});
