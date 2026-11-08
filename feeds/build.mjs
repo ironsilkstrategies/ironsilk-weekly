@@ -528,6 +528,39 @@ async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.n
   Object.keys(C.espn).forEach(id=>{if(now-C.espn[id].at>3*864e5)delete C.espn[id];});
   fs.writeFileSync(path.join(OUT,'oraclecache.json'),JSON.stringify(C));fs.writeFileSync(path.join(OUT,'oracle.json'),JSON.stringify(out));
   D.games=Object.keys(out.g).length;D.graded=graded;diag.oracle=D;return out;}
+/* ═══ THE SCOREKEEPER'S BOX SCORES (v2.96) ══════════════════════════════════════════════════════════════════════════
+   Every final of the season read once from its ESPN summary, the parts a score is built from:
+     football   — touchdowns, field goals, safeties, the points the touchdowns brought (PATs, 2-pt tries), drives, possession
+     basketball — field goals, threes, free throws (made / tried), offensive rebounds, turnovers → possessions
+     hockey     — shots on goal, power-play goals and chances
+   comps.json keeps one row per game; the app builds each team's rates (offense against the other side's defense). */
+const COMP_BUDGET=300;
+const mmss=v=>{const m=String(v||'').match(/^(\d+):(\d+)$/);return m?+(+m[1]+m[2]/60).toFixed(2):null;};
+const mk=v=>{const m=String(v==null?'':v).match(/^(\d+)\s*-\s*(\d+)$/);return m?[+m[1],+m[2]]:[null,null];};
+const nn=v=>{const x=parseFloat(v);return isFinite(x)?x:null;};
+function compsOf(sp,j){const bt=((j.boxscore||{}).teams)||[];const tA=bt.find(t=>t.homeAway==='away')||bt[0],tH=bt.find(t=>t.homeAway==='home')||bt[1];if(!tA||!tH)return null;
+  const st=t=>{const m={};((t&&t.statistics)||[]).forEach(x=>{if(x&&x.name)m[x.name]=x.displayValue!=null?x.displayValue:x.value;});return m;};const A=st(tA),H=st(tH);
+  if(sp==='nfl'||sp==='ncaaf'){const P=j.scoringPlays||[];let pa=0,ph=0;const c={a:{td:0,fg:0,sf:0,tp:0},h:{td:0,fg:0,sf:0,tp:0}};let last=null;
+    P.forEach(p=>{const txt=[(p.type||{}).text,(p.type||{}).abbreviation,(p.scoringType||{}).name,(p.scoringType||{}).abbreviation,p.text].join(' ');
+      const na=nn(p.awayScore),nh=nn(p.homeScore);const da=na!=null?na-pa:0,dh=nh!=null?nh-ph:0;if(na!=null)pa=na;if(nh!=null)ph=nh;
+      const side=da>0?'a':dh>0?'h':null;if(!side)return;const pts=Math.max(da,dh);const o=c[side];
+      if(/extra point|two-point|2-pt|conversion|\bPAT\b/i.test(txt)&&pts<=2&&last&&last.side===side){last.o.tp+=pts;return;}
+      if(/touchdown|\bTD\b/i.test(txt)||pts>=6){o.td++;o.tp+=pts;last={side,o};}
+      else if(/field goal|\bFG\b/i.test(txt)||pts===3){o.fg++;last=null;}
+      else if(/safety/i.test(txt)){o.sf++;last=null;}
+      else if(pts<=2&&last&&last.side===side){last.o.tp+=pts;}});
+    const row=(o,S)=>[o.td,o.fg,o.sf,o.tp,nn(S.totalDrives),mmss(S.possessionTime)];return{a:row(c.a,A),h:row(c.h,H),n:P.length};}
+  if(sp==='nba'||sp==='ncaab'){const row=S=>{const [fgm,fga]=mk(S['fieldGoalsMade-fieldGoalsAttempted']),[tpm,tpa]=mk(S['threePointFieldGoalsMade-threePointFieldGoalsAttempted']),[ftm,fta]=mk(S['freeThrowsMade-freeThrowsAttempted']);
+      return[fgm,fga,tpm,tpa,ftm,fta,nn(S.offensiveRebounds),nn(S.totalTurnovers!=null?S.totalTurnovers:S.turnovers)];};const a=row(A),h=row(H);return a[1]==null||h[1]==null?null:{a,h};}
+  if(sp==='nhl'){const row=S=>[nn(S.shotsTotal!=null?S.shotsTotal:S.shots),nn(S.powerPlayGoals),nn(S.powerPlayOpportunities)];const a=row(A),h=row(H);return a[0]==null||h[0]==null?null:{a,h};}
+  return null;}
+async function buildComps(diag){const S=read('season.json')||{g:{}};const C=read('comps.json')||{v:1,g:{},bad:{}};C.g=C.g||{};C.bad=C.bad||{};const D={sum:0,added:0,err:[],ex:{}};
+  const todo=Object.entries(S.g||{}).filter(([id,r])=>!C.g[id]&&(C.bad[id]||0)<3&&TEAM_SP[r[0]]).sort((x,y)=>String(y[1][1]).localeCompare(String(x[1][1]))).slice(0,COMP_BUDGET);
+  await pool(todo,async([id,r])=>{const sp=r[0];const [s,l]=TEAM_SP[sp];let j;try{j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${s}/${l}/summary?event=${id}`);D.sum++;}catch(e){C.bad[id]=(C.bad[id]||0)+1;if(D.err.length<6)D.err.push(sp+' '+id+' '+String(e.message).slice(0,30));return;}
+    if(!D.ex[sp]){const t=(((j.boxscore||{}).teams)||[])[0];D.ex[sp]={names:((t&&t.statistics)||[]).map(x=>x.name).slice(0,40),sp0:(j.scoringPlays||[]).slice(0,2).map(p=>[(p.type||{}).abbreviation,(p.scoringType||{}).name,p.awayScore,p.homeScore].join('/'))};}
+    const x=compsOf(sp,j);if(!x){C.bad[id]=(C.bad[id]||0)+1;return;}C.g[id]=[sp,r[1],r[2],r[3],r[4],r[5],x.a,x.h];D.added++;});
+  const by={};Object.values(C.g).forEach(r=>{by[r[0]]=(by[r[0]]||0)+1;});D.have=by;D.left=Object.keys(S.g||{}).filter(id=>!C.g[id]).length;
+  fs.writeFileSync(path.join(OUT,'comps.json'),JSON.stringify({v:1,ts:new Date().toISOString(),g:C.g,bad:C.bad}));diag.comps=D;return C;}
 async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=read('closes.json');const games=(prev&&prev.v===1&&prev.games)||{};const log={ts:new Date(now).toISOString(),added:0,errors:[],calls:0};
   const cut=new Date(now-KEEP_DAYS*864e5).toISOString();Object.keys(games).forEach(k=>{if(String(games[k].st||'')<cut)delete games[k];});
   const todo=[];
@@ -545,10 +578,11 @@ async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=re
   if(!FIX||process.env.FEEDS_HIST){try{await buildHistory(diag,games,read('season.json'));}catch(e){diag.hist={fail:String(e.message||e).slice(0,120)};}}
   if(!FIX||process.env.FEEDS_COACH){try{await buildCoach(diag);}catch(e){diag.coach={fail:String(e.message||e).slice(0,120)};}}
   if(!FIX||process.env.FEEDS_ORACLE){try{await buildOracle(diag,games);}catch(e){diag.oracle={fail:String(e.message||e).slice(0,120)};}}
+  if(!FIX||process.env.FEEDS_COMPS){try{await buildComps(diag);}catch(e){diag.comps={fail:String(e.message||e).slice(0,120)};}}
   log.verify=diag;
   log.calls=calls;const n=Object.keys(games).length;
   fs.writeFileSync(path.join(OUT,'closes.json'),JSON.stringify({v:1,ts:log.ts,n,games}));
-  const idx=read('index.json')||{v:1,runs:[]};idx.v=1;idx.ts=log.ts;idx.files={...(idx.files||{}),closes:{ts:log.ts,n},...(diag.props&&diag.props.ev!=null?{props:{ts:log.ts,n:diag.props.ev}}:{}),...(diag.teams&&diag.teams.teams!=null?{teams:{ts:log.ts,n:diag.teams.teams}}:{}),...(diag.hist&&diag.hist.teams!=null?{historian:{ts:log.ts,n:diag.hist.teams}}:{}),...(diag.coach&&diag.coach.games!=null?{coach:{ts:log.ts,n:diag.coach.games}}:{}),...(diag.oracle&&diag.oracle.games!=null?{oracle:{ts:log.ts,n:diag.oracle.games}}:{})};idx.runs=[log,...(idx.runs||[])].slice(0,12);
+  const idx=read('index.json')||{v:1,runs:[]};idx.v=1;idx.ts=log.ts;idx.files={...(idx.files||{}),closes:{ts:log.ts,n},...(diag.props&&diag.props.ev!=null?{props:{ts:log.ts,n:diag.props.ev}}:{}),...(diag.teams&&diag.teams.teams!=null?{teams:{ts:log.ts,n:diag.teams.teams}}:{}),...(diag.hist&&diag.hist.teams!=null?{historian:{ts:log.ts,n:diag.hist.teams}}:{}),...(diag.coach&&diag.coach.games!=null?{coach:{ts:log.ts,n:diag.coach.games}}:{}),...(diag.oracle&&diag.oracle.games!=null?{oracle:{ts:log.ts,n:diag.oracle.games}}:{}),...(diag.comps&&diag.comps.have?{comps:{ts:log.ts,n:Object.values(diag.comps.have).reduce((a,b)=>a+b,0)}}:{})};idx.runs=[log,...(idx.runs||[])].slice(0,12);
   fs.writeFileSync(path.join(OUT,'index.json'),JSON.stringify(idx));
   console.log(`feeds: +${log.added} finals, ${n} kept, ${calls} requests, ${log.errors.length} errors`);}
 main().catch(e=>{console.error('feeds failed',e);process.exit(1);});
