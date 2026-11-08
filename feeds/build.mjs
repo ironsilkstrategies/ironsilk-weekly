@@ -376,7 +376,7 @@ async function orPoly(G,D){const out=[];D.pm={ev:0};
       if(hit)break;}}
   return out;}
 /* the other codes outside sources use for ESPN's teams */
-const OR_AL={nfl:{JAX:['JAC'],LAR:['LA'],WSH:['WAS']},nba:{GS:['GSW'],NY:['NYK'],NO:['NOP','NOR'],SA:['SAS'],UTAH:['UTA'],WSH:['WAS'],PHX:['PHO'],BKN:['BRK']},
+const OR_AL={nfl:{JAX:['JAC'],LAR:['LA'],WSH:['WAS']},nba:{GS:['GSW'],NY:['NYK'],NO:['NOP','NOR'],SA:['SAS'],UTAH:['UTA'],WSH:['WAS'],PHX:['PHO'],BKN:['BRK','BK']},
   nhl:{NJ:['NJD'],SJ:['SJS'],TB:['TBL'],LA:['LAK'],UTAH:['UTA'],VGK:['VEG'],MTL:['MON'],WSH:['WAS']}};
 const ent=s=>String(s||'').replace(/&#0?39;|&#x27;|&rsquo;|’/g,"'").replace(/&amp;/g,'&').replace(/&nbsp;|&#160;/g,' ').replace(/&quot;/g,'"');
 const cellsOf=row=>(row.match(/<t[dh][\s>][\s\S]*?(?=<t[dh][\s>]|<\/tr>|$)/gi)||[]).map(c=>ent(c.replace(/<(script|style)[\s\S]*?<\/\1>/gi,' ').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim());
@@ -433,6 +433,27 @@ async function orPickswise(G,D){const out=[];D.pw={};
       if(v){out.push({g,v:{pk:{...v,st:stars}}});n++;}}
     D.pw[sp]=n;}
   return out;}
+/* Covers' contest consensus: the share of Covers players on each side against the spread (away listed first) */
+const CV_URL={nfl:'nfl',nba:'nba',nhl:'nhl'};const MON={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+async function orCovers(G,D,now){const out=[];D.cv={};
+  for(const [sp,u] of Object.entries(CV_URL)){let html;try{html=await getText(`https://contests.covers.com/consensus/topconsensus/${u}/overall`);D.calls++;}catch(e){D.cv[sp]='err '+String(e.message||e).slice(0,20);continue;}let n=0;
+    for(const row of html.split(/<tr[\s>]/i).slice(1)){const t=ent(row.replace(/<(script|style)[\s\S]*?<\/\1>/gi,' ').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim();
+      const m=t.match(/^(?:NFL|NBA|NHL)?\s*([A-Za-z.]+)\s+([A-Za-z.]+)\s+\w{3}\.?\s+(\w{3})\s+(\d{1,2})\s.*?(\d{1,3})%\s+(\d{1,3})%\s+\S+\s+\S+\s+(\d+)\s+(\d+)/);if(!m)continue;
+      const yr=new Date(now).getUTCFullYear();const dt=new Date(Date.UTC(yr,MON[m[3]]??0,+m[4],18)).toISOString();const f=orFind(G,sp,m[1],m[2],dt);if(!f)continue;
+      const A=f.s1==='a';const home=A?+m[6]:+m[5];const cnt=+m[7]+(+m[8]);out.push({g:f.g,v:{pub:{sp:home,n:cnt}}});n++;}
+    D.cv[sp]=n;}
+  return out;}
+/* CBS Sports' expert panel: every expert's pick against the spread, counted per side */
+const CBS_URL={nfl:'nfl',ncaaf:'college-football'};
+async function orCBS(G,D){const out=[];D.cbs={};
+  for(const [sp,u] of Object.entries(CBS_URL)){let html;try{html=await getText(`https://www.cbssports.com/${u}/picks/experts/`);D.calls++;}catch(e){D.cbs[sp]='err '+String(e.message||e).slice(0,20);continue;}let n=0;
+    for(const row of html.split(/<tr[\s>]/i).slice(1)){const t=ent(row.replace(/<(script|style)[\s\S]*?<\/\1>/gi,' ').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim();if(/^FINAL|\bFINAL\b/.test(t.slice(0,12)))continue;
+      const mt=t.match(/([A-Z][A-Z0-9&]{1,4})\s+\d+-\d+(?:-\d+)?\s+([A-Z][A-Z0-9&]{1,4})\s+\d+-\d+(?:-\d+)?/);if(!mt)continue;const f=orFind(G,sp,mt[1],mt[2]);if(!f)continue;
+      const rest=t.slice(t.indexOf(mt[0])+mt[0].length);let ca=0,ch=0;const a1=f.s1==='a'?mt[1]:mt[2],h1=f.s1==='a'?mt[2]:mt[1];
+      for(const p of rest.matchAll(/\b([A-Z][A-Z0-9&]{1,4})\s+(?:[+-]\d+(?:\.5)?|PK|EVEN)\b/g)){if(p[1]===a1)ca++;else if(p[1]===h1)ch++;}
+      if(ca+ch>=3){out.push({g:f.g,v:{xp:{a:ca,h:ch}}});n++;}}
+    D.cbs[sp]=n;}
+  return out;}
 /* the betting public: Action Network's ticket and money splits (home / over %) */
 async function orPublic(G,D){const out=[];D.an={g:0};
   for(const sp of Object.keys(OR_SP)){const days=[...new Set(G.filter(g=>g.sp===sp&&g.state==='pre').map(g=>g.d.replace(/-/g,'')))].slice(0,4);
@@ -443,8 +464,7 @@ async function orPublic(G,D){const out=[];D.an={g:0};
         out.push({g:f.g,v:{pub:{ml:n(o.ml_home_public),sp:n(o.spread_home_public),ou:n(o.total_over_public),mlm:n(o.ml_home_money),spm:n(o.spread_home_money),oum:n(o.total_over_money)}}});}}}
   return out;}
 /* discovery: which prediction sites the worker can read, and how their pages are shaped (removed once each has an adapter) */
-const OR_PROBE_V=3,OR_PROBE=[['covers','nfl','https://contests.covers.com/consensus/topconsensus/nfl/overall'],['covers','nba','https://contests.covers.com/consensus/topconsensus/nba/overall'],
-  ['cbs','nfl','https://www.cbssports.com/nfl/picks/experts/'],['oddsshark','nba','https://www.oddsshark.com/nba/computer-picks']];
+const OR_PROBE_V=4,OR_PROBE=[['covers','ncaab','https://contests.covers.com/consensus/topconsensus/ncaab/overall'],['covers','ncaaf','https://contests.covers.com/consensus/topconsensus/ncaaf/overall'],['cbs','nba','https://www.cbssports.com/nba/expert-picks/']];
 function orHint(txt,G,sp){const h={b:txt.length};const tt=txt.match(/<title[^>]*>([^<]{0,90})/i);if(tt)h.t=tt[1].trim();h.tb=(txt.match(/<table/gi)||[]).length;
   h.nd=/__NEXT_DATA__|__NUXT__|window\.__INITIAL|application\/ld\+json/i.test(txt)?1:0;h.cf=/challenge-platform|cf-chl|Just a moment|captcha/i.test(txt)?1:0;
   h.th=(txt.match(/<th[\s>][\s\S]*?<\/th>/gi)||[]).slice(0,14).map(x=>x.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,18));
@@ -464,16 +484,17 @@ function orGrade(s,f){const m=f.hs-f.as;const pc=f.pc||{};const cl=pc.spread&&pc
   if(s.pk)[].concat(s.pk).forEach(k=>{if(k.mk==='ml'&&m!==0)r.su=(k.side==='home')===(m>0)?1:0;
     if(k.mk==='spread'&&k.line!=null){const mm=k.side==='home'?m:-m;if(mm+k.line!==0)r.ats=mm+k.line>0?1:0;}
     if(k.mk==='total'&&k.line!=null&&f.as+f.hs!==k.line)r.ou=(k.side==='over')===(f.as+f.hs>k.line)?1:0;});
+  if(s.xp&&cl!=null&&s.xp.a!==s.xp.h&&m+cl!==0)r.ats=(s.xp.h>s.xp.a)===(m+cl>0)?1:0;
   if(s.pub){const p=s.pub;if(p.ml!=null&&p.ml!==50&&m!==0)r.su=(p.ml>50)===(m>0)?1:0;if(p.sp!=null&&p.sp!==50&&cl!=null&&m+cl!==0)r.ats=(p.sp>50)===(m+cl>0)?1:0;if(p.ou!=null&&p.ou!==50&&T!=null&&f.as+f.hs!==T)r.ou=(p.ou>50)===(f.as+f.hs>T)?1:0;}
   return r;}
-const OR_SRC={espn:{lab:'ESPN FPI/BPI',kind:'model'},kalshi:{lab:'Kalshi',kind:'market'},poly:{lab:'Polymarket',kind:'market'},dr:{lab:'DRatings',kind:'model'},os:{lab:'OddsShark computer',kind:'model'},pw:{lab:'Pickswise experts',kind:'expert'},public:{lab:'The betting public',kind:'crowd'}};
+const OR_SRC={espn:{lab:'ESPN FPI/BPI',kind:'model'},kalshi:{lab:'Kalshi',kind:'market'},poly:{lab:'Polymarket',kind:'market'},dr:{lab:'DRatings',kind:'model'},os:{lab:'OddsShark computer',kind:'model'},pw:{lab:'Pickswise experts',kind:'expert'},cbs:{lab:'CBS Sports experts',kind:'expert'},covers:{lab:'Covers contest consensus',kind:'crowd'},public:{lab:'The betting public',kind:'crowd'}};
 async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.now();const C=read('oraclecache.json')||{v:1};['espn','p','led','h'].forEach(k=>C[k]=C[k]||{});
   const D={calls:0,src:{}};const G=await orSlate(now,D);D.slate={};G.forEach(g=>{D.slate[g.sp]=(D.slate[g.sp]||0)+1;});
   const pre=G.filter(g=>g.state==='pre'&&Date.parse(g.st)<=now+80*36e5);
   /* each source, unless it's resting after a day of failures */
   const run=async(k,fn)=>{const H=C.h[k]||(C.h[k]={ok:0,fail:0,try:0});if(H.fail>=24&&now-H.try<6*36e5){D.src[k]={rest:H.fail};return[];}H.try=now;
     let R=[];try{R=await fn();}catch(e){D.src[k]={err:String(e.message||e).slice(0,80)};}if(R.length){H.ok=now;H.fail=0;}else H.fail++;D.src[k]={...(D.src[k]||{}),n:R.length};return R;};
-  const got={espn:await run('espn',()=>orEspn(pre,C,D,now)),kalshi:await run('kalshi',()=>orKalshi(pre,D)),poly:await run('poly',()=>orPoly(pre,D)),dr:await run('dr',()=>orDRatings(pre,D)),os:await run('os',()=>orShark(pre,D)),pw:await run('pw',()=>orPickswise(pre,D)),public:await run('public',()=>orPublic(pre,D))};
+  const got={espn:await run('espn',()=>orEspn(pre,C,D,now)),kalshi:await run('kalshi',()=>orKalshi(pre,D)),poly:await run('poly',()=>orPoly(pre,D)),dr:await run('dr',()=>orDRatings(pre,D)),os:await run('os',()=>orShark(pre,D)),pw:await run('pw',()=>orPickswise(pre,D)),cbs:await run('cbs',()=>orCBS(pre,D)),covers:await run('covers',()=>orCovers(pre,D,now)),public:await run('public',()=>orPublic(pre,D))};
   /* the Prediction Tracker's systems arrive together; each is filed as its own source */
   (await run('pt',()=>orPT(pre,D))).forEach(r=>{(got[r.k]=got[r.k]||[]).push(r);});
   /* today's wire: per game, each source's numbers (a source with two reads of one game is averaged) */
