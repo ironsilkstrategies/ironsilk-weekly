@@ -534,7 +534,7 @@ async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.n
      basketball — field goals, threes, free throws (made / tried), offensive rebounds, turnovers → possessions
      hockey     — shots on goal, power-play goals and chances
    comps.json keeps one row per game; the app builds each team's rates (offense against the other side's defense). */
-const COMP_BUDGET=300;
+const COMP_BUDGET=1200;   /* a busy college-hoops night is ~150 finals; the first pass fills the season in one run */
 const mmss=v=>{const m=String(v||'').match(/^(\d+):(\d+)$/);return m?+(+m[1]+m[2]/60).toFixed(2):null;};
 const mk=v=>{const m=String(v==null?'':v).match(/^(\d+)\s*-\s*(\d+)$/);return m?[+m[1],+m[2]]:[null,null];};
 const nn=v=>{const x=parseFloat(v);return isFinite(x)?x:null;};

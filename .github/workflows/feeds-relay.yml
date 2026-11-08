@@ -1,0 +1,27 @@
+name: Feeds relay
+# GitHub drops most scheduled runs on this repo — the "hourly" Data feeds ran about every 6 hours (Oct 30 – Nov 8).
+# The relay starts a feeds run, waits ~55 minutes, and hands off to its next self: one feeds run an hour, around the
+# clock. The schedule below is only a backstop that restarts the chain if it ever breaks. No secrets, no keys: it only
+# starts workflows in this repo. (Same idea as the Telegram autopilot's relay.)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 */3 * * *'
+permissions:
+  actions: write
+  contents: read
+concurrency:
+  group: feeds-relay
+  cancel-in-progress: true
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Start a feeds run, wait, hand off
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run feeds.yml -R "$GITHUB_REPOSITORY"
+          sleep 3300
+          gh workflow run feeds-relay.yml -R "$GITHUB_REPOSITORY"
