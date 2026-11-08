@@ -58,7 +58,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const W8=ms=>
   E(`tfSet('bt','all');tfSet('tier','play')`);await W8(50);
   T('a character + ✅ Official shows only its official calls (the Judge\'s 93% BOS ML is -1400 — never official)',/no calls today|none that pass/i.test(tb.textContent)||!/LEARNING/.test(tb.textContent),tb.textContent.replace(/\s+/g,' ').slice(-300));
   E(`tfSet('tier','all');tfSet('ch','Scout')`);await W8(50);T('a character with too few graded calls reads ⏳ still proving itself',/⏳ Still proving itself/.test(prof())&&/Only 10 graded/.test(prof()));
-  E(`tfSet('ch','Pred')`);await W8(50);T('a character with nothing to say today says why (The Oracle: no outside prediction uploaded)',/no outside prediction uploaded/.test(tb.textContent));
+  E(`tfSet('ch','Pred')`);await W8(50);T('a character with nothing to say today says why (The Oracle: no outside read on this game)',/no outside read on this game/.test(tb.textContent));
   E(`tfSet('ch','all')`);await W8(50);
   /* the ticket builder */
   E(`TICKETTAB='build';BUILD_MODE='chars';CB_V=null;CB_BT='all';CB_ALL=true;tab('tickets',[...document.querySelectorAll('nav button')].find(b=>/Tickets/.test(b.textContent)));renderTickets();`);await W8(100);

@@ -30,12 +30,12 @@ function coachGameFile(sp,a,h){const D=coachIdx();if(!D)return null;return D.g[s
 
 /* §1 · the clipboard ─────────────────────────────────────────────────────────────────────────────────────────────── */
 /* a call's confidence as its character made it: the gut (Dog, Historian, Coach) or the confidence */
-function coachBase(x){if(!x)return null;if(x.dG!=null)return x.dG/100;if(x.hG!=null)return x.hG/100;if(x.cG!=null)return x.cG/100;return x.cf!=null?+x.cf:x.cfr!=null?+x.cfr:null;}
+function coachBase(x){if(!x)return null;if(x.dG!=null)return x.dG/100;if(x.hG!=null)return x.hG/100;if(x.cG!=null)return x.cG/100;if(x.oG!=null)return x.oG/100;return x.cf!=null?+x.cf:x.cfr!=null?+x.cfr:null;}
 function coachRoleOf(x){return typeof bkRole==='function'?bkRole(x.market,x.side,x.line,x.price):(x.market==='total'?(/under/i.test(x.side)?'under':'over'):(+x.price<0?'fav':'dog'));}
 let COACH_B=null;
 /* a gut-based call (the rebuilt Dog, Historian, Coach) is judged only against that gut's own graded calls — the old
    ideology's record isn't the new one's */
-const coachGutTag=x=>x.dG!=null?'g':x.hG!=null?'g':x.cG!=null?'g':'c';
+const coachGutTag=x=>x.dG!=null||x.hG!=null||x.cG!=null||x.oG!=null?'g':'c';
 /* the scale on a lane: how far its sure calls (60%+) land above a coin flip, against how far they claim to — with a prior
    worth twenty 70% calls at face value, so a thin lane barely moves */
 /* he never rewrites history: a call on day D is judged only by what was graded before D, and nothing before his first day

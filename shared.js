@@ -2243,7 +2243,7 @@ const CHARS={
   'Judge':      {chip:'JUDGE',color:'#f5a524',label:'The Judge',school:'weighs every witness by its graded accuracy (forecast combination)',quiet:'no witnesses'},
   'Coach':      {chip:'COACH',color:'#5FD3E8',label:'The Coach',school:'keeps everyone honest — scales each character\'s confidence to its real hit rate; his own score from season scoring, rest, spots, revenge, weather and the news',quiet:'nothing on the clipboard clears the line'},
   'Most common':{chip:'SCORE',color:'#a78bfa',label:'The Scorekeeper',school:'the single most likely final score',quiet:'no modal score'},
-  'Pred':       {chip:'ORACLE',color:'#e8c15a',label:'The Oracle',school:'outside predicted scores you upload (non-Covers)',quiet:'no outside prediction uploaded'},
+  'Pred':       {chip:'ORACLE',color:'#e8c15a',label:'The Oracle',school:'the outside world\'s consensus — prediction markets, 50+ computer rating systems, expert picks and your uploads, each weighed by its own record',quiet:'no outside read on this game'},
   'Covers':     {chip:'COVERS',color:'#ff7a1a',label:'Covers',school:'Covers / OddsShark computer predicted score',quiet:'no Covers prediction uploaded'},
   'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'prestige, head-to-head, dynasties and pretenders, units exposed for years, the referee — ten finished seasons (plus your uploaded trends)',quiet:'nothing in the history clears his gut'},
   'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
@@ -2334,17 +2334,20 @@ function characterCalls(sp,g,s){
   const ms=String(s.modeScore||'').match(/(\d+)\D+(\d+)/);
   if(ms)byMargin('Most common',+ms[1],+ms[2],{score:ms[1]+'-'+ms[2]});
   // Pred — the gold "pred A x – y H" line under the projected score
-  /* Covers is its own character; every other uploaded prediction speaks as the Oracle. */
+  /* Covers is its own character. v2.94 · any other upload is one source in the Oracle's consensus (desk-oracle.js), which
+     reads the outside world off the feeds robot; without the Oracle's module the upload speaks alone, as before. */
   const isCovers=src=>/covers|oddsshark/i.test(String(src||''));
-  let spoke={};
-  try{const p=typeof predFor==='function'?predFor(sp,gl):null;if(p&&p.a!=null&&p.h!=null){const v=isCovers(p.src)?'Covers':'Pred';byMargin(v,+p.a,+p.h,{score:p.a+'-'+p.h,src:p.src||''});spoke[v]=1;}}catch(e){}
-  // Outside predicted scores from the Intel log — Covers → Covers, others → Oracle (once each)
+  let spoke={},oraUp=null;
+  try{const p=typeof predFor==='function'?predFor(sp,gl):null;if(p&&p.a!=null&&p.h!=null){if(isCovers(p.src)){byMargin('Covers',+p.a,+p.h,{score:p.a+'-'+p.h,src:p.src||''});spoke.Covers=1;}else oraUp={a:+p.a,h:+p.h,src:p.src||''};}}catch(e){}
+  // Outside predicted scores from the Intel log — Covers → Covers, others → the Oracle (once each)
   try{
     const preds=roGet(INTEL_KEY,[]).filter(x=>x.sp===sp&&x.kind==='pred'&&x.game===gl&&x.date===d&&x.a!=null&&x.h!=null);
     const bySrc={};preds.forEach(x=>{(bySrc[x.src]=bySrc[x.src]||[]).push(x)});
-    Object.entries(bySrc).forEach(([src,arr])=>{const last=arr[arr.length-1];const v=isCovers(src)?'Covers':'Pred';
-      if(spoke[v])return;spoke[v]=1;byMargin(v,last.a,last.h,{score:last.a+'-'+last.h,src});});
+    Object.entries(bySrc).forEach(([src,arr])=>{const last=arr[arr.length-1];
+      if(isCovers(src)){if(!spoke.Covers){spoke.Covers=1;byMargin('Covers',last.a,last.h,{score:last.a+'-'+last.h,src});}}else if(!oraUp)oraUp={a:+last.a,h:+last.h,src};});
   }catch(e){}
+  let oraDone=false;try{if(typeof oracleCallsV2==='function'&&oracleCallsV2(sp,g,Ln,hl,hlSim,tl,tlSim,add,d,oraUp))oraDone=true;}catch(e){}
+  if(!oraDone&&oraUp)byMargin('Pred',oraUp.a,oraUp.h,{score:oraUp.a+'-'+oraUp.h,src:oraUp.src});
   // Trends — v2.91: the Historian (desk-hist.js) reads ten seasons; the uploaded trends are one voice in his gut
   let histDone=false;try{if(typeof histCalls==='function'){let tr=null;try{tr=brainTrendEvidence(g,sp);}catch(e){}histCalls(sp,g,Ln,hl,hlSim,tl,tlSim,add,tr);histDone=true;}}catch(e){}
   if(!histDone)try{const tr=brainTrendEvidence(g,sp);
@@ -2504,7 +2507,8 @@ function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)r
   /* v2.90 · the Underdog Spotter calls a score on every game with a dog, official pick or not */
   try{const dp=typeof dogPredFor==='function'?dogPredFor(sp,g):null;if(dp)own('Dog',dp.a,dp.h);}catch(e){}
   try{const hp=typeof histPredFor==='function'?histPredFor(sp,g):null;if(hp)own('Trends',hp.a,hp.h);}catch(e){}
-  try{const cp=typeof coachPredFor==='function'?coachPredFor(sp,g):null;if(cp)own('Coach',cp.a,cp.h);}catch(e){}   /* v2.93 · the Coach's own score, every game */   /* v2.91 · the Historian's score on every game he reads */
+  try{const cp=typeof coachPredFor==='function'?coachPredFor(sp,g):null;if(cp)own('Coach',cp.a,cp.h);}catch(e){}
+  try{const op=typeof oraclePredFor==='function'?oraclePredFor(sp,g):null;if(op)own('Pred',op.a,op.h);}catch(e){}   /* v2.94 · the Oracle's consensus score, every game he can read */   /* v2.93 · the Coach's own score, every game */   /* v2.91 · the Historian's score on every game he reads */
   [['Most common'],['Covers'],['Pred']].forEach(([v])=>{const c=by(v).find(x=>x.score);if(c){const m=String(c.score).match(/([\d.]+)\D+([\d.]+)/);if(m)own(v,+m[1],+m[2]);}});
   const unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3;
   new Set(calls.map(c=>c.voice)).forEach(v=>{if(out[v]||v==='Books')return;const C=by(v);if(!C.length)return;let a=+s.awayProj,h=+s.homeProj;
@@ -3037,7 +3041,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261108e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261108f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18001,7 +18005,7 @@ const CHAR_EDGE={
   'Judge':['weighing every source by how accurate it has actually been','when its witnesses are wrong together, so is it — and it trusts a source\'s past more than its latest change'],
   'Coach':['the clipboard — sees when a character says more than it hits, and the situations (rest, spots, weather, news) nobody else reads','his score starts from the season\'s scoring, so a team that just changed (a new QB, a trade) takes him a few games to see'],
   'Most common':['the single most likely final score — exact scores, and totals near the number','the likeliest score is still unlikely — high-variance games swing right past it'],
-  'Pred':['the outside predicted scores you upload','only as good as the source you upload, and silent without one'],
+  'Pred':['what the whole outside world thinks — markets, rating systems, experts — weighed by who has actually been right, sport by sport','the outside world has seen the same line the books set: his edge is only where the sharpest sources part from it'],
   'Covers':['the Covers / OddsShark computer projection','a public number the books have already seen — and silent without an upload'],
   'Trends':['prestige, head-to-head streaks, units exposed for years — the long memory the others don\'t have','history moves slower than this season: a rebuilt roster or a new coach can make the past wrong'],
   'Consensus':['where the public tickets and money are','the public loses over time and books shade lines against it; silent without uploaded splits'],
@@ -22417,7 +22421,7 @@ function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet
   B.streak=Object.assign([0,0],{s});
   return{B,all};}
 /* the character's stated chance where it has one; otherwise its own all-time rate here */
-function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Trends'&&c.hG!=null?+(c.hG/100).toFixed(2):c.voice==='Coach'&&c.cG!=null?+(c.cG/100).toFixed(2):c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
+function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Trends'&&c.hG!=null?+(c.hG/100).toFixed(2):c.voice==='Coach'&&c.cG!=null?+(c.cG/100).toFixed(2):c.voice==='Pred'&&c.oG!=null?+(c.oG/100).toFixed(2):c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
   const rate=(all[0]+FEEL_K0*0.5)/(all[0]+all[1]+FEEL_K0);
   if(st>0&&st<1){/* a stated chance is tempered by how reliable the character has actually been */const n=all[0]+all[1];const k=n/(n+FEEL_K0);return Math.max(0.02,Math.min(0.98,(1-k*0.5)*st+k*0.5*rate));}
   return rate;}

@@ -124,7 +124,7 @@ function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_P
   const p=+x.price;return isFinite(p)&&p>=CONF_PAY_MIN;}
 /* v2.93 · the Coach's clipboard decides how much confidence each call may carry (desk-coach.js) */
 const coachOk=x=>typeof coachConf==='function'?coachConf(x):confOf(x);
-function isOfficial(x){if(x&&(x.voice==='Trends'&&x.hG!=null||x.voice==='Coach'&&x.cG!=null))return coachOk(x)*100>=(x.market==='ml'?75:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91/v2.93 · the Historian's and the Coach's gut */
+function isOfficial(x){if(x&&(x.voice==='Trends'&&x.hG!=null||x.voice==='Coach'&&x.cG!=null||x.voice==='Pred'&&x.oG!=null))return coachOk(x)*100>=(x.market==='ml'?75:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91/v2.93 · the Historian's and the Coach's gut */
   if(x&&x.voice==='Dog'){if(x.dG!=null)return coachOk(x)*100>=(x.market==='ml'?78:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.90 · his gut, not the price */
     return!!(typeof PROB_OK!=='undefined'&&PROB_OK.Dog)&&+x.dEdge>=DOG_ML_EDGE-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
   const c=coachOk(x);if(c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x))return true;
