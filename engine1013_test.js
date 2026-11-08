@@ -11,10 +11,11 @@ setTimeout(async()=>{try{
   /* ── 🏦 the Banker ─────────────────────────────────────────── */
   T('roster: the Banker is a character and never votes (derived from the Blend)',w.eval(`!!CHARS.Banker&&CHAR_ORDER.includes('Banker')&&!isVoter('Banker')&&VOTER_ORDER.length===9`));
   w.eval(`blendSideP=function(sp,g,m,sd,mp){return mp};brainSideP=function(){return null};marketFair=function(){return null};`);
-  const bank=(simP,ph,pa)=>{const got=[];w.__g=got;w.eval(`metaCalls('nfl',{away:{abbr:'A'},home:{abbr:'H'}},[{voice:'Sim',market:'ml',side:'home',simP:${simP},line:null}],{mlH:{price:${ph}},mlA:{price:${pa}}},(v,m,s,ex)=>window.__g.push({v,m,s,ex}))`);return got.filter(x=>x.v==='Banker');};
-  const b1=bank(0.60,-110,-110);T('Banker plays the side whose price the calibrated chance beats by 3%+',b1.length===1&&b1[0].s==='home'&&Math.abs(b1[0].ex.ev-0.1455)<0.002,J(b1));
-  T('…and stays quiet when no price clears +3% EV',bank(0.52,-110,-110).length===0);
-  T('…and never takes a price shorter than -300',bank(0.85,-400,300).length===0||bank(0.85,-400,300)[0].s==='away',J(bank(0.85,-400,300)));
+  /* v2.89 · the Banker reads the books: he backs the side two or more characters are on, 60%+ of the account-weighted backing */
+  const bank=(simP,ph,pa,extra)=>{const got=[];w.__g=got;w.eval(`metaCalls('nfl',{away:{abbr:'A'},home:{abbr:'H'}},[{voice:'Sim',market:'ml',side:'home',simP:${simP},line:null}${extra||''}],{mlH:{price:${ph}},mlA:{price:${pa}}},(v,m,s,ex)=>window.__g.push({v,m,s,ex}))`);return got.filter(x=>x.v==='Banker');};
+  const b1=bank(0.60,-110,-110,`,{voice:'Judge',market:'ml',side:'home',line:null}`);T('Banker backs the side two characters with sound books are on',b1.length===1&&b1[0].s==='home'&&b1[0].ex.by.join()==='Sim,Judge',J(b1));
+  T('…and stays quiet on a split room (one each way)',bank(0.60,-110,-110,`,{voice:'Judge',market:'ml',side:'away',line:null}`).length===0);
+  T('…and never takes a price shorter than -300',bank(0.85,-400,300,`,{voice:'Judge',market:'ml',side:'home',line:null}`).length===0);
 
   /* ── 🏆 squads ─────────────────────────────────────────────── */
   w.eval(`(function(){const V=[];for(let i=0;i<40;i++){const d='2026-09-'+String(10+(i%20)).padStart(2,'0');const g='A'+i+'@H'+i;const hit=i%5!==0;

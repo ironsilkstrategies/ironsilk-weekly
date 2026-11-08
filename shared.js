@@ -2250,7 +2250,7 @@ const CHARS={
   'Power':      {chip:'⚡ POWER',color:'#818cf8',label:'The Commissioner',school:'TheDesk Power Index — who\'s better and by how much, plus prestige and the all-time series',quiet:'no power rating for one of these teams, or no real edge on this number'},
   'Dog':        {chip:'🐕 DOG',color:'#2dd4bf',label:'The Underdog Spotter',school:'plus-money value only — a dog the Sim gives clearly more chance than its price (5+ points on a moneyline, 4+ on a spread); silent on every favorite',quiet:'no dog the Sim rates clearly above its price'},
   'Scout':      {chip:'🔭 SCOUT',color:'#fb7185',label:'The Scout',school:'talent: superstars vs busts — QB efficiency, pass rush, ball hawks, shooters, goalies — read as matchups',quiet:'not enough of either team\'s games read yet, or no real talent edge'},
-  'Banker':     {chip:'🏦 BANKER',color:'#d4af37',label:'The Banker',school:'only a price the calibrated chance beats — +3% EV or no bet, never shorter than -300',quiet:'no price beats the calibrated chance by 3%+'},
+  'Banker':     {chip:'🏦 BANKER',color:'#d4af37',label:'The Banker',school:'the secretary — reads every character\'s books (sport × bet type × favorite/dog/over/under) and backs the side the strongest accounts are on; builds the Master Parlay Sheet',quiet:'no side has two or more characters with strong books agreeing'},
   'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the Sim, the market and every character\'s graded vote, weighed together',quiet:'still learning — needs graded character history'},
   'Blend':      {chip:'BLEND',color:'#a3e635',label:'The Blend',school:'the Sim\'s chance blended with the market\'s, weighted by which has predicted better',quiet:'no sim chance on this market'}
 };
@@ -2420,10 +2420,9 @@ function metaCalls(sp,g,calls,Ln,add){
       return{sd,line,price,mk,brain:brainSideP(sp,g,voters,m,sd,mp,line,price),blend:blendSideP(sp,g,m,sd,mp,line,price)};});
     [['Brain','brain'],['Blend','blend']].forEach(([v,k])=>{const a=sides[0][k],b=sides[1][k];if(a==null||b==null||Math.abs(a-b)<1e-9)return;
       const w=a>b?sides[0]:sides[1];add(v,m,w.sd,{simP:+w[k].toFixed(4),mktP:w.mk!=null?+w.mk.toFixed(4):null});});
-    /* 🏦 the Banker (v2.28) — derived from the Blend, so it never votes: the side whose price the calibrated chance beats by 3%+ */
-    try{const ev=sides.map(o=>o.blend==null||o.price==null||!bkPriceOk(o.price)?null:o.blend*americanToDecimal(o.price)-1);
-      const i=ev[0]!=null&&(ev[1]==null||ev[0]>=ev[1])?0:1;
-      if(ev[i]!=null&&ev[i]>=IDEO_P('Banker','ev',0.03))add('Banker',m,sides[i].sd,{simP:+sides[i].blend.toFixed(4),mktP:sides[i].mk!=null?+sides[i].mk.toFixed(4):null,ev:+ev[i].toFixed(4)});}catch(e){}});}
+    /* 🏦 the Banker (v2.89) — never votes: he reads every character's books and backs the side the strongest accounts are on
+       (desk-bank.js). The old +3% EV rule chased long prices: 298-395. */
+    try{if(typeof bkBankerPick==='function'){const P=bkBankerPick(sp,m,sides,voters);if(P)add('Banker',m,P.sd,P.ex);}}catch(e){}});}
 /* v2.32 · the ledger keeps every sport's history without outgrowing a phone:
    ungraded calls older than 14 days go (they can't grade — mostly the old per-day
    copies of football calls from before v2.09), college basketball keeps
@@ -3032,7 +3031,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261107o';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261108a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18003,7 +18002,7 @@ const CHAR_EDGE={
   'Power':['who\'s better and by how much — the Power Index, prestige and the all-time series','ratings move slowly, so injuries and sudden form swings take a while to show'],
   'Dog':['plus-money value — underdogs the Sim rates clearly above their price','it never backs a favorite, and long prices mean long losing runs even when it\'s right'],
   'Scout':['talent matchups — QBs, pass rush, ball hawks, shooters, goalies','it needs enough games read for both teams, so it\'s quiet early in a season'],
-  'Banker':['price discipline — it bets only when the calibrated chance beats the price by 3%+, never shorter than -300','it sits out most games, so its record moves slowly'],
+  'Banker':['reads every character\'s books — backs only a side the strongest accounts agree on (60%+ of the weighted backing, never against the calibrated chance, never shorter than -300)','he only speaks when two or more characters are on a side, so he skips split games'],
   'Brain':['the Sim, the market and every character\'s graded vote, weighed together','it\'s only as right as the voices it weighs, and still learning until they have graded history'],
   'Blend':['the Sim\'s chance blended with the market\'s, weighted by which has predicted better','it stays close to the market by design, so it rarely finds a big edge']};
 const CW_LAB={heavy:['✅','Carries weight','var(--win)'],light:['⚠️','Light weight','var(--rust)'],mixed:['➖','Mixed record','var(--gold)'],new:['⏳','Still proving itself','var(--mute)']};
