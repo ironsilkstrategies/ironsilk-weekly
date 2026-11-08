@@ -133,7 +133,7 @@ const coachOk=x=>typeof coachConf==='function'?coachConf(x):confOf(x);
 function isOfficial(x){if(x&&String(x.date||'').slice(0,10)>=HV_FROM){if(isHeavyML(x)&&x.voice!=='Sim')return false;
     if(x.voice==='Brain'&&x.bG!=null)return typeof brainOfficial==='function'?brainOfficial(x):false;
     if(x.voice==='Sim'&&!isHeavyML(x)){const c=coachOk(x);return c!=null&&c>=0.80-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x);}}
-  if(x&&(x.voice==='Trends'&&x.hG!=null||x.voice==='Coach'&&x.cG!=null||x.voice==='Pred'&&x.oG!=null))return coachOk(x)*100>=(x.market==='ml'?75:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91/v2.93 · the Historian's and the Coach's gut */
+  if(x&&(x.voice==='Trends'&&x.hG!=null||x.voice==='Coach'&&x.cG!=null||x.voice==='Pred'&&x.oG!=null||x.voice==='Most common'&&x.kG!=null))return coachOk(x)*100>=(x.market==='ml'?75:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91/v2.93 · the Historian's and the Coach's gut */
   if(x&&x.voice==='Dog'){if(x.dG!=null)return coachOk(x)*100>=(x.market==='ml'?78:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.90 · his gut, not the price */
     return!!(typeof PROB_OK!=='undefined'&&PROB_OK.Dog)&&+x.dEdge>=DOG_ML_EDGE-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
   const c=coachOk(x);if(c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x))return true;
@@ -244,7 +244,7 @@ const IDEO_TXT={
   Sim:{how:'Plays every game 10,000 times from team strength, injuries, rest and weather, then takes the side its simulation favors against the line.',reads:'team power and form · injuries · weather (football) · rest and schedule'},
   Judge:{how:'Weighs every witness — the Sim, predicted scores, trends, sharp money, outside picks — by how accurate each has actually been, and builds one projected score from them.',reads:'every other read, weighted by its graded record'},
   Coach:{how:'Takes or fades the model\'s side on the situation: matchup, rest, recent form. Calls a total only when the situation clearly points one way.',reads:'matchup · rest · form · totals situations'},
-  'Most common':{how:'Finds the single most likely final score in the 10,000 runs and bets whatever that score says about the side, spread and total.',reads:'the simulation\'s most frequent final score'},
+  'Most common':{how:'Builds every final from its parts off the season\'s box scores — touchdowns and field goals, possessions and each kind of make, shots and the goalie — and bets what his own distribution says about the side, spread and total.',reads:'the simulation\'s most frequent final score'},
   Pred:{how:'Uses the predicted scores you upload from outside sources (not Covers) and bets what they imply.',reads:'your uploaded predicted scores'},
   Covers:{how:'Uses the Covers computer\'s predicted score and bets what it implies.',reads:'Covers predicted scores from your intake'},
   Trends:{how:'Adds up every uploaded trend on the game — each one shrunk by its sample size, so a 5-1 counts like ~54%, not 83% — and leans the way they point.',reads:'uploaded trends',params:[['lean','Smallest net lean that makes a call',0.05,0.01,0.3,0.01]]},

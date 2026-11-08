@@ -35,7 +35,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const W8=ms=>
   E(`set(CPROP_KEY,${J([{id:'p1',sp:'nhl',voice:'Sim',player:'Auston Matthews',team:'TOR',k:'s',thr:4,p:0.74,d:dd},{id:'p2',sp:'nhl',voice:'Coach',player:'Auston Matthews',team:'TOR',k:'s',thr:4,p:0.7,d:dd}])})`);
   E(`set(TF_KEY,{tier:'all',ch:'all',sp:'all',view:'picks',bt:'all'});tab('today',[...document.querySelectorAll('nav button')].find(b=>/Today/.test(b.textContent)));`);await W8(400);E('renderToday(true)');await W8(100);
   const tb=w.document.getElementById('todayBody');const chips=()=>[...tb.querySelectorAll('.msg-chip')].map(x=>x.textContent.replace(/\s+/g,' ').trim());
-  T('Today: the bet-type row — All bets, Moneyline, Heavy ML -1000+, Light ML, Spreads, O/U, 1st half, Props, each with its count',['All bets 4','Moneyline 2','Heavy ML -1000+ 1','Light ML 1','Spreads 1','O/U 1','1st half 2','Props 2'].every(c=>chips().includes(c)),J(chips().slice(0,9)));
+  T('Today: the bet-type row — All bets, Moneyline, Heavy ML -500+, Light ML, Spreads, O/U, 1st half, Props, each with its count',['All bets 4','Moneyline 2','Heavy ML -500+ 1','Light ML 1','Spreads 1','O/U 1','1st half 2','Props 2'].every(c=>chips().includes(c)),J(chips().slice(0,9)));
   const chs=[...tb.querySelectorAll('.ch-row .msg-chip')].map(x=>x.textContent.replace(/\s+/g,' ').trim());
   T('…and every character — all 14, even the ones with nothing on the card today (Banker, Blend, Dog…)',chs.length===15&&['The Simulator','The Judge','The Coach','The Scorekeeper','The Oracle','Covers','The Historian','The Crowd','The Commissioner','The Underdog Spotter','The Scout','The Banker','The Brain','The Blend'].every(n=>chs.some(c=>c.includes(n))),J(chs));
   T('…each chip counts that character\'s calls today and wears its weight badge',chs.some(c=>/The Underdog Spotter 1$/.test(c)&&/^✅/.test(c))&&chs.some(c=>/The Oracle 0$/.test(c)&&/^⏳/.test(c)),J(chs.filter(c=>/Underdog|Oracle/.test(c))));
@@ -63,7 +63,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const W8=ms=>
   /* the ticket builder */
   E(`TICKETTAB='build';BUILD_MODE='chars';CB_V=null;CB_BT='all';CB_ALL=true;tab('tickets',[...document.querySelectorAll('nav button')].find(b=>/Tickets/.test(b.textContent)));renderTickets();`);await W8(100);
   const kb=w.document.getElementById('ticketBody');
-  T('Tickets → Build → Characters: every character, the bet types (game lines), and the selected character\'s profile',kb.querySelectorAll('.ch-row .msg-chip').length===14&&/Heavy ML -1000\+/.test(kb.textContent)&&/Light ML/.test(kb.textContent)&&!!kb.querySelector('.ch-prof'));
+  T('Tickets → Build → Characters: every character, the bet types (game lines), and the selected character\'s profile',kb.querySelectorAll('.ch-row .msg-chip').length===14&&/Heavy ML -500\+/.test(kb.textContent)&&/Light ML/.test(kb.textContent)&&!!kb.querySelector('.ch-prof'));
   E(`cbSetV('Sim');cbSetBt('heavy')`);await W8(50);
   const pool=E(`cbPool('Sim').map(x=>x.pick+' '+x.price)`);
   T('Heavy ML in the builder: the -1000+ favorites (kept off every other ticket by the -300 floor), and it says the floor is lifted here only',pool.length===1&&/BOS ML -1400/.test(pool[0])&&/lifted in this view only/.test(kb.textContent),J(pool));
