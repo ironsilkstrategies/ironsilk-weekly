@@ -17,7 +17,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const J=JSON.
   T('your ticket: 📤 Share opens one sheet with a picture of it',!!sh&&!!card&&/Sunday early window/.test(card.textContent)&&/NO -3/.test(card.textContent)&&/SF ML/.test(card.textContent));
   T('…the parlay price from the legs\' own prices (-110 · -140 · -105 ≈ +590)',/\+5\d\d/.test(card.textContent),card.textContent.slice(0,120));
   T('…a won leg wears its ✅, an open one its start time',/✅/.test(card.textContent)&&/3:25 PM CT/.test(card.textContent));
-  const text=E('tksText(TKS_CUR)');T('the words: the ticket, every leg, locked-before-the-games, and the lounge invite',/^🎫 Sunday early window · \+5\d\d/.test(text)&&/✅ NO -3 \(-110\) · 🏈 CLE@NO/.test(text)&&/▫️ SF ML \(-140\)/.test(text)&&/Talk sports with us, not just picks → https:\/\/t\.me\/TheDeskApp/.test(text),text);
+  const text=E('tksText(TKS_CUR)');T('the words: the ticket, every leg, locked-before-the-games, and the lounge invite',/^🎫 Sunday early window · \+5\d\d/.test(text)&&/✅ NO -3 \(-110\) · 🏈 CLE@NO/.test(text)&&/▫️ SF ML \(-140\)/.test(text)&&/Talk sports with us, not just picks → https:\/\/t\.me\/TheDeskLounge/.test(text),text);
   T('the share sheet offers everything: phone share, 𝕏, Facebook, Telegram, copy, save',['Share picture + words','𝕏 Post','Facebook','Telegram','Copy words','Save picture'].every(s=>sh.textContent.includes(s)));
   T('…and says plainly how Facebook groups work (the phone\'s share sheet)',/Facebook doesn't let apps post into groups/.test(sh.textContent));
   T('no bot saved, no Telegram buttons',!/STRAIGHT TO THEDESK/.test(sh.textContent));
@@ -30,7 +30,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const J=JSON.
   await E(`tksTg('pubL',null)`);const m=TG.find(x=>x.p.chat_id==='-100888');T('…a tap posts the ticket to the public lounge, as HTML',m&&/sendMessage/.test(m.u)&&/<b>🎫 Sunday early window/.test(m.p.text)&&m.p.parse_mode==='HTML',J(m&&m.p).slice(0,200));
   /* a long ticket for 𝕏 */
   const big={title:'The Banker · Ticket A',legs:Array.from({length:14},(_,i)=>({pick:'Team '+i+' -3.5 alternate line',game:'A@B',sp:'nfl',price:-110}))};
-  const xt=E(`tksXText(tksTicket(${J(big)}))`);T('a 14-leg ticket still fits 𝕏 (cut with …, the link kept)',xt.length<=280&&/…/.test(xt)&&/t\.me\/TheDeskApp/.test(xt),String(xt.length));
+  const xt=E(`tksXText(tksTicket(${J(big)}))`);T('a 14-leg ticket still fits 𝕏 (cut with …, the link kept)',xt.length<=280&&/…/.test(xt)&&/t\.me\/TheDeskLounge/.test(xt),String(xt.length));
   /* the other tickets */
   E(`bkSheet=()=>({tix:[{name:'A',dec:4.2,games:2,legs:[{pick:'NO -3',game:'CLE@NO',sp:'nfl',price:-110},{pick:'Over 47.5',game:'NYG@DAL',sp:'nfl',price:-110}]}]});tksBank(0)`);
   T('the Banker\'s sheet: each ticket shares the same way',/The Banker · Ticket A/.test(w.document.getElementById('tksCard').textContent)&&/\+320/.test(w.document.getElementById('tksCard').textContent));

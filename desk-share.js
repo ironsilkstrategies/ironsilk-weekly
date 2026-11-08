@@ -18,7 +18,7 @@ let TKS_CUR=null;
 const tksDec=pr=>{pr=+pr;if(!isFinite(pr)||Math.abs(pr)<100)return null;return pr>0?1+pr/100:1+100/(-pr);};
 const tksAm=d=>d==null||!isFinite(d)||d<=1?'':d>=2?'+'+Math.round((d-1)*100).toLocaleString():'-'+Math.round(100/(d-1));
 const tksSgn=pr=>pr==null||!isFinite(+pr)||Math.abs(+pr)<100?'':(+pr>0?'+':'')+Math.round(+pr);
-const tksLounge=()=>(typeof THEDESK_SOCIAL!=='undefined'&&THEDESK_SOCIAL.tg)||'https://t.me/TheDeskApp';
+const tksLounge=()=>(typeof THEDESK_SOCIAL!=='undefined'&&THEDESK_SOCIAL.lounge)||'https://t.me/TheDeskLounge';
 const tksTime=t=>{const x=Date.parse(t||'');if(!isFinite(x))return'';try{return new Date(x).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'})+' CT';}catch(e){return'';}};
 /* a leg in any shape → {pick, game, sp, price, start, res} */
 function tksLeg(l,d){const sp=l.sp||l.sport||'';let res=l.res||null;

@@ -18,7 +18,7 @@ p=mk();WT.length=0;await Wk.runPublic(p,{tg,now:u0-60e3,fetch:fetchFB,fb});T('no
 await Wk.runPublic(p,{tg,now:u0+60e3,fetch:fetchFB,fb});const f1=FB[0];
 T('at the unlock the page gets the same post, to the page\'s feed, with its token',FB.length===1&&/graph\.facebook\.com\/v24\.0\/123456\/feed/.test(f1.u)&&f1.body.access_token==='SECRET-PAGE-TOKEN',f1&&f1.u);
 T('…in plain text (no Telegram HTML), only the unlocked pick (SF ML stays locked)',/UNLOCKED — TheDesk · Sun, Nov 8/.test(f1.body.message)&&/NO -3/.test(f1.body.message)&&!/SF ML/.test(f1.body.message)&&!/<b>|<i>/.test(f1.body.message),f1&&f1.body.message.slice(0,200));
-T('…with the invite: we talk sports in the free lounge, not just picks',/We talk sports in TheDesk's free Telegram lounge… not just picks\. Pull up → https:\/\/t\.me\/TheDeskApp/.test(f1.body.message));
+T('…with the invite: we talk sports in the free lounge, not just picks',/We talk sports in TheDesk's free Telegram lounge… not just picks\. Pull up → https:\/\/t\.me\/TheDeskLounge/.test(f1.body.message));
 await Wk.runPublic(p,{tg,now:u0+120e3,fetch:fetchFB,fb});T('…once',FB.length===1);
 p.st[legs[0].k]='W';await Wk.runPublic(p,{tg,now:u0+3*36e5,fetch:fetchFB,fb});T('a graded public pick goes to the page as a result',FB.length===2&&/Results/.test(FB[1].body.message)&&/✅/.test(FB[1].body.message),FB[1]&&FB[1].body.message.slice(0,120));
 /* Telegram misses: the page waits, so both retry together */

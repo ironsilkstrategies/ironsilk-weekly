@@ -20,7 +20,7 @@ setTimeout(async()=>{try{
   T('v2.82 · the menu has /live /next /why /week /rules /vip /howitworks /status (no duplicates, under 100)',['live','next','why','week','rules','vip','howitworks','status'].every(c=>C.menu.filter(m=>m.command===c).length===1)&&C.menu.length<=100&&new Set(C.menu.map(m=>m.command)).size===C.menu.length);
   T('v2.82 · /help lists them, says when the robot answers, and tells admins about /warn and /ban',/\/live — /.test(C.r.help)&&/in seconds from 8 AM to midnight CT/.test(C.r.help)&&/\/warn or \/ban/.test(C.r.help)&&!/on its next run/.test(C.r.help)&&C.r.help.length<4000,String(C.r.help.length));
   T('v2.82.1 · an empty Top 10 says why in counts and which sports are on the card (no picks named)',/No other pick qualified today\. Of \d+ on today's card: /.test(C.r.top10)&&/On today's card: 🏒 NHL/.test(C.r.top10)&&!/Nothing yet today/.test(C.r.top10),C.r.top10);
-  T('v2.82 · the join link for the welcome rides along; no custom rules → the robot uses the default six',C.join==='https://t.me/TheDeskApp'&&!C.rules);
+  T('v2.82 · the join link (the lounge, v2.97.1) rides along; no custom rules → the robot uses the default six',C.join==='https://t.me/TheDeskLounge'&&!C.rules);
   w.eval(`tgRulesSave('No politics.\\n\\n  Be cool.  ')`);const C2=w.eval('cmdBuild()');
   T('v2.82 · rules written in Settings go to the robot, one per line, blanks dropped',JSON.stringify(C2.rules)==='["No politics.","Be cool."]'&&JSON.stringify(w.eval("get('d4.tgrules')"))==='["No politics.","Be cool."]');
   w.eval(`set('d4.sublink','https://whop.com/thedesk')`);T('v2.82 · /vip carries the VIP link once it\'s saved',/whop\.com\/thedesk/.test(w.eval('cmdBuild()').r.vip));

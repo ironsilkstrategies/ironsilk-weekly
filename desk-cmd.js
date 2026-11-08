@@ -147,7 +147,7 @@ function cmdTop10Empty(){let W=null;try{W=subTop10Why();}catch(e){}if(!W||!W.n)r
 if(!window.__CMD82__){window.__CMD82__=1;const B3=cmdBuild;cmdBuild=function(){const o=B3();try{const R=o.r;Object.assign(R,cmdWhyAll());R.week=cmdWeek();R.vip=cmdVip();R.howitworks=CMD_HOW;
     {let t10=[];try{t10=subTop10();}catch(e){}if(!t10.length)R.top10=cmdTop10Empty();}
     const rules=(get('d4.tgrules',[])||[]).filter(x=>typeof x==='string'&&x.trim());if(rules.length)o.rules=rules.slice(0,15);
-    o.join=(typeof THEDESK_SOCIAL!=='undefined'&&THEDESK_SOCIAL.tg)||'https://t.me/TheDeskApp';
+    o.join=(typeof THEDESK_SOCIAL!=='undefined'&&(THEDESK_SOCIAL.lounge||THEDESK_SOCIAL.tg))||'https://t.me/TheDeskLounge';   /* v2.97.1 · "join the lounge" sends people to the lounge */
     const at=(after,add)=>{const i=o.menu.findIndex(x=>x.command===after);o.menu.splice(i<0?o.menu.length:i+1,0,...add.filter(([c])=>!o.menu.some(x=>x.command===c)).map(([command,description])=>({command,description})));};
     at('top10',[['live','Live scores of today\'s picks'],['next','The next game on the card'],['why','Why the Best 3 made the card (/why 2)']]);
     at('results',[['week','The Best 3, last 7 days']]);

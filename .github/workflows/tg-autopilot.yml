@@ -33,4 +33,4 @@ jobs:
           LOUNGE: ${{ vars.LOUNGE }}   # v2.82 · lounge hours, Central: "8-24" when unset, "0-24" round the clock, "off" = game time only
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}        # v2.97 · TheDesk's Facebook page — mirrors the public posts; off until both are set
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}  # a page access token (pages_manage_posts); masked in the logs, never printed
-          LOUNGE_URL: ${{ vars.LOUNGE_URL }}           # the free lounge's invite link for the page's posts (default https://t.me/TheDeskApp)
+          LOUNGE_URL: ${{ vars.LOUNGE_URL }}           # the free lounge's invite link for the page's posts (default https://t.me/TheDeskLounge)

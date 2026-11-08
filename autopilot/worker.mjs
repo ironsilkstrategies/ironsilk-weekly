@@ -183,7 +183,7 @@ export async function chatAccess(state, T, p, chat, from) { if (!chat) return 'u
       if (v !== 'ok' && checked) v = 'outsider'; } }
   else if (owners.length) { const r = await T('getChatAdministrators', { chat_id: String(chat.id) }); if (r && Array.isArray(r.result)) v = r.result.some(x => x && x.user && owners.includes(x.user.id)) ? 'ok' : 'stranger'; }
   M.acl[key] = { v, ts: Date.now() }; prune(M.acl, 300); return v; }
-const joinLink = C => (C && C.join) || 'https://t.me/TheDeskApp';
+const joinLink = C => (C && C.join) || 'https://t.me/TheDeskLounge';
 async function turnAway(state, T, C, chat, from, why) { const M = modOf(state); const key = why === 'stranger' ? 'c' + chat.id : 'u' + (from && from.id); const fresh = Date.now() - (M.note[key] || 0) > 864e5;
   if (why === 'stranger') { if (fresh && chat.type !== 'channel') { await T('sendMessage', { chat_id: String(chat.id), text: `🔒 This bot only works inside TheDesk's own chats, so it's leaving this one.\nJoin TheDesk: ${joinLink(C)}`, disable_web_page_preview: 'true' }); M.note[key] = Date.now(); prune(M.note, 300); }
     await T('leaveChat', { chat_id: String(chat.id) }); return 1; }
@@ -392,7 +392,7 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
 const fbCfg = deps => deps?.fb || { page: (env.FB_PAGE_ID || '').trim(), tok: (env.FB_PAGE_TOKEN || '').trim(), v: (env.FB_GRAPH_VERSION || 'v24.0').trim() };
 export const fbOn = deps => { const c = fbCfg(deps); return !!(c && c.page && c.tok); };
 if ((env.FB_PAGE_TOKEN || '').trim() && env.GITHUB_ACTIONS === 'true') console.log('::add-mask::' + env.FB_PAGE_TOKEN.trim());
-const loungeUrl = deps => (deps?.lounge || env.LOUNGE_URL || '').trim() || 'https://t.me/TheDeskApp';
+const loungeUrl = deps => (deps?.lounge || env.LOUNGE_URL || '').trim() || 'https://t.me/TheDeskLounge';
 export const fbPlain = html => String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
 const fbFoot = deps => `\n\n💬 We talk sports in TheDesk's free Telegram lounge… not just picks. Pull up → ${loungeUrl(deps)}`;
 export async function fbPost(text, deps, opt) { const c = fbCfg(deps); if (!c || !c.page || !c.tok) return false; const F = deps?.fetch || fetch;
