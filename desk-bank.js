@@ -125,7 +125,7 @@ function bkSheetHtml(){let S;try{S=bkSheet();}catch(e){return`<div class="tkt"><
       <div class="mono" style="font-size:10.5px;color:var(--gold)">${decimalToAmerican(t.dec)} · ${t.p>=0.01?(t.p*100).toFixed(1)+'%':'1 in '+Math.round(1/t.p).toLocaleString()}</div></div>
     <div class="mono" style="font-size:9.5px;color:var(--mute)">${t.games} games · ${bkT(t.first)} → ${bkT(t.last)}${t.watch.length>1?' · on at '+t.watch.map(bkT).join(' · '):''}</div>
     <ol style="margin:4px 0 0 18px;padding:0">${t.legs.map(bkSheetLegHtml).join('')}</ol>
-    <div class="bar" style="margin-top:4px"><button onclick="bkSheetCopy(${i})">📋 Copy ticket ${t.name}</button></div></div>`).join('')+
+    <div class="bar" style="margin-top:4px"><button onclick="bkSheetCopy(${i})">📋 Copy ticket ${t.name}</button><button onclick="tksBank(${i})">📤 Share</button></div></div>`).join('')+
     `<div class="bar"><button onclick="bkSheetCopy('all')">📋 Copy the whole sheet</button></div>`;}
 /* the books, for anyone curious which accounts are strong */
 function bkBooksHtml(){const A=Object.values(bkAcctBook()).filter(o=>o.n>=15);if(!A.length)return'';

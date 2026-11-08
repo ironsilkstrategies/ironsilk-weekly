@@ -3060,7 +3060,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261108i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261108j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -9785,6 +9785,7 @@ function renderBuilderResult(combo){
     <ol style="list-style:none;padding:0;margin:10px 0">${legs}</ol>
     <div class="bar" style="margin-top:4px">
       <button class="primary" onclick="lockBuiltTicket()">Lock this ticket</button>
+      <button onclick="tksBuilt()">📤 Share</button>
       <button onclick="rerollHeld()">Reroll free legs</button>
     </div>
     <div class="sub" style="margin-top:6px;color:var(--mute)">Tap HOLD on any leg to keep it. Hit Reroll to swap out the rest.</div>
@@ -13647,6 +13648,7 @@ function genTickets(mode){
             onchange="toggleArchiveSelect(${jsArg(t.id)},this.checked)"> <span class="m">select</span></label>`:'';
       if(t.archived){
         actionBtn=`${archChk}<button onclick="unarchiveTicket(${jsArg(t.id)})">Move back to pending</button>
+          <button onclick="tksMine(${jsArg(t.id)})">📤 Share</button>
           ${moveBtn}
           <button onclick="delLocked(${jsArg(t.id)})">Delete</button>`;
       }else{
@@ -13656,6 +13658,7 @@ function genTickets(mode){
         const modifyBtn=canModifyTicket(t)
           ?`<button onclick="toggleModifyTicket(${jsArg(t.id)})">${editing?'Done editing':'Modify'}</button>`:'';
         actionBtn=`${complete?`<button class="primary" onclick="archiveTicket(${jsArg(t.id)})">Archive</button>`:''}
+          <button onclick="tksMine(${jsArg(t.id)})">📤 Share</button>
           ${modifyBtn}
           ${moveBtn}
           ${t.finalized?'':`<button style="color:var(--cold)" onclick="(async()=>{try{const el=document.querySelector('#tkt-${t.id} .rcalc');if(el)el.textContent='…';await mgRefresh(true);const n=clearStaleFromFinals();renderTickets();renderMyGames();}catch(e){}})()"><span class="rcalc">↻ Reset scores</span></button>`}
@@ -21246,7 +21249,7 @@ function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const to
       <span style="font-family:'Archivo';font-weight:900;font-size:20px;color:var(--gold)">${sel.length>1?decimalToAmerican(dec):sgnP(sel[0].price)}</span></div>
     ${sel.length>2&&pc<CORE_CASH_MIN?`<div class="mono" style="font-size:10px;color:var(--rust);margin:2px 0">⚠ ${(pc*100).toFixed(1)}% to cash is under the ${Math.round(CORE_CASH_MIN*100)}% leg budget — the best ${Math.max(2,legBudget(sel.map(x=>x.p).sort((a,b)=>b-a),sel.length))} of these cash ${(sel.map(x=>x.p).sort((a,b)=>b-a).slice(0,Math.max(2,legBudget(sel.map(x=>x.p).sort((a,b)=>b-a),sel.length))).reduce((a,p)=>a*p,1)*100).toFixed(0)}%</div>`:''}
     <div class="mono" style="font-size:10px;color:var(--mute)">${(pc*100).toFixed(1)}% to cash · EV ${pc*dec-1>=0?'+':''}${((pc*dec-1)*100).toFixed(1)}% at the leg chances${stake?` · Banker size $${stake.toFixed(2)} (¼-Kelly)`:''}</div>
-    <div class="bar" style="margin-top:6px"><button class="primary" onclick="cbLock()">🔒 Lock this ticket</button></div></div>`:'<div class="sub" style="margin-top:6px">Check at least one pick to build a ticket.</div>';
+    <div class="bar" style="margin-top:6px"><button class="primary" onclick="cbLock()">🔒 Lock this ticket</button><button onclick="tksChar()">📤 Share</button></div></div>`:'<div class="sub" style="margin-top:6px">Check at least one pick to build a ticket.</div>';
   /* v2.87.0 · who this character is, why its word carries weight or doesn't — and, when it has nothing to build, what it would do anyway */
   let prof='';try{prof=CHARS[CB_V]?charProfileHtml(CB_V,{sp:CB_SP,bt:CB_BT}):'';}catch(e){}
   let would='';if(!pool.length&&CHARS[CB_V]){try{const W=charCallsFor(CB_V,{sp:CB_SP,bt:CB_BT,tier:'all'}).filter(o=>o.kind==='line');
