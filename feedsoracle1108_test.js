@@ -8,7 +8,7 @@ const team=(ab,loc,nick)=>({id:ab,abbreviation:ab,location:loc,name:nick,shortDi
 const ev=(id,date,state,a,h,odds)=>({id,date,status:{type:{state}},competitions:[{date,odds:odds?[odds]:[],competitors:[{homeAway:'away',team:a},{homeAway:'home',team:h}]}]});
 const CLE=team('CLE','Cleveland','Browns'),NO=team('NO','New Orleans','Saints'),NYG=team('NYG','New York','Giants'),DAL=team('DAL','Dallas','Cowboys');
 const SB='https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20261108';
-const fx1={[SB]:{events:[ev('401','2026-11-08T18:00Z','pre',CLE,NO,{details:'NO -3',overUnder:44.5}),ev('402','2026-11-08T21:25Z','pre',NYG,DAL,{details:'DAL -3.5',overUnder:47.5})]},
+const fx1={[SB]:{events:[ev('401','2026-11-08T18:00Z','pre',CLE,NO,{pointSpread:{home:{open:{line:'-2.5'},close:{line:'-3'}}},moneyline:{home:{open:{odds:'-135'},close:{odds:'-155'}},away:{open:{odds:'+115'},close:{odds:'+130'}}},total:{over:{open:{line:'45.5'},close:{line:'44.5'}}}}),ev('402','2026-11-08T21:25Z','pre',NYG,DAL,{details:'DAL -3.5',overUnder:47.5})]},
   'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/401/competitions/401/predictor':{homeTeam:{statistics:[{name:'gameProjection',value:'72.5'},{name:'teamPredPtDiff',value:'6.1'},{name:'matchupQuality',value:'40'}]},awayTeam:{statistics:[{name:'gameProjection',value:'27.5'}]}},
   'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/402/competitions/402/predictor':{homeTeam:{statistics:[{name:'gameProjection',value:'61.0'}]},awayTeam:{statistics:[]}},
   'https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXNFLGAME&status=open&limit=1000':{markets:[
@@ -29,6 +29,7 @@ const dir=fs.mkdtempSync(path.join(require('os').tmpdir(),'fo-'));const run=(fx,
   return JSON.parse(fs.readFileSync(path.join(dir,'oracle.json'),'utf8'));};
 const O=run(fx1,NOW);const g1=O.g['nfl|CLE@NO|2026-11-08'],g2=O.g['nfl|NYG@DAL|2026-11-08'];
 T('the slate: both of today\'s games, with the line',g1&&g2&&g1.ln&&g1.ln.spH===-3&&g1.ln.tot===44.5,JSON.stringify(g1&&g1.ln));
+T('…and where it opened (NO -2.5, -135, total 45.5), so the app can see the move',g1.op&&g1.op.spH===-2.5&&g1.op.mlH===-135&&g1.op.mlA===115&&g1.op.tot===45.5&&g1.ln.mlH===-155,JSON.stringify([g1.op,g1.ln]));
 T('ESPN\'s FPI: win chance and predicted margin for the home side',g1.s.espn&&g1.s.espn.wp===0.725&&g1.s.espn.mg===6.1&&g2.s.espn.wp===0.61&&g2.s.espn.mg==null,JSON.stringify([g1.s.espn,g2.s.espn]));
 T('Kalshi: both sides\' markets read as one home chance (mid of a tight bid/ask)',g1.s.kalshi&&Math.abs(g1.s.kalshi.wp-0.71)<1e-9,JSON.stringify(g1.s.kalshi));
 T('…a wide market falls back to its last trade ("New York G" is the Giants, so Dallas 64%)',g2.s.kalshi&&Math.abs(g2.s.kalshi.wp-0.64)<1e-9,JSON.stringify(g2.s.kalshi));

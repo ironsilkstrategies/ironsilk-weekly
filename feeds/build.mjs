@@ -134,6 +134,10 @@ function sbLine(c,a,h){const o=(c.odds||[])[0];if(!o)return null;let spH=null,ml
   if(spH==null&&o.details){const m=String(o.details).match(/^([A-Z0-9&]+)\s*([+-]?\d+(?:\.\d+)?)$/i);if(m){const v=Math.abs(+m[2]);spH=m[1].toUpperCase()===h?-v:m[1].toUpperCase()===a?v:null;}else if(/^(even|pk|pick)/i.test(o.details))spH=0;}
   if(tot==null&&isFinite(+o.overUnder))tot=+o.overUnder;
   return spH==null&&mlA==null?null:{spH,mlA,mlH,tot};}
+/* v2.95 · the opening number off the same event, so the app can see how far the market has moved (the Brain's steam) */
+function sbOpen(c){const o=(c.odds||[])[0];if(!o)return null;const op=x=>x&&x.open||null;let spH=null,mlA=null,mlH=null,tot=null;
+  if(o.pointSpread){const x=op(o.pointSpread.home);if(x)spH=num(x.line);}if(o.moneyline){const xa=op(o.moneyline.away),xh=op(o.moneyline.home);if(xa)mlA=num(xa.odds);if(xh)mlH=num(xh.odds);}
+  if(o.total){const x=op(o.total.over);if(x)tot=num(x.line);}return spH==null&&mlA==null&&tot==null?null:{spH,mlA,mlH,tot};}
 async function buildTeams(diag,closes){const now=Date.now(),td=etDay(now);const S=read('season.json')||{v:1,g:{},done:{}};S.g=S.g||{};S.done=S.done||{};const D={fetched:0,added:0,lined:0,sum:0,err:[]};
   const upc={};let sumLeft=SUMMARY_BUDGET;
   for(const [sp,[s,l,q]] of Object.entries(TEAM_SP)){const from=SEASON_FROM[sp];if(!from||from>td)continue;
@@ -323,7 +327,7 @@ async function orSlate(now,D){const G=[];
     for(let b=0;b<=nd;b++){const d=etDay(now+b*864e5).replace(/-/g,'');let sb;try{sb=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${s}/${l}/scoreboard?dates=${d}${q}`);D.calls++;}catch(e){continue;}
       for(const ev of (sb.events||[])){if(seen.has(ev.id))continue;seen.add(ev.id);const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];const A=cs.find(x=>x.homeAway==='away'),H=cs.find(x=>x.homeAway==='home');if(!A||!H||!A.team||!H.team)continue;
         const tm=x=>{const ab=String(x.team.abbreviation||'').toUpperCase();return{id:String(x.team.id),ab,nm:[x.team.displayName,x.team.shortDisplayName,x.team.location,x.team.name,x.team.nickname,x.team.abbreviation,...(((OR_AL[sp]||{})[ab])||[])].filter(Boolean)};};
-        const g={sp,id:String(ev.id),st:ev.date,d:etDay(Date.parse(ev.date)),state:(((ev.status||{}).type)||{}).state||'',neutral:!!c.neutralSite,a:tm(A),h:tm(H)};g.ln=sbLine(c,g.a.ab,g.h.ab);G.push(g);}}}
+        const g={sp,id:String(ev.id),st:ev.date,d:etDay(Date.parse(ev.date)),state:(((ev.status||{}).type)||{}).state||'',neutral:!!c.neutralSite,a:tm(A),h:tm(H)};g.ln=sbLine(c,g.a.ab,g.h.ab);g.op=sbOpen(c);G.push(g);}}}
   return G;}
 /* two names, either order → the slate game they belong to (both teams must match; the nearest start wins a tie) */
 function orFind(G,sp,n1,n2,near){let best=null;
@@ -499,7 +503,7 @@ async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.n
   (await run('pt',()=>orPT(pre,D))).forEach(r=>{(got[r.k]=got[r.k]||[]).push(r);});
   /* today's wire: per game, each source's numbers (a source with two reads of one game is averaged) */
   const out={v:1,ts:new Date(now).toISOString(),src:{},g:{},rec:{}};
-  pre.forEach(g=>{out.g[orKey(g)]={sp:g.sp,st:g.st,a:g.a.ab,h:g.h.ab,ln:g.ln,s:{}};});
+  pre.forEach(g=>{out.g[orKey(g)]={sp:g.sp,st:g.st,a:g.a.ab,h:g.h.ab,ln:g.ln,op:g.op||null,s:{}};});
   Object.entries(got).forEach(([k,R])=>{const acc={};R.forEach(({g,v})=>{const K=orKey(g);(acc[K]=acc[K]||[]).push(v);});
     Object.entries(acc).forEach(([K,L])=>{if(!out.g[K])return;let v=L.length===1?L[0]:{...L[0],wp:L.every(x=>x.wp!=null)?+(L.reduce((s,x)=>s+x.wp,0)/L.length).toFixed(4):L[0].wp};
       if(L.some(x=>x.pk)){const seen=new Set();v={pk:L.map(x=>x.pk).filter(p=>{const q=p.mk+p.side+p.line;if(seen.has(q))return false;seen.add(q);return true;})};}out.g[K].s[k]=v;});});
