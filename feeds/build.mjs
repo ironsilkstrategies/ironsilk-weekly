@@ -304,6 +304,141 @@ async function buildCoach(diag){const now=Date.now();const C=read('coachcache.js
   /* the robot's memory trimmed */
   Object.keys(C.wx).forEach(k=>{if(now-C.wx[k].at>2*864e5)delete C.wx[k];});Object.keys(C.news).forEach(k=>{if(now-C.news[k].at>5*864e5)delete C.news[k];});
   fs.writeFileSync(path.join(OUT,'coachcache.json'),JSON.stringify(C));fs.writeFileSync(path.join(OUT,'coach.json'),JSON.stringify(out));D.err=D.err.slice(0,6);diag.coach=D;return out;}
+/* ═══ THE ORACLE'S WIRE (v2.94) ═════════════════════════════════════════════════════════════════════════════════════════
+   What the outside world predicts for every game on the next slates: computer ratings (ESPN's FPI/BPI), prediction markets
+   (Kalshi, Polymarket) and the betting public (Action Network's ticket and money splits). Each source's numbers are public;
+   they are stored per game until the final and graded here — straight-up, against the closing spread, the closing total,
+   how far off the margin was — so the app's Oracle knows what each source is good at. The Desk's own picks are never
+   computed or published here: the Oracle's consensus and calls are made in the app. A source that keeps failing is rested
+   (retried every 6 hours) and comes back on its own. */
+const OR_SP={nfl:['football','nfl','',3],ncaaf:['football','college-football','&groups=80&limit=300',3],nba:['basketball','nba','',1],ncaab:['basketball','mens-college-basketball','&groups=50&limit=300',1],nhl:['hockey','nhl','',1]};
+const HTML_HDR={'user-agent':BROWSER['user-agent'],'accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','accept-language':'en-US,en;q=0.9'};
+async function getText(url,hdr){calls++;if(FIX){const v=FIX[url];if(v===undefined)throw new Error('no fixture for '+url);return typeof v==='string'?v:JSON.stringify(v);}
+  const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),20000);
+  try{const r=await fetch(url,{signal:ctl.signal,headers:hdr||HTML_HDR,redirect:'follow'});if(!r.ok)throw new Error(String(r.status));return await r.text();}finally{clearTimeout(t);}}
+const pad=s=>' '+norm(s)+' ';
+const orKey=g=>g.sp+'|'+g.a.ab+'@'+g.h.ab+'|'+g.d;
+async function orSlate(now,D){const G=[];
+  for(const [sp,[s,l,q,nd]] of Object.entries(OR_SP)){const seen=new Set();
+    for(let b=0;b<=nd;b++){const d=etDay(now+b*864e5).replace(/-/g,'');let sb;try{sb=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${s}/${l}/scoreboard?dates=${d}${q}`);D.calls++;}catch(e){continue;}
+      for(const ev of (sb.events||[])){if(seen.has(ev.id))continue;seen.add(ev.id);const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];const A=cs.find(x=>x.homeAway==='away'),H=cs.find(x=>x.homeAway==='home');if(!A||!H||!A.team||!H.team)continue;
+        const tm=x=>({id:String(x.team.id),ab:String(x.team.abbreviation||'').toUpperCase(),nm:[x.team.displayName,x.team.shortDisplayName,x.team.location,x.team.name,x.team.nickname,x.team.abbreviation].filter(Boolean)});
+        const g={sp,id:String(ev.id),st:ev.date,d:etDay(Date.parse(ev.date)),state:(((ev.status||{}).type)||{}).state||'',neutral:!!c.neutralSite,a:tm(A),h:tm(H)};g.ln=sbLine(c,g.a.ab,g.h.ab);G.push(g);}}}
+  return G;}
+/* two names, either order → the slate game they belong to (both teams must match; the nearest start wins a tie) */
+function orFind(G,sp,n1,n2,near){let best=null;
+  for(const g of G){if(g.sp!==sp)continue;const x1a=nameHit([n1],g.a.nm),x1h=nameHit([n1],g.h.nm),x2a=nameHit([n2],g.a.nm),x2h=nameHit([n2],g.h.nm);
+    const fa=Math.min(x1a,x2h),fh=Math.min(x1h,x2a);const sc=Math.max(fa,fh),s1=fa>=fh?'a':'h';if(sc<0.8)continue;
+    const dt=near&&isFinite(Date.parse(near))?Math.abs(Date.parse(g.st)-Date.parse(near)):0;if(dt>40*36e5)continue;
+    if(!best||sc>best.sc||(sc===best.sc&&dt<best.dt))best={g,s1,sc,dt};}
+  return best;}
+/* ESPN's FPI (football) and BPI (basketball): the matchup predictor on every game */
+async function orEspn(G,C,D,now){const out=[];const todo=G.filter(g=>g.state==='pre'&&g.sp!=='nhl');
+  const need=todo.filter(g=>!C.espn[g.id]||now-C.espn[g.id].at>2*36e5).slice(0,260);
+  await pool(need,async g=>{const [s,l]=OR_SP[g.sp];try{const j=await getJSON(`https://sports.core.api.espn.com/v2/sports/${s}/leagues/${l}/events/${g.id}/competitions/${g.id}/predictor`);D.calls++;
+      const st=o=>{const m={};((o||{}).statistics||[]).forEach(x=>{if(x&&x.name&&isFinite(+x.value))m[x.name]=+x.value;});return m;};
+      C.espn[g.id]={at:now,H:st(j.homeTeam),A:st(j.awayTeam)};if(!D.espnKeys)D.espnKeys=Object.keys(C.espn[g.id].H).slice(0,16);}catch(e){C.espn[g.id]={at:now,err:String(e.message||e).slice(0,30)};}});
+  todo.forEach(g=>{const r=C.espn[g.id];if(!r||!r.H)return;const H=r.H,A=r.A;
+    const wp=isFinite(H.gameProjection)?H.gameProjection/100:isFinite(A.gameProjection)?1-A.gameProjection/100:isFinite(H.teamChanceLoss)?1-H.teamChanceLoss/100:null;
+    const mg=isFinite(H.teamPredPtDiff)?H.teamPredPtDiff:isFinite(A.teamPredPtDiff)?-A.teamPredPtDiff:null;
+    if(wp!=null&&wp>0&&wp<1||mg!=null)out.push({g,v:{wp:wp!=null&&wp>0&&wp<1?+wp.toFixed(4):null,mg:mg!=null?+mg.toFixed(1):null}});});
+  return out;}
+/* Kalshi: the game-winner markets (public market data, no account) */
+const KX={nfl:'KXNFLGAME',ncaaf:'KXNCAAFGAME',nba:'KXNBAGAME',ncaab:'KXNCAAMBGAME',nhl:'KXNHLGAME'};
+const KX_BASE=['https://api.elections.kalshi.com/trade-api/v2','https://external-api.kalshi.com/trade-api/v2'];
+const pd=(d,c)=>{const x=+d;if(isFinite(x)&&x>0)return x;const y=+c;return isFinite(y)&&y>0?y/100:0;};
+async function orKalshi(G,D){const out=[];let base=null;D.kx={ev:0};
+  for(const [sp,ser] of Object.entries(KX)){let j=null;
+    for(const b of (base?[base]:KX_BASE)){try{j=await getJSON(`${b}/markets?series_ticker=${ser}&status=open&limit=1000`,BROWSER);D.calls++;base=b;break;}catch(e){D.kx.err=String(e.message||e).slice(0,60);}}
+    if(!j)continue;const E={};(j.markets||[]).forEach(m=>{(E[m.event_ticker]=E[m.event_ticker]||[]).push(m);});D.kx.ev+=Object.keys(E).length;
+    for(const M of Object.values(E)){const m0=M[0];const ttl=String(m0.title||'').replace(/\s*winner\??\s*$/i,'').trim();const pr=ttl.split(/\s+(?:at|vs\.?|@)\s+/i);if(pr.length!==2)continue;
+      if(!D.kx.ex)D.kx.ex=ttl+' / '+(m0.yes_sub_title||'');const f=orFind(G,sp,pr[0],pr[1]);if(!f)continue;const g=f.g;const ph=[];
+      M.forEach(m=>{const bid=pd(m.yes_bid_dollars,m.yes_bid),ask=pd(m.yes_ask_dollars,m.yes_ask),last=pd(m.last_price_dollars,m.last_price);
+        const p=bid>0&&ask>0&&ask-bid<=0.06?(bid+ask)/2:last>0?last:null;if(p==null||p<=0||p>=1)return;const who=String(m.yes_sub_title||m.subtitle||'');
+        const xa=nameHit([who],g.a.nm),xh=nameHit([who],g.h.nm);if(xh>xa&&xh>=0.8)ph.push(p);else if(xa>xh&&xa>=0.8)ph.push(1-p);});
+      if(ph.length)out.push({g,v:{wp:+(ph.reduce((s,x)=>s+x,0)/ph.length).toFixed(4)}});}}
+  D.kx.base=base;return out;}
+/* Polymarket: game moneyline markets (public, no account) */
+const PM_TAG={nfl:['nfl'],ncaaf:['cfb','college-football','ncaaf'],nba:['nba'],ncaab:['cbb','ncaab','college-basketball'],nhl:['nhl']};
+async function orPoly(G,D){const out=[];D.pm={ev:0};
+  for(const [sp,tags] of Object.entries(PM_TAG)){for(const tag of tags){let j;try{j=await getJSON(`https://gamma-api.polymarket.com/events?tag_slug=${tag}&closed=false&active=true&limit=500`,BROWSER);D.calls++;}catch(e){D.pm.err=String(e.message||e).slice(0,60);continue;}
+      const E=Array.isArray(j)?j:(j.data||j.events||[]);if(!E.length)continue;D.pm.ev+=E.length;D.pm[sp]=tag;let hit=0;
+      for(const e of E){for(const m of (e.markets||[])){let oc,pr;try{oc=JSON.parse(m.outcomes||'[]');pr=JSON.parse(m.outcomePrices||'[]').map(Number);}catch(x){continue;}
+          if(oc.length!==2||pr.length!==2||oc.some(o=>/^(yes|no|over|under)$/i.test(o)))continue;if(m.sportsMarketType&&m.sportsMarketType!=='moneyline')continue;
+          if(/spread|o\/u|total|1st|2nd|half|quarter|period/i.test(m.question||''))continue;if(!D.pm.ex)D.pm.ex=(e.title||'')+' / '+oc.join(',');
+          const f=orFind(G,sp,oc[0],oc[1]);if(!f)continue;const ph=f.s1==='h'?pr[0]:pr[1];if(!(ph>0.01&&ph<0.99))continue;out.push({g:f.g,v:{wp:+ph.toFixed(4)}});hit++;break;}}
+      if(hit)break;}}
+  return out;}
+/* the betting public: Action Network's ticket and money splits (home / over %) */
+async function orPublic(G,D){const out=[];D.an={g:0};
+  for(const sp of Object.keys(OR_SP)){const days=[...new Set(G.filter(g=>g.sp===sp&&g.state==='pre').map(g=>g.d.replace(/-/g,'')))].slice(0,4);
+    for(const d of days){let j;try{j=await getJSON(`https://api.actionnetwork.com/web/v1/scoreboard/${sp}?period=game&bookIds=15,30&date=${d}`,BROWSER);D.calls++;}catch(e){D.an.err=String(e.message||e).slice(0,60);break;}
+      for(const x of (j.games||[])){const T={};(x.teams||[]).forEach(t=>T[t.id]=t);const ta=T[x.away_team_id],th=T[x.home_team_id];if(!ta||!th)continue;D.an.g++;
+        const f=orFind(G,sp,ta.full_name||ta.display_name||'',th.full_name||th.display_name||'',x.start_time);if(!f||f.s1!=='a')continue;
+        const o=(x.odds||[]).find(o=>o&&(o.ml_home_public!=null||o.spread_home_public!=null))||null;if(!o)continue;const n=v=>v==null||!isFinite(+v)?null:+v;
+        out.push({g:f.g,v:{pub:{ml:n(o.ml_home_public),sp:n(o.spread_home_public),ou:n(o.total_over_public),mlm:n(o.ml_home_money),spm:n(o.spread_home_money),oum:n(o.total_over_money)}}});}}}
+  return out;}
+/* discovery: which prediction sites the worker can read, and how their pages are shaped (removed once each has an adapter) */
+const OR_PROBE=[['dratings','nfl','https://www.dratings.com/predictor/nfl-football-predictions/'],['dratings','nba','https://www.dratings.com/predictor/nba-basketball-predictions/'],
+  ['dratings','nhl','https://www.dratings.com/predictor/nhl-hockey-predictions/'],['dratings','ncaaf','https://www.dratings.com/predictor/ncaa-football-predictions/'],['dratings','ncaab','https://www.dratings.com/predictor/ncaa-basketball-predictions/'],
+  ['pt','*','https://www.thepredictiontracker.com/'],['pt','nfl','https://www.thepredictiontracker.com/nflpredictions.csv'],['pt','ncaaf','https://www.thepredictiontracker.com/ncaapredictions.csv'],
+  ['pt','nba','https://www.thepredictiontracker.com/nbapredictions.csv'],['pt','ncaab','https://www.thepredictiontracker.com/ncaabbpredictions.csv'],
+  ['torvik','ncaab','https://barttorvik.com/schedule.php'],['nfelo','nfl','https://www.nfeloapp.com/games/'],['cbs','nfl','https://www.cbssports.com/nfl/picks/experts/'],
+  ['cbs','ncaaf','https://www.cbssports.com/college-football/picks/experts/'],['covers','nfl','https://contests.covers.com/consensus/topconsensus/nfl/overall'],
+  ['oddsshark','nfl','https://www.oddsshark.com/nfl/computer-picks'],['moneypuck','nhl','https://moneypuck.com/index.html'],['massey','ncaaf','https://masseyratings.com/cf/fbs/games'],
+  ['teamrankings','nfl','https://www.teamrankings.com/nfl-win-picks/'],['pickswise','nfl','https://www.pickswise.com/nfl/picks/'],['haslam','ncaab','https://haslametrics.com/'],
+  ['sagarin','nfl','http://sagarin.com/sports/nflsend.htm'],['dimers','nfl','https://www.dimers.com/bet-hub/nfl/schedule']];
+function orHint(txt,G,sp){const h={b:txt.length};const tt=txt.match(/<title[^>]*>([^<]{0,90})/i);if(tt)h.t=tt[1].trim();h.tb=(txt.match(/<table/gi)||[]).length;
+  h.nd=/__NEXT_DATA__|__NUXT__|window\.__INITIAL|application\/ld\+json/i.test(txt)?1:0;h.cf=/challenge-platform|cf-chl|Just a moment|captcha/i.test(txt)?1:0;
+  h.th=(txt.match(/<th[\s>][\s\S]*?<\/th>/gi)||[]).slice(0,14).map(x=>x.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,18));
+  if(!/^\s*</.test(txt)&&/,/.test(txt.slice(0,300)))h.csv=txt.split('\n').slice(0,2).map(x=>x.slice(0,500));
+  const rows=txt.split(/<tr[\s>]/i).slice(1).map(r=>r.replace(/<(script|style)[\s\S]*?<\/\1>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/g,' ').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim()).filter(Boolean);h.rows=rows.length;
+  const S=G.filter(g=>sp==='*'||g.sp===sp);const hit=new Set();let ex=null;const has=(r,t)=>{const R=pad(r);return t.nm.some(n=>{const x=norm(n);return x.length>=4&&R.includes(' '+x+' ');});};
+  rows.forEach(r=>{for(const g of S)if(has(r,g.a)&&has(r,g.h)){hit.add(orKey(g));if(!ex)ex=r.slice(0,240);break;}});
+  if(!hit.size)for(let i=0;i+1<rows.length;i++)for(const g of S)if(has(rows[i],g.a)&&has(rows[i+1],g.h)||has(rows[i],g.h)&&has(rows[i+1],g.a)){hit.add(orKey(g));if(!ex)ex=(rows[i]+' || '+rows[i+1]).slice(0,260);break;}
+  h.m=hit.size;if(ex)h.ex=ex;if(sp==='*'||!h.m)h.links=[...new Set((txt.match(/href="[^"]+"/gi)||[]).map(x=>x.slice(6,-1)).filter(u=>/pred|csv|pick|games|sched|json/i.test(u)))].slice(0,30);
+  return h;}
+/* a source's call graded against the final: straight-up, against the closing spread and total, the margin miss */
+function orGrade(s,f){const m=f.hs-f.as;const pc=f.pc||{};const cl=pc.spread&&pc.spread.home&&pc.spread.home.cl!=null?pc.spread.home.cl:null;const T=pc.total&&pc.total.over&&pc.total.over.cl!=null?pc.total.over.cl:null;const r={};
+  if(s.wp!=null&&m!==0&&s.wp!==0.5){r.su=(s.wp>0.5)===(m>0)?1:0;r.br=+((s.wp-(m>0?1:0))**2).toFixed(4);}
+  const pm=s.mg!=null?s.mg:(s.ph!=null&&s.pa!=null?s.ph-s.pa:null);
+  if(pm!=null){r.ae=+Math.abs(pm-m).toFixed(1);if(cl!=null&&pm+cl!==0&&m+cl!==0)r.ats=(pm+cl>0)===(m+cl>0)?1:0;if(r.su==null&&m!==0&&pm!==0)r.su=(pm>0)===(m>0)?1:0;}
+  const pt=s.tot!=null?s.tot:(s.ph!=null&&s.pa!=null?s.ph+s.pa:null);if(pt!=null&&T!=null&&pt!==T&&f.as+f.hs!==T)r.ou=(pt>T)===(f.as+f.hs>T)?1:0;
+  if(s.pub){const p=s.pub;if(p.ml!=null&&p.ml!==50&&m!==0)r.su=(p.ml>50)===(m>0)?1:0;if(p.sp!=null&&p.sp!==50&&cl!=null&&m+cl!==0)r.ats=(p.sp>50)===(m+cl>0)?1:0;if(p.ou!=null&&p.ou!==50&&T!=null&&f.as+f.hs!==T)r.ou=(p.ou>50)===(f.as+f.hs>T)?1:0;}
+  return r;}
+const OR_SRC={espn:{lab:'ESPN FPI/BPI',kind:'model'},kalshi:{lab:'Kalshi',kind:'market'},poly:{lab:'Polymarket',kind:'market'},public:{lab:'The betting public',kind:'crowd'}};
+async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.now();const C=read('oraclecache.json')||{v:1};['espn','p','led','h'].forEach(k=>C[k]=C[k]||{});
+  const D={calls:0,src:{}};const G=await orSlate(now,D);D.slate={};G.forEach(g=>{D.slate[g.sp]=(D.slate[g.sp]||0)+1;});
+  const pre=G.filter(g=>g.state==='pre'&&Date.parse(g.st)<=now+80*36e5);
+  /* each source, unless it's resting after a day of failures */
+  const run=async(k,fn)=>{const H=C.h[k]||(C.h[k]={ok:0,fail:0,try:0});if(H.fail>=24&&now-H.try<6*36e5){D.src[k]={rest:H.fail};return[];}H.try=now;
+    let R=[];try{R=await fn();}catch(e){D.src[k]={err:String(e.message||e).slice(0,80)};}if(R.length){H.ok=now;H.fail=0;}else H.fail++;D.src[k]={...(D.src[k]||{}),n:R.length};return R;};
+  const got={espn:await run('espn',()=>orEspn(pre,C,D,now)),kalshi:await run('kalshi',()=>orKalshi(pre,D)),poly:await run('poly',()=>orPoly(pre,D)),public:await run('public',()=>orPublic(pre,D))};
+  /* today's wire: per game, each source's numbers (a source with two reads of one game is averaged) */
+  const out={v:1,ts:new Date(now).toISOString(),src:{},g:{},rec:{}};
+  pre.forEach(g=>{out.g[orKey(g)]={sp:g.sp,st:g.st,a:g.a.ab,h:g.h.ab,ln:g.ln,s:{}};});
+  Object.entries(got).forEach(([k,R])=>{const acc={};R.forEach(({g,v})=>{const K=orKey(g);(acc[K]=acc[K]||[]).push(v);});
+    Object.entries(acc).forEach(([K,L])=>{if(!out.g[K])return;const v=L.length===1?L[0]:{...L[0],wp:L.every(x=>x.wp!=null)?+(L.reduce((s,x)=>s+x.wp,0)/L.length).toFixed(4):L[0].wp};out.g[K].s[k]=v;});});
+  /* remember every pre-game read until the final (the last read before kickoff is the one graded) */
+  Object.entries(out.g).forEach(([K,o])=>{if(Object.keys(o.s).length)C.p[K]={st:o.st,s:o.s};});
+  const F={};Object.values(finals||{}).forEach(f=>{if(f&&f.sp&&f.st)F[f.sp+'|'+f.a+'@'+f.h+'|'+etDay(Date.parse(f.st))]=f;});let graded=0;
+  Object.entries(C.p).forEach(([K,o])=>{const f=F[K];if(!f){if(now-Date.parse(o.st)>4*864e5)delete C.p[K];return;}const sp=K.split('|')[0],d=K.split('|')[2];
+    Object.entries(o.s).forEach(([k,s])=>{const r=orGrade(s,f);const L=C.led[k+'|'+sp]||(C.led[k+'|'+sp]={});const B=L[d]||(L[d]={n:0,su:[0,0],ats:[0,0],ou:[0,0],ae:[0,0],br:[0,0]});B.n++;
+      if(r.su!=null){B.su[0]+=r.su;B.su[1]++;}if(r.ats!=null){B.ats[0]+=r.ats;B.ats[1]++;}if(r.ou!=null){B.ou[0]+=r.ou;B.ou[1]++;}if(r.ae!=null){B.ae[0]+=r.ae;B.ae[1]++;}if(r.br!=null){B.br[0]+=r.br;B.br[1]++;}});
+    delete C.p[K];graded++;});
+  /* each source's record by sport: the last 60 days and the last 14 */
+  const d60=etDay(now-60*864e5),d14=etDay(now-14*864e5);
+  Object.entries(C.led).forEach(([kk,L])=>{Object.keys(L).forEach(d=>{if(d<etDay(now-150*864e5))delete L[d];});const [k,sp]=kk.split('|');
+    const sum=from=>{const o={n:0,su:[0,0],ats:[0,0],ou:[0,0],ae:[0,0],br:[0,0]};Object.entries(L).forEach(([d,B])=>{if(d<from)return;o.n+=B.n;['su','ats','ou','ae','br'].forEach(x=>{o[x][0]+=B[x][0];o[x][1]+=B[x][1];});});
+      return{n:o.n,su:o.su,ats:o.ats,ou:o.ou,mae:o.ae[1]?+(o.ae[0]/o.ae[1]).toFixed(2):null,br:o.br[1]?+(o.br[0]/o.br[1]).toFixed(4):null};};
+    (out.rec[k]=out.rec[k]||{})[sp]={all:sum(d60),d14:sum(d14)};});
+  Object.entries(OR_SRC).forEach(([k,o])=>{const H=C.h[k]||{};out.src[k]={...o,ok:H.ok?new Date(H.ok).toISOString():null,rest:H.fail>=24};});
+  /* discovery, every 6 hours */
+  if(!FIX&&(!C.probeAt||now-C.probeAt>6*36e5||process.env.FEEDS_PROBE)){C.probeAt=now;D.probe=[];
+    await pool(OR_PROBE,async([k,sp,u])=>{let h;try{h=orHint(await getText(u),G,sp);}catch(e){h={err:String(e.message||e).slice(0,50)};}D.probe.push({k,sp,u:u.replace(/^https?:\/\/(www\.)?/,'').slice(0,60),...h});});}
+  Object.keys(C.espn).forEach(id=>{if(now-C.espn[id].at>3*864e5)delete C.espn[id];});
+  fs.writeFileSync(path.join(OUT,'oraclecache.json'),JSON.stringify(C));fs.writeFileSync(path.join(OUT,'oracle.json'),JSON.stringify(out));
+  D.games=Object.keys(out.g).length;D.graded=graded;diag.oracle=D;return out;}
 async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=read('closes.json');const games=(prev&&prev.v===1&&prev.games)||{};const log={ts:new Date(now).toISOString(),added:0,errors:[],calls:0};
   const cut=new Date(now-KEEP_DAYS*864e5).toISOString();Object.keys(games).forEach(k=>{if(String(games[k].st||'')<cut)delete games[k];});
   const todo=[];
@@ -320,10 +455,11 @@ async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=re
   if(!FIX||process.env.FEEDS_TEAMS){try{await buildTeams(diag,games);}catch(e){diag.teams={fail:String(e.message||e).slice(0,120)};}}
   if(!FIX||process.env.FEEDS_HIST){try{await buildHistory(diag,games,read('season.json'));}catch(e){diag.hist={fail:String(e.message||e).slice(0,120)};}}
   if(!FIX||process.env.FEEDS_COACH){try{await buildCoach(diag);}catch(e){diag.coach={fail:String(e.message||e).slice(0,120)};}}
+  if(!FIX||process.env.FEEDS_ORACLE){try{await buildOracle(diag,games);}catch(e){diag.oracle={fail:String(e.message||e).slice(0,120)};}}
   log.verify=diag;
   log.calls=calls;const n=Object.keys(games).length;
   fs.writeFileSync(path.join(OUT,'closes.json'),JSON.stringify({v:1,ts:log.ts,n,games}));
-  const idx=read('index.json')||{v:1,runs:[]};idx.v=1;idx.ts=log.ts;idx.files={...(idx.files||{}),closes:{ts:log.ts,n},...(diag.props&&diag.props.ev!=null?{props:{ts:log.ts,n:diag.props.ev}}:{}),...(diag.teams&&diag.teams.teams!=null?{teams:{ts:log.ts,n:diag.teams.teams}}:{}),...(diag.hist&&diag.hist.teams!=null?{historian:{ts:log.ts,n:diag.hist.teams}}:{}),...(diag.coach&&diag.coach.games!=null?{coach:{ts:log.ts,n:diag.coach.games}}:{})};idx.runs=[log,...(idx.runs||[])].slice(0,12);
+  const idx=read('index.json')||{v:1,runs:[]};idx.v=1;idx.ts=log.ts;idx.files={...(idx.files||{}),closes:{ts:log.ts,n},...(diag.props&&diag.props.ev!=null?{props:{ts:log.ts,n:diag.props.ev}}:{}),...(diag.teams&&diag.teams.teams!=null?{teams:{ts:log.ts,n:diag.teams.teams}}:{}),...(diag.hist&&diag.hist.teams!=null?{historian:{ts:log.ts,n:diag.hist.teams}}:{}),...(diag.coach&&diag.coach.games!=null?{coach:{ts:log.ts,n:diag.coach.games}}:{}),...(diag.oracle&&diag.oracle.games!=null?{oracle:{ts:log.ts,n:diag.oracle.games}}:{})};idx.runs=[log,...(idx.runs||[])].slice(0,12);
   fs.writeFileSync(path.join(OUT,'index.json'),JSON.stringify(idx));
   console.log(`feeds: +${log.added} finals, ${n} kept, ${calls} requests, ${log.errors.length} errors`);}
 main().catch(e=>{console.error('feeds failed',e);process.exit(1);});
