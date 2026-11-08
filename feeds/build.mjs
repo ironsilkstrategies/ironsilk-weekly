@@ -118,6 +118,78 @@ async function buildProps(diag){const now=Date.now();const ath=read('ath.json')|
   fs.writeFileSync(path.join(OUT,'props.json'),JSON.stringify(out));
   const ids=Object.keys(A);if(ids.length>30000)ids.slice(0,ids.length-30000).forEach(k=>delete A[k]);fs.writeFileSync(path.join(OUT,'ath.json'),JSON.stringify({v:1,a:A}));
   D.types=Object.entries(D.types).sort((x,y)=>y[1]-x[1]).slice(0,40).map(([k,n])=>k+':'+n).join(' | ');D.err=D.err.slice(0,8);diag.props=D;return out;}
+/* v2.90.0 · THE SEASON — every final since opening day with its closing line, for the Underdog Spotter: who wins and covers
+   as a dog, who loses as a favorite, a power rating from the margins, each team's rest, and who's back from injury.
+   season.json keeps the games (the robot's own memory); teams.json is what the app reads. Public results and lines only. */
+const SEASON_FROM={nfl:'2026-09-09',ncaaf:'2026-08-29',nhl:'2026-10-06',nba:'2026-10-20',ncaab:'2026-11-02'};
+const TEAM_SP={nfl:['football','nfl',''],ncaaf:['football','college-football','&groups=80&limit=300'],nhl:['hockey','nhl',''],nba:['basketball','nba',''],ncaab:['basketball','mens-college-basketball','&groups=50&limit=300']};
+const BACKFILL_DAYS=14,SUMMARY_BUDGET=160;
+const dayAdd=(d,n)=>{const t=new Date(d+'T12:00:00Z');t.setUTCDate(t.getUTCDate()+n);return t.toISOString().slice(0,10);};
+/* the closing line off a scoreboard event (both of ESPN's shapes): home spread, both moneylines, the total */
+function sbLine(c,a,h){const o=(c.odds||[])[0];if(!o)return null;let spH=null,mlA=null,mlH=null,tot=null;
+  const cl=x=>x&&(x.close||x.current||x.open)||null;
+  if(o.pointSpread){const x=cl(o.pointSpread.home);if(x)spH=num(x.line);}if(o.moneyline){const xa=cl(o.moneyline.away),xh=cl(o.moneyline.home);if(xa)mlA=num(xa.odds);if(xh)mlH=num(xh.odds);}
+  if(o.total){const x=cl(o.total.over);if(x)tot=num(x.line);}
+  if(mlA==null&&o.awayTeamOdds&&isFinite(+o.awayTeamOdds.moneyLine))mlA=+o.awayTeamOdds.moneyLine;if(mlH==null&&o.homeTeamOdds&&isFinite(+o.homeTeamOdds.moneyLine))mlH=+o.homeTeamOdds.moneyLine;
+  if(spH==null&&o.details){const m=String(o.details).match(/^([A-Z0-9&]+)\s*([+-]?\d+(?:\.\d+)?)$/i);if(m){const v=Math.abs(+m[2]);spH=m[1].toUpperCase()===h?-v:m[1].toUpperCase()===a?v:null;}else if(/^(even|pk|pick)/i.test(o.details))spH=0;}
+  if(tot==null&&isFinite(+o.overUnder))tot=+o.overUnder;
+  return spH==null&&mlA==null?null:{spH,mlA,mlH,tot};}
+async function buildTeams(diag,closes){const now=Date.now(),td=etDay(now);const S=read('season.json')||{v:1,g:{},done:{}};S.g=S.g||{};S.done=S.done||{};const D={fetched:0,added:0,lined:0,sum:0,err:[]};
+  const upc={};let sumLeft=SUMMARY_BUDGET;
+  for(const [sp,[s,l,q]] of Object.entries(TEAM_SP)){const from=SEASON_FROM[sp];if(!from||from>td)continue;
+    const all=[];for(let d=from;d<=dayAdd(td,1);d=dayAdd(d,1))all.push(d);
+    const recent=all.filter(d=>d>=dayAdd(td,-2));const back=all.filter(d=>d<dayAdd(td,-2)&&!S.done[sp+'|'+d]).reverse().slice(0,BACKFILL_DAYS);
+    for(const d of [...recent,...back]){let sb=null;try{sb=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${s}/${l}/scoreboard?dates=${d.replace(/-/g,'')}${q}`);D.fetched++;}catch(e){if(D.err.length<6)D.err.push(sp+' '+d+' '+String(e.message).slice(0,30));continue;}
+      (sb.events||[]).forEach(ev=>{const c=(ev.competitions||[])[0]||{};const cs=c.competitors||[];const A=cs.find(x=>x.homeAway==='away'),H=cs.find(x=>x.homeAway==='home');if(!A||!H)return;
+        const a=String((A.team||{}).abbreviation||'').toUpperCase(),h=String((H.team||{}).abbreviation||'').toUpperCase();const st=(((ev.status||{}).type)||{}).state;
+        const ln=sbLine(c,a,h);const conf=c.conferenceCompetition?1:0;
+        if(st==='pre'){if(Date.parse(ev.date)<=now+40*36e5)(upc[sp]=upc[sp]||[]).push({id:String(ev.id),st:ev.date,a,h,conf,neutral:c.neutralSite?1:0,ln});return;}
+        if(st!=='post')return;const id=String(ev.id);const old=S.g[id];
+        const row=[sp,etDay(ev.date),a,h,+A.score||0,+H.score||0,ln?ln.spH:null,ln?ln.mlA:null,ln?ln.mlH:null,ln?ln.tot:null,conf,c.neutralSite?1:0];
+        if(!old){D.added++;S.g[id]=row;}else if(old[6]==null&&old[7]==null&&ln){S.g[id]=row;}});
+      if(d<dayAdd(td,-2))S.done[sp+'|'+d]=1;}}
+  /* DraftKings' close from the robot's own finals beats a scoreboard's leftovers; anything still lineless gets one summary read */
+  Object.values(closes||{}).forEach(g=>{const r=S.g[g.id];if(!r||!g.pc)return;const c=x=>x?(x.c!=null?x.c:x.o):null,cl=x=>x?(x.cl!=null?x.cl:x.ol):null;
+    const spH=cl((g.pc.spread||{}).home),mlA=c((g.pc.ml||{}).away),mlH=c((g.pc.ml||{}).home),tot=cl((g.pc.total||{}).over);if(spH!=null)r[6]=spH;if(mlA!=null)r[7]=mlA;if(mlH!=null)r[8]=mlH;if(tot!=null)r[9]=tot;});
+  const need=Object.entries(S.g).filter(([id,r])=>r[6]==null&&r[7]==null&&!r[12]).slice(-sumLeft);
+  await pool(need,async([id,r])=>{const [s,l]=TEAM_SP[r[0]];try{const j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${s}/${l}/summary?event=${id}`);D.sum++;
+    const pc=(j.pickcenter||[]).find(x=>x&&(x.moneyline||x.pointSpread||x.spread!=null))||null;
+    if(pc){const c=x=>x?num((x.close||x.open||{}).odds):null,cl=x=>x?num((x.close||x.open||{}).line):null;
+      r[6]=cl((pc.pointSpread||{}).home);r[7]=c((pc.moneyline||{}).away);r[8]=c((pc.moneyline||{}).home);r[9]=cl((pc.total||{}).over);
+      if(r[6]==null&&pc.spread!=null){const hf=pc.homeTeamOdds&&pc.homeTeamOdds.favorite;r[6]=hf?-Math.abs(+pc.spread):Math.abs(+pc.spread);}
+      if(r[7]==null&&pc.awayTeamOdds)r[7]=num(pc.awayTeamOdds.moneyLine);if(r[8]==null&&pc.homeTeamOdds)r[8]=num(pc.homeTeamOdds.moneyLine);if(r[9]==null&&pc.overUnder!=null)r[9]=+pc.overUnder;}
+    if(r[6]==null&&r[7]==null)r[12]=1;}catch(e){r[12]=1;}});   /* r[12]: no line anywhere — don't ask again */
+  D.lined=Object.values(S.g).filter(r=>r[6]!=null||r[7]!=null).length;D.games=Object.keys(S.g).length;
+  fs.writeFileSync(path.join(OUT,'season.json'),JSON.stringify(S));
+  /* the teams */
+  const T={};const lg={};
+  Object.values(S.g).sort((x,y)=>x[1].localeCompare(y[1])).forEach(r=>{const [sp,d,a,h,as,hs,spH,mlA,mlH]=r;const L=lg[sp]||(lg[sp]={g:0,pts:0,dogN:0,dogW:0,dogC:0,dogATSn:0});L.g++;L.pts+=as+hs;
+    [[a,h,as,hs,spH!=null?-spH:null,mlA,mlH,0],[h,a,hs,as,spH,mlH,mlA,1]].forEach(([t,o,pf,pa,sp_,ml,oml,home])=>{const k=sp+'|'+t;
+      const x=T[k]||(T[k]={n:0,pf:0,pa:0,dog:[0,0,0,0],fav:[0,0,0,0],form:[],last:null,opp:[],mar:[]});x.n++;x.pf+=pf;x.pa+=pa;x.last=d;x.opp.push(sp+'|'+o);x.mar.push(pf-pa);
+      const dog=ml!=null&&oml!=null?ml>oml:sp_!=null?sp_>0:null;const won=pf>pa;const cov=sp_!=null?(pf-pa+sp_>0?1:pf-pa+sp_===0?0.5:0):null;
+      if(dog!=null){const B=dog?x.dog:x.fav;B[0]++;if(won)B[1]++;if(cov===1)B[2]++;if(cov===0.5)B[3]++;if(dog){L.dogN++;if(won)L.dogW++;if(cov!=null){L.dogATSn++;if(cov===1)L.dogC++;}}}
+      x.form.push((won?'W':'L')+(cov===1?'c':cov===0?'x':''));if(x.form.length>6)x.form.shift();});});
+  /* a power rating from the margins, adjusted for who they played (10 passes) */
+  Object.keys(TEAM_SP).forEach(sp=>{const ks=Object.keys(T).filter(k=>k.startsWith(sp+'|'));const r={};ks.forEach(k=>r[k]=T[k].mar.reduce((a,b)=>a+b,0)/T[k].mar.length);
+    for(let it=0;it<10;it++){const nr={};ks.forEach(k=>{const x=T[k];const os=x.opp.map(o=>r[o]||0);nr[k]=x.mar.reduce((a,b)=>a+b,0)/x.n+os.reduce((a,b)=>a+b,0)/os.length;});
+      const m=ks.reduce((a,k)=>a+nr[k],0)/(ks.length||1);ks.forEach(k=>r[k]=nr[k]-m);}
+    ks.forEach(k=>T[k].pw=+r[k].toFixed(2));});
+  const out={v:1,ts:new Date(now).toISOString(),lg:{},t:{},up:{}};
+  Object.entries(lg).forEach(([sp,L])=>out.lg[sp]={ppg:+(L.pts/L.g/2).toFixed(2),dogSU:L.dogN?+(L.dogW/L.dogN).toFixed(3):null,dogATS:L.dogATSn?+(L.dogC/L.dogATSn).toFixed(3):null,g:L.g});
+  Object.entries(T).forEach(([k,x])=>out.t[k]={n:x.n,pf:+(x.pf/x.n).toFixed(2),pa:+(x.pa/x.n).toFixed(2),dog:x.dog,fav:x.fav,form:x.form.join(' '),last:x.last,pw:x.pw});
+  /* the next day and a half: rest days and back-to-backs for both teams, conference games */
+  Object.entries(upc).forEach(([sp,L])=>{out.up[sp]=L.map(u=>{const rest=t=>{const x=T[sp+'|'+t];if(!x||!x.last)return null;return Math.round((Date.parse(etDay(u.st)+'T12:00:00Z')-Date.parse(x.last+'T12:00:00Z'))/864e5);};
+    return{...u,restA:rest(u.a),restH:rest(u.h)};});});
+  /* back from injury: on the injury report last time, off it (or upgraded) now — remembered 3 days */
+  try{const I=read('inj.json')||{snap:{},ret:{}};const snap={};
+    for(const sp of ['nfl','nba','nhl']){const [s,l]=TEAM_SP[sp];try{const j=await getJSON(`https://site.api.espn.com/apis/site/v2/sports/${s}/${l}/injuries`);
+      (j.injuries||[]).forEach(t=>{const ab=String(((t.team||{}).abbreviation)||t.abbreviation||'').toUpperCase()||String(t.displayName||'');(t.injuries||[]).forEach(x=>{const n=((x.athlete||{}).displayName)||'';if(n)snap[sp+'|'+ab+'|'+n]=String(x.status||'');});});}catch(e){if(D.err.length<8)D.err.push(sp+' inj '+String(e.message).slice(0,30));}}
+    const had=Object.keys(snap).length>0;
+    if(had){Object.entries(I.snap||{}).forEach(([k,stt])=>{if(!/out|injured reserve|ir|doubtful/i.test(stt))return;const now2=snap[k];if(now2&&/out|injured reserve|doubtful/i.test(now2))return;
+        const [sp,ab,n]=k.split('|');const K=sp+'|'+ab;(I.ret[K]=I.ret[K]||[]).push({n,d:td});});
+      Object.keys(I.ret).forEach(K=>{I.ret[K]=I.ret[K].filter(x=>x.d>=dayAdd(td,-3));if(!I.ret[K].length)delete I.ret[K];});I.snap=snap;}
+    fs.writeFileSync(path.join(OUT,'inj.json'),JSON.stringify(I));out.ret=I.ret;D.ret=Object.keys(I.ret).length;D.injSnap=Object.keys(I.snap).length;}catch(e){D.err.push('inj '+String(e.message).slice(0,40));}
+  fs.writeFileSync(path.join(OUT,'teams.json'),JSON.stringify(out));D.teams=Object.keys(out.t).length;D.err=D.err.slice(0,8);diag.teams=D;return out;}
 async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=read('closes.json');const games=(prev&&prev.v===1&&prev.games)||{};const log={ts:new Date(now).toISOString(),added:0,errors:[],calls:0};
   const cut=new Date(now-KEEP_DAYS*864e5).toISOString();Object.keys(games).forEach(k=>{if(String(games[k].st||'')<cut)delete games[k];});
   const todo=[];
@@ -131,10 +203,11 @@ async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=re
   res.forEach((r,i)=>{if(r&&r.err&&log.errors.length<20)log.errors.push(todo[i].sp+' '+todo[i].id+': '+r.err);});
   const diag={};if(!FIX||process.env.FEEDS_VERIFY){try{await verifyFinals(games,diag);}catch(e){diag.fail=String(e.message||e).slice(0,80);}}
   if(!FIX||process.env.FEEDS_PROPS){try{await buildProps(diag);}catch(e){diag.props={fail:String(e.message||e).slice(0,80)};}}
+  if(!FIX||process.env.FEEDS_TEAMS){try{await buildTeams(diag,games);}catch(e){diag.teams={fail:String(e.message||e).slice(0,120)};}}
   log.verify=diag;
   log.calls=calls;const n=Object.keys(games).length;
   fs.writeFileSync(path.join(OUT,'closes.json'),JSON.stringify({v:1,ts:log.ts,n,games}));
-  const idx=read('index.json')||{v:1,runs:[]};idx.v=1;idx.ts=log.ts;idx.files={...(idx.files||{}),closes:{ts:log.ts,n},...(diag.props&&diag.props.ev!=null?{props:{ts:log.ts,n:diag.props.ev}}:{})};idx.runs=[log,...(idx.runs||[])].slice(0,12);
+  const idx=read('index.json')||{v:1,runs:[]};idx.v=1;idx.ts=log.ts;idx.files={...(idx.files||{}),closes:{ts:log.ts,n},...(diag.props&&diag.props.ev!=null?{props:{ts:log.ts,n:diag.props.ev}}:{}),...(diag.teams&&diag.teams.teams!=null?{teams:{ts:log.ts,n:diag.teams.teams}}:{})};idx.runs=[log,...(idx.runs||[])].slice(0,12);
   fs.writeFileSync(path.join(OUT,'index.json'),JSON.stringify(idx));
   console.log(`feeds: +${log.added} finals, ${n} kept, ${calls} requests, ${log.errors.length} errors`);}
 main().catch(e=>{console.error('feeds failed',e);process.exit(1);});
