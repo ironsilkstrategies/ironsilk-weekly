@@ -12,7 +12,7 @@
    Plus who's hot and cold among the characters this week, the league's own weather, and a one-line outlook: lean into,
    stay away from. */
 
-const FC_LANES={ml:{fav:'ML favorites',dog:'ML dogs'},spread:{fav:'Spread favorites',dog:'Spread dogs'},total:{over:'Overs',under:'Unders'}};
+const FC_LANES={ml:{fav:'ML favorites',dog:'ML dogs',heavy:'Heavy ML (-500+)'},spread:{fav:'Spread favorites',dog:'Spread dogs'},total:{over:'Overs',under:'Unders'}};
 const FC_SP={nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA',ncaab:'🏀 CBB',mlb:'⚾ MLB'};
 function fcImp(pr){pr=+pr;if(!isFinite(pr)||Math.abs(pr)<100)return 0.524;return pr>0?100/(pr+100):(-pr)/((-pr)+100);}
 function fcDec(pr){pr=+pr;if(!isFinite(pr)||Math.abs(pr)<100)return 1.91;return pr>0?1+pr/100:1+100/(-pr);}
@@ -29,9 +29,9 @@ function fcData(){const V=roGet(VOICES_KEY,[],30e3)||[];const P=roGet(typeof CPR
   /* game lines: each pick once (sport · game · day · market · side), whoever made it */
   const seen=new Set();V.forEach(x=>{if(!x||!x.graded||x.hit==null||x.push||!FC_LANES[x.market]||!CHARS[x.voice])return;const d=String(x.date).slice(0,10);if(d<d30)return;
     if(x.market==='ml'&&!(Math.abs(+x.price)>=100))return;   /* a moneyline with no real price can't say fav or dog, or pay */
-    const role=x.market==='total'?(/under/i.test(x.side)?'under':'over'):x.market==='spread'?(x.line!=null&&+x.line<0?'fav':x.line!=null&&+x.line>0?'dog':(+x.price<0?'fav':'dog')):(+x.price<0?'fav':'dog');
+    const role=x.market==='total'?(/under/i.test(x.side)?'under':'over'):x.market==='spread'?(x.line!=null&&+x.line<0?'fav':x.line!=null&&+x.line>0?'dog':(+x.price<0?'fav':'dog')):(+x.price<=-500?'heavy':+x.price<0?'fav':'dog');
     /* the characters' own week */
-    if(d>=d7&&!(typeof META_VOICES!=='undefined'&&META_VOICES.has(x.voice))){const C=chars[x.voice]||(chars[x.voice]={v:x.voice,w:0,l:0,u:0});x.hit?C.w++:C.l++;C.u+=x.hit?fcDec(x.price)-1:-1;}
+    if(d>=d7&&role!=='heavy'&&!(typeof META_VOICES!=='undefined'&&META_VOICES.has(x.voice))){const C=chars[x.voice]||(chars[x.voice]={v:x.voice,w:0,l:0,u:0});x.hit?C.w++:C.l++;C.u+=x.hit?fcDec(x.price)-1:-1;}
     const k=[x.sp,x.game,d,x.market,x.side,x.line==null?'':x.line].join('|');if(seen.has(k))return;seen.add(k);
     add(x.sp+'|'+x.market+'|'+role,FC_LANES[x.market][role],x.sp,d,!!x.hit,x.price);});
   /* player props: each player-stat-line once */

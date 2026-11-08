@@ -28,7 +28,9 @@ function bkSheetSet(k,v){const f=bkSheetF();f[k]=v;try{localStorage.setItem(BKS_
 function bkImpQ(price,mk){if(typeof mcNoVig==='function'){const q=mcNoVig(price,mk);if(q!=null)return q;}return mk==='ml'?null:0.5;}
 /* the role a call plays in its account: favorite or dog on a side, over or under on a total */
 function bkRole(mk,side,line,price){if(mk==='total')return/under/i.test(side)?'under':'over';
-  if(mk==='spread')return line!=null&&+line<0?'fav':line!=null&&+line>0?'dog':(+price<0?'fav':'dog');return price!=null&&+price<0?'fav':'dog';}
+  if(mk==='spread')return line!=null&&+line<0?'fav':line!=null&&+line>0?'dog':(+price<0?'fav':'dog');
+  if(price!=null&&isFinite(+price)&&+price<=-500)return'heavy';   /* v2.95 · heavy wins can't cover a lane's middle-band losses */
+  return price!=null&&+price<0?'fav':'dog';}
 let BKA_C=null;
 function bkAcctBook(){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=(typeof ledgerSig==='function'?ledgerSig(V):V.length)+'|'+today();if(BKA_C&&BKA_C.sig===sig)return BKA_C.A;
   const A={};const ref=Date.parse(today()+'T12:00:00Z');

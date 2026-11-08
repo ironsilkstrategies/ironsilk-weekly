@@ -30,12 +30,12 @@ function coachGameFile(sp,a,h){const D=coachIdx();if(!D)return null;return D.g[s
 
 /* §1 · the clipboard ─────────────────────────────────────────────────────────────────────────────────────────────── */
 /* a call's confidence as its character made it: the gut (Dog, Historian, Coach) or the confidence */
-function coachBase(x){if(!x)return null;if(x.dG!=null)return x.dG/100;if(x.hG!=null)return x.hG/100;if(x.cG!=null)return x.cG/100;if(x.oG!=null)return x.oG/100;return x.cf!=null?+x.cf:x.cfr!=null?+x.cfr:null;}
+function coachBase(x){if(!x)return null;if(x.dG!=null)return x.dG/100;if(x.hG!=null)return x.hG/100;if(x.cG!=null)return x.cG/100;if(x.oG!=null)return x.oG/100;if(x.bG!=null)return x.bG/100;return x.cf!=null?+x.cf:x.cfr!=null?+x.cfr:null;}
 function coachRoleOf(x){return typeof bkRole==='function'?bkRole(x.market,x.side,x.line,x.price):(x.market==='total'?(/under/i.test(x.side)?'under':'over'):(+x.price<0?'fav':'dog'));}
 let COACH_B=null;
 /* a gut-based call (the rebuilt Dog, Historian, Coach) is judged only against that gut's own graded calls — the old
    ideology's record isn't the new one's */
-const coachGutTag=x=>x.dG!=null||x.hG!=null||x.cG!=null||x.oG!=null?'g':'c';
+const coachGutTag=x=>x.dG!=null||x.hG!=null||x.cG!=null||x.oG!=null||x.bG!=null?'g':'c';
 /* the scale on a lane: how far its sure calls (60%+) land above a coin flip, against how far they claim to — with a prior
    worth twenty 70% calls at face value, so a thin lane barely moves */
 /* he never rewrites history: a call on day D is judged only by what was graded before D, and nothing before his first day
@@ -110,7 +110,7 @@ function coachCallsV2(sp,g,Ln,hl,hlSim,tl,tlSim,add){const o={sp,a:g.away.abbr,h
 function coachPredFor(sp,g){return COACH_PS[sp+'|'+g.away.abbr+'@'+g.home.abbr]||null;}
 
 /* the clipboard card ────────────────────────────────────────────────────────────────────────────────────────────── */
-function coachCardHtml(){try{const B=coachBook();const rl={fav:'favorites',dog:'dogs',over:'overs',under:'unders'},ml={ml:'ML',spread:'spread',total:'total'};
+function coachCardHtml(){try{const B=coachBook();const rl={fav:'favorites',dog:'dogs',over:'overs',under:'unders',heavy:'heavy favorites (-500+)'},ml={ml:'ML',spread:'spread',total:'total'};
   const lanes=Object.entries(B).filter(([k,o])=>!k.endsWith('|*')&&o.n>=20).map(([k,o])=>{const [v,sp,mk,role]=k.split('|');return{v,sp,mk,role,...o};});
   const rein=lanes.filter(o=>o.k<0.85).sort((a,b)=>a.k-b.k).slice(0,8),free=lanes.filter(o=>o.k>1.05).sort((a,b)=>b.k-a.k).slice(0,5);
   const ln=o=>`${txtEsc((CHARS[o.v.replace('~','')]||{}).chip||o.v)}${o.v.endsWith('~')?' (new gut)':''} ${(o.sp||'').toUpperCase()} ${ml[o.mk]||o.mk} ${rl[o.role]||o.role}: says ${Math.round(o.say*100)}%, hits ${Math.round(o.hit*100)}% on ${o.n} → <b>×${o.k.toFixed(2)}</b>`;

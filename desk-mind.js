@@ -109,7 +109,7 @@ const STATUS_SKIP={ncaaf:[['2026-09-28','2026-10-16',null]],nfl:[['2026-10-08','
 function statusSkip(x,dd,QJ){const L=STATUS_SKIP[x.sp]||[];if(L.some(([a,b,m])=>dd>=a&&dd<=b&&(!m||m===x.market)))return true;const q=QJ[dd]&&QJ[dd][x.sp];return!!(q&&(q.all||(q.markets||{})[x.market]));}
 function statusStats(V,d){const from=dayShift(d,-STATUS_WIN);const S={},POOL={};let QJ={};try{QJ=bookQuarAll()||{};}catch(e){}
   (V||[]).forEach(x=>{if(!x||!CHARS[x.voice]||!x.graded||x.hit==null||x.push||x.price==null)return;const dd=String(x.date||'').slice(0,10);if(dd<from||dd>=d||x.pre)return;if(statusSkip(x,dd,QJ))return;
-    try{if(confPre(x))return;}catch(e){}const p=confOf(x);if(p==null||!(p>0&&p<1))return;
+    try{if(confPre(x))return;}catch(e){}if(typeof isHeavyML==='function'&&isHeavyML(x))return;const p=confOf(x);if(p==null||!(p>0&&p<1))return;
     const k=x.voice+'|'+x.sp;const o=S[k]||(S[k]={v:x.voice,sp:x.sp,n:0,w:0,e:0,var:0,u:0,cn:0,cs:0,cs2:0,mn:0,ms:0,lanes:{}});const pk=x.sp;const Pq=POOL[pk]||(POOL[pk]={w:0,e:0});Pq.e+=p;if(x.hit)Pq.w++;o.n++;if(x.hit)o.w++;o.e+=p;o.var+=p*(1-p);o.u+=+x.units||0;
     if(x.clv!=null&&isFinite(x.clv)){if(x.clvs==='own'||x.clvs==='close'){o.cn++;o.cs+=+x.clv;o.cs2+=x.clv*x.clv;}else{o.mn++;o.ms+=+x.clv;}}
     try{const lk=laneKey(x.sp,x.market,x.side,x.price,x.line);if(lk){const L=o.lanes[lk]||(o.lanes[lk]={w:0,n:0,u:0});L.n++;if(x.hit)L.w++;L.u+=+x.units||0;}}catch(e){}});

@@ -6,7 +6,7 @@ const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com
   w.fetch=()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});
   w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(()=>{try{
-  w.eval(`window.__G={id:'g1',away:{abbr:'VAN'},home:{abbr:'EDM'},__date:today(),abstract:'pre'};
+  w.eval(`window.__G={id:'g1',away:{abbr:'VAN'},home:{abbr:'EDM'},__date:'2026-11-07',abstract:'pre'};   /* the legacy Brain and Blend, before the Nov 8 rebuild */
     window.__S={aw:0.38,hw:0.62,homeProj:3.4,awayProj:2.6,med:6,modeScore:'2-4',over:l=>l<6?0.6:0.42,under:l=>l<6?0.4:0.58,homeCover:l=>l<0?0.44:0.7,awayCover:l=>l<0?0.3:0.56};`);
   T('Brain and Blend are on the roster',w.eval(`!!CHARS.Brain&&!!CHARS.Blend&&CHAR_ORDER.includes('Brain')&&CHAR_ORDER.includes('Blend')`));
   T('…but are not voters (derived voices)',w.eval(`!VOTER_ORDER.includes('Brain')&&!VOTER_ORDER.includes('Blend')&&VOTER_ORDER.includes('Judge')`));
@@ -30,7 +30,7 @@ setTimeout(()=>{try{
   T('square meter counts voters only (Brain/Blend never vote)',new RegExp('of '+w.eval('VOTER_ORDER.length')+' on').test(sq.meter)&&!/BRAIN|BLEND/.test(sq.chips),sq.meter.replace(/<[^>]+>/g,' ').slice(0,90));
   /* lock to the ledger */
   w.eval(`window.sportGames=()=>[__G];window.sportSims=()=>({g1:__S});`);
-  w.eval(`voicesLog('nhl')`);let L=w.eval(`get(VOICES_KEY,[]).filter(x=>x.date===today())`);
+  w.eval(`voicesLog('nhl')`);let L=w.eval(`get(VOICES_KEY,[]).filter(x=>x.date===today()||x.date==='2026-11-07')`);
   T('voicesLog locks Brain + Blend calls like every character',L.some(x=>x.voice==='Brain')&&L.filter(x=>x.voice==='Blend').length===3);
   /* a game already logged under the old 70% rule isn't logged twice */
   w.eval(`(()=>{const V=get(VOICES_KEY,[]).filter(x=>!(x.date===today()&&(x.voice==='Brain'||x.voice==='Blend')));V.push({id:['Blend','nhl','VAN@EDM',today(),'ml'].join('|'),sp:'nhl',date:today(),game:'VAN@EDM',voice:'Blend',market:'ml',side:'home',simP:0.72});set(VOICES_KEY,V);Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);})()`);

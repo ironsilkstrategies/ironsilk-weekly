@@ -122,9 +122,18 @@ const confEvOk=(x,c,d)=>{const p=+x.price;if(!d||d<CONF_EV_FROM||!isFinite(p)||M
 function confPays(x){const d=String((x&&x.date)||'').slice(0,10);if(!d||d<CONF_PAY_FROM)return true;const c=confOf(x);if(c==null)return true;
   if(!confEvOk(x,c,d))return false;if(c>=0.70-1e-9)return true;
   const p=+x.price;return isFinite(p)&&p>=CONF_PAY_MIN;}
+/* v2.95 · THE HEAVY LANE (Nov 8: "anyone can call a -10000 bet"): a moneyline priced -500 or shorter. From Nov 8 it is never a
+   character's official call except the Simulator's — now the heavy-moneyline specialist — and it never counts on a headline
+   record (it keeps its own lane). The Simulator's other calls go official only at 80%+: between -350 and +350 its 70%+
+   calls went 59-32 (-6.1u), because its confidence is mostly the market's. The Brain goes official on his edge, once proven. */
+const HEAVY_ML=-500,HV_FROM='2026-11-08';
+const isHeavyML=x=>!!x&&(x.market==='ml'||x.market==='moneyline')&&x.price!=null&&x.price!==''&&isFinite(+x.price)&&Math.abs(+x.price)>=100&&+x.price<=HEAVY_ML;
 /* v2.93 · the Coach's clipboard decides how much confidence each call may carry (desk-coach.js) */
 const coachOk=x=>typeof coachConf==='function'?coachConf(x):confOf(x);
-function isOfficial(x){if(x&&(x.voice==='Trends'&&x.hG!=null||x.voice==='Coach'&&x.cG!=null||x.voice==='Pred'&&x.oG!=null))return coachOk(x)*100>=(x.market==='ml'?75:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91/v2.93 · the Historian's and the Coach's gut */
+function isOfficial(x){if(x&&String(x.date||'').slice(0,10)>=HV_FROM){if(isHeavyML(x)&&x.voice!=='Sim')return false;
+    if(x.voice==='Brain'&&x.bG!=null)return typeof brainOfficial==='function'?brainOfficial(x):false;
+    if(x.voice==='Sim'&&!isHeavyML(x)){const c=coachOk(x);return c!=null&&c>=0.80-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x);}}
+  if(x&&(x.voice==='Trends'&&x.hG!=null||x.voice==='Coach'&&x.cG!=null||x.voice==='Pred'&&x.oG!=null))return coachOk(x)*100>=(x.market==='ml'?75:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91/v2.93 · the Historian's and the Coach's gut */
   if(x&&x.voice==='Dog'){if(x.dG!=null)return coachOk(x)*100>=(x.market==='ml'?78:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.90 · his gut, not the price */
     return!!(typeof PROB_OK!=='undefined'&&PROB_OK.Dog)&&+x.dEdge>=DOG_ML_EDGE-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);}
   const c=coachOk(x);if(c!=null&&c>=confFloorFor(x)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x))return true;

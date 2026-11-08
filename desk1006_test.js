@@ -72,7 +72,8 @@ setTimeout(()=>{try{
     {game:'M@N',m:'ml',sd:'home',pick:'N ML',price:-110,color:'value',chars:['Sim'],blend:.55,evCal:5,start:st(23)}];
   /* v2.31: a pick makes the Best card only when a character is 70%+ sure of it */
   const CF={'A@B':0.8,'C@D':0.76,'E@F':0.71,'G@H':0.70,'I@J':0.9,'K@L':0.62,'M@N':0.69};
-  w.eval(`set(VOICES_KEY,${JSON.stringify(B.map((x,i)=>({id:'b'+i,voice:'Sim',sp:'nhl',game:x.game,market:x.m,side:x.sd,price:x.price,date:'__D__',cf:CF[x.game]})))}.map(v=>({...v,date:today()})))`);
+  /* v2.95 · the Simulator's own calls between -350 and +350 need 80%+ now, so the Best card's mechanics are seeded with the Judge's */
+  w.eval(`set(VOICES_KEY,${JSON.stringify(B.map((x,i)=>({id:'b'+i,voice:'Judge',sp:'nhl',game:x.game,market:x.m,side:x.sd,price:x.price,date:'__D__',cf:CF[x.game]})))}.map(v=>({...v,date:today()})))`);
   w.eval(`localStorage.removeItem(BEST5_KEY);localStorage.removeItem('d4.best5log');set(LS_EVAL,{});set(TC_KEY,{d:today(),by:{nhl:{ts:Date.now(),picks:${JSON.stringify(B)},props:[]},ncaaf:{ts:Date.now(),picks:${JSON.stringify(B.slice(4,5).map(x=>({...x,game:'X@Y'})))},props:[]}}})`);
   const S=w.eval('best5State()');const top=S.top3.map(x=>x.pick);
   T('Best card: exactly 3 picks',S.top3.length===3,top.join(', '));

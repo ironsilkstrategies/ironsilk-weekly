@@ -12,7 +12,7 @@ const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com
   w.fetch=()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.prompt=()=>null;w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const W8=ms=>new Promise(r=>setTimeout(r,ms));const J=JSON.stringify;
   /* bet types */
-  T('bet types: heavy = a moneyline -1000 or shorter, light = every other moneyline',E(`btPass('heavy','ml',-1000)&&btPass('heavy','ml',-2500)&&!btPass('heavy','ml',-999)&&btPass('light','ml',-999)&&btPass('light','ml',150)&&!btPass('light','ml',-1200)&&btPass('ml','moneyline',-1200)`));
+  T('bet types: heavy = a moneyline -500 or shorter (v2.95), light = every other moneyline',E(`btPass('heavy','ml',-500)&&btPass('heavy','ml',-2500)&&!btPass('heavy','ml',-499)&&btPass('light','ml',-499)&&btPass('light','ml',150)&&!btPass('light','ml',-1200)&&btPass('ml','moneyline',-1200)`));
   T('…spreads, O/U, 1st half (h1/p1 markets), props each stand alone',E(`btPass('spread','spread',-110)&&!btPass('spread','total',-110)&&btPass('total','total')&&btPass('half','h1spread')&&btPass('half','p1total')&&!btPass('half','spread')&&btPass('props','prop')&&!btPass('props','ml')&&!btPass('ml','h1ml')`));
   /* a slate: today's card + every character's calls */
   const now=Date.now(),at=h=>new Date(Math.ceil((now+h*36e5)/60000)*60000).toISOString();const A2=at(2);const d=E('today()'),dd=E(`tdDay(${J(A2)})`);
@@ -40,7 +40,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const W8=ms=>
   T('…and every character — all 14, even the ones with nothing on the card today (Banker, Blend, Dog…)',chs.length===15&&['The Simulator','The Judge','The Coach','The Scorekeeper','The Oracle','Covers','The Historian','The Crowd','The Commissioner','The Underdog Spotter','The Scout','The Banker','The Brain','The Blend'].every(n=>chs.some(c=>c.includes(n))),J(chs));
   T('…each chip counts that character\'s calls today and wears its weight badge',chs.some(c=>/The Underdog Spotter 1$/.test(c)&&/^✅/.test(c))&&chs.some(c=>/The Oracle 0$/.test(c)&&/^⏳/.test(c)),J(chs.filter(c=>/Underdog|Oracle/.test(c))));
   E(`tfSet('bt','heavy')`);await W8(50);
-  T('Heavy ML: only the -1000+ moneyline, with the warning that one miss erases ten wins',/BOS ML/.test(tb.textContent)&&!/MTL ML/.test(tb.textContent)&&/one miss erases ten wins/.test(tb.textContent));
+  T('Heavy ML: only the -500+ moneyline, with the warning that one miss erases five wins',/BOS ML/.test(tb.textContent)&&!/MTL ML/.test(tb.textContent)&&/one miss erases five wins/.test(tb.textContent));
   E(`tfSet('bt','light')`);await W8(50);T('Light ML: every other moneyline',/MTL ML/.test(tb.textContent)&&!/BOS ML -1400/.test(tb.textContent.replace(/\s+/g,' ')));
   E(`tfSet('bt','total')`);await W8(50);T('O/U: only totals',/Over 6\.5/.test(tb.textContent)&&!/MTL ML|BOS -1\.5/.test(tb.textContent));
   E(`tfSet('bt','half')`);await W8(50);T('1st half: every character\'s half read, grouped, with who agrees',/1P Over 1\.5/.test(tb.textContent)&&/2 characters/.test(tb.textContent));

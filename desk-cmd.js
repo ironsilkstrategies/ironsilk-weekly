@@ -11,7 +11,7 @@ const cmdT=t=>{try{const d=new Date(t);return isFinite(d)?d.toLocaleTimeString('
 const cmdSp=sp=>({nhl:'🏒',nfl:'🏈',ncaaf:'🏟',nba:'🏀',ncaab:'🏀',mlb:'⚾'})[sp]||'';
 const cmdMk=x=>`⟦m:${tgLegKey(x)}⟧`;
 function cmdCallPick(c){try{return charPickText(c);}catch(e){return`${c.side} ${c.market}`;}}
-function cmdRec(V,v,days){const lo=dayShift(today(),-(days||30));let w=0,l=0,u=0;V.forEach(x=>{if(x.voice!==v||!x.graded||x.push||x.hit==null||String(x.date).slice(0,10)<lo||!isOfficial(x))return;if(x.hit)w++;else l++;u+=+x.units||0;});return{w,l,u};}
+function cmdRec(V,v,days){const lo=dayShift(today(),-(days||30));let w=0,l=0,u=0;V.forEach(x=>{if(x.voice!==v||!x.graded||x.push||x.hit==null||String(x.date).slice(0,10)<lo||!isOfficial(x)||(typeof isHeavyML==='function'&&isHeavyML(x)))return;if(x.hit)w++;else l++;u+=+x.units||0;});return{w,l,u};}
 const cmdRecTxt=r=>r.w+r.l?`${r.w}-${r.l} · ${r.u>=0?'+':''}${r.u.toFixed(1)}u (30 days, official)`:'no official record yet';
 function cmdCharTop(V,v){const d=today();const seen=new Set();
   const C=V.filter(c=>c.voice===v&&String(c.date).slice(0,10)===d&&c.price!=null&&!c.graded&&confOf(c)!=null).sort((a,b)=>confOf(b)-confOf(a))

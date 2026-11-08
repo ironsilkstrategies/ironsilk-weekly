@@ -2220,6 +2220,18 @@ function intelReport(sp){
    ═══════════════════════════════════════════════════════════════════════════ */
 const VOICES_KEY='d4.voices';
 const _vProfit=p=>{p=+p;return p>0?p/100:100/Math.abs(p)};
+/* v2.95 · units, honestly: a moneyline logged without a price was scored as if it paid -110 — most were heavy favorites,
+   which padded every top character by ~15 units. Now it takes that side's closing price from the feed, and with none
+   it counts in the record but not in the units. Spreads and totals without a price stay at -110 (that's their price). */
+function vClosePx(x){try{const C=roGet(typeof CLOSES_KEY!=='undefined'?CLOSES_KEY:'d4.closes',{},60e3)||{};const D=C[String(x.date).slice(0,10)];const r=D&&D[x.sp+'|'+x.game];const s=r&&r.ml&&r.ml[x.side];
+  const p=s&&(s.close!=null?s.close:s.open);return p!=null&&Math.abs(+p)>=100?+p:null;}catch(e){return null;}}
+function vUnits(x,hit){if(hit==null)return null;const ml=/ml$|^moneyline$/.test(String(x.market||x.mk||''));let p=x.price;
+  if(p==null||p===''||!(Math.abs(+p)>=100)){if(!ml)p=-110;else{const c=/^h1|^p1/.test(String(x.mk||''))?null:vClosePx(x);if(c==null){x.nopx=1;return 0;}x.pxc=c;p=c;}}
+  return hit?_vProfit(p):-1;}
+/* once per session: every graded moneyline already stored without a price is re-scored the same way */
+function vUnitsRepair(){try{const V=get(VOICES_KEY,[]);let n=0;V.forEach(x=>{if(!x||!x.graded||x.hit==null||x.push||!/^(ml|moneyline)$/.test(x.market||''))return;if(x.price!=null&&x.price!==''&&Math.abs(+x.price)>=100)return;
+    const u=vUnits(x,x.hit);if(u!==x.units){x.units=u;n++;}});if(n)set(VOICES_KEY,V);return n;}catch(e){return 0;}}
+if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__)setTimeout(()=>{try{vUnitsRepair();}catch(e){}},6000);
 function voicesLines(sp,g){const gl=g.away.abbr+'@'+g.home.abbr;let L=[];
   /* v2.50 · basketball reads its own book (ESPN's DraftKings lines, yours first) — it fell through to the MLB lookup, so every NBA call went unpriced and none could be official */
   try{L=sp==='nfl'?nflBookLinesFor(gl):sp==='ncaaf'?ncaafBookLinesFor(gl):sp==='nhl'?(typeof nhlBookLinesFor==='function'?nhlBookLinesFor(gl):[])
@@ -2239,7 +2251,7 @@ function voicesLines(sp,g){const gl=g.away.abbr+'@'+g.home.abbr;let L=[];
    the condition under which it stays silent — a silent character is shown as
    "no call" with its reason, never quietly dropped from the count. */
 const CHARS={
-  'Sim':        {chip:'★ SIM',color:'#FFD75E',label:'The Simulator',school:'10,000 Monte Carlo runs of the game',quiet:'no sim yet'},
+  'Sim':        {chip:'★ SIM',color:'#FFD75E',label:'The Simulator',school:'10,000 Monte Carlo runs of the game — the engine everyone reads; official on the heavy moneylines (-500 or shorter), anything else only at 80%+',quiet:'no sim yet'},
   'Judge':      {chip:'JUDGE',color:'#f5a524',label:'The Judge',school:'weighs every witness by its graded accuracy (forecast combination)',quiet:'no witnesses'},
   'Coach':      {chip:'COACH',color:'#5FD3E8',label:'The Coach',school:'keeps everyone honest — scales each character\'s confidence to its real hit rate; his own score from season scoring, rest, spots, revenge, weather and the news',quiet:'nothing on the clipboard clears the line'},
   'Most common':{chip:'SCORE',color:'#a78bfa',label:'The Scorekeeper',school:'the single most likely final score',quiet:'no modal score'},
@@ -2251,8 +2263,8 @@ const CHARS={
   'Dog':        {chip:'🐕 DOG',color:'#2dd4bf',label:'The Underdog Spotter',school:'knows the dogs — who wins and covers every time they get points, favorites that drop games to dogs, power, offense vs defense, rest and injuries; official at a gut of 70+',quiet:'no dog clears his gut today'},
   'Scout':      {chip:'🔭 SCOUT',color:'#fb7185',label:'The Scout',school:'talent: superstars vs busts — QB efficiency, pass rush, ball hawks, shooters, goalies — read as matchups',quiet:'not enough of either team\'s games read yet, or no real talent edge'},
   'Banker':     {chip:'🏦 BANKER',color:'#d4af37',label:'The Banker',school:'the secretary — reads every character\'s books (sport × bet type × favorite/dog/over/under) and backs the side the strongest accounts are on; builds the Master Parlay Sheet',quiet:'no side has two or more characters with strong books agreeing'},
-  'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the Sim, the market and every character\'s graded vote, weighed together',quiet:'still learning — needs graded character history'},
-  'Blend':      {chip:'BLEND',color:'#a3e635',label:'The Blend',school:'the Sim\'s chance blended with the market\'s, weighted by which has predicted better',quiet:'no sim chance on this market'}
+  'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the tough middle — only -350…+350, only when his chance beats the price: the exchanges and the outside consensus against the book, steam, the longshot bias, the crowd',quiet:'no edge worth taking on this game'},
+  'Blend':      {chip:'BLEND',color:'#a3e635',label:'The Blend',school:'retired Nov 8 — folded into the Brain (the Sim\'s chance blended with the market\'s)',quiet:'folded into the Brain'}
 };
 const CHAR_ORDER=Object.keys(CHARS);
 /* v1.99 · Brain and Blend are full characters: they call every game like the rest,
@@ -2423,7 +2435,10 @@ function metaCalls(sp,g,calls,Ln,add){
       const price=pr?amerOk(pr.price):null;const mp=sd===sim.side?sim.simP:1-sim.simP;
       let mk=null;try{const mf=marketFair(sp,g,m,sd,line);if(mf)mk=mf.p;}catch(e){}
       return{sd,line,price,mk,brain:brainSideP(sp,g,voters,m,sd,mp,line,price),blend:blendSideP(sp,g,m,sd,mp,line,price)};});
-    [['Brain','brain'],['Blend','blend']].forEach(([v,k])=>{const a=sides[0][k],b=sides[1][k];if(a==null||b==null||Math.abs(a-b)<1e-9)return;
+    /* v2.95 · the tough Brain (desk-brain.js) reads both sides of every market and picks only a real edge; the Blend folded into him */
+    let toughDone=false;try{if(typeof brainToughCalls==='function')toughDone=brainToughCalls(sp,g,m,sides.map(o=>({sd:o.sd,line:o.line,price:o.price})),Ln,add);}catch(e){}
+    const dd=(g&&g.__date)||today();
+    [['Brain','brain'],['Blend','blend']].forEach(([v,k])=>{if(v==='Brain'&&toughDone)return;if(v==='Blend'&&dd>=(typeof BRN_FROM!=='undefined'?BRN_FROM:'2026-11-08'))return;const a=sides[0][k],b=sides[1][k];if(a==null||b==null||Math.abs(a-b)<1e-9)return;
       const w=a>b?sides[0]:sides[1];add(v,m,w.sd,{simP:+w[k].toFixed(4),mktP:w.mk!=null?+w.mk.toFixed(4):null});});
     /* 🏦 the Banker (v2.89) — never votes: he reads every character's books and backs the side the strongest accounts are on
        (desk-bank.js). The old +3% EV rule chased long prices: 298-395. */
@@ -2508,7 +2523,8 @@ function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)r
   try{const dp=typeof dogPredFor==='function'?dogPredFor(sp,g):null;if(dp)own('Dog',dp.a,dp.h);}catch(e){}
   try{const hp=typeof histPredFor==='function'?histPredFor(sp,g):null;if(hp)own('Trends',hp.a,hp.h);}catch(e){}
   try{const cp=typeof coachPredFor==='function'?coachPredFor(sp,g):null;if(cp)own('Coach',cp.a,cp.h);}catch(e){}
-  try{const op=typeof oraclePredFor==='function'?oraclePredFor(sp,g):null;if(op)own('Pred',op.a,op.h);}catch(e){}   /* v2.94 · the Oracle's consensus score, every game he can read */   /* v2.93 · the Coach's own score, every game */   /* v2.91 · the Historian's score on every game he reads */
+  try{const op=typeof oraclePredFor==='function'?oraclePredFor(sp,g):null;if(op)own('Pred',op.a,op.h);}catch(e){}
+  try{const bp=typeof brainPredFor==='function'?brainPredFor(sp,g):null;if(bp)own('Brain',bp.a,bp.h);}catch(e){}   /* v2.95 · the Brain's score from his own chances */   /* v2.94 · the Oracle's consensus score, every game he can read */   /* v2.93 · the Coach's own score, every game */   /* v2.91 · the Historian's score on every game he reads */
   [['Most common'],['Covers'],['Pred']].forEach(([v])=>{const c=by(v).find(x=>x.score);if(c){const m=String(c.score).match(/([\d.]+)\D+([\d.]+)/);if(m)own(v,+m[1],+m[2]);}});
   const unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3;
   new Set(calls.map(c=>c.voice)).forEach(v=>{if(out[v]||v==='Books')return;const C=by(v);if(!C.length)return;let a=+s.awayProj,h=+s.homeProj;
@@ -2617,7 +2633,7 @@ function gradeHalfCalls(){const L=get(HALF_KEY,{})||{};let n=0;
     if(/ml$/.test(x.mk)){if(A!==H)hit=(x.side==='home')===(H>A);}
     else if(/spread$/.test(x.mk)){const m=(x.side==='home'?H-A:A-H)+x.line;if(m!==0)hit=m>0;}
     else{const t=A+H;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
-    x.graded=1;x.fa=A;x.fh=H;x.hit=hit;if(hit!=null)x.units=hit?_vProfit(x.price!=null?x.price:-110):-1;n++;});
+    x.graded=1;x.fa=A;x.fh=H;x.hit=hit;if(hit!=null)x.units=vUnits(x,hit);n++;});
   if(n)set(HALF_KEY,L);return n;}
 function halfRecord(sp,voice,mk){const r={w:0,l:0,u:0};Object.values(roGet(HALF_KEY,{})||{}).forEach(x=>{if(!x.graded||x.hit==null||x.sp!==sp||x.voice!==voice||x.mk!==mk)return;x.hit?r.w++:r.l++;r.u+=x.units||0;});r.n=r.w+r.l;r.p=r.n?r.w/r.n:null;r.ok=r.n>=HALF_OK.n&&r.p>=HALF_OK.p&&r.u>0;return r;}
 /* today's half calls, official first */
@@ -2887,7 +2903,7 @@ function gradeVoices(){try{voicesRepairDates();}catch(e){console.warn('voices re
     if(x.market==='ml'){if(a!==h)hit=(x.side==='home')===(h>a);}
     else if(x.market==='spread'&&x.line!=null){const m=(x.side==='home'?h-a:a-h)+x.line;if(m!==0)hit=m>0;}
     else if(x.market==='total'&&x.line!=null){const t=a+h;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
-    x.graded=true;x.hit=hit;if(hit!==null)x.units=hit?_vProfit(x.price!=null?x.price:-110):-1;n++;});
+    x.graded=true;x.hit=hit;if(hit!==null)x.units=vUnits(x,hit);n++;});
   if(n)set(VOICES_KEY,V);try{gradeScoreCalls();}catch(e){console.warn('score grade',e);}try{gradeHalfCalls();}catch(e){console.warn('half grade',e);}return n;}
 function voicesReport(sp){
   let extra='';try{extra=(typeof cpRecordHtml==='function'?cpRecordHtml():'')+scoreCallsHtml(sp)+halfRecordsHtml(sp)+charBrainReport(sp)+boxAccuracyHtml();}catch(e){}
@@ -3041,7 +3057,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261108g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261108h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -17982,8 +17998,8 @@ function tfPass(x,sp,F){
 /* ══ v2.87.0 · BET TYPES — one breakdown for Today, ⏰ By time and the ticket builder ══════════════════════════════════════════════
    Nov 7: "break it down by bet types (props, spreads, o/u, 1st half, moneyline, heavy moneylines (over -1000) and light moneylines)".
    Heavy = a moneyline priced -1000 or shorter; light = every other moneyline. 1st half covers hockey's 1st period. */
-const BT_HEAVY=-1000;
-const BT_LIST=[['all','All bets'],['ml','Moneyline'],['heavy','Heavy ML -1000+'],['light','Light ML'],['spread','Spreads'],['total','O/U'],['half','1st half'],['props','Props']];
+const BT_HEAVY=-500;   /* v2.95 · the heavy lane starts at -500 (was -1000) */
+const BT_LIST=[['all','All bets'],['ml','Moneyline'],['heavy','Heavy ML -500+'],['light','Light ML'],['spread','Spreads'],['total','O/U'],['half','1st half'],['props','Props']];
 const BT_LINES=['all','ml','heavy','light','spread','total'];
 function btMarket(m){m=String(m||'');return m==='moneyline'?'ml':m==='runline'||m==='puckline'?'spread':m;}
 function btHeavy(price){return price!=null&&price!==''&&isFinite(+price)&&+price<=BT_HEAVY;}
@@ -17991,8 +18007,8 @@ function btPass(bt,m,price){if(!bt||bt==='all')return true;m=btMarket(m);
   if(/^(h1|p1)/.test(m))return bt==='half';if(m==='prop')return bt==='props';if(bt==='half'||bt==='props')return false;
   if(bt==='ml')return m==='ml';if(bt==='heavy')return m==='ml'&&btHeavy(price);if(bt==='light')return m==='ml'&&!btHeavy(price);return m===bt;}
 function btLabel(bt){return(BT_LIST.find(x=>x[0]===bt)||[0,bt])[1];}
-const BT_NOTE={heavy:'Heavy favorites: moneylines priced -1000 or shorter — risk $10+ to win $1, so one miss erases ten wins. They\'re never official (the 70% rule needs a price of -300 or better).',
-  light:'Light moneylines: every moneyline priced longer than -1000 — short favorites, pick\'ems and underdogs.',
+const BT_NOTE={heavy:'Heavy favorites: moneylines priced -500 or shorter — risk $5+ to win $1, so one miss erases five wins. Their own lane: off every character\'s headline record, official only for the Simulator (the heavy specialist).',
+  light:'Light moneylines: every moneyline priced longer than -500 — short favorites, pick\'ems and underdogs.',
   half:'1st half (1st period in hockey): every character\'s half read, scaled from its own final-score call so it agrees with its game picks. Official once that character has proven that half market.',
   props:'Props: the board\'s player props at 70%+, and each character\'s own prop calls.'};
 
@@ -18001,7 +18017,7 @@ const BT_NOTE={heavy:'Heavy favorites: moneylines priced -1000 or shorter — ri
    its record says (live, graded calls only): the lanes (sport × bet type × fav/dog/over/under) where it has made money and where it
    has lost it — the same lanes that let its picks onto the card or keep them off. */
 const CHAR_EDGE={
-  'Sim':['every market on every game — 10,000 runs of the full model','it only knows what it\'s fed: a late scratch, a motivation spot or news it hasn\'t seen'],
+  'Sim':['the engine — every market on every game, 10,000 runs; the heavy favorites it calls','its confidence leans on the market (its raw chance predicts worse than the book), so between -350 and +350 it isn\'t trusted below 80%'],
   'Judge':['weighing every source by how accurate it has actually been','when its witnesses are wrong together, so is it — and it trusts a source\'s past more than its latest change'],
   'Coach':['the clipboard — sees when a character says more than it hits, and the situations (rest, spots, weather, news) nobody else reads','his score starts from the season\'s scoring, so a team that just changed (a new QB, a trade) takes him a few games to see'],
   'Most common':['the single most likely final score — exact scores, and totals near the number','the likeliest score is still unlikely — high-variance games swing right past it'],
@@ -18013,8 +18029,8 @@ const CHAR_EDGE={
   'Dog':['knows the dogs — season records as a dog, favorites that drop games to dogs, power vs the line, matchups, rest and injuries, all in one gut score','it never backs a favorite, and outright dogs lose more often than they win even when he\'s right'],
   'Scout':['talent matchups — QBs, pass rush, ball hawks, shooters, goalies','it needs enough games read for both teams, so it\'s quiet early in a season'],
   'Banker':['reads every character\'s books — backs only a side the strongest accounts agree on (60%+ of the weighted backing, never against the calibrated chance, never shorter than -300)','he only speaks when two or more characters are on a side, so he skips split games'],
-  'Brain':['the Sim, the market and every character\'s graded vote, weighed together','it\'s only as right as the voices it weighs, and still learning until they have graded history'],
-  'Blend':['the Sim\'s chance blended with the market\'s, weighted by which has predicted better','it stays close to the market by design, so it rarely finds a big edge']};
+  'Brain':['the middle of the board, priced: where sharper markets disagree with the book, steam, overbet longshots','he passes most games, and proves himself on units and closing-line value before he goes official'],
+  'Blend':['retired — the Sim-plus-market read now feeds the Brain','when it disagreed with the Sim it lost: 200-194, -32.6u']};
 const CW_LAB={heavy:['✅','Carries weight','var(--win)'],light:['⚠️','Light weight','var(--rust)'],mixed:['➖','Mixed record','var(--gold)'],new:['⏳','Still proving itself','var(--mute)']};
 let CPROF_C=null;
 function charProfile(v){const T=laneTable();const CP=roGet(CPROP_KEY,[],30e3)||[];const HL=roGet(HALF_KEY,{},30e3)||{};
@@ -18261,6 +18277,7 @@ const CDAY_COLS=[['spread','ATS'],['ml','ML'],['total','O/U'],['prop','Props']];
 function charDayRecord(d,sp){const V=roGet(VOICES_KEY,[],5000)||[];const R={};
   const row=v=>R[v]||(R[v]={v,w:0,l:0,p:0,pend:0,u:0,by:{spread:{w:0,l:0,p:0,pend:0},ml:{w:0,l:0,p:0,pend:0},total:{w:0,l:0,p:0,pend:0},prop:{w:0,l:0,p:0,pend:0}}});
   V.forEach(x=>{if(String(x.date).slice(0,10)!==d||!CHARS[x.voice]||(sp&&sp!=='all'&&x.sp!==sp))return;const m=x.market==='moneyline'?'ml':x.market;if(!['ml','spread','total'].includes(m))return;
+    if(typeof isHeavyML==='function'&&isHeavyML(x))return;   /* v2.95 · the heavy lane isn't a character's record */
     const o=row(x.voice),b=o.by[m];if(!x.graded){o.pend++;b.pend++;return;}
     if(x.hit===true){o.w++;b.w++;}else if(x.hit===false){o.l++;b.l++;}else{o.p++;b.p++;}o.u+=+x.units||0;});
   /* character player props (graded off the box score) */
@@ -19454,7 +19471,7 @@ function hubYou(){
 function hubData(){
   const V=get(VOICES_KEY,[]);const sig=V.length+'|'+get(LS.locked,[]).length+'|'+Math.floor(Date.now()/300e3);
   if(HUB_CACHE&&HUB_SIG===sig)return HUB_CACHE;
-  const M={};V.forEach(x=>{if(!x.graded||x.hit==null)return;const v=HUB_VOICES.includes(x.voice)?x.voice:'Outside preds';
+  const M={};V.forEach(x=>{if(!x.graded||x.hit==null)return;const v=typeof isHeavyML==='function'&&isHeavyML(x)?'Heavy ML lane':HUB_VOICES.includes(x.voice)?x.voice:'Outside preds';   /* v2.95 · heavy favorites keep their own lane */
     const o=((M[v]||(M[v]={}))[x.sp]||(M[v][x.sp]={w:0,n:0,u:0,be:0,bv:0}));o.n++;if(x.hit)o.w++;o.u+=x.units||0;hubBE(o,x.price);});
   HUB_CACHE={M,you:hubYou()};HUB_SIG=sig;return HUB_CACHE;
 }
@@ -19479,7 +19496,8 @@ function renderRecordsHub(){
   const Y=D.you;
   const rows=[row('You (picks)',Y.picks,'var(--gold)')].concat(
     HUB_VOICES.filter(v=>D.M[v]).map(v=>row((CHARS[v]?CHARS[v].chip+' ':'')+(CHARS[v]?CHARS[v].label:v),D.M[v],CHARS[v]?CHARS[v].color:null)),
-    D.M['Outside preds']?[row('Outside preds',D.M['Outside preds'])]:[]);
+    D.M['Outside preds']?[row('Outside preds',D.M['Outside preds'])]:[],
+    D.M['Heavy ML lane']?[row('🔒 Heavy ML lane (-500+, every character)',D.M['Heavy ML lane'],'var(--mute)')]:[]);
   const best=HUB_VOICES.concat(['Outside preds']).map(v=>({v,o:sum(D.M[v])})).filter(x=>x.o.n>=15).sort((a,b)=>b.o.w/b.o.n-a.o.w/a.o.n)[0];
   const _sp=typeof REC_FILTER_SP!=='undefined'?REC_FILTER_SP:'all';
   const _mkt=typeof REC_FILTER_MKT!=='undefined'?REC_FILTER_MKT:'all';
@@ -21165,7 +21183,7 @@ if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__&&!(typeof location!=='u
 let CB_V=null,CB_N='auto',CB_SP='all',CB_SEL=null,CB_SIG='',CB_ALL=false,CB_BT='all',CB_CC=null;
 /* v2.87.0 · the candidates once per ledger change (every character asks for its pool now, to count it) */
 function cbCands(V,d){if(CB_CC&&CB_CC.V===V&&CB_CC.d===d&&Date.now()-CB_CC.t<30e3)return CB_CC.out;const out=bkDayCands(V,d);CB_CC={V,d,t:Date.now(),out};return out;}
-/* heavy favorites (-1000 or shorter) sit below the -300 floor, so they're built here, only when you ask for them */
+/* heavy favorites (-500 or shorter) sit below the -300 floor, so they're built here, only when you ask for them */
 function cbHeavyCands(V,d,v){return V.filter(x=>String(x.date).slice(0,10)===d&&x.voice===v&&x.price!=null&&btMarket(x.market)==='ml'&&btHeavy(x.price))
   .map(c=>{const s=cparLegScore(V,c);return{v,sp:c.sp,game:c.game,gd:String(c.date||'').slice(0,10)||null,m:'ml',sd:c.side,line:c.line,pick:charPickText(c),price:c.price,p:s.p,score:s.score,hr:s.hr,why:s.why,weak:s.weak};})
   .filter(x=>!x.weak&&x.p>0).sort((a,b)=>b.score-a.score);}
@@ -22421,7 +22439,7 @@ function feelBuckets(c,V){V=V||roGet(VOICES_KEY,[],30e3)||[];const M=((splitsGet
   B.streak=Object.assign([0,0],{s});
   return{B,all};}
 /* the character's stated chance where it has one; otherwise its own all-time rate here */
-function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Trends'&&c.hG!=null?+(c.hG/100).toFixed(2):c.voice==='Coach'&&c.cG!=null?+(c.cG/100).toFixed(2):c.voice==='Pred'&&c.oG!=null?+(c.oG/100).toFixed(2):c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
+function feelBase(c,all){const st=c.voice==='Power'?c.pP:c.voice==='Dog'?c.dP:c.voice==='Trends'&&c.hG!=null?+(c.hG/100).toFixed(2):c.voice==='Coach'&&c.cG!=null?+(c.cG/100).toFixed(2):c.voice==='Pred'&&c.oG!=null?+(c.oG/100).toFixed(2):c.voice==='Brain'&&c.bG!=null?+(c.bG/100).toFixed(2):c.voice==='Scout'?c.sP:(c.voice==='Sim'?(c.pUsed||c.simP):(META_VOICES.has(c.voice)?c.simP:null));
   const rate=(all[0]+FEEL_K0*0.5)/(all[0]+all[1]+FEEL_K0);
   if(st>0&&st<1){/* a stated chance is tempered by how reliable the character has actually been */const n=all[0]+all[1];const k=n/(n+FEEL_K0);return Math.max(0.02,Math.min(0.98,(1-k*0.5)*st+k*0.5*rate));}
   return rate;}
