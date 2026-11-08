@@ -2248,7 +2248,7 @@ const CHARS={
   'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'situational trend records, shrunk for small samples',quiet:'no uploaded trends lean'},
   'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
   'Power':      {chip:'⚡ POWER',color:'#818cf8',label:'The Commissioner',school:'TheDesk Power Index — who\'s better and by how much, plus prestige and the all-time series',quiet:'no power rating for one of these teams, or no real edge on this number'},
-  'Dog':        {chip:'🐕 DOG',color:'#2dd4bf',label:'The Underdog Spotter',school:'plus-money value only — a dog the Sim gives clearly more chance than its price (5+ points on a moneyline, 4+ on a spread); silent on every favorite',quiet:'no dog the Sim rates clearly above its price'},
+  'Dog':        {chip:'🐕 DOG',color:'#2dd4bf',label:'The Underdog Spotter',school:'knows the dogs — who wins and covers every time they get points, favorites that drop games to dogs, power, offense vs defense, rest and injuries; official at a gut of 70+',quiet:'no dog clears his gut today'},
   'Scout':      {chip:'🔭 SCOUT',color:'#fb7185',label:'The Scout',school:'talent: superstars vs busts — QB efficiency, pass rush, ball hawks, shooters, goalies — read as matchups',quiet:'not enough of either team\'s games read yet, or no real talent edge'},
   'Banker':     {chip:'🏦 BANKER',color:'#d4af37',label:'The Banker',school:'the secretary — reads every character\'s books (sport × bet type × favorite/dog/over/under) and backs the side the strongest accounts are on; builds the Master Parlay Sheet',quiet:'no side has two or more characters with strong books agreeing'},
   'Brain':      {chip:'🧠 BRAIN',color:'#60a5fa',label:'The Brain',school:'the Sim, the market and every character\'s graded vote, weighed together',quiet:'still learning — needs graded character history'},
@@ -2381,8 +2381,8 @@ function characterCalls(sp,g,s){
   try{pwrCharCalls(sp,g,hl,tl,hlSim,tlSim,add);}catch(e){}
   /* 🔭 the Scout — stars vs busts (v2.27) */
   try{scoutCharCalls(sp,g,hl,tl,hlSim,tlSim,add);}catch(e){}
-  /* 🐕 the Underdog Spotter — plus-money value only (v2.54) */
-  try{dogCharCalls(sp,g,s,Ln,hl,hlSim,add);}catch(e){}
+  /* 🐕 the Underdog Spotter — v2.90: knows the dogs (desk-dog.js); the old plus-money value rule only if that module is missing */
+  try{if(typeof dogCallsV2==='function')dogCallsV2(sp,g,s,Ln,hl,hlSim,add,tlSim?null:tl);else dogCharCalls(sp,g,s,Ln,hl,hlSim,add);}catch(e){}
   try{metaCalls(sp,g,calls,Ln,add);}catch(e){}
   CHAR_CACHE[ck]={ts:Date.now(),s,calls,g:CHAR_GEN};
   return calls;
@@ -2499,6 +2499,8 @@ function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)r
   const own=(v,a,h)=>{if(isFinite(+a)&&isFinite(+h)){const ml=(by(v).find(c=>c.market==='ml')||{}).side;out[v]=fix(+a,+h,ml);}};
   own('Sim',s.awayProj,s.homeProj);
   const J=by('Judge').find(c=>c.ja!=null);if(J)own('Judge',J.ja,J.jh);
+  /* v2.90 · the Underdog Spotter calls a score on every game with a dog, official pick or not */
+  try{const dp=typeof dogPredFor==='function'?dogPredFor(sp,g):null;if(dp)own('Dog',dp.a,dp.h);}catch(e){}
   [['Most common'],['Covers'],['Pred']].forEach(([v])=>{const c=by(v).find(x=>x.score);if(c){const m=String(c.score).match(/([\d.]+)\D+([\d.]+)/);if(m)own(v,+m[1],+m[2]);}});
   const unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3;
   new Set(calls.map(c=>c.voice)).forEach(v=>{if(out[v]||v==='Books')return;const C=by(v);if(!C.length)return;let a=+s.awayProj,h=+s.homeProj;
@@ -3031,7 +3033,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261108a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261108b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18000,7 +18002,7 @@ const CHAR_EDGE={
   'Trends':['situational trend records, shrunk for small samples','trends describe the past and many are noise; silent without uploaded trends'],
   'Consensus':['where the public tickets and money are','the public loses over time and books shade lines against it; silent without uploaded splits'],
   'Power':['who\'s better and by how much — the Power Index, prestige and the all-time series','ratings move slowly, so injuries and sudden form swings take a while to show'],
-  'Dog':['plus-money value — underdogs the Sim rates clearly above their price','it never backs a favorite, and long prices mean long losing runs even when it\'s right'],
+  'Dog':['knows the dogs — season records as a dog, favorites that drop games to dogs, power vs the line, matchups, rest and injuries, all in one gut score','it never backs a favorite, and outright dogs lose more often than they win even when he\'s right'],
   'Scout':['talent matchups — QBs, pass rush, ball hawks, shooters, goalies','it needs enough games read for both teams, so it\'s quiet early in a season'],
   'Banker':['reads every character\'s books — backs only a side the strongest accounts agree on (60%+ of the weighted backing, never against the calibrated chance, never shorter than -300)','he only speaks when two or more characters are on a side, so he skips split games'],
   'Brain':['the Sim, the market and every character\'s graded vote, weighed together','it\'s only as right as the voices it weighs, and still learning until they have graded history'],

@@ -48,7 +48,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);const e0=errs.length;const W8=ms=>
   /* a character: who it is, why its word carries weight or doesn't, what it would do */
   E(`tfSet('bt','all');tfSet('ch','Dog')`);await W8(50);
   const prof=()=>(tb.querySelector('.ch-prof')||{textContent:''}).textContent.replace(/\s+/g,' ');
-  T('picking a character shows what its method is built for and its blind spot',/Built for plus-money value/.test(prof())&&/Blind spot: it never backs a favorite/.test(prof()),prof().slice(0,300));
+  T('picking a character shows what its method is built for and its blind spot',/Built for knows the dogs/i.test(prof())&&/Blind spot: it never backs a favorite/.test(prof()),prof().slice(0,300));
   T('…and its weight from its graded record: ✅ carries weight, with the lane it has proven (NHL side (dog) 24-16)',/✅ Carries weight/.test(prof())&&/Proven: 🏒 NHL side \(dog\) 24-16/.test(prof()),prof());
   T('…then every call it made today, even ones that never reached the card',/MTL ML/.test(tb.textContent)&&/1 call/i.test(tb.textContent));
   E(`tfSet('ch','Judge')`);await W8(50);

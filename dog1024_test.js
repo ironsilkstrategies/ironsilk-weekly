@@ -20,13 +20,14 @@ function page(file,V){let html=fs.readFileSync(path.join(W,file),'utf8');html=ht
       return{c1,c2,voter:isVoter('Dog'),inOrder:VOTER_ORDER.includes('Dog'),chars:!!CHARS.Dog};})()`);
     T('the Spotter is on the roster, and on probation it does not vote',r.chars&&r.voter===false&&r.inOrder===false);
     const d=r.c1[0];
-    T('a dog the Sim rates clearly above its price gets the call (WPG +170: the Sim 44% vs the price\'s 37%)',r.c1.length===1&&d.market==='ml'&&d.side==='away'&&d.price===170&&d.dEdge>=0.05,JSON.stringify(r.c1.map(x=>({m:x.market,s:x.side,p:x.price,dP:x.dP,e:x.dEdge}))));
+    /* v2.90 · the Spotter was rebuilt (dog1108_test.js): value is no longer his thing — a dog the Sim likes over its price gets no call on that alone */
+    T('v2.90 · the Sim\'s value on a dog alone no longer makes a Spotter call (the rebuilt Spotter reads the season — dog1108_test.js)',r.c1.length===0,JSON.stringify(r.c1.map(x=>({m:x.market,s:x.side,p:x.price,dP:x.dP,e:x.dEdge}))));
     T('a dog priced fairly gets nothing — the Spotter only speaks when the price is wrong (CGY +130)',r.c2.length===0,JSON.stringify(r.c2));
     T('it never takes a favorite',r.c1.every(x=>x.price>0));
     const off=w.eval(`isOfficial({...${JSON.stringify(d)},cf:0.9})`);
     T('on probation nothing it says is official — even with a high confidence',off===false);
     w.eval(`PROB_OK.Dog=true`);
-    T('once graduated, its official bar is VALUE (its edge over the price), not a win chance a dog can never reach',w.eval(`isOfficial({...${JSON.stringify(d)},cf:0.41})`)===true&&w.eval(`isOfficial({...${JSON.stringify(d)},cf:0.41,dEdge:0.02})`)===false);
+    T('v2.90 · an old value-style call (no gut on it) keeps its old official rule — graduated and +5% over the price',w.eval(`isOfficial({voice:'Dog',market:'ml',price:170,dEdge:0.06,cf:0.41,date:today()})`)===true&&w.eval(`isOfficial({voice:'Dog',market:'ml',price:170,dEdge:0.02,cf:0.41,date:today()})`)===false);
     w.eval(`PROB_OK.Dog=false`);
     /* football spreads: the side getting points */
     const s=w.eval(`(()=>{const g={id:'f1',away:{abbr:'NYJ'},home:{abbr:'BUF'},abstract:'pre',date:'2026-10-25T17:00:00Z'};const add=[];
@@ -38,6 +39,6 @@ function page(file,V){let html=fs.readFileSync(path.join(W,file),'utf8');html=ht
     const P=w.eval('dogProbation()');
     T('a dog that wins 40% at +180 is a WINNER — probation reads units, not the hit rate',P.n===50&&P.w===20&&Math.abs(P.u-6)<1e-9&&P.ok===true&&w.eval('isVoter("Dog")')===true,JSON.stringify(P));
     w.eval(`if(!document.getElementById('bestCard')){const d=document.createElement('div');d.id='bestCard';document.body.appendChild(d);}renderBest();`);
-    T('its card sits under the Best 3 with its record',/The Underdog Spotter/.test(w.document.getElementById('bestCard').innerHTML)&&/Graduated — it votes · 20-30 · \+6\.0u/.test(w.document.getElementById('bestCard').innerHTML));}
+    T('its card sits under the Best 3 with its record',/The Underdog Spotter/.test(w.document.getElementById('bestCard').innerHTML)&&/Knows the dogs/.test(w.document.getElementById('bestCard').innerHTML));}
 }catch(e){T('no crash',false,String(e&&e.stack||e).slice(0,600));}
   const p=out.filter(x=>x.startsWith('PASS')).length;console.log(out.join('\n'));console.log(`${p} pass / ${out.length-p} fail`);process.exit(0);})();

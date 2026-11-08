@@ -68,6 +68,8 @@ function bkSheetLegs(){const d=today();let C=[];try{C=deskCands(roGet(VOICES_KEY
     o.score=cf+o.acc+0.01*Math.min(4,o.by.length-1);
     let pc=null;try{pc=typeof mcalTeam==='function'?mcalTeam({sp:o.sp,mk:o.m,price:o.price,v:Object.fromEntries(o.by.map((v,i)=>[v,o.cf[i]])),opp:[]}):null;}catch(e){}
     o.p=Math.max(0.02,Math.min(0.98,(pc!=null?pc:cf)+o.acc));if(!o.start){try{o.start=boardStart(o.sp,o.game,d)||'';}catch(e){}}});
+  /* an outright dog (under a 45% calibrated chance) is a fine single but sinks a 9-leg ticket — the sheet leaves it to the singles */
+  for(let i=legs.length-1;i>=0;i--)if(legs[i].p<0.45)legs.splice(i,1);
   /* one side per game: the spread or the moneyline, whichever the Banker rates higher */
   const G={};legs.forEach(o=>{const g=o.sp+'|'+o.game;const e=G[g]||(G[g]={sp:o.sp,game:o.game,start:o.start,legs:[]});if(!e.start&&o.start)e.start=o.start;
     if(o.m!=='total'){const i=e.legs.findIndex(z=>z.m!=='total');if(i>=0){if(e.legs[i].score>=o.score)return;e.legs.splice(i,1);}}e.legs.push(o);});
