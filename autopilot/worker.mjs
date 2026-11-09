@@ -566,8 +566,8 @@ export function goalPost(p, n, now) { const legs = lockedFree(p, now); const fir
   const card = { kicker: 'The goal · ' + day, title: `${n} reactions unlocks it`, wrap: true, big: { value: String(legs.length), label: `free picks, locked` }, rows: [{ label: 'React to this post', meta: `${n} reactions and the full free card drops here` }, isFinite(first) ? { label: 'First game ' + tStr(first), meta: 'clock\'s running', lock: true } : null].filter(Boolean) };
   return { kind: 'goal', key: 'goal|' + p.d, text, card, only: 'fb', legs: legs.map(l => l.k), until: (u => isFinite(u) && u > 0 ? u : now + 12 * 36e5)(Math.max(...legs.map(l => l.unlockAt || 0))) }; }   /* alive until the last locked pick unlocks */
 export function dropPost(p, legs, n) { const day = (p.pub && p.pub.day) || DAYFMT(p.d);
-  const text = [`🔓 <b>GOAL HIT — ${n}+ reactions. Here's today's full free card.</b>`, ...legs.map(l => `• <b>${esc(l.label)}</b> · ${esc(l.kind)}${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${l.start ? ' · ' + tStr(l.start) : ''}`), '', '<i>Locked before the games. Graded at the final. You did this — keep it coming.</i>'].join('\n');
-  const card = { kicker: 'Goal hit · ' + day, title: 'The full free card', big: { value: `${n}+`, label: 'reactions did it' }, rows: legs.map(l => ({ label: l.label, meta: [l.kind, l.game, l.start ? tStr(l.start) : ''].filter(Boolean).join(' · ') })) };
+  const text = [n ? `🔓 <b>GOAL HIT — ${n}+ reactions. Here's today's full free card.</b>` : `🔓 <b>AS PROMISED — today's full free card, early.</b>`, ...legs.map(l => `• <b>${esc(l.label)}</b> · ${esc(l.kind)}${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${l.start ? ' · ' + tStr(l.start) : ''}`), '', '<i>Locked before the games. Graded at the final. You did this — keep it coming.</i>'].join('\n');
+  const card = { kicker: 'Goal hit · ' + day, title: 'The full free card', big: n ? { value: `${n}+`, label: 'reactions did it' } : null, rows: legs.map(l => ({ label: l.label, meta: [l.kind, l.game, l.start ? tStr(l.start) : ''].filter(Boolean).join(' · ') })) };
   return { kind: 'drop', key: 'drop|' + p.d, text, card }; }
 export async function runMegaphone(state, M, today, deps) { if (String(deps?.mega ?? env.MEGAPHONE ?? '').trim().toLowerCase() === 'off') return 0;
   const now = deps?.now || Date.now(), T = deps?.tg || tg; let acted = 0;
@@ -576,7 +576,9 @@ export async function runMegaphone(state, M, today, deps) { if (String(deps?.meg
   /* the goal: count the reactions every few minutes; at the number, drop every free pick still locked */
   const G = M.goal; if (G && G.d === today && !G.done && p) {
     if (now >= G.until) G.done = 'expired'; else if (!G.chk || now - G.chk >= 8 * 60e3) { G.chk = now; const n = await Soc.fbReactions(G.id, deps); if (n != null) G.seen = n;
-      if (n != null && n >= G.n) { const legs = lockedFree(p, now); if (!legs.length) G.done = 'empty'; else { const r = await sendMega(dests, T, deps, dropPost(p, legs, G.n));
+      /* can't read the count (the token lacks pages_read_user_content)? the promise still holds: the card drops 90 minutes in */
+      const blind = n == null && now - G.at >= 90 * 60e3; if (blind) log('megaphone · reactions unreadable — dropping the card as promised');
+      if ((n != null && n >= G.n) || blind) { const legs = lockedFree(p, now); if (!legs.length) G.done = 'empty'; else { const r = await sendMega(dests, T, deps, dropPost(p, legs, blind ? 0 : G.n));
           if (r.ok) { legs.forEach(l => { p.sent['unlock|' + l.k] = 1; }); G.done = 'hit'; acted++; log('megaphone · goal hit ·', n, 'reactions · dropped', legs.length, 'picks'); } } } } }
   if (!Mega.due(M, now, { hours: deps?.hours ?? env.MEGA_HOURS, every: deps?.every ?? env.MEGA_EVERY })) return acted;
   const F = await feedsNow(deps); const c = {}; const L = loungeUrl(deps); const h = Mega.ctParts(now).h;

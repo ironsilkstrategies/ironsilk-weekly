@@ -128,7 +128,7 @@ export function moversPost(games, F, now, deps) { const lounge = (deps && deps.l
 const ctLabel = ts => new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(ts));
 
 /* ── the schedule: is a post due, and which one ── */
-export function hours(spec) { const m = String(spec || '').match(/^(\d{1,2})\s*-\s*(\d{1,2})$/); return m ? [+m[1], +m[2]] : [8, 23]; }
+export function hours(spec) { const m = String(spec || '').match(/^(\d{1,2})\s*-\s*(\d{1,2})$/); return m ? [+m[1], +m[2]] : [9, 23]; }
 export function due(M, now, opt = {}) { const [a, b] = hours(opt.hours); const { h } = ctParts(now); const every = (+opt.every || 30) * 60e3;
   return h >= a && h < b && (!M.last || now - M.last >= every - 4 * 60e3); }
 /* order of play: the goal (once, mornings), then questions on the hour and the rest between; anything missing → a question */
