@@ -24,6 +24,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: autopilot/package-lock.json
+      - run: npm ci --prefix autopilot --no-audit --no-fund   # v2.98 · the picture-card renderer (satori + resvg) and its fonts
+        continue-on-error: true   # no renderer → the posts still go out, as words
       - run: node autopilot/worker.mjs
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -34,3 +38,7 @@ jobs:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}        # v2.97 · TheDesk's Facebook page — mirrors the public posts; off until both are set
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}  # a page access token (pages_manage_posts); masked in the logs, never printed
           LOUNGE_URL: ${{ vars.LOUNGE_URL }}           # the free lounge's invite link for the page's posts (default https://t.me/TheDeskLounge)
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}        # v2.98 · the Instagram professional account linked to the page — off until set (posts with FB_PAGE_TOKEN)
+          IG_KINDS: ${{ vars.IG_KINDS }}               # which posts Instagram gets: "unlock,recap,cash,invite" when unset, "all" for every result too
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}  # v2.98 · Threads — off until set; the worker refreshes it weekly and keeps it encrypted
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}  # optional (the token's own account when unset)

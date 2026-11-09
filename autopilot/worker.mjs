@@ -6,11 +6,12 @@
    and the worker never overwrite each other.
    Secrets: TG_BOT_TOKEN, AUTOPILOT_KEY. GITHUB_TOKEN + GITHUB_REPOSITORY come from Actions. */
 import { webcrypto as crypto } from 'node:crypto';
+import * as Soc from './social.mjs';   /* v2.98 · the picture cards and the other outlets (Facebook, Instagram, Threads) */
 const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.82';
+const VERSION = 'worker v2.98';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -152,6 +153,16 @@ export function cashText(p, g) { const st = p.st || {}; const by = {}; (p.legs |
   const D = g.keys.filter(k => st[k] === 'W').reduce((a, k) => a * toDec(by[k] && by[k].price), 1); const day = (p.recapPlan && p.recapPlan.day) || p.d;
   return [`🎉 <b>CASHED</b> — <b>${g.who.map(esc).join(' + ')}</b>`, `<b>${g.keys.length}-leg parlay · ${toAmer(D)}</b> · 1 unit → <b>+${(D - 1).toFixed(2)}u</b>`, '',
     ...g.keys.map(k => { const l = by[k] || {}; return `${MARK[st[k]] || ''}<b>${esc(l.label || k)}</b>${l.__fin ? ' · ' + esc(l.__fin) : ''}`; }), '', `<i>Locked and posted before the first game · ${esc(day)}</i>`].join('\n'); }
+/* v2.98 · the same cash as a picture card */
+export function cashCard(p, g) { const st = p.st || {}; const by = {}; (p.legs || []).forEach(l => { by[l.k] = l; });
+  const D = g.keys.filter(k => st[k] === 'W').reduce((a, k) => a * toDec(by[k] && by[k].price), 1); const day = (p.recapPlan && p.recapPlan.day) || DAYFMT(p.d);
+  return { kicker: 'Cashed · ' + day, title: g.who.join(' + '), big: { value: toAmer(D), label: `${g.keys.length}-leg parlay · +${(D - 1).toFixed(2)}u` },
+    rows: g.keys.map(k => ({ label: (by[k] && by[k].label) || k, meta: (by[k] && by[k].__fin) || '', res: st[k] })) }; }
+/* v2.98 · pictures. In a real run (no deps) the real renderer and Telegram's sendPhoto; a test hands in its own, or none
+   (then it's words only, exactly as before). A post whose picture can't be made or sent still goes out as words. */
+const picOf = async (card, deps) => { const R = deps ? deps.render : Soc.renderCard; if (!R || !card) return null; try { return await R(card, deps); } catch (e) { return null; } };
+async function say(T, chat, text, img, deps) { const P = deps ? deps.tgPhoto : (c, i, t) => Soc.tgPhoto(TG, c, i, t);
+  if (img && P && await P(chat, img, text)) return true; return !!(await T('sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: 'true' })); }
 
 /* ── v2.60 · commands: anyone in TheDesk's lounges types /best, /judge … and gets the answer the app wrote at its last
    hand-off, with ✅/❌ filled in from the grades so far.
@@ -375,11 +386,13 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
   /* cashed tickets — also for days already recapped (the last 4), each announced once */
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || !p.chat || quiet(p) || d < shift(today, -4)) continue; p.sent = p.sent || {};
     for (const g of cashedParlays(p)) { const key = 'cash|' + g.sig; if (p.sent[key]) continue;
-      const r = await T('sendMessage', { chat_id: p.chat, text: cashText(p, g), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.sent[key] = 'W'; acted++;
+      const text = cashText(p, g), img = await picOf(cashCard(p, g), deps);   /* v2.98 · one picture, every outlet */
+      if (await say(T, p.chat, text, img, deps)) { p.sent[key] = 'W'; acted++;
         /* v2.31 · a cash goes everywhere: the VIP lounge, the public channel and its lounge (it's after the fact) */
         for (const [lab, c] of [['vl', p.bc && p.bc.vipLounge], ['pub', p.bc && p.bc.pub], ['pl', p.bc && p.bc.pubLounge]]) { if (!c || p.sent[key + '|' + lab]) continue;
-          const r2 = await T('sendMessage', { chat_id: c, text: cashText(p, g), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r2) p.sent[key + '|' + lab] = 'W'; }
-        if (fbOn(deps) && !p.sent[key + '|fb'] && await fbPost(cashText(p, g), deps)) p.sent[key + '|fb'] = 'W'; } }
+          if (await say(T, c, text, img, deps)) p.sent[key + '|' + lab] = 'W'; }
+        if (Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind: 'cash' }, { fb: !!p.sent[key + '|fb'], ig: !!p.sent[key + '|ig'], th: !!p.sent[key + '|th'] });
+          for (const o of ['fb', 'ig', 'th']) if (m[o]) p.sent[key + '|' + o] = m[o] === true ? 'W' : 'skip'; } } }
     state.posts[d] = p; }
   return acted; }
 
@@ -388,7 +401,9 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
    TheDesk's Facebook page in plain text with the lounge invite, and once a day (from 10 AM Central, on a day with a card)
    the page gets an invite to the free lounge: we talk sports there, not just picks. It only ever mirrors what already
    went public, after Telegram took it. On only when the repo secrets FB_PAGE_ID and FB_PAGE_TOKEN are set; the token is
-   masked in the (public) Actions logs and never printed. LOUNGE_URL (a repo variable) overrides the invite link. */
+   masked in the (public) Actions logs and never printed. LOUNGE_URL (a repo variable) overrides the invite link.
+   v2.98 · every one of those posts is now a picture card too, and Instagram + Threads get them (social.mjs). fbPost stays
+   for a plain words-only post. */
 const fbCfg = deps => deps?.fb || { page: (env.FB_PAGE_ID || '').trim(), tok: (env.FB_PAGE_TOKEN || '').trim(), v: (env.FB_GRAPH_VERSION || 'v24.0').trim() };
 export const fbOn = deps => { const c = fbCfg(deps); return !!(c && c.page && c.tok); };
 if ((env.FB_PAGE_TOKEN || '').trim() && env.GITHUB_ACTIONS === 'true') console.log('::add-mask::' + env.FB_PAGE_TOKEN.trim());
@@ -405,10 +420,16 @@ const FB_INVITES = [
   "🏈🏀🏒 Talk sports with us… not just picks. TheDesk's free lounge on Telegram: live game talk, the reads behind every play, and a crew that actually watches the games.\nJoin → {link}",
   "Every pick we post is locked before the games and graded at the final… in public. Want the why behind them? Come talk it out in the free lounge.\n→ {link}",
   "No promises. No politics. Just sports. TheDesk's free Telegram lounge is where the real conversation happens… bring your takes.\n→ {link}"];
-export async function fbInvite(state, deps) { if (!fbOn(deps)) return 0; const now = deps?.now || Date.now(); const d = chicagoDay(now); const p = state && state.posts && state.posts[d]; if (!p) return 0;
+/* v2.98 · the daily invite is a picture too, and goes to every outlet that's on (Facebook, Instagram, Threads) */
+const inviteCard = deps => ({ kicker: 'Free · Telegram lounge', title: 'Talk sports with us', sub: 'Not just picks… the slate, the matchups, the reads.',
+  rows: [{ label: 'Live game talk', meta: 'a crew that actually watches the games' }, { label: 'The why behind every pick', meta: 'every read, out in the open' }, { label: 'Graded in public', meta: 'locked before the games, graded at the final' }],
+  foot: 'Join free · ' + loungeUrl(deps).replace(/^https?:\/\//, '') });
+export async function fbInvite(state, deps) { if (!Soc.anyOn(deps)) return 0; const now = deps?.now || Date.now(); const d = chicagoDay(now); const p = state && state.posts && state.posts[d]; if (!p) return 0;
   const h = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now)); p.sent = p.sent || {};
-  if (h < 10 || p.sent.fbinv) return 0; const i = Math.floor(Date.parse(d + 'T12:00:00Z') / 864e5) % FB_INVITES.length;
-  if (await fbPost(FB_INVITES[i].replace('{link}', loungeUrl(deps)), deps, { bare: true })) { p.sent.fbinv = 1; return 1; } return 0; }
+  const done = { fb: !!p.sent.fbinv, ig: !!p.sent.iginv, th: !!p.sent.thinv };
+  if (h < 10 || ['fb', 'ig', 'th'].every(o => done[o] || !Soc.on(deps, o))) return 0; const i = Math.floor(Date.parse(d + 'T12:00:00Z') / 864e5) % FB_INVITES.length;
+  const m = await Soc.mirror(FB_INVITES[i].replace('{link}', loungeUrl(deps)), await picOf(inviteCard(deps), deps), deps, { bare: true, kind: 'invite' }, done);
+  if (m.fb) p.sent.fbinv = 1; if (m.ig) p.sent.iginv = 1; if (m.th) p.sent.thinv = 1; return [m.fb, m.ig, m.th].includes(true) ? 1 : 0; }
 
 /* ── v2.31 · the public side ──────────────────────────────────────────────────
    p.pub.legs: the Best 3, the Best 3 props and the Banker's parlay legs, each with
@@ -421,24 +442,33 @@ const KIND = { 'Best 3': '⭐ Best 3', 'Prop': '🎯 Prop', "Banker's parlay": "
 export async function runPublic(p, deps) { const T = deps?.tg || tg; const now = deps?.now || Date.now(); const legs = (p.pub && p.pub.legs) || []; if (!legs.length) return 0;
   const dests = [p.bc && p.bc.pub, p.bc && p.bc.pubLounge].filter(Boolean); let acted = 0; p.st = p.st || {}; p.sent = p.sent || {};
   for (const l of legs) { if (!l.prop || p.st[l.k]) continue; let s = null; try { s = await (deps?.gradeProp || gradeProp)({ sp: l.sp, player: l.player, team: l.team, stat: l.stat, thr: l.thr, side: l.side }, p.d); } catch (e) { } if (s) p.st[l.k] = s; }
-  if (!dests.length && !fbOn(deps)) return 0;
-  const send = async text => { let ok = false; for (const c of dests) { const r = await T('sendMessage', { chat_id: c, text, parse_mode: 'HTML', disable_web_page_preview: 'true' }); ok = ok || !!r; }
-    /* v2.97 · the Facebook page gets it once Telegram has it (a Telegram miss retries both next pass) */
-    if ((ok || !dests.length) && fbOn(deps)) { const fb = await fbPost(text, deps); if (!dests.length) ok = fb; } return ok; };
+  if (!dests.length && !Soc.anyOn(deps)) return 0;
+  /* v2.97 · the other outlets get it once Telegram has it (a Telegram miss retries all of them next pass)
+     v2.98 · …with its picture: the public channel and lounge get the card with the words as its caption */
+  const send = async (text, card, kind) => { const img = await picOf(card, deps); let ok = false; for (const c of dests) ok = (await say(T, c, text, img, deps)) || ok;
+    if ((ok || !dests.length) && Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind }); if (!dests.length) ok = [m.fb, m.ig, m.th].includes(true); } return ok; };
+  const day = (p.pub && p.pub.day) || DAYFMT(p.d);
   /* unlocks */
   const open = legs.filter(l => l.unlockAt && now >= l.unlockAt && !p.sent['unlock|' + l.k] && !p.st[l.k]);
-  if (open.length) { const day = (p.pub && p.pub.day) || DAYFMT(p.d);
+  if (open.length) {
     /* v2.35 · an unlock that goes out after its game has started says so — the post never claims a time it missed */
     const late = l => { const t = Date.parse(l.start || ''); return isFinite(t) && now >= t; };
     const txt = [`🔓 <b>UNLOCKED — TheDesk · ${esc(day)}</b>`, ...open.map(l => `${KIND[l.kind] || l.kind}${l.n && l.kind !== 'Prop' ? ' #' + l.n : ''}: <b>${esc(l.label)}</b>${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${l.start ? ' · ' + tStr(l.start) : ''}${late(l) ? ' · <i>underway</i>' : ''}`),
       '', open.some(late) ? '<i>Locked before the games. This post is late — the game marked underway has already started. Graded at the final.</i>'
         : '<i>Locked before the games, posted 30 minutes before each start. Graded at the final.</i>'].join('\n');
-    if (await send(txt)) { open.forEach(l => { p.sent['unlock|' + l.k] = 1; }); acted++; } }
+    const kinds = [...new Set(open.map(l => l.kind))], one = open.length === 1 ? open[0] : null;
+    const card = { kicker: 'Unlocked · ' + day, title: kinds.length > 1 ? 'Picks unlocked' : kinds[0] === 'Prop' ? (open.length > 1 ? 'Props' : 'Prop') : kinds[0],
+      sub: one && one.game ? one.game + (one.start ? ' · ' + tStr(one.start) : '') : 'Locked before the games · graded at the final',
+      rows: open.map(l => ({ label: l.label, meta: [l.kind + (l.n && l.kind !== 'Prop' ? ' #' + l.n : ''), one ? '' : l.game, one || !l.start ? '' : tStr(l.start), late(l) ? 'underway' : ''].filter(Boolean).join(' · ') })) };
+    if (await send(txt, card, 'unlock')) { open.forEach(l => { p.sent['unlock|' + l.k] = 1; }); acted++; } }
   /* results (only what's been unlocked or is final) */
   const fresh = legs.filter(l => p.st[l.k] && !p.sent['pres|' + l.k]);
   if (fresh.length) { const by = {}; (p.legs || []).forEach(l => { by[l.k] = l; });
     const txt = '<b>📣 Results</b>\n' + fresh.map(l => `${MARK[p.st[l.k]]}<b>${esc(l.label)}</b> <i>${esc(KIND[l.kind] || l.kind)}</i>${by[l.k] && by[l.k].__fin ? ' · ' + esc(by[l.k].__fin) : ''}`).join('\n');
-    if (await send(txt)) { fresh.forEach(l => { p.sent['pres|' + l.k] = p.st[l.k]; }); acted++; } }
+    const n = s => fresh.filter(l => p.st[l.k] === s).length;
+    const card = { kicker: 'Results · ' + day, title: fresh.length === 1 ? ({ W: 'Winner', L: 'Loss', P: 'Push' })[p.st[fresh[0].k]] || 'Graded' : `${n('W')}-${n('L')}${n('P') ? '-' + n('P') : ''}`,
+      rows: fresh.map(l => ({ label: l.label, meta: [l.kind, by[l.k] && by[l.k].__fin].filter(Boolean).join(' · '), res: p.st[l.k] })) };
+    if (await send(txt, card, 'result')) { fresh.forEach(l => { p.sent['pres|' + l.k] = p.st[l.k]; }); acted++; } }
   /* the public recap, once */
   const allDone = legs.every(l => p.st[l.k]);
   if ((allDone || p.d < shift(chicagoDay(now), -1)) && !p.sent.precap && legs.some(l => p.st[l.k])) {
@@ -450,7 +480,10 @@ export async function runPublic(p, deps) { const T = deps?.tg || tg; const now =
     if (props.length) out.push(`🎯 Props: <b>${rec(props)}</b>`);
     if (bk.length) out.push(`🏦 The Banker's parlay: ${bkr}${p.pub && p.pub.parlay ? ' ' + esc(p.pub.parlay.price) : ''}`);
     out.push('<i>Every pick locked before the games and graded at the final — VIP gets them all in the morning.</i>');
-    if (await send(out.join('\n'))) { p.sent.precap = 1; acted++; } }
+    const graded = legs.filter(l => p.st[l.k]), bu = best.reduce((a, l) => a + units(l.price, p.st[l.k] || 'P'), 0);
+    const card = { kicker: 'Recap · ' + day, title: 'Free picks, graded', big: { value: rec(graded), label: best.length ? `Best ${best.length}: ${bu >= 0 ? '+' : ''}${bu.toFixed(2)}u` : 'graded at the final' },
+      rows: graded.map(l => ({ label: l.label, meta: l.kind, res: p.st[l.k] })) };
+    if (await send(out.join('\n'), card, 'recap')) { p.sent.precap = 1; acted++; } }
   return acted; }
 /* the public page: the full card the app handed over, with whatever hasn't unlocked yet hidden, and every grade the worker knows */
 export function publicView(feed, st, now) { const F = JSON.parse(JSON.stringify(feed || {})); st = st || {}; const T0 = F.today; if (!T0) { F.generated = now; return F; }
@@ -516,10 +549,20 @@ export async function relayNext(state, deps) { if ((env.RELAY || '') === 'off') 
 /* the slate day turns over at 5 AM Central — a game ending after midnight still belongs to its day */
 export function chicagoDay(now) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date((now || Date.now()) - 5 * 36e5)); }
 export { decrypt, encrypt, gradePick, gradeProp };
+/* v2.98 · the worker's own memory for Threads: its refreshed token, encrypted, in social.enc on the state branch of
+   this repo only — never in the card, never in the site's copy, so it never reaches the phone or the public page */
+const SOCFILE = 'social.enc';
+async function socialBoot() { if (!(env.THREADS_TOKEN || '').trim() || !GH || !REPO) return;
+  try { const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${SOCFILE}?ref=${BRANCH}`, { headers: ghH }); let S = {}, sha = null;
+    if (r.ok) { const j = await r.json(); sha = j.sha; S = await decrypt(Buffer.from(j.content, 'base64').toString('utf8')); } else if (r.status !== 404) { log('threads memory: HTTP', r.status); return; }
+    Soc.useSocial(S); if (!(await Soc.thRefresh(S))) return;
+    const w = await fetch(`https://api.github.com/repos/${REPO}/contents/${SOCFILE}`, { method: 'PUT', headers: { ...ghH, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'autopilot social ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(S), 'utf8').toString('base64'), ...(sha ? { sha } : {}) }) });
+    if (!w.ok) log('threads memory: save HTTP', w.status); } catch (e) { log('threads memory:', String(e && e.message || e).slice(0, 60)); } }
 /* ── main ── */
 if (import.meta.url === 'file://' + process.argv[1]) {
   const t0 = Date.now(), BUDGET = +(env.RELAY_BUDGET_MS || 6.5 * 60e3), STEP = +(env.RELAY_STEP_MS || 75e3), MARGIN = +(env.RELAY_MARGIN_MS || 25e3);
-  log(VERSION, '· repo', REPO, '· card from', SITE === REPO ? 'here' : SITE + ' + here', '· today', chicagoDay(t0), '·', env.GITHUB_EVENT_NAME || 'manual', '· lounge hours', (loungeHours(env.LOUNGE) || ['off']).join('-'), '· facebook page', fbOn() ? 'on' : 'off');
+  log(VERSION, '· repo', REPO, '· card from', SITE === REPO ? 'here' : SITE + ' + here', '· today', chicagoDay(t0), '·', env.GITHUB_EVENT_NAME || 'manual', '· lounge hours', (loungeHours(env.LOUNGE) || ['off']).join('-'), '· facebook page', fbOn() ? 'on' : 'off', '· instagram', Soc.on(undefined, 'ig') ? 'on' : 'off', '· threads', (env.THREADS_TOKEN || '').trim() ? 'on' : 'off');
+  await socialBoot();
   /* write one copy: on a collision, re-read that copy, merge, retry */
   const saveAt = async (repo, state, cur) => { for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readStateAt(repo) : cur;
       const merged = tries && latest ? mergeState(state, latest.state) : state; const st = await writeStateAt(repo, merged, latest && latest.sha);

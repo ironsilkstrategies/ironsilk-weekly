@@ -83,7 +83,8 @@ try {
     const pg = G.o.page[G.o.page.length - 1];
     T('the public page published with the card token: COL graded, the unscheduled pick stays hidden', pg && pg.auth === 'Bearer SITETOK' && pg.body.today.picks[0].hit === true && pg.body.today.picks[1].hidden === true && !JSON.stringify(pg.body).includes('NYR ML'), JSON.stringify(pg && pg.body.today).slice(0, 300));
     T('graded and recapped → the relay rests', G.o.dispatch.length === 0 && /the relay rests/.test(G.log) && G.code === 0, 'exit ' + G.code);
-    T('the token never shows in the log', !/SITETOK/.test(G.log)); }
+    T('the token never shows in the log', !/SITETOK/.test(G.log));
+    T('v2.98 · the public channel\'s posts went out as picture cards (a PNG with the words as its caption)', pub.some(x => x.meth === 'sendPhoto' && /\[file image\/png \d{5,}b\]/.test(x.params.photo) && /📣 Results|Public recap/.test(x.params.caption || '')), pub.map(x => x.meth + ' ' + String(x.params.photo || '').slice(0, 30)).join(' | ')); }
   else T('site run produced output', false, G.log.slice(-600));
   /* 8 · a live game on the site card + an unlock that missed its T-30 → says "underway" */
   const site2 = JSON.parse(JSON.stringify(site)); delete site2.posts[d3]; delete site2.posts[d1];

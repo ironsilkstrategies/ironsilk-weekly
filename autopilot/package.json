@@ -1,0 +1,13 @@
+{
+  "name": "thedesk-autopilot",
+  "private": true,
+  "type": "module",
+  "description": "TheDesk's robots: the Telegram autopilot and its social posting (picture cards for Telegram, Facebook, Instagram, Threads)",
+  "dependencies": {
+    "satori": "0.33.5",
+    "@resvg/resvg-js": "2.6.2",
+    "jpeg-js": "0.4.4",
+    "@fontsource/archivo": "5.2.8",
+    "@fontsource/ibm-plex-sans": "5.2.8"
+  }
+}
