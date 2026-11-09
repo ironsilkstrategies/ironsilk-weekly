@@ -41,5 +41,9 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}        # v2.98 · the Instagram professional account linked to the page — off until set (posts with FB_PAGE_TOKEN)
           IG_KINDS: ${{ vars.IG_KINDS }}               # which posts Instagram gets: "unlock,recap,cash,invite,spotlight" when unset, "all" for every result too
           SPOTLIGHT: ${{ vars.SPOTLIGHT }}             # v2.98 · Player of the Week + the Terrible 3: teaser when unset (legs unlock at T-30), "full", or "off"
+          MEGAPHONE: ${{ vars.MEGAPHONE }}             # v2.99 · a post every 30 min (game questions + polls, streaks, line movers, receipts, the goal) — "off" stops it
+          MEGA_HOURS: ${{ vars.MEGA_HOURS }}           # posting hours, Central: "9-23" when unset
+          MEGA_EVERY: ${{ vars.MEGA_EVERY }}           # minutes between posts: 30 when unset
+          MEGA_GOAL: ${{ vars.MEGA_GOAL }}             # reactions that drop the free card early: 100 when unset, "off" for no goal posts
           THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}  # v2.98 · Threads — off until set; the worker refreshes it weekly and keeps it encrypted
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}  # optional (the token's own account when unset)

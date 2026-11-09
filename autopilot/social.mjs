@@ -44,10 +44,12 @@ export const txt = s => String(s ?? '').replace(/[←-⇿]/g, '·').replace(/[^ 
 const clip = (s, n) => { s = txt(s); return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s; };
 /* rows fit by measure: three densities, then "+N more" (the words under the picture always carry the full list) */
 const DENS = { normal: { pitch: 164, gap: 20, pad: '26px 30px', lab: 42, meta: 26, cl: [32, 28], cm: 56 }, dense: { pitch: 128, gap: 14, pad: '18px 26px', lab: 34, meta: 22, cl: [38, 34], cm: 64 }, tight: { pitch: 103, gap: 10, pad: '12px 24px', lab: 30, meta: 20, cl: [42, 38], cm: 72 } };
-export function layout(card) { const title = txt(card.title); const fs = title.length <= 16 ? 86 : title.length <= 22 ? 70 : 56;
-  const top = 292 + fs + (card.sub ? 58 : 0) + (card.big ? 163 : 0), room = 1185 - top; const all = (card.rows || []).filter(r => r && r.label);
-  for (const k of ['normal', 'dense', 'tight']) { const D = DENS[k]; const fit = Math.floor((room + D.gap) / D.pitch); if (all.length <= fit) return { fs, dens: k, rows: all, more: 0 }; }
-  const fit = Math.max(1, Math.floor((room - 44 + DENS.tight.gap) / DENS.tight.pitch)); return { fs, dens: 'tight', rows: all.slice(0, fit), more: all.length - fit }; }
+export function layout(card) { const title = txt(card.title); let fs = title.length <= 16 ? 86 : title.length <= 22 ? 70 : 56, tl = 30, lines = 1;
+  /* v2.99 · a question card (wrap) lets its headline run two big lines */
+  if (card.wrap) { fs = title.length <= 18 ? 86 : 74; const cpl = Math.floor(940 / (fs * 0.56)); tl = cpl * 2; lines = title.length > cpl ? 2 : 1; }
+  const top = 292 + fs * 1.04 * lines + (card.sub ? 58 : 0) + (card.big ? 163 : 0), room = 1185 - top; const all = (card.rows || []).filter(r => r && r.label);
+  for (const k of ['normal', 'dense', 'tight']) { const D = DENS[k]; const fit = Math.floor((room + D.gap) / D.pitch); if (all.length <= fit) return { fs, tl, dens: k, rows: all, more: 0 }; }
+  const fit = Math.max(1, Math.floor((room - 44 + DENS.tight.gap) / DENS.tight.pitch)); return { fs, tl, dens: 'tight', rows: all.slice(0, fit), more: all.length - fit }; }
 export const loungeUrl = deps => (deps?.lounge || env.LOUNGE_URL || '').trim() || 'https://t.me/TheDeskLounge';
 /* a card = { kicker, title, sub?, big?: { value, label }, rows: [{ label, meta?, res?: 'W'|'L'|'P', lock?: a locked leg }], foot? } */
 export function cardTree(card, deps) { const L = layout(card), D = DENS[L.dens];
@@ -58,7 +60,7 @@ export function cardTree(card, deps) { const L = layout(card), D = DENS[L.dens];
       h('div', { width: 64, height: 64, borderRadius: 16, background: `linear-gradient(135deg, ${C.gold}, ${C.gold2})`, color: C.bg, fontFamily: 'Archivo', fontWeight: 900, fontSize: 28, alignItems: 'center', justifyContent: 'center' }, 'TD'),
       h('div', { fontFamily: 'Archivo', fontWeight: 900, fontSize: 30, letterSpacing: 2 }, 'THEDESK')),
     h('div', { marginTop: 70, fontSize: 26, fontWeight: 600, letterSpacing: 6, color: C.gold }, clip(card.kicker, 40).toUpperCase()),
-    h('div', { marginTop: 14, fontFamily: 'Archivo', fontWeight: 900, fontSize: L.fs, lineHeight: 1.0, letterSpacing: -2 }, clip(card.title, 30)),
+    h('div', { marginTop: 14, fontFamily: 'Archivo', fontWeight: 900, fontSize: L.fs, lineHeight: 1.04, letterSpacing: -2 }, clip(card.title, L.tl)),
     card.sub ? h('div', { marginTop: 18, fontSize: 30, color: C.soft, lineHeight: 1.35 }, clip(card.sub, 58)) : null,
     card.big ? h('div', { marginTop: 40, alignItems: 'baseline', gap: 22 }, h('div', { fontFamily: 'Archivo', fontWeight: 900, fontSize: 150, color: C.gold, lineHeight: 1 }, clip(card.big.value, 9)), h('div', { fontSize: 32, color: C.mute }, clip(card.big.label, 34))) : null,
     h('div', { flexDirection: 'column', gap: D.gap, marginTop: 44 },
@@ -92,7 +94,7 @@ const cfg = deps => { const v = (env.FB_GRAPH_VERSION || 'v24.0').trim();
     th: deps?.th || { user: (env.THREADS_USER_ID || '').trim() || 'me', tok: SOC.thTok || (env.THREADS_TOKEN || '').trim() } }; };
 export const on = (deps, which) => { const c = cfg(deps)[which]; return which === 'fb' ? !!(c.page && c.tok) : which === 'ig' ? !!(c.user && c.tok) : which === 'th' ? !!c.tok : false; };
 export const anyOn = deps => on(deps, 'fb') || on(deps, 'ig') || on(deps, 'th');
-export const igWants = (kind, deps) => { const k = (cfg(deps).ig.kinds || 'unlock,recap,cash,invite,spotlight').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
+export const igWants = (kind, deps) => { const k = (cfg(deps).ig.kinds || 'unlock,recap,cash,invite,spotlight,drop').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
 if (env.GITHUB_ACTIONS === 'true') for (const t of [env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN]) if ((t || '').trim()) console.log('::add-mask::' + t.trim());
 const KNOWN = new Set();   /* every token this run has used: each log line is scrubbed of all of them, not just its own */
 const hide = (s, toks) => { s = String(s || ''); for (const t of toks) if (t) KNOWN.add(t); for (const t of [...KNOWN, env.TG_BOT_TOKEN, env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN, SOC.thTok]) if (t && String(t).trim().length > 3) s = s.split(String(t).trim()).join('…'); return s; };
@@ -109,12 +111,16 @@ export async function tgPhoto(token, chat, img, html, deps) { if (!token || !img
 /* Facebook: a photo post (a text post when there's no picture); hands back the picture's public address */
 export async function fbSend(html, img, deps, opt) { const c = cfg(deps).fb; if (!c.page || !c.tok) return null; const F = deps?.fetch || fetch; const G = `https://graph.facebook.com/${c.v || 'v24.0'}`;
   const message = plain(html) + (opt && opt.bare ? '' : foot(deps));
-  const words = async () => { const j = await call(F, `${G}/${encodeURIComponent(c.page)}/feed`, new URLSearchParams({ message, access_token: c.tok }), [c.tok], 'facebook'); if (j) log('facebook ✓', message.split('\n')[0].slice(0, 70)); return j ? { ok: true, url: null } : null; };
+  const words = async () => { const j = await call(F, `${G}/${encodeURIComponent(c.page)}/feed`, new URLSearchParams({ message, access_token: c.tok }), [c.tok], 'facebook'); if (j) log('facebook ✓', message.split('\n')[0].slice(0, 70)); return j ? { ok: true, url: null, id: j.id || null } : null; };
   if (!img) return words();
   const j = await call(F, `${G}/${encodeURIComponent(c.page)}/photos`, form({ source: { buf: img.jpg, type: 'image/jpeg', name: 'thedesk.jpg' }, message, published: 'true', access_token: c.tok }), [c.tok], 'facebook photo');
   if (!j) { log('facebook: the picture didn\'t take — posting the words'); return words(); } log('facebook ✓ photo ·', message.split('\n')[0].slice(0, 64));
   let url = null; if (j.id) { const g = await call(F, `${G}/${j.id}?fields=images&access_token=${encodeURIComponent(c.tok)}`, null, [c.tok], 'facebook picture'); url = (g && g.images && g.images[0] && g.images[0].source) || null; }
-  return { ok: true, url }; }
+  return { ok: true, url, id: j.post_id || j.id || null }; }
+/* v2.99 · how many reactions a page post has (the "100 reactions and we drop the card" goal) — null when unknown */
+export async function fbReactions(id, deps) { const c = cfg(deps).fb; if (!c.page || !c.tok || !id) return null; const F = deps?.fetch || fetch;
+  const j = await call(F, `https://graph.facebook.com/${c.v || 'v24.0'}/${id}?fields=reactions.summary(total_count).limit(0)&access_token=${encodeURIComponent(c.tok)}`, null, [c.tok], 'facebook reactions');
+  const n = j && j.reactions && j.reactions.summary && j.reactions.summary.total_count; return Number.isFinite(+n) ? +n : null; }
 /* Instagram: a picture post from that public address, the words as its caption (Instagram's links don't click: the lounge goes by name) */
 export async function igSend(html, imgUrl, deps, opt) { const c = cfg(deps).ig; if (!c.user || !c.tok || !imgUrl) return false; const F = deps?.fetch || fetch; const w = deps?.wait || sleep; const G = `https://graph.facebook.com/${c.v || 'v24.0'}`;
   const caption = cut(plain(html) + (opt && opt.bare ? '' : `\n\n💬 We talk sports in TheDesk's free Telegram lounge… not just picks. Link in bio · ${loungeUrl(deps).replace(/^https?:\/\//, '')}`) + '\n\n#TheDesk #sportspicks #sportsbetting', 2150);
@@ -143,7 +149,8 @@ export async function thRefresh(S, deps) { const envTok = (deps?.thSeed ?? env.T
 /* ── one post to every outlet that's on. done = what already has it (retries skip those). Each value: true posted,
    false tried and missed (retry next pass), 'skip' won't go there (Instagram without a picture, or not a kind it takes). */
 export async function mirror(html, img, deps, opt = {}, done = {}) { const out = {}; let url = null;
-  if (on(deps, 'fb') && !done.fb) { const r = await fbSend(html, img, deps, opt); out.fb = !!r; url = (r && r.url) || null; }
+  if (on(deps, 'fb') && !done.fb) { const r = await fbSend(html, img, deps, opt); out.fb = !!r; url = (r && r.url) || null; out.fbId = (r && r.id) || null; }
+  if (opt.only === 'fb') return out;   /* v2.99 · a Facebook-only post (the reactions goal lives there) */
   if (on(deps, 'ig') && !done.ig) out.ig = !igWants(opt.kind, deps) ? 'skip' : url ? await igSend(html, url, deps, opt) : (done.fb || !on(deps, 'fb') || (out.fb && !img)) ? 'skip' : false;
   if (on(deps, 'th') && !done.th) out.th = await thSend(html, url, deps, opt);
   return out; }

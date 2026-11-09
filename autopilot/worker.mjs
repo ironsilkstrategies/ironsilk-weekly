@@ -6,12 +6,13 @@
    and the worker never overwrite each other.
    Secrets: TG_BOT_TOKEN, AUTOPILOT_KEY. GITHUB_TOKEN + GITHUB_REPOSITORY come from Actions. */
 import { webcrypto as crypto } from 'node:crypto';
-import * as Soc from './social.mjs';   /* v2.98 · the picture cards and the other outlets (Facebook, Instagram, Threads) */
+import * as Soc from './social.mjs';
+import * as Mega from './megaphone.mjs';   /* v2.99 · a post every 30 minutes: game questions + polls, streaks, line movers, the reactions goal */   /* v2.98 · the picture cards and the other outlets (Facebook, Instagram, Threads) */
 const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.98';
+const VERSION = 'worker v2.99';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -533,6 +534,63 @@ export async function runSpotlights(state, p, today, deps) { const mode = String
 /* the public posts' one way out: Telegram first (picture + words), then the other outlets once Telegram has it */
 async function sendPublic(dests, T, deps, text, card, kind) { const img = await picOf(card, deps); let ok = false; for (const c of dests) ok = (await say(T, c, text, img, deps)) || ok;
   if ((ok || !dests.length) && Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind }); if (!dests.length) ok = [m.fb, m.ig, m.th].includes(true); } return ok; }
+/* ── v2.99 · THE MEGAPHONE: one post every 30 minutes in posting hours (megaphone.mjs says what and why) ── */
+const FEEDS_RAW = () => `https://raw.githubusercontent.com/${REPO || 'ironsilkstrategies/ironsilk-weekly'}/feeds/`;
+let FEEDS = null;
+async function feedsNow(deps) { if (deps && 'feeds' in deps) return deps.feeds ? { ...deps.feeds, P: Mega.powerRanks(deps.feeds.season) } : null; if (FEEDS && Date.now() - FEEDS.at < 20 * 60e3) return FEEDS;
+  try { const get = async f => { const r = await fetch(FEEDS_RAW() + f + '.json', { headers: { 'User-Agent': 'thedesk-autopilot' } }); return r.ok ? r.json() : null; };
+    const [oracle, season, coach] = await Promise.all([get('oracle'), get('season'), get('coach')]); if (!oracle) return FEEDS;
+    FEEDS = { at: Date.now(), oracle, season, coach, P: Mega.powerRanks(season) }; return FEEDS; } catch (e) { log('megaphone feeds:', String(e && e.message || e).slice(0, 60)); return FEEDS; } }
+/* the public places to post: the newest card that names them */
+const pubDests = state => { const ds = Object.keys(state.posts || {}).sort().reverse(); for (const d of ds) { const b = state.posts[d] && state.posts[d].bc; if (b && (b.pub || b.pubLounge)) return [b.pub, b.pubLounge].filter(Boolean); } return []; };
+/* a Megaphone post: picture + words to the public channel and lounge (with a poll under it when it has one), then the outlets */
+async function sendMega(dests, T, deps, post) { const img = await picOf(post.card, deps); let ok = false, fbId = null;
+  if (post.only !== 'fb') for (const c of dests) { const r = await say(T, c, post.text, img, deps); ok = r || ok;
+    if (r && post.poll && post.poll.options && post.poll.options.length >= 2) await T('sendPoll', { chat_id: c, question: post.poll.question, options: JSON.stringify(post.poll.options.map(text => ({ text }))), is_anonymous: 'true' }); }
+  if ((ok || !dests.length || post.only === 'fb') && Soc.anyOn(deps)) { const m = await Soc.mirror(post.text, img, deps, { kind: post.kind, bare: true, only: post.only }); fbId = m.fbId || null;
+    if (!dests.length || post.only === 'fb') ok = [m.fb, m.ig, m.th].includes(true); }
+  return { ok, fbId }; }
+const goalN = deps => { const v = String(deps?.goal ?? env.MEGA_GOAL ?? '').trim().toLowerCase(); return v === 'off' ? 0 : (+v > 0 ? Math.round(+v) : 100); };
+const lockedFree = (p, now) => ((p && p.pub && p.pub.legs) || []).filter(l => !p.sent['unlock|' + l.k] && !(p.st || {})[l.k] && (!l.unlockAt || l.unlockAt > now));
+/* 🧾 yesterday's free card, graded (mornings) */
+export function recordPost(state, today) { const p = state.posts && state.posts[shift(today, -1)]; const legs = ((p && p.pub && p.pub.legs) || []).filter(l => (p.st || {})[l.k]); if (legs.length < 2) return null;
+  const st = p.st, w = legs.filter(l => st[l.k] === 'W').length, L = legs.filter(l => st[l.k] === 'L').length; const best = legs.filter(l => l.kind === 'Best 3'); const bu = best.reduce((a, l) => a + units(l.price, st[l.k]), 0); const day = (p.pub && p.pub.day) || DAYFMT(p.d);
+  const text = [`🧾 <b>RECEIPTS — yesterday's free card went ${w}-${L}</b>`, ...legs.map(l => `${MARK[st[l.k]] || ''}<b>${esc(l.label)}</b> · ${esc(l.kind)}`), best.length ? `\nBest ${best.length}: ${bu >= 0 ? '+' : ''}${bu.toFixed(2)}u` : '', '',
+    `Every pick posted before its game, graded at the final — wins and losses. Today's free picks unlock 30 minutes before each game. 👇 ${loungeUrl()}`].join('\n').replace(/\n{3,}/g, '\n\n');
+  const card = { kicker: 'Receipts · ' + day, title: `Yesterday: ${w}-${L}`, big: best.length ? { value: `${bu >= 0 ? '+' : ''}${bu.toFixed(1)}u`, label: `Best ${best.length} on the day` } : null, rows: legs.map(l => ({ label: l.label, meta: l.kind, res: st[l.k] })) };
+  return { kind: 'record', key: 'rec|' + p.d, text, card }; }
+/* 🎯 the goal post (Facebook, where the reactions are counted) and the drop when it hits */
+export function goalPost(p, n, now) { const legs = lockedFree(p, now); const first = Math.min(...legs.map(l => Date.parse(l.start || '') || Infinity)); const day = (p.pub && p.pub.day) || DAYFMT(p.d);
+  const text = [`🎯 <b>${n} REACTIONS = TODAY'S FULL FREE CARD, EARLY</b>`, `Hit ${n} reactions on this post and we drop all ${legs.length} of today's free picks right here, right then — no waiting on the 30-minute unlocks.`,
+    isFinite(first) ? `First game: ${tStr(first)}. Clock's running.` : '', '', 'Every pick locked before the games, graded at the final. 👇'].filter((x, i) => x || i === 3).join('\n');
+  const card = { kicker: 'The goal · ' + day, title: `${n} reactions unlocks it`, wrap: true, big: { value: String(legs.length), label: `free picks, locked` }, rows: [{ label: 'React to this post', meta: `${n} reactions and the full free card drops here` }, isFinite(first) ? { label: 'First game ' + tStr(first), meta: 'clock\'s running', lock: true } : null].filter(Boolean) };
+  return { kind: 'goal', key: 'goal|' + p.d, text, card, only: 'fb', legs: legs.map(l => l.k), until: (u => isFinite(u) && u > 0 ? u : now + 12 * 36e5)(Math.max(...legs.map(l => l.unlockAt || 0))) }; }   /* alive until the last locked pick unlocks */
+export function dropPost(p, legs, n) { const day = (p.pub && p.pub.day) || DAYFMT(p.d);
+  const text = [`🔓 <b>GOAL HIT — ${n}+ reactions. Here's today's full free card.</b>`, ...legs.map(l => `• <b>${esc(l.label)}</b> · ${esc(l.kind)}${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${l.start ? ' · ' + tStr(l.start) : ''}`), '', '<i>Locked before the games. Graded at the final. You did this — keep it coming.</i>'].join('\n');
+  const card = { kicker: 'Goal hit · ' + day, title: 'The full free card', big: { value: `${n}+`, label: 'reactions did it' }, rows: legs.map(l => ({ label: l.label, meta: [l.kind, l.game, l.start ? tStr(l.start) : ''].filter(Boolean).join(' · ') })) };
+  return { kind: 'drop', key: 'drop|' + p.d, text, card }; }
+export async function runMegaphone(state, M, today, deps) { if (String(deps?.mega ?? env.MEGAPHONE ?? '').trim().toLowerCase() === 'off') return 0;
+  const now = deps?.now || Date.now(), T = deps?.tg || tg; let acted = 0;
+  if (M.d !== today) { const last = M.last || 0, goal = M.goal; for (const k of Object.keys(M)) delete M[k]; Object.assign(M, { d: today, last, n: 0, q: {}, st: {}, mv: 0, rec: 0 }); if (goal && goal.d === today) M.goal = goal; }
+  const dests = pubDests(state); if (!dests.length && !Soc.anyOn(deps)) return 0; const p = state.posts && state.posts[today];
+  /* the goal: count the reactions every few minutes; at the number, drop every free pick still locked */
+  const G = M.goal; if (G && G.d === today && !G.done && p) {
+    if (now >= G.until) G.done = 'expired'; else if (!G.chk || now - G.chk >= 8 * 60e3) { G.chk = now; const n = await Soc.fbReactions(G.id, deps); if (n != null) G.seen = n;
+      if (n != null && n >= G.n) { const legs = lockedFree(p, now); if (!legs.length) G.done = 'empty'; else { const r = await sendMega(dests, T, deps, dropPost(p, legs, G.n));
+          if (r.ok) { legs.forEach(l => { p.sent['unlock|' + l.k] = 1; }); G.done = 'hit'; acted++; log('megaphone · goal hit ·', n, 'reactions · dropped', legs.length, 'picks'); } } } } }
+  if (!Mega.due(M, now, { hours: deps?.hours ?? env.MEGA_HOURS, every: deps?.every ?? env.MEGA_EVERY })) return acted;
+  const F = await feedsNow(deps); const c = {}; const L = loungeUrl(deps); const h = Mega.ctParts(now).h;
+  if (F && F.oracle) { const games = Mega.gamesToday(F.oracle, today); const g = Mega.pickGame(games, F.P, M, now); if (g) c.question = Mega.questionPost(g, F, { lounge: L });
+    if (Object.keys(M.st || {}).length < 3) c.streak = Mega.streakPost(games, F, M, now, { lounge: L });
+    if ((M.mv || 0) < 2 && (!M.mvAt || now - M.mvAt > 4 * 36e5)) c.movers = Mega.moversPost(games, F, now, { lounge: L }); }
+  if (!M.rec && h < 13) c.record = recordPost(state, today);
+  const gn = goalN(deps); if (gn && p && p.pub && Soc.on(deps, 'fb') && !(M.goal && M.goal.d === today) && h >= 9 && h < 13) { const free = lockedFree(p, now + 90 * 60e3); if (free.length >= 2) c.goal = goalPost(p, gn, now); }
+  const post = Mega.choose(c, M); if (!post) return acted;
+  const r = await sendMega(dests, T, deps, post); if (!r.ok) return acted;
+  M.last = now; M.n = (M.n || 0) + 1;
+  if (post.kind === 'question') M.q[post.key.slice(2)] = 1; else if (post.kind === 'streak') M.st[post.key.slice(3)] = 1; else if (post.kind === 'movers') { M.mv = (M.mv || 0) + 1; M.mvAt = now; } else if (post.kind === 'record') M.rec = 1;
+  else if (post.kind === 'goal') M.goal = r.fbId ? { d: today, id: r.fbId, n: gn, at: now, until: post.until } : { d: today, done: 'noid' };
+  log('megaphone ·', post.kind, '·', post.key.slice(0, 60)); return acted + 1; }
 /* the public page: the full card the app handed over, with whatever hasn't unlocked yet hidden, and every grade the worker knows */
 export function publicView(feed, st, now) { const F = JSON.parse(JSON.stringify(feed || {})); st = st || {}; const T0 = F.today; if (!T0) { F.generated = now; return F; }
   const key = x => [x.sp, x.game || x.team || '', x.pick || ''].join('|');
@@ -600,12 +658,16 @@ export { decrypt, encrypt, gradePick, gradeProp };
 /* v2.98 · the worker's own memory for Threads: its refreshed token, encrypted, in social.enc on the state branch of
    this repo only — never in the card, never in the site's copy, so it never reaches the phone or the public page */
 const SOCFILE = 'social.enc';
-async function socialBoot() { if (!(env.THREADS_TOKEN || '').trim() || !GH || !REPO) return;
+/* v2.99 · the same file is the Megaphone's memory (what it posted today, and when) */
+let SOCMEM = null;
+async function socialBoot() { if (!GH || !REPO) return;
   try { const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${SOCFILE}?ref=${BRANCH}`, { headers: ghH }); let S = {}, sha = null;
-    if (r.ok) { const j = await r.json(); sha = j.sha; S = await decrypt(Buffer.from(j.content, 'base64').toString('utf8')); } else if (r.status !== 404) { log('threads memory: HTTP', r.status); return; }
-    Soc.useSocial(S); if (!(await Soc.thRefresh(S))) return;
-    const w = await fetch(`https://api.github.com/repos/${REPO}/contents/${SOCFILE}`, { method: 'PUT', headers: { ...ghH, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'autopilot social ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(S), 'utf8').toString('base64'), ...(sha ? { sha } : {}) }) });
-    if (!w.ok) log('threads memory: save HTTP', w.status); } catch (e) { log('threads memory:', String(e && e.message || e).slice(0, 60)); } }
+    if (r.ok) { const j = await r.json(); sha = j.sha; S = await decrypt(Buffer.from(j.content, 'base64').toString('utf8')) || {}; } else if (r.status !== 404) { log('social memory: HTTP', r.status); return; }
+    S.mega = S.mega || {}; SOCMEM = { S, sha };
+    if ((env.THREADS_TOKEN || '').trim()) { Soc.useSocial(S); if (await Soc.thRefresh(S)) await socialSave(); } } catch (e) { log('social memory:', String(e && e.message || e).slice(0, 60)); } }
+async function socialSave() { if (!SOCMEM) return;
+  try { const w = await fetch(`https://api.github.com/repos/${REPO}/contents/${SOCFILE}`, { method: 'PUT', headers: { ...ghH, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'autopilot social ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(SOCMEM.S), 'utf8').toString('base64'), ...(SOCMEM.sha ? { sha: SOCMEM.sha } : {}) }) });
+    if (w.ok) { const j = await w.json(); SOCMEM.sha = (j.content && j.content.sha) || SOCMEM.sha; } else log('social memory: save HTTP', w.status); } catch (e) { log('social memory:', String(e && e.message || e).slice(0, 60)); } }
 /* ── main ── */
 if (import.meta.url === 'file://' + process.argv[1]) {
   const t0 = Date.now(), BUDGET = +(env.RELAY_BUDGET_MS || 6.5 * 60e3), STEP = +(env.RELAY_STEP_MS || 75e3), MARGIN = +(env.RELAY_MARGIN_MS || 25e3);
@@ -629,6 +691,7 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       let acted = await runOnce(state, today); try { acted += await publishPublic(state); } catch (e) { log('public page', e.message || e); }
       try { acted += await runCommands(state); } catch (e) { log('commands', e.message || e); }
       try { acted += await fbInvite(state); } catch (e) { log('facebook invite', e.message || e); }
+      if (SOCMEM) try { const a = await runMegaphone(state, SOCMEM.S.mega, today); if (a) { acted += a; await socialSave(); } } catch (e) { log('megaphone', e.message || e); }
       /* the state branch only gets a commit when something was sent — or an hourly heartbeat */
       const beat = !state.lastRun || Date.now() - state.lastRun > 60 * 60e3;
       if (acted || beat || dirty) { state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1; dirty = !(await saveAt(REPO, state, cur)); if (dirty) log('couldn\'t save this pass — kept in memory, retrying next pass'); }
