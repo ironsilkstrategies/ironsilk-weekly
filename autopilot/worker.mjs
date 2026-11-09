@@ -381,8 +381,9 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
         if (p.bc && p.bc.vipLounge) await T('sendMessage', { chat_id: p.bc.vipLounge, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); } }
     state.posts[d] = p; }
   /* v2.31 · the public side: unlocks 30 min before each game, results, the public recap */
-  for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || !p.pub || quiet(p) || d < shift(today, -2)) continue;
-    try { acted += await runPublic(p, deps); } catch (e) { log('public side', e.message || e); } state.posts[d] = p; }
+  for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || quiet(p) || d < shift(today, -2)) continue;
+    if (p.pub) try { acted += await runPublic(p, deps); } catch (e) { log('public side', e.message || e); }
+    try { acted += await runSpotlights(state, p, today, deps); } catch (e) { log('spotlights', e.message || e); } state.posts[d] = p; }
   /* cashed tickets — also for days already recapped (the last 4), each announced once */
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || !p.chat || quiet(p) || d < shift(today, -4)) continue; p.sent = p.sent || {};
     for (const g of cashedParlays(p)) { const key = 'cash|' + g.sig; if (p.sent[key]) continue;
@@ -445,8 +446,7 @@ export async function runPublic(p, deps) { const T = deps?.tg || tg; const now =
   if (!dests.length && !Soc.anyOn(deps)) return 0;
   /* v2.97 · the other outlets get it once Telegram has it (a Telegram miss retries all of them next pass)
      v2.98 · …with its picture: the public channel and lounge get the card with the words as its caption */
-  const send = async (text, card, kind) => { const img = await picOf(card, deps); let ok = false; for (const c of dests) ok = (await say(T, c, text, img, deps)) || ok;
-    if ((ok || !dests.length) && Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind }); if (!dests.length) ok = [m.fb, m.ig, m.th].includes(true); } return ok; };
+  const send = (text, card, kind) => sendPublic(dests, T, deps, text, card, kind);
   const day = (p.pub && p.pub.day) || DAYFMT(p.d);
   /* unlocks */
   const open = legs.filter(l => l.unlockAt && now >= l.unlockAt && !p.sent['unlock|' + l.k] && !p.st[l.k]);
@@ -485,6 +485,54 @@ export async function runPublic(p, deps) { const T = deps?.tg || tg; const now =
       rows: graded.map(l => ({ label: l.label, meta: l.kind, res: p.st[l.k] })) };
     if (await send(out.join('\n'), card, 'recap')) { p.sent.precap = 1; acted++; } }
   return acted; }
+/* ── v2.98 · character spotlights ────────────────────────────────────────────────────────────────────────────────
+   Nov 8: "posting different characters parlays (player of the week daily parlay, underdog spotter 'terrible 3' picks etc)".
+   Two tickets a day go public, 30 minutes before their first game, picture and all, to the public channel and lounge and
+   every outlet that's on:
+     🌟 Player of the Week — the character with the hottest hand over the card days the worker holds (2+ graded
+        parlays, most units won), and today's parlay from him
+     🐕 The Terrible 3 — the Underdog Spotter's dogs-only parlay ("The Terrible 4" when it has four)
+   A teaser by default: a leg shows once its own game is 30 minutes out (the rule every public pick follows); the rest
+   say when they unlock — VIP already has the whole ticket. SPOTLIGHT (repo variable): "full" shows every leg at the
+   first unlock, "off" stops them. A ticket whose first game started over an hour ago is skipped, never posted late.
+   If it cashes, the cash post already goes everywhere. */
+const baseName = n => String(n || '').replace(/\s*\((props|strong suit)\)$/, '').trim();
+export function weekLeader(state, today) { const U = {};
+  for (const [d, p] of Object.entries(state.posts || {})) { if (d >= today || !p || !p.recapPlan) continue; const st = p.st || {}; const by = {}; (p.legs || []).forEach(l => { by[l.k] = l; });
+    for (const c of p.recapPlan.chars || []) { if (/\((props|strong suit)\)$/.test(c.name)) continue; const m = (c.keys || []).map(k => st[k]); if (!m.length || m.some(s => !s)) continue;
+      const nm = baseName(c.name); const u = U[nm] = U[nm] || { name: nm, u: 0, n: 0, w: 0, days: new Set() }; u.n++; u.days.add(d);
+      if (m.includes('L')) u.u -= 1; else { const D = c.keys.filter(k => st[k] === 'W').reduce((a, k) => a * toDec(by[k] && by[k].price), 1); u.u += D - 1; if (m.includes('W')) u.w++; } } }
+  const L = Object.values(U).filter(x => x.n >= 2 && x.u > 0).sort((a, b) => b.u - a.u || b.w - a.w || a.name.localeCompare(b.name)); return L[0] ? { ...L[0], days: L[0].days.size } : null; }
+export function spotlights(state, p, today) { const chars = (p.recapPlan && p.recapPlan.chars) || []; const out = [];
+  const lead = weekLeader(state, today); const pc = lead && chars.find(c => c.name === lead.name && (c.keys || []).length); if (pc) out.push({ tag: 'potw', c: pc, lead });
+  const dog = chars.find(c => c.name === 'The Underdog Spotter' && (c.keys || []).length); if (dog) { if (pc === dog) out[0].dog = true; else out.push({ tag: 'dog', c: dog }); }
+  return out; }
+async function legStart(l, d, deps) { if (deps?.startOf) return deps.startOf(l, d);
+  try { if (l.game) { const [a, h] = String(l.game).split('@'); const F = a && h ? await findEvent(l.sp, d, [a, h]) : null; return F ? Date.parse(F.ev.date) : NaN; }
+    if (l.team) for (const day of [d, shift(d, 1)]) for (const ev of await scoreboard(l.sp, day)) { const T = evTeams(l.sp, ev); if (T && [T.a, T.h].includes(ab(l.sp, l.team))) return Date.parse(ev.date); } } catch (e) { }
+  return NaN; }
+const WORD = { 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five', 6: 'Six' };
+export async function runSpotlights(state, p, today, deps) { const mode = String(deps?.spot ?? env.SPOTLIGHT ?? '').trim().toLowerCase() || 'teaser'; if (mode === 'off' || !p || p.d !== today) return 0;
+  const T = deps?.tg || tg; const now = deps?.now || Date.now(); const dests = [p.bc && p.bc.pub, p.bc && p.bc.pubLounge].filter(Boolean); if (!dests.length && !Soc.anyOn(deps)) return 0;
+  p.sent = p.sent || {}; let acted = 0; const by = {}; (p.legs || []).forEach(l => { by[l.k] = l; }); const day = (p.recapPlan && p.recapPlan.day) || DAYFMT(p.d);
+  for (const s of spotlights(state, p, today)) { const key = 'spot|' + [...s.c.keys].sort().join('¦'); if (p.sent[key]) continue;
+    const legs = s.c.keys.map(k => by[k]); if (legs.some(l => !l)) { p.sent[key] = 'x'; continue; }
+    const starts = []; for (const l of legs) starts.push(await legStart(l, p.d, deps)); const known = starts.filter(t => isFinite(t)); if (!known.length) continue;
+    const first = Math.min(...known); if (now < first - 30 * 60e3) continue; if (now > first + 60 * 60e3) { p.sent[key] = 'late'; continue; }
+    const open = i => mode === 'full' || (isFinite(starts[i]) && now >= starts[i] - 30 * 60e3); const n = legs.length;
+    const when = i => isFinite(starts[i]) ? 'unlocks ' + tStr(starts[i] - 30 * 60e3) : 'unlocks 30 min before its game';
+    const lead = s.lead ? `+${s.lead.u.toFixed(2)}u over the last ${s.lead.days} card day${s.lead.days > 1 ? 's' : ''}` : '';
+    const head = s.tag === 'potw' ? `🌟 <b>PLAYER OF THE WEEK — ${esc(s.c.name)}</b>\n<i>Hottest hand on TheDesk: ${lead}${s.dog ? ` · today it's his Terrible ${n}` : ''}</i>` : `🐕 <b>THE TERRIBLE ${n} — The Underdog Spotter</b>\n<i>${WORD[n] || n} dogs, one ticket.</i>`;
+    const lines = legs.map((l, i) => open(i) ? `• <b>${esc(l.label)}</b>${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${isFinite(starts[i]) ? ' · ' + tStr(starts[i]) : ''}${isFinite(starts[i]) && now >= starts[i] ? ' · <i>underway</i>' : ''}` : `🔒 Leg ${i + 1} · ${when(i)}`);
+    const shut = legs.some((l, i) => !open(i));
+    const text = [head, `<b>${n}-leg parlay · ${esc(s.c.price)}</b>`, ...lines, '', shut ? '<i>Locked before the games. VIP got the whole ticket this morning; here each leg unlocks 30 minutes before its game. Graded at the final.</i>' : '<i>Locked before the games. Graded at the final.</i>'].join('\n');
+    const card = { kicker: (s.tag === 'potw' ? 'Player of the week · ' : 'Underdog Spotter · ') + day, title: s.tag === 'potw' ? s.c.name : `The Terrible ${n}`, sub: s.tag === 'potw' ? lead : `${WORD[n] || n} dogs, one ticket`,
+      big: { value: s.c.price, label: `${n}-leg parlay` }, rows: legs.map((l, i) => open(i) ? { label: l.label, meta: [l.game, isFinite(starts[i]) ? tStr(starts[i]) : ''].filter(Boolean).join(' · ') } : { label: `Locked · leg ${i + 1}`, meta: when(i) + ' · VIP has it now', lock: true }) };
+    if (await sendPublic(dests, T, deps, text, card, 'spotlight')) { p.sent[key] = 1; acted++; log('spotlight ·', s.tag, '·', s.c.name); } }
+  return acted; }
+/* the public posts' one way out: Telegram first (picture + words), then the other outlets once Telegram has it */
+async function sendPublic(dests, T, deps, text, card, kind) { const img = await picOf(card, deps); let ok = false; for (const c of dests) ok = (await say(T, c, text, img, deps)) || ok;
+  if ((ok || !dests.length) && Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind }); if (!dests.length) ok = [m.fb, m.ig, m.th].includes(true); } return ok; }
 /* the public page: the full card the app handed over, with whatever hasn't unlocked yet hidden, and every grade the worker knows */
 export function publicView(feed, st, now) { const F = JSON.parse(JSON.stringify(feed || {})); st = st || {}; const T0 = F.today; if (!T0) { F.generated = now; return F; }
   const key = x => [x.sp, x.game || x.team || '', x.pick || ''].join('|');

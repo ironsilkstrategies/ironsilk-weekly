@@ -14,7 +14,7 @@
    secrets; a missing renderer or a dead outlet never stops the Telegram post. Tokens are masked and never printed.
      FB_PAGE_ID + FB_PAGE_TOKEN          Facebook page (the same token, re-made with Instagram's permissions, serves Instagram)
      IG_USER_ID                          the Instagram professional account connected to that page
-     IG_KINDS (repo variable)            which posts Instagram gets: "unlock,recap,cash,invite" when unset (each result is
+     IG_KINDS (repo variable)            which posts Instagram gets: "unlock,recap,cash,invite,spotlight" unset (each result is
                                          in the recap — 20 posts a day would bury the feed), "all" for everything
      THREADS_TOKEN (+ THREADS_USER_ID)   Threads; the 60-day token is refreshed weekly by the worker and kept encrypted in
                                          its own file on the state branch (never in the card, never on the phone) */
@@ -49,7 +49,7 @@ export function layout(card) { const title = txt(card.title); const fs = title.l
   for (const k of ['normal', 'dense', 'tight']) { const D = DENS[k]; const fit = Math.floor((room + D.gap) / D.pitch); if (all.length <= fit) return { fs, dens: k, rows: all, more: 0 }; }
   const fit = Math.max(1, Math.floor((room - 44 + DENS.tight.gap) / DENS.tight.pitch)); return { fs, dens: 'tight', rows: all.slice(0, fit), more: all.length - fit }; }
 export const loungeUrl = deps => (deps?.lounge || env.LOUNGE_URL || '').trim() || 'https://t.me/TheDeskLounge';
-/* a card = { kicker, title, sub?, big?: { value, label }, rows: [{ label, meta?, res?: 'W'|'L'|'P' }], foot? } */
+/* a card = { kicker, title, sub?, big?: { value, label }, rows: [{ label, meta?, res?: 'W'|'L'|'P', lock?: a locked leg }], foot? } */
 export function cardTree(card, deps) { const L = layout(card), D = DENS[L.dens];
   return h('div', { width: 1080, height: 1350, flexDirection: 'column', background: C.bg, color: C.ink, fontFamily: 'Plex', padding: '64px 70px 56px', position: 'relative' },
     h('div', { position: 'absolute', left: 0, top: 0, width: 1080, height: 14, background: `linear-gradient(90deg, ${C.gold2}, ${C.gold} 45%, ${C.bg} 90%)` }),
@@ -62,9 +62,9 @@ export function cardTree(card, deps) { const L = layout(card), D = DENS[L.dens];
     card.sub ? h('div', { marginTop: 18, fontSize: 30, color: C.soft, lineHeight: 1.35 }, clip(card.sub, 58)) : null,
     card.big ? h('div', { marginTop: 40, alignItems: 'baseline', gap: 22 }, h('div', { fontFamily: 'Archivo', fontWeight: 900, fontSize: 150, color: C.gold, lineHeight: 1 }, clip(card.big.value, 9)), h('div', { fontSize: 32, color: C.mute }, clip(card.big.label, 34))) : null,
     h('div', { flexDirection: 'column', gap: D.gap, marginTop: 44 },
-      L.rows.map(r => h('div', { alignItems: 'center', gap: 24, background: C.panel, border: `2px solid ${C.rule}`, borderLeft: `8px solid ${PILL[r.res] ? PILL[r.res][1] : C.gold}`, borderRadius: 22, padding: D.pad },
+      L.rows.map(r => h('div', { alignItems: 'center', gap: 24, background: C.panel, border: `2px solid ${C.rule}`, borderLeft: `8px solid ${PILL[r.res] ? PILL[r.res][1] : r.lock ? '#3A4A60' : C.gold}`, borderRadius: 22, padding: D.pad },
         h('div', { flexDirection: 'column', flexGrow: 1, flexShrink: 1 },
-          h('div', { fontFamily: 'Archivo', fontWeight: 800, fontSize: D.lab, lineHeight: 1.1 }, clip(r.label, D.cl[PILL[r.res] ? 1 : 0])),
+          h('div', { fontFamily: 'Archivo', fontWeight: 800, fontSize: D.lab, lineHeight: 1.1, color: r.lock ? C.mute : C.ink }, clip(r.label, D.cl[PILL[r.res] ? 1 : 0])),
           r.meta ? h('div', { marginTop: 6, fontSize: D.meta, color: C.mute }, clip(r.meta, D.cm)) : null),
         PILL[r.res] ? h('div', { fontFamily: 'Archivo', fontWeight: 900, fontSize: 24, letterSpacing: 2, color: C.bg, background: PILL[r.res][1], borderRadius: 14, padding: '9px 16px' }, PILL[r.res][0]) : null)),
       L.more ? h('div', { fontSize: 24, color: C.mute, paddingLeft: 8 }, `+${L.more} more in the post`) : null),
@@ -92,7 +92,7 @@ const cfg = deps => { const v = (env.FB_GRAPH_VERSION || 'v24.0').trim();
     th: deps?.th || { user: (env.THREADS_USER_ID || '').trim() || 'me', tok: SOC.thTok || (env.THREADS_TOKEN || '').trim() } }; };
 export const on = (deps, which) => { const c = cfg(deps)[which]; return which === 'fb' ? !!(c.page && c.tok) : which === 'ig' ? !!(c.user && c.tok) : which === 'th' ? !!c.tok : false; };
 export const anyOn = deps => on(deps, 'fb') || on(deps, 'ig') || on(deps, 'th');
-export const igWants = (kind, deps) => { const k = (cfg(deps).ig.kinds || 'unlock,recap,cash,invite').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
+export const igWants = (kind, deps) => { const k = (cfg(deps).ig.kinds || 'unlock,recap,cash,invite,spotlight').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
 if (env.GITHUB_ACTIONS === 'true') for (const t of [env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN]) if ((t || '').trim()) console.log('::add-mask::' + t.trim());
 const KNOWN = new Set();   /* every token this run has used: each log line is scrubbed of all of them, not just its own */
 const hide = (s, toks) => { s = String(s || ''); for (const t of toks) if (t) KNOWN.add(t); for (const t of [...KNOWN, env.TG_BOT_TOKEN, env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN, SOC.thTok]) if (t && String(t).trim().length > 3) s = s.split(String(t).trim()).join('…'); return s; };
