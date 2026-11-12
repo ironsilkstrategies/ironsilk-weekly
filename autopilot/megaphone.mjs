@@ -49,7 +49,13 @@ export function powerRanks(season) { const rows = Object.values((season && seaso
 /* ── today's games from the Oracle feed (its key carries the local day) ── */
 export function gamesToday(oracle, day) { return Object.entries((oracle && oracle.g) || {}).filter(([k]) => k.endsWith('|' + day)).map(([k, g]) => ({ k: k.replace(/\|\d{4}-\d\d-\d\d$/, ''), ...g, t: Date.parse(g.st) })).filter(g => fin(g.t) && g.a && g.h); }
 const TWO = ['Red Wings', 'Blue Jackets', 'Maple Leafs', 'Golden Knights', 'Trail Blazers', 'Red Sox', 'White Sox', 'Blue Jays', 'Golden State'];
-export function names(g, coach) { const C = coach && coach.g && coach.g[g.k]; const nm = (side, ab) => { const full = C && C[side] && C[side].name; if (!full || /^ncaa/.test(g.sp)) return { full: full || ab, nick: ab };
+/* v3.0 · the pro leagues by name (the feeds carry abbreviations; a game's own preview carries names only on game day) */
+export const TEAMS = {
+  nfl: { ARI: 'Arizona Cardinals', ATL: 'Atlanta Falcons', BAL: 'Baltimore Ravens', BUF: 'Buffalo Bills', CAR: 'Carolina Panthers', CHI: 'Chicago Bears', CIN: 'Cincinnati Bengals', CLE: 'Cleveland Browns', DAL: 'Dallas Cowboys', DEN: 'Denver Broncos', DET: 'Detroit Lions', GB: 'Green Bay Packers', HOU: 'Houston Texans', IND: 'Indianapolis Colts', JAX: 'Jacksonville Jaguars', KC: 'Kansas City Chiefs', LAC: 'Los Angeles Chargers', LAR: 'Los Angeles Rams', LV: 'Las Vegas Raiders', MIA: 'Miami Dolphins', MIN: 'Minnesota Vikings', NE: 'New England Patriots', NO: 'New Orleans Saints', NYG: 'New York Giants', NYJ: 'New York Jets', PHI: 'Philadelphia Eagles', PIT: 'Pittsburgh Steelers', SEA: 'Seattle Seahawks', SF: 'San Francisco 49ers', TB: 'Tampa Bay Buccaneers', TEN: 'Tennessee Titans', WSH: 'Washington Commanders' },
+  nba: { ATL: 'Atlanta Hawks', BKN: 'Brooklyn Nets', BOS: 'Boston Celtics', CHA: 'Charlotte Hornets', CHI: 'Chicago Bulls', CLE: 'Cleveland Cavaliers', DAL: 'Dallas Mavericks', DEN: 'Denver Nuggets', DET: 'Detroit Pistons', GS: 'Golden State Warriors', HOU: 'Houston Rockets', IND: 'Indiana Pacers', LAC: 'LA Clippers', LAL: 'Los Angeles Lakers', MEM: 'Memphis Grizzlies', MIA: 'Miami Heat', MIL: 'Milwaukee Bucks', MIN: 'Minnesota Timberwolves', NO: 'New Orleans Pelicans', NY: 'New York Knicks', OKC: 'Oklahoma City Thunder', ORL: 'Orlando Magic', PHI: 'Philadelphia 76ers', PHX: 'Phoenix Suns', POR: 'Portland Trail Blazers', SA: 'San Antonio Spurs', SAC: 'Sacramento Kings', TOR: 'Toronto Raptors', UTAH: 'Utah Jazz', WSH: 'Washington Wizards' },
+  nhl: { ANA: 'Anaheim Ducks', BOS: 'Boston Bruins', BUF: 'Buffalo Sabres', CAR: 'Carolina Hurricanes', CBJ: 'Columbus Blue Jackets', CGY: 'Calgary Flames', CHI: 'Chicago Blackhawks', COL: 'Colorado Avalanche', DAL: 'Dallas Stars', DET: 'Detroit Red Wings', EDM: 'Edmonton Oilers', FLA: 'Florida Panthers', LA: 'Los Angeles Kings', MIN: 'Minnesota Wild', MTL: 'Montreal Canadiens', NJ: 'New Jersey Devils', NSH: 'Nashville Predators', NYI: 'New York Islanders', NYR: 'New York Rangers', OTT: 'Ottawa Senators', PHI: 'Philadelphia Flyers', PIT: 'Pittsburgh Penguins', SEA: 'Seattle Kraken', SJ: 'San Jose Sharks', STL: 'St. Louis Blues', TB: 'Tampa Bay Lightning', TOR: 'Toronto Maple Leafs', UTA: 'Utah Mammoth', VAN: 'Vancouver Canucks', VGK: 'Vegas Golden Knights', WPG: 'Winnipeg Jets', WSH: 'Washington Capitals' } };
+export const nickOf = full => { const two = TWO.find(t => full.endsWith(t)); return two === 'Golden State' ? full : two || full.split(' ').pop(); };
+export function names(g, coach) { const C = coach && coach.g && coach.g[g.k]; const nm = (side, ab) => { const full = (C && C[side] && C[side].name) || (TEAMS[g.sp] || {})[ab]; if (!full || /^ncaa/.test(g.sp)) return { full: full || ab, nick: ab };
     const two = TWO.find(t => full.endsWith(t)); return { full, nick: two || full.split(' ').pop() }; };
   return { A: nm('a', g.a), H: nm('h', g.h), venue: C && C.venue, C }; }
 /* the one note worth a line: a preview headline that names both teams, else injury/lineup news about either */
@@ -68,7 +74,8 @@ export function pickGame(games, P, M, now) { return games.filter(g => g.t >= now
 export function facts(g, F) { const P = F.P, N = names(g, F.coach); const pa = P[g.sp + '|' + g.a] || {}, ph = P[g.sp + '|' + g.h] || {}; const ln = g.ln || {}, op = g.op || {}, s = g.s || {};
   const fav = fin(ln.spH) ? (ln.spH < 0 ? 'h' : ln.spH > 0 ? 'a' : null) : fin(ln.mlH) && fin(ln.mlA) ? (ln.mlH < ln.mlA ? 'h' : 'a') : null; const line = fin(ln.spH) ? Math.abs(ln.spH) : null;
   const mk = [s.kalshi, s.poly].map(x => x && x.wp).filter(fin); const hw = mk.length ? mk.reduce((a, b) => a + b, 0) / mk.length : s.espn && fin(s.espn.wp) ? s.espn.wp : null;
-  const os = s.os && fin(s.os.pa) && fin(s.os.ph) ? s.os : null; const dec = g.sp === 'nhl' || g.sp === 'mlb' ? 1 : 0; const fx = x => dec ? x.toFixed(1) : String(Math.round(x));
+  /* v3.0 · the projected score is the average of every source that gives one (the feed's sources come and go by sport) */
+  const pj = Object.values(s).filter(x => x && fin(x.pa) && fin(x.ph)); const os = pj.length ? { pa: pj.reduce((a, x) => a + x.pa, 0) / pj.length, ph: pj.reduce((a, x) => a + x.ph, 0) / pj.length, n: pj.length } : null; const dec = g.sp === 'nhl' || g.sp === 'mlb' ? 1 : 0; const fx = x => dec ? x.toFixed(1) : String(Math.round(x));
   const moves = []; if (fin(op.spH) && fin(ln.spH) && Math.abs(ln.spH - op.spH) >= (g.sp === 'nhl' ? 9 : 1)) moves.push(`spread opened ${g.h} ${sgn(op.spH)}, now ${sgn(ln.spH)}`);
   if (fin(op.tot) && fin(ln.tot) && Math.abs(ln.tot - op.tot) >= (g.sp === 'nhl' ? 0.5 : 1.5)) moves.push(`total opened ${op.tot}, now ${ln.tot}`);
   return { g, N, pa, ph, fav, line, tot: fin(ln.tot) ? ln.tot : null, hw, os, fx, moves, note: keyNote(g, N), rk: x => x.rk ? '#' + x.rk : '' }; }
@@ -134,3 +141,23 @@ export function due(M, now, opt = {}) { const [a, b] = hours(opt.hours); const {
 /* order of play: the goal (once, mornings), then questions on the hour and the rest between; anything missing → a question */
 export function choose(c, M) { const even = (M.n || 0) % 2 === 0;
   if (c.goal) return c.goal; const order = even ? [c.question, c.record, c.streak, c.movers] : [c.record, c.streak, c.movers, c.question]; return order.find(Boolean) || null; }
+
+/* ═══ THE SHEET (v3.0) — the day's slate for the public app, as one small public file ══════════════════════════════════
+   The feeds robot calls this and publishes slate.json on the feeds branch; the public app (/desk/) draws its "Slate" tab
+   from it. Public sports data only: schedule, lines and how they've moved, prediction-market odds, the projected score the
+   public models and markets land near, TheDesk Power Rankings, and the question the worker is asking about the game.
+   Never a pick. Pro games all go in; the college slates are cut to the games worth a look (ranked teams, tight lines). */
+const COLLEGE_MAX = 14;
+export function slateOf(F, now, nDays = 2) { const P = F.P || powerRanks(F.season); const FF = { ...F, P }; const d0 = ctParts(now).day; const days = [];
+  for (let i = 0; i < nDays; i++) { const d = new Date(Date.parse(d0 + 'T12:00:00Z') + i * 864e5).toISOString().slice(0, 10); let games = gamesToday(F.oracle, d).filter(g => g.ln || (g.s && Object.keys(g.s).length));
+    const col = games.filter(g => /^ncaa/.test(g.sp)); const keep = new Set(); for (const sp of ['ncaaf', 'ncaab']) col.filter(g => g.sp === sp).sort((x, y) => interest(y, P, now) - interest(x, P, now)).slice(0, COLLEGE_MAX).forEach(g => keep.add(g.k));
+    games = games.filter(g => !/^ncaa/.test(g.sp) || keep.has(g.k)).sort((x, y) => x.t - y.t || x.k.localeCompare(y.k));
+    const side = (f, x, ab, N) => ({ ab, name: N.full, nick: N.nick, rk: x.rk || 0, of: x.of || 0, w: x.w || 0, l: x.l || 0, l5: (x.l5 || []).join(''), st: x.streak && x.streak.n >= 2 ? x.streak.t + x.streak.n : '', pf: x.pf ?? null, pa: x.pa ?? null });
+    days.push({ d, more: Math.max(0, col.length - keep.size), games: games.map(g => { const f = facts(g, FF), q = questionOf(f), ln = g.ln || {};
+      return { k: g.k, sp: g.sp, t: g.t, a: side(f, f.pa, g.a, f.N.A), h: side(f, f.ph, g.h, f.N.H), venue: f.N.venue || '',
+        ln: (f.line != null || f.tot != null || fin(ln.mlA)) ? { fav: f.fav ? (f.fav === 'h' ? g.h : g.a) : '', line: f.line, tot: f.tot, mlA: fin(ln.mlA) ? ln.mlA : null, mlH: fin(ln.mlH) ? ln.mlH : null } : null,
+        mv: f.moves, mkt: f.hw != null ? { ab: f.hw >= 0.5 ? g.h : g.a, pct: Math.round(Math.max(f.hw, 1 - f.hw) * 100), src: (g.s && (g.s.kalshi || g.s.poly)) ? 'markets' : 'model' } : null,
+        read: f.os ? { a: +f.fx(f.os.pa), h: +f.fx(f.os.ph) } : null, note: f.note || '', q: { title: q.title, opts: q.opts }, hot: interest(g, P, now) }; }) }); }
+  const ranks = {}; for (const [k, x] of Object.entries(P)) { if (!x.rk) continue; const [sp, ab] = k.split('|'); if (/^ncaa/.test(sp) && x.rk > 25) continue; (ranks[sp] = ranks[sp] || []).push({ rk: x.rk, ab, name: (TEAMS[sp] || {})[ab] || ab, w: x.w, l: x.l, rt: x.rt, l5: (x.l5 || []).join(''), st: x.streak && x.streak.n >= 2 ? x.streak.t + x.streak.n : '' }); }
+  for (const sp in ranks) ranks[sp].sort((a, b) => a.rk - b.rk);
+  return { v: 1, ts: now, tz: 'America/Chicago', days, ranks }; }

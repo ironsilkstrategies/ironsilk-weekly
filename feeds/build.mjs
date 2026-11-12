@@ -561,6 +561,16 @@ async function buildComps(diag){const S=read('season.json')||{g:{}};const C=read
     const x=compsOf(sp,j);if(!x){C.bad[id]=(C.bad[id]||0)+1;return;}C.g[id]=[sp,r[1],r[2],r[3],r[4],r[5],x.a,x.h];D.added++;});
   const by={};Object.values(C.g).forEach(r=>{by[r[0]]=(by[r[0]]||0)+1;});D.have=by;D.left=Object.keys(S.g||{}).filter(id=>!C.g[id]).length;
   fs.writeFileSync(path.join(OUT,'comps.json'),JSON.stringify({v:1,ts:new Date().toISOString(),g:C.g,bad:C.bad}));diag.comps=D;return C;}
+/* ═══ THE SHEET (v3.0) — slate.json: the day's slate for the public app ════════════════════════════════════════════
+   One small public file (today + tomorrow, Central): schedule, lines and their moves, prediction-market odds, the
+   projected score the public models land near, TheDesk Power Rankings and the worker's question for each game. Built
+   from feeds this run already made (oracle, season, coach) by the same code the worker's posts use (autopilot/megaphone.mjs),
+   so the app's Slate tab and the social posts always say the same thing. Public sports data only, never a pick. */
+async function buildSlate(diag){const now=+process.env.FEEDS_NOW||Date.now();const oracle=read('oracle.json'),season=read('season.json'),coach=read('coach.json');
+  if(!oracle||!oracle.g){diag.slate={skip:'no oracle feed'};return;}
+  const Mega=await import(new URL('../autopilot/megaphone.mjs',import.meta.url).href);
+  const S=Mega.slateOf({oracle,season:season||{g:{}},coach:coach||{g:{}}},now,2);
+  fs.writeFileSync(path.join(OUT,'slate.json'),JSON.stringify(S));diag.slate={games:S.days.reduce((a,d)=>a+d.games.length,0),days:S.days.map(d=>d.d)};}
 async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=read('closes.json');const games=(prev&&prev.v===1&&prev.games)||{};const log={ts:new Date(now).toISOString(),added:0,errors:[],calls:0};
   const cut=new Date(now-KEEP_DAYS*864e5).toISOString();Object.keys(games).forEach(k=>{if(String(games[k].st||'')<cut)delete games[k];});
   const todo=[];
@@ -579,6 +589,7 @@ async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=re
   if(!FIX||process.env.FEEDS_COACH){try{await buildCoach(diag);}catch(e){diag.coach={fail:String(e.message||e).slice(0,120)};}}
   if(!FIX||process.env.FEEDS_ORACLE){try{await buildOracle(diag,games);}catch(e){diag.oracle={fail:String(e.message||e).slice(0,120)};}}
   if(!FIX||process.env.FEEDS_COMPS){try{await buildComps(diag);}catch(e){diag.comps={fail:String(e.message||e).slice(0,120)};}}
+  if(!FIX||process.env.FEEDS_SLATE){try{await buildSlate(diag);}catch(e){diag.slate={fail:String(e.message||e).slice(0,120)};}}
   log.verify=diag;
   log.calls=calls;const n=Object.keys(games).length;
   fs.writeFileSync(path.join(OUT,'closes.json'),JSON.stringify({v:1,ts:log.ts,n,games}));

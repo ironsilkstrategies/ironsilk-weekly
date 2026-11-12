@@ -12,7 +12,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v2.99';
+const VERSION = 'worker v3.0';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -575,7 +575,9 @@ export async function runMegaphone(state, M, today, deps) { if (String(deps?.meg
   const dests = pubDests(state); if (!dests.length && !Soc.anyOn(deps)) return 0; const p = state.posts && state.posts[today];
   /* the goal: count the reactions every few minutes; at the number, drop every free pick still locked */
   const G = M.goal; if (G && G.d === today && !G.done && p) {
-    if (now >= G.until) G.done = 'expired'; else if (!G.chk || now - G.chk >= 8 * 60e3) { G.chk = now; const n = await Soc.fbReactions(G.id, deps); if (n != null) G.seen = n;
+    /* v3.0 · two unreadable counts in a row (the token can't read reactions) → stop asking; the 90-minute promise still pays */
+    const deaf = (G.miss || 0) >= 2;
+    if (now >= G.until) G.done = 'expired'; else if (deaf ? now - G.at >= 90 * 60e3 : (!G.chk || now - G.chk >= 8 * 60e3)) { G.chk = now; const n = deaf ? null : await Soc.fbReactions(G.id, deps); if (n != null) { G.seen = n; G.miss = 0; } else G.miss = (G.miss || 0) + 1;
       /* can't read the count (the token lacks pages_read_user_content)? the promise still holds: the card drops 90 minutes in */
       const blind = n == null && now - G.at >= 90 * 60e3; if (blind) log('megaphone · reactions unreadable — dropping the card as promised');
       if ((n != null && n >= G.n) || blind) { const legs = lockedFree(p, now); if (!legs.length) G.done = 'empty'; else { const r = await sendMega(dests, T, deps, dropPost(p, legs, blind ? 0 : G.n));

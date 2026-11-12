@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['feeds/**', '.github/workflows/feeds.yml']
+    paths: ['feeds/**', 'autopilot/megaphone.mjs', '.github/workflows/feeds.yml']
 permissions:
   contents: write
 concurrency:
@@ -19,7 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: feeds
+          sparse-checkout: |
+            feeds
+            autopilot
       - name: The feeds so far
         run: |
           mkdir -p out
