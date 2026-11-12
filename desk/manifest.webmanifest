@@ -1,0 +1,23 @@
+{
+  "name": "TheDesk",
+  "short_name": "TheDesk",
+  "description": "Three picks locked every morning, opened 30 minutes before each game and graded at the final.",
+  "id": "/desk/",
+  "start_url": "./?source=app",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#06190F",
+  "theme_color": "#0E3B2C",
+  "categories": ["sports", "entertainment"],
+  "icons": [
+    {"src": "../brand/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "../brand/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "../brand/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Today's card", "url": "./#today", "icons": [{"src": "../brand/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "The sheet", "url": "./#slate", "icons": [{"src": "../brand/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "Every result", "url": "./#receipts", "icons": [{"src": "../brand/icon-192.png", "sizes": "192x192", "type": "image/png"}]}
+  ]
+}

@@ -1,0 +1,4 @@
+Big Shoulders Display - Copyright 2019 The Big Shoulders Project Authors (https://github.com/xotypeco/big_shoulders)
+Libre Franklin - Copyright 2020 The Libre Franklin Project Authors (https://github.com/googlefonts/Libre-Franklin)
+
+Both typefaces are licensed under the SIL Open Font License, Version 1.1: https://openfontlicense.org
