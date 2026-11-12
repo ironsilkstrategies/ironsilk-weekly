@@ -237,7 +237,7 @@ function viewToday() {
     if (done) { const t = tally(graded); lede = `Final. The card went <b>${t.w}–${t.l}${t.p ? '–' + t.p : ''}</b> for <b>${signed(t.u)} units</b>.`; }
     else lede = `Locked at <b>${esc(clock(T.lockedAt))}</b>. Each pick opens 30 minutes before its game and is graded at the final.`;
   } else if (T) { title = `${weekday(T.d)}: no play`; lede = 'Nothing cleared the bar today. The desk doesn’t force picks.'; }
-  else { title = 'Today’s card isn’t locked yet'; lede = 'The card locks every morning. Some days the answer is pass.'; }
+  else { title = 'Today’s card isn’t locked yet'; lede = 'The desk locks the card before the first game. Some days the answer is pass.'; }
 
   const n = (R.w || 0) + (R.l || 0);
   const onrec = n ? `<p class="onrec"><span>On the record: <b>${R.w}–${R.l}${R.pu ? '–' + R.pu : ''}</b>, <b>${signed(+R.u || 0, 1)} units</b>${R.first ? ' since ' + esc(monthDay(R.first)) : ''}</span><button type="button" data-go="receipts">Every result</button></p>` : '<p class="onrec"></p>';

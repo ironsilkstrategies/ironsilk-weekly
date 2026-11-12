@@ -99,7 +99,8 @@ a.chip{text-decoration:none}
 .punch{display:flex;align-items:center;gap:3.5px;margin-top:3px}
 .punch i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--ink)}
 .punch i.on{background:var(--ink)}
-.punch b{margin-left:6px}
+.punch b{margin-left:6px;white-space:nowrap}
+.fields .f:only-child{grid-column:1/-1}
 .tag{display:inline-block;margin-top:12px;font-size:12.5px;font-weight:650;padding:3px 8px;border-radius:5px;border:1.5px solid var(--ink)}
 .slip-main.stamped .tag,.slip-main.stamped .fine{max-width:calc(100% - 150px)}
 .slip-main.stamped{padding-bottom:26px}
