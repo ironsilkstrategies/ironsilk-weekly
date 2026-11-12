@@ -209,11 +209,11 @@ function slipHtml(x0, i, key, opt = {}) {
   const label = opt.label || R.big, long = label.length > 10 ? ' long' : '';
   return `<article class="slip${why ? '' : ' nostub'}${opt.mini ? ' mini' : ''}${turn}" data-key="${esc(key)}"><div class="ghost"></div>
     <div class="slip-head"><span>${esc(no)}</span><span>${esc(LEAGUE[x.sp] || String(x.sp || '').toUpperCase())}</span></div>
-    <div class="slip-main">${when}
+    <div class="slip-main${graded ? ' stamped' : ''}">${when}
       <h3 class="pick${long}">${esc(label)}${x.price != null ? ` <span class="price">${esc(odds(x.price))}</span>` : ''}</h3>
       ${opt.plain || R.plain ? `<p class="plain">${esc(opt.plain || R.plain)}</p>` : ''}${opt.sub || matchup(x) ? `<p class="match">${esc(opt.sub || matchup(x))}</p>` : ''}${score}
       <div class="fields"><div class="f"><small>Confidence</small>${punches(x.p)}</div>${graded ? '' : `<div class="f"><small>Starts</small><b>${esc(whenLabel(x.start) || 'TBD')}</b></div>`}</div>
-      ${x.tier === 'UNANIMOUS' ? '<span class="tag">Unanimous: every voice on the desk agreed</span>' : ''}${fine ? `<p class="fine">${fine}</p>` : ''}
+      ${x.tier === 'UNANIMOUS' ? '<span class="tag">Unanimous: every voice agreed</span>' : ''}${fine ? `<p class="fine">${fine}</p>` : ''}
       ${stampHtml(x, key)}
     </div>${why}</article>`;
 }
@@ -294,7 +294,7 @@ async function seal(T) {
 }
 function footHtml() {
   return `<footer class="foot"><p>For entertainment. 21 and over. Bet only what you can afford to lose. If betting stops being fun, call 1-800-GAMBLER.</p>
-    <p>TheDesk is published by IronSilk Strategies. <a href="../privacy.html">Privacy</a> · <a href="../terms.html">Terms</a></p></footer>`;
+    <p>TheDesk is published by IronSilk Strategies. <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></p></footer>`;
 }
 
 /* ── Receipts ────────────────────────────────────────────────────────────── */
@@ -323,7 +323,7 @@ function viewReceipts() {
       ${h.picks.map(x => { const [c, m] = mark(x); return `<div class="li"><span class="mk ${c}">${m}</span><span class="pk">${esc(readPick(x).big)} ${esc(odds(x.price))}<small>${esc(LEAGUE[x.sp] || '')}</small></span><span class="u">${x.hit === true ? signed(unitsWon(x.price)) : x.hit === false ? '−1.00' : x.push ? '0.00' : ''}</span></div>`; }).join('')}</div>`; }).join('');
   const cashed = (F.cashed || []).slice(0, 8);
   const cashHtml = cashed.length ? `<h2 class="h2">Cashed parlays</h2><p class="note">Every winning parlay from the last two weeks.</p>${cashed.map(c => `<div class="memo"><time>${esc(shortDay(c.d))}, ${c.legs.length} legs</time><b>${esc((c.who || []).join(' + '))}</b> cashed at ${esc(c.price)} for ${signed(+c.units)}u</div>`).join('')}` : '';
-  el.innerHTML = `<h1 class="title">Every result, on the record</h1>
+  el.innerHTML = `<h1 class="title">Every result on the record</h1>
     <p class="lede">Each card is sealed before the games and graded at the final. Wins and losses both stay up. One unit is risked on every pick.</p>
     <div class="two"><div class="tape"><div class="tape-h"><b>TheDesk</b><span>Best 3 ledger${R.first ? ', since ' + esc(shortDay(R.first)) : ''}</span></div>
       <dl class="sum"><dt>Record</dt><dd class="big">${R.w || 0}–${R.l || 0}${R.pu ? '–' + R.pu : ''}</dd>
@@ -349,7 +349,7 @@ function gameHtml(g) {
   let more = '';
   if (open) {
     const nm = x => esc(x.nick || x.ab), rows = [];
-    if (g.a.l5 || g.h.l5) rows.push(['Last five', `${nm(g.a)} ${pips(g.a.l5)} &nbsp; ${nm(g.h)} ${pips(g.h.l5)}`]);
+    if (g.a.l5 || g.h.l5) rows.push(['Last five', [g.a, g.h].filter(x => x.l5).map(x => `<span class="l5">${nm(x)} ${pips(x.l5)}</span>`).join('')]);
     const stk = [g.a, g.h].filter(x => x.st).map(x => `${nm(x)} ${x.st[0] === 'W' ? 'won' : 'lost'} ${esc(x.st.slice(1))} straight`); if (stk.length) rows.push(['Streaks', stk.join(', ')]);
     if (fin(g.a.pf) && fin(g.h.pf)) rows.push(['Scoring', `${nm(g.a)} ${g.a.pf} for, ${g.a.pa} against. ${nm(g.h)} ${g.h.pf} for, ${g.h.pa} against.`]);
     if (g.ln && fin(g.ln.mlA) && fin(g.ln.mlH)) rows.push(['Moneyline', `${nm(g.a)} ${esc(odds(g.ln.mlA))}, ${nm(g.h)} ${esc(odds(g.ln.mlH))}`]);
@@ -444,7 +444,7 @@ function openGuide(first) {
   S.guide = { tab: device().kind, first: !!first }; $('#guideRoot').innerHTML = guideHtml();
   const g = $('.guide'); if (g && !first) g.focus();
 }
-function closeGuide() { S.guide = null; $('#guideRoot').innerHTML = ''; store.set('guide', { at: Date.now() }); }
+function closeGuide() { const g = store.get('guide') || {}; S.guide = null; $('#guideRoot').innerHTML = ''; store.set('guide', { at: Date.now(), n: (g.n || 0) + 1 }); }
 function chip() { $('#installChip').hidden = isStandalone(); }
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.canPrompt = e; if (S.guide) $('#guideRoot').innerHTML = guideHtml(); });
 window.addEventListener('appinstalled', () => { S.canPrompt = null; closeGuide(); $('#installChip').hidden = true; toast('TheDesk is installed'); });
@@ -513,5 +513,6 @@ chip();
 go((location.hash || '#today').slice(1), false);
 loadFeed();
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadSlate());
-{ const g = store.get('guide'); if (!isStandalone() && (!g || Date.now() - g.at > 3 * 864e5)) openGuide(true); }
+/* the install guide greets a first visit, comes back once a week later, and after that lives behind "Get the app" */
+{ const g = store.get('guide'); if (!isStandalone() && (!g || ((g.n || 1) < 2 && Date.now() - g.at > 7 * 864e5))) openGuide(true); }
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { /* the app works without it */ });
