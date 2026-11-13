@@ -2613,6 +2613,8 @@ const HALF_KEY='d4.halfcalls',HALFLN_KEY='d4.halflines',HALF_OK={n:20,p:0.57};
    (15-8 reads 61%). The projected half score itself was tested and doesn't sort winners from losers (its 60% calls hit 38%),
    so the record is the honest number. Nov 13: official half calls showed a record but no "% sure". */
 const halfRecConf=R=>R&&R.n?(R.w+5)/(R.n+10):null;
+/* v2.98.4 · one rule everywhere (Chris, Nov 13): a half call is official only when that confidence is 70%+ too (about 26-6 or better), on top of the proven record */
+const HALF_CONF=0.70;const halfOfficial=(R,x)=>!!(R&&R.ok&&x&&x.price!=null&&halfRecConf(R)>=HALF_CONF-1e-9);
 const HALF_FRAC={nba:[0.49,0.5],ncaab:[0.47,0.5],nfl:[0.49,0.5],ncaaf:[0.49,0.5],nhl:[0.31,0.33]};   /* [share of total, share of margin] */
 const halfTag=sp=>sp==='nhl'?'P1':'1H';
 async function halfLinesRefresh(){if(typeof fetch==='undefined'||typeof location==='undefined'||!/^https?:/.test(location.protocol))return;const d=today();
@@ -2644,12 +2646,12 @@ function gradeHalfCalls(){const L=get(HALF_KEY,{})||{};let n=0;
   if(n)set(HALF_KEY,L);return n;}
 function halfRecord(sp,voice,mk){const r={w:0,l:0,u:0};Object.values(roGet(HALF_KEY,{})||{}).forEach(x=>{if(!x.graded||x.hit==null||x.sp!==sp||x.voice!==voice||x.mk!==mk)return;x.hit?r.w++:r.l++;r.u+=x.units||0;});r.n=r.w+r.l;r.p=r.n?r.w/r.n:null;r.ok=r.n>=HALF_OK.n&&r.p>=HALF_OK.p&&r.u>0;return r;}
 /* today's half calls, official first */
-function halfToday(){const d=today();return Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.date===d&&CHARS[x.voice]).map(x=>{const R=halfRecord(x.sp,x.voice,x.mk);return{...x,rec:R,official:R.ok&&x.price!=null};});}
+function halfToday(){const d=today();return Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.date===d&&CHARS[x.voice]).map(x=>{const R=halfRecord(x.sp,x.voice,x.mk);return{...x,rec:R,official:halfOfficial(R,x)};});}
 function halfCardHtml(){const T=halfToday();if(!T.length)return'';const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');
   const off=T.filter(x=>x.official);const by={};T.forEach(x=>{const k=x.sp+'|'+x.pick+'|'+x.game;(by[k]=by[k]||{x,v:[]}).v.push(x.voice);});
   const top=Object.values(by).sort((a,b)=>b.v.length-a.v.length).slice(0,6);
   return`<div class="tkt" style="margin-top:8px"><h3>🕐 Halves & 1st periods</h3>
-    ${off.length?off.map(x=>{const c=halfRecConf(x.rec);return`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)} — ${txtEsc(nm(x.voice))}${c!=null?` ${Math.round(c*100)}% sure ·`:''} ${x.rec.w}-${x.rec.l} in this market</div>`;}).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls at ${Math.round(HALF_OK.p*100)}%+ in profit, per sport and market. Learning from tonight.</div>`}
+    ${off.length?off.map(x=>{const c=halfRecConf(x.rec);return`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)} — ${txtEsc(nm(x.voice))}${c!=null?` ${Math.round(c*100)}% sure ·`:''} ${x.rec.w}-${x.rec.l} in this market</div>`;}).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls in profit and a 70%+ record-based confidence (about 26-6), per sport and market. Learning from tonight.</div>`}
     <details style="margin-top:4px"><summary class="sub">Most-agreed half calls today (${T.length} calls)</summary><div class="mono" style="font-size:10.5px">${top.map(o=>`<div>${txtEsc(o.x.pick)} ${tcSgn(o.x.price)} · ${txtEsc(o.x.game)} — ${o.v.length} characters</div>`).join('')}</div></details></div>`;}
 function halfRecordsHtml(sp){const L=Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.graded&&x.hit!=null&&(!sp||sp==='all'||x.sp===sp));
   const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');const by={};L.forEach(x=>{const k=x.voice;const r=by[k]=by[k]||{};const m=x.mk.replace(/^(h1|p1)/,'');const c=r[m]=r[m]||{w:0,l:0,u:0};x.hit?c.w++:c.l++;c.u+=x.units||0;});
@@ -3066,7 +3068,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18111,12 +18113,12 @@ function charCallsToday(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
   Object.entries(by).forEach(([sp,B])=>(B&&B.picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;const m=btMarket(x.m);(x.chars||[]).forEach(v=>{if(!CHARS[v]||have.has(v+'|'+sp+'|'+x.game+'|'+m+'|'+x.sd))return;
     have.add(v+'|'+sp+'|'+x.game+'|'+m+'|'+x.sd);put(v,{kind:'line',v,sp,game:x.game,gid:x.gid,start:x.start||null,m,sd:x.sd,line:x.line,price:x.price,pick:x.pick,conf:null,off:false,fromCard:true,graded:false,hit:null,tc:x});});}));
   Object.values(HL).forEach(x=>{if(!x||String(x.date).slice(0,10)!==d||!CHARS[x.voice])return;let rec=null;try{rec=halfRecord(x.sp,x.voice,x.mk);}catch(e){}
-    put(x.voice,{kind:'half',v:x.voice,sp:x.sp,game:x.game,start:start.get(x.sp+'|'+x.game)||null,m:x.mk,sd:x.side,line:x.line,price:x.price,pick:x.pick,conf:halfRecConf(rec),off:!!(rec&&rec.ok&&x.price!=null),rec,graded:!!x.graded,hit:x.graded?x.hit:null,tc:null});});
+    put(x.voice,{kind:'half',v:x.voice,sp:x.sp,game:x.game,start:start.get(x.sp+'|'+x.game)||null,m:x.mk,sd:x.side,line:x.line,price:x.price,pick:x.pick,conf:halfRecConf(rec),off:halfOfficial(rec,x),rec,graded:!!x.graded,hit:x.graded?x.hit:null,tc:null});});
   const seen=new Set();CP.forEach(x=>{if(!x||String(x.d).slice(0,10)!==d||!CHARS[x.voice])return;const k=x.voice+'|'+x.sp+'|'+x.player+'|'+x.k+'|'+x.thr;if(seen.has(k))return;seen.add(k);
     const game=team.get(x.sp+'|'+x.team)||null;put(x.voice,{kind:'prop',v:x.voice,sp:x.sp,game,team:x.team,start:game?start.get(x.sp+'|'+game)||null:null,m:'prop',pick:`${x.player} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}`,conf:x.p!=null?+x.p:null,off:+x.p>=0.7,graded:x.hit!=null,hit:x.hit!=null?x.hit:null,tc:null});});
   CHC_C={d,V,CP,HL,TC,t:Date.now(),R};return R;}
 /* a character's calls through the filters: sport, bet type, and the tier row read for a character — Official = its official calls
-   (70%+, or a proven half market, or a 70%+ prop), Unanimous/colors = the picks of its that made Today's card in that color */
+   (70%+: a game line, a proven half market at 70%+, or a 70%+ prop), Unanimous/colors = the picks of its that made Today's card in that color */
 function charCallPass(o,F){if(F.sp&&F.sp!=='all'&&o.sp!==F.sp)return false;if(!btPass(F.bt||'all',o.m,o.price))return false;const t=F.tier||'all';
   if(t==='all')return true;if(t==='play')return o.off;if(t==='unan')return!!(o.tc&&o.tc.unan);return!!(o.tc&&String(o.tc.color||'').trim()===t);}
 function charCallsFor(v,F){return(charCallsToday().get(v)||[]).filter(o=>charCallPass(o,F||{}));}
