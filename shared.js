@@ -3060,7 +3060,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261108k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16138,6 +16138,7 @@ function renderBest(){
   el.innerHTML=bar+tabs+bestPublicCardHtml(S,{sp:BEST_VIEW})+priceTxt+dogTxt+notes+rcT+prev+`<div class="bar" style="margin-top:8px"><button class="primary" id="bestShareBtn" onclick="exportImage('bestShareTarget','bestShareBtn','thedesk-best-${S.d}','TheDesk — today\\'s best plays')">📤 Share as image</button><button onclick="publishPicks(true)">📣 Publish to public page</button></div>
     <div class="sub mono pub-row">${pubTxt?`<span>${pubTxt}</span>`:''}<a href="${PUB_URL}" target="_blank" rel="noopener">open public page ↗</a>${typeof shareHub==='function'?' · <a href="#" onclick="shareHub();return false">📤 share</a>':''}</div>
     ${pubTxt?'':'<div class="sub mono" style="font-size:10px">The public page (picks.html) shows only the locked card, its graded record and your subscribe link. It publishes itself when the card locks.</div>'}
+    <label class="sub" style="font-size:10.5px;margin-top:6px;display:flex;gap:8px;align-items:center"><input type="checkbox" ${get('d4.pubbeta',true)!==false?'checked':''} onchange="set('d4.pubbeta',this.checked);try{deskPublishPage('Update');}catch(e){}"> <span><b>Open beta on the public page</b> — the whole card the minute it locks: Top 10, the Banker, every character's picks with their breakdowns, bios and bloodlines, all free. Untick to go back to free vs VIP.</span></label>
     <div class="sub" style="font-size:10px;margin-top:4px">Subscribe link for the public page <input id="subLinkIn" placeholder="https://… (Whop, Patreon, Stripe link)" value="${esc(get('d4.sublink',''))}" onchange="set('d4.sublink',this.value.trim())" style="width:100%;margin-top:2px"></div>`+
     ((S.props||[]).length?`<details class="tkt" style="margin-top:8px"><summary><b>Bonus props</b> <span class="mono" style="font-size:10px;color:var(--mute)">not part of the record</span></summary>${bestRowsHtml('Top props',S.props,null,'')}</details>`:'');
 }

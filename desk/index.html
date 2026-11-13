@@ -25,7 +25,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preload" as="font" type="font/woff2" href="fonts/big-shoulders.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/franklin.woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=5">
+<link rel="stylesheet" href="app.css?v=6">
 </head>
 <body>
 <a class="skip" href="#main">Skip to today's card</a>
@@ -38,6 +38,7 @@
   <nav class="nav-top" aria-label="Sections">
     <button type="button" data-go="today">Today</button>
     <button type="button" data-go="slate">Slate</button>
+    <button type="button" data-go="cast">Characters</button>
     <button type="button" data-go="receipts">Receipts</button>
     <button type="button" data-go="join">Join</button>
   </nav>
@@ -49,6 +50,7 @@
 <main id="main">
   <section class="view" id="v-today" aria-label="Today's card"><div class="slips"><div class="shimmer"></div></div></section>
   <section class="view" id="v-slate" aria-label="The slate" hidden></section>
+  <section class="view" id="v-cast" aria-label="The characters" hidden></section>
   <section class="view" id="v-receipts" aria-label="Every result" hidden></section>
   <section class="view" id="v-join" aria-label="Join" hidden></section>
 </main>
@@ -56,12 +58,13 @@
 <nav class="tabs" aria-label="Sections">
   <button type="button" data-go="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5v-2a1 1 0 0 1 1-1h15a1 1 0 0 1 1 1v2a2.5 2.5 0 0 0 0 5v4a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-4a2.5 2.5 0 0 0 0-5Z"/><path d="M14.5 6v2.2m0 3v1.6m0 3V18" stroke-linecap="round"/></svg>Today</button>
   <button type="button" data-go="slate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="3.5" width="15" height="17" rx="1.6"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Slate</button>
+  <button type="button" data-go="cast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.6 14.7c2.4-.4 4.4 1.1 4.9 4.8"/></svg>Characters</button>
   <button type="button" data-go="receipts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5v-17Z"/><path d="m9 11 2.2 2.2L15.5 9"/></svg>Receipts</button>
   <button type="button" data-go="join"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="3.5" width="13" height="17" rx="2"/><path d="M10 6.5h4"/><path d="m12 10.2 1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4L12 10.2Z"/></svg>Join</button>
 </nav>
 
 <div id="guideRoot"></div>
 <noscript><p style="max-width:40ch;margin:40px auto;padding:0 16px;font-family:sans-serif;color:#F3EEDF">TheDesk needs JavaScript to show today's card. Three picks are locked every morning, opened 30 minutes before each game and graded at the final.</p></noscript>
-<script type="module" src="app.js?v=5"></script>
+<script type="module" src="app.js?v=6"></script>
 </body>
 </html>

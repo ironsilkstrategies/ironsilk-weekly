@@ -12,7 +12,7 @@ let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');html=html.replace(/<scr
     x.__NO_GRADELOOP__=true;x.__NO_REOPEN__=true;x.__NO_FLIP_RELOAD__=true;x.__NO_SYNC_LOOP__=true;x.__NO_BACKFILL__=true;
     x.fetch=()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});x.scrollTo=()=>{};x.alert=()=>{};x.confirm=()=>true;x.open=(u)=>{opened.push(u);return null;};
     Object.defineProperty(x.navigator,'clipboard',{configurable:true,value:{writeText:t=>{copied.push(t);return Promise.resolve();}}});
-    x.localStorage.setItem('d4.setupDone','1');x.localStorage.setItem('d4.sublink',JSON.stringify('https://whop.com/ironsilkweekly/thedesk-vip'));x.localStorage.setItem('d4.handle',JSON.stringify('RuleTheWorldKid'));}}).window;
+    x.localStorage.setItem('d4.setupDone','1');x.localStorage.setItem('d4.pubbeta','false');x.localStorage.setItem('d4.sublink',JSON.stringify('https://whop.com/ironsilkweekly/thedesk-vip'));x.localStorage.setItem('d4.handle',JSON.stringify('RuleTheWorldKid'));}}).window;
   await wait(2500);
   const pk=(game,pick,price,start)=>({sp:'nhl',game,pick,price,p:0.74,ev:12,start,main:true,color:' strong'});
   const top3=[pk('WPG@DAL','DAL ML',-205,'2026-10-23T00:00Z'),pk('MIN@CGY','MIN ML',-205,'2026-10-23T01:00Z'),pk('NSH@BOS','BOS ML',-155,'2026-10-22T23:00Z')];

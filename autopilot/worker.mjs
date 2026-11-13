@@ -12,7 +12,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.0';
+const VERSION = 'worker v3.1';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -600,7 +600,8 @@ export function publicView(feed, st, now) { const F = JSON.parse(JSON.stringify(
   const key = x => [x.sp, x.game || x.team || '', x.pick || ''].join('|');
   const hide = x => ({ hidden: true, sp: x.sp, start: x.start || '', unlockAt: x.unlockAt || null });
   /* v2.35 · open = graded, or past its unlock (T-30 from the start when only the start is known). No time at all → stays hidden. */
-  const shut = x => { if (x.hit != null || x.push) return false; const t = x.unlockAt || (Date.parse(x.start || '') - 30 * 60e3); return !(isFinite(t) && now >= t); };
+  /* v3.1 · the open beta: when the app says so, nothing waits for its unlock */
+  const shut = x => { if (F.beta === true) return false; if (x.hit != null || x.push) return false; const t = x.unlockAt || (Date.parse(x.start || '') - 30 * 60e3); return !(isFinite(t) && now >= t); };
   const R = F.record || { w: 0, l: 0, pu: 0, u: 0 };
   T0.picks = (T0.picks || []).map(x => { if (x.hidden) return x; const s = st[key(x)];
     if (x.hit == null && !x.push && s) { if (s === 'P') x.push = true; else { x.hit = s === 'W'; if (x.hit) { R.w++; R.u += units(x.price, 'W'); } else { R.l++; R.u -= 1; } } }

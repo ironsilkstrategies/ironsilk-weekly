@@ -1316,13 +1316,58 @@ const pubOpenAt=x=>{const t=Date.parse(x&&x.start||'');return isFinite(t)?t-PUB_
 const pubIsOpen=(x,now)=>{const t=pubOpenAt(x);return t!=null&&(now||Date.now())>=t;};
 function deskPropResult(x,d){try{if(x.hit!=null||x.push)return x;const g=(get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];const k=(x.keys||[x.k])[0];
   if(g&&g.d>=d&&g.d<=dayShift(d,1)&&g.v&&g.v[k]!=null){const a=+g.v[k];return{...x,actual:a,hit:x.side==='under'?a<+x.thr:a>+x.thr};}}catch(e){}return x;}
-function publicFeedCore(full){const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();
+/* v2.98 · THE OPEN BETA (Nov 13). While the beta switch is on (Settings → Public page), the public page carries the whole card
+   the minute it locks: the Best 3, the rest of the Top 10, the Banker's parlay, every character's parlay and the props, every
+   character's official picks with each character's own breakdown, the characters' bios and records, and the bloodlines.
+   Switch it off and the page goes back to free vs VIP: picks open 30 minutes before each game and the VIP parts drop out.
+   Only results and plain-words reasons leave this app — never an engine, a weight or a key. */
+const PUB_BETA_KEY='d4.pubbeta';const pubBeta=()=>get(PUB_BETA_KEY,true)!==false;
+const PUB_PLANS=[{id:'month',name:'Monthly',price:50,per:'month',note:'Everything, every day'},{id:'year',name:'Yearly',price:300,per:'year',note:'Everything, plus the VIP lounge on Telegram and in the app',best:true},
+  {id:'league',name:'League pass',price:100,per:'league, per season',note:'Everything for one league, all season'},{id:'pass',name:'2-day pass',price:20,per:'2 days',note:'Everything for 48 hours'},
+  {id:'single',name:'Single pick',price:2,per:'pick',note:'One pick from a game the characters are on'}];
+const PUB_NOTE_SKIP=new Set(['fav','dog','home','road','over','under','bigfav','longdog']);
+function pubCallNote(c){try{const w=typeof c.why==='string'?c.why:Array.isArray(c.why)?c.why.join(' · '):'';if(w)return w.slice(0,240);
+    const f=(Array.isArray(c.f)?c.f:[]).filter(t=>!PUB_NOTE_SKIP.has(t)).map(t=>(typeof FAC_LAB!=='undefined'&&FAC_LAB[t])||'').filter(Boolean).slice(0,3);
+    const sc=c.score?`projects ${c.score}`:'';return[sc,...f].filter(Boolean).join(' · ').slice(0,240);}catch(e){return'';}}
+const pubOff=c=>{try{return!!isOfficial(c);}catch(e){return false;}};
+const pubUnits=(price,hit)=>hit?(+price>0?+price/100:100/Math.abs(+price||100)):-1;
+/* every character's call on a pick's game and bet type: with it or against it, how sure, and why */
+function pubVoicesOn(x,V){try{const m=mkNorm(x.m||x.market),sd=x.sd||x.side,d=String(x.date||x.d0||x.d||today()).slice(0,10);
+    return V.filter(c=>c.sp===x.sp&&c.game===x.game&&c.market===m&&String(c.date).slice(0,10)===d&&CHARS[c.voice]&&c.voice!=='Blend')
+      .map(c=>({who:charName(c.voice),v:c.voice,with:c.side===sd,pick:c.pick,p:c.cf!=null&&isFinite(+c.cf)?+(+c.cf).toFixed(3):null,official:pubOff(c),note:pubCallNote(c)}))
+      .sort((a,b)=>(b.with-a.with)||(b.official-a.official)||((b.p||0)-(a.p||0)));}catch(e){return[];}}
+/* the roster: bio, record on official calls, today's official picks with the reasons */
+let PUB_CHAR_MEMO=null;
+function pubCharacters(V,d){const k=d+'|'+V.length;if(PUB_CHAR_MEMO&&PUB_CHAR_MEMO.k===k&&Date.now()-PUB_CHAR_MEMO.ts<10*60e3)return PUB_CHAR_MEMO.val;const val=pubCharacters0(V,d);PUB_CHAR_MEMO={k,ts:Date.now(),val};return val;}
+function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEach(c=>{if(!CHARS[c.voice]||c.voice==='Blend')return;(by[c.voice]=by[c.voice]||[]).push(c);});
+    return CHAR_ORDER.filter(v=>by[v]&&v!=='Blend').map(v=>{const C=CHARS[v],L=by[v];let w=0,l=0,pu=0,u=0;const picks=[];
+      L.forEach(c=>{const day=String(c.date).slice(0,10);if(day<from||day>d)return;if(day<d&&c.hit==null&&!c.push)return;if(!pubOff(c))return;
+        if(day===d)picks.push({sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:c.cf!=null?+(+c.cf).toFixed(3):null,start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});
+        else if(c.push)pu++;else if(c.hit===true){w++;u+=pubUnits(c.price,true);}else if(c.hit===false){l++;u-=1;}});
+      return{v,name:C.label,chip:C.chip,color:C.color,bio:C.school,record:{w,l,pu,u:+u.toFixed(2)},picks:picks.sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,12)};});}catch(e){return[];}}
+/* the bloodlines: each character × bet type, its generation, its heirs and how close the best one is to the chair (labels only) */
+function pubBloodlines(){try{if(typeof heirsAll!=='function')return null;const H=heirsAll(),R=typeof HEIR_MEMO!=='undefined'?HEIR_MEMO:null;
+    const cells=Object.entries(H.cells||{}).map(([k,C])=>{const c=R&&R.cells&&R.cells[k],bar=+(((c&&c.ctx)||{}).bar||HEIR_BAR).toFixed(2);
+      const sh=((c&&c.heirs)||[]).filter(h=>h.st==='shadow').sort((a,b)=>(b.z||0)-(a.z||0)),b=sh[0];
+      return{who:charName(C.v),v:C.v,m:C.m,gen:C.gen||1,champ:(C.champ||{}).lab||'',heirs:(C.heirs||[]).filter(h=>h.st==='shadow').length,retired:(C.heirs||[]).filter(h=>h.st==='retired').length,
+        best:b?{lab:b.lab||'',n:b.n||0,days:b.days||0,z:+(+(b.z||0)).toFixed(2),bar}:null,hist:(C.hist||[]).slice(-4).map(h=>({gen:h.gen,lab:h.lab,to:h.to,why:h.why}))};});
+    return{need:{n:HEIR_MIN_N,days:HEIR_MIN_DAYS},cells};}catch(e){return null;}}
+function pubLeg(l,V){const st=l.start||(()=>{try{return deskGameStart(l.sp,l.game)||'';}catch(e){return'';}})();
+  const pick=l.player?(()=>{try{return cpropLine(l);}catch(e){return l.pick||'';}})():l.pick;
+  return{sp:l.sp,game:l.game||'',gl:l.game?gameLabel(l.sp,l.game):'',pick,price:l.price,p:l.p!=null?+(+l.p).toFixed(3):null,start:st,hit:l.hit==null?null:l.hit,push:!!l.push,
+    by:l.by?(Array.isArray(l.by)?l.by:[l.by]).map(charName):l.v?[charName(l.v)]:[],voices:l.player?[]:pubVoicesOn(l,V)};}
+function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,skill:!!P.skill,px:!!P.px,price:decimalToAmerican(P.dec),p:+(+P.p).toFixed(3),legs:P.legs.map(l=>pubLeg({...l,v:P.v},V))});
+    return{top10:(C.top10||[]).map(x=>({...pubLeg(x,V),ev:x.ev!=null?+(+x.ev).toFixed(1):null,voicesBy:(x.confBy?[].concat(x.confBy):[]).map(charName)})),
+      banker:C.banker?{price:decimalToAmerican(C.banker.dec),p:+(+C.banker.p).toFixed(3),legs:C.banker.legs.map(l=>pubLeg(l,V))}:null,
+      parlays:[...(C.chars||[]),...(C.px||[])].map(par),
+      props:(C.props||[]).map(c=>({who:charName(c.v),v:c.v,sp:c.sp,pick:(()=>{try{return cpropLine(c)+propWhere(c);}catch(e){return c.player||'';}})(),price:c.price,p:c.cal!=null?+(+c.cal).toFixed(3):null,star:c.fav==='fav'}))};}catch(e){console.warn('pub vip',e);return null;}}
+function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();const VB=beta?(roGet(VOICES_KEY,[],30e3)||[]):null;
   const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
-    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,tuned:x.tuned?true:undefined,
+    tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),calls:beta&&x.whyOn&&VB?pubVoicesOn({...x,d0:x.d0},VB):undefined,hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,tuned:x.tuned?true:undefined,
     why:(()=>{if(!x.whyOn)return undefined;try{const W=pickWhy({...x,date:x.d0});return{bullets:W.bullets.slice(0,6),script:W.script};}catch(e){return undefined;}})()});
   const hist=Object.keys(log).sort().reverse().slice(0,30).map(d=>({d,picks:(log[d].picks||[]).filter(x=>x.main).map(slim)})).filter(x=>x.picks.length);
   const logOf=x=>(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);
-  const gate=(x,body)=>{const at=pubOpenAt(x);const L=logOf(x);const graded=!!(L&&(L.hit!=null||L.push));const open=full||graded||(at!=null&&now>=at);
+  const gate=(x,body)=>{const at=pubOpenAt(x);const L=logOf(x);const graded=!!(L&&(L.hit!=null||L.push));const open=full||beta||graded||(at!=null&&now>=at);
     return open?{...body,unlockAt:at}:{hidden:true,sp:x.sp,start:x.start||'',unlockAt:at};};
   const today_=S.locked?{d:S.d,lockedAt:S.lockedAt,unlockMin:30,picks:(S.top3||[]).map(x=>{const L=logOf(x);return gate(x,slim({...x,hit:L?L.hit:null,push:L?L.push:false,whyOn:true,d0:S.d}));}),
     props:(S.props||[]).slice(0,3).map(x0=>{const x=deskPropResult({...x0,start:x0.start||deskTeamStart(x0.sp,x0.team)},S.d);const lab=`${x.player} ${x.side==='under'?'under':'over'} ${x.thr} ${x.stat}`;
@@ -1330,7 +1375,7 @@ function publicFeedCore(full){const S=best5State();try{best5Grade();}catch(e){}c
     allStarted:(S.top3||[]).every(x=>pubIsOpen(x,now)||!!(logOf(x)&&(logOf(x).hit!=null||logOf(x).push)))}:null;
   let parlay=null,prec=null;try{const B=get(BKDAY_KEY,{})||{};if(B.locked&&B.d===today()&&B.own&&B.own.legs.length){const O=B.own;
       parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(O.dec),p:O.p,result:tixDone(O.legs),legs:O.legs.map(l=>{const st=l.start||deskGameStart(l.sp,l.game)||'';
-        const x={...l,start:st};if(!full&&!pubIsOpen(x,now)&&l.hit==null&&!l.push)return{hidden:true,sp:l.sp,start:st,unlockAt:pubOpenAt(x)};let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}
+        const x={...l,start:st};if(!full&&!beta&&!pubIsOpen(x,now)&&l.hit==null&&!l.push)return{hidden:true,sp:l.sp,start:st,unlockAt:pubOpenAt(x)};let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}
         return{sp:l.sp,game:l.game,gl:gameLabel(l.sp,l.game),pick:l.pick,price:l.price,p:l.p,start:st,unlockAt:pubOpenAt(x),by:(l.by||[l.v]).map(charName).join(' + '),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
     const RR=bkDayRecord().own;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
   let cashed=[];try{cashed=cashedList(14).filter(c=>c.units>=1).slice(0,12);}catch(e){}
@@ -1339,9 +1384,11 @@ function publicFeedCore(full){const S=best5State();try{best5Grade();}catch(e){}c
     subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,updates,
     /* v2.51.1 · today's card never rides in the history list — it showed every locked pick there (with its price) before
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
-    history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30};}
+    history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30,plans:PUB_PLANS,
+    ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines();
+      return{beta:true,vip,characters,bloodlines,betaSig:JSON.stringify([vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
 function publicFeed(){return publicFeedCore(false);}
-function pubSig(F){return JSON.stringify([F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts)]);}
+function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts)]);}
 
 /* ── 14 · BROADCAST — the public page, the channels and the lounges ─────────────
    VIP channel  — the full card at the freeze, every result, every cash, the recap
@@ -1407,7 +1454,7 @@ async function deskPublishAll(why){const out=[];const B=bcCfg();const d=today();
   const day=new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   if(B.vipLounge&&!sent.k.vipL&&get('d4.tgposted',{}).d===d){const j=await tgApi('sendMessage',{chat_id:B.vipLounge,text:`🔒 <b>Today's VIP card is up</b> — ${day}\n${n?`Best ${n}`:'No Best 3 today (nothing cleared the 70% rule)'}${P&&P.own?' · the Banker\'s parlay':''}${P&&Object.keys(P.chars||{}).length?' · '+Object.keys(P.chars).length+' character tickets':''}. Check the channel.`,parse_mode:'HTML'});if(j)sent.k.vipL=1;}
   for(const[k,c]of[['pub',B.pub],['pubL',B.pubLounge]]){if(!c||sent.k[k]||!S.locked)continue;
-    const j=await tgApi('sendMessage',{chat_id:c,text:`🔒 <b>TheDesk — ${day}</b>\n${n?`Today's Best ${n} are locked`:'No play cleared the bar today — we don\'t force picks'}.\nEach one unlocks here and on the public page <b>30 minutes before its game</b>.${get('d4.sublink','')?`\nVIP has every pick now → ${txtEsc(get('d4.sublink',''))}`:''}\n<i>Every pick locked before the games, graded at the final.</i>`,parse_mode:'HTML',disable_web_page_preview:'true'});
+    const j=await tgApi('sendMessage',{chat_id:c,text:`🔒 <b>TheDesk — ${day}</b>\n${n?`Today's Best ${n} are locked`:'No play cleared the bar today — we don\'t force picks'}.${typeof pubBeta==='function'&&pubBeta()?`\nOpen beta: the whole card is on the public page right now, free → ironsilkweekly.com/desk/`:`\nEach one unlocks here and on the public page <b>30 minutes before its game</b>.${get('d4.sublink','')?`\nVIP has every pick now → ${txtEsc(get('d4.sublink',''))}`:''}`}\n<i>Every pick locked before the games, graded at the final.</i>`,parse_mode:'HTML',disable_web_page_preview:'true'});
     if(j)sent.k[k]=1;}
   set('d4.bcsent',sent);return{msg:out.join(' · '),out};}
 /* the worker gets the public side too: who's where, what unlocks when, and the full page to publish */

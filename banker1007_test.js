@@ -11,7 +11,7 @@ function boot(page,extraFetch){let html=fs.readFileSync(path.join(W,page),'utf8'
         if(/api\.github\.com\/repos\/[^/]+\/[^/?]+$/.test(u))return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});
         return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});}
       return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});};
-    w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;}
+    w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');w.localStorage.setItem('d4.pubbeta','false');}}).window;}
 const w=boot('nhl.html');
 setTimeout(async()=>{try{
   // ── roster ──

@@ -13,14 +13,17 @@
         game, walk-forward (each day predicted only from the days before it), graded like
         everyone, never posted.
    §3 · THE GENERATION BOOK. An heir takes the chair only when it beat its parent on games it was
-        never tuned on — born after the heir, 150+ of them, over at least two weeks — by a margin
+        never tuned on — born after the heir, 100+ of them, over at least ten days — by a margin
         that rises with every heir tried (try enough heirs and one looks brilliant by luck), and
         its official picks didn't make less money. A clearly worse heir retires; a new one is born
         so two are always in the shadows. The parent retires to the family tree with its record.
    §4 · THE FAMILY TREE: chapters of the season, heirlooms (beliefs that have paid), scars (lanes
         blocked by losses, and whether they're healing), every generation and why it changed. */
 
-const HEIR_KEY='d4.heirs',HEIR_BORN='2026-10-18',HEIR_MIN_N=150,HEIR_MIN_DAYS=14,HEIR_BAR=2.0;
+/* v2.98 · the bar came down (Nov 13): 26 days in, 40 bloodlines, 80 heirs reading and not one generation had turned. 150 unseen games,
+   14 days and 2σ plus half a σ per heir tried kept luck out, but also kept the desk from evolving. Now 100 games, 10 days, 1.5σ plus a
+   quarter σ per heir tried, and the money check stays: an heir whose official picks made less money still never takes the chair. */
+const HEIR_KEY='d4.heirs',HEIR_BORN='2026-10-18',HEIR_MIN_N=100,HEIR_MIN_DAYS=10,HEIR_BAR=1.5,HEIR_LUCK=0.25;
 const WV_SIG={nfl:13.5,ncaaf:16,nba:12,ncaab:10.5,nhl:2.3,mlb:4.2},WV_TSIG={nfl:13.5,ncaaf:16.5,nba:18,ncaab:15,nhl:2.3,mlb:4.4};
 /* the season's chapters: early on, last year's ratings matter most; late, motivation does */
 const WV_SEASON={nfl:[[9,1],[1,10],[1,11],[2,15]],ncaaf:[[8,20],[12,8],[12,9],[1,25]],nhl:[[10,1],[4,18],[4,19],[6,30]],nba:[[10,18],[4,14],[4,15],[6,25]],ncaab:[[11,1],[3,10],[3,11],[4,10]],mlb:[[3,20],[9,30],[10,1],[11,5]]};
@@ -140,7 +143,7 @@ Object.assign(BOOK_ENDS,{KEEP:{ok:1,ico:'🌱',lab:'Keep watching — the heirs 
 bookDefine({id:'generation',title:'Generations — when an heir takes the chair',start:'heirs',
   pages:{
     heirs:{q:'Are two heirs reading in the shadows?',to:['SPAWN','enough'],ask:c=>c.heirs<2&&c.room?['SPAWN',`${c.heirs} heir${c.heirs===1?'':'s'} in the shadows — one more is born`]:['enough',c.heirs<2?'every variation of this bloodline has been tried':'two heirs are reading']},
-    enough:{q:'Has the best heir read 150+ games it was never tuned on, over two weeks?',to:['KEEP','better'],ask:c=>!c.heirs?['KEEP','no heir left to judge — the champion keeps the chair']:c.n<HEIR_MIN_N||c.days<HEIR_MIN_DAYS?['KEEP',`${c.n} unseen games over ${c.days} days — not enough to judge`]:['better',`${c.n} unseen games`]},
+    enough:{q:`Has the best heir read ${HEIR_MIN_N}+ games it was never tuned on, over ${HEIR_MIN_DAYS}+ days?`,to:['KEEP','better'],ask:c=>!c.heirs?['KEEP','no heir left to judge — the champion keeps the chair']:c.n<HEIR_MIN_N||c.days<HEIR_MIN_DAYS?['KEEP',`${c.n} unseen games over ${c.days} days — not enough to judge`]:['better',`${c.n} unseen games`]},
     better:{q:'Did it beat its parent by more than luck allows?',to:['money','worse'],ask:c=>c.z>=c.bar?['money',`${c.z.toFixed(1)}σ better, past the ${c.bar.toFixed(1)}σ bar (${c.tried} heir${c.tried===1?'':'s'} tried)`]:['worse',`${c.z.toFixed(1)}σ — short of the ${c.bar.toFixed(1)}σ bar`]},
     money:{q:'Did its official picks make at least as much money?',to:['PROMOTE','KEEP'],ask:c=>c.du>=-1?['PROMOTE',`its official picks made ${c.du>=0?'+':''}${c.du.toFixed(1)}u against its parent's`]:['KEEP',`better calls, but its official picks made ${c.du.toFixed(1)}u less — not yet`]},
     worse:{q:'Is it clearly worse than its parent?',to:['RETIRE','KEEP'],ask:c=>c.z<=-2?['RETIRE',`${c.z.toFixed(1)}σ worse on ${c.n} unseen games`]:['KEEP','neither better nor worse yet']}},
@@ -184,7 +187,7 @@ function heirsRun(force){const d=today();if(SAFE_MODE&&!force)return HEIR_MEMO||
         off:{n:sH.on,w:sH.ow,u:+sH.ou.toFixed(2)},offC:{n:sC.on,w:sC.ow,u:+sC.ou.toFixed(2)},days:Math.max(0,Math.round((Date.parse(d)-Date.parse(h.born))/864e5))});});
     /* the Generation Book, on the strongest heir */
     const shadow=res.heirs.filter(h=>h.st==='shadow').sort((a,b)=>b.z-a.z);const best=shadow[0];const tried=H.tried[C.v+'|'+C.m]||1;
-    const ctx={heirs:shadow.length,room:heirRoom(C),n:best?best.n:0,days:best?best.days:0,z:best?best.z:0,bar:HEIR_BAR+0.5*Math.log2(Math.max(1,tried)),tried,du:best?best.off.u-best.offC.u:0};
+    const ctx={heirs:shadow.length,room:heirRoom(C),n:best?best.n:0,days:best?best.days:0,z:best?best.z:0,bar:HEIR_BAR+HEIR_LUCK*Math.log2(Math.max(1,tried)),tried,du:best?best.off.u-best.offC.u:0};
     const R=bookWalkSync(BOOKS.generation,ctx,null);res.book={end:R.end,why:R.why,path:R.path.map(s=>s.p+'>'+s.to).join(' '),steps:R.path.map(s=>({p:s.p,to:s.to,why:s.why||''}))};res.ctx=ctx;res.best=best?best.id:null;
     if(R.end==='PROMOTE'&&best&&d>=HEIR_BORN){const h=C.heirs.find(x=>x.id===best.id&&x.st==='shadow');const old=C.champ;C.hist.push({gen:C.gen,champ:old.id,lab:old.lab,from:old.since,to:d,why:`retired — ${h.lab} beat it: ${R.why}`});
       C.gen++;C.champ={id:h.id,lab:h.lab,since:dayShift(d,1),gen:C.gen,p:h.p};h.st='champion';C.heirs.filter(x=>x.st==='champion'&&x.id!==h.id).forEach(x=>x.st='retired');changed=true;
@@ -241,7 +244,7 @@ function familyHtml(){let R=null;if(!HEIR_MEMO||HEIR_MEMO.d!==today()){heirsRunA
       ${B.paying.length&&!B.heirlooms.length?`<div class="mktlab">🌱 Beliefs starting to pay</div>${B.paying.map(o=>`<div class="mono fm-b">${txtEsc(vxSp(o.sp))}: ${txtEsc(o.lab)} — ${o.w}-${o.n-o.w} (${o.n} games)${o.n<30?' · still small':''}</div>`).join('')}`:''}
       ${B.costing.length?`<div class="mktlab">⚠️ Beliefs costing it</div>${B.costing.map(o=>`<div class="mono fm-b">${txtEsc(vxSp(o.sp))}: ${txtEsc(o.lab)} — ${o.w}-${o.n-o.w}, ${o.z.toFixed(1)}σ under${o.n<30?' · still small':''}</div>`).join('')}`:''}
       ${S.length?`<div class="mktlab">🩹 Scars — lanes its losses blocked</div>${S.map(o=>`<div class="mono fm-b">${txtEsc(o.lab)} — ${o.w}-${o.l} (${o.u>=0?'+':''}${o.u.toFixed(1)}u) · last 3 weeks ${o.rw}-${o.rl}${o.healing?' · <span style="color:var(--win)">healing</span>':''}</div>`).join('')}`:''}</details>`;};
-  return`<div class="tkt hi"><h3>🧬 Generations</h3><div class="sub" style="font-size:10.5px">Every character is a bloodline. The champion's confidence is the one that counts; its heirs — the same character with one belief changed — read every game in the shadows. An heir takes the chair only after beating its parent on 150+ games it was never tuned on, by more than luck allows, without its official picks making less money.</div>
+  return`<div class="tkt hi"><h3>🧬 Generations</h3><div class="sub" style="font-size:10.5px">Every character is a bloodline. The champion's confidence is the one that counts; its heirs — the same character with one belief changed — read every game in the shadows. An heir takes the chair only after beating its parent on ${HEIR_MIN_N}+ games it was never tuned on, by more than luck allows, without its official picks making less money.</div>
     <div class="mono" style="font-size:10px;margin-top:4px">Chapters now: ${Object.entries(ch).map(([sp,c])=>`${txtEsc(vxSp(sp))} — ${WV_CH_LAB[c]}`).join(' · ')||'—'}</div></div>
     ${CHAR_ORDER.map(card).join('')}${bookPagesHtml(BOOKS.generation)}`;}
 if(typeof recViewBar==='function'&&typeof window!=='undefined'&&!window.__HEIR_VIEW__){window.__HEIR_VIEW__=1;const RVB1=recViewBar;

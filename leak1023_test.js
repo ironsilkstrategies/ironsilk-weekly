@@ -16,7 +16,12 @@ let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');html=html.replace(/<scr
   const top3=[pk('WPG@DAL','DAL ML',-205,'2026-10-23T00:00Z'),pk('MIN@CGY','MIN ML',-205,'2026-10-23T01:00Z'),pk('NSH@BOS','BOS ML',-155,'2026-10-23T02:00Z')];
   w.eval(`set(BEST5_KEY,{d:'${D}',locked:true,lockedAt:Date.now()-3*36e5,top3:${JSON.stringify(top3)},bySport:{},picks:[],props:[]});
     set('d4.best5log',{'${D}':{v:2,picks:${JSON.stringify(top3)}},'2026-10-21':{v:2,picks:[{sp:'nhl',game:'TOR@MTL',pick:'TOR ML',price:-130,p:.7,main:true,hit:true,start:'2026-10-21T23:00Z'}]}});`);
+  /* v2.98 · the open beta is on by default: the whole card the minute it locks */
+  const FB=w.eval('publicFeed()');
+  T('open beta (the default): every pick of today\'s card is on the public page at once, with the beta flag, the plans and the roster',FB.beta===true&&FB.today.picks.every(x=>!x.hidden&&x.pick)&&Array.isArray(FB.plans)&&FB.plans.length===5&&Array.isArray(FB.characters),JSON.stringify(FB.today.picks.map(x=>x.hidden?'h':x.pick))+' '+FB.beta);
+  w.eval(`set('d4.pubbeta',false)`);
   const F=w.eval('publicFeed()');const txt=JSON.stringify(F);
+  T('beta switched off: back to free vs VIP (no beta flag, no VIP sections)',F.beta===false&&!F.vip&&!F.characters&&!F.bloodlines);
   T('3 hours before the first unlock every pick is hidden on the card',F.today&&F.today.picks.length===3&&F.today.picks.every(x=>x.hidden));
   T("today's card is not in the public history list",!(F.history||[]).some(h=>h.d===D),JSON.stringify((F.history||[]).map(h=>h.d)));
   T('…so no locked pick (or its price) appears anywhere in the public file',!/DAL ML|MIN ML|BOS ML/.test(txt),(txt.match(/(DAL|MIN|BOS) ML/)||[''])[0]);
@@ -28,6 +33,8 @@ let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');html=html.replace(/<scr
   const V=Wk.publicView(full,{},NOW);
   T("the worker's public page drops today's card from the history too (even if an older app build sends it)",!V.history.some(h=>h.d===D)&&V.history.length===1&&!/DAL ML|MIN ML|BOS ML/.test(JSON.stringify(V)),JSON.stringify(V.history.map(h=>h.d)));
   const V2=Wk.publicView(full,{},Date.parse('2026-10-23T00:40:00Z'));
+  const V3=Wk.publicView({...full,beta:true},{},NOW);
+  T('the worker honors the open beta: nothing waits for its unlock',V3.today.picks.every(x=>!x.hidden&&x.pick),JSON.stringify(V3.today.picks.map(x=>x.hidden?'hidden':x.pick)));
   T('…and each pick still opens on the card at its 30-minute mark',V2.today.picks[0].pick==='DAL ML'&&V2.today.picks[1].pick==='MIN ML'&&V2.today.picks[2].hidden===true,JSON.stringify(V2.today.picks.map(x=>x.hidden?'hidden':x.pick)));
 }catch(e){T('no crash',false,String(e&&e.stack||e).slice(0,500));}
   const p=out.filter(x=>x.startsWith('PASS')).length;console.log(out.join('\n'));console.log(`${p} pass / ${out.length-p} fail`);process.exit(0);})();

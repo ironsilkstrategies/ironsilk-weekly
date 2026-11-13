@@ -10,7 +10,7 @@ const w=new JSDOM(load('nfl.html'),{runScripts:'dangerously',url:'https://ironsi
       if(tgMode==='cors')return Promise.reject(new TypeError('Failed to fetch'));if(tgMode==='bad')return Promise.resolve({ok:false,status:400,json:()=>Promise.resolve({ok:false,description:'Bad Request: chat not found'})});
       return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({ok:true})});}
     return Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});};
-  w.scrollTo=()=>{};w.alert=m=>{w.__al=(w.__al||[]).concat(m)};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
+  w.scrollTo=()=>{};w.alert=m=>{w.__al=(w.__al||[]).concat(m)};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');w.localStorage.setItem('d4.pubbeta','false');}}).window;
 setTimeout(async()=>{try{
   const td=w.eval('today()');
   /* ── specialties: the Judge wins road dog spreads, loses road fav spreads, in CFB ── */

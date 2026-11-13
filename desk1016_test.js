@@ -15,7 +15,7 @@ const boot=(page)=>new JSDOM(load(page),{runScripts:'dangerously',url:'https://i
     if(/api\.telegram\.org/.test(u)){TG.push({m:u.split('/').pop(),p:Object.fromEntries(new URLSearchParams(o.body))});return J(200,{ok:true,result:{message_id:700+TG.length}});}
     if(/api\.github\.com/.test(u)){if(o.method==='PUT'){PUT.push({u,b:JSON.parse(o.body)});return J(201,{});}return /contents/.test(u)?J(404,{}):J(200,{});}
     return J(404,{});};
-  w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
+  w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');w.localStorage.setItem('d4.pubbeta','false');/* v2.98 · this file proves the gated (free vs VIP) mode; the open beta has its own checks */}}).window;
 const w=boot('nhl.html');const E=s=>w.eval(s);
 setTimeout(async()=>{try{
   /* ── the slate day turns over at 5 AM Central ── */

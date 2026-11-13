@@ -90,7 +90,7 @@ function readPick(x) {
 /* ── state ───────────────────────────────────────────────────────────────── */
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null };
-const TABS = ['today', 'slate', 'receipts', 'join'];
+const TABS = ['today', 'slate', 'cast', 'receipts', 'join'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -176,19 +176,20 @@ function stampHtml(x, key) {
   if (x.hit === false) return `<div class="stamp loss${land}">Loss<small>−1.00u</small></div>`;
   return '';
 }
-function readHtml(W) {
-  if (!W) return '';
+function readHtml(W, calls) {
+  const ch = callsHtml(calls);
+  if (!W) return ch ? `<div class="slip-stub"><div class="read">${ch}</div></div>` : '';
   const R = W.read, B = (W.bullets || []).slice(0, 6);
-  if (!R && !B.length) return '';
+  if (!R && !B.length) return ch ? `<div class="slip-stub"><div class="read">${ch}</div></div>` : '';
   const paras = R ? String(R.text || '').split(/\n{2,}|\n/).map(t => t.trim()).filter(Boolean) : [];
   /* the read often opens with its own pull quote: say it once */
   const tk = R && R.take ? String(R.take).trim() : '';
   if (tk && paras[0] && paras[0].startsWith(tk)) { paras[0] = paras[0].slice(tk.length).trim(); if (!paras[0]) paras.shift(); }
   const nums = B.length ? `<ul>${B.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : '';
-  if (!R) return `<div class="slip-stub"><div class="read"><b>Why the desk likes it</b>${nums}</div></div>`;
+  if (!R) return `<div class="slip-stub"><div class="read"><b>Why the desk likes it</b>${nums}${ch}</div></div>`;
   const first = paras[0] || '', rest = paras.slice(1);
   return `<div class="slip-stub"><div class="read"><b>${esc(R.who || 'The desk')}</b>${R.take ? `<p class="take">“${esc(R.take)}”</p>` : ''}
-    <div class="body">${first ? `<p>${esc(first)}</p>` : ''}${rest.length || nums ? `<details><summary>Read the rest</summary>${rest.map(t => `<p>${esc(t)}</p>`).join('')}${nums}</details>` : ''}</div></div></div>`;
+    <div class="body">${first ? `<p>${esc(first)}</p>` : ''}${rest.length || nums ? `<details><summary>Read the rest</summary>${rest.map(t => `<p>${esc(t)}</p>`).join('')}${nums}</details>` : ''}</div>${ch}</div></div>`;
 }
 function slipHtml(x0, i, key, opt = {}) {
   const no = opt.no || `No. ${i + 1}`;
@@ -207,7 +208,7 @@ function slipHtml(x0, i, key, opt = {}) {
   let when = `<div class="when">${esc(whenLabel(x.start))}</div>`, score = '';
   if (L && L.state === 'in') { when = `<div class="when live"><span class="dot"></span>Live${L.detail ? ', ' + esc(L.detail) : ''}</div>`; score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}</p>`; }
   else if (graded || (L && L.state === 'post')) { when = `<div class="when">Final</div>`; if (L && L.state === 'post') score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}</p>`; }
-  const why = opt.noRead ? '' : readHtml(x.why);
+  const why = opt.noRead ? '' : readHtml(x.why, x.calls);
   const fine = x.spread ? 'A spread pick, below the usual 70% bar. It is on the card so every league gets a play.' : x.tuned ? 'History-tuned: under the 70% bar, in because picks like it have made money.' : '';
   const label = opt.label || R.big, long = label.length > 10 ? ' long' : '';
   return `<article class="slip${why ? '' : ' nostub'}${opt.mini ? ' mini' : ''}${turn}" data-key="${esc(key)}"><div class="ghost"></div>
@@ -238,7 +239,7 @@ function viewToday() {
   if (T && picks.length) {
     title = `${weekday(T.d)}’s ${picks.length === 1 ? 'best play' : 'Best ' + picks.length}`;
     if (done) { const t = tally(graded); lede = `Final. The card went <b>${t.w}–${t.l}${t.p ? '–' + t.p : ''}</b> for <b>${signed(t.u)} units</b>.`; }
-    else lede = `Locked at <b>${esc(clock(T.lockedAt))}</b>. Each pick opens 30 minutes before its game and is graded at the final.`;
+    else lede = F.beta ? `Locked at <b>${esc(clock(T.lockedAt))}</b>. Open to everyone during the beta, and graded at the final.` : `Locked at <b>${esc(clock(T.lockedAt))}</b>. Each pick opens 30 minutes before its game and is graded at the final.`;
   } else if (T) { title = `${weekday(T.d)}: no play`; lede = 'Nothing cleared the bar today. The desk doesn’t force picks.'; }
   else { title = 'Today’s card isn’t locked yet'; lede = 'The desk locks the card before the first game. Some days the answer is pass.'; }
 
@@ -251,7 +252,7 @@ function viewToday() {
   /* props and the Banker's parlay ride along when the desk publishes them */
   const props = (T && T.props) || [];
   const propsHtml = props.length ? `<h2 class="h2">Best ${props.length} props</h2><div class="slips${props.length < 3 ? ' few' : ''}">${props.map((x, i) => slipHtml({ ...x, game: '' }, i, `${T.d}|p${i}`, { mini: true, noRead: true, label: x.label || `${x.player || ''} ${x.side || 'over'} ${x.thr} ${x.stat || ''}`, plain: x.actual != null ? `Finished with ${x.actual}` : '', sub: x.team || '', vip: vipLine })).join('')}</div>` : '';
-  const P = F.parlay;
+  const P = F.vip && F.vip.banker ? null : F.parlay;
   const parlayHtml = P && (P.legs || []).length ? `<h2 class="h2">The Banker’s parlay</h2><div class="slips few"><article class="slip nostub"><div class="slip-head"><span>${P.legs.length} legs</span><span>${esc(P.price || '')}</span></div><div class="slip-main">
       ${P.legs.map((l0, i) => { if (l0.hidden) { const u = l0.unlockAt; return `<div class="li"><span class="mk">•</span><span class="pk">Sealed leg<small>${esc(LEAGUE[l0.sp] || '')}</small></span><span class="u"${u ? ` data-until="${u}"` : ''}>${u ? esc(left(u - Date.now())) : ''}</span></div>`; }
         const l = liveGrade(l0), c = stateOf(l); return `<div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : '•'}</span><span class="pk">${esc(readPick(l).big)} ${esc(odds(l.price))}<small>${esc(matchup(l))}</small></span><span class="u">${pct(l.p)}%</span></div>`; }).join('')}
@@ -272,11 +273,13 @@ function viewToday() {
     }
   }
   const price = String(F.price || '').split('·')[0].trim();
-  const vip = sub ? `<div class="vipstrip"><div><h3>${anyHidden ? 'VIP already has all ' + (picks.length === 3 ? 'three' : 'of them') : 'Get the card the minute it locks'}</h3>
+  const vip = F.beta ? `<div class="vipstrip beta"><div><h3>Open beta: the whole card is free</h3>
+      <p>Every pick, every character’s breakdown, the Top 10, the Banker and every parlay, free while the desk is in beta.</p></div>
+      <div class="row"><button type="button" class="btn foil" data-go="cast">Meet the characters</button><button type="button" class="btn line" data-go="join">See the plans</button></div></div>` : sub ? `<div class="vipstrip"><div><h3>${anyHidden ? 'VIP already has all ' + (picks.length === 3 ? 'three' : 'of them') : 'Get the card the minute it locks'}</h3>
       <p>Members get the Best 3 at lock time, the Top 10 plays and every character’s parlay, in a private Telegram.</p></div>
       <div class="row"><a class="btn foil" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP${price ? ', ' + esc(price) : ''}</a><button type="button" class="btn line" data-go="join">What you get</button></div></div>` : '';
 
-  el.innerHTML = `<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${last}${propsHtml}${parlayHtml}${upsHtml}
+  el.innerHTML = `<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
     <div id="seal"></div>${vip}
     ${T && picks.length ? `<div class="row" style="margin-top:22px"><button type="button" class="btn line" data-act="share">Share today’s card</button></div>` : ''}${footHtml()}`;
   if (T) { remember(picks.map((x, i) => [keys[i], x])); remember(props.map((x, i) => [`${T.d}|p${i}`, x])); seal(T); }
@@ -394,6 +397,62 @@ function viewSlate() {
     <div>${ranks}</div></div>${footHtml()}`;
 }
 
+/* ── the open beta: the whole card, and every character's say on each pick ──────── */
+const vipBadge = () => (S.feed && S.feed.beta ? '<span class="vipbadge">VIP · free in beta</span>' : '<span class="vipbadge">VIP</span>');
+function callsHtml(calls) {
+  const L = (calls || []).filter(c => c && c.who); if (!L.length) return '';
+  const w = L.filter(c => c.with), a = L.filter(c => !c.with);
+  const row = c => `<li class="${c.with ? 'on' : 'off'}"><span class="who">${esc(c.who)}${c.official ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>
+    <span class="nt">${c.with ? '' : `On ${esc(c.pick || 'the other side')}${c.note ? '. ' : ''}`}${esc(c.note || '')}</span></li>`;
+  return `<details class="calls"><summary><span>Every character on it</span><small>${w.length} with · ${a.length} against</small></summary><ul>${[...w, ...a].map(row).join('')}</ul></details>`;
+}
+function legRow(l0) {
+  const l = l0.game ? liveGrade(l0) : l0, c = stateOf(l), big = l.game ? readPick(l).big : l.pick;
+  const meta = [LEAGUE[l.sp], l.gl || (l.game ? matchup(l) : ''), c === 'o' && l.start ? whenLabel(l.start) : '', (l.by || []).length ? 'by ' + l.by.join(' + ') : ''].filter(Boolean).join(' · ');
+  return `<div class="leg"><div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : '•'}</span><span class="pk">${esc(big)} ${esc(odds(l.price))}<small>${esc(meta)}</small></span><span class="u">${l.p != null ? pct(l.p) + '%' : ''}</span></div>${callsHtml(l.voices)}</div>`;
+}
+function vipHtml(F) {
+  const V = F.vip; if (!V) return '';
+  const sec = (title, body, note) => `<section class="vsec"><div class="vh"><h2 class="h2">${title}</h2>${vipBadge()}</div>${note ? `<p class="note">${note}</p>` : ''}${body}</section>`;
+  const tix = (head, legs) => `<div class="paper tix">${head ? `<div class="tix-h">${head}</div>` : ''}${legs.map(legRow).join('')}</div>`;
+  const top = (V.top10 || []).length ? sec('The rest of the Top 10', tix('', V.top10), 'Official singles: a character is 70%+ sure and the price pays.') : '';
+  const bank = V.banker && (V.banker.legs || []).length ? sec('The Banker’s parlay', tix(`<b>${V.banker.legs.length} legs · ${esc(V.banker.price || '')}</b><span>${pct(V.banker.p)}% to cash</span>`, V.banker.legs), 'Backs the side the strongest books are on.') : '';
+  const pars = (V.parlays || []).length ? sec('Every character’s parlay', `<div class="pargrid">${V.parlays.map(P => tix(`<b>${esc(P.who)}${P.skill ? ' · strong suit' : P.px ? ' · props' : ''}</b><span>${P.legs.length} legs · ${esc(P.price || '')} · ${pct(P.p)}%</span>`, P.legs)).join('')}</div>`) : '';
+  const props = (V.props || []).length ? sec('Props of the day', `<div class="paper tix">${V.props.map(c => `<div class="leg"><div class="li"><span class="mk">${c.star ? '★' : '•'}</span><span class="pk">${esc(c.pick)}${c.price != null ? ' ' + esc(odds(c.price)) : ''}<small>${esc([LEAGUE[c.sp], c.who].filter(Boolean).join(' · '))}</small></span><span class="u">${c.p != null ? pct(c.p) + '%' : ''}</span></div></div>`).join('')}</div>`) : '';
+  return top + bank + pars + props;
+}
+
+/* ── the characters: bios, records, today's official picks, bloodlines ──────── */
+const okColor = c => (/^#[0-9a-f]{3,8}$/i.test(String(c || '')) ? c : '#F2D067');
+const MKT = { ml: 'Moneylines', spread: 'Spreads', total: 'Totals' };
+function crownPct(b, need) { if (!b) return 0; const z = b.bar > 0 ? Math.max(0, Math.min(1, b.z / b.bar)) : 0; return (Math.min(1, b.n / need.n) + Math.min(1, b.days / need.days) + 2 * z) / 4; }
+function blRow(c, need) {
+  const b = c.best, p = Math.round(crownPct(b, need) * 100);
+  return `<div class="bl"><div class="bl-t"><b>${esc(MKT[c.m] || c.m)}</b><span>Generation ${c.gen} · ${c.heirs} heir${c.heirs === 1 ? '' : 's'} reading</span></div>
+    ${b ? `<div class="bl-bar" role="img" aria-label="${p}% of the way to the chair"><i style="width:${p}%"></i></div><div class="bl-s">${Math.min(b.n, need.n)}/${need.n} games · ${Math.min(b.days, need.days)}/${need.days} days · ${b.z >= 0 ? '+' : '−'}${Math.abs(b.z).toFixed(1)}σ of ${b.bar.toFixed(1)}σ</div>` : ''}
+    ${(c.hist || []).length ? `<div class="bl-s">Last change: ${esc(c.hist[c.hist.length - 1].lab || '')}</div>` : ''}</div>`;
+}
+function viewCast() {
+  const el = $('#v-cast'), F = S.feed || {}, C = F.characters || [], B = F.bloodlines, need = (B && B.need) || { n: 100, days: 10 };
+  if (!C.length) { el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">The roster shows up here once the desk publishes it.</p>${footHtml()}`; return; }
+  const cells = (B && B.cells) || [];
+  const race = cells.filter(c => c.best).map(c => ({ c, p: crownPct(c.best, need) })).sort((a, b) => b.p - a.p).slice(0, 5);
+  const gens = cells.filter(c => c.gen > 1).length, heirs = cells.reduce((n, c) => n + (c.heirs || 0), 0);
+  const raceHtml = cells.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div>
+      <p class="note">Every character is a bloodline. Heirs, each the same character with one belief changed, read every game in the shadows. One takes the chair after ${need.n}+ games it was never tuned on and ${need.days}+ days, if it beats its parent by more than luck and makes no less money.</p>
+      <div class="crown-stats"><div><b>${cells.length}</b><span>bloodlines</span></div><div><b>${heirs}</b><span>heirs reading</span></div><div><b>${gens}</b><span>new generations</span></div></div>
+      ${race.length ? `<div class="paper race"><div class="tix-h"><b>Closest to the crown</b><span>${need.n} games · ${need.days} days · past the bar</span></div>${race.map(({ c, p }, i) => `<div class="rc"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)} · ${esc(c.best.lab || '')}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div>` : ''}</section>` : '';
+  const card = c => {
+    const r = c.record || { w: 0, l: 0, pu: 0, u: 0 }, n = r.w + r.l, lines = cells.filter(x => x.v === c.v);
+    return `<article class="castcard" style="--cc:${okColor(c.color)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${n ? `<span class="cc-rec">${r.w}–${r.l}${r.pu ? '–' + r.pu : ''}, ${signed(r.u)}u</span>` : '<span class="cc-rec">No graded calls yet</span>'}</div>
+      <h3>${esc(c.name)}</h3><p class="cc-bio">${esc(c.bio || '')}</p>
+      ${(c.picks || []).length ? `<div class="cc-sub"><span>Today’s official picks</span>${vipBadge()}</div><div class="paper tix">${c.picks.map(p => `<div class="leg"><div class="li"><span class="mk ${stateOf(p)}">${stateOf(p) === 'w' ? '✓' : stateOf(p) === 'l' ? '✗' : stateOf(p) === 'p' ? '=' : '•'}</span><span class="pk">${esc(readPick(p).big)} ${esc(odds(p.price))}<small>${esc([LEAGUE[p.sp], p.gl, stateOf(p) === 'o' && p.start ? whenLabel(p.start) : ''].filter(Boolean).join(' · '))}</small></span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div>${p.note ? `<p class="why1">${esc(p.note)}</p>` : ''}</div>`).join('')}</div>` : '<div class="cc-sub"><span>No official pick today</span></div>'}
+      ${lines.length ? `<div class="cc-sub"><span>Bloodlines</span></div>${lines.map(x => blRow(x, need)).join('')}` : ''}</article>`;
+  };
+  el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">Every pick on TheDesk comes from these voices. Each one reads every game its own way, gets graded in public, and keeps its own record. Records count official calls over the last 60 days.</p>
+    ${raceHtml}<div class="castgrid">${C.map(card).join('')}</div>${footHtml()}`;
+}
+
 /* ── Join ────────────────────────────────────────────────────────────────── */
 /* how long members had the latest card before the public saw its first pick (all from public timestamps) */
 function headStart(T) {
@@ -407,38 +466,47 @@ const hm = d => { const m = Math.round(d / 60e3), h = Math.floor(m / 60); return
 const YES = '<svg class="y" viewBox="0 0 24 24" role="img" aria-label="Included"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const NO = '<svg class="n" viewBox="0 0 24 24" role="img" aria-label="Not included"><path d="M7 12h10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
 function viewJoin() {
-  const el = $('#v-join'), F = S.feed || {}, sub = okUrl(F.subscribe), soc = { ...CFG.social, ...(F.social || {}) }, tg = okUrl(soc.tg), fb = okUrl(soc.fb);
+  const el = $('#v-join'), F = S.feed || {}, beta = !!F.beta, sub = beta ? '' : okUrl(F.subscribe), soc = { ...CFG.social, ...(F.social || {}) }, tg = okUrl(soc.tg), fb = okUrl(soc.fb);
   const price = String(F.price || '').replace(/\s*·\s*/g, ' or ').trim(), R = F.record || {}, n = (R.w || 0) + (R.l || 0);
-  const T = F.today, H = headStart(T), isToday = T && T.d === deskDay(), when = isToday ? 'today' : T ? 'on ' + weekday(T.d) : '';
+  const T = F.today, H = beta ? null : headStart(T), isToday = T && T.d === deskDay(), when = isToday ? 'today' : T ? 'on ' + weekday(T.d) : '';
   const lead = H ? `<div class="headstart"><div class="hs-n">${esc(hm(H.lead))}</div><b class="hs-l">Head start ${esc(when)}</b><span class="hs-s">${isToday && Date.now() < H.first
       ? `Members have had the card since ${esc(clock(H.lock))}. The public’s first look is at ${esc(clock(H.first))}.`
       : `Members had the card at ${esc(clock(H.lock))}. The public saw its first pick at ${esc(clock(H.first))}.`}</span></div>` : '';
   const proof = n ? `<p class="proof">On the record: <b>${R.w}–${R.l}${R.pu ? '–' + R.pu : ''}</b>, <b>${signed(+R.u || 0)} units</b>${R.first ? ' since ' + esc(monthDay(R.first)) : ''}. <button type="button" class="link" data-go="receipts">See every result</button></p>` : '';
-  const rows = [['The Best 3', '30 min before each game', 'The minute it locks'], ['The Top 10 plays of the day', 0, 1], ['Every character’s parlay, plus the Banker’s', 0, 1], ['The private Telegram', 0, 1],
-    ['Every result, graded in public', 1, 1], ['The slate and Power Rankings', 1, 1], ['The lounge', 1, 1]];
+  const rows = [['The Best 3', '30 min before each game', 'The minute it locks'], ['The Top 10 plays of the day', 0, 1], ['Every character’s official picks, with each one’s breakdown', 0, 1], ['Every character’s parlay, plus the Banker’s', 0, 1],
+    ['The members’ chatroom', 0, 'Soon'], ['The VIP lounge on Telegram and in the app', 0, 'Yearly plan'], ['Every result, graded in public', 1, 1], ['The slate, Power Rankings, bios and bloodlines', 1, 1], ['The free lounge', 1, 1]];
   const cell = (v, cls) => `<td${cls ? ` class="${cls}"` : ''}>${v === 1 ? YES : v === 0 ? NO : esc(v)}</td>`;
-  el.innerHTML = `<h1 class="title">Get the card before the games</h1>
-    <p class="lede">The public sees each pick 30 minutes before its game. Members see the whole card the minute it locks.</p>
-    <div class="cols join"><div>
-    ${sub ? `<div class="pass"><div class="vip" aria-hidden="true">VIP</div><h3>All access</h3>${lead}
-      <ul><li>The Best 3 at lock time, hours before the public</li><li>The Top 10 plays of the day</li><li>A parlay from every character on the desk, plus the Banker’s</li><li>A private Telegram where it all lands</li></ul>
+  const plans = (F.plans || []).filter(x => x && x.name && isFinite(+x.price));
+  const plansHtml = plans.length ? `<h2 class="h2">${beta ? 'Plans after the beta' : 'Plans'}</h2>${beta ? '<p class="note">Nothing to buy yet. These open when the beta ends.</p>' : ''}
+    <div class="plans">${plans.map(x => `<div class="plan${x.best ? ' best' : ''}">${x.best ? '<span class="pl-tag">Best value</span>' : ''}<b>${esc(x.name)}</b><div class="pl-p">$${esc(String(+x.price))}<small>/ ${esc(x.per || '')}</small></div><span>${esc(x.note || '')}</span></div>`).join('')}</div>` : '';
+  const pass = beta ? `<div class="pass"><div class="vip" aria-hidden="true">VIP</div><h3>All access</h3>
+      <ul><li>The Best 3 the minute the card locks</li><li>The Top 10 plays of the day</li><li>Every character’s official picks, with each one’s breakdown</li><li>Every character’s parlay, plus the Banker’s</li><li>The members’ chatroom, and on the yearly plan the VIP lounge</li></ul>
+      <div class="cost">Free during the beta</div><button type="button" class="btn foil block" data-go="today">See today’s full card</button>
+      ${proof}<p class="small">Memberships open when the beta ends. Free stays free.</p></div>`
+    : sub ? `<div class="pass"><div class="vip" aria-hidden="true">VIP</div><h3>All access</h3>${lead}
+      <ul><li>The Best 3 at lock time, hours before the public</li><li>The Top 10 plays of the day</li><li>Every character’s official picks, with each one’s breakdown</li><li>Every character’s parlay, plus the Banker’s</li><li>The members’ chatroom, and on the yearly plan the VIP lounge</li></ul>
       ${price ? `<div class="cost">${esc(price)}</div>` : ''}<a class="btn foil block" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP</a>
-      ${proof}<p class="small">Checkout runs on Whop. Cancel there any time.</p></div>` : ''}
+      ${proof}<p class="small">Checkout runs on Whop. Cancel there any time.</p></div>` : '';
+  const faq = beta ? [['Where do the picks show up?', 'Right here, the minute the card locks, free for everyone during the beta.'], ['Do you guarantee wins?', 'No, and nobody honest can. Every pick is graded in public, losses included, and the full record is on Receipts.'],
+      ['What happens after the beta?', 'Memberships open: $50 a month, $300 a year, $100 per league for a season, a $20 two-day pass, or $2 for a single pick. Free stays free.']]
+    : [['Where do the picks show up?', 'In the private Telegram, the minute the card locks. The public app opens each pick 30 minutes before its game.'], ['Do you guarantee wins?', 'No, and nobody honest can. Every pick is graded in public, losses included, and the full record is on Receipts.'], ['Can I cancel?', 'Any time, on Whop. No contract.']];
+  el.innerHTML = `<h1 class="title">${beta ? 'Everything’s free during the beta' : 'Get the card before the games'}</h1>
+    <p class="lede">${beta ? 'Every pick, every character and every stat line is open while the desk is in beta.' : 'The public sees each pick 30 minutes before its game. Members see the whole card the minute it locks.'}</p>
+    <div class="cols join"><div>${pass}
     <article class="slip stubcard"><div class="slip-head"><span>Admit all</span><span>Free</span></div><div class="slip-main"><h3>The lounge</h3>
       <p>We talk sports here, not just picks. Game threads, polls every hour, and the results posted win or lose.</p></div>
       <div class="slip-stub"><div class="row"><a class="btn ink" href="${CFG.lounge}" target="_blank" rel="noopener">Open the lounge</a>${tg ? `<a class="btn paper" href="${esc(tg)}" target="_blank" rel="noopener">Telegram channel</a>` : ''}${fb ? `<a class="btn paper" href="${esc(fb)}" target="_blank" rel="noopener">Facebook</a>` : ''}</div></div></article>
     </div><div>
-    <h2 class="h2">Free or VIP</h2>
+    ${plansHtml}
+    <h2 class="h2">Free or VIP</h2>${beta ? '<p class="note">During the beta the VIP column is free for everyone.</p>' : ''}
     <div class="paper cmp"><table><thead><tr><th scope="col"><span class="sr">What you get</span></th><th scope="col">Free</th><th scope="col" class="v">VIP</th></tr></thead>
       <tbody>${rows.map(([k, f, v]) => `<tr><th scope="row">${esc(k)}</th>${cell(f)}${cell(v, 'v')}</tr>`).join('')}</tbody></table></div>
     <h2 class="h2">How the desk works</h2>
     <ol class="steps"><li><div><b>Locked every morning</b><span>The card is sealed and time-stamped before the first game. A fingerprint of it goes public right then.</span></div></li>
-      <li><div><b>Opened 30 minutes before each game</b><span>Each slip turns over on its own clock. Members have it from the lock.</span></div></li>
+      <li><div><b>${beta ? 'Open the minute it locks' : 'Opened 30 minutes before each game'}</b><span>${beta ? 'During the beta everyone sees the whole card at once.' : 'Each slip turns over on its own clock. Members have it from the lock.'}</span></div></li>
       <li><div><b>Graded at the final</b><span>Win or lose, the stamp goes on and the result stays on the record.</span></div></li></ol>
     <h2 class="h2">Questions</h2>
-    <div class="faq"><details><summary>Where do the picks show up?</summary><p>In the private Telegram, the minute the card locks. The public app opens each pick 30 minutes before its game.</p></details>
-      <details><summary>Do you guarantee wins?</summary><p>No, and nobody honest can. Every pick is graded in public, losses included, and the full record is on Receipts.</p></details>
-      <details><summary>Can I cancel?</summary><p>Any time, on Whop. Weekly or monthly, no contract.</p></details></div>
+    <div class="faq">${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('')}</div>
     ${isStandalone() ? '' : `<h2 class="h2">Keep it on your phone</h2><p class="note">TheDesk installs like an app from your browser. No app store, nothing to update.</p><div class="row" style="margin-top:12px"><button type="button" class="btn line" data-act="guide">Show me how</button></div>`}
     </div></div>${F.handle ? `<p class="note" style="margin-top:34px">Run by ${esc(F.handle)}.</p>` : ''}${footHtml()}`;
 }
@@ -490,7 +558,7 @@ async function share() {
   try { if (navigator.share) { await navigator.share({ title: 'TheDesk', text, url: CFG.home }); return; } } catch { return; }
   try { await navigator.clipboard.writeText(`${text}\n${CFG.home}`); toast('Card copied'); } catch { toast('Couldn’t copy the card'); }
 }
-const VIEWS = { today: viewToday, slate: viewSlate, receipts: viewReceipts, join: viewJoin };
+const VIEWS = { today: viewToday, slate: viewSlate, cast: viewCast, receipts: viewReceipts, join: viewJoin };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   if (!TABS.includes(tab)) tab = 'today';
