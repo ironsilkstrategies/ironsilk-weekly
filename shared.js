@@ -3080,7 +3080,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18126,7 +18126,7 @@ function charCallsToday(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
   const R=new Map();const put=(v,o)=>{const a=R.get(v);if(a)a.push(o);else R.set(v,[o]);};
   V.forEach(c=>{if(!c||String(c.date).slice(0,10)!==d||!CHARS[c.voice]||c.push)return;const m=btMarket(c.market);if(m!=='ml'&&m!=='spread'&&m!=='total')return;
     let off=false;try{off=typeof isOfficial==='function'&&isOfficial(c);}catch(e){}
-    put(c.voice,{kind:'line',v:c.voice,sp:c.sp,game:c.game,gid:c.gid,start:start.get(c.sp+'|'+c.game)||null,m,sd:c.side,line:c.line,price:c.price,pick:charPickText(c),conf:confOf(c),off,graded:!!c.graded,hit:c.graded?c.hit:null,tc:tcI.get(c.sp+'|'+c.game+'|'+m+'|'+c.side)||null,c});});
+    put(c.voice,{kind:'line',v:c.voice,sp:c.sp,game:c.game,gid:c.gid,start:start.get(c.sp+'|'+c.game)||null,m,sd:c.side,line:c.line,price:c.price,pick:charPickText(c),conf:typeof coachOk==='function'?coachOk(c):confOf(c),off,graded:!!c.graded,hit:c.graded?c.hit:null,tc:tcI.get(c.sp+'|'+c.game+'|'+m+'|'+c.side)||null,c});});
   /* a pick on Today's card names the characters behind it; if a character's own call didn't make the ledger, the card still says it backs it */
   const have=new Set();R.forEach(L=>L.forEach(o=>{if(o.kind==='line')have.add(o.v+'|'+o.sp+'|'+o.game+'|'+o.m+'|'+o.sd);}));
   Object.entries(by).forEach(([sp,B])=>(B&&B.picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;const m=btMarket(x.m);(x.chars||[]).forEach(v=>{if(!CHARS[v]||have.has(v+'|'+sp+'|'+x.game+'|'+m+'|'+x.sd))return;
@@ -18147,6 +18147,8 @@ function charCallRowHtml(o,opt){opt=opt||{};const e=txtEsc;const C=CHARS[o.v]||{
   const res=o.graded?(o.hit===true?'<b style="color:var(--win)">✅ HIT</b>':o.hit===false?'<b style="color:var(--rust)">❌ MISS</b>':'<b style="color:var(--mute)">PUSH</b>'):'';
   const meta=[o.game?`${opt.inGame?'':e(gameLabel(o.sp,o.game))}${opt.inGame?'':gameWhenHtml(o.sp,o.game,o.start)}`:o.team?e(o.team):'',
     o.conf!=null?`${Math.round(o.conf*100)}% sure`:'',
+    (()=>{try{if(o.kind!=='line'||!o.c||typeof chemOf!=='function')return'';const C=chemOf(o.c);if(Math.abs(C.d)<0.005)return'';const top=C.why.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d))[0];
+      return`<span style="color:${C.d>0?'var(--win)':'var(--rust)'}" title="${e(C.why.map(w=>`${charName(w.u)} ${w.rel==='with'?'with it':'against it'}: ${w.d>0?'+':''}${Math.round(w.d*100)} (${w.n} together)`).join(' · '))}">chemistry ${C.d>0?'+':''}${Math.round(C.d*100)}% (${e(charName(top.u).replace(/^The /,''))} ${top.rel==='with'?'with it':'against it'})</span>`;}catch(err){return'';}})(),
     o.kind==='half'&&o.rec&&o.rec.n?`${o.rec.w}-${o.rec.l} in this half market`:'',
     rec&&rec.n?`${rec.w}-${rec.n-rec.w} ${rec.u>=0?'+':''}${rec.u.toFixed(1)}u in this lane`:'',
     lane==='proven'?'<span style="color:var(--win)">✓ proven lane</span>':lane==='blocked'?'<span style="color:var(--rust)">⛔ blocked lane</span>':''].filter(Boolean).join(' · ');

@@ -1360,11 +1360,14 @@ function pubCallNote(c){try{const w0=typeof c.why==='string'?c.why:Array.isArray
     const f=(Array.isArray(c.f)?c.f:[]).filter(t=>!PUB_NOTE_SKIP.has(t)).map(t=>(typeof FAC_LAB!=='undefined'&&FAC_LAB[t])||'').filter(Boolean).slice(0,3);
     return f.join(' · ').slice(0,240);}catch(e){return'';}}
 const pubOff=c=>{try{return!!isOfficial(c);}catch(e){return false;}};
+/* v3.0.2 · the number shown is the character's OWN confidence — the one that made the call official: its own read, scaled by its own record
+   in that lane, moved by its own chemistry with the others (desk-coach.js). Nov 13: the Coach's 70%+ under showed 51%, a different number. */
+const pubConf=c=>{try{const v=typeof coachOk==='function'?coachOk(c):confOf(c);return v!=null&&isFinite(+v)?+(+v).toFixed(3):null;}catch(e){return null;}};
 const pubUnits=(price,hit)=>hit?(+price>0?+price/100:100/Math.abs(+price||100)):-1;
 /* every character's call on a pick's game and bet type: with it or against it, how sure, and why */
 function pubVoicesOn(x,V){try{const m=mkNorm(x.m||x.market),sd=x.sd||x.side,d=String(x.date||x.d0||x.d||today()).slice(0,10);
     return V.filter(c=>c.sp===x.sp&&c.game===x.game&&c.market===m&&String(c.date).slice(0,10)===d&&CHARS[c.voice]&&c.voice!=='Blend')
-      .map(c=>({who:charName(c.voice),v:c.voice,with:c.side===sd,pick:c.pick,p:c.cf!=null&&isFinite(+c.cf)?+(+c.cf).toFixed(3):null,official:pubOff(c),note:pubCallNote(c)}))
+      .map(c=>({who:charName(c.voice),v:c.voice,with:c.side===sd,pick:c.pick,p:pubConf(c),official:pubOff(c),note:pubCallNote(c)}))
       .sort((a,b)=>(b.with-a.with)||(b.official-a.official)||((b.p||0)-(a.p||0)));}catch(e){return[];}}
 /* the roster: bio, record on official calls, today's official picks with the reasons */
 let PUB_CHAR_MEMO=null;
@@ -1374,7 +1377,7 @@ function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEac
     const res=x=>x.push?'push':x.hit===true?'win':x.hit===false?'loss':null;
     return CHAR_ORDER.filter(v=>(by[v]||CP.some(x=>x.voice===v))&&v!=='Blend').map(v=>{const C=CHARS[v],L=by[v]||[],B=PUB_BIOS[v]||{};let w=0,l=0,pu=0,u=0;const picks=[],recent=[],teams={};
       L.forEach(c=>{const day=String(c.date).slice(0,10);if(day<from||day>d)return;if(day<d&&c.hit==null&&!c.push)return;if(!pubOff(c))return;
-        if(day===d){picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:c.cf!=null?+(+c.cf).toFixed(3):null,start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});return;}
+        if(day===d){picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:pubConf(c),start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});return;}
         if(c.push)pu++;else if(c.hit===true){w++;u+=pubUnits(c.price,true);}else if(c.hit===false){l++;u-=1;}
         recent.push({d:day,kind:'game',sp:c.sp,pick:c.pick,price:c.price,gl:gameLabel(c.sp,c.game),r:res(c)});
         /* the teams it backs and goes against (sides only; totals have no side) */

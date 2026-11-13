@@ -52,7 +52,29 @@ function coachBook(D){D=String(D||today()).slice(0,10);const V=roGet(VOICES_KEY,
 /* he steps in on real flaws, not noise: a lane within ±10% of its word is left alone */
 const coachBand=k=>k>=0.9&&k<=1.1?1:k;
 function coachK(x){const d=String(x.date||today()).slice(0,10);if(d<COACH_FROM)return 1;const B=coachBook(d);const v=x.voice+(coachGutTag(x)==='g'?'~':'');const L=B[[v,x.sp,x.market,coachRoleOf(x)].join('|')];if(L&&L.n>=12)return coachBand(L.k);const A=B[v+'|*'];return A&&A.n>=20?coachBand(1+(A.k-1)*0.5):1;}
-function coachConf(x){const c=coachBase(x);if(c==null)return null;let k=1;try{k=coachK(x);}catch(e){}return Math.min(COACH_CEIL,0.5+k*(c-0.5));}
+/* §1b · chemistry (v3.0.2, Chris, Nov 13) — each character learns, for itself, whose company it keeps well. When the Scout has
+   been right more often than it said whenever the Historian agreed with it (or wrong more often when the Commissioner took the
+   other side), the Scout's own confidence moves with that — for the Scout only. Measured on its graded calls before the day (never
+   rewriting a posted day, nothing before Nov 13), against its own average: a pairing needs 25+ graded calls together, is pulled
+   toward nothing by 25 more, moves a call at most 4 points per partner and 6 in all. The Brain, the Banker and the Blend are
+   derived from the others, so they're never a partner (that would count the same opinion twice). */
+const CHEM_FROM='2026-11-13',CHEM_MIN=25,CHEM_PRIOR=25,CHEM_ONE=0.04,CHEM_ALL=0.06;let CHEM_B=null;
+const chemPartnerOk=v=>!!(typeof CHARS!=='undefined'&&CHARS[v])&&!['Brain','Banker','Blend'].includes(v);
+function chemBook(D){D=String(D||today()).slice(0,10);const V=roGet(VOICES_KEY,[],30e3)||[];const sig=typeof ledgerSig==='function'?ledgerSig(V):V.length;
+  if(!CHEM_B||CHEM_B.sig!==sig)CHEM_B={sig,by:{},idx:null};if(CHEM_B.by[D])return CHEM_B.by[D];
+  if(!CHEM_B.idx){const I=new Map();V.forEach(x=>{if(!x||!['ml','spread','total'].includes(x.market)||!chemPartnerOk(x.voice))return;const k=[x.sp,x.game,x.market,String(x.date).slice(0,10)].join('|');(I.get(k)||I.set(k,[]).get(k)).push(x);});CHEM_B.idx=I;}
+  const avg={},pair={};
+  V.forEach(x=>{if(!x||!x.graded||x.hit==null||x.push||!['ml','spread','total'].includes(x.market)||!CHARS[x.voice]||String(x.date).slice(0,10)>=D)return;const c=coachBase(x);if(c==null||c<0.6)return;
+    const r=(x.hit?1:0)-c,v=x.voice;const A=avg[v]||(avg[v]={n:0,r:0});A.n++;A.r+=r;
+    (CHEM_B.idx.get([x.sp,x.game,x.market,String(x.date).slice(0,10)].join('|'))||[]).forEach(y=>{if(y.voice===v)return;const k=v+'|'+y.voice+'|'+(y.side===x.side?'with':'vs');const o=pair[k]||(pair[k]={n:0,r:0});o.n++;o.r+=r;});});
+  const out={};Object.entries(pair).forEach(([k,o])=>{const v=k.split('|')[0],A=avg[v];if(!A||o.n<CHEM_MIN)return;const d=(o.r-o.n*(A.r/A.n))/(o.n+CHEM_PRIOR);out[k]={n:o.n,d:Math.max(-CHEM_ONE,Math.min(CHEM_ONE,d))};});
+  CHEM_B.by[D]=out;return out;}
+/* the nudge one call gets from who's with it and who's against it today, and why (for the app's own screens) */
+function chemOf(x){try{if(!x||!CHARS[x.voice]||!['ml','spread','total'].includes(x.market))return{d:0,why:[]};const D=String(x.date||today()).slice(0,10);if(D<CHEM_FROM)return{d:0,why:[]};
+    const B=chemBook(D);if(!CHEM_B||!CHEM_B.idx)return{d:0,why:[]};let d=0;const why=[];
+    (CHEM_B.idx.get([x.sp,x.game,x.market,D].join('|'))||[]).forEach(y=>{if(y.voice===x.voice)return;const rel=y.side===x.side?'with':'vs';const o=B[x.voice+'|'+y.voice+'|'+rel];if(!o||Math.abs(o.d)<0.005)return;d+=o.d;why.push({u:y.voice,rel,d:o.d,n:o.n});});
+    d=Math.max(-CHEM_ALL,Math.min(CHEM_ALL,d));return{d,why};}catch(e){return{d:0,why:[]};}}
+function coachConf(x){const c=coachBase(x);if(c==null)return null;let k=1;try{k=coachK(x);}catch(e){}let ch=0;try{ch=chemOf(x).d;}catch(e){}return Math.max(0.01,Math.min(COACH_CEIL,0.5+k*(c-0.5)+ch));}
 
 /* §2 · groupthink — from the master calibration's leg rows: edge over the prices by how many characters agreed ───────── */
 let COACH_GT=null;
