@@ -29,7 +29,8 @@ jobs:
       - name: Deploy
         working-directory: chat
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then echo "Cloudflare secrets aren't set yet, nothing to deploy."; exit 0; fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "The Cloudflare token isn't set yet, nothing to deploy."; exit 0; fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; echo "No account ID secret: Wrangler finds the account from the token."; fi
           npx --yes wrangler@3 deploy
           if [ -n "$CHAT_ADMIN_CODE" ]; then printf '%s' "$CHAT_ADMIN_CODE" | npx --yes wrangler@3 secret put ADMIN_CODE >/dev/null && echo "Owner code set."; else echo "CHAT_ADMIN_CODE isn't set: the room works, but nobody can be owner yet."; fi
       - name: Check it answers
