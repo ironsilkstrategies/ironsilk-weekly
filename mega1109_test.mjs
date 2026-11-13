@@ -64,16 +64,16 @@ T('…its words hold no pick',!/NO -3|SF ML|Mahomes/.test(gp.b.message));
 a=await Wk.runMegaphone(state,M,day,{...D,now:at('15:10')});T('…nothing again 10 minutes later (30-minute rhythm), the reactions counted (12)',a===0&&M.goal.seen===12,JSON.stringify(M.goal));
 /* 9:30: a question (even slot after the goal is odd? n=1 → odd slot: receipts first) */
 a=await Wk.runMegaphone(state,M,day,{...D,now:at('15:31')});const rp=PH.filter(x=>/RECEIPTS/.test(x.cap));
-T('9:30: yesterday\'s receipts to the public channel and lounge (2-1, every pick graded)',a===1&&rp.length===2&&/went 2-1/.test(rp[0].cap)&&rp[0].card.title==='Yesterday: 2-1',PH.map(x=>x.cap.split('\n')[0]).join(' | '));
+T('9:30: yesterday\'s receipts to the public channel (not the lounge since v3.1.1) (2-1, every pick graded)',a===1&&rp.length===1&&/went 2-1/.test(rp[0].cap)&&rp[0].card.title==='Yesterday: 2-1',PH.map(x=>x.cap.split('\n')[0]).join(' | '));
 a=await Wk.runMegaphone(state,M,day,{...D,now:at('16:01')});const q1=PH.filter(x=>/🗳️/.test(x.cap));
-T('10:00: a game question — picture to the channel and lounge, each with a native poll under it',a===1&&q1.length===2&&/Bills @ Vikings/.test(q1[0].cap)&&WT.filter(w=>w.m==='sendPoll').length===2&&JSON.parse(WT.find(w=>w.m==='sendPoll').options).map(o=>o.text).join()==='Over 44.5,Under 44.5',JSON.stringify(WT.slice(-1)));
+T('10:00: a game question — picture to the channel, with a native poll under it',a===1&&q1.length===1&&/Bills @ Vikings/.test(q1[0].cap)&&WT.filter(w=>w.m==='sendPoll').length===1&&JSON.parse(WT.find(w=>w.m==='sendPoll').options).map(o=>o.text).join()==='Over 44.5,Under 44.5',JSON.stringify(WT.slice(-1)));
 T('…and mirrored to Facebook as a photo post',FBC.filter(c=>/\/photos$/.test(c.u)&&/Bills @ Vikings/.test(c.b.message)).length===1);
 for(const t of ['16:31','17:01','17:31','18:01'])await Wk.runMegaphone(state,M,day,{...D,now:at(t)});
 const heads=PH.filter(x=>x.chat==='@TheDeskApp').map(x=>x.cap.split('\n')[0]);const qs=heads.filter(h=>/🗳️/.test(h));
 T('through the day: a different game every hour, never the same one twice',new Set(qs).size===qs.length&&qs.length>=2&&heads.some(h=>/STREAK WATCH/.test(h)),heads.join(' | '));
 /* the goal hits */
 REACT=104;const before=PH.length;a=await Wk.runMegaphone(state,M,day,{...D,now:at('18:12')});const drop=PH.slice(before).filter(x=>/GOAL HIT/.test(x.cap));
-T('the goal hits (104 reactions): every free pick still locked drops right then — channel, lounge and Facebook',drop.length===2&&/SF ML/.test(drop[0].cap)&&/Mahomes/.test(drop[0].cap)&&!/NO -3/.test(drop[0].cap)&&FBC.some(c=>/\/photos$/.test(c.u)&&/GOAL HIT/.test(c.b.message)),drop[0]&&drop[0].cap);
+T('the goal hits (104 reactions): every free pick still locked drops right then — channel and Facebook',drop.length===1&&/SF ML/.test(drop[0].cap)&&/Mahomes/.test(drop[0].cap)&&!/NO -3/.test(drop[0].cap)&&FBC.some(c=>/\/photos$/.test(c.u)&&/GOAL HIT/.test(c.b.message)),drop[0]&&drop[0].cap);
 T('…marked unlocked, so the 30-minute unlock posts don\'t repeat them, and the goal is closed',['b','c'].every(k=>state.posts[day].sent['unlock|'+k])&&M.goal.done==='hit');
 /* off switch, hours, a missing goal */
 const s2=mkState(),M2={};a=await Wk.runMegaphone(s2,M2,day,{...D,mega:'off',now:at('15:00')});T('MEGAPHONE=off: silent',a===0&&!M2.n);

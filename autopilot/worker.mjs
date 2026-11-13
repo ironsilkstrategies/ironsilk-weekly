@@ -12,7 +12,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.1';
+const VERSION = 'worker v3.1.1';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -373,13 +373,11 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
       if ((p.ids || []).length === (p.parts || []).length) for (let i = 0; i < p.parts.length; i++) await T('editMessageText', { chat_id: p.chat, message_id: p.ids[i], text: fillTemplate(p.parts[i], p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' });
       const lines = fresh.map(l => `${MARK[p.st[l.k]]}<b>${esc(l.label)}</b> <i>${esc(l.kind)}</i>${l.__fin ? ' · ' + esc(l.__fin) : ''}`);
       const msg = { chat_id: p.chat, text: '<b>📣 Results</b>\n' + lines.join('\n'), parse_mode: 'HTML', disable_web_page_preview: 'true' }; if ((p.ids || [])[0]) { msg.reply_to_message_id = p.ids[0]; msg.allow_sending_without_reply = 'true'; }
-      const r = await T('sendMessage', msg); if (r) { fresh.forEach(l => { p.sent[l.k] = p.st[l.k]; }); acted++; }
-      /* v2.31 · the VIP lounge gets the same results */
-      const vl = p.bc && p.bc.vipLounge; if (vl) await T('sendMessage', { chat_id: vl, text: '<b>📣 Results</b>\n' + lines.join('\n'), parse_mode: 'HTML', disable_web_page_preview: 'true' }); }
+      const r = await T('sendMessage', msg); if (r) { fresh.forEach(l => { p.sent[l.k] = p.st[l.k]; }); acted++; } }
+      /* v3.1.1 · the VIP lounge is for people: no automatic results there (Nov 13) */
     const legs = p.legs || []; const allDone = legs.every(l => p.st[l.k]); const games = legs.filter(l => !l.player);
     const ready = legs.length && (allDone || (p.d < today && games.every(l => p.st[l.k])) || p.d < shift(today, -1));
-    if (ready) { const r = await T('sendMessage', { chat_id: p.chat, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.recap = true; acted++;
-        if (p.bc && p.bc.vipLounge) await T('sendMessage', { chat_id: p.bc.vipLounge, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); } }
+    if (ready) { const r = await T('sendMessage', { chat_id: p.chat, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.recap = true; acted++; } }
     state.posts[d] = p; }
   /* v2.31 · the public side: unlocks 30 min before each game, results, the public recap */
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || quiet(p) || d < shift(today, -2)) continue;
@@ -390,8 +388,8 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
     for (const g of cashedParlays(p)) { const key = 'cash|' + g.sig; if (p.sent[key]) continue;
       const text = cashText(p, g), img = await picOf(cashCard(p, g), deps);   /* v2.98 · one picture, every outlet */
       if (await say(T, p.chat, text, img, deps)) { p.sent[key] = 'W'; acted++;
-        /* v2.31 · a cash goes everywhere: the VIP lounge, the public channel and its lounge (it's after the fact) */
-        for (const [lab, c] of [['vl', p.bc && p.bc.vipLounge], ['pub', p.bc && p.bc.pub], ['pl', p.bc && p.bc.pubLounge]]) { if (!c || p.sent[key + '|' + lab]) continue;
+        /* v2.31 · a cash goes out after the fact: the public channel and its lounge (v3.1.1: not the VIP lounge, which is people only) */
+        for (const [lab, c] of [['pub', p.bc && p.bc.pub], ['pl', p.bc && p.bc.pubLounge]]) { if (!c || p.sent[key + '|' + lab]) continue;
           if (await say(T, c, text, img, deps)) p.sent[key + '|' + lab] = 'W'; }
         if (Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind: 'cash' }, { fb: !!p.sent[key + '|fb'], ig: !!p.sent[key + '|ig'], th: !!p.sent[key + '|th'] });
           for (const o of ['fb', 'ig', 'th']) if (m[o]) p.sent[key + '|' + o] = m[o] === true ? 'W' : 'skip'; } } }
@@ -442,23 +440,25 @@ const tStr = t => { try { return new Date(t).toLocaleTimeString('en-US', { hour:
 const EM = { nfl: '🏈', ncaaf: '🏟', nhl: '🏒', mlb: '⚾', nba: '🏀', ncaab: '🏀' };
 const KIND = { 'Best 3': '⭐ Best 3', 'Prop': '🎯 Prop', "Banker's parlay": "🏦 Banker's parlay" };
 export async function runPublic(p, deps) { const T = deps?.tg || tg; const now = deps?.now || Date.now(); const legs = (p.pub && p.pub.legs) || []; if (!legs.length) return 0;
-  const dests = [p.bc && p.bc.pub, p.bc && p.bc.pubLounge].filter(Boolean); let acted = 0; p.st = p.st || {}; p.sent = p.sent || {};
+  /* v3.1.1 · the free picks live in the public channel; the public lounge only hears the recap (and cashes) */
+  const chan = [p.bc && p.bc.pub].filter(Boolean), dests = [p.bc && p.bc.pub, p.bc && p.bc.pubLounge].filter(Boolean); let acted = 0; p.st = p.st || {}; p.sent = p.sent || {};
+  const beta = !!(p.feed && p.feed.beta === true);
   for (const l of legs) { if (!l.prop || p.st[l.k]) continue; let s = null; try { s = await (deps?.gradeProp || gradeProp)({ sp: l.sp, player: l.player, team: l.team, stat: l.stat, thr: l.thr, side: l.side }, p.d); } catch (e) { } if (s) p.st[l.k] = s; }
   if (!dests.length && !Soc.anyOn(deps)) return 0;
   /* v2.97 · the other outlets get it once Telegram has it (a Telegram miss retries all of them next pass)
      v2.98 · …with its picture: the public channel and lounge get the card with the words as its caption */
-  const send = (text, card, kind) => sendPublic(dests, T, deps, text, card, kind);
+  const send = (text, card, kind) => sendPublic(kind === 'recap' ? dests : chan, T, deps, text, card, kind);
   const day = (p.pub && p.pub.day) || DAYFMT(p.d);
   /* unlocks */
   const open = legs.filter(l => l.unlockAt && now >= l.unlockAt && !p.sent['unlock|' + l.k] && !p.st[l.k]);
   if (open.length) {
     /* v2.35 · an unlock that goes out after its game has started says so — the post never claims a time it missed */
     const late = l => { const t = Date.parse(l.start || ''); return isFinite(t) && now >= t; };
-    const txt = [`🔓 <b>UNLOCKED — TheDesk · ${esc(day)}</b>`, ...open.map(l => `${KIND[l.kind] || l.kind}${l.n && l.kind !== 'Prop' ? ' #' + l.n : ''}: <b>${esc(l.label)}</b>${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${l.start ? ' · ' + tStr(l.start) : ''}${late(l) ? ' · <i>underway</i>' : ''}`),
+    const txt = [beta ? `⏰ <b>STARTING SOON — TheDesk · ${esc(day)}</b>` : `🔓 <b>UNLOCKED — TheDesk · ${esc(day)}</b>`, ...open.map(l => `${KIND[l.kind] || l.kind}${l.n && l.kind !== 'Prop' ? ' #' + l.n : ''}: <b>${esc(l.label)}</b>${l.game ? ' · ' + (EM[l.sp] || '') + ' ' + esc(l.game) : ''}${l.start ? ' · ' + tStr(l.start) : ''}${late(l) ? ' · <i>underway</i>' : ''}`),
       '', open.some(late) ? '<i>Locked before the games. This post is late — the game marked underway has already started. Graded at the final.</i>'
-        : '<i>Locked before the games, posted 30 minutes before each start. Graded at the final.</i>'].join('\n');
+        : beta ? '<i>Posted at the lock, back again 30 minutes before the start. Graded at the final.</i>' : '<i>Locked before the games, posted 30 minutes before each start. Graded at the final.</i>'].join('\n');
     const kinds = [...new Set(open.map(l => l.kind))], one = open.length === 1 ? open[0] : null;
-    const card = { kicker: 'Unlocked · ' + day, title: kinds.length > 1 ? 'Picks unlocked' : kinds[0] === 'Prop' ? (open.length > 1 ? 'Props' : 'Prop') : kinds[0],
+    const card = { kicker: (beta ? 'Starting soon · ' : 'Unlocked · ') + day, title: beta ? 'Starting soon' : kinds.length > 1 ? 'Picks unlocked' : kinds[0] === 'Prop' ? (open.length > 1 ? 'Props' : 'Prop') : kinds[0],
       sub: one && one.game ? one.game + (one.start ? ' · ' + tStr(one.start) : '') : 'Locked before the games · graded at the final',
       rows: open.map(l => ({ label: l.label, meta: [l.kind + (l.n && l.kind !== 'Prop' ? ' #' + l.n : ''), one ? '' : l.game, one || !l.start ? '' : tStr(l.start), late(l) ? 'underway' : ''].filter(Boolean).join(' · ') })) };
     if (await send(txt, card, 'unlock')) { open.forEach(l => { p.sent['unlock|' + l.k] = 1; }); acted++; } }
@@ -514,7 +514,7 @@ async function legStart(l, d, deps) { if (deps?.startOf) return deps.startOf(l, 
   return NaN; }
 const WORD = { 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five', 6: 'Six' };
 export async function runSpotlights(state, p, today, deps) { const mode = String(deps?.spot ?? env.SPOTLIGHT ?? '').trim().toLowerCase() || 'teaser'; if (mode === 'off' || !p || p.d !== today) return 0;
-  const T = deps?.tg || tg; const now = deps?.now || Date.now(); const dests = [p.bc && p.bc.pub, p.bc && p.bc.pubLounge].filter(Boolean); if (!dests.length && !Soc.anyOn(deps)) return 0;
+  const T = deps?.tg || tg; const now = deps?.now || Date.now(); const dests = [p.bc && p.bc.pub].filter(Boolean); if (!dests.length && !Soc.anyOn(deps)) return 0;   /* v3.1.1 · the channel, not the lounge */
   p.sent = p.sent || {}; let acted = 0; const by = {}; (p.legs || []).forEach(l => { by[l.k] = l; }); const day = (p.recapPlan && p.recapPlan.day) || DAYFMT(p.d);
   for (const s of spotlights(state, p, today)) { const key = 'spot|' + [...s.c.keys].sort().join('¦'); if (p.sent[key]) continue;
     const legs = s.c.keys.map(k => by[k]); if (legs.some(l => !l)) { p.sent[key] = 'x'; continue; }
@@ -542,7 +542,7 @@ async function feedsNow(deps) { if (deps && 'feeds' in deps) return deps.feeds ?
     const [oracle, season, coach] = await Promise.all([get('oracle'), get('season'), get('coach')]); if (!oracle) return FEEDS;
     FEEDS = { at: Date.now(), oracle, season, coach, P: Mega.powerRanks(season) }; return FEEDS; } catch (e) { log('megaphone feeds:', String(e && e.message || e).slice(0, 60)); return FEEDS; } }
 /* the public places to post: the newest card that names them */
-const pubDests = state => { const ds = Object.keys(state.posts || {}).sort().reverse(); for (const d of ds) { const b = state.posts[d] && state.posts[d].bc; if (b && (b.pub || b.pubLounge)) return [b.pub, b.pubLounge].filter(Boolean); } return []; };
+const pubDests = state => { const ds = Object.keys(state.posts || {}).sort().reverse(); for (const d of ds) { const b = state.posts[d] && state.posts[d].bc; if (b && b.pub) return [b.pub]; } return []; };   /* v3.1.1 · drops go to the channel, not the lounge */
 /* a Megaphone post: picture + words to the public channel and lounge (with a poll under it when it has one), then the outlets */
 async function sendMega(dests, T, deps, post) { const img = await picOf(post.card, deps); let ok = false, fbId = null;
   if (post.only !== 'fb') for (const c of dests) { const r = await say(T, c, post.text, img, deps); ok = r || ok;
