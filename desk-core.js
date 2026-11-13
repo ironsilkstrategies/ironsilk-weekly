@@ -1411,9 +1411,9 @@ function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,
 /* v3.0.3 · the board: every game on today's card by start time, its colored picks (★ unanimous, ◆ supreme, strong, value, outside),
    every character's call on each bet with its confidence, and where that character ranks in that kind of bet: 👑 #1 has the say,
    🧊 the worst shouldn't have one. Records and tiers only; no reasons, no method. */
-/* v3.0.4 · no heavy moneylines (-500 or shorter) on the public site: they pay nothing and don't help a parlay. Forward-looking picks only;
+/* v3.0.4 · no heavy moneylines (-1000 or shorter; was -500 until v3.0.5) on the public site: they pay nothing and don't help a parlay. Forward-looking picks only;
    graded records stay whole (taking losses or wins out after the fact would bend the record). */
-const PUB_HEAVY=-500;
+const PUB_HEAVY=-1000;
 function pubHeavy(x){if(!x)return false;const pr=x.price;if(pr==null||pr===''||!isFinite(+pr)||+pr>PUB_HEAVY)return false;
   const m=btMarket(x.m||x.market||'');return m==='ml'||(!m&&/\bML$/i.test(String(x.pick||'').trim()));}
 let PUB_BOARD_MEMO=null;

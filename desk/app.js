@@ -378,8 +378,8 @@ const RUNS = { nfl: 3.6, ncaaf: 3.9, nba: 2.6, ncaab: 2.3, nhl: 2.8, mlb: 3.3 };
 const MK_LAB = { ml: 'Moneyline', spread: 'Spread', total: 'Total' };
 const hourCT = t => { try { return +new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: CFG.deskTz }).format(new Date(ms(t))) % 24; } catch { return 12; } };
 const winOf = t => { const h = hourCT(t); return h < 13 ? 'early' : h < 17 ? 'afternoon' : h < 20 ? 'evening' : 'late'; };
-/* no heavy moneylines (−500 or shorter) on the public site, even if an older feed still carries one */
-const HEAVY = -500, isHeavy = (m, price) => m === 'ml' && price != null && isFinite(+price) && +price <= HEAVY;
+/* no heavy moneylines (−1000 or shorter) on the public site, even if an older feed still carries one */
+const HEAVY = -1000, isHeavy = (m, price) => m === 'ml' && price != null && isFinite(+price) && +price <= HEAVY;
 let BOARD_SRC = null, BOARD_CLEAN = null;
 const boardOf = () => { const B = S.feed && S.feed.beta !== false && S.feed.board && Array.isArray(S.feed.board.games) ? S.feed.board : null; if (!B) return null; if (B === BOARD_SRC) return BOARD_CLEAN;
   const games = B.games.map(g => { const calls = {}; for (const [m, L] of Object.entries(g.calls || {})) { const k = (L || []).filter(c => !isHeavy(m, c.price)); if (k.length) calls[m] = k; }
@@ -446,7 +446,7 @@ function filterBarHtml(B, games, F) {
 /* the VIP lists, character pages and parlays: no heavy moneyline goes on screen (graded records stay as they are) */
 function noHeavy(F) {
   if (!F || F.beta === false) return F;
-  const hv = x => x && !x.hidden && x.price != null && isFinite(+x.price) && +x.price <= -500 && (x.m === 'ml' || /\bML$/i.test(String(x.pick || '').trim()));
+  const hv = x => x && !x.hidden && x.price != null && isFinite(+x.price) && +x.price <= HEAVY && (x.m === 'ml' || /\bML$/i.test(String(x.pick || '').trim()));
   const live = x => x && x.hit == null;
   try {
     const V = F.vip ? { ...F.vip } : null;

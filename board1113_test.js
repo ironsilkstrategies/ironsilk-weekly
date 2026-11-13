@@ -27,8 +27,8 @@ setTimeout(() => { try {
   T('the board carries today\'s game', B && B.games.length === 1 && B.games[0].game === 'ATL@CHI' && B.games[0].day === '2026-11-14', JSON.stringify(B && B.games.map(g => [g.game, g.day])));
   const g = B.games[0], P = g.picks;
   T('colored picks: unanimous + supreme first; a flagged pick never goes out', P[0].pick === 'Under 245.5' && P[0].unan && P[0].tier === 'supreme', JSON.stringify(P));
-  T('no heavy moneyline (-500 or shorter) goes public: not the strong CHI ML -600, not the Coach\'s call on it', P.length === 1 && !P.some(p => p.m === 'ml') && !(g.calls.ml || []).length, JSON.stringify([P, g.calls.ml]));
-  T('…the line sits at -500: a -500 is out, a -499 stays', w.eval(`pubHeavy({m:'ml',price:-500})&&!pubHeavy({m:'ml',price:-499})&&!pubHeavy({m:'spread',price:-600})&&pubHeavy({pick:'CHI ML',price:-650})&&!pubHeavy({pick:'Under 1.5 SOG',price:-600})`));
+  T('no heavy moneyline (-1000 or shorter) goes public; a -600 still does', P.length === 2 && P[1].m === 'ml' && (g.calls.ml || []).length === 1, JSON.stringify([P, g.calls.ml]));
+  T('…the line sits at -1000: a -1000 is out, a -999 stays', w.eval(`pubHeavy({m:'ml',price:-1000})&&!pubHeavy({m:'ml',price:-999})&&!pubHeavy({m:'ml',price:-600})&&!pubHeavy({m:'spread',price:-1200})&&pubHeavy({pick:'CHI ML',price:-1500})&&!pubHeavy({pick:'Under 1.5 SOG',price:-1200})`));
   T('…the Brain is never listed as a picker (it\'s made from the others)', !P[0].by.includes('Brain') && P[0].by.includes('Coach'));
   const tot = g.calls.total || [];
   T('every character\'s call on the total: with and against, each with its own confidence', tot.length === 3 && tot.some(c => c.v === 'Judge' && c.s === 'over') && tot.every(c => c.p != null), JSON.stringify(tot));
