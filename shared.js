@@ -2609,6 +2609,10 @@ function scoreTrustHtml(sp){const T=scoreTrust(sp);const rows=Object.entries(T).
    OFFICIAL: a half call counts once that character has PROVEN it in that sport + half market — 20+ graded calls at
    57%+ and in profit. Until then it's tracked for learning, like any new character. */
 const HALF_KEY='d4.halfcalls',HALFLN_KEY='d4.halflines',HALF_OK={n:20,p:0.57};
+/* v2.98.4 · a half / 1st-period call's confidence: its record in that market, pulled toward a coin flip by 10 games' worth
+   (15-8 reads 61%). The projected half score itself was tested and doesn't sort winners from losers (its 60% calls hit 38%),
+   so the record is the honest number. Nov 13: official half calls showed a record but no "% sure". */
+const halfRecConf=R=>R&&R.n?(R.w+5)/(R.n+10):null;
 const HALF_FRAC={nba:[0.49,0.5],ncaab:[0.47,0.5],nfl:[0.49,0.5],ncaaf:[0.49,0.5],nhl:[0.31,0.33]};   /* [share of total, share of margin] */
 const halfTag=sp=>sp==='nhl'?'P1':'1H';
 async function halfLinesRefresh(){if(typeof fetch==='undefined'||typeof location==='undefined'||!/^https?:/.test(location.protocol))return;const d=today();
@@ -2645,7 +2649,7 @@ function halfCardHtml(){const T=halfToday();if(!T.length)return'';const nm=v=>(C
   const off=T.filter(x=>x.official);const by={};T.forEach(x=>{const k=x.sp+'|'+x.pick+'|'+x.game;(by[k]=by[k]||{x,v:[]}).v.push(x.voice);});
   const top=Object.values(by).sort((a,b)=>b.v.length-a.v.length).slice(0,6);
   return`<div class="tkt" style="margin-top:8px"><h3>🕐 Halves & 1st periods</h3>
-    ${off.length?off.map(x=>`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)} — ${txtEsc(nm(x.voice))} ${x.rec.w}-${x.rec.l} in this market</div>`).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls at ${Math.round(HALF_OK.p*100)}%+ in profit, per sport and market. Learning from tonight.</div>`}
+    ${off.length?off.map(x=>{const c=halfRecConf(x.rec);return`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)} — ${txtEsc(nm(x.voice))}${c!=null?` ${Math.round(c*100)}% sure ·`:''} ${x.rec.w}-${x.rec.l} in this market</div>`;}).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls at ${Math.round(HALF_OK.p*100)}%+ in profit, per sport and market. Learning from tonight.</div>`}
     <details style="margin-top:4px"><summary class="sub">Most-agreed half calls today (${T.length} calls)</summary><div class="mono" style="font-size:10.5px">${top.map(o=>`<div>${txtEsc(o.x.pick)} ${tcSgn(o.x.price)} · ${txtEsc(o.x.game)} — ${o.v.length} characters</div>`).join('')}</div></details></div>`;}
 function halfRecordsHtml(sp){const L=Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.graded&&x.hit!=null&&(!sp||sp==='all'||x.sp===sp));
   const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');const by={};L.forEach(x=>{const k=x.voice;const r=by[k]=by[k]||{};const m=x.mk.replace(/^(h1|p1)/,'');const c=r[m]=r[m]||{w:0,l:0,u:0};x.hit?c.w++:c.l++;c.u+=x.units||0;});
@@ -2957,14 +2961,16 @@ function bolGrammar(sp,rows){const sg=v=>(v>0?'+':'')+v,pt=v=>v>0?'+'+v:v===0?'+
     if(r.sp)out.push(`${key}: ${r.a} ${pt(r.sp[0])} (${sg(r.sp[1])}) / ${r.h} ${pt(r.sp[2])} (${sg(r.sp[3])})`);
     if(r.ou)out.push(`OU: o${r.ou[0]} (${sg(r.ou[1])}) / u${r.ou[0]} (${sg(r.ou[2])})`);out.push('');});
   return out.join('\n');}
-async function bolFetch(sp,key){const ctl=typeof AbortController!=='undefined'?new AbortController():null;const tm=setTimeout(()=>{try{ctl&&ctl.abort();}catch(e){}},20000);
+/* v2.98.4 · 40 s and one retry on a timeout (Nov 13: NFL's board timed out at 20 s on a weak signal) */
+async function bolFetch(sp,key,again){const R=await bolFetch1(sp,key);if(!again&&R&&/timed out/.test(R.err||''))return bolFetch(sp,key,true);return R;}
+async function bolFetch1(sp,key){const ctl=typeof AbortController!=='undefined'?new AbortController():null;const tm=setTimeout(()=>{try{ctl&&ctl.abort();}catch(e){}},40000);
   try{try{trackCall('odds');}catch(e){}
     const r=await fetch(`https://api.the-odds-api.com/v4/sports/${ODDS_SPORT[sp]}/odds/?apiKey=${encodeURIComponent(key)}&bookmakers=${BOL_BOOK}&markets=h2h,spreads,totals&oddsFormat=american&dateFormat=iso`,ctl?{signal:ctl.signal}:{});
     const hd=n=>{try{return r.headers&&r.headers.get?r.headers.get(n):null;}catch(e){return null;}};
     const cr={left:hd('x-requests-remaining'),used:hd('x-requests-used'),last:hd('x-requests-last')};
     if(r.status===401)return{err:'key rejected or out of credits (401)',cr};if(r.status===429)return{err:'too many requests — try again in a minute (429)',cr};
     if(!r.ok)return{err:'Odds API '+r.status,cr};const j=await r.json();if(!Array.isArray(j))return{err:(j&&j.message)||'unexpected Odds API response',cr};return{events:j,cr};}
-  catch(e){return{err:/abort/i.test(String(e&&e.name||e))?'timed out after 20 s':String(e&&e.message||e)};}finally{clearTimeout(tm);}}
+  catch(e){return{err:/abort/i.test(String(e&&e.name||e))?'timed out after 40 s (tried twice)':String(e&&e.message||e)};}finally{clearTimeout(tm);}}
 /* the one tap: every shown, in-season sport (or the ones asked for) */
 async function bolPull(opts){opts=opts||{};if(BOL_BUSY)return{busy:true};const key=theOddsApiKey();if(!key)return{err:'Add your Odds API key in Settings → The Odds API.'};
   const want=(opts.sports&&opts.sports.length?opts.sports:(typeof liveSports==='function'?liveSports():Object.keys(ODDS_SPORT))).filter(sp=>ODDS_SPORT[sp]&&(typeof sportOn!=='function'||sportOn(sp)));
@@ -3060,7 +3066,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18105,7 +18111,7 @@ function charCallsToday(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
   Object.entries(by).forEach(([sp,B])=>(B&&B.picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;const m=btMarket(x.m);(x.chars||[]).forEach(v=>{if(!CHARS[v]||have.has(v+'|'+sp+'|'+x.game+'|'+m+'|'+x.sd))return;
     have.add(v+'|'+sp+'|'+x.game+'|'+m+'|'+x.sd);put(v,{kind:'line',v,sp,game:x.game,gid:x.gid,start:x.start||null,m,sd:x.sd,line:x.line,price:x.price,pick:x.pick,conf:null,off:false,fromCard:true,graded:false,hit:null,tc:x});});}));
   Object.values(HL).forEach(x=>{if(!x||String(x.date).slice(0,10)!==d||!CHARS[x.voice])return;let rec=null;try{rec=halfRecord(x.sp,x.voice,x.mk);}catch(e){}
-    put(x.voice,{kind:'half',v:x.voice,sp:x.sp,game:x.game,start:start.get(x.sp+'|'+x.game)||null,m:x.mk,sd:x.side,line:x.line,price:x.price,pick:x.pick,conf:null,off:!!(rec&&rec.ok&&x.price!=null),rec,graded:!!x.graded,hit:x.graded?x.hit:null,tc:null});});
+    put(x.voice,{kind:'half',v:x.voice,sp:x.sp,game:x.game,start:start.get(x.sp+'|'+x.game)||null,m:x.mk,sd:x.side,line:x.line,price:x.price,pick:x.pick,conf:halfRecConf(rec),off:!!(rec&&rec.ok&&x.price!=null),rec,graded:!!x.graded,hit:x.graded?x.hit:null,tc:null});});
   const seen=new Set();CP.forEach(x=>{if(!x||String(x.d).slice(0,10)!==d||!CHARS[x.voice])return;const k=x.voice+'|'+x.sp+'|'+x.player+'|'+x.k+'|'+x.thr;if(seen.has(k))return;seen.add(k);
     const game=team.get(x.sp+'|'+x.team)||null;put(x.voice,{kind:'prop',v:x.voice,sp:x.sp,game,team:x.team,start:game?start.get(x.sp+'|'+game)||null:null,m:'prop',pick:`${x.player} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}`,conf:x.p!=null?+x.p:null,off:+x.p>=0.7,graded:x.hit!=null,hit:x.hit!=null?x.hit:null,tc:null});});
   CHC_C={d,V,CP,HL,TC,t:Date.now(),R};return R;}
@@ -22949,12 +22955,15 @@ function sy3Join(ord,parts){
 /* v2.86.6 · every sync request gives up after 60 s — a request that never answers used to hold that page's sync forever */
 /* v2.98.3 · the clock now runs until the BODY is read, not just the headers (Nov 13: a reply that stalled mid-download held the backup
    "busy" forever — the phone's last save was 5:44 PM and Sync now did nothing, silently) */
-function syncFetch(url,o){o=o||{};let ac=null,tm=0;try{ac=new AbortController();tm=setTimeout(()=>{try{ac.abort();}catch(e){}},90e3);o.signal=ac.signal;}catch(e){}
-  const late=e=>{throw ac&&ac.signal&&ac.signal.aborted?new Error('GitHub didn\'t answer in 90 s'):e;};
+function syncFetch(url,o){o=o||{};let ac=null,tm=0;try{ac=new AbortController();tm=setTimeout(()=>{try{ac.abort();}catch(e){}},120e3);o.signal=ac.signal;}catch(e){}
+  const late=e=>{throw ac&&ac.signal&&ac.signal.aborted?new Error('GitHub didn\'t answer in 2 minutes'):e;};
   return fetch(url,o).then(r=>{try{const j=r.json.bind(r),t=r.text.bind(r);r.json=()=>j().catch(late).finally(()=>clearTimeout(tm));r.text=()=>t().catch(late).finally(()=>clearTimeout(tm));}catch(e){clearTimeout(tm);}return r;},e=>{clearTimeout(tm);return late(e);});}
 async function sy3Req(path,o){o=o||{};const h=Object.assign({},o.body?{'Content-Type':'application/json'}:{},o.h||{});
   return syncFetch(syncGit(path)+(o.q||''),{method:o.m||'GET',headers:syncHeaders(h),body:o.body?JSON.stringify(o.body):undefined,cache:'no-store'});}
-async function sy3Json(path,o){const r=await sy3Req(path,o);if(!r.ok){const e=new Error('HTTP '+r.status+' ('+String(path).split('/')[0]+')');e.status=r.status;throw e;}return r.json();}
+/* v2.98.4 · a dropped connection or a stalled reply is tried again (3 tries, 3 s and 8 s apart) — every call here is safe to repeat
+   (a tree or commit with the same content is the same object). Nov 13: "Load failed" / no answer on a weak signal stopped every backup. */
+async function sy3Json(path,o){let last=null;for(let i=0;i<3;i++){try{const r=await sy3Req(path,o);if(!r.ok){const e=new Error('HTTP '+r.status+' ('+String(path).split('/')[0]+')');e.status=r.status;if(r.status<500)throw e;last=e;}else return await r.json();}
+    catch(e){if(e&&e.status&&e.status<500)throw e;last=e;}if(i<2)await new Promise(res=>setTimeout(res,i?8000:3000));}throw last;}
 async function sy3Tree(commitSha){const c=await sy3Json('commits/'+commitSha);const tree=c.tree&&c.tree.sha;const t=await sy3Json('trees/'+tree,{q:'?recursive=1'});
   const files={};let legacy=null;(t.tree||[]).forEach(e=>{if(e.type!=='blob')return;if(e.path===SYNC.file){legacy=e.sha;return;}files[e.path]=e.sha;});
   return{commit:commitSha,tree,files,legacy,msg:c.message||''};}
@@ -23006,7 +23015,7 @@ async function sy3Push(B,R,ref){const D=sy3Dirty();const keys=Object.keys(D).fil
   /* files go up in ~2.5 MB batches AS they're found, so even the first full save never holds everything at once */
   let tree=baseTree,batch=[],sz=0;
   const send=async()=>{if(!batch.length)return;const body={tree:batch};if(tree)body.base_tree=tree;const t=await sy3Json('trees',{m:'POST',body});tree=t.sha;batch=[];sz=0;};
-  const add=async e=>{const w=(e.content?e.content.length:0)+200;if(batch.length&&sz+w>2.5e6)await send();batch.push(e);sz+=w;};
+  const add=async e=>{const w=(e.content?e.content.length:0)+200;if(batch.length&&sz+w>0.9e6)await send();batch.push(e);sz+=w;};   /* v2.98.4 · ~0.9 MB per upload (was 2.5 MB): a weak signal finishes each one */
   for(const k of keys){const raw=syncRawJson(k);const mine=Object.keys(B.files).filter(p=>{const o=sy3KeyOf(p);return o&&o.k===k;});
     if(raw==null){mine.forEach(p=>{if(inCloud(p))dels.push(p);});continue;}
     const S=await sy3SplitOff(raw);ordM[k]=S.ord;const ids=new Set();

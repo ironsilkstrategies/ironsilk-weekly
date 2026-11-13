@@ -103,6 +103,10 @@ setTimeout(async()=>{try{
   /* v2.98.3 · Nov 13: a backup stuck "busy" made Sync now do nothing, silently */
   phone.eval('SYNC_BUSY=new Promise(()=>{});SYNC_BUSY_AT=Date.now()-5*60e3;SYNC_SAFE=null');r=await phone.eval('syncNow(true)');
   T('a backup stuck for 4+ minutes is dropped and Sync now runs a fresh one',r&&r.ok===true&&phone.eval('SYNC_BUSY')===null,JSON.stringify(r));
+  /* v2.98.4 · a dropped connection mid-backup is tried again instead of failing the whole save */
+  { let drops=2;const real=phone.fetch;phone.fetch=(u,o)=>{if(drops>0&&/\/git\/(trees|commits)/.test(String(u))&&o&&o.method==='POST'){drops--;return Promise.reject(new TypeError('Load failed'));}return real(u,o);};
+    phone.eval(`set('d4.locked',get('d4.locked',[]).concat([{id:'drop-test',sp:'nhl',game:'A@B',pick:'A ML'}]))`);phone.eval('SYNC_SAFE=null');r=await phone.eval('syncNow(true)');phone.fetch=real;
+    T('a dropped connection ("Load failed") during the upload is retried and the backup still saves',r&&r.ok===true&&drops===0,JSON.stringify(r)+' drops left '+drops); }
   phone.eval('window.__busy=new Promise(()=>{});SYNC_BUSY=window.__busy;SYNC_BUSY_AT=Date.now()-5e3');phone.eval('syncNow(true)');await new Promise(r=>setTimeout(r,300));const same=phone.eval('SYNC_BUSY===window.__busy');
   T('…a backup that is genuinely running is left alone (Sync now says so instead of starting a second)',same===true);phone.eval('SYNC_BUSY=null');
 }catch(e){T('crashed',false,e.stack);}
