@@ -9,6 +9,9 @@ const CFG = {
   social: { tg: 'https://t.me/TheDeskApp', fb: 'https://www.facebook.com/share/1FCDFdUvRp/' },
   home: 'https://ironsilkweekly.com/desk/',
   chat: 'https://thedesk-chat.ironsilkstrategies.workers.dev',
+  /* the price list, until the desk's feed carries its own (and the beta is on unless the feed says otherwise) */
+  plans: [{ id: 'month', name: 'Monthly', price: 50, per: 'month', note: 'Everything, every day' }, { id: 'year', name: 'Yearly', price: 300, per: 'year', note: 'Everything, plus the VIP lounge on Telegram and in the app', best: true },
+    { id: 'league', name: 'League pass', price: 100, per: 'league, per season', note: 'Everything for one league, all season' }, { id: 'pass', name: '2-day pass', price: 20, per: '2 days', note: 'Everything for 48 hours' }, { id: 'single', name: 'Single pick', price: 2, per: 'pick', note: 'One pick from a game the characters are on' }],
   deskTz: 'America/Chicago',
 };
 
@@ -273,10 +276,10 @@ function viewToday() {
       remember(H.picks.map((x, i) => [`${H.d}|${i}`, x]));
     }
   }
-  const price = String(F.price || '').split('·')[0].trim();
+  const price = '$50/mo';
   const vip = F.beta ? `<div class="vipstrip beta"><div><h3>Open beta: the whole card is free</h3>
       <p>Every pick, every character’s breakdown, the Top 10, the Banker and every parlay, free while the desk is in beta.</p></div>
-      <div class="row"><button type="button" class="btn foil" data-go="cast">Meet the characters</button><button type="button" class="btn line" data-go="join">See the plans</button></div></div>` : sub ? `<div class="vipstrip"><div><h3>${anyHidden ? 'VIP already has all ' + (picks.length === 3 ? 'three' : 'of them') : 'Get the card the minute it locks'}</h3>
+      <div class="row"><button type="button" class="btn foil" data-go="cast">Meet the characters</button><button type="button" class="btn line" data-go="join">See the plans</button></div></div>` : sub && F.beta === false ? `<div class="vipstrip"><div><h3>${anyHidden ? 'VIP already has all ' + (picks.length === 3 ? 'three' : 'of them') : 'Get the card the minute it locks'}</h3>
       <p>Members get the Best 3 at lock time, the Top 10 plays and every character’s parlay, in a private Telegram.</p></div>
       <div class="row"><a class="btn foil" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP${price ? ', ' + esc(price) : ''}</a><button type="button" class="btn line" data-go="join">What you get</button></div></div>` : '';
 
@@ -523,8 +526,8 @@ const hm = d => { const m = Math.round(d / 60e3), h = Math.floor(m / 60); return
 const YES = '<svg class="y" viewBox="0 0 24 24" role="img" aria-label="Included"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const NO = '<svg class="n" viewBox="0 0 24 24" role="img" aria-label="Not included"><path d="M7 12h10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
 function viewJoin() {
-  const el = $('#v-join'), F = S.feed || {}, beta = !!F.beta, sub = beta ? '' : okUrl(F.subscribe), soc = { ...CFG.social, ...(F.social || {}) }, tg = okUrl(soc.tg), fb = okUrl(soc.fb);
-  const price = String(F.price || '').replace(/\s*·\s*/g, ' or ').trim(), R = F.record || {}, n = (R.w || 0) + (R.l || 0);
+  const el = $('#v-join'), F = S.feed || {}, beta = F.beta !== false, sub = beta ? '' : okUrl(F.subscribe), soc = { ...CFG.social, ...(F.social || {}) }, tg = okUrl(soc.tg), fb = okUrl(soc.fb);
+  const price = '$50/mo or $300/yr', R = F.record || {}, n = (R.w || 0) + (R.l || 0);
   const T = F.today, H = beta ? null : headStart(T), isToday = T && T.d === deskDay(), when = isToday ? 'today' : T ? 'on ' + weekday(T.d) : '';
   const lead = H ? `<div class="headstart"><div class="hs-n">${esc(hm(H.lead))}</div><b class="hs-l">Head start ${esc(when)}</b><span class="hs-s">${isToday && Date.now() < H.first
       ? `Members have had the card since ${esc(clock(H.lock))}. The public’s first look is at ${esc(clock(H.first))}.`
@@ -533,7 +536,7 @@ function viewJoin() {
   const rows = [['The Best 3', '30 min before each game', 'The minute it locks'], ['The Top 10 plays of the day', 0, 1], ['Every character’s official picks, with each one’s breakdown', 0, 1], ['Every character’s parlay, plus the Banker’s', 0, 1],
     ['The members’ chatroom', 0, 'Soon'], ['The VIP lounge on Telegram and in the app', 0, 'Yearly plan'], ['Every result, graded in public', 1, 1], ['The slate, Power Rankings, bios and bloodlines', 1, 1], ['The free lounge', 1, 1]];
   const cell = (v, cls) => `<td${cls ? ` class="${cls}"` : ''}>${v === 1 ? YES : v === 0 ? NO : esc(v)}</td>`;
-  const plans = (F.plans || []).filter(x => x && x.name && isFinite(+x.price));
+  const plans = ((F.plans || []).length ? F.plans : CFG.plans).filter(x => x && x.name && isFinite(+x.price));
   const plansHtml = plans.length ? `<h2 class="h2">${beta ? 'Plans after the beta' : 'Plans'}</h2>${beta ? '<p class="note">Nothing to buy yet. These open when the beta ends.</p>' : ''}
     <div class="plans">${plans.map(x => `<div class="plan${x.best ? ' best' : ''}">${x.best ? '<span class="pl-tag">Best value</span>' : ''}<b>${esc(x.name)}</b><div class="pl-p">$${esc(String(+x.price))}<small>/ ${esc(x.per || '')}</small></div><span>${esc(x.note || '')}</span></div>`).join('')}</div>` : '';
   const pass = beta ? `<div class="pass"><div class="vip" aria-hidden="true">VIP</div><h3>All access</h3>

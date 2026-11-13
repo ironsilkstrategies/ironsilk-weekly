@@ -1385,7 +1385,7 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
     const RR=bkDayRecord().own;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
   let cashed=[];try{cashed=cashedList(14).filter(c=>c.units>=1).slice(0,12);}catch(e){}
   const updates=(get(PUBUPD_KEY,[])||[]).filter(u=>u.pub!==false&&now-u.ts<3*864e5).slice(-12).reverse().map(u=>({ts:u.ts,text:u.text,kind:u.kind||'update'}));
-  return{v:4,generated:now,cashed,brand:'TheDesk',price:get('d4.pricetext','')||'$19.99/mo · $9.99/wk',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),
+  return{v:4,generated:now,cashed,brand:'TheDesk',price:typeof subPriceText==='function'?subPriceText():'$50/mo · $300/yr',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),
     subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,updates,
     /* v2.51.1 · today's card never rides in the history list — it showed every locked pick there (with its price) before
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */

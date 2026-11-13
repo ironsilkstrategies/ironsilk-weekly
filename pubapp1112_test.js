@@ -14,7 +14,7 @@ const P = [
 const un = x => Date.parse(x.start) - 30 * 60e3, hide = x => ({ hidden: true, sp: x.sp, start: x.start, unlockAt: un(x) }), open = x => ({ ...x, unlockAt: un(x) });
 const hist = [{ d: '2026-11-10', picks: [{ sp: 'nba', game: 'CLE@NY', pick: 'NY ML', price: -160, p: 0.73, hit: false, push: false }, { sp: 'nhl', game: 'PIT@SJ', pick: 'SJ +1.5', price: -193, p: 0.66, hit: true, push: false }] },
   { d: '2026-11-09', picks: [{ sp: 'nfl', game: 'BUF@MIN', pick: 'Under 44.5', price: -110, p: 0.7, hit: true, push: false }] }];
-const base = { v: 4, brand: 'TheDesk', price: '$25/mo · $10/wk', social: { fb: 'https://www.facebook.com/share/1FCDFdUvRp/', tg: 'https://t.me/TheDeskApp' }, handle: 'Tester', subscribe: 'https://whop.com/ironsilkweekly/thedesk-vip',
+const base = { v: 4, beta: false, brand: 'TheDesk', price: '$25/mo · $10/wk', social: { fb: 'https://www.facebook.com/share/1FCDFdUvRp/', tg: 'https://t.me/TheDeskApp' }, handle: 'Tester', subscribe: 'https://whop.com/ironsilkweekly/thedesk-vip',
   record: { w: 38, l: 27, pu: 0, u: 1.24, first: '2026-10-06' }, parlay: null, updates: [], cashed: [], history: hist, unlockMin: 30 };
 const today = picks => ({ d: day, lockedAt: now - 2 * 36e5, unlockMin: 30, picks, props: [] });
 const FEEDS = {
@@ -97,7 +97,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('Receipts: the record, hit rate and units, then every card with each result', /38–27/.test(t) && /58%/.test(t) && /\+1\.24u/.test(t) && /Knicks ML −160/.test(t) && /Sharks \+1\.5 −193/.test(t) && /Under 44\.5/.test(t), t.slice(0, 500));
   await v.p.click('.tabs [data-go="join"]'); await v.p.waitForTimeout(400); t = await v.text();
   const hrefs = await v.p.evaluate(() => [...document.querySelectorAll('#v-join a[href]')].map(a => a.href));
-  T('Join: VIP (the Whop link from the feed), the free lounge, how the desk works', /\$25\/mo or \$10\/wk/.test(t) && hrefs.includes('https://whop.com/ironsilkweekly/thedesk-vip') && hrefs.includes('https://t.me/TheDeskLounge') && /Locked every morning/.test(t), hrefs.join(' '));
+  T('Join: VIP (the Whop link from the feed), the free lounge, how the desk works', /\$50\/mo or \$300\/yr/.test(t) && !/\$25|\$10\/wk/.test(t) && hrefs.includes('https://whop.com/ironsilkweekly/thedesk-vip') && hrefs.includes('https://t.me/TheDeskLounge') && /Locked every morning/.test(t), hrefs.join(' '));
   T('…the head start from the public timestamps (locked 2h before an unlock 10 min ago → about 1h 50m), the real record by the button', /HEAD START TODAY/i.test(t) && /1h (49|50)m/i.test(t) && /On the record: 38–27, \+1\.24 units since Oct 6/.test(t), t.slice(0, 700));
   T('…free vs VIP side by side (VIP: the card at lock, the Top 10, the parlays, the private Telegram)', (await v.p.locator('#v-join .cmp tbody tr').count()) === 9 && /The minute it locks/.test(t) && /30 min before each game/.test(t) && /Yearly plan/.test(t) && (await v.p.locator('#v-join .cmp td.v svg.y').count()) === 6 && (await v.p.locator('#v-join .cmp td:not(.v) svg.n').count()) === 5);
   T('…and the straight answers: where picks land, no guarantees, cancel any time', /Where do the picks show up/.test(t) && /Do you guarantee wins/.test(t) && /Can I cancel/.test(t));
@@ -121,6 +121,11 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   for (const tab of ['today', 'cast', 'join']) { await v.p.click(`.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('beta: no sideways scroll on ' + tab, false, o + 'px'); }
   T('beta: no sideways scroll, no script errors', v.errs.length === 0, v.errs.join(' | '));
   await v.ctx.close();
+
+  /* ── an older app's feed (no beta flag, old price line): the beta Join page with today's prices, never the old ones ── */
+  { const old = { ...FEEDS.morning }; delete old.beta; v = await visit(old, { tab: 'join' }); t = await v.text();
+    T('a feed from an older app still shows the new price list and no checkout (the beta is on unless the feed says off)', /EVERYTHING.S FREE DURING THE BETA/i.test(t) && ['$50', '$300', '$100', '$20', '$2'].every(x => t.includes(x)) && !/\$25|\$10\/wk|\$19\.99/.test(t) && !(await v.p.evaluate(() => [...document.querySelectorAll('a[href]')].some(a => /whop/.test(a.href)))));
+    await v.ctx.close(); }
 
   /* ── the members' chat ── */
   const CHATLOG = [{ id: '1', name: 'Hoops Fan', owner: false, text: 'Wolves -6 feels right <img src=x onerror="window.__xss=11">', ts: now - 6e5 }, { id: '2', name: 'TheDesk', owner: true, text: 'Card is locked.', ts: now - 3e5 }];

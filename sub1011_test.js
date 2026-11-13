@@ -61,7 +61,7 @@ setTimeout(async()=>{try{
   w.eval(`set(BEST5_KEY,{d:'${td}',locked:true,lockedAt:Date.now()-3600e3,top3:${JSON.stringify(top3)},bySport:{},picks:[]})`);
   const F=w.eval('publicFeed()');
   T('public feed: unstarted play hidden (no pick, no price), started play shown',F.today.picks[0].hidden&&!F.today.picks[0].pick&&F.today.picks[1].pick==='WSH ML'&&F.today.allStarted===false);
-  T('public feed carries the price line',F.price==='$19.99/mo · $9.99/wk');
+  T('public feed carries the price line (v2.98.2: the new list; an old $19.99 line retires)',/^\$50\/mo · \$300\/yr/.test(F.price)&&!/19\.99/.test(F.price),F.price);
   const c1=await w.eval(`pickCommit(get(BEST5_KEY,{}),false)`);const c2=await w.eval(`pickCommit(get(BEST5_KEY,{}),true)`);
   T('fingerprint: same hash before and after reveal; key only at reveal',c1.hash===c2.hash&&c1.salt===null&&/^[0-9a-f]{32}$/.test(c2.salt)&&/^[0-9a-f]{64}$/.test(c1.hash));
   /* the picks page verifies it */

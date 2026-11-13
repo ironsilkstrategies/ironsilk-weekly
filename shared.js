@@ -3060,7 +3060,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23168,7 +23168,11 @@ if(typeof window!=='undefined'&&!window.__NO_SYNC_LOOP__&&!SY3_RELAY){
    strengths (weak spots never make a ticket). Posted to the private Telegram
    channel that Whop manages; the public page shows the record and keeps
    today's picks hidden until kickoff, with a fingerprint anyone can verify. */
-const SUB_PRICE_DEFAULT='$19.99/mo · $9.99/wk';
+/* v2.98.2 · the price list (Nov 13): $50 a month, $300 a year, $100 per league per season, a $20 two-day pass, $2 a single pick.
+   An old saved price line ($19.99 / $9.99, $25 / $10) retires by itself. */
+const SUB_PRICE_DEFAULT='$50/mo · $300/yr · $100/league season · $20 2-day pass · $2 single pick';
+const SUB_PRICE_OLD=/\$(19\.99|9\.99|25|10)(\/| a | per )?(mo|wk|month|week)/i;
+function subPriceText(){const v=String(get('d4.pricetext','')||'').trim();return!v||SUB_PRICE_OLD.test(v)?SUB_PRICE_DEFAULT:v;}
 function subBanker(){let S=null;try{S=bkDayState();}catch(e){return null;}const D=S&&(S.locked?S:S.preview);if(!D||!D.own||!(D.own.legs||[]).length)return null;return{...D.own,locked:!!S.locked};}
 const subPct=p=>p==null?'':(p*100<10?(p*100).toFixed(1):Math.round(p*100))+'%';
 const subLeg=x=>`${x.pick} (${tcSgn(x.price)}) · ${(SP_LAB[x.sp]||'').split(' ')[0]} ${gameLabel(x.sp,x.game)}`;
@@ -23371,7 +23375,7 @@ function subCardHtml(){const C=subCard();const e=txtEsc;const pc=subPct;const po
   const setupOpen=!get('d4.tgbot','')||!get('d4.tgchat','')||!get('d4.sublink','');
   return`<div class="tkt" style="border:1px solid rgba(255,199,44,.45);background:linear-gradient(180deg,rgba(255,199,44,.09),transparent 70%)">
       <h3 style="margin:0">💎 Subscriber card — ${e(new Date(C.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}))}</h3>
-      <div class="sub" style="font-size:10.5px;margin:3px 0 8px">What paying members get in the private Telegram. ${e(get('d4.pricetext','')||SUB_PRICE_DEFAULT)}.</div>
+      <div class="sub" style="font-size:10.5px;margin:3px 0 8px">What paying members get in the private Telegram. ${e(subPriceText())}.</div>
       <div class="bar"><button class="primary" onclick="subPostTelegram()">📣 Post to Telegram</button><button onclick="subCopy()">Copy text</button></div>
       ${(()=>{try{return tgAutoHtml()+tgwHtml();}catch(e){return'';}})()}
       ${posted&&posted.d===C.d?`<div class="sub mono" style="font-size:9.5px;color:var(--win);margin-top:4px">✓ posted ${new Date(posted.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}${posted.unconfirmed?' (check the channel)':''}</div>`:''}</div>
@@ -23383,11 +23387,11 @@ function subCardHtml(){const C=subCard();const e=txtEsc;const pc=subPct;const po
     ${(C.props||[]).length?sec('🎯 Character props of the day','each character\'s best player call',C.props.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--rule)"><div><b style="font-size:13px">${e(cpropLine(c))}</b><div class="mono" style="font-size:9.5px;color:var(--mute)">${e(charName(c.v))} · ${e((SP_LAB[c.sp]||'').split(' ')[0])} ${e(c.team)}${c.fav==='fav'?` · ⭐ ${e(c.rec||'')} on him`:''}${c.why?' · '+e(c.why):''}</div></div><span class="mono" style="font-size:11.5px;font-weight:800">${pc(c.cal)}</span></div>`).join('')):''}
     <div class="sub mono" style="font-size:9.5px;color:var(--mute);margin:4px 2px 10px">5-leg tickets are long shots by nature — the cash chance on each is what the record says, not a promise.</div>
     <details class="tkt"${setupOpen?' open':''}><summary><b>⚙️ Whop + Telegram setup</b></summary>
-      <div class="sub" style="font-size:10.5px;line-height:1.6;margin:6px 0">1. Whop: create the product with two prices (${e(SUB_PRICE_DEFAULT)}), add Whop's Telegram app and connect your <b>private</b> channel — Whop adds members when they pay and removes them when they cancel.<br>
+      <div class="sub" style="font-size:10.5px;line-height:1.6;margin:6px 0">1. Whop: create a product for each plan (${e(SUB_PRICE_DEFAULT)}), add Whop's Telegram app and connect your <b>private</b> channel — Whop adds members when they pay and removes them when they cancel.<br>
         2. Telegram: message <b>@BotFather</b> → /newbot → copy the token. Add the bot to the private channel as an <b>admin</b> who can post.<br>
         3. Paste below. The token stays on this device — it never syncs or backs up.</div>
       <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Telegram bot token</div><input id="subTgTok" type="password" placeholder="${get('d4.tgbot','')?'saved — paste to replace':'123456:ABC…'}" autocomplete="off">
       <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Private channel (@name or -100… id)</div><input id="subTgChat" value="${e(get('d4.tgchat','')||'')}" placeholder="@TheDeskVIP">
       <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Whop checkout link (shown on the public page)</div><input id="subWhop" value="${e(get('d4.sublink','')||'')}" placeholder="https://whop.com/…">
-      <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Price line</div><input id="subPrice" value="${e(get('d4.pricetext','')||SUB_PRICE_DEFAULT)}">
+      <div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">Price line</div><input id="subPrice" value="${e(subPriceText())}">
       <div class="bar" style="margin-top:8px"><button class="primary" onclick="subSaveSetup()">Save</button></div></details>`;}
