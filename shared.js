@@ -3060,7 +3060,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -22757,7 +22757,7 @@ const SY3={base:'d4.sync3base',dirty:'d4.sync3dirty',meta:'meta.json'};
 SYNC_NEVER.add(SY3.base);SYNC_NEVER.add(SY3.dirty);
 const SY3_RELAY=typeof location!=='undefined'&&/[?&](bg|chain)=1/.test(location.search||'');
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
-let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_STATE={msg:'',ok:null,ts:0};
+let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_BUSY_AT=0,SYNC_STATE={msg:'',ok:null,ts:0};
 function syncKts(){if(!SYNC_KTS){try{SYNC_KTS=JSON.parse(localStorage.getItem(SYNC.ts)||'{}')||{};}catch(e){SYNC_KTS={};}}return SYNC_KTS;}
 function syncSaveKts(){try{localStorage.setItem(SYNC.ts,JSON.stringify(syncKts()));}catch(e){}}
 function syncMark(k){if(SYNC_APPLY||syncSkip(k))return;SYNC_LOCAL_N++;syncKts()[k]=Date.now();syncSaveKts();
@@ -22947,8 +22947,11 @@ function sy3Join(ord,parts){
     const out=[];dated.concat(parts.filter(p=>p.id==='a._')).forEach(p=>{(Array.isArray(p.v)?p.v:[]).forEach(x=>out.push(x));});return out;}
   const p=parts.find(x=>x.id==='all');return p?p.v:undefined;}
 /* v2.86.6 · every sync request gives up after 60 s — a request that never answers used to hold that page's sync forever */
-function syncFetch(url,o){o=o||{};let ac=null,tm=0;try{ac=new AbortController();tm=setTimeout(()=>{try{ac.abort();}catch(e){}},60e3);o.signal=ac.signal;}catch(e){}
-  return fetch(url,o).catch(e=>{throw ac&&ac.signal&&ac.signal.aborted?new Error('GitHub didn\'t answer in 60 s'):e;}).finally(()=>clearTimeout(tm));}
+/* v2.98.3 · the clock now runs until the BODY is read, not just the headers (Nov 13: a reply that stalled mid-download held the backup
+   "busy" forever — the phone's last save was 5:44 PM and Sync now did nothing, silently) */
+function syncFetch(url,o){o=o||{};let ac=null,tm=0;try{ac=new AbortController();tm=setTimeout(()=>{try{ac.abort();}catch(e){}},90e3);o.signal=ac.signal;}catch(e){}
+  const late=e=>{throw ac&&ac.signal&&ac.signal.aborted?new Error('GitHub didn\'t answer in 90 s'):e;};
+  return fetch(url,o).then(r=>{try{const j=r.json.bind(r),t=r.text.bind(r);r.json=()=>j().catch(late).finally(()=>clearTimeout(tm));r.text=()=>t().catch(late).finally(()=>clearTimeout(tm));}catch(e){clearTimeout(tm);}return r;},e=>{clearTimeout(tm);return late(e);});}
 async function sy3Req(path,o){o=o||{};const h=Object.assign({},o.body?{'Content-Type':'application/json'}:{},o.h||{});
   return syncFetch(syncGit(path)+(o.q||''),{method:o.m||'GET',headers:syncHeaders(h),body:o.body?JSON.stringify(o.body):undefined,cache:'no-store'});}
 async function sy3Json(path,o){const r=await sy3Req(path,o);if(!r.ok){const e=new Error('HTTP '+r.status+' ('+String(path).split('/')[0]+')');e.status=r.status;throw e;}return r.json();}
@@ -23036,9 +23039,13 @@ function syncFailNote(msg){try{localStorage.setItem('d4.syncfail',JSON.stringify
 async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your private repo and token first.');return{ok:false};}
   /* v2.86.7 · never back up a page that can't see the big store: it would save a partial copy over the full one (Nov 6) */
   if(storeDegraded()){const m='your saved history didn\'t load on this page — the backup waits so a partial copy can\'t replace the full one';SYNC_STATE={ok:false,ts:Date.now(),msg:'⏸ '+m};try{renderSyncStatus();}catch(e){}if(manual)alert('Backup paused: '+m+'. Force-quit TheDesk and reopen it.');return{ok:false,reason:m};}
-  if(SYNC_BUSY)return SYNC_BUSY;
+  /* v2.98.3 · a backup that has been "running" for 4+ minutes is stuck: let it go and start fresh (the branch check stops a late finisher from clobbering) */
+  if(SYNC_BUSY&&Date.now()-(SYNC_BUSY_AT||0)>4*60e3){SYNC_BUSY=null;SYNC_STATE={ok:false,ts:Date.now(),msg:'the last backup got stuck — starting again'};}
+  if(SYNC_BUSY){if(manual)toastSync(`a backup is already running (${Math.max(1,Math.round((Date.now()-SYNC_BUSY_AT)/1000))} s) — it finishes on its own`);return SYNC_BUSY;}
+  if(manual)toastSync('backing up…');
   {const safe=await syncRepoSafe(!!manual);if(!safe.ok){SYNC_STATE={ok:false,ts:Date.now(),msg:'⛔ '+safe.why};try{renderSyncStatus();}catch(e){}syncFailNote(safe.why);
     if(manual)alert('Sync is stopped: '+safe.why);else if(!safe.soft&&!SYNC_SAFE_WARNED){SYNC_SAFE_WARNED=true;try{toastSync('⛔ Sync stopped — '+safe.why);}catch(e){}}return{ok:false,reason:safe.why};}}
+  SYNC_BUSY_AT=Date.now();
   SYNC_BUSY=(async()=>{let changed=0,sent=0,fast=null;try{
     if(first==='remote'){sy3SaveBase({commit:null,tree:null,files:{},ord:{}});sy3SaveDirty({});}
     if(first==='local')sy3MarkAll();

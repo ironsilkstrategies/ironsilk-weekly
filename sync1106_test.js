@@ -100,5 +100,10 @@ setTimeout(async()=>{try{
   phone.eval(`localStorage.setItem('d4.syncrepo',JSON.stringify('me/thedesk-data'))`);phone.eval('SYNC_SAFE=null');r=await phone.eval('syncNow(false)');
   T('a private repo syncs again right away',r.ok===true,JSON.stringify(r));
   const card=phone.eval(`syncSettingsHtml()`);T('settings card still renders',/Sync across devices/.test(card));
+  /* v2.98.3 · Nov 13: a backup stuck "busy" made Sync now do nothing, silently */
+  phone.eval('SYNC_BUSY=new Promise(()=>{});SYNC_BUSY_AT=Date.now()-5*60e3;SYNC_SAFE=null');r=await phone.eval('syncNow(true)');
+  T('a backup stuck for 4+ minutes is dropped and Sync now runs a fresh one',r&&r.ok===true&&phone.eval('SYNC_BUSY')===null,JSON.stringify(r));
+  phone.eval('window.__busy=new Promise(()=>{});SYNC_BUSY=window.__busy;SYNC_BUSY_AT=Date.now()-5e3');phone.eval('syncNow(true)');await new Promise(r=>setTimeout(r,300));const same=phone.eval('SYNC_BUSY===window.__busy');
+  T('…a backup that is genuinely running is left alone (Sync now says so instead of starting a second)',same===true);phone.eval('SYNC_BUSY=null');
 }catch(e){T('crashed',false,e.stack);}
 console.log(out.join('\n'));const f=out.filter(x=>x.startsWith('FAIL')).length;console.log(`${out.length-f} pass / ${f} fail`);process.exit(0);},2500);
