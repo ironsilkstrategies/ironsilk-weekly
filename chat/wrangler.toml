@@ -1,0 +1,18 @@
+# TheDesk members' chatroom · deployed by .github/workflows/chat-deploy.yml (never by hand with keys in a file)
+name = "thedesk-chat"
+main = "worker.mjs"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[vars]
+ALLOW_ORIGINS = "https://ironsilkweekly.com,https://www.ironsilkweekly.com"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# Secret (set by the deploy workflow from the GitHub secret CHAT_ADMIN_CODE): ADMIN_CODE

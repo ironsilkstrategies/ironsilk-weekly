@@ -8,6 +8,7 @@ const CFG = {
   lounge: 'https://t.me/TheDeskLounge',
   social: { tg: 'https://t.me/TheDeskApp', fb: 'https://www.facebook.com/share/1FCDFdUvRp/' },
   home: 'https://ironsilkweekly.com/desk/',
+  chat: 'https://thedesk-chat.ironsilkstrategies.workers.dev',
   deskTz: 'America/Chicago',
 };
 
@@ -90,7 +91,7 @@ function readPick(x) {
 /* ── state ───────────────────────────────────────────────────────────────── */
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null };
-const TABS = ['today', 'slate', 'cast', 'receipts', 'join'];
+const TABS = ['today', 'slate', 'cast', 'chat', 'receipts', 'join'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -453,6 +454,62 @@ function viewCast() {
     ${raceHtml}<div class="castgrid">${C.map(card).join('')}</div>${footHtml()}`;
 }
 
+/* ── the members' chatroom (the one thing that talks back: words only, never picks) ── */
+const CH = { list: [], ws: null, tries: 0, poll: null, invite: '', err: '' };
+const chatPass = () => { const p = store.get('chat'); return p && p.token && p.exp > Date.now() ? p : null; };
+async function chatApi(path, body) {
+  const r = await fetch(CFG.chat + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+  let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) throw new Error(j.error || 'the chat didn’t answer'); return j;
+}
+function msgHtml(m, owner) {
+  return `<div class="msg${m.owner ? ' own' : ''}" data-id="${esc(m.id)}"><div class="msg-h"><b>${esc(m.name)}</b>${m.owner ? '<span class="msg-tag">The desk</span>' : ''}<time>${esc(clock(m.ts))}</time>
+    ${owner && !m.owner ? `<span class="msg-mod"><button type="button" data-act="chat-del" data-id="${esc(m.id)}">Delete</button><button type="button" data-act="chat-mute" data-name="${esc(m.name)}">Mute 1h</button><button type="button" data-act="chat-ban" data-name="${esc(m.name)}">Ban</button></span>` : owner ? `<span class="msg-mod"><button type="button" data-act="chat-del" data-id="${esc(m.id)}">Delete</button></span>` : ''}</div><p>${esc(m.text)}</p></div>`;
+}
+function paintChat(stick) {
+  const box = $('#msgs'); if (!box) return; const P = chatPass(), near = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  box.innerHTML = CH.list.length ? CH.list.map(m => msgHtml(m, P && P.owner)).join('') : '<p class="chat-empty">No messages yet. Say the first word.</p>';
+  if (stick || near) box.scrollTop = box.scrollHeight;
+}
+function chatConnect() {
+  if (CH.ws && CH.ws.readyState <= 1) return;
+  try {
+    const ws = new WebSocket(CFG.chat.replace(/^http/, 'ws') + '/chat/live'); CH.ws = ws;
+    ws.onopen = () => { CH.tries = 0; };
+    ws.onmessage = e => { let o; try { o = JSON.parse(e.data); } catch { return; }
+      if (o.type === 'msg' && o.m && !CH.list.some(m => m.id === o.m.id)) { CH.list.push(o.m); CH.list = CH.list.slice(-200); paintChat(); }
+      else if (o.type === 'del') { CH.list = CH.list.filter(m => m.id !== o.id); paintChat(); } };
+    ws.onclose = () => { CH.ws = null; if (S.tab === 'chat') setTimeout(chatConnect, Math.min(30e3, 2000 * 2 ** CH.tries++)); };
+  } catch { /* no live updates: the poll below still runs */ }
+  clearInterval(CH.poll); CH.poll = setInterval(() => { if (S.tab === 'chat' && !(CH.ws && CH.ws.readyState === 1)) chatLoad(); }, 20e3);
+}
+async function chatLoad() { try { const j = await chatApi('/chat/history'); CH.list = j.messages || []; CH.err = ''; } catch (e) { CH.err = 'The chat can’t be reached right now.'; } paintChat(true); const n = $('#chatErr'); if (n) n.textContent = CH.err; }
+function viewChat() {
+  const el = $('#v-chat'), P = chatPass(), key = P ? P.name + (P.owner ? '*' : '') : '-';
+  if (el.dataset.who !== key) {
+    el.dataset.who = key;
+    const form = P ? `<form class="compose" data-form="chat-send"><label class="sr" for="chatText">Message</label><textarea id="chatText" maxlength="500" rows="2" placeholder="Talk sports, ${esc(P.name)}…"></textarea><button type="submit" class="btn foil">Send</button></form>
+        <p class="chat-me">Posting as <b>${esc(P.name)}</b>${P.owner ? ' (owner)' : ''}. <button type="button" class="link" data-act="chat-leave">Sign out</button></p>`
+      : `<form class="joinchat" data-form="chat-join"><p><b>Want to post?</b> During the beta, posting takes an invite code from the desk.</p>
+        <div class="jc-row"><label><span>Your name</span><input name="name" maxlength="20" autocomplete="nickname" placeholder="Hoops Fan"></label><label><span>Invite code</span><input name="code" autocomplete="off" autocapitalize="characters" placeholder="DESK-XXXXX"></label></div>
+        <button type="submit" class="btn foil">Join the chat</button><p class="chat-err" id="joinErr" role="alert"></p></form>`;
+    const tools = P && P.owner ? `<div class="owner"><b>Owner tools</b><div class="row"><button type="button" class="btn line" data-act="chat-invite">Make an invite code (25 uses)</button></div><p class="chat-inv" id="chatInv">${CH.invite ? `New code: <code>${esc(CH.invite)}</code>` : ''}</p></div>` : '';
+    el.innerHTML = `<h1 class="title">Members’ chat</h1><p class="lede">Talk sports with the desk and everyone on it. Anyone can read. ${S.feed && S.feed.beta ? 'During the beta, posting takes an invite code.' : 'Posting is for members.'}</p>
+      <div class="paper chatbox"><div class="msgs" id="msgs" aria-live="polite"></div></div><p class="chat-err" id="chatErr" role="alert">${esc(CH.err)}</p>${form}${tools}
+      <p class="note" style="margin-top:14px">Keep it about sports. No picks for sale, no spam, no slurs. The desk removes anything that crosses the line.</p>${footHtml()}`;
+  }
+  paintChat(true); if (!CH.loaded) { CH.loaded = true; chatLoad(); } chatConnect();
+}
+document.addEventListener('submit', async e => {
+  const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
+  if (f.dataset.form === 'chat-join') { const n = $('#joinErr'); n.textContent = '';
+    try { const j = await chatApi('/chat/join', { name: f.name.value.trim(), code: f.code.value.trim() }); store.set('chat', j); viewChat(); toast(`You’re in, ${j.name}`); } catch (err) { n.textContent = err.message; } }
+  if (f.dataset.form === 'chat-send') { const t = $('#chatText'), P = chatPass(); if (!t || !t.value.trim() || !P) return;
+    try { const j = await chatApi('/chat/send', { token: P.token, text: t.value }); t.value = ''; if (!CH.list.some(m => m.id === j.message.id)) { CH.list.push(j.message); paintChat(true); } }
+    catch (err) { toast(err.message); if (/join the chat/.test(err.message)) { store.set('chat', null); viewChat(); } } }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'chatText') { e.preventDefault(); e.target.form.requestSubmit(); } });
+async function chatMod(body, done) { const P = chatPass(); if (!P || !P.owner) return; try { const j = await chatApi('/chat/mod', { token: P.token, ...body }); done && done(j); } catch (err) { toast(err.message); } }
+
 /* ── Join ────────────────────────────────────────────────────────────────── */
 /* how long members had the latest card before the public saw its first pick (all from public timestamps) */
 function headStart(T) {
@@ -558,7 +615,7 @@ async function share() {
   try { if (navigator.share) { await navigator.share({ title: 'TheDesk', text, url: CFG.home }); return; } } catch { return; }
   try { await navigator.clipboard.writeText(`${text}\n${CFG.home}`); toast('Card copied'); } catch { toast('Couldn’t copy the card'); }
 }
-const VIEWS = { today: viewToday, slate: viewSlate, cast: viewCast, receipts: viewReceipts, join: viewJoin };
+const VIEWS = { today: viewToday, slate: viewSlate, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   if (!TABS.includes(tab)) tab = 'today';
@@ -587,6 +644,11 @@ document.addEventListener('click', async e => {
   else if (act === 'slatesp') { S.slateSp = a.dataset.sp; render(); }
   else if (act === 'ranksp') { S.rankSp = a.dataset.sp; S.rankAll = false; render(); }
   else if (act === 'rankall') { S.rankAll = !S.rankAll; render(); }
+  else if (act === 'chat-leave') { store.set('chat', null); viewChat(); }
+  else if (act === 'chat-del') chatMod({ act: 'del', id: a.dataset.id }, () => { CH.list = CH.list.filter(m => m.id !== a.dataset.id); paintChat(); });
+  else if (act === 'chat-mute') chatMod({ act: 'mute', name: a.dataset.name, mins: 60 }, () => toast(`${a.dataset.name} is muted for an hour`));
+  else if (act === 'chat-ban') chatMod({ act: 'ban', name: a.dataset.name }, () => toast(`${a.dataset.name} is banned`));
+  else if (act === 'chat-invite') chatMod({ act: 'invite', uses: 25 }, j => { CH.invite = j.code; const n = $('#chatInv'); if (n) n.innerHTML = `New code: <code>${esc(j.code)}</code> (25 uses)`; });
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
 window.addEventListener('popstate', () => go((location.hash || '#today').slice(1), false));
@@ -607,6 +669,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { lo
 S.feed = store.get('feed'); S.slate = store.get('slate');
 if (S.slate && !(S.slate.v === 1 && Array.isArray(S.slate.days))) S.slate = null;
 chip();
+/* ?embed=1 · the chat inside the desk's own app: no header, no tabs */
+if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
 go((location.hash || '#today').slice(1), false);
 loadFeed();
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadSlate());

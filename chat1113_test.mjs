@@ -1,0 +1,61 @@
+/* v1.0 · the members' chatroom server (chat/worker.mjs): read by anyone, posting by invite code, the owner's tools,
+   flood limits, the word filter. A fake Durable Object storage (an ordered Map), no network. */
+import { Room, clean, okName } from './chat/worker.mjs';
+let pass = 0, fail = 0; const T = (n, c, x) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  — ' + String(x ?? '').slice(0, 300))); };
+function storage() { const m = new Map(); const sorted = () => [...m.keys()].sort();
+  return { m, get: async k => m.get(k), put: async (k, v) => { m.set(k, structuredClone(v)); }, delete: async k => { for (const x of [].concat(k)) m.delete(x); },
+    list: async ({ prefix = '', reverse = false, limit } = {}) => { let ks = sorted().filter(k => k.startsWith(prefix)); if (reverse) ks.reverse(); if (limit) ks = ks.slice(0, limit); return new Map(ks.map(k => [k, m.get(k)])); } }; }
+const sent = []; let clock = Date.parse('2026-11-13T18:00:00Z');
+const ctx = { storage: storage(), getWebSockets: () => [{ send: s => sent.push(JSON.parse(s)) }], acceptWebSocket() { } };
+const ADMIN = 'DESK-TEST-ADMIN-CODE-1234567890';
+const room = new Room(ctx, { ADMIN_CODE: ADMIN, ALLOW_ORIGINS: 'https://ironsilkweekly.com' }, { now: () => clock });
+const call = async (path, body, ip = '203.0.113.5', method = 'POST') => { const r = await room.fetch(new Request('https://chat.test' + path, { method, headers: { 'content-type': 'application/json', origin: 'https://ironsilkweekly.com', 'cf-connecting-ip': ip }, body: body ? JSON.stringify(body) : undefined }));
+  return { status: r.status, j: await r.json(), h: r.headers }; };
+
+T('names: 2–20 letters or numbers; reserved and rude names refused', okName('Hoops Fan 22') && !okName('a') && !okName('TheDesk') && !okName('The Scout') && !okName('shit talker') && !okName('<b>x</b>'));
+T('the word filter masks, keeps the first letter', clean('this is shit, fucking great') === 'this is s***, f****** great', clean('this is shit, fucking great'));
+let r = await call('/chat/history', null, undefined, 'GET');
+T('anyone can read (an empty room to start), CORS for the site', r.status === 200 && Array.isArray(r.j.messages) && r.j.messages.length === 0 && r.h.get('access-control-allow-origin') === 'https://ironsilkweekly.com');
+r = await call('/chat/send', { token: 'nope-nope-nope-nope-nope', text: 'hi' });
+T('posting without a pass is refused', r.status === 401);
+r = await call('/chat/join', { name: 'Hoops Fan', code: 'DESK-WRONG' });
+T('a wrong invite code is refused', r.status === 403);
+const own = await call('/chat/join', { code: ADMIN });
+T('the owner\'s code → a pass as "TheDesk", marked owner', own.status === 200 && own.j.owner === true && own.j.name === 'TheDesk' && own.j.token.length >= 32);
+const inv = await call('/chat/mod', { token: own.j.token, act: 'invite', uses: 2 });
+T('the owner makes an invite code (2 uses)', inv.status === 200 && /^DESK-[A-Z0-9]{5}$/.test(inv.j.code) && inv.j.uses === 2, JSON.stringify(inv.j));
+const a = await call('/chat/join', { name: 'Hoops Fan', code: inv.j.code.toLowerCase() }, '198.51.100.1');
+T('a fan joins with the code (any case) → a 30-day pass', a.status === 200 && a.j.owner === false && a.j.exp === clock + 30 * 864e5, JSON.stringify(a.j));
+T('…the name is held for that code: someone else can\'t take it', (await call('/chat/join', { name: 'hoops fan', code: ADMIN.slice(0, 5) }, '198.51.100.2')).status === 403);
+const b = await call('/chat/join', { name: 'Puck Head', code: inv.j.code }, '198.51.100.3');
+T('the second use works, the third doesn\'t (uses run out)', b.status === 200 && (await call('/chat/join', { name: 'Third Guy', code: inv.j.code }, '198.51.100.4')).status === 403);
+r = await call('/chat/send', { token: a.j.token, text: '  Wild   ML tonight, who\'s with me? <script>x</script>  ' });
+T('a member posts: trimmed, kept as plain text, sent live to everyone watching', r.status === 200 && r.j.message.text === 'Wild ML tonight, who\'s with me? <script>x</script>' && sent.some(s => s.type === 'msg' && s.m.id === r.j.message.id));
+const first = r.j.message.id;
+r = await call('/chat/send', { token: a.j.token, text: 'again' });
+T('flood limit: a second post within 2.5 seconds is held', r.status === 429);
+clock += 3000; r = await call('/chat/send', { token: a.j.token, text: 'shit, that line moved' });
+T('…a moment later it goes, with the word masked', r.status === 200 && r.j.message.text === 's***, that line moved');
+clock += 3000; r = await call('/chat/send', { token: a.j.token, text: 'x'.repeat(900) });
+T('messages cap at 500 characters', r.status === 200 && r.j.message.text.length === 500);
+T('history returns the messages oldest first', (await call('/chat/history', null, undefined, 'GET')).j.messages.map(m => m.id)[0] === first);
+r = await call('/chat/mod', { token: a.j.token, act: 'ban', name: 'Puck Head' });
+T('owner tools are owner-only', r.status === 403);
+r = await call('/chat/mod', { token: own.j.token, act: 'del', id: first });
+T('the owner deletes a message: gone from history, and the deletion goes out live', r.status === 200 && !(await call('/chat/history', null, undefined, 'GET')).j.messages.some(m => m.id === first) && sent.some(s => s.type === 'del' && s.id === first));
+await call('/chat/mod', { token: own.j.token, act: 'mute', name: 'Hoops Fan', mins: 30 }); clock += 3000;
+T('a muted name can\'t post until the mute runs out', (await call('/chat/send', { token: a.j.token, text: 'hello?' })).status === 403 && (clock += 31 * 60e3, (await call('/chat/send', { token: a.j.token, text: 'back' })).status === 200));
+await call('/chat/mod', { token: own.j.token, act: 'ban', name: 'Puck Head' });
+T('a banned name loses its pass and can\'t rejoin', (await call('/chat/send', { token: b.j.token, text: 'hi' })).status === 401 && (await call('/chat/join', { name: 'Puck Head', code: ADMIN.slice(0, 5) }, '198.51.100.9')).status === 403);
+const L = await call('/chat/mod', { token: own.j.token, act: 'invites' });
+T('the owner lists invite codes with their uses', L.status === 200 && L.j.invites.some(i => i.code === inv.j.code && i.used === 2 && i.uses === 2));
+let tries = 0; for (let i = 0; i < 9; i++) tries = (await call('/chat/join', { name: 'Guesser', code: 'DESK-AAAA' + i }, '192.0.2.7')).status;
+T('guessing codes: after 8 wrong tries from one address it waits 15 minutes', tries === 429);
+T('the owner\'s posts aren\'t flood-limited (announcements)', (await call('/chat/send', { token: own.j.token, text: 'Card is locked.' })).status === 200 && (await call('/chat/send', { token: own.j.token, text: 'Wild ML is the play.' })).status === 200);
+for (let i = 0; i < 420; i++) await ctx.storage.put('m:' + String(i).padStart(9, '0'), { id: String(i), text: 'old' });
+clock += 3000; await call('/chat/send', { token: own.j.token, text: 'trim check' });
+T('the room keeps the newest 400 messages', [...ctx.storage.m.keys()].filter(k => k.startsWith('m:')).length === 400);
+const noAdmin = new Room({ ...ctx, storage: storage() }, { ADMIN_CODE: 'short' }, { now: () => clock });
+const rr = await noAdmin.fetch(new Request('https://chat.test/chat/join', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: 'short', name: 'x' }) }));
+T('a weak owner code (under 24 characters) never makes an owner', rr.status !== 200 || !(await rr.json()).owner);
+console.log(`${pass} pass / ${fail} fail`); if (fail) process.exit(1);

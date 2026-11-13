@@ -50,19 +50,20 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 (async () => {
   const b = await pw.chromium.launch(); const HOSTS = new Set();
   /* one visit: a fresh browser profile, the given feed, the tab; returns the page + what it asked the network for */
-  async function visit(feed, { tab = 'today', ua, guide = false, width } = {}) {
+  async function visit(feed, { tab = 'today', ua, guide = false, width, chat, query = '' } = {}) {
     const ctx = await b.newContext({ ...pw.devices['iPhone 14'], ...(ua ? { userAgent: ua } : {}), ...(width ? { viewport: { width, height: 860 }, isMobile: false, hasTouch: false } : {}) });
     const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
     await p.route('**/*', r => { const u = new URL(r.request().url()); HOSTS.add(u.hostname + (u.hostname === 'raw.githubusercontent.com' ? u.pathname : ''));
       if (/picks\.json$/.test(u.pathname)) return feed ? r.fulfill({ contentType: 'application/json', body: JSON.stringify(feed) }) : r.abort();
       if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
       if (u.hostname === 'site.api.espn.com') return r.fulfill({ contentType: 'application/json', body: '{"events":[]}' });
+      if (chat && u.hostname === 'thedesk-chat.ironsilkstrategies.workers.dev') return chat(r, u);
       if (u.hostname !== 'desk.test') return r.abort();
       let f = path.join(W, decodeURIComponent(u.pathname)); if (f.endsWith('/')) f += 'index.html';
       if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
       r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
     if (!guide) await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); } catch (e) { } });
-    await p.goto('https://desk.test/desk/#' + tab, { waitUntil: 'load' }); await p.waitForTimeout(900);
+    await p.goto('https://desk.test/desk/' + query + '#' + tab, { waitUntil: 'load' }); await p.waitForTimeout(900);
     return { p, ctx, errs, text: () => p.evaluate(() => document.body.innerText), html: () => p.evaluate(() => document.body.innerHTML) };
   }
   const PICKWORDS = /DET|Pistons|9\.5|Under 40\.5|40\.5|SJ \+1\.5|Sharks|-110|−110|-108|−108|-193|−193|72%|71%|70%/;
@@ -121,6 +122,31 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('beta: no sideways scroll, no script errors', v.errs.length === 0, v.errs.join(' | '));
   await v.ctx.close();
 
+  /* ── the members' chat ── */
+  const CHATLOG = [{ id: '1', name: 'Hoops Fan', owner: false, text: 'Wolves -6 feels right <img src=x onerror="window.__xss=11">', ts: now - 6e5 }, { id: '2', name: 'TheDesk', owner: true, text: 'Card is locked.', ts: now - 3e5 }];
+  const chatSrv = (log, joinAs) => async (r, u) => { const ok = o => r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(o) });
+    if (u.pathname === '/chat/history') return ok({ messages: log });
+    const b = JSON.parse(r.request().postData() || '{}');
+    if (u.pathname === '/chat/join') return b.code === 'DESK-GOOD1' || joinAs ? ok({ token: 't'.repeat(32), name: joinAs ? 'TheDesk' : b.name, owner: !!joinAs, exp: Date.now() + 864e5 }) : r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'that invite code doesn’t work' }) });
+    if (u.pathname === '/chat/send') { const m = { id: String(log.length + 1), name: 'Puck Head', owner: false, text: b.text, ts: Date.now() }; log.push(m); return ok({ message: m }); }
+    if (u.pathname === '/chat/mod') return ok(b.act === 'invite' ? { code: 'DESK-NEW42', uses: 25 } : { ok: true });
+    return r.abort(); };
+  v = await visit(FEEDS.morning, { tab: 'chat', chat: chatSrv([...CHATLOG]) }); await v.p.waitForTimeout(500); t = await v.text();
+  T('Chat: anyone can read the room; messages show as plain text; the desk\'s posts are marked', /Wolves -6 feels right <img/.test(t) && /Card is locked/.test(t) && (await v.p.locator('.msg.own').count()) === 1 && (await v.p.evaluate(() => window.__xss || 0)) === 0);
+  T('…posting takes a name and an invite code', (await v.p.locator('form[data-form="chat-join"]').count()) === 1 && !(await v.p.locator('#chatText').count()));
+  await v.p.fill('input[name="name"]', 'Puck Head'); await v.p.fill('input[name="code"]', 'DESK-BAD00'); await v.p.click('form[data-form="chat-join"] button'); await v.p.waitForTimeout(300);
+  T('…a bad code says so', /that invite code doesn’t work/.test(await v.text()));
+  await v.p.fill('input[name="code"]', 'DESK-GOOD1'); await v.p.click('form[data-form="chat-join"] button'); await v.p.waitForTimeout(400);
+  await v.p.fill('#chatText', 'Wild ML is the lock tonight'); await v.p.keyboard.press('Enter'); await v.p.waitForTimeout(400); t = await v.text();
+  T('…with a good code you\'re in: Enter sends, and your message lands in the room', /Posting as Puck Head/.test(t) && /Wild ML is the lock tonight/.test(t) && !(await v.p.locator('.msg-mod').count()));
+  T('chat: no script errors, no sideways scroll', v.errs.length === 0 && (await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0, v.errs.join(' | '));
+  await v.ctx.close();
+  v = await visit(FEEDS.morning, { tab: 'chat', chat: chatSrv([...CHATLOG], true), query: '?embed=1' }); await v.p.waitForTimeout(400);
+  await v.p.fill('input[name="code"]', 'owner-code'); await v.p.fill('input[name="name"]', 'x1'); await v.p.click('form[data-form="chat-join"] button'); await v.p.waitForTimeout(400);
+  await v.p.click('[data-act="chat-invite"]'); await v.p.waitForTimeout(300); t = await v.text();
+  T('inside the desk\'s own app (?embed=1): no header or tabs; the owner gets delete / mute / ban and makes invite codes', !(await v.p.locator('.tabs').isVisible()) && !(await v.p.locator('header.top').isVisible()) && (await v.p.locator('[data-act="chat-ban"]').count()) === 1 && (await v.p.locator('[data-act="chat-del"]').count()) === 2 && /DESK-NEW42/.test(t));
+  await v.ctx.close();
+
   /* ── graded ── */
   v = await visit(FEEDS.final); t = await v.text();
   T('at the final each slip is stamped (two wins, one loss) and the card is summed up', (await v.p.locator('.stamp:not(.loss):not(.push)').count()) === 2 && (await v.p.locator('.stamp.loss').count()) === 1 && /went 2–1/.test(t) && /\+0\.84 units/.test(t), t.slice(0, 200));
@@ -161,7 +187,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('none of the desk\'s machinery: no engine scripts, no app storage, no keys or settings, no eval', !/shared\.js|desk-[a-z]+\.js|-engine\.js|store\.js|theme\.css/.test(all) && !/['"`]d4\./.test(all) && !/apiKey|api_key|odds-?api|ghp_|bot[0-9]{6,}|AUTOPILOT|tgautokey/i.test(all) && !/\beval\(|new Function\(/.test(all));
   const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]);
   T('one script, its own; fonts and styles self-hosted (no third-party code or font CDNs)', scripts.length === 1 && /^app\.js/.test(scripts[0]) && !/fonts\.googleapis|gstatic|cdn\.|unpkg|jsdelivr/.test(all));
-  const allowed = h => h === 'desk.test' || h === 'site.api.espn.com' || h === 'raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/picks.json' || h === 'raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json';
+  const allowed = h => h === 'desk.test' || h === 'site.api.espn.com' || h === 'raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/picks.json' || h === 'raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json' || h === 'thedesk-chat.ironsilkstrategies.workers.dev';
   T('it only ever asks for: its own files, the published picks, the public slate, ESPN\'s public scores', [...HOSTS].every(allowed), [...HOSTS].filter(h => !allowed(h)).join(' '));
   const man = JSON.parse(src['manifest.webmanifest']);
   T('installable: its own manifest (scope and start inside /desk/, standalone, icons) and an offline shell that never caches the feeds', man.display === 'standalone' && man.scope === './' && /^\.\//.test(man.start_url) && man.icons.length >= 3 && man.icons.every(i => fs.existsSync(path.join(dir, i.src))) && /endsWith\('\.json'\)\) return/.test(src['sw.js']));

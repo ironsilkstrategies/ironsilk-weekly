@@ -1,0 +1,39 @@
+name: Chat server
+# Deploys the members' chatroom (chat/) to Cloudflare Workers. Keys come only from repository secrets and are never printed:
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (Cloudflare) · CHAT_ADMIN_CODE (the owner's code, 24+ characters).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['chat/**', '.github/workflows/chat-deploy.yml']
+permissions:
+  contents: read
+concurrency:
+  group: chat-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CHAT_ADMIN_CODE: ${{ secrets.CHAT_ADMIN_CODE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: chat
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Deploy
+        working-directory: chat
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then echo "Cloudflare secrets aren't set yet, nothing to deploy."; exit 0; fi
+          npx --yes wrangler@3 deploy
+          if [ -n "$CHAT_ADMIN_CODE" ]; then printf '%s' "$CHAT_ADMIN_CODE" | npx --yes wrangler@3 secret put ADMIN_CODE >/dev/null && echo "Owner code set."; else echo "CHAT_ADMIN_CODE isn't set: the room works, but nobody can be owner yet."; fi
+      - name: Check it answers
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then exit 0; fi
+          for i in 1 2 3 4 5 6; do if curl -fsS https://thedesk-chat.ironsilkstrategies.workers.dev/chat/history >/dev/null; then echo "Chat is up."; exit 0; fi; sleep 5; done
+          echo "Chat didn't answer yet"; exit 1
