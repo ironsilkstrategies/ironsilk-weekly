@@ -1471,7 +1471,7 @@ function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.p
    Public channel — the free picks: the lock post (in the beta it lists them), each one again 30 min
      before its game, their results, the public recap, cashes, the character spotlights and drops
    Public lounge  — the full card at the freeze while the beta is on (a "card is locked" pointer once it
-     ends), then only the big moments: cashes and the public recap
+     ends), plus everything that goes to Facebook (v3.0.7: unlocks, results, recap, cashes, spotlights, drops)
    Slate updates you write go wherever you tick. The 24/7 worker carries all of it
    after the post, with every device off. */
 const BCAST_KEY='d4.bcast';
@@ -1480,7 +1480,7 @@ function bcCfg(){const B=get(BCAST_KEY,null)||{};return{pub:B.pub!=null?B.pub:tg
 function bcSave(k,v){const B=get(BCAST_KEY,null)||{};B[k]=typeof v==='string'?(v.trim()?tgChatNorm(v):''):v;set(BCAST_KEY,B);deskToast('Saved',1400);}
 function bcSettingsHtml(){const B=bcCfg();const inp=(k,lab,ph)=>`<div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">${lab}</div><input value="${txtEsc(B[k]||'')}" placeholder="${ph}" onchange="bcSave('${k}',this.value)">`;
   return`<div class="tkt" style="margin:8px 0"><h3 style="margin:0">📣 Where everything goes</h3>
-    <div class="sub" style="font-size:10.5px;margin:4px 0">VIP channel: the full card at the master evaluation, every result, the recap. Public lounge: the full card too during the beta, then cashes and the recap. Public channel: the free picks (at lock, and again 30 min before each game), their results, the recap. VIP lounge: people only (the bot just moderates). The bot must be an admin wherever it posts.</div>
+    <div class="sub" style="font-size:10.5px;margin:4px 0">VIP channel: the full card at the master evaluation, every result, the recap. Public channel: the free picks (at lock, and again 30 min before each game), their results, the recap. Public lounge: the full card too during the beta, plus everything the channel and Facebook get. VIP lounge: people only (the bot just moderates). The bot must be an admin wherever it posts.</div>
     ${inp('pub','Public channel','@TheDeskApp')}${inp('vipLounge','VIP lounge (group chat id, -100…)','-100…')}${inp('pubLounge','Public lounge (group chat id, -100…)','-100…')}
     <label class="mono" style="font-size:10px;display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" ${B.autoPost?'checked':''} onchange="bcSave('autoPost',this.checked)"> post the VIP card by itself at the master evaluation</label>
     <label class="mono" style="font-size:10px;display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" ${B.siteByWorker?'checked':''} onchange="bcSave('siteByWorker',this.checked)"> let the 24/7 worker update the public page (sends it your site token, encrypted)</label>

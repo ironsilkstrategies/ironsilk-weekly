@@ -32,7 +32,7 @@ const mk=()=>({d:'2026-11-08',chat:'-100555',legs:legs.map(l=>({k:l.k,label:l.la
 const D={tg,tgPhoto,render,fetch:fetchAll,fb,ig,th,wait};
 /* ── an unlock: picture everywhere ── */
 let p=mk();await Wk.runPublic(p,{...D,now:u0+60e3});
-T('the unlock goes to the public channel (not the lounge since v3.1.1) as a picture card, the words as its caption',PH.length===1&&PH.every(x=>png(x.im.png)&&/UNLOCKED — TheDesk · Sun, Nov 8/.test(x.cap)&&/NO -3/.test(x.cap))&&PH.map(x=>x.chat).join()==='@TheDeskApp'&&!WT.length,PH.map(x=>x.chat).join());
+T('the unlock goes to the public channel and lounge as a picture card, the words as its caption',PH.length===2&&PH.every(x=>png(x.im.png)&&/UNLOCKED — TheDesk · Sun, Nov 8/.test(x.cap)&&/NO -3/.test(x.cap))&&PH.map(x=>x.chat).join()==='@TheDeskApp,-100888'&&!WT.length,PH.map(x=>x.chat).join());
 const fbp=CALLS.find(c=>/\/123456\/photos$/.test(c.u));
 T('Facebook gets a photo post: the JPEG plus the words (plain text, with the lounge invite)',fbp&&fbp.b.source&&fbp.b.source.file==='image/jpeg'&&fbp.b.source.size>20000&&/UNLOCKED/.test(fbp.b.message)&&!/<b>/.test(fbp.b.message)&&/Pull up → https:\/\/t\.me\/TheDeskLounge/.test(fbp.b.message)&&fbp.b.access_token==='SECRET-PAGE-TOKEN',fbp&&JSON.stringify(fbp.b).slice(0,200));
 const igc=CALLS.find(c=>/\/1784\/media$/.test(c.u)),igp=CALLS.find(c=>/\/1784\/media_publish$/.test(c.u));
@@ -43,7 +43,7 @@ T('…only the unlocked pick (SF ML stays locked everywhere)',![fbp.b.message,ig
 let n=CALLS.length,np=PH.length;await Wk.runPublic(p,{...D,now:u0+120e3});T('…once',CALLS.length===n&&PH.length===np);
 /* ── a result: Instagram skips by default (it's in the recap), Threads and Facebook get it ── */
 p.st[legs[0].k]='W';n=CALLS.length;await Wk.runPublic(p,{...D,now:u0+3*36e5});const R=CALLS.slice(n);
-T('a result: picture on Telegram + Facebook + Threads; Instagram waits for the recap (IG_KINDS unset)',PH.length===np+1&&/Results/.test(PH[PH.length-1].cap)&&R.some(c=>/\/photos$/.test(c.u))&&R.some(c=>/me\/threads$/.test(c.u))&&!R.some(c=>/1784\/media/.test(c.u)),R.map(c=>c.u.replace(/\?.*/,'')).join(' | '));
+T('a result: picture on Telegram + Facebook + Threads; Instagram waits for the recap (IG_KINDS unset)',PH.length===np+2&&/Results/.test(PH[PH.length-1].cap)&&R.some(c=>/\/photos$/.test(c.u))&&R.some(c=>/me\/threads$/.test(c.u))&&!R.some(c=>/1784\/media/.test(c.u)),R.map(c=>c.u.replace(/\?.*/,'')).join(' | '));
 const p1=mk();p1.st[legs[0].k]='W';p1.sent['unlock|'+legs[0].k]=1;n=CALLS.length;await Wk.runPublic(p1,{...D,ig:{...ig,kinds:'all'},now:u0+3*36e5});
 T('IG_KINDS=all: Instagram gets every result too',CALLS.slice(n).some(c=>/1784\/media_publish$/.test(c.u)));
 /* ── the recap card ── */
@@ -54,7 +54,7 @@ const p2=mk();n=CALLS.length;await Wk.runPublic(p2,{...D,tgPhoto:async()=>false,
 T('if Telegram misses (picture and words), no other outlet gets it — all retry next pass',CALLS.length===n&&!p2.sent['unlock|'+legs[0].k]);
 /* ── no picture (renderer missing): words, exactly as before ── */
 const p3=mk();WT.length=0;n=CALLS.length;await Wk.runPublic(p3,{...D,render:async()=>null,now:u0+60e3});
-T('no picture → the words go out as before (Telegram text, Facebook text post; Threads text; Instagram needs a picture so skips)',WT.length===1&&/UNLOCKED/.test(WT[0].text)&&CALLS.slice(n).some(c=>/\/feed$/.test(c.u))&&CALLS.slice(n).some(c=>/me\/threads$/.test(c.u)&&c.b.media_type==='TEXT')&&!CALLS.slice(n).some(c=>/1784/.test(c.u)));
+T('no picture → the words go out as before (Telegram text, Facebook text post; Threads text; Instagram needs a picture so skips)',WT.length===2&&/UNLOCKED/.test(WT[0].text)&&CALLS.slice(n).some(c=>/\/feed$/.test(c.u))&&CALLS.slice(n).some(c=>/me\/threads$/.test(c.u)&&c.b.media_type==='TEXT')&&!CALLS.slice(n).some(c=>/1784/.test(c.u)));
 /* ── Facebook off: Threads goes text-only, Instagram can't (it needs Facebook's copy) ── */
 const p4=mk();n=CALLS.length;await Wk.runPublic(p4,{...D,fb:{page:'',tok:''},now:u0+60e3});
 T('Facebook off: Threads posts the words alone, Instagram sits out',CALLS.slice(n).some(c=>/me\/threads$/.test(c.u)&&c.b.media_type==='TEXT')&&!CALLS.slice(n).some(c=>/graph\.facebook/.test(c.u)));
@@ -67,9 +67,10 @@ T('…and to Facebook, Instagram and Threads, each marked',CALLS.slice(n).some(c
 const cc=Wk.cashCard(p5,{who:['🎭 The Simulator (props)'],keys:legs.map(l=>l.k)});T('the cash card carries the price, the units and every leg graded',cc.big.value==='+227'&&/2-leg parlay · \+2\.27u/.test(cc.big.label)&&cc.rows.length===2&&cc.rows.every(r=>r.res==='W'),JSON.stringify(cc.big));
 n=CALLS.length;await Wk.runOnce(st5,'2026-11-08',{...D,now:u0+7*36e5,gradePick:async()=>null,gradeProp:async()=>null});T('…once',CALLS.length===n&&PH.length===3);
 /* ── the daily invite: a picture to every outlet, once a day ── */
-const st6={posts:{'2026-11-08':mk()}};n=CALLS.length;await Wk.fbInvite(st6,{...D,now:Date.parse('2026-11-08T16:30:00Z')});const I=CALLS.slice(n);
+const st6={posts:{'2026-11-08':mk()}};n=CALLS.length;const np6=PH.length;await Wk.fbInvite(st6,{...D,now:Date.parse('2026-11-08T16:30:00Z')});const I=CALLS.slice(n);
 T('the lounge invite: a picture on Facebook, Instagram and Threads (one link each, no doubled footer)',I.some(c=>/\/photos$/.test(c.u)&&(c.b.message.match(/t\.me/g)||[]).length===1)&&I.some(c=>/media_publish$/.test(c.u))&&I.some(c=>/me\/threads$/.test(c.u)&&(c.b.text.match(/t\.me/g)||[]).length===1),I.map(c=>c.u.replace(/\?.*/,'')).join(' | '));
-n=CALLS.length;await Wk.fbInvite(st6,{...D,now:Date.parse('2026-11-08T20:30:00Z')});T('…once a day',CALLS.length===n);
+T('…and the free channel gets it too, not the lounge it invites to (v3.1.2)',PH.slice(np6).map(x=>x.chat).join()==='@TheDeskApp'&&/t\.me/.test(PH[PH.length-1].cap),PH.slice(np6).map(x=>x.chat).join());
+n=CALLS.length;const np7=PH.length;await Wk.fbInvite(st6,{...D,now:Date.parse('2026-11-08T20:30:00Z')});T('…once a day',CALLS.length===n&&PH.length===np7);
 /* ── a long post: the picture with its headline, then the words ── */
 const TGC=[];const fT=async(u,o)=>{TGC.push({u:String(u),b:ent(o.body)});return ok({ok:true,result:{}});};
 await S.tgPhoto('BOT-TOKEN','@c',img,'<b>Headline</b>\n'+'x'.repeat(1200),{fetch:fT});

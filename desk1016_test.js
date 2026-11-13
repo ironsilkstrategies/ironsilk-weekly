@@ -121,7 +121,7 @@ setTimeout(async()=>{try{
   const u0=Math.min(...legs.map(l=>l.unlockAt)),first=legs.filter(l=>l.unlockAt===u0),later=legs.filter(l=>l.unlockAt>u0);
   await Wk.runPublic(p,{tg,now:u0-60e3});T('worker: nothing goes public before the unlock',!WT.length,WT.map(q=>q.text.slice(0,60)).join(' | '));
   await Wk.runPublic(p,{tg,now:u0+60e3});const un=WT.filter(q=>/UNLOCKED/.test(q.text));
-  T('worker: at the unlock it posts that pick to the public channel (the lounge only hears the recap since v3.1.1) — not the later ones',un.length===1&&un.every(q=>first.every(l=>q.text.includes(l.label)))&&!later.some(l=>un[0].text.includes(l.label)),un[0]&&un[0].text.replace(/<[^>]+>/g,'').slice(0,160));
+  T('worker: at the unlock it posts that pick to the public channel and lounge — not the later ones',un.length===2&&un.every(q=>first.every(l=>q.text.includes(l.label)))&&!later.some(l=>un[0].text.includes(l.label)),un[0]&&un[0].text.replace(/<[^>]+>/g,'').slice(0,160));
   WT.length=0;await Wk.runPublic(p,{tg,now:u0+120e3});T('…once',!WT.some(q=>/UNLOCKED/.test(q.text)));
   p.st[first[0].k]='W';WT.length=0;await Wk.runPublic(p,{tg,now:u0+3*36e5});T('worker: a graded public pick goes out as a result',WT.some(q=>/Results/.test(q.text)&&q.text.includes('✅')));
   const view=Wk.publicView(full,p.st,u0+60e3);

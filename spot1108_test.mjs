@@ -28,10 +28,10 @@ let st=mkState();let p=st.posts[today];
 await Wk.runSpotlights(st,p,today,{...D,now:S('2026-11-08T17:00:00Z')});T('nothing before the first game is 30 minutes out',PH.length===0);
 await Wk.runSpotlights(st,p,today,{...D,now:S('2026-11-08T17:31:00Z')});
 const potw=PH.filter(x=>/PLAYER OF THE WEEK/.test(x.cap)),dog=PH.filter(x=>/THE TERRIBLE 3/.test(x.cap));
-T('at T-30 the Player of the Week goes to the public channel (not the lounge since v3.1.1), picture and words',potw.length===1&&potw.map(x=>x.chat).join()==='@TheDeskApp'&&/The Coach/.test(potw[0].cap)&&/\+5\.29u over the last 2 card days/.test(potw[0].cap),potw[0]&&potw[0].cap);
+T('at T-30 the Player of the Week goes to the public channel and lounge, picture and words',potw.length===2&&potw.map(x=>x.chat).join()==='@TheDeskApp,-100888'&&/The Coach/.test(potw[0].cap)&&/\+5\.29u over the last 2 card days/.test(potw[0].cap),potw[0]&&potw[0].cap);
 T('…a teaser: the 12:00 leg shows, the later legs are locked with their unlock times (VIP has them)',/NO -3 \(-110\)/.test(potw[0].cap)&&!/SF ML|KC -2\.5/.test(potw[0].cap)&&/🔒 Leg 2 · unlocks 2:55 PM CT/.test(potw[0].cap)&&/🔒 Leg 3 · unlocks 6:50 PM CT/.test(potw[0].cap)&&/VIP got the whole ticket this morning/.test(potw[0].cap),potw[0]&&potw[0].cap);
 const pc=potw[0].im.card;T('…and the picture card says the same (locked rows carry no pick)',pc.title==='The Coach'&&pc.big.value==='+596'&&pc.rows[0].label==='NO -3 (-110)'&&/^Locked · leg 2$/.test(pc.rows[1].label)&&!JSON.stringify(pc).match(/SF ML|KC -2\.5/),JSON.stringify(pc.rows));
-T('the Terrible 3: the Underdog Spotter\'s dogs, two at 12:00 shown, the 3:05 dog locked',dog.length===1&&/Three dogs, one ticket/.test(dog[0].cap)&&/NYJ \+6\.5/.test(dog[0].cap)&&/TEN \+3/.test(dog[0].cap)&&!/ARI ML/.test(dog[0].cap)&&/🔒 Leg 3 · unlocks 2:35 PM CT/.test(dog[0].cap)&&/\+1290/.test(dog[0].cap),dog[0]&&dog[0].cap);
+T('the Terrible 3: the Underdog Spotter\'s dogs, two at 12:00 shown, the 3:05 dog locked',dog.length===2&&/Three dogs, one ticket/.test(dog[0].cap)&&/NYJ \+6\.5/.test(dog[0].cap)&&/TEN \+3/.test(dog[0].cap)&&!/ARI ML/.test(dog[0].cap)&&/🔒 Leg 3 · unlocks 2:35 PM CT/.test(dog[0].cap)&&/\+1290/.test(dog[0].cap),dog[0]&&dog[0].cap);
 const n=PH.length;await Wk.runSpotlights(st,p,today,{...D,now:S('2026-11-08T17:45:00Z')});T('…each once',PH.length===n);
 /* full mode */
 st=mkState();p=st.posts[today];PH.length=0;await Wk.runSpotlights(st,p,today,{...D,spot:'full',now:S('2026-11-08T17:31:00Z')});
@@ -45,11 +45,11 @@ st=mkState();p=st.posts[today];PH.length=0;await Wk.runSpotlights(st,p,today,{..
 /* the Dog is also the Player of the Week → one post */
 const hotDog={posts:{'2026-11-06':past('2026-11-06','L','L','W'),'2026-11-07':past('2026-11-07','L','L','W'),[today]:card()}};PH.length=0;
 await Wk.runSpotlights(hotDog,hotDog.posts[today],today,{...D,now:S('2026-11-08T17:31:00Z')});
-T('when the Underdog Spotter is the Player of the Week, it\'s one post that says both',PH.length===1&&PH.every(x=>/PLAYER OF THE WEEK — The Underdog Spotter/.test(x.cap)&&/today it's his Terrible 3/.test(x.cap)),PH.map(x=>x.cap.split('\n')[0]).join(' | '));
+T('when the Underdog Spotter is the Player of the Week, it\'s one post that says both',PH.length===2&&PH.every(x=>/PLAYER OF THE WEEK — The Underdog Spotter/.test(x.cap)&&/today it's his Terrible 3/.test(x.cap)),PH.map(x=>x.cap.split('\n')[0]).join(' | '));
 /* Telegram misses → retried */
 st=mkState();p=st.posts[today];await Wk.runSpotlights(st,p,today,{...D,tgPhoto:async()=>false,tg:async()=>null,now:S('2026-11-08T17:31:00Z')});T('a Telegram miss leaves it to retry next pass',!Object.keys(p.sent).some(k=>/^spot\|/.test(k)));
 /* it runs from the worker's pass */
 st=mkState();PH.length=0;await Wk.runOnce(st,today,{...D,now:S('2026-11-08T17:31:00Z'),gradePick:async()=>null,gradeProp:async()=>null});
-T('the worker\'s pass runs the spotlights',PH.filter(x=>/PLAYER OF THE WEEK|THE TERRIBLE 3/.test(x.cap)).length===2&&Object.keys(st.posts[today].sent).filter(k=>/^spot\|/.test(k)).length===2,PH.length);
+T('the worker\'s pass runs the spotlights',PH.filter(x=>/PLAYER OF THE WEEK|THE TERRIBLE 3/.test(x.cap)).length===4&&Object.keys(st.posts[today].sent).filter(k=>/^spot\|/.test(k)).length===2,PH.length);
 const wf=(await import('fs')).readFileSync('/home/claude/work/.github/workflows/tg-autopilot.yml','utf8');T('the switch is a repo variable',/SPOTLIGHT: \$\{\{ vars\.SPOTLIGHT \}\}/.test(wf));
 console.log(pass+' pass / '+fail+' fail');
