@@ -34,11 +34,11 @@ const D={tg,tgPhoto,render,fetch:fetchAll,fb,ig,th,wait};
 let p=mk();await Wk.runPublic(p,{...D,now:u0+60e3});
 T('the unlock goes to the public channel and lounge as a picture card, the words as its caption',PH.length===2&&PH.every(x=>png(x.im.png)&&/UNLOCKED — TheDesk · Sun, Nov 8/.test(x.cap)&&/NO -3/.test(x.cap))&&PH.map(x=>x.chat).join()==='@TheDeskApp,-100888'&&!WT.length,PH.map(x=>x.chat).join());
 const fbp=CALLS.find(c=>/\/123456\/photos$/.test(c.u));
-T('Facebook gets a photo post: the JPEG plus the words (plain text, with the lounge invite)',fbp&&fbp.b.source&&fbp.b.source.file==='image/jpeg'&&fbp.b.source.size>20000&&/UNLOCKED/.test(fbp.b.message)&&!/<b>/.test(fbp.b.message)&&/Pull up → https:\/\/t\.me\/TheDeskLounge/.test(fbp.b.message)&&fbp.b.access_token==='SECRET-PAGE-TOKEN',fbp&&JSON.stringify(fbp.b).slice(0,200));
+T('Facebook gets a photo post: the JPEG plus the words (plain text, pointing at the public app)',fbp&&fbp.b.source&&fbp.b.source.file==='image/jpeg'&&fbp.b.source.size>20000&&/UNLOCKED/.test(fbp.b.message)&&!/<b>/.test(fbp.b.message)&&/→ https:\/\/ironsilkweekly\.com\/desk\//.test(fbp.b.message)&&!/TheDeskLounge/.test(fbp.b.message)&&fbp.b.access_token==='SECRET-PAGE-TOKEN',fbp&&JSON.stringify(fbp.b).slice(0,200));
 const igc=CALLS.find(c=>/\/1784\/media$/.test(c.u)),igp=CALLS.find(c=>/\/1784\/media_publish$/.test(c.u));
 T('Instagram gets the same picture from Facebook\'s public copy, then publishes it',igc&&igc.b.image_url==='https://scontent.xx.fbcdn.net/v/t39/PH1_n.jpg?oh=abc'&&/UNLOCKED/.test(igc.b.caption)&&/#TheDesk/.test(igc.b.caption)&&igp&&igp.b.creation_id==='C1',igc&&JSON.stringify(igc.b).slice(0,160));
 const thc=CALLS.find(c=>/threads\.net\/v1\.0\/me\/threads$/.test(c.u)),thp=CALLS.find(c=>/threads_publish$/.test(c.u));
-T('Threads gets the picture and the words (within 500 characters), then publishes',thc&&thc.b.media_type==='IMAGE'&&thc.b.image_url===igc.b.image_url&&thc.b.text.length<=500&&/UNLOCKED/.test(thc.b.text)&&/t\.me\/TheDeskLounge/.test(thc.b.text)&&thp&&thp.b.creation_id==='T1'&&thc.b.access_token==='TH-SECRET-TOKEN',thc&&thc.b.text);
+T('Threads gets the picture and the words (within 500 characters), then publishes',thc&&thc.b.media_type==='IMAGE'&&thc.b.image_url===igc.b.image_url&&thc.b.text.length<=500&&/UNLOCKED/.test(thc.b.text)&&/ironsilkweekly\.com\/desk/.test(thc.b.text)&&!/TheDeskLounge/.test(thc.b.text)&&thp&&thp.b.creation_id==='T1'&&thc.b.access_token==='TH-SECRET-TOKEN',thc&&thc.b.text);
 T('…only the unlocked pick (SF ML stays locked everywhere)',![fbp.b.message,igc.b.caption,thc.b.text,...PH.map(x=>x.cap)].some(x=>/SF ML/.test(x)));
 let n=CALLS.length,np=PH.length;await Wk.runPublic(p,{...D,now:u0+120e3});T('…once',CALLS.length===n&&PH.length===np);
 /* ── a result: Instagram skips by default (it's in the recap), Threads and Facebook get it ── */
@@ -62,15 +62,15 @@ T('Facebook off: Threads posts the words alone, Instagram sits out',CALLS.slice(
 const p5=mk();p5.st={[legs[0].k]:'W',[legs[1].k]:'W'};p5.recapPlan={day:'Sun, Nov 8',chars:[{name:'The Simulator (props)',keys:legs.map(l=>l.k),price:'+150'}]};p5.recap=true;
 legs.forEach(l=>{p5.sent['unlock|'+l.k]=1;p5.sent['pres|'+l.k]='W';});p5.sent.precap=1;const st5={posts:{'2026-11-08':p5}};PH.length=0;n=CALLS.length;
 await Wk.runOnce(st5,'2026-11-08',{...D,now:u0+6*36e5,gradePick:async()=>null,gradeProp:async()=>null});const cs=Object.keys(p5.sent).filter(k=>/^cash\|/.test(k));
-T('a cash: the picture to the VIP channel, the public channel and its lounge (not the VIP lounge since v3.1.1)',PH.length===3&&PH.every(x=>/CASHED/.test(x.cap)&&png(x.im.png))&&PH.map(x=>x.chat).join()==='-100555,@TheDeskApp,-100888',PH.map(x=>x.chat).join());
+T('a cash: the picture to the VIP channel, the VIP lounge, the public channel and its lounge',PH.length===4&&PH.every(x=>/CASHED/.test(x.cap)&&png(x.im.png))&&PH.map(x=>x.chat).join()==='-100555,-100777,@TheDeskApp,-100888',PH.map(x=>x.chat).join());
 T('…and to Facebook, Instagram and Threads, each marked',CALLS.slice(n).some(c=>/\/photos$/.test(c.u))&&CALLS.slice(n).some(c=>/media_publish$/.test(c.u))&&CALLS.slice(n).some(c=>/threads_publish$/.test(c.u))&&['fb','ig','th'].every(o=>cs.some(k=>k.endsWith('|'+o))),cs.join(' '));
 const cc=Wk.cashCard(p5,{who:['🎭 The Simulator (props)'],keys:legs.map(l=>l.k)});T('the cash card carries the price, the units and every leg graded',cc.big.value==='+227'&&/2-leg parlay · \+2\.27u/.test(cc.big.label)&&cc.rows.length===2&&cc.rows.every(r=>r.res==='W'),JSON.stringify(cc.big));
-n=CALLS.length;await Wk.runOnce(st5,'2026-11-08',{...D,now:u0+7*36e5,gradePick:async()=>null,gradeProp:async()=>null});T('…once',CALLS.length===n&&PH.length===3);
-/* ── the daily invite: a picture to every outlet, once a day ── */
-const st6={posts:{'2026-11-08':mk()}};n=CALLS.length;const np6=PH.length;await Wk.fbInvite(st6,{...D,now:Date.parse('2026-11-08T16:30:00Z')});const I=CALLS.slice(n);
-T('the lounge invite: a picture on Facebook, Instagram and Threads (one link each, no doubled footer)',I.some(c=>/\/photos$/.test(c.u)&&(c.b.message.match(/t\.me/g)||[]).length===1)&&I.some(c=>/media_publish$/.test(c.u))&&I.some(c=>/me\/threads$/.test(c.u)&&(c.b.text.match(/t\.me/g)||[]).length===1),I.map(c=>c.u.replace(/\?.*/,'')).join(' | '));
-T('…and the free channel gets it too, not the lounge it invites to (v3.1.2)',PH.slice(np6).map(x=>x.chat).join()==='@TheDeskApp'&&/t\.me/.test(PH[PH.length-1].cap),PH.slice(np6).map(x=>x.chat).join());
-n=CALLS.length;const np7=PH.length;await Wk.fbInvite(st6,{...D,now:Date.parse('2026-11-08T20:30:00Z')});T('…once a day',CALLS.length===n&&PH.length===np7);
+n=CALLS.length;await Wk.runOnce(st5,'2026-11-08',{...D,now:u0+7*36e5,gradePick:async()=>null,gradeProp:async()=>null});T('…once',CALLS.length===n&&PH.length===4);
+/* ── v3.1.3 · the lounge easter egg: a picture to every outlet and the free channel, once that day ── */
+const st6={posts:{'2026-11-08':mk()}};n=CALLS.length;const np6=PH.length;await Wk.fbInvite(st6,{...D,eggDue:()=>true,now:Date.parse('2026-11-08T16:30:00Z')});const I=CALLS.slice(n);
+T('the easter egg: a picture on Facebook, Instagram and Threads (one link each, no app footer)',I.some(c=>/\/photos$/.test(c.u)&&(c.b.message.match(/t\.me/g)||[]).length===1)&&I.some(c=>/media_publish$/.test(c.u))&&I.some(c=>/me\/threads$/.test(c.u)&&(c.b.text.match(/t\.me/g)||[]).length===1),I.map(c=>c.u.replace(/\?.*/,'')).join(' | '));
+T('…and the free channel gets it too, not the lounge it points to',PH.slice(np6).map(x=>x.chat).join()==='@TheDeskApp'&&/t\.me/.test(PH[PH.length-1].cap),PH.slice(np6).map(x=>x.chat).join());
+n=CALLS.length;const np7=PH.length;await Wk.fbInvite(st6,{...D,eggDue:()=>true,now:Date.parse('2026-11-08T20:30:00Z')});T('…once a day',CALLS.length===n&&PH.length===np7);
 /* ── a long post: the picture with its headline, then the words ── */
 const TGC=[];const fT=async(u,o)=>{TGC.push({u:String(u),b:ent(o.body)});return ok({ok:true,result:{}});};
 await S.tgPhoto('BOT-TOKEN','@c',img,'<b>Headline</b>\n'+'x'.repeat(1200),{fetch:fT});

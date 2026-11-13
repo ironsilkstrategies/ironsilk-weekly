@@ -19,7 +19,7 @@
      THREADS_TOKEN (+ THREADS_USER_ID)   Threads; the 60-day token is refreshed weekly by the worker and kept encrypted in
                                          its own file on the state branch (never in the card, never on the phone) */
 import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 const env = process.env;
@@ -71,7 +71,7 @@ export function cardTree(card, deps) { const L = layout(card), D = DENS[L.dens];
         PILL[r.res] ? h('div', { fontFamily: 'Archivo', fontWeight: 900, fontSize: 24, letterSpacing: 2, color: C.bg, background: PILL[r.res][1], borderRadius: 14, padding: '9px 16px' }, PILL[r.res][0]) : null)),
       L.more ? h('div', { fontSize: 24, color: C.mute, paddingLeft: 8 }, `+${L.more} more in the post`) : null),
     h('div', { position: 'absolute', left: 70, right: 70, bottom: 52, justifyContent: 'space-between', alignItems: 'flex-end', borderTop: `2px solid ${C.rule}`, paddingTop: 22 },
-      h('div', { flexDirection: 'column' }, h('div', { fontSize: 26, fontWeight: 600, color: C.ink }, clip(card.foot || 'Talk sports with us: ' + loungeUrl(deps).replace(/^https?:\/\//, ''), 50)), h('div', { marginTop: 6, fontSize: 21, color: C.mute }, 'Every pick locked before the games, graded at the final')),
+      h('div', { flexDirection: 'column' }, h('div', { fontSize: 26, fontWeight: 600, color: C.ink }, clip(card.foot || appUrl(deps).replace(/^https?:\/\//, '').replace(/\/$/, ''), 50)), h('div', { marginTop: 6, fontSize: 21, color: C.mute }, 'Every pick locked before the games, graded at the final')),
       h('div', { fontSize: 21, color: C.mute }, '21+ · bet responsibly'))); }
 /* → { png, jpg } buffers, or null when there's no renderer */
 export async function renderCard(card, deps) { const r = await renderer(); if (!r || !card) return null;
@@ -82,7 +82,9 @@ export async function renderCard(card, deps) { const r = await renderer(); if (!
 
 /* ── words for each outlet ─────────────────────────────────────────────────────────────────────────────────────── */
 export const plain = html => String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
-export const foot = deps => `\n\n💬 We talk sports in TheDesk's free Telegram lounge… not just picks. Pull up → ${loungeUrl(deps)}`;
+/* v3.1.3 · every post promotes the public app; the lounge is only an easter egg now */
+export const appUrl = deps => (deps?.app || env.APP_URL || '').trim() || 'https://ironsilkweekly.com/desk/';
+export const foot = deps => `\n\n📲 The full card, live scores and every result → ${appUrl(deps)}`;
 const cut = (s, n) => s.length <= n ? s : s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…';
 
 /* ── the outlets ───────────────────────────────────────────────────────────────────────────────────────────────── */
@@ -91,13 +93,16 @@ export const useSocial = S => { SOC.thTok = (S && S.thTok) || ''; if (SOC.thTok 
 const cfg = deps => { const v = (env.FB_GRAPH_VERSION || 'v24.0').trim();
   return { fb: deps?.fb || { page: (env.FB_PAGE_ID || '').trim(), tok: (env.FB_PAGE_TOKEN || '').trim(), v },
     ig: deps?.ig || { user: (env.IG_USER_ID || '').trim(), tok: (env.IG_TOKEN || env.FB_PAGE_TOKEN || '').trim(), v, kinds: (env.IG_KINDS || '').trim() },
-    th: deps?.th || { user: (env.THREADS_USER_ID || '').trim() || 'me', tok: SOC.thTok || (env.THREADS_TOKEN || '').trim() } }; };
-export const on = (deps, which) => { const c = cfg(deps)[which]; return which === 'fb' ? !!(c.page && c.tok) : which === 'ig' ? !!(c.user && c.tok) : which === 'th' ? !!c.tok : false; };
-export const anyOn = deps => on(deps, 'fb') || on(deps, 'ig') || on(deps, 'th');
-export const igWants = (kind, deps) => { const k = (cfg(deps).ig.kinds || 'unlock,recap,cash,invite,spotlight,drop').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
-if (env.GITHUB_ACTIONS === 'true') for (const t of [env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN]) if ((t || '').trim()) console.log('::add-mask::' + t.trim());
+    th: deps?.th || { user: (env.THREADS_USER_ID || '').trim() || 'me', tok: SOC.thTok || (env.THREADS_TOKEN || '').trim() },
+    x: deps?.x || { key: (env.X_API_KEY || '').trim(), secret: (env.X_API_SECRET || '').trim(), tok: (env.X_ACCESS_TOKEN || '').trim(), tsec: (env.X_ACCESS_SECRET || '').trim(), kinds: (env.X_KINDS || '').trim() } }; };
+export const on = (deps, which) => { const c = cfg(deps)[which]; return which === 'fb' ? !!(c.page && c.tok) : which === 'ig' ? !!(c.user && c.tok) : which === 'th' ? !!c.tok : which === 'x' ? !!(c.key && c.secret && c.tok && c.tsec) : false; };
+export const anyOn = deps => on(deps, 'fb') || on(deps, 'ig') || on(deps, 'th') || on(deps, 'x');
+/* X charges per post (about $0.20 with a link): by default only the daily recap and the easter eggs go there. X_KINDS widens it. */
+export const xWants = (kind, deps) => { const k = (cfg(deps).x.kinds || 'recap,egg').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
+export const igWants = (kind, deps) => { const k = (cfg(deps).ig.kinds || 'unlock,recap,cash,invite,spotlight,drop,egg').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
+if (env.GITHUB_ACTIONS === 'true') for (const t of [env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN, env.X_API_SECRET, env.X_ACCESS_TOKEN, env.X_ACCESS_SECRET]) if ((t || '').trim()) console.log('::add-mask::' + t.trim());
 const KNOWN = new Set();   /* every token this run has used: each log line is scrubbed of all of them, not just its own */
-const hide = (s, toks) => { s = String(s || ''); for (const t of toks) if (t) KNOWN.add(t); for (const t of [...KNOWN, env.TG_BOT_TOKEN, env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN, SOC.thTok]) if (t && String(t).trim().length > 3) s = s.split(String(t).trim()).join('…'); return s; };
+const hide = (s, toks) => { s = String(s || ''); for (const t of toks) if (t) KNOWN.add(t); for (const t of [...KNOWN, env.TG_BOT_TOKEN, env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN, SOC.thTok, env.X_API_SECRET, env.X_ACCESS_TOKEN, env.X_ACCESS_SECRET]) if (t && String(t).trim().length > 3) s = s.split(String(t).trim()).join('…'); return s; };
 async function call(F, url, body, toks, what) { toks.forEach(t => t && KNOWN.add(t)); try { const r = await F(url, body ? { method: 'POST', body } : {}); let j = {}; try { j = await r.json(); } catch (e) { }
     if (!r.ok || (j && j.error)) { log(what + ':', r.status, hide((j && j.error && (j.error.message || j.error.description)) || (j && j.description) || '', toks).slice(0, 90)); return null; } return j || {}; }
   catch (e) { log(what + ':', hide(e && e.message || e, toks).slice(0, 60)); return null; } }
@@ -123,17 +128,31 @@ export async function fbReactions(id, deps) { const c = cfg(deps).fb; if (!c.pag
   const n = j && j.reactions && j.reactions.summary && j.reactions.summary.total_count; return Number.isFinite(+n) ? +n : null; }
 /* Instagram: a picture post from that public address, the words as its caption (Instagram's links don't click: the lounge goes by name) */
 export async function igSend(html, imgUrl, deps, opt) { const c = cfg(deps).ig; if (!c.user || !c.tok || !imgUrl) return false; const F = deps?.fetch || fetch; const w = deps?.wait || sleep; const G = `https://graph.facebook.com/${c.v || 'v24.0'}`;
-  const caption = cut(plain(html) + (opt && opt.bare ? '' : `\n\n💬 We talk sports in TheDesk's free Telegram lounge… not just picks. Link in bio · ${loungeUrl(deps).replace(/^https?:\/\//, '')}`) + '\n\n#TheDesk #sportspicks #sportsbetting', 2150);
+  const caption = cut(plain(html) + (opt && opt.bare ? '' : `\n\n📲 The full card, live scores and every result · link in bio · ${appUrl(deps).replace(/^https?:\/\//, '').replace(/\/$/, '')}`) + '\n\n#TheDesk #sportspicks #sportsbetting', 2150);
   const m = await call(F, `${G}/${encodeURIComponent(c.user)}/media`, new URLSearchParams({ image_url: imgUrl, caption, access_token: c.tok }), [c.tok], 'instagram'); if (!m || !m.id) return false;
   for (let i = 0; i < 6; i++) { const s = await call(F, `${G}/${m.id}?fields=status_code&access_token=${encodeURIComponent(c.tok)}`, null, [c.tok], 'instagram status'); if (s && s.status_code === 'FINISHED') break; if (s && s.status_code === 'ERROR') { log('instagram: the picture was refused'); return false; } await w(3000); }
   const p = await call(F, `${G}/${encodeURIComponent(c.user)}/media_publish`, new URLSearchParams({ creation_id: m.id, access_token: c.tok }), [c.tok], 'instagram publish'); if (p) log('instagram ✓', caption.split('\n')[0].slice(0, 70)); return !!p; }
 /* Threads: the picture and the words (500 characters), or the words alone */
 export async function thSend(html, imgUrl, deps, opt) { const c = cfg(deps).th; if (!c.tok) return false; const F = deps?.fetch || fetch; const w = deps?.wait || sleep; const B = 'https://graph.threads.net/v1.0';
-  const tail = opt && opt.bare ? '' : `\n\n💬 Talk sports with us → ${loungeUrl(deps)}`; const text = cut(plain(html), 495 - tail.length) + tail;
+  const tail = opt && opt.bare ? '' : `\n\n📲 ${appUrl(deps)}`; const text = cut(plain(html), 495 - tail.length) + tail;
   const q = imgUrl ? { media_type: 'IMAGE', image_url: imgUrl, text, access_token: c.tok } : { media_type: 'TEXT', text, access_token: c.tok };
   const m = await call(F, `${B}/${encodeURIComponent(c.user)}/threads`, new URLSearchParams(q), [c.tok], 'threads'); if (!m || !m.id) return false;
   for (let i = 0; i < 6; i++) { const s = await call(F, `${B}/${m.id}?fields=status&access_token=${encodeURIComponent(c.tok)}`, null, [c.tok], 'threads status'); if (!s || s.status === 'FINISHED' || !s.status) break; if (s.status === 'ERROR' || s.status === 'EXPIRED') { log('threads: the post was refused'); return false; } await w(5000); }
   const p = await call(F, `${B}/${encodeURIComponent(c.user)}/threads_publish`, new URLSearchParams({ creation_id: m.id, access_token: c.tok }), [c.tok], 'threads publish'); if (p) log('threads ✓', text.split('\n')[0].slice(0, 70)); return !!p; }
+/* v3.1.3 · X: the words (280 characters, a link counts as 23), signed with the account's own keys (OAuth 1.0a).
+   X_API_KEY + X_API_SECRET (the app) and X_ACCESS_TOKEN + X_ACCESS_SECRET (the account, made with Read and Write) as repo secrets. */
+const pe = v => encodeURIComponent(String(v)).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+export function xAuth(method, url, c, ts, nonce) { const o = { oauth_consumer_key: c.key, oauth_nonce: nonce || randomBytes(16).toString('hex'), oauth_signature_method: 'HMAC-SHA1', oauth_timestamp: String(ts || Math.floor(Date.now() / 1000)), oauth_token: c.tok, oauth_version: '1.0' };
+  const base = [method.toUpperCase(), pe(url), pe(Object.keys(o).sort().map(k => pe(k) + '=' + pe(o[k])).join('&'))].join('&');
+  o.oauth_signature = createHmac('sha1', pe(c.secret) + '&' + pe(c.tsec)).update(base).digest('base64');
+  return 'OAuth ' + Object.keys(o).sort().map(k => `${pe(k)}="${pe(o[k])}"`).join(', '); }
+export async function xSend(html, deps, opt) { const c = cfg(deps).x; if (!(c.key && c.secret && c.tok && c.tsec)) return false; const F = deps?.fetch || fetch;
+  const words = plain(html); const urls = words.match(/https?:\/\/\S+/g) || []; const link = urls.length ? '' : (opt && opt.bare ? '' : appUrl(deps));
+  const room = 280 - (link ? 24 : 0) - urls.reduce((n, u) => n + 23 - u.length, 0); const text = (words.length <= room ? words : cut(words, room)) + (link ? '\n' + link : '');
+  const url = 'https://api.x.com/2/tweets'; KNOWN.add(c.secret); KNOWN.add(c.tok); KNOWN.add(c.tsec);
+  try { const r = await F(url, { method: 'POST', headers: { Authorization: xAuth('POST', url, c), 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }); let j = {}; try { j = await r.json(); } catch (e) { }
+    if (!r.ok) { log('x:', r.status, hide((j && (j.detail || j.title)) || '', []).slice(0, 90)); return 'skip'; }   /* no retry loop on a paid outlet */
+    log('x ✓', text.split('\n')[0].slice(0, 70)); return true; } catch (e) { log('x:', hide(e && e.message || e, []).slice(0, 60)); return 'skip'; } }
 /* Threads' long-lived token lasts 60 days: refreshed once a week into the worker's own encrypted file. A new THREADS_TOKEN
    secret (it changed since the worker last refreshed) takes over from the stored one. Returns true when S changed. */
 export const seedOf = t => t ? createHash('sha256').update(t).digest('hex').slice(0, 16) : '';
@@ -153,4 +172,5 @@ export async function mirror(html, img, deps, opt = {}, done = {}) { const out =
   if (opt.only === 'fb') return out;   /* v2.99 · a Facebook-only post (the reactions goal lives there) */
   if (on(deps, 'ig') && !done.ig) out.ig = !igWants(opt.kind, deps) ? 'skip' : url ? await igSend(html, url, deps, opt) : (done.fb || !on(deps, 'fb') || (out.fb && !img)) ? 'skip' : false;
   if (on(deps, 'th') && !done.th) out.th = await thSend(html, url, deps, opt);
+  if (on(deps, 'x') && !done.x) out.x = xWants(opt.kind, deps) ? await xSend(html, deps, opt) : 'skip';
   return out; }

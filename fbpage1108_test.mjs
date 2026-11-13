@@ -18,7 +18,7 @@ p=mk();WT.length=0;await Wk.runPublic(p,{tg,now:u0-60e3,fetch:fetchFB,fb});T('no
 await Wk.runPublic(p,{tg,now:u0+60e3,fetch:fetchFB,fb});const f1=FB[0];
 T('at the unlock the page gets the same post, to the page\'s feed, with its token',FB.length===1&&/graph\.facebook\.com\/v24\.0\/123456\/feed/.test(f1.u)&&f1.body.access_token==='SECRET-PAGE-TOKEN',f1&&f1.u);
 T('…in plain text (no Telegram HTML), only the unlocked pick (SF ML stays locked)',/UNLOCKED — TheDesk · Sun, Nov 8/.test(f1.body.message)&&/NO -3/.test(f1.body.message)&&!/SF ML/.test(f1.body.message)&&!/<b>|<i>/.test(f1.body.message),f1&&f1.body.message.slice(0,200));
-T('…with the invite: we talk sports in the free lounge, not just picks',/We talk sports in TheDesk's free Telegram lounge… not just picks\. Pull up → https:\/\/t\.me\/TheDeskLounge/.test(f1.body.message));
+T('…pointing at the public app (v3.1.3: the lounge is only an easter egg now)',/📲 The full card, live scores and every result → https:\/\/ironsilkweekly\.com\/desk\//.test(f1.body.message)&&!/t\.me\/TheDeskLounge/.test(f1.body.message),f1.body.message);
 await Wk.runPublic(p,{tg,now:u0+120e3,fetch:fetchFB,fb});T('…once',FB.length===1);
 p.st[legs[0].k]='W';await Wk.runPublic(p,{tg,now:u0+3*36e5,fetch:fetchFB,fb});T('a graded public pick goes to the page as a result',FB.length===2&&/Results/.test(FB[1].body.message)&&/✅/.test(FB[1].body.message),FB[1]&&FB[1].body.message.slice(0,120));
 /* Telegram misses: the page waits, so both retry together */
@@ -31,12 +31,16 @@ Object.values(p4.pub.legs).forEach(l=>{p4.sent['unlock|'+l.k]=1;p4.sent['pres|'+
 await Wk.runOnce(st,'2026-11-08',{tg,now:u0+6*36e5,fetch:fetchFB,fb,gradePick:async()=>null,gradeProp:async()=>null});
 T('a cashed ticket goes to the page once it\'s over',FB.slice(n4).some(x=>/CASH/i.test(x.body.message)),FB.slice(n4).map(x=>x.body.message.slice(0,60)).join(' | '));
 const n5=FB.length;await Wk.runOnce(st,'2026-11-08',{tg,now:u0+7*36e5,fetch:fetchFB,fb,gradePick:async()=>null,gradeProp:async()=>null});T('…once',FB.length===n5);
-/* the daily lounge invite */
+/* v3.1.3 · the lounge easter egg (about twice a week) */
+const TGX=[];const tgx={tg:async(m,b)=>{TGX.push({m,chat:b.chat_id,text:b.text});return{ok:true,result:{message_id:1}};},tgPhoto:async(c,i,t)=>{TGX.push({m:'photo',chat:c,text:t});return true;},render:async()=>null};
 const st6={posts:{'2026-11-08':mk()}};const n6=FB.length;
-await Wk.fbInvite(st6,{now:Date.parse('2026-11-08T14:00:00Z'),fetch:fetchFB,fb});T('no lounge invite before 10 AM Central',FB.length===n6);
-await Wk.fbInvite(st6,{now:Date.parse('2026-11-08T16:30:00Z'),fetch:fetchFB,fb,lounge:'https://t.me/+lounge'});const iv=FB[FB.length-1];
-T('one invite a day after 10 — talk sports, not just picks — with the lounge link (no doubled footer)',FB.length===n6+1&&/https:\/\/t\.me\/\+lounge/.test(iv.body.message)&&(iv.body.message.match(/t\.me/g)||[]).length===1&&/sports|picks/i.test(iv.body.message),iv.body.message);
-await Wk.fbInvite(st6,{now:Date.parse('2026-11-08T20:30:00Z'),fetch:fetchFB,fb});T('…once a day',FB.length===n6+1);
+await Wk.fbInvite(st6,{now:Date.parse('2026-11-08T16:30:00Z'),fetch:fetchFB,fb,...tgx,eggDue:()=>false});T('no egg on a day the week\'s plan didn\'t pick',FB.length===n6&&!TGX.length);
+await Wk.fbInvite(st6,{now:Date.parse('2026-11-08T16:30:00Z'),fetch:fetchFB,fb,...tgx,eggDue:()=>true,lounge:'https://t.me/+lounge'});const iv=FB[FB.length-1];
+T('an egg day: one cryptic post with the lounge link and nothing else (no app footer, no doubled link)',FB.length===n6+1&&/^🥚/.test(iv.body.message)&&/https:\/\/t\.me\/\+lounge/.test(iv.body.message)&&(iv.body.message.match(/https?:/g)||[]).length===1,iv.body.message);
+T('…the free channel gets the same egg; the lounge itself doesn\'t',TGX.length===1&&TGX[0].chat==='@TheDeskApp'&&/🥚/.test(TGX[0].text),JSON.stringify(TGX));
+await Wk.fbInvite(st6,{now:Date.parse('2026-11-08T20:30:00Z'),fetch:fetchFB,fb,...tgx,eggDue:()=>true});T('…once a day',FB.length===n6+1&&TGX.length===1);
+const st7={posts:{'2026-11-08':mk()},lounge:{chat:'-100888',n:100,locked:Date.parse('2026-11-07T12:00:00Z')}};
+T('once the lounge has locked at 100, no more eggs',(await Wk.fbInvite(st7,{now:Date.parse('2026-11-08T16:30:00Z'),fetch:fetchFB,fb,...tgx,eggDue:()=>true}))===0&&FB.length===n6+1);
 T('no card handed over that day → no invite',(await Wk.fbInvite({posts:{}},{now:Date.parse('2026-11-08T16:30:00Z'),fetch:fetchFB,fb}))===0);
 /* the token never leaks into a log line */
 const L=[];const ol=console.log;console.log=(...a)=>L.push(a.join(' '));await Wk.fbPost('x',{fb,fetch:async()=>({ok:false,status:400,json:async()=>({error:{message:'Invalid token SECRET-PAGE-TOKEN expired'}})})});console.log=ol;

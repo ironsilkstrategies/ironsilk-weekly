@@ -1454,7 +1454,7 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
     const RR=bkDayRecord().own;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
   let cashed=[];try{cashed=cashedList(14).filter(c=>c.units>=1).slice(0,12);}catch(e){}
   const updates=(get(PUBUPD_KEY,[])||[]).filter(u=>u.pub!==false&&now-u.ts<3*864e5).slice(-12).reverse().map(u=>({ts:u.ts,text:u.text,kind:u.kind||'update'}));
-  return{v:4,generated:now,cashed,brand:'TheDesk',price:typeof subPriceText==='function'?subPriceText():'$50/mo · $300/yr',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||''},handle:get(LS.handle,''),
+  return{v:4,generated:now,cashed,brand:'TheDesk',price:typeof subPriceText==='function'?subPriceText():'$50/mo · $300/yr',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||'',ig:THEDESK_SOCIAL.ig||'',x:THEDESK_SOCIAL.x||''},handle:get(LS.handle,''),
     subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,updates,
     /* v2.51.1 · today's card never rides in the history list — it showed every locked pick there (with its price) before
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
@@ -1467,7 +1467,8 @@ function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.p
 /* ── 14 · BROADCAST — the public page, the channels and the lounges ─────────────
    v3.0.6 · Nov 13 ("free picks to the free channel… full slate to the VIP channel and the public lounge"):
    VIP channel    — the full card at the freeze, every result, every cash, the recap
-   VIP lounge     — nothing automatic: people talk; the bot moderates and answers /commands
+   VIP lounge     — (v3.0.8) the public lounge, renamed when it hits 100 members: the full card at the freeze, results, the recap.
+                    The first 100 keep their seats free; after that, VIP invites only (the owner DMs the bot /vipinvite)
    Public channel — the free picks: the lock post (in the beta it lists them), each one again 30 min
      before its game, their results, the public recap, cashes, the character spotlights and drops
    Public lounge  — the full card at the freeze while the beta is on (a "card is locked" pointer once it
@@ -1480,7 +1481,7 @@ function bcCfg(){const B=get(BCAST_KEY,null)||{};return{pub:B.pub!=null?B.pub:tg
 function bcSave(k,v){const B=get(BCAST_KEY,null)||{};B[k]=typeof v==='string'?(v.trim()?tgChatNorm(v):''):v;set(BCAST_KEY,B);deskToast('Saved',1400);}
 function bcSettingsHtml(){const B=bcCfg();const inp=(k,lab,ph)=>`<div class="mono" style="font-size:10px;color:var(--mute);margin:8px 0 3px">${lab}</div><input value="${txtEsc(B[k]||'')}" placeholder="${ph}" onchange="bcSave('${k}',this.value)">`;
   return`<div class="tkt" style="margin:8px 0"><h3 style="margin:0">📣 Where everything goes</h3>
-    <div class="sub" style="font-size:10.5px;margin:4px 0">VIP channel: the full card at the master evaluation, every result, the recap. Public channel: the free picks (at lock, and again 30 min before each game), their results, the recap. Public lounge: the full card too during the beta, plus everything the channel and Facebook get. VIP lounge: people only (the bot just moderates). The bot must be an admin wherever it posts.</div>
+    <div class="sub" style="font-size:10.5px;margin:4px 0">VIP channel: the full card at the master evaluation, every result, the recap. Public channel: the free picks (at lock, and again 30 min before each game), their results, the recap. Public lounge: the full card too during the beta, plus everything the channel and Facebook get; the socials only hint at it now and then, and at 100 members it locks and becomes the VIP lounge (the full card, results, the recap). VIP lounge: people only (the bot just moderates). The bot must be an admin wherever it posts.</div>
     ${inp('pub','Public channel','@TheDeskApp')}${inp('vipLounge','VIP lounge (group chat id, -100…)','-100…')}${inp('pubLounge','Public lounge (group chat id, -100…)','-100…')}
     <label class="mono" style="font-size:10px;display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" ${B.autoPost?'checked':''} onchange="bcSave('autoPost',this.checked)"> post the VIP card by itself at the master evaluation</label>
     <label class="mono" style="font-size:10px;display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" ${B.siteByWorker?'checked':''} onchange="bcSave('siteByWorker',this.checked)"> let the 24/7 worker update the public page (sends it your site token, encrypted)</label>
@@ -1529,20 +1530,28 @@ function pubLockText(day,n,beta){const head=`🔒 <b>TheDesk — ${day}</b>`;if(
     L=(T.picks||[]).filter(x=>x&&!x.hidden&&x.pick).map((x,i)=>`⭐ #${i+1} <b>${txtEsc(x.pick)}</b> (${tcSgn(x.price)})${x.game?' · '+txtEsc(String(x.game).replace('@',' at ')):''}${x.start?' · '+tm(x.start):''}`)
       .concat((T.props||[]).filter(x=>x&&!x.hidden&&x.label).map(x=>`🎯 <b>${txtEsc(x.label)}</b>`));}catch(e){}
   return`${head}\n${L.length?`Today's free picks:\n${L.join('\n')}`:`Today's Best ${n} are locked`}\n\nEach one comes back here 30 minutes before its game. The full card is on the public page → ironsilkweekly.com/desk/\n<i>Every pick locked before the games, graded at the final.</i>`;}
+/* v3.0.8 · Nov 13: "once the public lounge hits 100 members the public lounge will be locked and renamed the VIP lounge". The worker
+   counts it and does the lock (it renames the room); the app follows the room's name: once it reads "VIP Lounge", that chat moves
+   from the public lounge slot to the VIP lounge slot for good. A lounge that was set up by its @name follows the same way. */
+async function loungeFollow(B){try{if(!B.pubLounge)return B;const j=await tgApi('getChat',{chat_id:B.pubLounge});const t=(j&&j.result&&j.result.title)||'';
+    if(/VIP Lounge/i.test(t)){const C=get(BCAST_KEY,{})||{};C.vipLounge=B.pubLounge;C.pubLounge='';set(BCAST_KEY,C);return bcCfg();}}catch(e){}return B;}
 /* the freeze's publishing: page, VIP card, and the "card is locked" notes — each once a day */
-async function deskPublishAll(why){const out=[];const B=bcCfg();const d=today();const sent=get('d4.bcsent',{})||{};if(sent.d!==d){sent.d=d;sent.k={};}
+async function deskPublishAll(why){const out=[];const B=await loungeFollow(bcCfg());const d=today();const sent=get('d4.bcsent',{})||{};if(sent.d!==d){sent.d=d;sent.k={};}
   try{const r=await deskPublishPage('Publish picks');out.push(r&&r.ok?'public page ✓':'public page: '+((r&&r.reason)||'not set up'));}catch(e){out.push('public page failed');}
   let card=null;if(B.autoPost||why==='manual'){try{const r=await deskTgPostCard(false);card=r.card||null;out.push(r.ok?`VIP card ✓ (${r.n} message${r.n>1?'s':''})`:'VIP card: '+r.reason);}catch(e){out.push('VIP card failed');}}
   const S=(()=>{try{return best5State();}catch(e){return{};}})();const n=(S.top3||[]).length;let P=null;try{P=deskPlan();}catch(e){}
   const day=new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-  /* v3.0.6 · the VIP lounge gets nothing automatic. The public channel gets the free picks; the public lounge gets the full card (beta). */
+  /* v3.0.6 · the public channel gets the free picks; the public lounge gets the full card (beta).
+     v3.0.8 · the VIP lounge (the public lounge after it locked at 100) gets the full card at the freeze, every day. */
   const beta=typeof pubBeta==='function'&&pubBeta();
+  const fullCard=async(chat,lab)=>{const C=card||(()=>{try{return subCard();}catch(e){return null;}})();if(!C)return false;let ok=true;
+    try{for(const text of subTelegramText(C)){const j=await tgApi('sendMessage',{chat_id:chat,text,parse_mode:'HTML',disable_web_page_preview:'true'});if(!j||j.ok===false){ok=false;break;}await new Promise(z=>setTimeout(z,450));}}catch(e){ok=false;}
+    out.push(ok?lab+': full card ✓':lab+': full card failed');return ok;};
+  if(B.vipLounge&&!sent.k.vipL&&S.locked){if(await fullCard(B.vipLounge,'VIP lounge'))sent.k.vipL=1;}
   if(B.pub&&!sent.k.pub&&S.locked){const j=await tgApi('sendMessage',{chat_id:B.pub,text:pubLockText(day,n,beta),parse_mode:'HTML',disable_web_page_preview:'true'});if(j)sent.k.pub=1;}
   if(B.pubLounge&&!sent.k.pubL&&S.locked){let ok=false;
-    const C=beta?(card||(()=>{try{return subCard();}catch(e){return null;}})()):null;
-    if(C){try{const parts=subTelegramText(C);ok=true;for(const text of parts){const j=await tgApi('sendMessage',{chat_id:B.pubLounge,text,parse_mode:'HTML',disable_web_page_preview:'true'});if(!j||j.ok===false){ok=false;break;}await new Promise(z=>setTimeout(z,450));}
-      out.push(ok?'public lounge: full card ✓':'public lounge: full card failed');}catch(e){ok=false;}}
-    else if(!beta){const j=await tgApi('sendMessage',{chat_id:B.pubLounge,text:`🔒 <b>TheDesk — ${day}</b>\n${n?`Today's Best ${n} are locked. They unlock in the channel 30 minutes before each game.`:'No play cleared the bar today — we don\'t force picks.'}\n<i>Every pick locked before the games, graded at the final.</i>`,parse_mode:'HTML',disable_web_page_preview:'true'});ok=!!j;}
+    if(beta)ok=await fullCard(B.pubLounge,'public lounge');
+    else{const j=await tgApi('sendMessage',{chat_id:B.pubLounge,text:`🔒 <b>TheDesk — ${day}</b>\n${n?`Today's Best ${n} are locked. They unlock in the channel 30 minutes before each game.`:'No play cleared the bar today — we don\'t force picks.'}\n<i>Every pick locked before the games, graded at the final.</i>`,parse_mode:'HTML',disable_web_page_preview:'true'});ok=!!j;}
     if(ok)sent.k.pubL=1;}
   set('d4.bcsent',sent);return{msg:out.join(' · '),out};}
 /* the worker gets the public side too: who's where, what unlocks when, and the full page to publish */

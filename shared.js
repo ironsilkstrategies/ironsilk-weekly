@@ -3080,7 +3080,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113o';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113p';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -21825,7 +21825,7 @@ function skinSetup(){try{intakeCollapse();}catch(e){}try{if(!document.getElement
   /* the slip bar docks just above the nav, whatever height the nav ends up on this phone */
   try{const set=()=>{const h=phone?Math.round(nav.getBoundingClientRect().height):0;document.documentElement.style.setProperty('--bnh',(h||64)+'px');};set();requestAnimationFrame(set);setTimeout(set,600);}catch(e){}}catch(e){console.warn('skin',e);}}
 /* TheDesk socials (v1.93) — shown in the More sheet, the launcher and the public picks page */
-const THEDESK_SOCIAL={fb:'https://www.facebook.com/share/1FCDFdUvRp/',tg:'https://t.me/TheDeskApp',lounge:'https://t.me/TheDeskLounge'};   /* tg = the free channel · lounge = the free lounge (Nov 8) */
+const THEDESK_SOCIAL={fb:'https://www.facebook.com/share/1FCDFdUvRp/',tg:'https://t.me/TheDeskApp',lounge:'https://t.me/TheDeskLounge',ig:'',x:''};   /* v3.0.8 · ig / x: the Instagram and X profile links, once they're set up (shown on the public app) */   /* tg = the free channel · lounge = the free lounge (Nov 8) */
 function socialHtml(){const S=THEDESK_SOCIAL;const a=[];
   if(S.fb)a.push(`<a class="bn-soc" href="${txtEsc(S.fb)}" target="_blank" rel="noopener" style="border-color:#1877f255"><b style="color:#1877F2">f</b> Facebook</a>`);
   if(S.tg)a.push(`<a class="bn-soc" href="${txtEsc(S.tg)}" target="_blank" rel="noopener" style="border-color:#29a9eb55"><b style="color:#29A9EB">✈</b> Telegram</a>`);

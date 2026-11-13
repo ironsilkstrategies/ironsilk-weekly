@@ -37,7 +37,7 @@ jobs:
           LOUNGE: ${{ vars.LOUNGE }}   # v2.82 · lounge hours, Central: "8-24" when unset, "0-24" round the clock, "off" = game time only
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}        # v2.97 · TheDesk's Facebook page — mirrors the public posts; off until both are set
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}  # a page access token (pages_manage_posts); masked in the logs, never printed
-          LOUNGE_URL: ${{ vars.LOUNGE_URL }}           # the free lounge's invite link for the page's posts (default https://t.me/TheDeskLounge)
+          LOUNGE_URL: ${{ vars.LOUNGE_URL }}           # the lounge's link, used only in the easter eggs (default https://t.me/TheDeskLounge)
           IG_USER_ID: ${{ secrets.IG_USER_ID }}        # v2.98 · the Instagram professional account linked to the page — off until set (posts with FB_PAGE_TOKEN)
           IG_KINDS: ${{ vars.IG_KINDS }}               # which posts Instagram gets: "unlock,recap,cash,invite,spotlight" when unset, "all" for every result too
           SPOTLIGHT: ${{ vars.SPOTLIGHT }}             # v2.98 · Player of the Week + the Terrible 3: teaser when unset (legs unlock at T-30), "full", or "off"
@@ -47,3 +47,10 @@ jobs:
           MEGA_GOAL: ${{ vars.MEGA_GOAL }}             # reactions that drop the free card early: 100 when unset, "off" for no goal posts
           THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}  # v2.98 · Threads — off until set; the worker refreshes it weekly and keeps it encrypted
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}  # optional (the token's own account when unset)
+          X_API_KEY: ${{ secrets.X_API_KEY }}          # v3.1.3 · X (Twitter) — off until all four are set; X bills per post (~$0.20 with a link)
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}  # the account's token, made with Read and Write
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          X_KINDS: ${{ vars.X_KINDS }}                 # which posts X gets: "recap,egg" when unset (keeps the bill small), "all" for everything
+          APP_URL: ${{ vars.APP_URL }}                 # v3.1.3 · the public app every post points to (default https://ironsilkweekly.com/desk/)
+          LOUNGE_CAP: ${{ vars.LOUNGE_CAP }}           # v3.1.3 · seats before the public lounge locks and becomes the VIP lounge (100 when unset)

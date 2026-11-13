@@ -5,14 +5,14 @@
    day's recap once. Writes the updated state back (encrypted) with a merge so the app
    and the worker never overwrite each other.
    Secrets: TG_BOT_TOKEN, AUTOPILOT_KEY. GITHUB_TOKEN + GITHUB_REPOSITORY come from Actions. */
-import { webcrypto as crypto } from 'node:crypto';
+import { webcrypto as crypto, createHash } from 'node:crypto';
 import * as Soc from './social.mjs';
 import * as Mega from './megaphone.mjs';   /* v2.99 · a post every 30 minutes: game questions + polls, streaks, line movers, the reactions goal */   /* v2.98 · the picture cards and the other outlets (Facebook, Instagram, Threads) */
 const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.1.2';
+const VERSION = 'worker v3.1.3';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -59,7 +59,7 @@ export function mergeMod(x, y) { if (!x && !y) return undefined; x = x || {}; y 
      warnings, a welcome) keep the newest — a reset (/unban) is newer than the warnings it clears. Ties keep the first copy. */
   const pick = (A, B) => { const o = { ...(B || {}) }; for (const k in (A || {})) { const a = A[k], b = o[k]; o[k] = b == null ? a : (typeof a === 'number' ? Math.max(a, +b || 0) : ts(a) >= ts(b) ? a : b); } return o; };
   return { owner: ts(x.owner) >= ts(y.owner) ? (x.owner || y.owner) : y.owner, acl: pick(x.acl, y.acl), agreed: pick(x.agreed, y.agreed), warns: pick(x.warns, y.warns), wel: pick(x.wel, y.wel), note: pick(x.note, y.note) }; }
-export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}), ...(a?.mod || b?.mod ? { mod: mergeMod(a?.mod, b?.mod) } : {}) };
+export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}), ...(a?.mod || b?.mod ? { mod: mergeMod(a?.mod, b?.mod) } : {}), ...(a?.lounge || b?.lounge ? { lounge: mergeLounge(a?.lounge, b?.lounge) } : {}) };
   const ds = new Set([...Object.keys(a?.posts || {}), ...Object.keys(b?.posts || {})]);
   ds.forEach(d => { const x = a?.posts?.[d], y = b?.posts?.[d]; if (!x || !y) { out.posts[d] = x || y; return; }
     const base = (x.postedTs || 0) >= (y.postedTs || 0) ? x : y;
@@ -68,6 +68,10 @@ export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.
       ...(fx.feedTs ? { feed: fx.feed, pub: fx.pub, bc: fx.bc, site: fx.site, feedTs: fx.feedTs, ...(fx.cmd ? { cmd: fx.cmd } : {}) } : {}) }; });
   const keep = Object.keys(out.posts).sort().slice(-5); Object.keys(out.posts).forEach(d => { if (!keep.includes(d)) delete out.posts[d]; });
   return out; }
+
+/* v3.1.3 · the lounge's memory: its member count (newest reading wins) and the moment it locked at 100 (the first lock wins, never undone) */
+export function mergeLounge(x, y) { if (!x || !y) return x || y; const nw = (x.at || 0) >= (y.at || 0) ? x : y, lk = [x, y].filter(z => z.locked).sort((a, b) => a.locked - b.locked)[0];
+  return { ...nw, ...(lk ? { locked: lk.locked, chat: lk.chat, founders: lk.founders, titled: !!(x.titled || y.titled) } : {}) }; }
 
 /* ── ESPN ── */
 const PATH = { nfl: 'football/nfl', ncaaf: 'football/college-football', nhl: 'hockey/nhl', mlb: 'baseball/mlb', nba: 'basketball/nba', ncaab: 'basketball/mens-college-basketball' };
@@ -273,16 +277,22 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
   /* the / menu, once per new list: the robot's own commands ride along; admins also see /warn /ban /unban */
   const menu = [...(C.menu || [])]; if (menu.length) for (const [c, t] of WORKER_MENU) if (!menu.some(x => x.command === c)) menu.push({ command: c, description: t });
   const sig = 'v2|' + menu.map(m => m.command).join(','); if (state.cmdSig !== sig && menu.length) { const r = await T('setMyCommands', { commands: JSON.stringify(menu.slice(0, 100)) });
-    const r2 = await T('setMyCommands', { commands: JSON.stringify([...menu.slice(0, 97), { command: 'warn', description: 'Admins: warn a member (reply). 3 = ban' }, { command: 'ban', description: 'Admins: ban a member (reply)' }, { command: 'unban', description: 'Admins: lift a ban (reply)' }]), scope: JSON.stringify({ type: 'all_chat_administrators' }) });
+    const r2 = await T('setMyCommands', { commands: JSON.stringify([...menu.slice(0, 97), { command: 'warn', description: 'Admins: warn a member (reply). 3 = ban' }, { command: 'ban', description: 'Admins: ban a member (reply)' }, { command: 'unban', description: 'Admins: lift a ban (reply)' }, { command: 'vipinvite', description: 'Owner: a one-person VIP lounge link (DM the bot)' }, { command: 'lounge', description: 'Owner: how many lounge seats are taken' }]), scope: JSON.stringify({ type: 'all_chat_administrators' }) });
     if (r && r2) { state.cmdSig = sig; acted++; } }
-  const u = await T('getUpdates', { offset: String((state.tgOff || 0) + 1), timeout: String(Math.max(0, Math.min(50, deps?.poll || 0))), allowed_updates: JSON.stringify(['message', 'callback_query', 'my_chat_member']) });
+  const u = await T('getUpdates', { offset: String((state.tgOff || 0) + 1), timeout: String(Math.max(0, Math.min(50, deps?.poll || 0))), allowed_updates: JSON.stringify(['message', 'callback_query', 'my_chat_member', 'chat_member']) });
   const rows = (u && Array.isArray(u.result)) ? u.result : []; if (!rows.length) return acted;
-  const st = {}; for (const d of ds) Object.assign(st, state.posts[d].st || {}); const joins = {};
+  const st = {}; for (const d of ds) Object.assign(st, state.posts[d].st || {}); const joins = {}, gone = new Set();
   for (const x of rows) { state.tgOff = Math.max(state.tgOff || 0, x.update_id);
     try {
       /* the bot was added somewhere: whose chat is it? */
       if (x.my_chat_member) { seen++; const mc = x.my_chat_member; const nw = mc.new_chat_member && mc.new_chat_member.status;
         if ((nw === 'member' || nw === 'administrator') && mc.chat && mc.chat.type !== 'private') { const a = await chatAccess(state, T, p, mc.chat, mc.from); if (a === 'stranger') { acted += await turnAway(state, T, C, mc.chat, mc.from, a); log('left a chat that isn\'t TheDesk\'s'); } }
+        continue; }
+      /* v3.1.3 · the VIP lounge's door: after the lock, a join that didn't come through a VIP invite (or the owner adding someone) is shown out */
+      if (x.chat_member) { seen++; const cm = x.chat_member, LK = state.lounge; const u = cm.new_chat_member && cm.new_chat_member.user;
+        if (LK && LK.locked && u && !u.is_bot && cm.chat && String(cm.chat.id) === String(LK.chat) && ['member', 'restricted'].includes(cm.new_chat_member.status) && ['left', 'kicked'].includes(cm.old_chat_member && cm.old_chat_member.status) && (cm.date || 0) * 1000 >= LK.locked) {
+          const owners = await ownersOf(state, T, p); const viaVip = !!(cm.invite_link && /^VIP/i.test(cm.invite_link.name || '')); const byOwner = !!(cm.from && cm.from.id !== u.id && owners.includes(cm.from.id));
+          if (!viaVip && !byOwner && !owners.includes(u.id)) { await T('banChatMember', { chat_id: String(LK.chat), user_id: String(u.id), until_date: String(Math.floor(now / 1000) + 60) }); await T('unbanChatMember', { chat_id: String(LK.chat), user_id: String(u.id), only_if_banned: 'true' }); gone.add(u.id); acted++; log('VIP lounge: a join without a VIP invite was shown out'); } }
         continue; }
       if (x.callback_query) { seen++; const cq = x.callback_query; if (cq.data === 'agree') acted += await onAgree(state, T, cq); else await T('answerCallbackQuery', { callback_query_id: cq.id }); continue; }
       const m = x.message; if (!m || !m.chat) continue;
@@ -293,6 +303,7 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
       const acc = await chatAccess(state, T, p, m.chat, m.from); if (acc !== 'ok') { acted += await turnAway(state, T, C, m.chat, m.from, acc); if (acc === 'stranger') log('left a chat that isn\'t TheDesk\'s'); continue; }
       const parts = m.text.slice(1).split(/\s+/); const cmd = (parts[0] || '').split('@')[0].toLowerCase(); const arg = (parts[1] || '').toLowerCase(); const at = ((parts[0] || '').split('@')[1] || '').toLowerCase();
       if (cmd === 'warn' || cmd === 'ban' || cmd === 'unban') { acted += await moderate(state, T, p, m, cmd); continue; }
+      if ((cmd === 'vipinvite' || cmd === 'lounge') && await ownerLounge(state, T, p, m, cmd, now)) { acted++; continue; }
       /* the same question in the same group within 15 s gets one answer (the first is right above) — the bot can't be used as a spam cannon */
       if (m.chat.type !== 'private' && cmd !== 'check') { const R0 = RECENT.get(state) || new Map(); RECENT.set(state, R0); const rk = m.chat.id + '|' + cmd + '|' + arg; if (Date.now() - (R0.get(rk) || 0) < 15e3) continue; R0.set(rk, Date.now()); }
       let txt = null;
@@ -308,7 +319,7 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
       const r = await T('sendMessage', { chat_id: m.chat.id, text: (fillTemplate(txt, st) + stale).slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: 'true', reply_to_message_id: String(m.message_id), allow_sending_without_reply: 'true' }); if (r) acted++;
     } catch (e) { log('update', x.update_id, e.message || e); } }
   /* one welcome per chat for everyone who joined in this batch */
-  for (const k in joins) { const J = joins[k]; try { if ((await chatAccess(state, T, p, J.chat, J.from)) === 'ok') acted += await welcome(state, T, C, J.chat, J.users, await ownersOf(state, T, p)); } catch (e) { log('welcome', e.message || e); } }
+  for (const k in joins) { const J = joins[k]; J.users = J.users.filter(u => !gone.has(u.id)); if (!J.users.length) continue; try { if ((await chatAccess(state, T, p, J.chat, J.from)) === 'ok') acted += await welcome(state, T, C, J.chat, J.users, await ownersOf(state, T, p)); } catch (e) { log('welcome', e.message || e); } }
   return acted || (seen ? 1 : 0); }   /* a command, a join or a tap moved things: save. Plain chatter doesn't (ackUpdates confirms it). */
 /* confirm everything read so far, so the next run never sees it again */
 export async function ackUpdates(state, deps) { const T = deps?.tg || tg; if (!state || !state.tgOff) return null; return T('getUpdates', { offset: String(state.tgOff + 1), timeout: '0', limit: '1' }); }
@@ -362,7 +373,15 @@ async function retireQuiet(p, deps, T) { p.st = p.st || {}; p.sent = p.sent || {
   for (const l of (p.pub && p.pub.legs) || []) { p.sent['unlock|' + l.k] = p.sent['unlock|' + l.k] || 'q'; p.sent['pres|' + l.k] = p.sent['pres|' + l.k] || 'q'; }
   p.sent.precap = p.sent.precap || 'q'; p.sent['~quiet'] = 1; p.recap = true; }
 const quiet = p => !!(p && p.sent && p.sent['~quiet']);
-export async function runOnce(state, today, deps) { const T = deps?.tg || tg; let acted = 0; const now = deps?.now || Date.now();
+/* v3.1.3 · the owner's lounge tools: /vipinvite (in private) makes a one-person VIP link, good for 7 days; /lounge shows the seats */
+async function ownerLounge(state, T, p, m, cmd, now) { const owners = await ownersOf(state, T, p); if (!m.from || !owners.includes(m.from.id)) return 0;
+  const L = state.lounge || {}; const chat = L.locked ? L.chat : (p && p.bc && (p.bc.vipLounge || p.bc.pubLounge)); const reply = text => T('sendMessage', { chat_id: m.chat.id, text, disable_web_page_preview: 'true' });
+  if (cmd === 'lounge') { await reply(L.locked ? `🔒 VIP lounge since ${new Date(L.locked).toLocaleDateString('en-US', { timeZone: 'America/Chicago' })} · ${L.founders} founders${L.n ? ` · ${L.n} members at the last count` : ''}` : L.n != null ? `🚪 Public lounge: ${L.n} of ${LOUNGE_CAP()} seats taken · ${Math.max(0, LOUNGE_CAP() - L.n)} left` : 'No count yet (the lounge is counted every 15 minutes).'); return 1; }
+  if (m.chat.type !== 'private') { await reply('DM me /vipinvite so the link stays private.'); return 1; }
+  const r = chat ? await T('createChatInviteLink', { chat_id: String(chat), name: 'VIP ' + chicagoDay(now), member_limit: '1', expire_date: String(Math.floor(now / 1000) + 7 * 86400) }) : null;
+  const link = r && r.result && r.result.invite_link; await reply(link ? `🎟 One VIP seat: one person, good for 7 days.\n${link}` : "Couldn't make a link: is the bot an admin there with \"Invite users\" on?"); return 1; }
+
+export async function runOnce(state, today, deps) { const T = deps?.tg || tg; let acted = 0; const now = deps?.now || Date.now(); loungeRoute(state);
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.recap || p.worker === false || !p.chat) continue;
     p.st = p.st || {}; p.sent = p.sent || {};
     if (isHistory(p, d, today, now)) { await retireQuiet(p, deps, T); state.posts[d] = p; acted++; log('closed', d, 'quietly ·', (p.legs || []).filter(l => p.st[l.k]).length + '/' + (p.legs || []).length, 'graded into the original post'); continue; }
@@ -373,11 +392,13 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
       if ((p.ids || []).length === (p.parts || []).length) for (let i = 0; i < p.parts.length; i++) await T('editMessageText', { chat_id: p.chat, message_id: p.ids[i], text: fillTemplate(p.parts[i], p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' });
       const lines = fresh.map(l => `${MARK[p.st[l.k]]}<b>${esc(l.label)}</b> <i>${esc(l.kind)}</i>${l.__fin ? ' · ' + esc(l.__fin) : ''}`);
       const msg = { chat_id: p.chat, text: '<b>📣 Results</b>\n' + lines.join('\n'), parse_mode: 'HTML', disable_web_page_preview: 'true' }; if ((p.ids || [])[0]) { msg.reply_to_message_id = p.ids[0]; msg.allow_sending_without_reply = 'true'; }
-      const r = await T('sendMessage', msg); if (r) { fresh.forEach(l => { p.sent[l.k] = p.st[l.k]; }); acted++; } }
-      /* v3.1.1 · the VIP lounge is for people: no automatic results there (Nov 13) */
+      const r = await T('sendMessage', msg); if (r) { fresh.forEach(l => { p.sent[l.k] = p.st[l.k]; }); acted++; }
+      /* v3.1.3 · the VIP lounge (the public lounge, renamed at 100) gets every result */
+      const vl = p.bc && p.bc.vipLounge; if (vl) await T('sendMessage', { chat_id: vl, text: '<b>📣 Results</b>\n' + lines.join('\n'), parse_mode: 'HTML', disable_web_page_preview: 'true' }); }
     const legs = p.legs || []; const allDone = legs.every(l => p.st[l.k]); const games = legs.filter(l => !l.player);
     const ready = legs.length && (allDone || (p.d < today && games.every(l => p.st[l.k])) || p.d < shift(today, -1));
-    if (ready) { const r = await T('sendMessage', { chat_id: p.chat, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.recap = true; acted++; } }
+    if (ready) { const r = await T('sendMessage', { chat_id: p.chat, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); if (r) { p.recap = true; acted++;
+        if (p.bc && p.bc.vipLounge) await T('sendMessage', { chat_id: p.bc.vipLounge, text: recapText(p, p.st), parse_mode: 'HTML', disable_web_page_preview: 'true' }); } }
     state.posts[d] = p; }
   /* v2.31 · the public side: unlocks 30 min before each game, results, the public recap */
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.worker === false || quiet(p) || d < shift(today, -2)) continue;
@@ -388,11 +409,11 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
     for (const g of cashedParlays(p)) { const key = 'cash|' + g.sig; if (p.sent[key]) continue;
       const text = cashText(p, g), img = await picOf(cashCard(p, g), deps);   /* v2.98 · one picture, every outlet */
       if (await say(T, p.chat, text, img, deps)) { p.sent[key] = 'W'; acted++;
-        /* v2.31 · a cash goes out after the fact: the public channel and its lounge (v3.1.1: not the VIP lounge, which is people only) */
-        for (const [lab, c] of [['pub', p.bc && p.bc.pub], ['pl', p.bc && p.bc.pubLounge]]) { if (!c || p.sent[key + '|' + lab]) continue;
+        /* v2.31 · a cash goes everywhere after the fact: the VIP lounge, the public channel and its lounge */
+        for (const [lab, c] of [['vl', p.bc && p.bc.vipLounge], ['pub', p.bc && p.bc.pub], ['pl', p.bc && p.bc.pubLounge]]) { if (!c || p.sent[key + '|' + lab]) continue;
           if (await say(T, c, text, img, deps)) p.sent[key + '|' + lab] = 'W'; }
-        if (Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind: 'cash' }, { fb: !!p.sent[key + '|fb'], ig: !!p.sent[key + '|ig'], th: !!p.sent[key + '|th'] });
-          for (const o of ['fb', 'ig', 'th']) if (m[o]) p.sent[key + '|' + o] = m[o] === true ? 'W' : 'skip'; } } }
+        if (Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind: 'cash' }, { fb: !!p.sent[key + '|fb'], ig: !!p.sent[key + '|ig'], th: !!p.sent[key + '|th'], x: !!p.sent[key + '|x'] });
+          for (const o of ['fb', 'ig', 'th', 'x']) if (m[o]) p.sent[key + '|' + o] = m[o] === true ? 'W' : 'skip'; } } }
     state.posts[d] = p; }
   return acted; }
 
@@ -409,30 +430,68 @@ export const fbOn = deps => { const c = fbCfg(deps); return !!(c && c.page && c.
 if ((env.FB_PAGE_TOKEN || '').trim() && env.GITHUB_ACTIONS === 'true') console.log('::add-mask::' + env.FB_PAGE_TOKEN.trim());
 const loungeUrl = deps => (deps?.lounge || env.LOUNGE_URL || '').trim() || 'https://t.me/TheDeskLounge';
 export const fbPlain = html => String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\n{3,}/g, '\n\n').trim();
-const fbFoot = deps => `\n\n💬 We talk sports in TheDesk's free Telegram lounge… not just picks. Pull up → ${loungeUrl(deps)}`;
+/* v3.1.3 · Nov 13: "the socials promote the public app address" — the lounge is only ever an easter egg now */
+export const appUrl = deps => (deps?.app || env.APP_URL || '').trim() || 'https://ironsilkweekly.com/desk/';
+const fbFoot = deps => `\n\n📲 The full card, live scores and every result → ${appUrl(deps)}`;
 export async function fbPost(text, deps, opt) { const c = fbCfg(deps); if (!c || !c.page || !c.tok) return false; const F = deps?.fetch || fetch;
   const message = fbPlain(text) + (opt && opt.bare ? '' : fbFoot(deps)); const hide = x => String(x || '').split(c.tok).join('…');
   try { const r = await F(`https://graph.facebook.com/${c.v || 'v24.0'}/${encodeURIComponent(c.page)}/feed`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ message, access_token: c.tok }).toString() });
     if (r && r.ok) { log('facebook ✓', message.split('\n')[0].slice(0, 70)); return true; } let why = r ? r.status : 'no reply'; try { const j = await r.json(); const m = j && j.error && j.error.message; if (m) why += ' ' + hide(m).slice(0, 90); } catch (e) { }
     log('facebook:', why); return false; } catch (e) { log('facebook:', hide(e && e.message || e).slice(0, 60)); return false; } }
-const FB_INVITES = [
-  "💬 TheDesk lounge is open… a free Telegram room where we break down the slate, argue the matchups and talk ball all day. The picks are part of it… the conversation is the point.\nPull up → {link}",
-  "🏈🏀🏒 Talk sports with us… not just picks. TheDesk's free lounge on Telegram: live game talk, the reads behind every play, and a crew that actually watches the games.\nJoin → {link}",
-  "Every pick we post is locked before the games and graded at the final… in public. Want the why behind them? Come talk it out in the free lounge.\n→ {link}",
-  "No promises. No politics. Just sports. TheDesk's free Telegram lounge is where the real conversation happens… bring your takes.\n→ {link}"];
-/* v2.98 · the daily invite is a picture too, and goes to every outlet that's on (Facebook, Instagram, Threads) */
-const inviteCard = deps => ({ kicker: 'Free · Telegram lounge', title: 'Talk sports with us', sub: 'Not just picks… the slate, the matchups, the reads.',
-  rows: [{ label: 'Live game talk', meta: 'a crew that actually watches the games' }, { label: 'The why behind every pick', meta: 'every read, out in the open' }, { label: 'Graded in public', meta: 'locked before the games, graded at the final' }],
-  foot: 'Join free · ' + loungeUrl(deps).replace(/^https?:\/\//, '') });
-export async function fbInvite(state, deps) { if (!Soc.anyOn(deps)) return 0; const now = deps?.now || Date.now(); const d = chicagoDay(now); const p = state && state.posts && state.posts[d]; if (!p) return 0;
-  const h = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now)); p.sent = p.sent || {};
-  const done = { fb: !!p.sent.fbinv, ig: !!p.sent.iginv, th: !!p.sent.thinv };
-  if (h < 10 || ['fb', 'ig', 'th'].every(o => done[o] || !Soc.on(deps, o))) return 0; const i = Math.floor(Date.parse(d + 'T12:00:00Z') / 864e5) % FB_INVITES.length;
-  const txt = FB_INVITES[i].replace('{link}', loungeUrl(deps)), pic = await picOf(inviteCard(deps), deps);
-  const m = await Soc.mirror(txt, pic, deps, { bare: true, kind: 'invite' }, done);
-  /* v3.1.2 · the free channel gets the invite too (not the lounge: it's the room being invited to) */
-  if (m.fb && !p.sent.tginv && p.bc && p.bc.pub) { if (await say(deps?.tg || tg, p.bc.pub, txt, pic, deps)) p.sent.tginv = 1; }
-  if (m.fb) p.sent.fbinv = 1; if (m.ig) p.sent.iginv = 1; if (m.th) p.sent.thinv = 1; return [m.fb, m.ig, m.th].includes(true) ? 1 : 0; }
+/* v3.1.3 · Nov 13: "those socials will leave an Easter egg from time to time about the TG public lounge… once the public lounge
+   hits 100 members the public lounge will be locked and renamed the VIP lounge." About twice a week, on days and at times nobody
+   can predict (drawn from a hash of the week and the worker's own key), Facebook, Instagram, Threads, X and the free channel get a
+   short, cryptic way in. It stops for good the moment the lounge locks. */
+export const LOUNGE_CAP = () => Math.max(2, Math.floor(+(env.LOUNGE_CAP || 100)) || 100);
+const EGGS = [
+  "🥚 There's a room where the whole card drops the second it locks. {left} No ads, no announcement… this is the door.\n→ {link}",
+  "🥚 You weren't supposed to find this. {left}\n→ {link}",
+  "🥚 First 100 through the door keep their seat free… for good. After that it's VIP only. {left}\n→ {link}",
+  "🥚 Not everybody gets told about this one. The full slate at lock, and a crew that actually watches the games. {left}\n→ {link}",
+  "🥚 Somewhere on Telegram there's a room with 100 chairs. {left} When they're gone, the door closes.\n→ {link}"];
+const mondayOf = d => { const t = Date.parse(d + 'T12:00:00Z'); const w = new Date(t).getUTCDay(); return new Date(t - ((w + 6) % 7) * 864e5).toISOString().slice(0, 10); };
+/* this week's two egg moments: [{ day: 0-6 from Monday, min: minutes after midnight Central (11:00 AM – 8:59 PM) }] */
+export function eggPlan(day, salt) { const mon = mondayOf(day); const H = createHash('sha256').update(String(salt || 'thedesk') + '|egg|' + mon).digest();
+  const a = H[0] % 7; let b = H[1] % 6; if (b >= a) b++; return [a, b].sort((x, y) => x - y).map((dd, i) => ({ day: dd, min: 11 * 60 + ((H[2 + i * 2] << 8 | H[3 + i * 2]) % 600) })); }
+export function eggDue(day, now, deps) { const salt = deps?.eggSalt ?? createHash('sha256').update(env.AUTOPILOT_KEY || 'thedesk').digest('hex');
+  const P = eggPlan(day, salt); const dow = (new Date(Date.parse(day + 'T12:00:00Z')).getUTCDay() + 6) % 7; const e = P.find(x => x.day === dow); if (!e) return false;
+  const [hh, mm] = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).format(new Date(now)).split(':').map(Number);
+  const m = hh * 60 + mm; return m >= e.min && hh < 23; }
+const eggCard = (deps, left) => ({ kicker: 'You found something', title: 'There’s a room', sub: 'The full card the second it locks. 100 seats.',
+  big: { value: left != null ? String(left) : '100', label: left != null ? 'seats left' : 'seats' }, rows: [{ label: 'First 100 keep their seat', meta: 'free, for good' }, { label: 'After that', meta: 'VIP only', lock: true }],
+  foot: loungeUrl(deps).replace(/^https?:\/\//, '') });
+export async function fbInvite(state, deps) { const now = deps?.now || Date.now(); const d = chicagoDay(now); const p = state && state.posts && state.posts[d]; if (!p) return 0;
+  if (state.lounge && state.lounge.locked) return 0; if (!p.bc || !p.bc.pubLounge) return 0;   /* no lounge, or it's full: no egg */
+  const T = deps?.tg || tg; const chan = p.bc.pub; if (!Soc.anyOn(deps) && !chan) return 0; if (!(deps?.eggDue ? deps.eggDue(d, now) : eggDue(d, now, deps))) return 0; p.sent = p.sent || {};
+  const done = { fb: !!p.sent.fbinv, ig: !!p.sent.iginv, th: !!p.sent.thinv, x: !!p.sent.xinv };
+  const socLeft = Soc.anyOn(deps) && ['fb', 'ig', 'th', 'x'].some(o => !done[o] && Soc.on(deps, o)); if (!socLeft && (!chan || p.sent.tginv)) return 0;
+  const L = state.lounge, left = L && L.n != null && String(L.chat) === String(p.bc.pubLounge) ? Math.max(0, LOUNGE_CAP() - L.n) : null;
+  const i = createHash('sha256').update('pick|' + d).digest()[0] % EGGS.length;
+  const txt = EGGS[i].replace('{link}', loungeUrl(deps)).replace('{left}', left != null ? `${left} seat${left === 1 ? '' : 's'} left.` : '100 seats.');
+  const pic = await picOf(eggCard(deps, left), deps); let acted = 0;
+  if (socLeft) { const m = await Soc.mirror(txt, pic, deps, { bare: true, kind: 'egg' }, done); if (m.fb) p.sent.fbinv = 1; if (m.ig) p.sent.iginv = 1; if (m.th) p.sent.thinv = 1; if (m.x) p.sent.xinv = 1; if ([m.fb, m.ig, m.th, m.x].includes(true)) acted = 1; }
+  if (chan && !p.sent.tginv) { if (await say(T, chan, txt, pic, deps)) { p.sent.tginv = 1; acted = 1; } }
+  if (acted) log('lounge easter egg out'); return acted; }
+
+/* v3.1.3 · the lock: the worker counts the public lounge every 15 minutes. At 100 (LOUNGE_CAP) it renames the room
+   "TheDesk VIP Lounge", makes a fresh invite link (the old one stops working), tells the room its founders keep their seats
+   free for good, and tells the owner the one step only they can take (a public @username can't be removed by a bot).
+   From then on the room is the VIP lounge: the full card at lock, results and the recap; new members only through a VIP invite. */
+export async function loungeWatch(state, deps) { const T = deps?.tg || tg; const now = deps?.now || Date.now(); if (!state) return 0;
+  const ds = Object.keys(state.posts || {}).sort(); const p = state.posts && state.posts[ds[ds.length - 1]]; const L = state.lounge = state.lounge || {};
+  if (L.locked) return 0; const chat = p && p.bc && p.bc.pubLounge; if (!chat) return 0;
+  if (String(L.chat) === String(chat) && L.at && now - L.at < 15 * 60e3) return 0;
+  const r = await T('getChatMemberCount', { chat_id: String(chat) }); const n = r && Number.isFinite(+r.result) ? +r.result : null; if (n == null) return 0;
+  L.chat = String(chat); L.n = n; L.at = now; if (n < LOUNGE_CAP()) return 0;
+  L.titled = !!(await T('setChatTitle', { chat_id: L.chat, title: 'TheDesk VIP Lounge' }));
+  await T('exportChatInviteLink', { chat_id: L.chat });
+  await T('sendMessage', { chat_id: L.chat, parse_mode: 'HTML', text: `🔒 <b>${n} seats filled. The door is closed.</b>\nThis room is now <b>TheDesk VIP Lounge</b>. Everyone here found it first… your seat is yours, free, for good.\nFrom here on: the full card the second it locks, every result, the recap. New faces come in through VIP only.` });
+  L.locked = now; L.founders = n; log('the lounge hit', n, '— locked and renamed the VIP lounge');
+  for (const id of await ownersOf(state, T, p)) await T('sendMessage', { chat_id: String(id), disable_web_page_preview: 'true', text: `🔒 The lounge hit ${n} members and is now TheDesk VIP Lounge.\n\nOne step only you can take: if the group still has a public @username, open it in Telegram → Edit → Group type → Private. A bot can't remove that name; until it's gone, anyone who joins by it is removed automatically.\n\nTo let a VIP subscriber in, send me /vipinvite here: a one-person link, good for 7 days.` });
+  return 1; }
+/* every post's routing follows the lock: the room that was the public lounge is the VIP lounge now */
+export function loungeRoute(state) { const L = state && state.lounge; if (!L || !L.locked || !L.chat) return;
+  for (const p of Object.values(state.posts || {})) if (p && p.bc && p.bc.pubLounge && String(p.bc.pubLounge) === String(L.chat)) p.bc = { ...p.bc, vipLounge: p.bc.pubLounge, pubLounge: '' }; }
 
 /* ── v2.31 · the public side ──────────────────────────────────────────────────
    p.pub.legs: the Best 3, the Best 3 props and the Banker's parlay legs, each with
@@ -701,7 +760,8 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       if (!pass) log('posts on file:', Object.entries(state.posts || {}).map(([d, p]) => `${d} ${Object.keys(p.st || {}).length}/${(p.legs || []).length} graded${p.recap ? ' · closed' : ''}`).join(' · '));
       let acted = await runOnce(state, today); try { acted += await publishPublic(state); } catch (e) { log('public page', e.message || e); }
       try { acted += await runCommands(state); } catch (e) { log('commands', e.message || e); }
-      try { acted += await fbInvite(state); } catch (e) { log('facebook invite', e.message || e); }
+      try { acted += await loungeWatch(state); } catch (e) { log('lounge watch', e.message || e); }
+      try { acted += await fbInvite(state); } catch (e) { log('lounge easter egg', e.message || e); }
       if (SOCMEM) try { const a = await runMegaphone(state, SOCMEM.S.mega, today); if (a) { acted += a; await socialSave(); } } catch (e) { log('megaphone', e.message || e); }
       /* the state branch only gets a commit when something was sent — or an hourly heartbeat */
       const beat = !state.lastRun || Date.now() - state.lastRun > 60 * 60e3;

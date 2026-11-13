@@ -5,7 +5,6 @@
 const CFG = {
   feeds: ['../public/picks.json', 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/picks.json'],
   slates: ['https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json'],
-  lounge: 'https://t.me/TheDeskLounge',
   social: { tg: 'https://t.me/TheDeskApp', fb: 'https://www.facebook.com/share/1FCDFdUvRp/' },
   home: 'https://ironsilkweekly.com/desk/',
   chat: 'https://thedesk-chat.ironsilkstrategies.workers.dev',
@@ -477,7 +476,7 @@ function gameHtml(g) {
     if (g.note) rows.push(['In the news', esc(g.note)]);
     const bp = b ? boardPicksHtml(b, F, heavy, true) : '', wo = b ? whoOnHtml(b) : '';
     more = `<div class="g-more">${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call and how sure it is. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
-      ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the lounge.</span><a class="btn foil" href="${CFG.lounge}" target="_blank" rel="noopener">Open the lounge</a></div>` : ''}</div>`;
+      ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the members’ chat.</span><button type="button" class="btn foil" data-go="chat">Open the chat</button></div>` : ''}</div>`;
   }
   return `<div class="game"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
     <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${F.ch !== 'all' ? chCallsHtml(b, F.ch) : boardPicksHtml(b, F.tier === 'all' && F.bt === 'all' ? { ...F, tier: 'top' } : F, heavy, false)}</div>` : ''}${more}</div>`;
@@ -674,7 +673,7 @@ const hm = d => { const m = Math.round(d / 60e3), h = Math.floor(m / 60); return
 const YES = '<svg class="y" viewBox="0 0 24 24" role="img" aria-label="Included"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const NO = '<svg class="n" viewBox="0 0 24 24" role="img" aria-label="Not included"><path d="M7 12h10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
 function viewJoin() {
-  const el = $('#v-join'), F = S.feed || {}, beta = F.beta !== false, sub = beta ? '' : okUrl(F.subscribe), soc = { ...CFG.social, ...(F.social || {}) }, tg = okUrl(soc.tg), fb = okUrl(soc.fb);
+  const el = $('#v-join'), F = S.feed || {}, beta = F.beta !== false, sub = beta ? '' : okUrl(F.subscribe), soc = { ...CFG.social, ...(F.social || {}) }, tg = okUrl(soc.tg), fb = okUrl(soc.fb), ig = okUrl(soc.ig), xx = okUrl(soc.x);
   const price = '$50/mo or $300/yr', R = F.record || {}, n = (R.w || 0) + (R.l || 0);
   const T = F.today, H = beta ? null : headStart(T), isToday = T && T.d === deskDay(), when = isToday ? 'today' : T ? 'on ' + weekday(T.d) : '';
   const lead = H ? `<div class="headstart"><div class="hs-n">${esc(hm(H.lead))}</div><b class="hs-l">Head start ${esc(when)}</b><span class="hs-s">${isToday && Date.now() < H.first
@@ -701,9 +700,9 @@ function viewJoin() {
   el.innerHTML = `<h1 class="title">${beta ? 'Everything’s free during the beta' : 'Get the card before the games'}</h1>
     <p class="lede">${beta ? 'Every pick, every character and every stat line is open while the desk is in beta.' : 'The public sees each pick 30 minutes before its game. Members see the whole card the minute it locks.'}</p>
     <div class="cols join"><div>${pass}
-    <article class="slip stubcard"><div class="slip-head"><span>Admit all</span><span>Free</span></div><div class="slip-main"><h3>The lounge</h3>
-      <p>We talk sports here, not just picks. Game threads, polls every hour, and the results posted win or lose.</p></div>
-      <div class="slip-stub"><div class="row"><a class="btn ink" href="${CFG.lounge}" target="_blank" rel="noopener">Open the lounge</a>${tg ? `<a class="btn paper" href="${esc(tg)}" target="_blank" rel="noopener">Telegram channel</a>` : ''}${fb ? `<a class="btn paper" href="${esc(fb)}" target="_blank" rel="noopener">Facebook</a>` : ''}</div></div></article>
+    <article class="slip stubcard"><div class="slip-head"><span>Admit all</span><span>Free</span></div><div class="slip-main"><h3>Follow the desk</h3>
+      <p>The free picks before every game, every result and the nightly recap, wherever you scroll. Keep an eye out… now and then we leave something hidden.</p></div>
+      <div class="slip-stub"><div class="row">${tg ? `<a class="btn ink" href="${esc(tg)}" target="_blank" rel="noopener">Telegram channel</a>` : ''}${fb ? `<a class="btn paper" href="${esc(fb)}" target="_blank" rel="noopener">Facebook</a>` : ''}${ig ? `<a class="btn paper" href="${esc(ig)}" target="_blank" rel="noopener">Instagram</a>` : ''}${xx ? `<a class="btn paper" href="${esc(xx)}" target="_blank" rel="noopener">X</a>` : ''}</div></div></article>
     </div><div>
     ${plansHtml}
     <h2 class="h2">Free or VIP</h2>${beta ? '<p class="note">During the beta the VIP column is free for everyone.</p>' : ''}
