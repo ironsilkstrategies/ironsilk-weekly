@@ -181,6 +181,9 @@ function readHtml(W) {
   const R = W.read, B = (W.bullets || []).slice(0, 6);
   if (!R && !B.length) return '';
   const paras = R ? String(R.text || '').split(/\n{2,}|\n/).map(t => t.trim()).filter(Boolean) : [];
+  /* the read often opens with its own pull quote: say it once */
+  const tk = R && R.take ? String(R.take).trim() : '';
+  if (tk && paras[0] && paras[0].startsWith(tk)) { paras[0] = paras[0].slice(tk.length).trim(); if (!paras[0]) paras.shift(); }
   const nums = B.length ? `<ul>${B.map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : '';
   if (!R) return `<div class="slip-stub"><div class="read"><b>Why the desk likes it</b>${nums}</div></div>`;
   const first = paras[0] || '', rest = paras.slice(1);
@@ -212,7 +215,7 @@ function slipHtml(x0, i, key, opt = {}) {
     <div class="slip-main${graded ? ' stamped' : ''}">${when}
       <h3 class="pick${long}">${esc(label)}${x.price != null ? ` <span class="price">${esc(odds(x.price))}</span>` : ''}</h3>
       ${opt.plain || R.plain ? `<p class="plain">${esc(opt.plain || R.plain)}</p>` : ''}${opt.sub || matchup(x) ? `<p class="match">${esc(opt.sub || matchup(x))}</p>` : ''}${score}
-      <div class="fields"><div class="f"><small>Confidence</small>${punches(x.p)}</div>${graded ? '' : `<div class="f"><small>Starts</small><b>${esc(whenLabel(x.start) || 'TBD')}</b></div>`}</div>
+      <div class="fields"><div class="f"><small>Confidence</small>${punches(x.p)}</div>${graded || x.price == null || x.price === '' ? '' : `<div class="f"><small>To win, 1u</small><b>${unitsWon(+x.price).toFixed(2)}u</b></div>`}</div>
       ${x.tier === 'UNANIMOUS' ? '<span class="tag">Unanimous: every voice agreed</span>' : ''}${fine ? `<p class="fine">${fine}</p>` : ''}
       ${stampHtml(x, key)}
     </div>${why}</article>`;

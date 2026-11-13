@@ -8,7 +8,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const now = Date.now(), iso = t => new Date(t).toISOString().slice(0, 16) + 'Z';
 const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date(now));
 const P = [
-  { sp: 'nba', game: 'DET@WSH', pick: 'DET -9.5', price: -110, p: 0.724, start: iso(now + 20 * 60e3), tier: 'SUPREME', hit: null, push: false, why: { read: { who: 'The Coach', take: 'Washington has lost five straight.', text: 'Detroit defends.\nThe Pistons travel well.' } } },
+  { sp: 'nba', game: 'DET@WSH', pick: 'DET -9.5', price: -110, p: 0.724, start: iso(now + 20 * 60e3), tier: 'SUPREME', hit: null, push: false, why: { read: { who: 'The Coach', take: 'Washington has lost five straight.', text: 'Washington has lost five straight. Detroit defends.\nThe Pistons travel well.' } } },
   { sp: 'nfl', game: 'WSH@NYG', pick: 'Under 40.5', price: -108, p: 0.711, start: iso(now + 3 * 36e5), tier: 'UNANIMOUS', hit: null, push: false },
   { sp: 'nhl', game: 'PIT@SJ', pick: 'SJ +1.5', price: -193, p: 0.702, start: iso(now + 6 * 36e5), tier: 'STRONG', hit: null, push: false }];
 const un = x => Date.parse(x.start) - 30 * 60e3, hide = x => ({ hidden: true, sp: x.sp, start: x.start, unlockAt: un(x) }), open = x => ({ ...x, unlockAt: un(x) });
@@ -69,6 +69,8 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   v = await visit(FEEDS.morning); t = await v.text();
   T('30 minutes out the slip is face up: the pick big, the price, plain words, the matchup, confidence', /PISTONS −9\.5/i.test(t) && /−110/.test(t) && /Pistons to win by 10 or more/.test(t) && /Pistons at Wizards/.test(t) && /72%/.test(t), t.slice(0, 500));
   T('…with the character\'s read on the stub', /THE COACH/i.test(t) && /Washington has lost five straight/.test(t) && /Detroit defends/.test(t));
+  T('…the pull quote is said once, not repeated as the first line of the read', (t.match(/Washington has lost five straight/g) || []).length === 1, (t.match(/Washington has lost five straight/g) || []).length);
+  T('…and the slip shows what one unit wins at the price (−110 → 0.91u)', /To win, 1u/i.test(t) && /0\.91u/.test(t), t.slice(0, 400));
   T('…and the other two stay sealed', (await v.p.locator('.slip.locked').count()) === 2 && !/Under 40\.5|Sharks/.test(t));
   T('the record line reads from the feed', /38–27/.test(t) && /\+1\.2 units/.test(t));
   await v.p.click('.tabs [data-go="slate"]'); await v.p.waitForTimeout(500); t = await v.text();
