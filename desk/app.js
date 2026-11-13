@@ -111,7 +111,7 @@ async function loadFeed() {
   if (!got.length) { S.feedErr = !S.feed; if (S.tab === 'today' || S.tab === 'receipts') render(); return; }
   const F = got.sort((a, b) => b.generated - a.generated)[0];
   if (S.feed && S.feed.generated >= F.generated) return;
-  S.feed = F; S.feedErr = false; store.set('feed', F);
+  S.feed = noHeavy(F); S.feedErr = false; store.set('feed', S.feed);
   render(); liveTick();
 }
 async function loadSlate() {
@@ -372,18 +372,24 @@ function openPickOn(g) {
 const TIER = { supreme: ['◆ Supreme', 'supreme'], strong: ['Strong', 'strong'], value: ['Value', 'value'], source: ['Outside', 'source'] };
 const TIER_RANK = { supreme: 4, strong: 3, value: 2, source: 1 };
 const WINS = [['up', 'Not over yet'], ['all', 'Any time'], ['early', 'Before 1 PM'], ['afternoon', '1–5 PM'], ['evening', '5–8 PM'], ['late', '8 PM +']];
-const BTS = [['all', 'All bets'], ['ml', 'Moneyline'], ['heavy', 'Heavy ML −500+'], ['light', 'Light ML'], ['spread', 'Spreads'], ['total', 'O/U']];
+const BTS = [['all', 'All bets'], ['ml', 'Moneyline'], ['spread', 'Spreads'], ['total', 'O/U']];
 const TIERS = [['all', 'Every pick'], ['top', 'Unanimous, Supreme & Strong'], ['play', '✓ Official'], ['unan', '★ Unanimous'], ['supreme', '◆ Supreme'], ['strong', 'Strong'], ['value', 'Value'], ['source', 'Outside']];
 const RUNS = { nfl: 3.6, ncaaf: 3.9, nba: 2.6, ncaab: 2.3, nhl: 2.8, mlb: 3.3 };
 const MK_LAB = { ml: 'Moneyline', spread: 'Spread', total: 'Total' };
 const hourCT = t => { try { return +new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: CFG.deskTz }).format(new Date(ms(t))) % 24; } catch { return 12; } };
 const winOf = t => { const h = hourCT(t); return h < 13 ? 'early' : h < 17 ? 'afternoon' : h < 20 ? 'evening' : 'late'; };
-const boardOf = () => (S.feed && S.feed.beta !== false && S.feed.board && Array.isArray(S.feed.board.games) ? S.feed.board : null);
+/* no heavy moneylines (−500 or shorter) on the public site, even if an older feed still carries one */
+const HEAVY = -500, isHeavy = (m, price) => m === 'ml' && price != null && isFinite(+price) && +price <= HEAVY;
+let BOARD_SRC = null, BOARD_CLEAN = null;
+const boardOf = () => { const B = S.feed && S.feed.beta !== false && S.feed.board && Array.isArray(S.feed.board.games) ? S.feed.board : null; if (!B) return null; if (B === BOARD_SRC) return BOARD_CLEAN;
+  const games = B.games.map(g => { const calls = {}; for (const [m, L] of Object.entries(g.calls || {})) { const k = (L || []).filter(c => !isHeavy(m, c.price)); if (k.length) calls[m] = k; }
+    return { ...g, picks: (g.picks || []).filter(p => !isHeavy(p.m, p.price)), calls }; }).filter(g => g.picks.length || Object.keys(g.calls).length);
+  BOARD_SRC = B; BOARD_CLEAN = { ...B, games }; return BOARD_CLEAN; };
 const castOf = v => { const B = boardOf(), c = (B && B.cast && B.cast[v]) || {}; return { name: c.name || v, color: okColor(c.color) }; };
 const bKey = (sp, a, h) => `${sp}|${ab(sp, a)}|${ab(sp, h)}`;
 function boardIndex() { const B = boardOf(), M = new Map(); if (B) for (const b of B.games) { const [a, h] = String(b.game).split('@'); M.set(bKey(b.sp, a, h) + '|' + b.day, b); } return M; }
 function overOf(sp, game, t, st) { const L = liveOf({ sp, game }); if (L && L.state) return L.state === 'post'; if (st === 'post') return true; return fin(t) && Date.now() - t > (RUNS[sp] || 3) * 36e5; }
-function btOk(bt, p, heavy) { if (bt === 'all') return true; if (bt === 'ml' || bt === 'heavy' || bt === 'light') { if (p.m !== 'ml') return false; const hv = p.price != null && +p.price <= heavy; return bt === 'ml' || (bt === 'heavy' ? hv : !hv); } return p.m === bt; }
+function btOk(bt, p) { if (bt === 'all' || !BTS.some(([k]) => k === bt)) return true; return p.m === bt; }
 function pickOk(p, F, heavy) { if (!btOk(F.bt, p, heavy)) return false; if (F.tier === 'all') return true; if (F.tier === 'play') return !!p.off; if (F.tier === 'top') return !!p.unan || p.tier === 'supreme' || p.tier === 'strong'; if (F.tier === 'unan') return !!p.unan; return p.tier === F.tier; }
 const tierTag = p => `${p.unan ? '<span class="tb unan">★ Unanimous</span>' : ''}${TIER[p.tier] ? `<span class="tb ${TIER[p.tier][1]}">${TIER[p.tier][0]}</span>` : ''}${p.off ? '<span class="tb off">✓ Official</span>' : ''}`;
 const bigOf = (sp, game, pick) => readPick({ sp, game, pick }).big;
@@ -422,6 +428,7 @@ function chCallsHtml(b, v) {
   return `<div class="bpicks">${L.map(c => `<div class="bp"><span class="tb ch" style="--c:${k.color}">${esc(k.name)}</span><span class="bp-pk">${esc(bigOf(b.sp, b.game, c.pick))}${c.price != null ? ' ' + esc(odds(c.price)) : ''}</span>${c.p != null ? `<span class="bp-p">${pct(c.p)}%</span>` : ''}${c.o ? '<span class="tb off">✓ Official</span>' : ''}</div>`).join('')}</div>`;
 }
 function filterBarHtml(B, games, F) {
+  if (!BTS.some(([k]) => k === F.bt)) F.bt = 'all';
   const heavy = B.heavy || -500, cnt = f => games.filter(f).length;
   const passT = (g, t) => (g.b ? g.b.picks : []).some(p => pickOk(p, { ...F, tier: t }, heavy));
   const chip = (k, v, lab, n, cls = '') => `<button type="button" class="${cls}" data-act="bf" data-k="${k}" data-v="${esc(v)}" aria-pressed="${F[k] === v}">${lab}${n != null ? ` <span class="n">${n}</span>` : ''}</button>`;
@@ -435,6 +442,20 @@ function filterBarHtml(B, games, F) {
     <div class="seg tight" role="group" aria-label="Bet type">${BTS.map(([k, l]) => chip('bt', k, l, k === 'all' ? null : inW.filter(g => (g.b ? g.b.picks : []).some(p => btOk(k, p, heavy) && pickOk(p, { ...F, bt: 'all' }, heavy))).length)).join('')}</div>
     ${cast.length ? `<label class="bf-ch"><span>Character</span><select data-change="bfch"><option value="all">Every character</option>${cast.map(([v, c]) => `<option value="${esc(v)}"${F.ch === v ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
     ${F.win !== 'up' || F.tier !== 'all' || F.bt !== 'all' || F.ch !== 'all' ? '<button type="button" class="bf-reset" data-act="bfreset">Show everything</button>' : ''}</div>`;
+}
+/* the VIP lists, character pages and parlays: no heavy moneyline goes on screen (graded records stay as they are) */
+function noHeavy(F) {
+  if (!F || F.beta === false) return F;
+  const hv = x => x && !x.hidden && x.price != null && isFinite(+x.price) && +x.price <= -500 && (x.m === 'ml' || /\bML$/i.test(String(x.pick || '').trim()));
+  const live = x => x && x.hit == null;
+  try {
+    const V = F.vip ? { ...F.vip } : null;
+    if (V) { if (Array.isArray(V.top10)) V.top10 = V.top10.filter(x => !(live(x) && hv(x)));
+      if (V.banker && (V.banker.legs || []).some(x => live(x) && hv(x))) V.banker = null;
+      if (Array.isArray(V.parlays)) V.parlays = V.parlays.filter(P => !(P.legs || []).some(x => live(x) && hv(x))); }
+    const C = Array.isArray(F.characters) ? F.characters.map(c => ({ ...c, picks: (c.picks || []).filter(x => !(x.kind !== 'prop' && live(x) && hv(x))) })) : F.characters;
+    return { ...F, vip: V || F.vip, characters: C };
+  } catch { return F; }
 }
 function gameHtml(g) {
   const L = liveOf({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}` }), open = S.openGame === g.k, on = openPickOn(g), b = g.b, F = S.bf, heavy = (boardOf() || {}).heavy || -500;
@@ -809,7 +830,7 @@ setInterval(() => { if (!document.hidden && S.tab === 'slate') loadSlate(); }, 6
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadFeed(); if (S.tab === 'slate') loadSlate(); } });
 
 /* start: last good copy first (instant, works offline), then the live feed */
-S.feed = store.get('feed'); S.slate = store.get('slate');
+S.feed = noHeavy(store.get('feed')); S.slate = store.get('slate');
 if (S.slate && !(S.slate.v === 1 && Array.isArray(S.slate.days))) S.slate = null;
 chip();
 /* ?embed=1 · the chat inside the desk's own app: no header, no tabs */

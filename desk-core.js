@@ -1377,7 +1377,7 @@ function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEac
     const res=x=>x.push?'push':x.hit===true?'win':x.hit===false?'loss':null;
     return CHAR_ORDER.filter(v=>(by[v]||CP.some(x=>x.voice===v))&&v!=='Blend').map(v=>{const C=CHARS[v],L=by[v]||[],B=PUB_BIOS[v]||{};let w=0,l=0,pu=0,u=0;const picks=[],recent=[],teams={};
       L.forEach(c=>{const day=String(c.date).slice(0,10);if(day<from||day>d)return;if(day<d&&c.hit==null&&!c.push)return;if(!pubOff(c))return;
-        if(day===d){picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:pubConf(c),start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});return;}
+        if(day===d){if(pubHeavy({m:mkNorm(c.market),price:c.price,pick:c.pick}))return;picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:pubConf(c),start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});return;}
         if(c.push)pu++;else if(c.hit===true){w++;u+=pubUnits(c.price,true);}else if(c.hit===false){l++;u-=1;}
         recent.push({d:day,kind:'game',sp:c.sp,pick:c.pick,price:c.price,gl:gameLabel(c.sp,c.game),r:res(c)});
         /* the teams it backs and goes against (sides only; totals have no side) */
@@ -1404,13 +1404,18 @@ function pubLeg(l,V){const st=l.start||(()=>{try{return deskGameStart(l.sp,l.gam
   return{sp:l.sp,game:l.game||'',gl:l.game?gameLabel(l.sp,l.game):'',pick,price:l.price,p:l.p!=null?+(+l.p).toFixed(3):null,start:st,hit:l.hit==null?null:l.hit,push:!!l.push,
     by:l.by?(Array.isArray(l.by)?l.by:[l.by]).map(charName):l.v?[charName(l.v)]:[],voices:l.player?[]:pubVoicesOn(l,V)};}
 function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,skill:!!P.skill,px:!!P.px,price:decimalToAmerican(P.dec),p:+(+P.p).toFixed(3),legs:P.legs.map(l=>pubLeg({...l,v:P.v},V))});
-    return{top10:(C.top10||[]).map(x=>({...pubLeg(x,V),ev:x.ev!=null?+(+x.ev).toFixed(1):null,voicesBy:(x.confBy?[].concat(x.confBy):[]).map(charName)})),
-      banker:C.banker?{price:decimalToAmerican(C.banker.dec),p:+(+C.banker.p).toFixed(3),legs:C.banker.legs.map(l=>pubLeg(l,V))}:null,
-      parlays:[...(C.chars||[]),...(C.px||[])].map(par),
+    return{top10:(C.top10||[]).filter(x=>!pubHeavy(x)).map(x=>({...pubLeg(x,V),ev:x.ev!=null?+(+x.ev).toFixed(1):null,voicesBy:(x.confBy?[].concat(x.confBy):[]).map(charName)})),
+      banker:C.banker&&!C.banker.legs.some(pubHeavy)?{price:decimalToAmerican(C.banker.dec),p:+(+C.banker.p).toFixed(3),legs:C.banker.legs.map(l=>pubLeg(l,V))}:null,
+      parlays:[...(C.chars||[]),...(C.px||[])].filter(P=>!(P.legs||[]).some(pubHeavy)).map(par),
       props:(C.props||[]).map(c=>({who:charName(c.v),v:c.v,sp:c.sp,pick:(()=>{try{return cpropLine(c)+propWhere(c);}catch(e){return c.player||'';}})(),price:c.price,p:c.cal!=null?+(+c.cal).toFixed(3):null,star:c.fav==='fav'}))};}catch(e){console.warn('pub vip',e);return null;}}
 /* v3.0.3 · the board: every game on today's card by start time, its colored picks (★ unanimous, ◆ supreme, strong, value, outside),
    every character's call on each bet with its confidence, and where that character ranks in that kind of bet: 👑 #1 has the say,
    🧊 the worst shouldn't have one. Records and tiers only; no reasons, no method. */
+/* v3.0.4 · no heavy moneylines (-500 or shorter) on the public site: they pay nothing and don't help a parlay. Forward-looking picks only;
+   graded records stay whole (taking losses or wins out after the fact would bend the record). */
+const PUB_HEAVY=-500;
+function pubHeavy(x){if(!x)return false;const pr=x.price;if(pr==null||pr===''||!isFinite(+pr)||+pr>PUB_HEAVY)return false;
+  const m=btMarket(x.m||x.market||'');return m==='ml'||(!m&&/\bML$/i.test(String(x.pick||'').trim()));}
 let PUB_BOARD_MEMO=null;
 function pubBoard(V){try{const d=today();const T=roGet(TC_KEY,{})||{};const k=d+'|'+ledgerSig(V)+'|'+(T.ts||T.at||'')+'|'+((T.by&&Object.values(T.by).reduce((n,B)=>n+((B&&B.picks)||[]).length,0))||0);
     if(PUB_BOARD_MEMO&&PUB_BOARD_MEMO.k===k&&Date.now()-PUB_BOARD_MEMO.ts<5*60e3)return PUB_BOARD_MEMO.val;const val=pubBoard0(V,d);PUB_BOARD_MEMO={k,ts:Date.now(),val};return val;}catch(e){console.warn('pub board',e);return null;}}
@@ -1421,11 +1426,11 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
       return{lab:P.lab,rk:i+1,of:P.list.length,w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1),say:P.king&&P.king.v===c.voice?'top':P.goat&&P.goat.v===c.voice?'worst':''};}catch(e){return null;}};
   const use=v=>{if(!cast[v]){const L=CHARS[v]||{};cast[v]={name:charName(v),chip:L.chip||'',color:L.color||''};}return v;};
   const games=R.all.filter(g=>g.day>=d&&g.day<=last).sort((a,b)=>a.t-b.t||a.sp.localeCompare(b.sp)).map(g=>{
-    const picks=g.picks.filter(x=>x&&x.pick&&!x.suspect&&!x.incoherent).map(x=>({m:btMarket(x.m),sd:x.sd,pick:x.pick,price:x.price!=null?+x.price:null,
+    const picks=g.picks.filter(x=>x&&x.pick&&!x.suspect&&!x.incoherent&&!pubHeavy({m:btMarket(x.m),price:x.price,pick:x.pick})).map(x=>({m:btMarket(x.m),sd:x.sd,pick:x.pick,price:x.price!=null?+x.price:null,
         p:r3(x.fz&&x.fz.cf!=null?x.fz.cf:slotPickP(x)),tier:String(x.color||'').trim(),unan:!!x.unan,off:(()=>{try{return!!tfPlayable(x,g.sp);}catch(e){return false;}})(),
         by:[...new Set((x.fz&&x.fz.by&&x.fz.by.length?x.fz.by:x.chars||[]).filter(v=>CHARS[v]&&!META_VOICES.has(v)))].map(use)}))
       .sort((a,b)=>(b.unan-a.unan)||((PUB_TIER_RANK[b.tier]||0)-(PUB_TIER_RANK[a.tier]||0))||((b.p||0)-(a.p||0)));
-    const calls={};(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).forEach(c=>{const m=mkNorm(c.market);let txt='';try{txt=charPickText(c);}catch(e){txt=c.pick||c.side;}
+    const calls={};(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).forEach(c=>{const m=mkNorm(c.market);if(pubHeavy({m,price:c.price}))return;let txt='';try{txt=charPickText(c);}catch(e){txt=c.pick||c.side;}
       (calls[m]=calls[m]||[]).push({v:use(c.voice),s:c.side,pick:txt,price:c.price!=null?+c.price:null,p:pubConf(c),o:pubOff(c)?1:0,r:rankOf(c,m),hit:c.hit==null?null:c.hit});});
     return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
   return{d,games,cast,heavy:typeof BT_HEAVY!=='undefined'?BT_HEAVY:-500};}
