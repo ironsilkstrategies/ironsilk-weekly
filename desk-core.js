@@ -1408,6 +1408,28 @@ function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,
       banker:C.banker?{price:decimalToAmerican(C.banker.dec),p:+(+C.banker.p).toFixed(3),legs:C.banker.legs.map(l=>pubLeg(l,V))}:null,
       parlays:[...(C.chars||[]),...(C.px||[])].map(par),
       props:(C.props||[]).map(c=>({who:charName(c.v),v:c.v,sp:c.sp,pick:(()=>{try{return cpropLine(c)+propWhere(c);}catch(e){return c.player||'';}})(),price:c.price,p:c.cal!=null?+(+c.cal).toFixed(3):null,star:c.fav==='fav'}))};}catch(e){console.warn('pub vip',e);return null;}}
+/* v3.0.3 · the board: every game on today's card by start time, its colored picks (★ unanimous, ◆ supreme, strong, value, outside),
+   every character's call on each bet with its confidence, and where that character ranks in that kind of bet: 👑 #1 has the say,
+   🧊 the worst shouldn't have one. Records and tiers only; no reasons, no method. */
+let PUB_BOARD_MEMO=null;
+function pubBoard(V){try{const d=today();const T=roGet(TC_KEY,{})||{};const k=d+'|'+ledgerSig(V)+'|'+(T.ts||T.at||'')+'|'+((T.by&&Object.values(T.by).reduce((n,B)=>n+((B&&B.picks)||[]).length,0))||0);
+    if(PUB_BOARD_MEMO&&PUB_BOARD_MEMO.k===k&&Date.now()-PUB_BOARD_MEMO.ts<5*60e3)return PUB_BOARD_MEMO.val;const val=pubBoard0(V,d);PUB_BOARD_MEMO={k,ts:Date.now(),val};return val;}catch(e){console.warn('pub board',e);return null;}}
+function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=new Map(),cast={};const r3=x=>x!=null&&isFinite(+x)?+(+x).toFixed(3):null;
+  V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const day=String(c.date).slice(0,10);if(day<d||day>last)return;const m=mkNorm(c.market);if(m!=='ml'&&m!=='spread'&&m!=='total')return;
+    const key=c.sp+'|'+c.game+'|'+day;const a=VI.get(key);if(a)a.push(c);else VI.set(key,[c]);});
+  const rankOf=(c,m)=>{try{const P=prFor(c.sp,m,c.side,c.price!=null?+c.price:null,c.line!=null?+c.line:null);if(!P)return null;const i=P.list.findIndex(x=>x.v===c.voice);if(i<0)return{lab:P.lab,of:P.list.length};const x=P.list[i];
+      return{lab:P.lab,rk:i+1,of:P.list.length,w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1),say:P.king&&P.king.v===c.voice?'top':P.goat&&P.goat.v===c.voice?'worst':''};}catch(e){return null;}};
+  const use=v=>{if(!cast[v]){const L=CHARS[v]||{};cast[v]={name:charName(v),chip:L.chip||'',color:L.color||''};}return v;};
+  const games=R.all.filter(g=>g.day>=d&&g.day<=last).sort((a,b)=>a.t-b.t||a.sp.localeCompare(b.sp)).map(g=>{
+    const picks=g.picks.filter(x=>x&&x.pick&&!x.suspect&&!x.incoherent).map(x=>({m:btMarket(x.m),sd:x.sd,pick:x.pick,price:x.price!=null?+x.price:null,
+        p:r3(x.fz&&x.fz.cf!=null?x.fz.cf:slotPickP(x)),tier:String(x.color||'').trim(),unan:!!x.unan,off:(()=>{try{return!!tfPlayable(x,g.sp);}catch(e){return false;}})(),
+        by:[...new Set((x.fz&&x.fz.by&&x.fz.by.length?x.fz.by:x.chars||[]).filter(v=>CHARS[v]&&!META_VOICES.has(v)))].map(use)}))
+      .sort((a,b)=>(b.unan-a.unan)||((PUB_TIER_RANK[b.tier]||0)-(PUB_TIER_RANK[a.tier]||0))||((b.p||0)-(a.p||0)));
+    const calls={};(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).forEach(c=>{const m=mkNorm(c.market);let txt='';try{txt=charPickText(c);}catch(e){txt=c.pick||c.side;}
+      (calls[m]=calls[m]||[]).push({v:use(c.voice),s:c.side,pick:txt,price:c.price!=null?+c.price:null,p:pubConf(c),o:pubOff(c)?1:0,r:rankOf(c,m),hit:c.hit==null?null:c.hit});});
+    return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
+  return{d,games,cast,heavy:typeof BT_HEAVY!=='undefined'?BT_HEAVY:-500};}
+const PUB_TIER_RANK={supreme:4,strong:3,value:2,source:1};
 function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();const VB=beta?(roGet(VOICES_KEY,[],30e3)||[]):null;
   const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
     tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),calls:beta&&x.whyOn&&VB?pubVoicesOn({...x,d0:x.d0},VB):undefined,hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,tuned:x.tuned?true:undefined,
@@ -1432,8 +1454,8 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
     /* v2.51.1 · today's card never rides in the history list — it showed every locked pick there (with its price) before
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
     history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30,plans:PUB_PLANS,
-    ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines();
-      return{beta:true,vip,characters,bloodlines,betaSig:JSON.stringify([vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
+    ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB);
+      return{beta:true,vip,characters,bloodlines,board,betaSig:JSON.stringify([board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
 function publicFeed(){return publicFeedCore(false);}
 function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts)]);}
 

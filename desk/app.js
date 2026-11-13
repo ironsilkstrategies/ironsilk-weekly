@@ -93,7 +93,8 @@ function readPick(x) {
 
 /* ── state ───────────────────────────────────────────────────────────────── */
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
-  slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null };
+  slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
+  bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time' }, store.get('bf') || {}) };
 const TABS = ['today', 'slate', 'cast', 'chat', 'receipts', 'join'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
@@ -283,11 +284,27 @@ function viewToday() {
       <p>Members get the Best 3 at lock time, the Top 10 plays and every character’s parlay, in a private Telegram.</p></div>
       <div class="row"><a class="btn foil" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP${price ? ', ' + esc(price) : ''}</a><button type="button" class="btn line" data-go="join">What you get</button></div></div>` : '';
 
-  el.innerHTML = `<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
+  el.innerHTML = `<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
     <div id="seal"></div>${vip}
     ${T && picks.length ? `<div class="row" style="margin-top:22px"><button type="button" class="btn line" data-act="share">Share today’s card</button></div>` : ''}${footHtml()}`;
   if (T) { remember(picks.map((x, i) => [keys[i], x])); remember(props.map((x, i) => [`${T.d}|p${i}`, x])); seal(T); }
   S.first = false;
+}
+/* the strongest of the board on the front page: unanimous, supreme and strong, games not over yet */
+function strongHtml() {
+  const B = boardOf(); if (!B) return '';
+  const today = deskDay(), P = [];
+  for (const b of B.games) { if (b.day !== today || overOf(b.sp, b.game, ms(b.start), b.st)) continue;
+    for (const p of b.picks || []) if (p.unan || p.tier === 'supreme' || p.tier === 'strong') P.push({ b, p }); }
+  if (!P.length) return '';
+  P.sort((x, y) => (y.p.unan - x.p.unan) || ((TIER_RANK[y.p.tier] || 0) - (TIER_RANK[x.p.tier] || 0)) || ((y.p.p || 0) - (x.p.p || 0)));
+  const n = f => P.filter(f).length, shown = P.slice(0, 12);
+  const row = ({ b, p }) => `<div class="leg"><div class="li"><span class="mk">${p.unan ? '★' : p.tier === 'supreme' ? '◆' : '•'}</span><span class="pk">${esc(bigOf(b.sp, b.game, p.pick))}${p.price != null ? ' ' + esc(odds(p.price)) : ''}
+      <small>${esc([LEAGUE[b.sp], matchup(b), whenLabel(b.start)].filter(Boolean).join(' · '))}</small><span class="tbs">${tierTag(p)}</span>${(p.by || []).length ? `<small>by ${p.by.map(v => esc(castOf(v).name)).join(', ')}</small>` : ''}</span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div></div>`;
+  return `<section class="vsec"><div class="vh"><h2 class="h2">Unanimous, Supreme &amp; Strong</h2>${vipBadge()}</div>
+    <p class="note">${[n(x => x.p.unan) ? `<b>${n(x => x.p.unan)} unanimous</b> (every character on the same side)` : '', n(x => x.p.tier === 'supreme') ? `<b>${n(x => x.p.tier === 'supreme')} supreme</b> (every read lines up)` : '', n(x => x.p.tier === 'strong') ? `<b>${n(x => x.p.tier === 'strong')} strong</b> (two reads line up)` : ''].filter(Boolean).join(', ')} on games that haven’t finished.</p>
+    <div class="paper tix">${shown.map(row).join('')}</div>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn line" data-act="gobf" data-tier="top">${P.length > shown.length ? `All ${P.length} by start time` : 'See them by start time'}</button><button type="button" class="btn line" data-act="gobf" data-tier="all">Every game, every pick</button></div></section>`;
 }
 /* proof the card wasn't touched after lock: the fingerprint goes out at lock time, the key once every game has started */
 async function seal(T) {
@@ -351,8 +368,76 @@ function openPickOn(g) {
   const T = S.feed && S.feed.today; if (!T || T.d !== deskDay()) return null;
   return (T.picks || []).find(x => !x.hidden && x.sp === g.sp && x.game && ab(x.sp, x.game.split('@')[0]) === ab(g.sp, g.a.ab) && ab(x.sp, x.game.split('@')[1]) === ab(g.sp, g.h.ab)) || null;
 }
+/* ── the board: the desk's colored picks on every game, by start time, and every character's say ── */
+const TIER = { supreme: ['◆ Supreme', 'supreme'], strong: ['Strong', 'strong'], value: ['Value', 'value'], source: ['Outside', 'source'] };
+const TIER_RANK = { supreme: 4, strong: 3, value: 2, source: 1 };
+const WINS = [['up', 'Not over yet'], ['all', 'Any time'], ['early', 'Before 1 PM'], ['afternoon', '1–5 PM'], ['evening', '5–8 PM'], ['late', '8 PM +']];
+const BTS = [['all', 'All bets'], ['ml', 'Moneyline'], ['heavy', 'Heavy ML −500+'], ['light', 'Light ML'], ['spread', 'Spreads'], ['total', 'O/U']];
+const TIERS = [['all', 'Every pick'], ['top', 'Unanimous, Supreme & Strong'], ['play', '✓ Official'], ['unan', '★ Unanimous'], ['supreme', '◆ Supreme'], ['strong', 'Strong'], ['value', 'Value'], ['source', 'Outside']];
+const RUNS = { nfl: 3.6, ncaaf: 3.9, nba: 2.6, ncaab: 2.3, nhl: 2.8, mlb: 3.3 };
+const MK_LAB = { ml: 'Moneyline', spread: 'Spread', total: 'Total' };
+const hourCT = t => { try { return +new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: CFG.deskTz }).format(new Date(ms(t))) % 24; } catch { return 12; } };
+const winOf = t => { const h = hourCT(t); return h < 13 ? 'early' : h < 17 ? 'afternoon' : h < 20 ? 'evening' : 'late'; };
+const boardOf = () => (S.feed && S.feed.beta !== false && S.feed.board && Array.isArray(S.feed.board.games) ? S.feed.board : null);
+const castOf = v => { const B = boardOf(), c = (B && B.cast && B.cast[v]) || {}; return { name: c.name || v, color: okColor(c.color) }; };
+const bKey = (sp, a, h) => `${sp}|${ab(sp, a)}|${ab(sp, h)}`;
+function boardIndex() { const B = boardOf(), M = new Map(); if (B) for (const b of B.games) { const [a, h] = String(b.game).split('@'); M.set(bKey(b.sp, a, h) + '|' + b.day, b); } return M; }
+function overOf(sp, game, t, st) { const L = liveOf({ sp, game }); if (L && L.state) return L.state === 'post'; if (st === 'post') return true; return fin(t) && Date.now() - t > (RUNS[sp] || 3) * 36e5; }
+function btOk(bt, p, heavy) { if (bt === 'all') return true; if (bt === 'ml' || bt === 'heavy' || bt === 'light') { if (p.m !== 'ml') return false; const hv = p.price != null && +p.price <= heavy; return bt === 'ml' || (bt === 'heavy' ? hv : !hv); } return p.m === bt; }
+function pickOk(p, F, heavy) { if (!btOk(F.bt, p, heavy)) return false; if (F.tier === 'all') return true; if (F.tier === 'play') return !!p.off; if (F.tier === 'top') return !!p.unan || p.tier === 'supreme' || p.tier === 'strong'; if (F.tier === 'unan') return !!p.unan; return p.tier === F.tier; }
+const tierTag = p => `${p.unan ? '<span class="tb unan">★ Unanimous</span>' : ''}${TIER[p.tier] ? `<span class="tb ${TIER[p.tier][1]}">${TIER[p.tier][0]}</span>` : ''}${p.off ? '<span class="tb off">✓ Official</span>' : ''}`;
+const bigOf = (sp, game, pick) => readPick({ sp, game, pick }).big;
+function sayBadge(r) {
+  if (!r) return '<span class="say none">Not ranked yet</span>';
+  const rec = r.w != null ? ` <small>${r.w}–${r.l}, ${r.u >= 0 ? '+' : '−'}${Math.abs(r.u).toFixed(1)}u</small>` : '';
+  if (r.say === 'top') return `<span class="say top">👑 #1 in ${esc(r.lab)}: has the say${rec}</span>`;
+  if (r.say === 'worst') return `<span class="say low">🧊 Worst in ${esc(r.lab)}: no say${rec}</span>`;
+  return r.rk ? `<span class="say">#${r.rk} of ${r.of} in ${esc(r.lab)}${rec}</span>` : `<span class="say none">Not ranked in ${esc(r.lab)} yet</span>`;
+}
+/* one bet on one game: each side, who's on it, how sure, and where they rank in that kind of bet */
+function whoOnHtml(b) {
+  const out = [];
+  for (const m of ['ml', 'spread', 'total']) {
+    const C = (b.calls || {})[m]; if (!C || !C.length) continue;
+    const by = {}; for (const c of C) (by[c.s] = by[c.s] || []).push(c);
+    const sides = Object.keys(by).sort((x, y) => by[y].length - by[x].length), tot = C.length;
+    const top = C.find(c => c.r && c.r.say === 'top'), low = C.find(c => c.r && c.r.say === 'worst');
+    const say = [top ? `👑 <b>${esc(castOf(top.v).name)}</b> has the say, on ${esc(bigOf(b.sp, b.game, top.pick))}` : '', low ? `🧊 <b>${esc(castOf(low.v).name)}</b> shouldn’t, on ${esc(bigOf(b.sp, b.game, low.pick))}` : ''].filter(Boolean).join(' · ');
+    const row = c => { const k = castOf(c.v), mk = c.hit === true ? '<b class="hitw">✓</b> ' : c.hit === false ? '<b class="hitl">✗</b> ' : '';
+      return `<li style="--c:${k.color}"><span class="who">${mk}${esc(k.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>${sayBadge(c.r)}</li>`; };
+    out.push(`<div class="won"><div class="won-h"><b>${MK_LAB[m]}</b><span>${sides.length === 1 ? `All ${tot} agree` : `${by[sides[0]].length}–${tot - by[sides[0]].length} split`}</span></div>
+      ${say ? `<p class="won-say">${say}</p>` : ''}
+      ${sides.map((sd, i) => { const L = by[sd].sort((x, y) => (y.o - x.o) || ((y.p || 0) - (x.p || 0))); const pr = L.find(c => c.price != null);
+        return `<div class="won-side${i ? ' vs' : ''}"><div class="won-pk">${esc(bigOf(b.sp, b.game, L[0].pick))}${pr ? ' ' + esc(odds(pr.price)) : ''} <small>${L.length} ${i ? 'against' : sides.length === 1 ? 'on it' : 'with'}</small></div><ul>${L.map(row).join('')}</ul></div>`; }).join('')}</div>`);
+  }
+  return out.join('');
+}
+function boardPicksHtml(b, F, heavy, all) {
+  const P = (b.picks || []).filter(p => all || pickOk(p, F, heavy)); if (!P.length) return '';
+  return `<div class="bpicks">${P.map(p => `<div class="bp">${tierTag(p)}<span class="bp-pk">${esc(bigOf(b.sp, b.game, p.pick))}${p.price != null ? ' ' + esc(odds(p.price)) : ''}</span>${p.p != null ? `<span class="bp-p">${pct(p.p)}%</span>` : ''}${all && (p.by || []).length ? `<small class="bp-by">by ${p.by.map(v => esc(castOf(v).name)).join(', ')}</small>` : ''}</div>`).join('')}</div>`;
+}
+function chCallsHtml(b, v) {
+  const L = []; for (const m of ['ml', 'spread', 'total']) for (const c of ((b.calls || {})[m] || [])) if (c.v === v) L.push(c);
+  if (!L.length) return ''; const k = castOf(v);
+  return `<div class="bpicks">${L.map(c => `<div class="bp"><span class="tb ch" style="--c:${k.color}">${esc(k.name)}</span><span class="bp-pk">${esc(bigOf(b.sp, b.game, c.pick))}${c.price != null ? ' ' + esc(odds(c.price)) : ''}</span>${c.p != null ? `<span class="bp-p">${pct(c.p)}%</span>` : ''}${c.o ? '<span class="tb off">✓ Official</span>' : ''}</div>`).join('')}</div>`;
+}
+function filterBarHtml(B, games, F) {
+  const heavy = B.heavy || -500, cnt = f => games.filter(f).length;
+  const passT = (g, t) => (g.b ? g.b.picks : []).some(p => pickOk(p, { ...F, tier: t }, heavy));
+  const chip = (k, v, lab, n, cls = '') => `<button type="button" class="${cls}" data-act="bf" data-k="${k}" data-v="${esc(v)}" aria-pressed="${F[k] === v}">${lab}${n != null ? ` <span class="n">${n}</span>` : ''}</button>`;
+  const okW = (g, w) => w === 'all' || (w === 'up' ? !g.over : winOf(g.t) === w);
+  const inW = games.filter(g => okW(g, F.win));
+  const cast = Object.entries(B.cast || {}).sort((a, b) => String(a[1].name).localeCompare(b[1].name));
+  return `<div class="bf">
+    <div class="seg tight" role="group" aria-label="View">${chip('view', 'time', '🕒 By time')}${chip('view', 'league', 'By league')}</div>
+    <div class="seg tight" role="group" aria-label="Start time">${WINS.map(([w, l]) => chip('win', w, l, cnt(g => okW(g, w)))).join('')}</div>
+    <div class="seg tight" role="group" aria-label="Pick strength">${TIERS.map(([t, l]) => chip('tier', t, l, t === 'all' ? inW.length : inW.filter(g => passT(g, t)).length, 't-' + t)).join('')}</div>
+    <div class="seg tight" role="group" aria-label="Bet type">${BTS.map(([k, l]) => chip('bt', k, l, k === 'all' ? null : inW.filter(g => (g.b ? g.b.picks : []).some(p => btOk(k, p, heavy) && pickOk(p, { ...F, bt: 'all' }, heavy))).length)).join('')}</div>
+    ${cast.length ? `<label class="bf-ch"><span>Character</span><select data-change="bfch"><option value="all">Every character</option>${cast.map(([v, c]) => `<option value="${esc(v)}"${F.ch === v ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
+    ${F.win !== 'up' || F.tier !== 'all' || F.bt !== 'all' || F.ch !== 'all' ? '<button type="button" class="bf-reset" data-act="bfreset">Show everything</button>' : ''}</div>`;
+}
 function gameHtml(g) {
-  const L = liveOf({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}` }), open = S.openGame === g.k, on = openPickOn(g);
+  const L = liveOf({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}` }), open = S.openGame === g.k, on = openPickOn(g), b = g.b, F = S.bf, heavy = (boardOf() || {}).heavy || -500;
   const t = L && L.state === 'in' ? `<div class="g-t live">Live<br>${esc(L.detail || '')}</div>` : L && L.state === 'post' ? '<div class="g-t">Final</div>' : `<div class="g-t">${esc(clock(g.t)).replace(' ', '<br>')}</div>`;
   const side = (x, sc) => `<div class="tm"><span class="rk">${x.rk ? x.rk : ''}</span><span class="nm">${esc(x.nick || x.ab)}</span><span class="rc">${x.w + x.l ? `${x.w}-${x.l}` : ''}</span>${sc != null ? `<span class="sc">${sc}</span>` : ''}</div>`;
   const live = L && L.state !== 'pre';
@@ -369,11 +454,12 @@ function gameHtml(g) {
     if ((g.mv || []).length) rows.push(['Line moves', esc(g.mv.join('; ').replace(/-/g, '−'))]);
     if (g.venue) rows.push(['Where', esc(g.venue)]);
     if (g.note) rows.push(['In the news', esc(g.note)]);
-    more = `<div class="g-more"><dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>
+    const bp = b ? boardPicksHtml(b, F, heavy, true) : '', wo = b ? whoOnHtml(b) : '';
+    more = `<div class="g-more">${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call and how sure it is. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
       ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the lounge.</span><a class="btn foil" href="${CFG.lounge}" target="_blank" rel="noopener">Open the lounge</a></div>` : ''}</div>`;
   }
   return `<div class="game"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
-    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${more}</div>`;
+    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${F.ch !== 'all' ? chCallsHtml(b, F.ch) : boardPicksHtml(b, F.tier === 'all' && F.bt === 'all' ? { ...F, tier: 'top' } : F, heavy, false)}</div>` : ''}${more}</div>`;
 }
 function viewSlate() {
   const el = $('#v-slate'), SL = S.slate;
@@ -382,8 +468,33 @@ function viewSlate() {
   if (S.slateDay >= list.length) S.slateDay = 0;
   const D = list[S.slateDay], label = d => (d === today ? 'Today' : d === deskDay(Date.now() + 864e5) ? 'Tomorrow' : shortDay(d));
   const sps = ORDER.filter(sp => D.games.some(g => g.sp === sp)); if (S.slateSp !== 'all' && !sps.includes(S.slateSp)) S.slateSp = 'all';
-  const games = D.games.filter(g => S.slateSp === 'all' || g.sp === S.slateSp);
-  const body = sps.filter(sp => S.slateSp === 'all' || sp === S.slateSp).map(sp => { const gs = games.filter(g => g.sp === sp); return `<div class="lg">${esc(LEAGUE[sp])}, ${gs.length} game${gs.length === 1 ? '' : 's'}</div>${gs.map(gameHtml).join('')}`; }).join('');
+  /* the board rides on top of the sheet: each game gets the desk's picks and calls, and board games the sheet skipped join it */
+  const B = boardOf(), BF = S.bf, heavy = (B && B.heavy) || -500; let all = D.games.map(g => ({ ...g }));
+  if (B) {
+    const M = boardIndex(), used = new Set();
+    for (const g of all) { const k = bKey(g.sp, g.a.ab, g.h.ab) + '|' + D.d; const b = M.get(k); if (b) { g.b = b; used.add(k); } }
+    for (const [k, b] of M) { if (used.has(k) || b.day !== D.d) continue; const [a, h] = String(b.game).split('@'), tm = x => ({ ab: x, nick: teamName(b.sp, x), w: 0, l: 0 });
+      all.push({ sp: b.sp, k: 'b|' + k, t: ms(b.start), a: tm(a), h: tm(h), b }); }
+    for (const g of all) g.over = overOf(g.sp, `${g.a.ab}@${g.h.ab}`, g.t, g.b && g.b.st);
+    for (const sp of ORDER) if (!sps.includes(sp) && all.some(g => g.sp === sp)) sps.push(sp);
+    sps.sort((x, y) => ORDER.indexOf(x) - ORDER.indexOf(y));
+  }
+  const bOn = !!(B && all.some(g => g.b));
+  const inSp = all.filter(g => S.slateSp === 'all' || g.sp === S.slateSp);
+  const okG = g => { if (!bOn) return true;
+    if (!(BF.win === 'all' || (BF.win === 'up' ? !g.over : winOf(g.t) === BF.win))) return false;
+    if (BF.ch !== 'all') return !!(g.b && Object.values(g.b.calls || {}).some(L => L.some(c => c.v === BF.ch)));
+    if (BF.tier !== 'all' || BF.bt !== 'all') return !!(g.b && g.b.picks.some(p => pickOk(p, BF, heavy)));
+    return true; };
+  const games = inSp.filter(okG).sort((x, y) => x.t - y.t || ORDER.indexOf(x.sp) - ORDER.indexOf(y.sp));
+  const slotHead = gs => { const P = gs.flatMap(g => g.b ? g.b.picks.filter(p => pickOk(p, BF, heavy)) : []), n = t => P.filter(p => p.tier === t).length, u = P.filter(p => p.unan).length;
+    const st = gs.every(g => g.over) ? ' · final' : gs.some(g => { const L = liveOf({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}` }); return L && L.state === 'in'; }) ? ' · live' : '';
+    return `<div class="lg slot"><span>🕒 ${esc(clock(gs[0].t))}${st}</span><small>${gs.length} game${gs.length === 1 ? '' : 's'} · ${[...new Set(gs.map(g => LEAGUE[g.sp]))].join(' · ')}${u ? ` · <b class="c-unan">★ ${u} unanimous</b>` : ''}${n('supreme') ? ` · <b class="c-supreme">${n('supreme')} supreme</b>` : ''}${n('strong') ? ` · <b class="c-strong">${n('strong')} strong</b>` : ''}</small></div>`; };
+  let body;
+  if (bOn && BF.view === 'time') { const T = new Map(); for (const g of games) { const k = fin(g.t) ? g.t : 0; if (!T.has(k)) T.set(k, []); T.get(k).push(g); }
+    body = [...T.values()].map(gs => slotHead(gs) + gs.map(gameHtml).join('')).join(''); }
+  else body = sps.filter(sp => S.slateSp === 'all' || sp === S.slateSp).map(sp => { const gs = games.filter(g => g.sp === sp); return gs.length ? `<div class="lg">${esc(LEAGUE[sp])}, ${gs.length} game${gs.length === 1 ? '' : 's'}</div>${gs.map(gameHtml).join('')}` : ''; }).join('');
+  if (bOn && !body) body = `<div class="blank"><b>No games match these filters</b><p><button type="button" class="btn line" data-act="bfreset">Show everything</button></p></div>`;
   const stale = Date.now() - SL.ts > 6 * 36e5;
   /* rankings */
   const rsps = ORDER.filter(sp => (SL.ranks[sp] || []).length); if (!rsps.includes(S.rankSp)) S.rankSp = rsps[0] || '';
@@ -393,9 +504,10 @@ function viewSlate() {
     <div class="paper">${shown.map(x => `<div class="rank"><span class="n">${x.rk}</span><span class="t">${esc(x.name || x.ab)}<small>${x.w}-${x.l}${x.st ? `, ${x.st[0] === 'W' ? 'won' : 'lost'} ${esc(x.st.slice(1))} straight` : ''}</small></span><span>${pips(x.l5)}</span><span class="r">${x.rt > 0 ? '+' : x.rt < 0 ? '−' : ''}${Math.abs(x.rt).toFixed(1)}</span></div>`).join('')}
       ${RK.length > 10 ? `<button type="button" class="more-btn" data-act="rankall">${S.rankAll ? 'Show the top 10' : `Show all ${RK.length}`}</button>` : ''}</div>` : '';
   el.innerHTML = `<h1 class="title">${esc(label(D.d) === 'Today' ? weekday(D.d) + '’s sheet' : label(D.d) === 'Tomorrow' ? 'Tomorrow’s sheet' : shortDay(D.d))}</h1>
-    <p class="lede">Every game on the board with its line, the market’s odds and where each team sits in TheDesk Power Rankings. Tap a game for the details.</p>
+    <p class="lede">${bOn ? 'Every game by start time, with the desk’s colored picks. Tap a game to see which characters are with it, which are against it, and who has earned a say.' : 'Every game on the board with its line, the market’s odds and where each team sits in TheDesk Power Rankings. Tap a game for the details.'}</p>
     <div class="cols"><div><div class="seg" role="group" aria-label="Day and league">${list.map((d, i) => `<button type="button" data-act="slateday" data-i="${i}" aria-pressed="${i === S.slateDay}">${esc(label(d.d))}</button>`).join('')}
       ${sps.length > 1 ? `<button type="button" data-act="slatesp" data-sp="all" aria-pressed="${S.slateSp === 'all'}">All leagues</button>${sps.map(sp => `<button type="button" data-act="slatesp" data-sp="${sp}" aria-pressed="${sp === S.slateSp}">${esc(LEAGUE[sp])}</button>`).join('')}` : ''}</div>
+    ${bOn ? filterBarHtml(B, inSp, BF) : ''}
     <div class="paper"><div class="sheet-h"><b>${esc(shortDay(D.d))}</b><span>Lines as of ${esc(clock(SL.ts))}${stale ? ', waiting on a refresh' : ''}</span></div>
       ${body || '<div class="blank"><b>Nothing on the board</b><p>No games with lines for this day yet.</p></div>'}
       <div class="sheet-f">The number beside a team is its Power Rank.${D.more ? ` ${D.more} more college games are on the full board; these are the ones worth a look.` : ''} Lines can move. This sheet never shows the desk’s sealed picks.</div></div></div>
@@ -451,7 +563,7 @@ function viewCast() {
         return `<button type="button" class="castcard mini" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span><span class="cc-rec">${today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today'}</span></div>
           <h3>${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span></div><span class="cc-more">See profile →</span></button>`; }).join('')}</div>
       ${race.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div><p class="note">Every character has heirs learning in the background. When one proves it’s better, it takes over: a new generation.</p>
-        <div class="paper race"><div class="tix-h"><b>Closest to a new generation</b></div>${race.map(({ c, p }, i) => `<div class="rc"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div></section>` : ''}${footHtml()}`;
+        <div class="paper race"><div class="tix-h"><b>Closest to a new generation</b></div>${race.map(({ c, p }, i) => `<div class="rcr"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div></section>` : ''}${footHtml()}`;
     return;
   }
   const c = C.find(x => x.v === pick), g = c.record || {}, pr = c.props || {}, lines = cells.filter(x => x.v === c.v);
@@ -660,6 +772,9 @@ document.addEventListener('click', async e => {
   else if (act === 'game') { S.openGame = S.openGame === a.dataset.k ? '' : a.dataset.k; render(); }
   else if (act === 'slateday') { S.slateDay = +a.dataset.i; S.openGame = ''; render(); slateLive(); }
   else if (act === 'slatesp') { S.slateSp = a.dataset.sp; render(); }
+  else if (act === 'bf') { S.bf[a.dataset.k] = a.dataset.v; store.set('bf', S.bf); S.openGame = ''; render(); }
+  else if (act === 'bfreset') { S.bf = { win: 'up', tier: 'all', bt: 'all', ch: 'all', view: S.bf.view || 'time' }; store.set('bf', S.bf); render(); }
+  else if (act === 'gobf') { S.bf = { ...S.bf, win: 'up', tier: a.dataset.tier || 'all', bt: 'all', ch: 'all', view: 'time' }; store.set('bf', S.bf); S.slateDay = 0; go('slate', true); }
   else if (act === 'ranksp') { S.rankSp = a.dataset.sp; S.rankAll = false; render(); }
   else if (act === 'rankall') { S.rankAll = !S.rankAll; render(); }
   else if (act === 'castpick') { S.castPick = a.dataset.v || ''; store.set('castpick', S.castPick); viewCast(); window.scrollTo(0, 0); }
@@ -671,7 +786,7 @@ document.addEventListener('click', async e => {
   else if (act === 'chat-invite') chatMod({ act: 'invite', uses: 25 }, j => { CH.invite = j.code; const n = $('#chatInv'); if (n) n.innerHTML = `New code: <code>${esc(j.code)}</code> (25 uses)`; });
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
-document.addEventListener('change', e => { const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
+document.addEventListener('change', e => { const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
 /* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
 async function restartApp() {
   toast('Restarting with the newest version…');
