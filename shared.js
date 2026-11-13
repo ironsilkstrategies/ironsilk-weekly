@@ -597,13 +597,13 @@ function pstUnpack(R){if(!R||R.v!==2)return R;const p={};Object.entries(R.p||{})
   return{p,fed:R.fed||{},bf:R.bf};}
 const PST_MEM={};
 const PST_STATS={
-  nhl:{g:'goals',a:'assists',pts:'points',s:'shots on goal'},
+  nhl:{g:'goals',a:'assists',pts:'points',s:'shots on goal',bs:'blocked shots',ht:'hits',sv:'saves (G)',ga:'goals against (G)'},
   mlb:{h:'hits',hr:'home runs',rbi:'RBI',r:'runs',bb:'walks',tb:'total bases',k:'strikeouts (P)',ha:'hits allowed (P)',er:'earned runs (P)'},
-  nfl:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs'},
-  ncaaf:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs'},
-  nba:{pts:'points',reb:'rebounds',ast:'assists',fg3:'3-pointers',stl:'steals',blk:'blocks'}};
+  nfl:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs',pint:'interceptions thrown',cmp:'completions',att:'pass attempts',car:'rush attempts',sk:'sacks',tkl:'tackles',dint:'interceptions'},
+  ncaaf:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs',pint:'interceptions thrown',cmp:'completions',att:'pass attempts',car:'rush attempts',sk:'sacks',tkl:'tackles',dint:'interceptions'},
+  nba:{pts:'points',reb:'rebounds',ast:'assists',fg3:'3-pointers',stl:'steals',blk:'blocks',to:'turnovers'}};
 PST_STATS.ncaab=PST_STATS.nba;
-const PST_COUNT=new Set(['g','a','s','h','hr','rbi','r','bb','tb','k','ha','er','ptd','rtd','wtd','td','rec','fg3','stl','blk']);
+const PST_COUNT=new Set(['g','a','s','h','hr','rbi','r','bb','tb','k','ha','er','ptd','rtd','wtd','td','rec','fg3','stl','blk','pint','cmp','att','car','sk','tkl','dint','to','bs','ht','sv','ga','sb']);
 function pstDb(sp){if(!PST_MEM[sp]){const R=pstUnpack(get(PST_KEY(sp),null));PST_MEM[sp]=R&&R.p?R:{p:{},fed:{}};}return PST_MEM[sp];}
 function pstSave(sp,cap){const D=pstDb(sp);const ids=Object.keys(D.p);const MAX=cap||PST_CAP[sp]||1500;
   if(ids.length>MAX){ids.sort((a,b)=>(D.p[a].n||0)-(D.p[b].n||0)).slice(0,ids.length-MAX).forEach(k=>delete D.p[k]);}
@@ -629,25 +629,35 @@ function pstForm(sp,name,k,n){const P=pstDb(sp).p[pstId(name)];if(!P||!Array.isA
   const R=P.r.slice(-(n||5)).map(row=>{if(i>=0)return row[i+1];const parts=PST_COMBO[k];return parts?parts.reduce((a,x)=>{const j=K.indexOf(x);return a+(j>=0&&row[j+1]!=null?row[j+1]:0);},0):null;}).filter(v=>v!=null);
   if(!R.length)return null;const avg=R.reduce((a,v)=>a+v,0)/R.length;
   return{n:R.length,avg,vals:R,hit:thr=>R.filter(v=>v>=thr).length,last:R[R.length-1]};}
-const PST_COMBO={pra:['pts','reb','ast'],pr:['pts','reb'],pa:['pts','ast'],ra:['reb','ast']};
+const PST_COMBO={pra:['pts','reb','ast'],pr:['pts','reb'],pa:['pts','ast'],ra:['reb','ast'],sb:['stl','blk'],rry:['ry','wy'],pry:['py','ry']};
+/* v2.99 · a stat's running record — or, for a combo (points + rebounds + assists…), one built from its parts: the means add, and the
+   spread is the parts' spread plus a quarter for how they move together. So combo props work today from the history already kept. */
+function pstStatOf(P,k){if(!P||!P.s)return null;if(P.s[k])return P.s[k];const parts=PST_COMBO[k];if(!parts)return null;const Ss=parts.map(x=>P.s[x]);if(Ss.some(x=>!x||!x.gp))return null;
+  const n=Math.min(...Ss.map(x=>x.gp));let mean=0,ema=0,v=0;Ss.forEach(x=>{const m=x.sum/x.gp;mean+=m;ema+=x.ema==null?m:x.ema;v+=x.gp>1?Math.max(0,(x.sq-x.gp*m*m)/(x.gp-1)):0;});v*=1.25;
+  return{gp:n,sum:mean*n,sq:v*Math.max(n-1,0)+n*mean*mean,ema,combo:true};}
+/* a finished game's value for a stat — a combo adds its parts */
+function pstVal(v,k){if(!v)return null;if(v[k]!=null)return+v[k];const parts=PST_COMBO[k];if(!parts||parts.some(x=>v[x]==null))return null;return parts.reduce((a,x)=>a+(+v[x]||0),0);}
 /* Feed a parsed box exactly once, and only when it is FINAL */
 function pstatFeed(sp,eventId,box){
   if(!box||box.state!=='post'||!eventId)return 0;try{scoutFeed(sp,eventId,box);}catch(e){}const D=pstDb(sp);if(D.fed[eventId])return 0;
   const lines={};const L=(name,team)=>{const k=pstId(name);if(!k)return null;return lines[k]||(lines[k]={name,team,v:{}});};
   if(sp==='nhl'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.skaters||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;
-      const g=pstNum(r.G),a=pstNum(r.A);Object.assign(x.v,{g,a,pts:g+a,s:pstNum(r.S!=null?r.S:r.SOG)});}));}
+      const g=pstNum(r.G),a=pstNum(r.A);Object.assign(x.v,{g,a,pts:g+a,s:pstNum(r.S!=null?r.S:r.SOG),bs:pstNum(r.BS),ht:pstNum(r.HT)});}));
+      Object.entries(box.teams||{}).forEach(([team,t])=>(t.goalies||[]).forEach(r=>{if(r.SV==null&&r.SA==null)return;const x=L(r.name,team);if(!x)return;Object.assign(x.v,{sv:pstNum(r.SV),ga:pstNum(r.GA)});}));}
   else if(sp==='mlb'){Object.entries(box.teams||{}).forEach(([team,t])=>{
       (t.batters||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;const h=pstNum(r.H),hr=pstNum(r.HR);
         const d2=pstNum(r['2B']),d3=pstNum(r['3B']);Object.assign(x.v,{h,hr,rbi:pstNum(r.RBI),r:pstNum(r.R),bb:pstNum(r.BB),tb:h+d2+2*d3+3*hr});});
       (t.pitchers||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;Object.assign(x.v,{k:pstNum(r.K),ha:pstNum(r.H),er:pstNum(r.ER)});});});}
   else if(sp==='nfl'||sp==='ncaaf'){Object.entries(box.teamStats||{}).forEach(([team,t])=>{
-      (t.passing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.py=pstNum(r.YDS);x.v.ptd=pstNum(r.TD);});
-      (t.rushing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.ry=pstNum(r.YDS);x.v.rtd=pstNum(r.TD);});
+      (t.passing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.py=pstNum(r.YDS);x.v.ptd=pstNum(r.TD);x.v.pint=pstNum(r.INT);const ca=String(r['C/ATT']||'').split('/');if(ca.length===2){x.v.cmp=pstNum(ca[0]);x.v.att=pstNum(ca[1]);}});
+      (t.rushing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.ry=pstNum(r.YDS);x.v.rtd=pstNum(r.TD);x.v.car=pstNum(r.CAR);});
+      (t.defensive||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.tkl=pstNum(r.TOT);x.v.sk=pstNum(r.SACKS);if(x.v.dint==null)x.v.dint=0;});
+      (t.ints||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.dint=pstNum(r.INT);});
       (t.receiving||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.rec=pstNum(r.REC);x.v.wy=pstNum(r.YDS);x.v.wtd=pstNum(r.TD);});});
     Object.values(lines).forEach(x=>{['py','ptd','ry','rtd','rec','wy','wtd'].forEach(k=>{if(x.v[k]==null)x.v[k]=0;});x.v.td=x.v.rtd+x.v.wtd;});}
   else if(sp==='nba'||sp==='ncaab'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.players||[]).forEach(r=>{
       if(!pstNum(r.MIN)&&!pstNum(r.PTS))return;const x=L(r.name,team);if(!x)return;
-      Object.assign(x.v,{pts:pstNum(r.PTS),reb:pstNum(r.REB),ast:pstNum(r.AST),fg3:pstNum(String(r['3PT']||'').split('-')[0]),stl:pstNum(r.STL),blk:pstNum(r.BLK),min:pstNum(String(r.MIN||'').split(':')[0])});}));}
+      Object.assign(x.v,{pts:pstNum(r.PTS),reb:pstNum(r.REB),ast:pstNum(r.AST),fg3:pstNum(String(r['3PT']||'').split('-')[0]),stl:pstNum(r.STL),blk:pstNum(r.BLK),to:pstNum(r.TO),min:pstNum(String(r.MIN||'').split(':')[0])});}));}
   const all=Object.values(lines);if(!all.length)return 0;
   const gday=box.date?tdDay(box.date):today();all.forEach(x=>pstAdd(sp,x.name,x.team,x.v,eventId,gday));D.fed[eventId]=1;pstSave(sp);
   try{if(!box.date)throw 0;const LK='d4.pstlast.'+sp,last=get(LK,{})||{};const d=tdDay(box.date);all.forEach(x=>{const k=pstId(x.name);if(!last[k]||last[k].d<=d)last[k]={d,v:x.v};});
@@ -666,21 +676,21 @@ function pstatFeed(sp,eventId,box){
      spread (phi) plus not knowing his true rate; yards / points / boards use a normal with the spread shrunk the same way.
    Per stat: b prior games · w form share · phi (count) or cv2 (spread²/mean²) · m0 league mean · role/rm0/rcv2 for a role prior. */
 const PROP_MODEL={
-  nhl:{s:{b:3,w:.25,phi:1.1,m0:1.75},pts:{b:6,w:.25,phi:1,m0:.56},g:{b:10,w:.25,phi:1,m0:.21},a:{b:6,w:.25,phi:1,m0:.35}},
-  nba:{pts:{b:3,w:.75,cv2:.5,m0:11.7},reb:{b:3,w:.5,cv2:.5,m0:4.3},ast:{b:3,w:.75,cv2:.62,m0:2.8},fg3:{b:3,w:.5,phi:1.22,m0:1.38},stl:{b:6,w:.25,phi:1.1,m0:.75},blk:{b:6,w:.25,phi:1.3,m0:.45},min:{b:3,w:.75,cv2:.15,m0:22}},
-  ncaab:{pts:{b:3,w:.75,cv2:.51,m0:10.7},reb:{b:3,w:.75,cv2:.31,m0:3.9},ast:{b:6,w:.75,cv2:.5,m0:2.05},fg3:{b:3,w:.25,phi:1.32,m0:.97},stl:{b:6,w:.25,phi:1.1,m0:.7},blk:{b:6,w:.25,phi:1.3,m0:.4},min:{b:3,w:.75,cv2:.15,m0:20}},
+  nhl:{s:{b:3,w:.25,phi:1.1,m0:1.75},pts:{b:6,w:.25,phi:1,m0:.56},g:{b:10,w:.25,phi:1,m0:.21},a:{b:6,w:.25,phi:1,m0:.35},bs:{b:6,w:.25,phi:1.2,m0:.9},ht:{b:6,w:.25,phi:1.3,m0:1.3},sv:{b:3,w:.25,phi:1.15,m0:26},ga:{b:6,w:.25,phi:1.05,m0:2.9}},
+  nba:{pts:{b:3,w:.75,cv2:.5,m0:11.7},reb:{b:3,w:.5,cv2:.5,m0:4.3},ast:{b:3,w:.75,cv2:.62,m0:2.8},fg3:{b:3,w:.5,phi:1.22,m0:1.38},stl:{b:6,w:.25,phi:1.1,m0:.75},blk:{b:6,w:.25,phi:1.3,m0:.45},min:{b:3,w:.75,cv2:.15,m0:22},to:{b:4,w:.25,phi:1.1,m0:1.3}},
+  ncaab:{pts:{b:3,w:.75,cv2:.51,m0:10.7},reb:{b:3,w:.75,cv2:.31,m0:3.9},ast:{b:6,w:.75,cv2:.5,m0:2.05},fg3:{b:3,w:.25,phi:1.32,m0:.97},stl:{b:6,w:.25,phi:1.1,m0:.7},blk:{b:6,w:.25,phi:1.3,m0:.4},min:{b:3,w:.75,cv2:.15,m0:20},to:{b:4,w:.25,phi:1.1,m0:1.5}},
   mlb:{h:{b:25,w:.75,phi:1,m0:.84},tb:{b:25,w:.25,phi:2.18,m0:1.38},hr:{b:40,w:.25,phi:1,m0:.12},rbi:{b:25,w:.25,phi:1.5,m0:.45},r:{b:25,w:.25,phi:1.2,m0:.5},bb:{b:25,w:.25,phi:1.1,m0:.35},
     k:{b:6,w:.25,phi:1.3,m0:1,role:2.5,rm0:5},ha:{b:10,w:.25,phi:1.1,m0:.8,role:3,rm0:5.2},er:{b:10,w:.25,phi:1.6,m0:.35,role:1.5,rm0:2.6}},
   nfl:{py:{b:1,w:.75,cv2:.16,m0:16,role:100,rm0:220},ry:{b:3,w:.75,cv2:2.5,m0:13,role:25,rm0:55,rcv2:.38},wy:{b:6,w:.25,cv2:1.8,m0:21.5,role:20,rm0:45,rcv2:.59},
-    rec:{b:1,w:0,phi:1.29,m0:1.95,role:1.5,rm0:3.6},td:{b:3,w:0,phi:1.03,m0:.27},ptd:{b:3,w:.25,phi:1.1,m0:1.4},rtd:{b:3,w:0,phi:1,m0:.15},wtd:{b:3,w:0,phi:1,m0:.15}},
+    rec:{b:1,w:0,phi:1.29,m0:1.95,role:1.5,rm0:3.6},td:{b:3,w:0,phi:1.03,m0:.27},ptd:{b:3,w:.25,phi:1.1,m0:1.4},rtd:{b:3,w:0,phi:1,m0:.15},wtd:{b:3,w:0,phi:1,m0:.15},pint:{b:3,w:.25,phi:1.05,m0:.75},cmp:{b:2,w:.5,phi:1.15,m0:20},att:{b:2,w:.5,phi:1.1,m0:31},car:{b:2,w:.5,phi:1.3,m0:8,role:10,rm0:15},sk:{b:6,w:.25,phi:1.1,m0:.25},tkl:{b:4,w:.25,phi:1.15,m0:3.2},dint:{b:10,w:0,phi:1,m0:.06}},
   ncaaf:{py:{b:1,w:.75,cv2:.12,m0:23,role:100,rm0:225},ry:{b:3,w:.75,cv2:1.2,m0:21,role:25,rm0:54,rcv2:.61},wy:{b:3,w:.75,cv2:1.1,m0:26,role:20,rm0:48,rcv2:.44},
-    rec:{b:3,w:.75,phi:1.11,m0:2.05,role:1.5,rm0:3.1},td:{b:6,w:0,phi:1,m0:.39},ptd:{b:3,w:.25,phi:1.1,m0:1.8},rtd:{b:6,w:0,phi:1,m0:.25},wtd:{b:6,w:0,phi:1,m0:.2}}};
+    rec:{b:3,w:.75,phi:1.11,m0:2.05,role:1.5,rm0:3.1},td:{b:6,w:0,phi:1,m0:.39},ptd:{b:3,w:.25,phi:1.1,m0:1.8},rtd:{b:6,w:0,phi:1,m0:.25},wtd:{b:6,w:0,phi:1,m0:.2},pint:{b:3,w:.25,phi:1.05,m0:.8},cmp:{b:2,w:.5,phi:1.15,m0:19},att:{b:2,w:.5,phi:1.1,m0:30},car:{b:2,w:.5,phi:1.3,m0:9,role:10,rm0:16},sk:{b:6,w:.25,phi:1.1,m0:.3},tkl:{b:4,w:.25,phi:1.15,m0:3.5},dint:{b:10,w:0,phi:1,m0:.07}}};
 function pstModel(sp,k,raw){const T=(PROP_MODEL[sp]||{})[k];const cnt=PST_COUNT.has(k)||(sp==='nhl'&&k==='pts');
   if(!T)return{b:4,w:.25,phi:cnt?1.1:null,cv2:cnt?null:.4,m0:raw||0};const role=T.role!=null&&raw>=T.role;
   return{b:T.b,w:T.w,phi:T.phi!=null?T.phi:null,cv2:T.phi!=null?null:(role&&T.rcv2!=null?T.rcv2:T.cv2),m0:role&&T.rm0!=null?T.rm0:T.m0};}
 /* one stat's projection: season (shrunk), form (shrunk), and the blends each character reads */
-function pstProj(sp,name,k){const P=pstDb(sp).p[pstId(name)];if(!P||!P.s[k]||!P.s[k].gp)return null;
-  const S=P.s[k],n=S.gp,mean=S.sum/n,ema=S.ema==null?mean:S.ema;const v=n>1?Math.max(0,(S.sq-n*mean*mean)/(n-1)):null;
+function pstProj(sp,name,k){const P=pstDb(sp).p[pstId(name)];const S=pstStatOf(P,k);if(!S||!S.gp)return null;
+  const n=S.gp,mean=S.sum/n,ema=S.ema==null?mean:S.ema;const v=n>1?Math.max(0,(S.sq-n*mean*mean)/(n-1)):null;
   const M=pstModel(sp,k,mean);const season=(S.sum+M.b*M.m0)/(n+M.b);const nf=Math.min(n,3.3);const form=(ema*nf+M.b*season)/(nf+M.b);const ramp=Math.min(1,n/10);
   const mu=(1-M.w*ramp)*season+M.w*ramp*form;const tw=Math.max(.75,M.w)*ramp;
   return{mu,mean,ema,n,sd:v!=null?Math.sqrt(v):null,v,team:P.team,name:P.name,season,form,trend:(1-tw)*season+tw*form,M};}
@@ -1146,16 +1156,17 @@ function rsInjury(sp,name){try{const C=roGet('d4.rsroster',{})||{};   /* v2.86 �
 const rsOut=s=>/^(out|injured|ir\b|suspen|doubtful)/i.test(String(s||''));
 /* ESPN stat names → this app's stat keys (the names are exactly what the game-log API sends) */
 const GL_MAP={
-  football:{passingYards:'py',passingTouchdowns:'ptd',rushingYards:'ry',rushingTouchdowns:'rtd',receptions:'rec',receivingYards:'wy',receivingTouchdowns:'wtd'},
+  football:{passingYards:'py',passingTouchdowns:'ptd',rushingYards:'ry',rushingTouchdowns:'rtd',receptions:'rec',receivingYards:'wy',receivingTouchdowns:'wtd',completions:'cmp',passingAttempts:'att',rushingAttempts:'car'},
+  footballQB:{interceptions:'pint'},footballDef:{totalTackles:'tkl',sacks:'sk',interceptions:'dint'},
   /* v2.36 · threes arrive as "threePointFieldGoalsMade-threePointFieldGoalsAttempted" ("3-7") — they were never read before */
-  nba:{points:'pts',totalRebounds:'reb',rebounds:'reb',assists:'ast',threePointFieldGoalsMade:'fg3','threePointFieldGoalsMade-threePointFieldGoalsAttempted':'fg3',steals:'stl',blocks:'blk',minutes:'min'},
-  nhl:{goals:'g',assists:'a',points:'pts',shotsTotal:'s',shots:'s',shotsOnGoal:'s'},
+  nba:{points:'pts',totalRebounds:'reb',rebounds:'reb',assists:'ast',threePointFieldGoalsMade:'fg3','threePointFieldGoalsMade-threePointFieldGoalsAttempted':'fg3',steals:'stl',blocks:'blk',minutes:'min',turnovers:'to'},
+  nhl:{goals:'g',assists:'a',points:'pts',shotsTotal:'s',shots:'s',shotsOnGoal:'s',blockedShots:'bs',hits:'ht',saves:'sv',goalsAgainst:'ga'},
   mlb:{hits:'h',homeRuns:'hr',RBIs:'rbi',runsBattedIn:'rbi',runs:'r',walks:'bb',doubles:'d2',triples:'d3'},
   /* v2.36 · a PITCHER's log uses the same names for what he allowed — it used to land as a hitter's line */
   mlbPitch:{strikeouts:'k',hits:'ha',earnedRuns:'er'}};
 /* tolerant game-log parser: names[] + seasonTypes[].categories[].events[{eventId,stats[]}] */
 function glParse(sp,j){const fam=sp==='nfl'||sp==='ncaaf'?'football':sp==='ncaab'?'nba':sp;const names=(j&&(j.names||j.labels))||[];const games={};
-  const mapFor=nm=>fam==='mlb'&&(nm.includes('innings')||nm.includes('earnedRuns'))?GL_MAP.mlbPitch:(GL_MAP[fam]||{});
+  const mapFor=nm=>fam==='mlb'&&(nm.includes('innings')||nm.includes('earnedRuns'))?GL_MAP.mlbPitch:fam==='football'?{...GL_MAP.football,...(nm.includes('totalTackles')?GL_MAP.footballDef:nm.includes('passingYards')?GL_MAP.footballQB:{})}:(GL_MAP[fam]||{});
   const walk=o=>{if(!o||typeof o!=='object')return;if(Array.isArray(o)){o.forEach(walk);return;}
     if(o.eventId&&Array.isArray(o.stats)){const nm=Array.isArray(o.names)?o.names:names;const M=mapFor(nm);const g=games[o.eventId]||(games[o.eventId]={});
       o.stats.forEach((v,i)=>{const k=M[nm[i]];if(k&&g[k]==null)g[k]=pstNum(String(v).split('-')[0]);});return;}
@@ -3068,7 +3079,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15949,9 +15960,16 @@ if(typeof window!=='undefined'&&!/[?&]bg=1/.test(location.search||''))window.add
       priced at -400 is flagged as overpriced), and
    2) "likely outcomes": for players on today's slate, the highest standard
       threshold each clears ≥65% of the time — for every sport, no lines needed. */
-const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4]},nfl:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},
-  ncaaf:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1]},mlb:{h:[1,2],tb:[2,3],hr:[1],k:[5,6,7]},nhl:{s:[2,3,4],pts:[1],g:[1]},
-  ncaab:{pts:[10,15,20,25],reb:[5,7,10],ast:[3,5,7],fg3:[1,2,3]}};
+/* v2.99 · the board widened (Nov 13): combos (P+R+A, P+R, P+A, R+A, steals + blocks, rush + rec yds, pass + rush yds), turnovers, steals and
+   blocks; QB completions, attempts, passing TDs and interceptions; rush attempts, rushing and receiving TDs; sacks, tackles and picks for
+   defenders; hockey assists, blocked shots, hits, and goalie saves and goals against. Unders where the line has room (see CPROP_UNDER). */
+const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4],pra:[20,25,30,35,40],pr:[15,20,25,30],pa:[15,20,25,30],ra:[8,10,12],stl:[1,2],blk:[1,2],sb:[2,3],to:[2,3,4]},
+  nfl:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1],ptd:[1,2,3],pint:[1],cmp:[15,20,25],att:[25,30,35],car:[10,15,20],rtd:[1],wtd:[1],rry:[60,80,100],pry:[220,260,300],sk:[1],tkl:[4,6,8],dint:[1]},
+  ncaaf:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1],ptd:[1,2,3],pint:[1],cmp:[15,20,25],att:[25,30,35],car:[10,15,20],rtd:[1],wtd:[1],rry:[60,80,100],pry:[220,260,300],sk:[1],tkl:[4,6,8],dint:[1]},
+  mlb:{h:[1,2],tb:[2,3],hr:[1],k:[5,6,7]},nhl:{s:[2,3,4],pts:[1],g:[1],a:[1],bs:[1,2,3],ht:[2,3,4],sv:[20,25,30],ga:[2,3,4]},
+  ncaab:{pts:[10,15,20,25],reb:[5,7,10],ast:[3,5,7],fg3:[1,2,3],pra:[15,20,25,30],pr:[12,15,20],pa:[12,15,20],ra:[6,8,10],stl:[1,2],blk:[1,2],to:[2,3,4]}};
+/* unders only where the stat has room on both sides (never "no touchdown" or "no goal") */
+const CPROP_UNDER=new Set(['pts','reb','ast','fg3','pra','pr','pa','ra','to','py','ry','wy','rec','cmp','att','car','rry','pry','tkl','s','ht','bs','sv','ga','k','tb']);
 /* v2.50 · only teams playing TODAY: the football boards hold the whole week, so Sunday's players no longer show as Thursday props */
 function teamsToday(sp){const s=new Set();const d=today();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(a&&a!=='pre'&&a!=='preview')return;const gd=gameDayOf(g);if(gd&&gd!==d)return;s.add(g.away.abbr);s.add(g.home.abbr);});}catch(e){}
   try{const T=roGet(TC_KEY,{})||{};if(T.d===today()){const B=(T.by||{})[sp]||{};(B.picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;String(x.game).split('@').forEach(t=>s.add(t));});
@@ -15959,7 +15977,7 @@ function teamsToday(sp){const s=new Set();const d=today();try{(sportGames(sp)||[
     const now=Date.now();(B.games||[]).forEach(x=>{if(!x||!x.g||!x.s||tdDay(x.s)!==d||Date.parse(x.s)<=now)return;String(x.g).split('@').forEach(t=>s.add(t));});}}catch(e){}return s;}
 function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const teams=teamsToday(sp);if(!teams.size)return[];const out=[];
   Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<3)return;if(rsOut(rsInjury(sp,P.name)))return;
-    Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<3)return;let best=null;
+    Object.entries(L).forEach(([k,ths])=>{const S=pstStatOf(P,k);if(!S||(S.gp||0)<3)return;let best=null;
       ths.forEach(t=>{const r=pstProb(sp,P.name,k,t,'over');if(r&&r.p>=0.65)best={sp,player:P.name,team:P.team,k,thr:t,p:r.p,mu:r.proj.mu,n:r.proj.n};});
       if(best)out.push(best);});});
   return out.sort((a,b)=>b.p-a.p).slice(0,limit||12);}
@@ -15970,7 +15988,7 @@ function likelyLog(R,d){if(!R||!R.length)return;const A=get(LIKELY_KEY,{})||{};c
   if(n){Object.keys(A).sort().slice(0,-45).forEach(k=>delete A[k]);set(LIKELY_KEY,A);}}
 function likelyGrade(){const A=get(LIKELY_KEY,{})||{};let n=0;const LAST={};
   Object.entries(A).forEach(([d,D])=>D.forEach(x=>{if(x.hit!=null)return;const g=(LAST[x.sp]=LAST[x.sp]||get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];
-    if(!g||g.d<d||g.d>dayShift(d,1)||g.v[x.k]==null)return;x.actual=+g.v[x.k];x.hit=x.actual>=x.thr;n++;}));
+    const av=g?pstVal(g.v,x.k):null;if(!g||g.d<d||g.d>dayShift(d,1)||av==null)return;x.actual=av;x.hit=x.actual>=x.thr;n++;}));
   if(n)set(LIKELY_KEY,A);return n;}
 function likelyRecord(days){const A=get(LIKELY_KEY,{})||{};const lo=dayShift(today(),-(days||30));let w=0,l=0;const by={};
   Object.entries(A).forEach(([d,D])=>{if(d<lo)return;D.forEach(x=>{if(x.hit==null)return;if(x.hit)w++;else l++;const b=by[x.sp]||(by[x.sp]={w:0,l:0});if(x.hit)b.w++;else b.l++;});});return{w,l,by};}
@@ -19017,13 +19035,16 @@ function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C
     const last=roGet('d4.pstlast.'+sp,{})||{};
     Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<5)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
       if(rsOut(rsInjury(sp,P.name)))return;   /* v2.36 · listed Out / Doubtful / on IR: no call on a player who won't play */
-      Object.entries(L).forEach(([k,ths])=>{const S=P.s[k];if(!S||(S.gp||0)<5)return;
-        const best={};ths.forEach(t=>{const R0=cpropReads(sp,P.name,k,t,BR);if(!R0)return;
-          CPROP_VOICES.forEach(v=>{const p=R0.r[v];if(p!=null&&p>=0.70)best[v]={p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:''};});});
+      Object.entries(L).forEach(([k,ths])=>{const S=pstStatOf(P,k);if(!S||(S.gp||0)<5)return;
+        const best={},bestU={};ths.forEach(t=>{const R0=cpropReads(sp,P.name,k,t,BR);if(!R0)return;
+          CPROP_VOICES.forEach(v=>{const p=R0.r[v];if(p!=null&&p>=0.70)best[v]={p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:''};
+            /* v2.99 · its lowest line it's 70%+ sure he stays UNDER — used only when no over clears for this character */
+            if(p!=null&&CPROP_UNDER.has(k)&&t>=2&&1-p>=0.70&&!bestU[v])bestU[v]={p:1-p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:'',side:'under'};});});
+        Object.entries(bestU).forEach(([v,b])=>{if(!best[v])best[v]=b;});
         Object.entries(best).forEach(([v,b])=>{let cal=cpropCal(C,v,b.p);const o=REC[v+'|'+sp+'|'+pstId(P.name)];let fav=null;
           /* v2.02 · its record on THIS player is evidence too — 6 games of prior weight on the calibrated % */
           if(o&&o.n>=3){cal=(o.w+6*cal)/(o.n+6);fav=o.n>=4&&o.w/o.n>=0.7?'fav':o.n>=4&&o.w/o.n<=0.4?'fade':null;}
-          out.push({id:[sp,pstId(P.name),k,b.thr,v,d].join('|'),sp,voice:v,player:P.name,team:P.team,k,thr:b.thr,p:+b.p.toFixed(4),cal,mu:b.mu,d,fav,rec:o&&o.n>=3?`${o.w}-${o.n-o.w}`:null,why:b.why||''});});});});});
+          out.push({id:[sp,pstId(P.name),k,b.thr,v,d].join('|')+(b.side==='under'?'|u':''),sp,voice:v,player:P.name,team:P.team,k,thr:b.thr,side:b.side||'over',p:+b.p.toFixed(4),cal,mu:b.mu,d,fav,rec:o&&o.n>=3?`${o.w}-${o.n-o.w}`:null,why:b.why||''});});});});});
   return out;}
 /* every character's record on every player it has called */
 let CPR_C=null;
@@ -19034,15 +19055,17 @@ function cpropFavs(v){const L=Object.values(cpropRecIdx()).filter(o=>o.voice===v
 /* its best prop today — favorites first when they're within 3 points */
 function cpropOfDay(v,calls){calls=(calls||cpropToday()).filter(c=>c.voice===v&&c.fav!=='fade');if(!calls.length)return null;
   return calls.sort((a,b)=>(b.cal+(b.fav==='fav'?0.03:0))-(a.cal+(a.fav==='fav'?0.03:0)))[0];}
-function cpropLine(c){return`${c.player} ${c.thr}+ ${CPROP_LAB[c.k]||c.k}`;}
+function cpropLine(c){return c&&c.side==='under'?`${c.player} under ${(+c.thr)-0.5} ${CPROP_LAB[c.k]||c.k}`:`${c.player} ${c.thr}+ ${CPROP_LAB[c.k]||c.k}`;}
 function cpropLog(calls){const L=get(CPROP_KEY,[])||[];const have=new Set(L.map(x=>x.id));let n=0;
-  calls.forEach(c=>{if(have.has(c.id))return;L.push({id:c.id,sp:c.sp,voice:c.voice,player:c.player,team:c.team,k:c.k,thr:c.thr,p:c.p,d:c.d,hit:null,mv:CPROP_MV});n++;});
+  calls.forEach(c=>{if(have.has(c.id))return;L.push({id:c.id,sp:c.sp,voice:c.voice,player:c.player,team:c.team,k:c.k,thr:c.thr,...(c.side==='under'?{side:'under'}:{}),p:c.p,d:c.d,hit:null,mv:CPROP_MV});n++;});
   if(n)set(CPROP_KEY,L.slice(-6000));return n;}
 function cpropGrade(){const L=get(CPROP_KEY,[])||[];let n=0;const LAST={};
   L.forEach(x=>{if(x.hit!=null)return;const g=(LAST[x.sp]=LAST[x.sp]||get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];
-    if(!g||g.d<x.d||g.d>dayShift(x.d,1)||g.v[x.k]==null)return;x.actual=+g.v[x.k];x.hit=x.actual>=x.thr;n++;});
+    const a=g?pstVal(g.v,x.k):null;if(!g||g.d<x.d||g.d>dayShift(x.d,1)||a==null)return;x.actual=a;x.hit=x.side==='under'?a<x.thr:a>=x.thr;n++;});
   if(n)set(CPROP_KEY,L);return n;}
-const CPROP_LAB={pts:'PTS',reb:'REB',ast:'AST',fg3:'3PM',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'rec',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'K',s:'SOG',g:'goal'};
+const CPROP_LAB={pts:'PTS',reb:'REB',ast:'AST',fg3:'3PM',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'rec',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'K',s:'SOG',g:'goal',
+  pra:'PTS+REB+AST',pr:'PTS+REB',pa:'PTS+AST',ra:'REB+AST',stl:'STL',blk:'BLK',sb:'STL+BLK',to:'turnovers',ptd:'pass TD',pint:'INT thrown',cmp:'completions',att:'pass att',car:'rush att',rtd:'rush TD',wtd:'rec TD',
+  rry:'rush+rec yds',pry:'pass+rush yds',sk:'sacks',tkl:'tackles',dint:'INT',a:'assist',bs:'blocked shots',ht:'hits',sv:'saves',ga:'goals against'};
 function cpropCalibHtml(){const C=cpropCalib();
   const rows=CPROP_VOICES.map(v=>{const cells=C[v].map(b=>b.n?`<td style="color:${b.rate>=b.avgP-0.03?'var(--win)':b.rate>=b.avgP-0.08?'var(--gold)':'var(--rust)'}">${b.h}/${b.n}<br><b>${Math.round(b.rate*100)}%</b></td>`:'<td style="color:var(--mute)">—</td>').join('');
     const all=C[v].reduce((a,b)=>({n:a.n+b.n,h:a.h+b.h}),{n:0,h:0});
@@ -19054,7 +19077,7 @@ let CPROP_FOCUS=null;
 function cpropFocus(id){CPROP_FOCUS=CPROP_FOCUS===id?null:id;renderToday(true);}
 function cpropSweetHtml(sp,name){const P=pstDb(sp).p[pstId(name)];if(!P)return'';const L=LIKELY_LADDER[sp]||{};const BR=cpropBrier();
   const hist=(get(CPROP_KEY,[])||[]).filter(x=>x.sp===sp&&pstId(x.player)===pstId(name)&&x.hit!=null);
-  const stats=Object.entries(L).filter(([k])=>P.s[k]&&P.s[k].gp>=4).map(([k,ths])=>{const J=pstProj(sp,name,k);
+  const stats=Object.entries(L).filter(([k])=>{const S=pstStatOf(P,k);return S&&S.gp>=4;}).map(([k,ths])=>{const J=pstProj(sp,name,k);
     const rows=ths.map(t=>{const R0=cpropReads(sp,name,k,t,BR);if(!R0)return'';return`<tr><td style="text-align:left">${t}+ ${CPROP_LAB[k]||k}</td>${CPROP_VOICES.map(v=>{const p=R0.r[v];return`<td style="color:${p>=0.7?'var(--win)':p>=0.55?'var(--gold)':'var(--mute)'}">${p==null?'—':Math.round(p*100)+'%'}</td>`;}).join('')}</tr>`;}).join('');
     const h=hist.filter(x=>x.k===k);const hw=h.filter(x=>x.hit).length;
     return`<div style="margin-top:6px"><div class="mono" style="font-size:10px"><b>${(PST_STATS[sp]||{})[k]||k}</b> · season ${J.mean.toFixed(1)}/g · recent ${J.ema.toFixed(1)} · ${J.n} games${h.length?` · characters ${hw}-${h.length-hw} on him here`:''}</div>

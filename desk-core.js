@@ -1320,7 +1320,7 @@ const PUB_UNLOCK_MS=30*60e3,PUBUPD_KEY='d4.pubupdates';
 const pubOpenAt=x=>{const t=Date.parse(x&&x.start||'');return isFinite(t)?t-PUB_UNLOCK_MS:null;};
 const pubIsOpen=(x,now)=>{const t=pubOpenAt(x);return t!=null&&(now||Date.now())>=t;};
 function deskPropResult(x,d){try{if(x.hit!=null||x.push)return x;const g=(get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];const k=(x.keys||[x.k])[0];
-  if(g&&g.d>=d&&g.d<=dayShift(d,1)&&g.v&&g.v[k]!=null){const a=+g.v[k];return{...x,actual:a,hit:x.side==='under'?a<+x.thr:a>+x.thr};}}catch(e){}return x;}
+  const gv=g&&g.v?(typeof pstVal==='function'?pstVal(g.v,k):g.v[k]):null;if(g&&g.d>=d&&g.d<=dayShift(d,1)&&gv!=null){const a=+gv;return{...x,actual:a,hit:x.side==='under'?a<+x.thr:a>+x.thr};}}catch(e){}return x;}
 /* v2.98 · THE OPEN BETA (Nov 13). While the beta switch is on (Settings → Public page), the public page carries the whole card
    the minute it locks: the Best 3, the rest of the Top 10, the Banker's parlay, every character's parlay and the props, every
    character's official picks with each character's own breakdown, the characters' bios and records, and the bloodlines.
