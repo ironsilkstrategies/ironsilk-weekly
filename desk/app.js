@@ -304,7 +304,8 @@ async function seal(T) {
 }
 function footHtml() {
   return `<footer class="foot"><p>For entertainment. 21 and over. Bet only what you can afford to lose. If betting stops being fun, call 1-800-GAMBLER.</p>
-    <p>TheDesk is published by IronSilk Strategies. <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></p></footer>`;
+    <p>TheDesk is published by IronSilk Strategies. <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></p>
+    <p><button type="button" class="btn line restart" data-act="restart">↻ Restart the app</button> <span class="small-note">Not seeing the latest? This loads the newest version.</span></p></footer>`;
 }
 
 /* ── Receipts ────────────────────────────────────────────────────────────── */
@@ -433,32 +434,46 @@ function crownPct(b, need) { if (!b) return 0; const z = b.bar > 0 ? Math.max(0,
 function blRow(c, need) {
   const b = c.best, p = Math.round(crownPct(b, need) * 100);
   return `<div class="bl"><div class="bl-t"><b>${esc(MKT[c.m] || c.m)}</b><span>Generation ${c.gen} · ${c.heirs} heir${c.heirs === 1 ? '' : 's'} reading</span></div>
-    ${b ? `<div class="bl-bar" role="img" aria-label="${p}% of the way to the chair"><i style="width:${p}%"></i></div><div class="bl-s">${Math.min(b.n, need.n)}/${need.n} games · ${Math.min(b.days, need.days)}/${need.days} days · ${b.z >= 0 ? '+' : '−'}${Math.abs(b.z).toFixed(1)}σ of ${b.bar.toFixed(1)}σ</div>` : ''}
-    ${(c.hist || []).length ? `<div class="bl-s">Last change: ${esc(c.hist[c.hist.length - 1].lab || '')}</div>` : ''}</div>`;
+    ${b ? `<div class="bl-bar" role="img" aria-label="${p}% of the way to a new generation"><i style="width:${p}%"></i></div><div class="bl-s">${p}% of the way to a new generation · ${Math.min(b.n, need.n)}/${need.n} games watched</div>` : ''}
+    ${(c.hist || []).length ? `<div class="bl-s">Generation ${c.gen} took over ${esc(shortDay(c.hist[c.hist.length - 1].to || deskDay()))}</div>` : ''}</div>`;
 }
 function viewCast() {
   const el = $('#v-cast'), F = S.feed || {}, C = F.characters || [], B = F.bloodlines, need = (B && B.need) || { n: 100, days: 10 };
   if (!C.length) { el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">The roster shows up here once the desk publishes it.</p>${footHtml()}`; return; }
-  const cells = (B && B.cells) || [];
-  const race = cells.filter(c => c.best).map(c => ({ c, p: crownPct(c.best, need) })).sort((a, b) => b.p - a.p).slice(0, 5);
-  const gens = cells.filter(c => c.gen > 1).length, heirs = cells.reduce((n, c) => n + (c.heirs || 0), 0);
-  const raceHtml = cells.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div>
-      <p class="note">Every character is a bloodline. Heirs, each the same character with one belief changed, read every game in the shadows. One takes the chair after ${need.n}+ games it was never tuned on and ${need.days}+ days, if it beats its parent by more than luck and makes no less money.</p>
-      <div class="crown-stats"><div><b>${cells.length}</b><span>bloodlines</span></div><div><b>${heirs}</b><span>heirs reading</span></div><div><b>${gens}</b><span>new generations</span></div></div>
-      ${race.length ? `<div class="paper race"><div class="tix-h"><b>Closest to the crown</b><span>${need.n} games · ${need.days} days · past the bar</span></div>${race.map(({ c, p }, i) => `<div class="rc"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)} · ${esc(c.best.lab || '')}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div>` : ''}</section>` : '';
-  const card = c => {
-    const r = c.record || { w: 0, l: 0, pu: 0, u: 0 }, n = r.w + r.l, lines = cells.filter(x => x.v === c.v);
-    return `<article class="castcard" style="--cc:${okColor(c.color)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${n ? `<span class="cc-rec">${r.w}–${r.l}${r.pu ? '–' + r.pu : ''}, ${signed(r.u)}u</span>` : '<span class="cc-rec">No graded calls yet</span>'}</div>
-      <h3>${esc(c.name)}</h3><p class="cc-bio">${esc(c.bio || '')}</p>
-      ${(c.picks || []).length ? `<div class="cc-sub"><span>Today’s official picks</span>${vipBadge()}</div><div class="paper tix">${c.picks.map(p => `<div class="leg"><div class="li"><span class="mk ${stateOf(p)}">${stateOf(p) === 'w' ? '✓' : stateOf(p) === 'l' ? '✗' : stateOf(p) === 'p' ? '=' : '•'}</span><span class="pk">${esc(readPick(p).big)} ${esc(odds(p.price))}<small>${esc([LEAGUE[p.sp], p.gl, stateOf(p) === 'o' && p.start ? whenLabel(p.start) : ''].filter(Boolean).join(' · '))}</small></span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div>${p.note ? `<p class="why1">${esc(p.note)}</p>` : ''}</div>`).join('')}</div>` : '<div class="cc-sub"><span>No official pick today</span></div>'}
-      ${lines.length ? `<div class="cc-sub"><span>Bloodlines</span></div>${lines.map(x => blRow(x, need)).join('')}` : ''}</article>`;
-  };
-  el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">Every pick on TheDesk comes from these voices. Each one reads every game its own way, gets graded in public, and keeps its own record. Records count official calls over the last 60 days.</p>
-    ${raceHtml}<div class="castgrid">${C.map(card).join('')}</div>${footHtml()}`;
+  const cells = (B && B.cells) || [], pick = S.castPick && C.some(c => c.v === S.castPick) ? S.castPick : '';
+  const sel = `<div class="castpick"><label for="castSel">Pick a character</label><select id="castSel" data-change="castpick"><option value="">All characters</option>${C.map(c => `<option value="${esc(c.v)}"${c.v === pick ? ' selected' : ''}>${esc(c.name)}${c.title ? ' · ' + esc(c.title) : ''}</option>`).join('')}</select></div>`;
+  const rec = r => r && r.w + r.l ? `${r.w}–${r.l}${r.pu ? '–' + r.pu : ''}` : '—';
+  const mark = r => (r === 'win' ? '<span class="mk w">✓</span>' : r === 'loss' ? '<span class="mk l">✗</span>' : r === 'push' ? '<span class="mk p">=</span>' : '<span class="mk">•</span>');
+  if (!pick) {
+    const race = cells.filter(c => c.best).map(c => ({ c, p: crownPct(c.best, need) })).sort((a, b) => b.p - a.p).slice(0, 5);
+    el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">Every pick on TheDesk comes from these voices. Each one sees the game its own way and keeps its own record. Pick one to see everything it’s called.</p>${sel}
+      <div class="castgrid">${C.map(c => { const g = c.record || {}, pr = c.props || {}, today = (c.picks || []).length;
+        return `<button type="button" class="castcard mini" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span><span class="cc-rec">${today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today'}</span></div>
+          <h3>${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span></div><span class="cc-more">See profile →</span></button>`; }).join('')}</div>
+      ${race.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div><p class="note">Every character has heirs learning in the background. When one proves it’s better, it takes over: a new generation.</p>
+        <div class="paper race"><div class="tix-h"><b>Closest to a new generation</b></div>${race.map(({ c, p }, i) => `<div class="rc"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div></section>` : ''}${footHtml()}`;
+    return;
+  }
+  const c = C.find(x => x.v === pick), g = c.record || {}, pr = c.props || {}, lines = cells.filter(x => x.v === c.v);
+  const games = (c.picks || []).filter(p => p.kind !== 'prop'), props = (c.picks || []).filter(p => p.kind === 'prop');
+  const pickRow = p => `<div class="leg"><div class="li"><span class="mk ${stateOf(p)}">${stateOf(p) === 'w' ? '✓' : stateOf(p) === 'l' ? '✗' : stateOf(p) === 'p' ? '=' : '•'}</span><span class="pk">${esc(p.kind === 'prop' ? p.pick : readPick(p).big)}${p.price != null ? ' ' + esc(odds(p.price)) : ''}<small>${esc([LEAGUE[p.sp], p.gl || p.team, p.kind !== 'prop' && stateOf(p) === 'o' && p.start ? whenLabel(p.start) : ''].filter(Boolean).join(' · '))}</small></span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div>${p.note ? `<p class="why1">${esc(p.note)}</p>` : ''}</div>`;
+  const wl = o => (o && o.w + o.l ? `${o.w}–${o.l}` : '—');
+  el.innerHTML = `<button type="button" class="link back" data-act="castpick" data-v="">← All characters</button>${sel}
+    <article class="profile" style="--cc:${okColor(c.color)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${vipBadge()}</div>
+      <h1 class="title">${esc(c.name)}</h1>${c.title ? `<p class="cc-title big">${esc(c.title)}</p>` : ''}<p class="lede">${esc(c.bio || '')}</p>
+      ${c.origin ? `<div class="origin"><b>Where the eye comes from</b><p>${esc(c.origin)}</p></div>` : ''}
+      <div class="statrow"><div><b>${rec(g)}</b><span>Official game picks${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span></div><div><b>${rec(pr)}</b><span>Props</span></div><div><b>${(c.picks || []).length}</b><span>Picks today</span></div></div>
+      ${(c.best || []).length ? `<h2 class="h2">Best at</h2><div class="lanes">${c.best.map(x => `<span class="lane good">${esc(x.lane)} <b>${x.w}–${x.l}</b>${x.u ? ` ${x.u > 0 ? '+' : ''}${x.u}u` : ''}</span>`).join('')}${(c.still || []).map(x => `<span class="lane meh">Still learning: ${esc(x.lane)} <b>${x.w}–${x.l}</b></span>`).join('')}</div>` : ''}
+      <h2 class="h2">Today’s official picks</h2>${games.length || props.length ? `<div class="paper tix">${games.map(pickRow).join('')}${props.length ? `<div class="tix-h sub"><b>Props</b></div>${props.map(pickRow).join('')}` : ''}</div>` : '<p class="note">Nothing official today. It only speaks when it’s sure.</p>'}
+      ${(c.recent || []).length ? `<h2 class="h2">Recent results</h2><div class="paper tix">${c.recent.map(r => `<div class="leg"><div class="li">${mark(r.r)}<span class="pk">${esc(r.kind === 'prop' ? r.pick : readPick(r).big)}${r.price != null ? ' ' + esc(odds(r.price)) : ''}<small>${esc([LEAGUE[r.sp], r.gl, shortDay(r.d)].filter(Boolean).join(' · '))}</small></span><span class="u"></span></div></div>`).join('')}</div>` : ''}
+      ${(c.teams || []).length ? `<h2 class="h2">Teams it backs and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Team</th><th scope="col">Backed</th><th scope="col">Against</th></tr></thead><tbody>${c.teams.map(t => `<tr><th scope="row">${esc(teamName(t.sp, t.team))}<small>${esc(LEAGUE[t.sp] || '')}</small></th><td>${wl(t.for)}</td><td>${wl(t.vs)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${(c.players || []).length ? `<h2 class="h2">Players it rides and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Player</th><th scope="col">Overs</th><th scope="col">Unders</th></tr></thead><tbody>${c.players.map(t => `<tr><th scope="row">${esc(t.player)}<small>${esc([LEAGUE[t.sp], t.team].filter(Boolean).join(' · '))}</small></th><td>${wl(t.over)}</td><td>${wl(t.under)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${lines.length ? `<h2 class="h2">Bloodlines</h2>${lines.map(x => blRow(x, need)).join('')}` : ''}</article>${footHtml()}`;
 }
 
 /* ── the members' chatroom (the one thing that talks back: words only, never picks) ── */
 const CH = { list: [], ws: null, tries: 0, poll: null, invite: '', err: '' };
+S.castPick = store.get('castpick') || '';
 const chatPass = () => { const p = store.get('chat'); return p && p.token && p.exp > Date.now() ? p : null; };
 async function chatApi(path, body) {
   const r = await fetch(CFG.chat + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -647,6 +662,8 @@ document.addEventListener('click', async e => {
   else if (act === 'slatesp') { S.slateSp = a.dataset.sp; render(); }
   else if (act === 'ranksp') { S.rankSp = a.dataset.sp; S.rankAll = false; render(); }
   else if (act === 'rankall') { S.rankAll = !S.rankAll; render(); }
+  else if (act === 'castpick') { S.castPick = a.dataset.v || ''; store.set('castpick', S.castPick); viewCast(); window.scrollTo(0, 0); }
+  else if (act === 'restart') restartApp();
   else if (act === 'chat-leave') { store.set('chat', null); viewChat(); }
   else if (act === 'chat-del') chatMod({ act: 'del', id: a.dataset.id }, () => { CH.list = CH.list.filter(m => m.id !== a.dataset.id); paintChat(); });
   else if (act === 'chat-mute') chatMod({ act: 'mute', name: a.dataset.name, mins: 60 }, () => toast(`${a.dataset.name} is muted for an hour`));
@@ -654,6 +671,14 @@ document.addEventListener('click', async e => {
   else if (act === 'chat-invite') chatMod({ act: 'invite', uses: 25 }, j => { CH.invite = j.code; const n = $('#chatInv'); if (n) n.innerHTML = `New code: <code>${esc(j.code)}</code> (25 uses)`; });
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
+document.addEventListener('change', e => { const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
+/* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
+async function restartApp() {
+  toast('Restarting with the newest version…');
+  try { const R = navigator.serviceWorker && navigator.serviceWorker.getRegistrations ? await navigator.serviceWorker.getRegistrations() : []; await Promise.all(R.filter(r => /\/desk\//.test(r.scope)).map(r => r.unregister())); } catch { /* none */ }
+  try { const K = window.caches ? await caches.keys() : []; await Promise.all(K.filter(k => /^thedesk-shell/.test(k)).map(k => caches.delete(k))); } catch { /* none */ }
+  setTimeout(() => location.replace(location.pathname + '?fresh=' + Date.now() + location.hash), 400);
+}
 window.addEventListener('popstate', () => go((location.hash || '#today').slice(1), false));
 
 /* the clocks on sealed slips; when one runs out, ask the desk for the opened slip */

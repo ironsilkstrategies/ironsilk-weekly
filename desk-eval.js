@@ -58,7 +58,7 @@ if(typeof window!=='undefined'&&!window.__EV_BOOT__){window.__EV_BOOT__=1;window
    No props, no parlays, no cashed-ticket showcase, no model numbers, no "show the math" — the answers
    leave the phone; the machinery that made them never does. Your own app keeps everything. */
 function evSimpleFeed(F){try{if(!F)return F;const simple=x=>{if(!x)return x;const o={...x};delete o.voices;
-      if(o.why){const r=o.why.read;o.why=r?{read:{who:r.who,take:r.take,text:r.text}}:undefined;}return o;};
+      if(o.why){const r=o.why.read;o.why=r?{read:{who:r.who,take:r.take,text:r.text}}:undefined;if(o.why&&typeof pubWhy==='function')o.why=pubWhy(o.why);}return o;};   /* v3.0 · no method talk leaves the phone */
     if(F.today){F.today={...F.today,picks:(F.today.picks||[]).map(simple),props:[]};}F.parlay=null;F.parlayRecord=null;F.cashed=[];
     F.history=(F.history||[]).map(h=>({...h,picks:(h.picks||[]).map(simple)}));F.simple=1;}catch(e){}return F;}
 if(typeof publicFeed==='function'&&typeof window!=='undefined'&&!window.__EV_PUB__){window.__EV_PUB__=1;const PF1=publicFeed;

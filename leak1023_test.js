@@ -19,6 +19,9 @@ let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');html=html.replace(/<scr
   /* v2.98 · the open beta is on by default: the whole card the minute it locks */
   const FB=w.eval('publicFeed()');
   T('open beta (the default): every pick of today\'s card is on the public page at once, with the beta flag, the plans and the roster',FB.beta===true&&FB.today.picks.every(x=>!x.hidden&&x.pick)&&Array.isArray(FB.plans)&&FB.plans.length===5&&Array.isArray(FB.characters),JSON.stringify(FB.today.picks.map(x=>x.hidden?'h':x.pick))+' '+FB.beta);
+  T('public bios: a title and a human story for every character, no method words', w.eval(`Object.values(PUB_BIOS).every(b=>b.title&&b.bio&&b.origin&&!PUB_SCRUB.test(b.bio)&&!PUB_SCRUB.test(b.origin))`));
+  T('method talk never leaves the phone: "Played 10,000 times" and "the simulation" sentences are cut, the rest of the read stays', w.eval(`pubScrub("I watch the talent. Played 10,000 times, Minnesota wins 62% of them. The simulation alone says 62%. The worry: no Faber.")`)==='I watch the talent. The worry: no Faber.');
+  T('a public lane reads like a person wrote it', w.eval(`pubLaneName('nhl|spread|fav')`)==='NHL favorites on the spread'&&w.eval(`pubLaneName('nba|ml|dog')`)==='NBA underdogs on the moneyline');
   w.eval(`set('d4.pubbeta',false)`);
   const F=w.eval('publicFeed()');const txt=JSON.stringify(F);
   T('beta switched off: back to free vs VIP (no beta flag, no VIP sections)',F.beta===false&&!F.vip&&!F.characters&&!F.bloodlines);

@@ -1321,6 +1321,31 @@ const pubOpenAt=x=>{const t=Date.parse(x&&x.start||'');return isFinite(t)?t-PUB_
 const pubIsOpen=(x,now)=>{const t=pubOpenAt(x);return t!=null&&(now||Date.now())>=t;};
 function deskPropResult(x,d){try{if(x.hit!=null||x.push)return x;const g=(get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];const k=(x.keys||[x.k])[0];
   const gv=g&&g.v?(typeof pstVal==='function'?pstVal(g.v,k):g.v[k]):null;if(g&&g.d>=d&&g.d<=dayShift(d,1)&&gv!=null){const a=+gv;return{...x,actual:a,hit:x.side==='under'?a<+x.thr:a>+x.thr};}}catch(e){}return x;}
+/* v3.0 · THE PUBLIC FACE OF EACH CHARACTER (Nov 13). Who they are, where their eye comes from, what they're best at — told like a
+   person, never like a machine. How each one actually reads a game stays in this app: no methods, no math, nothing to copy. */
+const PUB_BIOS={
+  Sim:{title:'The Visionary',bio:'He has watched more football, hockey and hoops than anyone alive, and it shows: by the time the anthem ends he has already seen every way the night can go. Quiet, unflappable, allergic to hype. When a favorite is supposed to roll, he is the one who knows whether it actually will.',origin:'Grew up in a film room with the lights off. Learned early that the game tells you what it is going to do if you have watched it enough times.'},
+  Judge:{title:'The Gavel',bio:'Nobody talks over the Judge. She lets every voice in the room make its case, then rules, and her rulings stick. Patient, fair and impossible to rush, she is at her best when the desk is split and somebody has to decide.',origin:'Spent years listening to experts argue and keeping score of who was actually right. Trusts a track record over a loud voice, every time.'},
+  Coach:{title:'The Sideline General',bio:'Twenty seasons of road trips, red-eyes and locker rooms taught the Coach one thing: talent is half the story, the other half is whether a team is ready to play tonight. He keeps everyone on the desk honest and calls out the spots where a good team is due to stumble.',origin:'Came up as a grinder, not a star. Knows what a long week on the road does to legs, and what a team looks like when it has something to prove.'},
+  'Most common':{title:'The Scorekeeper',bio:'Give her a game and she will hand you the final before kickoff. She does not care about stories or streaks, only how points actually get scored, possession by possession. Deadly on totals and on games where everyone else is guessing.',origin:'Kept the official book in a press box for years. Watched every point go up on the board and learned exactly where they come from.'},
+  Pred:{title:'The Oracle',bio:'The Oracle has ears everywhere. Markets, insiders, the sharpest minds in the business: she hears it all, sorts the signal from the noise and tells you what the smart world really thinks. When the room is quiet, she is the one who already knows.',origin:'Built a network before she built a following. Believes the crowd of the best is smarter than any one genius, and has the receipts.'},
+  Covers:{title:'The Outsider',bio:'A sharp outside voice the desk keeps in the room to hear what the rest of the industry is projecting. Useful as a second opinion, never the final word.',origin:'Comes from outside the building, and that is the point: a fresh set of eyes on every game.'},
+  Trends:{title:'The Historian',bio:'He has read every box score back to the leather-helmet days and he remembers all of them. Dynasties, pretenders, the rivalry that always goes the same way: if history has an opinion about tonight, the Historian will tell you. Best when the past keeps repeating itself.',origin:'Raised on old almanacs and grainy tape. Swears history does not repeat, but it rhymes, and he can hear the rhyme.'},
+  Consensus:{title:'The Crowd',bio:'The voice of the people. The Crowd knows where the public is leaning and how hard, and sometimes the smartest move is knowing which way everyone else is going.',origin:'Lives in the stands, the group chats and the betting lines at the window. Feels the room before the room knows it.'},
+  Power:{title:'The Commissioner',bio:'The Commissioner runs the pecking order. Who is better, by how much, and whether the number on the board respects it. Cool, decisive, never swayed by a hot week. Strongest when a line does not match who the teams really are.',origin:'Spent a career ranking teams for people who make decisions. Believes every team has a true level, and the scoreboard always finds it eventually.'},
+  Dog:{title:'The Underdog Spotter',bio:'Grew up rooting for the little guy and never stopped. The Spotter finds the dog with teeth: the team nobody believes in that keeps games close and steals a few. When the favorite is too comfortable, the Spotter smells blood.',origin:'Was the undersized kid who kept getting picked last and kept winning anyway. Knows an upset is coming before the favorite does.'},
+  Scout:{title:'The Talent Hunter',bio:'The Scout watches players, not teams. Stars who take over, matchups a defense cannot handle, the one guy who swings a game by himself. When tonight comes down to who has the better players on the floor or the ice, the Scout is the voice to hear.',origin:'Spent years on the road in empty gyms and cold rinks, finding players before anyone knew their names. Trusts his eyes on talent over any headline.'},
+  Banker:{title:'The Money Man',bio:'The Banker keeps the books for the whole desk and only backs where the strongest accounts are. Calm, disciplined, never chasing. His parlays are built the way he runs money: carefully, and only with the pieces that have earned it.',origin:'Ran the money before he ever made a pick. Learned that discipline beats brilliance over a long season.'},
+  Brain:{title:'The Strategist',bio:'The Brain lives in the gray zone between favorite and underdog, where the prices are fair and most people guess. He only steps in when the number is wrong, and he is patient enough to wait for it.',origin:'Studied the game behind the game. Believes the edge is not in picking winners, it is in knowing when the price is off.'}};
+/* the public never reads a method: any sentence that names one is left out of what goes to the page */
+const PUB_SCRUB=/10[, ]?000|simulat|monte carlo|played \\d[\\d,]* times|run \\d|model|calibrat|algorithm|regression|poisson|binomial|logit|exponential|weighs? every|witness|graded accuracy|power index|engine|sample|z-score|σ|sigma|walk-forward/i;
+function pubScrub(t){if(t==null)return t;const s=String(t);return s.split(/(?<=[.!?])\s+/).filter(x=>!PUB_SCRUB.test(x)).join(' ').trim();}
+/* a pick's reasons, cleaned of any method talk (the Best 3 read, its bullets) */
+function pubWhy(W){if(!W)return W;const o={...W};try{if(o.bullets)o.bullets=o.bullets.map(pubScrub).filter(Boolean);if(o.script)o.script=pubScrub(o.script);
+  if(o.read)o.read={...o.read,take:pubScrub(o.read.take),text:String(o.read.text||'').split(/\n+/).map(pubScrub).filter(Boolean).join('\n')};}catch(e){}return o;}
+const PUB_SPN={nfl:'NFL',ncaaf:'College football',nba:'NBA',ncaab:'College hoops',nhl:'NHL',mlb:'MLB'};
+function pubLaneName(k){const[sp,m,t]=String(k).split('|');const T={fav:'favorites',dog:'underdogs',over:'overs',under:'unders',heavy:'heavy favorites'}[t]||t||'';
+  return`${PUB_SPN[sp]||String(sp||'').toUpperCase()} ${T}${m==='total'?'':m==='ml'?' on the moneyline':m==='spread'?' on the spread':''}`.trim();}
 /* v2.98 · THE OPEN BETA (Nov 13). While the beta switch is on (Settings → Public page), the public page carries the whole card
    the minute it locks: the Best 3, the rest of the Top 10, the Banker's parlay, every character's parlay and the props, every
    character's official picks with each character's own breakdown, the characters' bios and records, and the bloodlines.
@@ -1331,9 +1356,9 @@ const PUB_PLANS=[{id:'month',name:'Monthly',price:50,per:'month',note:'Everythin
   {id:'league',name:'League pass',price:100,per:'league, per season',note:'Everything for one league, all season'},{id:'pass',name:'2-day pass',price:20,per:'2 days',note:'Everything for 48 hours'},
   {id:'single',name:'Single pick',price:2,per:'pick',note:'One pick from a game the characters are on'}];
 const PUB_NOTE_SKIP=new Set(['fav','dog','home','road','over','under','bigfav','longdog']);
-function pubCallNote(c){try{const w=typeof c.why==='string'?c.why:Array.isArray(c.why)?c.why.join(' · '):'';if(w)return w.slice(0,240);
+function pubCallNote(c){try{const w0=typeof c.why==='string'?c.why:Array.isArray(c.why)?c.why.join(' · '):'';const w=pubScrub(w0);if(w)return w.slice(0,240);
     const f=(Array.isArray(c.f)?c.f:[]).filter(t=>!PUB_NOTE_SKIP.has(t)).map(t=>(typeof FAC_LAB!=='undefined'&&FAC_LAB[t])||'').filter(Boolean).slice(0,3);
-    const sc=c.score?`projects ${c.score}`:'';return[sc,...f].filter(Boolean).join(' · ').slice(0,240);}catch(e){return'';}}
+    return f.join(' · ').slice(0,240);}catch(e){return'';}}
 const pubOff=c=>{try{return!!isOfficial(c);}catch(e){return false;}};
 const pubUnits=(price,hit)=>hit?(+price>0?+price/100:100/Math.abs(+price||100)):-1;
 /* every character's call on a pick's game and bet type: with it or against it, how sure, and why */
@@ -1345,11 +1370,25 @@ function pubVoicesOn(x,V){try{const m=mkNorm(x.m||x.market),sd=x.sd||x.side,d=St
 let PUB_CHAR_MEMO=null;
 function pubCharacters(V,d){const k=d+'|'+V.length;if(PUB_CHAR_MEMO&&PUB_CHAR_MEMO.k===k&&Date.now()-PUB_CHAR_MEMO.ts<10*60e3)return PUB_CHAR_MEMO.val;const val=pubCharacters0(V,d);PUB_CHAR_MEMO={k,ts:Date.now(),val};return val;}
 function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEach(c=>{if(!CHARS[c.voice]||c.voice==='Blend')return;(by[c.voice]=by[c.voice]||[]).push(c);});
-    return CHAR_ORDER.filter(v=>by[v]&&v!=='Blend').map(v=>{const C=CHARS[v],L=by[v];let w=0,l=0,pu=0,u=0;const picks=[];
+    const CP=(roGet(CPROP_KEY,[],30e3)||[]).filter(x=>x&&x.d>=from);let todayProps=[];try{todayProps=typeof cpropToday==='function'?cpropToday():[];}catch(e){}
+    const res=x=>x.push?'push':x.hit===true?'win':x.hit===false?'loss':null;
+    return CHAR_ORDER.filter(v=>(by[v]||CP.some(x=>x.voice===v))&&v!=='Blend').map(v=>{const C=CHARS[v],L=by[v]||[],B=PUB_BIOS[v]||{};let w=0,l=0,pu=0,u=0;const picks=[],recent=[],teams={};
       L.forEach(c=>{const day=String(c.date).slice(0,10);if(day<from||day>d)return;if(day<d&&c.hit==null&&!c.push)return;if(!pubOff(c))return;
-        if(day===d)picks.push({sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:c.cf!=null?+(+c.cf).toFixed(3):null,start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});
-        else if(c.push)pu++;else if(c.hit===true){w++;u+=pubUnits(c.price,true);}else if(c.hit===false){l++;u-=1;}});
-      return{v,name:C.label,chip:C.chip,color:C.color,bio:C.school,record:{w,l,pu,u:+u.toFixed(2)},picks:picks.sort((a,b)=>(b.p||0)-(a.p||0)).slice(0,12)};});}catch(e){return[];}}
+        if(day===d){picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:c.cf!=null?+(+c.cf).toFixed(3):null,start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});return;}
+        if(c.push)pu++;else if(c.hit===true){w++;u+=pubUnits(c.price,true);}else if(c.hit===false){l++;u-=1;}
+        recent.push({d:day,kind:'game',sp:c.sp,pick:c.pick,price:c.price,gl:gameLabel(c.sp,c.game),r:res(c)});
+        /* the teams it backs and goes against (sides only; totals have no side) */
+        if(c.market!=='total'&&c.side&&c.game&&!c.push&&c.hit!=null){const[A,H]=String(c.game).split('@');const mine=c.side==='home'?H:A,opp=c.side==='home'?A:H;
+          [[mine,'for'],[opp,'vs']].forEach(([t,k])=>{const o=teams[c.sp+'|'+t]||(teams[c.sp+'|'+t]={sp:c.sp,team:t,for:{w:0,l:0},vs:{w:0,l:0}});c.hit?o[k].w++:o[k].l++;});}});
+      /* props: its record, the players it backs (overs) and goes against (unders), today's calls */
+      const pr={w:0,l:0},players={};CP.filter(x=>x.voice===v&&x.hit!=null).forEach(x=>{x.hit?pr.w++:pr.l++;const o=players[x.sp+'|'+x.player]||(players[x.sp+'|'+x.player]={sp:x.sp,player:x.player,team:x.team||'',over:{w:0,l:0},under:{w:0,l:0}});
+        const k=x.side==='under'?'under':'over';x.hit?o[k].w++:o[k].l++;recent.push({d:x.d,kind:'prop',sp:x.sp,pick:(()=>{try{return cpropLine(x);}catch(e){return x.player;}})(),r:x.hit?'win':'loss'});});
+      todayProps.filter(x=>x.voice===v&&x.fav!=='fade').sort((a,b)=>(b.cal||b.p)-(a.cal||a.p)).slice(0,6).forEach(x=>picks.push({kind:'prop',sp:x.sp,pick:(()=>{try{return cpropLine(x);}catch(e){return x.player;}})(),team:x.team,side:x.side||'over',p:+(+(x.cal||x.p)).toFixed(3),hit:null,push:false,note:x.rec?`${x.rec} on him before`:''}));
+      let best=[],still=[];try{const P=charProfile(v);best=(P.strong||[]).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1)}));still=(P.weak||[]).slice(0,1).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w}));}catch(e){}
+      const top=(o,n)=>Object.values(o).map(x=>({...x,n:(x.for?x.for.w+x.for.l+x.vs.w+x.vs.l:x.over.w+x.over.l+x.under.w+x.under.l)})).sort((a,b)=>b.n-a.n).slice(0,n).map(x=>{delete x.n;return x;});
+      return{v,name:C.label,chip:C.chip,color:C.color,title:B.title||'',bio:B.bio||'',origin:B.origin||'',best,still,
+        record:{w,l,pu,u:+u.toFixed(2)},props:pr,picks:picks.sort((a,b)=>(a.kind===b.kind?0:a.kind==='game'?-1:1)||(b.p||0)-(a.p||0)).slice(0,16),
+        recent:recent.sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,12),teams:top(teams,8),players:top(players,8)};});}catch(e){console.warn('pub characters',e);return[];}}
 /* the bloodlines: each character × bet type, its generation, its heirs and how close the best one is to the chair (labels only) */
 function pubBloodlines(){try{if(typeof heirsAll!=='function')return null;const H=heirsAll(),R=typeof HEIR_MEMO!=='undefined'?HEIR_MEMO:null;
     const cells=Object.entries(H.cells||{}).map(([k,C])=>{const c=R&&R.cells&&R.cells[k],bar=+(((c&&c.ctx)||{}).bar||HEIR_BAR).toFixed(2);
@@ -1369,7 +1408,7 @@ function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,
 function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();const VB=beta?(roGet(VOICES_KEY,[],30e3)||[]):null;
   const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
     tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),calls:beta&&x.whyOn&&VB?pubVoicesOn({...x,d0:x.d0},VB):undefined,hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,tuned:x.tuned?true:undefined,
-    why:(()=>{if(!x.whyOn)return undefined;try{const W=pickWhy({...x,date:x.d0});return{bullets:W.bullets.slice(0,6),script:W.script};}catch(e){return undefined;}})()});
+    why:(()=>{if(!x.whyOn)return undefined;try{const W=pickWhy({...x,date:x.d0});return pubWhy({bullets:W.bullets.slice(0,6),script:W.script,read:W.read});}catch(e){return undefined;}})()});
   const hist=Object.keys(log).sort().reverse().slice(0,30).map(d=>({d,picks:(log[d].picks||[]).filter(x=>x.main).map(slim)})).filter(x=>x.picks.length);
   const logOf=x=>(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);
   const gate=(x,body)=>{const at=pubOpenAt(x);const L=logOf(x);const graded=!!(L&&(L.hit!=null||L.push));const open=full||beta||graded||(at!=null&&now>=at);

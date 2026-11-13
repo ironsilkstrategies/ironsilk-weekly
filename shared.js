@@ -599,11 +599,11 @@ const PST_MEM={};
 const PST_STATS={
   nhl:{g:'goals',a:'assists',pts:'points',s:'shots on goal',bs:'blocked shots',ht:'hits',sv:'saves (G)',ga:'goals against (G)'},
   mlb:{h:'hits',hr:'home runs',rbi:'RBI',r:'runs',bb:'walks',tb:'total bases',k:'strikeouts (P)',ha:'hits allowed (P)',er:'earned runs (P)'},
-  nfl:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs',pint:'interceptions thrown',cmp:'completions',att:'pass attempts',car:'rush attempts',sk:'sacks',tkl:'tackles',dint:'interceptions'},
-  ncaaf:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs',pint:'interceptions thrown',cmp:'completions',att:'pass attempts',car:'rush attempts',sk:'sacks',tkl:'tackles',dint:'interceptions'},
+  nfl:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs',pint:'interceptions thrown',cmp:'completions',att:'pass attempts',car:'rush attempts',sk:'sacks',tkl:'tackles',dint:'interceptions',lry:'longest rush',lwy:'longest reception',kpts:'kicking points',fgm:'field goals made'},
+  ncaaf:{py:'passing yds',ptd:'passing TDs',ry:'rushing yds',rtd:'rushing TDs',rec:'receptions',wy:'receiving yds',wtd:'receiving TDs',td:'anytime TDs',pint:'interceptions thrown',cmp:'completions',att:'pass attempts',car:'rush attempts',sk:'sacks',tkl:'tackles',dint:'interceptions',lry:'longest rush',lwy:'longest reception',kpts:'kicking points',fgm:'field goals made'},
   nba:{pts:'points',reb:'rebounds',ast:'assists',fg3:'3-pointers',stl:'steals',blk:'blocks',to:'turnovers'}};
 PST_STATS.ncaab=PST_STATS.nba;
-const PST_COUNT=new Set(['g','a','s','h','hr','rbi','r','bb','tb','k','ha','er','ptd','rtd','wtd','td','rec','fg3','stl','blk','pint','cmp','att','car','sk','tkl','dint','to','bs','ht','sv','ga','sb']);
+const PST_COUNT=new Set(['g','a','s','h','hr','rbi','r','bb','tb','k','ha','er','ptd','rtd','wtd','td','rec','fg3','stl','blk','pint','cmp','att','car','sk','tkl','dint','to','bs','ht','sv','ga','sb','kpts','fgm']);
 function pstDb(sp){if(!PST_MEM[sp]){const R=pstUnpack(get(PST_KEY(sp),null));PST_MEM[sp]=R&&R.p?R:{p:{},fed:{}};}return PST_MEM[sp];}
 function pstSave(sp,cap){const D=pstDb(sp);const ids=Object.keys(D.p);const MAX=cap||PST_CAP[sp]||1500;
   if(ids.length>MAX){ids.sort((a,b)=>(D.p[a].n||0)-(D.p[b].n||0)).slice(0,ids.length-MAX).forEach(k=>delete D.p[k]);}
@@ -650,10 +650,11 @@ function pstatFeed(sp,eventId,box){
       (t.pitchers||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;Object.assign(x.v,{k:pstNum(r.K),ha:pstNum(r.H),er:pstNum(r.ER)});});});}
   else if(sp==='nfl'||sp==='ncaaf'){Object.entries(box.teamStats||{}).forEach(([team,t])=>{
       (t.passing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.py=pstNum(r.YDS);x.v.ptd=pstNum(r.TD);x.v.pint=pstNum(r.INT);const ca=String(r['C/ATT']||'').split('/');if(ca.length===2){x.v.cmp=pstNum(ca[0]);x.v.att=pstNum(ca[1]);}});
-      (t.rushing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.ry=pstNum(r.YDS);x.v.rtd=pstNum(r.TD);x.v.car=pstNum(r.CAR);});
+      (t.rushing||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.ry=pstNum(r.YDS);x.v.rtd=pstNum(r.TD);x.v.car=pstNum(r.CAR);if(r.LONG!=null)x.v.lry=pstNum(r.LONG);});
+      (t.kicking||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.kpts=pstNum(r.PTS);const fg=String(r.FG||'').split('/');if(fg.length===2)x.v.fgm=pstNum(fg[0]);});
       (t.defensive||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.tkl=pstNum(r.TOT);x.v.sk=pstNum(r.SACKS);if(x.v.dint==null)x.v.dint=0;});
       (t.ints||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.dint=pstNum(r.INT);});
-      (t.receiving||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.rec=pstNum(r.REC);x.v.wy=pstNum(r.YDS);x.v.wtd=pstNum(r.TD);});});
+      (t.receiving||[]).forEach(r=>{const x=L(r.name,team);if(!x)return;x.v.rec=pstNum(r.REC);x.v.wy=pstNum(r.YDS);x.v.wtd=pstNum(r.TD);if(r.LONG!=null)x.v.lwy=pstNum(r.LONG);});});
     Object.values(lines).forEach(x=>{['py','ptd','ry','rtd','rec','wy','wtd'].forEach(k=>{if(x.v[k]==null)x.v[k]=0;});x.v.td=x.v.rtd+x.v.wtd;});}
   else if(sp==='nba'||sp==='ncaab'){Object.entries(box.teams||{}).forEach(([team,t])=>(t.players||[]).forEach(r=>{
       if(!pstNum(r.MIN)&&!pstNum(r.PTS))return;const x=L(r.name,team);if(!x)return;
@@ -1156,7 +1157,7 @@ function rsInjury(sp,name){try{const C=roGet('d4.rsroster',{})||{};   /* v2.86 �
 const rsOut=s=>/^(out|injured|ir\b|suspen|doubtful)/i.test(String(s||''));
 /* ESPN stat names → this app's stat keys (the names are exactly what the game-log API sends) */
 const GL_MAP={
-  football:{passingYards:'py',passingTouchdowns:'ptd',rushingYards:'ry',rushingTouchdowns:'rtd',receptions:'rec',receivingYards:'wy',receivingTouchdowns:'wtd',completions:'cmp',passingAttempts:'att',rushingAttempts:'car'},
+  football:{passingYards:'py',passingTouchdowns:'ptd',rushingYards:'ry',rushingTouchdowns:'rtd',receptions:'rec',receivingYards:'wy',receivingTouchdowns:'wtd',completions:'cmp',passingAttempts:'att',rushingAttempts:'car',longRushing:'lry',longReception:'lwy',totalKickingPoints:'kpts',fieldGoalsMade:'fgm'},
   footballQB:{interceptions:'pint'},footballDef:{totalTackles:'tkl',sacks:'sk',interceptions:'dint'},
   /* v2.36 · threes arrive as "threePointFieldGoalsMade-threePointFieldGoalsAttempted" ("3-7") — they were never read before */
   nba:{points:'pts',totalRebounds:'reb',rebounds:'reb',assists:'ast',threePointFieldGoalsMade:'fg3','threePointFieldGoalsMade-threePointFieldGoalsAttempted':'fg3',steals:'stl',blocks:'blk',minutes:'min',turnovers:'to'},
@@ -3079,7 +3080,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261113i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8346,7 +8347,7 @@ function fbpParseBox(j){
     (tb.statistics||[]).forEach(gr=>{
       const cat=(gr.name||gr.type||'').toLowerCase();const labels=gr.labels||gr.keys||[];
       const key=cat.includes('pass')?'passing':cat.includes('rush')?'rushing':cat.includes('receiv')?'receiving':
-        cat==='defensive'?'defensive':cat==='interceptions'?'ints':cat.includes('kickreturn')?'kr':cat.includes('puntreturn')?'pr':null;   /* v2.22: sacks + every way to score a TD */
+        cat==='defensive'?'defensive':cat==='interceptions'?'ints':cat==='kicking'?'kicking':cat.includes('kickreturn')?'kr':cat.includes('puntreturn')?'pr':null;   /* v2.22: sacks + every way to score a TD */
       if(!key)return;if(!out[key])out[key]=[];
       (gr.athletes||[]).forEach(a=>{
         const nm=(a.athlete&&(a.athlete.displayName||a.athlete.shortName))||'';
@@ -15964,12 +15965,12 @@ if(typeof window!=='undefined'&&!/[?&]bg=1/.test(location.search||''))window.add
    blocks; QB completions, attempts, passing TDs and interceptions; rush attempts, rushing and receiving TDs; sacks, tackles and picks for
    defenders; hockey assists, blocked shots, hits, and goalie saves and goals against. Unders where the line has room (see CPROP_UNDER). */
 const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4],pra:[20,25,30,35,40],pr:[15,20,25,30],pa:[15,20,25,30],ra:[8,10,12],stl:[1,2],blk:[1,2],sb:[2,3],to:[2,3,4]},
-  nfl:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1],ptd:[1,2,3],pint:[1],cmp:[15,20,25],att:[25,30,35],car:[10,15,20],rtd:[1],wtd:[1],rry:[60,80,100],pry:[220,260,300],sk:[1],tkl:[4,6,8],dint:[1]},
-  ncaaf:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1],ptd:[1,2,3],pint:[1],cmp:[15,20,25],att:[25,30,35],car:[10,15,20],rtd:[1],wtd:[1],rry:[60,80,100],pry:[220,260,300],sk:[1],tkl:[4,6,8],dint:[1]},
+  nfl:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1],ptd:[1,2,3],pint:[1],cmp:[15,20,25],att:[25,30,35],car:[10,15,20],rtd:[1],wtd:[1],rry:[60,80,100],pry:[220,260,300],sk:[1],tkl:[4,6,8],dint:[1],lwy:[15,20,25,30],lry:[10,15,20],kpts:[5,7,9],fgm:[1,2]},
+  ncaaf:{py:[200,250,275],ry:[50,75,100],wy:[40,60,80],rec:[4,5,6],td:[1],ptd:[1,2,3],pint:[1],cmp:[15,20,25],att:[25,30,35],car:[10,15,20],rtd:[1],wtd:[1],rry:[60,80,100],pry:[220,260,300],sk:[1],tkl:[4,6,8],dint:[1],lwy:[15,20,25,30],lry:[10,15,20],kpts:[5,7,9],fgm:[1,2]},
   mlb:{h:[1,2],tb:[2,3],hr:[1],k:[5,6,7]},nhl:{s:[2,3,4],pts:[1],g:[1],a:[1],bs:[1,2,3],ht:[2,3,4],sv:[20,25,30],ga:[2,3,4]},
   ncaab:{pts:[10,15,20,25],reb:[5,7,10],ast:[3,5,7],fg3:[1,2,3],pra:[15,20,25,30],pr:[12,15,20],pa:[12,15,20],ra:[6,8,10],stl:[1,2],blk:[1,2],to:[2,3,4]}};
 /* unders only where the stat has room on both sides (never "no touchdown" or "no goal") */
-const CPROP_UNDER=new Set(['pts','reb','ast','fg3','pra','pr','pa','ra','to','py','ry','wy','rec','cmp','att','car','rry','pry','tkl','s','ht','bs','sv','ga','k','tb']);
+const CPROP_UNDER=new Set(['pts','reb','ast','fg3','pra','pr','pa','ra','to','py','ry','wy','rec','cmp','att','car','rry','pry','tkl','s','ht','bs','sv','ga','k','tb','lwy','lry','kpts']);
 /* v2.50 · only teams playing TODAY: the football boards hold the whole week, so Sunday's players no longer show as Thursday props */
 function teamsToday(sp){const s=new Set();const d=today();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(a&&a!=='pre'&&a!=='preview')return;const gd=gameDayOf(g);if(gd&&gd!==d)return;s.add(g.away.abbr);s.add(g.home.abbr);});}catch(e){}
   try{const T=roGet(TC_KEY,{})||{};if(T.d===today()){const B=(T.by||{})[sp]||{};(B.picks||[]).forEach(x=>{if(typeof tcIsToday==='function'&&!tcIsToday(x))return;String(x.game).split('@').forEach(t=>s.add(t));});
@@ -19065,7 +19066,7 @@ function cpropGrade(){const L=get(CPROP_KEY,[])||[];let n=0;const LAST={};
   if(n)set(CPROP_KEY,L);return n;}
 const CPROP_LAB={pts:'PTS',reb:'REB',ast:'AST',fg3:'3PM',py:'pass yds',ry:'rush yds',wy:'rec yds',rec:'rec',td:'TD',h:'hits',tb:'total bases',hr:'HR',k:'K',s:'SOG',g:'goal',
   pra:'PTS+REB+AST',pr:'PTS+REB',pa:'PTS+AST',ra:'REB+AST',stl:'STL',blk:'BLK',sb:'STL+BLK',to:'turnovers',ptd:'pass TD',pint:'INT thrown',cmp:'completions',att:'pass att',car:'rush att',rtd:'rush TD',wtd:'rec TD',
-  rry:'rush+rec yds',pry:'pass+rush yds',sk:'sacks',tkl:'tackles',dint:'INT',a:'assist',bs:'blocked shots',ht:'hits',sv:'saves',ga:'goals against'};
+  rry:'rush+rec yds',pry:'pass+rush yds',sk:'sacks',tkl:'tackles',dint:'INT',a:'assist',bs:'blocked shots',ht:'hits',sv:'saves',ga:'goals against',lwy:'longest rec yds',lry:'longest rush yds',kpts:'kicking pts',fgm:'FG made'};
 function cpropCalibHtml(){const C=cpropCalib();
   const rows=CPROP_VOICES.map(v=>{const cells=C[v].map(b=>b.n?`<td style="color:${b.rate>=b.avgP-0.03?'var(--win)':b.rate>=b.avgP-0.08?'var(--gold)':'var(--rust)'}">${b.h}/${b.n}<br><b>${Math.round(b.rate*100)}%</b></td>`:'<td style="color:var(--mute)">—</td>').join('');
     const all=C[v].reduce((a,b)=>({n:a.n+b.n,h:a.h+b.h}),{n:0,h:0});
