@@ -395,24 +395,50 @@ function viewSlate() {
 }
 
 /* ── Join ────────────────────────────────────────────────────────────────── */
+/* how long members had the latest card before the public saw its first pick (all from public timestamps) */
+function headStart(T) {
+  if (!T || !fin(ms(T.lockedAt))) return null;
+  const opens = (T.picks || []).map(x => fin(ms(x.unlockAt)) ? ms(x.unlockAt) : fin(ms(x.start)) ? ms(x.start) - 30 * 60e3 : NaN).filter(fin);
+  if (!opens.length) return null;
+  const lock = ms(T.lockedAt), first = Math.min(...opens);
+  return first - lock >= 30 * 60e3 ? { lock, first, lead: first - lock } : null;
+}
+const hm = d => { const m = Math.round(d / 60e3), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : `${m}m`; };
+const YES = '<svg class="y" viewBox="0 0 24 24" role="img" aria-label="Included"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const NO = '<svg class="n" viewBox="0 0 24 24" role="img" aria-label="Not included"><path d="M7 12h10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
 function viewJoin() {
   const el = $('#v-join'), F = S.feed || {}, sub = okUrl(F.subscribe), soc = { ...CFG.social, ...(F.social || {}) }, tg = okUrl(soc.tg), fb = okUrl(soc.fb);
-  const price = String(F.price || '').replace(/\s*·\s*/g, ' or ').trim();
+  const price = String(F.price || '').replace(/\s*·\s*/g, ' or ').trim(), R = F.record || {}, n = (R.w || 0) + (R.l || 0);
+  const T = F.today, H = headStart(T), isToday = T && T.d === deskDay(), when = isToday ? 'today' : T ? 'on ' + weekday(T.d) : '';
+  const lead = H ? `<div class="headstart"><div class="hs-n">${esc(hm(H.lead))}</div><b class="hs-l">Head start ${esc(when)}</b><span class="hs-s">${isToday && Date.now() < H.first
+      ? `Members have had the card since ${esc(clock(H.lock))}. The public’s first look is at ${esc(clock(H.first))}.`
+      : `Members had the card at ${esc(clock(H.lock))}. The public saw its first pick at ${esc(clock(H.first))}.`}</span></div>` : '';
+  const proof = n ? `<p class="proof">On the record: <b>${R.w}–${R.l}${R.pu ? '–' + R.pu : ''}</b>, <b>${signed(+R.u || 0)} units</b>${R.first ? ' since ' + esc(monthDay(R.first)) : ''}. <button type="button" class="link" data-go="receipts">See every result</button></p>` : '';
+  const rows = [['The Best 3', '30 min before each game', 'The minute it locks'], ['The Top 10 plays of the day', 0, 1], ['Every character’s parlay, plus the Banker’s', 0, 1], ['The private Telegram', 0, 1],
+    ['Every result, graded in public', 1, 1], ['The slate and Power Rankings', 1, 1], ['The lounge', 1, 1]];
+  const cell = (v, cls) => `<td${cls ? ` class="${cls}"` : ''}>${v === 1 ? YES : v === 0 ? NO : esc(v)}</td>`;
   el.innerHTML = `<h1 class="title">Get the card before the games</h1>
     <p class="lede">The public sees each pick 30 minutes before its game. Members see the whole card the minute it locks.</p>
-    <div class="cols"><div>
-    ${sub ? `<div class="pass"><div class="vip" aria-hidden="true">VIP</div><h3>All access</h3>
+    <div class="cols join"><div>
+    ${sub ? `<div class="pass"><div class="vip" aria-hidden="true">VIP</div><h3>All access</h3>${lead}
       <ul><li>The Best 3 at lock time, hours before the public</li><li>The Top 10 plays of the day</li><li>A parlay from every character on the desk, plus the Banker’s</li><li>A private Telegram where it all lands</li></ul>
       ${price ? `<div class="cost">${esc(price)}</div>` : ''}<a class="btn foil block" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP</a>
-      <p class="small">Checkout runs on Whop. Cancel there any time.</p></div>` : ''}
+      ${proof}<p class="small">Checkout runs on Whop. Cancel there any time.</p></div>` : ''}
     <article class="slip stubcard"><div class="slip-head"><span>Admit all</span><span>Free</span></div><div class="slip-main"><h3>The lounge</h3>
       <p>We talk sports here, not just picks. Game threads, polls every hour, and the results posted win or lose.</p></div>
       <div class="slip-stub"><div class="row"><a class="btn ink" href="${CFG.lounge}" target="_blank" rel="noopener">Open the lounge</a>${tg ? `<a class="btn paper" href="${esc(tg)}" target="_blank" rel="noopener">Telegram channel</a>` : ''}${fb ? `<a class="btn paper" href="${esc(fb)}" target="_blank" rel="noopener">Facebook</a>` : ''}</div></div></article>
     </div><div>
+    <h2 class="h2">Free or VIP</h2>
+    <div class="paper cmp"><table><thead><tr><th scope="col"><span class="sr">What you get</span></th><th scope="col">Free</th><th scope="col" class="v">VIP</th></tr></thead>
+      <tbody>${rows.map(([k, f, v]) => `<tr><th scope="row">${esc(k)}</th>${cell(f)}${cell(v, 'v')}</tr>`).join('')}</tbody></table></div>
     <h2 class="h2">How the desk works</h2>
     <ol class="steps"><li><div><b>Locked every morning</b><span>The card is sealed and time-stamped before the first game. A fingerprint of it goes public right then.</span></div></li>
       <li><div><b>Opened 30 minutes before each game</b><span>Each slip turns over on its own clock. Members have it from the lock.</span></div></li>
       <li><div><b>Graded at the final</b><span>Win or lose, the stamp goes on and the result stays on the record.</span></div></li></ol>
+    <h2 class="h2">Questions</h2>
+    <div class="faq"><details><summary>Where do the picks show up?</summary><p>In the private Telegram, the minute the card locks. The public app opens each pick 30 minutes before its game.</p></details>
+      <details><summary>Do you guarantee wins?</summary><p>No, and nobody honest can. Every pick is graded in public, losses included, and the full record is on Receipts.</p></details>
+      <details><summary>Can I cancel?</summary><p>Any time, on Whop. Weekly or monthly, no contract.</p></details></div>
     ${isStandalone() ? '' : `<h2 class="h2">Keep it on your phone</h2><p class="note">TheDesk installs like an app from your browser. No app store, nothing to update.</p><div class="row" style="margin-top:12px"><button type="button" class="btn line" data-act="guide">Show me how</button></div>`}
     </div></div>${F.handle ? `<p class="note" style="margin-top:34px">Run by ${esc(F.handle)}.</p>` : ''}${footHtml()}`;
 }

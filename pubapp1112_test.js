@@ -83,6 +83,9 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   await v.p.click('.tabs [data-go="join"]'); await v.p.waitForTimeout(400); t = await v.text();
   const hrefs = await v.p.evaluate(() => [...document.querySelectorAll('#v-join a[href]')].map(a => a.href));
   T('Join: VIP (the Whop link from the feed), the free lounge, how the desk works', /\$25\/mo or \$10\/wk/.test(t) && hrefs.includes('https://whop.com/ironsilkweekly/thedesk-vip') && hrefs.includes('https://t.me/TheDeskLounge') && /Locked every morning/.test(t), hrefs.join(' '));
+  T('…the head start from the public timestamps (locked 2h before an unlock 10 min ago → about 1h 50m), the real record by the button', /HEAD START TODAY/i.test(t) && /1h (49|50)m/i.test(t) && /On the record: 38–27, \+1\.24 units since Oct 6/.test(t), t.slice(0, 700));
+  T('…free vs VIP side by side (VIP: the card at lock, the Top 10, the parlays, the private Telegram)', (await v.p.locator('#v-join .cmp tbody tr').count()) === 7 && /The minute it locks/.test(t) && /30 min before each game/.test(t) && (await v.p.locator('#v-join .cmp td.v svg.y').count()) === 6 && (await v.p.locator('#v-join .cmp td:not(.v) svg.n').count()) === 3);
+  T('…and the straight answers: where picks land, no guarantees, cancel any time', /Where do the picks show up/.test(t) && /Do you guarantee wins/.test(t) && /Can I cancel/.test(t));
   for (const tab of ['today', 'slate', 'receipts', 'join']) { await v.p.click(`.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('no sideways scroll on ' + tab, false, o + 'px'); }
   T('no sideways scroll on a phone, any tab', true); T('no script errors', v.errs.length === 0, v.errs.join(' | '));
   await v.ctx.close();
