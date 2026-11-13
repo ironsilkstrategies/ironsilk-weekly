@@ -104,7 +104,7 @@ setTimeout(async()=>{try{
   E(`(()=>{const V=get(VOICES_KEY,[]);V.forEach(x=>{if(x.date===today()&&x.market==='ml'){x.cf=0.5;}});set(VOICES_KEY,V);PCI_C=null;DESK_MEM=null;})()`);
   T('after the freeze nothing changes when the inputs move',JSON.stringify(E('best5State()').top3.map(x=>x.pick))===JSON.stringify(B2.top3.map(x=>x.pick))&&JSON.stringify(E('deskPlan()').use)===JSON.stringify(P2.use)&&E('get(TC_KEY,{}).by.nhl.picks.filter(x=>tfPlayable(x,"nhl")).length')===E('get(TC_KEY,{}).by.nhl.picks.filter(x=>x.fz.play).length'));
   const vip=TG.filter(x=>x.p.chat_id==='-100555'),lounge=TG.filter(x=>x.p.chat_id==='-100777'),pub=TG.filter(x=>x.p.chat_id==='@TheDeskApp');
-  T('…and it posts by itself: the VIP card, a note in the VIP lounge, "locked" on the public channel (no picks)',vip.length>=1&&lounge.length===1&&pub.length===1&&!/ML \(/.test(pub[0].p.text)&&/30 minutes before/.test(pub[0].p.text),`vip ${vip.length} · lounge ${lounge.length} · public ${pub.length}`);
+  T('…and it posts by itself: the VIP card, nothing in the VIP lounge (people only since v3.0.6), "locked" on the public channel (no picks)',vip.length>=1&&lounge.length===0&&pub.length===1&&!/ML \(/.test(pub[0].p.text)&&/30 minutes before/.test(pub[0].p.text),`vip ${vip.length} · lounge ${lounge.length} · public ${pub.length}`);
   T('…and publishes the public page',PUT.some(p=>/public\/picks\.json/.test(p.u)));
   /* ── the public page: 30-minute unlock ── */
   const F=E('publicFeed()');
