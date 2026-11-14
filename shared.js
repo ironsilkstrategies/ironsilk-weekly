@@ -253,12 +253,19 @@ function intakeAbbr(sport,raw){
   const t=String(raw||'').trim();if(!t)return null;
   if(sport==='nfl')return intakeNFLAbbr(t);
   if(sport==='mlb'){const a=typeof abbr==='function'?abbr(t):null;return a||(/^[A-Z]{2,4}$/.test(t.toUpperCase())?t.toUpperCase():null);}
-  if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;}return cfbFallbackAbbr(t);}
+  if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;for(const v of bookNameVariants(t)){const b=ncaafAbbrFor(v);if(b)return b;}}return cfbFallbackAbbr(t);}
   if(sport==='nhl')return intakeNHLAbbr(t);
   if(sport==='nba')return nbaAbbrFor(t);
-  if(sport==='ncaab')return ncaabAbbrFor(t);
+  if(sport==='ncaab'){const a=ncaabAbbrFor(t);if(a)return a;for(const v of bookNameVariants(t)){const b=ncaabAbbrFor(v);if(b)return b;}return null;}
   return null;
 }
+/* v3.0.9 · the book's short college names ("No. Colorado", "So. Utah", "E. Washington", "Ark.-Pine Bluff", "Kennesaw St.") — tried
+   only after the plain name fails, so nothing that already resolves can change. "St." up front stays Saint (St. John's). */
+const BOOK_LEAD=[[/^No\.\s*/i,['Northern ']],[/^So\.\s*/i,['Southern ']],[/^N\.\s*/,['North ','Northern ']],[/^S\.\s*/,['South ','Southern ']],[/^E\.\s*/,['Eastern ','East ']],[/^W\.\s*/,['Western ','West ']],[/^C\.\s*/,['Central ']]];
+const BOOK_WORD={'Ala.':'Alabama','Ariz.':'Arizona','Ark.':'Arkansas','Cal.':'California','Car.':'Carolina','Colo.':'Colorado','Conn.':'Connecticut','Fla.':'Florida','Ga.':'Georgia','Ill.':'Illinois','Ind.':'Indiana','Ky.':'Kentucky','La.':'Louisiana','Mich.':'Michigan','Minn.':'Minnesota','Miss.':'Mississippi','Mo.':'Missouri','Neb.':'Nebraska','Okla.':'Oklahoma','Ore.':'Oregon','Tenn.':'Tennessee','Tex.':'Texas','Va.':'Virginia','Wash.':'Washington','Wis.':'Wisconsin','Univ.':'University','Int\'l':'International','Intl.':'International'};
+function bookNameVariants(t){const out=new Set();let bases=[t];for(const[re,reps]of BOOK_LEAD)if(re.test(t)){bases=reps.map(r=>t.replace(re,r));break;}
+  const words=x=>x.replace(/(^|[\s(-])([A-Z][a-z]{1,4}\.|Int'l)(?=[\s)-]|$)/g,(m,pre,w)=>pre+(BOOK_WORD[w]||w)).replace(/\s+St\.?$/,' State').replace(/\s+/g,' ').trim();
+  for(const b of bases){out.add(b.trim());out.add(words(b));}out.delete(t);return[...out];}
 /* A sport's team names only resolve where that sport's engine is loaded. */
 /* A section is filed here only if this page has that sport's parser AND name
    resolver; otherwise the whole section (odds + extras) waits for its page, so
@@ -3080,7 +3087,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261113p';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
