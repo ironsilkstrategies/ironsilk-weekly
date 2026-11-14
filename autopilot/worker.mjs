@@ -69,9 +69,11 @@ export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.
   const keep = Object.keys(out.posts).sort().slice(-5); Object.keys(out.posts).forEach(d => { if (!keep.includes(d)) delete out.posts[d]; });
   return out; }
 
-/* v3.1.4 · the welcome post (on request only) */
-const WELCOME_TEXT = '👋 Welcome to TheDesk App.\n\nFree picks before every game. Every result posted, win or lose. The recap every night. No hype… just receipts.\n\nThe whole card is free on the app during the open beta.';
-const WELCOME_CARD = () => ({ kicker: 'Welcome', title: 'Welcome to TheDesk App', sub: 'Free picks. Real receipts.', rows: [{ label: 'Free picks', meta: '30 min before every game' }, { label: 'Every result', meta: 'graded at the final, win or lose' }, { label: 'The recap', meta: 'every night' }, { label: 'The full card', meta: 'free in the open beta' }], foot: 'ironsilkweekly.com/desk' });
+/* v3.1.4 · the welcome post (on request only, from its own workflow: .github/workflows/social-post.yml → autopilot/postnow.mjs) */
+export async function postNow(kind, deps) { if (kind !== 'welcome' || !Soc.anyOn(deps)) return null; const m = await Soc.mirror(WELCOME_TEXT, await picOf(WELCOME_CARD(), deps), deps, { kind: 'welcome' });
+  log('welcome post:', ['fb', 'ig', 'th', 'x'].filter(o => Soc.on(deps, o)).map(o => o + (m[o] === true ? ' ✓' : m[o] === 'skip' ? ' skipped' : ' ✗')).join(' · ')); return m; }
+export const WELCOME_TEXT = '👋 Welcome to TheDesk App.\n\nFree picks before every game. Every result posted, win or lose. The recap every night. No hype… just receipts.\n\nThe whole card is free on the app during the open beta.';
+export const WELCOME_CARD = () => ({ kicker: 'Welcome', title: 'Welcome to TheDesk App', sub: 'Free picks. Real receipts.', rows: [{ label: 'Free picks', meta: '30 min before every game' }, { label: 'Every result', meta: 'graded at the final, win or lose' }, { label: 'The recap', meta: 'every night' }, { label: 'The full card', meta: 'free in the open beta' }], foot: 'ironsilkweekly.com/desk' });
 /* v3.1.3 · the lounge's memory: its member count (newest reading wins) and the moment it locked at 100 (the first lock wins, never undone) */
 export function mergeLounge(x, y) { if (!x || !y) return x || y; const nw = (x.at || 0) >= (y.at || 0) ? x : y, lk = [x, y].filter(z => z.locked).sort((a, b) => a.locked - b.locked)[0];
   return { ...nw, ...(lk ? { locked: lk.locked, chat: lk.chat, founders: lk.founders, titled: !!(x.titled || y.titled) } : {}) }; }
@@ -745,10 +747,6 @@ async function socialSave() { if (!SOCMEM) return;
 if (import.meta.url === 'file://' + process.argv[1]) {
   const t0 = Date.now(), BUDGET = +(env.RELAY_BUDGET_MS || 6.5 * 60e3), STEP = +(env.RELAY_STEP_MS || 75e3), MARGIN = +(env.RELAY_MARGIN_MS || 25e3);
   log(VERSION, '· repo', REPO, '· card from', SITE === REPO ? 'here' : SITE + ' + here', '· today', chicagoDay(t0), '·', env.GITHUB_EVENT_NAME || 'manual', '· lounge hours', (loungeHours(env.LOUNGE) || ['off']).join('-'), '· facebook page', fbOn() ? 'on' : 'off', '· instagram', Soc.on(undefined, 'ig') ? 'on' : 'off', '· threads', (env.THREADS_TOKEN || '').trim() ? 'on' : 'off');
-  /* v3.1.4 · a one-off post on request (Actions → Run workflow → post: welcome): Facebook first, then Instagram from Facebook's copy
-     of the picture. Never runs on a schedule or the relay; nothing else changes. */
-  if ((env.POST_NOW || '').trim() === 'welcome' && Soc.anyOn()) { try { const m = await Soc.mirror(WELCOME_TEXT, await picOf(WELCOME_CARD(), null), null, { kind: 'welcome' });
-      log('welcome post:', ['fb', 'ig', 'th', 'x'].filter(o => Soc.on(null, o)).map(o => o + (m[o] === true ? ' ✓' : m[o] === 'skip' ? ' skipped' : ' ✗')).join(' · ')); } catch (e) { log('welcome post', e.message || e); } }
   await socialBoot();
   /* write one copy: on a collision, re-read that copy, merge, retry */
   const saveAt = async (repo, state, cur) => { for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readStateAt(repo) : cur;

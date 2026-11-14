@@ -4,13 +4,6 @@ on:
     - cron: '*/10 * * * *'
     - cron: '7 13,14 * * *'   # v2.82 · wake for lounge hours (8:07 AM Central in summer and in winter)
   workflow_dispatch:
-    inputs:
-      post:
-        description: 'A one-off post right now (v3.1.4): "welcome" posts a Welcome to TheDesk App card to Facebook and Instagram'
-        required: false
-        default: ''
-        type: choice
-        options: ['', 'welcome']
   push:
     branches: [main]
     paths: ['autopilot/**', '.github/workflows/tg-autopilot.yml']
@@ -38,7 +31,6 @@ jobs:
       - run: node autopilot/worker.mjs
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          POST_NOW: ${{ inputs.post }}                 # v3.1.4 · a one-off post on request only (empty on schedule and relay runs)
           AUTOPILOT_KEY: ${{ secrets.AUTOPILOT_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELAY: ${{ vars.RELAY }}   # set the repo variable RELAY=off to stop the live-slate relay

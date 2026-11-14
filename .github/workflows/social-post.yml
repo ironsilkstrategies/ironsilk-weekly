@@ -1,0 +1,48 @@
+name: Social post now
+# v3.1.4 · a one-off post on request: Actions → Social post now → Run workflow. "welcome" posts the Welcome to TheDesk App card
+# to Facebook, then Instagram (from Facebook's copy of the picture). Its own queue, so the Telegram autopilot can't bump it.
+# Keys only from repository secrets; tokens are masked and never printed.
+on:
+  workflow_dispatch:
+    inputs:
+      post:
+        description: 'What to post'
+        required: true
+        default: 'welcome'
+        type: choice
+        options: ['welcome']
+permissions:
+  contents: read
+concurrency:
+  group: social-post
+  cancel-in-progress: false
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: autopilot
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: autopilot/package-lock.json
+      - run: npm ci --prefix autopilot --no-audit --no-fund
+      - name: Post
+        working-directory: autopilot
+        env:
+          AUTOPILOT_KEY: ${{ secrets.AUTOPILOT_KEY }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: node postnow.mjs "${{ inputs.post }}"
