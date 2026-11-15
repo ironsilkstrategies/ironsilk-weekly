@@ -1465,7 +1465,7 @@ function pubFounder0(L){const d=today(),lo7=dayShift(d,-7),lo30=dayShift(d,-30);
      day's tickets stay up. The 30-day record above still counts every one. */
   let fd=null;try{const Fz=roGet(FREEZE_KEY,null,3e3);if(Fz&&Fz.d===d)fd=d;}catch(e){}
   const latest=all.reduce((m,t)=>String(t.date||'')>m?String(t.date):m,'');const show=fd||latest;
-  const tix=all.filter(t=>String(t.date||'')>=show&&String(t.date||'')>=dayShift(d,-1)).sort((a,b)=>(ord[a.res]-ord[b.res])||String(b.date).localeCompare(String(a.date))).slice(0,8);
+  const tix=all.filter(t=>String(t.date||'')>=show&&String(t.date||'')>=dayShift(d,-1)).sort((a,b)=>(ord[a.res]-ord[b.res])||String(b.date).localeCompare(String(a.date))).slice(0,40);   /* v3.0.33 · every ticket of the day (it was capped at 8 — Chris had 9) */
   return{tix,rec};}
 let PUB_BOARD_MEMO=null;
 function pubBoard(V){try{const d=today();const T=roGet(TC_KEY,{})||{};const k=d+'|'+ledgerSig(V)+'|'+(T.ts||T.at||'')+'|'+((T.by&&Object.values(T.by).reduce((n,B)=>n+((B&&B.picks)||[]).length,0))||0);

@@ -32,6 +32,9 @@ setTimeout(() => { try {
   const after = w.eval(`pubFounder0(get(LS.locked,[]))`);
   T('archive at the freeze: before today\'s card is frozen the latest day stays up; once frozen, only today\'s tickets show', before.every(d => d === td) && after.tix.every(t => t.date >= td) && after.tix.length >= 1, JSON.stringify([td, before, after.tix.map(t => t.date)]));
   w.eval(`set(LS.locked,get(LS.locked,[]).filter(t=>t.id!=='extY'));set(FREEZE_KEY,null);PUB_FOUNDER_MEMO=null;`);
+  w.eval(`const L1=get(LS.locked,[]);for(let i=0;i<10;i++)L1.push({id:'extN'+i,date:today(),name:'Ticket #N'+i,source:'mine',imported:true,stake:'$1',toWin:'$9',legs:[{id:'n'+i,sport:'nhl',game:'A'+i+'@B'+i,pick:'B'+i+' ML',price:120,gameDate:today(),book:'external'}]});set(LS.locked,L1);`);
+  T('every ticket of the day goes up (no cap at 8)', w.eval(`pubFounder0(get(LS.locked,[])).tix.filter(t=>t.legs[0].game.startsWith('A')).length`) === 10);
+  w.eval(`set(LS.locked,get(LS.locked,[]).filter(t=>!String(t.id).startsWith('extN')));PUB_FOUNDER_MEMO=null;`);
   const P = w.eval('publicFeedCore(false)');
   T('the open beta publishes it, and the feed signature moves with each leg', P.founder && P.founder.tix.length === 1 && /live:hoh21/.test(P.betaSig), (P.betaSig || '').slice(0, 80));
   T('the switch on the ticket: 🌐 Public ✓ → tap → hidden', /Public ✓/.test(w.eval(`tktPubBtn(get(LS.locked,[])[0])`)) && (w.eval(`tktPubToggle('ext1015000001');get(LS.locked,[])[0].pubHide`) === true) && /Hidden/.test(w.eval(`tktPubBtn(get(LS.locked,[])[0])`)) && w.eval(`PUB_FOUNDER_MEMO=null;pubFounder().tix.length`) === 0);
