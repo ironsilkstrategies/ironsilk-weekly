@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261115d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261115e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16019,7 +16019,7 @@ function teamsToday(sp){const s=new Set();const d=today();try{(sportGames(sp)||[
     const now=Date.now();(B.games||[]).forEach(x=>{if(!x||!x.g||!x.s||tdDay(x.s)!==d||Date.parse(x.s)<=now)return;String(x.g).split('@').forEach(t=>s.add(t));});}}catch(e){}return s;}
 function propLikely(sp,limit){const L=LIKELY_LADDER[sp];if(!L)return[];const teams=teamsToday(sp);if(!teams.size)return[];const out=[];
   Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<3)return;if(rsOut(rsInjury(sp,P.name)))return;
-    Object.entries(L).forEach(([k,ths])=>{const S=pstStatOf(P,k);if(!S||(S.gp||0)<3)return;let best=null;
+    Object.entries(L).forEach(([k,ths])=>{const S=pstStatOf(P,k);if(!S||(S.gp||0)<3)return;if(!pstPlays(sp,P,k))return;let best=null;
       ths.forEach(t=>{const r=pstProb(sp,P.name,k,t,'over');if(r&&r.p>=0.65)best={sp,player:P.name,team:P.team,k,thr:t,p:r.p,mu:r.proj.mu,n:r.proj.n};});
       if(best)out.push(best);});});
   return out.sort((a,b)=>b.p-a.p).slice(0,limit||12);}
@@ -18656,7 +18656,8 @@ function cpxPropPrice(p){const dec=1/Math.min(0.97,p*(1+CPX_HOLD));return +decim
 function cpxPropGame(sp,team){const o=cpropOpp(sp,team);if(!o)return null;return o.home?o.opp+'@'+team:team+'@'+o.opp;}
 function cpxBuild(voice,V,d,calls){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();
   if(!CPROP_VOICES.includes(voice))return null;
-  const props=(calls||[]).filter(c=>c.voice===voice&&c.fav!=='fade'&&c.cal>=0.72).map(c=>({c,game:cpxPropGame(c.sp,c.team)})).filter(x=>x.game)
+  /* v3.0.28 · never a junk leg: the player has to play the stat, and no estimated price past -1000 (a "99.9%" prop is a gimme, not a leg) */
+  const props=(calls||[]).filter(c=>c.voice===voice&&c.fav!=='fade'&&c.cal>=0.72&&cpxPropPrice(c.cal)>-1000&&!cpropJunk(c)).map(c=>({c,game:cpxPropGame(c.sp,c.team)})).filter(x=>x.game)
     .sort((a,b)=>(b.c.cal+(b.c.fav==='fav'?0.03:0))-(a.c.cal+(a.c.fav==='fav'?0.03:0)));
   if(!props.length)return null;
   const gl=cparCands(voice,V,d);const legs=[],used=new Set();
@@ -19063,9 +19064,25 @@ const CPROP_BKT=[[0.70,0.73],[0.73,0.76],[0.76,0.80],[0.80,0.85],[0.85,0.90],[0.
 /* v2.36 · every character reads the same honest distribution — they differ in WHAT they believe the mean is */
 function cpropPAt(J,mu,thr){if(mu==null||!J)return null;return pstPAt(J,mu,thr);}
 /* v2.36 · calibration and form only learn from calls the new model made (mv 2) — the old reads' misses aren't this model's */
-const CPROP_MV=2,cpropNew=x=>(x&&x.mv||1)>=CPROP_MV;
+const CPROP_MV=2,cpropNew=x=>(x&&x.mv||1)>=CPROP_MV&&!cpropJunk(x);
 function cpropBrier(){const L=(roGet(CPROP_KEY,[])||[]).filter(cpropNew);const B={};CPROP_VOICES.forEach(v=>{const g=L.filter(x=>x.voice===v&&x.hit!=null);
   B[v]=g.length>=10?g.reduce((a,x)=>a+Math.pow(x.p-(x.hit?1:0),2),0)/g.length:0.2;});return B;}
+/* v3.0.28 · a prop only on a stat the player actually PLAYS (Chris, Nov 15: "Patrick Mahomes 40+ receiving yards", "Jadarian Price 200+
+   passing yards"…). They were UNDERS the characters were 99.9% sure of ("Mahomes under 39.5 rec yds") — true and worthless, and they
+   filled parlay legs and padded the records. Now:
+   · he has to produce it: a nonzero line in at least half his recent games (and a real season average);
+   · football: the position has to fit when we know it (no receiving props on a quarterback, no passing props on a back or receiver);
+   · no gimme unders: an under only when his average is at least 60% of the line, so the game can actually go over. */
+const PST_POS_OK={QB:new Set(['py','ptd','pint','cmp','att','ry','rtd','car','lry','pry','td']),RB:new Set(['ry','rtd','car','lry','rec','wy','wtd','lwy','rry','td']),FB:new Set(['ry','rtd','car','rec','wy','wtd','rry','td']),
+  WR:new Set(['rec','wy','wtd','lwy','rry','td','ry','car']),TE:new Set(['rec','wy','wtd','lwy','rry','td']),K:new Set(['kpts','fgm']),PK:new Set(['kpts','fgm'])};
+function pstPlays(sp,P,k,thr,side){try{if(!P)return false;const S=pstStatOf(P,k);if(!S||!S.gp)return false;const mean=S.sum/S.gp;if(!(mean>0))return false;
+    if((sp==='nfl'||sp==='ncaaf')&&P.pos){const ok=PST_POS_OK[String(P.pos).toUpperCase()];if(ok&&!ok.has(k))return false;}
+    const K=Object.keys(PST_STATS[sp]||{});const parts=PST_COMBO[k]||[k];const R=(P.r||[]).slice(-10);
+    if(R.length>=3){const nz=R.filter(row=>parts.reduce((a,x)=>{const j=K.indexOf(x);return a+(j>=0&&row[j+1]!=null?+row[j+1]:0);},0)>0).length;if(nz*2<R.length)return false;}
+    if(side==='under'&&thr!=null&&mean<0.6*thr)return false;return true;}catch(e){return true;}}
+/* a logged call that breaks those rules: off the records and the calibration (it never told us anything) */
+const CPJ_C=new Map();function cpropJunk(x){if(!x||!x.player||!x.k)return false;const key=x.sp+'|'+x.player+'|'+x.k+'|'+x.thr+'|'+(x.side||'over');if(CPJ_C.has(key))return CPJ_C.get(key);
+  let j=false;try{const P=pstDb(x.sp).p[pstId(x.player)];if(P)j=!pstPlays(x.sp,P,x.k,x.thr,x.side||'over');}catch(e){}if(CPJ_C.size>5000)CPJ_C.clear();CPJ_C.set(key,j);return j;}
 function cpropReads(sp,name,k,thr,BR){const J=pstProj(sp,name,k);if(!J||J.n<5)return null;
   /* Sim: season + tuned form · Most common: the season alone · Trends: form-heavy · Coach: Sim × tonight's matchup */
   const r={Sim:cpropPAt(J,J.mu,thr),'Most common':cpropPAt(J,J.season,thr),Trends:cpropPAt(J,J.trend,thr)};
@@ -19081,11 +19098,11 @@ function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C
     const last=roGet('d4.pstlast.'+sp,{})||{};
     Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<5)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
       if(rsOut(rsInjury(sp,P.name)))return;   /* v2.36 · listed Out / Doubtful / on IR: no call on a player who won't play */
-      Object.entries(L).forEach(([k,ths])=>{const S=pstStatOf(P,k);if(!S||(S.gp||0)<5)return;
+      Object.entries(L).forEach(([k,ths])=>{const S=pstStatOf(P,k);if(!S||(S.gp||0)<5)return;if(!pstPlays(sp,P,k))return;
         const best={},bestU={};ths.forEach(t=>{const R0=cpropReads(sp,P.name,k,t,BR);if(!R0)return;
           CPROP_VOICES.forEach(v=>{const p=R0.r[v];if(p!=null&&p>=0.70)best[v]={p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:''};
             /* v2.99 · its lowest line it's 70%+ sure he stays UNDER — used only when no over clears for this character */
-            if(p!=null&&CPROP_UNDER.has(k)&&t>=2&&1-p>=0.70&&!bestU[v])bestU[v]={p:1-p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:'',side:'under'};});});
+            if(p!=null&&CPROP_UNDER.has(k)&&t>=2&&1-p>=0.70&&!bestU[v]&&pstPlays(sp,P,k,t,'under'))bestU[v]={p:1-p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:'',side:'under'};});});
         Object.entries(bestU).forEach(([v,b])=>{if(!best[v])best[v]=b;});
         Object.entries(best).forEach(([v,b])=>{let cal=cpropCal(C,v,b.p);const o=REC[v+'|'+sp+'|'+pstId(P.name)];let fav=null;
           /* v2.02 · its record on THIS player is evidence too — 6 games of prior weight on the calibrated % */
