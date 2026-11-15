@@ -12,10 +12,10 @@ const run = async (from, text, chat = { id: -100888, type: 'supergroup', title: 
   await W.runCommands(st, { tg }); return { calls, st }; };
 let R = await run(7, '/app');
 const send = R.calls.find(c => c.m === 'sendMessage' && /Open TheDesk/.test(c.p.reply_markup || ''));
-T('the owner sends /app in the lounge: a post with an "Open TheDesk" button to t.me/<bot>/desk', send && JSON.parse(send.p.reply_markup).inline_keyboard[0][0].url === 'https://t.me/thedeskbot/desk', JSON.stringify(R.calls.map(c => c.m)));
+T('the owner sends /app in the lounge: a post with an "Open TheDesk" button to t.me/<bot>/TheDesk (the registered short name)', send && JSON.parse(send.p.reply_markup).inline_keyboard[0][0].url === 'https://t.me/thedeskbot/TheDesk', JSON.stringify(R.calls.map(c => c.m)));
 T('…and it gets pinned', R.calls.some(c => c.m === 'pinChatMessage' && c.p.message_id === '99'));
-R = await run(7, '/app thedesk');
-T('…a different Mini App short name: /app thedesk', R.calls.some(c => c.m === 'sendMessage' && /t\.me\/thedeskbot\/thedesk"/.test(c.p.reply_markup || '')) && R.st.appShort === 'thedesk');
+R = await run(7, '/app desk2');
+T('…a different Mini App short name: /app desk2', R.calls.some(c => c.m === 'sendMessage' && /t\.me\/thedeskbot\/desk2"/.test(c.p.reply_markup || '')) && R.st.appShort === 'desk2');
 R = await run(12345, '/app');
 T('nobody else can post it', !R.calls.some(c => c.m === 'sendMessage' && /Open TheDesk/.test(c.p.reply_markup || '')) && !R.calls.some(c => c.m === 'pinChatMessage'), JSON.stringify(R.calls.map(c => c.m)));
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);
