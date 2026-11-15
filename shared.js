@@ -3091,7 +3091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23298,11 +23298,17 @@ function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||
   ds.forEach(d=>{const x=a&&a.posts&&a.posts[d],y=b&&b.posts&&b.posts[d];if(!x||!y){out.posts[d]=x||y;return;}const base=(x.postedTs||0)>=(y.postedTs||0)?x:y;
     const fx=(x.feedTs||0)>=(y.feedTs||0)?x:y;   /* v2.31 · the newest public card wins */
     out.posts[d]={...base,st:{...(y.st||{}),...(x.st||{})},sent:{...(y.sent||{}),...(x.sent||{})},recap:!!(x.recap||y.recap),worker:x.worker!==false&&y.worker!==false,...(fx.feedTs?{feed:fx.feed,pub:fx.pub,bc:fx.bc,site:fx.site,feedTs:fx.feedTs,...(fx.cmd?{cmd:fx.cmd}:{})}:{})};});
-  Object.keys(out.posts).sort().slice(0,-5).forEach(d=>delete out.posts[d]);return out;}
+  Object.keys(out.posts).sort().slice(0,-5).forEach(d=>delete out.posts[d]);
+  /* v3.0.11 · only the two newest days carry the full public card (~300 KB each); older days keep what the recap and results need */
+  Object.keys(out.posts).sort().slice(0,-2).forEach(d=>{if(out.posts[d]&&out.posts[d].feed){const{feed,...rest}=out.posts[d];out.posts[d]=rest;}});return out;}
 async function tgwGh(){const repo=pubRepo();const toks=[...new Set([get(LS.ghtoken,''),get(SYNC.token,'')].filter(Boolean))];return{repo,toks};}
 async function tgwRead(){const{repo,toks}=await tgwGh();for(const token of toks){const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
     try{const r=await fetch(`https://api.github.com/repos/${repo}/contents/${TGW_FILE}?ref=${TGW_BRANCH}&t=${Date.now()}`,{headers:H,cache:'no-store'});   /* v2.62.1 · never a cached copy: a stale sha made every hand-off since Oct 18 collide (409) */if(r.status===404)return{ok:true,state:null,sha:null,token,H,repo};
-      if(!r.ok)continue;const j=await r.json();const txt=new TextDecoder().decode(Uint8Array.from(atob(String(j.content).replace(/\s/g,'')),c=>c.charCodeAt(0)));
+      if(!r.ok)continue;const j=await r.json();let raw=j.content;
+      /* v3.0.11 · over 1 MB GitHub's contents API sends no body ("encoding":"none"); the hand-off file crossed it on Nov 13 and every
+         hand-off after that quietly failed. The blob API returns the same file up to 100 MB. */
+      if(!raw||j.encoding==='none'){const b=await fetch(`https://api.github.com/repos/${repo}/git/blobs/${j.sha}`,{headers:H,cache:'no-store'});if(!b.ok)continue;raw=(await b.json()).content;}
+      const txt=new TextDecoder().decode(Uint8Array.from(atob(String(raw||'').replace(/\s/g,'')),c=>c.charCodeAt(0)));
       return{ok:true,state:await tgwDecrypt(txt),sha:j.sha,token,H,repo};}catch(e){}}return{ok:false,reason:'no GitHub token here can read '+repo};}
 async function tgwEnsureBranch(repo,H){const r=await fetch(`https://api.github.com/repos/${repo}/git/ref/heads/${TGW_BRANCH}`,{headers:H});if(r.ok)return true;
   const m=await fetch(`https://api.github.com/repos/${repo}`,{headers:H}).then(x=>x.json()).catch(()=>({}));const def=m.default_branch||'main';

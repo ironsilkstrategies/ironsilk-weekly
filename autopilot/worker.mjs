@@ -12,7 +12,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.1.4';
+const VERSION = 'worker v3.1.5';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -34,17 +34,25 @@ const SITE = String(env.STATE_REPO || 'ironsilkstrategies/ironsilk-weekly-site')
 let SITE_TOK = '';
 const siteTokOf = s => { let t = ''; for (const d of Object.keys((s && s.posts) || {}).sort()) { const x = s.posts[d] && s.posts[d].site; if (x && x.tok && x.repo === SITE) t = x.tok; } return t; };
 async function readStateAt(repo) { const url = `https://api.github.com/repos/${repo}/contents/${FILE}?ref=${BRANCH}`; const own = repo === REPO;
-  let r = await fetch(url, { headers: { ...ghH, Authorization: 'Bearer ' + (own ? GH : (SITE_TOK || GH)) } });
-  if (!own && (r.status === 401 || r.status === 403 || r.status === 404)) r = await fetch(url, { headers: { Accept: ghH.Accept, 'User-Agent': ghH['User-Agent'] } });   /* a public repo reads without a token */
+  let H = { ...ghH, Authorization: 'Bearer ' + (own ? GH : (SITE_TOK || GH)) }; let r = await fetch(url, { headers: H });
+  if (!own && (r.status === 401 || r.status === 403 || r.status === 404)) { H = { Accept: ghH.Accept, 'User-Agent': ghH['User-Agent'] }; r = await fetch(url, { headers: H }); }   /* a public repo reads without a token */
   if (r.status === 404) return null; if (!r.ok) throw new Error('read state ' + (own ? '' : repo + ' ') + 'HTTP ' + r.status);
-  const j = await r.json(); const state = await decrypt(Buffer.from(j.content, 'base64').toString('utf8'));
+  const j = await r.json(); let raw = j.content;
+  /* v3.1.5 · over 1 MB the contents API sends no body ("encoding": "none") — the site's copy crossed it on Nov 13 and the worker
+     lost every card after that ("unknown format"). The blob API gives the same file up to 100 MB. */
+  if (!raw || j.encoding === 'none') { const b = await fetch(`https://api.github.com/repos/${repo}/git/blobs/${j.sha}`, { headers: H }); if (!b.ok) throw new Error('read state blob ' + (own ? '' : repo + ' ') + 'HTTP ' + b.status); raw = (await b.json()).content; }
+  const state = await decrypt(Buffer.from(String(raw || ''), 'base64').toString('utf8'));
   if (!own) { const t = siteTokOf(state); if (t && t !== SITE_TOK) { SITE_TOK = t; if (env.GITHUB_ACTIONS === 'true') console.log('::add-mask::' + t); } }   /* this repo's logs are public — the runner blanks the token everywhere */
   return { repo, sha: j.sha, state }; }
 async function readState() { return readStateAt(REPO); }
 /* this repo's copy never carries the site token — the site's own copy already holds it */
 const stripTok = s => { const o = JSON.parse(JSON.stringify(s)); for (const d in o.posts || {}) { const p = o.posts[d]; if (p && p.site && p.site.tok) p.site = { ...p.site, tok: '' }; } return o; };
+/* v3.1.5 · only the two newest days keep their full public card (the public page is rebuilt from the newest one); older days keep
+   everything the recap, results and receipts need, without the ~300 KB card each — the file stays well under GitHub's limits */
+export function slimFeeds(state) { if (!state || !state.posts) return state; const ds = Object.keys(state.posts).sort(); const keep = new Set(ds.slice(-2)); const posts = {};
+  for (const d of ds) { const p = state.posts[d]; posts[d] = keep.has(d) || !p || !p.feed ? p : (({ feed, ...rest }) => rest)(p); } return { ...state, posts }; }
 async function writeStateAt(repo, state, sha) { const own = repo === REPO; const tok = own ? GH : SITE_TOK; if (!tok) return 0;
-  const body = { message: 'autopilot ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(own ? stripTok(state) : state), 'utf8').toString('base64'), ...(sha ? { sha } : {}) };
+  const body = { message: 'autopilot ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(slimFeeds(own ? stripTok(state) : state)), 'utf8').toString('base64'), ...(sha ? { sha } : {}) };
   const r = await fetch(`https://api.github.com/repos/${repo}/contents/${FILE}`, { method: 'PUT', headers: { ...ghH, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return r.status; }
 async function writeState(state, sha) { return writeStateAt(REPO, state, sha); }
