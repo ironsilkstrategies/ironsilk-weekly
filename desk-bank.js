@@ -107,9 +107,11 @@ let BKSH_C=null;
 const bkT=t=>t?new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:APP_TZ}):'—';
 function bkSheetLegHtml(o){const ch=o.by.map(v=>{const C=CHARS[v]||{};return`<span class="mono" style="font-size:8.5px;color:${C.color||'var(--mute)'};border:1px solid ${C.color||'var(--rule)'};border-radius:3px;padding:0 3px;margin-right:2px;white-space:nowrap">${txtEsc(C.chip||v)}</span>`;}).join('');
   const sp=({nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀',mlb:'⚾'})[o.sp]||'';
-  return`<li style="margin:3px 0"><span class="mono" style="font-size:9.5px;color:var(--gold)">${bkT(o.start?Date.parse(o.start):null)}</span> ${sp} <b>${txtEsc(o.pick)}</b> <span class="mono" style="font-size:10px">${o.price!=null?(o.price>0?'+':'')+o.price:''}</span>
+  /* v3.0.32 · every leg names its game (Chris: "your over/unders never describe what game it is") */
+  let gl='';try{gl=o.game?(typeof gameLabel==='function'?gameLabel(o.sp,o.game):o.game.replace('@',' @ ')):'';}catch(e){gl=o.game||'';}
+  return`<li style="margin:3px 0"><span class="mono" style="font-size:9.5px;color:var(--gold)">${bkT(o.start?Date.parse(o.start):null)}</span> ${sp} <b>${txtEsc(o.pick)}</b> <span class="mono" style="font-size:10px">${o.price!=null?(o.price>0?'+':'')+o.price:''}</span>${gl?` <span class="mono" style="font-size:10px;color:var(--chalk)">· ${txtEsc(gl)}</span>`:''}
     <span class="mono" style="font-size:9.5px;color:var(--mute)">${Math.round(o.p*100)}%${o.acc?` · books ${o.acc>0?'+':''}${Math.round(o.acc*100)}`:''}</span><div style="margin-top:1px">${ch}</div></li>`;}
-function bkSheetText(t){return`TICKET ${t.name} (${t.legs.length} legs)\n`+t.legs.map(o=>`  ${bkT(o.start?Date.parse(o.start):null)}  ${o.pick}${o.price!=null?' '+(o.price>0?'+':'')+o.price:''}`).join('\n');}
+function bkSheetText(t){return`TICKET ${t.name} (${t.legs.length} legs)\n`+t.legs.map(o=>`  ${bkT(o.start?Date.parse(o.start):null)}  ${o.pick}${o.price!=null?' '+(o.price>0?'+':'')+o.price:''}${o.game?'  ('+o.game.replace('@',' @ ')+')':''}`).join('\n');}
 function bkSheetCopy(i){try{const S=bkSheet();const t=i==='all'?S.tix.map(bkSheetText).join('\n\n'):bkSheetText(S.tix[i]);if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>{try{deskToast('📋 Copied',1500);}catch(e){}}).catch(()=>{});}catch(e){}}
 function bkSheetHtml(){let S;try{S=bkSheet();}catch(e){return`<div class="tkt"><div class="sub">${txtEsc(e.message)}</div></div>`;}const f=bkSheetF();
   const chip=(v,lab)=>`<button class="${f.mode===v?'on':''}" onclick="bkSheetSet('mode','${v}')">${lab}</button>`;

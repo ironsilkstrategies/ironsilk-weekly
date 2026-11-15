@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261115j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261115k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16187,7 +16187,7 @@ function renderBest(){
       return`<div class="mono" style="font-size:9.5px;margin-top:4px;color:var(--mute)">Rules in force: model under ${lo('disagree',r.disagree,v=>Math.round(v*100)+' pts')} off the market · lays ${lo('b3lo',r.b3lo,v=>v)} at most · ${lo('floor',r.floor,v=>Math.round(v*100)+'%')} confidence or an official call · <a href="#" onclick="REC_VIEW='rules';tab('grades',document.querySelector('nav button[onclick*=grades]'));return false" style="color:var(--gold)">📏 how history set these</a>${typeof healthChipHtml==='function'?' · '+healthChipHtml():''}</div>`;}catch(e){return'';}})():''}${diag}${(()=>{const sv=BEST_VIEW!=='all'?BEST_VIEW:null;const L0=sv?((S.bySport||{})[sv]||[]):(S.top3||[]);
       /* v2.80.9 · always: a gold SUPREME tile that isn't on the card must say which rule kept it off (it used to show only on an empty card) */
       let N=[];try{N=best3Near(80).filter(x=>(!sv||x.sp===sv)&&!L0.some(y=>y.sp===x.sp&&y.game===x.game&&y.pick===x.pick)).slice(0,8);}catch(e){}if(!N.length)return'';
-      return`<div class="mono" style="font-size:9.5px;margin-top:6px;color:var(--mute)">${L0.length?'Strong calls NOT on the card — the rule each one missed':'Closest '+(sv?(SP_LAB[sv]||sv)+' ':'')+'calls today (not on the card)'}:</div>${N.map(x=>`<div class="mono" style="font-size:10px;padding:2px 0">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> ${x.price!=null?(x.price>0?'+':'')+x.price:''} · ${x.p!=null?Math.round(x.p*100)+'%':'—'} · <span style="color:var(--rust)">${txtEsc(x.why)}</span></div>`).join('')}`;})()}</div>`;
+      return`<div class="mono" style="font-size:9.5px;margin-top:6px;color:var(--mute)">${L0.length?'Strong calls NOT on the card — the rule each one missed':'Closest '+(sv?(SP_LAB[sv]||sv)+' ':'')+'calls today (not on the card)'}:</div>${N.map(x=>`<div class="mono" style="font-size:10px;padding:2px 0">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(pickG(x))}</b> ${x.price!=null?(x.price>0?'+':'')+x.price:''} · ${x.p!=null?Math.round(x.p*100)+'%':'—'} · <span style="color:var(--rust)">${txtEsc(x.why)}</span></div>`).join('')}`;})()}</div>`;
   /* yesterday's card stays up until it's fully graded */
   let prev='';try{const P=get('d4.best5prev',null);const L=P&&(get('d4.best5log',{})||{})[P.d];
     if(L){const main=(L.picks||[]).filter(x=>x.main);const open=main.filter(x=>x.hit==null&&!x.push);
@@ -18182,6 +18182,8 @@ function charCallsToday(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
 function charCallPass(o,F){if(F.sp&&F.sp!=='all'&&o.sp!==F.sp)return false;if(!btPass(F.bt||'all',o.m,o.price))return false;const t=F.tier||'all';
   if(t==='all')return true;if(t==='play')return o.off;if(t==='unan')return!!(o.tc&&o.tc.unan);return!!(o.tc&&String(o.tc.color||'').trim()===t);}
 function charCallsFor(v,F){return(charCallsToday().get(v)||[]).filter(o=>charCallPass(o,F||{}));}
+/* v3.0.32 · an over/under never stands alone: "Under 49" becomes "Under 49 (MISS @ MSST)" wherever a row doesn't already show the game */
+function pickG(x){const p=String((x&&x.pick)||'');if(!x||!x.game||!/^(over|under|o|u)\s*\d/i.test(p.trim()))return p;return`${p} (${String(x.game).replace('@',' @ ')})`;}
 function charCallRowHtml(o,opt){opt=opt||{};const e=txtEsc;const C=CHARS[o.v]||{};const started=o.start?Date.parse(o.start)<=Date.now():false;
   let lane=null,rec=null;if(o.kind==='line'){try{const k=laneKey(o.sp,o.m,o.sd,o.price,o.line);lane=k?laneStatus(k,o.v):null;const T=laneTable();rec=k&&T.BYV[o.v]?T.BYV[o.v][k]:null;}catch(err){}}
   const tag=o.tc?(TC_COL[o.tc.color]||['var(--mute)',''])[1]:'';const col=o.tc?(TC_COL[o.tc.color]||['var(--rule)'])[0]:'var(--rule)';
