@@ -25,7 +25,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preload" as="font" type="font/woff2" href="fonts/big-shoulders.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/franklin.woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=14">
+<link rel="stylesheet" href="app.css?v=15">
 </head>
 <body>
 <a class="skip" href="#main">Skip to today's card</a>
@@ -46,14 +46,16 @@
     <button type="button" data-go="join">Join</button>
   </nav>
   <button type="button" class="joinpill" data-go="join">Join</button>
+  <button type="button" class="acctbtn" id="acctBtn" data-go="me" aria-label="Sign in"></button>
   <button type="button" class="chip" id="installChip" data-act="guide" hidden>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>Get the app
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span class="ic-t">Get the app</span>
   </button>
 </header>
 
 <main id="main">
   <section class="view" id="v-today" aria-label="Today's card"><div class="slips"><div class="shimmer"></div></div></section>
   <section class="view" id="v-slate" aria-label="The slate" hidden></section>
+  <section class="view" id="v-me" aria-label="Your tickets" hidden></section>
   <section class="view" id="v-props" aria-label="Props" hidden></section>
   <section class="view" id="v-longshots" aria-label="Founder LongShot Parlays" hidden></section>
   <section class="view" id="v-cast" aria-label="The characters" hidden></section>
@@ -74,6 +76,6 @@
 
 <div id="guideRoot"></div>
 <noscript><p style="max-width:40ch;margin:40px auto;padding:0 16px;font-family:sans-serif;color:#F3EEDF">TheDesk needs JavaScript to show today's card. Three picks are locked every morning, opened 30 minutes before each game and graded at the final.</p></noscript>
-<script type="module" src="app.js?v=18"></script>
+<script type="module" src="app.js?v=19"></script>
 </body>
 </html>

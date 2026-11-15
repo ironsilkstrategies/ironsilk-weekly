@@ -188,6 +188,32 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     T('a feed from an older app still shows the new price list and no checkout (the beta is on unless the feed says off)', /EVERYTHING.S FREE DURING THE BETA/i.test(t) && ['$50', '$300', '$100', '$20', '$2'].every(x => t.includes(x)) && !/\$25|\$10\/wk|\$19\.99/.test(t) && !(await v.p.evaluate(() => [...document.querySelectorAll('a[href]')].some(a => /whop/.test(a.href)))));
     await v.ctx.close(); }
 
+
+  /* ── accounts + your tickets (v3.0.21) ── */
+  { const users = {}, tix = {}; let lastSave = null;
+    const acctSrv = async (r, u) => { const ok = o => r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(o) }); const no = (st, e) => r.fulfill({ status: st, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ error: e }) });
+      const b = JSON.parse(r.request().postData() || '{}'); const who = tk => Object.keys(users).find(n => users[n].tok === tk);
+      if (u.pathname === '/acct/signup') { if (b.age21 !== true) return no(400, 'TheDesk is for 21 and over'); users[b.name] = { pass: b.pass, tok: 'k'.repeat(30) + b.name.length }; tix[b.name] = []; return ok({ token: users[b.name].tok, name: b.name }); }
+      if (u.pathname === '/acct/login') return users[b.name] && users[b.name].pass === b.pass ? ok({ token: users[b.name].tok, name: b.name }) : no(403, 'that username and password don’t match');
+      const n = who(b.token); if (!n) return no(401, 'sign in first');
+      if (u.pathname === '/acct/me') return ok({ name: n, tickets: tix[n] });
+      if (u.pathname === '/acct/save') { lastSave = b.ticket; const L = tix[n]; const i = L.findIndex(x => x.id === b.ticket.id); if (i >= 0) L[i] = b.ticket; else L.unshift(b.ticket); return ok({ ticket: b.ticket }); }
+      if (u.pathname === '/acct/del') { tix[n] = tix[n].filter(x => x.id !== b.id); return ok({ ok: true }); }
+      return ok({ ok: true }); };
+    v = await visit(BETA, { chat: acctSrv }); await v.p.click('#acctBtn'); await v.p.waitForTimeout(300); t = await v.text();
+    T('Accounts: the person button opens sign-in (username + password)', /YOUR TICKETS/i.test(t) && (await v.p.locator('form[data-form="acct"]').count()) === 1);
+    await v.p.click('[data-act="acmode"][data-v="signup"]'); await v.p.fill('form[data-form="acct"] input[name="name"]', 'Puck Head'); await v.p.fill('form[data-form="acct"] input[name="pass"]', 'longenough1');
+    await v.p.check('form[data-form="acct"] input[name="age21"]'); await v.p.click('form[data-form="acct"] button[type="submit"]'); await v.p.waitForTimeout(500); t = await v.text();
+    T('…create an account (21+ box) → signed in, the button shows your initial', /Signed in as Puck Head/.test(t) && (await v.p.locator('#acctBtn.in').textContent()) === 'P');
+    await v.p.click('.newtk summary'); await v.p.fill('form[data-form="newtk"] textarea', 'Bills -3 -110\nOver 221.5 -105'); await v.p.fill('form[data-form="newtk"] input[name="stake"]', '5');
+    await v.p.click('form[data-form="newtk"] button'); await v.p.waitForTimeout(400); t = await v.text();
+    T('…type your own legs → a ticket with prices, the odds and what $5 pays', lastSave && lastSave.legs.length === 2 && lastSave.legs[0].price === -110 && /Bills -3/.test(t) && /\$5 to win/.test(t), JSON.stringify(lastSave));
+    await v.p.click('.mytk [data-act="tkmark"][data-v="hit"] >> nth=0'); await v.p.waitForTimeout(300); t = await v.text();
+    T('…mark a leg as it settles; it saves', lastSave.legs[0].res === 'hit' && /Live · 1 of 2/i.test(t), JSON.stringify(lastSave.legs));
+    await v.p.click('.tabs [data-go="props"]'); await v.p.click('.pcard [data-act="pslip"] >> nth=0'); await v.p.waitForTimeout(200); await v.p.click('[data-act="psliptrack"]'); await v.p.waitForTimeout(400);
+    T('…build a slip on Props → Track it saves it to your tickets', lastSave && lastSave.legs[0].src === 'prop' && /Kaprizov|Edwards/.test(lastSave.legs[0].pick) && !(await v.p.locator('.pslipbar').count()), JSON.stringify(lastSave));
+    T('accounts: no script errors', v.errs.length === 0, v.errs.join(' | '));
+    await v.ctx.close(); }
   /* ── the members' chat ── */
   const CHATLOG = [{ id: '1', name: 'Hoops Fan', owner: false, text: 'Wolves -6 feels right <img src=x onerror="window.__xss=11">', ts: now - 6e5 }, { id: '2', name: 'TheDesk', owner: true, text: 'Card is locked.', ts: now - 3e5 }];
   const chatSrv = (log, joinAs) => async (r, u) => { const ok = o => r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(o) });

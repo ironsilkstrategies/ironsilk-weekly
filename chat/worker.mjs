@@ -23,6 +23,7 @@ const json = (o, status, h) => new Response(JSON.stringify(o), { status, headers
 
 export default { async fetch(req, env) { const url = new URL(req.url);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req, env) });
+  if (url.pathname.startsWith('/acct/') && env.ACCT) return env.ACCT.get(env.ACCT.idFromName('members')).fetch(req);
   if (!url.pathname.startsWith('/chat/')) return json({ error: 'not found' }, 404, cors(req, env));
   const room = env.ROOM.get(env.ROOM.idFromName('lounge')); return room.fetch(req); } };
 
@@ -80,4 +81,69 @@ export class Room {
   cast(o) { const s = JSON.stringify(o); for (const ws of this.ctx.getWebSockets()) { try { ws.send(s); } catch (e) { } } }
   webSocketMessage(ws, msg) { if (msg === 'ping') try { ws.send('pong'); } catch (e) { } }   /* read-only: posting goes through /chat/send */
   webSocketClose(ws) { try { ws.close(); } catch (e) { } }
+}
+
+/* ═══ ACCOUNTS (v3.0.21, Chris, Nov 15: logins so app users can track their own tickets — "can't we just cloud it") ═══════════
+   Everything stays on our Cloudflare: a username and a password, the password never stored, only a PBKDF2-SHA256 hash with its
+   own salt (100,000 rounds). A sign-in gives a 90-day token. Each member keeps up to 300 tickets, 15 legs each.
+   Routes (POST, JSON):
+     /acct/signup  { name, pass, age21 }   → { token, name }      21+ confirmed, name 2–20 letters/numbers, password 8+
+     /acct/login   { name, pass }          → { token, name }      8 misses from one address → wait 15 minutes
+     /acct/me      { token }               → { name, since, tickets }
+     /acct/save    { token, ticket }       → { ticket }           add or replace one ticket (by id)
+     /acct/del     { token, id }           → { ok }
+     /acct/logout  { token }               → { ok }
+     /acct/close   { token, pass }         → { ok }               deletes the account, its tickets and every sign-in
+   The tickets are the member's own; nothing here reads the desk's picks or methods. */
+const ACCT_DAYS = 90, TIX_MAX = 300, LEGS_MAX = 15, PBKDF2_N = 100000;
+const b64 = u => btoa(String.fromCharCode(...new Uint8Array(u)));
+async function passHash(pass, salt) { const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pass)), 'PBKDF2', false, ['deriveBits']);
+  return b64(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: PBKDF2_N }, k, 256)); }
+const str = (v, n) => clean(String(v == null ? '' : v).replace(/[<>]/g, '').trim()).slice(0, n);
+export function cleanTicket(t) { if (!t || typeof t !== 'object') return null; const id = String(t.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 32); if (!id) return null;
+  const legs = (Array.isArray(t.legs) ? t.legs : []).slice(0, LEGS_MAX).map(l => ({ src: ['pick', 'prop', 'own'].includes(l && l.src) ? l.src : 'own', ref: str(l && l.ref, 120), sp: str(l && l.sp, 8),
+    game: str(l && l.game, 24), pick: str(l && l.pick, 80), price: Number.isFinite(+(l && l.price)) && Math.abs(+l.price) >= 100 && Math.abs(+l.price) < 100000 ? Math.round(+l.price) : null,
+    start: str(l && l.start, 30), res: ['hit', 'miss', 'push'].includes(l && l.res) ? l.res : null })).filter(l => l.pick);
+  if (!legs.length) return null;
+  return { id, ts: Number.isFinite(+t.ts) ? +t.ts : Date.now(), title: str(t.title, 40), stake: Number.isFinite(+t.stake) && +t.stake > 0 ? Math.min(100000, Math.round(+t.stake * 100) / 100) : null,
+    odds: Number.isFinite(+t.odds) && Math.abs(+t.odds) >= 100 ? Math.round(+t.odds) : null, legs }; }
+export class Accounts {
+  constructor(ctx, env, deps = {}) { this.ctx = ctx; this.env = env; this.now = deps.now || (() => Date.now()); }
+  async fetch(req) { const url = new URL(req.url), p = url.pathname, H = cors(req, this.env);
+    try { if (req.method !== 'POST') return json({ error: 'not found' }, 404, H);
+      const ip = req.headers.get('cf-connecting-ip') || 'unknown'; let b; try { b = await req.json(); } catch (e) { return json({ error: 'body' }, 400, H); }
+      if (p === '/acct/signup') return this.signup(b, ip, H);
+      if (p === '/acct/login') return this.login(b, ip, H);
+      const s = await this.pass(b.token); if (!s) return json({ error: 'sign in first' }, 401, H);
+      if (p === '/acct/me') return this.me(s, H);
+      if (p === '/acct/save') return this.save(s, b, H);
+      if (p === '/acct/del') { await this.ctx.storage.delete('t:' + s.key + ':' + String(b.id || '')); return json({ ok: true }, 200, H); }
+      if (p === '/acct/close') { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u || !(await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash))) return json({ error: 'that password doesn’t match' }, 403, H);
+        const L = await S.list({ prefix: 't:' + s.key + ':' }); if (L.size) await S.delete([...L.keys()]); const ses = await S.list({ prefix: 's:' }); const mine = [...ses].filter(([, v]) => v.key === s.key).map(([k]) => k); if (mine.length) await S.delete(mine);
+        await S.delete('u:' + s.key); return json({ ok: true }, 200, H); }
+      if (p === '/acct/logout') { await this.ctx.storage.delete('s:' + b.token); return json({ ok: true }, 200, H); }
+      return json({ error: 'not found' }, 404, H);
+    } catch (e) { return json({ error: 'server' }, 500, H); } }
+  async pass(token) { if (typeof token !== 'string' || token.length < 20) return null; const s = await this.ctx.storage.get('s:' + token); if (!s || s.exp < this.now()) return null; return s; }
+  async tooMany(ip) { const t = await this.ctx.storage.get('j:' + ip); return t && t.n >= 8 && this.now() - t.t < 15 * 60e3; }
+  async miss(ip) { const S = this.ctx.storage, t = (await S.get('j:' + ip)) || { n: 0, t: this.now() }; await S.put('j:' + ip, { n: (this.now() - t.t < 15 * 60e3 ? t.n : 0) + 1, t: this.now() }); }
+  async issue(name, H) { const token = rid(32), exp = this.now() + ACCT_DAYS * 864e5; await this.ctx.storage.put('s:' + token, { name, key: name.toLowerCase(), exp }); return json({ token, name, exp }, 200, H); }
+  async signup(b, ip, H) { if (await this.tooMany(ip)) return json({ error: 'too many tries, wait 15 minutes' }, 429, H);
+    const name = String(b.name || '').trim(), pass = String(b.pass || '');
+    if (b.age21 !== true) return json({ error: 'TheDesk is for 21 and over' }, 400, H);
+    if (!okName(name)) return json({ error: 'pick a username: 2–20 letters or numbers, nothing reserved or rude' }, 400, H);
+    if (pass.length < 8 || pass.length > 200) return json({ error: 'use a password of 8 or more characters' }, 400, H);
+    const S = this.ctx.storage, k = 'u:' + name.toLowerCase(); if (await S.get(k)) { await this.miss(ip); return json({ error: 'that username is taken' }, 409, H); }
+    const salt = rid(16); await S.put(k, { name, salt, hash: await passHash(pass, salt), at: this.now(), age21: true }); return this.issue(name, H); }
+  async login(b, ip, H) { if (await this.tooMany(ip)) return json({ error: 'too many tries, wait 15 minutes' }, 429, H);
+    const name = String(b.name || '').trim(), u = await this.ctx.storage.get('u:' + name.toLowerCase());
+    const ok = u && await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash);
+    if (!ok) { await this.miss(ip); return json({ error: 'that username and password don’t match' }, 403, H); }
+    await this.ctx.storage.delete('j:' + ip); return this.issue(u.name, H); }
+  async me(s, H) { const u = await this.ctx.storage.get('u:' + s.key); const L = await this.ctx.storage.list({ prefix: 't:' + s.key + ':' });
+    return json({ name: s.name, since: u && u.at, tickets: [...L.values()].sort((a, b) => b.ts - a.ts) }, 200, H); }
+  async save(s, b, H) { const t = cleanTicket(b.ticket); if (!t) return json({ error: 'a ticket needs at least one leg' }, 400, H);
+    const S = this.ctx.storage, pre = 't:' + s.key + ':', k = pre + t.id;
+    if (!(await S.get(k))) { const L = await S.list({ prefix: pre }); if (L.size >= TIX_MAX) { const old = [...L.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]; await S.delete(old[0]); } }
+    await S.put(k, t); return json({ ticket: t }, 200, H); }
 }

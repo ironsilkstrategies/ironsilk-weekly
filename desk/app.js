@@ -94,7 +94,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'props', 'longshots', 'cast', 'chat', 'receipts', 'join'];
+const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'cast', 'chat', 'receipts', 'join'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -311,6 +311,58 @@ function founderHtml(page) {
   return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${R.cashed + R.lost ? `<span class="f-rec">Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost</span>` : ''}</div>
     <div class="fgrid">${F.tix.map(card).join('')}</div></section>`;
 }
+/* ── Accounts + My Tickets (v3.0.21, Chris, Nov 15). Sign up with a username and a password (21+), kept on our Cloudflare.
+   Track tickets from the Props slip, from the board, or by typing your own legs; they follow you to any device. Legs on the
+   desk's picks grade themselves from the board; your own legs you mark as they settle. */
+const AC = { me: null, busy: false, err: '', open: false };
+const acctPass = () => store.get('acct');
+async function acctApi(path, body) { const r = await fetch(CFG.chat + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) { const e = new Error(j.error || 'the server didn’t answer'); e.status = r.status; throw e; } return j; }
+async function acctLoad() { const P = acctPass(); if (!P) { AC.me = null; return; } try { AC.me = await acctApi('/acct/me', { token: P.token }); AC.err = ''; }
+  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); }
+function acctBadge() { const b = $('#acctBtn'); if (!b) return; const P = acctPass(); b.textContent = P ? P.name.slice(0, 1).toUpperCase() : ''; b.classList.toggle('in', !!P); b.setAttribute('aria-label', P ? `My tickets (${P.name})` : 'Sign in'); }
+const tid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+function legAuto(l) { if (l.src !== 'pick' || l.res) return l.res; const B = boardOf(); if (!B) return null; const g = (B.games || []).find(x => x.sp === l.sp && x.game === l.game); if (!g) return null;
+  for (const a of Object.values(g.calls || {})) for (const c of a) if (c.pick === l.pick && c.hit != null) return c.hit === true ? 'hit' : c.hit === false ? 'miss' : null; return null; }
+function tkState(t) { const R = t.legs.map(l => l.res || legAuto(l)); const miss = R.includes('miss'), done = R.every(Boolean);
+  return { R, res: miss ? 'lost' : done ? 'cashed' : R.some(Boolean) ? 'live' : 'open', hit: R.filter(x => x === 'hit').length }; }
+const tkDec = t => { if (t.odds) return t.odds > 0 ? 1 + t.odds / 100 : 1 + 100 / -t.odds; const P = t.legs.map(l => l.price); return P.every(x => x != null) ? P.reduce((a, x) => a * (x > 0 ? 1 + x / 100 : 1 + 100 / -x), 1) : null; };
+async function tkSave(t, msg) { const P = acctPass(); if (!P) { AC.open = true; go('me', true); toast('Sign in to track tickets'); return false; }
+  try { const j = await acctApi('/acct/save', { token: P.token, ticket: t }); const L = (AC.me && AC.me.tickets) || []; const i = L.findIndex(x => x.id === t.id);
+    if (i >= 0) L[i] = j.ticket; else L.unshift(j.ticket); if (AC.me) AC.me.tickets = L; if (msg) toast(msg); return true; } catch (e) { toast(e.message); return false; } }
+function slipTicket() { const all = propsAll(); const L = S.slip.map(id => all.find(x => x.id === id)).filter(Boolean); if (!L.length) return null;
+  return { id: tid(), ts: Date.now(), title: `${L.length}-leg prop slip`, legs: L.map(x => ({ src: 'prop', ref: x.id, sp: x.sp, game: x.opp ? (x.home ? x.opp + '@' + x.team : x.team + '@' + x.opp) : '', pick: `${x.player} ${pLine(x)}`, price: null, start: x.start || '' })) }; }
+function myRecord(L) { let c = 0, l = 0, h = 0, n = 0; L.forEach(t => { const st = tkState(t); if (st.res === 'cashed') c++; if (st.res === 'lost') l++; st.R.forEach(r => { if (r === 'hit') { h++; n++; } else if (r === 'miss') { n++; } }); }); return { c, l, h, n }; }
+function myTicketHtml(t) { const st = tkState(t), dec = tkDec(t), chip = { cashed: '✓ Cashed', lost: '✗ Lost', live: `● Live · ${st.hit} of ${t.legs.length}`, open: 'Open' }[st.res];
+  return `<article class="slip mytk nostub ${st.res}"><div class="slip-head"><span>${esc(t.title || `${t.legs.length}-leg ticket`)}</span><span class="fchip ${st.res}">${chip}</span></div><div class="slip-main">
+    ${dec ? `<div class="f-odds"><b>${esc(odds(decAm(dec)))}</b>${t.stake ? `<span>$${t.stake} to win $${(t.stake * (dec - 1)).toFixed(2)}</span>` : ''}</div>` : ''}
+    <ul class="fl-list">${t.legs.map((l, i) => { const r = st.R[i]; return `<li class="fl ${r || 'open'}"><span class="fl-ic">${r === 'hit' ? '✓' : r === 'miss' ? '✗' : r === 'push' ? '↺' : '○'}</span><div class="fl-b"><b>${esc(l.pick)}${l.price != null ? ' ' + esc(odds(l.price)) : ''}</b>
+      <small>${esc([LEAGUE[l.sp], l.game ? l.game.replace('@', ' at ') : '', l.src === 'pick' ? 'grades itself' : ''].filter(Boolean).join(' · '))}</small>
+      ${l.src !== 'pick' ? `<span class="mk">${['hit', 'miss', 'push'].map(v => `<button type="button" class="${l.res === v ? 'on' : ''}" data-act="tkmark" data-id="${esc(t.id)}" data-i="${i}" data-v="${v}">${v === 'hit' ? '✓ Hit' : v === 'miss' ? '✗ Miss' : 'Push'}</button>`).join('')}</span>` : ''}</div></li>`; }).join('')}</ul>
+    <div class="row"><button type="button" class="btn ghost sm" data-act="tkdel" data-id="${esc(t.id)}">Delete</button></div></div></article>`; }
+function viewMe() {
+  const el = $('#v-me'), P = acctPass();
+  if (!P) { el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Sign in to track your own tickets on any device: build them from the Props slip, add the desk's picks, or type your own legs.</p>
+    <div class="paper acctbox"><div class="pview">${['login', 'signup'].map(v => `<button type="button" class="${(AC.mode || 'login') === v ? 'on' : ''}" data-act="acmode" data-v="${v}">${v === 'login' ? 'Sign in' : 'Create account'}</button>`).join('')}</div>
+      <form data-form="acct" autocomplete="on"><label>Username<input name="name" required minlength="2" maxlength="20" autocomplete="username" autocapitalize="off"></label>
+      <label>Password<input name="pass" type="password" required minlength="8" autocomplete="${AC.mode === 'signup' ? 'new-password' : 'current-password'}"></label>
+      ${AC.mode === 'signup' ? '<label class="chk"><input name="age21" type="checkbox" required> I’m 21 or older</label>' : ''}
+      <p class="chat-err" id="acctErr" role="alert"></p><button class="btn" type="submit">${AC.mode === 'signup' ? 'Create account' : 'Sign in'}</button></form>
+      <p class="note">Your password is never stored, only a scrambled copy of it. <a href="privacy.html">Privacy</a></p></div>${footHtml()}`; return; }
+  const L = (AC.me && AC.me.tickets) || [], R = myRecord(L);
+  el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Signed in as <b>${esc(P.name)}</b>. <button type="button" class="link" data-act="aclogout">Sign out</button></p>
+    ${AC.me ? `<div class="mystats"><span><b>${R.c}</b>cashed</span><span><b>${R.l}</b>lost</span><span><b>${R.n ? Math.round(100 * R.h / R.n) + '%' : '—'}</b>legs hit</span><span><b>${L.length}</b>tickets</span></div>` : ''}
+    <details class="paper newtk"${AC.open ? ' open' : ''}><summary>＋ New ticket</summary><form data-form="newtk"><label>Name it (optional)<input name="title" maxlength="40" placeholder="Sunday 3-leg"></label>
+      <label>Legs, one per line<textarea name="legs" rows="4" required placeholder="Bills -3 -110&#10;Kaprizov 3+ SOG&#10;Over 221.5 -105"></textarea></label>
+      <div class="row2"><label>Stake $<input name="stake" inputmode="decimal" placeholder="5"></label><label>Ticket odds<input name="odds" inputmode="numeric" placeholder="+600"></label></div>
+      <button class="btn" type="submit">Track it</button></form><p class="note">Tip: build a slip on the Props tab and tap “Track it” — or tap ＋ on any pick on the Slate.</p></details>
+    <p class="chat-err" role="alert">${esc(AC.err)}</p>
+    ${!AC.me ? '<div class="shimmer"></div>' : L.length ? `<div class="fgrid">${L.map(myTicketHtml).join('')}</div>` : '<div class="paper blank"><b>No tickets yet</b><p>Your first one shows up here.</p></div>'}
+    <details class="closeacct"><summary>Delete my account</summary><form data-form="acclose"><p class="note">This deletes your account and every ticket on it, for good.</p><label>Your password<input name="pass" type="password" required autocomplete="current-password"></label><button class="btn ghost sm" type="submit">Delete it</button></form></details>${footHtml()}`;
+  AC.open = false;
+}
+function parseLegs(txt) { return String(txt || '').split(/\n+/).map(x => x.trim()).filter(Boolean).slice(0, 15).map(line => { const m = line.match(/\s([+-−]\d{3,5})\s*$/);
+  const price = m ? +m[1].replace('−', '-') : null; return { src: 'own', pick: (m ? line.slice(0, m.index) : line).trim().slice(0, 80), price }; }).filter(l => l.pick); }
 /* ── Props (v3.0.20, Chris, Nov 14: "better than them… unrecognizable… way more modern"). Our own take, our own look:
    · the Desk Score — one 0–100 read per prop: his last 10, his last 5, how sure the room is, how many characters are on it;
    · the run strip — his last 10 games as ticket stubs against the line, punched gold when he cleared it;
@@ -358,7 +410,7 @@ function propSheet(L) { const th = (k, t) => `<button type="button" class="${S.p
 function slipBar() { const all = propsAll(); const L = S.slip.map(id => all.find(x => x.id === id)).filter(Boolean); if (!L.length) return '';
   const p = L.reduce((a, x) => a * (x.p || 0.5), 1); const am = p >= 0.5 ? -Math.round(100 * p / (1 - p)) : Math.round(100 * (1 - p) / p);
   return `<div class="pslipbar"><div><b>Your slip · ${L.length} leg${L.length > 1 ? 's' : ''}</b><small>The room gives it ${(p * 100).toFixed(p < 0.1 ? 1 : 0)}% · fair ${esc(odds(am))}</small></div>
-    <button type="button" class="btn sm" data-act="pslipcopy">📋 Copy</button><button type="button" class="btn ghost sm" data-act="pslipclear">Clear</button></div>`; }
+    <button type="button" class="btn sm" data-act="psliptrack">Track it</button><button type="button" class="btn ghost sm" data-act="pslipcopy">📋</button><button type="button" class="btn ghost sm" data-act="pslipclear">Clear</button></div>`; }
 function slipText() { const all = propsAll(); return 'TheDesk · my prop slip\n' + S.slip.map(id => all.find(x => x.id === id)).filter(Boolean).map(x => `• ${x.player} ${pLine(x)}${x.opp ? ` (${x.home ? 'vs' : 'at'} ${x.opp})` : ''}`).join('\n') + '\n' + (CFG.home || 'https://ironsilkweekly.com/desk/'); }
 function viewProps() {
   const el = $('#v-props'), F = S.feed, all = propsAll(), f = S.pf;
@@ -519,7 +571,7 @@ function whoOnHtml(b) {
 }
 function boardPicksHtml(b, F, heavy, all) {
   const P = (b.picks || []).filter(p => all || pickOk(p, F, heavy)); if (!P.length) return '';
-  return `<div class="bpicks">${P.map(p => `<div class="bp">${tierTag(p)}<span class="bp-pk">${esc(bigOf(b.sp, b.game, p.pick))}${p.price != null ? ' ' + esc(odds(p.price)) : ''}</span>${p.p != null ? `<span class="bp-p">${pct(p.p)}%</span>` : ''}${all && (p.by || []).length ? `<small class="bp-by">by ${p.by.map(v => esc(castOf(v).name)).join(', ')}</small>` : ''}</div>`).join('')}</div>`;
+  return `<div class="bpicks">${P.map(p => `<div class="bp">${tierTag(p)}<span class="bp-pk">${esc(bigOf(b.sp, b.game, p.pick))}${p.price != null ? ' ' + esc(odds(p.price)) : ''}</span>${p.p != null ? `<span class="bp-p">${pct(p.p)}%</span>` : ''}<button type="button" class="bp-tk" data-act="trackpick" data-sp="${esc(b.sp)}" data-game="${esc(b.game)}" data-pick="${esc(p.pick)}" data-price="${p.price != null ? esc(String(p.price)) : ''}" data-start="${esc(b.start || '')}" aria-label="Track ${esc(p.pick)}" title="Track it">＋</button>${all && (p.by || []).length ? `<small class="bp-by">by ${p.by.map(v => esc(castOf(v).name)).join(', ')}</small>` : ''}</div>`).join('')}</div>`;
 }
 function chCallsHtml(b, v) {
   const L = []; for (const m of ['ml', 'spread', 'total']) for (const c of ((b.calls || {})[m] || [])) if (c.v === v) L.push(c);
@@ -751,6 +803,13 @@ function viewChat() {
 }
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
+  if (f.dataset.form === 'acct') { const n = $('#acctErr'); n.textContent = ''; const signup = AC.mode === 'signup';
+    try { const j = await acctApi(signup ? '/acct/signup' : '/acct/login', { name: f.name.value.trim(), pass: f.pass.value, ...(signup ? { age21: !!(f.age21 && f.age21.checked) } : {}) });
+      store.set('acct', { token: j.token, name: j.name }); acctBadge(); toast(signup ? `Welcome to TheDesk, ${j.name}` : `Welcome back, ${j.name}`); viewMe(); acctLoad(); } catch (err) { n.textContent = err.message; } return; }
+  if (f.dataset.form === 'acclose') { const P = acctPass(); if (!P) return; try { await acctApi('/acct/close', { token: P.token, pass: f.pass.value }); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); toast('Your account is deleted'); } catch (err) { toast(err.message); } return; }
+  if (f.dataset.form === 'newtk') { const legs = parseLegs(f.legs.value); if (!legs.length) return toast('Add at least one leg');
+    const od = +String(f.odds.value).replace(/[^\d+-]/g, ''); const t = { id: tid(), ts: Date.now(), title: f.title.value.trim(), stake: +f.stake.value || null, odds: Math.abs(od) >= 100 ? od : null, legs };
+    if (await tkSave(t, 'Tracking it')) viewMe(); return; }
   if (f.dataset.form === 'chat-join') { const n = $('#joinErr'); n.textContent = '';
     try { const j = await chatApi('/chat/join', { name: f.name.value.trim(), code: f.code.value.trim() }); store.set('chat', j); viewChat(); toast(`You’re in, ${j.name}`); } catch (err) { n.textContent = err.message; } }
   if (f.dataset.form === 'chat-send') { const t = $('#chatText'), P = chatPass(); if (!t || !t.value.trim() || !P) return;
@@ -865,7 +924,7 @@ async function share() {
   try { if (navigator.share) { await navigator.share({ title: 'TheDesk', text, url: CFG.home }); return; } } catch { return; }
   try { await navigator.clipboard.writeText(`${text}\n${CFG.home}`); toast('Card copied'); } catch { toast('Couldn’t copy the card'); }
 }
-const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, longshots: viewLongshots, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
+const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, longshots: viewLongshots, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   if (!TABS.includes(tab)) tab = 'today';
@@ -875,7 +934,7 @@ function go(tab, push) {
   if (push && location.hash !== '#' + tab) history.pushState(null, '', '#' + tab);
   render(); window.scrollTo(0, 0);
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
@@ -897,6 +956,12 @@ document.addEventListener('click', async e => {
   else if (act === 'psort') { S.pf.sort = a.dataset.v; store.set('pf', S.pf); render(); }
   else if (act === 'pslip') { const id = a.dataset.id; S.slip = S.slip.includes(id) ? S.slip.filter(x => x !== id) : [...S.slip, id].slice(-12); store.set('pslip', S.slip); render(); }
   else if (act === 'pslipclear') { S.slip = []; store.set('pslip', S.slip); render(); }
+  else if (act === 'psliptrack') { const t = slipTicket(); if (t && await tkSave(t, 'Tracking it — see Your tickets')) { S.slip = []; store.set('pslip', S.slip); render(); } }
+  else if (act === 'acmode') { AC.mode = a.dataset.v; viewMe(); }
+  else if (act === 'aclogout') { const P = acctPass(); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); if (P) acctApi('/acct/logout', { token: P.token }).catch(() => { }); }
+  else if (act === 'tkmark') { const t = ((AC.me && AC.me.tickets) || []).find(x => x.id === a.dataset.id); if (t) { const l = t.legs[+a.dataset.i]; l.res = l.res === a.dataset.v ? null : a.dataset.v; viewMe(); tkSave(t); } }
+  else if (act === 'tkdel') { const P = acctPass(); if (P && AC.me) { AC.me.tickets = AC.me.tickets.filter(x => x.id !== a.dataset.id); viewMe(); acctApi('/acct/del', { token: P.token, id: a.dataset.id }).catch(e => toast(e.message)); } }
+  else if (act === 'trackpick') { const d = a.dataset; tkSave({ id: tid(), ts: Date.now(), title: '', legs: [{ src: 'pick', sp: d.sp, game: d.game, pick: d.pick, price: d.price ? +d.price : null, start: d.start || '' }] }, 'Tracking it — see Your tickets'); }
   else if (act === 'pslipcopy') { copyText(slipText(), 'Slip copied — paste it into your book'); }
   else if (act === 'bf') { S.bf[a.dataset.k] = a.dataset.v; store.set('bf', S.bf); S.openGame = ''; render(); }
   else if (act === 'bfreset') { S.bf = { win: 'up', tier: 'all', bt: 'all', ch: 'all', view: S.bf.view || 'time' }; store.set('bf', S.bf); render(); }
@@ -942,6 +1007,7 @@ chip();
 if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
 go((location.hash || '#today').slice(1), false);
 loadFeed();
+acctBadge(); acctLoad();
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadSlate());
 /* the install guide greets a first visit, comes back once a week later, and after that lives behind "Get the app" */
 { const g = store.get('guide'); if (!isStandalone() && (!g || ((g.n || 1) < 2 && Date.now() - g.at > 7 * 864e5))) openGuide(true); }

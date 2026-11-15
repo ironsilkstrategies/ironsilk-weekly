@@ -619,3 +619,23 @@ body.embed .view{padding-bottom:20px}
 @media (max-width:420px){.pgrid{grid-template-columns:1fr}}
 .top .chip{white-space:nowrap}
 @media (max-width:400px){.joinpill{padding:7px 11px;font-size:12px}.top{gap:8px}}
+
+/* ── Accounts + Your tickets (v3.0.21) ── */
+.acctbtn{appearance:none;flex:none;width:36px;height:36px;border-radius:50%;border:1.5px solid rgba(244,236,216,.45);cursor:pointer;color:#1a1405;font:800 16px/1 var(--display);
+  background:center/18px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f4ecd8' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6'/%3E%3C/svg%3E"),rgba(0,0,0,.25)}
+.acctbtn.in{background:linear-gradient(180deg,#f3d27a,#c99a2e);border-color:transparent}
+.acctbox{padding:18px;max-width:440px}.acctbox form{display:grid;gap:12px;margin-top:14px}
+.acctbox label,.newtk label{display:grid;gap:5px;font:600 13px/1.2 var(--text);color:#3b4a40}
+.acctbox input,.newtk input,.newtk textarea{font:500 16px/1.3 var(--text);padding:11px 12px;border-radius:10px;border:1.5px solid rgba(27,42,33,.25);background:#fffaf0;color:#1b2a21}
+.acctbox .chk{display:flex;align-items:center;gap:8px}.acctbox .chk input{width:20px;height:20px}
+.acctbox .pview{border-color:rgba(27,42,33,.25)}.acctbox .pview button{color:#3b4a40}.acctbox .pview button.on{background:#1b2a21;color:#f4ecd8}
+.mystats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:4px 0 14px}
+.mystats span{background:rgba(0,0,0,.25);border:1px solid rgba(244,236,216,.15);border-radius:12px;padding:10px 8px;text-align:center;font:600 11px/1.2 var(--text);color:var(--cream-2);text-transform:uppercase;letter-spacing:.05em}
+.mystats b{display:block;font:800 24px/1 var(--display);color:var(--cream);margin-bottom:3px}
+.newtk{padding:12px 16px;margin-bottom:14px}.newtk summary{cursor:pointer;font:700 15px/1 var(--text);color:#1b2a21;padding:4px 0}
+.newtk form{display:grid;gap:10px;margin-top:12px}.newtk .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mytk .mk{display:flex;gap:6px;margin-top:6px}.mytk .mk button{appearance:none;border:1px solid rgba(27,42,33,.25);background:#fffaf0;color:#3b4a40;font:600 11.5px/1 var(--text);padding:5px 8px;border-radius:7px;cursor:pointer}
+.mytk .mk button.on{background:#1b2a21;color:#f0cd6a;border-color:#1b2a21}
+.bp-tk{appearance:none;border:1px solid rgba(27,42,33,.3);background:#fffaf0;color:#1b2a21;width:26px;height:26px;border-radius:50%;font:700 15px/1 var(--text);cursor:pointer;flex:none}
+@media (max-width:430px){#installChip .ic-t{display:none}#installChip{padding:8px 10px}.brand b{font-size:22px}}
+.closeacct{margin:22px 0 4px;color:var(--cream-3);font-size:13px}.closeacct summary{cursor:pointer}.closeacct form{display:grid;gap:8px;max-width:320px;margin-top:8px}.closeacct input{font:500 16px var(--text);padding:9px 10px;border-radius:8px;border:1px solid rgba(244,236,216,.3);background:rgba(0,0,0,.3);color:var(--cream)}
