@@ -192,7 +192,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   /* ── following tickets live (v3.0.34) ── */
   { let bump = 0; const espnUrls = [], boxUrls = []; const F = JSON.parse(JSON.stringify(BETA)); const t0 = F.founder.tix[0]; t0.p0 = 0.02; t0.now = 0.035;
     t0.legs[1].p = 0.52; t0.legs[1].q = 0.61; t0.legs[1].st = 'live'; t0.legs[1].detail = 'DAL 50–58 MIN (live) · margin +8'; t0.legs[1].start = iso(now - 30 * 60e3); t0.legs[0].p = 0.6; t0.legs[2].p = 0.3; t0.legs[2].q = 0.05;
-    F.vip.parlays[0].legs[0].q = 0.8; F.vip.parlays[0].legs[0].start = iso(now - 40 * 60e3);
+    F.props.props[1].home = true;     F.vip.parlays[0].legs[0].q = 0.8; F.vip.parlays[0].legs[0].start = iso(now - 40 * 60e3);
     const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
     await p.addInitScript(f => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.feed', f); } catch (e) { } }, JSON.stringify(F)); /* the same card already saved on the phone: no new publish to wake the live loop */
     await p.route('**/*', r => { const u = new URL(r.request().url());
@@ -217,6 +217,13 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     T('scores keep updating: the next fetch shows the new score (no cached copy), with a "Scores updated" time', /LIVE DAL 60–61 MIN · 2:40 - 3rd/i.test(t) && /Scores updated/i.test(t) && espnUrls.length > 0 && espnUrls.every(q => /[?&]_=\d+/.test(q)), (t.match(/MIN -5\.5[^]{0,200}/) || [])[0] + ' ' + espnUrls[0]);
     T('…and the live chance is worked out on the phone: same feed, new score → the leg drops to 35%, the ticket\'s live cash chance moves with it (no republish from the desk)', /LIVE DAL 60–61 MIN · 2:40 - 3rd · 35% live \(was 52%\)/i.test(t) && /Live cash chance 34\.6%/i.test(t), (t.match(/LIVE DAL[^]{0,120}/) || [])[0] + ' | ' + (t.match(/live cash chance[^]{0,40}/i) || [])[0]);
     T('…a prop that clears mid-game is graded ✓ on the spot (no waiting on the desk), and the ticket counts it', /✓\s*A\. Edwards 25\+ points[^]{0,80}A\. Edwards 27 · cleared it/.test(t) && /2 OF 3 HIT|2 of 3 hit/i.test(t), (t.match(/.{0,4}A\. Edwards 25\+ points[^]{0,100}/) || [])[0] + ' | ' + (t.match(/LIVE · \d OF \d HIT/i) || [])[0]);
+    T('…the founder ticket counts hits and misses', /✓ 2 hit · ✗ 0 missed/.test(t), (t.match(/legs ·[^\n]{0,80}/) || [])[0]);
+    await p.click('.tabs [data-go="props"]'); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('#v-props').innerText);
+    T('Props tab: a prop that cleared shows HIT with the player\'s number; a live one shows score and its live chance', /HIT/.test(t) && /✓ Hit · Anthony Edwards had 27/.test(t), (t.match(/Anthony Edwards[^]{0,260}/) || [t.slice(0, 400)])[0]);
+    await p.click('.tabs [data-go="today"]'); await p.waitForTimeout(700); t = await p.evaluate(() => document.body.innerText);
+    T('Today\'s Unanimous/Supreme/Strong board: live games show the score and each pick\'s live chance', /UNANIMOUS, SUPREME & STRONG/i.test(t) && /LIVE WSH 3–10 NYG[^\n]*% live/.test(t), (t.match(/UNANIMOUS, SUPREME[^]{0,700}/i) || [])[0]);
+    await p.click('.tabs [data-go="slate"]'); await p.waitForTimeout(900);
+    T('the Slate\'s colored picks carry their live chance while the game plays', await p.evaluate(() => [...document.querySelectorAll('.bp.bp-live .lvq')].length > 0), await p.evaluate(() => (document.querySelector('.bpicks') || {}).innerText));
     await p.click('.tabs [data-go="today"]'); await p.waitForTimeout(800); t = await p.evaluate(() => document.body.innerText);
     T('…one score line per live game leg (the stale grade line from the last publish stays off)', !/MIN -5\.5[^]{0,160}\(live\)/.test(t.split('Edwards')[0]), (t.match(/MIN -5\.5[^]{0,200}/) || [])[0]);
     T('VIP parlays get the same summary; a live leg shows its score, clock and live chance', /EVERY CHARACTER’S PARLAY|Every character’s parlay/i.test(t) && /legs · /.test(t) && /LIVE WSH 3–10 NYG · 9:41 - 2nd/i.test(t) && /86% live \(was 71%\)/i.test(t), (t.match(/LIVE WSH[^]{0,200}/) || [])[0]);
