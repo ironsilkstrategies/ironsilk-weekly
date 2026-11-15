@@ -3094,7 +3094,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8173,7 +8173,9 @@ let RL_OVR=null;   /* v2.87.7 · the second-opinion check re-grades a leg on the
    totals and moneylines name the team, not the side, so nothing else changes) and the ticket is saved that way. */
 function legFlipHeal(leg,ticketDate){try{if(!leg||!leg.game||leg.fbProp||leg.nhlProp||leg.mlbProp||leg.bbProp||leg.isProp)return;const g=String(leg.game);if(!/^[^@]+@[^@]+$/.test(g))return;
     const sp=leg.sport||'mlb';const[A,H]=g.split('@');const rev=H+'@'+A;const d=leg.gameDate||ticketDate,ap=!!leg.gdApprox||!leg.gameDate;
-    const want=legDay(leg,ticketDate);const has=x=>{if((sportGames(sp)||[]).some(z=>z&&z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x&&(()=>{try{return dayOk(gameDayOf(z),want,ap);}catch(e){return true;}})()))return true;try{if(mgEventFor(sp,x,d,ap,leg.start))return true;}catch(e){}try{if(finalsFor(sp,x,legDay(leg,ticketDate),ap,leg.start))return true;}catch(e){}return false;};
+    const want=legDay(leg,ticketDate);const has=x=>{if((sportGames(sp)||[]).some(z=>z&&z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x&&(()=>{try{return dayOk(gameDayOf(z),want,ap);}catch(e){return true;}})()))return true;try{if(mgEventFor(sp,x,d,ap,leg.start))return true;}catch(e){}try{if(finalsFor(sp,x,legDay(leg,ticketDate),ap,leg.start))return true;}catch(e){}
+      /* v3.0.14 · and ESPN's own scoreboard index (filled whenever a prop in that game is looked up — away@home exactly as ESPN has it) */
+      try{if(want&&typeof fbpGameKey==='function'){const I=get(FBP_IDX_KEY,{})||{};const k=fbpGameKey(x,sp),lo=fbpShift(want,-1),hi=fbpShift(want,1);if(Object.keys(I).some(key=>{const q=key.split(':');return q[0]===sp&&q[1]===k&&q[2]>=lo&&q[2]<=hi;}))return true;}}catch(e){}return false;};
     if(has(g)||!has(rev))return;leg.game=rev;leg.flipped=1;
     try{const L=get(LS.locked,[]);let ch=false;L.forEach(t=>(t.legs||[]).forEach(l=>{if(l.id&&l.id===leg.id&&l.game===g){l.game=rev;l.flipped=1;ch=true;}}));if(ch)set(LS.locked,L);}catch(e){}}catch(e){}}
 function resolveLeg(leg,ticketDate){

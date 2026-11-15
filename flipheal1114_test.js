@@ -20,6 +20,10 @@ setTimeout(() => { try {
   T('a flipped leg heals: DAL ML finds CLE@DAL, grades the Mavericks\' win, and the ticket is saved the right way round', R.game === 'CLE@DAL' && R.saved === 'CLE@DAL' && R.g && R.g.hit === true, JSON.stringify(R));
   const tot = w.eval(`(()=>{const t=(get(LS.locked,[])||[]).find(t=>t.id==='ext1099000001');const l=t.legs.find(x=>x.pick==='Over 217.5');return{g:gradeLeg(l,t.date),game:l.game};})()`);
   T('…the total in the same game heals and grades too (228 > 217.5)', tot.game === 'CLE@DAL' && tot.g.hit === true, JSON.stringify(tot));
+  /* v3.0.14 · the game is only in ESPN's scoreboard index (a prop in it was looked up), not on this page's slate */
+  w.eval(`const I=get(FBP_IDX_KEY,{});I['nba:'+fbpGameKey('NO@DEN','nba')+':'+fbpYmd('2026-11-14')]='401999';set(FBP_IDX_KEY,I);`);
+  const den = w.eval(`(()=>{const l={id:'dd1',sport:'nba',game:'DEN@NO',pick:'DEN ML',gameDate:'2026-11-15'};resolveLeg(l,'2026-11-15');return l.game;})()`);
+  T('…healed from ESPN\'s scoreboard index too: DEN@NO becomes NO@DEN when ESPN lists NO@DEN that night', den === 'NO@DEN', den);
   const keep = w.eval(`(()=>{const l={id:'zz',sport:'nba',game:'BOS@NYK',pick:'BOS ML',gameDate:'2026-11-15'};resolveLeg(l,'2026-11-15');return l.game;})()`);
   T('a leg whose game simply isn\'t posted yet is left alone', keep === 'BOS@NYK');
 } catch (e) { T('no crash', false, String(e && e.stack || e).slice(0, 500)); }
