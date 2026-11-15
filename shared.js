@@ -2286,7 +2286,7 @@ const CHARS={
   'Coach':      {chip:'COACH',color:'#5FD3E8',label:'The Coach',school:'keeps everyone honest — scales each character\'s confidence to its real hit rate; his own score from season scoring, rest, spots, revenge, weather and the news',quiet:'nothing on the clipboard clears the line'},
   'Most common':{chip:'SCORE',color:'#a78bfa',label:'The Scorekeeper',school:'every final built from its parts — touchdowns × what they bring + field goals, possessions × threes / twos / free throws, shots × the goalie — off the season\'s box scores',quiet:'no modal score'},
   'Pred':       {chip:'ORACLE',color:'#e8c15a',label:'The Oracle',school:'the outside world\'s consensus — prediction markets, 50+ computer rating systems, expert picks and your uploads, each weighed by its own record',quiet:'no outside read on this game'},
-  'Covers':     {chip:'COVERS',color:'#ff7a1a',label:'Covers',school:'Covers / OddsShark computer predicted score',quiet:'no Covers prediction uploaded'},
+  'Covers':     {chip:'COVERS',color:'#ff7a1a',label:'Covers',school:'Covers / OddsShark computer predicted score',quiet:'no Covers or OddsShark score for this game'},
   'Trends':     {chip:'TRENDS',color:'#34d399',label:'The Historian',school:'prestige, head-to-head, dynasties and pretenders, units exposed for years, the referee — ten finished seasons (plus your uploaded trends)',quiet:'nothing in the history clears his gut'},
   'Consensus':  {chip:'CROWD',color:'#f472b6',label:'The Crowd',school:'where the public tickets and money are',quiet:'no public split uploaded'},
   'Power':      {chip:'⚡ POWER',color:'#818cf8',label:'The Commissioner',school:'TheDesk Power Index — who\'s better and by how much, plus prestige and the all-time series',quiet:'no power rating for one of these teams, or no real edge on this number'},
@@ -2390,6 +2390,10 @@ function characterCalls(sp,g,s){
     Object.entries(bySrc).forEach(([src,arr])=>{const last=arr[arr.length-1];
       if(isCovers(src)){if(!spoke.Covers){spoke.Covers=1;byMargin('Covers',last.a,last.h,{score:last.a+'-'+last.h,src});}}else if(!oraUp)oraUp={a:+last.a,h:+last.h,src};});
   }catch(e){}
+  /* v3.0.18 · Nov 14: the Outsider stopped waiting on a paste. With no Covers score uploaded it reads OddsShark's computer
+     score off the feeds robot (pulled every hour) and bets what it implies. From Nov 15 on; posted days stand. */
+  try{if(!spoke.Covers&&d>='2026-11-15'&&typeof oracleFile==='function'){const F=oracleFile(sp,A,H,d),o=F&&F.s&&F.s.os;
+    if(o&&isFinite(+o.pa)&&isFinite(+o.ph)&&+o.pa+ +o.ph>0){const a=+(+o.pa).toFixed(1),h=+(+o.ph).toFixed(1);spoke.Covers=1;byMargin('Covers',a,h,{score:a+'-'+h,src:'OddsShark computer'});}}}catch(e){}
   let oraDone=false;try{if(typeof oracleCallsV2==='function'&&oracleCallsV2(sp,g,Ln,hl,hlSim,tl,tlSim,add,d,oraUp))oraDone=true;}catch(e){}
   if(!oraDone&&oraUp)byMargin('Pred',oraUp.a,oraUp.h,{score:oraUp.a+'-'+oraUp.h,src:oraUp.src});
   // Trends — v2.91: the Historian (desk-hist.js) reads ten seasons; the uploaded trends are one voice in his gut
@@ -3098,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
