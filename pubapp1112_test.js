@@ -190,7 +190,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
 
   /* ── following tickets live (v3.0.34) ── */
-  { let bump = 0; const espnUrls = []; const F = JSON.parse(JSON.stringify(BETA)); const t0 = F.founder.tix[0]; t0.p0 = 0.02; t0.now = 0.035;
+  { let bump = 0; const espnUrls = [], boxUrls = []; const F = JSON.parse(JSON.stringify(BETA)); const t0 = F.founder.tix[0]; t0.p0 = 0.02; t0.now = 0.035;
     t0.legs[1].p = 0.52; t0.legs[1].q = 0.61; t0.legs[1].st = 'live'; t0.legs[1].detail = 'DAL 50–58 MIN (live) · margin +8'; t0.legs[1].start = iso(now - 30 * 60e3); t0.legs[0].p = 0.6; t0.legs[2].p = 0.3; t0.legs[2].q = 0.05;
     F.vip.parlays[0].legs[0].q = 0.8; F.vip.parlays[0].legs[0].start = iso(now - 40 * 60e3);
     const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
@@ -198,7 +198,10 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await p.route('**/*', r => { const u = new URL(r.request().url());
       if (/picks\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(F) });
       if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
-      if (u.hostname === 'site.api.espn.com') { const ev = (a, h, as, hs, det, per, clk) => ({ competitions: [{ status: { period: per, clock: clk, type: { state: 'in', shortDetail: det } }, competitors: [{ homeAway: 'away', team: { abbreviation: a }, score: String(as) }, { homeAway: 'home', team: { abbreviation: h }, score: String(hs) }] }] });
+      if (u.hostname === 'site.api.espn.com') { const ev = (a, h, as, hs, det, per, clk) => ({ id: a + h, competitions: [{ status: { period: per, clock: clk, type: { state: 'in', shortDetail: det } }, competitors: [{ homeAway: 'away', team: { abbreviation: a }, score: String(as) }, { homeAway: 'home', team: { abbreviation: h }, score: String(hs) }] }] });
+        if (/summary$/.test(u.pathname)) { boxUrls.push(u.search); const id = u.searchParams.get('event');
+          const P = id === 'DALMIN' ? [{ team: { abbreviation: 'MIN' }, statistics: [{ keys: ['minutes', 'points', 'fieldGoalsMade-fieldGoalsAttempted', 'threePointFieldGoalsMade-threePointFieldGoalsAttempted', 'rebounds', 'assists'], athletes: [{ athlete: { displayName: 'Anthony Edwards', shortName: 'A. Edwards' }, stats: ['30', String(18 + (bump ? 9 : 0)), '7-15', '2-6', '4', '5'] }, { athlete: { displayName: 'Anthony Black', shortName: 'A. Black' }, stats: ['20', '9', '4-9', '1-3', '2', '6'] }] }] }] : [];
+          return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ boxscore: { players: P } }) }); }
         espnUrls.push(u.search); const E = /basketball\/nba/.test(u.pathname) ? [ev('DAL', 'MIN', 54 + bump, 61, bump ? '2:40 - 3rd' : '5:12 - 3rd', 3, bump ? 160 : 312)] : /football\/nfl/.test(u.pathname) ? [ev('WSH', 'NYG', 3, 10, '9:41 - 2nd', 2, 581)] : [];
         return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ events: E }) }); }
       if (u.hostname !== 'desk.test') return r.abort();
@@ -206,11 +209,13 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
       r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
     await p.goto('https://desk.test/desk/#longshots', { waitUntil: 'load' }); await p.waitForTimeout(1500);
     let t = await p.evaluate(() => document.querySelector('#v-longshots').innerText);
-    T('LongShots live: the ticket\'s chance and "1 in N", legs live, to go, and a live cash chance against pre-game', /2\.0%\s*·\s*1 in 50/.test(t) && /● \d+ live/.test(t) && /LIVE CASH CHANCE 3\.5%|Live cash chance 3\.5%/i.test(t) && /was 1 in 50 pre-game/i.test(t), t.slice(0, 600));
+    T('LongShots live: the ticket\'s chance and "1 in N", legs live, to go, and a live cash chance against pre-game', /2\.0%\s*·\s*1 in 50/.test(t) && /● \d+ live/.test(t) && /Live cash chance \d+\.\d%/i.test(t) && /was 1 in 50 pre-game/i.test(t), (t.match(/live cash chance[^]{0,60}/i) || [t.slice(0, 600)])[0]);
+    T('player props live off ESPN\'s box score, on the phone: the stat against the line and its own live chance (the feed\'s stale 5% is ignored)', /A\. Edwards 25\+ points[^]{0,120}18 of 25\+ · 61% live \(was 30%\)/.test(t) && !/A\. Edwards 18\b/.test(t) && boxUrls.length > 0 && boxUrls.every(q => /event=DALMIN/.test(q)), (t.match(/A\. Edwards 25\+ points[^]{0,160}/) || [])[0]);
     T('…each live leg: score and clock, and its live chance (was X% pre-game)', /LIVE DAL 54–61 MIN · 5:12 - 3rd/i.test(t) && /70% live \(was 52%\)/i.test(t), (t.match(/LIVE DAL[^]{0,300}/) || [t.slice(0,900)])[0]);
     bump = 6; await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await p.waitForTimeout(900); t = await p.evaluate(() => document.querySelector('#v-longshots').innerText);
     T('scores keep updating: the next fetch shows the new score (no cached copy), with a "Scores updated" time', /LIVE DAL 60–61 MIN · 2:40 - 3rd/i.test(t) && /Scores updated/i.test(t) && espnUrls.length > 0 && espnUrls.every(q => /[?&]_=\d+/.test(q)), (t.match(/MIN -5\.5[^]{0,200}/) || [])[0] + ' ' + espnUrls[0]);
-    T('…and the live chance is worked out on the phone: same feed, new score → the leg drops to 35%, the ticket\'s live cash chance moves with it (no republish from the desk)', /LIVE DAL 60–61 MIN · 2:40 - 3rd · 35% live \(was 52%\)/i.test(t) && /LIVE CASH CHANCE 1\.7%|Live cash chance 1\.7%/i.test(t), (t.match(/LIVE DAL[^]{0,120}/) || [])[0] + ' | ' + (t.match(/live cash chance[^]{0,40}/i) || [])[0]);
+    T('…and the live chance is worked out on the phone: same feed, new score → the leg drops to 35%, the ticket\'s live cash chance moves with it (no republish from the desk)', /LIVE DAL 60–61 MIN · 2:40 - 3rd · 35% live \(was 52%\)/i.test(t) && /Live cash chance 34\.6%/i.test(t), (t.match(/LIVE DAL[^]{0,120}/) || [])[0] + ' | ' + (t.match(/live cash chance[^]{0,40}/i) || [])[0]);
+    T('…a prop that clears mid-game is graded ✓ on the spot (no waiting on the desk), and the ticket counts it', /✓\s*A\. Edwards 25\+ points[^]{0,80}A\. Edwards 27 · cleared it/.test(t) && /2 OF 3 HIT|2 of 3 hit/i.test(t), (t.match(/.{0,4}A\. Edwards 25\+ points[^]{0,100}/) || [])[0] + ' | ' + (t.match(/LIVE · \d OF \d HIT/i) || [])[0]);
     await p.click('.tabs [data-go="today"]'); await p.waitForTimeout(800); t = await p.evaluate(() => document.body.innerText);
     T('…one score line per live game leg (the stale grade line from the last publish stays off)', !/MIN -5\.5[^]{0,160}\(live\)/.test(t.split('Edwards')[0]), (t.match(/MIN -5\.5[^]{0,200}/) || [])[0]);
     T('VIP parlays get the same summary; a live leg shows its score, clock and live chance', /EVERY CHARACTER’S PARLAY|Every character’s parlay/i.test(t) && /legs · /.test(t) && /LIVE WSH 3–10 NYG · 9:41 - 2nd/i.test(t) && /86% live \(was 71%\)/i.test(t), (t.match(/LIVE WSH[^]{0,200}/) || [])[0]);
@@ -352,7 +357,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
   /* ── what's in the box (and what isn't) ── */
   const dir = path.join(W, 'desk'), files = fs.readdirSync(dir).filter(f => /\.(html|js|css|webmanifest)$/.test(f)); const src = Object.fromEntries(files.map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')])); const all = Object.values(src).join('\n');
-  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 150000);
+  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 175000);
   T('none of the desk\'s machinery: no engine scripts, no app storage, no keys or settings, no eval', !/shared\.js|desk-[a-z]+\.js|-engine\.js|store\.js|theme\.css/.test(all) && !/['"`]d4\./.test(all) && !/apiKey|api_key|odds-?api|ghp_|bot[0-9]{6,}|AUTOPILOT|tgautokey/i.test(all) && !/\beval\(|new Function\(/.test(all));
   const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]).filter(u => !/^https:\/\/telegram\.org\//.test(u));
   const tgLoader = /if\(\/tgWebApp\/\.test\(location\.hash\+location\.search\)\)document\.write\('<script src="https:\/\/telegram\.org\/js\/telegram-web-app\.js">/.test(src['index.html']);

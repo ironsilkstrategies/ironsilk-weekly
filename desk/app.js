@@ -135,7 +135,7 @@ async function scores(sps, ymd) {
         const st = (c.status || ev.status || {}).type || {};
         const num = z => +(z.score && z.score.value != null ? z.score.value : z.score);
         S.live[`${sp}|${ab(sp, A.team && A.team.abbreviation)}@${ab(sp, H.team && H.team.abbreviation)}`] =
-          { a: num(A), h: num(H), state: st.state === 'post' || st.completed ? 'post' : st.state === 'in' ? 'in' : 'pre', detail: st.shortDetail || st.detail || '', period: +((c.status || ev.status || {}).period) || 0, clock: (c.status || ev.status || {}).clock != null ? +((c.status || ev.status || {}).clock) : null };
+          { a: num(A), h: num(H), state: st.state === 'post' || st.completed ? 'post' : st.state === 'in' ? 'in' : 'pre', detail: st.shortDetail || st.detail || '', id: ev.id || c.id || null, period: +((c.status || ev.status || {}).period) || 0, clock: (c.status || ev.status || {}).clock != null ? +((c.status || ev.status || {}).clock) : null };
       }
     } catch { /* scores are a nicety */ }
   }));
@@ -148,10 +148,11 @@ async function liveTick() {
      sit on another day — a ticket the book dated the next morning) */
   const V = F.vip || {}, td = String((T && T.d) || deskDay()), legsOf = a => (a || []).filter(x => x && !x.hidden && x.game && x.hit == null && !x.push);
   const items = [...legsOf(T && T.picks), ...legsOf((F.parlay || {}).legs), ...legsOf(V.top10), ...legsOf((V.banker || {}).legs), ...(V.parlays || []).flatMap(P => legsOf(P.legs)).map(x => x),
-    ...((F.founder || {}).tix || []).flatMap(t => (t.legs || []).filter(l => l.sp && l.game && l.st !== 'hit' && l.st !== 'miss' && l.st !== 'push').map(l => ({ sp: l.sp, game: l.game, day: l.day || t.date })))];
+    ...((F.founder || {}).tix || []).flatMap(t => (t.legs || []).filter(l => l.sp && l.game && l.st !== 'hit' && l.st !== 'miss' && l.st !== 'push').map(l => ({ sp: l.sp, game: l.game, pick: l.pick, day: l.day || t.date })))];
   const by = new Map(); items.forEach(x => { const d = String(x.day || td).slice(0, 10).replace(/-/g, ''); const k = d; const set = by.get(k) || new Set(); set.add(x.sp); by.set(k, set); });
   if (!by.size) return;
   await Promise.all([...by].map(([d, sps]) => scores([...sps], d)));
+  await boxes(items); /* player props: their box scores, now that the scoreboard has each game's id */
   if (S.tab === 'today' || S.tab === 'longshots') render();
 }
 async function slateLive() {
@@ -163,6 +164,7 @@ async function slateLive() {
 /* the page grades a finished game itself, so a result never waits on the next publish */
 function liveGrade(x) {
   if (!x || x.hidden || x.hit != null || x.push) return x;
+  if (parseProp(x.pick)) { const P = propNow(x); return P && P.st !== 'live' ? { ...x, hit: P.st === 'hit' } : x; }
   const L = liveOf(x); if (!L || L.state !== 'post' || !fin(L.a) || !fin(L.h)) return x;
   const [ga, gh] = String(x.game).split('@'), A = L.a, H = L.h, p = String(x.pick || '').trim(); let m;
   if ((m = p.match(/^(Over|Under)\s+([\d.]+)$/i))) { const t = A + H, ln = +m[2]; return t === ln ? { ...x, push: true } : { ...x, hit: /over/i.test(m[1]) ? t > ln : t < ln }; }
@@ -300,6 +302,7 @@ function viewToday() {
 /* ── Founder LongShot Parlays: the founder's own tickets, live, to tail ── */
 const decAm = d => !d || d <= 1 ? '' : d >= 2 ? '+' + Math.round((d - 1) * 100).toLocaleString('en-US') : '−' + Math.round(100 / (d - 1));
 const FST = { hit: ['✓', 'hit'], miss: ['✗', 'miss'], push: ['↺', 'push'], live: ['●', 'live'], open: ['·', 'open'] };
+const nmShort = pk => (parseProp(pk) || {}).name || '';
 const legText = l => l.prop || !l.game ? l.pick : (readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick);
 function founderLeg(l) {
   const [ic, cls] = FST[l.st] || FST.open, bar = l.prog && l.st !== 'open' ? Math.max(0, Math.min(100, l.prog.d === 'under' ? (l.prog.v <= l.prog.t ? 100 : 0) : (l.prog.v / l.prog.t) * 100)) : null;
@@ -307,8 +310,9 @@ function founderLeg(l) {
     <small class="fl-g">${esc([l.game ? matchup(l) : '', l.st === 'open' && l.start ? whenLabel(l.start) : ''].filter(Boolean).join(' · '))}</small>
     ${(() => { const lv = l.game && (l.st === 'live' || l.st === 'open') ? liveOf(l) : null; const on = lv && lv.state === 'in';
       /* one score line: while ESPN's live score is on the leg, the grade line from the last publish (a step behind) stays off — props keep theirs (the stat + bar) */
-      const dt = l.detail && !(on && !l.prop) ? `<small class="fl-d">${esc(l.detail)}</small>` : '';
-      return (on ? `<small class="lv">${scoreBit(l, lv)}${!l.prop ? ' · ' + qBit(l, true) : ''}</small>` : '') + dt; })()}${bar != null ? `<span class="fl-bar"><i style="width:${bar.toFixed(0)}%"></i></span>` : ''}</span></li>`;
+      const dt = l.detail && !(on && (!l.prop || l.ph)) && !(l.ph && l.ph.st !== 'live') ? `<small class="fl-d">${esc(l.detail)}</small>` : '';
+      const qb = on && (!l.prop || l.ph) ? qBit(l, true) : '', fin = l.ph && l.ph.st !== 'live' ? `<small class="fl-d">${esc(nmShort(l.pick))} ${l.ph.v} · ${(liveOf(l) || {}).state === 'post' ? 'final' : l.ph.st === 'hit' ? 'cleared it' : 'went over'}</small>` : '';
+      return (on ? `<small class="lv">${scoreBit(l, lv)}${qb ? ' · ' + qb : ''}</small>` : '') + (fin || dt); })()}${bar != null ? `<span class="fl-bar"><i style="width:${bar.toFixed(0)}%"></i></span>` : ''}</span></li>`;
 }
 function founderSum(t) { const L = t.legs || []; if (L.length < 2) return ''; const lv = l => { const x = l.game ? liveOf(l) : null; return l.st === 'live' || (l.st === 'open' && x && x.state === 'in'); };
   const live = L.filter(lv).length, togo = L.filter(l => l.st === 'open' && !lv(l)).length, lost = t.res === 'lost', started = L.some(l => l.st !== 'open') || live;
@@ -320,7 +324,7 @@ function founderSum(t) { const L = t.legs || []; if (L.length < 2) return ''; co
     ${started && p0 != null && now != null ? `<div class="tk-live ${lost ? 'dn' : now >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(now)} · 1 in ${p1in(now)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>` : ''}${live && S.liveAt ? `<div class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }))}</div>` : ''}`; }
 function founderHtml(page) {
   const F = S.feed && S.feed.beta !== false && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
-  const R = F.rec || {}, card = t => { const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
+  const R = F.rec || {}, card = t0 => { const t = effTicket(t0); const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
     const chip = t.res === 'cashed' ? '<span class="fchip win">Cashed</span>' : t.res === 'lost' ? '<span class="fchip loss">Lost</span>' : t.res === 'live' ? `<span class="fchip live">● Live · ${t.hit} of ${n} hit</span>` : '<span class="fchip">Pending</span>';
     return `<article class="slip founder nostub ${t.res}"><div class="slip-head"><span>${esc(t.name || 'LongShot')} · ${n} legs</span>${chip}</div><div class="slip-main">
       <div class="f-odds">${t.dec ? `<b>${esc(decAm(t.dec))}</b><span>$10 pays <b>$${(10 * t.dec).toLocaleString('en-US', { maximumFractionDigits: 0 })}</b></span>` : ''}<span class="f-prog">${done} of ${n} settled</span></div>
@@ -758,6 +762,79 @@ function callsHtml(calls) {
     <span class="nt">${c.with ? '' : `On ${esc(c.pick || 'the other side')}${c.note ? '. ' : ''}`}${esc(c.note || '')}</span></li>`;
   return `<details class="calls"><summary><span>Every character on it</span><small>${w.length} with · ${a.length} against</small></summary><ul>${[...w, ...a].map(row).join('')}</ul></details>`;
 }
+/* ── player props live on the phone too (Chris, Nov 15: "Do that!"): the page pulls ESPN's box score for every game with a prop on it,
+   reads the player's line, grades the leg the moment it clears (or the game ends), and moves the chance with what's left of the game */
+S.box = {};
+const nrm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[.'’]/g, '').replace(/\b(jr|sr|ii|iii|iv)\b/g, '').replace(/\s+/g, ' ').trim();
+function parseProp(pick) {
+  const s = String(pick || '').replace(/\s*\([^)]*\)\s*$/, '').trim(); let m;
+  if ((m = s.match(/^(.+?)\s+(\d+(?:\.\d+)?)\+\s+(.+)$/))) { const t = Math.ceil(+m[2]); return { name: m[1], stat: m[3], t, show: +m[2], under: false }; }
+  if ((m = s.match(/^(.+?)\s+(over|under|o|u)\s+(\d+(?:\.\d+)?)\s+(.+)$/i))) { const L = +m[3], under = /^u/i.test(m[2]); return { name: m[1], stat: m[4], t: Math.floor(L) + 1, u: Math.ceil(L) - 1 + (L % 1 ? 0 : 1), show: L, under }; }
+  return null; }
+/* the stat a prop names → the box-score key(s) it sums; null when the page can't read it (the desk's number stays) */
+function statKeys(sp, stat) {
+  let parts = String(stat).toLowerCase().split(/\s*\+\s*/).filter(Boolean); const unit = (parts[parts.length - 1].match(/\b(yds|yards|td|tds|touchdowns?)\b/) || [])[0];
+  if (unit) parts = parts.map(c => /\b(yds|yards|td|tds|touchdowns?)\b/.test(c) ? c : c + ' ' + unit);
+  const one = c => {
+    if (/^nba|^ncaab/.test(sp)) return /three|3pm|3-pt|3pt/.test(c) ? 'threePointFieldGoalsMade' : /point|pts/.test(c) ? 'points' : /reb/.test(c) ? 'rebounds' : /ast|assist/.test(c) ? 'assists' : /stl|steal/.test(c) ? 'steals' : /blk|block/.test(c) ? 'blocks' : /turnover/.test(c) ? 'turnovers' : null;
+    if (/^nfl|^ncaaf/.test(sp)) return /pass.*(td|touch)/.test(c) ? 'passingTouchdowns' : /rush.*(td|touch)/.test(c) ? 'rushingTouchdowns' : /(rec|receiv).*(td|touch)/.test(c) ? 'receivingTouchdowns' : /pass.*(yd|yard)/.test(c) ? 'passingYards' : /rush.*(yd|yard)/.test(c) ? 'rushingYards' : /(rec|receiv).*(yd|yard)/.test(c) ? 'receivingYards' : /rush.*att|carries/.test(c) ? 'rushingAttempts' : /complet/.test(c) ? 'completions' : /recept|^rec$|catches/.test(c) ? 'receptions' : /intercep/.test(c) ? 'interceptions' : null;
+    if (sp === 'nhl') return /shot|sog/.test(c) ? 'shots' : /goal/.test(c) ? 'goals' : /assist/.test(c) ? 'assists' : /point/.test(c) ? 'pts' : /save/.test(c) ? 'saves' : /block/.test(c) ? 'blockedShots' : /hit/.test(c) ? 'hits' : null;
+    if (sp === 'mlb') return /home run|\bhr/.test(c) ? 'homeRuns' : /rbi/.test(c) ? 'RBIs' : /strikeout|\bks?\b/.test(c) ? 'p_strikeouts' : /walk/.test(c) ? 'walks' : /\bruns?\b/.test(c) ? 'runs' : /\bhits?\b/.test(c) ? 'hits' : null;
+    return null; };
+  const ks = parts.map(one); return ks.every(Boolean) ? ks : null; }
+/* ESPN summary → {players by name}; keys like "made-attempted" split, pitchers' stats kept apart (p_) */
+function readBox(j) {
+  const rows = [];
+  for (const tm of ((j && j.boxscore && j.boxscore.players) || [])) for (const g of tm.statistics || []) {
+    const keys = g.keys || [], pre = /pitch/i.test(g.name || g.type || '') ? 'p_' : '';
+    for (const a of g.athletes || []) { const ath = a.athlete || {}, nm = nrm(ath.displayName || ath.fullName); if (!nm) continue;
+      let r = rows.find(x => x.nm === nm); if (!r) rows.push(r = { nm, sh: nrm(ath.shortName), v: {} });
+      const o = {}; keys.forEach((k, i) => { const val = (a.stats || [])[i]; if (val == null) return; const ks = String(k).split(/[-/]/), vs = String(val).split(/[-/]/);
+        ks.forEach((kk, n) => { const x = parseFloat(vs[n]); if (isFinite(x)) o[pre + kk] = x; }); }); /* one group: set (MLB lists hits twice); across groups: add */
+      for (const k in o) r.v[k] = (r.v[k] || 0) + o[k]; } }
+  rows.forEach(r => { const v = r.v; if (v.shots == null) { const sh = v.shotsTotal != null ? v.shotsTotal : v.shotsOnGoal; if (sh != null) v.shots = sh; } if (v.goals != null || v.assists != null) v.pts = (v.goals || 0) + (v.assists || 0); });
+  return rows; }
+function findPlayer(rows, name) {
+  const n = nrm(name), tk = n.split(' '), last = tk[tk.length - 1];
+  let hit = rows.filter(r => r.nm === n || r.sh === n); if (hit.length === 1) return hit[0];
+  if (tk.length >= 2 && tk[0].length <= 2) { hit = rows.filter(r => { const t = r.nm.split(' '); return t[t.length - 1] === last && t[0].startsWith(tk[0][0]); }); if (hit.length === 1) return hit[0]; }
+  hit = rows.filter(r => r.nm.split(' ').slice(-1)[0] === last && r.nm.split(' ')[0] === tk[0]); return hit.length === 1 ? hit[0] : null; }
+const pois = (k, mu) => { let t = Math.exp(-mu), s = 0; for (let i = 0; i <= k; i++) { s += t; t *= mu / (i + 1); } return Math.min(1, s); }; /* P(X ≤ k) */
+function paceQ(sp, keys, v, P, p0, f) {
+  const big = keys.some(k => /Yards$/.test(k)) || (/^nba|^ncaab/.test(sp) && (keys.length > 1 || keys[0] === 'points'));
+  if (big) { const cv = keys.includes('passingYards') ? 0.3 : /^nba|^ncaab/.test(sp) ? 0.3 : 0.55;
+    if (!P.under) { const mu = (P.t - 0.5) / Math.max(0.25, 1 + cv * probit(1 - p0)), Rm = mu * f, Rs = Math.max(0.5, cv * mu * Math.sqrt(f)); return 1 - ncdf((P.t - 0.5 - v - Rm) / Rs); }
+    const mu = (P.u + 0.5) / Math.max(0.25, 1 + cv * probit(p0)), Rm = mu * f, Rs = Math.max(0.5, cv * mu * Math.sqrt(f)); return ncdf((P.u + 0.5 - v - Rm) / Rs); }
+  /* counting stats (catches, TDs, shots, hits…): Poisson, the full-game rate backed out of the pre-game chance */
+  const tail = mu => P.under ? pois(P.u, mu) : 1 - pois(P.t - 1, mu); let lo = 0.01, hi = 80;
+  for (let i = 0; i < 50; i++) { const mid = (lo + hi) / 2; ((tail(mid) < p0) !== P.under) ? lo = mid : hi = mid; }
+  const mu = (lo + hi) / 2 * f; return P.under ? pois(P.u - v, mu) : 1 - pois(P.t - 1 - v, mu); }
+/* where a prop stands right now on this phone: {v, show, under, q, st: hit | miss | live}; null → the desk's numbers */
+function propNow(l) {
+  const P = parseProp(l.pick); if (!P || !l.game) return null; const lv = liveOf(l); if (!lv || lv.state === 'pre' || !lv.id) return null;
+  const B = S.box[`${l.sp}|${lv.id}`], keys = B && statKeys(l.sp, P.stat); if (!B || !keys) return null;
+  if (!keys.every(k => B.rows.some(x => x.v[k] != null))) return null; /* a stat this box doesn't carry: never read it as a zero */
+  const r = findPlayer(B.rows, P.name); if (!r) return null; const v = keys.reduce((a, k) => a + (r.v[k] || 0), 0), o = { v, show: P.show, under: P.under, plus: /\+/.test(String(l.pick)) };
+  if (!P.under && v >= P.t) return { ...o, q: 1, st: 'hit' }; if (P.under && v > P.u) return { ...o, q: 0, st: 'miss' };
+  if (lv.state === 'post' && B.final) return { ...o, q: P.under ? 1 : 0, st: P.under ? 'hit' : 'miss' };
+  const p0 = l.p > 0 && l.p < 1 ? l.p : impP(l.price); if (p0 == null) return { ...o, q: l.q != null ? l.q : null, st: 'live' };
+  return { ...o, q: Math.max(0.01, Math.min(0.99, paceQ(l.sp, keys, v, P, Math.min(0.97, Math.max(0.03, p0)), lv.state === 'post' ? 0.01 : keys.some(k => /^p_/.test(k)) ? Math.max(0.02, (fracLeft(lv, l.sp) * 9 - 3) / 6) : fracLeft(lv, l.sp)))), st: 'live' }; } /* a starter's line: about six innings, not nine */
+async function boxes(legs) {
+  const want = new Map(); for (const l of legs) { if (!parseProp(l.pick) || !l.game) continue; const lv = liveOf(l); if (!lv || !lv.id || lv.state === 'pre' || !ESPN[l.sp]) continue;
+    const k = `${l.sp}|${lv.id}`, B = S.box[k], sig = [lv.a, lv.h, lv.period, lv.clock, lv.detail, lv.state].join('|');
+    /* a new box only when the game moved (score, clock, inning) or a minute passed — finals once */
+    if (B && (B.final || (B.sig === sig && Date.now() - B.at < 60e3))) continue; want.set(k, { sp: l.sp, id: lv.id, post: lv.state === 'post', sig }); }
+  await Promise.all([...want].map(async ([k, w]) => { try {
+    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${ESPN[w.sp]}/summary?event=${encodeURIComponent(w.id)}&_=${Math.floor(Date.now() / 15e3)}`, { cache: 'no-store' }); if (!r.ok) return;
+    S.box[k] = { at: Date.now(), final: w.post, sig: w.sig, rows: readBox(await r.json()) }; } catch { /* box scores are a nicety */ } })); }
+/* a ticket leg as this phone sees it: graded the moment ESPN says so, props carrying their live stat */
+function effLeg(l) {
+  if (!l || !l.game || l.st === 'hit' || l.st === 'miss' || l.st === 'push') return l;
+  const P = propNow(l); if (P) return { ...l, st: P.st === 'live' ? 'live' : P.st, prog: { v: P.v, t: P.show, d: P.under ? 'under' : 'atleast' }, ph: P };
+  if (!parseProp(l.pick)) { const g = liveGrade({ sp: l.sp, game: l.game, pick: l.pick }); if (g.push) return { ...l, st: 'push' }; if (g.hit != null) return { ...l, st: g.hit ? 'hit' : 'miss' }; }
+  return l; }
+function effTicket(t) { const legs = (t.legs || []).map(effLeg), miss = legs.some(l => l.st === 'miss'), done = legs.every(l => l.st === 'hit' || l.st === 'push');
+  return { ...t, legs, hit: legs.filter(l => l.st === 'hit').length, res: miss ? 'lost' : done && legs.length ? 'cashed' : legs.some(l => l.st !== 'open') ? 'live' : t.res }; }
 /* ── live chances on the viewer's own phone (Chris, Nov 15: "I need that incorporated where it doesn't rely on my app to update it").
    The desk publishes each leg's pre-game chance; the page moves it with the live score: the margin (or the total so far) against what's
    left of the game, the usual win-probability way — so the % updates with every score refresh, app open or not. */
@@ -777,7 +854,7 @@ const impP = pr => (pr == null || !isFinite(+pr) ? null : +pr < 0 ? -pr / (-pr +
 function liveQ(l) {
   const p0 = l.p > 0 && l.p < 1 ? l.p : impP(l.price); if (p0 == null) return l.q != null ? l.q : null;
   const lv = l.game ? liveOf(l) : null; if (!lv || lv.state !== 'in' || lv.a == null || isNaN(lv.a)) return l.q != null ? l.q : p0;
-  if (l.prop || l.player || /\d\+|points|rebounds|assists|yds|yards|shots|SOG|three/i.test(String(l.pick || '').replace(/^(over|under)\s+[\d.]+$/i, ''))) return l.q != null ? l.q : p0;
+  if (l.prop || l.player || parseProp(l.pick)) { const P = propNow(l); return P && P.q != null ? P.q : l.q != null ? l.q : p0; }
   if (/\b(1H|2H|Q[1-4]|P[1-3]|F5|1st|2nd|first|half|period|inning)\b/i.test(String(l.pick || '') + ' ' + String(l.mkt || ''))) return l.q != null ? l.q : p0; /* part-game legs: the desk's number */
   const sp = l.sp, S = LIVE_SD[sp] || [10, 10], f = fracLeft(lv, sp), pc = Math.min(0.99, Math.max(0.01, p0)), A = +lv.a, H = +lv.h, pick = String(l.pick || '').trim(); let m;
   if ((m = pick.match(/^(over|under)\s+([\d.]+)/i))) { const X = +m[2], over = /over/i.test(m[1]), T = A + H; if (T > X) return over ? 1 : 0;
@@ -794,7 +871,8 @@ const fmtP = p => (p == null ? '—' : p * 100 < 1 ? (p * 100).toFixed(2) + '%' 
 function legNow(l0) { const l = l0.game ? liveGrade(l0) : l0, c = stateOf(l), lv = l.game ? liveOf(l) : null; return { l, c, lv, live: c === 'o' && !!lv && lv.state === 'in' }; }
 function scoreBit(l, lv) { if (!lv || lv.state === 'pre' || lv.a == null || isNaN(lv.a)) return ''; const [A, H] = String(l.game || '').split('@');
   return lv.state === 'in' ? `<span class="lv-on">● LIVE ${esc(A)} ${lv.a}–${lv.h} ${esc(H)}${lv.detail ? ' · ' + esc(lv.detail) : ''}</span>` : `<span class="lv-fin">Final ${esc(A)} ${lv.a}–${lv.h} ${esc(H)}</span>`; }
-function qBit(l, live) { if (!live) return ''; const q = liveQ(l); if (q == null) return ''; const p = l.p > 0 && l.p < 1 ? l.p : impP(l.price); return `<span class="lv-q ${p == null || q >= p ? 'up' : 'dn'}">${pct(q)}% live</span>${p != null ? ` <span class="lv-was">(was ${pct(p)}%)</span>` : ''}`; }
+function qBit(l, live) { if (!live) return ''; const P = parseProp(l.pick) ? propNow(l) : null, q = liveQ(l); if (q == null) return '';
+  const stat = P ? `<b class="lv-stat">${P.v} ${P.under ? `(under ${P.show})` : `of ${P.plus ? P.show + '+' : P.show}`}</b> · ` : ''; const p = l.p > 0 && l.p < 1 ? l.p : impP(l.price); return `${stat}<span class="lv-q ${p == null || q >= p ? 'up' : 'dn'}">${pct(q)}% live</span>${p != null ? ` <span class="lv-was">(was ${pct(p)}%)</span>` : ''}`; }
 function tkSum(legs, pFallback, machine) {
   const N = (legs || []).filter(x => !x.hidden).map(legNow); if (N.length < 2) return '';
   const live = N.filter(x => x.live).length, lost = N.some(x => x.c === 'l'), started = N.some(x => x.c !== 'o' || x.live);
