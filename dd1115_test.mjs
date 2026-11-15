@@ -48,4 +48,10 @@ T('the board ranks EARNED D$: Puck Head (+32.23 earned) above Big Spender (D$6,0
 /* void after 3 days */
 const v = await call('/acct/bet', { token: tok, stake: 10, legs: [{ k: 'nba|BOS@NYK', mk: 'ml', side: 'home' }] });
 T('…(a bet on a game that already finished is refused)', v.status === 400);
+const ow = await call('/acct/login', { name: 'thedesk', pass: env.ADMIN_CODE });
+T('the owner signs in as TheDesk with the owner code, no sign-up, and gets D$1,000', ow.status === 200 && ow.j.owner === true && ow.j.name === 'TheDesk' && (await call('/acct/me', { token: ow.j.token })).j.wallet.bal === 1000);
+T('…a wrong code is refused; nobody can sign up as TheDesk', (await call('/acct/login', { name: 'TheDesk', pass: 'guess-guess-guess' })).status === 403 && (await call('/acct/signup', { name: 'TheDesk', pass: 'longenough9', age21: true })).status === 400);
+T('…the owner adds D$ without the code again (marked bought)', (await call('/acct/grant', { token: ow.j.token, name: 'Puck Head', amount: 250 })).status === 200);
+const s0 = ctx.storage.m.get('s:' + ow.j.token).exp; clock += 40 * 864e5; await call('/acct/me', { token: ow.j.token });
+T('stays signed in: a visit inside the last 60 days renews the pass to a full 90', ctx.storage.m.get('s:' + ow.j.token).exp === clock + 90 * 864e5 && ctx.storage.m.get('s:' + ow.j.token).exp > s0);
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);

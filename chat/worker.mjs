@@ -153,16 +153,18 @@ export class Accounts {
       if (p === '/acct/grant') return this.grant(s, b, H);
       if (p === '/acct/save') return this.save(s, b, H);
       if (p === '/acct/del') { await this.ctx.storage.delete('t:' + s.key + ':' + String(b.id || '')); return json({ ok: true }, 200, H); }
-      if (p === '/acct/close') { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u || !(await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash))) return json({ error: 'that password doesn’t match' }, 403, H);
+      if (p === '/acct/close') { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (u && u.owner) return json({ error: 'the owner account stays' }, 400, H); if (!u || !(await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash))) return json({ error: 'that password doesn’t match' }, 403, H);
         for (const pre of ['t:', 'b:', 'o:']) { const L = await S.list({ prefix: pre + s.key + ':' }); if (L.size) await S.delete([...L.keys()]); } const ses = await S.list({ prefix: 's:' }); const mine = [...ses].filter(([, v]) => v.key === s.key).map(([k]) => k); if (mine.length) await S.delete(mine);
         await S.delete('u:' + s.key); return json({ ok: true }, 200, H); }
       if (p === '/acct/logout') { await this.ctx.storage.delete('s:' + b.token); return json({ ok: true }, 200, H); }
       return json({ error: 'not found' }, 404, H);
     } catch (e) { return json({ error: 'server' }, 500, H); } }
-  async pass(token) { if (typeof token !== 'string' || token.length < 20) return null; const s = await this.ctx.storage.get('s:' + token); if (!s || s.exp < this.now()) return null; return s; }
+  async pass(token) { if (typeof token !== 'string' || token.length < 20) return null; const s = await this.ctx.storage.get('s:' + token); if (!s || s.exp < this.now()) return null;
+    /* stays signed in while they use it: any visit inside the last 60 days of the pass renews it to a full 90 */
+    if (s.exp - this.now() < 60 * 864e5) { s.exp = this.now() + ACCT_DAYS * 864e5; await this.ctx.storage.put('s:' + token, s); } return s; }
   async tooMany(ip) { const t = await this.ctx.storage.get('j:' + ip); return t && t.n >= 8 && this.now() - t.t < 15 * 60e3; }
   async miss(ip) { const S = this.ctx.storage, t = (await S.get('j:' + ip)) || { n: 0, t: this.now() }; await S.put('j:' + ip, { n: (this.now() - t.t < 15 * 60e3 ? t.n : 0) + 1, t: this.now() }); }
-  async issue(name, H) { const token = rid(32), exp = this.now() + ACCT_DAYS * 864e5; await this.ctx.storage.put('s:' + token, { name, key: name.toLowerCase(), exp }); return json({ token, name, exp }, 200, H); }
+  async issue(name, H, owner) { const token = rid(32), exp = this.now() + ACCT_DAYS * 864e5; await this.ctx.storage.put('s:' + token, { name, key: name.toLowerCase(), exp, owner: !!owner }); return json({ token, name, exp, owner: !!owner }, 200, H); }
   async signup(b, ip, H) { if (await this.tooMany(ip)) return json({ error: 'too many tries, wait 15 minutes' }, 429, H);
     const name = String(b.name || '').trim(), pass = String(b.pass || '');
     if (b.age21 !== true) return json({ error: 'TheDesk is for 21 and over' }, 400, H);
@@ -171,14 +173,19 @@ export class Accounts {
     const S = this.ctx.storage, k = 'u:' + name.toLowerCase(); if (await S.get(k)) { await this.miss(ip); return json({ error: 'that username is taken' }, 409, H); }
     const salt = rid(16); await S.put(k, { name, salt, hash: await passHash(pass, salt), at: this.now(), age21: true, dd: { ...ddWallet({}), at: this.now() } }); this._bd = null; return this.issue(name, H); }
   async login(b, ip, H) { if (await this.tooMany(ip)) return json({ error: 'too many tries, wait 15 minutes' }, 429, H);
-    const name = String(b.name || '').trim(), u = await this.ctx.storage.get('u:' + name.toLowerCase());
-    const ok = u && await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash);
+    const name = String(b.name || '').trim();
+    /* the owner: "TheDesk" + the owner code (the chat's), no sign-up — the account is made the first time */
+    if (name.toLowerCase() === 'thedesk') { const admin = this.env.ADMIN_CODE; if (!(typeof admin === 'string' && admin.length >= 24 && await sameSecret(String(b.pass || ''), admin))) { await this.miss(ip); return json({ error: 'that username and password don’t match' }, 403, H); }
+      const S = this.ctx.storage; let o = await S.get('u:thedesk'); if (!o) { o = { name: 'TheDesk', owner: true, at: this.now(), age21: true, dd: { ...ddWallet({}), at: this.now() } }; await S.put('u:thedesk', o); this._bd = null; }
+      await S.delete('j:' + ip); return this.issue('TheDesk', H, true); }
+    const u = await this.ctx.storage.get('u:' + name.toLowerCase());
+    const ok = u && !u.owner && await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash);
     if (!ok) { await this.miss(ip); return json({ error: 'that username and password don’t match' }, 403, H); }
     await this.ctx.storage.delete('j:' + ip); return this.issue(u.name, H); }
   async me(s, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H);
     if (!u.dd) { u.dd = ddWallet(u); u.dd.at = this.now(); await S.put('u:' + s.key, u); }
     const L = await S.list({ prefix: 't:' + s.key + ':' }); const B = await S.list({ prefix: 'b:' + s.key + ':' });
-    return json({ name: s.name, since: u.at, wallet: u.dd, store: this.env.STORE_ON === 'yes', tickets: [...L.values()].sort((a, b) => b.ts - a.ts), bets: [...B.values()].sort((a, b) => b.ts - a.ts).slice(0, 100) }, 200, H); }
+    return json({ name: s.name, owner: !!u.owner, since: u.at, wallet: u.dd, store: this.env.STORE_ON === 'yes', tickets: [...L.values()].sort((a, b) => b.ts - a.ts), bets: [...B.values()].sort((a, b) => b.ts - a.ts).slice(0, 100) }, 200, H); }
   async slate() { if (this._sl && this.now() - this._sl.t < 5 * 60e3) return this._sl.v; const f = this.fetchFn || fetch; const r = await f(SLATE_URL, { cf: { cacheTtl: 120 } }); if (!r.ok) throw new Error('slate');
     const v = await r.json(); const G = new Map(); (v.days || []).forEach(d => (d.games || []).forEach(g => G.set(g.k, g))); this._sl = { t: this.now(), v: G }; return G; }
   async bet(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); const W = ddWallet(u);
@@ -214,7 +221,7 @@ export class Accounts {
   async board(H) { if (this._bd && this.now() - this._bd.t < 60e3) return json(this._bd.v, 200, H); const U = await this.ctx.storage.list({ prefix: 'u:' });
     const rows = [...U.values()].map(u => { const W = ddWallet(u); return { name: u.name, bal: W.bal, bought: W.bought, earned: Math.round((W.bal - W.bought) * 100) / 100, w: W.w, l: W.l, roi: W.staked ? Math.round(1000 * (W.back - W.staked) / W.staked) / 10 : null }; })
       .sort((a, b) => b.earned - a.earned).slice(0, 50); const v = { rows, n: U.size }; this._bd = { t: this.now(), v }; return json(v, 200, H); }
-  async grant(s, b, H) { const admin = this.env.ADMIN_CODE; if (!(typeof admin === 'string' && admin.length >= 24 && await sameSecret(String(b.code || ''), admin))) return json({ error: 'owner only' }, 403, H);
+  async grant(s, b, H) { const admin = this.env.ADMIN_CODE; if (!s.owner && !(typeof admin === 'string' && admin.length >= 24 && await sameSecret(String(b.code || ''), admin))) return json({ error: 'owner only' }, 403, H);
     const S = this.ctx.storage, key = String(b.name || '').trim().toLowerCase(), u = await S.get('u:' + key); if (!u) return json({ error: 'no such member' }, 404, H);
     const amt = Math.round(+b.amount); if (!(amt > 0 && amt <= 100000)) return json({ error: 'amount' }, 400, H); const W = ddWallet(u); W.bal += amt; W.bought += amt; u.dd = W; await S.put('u:' + key, u); this._bd = null; return json({ wallet: W }, 200, H); }
   async save(s, b, H) { const t = cleanTicket(b.ticket); if (!t) return json({ error: 'a ticket needs at least one leg' }, 400, H);

@@ -205,7 +205,10 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     v = await visit(BETA, { chat: acctSrv }); await v.p.click('#acctBtn'); await v.p.waitForTimeout(300); t = await v.text();
     T('Accounts: the person button opens sign-in (username + password)', /YOUR TICKETS/i.test(t) && (await v.p.locator('form[data-form="acct"]').count()) === 1);
     await v.p.click('[data-act="acmode"][data-v="signup"]'); await v.p.fill('form[data-form="acct"] input[name="name"]', 'Puck Head'); await v.p.fill('form[data-form="acct"] input[name="pass"]', 'longenough1');
-    await v.p.check('form[data-form="acct"] input[name="age21"]'); await v.p.click('form[data-form="acct"] button[type="submit"]'); await v.p.waitForTimeout(500); t = await v.text();
+    await v.p.check('form[data-form="acct"] input[name="age21"]'); await v.p.click('form[data-form="acct"] button[type="submit"]'); await v.p.waitForTimeout(300);
+    await v.p.waitForTimeout(1300); const gOpen = await v.p.locator('#gT').count(); const gTxt = gOpen ? await v.p.locator('#guideRoot').innerText() : ''; if (gOpen) await v.p.click('[data-act="guide-done"]'); await v.p.waitForTimeout(200);
+    T('…right after signing up in a browser, the save-as-app guide opens: saved as an app you stay signed in', gOpen === 1 && /stay signed in/.test(gTxt), gTxt.slice(0, 200));
+    t = await v.text();
     T('…create an account (21+ box) → signed in, the button shows your initial', /Signed in as Puck Head/.test(t) && (await v.p.locator('#acctBtn.in').textContent()) === 'P');
     await v.p.click('.newtk summary'); await v.p.fill('form[data-form="newtk"] textarea', 'Bills -3 -110\nOver 221.5 -105'); await v.p.fill('form[data-form="newtk"] input[name="stake"]', '5');
     await v.p.click('form[data-form="newtk"] button'); await v.p.waitForTimeout(400); t = await v.text();

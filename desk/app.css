@@ -656,3 +656,4 @@ body.embed .view{padding-bottom:20px}
 .wallet .note{margin:10px 0 0;font-size:12px}
 .lb .ps-h,.lb .ps-r{grid-template-columns:26px 1fr 92px 62px}.lb-b{color:#2a8fc4!important;font-weight:700}
 .ddpitch{padding:14px 16px;margin-top:14px;max-width:440px}.ddpitch b{font:800 18px/1.1 var(--display);text-transform:uppercase;color:#7a5a00}.ddpitch p{margin:6px 0 0;color:#3b4a40}
+.ddown{padding:14px 16px;margin:0 0 16px}.ddown form{display:grid;grid-template-columns:1fr 100px auto;gap:8px;align-items:end;margin-top:8px}.ddown label{display:grid;gap:4px;font:600 12px var(--text);color:#3b4a40}.ddown input{font:500 16px var(--text);padding:8px 10px;border-radius:8px;border:1.5px solid rgba(27,42,33,.25);background:#fffaf0}

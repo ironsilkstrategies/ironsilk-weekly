@@ -377,11 +377,13 @@ function viewMe() {
       <label>Password<input name="pass" type="password" required minlength="8" autocomplete="${AC.mode === 'signup' ? 'new-password' : 'current-password'}"></label>
       ${AC.mode === 'signup' ? '<label class="chk"><input name="age21" type="checkbox" required> I’m 21 or older</label>' : ''}
       <p class="chat-err" id="acctErr" role="alert"></p><button class="btn" type="submit">${AC.mode === 'signup' ? 'Create account' : 'Sign in'}</button></form>
-      <p class="note">Your password is never stored, only a scrambled copy of it. <a href="privacy.html">Privacy</a></p></div>
+      <p class="note">Your password is never stored, only a scrambled copy of it. <a href="privacy.html">Privacy</a></p>
+      ${isStandalone() ? '' : '<p class="note"><b>Tip:</b> <button type="button" class="link" data-act="guide">save TheDesk as an app</button> and you stay signed in for good.</p>'}</div>
     <div class="paper ddpitch"><b>D$1,000 the moment you sign up</b><p>Desk Dollars are play money: bet them on any game on the Slate, flip them, and climb the leaderboard for bragging rights.</p></div>${lbHtml()}${footHtml()}`; if (!LB) lbLoad(); return; }
   const L = (AC.me && AC.me.tickets) || [], R = myRecord(L);
   el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Signed in as <b>${esc(P.name)}</b>. <button type="button" class="link" data-act="aclogout">Sign out</button></p>
     ${AC.me ? walletHtml(AC.me.wallet) : ''}${AC.me && (AC.me.bets || []).length ? `<h2 class="h2">Your D$ bets</h2><div class="fgrid">${AC.me.bets.slice(0, 20).map(ddBetHtml).join('')}</div>` : AC.me ? '<p class="note">Open any game on the <button type="button" class="link" data-go="slate">Slate</button> and tap a line to bet Desk Dollars.</p>' : ''}
+    ${AC.me && AC.me.owner ? `<div class="paper owner ddown"><b>Owner tools</b><form data-form="ddgrant"><label>Give D$ to<input name="who" required maxlength="20" placeholder="username"></label><label>Amount<input name="amt" inputmode="numeric" required placeholder="500"></label><button class="btn sm" type="submit">Add D$</button></form><p class="note">Added D$ counts as bought: it shows in blue and never counts on the leaderboard.</p></div>` : ''}
     ${lbHtml()}<h2 class="h2">Your real tickets</h2>
     ${AC.me ? `<div class="mystats"><span><b>${R.c}</b>cashed</span><span><b>${R.l}</b>lost</span><span><b>${R.n ? Math.round(100 * R.h / R.n) + '%' : '—'}</b>legs hit</span><span><b>${L.length}</b>tickets</span></div>` : ''}
     <details class="paper newtk"${AC.open ? ' open' : ''}><summary>＋ New ticket</summary><form data-form="newtk"><label>Name it (optional)<input name="title" maxlength="40" placeholder="Sunday 3-leg"></label>
@@ -390,7 +392,7 @@ function viewMe() {
       <button class="btn" type="submit">Track it</button></form><p class="note">Tip: build a slip on the Props tab and tap “Track it” — or tap ＋ on any pick on the Slate.</p></details>
     <p class="chat-err" role="alert">${esc(AC.err)}</p>
     ${!AC.me ? '<div class="shimmer"></div>' : L.length ? `<div class="fgrid">${L.map(myTicketHtml).join('')}</div>` : '<div class="paper blank"><b>No tickets yet</b><p>Your first one shows up here.</p></div>'}
-    <details class="closeacct"><summary>Delete my account</summary><form data-form="acclose"><p class="note">This deletes your account and every ticket on it, for good.</p><label>Your password<input name="pass" type="password" required autocomplete="current-password"></label><button class="btn ghost sm" type="submit">Delete it</button></form></details>${footHtml()}`;
+    ${AC.me && AC.me.owner ? '' : `<details class="closeacct"><summary>Delete my account</summary><form data-form="acclose"><p class="note">This deletes your account and every ticket on it, for good.</p><label>Your password<input name="pass" type="password" required autocomplete="current-password"></label><button class="btn ghost sm" type="submit">Delete it</button></form></details>`}${footHtml()}`;
   AC.open = false; if (!LB) lbLoad();
 }
 function parseLegs(txt) { return String(txt || '').split(/\n+/).map(x => x.trim()).filter(Boolean).slice(0, 15).map(line => { const m = line.match(/\s([+-−]\d{3,5})\s*$/);
@@ -837,7 +839,9 @@ document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
   if (f.dataset.form === 'acct') { const n = $('#acctErr'); n.textContent = ''; const signup = AC.mode === 'signup';
     try { const j = await acctApi(signup ? '/acct/signup' : '/acct/login', { name: f.name.value.trim(), pass: f.pass.value, ...(signup ? { age21: !!(f.age21 && f.age21.checked) } : {}) });
-      store.set('acct', { token: j.token, name: j.name }); acctBadge(); toast(signup ? `Welcome to TheDesk, ${j.name}` : `Welcome back, ${j.name}`); viewMe(); acctLoad(); } catch (err) { n.textContent = err.message; } return; }
+      try { if (window.PasswordCredential && navigator.credentials) navigator.credentials.store(new PasswordCredential({ id: f.name.value.trim(), password: f.pass.value, name: j.name })).catch(() => { }); } catch (e2) { }
+      store.set('acct', { token: j.token, name: j.name, owner: !!j.owner }); acctBadge(); toast(signup ? `Welcome to TheDesk, ${j.name}` : `Welcome back, ${j.name}`); viewMe(); acctLoad(); if (!isStandalone()) setTimeout(() => openGuide(false), 1400); } catch (err) { n.textContent = err.message; } return; }
+  if (f.dataset.form === 'ddgrant') { const P = acctPass(); if (!P) return; try { await acctApi('/acct/grant', { token: P.token, name: f.who.value.trim(), amount: +f.amt.value }); toast(`Added D$${(+f.amt.value).toLocaleString('en-US')} to ${f.who.value.trim()}`); f.reset(); LB = null; lbLoad(); } catch (err) { toast(err.message); } return; }
   if (f.dataset.form === 'acclose') { const P = acctPass(); if (!P) return; try { await acctApi('/acct/close', { token: P.token, pass: f.pass.value }); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); toast('Your account is deleted'); } catch (err) { toast(err.message); } return; }
   if (f.dataset.form === 'newtk') { const legs = parseLegs(f.legs.value); if (!legs.length) return toast('Add at least one leg');
     const od = +String(f.odds.value).replace(/[^\d+-]/g, ''); const t = { id: tid(), ts: Date.now(), title: f.title.value.trim(), stake: +f.stake.value || null, odds: Math.abs(od) >= 100 ? od : null, legs };
@@ -930,7 +934,7 @@ function guideHtml() {
   const warn = dv.inapp && tab === dv.kind ? `<p class="warn"><b>You’re inside ${esc(dv.inapp === 'this app' ? 'an app’s built-in browser' : dv.inapp + '’s browser')}.</b> It can’t add apps to your phone. Tap the ••• menu and choose <b>Open in ${dv.kind === 'iphone' ? 'Safari' : 'Chrome'}</b>, or copy the link and paste it there.</p>` : '';
   const main = can && tab === dv.kind ? '<button type="button" class="btn ink" data-act="install">Install TheDesk</button>' : dv.inapp && tab === dv.kind ? '<button type="button" class="btn ink" data-act="copylink">Copy the link</button>' : '';
   return `<div class="scrim" data-act="guide-close"><div class="guide" role="dialog" aria-modal="true" aria-labelledby="gT" tabindex="-1">
-    <div class="guide-top"><img src="../brand/icon-192.png" width="60" height="60" alt=""><div><h2 id="gT">Put TheDesk on your home screen</h2><p class="sub">One tap to today’s card. No app store, nothing to update.</p></div></div>
+    <div class="guide-top"><img src="../brand/icon-192.png" width="60" height="60" alt=""><div><h2 id="gT">Put TheDesk on your home screen</h2><p class="sub">The best way to use TheDesk. Saved as an app, you stay signed in, so your D$ and your tickets are one tap away and you never have to log in again. No app store, nothing to update.</p></div></div>
     <div class="dev" role="group" aria-label="Your device">${[['iphone', 'iPhone'], ['android', 'Android'], ['computer', 'Computer']].map(([k, l]) => `<button type="button" data-act="guide-tab" data-tab="${k}" aria-pressed="${k === tab}">${l}</button>`).join('')}</div>
     ${warn}<ol class="how">${steps.map(s => `<li><span>${s}</span></li>`).join('')}</ol>
     <div class="row">${main}<button type="button" class="btn paper" data-act="guide-done">${G.first ? 'Go to today’s card' : 'Done'}</button></div></div></div>`;
