@@ -190,13 +190,15 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
 
   /* ── accounts + your tickets (v3.0.21) ── */
-  { const users = {}, tix = {}; let lastSave = null;
+  { const users = {}, tix = {}; let lastSave = null, lastBet = null;
     const acctSrv = async (r, u) => { const ok = o => r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(o) }); const no = (st, e) => r.fulfill({ status: st, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ error: e }) });
       const b = JSON.parse(r.request().postData() || '{}'); const who = tk => Object.keys(users).find(n => users[n].tok === tk);
+      if (u.pathname === '/acct/board') return ok({ rows: [{ name: 'Puck Head', bal: 1200, bought: 0, earned: 1200, w: 3, l: 1, roi: 12.5 }, { name: 'Big Spender', bal: 6000, bought: 5000, earned: 1000, w: 0, l: 0, roi: null }], n: 2 });
       if (u.pathname === '/acct/signup') { if (b.age21 !== true) return no(400, 'TheDesk is for 21 and over'); users[b.name] = { pass: b.pass, tok: 'k'.repeat(30) + b.name.length }; tix[b.name] = []; return ok({ token: users[b.name].tok, name: b.name }); }
       if (u.pathname === '/acct/login') return users[b.name] && users[b.name].pass === b.pass ? ok({ token: users[b.name].tok, name: b.name }) : no(403, 'that username and password don’t match');
       const n = who(b.token); if (!n) return no(401, 'sign in first');
-      if (u.pathname === '/acct/me') return ok({ name: n, tickets: tix[n] });
+      if (u.pathname === '/acct/me') return ok({ name: n, tickets: tix[n], wallet: users[n].W || (users[n].W = { bal: 1000, bought: 0, w: 0, l: 0, p: 0 }), bets: users[n].bets || [] });
+      if (u.pathname === '/acct/bet') { lastBet = b; const W = users[n].W; W.bal -= b.stake; const bet = { id: 'b1', stake: b.stake, toWin: 124, status: 'open', legs: b.legs.map(l => ({ ...l, pick: 'NE ML', price: 124, game: 'NE@DET', sp: 'nfl', t: Date.now() + 9e6, res: null })) }; (users[n].bets = users[n].bets || []).unshift(bet); return ok({ bet, wallet: W }); }
       if (u.pathname === '/acct/save') { lastSave = b.ticket; const L = tix[n]; const i = L.findIndex(x => x.id === b.ticket.id); if (i >= 0) L[i] = b.ticket; else L.unshift(b.ticket); return ok({ ticket: b.ticket }); }
       if (u.pathname === '/acct/del') { tix[n] = tix[n].filter(x => x.id !== b.id); return ok({ ok: true }); }
       return ok({ ok: true }); };
@@ -212,6 +214,14 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     T('…mark a leg as it settles; it saves', lastSave.legs[0].res === 'hit' && /Live · 1 of 2/i.test(t), JSON.stringify(lastSave.legs));
     await v.p.click('.tabs [data-go="props"]'); await v.p.click('.pcard [data-act="pslip"] >> nth=0'); await v.p.waitForTimeout(200); await v.p.click('[data-act="psliptrack"]'); await v.p.waitForTimeout(400);
     T('…build a slip on Props → Track it saves it to your tickets', lastSave && lastSave.legs[0].src === 'prop' && /Kaprizov|Edwards/.test(lastSave.legs[0].pick) && !(await v.p.locator('.pslipbar').count()), JSON.stringify(lastSave));
+    await v.p.click('#acctBtn'); await v.p.waitForTimeout(400); t = await v.text();
+    T('Desk Dollars: D$1,000 in the wallet; the leaderboard ranks earned D$, bought shown apart', /D\$1,000/.test(t) && /THE LEADERBOARD/i.test(t) && /\+D\$5,000 bought/.test(t), JSON.stringify([/D\$1,000/.test(t), /THE LEADERBOARD/i.test(t), /\+D\$5,000 bought/.test(t), (t.match(/leaderboard[^]{0,300}/i)||[])[0]]));
+    await v.p.click('.tabs [data-go="slate"]'); await v.p.waitForTimeout(500);
+    const gk = await v.p.evaluate(() => { const b = [...document.querySelectorAll('.game > button[data-act="game"]')]; return b.length ? b[0].dataset.k : null; });
+    if (gk) { await v.p.click(`.game > button[data-k="${gk}"]`); await v.p.waitForTimeout(300); }
+    const nb = await v.p.locator('.ddb').count();
+    if (nb) { await v.p.click('.ddb >> nth=0'); await v.p.waitForTimeout(200); await v.p.fill('#ddStake', '100'); await v.p.click('[data-act="ddplace"]'); await v.p.waitForTimeout(400); }
+    T('…open a Slate game, tap a line, place D$100: the server gets the game, market and side (never a price)', nb >= 4 && lastBet && lastBet.stake === 100 && lastBet.legs[0].k === gk && !('price' in lastBet.legs[0]), JSON.stringify([nb, lastBet]));
     T('accounts: no script errors', v.errs.length === 0, v.errs.join(' | '));
     await v.ctx.close(); }
   /* ── the members' chat ── */
@@ -275,7 +285,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
   /* ── what's in the box (and what isn't) ── */
   const dir = path.join(W, 'desk'), files = fs.readdirSync(dir).filter(f => /\.(html|js|css|webmanifest)$/.test(f)); const src = Object.fromEntries(files.map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')])); const all = Object.values(src).join('\n');
-  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 125000);
+  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 150000);
   T('none of the desk\'s machinery: no engine scripts, no app storage, no keys or settings, no eval', !/shared\.js|desk-[a-z]+\.js|-engine\.js|store\.js|theme\.css/.test(all) && !/['"`]d4\./.test(all) && !/apiKey|api_key|odds-?api|ghp_|bot[0-9]{6,}|AUTOPILOT|tgautokey/i.test(all) && !/\beval\(|new Function\(/.test(all));
   const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]);
   T('one script, its own; fonts and styles self-hosted (no third-party code or font CDNs)', scripts.length === 1 && /^app\.js/.test(scripts[0]) && !/fonts\.googleapis|gstatic|cdn\.|unpkg|jsdelivr/.test(all));

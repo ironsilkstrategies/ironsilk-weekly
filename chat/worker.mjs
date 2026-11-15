@@ -83,6 +83,37 @@ export class Room {
   webSocketClose(ws) { try { ws.close(); } catch (e) { } }
 }
 
+
+/* ═══ DESK DOLLARS (v3.0.22, Chris, Nov 15: "each signup gets $1000 of free novelty money… a badge of honor") ════════════════
+   Play money only: never cashed out, never a prize. Every member starts with D$1,000 (members from before get theirs the first
+   time they look). Bets are on the slate's own games (moneyline, spread, total), priced by the server from the public slate
+   feed at the moment of the bet (spreads and totals at -110), closed at start time, one leg per game, up to 10 legs. The server
+   grades them itself from ESPN finals every 10 minutes; a game it can't find in 3 days is voided and the stake comes back.
+   Bought D$ (the store, built but OFF until a lawyer signs off — or the owner's grant) is kept apart: it shows in its own color,
+   and the leaderboard ranks EARNED D$ (balance minus everything bought), so nobody buys their way up the board. */
+const DD_START = 1000, DD_LEGS = 10, DD_JUICE = -110, SLATE_URL = 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json';
+const ESPN_PATH = { nfl: 'football/nfl', ncaaf: 'football/college-football', nba: 'basketball/nba', ncaab: 'basketball/mens-college-basketball', nhl: 'hockey/nhl', mlb: 'baseball/mlb' };
+const ESPN_GROUP = { ncaaf: '&groups=80', ncaab: '&groups=50' };
+export const ddDec = p => (p > 0 ? 1 + p / 100 : 1 + 100 / -p);
+export const ddWallet = u => (u.dd ? u.dd : { bal: DD_START, bought: 0, w: 0, l: 0, p: 0, staked: 0, back: 0, at: 0 });
+/* price one leg from the slate game: {mk:'ml'|'spread'|'total', side:'away'|'home'|'over'|'under'} */
+export function ddPrice(g, mk, side) { const ln = g && g.ln; if (!ln) return null;
+  if (mk === 'ml') { const p = side === 'away' ? ln.mlA : side === 'home' ? ln.mlH : null; return Number.isFinite(p) && Math.abs(p) >= 100 ? { price: Math.round(p), line: null, pick: `${side === 'away' ? g.a.ab : g.h.ab} ML` } : null; }
+  if (mk === 'spread') { if (!Number.isFinite(ln.line) || !ln.fav) return null; const team = side === 'away' ? g.a.ab : side === 'home' ? g.h.ab : null; if (!team) return null;
+    const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: DD_JUICE, line, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
+  if (mk === 'total') { if (!Number.isFinite(ln.tot) || !['over', 'under'].includes(side)) return null; return { price: DD_JUICE, line: ln.tot, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` }; }
+  return null; }
+/* grade one leg against a final score: hit / miss / push */
+export function ddGrade(leg, a, h) { if (!Number.isFinite(a) || !Number.isFinite(h)) return null;
+  if (leg.mk === 'ml') { if (a === h) return 'push'; return (leg.side === 'home') === (h > a) ? 'hit' : 'miss'; }
+  if (leg.mk === 'spread') { const m = (leg.side === 'home' ? h - a : a - h) + leg.line; return m === 0 ? 'push' : m > 0 ? 'hit' : 'miss'; }
+  if (leg.mk === 'total') { const t = a + h; return t === leg.line ? 'push' : (leg.side === 'over') === (t > leg.line) ? 'hit' : 'miss'; }
+  return null; }
+/* settle a whole bet: any miss loses; pushes drop out of the odds; all pushed → stake back */
+export function ddSettle(b) { const R = b.legs.map(l => l.res); if (R.includes('miss')) return { status: 'lost', back: 0 }; if (R.some(r => !r)) return null;
+  const live = b.legs.filter(l => l.res === 'hit'); if (!live.length) return { status: 'push', back: b.stake };
+  const dec = live.reduce((x, l) => x * ddDec(l.price), 1); return { status: 'won', back: Math.round(b.stake * dec * 100) / 100 }; }
+
 /* ═══ ACCOUNTS (v3.0.21, Chris, Nov 15: logins so app users can track their own tickets — "can't we just cloud it") ═══════════
    Everything stays on our Cloudflare: a username and a password, the password never stored, only a PBKDF2-SHA256 hash with its
    own salt (100,000 rounds). A sign-in gives a 90-day token. Each member keeps up to 300 tickets, 15 legs each.
@@ -108,18 +139,22 @@ export function cleanTicket(t) { if (!t || typeof t !== 'object') return null; c
   return { id, ts: Number.isFinite(+t.ts) ? +t.ts : Date.now(), title: str(t.title, 40), stake: Number.isFinite(+t.stake) && +t.stake > 0 ? Math.min(100000, Math.round(+t.stake * 100) / 100) : null,
     odds: Number.isFinite(+t.odds) && Math.abs(+t.odds) >= 100 ? Math.round(+t.odds) : null, legs }; }
 export class Accounts {
-  constructor(ctx, env, deps = {}) { this.ctx = ctx; this.env = env; this.now = deps.now || (() => Date.now()); }
+  constructor(ctx, env, deps = {}) { this.ctx = ctx; this.env = env; this.now = deps.now || (() => Date.now()); this.fetchFn = deps.fetch || null; }
   async fetch(req) { const url = new URL(req.url), p = url.pathname, H = cors(req, this.env);
-    try { if (req.method !== 'POST') return json({ error: 'not found' }, 404, H);
+    try { if (req.method === 'GET' && p === '/acct/board') return this.board(H); if (req.method !== 'POST') return json({ error: 'not found' }, 404, H);
       const ip = req.headers.get('cf-connecting-ip') || 'unknown'; let b; try { b = await req.json(); } catch (e) { return json({ error: 'body' }, 400, H); }
+      if (p === '/acct/board') return this.board(H);
       if (p === '/acct/signup') return this.signup(b, ip, H);
       if (p === '/acct/login') return this.login(b, ip, H);
       const s = await this.pass(b.token); if (!s) return json({ error: 'sign in first' }, 401, H);
       if (p === '/acct/me') return this.me(s, H);
+      if (p === '/acct/bet') return this.bet(s, b, H);
+      if (p === '/acct/buy') return this.env.STORE_ON === 'yes' ? json({ error: 'checkout isn’t connected yet' }, 501, H) : json({ error: 'the D$ store opens soon' }, 403, H);
+      if (p === '/acct/grant') return this.grant(s, b, H);
       if (p === '/acct/save') return this.save(s, b, H);
       if (p === '/acct/del') { await this.ctx.storage.delete('t:' + s.key + ':' + String(b.id || '')); return json({ ok: true }, 200, H); }
       if (p === '/acct/close') { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u || !(await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash))) return json({ error: 'that password doesn’t match' }, 403, H);
-        const L = await S.list({ prefix: 't:' + s.key + ':' }); if (L.size) await S.delete([...L.keys()]); const ses = await S.list({ prefix: 's:' }); const mine = [...ses].filter(([, v]) => v.key === s.key).map(([k]) => k); if (mine.length) await S.delete(mine);
+        for (const pre of ['t:', 'b:', 'o:']) { const L = await S.list({ prefix: pre + s.key + ':' }); if (L.size) await S.delete([...L.keys()]); } const ses = await S.list({ prefix: 's:' }); const mine = [...ses].filter(([, v]) => v.key === s.key).map(([k]) => k); if (mine.length) await S.delete(mine);
         await S.delete('u:' + s.key); return json({ ok: true }, 200, H); }
       if (p === '/acct/logout') { await this.ctx.storage.delete('s:' + b.token); return json({ ok: true }, 200, H); }
       return json({ error: 'not found' }, 404, H);
@@ -134,14 +169,54 @@ export class Accounts {
     if (!okName(name)) return json({ error: 'pick a username: 2–20 letters or numbers, nothing reserved or rude' }, 400, H);
     if (pass.length < 8 || pass.length > 200) return json({ error: 'use a password of 8 or more characters' }, 400, H);
     const S = this.ctx.storage, k = 'u:' + name.toLowerCase(); if (await S.get(k)) { await this.miss(ip); return json({ error: 'that username is taken' }, 409, H); }
-    const salt = rid(16); await S.put(k, { name, salt, hash: await passHash(pass, salt), at: this.now(), age21: true }); return this.issue(name, H); }
+    const salt = rid(16); await S.put(k, { name, salt, hash: await passHash(pass, salt), at: this.now(), age21: true, dd: { ...ddWallet({}), at: this.now() } }); this._bd = null; return this.issue(name, H); }
   async login(b, ip, H) { if (await this.tooMany(ip)) return json({ error: 'too many tries, wait 15 minutes' }, 429, H);
     const name = String(b.name || '').trim(), u = await this.ctx.storage.get('u:' + name.toLowerCase());
     const ok = u && await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash);
     if (!ok) { await this.miss(ip); return json({ error: 'that username and password don’t match' }, 403, H); }
     await this.ctx.storage.delete('j:' + ip); return this.issue(u.name, H); }
-  async me(s, H) { const u = await this.ctx.storage.get('u:' + s.key); const L = await this.ctx.storage.list({ prefix: 't:' + s.key + ':' });
-    return json({ name: s.name, since: u && u.at, tickets: [...L.values()].sort((a, b) => b.ts - a.ts) }, 200, H); }
+  async me(s, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H);
+    if (!u.dd) { u.dd = ddWallet(u); u.dd.at = this.now(); await S.put('u:' + s.key, u); }
+    const L = await S.list({ prefix: 't:' + s.key + ':' }); const B = await S.list({ prefix: 'b:' + s.key + ':' });
+    return json({ name: s.name, since: u.at, wallet: u.dd, store: this.env.STORE_ON === 'yes', tickets: [...L.values()].sort((a, b) => b.ts - a.ts), bets: [...B.values()].sort((a, b) => b.ts - a.ts).slice(0, 100) }, 200, H); }
+  async slate() { if (this._sl && this.now() - this._sl.t < 5 * 60e3) return this._sl.v; const f = this.fetchFn || fetch; const r = await f(SLATE_URL, { cf: { cacheTtl: 120 } }); if (!r.ok) throw new Error('slate');
+    const v = await r.json(); const G = new Map(); (v.days || []).forEach(d => (d.games || []).forEach(g => G.set(g.k, g))); this._sl = { t: this.now(), v: G }; return G; }
+  async bet(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); const W = ddWallet(u);
+    const stake = Math.round(+b.stake * 100) / 100; if (!(stake >= 1)) return json({ error: 'the smallest bet is D$1' }, 400, H); if (stake > W.bal) return json({ error: `you have D$${W.bal.toLocaleString('en-US')}` }, 400, H);
+    const want = Array.isArray(b.legs) ? b.legs.slice(0, DD_LEGS + 1) : []; if (!want.length) return json({ error: 'add a leg' }, 400, H); if (want.length > DD_LEGS) return json({ error: `up to ${DD_LEGS} legs` }, 400, H);
+    let G; try { G = await this.slate(); } catch (e) { return json({ error: 'the lines can’t be reached right now — try again in a minute' }, 503, H); }
+    const seen = new Set(), legs = [];
+    for (const w of want) { const k = String(w.k || ''); const g = G.get(k); if (!g) return json({ error: 'that game isn’t on the board' }, 400, H);
+      if (seen.has(k)) return json({ error: 'one leg per game' }, 400, H); seen.add(k);
+      if (!(g.t > this.now() + 60e3)) return json({ error: `${g.a.ab} at ${g.h.ab} has started — bets are closed` }, 400, H);
+      const pr = ddPrice(g, w.mk, w.side); if (!pr) return json({ error: 'that line isn’t available' }, 400, H);
+      legs.push({ k, sp: g.sp, t: g.t, game: g.a.ab + '@' + g.h.ab, mk: w.mk, side: w.side, line: pr.line, price: pr.price, pick: pr.pick, res: null }); }
+    const dec = legs.reduce((x, l) => x * ddDec(l.price), 1), id = this.now().toString(36) + rid(4);
+    const bet = { id, ts: this.now(), stake, dec: Math.round(dec * 1000) / 1000, toWin: Math.round(stake * (dec - 1) * 100) / 100, legs, status: 'open' };
+    W.bal = Math.round((W.bal - stake) * 100) / 100; W.staked = Math.round((W.staked + stake) * 100) / 100; u.dd = W;
+    await S.put('u:' + s.key, u); await S.put('b:' + s.key + ':' + id, bet); await S.put('o:' + s.key + ':' + id, 1); this._bd = null; await this.wake();
+    return json({ bet, wallet: W }, 200, H); }
+  async wake() { try { const a = await this.ctx.storage.getAlarm(); if (a == null) await this.ctx.storage.setAlarm(this.now() + 10 * 60e3); } catch (e) { } }
+  async scores(sp, day) { const k = sp + day; this._sc = this._sc || new Map(); const c = this._sc.get(k); if (c && this.now() - c.t < 5 * 60e3) return c.v;
+    const f = this.fetchFn || fetch; const r = await f(`https://site.api.espn.com/apis/site/v2/sports/${ESPN_PATH[sp]}/scoreboard?dates=${day}&limit=400${ESPN_GROUP[sp] || ''}`); const v = new Map();
+    if (r.ok) { const j = await r.json(); (j.events || []).forEach(e => { const c0 = e.competitions && e.competitions[0]; if (!c0) return; const A = c0.competitors.find(x => x.homeAway === 'away'), Hm = c0.competitors.find(x => x.homeAway === 'home');
+      if (!A || !Hm) return; v.set(A.team.abbreviation + '@' + Hm.team.abbreviation, { done: !!(c0.status && c0.status.type && c0.status.type.completed), a: +A.score, h: +Hm.score }); }); }
+    this._sc.set(k, { t: this.now(), v }); return v; }
+  async alarm() { const S = this.ctx.storage, O = await S.list({ prefix: 'o:' }); if (!O.size) return; const dayOf = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(t)).replace(/-/g, '');
+    for (const ok of O.keys()) { const [, key, id] = ok.split(':'); const bk = 'b:' + key + ':' + id, bet = await S.get(bk); if (!bet || bet.status !== 'open') { await S.delete(ok); continue; }
+      let changed = false; for (const l of bet.legs) { if (l.res || l.t > this.now()) continue; let sc = null; try { sc = (await this.scores(l.sp, dayOf(l.t))).get(l.game); } catch (e) { }
+        if (sc && sc.done) { l.res = ddGrade(l, sc.a, sc.h); changed = true; } else if (this.now() - l.t > 3 * 864e5) { l.res = 'push'; l.void = true; changed = true; } }
+      const fin = ddSettle(bet); if (!changed && !fin) continue;
+      if (fin) { bet.status = fin.status; bet.back = fin.back; bet.done = this.now(); const u = await S.get('u:' + key); if (u) { const W = ddWallet(u); W.bal = Math.round((W.bal + fin.back) * 100) / 100; W.back = Math.round((W.back + fin.back) * 100) / 100;
+          if (fin.status === 'won') W.w++; else if (fin.status === 'lost') W.l++; else W.p++; u.dd = W; await S.put('u:' + key, u); } await S.delete(ok); this._bd = null; }
+      await S.put(bk, bet); }
+    if ((await S.list({ prefix: 'o:', limit: 1 })).size) await S.setAlarm(this.now() + 10 * 60e3); }
+  async board(H) { if (this._bd && this.now() - this._bd.t < 60e3) return json(this._bd.v, 200, H); const U = await this.ctx.storage.list({ prefix: 'u:' });
+    const rows = [...U.values()].map(u => { const W = ddWallet(u); return { name: u.name, bal: W.bal, bought: W.bought, earned: Math.round((W.bal - W.bought) * 100) / 100, w: W.w, l: W.l, roi: W.staked ? Math.round(1000 * (W.back - W.staked) / W.staked) / 10 : null }; })
+      .sort((a, b) => b.earned - a.earned).slice(0, 50); const v = { rows, n: U.size }; this._bd = { t: this.now(), v }; return json(v, 200, H); }
+  async grant(s, b, H) { const admin = this.env.ADMIN_CODE; if (!(typeof admin === 'string' && admin.length >= 24 && await sameSecret(String(b.code || ''), admin))) return json({ error: 'owner only' }, 403, H);
+    const S = this.ctx.storage, key = String(b.name || '').trim().toLowerCase(), u = await S.get('u:' + key); if (!u) return json({ error: 'no such member' }, 404, H);
+    const amt = Math.round(+b.amount); if (!(amt > 0 && amt <= 100000)) return json({ error: 'amount' }, 400, H); const W = ddWallet(u); W.bal += amt; W.bought += amt; u.dd = W; await S.put('u:' + key, u); this._bd = null; return json({ wallet: W }, 200, H); }
   async save(s, b, H) { const t = cleanTicket(b.ticket); if (!t) return json({ error: 'a ticket needs at least one leg' }, 400, H);
     const S = this.ctx.storage, pre = 't:' + s.key + ':', k = pre + t.id;
     if (!(await S.get(k))) { const L = await S.list({ prefix: pre }); if (L.size >= TIX_MAX) { const old = [...L.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]; await S.delete(old[0]); } }

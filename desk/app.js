@@ -311,6 +311,35 @@ function founderHtml(page) {
   return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${R.cashed + R.lost ? `<span class="f-rec">Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost</span>` : ''}</div>
     <div class="fgrid">${F.tix.map(card).join('')}</div></section>`;
 }
+/* ── Desk Dollars (v3.0.22). D$1,000 on sign-up, play money only. Open a game on the Slate → tap a line → it lands on your
+   D$ slip; place it and the server prices it from the slate and grades it from the finals. Bought D$ shows in its own color;
+   the leaderboard ranks earned D$. */
+S.dd = store.get('ddslip') || [];
+const slateGameOf = k => { for (const d of ((S.slate && S.slate.days) || [])) for (const g of (d.games || [])) if (g.k === k) return g; return null; };
+const DDJ = -110, ddDec = p => (p > 0 ? 1 + p / 100 : 1 + 100 / -p), dd$ = n => 'D$' + (Math.round(n * 100) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
+function ddLegOf(g, mk, side) { const ln = g.ln || {}; if (mk === 'ml') { const p = side === 'away' ? ln.mlA : ln.mlH; return fin(p) ? { price: p, pick: `${side === 'away' ? g.a.ab : g.h.ab} ML` } : null; }
+  if (mk === 'spread') { if (!fin(ln.line) || !ln.fav) return null; const team = side === 'away' ? g.a.ab : g.h.ab; const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: DDJ, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
+  if (mk === 'total') return fin(ln.tot) ? { price: DDJ, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` } : null; return null; }
+function ddBtns(g) { if (!(g.t > Date.now() + 60e3) || !g.ln) return ''; const on = (mk, sd) => S.dd.some(l => l.k === g.k && l.mk === mk && l.side === sd);
+  const btn = (mk, sd) => { const L = ddLegOf(g, mk, sd); return L ? `<button type="button" class="ddb${on(mk, sd) ? ' on' : ''}" data-act="ddpick" data-k="${esc(g.k)}" data-mk="${mk}" data-side="${sd}"><b>${esc(L.pick)}</b><small>${esc(odds(L.price))}</small></button>` : '<span></span>'; };
+  return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }
+function ddSlipBar() { if (!S.dd.length) return ''; const dec = S.dd.reduce((x, l) => x * ddDec(l.price), 1), st = +(store.get('ddstake') || 25); const W = AC.me && AC.me.wallet;
+  return `<div class="pslipbar ddslip"><div><b>D$ slip · ${S.dd.length} leg${S.dd.length > 1 ? 's' : ''} · ${esc(odds(decAm(dec)))}</b><small>${S.dd.map(l => esc(l.pick)).join(' · ')}</small>
+    <small>${W ? `You have ${dd$(W.bal)}. ` : ''}Stake <input id="ddStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"> pays <span id="ddPays">${dd$(st * dec)}</span></small></div>
+    <button type="button" class="btn sm" data-act="ddplace">Place it</button><button type="button" class="btn ghost sm" data-act="ddclear">✕</button></div>`; }
+function walletHtml(W) { if (!W) return ''; const bought = Math.max(0, Math.min(W.bought || 0, W.bal)), earned = W.bal - bought, net = W.bal - (W.bought || 0) - 1000;
+  return `<div class="wallet"><div class="w-top"><span class="w-lab">Desk Dollars</span><b class="w-bal">${dd$(W.bal)}</b><span class="w-net ${net >= 0 ? 'up' : 'dn'}">${net >= 0 ? '+' : '−'}${dd$(Math.abs(net)).replace('D$', 'D$')} earned since your D$1,000</span></div>
+    <div class="w-bar"><i class="e" style="flex:${Math.max(earned, 0.0001)}"></i>${bought ? `<i class="b" style="flex:${bought}"></i>` : ''}</div>
+    <div class="w-key"><span><i class="e"></i>Earned ${dd$(earned)}</span>${W.bought ? `<span><i class="b"></i>Bought ${dd$(W.bought)}</span>` : ''}<span>${W.w}-${W.l}${W.p ? '-' + W.p : ''} on settled bets</span></div>
+    <p class="note">Play money for bragging rights: never cashed out, never a prize. Bought D$ shows in its own color and never counts on the leaderboard. ${AC.me && AC.me.store ? '' : '<b>The D$ store opens soon.</b>'}</p></div>`; }
+function ddBetHtml(b) { const chip = { won: `✓ Won ${dd$(b.back)}`, lost: '✗ Lost', push: '↺ Push', open: `Open · to win ${dd$(b.toWin)}` }[b.status];
+  return `<article class="slip mytk nostub ${b.status === 'won' ? 'cashed' : b.status}"><div class="slip-head"><span>${dd$(b.stake)} · ${b.legs.length > 1 ? b.legs.length + '-leg' : 'single'}</span><span class="fchip ${b.status === 'won' ? 'cashed' : b.status}">${chip}</span></div><div class="slip-main">
+    <ul class="fl-list">${b.legs.map(l => `<li class="fl ${l.res || 'open'}"><span class="fl-ic">${l.res === 'hit' ? '✓' : l.res === 'miss' ? '✗' : l.res === 'push' ? '↺' : '○'}</span><div class="fl-b"><b>${esc(l.pick)} ${esc(odds(l.price))}</b><small>${esc([LEAGUE[l.sp], l.game.replace('@', ' at '), l.res ? '' : clock(l.t)].filter(Boolean).join(' · '))}${l.void ? ' · voided' : ''}</small></div></li>`).join('')}</ul></div></article>`; }
+let LB = null;
+async function lbLoad() { try { const r = await fetch(CFG.chat + '/acct/board'); if (r.ok) { LB = await r.json(); if (S.tab === 'me') { const n = $('#lb'); if (n) n.outerHTML = lbHtml(); } } } catch (e) { } }
+function lbHtml() { const P = acctPass(); if (!LB) return '<section id="lb" class="vsec"><h2 class="h2">The leaderboard</h2><div class="shimmer"></div></section>';
+  return `<section id="lb" class="vsec"><h2 class="h2">The leaderboard</h2><p class="note">Ranked by Desk Dollars earned from the D$1,000 everyone starts with. Bought D$ shows in blue and never counts.</p>
+    <div class="psheet lb"><div class="ps-h"><span>#</span><span>Player</span><span>Earned</span><span>Record</span></div>${LB.rows.map((r, i) => `<div class="ps-r${P && P.name === r.name ? ' on' : ''}"><span>${i + 1}</span><span><b>${esc(r.name)}</b>${r.bought ? `<small class="lb-b">+${dd$(r.bought)} bought</small>` : ''}</span><span class="ps-s">${dd$(r.earned)}</span><span>${r.w}-${r.l}${r.roi != null ? `<small>${r.roi > 0 ? '+' : ''}${r.roi}% ROI</small>` : ''}</span></div>`).join('') || '<div class="ps-r"><span></span><span>Be the first on the board.</span></div>'}</div></section>`; }
 /* ── Accounts + My Tickets (v3.0.21, Chris, Nov 15). Sign up with a username and a password (21+), kept on our Cloudflare.
    Track tickets from the Props slip, from the board, or by typing your own legs; they follow you to any device. Legs on the
    desk's picks grade themselves from the board; your own legs you mark as they settle. */
@@ -348,9 +377,12 @@ function viewMe() {
       <label>Password<input name="pass" type="password" required minlength="8" autocomplete="${AC.mode === 'signup' ? 'new-password' : 'current-password'}"></label>
       ${AC.mode === 'signup' ? '<label class="chk"><input name="age21" type="checkbox" required> I’m 21 or older</label>' : ''}
       <p class="chat-err" id="acctErr" role="alert"></p><button class="btn" type="submit">${AC.mode === 'signup' ? 'Create account' : 'Sign in'}</button></form>
-      <p class="note">Your password is never stored, only a scrambled copy of it. <a href="privacy.html">Privacy</a></p></div>${footHtml()}`; return; }
+      <p class="note">Your password is never stored, only a scrambled copy of it. <a href="privacy.html">Privacy</a></p></div>
+    <div class="paper ddpitch"><b>D$1,000 the moment you sign up</b><p>Desk Dollars are play money: bet them on any game on the Slate, flip them, and climb the leaderboard for bragging rights.</p></div>${lbHtml()}${footHtml()}`; if (!LB) lbLoad(); return; }
   const L = (AC.me && AC.me.tickets) || [], R = myRecord(L);
   el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Signed in as <b>${esc(P.name)}</b>. <button type="button" class="link" data-act="aclogout">Sign out</button></p>
+    ${AC.me ? walletHtml(AC.me.wallet) : ''}${AC.me && (AC.me.bets || []).length ? `<h2 class="h2">Your D$ bets</h2><div class="fgrid">${AC.me.bets.slice(0, 20).map(ddBetHtml).join('')}</div>` : AC.me ? '<p class="note">Open any game on the <button type="button" class="link" data-go="slate">Slate</button> and tap a line to bet Desk Dollars.</p>' : ''}
+    ${lbHtml()}<h2 class="h2">Your real tickets</h2>
     ${AC.me ? `<div class="mystats"><span><b>${R.c}</b>cashed</span><span><b>${R.l}</b>lost</span><span><b>${R.n ? Math.round(100 * R.h / R.n) + '%' : '—'}</b>legs hit</span><span><b>${L.length}</b>tickets</span></div>` : ''}
     <details class="paper newtk"${AC.open ? ' open' : ''}><summary>＋ New ticket</summary><form data-form="newtk"><label>Name it (optional)<input name="title" maxlength="40" placeholder="Sunday 3-leg"></label>
       <label>Legs, one per line<textarea name="legs" rows="4" required placeholder="Bills -3 -110&#10;Kaprizov 3+ SOG&#10;Over 221.5 -105"></textarea></label>
@@ -359,7 +391,7 @@ function viewMe() {
     <p class="chat-err" role="alert">${esc(AC.err)}</p>
     ${!AC.me ? '<div class="shimmer"></div>' : L.length ? `<div class="fgrid">${L.map(myTicketHtml).join('')}</div>` : '<div class="paper blank"><b>No tickets yet</b><p>Your first one shows up here.</p></div>'}
     <details class="closeacct"><summary>Delete my account</summary><form data-form="acclose"><p class="note">This deletes your account and every ticket on it, for good.</p><label>Your password<input name="pass" type="password" required autocomplete="current-password"></label><button class="btn ghost sm" type="submit">Delete it</button></form></details>${footHtml()}`;
-  AC.open = false;
+  AC.open = false; if (!LB) lbLoad();
 }
 function parseLegs(txt) { return String(txt || '').split(/\n+/).map(x => x.trim()).filter(Boolean).slice(0, 15).map(line => { const m = line.match(/\s([+-−]\d{3,5})\s*$/);
   const price = m ? +m[1].replace('−', '-') : null; return { src: 'own', pick: (m ? line.slice(0, m.index) : line).trim().slice(0, 80), price }; }).filter(l => l.pick); }
@@ -627,7 +659,7 @@ function gameHtml(g) {
     if (g.venue) rows.push(['Where', esc(g.venue)]);
     if (g.note) rows.push(['In the news', esc(g.note)]);
     const bp = b ? boardPicksHtml(b, F, heavy, true) : '', wo = b ? whoOnHtml(b) : '';
-    more = `<div class="g-more">${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call and how sure it is. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
+    more = `<div class="g-more">${ddBtns(g)}${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call and how sure it is. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
       ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the members’ chat.</span><button type="button" class="btn foil" data-go="chat">Open the chat</button></div>` : ''}</div>`;
   }
   return `<div class="game"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
@@ -683,7 +715,7 @@ function viewSlate() {
     <div class="paper"><div class="sheet-h"><b>${esc(shortDay(D.d))}</b><span>Lines as of ${esc(clock(SL.ts))}${stale ? ', waiting on a refresh' : ''}</span></div>
       ${body || '<div class="blank"><b>Nothing on the board</b><p>No games with lines for this day yet.</p></div>'}
       <div class="sheet-f">The number beside a team is its Power Rank.${D.more ? ` ${D.more} more college games are on the full board; these are the ones worth a look.` : ''} Lines can move. This sheet never shows the desk’s sealed picks.</div></div></div>
-    <div>${ranks}</div></div>${footHtml()}`;
+    <div>${ranks}</div></div>${ddSlipBar()}${footHtml()}`;
 }
 
 /* ── the open beta: the whole card, and every character's say on each pick ──────── */
@@ -957,6 +989,13 @@ document.addEventListener('click', async e => {
   else if (act === 'pslip') { const id = a.dataset.id; S.slip = S.slip.includes(id) ? S.slip.filter(x => x !== id) : [...S.slip, id].slice(-12); store.set('pslip', S.slip); render(); }
   else if (act === 'pslipclear') { S.slip = []; store.set('pslip', S.slip); render(); }
   else if (act === 'psliptrack') { const t = slipTicket(); if (t && await tkSave(t, 'Tracking it — see Your tickets')) { S.slip = []; store.set('pslip', S.slip); render(); } }
+  else if (act === 'ddpick') { const g = slateGameOf(a.dataset.k); if (g) { const mk = a.dataset.mk, sd = a.dataset.side, i = S.dd.findIndex(l => l.k === g.k);
+      const same = i >= 0 && S.dd[i].mk === mk && S.dd[i].side === sd; if (i >= 0) S.dd.splice(i, 1); if (!same) { const L = ddLegOf(g, mk, sd); if (L) { if (S.dd.length >= 10) toast('Up to 10 legs'); else S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); } }
+      store.set('ddslip', S.dd); render(); } }
+  else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
+  else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }
+    const st = +(($('#ddStake') || {}).value || 0); try { const j = await acctApi('/acct/bet', { token: P.token, stake: st, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
+      if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; } S.dd = []; store.set('ddslip', S.dd); store.set('ddstake', st); render(); toast(`Placed: ${dd$(j.bet.stake)} to win ${dd$(j.bet.toWin)}`); LB = null; } catch (e) { toast(e.message); } }
   else if (act === 'acmode') { AC.mode = a.dataset.v; viewMe(); }
   else if (act === 'aclogout') { const P = acctPass(); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); if (P) acctApi('/acct/logout', { token: P.token }).catch(() => { }); }
   else if (act === 'tkmark') { const t = ((AC.me && AC.me.tickets) || []).find(x => x.id === a.dataset.id); if (t) { const l = t.legs[+a.dataset.i]; l.res = l.res === a.dataset.v ? null : a.dataset.v; viewMe(); tkSave(t); } }
@@ -977,6 +1016,7 @@ document.addEventListener('click', async e => {
   else if (act === 'chat-invite') chatMod({ act: 'invite', uses: 25 }, j => { CH.invite = j.code; const n = $('#chatInv'); if (n) n.innerHTML = `New code: <code>${esc(j.code)}</code> (25 uses)`; });
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
+document.addEventListener('input', e => { if (e.target.id === 'ddStake') { const v = +e.target.value || 0, dec = S.dd.reduce((x, l) => x * ddDec(l.price), 1), n = $('#ddPays'); if (n) n.textContent = dd$(v * dec); } });
 document.addEventListener('change', e => { const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
 /* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
 async function restartApp() {

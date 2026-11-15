@@ -639,3 +639,20 @@ body.embed .view{padding-bottom:20px}
 .bp-tk{appearance:none;border:1px solid rgba(27,42,33,.3);background:#fffaf0;color:#1b2a21;width:26px;height:26px;border-radius:50%;font:700 15px/1 var(--text);cursor:pointer;flex:none}
 @media (max-width:430px){#installChip .ic-t{display:none}#installChip{padding:8px 10px}.brand b{font-size:22px}}
 .closeacct{margin:22px 0 4px;color:var(--cream-3);font-size:13px}.closeacct summary{cursor:pointer}.closeacct form{display:grid;gap:8px;max-width:320px;margin-top:8px}.closeacct input{font:500 16px var(--text);padding:9px 10px;border-radius:8px;border:1px solid rgba(244,236,216,.3);background:rgba(0,0,0,.3);color:var(--cream)}
+
+/* ── Desk Dollars (v3.0.22) ── */
+.ddgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ddh{font:700 10px/1 var(--text);text-transform:uppercase;letter-spacing:.07em;color:#5b6a60;text-align:center}
+.ddb{appearance:none;border:1.5px solid rgba(27,42,33,.22);background:#fffaf0;border-radius:10px;padding:9px 4px;display:grid;gap:3px;cursor:pointer;color:#1b2a21}
+.ddb b{font:700 13px/1.1 var(--text)}.ddb small{font:600 12px/1 var(--text);color:#7a5a00}
+.ddb.on{background:#1b2a21;border-color:#1b2a21;color:#f4ecd8}.ddb.on small{color:#f0cd6a}
+.ddslip small{display:block;margin-top:3px}.ddslip input{width:70px;font:600 14px var(--text);padding:3px 6px;border-radius:6px;border:1px solid #E9C25A;background:#000;color:#f0cd6a}
+.wallet{background:linear-gradient(160deg,#16261d,#0b1410);border:1px solid rgba(233,194,90,.5);border-radius:16px;padding:16px;margin:4px 0 18px}
+.w-top{display:grid;gap:2px}.w-lab{font:700 11px/1 var(--text);text-transform:uppercase;letter-spacing:.1em;color:var(--cream-3)}
+.w-bal{font:800 44px/1 var(--display);color:#f0cd6a;letter-spacing:.01em}.w-net{font:600 13px/1.2 var(--text)}.w-net.up{color:#7fd6a4}.w-net.dn{color:#e59a85}
+.w-bar{display:flex;height:10px;border-radius:99px;overflow:hidden;margin:12px 0 8px;background:rgba(255,255,255,.08)}.w-bar i{display:block}
+.w-bar .e,.w-key .e{background:linear-gradient(90deg,#c99a2e,#f0cd6a)}.w-bar .b,.w-key .b{background:#4fb3e8}
+.w-key{display:flex;flex-wrap:wrap;gap:12px;font:600 12px/1 var(--text);color:var(--cream-2)}.w-key i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.wallet .note{margin:10px 0 0;font-size:12px}
+.lb .ps-h,.lb .ps-r{grid-template-columns:26px 1fr 92px 62px}.lb-b{color:#2a8fc4!important;font-weight:700}
+.ddpitch{padding:14px 16px;margin-top:14px;max-width:440px}.ddpitch b{font:800 18px/1.1 var(--display);text-transform:uppercase;color:#7a5a00}.ddpitch p{margin:6px 0 0;color:#3b4a40}
