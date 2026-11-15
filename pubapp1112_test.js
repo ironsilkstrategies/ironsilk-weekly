@@ -288,6 +288,74 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await p.click('.lgnew summary'); await p.fill('form[data-form="lgsnew"] input[name="name"]', 'Bowl Season Bash'); await p.fill('form[data-form="lgsnew"] input[name="prizes"]', '20000, 5000'); await p.click('form[data-form="lgsnew"] button[type="submit"]'); await p.waitForTimeout(900);
     T('the owner opens a league: name, dates, bankroll, prizes reach the server; it shows up', posts.some(([u, bd]) => u === '/acct/lgs/create' && bd.name === 'Bowl Season Bash' && bd.prizes[0] === 20000 && bd.ends > bd.starts && bd.bank === 1000) && /Bowl Season Bash/.test(await p.evaluate(() => document.querySelector('#v-leagues').innerText)));
     T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
+  /* ── the owner's dashboard (v3.1.1) ── */
+  { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message))); const posts = [];
+    const users = [{ name: 'TheDesk', owner: true, at: now - 9e8, seen: now, visits: 40, bal: 1000, bought: 0, prize: 0, w: 0, l: 0, xp: 0, rank: 'Rookie', runs: 0, lgs: 0, sus: false, note: '' },
+      { name: 'BigShot', at: now - 864e5 * 3, seen: now - 36e5, visits: 12, bal: 4120, bought: 0, prize: 250, w: 9, l: 3, xp: 2140, rank: 'Sharp', runs: 2, lgs: 1, sus: false, note: 'whale' },
+      { name: 'Spammer9', at: now - 36e5, seen: now - 6e5, visits: 2, bal: 1000, bought: 0, prize: 0, w: 0, l: 0, xp: 0, rank: 'Rookie', runs: 0, lgs: 0, sus: false, note: '' }];
+    const ST = { k: { members: 3, new1: 1, new7: 2, act1: 3, act7: 3, dd: 6120, bought: 0, prizes: 250, staked: 900, open: 4, bets: 20, settled: 16, runs: 2, runsWon: 1, lgLive: 1, lgAll: 2, unread: 2, threads: 1, sus: 0, chatDay: 14, chatTotal: 120, bans: 0, paid: null },
+      days: Array.from({ length: 14 }, (_, i) => ({ d: new Date(now - (13 - i) * 864e5).toISOString().slice(0, 10), n: i % 3, act: i % 4 + 1 })), users, cfg: { lgOpen: false, envOpen: false, store: false } };
+    await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.acct', JSON.stringify({ token: 'x'.repeat(32), name: 'TheDesk', exp: Date.now() + 864e5 })); localStorage.setItem('tdp.adtab', '"overview"'); } catch (e) { } });
+    await p.route('**/*', r => { const u = new URL(r.request().url()), req = r.request();
+      if (/picks\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(BETA) });
+      if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
+      if (u.hostname === 'thedesk-chat.ironsilkstrategies.workers.dev') { const body = req.method() === 'POST' ? JSON.parse(req.postData() || '{}') : {}; posts.push([u.pathname, body]); const J = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+        if (u.pathname === '/acct/me') return J({ name: 'TheDesk', owner: true, wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0 }, tickets: [], bets: [], runs: [], leagues: [], inbox: { msgs: [], unread: 0 } });
+        if (u.pathname === '/acct/admin') { const a = body.act;
+          if (a === 'stats') return J(ST);
+          if (a === 'user') return J({ user: { name: body.name, at: now - 864e5 * 3, seen: now - 36e5, visits: 12, wallet: { bal: 4120, bought: 0, prize: 250, w: 9, l: 3, p: 0, staked: 900 }, xp: 2140, rank: { name: 'Sharp' }, trophies: {}, xplog: [{ why: '🏆 Puck Chalk Payday', xp: 305, dd: 180 }], note: 'whale', sus: false, sessions: 2 }, bets: [{ stake: 50, status: 'won', legs: [{ pick: 'NYG ML' }] }], runs: [], leagues: [], inbox: [] });
+          if (a === 'inbox') return J({ threads: [{ key: 'bigshot', name: 'BigShot', last: now - 6e5, unread: 2, n: 2, preview: 'When does the next league open?', from: 'me' }] });
+          if (a === 'thread' || a === 'reply') return J({ thread: { name: 'BigShot', msgs: [{ from: 'me', text: 'When does the next league open?', t: now - 6e5 }, ...(a === 'reply' ? [{ from: 'desk', text: body.text, t: now }] : [])] } });
+          if (a === 'chat') return J({ messages: [{ id: 'm1', name: 'Spammer9', text: 'buy my picks!!!', ts: now - 6e4 }], mutes: [], bans: body.sub === 'ban' ? ['spammer9'] : [], invites: [], total: 120, day: 14 });
+          return J({ ok: true, wallet: { bal: 4370 }, xp: 2240, n: 2 }); }
+        return J({ rows: [], n: 0, leagues: [], by: {}, leaders: [], recent: [], xp: [] }); }
+      if (u.hostname !== 'desk.test') return r.abort();
+      let f = path.join(W, decodeURIComponent(u.pathname)); if (f.endsWith('/')) f += 'index.html'; if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
+      r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
+    await p.goto('https://desk.test/desk/#me', { waitUntil: 'load' }); await p.waitForTimeout(900);
+    await p.click('[data-go="admin"].btn'); await p.waitForTimeout(800); let t = await p.evaluate(() => document.querySelector('#v-admin').innerText);
+    T('Admin (owner only): members, new and active, paid subscribers (Whop not connected), unread, D$ in wallets, prizes, bets, runs, leagues, chat, the 14-day chart, biggest bankrolls', /MEMBERS/i.test(t) && /\+1 today · \+2 this week/.test(t) && /Paid subscribers/i.test(t) && /Whop isn’t connected/.test(t) && /Unread messages/i.test(t) && /D\$6,120/.test(t) && /D\$250 paid in prizes/.test(t) && /Open bets/i.test(t) && /Chat messages today/i.test(t) && /LAST 14 DAYS/i.test(t) && /BIGGEST BANKROLLS/i.test(t) && (await p.locator('.adchart > div').count()) === 14, t.slice(0, 1000));
+    await p.click('.adtabs [data-v="members"]'); await p.waitForTimeout(400); t = await p.evaluate(() => document.querySelector('#v-admin').innerText);
+    T('Members: every name, balance, rank, XP, last seen, visits (record on wider screens)', /BigShot/.test(t) && /D\$4,120/.test(t) && /Sharp · 2140 XP/.test(t) && /1h ago/.test(t) && /12 visits/.test(t) && /Spammer9/.test(t), t.slice(250, 1100));
+    await p.click('.adtr[data-name="BigShot"]'); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('.adpanel').innerText);
+    T('…tap a member: wallet, record, XP, devices, their bets and XP log, and the actions (give/take D$, XP, note, suspend, sign out, message, delete)', /BigShot/.test(t) && /2 signed-in devices/.test(t) && /D\$4,120/.test(t) && /NYG ML/.test(t) && /Puck Chalk Payday/.test(t) && /Suspend/.test(t) && /Sign out everywhere/.test(t) && /Delete account/.test(t), t.slice(0, 700));
+    await p.fill('form[data-form="admoney"] input[name="amt"]', '250'); await p.click('form[data-form="admoney"] button'); await p.waitForTimeout(500);
+    T('…giving D$ as a prize hits the server', posts.some(([u, bd]) => u === '/acct/admin' && bd.act === 'grant' && bd.name === 'BigShot' && bd.amount === 250 && bd.kind === 'prize'));
+    await p.click('[data-act="adsus"]'); await p.click('[data-act="adsus"]'); await p.waitForTimeout(500);
+    T('…suspend takes a second tap to confirm, then goes', posts.some(([u, bd]) => bd.act === 'suspend' && bd.name === 'BigShot'));
+    await p.click('.adpanel .cs-x'); await p.click('.adtabs [data-v="inbox"]'); await p.waitForTimeout(600); t = await p.evaluate(() => document.querySelector('#v-admin').innerText);
+    T('Inbox: threads with unread counts and a broadcast to everyone', /BigShot/.test(t) && /When does the next league open/.test(t) && /Message every member/.test(t), t.slice(0, 500));
+    await p.click('[data-act="adthread"]'); await p.waitForTimeout(500); await p.fill('form[data-form="adreply"] textarea', 'Friday at noon.'); await p.click('form[data-form="adreply"] button'); await p.waitForTimeout(500);
+    T('…open a thread and reply', posts.some(([u, bd]) => bd.act === 'reply' && bd.text === 'Friday at noon.') && /Friday at noon/.test(await p.evaluate(() => document.querySelector('#v-admin').innerText)));
+    await p.click('.adtabs [data-v="chat"]'); await p.waitForTimeout(600); t = await p.evaluate(() => document.querySelector('#v-admin').innerText);
+    T('Chat: the latest messages with delete, mute and ban; invite codes', /Spammer9/.test(t) && /buy my picks/.test(t) && /Delete/.test(t) && /Mute 1h/.test(t) && /Ban/.test(t) && /New invite code/.test(t));
+    await p.click('[data-act="adcban"]'); await p.click('[data-act="adcban"]'); await p.waitForTimeout(500);
+    T('…ban from the chat', posts.some(([u, bd]) => bd.act === 'chat' && bd.sub === 'ban' && bd.name === 'Spammer9'));
+    await p.click('.adtabs [data-v="settings"]'); await p.waitForTimeout(300); await p.click('[data-act="adlgopen"]'); await p.waitForTimeout(400);
+    T('Settings: the switch that lets members open leagues', posts.some(([u, bd]) => bd.act === 'cfg' && bd.lgOpen === true));
+    T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
+  { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const posts = [];
+    await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.acct', JSON.stringify({ token: 'x'.repeat(32), name: 'Tester', exp: Date.now() + 864e5 })); } catch (e) { } });
+    await p.route('**/*', r => { const u = new URL(r.request().url()), req = r.request();
+      if (/\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(/picks/.test(u.pathname) ? BETA : SLATE) });
+      if (u.hostname === 'thedesk-chat.ironsilkstrategies.workers.dev') { const body = req.method() === 'POST' ? JSON.parse(req.postData() || '{}') : {}; posts.push([u.pathname, body]); const J = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+        if (u.pathname === '/acct/me') return J({ name: 'Tester', wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0 }, tickets: [], bets: [], runs: [], leagues: [], inbox: { msgs: [{ from: 'desk', text: 'Leagues open Friday.', t: now, all: true }], unread: 1 } });
+        if (u.pathname === '/acct/inbox/send') return J({ inbox: { msgs: [{ from: 'desk', text: 'Leagues open Friday.', t: now }, { from: 'me', text: body.text, t: now }], unread: 0 } });
+        if (u.pathname === '/acct/admin') return r.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"owner only"}' });
+        return J({ ok: true, rows: [] }); }
+      if (u.hostname !== 'desk.test') return r.abort();
+      let f = path.join(W, decodeURIComponent(u.pathname)); if (f.endsWith('/')) f += 'index.html'; if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
+      r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
+    await p.goto('https://desk.test/desk/#me', { waitUntil: 'load' }); await p.waitForTimeout(1000);
+    let t = await p.evaluate(() => document.querySelector('#v-me').innerText);
+    T('a member: an unread dot on the account button, "Message the desk · 1 new"', await p.evaluate(() => document.querySelector('#acctBtn').classList.contains('dot')) && /Message the desk/.test(t) && /1 new/.test(t), t.slice(0, 500));
+    await p.click('.myinbox summary'); await p.waitForTimeout(400); t = await p.evaluate(() => document.querySelector('#v-me').innerText);
+    T('…opening it shows the desk\'s message and clears the dot', /Leagues open Friday/.test(t) && /The desk · to everyone/.test(t) && !(await p.evaluate(() => document.querySelector('#acctBtn').classList.contains('dot'))) && posts.some(([u]) => u === '/acct/inbox/read'), t.slice(0, 500));
+    await p.fill('form[data-form="mymsg"] textarea', 'Can I get a league invite?'); await p.click('form[data-form="mymsg"] button'); await p.waitForTimeout(500);
+    T('…they write back', posts.some(([u, bd]) => u === '/acct/inbox/send' && bd.text === 'Can I get a league invite?'));
+    await p.goto('https://desk.test/desk/#admin', { waitUntil: 'load' }); await p.waitForTimeout(800);
+    T('…and the Admin page is closed to them (no link, no dashboard)', /for the desk only/.test(await p.evaluate(() => document.querySelector('#v-admin').innerText)) && !(await p.evaluate(() => document.body.classList.contains('is-owner'))) && !posts.some(([u]) => u === '/acct/admin'));
+    await ctx.close(); }
   /* ── inside Telegram (Mini App) ── */
   { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
     await p.route('**/*', r => { const u = new URL(r.request().url());
@@ -425,7 +493,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
   /* ── what's in the box (and what isn't) ── */
   const dir = path.join(W, 'desk'), files = fs.readdirSync(dir).filter(f => /\.(html|js|css|webmanifest)$/.test(f)); const src = Object.fromEntries(files.map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')])); const all = Object.values(src).join('\n');
-  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 200000);
+  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 240000);
   T('none of the desk\'s machinery: no engine scripts, no app storage, no keys or settings, no eval', !/shared\.js|desk-[a-z]+\.js|-engine\.js|store\.js|theme\.css/.test(all) && !/['"`]d4\./.test(all) && !/apiKey|api_key|odds-?api|ghp_|bot[0-9]{6,}|AUTOPILOT|tgautokey/i.test(all) && !/\beval\(|new Function\(/.test(all));
   const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]).filter(u => !/^https:\/\/telegram\.org\//.test(u));
   const tgLoader = /if\(\/tgWebApp\/\.test\(location\.hash\+location\.search\)\)document\.write\('<script src="https:\/\/telegram\.org\/js\/telegram-web-app\.js">/.test(src['index.html']);

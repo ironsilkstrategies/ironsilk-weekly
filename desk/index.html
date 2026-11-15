@@ -25,7 +25,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preload" as="font" type="font/woff2" href="fonts/big-shoulders.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/franklin.woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=25">
+<link rel="stylesheet" href="app.css?v=26">
 </head>
 <body>
 <a class="skip" href="#main">Skip to today's card</a>
@@ -46,6 +46,7 @@
     <button type="button" data-go="chat">Chat</button>
     <button type="button" data-go="receipts">Receipts</button>
     <button type="button" data-go="join">Join</button>
+    <button type="button" data-go="admin" class="adminlink">Admin</button>
   </nav>
   <button type="button" class="joinpill" data-go="join">Join</button>
   <button type="button" class="acctbtn" id="acctBtn" data-go="me" aria-label="Sign in"></button>
@@ -66,6 +67,7 @@
   <section class="view" id="v-chat" aria-label="Members' chat" hidden></section>
   <section class="view" id="v-receipts" aria-label="Every result" hidden></section>
   <section class="view" id="v-join" aria-label="Join" hidden></section>
+  <section class="view" id="v-admin" aria-label="Admin" hidden></section>
 </main>
 
 <nav class="tabs" aria-label="Sections">
@@ -82,6 +84,6 @@
 <div id="guideRoot"></div>
 <noscript><p style="max-width:40ch;margin:40px auto;padding:0 16px;font-family:sans-serif;color:#F3EEDF">TheDesk needs JavaScript to show today's card. Three picks are locked every morning, opened 30 minutes before each game and graded at the final.</p></noscript>
 <script>/* inside Telegram only: its Mini App bridge (nobody else downloads it) */if(/tgWebApp/.test(location.hash+location.search))document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>');</script>
-<script type="module" src="app.js?v=37"></script>
+<script type="module" src="app.js?v=38"></script>
 </body>
 </html>

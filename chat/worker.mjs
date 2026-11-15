@@ -41,6 +41,10 @@ export class Room {
       if (p === '/chat/join') return this.join(b, ip, H);
       if (p === '/chat/send') return this.send(b, H);
       if (p === '/chat/mod') return this.mod(b, H);
+      if (p === '/chat/adm') { const admin = this.env.ADMIN_CODE; if (!(typeof admin === 'string' && admin.length >= 24 && await sameSecret(String(b.admin || ''), admin))) return json({ error: 'owner only' }, 403, H);
+        if (b.act === 'list') { const S = this.ctx.storage, U = await S.list({ prefix: 'u:' }), B = await S.list({ prefix: 'b:' }), I = await S.list({ prefix: 'i:' }), all = await S.list({ prefix: 'm:' }), day = this.now() - 864e5;
+          return json({ messages: (await this.recent()).slice(-60), mutes: [...U].filter(([, v]) => v.until > this.now()).map(([k, v]) => ({ name: k.slice(2), until: v.until })), bans: [...B.keys()].map(k => k.slice(2)), invites: [...I].map(([k, v]) => ({ code: k.slice(2), ...v })), total: all.size, day: [...all.values()].filter(m => (m.ts || m.t || 0) > day).length }, 200, H); }
+        return this.modDo(b, H); }
       return json({ error: 'not found' }, 404, H);
     } catch (e) { return json({ error: 'server' }, 500, H); } }
   async recent() { const m = await this.ctx.storage.list({ prefix: 'm:', reverse: true, limit: PAGE }); return [...m.values()].reverse(); }
@@ -68,7 +72,8 @@ export class Room {
     const t = this.now(), id = t.toString(36).padStart(9, '0') + rid(4), m = { id, name: s.name, owner: s.owner, text, ts: t };
     await this.ctx.storage.put('m:' + id, m); this.cast({ type: 'msg', m }); await this.trim(); return json({ message: m }, 200, H); }
   async trim() { const all = await this.ctx.storage.list({ prefix: 'm:' }); if (all.size <= KEEP) return; const old = [...all.keys()].slice(0, all.size - KEEP); await this.ctx.storage.delete(old); }
-  async mod(b, H) { const s = await this.pass(b.token); if (!s || !s.owner) return json({ error: 'owner only' }, 403, H); const S = this.ctx.storage, n = String(b.name || '').trim().toLowerCase();
+  async mod(b, H) { const s = await this.pass(b.token); if (!s || !s.owner) return json({ error: 'owner only' }, 403, H); return this.modDo(b, H); }
+  async modDo(b, H) { const S = this.ctx.storage, n = String(b.name || '').trim().toLowerCase();
     switch (b.act) {
       case 'del': { const k = 'm:' + String(b.id || ''); if (!(await S.get(k))) return json({ error: 'no such message' }, 404, H); await S.delete(k); this.cast({ type: 'del', id: b.id }); return json({ ok: true }, 200, H); }
       case 'mute': { if (!n) return json({ error: 'name' }, 400, H); const mins = Math.max(5, Math.min(7 * 1440, +b.mins || 60)); await S.put('u:' + n, { until: this.now() + mins * 60e3 }); return json({ ok: true, mins }, 200, H); }
@@ -188,6 +193,9 @@ export class Accounts {
       if (p === '/acct/login') return this.login(b, ip, H);
       const s = await this.pass(b.token); if (!s) return json({ error: 'sign in first' }, 401, H);
       if (p === '/acct/me') return this.me(s, H);
+      if (p === '/acct/inbox/send') return this.inboxSend(s, b, H);
+      if (p === '/acct/inbox/read') { const S = this.ctx.storage, t = await S.get('ib:' + s.key); if (t) { t.uread = 0; await S.put('ib:' + s.key, t); } return json({ ok: true }, 200, H); }
+      if (p === '/acct/admin') return s.owner ? this.admin(s, b, H) : json({ error: 'owner only' }, 403, H);
       if (p === '/acct/bet') return this.bet(s, b, H);
       if (p === '/acct/buy') return this.env.STORE_ON === 'yes' ? json({ error: 'checkout isn’t connected yet' }, 501, H) : json({ error: 'the D$ store opens soon' }, 403, H);
       if (p === '/acct/grant') return this.grant(s, b, H);
@@ -202,11 +210,12 @@ export class Accounts {
       if (p === '/acct/close') { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (u && u.owner) return json({ error: 'the owner account stays' }, 400, H); if (!u || !(await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash))) return json({ error: 'that password doesn’t match' }, 403, H);
         for (const pre of ['t:', 'b:', 'o:', 'c:', 'r:']) { const L = await S.list({ prefix: pre + s.key + ':' }); if (L.size) await S.delete([...L.keys()]); }
         { const E = await S.list({ prefix: 'e:' }); const mine = [...E.keys()].filter(k => k.endsWith(':' + s.key)); if (mine.length) await S.delete(mine); }
-        await S.delete('u:' + s.key); return json({ ok: true }, 200, H); }
+        await S.delete(['u:' + s.key, 'ib:' + s.key]); return json({ ok: true }, 200, H); }
       if (p === '/acct/logout') { await this.ctx.storage.delete('s:' + b.token); return json({ ok: true }, 200, H); }
       return json({ error: 'not found' }, 404, H);
     } catch (e) { return json({ error: 'server' }, 500, H); } }
   async pass(token) { if (typeof token !== 'string' || token.length < 20) return null; const s = await this.ctx.storage.get('s:' + token); if (!s || s.exp < this.now()) return null;
+    if (!s.owner && await this.ctx.storage.get('X:' + s.key)) return null; /* suspended by the desk */
     /* stays signed in while they use it: any visit inside the last 60 days of the pass renews it to a full 90 */
     if (s.exp - this.now() < 60 * 864e5) { s.exp = this.now() + ACCT_DAYS * 864e5; await this.ctx.storage.put('s:' + token, s); } return s; }
   async tooMany(ip) { const t = await this.ctx.storage.get('j:' + ip); return t && t.n >= 8 && this.now() - t.t < 15 * 60e3; }
@@ -226,16 +235,18 @@ export class Accounts {
       const S = this.ctx.storage; let o = await S.get('u:thedesk'); if (!o) { o = { name: 'TheDesk', owner: true, at: this.now(), age21: true, dd: { ...ddWallet({}), at: this.now() } }; await S.put('u:thedesk', o); this._bd = null; }
       await S.delete('j:' + ip); return this.issue('TheDesk', H, true); }
     const u = await this.ctx.storage.get('u:' + name.toLowerCase());
+    if (u && await this.ctx.storage.get('X:' + u.name.toLowerCase())) return json({ error: 'this account is suspended — message the desk on Telegram' }, 403, H);
     const ok = u && !u.owner && await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash);
     if (!ok) { await this.miss(ip); return json({ error: 'that username and password don’t match' }, 403, H); }
     await this.ctx.storage.delete('j:' + ip); return this.issue(u.name, H); }
   async me(s, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H);
     if (!u.dd) { u.dd = ddWallet(u); u.dd.at = this.now(); await S.put('u:' + s.key, u); }
     const L = await S.list({ prefix: 't:' + s.key + ':' }); const B = await S.list({ prefix: 'b:' + s.key + ':' });
-    const C = await S.list({ prefix: 'c:' + s.key + ':' }), lg = [];
+    if (this.now() - (u.seen || 0) > 5 * 60e3) { u.seen = this.now(); u.visits = (u.visits || 0) + 1; await S.put('u:' + s.key, u); }
+    const C = await S.list({ prefix: 'c:' + s.key + ':' }), lg = [], ib = await S.get('ib:' + s.key), cfg = (await S.get('cfg')) || {};
     for (const lid of (u.lgs || [])) { const g = await S.get('G:' + lid), e = await S.get('e:' + lid + ':' + s.key); if (g && e) lg.push({ lid, name: g.name, status: lgStatus(g, this.now()), bal: e.bal, start: e.start, open: e.open || 0, starts: g.starts, ends: g.ends, sports: g.sports || null }); }
     return json({ name: s.name, owner: !!u.owner, since: u.at, wallet: u.dd, store: this.env.STORE_ON === 'yes', tickets: [...L.values()].sort((a, b) => b.ts - a.ts), bets: [...B.values()].sort((a, b) => b.ts - a.ts).slice(0, 100),
-      runs: [...C.values()].sort((a, b) => b.ts - a.ts).slice(0, 40), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), leagues: lg, lgOpen: this.env.LG_OPEN === 'yes' || !!u.owner }, 200, H); }
+      runs: [...C.values()].sort((a, b) => b.ts - a.ts).slice(0, 40), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), leagues: lg, lgOpen: this.env.LG_OPEN === 'yes' || !!cfg.lgOpen || !!u.owner, inbox: ib ? { msgs: ib.msgs.slice(-50), unread: ib.uread || 0 } : { msgs: [], unread: 0 } }, 200, H); }
   /* XP and D$ prizes land here: XP on the account (with a short log), prizes in the wallet as earned D$ */
   async award(key, xp, prize, why) { const S = this.ctx.storage, u = await S.get('u:' + key); if (!u) return; u.xp = (u.xp || 0) + (xp || 0); u.xpl = [...(u.xpl || []), { t: this.now(), xp: xp || 0, dd: prize || 0, why }].slice(-40);
     if (prize) { const W = ddWallet(u); W.bal = r2(W.bal + prize); W.prize = r2((W.prize || 0) + prize); u.dd = W; } await S.put('u:' + key, u); this._bd = null; }
@@ -324,7 +335,7 @@ export class Accounts {
     return json(this._ch.v, 200, H); }
   /* ── leagues: the desk runs them ── */
   async lgsCreate(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H);
-    if (!s.owner && this.env.LG_OPEN !== 'yes') return json({ error: 'leagues are opened by the desk for now' }, 403, H);
+    if (!s.owner && this.env.LG_OPEN !== 'yes' && !(((await S.get('cfg')) || {}).lgOpen)) return json({ error: 'leagues are opened by the desk for now' }, 403, H);
     const name = str(b.name, 40); if (name.length < 3) return json({ error: 'give the league a name' }, 400, H); if (clean(name) !== name) return json({ error: 'pick a cleaner name' }, 400, H);
     const starts = +b.starts, ends = +b.ends; if (!(starts > this.now() - 864e5 && ends > starts + 36e5 && ends - starts <= 120 * 864e5)) return json({ error: 'check the dates (an hour to 120 days)' }, 400, H);
     const bank = Math.round(+b.bank || 1000); if (!(bank >= 100 && bank <= 100000)) return json({ error: 'bankroll D$100 to D$100,000' }, 400, H);
@@ -347,11 +358,61 @@ export class Accounts {
       for (const g of G) { const st = lgStatus(g, now); const top = st === 'final' ? (g.results || []).slice(0, 3) : lgRank([...(await S.list({ prefix: 'e:' + g.lid + ':' })).values()]).slice(0, 3).map(e => ({ name: e.name, bal: e.bal, start: e.start }));
         out.push({ lid: g.lid, name: g.name, blurb: g.blurb, starts: g.starts, ends: g.ends, bank: g.bank, prizes: g.prizes, pool: g.prizes.reduce((a, x) => a + x, 0), sports: g.sports, n: g.n || 0, max: g.max, late: g.late, official: g.official, status: st, top }); }
       const order = { live: 0, open: 1, settling: 2, final: 3 }; out.sort((a, b) => order[a.status] - order[b.status] || (a.status === 'final' ? b.ends - a.ends : a.starts - b.starts));
-      this._lgs = { t: now, v: { leagues: out, open: this.env.LG_OPEN === 'yes' } }; }
+      this._lgs = { t: now, v: { leagues: out, open: this.env.LG_OPEN === 'yes' || !!(((await S.get('cfg')) || {}).lgOpen) } }; }
     return json(this._lgs.v, 200, H); }
   async lgsOne(lid, H) { const S = this.ctx.storage, g = await S.get('G:' + lid.replace(/[^a-z0-9]/gi, '')); if (!g || g.cancelled) return json({ error: 'no such league' }, 404, H);
     const st = lgStatus(g, this.now()), rows = st === 'final' ? g.results : lgRank([...(await S.list({ prefix: 'e:' + g.lid + ':' })).values()]).slice(0, 200).map(e => ({ name: e.name, bal: e.bal, start: e.start, peak: e.peak, w: e.w, l: e.l, p: e.p, open: e.open || 0, bets: e.bets || 0 }));
     return json({ league: { ...g, results: undefined, status: st, pool: g.prizes.reduce((a, x) => a + x, 0) }, rows }, 200, H); }
+  /* ── the subscriber inbox: members write to the desk, the desk writes back (one thread per member) ── */
+  async inboxSend(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); if (s.owner) return json({ error: 'reply from the admin inbox' }, 400, H);
+    const text = clean(String(b.text || '').replace(/[<>]/g, '').trim()).slice(0, 1000); if (text.length < 2) return json({ error: 'write a message' }, 400, H);
+    const t = (await S.get('ib:' + s.key)) || { name: u.name, msgs: [], unread: 0, uread: 0 }, today = t.msgs.filter(m => m.from === 'me' && this.now() - m.t < 864e5).length;
+    if (today >= 20) return json({ error: 'that’s 20 messages today — the desk will get back to you' }, 429, H);
+    t.msgs.push({ from: 'me', text, t: this.now() }); t.msgs = t.msgs.slice(-200); t.unread = (t.unread || 0) + 1; t.last = this.now(); t.name = u.name; await S.put('ib:' + s.key, t); return json({ inbox: { msgs: t.msgs.slice(-50), unread: t.uread || 0 } }, 200, H); }
+  /* ── the owner's dashboard ── */
+  async admin(s, b, H) { const S = this.ctx.storage, now = this.now(), key = String(b.name || '').trim().toLowerCase(), act = String(b.act || '');
+    const room = async body => { if (!this.env.ROOM) return null; try { const r = await this.env.ROOM.get(this.env.ROOM.idFromName('lounge')).fetch(new Request('https://x/chat/adm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, admin: this.env.ADMIN_CODE }) })); return await r.json(); } catch (e) { return null; } };
+    const need = async () => { const u = await S.get('u:' + key); if (!u) throw Object.assign(new Error('no such member'), { st: 404 }); return u; };
+    try { switch (act) {
+      case 'stats': { const U = [...(await S.list({ prefix: 'u:' })).values()], X = new Set([...(await S.list({ prefix: 'X:' })).keys()].map(k => k.slice(2))), O = await S.list({ prefix: 'o:' }), Bt = [...(await S.list({ prefix: 'b:' })).values()];
+        const C = [...(await S.list({ prefix: 'c:' })).values()], G = [...(await S.list({ prefix: 'G:' })).values()], IB = [...(await S.list({ prefix: 'ib:' })).values()], cfg = (await S.get('cfg')) || {};
+        const d = n => now - n * 864e5, W = u => ddWallet(u), sum = f => Math.round(U.reduce((a, u) => a + (f(u) || 0), 0) * 100) / 100;
+        const days = []; for (let i = 13; i >= 0; i--) { const a = new Date(now - i * 864e5).toISOString().slice(0, 10); days.push({ d: a, n: U.filter(u => new Date(u.at || 0).toISOString().slice(0, 10) === a).length, act: U.filter(u => u.seen && new Date(u.seen).toISOString().slice(0, 10) === a).length }); }
+        const live = G.filter(g => !g.cancelled && lgStatus(g, now) === 'live').length;
+        const users = U.map(u => { const w = W(u); return { name: u.name, owner: !!u.owner, at: u.at || 0, seen: u.seen || 0, visits: u.visits || 0, bal: w.bal, bought: w.bought || 0, prize: w.prize || 0, w: w.w, l: w.l, staked: w.staked || 0, xp: u.xp || 0, rank: rankOf(u.xp || 0).name, runs: C.filter(r => r.name === u.name && r.status === 'live').length, lgs: (u.lgs || []).length, sus: X.has(u.name.toLowerCase()), note: u.note || '', tg: u.tg || null }; });
+        const chat = await room({ act: 'list' });
+        return json({ k: { members: U.length, new1: U.filter(u => (u.at || 0) > d(1)).length, new7: U.filter(u => (u.at || 0) > d(7)).length, act1: U.filter(u => (u.seen || 0) > d(1)).length, act7: U.filter(u => (u.seen || 0) > d(7)).length,
+            dd: sum(u => W(u).bal), bought: sum(u => W(u).bought), prizes: sum(u => W(u).prize), staked: sum(u => W(u).staked), open: O.size, bets: Bt.length, settled: Bt.filter(x => x.status !== 'open').length,
+            runs: C.filter(r => r.status === 'live').length, runsWon: C.filter(r => r.status === 'won').length, lgLive: live, lgAll: G.filter(g => !g.cancelled).length, unread: IB.reduce((a, t) => a + (t.unread || 0), 0), threads: IB.length, sus: X.size,
+            chatDay: chat ? chat.day : null, chatTotal: chat ? chat.total : null, bans: chat ? chat.bans.length : null, paid: null },
+          days, users: users.sort((a, b) => b.seen - a.seen || b.at - a.at), cfg: { lgOpen: !!cfg.lgOpen, envOpen: this.env.LG_OPEN === 'yes', store: this.env.STORE_ON === 'yes' } }, 200, H); }
+      case 'user': { const u = await need(), B = [...(await S.list({ prefix: 'b:' + key + ':' })).values()].sort((a, b) => b.ts - a.ts), C = [...(await S.list({ prefix: 'c:' + key + ':' })).values()].sort((a, b) => b.ts - a.ts), lg = [];
+        for (const lid of (u.lgs || [])) { const g = await S.get('G:' + lid), e = await S.get('e:' + lid + ':' + key); if (g && e) lg.push({ lid, name: g.name, status: lgStatus(g, now), bal: e.bal, start: e.start, w: e.w, l: e.l }); }
+        const ses = [...(await S.list({ prefix: 's:' })).values()].filter(x => x.key === key && x.exp > now).length;
+        return json({ user: { name: u.name, owner: !!u.owner, at: u.at, seen: u.seen || 0, visits: u.visits || 0, wallet: ddWallet(u), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), note: u.note || '', sus: !!(await S.get('X:' + key)), sessions: ses },
+          bets: B.slice(0, 40), runs: C.slice(0, 20), leagues: lg, inbox: ((await S.get('ib:' + key)) || { msgs: [] }).msgs.slice(-50) }, 200, H); }
+      case 'grant': case 'take': { const u = await need(), amt = Math.round(+b.amount * 100) / 100; if (!(amt > 0 && amt <= 1e6)) return json({ error: 'amount' }, 400, H); const w = ddWallet(u);
+        if (act === 'grant') { w.bal = Math.round((w.bal + amt) * 100) / 100; if (b.kind === 'prize') w.prize = Math.round(((w.prize || 0) + amt) * 100) / 100; else w.bought = Math.round(((w.bought || 0) + amt) * 100) / 100; }
+        else { w.bal = Math.max(0, Math.round((w.bal - amt) * 100) / 100); } u.dd = w; u.xpl = [...(u.xpl || []), { t: now, xp: 0, dd: act === 'grant' ? amt : -amt, why: act === 'grant' ? (b.kind === 'prize' ? '🎁 From the desk' : '➕ Added by the desk') : '➖ Adjusted by the desk' }].slice(-40); await S.put('u:' + key, u); this._bd = null; return json({ wallet: w }, 200, H); }
+      case 'xp': { const u = await need(), n = Math.round(+b.amount); if (!n || Math.abs(n) > 100000) return json({ error: 'amount' }, 400, H); u.xp = Math.max(0, (u.xp || 0) + n); u.xpl = [...(u.xpl || []), { t: now, xp: n, dd: 0, why: n > 0 ? '⭐ Bonus from the desk' : 'XP adjusted by the desk' }].slice(-40); await S.put('u:' + key, u); return json({ xp: u.xp }, 200, H); }
+      case 'note': { const u = await need(); u.note = str(b.note, 300); await S.put('u:' + key, u); return json({ ok: true }, 200, H); }
+      case 'suspend': { const u = await need(); if (u.owner) return json({ error: 'not the owner' }, 400, H); await S.put('X:' + key, { at: now, why: str(b.why, 200) }); const ses = [...(await S.list({ prefix: 's:' }))].filter(([, v]) => v.key === key).map(([k]) => k); if (ses.length) await S.delete(ses); await room({ act: 'ban', name: u.name }); return json({ ok: true }, 200, H); }
+      case 'unsuspend': { await S.delete('X:' + key); await room({ act: 'unban', name: key }); return json({ ok: true }, 200, H); }
+      case 'signout': { const ses = [...(await S.list({ prefix: 's:' }))].filter(([, v]) => v.key === key && !v.owner).map(([k]) => k); if (ses.length) await S.delete(ses); return json({ ok: true, n: ses.length }, 200, H); }
+      case 'delete': { const u = await need(); if (u.owner) return json({ error: 'the owner account stays' }, 400, H);
+        for (const pre of ['t:', 'b:', 'o:', 'c:', 'r:']) { const L = await S.list({ prefix: pre + key + ':' }); if (L.size) await S.delete([...L.keys()]); }
+        { const E = await S.list({ prefix: 'e:' }); const mine = [...E.keys()].filter(k => k.endsWith(':' + key)); if (mine.length) await S.delete(mine); }
+        const ses = [...(await S.list({ prefix: 's:' }))].filter(([, v]) => v.key === key).map(([k]) => k); if (ses.length) await S.delete(ses); await S.delete(['u:' + key, 'ib:' + key, 'X:' + key]); this._bd = null; return json({ ok: true }, 200, H); }
+      case 'inbox': { const T = [...(await S.list({ prefix: 'ib:' }))].map(([k, t]) => ({ key: k.slice(3), name: t.name, last: t.last || 0, unread: t.unread || 0, n: t.msgs.length, preview: (t.msgs[t.msgs.length - 1] || {}).text || '', from: (t.msgs[t.msgs.length - 1] || {}).from })).sort((a, b) => b.unread - a.unread || b.last - a.last); return json({ threads: T }, 200, H); }
+      case 'thread': { const t = await S.get('ib:' + key); if (!t) return json({ thread: { name: b.name, msgs: [] } }, 200, H); t.unread = 0; await S.put('ib:' + key, t); return json({ thread: { name: t.name, msgs: t.msgs.slice(-100) } }, 200, H); }
+      case 'reply': { const u = await need(), text = String(b.text || '').replace(/[<>]/g, '').trim().slice(0, 2000); if (!text) return json({ error: 'write a reply' }, 400, H);
+        const t = (await S.get('ib:' + key)) || { name: u.name, msgs: [], unread: 0, uread: 0 }; t.msgs.push({ from: 'desk', text, t: now }); t.msgs = t.msgs.slice(-200); t.uread = (t.uread || 0) + 1; t.unread = 0; t.last = now; await S.put('ib:' + key, t); return json({ thread: { name: t.name, msgs: t.msgs.slice(-100) } }, 200, H); }
+      case 'broadcast': { const text = String(b.text || '').replace(/[<>]/g, '').trim().slice(0, 2000); if (!text) return json({ error: 'write a message' }, 400, H); const U = [...(await S.list({ prefix: 'u:' }))].filter(([, u]) => !u.owner); let n = 0;
+        for (const [k, u] of U) { const kk = k.slice(2), t = (await S.get('ib:' + kk)) || { name: u.name, msgs: [], unread: 0, uread: 0 }; t.msgs.push({ from: 'desk', text, t: now, all: true }); t.msgs = t.msgs.slice(-200); t.uread = (t.uread || 0) + 1; t.last = Math.max(t.last || 0, 0) || now; await S.put('ib:' + kk, t); n++; } return json({ ok: true, n }, 200, H); }
+      case 'chat': { const r = await room({ act: b.sub || 'list', id: b.id, name: b.name, mins: b.mins, uses: b.uses, code: b.code }); return r ? json(r, 200, H) : json({ error: 'the chat can’t be reached' }, 503, H); }
+      case 'cfg': { const c = (await S.get('cfg')) || {}; if (typeof b.lgOpen === 'boolean') c.lgOpen = b.lgOpen; await S.put('cfg', c); this._lgs = null; return json({ cfg: c }, 200, H); }
+      default: return json({ error: 'unknown action' }, 400, H); }
+    } catch (e) { return json({ error: e.message || 'server' }, e.st || 500, H); } }
   async board(H) { if (this._bd && this.now() - this._bd.t < 60e3) return json(this._bd.v, 200, H); const U = await this.ctx.storage.list({ prefix: 'u:' });
     const rows = [...U.values()].map(u => { const W = ddWallet(u); return { name: u.name, bal: W.bal, bought: W.bought, earned: Math.round((W.bal - W.bought) * 100) / 100, w: W.w, l: W.l, roi: W.staked ? Math.round(1000 * (W.back - W.staked) / W.staked) / 10 : null }; })
       .sort((a, b) => b.earned - a.earned).slice(0, 50); const v = { rows, n: U.size }; this._bd = { t: this.now(), v }; return json(v, 200, H); }

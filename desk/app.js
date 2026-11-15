@@ -95,7 +95,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join'];
+const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -391,8 +391,8 @@ const acctPass = () => store.get('acct');
 async function acctApi(path, body) { const r = await fetch(CFG.chat + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) { const e = new Error(j.error || 'the server didn’t answer'); e.status = r.status; throw e; } return j; }
 async function acctLoad() { const P = acctPass(); if (!P) { AC.me = null; return; } try { AC.me = await acctApi('/acct/me', { token: P.token }); AC.err = ''; }
-  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); else if (S.tab === 'challenges') viewChallenges(); else if (S.tab === 'leagues') viewLeagues(); }
-function acctBadge() { const b = $('#acctBtn'); if (!b) return; const P = acctPass(); b.textContent = P ? P.name.slice(0, 1).toUpperCase() : ''; b.classList.toggle('in', !!P); b.setAttribute('aria-label', P ? `My tickets (${P.name})` : 'Sign in'); }
+  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); else if (S.tab === 'challenges') viewChallenges(); else if (S.tab === 'leagues') viewLeagues(); else if (S.tab === 'admin') viewAdmin(); }
+function acctBadge() { const b = $('#acctBtn'); if (!b) return; const P = acctPass(); b.classList.toggle('dot', !!(AC.me && AC.me.inbox && AC.me.inbox.unread)); document.body.classList.toggle('is-owner', !!(AC.me && AC.me.owner)); b.textContent = P ? P.name.slice(0, 1).toUpperCase() : ''; b.classList.toggle('in', !!P); b.setAttribute('aria-label', P ? `My tickets (${P.name})` : 'Sign in'); }
 const tid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 function legAuto(l) { if (l.src !== 'pick' || l.res) return l.res; const B = boardOf(); if (!B) return null; const g = (B.games || []).find(x => x.sp === l.sp && x.game === l.game); if (!g) return null;
   for (const a of Object.values(g.calls || {})) for (const c of a) if (c.pick === l.pick && c.hit != null) return c.hit === true ? 'hit' : c.hit === false ? 'miss' : null; return null; }
@@ -425,7 +425,7 @@ function viewMe() {
     <div class="paper ddpitch"><b>D$1,000 the moment you sign up</b><p>Desk Dollars are play money: bet them on any game on the Slate, flip them, and climb the leaderboard for bragging rights.</p></div>${lbHtml()}${footHtml()}`; if (!LB) lbLoad(); return; }
   const L = (AC.me && AC.me.tickets) || [], R = myRecord(L);
   el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Signed in as <b>${esc(P.name)}</b>. <button type="button" class="link" data-act="aclogout">Sign out</button></p>
-    ${AC.me ? walletHtml(AC.me.wallet) : ''}${AC.me && (AC.me.bets || []).length ? `<h2 class="h2">Your D$ bets</h2><div class="fgrid">${AC.me.bets.slice(0, 20).map(ddBetHtml).join('')}</div>` : AC.me ? '<p class="note">Open any game on the <button type="button" class="link" data-go="slate">Slate</button> and tap a line to bet Desk Dollars.</p>' : ''}
+    ${AC.me && AC.me.owner ? '<div class="row"><button type="button" class="btn foil" data-go="admin">🛠 Admin dashboard</button></div>' : ''}${myInbox()}${AC.me ? walletHtml(AC.me.wallet) : ''}${AC.me && (AC.me.bets || []).length ? `<h2 class="h2">Your D$ bets</h2><div class="fgrid">${AC.me.bets.slice(0, 20).map(ddBetHtml).join('')}</div>` : AC.me ? '<p class="note">Open any game on the <button type="button" class="link" data-go="slate">Slate</button> and tap a line to bet Desk Dollars.</p>' : ''}
     ${AC.me && AC.me.owner ? `<div class="paper owner ddown"><b>Owner tools</b><form data-form="ddgrant"><label>Give D$ to<input name="who" required maxlength="20" placeholder="username"></label><label>Amount<input name="amt" inputmode="numeric" required placeholder="500"></label><button class="btn sm" type="submit">Add D$</button></form><p class="note">Added D$ counts as bought: it shows in blue and never counts on the leaderboard.</p></div>` : ''}
     ${lbHtml()}<h2 class="h2">Your real tickets</h2>
     ${AC.me ? `<div class="mystats"><span><b>${R.c}</b>cashed</span><span><b>${R.l}</b>lost</span><span><b>${R.n ? Math.round(100 * R.h / R.n) + '%' : '—'}</b>legs hit</span><span><b>${L.length}</b>tickets</span></div>` : ''}
@@ -1008,6 +1008,12 @@ function viewChat() {
 }
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
+  if (f.dataset.form === 'admoney') { const k = f.kind.value, amt = +f.amt.value; try { await adApi(k === 'take' ? 'take' : 'grant', { name: AD.sel, amount: amt, kind: k }); toast(k === 'take' ? `Took ${dd$(amt)}` : `Gave ${dd$(amt)}`); AD.user = await adApi('user', { name: AD.sel }); adLoad(true); } catch (err) { toast(err.message); } return; }
+  if (f.dataset.form === 'adxp') { try { const j = await adApi('xp', { name: AD.sel, amount: +f.amt.value }); toast(`XP now ${j.xp}`); AD.user = await adApi('user', { name: AD.sel }); viewAdmin(); } catch (err) { toast(err.message); } return; }
+  if (f.dataset.form === 'adnote') { try { await adApi('note', { name: AD.sel, note: f.note.value }); toast('Note saved'); } catch (err) { toast(err.message); } return; }
+  if (f.dataset.form === 'adreply') { try { AD.thread = (await adApi('reply', { name: AD.thread.name, text: f.text.value })).thread; viewAdmin(); toast('Sent'); } catch (err) { toast(err.message); } return; }
+  if (f.dataset.form === 'adbcast') { if (!confirm('Send this to every member?')) return; try { const j = await adApi('broadcast', { text: f.text.value }); toast(`Sent to ${j.n} members`); AD.inbox = null; viewAdmin(); } catch (err) { toast(err.message); } return; }
+  if (f.dataset.form === 'mymsg') { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/inbox/send', { token: P.token, text: f.text.value }); if (AC.me) AC.me.inbox = j.inbox; viewMe(); toast('Sent to the desk'); } catch (err) { toast(err.message); } return; }
   if (f.dataset.form === 'lgsnew') { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/lgs/create', { token: P.token, name: f.name.value.trim(), blurb: f.blurb.value.trim(), starts: Date.parse(f.starts.value), ends: Date.parse(f.ends.value), bank: +f.bank.value, max: +f.max.value,
       prizes: f.prizes.value.split(/[,\s]+/).map(Number).filter(x => x > 0), sports: [...f.querySelectorAll('input[name="sp"]:checked')].map(x => x.value), late: f.late.checked }); LGX.at = 0; lgsLoad(true); toast(`${j.league.name} is open`); } catch (err) { toast(err.message); } return; }
   if (f.dataset.form === 'acct') { const n = $('#acctErr'); n.textContent = ''; const signup = AC.mode === 'signup';
@@ -1277,7 +1283,69 @@ function viewLeagues() {
     <p class="note">Desk Dollars are play money. League prizes are paid in D$ to your wallet, never in cash. ${D && !D.open ? 'Leagues are run by the desk for now. Member-run leagues come next.' : ''}</p>${footHtml()}`;
   lgsLoad(); if (LGX.open && !LGX.one[LGX.open]) lgOneLoad(LGX.open); }
 const confirmQuit = b => { if (b.dataset.sure === '1') return true; b.dataset.sure = '1'; b.textContent = 'Tap again to quit'; return false; };
-const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
+/* ── The owner's dashboard (v3.1.1, Chris, Nov 15: "an admin dashboard … stats on users and names and balances … a subscriber
+   inbox … how can I moderate without a moderate dashboard"). Owner only: the server refuses everyone else. */
+const AD = { tab: store.get('adtab') || 'overview', st: null, at: 0, sel: '', user: null, inbox: null, thread: null, chat: null, q: '', sort: 'seen', busy: false };
+const ago = t => { if (!t) return 'never'; const s = (Date.now() - t) / 1000; return s < 90 ? 'just now' : s < 3600 ? Math.round(s / 60) + 'm ago' : s < 86400 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; };
+async function adApi(act, extra) { const P = acctPass(); return acctApi('/acct/admin', { token: P && P.token, act, ...(extra || {}) }); }
+async function adLoad(force) { if (AD.busy || (!force && AD.st && Date.now() - AD.at < 20e3)) return; AD.busy = true; try { AD.st = await adApi('stats'); AD.at = Date.now(); } catch (e) { AD.err = e.message; } AD.busy = false; if (S.tab === 'admin') viewAdmin(); }
+const adTile = (v, l, sub, cls) => `<div class="adt ${cls || ''}"><b>${v}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
+function adOverview(St) { const K = St.k, D = St.days, mx = Math.max(1, ...D.map(x => Math.max(x.n, x.act)));
+  const top = St.users.filter(u => !u.owner).slice().sort((a, b) => b.bal - a.bal).slice(0, 5);
+  return `<div class="adgrid">${adTile(K.members.toLocaleString('en-US'), 'Members', `+${K.new1} today · +${K.new7} this week`, 'gold')}${adTile(K.act1, 'Active today', `${K.act7} this week`)}
+    ${adTile(K.paid == null ? '—' : K.paid, 'Paid subscribers', 'Whop isn’t connected yet', 'dim')}${adTile(`<span class="${K.unread ? 'hot' : ''}">${K.unread}</span>`, 'Unread messages', `${K.threads} threads`, K.unread ? 'alert' : '')}
+    ${adTile(dd$(K.dd), 'D$ in wallets', `${dd$(K.prizes)} paid in prizes`)}${adTile(dd$(K.bought), 'D$ bought / added', 'store off')}
+    ${adTile(K.open, 'Open bets', `${K.settled} settled · ${dd$(K.staked)} staked`)}${adTile(K.runs, 'Challenge runs live', `${K.runsWon} finished`)}
+    ${adTile(K.lgLive, 'Leagues live', `${K.lgAll} total`)}${adTile(K.chatDay == null ? '—' : K.chatDay, 'Chat messages today', K.chatTotal == null ? 'chat unreachable' : `${K.chatTotal} kept · ${K.bans} banned`)}
+    ${adTile(K.sus, 'Suspended', '', K.sus ? 'alert' : 'dim')}</div>
+    <h3 class="adh">Last 14 days</h3><div class="adchart">${D.map(x => `<div title="${x.d}: ${x.n} sign-ups, ${x.act} active"><span class="a" style="height:${(x.act / mx) * 100}%"></span><span class="n" style="height:${(x.n / mx) * 100}%"></span><em>${x.d.slice(8)}</em></div>`).join('')}</div>
+    <p class="adkey"><i class="n"></i>Sign-ups <i class="a"></i>Active (last seen that day)</p>
+    <h3 class="adh">Biggest bankrolls</h3><div class="adlist">${top.map((u, i) => `<button type="button" data-act="aduser" data-name="${esc(u.name)}"><span>${i + 1}</span><b>${esc(u.name)}</b><em>${dd$(u.bal)}</em></button>`).join('') || '<p class="note">No members yet.</p>'}</div>`; }
+function adMembers(St) { const q = AD.q.toLowerCase(); let U = St.users.filter(u => !q || u.name.toLowerCase().includes(q));
+  const key = { seen: u => -u.seen, new: u => -u.at, bal: u => -u.bal, xp: u => -u.xp, name: u => u.name.toLowerCase() }[AD.sort]; U = U.slice().sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+  return `<div class="adbar"><input type="search" placeholder="Search members" value="${esc(AD.q)}" data-input="adq" aria-label="Search members"><select data-change="adsort" aria-label="Sort">${[['seen', 'Last seen'], ['new', 'Newest'], ['bal', 'Balance'], ['xp', 'XP'], ['name', 'Name']].map(([k, v]) => `<option value="${k}"${AD.sort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
+    <p class="note">${U.length} of ${St.users.length}</p><div class="adtable"><div class="adtr h"><span>Member</span><span>Balance</span><span>Record</span><span>Seen</span></div>
+    ${U.map(u => `<button type="button" class="adtr${u.sus ? ' sus' : ''}${AD.sel === u.name ? ' on' : ''}" data-act="aduser" data-name="${esc(u.name)}"><span><b>${esc(u.name)}</b>${u.owner ? ' <em class="own">owner</em>' : ''}${u.sus ? ' <em class="sus">suspended</em>' : ''}<small>${esc(u.rank)} · ${u.xp} XP · joined ${ago(u.at)}${u.note ? ' · 📝' : ''}</small></span>
+      <span>${dd$(u.bal)}${u.prize ? `<small>+${dd$(u.prize)} prizes</small>` : ''}${u.bought ? `<small class="b">+${dd$(u.bought)} added</small>` : ''}</span><span>${u.w}-${u.l}<small>${u.runs ? u.runs + ' runs · ' : ''}${u.lgs ? u.lgs + ' lgs' : ''}</small></span><span>${ago(u.seen)}<small>${u.visits} visits</small></span></button>`).join('')}</div>`; }
+function adUserPanel() { const D = AD.user; if (!AD.sel) return ''; if (!D) return '<div class="adpanel"><div class="shimmer"></div></div>'; const u = D.user, w = u.wallet;
+  return `<div class="sheet-bg" data-act="adclose"></div><section class="adpanel" role="dialog" aria-label="${esc(u.name)}"><button type="button" class="cs-x" data-act="adclose" aria-label="Close">✕</button>
+    <h2>${esc(u.name)} ${u.sus ? '<em class="sus">suspended</em>' : ''}</h2><p class="note">Joined ${new Date(u.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · last seen ${ago(u.seen)} · ${u.visits} visits · ${u.sessions} signed-in device${u.sessions === 1 ? '' : 's'}</p>
+    <div class="adgrid sm">${adTile(dd$(w.bal), 'Balance')}${adTile(`${w.w}-${w.l}${w.p ? '-' + w.p : ''}`, 'Record')}${adTile(u.xp, u.rank.name + ' · XP')}${adTile(dd$(w.prize || 0), 'Prizes')}${adTile(dd$(w.bought || 0), 'Added')}${adTile(dd$(w.staked || 0), 'Staked')}</div>
+    <h3 class="adh">Actions</h3>
+    <form class="adact" data-form="admoney"><input name="amt" inputmode="decimal" placeholder="D$ amount" required><select name="kind"><option value="prize">Give as a prize (earned)</option><option value="bought">Add (counts as bought)</option><option value="take">Take away</option></select><button class="btn sm" type="submit">Apply</button></form>
+    <form class="adact" data-form="adxp"><input name="amt" inputmode="numeric" placeholder="XP (use − to remove)" required><button class="btn sm" type="submit">Give XP</button></form>
+    <form class="adact" data-form="adnote"><input name="note" maxlength="300" placeholder="Private note (only you see it)" value="${esc(u.note)}"><button class="btn ghost sm" type="submit">Save note</button></form>
+    <div class="row">${u.owner ? '' : u.sus ? `<button type="button" class="btn sm" data-act="adsus" data-v="0">Unsuspend</button>` : `<button type="button" class="btn ghost sm warn" data-act="adsus" data-v="1">Suspend</button>`}<button type="button" class="btn ghost sm" data-act="adsignout">Sign out everywhere</button><button type="button" class="btn ghost sm" data-act="admsg">Message</button>${u.owner ? '' : '<button type="button" class="btn ghost sm warn" data-act="addel">Delete account</button>'}</div>
+    ${D.runs.length ? `<h3 class="adh">Challenge runs</h3><div class="adlist">${D.runs.slice(0, 8).map(r => `<p><b>${esc(CHN(r.cid))}</b><span>${r.status} · ${dd$(r.bal)} of ${dd$(r.goal)}</span></p>`).join('')}</div>` : ''}
+    ${D.leagues.length ? `<h3 class="adh">Leagues</h3><div class="adlist">${D.leagues.map(g => `<p><b>${esc(g.name)}</b><span>${g.status} · ${dd$(g.bal)} · ${g.w}-${g.l}</span></p>`).join('')}</div>` : ''}
+    ${D.bets.length ? `<h3 class="adh">Recent bets</h3><div class="adlist">${D.bets.slice(0, 12).map(x => `<p><b>${dd$(x.stake)} · ${x.legs.map(l => esc(l.pick)).join(' + ')}</b><span>${x.status}${x.run ? ' · challenge' : x.lg ? ' · league' : ''}</span></p>`).join('')}</div>` : ''}
+    ${u.xplog.length ? `<h3 class="adh">XP and prize log</h3><div class="adlist">${u.xplog.slice(0, 10).map(x => `<p><b>${esc(x.why)}</b><span>${x.xp ? (x.xp > 0 ? '+' : '') + x.xp + ' XP ' : ''}${x.dd ? (x.dd > 0 ? '+' : '') + dd$(x.dd) : ''}</span></p>`).join('')}</div>` : ''}</section>`; }
+const adMsgs = (M, mine) => `<div class="admsgs">${M.map(m => `<div class="adm ${m.from === 'desk' ? 'desk' : 'them'}"><p>${esc(m.text)}</p><small>${mine ? (m.from === 'desk' ? (m.all ? 'The desk · to everyone' : 'The desk') : 'You') : m.from === 'desk' ? (m.all ? 'You · to everyone' : 'You') : 'Them'} · ${ago(m.t)}</small></div>`).join('') || '<p class="note">No messages yet. Say hi.</p>'}</div>`;
+function adInbox() { const I = AD.inbox; if (!I) { adApi('inbox').then(j => { AD.inbox = j; viewAdmin(); }).catch(e => toast(e.message)); return '<div class="shimmer"></div>'; }
+  if (AD.thread) { const T = AD.thread; return `<button type="button" class="link back" data-act="adthreadx">← All messages</button><h3 class="adh">${esc(T.name)}</h3>${adMsgs(T.msgs)}<form class="adreply" data-form="adreply"><textarea name="text" rows="3" maxlength="2000" required placeholder="Reply to ${esc(T.name)}…"></textarea><button class="btn foil sm" type="submit">Send reply</button></form>`; }
+  return `<details class="paper adbc"><summary>📣 Message every member</summary><form data-form="adbcast"><textarea name="text" rows="3" maxlength="2000" required placeholder="Leagues open Friday at noon…"></textarea><button class="btn sm" type="submit">Send to everyone</button></form><p class="note">It lands in every member’s inbox on the app.</p></details>
+    <div class="adthreads">${I.threads.map(t => `<button type="button" class="${t.unread ? 'unread' : ''}" data-act="adthread" data-name="${esc(t.name)}"><b>${esc(t.name)}${t.unread ? ` <em>${t.unread}</em>` : ''}</b><span>${t.from === 'desk' ? 'You: ' : ''}${esc(t.preview.slice(0, 90))}</span><small>${ago(t.last)}</small></button>`).join('') || '<div class="paper blank"><b>Inbox zero</b><p>When members write the desk from the app, it lands here.</p></div>'}</div>`; }
+function adChat() { const C = AD.chat; if (!C) { adApi('chat').then(j => { AD.chat = j; viewAdmin(); }).catch(e => toast(e.message)); return '<div class="shimmer"></div>'; }
+  return `<div class="row"><button type="button" class="btn sm" data-act="adinvite">New invite code</button><button type="button" class="btn ghost sm" data-act="adchatr">Refresh</button></div>
+    ${C.invites && C.invites.length ? `<h3 class="adh">Invite codes</h3><div class="adlist">${C.invites.map(i => `<p><b>${esc(i.code)}</b><span>${i.used}/${i.uses} used <button type="button" class="link" data-act="aduninv" data-code="${esc(i.code)}">remove</button></span></p>`).join('')}</div>` : ''}
+    ${(C.mutes || []).length || (C.bans || []).length ? `<h3 class="adh">Muted and banned</h3><div class="adlist">${C.mutes.map(m => `<p><b>${esc(m.name)}</b><span>muted ${cxLeft(m.until - Date.now())} <button type="button" class="link" data-act="adunban" data-name="${esc(m.name)}">lift</button></span></p>`).join('')}${C.bans.map(n => `<p><b>${esc(n)}</b><span>banned <button type="button" class="link" data-act="adunban" data-name="${esc(n)}">unban</button></span></p>`).join('')}</div>` : ''}
+    <h3 class="adh">Latest messages</h3><div class="adchat">${C.messages.slice().reverse().map(m => `<div class="adcm"><p><b>${esc(m.name)}</b> ${esc(m.text)}</p><small>${ago(m.ts || m.t)}</small>${m.name === 'TheDesk' ? '' : `<span><button type="button" data-act="adcdel" data-id="${esc(m.id)}">Delete</button><button type="button" data-act="adcmute" data-name="${esc(m.name)}" data-mins="60">Mute 1h</button><button type="button" data-act="adcmute" data-name="${esc(m.name)}" data-mins="1440">24h</button><button type="button" class="warn" data-act="adcban" data-name="${esc(m.name)}">Ban</button></span>`}</div>`).join('') || '<p class="note">Quiet in there.</p>'}</div>`; }
+function adSettings(St) { const C = St.cfg;
+  return `<div class="adset"><div><b>Members can open their own leagues</b><p>Off: only you open leagues. On: members can open free leagues (no D$ prizes, only you put those up).</p></div><button type="button" class="adsw${C.lgOpen || C.envOpen ? ' on' : ''}" data-act="adlgopen" aria-pressed="${C.lgOpen || C.envOpen}"><i></i></button></div>
+    <div class="adset"><div><b>D$ store</b><p>${C.store ? 'On.' : 'Off, until a lawyer signs off. Bought D$ can only be added by you from a member’s page.'}</p></div><span class="fchip">${C.store ? 'On' : 'Off'}</span></div>
+    <div class="adset"><div><b>Open a league</b><p>The league form lives on the Leagues tab.</p></div><button type="button" class="btn sm" data-go="leagues">Go</button></div>`; }
+function viewAdmin() { const el = $('#v-admin'), M = AC.me;
+  if (!M || !M.owner) { el.innerHTML = `<h1 class="title">Admin</h1><p class="lede">This page is for the desk only.</p>${acctPass() ? '' : '<div class="row"><button type="button" class="btn" data-go="me">Sign in</button></div>'}${footHtml()}`; return; }
+  const St = AD.st, tabs = [['overview', 'Overview'], ['members', 'Members'], ['inbox', `Inbox${St && St.k.unread ? ` (${St.k.unread})` : ''}`], ['chat', 'Chat'], ['settings', 'Settings']];
+  el.innerHTML = `<div class="adhead"><h1 class="title">Admin</h1><button type="button" class="btn line sm" data-act="adrefresh">↻ Refresh</button></div><div class="adtabs">${tabs.map(([k, l]) => `<button type="button" class="${AD.tab === k ? 'on' : ''}" data-act="adtab" data-v="${k}">${l}</button>`).join('')}</div>
+    ${!St ? (AD.err ? `<p class="chat-err">${esc(AD.err)}</p>` : '<div class="shimmer"></div>') : AD.tab === 'overview' ? adOverview(St) : AD.tab === 'members' ? adMembers(St) : AD.tab === 'inbox' ? adInbox() : AD.tab === 'chat' ? adChat() : adSettings(St)}
+    <div id="adPanel">${adUserPanel()}</div>${footHtml()}`;
+  adLoad(); }
+async function adOpenUser(name) { AD.sel = name; AD.user = null; document.body.classList.add('sheet-on'); viewAdmin(); try { AD.user = await adApi('user', { name }); } catch (e) { toast(e.message); AD.sel = ''; document.body.classList.remove('sheet-on'); } viewAdmin(); }
+/* the member's side of the inbox: on Your tickets */
+function myInbox() { const I = AC.me && AC.me.inbox; if (!I || (AC.me && AC.me.owner)) return '';
+  return `<details class="paper myinbox"${AC.inboxOpen ? ' open' : ''}><summary>✉️ Message the desk${I.unread ? ` <em>${I.unread} new</em>` : ''}</summary>${adMsgs(I.msgs, true)}<form data-form="mymsg"><textarea name="text" rows="3" maxlength="1000" required placeholder="Questions, ideas, problems: the desk reads every one."></textarea><button class="btn sm" type="submit">Send</button></form></details>`; }
+const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   if (!TABS.includes(tab)) tab = 'today';
@@ -1288,7 +1356,7 @@ function go(tab, push) {
   render(); window.scrollTo(0, 0);
   try { if (TG && TG.BackButton) { if (tab === 'today') TG.BackButton.hide(); else TG.BackButton.show(); } } catch (e) { }
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
@@ -1334,6 +1402,24 @@ document.addEventListener('click', async e => {
     try { const j = await acctApi('/acct/lgs/join', { token: P.token, id: a.dataset.lid }); await acctLoad(); LGX.at = 0; delete LGX.one[a.dataset.lid]; lgsLoad(true); toast(`You’re in ${j.league.name}: ${dd$(j.entry.bal)} to play with`); } catch (e) { toast(e.message); } }
   else if (act === 'lguse') { S.ddFrom = 'lg:' + a.dataset.lid; store.set('ddfrom', S.ddFrom); go('slate', true); toast('Tap any line on the Slate: the slip bets from your league bankroll'); }
   else if (act === 'lgcancel') { const P = acctPass(); if (!P || !confirmQuit(a)) return; try { await acctApi('/acct/lgs/cancel', { token: P.token, id: a.dataset.lid }); lgsLoad(true); toast('League cancelled'); } catch (e) { toast(e.message); } }
+  else if (act === 'adtab') { AD.tab = a.dataset.v; store.set('adtab', AD.tab); AD.thread = null; if (AD.tab === 'inbox') AD.inbox = null; if (AD.tab === 'chat') AD.chat = null; viewAdmin(); }
+  else if (act === 'adrefresh') { AD.inbox = null; AD.chat = null; AD.thread = null; await adLoad(true); toast('Refreshed'); }
+  else if (act === 'aduser') adOpenUser(a.dataset.name);
+  else if (act === 'adclose') { AD.sel = ''; AD.user = null; document.body.classList.remove('sheet-on'); viewAdmin(); }
+  else if (act === 'adsus') { if (a.dataset.v === '1' && !confirmQuit(a)) return; try { await adApi(a.dataset.v === '1' ? 'suspend' : 'unsuspend', { name: AD.sel }); toast(a.dataset.v === '1' ? 'Suspended, signed out and banned from the chat' : 'Unsuspended'); AD.user = await adApi('user', { name: AD.sel }); adLoad(true); } catch (e) { toast(e.message); } }
+  else if (act === 'adsignout') { try { const j = await adApi('signout', { name: AD.sel }); toast(`Signed out of ${j.n} device${j.n === 1 ? '' : 's'}`); } catch (e) { toast(e.message); } }
+  else if (act === 'addel') { if (!confirmQuit(a)) return; try { await adApi('delete', { name: AD.sel }); toast('Account deleted'); AD.sel = ''; AD.user = null; document.body.classList.remove('sheet-on'); adLoad(true); } catch (e) { toast(e.message); } }
+  else if (act === 'admsg') { const n = AD.sel; AD.sel = ''; AD.user = null; document.body.classList.remove('sheet-on'); AD.tab = 'inbox'; try { AD.thread = (await adApi('thread', { name: n })).thread; AD.inbox = AD.inbox || { threads: [] }; } catch (e) { toast(e.message); } viewAdmin(); }
+  else if (act === 'adthread') { try { AD.thread = (await adApi('thread', { name: a.dataset.name })).thread; viewAdmin(); adLoad(true); } catch (e) { toast(e.message); } }
+  else if (act === 'adthreadx') { AD.thread = null; AD.inbox = null; viewAdmin(); }
+  else if (act === 'adchatr') { AD.chat = null; viewAdmin(); }
+  else if (act === 'adinvite') { try { const j = await adApi('chat', { sub: 'invite', uses: 25 }); copyText(j.code, `Invite ${j.code} copied (25 uses)`); AD.chat = null; viewAdmin(); } catch (e) { toast(e.message); } }
+  else if (act === 'aduninv') { try { await adApi('chat', { sub: 'uninvite', code: a.dataset.code }); AD.chat = null; viewAdmin(); } catch (e) { toast(e.message); } }
+  else if (act === 'adcdel') { try { await adApi('chat', { sub: 'del', id: a.dataset.id }); AD.chat = null; viewAdmin(); toast('Deleted'); } catch (e) { toast(e.message); } }
+  else if (act === 'adcmute') { try { await adApi('chat', { sub: 'mute', name: a.dataset.name, mins: +a.dataset.mins }); AD.chat = null; viewAdmin(); toast(`${a.dataset.name} muted`); } catch (e) { toast(e.message); } }
+  else if (act === 'adcban') { if (!confirmQuit(a)) return; try { await adApi('chat', { sub: 'ban', name: a.dataset.name }); AD.chat = null; viewAdmin(); toast(`${a.dataset.name} banned from the chat`); } catch (e) { toast(e.message); } }
+  else if (act === 'adunban') { try { await adApi('chat', { sub: 'unban', name: a.dataset.name }); AD.chat = null; viewAdmin(); } catch (e) { toast(e.message); } }
+  else if (act === 'adlgopen') { try { const on = a.getAttribute('aria-pressed') !== 'true'; await adApi('cfg', { lgOpen: on }); toast(on ? 'Members can now open leagues' : 'Only the desk opens leagues'); adLoad(true); } catch (e) { toast(e.message); } }
   else if (act === 'ddmode') { S.ddMode = a.dataset.v; store.set('ddmode', S.ddMode); render(); }
   else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
   else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }
@@ -1360,9 +1446,12 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
 document.addEventListener('input', e => { if (e.target.id === 'ddStake') { const v = +e.target.value || 0, dec = ddTicketDec(S.dd, S.ddMode), n = $('#ddPays'); if (n) n.textContent = dd$(v * dec); } });
+let adT = 0; document.addEventListener('input', e => { const q = e.target.closest('[data-input="adq"]'); if (!q) return; clearTimeout(adT); adT = setTimeout(() => { AD.q = q.value; viewAdmin(); const n = document.querySelector('[data-input="adq"]'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 200); });
 let cxT = 0; document.addEventListener('input', e => { const q = e.target.closest('[data-input="cxq"]'); if (!q) return; clearTimeout(cxT); cxT = setTimeout(() => { CX.f.q = q.value; CX.show = 24; store.set('cxf', CX.f); const pos = q.selectionStart; viewChallenges(); const n = document.querySelector('[data-input="cxq"]'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { } } }, 220); });
+document.addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('myinbox')) AC.inboxOpen = d.open; if (d.classList && d.classList.contains('myinbox') && d.open && AC.me && AC.me.inbox && AC.me.inbox.unread) { const P = acctPass(); AC.me.inbox.unread = 0; acctBadge(); if (P) acctApi('/acct/inbox/read', { token: P.token }).catch(() => { }); } }, true);
 document.addEventListener('change', async e => { const df = e.target.closest('[data-change="ddfrom"]'); if (df) { S.ddFrom = df.value; store.set('ddfrom', S.ddFrom); render(); return; }
   const cf = e.target.closest('[data-change="cxf"]'); if (cf) { CX.f[cf.dataset.k] = cf.value; CX.show = 24; store.set('cxf', CX.f); viewChallenges(); return; }
+  const as = e.target.closest('[data-change="adsort"]'); if (as) { AD.sort = as.value; viewAdmin(); return; }
   const rr = e.target.closest('[data-change="runroute"]'); if (rr) { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/chal/route', { token: P.token, rid: rr.dataset.rid, route: rr.value }); if (AC.me) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); viewChallenges(); toast(`Route: ${ROUTES[rr.value].name}`); } catch (er) { toast(er.message); } return; } const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
 /* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
 async function restartApp() {
