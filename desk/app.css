@@ -669,9 +669,11 @@ body.embed .view{padding-bottom:20px}
 .tk-sum{font:600 13px/1.35 var(--text);color:#3b4a40;margin:2px 0 4px}.tk-sum b{color:#1b2a21;font-size:15px}
 .tk-live{font:700 13px/1.3 var(--text);color:#7a5a00;margin:0 0 8px}.tk-live.up{color:#17703f}.tk-live.dn{color:#a23b25}.tk-live small{font-weight:500;color:#5b6a60}
 .tix .tk-sum,.tix .tk-live{padding:0 2px}
+.tk-sum.castday{color:var(--cream-2);font-size:14px;margin:-4px 0 10px}.tk-sum.castday .tk-upd{color:var(--cream-2);opacity:.75;font-weight:500}
 .lv-on{color:#c0392b;font-weight:700}.lv-fin{color:#3b4a40;font-weight:600}
 small.lv{display:block;margin-top:2px;font:600 12px/1.3 var(--text)}
 .lv-q{font-weight:800}.lv-q.up{color:#17703f}.lv-q.dn{color:#a23b25}.lv-was{color:#5b6a60;font-weight:500}
 .leg.is-live{background:rgba(192,57,43,.06);border-radius:8px}
 .score-q{margin:2px 0 0;font:600 13px/1.3 var(--text)}
 .tk-upd{font:500 11px/1.2 var(--text);color:#5b6a60;margin:-4px 0 8px}
+.castcard .lv-on,.tk-sum.castday .lv-on{color:#ff8f80}
