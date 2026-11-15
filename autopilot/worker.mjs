@@ -12,7 +12,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.1.5';
+const VERSION = 'worker v3.1.6';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -400,7 +400,9 @@ async function ownerLounge(state, T, p, m, cmd, now) { const owners = await owne
    in BotFather (t.me/<bot>/<short name>: "TheDesk", the name Chris registered; /app <other> to change it); with no Mini App registered yet it
    opens the web address. The app is the public one — the published card only, nothing of the machine. */
 export const APP_URL_DEF = 'https://ironsilkweekly.com/desk/';
-async function ownerApp(state, T, p, m, arg) { const owners = await ownersOf(state, T, p); if (!m.from || !owners.includes(m.from.id)) return 0;
+async function ownerApp(state, T, p, m, arg) { const owners = await ownersOf(state, T, p);
+  /* the owner, or any admin of that chat — including one posting anonymously as the group (Telegram then hides who it is) */
+  const ok = (m.from && owners.includes(m.from.id)) || (m.chat.type !== 'private' && await isAdmin(state, T, p, m)); if (!ok) return 0;
   const short = (String(arg || '').match(/^[A-Za-z0-9_]{3,30}$/) || [])[0] || state.appShort || 'TheDesk'; state.appShort = short;   /* Chris registered the Mini App as "TheDesk" (Nov 15) */
   const me = await myName(T); const url = me ? `https://t.me/${me}/${short}` : (process.env.APP_URL || APP_URL_DEF);
   const text = `📲 <b>TheDesk, right here in Telegram</b>\n\nToday's card, the board, Props, the Founder LongShots and your Desk Dollars, without leaving the lounge. Tap below to open it.`;

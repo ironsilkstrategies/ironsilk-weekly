@@ -18,4 +18,10 @@ R = await run(7, '/app desk2');
 T('…a different Mini App short name: /app desk2', R.calls.some(c => c.m === 'sendMessage' && /t\.me\/thedeskbot\/desk2"/.test(c.p.reply_markup || '')) && R.st.appShort === 'desk2');
 R = await run(12345, '/app');
 T('nobody else can post it', !R.calls.some(c => c.m === 'sendMessage' && /Open TheDesk/.test(c.p.reply_markup || '')) && !R.calls.some(c => c.m === 'pinChatMessage'), JSON.stringify(R.calls.map(c => c.m)));
+{ const calls = []; const chat = { id: -100888, type: 'supergroup', title: 'TheDesk Lounge' };
+  const tg = async (m, p) => { calls.push({ m, p }); if (m === 'getUpdates') return { ok: true, result: [{ update_id: 1, message: { message_id: 5, date: Math.floor(Date.now() / 1000), chat, from: { id: 1087968824, is_bot: true, first_name: 'Group' }, sender_chat: chat, text: '/app thedesk' } }] };
+    if (m === 'getMe') return { ok: true, result: { username: 'TheDeskBot', id: 42 } }; if (m === 'getChatAdministrators') return { ok: true, result: [{ user: { id: 7 }, status: 'creator' }] }; if (m === 'getChat') return { ok: true, result: chat };
+    return { ok: true, result: { message_id: 99 } }; };
+  await W.runCommands({ posts: { '2026-11-15': { d: '2026-11-15', chat: '-100555', bc: { pubLounge: '-100888' }, cmd: { r: {}, menu: [] }, legs: [] } } }, { tg });
+  T('an admin posting anonymously as the group can send /app too (Telegram hides who it is)', calls.some(c => c.m === 'sendMessage' && /t\.me\/thedeskbot\/thedesk"/.test(c.p.reply_markup || '')) && calls.some(c => c.m === 'pinChatMessage'), JSON.stringify(calls.map(c => c.m))); }
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);
