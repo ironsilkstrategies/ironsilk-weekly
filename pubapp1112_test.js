@@ -225,13 +225,13 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await p.click('#v-cast [data-act="castpick"][data-v="Scout"]'); await p.waitForTimeout(400); t = await p.evaluate(() => document.querySelector('#v-cast').innerText);
     T('…its profile grades today\'s picks live: the game with score, clock and live chance; the prop with the stat against the line (found by team, off the box score)', /NYG ML|Giants ML/.test(t) && /LIVE WSH 3–10 NYG · 9:41 - 2nd · 86% live/i.test(t) && /Anthony Edwards under 39\.5 PTS\+REB\+AST[^]{0,200}36 \(under 39\.5\) · \d+% live/.test(t), (t.match(/Today’s official picks[^]{0,500}/i) || [t.slice(0, 500)])[0]);
     T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
-  /* ── Challenges + Leagues (v3.0.36) ── */
-  { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message))); const posts = [];
-    const runs = [], leagues = [];
-    const CHB = { chal: [['2x7', 'Double Up', 2, 7], ['4x7', 'The Quad', 4, 7], ['10x21', 'Ten-Bagger', 10, 21], ['20x30', 'The Moonshot', 20, 30]].map(([id, name, x, days]) => ({ id, name, x, days, start: 100, blurb: name + ' blurb', live: 3, tries: 5, won: 1, fastest: { name: 'BigShot', took: 30 * 36e5 } })),
-      leaders: [{ name: 'LoungeLizard', cid: '2x7', bal: 184, goal: 200, start: 100, ends: now + 2 * 864e5, pct: 88 }], recent: [{ name: 'BigShot', cid: '2x7', status: 'won', took: 30 * 36e5 }, { name: 'PuckHead', cid: '4x7', status: 'busted', took: 864e5 }] };
-    const LGB = code => ({ league: { code, name: code === 'ALL' ? 'TheDesk League' : 'Hobart Sharps', n: 3 }, week: '2026-11-16', current: true, ends: now + 3 * 864e5, prev: '2026-11-09', min: 3,
-      rows: [{ name: 'BigShot', net: 412.5, w: 5, l: 1, p: 0, n: 7, open: 1, os: 50, settled: 6 }, { name: 'Tester', net: -40, w: 2, l: 3, p: 0, n: 5, open: 0, os: 0, settled: 5 }], champ: { week: '2026-11-09', name: 'LoungeLizard', net: 655, rec: '6-2' }, hall: [{ week: '2026-11-09', name: 'LoungeLizard', net: 655, rec: '6-2' }] });
+  /* ── Challenges + Leagues (v3.1.0) ── */
+  { const L = (await import('./desk/chal-lib.js')).library(); const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message))); const posts = [];
+    const runs = [], c7 = L.find(c => c.days === 7 && c.tier === 'normal'); let lgs = [{ lid: 'g1', name: 'Thanksgiving Week Classic', blurb: 'Turkey and D$.', starts: now - 864e5, ends: now + 5 * 864e5, bank: 1000, prizes: [5000, 2500, 1000], pool: 8500, sports: null, n: 41, max: 500, late: true, official: true, status: 'live', top: [{ name: 'BigShot', bal: 1640 }] },
+      { lid: 'g2', name: 'December Hoops Invitational', blurb: '', starts: now + 9 * 864e5, ends: now + 30 * 864e5, bank: 2500, prizes: [10000, 5000], pool: 15000, sports: ['nba'], n: 12, max: 200, late: false, official: true, status: 'open', top: [] },
+      { lid: 'g0', name: 'Week One Opener', blurb: '', starts: now - 20 * 864e5, ends: now - 13 * 864e5, bank: 1000, prizes: [2000, 1000, 500], pool: 3500, sports: null, n: 9, max: 500, late: true, official: true, status: 'final', top: [{ name: 'LoungeLizard', bal: 2210, prize: 2000 }] }];
+    const leagues = [];
+    const ME = () => ({ name: 'Tester', owner: true, lgOpen: true, xp: 860, rank: { name: 'Hustler', next: 1000, nextName: 'Sharp', pct: 0.72 }, trophies: { cakewalk: 2, easy: 1 }, xplog: [{ xp: 150, dd: 60, why: '🏆 Tip Jar' }], wallet: { bal: 1000, bought: 0, prize: 85, w: 0, l: 0, p: 0 }, tickets: [], bets: [], runs, leagues });
     await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.acct', JSON.stringify({ token: 'x'.repeat(32), name: 'Tester', exp: Date.now() + 864e5 }));
       localStorage.setItem('tdp.ddslip', JSON.stringify([{ k: 'nfl|WSH@NYG', mk: 'ml', side: 'home', sp: 'nfl', price: -130, pick: 'NYG ML' }])); } catch (e) { } });
     await p.route('**/*', r => { const u = new URL(r.request().url()), req = r.request();
@@ -239,57 +239,55 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
       if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
       if (u.hostname === 'thedesk-chat.ironsilkstrategies.workers.dev') { const body = req.method() === 'POST' ? JSON.parse(req.postData() || '{}') : null; if (body) posts.push([u.pathname, body]);
         const J = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
-        if (u.pathname === '/acct/me') return J({ name: 'Tester', wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0, staked: 0, back: 0 }, tickets: [], bets: [], runs, leagues });
-        if (u.pathname === '/acct/chal') return J(CHB);
-        if (u.pathname === '/acct/lg') return J(LGB(u.searchParams.get('code')));
-        if (u.pathname === '/acct/chal/join') { const run = { rid: 'run1', cid: body.cid, name: 'Tester', ts: now, ends: now + 7 * 864e5, start: 100, bal: 100, goal: 200, status: 'live', open: 0, bets: 0, w: 0, l: 0, p: 0 }; runs.unshift(run); return J({ run }); }
-        if (u.pathname === '/acct/bet') return J({ bet: { id: 'b1', stake: body.stake, mode: 'parlay', toWin: 19, legs: [], status: 'open', run: body.run }, wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0 }, run: { ...runs[0], bal: 75, open: 1, bets: 1 } });
-        if (u.pathname === '/acct/lg/create') { const lg = { code: 'HBS7K2', name: body.name, n: 1, mine: true }; leagues.push(lg); return J({ league: lg }); }
-        if (u.pathname === '/acct/lg/join') { const lg = { code: body.code, name: 'Hobart Sharps', n: 4, mine: false }; leagues.push(lg); return J({ league: lg }); }
+        if (u.pathname === '/acct/me') return J(ME());
+        if (u.pathname === '/acct/chal') return J({ by: { [c7.id]: { live: 4, tries: 9, won: 3, fast: { name: 'BigShot', took: 30 * 36e5 } } }, leaders: [{ name: 'LoungeLizard', cid: c7.id, bal: 184, goal: 200, start: 100, ends: now + 2 * 864e5, pct: 88 }], recent: [{ name: 'BigShot', cid: c7.id, cname: c7.name, status: 'won', took: 30 * 36e5, prize: c7.prize }], xp: [{ name: 'BigShot', xp: 2140, rank: 'Sharp', won: 7 }], totals: {} });
+        if (u.pathname === '/acct/lgs') return J({ leagues: lgs, open: false });
+        if (u.pathname === '/acct/lgs/one') return J({ league: { ...lgs.find(g => g.lid === u.searchParams.get('id')) }, rows: [{ name: 'BigShot', bal: 1640, start: 1000, w: 4, l: 1, p: 0, open: 1, bets: 5 }, { name: 'Tester', bal: 1180, start: 1000, w: 2, l: 1, p: 0, open: 0, bets: 3 }] });
+        if (u.pathname === '/acct/chal/join') { const run = { rid: 'run1', cid: body.id, name: 'Tester', ts: now, ends: now + c7.days * 864e5, start: c7.start, bal: c7.start, goal: c7.goal, route: body.route, status: 'live', open: 0, bets: 0, w: 0, l: 0, p: 0, cp: 0 }; runs.unshift(run); return J({ run }); }
+        if (u.pathname === '/acct/lgs/join') { leagues.push({ lid: body.id, name: 'Thanksgiving Week Classic', status: 'live', bal: 1000, start: 1000, open: 0 }); return J({ league: lgs[0], entry: { lid: body.id, bal: 1000 } }); }
+        if (u.pathname === '/acct/bet') return J({ bet: { id: 'b1', stake: body.stake, mode: 'parlay', toWin: 19, legs: [], status: 'open' }, wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0 }, run: null, entry: body.league ? { lid: body.league, bal: 975, open: 1 } : null });
+        if (u.pathname === '/acct/lgs/create') { const g = { lid: 'g9', name: body.name, prizes: body.prizes }; lgs = [{ ...lgs[1], lid: 'g9', name: body.name, prizes: body.prizes, pool: body.prizes.reduce((a, x) => a + x, 0) }, ...lgs]; return J({ league: g }); }
         return J({ rows: [], n: 0 }); }
       if (u.hostname !== 'desk.test') return r.abort();
       let f = path.join(W, decodeURIComponent(u.pathname)); if (f.endsWith('/')) f += 'index.html'; if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
       r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
     await p.goto('https://desk.test/desk/#today', { waitUntil: 'load' }); await p.waitForTimeout(900);
     const bar = await p.evaluate(() => { const n = document.querySelector('.tabs'); const bs = [...n.querySelectorAll('button')]; return { n: bs.length, fits: bs.every(x => x.scrollWidth <= x.clientWidth + 1), labels: bs.map(x => x.innerText.trim()), over: document.documentElement.scrollWidth > innerWidth }; });
-    T('the bottom bar gets a Compete tab, still one row, every label fits', bar.n === 8 && bar.labels.includes('Compete') && bar.fits && !bar.over, JSON.stringify(bar));
-    await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(600); let t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
-    T('Challenges: a switch to Leagues, the four challenges (D$100 → goal, days, how many running and finished, the fastest), who\'s closest, who just finished', /Challenges/.test(t) && /Leagues/.test(t) && /Double Up/.test(t) && /The Moonshot/.test(t) && /D\$100 → D\$2,000 · 30 days/.test(t) && /1 of 5 finished/.test(t) && /BigShot in 1d 6h/.test(t) && /CLOSEST TO THE FINISH/i.test(t) && /LoungeLizard/.test(t) && /JUST FINISHED/i.test(t) && /busted/.test(t), t.slice(0, 900));
-    T('…the Compete tab stays lit on both pages', await p.evaluate(() => document.querySelector('.tabs [data-go="challenges"]').getAttribute('aria-current') === 'page'));
-    await p.click('[data-act="chaljoin"][data-cid="2x7"]'); await p.waitForTimeout(600); t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
-    T('Start → your run: D$100 of D$200, time left, the steady and the bold way there', posts.some(([u, bd]) => u === '/acct/chal/join' && bd.cid === '2x7') && /YOUR RUNS/i.test(t) && /D\$100\s*of D\$200/.test(t) && /6d 23h left|7d 0h left/i.test(t) && /Steady/i.test(t) && /Bold/i.test(t) && /one ticket at \+100/.test(t), t.slice(0, 800));
+    T('the bottom bar has a Compete tab, still one row, every label fits', bar.n === 8 && bar.labels.includes('Compete') && bar.fits && !bar.over, JSON.stringify(bar));
+    await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(700); let t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
+    T('Challenges: the player card (rank, XP to the next rank, trophies by tier, prizes), the challenge of the day, 1,000 to browse', /HUSTLER/i.test(t) && /860/.test(t) && /140 XP to Sharp/.test(t) && /LEGENDARY/i.test(t) && /D\$85 in prizes/.test(t) && /CHALLENGE OF THE DAY/i.test(t) && /1,000 of 1,000/.test(t), t.slice(0, 900));
+    T('…24 cards at a time, each with its size, days, tier, rule, XP and D$ prize', (await p.locator('.cc2').count()) === 24 && /\+\d+ XP/.test(t) && /🏆 D\$\d+/.test(t));
+    await p.click('[data-act="cxf"][data-k="d"][data-v="30"]'); await p.waitForTimeout(250); await p.click('[data-act="cxf"][data-k="t"][data-v="legendary"]'); await p.waitForTimeout(300);
+    t = await p.evaluate(() => document.querySelector('#v-challenges').innerText); const n30 = L.filter(c => c.days === 30 && c.tier === 'legendary').length;
+    T('filters: 30 days + Legendary narrows the 1,000 to just those', new RegExp(`${n30} of 1,000`).test(t) && (await p.evaluate(() => [...document.querySelectorAll('.cc2')].every(x => /30 days/.test(x.innerText) && /LEGENDARY/i.test(x.innerText)))), t.match(/\d+ of 1,000/));
+    await p.click('[data-act="cxf"][data-k="d"][data-v="0"]'); await p.click('[data-act="cxf"][data-k="t"][data-v=""]'); await p.waitForTimeout(200);
+    await p.fill('.cxf-q', c7.name); await p.waitForTimeout(600);
+    T('search finds a challenge by name', (await p.locator('.cc2').count()) >= 1 && (await p.locator('.cc2').first().innerText()).includes(c7.name));
+    await p.locator('.cc2').first().click(); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('.csheet').innerText);
+    T('the sheet: number, why, the road map (six checkpoints to the vault), the day-by-day pace, every route with finish odds, the rules, XP and the D$ prize', new RegExp(`#${c7.n} OF 1,000`, 'i').test(t) && /WHY THIS ONE/i.test(t) && /The Corner/.test(t) && /The Vault/.test(t) && /Day 7/.test(t) && /PICK YOUR ROUTE/i.test(t) && (await p.locator('.csr').count()) === 8 && /best odds/i.test(t) && /\d+% bust/.test(t) && new RegExp(`\\+${c7.xp}`).test(t) && t.includes(`D$${c7.prize}`), t.slice(0, 700));
+    await p.click('.csr[data-route="snowball"]'); await p.waitForTimeout(300);
+    T('…picking a route updates the start button', /Snowball route/.test(await p.locator('.cs-go').innerText()));
+    await p.click('.cs-go [data-act="chaljoin"]'); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
+    T('Start → your run: bankroll vs goal, the road map with pace, today\'s order on its route, finish odds', posts.some(([u, bd]) => u === '/acct/chal/join' && bd.id === c7.id && bd.route === 'snowball') && /YOUR RUNS/i.test(t) && /TODAY’S ORDER · 🎲 SNOWBALL/i.test(t) && /FINISH ODDS/i.test(t) && /pace/i.test(t) && (await p.locator('.runcard .rd-cp').count()) === 6, t.slice(0, 900));
     await p.click('[data-act="runuse"]'); await p.waitForTimeout(700);
     const from = await p.evaluate(() => { const s = document.querySelector('#ddFrom'); return s ? [s.value, [...s.options].map(o => o.text)] : null; });
-    T('Bet from this run → the Slate, and the slip bets from the run (wallet or run, your pick)', from && from[0] === 'run1' && /Wallet/.test(from[1][0]) && /Double Up run · D\$100/.test(from[1][1]), JSON.stringify(from));
+    T('Bet from this run → the Slate, the slip bets from the run', from && from[0] === 'run:run1' && /Wallet/.test(from[1][0]) && from[1][1].includes(c7.name), JSON.stringify(from));
     await p.fill('#ddStake', '25'); await p.click('[data-act="ddplace"]'); await p.waitForTimeout(500);
-    T('…placing sends the run with the bet', posts.some(([u, bd]) => u === '/acct/bet' && bd.run === 'run1' && bd.stake === 25), JSON.stringify(posts.filter(x => x[0] === '/acct/bet')));
-    await p.click('.compsw [data-go="leagues"]').catch(() => p.evaluate(() => location.hash = '#leagues')); await p.evaluate(() => document.querySelector('.tabs [data-go="challenges"]').click()); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(700);
-    t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
-    T('Leagues: this week\'s dates and time left, last week\'s champion, the standings (net, record, what\'s riding), the hall of champions', /THIS WEEK/i.test(t) && /Nov 16 – Nov 22/.test(t) && /left/.test(t) && /LoungeLizard/.test(t) && /\+D\$655/.test(t) && /BigShot/.test(t) && /\+D\$412\.5/.test(t) && /1 open · D\$50 riding/.test(t) && /−D\$40/.test(t) && /HALL OF CHAMPIONS/i.test(t), t.slice(0, 900));
-    T('…your row is highlighted', await p.evaluate(() => /Tester/.test((document.querySelector('#v-leagues .ps-r.on') || {}).innerText || '')));
-    await p.click('.lgforms summary >> nth=0'); await p.fill('form[data-form="lgcreate"] input[name="name"]', 'Hobart Sharps'); await p.click('form[data-form="lgcreate"] button'); await p.waitForTimeout(700);
-    t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
-    T('Start a league → its chip, its board, the invite code to share', posts.some(([u, bd]) => u === '/acct/lg/create' && bd.name === 'Hobart Sharps') && /INVITE CODE/i.test(t) && /HBS7K2/.test(t) && (await p.locator('.lgchips button.on').innerText()) === 'Hobart Sharps', t.slice(0, 600));
+    T('…placing sends the run with the bet', posts.some(([u, bd]) => u === '/acct/bet' && bd.run === 'run1' && bd.stake === 25));
+    await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(800); t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
+    T('Leagues: live, open and final leagues; prize pools and payouts, dates and countdowns, bankroll, players, sports; the hall of champions', /LIVE NOW/i.test(t) && /OPEN FOR SIGN-UPS/i.test(t) && /FINAL/i.test(t) && /D\$8,500/.test(t) && /🥇 D\$5,000/.test(t) && /left/.test(t) && /Starts in 8d|Starts in 9d/.test(t) && /41\/500/.test(t) && /HALL OF CHAMPIONS/i.test(t) && /LoungeLizard/.test(t) && /\+D\$2,000/.test(t), t.slice(0, 1200));
+    T('…the owner gets "Open a league"', /Open a league/.test(t));
+    await p.click('.lgc [data-act="lgjoin"][data-lid="g1"]'); await p.waitForTimeout(800); t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
+    T('Join → you\'re in with the league bankroll, and you can bet from it', posts.some(([u, bd]) => u === '/acct/lgs/join' && bd.id === 'g1') && /You: D\$1,000/.test(t) && (await p.locator('[data-act="lguse"]').count()) === 1, t.slice(0, 600));
+    await p.click('[data-act="lgopen"][data-lid="g1"]'); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
+    T('Standings: bankrolls, ROI, what each place is in line for', /BigShot/.test(t) && /\+64\.0%/.test(t) && /in line for D\$5,000/.test(t), t.slice(0, 900));
+    await p.evaluate(() => localStorage.setItem('tdp.ddslip', JSON.stringify([{ k: 'nfl|WSH@NYG', mk: 'ml', side: 'home', sp: 'nfl', price: -130, pick: 'NYG ML' }]))); await p.reload({ waitUntil: 'load' }); await p.waitForTimeout(1200);
+    await p.click('[data-act="lguse"]'); await p.waitForTimeout(600); await p.fill('#ddStake', '25'); await p.click('[data-act="ddplace"]'); await p.waitForTimeout(500);
+    T('a league bet sends the league with it', posts.some(([u, bd]) => u === '/acct/bet' && bd.league === 'g1'));
+    await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(500);
+    await p.click('.lgnew summary'); await p.fill('form[data-form="lgsnew"] input[name="name"]', 'Bowl Season Bash'); await p.fill('form[data-form="lgsnew"] input[name="prizes"]', '20000, 5000'); await p.click('form[data-form="lgsnew"] button[type="submit"]'); await p.waitForTimeout(900);
+    T('the owner opens a league: name, dates, bankroll, prizes reach the server; it shows up', posts.some(([u, bd]) => u === '/acct/lgs/create' && bd.name === 'Bowl Season Bash' && bd.prizes[0] === 20000 && bd.ends > bd.starts && bd.bank === 1000) && /Bowl Season Bash/.test(await p.evaluate(() => document.querySelector('#v-leagues').innerText)));
     T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
-  { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const posts = [];
-    await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.acct', JSON.stringify({ token: 'x'.repeat(32), name: 'Tester', exp: Date.now() + 864e5 })); } catch (e) { } });
-    await p.route('**/*', r => { const u = new URL(r.request().url()), req = r.request();
-      if (/picks\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(BETA) });
-      if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
-      if (u.hostname === 'thedesk-chat.ironsilkstrategies.workers.dev') { if (req.method() === 'POST') posts.push([u.pathname, JSON.parse(req.postData() || '{}')]); const J = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
-        if (u.pathname === '/acct/me') return J({ name: 'Tester', wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0 }, tickets: [], bets: [], runs: [], leagues: [] });
-        if (u.pathname === '/acct/lg/join') return J({ league: { code: 'HBS7K2', name: 'Hobart Sharps', n: 4 } });
-        if (u.pathname === '/acct/lg') return J({ league: { code: u.searchParams.get('code'), name: 'X', n: 1 }, week: '2026-11-16', current: true, ends: now + 864e5, prev: '2026-11-09', min: 3, rows: [], champ: null, hall: [] });
-        return J({}); }
-      if (u.hostname !== 'desk.test') return r.abort();
-      let f = path.join(W, decodeURIComponent(u.pathname)); if (f.endsWith('/')) f += 'index.html'; if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
-      r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
-    await p.goto('https://desk.test/desk/?lg=hbs7k2', { waitUntil: 'load' }); await p.waitForTimeout(1200);
-    let t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
-    T('an invite link opens Leagues with the invitation', /#leagues$/.test(p.url()) && /invited to league HBS7K2/i.test(t), p.url() + ' ' + t.slice(0, 300));
-    await p.click('[data-act="lgjoinpend"]'); await p.waitForTimeout(600);
-    T('…one tap joins it', posts.some(([u, bd]) => u === '/acct/lg/join' && bd.code === 'HBS7K2') && (await p.locator('.lgchips button.on').innerText()) === 'Hobart Sharps');
-    await ctx.close(); }
   /* ── inside Telegram (Mini App) ── */
   { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
     await p.route('**/*', r => { const u = new URL(r.request().url());
