@@ -20,10 +20,16 @@ setTimeout(() => { try {
   T('a flipped leg heals: DAL ML finds CLE@DAL, grades the Mavericks\' win, and the ticket is saved the right way round', R.game === 'CLE@DAL' && R.saved === 'CLE@DAL' && R.g && R.g.hit === true, JSON.stringify(R));
   const tot = w.eval(`(()=>{const t=(get(LS.locked,[])||[]).find(t=>t.id==='ext1099000001');const l=t.legs.find(x=>x.pick==='Over 217.5');return{g:gradeLeg(l,t.date),game:l.game};})()`);
   T('…the total in the same game heals and grades too (228 > 217.5)', tot.game === 'CLE@DAL' && tot.g.hit === true, JSON.stringify(tot));
-  /* v3.0.14 · the game is only in ESPN's scoreboard index (a prop in it was looked up), not on this page's slate */
-  w.eval(`const I=get(FBP_IDX_KEY,{});I['nba:'+fbpGameKey('NO@DEN','nba')+':'+fbpYmd('2026-11-14')]='401999';set(FBP_IDX_KEY,I);`);
-  const den = w.eval(`(()=>{const l={id:'dd1',sport:'nba',game:'DEN@NO',pick:'DEN ML',gameDate:'2026-11-15'};resolveLeg(l,'2026-11-15');return l.game;})()`);
-  T('…healed from ESPN\'s scoreboard index too: DEN@NO becomes NO@DEN when ESPN lists NO@DEN that night', den === 'NO@DEN', den);
+  /* v3.0.14 / v3.0.15 · the book's accepted stamp ("11/15") is a day ahead of Saturday-night games; ESPN's scoreboard index knows the real day */
+  w.eval(`const I=get(FBP_IDX_KEY,{});I['nba:'+fbpGameKey('NO@DEN','nba')+':'+fbpYmd('2026-11-14')]='401999';I['nba:'+fbpGameKey('DET@MIA','nba')+':'+fbpYmd('2026-11-14')]='401998';I['mlb:'+fbpGameKey('NYY@BOS','mlb')+':'+fbpYmd('2026-11-14')]='401997';set(FBP_IDX_KEY,I);`);
+  const den = w.eval(`(()=>{const l={id:'dd1',sport:'nba',game:'DEN@NO',pick:'DEN ML',gameDate:'2026-11-15',book:'external'};resolveLeg(l,'2026-11-15');return l.game+' '+l.gameDate;})()`);
+  T('a flipped leg dated a day ahead heals both ways: DEN@NO on 11/15 becomes NO@DEN on 11/14', den === 'NO@DEN 2026-11-14', den);
+  const det = w.eval(`(()=>{const l={id:'dd2',sport:'nba',game:'DET@MIA',pick:'Over 218.5',gameDate:'2026-11-15',book:'external'};resolveLeg(l,'2026-11-15');return l.game+' '+l.gameDate;})()`);
+  T('…a leg with the right teams but the book\'s next-day stamp moves to the real night: DET@MIA 11/15 → 11/14', det === 'DET@MIA 2026-11-14', det);
+  const mlb = w.eval(`(()=>{const l={id:'dd3',sport:'mlb',game:'NYY@BOS',pick:'NYY ML',gameDate:'2026-11-15',book:'external'};resolveLeg(l,'2026-11-15');return l.gameDate;})()`);
+  T('…never in baseball (a series plays the same teams on back-to-back days)', mlb === '2026-11-15', mlb);
+  const timed = w.eval(`(()=>{const l={id:'dd4',sport:'nba',game:'DET@MIA',pick:'DET ML',gameDate:'2026-11-15',book:'external',start:'2026-11-16T00:00:00Z'};resolveLeg(l,'2026-11-15');return l.gameDate;})()`);
+  T('…nor a leg that carries its own start time (the book printed it, so the date is right)', timed === '2026-11-15', timed);
   const keep = w.eval(`(()=>{const l={id:'zz',sport:'nba',game:'BOS@NYK',pick:'BOS ML',gameDate:'2026-11-15'};resolveLeg(l,'2026-11-15');return l.game;})()`);
   T('a leg whose game simply isn\'t posted yet is left alone', keep === 'BOS@NYK');
 } catch (e) { T('no crash', false, String(e && e.stack || e).slice(0, 500)); }

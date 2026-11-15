@@ -3094,7 +3094,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114f';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8172,12 +8172,20 @@ let RL_OVR=null;   /* v2.87.7 · the second-opinion check re-grades a leg on the
    games away@home exactly. When the game as written isn't there but the flipped one is, the leg takes the real orientation (spreads,
    totals and moneylines name the team, not the side, so nothing else changes) and the ticket is saved that way. */
 function legFlipHeal(leg,ticketDate){try{if(!leg||!leg.game||leg.fbProp||leg.nhlProp||leg.mlbProp||leg.bbProp||leg.isProp)return;const g=String(leg.game);if(!/^[^@]+@[^@]+$/.test(g))return;
-    const sp=leg.sport||'mlb';const[A,H]=g.split('@');const rev=H+'@'+A;const d=leg.gameDate||ticketDate,ap=!!leg.gdApprox||!leg.gameDate;
-    const want=legDay(leg,ticketDate);const has=x=>{if((sportGames(sp)||[]).some(z=>z&&z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x&&(()=>{try{return dayOk(gameDayOf(z),want,ap);}catch(e){return true;}})()))return true;try{if(mgEventFor(sp,x,d,ap,leg.start))return true;}catch(e){}try{if(finalsFor(sp,x,legDay(leg,ticketDate),ap,leg.start))return true;}catch(e){}
-      /* v3.0.14 · and ESPN's own scoreboard index (filled whenever a prop in that game is looked up — away@home exactly as ESPN has it) */
-      try{if(want&&typeof fbpGameKey==='function'){const I=get(FBP_IDX_KEY,{})||{};const k=fbpGameKey(x,sp),lo=fbpShift(want,-1),hi=fbpShift(want,1);if(Object.keys(I).some(key=>{const q=key.split(':');return q[0]===sp&&q[1]===k&&q[2]>=lo&&q[2]<=hi;}))return true;}}catch(e){}return false;};
-    if(has(g)||!has(rev))return;leg.game=rev;leg.flipped=1;
-    try{const L=get(LS.locked,[]);let ch=false;L.forEach(t=>(t.legs||[]).forEach(l=>{if(l.id&&l.id===leg.id&&l.game===g){l.game=rev;l.flipped=1;ch=true;}}));if(ch)set(LS.locked,L);}catch(e){}}catch(e){}}
+    const sp=leg.sport||'mlb';const[A,H]=g.split('@');const rev=H+'@'+A;const ap=!!leg.gdApprox||!leg.gameDate;const want=legDay(leg,ticketDate);
+    /* is game x on day dd anywhere we can see: this page's slate, the live feed, the finals store, or ESPN's scoreboard index */
+    const has=(x,dd)=>{if((sportGames(sp)||[]).some(z=>z&&z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x&&(()=>{try{return dayOk(gameDayOf(z),dd,ap);}catch(e){return true;}})()))return true;
+      try{if(mgEventFor(sp,x,dd,ap,leg.start))return true;}catch(e){}try{if(finalsFor(sp,x,dd,ap,leg.start))return true;}catch(e){}
+      try{if(dd&&typeof fbpGameKey==='function'){const I=get(FBP_IDX_KEY,{})||{};const k=sp+':'+fbpGameKey(x,sp)+':'+fbpYmd(dd);if(I[k])return true;}}catch(e){}return false;};
+    if(has(g,want))return;
+    /* v3.0.15 · this book stamps SGP tickets with its own accepted date, a day ahead of US time after 6 PM Central (ticket 1015366949:
+       "11/15" for Saturday-night games) — every game line looked for its game on Sunday. A pasted ticket with no start time of its own
+       may move back one day, never in baseball (a series plays the same two teams on back-to-back days). */
+    const cands=[[rev,want]];if(want&&leg.book==='external'&&!leg.start&&sp!=='mlb')cands.push([g,dayShift(want,-1)],[rev,dayShift(want,-1)]);
+    const hit=cands.find(([x,dd])=>has(x,dd));if(!hit)return;const[x,dd]=hit;
+    const fix=l=>{if(x!==l.game){l.game=x;l.flipped=1;}if(dd!==want){l.gameDate=dd;l.dayHealed=1;}};
+    try{const L=get(LS.locked,[]);let ch=false;L.forEach(t=>(t.legs||[]).forEach(l=>{if(l.id&&l.id===leg.id&&l.game===g){fix(l);ch=true;}}));if(ch)set(LS.locked,L);}catch(e){}
+    fix(leg);}catch(e){}}
 function resolveLeg(leg,ticketDate){
   if(RL_OVR&&RL_OVR.leg===leg)return{a:+RL_OVR.a,h:+RL_OVR.h,gid:leg.gid,live:false,source:'check'};
   legFlipHeal(leg,ticketDate);
