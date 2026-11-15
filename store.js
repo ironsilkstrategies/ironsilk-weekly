@@ -63,6 +63,13 @@
     inLS:function(k){return!ON||!INIDB.has(k)||PEND.get(k)===null;},
     bytes:function(){var ls=0,db=0;MEM.forEach(function(v,k){var n=v.length*2;if(ON&&(INIDB.has(k)||(PEND.has(k)&&PEND.get(k)!==null)))db+=n;else ls+=n;});return{ls:ls,db:db};}};
   window.D4_FLUSH=function(){return flush();};
+  /* v3.0.26 · leaving for another sport's page: finish the saves and close the connection FIRST, then go. iPhone freezes a page the
+     moment it leaves (it may keep it for the back button); a save still running then holds IndexedDB locked, and the next page waits
+     on it forever ("didn't answer in 30 s"). Capped at 4 s so a tap never hangs. */
+  window.D4_LEAVE=function(url){var gone=false,leave=function(){if(gone)return;gone=true;try{if(DB){DB.close();DB=null;}}catch(e){}location.href=url;};
+    if(!ON||!DB){location.href=url;return;}setTimeout(leave,4000);flush().then(leave,leave);};
+  /* came back through the back button with the connection closed: reload so the page reads the store fresh */
+  window.addEventListener('pageshow',function(e){if(e&&e.persisted&&ON&&!DB){try{location.reload();}catch(_){}}});
   function hydrate(late){var t0=Date.now();return open().then(function(db){DB=db;return all(db);}).then(function(m){if(late())throw new Error('too late');
       var dg={};try{(JSON.parse(RLS.getItem(DG_K)||'[]')||[]).forEach(function(k){dg[k]=1;});}catch(e){}
       var stash=[],fix=[];
@@ -116,6 +123,10 @@
       n.style.cssText='position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);z-index:99999;background:#111;color:#f2d067;border:1px solid #f2d067;border-radius:999px;padding:9px 16px;font:600 13px/1.2 system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.5)';
       n.textContent='Opening your saved history…';(document.body||document.documentElement).appendChild(n);}catch(e){}},2500);
     var clr=function(){clearTimeout(note0);try{var n=document.getElementById('d4open');if(n)n.remove();}catch(e){}};var go0=go;go=function(){clr();go0();};
-    hydrate(function(){return done;}).then(go,function(e){if(done)return;try{console.warn('store: staying on localStorage —',e&&e.message);}catch(_){}degrade('IndexedDB error: '+String(e&&e.message||e).slice(0,120),Date.now()-T0);go();});
+    /* v3.0.26 · a second try: if the phone's storage hasn't answered in 5 s, open a fresh connection (after nudging Safari's
+       IndexedDB with databases(), a known kick for a stuck open) instead of waiting out a stuck one; whichever answers first wins */
+    var tries=0,failed=0,lastErr=null,attempt=function(){tries++;hydrate(function(){return done;}).then(go,function(e){failed++;lastErr=e;if(done||failed<tries)return;
+      try{console.warn('store: staying on localStorage —',e&&e.message);}catch(_){}degrade('IndexedDB error: '+String(e&&e.message||e).slice(0,120),Date.now()-T0);go();});};
+    attempt();setTimeout(function(){if(done)return;try{if(indexedDB.databases)indexedDB.databases().catch(function(){});}catch(e){}attempt();},5000);
     setTimeout(function(){if(!done){try{console.warn('store: IndexedDB too slow — staying on localStorage this load');}catch(_){}degrade('IndexedDB didn\'t answer in '+Math.round(lim/1000)+' s',lim);go();}},lim);};
 })();

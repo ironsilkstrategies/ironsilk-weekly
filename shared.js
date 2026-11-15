@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261115a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261115b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3126,13 +3126,13 @@ function doSportSwitch(sport){
   const pageOwner=window.__PAGE_SPORT__;
   if(pageOwner&&sport!==pageOwner&&SPORT_PAGE[sport]){
     try{localStorage.setItem('d4.activeSport',sport)}catch(e){}
-    window.location.href=pageUrl(sport);
+    if(window.D4_LEAVE)window.D4_LEAVE(pageUrl(sport));else window.location.href=pageUrl(sport);
     return;
   }
   if(!engineHere){
     try{localStorage.setItem('d4.activeSport',sport)}catch(e){}
     const dest=pageUrl(sport);
-    if(dest)window.location.href=dest;
+    if(dest){if(window.D4_LEAVE)window.D4_LEAVE(dest);else window.location.href=dest;}
     return;
   }
   ACTIVE_SPORT=sport;

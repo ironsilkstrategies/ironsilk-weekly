@@ -10,7 +10,7 @@ function page(seedLS) {
   const doc = { readyState: 'complete', getElementById: id => id === 'd4s' ? { content: { querySelectorAll: () => [{ getAttribute: a => (a === 'src' ? 'app.js' : null), textContent: '' }] } } : id === 'd4open' ? notice : null,
     createElement: () => ({ style: {}, setAttribute() { }, remove() { notice = null; } }), body: { appendChild: n => { if (n.textContent && /Opening/.test(n.textContent)) { notice = n; return; } nodes.push(n); if (n.src) { ran++; setTimeout(() => n.onload && n.onload(), 0); } } },
     documentElement: {}, addEventListener() { }, dispatchEvent() { } };
-  const w = { indexedDB, localStorage: RLS, document: doc, navigator: { userAgent: 'iPhone Safari' }, location: { search: '' }, Promise, Proxy, Map, Set, JSON, Date, Math, String, Array, Object, Error, console, setTimeout, clearTimeout,
+  const w = { indexedDB, localStorage: RLS, document: doc, navigator: { userAgent: 'iPhone Safari' }, location: { search: '', href: '', reload() { } }, Promise, Proxy, Map, Set, JSON, Date, Math, String, Array, Object, Error, console, setTimeout, clearTimeout,
     addEventListener() { }, dispatchEvent() { }, Event: function () { }, StorageEvent: function () { }, BroadcastChannel: function () { this.postMessage = () => { }; } };
   w.window = w; vm.createContext(w); vm.runInContext(src, w); return { w, ls, ran: () => ran, notice: () => notice };
 }
@@ -30,6 +30,17 @@ T('re-saving an identical big record writes nothing', writes === 0, writes);
 Q.w.localStorage.setItem('d4.clv', big2 + 'z'); await Q.w.D4_FLUSH();
 T('…a changed one is written', writes === 1 && Q.w.localStorage.getItem('d4.clv').endsWith('z'), writes);
 IDBObjectStore.prototype.put = put0;
+/* leaving for another sport: the pending save finishes first, then the connection closes, then it navigates */
+Q.w.localStorage.setItem('d4.clv', big2 + 'LEAVE'); Q.w.location.href = ''; Q.w.D4_LEAVE('nhl.html'); await new Promise(r => setTimeout(r, 300));
+let R = page({ 'd4.small': '1' }); R.w.D4_BOOT(); await new Promise(r => setTimeout(r, 300));
+T('switching sports: the save lands before leaving, and the next page reads it', Q.w.location.href === 'nhl.html' && R.w.localStorage.getItem('d4.clv').endsWith('LEAVE'), [Q.w.location.href, (R.w.localStorage.getItem('d4.clv') || '').slice(-6)]);
+/* a stuck first open: the second try at 5 s wins */
+const open0 = indexedDB.open.bind(indexedDB); let n = 0; indexedDB.open = (...a) => { n++; if (n === 1) return { set onsuccess(f) { }, set onerror(f) { }, set onupgradeneeded(f) { }, set onblocked(f) { } }; return open0(...a); };
+let S2 = page({ 'd4.small': '1' }); const t0 = Date.now(); S2.w.D4_BOOT(); await new Promise(r => setTimeout(r, 2800));
+T('…a stuck open shows the "Opening your saved history…" notice', !!S2.notice());
+await new Promise(r => setTimeout(r, 2600));
+T('…and the second try (at 5 s) opens a fresh connection: the history loads, no safe mode', S2.w.D4_STORE.on() && !S2.w.D4_STORE.degraded() && S2.w.localStorage.getItem('d4.clv').endsWith('LEAVE') && !S2.notice() && n === 2, [S2.w.D4_STORE.on(), n]);
+indexedDB.open = open0;
 const st = src;
 T('the wait is 30 s with a quiet notice after 2.5 s; safe mode only after that', /var lim=30000/.test(st) && /Opening your saved history…/.test(st) && /degrade\('IndexedDB didn\\'t answer in '\+Math\.round\(lim\/1000\)\+' s',lim\)/.test(st));
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);
