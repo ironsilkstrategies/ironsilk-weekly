@@ -219,6 +219,10 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await p.click('.tabs [data-go="today"]'); await p.waitForTimeout(800); t = await p.evaluate(() => document.body.innerText);
     T('…one score line per live game leg (the stale grade line from the last publish stays off)', !/MIN -5\.5[^]{0,160}\(live\)/.test(t.split('Edwards')[0]), (t.match(/MIN -5\.5[^]{0,200}/) || [])[0]);
     T('VIP parlays get the same summary; a live leg shows its score, clock and live chance', /EVERY CHARACTER’S PARLAY|Every character’s parlay/i.test(t) && /legs · /.test(t) && /LIVE WSH 3–10 NYG · 9:41 - 2nd/i.test(t) && /86% live \(was 71%\)/i.test(t), (t.match(/LIVE WSH[^]{0,200}/) || [])[0]);
+    await p.click('.tabs [data-go="cast"]'); await p.waitForTimeout(500); t = await p.evaluate(() => document.querySelector('#v-cast').innerText);
+    T('Cast: each character card shows today live (record so far, how many playing)', /Today 0–0 · ● 2 live/.test(t), t.slice(0, 400));
+    await p.click('#v-cast [data-act="castpick"][data-v="Scout"]'); await p.waitForTimeout(400); t = await p.evaluate(() => document.querySelector('#v-cast').innerText);
+    T('…its profile grades today\'s picks live: the game with score, clock and live chance; the prop with the stat against the line (found by team, off the box score)', /NYG ML|Giants ML/.test(t) && /LIVE WSH 3–10 NYG · 9:41 - 2nd · 86% live/i.test(t) && /Anthony Edwards under 39\.5 PTS\+REB\+AST[^]{0,200}36 \(under 39\.5\) · \d+% live/.test(t), (t.match(/Today’s official picks[^]{0,500}/i) || [t.slice(0, 500)])[0]);
     T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
   /* ── inside Telegram (Mini App) ── */
   { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));

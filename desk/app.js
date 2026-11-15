@@ -142,6 +142,11 @@ async function scores(sps, ymd) {
   S.liveAt = Date.now();
 }
 const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'); return S.live[`${x.sp}|${ab(x.sp, a)}@${ab(x.sp, h)}`] || null; };
+/* a character's prop names its team, not its game: find the team's game on today's scoreboard */
+function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t = ab(p.sp, p.team);
+  const k = Object.keys(S.live).find(k => { if (!k.startsWith(p.sp + '|')) return false; const [a, h] = k.slice(p.sp.length + 1).split('@'); return a === t || h === t; });
+  return k ? { ...p, game: k.slice(p.sp.length + 1) } : p; }
+const castPicks = () => ((S.feed && S.feed.characters) || []).flatMap(c => (c.picks || []).filter(p => p && p.sp && p.hit == null && !p.push));
 async function liveTick() {
   const F = S.feed, T = F && F.today; if (!F) return;
   /* every leg the page shows live: Today's picks and parlay, the VIP Top 10 / Banker / character parlays, and the LongShots (whose legs can
@@ -149,11 +154,12 @@ async function liveTick() {
   const V = F.vip || {}, td = String((T && T.d) || deskDay()), legsOf = a => (a || []).filter(x => x && !x.hidden && x.game && x.hit == null && !x.push);
   const items = [...legsOf(T && T.picks), ...legsOf((F.parlay || {}).legs), ...legsOf(V.top10), ...legsOf((V.banker || {}).legs), ...(V.parlays || []).flatMap(P => legsOf(P.legs)).map(x => x),
     ...((F.founder || {}).tix || []).flatMap(t => (t.legs || []).filter(l => l.sp && l.game && l.st !== 'hit' && l.st !== 'miss' && l.st !== 'push').map(l => ({ sp: l.sp, game: l.game, pick: l.pick, day: l.day || t.date })))];
+  const cast = castPicks(); items.push(...cast.map(p => ({ sp: p.sp, game: p.game, pick: p.pick, day: td })));
   const by = new Map(); items.forEach(x => { const d = String(x.day || td).slice(0, 10).replace(/-/g, ''); const k = d; const set = by.get(k) || new Set(); set.add(x.sp); by.set(k, set); });
   if (!by.size) return;
   await Promise.all([...by].map(([d, sps]) => scores([...sps], d)));
-  await boxes(items); /* player props: their box scores, now that the scoreboard has each game's id */
-  if (S.tab === 'today' || S.tab === 'longshots') render();
+  await boxes([...items, ...cast.map(withGame)]); /* player props: their box scores, now that the scoreboard has each game's id (the cast's props find their game by team) */
+  if (S.tab === 'today' || S.tab === 'longshots' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render();
 }
 async function slateLive() {
   const SL = S.slate, D = SL && SL.days[S.slateDay]; if (!D || D.d !== deskDay()) return;
@@ -915,12 +921,15 @@ function viewCast() {
   const cells = (B && B.cells) || [], pick = S.castPick && C.some(c => c.v === S.castPick) ? S.castPick : '';
   const sel = `<div class="castpick"><label for="castSel">Pick a character</label><select id="castSel" data-change="castpick"><option value="">All characters</option>${C.map(c => `<option value="${esc(c.v)}"${c.v === pick ? ' selected' : ''}>${esc(c.name)}${c.title ? ' · ' + esc(c.title) : ''}</option>`).join('')}</select></div>`;
   const rec = r => r && r.w + r.l ? `${r.w}–${r.l}${r.pu ? '–' + r.pu : ''}` : '—';
+  const todayLive = c => { let w = 0, l = 0, on = 0; for (const p0 of c.picks || []) { const g = withGame(p0), p = g.game ? liveGrade(g) : g, st = stateOf(p), lv = p.game ? liveOf(p) : null;
+    if (st === 'w') w++; else if (st === 'l') l++; else if (st === 'o' && lv && lv.state === 'in') on++; } return { w, l, on }; };
+  const todayTxt = c => { const T = todayLive(c); return T.w + T.l || T.on ? `Today ${T.w}–${T.l}${T.on ? ` · <span class="lv-on">● ${T.on} live</span>` : ''}` : ''; };
   const mark = r => (r === 'win' ? '<span class="mk w">✓</span>' : r === 'loss' ? '<span class="mk l">✗</span>' : r === 'push' ? '<span class="mk p">=</span>' : '<span class="mk">•</span>');
   if (!pick) {
     const race = cells.filter(c => c.best).map(c => ({ c, p: crownPct(c.best, need) })).sort((a, b) => b.p - a.p).slice(0, 5);
     el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">Every pick on TheDesk comes from these voices. Each one sees the game its own way and keeps its own record. Pick one to see everything it’s called.</p>${sel}
       <div class="castgrid">${C.map(c => { const g = c.record || {}, pr = c.props || {}, today = (c.picks || []).length;
-        return `<button type="button" class="castcard mini" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span><span class="cc-rec">${today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today'}</span></div>
+        return `<button type="button" class="castcard mini" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span><span class="cc-rec">${todayTxt(c) || (today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today')}</span></div>
           <h3>${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span></div><span class="cc-more">See profile →</span></button>`; }).join('')}</div>
       ${race.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div><p class="note">Every character has heirs learning in the background. When one proves it’s better, it takes over: a new generation.</p>
         <div class="paper race"><div class="tix-h"><b>Closest to a new generation</b></div>${race.map(({ c, p }, i) => `<div class="rcr"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div></section>` : ''}${footHtml()}`;
@@ -928,7 +937,9 @@ function viewCast() {
   }
   const c = C.find(x => x.v === pick), g = c.record || {}, pr = c.props || {}, lines = cells.filter(x => x.v === c.v);
   const games = (c.picks || []).filter(p => p.kind !== 'prop'), props = (c.picks || []).filter(p => p.kind === 'prop');
-  const pickRow = p => `<div class="leg"><div class="li"><span class="mk ${stateOf(p)}">${stateOf(p) === 'w' ? '✓' : stateOf(p) === 'l' ? '✗' : stateOf(p) === 'p' ? '=' : '•'}</span><span class="pk">${esc(p.kind === 'prop' ? p.pick : readPick(p).big)}${p.price != null ? ' ' + esc(odds(p.price)) : ''}<small>${esc([LEAGUE[p.sp], p.gl || p.team, p.kind !== 'prop' && stateOf(p) === 'o' && p.start ? whenLabel(p.start) : ''].filter(Boolean).join(' · '))}</small></span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div>${p.note ? `<p class="why1">${esc(p.note)}</p>` : ''}</div>`;
+  /* graded live on the phone, like every ticket: score + clock + live chance while it plays, ✓/✗ the moment it's decided */
+  const pickRow = p0 => { const g = withGame(p0), p = g.game ? liveGrade(g) : g, c = stateOf(p), lv = p.game ? liveOf(p) : null, on = c === 'o' && lv && lv.state === 'in';
+    return `<div class="leg${on ? ' is-live' : ''}"><div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : on ? '●' : '•'}</span><span class="pk">${esc(p.kind === 'prop' ? p.pick : readPick(p).big)}${p.price != null ? ' ' + esc(odds(p.price)) : ''}<small>${esc([LEAGUE[p.sp], p.gl || p.team, p.kind !== 'prop' && c === 'o' && !on && p.start ? whenLabel(p.start) : ''].filter(Boolean).join(' · '))}</small>${lv && lv.state !== 'pre' ? `<small class="lv">${scoreBit(p, lv)}${on ? ' · ' + qBit(p, true) : ''}</small>` : ''}</span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div>${p.note ? `<p class="why1">${esc(p.note)}</p>` : ''}</div>`; };
   const wl = o => (o && o.w + o.l ? `${o.w}–${o.l}` : '—');
   el.innerHTML = `<button type="button" class="link back" data-act="castpick" data-v="">← All characters</button>${sel}
     <article class="profile" style="--cc:${okColor(c.color)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${vipBadge()}</div>
@@ -936,7 +947,7 @@ function viewCast() {
       ${c.origin ? `<div class="origin"><b>Where the eye comes from</b><p>${esc(c.origin)}</p></div>` : ''}
       <div class="statrow"><div><b>${rec(g)}</b><span>Official game picks${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span></div><div><b>${rec(pr)}</b><span>Props</span></div><div><b>${(c.picks || []).length}</b><span>Picks today</span></div></div>
       ${(c.best || []).length ? `<h2 class="h2">Best at</h2><div class="lanes">${c.best.map(x => `<span class="lane good">${esc(x.lane)} <b>${x.w}–${x.l}</b>${x.u ? ` ${x.u > 0 ? '+' : ''}${x.u}u` : ''}</span>`).join('')}${(c.still || []).map(x => `<span class="lane meh">Still learning: ${esc(x.lane)} <b>${x.w}–${x.l}</b></span>`).join('')}</div>` : ''}
-      <h2 class="h2">Today’s official picks</h2>${games.length || props.length ? `<div class="paper tix">${games.map(pickRow).join('')}${props.length ? `<div class="tix-h sub"><b>Props</b></div>${props.map(pickRow).join('')}` : ''}</div>` : '<p class="note">Nothing official today. It only speaks when it’s sure.</p>'}
+      <h2 class="h2">Today’s official picks</h2>${todayTxt(c) ? `<p class="tk-sum">${todayTxt(c)}${S.liveAt && todayLive(c).on ? ` · <span class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</span>` : ''}</p>` : ''}${games.length || props.length ? `<div class="paper tix">${games.map(pickRow).join('')}${props.length ? `<div class="tix-h sub"><b>Props</b></div>${props.map(pickRow).join('')}` : ''}</div>` : '<p class="note">Nothing official today. It only speaks when it’s sure.</p>'}
       ${(c.recent || []).length ? `<h2 class="h2">Recent results</h2><div class="paper tix">${c.recent.map(r => `<div class="leg"><div class="li">${mark(r.r)}<span class="pk">${esc(r.kind === 'prop' ? r.pick : readPick(r).big)}${r.price != null ? ' ' + esc(odds(r.price)) : ''}<small>${esc([LEAGUE[r.sp], r.gl, shortDay(r.d)].filter(Boolean).join(' · '))}</small></span><span class="u"></span></div></div>`).join('')}</div>` : ''}
       ${(c.teams || []).length ? `<h2 class="h2">Teams it backs and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Team</th><th scope="col">Backed</th><th scope="col">Against</th></tr></thead><tbody>${c.teams.map(t => `<tr><th scope="row">${esc(teamName(t.sp, t.team))}<small>${esc(LEAGUE[t.sp] || '')}</small></th><td>${wl(t.for)}</td><td>${wl(t.vs)}</td></tr>`).join('')}</tbody></table></div>` : ''}
       ${(c.players || []).length ? `<h2 class="h2">Players it rides and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Player</th><th scope="col">Overs</th><th scope="col">Unders</th></tr></thead><tbody>${c.players.map(t => `<tr><th scope="row">${esc(t.player)}<small>${esc([LEAGUE[t.sp], t.team].filter(Boolean).join(' · '))}</small></th><td>${wl(t.over)}</td><td>${wl(t.under)}</td></tr>`).join('')}</tbody></table></div>` : ''}
