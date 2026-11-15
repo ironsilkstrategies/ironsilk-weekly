@@ -657,3 +657,5 @@ body.embed .view{padding-bottom:20px}
 .lb .ps-h,.lb .ps-r{grid-template-columns:26px 1fr 92px 62px}.lb-b{color:#2a8fc4!important;font-weight:700}
 .ddpitch{padding:14px 16px;margin-top:14px;max-width:440px}.ddpitch b{font:800 18px/1.1 var(--display);text-transform:uppercase;color:#7a5a00}.ddpitch p{margin:6px 0 0;color:#3b4a40}
 .ddown{padding:14px 16px;margin:0 0 16px}.ddown form{display:grid;grid-template-columns:1fr 100px auto;gap:8px;align-items:end;margin-top:8px}.ddown label{display:grid;gap:4px;font:600 12px var(--text);color:#3b4a40}.ddown input{font:500 16px var(--text);padding:8px 10px;border-radius:8px;border:1.5px solid rgba(27,42,33,.25);background:#fffaf0}
+.ddmode{display:inline-flex;border:1px solid rgba(233,194,90,.5);border-radius:999px;padding:2px;margin-bottom:6px}.ddmode button{appearance:none;border:0;background:none;color:var(--cream-2);font:700 11.5px/1 var(--text);padding:5px 12px;border-radius:999px;cursor:pointer}.ddmode button.on{background:#E9C25A;color:#1a1405}
+.ddwarn{color:#f0a58f!important;font-weight:600}.ddslip .btn[disabled]{opacity:.45;pointer-events:none}

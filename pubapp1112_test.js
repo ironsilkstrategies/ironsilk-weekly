@@ -226,9 +226,12 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     const gks = await v.p.evaluate(() => [...document.querySelectorAll('.game > button[data-act="game"]')].map(b => b.dataset.k));
     if (nb && gks.length > 1) { await v.p.click('.ddb >> nth=0'); await v.p.waitForTimeout(200); await v.p.click(`.game > button[data-k="${gks[1]}"]`); await v.p.waitForTimeout(300); await v.p.click('.ddb >> nth=2'); await v.p.waitForTimeout(200);
       T('D$ parlays across games (one leg in each)', (await v.p.evaluate(() => JSON.parse(localStorage.getItem('tdp.ddslip') || '[]').length)) === 2, JSON.stringify([gks.slice(0, 3), await v.p.evaluate(() => localStorage.getItem('tdp.ddslip'))])); await v.p.click('[data-act="ddclear"]'); await v.p.click(`.game > button[data-k="${gk}"]`); await v.p.waitForTimeout(300);
-      await v.p.click('.ddb >> nth=0'); await v.p.click('.ddb >> nth=2'); await v.p.click('.ddb >> nth=1'); await v.p.waitForTimeout(200);
+      await v.p.click('.ddb >> nth=0'); await v.p.click('.ddb >> nth=2'); await v.p.waitForTimeout(200);
+      T('…a parlay keeps one pick per game (a second pick in the game swaps, with a note)', (await v.p.evaluate(() => JSON.parse(localStorage.getItem('tdp.ddslip') || '[]').length)) === 1 && /Switch to SGP/.test(await v.text()));
+      await v.p.click('[data-act="ddmode"][data-v="sgp"]'); await v.p.click('.ddb >> nth=0'); await v.p.click('.ddb >> nth=1'); await v.p.waitForTimeout(200);
       const sl = await v.p.evaluate(() => JSON.parse(localStorage.getItem('tdp.ddslip') || '[]').map(l => l.mk).sort().join());
-      T('…same game: a side plus the total; a spread replaces the moneyline (with a note)', sl === 'spread,total' && /one side per game/.test(await v.text()), sl); await v.p.click('[data-act="ddclear"]'); await v.p.waitForTimeout(200); }
+      T('…SGP: several picks in one game, one per market', sl.split(',').length === 3 && /SGP/.test(await v.text()), sl);
+      await v.p.click('[data-act="ddmode"][data-v="parlay"]'); await v.p.waitForTimeout(200); await v.p.click('[data-act="ddclear"]'); await v.p.waitForTimeout(200); }
     if (nb) { await v.p.click('.ddb >> nth=0'); await v.p.waitForTimeout(200); await v.p.fill('#ddStake', '100'); await v.p.click('[data-act="ddplace"]'); await v.p.waitForTimeout(400); }
     T('…open a Slate game, tap a line, place D$100: the server gets the game, market and side (never a price)', nb >= 4 && lastBet && lastBet.stake === 100 && lastBet.legs[0].k === gk && !('price' in lastBet.legs[0]), JSON.stringify([nb, lastBet]));
     T('accounts: no script errors', v.errs.length === 0, v.errs.join(' | '));

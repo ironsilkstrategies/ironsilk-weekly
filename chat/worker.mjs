@@ -87,11 +87,12 @@ export class Room {
 /* ═══ DESK DOLLARS (v3.0.22, Chris, Nov 15: "each signup gets $1000 of free novelty money… a badge of honor") ════════════════
    Play money only: never cashed out, never a prize. Every member starts with D$1,000 (members from before get theirs the first
    time they look). Bets are on the slate's own games (moneyline, spread, total), priced by the server from the public slate
-   feed at the moment of the bet (spreads and totals at -110), closed at start time, up to 10 legs: per game one side (moneyline or spread) plus the total, never ML and spread together. The server
+   feed at the moment of the bet (spreads and totals at -110), closed at start time. Parlay: one pick per game, any number of games. SGP: every game on it 2+ picks (one per market), priced as
+   ddTicketDec says. No ticket pays more than 10,000x its stake. The server
    grades them itself from ESPN finals every 10 minutes; a game it can't find in 3 days is voided and the stake comes back.
    Bought D$ (the store, built but OFF until a lawyer signs off — or the owner's grant) is kept apart: it shows in its own color,
    and the leaderboard ranks EARNED D$ (balance minus everything bought), so nobody buys their way up the board. */
-const DD_START = 1000, DD_LEGS = 10, DD_JUICE = -110, SLATE_URL = 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json';
+const DD_START = 1000, DD_LEGS = 100, DD_CAP = 10000, DD_SGP = 0.8, DD_JUICE = -110, SLATE_URL = 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json';
 const ESPN_PATH = { nfl: 'football/nfl', ncaaf: 'football/college-football', nba: 'basketball/nba', ncaab: 'basketball/mens-college-basketball', nhl: 'hockey/nhl', mlb: 'baseball/mlb' };
 const ESPN_GROUP = { ncaaf: '&groups=80', ncaab: '&groups=50' };
 export const ddDec = p => (p > 0 ? 1 + p / 100 : 1 + 100 / -p);
@@ -103,6 +104,15 @@ export function ddPrice(g, mk, side) { const ln = g && g.ln; if (!ln) return nul
     const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: DD_JUICE, line, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
   if (mk === 'total') { if (!Number.isFinite(ln.tot) || !['over', 'under'].includes(side)) return null; return { price: DD_JUICE, line: ln.tot, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` }; }
   return null; }
+/* v3.0.23 · how a ticket pays. Parlay: the legs multiply. SGP (each game 2+ picks): inside one game, a team's moneyline and its
+   own spread are one bet (the favorite's spread implies its moneyline; the dog's moneyline implies its spread), and what's
+   left pays 80% of the straight-parlay profit, since legs in one game move together. Games multiply with each other. */
+export function ddTicketDec(legs, mode) { const G = new Map(); legs.forEach(l => { const a = G.get(l.k) || []; a.push(l); G.set(l.k, a); }); let dec = 1;
+  for (const L of G.values()) { if (mode !== 'sgp' || L.length < 2) { dec *= L.reduce((x, l) => x * ddDec(l.price), 1); continue; }
+    let eff = L.slice(); const ml = eff.find(l => l.mk === 'ml'), sp = eff.find(l => l.mk === 'spread');
+    if (ml && sp && ml.side === sp.side) eff = eff.filter(l => l !== (sp.line < 0 ? ml : sp));
+    const prod = eff.reduce((x, l) => x * ddDec(l.price), 1); dec *= eff.length > 1 ? 1 + (prod - 1) * DD_SGP : prod; }
+  return Math.round(dec * 10000) / 10000; }
 /* grade one leg against a final score: hit / miss / push */
 export function ddGrade(leg, a, h) { if (!Number.isFinite(a) || !Number.isFinite(h)) return null;
   if (leg.mk === 'ml') { if (a === h) return 'push'; return (leg.side === 'home') === (h > a) ? 'hit' : 'miss'; }
@@ -112,7 +122,7 @@ export function ddGrade(leg, a, h) { if (!Number.isFinite(a) || !Number.isFinite
 /* settle a whole bet: any miss loses; pushes drop out of the odds; all pushed → stake back */
 export function ddSettle(b) { const R = b.legs.map(l => l.res); if (R.includes('miss')) return { status: 'lost', back: 0 }; if (R.some(r => !r)) return null;
   const live = b.legs.filter(l => l.res === 'hit'); if (!live.length) return { status: 'push', back: b.stake };
-  const dec = live.reduce((x, l) => x * ddDec(l.price), 1); return { status: 'won', back: Math.round(b.stake * dec * 100) / 100 }; }
+  const dec = Math.min(DD_CAP, ddTicketDec(live, b.mode)); return { status: 'won', back: Math.round(b.stake * dec * 100) / 100 }; }
 
 /* ═══ ACCOUNTS (v3.0.21, Chris, Nov 15: logins so app users can track their own tickets — "can't we just cloud it") ═══════════
    Everything stays on our Cloudflare: a username and a password, the password never stored, only a PBKDF2-SHA256 hash with its
@@ -192,14 +202,18 @@ export class Accounts {
     const stake = Math.round(+b.stake * 100) / 100; if (!(stake >= 1)) return json({ error: 'the smallest bet is D$1' }, 400, H); if (stake > W.bal) return json({ error: `you have D$${W.bal.toLocaleString('en-US')}` }, 400, H);
     const want = Array.isArray(b.legs) ? b.legs.slice(0, DD_LEGS + 1) : []; if (!want.length) return json({ error: 'add a leg' }, 400, H); if (want.length > DD_LEGS) return json({ error: `up to ${DD_LEGS} legs` }, 400, H);
     let G; try { G = await this.slate(); } catch (e) { return json({ error: 'the lines can’t be reached right now — try again in a minute' }, 503, H); }
-    const seen = new Set(), legs = [];
+    const mode = b.mode === 'sgp' ? 'sgp' : 'parlay', seen = new Set(), per = new Map(), legs = [];
     for (const w of want) { const k = String(w.k || ''); const g = G.get(k); if (!g) return json({ error: 'that game isn’t on the board' }, 400, H);
-      const grp = k + '|' + (w.mk === 'total' ? 'total' : 'side'); if (seen.has(grp)) return json({ error: 'one side and one total per game (moneyline and spread on the same game don’t parlay)' }, 400, H); seen.add(grp);
+      if (!['ml', 'spread', 'total'].includes(w.mk)) return json({ error: 'that line isn’t available' }, 400, H);
+      const grp = mode === 'sgp' ? k + '|' + w.mk : k; if (seen.has(grp)) return json({ error: mode === 'sgp' ? 'one pick per market in a game' : 'one pick per game in a parlay — switch to SGP for more' }, 400, H); seen.add(grp);
+      per.set(k, (per.get(k) || 0) + 1);
       if (!(g.t > this.now() + 60e3)) return json({ error: `${g.a.ab} at ${g.h.ab} has started — bets are closed` }, 400, H);
       const pr = ddPrice(g, w.mk, w.side); if (!pr) return json({ error: 'that line isn’t available' }, 400, H);
       legs.push({ k, sp: g.sp, t: g.t, game: g.a.ab + '@' + g.h.ab, mk: w.mk, side: w.side, line: pr.line, price: pr.price, pick: pr.pick, res: null }); }
-    const dec = legs.reduce((x, l) => x * ddDec(l.price), 1), id = this.now().toString(36) + rid(4);
-    const bet = { id, ts: this.now(), stake, dec: Math.round(dec * 1000) / 1000, toWin: Math.round(stake * (dec - 1) * 100) / 100, legs, status: 'open' };
+    if (mode === 'sgp' && [...per.values()].some(n => n < 2)) return json({ error: 'an SGP needs at least two picks in every game on it' }, 400, H);
+    const dec = ddTicketDec(legs, mode), id = this.now().toString(36) + rid(4);
+    if (dec > DD_CAP) return json({ error: `that ticket pays over ${DD_CAP.toLocaleString('en-US')}x — the most any ticket can pay is ${DD_CAP.toLocaleString('en-US')}x the stake` }, 400, H);
+    const bet = { id, ts: this.now(), stake, mode, dec: Math.round(dec * 1000) / 1000, toWin: Math.round(stake * (dec - 1) * 100) / 100, legs, status: 'open' };
     W.bal = Math.round((W.bal - stake) * 100) / 100; W.staked = Math.round((W.staked + stake) * 100) / 100; u.dd = W;
     await S.put('u:' + s.key, u); await S.put('b:' + s.key + ':' + id, bet); await S.put('o:' + s.key + ':' + id, 1); this._bd = null; await this.wake();
     return json({ bet, wallet: W }, 200, H); }

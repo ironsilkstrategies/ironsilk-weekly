@@ -314,26 +314,33 @@ function founderHtml(page) {
 /* ── Desk Dollars (v3.0.22). D$1,000 on sign-up, play money only. Open a game on the Slate → tap a line → it lands on your
    D$ slip; place it and the server prices it from the slate and grades it from the finals. Bought D$ shows in its own color;
    the leaderboard ranks earned D$. */
-S.dd = store.get('ddslip') || [];
+S.dd = store.get('ddslip') || []; S.ddMode = store.get('ddmode') || 'parlay';
+/* same pricing as the server: parlay multiplies; SGP folds a team's ML + own spread and pays 80% of each game's profit; cap 10,000x */
+function ddTicketDec(legs, mode) { const G = new Map(); legs.forEach(l => { const a = G.get(l.k) || []; a.push(l); G.set(l.k, a); }); let dec = 1;
+  for (const L of G.values()) { if (mode !== 'sgp' || L.length < 2) { dec *= L.reduce((x, l) => x * ddDec(l.price), 1); continue; } let eff = L.slice(); const ml = eff.find(l => l.mk === 'ml'), sp = eff.find(l => l.mk === 'spread');
+    if (ml && sp && ml.side === sp.side) eff = eff.filter(l => l !== (sp.line < 0 ? ml : sp)); const prod = eff.reduce((x, l) => x * ddDec(l.price), 1); dec *= eff.length > 1 ? 1 + (prod - 1) * 0.8 : prod; } return dec; }
 const slateGameOf = k => { for (const d of ((S.slate && S.slate.days) || [])) for (const g of (d.games || [])) if (g.k === k) return g; return null; };
 const DDJ = -110, ddDec = p => (p > 0 ? 1 + p / 100 : 1 + 100 / -p), dd$ = n => 'D$' + (Math.round(n * 100) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
 function ddLegOf(g, mk, side) { const ln = g.ln || {}; if (mk === 'ml') { const p = side === 'away' ? ln.mlA : ln.mlH; return fin(p) ? { price: p, pick: `${side === 'away' ? g.a.ab : g.h.ab} ML` } : null; }
-  if (mk === 'spread') { if (!fin(ln.line) || !ln.fav) return null; const team = side === 'away' ? g.a.ab : g.h.ab; const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: DDJ, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
+  if (mk === 'spread') { if (!fin(ln.line) || !ln.fav) return null; const team = side === 'away' ? g.a.ab : g.h.ab; const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: DDJ, line, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
   if (mk === 'total') return fin(ln.tot) ? { price: DDJ, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` } : null; return null; }
 function ddBtns(g) { if (!(g.t > Date.now() + 60e3) || !g.ln) return ''; const on = (mk, sd) => S.dd.some(l => l.k === g.k && l.mk === mk && l.side === sd);
   const btn = (mk, sd) => { const L = ddLegOf(g, mk, sd); return L ? `<button type="button" class="ddb${on(mk, sd) ? ' on' : ''}" data-act="ddpick" data-k="${esc(g.k)}" data-mk="${mk}" data-side="${sd}"><b>${esc(L.pick)}</b><small>${esc(odds(L.price))}</small></button>` : '<span></span>'; };
-  return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><p class="g-note">Tap lines to build a slip across games. In one game: a side (moneyline or spread) plus the total.</p><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }
-function ddSlipBar() { if (!S.dd.length) return ''; const dec = S.dd.reduce((x, l) => x * ddDec(l.price), 1), st = +(store.get('ddstake') || 25); const W = AC.me && AC.me.wallet;
-  return `<div class="pslipbar ddslip"><div><b>D$ slip · ${S.dd.length} leg${S.dd.length > 1 ? 's' : ''} · ${esc(odds(decAm(dec)))}</b><small>${S.dd.map(l => esc(l.pick)).join(' · ')}</small>
-    <small>${W ? `You have ${dd$(W.bal)}. ` : ''}Stake <input id="ddStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"> pays <span id="ddPays">${dd$(st * dec)}</span></small></div>
-    <button type="button" class="btn sm" data-act="ddplace">Place it</button><button type="button" class="btn ghost sm" data-act="ddclear">✕</button></div>`; }
+  return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><p class="g-note">Tap lines to build your slip. Parlay: one pick per game, as many games as you like. SGP: two or more picks in each game. No ticket pays over 10,000x.</p><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }
+function ddSlipBar() { if (!S.dd.length) return ''; const sgp = S.ddMode === 'sgp', dec = ddTicketDec(S.dd, S.ddMode), st = +(store.get('ddstake') || 25); const W = AC.me && AC.me.wallet;
+  const per = {}; S.dd.forEach(l => { per[l.k] = (per[l.k] || 0) + 1; }); const thin = sgp && Object.values(per).some(n => n < 2), over = dec > 10000;
+  const warn = over ? `Pays ${Math.round(dec).toLocaleString('en-US')}x: the most any ticket can pay is 10,000x the stake. Drop a leg.` : thin ? 'An SGP needs at least two picks in every game on it.' : '';
+  return `<div class="pslipbar ddslip"><div><div class="ddmode">${['parlay', 'sgp'].map(m => `<button type="button" class="${S.ddMode === m ? 'on' : ''}" data-act="ddmode" data-v="${m}">${m === 'sgp' ? 'SGP' : 'Parlay'}</button>`).join('')}</div>
+    <b>${S.dd.length} leg${S.dd.length > 1 ? 's' : ''} · ${esc(odds(decAm(dec)))}</b><small>${S.dd.map(l => esc(l.pick)).join(' · ')}</small>
+    ${warn ? `<small class="ddwarn">${esc(warn)}</small>` : `<small>${W ? `You have ${dd$(W.bal)}. ` : ''}Stake <input id="ddStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"> pays <span id="ddPays">${dd$(st * dec)}</span></small>`}</div>
+    <button type="button" class="btn sm" data-act="ddplace"${warn ? ' disabled' : ''}>Place it</button><button type="button" class="btn ghost sm" data-act="ddclear">✕</button></div>`; }
 function walletHtml(W) { if (!W) return ''; const bought = Math.max(0, Math.min(W.bought || 0, W.bal)), earned = W.bal - bought, net = W.bal - (W.bought || 0) - 1000;
   return `<div class="wallet"><div class="w-top"><span class="w-lab">Desk Dollars</span><b class="w-bal">${dd$(W.bal)}</b><span class="w-net ${net >= 0 ? 'up' : 'dn'}">${net >= 0 ? '+' : '−'}${dd$(Math.abs(net)).replace('D$', 'D$')} earned since your D$1,000</span></div>
     <div class="w-bar"><i class="e" style="flex:${Math.max(earned, 0.0001)}"></i>${bought ? `<i class="b" style="flex:${bought}"></i>` : ''}</div>
     <div class="w-key"><span><i class="e"></i>Earned ${dd$(earned)}</span>${W.bought ? `<span><i class="b"></i>Bought ${dd$(W.bought)}</span>` : ''}<span>${W.w}-${W.l}${W.p ? '-' + W.p : ''} on settled bets</span></div>
     <p class="note">Play money for bragging rights: never cashed out, never a prize. Bought D$ shows in its own color and never counts on the leaderboard. ${AC.me && AC.me.store ? '' : '<b>The D$ store opens soon.</b>'}</p></div>`; }
 function ddBetHtml(b) { const chip = { won: `✓ Won ${dd$(b.back)}`, lost: '✗ Lost', push: '↺ Push', open: `Open · to win ${dd$(b.toWin)}` }[b.status];
-  return `<article class="slip mytk nostub ${b.status === 'won' ? 'cashed' : b.status}"><div class="slip-head"><span>${dd$(b.stake)} · ${b.legs.length > 1 ? b.legs.length + '-leg' : 'single'}</span><span class="fchip ${b.status === 'won' ? 'cashed' : b.status}">${chip}</span></div><div class="slip-main">
+  return `<article class="slip mytk nostub ${b.status === 'won' ? 'cashed' : b.status}"><div class="slip-head"><span>${dd$(b.stake)} · ${b.mode === 'sgp' ? 'SGP · ' + b.legs.length + ' legs' : b.legs.length > 1 ? b.legs.length + '-leg' : 'single'}</span><span class="fchip ${b.status === 'won' ? 'cashed' : b.status}">${chip}</span></div><div class="slip-main">
     <ul class="fl-list">${b.legs.map(l => `<li class="fl ${l.res || 'open'}"><span class="fl-ic">${l.res === 'hit' ? '✓' : l.res === 'miss' ? '✗' : l.res === 'push' ? '↺' : '○'}</span><div class="fl-b"><b>${esc(l.pick)} ${esc(odds(l.price))}</b><small>${esc([LEAGUE[l.sp], l.game.replace('@', ' at '), l.res ? '' : clock(l.t)].filter(Boolean).join(' · '))}${l.void ? ' · voided' : ''}</small></div></li>`).join('')}</ul></div></article>`; }
 let LB = null;
 async function lbLoad() { try { const r = await fetch(CFG.chat + '/acct/board'); if (r.ok) { LB = await r.json(); if (S.tab === 'me') { const n = $('#lb'); if (n) n.outerHTML = lbHtml(); } } } catch (e) { } }
@@ -993,13 +1000,15 @@ document.addEventListener('click', async e => {
   else if (act === 'pslip') { const id = a.dataset.id; S.slip = S.slip.includes(id) ? S.slip.filter(x => x !== id) : [...S.slip, id].slice(-12); store.set('pslip', S.slip); render(); }
   else if (act === 'pslipclear') { S.slip = []; store.set('pslip', S.slip); render(); }
   else if (act === 'psliptrack') { const t = slipTicket(); if (t && await tkSave(t, 'Tracking it — see Your tickets')) { S.slip = []; store.set('pslip', S.slip); render(); } }
-  else if (act === 'ddpick') { const g = slateGameOf(a.dataset.k); if (g) { const mk = a.dataset.mk, sd = a.dataset.side, grp = m => (m === 'total' ? 'total' : 'side'), i = S.dd.findIndex(l => l.k === g.k && grp(l.mk) === grp(mk));
-      const same = i >= 0 && S.dd[i].mk === mk && S.dd[i].side === sd; if (i >= 0) { if (!same) toast(grp(mk) === 'total' ? 'Swapped the total' : 'Swapped it: one side per game (moneyline or spread), plus the total'); S.dd.splice(i, 1); } if (!same) { const L = ddLegOf(g, mk, sd); if (L) { if (S.dd.length >= 10) toast('Up to 10 legs'); else S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); } }
+  else if (act === 'ddpick') { const g = slateGameOf(a.dataset.k); if (g) { const mk = a.dataset.mk, sd = a.dataset.side, sgp = S.ddMode === 'sgp', i = S.dd.findIndex(l => l.k === g.k && (!sgp || l.mk === mk));
+      const same = i >= 0 && S.dd[i].mk === mk && S.dd[i].side === sd; if (i >= 0) { if (!same) toast(sgp ? 'Swapped it: one pick per market' : 'Swapped it: one pick per game in a parlay. Switch to SGP for more'); S.dd.splice(i, 1); }
+      if (!same) { const L = ddLegOf(g, mk, sd); if (L) S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); }
       store.set('ddslip', S.dd); render(); } }
+  else if (act === 'ddmode') { S.ddMode = a.dataset.v; store.set('ddmode', S.ddMode); if (S.ddMode === 'parlay') { const seen = new Set(); const before = S.dd.length; S.dd = S.dd.filter(l => !seen.has(l.k) && seen.add(l.k)); if (S.dd.length < before) toast('Parlay keeps one pick per game'); store.set('ddslip', S.dd); } render(); }
   else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
   else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }
-    const st = +(($('#ddStake') || {}).value || 0); try { const j = await acctApi('/acct/bet', { token: P.token, stake: st, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
-      if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; } S.dd = []; store.set('ddslip', S.dd); store.set('ddstake', st); render(); toast(`Placed: ${dd$(j.bet.stake)} to win ${dd$(j.bet.toWin)}`); LB = null; } catch (e) { toast(e.message); } }
+    const st = +(($('#ddStake') || {}).value || 0); try { const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: S.ddMode, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
+      if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; } S.dd = []; store.set('ddslip', S.dd); store.set('ddstake', st); render(); toast(`Placed${j.bet.mode === 'sgp' ? ' (SGP)' : ''}: ${dd$(j.bet.stake)} to win ${dd$(j.bet.toWin)}`); LB = null; } catch (e) { toast(e.message); } }
   else if (act === 'acmode') { AC.mode = a.dataset.v; viewMe(); }
   else if (act === 'aclogout') { const P = acctPass(); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); if (P) acctApi('/acct/logout', { token: P.token }).catch(() => { }); }
   else if (act === 'tkmark') { const t = ((AC.me && AC.me.tickets) || []).find(x => x.id === a.dataset.id); if (t) { const l = t.legs[+a.dataset.i]; l.res = l.res === a.dataset.v ? null : a.dataset.v; viewMe(); tkSave(t); } }
@@ -1020,7 +1029,7 @@ document.addEventListener('click', async e => {
   else if (act === 'chat-invite') chatMod({ act: 'invite', uses: 25 }, j => { CH.invite = j.code; const n = $('#chatInv'); if (n) n.innerHTML = `New code: <code>${esc(j.code)}</code> (25 uses)`; });
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
-document.addEventListener('input', e => { if (e.target.id === 'ddStake') { const v = +e.target.value || 0, dec = S.dd.reduce((x, l) => x * ddDec(l.price), 1), n = $('#ddPays'); if (n) n.textContent = dd$(v * dec); } });
+document.addEventListener('input', e => { if (e.target.id === 'ddStake') { const v = +e.target.value || 0, dec = ddTicketDec(S.dd, S.ddMode), n = $('#ddPays'); if (n) n.textContent = dd$(v * dec); } });
 document.addEventListener('change', e => { const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
 /* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
 async function restartApp() {
