@@ -25,7 +25,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preload" as="font" type="font/woff2" href="fonts/big-shoulders.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/franklin.woff2" crossorigin>
-<link rel="stylesheet" href="app.css?v=23">
+<link rel="stylesheet" href="app.css?v=24">
 </head>
 <body>
 <a class="skip" href="#main">Skip to today's card</a>
@@ -40,6 +40,8 @@
     <button type="button" data-go="slate">Slate</button>
     <button type="button" data-go="props">Props</button>
     <button type="button" data-go="longshots">LongShots</button>
+    <button type="button" data-go="challenges">Challenges</button>
+    <button type="button" data-go="leagues">Leagues</button>
     <button type="button" data-go="cast">Characters</button>
     <button type="button" data-go="chat">Chat</button>
     <button type="button" data-go="receipts">Receipts</button>
@@ -58,6 +60,8 @@
   <section class="view" id="v-me" aria-label="Your tickets" hidden></section>
   <section class="view" id="v-props" aria-label="Props" hidden></section>
   <section class="view" id="v-longshots" aria-label="Founder LongShot Parlays" hidden></section>
+  <section class="view" id="v-challenges" aria-label="Challenges" hidden></section>
+  <section class="view" id="v-leagues" aria-label="Leagues" hidden></section>
   <section class="view" id="v-cast" aria-label="The characters" hidden></section>
   <section class="view" id="v-chat" aria-label="Members' chat" hidden></section>
   <section class="view" id="v-receipts" aria-label="Every result" hidden></section>
@@ -69,6 +73,7 @@
   <button type="button" data-go="slate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="3.5" width="15" height="17" rx="1.6"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Slate</button>
   <button type="button" data-go="props"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><circle cx="16" cy="9" r="1.6"/></svg>Props</button>
   <button type="button" data-go="longshots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="13" r="7.5"/><circle cx="11" cy="13" r="3.6"/><path d="m11 13 8.5-8.5"/><path d="M16.5 4.5h3v3"/></svg>LongShots</button>
+  <button type="button" data-go="challenges" data-also="leagues"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4.5h9v4.2a4.5 4.5 0 0 1-9 0V4.5Z"/><path d="M7.5 6.5H4.8a.8.8 0 0 0-.8.9c.3 2.3 1.6 3.6 3.9 3.9M16.5 6.5h2.7a.8.8 0 0 1 .8.9c-.3 2.3-1.6 3.6-3.9 3.9"/><path d="M12 13.2v3.3M8.5 20h7M9.5 16.5h5l.5 3.5h-6l.5-3.5Z"/></svg>Compete</button>
   <button type="button" data-go="cast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.6 14.7c2.4-.4 4.4 1.1 4.9 4.8"/></svg>Cast</button>
   <button type="button" data-go="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5V16.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z"/><path d="M8 10h8M8 13h5"/></svg>Chat</button>
   <button type="button" data-go="receipts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5v-17Z"/><path d="m9 11 2.2 2.2L15.5 9"/></svg>Receipts</button>
@@ -77,6 +82,6 @@
 <div id="guideRoot"></div>
 <noscript><p style="max-width:40ch;margin:40px auto;padding:0 16px;font-family:sans-serif;color:#F3EEDF">TheDesk needs JavaScript to show today's card. Three picks are locked every morning, opened 30 minutes before each game and graded at the final.</p></noscript>
 <script>/* inside Telegram only: its Mini App bridge (nobody else downloads it) */if(/tgWebApp/.test(location.hash+location.search))document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>');</script>
-<script type="module" src="app.js?v=35"></script>
+<script type="module" src="app.js?v=36"></script>
 </body>
 </html>

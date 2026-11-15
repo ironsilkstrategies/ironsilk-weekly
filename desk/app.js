@@ -94,7 +94,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'cast', 'chat', 'receipts', 'join'];
+const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -347,7 +347,8 @@ function founderHtml(page) {
 /* ── Desk Dollars (v3.0.22). D$1,000 on sign-up, play money only. Open a game on the Slate → tap a line → it lands on your
    D$ slip; place it and the server prices it from the slate and grades it from the finals. Bought D$ shows in its own color;
    the leaderboard ranks earned D$. */
-S.dd = store.get('ddslip') || []; S.ddMode = store.get('ddmode') || 'parlay';
+S.dd = store.get('ddslip') || []; S.ddMode = store.get('ddmode') || 'parlay'; S.ddRun = store.get('ddrun') || '';
+const ddRunOn = () => (S.ddRun && liveRuns().some(r => r.rid === S.ddRun) ? S.ddRun : '');
 /* same pricing as the server: parlay multiplies; SGP folds a team's ML + own spread and pays 80% of each game's profit; cap 10,000x */
 function ddTicketDec(legs, mode) { const G = new Map(); legs.forEach(l => { const a = G.get(l.k) || []; a.push(l); G.set(l.k, a); }); let dec = 1;
   for (const L of G.values()) { if (mode !== 'sgp' || L.length < 2) { dec *= L.reduce((x, l) => x * ddDec(l.price), 1); continue; } let eff = L.slice(); const ml = eff.find(l => l.mk === 'ml'), sp = eff.find(l => l.mk === 'spread');
@@ -366,7 +367,8 @@ function ddSlipBar() { if (!S.dd.length) return ''; const sgp = S.ddMode === 'sg
   const warn = over ? `Pays ${Math.round(dec).toLocaleString('en-US')}x: the most any ticket can pay is 10,000x the stake. Drop a leg.` : thin ? 'An SGP needs two picks in every game on it: its side and its total.' : nhlPair ? 'Hockey parlay: puck line + total takes an SGP. Switch to SGP or drop one.' : '';
   return `<div class="pslipbar ddslip"><div><div class="ddmode">${['parlay', 'sgp'].map(m => `<button type="button" class="${S.ddMode === m ? 'on' : ''}" data-act="ddmode" data-v="${m}">${m === 'sgp' ? 'SGP' : 'Parlay'}</button>`).join('')}</div>
     <b>${S.dd.length} leg${S.dd.length > 1 ? 's' : ''} · ${esc(odds(decAm(dec)))}</b><small>${S.dd.map(l => esc(l.pick)).join(' · ')}</small>
-    ${warn ? `<small class="ddwarn">${esc(warn)}</small>` : `<small>${W ? `You have ${dd$(W.bal)}. ` : ''}Stake <input id="ddStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"> pays <span id="ddPays">${dd$(st * dec)}</span></small>`}</div>
+    ${liveRuns().length ? `<small class="ddfrom">From <select id="ddFrom" data-change="ddfrom" aria-label="Bet from"><option value="">Wallet · ${dd$(W ? W.bal : 0)}</option>${liveRuns().map(r => `<option value="${esc(r.rid)}"${S.ddRun === r.rid ? ' selected' : ''}>${esc(CHN[r.cid] || r.cid)} run · ${dd$(r.bal)}</option>`).join('')}</select></small>` : ''}
+    ${warn ? `<small class="ddwarn">${esc(warn)}</small>` : `<small>${W && !ddRunOn() ? `You have ${dd$(W.bal)}. ` : ''}Stake <input id="ddStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"> pays <span id="ddPays">${dd$(st * dec)}</span></small>`}</div>
     <button type="button" class="btn sm" data-act="ddplace"${warn ? ' disabled' : ''}>Place it</button><button type="button" class="btn ghost sm" data-act="ddclear">✕</button></div>`; }
 function walletHtml(W) { if (!W) return ''; const bought = Math.max(0, Math.min(W.bought || 0, W.bal)), earned = W.bal - bought, net = W.bal - (W.bought || 0) - 1000;
   return `<div class="wallet"><div class="w-top"><span class="w-lab">Desk Dollars</span><b class="w-bal">${dd$(W.bal)}</b><span class="w-net ${net >= 0 ? 'up' : 'dn'}">${net >= 0 ? '+' : '−'}${dd$(Math.abs(net)).replace('D$', 'D$')} earned since your D$1,000</span></div>
@@ -389,7 +391,7 @@ const acctPass = () => store.get('acct');
 async function acctApi(path, body) { const r = await fetch(CFG.chat + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) { const e = new Error(j.error || 'the server didn’t answer'); e.status = r.status; throw e; } return j; }
 async function acctLoad() { const P = acctPass(); if (!P) { AC.me = null; return; } try { AC.me = await acctApi('/acct/me', { token: P.token }); AC.err = ''; }
-  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); }
+  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); else if (S.tab === 'challenges') viewChallenges(); else if (S.tab === 'leagues') viewLeagues(); }
 function acctBadge() { const b = $('#acctBtn'); if (!b) return; const P = acctPass(); b.textContent = P ? P.name.slice(0, 1).toUpperCase() : ''; b.classList.toggle('in', !!P); b.setAttribute('aria-label', P ? `My tickets (${P.name})` : 'Sign in'); }
 const tid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 function legAuto(l) { if (l.src !== 'pick' || l.res) return l.res; const B = boardOf(); if (!B) return null; const g = (B.games || []).find(x => x.sp === l.sp && x.game === l.game); if (!g) return null;
@@ -1006,6 +1008,8 @@ function viewChat() {
 }
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
+  if (f.dataset.form === 'lgcreate') { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/lg/create', { token: P.token, name: f.name.value.trim() }); if (AC.me) AC.me.leagues = [...(AC.me.leagues || []), j.league]; LGS.code = j.league.code; LGS.week = null; store.set('lgcode', LGS.code); viewLeagues(); toast(`${j.league.name} is live. Code: ${j.league.code}`); } catch (err) { toast(err.message); } return; }
+  if (f.dataset.form === 'lgjoin') { await lgJoinCode(f.code.value.trim().toUpperCase()); return; }
   if (f.dataset.form === 'acct') { const n = $('#acctErr'); n.textContent = ''; const signup = AC.mode === 'signup';
     try { const j = await acctApi(signup ? '/acct/signup' : '/acct/login', { name: f.name.value.trim(), pass: f.pass.value, ...(signup ? { age21: !!(f.age21 && f.age21.checked) } : {}) });
       try { if (window.PasswordCredential && navigator.credentials) navigator.credentials.store(new PasswordCredential({ id: f.name.value.trim(), password: f.pass.value, name: j.name })).catch(() => { }); } catch (e2) { }
@@ -1139,18 +1143,82 @@ async function share() {
   try { if (navigator.share) { await navigator.share({ title: 'TheDesk', text, url: CFG.home }); return; } } catch { return; }
   try { await navigator.clipboard.writeText(`${text}\n${CFG.home}`); toast('Card copied'); } catch { toast('Couldn’t copy the card'); }
 }
-const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, longshots: viewLongshots, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
+/* ── Challenges + Leagues (v3.0.36, Chris, Nov 15: "load the challenges tab on the public and the leagues tab"). Both run on the
+   members' D$ — play money, graded by the server, bragging rights only. A challenge is its own D$100 bankroll racing a clock; a
+   league is a week-long season (Monday–Sunday, Central), everyone in TheDesk League plus any private league with a code. */
+const CX = { board: null, at: 0 }, LGS = { code: store.get('lgcode') || 'ALL', week: null, data: {}, at: {} };
+const CHN = { '2x7': 'Double Up', '4x7': 'The Quad', '10x21': 'Ten-Bagger', '20x30': 'The Moonshot' };
+const cxLeft = ms => { if (ms <= 0) return 'time’s up'; const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 60e3); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };
+const cxTook = ms => { const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5); return d ? `${d}d ${h}h` : `${Math.max(1, h)}h`; };
+const runPct = r => Math.max(0, Math.min(1, Math.log(Math.max(r.bal, 1) / r.start) / Math.log(r.goal / r.start)));
+const liveRuns = () => ((AC.me && AC.me.runs) || []).filter(r => r.status === 'live' && r.ends > Date.now());
+async function chalLoad(force) { if (!force && CX.board && Date.now() - CX.at < 30e3) return; try { const r = await fetch(CFG.chat + '/acct/chal', { cache: 'no-store' }); if (r.ok) { CX.board = await r.json(); CX.at = Date.now(); if (S.tab === 'challenges') viewChallenges(); } } catch (e) { } }
+async function lgLoad(force) { const k = LGS.code + '|' + (LGS.week || ''); if (!force && LGS.data[k] && Date.now() - (LGS.at[k] || 0) < 30e3) return;
+  try { const r = await fetch(CFG.chat + '/acct/lg?code=' + encodeURIComponent(LGS.code) + (LGS.week ? '&week=' + LGS.week : ''), { cache: 'no-store' }); const j = await r.json().catch(() => ({}));
+    if (r.ok) { LGS.data[k] = j; LGS.at[k] = Date.now(); } else if (r.status === 404 && LGS.code !== 'ALL') { LGS.code = 'ALL'; store.set('lgcode', 'ALL'); return lgLoad(true); }
+    if (S.tab === 'leagues') viewLeagues(); } catch (e) { } }
+const compSwitch = on => `<div class="compsw" role="tablist">${[['challenges', '🎯 Challenges'], ['leagues', '🏆 Leagues']].map(([t, l]) => `<button type="button" role="tab" aria-selected="${on === t}" class="${on === t ? 'on' : ''}" data-go="${t}">${l}</button>`).join('')}</div>`;
+const signCta = what => `<div class="paper ddpitch"><b>Sign in to ${what}</b><p>Free: an account comes with D$1,000 of play money for the Slate, plus a fresh D$100 bankroll for every challenge you start.</p><div class="row"><button type="button" class="btn sm" data-go="me">Sign in or sign up</button></div></div>`;
+/* the two ways to the goal from where a run stands: steady (one −110 single a day on pace) or bold (one ticket, all in) */
+function runPath(r) { const now = Date.now(), daysLeft = Math.max(1, Math.ceil((r.ends - now) / 864e5)), m = r.goal / Math.max(r.bal, 0.01);
+  if (r.bal >= r.goal) return ''; const d = Math.pow(m, 1 / daysLeft), f = (d - 1) / (100 / 110), steady = r.bal * f;
+  return `<div class="rpath"><div><small>Steady</small><b>${steady <= r.bal ? `${dd$(Math.ceil(steady))} on a −110 single today` : 'a parlay a day'}</b><span>grows it ×${d.toFixed(2)} a day: on pace for ${dd$(r.goal)} in ${daysLeft} day${daysLeft > 1 ? 's' : ''}</span></div>
+    <div><small>Bold</small><b>one ticket at ${esc(decAm(m))}</b><span>all ${dd$(r.bal)} in, and it’s done tonight</span></div></div>`; }
+function runCard(r) { const live = r.status === 'live' && r.ends > Date.now(), p = runPct(r), c = CHN[r.cid] || r.cid;
+  const chip = live ? `<span class="fchip live">● ${cxLeft(r.ends - Date.now())} left</span>` : { won: '<span class="fchip cashed">🏆 Done</span>', busted: '<span class="fchip lost">Busted</span>', expired: '<span class="fchip">Time ran out</span>', quit: '<span class="fchip">Quit</span>' }[r.status] || '<span class="fchip">Settling</span>';
+  return `<article class="runcard ${r.status}"><div class="rc-h"><b>${esc(c)}</b>${chip}</div>
+    <div class="rc-n"><b>${dd$(r.bal)}</b><span>of ${dd$(r.goal)}</span></div><div class="rc-bar"><i style="width:${(p * 100).toFixed(1)}%"></i><em style="left:0">${dd$(r.start)}</em><em style="right:0">${dd$(r.goal)}</em></div>
+    <p class="rc-m">${r.w || 0}-${r.l || 0}${r.p ? '-' + r.p : ''} · ${r.bets || 0} bet${r.bets === 1 ? '' : 's'}${r.open ? ` · <b>${r.open} open</b>` : ''}${r.status === 'won' ? ` · finished in ${cxTook(r.done - r.ts)}` : ''}</p>
+    ${live ? runPath(r) + `<div class="row"><button type="button" class="btn sm" data-act="runuse" data-rid="${esc(r.rid)}">Bet from this run</button><button type="button" class="btn ghost sm" data-act="runquit" data-rid="${esc(r.rid)}">Quit</button></div>` : ''}</article>`; }
+const confirmQuit = b => { if (b.dataset.sure === '1') return true; b.dataset.sure = '1'; b.textContent = 'Tap again to quit'; return false; };
+async function lgJoinCode(code) { const P = acctPass(); if (!P) { go('me', true); toast('Sign in to join a league'); return; }
+  try { const j = await acctApi('/acct/lg/join', { token: P.token, code }); if (AC.me) AC.me.leagues = [...(AC.me.leagues || []).filter(g => g.code !== j.league.code), j.league]; LGS.code = j.league.code; LGS.week = null; store.set('lgcode', LGS.code); go('leagues', true); toast(`You’re in ${j.league.name}`); } catch (e) { toast(e.message); } }
+function viewChallenges() {
+  const el = $('#v-challenges'), B = CX.board, P = acctPass(), mine = (AC.me && AC.me.runs) || [], live = liveRuns(), done = mine.filter(r => !live.includes(r)).slice(0, 6);
+  const cards = B ? B.chal.map(c => { const going = live.find(r => r.cid === c.id); return `<article class="chcard c${esc(c.id)}"><div class="ch-x">${c.x}<small>×</small></div><div class="ch-b"><h3>${esc(c.name)}</h3><p class="ch-g">${dd$(c.start)} → ${dd$(c.start * c.x)} · ${c.days} days</p><p class="ch-bl">${esc(c.blurb)}</p>
+      <p class="ch-s"><span><b>${c.live}</b> running</span><span><b>${c.won}</b> of ${c.tries} finished</span>${c.fastest ? `<span>fastest: <b>${esc(c.fastest.name)}</b> in ${cxTook(c.fastest.took)}</span>` : ''}</p></div>
+      <div class="ch-go">${going ? '<span class="fchip live">● Yours is running</span>' : `<button type="button" class="btn foil sm" data-act="chaljoin" data-cid="${esc(c.id)}">Start</button>`}</div></article>`; }).join('') : '<div class="shimmer"></div>';
+  el.innerHTML = `${compSwitch('challenges')}<h1 class="title">Challenges</h1><p class="lede">Pick a goal and get a fresh D$100 bankroll that’s only for that run. Then race the clock. Every bet is a game line the server prices and grades on its own, so every finish is real.</p>
+    ${P ? (live.length ? `<h2 class="h2">Your runs</h2><div class="rgrid">${live.map(runCard).join('')}</div>` : '') : signCta('take a challenge')}
+    <h2 class="h2">Pick a challenge</h2><div class="chlist">${cards}</div>
+    ${B && B.leaders.length ? `<h2 class="h2">Closest to the finish</h2><div class="paper lead-l">${B.leaders.map((r, i) => `<div class="ll"><span class="n">${i + 1}</span><span class="w"><b>${esc(r.name)}</b><small>${esc(CHN[r.cid] || r.cid)} · ${cxLeft(r.ends - Date.now())} left</small></span><span class="bar"><i style="width:${Math.max(2, r.pct)}%"></i></span><span class="v">${dd$(r.bal)}<small>of ${dd$(r.goal)}</small></span></div>`).join('')}</div>` : ''}
+    ${B && B.recent.length ? `<h2 class="h2">Just finished</h2><div class="paper lead-l fin">${B.recent.slice(0, 10).map(x => `<div class="ll"><span class="n">${x.status === 'won' ? '🏆' : '✗'}</span><span class="w"><b>${esc(x.name)}</b><small>${esc(CHN[x.cid] || x.cid)}</small></span><span class="v v-${x.status}">${x.status === 'won' ? `done in ${cxTook(x.took)}` : x.status === 'busted' ? 'busted' : 'time ran out'}</span></div>`).join('')}</div>` : ''}
+    ${done.length ? `<h2 class="h2">Your past runs</h2><div class="rgrid">${done.map(runCard).join('')}</div>` : ''}
+    <p class="note">Desk Dollars are play money: never cashed out, never a prize. A run’s bankroll is separate from your wallet, and starting one costs nothing.</p>${footHtml()}`;
+  chalLoad(); }
+function viewLeagues() {
+  const el = $('#v-leagues'), P = acctPass(), mine = (AC.me && AC.me.leagues) || [], k = LGS.code + '|' + (LGS.week || ''), D = LGS.data[k], me = P && P.name;
+  const pend = store.get('lgjoin');
+  const chips = `<div class="lgchips"><button type="button" class="${LGS.code === 'ALL' ? 'on' : ''}" data-act="lgpick" data-code="ALL">TheDesk League</button>${mine.map(g => `<button type="button" class="${LGS.code === g.code ? 'on' : ''}" data-act="lgpick" data-code="${esc(g.code)}">${esc(g.name)}</button>`).join('')}</div>`;
+  const wk = D ? `<div class="lgweek"><div><small>${D.current ? 'This week' : 'Week of'}</small><b>${esc(monthDay(D.week))} – ${esc(monthDay(new Date(Date.parse(D.week + 'T12:00:00Z') + 6 * 864e5).toISOString().slice(0, 10)))}</b></div>
+    <div>${D.current ? `<small>Ends Sunday midnight CT</small><b>${cxLeft(D.ends - Date.now())} left</b>` : '<small>Final</small><b>Season over</b>'}</div>
+    <button type="button" class="btn line sm" data-act="lgweek" data-w="${D.current ? esc(D.prev) : ''}">${D.current ? '← Last week' : 'This week →'}</button></div>` : '';
+  const rows = D ? (D.rows.length ? `<div class="psheet lb lgt"><div class="ps-h"><span>#</span><span>Player</span><span>Net</span><span>Record</span></div>${D.rows.map((r, i) => `<div class="ps-r${me && me === r.name ? ' on' : ''}"><span>${i === 0 && r.settled >= D.min && r.net > 0 ? '👑' : i + 1}</span><span><b>${esc(r.name)}</b>${r.open ? `<small>${r.open} open · ${dd$(r.os)} riding</small>` : ''}</span><span class="ps-s ${r.net > 0 ? 'up' : r.net < 0 ? 'dn' : ''}">${r.net > 0 ? '+' : r.net < 0 ? '−' : ''}${dd$(Math.abs(r.net))}</span><span>${r.w}-${r.l}${r.p ? '-' + r.p : ''}</span></div>`).join('')}</div>`
+    : `<div class="paper blank"><b>${D.current ? 'Nobody’s on the board yet this week' : 'No bets that week'}</b><p>${D.current ? 'Place a D$ bet on the <button type="button" class="link" data-go="slate">Slate</button> and you’re in.' : ''}</p></div>`) : '<div class="shimmer"></div>';
+  const g = mine.find(x => x.code === LGS.code), link = g ? `https://ironsilkweekly.com/desk/?lg=${g.code}#leagues` : '';
+  el.innerHTML = `${compSwitch('leagues')}<h1 class="title">Leagues</h1><p class="lede">Every week is a new season. Bet your Desk Dollars Monday through Sunday, and the best net on settled bets takes the crown. Bragging rights only.</p>
+    ${pend && P && !mine.some(x => x.code === pend) ? `<div class="paper lginv"><b>You’re invited to league ${esc(pend)}</b><div class="row"><button type="button" class="btn sm" data-act="lgjoinpend">Join it</button><button type="button" class="btn ghost sm" data-act="lgdrop">No thanks</button></div></div>` : ''}
+    ${P ? '' : signCta('play in a league')}${chips}${wk}
+    ${D && D.champ ? `<div class="lgchamp"><span>👑</span><div><small>Last week’s champion</small><b>${esc(D.champ.name)}</b><em>+${dd$(D.champ.net)} · ${esc(D.champ.rec)}</em></div></div>` : ''}
+    ${rows}
+    ${D ? `<p class="note">${D.league.code === 'ALL' ? 'TheDesk League is everyone who bets D$ that week.' : `${D.league.n} member${D.league.n === 1 ? '' : 's'}.`} Ranked by net on settled bets placed that week. To be crowned you need ${D.min}+ settled bets and a profit. Challenge bets don’t count here.</p>` : ''}
+    ${g ? `<div class="paper lgcode"><small>Invite code</small><b>${esc(g.code)}</b><div class="row"><button type="button" class="btn sm" data-act="lgcopy" data-link="${esc(link)}" data-name="${esc(g.name)}">Copy invite</button><button type="button" class="btn ghost sm" data-act="lgleave" data-code="${esc(g.code)}">Leave</button></div></div>` : ''}
+    ${D && D.hall.length ? `<h2 class="h2">Hall of champions</h2><div class="paper lead-l">${D.hall.map(h => `<div class="ll"><span class="n">👑</span><span class="w"><b>${esc(h.name)}</b><small>week of ${esc(monthDay(h.week))}</small></span><span class="v v-won">+${dd$(h.net)}<small>${esc(h.rec)}</small></span></div>`).join('')}</div>` : ''}
+    ${P ? `<div class="lgforms"><details class="paper"><summary>＋ Start a league</summary><form data-form="lgcreate"><label>League name<input name="name" required minlength="3" maxlength="32" placeholder="Hobart Sharps"></label><button class="btn sm" type="submit">Create it</button></form><p class="note">You get a 6-letter code to share. Up to 100 members.</p></details>
+      <details class="paper"><summary>Join with a code</summary><form data-form="lgjoin"><label>Code<input name="code" required minlength="6" maxlength="6" autocapitalize="characters" placeholder="ABC234"></label><button class="btn sm" type="submit">Join</button></form></details></div>` : ''}${footHtml()}`;
+  lgLoad(); }
+const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   if (!TABS.includes(tab)) tab = 'today';
   S.tab = tab;
   for (const t of TABS) $('#v-' + t).hidden = t !== tab;
-  for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top')) { if (b.dataset.go === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
+  for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top')) { if (b.dataset.go === tab || (b.dataset.also || '').split(' ').includes(tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
   if (push && location.hash !== '#' + tab) history.pushState(null, '', '#' + tab);
   render(); window.scrollTo(0, 0);
   try { if (TG && TG.BackButton) { if (tab === 'today') TG.BackButton.hide(); else TG.BackButton.show(); } } catch (e) { }
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
@@ -1182,11 +1250,22 @@ document.addEventListener('click', async e => {
         if (out.length && out.some(l => l.mk !== mk)) toast(hockey && !sgp && (mk === 'spread' || out.some(l => l.mk === 'spread')) ? 'Hockey parlay: moneyline + total, or the puck line alone (switch to SGP for puck line + total)' : 'Swapped it: moneyline or spread, plus the total');
         const L = ddLegOf(g, mk, sd); if (L) S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); }
       store.set('ddslip', S.dd); render(); } }
+  else if (act === 'chaljoin') { const P = acctPass(); if (!P) { go('me', true); toast('Sign in to take a challenge'); return; }
+    try { const j = await acctApi('/acct/chal/join', { token: P.token, cid: a.dataset.cid }); if (AC.me) AC.me.runs = [j.run, ...(AC.me.runs || [])]; S.ddRun = j.run.rid; store.set('ddrun', S.ddRun); CX.at = 0; viewChallenges(); toast(`${CHN[j.run.cid] || 'Run'} started: D$${j.run.start} to ${dd$(j.run.goal)}. Your slip now bets from it.`); } catch (e) { toast(e.message); } }
+  else if (act === 'runuse') { S.ddRun = a.dataset.rid; store.set('ddrun', S.ddRun); go('slate', true); toast('Tap any line on the Slate: the slip bets from this run'); }
+  else if (act === 'runquit') { const P = acctPass(); if (!P || !confirmQuit(a)) return; try { const j = await acctApi('/acct/chal/quit', { token: P.token, rid: a.dataset.rid }); if (AC.me) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); CX.at = 0; viewChallenges(); } catch (e) { toast(e.message); } }
+  else if (act === 'lgpick') { LGS.code = a.dataset.code; LGS.week = null; store.set('lgcode', LGS.code); viewLeagues(); }
+  else if (act === 'lgweek') { LGS.week = a.dataset.w || null; viewLeagues(); }
+  else if (act === 'lgcopy') { copyText(`Join my TheDesk league "${a.dataset.name}": ${a.dataset.link}`, 'Invite copied. Send it to the crew.'); }
+  else if (act === 'lgleave') { const P = acctPass(); if (!P) return; if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.textContent = 'Tap again to leave'; return; }
+    try { await acctApi('/acct/lg/leave', { token: P.token, code: a.dataset.code }); if (AC.me) AC.me.leagues = (AC.me.leagues || []).filter(g => g.code !== a.dataset.code); LGS.code = 'ALL'; store.set('lgcode', 'ALL'); viewLeagues(); toast('You left the league'); } catch (e) { toast(e.message); } }
+  else if (act === 'lgjoinpend') { await lgJoinCode(store.get('lgjoin')); store.set('lgjoin', null); }
+  else if (act === 'lgdrop') { store.set('lgjoin', null); viewLeagues(); }
   else if (act === 'ddmode') { S.ddMode = a.dataset.v; store.set('ddmode', S.ddMode); render(); }
   else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
   else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }
-    const st = +(($('#ddStake') || {}).value || 0); try { const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: S.ddMode, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
-      if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; } S.dd = []; store.set('ddslip', S.dd); store.set('ddstake', st); render(); toast(`Placed${j.bet.mode === 'sgp' ? ' (SGP)' : ''}: ${dd$(j.bet.stake)} to win ${dd$(j.bet.toWin)}`); LB = null; } catch (e) { toast(e.message); } }
+    const st = +(($('#ddStake') || {}).value || 0); try { const run = ddRunOn(); const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: S.ddMode, run: run || undefined, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
+      if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; if (j.run) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); } CX.at = 0; LGS.at = {}; S.dd = []; store.set('ddslip', S.dd); store.set('ddstake', st); render(); toast(`Placed${j.bet.mode === 'sgp' ? ' (SGP)' : ''}: ${dd$(j.bet.stake)} to win ${dd$(j.bet.toWin)}`); LB = null; } catch (e) { toast(e.message); } }
   else if (act === 'acmode') { AC.mode = a.dataset.v; viewMe(); }
   else if (act === 'aclogout') { const P = acctPass(); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); if (P) acctApi('/acct/logout', { token: P.token }).catch(() => { }); }
   else if (act === 'tkmark') { const t = ((AC.me && AC.me.tickets) || []).find(x => x.id === a.dataset.id); if (t) { const l = t.legs[+a.dataset.i]; l.res = l.res === a.dataset.v ? null : a.dataset.v; viewMe(); tkSave(t); } }
@@ -1208,7 +1287,7 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
 document.addEventListener('input', e => { if (e.target.id === 'ddStake') { const v = +e.target.value || 0, dec = ddTicketDec(S.dd, S.ddMode), n = $('#ddPays'); if (n) n.textContent = dd$(v * dec); } });
-document.addEventListener('change', e => { const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
+document.addEventListener('change', e => { const df = e.target.closest('[data-change="ddfrom"]'); if (df) { S.ddRun = df.value; store.set('ddrun', S.ddRun); render(); return; } const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
 /* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
 async function restartApp() {
   toast('Restarting with the newest version…');
@@ -1255,6 +1334,7 @@ if (S.slate && !(S.slate.v === 1 && Array.isArray(S.slate.days))) S.slate = null
 chip();
 /* ?embed=1 · the chat inside the desk's own app: no header, no tabs */
 if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
+{ const m = location.search.match(/[?&]lg=([A-Za-z0-9]{6})\b/); if (m) { store.set('lgjoin', m[1].toUpperCase()); history.replaceState(null, '', location.pathname + '#leagues'); } } /* an invite link: offer the join on the Leagues tab */
 go((() => { try { const sp = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param; if (sp && TABS.includes(sp)) return sp; } catch (e) { } return (location.hash || '#today').slice(1); })(), false);
 loadFeed(); liveTick(); /* scores straight away off the saved card: live legs shouldn't wait for a new publish or the minute loop */
 acctBadge(); acctLoad();

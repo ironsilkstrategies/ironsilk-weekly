@@ -157,10 +157,39 @@ export function cleanTicket(t) { if (!t || typeof t !== 'object') return null; c
   if (!legs.length) return null;
   return { id, ts: Number.isFinite(+t.ts) ? +t.ts : Date.now(), title: str(t.title, 40), stake: Number.isFinite(+t.stake) && +t.stake > 0 ? Math.min(100000, Math.round(+t.stake * 100) / 100) : null,
     odds: Number.isFinite(+t.odds) && Math.abs(+t.odds) >= 100 ? Math.round(+t.odds) : null, legs }; }
+/* ═══ CHALLENGES + LEAGUES (v3.0.36, Chris, Nov 15: "load the challenges tab on the public and the leagues tab") ════════════════
+   CHALLENGES · pick a goal, get a fresh D$100 bankroll that belongs to that run alone (free, the wallet isn't touched), and race
+   the clock. Bets from a run are ordinary D$ bets — game lines the server prices and grades itself — so every finish is real.
+   A run is won the moment its bankroll reaches the goal, busted when it's under D$1 with nothing open, expired when time runs
+   out with nothing open. One live run per challenge per member.
+   LEAGUES · every week (Monday–Sunday, Central) is a season. Wallet bets count toward the week they were placed in; the board
+   ranks the net on settled bets. TheDesk League is everyone; members can make private leagues with a 6-letter code. The top
+   net with 3+ settled bets wins the week. Bragging rights only: nothing here is cashed out or a prize.
+   Routes: GET /acct/chal · POST /acct/chal/join {token,cid} · /acct/chal/quit {token,rid}
+           GET /acct/lg?code=ALL|XXXXXX · POST /acct/lg/create {token,name} · /acct/lg/join {token,code} · /acct/lg/leave {token,code} */
+export const CHAL = [
+  { id: '2x7', name: 'Double Up', x: 2, days: 7, start: 100, blurb: 'Turn D$100 into D$200 inside a week.' },
+  { id: '4x7', name: 'The Quad', x: 4, days: 7, start: 100, blurb: 'D$100 to D$400 in seven days. Pick your spots.' },
+  { id: '10x21', name: 'Ten-Bagger', x: 10, days: 21, start: 100, blurb: 'D$100 to D$1,000 in three weeks.' },
+  { id: '20x30', name: 'The Moonshot', x: 20, days: 30, start: 100, blurb: 'D$100 to D$2,000 in thirty days. Legends only.' }];
+const LG_MAX = 8, LG_SIZE = 100, LG_CODE = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', CHAMP_MIN = 3;
+const r2 = n => Math.round(n * 100) / 100;
+export function weekOf(t) { const P = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' }).formatToParts(new Date(t)).map(x => [x.type, x.value]));
+  const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(P.weekday); return new Date(Date.UTC(+P.year, +P.month - 1, +P.day) - wd * 864e5).toISOString().slice(0, 10); }
+/* when a week ends: the next Monday, midnight Central (CST or CDT, whichever that night is) */
+export function weekEnd(wk) { const d = Date.parse(wk + 'T00:00:00Z') + 7 * 864e5; for (const h of [5, 6]) { const t = d + h * 36e5; const hr = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(t)); if (hr === 0) return t; } return d + 6 * 36e5; }
+const wkPrev = wk => new Date(Date.parse(wk + 'T00:00:00Z') - 7 * 864e5).toISOString().slice(0, 10);
+const ledger = (u, l) => ({ name: (l && l.name) || u.name, n: 0, st: 0, bk: 0, w: 0, l: 0, p: 0, open: 0, os: 0, ...(l || {}) });
+export function lgRows(L) { return L.map(x => ({ name: x.name, net: r2(x.bk - x.st), w: x.w, l: x.l, p: x.p, n: x.n, open: x.open, os: r2(x.os), settled: x.w + x.l + x.p }))
+  .sort((a, b) => b.net - a.net || b.w - a.w || a.n - b.n); }
+export const lgChamp = rows => rows.find(r => r.settled >= CHAMP_MIN && r.net > 0) || null;
 export class Accounts {
   constructor(ctx, env, deps = {}) { this.ctx = ctx; this.env = env; this.now = deps.now || (() => Date.now()); this.fetchFn = deps.fetch || null; }
   async fetch(req) { const url = new URL(req.url), p = url.pathname, H = cors(req, this.env);
-    try { if (req.method === 'GET' && p === '/acct/board') return this.board(H); if (req.method !== 'POST') return json({ error: 'not found' }, 404, H);
+    try { if (req.method === 'GET' && p === '/acct/board') return this.board(H);
+      if (req.method === 'GET' && p === '/acct/chal') return this.chalBoard(url.searchParams.get('me'), H);
+      if (req.method === 'GET' && p === '/acct/lg') return this.lgBoard(String(url.searchParams.get('code') || 'ALL').toUpperCase(), url.searchParams.get('week'), H);
+      if (req.method !== 'POST') return json({ error: 'not found' }, 404, H);
       const ip = req.headers.get('cf-connecting-ip') || 'unknown'; let b; try { b = await req.json(); } catch (e) { return json({ error: 'body' }, 400, H); }
       if (p === '/acct/board') return this.board(H);
       if (p === '/acct/signup') return this.signup(b, ip, H);
@@ -170,10 +199,17 @@ export class Accounts {
       if (p === '/acct/bet') return this.bet(s, b, H);
       if (p === '/acct/buy') return this.env.STORE_ON === 'yes' ? json({ error: 'checkout isn’t connected yet' }, 501, H) : json({ error: 'the D$ store opens soon' }, 403, H);
       if (p === '/acct/grant') return this.grant(s, b, H);
+      if (p === '/acct/chal/join') return this.chalJoin(s, b, H);
+      if (p === '/acct/chal/quit') return this.chalQuit(s, b, H);
+      if (p === '/acct/lg/create') return this.lgCreate(s, b, H);
+      if (p === '/acct/lg/join') return this.lgJoin(s, b, H);
+      if (p === '/acct/lg/leave') return this.lgLeave(s, b, H);
       if (p === '/acct/save') return this.save(s, b, H);
       if (p === '/acct/del') { await this.ctx.storage.delete('t:' + s.key + ':' + String(b.id || '')); return json({ ok: true }, 200, H); }
       if (p === '/acct/close') { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (u && u.owner) return json({ error: 'the owner account stays' }, 400, H); if (!u || !(await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash))) return json({ error: 'that password doesn’t match' }, 403, H);
-        for (const pre of ['t:', 'b:', 'o:']) { const L = await S.list({ prefix: pre + s.key + ':' }); if (L.size) await S.delete([...L.keys()]); } const ses = await S.list({ prefix: 's:' }); const mine = [...ses].filter(([, v]) => v.key === s.key).map(([k]) => k); if (mine.length) await S.delete(mine);
+        for (const pre of ['t:', 'b:', 'o:', 'c:', 'r:']) { const L = await S.list({ prefix: pre + s.key + ':' }); if (L.size) await S.delete([...L.keys()]); }
+        for (const code of (u.lg || [])) { const g = await S.get('L:' + code); if (g) { g.members = g.members.filter(k => k !== s.key); if (g.members.length) await S.put('L:' + code, g); else await S.delete('L:' + code); } }
+        { const W = await S.list({ prefix: 'w:' }); const mine = [...W.keys()].filter(k => k.endsWith(':' + s.key)); if (mine.length) await S.delete(mine); } const ses = await S.list({ prefix: 's:' }); const mine = [...ses].filter(([, v]) => v.key === s.key).map(([k]) => k); if (mine.length) await S.delete(mine);
         await S.delete('u:' + s.key); return json({ ok: true }, 200, H); }
       if (p === '/acct/logout') { await this.ctx.storage.delete('s:' + b.token); return json({ ok: true }, 200, H); }
       return json({ error: 'not found' }, 404, H);
@@ -204,11 +240,18 @@ export class Accounts {
   async me(s, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H);
     if (!u.dd) { u.dd = ddWallet(u); u.dd.at = this.now(); await S.put('u:' + s.key, u); }
     const L = await S.list({ prefix: 't:' + s.key + ':' }); const B = await S.list({ prefix: 'b:' + s.key + ':' });
-    return json({ name: s.name, owner: !!u.owner, since: u.at, wallet: u.dd, store: this.env.STORE_ON === 'yes', tickets: [...L.values()].sort((a, b) => b.ts - a.ts), bets: [...B.values()].sort((a, b) => b.ts - a.ts).slice(0, 100) }, 200, H); }
+    const C = await S.list({ prefix: 'c:' + s.key + ':' }), lg = [];
+    for (const code of (u.lg || [])) { const g = await S.get('L:' + code); if (g) lg.push({ code, name: g.name, n: g.members.length, mine: g.owner === s.key }); }
+    return json({ name: s.name, owner: !!u.owner, since: u.at, wallet: u.dd, store: this.env.STORE_ON === 'yes', tickets: [...L.values()].sort((a, b) => b.ts - a.ts), bets: [...B.values()].sort((a, b) => b.ts - a.ts).slice(0, 100),
+      runs: [...C.values()].sort((a, b) => b.ts - a.ts).slice(0, 20), trophies: u.tr || null, leagues: lg }, 200, H); }
   async slate() { if (this._sl && this.now() - this._sl.t < 5 * 60e3) return this._sl.v; const f = this.fetchFn || fetch; const r = await f(SLATE_URL, { cf: { cacheTtl: 120 } }); if (!r.ok) throw new Error('slate');
     const v = await r.json(); const G = new Map(); (v.days || []).forEach(d => (d.games || []).forEach(g => G.set(g.k, g))); this._sl = { t: this.now(), v: G }; return G; }
   async bet(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); const W = ddWallet(u);
-    const stake = Math.round(+b.stake * 100) / 100; if (!(stake >= 1)) return json({ error: 'the smallest bet is D$1' }, 400, H); if (stake > W.bal) return json({ error: `you have D$${W.bal.toLocaleString('en-US')}` }, 400, H);
+    const rk = b.run ? 'c:' + s.key + ':' + String(b.run).replace(/[^a-z0-9]/gi, '').slice(0, 24) : null, run = rk ? await S.get(rk) : null;
+    if (rk && (!run || run.status !== 'live')) return json({ error: 'that challenge run is over' }, 400, H);
+    if (run && run.ends <= this.now()) return json({ error: 'time’s up on that run — no new bets' }, 400, H);
+    const pot = run ? run.bal : W.bal;
+    const stake = Math.round(+b.stake * 100) / 100; if (!(stake >= 1)) return json({ error: 'the smallest bet is D$1' }, 400, H); if (stake > pot) return json({ error: `${run ? 'this run has' : 'you have'} D$${pot.toLocaleString('en-US')}` }, 400, H);
     const want = Array.isArray(b.legs) ? b.legs.slice(0, DD_LEGS + 1) : []; if (!want.length) return json({ error: 'add a leg' }, 400, H); if (want.length > DD_LEGS) return json({ error: `up to ${DD_LEGS} legs` }, 400, H);
     let G; try { G = await this.slate(); } catch (e) { return json({ error: 'the lines can’t be reached right now — try again in a minute' }, 503, H); }
     const mode = b.mode === 'sgp' ? 'sgp' : 'parlay', seen = new Set(), per = new Map(), legs = [];
@@ -223,24 +266,82 @@ export class Accounts {
     const dec = ddTicketDec(legs, mode), id = this.now().toString(36) + rid(4);
     if (dec > DD_CAP) return json({ error: `that ticket pays over ${DD_CAP.toLocaleString('en-US')}x — the most any ticket can pay is ${DD_CAP.toLocaleString('en-US')}x the stake` }, 400, H);
     const bet = { id, ts: this.now(), stake, mode, dec: Math.round(dec * 1000) / 1000, toWin: Math.round(stake * (dec - 1) * 100) / 100, legs, status: 'open' };
-    W.bal = Math.round((W.bal - stake) * 100) / 100; W.staked = Math.round((W.staked + stake) * 100) / 100; u.dd = W;
-    await S.put('u:' + s.key, u); await S.put('b:' + s.key + ':' + id, bet); await S.put('o:' + s.key + ':' + id, 1); this._bd = null; await this.wake();
-    return json({ bet, wallet: W }, 200, H); }
+    if (run) { bet.run = run.rid; bet.cid = run.cid; run.bal = r2(run.bal - stake); run.open = (run.open || 0) + 1; run.bets = (run.bets || 0) + 1; await S.put(rk, run); }
+    else { W.bal = r2(W.bal - stake); W.staked = r2(W.staked + stake); u.dd = W; await S.put('u:' + s.key, u);
+      /* the week it was placed in: that's the league week it counts for */
+      bet.wk = weekOf(this.now()); const wk = 'w:' + bet.wk + ':' + s.key, L = ledger(u, await S.get(wk)); L.name = u.name; L.n++; L.open++; L.os = r2(L.os + stake); await S.put(wk, L); this._lg = null; }
+    await S.put('b:' + s.key + ':' + id, bet); await S.put('o:' + s.key + ':' + id, 1); this._bd = null; this._ch = null; await this.wake();
+    return json({ bet, wallet: W, run: run || null }, 200, H); }
   async wake() { try { const a = await this.ctx.storage.getAlarm(); if (a == null) await this.ctx.storage.setAlarm(this.now() + 10 * 60e3); } catch (e) { } }
   async scores(sp, day) { const k = sp + day; this._sc = this._sc || new Map(); const c = this._sc.get(k); if (c && this.now() - c.t < 5 * 60e3) return c.v;
     const f = this.fetchFn || fetch; const r = await f(`https://site.api.espn.com/apis/site/v2/sports/${ESPN_PATH[sp]}/scoreboard?dates=${day}&limit=400${ESPN_GROUP[sp] || ''}`); const v = new Map();
     if (r.ok) { const j = await r.json(); (j.events || []).forEach(e => { const c0 = e.competitions && e.competitions[0]; if (!c0) return; const A = c0.competitors.find(x => x.homeAway === 'away'), Hm = c0.competitors.find(x => x.homeAway === 'home');
       if (!A || !Hm) return; v.set(A.team.abbreviation + '@' + Hm.team.abbreviation, { done: !!(c0.status && c0.status.type && c0.status.type.completed), a: +A.score, h: +Hm.score }); }); }
     this._sc.set(k, { t: this.now(), v }); return v; }
-  async alarm() { const S = this.ctx.storage, O = await S.list({ prefix: 'o:' }); if (!O.size) return; const dayOf = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(t)).replace(/-/g, '');
+  async alarm() { const S = this.ctx.storage, O = await S.list({ prefix: 'o:' }); const dayOf = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(t)).replace(/-/g, '');
     for (const ok of O.keys()) { const [, key, id] = ok.split(':'); const bk = 'b:' + key + ':' + id, bet = await S.get(bk); if (!bet || bet.status !== 'open') { await S.delete(ok); continue; }
       let changed = false; for (const l of bet.legs) { if (l.res || l.t > this.now()) continue; let sc = null; try { sc = (await this.scores(l.sp, dayOf(l.t))).get(l.game); } catch (e) { }
         if (sc && sc.done) { l.res = ddGrade(l, sc.a, sc.h); changed = true; } else if (this.now() - l.t > 3 * 864e5) { l.res = 'push'; l.void = true; changed = true; } }
       const fin = ddSettle(bet); if (!changed && !fin) continue;
-      if (fin) { bet.status = fin.status; bet.back = fin.back; bet.done = this.now(); const u = await S.get('u:' + key); if (u) { const W = ddWallet(u); W.bal = Math.round((W.bal + fin.back) * 100) / 100; W.back = Math.round((W.back + fin.back) * 100) / 100;
-          if (fin.status === 'won') W.w++; else if (fin.status === 'lost') W.l++; else W.p++; u.dd = W; await S.put('u:' + key, u); } await S.delete(ok); this._bd = null; }
+      if (fin) { bet.status = fin.status; bet.back = fin.back; bet.done = this.now(); const tally = o => { if (fin.status === 'won') o.w++; else if (fin.status === 'lost') o.l++; else o.p++; };
+        if (bet.run) { const rk = 'c:' + key + ':' + bet.run, run = await S.get(rk); if (run) { run.bal = r2(run.bal + fin.back); run.open = Math.max(0, (run.open || 1) - 1); run.w = run.w || 0; run.l = run.l || 0; run.p = run.p || 0; tally(run);
+            run.peak = Math.max(run.peak || run.start, run.bal); await S.put(rk, run); await this.runCheck(key, run); } }
+        else { const u = await S.get('u:' + key); if (u) { const W = ddWallet(u); W.bal = r2(W.bal + fin.back); W.back = r2(W.back + fin.back); tally(W); u.dd = W; await S.put('u:' + key, u);
+            if (bet.wk) { const wk = 'w:' + bet.wk + ':' + key, L = ledger(u, await S.get(wk)); L.open = Math.max(0, L.open - 1); L.os = r2(Math.max(0, L.os - bet.stake)); L.st = r2(L.st + bet.stake); L.bk = r2(L.bk + fin.back); tally(L); await S.put(wk, L); this._lg = null; } } }
+        await S.delete(ok); this._bd = null; this._ch = null; }
       await S.put(bk, bet); }
-    if ((await S.list({ prefix: 'o:', limit: 1 })).size) await S.setAlarm(this.now() + 10 * 60e3); }
+    /* challenge runs whose clock ran out */
+    for (const [rk2] of await S.list({ prefix: 'r:' })) { const [, key, rid2] = rk2.split(':'); const run = await S.get('c:' + key + ':' + rid2); if (!run || run.status !== 'live') { await S.delete(rk2); continue; } await this.runCheck(key, run); }
+    if ((await S.list({ prefix: 'o:', limit: 1 })).size || (await S.list({ prefix: 'r:', limit: 1 })).size) await S.setAlarm(this.now() + 10 * 60e3); }
+  /* a run ends: won the moment it reaches the goal; busted under D$1 with nothing open; expired when time's up and nothing's open */
+  async runCheck(key, run) { if (run.status !== 'live') return; const S = this.ctx.storage; let end = null;
+    if (run.bal >= run.goal) end = 'won'; else if (run.bal < 1 && !run.open) end = 'busted'; else if (run.ends <= this.now() && !run.open) end = 'expired';
+    if (!end) return; run.status = end; run.done = this.now(); await S.put('c:' + key + ':' + run.rid, run); await S.delete('r:' + key + ':' + run.rid);
+    if (end === 'won') { const u = await S.get('u:' + key); if (u) { u.tr = u.tr || {}; u.tr[run.cid] = (u.tr[run.cid] || 0) + 1; await S.put('u:' + key, u); } }
+    await S.put('cx:' + String(run.done).padStart(14, '0') + ':' + key, { name: run.name, cid: run.cid, status: end, bal: run.bal, goal: run.goal, took: run.done - run.ts, bets: run.bets || 0 });
+    const X = await S.list({ prefix: 'cx:' }); if (X.size > 60) await S.delete([...X.keys()].slice(0, X.size - 60)); this._ch = null; }
+  async chalJoin(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key), c = CHAL.find(x => x.id === b.cid); if (!u) return json({ error: 'sign in first' }, 401, H); if (!c) return json({ error: 'no such challenge' }, 400, H);
+    const live = [...(await S.list({ prefix: 'c:' + s.key + ':' })).values()].filter(r => r.status === 'live');
+    if (live.some(r => r.cid === c.id)) return json({ error: `you already have a ${c.name} run going` }, 400, H);
+    const rid2 = this.now().toString(36) + rid(4), run = { rid: rid2, cid: c.id, name: u.name, ts: this.now(), ends: this.now() + c.days * 864e5, start: c.start, bal: c.start, goal: c.start * c.x, peak: c.start, status: 'live', open: 0, bets: 0, w: 0, l: 0, p: 0 };
+    await S.put('c:' + s.key + ':' + rid2, run); await S.put('r:' + s.key + ':' + rid2, 1); await this.wake(); this._ch = null; return json({ run }, 200, H); }
+  async chalQuit(s, b, H) { const S = this.ctx.storage, rk = 'c:' + s.key + ':' + String(b.rid || '').replace(/[^a-z0-9]/gi, ''), run = await S.get(rk); if (!run || run.status !== 'live') return json({ error: 'that run is already over' }, 400, H);
+    run.status = 'quit'; run.done = this.now(); await S.put(rk, run); await S.delete('r:' + s.key + ':' + run.rid); this._ch = null; return json({ run }, 200, H); }
+  async chalBoard(meName, H) { if (!this._ch || this.now() - this._ch.t > 60e3) { const S = this.ctx.storage, all = [...(await S.list({ prefix: 'c:' })).values()], now = this.now();
+      const stats = CHAL.map(c => { const R = all.filter(r => r.cid === c.id), fin = R.filter(r => r.status !== 'live' && r.status !== 'quit'), won = fin.filter(r => r.status === 'won');
+        const fast = won.slice().sort((a, b) => (a.done - a.ts) - (b.done - b.ts))[0];
+        return { ...c, live: R.filter(r => r.status === 'live').length, tries: fin.length, won: won.length, fastest: fast ? { name: fast.name, took: fast.done - fast.ts } : null }; });
+      const leaders = all.filter(r => r.status === 'live' && r.ends > now).map(r => ({ name: r.name, cid: r.cid, bal: r.bal, goal: r.goal, start: r.start, ends: r.ends, pct: Math.round(1000 * Math.log(Math.max(r.bal, 1) / r.start) / Math.log(r.goal / r.start)) / 10 }))
+        .sort((a, b) => b.pct - a.pct).slice(0, 15);
+      const recent = [...(await S.list({ prefix: 'cx:' })).entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 20).map(e => e[1]);
+      this._ch = { t: now, v: { chal: stats, leaders, recent } }; }
+    return json(this._ch.v, 200, H); }
+  /* ── leagues ── */
+  async lgCreate(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H);
+    const name = str(b.name, 32); if (name.length < 3) return json({ error: 'give the league a name (3+ letters)' }, 400, H); if (clean(name) !== name) return json({ error: 'pick a cleaner name' }, 400, H);
+    u.lg = u.lg || []; if (u.lg.length >= LG_MAX) return json({ error: `up to ${LG_MAX} leagues each` }, 400, H);
+    let code = ''; for (let i = 0; i < 8; i++) { const a = new Uint8Array(6); crypto.getRandomValues(a); code = [...a].map(x => LG_CODE[x % LG_CODE.length]).join(''); if (!(await S.get('L:' + code))) break; }
+    const g = { code, name, owner: s.key, members: [s.key], at: this.now() }; await S.put('L:' + code, g); u.lg.push(code); await S.put('u:' + s.key, u); return json({ league: { code, name, n: 1, mine: true } }, 200, H); }
+  async lgJoin(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); const code = String(b.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+    const g = await S.get('L:' + code); if (!g) return json({ error: 'no league with that code' }, 404, H); u.lg = u.lg || [];
+    if (!u.lg.includes(code)) { if (u.lg.length >= LG_MAX) return json({ error: `up to ${LG_MAX} leagues each` }, 400, H); if (g.members.length >= LG_SIZE) return json({ error: 'that league is full' }, 400, H);
+      if (!g.members.includes(s.key)) g.members.push(s.key); u.lg.push(code); await S.put('L:' + code, g); await S.put('u:' + s.key, u); this._lg = null; }
+    return json({ league: { code, name: g.name, n: g.members.length, mine: g.owner === s.key } }, 200, H); }
+  async lgLeave(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); const code = String(b.code || '').toUpperCase(); const g = await S.get('L:' + code);
+    if (u) { u.lg = (u.lg || []).filter(c => c !== code); await S.put('u:' + s.key, u); }
+    if (g) { g.members = g.members.filter(k => k !== s.key); if (!g.members.length) await S.delete('L:' + code); else { if (g.owner === s.key) g.owner = g.members[0]; await S.put('L:' + code, g); } } this._lg = null; return json({ ok: true }, 200, H); }
+  async lgWeek(code, wk) { const S = this.ctx.storage; let L;
+    if (code === 'ALL') L = [...(await S.list({ prefix: 'w:' + wk + ':' })).values()];
+    else { const g = await S.get('L:' + code); if (!g) return null; L = (await Promise.all(g.members.map(k => S.get('w:' + wk + ':' + k)))).filter(Boolean);
+      const have = new Set(L.map(x => x.name.toLowerCase())); for (const k of g.members) if (!have.has(k)) { const u = await S.get('u:' + k); if (u) L.push(ledger(u)); } }
+    return lgRows(L.filter(x => x.n || code !== 'ALL')); }
+  async lgBoard(code, week, H) { const S = this.ctx.storage, now = this.now(), cur = weekOf(now), wk = /^\d{4}-\d{2}-\d{2}$/.test(String(week || '')) ? week : cur, ck = code + wk;
+    this._lg = this._lg || new Map(); const c = this._lg.get && this._lg.get(ck); if (c && now - c.t < 30e3) return json(c.v, 200, H);
+    const g = code === 'ALL' ? { name: 'TheDesk League', members: null } : await S.get('L:' + code); if (!g) return json({ error: 'no league with that code' }, 404, H);
+    const rows = await this.lgWeek(code, wk); const hall = [];
+    for (let w = wkPrev(wk), i = 0; i < 6; i++, w = wkPrev(w)) { const R = await this.lgWeek(code, w); const ch = R && lgChamp(R); if (ch) hall.push({ week: w, name: ch.name, net: ch.net, rec: `${ch.w}-${ch.l}${ch.p ? '-' + ch.p : ''}` }); }
+    const v = { league: { code, name: g.name, n: g.members ? g.members.length : rows.length }, week: wk, current: wk === cur, ends: weekEnd(wk), prev: wkPrev(wk), rows: rows.slice(0, 100), champ: hall[0] && hall[0].week === wkPrev(wk) ? hall[0] : null, hall, min: CHAMP_MIN };
+    if (!(this._lg instanceof Map)) this._lg = new Map(); this._lg.set(ck, { t: now, v }); return json(v, 200, H); }
   async board(H) { if (this._bd && this.now() - this._bd.t < 60e3) return json(this._bd.v, 200, H); const U = await this.ctx.storage.list({ prefix: 'u:' });
     const rows = [...U.values()].map(u => { const W = ddWallet(u); return { name: u.name, bal: W.bal, bought: W.bought, earned: Math.round((W.bal - W.bought) * 100) / 100, w: W.w, l: W.l, roi: W.staked ? Math.round(1000 * (W.back - W.staked) / W.staked) / 10 : null }; })
       .sort((a, b) => b.earned - a.earned).slice(0, 50); const v = { rows, n: U.size }; this._bd = { t: this.now(), v }; return json(v, 200, H); }

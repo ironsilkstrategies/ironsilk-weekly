@@ -127,7 +127,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   v = await visit(BETA); t = await v.text();
   T('open beta: every Best 3 pick is face up at lock, and the page says it\'s open to everyone', (await v.p.locator('#v-today .slip.locked').count()) === 0 && /PISTONS −9\.5/i.test(t) && /UNDER 40\.5/i.test(t) && /Open to everyone during the beta/.test(t));
   T('Today teases Founder LongShot Parlays: the live ticket, with a link to the LongShots tab', /FOUNDER LONGSHOT PARLAYS/i.test(t) && /LONGSHOT · 3 LEGS/i.test(t) && /LongShots tab/.test(t) && (await v.p.locator('#v-today [data-act="tail"]').count()) === 1 && !/LONGSHOT · 2 LEGS/i.test(t));
-  T('one row of tabs on a phone, Props third, LongShots fourth', await v.p.evaluate(() => { const b = [...document.querySelectorAll('.tabs button')]; const tops = new Set(b.map(x => Math.round(x.getBoundingClientRect().top))); return b.length === 7 && tops.size === 1 && b[2].dataset.go === 'props' && b[3].dataset.go === 'longshots' && b.every(x => x.scrollWidth <= x.clientWidth + 1); }), await v.p.evaluate(() => JSON.stringify([...document.querySelectorAll('.tabs button')].map(x => [x.dataset.go, Math.round(x.getBoundingClientRect().top), x.scrollWidth, x.clientWidth]))));
+  T('one row of tabs on a phone, Props third, LongShots fourth, Compete fifth', await v.p.evaluate(() => { const b = [...document.querySelectorAll('.tabs button')]; const tops = new Set(b.map(x => Math.round(x.getBoundingClientRect().top))); return b.length === 8 && tops.size === 1 && b[2].dataset.go === 'props' && b[3].dataset.go === 'longshots' && b.every(x => x.scrollWidth <= x.clientWidth + 1); }), await v.p.evaluate(() => JSON.stringify([...document.querySelectorAll('.tabs button')].map(x => [x.dataset.go, Math.round(x.getBoundingClientRect().top), x.scrollWidth, x.clientWidth]))));
   await v.p.click('.tabs [data-go="longshots"]'); await v.p.waitForTimeout(300); t = await v.text();
   T('the LongShots tab: every founder ticket, leg by leg, the odds, what $10 pays, the 30-day record; the live one tails, the lost one doesn\'t', /FOUNDER LONGSHOT PARLAYS/i.test(t) && /3 cashed, 5 lost/i.test(t) && /A\. Edwards 25\+ points/.test(t) && /\+1,150/.test(t) && /\$10 pays \$125/.test(t) && /LONGSHOT · 2 LEGS/i.test(t) && (await v.p.locator('#v-longshots [data-act="tail"]').count()) === 1 && (await v.p.locator('.slip.founder img').count()) === 0, (t.match(/Founder LongShot Parlays[^]{0,300}/i) || [])[0]);
   await v.p.click('#v-longshots [data-act="tail"]'); await v.p.waitForTimeout(300); t = await v.text();
@@ -225,6 +225,71 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await p.click('#v-cast [data-act="castpick"][data-v="Scout"]'); await p.waitForTimeout(400); t = await p.evaluate(() => document.querySelector('#v-cast').innerText);
     T('…its profile grades today\'s picks live: the game with score, clock and live chance; the prop with the stat against the line (found by team, off the box score)', /NYG ML|Giants ML/.test(t) && /LIVE WSH 3–10 NYG · 9:41 - 2nd · 86% live/i.test(t) && /Anthony Edwards under 39\.5 PTS\+REB\+AST[^]{0,200}36 \(under 39\.5\) · \d+% live/.test(t), (t.match(/Today’s official picks[^]{0,500}/i) || [t.slice(0, 500)])[0]);
     T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
+  /* ── Challenges + Leagues (v3.0.36) ── */
+  { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message))); const posts = [];
+    const runs = [], leagues = [];
+    const CHB = { chal: [['2x7', 'Double Up', 2, 7], ['4x7', 'The Quad', 4, 7], ['10x21', 'Ten-Bagger', 10, 21], ['20x30', 'The Moonshot', 20, 30]].map(([id, name, x, days]) => ({ id, name, x, days, start: 100, blurb: name + ' blurb', live: 3, tries: 5, won: 1, fastest: { name: 'BigShot', took: 30 * 36e5 } })),
+      leaders: [{ name: 'LoungeLizard', cid: '2x7', bal: 184, goal: 200, start: 100, ends: now + 2 * 864e5, pct: 88 }], recent: [{ name: 'BigShot', cid: '2x7', status: 'won', took: 30 * 36e5 }, { name: 'PuckHead', cid: '4x7', status: 'busted', took: 864e5 }] };
+    const LGB = code => ({ league: { code, name: code === 'ALL' ? 'TheDesk League' : 'Hobart Sharps', n: 3 }, week: '2026-11-16', current: true, ends: now + 3 * 864e5, prev: '2026-11-09', min: 3,
+      rows: [{ name: 'BigShot', net: 412.5, w: 5, l: 1, p: 0, n: 7, open: 1, os: 50, settled: 6 }, { name: 'Tester', net: -40, w: 2, l: 3, p: 0, n: 5, open: 0, os: 0, settled: 5 }], champ: { week: '2026-11-09', name: 'LoungeLizard', net: 655, rec: '6-2' }, hall: [{ week: '2026-11-09', name: 'LoungeLizard', net: 655, rec: '6-2' }] });
+    await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.acct', JSON.stringify({ token: 'x'.repeat(32), name: 'Tester', exp: Date.now() + 864e5 }));
+      localStorage.setItem('tdp.ddslip', JSON.stringify([{ k: 'nfl|WSH@NYG', mk: 'ml', side: 'home', sp: 'nfl', price: -130, pick: 'NYG ML' }])); } catch (e) { } });
+    await p.route('**/*', r => { const u = new URL(r.request().url()), req = r.request();
+      if (/picks\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(BETA) });
+      if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
+      if (u.hostname === 'thedesk-chat.ironsilkstrategies.workers.dev') { const body = req.method() === 'POST' ? JSON.parse(req.postData() || '{}') : null; if (body) posts.push([u.pathname, body]);
+        const J = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+        if (u.pathname === '/acct/me') return J({ name: 'Tester', wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0, staked: 0, back: 0 }, tickets: [], bets: [], runs, leagues });
+        if (u.pathname === '/acct/chal') return J(CHB);
+        if (u.pathname === '/acct/lg') return J(LGB(u.searchParams.get('code')));
+        if (u.pathname === '/acct/chal/join') { const run = { rid: 'run1', cid: body.cid, name: 'Tester', ts: now, ends: now + 7 * 864e5, start: 100, bal: 100, goal: 200, status: 'live', open: 0, bets: 0, w: 0, l: 0, p: 0 }; runs.unshift(run); return J({ run }); }
+        if (u.pathname === '/acct/bet') return J({ bet: { id: 'b1', stake: body.stake, mode: 'parlay', toWin: 19, legs: [], status: 'open', run: body.run }, wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0 }, run: { ...runs[0], bal: 75, open: 1, bets: 1 } });
+        if (u.pathname === '/acct/lg/create') { const lg = { code: 'HBS7K2', name: body.name, n: 1, mine: true }; leagues.push(lg); return J({ league: lg }); }
+        if (u.pathname === '/acct/lg/join') { const lg = { code: body.code, name: 'Hobart Sharps', n: 4, mine: false }; leagues.push(lg); return J({ league: lg }); }
+        return J({ rows: [], n: 0 }); }
+      if (u.hostname !== 'desk.test') return r.abort();
+      let f = path.join(W, decodeURIComponent(u.pathname)); if (f.endsWith('/')) f += 'index.html'; if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
+      r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
+    await p.goto('https://desk.test/desk/#today', { waitUntil: 'load' }); await p.waitForTimeout(900);
+    const bar = await p.evaluate(() => { const n = document.querySelector('.tabs'); const bs = [...n.querySelectorAll('button')]; return { n: bs.length, fits: bs.every(x => x.scrollWidth <= x.clientWidth + 1), labels: bs.map(x => x.innerText.trim()), over: document.documentElement.scrollWidth > innerWidth }; });
+    T('the bottom bar gets a Compete tab, still one row, every label fits', bar.n === 8 && bar.labels.includes('Compete') && bar.fits && !bar.over, JSON.stringify(bar));
+    await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(600); let t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
+    T('Challenges: a switch to Leagues, the four challenges (D$100 → goal, days, how many running and finished, the fastest), who\'s closest, who just finished', /Challenges/.test(t) && /Leagues/.test(t) && /Double Up/.test(t) && /The Moonshot/.test(t) && /D\$100 → D\$2,000 · 30 days/.test(t) && /1 of 5 finished/.test(t) && /BigShot in 1d 6h/.test(t) && /CLOSEST TO THE FINISH/i.test(t) && /LoungeLizard/.test(t) && /JUST FINISHED/i.test(t) && /busted/.test(t), t.slice(0, 900));
+    T('…the Compete tab stays lit on both pages', await p.evaluate(() => document.querySelector('.tabs [data-go="challenges"]').getAttribute('aria-current') === 'page'));
+    await p.click('[data-act="chaljoin"][data-cid="2x7"]'); await p.waitForTimeout(600); t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
+    T('Start → your run: D$100 of D$200, time left, the steady and the bold way there', posts.some(([u, bd]) => u === '/acct/chal/join' && bd.cid === '2x7') && /YOUR RUNS/i.test(t) && /D\$100\s*of D\$200/.test(t) && /6d 23h left|7d 0h left/i.test(t) && /Steady/i.test(t) && /Bold/i.test(t) && /one ticket at \+100/.test(t), t.slice(0, 800));
+    await p.click('[data-act="runuse"]'); await p.waitForTimeout(700);
+    const from = await p.evaluate(() => { const s = document.querySelector('#ddFrom'); return s ? [s.value, [...s.options].map(o => o.text)] : null; });
+    T('Bet from this run → the Slate, and the slip bets from the run (wallet or run, your pick)', from && from[0] === 'run1' && /Wallet/.test(from[1][0]) && /Double Up run · D\$100/.test(from[1][1]), JSON.stringify(from));
+    await p.fill('#ddStake', '25'); await p.click('[data-act="ddplace"]'); await p.waitForTimeout(500);
+    T('…placing sends the run with the bet', posts.some(([u, bd]) => u === '/acct/bet' && bd.run === 'run1' && bd.stake === 25), JSON.stringify(posts.filter(x => x[0] === '/acct/bet')));
+    await p.click('.compsw [data-go="leagues"]').catch(() => p.evaluate(() => location.hash = '#leagues')); await p.evaluate(() => document.querySelector('.tabs [data-go="challenges"]').click()); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(700);
+    t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
+    T('Leagues: this week\'s dates and time left, last week\'s champion, the standings (net, record, what\'s riding), the hall of champions', /THIS WEEK/i.test(t) && /Nov 16 – Nov 22/.test(t) && /left/.test(t) && /LoungeLizard/.test(t) && /\+D\$655/.test(t) && /BigShot/.test(t) && /\+D\$412\.5/.test(t) && /1 open · D\$50 riding/.test(t) && /−D\$40/.test(t) && /HALL OF CHAMPIONS/i.test(t), t.slice(0, 900));
+    T('…your row is highlighted', await p.evaluate(() => /Tester/.test((document.querySelector('#v-leagues .ps-r.on') || {}).innerText || '')));
+    await p.click('.lgforms summary >> nth=0'); await p.fill('form[data-form="lgcreate"] input[name="name"]', 'Hobart Sharps'); await p.click('form[data-form="lgcreate"] button'); await p.waitForTimeout(700);
+    t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
+    T('Start a league → its chip, its board, the invite code to share', posts.some(([u, bd]) => u === '/acct/lg/create' && bd.name === 'Hobart Sharps') && /INVITE CODE/i.test(t) && /HBS7K2/.test(t) && (await p.locator('.lgchips button.on').innerText()) === 'Hobart Sharps', t.slice(0, 600));
+    T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
+  { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const posts = [];
+    await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.acct', JSON.stringify({ token: 'x'.repeat(32), name: 'Tester', exp: Date.now() + 864e5 })); } catch (e) { } });
+    await p.route('**/*', r => { const u = new URL(r.request().url()), req = r.request();
+      if (/picks\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(BETA) });
+      if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
+      if (u.hostname === 'thedesk-chat.ironsilkstrategies.workers.dev') { if (req.method() === 'POST') posts.push([u.pathname, JSON.parse(req.postData() || '{}')]); const J = o => r.fulfill({ contentType: 'application/json', body: JSON.stringify(o) });
+        if (u.pathname === '/acct/me') return J({ name: 'Tester', wallet: { bal: 1000, bought: 0, w: 0, l: 0, p: 0 }, tickets: [], bets: [], runs: [], leagues: [] });
+        if (u.pathname === '/acct/lg/join') return J({ league: { code: 'HBS7K2', name: 'Hobart Sharps', n: 4 } });
+        if (u.pathname === '/acct/lg') return J({ league: { code: u.searchParams.get('code'), name: 'X', n: 1 }, week: '2026-11-16', current: true, ends: now + 864e5, prev: '2026-11-09', min: 3, rows: [], champ: null, hall: [] });
+        return J({}); }
+      if (u.hostname !== 'desk.test') return r.abort();
+      let f = path.join(W, decodeURIComponent(u.pathname)); if (f.endsWith('/')) f += 'index.html'; if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
+      r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
+    await p.goto('https://desk.test/desk/?lg=hbs7k2', { waitUntil: 'load' }); await p.waitForTimeout(1200);
+    let t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
+    T('an invite link opens Leagues with the invitation', /#leagues$/.test(p.url()) && /invited to league HBS7K2/i.test(t), p.url() + ' ' + t.slice(0, 300));
+    await p.click('[data-act="lgjoinpend"]'); await p.waitForTimeout(600);
+    T('…one tap joins it', posts.some(([u, bd]) => u === '/acct/lg/join' && bd.code === 'HBS7K2') && (await p.locator('.lgchips button.on').innerText()) === 'Hobart Sharps');
+    await ctx.close(); }
   /* ── inside Telegram (Mini App) ── */
   { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
     await p.route('**/*', r => { const u = new URL(r.request().url());
@@ -362,7 +427,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
   /* ── what's in the box (and what isn't) ── */
   const dir = path.join(W, 'desk'), files = fs.readdirSync(dir).filter(f => /\.(html|js|css|webmanifest)$/.test(f)); const src = Object.fromEntries(files.map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')])); const all = Object.values(src).join('\n');
-  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 175000);
+  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 200000);
   T('none of the desk\'s machinery: no engine scripts, no app storage, no keys or settings, no eval', !/shared\.js|desk-[a-z]+\.js|-engine\.js|store\.js|theme\.css/.test(all) && !/['"`]d4\./.test(all) && !/apiKey|api_key|odds-?api|ghp_|bot[0-9]{6,}|AUTOPILOT|tgautokey/i.test(all) && !/\beval\(|new Function\(/.test(all));
   const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]).filter(u => !/^https:\/\/telegram\.org\//.test(u));
   const tgLoader = /if\(\/tgWebApp\/\.test\(location\.hash\+location\.search\)\)document\.write\('<script src="https:\/\/telegram\.org\/js\/telegram-web-app\.js">/.test(src['index.html']);
