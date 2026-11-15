@@ -222,3 +222,181 @@ if(typeof subTelegramText==='function'&&typeof window!=='undefined'&&!window.__V
 const VX_CSS=`.vx-read{padding:6px 8px;margin:2px 0 6px;border-radius:8px;background:rgba(255,255,255,.025)}.vx-who{font-size:11.5px}.vx-take{font-size:13px;font-weight:700;margin:2px 0 3px;line-height:1.35}
 .vx-b{font-size:11.5px;line-height:1.5;margin:2px 0}.vx-w{color:var(--chalk)}.vx-p{color:var(--gold)}.vx-one{font-size:11px;line-height:1.4;padding:2px 0}.vx-math{margin-top:4px}.vx-tbs{border-top:1px solid var(--rule);margin-top:6px;padding-top:2px}.vx-tb{display:flex;gap:6px;align-items:baseline}`;
 if(typeof window!=='undefined'&&!window.__VX_BOOT__){window.__VX_BOOT__=1;window.addEventListener('load',()=>{try{if(!document.getElementById('vxCss')){const st=document.createElement('style');st.id='vxCss';st.textContent=VX_CSS;document.head.appendChild(st);}}catch(e){}});}
+
+/* ═══ v3.0.27 · REAL VOICES (Chris, Nov 15: "I see the same characters lay out the edges with the same language over and over, just the
+   players' names change… I don't want robot vibes… very humanized when they explain why they picked what they picked")
+   The facts stay exactly the facts (every line still comes from a row the app holds). What changes is the PERSON saying them:
+   · each character has its own personality — words, rhythm, habits, how it opens and how it admits doubt;
+   · every beat has several ways to be said, and a character ROTATES through them across its picks that day (its 1st pick, 2nd,
+     3rd… each get a different wording and a different shape), so two of its reads side by side never sound alike;
+   · the order of the read changes too (sometimes the worry comes first, sometimes the story);
+   · it's deterministic: the same pick reads the same every time you open it, and posted cards keep their words. */
+const VX2_FROM='2026-11-15';
+const vxH=s=>{let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;};
+/* where this pick sits among the character's calls that day: 0, 1, 2… — the rotation that keeps its reads from repeating */
+const VX2_RANK=new Map();
+function vx2Rank(v,F){const d=F.d;const k=v+'|'+d;let L=VX2_RANK.get(k);
+  if(!L||Date.now()-L.t>30e3){const V=roGet(VOICES_KEY,[],30e3)||[];const ks=V.filter(c=>c.voice===v&&String(c.date).slice(0,10)===d).map(c=>c.sp+'|'+c.game+'|'+c.market+'|'+c.side).filter((x,i,a)=>a.indexOf(x)===i).sort();
+    L={t:Date.now(),ks};VX2_RANK.set(k,L);if(VX2_RANK.size>200)VX2_RANK.clear();}
+  const i=L.ks.indexOf(F.sp+'|'+F.x.game+'|'+F.m+'|'+F.sd);return i>=0?i:vxH(F.x.game+F.m+F.sd)%7;}
+/* choose one of the ways to say it: the character's rotation plus a per-beat offset, so the beats don't all turn together */
+function vx2Pick(list,v,F,beat){const all=list.map(f=>{try{return f();}catch(e){return null;}});const n=all.length;if(!n||!all.some(Boolean))return null;
+  /* walk forward from this pick's slot to the next way that fits, so neighbours in the rotation stay different */
+  const st=(vx2Rank(v,F)+vxH(v+'|'+beat+'|'+F.d))%n;for(let i=0;i<n;i++){const s=all[(st+i)%n];if(s)return s;}return null;}
+const vxCap=s=>s?s.replace(/^./,c=>c.toUpperCase()):s;
+const vxWho=F=>F.T?F.Tn:F.sd==='over'?'the over':F.sd==='under'?'the under':'this side';
+const vxLn=F=>F.m==='spread'&&F.x.line!=null?`${F.Tn} ${vxPrice(F.x.line)}`:F.m==='total'&&F.x.line!=null?`${F.sd==='over'?'over':'under'} ${F.x.line}`:F.m==='ml'&&F.T?`${F.Tn} on the moneyline`:vxWho(F);
+/* the people — how each one talks */
+const PERSONA={
+  Sim:{lead:['Ran it.','Okay.','Numbers first.','I don\'t do feelings.',''],aside:['That\'s not a hunch, that\'s a count.','The machine doesn\'t care about the narrative.','I just count what happens.'],worry:['What breaks my model:','Where I could be wrong:','The thing ten thousand runs can\'t see:'],price:['Price check:','Now the number.','And the market?']},
+  Judge:{lead:['Let the record show:','I\'ve heard the arguments.','Order in the court.','Here\'s my ruling.',''],aside:['I don\'t take a side until the witnesses talk.','The evidence, not the noise.','I weigh testimony, not volume.'],worry:['The case against:','For the defense:','I\'ll allow the objection:'],price:['As for the price:','On the matter of the number:','Weighing the price:']},
+  Coach:{lead:['Listen.','Here\'s what I see from the sideline.','I\'ve been in this spot.','Look, kid.',''],aside:['Legs matter. Schedules matter.','You don\'t win on paper, you win in the spot.','Bodies get tired. That\'s football, that\'s hockey, that\'s life.'],worry:['What keeps me up:','What scares me:','Where this gets ugly:'],price:['And the number?','Price-wise:','On the line:']},
+  'Most common':{lead:['I keep the book.','Final score first.','Write this one down.',''],aside:['Most nights it lands right around there.','I\'m not here for the fireworks, just the final.'],worry:['How the score gets away from me:','What blows up my number:'],price:['Against the line:','The price on it:']},
+  Pred:{lead:['I listen to everyone outside these walls.','The room outside is talking.','I hear a lot of voices.',''],aside:['When the outside world agrees, I pay attention.','The best forecasters in the world are leaning one way.'],worry:['Where the outside world disagrees:','The quiet voice on the other side:'],price:['What the market charges:','The price of listening:']},
+  Covers:{lead:['I don\'t trust the building, I trust the computer.','Outside opinion, straight up.','Somebody else\'s computer, my call.',''],aside:['I don\'t need the noise in here.','An honest outside number beats a loud inside one.'],worry:['Where I could be fooled:','The catch:'],price:['On the price:','The number they want:']},
+  Trends:{lead:['We\'ve seen this movie before.','History doesn\'t repeat, but it rhymes.','Pull up a chair.','I remember games like this.',''],aside:['The past isn\'t a promise, but it\'s a pretty good hint.','Old habits die hard in this league.'],worry:['Where history might lie to me:','The chapter that doesn\'t fit:'],price:['And what it costs us:','The price on history:']},
+  Consensus:{lead:['I read the room.','Follow the people — or don\'t.','The crowd is loud tonight.',''],aside:['Sometimes you ride with the crowd. Sometimes you stand alone.','The crowd isn\'t always wrong. Just usually overpriced.'],worry:['Where the crowd bites back:','What I\'m nervous about:'],price:['What the crowd costs:','On the price:']},
+  Power:{lead:['Rankings don\'t lie for long.','By the standings,','Order matters.','The table says it plainly.',''],aside:['Good teams beat bad teams more than people think.','Talent rises over a season.'],worry:['What could upset the order:','The exception to the rule:'],price:['The number vs. the ratings:','As priced:']},
+  Scout:{lead:['Watch the players, not the logos.','I\'ve been watching tape.','Eyes on the field.','It\'s about who\'s out there.',''],aside:['Games are won by people, not spreadsheets.','The guy with the hot hand changes everything.'],worry:['The player who could ruin it:','What I don\'t love on tape:'],price:['What it costs:','The price on talent:']},
+  Banker:{lead:['I don\'t care who wins.','Business, not feelings.','Follow the money.',''],aside:['I\'m paid to find mistakes in prices. That\'s it.','A good team at a bad price is a bad bet.'],worry:['The risk on the books:','Where I lose money:'],price:['The ledger:','Bottom line:','The math on the money:']},
+  Dog:{lead:['Everybody wants the favorite.','Here\'s a dog with a bite.','I love a team nobody believes in.','Don\'t sleep on this.',''],aside:['The underdog only has to be good enough tonight.','Plus money cures a lot of worries.'],worry:['Where the dog gets put down:','The ugly truth:'],price:['And the payout?','What they\'re paying us:']},
+  Brain:{lead:['I\'ve heard everyone out.','Let me put it together.','All the voices are in.',''],aside:['I don\'t have one idea, I have all of them, weighted.','When the sharp voices line up, I listen.'],worry:['What doesn\'t fit:','The piece I can\'t make go away:'],price:['Weighing the price:','Against the market:']},
+  Blend:{lead:['Two opinions, one answer.',''],aside:['The model and the market, mixed by who\'s been sharper.'],worry:['Where the blend could miss:'],price:['On the price:']}};
+const vxP=v=>PERSONA[v]||PERSONA.Judge;
+/* each character's opening line — five or six ways each, all from the facts */
+const TAKES={
+  Sim:F=>F.sim==null?[]:[()=>`I ran this game 10,000 times. ${F.T?F.Tn+(F.m==='ml'?' wins ':' covers '):'The '+F.sd+' hits '}${vxPct(F.sim)} of them.`,
+    ()=>`Ten thousand simulations. ${vxCap(vxLn(F))} comes through in ${vxPct(F.sim)}.`,
+    ()=>`${vxPct(F.sim)}. That's how often ${vxLn(F)} cashes when I play it out. That's the whole pitch.`,
+    ()=>`Play it 10,000 times and ${vxLn(F)} wins the argument ${vxPct(F.sim)} of the time. I'll take that.`,
+    ()=>`I don't guess. I replay. ${vxCap(vxLn(F))}: ${vxPct(F.sim)} of 10,000 runs.`],
+  Judge:F=>{const v=F.on.filter(c=>isVoter(c.voice)&&c.voice!=='Sim').length,n=F.calls.filter(c=>isVoter(c.voice)&&c.voice!=='Sim').length;
+    return[()=>n>=3?`I weigh every witness by how often they've been right, and ${v>=n-1?'nearly all of them':'the ones I trust most'} point to ${vxWho(F)}.`:null,
+      ()=>n>=3?`${v} of ${n} witnesses testify for ${vxLn(F)}. I've checked their records. The ruling is ${vxWho(F)}.`:null,
+      ()=>`After hearing every side, I'm ruling for ${vxLn(F)}.`,
+      ()=>n>=3?`The testimony stacks up for ${vxWho(F)}: ${v} of ${n}, and the reliable ones lead the way.`:null,
+      ()=>`Case closed, for now: ${vxLn(F)}.`];},
+  Coach:F=>{const s=(F.sit||[]).find(z=>!z.bad);return[()=>s&&F.T?`This is a spot game, and the spot belongs to ${F.Tn}.`:null,
+      ()=>s&&F.T?`I'd want to be ${F.Tn} tonight. Here's why: ${VX_SIT[s.k](F.Tn,F.On).replace(/^./,c=>c.toLowerCase())}.`:null,
+      ()=>F.T?`Give me ${F.Tn}. I like how they're set up for this one.`:null,
+      ()=>F.T?`Situations win games, and ${F.Tn} has the better situation.`:`The game script says ${F.sd}. I'm riding it.`,
+      ()=>F.T?`${F.Tn} walks in with the edge that doesn't show up in the box score.`:null];},
+  'Most common':(F,c)=>{const m=String((c&&c.score)||'').match(/(\d+)\D+(\d+)/);if(!m)return[];return[()=>`My single most likely final: ${F.An} ${m[1]}, ${F.Hn} ${m[2]}.`,
+      ()=>`If you made me write one score down, it's ${F.An} ${m[1]}, ${F.Hn} ${m[2]}.`,
+      ()=>`${F.An} ${m[1]}, ${F.Hn} ${m[2]}. That's the score that comes up more than any other.`,
+      ()=>`Put ${m[1]}–${m[2]} on the board. ${vxCap(vxLn(F))} follows from there.`];},
+  Pred:F=>!F.pred?[]:[()=>`The outside projection has it ${F.An} ${vxN(F.pred.a)}, ${F.Hn} ${vxN(F.pred.h)}, and I go where it points.`,
+      ()=>`Out there, the sharpest forecasts land on ${F.An} ${vxN(F.pred.a)}, ${F.Hn} ${vxN(F.pred.h)}. I'm listening.`,
+      ()=>`Everyone outside these walls is whispering ${vxWho(F)}. The projection: ${F.An} ${vxN(F.pred.a)}, ${F.Hn} ${vxN(F.pred.h)}.`,
+      ()=>`I don't make the noise, I collect it. And it says ${vxLn(F)}.`],
+  Covers:F=>!F.pred?[]:[()=>`The computer has it ${F.An} ${vxN(F.pred.a)}, ${F.Hn} ${vxN(F.pred.h)}. That's ${vxLn(F)} to me.`,
+      ()=>`An outside machine with no stake in this says ${F.An} ${vxN(F.pred.a)}, ${F.Hn} ${vxN(F.pred.h)}. I trust that more than the chatter.`,
+      ()=>`${F.An} ${vxN(F.pred.a)}, ${F.Hn} ${vxN(F.pred.h)}, per the computer. So: ${vxLn(F)}.`,
+      ()=>`I'm the outsider here. The outside number points to ${vxWho(F)}, and I'm not overthinking it.`],
+  Trends:F=>[()=>F.trPro&&F.trPro.length?`History is on ${F.T?F.Tn+"'s":'the '+F.sd+"'s"} side tonight.`:null,
+      ()=>F.trPro&&F.trPro.length?`I've seen this setup a hundred times. It usually ends with ${vxWho(F)}.`:null,
+      ()=>`The pattern's there if you look for it: ${vxLn(F)}.`,
+      ()=>F.met&&F.met.length?`These two have history this season, and it tilts toward ${vxWho(F)}.`:null,
+      ()=>`Old story, new names. I'm on ${vxLn(F)}.`],
+  Consensus:F=>[()=>F.pub&&F.pub.pct<=35?`The crowd is on the other side. I'm not.`:null,
+      ()=>F.pub&&F.pub.pct<=35?`Only ${Math.round(F.pub.pct)}% of ${F.pub.metric} is here. Lonely spot. I like it.`:null,
+      ()=>F.pub&&F.pub.pct>=60?`Follow the money. It's on ${vxWho(F)}, and for once I'm following.`:null,
+      ()=>`I read the crowd, and the crowd tells me ${vxWho(F)}.`,
+      ()=>F.pub?`${Math.round(F.pub.pct)}% of ${F.pub.metric} on this side. I've done the reading, I'm on ${vxLn(F)}.`:null],
+  Power:F=>!(F.pw&&F.T)?[]:[()=>F.pw.mT>0?`On paper, ${F.Tn} is the better team: No. ${F.pw.me.rank} against No. ${F.pw.op.rank}.`:`${F.Tn} is the lower-rated team, but the number gives it enough room.`,
+      ()=>`No. ${F.pw.me.rank} versus No. ${F.pw.op.rank}. The table already told you what to do.`,
+      ()=>F.pw.mT>0?`There's a gap between these teams, and it favors ${F.Tn}.`:`${F.Tn} ranks lower, sure. The points cover that gap.`,
+      ()=>`My index has ${F.Tn} at No. ${F.pw.me.rank}. ${F.On}? No. ${F.pw.op.rank}. Order holds more often than it breaks.`],
+  Scout:F=>{const p=(F.pl||[]).find(q=>q.hot);return[()=>p?`This one comes down to players, and ${p.name} is hot.`:null,
+      ()=>p?`Watch ${p.name}. He's been running at ${vxR(p.ema)} ${p.lab} a game lately, way above his ${vxR(p.mean)}.`:null,
+      ()=>F.T?`I watch the talent, and the talent edge is ${F.Tn}'s.`:`I watch the talent, and the talent says ${F.sd}.`,
+      ()=>F.injO&&F.injO.length?`${F.On} is short-handed tonight, and I noticed.`:null,
+      ()=>F.T?`Put the rosters side by side. I'd rather have ${F.Tn}'s guys.`:null];},
+  Banker:F=>[()=>`I don't care who wins. I care about the price, and this price is wrong.`,
+      ()=>F.price!=null?`${vxPrice(F.price)}? That number's off, and I'm happy to take it.`:null,
+      ()=>`Somebody priced ${vxLn(F)} wrong. I'm collecting.`,
+      ()=>`This isn't about the teams. It's about a mistake in the number.`,
+      ()=>F.imp!=null?`The book is charging like it hits ${vxPct(F.imp)}. It hits more than that.`:null],
+  Dog:(F,c)=>[()=>c&&c.dP!=null&&F.T?`Everybody wants the favorite. At this price ${F.Tn} only has to win ${vxPct(+c.dP-(+c.dEdge||0))} of the time, and I have it at ${vxPct(+c.dP)}.`:null,
+      ()=>F.T?`The dog is the value here, and the dog is ${F.Tn}.`:null,
+      ()=>F.T?`Nobody's talking about ${F.Tn}. Good. More for us.`:null,
+      ()=>F.T&&F.price!=null&&F.price>0?`${vxPrice(F.price)} on ${F.Tn}. They don't have to be better, just better tonight.`:null,
+      ()=>F.T?`I'll take the team getting disrespected: ${F.Tn}.`:null],
+  Brain:F=>[()=>`Everyone has had their say. When I weigh them by who's been right, it comes out ${vxWho(F)}.`,
+      ()=>`I took every opinion in the building, weighted by track record. The answer is ${vxLn(F)}.`,
+      ()=>`Not one reason, a stack of them, weighed. ${vxCap(vxLn(F))}.`,
+      ()=>`When the reliable voices line up, I don't argue. ${vxCap(vxLn(F))}.`],
+  Blend:F=>F.sim!=null&&F.imp!=null?[()=>`The Sim says ${vxPct(F.sim)}, the market says ${vxPct(F.imp)}. I blend them by who's been sharper lately, and it still comes out ${vxWho(F)}.`]:[]};
+/* the facts, said several ways each (the same data, never more) */
+const BEATS={
+  proj:F=>!F.proj?[]:[()=>`My projected final is ${F.An} ${vxN(F.proj.a)}, ${F.Hn} ${vxN(F.proj.h)}${F.m==='total'&&F.x.line!=null?`. That's ${vxN(F.proj.a+F.proj.h)} total against a line of ${F.x.line}`:''}.`,
+    ()=>`I've got it ending ${F.An} ${vxN(F.proj.a)}, ${F.Hn} ${vxN(F.proj.h)}${F.m==='total'&&F.x.line!=null?`, about ${vxN(F.proj.a+F.proj.h)} combined, and the line's ${F.x.line}`:''}.`,
+    ()=>`Projected: ${F.An} ${vxN(F.proj.a)}–${F.Hn} ${vxN(F.proj.h)}.${F.m==='total'&&F.x.line!=null?` Add it up and you're at ${vxN(F.proj.a+F.proj.h)} against ${F.x.line}.`:''}`],
+  sim:F=>F.sim==null?[]:[()=>`Played 10,000 times, ${vxLn(F)} hits ${vxPct(F.sim)} of them.`,()=>`The sims land on ${vxWho(F)} ${vxPct(F.sim)} of the time.`,()=>`Run it back over and over and it's ${vxPct(F.sim)} for ${vxWho(F)}.`],
+  power:F=>!(F.pw&&F.T)?[]:[()=>VXS.power(F),()=>`In our power index it's No. ${F.pw.me.rank} ${F.Tn} against No. ${F.pw.op.rank} ${F.On}.`,()=>`${F.Tn} sits No. ${F.pw.me.rank} in our ratings. ${F.On} is down at No. ${F.pw.op.rank}.`],
+  powerLine:F=>{const s=VXS.powerLine(F);if(!s||!F.pw)return[];const mT=F.pw.mT;if(F.m==='spread'&&F.x.line!=null){const cov=mT+(+F.x.line);
+      return[()=>s,()=>`Ratings say ${F.Tn} ${mT>=0?'by '+vxN(mT,1):'loses by '+vxN(-mT,1)}. With ${vxPrice(F.x.line)} in hand, ${cov>0?`that's ${vxN(cov,1)} of breathing room`:`we're ${vxN(-cov,1)} short, so it's tight`}.`,
+        ()=>`Strip the names off and it's ${mT>=0?'a '+vxN(mT,1)+'-point edge':'a '+vxN(-mT,1)+'-point hole'} for ${F.Tn}, against a line of ${vxPrice(F.x.line)}.`];}
+    return[()=>s,()=>`By the ratings, ${F.Tn} is ${vxN(mT,1)} ${F.pw.unit} better on a neutral night, and that's before anything else.`];},
+  matchup:F=>{const s=VXS.matchup(F);return s?[()=>s,()=>`It's the No. ${F.pw.tor} offense into the No. ${F.pw.odr} defense. That's the matchup I keep coming back to.`,()=>`${F.Tn} can score (No. ${F.pw.tor} offense) and ${F.On} can't stop much (No. ${F.pw.odr} defense).`]:[];},
+  form:F=>{const s=VXS.form(F);if(!s)return[];const f=t=>{t=String(t||'');return`${(t.match(/W/g)||[]).length}-${(t.match(/L/g)||[]).length}`;};const a=f(F.pw.me.last5),b=f(F.pw.op.last5);
+    return[()=>s,()=>`${F.Tn} is ${a} in its last five. ${F.On}? ${b}.`,()=>`Recent form: ${F.Tn} ${a}, ${F.On} ${b} over the last five.`];},
+  luck:F=>{const s=VXS.luck(F);return s?[()=>s,()=>F.pw.op.luck>=1.5?`${F.On}'s record is flattering it by about ${vxN(F.pw.op.luck)} wins. That catches up with you.`:`${F.Tn} is better than its record by about ${vxN(-F.pw.me.luck)} wins. The scoreboard knows it even if the standings don't.`]:[];},
+  players:F=>{const P=(F.pl||[]).filter(p=>p.gp>=3);if(!P.length)return[];const p=P.find(q=>q.hot)||P[0];const hot=p.hot&&p.ema!=null;
+    return[()=>VXS.players(F),
+      ()=>`${p.name} is putting up ${vxR(p.mean)} ${p.lab} a game${hot?`, and lately it's ${vxR(p.ema)}`:''}${vxSmall(p.gp)}.`,
+      ()=>hot?`${p.name} is on a heater: ${vxR(p.ema)} ${p.lab} a game recently, against a season mark of ${vxR(p.mean)}.`:`${p.name} gives you ${vxR(p.mean)} ${p.lab} a night${vxSmall(p.gp)}.`,
+      ()=>`Keep an eye on ${p.name}: ${vxR(hot?p.ema:p.mean)} ${p.lab} a game${hot?' over his recent stretch':''}.`];},
+  injO:F=>!(F.injO&&F.injO.length)?[]:[()=>VXS.injO(F),()=>`${F.On} won't have ${F.injO.map(i=>i.n).join(' or ')} (${F.injO.map(i=>String(i.st).toLowerCase()).join(', ')}).`,()=>`No ${F.injO.map(i=>`${i.n}, ${i.pos}`).join(', no ')} for ${F.On}. That matters.`],
+  flags:F=>{const s=VXS.flags(F);return s?[()=>s,()=>s.replace(/^The matchup to watch: /,'Here\'s the one that jumps off the page: ')]:[];},
+  sit:F=>{const s=VXS.sit(F);if(!s)return[];const S=(F.sit||[]).filter(z=>!z.bad).sort((a,b)=>(b.proven?1:0)-(a.proven?1:0)||vxSitRank(a.k)-vxSitRank(b.k))[0];const base=VX_SIT[S.k](F.Tn,F.On);
+    return[()=>s,()=>`${vxCap(base)}.${S.proven?` We've tracked that spot, and it's been real for us (${S.adj>0?'+':''}${(S.adj*100).toFixed(1)} points).`:''}`,()=>`Don't skip past this: ${base}.`];},
+  met:F=>{const s=VXS.met(F);return s?[()=>s,()=>`They've seen each other already this year: ${F.met.map(q=>`${q[1]} ${q[3]}–${q[4]} ${q[2]}`).join(', ')}${vxSmall(F.met.length)}.`]:[];},
+  pred:F=>{const s=VXS.pred(F);return s?[()=>s,()=>`Even ${F.pred.src} sees it ${F.An} ${vxN(F.pred.a)}, ${F.Hn} ${vxN(F.pred.h)}.`]:[];},
+  trend:F=>{const s=VXS.trend(F);return s?[()=>s,()=>`Here's a trend for you: ${String(F.trPro[0]).replace(/\.$/,'').replace(/^./,c=>c.toLowerCase())}.`,()=>`The book on this spot: ${String(F.trPro[0]).replace(/\.$/,'')}.`]:[];},
+  pub:F=>{const s=VXS.pub(F);return s?[()=>s,()=>F.pub.pct<=35?`The public wants the other side, ${Math.round(100-F.pub.pct)}% of ${F.pub.metric}. Fine by me.`:F.pub.pct>=65?`Everybody's on it, ${Math.round(F.pub.pct)}% of ${F.pub.metric}, so don't expect a bargain.`:`The public can't decide: ${Math.round(F.pub.pct)}% this way.`]:[];},
+  others:F=>{const s=VXS.others(F);if(!s)return[];const v=F.on.filter(c=>isVoter(c.voice)&&c.voice!=='Sim').length,n=F.calls.filter(c=>isVoter(c.voice)&&c.voice!=='Sim').length;
+    return[()=>s,()=>v===n?`Not one character in the room disagrees. That's rare.`:`${v} of the ${n} of us landed here on our own.`,()=>v===n?`Everybody's on the same page, all ${n} of us.`:`Most of the room agrees: ${v} of ${n}.`];},
+  squad:F=>{const s=VXS.squad(F);return s?[()=>s,()=>`When ${F.squad.name} line up like this, they're ${F.squad.w}-${F.squad.l}.`]:[];}};
+function vx2Beat(key,v,F){const f=BEATS[key];if(f){const s=vx2Pick(f(F),v,F,key);if(s)return s;}try{return VXS[key]?VXS[key](F):null;}catch(e){return null;}}
+/* the honest part, in the character's own mouth */
+function vx2Worry(F,v,rec){const base=vxWorry(F,v,rec);const P=vxP(v);const lead=vx2Pick(P.worry.map(w=>()=>w),v,F,'wlead');
+  const generic=/nothing here is a lock\.$/.test(base);
+  if(generic){const sp=F.sp,alt=F.m==='total'?[()=>base,()=>`${sp==='nhl'?'One empty-netter':sp==='mlb'?'One crooked inning':sp==='nba'||sp==='ncaab'?'A late parade to the free-throw line':'One garbage-time touchdown'} and this total is somebody else's. That's the deal with totals.`,()=>`Totals are fragile. ${sp==='nhl'?'A late empty-net goal':sp==='mlb'?'A bullpen meltdown':sp==='nba'||sp==='ncaab'?'Intentional fouling at the end':'A meaningless late score'} can wreck it.`]
+      :F.m==='spread'?[()=>base,()=>`Spreads die in the last minute. ${sp==='nhl'?'An empty net':sp==='mlb'?'One run':sp==='nba'||sp==='ncaab'?'A couple of late free throws':'A backdoor cover'} is all it takes.`,()=>`I'd sweat the number at the end. ${sp==='nhl'?'Empty-net goals':sp==='mlb'?'Late runs':sp==='nba'||sp==='ncaab'?'Free throws in the final minute':'Late field goals'} are where spreads go to die.`]
+      :[()=>base,()=>`${sp==='nhl'?'A goalie standing on his head':sp==='mlb'?'One swing of the bat':sp==='nba'||sp==='ncaab'?'One team going ice-cold from three':'A couple of turnovers'} and none of this matters.`,()=>`No such thing as a sure thing. ${sp==='nhl'?'Hockey bounces':sp==='mlb'?'Baseball is weird':sp==='nba'||sp==='ncaab'?'Shooters go cold':'The ball bounces funny'} sometimes.`];
+    return vx2Pick(alt,v,F,'wgen');}
+  return base;}
+function vx2Price(F,cf,rec,v){const base=vxPriceLine(F,cf,rec);if(!base||F.imp==null)return base;const P=vxP(v);const ev=cf!=null&&F.price!=null?cf*americanToDecimal(F.price)-1:null;
+  const verdict=ev==null?'':ev>0.005?'the price pays more than the risk':ev<-0.005?'I like the side more than the price':'about fair';
+  const tail=base.match(/ The simulation alone says[^]*$/);let t=tail?tail[0]:'';
+  if(t&&F.sim!=null){const L=rec&&rec.lane,up=cf>F.sim;const tails=[()=>t,
+      ()=>` Pure simulation has it at ${vxPct(F.sim)}${L?`; my ${L.w}-${L.l} on ${L.lab} ${up?'pushes me higher':'pulls me back'}`:'; the rest is the price and how I do in spots like this'}.`,
+      ()=>` (The sim by itself: ${vxPct(F.sim)}.)`,()=>''];t=vx2Pick(tails,v,F,'ptail')||'';}
+  const alts=[()=>base,
+    ()=>cf!=null?`${vx2Pick(P.price.map(w=>()=>w),v,F,'plead')} ${vxPrice(F.price)} needs ${vxPct(F.imp)}. I'm at ${vxPct(cf)}${verdict?`, so ${verdict}`:''}.${t}`:null,
+    ()=>cf!=null?`The book is pricing this like it happens ${vxPct(F.imp)} of the time. I say ${vxPct(cf)}${verdict?`. Translation: ${verdict}`:''}.${t}`:null,
+    ()=>cf!=null?`Break-even at ${vxPrice(F.price)} is ${vxPct(F.imp)}. My number: ${vxPct(cf)}${verdict?`. ${vxCap(verdict)}`:''}.${t}`:null];
+  return vx2Pick(alts,v,F,'price')||base;}
+/* the read, assembled in one of a few shapes, so it never runs the same order every time */
+if(typeof window!=='undefined'&&!window.__VX2__){window.__VX2__=1;const CR1=charRead;
+  charRead=function(v,x,c){const d=String(x.date||x.d||today()).slice(0,10);if(d<VX2_FROM)return CR1(v,x,c);
+    try{const k='2|'+v+'|'+x.sp+'|'+x.game+'|'+mkNorm(x.m||x.market)+'|'+(x.sd||x.side)+'|'+(x.price||'')+'|'+d;
+      const V=roGet(VOICES_KEY,[],30e3)||[];const sig=V.length+'|'+(V.length?V[V.length-1].id:'');if(sig!==VX_SIG){VX_CACHE.clear();VX_SIG=sig;}if(VX_CACHE.has(k))return VX_CACHE.get(k);
+      const F=vxFacts({...x,date:d});c=c||F.on.find(z=>z.voice===v)||null;const P0=VOICES[v]||VOICES.Judge,P=vxP(v);const rec=vxRecord(v,F,c);const cf=c?confOf(c):x.cf!=null?x.cf:x.p!=null?x.p:null;
+      const used=new Set();const pick=keys=>{for(const key of keys){if(used.has(key))continue;const s=vx2Beat(key,v,F);if(s){used.add(key);return s;}}return null;};
+      if(v==='Sim'||v==='Blend')used.add('sim');if(v==='Most common')used.add('proj');if(v==='Pred'||v==='Covers')used.add('pred');if(v==='Power')used.add('power');
+      const T=TAKES[v]?TAKES[v](F,c):[];let take=vx2Pick(T,v,F,'take')||(P0.take&&P0.take(F,c))||(F.T?`I'm on ${F.Tn}.`:`I'm on the ${F.sd}.`);
+      const lead=vx2Pick(P.lead.map(w=>()=>w||null),v,F,'lead');if(lead&&vxH(v+F.x.game+F.m)%3!==0&&!take.startsWith(lead))take=`${lead} ${take}`;
+      const story=[pick(P0.story),pick(['players','injO','sit','form','met','flags','luck'])].filter(Boolean).slice(0,2);
+      const aside=vx2Pick(P.aside.map(w=>()=>w),v,F,'aside');if(aside&&story.length&&(vx2Rank(v,F)+vxH(v))%3===1)story.push(aside);
+      const proof=[pick(P0.proof)].filter(Boolean);
+      if(rec.lane){const L=rec.lane;proof.push(vx2Pick([()=>`I'm ${L.w}-${L.l} on ${L.lab}${vxSmall(L.w+L.l)}.`,()=>`My record on ${L.lab}: ${L.w}-${L.l}${vxSmall(L.w+L.l)}.`,()=>`${L.lab.replace(/^./,c=>c.toUpperCase())} is ${L.w>L.l?'a lane I know':'not my best lane'}: ${L.w}-${L.l}${vxSmall(L.w+L.l)}.`],v,F,'lane'));}
+      else if(rec.team&&F.T)proof.push(vx2Pick([()=>`I'm ${rec.team.w}-${rec.team.l} picking ${F.Tn} games${vxSmall(rec.team.w+rec.team.l)}.`,()=>`I've called ${F.Tn} games ${rec.team.w}-${rec.team.l}${vxSmall(rec.team.w+rec.team.l)}.`],v,F,'team'));
+      const R={v,name:charName(v),pick:x.pick||charPickText(c||{...x,market:mkNorm(x.m||x.market),side:x.sd||x.side}),price:F.price,cf,take,story,proof:proof.filter(Boolean).slice(0,2),worry:vx2Worry(F,v,rec),worryLab:vx2Pick(vxP(v).worry.map(w=>()=>w).concat([()=>'The worry:',()=>'Where it goes wrong:']),v,F,'wlab'),priceLine:null,
+        status:rec.status||null,skill:!!x.skill,under:cf!=null&&!(c&&isOfficial(c)),shape:(vx2Rank(v,F)+vxH(v+'shape'))%3};R.priceLine=vx2Price(F,cf,rec,v);
+      VX_CACHE.set(k,R);return R;}catch(e){return CR1(v,x,c);}};
+  /* the read as one paragraph, in that read's shape: take-first, worry-early, or story-first */
+  const RT0=readText;readText=function(R,short){if(!R||short||R.shape==null)return RT0(R,short);const W=(R.worryLab||'The worry:')+' '+R.worry;
+    const S=R.shape===1?[R.take,W,...R.story,...R.proof,R.priceLine]:R.shape===2?[...R.story.slice(0,1),R.take,...R.story.slice(1),...R.proof,R.priceLine,W]:[R.take,...R.story,...R.proof,W,R.priceLine];
+    return S.filter(Boolean).join(' ');};}
