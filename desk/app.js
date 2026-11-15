@@ -302,8 +302,10 @@ function founderLeg(l) {
   const [ic, cls] = FST[l.st] || FST.open, bar = l.prog && l.st !== 'open' ? Math.max(0, Math.min(100, l.prog.d === 'under' ? (l.prog.v <= l.prog.t ? 100 : 0) : (l.prog.v / l.prog.t) * 100)) : null;
   return `<li class="fl ${cls}"><span class="fl-ic">${ic}</span><span class="fl-pk">${esc(legText(l))}${l.price != null ? ` <small>${esc(odds(l.price))}</small>` : ''}
     <small class="fl-g">${esc([l.game ? matchup(l) : '', l.st === 'open' && l.start ? whenLabel(l.start) : ''].filter(Boolean).join(' · '))}</small>
-    ${(() => { const lv = l.game && (l.st === 'live' || l.st === 'open') ? liveOf(l) : null; const on = lv && lv.state === 'in'; return on ? `<small class="lv">${scoreBit(l, lv)}${l.q != null && !l.prop ? ' · ' + qBit(l, true) : ''}</small>` : ''; })()}
-    ${l.detail ? `<small class="fl-d">${esc(l.detail)}</small>` : ''}${bar != null ? `<span class="fl-bar"><i style="width:${bar.toFixed(0)}%"></i></span>` : ''}</span></li>`;
+    ${(() => { const lv = l.game && (l.st === 'live' || l.st === 'open') ? liveOf(l) : null; const on = lv && lv.state === 'in';
+      /* one score line: while ESPN's live score is on the leg, the grade line from the last publish (a step behind) stays off — props keep theirs (the stat + bar) */
+      const dt = l.detail && !(on && !l.prop) ? `<small class="fl-d">${esc(l.detail)}</small>` : '';
+      return (on ? `<small class="lv">${scoreBit(l, lv)}${l.q != null && !l.prop ? ' · ' + qBit(l, true) : ''}</small>` : '') + dt; })()}${bar != null ? `<span class="fl-bar"><i style="width:${bar.toFixed(0)}%"></i></span>` : ''}</span></li>`;
 }
 function founderSum(t) { const L = t.legs || []; if (L.length < 2) return ''; const lv = l => { const x = l.game ? liveOf(l) : null; return l.st === 'live' || (l.st === 'open' && x && x.state === 'in'); };
   const live = L.filter(lv).length, togo = L.filter(l => l.st === 'open' && !lv(l)).length, lost = t.res === 'lost', started = L.some(l => l.st !== 'open') || live;

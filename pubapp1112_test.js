@@ -191,7 +191,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
   /* ── following tickets live (v3.0.34) ── */
   { const F = JSON.parse(JSON.stringify(BETA)); const t0 = F.founder.tix[0]; t0.p0 = 0.02; t0.now = 0.035;
-    t0.legs[1].p = 0.52; t0.legs[1].q = 0.61; t0.legs[1].start = iso(now - 30 * 60e3); t0.legs[0].p = 0.6;
+    t0.legs[1].p = 0.52; t0.legs[1].q = 0.61; t0.legs[1].st = 'live'; t0.legs[1].detail = 'DAL 50–58 MIN (live) · margin +8'; t0.legs[1].start = iso(now - 30 * 60e3); t0.legs[0].p = 0.6;
     F.vip.parlays[0].legs[0].q = 0.8; F.vip.parlays[0].legs[0].start = iso(now - 40 * 60e3);
     const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
     await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); } catch (e) { } });
@@ -209,6 +209,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     T('LongShots live: the ticket\'s chance and "1 in N", legs live, to go, and a live cash chance against pre-game', /2\.0%\s*·\s*1 in 50/.test(t) && /● \d+ live/.test(t) && /LIVE CASH CHANCE 3\.5%|Live cash chance 3\.5%/i.test(t) && /was 1 in 50 pre-game/i.test(t), t.slice(0, 600));
     T('…each live leg: score and clock, and its live chance (was X% pre-game)', /LIVE DAL 54–61 MIN · 5:12 - 3rd/i.test(t) && /61% live/i.test(t) && /was 52%/i.test(t), (t.match(/MIN -5\.5[^]{0,200}/) || [])[0]);
     await p.click('.tabs [data-go="today"]'); await p.waitForTimeout(800); t = await p.evaluate(() => document.body.innerText);
+    T('…one score line per live game leg (the stale grade line from the last publish stays off)', !/MIN -5\.5[^]{0,160}\(live\)/.test(t.split('Edwards')[0]), (t.match(/MIN -5\.5[^]{0,200}/) || [])[0]);
     T('VIP parlays get the same summary; a live leg shows its score, clock and live chance', /EVERY CHARACTER’S PARLAY|Every character’s parlay/i.test(t) && /legs · /.test(t) && /LIVE WSH 3–10 NYG · 9:41 - 2nd/i.test(t) && /80% live/i.test(t), (t.match(/The Scout[^]{0,400}/) || [])[0]);
     T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
   /* ── inside Telegram (Mini App) ── */
