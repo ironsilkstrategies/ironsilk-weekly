@@ -87,7 +87,7 @@ export class Room {
 /* ═══ DESK DOLLARS (v3.0.22, Chris, Nov 15: "each signup gets $1000 of free novelty money… a badge of honor") ════════════════
    Play money only: never cashed out, never a prize. Every member starts with D$1,000 (members from before get theirs the first
    time they look). Bets are on the slate's own games (moneyline, spread, total), priced by the server from the public slate
-   feed at the moment of the bet (spreads and totals at -110), closed at start time, one leg per game, up to 10 legs. The server
+   feed at the moment of the bet (spreads and totals at -110), closed at start time, up to 10 legs: per game one side (moneyline or spread) plus the total, never ML and spread together. The server
    grades them itself from ESPN finals every 10 minutes; a game it can't find in 3 days is voided and the stake comes back.
    Bought D$ (the store, built but OFF until a lawyer signs off — or the owner's grant) is kept apart: it shows in its own color,
    and the leaderboard ranks EARNED D$ (balance minus everything bought), so nobody buys their way up the board. */
@@ -194,7 +194,7 @@ export class Accounts {
     let G; try { G = await this.slate(); } catch (e) { return json({ error: 'the lines can’t be reached right now — try again in a minute' }, 503, H); }
     const seen = new Set(), legs = [];
     for (const w of want) { const k = String(w.k || ''); const g = G.get(k); if (!g) return json({ error: 'that game isn’t on the board' }, 400, H);
-      if (seen.has(k)) return json({ error: 'one leg per game' }, 400, H); seen.add(k);
+      const grp = k + '|' + (w.mk === 'total' ? 'total' : 'side'); if (seen.has(grp)) return json({ error: 'one side and one total per game (moneyline and spread on the same game don’t parlay)' }, 400, H); seen.add(grp);
       if (!(g.t > this.now() + 60e3)) return json({ error: `${g.a.ab} at ${g.h.ab} has started — bets are closed` }, 400, H);
       const pr = ddPrice(g, w.mk, w.side); if (!pr) return json({ error: 'that line isn’t available' }, 400, H);
       legs.push({ k, sp: g.sp, t: g.t, game: g.a.ab + '@' + g.h.ab, mk: w.mk, side: w.side, line: pr.line, price: pr.price, pick: pr.pick, res: null }); }

@@ -322,7 +322,7 @@ function ddLegOf(g, mk, side) { const ln = g.ln || {}; if (mk === 'ml') { const 
   if (mk === 'total') return fin(ln.tot) ? { price: DDJ, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` } : null; return null; }
 function ddBtns(g) { if (!(g.t > Date.now() + 60e3) || !g.ln) return ''; const on = (mk, sd) => S.dd.some(l => l.k === g.k && l.mk === mk && l.side === sd);
   const btn = (mk, sd) => { const L = ddLegOf(g, mk, sd); return L ? `<button type="button" class="ddb${on(mk, sd) ? ' on' : ''}" data-act="ddpick" data-k="${esc(g.k)}" data-mk="${mk}" data-side="${sd}"><b>${esc(L.pick)}</b><small>${esc(odds(L.price))}</small></button>` : '<span></span>'; };
-  return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }
+  return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><p class="g-note">Tap lines to build a slip across games. In one game: a side (moneyline or spread) plus the total.</p><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }
 function ddSlipBar() { if (!S.dd.length) return ''; const dec = S.dd.reduce((x, l) => x * ddDec(l.price), 1), st = +(store.get('ddstake') || 25); const W = AC.me && AC.me.wallet;
   return `<div class="pslipbar ddslip"><div><b>D$ slip · ${S.dd.length} leg${S.dd.length > 1 ? 's' : ''} · ${esc(odds(decAm(dec)))}</b><small>${S.dd.map(l => esc(l.pick)).join(' · ')}</small>
     <small>${W ? `You have ${dd$(W.bal)}. ` : ''}Stake <input id="ddStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"> pays <span id="ddPays">${dd$(st * dec)}</span></small></div>
@@ -993,8 +993,8 @@ document.addEventListener('click', async e => {
   else if (act === 'pslip') { const id = a.dataset.id; S.slip = S.slip.includes(id) ? S.slip.filter(x => x !== id) : [...S.slip, id].slice(-12); store.set('pslip', S.slip); render(); }
   else if (act === 'pslipclear') { S.slip = []; store.set('pslip', S.slip); render(); }
   else if (act === 'psliptrack') { const t = slipTicket(); if (t && await tkSave(t, 'Tracking it — see Your tickets')) { S.slip = []; store.set('pslip', S.slip); render(); } }
-  else if (act === 'ddpick') { const g = slateGameOf(a.dataset.k); if (g) { const mk = a.dataset.mk, sd = a.dataset.side, i = S.dd.findIndex(l => l.k === g.k);
-      const same = i >= 0 && S.dd[i].mk === mk && S.dd[i].side === sd; if (i >= 0) S.dd.splice(i, 1); if (!same) { const L = ddLegOf(g, mk, sd); if (L) { if (S.dd.length >= 10) toast('Up to 10 legs'); else S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); } }
+  else if (act === 'ddpick') { const g = slateGameOf(a.dataset.k); if (g) { const mk = a.dataset.mk, sd = a.dataset.side, grp = m => (m === 'total' ? 'total' : 'side'), i = S.dd.findIndex(l => l.k === g.k && grp(l.mk) === grp(mk));
+      const same = i >= 0 && S.dd[i].mk === mk && S.dd[i].side === sd; if (i >= 0) { if (!same) toast(grp(mk) === 'total' ? 'Swapped the total' : 'Swapped it: one side per game (moneyline or spread), plus the total'); S.dd.splice(i, 1); } if (!same) { const L = ddLegOf(g, mk, sd); if (L) { if (S.dd.length >= 10) toast('Up to 10 legs'); else S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); } }
       store.set('ddslip', S.dd); render(); } }
   else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
   else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }

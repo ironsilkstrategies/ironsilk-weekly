@@ -26,7 +26,7 @@ T('the server prices the bet from the slate (a faked +5000 is ignored): NE ML +1
 r = await call('/acct/bet', { token: tok, stake: 50, legs: [{ k: 'nfl|NE@DET', mk: 'spread', side: 'home' }, { k: 'nba|BOS@NYK', mk: 'total', side: 'over' }] });
 T('a 2-leg parlay: DET -2.5 (-110) + Over 221.5 (-110) → about +264', r.status === 200 && r.j.bet.legs[0].line === -2.5 && r.j.bet.legs[0].pick === 'DET -2.5' && Math.abs(r.j.bet.dec - 3.645) < 0.01 && r.j.wallet.bal === 850, JSON.stringify(r.j.bet));
 T('a started game is closed', (await call('/acct/bet', { token: tok, stake: 10, legs: [{ k: 'nhl|CHI@MIN', mk: 'ml', side: 'home' }] })).status === 400);
-T('one leg per game; no betting more than you have', (await call('/acct/bet', { token: tok, stake: 10, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'away' }, { k: 'nfl|NE@DET', mk: 'total', side: 'over' }] })).status === 400 && (await call('/acct/bet', { token: tok, stake: 5000, legs: [{ k: 'nba|BOS@NYK', mk: 'ml', side: 'home' }] })).status === 400);
+T('same game: ML + spread refused; no betting more than you have', (await call('/acct/bet', { token: tok, stake: 10, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'away' }, { k: 'nfl|NE@DET', mk: 'spread', side: 'home' }] })).status === 400 && (await call('/acct/bet', { token: tok, stake: 5000, legs: [{ k: 'nba|BOS@NYK', mk: 'ml', side: 'home' }] })).status === 400);
 T('an alarm is set to grade', ctx.storage.alarmAt === clock + 10 * 60e3);
 clock = KICK + 4 * 36e5; ESPN = { 'football/nfl': [ev('NE', 'DET', 20, 27, true)] }; await A.alarm();
 r = await call('/acct/me', { token: tok }); const b1 = r.j.bets.find(b => b.stake === 100), b2 = r.j.bets.find(b => b.stake === 50);
@@ -54,4 +54,6 @@ T('…a wrong code is refused; nobody can sign up as TheDesk', (await call('/acc
 T('…the owner adds D$ without the code again (marked bought)', (await call('/acct/grant', { token: ow.j.token, name: 'Puck Head', amount: 250 })).status === 200);
 const s0 = ctx.storage.m.get('s:' + ow.j.token).exp; clock += 40 * 864e5; await call('/acct/me', { token: ow.j.token });
 T('stays signed in: a visit inside the last 60 days renews the pass to a full 90', ctx.storage.m.get('s:' + ow.j.token).exp === clock + 90 * 864e5 && ctx.storage.m.get('s:' + ow.j.token).exp > s0);
+const sg = await call('/acct/bet', { token: ow.j.token, stake: 10, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'away' }, { k: 'nfl|NE@DET', mk: 'total', side: 'over' }] });
+T('same game: a side plus the total is allowed (until it starts)', sg.status === 400 && /started/.test(sg.j.error), JSON.stringify(sg.j));
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);
