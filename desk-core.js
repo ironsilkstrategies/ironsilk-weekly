@@ -1399,9 +1399,13 @@ function pubBloodlines(){try{if(typeof heirsAll!=='function')return null;const H
       return{who:charName(C.v),v:C.v,m:C.m,gen:C.gen||1,champ:(C.champ||{}).lab||'',heirs:(C.heirs||[]).filter(h=>h.st==='shadow').length,retired:(C.heirs||[]).filter(h=>h.st==='retired').length,
         best:b?{lab:b.lab||'',n:b.n||0,days:b.days||0,z:+(+(b.z||0)).toFixed(2),bar}:null,hist:(C.hist||[]).slice(-4).map(h=>({gen:h.gen,lab:h.lab,to:h.to,why:h.why}))};});
     return{need:{n:HEIR_MIN_N,days:HEIR_MIN_DAYS},cells};}catch(e){return null;}}
+/* v3.0.34 · each leg's live chance for the public page (Chris, Nov 15: "make the public site do these features for the picks, parlays and
+   longshots so people can follow easily"): the same live model as the Tickets tab, only once the game has started; null before */
+function pubLiveQ(l,st,d){try{if(!l||!l.game||!st||Date.parse(st)>Date.now())return null;const x={id:'pq',sport:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,gameDate:d||today(),start:st,
+    ...(l.player?{bbProp:1}:{})};let r=null;try{r=gradeLeg(x,d||today());}catch(e){}const q=liveLegProb(x,r,d||today());return q==null?null:+(+q).toFixed(3);}catch(e){return null;}}
 function pubLeg(l,V){const st=l.start||(()=>{try{return deskGameStart(l.sp,l.game)||'';}catch(e){return'';}})();
   const pick=l.player?(()=>{try{return cpropLine(l);}catch(e){return l.pick||'';}})():l.pick;
-  return{sp:l.sp,game:l.game||'',gl:l.game?gameLabel(l.sp,l.game):'',pick,price:l.price,p:l.p!=null?+(+l.p).toFixed(3):null,start:st,hit:l.hit==null?null:l.hit,push:!!l.push,
+  return{sp:l.sp,game:l.game||'',gl:l.game?gameLabel(l.sp,l.game):'',pick,price:l.price,p:l.p!=null?+(+l.p).toFixed(3):null,q:l.player?null:pubLiveQ({...l,pick},st),start:st,hit:l.hit==null?null:l.hit,push:!!l.push,
     by:l.by?(Array.isArray(l.by)?l.by:[l.by]).map(charName):l.v?[charName(l.v)]:[],voices:l.player?[]:pubVoicesOn(l,V)};}
 function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,skill:!!P.skill,px:!!P.px,price:decimalToAmerican(P.dec),p:+(+P.p).toFixed(3),legs:P.legs.map(l=>pubLeg({...l,v:P.v},V))});
     return{top10:(C.top10||[]).filter(x=>!pubHeavy(x)).map(x=>({...pubLeg(x,V),ev:x.ev!=null?+(+x.ev).toFixed(1):null,voicesBy:(x.confBy?[].concat(x.confBy):[]).map(charName)})),
@@ -1450,13 +1454,15 @@ function pubFounder0(L){const d=today(),lo7=dayShift(d,-7),lo30=dayShift(d,-30);
   const mine=t=>t&&!t.pubHide&&(t.imported||t.source==='mine')&&Array.isArray(t.legs)&&t.legs.length&&!t.legs.some(l=>pubHeavy({m:/\bML$/i.test(String(l.pick||'').trim())?'ml':'',price:l.price,pick:l.pick}));
   const read=t=>{const legs=t.legs.map(l=>{let r=null;try{r=gradeLeg(l,t.date);}catch(e){}const st=r?(r.push?'push':r.hit===true?'hit':r.hit===false?'miss':r.live?'live':'open'):'open';
       const pr=r&&r.prog&&isFinite(+r.prog.val)&&isFinite(+r.prog.thr)&&+r.prog.thr>0?{v:+r.prog.val,t:+r.prog.thr,d:r.prog.dir||null}:null;
-      return{sp:l.sport||null,game:l.game||null,pick:String(l.pick||'').slice(0,90),price:l.price!=null&&Math.abs(+l.price)>=100?+l.price:null,start:l.start||null,day:l.gameDate||t.date||null,st,
+      let p0=null,q=null;try{p0=l.p>0&&l.p<1?+(+l.p).toFixed(3):l.price!=null&&Math.abs(+l.price)>=100?+imp(+l.price).toFixed(3):null;const qq=liveLegProb(l,r,t.date);q=qq==null?null:+(+qq).toFixed(3);}catch(e){}
+      return{sp:l.sport||null,game:l.game||null,pick:String(l.pick||'').slice(0,90),price:l.price!=null&&Math.abs(+l.price)>=100?+l.price:null,start:l.start||null,day:l.gameDate||t.date||null,st,p:p0,q,
         detail:r&&r.detail&&st!=='open'?String(r.detail).slice(0,80):null,prog:pr,prop:!!(l.isProp||l.bbProp||l.fbProp||l.nhlProp||l.mlbProp)};});
     const stake=num(t.stake),win=num(t.toWin);let dec=stake&&win&&stake>0?1+win/stake:null;
     if(!dec&&legs.every(l=>l.price!=null))dec=legs.reduce((a,l)=>a*(l.price>0?1+l.price/100:1+100/-l.price),1);
     const miss=legs.some(l=>l.st==='miss'),done=legs.every(l=>l.st==='hit'||l.st==='miss'||l.st==='push');
     const res=miss?'lost':done?'cashed':legs.some(l=>l.st==='live'||l.st==='hit')?'live':'open';
-    return{id:hash(t.id),name:t.name&&!/^Ticket\s*#/i.test(t.name)?String(t.name).slice(0,40):null,date:t.date,legs,dec:dec?+dec.toFixed(3):null,res,hit:legs.filter(l=>l.st==='hit').length};};
+    let p0=t.p>0&&t.p<1?+t.p:legs.every(l=>l.p!=null)?legs.reduce((a,l)=>a*l.p,1):null,now=null;try{const L=liveTicketChance(t);if(L&&L.any)now=+L.p.toFixed(5);}catch(e){}
+    return{id:hash(t.id),name:t.name&&!/^Ticket\s*#/i.test(t.name)?String(t.name).slice(0,40):null,date:t.date,legs,dec:dec?+dec.toFixed(3):null,res,hit:legs.filter(l=>l.st==='hit').length,p0:p0!=null?+(+p0).toFixed(5):null,now};};
   const pool=L.filter(mine).filter(t=>String(t.date||'')>=lo30);const all=pool.map(read);
   const rec={cashed:all.filter(t=>t.res==='cashed').length,lost:all.filter(t=>t.res==='lost').length};
   const ord={live:0,open:1,cashed:2,lost:3};
@@ -1494,14 +1500,14 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
   const logOf=x=>(log[S.d]&&log[S.d].picks||[]).find(y=>y.main&&y.game===x.game&&y.pick===x.pick);
   const gate=(x,body)=>{const at=pubOpenAt(x);const L=logOf(x);const graded=!!(L&&(L.hit!=null||L.push));const open=full||beta||graded||(at!=null&&now>=at);
     return open?{...body,unlockAt:at}:{hidden:true,sp:x.sp,start:x.start||'',unlockAt:at};};
-  const today_=S.locked?{d:S.d,lockedAt:S.lockedAt,unlockMin:30,picks:(S.top3||[]).map(x=>{const L=logOf(x);return gate(x,slim({...x,hit:L?L.hit:null,push:L?L.push:false,whyOn:true,d0:S.d}));}),
+  const today_=S.locked?{d:S.d,lockedAt:S.lockedAt,unlockMin:30,picks:(S.top3||[]).map(x=>{const L=logOf(x);return gate(x,{...slim({...x,hit:L?L.hit:null,push:L?L.push:false,whyOn:true,d0:S.d}),q:pubLiveQ(x,x.start,S.d)});}),
     props:(S.props||[]).slice(0,3).map(x0=>{const x=deskPropResult({...x0,start:x0.start||deskTeamStart(x0.sp,x0.team)},S.d);const lab=`${x.player} ${x.side==='under'?'under':'over'} ${x.thr} ${x.stat}`;
       return gate(x,{sp:x.sp,player:x.player,team:x.team,label:lab,stat:x.stat,k:(x.keys||[x.k])[0]||null,thr:x.thr,side:x.side,price:x.price,p:+(+x.p).toFixed(3),start:x.start||'',hit:x.hit==null?null:x.hit,push:!!x.push,actual:x.actual});}),
     allStarted:(S.top3||[]).every(x=>pubIsOpen(x,now)||!!(logOf(x)&&(logOf(x).hit!=null||logOf(x).push)))}:null;
   let parlay=null,prec=null;try{const B=get(BKDAY_KEY,{})||{};if(B.locked&&B.d===today()&&B.own&&B.own.legs.length){const O=B.own;
       parlay={d:B.d,lockedAt:B.lockedAt,price:decimalToAmerican(O.dec),p:O.p,result:tixDone(O.legs),legs:O.legs.map(l=>{const st=l.start||deskGameStart(l.sp,l.game)||'';
         const x={...l,start:st};if(!full&&!beta&&!pubIsOpen(x,now)&&l.hit==null&&!l.push)return{hidden:true,sp:l.sp,start:st,unlockAt:pubOpenAt(x)};let W=null;try{W=pickWhy({...l,date:B.d});}catch(e){}
-        return{sp:l.sp,game:l.game,gl:gameLabel(l.sp,l.game),pick:l.pick,price:l.price,p:l.p,start:st,unlockAt:pubOpenAt(x),by:(l.by||[l.v]).map(charName).join(' + '),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
+        return{sp:l.sp,game:l.game,gl:gameLabel(l.sp,l.game),pick:l.pick,price:l.price,p:l.p,q:pubLiveQ(l,st,B.d),start:st,unlockAt:pubOpenAt(x),by:(l.by||[l.v]).map(charName).join(' + '),hit:l.hit==null?null:l.hit,push:!!l.push,why:W?{bullets:W.bullets.slice(0,5),script:W.script}:null};})};}
     const RR=bkDayRecord().own;prec={w:RR.w,l:RR.l,u:+RR.u.toFixed(2)};}catch(e){}
   let cashed=[];try{cashed=cashedList(14).filter(c=>c.units>=1).slice(0,12);}catch(e){}
   const updates=(get(PUBUPD_KEY,[])||[]).filter(u=>u.pub!==false&&now-u.ts<3*864e5).slice(-12).reverse().map(u=>({ts:u.ts,text:u.text,kind:u.kind||'update'}));
@@ -1511,7 +1517,7 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
     history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30,plans:PUB_PLANS,
     ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB),founder=pubFounder(),propsb=pubProps();
-      return{beta:true,vip,characters,bloodlines,board,founder,props:propsb,betaSig:JSON.stringify([propsb?propsb.props.map(x=>x.id+x.votes):0,founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
+      return{beta:true,vip,characters,bloodlines,board,founder,props:propsb,betaSig:JSON.stringify([propsb?propsb.props.map(x=>x.id+x.votes):0,founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')+(l.st==='live'&&l.q!=null?'~'+Math.round(l.q*10):'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
 function publicFeed(){return publicFeedCore(false);}
 function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts)]);}
 

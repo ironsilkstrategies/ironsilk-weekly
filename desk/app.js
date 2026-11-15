@@ -140,11 +140,16 @@ async function scores(sps, ymd) {
 }
 const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'); return S.live[`${x.sp}|${ab(x.sp, a)}@${ab(x.sp, h)}`] || null; };
 async function liveTick() {
-  const F = S.feed, T = F && F.today; if (!T) return;
-  const open = [...(T.picks || []), ...((F.parlay || {}).legs || [])].filter(x => !x.hidden && x.game && x.hit == null && !x.push);
-  const sps = [...new Set(open.map(x => x.sp))]; if (!sps.length) return;
-  await scores(sps, String(T.d || '').replace(/-/g, ''));
-  if (S.tab === 'today') render();
+  const F = S.feed, T = F && F.today; if (!F) return;
+  /* every leg the page shows live: Today's picks and parlay, the VIP Top 10 / Banker / character parlays, and the LongShots (whose legs can
+     sit on another day — a ticket the book dated the next morning) */
+  const V = F.vip || {}, td = String((T && T.d) || deskDay()), legsOf = a => (a || []).filter(x => x && !x.hidden && x.game && x.hit == null && !x.push);
+  const items = [...legsOf(T && T.picks), ...legsOf((F.parlay || {}).legs), ...legsOf(V.top10), ...legsOf((V.banker || {}).legs), ...(V.parlays || []).flatMap(P => legsOf(P.legs)).map(x => x),
+    ...((F.founder || {}).tix || []).flatMap(t => (t.legs || []).filter(l => l.sp && l.game && l.st !== 'hit' && l.st !== 'miss' && l.st !== 'push').map(l => ({ sp: l.sp, game: l.game, day: l.day || t.date })))];
+  const by = new Map(); items.forEach(x => { const d = String(x.day || td).slice(0, 10).replace(/-/g, ''); const k = d; const set = by.get(k) || new Set(); set.add(x.sp); by.set(k, set); });
+  if (!by.size) return;
+  await Promise.all([...by].map(([d, sps]) => scores([...sps], d)));
+  if (S.tab === 'today' || S.tab === 'longshots') render();
 }
 async function slateLive() {
   const SL = S.slate, D = SL && SL.days[S.slateDay]; if (!D || D.d !== deskDay()) return;
@@ -210,7 +215,7 @@ function slipHtml(x0, i, key, opt = {}) {
   const turn = !S.first && was === 'h' ? ' turn' : '';
   const [ga, gh] = String(x.game || '').split('@');
   let when = `<div class="when">${esc(whenLabel(x.start))}</div>`, score = '';
-  if (L && L.state === 'in') { when = `<div class="when live"><span class="dot"></span>Live${L.detail ? ', ' + esc(L.detail) : ''}</div>`; score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}</p>`; }
+  if (L && L.state === 'in') { when = `<div class="when live"><span class="dot"></span>Live${L.detail ? ', ' + esc(L.detail) : ''}</div>`; score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}</p>${x.q != null ? `<p class="score-q">${qBit(x, true)}</p>` : ''}`; }
   else if (graded || (L && L.state === 'post')) { when = `<div class="when">Final</div>`; if (L && L.state === 'post') score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}</p>`; }
   const why = opt.noRead ? '' : readHtml(x.why, x.calls);
   const fine = x.spread ? 'A spread pick, below the usual 70% bar. It is on the card so every league gets a play.' : x.tuned ? 'History-tuned: under the 70% bar, in because picks like it have made money.' : '';
@@ -257,9 +262,9 @@ function viewToday() {
   const props = (T && T.props) || [];
   const propsHtml = props.length ? `<h2 class="h2">Best ${props.length} props</h2><div class="slips${props.length < 3 ? ' few' : ''}">${props.map((x, i) => slipHtml({ ...x, game: '' }, i, `${T.d}|p${i}`, { mini: true, noRead: true, label: x.label || `${x.player || ''} ${x.side || 'over'} ${x.thr} ${x.stat || ''}`, plain: x.actual != null ? `Finished with ${x.actual}` : '', sub: x.team || '', vip: vipLine })).join('')}</div>` : '';
   const P = F.vip && F.vip.banker ? null : F.parlay;
-  const parlayHtml = P && (P.legs || []).length ? `<h2 class="h2">The Banker’s parlay</h2><div class="slips few"><article class="slip nostub"><div class="slip-head"><span>${P.legs.length} legs</span><span>${esc(P.price || '')}</span></div><div class="slip-main">
+  const parlayHtml = P && (P.legs || []).length ? `<h2 class="h2">The Banker’s parlay</h2><div class="slips few"><article class="slip nostub"><div class="slip-head"><span>${P.legs.length} legs</span><span>${esc(P.price || '')}</span></div><div class="slip-main">${tkSum(P.legs, P.p)}
       ${P.legs.map((l0, i) => { if (l0.hidden) { const u = l0.unlockAt; return `<div class="li"><span class="mk">•</span><span class="pk">Sealed leg<small>${esc(LEAGUE[l0.sp] || '')}</small></span><span class="u"${u ? ` data-until="${u}"` : ''}>${u ? esc(left(u - Date.now())) : ''}</span></div>`; }
-        const l = liveGrade(l0), c = stateOf(l); return `<div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : '•'}</span><span class="pk">${esc(readPick(l).big)} ${esc(odds(l.price))}<small>${esc(matchup(l))}</small></span><span class="u">${pct(l.p)}%</span></div>`; }).join('')}
+        const l = liveGrade(l0), c = stateOf(l), N = legNow(l0); return `<div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : N.live ? '●' : '•'}</span><span class="pk">${esc(readPick(l).big)} ${esc(odds(l.price))}<small>${esc(matchup(l))}</small>${N.lv && N.lv.state !== 'pre' ? `<small class="lv">${scoreBit(l, N.lv)}${N.live && l.q != null ? ' · ' + qBit(l, true) : ''}</small>` : ''}</span><span class="u">${pct(l.p)}%</span></div>`; }).join('')}
       ${P.result === true ? '<div class="stamp">Cashed</div>' : P.result === false ? '<div class="stamp loss">Lost</div>' : ''}</div></article></div>` : '';
 
   const ups = (F.updates || []).slice(0, 5);
@@ -297,15 +302,22 @@ function founderLeg(l) {
   const [ic, cls] = FST[l.st] || FST.open, bar = l.prog && l.st !== 'open' ? Math.max(0, Math.min(100, l.prog.d === 'under' ? (l.prog.v <= l.prog.t ? 100 : 0) : (l.prog.v / l.prog.t) * 100)) : null;
   return `<li class="fl ${cls}"><span class="fl-ic">${ic}</span><span class="fl-pk">${esc(legText(l))}${l.price != null ? ` <small>${esc(odds(l.price))}</small>` : ''}
     <small class="fl-g">${esc([l.game ? matchup(l) : '', l.st === 'open' && l.start ? whenLabel(l.start) : ''].filter(Boolean).join(' · '))}</small>
+    ${(() => { const lv = l.game && (l.st === 'live' || l.st === 'open') ? liveOf(l) : null; const on = lv && lv.state === 'in'; return on ? `<small class="lv">${scoreBit(l, lv)}${l.q != null && !l.prop ? ' · ' + qBit(l, true) : ''}</small>` : ''; })()}
     ${l.detail ? `<small class="fl-d">${esc(l.detail)}</small>` : ''}${bar != null ? `<span class="fl-bar"><i style="width:${bar.toFixed(0)}%"></i></span>` : ''}</span></li>`;
 }
+function founderSum(t) { const L = t.legs || []; if (L.length < 2) return ''; const lv = l => { const x = l.game ? liveOf(l) : null; return l.st === 'live' || (l.st === 'open' && x && x.state === 'in'); };
+  const live = L.filter(lv).length, togo = L.filter(l => l.st === 'open' && !lv(l)).length, lost = t.res === 'lost', started = L.some(l => l.st !== 'open') || live;
+  const nx = L.filter(l => l.st === 'open' && !lv(l) && l.start && Date.parse(l.start) > Date.now()).map(l => Date.parse(l.start)).sort((a, b) => a - b)[0];
+  const p0 = t.p0, now = lost ? 0 : t.now;
+  return `<div class="tk-sum">${p0 != null ? `<b>${fmtP(p0)}</b> · 1 in ${p1in(p0)} · ` : ''}${L.length} legs${live ? ` · <span class="lv-on">● ${live} live</span>` : ''}${togo ? ` · ${togo} to go` : ''}${nx ? ` · next ${esc(clock(new Date(nx).toISOString()))}` : ''}</div>
+    ${started && p0 != null && now != null ? `<div class="tk-live ${lost ? 'dn' : now >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(now)} · 1 in ${p1in(now)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>` : ''}`; }
 function founderHtml(page) {
   const F = S.feed && S.feed.beta !== false && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
   const R = F.rec || {}, card = t => { const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
     const chip = t.res === 'cashed' ? '<span class="fchip win">Cashed</span>' : t.res === 'lost' ? '<span class="fchip loss">Lost</span>' : t.res === 'live' ? `<span class="fchip live">● Live · ${t.hit} of ${n} hit</span>` : '<span class="fchip">Pending</span>';
     return `<article class="slip founder nostub ${t.res}"><div class="slip-head"><span>${esc(t.name || 'LongShot')} · ${n} legs</span>${chip}</div><div class="slip-main">
       <div class="f-odds">${t.dec ? `<b>${esc(decAm(t.dec))}</b><span>$10 pays <b>$${(10 * t.dec).toLocaleString('en-US', { maximumFractionDigits: 0 })}</b></span>` : ''}<span class="f-prog">${done} of ${n} settled</span></div>
-      <ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>
+      ${founderSum(t)}<ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>
       ${t.res === 'open' || t.res === 'live' ? `<div class="row"><button type="button" class="btn foil" data-act="tail" data-id="${esc(t.id)}">📋 Tail this</button></div>` : ''}</div></article>`; };
   if (!page) return `<section class="vsec" id="founder"><div class="vh"><h2 class="h2">Founder LongShot Parlays</h2>${vipBadge()}</div><p class="note">The founder’s live tickets are on the <button type="button" class="link" data-go="longshots">LongShots tab</button>.</p><div class="fgrid">${F.tix.filter(t => t.res === 'live' || t.res === 'open').slice(0, 1).map(card).join('')}</div></section>`;
   return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${R.cashed + R.lost ? `<span class="f-rec">Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost</span>` : ''}</div>
@@ -739,18 +751,37 @@ function callsHtml(calls) {
     <span class="nt">${c.with ? '' : `On ${esc(c.pick || 'the other side')}${c.note ? '. ' : ''}`}${esc(c.note || '')}</span></li>`;
   return `<details class="calls"><summary><span>Every character on it</span><small>${w.length} with · ${a.length} against</small></summary><ul>${[...w, ...a].map(row).join('')}</ul></details>`;
 }
+/* ── following a ticket live (v3.0.34, Chris, Nov 15: "make the public site do these features for the picks, parlays and longshots so
+   people can follow easily"): every multi-leg ticket gets a summary — its chance, "1 in N", legs live, legs to go, the next start, and a
+   📡 live cash chance against the pre-game number; every leg shows its live score and clock and its live chance (was X% pre-game). */
+const p1in = p => (p > 0 ? Math.max(1, Math.round(1 / p)).toLocaleString('en-US') : '—');
+const fmtP = p => (p == null ? '—' : p * 100 < 1 ? (p * 100).toFixed(2) + '%' : (p * 100).toFixed(1) + '%');
+function legNow(l0) { const l = l0.game ? liveGrade(l0) : l0, c = stateOf(l), lv = l.game ? liveOf(l) : null; return { l, c, lv, live: c === 'o' && !!lv && lv.state === 'in' }; }
+function scoreBit(l, lv) { if (!lv || lv.state === 'pre' || lv.a == null || isNaN(lv.a)) return ''; const [A, H] = String(l.game || '').split('@');
+  return lv.state === 'in' ? `<span class="lv-on">● LIVE ${esc(A)} ${lv.a}–${lv.h} ${esc(H)}${lv.detail ? ' · ' + esc(lv.detail) : ''}</span>` : `<span class="lv-fin">Final ${esc(A)} ${lv.a}–${lv.h} ${esc(H)}</span>`; }
+function qBit(l, live) { if (!live || l.q == null) return ''; return `<span class="lv-q ${l.p == null || l.q >= l.p ? 'up' : 'dn'}">${pct(l.q)}% live</span>${l.p != null ? ` <span class="lv-was">(was ${pct(l.p)}%)</span>` : ''}`; }
+function tkSum(legs, pFallback, machine) {
+  const N = (legs || []).filter(x => !x.hidden).map(legNow); if (N.length < 2) return '';
+  const live = N.filter(x => x.live).length, lost = N.some(x => x.c === 'l'), started = N.some(x => x.c !== 'o' || x.live);
+  const togo = N.filter(x => x.c === 'o' && !x.live).length, nexts = N.filter(x => x.c === 'o' && !x.live && x.l.start && Date.parse(x.l.start) > Date.now()).map(x => Date.parse(x.l.start)).sort((a, b) => a - b);
+  const p0 = machine && machine.p0 != null ? machine.p0 : N.every(x => x.l.p != null) ? N.reduce((a, x) => a * x.l.p, 1) : pFallback;
+  const pNow = lost ? 0 : machine && machine.now != null ? machine.now : N.reduce((a, x) => a * (x.c === 'w' || x.c === 'p' ? 1 : x.live && x.l.q != null ? x.l.q : x.l.p != null ? x.l.p : 1), 1);
+  const head = `<div class="tk-sum">${p0 != null ? `<b>${fmtP(p0)}</b> · 1 in ${p1in(p0)} · ` : ''}${N.length} legs${live ? ` · <span class="lv-on">● ${live} live</span>` : ''}${togo ? ` · ${togo} to go` : ''}${nexts.length ? ` · next ${esc(clock(new Date(nexts[0]).toISOString()))}` : ''}</div>`;
+  const lc = started && p0 != null ? `<div class="tk-live ${lost ? 'dn' : pNow >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(pNow)} · 1 in ${p1in(pNow)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>` : '';
+  return head + lc; }
 function legRow(l0) {
   const l = l0.game ? liveGrade(l0) : l0, c = stateOf(l), big = l.game ? readPick(l).big : l.pick;
   const meta = [LEAGUE[l.sp], l.gl || (l.game ? matchup(l) : ''), c === 'o' && l.start ? whenLabel(l.start) : '', (l.by || []).length ? 'by ' + l.by.join(' + ') : ''].filter(Boolean).join(' · ');
-  return `<div class="leg"><div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : '•'}</span><span class="pk">${esc(big)} ${esc(odds(l.price))}<small>${esc(meta)}</small></span><span class="u">${l.p != null ? pct(l.p) + '%' : ''}</span></div>${callsHtml(l.voices)}</div>`;
+  const N = l.game ? legNow(l0) : { live: false, lv: null };
+  return `<div class="leg${N.live ? ' is-live' : ''}"><div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : N.live ? '●' : '•'}</span><span class="pk">${esc(big)} ${esc(odds(l.price))}<small>${esc(meta)}</small>${N.lv && N.lv.state !== 'pre' ? `<small class="lv">${scoreBit(l, N.lv)}${N.live && l.q != null ? ' · ' + qBit(l, true) : ''}</small>` : ''}</span><span class="u">${l.p != null ? pct(l.p) + '%' : ''}</span></div>${callsHtml(l.voices)}</div>`;
 }
 function vipHtml(F) {
   const V = F.vip; if (!V) return '';
   const sec = (title, body, note) => `<section class="vsec"><div class="vh"><h2 class="h2">${title}</h2>${vipBadge()}</div>${note ? `<p class="note">${note}</p>` : ''}${body}</section>`;
-  const tix = (head, legs) => `<div class="paper tix">${head ? `<div class="tix-h">${head}</div>` : ''}${legs.map(legRow).join('')}</div>`;
+  const tix = (head, legs, p) => `<div class="paper tix">${head ? `<div class="tix-h">${head}</div>` : ''}${head ? tkSum(legs, p) : ''}${legs.map(legRow).join('')}</div>`;
   const top = (V.top10 || []).length ? sec('The rest of the Top 10', tix('', V.top10), 'Official singles: a character is 70%+ sure and the price pays.') : '';
-  const bank = V.banker && (V.banker.legs || []).length ? sec('The Banker’s parlay', tix(`<b>${V.banker.legs.length} legs · ${esc(V.banker.price || '')}</b><span>${pct(V.banker.p)}% to cash</span>`, V.banker.legs), 'Backs the side the strongest books are on.') : '';
-  const pars = (V.parlays || []).length ? sec('Every character’s parlay', `<div class="pargrid">${V.parlays.map(P => tix(`<b>${esc(P.who)}${P.skill ? ' · strong suit' : P.px ? ' · props' : ''}</b><span>${P.legs.length} legs · ${esc(P.price || '')} · ${pct(P.p)}%</span>`, P.legs)).join('')}</div>`) : '';
+  const bank = V.banker && (V.banker.legs || []).length ? sec('The Banker’s parlay', tix(`<b>${V.banker.legs.length} legs · ${esc(V.banker.price || '')}</b><span>${pct(V.banker.p)}% to cash</span>`, V.banker.legs, V.banker.p), 'Backs the side the strongest books are on.') : '';
+  const pars = (V.parlays || []).length ? sec('Every character’s parlay', `<div class="pargrid">${V.parlays.map(P => tix(`<b>${esc(P.who)}${P.skill ? ' · strong suit' : P.px ? ' · props' : ''}</b><span>${P.legs.length} legs · ${esc(P.price || '')} · ${pct(P.p)}%</span>`, P.legs, P.p)).join('')}</div>`) : '';
   const props = (V.props || []).length ? sec('Props of the day', `<div class="paper tix">${V.props.map(c => `<div class="leg"><div class="li"><span class="mk">${c.star ? '★' : '•'}</span><span class="pk">${esc(c.pick)}${c.price != null ? ' ' + esc(odds(c.price)) : ''}<small>${esc([LEAGUE[c.sp], c.who].filter(Boolean).join(' · '))}</small></span><span class="u">${c.p != null ? pct(c.p) + '%' : ''}</span></div></div>`).join('')}</div>`) : '';
   return top + bank + pars + props;
 }
