@@ -283,12 +283,38 @@ function viewToday() {
       <p>Members get the Best 3 at lock time, the Top 10 plays and every character’s parlay, in a private Telegram.</p></div>
       <div class="row"><a class="btn foil" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP${price ? ', ' + esc(price) : ''}</a><button type="button" class="btn line" data-go="join">What you get</button></div></div>` : '';
 
-  el.innerHTML = `<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
+  el.innerHTML = `<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${founderHtml()}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
     <div id="seal"></div>${vip}
     ${T && picks.length ? `<div class="row" style="margin-top:22px"><button type="button" class="btn line" data-act="share">Share today’s card</button></div>` : ''}${footHtml()}`;
   if (T) { remember(picks.map((x, i) => [keys[i], x])); remember(props.map((x, i) => [`${T.d}|p${i}`, x])); seal(T); }
   S.first = false;
 }
+/* ── Founder Parlays: the founder's own tickets, live, to tail ── */
+const decAm = d => !d || d <= 1 ? '' : d >= 2 ? '+' + Math.round((d - 1) * 100).toLocaleString('en-US') : '−' + Math.round(100 / (d - 1));
+const FST = { hit: ['✓', 'hit'], miss: ['✗', 'miss'], push: ['↺', 'push'], live: ['●', 'live'], open: ['·', 'open'] };
+const legText = l => l.prop || !l.game ? l.pick : (readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick);
+function founderLeg(l) {
+  const [ic, cls] = FST[l.st] || FST.open, bar = l.prog && l.st !== 'open' ? Math.max(0, Math.min(100, l.prog.d === 'under' ? (l.prog.v <= l.prog.t ? 100 : 0) : (l.prog.v / l.prog.t) * 100)) : null;
+  return `<li class="fl ${cls}"><span class="fl-ic">${ic}</span><span class="fl-pk">${esc(legText(l))}${l.price != null ? ` <small>${esc(odds(l.price))}</small>` : ''}
+    <small class="fl-g">${esc([l.game ? matchup(l) : '', l.st === 'open' && l.start ? whenLabel(l.start) : ''].filter(Boolean).join(' · '))}</small>
+    ${l.detail ? `<small class="fl-d">${esc(l.detail)}</small>` : ''}${bar != null ? `<span class="fl-bar"><i style="width:${bar.toFixed(0)}%"></i></span>` : ''}</span></li>`;
+}
+function founderHtml() {
+  const F = S.feed && S.feed.beta !== false && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
+  const R = F.rec || {}, card = t => { const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
+    const chip = t.res === 'cashed' ? '<span class="fchip win">Cashed</span>' : t.res === 'lost' ? '<span class="fchip loss">Lost</span>' : t.res === 'live' ? `<span class="fchip live">● Live · ${t.hit} of ${n} hit</span>` : '<span class="fchip">Pending</span>';
+    return `<article class="slip founder nostub ${t.res}"><div class="slip-head"><span>${esc(t.name || 'Founder Parlay')} · ${n} legs</span>${chip}</div><div class="slip-main">
+      <div class="f-odds">${t.dec ? `<b>${esc(decAm(t.dec))}</b><span>$10 pays <b>$${(10 * t.dec).toLocaleString('en-US', { maximumFractionDigits: 0 })}</b></span>` : ''}<span class="f-prog">${done} of ${n} settled</span></div>
+      <ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>
+      ${t.res === 'open' || t.res === 'live' ? `<div class="row"><button type="button" class="btn foil" data-act="tail" data-id="${esc(t.id)}">📋 Tail this</button></div>` : ''}</div></article>`; };
+  return `<section class="vsec" id="founder"><div class="vh"><h2 class="h2">Founder Parlays</h2>${vipBadge()}</div>
+    <p class="note">The tickets the founder actually placed, posted as he plays them. Tail one by tapping the button, then paste it into your book.${R.cashed + R.lost ? ` Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost.` : ''}</p>
+    <div class="fgrid">${F.tix.map(card).join('')}</div></section>`;
+}
+function tailText(t) { return [`TheDesk · ${t.name || 'Founder Parlay'} (${t.legs.length} legs${t.dec ? ', ' + decAm(t.dec) : ''})`, ...t.legs.map((l, i) => `${i + 1}. ${legText(l)}${l.price != null ? ' (' + odds(l.price) + ')' : ''}${l.game ? ' · ' + matchup(l) : ''}`), CFG.home || 'https://ironsilkweekly.com/desk/'].join('\n'); }
+async function tailCopy(id) { const t = ((S.feed && S.feed.founder && S.feed.founder.tix) || []).find(x => x.id === id); if (!t) return; const txt = tailText(t);
+  try { await navigator.clipboard.writeText(txt); toast('Copied — paste it into your book'); return; } catch (e) { }
+  try { const ta = document.createElement('textarea'); ta.value = txt; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Copied — paste it into your book'); } catch (e) { toast('Couldn’t copy on this device'); } }
 /* the strongest of the board on the front page: unanimous, supreme and strong, games not over yet */
 function strongHtml() {
   const B = boardOf(); if (!B) return '';
@@ -792,6 +818,7 @@ document.addEventListener('click', async e => {
   else if (act === 'game') { S.openGame = S.openGame === a.dataset.k ? '' : a.dataset.k; render(); }
   else if (act === 'slateday') { S.slateDay = +a.dataset.i; S.openGame = ''; render(); slateLive(); }
   else if (act === 'slatesp') { S.slateSp = a.dataset.sp; render(); }
+  else if (act === 'tail') { tailCopy(a.dataset.id); }
   else if (act === 'bf') { S.bf[a.dataset.k] = a.dataset.v; store.set('bf', S.bf); S.openGame = ''; render(); }
   else if (act === 'bfreset') { S.bf = { win: 'up', tier: 'all', bt: 'all', ch: 'all', view: S.bf.view || 'time' }; store.set('bf', S.bf); render(); }
   else if (act === 'gobf') { S.bf = { ...S.bf, win: 'up', tier: a.dataset.tier || 'all', bt: 'all', ch: 'all', view: 'time' }; store.set('bf', S.bf); S.slateDay = 0; go('slate', true); }

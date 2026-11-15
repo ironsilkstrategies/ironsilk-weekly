@@ -534,3 +534,28 @@ body.embed .view{padding-bottom:20px}
 @media (max-width:420px){.g-bp{padding-left:16px}}
 .g-bp:empty{display:none}
 .g-bp .bpicks{margin-top:0}
+
+/* v3.0.16 · Founder Parlays */
+.fgrid{display:grid;gap:14px}
+@media (min-width:900px){.fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.slip.founder .slip-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.fchip{font:800 11px/1 var(--text);letter-spacing:.06em;text-transform:uppercase;padding:5px 8px 4px;border-radius:99px;background:rgba(21,19,15,.08);white-space:nowrap}
+.fchip.live{background:#C23A2B;color:#fff}.fchip.win{background:var(--win);color:#fff}.fchip.loss{background:#5b5b5b;color:#fff}
+.f-odds{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:0 0 2px}
+.f-odds>b{font:800 26px/1 var(--display);letter-spacing:.02em}
+.f-odds span{font-size:13.5px;color:var(--ink-2)}.f-odds span b{color:var(--ink)}
+.f-prog{margin-left:auto}
+.fl-list{list-style:none;margin:6px 0 0;padding:0}
+.fl{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:8px 0;border-top:1px solid var(--rule)}
+.fl:first-child{border-top:0}
+.fl-ic{font-weight:900;text-align:center;line-height:1.35}
+.fl.hit .fl-ic{color:var(--win)}.fl.miss .fl-ic{color:var(--loss)}.fl.live .fl-ic{color:#C23A2B}.fl.open .fl-ic{color:var(--ink-2)}
+.fl.miss .fl-pk{text-decoration:line-through;text-decoration-color:rgba(194,58,43,.6)}
+.fl-pk{font-weight:700;font-size:14.5px;line-height:1.35}
+.fl-pk small{font-weight:600;color:var(--ink-2)}
+.fl-g,.fl-d{display:block;font-size:12.5px;color:var(--ink-2);font-weight:500}
+.fl-d{color:var(--ink)}
+.fl-bar{display:block;height:6px;border-radius:99px;background:rgba(21,19,15,.1);margin-top:5px;overflow:hidden}
+.fl-bar i{display:block;height:100%;background:#E0A800;border-radius:99px}
+.fl.hit .fl-bar i{background:var(--win)}
+.slip.founder .row{padding:10px 0 0}

@@ -1265,6 +1265,10 @@ async function pullSharpBtn(){const e=document.querySelector('.sharpStatus');if(
   catch(x){e.innerHTML='<span style="color:var(--rust)">'+txtEsc(x.message||String(x))+'</span>';}}
 function viewOn(n){try{const v=document.getElementById('v-'+n);return!!(v&&v.classList.contains('on'));}catch(e){return false;}}
 function jsArg(v){return String(JSON.stringify(v===undefined?null:v)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+/* v3.0.16 · Founder Parlays: your pasted tickets show on the public site to tail; this switch keeps one to yourself */
+function tktPubBtn(t){if(!t||!(t.imported||t.source==='mine'))return'';return`<button onclick="tktPubToggle(${jsArg(t.id)})" title="Founder Parlays on the public site">${t.pubHide?'🌐 Hidden':'🌐 Public ✓'}</button>`;}
+function tktPubToggle(id){const L=get(LS.locked,[]);const t=L.find(x=>String(x.id)===String(id));if(!t)return;t.pubHide=!t.pubHide;set(LS.locked,L);
+  try{renderTickets();}catch(e){}try{deskToast(t.pubHide?'🌐 Off the public site — Founder Parlays won\'t show this one':'🌐 On the public site in Founder Parlays');}catch(e){}}
 function ticketAmerToProb(price){
   if(price==null||isNaN(price))return 0.5;
   return price>0?100/(price+100):(-price)/(-price+100);
@@ -3094,7 +3098,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -13701,7 +13705,7 @@ function genTickets(mode){
             onchange="toggleArchiveSelect(${jsArg(t.id)},this.checked)"> <span class="m">select</span></label>`:'';
       if(t.archived){
         actionBtn=`${archChk}<button onclick="unarchiveTicket(${jsArg(t.id)})">Move back to pending</button>
-          <button onclick="tksMine(${jsArg(t.id)})">📤 Share</button>
+          <button onclick="tksMine(${jsArg(t.id)})">📤 Share</button>${tktPubBtn(t)}
           ${moveBtn}
           <button onclick="delLocked(${jsArg(t.id)})">Delete</button>`;
       }else{
@@ -13711,7 +13715,7 @@ function genTickets(mode){
         const modifyBtn=canModifyTicket(t)
           ?`<button onclick="toggleModifyTicket(${jsArg(t.id)})">${editing?'Done editing':'Modify'}</button>`:'';
         actionBtn=`${complete?`<button class="primary" onclick="archiveTicket(${jsArg(t.id)})">Archive</button>`:''}
-          <button onclick="tksMine(${jsArg(t.id)})">📤 Share</button>
+          <button onclick="tksMine(${jsArg(t.id)})">📤 Share</button>${tktPubBtn(t)}
           ${modifyBtn}
           ${moveBtn}
           ${t.finalized?'':`<button style="color:var(--cold)" onclick="(async()=>{try{const el=document.querySelector('#tkt-${t.id} .rcalc');if(el)el.textContent='…';await mgRefresh(true);const n=clearStaleFromFinals();renderTickets();renderMyGames();}catch(e){}})()"><span class="rcalc">↻ Reset scores</span></button>`}

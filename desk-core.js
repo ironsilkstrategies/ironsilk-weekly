@@ -1416,6 +1416,30 @@ function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,
 const PUB_HEAVY=-1000;
 function pubHeavy(x){if(!x)return false;const pr=x.price;if(pr==null||pr===''||!isFinite(+pr)||+pr>PUB_HEAVY)return false;
   const m=btMarket(x.m||x.market||'');return m==='ml'||(!m&&/\bML$/i.test(String(x.pick||'').trim()));}
+/* v3.0.16 · Founder Parlays (Nov 14: "when I put tickets in for intake… a section for tailing our parlays on the public side"):
+   every ticket Chris pastes into intake shows on the public site, live, with a Tail button — unless he switches that ticket off
+   (🌐 on the ticket). Picks, odds and results only: never the ticket number or the stake. A ticket with a moneyline at -1000 or
+   shorter stays off, like every other public parlay. Records count every settled ticket from the last 30 days, cashed or lost. */
+let PUB_FOUNDER_MEMO=null;
+function pubFounder(){try{const L=get(LS.locked,[])||[];const k=JSON.stringify(L.map(t=>[t.id,t.pubHide?1:0,(t.legs||[]).length]))+'|'+Math.floor(Date.now()/60e3);
+    if(PUB_FOUNDER_MEMO&&PUB_FOUNDER_MEMO.k===k)return PUB_FOUNDER_MEMO.val;const val=pubFounder0(L);PUB_FOUNDER_MEMO={k,val};return val;}catch(e){console.warn('founder',e);return null;}}
+function pubFounder0(L){const d=today(),lo7=dayShift(d,-7),lo30=dayShift(d,-30);const num=v=>{const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,''));return isFinite(n)?n:null;};
+  const hash=x=>{let h=5381;for(const c of String(x))h=((h<<5)+h+c.charCodeAt(0))>>>0;return'f'+h.toString(36);};
+  const mine=t=>t&&!t.pubHide&&(t.imported||t.source==='mine')&&Array.isArray(t.legs)&&t.legs.length&&!t.legs.some(l=>pubHeavy({m:/\bML$/i.test(String(l.pick||'').trim())?'ml':'',price:l.price,pick:l.pick}));
+  const read=t=>{const legs=t.legs.map(l=>{let r=null;try{r=gradeLeg(l,t.date);}catch(e){}const st=r?(r.push?'push':r.hit===true?'hit':r.hit===false?'miss':r.live?'live':'open'):'open';
+      const pr=r&&r.prog&&isFinite(+r.prog.val)&&isFinite(+r.prog.thr)&&+r.prog.thr>0?{v:+r.prog.val,t:+r.prog.thr,d:r.prog.dir||null}:null;
+      return{sp:l.sport||null,game:l.game||null,pick:String(l.pick||'').slice(0,90),price:l.price!=null&&Math.abs(+l.price)>=100?+l.price:null,start:l.start||null,day:l.gameDate||t.date||null,st,
+        detail:r&&r.detail&&st!=='open'?String(r.detail).slice(0,80):null,prog:pr,prop:!!(l.isProp||l.bbProp||l.fbProp||l.nhlProp||l.mlbProp)};});
+    const stake=num(t.stake),win=num(t.toWin);let dec=stake&&win&&stake>0?1+win/stake:null;
+    if(!dec&&legs.every(l=>l.price!=null))dec=legs.reduce((a,l)=>a*(l.price>0?1+l.price/100:1+100/-l.price),1);
+    const miss=legs.some(l=>l.st==='miss'),done=legs.every(l=>l.st==='hit'||l.st==='miss'||l.st==='push');
+    const res=miss?'lost':done?'cashed':legs.some(l=>l.st==='live'||l.st==='hit')?'live':'open';
+    return{id:hash(t.id),name:t.name&&!/^Ticket\s*#/i.test(t.name)?String(t.name).slice(0,40):null,date:t.date,legs,dec:dec?+dec.toFixed(3):null,res,hit:legs.filter(l=>l.st==='hit').length};};
+  const pool=L.filter(mine).filter(t=>String(t.date||'')>=lo30);const all=pool.map(read);
+  const rec={cashed:all.filter(t=>t.res==='cashed').length,lost:all.filter(t=>t.res==='lost').length};
+  const ord={live:0,open:1,cashed:2,lost:3};
+  const tix=all.filter(t=>String(t.date||'')>=lo7&&(t.res==='live'||t.res==='open'||String(t.date)>=dayShift(d,-2))).sort((a,b)=>(ord[a.res]-ord[b.res])||String(b.date).localeCompare(String(a.date))).slice(0,8);
+  return{tix,rec};}
 let PUB_BOARD_MEMO=null;
 function pubBoard(V){try{const d=today();const T=roGet(TC_KEY,{})||{};const k=d+'|'+ledgerSig(V)+'|'+(T.ts||T.at||'')+'|'+((T.by&&Object.values(T.by).reduce((n,B)=>n+((B&&B.picks)||[]).length,0))||0);
     if(PUB_BOARD_MEMO&&PUB_BOARD_MEMO.k===k&&Date.now()-PUB_BOARD_MEMO.ts<5*60e3)return PUB_BOARD_MEMO.val;const val=pubBoard0(V,d);PUB_BOARD_MEMO={k,ts:Date.now(),val};return val;}catch(e){console.warn('pub board',e);return null;}}
@@ -1459,8 +1483,8 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
     /* v2.51.1 · today's card never rides in the history list — it showed every locked pick there (with its price) before
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
     history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30,plans:PUB_PLANS,
-    ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB);
-      return{beta:true,vip,characters,bloodlines,board,betaSig:JSON.stringify([board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
+    ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB),founder=pubFounder();
+      return{beta:true,vip,characters,bloodlines,board,founder,betaSig:JSON.stringify([founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
 function publicFeed(){return publicFeedCore(false);}
 function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts)]);}
 
