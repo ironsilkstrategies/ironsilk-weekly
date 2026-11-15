@@ -58,6 +58,9 @@ BETA.founder = { rec: { cashed: 3, lost: 5 }, tix: [
   { id: 'fx1', date: day, dec: 12.5, res: 'live', hit: 1, n: 3, legs: [{ sp: 'nfl', game: 'WSH@NYG', pick: 'NYG ML', price: -142, start: iso(now - 36e5), day, st: 'hit', detail: 'WSH 10–24 NYG' },
     { sp: 'nba', game: 'DAL@MIN', pick: 'MIN -5.5', price: -110, start: iso(now + 5 * 36e5), day, st: 'open' }, { sp: 'nba', game: 'DAL@MIN', pick: 'A. Edwards 25+ points', start: iso(now + 5 * 36e5), day, st: 'live', prog: { v: 18, t: 25, d: 'atleast' }, detail: 'A. Edwards 18' }] },
   { id: 'fx2', date: day, dec: 3.1, res: 'lost', hit: 0, n: 2, legs: [{ sp: 'nfl', game: 'WSH@NYG', pick: 'WSH +9.5', price: -110, day, st: 'miss', detail: 'WSH 10–24 NYG' }, { sp: 'nfl', game: 'WSH@NYG', pick: '<img src=x onerror=alert(1)>', price: 120, day, st: 'open' }] }] };
+BETA.props = { d: day, props: [
+  { id: 'nhl|kk|s|3|over', sp: 'nhl', player: 'Kirill Kaprizov', team: 'MIN', k: 's', lab: 'SOG', thr: 3, side: 'over', opp: 'CHI', home: true, start: iso(now + 5 * 36e5), last: [1,4,3,2,5,3,4,3,6,3], l5: [5,5], l10: [8,10], streak: 6, avg10: 3.4, by: [{ v: 'Sim', p: 0.76 }, { v: 'Coach', p: 0.72 }, { v: 'Judge', p: 0.7 }], votes: 3, p: 0.727, fair: -266 },
+  { id: 'nba|ae|pts|25|over', sp: 'nba', player: 'Anthony Edwards', team: 'MIN', k: 'pts', lab: 'PTS', thr: 25, side: 'over', opp: 'DAL', home: false, start: iso(now + 5 * 36e5), last: [30,28,31,26,22], l5: [4,5], l10: [4,5], streak: -1, avg10: 27.4, by: [{ v: 'Coach', p: 0.7 }], votes: 1, p: 0.7, fair: -233 }] };
 const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab: 'JAX', name: 'Jacksonville Jaguars', w: 6, l: 2, rt: 9.4, l5: 'WWLWW', st: 'W2' }] },
   days: [{ d: day, more: 0, games: [{ k: 'nfl|WSH@NYG', sp: 'nfl', t: now + 3 * 36e5, a: { ab: 'WSH', name: 'Washington Commanders', nick: 'Commanders', rk: 27, of: 32, w: 2, l: 6, l5: 'LLLWL', st: '', pf: 21.5, pa: 25.3 }, h: { ab: 'NYG', name: 'New York Giants', nick: 'Giants', rk: 20, of: 32, w: 5, l: 3, l5: 'WLLWW', st: 'W2', pf: 22.8, pa: 21.5 }, venue: 'MetLife Stadium', ln: { fav: 'NYG', line: 2.5, tot: 40.5, mlA: 120, mlH: -142 }, mv: ['total opened 47.5, now 40.5'], mkt: { ab: 'NYG', pct: 56, src: 'markets' }, read: { a: 20, h: 20 }, note: 'A note', q: { title: 'Over or under 40.5?', opts: ['Over 40.5', 'Under 40.5'] }, hot: 100 },
     { k: 'nba|DET@WSH', sp: 'nba', t: now + 20 * 60e3, a: { ab: 'DET', name: 'Detroit Pistons', nick: 'Pistons', rk: 9, of: 30, w: 7, l: 3, l5: 'WWLLW', st: '', pf: 112, pa: 104 }, h: { ab: 'WSH', name: 'Washington Wizards', nick: 'Wizards', rk: 25, of: 30, w: 4, l: 8, l5: 'LLLLL', st: 'L5', pf: 107, pa: 113 }, venue: '', ln: { fav: 'DET', line: 9.5, tot: 220.5, mlA: -423, mlH: 331 }, mv: [], mkt: null, read: null, note: '', q: { title: 'Upset alert or chalk?', opts: ['Pistons handle it', 'Wizards pull it off'] }, hot: 60 }] }] };
@@ -110,13 +113,13 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('…and TheDesk Power Rankings', /POWER RANKINGS/i.test(t) && /Jacksonville Jaguars/.test(t));
   await v.p.click('.tabs [data-go="receipts"]'); await v.p.waitForTimeout(400); t = await v.text();
   T('Receipts: the record, hit rate and units, then every card with each result', /38–27/.test(t) && /58%/.test(t) && /\+1\.24u/.test(t) && /Knicks ML −160/.test(t) && /Sharks \+1\.5 −193/.test(t) && /Under 44\.5/.test(t), t.slice(0, 500));
-  await v.p.click('.tabs [data-go="join"]'); await v.p.waitForTimeout(400); t = await v.text();
+  await v.p.click('.joinpill'); await v.p.waitForTimeout(400); t = await v.text();
   const hrefs = await v.p.evaluate(() => [...document.querySelectorAll('#v-join a[href]')].map(a => a.href));
   T('Join: VIP (the Whop link from the feed), follow the desk (channel + Facebook; the lounge stays hidden), how the desk works', /\$50\/mo or \$300\/yr/.test(t) && !/\$25|\$10\/wk/.test(t) && hrefs.includes('https://whop.com/ironsilkweekly/thedesk-vip') && hrefs.includes('https://t.me/TheDeskApp') && !hrefs.some(h => /TheDeskLounge/.test(h)) && /Follow the desk/i.test(t) && /Locked every morning/.test(t), hrefs.join(' '));
   T('…the head start from the public timestamps (locked 2h before an unlock 10 min ago → about 1h 50m), the real record by the button', /HEAD START TODAY/i.test(t) && /1h (49|50)m/i.test(t) && /On the record: 38–27, \+1\.24 units since Oct 6/.test(t), t.slice(0, 700));
   T('…free vs VIP side by side (VIP: the card at lock, the Top 10, the parlays, the private Telegram)', (await v.p.locator('#v-join .cmp tbody tr').count()) === 9 && /The minute it locks/.test(t) && /30 min before each game/.test(t) && /Yearly plan/.test(t) && (await v.p.locator('#v-join .cmp td.v svg.y').count()) === 6 && (await v.p.locator('#v-join .cmp td:not(.v) svg.n').count()) === 5);
   T('…and the straight answers: where picks land, no guarantees, cancel any time', /Where do the picks show up/.test(t) && /Do you guarantee wins/.test(t) && /Can I cancel/.test(t));
-  for (const tab of ['today', 'slate', 'receipts', 'join']) { await v.p.click(`.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('no sideways scroll on ' + tab, false, o + 'px'); }
+  for (const tab of ['today', 'slate', 'props', 'receipts', 'join']) { await v.p.click(tab === 'join' ? '.joinpill' : `.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('no sideways scroll on ' + tab, false, o + 'px'); }
   T('no sideways scroll on a phone, any tab', true); T('no script errors', v.errs.length === 0, v.errs.join(' | '));
   await v.ctx.close();
 
@@ -124,11 +127,21 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   v = await visit(BETA); t = await v.text();
   T('open beta: every Best 3 pick is face up at lock, and the page says it\'s open to everyone', (await v.p.locator('#v-today .slip.locked').count()) === 0 && /PISTONS −9\.5/i.test(t) && /UNDER 40\.5/i.test(t) && /Open to everyone during the beta/.test(t));
   T('Today teases Founder LongShot Parlays: the live ticket, with a link to the LongShots tab', /FOUNDER LONGSHOT PARLAYS/i.test(t) && /LONGSHOT · 3 LEGS/i.test(t) && /LongShots tab/.test(t) && (await v.p.locator('#v-today [data-act="tail"]').count()) === 1 && !/LONGSHOT · 2 LEGS/i.test(t));
-  T('one row of tabs on a phone, LongShots third', await v.p.evaluate(() => { const b = [...document.querySelectorAll('.tabs button')]; const tops = new Set(b.map(x => Math.round(x.getBoundingClientRect().top))); return b.length === 7 && tops.size === 1 && b[2].dataset.go === 'longshots' && b.every(x => x.scrollWidth <= x.clientWidth + 1); }), await v.p.evaluate(() => JSON.stringify([...document.querySelectorAll('.tabs button')].map(x => [x.dataset.go, Math.round(x.getBoundingClientRect().top), x.scrollWidth, x.clientWidth]))));
+  T('one row of tabs on a phone, Props third, LongShots fourth', await v.p.evaluate(() => { const b = [...document.querySelectorAll('.tabs button')]; const tops = new Set(b.map(x => Math.round(x.getBoundingClientRect().top))); return b.length === 7 && tops.size === 1 && b[2].dataset.go === 'props' && b[3].dataset.go === 'longshots' && b.every(x => x.scrollWidth <= x.clientWidth + 1); }), await v.p.evaluate(() => JSON.stringify([...document.querySelectorAll('.tabs button')].map(x => [x.dataset.go, Math.round(x.getBoundingClientRect().top), x.scrollWidth, x.clientWidth]))));
   await v.p.click('.tabs [data-go="longshots"]'); await v.p.waitForTimeout(300); t = await v.text();
   T('the LongShots tab: every founder ticket, leg by leg, the odds, what $10 pays, the 30-day record; the live one tails, the lost one doesn\'t', /FOUNDER LONGSHOT PARLAYS/i.test(t) && /3 cashed, 5 lost/i.test(t) && /A\. Edwards 25\+ points/.test(t) && /\+1,150/.test(t) && /\$10 pays \$125/.test(t) && /LONGSHOT · 2 LEGS/i.test(t) && (await v.p.locator('#v-longshots [data-act="tail"]').count()) === 1 && (await v.p.locator('.slip.founder img').count()) === 0, (t.match(/Founder LongShot Parlays[^]{0,300}/i) || [])[0]);
   await v.p.click('#v-longshots [data-act="tail"]'); await v.p.waitForTimeout(300); t = await v.text();
   T('…"Tail this" copies the legs, with a note to paste them into the book', /Copied/.test(t));
+  await v.p.click('.tabs [data-go="today"]'); await v.p.waitForTimeout(300); t = await v.text();
+  await v.p.click('.tabs [data-go="props"]'); await v.p.waitForTimeout(300); t = await v.text();
+  T('Props: Desk Score, run strip vs the line, L5/L10, streak, the room, whispers', /DESK/i.test(t) && (await v.p.locator('.pcard').count()) === 2 && (await v.p.locator('.pcard').first().locator('.pst').count()) === 10 && /L10 8\/10/.test(t) && /6 straight/.test(t) && /Simulator|Sim/.test(t) && /cleared 3\+ SOG 6 straight/.test(t), t.slice(0, 300));
+  await v.p.click('[data-act="pf"][data-v="bounce"]'); await v.p.waitForTimeout(200);
+  T('…the Bounce-back lens: missed last time, usually clears → Edwards only', (await v.p.locator('.pcard').count()) === 1 && /Anthony Edwards/.test(await v.text()));
+  await v.p.click('[data-act="pf"][data-v="all"][data-k="lens"]'); await v.p.click('.pcard [data-act="pslip"] >> nth=0'); await v.p.click('.pcard [data-act="pslip"] >> nth=1'); await v.p.waitForTimeout(200); t = await v.text();
+  T('…the slip: two legs, the room\'s combined chance and fair odds', /Your slip · 2 legs/.test(t) && /51%/.test(t), (t.match(/Your slip[^]{0,80}/) || [])[0]);
+  await v.p.click('[data-act="pf"][data-k="view"][data-v="sheet"]'); await v.p.waitForTimeout(200);
+  T('…the Sheet view lists every prop, sortable', (await v.p.locator('.ps-r').count()) === 2);
+  await v.p.click('[data-act="pslipclear"]'); await v.p.click('[data-act="pf"][data-k="view"][data-v="cards"]');
   await v.p.click('.tabs [data-go="today"]'); await v.p.waitForTimeout(300); t = await v.text();
   T('…the VIP sections ride along, each marked "VIP · free in beta": the rest of the Top 10, the Banker, every character\'s parlay, the props', /THE REST OF THE TOP 10/i.test(t) && /THE BANKER.S PARLAY/i.test(t) && /EVERY CHARACTER.S PARLAY/i.test(t) && /PROPS OF THE DAY/i.test(t) && (await v.p.locator('#v-today .vipbadge').count()) >= 4 && /Anthony Edwards 30\+ points/.test(t) && /\+264/.test(t), t.slice(0, 900));
   T('…no VIP selling during the beta (no checkout link anywhere), a beta strip instead', !(await v.p.evaluate(() => [...document.querySelectorAll('a[href]')].some(a => /whop\.com/.test(a.href)))) && /Open beta: the whole card is free/i.test(t));
@@ -164,9 +177,9 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('every page ends with "Restart the app" (loads the newest version)', (await v.p.locator('[data-act="restart"]').count()) >= 1);
   await v.p.locator('#v-cast [data-act="restart"]').click(); await v.p.waitForTimeout(1200);
   T('…tapping it reloads the app fresh (and nothing saved is lost)', /[?&]fresh=\d+/.test(v.p.url()) && (await v.p.evaluate(() => localStorage.getItem('tdp.castpick'))) !== null, v.p.url());
-  await v.p.click('.tabs [data-go="join"]'); await v.p.waitForTimeout(400); t = await v.text();
+  await v.p.click('.joinpill'); await v.p.waitForTimeout(400); t = await v.text();
   T('Join in beta: "Everything\'s free during the beta", the plans after the beta ($50 a month, $300 a year, $100 a league, $20 for 2 days, $2 a pick), no checkout', /EVERYTHING.S FREE DURING THE BETA/i.test(t) && /PLANS AFTER THE BETA/i.test(t) && ['$50', '$300', '$100', '$20', '$2'].every(x => t.includes(x)) && /Best value/i.test(t) && /What happens after the beta/.test(t) && !/HEAD START/i.test(t) && !(await v.p.evaluate(() => [...document.querySelectorAll('#v-join a[href]')].some(a => /whop/.test(a.href)))));
-  for (const tab of ['today', 'cast', 'join']) { await v.p.click(`.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('beta: no sideways scroll on ' + tab, false, o + 'px'); }
+  for (const tab of ['today', 'cast', 'join']) { await v.p.click(tab === 'join' ? '.joinpill' : `.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('beta: no sideways scroll on ' + tab, false, o + 'px'); }
   T('beta: no sideways scroll, no script errors', v.errs.length === 0, v.errs.join(' | '));
   await v.ctx.close();
 
@@ -206,7 +219,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   await v.ctx.close();
 
   /* ── hostile strings ── */
-  v = await visit(FEEDS.evil); await v.p.click('.tabs [data-go="join"]'); await v.p.waitForTimeout(300); await v.p.click('.tabs [data-go="today"]'); await v.p.waitForTimeout(300);
+  v = await visit(FEEDS.evil); await v.p.click('.joinpill'); await v.p.waitForTimeout(300); await v.p.click('.tabs [data-go="today"]'); await v.p.waitForTimeout(300);
   const x = await v.p.evaluate(() => ({ xss: window.__xss || 0, bad: document.querySelectorAll('#main img[onerror],#main script,#main iframe,#main svg[onload],#main [onclick],#main [onmouseover]').length, js: [...document.querySelectorAll('a[href]')].filter(a => /^javascript:/i.test(a.getAttribute('href'))).length }));
   T('nothing in the feed can run as code or become a javascript: link (text is shown as text)', x.xss === 0 && x.bad === 0 && x.js === 0, JSON.stringify(x));
   await v.ctx.close();
@@ -236,7 +249,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
   /* ── what's in the box (and what isn't) ── */
   const dir = path.join(W, 'desk'), files = fs.readdirSync(dir).filter(f => /\.(html|js|css|webmanifest)$/.test(f)); const src = Object.fromEntries(files.map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')])); const all = Object.values(src).join('\n');
-  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 100000);
+  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 125000);
   T('none of the desk\'s machinery: no engine scripts, no app storage, no keys or settings, no eval', !/shared\.js|desk-[a-z]+\.js|-engine\.js|store\.js|theme\.css/.test(all) && !/['"`]d4\./.test(all) && !/apiKey|api_key|odds-?api|ghp_|bot[0-9]{6,}|AUTOPILOT|tgautokey/i.test(all) && !/\beval\(|new Function\(/.test(all));
   const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]);
   T('one script, its own; fonts and styles self-hosted (no third-party code or font CDNs)', scripts.length === 1 && /^app\.js/.test(scripts[0]) && !/fonts\.googleapis|gstatic|cdn\.|unpkg|jsdelivr/.test(all));

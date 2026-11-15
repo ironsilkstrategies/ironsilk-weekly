@@ -1420,6 +1420,28 @@ function pubHeavy(x){if(!x)return false;const pr=x.price;if(pr==null||pr===''||!
    every ticket Chris pastes into intake shows on the public site, live, with a Tail button — unless he switches that ticket off
    (🌐 on the ticket). Picks, odds and results only: never the ticket number or the stake. A ticket with a moneyline at -1000 or
    shorter stays off, like every other public parlay. Records count every settled ticket from the last 30 days, cashed or lost. */
+/* v3.0.20 · the Props board (Chris, Nov 14: Linemate-style prop tools on the public app, in our look). Every prop the characters
+   call today: the player, the stat and line, his last 10 games at that stat (the bars), L5 / L10 hit rates, his current streak,
+   tonight's opponent and home/road, the characters with it (each one's own chance), and the fair odds of their average read.
+   Records and numbers only — no method. Capped at 150 props. */
+let PUB_PROPS_MEMO=null;
+function pubPropVal(sp,row,k){const K=Object.keys(PST_STATS[sp]||{});const one=x=>{const i=K.indexOf(x);return i<0?null:row[i+1];};
+  const parts=PST_COMBO[k];if(!parts)return one(k);let t=0;for(const x of parts){const v=one(x);if(v==null)return null;t+=+v;}return t;}
+function pubProps(){try{const k=today()+'|'+Math.floor(Date.now()/120e3);if(PUB_PROPS_MEMO&&PUB_PROPS_MEMO.k===k)return PUB_PROPS_MEMO.val;
+  let C=[];try{C=typeof cpropToday==='function'?cpropToday():[];}catch(e){}
+  const G=new Map();C.forEach(c=>{if(!c||!c.player||c.thr==null)return;const key=[c.sp,pstId(c.player),c.k,c.thr,c.side||'over'].join('|');
+    const o=G.get(key)||{sp:c.sp,player:c.player,team:c.team,k:c.k,thr:+c.thr,side:c.side||'over',by:[]};
+    if(!o.by.some(b=>b.v===c.voice))o.by.push({v:c.voice,p:+(+(c.cal!=null?c.cal:c.p)).toFixed(3)});G.set(key,o);});
+  const out=[];G.forEach(o=>{try{const P=pstDb(o.sp).p[pstId(o.player)];if(!P||!P.r||!P.r.length)return;
+    const L=P.r.map(r=>({d:String(r[0]),v:pubPropVal(o.sp,r,o.k)})).filter(x=>x.v!=null).slice(-10);if(L.length<3)return;
+    const hit=v=>o.side==='under'?v<o.thr:v>=o.thr;const h=a=>a.filter(x=>hit(x.v)).length;const l5=L.slice(-5);
+    let st=0;const first=hit(L[L.length-1].v);for(let i=L.length-1;i>=0;i--){if(hit(L[i].v)===first)st++;else break;}
+    const opp=typeof cpropOpp==='function'?cpropOpp(o.sp,o.team):null;const g=opp&&opp.g;const start=g&&(g.date||g.start)||null;
+    const avg=o.by.reduce((a,b)=>a+b.p,0)/o.by.length;const fair=avg>=0.5?-Math.round(100*avg/(1-avg)):Math.round(100*(1-avg)/avg);
+    out.push({id:[o.sp,pstId(o.player),o.k,o.thr,o.side].join('|'),sp:o.sp,player:o.player,team:o.team,k:o.k,lab:(typeof CPROP_LAB!=='undefined'&&CPROP_LAB[o.k])||o.k,thr:o.thr,side:o.side,
+      opp:opp?opp.opp:null,home:opp?!!opp.home:null,start,last:L.map(x=>+(+x.v).toFixed(1)),dates:L.map(x=>x.d),l5:[h(l5),l5.length],l10:[h(L),L.length],streak:first?st:-st,
+      avg10:+(L.reduce((a,x)=>a+x.v,0)/L.length).toFixed(1),by:o.by.sort((a,b)=>b.p-a.p),votes:o.by.length,p:+avg.toFixed(3),fair});}catch(e){}});
+  out.sort((a,b)=>b.votes-a.votes||b.p-a.p);const val=out.length?{d:today(),props:out.slice(0,150)}:null;PUB_PROPS_MEMO={k,val};return val;}catch(e){console.warn('props',e);return null;}}
 let PUB_FOUNDER_MEMO=null;
 function pubFounder(){try{const L=get(LS.locked,[])||[];const k=JSON.stringify(L.map(t=>[t.id,t.pubHide?1:0,(t.legs||[]).length]))+'|'+Math.floor(Date.now()/60e3);
     if(PUB_FOUNDER_MEMO&&PUB_FOUNDER_MEMO.k===k)return PUB_FOUNDER_MEMO.val;const val=pubFounder0(L);PUB_FOUNDER_MEMO={k,val};return val;}catch(e){console.warn('founder',e);return null;}}
@@ -1483,8 +1505,8 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
     /* v2.51.1 · today's card never rides in the history list — it showed every locked pick there (with its price) before
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
     history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30,plans:PUB_PLANS,
-    ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB),founder=pubFounder();
-      return{beta:true,vip,characters,bloodlines,board,founder,betaSig:JSON.stringify([founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
+    ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB),founder=pubFounder(),propsb=pubProps();
+      return{beta:true,vip,characters,bloodlines,board,founder,props:propsb,betaSig:JSON.stringify([propsb?propsb.props.map(x=>x.id+x.votes):0,founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
 function publicFeed(){return publicFeedCore(false);}
 function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts)]);}
 

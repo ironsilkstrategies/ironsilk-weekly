@@ -94,7 +94,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'longshots', 'cast', 'chat', 'receipts', 'join'];
+const TABS = ['today', 'slate', 'props', 'longshots', 'cast', 'chat', 'receipts', 'join'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -311,6 +311,71 @@ function founderHtml(page) {
   return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${R.cashed + R.lost ? `<span class="f-rec">Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost</span>` : ''}</div>
     <div class="fgrid">${F.tix.map(card).join('')}</div></section>`;
 }
+/* ── Props (v3.0.20, Chris, Nov 14: "better than them… unrecognizable… way more modern"). Our own take, our own look:
+   · the Desk Score — one 0–100 read per prop: his last 10, his last 5, how sure the room is, how many characters are on it;
+   · the run strip — his last 10 games as ticket stubs against the line, punched gold when he cleared it;
+   · lenses — smart presets, not just filters: the room agrees, on a heater, bounce-back (missed last time, usually clears),
+     home cooking, road trip; plus sport, stat and a minimum score;
+   · the room — every character seated at the table with its own read;
+   · whispers — a running ticker of what the numbers are saying today;
+   · the slip — stack props into your own slip; the room's combined chance and fair odds update as you build, then copy it. */
+const PL = { all: 'Everything', room: 'The room agrees', heat: 'On a heater', bounce: 'Bounce-back', home: 'Home cooking', road: 'Road trip' };
+S.pf = store.get('pf') || { lens: 'all', sp: 'all', stat: 'all', min: 0, sort: 'score', view: 'cards' };
+S.slip = store.get('pslip') || [];
+const pRate = a => (a && a[1] ? a[0] / a[1] : 0);
+const pScore = x => Math.round(100 * (0.35 * pRate(x.l10) + 0.2 * pRate(x.l5) + 0.3 * (x.p || 0) + 0.15 * Math.min((x.votes || 0) / 5, 1)));
+const pLine = x => `${x.side === 'under' ? 'Under ' : ''}${x.side === 'under' ? x.thr : x.thr + '+'} ${x.lab}`;
+const pCast = v => { const C = (S.feed && S.feed.characters) || []; const c = C.find(z => z.v === v); const k = castOf(v); return { name: (c && c.name) || k.name, color: k.color }; };
+function propsAll() { const P = S.feed && S.feed.beta !== false && S.feed.props; return P && Array.isArray(P.props) ? P.props.map(x => ({ ...x, score: pScore(x) })) : []; }
+function lensOk(x, l) { const r10 = pRate(x.l10), lastHit = x.streak > 0;
+  return l === 'room' ? x.votes >= 3 : l === 'heat' ? x.streak >= 4 : l === 'bounce' ? !lastHit && r10 >= 0.6 : l === 'home' ? x.home === true : l === 'road' ? x.home === false : true; }
+function propsShown() { const f = S.pf; let L = propsAll().filter(x => lensOk(x, f.lens) && (f.sp === 'all' || x.sp === f.sp) && (f.stat === 'all' || x.lab === f.stat) && x.score >= (f.min || 0));
+  const by = { score: x => x.score, l10: x => pRate(x.l10), streak: x => x.streak, votes: x => x.votes * 10 + x.p };
+  return L.sort((a, b) => (by[f.sort] || by.score)(b) - (by[f.sort] || by.score)(a)); }
+function whispers(L) { const out = [];
+  L.filter(x => x.streak >= 5).slice(0, 4).forEach(x => out.push(`🔥 ${x.player} has cleared ${pLine(x)} ${x.streak} straight`));
+  L.filter(x => x.l10[0] === x.l10[1] && x.l10[1] >= 8).slice(0, 3).forEach(x => out.push(`💯 ${x.player}: ${pLine(x)} in all of his last ${x.l10[1]}`));
+  L.filter(x => x.votes >= 4).slice(0, 3).forEach(x => out.push(`🪑 ${x.votes} characters at the table on ${x.player} ${pLine(x)}`));
+  L.filter(x => x.streak < 0 && pRate(x.l10) >= 0.7).slice(0, 3).forEach(x => out.push(`↩︎ ${x.player} missed last time, but clears ${pLine(x)} ${x.l10[0]} of 10`));
+  return out; }
+function runStrip(x) { const mx = Math.max(x.thr * 1.6, ...x.last, 1); const lineY = Math.min(100, (x.thr / mx) * 100);
+  return `<div class="pstrip" role="img" aria-label="Last ${x.last.length} games: ${x.last.join(', ')}; line ${x.thr}">${x.last.map(v => { const hit = x.side === 'under' ? v < x.thr : v >= x.thr;
+    return `<span class="pst ${hit ? 'y' : 'n'}" style="--h:${Math.max(6, Math.min(100, (v / mx) * 100))}%"><i>${v % 1 ? v.toFixed(1) : v}</i></span>`; }).join('')}<b class="pline" style="bottom:${lineY}%"></b></div>`; }
+function scoreRing(n) { const c = n >= 75 ? 'var(--foil)' : n >= 60 ? 'var(--win)' : 'var(--cream-3)';
+  return `<div class="pring" style="--n:${n};--c:${c}"><b>${n}</b><small>Desk</small></div>`; }
+function propCard(x) { const inSlip = S.slip.includes(x.id);
+  const room = x.by.map(b => { const k = pCast(b.v); return `<span class="seat" style="--c:${k.color}" title="${esc(k.name)}: ${Math.round(b.p * 100)}%"><i></i>${esc(k.name.replace(/^The /, ''))} <b>${Math.round(b.p * 100)}%</b></span>`; }).join('');
+  return `<article class="pcard${inSlip ? ' on' : ''}"><div class="pc-top">${scoreRing(x.score)}<div class="pc-who"><h3>${esc(x.player)}</h3><p class="pc-line">${esc(pLine(x))}</p>
+      <small>${esc([LEAGUE[x.sp], x.opp ? (x.home ? 'vs ' : 'at ') + x.opp : x.team, x.start ? whenLabel(x.start) : ''].filter(Boolean).join(' · '))}</small></div></div>
+    ${runStrip(x)}
+    <div class="pchips"><span class="pchip ${pRate(x.l5) >= 0.8 ? 'hot' : ''}">L5 <b>${x.l5[0]}/${x.l5[1]}</b></span><span class="pchip ${pRate(x.l10) >= 0.7 ? 'hot' : ''}">L10 <b>${x.l10[0]}/${x.l10[1]}</b></span>
+      <span class="pchip">${x.streak > 0 ? '🔥' : '🧊'} <b>${Math.abs(x.streak)}</b> ${x.streak > 0 ? 'straight' : 'missed'}</span><span class="pchip">avg <b>${x.avg10}</b></span><span class="pchip">fair <b>${esc(odds(x.fair))}</b></span></div>
+    <div class="proom"><span class="proom-l">At the table</span>${room}</div>
+    <button type="button" class="pslip-btn" data-act="pslip" data-id="${esc(x.id)}">${inSlip ? '✓ On your slip' : '＋ Add to slip'}</button></article>`; }
+function propSheet(L) { const th = (k, t) => `<button type="button" class="${S.pf.sort === k ? 'on' : ''}" data-act="psort" data-v="${k}">${t}</button>`;
+  return `<div class="psheet"><div class="ps-h"><span>Prop</span>${th('score', 'Desk')}${th('l10', 'L10')}${th('streak', 'Run')}${th('votes', 'Room')}</div>${L.map(x => `<div class="ps-r${S.slip.includes(x.id) ? ' on' : ''}" data-act="pslip" data-id="${esc(x.id)}">
+    <span><b>${esc(x.player)}</b><small>${esc(pLine(x))} · ${esc(x.opp ? (x.home ? 'vs ' : '@') + x.opp : LEAGUE[x.sp])}</small></span><span class="ps-s">${x.score}</span><span>${x.l10[0]}/${x.l10[1]}</span><span>${x.streak > 0 ? '🔥' + x.streak : '🧊' + -x.streak}</span><span>${x.votes}🪑</span></div>`).join('')}</div>`; }
+function slipBar() { const all = propsAll(); const L = S.slip.map(id => all.find(x => x.id === id)).filter(Boolean); if (!L.length) return '';
+  const p = L.reduce((a, x) => a * (x.p || 0.5), 1); const am = p >= 0.5 ? -Math.round(100 * p / (1 - p)) : Math.round(100 * (1 - p) / p);
+  return `<div class="pslipbar"><div><b>Your slip · ${L.length} leg${L.length > 1 ? 's' : ''}</b><small>The room gives it ${(p * 100).toFixed(p < 0.1 ? 1 : 0)}% · fair ${esc(odds(am))}</small></div>
+    <button type="button" class="btn sm" data-act="pslipcopy">📋 Copy</button><button type="button" class="btn ghost sm" data-act="pslipclear">Clear</button></div>`; }
+function slipText() { const all = propsAll(); return 'TheDesk · my prop slip\n' + S.slip.map(id => all.find(x => x.id === id)).filter(Boolean).map(x => `• ${x.player} ${pLine(x)}${x.opp ? ` (${x.home ? 'vs' : 'at'} ${x.opp})` : ''}`).join('\n') + '\n' + (CFG.home || 'https://ironsilkweekly.com/desk/'); }
+function viewProps() {
+  const el = $('#v-props'), F = S.feed, all = propsAll(), f = S.pf;
+  if (!F) { el.innerHTML = '<div class="shimmer"></div>'; return; }
+  const L = propsShown(), W = whispers(all);
+  const chip = (k, v, t, n) => `<button type="button" class="lens${f[k] === v ? ' on' : ''}" data-act="pf" data-k="${k}" data-v="${esc(String(v))}">${t}${n != null ? ` <small>${n}</small>` : ''}</button>`;
+  const sps = [...new Set(all.map(x => x.sp))], stats = [...new Set(all.filter(x => f.sp === 'all' || x.sp === f.sp).map(x => x.lab))];
+  el.innerHTML = `<h1 class="title">Props</h1><p class="lede">Every prop the characters like today: his last 10 against the line, the run he's on, who's at the table, and one Desk Score to read it all.</p>
+    ${W.length ? `<div class="whisper" aria-label="Whispers"><div class="wh-track">${[...W, ...W].map(t => `<span>${esc(t)}</span>`).join('')}</div></div>` : ''}
+    ${all.length ? `<div class="lenses" role="toolbar" aria-label="Lenses">${Object.entries(PL).map(([k, t]) => chip('lens', k, t, all.filter(x => lensOk(x, k)).length)).join('')}</div>
+    <div class="lenses sub">${chip('sp', 'all', 'All sports')}${sps.map(s => chip('sp', s, LEAGUE[s] || s)).join('')}<span class="lsep"></span>${chip('stat', 'all', 'Every stat')}${stats.map(t => chip('stat', t, t)).join('')}</div>
+    <div class="ptools"><label class="pmin">Desk Score <b>${f.min || 0}+</b><input type="range" min="0" max="90" step="5" value="${f.min || 0}" data-act="pmin" aria-label="Minimum Desk Score"></label>
+      <div class="pview">${['cards', 'sheet'].map(v => `<button type="button" class="${f.view === v ? 'on' : ''}" data-act="pf" data-k="view" data-v="${v}">${v === 'cards' ? 'Cards' : 'Sheet'}</button>`).join('')}</div></div>
+    ${L.length ? (f.view === 'sheet' ? propSheet(L) : `<div class="pgrid">${L.map(propCard).join('')}</div>`) : `<div class="paper blank"><b>Nothing through this lens</b><p>Try another lens, or lower the Desk Score.</p></div>`}`
+    : `<div class="paper blank"><b>Props post when the desk publishes today’s card</b><p>Check back closer to game time.</p></div>`}
+    ${slipBar()}${footHtml()}`;
+}
 /* the LongShots tab: every founder ticket from the last week, live */
 function viewLongshots() {
   const el = $('#v-longshots'), F = S.feed;
@@ -319,6 +384,8 @@ function viewLongshots() {
     ${body || (F || S.feedErr ? `<div class="paper blank"><b>No LongShots up right now</b><p>The founder’s next ticket lands here the moment it’s in.</p></div>` : '<div class="shimmer"></div>')}${footHtml()}`;
 }
 function tailText(t) { return [`TheDesk · ${t.name || 'Founder LongShot Parlay'} (${t.legs.length} legs${t.dec ? ', ' + decAm(t.dec) : ''})`, ...t.legs.map((l, i) => `${i + 1}. ${legText(l)}${l.price != null ? ' (' + odds(l.price) + ')' : ''}${l.game ? ' · ' + matchup(l) : ''}`), CFG.home || 'https://ironsilkweekly.com/desk/'].join('\n'); }
+async function copyText(txt, ok) { try { await navigator.clipboard.writeText(txt); toast(ok); return; } catch (e) { }
+  try { const ta = document.createElement('textarea'); ta.value = txt; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast(ok); } catch (e) { toast('Couldn’t copy on this device'); } }
 async function tailCopy(id) { const t = ((S.feed && S.feed.founder && S.feed.founder.tix) || []).find(x => x.id === id); if (!t) return; const txt = tailText(t);
   try { await navigator.clipboard.writeText(txt); toast('Copied — paste it into your book'); return; } catch (e) { }
   try { const ta = document.createElement('textarea'); ta.value = txt; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Copied — paste it into your book'); } catch (e) { toast('Couldn’t copy on this device'); } }
@@ -798,7 +865,7 @@ async function share() {
   try { if (navigator.share) { await navigator.share({ title: 'TheDesk', text, url: CFG.home }); return; } } catch { return; }
   try { await navigator.clipboard.writeText(`${text}\n${CFG.home}`); toast('Card copied'); } catch { toast('Couldn’t copy the card'); }
 }
-const VIEWS = { today: viewToday, slate: viewSlate, longshots: viewLongshots, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
+const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, longshots: viewLongshots, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   if (!TABS.includes(tab)) tab = 'today';
@@ -808,7 +875,7 @@ function go(tab, push) {
   if (push && location.hash !== '#' + tab) history.pushState(null, '', '#' + tab);
   render(); window.scrollTo(0, 0);
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
@@ -826,6 +893,11 @@ document.addEventListener('click', async e => {
   else if (act === 'slateday') { S.slateDay = +a.dataset.i; S.openGame = ''; render(); slateLive(); }
   else if (act === 'slatesp') { S.slateSp = a.dataset.sp; render(); }
   else if (act === 'tail') { tailCopy(a.dataset.id); }
+  else if (act === 'pf') { S.pf[a.dataset.k] = a.dataset.v; if (a.dataset.k === 'sp') S.pf.stat = 'all'; store.set('pf', S.pf); render(); }
+  else if (act === 'psort') { S.pf.sort = a.dataset.v; store.set('pf', S.pf); render(); }
+  else if (act === 'pslip') { const id = a.dataset.id; S.slip = S.slip.includes(id) ? S.slip.filter(x => x !== id) : [...S.slip, id].slice(-12); store.set('pslip', S.slip); render(); }
+  else if (act === 'pslipclear') { S.slip = []; store.set('pslip', S.slip); render(); }
+  else if (act === 'pslipcopy') { copyText(slipText(), 'Slip copied — paste it into your book'); }
   else if (act === 'bf') { S.bf[a.dataset.k] = a.dataset.v; store.set('bf', S.bf); S.openGame = ''; render(); }
   else if (act === 'bfreset') { S.bf = { win: 'up', tier: 'all', bt: 'all', ch: 'all', view: S.bf.view || 'time' }; store.set('bf', S.bf); render(); }
   else if (act === 'gobf') { S.bf = { ...S.bf, win: 'up', tier: a.dataset.tier || 'all', bt: 'all', ch: 'all', view: 'time' }; store.set('bf', S.bf); S.slateDay = 0; go('slate', true); }
@@ -840,7 +912,7 @@ document.addEventListener('click', async e => {
   else if (act === 'chat-invite') chatMod({ act: 'invite', uses: 25 }, j => { CH.invite = j.code; const n = $('#chatInv'); if (n) n.innerHTML = `New code: <code>${esc(j.code)}</code> (25 uses)`; });
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
-document.addEventListener('change', e => { const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
+document.addEventListener('change', e => { const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
 /* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
 async function restartApp() {
   toast('Restarting with the newest version…');
