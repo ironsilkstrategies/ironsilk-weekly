@@ -1441,8 +1441,12 @@ function parseSGPTicketText(text){
     /* Result - Team = moneyline in the (Match) dialect */
     if((m=line.match(/^(?:Result|Winner|Moneyline|Money ?line)\s*-\s*(.+?)\s*\((?:Match|Game)\)\s*$/i))){const ab=side(m[1])||cfbFallbackAbbr(m[1]);if(ab){push({pick:ab+' ML'});return;}skipped.push(line+'  (team not recognized)');return;}
     /* v2.65 · basketball player props: "Player points - Lauri Markkanen 15+", "Player points - Ace Bailey over 10.5", threes / assists / rebounds */
-    if((cur.sport==='nba'||cur.sport==='ncaab')&&(m=line.match(/^Player\s+(points|assists|rebounds|three pointers|threes|3-pointers|steals|blocks)\s*-\s*(.+?)\s+(?:(over|under)\s+([\d.]+)|(\d+(?:\.5)?)\+)\s*\(Game\)\s*$/i))){
-      const K={points:'pts',assists:'ast',rebounds:'reb','three pointers':'fg3',threes:'fg3','3-pointers':'fg3',steals:'stl',blocks:'blk'}[m[1].toLowerCase()];const dir=m[3]?m[3].toLowerCase():'atleast',thr=+(m[4]||m[5]);
+    /* v3.0.10 · combos too: "Player points + rebounds - Z. Williamson 20+", "Player points + assists + rebounds - K. Irving 20+" (graded from the parts) */
+    if((cur.sport==='nba'||cur.sport==='ncaab')&&(m=line.match(/^Player\s+((?:points|assists|rebounds|steals|blocks)(?:\s*\+\s*(?:points|assists|rebounds|steals|blocks))+|points|assists|rebounds|three pointers|threes|3-pointers|steals|blocks)\s*-\s*(.+?)\s+(?:(over|under)\s+([\d.]+)|(\d+(?:\.5)?)\+)\s*\(Game\)\s*$/i))){
+      const BK={points:'pts',assists:'ast',rebounds:'reb','three pointers':'fg3',threes:'fg3','3-pointers':'fg3',steals:'stl',blocks:'blk'};
+      const parts=m[1].toLowerCase().split(/\s*\+\s*/).map(x=>BK[x]);const set=[...new Set(parts)].sort().join(',');
+      const K=parts.length===1?parts[0]:({'ast,pts,reb':'pra','pts,reb':'pr','ast,pts':'pa','ast,reb':'ra','blk,stl':'sb'})[set];
+      if(!K){skipped.push(line+'  (that stat combination isn\'t graded yet)');return;}const dir=m[3]?m[3].toLowerCase():'atleast',thr=+(m[4]||m[5]);
       push({pick:`${m[2].trim()} ${dir==='atleast'?thr+'+':dir+' '+thr} ${m[1].toLowerCase()}`,isProp:1,bbProp:{player:m[2].trim(),k:K,thr,dir}});return;}
     if(cur.sport==='nhl'){
       const HS={goals:'goals',goal:'goals',assists:'assists',points:'points','shots on goal':'shots',shots:'shots',saves:'saves'};
@@ -3087,7 +3091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8642,13 +8646,13 @@ function gradeMLBPropShared(leg,ticketDate){
 /* v2.65 · basketball props graded from the player's final box line (d4.pstlast.<sport>, filled as box scores are read) */
 function gradeBBPropLeg(leg,ticketDate){const P=leg.bbProp;const sp=leg.sport||'nba';const d=String(leg.gameDate||ticketDate||'').slice(0,10);
   /* v2.65.1 · live: the game's ESPN box, refreshed with the live loop — the count moves as the game goes */
-  try{const ev=fbpEventId(leg,ticketDate);if(ev&&ev.id){const box=fbpBox(ev.id,sp);if(box&&box.state&&box.state!=='pre'){const v=cpropBoxVal(sp,box,null,P.player,P.k);
+  try{const ev=fbpEventId(leg,ticketDate);if(ev&&ev.id){const box=fbpBox(ev.id,sp);if(box&&box.state&&box.state!=='pre'){const v=PST_COMBO[P.k]?(()=>{const xs=PST_COMBO[P.k].map(k=>cpropBoxVal(sp,box,null,P.player,k));return xs.some(x=>x==null)?null:xs.reduce((a,x)=>a+x,0);})():cpropBoxVal(sp,box,null,P.player,P.k);
       if(v!=null){const live=box.state==='in';let hit=null;if(P.dir==='under'){if(v>P.thr)hit=false;else if(!live)hit=true;}else{const ok=P.dir==='over'?v>P.thr:v>=P.thr;if(ok)hit=true;else if(!live)hit=false;}
         return{hit,detail:`${P.player} ${v}${live?' so far':''}`,live,prog:{val:v,thr:P.thr,dir:P.dir==='over'?'over':P.dir}};}
       if(box.state==='post')return propDnpVoid(P.player);}}}catch(e){}
   let g=null;try{g=(get('d4.pstlast.'+sp,{})||{})[pstId(P.player)];}catch(e){}
-  if(!g||!d||g.d<d||g.d>dayShift(d,1)||g.v[P.k]==null){const R=(()=>{try{return resolveLeg(leg,ticketDate);}catch(e){return null;}})();return{hit:null,detail:R&&R.live?'live — graded at the final':null,live:!!(R&&R.live)};}
-  const v=+g.v[P.k];const hit=P.dir==='under'?v<P.thr:P.dir==='over'?v>P.thr:v>=P.thr;return{hit,detail:`${P.player} ${v}`,live:false,prog:{val:v,thr:P.thr,dir:P.dir}};}
+  if(!g||!d||g.d<d||g.d>dayShift(d,1)||pstVal(g.v,P.k)==null){const R=(()=>{try{return resolveLeg(leg,ticketDate);}catch(e){return null;}})();return{hit:null,detail:R&&R.live?'live — graded at the final':null,live:!!(R&&R.live)};}
+  const v=pstVal(g.v,P.k);const hit=P.dir==='under'?v<P.thr:P.dir==='over'?v>P.thr:v>=P.thr;return{hit,detail:`${P.player} ${v}`,live:false,prog:{val:v,thr:P.thr,dir:P.dir}};}
 function gradeLeg(leg,ticketDate){
   if(leg.manual)return{hit:leg.manual.push?null:leg.manual.hit,push:!!leg.manual.push,detail:'set by you',live:false,manual:true};
   if(leg.mlbProp)return gradeMLBPropShared(leg,ticketDate);
