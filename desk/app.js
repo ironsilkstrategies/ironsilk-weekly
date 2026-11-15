@@ -109,7 +109,7 @@ async function loadFeed(force) {
   const got = (await Promise.all(CFG.feeds.map(u => getJSON(u)))).filter(j => j && typeof j === 'object' && fin(j.generated));
   if (!got.length) { S.feedErr = !S.feed; if (S.tab === 'today' || S.tab === 'receipts') render(); return; }
   const F = got.sort((a, b) => b.generated - a.generated)[0];
-  if (S.feed && S.feed.generated >= F.generated) { if (force) render(); return; }
+  if (S.feed && S.feed.generated >= F.generated) { if (force) render(); if (!S.liveAt) liveTick(); return; }
   S.feed = noHeavy(F); S.feedErr = false; store.set('feed', S.feed);
   render(); liveTick();
 }
@@ -127,7 +127,8 @@ async function scores(sps, ymd) {
     try {
       /* never a cached copy: no-store for the browser, and a marker that changes every 15 s so ESPN's edge can't hand back an old one either
          (iPhone kept showing the first scores it got) */
-      const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${ESPN[sp]}/scoreboard?dates=${ymd}&limit=300${sp === 'ncaaf' ? '&groups=80' : sp === 'ncaab' ? '&groups=50' : ''}&_=${Math.floor(Date.now() / 15e3)}`, { cache: 'no-store' });
+      const ac = new AbortController(), to = setTimeout(() => ac.abort(), 8000); /* one slow league never holds up the others */
+      const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${ESPN[sp]}/scoreboard?dates=${ymd}&limit=300${sp === 'ncaaf' ? '&groups=80' : sp === 'ncaab' ? '&groups=50' : ''}&_=${Math.floor(Date.now() / 15e3)}`, { cache: 'no-store', signal: ac.signal }).finally(() => clearTimeout(to));
       if (!r.ok) return;
       for (const ev of (await r.json()).events || []) {
         const c = (ev.competitions || [])[0] || {}, cs = c.competitors || [];
@@ -137,6 +138,7 @@ async function scores(sps, ymd) {
         S.live[`${sp}|${ab(sp, A.team && A.team.abbreviation)}@${ab(sp, H.team && H.team.abbreviation)}`] =
           { a: num(A), h: num(H), state: st.state === 'post' || st.completed ? 'post' : st.state === 'in' ? 'in' : 'pre', detail: st.shortDetail || st.detail || '', id: ev.id || c.id || null, period: +((c.status || ev.status || {}).period) || 0, clock: (c.status || ev.status || {}).clock != null ? +((c.status || ev.status || {}).clock) : null };
       }
+      S.liveAt = Date.now(); liveRepaint(); /* each league paints as soon as it lands */
     } catch { /* scores are a nicety */ }
   }));
   S.liveAt = Date.now();
@@ -147,6 +149,7 @@ function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t =
   const k = Object.keys(S.live).find(k => { if (!k.startsWith(p.sp + '|')) return false; const [a, h] = k.slice(p.sp.length + 1).split('@'); return a === t || h === t; });
   return k ? { ...p, game: k.slice(p.sp.length + 1) } : p; }
 const castPicks = () => ((S.feed && S.feed.characters) || []).flatMap(c => (c.picks || []).filter(p => p && p.sp && p.hit == null && !p.push));
+let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { if (S.tab === 'today' || S.tab === 'longshots' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render(); }, 120); };
 async function liveTick() {
   const F = S.feed, T = F && F.today; if (!F) return;
   /* every leg the page shows live: Today's picks and parlay, the VIP Top 10 / Banker / character parlays, and the LongShots (whose legs can
@@ -158,6 +161,7 @@ async function liveTick() {
   const by = new Map(); items.forEach(x => { const d = String(x.day || td).slice(0, 10).replace(/-/g, ''); const k = d; const set = by.get(k) || new Set(); set.add(x.sp); by.set(k, set); });
   if (!by.size) return;
   await Promise.all([...by].map(([d, sps]) => scores([...sps], d)));
+  liveRepaint();
   await boxes([...items, ...cast.map(withGame)]); /* player props: their box scores, now that the scoreboard has each game's id (the cast's props find their game by team) */
   if (S.tab === 'today' || S.tab === 'longshots' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render();
 }
@@ -831,7 +835,7 @@ async function boxes(legs) {
     /* a new box only when the game moved (score, clock, inning) or a minute passed — finals once */
     if (B && (B.final || (B.sig === sig && Date.now() - B.at < 60e3))) continue; want.set(k, { sp: l.sp, id: lv.id, post: lv.state === 'post', sig }); }
   await Promise.all([...want].map(async ([k, w]) => { try {
-    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${ESPN[w.sp]}/summary?event=${encodeURIComponent(w.id)}&_=${Math.floor(Date.now() / 15e3)}`, { cache: 'no-store' }); if (!r.ok) return;
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 8000); const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${ESPN[w.sp]}/summary?event=${encodeURIComponent(w.id)}&_=${Math.floor(Date.now() / 15e3)}`, { cache: 'no-store', signal: ac.signal }).finally(() => clearTimeout(to)); if (!r.ok) return;
     S.box[k] = { at: Date.now(), final: w.post, sig: w.sig, rows: readBox(await r.json()) }; } catch { /* box scores are a nicety */ } })); }
 /* a ticket leg as this phone sees it: graded the moment ESPN says so, props carrying their live stat */
 function effLeg(l) {
@@ -1224,7 +1228,7 @@ setInterval(() => {
 setInterval(() => { if (!document.hidden) loadFeed(); }, 120e3);
 /* live scores: every 30 s while a game on the page is live, every 60 s otherwise */
 (function liveLoop() { const anyLive = Object.values(S.live || {}).some(v => v && v.state === 'in');
-  setTimeout(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive(); } liveLoop(); }, anyLive ? 30e3 : 60e3); })();
+  setTimeout(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive(); } liveLoop(); }, anyLive ? 30e3 : S.liveAt ? 60e3 : 10e3); })();
 setInterval(() => { if (!document.hidden && S.tab === 'slate') loadSlate(); }, 600e3);
 
 /* ── Pull to refresh (Chris, Nov 15: "the pull down refresh is not available yet on the public app"). A home-screen app on iPhone
@@ -1252,7 +1256,7 @@ chip();
 /* ?embed=1 · the chat inside the desk's own app: no header, no tabs */
 if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
 go((() => { try { const sp = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param; if (sp && TABS.includes(sp)) return sp; } catch (e) { } return (location.hash || '#today').slice(1); })(), false);
-loadFeed();
+loadFeed(); liveTick(); /* scores straight away off the saved card: live legs shouldn't wait for a new publish or the minute loop */
 acctBadge(); acctLoad();
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadSlate());
 /* the install guide greets a first visit, comes back once a week later, and after that lives behind "Get the app" */

@@ -194,7 +194,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     t0.legs[1].p = 0.52; t0.legs[1].q = 0.61; t0.legs[1].st = 'live'; t0.legs[1].detail = 'DAL 50–58 MIN (live) · margin +8'; t0.legs[1].start = iso(now - 30 * 60e3); t0.legs[0].p = 0.6; t0.legs[2].p = 0.3; t0.legs[2].q = 0.05;
     F.vip.parlays[0].legs[0].q = 0.8; F.vip.parlays[0].legs[0].start = iso(now - 40 * 60e3);
     const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
-    await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); } catch (e) { } });
+    await p.addInitScript(f => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.feed', f); } catch (e) { } }, JSON.stringify(F)); /* the same card already saved on the phone: no new publish to wake the live loop */
     await p.route('**/*', r => { const u = new URL(r.request().url());
       if (/picks\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(F) });
       if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
@@ -209,6 +209,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
       r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
     await p.goto('https://desk.test/desk/#longshots', { waitUntil: 'load' }); await p.waitForTimeout(1500);
     let t = await p.evaluate(() => document.querySelector('#v-longshots').innerText);
+    T('live scores land straight away on open, even when the saved card is already the newest (no minute-long wait)', /LIVE DAL 54–61 MIN/.test(t), t.slice(0, 300));
     T('LongShots live: the ticket\'s chance and "1 in N", legs live, to go, and a live cash chance against pre-game', /2\.0%\s*·\s*1 in 50/.test(t) && /● \d+ live/.test(t) && /Live cash chance \d+\.\d%/i.test(t) && /was 1 in 50 pre-game/i.test(t), (t.match(/live cash chance[^]{0,60}/i) || [t.slice(0, 600)])[0]);
     T('player props live off ESPN\'s box score, on the phone: the stat against the line and its own live chance (the feed\'s stale 5% is ignored)', /A\. Edwards 25\+ points[^]{0,120}18 of 25\+ · 61% live \(was 30%\)/.test(t) && !/A\. Edwards 18\b/.test(t) && boxUrls.length > 0 && boxUrls.every(q => /event=DALMIN/.test(q)), (t.match(/A\. Edwards 25\+ points[^]{0,160}/) || [])[0]);
     T('…each live leg: score and clock, and its live chance (was X% pre-game)', /LIVE DAL 54–61 MIN · 5:12 - 3rd/i.test(t) && /70% live \(was 52%\)/i.test(t), (t.match(/LIVE DAL[^]{0,300}/) || [t.slice(0,900)])[0]);
