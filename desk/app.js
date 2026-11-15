@@ -320,7 +320,7 @@ async function seal(T) {
 }
 function footHtml() {
   return `<footer class="foot"><p>For entertainment. 21 and over. Bet only what you can afford to lose. If betting stops being fun, call 1-800-GAMBLER.</p>
-    <p>TheDesk is published by IronSilk Strategies. <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></p>
+    <p>TheDesk is published by IronSilk Strategies. <a href="privacy.html">Privacy</a></p>
     <p><button type="button" class="btn line restart" data-act="restart">↻ Restart the app</button> <span class="small-note">Not seeing the latest? This loads the newest version.</span></p></footer>`;
 }
 

@@ -224,7 +224,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 
   /* ── what's in the box (and what isn't) ── */
   const dir = path.join(W, 'desk'), files = fs.readdirSync(dir).filter(f => /\.(html|js|css|webmanifest)$/.test(f)); const src = Object.fromEntries(files.map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')])); const all = Object.values(src).join('\n');
-  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html', 'terms.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 100000);
+  T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 100000);
   T('none of the desk\'s machinery: no engine scripts, no app storage, no keys or settings, no eval', !/shared\.js|desk-[a-z]+\.js|-engine\.js|store\.js|theme\.css/.test(all) && !/['"`]d4\./.test(all) && !/apiKey|api_key|odds-?api|ghp_|bot[0-9]{6,}|AUTOPILOT|tgautokey/i.test(all) && !/\beval\(|new Function\(/.test(all));
   const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]);
   T('one script, its own; fonts and styles self-hosted (no third-party code or font CDNs)', scripts.length === 1 && /^app\.js/.test(scripts[0]) && !/fonts\.googleapis|gstatic|cdn\.|unpkg|jsdelivr/.test(all));
@@ -232,7 +232,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('it only ever asks for: its own files, the published picks, the public slate, ESPN\'s public scores', [...HOSTS].every(allowed), [...HOSTS].filter(h => !allowed(h)).join(' '));
   const man = JSON.parse(src['manifest.webmanifest']);
   T('installable: its own manifest (scope and start inside /desk/, standalone, icons) and an offline shell that never caches the feeds', man.display === 'standalone' && man.scope === './' && /^\.\//.test(man.start_url) && man.icons.length >= 3 && man.icons.every(i => fs.existsSync(path.join(dir, i.src))) && /endsWith\('\.json'\)\) return/.test(src['sw.js']));
-  T('share preview, privacy and terms are in place', fs.existsSync(path.join(dir, 'img/og.jpg')) && /og:image" content="https:\/\/ironsilkweekly\.com\/desk\/img\/og\.jpg/.test(src['index.html']) && /1-800-GAMBLER/.test(src['terms.html']) && /no cookies/i.test(src['privacy.html']));
+  T('share preview and privacy are in place (no terms page since Nov 14)', fs.existsSync(path.join(dir, 'img/og.jpg')) && /og:image" content="https:\/\/ironsilkweekly\.com\/desk\/img\/og\.jpg/.test(src['index.html']) && !fs.existsSync(path.join(dir, 'terms.html')) && /no cookies/i.test(src['privacy.html']) && /TheDesk Poster/.test(src['privacy.html']));
   const pk = fs.readFileSync(path.join(W, 'picks.html'), 'utf8'), td = fs.readFileSync(path.join(W, 'TheDesk.html'), 'utf8');
   T('the old picks page hands visitors to the app, and the private launcher links to it', /location\.replace\("desk\/"/.test(pk) && /href="desk\/"/.test(td));
   T('the private app\'s pages ask search engines to stay out', ['TheDesk.html', 'nfl.html', 'nba.html', 'nhl.html', 'cfb.html', 'ncaab.html', 'mlb.html', 'odds-loader.html'].every(f => /name="robots" content="noindex/.test(fs.readFileSync(path.join(W, f), 'utf8'))));
