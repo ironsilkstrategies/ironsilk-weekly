@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114k';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18190,6 +18190,8 @@ function charCallRowHtml(o,opt){opt=opt||{};const e=txtEsc;const C=CHARS[o.v]||{
     o.conf!=null?`${Math.round(o.conf*100)}% sure`:'',
     (()=>{try{if(o.kind!=='line'||!o.c||typeof chemOf!=='function')return'';const C=chemOf(o.c);if(Math.abs(C.d)<0.005)return'';const top=C.why.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d))[0];
       return`<span style="color:${C.d>0?'var(--win)':'var(--rust)'}" title="${e(C.why.map(w=>`${charName(w.u)} ${w.rel==='with'?'with it':'against it'}: ${w.d>0?'+':''}${Math.round(w.d*100)} (${w.n} together)`).join(' · '))}">chemistry ${C.d>0?'+':''}${Math.round(C.d*100)}% (${e(charName(top.u).replace(/^The /,''))} ${top.rel==='with'?'with it':'against it'})</span>`;}catch(err){return'';}})(),
+    (()=>{try{if(o.kind!=='line'||!o.c||typeof wxOf!=='function')return'';const W=wxOf(o.c);if(!W.why.length)return'';
+      return W.why.map(w=>`<span style="color:${w.d>0?'var(--win)':'var(--rust)'}" title="${e(w.t)}">${w.k==='lane'?'weather':'league'} ${w.d>0?'+':'−'}${+(Math.abs(w.d)*100).toFixed(1)} pts (${e(w.k==='lane'?w.t.split(':')[0]:(w.d>0?'with the shift':'against the shift'))})</span>`).join(' ');}catch(err){return'';}})(),
     o.kind==='half'&&o.rec&&o.rec.n?`${o.rec.w}-${o.rec.l} in this half market`:'',
     rec&&rec.n?`${rec.w}-${rec.n-rec.w} ${rec.u>=0?'+':''}${rec.u.toFixed(1)}u in this lane`:'',
     lane==='proven'?'<span style="color:var(--win)">✓ proven lane</span>':lane==='blocked'?'<span style="color:var(--rust)">⛔ blocked lane</span>':''].filter(Boolean).join(' · ');

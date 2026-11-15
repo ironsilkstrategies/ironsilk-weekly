@@ -74,7 +74,32 @@ function chemOf(x){try{if(!x||!CHARS[x.voice]||!['ml','spread','total'].includes
     const B=chemBook(D);if(!CHEM_B||!CHEM_B.idx)return{d:0,why:[]};let d=0;const why=[];
     (CHEM_B.idx.get([x.sp,x.game,x.market,D].join('|'))||[]).forEach(y=>{if(y.voice===x.voice)return;const rel=y.side===x.side?'with':'vs';const o=B[x.voice+'|'+y.voice+'|'+rel];if(!o||Math.abs(o.d)<0.005)return;d+=o.d;why.push({u:y.voice,rel,d:o.d,n:o.n});});
     d=Math.max(-CHEM_ALL,Math.min(CHEM_ALL,d));return{d,why};}catch(e){return{d:0,why:[]};}}
-function coachConf(x){const c=coachBase(x);if(c==null)return null;let k=1;try{k=coachK(x);}catch(e){}let ch=0;try{ch=chemOf(x).d;}catch(e){}return Math.max(0.01,Math.min(COACH_CEIL,0.5+k*(c-0.5)+ch));}
+/* §1c · the weather (v3.0.19, Chris, Nov 14: "do them both") — the Forecast and the league's weather now move the picks.
+   · the lane: a bet type that's not working for the whole room (7 days AND 30 days both under water at the real prices,
+     8+ picks this week, 20+ this month) takes points off every character's confidence there: 🌥 −2 · 🌧 −4 · ⛈ −6 (so a broken
+     lane needs a much stronger read to go official). Working lanes add: 🌤 +2 · ☀️ +4. It never fades a lane, only bets it less.
+   · the league: when the league itself has shifted past luck (desk-world.js: 🌥 WATCH 2σ, ⛈ CHANGED 3σ) — home teams
+     winning more, overs hitting, favorites covering — picks with the shift get +1.5 / +3, picks against it −1.5 / −3.
+   Each day's lane weather is stamped the first time it's read, so a posted day stands as it was. From Nov 15 on. */
+const WX_FROM='2026-11-15',WX_LOG='d4.wxlog';let WX_M=null,WX_L=null;
+function wxLanes(){if(WX_M&&Date.now()-WX_M.t<60e3)return WX_M.v;const v={};try{if(typeof fcData==='function')(fcData().lanes||[]).forEach(o=>{v[o.k]=o;});}catch(e){}WX_M={t:Date.now(),v};return v;}
+function wxRole(x){const m=x.market;if(m==='total')return/under/i.test(x.side)?'under':'over';if(m==='spread')return x.line!=null&&+x.line<0?'fav':x.line!=null&&+x.line>0?'dog':(+x.price<0?'fav':'dog');
+  if(!(Math.abs(+x.price)>=100))return null;return +x.price<=-500?'heavy':+x.price<0?'fav':'dog';}
+function wxLaneNow(k){const o=wxLanes()[k];if(!o||o.n<8||o.n30<20)return{d:0};const r7=o.u7/o.n,r30=o.u30/o.n30;let d=0,ic='';
+  if(r30<0){if(r7<=-0.25&&o.n>=20){d=-0.06;ic='⛈ broken';}else if(r7<=-0.12){d=-0.04;ic='🌧 not working';}else if(r7<=-0.04){d=-0.02;ic='🌥 cooling';}}
+  else if(r30>0){if(r7>=0.12){d=0.04;ic='☀️ working';}else if(r7>=0.04){d=0.02;ic='🌤 warm';}}
+  return d?{d,t:`${ic}: ${o.lab} ${o.w7}-${o.l7} this week, ${o.w30}-${o.l30} in 30 days`}:{d:0};}
+function wxLane(sp,mk,role,D){const k=sp+'|'+mk+'|'+role;if(!WX_L)WX_L=get(WX_LOG,{})||{};const day=WX_L[D]||{};
+  if(D<today())return day[k]||{d:0};
+  if(day[k]&&day[k].ts&&Date.now()-day[k].ts<30*60e3)return day[k];
+  const r={...wxLaneNow(k),ts:Date.now()};const was=day[k];WX_L[D]={...day,[k]:r};
+  if(!was||was.d!==r.d||Date.now()-(was.ts||0)>30*60e3){const keep={};Object.keys(WX_L).sort().slice(-21).forEach(z=>{keep[z]=WX_L[z];});WX_L=keep;try{set(WX_LOG,WX_L);}catch(e){}}
+  return r;}
+function wxOf(x){const out={d:0,why:[]};try{if(!x||!CHARS[x.voice]||!['ml','spread','total'].includes(x.market))return out;const D=String(x.date||today()).slice(0,10);if(D<WX_FROM)return out;
+  const role=wxRole(x);if(role&&role!=='heavy'){const L=wxLane(x.sp,x.market,role,D);if(L&&L.d){out.d+=L.d;out.why.push({k:'lane',d:L.d,t:L.t});}}
+  if(typeof worldLine==='function'){const w=worldLine(x);if(w){const dd=(w.w>=3?0.03:0.015)*(w.help?1:-1);out.d+=dd;out.why.push({k:'league',d:dd,t:w.txt});}}
+  out.d=Math.max(-0.08,Math.min(0.06,out.d));}catch(e){}return out;}
+function coachConf(x){const c=coachBase(x);if(c==null)return null;let k=1;try{k=coachK(x);}catch(e){}let ch=0;try{ch=chemOf(x).d;}catch(e){}let wd=0;try{wd=wxOf(x).d;}catch(e){}return Math.max(0.01,Math.min(COACH_CEIL,0.5+k*(c-0.5)+ch+wd));}
 
 /* §2 · groupthink — from the master calibration's leg rows: edge over the prices by how many characters agreed ───────── */
 let COACH_GT=null;
