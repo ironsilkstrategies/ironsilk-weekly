@@ -24,7 +24,12 @@
     return null;}
   window.addEventListener('load',function(){LOADED=true;});
   function open(){return new Promise(function(res,rej){var r=indexedDB.open('thedesk',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv');};r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};r.onblocked=function(){rej(new Error('blocked'));};});}
-  function all(db){return new Promise(function(res,rej){var out=new Map();var c=db.transaction('kv','readonly').objectStore('kv').openCursor();c.onsuccess=function(){var x=c.result;if(x){out.set(String(x.key),x.value);x.continue();}else res(out);};c.onerror=function(){rej(c.error);};});}
+  /* v3.0.25 · one read, not one per record: getAllKeys + getAll in a single transaction (Safari walks a cursor record by record,
+     and with ~30 MB of history that alone could run past the wait). The cursor stays as the fallback for old browsers. */
+  function all(db){return new Promise(function(res,rej){var st=db.transaction('kv','readonly').objectStore('kv'),out=new Map();
+    if(st.getAll&&st.getAllKeys){var K=null,V=null,ok=function(){if(K&&V){for(var i=0;i<K.length;i++)out.set(String(K[i]),V[i]);res(out);}};
+      var rk=st.getAllKeys(),rv=st.getAll();rk.onsuccess=function(){K=rk.result;ok();};rv.onsuccess=function(){V=rv.result;ok();};rk.onerror=function(){rej(rk.error);};rv.onerror=function(){rej(rv.error);};return;}
+    var c=st.openCursor();c.onsuccess=function(){var x=c.result;if(x){out.set(String(x.key),x.value);x.continue();}else res(out);};c.onerror=function(){rej(c.error);};});}
   function flush(){if(TIMER){clearTimeout(TIMER);TIMER=null;}if(!DB||!PEND.size)return FLUSHING;var batch=new Map(PEND);PEND.clear();
     FLUSHING=FLUSHING.then(function(){return new Promise(function(res){try{var t=DB.transaction('kv','readwrite'),s=t.objectStore('kv');
       batch.forEach(function(v,k){if(v===null){s.delete(k);}else{s.put(v,k);}});
@@ -38,7 +43,9 @@
   var shim={
     getItem:function(k){k=String(k);return MEM.has(k)?MEM.get(k):null;},
     setItem:function(k,v){k=String(k);v=String(v);var had=MEM.has(k),old=MEM.get(k);
-      if(v.length>=BIG){MEM.set(k,v);queue(k,v);}
+      /* v3.0.25 · the app re-saves the same big records over and over; an identical copy already in IndexedDB isn't written again
+         (leaving a page used to rewrite megabytes, and the next sport's page had to wait behind those writes) */
+      if(v.length>=BIG){if(had&&old===v&&INIDB.has(k)&&!PEND.has(k)){tell(k,v);return;}MEM.set(k,v);queue(k,v);}
       else{try{RLS.setItem(k,v);}catch(e){if(had)MEM.set(k,old);throw e;}MEM.set(k,v);if(INIDB.has(k)||PEND.has(k))queue(k,null);}
       tell(k,v);},
     removeItem:function(k){k=String(k);MEM.delete(k);try{RLS.removeItem(k);}catch(e){}if(INIDB.has(k)||PEND.has(k))queue(k,null);tell(k,null);},
@@ -104,7 +111,11 @@
     if(!RLS||typeof indexedDB==='undefined'||!window.Promise||inline()||/jsdom/i.test(navigator.userAgent||'')){if(inline()){var tpl=document.getElementById('d4s');[].slice.call((tpl.content||tpl).querySelectorAll('script')).forEach(function(it){var s=document.createElement('script');s.text=it.textContent;document.body.appendChild(s);});}else run();return;}
     var done=false,T0=Date.now();window.__D4_WAIT=Date.now();var go=function(){if(done)return;done=true;window.__D4_WAIT=0;run();};   /* v2.82.3 · the pages' "code did not load" check waits while this is set */
     /* v2.86.7 · waits up to 12 s (relay pages 30 s) — it was 6 s; a slow phone morning tipped pages onto the small shelf */
-    var lim=/[?&]bg=1/.test(location.search||'')?30000:12000;
+    /* v3.0.25 · 30 s (it was 12): a slow open is waited out with a quiet notice; safe mode is for a real failure, not a slow phone */
+    var lim=30000,note0=setTimeout(function(){if(done)return;try{var n=document.createElement('div');n.id='d4open';n.setAttribute('role','status');
+      n.style.cssText='position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);z-index:99999;background:#111;color:#f2d067;border:1px solid #f2d067;border-radius:999px;padding:9px 16px;font:600 13px/1.2 system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.5)';
+      n.textContent='Opening your saved history…';(document.body||document.documentElement).appendChild(n);}catch(e){}},2500);
+    var clr=function(){clearTimeout(note0);try{var n=document.getElementById('d4open');if(n)n.remove();}catch(e){}};var go0=go;go=function(){clr();go0();};
     hydrate(function(){return done;}).then(go,function(e){if(done)return;try{console.warn('store: staying on localStorage —',e&&e.message);}catch(_){}degrade('IndexedDB error: '+String(e&&e.message||e).slice(0,120),Date.now()-T0);go();});
     setTimeout(function(){if(!done){try{console.warn('store: IndexedDB too slow — staying on localStorage this load');}catch(_){}degrade('IndexedDB didn\'t answer in '+Math.round(lim/1000)+' s',lim);go();}},lim);};
 })();

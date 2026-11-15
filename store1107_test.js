@@ -22,7 +22,7 @@ T('a good load merges a small-shelf copy into the big-store copy instead of lett
 T('the kept-aside copies stay in IndexedDB only (never loaded, never synced)',/if\(k\.indexOf\(PREV\)===0\)return;MEM\.set\(k,v\);INIDB\.add\(k\);/.test(st));
 T('a page without the big store lists every key it writes, for the next good load',/function degrade\(why,ms\)\{note\(why,ms\);DEGRADED=true;/.test(st)&&/setItem:function\(k,v\)\{RLS\.setItem\(k,v\);rec\(k\);\}/.test(st));
 T('…and says why the store was off ("IndexedDB didn\'t answer in 12 s" / the error)',/degrade\('IndexedDB didn\\'t answer in '\+Math\.round\(lim\/1000\)\+' s',lim\)/.test(st)&&/degrade\('IndexedDB error: '/.test(st));
-T('the store waits 12 s on a normal page (was 6 s), 30 s on a relay page',/var lim=\/\[\?&\]bg=1\/\.test\(location\.search\|\|''\)\?30000:12000;/.test(st));
+T('the store waits 30 s (v3.0.25; was 12 s, 6 s before that)',/var lim=30000/.test(st));
 T('on a page without the big store: no backup (it would save the partial copy over the full one), no tidying, a banner',
   /if\(storeDegraded\(\)\)\{const m='your saved history didn\\'t load on this page/.test(sh)&&/function storageTidy\(force\)\{if\(storeDegraded\(\)\)return 0;/.test(sh)&&/b\.id='storeWarn'/.test(sh));
 T('the store\'s own notes never sync',/__storewhy\$\|__dgkeys\$\)\/\.test\(k\)/.test(sh));
