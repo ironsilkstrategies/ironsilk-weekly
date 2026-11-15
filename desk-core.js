@@ -1371,7 +1371,10 @@ function pubVoicesOn(x,V){try{const m=mkNorm(x.m||x.market),sd=x.sd||x.side,d=St
       .sort((a,b)=>(b.with-a.with)||(b.official-a.official)||((b.p||0)-(a.p||0)));}catch(e){return[];}}
 /* the roster: bio, record on official calls, today's official picks with the reasons */
 let PUB_CHAR_MEMO=null;
-function pubCharacters(V,d){const k=d+'|'+V.length;if(PUB_CHAR_MEMO&&PUB_CHAR_MEMO.k===k&&Date.now()-PUB_CHAR_MEMO.ts<10*60e3)return PUB_CHAR_MEMO.val;const val=pubCharacters0(V,d);PUB_CHAR_MEMO={k,ts:Date.now(),val};return val;}
+function pubCharacters(V,d){const k=d+'|'+V.length;if(PUB_CHAR_MEMO&&PUB_CHAR_MEMO.k===k&&Date.now()-PUB_CHAR_MEMO.ts<10*60e3)return PUB_CHAR_MEMO.val;const val=pubCharacters0(V,d);pubPropLockSave();PUB_CHAR_MEMO={k,ts:Date.now(),val};return val;}
+const PUB_PROPLOCK='d4.pubproplock';let _PPL=null;
+function pubPropLock(d){if(_PPL&&_PPL.d===d)return _PPL;let L=null;try{L=get(PUB_PROPLOCK,null);}catch(e){}_PPL=L&&L.d===d?{...L,dirty:false}:{d,by:{},dirty:true};return _PPL;}
+function pubPropLockSave(){try{if(_PPL&&_PPL.dirty){set(PUB_PROPLOCK,{d:_PPL.d,by:_PPL.by});_PPL.dirty=false;}}catch(e){}}
 function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEach(c=>{if(!CHARS[c.voice]||c.voice==='Blend')return;(by[c.voice]=by[c.voice]||[]).push(c);});
     const CP=(roGet(CPROP_KEY,[],30e3)||[]).filter(x=>x&&x.d>=from);let todayProps=[];try{todayProps=typeof cpropToday==='function'?cpropToday():[];}catch(e){}
     const res=x=>x.push?'push':x.hit===true?'win':x.hit===false?'loss':null;
@@ -1385,8 +1388,17 @@ function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEac
           [[mine,'for'],[opp,'vs']].forEach(([t,k])=>{const o=teams[c.sp+'|'+t]||(teams[c.sp+'|'+t]={sp:c.sp,team:t,for:{w:0,l:0},vs:{w:0,l:0}});c.hit?o[k].w++:o[k].l++;});}});
       /* props: its record, the players it backs (overs) and goes against (unders), today's calls */
       const pr={w:0,l:0},players={};CP.filter(x=>x.voice===v&&x.hit!=null).forEach(x=>{x.hit?pr.w++:pr.l++;const o=players[x.sp+'|'+x.player]||(players[x.sp+'|'+x.player]={sp:x.sp,player:x.player,team:x.team||'',over:{w:0,l:0},under:{w:0,l:0}});
-        const k=x.side==='under'?'under':'over';x.hit?o[k].w++:o[k].l++;recent.push({d:x.d,kind:'prop',sp:x.sp,pick:(()=>{try{return cpropLine(x);}catch(e){return x.player;}})(),r:x.hit?'win':'loss'});});
-      todayProps.filter(x=>x.voice===v&&x.fav!=='fade').sort((a,b)=>(b.cal||b.p)-(a.cal||a.p)).slice(0,6).forEach(x=>picks.push({kind:'prop',sp:x.sp,pick:(()=>{try{return cpropLine(x);}catch(e){return x.player;}})(),team:x.team,side:x.side||'over',p:+(+(x.cal||x.p)).toFixed(3),hit:null,push:false,note:x.rec?`${x.rec} on him before`:''}));
+        const k=x.side==='under'?'under':'over';x.hit?o[k].w++:o[k].l++;if(String(x.d).slice(0,10)===d&&(pubPropLock(d).by[v]||[]).some(m=>m.key===[x.sp,x.player,x.k,x.thr,x.side==='under'?'under':'over'].join('|')))return;recent.push({d:x.d,kind:'prop',sp:x.sp,pick:(()=>{try{return cpropLine(x);}catch(e){return x.player;}})(),r:x.hit?'win':'loss'});});
+      /* v3.1.3 · today's official props are LOCKED once published (Chris, Nov 15: "it re-booked props after it had already had props locked
+         in as official picks"). The first publish of the day fixes each character's six; they stay on its card all day and grade in place.
+         A free slot (fewer than six) can still fill with a new call. Before this, the six were re-picked every publish, so a graded prop fell
+         off and a fresh one took its seat. */
+      {const PL=pubPropLock(d),key=x=>[x.sp,x.player,x.k,x.thr,x.side==='under'?'under':'over'].join('|'),mine=PL.by[v]=PL.by[v]||[];
+        const cands=todayProps.filter(x=>x.voice===v&&x.fav!=='fade').sort((a,b)=>(b.cal||b.p)-(a.cal||a.p));
+        for(const x of cands){if(mine.length>=6)break;const k=key(x);if(mine.some(m=>m.key===k))continue;
+          mine.push({key:k,sp:x.sp,player:x.player,k:x.k,thr:x.thr,side:x.side||'over',team:x.team,p:+(+(x.cal||x.p)).toFixed(3),note:x.rec?`${x.rec} on him before`:''});PL.dirty=true;}
+        const logged=new Map(CP.filter(x=>x.voice===v&&String(x.d).slice(0,10)===d).map(x=>[key(x),x]));
+        mine.forEach(m=>{const g=logged.get(m.key);picks.push({kind:'prop',sp:m.sp,pick:(()=>{try{return cpropLine(m);}catch(e){return m.player;}})(),team:m.team,side:m.side,p:m.p,hit:g&&g.hit!=null?g.hit:null,push:!!(g&&g.push),note:m.note});});}
       let best=[],still=[];try{const P=charProfile(v);best=(P.strong||[]).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1)}));still=(P.weak||[]).slice(0,1).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w}));}catch(e){}
       const top=(o,n)=>Object.values(o).map(x=>({...x,n:(x.for?x.for.w+x.for.l+x.vs.w+x.vs.l:x.over.w+x.over.l+x.under.w+x.under.l)})).sort((a,b)=>b.n-a.n).slice(0,n).map(x=>{delete x.n;return x;});
       return{v,name:C.label,chip:C.chip,color:C.color,title:B.title||'',bio:B.bio||'',origin:B.origin||'',best,still,
