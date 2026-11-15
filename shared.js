@@ -1306,7 +1306,7 @@ function parseMyTicketText(text){
     // two 1st-half legs here failed to match any pattern and got dropped.
     const pm=legText.match(/\s+for\s+(GAME|1ST HALF|1ST PERIOD)\s*$/i);
     const period=pm?pm[1].toUpperCase():null;
-    let body=legText.replace(/^\d+\s+/,'').replace(/\s+for\s+.+$/i,'').replace(/½/g,'.5').trim();
+    let body=legText.replace(/^\d+\s+/,'').replace(/\s+for\s+.+$/i,'').replace(/½/g,'.5').replace(/(^|\s)([+-])\.5(?=\s|$)/g,'$1$20.5').trim();   /* v3.0.12 · "Montana +½" → +0.5 (no whole number in front) */
     // "buying N" (bought points, e.g. buying 2 on a total) sits between the
     // price and "for GAME" — the number in the line is already the bought
     // line itself, so this is just noise text to drop, not a math adjustment.
@@ -3091,7 +3091,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114c';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
