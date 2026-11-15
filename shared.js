@@ -1266,9 +1266,9 @@ async function pullSharpBtn(){const e=document.querySelector('.sharpStatus');if(
 function viewOn(n){try{const v=document.getElementById('v-'+n);return!!(v&&v.classList.contains('on'));}catch(e){return false;}}
 function jsArg(v){return String(JSON.stringify(v===undefined?null:v)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 /* v3.0.16 · Founder Parlays: your pasted tickets show on the public site to tail; this switch keeps one to yourself */
-function tktPubBtn(t){if(!t||!(t.imported||t.source==='mine'))return'';return`<button onclick="tktPubToggle(${jsArg(t.id)})" title="Founder Parlays on the public site">${t.pubHide?'🌐 Hidden':'🌐 Public ✓'}</button>`;}
+function tktPubBtn(t){if(!t||!(t.imported||t.source==='mine'))return'';return`<button onclick="tktPubToggle(${jsArg(t.id)})" title="Founder LongShot Parlays on the public site">${t.pubHide?'🌐 Hidden':'🌐 Public ✓'}</button>`;}
 function tktPubToggle(id){const L=get(LS.locked,[]);const t=L.find(x=>String(x.id)===String(id));if(!t)return;t.pubHide=!t.pubHide;set(LS.locked,L);
-  try{renderTickets();}catch(e){}try{deskToast(t.pubHide?'🌐 Off the public site — Founder Parlays won\'t show this one':'🌐 On the public site in Founder Parlays');}catch(e){}}
+  try{renderTickets();}catch(e){}try{deskToast(t.pubHide?'🌐 Off the public site — Founder LongShot Parlays won\'t show this one':'🌐 On the public site in Founder LongShot Parlays');}catch(e){}}
 function ticketAmerToProb(price){
   if(price==null||isNaN(price))return 0.5;
   return price>0?100/(price+100):(-price)/(-price+100);
@@ -3098,7 +3098,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114h';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
