@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261115i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261115j';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18186,7 +18186,10 @@ function charCallRowHtml(o,opt){opt=opt||{};const e=txtEsc;const C=CHARS[o.v]||{
   let lane=null,rec=null;if(o.kind==='line'){try{const k=laneKey(o.sp,o.m,o.sd,o.price,o.line);lane=k?laneStatus(k,o.v):null;const T=laneTable();rec=k&&T.BYV[o.v]?T.BYV[o.v][k]:null;}catch(err){}}
   const tag=o.tc?(TC_COL[o.tc.color]||['var(--mute)',''])[1]:'';const col=o.tc?(TC_COL[o.tc.color]||['var(--rule)'])[0]:'var(--rule)';
   const res=o.graded?(o.hit===true?'<b style="color:var(--win)">✅ HIT</b>':o.hit===false?'<b style="color:var(--rust)">❌ MISS</b>':'<b style="color:var(--mute)">PUSH</b>'):'';
-  const meta=[o.game?`${opt.inGame?'':e(gameLabel(o.sp,o.game))}${opt.inGame?'':gameWhenHtml(o.sp,o.game,o.start)}`:o.team?e(o.team):'',
+  /* v3.0.31 · every row says its sport (Chris, Nov 15: "make these where I can tell what sport they are in… there are no labels") */
+  const SPL={mlb:'⚾ MLB',nfl:'🏈 NFL',ncaaf:'🏟 CFB',nhl:'🏒 NHL',nba:'🏀 NBA',ncaab:'🏀 CBB'}[o.sp]||String(o.sp||'').toUpperCase();
+  const spTag=o.sp&&!opt.inGame?`<span class="mono" style="display:inline-block;border:1px solid var(--rule);border-radius:5px;padding:0 5px;margin-right:2px;font-size:10.5px;color:var(--chalk);white-space:nowrap">${e(SPL)}</span>`:'';
+  const meta=[spTag,o.game?`${opt.inGame?'':e(gameLabel(o.sp,o.game))}${opt.inGame?'':gameWhenHtml(o.sp,o.game,o.start)}`:o.team?e(o.team):'',
     o.conf!=null?`${Math.round(o.conf*100)}% sure`:'',
     (()=>{try{if(o.kind!=='line'||!o.c||typeof chemOf!=='function')return'';const C=chemOf(o.c);if(Math.abs(C.d)<0.005)return'';const top=C.why.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d))[0];
       return`<span style="color:${C.d>0?'var(--win)':'var(--rust)'}" title="${e(C.why.map(w=>`${charName(w.u)} ${w.rel==='with'?'with it':'against it'}: ${w.d>0?'+':''}${Math.round(w.d*100)} (${w.n} together)`).join(' · '))}">chemistry ${C.d>0?'+':''}${Math.round(C.d*100)}% (${e(charName(top.u).replace(/^The /,''))} ${top.rel==='with'?'with it':'against it'})</span>`;}catch(err){return'';}})(),
