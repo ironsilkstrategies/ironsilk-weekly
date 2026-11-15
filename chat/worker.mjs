@@ -113,6 +113,15 @@ export function ddTicketDec(legs, mode) { const G = new Map(); legs.forEach(l =>
     if (ml && sp && ml.side === sp.side) eff = eff.filter(l => l !== (sp.line < 0 ? ml : sp));
     const prod = eff.reduce((x, l) => x * ddDec(l.price), 1); dec *= eff.length > 1 ? 1 + (prod - 1) * DD_SGP : prod; }
   return Math.round(dec * 10000) / 10000; }
+/* v3.0.24 · what a game can hold (Chris, Nov 15): moneyline + total, or spread + total — never moneyline and spread together.
+   Hockey on a regular parlay: moneyline + total, or the puck line alone; on an SGP ticket hockey follows the normal rule.
+   An SGP needs at least two picks in every game on it. Returns an error string, or '' when the ticket is fine. */
+export function ddRules(legs, mode) { const G = new Map(); legs.forEach(l => { const a = G.get(l.k) || []; a.push(l); G.set(l.k, a); });
+  for (const L of G.values()) { const mk = L.map(l => l.mk); if (new Set(mk).size !== mk.length) return 'one pick per market in a game';
+    if (mk.includes('ml') && mk.includes('spread')) return 'moneyline and spread on the same game don’t go together — pair either one with the total';
+    if (mode !== 'sgp' && L[0].sp === 'nhl' && mk.includes('spread') && mk.length > 1) return 'hockey on a parlay: moneyline + total, or the puck line alone (puck line + total takes an SGP)';
+    if (mode === 'sgp' && L.length < 2) return 'an SGP needs at least two picks in every game on it'; }
+  return ''; }
 /* grade one leg against a final score: hit / miss / push */
 export function ddGrade(leg, a, h) { if (!Number.isFinite(a) || !Number.isFinite(h)) return null;
   if (leg.mk === 'ml') { if (a === h) return 'push'; return (leg.side === 'home') === (h > a) ? 'hit' : 'miss'; }
@@ -205,12 +214,12 @@ export class Accounts {
     const mode = b.mode === 'sgp' ? 'sgp' : 'parlay', seen = new Set(), per = new Map(), legs = [];
     for (const w of want) { const k = String(w.k || ''); const g = G.get(k); if (!g) return json({ error: 'that game isn’t on the board' }, 400, H);
       if (!['ml', 'spread', 'total'].includes(w.mk)) return json({ error: 'that line isn’t available' }, 400, H);
-      const grp = mode === 'sgp' ? k + '|' + w.mk : k; if (seen.has(grp)) return json({ error: mode === 'sgp' ? 'one pick per market in a game' : 'one pick per game in a parlay — switch to SGP for more' }, 400, H); seen.add(grp);
+      if (!['ml', 'spread', 'total'].includes(w.mk)) return json({ error: 'that line isn’t available' }, 400, H);
       per.set(k, (per.get(k) || 0) + 1);
       if (!(g.t > this.now() + 60e3)) return json({ error: `${g.a.ab} at ${g.h.ab} has started — bets are closed` }, 400, H);
       const pr = ddPrice(g, w.mk, w.side); if (!pr) return json({ error: 'that line isn’t available' }, 400, H);
       legs.push({ k, sp: g.sp, t: g.t, game: g.a.ab + '@' + g.h.ab, mk: w.mk, side: w.side, line: pr.line, price: pr.price, pick: pr.pick, res: null }); }
-    if (mode === 'sgp' && [...per.values()].some(n => n < 2)) return json({ error: 'an SGP needs at least two picks in every game on it' }, 400, H);
+    { const bad = ddRules(legs, mode); if (bad) return json({ error: bad }, 400, H); }
     const dec = ddTicketDec(legs, mode), id = this.now().toString(36) + rid(4);
     if (dec > DD_CAP) return json({ error: `that ticket pays over ${DD_CAP.toLocaleString('en-US')}x — the most any ticket can pay is ${DD_CAP.toLocaleString('en-US')}x the stake` }, 400, H);
     const bet = { id, ts: this.now(), stake, mode, dec: Math.round(dec * 1000) / 1000, toWin: Math.round(stake * (dec - 1) * 100) / 100, legs, status: 'open' };

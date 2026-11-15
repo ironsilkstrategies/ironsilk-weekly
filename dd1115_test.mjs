@@ -1,6 +1,6 @@
 /* v3.0.22 · Desk Dollars: D$1,000 on sign-up, bets priced by the server from the slate (no faked odds), closed at start,
    graded from ESPN finals by the server, voided after 3 days, bought D$ kept apart, the board ranks earned D$. */
-import { Accounts, ddGrade, ddSettle, ddTicketDec } from './chat/worker.mjs';
+import { Accounts, ddGrade, ddSettle, ddTicketDec, ddRules } from './chat/worker.mjs';
 let pass = 0, fail = 0; const T = (n, c, x) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  — ' + String(x ?? '').slice(0, 400))); };
 function storage() { const m = new Map(); let alarm = null; const sorted = () => [...m.keys()].sort();
   return { m, get: async k => m.get(k), put: async (k, v) => { m.set(k, structuredClone(v)); }, delete: async k => { for (const x of [].concat(k)) m.delete(x); },
@@ -26,7 +26,7 @@ T('the server prices the bet from the slate (a faked +5000 is ignored): NE ML +1
 r = await call('/acct/bet', { token: tok, stake: 50, legs: [{ k: 'nfl|NE@DET', mk: 'spread', side: 'home' }, { k: 'nba|BOS@NYK', mk: 'total', side: 'over' }] });
 T('a 2-leg parlay: DET -2.5 (-110) + Over 221.5 (-110) → about +264', r.status === 200 && r.j.bet.legs[0].line === -2.5 && r.j.bet.legs[0].pick === 'DET -2.5' && Math.abs(r.j.bet.dec - 3.645) < 0.01 && r.j.wallet.bal === 850, JSON.stringify(r.j.bet));
 T('a started game is closed', (await call('/acct/bet', { token: tok, stake: 10, legs: [{ k: 'nhl|CHI@MIN', mk: 'ml', side: 'home' }] })).status === 400);
-T('a parlay is one pick per game; no betting more than you have', (await call('/acct/bet', { token: tok, stake: 10, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'away' }, { k: 'nfl|NE@DET', mk: 'spread', side: 'home' }] })).status === 400 && (await call('/acct/bet', { token: tok, stake: 5000, legs: [{ k: 'nba|BOS@NYK', mk: 'ml', side: 'home' }] })).status === 400);
+T('ML + spread on one game is refused; no betting more than you have', (await call('/acct/bet', { token: tok, stake: 10, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'away' }, { k: 'nfl|NE@DET', mk: 'spread', side: 'home' }] })).status === 400 && (await call('/acct/bet', { token: tok, stake: 5000, legs: [{ k: 'nba|BOS@NYK', mk: 'ml', side: 'home' }] })).status === 400);
 T('an alarm is set to grade', ctx.storage.alarmAt === clock + 10 * 60e3);
 clock = KICK + 4 * 36e5; ESPN = { 'football/nfl': [ev('NE', 'DET', 20, 27, true)] }; await A.alarm();
 r = await call('/acct/me', { token: tok }); const b1 = r.j.bets.find(b => b.stake === 100), b2 = r.j.bets.find(b => b.stake === 50);
@@ -49,12 +49,16 @@ T('the board ranks EARNED D$: Puck Head (+32.23 earned) above Big Spender (D$6,0
 const v = await call('/acct/bet', { token: tok, stake: 10, legs: [{ k: 'nba|BOS@NYK', mk: 'ml', side: 'home' }] });
 T('…(a bet on a game that already finished is refused)', v.status === 400);
 clock = Date.parse('2026-11-15T16:00:00Z');
-let q = await call('/acct/bet', { token: tok, stake: 10, mode: 'sgp', legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'home' }, { k: 'nfl|NE@DET', mk: 'spread', side: 'home' }, { k: 'nfl|NE@DET', mk: 'total', side: 'over' }, { k: 'nba|BOS@NYK', mk: 'ml', side: 'away' }, { k: 'nba|BOS@NYK', mk: 'total', side: 'under' }] });
+let q = await call('/acct/bet', { token: tok, stake: 10, mode: 'sgp', legs: [{ k: 'nfl|NE@DET', mk: 'spread', side: 'home' }, { k: 'nfl|NE@DET', mk: 'total', side: 'over' }, { k: 'nba|BOS@NYK', mk: 'ml', side: 'away' }, { k: 'nba|BOS@NYK', mk: 'total', side: 'under' }] });
 const e1 = (1 + (1.909090 * 1.909090 - 1) * 0.8) * (1 + (1.625 * 1.909090 - 1) * 0.8);
-T('SGP+ across two games: DET ML folds into DET -2.5, each game pays 80% of its parlay profit, games multiply', q.status === 200 && Math.abs(q.j.bet.dec - e1) < 0.01 && q.j.bet.mode === 'sgp', JSON.stringify([q.j.bet && q.j.bet.dec, e1, q.j.error]));
+T('SGP+ across two games (spread + total, ML + total): each game pays 80% of its parlay profit, games multiply', q.status === 200 && Math.abs(q.j.bet.dec - e1) < 0.01 && q.j.bet.mode === 'sgp', JSON.stringify([q.j.bet && q.j.bet.dec, e1, q.j.error]));
 T('…an SGP needs 2+ picks in every game; one pick per market', (await call('/acct/bet', { token: tok, stake: 10, mode: 'sgp', legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'home' }, { k: 'nfl|NE@DET', mk: 'total', side: 'over' }, { k: 'nba|BOS@NYK', mk: 'ml', side: 'away' }] })).status === 400 && (await call('/acct/bet', { token: tok, stake: 10, mode: 'sgp', legs: [{ k: 'nfl|NE@DET', mk: 'total', side: 'under' }, { k: 'nfl|NE@DET', mk: 'total', side: 'over' }] })).status === 400);
 T('the dog\'s moneyline implies its spread: NE ML + NE +2.5 pays as NE ML', Math.abs(ddTicketDec([{ k: 'g', mk: 'ml', side: 'away', price: 124 }, { k: 'g', mk: 'spread', side: 'away', line: 2.5, price: -110 }], 'sgp') - 2.24) < 1e-6);
 T('no ticket pays over 10,000x: a 15-leg +100 parlay (32,768x) is refused', ddTicketDec(Array.from({ length: 15 }, (_, i) => ({ k: 'g' + i, mk: 'ml', price: 100 })), 'parlay') > 10000);
+const L = (k, sp, mk) => ({ k, sp, mk });
+T('the game rules: ML+total ok, spread+total ok, ML+spread never', !ddRules([L('a', 'nfl', 'ml'), L('a', 'nfl', 'total')], 'parlay') && !ddRules([L('a', 'nba', 'spread'), L('a', 'nba', 'total')], 'parlay') && ddRules([L('a', 'nfl', 'ml'), L('a', 'nfl', 'spread')], 'sgp'));
+T('…hockey on a parlay: ML + total, or the puck line alone; puck line + total only on an SGP', !ddRules([L('h', 'nhl', 'ml'), L('h', 'nhl', 'total')], 'parlay') && !ddRules([L('h', 'nhl', 'spread')], 'parlay') && /hockey/.test(ddRules([L('h', 'nhl', 'spread'), L('h', 'nhl', 'total')], 'parlay')) && !ddRules([L('h', 'nhl', 'spread'), L('h', 'nhl', 'total')], 'sgp'));
+T('…an SGP needs two picks in every game', /two picks/.test(ddRules([L('a', 'nfl', 'ml'), L('a', 'nfl', 'total'), L('b', 'nba', 'ml')], 'sgp')));
 const ow = await call('/acct/login', { name: 'thedesk', pass: env.ADMIN_CODE });
 T('the owner signs in as TheDesk with the owner code, no sign-up, and gets D$1,000', ow.status === 200 && ow.j.owner === true && ow.j.name === 'TheDesk' && (await call('/acct/me', { token: ow.j.token })).j.wallet.bal === 1000);
 T('…a wrong code is refused; nobody can sign up as TheDesk', (await call('/acct/login', { name: 'TheDesk', pass: 'guess-guess-guess' })).status === 403 && (await call('/acct/signup', { name: 'TheDesk', pass: 'longenough9', age21: true })).status === 400);

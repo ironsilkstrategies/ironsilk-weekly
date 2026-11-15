@@ -326,10 +326,11 @@ function ddLegOf(g, mk, side) { const ln = g.ln || {}; if (mk === 'ml') { const 
   if (mk === 'total') return fin(ln.tot) ? { price: DDJ, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` } : null; return null; }
 function ddBtns(g) { if (!(g.t > Date.now() + 60e3) || !g.ln) return ''; const on = (mk, sd) => S.dd.some(l => l.k === g.k && l.mk === mk && l.side === sd);
   const btn = (mk, sd) => { const L = ddLegOf(g, mk, sd); return L ? `<button type="button" class="ddb${on(mk, sd) ? ' on' : ''}" data-act="ddpick" data-k="${esc(g.k)}" data-mk="${mk}" data-side="${sd}"><b>${esc(L.pick)}</b><small>${esc(odds(L.price))}</small></button>` : '<span></span>'; };
-  return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><p class="g-note">Tap lines to build your slip. Parlay: one pick per game, as many games as you like. SGP: two or more picks in each game. No ticket pays over 10,000x.</p><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }
+  return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><p class="g-note">Per game: moneyline or spread, plus the total. ${g.sp === 'nhl' ? 'Hockey parlays: moneyline + total, or the puck line alone (puck line + total takes an SGP). ' : ''}An SGP needs both picks in every game. No ticket pays over 10,000x.</p><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }
 function ddSlipBar() { if (!S.dd.length) return ''; const sgp = S.ddMode === 'sgp', dec = ddTicketDec(S.dd, S.ddMode), st = +(store.get('ddstake') || 25); const W = AC.me && AC.me.wallet;
   const per = {}; S.dd.forEach(l => { per[l.k] = (per[l.k] || 0) + 1; }); const thin = sgp && Object.values(per).some(n => n < 2), over = dec > 10000;
-  const warn = over ? `Pays ${Math.round(dec).toLocaleString('en-US')}x: the most any ticket can pay is 10,000x the stake. Drop a leg.` : thin ? 'An SGP needs at least two picks in every game on it.' : '';
+  const nhlPair = !sgp && S.dd.some(l => l.sp === 'nhl' && l.mk === 'spread' && per[l.k] > 1);
+  const warn = over ? `Pays ${Math.round(dec).toLocaleString('en-US')}x: the most any ticket can pay is 10,000x the stake. Drop a leg.` : thin ? 'An SGP needs two picks in every game on it: its side and its total.' : nhlPair ? 'Hockey parlay: puck line + total takes an SGP. Switch to SGP or drop one.' : '';
   return `<div class="pslipbar ddslip"><div><div class="ddmode">${['parlay', 'sgp'].map(m => `<button type="button" class="${S.ddMode === m ? 'on' : ''}" data-act="ddmode" data-v="${m}">${m === 'sgp' ? 'SGP' : 'Parlay'}</button>`).join('')}</div>
     <b>${S.dd.length} leg${S.dd.length > 1 ? 's' : ''} · ${esc(odds(decAm(dec)))}</b><small>${S.dd.map(l => esc(l.pick)).join(' · ')}</small>
     ${warn ? `<small class="ddwarn">${esc(warn)}</small>` : `<small>${W ? `You have ${dd$(W.bal)}. ` : ''}Stake <input id="ddStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"> pays <span id="ddPays">${dd$(st * dec)}</span></small>`}</div>
@@ -1000,11 +1001,16 @@ document.addEventListener('click', async e => {
   else if (act === 'pslip') { const id = a.dataset.id; S.slip = S.slip.includes(id) ? S.slip.filter(x => x !== id) : [...S.slip, id].slice(-12); store.set('pslip', S.slip); render(); }
   else if (act === 'pslipclear') { S.slip = []; store.set('pslip', S.slip); render(); }
   else if (act === 'psliptrack') { const t = slipTicket(); if (t && await tkSave(t, 'Tracking it — see Your tickets')) { S.slip = []; store.set('pslip', S.slip); render(); } }
-  else if (act === 'ddpick') { const g = slateGameOf(a.dataset.k); if (g) { const mk = a.dataset.mk, sd = a.dataset.side, sgp = S.ddMode === 'sgp', i = S.dd.findIndex(l => l.k === g.k && (!sgp || l.mk === mk));
-      const same = i >= 0 && S.dd[i].mk === mk && S.dd[i].side === sd; if (i >= 0) { if (!same) toast(sgp ? 'Swapped it: one pick per market' : 'Swapped it: one pick per game in a parlay. Switch to SGP for more'); S.dd.splice(i, 1); }
-      if (!same) { const L = ddLegOf(g, mk, sd); if (L) S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); }
+  else if (act === 'ddpick') { const g = slateGameOf(a.dataset.k); if (g) { const mk = a.dataset.mk, sd = a.dataset.side, sgp = S.ddMode === 'sgp', hockey = g.sp === 'nhl';
+      const i0 = S.dd.findIndex(l => l.k === g.k && l.mk === mk && l.side === sd);
+      if (i0 >= 0) S.dd.splice(i0, 1); else {
+        /* what this pick pushes out: the same market; ML ↔ spread; on a hockey parlay the puck line stands alone */
+        const clash = l => l.k === g.k && (l.mk === mk || (mk !== 'total' && l.mk !== 'total') || (hockey && !sgp && (mk === 'spread' || l.mk === 'spread')));
+        const out = S.dd.filter(clash); S.dd = S.dd.filter(l => !clash(l));
+        if (out.length && out.some(l => l.mk !== mk)) toast(hockey && !sgp && (mk === 'spread' || out.some(l => l.mk === 'spread')) ? 'Hockey parlay: moneyline + total, or the puck line alone (switch to SGP for puck line + total)' : 'Swapped it: moneyline or spread, plus the total');
+        const L = ddLegOf(g, mk, sd); if (L) S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); }
       store.set('ddslip', S.dd); render(); } }
-  else if (act === 'ddmode') { S.ddMode = a.dataset.v; store.set('ddmode', S.ddMode); if (S.ddMode === 'parlay') { const seen = new Set(); const before = S.dd.length; S.dd = S.dd.filter(l => !seen.has(l.k) && seen.add(l.k)); if (S.dd.length < before) toast('Parlay keeps one pick per game'); store.set('ddslip', S.dd); } render(); }
+  else if (act === 'ddmode') { S.ddMode = a.dataset.v; store.set('ddmode', S.ddMode); render(); }
   else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
   else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }
     const st = +(($('#ddStake') || {}).value || 0); try { const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: S.ddMode, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
