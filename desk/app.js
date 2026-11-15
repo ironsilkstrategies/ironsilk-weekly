@@ -137,7 +137,7 @@ async function scores(sps, ymd) {
         const st = (c.status || ev.status || {}).type || {};
         const num = z => +(z.score && z.score.value != null ? z.score.value : z.score);
         S.live[`${sp}|${ab(sp, A.team && A.team.abbreviation)}@${ab(sp, H.team && H.team.abbreviation)}`] =
-          { a: num(A), h: num(H), state: st.state === 'post' || st.completed ? 'post' : st.state === 'in' ? 'in' : 'pre', detail: st.shortDetail || st.detail || '', id: ev.id || c.id || null, period: +((c.status || ev.status || {}).period) || 0, clock: (c.status || ev.status || {}).clock != null ? +((c.status || ev.status || {}).clock) : null };
+          { a: num(A), h: num(H), state: st.state === 'post' || st.completed ? 'post' : st.state === 'in' ? 'in' : 'pre', detail: st.shortDetail || st.detail || '', ymd, id: ev.id || c.id || null, period: +((c.status || ev.status || {}).period) || 0, clock: (c.status || ev.status || {}).clock != null ? +((c.status || ev.status || {}).clock) : null };
       }
       S.liveAt = Date.now(); liveRepaint(); /* each league paints as soon as it lands */
     } catch { /* scores are a nicety */ }
@@ -146,8 +146,9 @@ async function scores(sps, ymd) {
 }
 const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'); return S.live[`${x.sp}|${ab(x.sp, a)}@${ab(x.sp, h)}`] || null; };
 /* a character's prop names its team, not its game: find the team's game on today's scoreboard */
-function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t = ab(p.sp, p.team);
-  const k = Object.keys(S.live).find(k => { if (!k.startsWith(p.sp + '|')) return false; const [a, h] = k.slice(p.sp.length + 1).split('@'); return a === t || h === t; });
+function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t = ab(p.sp, p.team), td = deskDay().replace(/-/g, '');
+  /* today's game only: yesterday's scoreboard can still be in memory, and a team that played then must not grade today's prop */
+  const k = Object.keys(S.live).find(k => { if (!k.startsWith(p.sp + '|') || (S.live[k].ymd && S.live[k].ymd !== td)) return false; const [a, h] = k.slice(p.sp.length + 1).split('@'); return a === t || h === t; });
   return k ? { ...p, game: k.slice(p.sp.length + 1) } : p; }
 const castPicks = () => ((S.feed && S.feed.characters) || []).flatMap(c => (c.picks || []).filter(p => p && p.sp && p.hit == null && !p.push));
 let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render(); }, 120); };
@@ -176,8 +177,14 @@ async function slateLive() {
   if (S.tab === 'slate') render();
 }
 /* the page grades a finished game itself, so a result never waits on the next publish */
-function liveGrade(x) {
-  if (!x || x.hidden || x.hit != null || x.push) return x;
+/* once this phone has graded a pick, it stays graded (the feed's own grade always wins). Without this, a grade made from a live
+   scoreboard could vanish after a reload, when that game's scoreboard isn't fetched again. */
+S.gm = store.get('gmem') || {}; { const cut = Date.now() - 4 * 864e5; for (const k in S.gm) if (S.gm[k].t < cut) delete S.gm[k]; }
+const gmKey = x => [x.sp, x.game || x.team || '', x.pick, String(x.start || x.day || deskDay()).slice(0, 10)].join('|');
+function liveGrade(x) { if (!x || x.hidden || x.hit != null || x.push) return x; const g = liveGrade0(x);
+  if (g.hit != null || g.push) { const k = gmKey(x); if (!S.gm[k] || S.gm[k].hit !== g.hit || !!S.gm[k].push !== !!g.push) { S.gm[k] = { hit: g.hit == null ? null : g.hit, push: !!g.push, t: Date.now() }; store.set('gmem', S.gm); } return g; }
+  const m = S.gm[gmKey(x)]; return m ? { ...x, hit: m.push ? null : m.hit, push: m.push } : g; }
+function liveGrade0(x) {
   if (parseProp(x.pick)) { const P = propNow(x); return P && P.st !== 'live' ? { ...x, hit: P.st === 'hit' } : x; }
   const L = liveOf(x); if (!L || L.state !== 'post' || !fin(L.a) || !fin(L.h)) return x;
   const [ga, gh] = String(x.game).split('@'), A = L.a, H = L.h, p = String(x.pick || '').trim(); let m;
