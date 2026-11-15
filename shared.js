@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261115g';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261115i';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8217,7 +8217,7 @@ function resolveLeg(leg,ticketDate){
       if(done&&fg.awayScore!=null)
         return{a:+fg.awayScore,h:+fg.homeScore,h1a:fg.h1a,h1h:fg.h1h,p1a:fg.p1a,p1h:fg.p1h,gid:fg.id,live:false,source:'memory',g:fg};
       const live=fg.status==='InProgress'||fg.abstract==='Live'||fg.abstract==='in';
-      if(live&&fg.awayScore!=null)
+      if(live&&fg.awayScore!=null&&!staleLive(fg.start||fg.date||leg.start))
         return{a:+fg.awayScore,h:+fg.homeScore,p1a:fg.p1a,p1h:fg.p1h,period:fg.period,gid:fg.id,live:true,source:'memory',g:fg,completed:null};
       // fall through to shared store rather than returning null — the shared
       // store may already hold this game's final from a prior football-page visit
@@ -19416,8 +19416,10 @@ function mgEventFor(sp,game,d,approx,legSt){
   const day=String(d||'').slice(0,10);
   /* v1.95: a stored final for that day beats whatever the live cache last saw — a page
      resumed the next morning still held last night's "in progress" events */
-  let F=null;try{const f=allFinals()[finalsKey(sp,game)];if(f&&day&&(f.d===day||(!approx&&f.st&&sameGameTime(f.st,f.d,day,legSt)))&&f.a!=null&&f.h!=null)F=f;}catch(e){}
   const L=(MG_LIVE[sp]||{})[mgKey(sp,game)];
+  /* v3.0.30 · a ticket the book dated the next morning (Nov 15) for a game played the night before (Nov 14): that final beats the live
+     cache too, when there's no game for this matchup on the ticket's own day (never MLB — series play the same matchup back to back) */
+  let F=null;try{const f=allFinals()[finalsKey(sp,game)];if(f&&day&&(f.d===day||(legSt&&f.st?sameGameTime(f.st,f.d,day,legSt):(!legSt&&sp!=='mlb'&&f.d===dayShift(day,-1)&&!(L||[]).some(e=>e.date===day&&e.state!=='pre'&&e.a!=null))))&&f.a!=null&&f.h!=null)F=f;}catch(e){}
   if(F){const h0=(L||[]).find(e=>e.date===F.d);if(!h0||h0.state!=='post'||h0.a!==F.a||h0.h!==F.h)
     return{...(h0||{}),date:F.d,start:(h0&&h0.start)||F.st,state:'post',detail:'Final',a:F.a,h:F.h,h1a:F.h1a!=null?F.h1a:(h0||{}).h1a,h1h:F.h1h!=null?F.h1h:(h0||{}).h1h,p1a:F.p1a,p1h:F.p1h,fromFinal:true};}
   if(!L||!L.length)return null;
@@ -19425,8 +19427,11 @@ function mgEventFor(sp,game,d,approx,legSt){
   if(!approx){const nb=L.find(e=>sameGameTime(e.start,e.date,day,legSt));return nb||null;}   // real game date: only the same game either side of midnight
   return L.filter(e=>dayOk(e.date,day,true)).sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
 }
+/* v3.0.30 · "live" from a game that started 7+ hours ago is a snapshot left over from last night, not a live game */
+function staleLive(t){const s=Date.parse(t||'');return isFinite(s)&&Date.now()-s>7*36e5;}
 function mgResolve(leg,ticketDate){
   const e=mgEventFor(leg.sport||'mlb',leg.game,leg.gameDate||ticketDate,!!leg.gdApprox||!leg.gameDate,leg.start);if(!e||e.a==null||e.state==='pre')return null;
+  if(e.state==='in'&&staleLive(e.start||leg.start))return null;
   return{a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,period:e.period,gid:leg.gid,live:e.state==='in',source:'espn-live',completed:e.state==='post'?true:null};
 }
 function mgTicketOpen(t){try{if(settledAll()[String(t.id)])return false;let dead=false,done=true;
