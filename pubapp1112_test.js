@@ -134,7 +134,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('…"Tail this" copies the legs, with a note to paste them into the book', /Copied/.test(t));
   await v.p.click('.tabs [data-go="today"]'); await v.p.waitForTimeout(300); t = await v.text();
   await v.p.click('.tabs [data-go="props"]'); await v.p.waitForTimeout(300); t = await v.text();
-  T('Props: Desk Score, run strip vs the line, L5/L10, streak, the room, whispers', /DESK/i.test(t) && (await v.p.locator('.pcard').count()) === 2 && (await v.p.locator('.pcard').first().locator('.pst').count()) === 10 && /L10 8\/10/.test(t) && /6 straight/.test(t) && /Simulator|Sim/.test(t) && /cleared 3\+ SOG 6 straight/.test(t), t.slice(0, 300));
+  T('Props: Desk Score, run strip vs the line, L5/L10, streak, the room, whispers', /DESK/i.test(t) && (await v.p.locator('.pcard').count()) === 2 && (await v.p.locator('.pcard').first().locator('.pst').count()) === 10 && /L10 8\/10/.test(t) && /6 straight/.test(t) && /Simulator|Sim/.test(t) && /Kirill Kaprizov \(MIN vs CHI, [^)]+\) has cleared 3\+ SOG 6 straight/.test(t), t.slice(0, 300));
   await v.p.click('[data-act="pf"][data-v="bounce"]'); await v.p.waitForTimeout(200);
   T('…the Bounce-back lens: missed last time, usually clears → Edwards only', (await v.p.locator('.pcard').count()) === 1 && /Anthony Edwards/.test(await v.text()));
   await v.p.click('[data-act="pf"][data-v="all"][data-k="lens"]'); await v.p.click('.pcard [data-act="pslip"] >> nth=0'); await v.p.click('.pcard [data-act="pslip"] >> nth=1'); await v.p.waitForTimeout(200); t = await v.text();

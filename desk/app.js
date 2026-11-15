@@ -368,7 +368,7 @@ async function tkSave(t, msg) { const P = acctPass(); if (!P) { AC.open = true; 
   try { const j = await acctApi('/acct/save', { token: P.token, ticket: t }); const L = (AC.me && AC.me.tickets) || []; const i = L.findIndex(x => x.id === t.id);
     if (i >= 0) L[i] = j.ticket; else L.unshift(j.ticket); if (AC.me) AC.me.tickets = L; if (msg) toast(msg); return true; } catch (e) { toast(e.message); return false; } }
 function slipTicket() { const all = propsAll(); const L = S.slip.map(id => all.find(x => x.id === id)).filter(Boolean); if (!L.length) return null;
-  return { id: tid(), ts: Date.now(), title: `${L.length}-leg prop slip`, legs: L.map(x => ({ src: 'prop', ref: x.id, sp: x.sp, game: x.opp ? (x.home ? x.opp + '@' + x.team : x.team + '@' + x.opp) : '', pick: `${x.player} ${pLine(x)}`, price: null, start: x.start || '' })) }; }
+  return { id: tid(), ts: Date.now(), title: `${L.length}-leg prop slip`, legs: L.map(x => ({ src: 'prop', ref: x.id, sp: x.sp, game: x.opp ? (x.home ? x.opp + '@' + x.team : x.team + '@' + x.opp) : '', pick: `${x.player} (${x.team}) ${pLine(x)}`, price: null, start: x.start || '' })) }; }
 function myRecord(L) { let c = 0, l = 0, h = 0, n = 0; L.forEach(t => { const st = tkState(t); if (st.res === 'cashed') c++; if (st.res === 'lost') l++; st.R.forEach(r => { if (r === 'hit') { h++; n++; } else if (r === 'miss') { n++; } }); }); return { c, l, h, n }; }
 function myTicketHtml(t) { const st = tkState(t), dec = tkDec(t), chip = { cashed: '✓ Cashed', lost: '✗ Lost', live: `● Live · ${st.hit} of ${t.legs.length}`, open: 'Open' }[st.res];
   return `<article class="slip mytk nostub ${st.res}"><div class="slip-head"><span>${esc(t.title || `${t.legs.length}-leg ticket`)}</span><span class="fchip ${st.res}">${chip}</span></div><div class="slip-main">
@@ -426,11 +426,13 @@ function lensOk(x, l) { const r10 = pRate(x.l10), lastHit = x.streak > 0;
 function propsShown() { const f = S.pf; let L = propsAll().filter(x => lensOk(x, f.lens) && (f.sp === 'all' || x.sp === f.sp) && (f.stat === 'all' || x.lab === f.stat) && x.score >= (f.min || 0));
   const by = { score: x => x.score, l10: x => pRate(x.l10), streak: x => x.streak, votes: x => x.votes * 10 + x.p };
   return L.sort((a, b) => (by[f.sort] || by.score)(b) - (by[f.sort] || by.score)(a)); }
+/* who and where, every time: "Kirill Kaprizov (MIN vs CHI)" — a line with no game means nothing */
+const pWho = x => `${x.player} (${[x.team, x.opp ? (x.home === false ? 'at ' : 'vs ') + x.opp : ''].filter(Boolean).join(' ')}${x.start ? ', ' + whenLabel(x.start) : ''})`;
 function whispers(L) { const out = [];
-  L.filter(x => x.streak >= 5).slice(0, 4).forEach(x => out.push(`🔥 ${x.player} has cleared ${pLine(x)} ${x.streak} straight`));
-  L.filter(x => x.l10[0] === x.l10[1] && x.l10[1] >= 8).slice(0, 3).forEach(x => out.push(`💯 ${x.player}: ${pLine(x)} in all of his last ${x.l10[1]}`));
-  L.filter(x => x.votes >= 4).slice(0, 3).forEach(x => out.push(`🪑 ${x.votes} characters at the table on ${x.player} ${pLine(x)}`));
-  L.filter(x => x.streak < 0 && pRate(x.l10) >= 0.7).slice(0, 3).forEach(x => out.push(`↩︎ ${x.player} missed last time, but clears ${pLine(x)} ${x.l10[0]} of 10`));
+  L.filter(x => x.streak >= 5).slice(0, 4).forEach(x => out.push(`🔥 ${pWho(x)} has cleared ${pLine(x)} ${x.streak} straight`));
+  L.filter(x => x.l10[0] === x.l10[1] && x.l10[1] >= 8).slice(0, 3).forEach(x => out.push(`💯 ${pWho(x)}: ${pLine(x)} in all of his last ${x.l10[1]}`));
+  L.filter(x => x.votes >= 4).slice(0, 3).forEach(x => out.push(`🪑 ${x.votes} characters at the table on ${pWho(x)} ${pLine(x)}`));
+  L.filter(x => x.streak < 0 && pRate(x.l10) >= 0.7).slice(0, 3).forEach(x => out.push(`↩︎ ${pWho(x)} missed last time, but clears ${pLine(x)} ${x.l10[0]} of 10`));
   return out; }
 function runStrip(x) { const mx = Math.max(x.thr * 1.6, ...x.last, 1); const lineY = Math.min(100, (x.thr / mx) * 100);
   return `<div class="pstrip" role="img" aria-label="Last ${x.last.length} games: ${x.last.join(', ')}; line ${x.thr}">${x.last.map(v => { const hit = x.side === 'under' ? v < x.thr : v >= x.thr;
@@ -453,7 +455,7 @@ function slipBar() { const all = propsAll(); const L = S.slip.map(id => all.find
   const p = L.reduce((a, x) => a * (x.p || 0.5), 1); const am = p >= 0.5 ? -Math.round(100 * p / (1 - p)) : Math.round(100 * (1 - p) / p);
   return `<div class="pslipbar"><div><b>Your slip · ${L.length} leg${L.length > 1 ? 's' : ''}</b><small>The room gives it ${(p * 100).toFixed(p < 0.1 ? 1 : 0)}% · fair ${esc(odds(am))}</small></div>
     <button type="button" class="btn sm" data-act="psliptrack">Track it</button><button type="button" class="btn ghost sm" data-act="pslipcopy">📋</button><button type="button" class="btn ghost sm" data-act="pslipclear">Clear</button></div>`; }
-function slipText() { const all = propsAll(); return 'TheDesk · my prop slip\n' + S.slip.map(id => all.find(x => x.id === id)).filter(Boolean).map(x => `• ${x.player} ${pLine(x)}${x.opp ? ` (${x.home ? 'vs' : 'at'} ${x.opp})` : ''}`).join('\n') + '\n' + (CFG.home || 'https://ironsilkweekly.com/desk/'); }
+function slipText() { const all = propsAll(); return 'TheDesk · my prop slip\n' + S.slip.map(id => all.find(x => x.id === id)).filter(Boolean).map(x => `• ${pWho(x)} ${pLine(x)}`).join('\n') + '\n' + (CFG.home || 'https://ironsilkweekly.com/desk/'); }
 function viewProps() {
   const el = $('#v-props'), F = S.feed, all = propsAll(), f = S.pf;
   if (!F) { el.innerHTML = '<div class="shimmer"></div>'; return; }
