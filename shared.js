@@ -1382,7 +1382,7 @@ function parseSGPTicketText(text){
   const matchStyle=/\(Match\)/i.test(text);
   const accepted=(()=>{const m=String(kv.accepteddate||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(!m)return today();
     const y=m[3].length===2?'20'+m[3]:m[3];return `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;})();
-  body.forEach(line=>{
+  body.forEach((line,bi)=>{
     const sgpHdr=line.match(/^SGP\s*\d+\s*:\s*([A-Za-z]+)\s*-\s*([A-Za-z]+)\s*-\s*(.+?)\s+vs?\.?\s+(.+)$/i);
     if(sgpHdr){
       const sportWord=sgpHdr[2].toUpperCase();
@@ -1390,7 +1390,10 @@ function parseSGPTicketText(text){
       if(!sport||(sport!=='ncaaf'&&!intakeCanNameResolve(sport))){cur=null;skipped.push(line+'  ('+(sportWord==='NCAAF'||sportWord==='CFB'?'college football names only read on the CFB page — paste this ticket there':'sport not recognized')+')');return;}
       const awayAb=intakeAbbr(sport,sgpHdr[3]),homeAb=intakeAbbr(sport,sgpHdr[4]);
       if(!awayAb||!homeAb){cur=null;skipped.push(line+'  (team name not recognized)');return;}
-      let A=awayAb,H=homeAb;if(matchStyle){A=homeAb;H=awayAb;}
+      /* v3.0.13 · one ticket can mix both dialects (football "(Game)", basketball "(Match)" on ticket 1015366949): each game's own
+         lines decide its orientation; the ticket-wide guess only when the block says neither */
+      let blockMatch=null;for(let j=bi+1;j<body.length&&!/^SGP\s*\d+\s*:/i.test(body[j]);j++){if(/\(Match\)\s*$/i.test(body[j])){blockMatch=true;break;}if(/\(Game\)\s*$/i.test(body[j])){blockMatch=false;break;}}
+      let A=awayAb,H=homeAb;if(blockMatch==null?matchStyle:blockMatch){A=homeAb;H=awayAb;}
       try{const wk=sport==='nfl'||sport==='ncaaf'?Object.values(get(sport==='nfl'?'d4.nflgames':'d4.ncaafgames',{})||{}).flatMap(W=>(W&&(Array.isArray(W)?W:W.v))||[]).filter(g=>g&&g.away&&g.home):[];
         const allG=[...(sportGames(sport)||[]),...wk,...(sport==='nhl'&&typeof NHL_UPCOMING!=='undefined'?NHL_UPCOMING:[])];
         const known=new Set(allG.map(g=>g.away.abbr+'@'+g.home.abbr));
@@ -3091,7 +3094,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261114d';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261114e';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8165,8 +8168,17 @@ function boxFor(gid){
 const ARC_RO={};
 function arcRead(key){const c=ARC_RO[key];if(c&&Date.now()-c.ts<15e3)return c.v;const v=get(key,{})||{};ARC_RO[key]={ts:Date.now(),v};return v;}
 let RL_OVR=null;   /* v2.87.7 · the second-opinion check re-grades a leg on the league's own score */
+/* v3.0.13 · a leg saved with home and away flipped (the book's two dialects) never found its game: the scoreboard and the live feed key
+   games away@home exactly. When the game as written isn't there but the flipped one is, the leg takes the real orientation (spreads,
+   totals and moneylines name the team, not the side, so nothing else changes) and the ticket is saved that way. */
+function legFlipHeal(leg,ticketDate){try{if(!leg||!leg.game||leg.fbProp||leg.nhlProp||leg.mlbProp||leg.bbProp||leg.isProp)return;const g=String(leg.game);if(!/^[^@]+@[^@]+$/.test(g))return;
+    const sp=leg.sport||'mlb';const[A,H]=g.split('@');const rev=H+'@'+A;const d=leg.gameDate||ticketDate,ap=!!leg.gdApprox||!leg.gameDate;
+    const want=legDay(leg,ticketDate);const has=x=>{if((sportGames(sp)||[]).some(z=>z&&z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x&&(()=>{try{return dayOk(gameDayOf(z),want,ap);}catch(e){return true;}})()))return true;try{if(mgEventFor(sp,x,d,ap,leg.start))return true;}catch(e){}try{if(finalsFor(sp,x,legDay(leg,ticketDate),ap,leg.start))return true;}catch(e){}return false;};
+    if(has(g)||!has(rev))return;leg.game=rev;leg.flipped=1;
+    try{const L=get(LS.locked,[]);let ch=false;L.forEach(t=>(t.legs||[]).forEach(l=>{if(l.id&&l.id===leg.id&&l.game===g){l.game=rev;l.flipped=1;ch=true;}}));if(ch)set(LS.locked,L);}catch(e){}}catch(e){}}
 function resolveLeg(leg,ticketDate){
   if(RL_OVR&&RL_OVR.leg===leg)return{a:+RL_OVR.a,h:+RL_OVR.h,gid:leg.gid,live:false,source:'check'};
+  legFlipHeal(leg,ticketDate);
   /* Tickets can now mix sports, so a leg tagged nfl/ncaaf must be resolved
      against ITS OWN schedule. Previously every leg was looked up in the MLB
      GAMES array only — a football leg matched nothing, returned null forever,
