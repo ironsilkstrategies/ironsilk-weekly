@@ -1460,7 +1460,12 @@ function pubFounder0(L){const d=today(),lo7=dayShift(d,-7),lo30=dayShift(d,-30);
   const pool=L.filter(mine).filter(t=>String(t.date||'')>=lo30);const all=pool.map(read);
   const rec={cashed:all.filter(t=>t.res==='cashed').length,lost:all.filter(t=>t.res==='lost').length};
   const ord={live:0,open:1,cashed:2,lost:3};
-  const tix=all.filter(t=>String(t.date||'')>=lo7&&(t.res==='live'||t.res==='open'||String(t.date)>=dayShift(d,-2))).sort((a,b)=>(ord[a.res]-ord[b.res])||String(b.date).localeCompare(String(a.date))).slice(0,8);
+  /* v3.0.29 · Chris, Nov 15: "always archive yesterday's longshots when the new slate is froze in the machine after master eval… keep
+     the record". Once today's card is frozen, only tickets from today on stay on the page; before the freeze (overnight), the latest
+     day's tickets stay up. The 30-day record above still counts every one. */
+  let fd=null;try{const Fz=roGet(FREEZE_KEY,null,3e3);if(Fz&&Fz.d===d)fd=d;}catch(e){}
+  const latest=all.reduce((m,t)=>String(t.date||'')>m?String(t.date):m,'');const show=fd||latest;
+  const tix=all.filter(t=>String(t.date||'')>=show&&String(t.date||'')>=dayShift(d,-1)).sort((a,b)=>(ord[a.res]-ord[b.res])||String(b.date).localeCompare(String(a.date))).slice(0,8);
   return{tix,rec};}
 let PUB_BOARD_MEMO=null;
 function pubBoard(V){try{const d=today();const T=roGet(TC_KEY,{})||{};const k=d+'|'+ledgerSig(V)+'|'+(T.ts||T.at||'')+'|'+((T.by&&Object.values(T.by).reduce((n,B)=>n+((B&&B.picks)||[]).length,0))||0);

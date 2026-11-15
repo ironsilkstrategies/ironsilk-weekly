@@ -105,11 +105,11 @@ async function getJSON(url, wait = 9000) {
   } catch { return null; } finally { clearTimeout(t); }
 }
 const stateOf = x => (!x ? '' : x.hidden ? 'h' : x.push ? 'p' : x.hit === true ? 'w' : x.hit === false ? 'l' : 'o');
-async function loadFeed() {
+async function loadFeed(force) {
   const got = (await Promise.all(CFG.feeds.map(u => getJSON(u)))).filter(j => j && typeof j === 'object' && fin(j.generated));
   if (!got.length) { S.feedErr = !S.feed; if (S.tab === 'today' || S.tab === 'receipts') render(); return; }
   const F = got.sort((a, b) => b.generated - a.generated)[0];
-  if (S.feed && S.feed.generated >= F.generated) return;
+  if (S.feed && S.feed.generated >= F.generated) { if (force) render(); return; }
   S.feed = noHeavy(F); S.feedErr = false; store.set('feed', S.feed);
   render(); liveTick();
 }
@@ -1058,6 +1058,23 @@ setInterval(() => {
 setInterval(() => { if (!document.hidden) loadFeed(); }, 120e3);
 setInterval(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive(); } }, 60e3);
 setInterval(() => { if (!document.hidden && S.tab === 'slate') loadSlate(); }, 600e3);
+
+/* ── Pull to refresh (Chris, Nov 15: "the pull down refresh is not available yet on the public app"). A home-screen app on iPhone
+   has none of its own, so: pull down from the top of any tab, let go past the line, and everything reloads — the card, the slate,
+   live scores, your tickets and the leaderboard. */
+(function () {
+  let y0 = null, dy = 0, busy = false; const TH = 70;
+  const ind = document.createElement('div'); ind.className = 'ptr'; ind.setAttribute('aria-hidden', 'true'); ind.innerHTML = '<span class="ptr-ic">↓</span><span class="ptr-t">Pull to refresh</span>'; document.body.appendChild(ind);
+  const set = (h, txt, cls) => { ind.style.transform = `translate(-50%, ${Math.min(h, 90) - 56}px)`; ind.style.opacity = String(Math.min(1, h / TH)); if (txt) ind.querySelector('.ptr-t').textContent = txt; ind.querySelector('.ptr-ic').textContent = cls === 'spin' ? '↻' : cls === 'done' ? '✓' : '↓'; ind.className = 'ptr' + (cls ? ' ' + cls : ''); };
+  const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+  const skip = t => t && t.closest && t.closest('input, textarea, select, .lenses, .ddslip, .pslipbar, #guideRoot, .wh-track, .chat-log, [data-noptr]');
+  addEventListener('touchstart', e => { if (busy || !atTop() || e.touches.length !== 1 || skip(e.target)) { y0 = null; return; } y0 = e.touches[0].clientY; dy = 0; }, { passive: true });
+  addEventListener('touchmove', e => { if (y0 == null) return; dy = e.touches[0].clientY - y0; if (dy <= 0 || !atTop()) { set(0); return; } const h = dy * 0.5; set(h, h >= TH ? 'Let go to refresh' : 'Pull to refresh', h >= TH ? 'ready' : ''); }, { passive: true });
+  addEventListener('touchend', async () => { if (y0 == null) return; const h = dy * 0.5; y0 = null; if (h < TH || busy) { set(0); return; }
+    busy = true; set(TH, 'Refreshing…', 'spin');
+    try { await Promise.all([loadFeed(true), loadSlate(), (async () => { try { liveTick(); } catch (e) { } })(), (async () => { try { if (acctPass()) await acctLoad(); LB = null; if (S.tab === 'me') lbLoad(); } catch (e) { } })()]); } catch (e) { }
+    render(); set(TH, 'Up to date', 'done'); setTimeout(() => { set(0); busy = false; }, 700); });
+})();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadFeed(); if (S.tab === 'slate') loadSlate(); } });
 
 /* start: last good copy first (instant, works offline), then the live feed */

@@ -189,6 +189,13 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await v.ctx.close(); }
 
 
+  /* ── pull to refresh ── */
+  { v = await visit(BETA); let pulls = 0; await v.p.route('**/picks.json*', r => { pulls++; r.continue(); });
+    const fire = async (type, y) => v.p.evaluate(([type, y]) => { const t = new Touch({ identifier: 1, target: document.body, clientX: 200, clientY: y }); document.body.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true })); }, [type, y]);
+    await v.p.evaluate(() => scrollTo(0, 0)); await fire('touchstart', 100); await fire('touchmove', 180); const mid = await v.p.locator('.ptr').innerText();
+    await fire('touchmove', 300); const ready = await v.p.locator('.ptr').innerText(); await fire('touchend', 300); await v.p.waitForTimeout(1200);
+    T('pull to refresh: pull down from the top, past the line, let go → it reloads the card', /Pull to refresh/.test(mid) && /Let go to refresh/.test(ready) && pulls >= 1, JSON.stringify([mid, ready, pulls]));
+    T('pull to refresh: no script errors', v.errs.length === 0, v.errs.join(' | ')); await v.ctx.close(); }
   /* ── accounts + your tickets (v3.0.21) ── */
   { const users = {}, tix = {}; let lastSave = null, lastBet = null;
     const acctSrv = async (r, u) => { const ok = o => r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(o) }); const no = (st, e) => r.fulfill({ status: st, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ error: e }) });

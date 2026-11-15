@@ -25,6 +25,13 @@ setTimeout(() => { try {
   T('the odds come from the ticket ($1 to win $57.95 → +5,795), never the stake or the ticket number', Math.abs(t.dec - 58.95) < 0.01 && !/1015000001|\$1\.00|57\.95|stake|toWin/.test(s), s.slice(0, 200));
   T('a ticket switched off, or carrying a -1000 moneyline, stays off the public site', !/BOS ML|MIN ML/.test(s));
   T('the 30-day record counts every settled ticket, even ones older than the cards shown (Nov 10 cashed)', F.rec.cashed === 1 && F.rec.lost === 0 && !F.tix.some(x => x.date === '2026-11-10'), JSON.stringify(F.rec));
+  /* v3.0.29 · archive at the freeze: a ticket from the day before stays up until today's card is frozen, then comes off (record keeps it) */
+  w.eval(`const L0=get(LS.locked,[]);L0.push({id:'extY',date:dayShift(today(),-1),name:'Ticket #9',source:'mine',imported:true,stake:'$1',toWin:'$9',legs:[{id:'y1',sport:'nhl',game:'TOR@MTL',pick:'TOR ML',price:110,gameDate:dayShift(today(),-1),book:'external'}]});set(LS.locked,L0);set(FREEZE_KEY,null);`);
+  const before = w.eval(`pubFounder0(get(LS.locked,[])).tix.map(t=>t.date)`), td = w.eval('today()');
+  w.eval(`set(FREEZE_KEY,{d:today()})`);
+  const after = w.eval(`pubFounder0(get(LS.locked,[]))`);
+  T('archive at the freeze: before today\'s card is frozen the latest day stays up; once frozen, only today\'s tickets show', before.every(d => d === td) && after.tix.every(t => t.date >= td) && after.tix.length >= 1, JSON.stringify([td, before, after.tix.map(t => t.date)]));
+  w.eval(`set(LS.locked,get(LS.locked,[]).filter(t=>t.id!=='extY'));set(FREEZE_KEY,null);PUB_FOUNDER_MEMO=null;`);
   const P = w.eval('publicFeedCore(false)');
   T('the open beta publishes it, and the feed signature moves with each leg', P.founder && P.founder.tix.length === 1 && /live:hoh21/.test(P.betaSig), (P.betaSig || '').slice(0, 80));
   T('the switch on the ticket: 🌐 Public ✓ → tap → hidden', /Public ✓/.test(w.eval(`tktPubBtn(get(LS.locked,[])[0])`)) && (w.eval(`tktPubToggle('ext1015000001');get(LS.locked,[])[0].pubHide`) === true) && /Hidden/.test(w.eval(`tktPubBtn(get(LS.locked,[])[0])`)) && w.eval(`PUB_FOUNDER_MEMO=null;pubFounder().tix.length`) === 0);
