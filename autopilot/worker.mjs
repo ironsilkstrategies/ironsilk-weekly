@@ -317,6 +317,7 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
       const parts = m.text.slice(1).split(/\s+/); const cmd = (parts[0] || '').split('@')[0].toLowerCase(); const arg = (parts[1] || '').toLowerCase(); const at = ((parts[0] || '').split('@')[1] || '').toLowerCase();
       if (cmd === 'warn' || cmd === 'ban' || cmd === 'unban') { acted += await moderate(state, T, p, m, cmd); continue; }
       if ((cmd === 'vipinvite' || cmd === 'lounge') && await ownerLounge(state, T, p, m, cmd, now)) { acted++; continue; }
+      if (cmd === 'app' && await ownerApp(state, T, p, m, parts[1] || '')) { acted++; continue; }
       /* the same question in the same group within 15 s gets one answer (the first is right above) — the bot can't be used as a spam cannon */
       if (m.chat.type !== 'private' && cmd !== 'check') { const R0 = RECENT.get(state) || new Map(); RECENT.set(state, R0); const rk = m.chat.id + '|' + cmd + '|' + arg; if (Date.now() - (R0.get(rk) || 0) < 15e3) continue; R0.set(rk, Date.now()); }
       let txt = null;
@@ -394,6 +395,20 @@ async function ownerLounge(state, T, p, m, cmd, now) { const owners = await owne
   const r = chat ? await T('createChatInviteLink', { chat_id: String(chat), name: 'VIP ' + chicagoDay(now), member_limit: '1', expire_date: String(Math.floor(now / 1000) + 7 * 86400) }) : null;
   const link = r && r.result && r.result.invite_link; await reply(link ? `🎟 One VIP seat: one person, good for 7 days.\n${link}` : "Couldn't make a link: is the bot an admin there with \"Invite users\" on?"); return 1; }
 
+/* v3.1.6 · the TheDesk app inside Telegram (Chris, Nov 15: "facilitate it into a TG app that I'll run in the lounge"). The owner sends
+   /app in the lounge (or any TheDesk chat): the bot posts an "Open TheDesk" button and pins it. The button opens the Mini App registered
+   in BotFather (t.me/<bot>/<short name>, short name "desk" unless he gives another: /app thedesk); with no Mini App registered yet it
+   opens the web address. The app is the public one — the published card only, nothing of the machine. */
+export const APP_URL_DEF = 'https://ironsilkweekly.com/desk/';
+async function ownerApp(state, T, p, m, arg) { const owners = await ownersOf(state, T, p); if (!m.from || !owners.includes(m.from.id)) return 0;
+  const short = (String(arg || '').match(/^[A-Za-z0-9_]{3,30}$/) || [])[0] || state.appShort || 'desk'; state.appShort = short;
+  const me = await myName(T); const url = me ? `https://t.me/${me}/${short}` : (process.env.APP_URL || APP_URL_DEF);
+  const text = `📲 <b>TheDesk, right here in Telegram</b>\n\nToday's card, the board, Props, the Founder LongShots and your Desk Dollars, without leaving the lounge. Tap below to open it.`;
+  const r = await T('sendMessage', { chat_id: String(m.chat.id), text, parse_mode: 'HTML', disable_web_page_preview: 'true', reply_markup: JSON.stringify({ inline_keyboard: [[{ text: '📲 Open TheDesk', url }]] }) });
+  const id = r && r.result && r.result.message_id;
+  if (id && m.chat.type !== 'private') { const pin = await T('pinChatMessage', { chat_id: String(m.chat.id), message_id: String(id), disable_notification: 'true' });
+    if (!pin) await T('sendMessage', { chat_id: String(m.chat.id), text: 'Posted, but I couldn\'t pin it: make me an admin with "Pin messages" on.' }); }
+  return 1; }
 export async function runOnce(state, today, deps) { const T = deps?.tg || tg; let acted = 0; const now = deps?.now || Date.now(); loungeRoute(state);
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.recap || p.worker === false || !p.chat) continue;
     p.st = p.st || {}; p.sent = p.sent || {};

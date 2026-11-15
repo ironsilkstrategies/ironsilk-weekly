@@ -189,6 +189,28 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await v.ctx.close(); }
 
 
+  /* ── inside Telegram (Mini App) ── */
+  { const ctx = await b.newContext({ ...pw.devices['iPhone 14'] }); const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
+    await p.route('**/*', r => { const u = new URL(r.request().url());
+      if (u.hostname === 'telegram.org') return r.fulfill({ contentType: 'text/javascript', body: '/* stub */' });
+      if (/picks\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(BETA) });
+      if (/slate\.json$/.test(u.pathname)) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(SLATE) });
+      if (u.hostname !== 'desk.test') return r.abort();
+      let f = path.join(W, decodeURIComponent(u.pathname)); if (f.endsWith('/')) f += 'index.html'; if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
+      r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
+    await p.addInitScript(() => { window.__TG = { calls: [], back: null }; const L = n => (...a) => window.__TG.calls.push(n);
+      window.Telegram = { WebApp: { initData: 'query_id=x&user=%7B%7D&hash=y', platform: 'ios', initDataUnsafe: { start_param: 'props' }, ready: L('ready'), expand: L('expand'), disableVerticalSwipes: L('noswipe'),
+        setHeaderColor: L('header'), setBackgroundColor: L('bg'), openLink: L('openLink'), openTelegramLink: L('openTgLink'),
+        BackButton: { show: () => { window.__TG.back = 'shown'; }, hide: () => { window.__TG.back = 'hidden'; }, onClick: f => { window.__TG.backFn = f; } } } }; });
+    await p.goto('https://desk.test/desk/#tgWebAppData=query_id%3Dx&tgWebAppVersion=8.0', { waitUntil: 'load' }); await p.waitForTimeout(1000);
+    const st = await p.evaluate(() => ({ tg: document.documentElement.classList.contains('tg'), calls: window.__TG.calls, back: window.__TG.back, props: !document.querySelector('#v-props').hidden,
+      chip: (() => { const c = document.querySelector('#installChip'); return !c || getComputedStyle(c).display === 'none'; })(), guide: !!document.querySelector('#gT') }));
+    T('Telegram Mini App: opens full screen in Telegram mode, swipe-down won\'t close it, our colors', st.tg && ['ready', 'expand', 'noswipe', 'header', 'bg'].every(c => st.calls.includes(c)), JSON.stringify(st));
+    T('…the lounge link\'s start param opens straight on Props, with Telegram\'s back button', st.props && st.back === 'shown', JSON.stringify(st));
+    T('…no "Get the app" and no home-screen guide inside Telegram', st.chip && !st.guide, JSON.stringify(st));
+    await p.evaluate(() => window.__TG.backFn()); await p.waitForTimeout(300);
+    T('…Telegram\'s back button goes home to Today (and hides there)', await p.evaluate(() => !document.querySelector('#v-today').hidden && window.__TG.back === 'hidden'));
+    T('…no script errors in Telegram', errs.length === 0, errs.join(' | ')); await ctx.close(); }
   /* ── pull to refresh ── */
   { v = await visit(BETA); let pulls = 0; await v.p.route('**/picks.json*', r => { pulls++; r.continue(); });
     const fire = async (type, y) => v.p.evaluate(([type, y]) => { const t = new Touch({ identifier: 1, target: document.body, clientX: 200, clientY: y }); document.body.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true })); }, [type, y]);
@@ -306,8 +328,9 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   const dir = path.join(W, 'desk'), files = fs.readdirSync(dir).filter(f => /\.(html|js|css|webmanifest)$/.test(f)); const src = Object.fromEntries(files.map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')])); const all = Object.values(src).join('\n');
   T('the app is its own small set of files', ['index.html', 'app.js', 'app.css', 'sw.js', 'manifest.webmanifest', 'privacy.html'].every(f => src[f]) && Buffer.byteLength(src['app.js']) < 150000);
   T('none of the desk\'s machinery: no engine scripts, no app storage, no keys or settings, no eval', !/shared\.js|desk-[a-z]+\.js|-engine\.js|store\.js|theme\.css/.test(all) && !/['"`]d4\./.test(all) && !/apiKey|api_key|odds-?api|ghp_|bot[0-9]{6,}|AUTOPILOT|tgautokey/i.test(all) && !/\beval\(|new Function\(/.test(all));
-  const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]);
-  T('one script, its own; fonts and styles self-hosted (no third-party code or font CDNs)', scripts.length === 1 && /^app\.js/.test(scripts[0]) && !/fonts\.googleapis|gstatic|cdn\.|unpkg|jsdelivr/.test(all));
+  const scripts = [...src['index.html'].matchAll(/<script[^>]*src="([^"]+)"/g)].map(m => m[1]).filter(u => !/^https:\/\/telegram\.org\//.test(u));
+  const tgLoader = /if\(\/tgWebApp\/\.test\(location\.hash\+location\.search\)\)document\.write\('<script src="https:\/\/telegram\.org\/js\/telegram-web-app\.js">/.test(src['index.html']);
+  T('one script, its own; fonts and styles self-hosted (no third-party code or font CDNs); Telegram\'s bridge only loads inside Telegram', scripts.length === 1 && /^app\.js/.test(scripts[0]) && tgLoader && !/fonts\.googleapis|gstatic|cdn\.|unpkg|jsdelivr/.test(all));
   const allowed = h => h === 'desk.test' || h === 'site.api.espn.com' || h === 'raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/picks.json' || h === 'raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json' || h === 'thedesk-chat.ironsilkstrategies.workers.dev';
   T('it only ever asks for: its own files, the published picks, the public slate, ESPN\'s public scores', [...HOSTS].every(allowed), [...HOSTS].filter(h => !allowed(h)).join(' '));
   const man = JSON.parse(src['manifest.webmanifest']);

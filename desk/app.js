@@ -925,7 +925,17 @@ function viewJoin() {
 
 /* ── install guide ───────────────────────────────────────────────────────── */
 const UA = navigator.userAgent || '';
-const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+/* ── Inside Telegram (Chris, Nov 15: "facilitate it into a TG app that I'll run in the lounge"). The same public app, opened as a
+   Telegram Mini App from the lounge's pinned button: full screen in our colors, Telegram's own back button, no "save to home screen"
+   (it already lives in Telegram), swipe-down doesn't close it (pull to refresh keeps working), links open the Telegram way, and
+   t.me/<bot>/desk?startapp=props opens straight on that tab. */
+const TG = (() => { try { const t = window.Telegram && window.Telegram.WebApp; return t && (t.initData || (t.platform && t.platform !== 'unknown')) ? t : null; } catch (e) { return null; } })();
+if (TG) { try { document.documentElement.classList.add('tg'); TG.ready(); TG.expand(); if (TG.disableVerticalSwipes) TG.disableVerticalSwipes();
+    if (TG.setHeaderColor) TG.setHeaderColor('#0e1712'); if (TG.setBackgroundColor) TG.setBackgroundColor('#0e1712'); if (TG.setBottomBarColor) TG.setBottomBarColor('#0e1712');
+    TG.BackButton && TG.BackButton.onClick(() => go('today', true));
+    document.addEventListener('click', e => { const a = e.target.closest('a[href]'); if (!a) return; const h = a.getAttribute('href') || ''; if (!/^https?:/i.test(h) || a.closest('[data-go]')) return;
+      e.preventDefault(); try { if (/^https?:\/\/t\.me\//i.test(h) && TG.openTelegramLink) TG.openTelegramLink(h); else TG.openLink(h); } catch (er) { location.href = h; } }, true); } catch (e) { } }
+const isStandalone = () => !!TG || (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
 function device() {
   const ios = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1), android = /Android/i.test(UA);
   const named = /FBAN|FBAV|FB_IAB/i.test(UA) ? 'Facebook' : /Instagram/i.test(UA) ? 'Instagram' : /Barcelona|Threads/i.test(UA) ? 'Threads' : /TikTok|musical_ly|Bytedance/i.test(UA) ? 'TikTok' : /Snapchat/i.test(UA) ? 'Snapchat' : /Twitter/i.test(UA) ? 'X' : /Line\//i.test(UA) ? 'Line' : '';
@@ -979,6 +989,7 @@ function go(tab, push) {
   for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top')) { if (b.dataset.go === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
   if (push && location.hash !== '#' + tab) history.pushState(null, '', '#' + tab);
   render(); window.scrollTo(0, 0);
+  try { if (TG && TG.BackButton) { if (tab === 'today') TG.BackButton.hide(); else TG.BackButton.show(); } } catch (e) { }
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
   document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
 }
@@ -1083,7 +1094,7 @@ if (S.slate && !(S.slate.v === 1 && Array.isArray(S.slate.days))) S.slate = null
 chip();
 /* ?embed=1 · the chat inside the desk's own app: no header, no tabs */
 if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
-go((location.hash || '#today').slice(1), false);
+go((() => { try { const sp = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param; if (sp && TABS.includes(sp)) return sp; } catch (e) { } return (location.hash || '#today').slice(1); })(), false);
 loadFeed();
 acctBadge(); acctLoad();
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadSlate());
