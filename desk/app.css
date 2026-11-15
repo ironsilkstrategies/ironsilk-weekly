@@ -674,3 +674,4 @@ small.lv{display:block;margin-top:2px;font:600 12px/1.3 var(--text)}
 .lv-q{font-weight:800}.lv-q.up{color:#17703f}.lv-q.dn{color:#a23b25}.lv-was{color:#5b6a60;font-weight:500}
 .leg.is-live{background:rgba(192,57,43,.06);border-radius:8px}
 .score-q{margin:2px 0 0;font:600 13px/1.3 var(--text)}
+.tk-upd{font:500 11px/1.2 var(--text);color:#5b6a60;margin:-4px 0 8px}

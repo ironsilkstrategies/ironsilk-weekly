@@ -125,7 +125,9 @@ async function loadSlate() {
 async function scores(sps, ymd) {
   await Promise.all(sps.filter(sp => ESPN[sp]).map(async sp => {
     try {
-      const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${ESPN[sp]}/scoreboard?dates=${ymd}&limit=300${sp === 'ncaaf' ? '&groups=80' : sp === 'ncaab' ? '&groups=50' : ''}`);
+      /* never a cached copy: no-store for the browser, and a marker that changes every 15 s so ESPN's edge can't hand back an old one either
+         (iPhone kept showing the first scores it got) */
+      const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${ESPN[sp]}/scoreboard?dates=${ymd}&limit=300${sp === 'ncaaf' ? '&groups=80' : sp === 'ncaab' ? '&groups=50' : ''}&_=${Math.floor(Date.now() / 15e3)}`, { cache: 'no-store' });
       if (!r.ok) return;
       for (const ev of (await r.json()).events || []) {
         const c = (ev.competitions || [])[0] || {}, cs = c.competitors || [];
@@ -137,6 +139,7 @@ async function scores(sps, ymd) {
       }
     } catch { /* scores are a nicety */ }
   }));
+  S.liveAt = Date.now();
 }
 const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'); return S.live[`${x.sp}|${ab(x.sp, a)}@${ab(x.sp, h)}`] || null; };
 async function liveTick() {
@@ -312,7 +315,7 @@ function founderSum(t) { const L = t.legs || []; if (L.length < 2) return ''; co
   const nx = L.filter(l => l.st === 'open' && !lv(l) && l.start && Date.parse(l.start) > Date.now()).map(l => Date.parse(l.start)).sort((a, b) => a - b)[0];
   const p0 = t.p0, now = lost ? 0 : t.now;
   return `<div class="tk-sum">${p0 != null ? `<b>${fmtP(p0)}</b> · 1 in ${p1in(p0)} · ` : ''}${L.length} legs${live ? ` · <span class="lv-on">● ${live} live</span>` : ''}${togo ? ` · ${togo} to go` : ''}${nx ? ` · next ${esc(clock(new Date(nx).toISOString()))}` : ''}</div>
-    ${started && p0 != null && now != null ? `<div class="tk-live ${lost ? 'dn' : now >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(now)} · 1 in ${p1in(now)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>` : ''}`; }
+    ${started && p0 != null && now != null ? `<div class="tk-live ${lost ? 'dn' : now >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(now)} · 1 in ${p1in(now)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>` : ''}${live && S.liveAt ? `<div class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }))}</div>` : ''}`; }
 function founderHtml(page) {
   const F = S.feed && S.feed.beta !== false && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
   const R = F.rec || {}, card = t => { const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
@@ -769,7 +772,7 @@ function tkSum(legs, pFallback, machine) {
   const p0 = machine && machine.p0 != null ? machine.p0 : N.every(x => x.l.p != null) ? N.reduce((a, x) => a * x.l.p, 1) : pFallback;
   const pNow = lost ? 0 : machine && machine.now != null ? machine.now : N.reduce((a, x) => a * (x.c === 'w' || x.c === 'p' ? 1 : x.live && x.l.q != null ? x.l.q : x.l.p != null ? x.l.p : 1), 1);
   const head = `<div class="tk-sum">${p0 != null ? `<b>${fmtP(p0)}</b> · 1 in ${p1in(p0)} · ` : ''}${N.length} legs${live ? ` · <span class="lv-on">● ${live} live</span>` : ''}${togo ? ` · ${togo} to go` : ''}${nexts.length ? ` · next ${esc(clock(new Date(nexts[0]).toISOString()))}` : ''}</div>`;
-  const lc = started && p0 != null ? `<div class="tk-live ${lost ? 'dn' : pNow >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(pNow)} · 1 in ${p1in(pNow)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>` : '';
+  const lc = started && p0 != null ? `<div class="tk-live ${lost ? 'dn' : pNow >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(pNow)} · 1 in ${p1in(pNow)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>${live && S.liveAt ? `<div class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }))}</div>` : ''}` : '';
   return head + lc; }
 function legRow(l0) {
   const l = l0.game ? liveGrade(l0) : l0, c = stateOf(l), big = l.game ? readPick(l).big : l.pick;
@@ -1100,7 +1103,9 @@ setInterval(() => {
   if (due && Date.now() - fast > 30e3) { fast = Date.now(); loadFeed(); }
 }, 1000);
 setInterval(() => { if (!document.hidden) loadFeed(); }, 120e3);
-setInterval(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive(); } }, 60e3);
+/* live scores: every 30 s while a game on the page is live, every 60 s otherwise */
+(function liveLoop() { const anyLive = Object.values(S.live || {}).some(v => v && v.state === 'in');
+  setTimeout(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive(); } liveLoop(); }, anyLive ? 30e3 : 60e3); })();
 setInterval(() => { if (!document.hidden && S.tab === 'slate') loadSlate(); }, 600e3);
 
 /* ── Pull to refresh (Chris, Nov 15: "the pull down refresh is not available yet on the public app"). A home-screen app on iPhone
@@ -1119,7 +1124,7 @@ setInterval(() => { if (!document.hidden && S.tab === 'slate') loadSlate(); }, 6
     try { await Promise.all([loadFeed(true), loadSlate(), (async () => { try { liveTick(); } catch (e) { } })(), (async () => { try { if (acctPass()) await acctLoad(); LB = null; if (S.tab === 'me') lbLoad(); } catch (e) { } })()]); } catch (e) { }
     render(); set(TH, 'Up to date', 'done'); setTimeout(() => { set(0); busy = false; }, 700); });
 })();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadFeed(); if (S.tab === 'slate') loadSlate(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadFeed(); liveTick(); if (S.tab === 'slate') { loadSlate(); slateLive(); } } });
 
 /* start: last good copy first (instant, works offline), then the live feed */
 S.feed = noHeavy(store.get('feed')); S.slate = store.get('slate');
