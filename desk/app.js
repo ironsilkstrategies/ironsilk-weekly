@@ -94,7 +94,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'cast', 'chat', 'receipts', 'join'];
+const TABS = ['today', 'slate', 'longshots', 'cast', 'chat', 'receipts', 'join'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -299,7 +299,7 @@ function founderLeg(l) {
     <small class="fl-g">${esc([l.game ? matchup(l) : '', l.st === 'open' && l.start ? whenLabel(l.start) : ''].filter(Boolean).join(' · '))}</small>
     ${l.detail ? `<small class="fl-d">${esc(l.detail)}</small>` : ''}${bar != null ? `<span class="fl-bar"><i style="width:${bar.toFixed(0)}%"></i></span>` : ''}</span></li>`;
 }
-function founderHtml() {
+function founderHtml(page) {
   const F = S.feed && S.feed.beta !== false && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
   const R = F.rec || {}, card = t => { const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
     const chip = t.res === 'cashed' ? '<span class="fchip win">Cashed</span>' : t.res === 'lost' ? '<span class="fchip loss">Lost</span>' : t.res === 'live' ? `<span class="fchip live">● Live · ${t.hit} of ${n} hit</span>` : '<span class="fchip">Pending</span>';
@@ -307,9 +307,16 @@ function founderHtml() {
       <div class="f-odds">${t.dec ? `<b>${esc(decAm(t.dec))}</b><span>$10 pays <b>$${(10 * t.dec).toLocaleString('en-US', { maximumFractionDigits: 0 })}</b></span>` : ''}<span class="f-prog">${done} of ${n} settled</span></div>
       <ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>
       ${t.res === 'open' || t.res === 'live' ? `<div class="row"><button type="button" class="btn foil" data-act="tail" data-id="${esc(t.id)}">📋 Tail this</button></div>` : ''}</div></article>`; };
-  return `<section class="vsec" id="founder"><div class="vh"><h2 class="h2">Founder LongShot Parlays</h2>${vipBadge()}</div>
-    <p class="note">The tickets the founder actually placed, posted as he plays them. Tail one by tapping the button, then paste it into your book.${R.cashed + R.lost ? ` Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost.` : ''}</p>
+  if (!page) return `<section class="vsec" id="founder"><div class="vh"><h2 class="h2">Founder LongShot Parlays</h2>${vipBadge()}</div><p class="note">The founder’s live tickets are on the <button type="button" class="link" data-go="longshots">LongShots tab</button>.</p><div class="fgrid">${F.tix.filter(t => t.res === 'live' || t.res === 'open').slice(0, 1).map(card).join('')}</div></section>`;
+  return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${R.cashed + R.lost ? `<span class="f-rec">Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost</span>` : ''}</div>
     <div class="fgrid">${F.tix.map(card).join('')}</div></section>`;
+}
+/* the LongShots tab: every founder ticket from the last week, live */
+function viewLongshots() {
+  const el = $('#v-longshots'), F = S.feed;
+  const body = F ? founderHtml(true) : '';
+  el.innerHTML = `<h1 class="title">Founder LongShot Parlays</h1><p class="lede">Real tickets the founder placed: big odds, posted as he plays them, graded live leg by leg. Tap “Tail this” to copy one, then paste it into your book.</p>
+    ${body || (F || S.feedErr ? `<div class="paper blank"><b>No LongShots up right now</b><p>The founder’s next ticket lands here the moment it’s in.</p></div>` : '<div class="shimmer"></div>')}${footHtml()}`;
 }
 function tailText(t) { return [`TheDesk · ${t.name || 'Founder LongShot Parlay'} (${t.legs.length} legs${t.dec ? ', ' + decAm(t.dec) : ''})`, ...t.legs.map((l, i) => `${i + 1}. ${legText(l)}${l.price != null ? ' (' + odds(l.price) + ')' : ''}${l.game ? ' · ' + matchup(l) : ''}`), CFG.home || 'https://ironsilkweekly.com/desk/'].join('\n'); }
 async function tailCopy(id) { const t = ((S.feed && S.feed.founder && S.feed.founder.tix) || []).find(x => x.id === id); if (!t) return; const txt = tailText(t);
@@ -791,7 +798,7 @@ async function share() {
   try { if (navigator.share) { await navigator.share({ title: 'TheDesk', text, url: CFG.home }); return; } } catch { return; }
   try { await navigator.clipboard.writeText(`${text}\n${CFG.home}`); toast('Card copied'); } catch { toast('Couldn’t copy the card'); }
 }
-const VIEWS = { today: viewToday, slate: viewSlate, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
+const VIEWS = { today: viewToday, slate: viewSlate, longshots: viewLongshots, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   if (!TABS.includes(tab)) tab = 'today';
@@ -801,7 +808,7 @@ function go(tab, push) {
   if (push && location.hash !== '#' + tab) history.pushState(null, '', '#' + tab);
   render(); window.scrollTo(0, 0);
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
