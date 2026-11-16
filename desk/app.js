@@ -448,9 +448,10 @@ function viewMe() {
   const el = $('#v-me'), P = acctPass();
   if (!P) { el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Sign in to track your own tickets on any device: build them from the Props slip, add the desk's picks, or type your own legs.</p>
     <div class="paper acctbox"><div class="pview">${['login', 'signup'].map(v => `<button type="button" class="${(AC.mode || 'login') === v ? 'on' : ''}" data-act="acmode" data-v="${v}">${v === 'login' ? 'Sign in' : 'Create account'}</button>`).join('')}</div>
-      <form data-form="acct" autocomplete="on"><label>Username<input name="name" required minlength="2" maxlength="20" autocomplete="username" autocapitalize="off"></label>
-      <label>Password<input name="pass" type="password" required minlength="8" autocomplete="${AC.mode === 'signup' ? 'new-password' : 'current-password'}"></label>
-      ${AC.mode === 'signup' ? '<label class="chk"><input name="age21" type="checkbox" required> I’m 21 or older</label>' : ''}
+      <form data-form="acct" autocomplete="on" novalidate><label>Username<input name="name" maxlength="20" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      ${AC.mode === 'signup' ? '<small class="fhint">2–20 letters or numbers (spaces, _ . - are fine after the first letter)</small>' : ''}
+      <label>Password<span class="pw"><input name="pass" type="password" autocomplete="${AC.mode === 'signup' ? 'new-password' : 'current-password'}"><button type="button" class="link" data-act="pwshow">Show</button></span></label>
+      ${AC.mode === 'signup' ? '<small class="fhint">At least 8 characters. Any letters, numbers or symbols.</small><label class="chk"><input name="age21" type="checkbox"> I’m 21 or older</label>' : ''}
       <p class="chat-err" id="acctErr" role="alert"></p><button class="btn" type="submit">${AC.mode === 'signup' ? 'Create account' : 'Sign in'}</button></form>
       <p class="note">Your password is never stored, only a scrambled copy of it. <a href="privacy.html">Privacy</a></p>
       ${isStandalone() ? '' : '<p class="note"><b>Tip:</b> <button type="button" class="link" data-act="guide">save TheDesk as an app</button> and you stay signed in for good.</p>'}</div>
@@ -800,6 +801,7 @@ function viewSlate() {
 }
 
 /* ── character voices (v3.1.4): each call's reasons, said the way that character talks (voice.js) ── */
+const cap1 = t => String(t || '').charAt(0).toUpperCase() + String(t || '').slice(1);
 const nickOf = (sp, game, a) => { try { return String(bigOf(sp, game, a + ' ML')).replace(/\s+ML$/, '') || a; } catch (e) { return a; } };
 const vOfName = n => { const C = (S.feed && S.feed.characters) || []; const c = C.find(x => x.name === n || x.v === n); return c ? c.v : n; };
 const voiceOf = (v, p, idx) => { try { return say(v, p, idx, deskDay(), a => nickOf(p.sp, p.game, a)); } catch (e) { return p.note || ''; } };
@@ -1073,9 +1075,12 @@ document.addEventListener('submit', async e => {
   if (f.dataset.form === 'lgsnew') { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/lgs/create', { token: P.token, name: f.name.value.trim(), blurb: f.blurb.value.trim(), starts: Date.parse(f.starts.value), ends: Date.parse(f.ends.value), bank: +f.bank.value, max: +f.max.value,
       prizes: f.prizes.value.split(/[,\s]+/).map(Number).filter(x => x > 0), sports: [...f.querySelectorAll('input[name="sp"]:checked')].map(x => x.value), late: f.late.checked }); LGX.at = 0; lgsLoad(true); toast(`${j.league.name} is open`); } catch (err) { toast(err.message); } return; }
   if (f.dataset.form === 'acct') { const n = $('#acctErr'); n.textContent = ''; const signup = AC.mode === 'signup';
+    /* say what's wrong in words: in Telegram and some phone browsers the built-in form bubbles never show, so the button just looked dead */
+    { const nm = f.name.value.trim(), pw = f.pass.value, bad = !nm ? 'Type a username.' : signup && !/^[A-Za-z0-9][A-Za-z0-9 _.-]{1,19}$/.test(nm) ? 'Usernames are 2–20 letters or numbers (spaces, _ . - are OK after the first letter).' : !pw ? 'Type a password.' : signup && pw.length < 8 ? `Passwords need at least 8 characters (that one has ${pw.length}).` : signup && !(f.age21 && f.age21.checked) ? 'Tick the box to confirm you’re 21 or older.' : '';
+      if (bad) { n.textContent = bad; return; } }
     try { const j = await acctApi(signup ? '/acct/signup' : '/acct/login', { name: f.name.value.trim(), pass: f.pass.value, ...(signup ? { age21: !!(f.age21 && f.age21.checked) } : {}) });
       try { if (window.PasswordCredential && navigator.credentials) navigator.credentials.store(new PasswordCredential({ id: f.name.value.trim(), password: f.pass.value, name: j.name })).catch(() => { }); } catch (e2) { }
-      store.set('acct', { token: j.token, name: j.name, owner: !!j.owner }); acctBadge(); toast(signup ? `Welcome to TheDesk, ${j.name}` : `Welcome back, ${j.name}`); viewMe(); acctLoad(); if (!isStandalone()) setTimeout(() => openGuide(false), 1400); } catch (err) { n.textContent = err.message; } return; }
+      store.set('acct', { token: j.token, name: j.name, owner: !!j.owner }); acctBadge(); toast(signup ? `Welcome to TheDesk, ${j.name}` : `Welcome back, ${j.name}`); viewMe(); acctLoad(); if (!isStandalone()) setTimeout(() => openGuide(false), 1400); } catch (err) { n.textContent = /fetch|network|load failed/i.test(err.message) ? 'Couldn’t reach TheDesk. Check your connection and try again.' : cap1(err.message); } return; }
   if (f.dataset.form === 'ddgrant') { const P = acctPass(); if (!P) return; try { await acctApi('/acct/grant', { token: P.token, name: f.who.value.trim(), amount: +f.amt.value }); toast(`Added D$${(+f.amt.value).toLocaleString('en-US')} to ${f.who.value.trim()}`); f.reset(); LB = null; lbLoad(); } catch (err) { toast(err.message); } return; }
   if (f.dataset.form === 'acclose') { const P = acctPass(); if (!P) return; try { await acctApi('/acct/close', { token: P.token, pass: f.pass.value }); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); toast('Your account is deleted'); } catch (err) { toast(err.message); } return; }
   if (f.dataset.form === 'newtk') { const legs = parseLegs(f.legs.value); if (!legs.length) return toast('Add at least one leg');
@@ -1478,6 +1483,7 @@ document.addEventListener('click', async e => {
   else if (act === 'adlgopen') { try { const on = a.getAttribute('aria-pressed') !== 'true'; await adApi('cfg', { lgOpen: on }); toast(on ? 'Members can now open leagues' : 'Only the desk opens leagues'); adLoad(true); } catch (e) { toast(e.message); } }
   else if (act === 'introok') { store.set('intro', 1); viewToday(); const t = $('#v-today .title'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   else if (act === 'introopen') { store.set('intro', 0); viewToday(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  else if (act === 'pwshow') { const i = a.parentElement.querySelector('input'); const on = i.type === 'password'; i.type = on ? 'text' : 'password'; a.textContent = on ? 'Hide' : 'Show'; }
   else if (act === 'ddmode') { S.ddMode = a.dataset.v; store.set('ddmode', S.ddMode); render(); }
   else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
   else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }
