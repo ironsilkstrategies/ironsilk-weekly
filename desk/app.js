@@ -1,3 +1,4 @@
+import { say } from './voice.js?v=1';
 import { library, get as chal, checkpoints, paceAt, orderFor, simulate, ROUTES, RULES, SPORTS, TIERS as CTIERS, rankOf } from './chal-lib.js?v=1';
 /* TheDesk — the public app.
    It shows what the desk publishes and nothing else: the day's Best 3 (each one sealed until 30 minutes before its
@@ -264,6 +265,21 @@ function slipHtml(x0, i, key, opt = {}) {
 function remember(pairs) { for (const [k, x] of pairs) S.seen[k] = stateOf(liveGrade(x)); }
 
 /* ── Today ───────────────────────────────────────────────────────────────── */
+/* ── the welcome (v3.1.4, Chris, Nov 15: "it just jumps right in to the 3 picks and doesn't explain the site or what we do … make sure
+   it's public friendly and tries to think for them"). Full on a first visit; a slim "New here?" bar after "Got it". */
+function introHtml() { const seen = store.get('intro') === 1, F = S.feed || {}, nC = (F.characters || []).length || 13;
+  if (seen) return `<button type="button" class="introbar" data-act="introopen"><span>👋</span> New here? <b>What TheDesk does, in 30 seconds</b><em>›</em></button>`;
+  return `<section class="intro" aria-label="Welcome to TheDesk"><div class="in-glow"></div>
+    <small class="in-k">Welcome to TheDesk</small><h1>${nC} sharp minds read every game,<br><span>so you don’t have to.</span></h1>
+    <p class="in-l">TheDesk is a betting desk you can carry in your pocket. ${nC} characters study tonight’s NFL, college football, NBA, college hoops, NHL and MLB games, each its own way: one simulates, one follows the money, one watches the players, one remembers history. When they agree, you see it here. Every pick shows its chance of winning, why it was made, and how it’s doing live. Every result stays on the record, wins and losses.</p>
+    <div class="in-steps">
+      <div><i>1</i><b>Start with the Best 3</b><span>Right below: the desk’s three strongest calls today, with the odds and how likely each one is to win.</span></div>
+      <div><i>2</i><b>Follow it live</b><span>Once games start, scores and each pick’s live chance update on their own. A ✓ or ✗ lands the second it’s decided.</span></div>
+      <div><i>3</i><b>Go deeper when you want</b><span><b>Slate</b> for every game, <b>Props</b> for players, <b>LongShots</b> for the founder’s big tickets, <b>Cast</b> to meet the characters.</span></div>
+      <div><i>4</i><b>Play for free</b><span>Sign up for D$1,000 in play money. Bet the slate, take on challenges, and join the desk’s leagues for D$ prizes.</span></div></div>
+    <div class="in-trust"><span>📊 Every pick graded in public</span><span>🔴 Live tracking, no app needed</span><span>🆓 Free during the open beta</span></div>
+    <div class="row"><button type="button" class="btn foil" data-act="introok">Got it, show me today’s picks</button><button type="button" class="btn line" data-go="cast">Meet the characters</button></div>
+    <p class="in-fine">For entertainment and information, 21+. TheDesk doesn’t take bets; Desk Dollars are play money and never cash. Bet responsibly · 1-800-GAMBLER.</p></section>`; }
 function viewToday() {
   const el = $('#v-today'), F = S.feed;
   if (!F) {
@@ -319,7 +335,7 @@ function viewToday() {
       <p>Members get the Best 3 at lock time, the Top 10 plays and every character’s parlay, in a private Telegram.</p></div>
       <div class="row"><a class="btn foil" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP${price ? ', ' + esc(price) : ''}</a><button type="button" class="btn line" data-go="join">What you get</button></div></div>` : '';
 
-  el.innerHTML = `<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${founderHtml()}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
+  el.innerHTML = `${introHtml()}<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${founderHtml()}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
     <div id="seal"></div>${vip}
     ${T && picks.length ? `<div class="row" style="margin-top:22px"><button type="button" class="btn line" data-act="share">Share today’s card</button></div>` : ''}${footHtml()}`;
   if (T) { remember(picks.map((x, i) => [keys[i], x])); remember(props.map((x, i) => [`${T.d}|p${i}`, x])); seal(T); }
@@ -783,13 +799,17 @@ function viewSlate() {
     <div>${ranks}</div></div>${ddSlipBar()}${footHtml()}`;
 }
 
+/* ── character voices (v3.1.4): each call's reasons, said the way that character talks (voice.js) ── */
+const nickOf = (sp, game, a) => { try { return String(bigOf(sp, game, a + ' ML')).replace(/\s+ML$/, '') || a; } catch (e) { return a; } };
+const vOfName = n => { const C = (S.feed && S.feed.characters) || []; const c = C.find(x => x.name === n || x.v === n); return c ? c.v : n; };
+const voiceOf = (v, p, idx) => { try { return say(v, p, idx, deskDay(), a => nickOf(p.sp, p.game, a)); } catch (e) { return p.note || ''; } };
 /* ── the open beta: the whole card, and every character's say on each pick ──────── */
 const vipBadge = () => (S.feed && S.feed.beta ? '<span class="vipbadge">VIP · free in beta</span>' : '<span class="vipbadge">VIP</span>');
 function callsHtml(calls) {
   const L = (calls || []).filter(c => c && c.who); if (!L.length) return '';
   const w = L.filter(c => c.with), a = L.filter(c => !c.with);
-  const row = c => `<li class="${c.with ? 'on' : 'off'}"><span class="who">${esc(c.who)}${c.official ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>
-    <span class="nt">${c.with ? '' : `On ${esc(c.pick || 'the other side')}${c.note ? '. ' : ''}`}${esc(c.note || '')}</span></li>`;
+  const row = (c, i) => `<li class="${c.with ? 'on' : 'off'}"><span class="who">${esc(c.who)}${c.official ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>
+    <span class="nt">${c.with ? '' : `On ${esc(c.pick || 'the other side')}. `}${esc(voiceOf(vOfName(c.who), { ...c, game: c.game || '' }, i))}</span></li>`;
   return `<details class="calls"><summary><span>Every character on it</span><small>${w.length} with · ${a.length} against</small></summary><ul>${[...w, ...a].map(row).join('')}</ul></details>`;
 }
 /* ── player props live on the phone too (Chris, Nov 15: "Do that!"): the page pulls ESPN's box score for every game with a prop on it,
@@ -980,8 +1000,8 @@ function viewCast() {
   const c = C.find(x => x.v === pick), g = c.record || {}, pr = c.props || {}, lines = cells.filter(x => x.v === c.v);
   const games = (c.picks || []).filter(p => p.kind !== 'prop'), props = (c.picks || []).filter(p => p.kind === 'prop');
   /* graded live on the phone, like every ticket: score + clock + live chance while it plays, ✓/✗ the moment it's decided */
-  const pickRow = p0 => { const g = withGame(p0), p = g.game ? liveGrade(g) : g, c = stateOf(p), lv = p.game ? liveOf(p) : null, on = c === 'o' && lv && lv.state === 'in';
-    return `<div class="leg${on ? ' is-live' : ''}"><div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : on ? '●' : '•'}</span><span class="pk">${esc(p.kind === 'prop' ? p.pick : readPick(p).big)}${p.price != null ? ' ' + esc(odds(p.price)) : ''}<small>${esc([LEAGUE[p.sp], p.gl || p.team, p.kind !== 'prop' && c === 'o' && !on && p.start ? whenLabel(p.start) : ''].filter(Boolean).join(' · '))}</small>${lv && lv.state !== 'pre' ? `<small class="lv">${scoreBit(p, lv)}${on ? ' · ' + qBit(p, true) : ''}</small>` : ''}</span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div>${p.note ? `<p class="why1">${esc(p.note)}</p>` : ''}</div>`; };
+  const pickRow = (p0, pi) => { const cv = pick, g = withGame(p0), p = g.game ? liveGrade(g) : g, c = stateOf(p), lv = p.game ? liveOf(p) : null, on = c === 'o' && lv && lv.state === 'in';
+    return `<div class="leg${on ? ' is-live' : ''}"><div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : on ? '●' : '•'}</span><span class="pk">${esc(p.kind === 'prop' ? p.pick : readPick(p).big)}${p.price != null ? ' ' + esc(odds(p.price)) : ''}<small>${esc([LEAGUE[p.sp], p.gl || p.team, p.kind !== 'prop' && c === 'o' && !on && p.start ? whenLabel(p.start) : ''].filter(Boolean).join(' · '))}</small>${lv && lv.state !== 'pre' ? `<small class="lv">${scoreBit(p, lv)}${on ? ' · ' + qBit(p, true) : ''}</small>` : ''}</span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div>${`<p class="why1 vq" title="${esc(p.note || '')}">“${esc(voiceOf(cv, p, pi))}”</p>`}</div>`; };
   const wl = o => (o && o.w + o.l ? `${o.w}–${o.l}` : '—');
   el.innerHTML = `<button type="button" class="link back" data-act="castpick" data-v="">← All characters</button>${sel}
     <article class="profile" style="--cc:${okColor(c.color)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${vipBadge()}</div>
@@ -989,7 +1009,7 @@ function viewCast() {
       ${c.origin ? `<div class="origin"><b>Where the eye comes from</b><p>${esc(c.origin)}</p></div>` : ''}
       <div class="statrow"><div><b>${rec(g)}</b><span>Official game picks${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span></div><div><b>${rec(pr)}</b><span>Props</span></div><div><b>${(c.picks || []).length}</b><span>Picks today</span></div></div>
       ${(c.best || []).length ? `<h2 class="h2">Best at</h2><div class="lanes">${c.best.map(x => `<span class="lane good">${esc(x.lane)} <b>${x.w}–${x.l}</b>${x.u ? ` ${x.u > 0 ? '+' : ''}${x.u}u` : ''}</span>`).join('')}${(c.still || []).map(x => `<span class="lane meh">Still learning: ${esc(x.lane)} <b>${x.w}–${x.l}</b></span>`).join('')}</div>` : ''}
-      <h2 class="h2">Today’s official picks</h2>${todayTxt(c) ? `<p class="tk-sum castday">${todayTxt(c)}${S.liveAt && todayLive(c).on ? ` · <span class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</span>` : ''}</p>` : ''}${games.length || props.length ? `<div class="paper tix">${games.map(pickRow).join('')}${props.length ? `<div class="tix-h sub"><b>Props</b></div>${props.map(pickRow).join('')}` : ''}</div>` : '<p class="note">Nothing official today. It only speaks when it’s sure.</p>'}
+      <h2 class="h2">Today’s official picks</h2>${todayTxt(c) ? `<p class="tk-sum castday">${todayTxt(c)}${S.liveAt && todayLive(c).on ? ` · <span class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</span>` : ''}</p>` : ''}${games.length || props.length ? `<div class="paper tix">${games.map(pickRow).join('')}${props.length ? `<div class="tix-h sub"><b>Props</b></div>${props.map((p, i) => pickRow(p, i + games.length)).join('')}` : ''}</div>` : '<p class="note">Nothing official today. It only speaks when it’s sure.</p>'}
       ${(c.recent || []).length ? `<h2 class="h2">Recent results</h2><div class="paper tix">${c.recent.map(r => `<div class="leg"><div class="li">${mark(r.r)}<span class="pk">${esc(r.kind === 'prop' ? r.pick : readPick(r).big)}${r.price != null ? ' ' + esc(odds(r.price)) : ''}<small>${esc([LEAGUE[r.sp], r.gl, shortDay(r.d)].filter(Boolean).join(' · '))}</small></span><span class="u"></span></div></div>`).join('')}</div>` : ''}
       ${(c.teams || []).length ? `<h2 class="h2">Teams it backs and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Team</th><th scope="col">Backed</th><th scope="col">Against</th></tr></thead><tbody>${c.teams.map(t => `<tr><th scope="row">${esc(teamName(t.sp, t.team))}<small>${esc(LEAGUE[t.sp] || '')}</small></th><td>${wl(t.for)}</td><td>${wl(t.vs)}</td></tr>`).join('')}</tbody></table></div>` : ''}
       ${(c.players || []).length ? `<h2 class="h2">Players it rides and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Player</th><th scope="col">Overs</th><th scope="col">Unders</th></tr></thead><tbody>${c.players.map(t => `<tr><th scope="row">${esc(t.player)}<small>${esc([LEAGUE[t.sp], t.team].filter(Boolean).join(' · '))}</small></th><td>${wl(t.over)}</td><td>${wl(t.under)}</td></tr>`).join('')}</tbody></table></div>` : ''}
@@ -1456,6 +1476,8 @@ document.addEventListener('click', async e => {
   else if (act === 'adcban') { if (!confirmQuit(a)) return; try { await adApi('chat', { sub: 'ban', name: a.dataset.name }); AD.chat = null; viewAdmin(); toast(`${a.dataset.name} banned from the chat`); } catch (e) { toast(e.message); } }
   else if (act === 'adunban') { try { await adApi('chat', { sub: 'unban', name: a.dataset.name }); AD.chat = null; viewAdmin(); } catch (e) { toast(e.message); } }
   else if (act === 'adlgopen') { try { const on = a.getAttribute('aria-pressed') !== 'true'; await adApi('cfg', { lgOpen: on }); toast(on ? 'Members can now open leagues' : 'Only the desk opens leagues'); adLoad(true); } catch (e) { toast(e.message); } }
+  else if (act === 'introok') { store.set('intro', 1); viewToday(); const t = $('#v-today .title'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  else if (act === 'introopen') { store.set('intro', 0); viewToday(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   else if (act === 'ddmode') { S.ddMode = a.dataset.v; store.set('ddmode', S.ddMode); render(); }
   else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
   else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }
