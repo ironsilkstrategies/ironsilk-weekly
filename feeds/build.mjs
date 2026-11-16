@@ -133,7 +133,13 @@ function sbLine(c,a,h){const o=(c.odds||[])[0];if(!o)return null;let spH=null,ml
   if(mlA==null&&o.awayTeamOdds&&isFinite(+o.awayTeamOdds.moneyLine))mlA=+o.awayTeamOdds.moneyLine;if(mlH==null&&o.homeTeamOdds&&isFinite(+o.homeTeamOdds.moneyLine))mlH=+o.homeTeamOdds.moneyLine;
   if(spH==null&&o.details){const m=String(o.details).match(/^([A-Z0-9&]+)\s*([+-]?\d+(?:\.\d+)?)$/i);if(m){const v=Math.abs(+m[2]);spH=m[1].toUpperCase()===h?-v:m[1].toUpperCase()===a?v:null;}else if(/^(even|pk|pick)/i.test(o.details))spH=0;}
   if(tot==null&&isFinite(+o.overUnder))tot=+o.overUnder;
-  return spH==null&&mlA==null?null:{spH,mlA,mlH,tot};}
+  /* v3.1.3 · the prices on the spread and the total too (a puck line is rarely −110; neither is every total) */
+  const px=(a,b)=>{const v=num(a);return v!=null?v:num(b);};let spPH=null,spPA=null,ovP=null,unP=null;
+  if(o.pointSpread){const xh=cl(o.pointSpread.home),xa=cl(o.pointSpread.away);spPH=xh?num(xh.odds):null;spPA=xa?num(xa.odds):null;}
+  if(o.total){const xo=cl(o.total.over),xu=cl(o.total.under);ovP=xo?num(xo.odds):null;unP=xu?num(xu.odds):null;}
+  if(spPH==null&&o.homeTeamOdds)spPH=px(o.homeTeamOdds.spreadOdds);if(spPA==null&&o.awayTeamOdds)spPA=px(o.awayTeamOdds.spreadOdds);
+  if(ovP==null)ovP=px(o.overOdds);if(unP==null)unP=px(o.underOdds);
+  return spH==null&&mlA==null?null:{spH,mlA,mlH,tot,spPH,spPA,ovP,unP};}
 /* v2.95 · the opening number off the same event, so the app can see how far the market has moved (the Brain's steam) */
 function sbOpen(c){const o=(c.odds||[])[0];if(!o)return null;const op=x=>x&&x.open||null;let spH=null,mlA=null,mlH=null,tot=null;
   if(o.pointSpread){const x=op(o.pointSpread.home);if(x)spH=num(x.line);}if(o.moneyline){const xa=op(o.moneyline.away),xh=op(o.moneyline.home);if(xa)mlA=num(xa.odds);if(xh)mlH=num(xh.odds);}

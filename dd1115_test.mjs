@@ -66,4 +66,9 @@ T('…the owner adds D$ without the code again (marked bought)', (await call('/a
 const s0 = ctx.storage.m.get('s:' + ow.j.token).exp; clock += 40 * 864e5; await call('/acct/me', { token: ow.j.token });
 T('stays signed in: a visit inside the last 60 days renews the pass to a full 90', ctx.storage.m.get('s:' + ow.j.token).exp === clock + 90 * 864e5 && ctx.storage.m.get('s:' + ow.j.token).exp > s0);
 
+{ /* v3.1.3 · an over that clears mid-game wins right away; spread and total use the book's price */
+  const { ddPrice: P2 } = await import('./chat/worker.mjs');
+  const g = { a: { ab: 'CHI' }, h: { ab: 'MIN' }, ln: { fav: 'MIN', line: 1.5, tot: 6.5, mlA: 150, mlH: -175, spA: -190, spH: 160, ov: -120, un: 100 } };
+  T('puck line and total priced at the book\'s number, not -110', P2(g, 'spread', 'away').price === -190 && P2(g, 'spread', 'home').price === 160 && P2(g, 'total', 'over').price === -120 && P2(g, 'total', 'under').price === 100);
+  T('…-110 only when the feed has no price', P2({ ...g, ln: { fav: 'MIN', line: 1.5, tot: 6.5 } }, 'total', 'over').price === -110); }
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);

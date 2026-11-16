@@ -148,7 +148,9 @@ const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]
 /* a character's prop names its team, not its game: find the team's game on today's scoreboard */
 function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t = ab(p.sp, p.team), td = deskDay().replace(/-/g, '');
   /* today's game only: yesterday's scoreboard can still be in memory, and a team that played then must not grade today's prop */
-  const k = Object.keys(S.live).find(k => { if (!k.startsWith(p.sp + '|') || (S.live[k].ymd && S.live[k].ymd !== td)) return false; const [a, h] = k.slice(p.sp.length + 1).split('@'); return a === t || h === t; });
+  const K = Object.keys(S.live).filter(k => { if (!k.startsWith(p.sp + '|')) return false; const [a, h] = k.slice(p.sp.length + 1).split('@'); return a === t || h === t; });
+  /* the team's game on today's scoreboard first; otherwise one that hasn't finished (never yesterday's final) */
+  const k = K.find(k => S.live[k].ymd === td) || K.find(k => S.live[k].state !== 'post');
   return k ? { ...p, game: k.slice(p.sp.length + 1) } : p; }
 const castPicks = () => ((S.feed && S.feed.characters) || []).flatMap(c => (c.picks || []).filter(p => p && p.sp && p.hit == null && !p.push));
 let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render(); }, 120); };
@@ -186,7 +188,10 @@ function liveGrade(x) { if (!x || x.hidden || x.hit != null || x.push) return x;
   const m = S.gm[gmKey(x)]; return m ? { ...x, hit: m.push ? null : m.hit, push: m.push } : g; }
 function liveGrade0(x) {
   if (parseProp(x.pick)) { const P = propNow(x); return P && P.st !== 'live' ? { ...x, hit: P.st === 'hit' } : x; }
-  const L = liveOf(x); if (!L || L.state !== 'post' || !fin(L.a) || !fin(L.h)) return x;
+  const L = liveOf(x); if (!L || !fin(L.a) || !fin(L.h)) return x;
+  /* an over that's already past its line has won (an under past it has lost) the moment the score gets there — no waiting for the final */
+  if (L.state === 'in') { const m0 = String(x.pick || '').trim().match(/^(Over|Under)\s+([\d.]+)$/i); return m0 && L.a + L.h > +m0[2] ? { ...x, hit: /over/i.test(m0[1]) } : x; }
+  if (L.state !== 'post') return x;
   const [ga, gh] = String(x.game).split('@'), A = L.a, H = L.h, p = String(x.pick || '').trim(); let m;
   if ((m = p.match(/^(Over|Under)\s+([\d.]+)$/i))) { const t = A + H, ln = +m[2]; return t === ln ? { ...x, push: true } : { ...x, hit: /over/i.test(m[1]) ? t > ln : t < ln }; }
   if ((m = p.match(/^(\S+)\s+ML$/i))) { if (A === H) return { ...x, push: true }; const home = ab(x.sp, m[1]) === ab(x.sp, gh); return { ...x, hit: home ? H > A : A > H }; }
@@ -367,8 +372,8 @@ function ddTicketDec(legs, mode) { const G = new Map(); legs.forEach(l => { cons
 const slateGameOf = k => { for (const d of ((S.slate && S.slate.days) || [])) for (const g of (d.games || [])) if (g.k === k) return g; return null; };
 const DDJ = -110, ddDec = p => (p > 0 ? 1 + p / 100 : 1 + 100 / -p), dd$ = n => 'D$' + (Math.round(n * 100) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
 function ddLegOf(g, mk, side) { const ln = g.ln || {}; if (mk === 'ml') { const p = side === 'away' ? ln.mlA : ln.mlH; return fin(p) ? { price: p, pick: `${side === 'away' ? g.a.ab : g.h.ab} ML` } : null; }
-  if (mk === 'spread') { if (!fin(ln.line) || !ln.fav) return null; const team = side === 'away' ? g.a.ab : g.h.ab; const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: DDJ, line, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
-  if (mk === 'total') return fin(ln.tot) ? { price: DDJ, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` } : null; return null; }
+  if (mk === 'spread') { if (!fin(ln.line) || !ln.fav) return null; const team = side === 'away' ? g.a.ab : g.h.ab; const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: fin(side === 'home' ? ln.spH : ln.spA) ? (side === 'home' ? ln.spH : ln.spA) : DDJ, line, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
+  if (mk === 'total') return fin(ln.tot) ? { price: fin(side === 'over' ? ln.ov : ln.un) ? (side === 'over' ? ln.ov : ln.un) : DDJ, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` } : null; return null; }
 function ddBtns(g) { if (!(g.t > Date.now() + 60e3) || !g.ln) return ''; const on = (mk, sd) => S.dd.some(l => l.k === g.k && l.mk === mk && l.side === sd);
   const btn = (mk, sd) => { const L = ddLegOf(g, mk, sd); return L ? `<button type="button" class="ddb${on(mk, sd) ? ' on' : ''}" data-act="ddpick" data-k="${esc(g.k)}" data-mk="${mk}" data-side="${sd}"><b>${esc(L.pick)}</b><small>${esc(odds(L.price))}</small></button>` : '<span></span>'; };
   return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><p class="g-note">Per game: moneyline or spread, plus the total. ${g.sp === 'nhl' ? 'Hockey parlays: moneyline + total, or the puck line alone (puck line + total takes an SGP). ' : ''}An SGP needs both picks in every game. No ticket pays over 10,000x.</p><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }

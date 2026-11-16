@@ -93,7 +93,7 @@ export class Room {
 /* ═══ DESK DOLLARS (v3.0.22, Chris, Nov 15: "each signup gets $1000 of free novelty money… a badge of honor") ════════════════
    Play money only: never cashed out, never a prize. Every member starts with D$1,000 (members from before get theirs the first
    time they look). Bets are on the slate's own games (moneyline, spread, total), priced by the server from the public slate
-   feed at the moment of the bet (spreads and totals at -110), closed at start time. Parlay: one pick per game, any number of games. SGP: every game on it 2+ picks (one per market), priced as
+   feed at the moment of the bet (spreads and totals at the book's price; -110 only when the feed has none), closed at start time. Parlay: one pick per game, any number of games. SGP: every game on it 2+ picks (one per market), priced as
    ddTicketDec says. No ticket pays more than 10,000x its stake. The server
    grades them itself from ESPN finals every 10 minutes; a game it can't find in 3 days is voided and the stake comes back.
    Bought D$ (the store, built but OFF until a lawyer signs off — or the owner's grant) is kept apart: it shows in its own color,
@@ -107,8 +107,8 @@ export const ddWallet = u => (u.dd ? u.dd : { bal: DD_START, bought: 0, w: 0, l:
 export function ddPrice(g, mk, side) { const ln = g && g.ln; if (!ln) return null;
   if (mk === 'ml') { const p = side === 'away' ? ln.mlA : side === 'home' ? ln.mlH : null; return Number.isFinite(p) && Math.abs(p) >= 100 ? { price: Math.round(p), line: null, pick: `${side === 'away' ? g.a.ab : g.h.ab} ML` } : null; }
   if (mk === 'spread') { if (!Number.isFinite(ln.line) || !ln.fav) return null; const team = side === 'away' ? g.a.ab : side === 'home' ? g.h.ab : null; if (!team) return null;
-    const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: DD_JUICE, line, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
-  if (mk === 'total') { if (!Number.isFinite(ln.tot) || !['over', 'under'].includes(side)) return null; return { price: DD_JUICE, line: ln.tot, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` }; }
+    const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); const sp2 = side === 'home' ? ln.spH : ln.spA; return { price: Number.isFinite(sp2) ? sp2 : DD_JUICE, line, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
+  if (mk === 'total') { if (!Number.isFinite(ln.tot) || !['over', 'under'].includes(side)) return null; const tp = side === 'over' ? ln.ov : ln.un; return { price: Number.isFinite(tp) ? tp : DD_JUICE, line: ln.tot, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` }; }
   return null; }
 /* v3.0.23 · how a ticket pays. Parlay: the legs multiply. SGP (each game 2+ picks): inside one game, a team's moneyline and its
    own spread are one bet (the favorite's spread implies its moneyline; the dog's moneyline implies its spread), and what's
@@ -291,7 +291,9 @@ export class Accounts {
   async alarm() { const S = this.ctx.storage, O = await S.list({ prefix: 'o:' }); const dayOf = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(t)).replace(/-/g, '');
     for (const ok of O.keys()) { const [, key, id] = ok.split(':'); const bk = 'b:' + key + ':' + id, bet = await S.get(bk); if (!bet || bet.status !== 'open') { await S.delete(ok); continue; }
       let changed = false; for (const l of bet.legs) { if (l.res || l.t > this.now()) continue; let sc = null; try { sc = (await this.scores(l.sp, dayOf(l.t))).get(l.game); } catch (e) { }
-        if (sc && sc.done) { l.res = ddGrade(l, sc.a, sc.h); changed = true; } else if (this.now() - l.t > 3 * 864e5) { l.res = 'push'; l.void = true; changed = true; } }
+        if (sc && sc.done) { l.res = ddGrade(l, sc.a, sc.h); changed = true; }
+        /* a total that's already decided mid-game: an over past the line has won, an under past it has lost — no need to wait for the final */
+        else if (sc && l.mk === 'total' && Number.isFinite(sc.a) && Number.isFinite(sc.h) && Number.isFinite(l.line) && sc.a + sc.h > l.line) { l.res = l.side === 'over' ? 'hit' : 'miss'; l.early = true; changed = true; } else if (this.now() - l.t > 3 * 864e5) { l.res = 'push'; l.void = true; changed = true; } }
       const fin = ddSettle(bet); if (!changed && !fin) continue;
       if (fin) { bet.status = fin.status; bet.back = fin.back; bet.done = this.now(); const tally = o => { if (fin.status === 'won') o.w++; else if (fin.status === 'lost') o.l++; else o.p++; };
         if (bet.run) { const rk = 'c:' + key + ':' + bet.run, run = await S.get(rk); if (run) { run.bal = r2(run.bal + fin.back); run.open = Math.max(0, (run.open || 1) - 1); run.w = run.w || 0; run.l = run.l || 0; run.p = run.p || 0; tally(run);
