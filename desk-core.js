@@ -1482,8 +1482,10 @@ function pubFounder0(L){const d=today(),lo7=dayShift(d,-7),lo30=dayShift(d,-30);
      the record". Once today's card is frozen, only tickets from today on stay on the page; before the freeze (overnight), the latest
      day's tickets stay up. The 30-day record above still counts every one. */
   let fd=null;try{const Fz=roGet(FREEZE_KEY,null,3e3);if(Fz&&Fz.d===d)fd=d;}catch(e){}
-  const latest=all.reduce((m,t)=>String(t.date||'')>m?String(t.date):m,'');const show=fd||latest;
-  const tix=all.filter(t=>String(t.date||'')>=show&&String(t.date||'')>=dayShift(d,-1)).sort((a,b)=>(ord[a.res]-ord[b.res])||String(b.date).localeCompare(String(a.date))).slice(0,40);   /* v3.0.33 · every ticket of the day (it was capped at 8 — Chris had 9) */
+  /* v3.0.36 · a ticket's day is its LAST game's day, not the day it was placed: a slip placed last night for tonight's games stays up */
+  const tday=t=>t.legs.reduce((m,l)=>{const g=String(l.day||'').slice(0,10);return g>m?g:m;},String(t.date||''));
+  const latest=all.reduce((m,t)=>tday(t)>m?tday(t):m,'');const show=fd||latest;
+  const tix=all.filter(t=>tday(t)>=show&&tday(t)>=dayShift(d,-1)).sort((a,b)=>(ord[a.res]-ord[b.res])||String(b.date).localeCompare(String(a.date))).slice(0,40);   /* v3.0.33 · every ticket of the day (it was capped at 8 — Chris had 9) */
   return{tix,rec};}
 let PUB_BOARD_MEMO=null;
 function pubBoard(V){try{const d=today();const T=roGet(TC_KEY,{})||{};const k=d+'|'+ledgerSig(V)+'|'+(T.ts||T.at||'')+'|'+((T.by&&Object.values(T.by).reduce((n,B)=>n+((B&&B.picks)||[]).length,0))||0);
