@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261116a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261117a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -22970,6 +22970,9 @@ async function syncRepoSafe(force){const norm=r=>String(r||'').trim().replace(/^
   if(SYNC_SAFE&&SYNC_SAFE.repo===repo&&SYNC_SAFE.tk===tk&&(SYNC_SAFE.ok||(!force&&Date.now()-SYNC_SAFE.ts<5*60e3)))return SYNC_SAFE;
   const own=new Set([norm(typeof TGW_WORKER_REPO!=='undefined'?TGW_WORKER_REPO:''),norm(get(LS.ghrepo,'')),norm(typeof SITE_REPO!=='undefined'?SITE_REPO:''),norm((()=>{try{return pubRepo();}catch(e){return'';}})())].filter(Boolean));
   let R;
+  /* v3.0.37 · the PUBLIC-PAGE box pointing at the sync repo (autofill, a slip) made the guard refuse the very repo sync needs. The publish
+     repo can never be the private data repo: clear that setting (publishing falls back to the site repo) and carry on. */
+  if(own.has(repo)&&norm(get(LS.ghrepo,''))===repo&&repo!==norm(SITE_REPO)&&repo!==norm(typeof TGW_WORKER_REPO!=='undefined'?TGW_WORKER_REPO:'')){set(LS.ghrepo,'');own.delete(repo);}
   if(own.has(repo))R={ok:false,why:`${repo} is the app/site repo — a sync save would replace its whole branch and publish your picks. Use a separate PRIVATE repo for sync.`};
   else{try{const r=await syncFetch('https://api.github.com/repos/'+repo,{headers:syncHeaders(),cache:'no-store'});
       if(r.status===401||r.status===403)R={ok:false,why:'token rejected (HTTP '+r.status+') — it needs Contents: read and write on '+repo};
