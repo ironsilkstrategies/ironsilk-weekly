@@ -93,7 +93,7 @@ function readPick(x) {
 }
 
 /* ── state ───────────────────────────────────────────────────────────────── */
-const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, tab: 'today', seen: {}, first: true,
+const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, liveD: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time' }, store.get('bf') || {}) };
 const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin'];
@@ -137,15 +137,21 @@ async function scores(sps, ymd) {
         const A = cs.find(z => z.homeAway === 'away'), H = cs.find(z => z.homeAway === 'home'); if (!A || !H) continue;
         const st = (c.status || ev.status || {}).type || {};
         const num = z => +(z.score && z.score.value != null ? z.score.value : z.score);
-        S.live[`${sp}|${ab(sp, A.team && A.team.abbreviation)}@${ab(sp, H.team && H.team.abbreviation)}`] =
-          { a: num(A), h: num(H), state: st.state === 'post' || st.completed ? 'post' : st.state === 'in' ? 'in' : 'pre', detail: st.shortDetail || st.detail || '', ymd, id: ev.id || c.id || null, period: +((c.status || ev.status || {}).period) || 0, clock: (c.status || ev.status || {}).clock != null ? +((c.status || ev.status || {}).clock) : null };
+        { const lk = `${sp}|${ab(sp, A.team && A.team.abbreviation)}@${ab(sp, H.team && H.team.abbreviation)}`, prev = S.live[lk];
+        /* v45 · several days load at once (an old LongShot's legs): each day keeps its own copy, and the shared key only ever moves FORWARD in time —
+           a finished game from an earlier day must never stand in for tonight's (POR@MIN graded at 0-2 in the 1st, Nov 17) */
+        const row = { a: num(A), h: num(H), state: st.state === 'post' || st.completed ? 'post' : st.state === 'in' ? 'in' : 'pre', detail: st.shortDetail || st.detail || '', ymd, id: ev.id || c.id || null, period: +((c.status || ev.status || {}).period) || 0, clock: (c.status || ev.status || {}).clock != null ? +((c.status || ev.status || {}).clock) : null };
+        S.liveD[lk + '#' + ymd] = row; if (!prev || !prev.ymd || prev.ymd <= ymd) S.live[lk] = row; }
       }
       S.liveAt = Date.now(); liveRepaint(); /* each league paints as soon as it lands */
     } catch { /* scores are a nicety */ }
   }));
   S.liveAt = Date.now();
 }
-const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'); return S.live[`${x.sp}|${ab(x.sp, a)}@${ab(x.sp, h)}`] || null; };
+const legYmd = x => { const s = x.start && Date.parse(x.start); const d = s ? deskDay(s) : x.day; return d ? String(d).slice(0, 10).replace(/-/g, '') : ''; };
+const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'), k = `${x.sp}|${ab(x.sp, a)}@${ab(x.sp, h)}`, d = legYmd(x);
+  if (d) { const D = S.liveD[k + '#' + d]; if (D) return D; const L = S.live[k]; return L && L.ymd && L.ymd !== d ? null : L || null; }
+  return S.live[k] || null; };
 /* a character's prop names its team, not its game: find the team's game on today's scoreboard */
 function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t = ab(p.sp, p.team), td = deskDay().replace(/-/g, '');
   /* today's game only: yesterday's scoreboard can still be in memory, and a team that played then must not grade today's prop */
@@ -186,7 +192,11 @@ S.gm = store.get('gmem') || {}; { const cut = Date.now() - 4 * 864e5; for (const
 const gmKey = x => [x.sp, x.game || x.team || '', x.pick, String(x.start || x.day || deskDay()).slice(0, 10)].join('|');
 function liveGrade(x) { if (!x || x.hidden || x.hit != null || x.push) return x; const g = liveGrade0(x);
   if (g.hit != null || g.push) { const k = gmKey(x); if (!S.gm[k] || S.gm[k].hit !== g.hit || !!S.gm[k].push !== !!g.push) { S.gm[k] = { hit: g.hit == null ? null : g.hit, push: !!g.push, t: Date.now() }; store.set('gmem', S.gm); } return g; }
-  const m = S.gm[gmKey(x)]; return m ? { ...x, hit: m.push ? null : m.hit, push: m.push } : g; }
+  const k = gmKey(x), m = S.gm[k]; if (!m) return g;
+  /* a remembered grade can't stand while its own game is still pre-game or mid-game — only an over already past its line is decided early */
+  const L = !parseProp(x.pick) && liveOf(x);
+  if (L && L.state !== 'post' && !(m.hit === true && /^Over\s/i.test(String(x.pick || '').trim())) && !(m.hit === false && /^Under\s/i.test(String(x.pick || '').trim()))) { delete S.gm[k]; store.set('gmem', S.gm); return g; }
+  return { ...x, hit: m.push ? null : m.hit, push: m.push }; }
 function liveGrade0(x) {
   if (parseProp(x.pick)) { const P = propNow(x); return P && P.st !== 'live' ? { ...x, hit: P.st === 'hit' } : x; }
   const L = liveOf(x); if (!L || !fin(L.a) || !fin(L.h)) return x;
