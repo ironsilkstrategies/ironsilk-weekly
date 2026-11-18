@@ -3878,6 +3878,7 @@ async function hardReload(){
 function saveGhSettings(){
   set(LS.ghrepo,document.getElementById('ghrepoIn').value.trim());
   set(LS.ghtoken,document.getElementById('ghtokenIn').value.trim());
+  try{if(typeof deskToast==='function')deskToast(get(LS.ghtoken,'')?'✓ Public page repo + token saved':'Public page settings saved (no token)',3000);}catch(e){}
 }
 function fileToB64(file){
   return new Promise((res,rej)=>{
