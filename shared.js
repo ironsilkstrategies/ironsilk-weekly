@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261117a';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261117b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -23395,7 +23395,9 @@ async function tgwRunNowTap(btn){if(btn){btn.disabled=true;btn.textContent='Star
   const msg=ok?'▶ Robot started — results in about a minute':"Couldn't start the robot: "+(window.__tgwWhy||'unknown')+'. It still runs on its own schedule.';
   try{deskToast(msg,ok?3500:7000);}catch(e){alert(msg);}if(btn){btn.disabled=false;btn.textContent='▶ Run now';}setTimeout(()=>{try{tgwRefreshStatus();}catch(e){}},70e3);}
 let TGW_STATUS=null;
-async function tgwRefreshStatus(){const R=await tgwRead();TGW_STATUS=R.ok?{ts:Date.now(),state:R.state}:{ts:Date.now(),err:R.reason};try{renderToday(true);}catch(e){}}
+async function tgwRefreshStatus(btn){if(btn){btn.disabled=true;btn.textContent='↻ checking…';}const R=await tgwRead();TGW_STATUS=R.ok?{ts:Date.now(),state:R.state}:{ts:Date.now(),err:R.reason};
+  if(btn){const st=R.ok&&R.state,d=st&&(st.day||st.d||'');try{deskToast(R.ok?(st?`🛰️ worker checked · card on file: ${d||'yes'}`:'🛰️ worker reached · no card handed over yet'):'⚠ '+String(R.reason||'could not reach the worker').slice(0,90),3500);}catch(e){}}
+  try{renderToday(true);}catch(e){}}
 function tgwSet(on){set('d4.tgworker',!!on);if(on){tgwKey();tgwRefreshStatus();}try{renderToday(true);}catch(e){}}
 function tgwHtml(){const on=tgwOn();const key=on?tgwKey():'';const repo=TGW_WORKER_REPO;
   if(on&&!TGW_STATUS&&!window.__tgwAsk){window.__tgwAsk=1;setTimeout(tgwRefreshStatus,50);}
@@ -23411,7 +23413,7 @@ function tgwHtml(){const on=tgwOn();const key=on?tgwKey():'';const repo=TGW_WORK
       <div class="mono" style="font-size:10px;margin:4px 0">2 · Name <b>AUTOPILOT_KEY</b> — value: <button style="font-size:9.5px" onclick="copyText('${key}','Autopilot key copied.')">copy key</button> <span style="color:var(--mute)">(keep it private — it unlocks the VIP card)</span></div>
       <div class="sub" style="font-size:10px">Then post the VIP card as usual. "Run now" kicks the worker immediately instead of waiting for GitHub's schedule (it only works if this phone's GitHub token can reach ${txtEsc(repo)}).</div></details>
     <div class="sub mono" style="font-size:9.5px;margin-top:4px">${stat||'Checking the worker…'}</div>
-    <div class="bar" style="margin-top:6px"><button class="primary" onclick="tgwResend(this)">🛰️ Re-send today's card</button><button onclick="tgwRunNowTap(this)">▶ Run now</button><button onclick="tgwRefreshStatus()">↻ Status</button>
+    <div class="bar" style="margin-top:6px"><button class="primary" onclick="tgwResend(this)">🛰️ Re-send today's card</button><button onclick="tgwRunNowTap(this)">▶ Run now</button><button onclick="tgwRefreshStatus(this)">↻ Status</button>
       ${(()=>{const P=tgPosts();const d=Object.keys(P).sort().pop();const p=d&&P[d];return p&&p.ids&&p.ids.length&&!p.worker?`<button onclick="(async()=>{const P=tgPosts();const p=P['${d}'];const r=await tgwHandOff(p);if(r.ok){p.worker=true;set(TGP_KEY,P);deskToast('🛰️ Handed to the 24/7 worker');}else alert(r.reason);tgwRefreshStatus();})()">Hand today's post to the worker</button>`:'';})()}</div>`:''}</div>`;}
 function tgAutoHere(p){try{return p.dev===syncDevice()||localStorage.getItem('td.tgauto')==='1';}catch(e){return false;}}
 function tgAutoNeeds(){const out=[];Object.values(tgPosts()).forEach(p=>{if(!p||p.recap||!p.card)return;tgAllLegs(p.card).forEach(({x})=>{if(x.sp)out.push([x.sp,p.d]);});});return out;}
