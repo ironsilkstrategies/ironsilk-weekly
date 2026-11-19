@@ -13,7 +13,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.3.0';
+const VERSION = 'worker v3.3.1';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -782,6 +782,76 @@ export async function runRecruitShout(state, deps) { const now = deps?.now || Da
   let room = null; for (const d of Object.keys(state.posts || {}).sort().reverse()) { const b = state.posts[d] && state.posts[d].bc; if (b && (b.pubLounge || b.vipLounge)) { room = b.pubLounge || b.vipLounge; break; } }
   if (!room) { R.shout = wk; return 1; } const r = await (deps?.tg || tg)('sendMessage', { chat_id: String(room), text, parse_mode: 'HTML', disable_web_page_preview: 'true' });
   if (r) { R.shout = wk; log('recruiting · the weekly shout-out went out'); return 1; } return 0; }
+/* 📄 Tonight's Game pages: the site's /desk/games/ (growth.mjs draws them). One commit per write through the Git Data API, the
+   files inline in one tree (three write calls however many pages), at most 60 pages a commit. New pages go out within 30
+   minutes, finals every 2 hours, days older than 14 are removed. The slate drops a game once it starts, so each day's rows sit
+   beside its pages in games.json (public slate data) for the final rewrite; the worker's own memory is ~2 KB (what it wrote).
+   The token: SITE_TOKEN (a repo secret) when set, else the card's. */
+let SLATE = null; const GP_RUN = { d: '', chk: 0, res: {}, fin: {} };
+async function slateNow(deps) { if (deps && 'slate' in deps) return deps.slate; if (SLATE && Date.now() - SLATE.at < 20 * 60e3) return SLATE.s;
+  try { const r = await fetch(FEEDS_RAW() + 'slate.json', { headers: { 'User-Agent': 'thedesk-autopilot' } }); if (r.ok) { SLATE = { at: Date.now(), s: await r.json() }; return SLATE.s; } } catch (e) { }
+  return SLATE ? SLATE.s : null; }
+async function finalOf(sp, game, d) { const [ga, gh] = String(game || '').split('@'); if (!ga || !gh) return null; const F = await findEvent(sp, d, [ga, gh]); if (!F || !evFinal(F.ev)) return null;
+  const { as, hs } = F.T; if (!isFinite(as) || !isFinite(hs)) return null; const awayIsA = F.T.a === ab(sp, ga); return `${ga} ${awayIsA ? as : hs}–${awayIsA ? hs : as} ${gh}`; }
+export async function siteCommit(repo, tok, files, del, message, deps) { const F = deps?.fetch || fetch, api = p => `https://api.github.com/repos/${repo}/${p}`;
+  const H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'User-Agent': 'thedesk-autopilot', 'Content-Type': 'application/json' };
+  const J = async (u, o) => { const r = await F(u, { headers: H, ...(o || {}) }); let j = null; try { j = await r.json(); } catch (e) { } return { ok: r.ok, status: r.status, j }; };
+  const put = Object.entries(files).map(([path, content]) => ({ path, mode: '100644', type: 'blob', content })); let gone = [...(del || [])];
+  for (let tries = 0; tries < 3; tries++) {
+    const ref = await J(api('git/ref/heads/main')); if (!ref.ok) return { ok: false, status: ref.status }; const head = ref.j.object.sha;
+    const cm = await J(api('git/commits/' + head)); if (!cm.ok) return { ok: false, status: cm.status };
+    const tree = () => J(api('git/trees'), { method: 'POST', body: JSON.stringify({ base_tree: cm.j.tree.sha, tree: [...put, ...gone.map(path => ({ path, mode: '100644', type: 'blob', sha: null }))] }) });
+    let t = await tree(); if (!t.ok && t.status === 422 && gone.length) { gone = []; t = await tree(); }   /* a file to remove was already gone: write the rest */
+    if (!t.ok) return { ok: false, status: t.status };
+    const c = await J(api('git/commits'), { method: 'POST', body: JSON.stringify({ message, tree: t.j.sha, parents: [head] }) }); if (!c.ok) return { ok: false, status: c.status };
+    const u = await J(api('git/refs/heads/main'), { method: 'PATCH', body: JSON.stringify({ sha: c.j.sha, force: false }) }); if (u.ok) return { ok: true, sha: c.j.sha, removed: gone.length };
+    if (u.status !== 422 && u.status !== 409) return { ok: false, status: u.status }; }   /* the phone published picks.json in between: build on the new head */
+  return { ok: false, reason: 'busy' }; }
+const SL_KEEP = g => ({ k: g.k, sp: g.sp, t: g.t, a: g.a, h: g.h, venue: g.venue || '', ln: g.ln ? { fav: g.ln.fav, line: g.ln.line, tot: g.ln.tot, mlA: g.ln.mlA, mlH: g.ln.mlH } : null, read: g.read || null, mkt: g.mkt || null, note: g.note || '' });
+const t36 = t => Math.round(t / 6e4).toString(36), un36 = s => parseInt(s, 36) * 6e4, fnv = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); };
+async function gamesOnSite(tok, deps) { const F = deps?.fetch || fetch, H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'User-Agent': 'thedesk-autopilot' };
+  const d = await F(`https://api.github.com/repos/${SITE}/contents/desk?ref=main`, { headers: H }); if (!d.ok) return { status: d.status };
+  const L = await d.json().catch(() => []), g = (Array.isArray(L) ? L : []).find(x => x && x.name === 'games' && x.type === 'dir'); if (!g) return { paths: [] };
+  const t = await F(`https://api.github.com/repos/${SITE}/git/trees/${g.sha}?recursive=1`, { headers: H }); if (!t.ok) return { status: t.status };
+  const T = await t.json().catch(() => ({})); return { paths: (T.tree || []).filter(x => x && x.type === 'blob').map(x => `${Gr.GP_DIR}/${x.path}`) }; }
+async function siteText(tok, path, deps) { try { const r = await (deps?.fetch || fetch)(`https://api.github.com/repos/${SITE}/contents/${path}?ref=main`, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github.raw', 'User-Agent': 'thedesk-autopilot' } }); return r.ok ? await r.text() : null; } catch (e) { return null; } }
+export async function runGamePages(state, S, today, deps) { if (String(deps?.gamePages ?? env.GAME_PAGES ?? '').trim().toLowerCase() === 'off') return 0;
+  const now = deps?.now || Date.now(), G = S.gp = S.gp || {}, run = deps?.gpRun || GP_RUN; if (run.d !== today) { run.d = today; run.chk = 0; run.res = {}; run.fin = {}; }
+  const tok = deps && 'siteTok' in deps ? deps.siteTok : ((env.SITE_TOKEN || '').trim() || SITE_TOK); if (!tok) return 0;
+  if (G.err && G.errTok === fnv(tok) && now - G.err < 60 * 60e3) return 0;   /* a refused token waits an hour; a new one is tried at once */
+  const W = G.w = G.w || {}; for (const d of Object.keys(W)) if (d < today) delete W[d];
+  const F = await pubFeedNow(deps), slate0 = await slateNow(deps); if (!slate0 || !Array.isArray(slate0.days)) return 0;
+  const B = F && F.beta === true && F.board ? F.board : null, days = [today, Gr.shift(today, 1), Gr.shift(today, 2)];
+  const live = {}, seen = {}; for (const D of slate0.days) if (days.includes(D.d)) for (const g of D.games || []) if (g && g.k && Gr.named(g) && Number.isFinite(g.t)) { (live[D.d] = live[D.d] || {})[g.k] = SL_KEEP(g); (seen[D.d] = seen[D.d] || {})[g.k] = g.t; }
+  const fresh = []; for (const d in seen) for (const k in seen[d]) if (!(W[d] && W[d][k])) fresh.push({ d, k, t: seen[d][k] });
+  /* finals: today's games past start + 2.5 h, graded with the cards' own grader (ESPN), at most once a run */
+  const mine = Object.entries(W[today] || {}).map(([k, v]) => ({ k, ph: v[0], t: un36(v.slice(1)) }));
+  if (!run.chk && (mine.some(x => x.ph === 'p' && now > x.t + 2.5 * 36e5) || fresh.some(x => x.d === today))) { run.chk = now;
+    const GP = deps?.gradePick || gradePick, FO = deps?.finalOf || finalOf, all = new Map(); for (const x of mine) all.set(x.k, x.t); for (const x of fresh) if (x.d === today) all.set(x.k, x.t); let looked = 0;
+    for (const [k, t] of all) { if (run.fin[k] || now < t + 2.5 * 36e5 || looked >= 60) continue; looked++; const [sp, game] = k.split('|'), b = B && (B.games || []).find(x => x.sp + '|' + x.game === k);
+      const picks = [...new Set([...((b && b.picks) || []).map(x => x && x.pick), ...((F && F.today && F.today.picks) || []).filter(x => x && !x.hidden && x.sp + '|' + x.game === k).map(x => x.pick)].filter(Boolean))];
+      let fin0 = null; try { for (const pk of picks) { const x = { sp, game, pick: pk }; const r = await GP(x, today); if (r) { run.res[k + '|' + pk] = r; fin0 = fin0 || x.__fin || null; } } if (!fin0) fin0 = await FO(sp, game, today); } catch (e) { }
+      if (fin0) run.fin[k] = fin0; } }
+  const finals = mine.filter(x => x.ph === 'p' && run.fin[x.k]);
+  const go = (fresh.length && (!G.at || now - G.at >= 30 * 60e3)) || (finals.length && (!G.at || now - G.at >= 2 * 36e5)); if (!go) return 0;
+  const L = await gamesOnSite(tok, deps); if (!L.paths) { if ([401, 403, 404].includes(L.status)) { G.err = now; G.errTok = fnv(tok); } log('game pages: the site said', L.status); return 0; }
+  const touched = [...new Set([...fresh.map(x => x.d), ...(finals.length ? [today] : [])])].sort(), have = new Set(L.paths), rows = {};
+  for (const d of touched) { const m = {}, f = `${Gr.GP_DIR}/${d}/games.json`; if (have.has(f)) { try { for (const g of (JSON.parse(await siteText(tok, f, deps) || '{}').games || [])) if (g && g.k) m[g.k] = g; } catch (e) { } }
+    Object.assign(m, live[d] || {}); rows[d] = Object.values(m).filter(Gr.named).sort((x, y) => x.t - y.t || x.k.localeCompare(y.k)); }
+  const FD = await feedsNow(deps).catch(() => null), app = appUrl(deps);
+  const P = Gr.gamePages(F, { days: touched.map(d => ({ d, games: rows[d] })) }, now, today, { app, coach: FD && FD.coach, res: run.res, fin: run.fin });
+  const due = P.pages.filter(pg => { const v = W[pg.day] && W[pg.day][pg.k]; return touched.includes(pg.day) && (!v || (pg.phase === 'final' && v[0] !== 'f')); }).sort((a, b) => a.day.localeCompare(b.day) || a.t - b.t).slice(0, 60);
+  if (!due.length) { G.at = now; return 0; }
+  const files = {}; for (const pg of due) files[pg.path] = pg.html; for (const dp of P.dayPages) if (touched.includes(dp.day)) files[dp.path] = dp.html;   /* a day's page only from its full list */
+  for (const d of touched) if (rows[d].length) files[`${Gr.GP_DIR}/${d}/games.json`] = JSON.stringify({ v: 1, d, note: 'TheDesk game pages: the public slate rows each page was drawn from', games: rows[d] }) + '\n';
+  const old = Gr.shift(today, -14), dayOf = p => (p.match(/\/(\d{4}-\d\d-\d\d)\//) || [])[1] || '', stale = L.paths.filter(p => dayOf(p) && dayOf(p) < old).slice(0, 400);
+  Object.assign(files, Gr.gameIndex([...new Set([...L.paths.filter(p => !stale.includes(p)), ...Object.keys(files)])], now, { app, today }));
+  if (!G.robots) { const txt = await siteText(tok, 'robots.txt', deps); if (txt != null) { if (txt.includes(`/${Gr.GP_DIR}/sitemap.xml`)) G.robots = true; else files['robots.txt'] = txt.replace(/\s*$/, '\n') + `Sitemap: ${Gr.GP_SITE}/${Gr.GP_DIR}/sitemap.xml\n`; } }
+  const nf = due.filter(pg => pg.phase === 'final').length, nn = due.length - nf;
+  const r = await (deps?.siteCommit || siteCommit)(SITE, tok, files, stale, `Game pages · ${today} · ${[nn ? nn + ' new' : '', nf ? nf + ' final' : '', stale.length ? stale.length + ' old removed' : ''].filter(Boolean).join(' · ')}`, deps);
+  if (!r.ok) { if (r.status === 401 || r.status === 403) { G.err = now; G.errTok = fnv(tok); } log('game pages: not written ·', r.status || r.reason); return 0; }
+  for (const pg of due) (W[pg.day] = W[pg.day] || {})[pg.k] = (pg.phase === 'final' ? 'f' : 'p') + t36(pg.t);
+  if (files['robots.txt']) G.robots = true; G.at = now; delete G.err; delete G.errTok; log('game pages ·', [nn ? nn + ' new' : '', nf ? nf + ' final' : '', stale.length ? stale.length + ' removed' : ''].filter(Boolean).join(' · ')); return 1; }
 /* the public page: the full card the app handed over, with whatever hasn't unlocked yet hidden, and every grade the worker knows */
 export function publicView(feed, st, now) { const F = JSON.parse(JSON.stringify(feed || {})); st = st || {}; const T0 = F.today; if (!T0) { F.generated = now; return F; }
   const key = x => [x.sp, x.game || x.team || '', x.pick || ''].join('|');
@@ -1014,6 +1084,7 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       if (SOCMEM) try { const a = await runMegaphone(state, SOCMEM.S.mega, today); if (a) { acted += a; await socialSave(); } } catch (e) { log('megaphone', e.message || e); }
       /* v3.3 · the growth desk: the debate (and its settle), Receipts Sunday, the recruiters' shout-out */
       if (SOCMEM) try { const a = (await runDebate(state, SOCMEM.S, today)) + (await runWeekly(state, SOCMEM.S, today)); if (a) { acted += a; await socialSave(); } } catch (e) { log('growth', e.message || e); }
+      if (SOCMEM) try { if (await runGamePages(state, SOCMEM.S, today)) await socialSave(); } catch (e) { log('game pages', e.message || e); }
       try { acted += await runRecruitShout(state); } catch (e) { log('recruiting', e.message || e); }
       /* v3.2 · the safeguards: what the site said about its token, the watchdog, once a run the vault copy and the history squash */
       if (siteNote(state, SITE_ERR, SITE_OK)) dirty = true; SITE_ERR = null;

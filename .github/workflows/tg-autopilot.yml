@@ -39,7 +39,7 @@ jobs:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}  # a page access token (pages_manage_posts); masked in the logs, never printed
           LOUNGE_URL: ${{ vars.LOUNGE_URL }}           # the lounge's link, used only in the easter eggs (default https://t.me/TheDeskLounge)
           IG_USER_ID: ${{ secrets.IG_USER_ID }}        # v2.98 · the Instagram professional account linked to the page — off until set (posts with FB_PAGE_TOKEN)
-          IG_KINDS: ${{ vars.IG_KINDS }}               # which posts Instagram gets: "unlock,recap,cash,invite,spotlight" when unset, "all" for every result too
+          IG_KINDS: ${{ vars.IG_KINDS }}               # which posts Instagram gets: "unlock,recap,cash,invite,spotlight,drop,egg,welcome,weekly,debate" when unset, "all" for every result too
           SPOTLIGHT: ${{ vars.SPOTLIGHT }}             # v2.98 · Player of the Week + the Terrible 3: teaser when unset (legs unlock at T-30), "full", or "off"
           MEGAPHONE: ${{ vars.MEGAPHONE }}             # v2.99 · a post every 30 min (game questions + polls, streaks, line movers, receipts, the goal) — "off" stops it
           MEGA_HOURS: ${{ vars.MEGA_HOURS }}           # posting hours, Central: "9-23" when unset
@@ -51,6 +51,10 @@ jobs:
           X_API_SECRET: ${{ secrets.X_API_SECRET }}
           X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}  # the account's token, made with Read and Write
           X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
-          X_KINDS: ${{ vars.X_KINDS }}                 # which posts X gets: "recap,egg" when unset (keeps the bill small), "all" for everything
+          X_KINDS: ${{ vars.X_KINDS }}                 # which posts X gets: "recap,egg,weekly" when unset (keeps the bill small), "all" for everything
           APP_URL: ${{ vars.APP_URL }}                 # v3.1.3 · the public app every post points to (default https://ironsilkweekly.com/desk/)
           LOUNGE_CAP: ${{ vars.LOUNGE_CAP }}           # v3.1.3 · seats before the public lounge locks and becomes the VIP lounge (100 when unset)
+          DEBATE: ${{ vars.DEBATE }}                   # v3.3 · the daily cast debate with a poll (open beta only) — "off" stops it
+          WEEKLY: ${{ vars.WEEKLY }}                   # v3.3 · Receipts Sunday, the week's graded record — "off" stops it
+          GAME_PAGES: ${{ vars.GAME_PAGES }}           # v3.3 · Tonight's Game pages on ironsilkweekly.com/desk/games/ — "off" stops them
+          SITE_TOKEN: ${{ secrets.SITE_TOKEN }}        # v3.3 · optional: a fine-grained token with Contents write on ironsilk-weekly-site only (else the card's own)

@@ -160,3 +160,69 @@ export function videoSpec(F, now, today, ctx = {}) {
     { k: 'cta', kicker: 'No deleted slips', big: 'Every call graded in public.', sub: host(appOf(ctx)) }];
   return { kind: 'receipts', key: 'rec|' + y, frames, title: `Yesterday: ${w}-${l}`,
     caption: `Yesterday: ${w}-${l}. Every call posted before its game and graded at the final, wins and losses. 🧾\nLink in bio.\n#sports #predictions` }; }
+
+/* ══ 📄 TONIGHT'S GAME PAGES ════════════════════════════════════════════════════════════════════════════════════
+   Static pages for search ("bills vs dolphins prediction"), inside TheDesk's own section of the site (/desk/games/), apart
+   from the newsroom's pages: one per slate game for today and the next two days, the day's page, an index and a sitemap. Each game
+   page is written at most twice: before the game (the read, the line at that moment, the cast's calls while the board is
+   public) and once at the final (the results). Only public data: the public slate, the public picks.json, ESPN finals. */
+export const GP_DIR = 'desk/games', GP_SITE = 'https://ironsilkweekly.com';
+export const named = s => !!(s && s.a && s.h && s.a.name && s.h.name && s.a.name !== s.a.ab && s.h.name !== s.h.ab);   /* "NCSU vs MUR" is no page: wait for real names */
+const slugify = s => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+const iso = t => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
+const longDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const MK = { ml: 'Moneyline', spread: 'Spread', total: 'Total' }, TIER = { unanimous: 'Unanimous', supreme: 'Supreme', strong: 'Strong', value: 'Value' };
+const PG_CSS = 'body{margin:0;background:#0A0D12;color:#EEF2F7;font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}a{color:#F2C94C}main{max-width:760px;margin:0 auto;padding:24px 16px 48px}'
+  + '.brand{font-weight:900;letter-spacing:.12em;font-size:13px;color:#F2C94C;text-decoration:none}h1{font-size:30px;line-height:1.15;margin:14px 0 6px}h2{font-size:18px;margin:28px 0 10px;color:#C9D2DE}'
+  + '.sub{color:#8D9AAE;margin:0 0 18px}table{width:100%;border-collapse:collapse;font-size:15px}td,th{padding:8px 6px;border-bottom:1px solid #243042;text-align:left}th{color:#8D9AAE;font-weight:600}'
+  + '.card{background:#121821;border:1px solid #243042;border-radius:14px;padding:14px 16px;margin:10px 0}.w{color:#3DDC84;font-weight:700}.l{color:#FF6B5B;font-weight:700}.p{color:#8D9AAE;font-weight:700}'
+  + '.cta{display:inline-block;margin-top:14px;background:#F2C94C;color:#0A0D12;font-weight:800;padding:12px 18px;border-radius:12px;text-decoration:none}ul{padding-left:18px}li{margin:6px 0}.fine{color:#8D9AAE;font-size:13px;margin-top:36px}';
+const pageShell = (o) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(o.title)}</title><meta name="description" content="${attr(o.desc)}">`
+  + `<link rel="canonical" href="${attr(o.url)}"><meta property="og:title" content="${attr(o.title)}"><meta property="og:description" content="${attr(o.desc)}"><meta property="og:url" content="${attr(o.url)}"><meta property="og:type" content="article">`
+  + `<meta name="theme-color" content="#0A0D12"><style>${PG_CSS}</style>${o.ld ? `<script type="application/ld+json">${JSON.stringify(o.ld).replace(/</g, '\\u003c')}</script>` : ''}</head><body><main><a class="brand" href="${attr(o.app)}">THEDESK</a>${o.body}`
+  + `<p class="fine">For entertainment. 21 and over. TheDesk takes no bets and sells no odds; every pick is locked before its game and graded at the final, wins and losses. Gambling problem? Call or text 1-800-MY-RESET.</p></main></body></html>\n`;
+const nk = x => x.nick && x.nick !== x.ab ? x.nick : (x.name || x.ab);   /* college "nicknames" are often the abbreviation */
+const resCls = r => r === 'W' ? 'w' : r === 'L' ? 'l' : r === 'P' ? 'p' : '', resTxt = r => r === 'W' ? '✓ Won' : r === 'L' ? '✗ Lost' : r === 'P' ? '↺ Push' : '';
+export function gamePages(F, slate, now, today, ctx = {}) { const app = appOf(ctx), appTag = app + '?src=games', days = [today, shift(today, 1), shift(today, 2)];
+  const B = F && F.beta === true && F.board ? F.board : null, cast = (B && B.cast) || {}, board = new Map(); for (const g of (B && B.games) || []) board.set(g.sp + '|' + g.game, g);
+  const open = new Map(); for (const x of ((F && F.today && F.today.picks) || [])) if (x && !x.hidden && x.sp && x.game) { const k = x.sp + '|' + x.game; if (!open.has(k)) open.set(k, []); open.get(k).push(x); }
+  const res = ctx.res || {}, fins = ctx.fin || {}; const G = [];
+  for (const D of (slate && slate.days) || []) { if (!days.includes(D.d)) continue; for (const s of D.games || []) if (s && s.k && named(s) && fin(s.t)) G.push({ day: D.d, k: s.k, sp: s.sp, t: s.t, a: s.a, h: s.h, s }); }
+  /* only the slate's games (full names, rankings, the read, the line): a board-only game would be a thin page of abbreviations */
+  G.sort((x, y) => x.t - y.t || x.k.localeCompare(y.k)); const used = new Set(), pages = [], byDay = {};
+  for (const g of G) { const an = g.a.name || g.a.ab, hn = g.h.name || g.h.ab, base = `${slugify(an)}-vs-${slugify(hn)}-prediction`; let slug = base, i = 2; while (used.has(g.day + '/' + slug)) slug = base + '-' + i++; used.add(g.day + '/' + slug);
+    const path = `${GP_DIR}/${g.day}/${slug}.html`, url = `${GP_SITE}/${path}`, b = board.get(g.k), o = open.get(g.k) || [], s = g.s || {}, sport = SP_LAB[g.sp] || String(g.sp).toUpperCase();
+    const picks = [...(b ? (b.picks || []).filter(p => p && p.pick && !p.off).map(p => ({ pick: p.pick, price: p.price, tier: TIER[String(p.tier || '').toLowerCase()] || '', n: (p.by || []).length, by: (p.by || []).map(v => (cast[v] && cast[v].name) || v), hit: p.hit })) : []),
+      ...o.filter(x => !(b && (b.picks || []).some(p => p.pick === x.pick))).map(x => ({ pick: x.pick, price: x.price, tier: String(x.tier || '').replace(/^./, c => c.toUpperCase()).toLowerCase().replace(/^./, c => c.toUpperCase()), n: 0, by: [], hit: x.hit, push: x.push }))];
+    for (const p of picks) { const r = res[g.k + '|' + p.pick]; p.r = r || (p.push ? 'P' : p.hit === true ? 'W' : p.hit === false ? 'L' : null); }
+    const done = fins[g.k] || null, phase = done || (picks.length && picks.every(p => p.r) && now > g.t + 6 * 36e5) ? 'final' : 'pre';   /* final = the score is in (or every pick graded, long after) */
+    const teamRow = (x, side) => `<tr><td><b>${esc(x.name || x.ab)}</b></td><td>${fin(x.rk) ? '#' + x.rk + (x.of ? ' of ' + x.of : '') : '—'}</td><td>${fin(x.w) ? x.w + '-' + x.l : '—'}</td><td>${esc(x.l5 || '—')}</td><td>${fin(x.pf) ? x.pf + ' / ' + x.pa : '—'}</td></tr>`;
+    const ln = s.ln || null, lineTxt = ln ? [fin(ln.line) && ln.fav ? `${ln.fav} -${ln.line}` : '', fin(ln.tot) ? `total ${ln.tot}` : '', fin(ln.mlA) && fin(ln.mlH) ? `moneyline ${g.a.ab} ${am(ln.mlA)} / ${g.h.ab} ${am(ln.mlH)}` : ''].filter(Boolean).join(' · ') : '';
+    const calls = b ? Object.entries(b.calls || {}).filter(([m]) => MK[m]).map(([m, arr]) => { const by = {}; for (const c of arr || []) if (c && c.s && c.pick) (by[c.pick] = by[c.pick] || []).push((cast[c.v] && cast[c.v].name) || c.v); const parts = Object.entries(by).sort((a, z) => z[1].length - a[1].length);
+      return parts.length ? `<li><b>${MK[m]}:</b> ${parts.map(([pk, who]) => `${who.length} with ${esc(pk)} (${esc(who.join(', '))})`).join(' · ')}</li>` : ''; }).join('') : '';
+    const title = `${an} vs ${hn} prediction (${md(g.day)}) · TheDesk`, desc = `${an} vs ${hn} prediction for ${longDay(g.day)}: TheDesk's power rankings, the read${calls ? ', and where its cast of models lands' : ''}. Every call locked before the game and graded in public.`;
+    const body = `<h1>${esc(an)} vs ${esc(hn)}: TheDesk's read</h1><p class="sub">${esc(sport)} · ${esc(longDay(g.day))} · ${esc(tCT(g.t))}${s.venue ? ' · ' + esc(s.venue) : ''}${done ? ' · <b>Final: ' + esc(done) + '</b>' : ''}</p>`
+      + `<h2>TheDesk Power Rankings</h2><table><tr><th>Team</th><th>Rank</th><th>Record</th><th>Last 5</th><th>Pts for / against</th></tr>${teamRow(g.a)}${teamRow(g.h)}</table>`
+      + (s.read && fin(s.read.a) && fin(s.read.h) ? `<h2>The read</h2><p>Models and markets land near <b>${esc(nk(g.a))} ${s.read.a}, ${esc(nk(g.h))} ${s.read.h}</b>.${s.mkt && fin(s.mkt.pct) ? ` Prediction markets give ${esc(s.mkt.ab)} a ${s.mkt.pct}% chance to win.` : ''}</p>` : '')
+      + (lineTxt ? `<p class="sub">The line when this page was written: ${esc(lineTxt)}.</p>` : '') + (s.note ? `<p>${esc(s.note)}</p>` : '')
+      + (picks.length ? `<h2>TheDesk's picks</h2>${picks.map(p => `<div class="card"><b>${esc(p.pick)}</b>${am(p.price) ? ' ' + esc(am(p.price)) : ''}${p.tier ? ' · ' + esc(p.tier) : ''}${p.n ? ` · ${p.n} of the cast` : ''}${p.r ? ` · <span class="${resCls(p.r)}">${resTxt(p.r)}</span>` : ''}${p.by.length ? `<br><small>${esc(p.by.join(', '))}</small>` : ''}</div>`).join('')}` : '')
+      + (calls ? `<h2>Where the cast lands</h2><ul>${calls}</ul>` : '')
+      + `<a class="cta" href="${attr(appTag + '#slate')}">See every pick and every grade on TheDesk</a><p><a href="./">All of ${esc(md(g.day))}'s games</a></p>`;
+    const ld = { '@context': 'https://schema.org', '@type': 'SportsEvent', name: `${an} vs ${hn}`, startDate: iso(g.t), sport, url, awayTeam: { '@type': 'SportsTeam', name: an }, homeTeam: { '@type': 'SportsTeam', name: hn }, ...(s.venue ? { location: { '@type': 'Place', name: s.venue } } : {}) };
+    const top = picks[0] ? `${picks[0].pick}${picks[0].n ? ' (' + picks[0].n + ' of the cast)' : ''}` : lineTxt.split(' · ')[0] || '';
+    pages.push({ path, url, day: g.day, phase, slug, k: g.k, t: g.t, html: pageShell({ title, desc, url, app, ld, body }) });
+    (byDay[g.day] = byDay[g.day] || []).push({ path, slug, sport, t: g.t, m: `${nk(g.a)} at ${nk(g.h)}`, top, r: picks.length && picks.every(p => p.r) ? picks.map(p => p.r).join('') : '' }); }
+  const dayPages = Object.entries(byDay).map(([d, L]) => { const path = `${GP_DIR}/${d}/index.html`, url = `${GP_SITE}/${GP_DIR}/${d}/`; const bySp = {}; for (const x of L) (bySp[x.sport] = bySp[x.sport] || []).push(x);
+    const body = `<h1>Predictions for ${esc(longDay(d))}</h1><p class="sub">Every game TheDesk works that day: power rankings, the read and the picks, each one locked before its game and graded at the final.</p>`
+      + Object.entries(bySp).map(([sp, xs]) => `<h2>${esc(sp)}</h2><ul>${xs.map(x => `<li>${esc(tCT(x.t))} · <a href="${attr(x.slug)}.html">${esc(x.m)}</a>${x.top ? ' · ' + esc(x.top) : ''}${x.r ? ' · ' + x.r.split('').map(r => `<span class="${resCls(r)}">${resTxt(r)}</span>`).join(' ') : ''}</li>`).join('')}</ul>`).join('')
+      + `<a class="cta" href="${attr(appTag + '#today')}">Open TheDesk</a><p><a href="../">Other days</a></p>`;
+    return { path, url, day: d, html: pageShell({ title: `Sports predictions for ${md(d)} · TheDesk`, desc: `TheDesk's predictions for ${longDay(d)}: every game, its power rankings and the picks, graded in public.`, url, app, body }) }; });
+  return { pages, dayPages }; }
+/* the index and the sitemap list every page on file (the worker's memory), newest day first */
+export function gameIndex(paths, now, ctx = {}) { const app = appOf(ctx), dayList = [...new Set(paths.map(p => (p.match(/\/(\d{4}-\d\d-\d\d)\//) || [])[1]).filter(Boolean))].sort().reverse();
+  const idx = pageShell({ title: 'Sports predictions by day · TheDesk', desc: 'TheDesk\'s game-by-game predictions, by day: power rankings, the read and the picks, each graded in public.', url: `${GP_SITE}/${GP_DIR}/`, app,
+    body: `<h1>Predictions by day</h1><ul>${dayList.map(d => `<li><a href="${attr(d)}/">${esc(longDay(d))}</a></li>`).join('') || '<li>The first day shows up here.</li>'}</ul><a class="cta" href="${attr(app + '?src=games#today')}">Open TheDesk</a>` });
+  const lm = ctx.today || new Date(now).toISOString().slice(0, 10), dOf = u => (u.match(/\/(\d{4}-\d\d-\d\d)\//) || [])[1], mod = u => { const d = dOf(u); return d && d < lm ? d : lm; };   /* a page changes last on its own day */
+  const urls = [`${GP_SITE}/${GP_DIR}/`, ...dayList.map(d => `${GP_SITE}/${GP_DIR}/${d}/`), ...paths.filter(p => /\/\d{4}-\d\d-\d\d\/(?!index\.html$)[^/]+\.html$/.test(p)).sort().map(p => `${GP_SITE}/${p}`)];
+  const map = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `  <url><loc>${esc(u)}</loc><lastmod>${mod(u)}</lastmod></url>`).join('\n')}\n</urlset>\n`;
+  return { [`${GP_DIR}/index.html`]: idx, [`${GP_DIR}/sitemap.xml`]: map }; }
