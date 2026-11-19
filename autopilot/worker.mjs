@@ -7,12 +7,13 @@
    Secrets: TG_BOT_TOKEN, AUTOPILOT_KEY. GITHUB_TOKEN + GITHUB_REPOSITORY come from Actions. */
 import { webcrypto as crypto, createHash } from 'node:crypto';
 import * as Soc from './social.mjs';
-import * as Mega from './megaphone.mjs';   /* v2.99 · a post every 30 minutes: game questions + polls, streaks, line movers, the reactions goal */   /* v2.98 · the picture cards and the other outlets (Facebook, Instagram, Threads) */
+import * as Mega from './megaphone.mjs';
+import * as Gr from './growth.mjs';   /* v3.3 · the growth playbook: the debate, Receipts Sunday, recruiting links, game pages */   /* v2.99 · a post every 30 minutes: game questions + polls, streaks, line movers, the reactions goal */   /* v2.98 · the picture cards and the other outlets (Facebook, Instagram, Threads) */
 const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.2.0';
+const VERSION = 'worker v3.3.0';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -75,7 +76,7 @@ export function mergeWatch(x, y) { if (!x || !y) return x || y; const sent = { .
   const out = { ...y, ...x, sent, sq }; const se = newerTs(x.siteErr, y.siteErr), so = Math.max(+x.siteOk || 0, +y.siteOk || 0);
   if (se && so > (se.ts || 0)) delete out.siteErr; else if (se) out.siteErr = se; else delete out.siteErr; if (so) out.siteOk = so;
   const v = newerTs(x.vault && { ...x.vault, ts: x.vault.ts }, y.vault && { ...y.vault, ts: y.vault.ts }); if (v) out.vault = v; return out; }
-export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}), ...(a?.mod || b?.mod ? { mod: mergeMod(a?.mod, b?.mod) } : {}), ...(a?.lounge || b?.lounge ? { lounge: mergeLounge(a?.lounge, b?.lounge) } : {}), ...(a?.phone || b?.phone ? { phone: newerTs(a?.phone, b?.phone) } : {}), ...(a?.watch || b?.watch ? { watch: mergeWatch(a?.watch, b?.watch) } : {}) };
+export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}), ...(a?.mod || b?.mod ? { mod: mergeMod(a?.mod, b?.mod) } : {}), ...(a?.lounge || b?.lounge ? { lounge: mergeLounge(a?.lounge, b?.lounge) } : {}), ...(a?.phone || b?.phone ? { phone: newerTs(a?.phone, b?.phone) } : {}), ...(a?.watch || b?.watch ? { watch: mergeWatch(a?.watch, b?.watch) } : {}), ...(a?.refs || b?.refs ? { refs: Gr.mergeRefs(a?.refs, b?.refs) } : {}) };
   const ds = new Set([...Object.keys(a?.posts || {}), ...Object.keys(b?.posts || {})]);
   ds.forEach(d => { const x = a?.posts?.[d], y = b?.posts?.[d]; if (!x || !y) { out.posts[d] = x || y; return; }
     const base = (x.postedTs || 0) >= (y.postedTs || 0) ? x : y;
@@ -218,7 +219,7 @@ export async function chatAccess(state, T, p, chat, from) { if (!chat) return 'u
   if (c && Date.now() - c.ts < (c.v === 'unknown' ? 10 * 60e3 : 12 * 36e5)) return c.v;
   const owners = await ownersOf(state, T, p); let v = 'unknown';
   if (chat.type === 'private') { if (from && owners.includes(from.id)) v = 'ok';
-    else if (from) { let checked = false; for (const id of new Set([p?.bc?.pubLounge, p?.bc?.vipLounge, p?.chat].filter(Boolean).map(String))) { const r = await T('getChatMember', { chat_id: id, user_id: String(from.id) }); if (!r) continue; checked = true; const m = r.result;
+    else if (from) { let checked = false; for (const id of new Set([p?.bc?.pubLounge, p?.bc?.vipLounge, p?.chat, p?.bc?.pub].filter(Boolean).map(String))) { const r = await T('getChatMember', { chat_id: id, user_id: String(from.id) }); if (!r) continue; checked = true; const m = r.result;
         if (m && (MEMBER.has(m.status) || (m.status === 'restricted' && m.is_member))) { v = 'ok'; break; } }
       if (v !== 'ok' && checked) v = 'outsider'; } }
   else if (owners.length) { const r = await T('getChatAdministrators', { chat_id: String(chat.id) }); if (r && Array.isArray(r.result)) v = r.result.some(x => x && x.user && owners.includes(x.user.id)) ? 'ok' : 'stranger'; }
@@ -231,7 +232,7 @@ async function turnAway(state, T, C, chat, from, why) { const M = modOf(state); 
   return 0; }
 /* the rules + the welcome */
 export const RULES_DEFAULT = ['Respect everyone. No harassment, hate, slurs or personal attacks.', 'No spam. No links to other groups or services, no selling picks or "VIP" offers.',
-  'Keep it to sports, picks and bankroll talk.', 'No begging, no scams, no DMing members to sell anything.', "Don't repost TheDesk's VIP picks outside TheDesk.", '21+ only. For entertainment… bet responsibly. Problem? Call 1-800-GAMBLER.'];
+  'Keep it to sports, picks and bankroll talk.', 'No begging, no scams, no DMing members to sell anything.', "Don't repost TheDesk's VIP picks outside TheDesk.", '21+ only. For entertainment… bet responsibly. Problem? Call or text 1-800-MY-RESET.'];
 const RULES_TAIL = "<b>Break a rule and you're out.</b> Admins warn or ban on sight… three warnings is an automatic ban.";
 const rulesList = C => (C && Array.isArray(C.rules) && C.rules.filter(Boolean).length ? C.rules.filter(Boolean) : RULES_DEFAULT).slice(0, 15).map((r, i) => `${i + 1}. ${esc(r)}`).join('\n');
 export function rulesText(C) { return `<b>📜 TheDesk lounge rules</b>\n${rulesList(C)}\n\n${RULES_TAIL}`; }
@@ -294,14 +295,14 @@ export function statusText(state, now) { const p = todayCard(state, now); const 
     p ? `Graded so far: ${g} of ${legs.length} picks` : '', H ? `Answers in seconds from ${hourName(H[0])} to ${hourName(H[1])} CT. Outside those hours it answers when it next wakes.` : 'It answers each time it runs (every few minutes on game days).'].filter(Boolean).join('\n'); }
 const RECENT = new WeakMap();
 let ME = null; async function myName(T) { if (ME) return ME; const r = await T('getMe', {}); const u = r && r.result && r.result.username; if (u) ME = String(u).toLowerCase(); return ME || ''; }
-const WORKER_MENU = [['live', "Live scores of today's picks"], ['next', 'The next game on the card'], ['rules', 'The lounge rules'], ['status', 'Is the robot on?']];
+const WORKER_MENU = [['live', "Live scores of today's picks"], ['next', 'The next game on the card'], ['rules', 'The lounge rules'], ['status', 'Is the robot on?'], ['mylink', 'Your personal invite link (DM the bot)']];
 export async function runCommands(state, deps) { const T = deps?.tg || tg; let acted = 0, seen = 0; const now = deps?.now || Date.now();
   const ds = Object.keys(state.posts || {}).filter(d => state.posts[d]?.cmd).sort(); const p = ds.length ? state.posts[ds[ds.length - 1]] : (Object.keys(state.posts || {}).sort().map(d => state.posts[d]).pop() || null);
   const C = (p && p.cmd) || { r: {}, menu: [] }; C.r = C.r || {};
   /* the / menu, once per new list: the robot's own commands ride along; admins also see /warn /ban /unban */
   const menu = [...(C.menu || [])]; if (menu.length) for (const [c, t] of WORKER_MENU) if (!menu.some(x => x.command === c)) menu.push({ command: c, description: t });
-  const sig = 'v2|' + menu.map(m => m.command).join(','); if (state.cmdSig !== sig && menu.length) { const r = await T('setMyCommands', { commands: JSON.stringify(menu.slice(0, 100)) });
-    const r2 = await T('setMyCommands', { commands: JSON.stringify([...menu.slice(0, 97), { command: 'warn', description: 'Admins: warn a member (reply). 3 = ban' }, { command: 'ban', description: 'Admins: ban a member (reply)' }, { command: 'unban', description: 'Admins: lift a ban (reply)' }, { command: 'vipinvite', description: 'Owner: a one-person VIP lounge link (DM the bot)' }, { command: 'lounge', description: 'Owner: how many lounge seats are taken' }]), scope: JSON.stringify({ type: 'all_chat_administrators' }) });
+  const sig = 'v3|' + menu.map(m => m.command).join(','); if (state.cmdSig !== sig && menu.length) { const r = await T('setMyCommands', { commands: JSON.stringify(menu.slice(0, 100)) });
+    const r2 = await T('setMyCommands', { commands: JSON.stringify([...menu.slice(0, 93), { command: 'warn', description: 'Admins: warn a member (reply). 3 = ban' }, { command: 'ban', description: 'Admins: ban a member (reply)' }, { command: 'unban', description: 'Admins: lift a ban (reply)' }, { command: 'vipinvite', description: 'Owner: a one-person VIP lounge link (DM the bot)' }, { command: 'lounge', description: 'Owner: how many lounge seats are taken' }, { command: 'sourcelinks', description: 'Owner: one invite link per platform (DM the bot)' }, { command: 'joins', description: 'Owner: joins by link, top recruiters (DM the bot)' }]), scope: JSON.stringify({ type: 'all_chat_administrators' }) });
     if (r && r2) { state.cmdSig = sig; acted++; } }
   const u = await T('getUpdates', { offset: String((state.tgOff || 0) + 1), timeout: String(Math.max(0, Math.min(50, deps?.poll || 0))), allowed_updates: JSON.stringify(['message', 'callback_query', 'my_chat_member', 'chat_member']) });
   const rows = (u && Array.isArray(u.result)) ? u.result : []; if (!rows.length) return acted;
@@ -317,6 +318,9 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
         if (LK && LK.locked && u && !u.is_bot && cm.chat && String(cm.chat.id) === String(LK.chat) && ['member', 'restricted'].includes(cm.new_chat_member.status) && ['left', 'kicked'].includes(cm.old_chat_member && cm.old_chat_member.status) && (cm.date || 0) * 1000 >= LK.locked) {
           const owners = await ownersOf(state, T, p); const viaVip = !!(cm.invite_link && /^VIP/i.test(cm.invite_link.name || '')); const byOwner = !!(cm.from && cm.from.id !== u.id && owners.includes(cm.from.id));
           if (!viaVip && !byOwner && !owners.includes(u.id)) { await T('banChatMember', { chat_id: String(LK.chat), user_id: String(u.id), until_date: String(Math.floor(now / 1000) + 60) }); await T('unbanChatMember', { chat_id: String(LK.chat), user_id: String(u.id), only_if_banned: 'true' }); gone.add(u.id); acted++; log('VIP lounge: a join without a VIP invite was shown out'); } }
+        /* v3.3 · recruiting: a join through a member's link (ref <id>) or a platform's link (src <tag>) counts once — never a show-out */
+        const nc = cm.new_chat_member || {}, joinedNow = u && !u.is_bot && (nc.status === 'member' || (nc.status === 'restricted' && nc.is_member)) && ['left', 'kicked'].includes(cm.old_chat_member && cm.old_chat_member.status);
+        if (joinedNow && !gone.has(u.id) && cm.invite_link && cm.invite_link.name) { const c = Gr.countJoin(state, cm.invite_link.name, u.id, now, chicagoDay(now)); if (c) { acted++; log('recruiting · a join through', c === 'ref' ? "a member's link" : 'the ' + String(cm.invite_link.name).slice(4) + ' link'); } }
         continue; }
       if (x.callback_query) { seen++; const cq = x.callback_query; if (cq.data === 'agree') acted += await onAgree(state, T, cq); else await T('answerCallbackQuery', { callback_query_id: cq.id }); continue; }
       const m = x.message; if (!m || !m.chat) continue;
@@ -330,6 +334,8 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
       if ((cmd === 'vipinvite' || cmd === 'lounge') && await ownerLounge(state, T, p, m, cmd, now)) { acted++; continue; }
       if (cmd === 'app' && await ownerApp(state, T, p, m, parts[1] || '')) { acted++; continue; }
       if (cmd === 'health' && await ownerHealth(state, T, p, m, now)) { acted++; continue; }
+      if (cmd === 'mylink') { acted += await myLink(state, T, p, m, now); continue; }
+      if ((cmd === 'sourcelinks' || cmd === 'joins') && await ownerRecruit(state, T, p, m, cmd, now)) { acted++; continue; }
       /* the same question in the same group within 15 s gets one answer (the first is right above) — the bot can't be used as a spam cannon */
       if (m.chat.type !== 'private' && cmd !== 'check') { const R0 = RECENT.get(state) || new Map(); RECENT.set(state, R0); const rk = m.chat.id + '|' + cmd + '|' + arg; if (Date.now() - (R0.get(rk) || 0) < 15e3) continue; R0.set(rk, Date.now()); }
       let txt = null;
@@ -704,6 +710,74 @@ export async function runMegaphone(state, M, today, deps) { if (String(deps?.meg
   if (post.kind === 'question') M.q[post.key.slice(2)] = 1; else if (post.kind === 'streak') M.st[post.key.slice(3)] = 1; else if (post.kind === 'movers') { M.mv = (M.mv || 0) + 1; M.mvAt = now; } else if (post.kind === 'record') M.rec = 1;
   else if (post.kind === 'goal') M.goal = r.fbId ? { d: today, id: r.fbId, n: gn, at: now, until: post.until } : { d: today, done: 'noid' };
   log('megaphone ·', post.kind, '·', post.key.slice(0, 60)); return acted + 1; }
+/* ══ v3.3 · THE GROWTH DESK (Nov 19, the playbook: "Let's execute it all") ═══════════════════════════════════════════
+   growth.mjs writes the words; this sends them. Everything here reads only what's already public: the live public page
+   (picks.json on the site, the same file anyone can open) and the worker's own grades. */
+let PUBF = null;   /* the live public page, read at most every 10 minutes */
+async function pubFeedNow(deps) { if (deps && 'pubFeed' in deps) return deps.pubFeed; if (PUBF && Date.now() - PUBF.at < 10 * 60e3) return PUBF.f;
+  try { const r = await fetch(`https://raw.githubusercontent.com/${SITE}/main/public/picks.json?t=${Math.floor(Date.now() / 6e5)}`, { headers: { 'User-Agent': 'thedesk-autopilot' } });
+    if (r.ok) { const f = await r.json(); PUBF = { at: Date.now(), f }; return f; } log('public page read: HTTP', r.status); } catch (e) { log('public page read:', String(e && e.message || e).slice(0, 60)); }
+  return PUBF ? PUBF.f : null; }
+const newestFeed = state => { for (const d of Object.keys(state.posts || {}).sort().reverse()) { const f = state.posts[d] && state.posts[d].feed; if (f) return f; } return null; };
+const newestChatCard = state => Object.keys(state.posts || {}).sort().map(d => state.posts[d]).filter(x => x && x.chat).pop() || null;
+/* ⚔️ The Desk Debate: once a day between 10 AM and 6 PM Central, only while the board is public (the open beta), for a game
+   90 minutes to 14 hours out. Telegram gets the card and a poll; Facebook, Instagram and Threads the card; the owner gets the
+   card and a ready-to-post X caption in a DM. After the final, both sides are graded and the result posts once. */
+export async function runDebate(state, S, today, deps) { if (String(deps?.debate ?? env.DEBATE ?? '').trim().toLowerCase() === 'off') return 0;
+  const now = deps?.now || Date.now(), T = deps?.tg || tg; const dests = pubDests(state); if (!dests.length && !Soc.anyOn(deps)) return 0; let acted = 0;
+  const D0 = S.deb || {};
+  if (D0.d && !D0.done && D0.start && now > D0.start + 150 * 60e3) {
+    const g = { sp: D0.sp, game: D0.game }, xa = { ...g, pick: D0.pa }, xb = { ...g, pick: D0.pb }; const G = deps?.gradePick || gradePick; let ra = null, rb = null;
+    try { ra = await G(xa, D0.d); rb = await G(xb, D0.d); } catch (e) { }
+    if (ra && rb) { const post = Gr.settlePost(D0, ra, rb, { fin: xa.__fin || xb.__fin || '' }); if (await sendPublic(dests, T, deps, post.text, post.card, 'debate')) { D0.done = ra + rb; acted++; log('debate settled ·', D0.k, ra + '/' + rb); } }
+    else if (now > D0.start + 30 * 36e5) { D0.done = 'x'; acted++; } }   /* never graded in 30 hours: let it go */
+  if (D0.d === today) return acted;
+  const h = Gr.ctHour(now); if (h < 10 || h >= 18) return acted;
+  const F = await pubFeedNow(deps); if (!F || F.beta !== true || !F.board || F.board.d !== today) return acted;
+  const C = Gr.debates(F.board, now)[0]; if (!C) return acted;
+  const FD = await feedsNow(deps).catch(() => null);
+  const post = Gr.debatePost(C, { cast: F.board.cast, coach: FD && FD.coach, day: DAYFMT(today), app: appUrl(deps) });
+  const r = await sendMega(dests, T, deps, post); if (!r.ok) return acted;
+  S.deb = { d: today, k: C.k, sp: C.sp, game: C.game, start: C.start, pa: C.la.pick, pb: C.lb.pick, wa: post.wa, wb: post.wb, matchup: post.matchup, fullM: post.fullM, ts: now }; acted++; log('debate ·', C.k);
+  /* the owner's kit for X (manual: X bills per post) — the card plus the words, ready to paste */
+  try { const p = newestChatCard(state); const owners = p ? await ownersOf(state, T, p) : []; const img = owners.length ? await picOf(post.card, deps) : null;
+    for (const id of owners) await say(T, String(id), `🗞 <b>Today's debate is live</b> on Telegram, Facebook and Instagram.\n\n<b>For X</b> (copy it, attach this picture, pin it):\n\n${esc(post.x)}`, img, deps); } catch (e) { log('debate kit:', String(e && e.message || e).slice(0, 60)); }
+  return acted; }
+/* 🧾 Receipts Sunday: Sundays from 9 AM Central, the week that ended Saturday, from the public record */
+export async function runWeekly(state, S, today, deps) { if (String(deps?.weekly ?? env.WEEKLY ?? '').trim().toLowerCase() === 'off') return 0; const now = deps?.now || Date.now();
+  if (S.wk === today || new Date(today + 'T12:00:00Z').getUTCDay() !== 0 || Gr.ctHour(now) < 9) return 0;
+  const dests = pubDests(state); if (!dests.length && !Soc.anyOn(deps)) return 0;
+  const F = (await pubFeedNow(deps)) || newestFeed(state); const post = Gr.weeklyPost(F, today, { app: appUrl(deps) }); if (!post) { S.wk = today; return 1; }   /* a quiet week: nothing to say */
+  if (!(await sendPublic(dests, deps?.tg || tg, deps, post.text, post.card, 'weekly'))) return 0; S.wk = today; log('receipts sunday ·', post.w + '-' + post.l); return 1; }
+/* 🔗 recruiting: members link to the public lounge until it locks, then to the free channel */
+const recruitChat = (state, p) => { const L = state.lounge || {}, lounge = p && p.bc && p.bc.pubLounge; if (lounge && !L.locked) return String(lounge); const ch = p && p.bc && p.bc.pub; return ch ? String(ch) : null; };
+const plainName = u => (([u && u.first_name, u && u.last_name].filter(Boolean).join(' ')) || (u && u.username ? '@' + u.username : 'A member')).slice(0, 40);
+async function myLink(state, T, p, m, now) { if (!m.from || m.from.is_bot) return 0;
+  const reply = text => T('sendMessage', { chat_id: String(m.chat.id), text, parse_mode: 'HTML', disable_web_page_preview: 'true', reply_to_message_id: String(m.message_id), allow_sending_without_reply: 'true' });
+  if (m.chat.type !== 'private') { const me = await myName(T); await reply(`🔗 DM me /mylink${me ? ' (@' + esc(me) + ')' : ''} and I'll send your personal invite link there.`); return 1; }
+  const chat = recruitChat(state, p); if (!chat) { await reply("There's no TheDesk room to invite people to yet."); return 1; }
+  const R = Gr.refsOf(state), uid = String(m.from.id); let L = R.links[uid];
+  if (!L || L.c !== chat) { const r = await T('createChatInviteLink', { chat_id: chat, name: ('ref ' + uid).slice(0, 32) }); const link = r && r.result && r.result.invite_link;
+    if (!link) { await reply('I couldn\'t make your link just now (the bot needs "Invite users" in that room). Try again later.'); return 1; } L = R.links[uid] = { l: link, c: chat, ts: now }; }
+  const B = R.by[uid] || { n: 0 }; R.by[uid] = { ...B, nm: plainName(m.from), ts: now };
+  await reply(`🔗 <b>Your personal TheDesk link</b>\n${L.l}\n\nEveryone who joins through it counts for you${B.n ? ` (so far: <b>${B.n}</b>)` : ''}. Sundays, the lounge hears who brought the most people in.`); return 1; }
+async function ownerRecruit(state, T, p, m, cmd, now) { const owners = await ownersOf(state, T, p); if (!m.from || !owners.includes(m.from.id)) return 0;
+  const reply = text => T('sendMessage', { chat_id: String(m.chat.id), text, parse_mode: 'HTML', disable_web_page_preview: 'true' });
+  if (m.chat.type !== 'private') { await reply(`DM me /${cmd} so it stays private.`); return 1; }
+  const R = Gr.refsOf(state); if (cmd === 'joins') { await reply(Gr.joinsText(R, Gr.weekOf(chicagoDay(now)))); return 1; }
+  const chat = recruitChat(state, p); if (!chat) { await reply("There's no TheDesk room to link to yet."); return 1; } const out = [];
+  for (const [tag, lab] of Gr.SRC_TAGS) { let L = R.srcLinks[tag];
+    if (!L || L.c !== chat) { const r = await T('createChatInviteLink', { chat_id: chat, name: 'src ' + tag }); const link = r && r.result && r.result.invite_link;
+      if (!link) { out.push(`${lab}: couldn't make it (is the bot an admin there with "Invite users" on?)`); continue; } L = R.srcLinks[tag] = { l: link, c: chat, ts: now }; }
+    out.push(`<b>${lab}</b>: ${L.l}`); }
+  await reply(['🔗 <b>One link per platform</b> (put each one in that platform\'s bio):', ...out, '', 'Telegram counts the joins on each link (the room → Manage → Invite links). /joins shows them here.'].join('\n')); return 1; }
+/* Sundays from 11 AM Central: the lounge hears who brought the most people in last week (only when somebody did) */
+export async function runRecruitShout(state, deps) { const now = deps?.now || Date.now(), today = chicagoDay(now); if (new Date(today + 'T12:00:00Z').getUTCDay() !== 0 || Gr.ctHour(now) < 11) return 0;
+  const R = state.refs; if (!R) return 0; const wk = Gr.weekOf(Gr.shift(today, -1)); if (R.shout === wk) return 0;
+  const text = Gr.shoutText(R, wk); if (!text) { R.shout = wk; return 1; }
+  let room = null; for (const d of Object.keys(state.posts || {}).sort().reverse()) { const b = state.posts[d] && state.posts[d].bc; if (b && (b.pubLounge || b.vipLounge)) { room = b.pubLounge || b.vipLounge; break; } }
+  if (!room) { R.shout = wk; return 1; } const r = await (deps?.tg || tg)('sendMessage', { chat_id: String(room), text, parse_mode: 'HTML', disable_web_page_preview: 'true' });
+  if (r) { R.shout = wk; log('recruiting · the weekly shout-out went out'); return 1; } return 0; }
 /* the public page: the full card the app handed over, with whatever hasn't unlocked yet hidden, and every grade the worker knows */
 export function publicView(feed, st, now) { const F = JSON.parse(JSON.stringify(feed || {})); st = st || {}; const T0 = F.today; if (!T0) { F.generated = now; return F; }
   const key = x => [x.sp, x.game || x.team || '', x.pick || ''].join('|');
@@ -934,6 +1008,9 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       try { acted += await loungeWatch(state); } catch (e) { log('lounge watch', e.message || e); }
       try { acted += await fbInvite(state); } catch (e) { log('lounge easter egg', e.message || e); }
       if (SOCMEM) try { const a = await runMegaphone(state, SOCMEM.S.mega, today); if (a) { acted += a; await socialSave(); } } catch (e) { log('megaphone', e.message || e); }
+      /* v3.3 · the growth desk: the debate (and its settle), Receipts Sunday, the recruiters' shout-out */
+      if (SOCMEM) try { const a = (await runDebate(state, SOCMEM.S, today)) + (await runWeekly(state, SOCMEM.S, today)); if (a) { acted += a; await socialSave(); } } catch (e) { log('growth', e.message || e); }
+      try { acted += await runRecruitShout(state); } catch (e) { log('recruiting', e.message || e); }
       /* v3.2 · the safeguards: what the site said about its token, the watchdog, once a run the vault copy and the history squash */
       if (siteNote(state, SITE_ERR, SITE_OK)) dirty = true; SITE_ERR = null;
       if (KEY_BAD) { const W0 = state.watch || (state.watch = {}); if (!W0.keyBad || KEY_BAD - W0.keyBad > 36e5) { W0.keyBad = KEY_BAD; dirty = true; } KEY_BAD = 0; }
