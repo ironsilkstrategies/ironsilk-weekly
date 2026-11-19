@@ -140,5 +140,7 @@ a = await Wk.runDebate(st2, S, '2026-11-19', { ...D, gradePick: G, now: Date.par
 /* the outlets: Instagram takes the debate and Sunday cards by default; X takes Receipts Sunday, not the daily debate (X bills per post) */
 T('Instagram takes the debate and Receipts Sunday by default', Soc.igWants('debate', { ig: { kinds: '' } }) && Soc.igWants('weekly', { ig: { kinds: '' } }));
 T('X takes Receipts Sunday by default, not the daily debate', Soc.xWants('weekly', { x: { kinds: '' } }) && !Soc.xWants('debate', { x: { kinds: '' } }));
+{ const site = { posts: {}, cmdSig: 'v2|help,live' }, here = { posts: {}, cmdSig: 'v3|help,live,mylink', cmdSigTs: 5 };
+  T('the / menu: the newer signature wins the merge, whichever copy comes first (a stale site copy can\'t make the menu re-send every pass)', Wk.combineStates(site, here, null).cmdSig === 'v3|help,live,mylink' && Wk.combineStates(here, site, null).cmdSig === 'v3|help,live,mylink' && Wk.mergeState({ posts: {}, cmdSig: 'a', cmdSigTs: 10 }, { posts: {}, cmdSig: 'b', cmdSigTs: 20 }).cmdSig === 'b'); }
 T('the lounge rules carry the national helpline (1-800-MY-RESET)', Wk.RULES_DEFAULT.some(r => /1-800-MY-RESET/.test(r)) && !Wk.RULES_DEFAULT.some(r => /GAMBLER/.test(r)));
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);
