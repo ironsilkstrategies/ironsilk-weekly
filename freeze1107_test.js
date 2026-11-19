@@ -33,6 +33,6 @@ setTimeout(()=>{try{const E=s=>w.eval(s);const e0=errs.length;
   const sw=E('syncWarnHtml()');
   T('a backup that stopped saving shows on Today, with the reason and ↻ Sync now',/hasn't saved since/.test(sw)&&/HTTP 422 \(trees\)/.test(sw)&&/onclick="syncNow\(true\)/.test(sw)&&E('syncOn()')===true,sw.slice(0,200)+' syncOn='+E('syncOn()'));
   T('…the failure is remembered on this device only (never synced)',E(`syncSkip('d4.syncfail')`)===true&&!!E(`localStorage.getItem('d4.syncfail')`));
-  E(`localStorage.setItem(SYNC.last,String(Date.now()))`);T('…and disappears once a save goes through',E('syncWarnHtml()')==='');
+  E(`localStorage.setItem(SYNC.last,String(Date.now()))`);T('…and disappears once a save goes through',!/hasn't saved since/.test(E('syncWarnHtml()')));   /* v3.2 · the transfer-code nudge can share the spot */
   T('no errors along the way',errs.length===e0,errs.slice(e0).join(' | '));
 }catch(e){T('crashed',false,e.stack);}console.log(pass+' pass / '+fail+' fail');process.exit(0);},2500);

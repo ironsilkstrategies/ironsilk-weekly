@@ -12,7 +12,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.1.6';
+const VERSION = 'worker v3.2.0';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -54,7 +54,7 @@ export function slimFeeds(state) { if (!state || !state.posts) return state; con
 async function writeStateAt(repo, state, sha) { const own = repo === REPO; const tok = own ? GH : SITE_TOK; if (!tok) return 0;
   const body = { message: 'autopilot ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(slimFeeds(own ? stripTok(state) : state)), 'utf8').toString('base64'), ...(sha ? { sha } : {}) };
   const r = await fetch(`https://api.github.com/repos/${repo}/contents/${FILE}`, { method: 'PUT', headers: { ...ghH, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  return r.status; }
+  if (!own) siteSeen(r.status); return r.status; }
 async function writeState(state, sha) { return writeStateAt(REPO, state, sha); }
 /* site copy first, so on a tie its version (with the token) wins; then this repo's; then what this run holds */
 export function combineStates(...xs) { return xs.filter(Boolean).reduce((a, s) => a ? mergeState(a, s) : s, null); }
@@ -67,12 +67,23 @@ export function mergeMod(x, y) { if (!x && !y) return undefined; x = x || {}; y 
      warnings, a welcome) keep the newest — a reset (/unban) is newer than the warnings it clears. Ties keep the first copy. */
   const pick = (A, B) => { const o = { ...(B || {}) }; for (const k in (A || {})) { const a = A[k], b = o[k]; o[k] = b == null ? a : (typeof a === 'number' ? Math.max(a, +b || 0) : ts(a) >= ts(b) ? a : b); } return o; };
   return { owner: ts(x.owner) >= ts(y.owner) ? (x.owner || y.owner) : y.owner, acl: pick(x.acl, y.acl), agreed: pick(x.agreed, y.agreed), warns: pick(x.warns, y.warns), wel: pick(x.wel, y.wel), note: pick(x.note, y.note) }; }
-export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}), ...(a?.mod || b?.mod ? { mod: mergeMod(a?.mod, b?.mod) } : {}), ...(a?.lounge || b?.lounge ? { lounge: mergeLounge(a?.lounge, b?.lounge) } : {}) };
+const newerTs = (x, y) => !x ? y : !y ? x : (+x.ts || 0) >= (+y.ts || 0) ? x : y;
+/* v3.2 · the watchdog's memory: which alert went out on which day, the last refusal from the site, the daily squash, the vault copies */
+export function mergeWatch(x, y) { if (!x || !y) return x || y; const sent = { ...(y.sent || {}) };
+  for (const k in (x.sent || {})) { const a = x.sent[k], b = sent[k]; sent[k] = !b || (a && (a.ts || 0) >= (b.ts || 0)) ? a : b; }
+  const sq = { ...(y.sq || {}) }; for (const k in (x.sq || {})) if (!sq[k] || String(x.sq[k]) > String(sq[k])) sq[k] = x.sq[k];
+  const out = { ...y, ...x, sent, sq }; const se = newerTs(x.siteErr, y.siteErr), so = Math.max(+x.siteOk || 0, +y.siteOk || 0);
+  if (se && so > (se.ts || 0)) delete out.siteErr; else if (se) out.siteErr = se; else delete out.siteErr; if (so) out.siteOk = so;
+  const v = newerTs(x.vault && { ...x.vault, ts: x.vault.ts }, y.vault && { ...y.vault, ts: y.vault.ts }); if (v) out.vault = v; return out; }
+export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), cmdSig: a?.cmdSig || b?.cmdSig || '', pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}), ...(a?.mod || b?.mod ? { mod: mergeMod(a?.mod, b?.mod) } : {}), ...(a?.lounge || b?.lounge ? { lounge: mergeLounge(a?.lounge, b?.lounge) } : {}), ...(a?.phone || b?.phone ? { phone: newerTs(a?.phone, b?.phone) } : {}), ...(a?.watch || b?.watch ? { watch: mergeWatch(a?.watch, b?.watch) } : {}) };
   const ds = new Set([...Object.keys(a?.posts || {}), ...Object.keys(b?.posts || {})]);
   ds.forEach(d => { const x = a?.posts?.[d], y = b?.posts?.[d]; if (!x || !y) { out.posts[d] = x || y; return; }
     const base = (x.postedTs || 0) >= (y.postedTs || 0) ? x : y;
     const fx = (x.feedTs || 0) >= (y.feedTs || 0) ? x : y;   /* the newest public card the app handed over wins */
-    out.posts[d] = { ...base, st: { ...(y.st || {}), ...(x.st || {}) }, sent: { ...(y.sent || {}), ...(x.sent || {}) }, recap: !!(x.recap || y.recap), worker: x.worker !== false && y.worker !== false,
+    /* v3.2 · whoever actually posted the card keeps its message ids: a later hand-off from a phone that couldn't post (ids: [])
+       must never make the worker post the same card twice */
+    const ids = (base.ids || []).length ? base.ids : ((base === x ? y : x).ids || []);
+    out.posts[d] = { ...base, ids, needPost: !ids.length && !!(x.needPost || y.needPost), ...(x.postedBy || y.postedBy ? { postedBy: x.postedBy || y.postedBy } : {}), st: { ...(y.st || {}), ...(x.st || {}) }, sent: { ...(y.sent || {}), ...(x.sent || {}) }, recap: !!(x.recap || y.recap), worker: x.worker !== false && y.worker !== false,
       ...(fx.feedTs ? { feed: fx.feed, pub: fx.pub, bc: fx.bc, site: fx.site, feedTs: fx.feedTs, ...(fx.cmd ? { cmd: fx.cmd } : {}) } : {}) }; });
   const keep = Object.keys(out.posts).sort().slice(-5); Object.keys(out.posts).forEach(d => { if (!keep.includes(d)) delete out.posts[d]; });
   return out; }
@@ -318,6 +329,7 @@ export async function runCommands(state, deps) { const T = deps?.tg || tg; let a
       if (cmd === 'warn' || cmd === 'ban' || cmd === 'unban') { acted += await moderate(state, T, p, m, cmd); continue; }
       if ((cmd === 'vipinvite' || cmd === 'lounge') && await ownerLounge(state, T, p, m, cmd, now)) { acted++; continue; }
       if (cmd === 'app' && await ownerApp(state, T, p, m, parts[1] || '')) { acted++; continue; }
+      if (cmd === 'health' && await ownerHealth(state, T, p, m, now)) { acted++; continue; }
       /* the same question in the same group within 15 s gets one answer (the first is right above) — the bot can't be used as a spam cannon */
       if (m.chat.type !== 'private' && cmd !== 'check') { const R0 = RECENT.get(state) || new Map(); RECENT.set(state, R0); const rk = m.chat.id + '|' + cmd + '|' + arg; if (Date.now() - (R0.get(rk) || 0) < 15e3) continue; R0.set(rk, Date.now()); }
       let txt = null;
@@ -415,6 +427,8 @@ export async function runOnce(state, today, deps) { const T = deps?.tg || tg; le
   for (const d of Object.keys(state.posts || {}).sort()) { const p = state.posts[d]; if (!p || p.recap || p.worker === false || !p.chat) continue;
     p.st = p.st || {}; p.sent = p.sent || {};
     if (isHistory(p, d, today, now)) { await retireQuiet(p, deps, T); state.posts[d] = p; acted++; log('closed', d, 'quietly ·', (p.legs || []).filter(l => p.st[l.k]).length + '/' + (p.legs || []).length, 'graded into the original post'); continue; }
+    /* v3.2 · the phone had no bot token (Nov 17: iOS wiped it) — the card came over unposted, so the worker posts it with its own */
+    if (p.needPost && !(p.ids || []).length && d >= shift(today, -1)) acted += await postCard(p, T);
     p.sent['~wk'] = p.sent['~wk'] || 1;   /* this card is live with a worker — it never counts as history */
     for (const l of p.legs || []) { if (p.st[l.k]) continue; let s = null; try { s = l.player ? await (deps?.gradeProp || gradeProp)(l, p.d) : await (deps?.gradePick || gradePick)(l, p.d); } catch (e) { } if (s) p.st[l.k] = s; }
     const fresh = (p.legs || []).filter(l => p.st[l.k] && !p.sent[l.k]);
@@ -714,7 +728,7 @@ async function sitePut(site, text, deps) { const tok = (site && site.tok) || (si
   const F = deps?.fetch || fetch; const api = `https://api.github.com/repos/${site.repo}/contents/${site.path || 'public/picks.json'}`; const H = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'User-Agent': 'thedesk-autopilot' };
   let sha = null; try { const g = await F(api, { headers: H }); if (g.status === 200) sha = (await g.json()).sha; } catch (e) { }
   const r = await F(api, { method: 'PUT', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Public page — worker update', content: Buffer.from(text, 'utf8').toString('base64'), ...(sha ? { sha } : {}) }) });
-  return { ok: r.ok, status: r.status }; }
+  if (site.repo === SITE) siteSeen(r.status); return { ok: r.ok, status: r.status }; }
 export async function publishPublic(state, deps) { const now = deps?.now || Date.now(); const ds = Object.keys(state.posts || {}).sort(); const d = ds.reverse().find(x => state.posts[x] && state.posts[x].feed && state.posts[x].site);
   if (!d) return 0; const p = state.posts[d]; const V = publicView(p.feed, p.st, now); const sig = JSON.stringify({ ...V, generated: 0 });
   state.pubSig = state.pubSig || {}; if (state.pubSig[d] === sig) return 0; const r = await sitePut(p.site, JSON.stringify(V, null, 1), deps);
@@ -768,6 +782,133 @@ async function socialBoot() { if (!GH || !REPO) return;
 async function socialSave() { if (!SOCMEM) return;
   try { const w = await fetch(`https://api.github.com/repos/${REPO}/contents/${SOCFILE}`, { method: 'PUT', headers: { ...ghH, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'autopilot social ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(SOCMEM.S), 'utf8').toString('base64'), ...(SOCMEM.sha ? { sha: SOCMEM.sha } : {}) }) });
     if (w.ok) { const j = await w.json(); SOCMEM.sha = (j.content && j.content.sha) || SOCMEM.sha; } else log('social memory: save HTTP', w.status); } catch (e) { log('social memory:', String(e && e.message || e).slice(0, 60)); } }
+/* ══ v3.2 · SAFEGUARDS (Nov 18) ═════════════════════════════════════════════════
+   Nov 17: iOS wiped the phone's app. The Telegram token went with it, so the VIP card never posted, so it was never handed
+   over — and this worker, the one piece that never sleeps, sat on Nov 16 for two days while nothing told anyone. Now:
+   · the phone hands the card over even without a bot token, and the worker posts it itself (TG_BOT_TOKEN lives here, safe from wipes)
+   · the phone checks in (state.phone) and the worker DMs the owner when the phone goes quiet, a card is missing, backups fail,
+     or the token inside the card is refused — once a day each, 9 AM to 10 PM Central
+   · /health (the owner, in a private chat) answers with the whole picture; health.json (branch desk-health — no secrets, times only) feeds the admin tab
+   · the state branches keep one day of history instead of 1,600 commits of 1 MB encrypted files
+   · the phone's encrypted vault backup (branch desk-vault on the site repo) is copied here, four days deep */
+export async function postCard(p, T) { const ids = []; const parts = p.parts || [];
+  for (const part of parts) { const r = await T('sendMessage', { chat_id: p.chat, text: fillTemplate(part, p.st || {}), parse_mode: 'HTML', disable_web_page_preview: 'true' });
+    const id = r && r.result && r.result.message_id; if (!id) break; ids.push(id); if (T === tg) await new Promise(z => setTimeout(z, 450)); }
+  if (!ids.length) return 0;   /* Telegram refused: the next pass tries again */
+  p.ids = ids.length === parts.length ? ids : []; p.needPost = false; p.postedBy = 'worker'; p.workerPostTs = Date.now();
+  log('posted the VIP card for', p.d, 'itself ·', ids.length + '/' + parts.length, 'message(s) — the phone had no bot token'); return 1; }
+let SITE_ERR = null, SITE_OK = 0, KEY_BAD = 0;
+/* the card couldn't be opened: sealed with a key that isn't AUTOPILOT_KEY (a phone that made itself a new one) */
+export const keyBadErr = e => /OperationError|operation failed|unknown format|Unsupported state|unable to authenticate/i.test(String(e && ((e.name || '') + ' ' + (e.message || ''))));
+function siteSeen(status) { if (status === 401 || status === 403) SITE_ERR = { status, ts: Date.now() }; else if (status >= 200 && status < 300) SITE_OK = Date.now(); }
+/* fold what this run saw about the site token into the state (only when it changed, so a dead token can't make every pass save) */
+export function siteNote(state, err, ok) { const W = state.watch || (state.watch = {}); let ch = false;
+  if (err && (!W.siteErr || W.siteErr.status !== err.status || err.ts - (W.siteErr.ts || 0) > 36e5)) { W.siteErr = err; ch = true; }
+  if (ok && W.siteErr && ok > (W.siteErr.ts || 0)) { delete W.siteErr; W.siteOk = ok; ch = true; } return ch; }
+const ctHour = now => +new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now));
+const ago = ms => { const h = ms / 36e5; return h < 1 ? Math.max(1, Math.round(ms / 60e3)) + ' min' : h < 48 ? Math.round(h) + ' h' : Math.round(h / 24) + ' days'; };
+const ctTime = t => new Date(t).toLocaleString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+/* what needs saying right now (pure — the tests drive it); each kind once a day, the transfer-code nudge once a week */
+export function watchPlan(state, now) { now = now || Date.now(); const today = chicagoDay(now); const out = []; const ph = state.phone || null, W = state.watch || {};
+  const fresh = !!(ph && ph.ts && now - ph.ts < 24 * 36e5);
+  if (ph && ph.ts && !fresh) out.push({ k: 'silent', text: `📵 <b>TheDesk hasn't checked in for ${ago(now - ph.ts)}</b> (last seen ${ctTime(ph.ts)} CT).\nI'm still grading and posting what I have, but backups and new cards wait until the app is opened. Open TheDesk on your phone.` });
+  const p = state.posts && state.posts[today];
+  if (!p && ctHour(now) >= 15) out.push({ k: 'nocard', text: `🗂 <b>No card has been handed to me today.</b>\nIf today's a day off, ignore this. Otherwise open TheDesk → Today → 🛰️ Re-send today's card.${ph && ph.keys && ph.keys.tg === false ? '\nThe phone has no Telegram token, and that\'s fine: I post the VIP card myself now.' : ''}` });
+  const S = ph && ph.sync;
+  if (S && S.on && fresh && (S.auth || !S.last || now - S.last > 24 * 36e5)) out.push({ k: 'backup', text: `☁️ <b>${S.auth ? 'The cloud backup is OFF: GitHub refused the sync token' : S.last ? 'The cloud backup hasn\'t saved for ' + ago(now - S.last) : 'The cloud backup has never saved on this phone'}</b>${S.err ? ' (' + esc(String(S.err).slice(0, 90)) + ')' : ''}.\nFix: TheDesk → Settings → ☁️ Sync → paste a new token for thedesk-data.${ph.vault && ph.vault.ts ? `\nYour encrypted vault copy is from ${ctTime(ph.vault.ts)} CT, so nothing older is at risk.` : ''}` });
+  if (S && !S.on && fresh) out.push({ k: 'nosync', text: '☁️ <b>Cloud sync isn\'t connected on the phone.</b> If iOS wipes the app, everything since the last backup is gone. TheDesk → Settings → ☁️ Sync.' });
+  if (W.siteErr && (W.siteErr.status === 401 || W.siteErr.status === 403) && now - (W.siteErr.ts || 0) < 12 * 36e5) out.push({ k: 'sitetok', text: `🔑 <b>The publish token inside the card was refused (HTTP ${W.siteErr.status}).</b>\nI can't update the public page or the site's copy until the phone hands over a working one: TheDesk → Settings → Public picks page → paste a fresh token → Save → 🛰️ Re-send today's card.` });
+  if (W.keyBad && now - W.keyBad < 12 * 36e5) out.push({ k: 'key', text: '🔐 <b>I can\'t open the card the phone handed over</b> — it was sealed with a different key than the AUTOPILOT_KEY secret (a phone that lost its key makes a new one).\nFix: restore your transfer code on the phone (it carries the key). Or, if this phone\'s key is the one you want: TheDesk → Today → 24/7 worker → copy key → update the AUTOPILOT_KEY secret.' });
+  const V = ph && ph.vault; if (V && V.on && fresh && now - (V.ts || 0) > 48 * 36e5) out.push({ k: 'vault', text: `🛟 <b>The encrypted vault backup is ${V.ts ? ago(now - V.ts) + ' old' : 'empty'}.</b> TheDesk → Settings → 🛟 Vault → Save now.` });
+  if (ph && fresh && ph.keys && ph.keys.n > 0 && !ph.xfer) out.push({ k: 'xfer', every: 7, text: '🔑 <b>No transfer code saved.</b> It\'s the only thing that brings your API keys back after a wipe (they never go to the cloud). TheDesk → Settings → ☁️ Sync → 🔑 Copy transfer code → your password manager.' });
+  const sent = W.sent || {}; const dayN = d => Math.round(Date.parse(d + 'T12:00:00Z') / 864e5);
+  return out.filter(a => { const s0 = sent[a.k]; if (!s0 || !s0.d) return true; return a.every ? dayN(today) - dayN(s0.d) >= a.every : s0.d !== today; }); }
+export async function runWatchdog(state, deps) { const T = deps?.tg || tg; const now = deps?.now || Date.now(); const h = ctHour(now); if (h < 9 || h >= 22) return 0;
+  const due = watchPlan(state, now); if (!due.length) return 0;
+  const p = Object.keys(state.posts || {}).sort().map(d => state.posts[d]).filter(x => x && x.chat).pop() || null;
+  const owners = p ? await ownersOf(state, T, p) : []; const W = state.watch || (state.watch = {}); W.sent = W.sent || {}; const today = chicagoDay(now); let n = 0;
+  for (const a of due) { let ok = false; for (const id of owners) { const r = await T('sendMessage', { chat_id: String(id), text: a.text + '\n\n<i>— your 24/7 worker · /health for the whole picture</i>', parse_mode: 'HTML', disable_web_page_preview: 'true' }); ok = ok || !!r; }
+    W.sent[a.k] = { d: today, ts: now, ...(ok ? {} : { fail: true }) }; n++;   /* a DM that can't land (no Start on the bot yet) isn't retried every pass */
+    log('watchdog →', ok ? 'owner:' : 'couldn\'t reach the owner (has the owner pressed Start on the bot?):', a.k); }
+  return n; }
+/* the whole picture — no secrets, no picks: times, counts and yes/no */
+export function healthOf(state, now) { now = now || Date.now(); const today = chicagoDay(now); const ds = Object.keys(state.posts || {}).sort(); const last = ds[ds.length - 1] || null; const p = last ? state.posts[last] : null;
+  const ph = state.phone || {}, W = state.watch || {}; const S = ph.sync || null;
+  return { v: 1, at: now, worker: { lastRun: state.lastRun || 0, runs: state.runs || 0, version: VERSION },
+    card: { day: last, today: last === today, legs: p ? (p.legs || []).length : 0, graded: p ? Object.keys(p.st || {}).filter(k => (p.legs || []).some(l => l.k === k)).length : 0, recap: !!(p && p.recap), posted: p ? (p.postedBy || ((p.ids || []).length ? 'phone' : p.needPost ? 'waiting' : 'unposted')) : null },
+    phone: { seen: ph.ts || 0, build: ph.build || null, sync: S ? { on: !!S.on, last: S.last || 0, ok: !!S.on && !S.auth && !!S.last && now - S.last < 24 * 36e5 } : null, vault: ph.vault ? { ts: ph.vault.ts || 0 } : null, keysMissing: ph.keys ? (ph.keys.missing || 0) : null, xfer: !!ph.xfer },
+    vault: W.vault ? { ts: W.vault.ts || 0, gens: (W.vault.gens || []).map(g => ({ day: g.day, ts: g.ts })) } : null,
+    site: { err: W.siteErr ? W.siteErr.status : null, at: W.siteErr ? W.siteErr.ts : (W.siteOk || 0) },
+    alerts: watchPlan({ ...state, watch: { ...W, sent: {} } }, now).map(a => a.k) }; }
+export function healthText(state, now) { now = now || Date.now(); const H = healthOf(state, now); const ok = b => b ? '✅' : '⚠️'; const t = x => x ? ctTime(x) + ' CT (' + ago(now - x) + ' ago)' : 'never';
+  const L = [`<b>🩺 TheDesk health</b> · ${esc(VERSION)}`,
+    `${ok(H.worker.lastRun && now - H.worker.lastRun < 3 * 36e5)} Worker: last run ${t(H.worker.lastRun)}`,
+    `${ok(H.card.today)} Card: ${H.card.day ? esc(H.card.day) + ' · ' + H.card.graded + '/' + H.card.legs + ' graded · posted by ' + esc(H.card.posted) : 'none on file'}${H.card.today ? '' : ' (nothing for today yet)'}`,
+    `${ok(H.phone.seen && now - H.phone.seen < 24 * 36e5)} Phone: ${H.phone.seen ? 'checked in ' + t(H.phone.seen) + (H.phone.build ? ' · ' + esc(H.phone.build) : '') : 'no check-in yet (needs the new app build)'}`,
+    `${ok(H.phone.sync && H.phone.sync.ok)} Cloud backup: ${H.phone.sync ? (H.phone.sync.on ? 'last saved ' + t(H.phone.sync.last) : 'not connected') : 'unknown'}`,
+    `${ok(H.vault && now - H.vault.ts < 48 * 36e5)} Vault: ${H.vault ? 'newest ' + t(H.vault.ts) + ' · ' + H.vault.gens.length + ' day(s) kept here' : 'no copy yet'}`,
+    `${ok(!H.site.err)} Publish token in the card: ${H.site.err ? 'REFUSED (HTTP ' + H.site.err + ')' : 'working'}`,
+    `${ok(H.phone.keysMissing === 0)} Keys on the phone: ${H.phone.keysMissing == null ? 'unknown' : H.phone.keysMissing ? H.phone.keysMissing + ' missing' : 'all there'}${H.phone.xfer ? '' : ' · ⚠️ no transfer code saved'}`];
+  if (H.alerts.length) L.push('', '<b>Needs you:</b> ' + H.alerts.join(', '));
+  return L.join('\n'); }
+async function ownerHealth(state, T, p, m, now) { const owners = await ownersOf(state, T, p); if (!m.from || !owners.includes(m.from.id)) return 0;
+  const priv = m.chat.type === 'private'; const r = await T('sendMessage', { chat_id: String(priv ? m.chat.id : m.from.id), text: healthText(state, now), parse_mode: 'HTML', disable_web_page_preview: 'true' });
+  if (!r && !priv) await T('sendMessage', { chat_id: String(m.chat.id), text: 'Press Start on the bot in a private chat first, then send /health there.', reply_to_message_id: String(m.message_id), allow_sending_without_reply: 'true' });
+  return 1; }
+/* health.json on its own branch (desk-health, one commit, no history): what the admin tab reads — public, so times and counts only */
+let HEALTH_SIG = null; const HBRANCH = 'desk-health';
+export async function writeHealth(state, deps) { const F = deps?.fetch || fetch; const now = deps?.now || Date.now(); if (!GH && !deps) return 0;
+  const H = healthOf(state, now); const sig = JSON.stringify({ ...H, at: 0, worker: { ...H.worker, lastRun: Math.floor((H.worker.lastRun || 0) / 36e5), runs: 0 } });
+  if (sig === HEALTH_SIG) return 0; const api = p => `https://api.github.com/repos/${REPO}/${p}`, JH = { ...ghH, 'Content-Type': 'application/json' };
+  try { const b = await F(api('git/blobs'), { method: 'POST', headers: JH, body: JSON.stringify({ content: JSON.stringify(H, null, 1), encoding: 'utf-8' }) }); if (!b.ok) throw new Error('blob HTTP ' + b.status);
+    const t = await F(api('git/trees'), { method: 'POST', headers: JH, body: JSON.stringify({ tree: [{ path: 'health.json', mode: '100644', type: 'blob', sha: (await b.json()).sha }] }) }); if (!t.ok) throw new Error('tree HTTP ' + t.status);
+    const c = await F(api('git/commits'), { method: 'POST', headers: JH, body: JSON.stringify({ message: 'health ' + new Date(now).toISOString(), tree: (await t.json()).sha, parents: [] }) }); if (!c.ok) throw new Error('commit HTTP ' + c.status); const sha = (await c.json()).sha;
+    let r = await F(api(`git/refs/heads/${HBRANCH}`), { method: 'PATCH', headers: JH, body: JSON.stringify({ sha, force: true }) });
+    if (r.status === 404 || r.status === 422) r = await F(api('git/refs'), { method: 'POST', headers: JH, body: JSON.stringify({ ref: 'refs/heads/' + HBRANCH, sha }) });
+    if (!r.ok) throw new Error('ref HTTP ' + r.status); HEALTH_SIG = sig; return 1; } catch (e) { log('health.json', e.message || e); return 0; } }
+/* the state branch's history, squashed to one commit (the newest files, nothing lost): 1 MB encrypted files don't compress, so
+   every save used to add a megabyte to the repo forever (938 MB on Nov 18) */
+export async function squashBranch(repo, tok, deps) { const F = deps?.fetch || fetch; if (!repo || !tok) return false;
+  const H = { ...ghH, Authorization: 'Bearer ' + tok }; const api = p => `https://api.github.com/repos/${repo}/${p}`;
+  const head = async () => { const r = await F(api(`git/ref/heads/${BRANCH}`), { headers: H }); return r.ok ? ((await r.json()).object || {}).sha || null : null; };
+  const h0 = await head(); if (!h0) return false; const c = await F(api(`git/commits/${h0}`), { headers: H }); if (!c.ok) return false; const cj = await c.json();
+  if (!(cj.parents || []).length) return true;   /* already one commit */
+  const n = await F(api('git/commits'), { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'autopilot state · history squashed ' + new Date().toISOString().slice(0, 10), tree: cj.tree.sha, parents: [] }) }); if (!n.ok) return false; const nj = await n.json();
+  if ((await head()) !== h0) return false;   /* someone saved in the meantime: try again tomorrow */
+  const u = await F(api(`git/refs/heads/${BRANCH}`), { method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ sha: nj.sha, force: true }) }); return !!u.ok; }
+export async function dailySquash(state, deps) { const now = deps?.now || Date.now(); const today = chicagoDay(now); const W = state.watch || (state.watch = {}); W.sq = W.sq || {}; let ch = false;
+  for (const [repo, tok] of [[REPO, GH], [SITE !== REPO ? SITE : null, SITE_TOK]]) { if (!repo || !tok || W.sq[repo] === today) continue;
+    try { if (await squashBranch(repo, tok, deps)) { W.sq[repo] = today; ch = true; log('state history squashed ·', repo === REPO ? 'here' : repo); } } catch (e) { log('squash', e.message || e); } }
+  return ch; }
+/* ── the vault courier: the phone's encrypted backup (site repo, branch desk-vault) copied here with four days of generations.
+   A copy far smaller than the last one (a half-loaded phone) is held back instead of rotating good days out. */
+const VBRANCH = 'desk-vault';
+export async function vaultCourier(state, deps) { const F = deps?.fetch || fetch; const now = deps?.now || Date.now(); const W = state.watch || (state.watch = {}); if (!GH && !deps) return 0;
+  const raw = (repo, f) => `https://raw.githubusercontent.com/${repo}/${VBRANCH}/${f}?t=${Math.floor(now / 60e3)}`; const UA = { 'User-Agent': 'thedesk-autopilot' };
+  let meta = null; try { const r = await F(raw(SITE, 'vault.json'), { headers: UA }); if (!r.ok) return 0; meta = await r.json(); } catch (e) { return 0; }
+  if (!meta || !(+meta.ts > 0)) return 0; const have = W.vault || null; if (have && +have.ts >= +meta.ts) return 0;
+  const keys = +meta.keys || 0;
+  if (have && +have.keys > 0 && keys < have.keys * 0.6 && now - (+have.ts || 0) < 14 * 864e5) {
+    if (!W.vaultHold || W.vaultHold.ts !== meta.ts) { W.vaultHold = { ts: meta.ts, keys }; log('vault: the newest copy has', keys, 'keys vs', have.keys, 'before — held back, the good days stay'); return 1; } return 0; }
+  const e = await F(raw(SITE, 'vault.enc'), { headers: UA }); if (!e.ok) { log('vault: read HTTP', e.status); return 0; } const enc = (await e.text()).trim();
+  if (!/^v2g\.[A-Za-z0-9+/=]+\.[A-Za-z0-9+/=]+$/.test(enc)) { log('vault: unknown format'); return 0; }
+  const api = p => `https://api.github.com/repos/${REPO}/${p}`; const J = async (url, o) => { const r = await F(url, o); if (!r.ok) { const er = new Error('HTTP ' + r.status + ' ' + url.split('/repos/')[1]); er.status = r.status; throw er; } return r.json(); };
+  const JH = { ...ghH, 'Content-Type': 'application/json' };
+  let cur = null; try { const ref = await J(api(`git/ref/heads/${VBRANCH}`), { headers: ghH }); const c = await J(api(`git/commits/${ref.object.sha}`), { headers: ghH }); const t = await J(api(`git/trees/${c.tree.sha}`), { headers: ghH });
+    cur = { files: Object.fromEntries((t.tree || []).filter(x => x.type === 'blob').map(x => [x.path, x.sha])) }; } catch (er) { if (er.status !== 404 && er.status !== 409) throw er; }
+  let prev = []; if (cur && cur.files['vault.json']) { try { const b = await J(api(`git/blobs/${cur.files['vault.json']}`), { headers: ghH }); prev = (JSON.parse(Buffer.from(b.content, 'base64').toString('utf8')).gens || []).filter(g => g && cur.files[g.file]); } catch (er) { prev = []; } }
+  const day = chicagoDay(+meta.ts); const blob = await J(api('git/blobs'), { method: 'POST', headers: JH, body: JSON.stringify({ content: enc, encoding: 'utf-8' }) });
+  const older = prev.length && prev[0].day === day ? prev.slice(1) : prev; const kept = older.slice(0, 3);
+  const tree = [{ path: 'vault.enc', mode: '100644', type: 'blob', sha: blob.sha }]; const gens = [{ day, ts: +meta.ts, keys, bytes: +meta.bytes || 0, file: 'vault.enc' }];
+  kept.forEach((g, i) => { const f = `vault-${i + 1}.enc`; tree.push({ path: f, mode: '100644', type: 'blob', sha: cur.files[g.file] }); gens.push({ ...g, file: f }); });
+  const mb = await J(api('git/blobs'), { method: 'POST', headers: JH, body: JSON.stringify({ content: JSON.stringify({ v: 2, at: now, from: SITE, gens }, null, 1), encoding: 'utf-8' }) });
+  tree.push({ path: 'vault.json', mode: '100644', type: 'blob', sha: mb.sha });
+  const t2 = await J(api('git/trees'), { method: 'POST', headers: JH, body: JSON.stringify({ tree }) });
+  const c2 = await J(api('git/commits'), { method: 'POST', headers: JH, body: JSON.stringify({ message: 'vault copy ' + day, tree: t2.sha, parents: [] }) });
+  if (cur) await J(api(`git/refs/heads/${VBRANCH}`), { method: 'PATCH', headers: JH, body: JSON.stringify({ sha: c2.sha, force: true }) });
+  else await J(api('git/refs'), { method: 'POST', headers: JH, body: JSON.stringify({ ref: 'refs/heads/' + VBRANCH, sha: c2.sha }) });
+  W.vault = { ts: +meta.ts, at: now, keys, bytes: +meta.bytes || 0, gens: gens.map(g => ({ day: g.day, ts: g.ts, keys: g.keys })) }; delete W.vaultHold;
+  log('vault: copied', day, '·', gens.length, 'day(s) kept'); return 1; }
 /* ── main ── */
 if (import.meta.url === 'file://' + process.argv[1]) {
   const t0 = Date.now(), BUDGET = +(env.RELAY_BUDGET_MS || 6.5 * 60e3), STEP = +(env.RELAY_STEP_MS || 75e3), MARGIN = +(env.RELAY_MARGIN_MS || 25e3);
@@ -776,8 +917,8 @@ if (import.meta.url === 'file://' + process.argv[1]) {
   /* write one copy: on a collision, re-read that copy, merge, retry */
   const saveAt = async (repo, state, cur) => { for (let tries = 0; tries < 3; tries++) { const latest = tries ? await readStateAt(repo) : cur;
       const merged = tries && latest ? mergeState(state, latest.state) : state; const st = await writeStateAt(repo, merged, latest && latest.sha);
-      if (st === 200 || st === 201) return true; if (!st) return false; log('write conflict', repo === REPO ? 'here' : repo, st, '— merging and retrying'); } return false; };
-  const readSite = async () => { if (SITE === REPO) return null; try { return await readStateAt(SITE); } catch (e) { log('the site\'s copy:', e.message || e); return undefined; } };
+      if (st === 200 || st === 201) return true; if (!st) return false; if (st === 401 || st === 403) { log('write refused', repo === REPO ? 'here' : repo, st, '— the token was rejected; not retrying'); return false; } log('write conflict', repo === REPO ? 'here' : repo, st, '— merging and retrying'); } return false; };
+  const readSite = async () => { if (SITE === REPO) return null; try { return await readStateAt(SITE); } catch (e) { log('the site\'s copy:', e.message || e); if (keyBadErr(e)) KEY_BAD = Date.now(); return undefined; } };
   /* v2.34 · a hiccup (GitHub or ESPN) costs one pass, not the chain. What this run already sent stays in
      memory and is merged into every fresh read, so a failed save can never make a result post twice. */
   let state = null, total = 0, dirty = false, siteDirty = false;
@@ -793,11 +934,18 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       try { acted += await loungeWatch(state); } catch (e) { log('lounge watch', e.message || e); }
       try { acted += await fbInvite(state); } catch (e) { log('lounge easter egg', e.message || e); }
       if (SOCMEM) try { const a = await runMegaphone(state, SOCMEM.S.mega, today); if (a) { acted += a; await socialSave(); } } catch (e) { log('megaphone', e.message || e); }
+      /* v3.2 · the safeguards: what the site said about its token, the watchdog, once a run the vault copy and the history squash */
+      if (siteNote(state, SITE_ERR, SITE_OK)) dirty = true; SITE_ERR = null;
+      if (KEY_BAD) { const W0 = state.watch || (state.watch = {}); if (!W0.keyBad || KEY_BAD - W0.keyBad > 36e5) { W0.keyBad = KEY_BAD; dirty = true; } KEY_BAD = 0; }
+      try { acted += await runWatchdog(state); } catch (e) { log('watchdog', e.message || e); }
+      if (!pass) { try { if (await vaultCourier(state)) dirty = true; } catch (e) { log('vault', e.message || e); }
+        try { if (await dailySquash(state)) dirty = true; } catch (e) { log('squash', e.message || e); } }
       /* the state branch only gets a commit when something was sent — or an hourly heartbeat */
       const beat = !state.lastRun || Date.now() - state.lastRun > 60 * 60e3;
       if (acted || beat || dirty) { state.lastRun = Date.now(); state.runs = (state.runs || 0) + 1; dirty = !(await saveAt(REPO, state, cur)); if (dirty) log('couldn\'t save this pass — kept in memory, retrying next pass'); }
       /* the site's copy too, so the app sees every grade (its token rides inside the card) */
       if (SITE !== REPO && SITE_TOK && sc !== undefined && (acted || siteDirty)) { siteDirty = !(await saveAt(SITE, state, sc)); if (siteDirty) log('couldn\'t update the site\'s copy — next pass'); }
+      try { await writeHealth(state); } catch (e) { log('health', e.message || e); }
       total += acted; if (acted) log('pass', pass + 1, '·', acted, 'update(s)');
     } catch (e) { log('pass', pass + 1, 'hiccup:', e.message || e); }
     if (state && !relayPending(state, Date.now())) { await ackUpdates(state); await flush(); log('ok ·', total, 'update(s) · nothing live, lounge closed — the relay rests'); process.exit(dirty ? 1 : 0); }

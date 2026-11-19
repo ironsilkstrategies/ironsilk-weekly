@@ -227,6 +227,10 @@ export class Accounts {
     if (!okName(name)) return json({ error: 'pick a username: 2–20 letters or numbers, nothing reserved or rude' }, 400, H);
     if (pass.length < 8 || pass.length > 200) return json({ error: 'use a password of 8 or more characters' }, 400, H);
     const S = this.ctx.storage, k = 'u:' + name.toLowerCase(); if (await S.get(k)) { await this.miss(ip); return json({ error: 'that username is taken' }, 409, H); }
+    /* v3.2 · every account starts with D$1,000: at most 10 new ones from one connection a day (a phone network shares addresses, so not fewer) */
+    const sk = 'su:' + ip, su = (await S.get(sk)) || { n: 0, t: this.now() }; const fresh = this.now() - su.t < 864e5;
+    if (fresh && su.n >= 10) return json({ error: 'too many new accounts from this connection today — try again tomorrow' }, 429, H);
+    await S.put(sk, { n: (fresh ? su.n : 0) + 1, t: fresh ? su.t : this.now() });
     const salt = rid(16); await S.put(k, { name, salt, hash: await passHash(pass, salt), at: this.now(), age21: true, dd: { ...ddWallet({}), at: this.now() } }); this._bd = null; return this.issue(name, H); }
   async login(b, ip, H) { if (await this.tooMany(ip)) return json({ error: 'too many tries, wait 15 minutes' }, 429, H);
     const name = String(b.name || '').trim();
@@ -252,7 +256,11 @@ export class Accounts {
     if (prize) { const W = ddWallet(u); W.bal = r2(W.bal + prize); W.prize = r2((W.prize || 0) + prize); u.dd = W; } await S.put('u:' + key, u); this._bd = null; }
   async slate() { if (this._sl && this.now() - this._sl.t < 5 * 60e3) return this._sl.v; const f = this.fetchFn || fetch; const r = await f(SLATE_URL, { cf: { cacheTtl: 120 } }); if (!r.ok) throw new Error('slate');
     const v = await r.json(); const G = new Map(); (v.days || []).forEach(d => (d.games || []).forEach(g => G.set(g.k, g))); this._sl = { t: this.now(), v: G }; return G; }
-  async bet(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); const W = ddWallet(u);
+  async bet(s, b, H) { if (!Array.isArray(b.legs) || !b.legs.length) return json({ error: 'add a leg' }, 400, H);
+    /* v3.2 · the lines first: a Durable Object lets another request in only while it waits on outside I/O, so with the fetch up here every
+       read-check-write of the wallet below is atomic. (Fetched after the read, two bets sent at once could both spend the same balance.) */
+    let G; try { G = await this.slate(); } catch (e) { return json({ error: 'the lines can’t be reached right now — try again in a minute' }, 503, H); }
+    const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); const W = ddWallet(u);
     const rk = b.run ? 'c:' + s.key + ':' + String(b.run).replace(/[^a-z0-9]/gi, '').slice(0, 24) : null, run = rk ? await S.get(rk) : null;
     if (rk && (!run || run.status !== 'live')) return json({ error: 'that challenge run is over' }, 400, H);
     if (run && run.ends <= this.now()) return json({ error: 'time’s up on that run — no new bets' }, 400, H);
@@ -261,10 +269,8 @@ export class Accounts {
     const pot = run ? run.bal : ent ? ent.bal : W.bal;
     const stake = Math.round(+b.stake * 100) / 100; if (!(stake >= 1)) return json({ error: 'the smallest bet is D$1' }, 400, H); if (stake > pot) return json({ error: `${run ? 'this run has' : 'you have'} D$${pot.toLocaleString('en-US')}` }, 400, H);
     const want = Array.isArray(b.legs) ? b.legs.slice(0, DD_LEGS + 1) : []; if (!want.length) return json({ error: 'add a leg' }, 400, H); if (want.length > DD_LEGS) return json({ error: `up to ${DD_LEGS} legs` }, 400, H);
-    let G; try { G = await this.slate(); } catch (e) { return json({ error: 'the lines can’t be reached right now — try again in a minute' }, 503, H); }
     const mode = b.mode === 'sgp' ? 'sgp' : 'parlay', seen = new Set(), per = new Map(), legs = [];
     for (const w of want) { const k = String(w.k || ''); const g = G.get(k); if (!g) return json({ error: 'that game isn’t on the board' }, 400, H);
-      if (!['ml', 'spread', 'total'].includes(w.mk)) return json({ error: 'that line isn’t available' }, 400, H);
       if (!['ml', 'spread', 'total'].includes(w.mk)) return json({ error: 'that line isn’t available' }, 400, H);
       per.set(k, (per.get(k) || 0) + 1);
       if (!(g.t > this.now() + 60e3)) return json({ error: `${g.a.ab} at ${g.h.ab} has started — bets are closed` }, 400, H);

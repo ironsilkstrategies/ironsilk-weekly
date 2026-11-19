@@ -17,7 +17,7 @@
    Each sport lives on its own page; this just routes. The ?b= build tag
    makes Safari fetch the current page after a deploy instead of a cached one. */
 (function(){
-  var BUILD='20261117b';
+  var BUILD='20261118a';
   var PAGES={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
   var last='';try{last=localStorage.getItem('d4.activeSport')||''}catch(e){}
   var q=(location.search.match(/[?&]sport=(mlb|nfl|ncaaf|cfb|nhl|nba|ncaab|cbb)/)||[])[1];
@@ -70,7 +70,7 @@ function tdMovePaste(){var go=function(c){if(!c)return;document.getElementById('
   var ask=function(){go(prompt('Paste your transfer code (long-press → Paste):','')||'');};
   try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(c){if(c&&c.indexOf('TDMOVE1.')>=0)go(c);else ask();},ask);return;}}catch(e){}
   ask();}
-function tdMove(){var K=['d4.key','d4.ai','d4.sharp','d4.rundown','d4.oddspapi','d4.cfbd','d4.ghtoken','d4.ghrepo','d4.tgbot','d4.syncrepo','d4.synctoken'];
+function tdMove(){var K=['d4.key','d4.ai','d4.sharp','d4.rundown','d4.oddspapi','d4.cfbd','d4.ghtoken','d4.ghrepo','d4.tgbot','d4.syncrepo','d4.synctoken','d4.tgautokey'];
   var msg=document.getElementById('mvMsg'),c=String(document.getElementById('mvIn').value||'').replace(/\s+/g,''),i=c.indexOf('TDMOVE1.');
   var bad=function(){msg.textContent="That isn't a transfer code. Old app: Settings → ☁️ Sync → 🔑 Copy transfer code.";msg.style.color='#ff7a59';};
   if(i<0)return bad();var o;try{o=JSON.parse(decodeURIComponent(escape(atob(c.slice(i+8)))));}catch(e){return bad();}
@@ -78,6 +78,6 @@ function tdMove(){var K=['d4.key','d4.ai','d4.sharp','d4.rundown','d4.oddspapi',
   localStorage.setItem('d4.setupDone','1');document.getElementById('mvIn').value='';
   msg.style.color='#5fd38d';msg.textContent=n+' keys restored — opening the desk and pulling your cloud copy…';
   var sp=localStorage.getItem('d4.activeSport')||'nfl',P={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
-  setTimeout(function(){location.replace((P[sp]||'nfl.html')+'?b='+'20261117b'+'&moved=1');},900);}
+  setTimeout(function(){location.replace((P[sp]||'nfl.html')+'?b='+'20261118a'+'&moved=1');},900);}
 </script>
 </body></html>

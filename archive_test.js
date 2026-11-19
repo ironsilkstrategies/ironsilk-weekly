@@ -15,12 +15,14 @@ const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path')
   // one pending ticket that's actually still live (must survive untouched regardless of age),
   // and one wrongly-archived ticket whose game is actually still live (simulates the old bug).
   const nowD=d=>new Date(Date.now()-d*86400e3).toISOString();
+  /* v2.84.2 dates a ticket by its last game day — the fixture's ages are relative to today (fixed September dates aged out) */
+  const DY=n=>w.eval(`dayShift(today(),${-n})`);
   w.eval(`set(LS.locked,[
-    {id:1,date:'2026-09-26',source:'mine',archived:true,archivedAt:${Date.now()-1*86400e3},
+    {id:1,date:'${DY(1)}',source:'mine',archived:true,archivedAt:${Date.now()-1*86400e3},
       legs:[{game:'ZZ@YY',pick:'ZZ ML',price:-110,p:0.52,sport:'nfl'}]},
-    {id:2,date:'2026-09-20',source:'mine',archived:true,archivedAt:${Date.now()-5*86400e3},
+    {id:2,date:'${DY(5)}',source:'mine',archived:true,archivedAt:${Date.now()-5*86400e3},
       legs:[{game:'AA@BB',pick:'AA ML',price:120,p:0.45,sport:'nfl'},{game:'CC@DD',pick:'Over 40',price:-105,p:0.5,sport:'nfl'}]},
-    {id:3,date:'2026-09-27',source:'mine',archived:false,
+    {id:3,date:'${DY(0)}',source:'mine',archived:false,
       legs:[{game:'EE@FF',pick:'EE ML',price:-150,p:0.6,sport:'nfl'}]}
   ])`);
   // Fake gradeLeg per-leg outcomes deterministically for the two archived tickets (win, then win+loss)
@@ -48,7 +50,7 @@ const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path')
 
   // Regrade pass: a wrongly-archived ticket whose underlying leg is genuinely still live
   // must come back to pending, not stay mis-filed as done.
-  w.eval(`const L=get(LS.locked,[]);L.push({id:4,date:'2026-09-27',source:'mine',archived:true,archivedAt:${Date.now()},
+  w.eval(`const L=get(LS.locked,[]);L.push({id:4,date:'${DY(0)}',source:'mine',archived:true,archivedAt:${Date.now()},
     legs:[{game:'EE@FF',pick:'EE ML',price:-150,p:0.6,sport:'nfl'}]});set(LS.locked,L);
     typeof backfillGrading==='undefined'?(window.backfillGrading=function(){return Promise.resolve()}):0;`);
   w.eval('regradeAllTicketsNow()');

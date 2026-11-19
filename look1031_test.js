@@ -9,7 +9,7 @@ const PAGES=['cfb.html','mlb.html','nba.html','ncaab.html','nfl.html','nhl.html'
   T('every font the theme names is in the repo',urls.length>=20&&urls.every(u=>fs.existsSync(path.join(W,u))),urls.filter(u=>!fs.existsSync(path.join(W,u))).join(','));
   T('the font license ships with the fonts',fs.existsSync(path.join(W,'fonts/OFL.txt')));
   T('the old family names are mapped (inline styles change too)',['Inter','Archivo','IBM Plex Mono','IBM Plex Sans'].every(f=>css.includes(`font-family:"${f}"`)));
-  T('every rule beyond the fonts is scoped to the new look (html.th)',css.replace(/\/\*[\s\S]*?\*\//g,'').split('}').filter(r=>r.includes('{')&&!/@font-face|@media|^\s*$/.test(r)).every(r=>/html\.th/.test(r.split('{')[0])||/^\s*html\.th/.test(r)));
+  T('every rule beyond the fonts is scoped to the new look (html.th)',css.replace(/\/\*[\s\S]*?\*\//g,'').split('}').filter(r=>r.includes('{')&&!/@font-face|@media|^\s*$/.test(r)&&!/^\s*\.lg-sc\b/.test(r)).every(r=>/html\.th/.test(r.split('{')[0])||/^\s*html\.th/.test(r)));
   const stamp=fs.readFileSync(path.join(W,'nba.html'),'utf8').match(/min\/shared\.js\?v=(\w+)/)[1];
   PAGES.forEach(f=>{const h=fs.readFileSync(path.join(W,f),'utf8');
     T(`${f}: links the theme with the build stamp and switches it before first paint`,h.includes(`<link rel="stylesheet" id="d4theme" href="theme.css?v=${stamp}">`)&&/getElementById\('d4theme'\)[^<]*disabled=true/.test(h)&&h.indexOf('id="d4theme"')<h.indexOf('<body'));});

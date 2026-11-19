@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261117b';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261118a',DESK_VER='3.1.0';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -11730,7 +11730,7 @@ function purgeOldArchivedTickets(days){
   days=days||3;
   const cutoff=Date.now()-days*86400e3;
   try{settledSync(true);}catch(e){}
-  const frozen=settledAll();                       // never drop a ticket the ledger hasn't frozen
+  const frozen=settledAll();                       // an archived ticket the ledger hasn't frozen gets a day's grace, then its result rolls into the lifetime log
   const L=get(LS.locked,[]);const keep=[];let purged=0;
   L.forEach(t=>{
     /* v2.84.2 · a ticket's age is its LAST game day, not when it was archived; and an old ticket goes once its data is
@@ -22976,7 +22976,10 @@ async function syncRepoSafe(force){const norm=r=>String(r||'').trim().replace(/^
   if(own.has(repo)&&norm(get(LS.ghrepo,''))===repo&&repo!==norm(SITE_REPO)&&repo!==norm(typeof TGW_WORKER_REPO!=='undefined'?TGW_WORKER_REPO:'')){set(LS.ghrepo,'');own.delete(repo);}
   if(own.has(repo))R={ok:false,why:`${repo} is the app/site repo — a sync save would replace its whole branch and publish your picks. Use a separate PRIVATE repo for sync.`};
   else{try{const r=await syncFetch('https://api.github.com/repos/'+repo,{headers:syncHeaders(),cache:'no-store'});
-      if(r.status===401||r.status===403)R={ok:false,why:'token rejected (HTTP '+r.status+') — it needs Contents: read and write on '+repo};
+      /* v3.2 · a 401 is a dead token (deleted, regenerated, expired, cut off) — not a permission problem; a 404 is a token that can't see the repo */
+      if(r.status===401)R={ok:false,why:`GitHub doesn't recognize the sync token (HTTP 401): it was deleted, regenerated or has expired — or it got cut off when it was pasted. Make a new one for ${repo} (Contents: Read and write) and paste it in Settings`};
+      else if(r.status===403&&!(r.headers&&r.headers.get&&r.headers.get('x-ratelimit-remaining')==='0'))R={ok:false,why:`the sync token isn't allowed to use ${repo} (HTTP 403) — it needs Contents: Read and write on that repo`};
+      else if(r.status===404)R={ok:false,why:`the sync token can't see ${repo} (HTTP 404) — check the name, and that the token was given that repo (Repository access → Only select repositories)`};
       else if(!r.ok)R={ok:false,soft:true,why:`GitHub didn't confirm ${repo} is private (HTTP ${r.status}) — sync waits and checks again`};
       else{const j=await r.json();R=j&&j.private===true?{ok:true}:{ok:false,why:`${repo} is PUBLIC — your tickets, calls and the card would be readable by anyone. Make it private on GitHub (Settings → Change visibility) or use a private repo.`};}}
     catch(e){R={ok:false,soft:true,why:'couldn\'t reach GitHub to check the sync repo — sync waits and checks again'};}}
@@ -23319,10 +23322,11 @@ function tgAllLegs(C){const L=[];(C.best||[]).forEach(x=>L.push({x,kind:'Best 3'
   (C.px||[]).forEach(P=>(P.legs||[]).forEach(x=>L.push({x:{...x,v:x.v||P.v},kind:charName(P.v)+' props'})));
   (C.props||[]).forEach(x=>L.push({x,kind:'Prop'}));return L;}
 function tgPosts(){const P=get(TGP_KEY,{})||{};return P&&typeof P==='object'?P:{};}
-function tgTrackPost(card,chat,ids){const P=tgPosts();const W=tgwOn()&&ids.length>0;
-  P[card.d]={d:card.d,chat,ids,card,ts:Date.now(),dev:syncDevice(),auto:get('d4.tgauto',true)!==false,st:{},sent:{},recap:false,worker:W};
+function tgTrackPost(card,chat,ids,opt){const P=tgPosts();const byW=!!(opt&&opt.worker)&&!ids.length;const W=tgwOn()&&(ids.length>0||byW);
+  /* v3.2 · byW: this phone has no bot token (Nov 17: iOS wiped it) — the card still goes over, and the worker posts it with its own */
+  P[card.d]={d:card.d,chat,ids,card,ts:Date.now(),dev:syncDevice(),auto:get('d4.tgauto',true)!==false,st:{},sent:{},recap:false,worker:W,...(byW?{needPost:true}:{})};
   Object.keys(P).sort().slice(0,-4).forEach(k=>delete P[k]);set(TGP_KEY,P);
-  if(W)tgwHandOff(P[card.d]).then(r=>{if(!r||!r.ok){P[card.d].worker=false;set(TGP_KEY,P);deskToast('🛰️ Couldn\'t hand the card to the 24/7 worker ('+((r&&r.reason)||'error')+') — the app will run the autopilot instead',5000);}else deskToast('🛰️ Handed to the 24/7 worker');}).catch(e=>{P[card.d].worker=false;set(TGP_KEY,P);deskToast('🛰️ Couldn\'t reach the 24/7 worker ('+((e&&e.message)||'error')+') — tap Re-send in the worker box',6000);});
+  if(W)tgwHandOff(P[card.d]).then(r=>{if(!r||!r.ok){P[card.d].worker=false;set(TGP_KEY,P);deskToast('🛰️ Couldn\'t hand the card to the 24/7 worker ('+((r&&r.reason)||'error')+')'+(byW?' — and this phone has no bot token, so nothing posts it. Settings → Telegram, or tap Re-send in the worker box':' — the app will run the autopilot instead'),byW?9000:5000);}else{deskToast(byW?'🛰️ Handed to the 24/7 worker — it posts the VIP card itself':'🛰️ Handed to the 24/7 worker');if(byW&&typeof tgwRunNow==='function')tgwRunNow().catch(()=>{});}}).catch(e=>{P[card.d].worker=false;set(TGP_KEY,P);deskToast('🛰️ Couldn\'t reach the 24/7 worker ('+((e&&e.message)||'error')+') — tap Re-send in the worker box',6000);});
   else setTimeout(()=>tgAutoTick().catch(()=>{}),30e3);}
 /* ══ 🛰️ 24/7 WORKER HANDOFF (v2.08) ═══════════════════════════════════════════
    A free GitHub Actions job (.github/workflows/tg-autopilot.yml) runs every 10 minutes
@@ -23353,14 +23357,17 @@ function tgwPayload(p){const C=p.card;const tplMk=x=>`⟦m:${tgLegKey(x)}⟧`;tp
     best:(C.best||[]).map(x=>({k:tgLegKey(x),price:x.price!=null?+x.price:null})),top10:(C.top10||[]).map(x=>({k:tgLegKey(x),price:x.price!=null?+x.price:null})),
     banker:C.banker?{keys:C.banker.legs.map(tgLegKey),price:decimalToAmerican(C.banker.dec)}:null,
     chars:[...(C.chars||[]),...(C.px||[])].map(P=>({name:charName(P.v)+(P.px?' (props)':P.skill?' (strong suit)':''),keys:P.legs.map(tgLegKey),price:decimalToAmerican(P.dec)})),props:(C.props||[]).map(tgLegKey)};
-  return{d:p.d,chat:p.chat,ids:p.ids,parts,legs,recapPlan,postedTs:p.ts,st:{},sent:{},recap:false,worker:true};}
-function tgwMerge(a,b){const out={v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),tgOff:Math.max((a&&a.tgOff)||0,(b&&b.tgOff)||0),cmdTs:Math.max((a&&a.cmdTs)||0,(b&&b.cmdTs)||0),cmdSig:(a&&a.cmdSig)||(b&&b.cmdSig)||'',pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
+  return{d:p.d,chat:p.chat,ids:p.ids,parts,legs,recapPlan,postedTs:p.ts,st:{},sent:{},recap:false,worker:true,...(p.needPost&&!(p.ids||[]).length?{needPost:true}:{})};}
+function tgwMerge(a,b){const keep=o=>o&&typeof o==='object'?o:{};const out={...keep(b),...keep(a),v:1,posts:{},lastRun:Math.max((a&&a.lastRun)||0,(b&&b.lastRun)||0),runs:Math.max((a&&a.runs)||0,(b&&b.runs)||0),tgOff:Math.max((a&&a.tgOff)||0,(b&&b.tgOff)||0),cmdTs:Math.max((a&&a.cmdTs)||0,(b&&b.cmdTs)||0),cmdSig:(a&&a.cmdSig)||(b&&b.cmdSig)||'',pubSig:{...((b&&b.pubSig)||{}),...((a&&a.pubSig)||{})}};
   {const x=a&&a.relay,y=b&&b.relay;if(x||y)out.relay=!x?y:!y?x:x.d>y.d?x:x.d<y.d?y:{d:x.d,n:Math.max(x.n||0,y.n||0)};}   /* v2.33 · the worker's relay counter rides along */
   {const y=(b&&b.mod)||(a&&a.mod);if(y)out.mod=y;}   /* v2.82 · the robot's own memory (warnings, who agreed to the rules, which chats are TheDesk's) rides along untouched — the app never writes it */
+  /* v3.2 · the robot's watchdog memory and the lounge ride along untouched too; the phone's check-in keeps the newest */
+  {const y=(b&&b.watch)||(a&&a.watch);if(y)out.watch=y;const L=(b&&b.lounge)||(a&&a.lounge);if(L)out.lounge=L;const x1=a&&a.phone,y1=b&&b.phone;if(x1||y1)out.phone=!x1?y1:!y1?x1:(x1.ts||0)>=(y1.ts||0)?x1:y1;}
   const ds=new Set([...Object.keys((a&&a.posts)||{}),...Object.keys((b&&b.posts)||{})]);
   ds.forEach(d=>{const x=a&&a.posts&&a.posts[d],y=b&&b.posts&&b.posts[d];if(!x||!y){out.posts[d]=x||y;return;}const base=(x.postedTs||0)>=(y.postedTs||0)?x:y;
     const fx=(x.feedTs||0)>=(y.feedTs||0)?x:y;   /* v2.31 · the newest public card wins */
-    out.posts[d]={...base,st:{...(y.st||{}),...(x.st||{})},sent:{...(y.sent||{}),...(x.sent||{})},recap:!!(x.recap||y.recap),worker:x.worker!==false&&y.worker!==false,...(fx.feedTs?{feed:fx.feed,pub:fx.pub,bc:fx.bc,site:fx.site,feedTs:fx.feedTs,...(fx.cmd?{cmd:fx.cmd}:{})}:{})};});
+    const ids=(base.ids||[]).length?base.ids:((base===x?y:x).ids||[]);   /* v3.2 · whoever posted keeps the message ids — never a second post */
+    out.posts[d]={...base,ids,needPost:!ids.length&&!!(x.needPost||y.needPost),...(x.postedBy||y.postedBy?{postedBy:x.postedBy||y.postedBy}:{}),st:{...(y.st||{}),...(x.st||{})},sent:{...(y.sent||{}),...(x.sent||{})},recap:!!(x.recap||y.recap),worker:x.worker!==false&&y.worker!==false,...(fx.feedTs?{feed:fx.feed,pub:fx.pub,bc:fx.bc,site:fx.site,feedTs:fx.feedTs,...(fx.cmd?{cmd:fx.cmd}:{})}:{})};});
   Object.keys(out.posts).sort().slice(0,-5).forEach(d=>delete out.posts[d]);
   /* v3.0.11 · only the two newest days carry the full public card (~300 KB each); older days keep what the recap and results need */
   Object.keys(out.posts).sort().slice(0,-2).forEach(d=>{if(out.posts[d]&&out.posts[d].feed){const{feed,...rest}=out.posts[d];out.posts[d]=rest;}});return out;}
@@ -23400,7 +23407,7 @@ async function tgwRefreshStatus(btn){if(btn){btn.disabled=true;btn.textContent='
   if(btn){const st=R.ok&&R.state,d=st&&(st.day||st.d||'');try{deskToast(R.ok?(st?`🛰️ worker checked · card on file: ${d||'yes'}`:'🛰️ worker reached · no card handed over yet'):'⚠ '+String(R.reason||'could not reach the worker').slice(0,90),3500);}catch(e){}}
   try{renderToday(true);}catch(e){}}
 function tgwSet(on){set('d4.tgworker',!!on);if(on){tgwKey();tgwRefreshStatus();}try{renderToday(true);}catch(e){}}
-function tgwHtml(){const on=tgwOn();const key=on?tgwKey():'';const repo=TGW_WORKER_REPO;
+function tgwHtml(){const on=tgwOn();const key=on?String(get('d4.tgautokey','')||''):'';   /* v3.2 · reading the box never mints a key (a fresh one synced over the real one would lock the worker out) */const repo=TGW_WORKER_REPO;
   if(on&&!TGW_STATUS&&!window.__tgwAsk){window.__tgwAsk=1;setTimeout(tgwRefreshStatus,50);}
   const S=TGW_STATUS;let stat='';if(on&&S){if(S.err)stat=`<span style="color:var(--rust)">${txtEsc(S.err)}</span>`;else if(!S.state)stat='No card handed over yet — post the VIP card and it goes to the worker.';
     else{const ds=Object.keys(S.state.posts||{}).sort();const p=S.state.posts[ds[ds.length-1]];const g=p?Object.keys(p.st||{}).length:0;

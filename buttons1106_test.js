@@ -28,7 +28,7 @@ const errs=[];const vc=new VirtualConsole();vc.on('jsdomError',e=>errs.push(Stri
 const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nhl.html',pretendToBeVisual:true,virtualConsole:vc,beforeParse(w){w.__NO_GRADELOOP__=true;w.__NO_BACKFILL__=true;w.__NO_SYNC_LOOP__=true;
   w.fetch=()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.prompt=()=>'Renamed by test';w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(()=>{try{
-  const tk=(id,extra)=>({id,date:'2026-11-06',source:'mine',stake:1,legs:[{sport:'nhl',game:'CGY@SEA',pick:'CGY +1.5',price:-222},{sport:'nhl',game:'OTT@BUF',pick:'BUF ML',price:-125}],...(extra||{})});
+  const D0=w.eval('today()');const tk=(id,extra)=>({id,date:D0,source:'mine',stake:1,legs:[{sport:'nhl',game:'CGY@SEA',pick:'CGY +1.5',price:-222},{sport:'nhl',game:'OTT@BUF',pick:'BUF ML',price:-125}],...(extra||{})});
   w.eval(`set(LS.locked,${JSON.stringify([tk('ext1011556038'),tk(1793928645372)])})`);
   w.eval(`tab('tickets',[...document.querySelectorAll('nav button')].find(b=>/Tickets/.test(b.textContent)))`);
   const wait=ms=>new Promise(z=>setTimeout(z,ms));

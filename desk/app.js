@@ -149,8 +149,11 @@ async function scores(sps, ymd) {
   S.liveAt = Date.now();
 }
 const legYmd = x => { const s = x.start && Date.parse(x.start); const d = s ? deskDay(s) : x.day; return d ? String(d).slice(0, 10).replace(/-/g, '') : ''; };
+/* a game that starts just after midnight Central (late West Coast, Hawaii) is often filed under the day before — that day counts too */
+const ymdBack = d => { const t = Date.parse(d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6) + 'T12:00:00Z') - 864e5; return new Date(t).toISOString().slice(0, 10).replace(/-/g, ''); };
 const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'), k = `${x.sp}|${ab(x.sp, a)}@${ab(x.sp, h)}`, d = legYmd(x);
-  if (d) { const D = S.liveD[k + '#' + d]; if (D) return D; const L = S.live[k]; return L && L.ymd && L.ymd !== d ? null : L || null; }
+  if (d) { const D = S.liveD[k + '#' + d]; if (D) return D; const s0 = x.start && Date.parse(x.start), early = s0 && +new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: CFG.deskTz }).format(new Date(s0)) < 5;
+    const p = early ? S.liveD[k + '#' + ymdBack(d)] : null; if (p) return p; const L = S.live[k]; return L && L.ymd && L.ymd !== d && !(early && L.ymd === ymdBack(d)) ? null : L || null; }
   return S.live[k] || null; };
 /* a character's prop names its team, not its game: find the team's game on today's scoreboard */
 function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t = ab(p.sp, p.team), td = deskDay().replace(/-/g, '');
@@ -1405,11 +1408,27 @@ function adSettings(St) { const C = St.cfg;
   return `<div class="adset"><div><b>Members can open their own leagues</b><p>Off: only you open leagues. On: members can open free leagues (no D$ prizes, only you put those up).</p></div><button type="button" class="adsw${C.lgOpen || C.envOpen ? ' on' : ''}" data-act="adlgopen" aria-pressed="${C.lgOpen || C.envOpen}"><i></i></button></div>
     <div class="adset"><div><b>D$ store</b><p>${C.store ? 'On.' : 'Off, until a lawyer signs off. Bought D$ can only be added by you from a member’s page.'}</p></div><span class="fchip">${C.store ? 'On' : 'Off'}</span></div>
     <div class="adset"><div><b>Open a league</b><p>The league form lives on the Leagues tab.</p></div><button type="button" class="btn sm" data-go="leagues">Go</button></div>`; }
+/* v3.2 · System: the 24/7 worker's own report (health.json on its desk-health branch — times and counts, no secrets), so the desk can be
+   checked from any phone, even one where TheDesk was wiped. The worker also answers /health on Telegram. */
+const HEALTH_URL = 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/desk-health/health.json';
+async function adHealthLoad(force) { if (AD.hBusy || (!force && AD.health && Date.now() - (AD.hAt || 0) < 60e3)) return; AD.hBusy = true; try { const H = await getJSON(HEALTH_URL, 9000); if (H && H.v === 1) AD.health = H; else AD.hErr = 'The worker hasn’t written its report yet.'; AD.hAt = Date.now(); } catch { AD.hErr = 'Couldn’t reach GitHub.'; } AD.hBusy = false; if (S.tab === 'admin' && AD.tab === 'system') viewAdmin(); }
+function adSystem() { const H = AD.health; if (!H) { adHealthLoad(); return AD.hErr ? `<p class="note">${esc(AD.hErr)}</p>` : '<div class="shimmer"></div>'; }
+  const now = Date.now(), F = S.feed, P = H.phone || {}, C = H.card || {}, V = H.vault, Wk = H.worker || {}, sy = P.sync;
+  const tile = (good, v, l, sub) => adTile(good ? '✓' : '!', l, `${esc(v)}${sub ? ' · ' + esc(sub) : ''}`, good ? '' : 'alert');
+  return `<div class="adgrid">${tile(Wk.lastRun && now - Wk.lastRun < 3 * 36e5, 'last run ' + ago(Wk.lastRun), '24/7 worker', Wk.version || '')}
+    ${tile(!!C.today, C.day ? `${C.day} · ${C.graded}/${C.legs} graded` : 'no card', 'Card with the worker', C.posted ? 'posted by ' + C.posted : '')}
+    ${tile(P.seen && now - P.seen < 24 * 36e5, P.seen ? 'checked in ' + ago(P.seen) : 'no check-in yet', 'Your phone', P.build || '')}
+    ${tile(!!(sy && sy.ok), sy ? (sy.on ? 'saved ' + ago(sy.last) : 'not connected') : 'unknown', 'Cloud backup', '')}
+    ${tile(!!(V && now - V.ts < 48 * 36e5), V ? 'newest ' + ago(V.ts) : 'no copy yet', 'Vault', V ? (V.gens || []).length + ' day(s) kept' : '')}
+    ${tile(!(H.site && H.site.err), H.site && H.site.err ? 'refused (HTTP ' + H.site.err + ')' : 'working', 'Publish token', '')}
+    ${tile(P.keysMissing === 0 && !!P.xfer, P.keysMissing == null ? 'unknown' : P.keysMissing ? P.keysMissing + ' missing' : 'all there', 'Keys on the phone', P.xfer ? 'transfer code saved' : 'no transfer code saved')}
+    ${tile(!!(F && now - F.generated < 30 * 36e5), F ? 'updated ' + ago(F.generated) : 'not loaded', 'Public page', F && F.by === 'worker' ? 'by the worker' : '')}</div>
+    <p class="note">${(H.alerts || []).length ? `Needs you: <b>${H.alerts.map(esc).join(', ')}</b>. ` : 'All quiet. '}Send <b>/health</b> to the bot on Telegram for the details. Report written ${ago(H.at)}.</p>`; }
 function viewAdmin() { const el = $('#v-admin'), M = AC.me;
   if (!M || !M.owner) { el.innerHTML = `<h1 class="title">Admin</h1><p class="lede">This page is for the desk only.</p>${acctPass() ? '' : '<div class="row"><button type="button" class="btn" data-go="me">Sign in</button></div>'}${footHtml()}`; return; }
-  const St = AD.st, tabs = [['overview', 'Overview'], ['members', 'Members'], ['inbox', `Inbox${St && St.k.unread ? ` (${St.k.unread})` : ''}`], ['chat', 'Chat'], ['settings', 'Settings']];
+  const St = AD.st, tabs = [['overview', 'Overview'], ['members', 'Members'], ['inbox', `Inbox${St && St.k.unread ? ` (${St.k.unread})` : ''}`], ['chat', 'Chat'], ['system', 'System'], ['settings', 'Settings']];
   el.innerHTML = `<div class="adhead"><h1 class="title">Admin</h1><button type="button" class="btn line sm" data-act="adrefresh">↻ Refresh</button></div><div class="adtabs">${tabs.map(([k, l]) => `<button type="button" class="${AD.tab === k ? 'on' : ''}" data-act="adtab" data-v="${k}">${l}</button>`).join('')}</div>
-    ${!St ? (AD.err ? `<p class="chat-err">${esc(AD.err)}</p>` : '<div class="shimmer"></div>') : AD.tab === 'overview' ? adOverview(St) : AD.tab === 'members' ? adMembers(St) : AD.tab === 'inbox' ? adInbox() : AD.tab === 'chat' ? adChat() : adSettings(St)}
+    ${!St ? (AD.err ? `<p class="chat-err">${esc(AD.err)}</p>` : '<div class="shimmer"></div>') : AD.tab === 'overview' ? adOverview(St) : AD.tab === 'members' ? adMembers(St) : AD.tab === 'inbox' ? adInbox() : AD.tab === 'chat' ? adChat() : AD.tab === 'system' ? adSystem() : adSettings(St)}
     <div id="adPanel">${adUserPanel()}</div>${footHtml()}`;
   adLoad(); }
 async function adOpenUser(name) { AD.sel = name; AD.user = null; document.body.classList.add('sheet-on'); viewAdmin(); try { AD.user = await adApi('user', { name }); } catch (e) { toast(e.message); AD.sel = ''; document.body.classList.remove('sheet-on'); } viewAdmin(); }
@@ -1474,7 +1493,7 @@ document.addEventListener('click', async e => {
   else if (act === 'lguse') { S.ddFrom = 'lg:' + a.dataset.lid; store.set('ddfrom', S.ddFrom); go('slate', true); toast('Tap any line on the Slate: the slip bets from your league bankroll'); }
   else if (act === 'lgcancel') { const P = acctPass(); if (!P || !confirmQuit(a)) return; try { await acctApi('/acct/lgs/cancel', { token: P.token, id: a.dataset.lid }); lgsLoad(true); toast('League cancelled'); } catch (e) { toast(e.message); } }
   else if (act === 'adtab') { AD.tab = a.dataset.v; store.set('adtab', AD.tab); AD.thread = null; if (AD.tab === 'inbox') AD.inbox = null; if (AD.tab === 'chat') AD.chat = null; viewAdmin(); }
-  else if (act === 'adrefresh') { AD.inbox = null; AD.chat = null; AD.thread = null; await adLoad(true); toast('Refreshed'); }
+  else if (act === 'adrefresh') { AD.inbox = null; AD.chat = null; AD.thread = null; AD.health = null; AD.hErr = ''; await adLoad(true); toast('Refreshed'); }
   else if (act === 'aduser') adOpenUser(a.dataset.name);
   else if (act === 'adclose') { AD.sel = ''; AD.user = null; document.body.classList.remove('sheet-on'); viewAdmin(); }
   else if (act === 'adsus') { if (a.dataset.v === '1' && !confirmQuit(a)) return; try { await adApi(a.dataset.v === '1' ? 'suspend' : 'unsuspend', { name: AD.sel }); toast(a.dataset.v === '1' ? 'Suspended, signed out and banned from the chat' : 'Unsuspended'); AD.user = await adApi('user', { name: AD.sel }); adLoad(true); } catch (e) { toast(e.message); } }

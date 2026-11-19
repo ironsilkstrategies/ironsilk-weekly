@@ -667,7 +667,7 @@ function whyLabel(w){w=String(w||'qualifies');let m;
   if(/sure, but the price needs \d+% — no value/.test(w))return'no value at this price';
   return w.replace(/-?\d+(\.\d+)?%?/g,'#').replace(/\s*\(.*?\)\s*/g,' ').slice(0,64).trim();}
 /* v2.86.6 · a cloud backup that stopped saving says so on Today, with the reason and a button (Nov 6: the phone's last save was 2:41 PM and nothing showed it) */
-function syncWarnHtml(){try{if(typeof syncOn!=='function'||!syncOn())return'';const last=+localStorage.getItem(SYNC.last)||0;let F=null;try{F=JSON.parse(localStorage.getItem('d4.syncfail')||'null');}catch(e){}
+function syncWarnHtml(){try{if(typeof grdBannerHtml==='function'){const g=grdBannerHtml();if(g!==null)return g;}if(typeof syncOn!=='function'||!syncOn())return'';const last=+localStorage.getItem(SYNC.last)||0;let F=null;try{F=JSON.parse(localStorage.getItem('d4.syncfail')||'null');}catch(e){}
   if(!F||!(F.ts>last)||Date.now()-last<2*36e5)return'';const when=last?deskT(last)+' '+new Date(last).toLocaleDateString([],{month:'short',day:'numeric'}):'—';
   return`<div class="sub" style="color:var(--rust);margin-top:6px">☁️ The cloud backup hasn't saved since ${when} — ${txtEsc(String(F.msg||'unknown error').slice(0,160))} <button onclick="syncNow(true).then(()=>{try{deskRerender();}catch(e){}})">↻ Sync now</button></div>`;}catch(e){return'';}}
 function best3Near(n){const T=get(TC_KEY,{})||{};if(T.d!==today())return[];const out=[];
@@ -1587,8 +1587,14 @@ async function deskPublishPage(msg){if(!(get(LS.ghtoken,'')||get(SYNC.token,''))
   if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{await ghPut('public/picks.json',JSON.stringify(F,null,1),(msg||'Update')+' — '+today(),LEGACY_PUB_REPO);}catch(e){}}
   if(a.ok){const P=get('d4.pubstate',{})||{};set('d4.pubstate',{...P,csig:pubSig(F),cts:Date.now()});}return a;}
 /* the VIP card, posted without any pop-ups (the master evaluation does this by itself) */
-async function deskTgPostCard(force){const tok=String(get('d4.tgbot','')||'').trim(),chat=tgChatNorm(get('d4.tgchat',''));if(!tok||!chat)return{ok:false,reason:'Telegram not set up'};
+async function deskTgPostCard(force){const tok=String(get('d4.tgbot','')||'').trim(),chat=tgChatNorm(get('d4.tgchat',''));
   const P0=get('d4.tgposted',null);if(!force&&P0&&P0.d===today())return{ok:false,reason:'already posted today'};
+  /* v3.2 · no bot token on this phone (Nov 17: iOS wiped the app and the VIP card never went out for two days) — when the 24/7 worker
+     is on, the card goes to it anyway and the worker posts it with its own token (a GitHub secret, safe from wipes) */
+  if(!tok&&chat&&typeof tgwOn==='function'&&tgwOn()&&(get(LS.ghtoken,'')||get(SYNC.token,''))){const card=subCard();const parts=subTelegramText(card);
+    set('d4.tgposted',{d:today(),ts:Date.now(),n:parts.length,unconfirmed:true,auto:!force,by:'worker'});
+    try{tgTrackPost(card,chat,[],{worker:true});}catch(e){console.warn('tg track',e);}return{ok:true,n:parts.length,card,byWorker:true};}
+  if(!tok||!chat)return{ok:false,reason:'Telegram not set up'};
   const card=subCard();const parts=subTelegramText(card);const ids=[];let unconfirmed=false;
   for(const text of parts){const j=await tgApi('sendMessage',{chat_id:chat,text,parse_mode:'HTML',disable_web_page_preview:'true'});
     if(j&&j.ok===false)return{ok:false,reason:'Telegram refused it: '+(j.description||'error')};if(j&&j.ok&&j.result&&j.result.message_id)ids.push(j.result.message_id);else unconfirmed=true;await new Promise(z=>setTimeout(z,450));}
@@ -1609,7 +1615,7 @@ async function loungeFollow(B){try{if(!B.pubLounge)return B;const j=await tgApi(
 /* the freeze's publishing: page, VIP card, and the "card is locked" notes — each once a day */
 async function deskPublishAll(why){const out=[];const B=await loungeFollow(bcCfg());const d=today();const sent=get('d4.bcsent',{})||{};if(sent.d!==d){sent.d=d;sent.k={};}
   try{const r=await deskPublishPage('Publish picks');out.push(r&&r.ok?'public page ✓':'public page: '+((r&&r.reason)||'not set up'));}catch(e){out.push('public page failed');}
-  let card=null;if(B.autoPost||why==='manual'){try{const r=await deskTgPostCard(false);card=r.card||null;out.push(r.ok?`VIP card ✓ (${r.n} message${r.n>1?'s':''})`:'VIP card: '+r.reason);}catch(e){out.push('VIP card failed');}}
+  let card=null;if(B.autoPost||why==='manual'){try{const r=await deskTgPostCard(false);card=r.card||null;out.push(r.ok?(r.byWorker?'VIP card → the 24/7 worker posts it (no bot token on this phone)':`VIP card ✓ (${r.n} message${r.n>1?'s':''})`):'VIP card: '+r.reason);}catch(e){out.push('VIP card failed');}}
   const S=(()=>{try{return best5State();}catch(e){return{};}})();const n=(S.top3||[]).length;let P=null;try{P=deskPlan();}catch(e){}
   const day=new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   /* v3.0.6 · the public channel gets the free picks; the public lounge gets the full card (beta).

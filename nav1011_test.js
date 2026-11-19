@@ -18,7 +18,7 @@ setTimeout(()=>{try{
       T('a stale (3h+) memory opens on Games as usual',w3.document.getElementById('v-games').classList.contains('on'));
       w.eval(`doSportSwitch('nhl')`);
       T('tapping a sport forgets the tab (you asked for the board)',(w.localStorage.getItem('td.lastTab')==null||JSON.parse(w.localStorage.getItem('td.lastTab')).n==='games')&&w.document.getElementById('v-games').classList.contains('on'));
-      const src=w.eval('syncNow.toString()');
+      const src=w.eval('(syncNow.__inner||syncNow).toString()+syncNow.toString()');   /* v3.2 · the guard wraps syncNow: both layers are checked */
       T('automatic sync no longer reloads the page',!/location\.reload/.test(src)&&/toastSync/.test(src));
       w.eval(`deskToast('hi')`);T('quiet toast shows instead',w.document.getElementById('deskToast').textContent==='hi');
     }catch(e){out.push('CRASH '+e.stack);}console.log(out.join('\n'));process.exit(0);},2200);

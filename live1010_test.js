@@ -12,7 +12,7 @@ setTimeout(()=>{try{
       {sport:'nhl',game:'TOR@COL',pick:'TOR ML',price:179,p:0.36,gameDate:'${d}'},{sport:'nhl',game:'TOR@COL',pick:'Over 6.5',price:-122,p:0.52,gameDate:'${d}'},{sport:'nhl',game:'PHI@BOS',pick:'PHI ML',price:115,p:0.46,gameDate:'${d}'}]}]);`);
   const t=w.eval(`JSON.stringify(get(LS.locked,[])[0])`);
   const c1=w.eval(`legLiveCard(get(LS.locked,[])[0],get(LS.locked,[])[0].legs[0],{link:true})`);
-  T('live leg: score, clock, live % to hit and ▲ from pregame',/● LIVE/.test(c1)&&/TOR <b>2<\/b> – <b>1<\/b> COL/.test(c1)&&/% to hit/.test(c1)&&/▲\d+ from 36%/.test(c1),c1.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,200));
+  T('live leg: score, clock, live % to hit and ▲ from pregame',/● LIVE/.test(c1)&&/TOR <b[^>]*>2<\/b> – <b[^>]*>1<\/b> COL/.test(c1)&&/% to hit/.test(c1)&&/▲\d+ from 36%/.test(c1),c1.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,200));
   const c3=w.eval(`legLiveCard(get(LS.locked,[])[0],get(LS.locked,[])[0].legs[2])`);
   T('final leg shows WON with the final score',/✅ WON/.test(c3)&&/FINAL/.test(c3));
   T('the card links to the whole ticket',/openTicketSheet/.test(c1)&&/tap for the whole ticket/.test(c1));
