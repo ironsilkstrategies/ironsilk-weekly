@@ -47,5 +47,5 @@ process.env.VIDEO_TO = 'channel'; sent.length = 0; n = await V.main({ now: NOW, 
 T('VIDEO_TO=channel: the owner and the free channel', n === 2 && sent.filter(x => x.m === 'sendVideo').map(x => x.chat).sort().join(',') === '4242,@TheDeskApp');
 /* the workflow */
 const yml = readFileSync('/home/claude/work/.github/workflows/daily-video.yml', 'utf8');
-T('the workflow: once a day (+ by hand), ffmpeg from apt, read-only, the bot token as its one secret', /cron: '40 16 \* \* \*'/.test(yml) && /workflow_dispatch/.test(yml) && /apt-get install[^\n]*ffmpeg/.test(yml) && /node autopilot\/video\.mjs/.test(yml) && /contents: read/.test(yml) && /secrets\.TG_BOT_TOKEN/.test(yml) && !/AUTOPILOT_KEY|GITHUB_TOKEN/.test(yml) && (yml.match(/secrets\./g) || []).length === 1);
+T('the workflow: once a day (+ by hand), ffmpeg from apt, read-only, the bot token as its one secret', /cron: '40 16 \* \* \*'/.test(yml) && /workflow_dispatch/.test(yml) && /ffmpeg-static@5\.2\.0/.test(yml) && /FFMPEG_PATH/.test(yml) && /apt-get install[^\n]*ffmpeg/.test(yml) && /node autopilot\/video\.mjs/.test(yml) && /contents: read/.test(yml) && /secrets\.TG_BOT_TOKEN/.test(yml) && !/AUTOPILOT_KEY|GITHUB_TOKEN/.test(yml) && (yml.match(/secrets\./g) || []).length === 1);
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);

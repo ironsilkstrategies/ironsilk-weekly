@@ -13,7 +13,7 @@ concurrency:
 jobs:
   video:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -24,7 +24,11 @@ jobs:
           cache: npm
           cache-dependency-path: autopilot/package-lock.json
       - run: npm ci --prefix autopilot --no-audit --no-fund   # the frame renderer (satori + resvg) and its fonts
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - name: ffmpeg (a pinned static build from npm, seconds; apt only if that fails — its mirrors took 7 minutes on Nov 19)
+        run: |
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/ff" ffmpeg-static@5.2.0 || true
+          FF="$RUNNER_TEMP/ff/node_modules/ffmpeg-static/ffmpeg"
+          if [ -x "$FF" ]; then echo "FFMPEG_PATH=$FF" >> "$GITHUB_ENV"; else sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg; fi
       - run: node autopilot/video.mjs
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}

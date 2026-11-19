@@ -56,7 +56,7 @@ export function ffArgs(files, out, d = 4, t = 0.5) { const a = ['-y', '-loglevel
   fc += `${last}format=yuv420p[out]`; a.push('-filter_complex', fc, '-map', '[out]', '-r', '30', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-movflags', '+faststart', '-an', out); return a; }
 export function encode(pngs, opt = {}) { const dir = mkdtempSync(path.join(os.tmpdir(), 'tdv-'));
   try { const files = pngs.map((b, i) => { const f = path.join(dir, `f${i}.png`); writeFileSync(f, b); return f; }), mp4 = path.join(dir, 'out.mp4');
-    const r = spawnSync(opt.ffmpeg || 'ffmpeg', ffArgs(files, mp4, opt.dur, opt.fade), { encoding: 'utf8' }); if (r.status !== 0) { log('ffmpeg failed:', String(r.stderr || (r.error && r.error.message) || '').slice(0, 200)); return null; }
+    const r = spawnSync(opt.ffmpeg || env.FFMPEG_PATH || 'ffmpeg', ffArgs(files, mp4, opt.dur, opt.fade), { encoding: 'utf8' }); if (r.status !== 0) { log('ffmpeg failed:', String(r.stderr || (r.error && r.error.message) || '').slice(0, 200)); return null; }
     return readFileSync(mp4); } finally { rmSync(dir, { recursive: true, force: true }); } }
 
 /* ── Telegram (the bot token in the URL is the only secret; replies never echo it) ── */
