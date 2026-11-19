@@ -120,7 +120,7 @@ T('the next day the memory drops the old day (only today and ahead)', !('2026-11
 /* 7 · a refused token waits an hour, a new one is tried at once */
 const S2 = {}, site2 = fakeSite({ 'robots.txt': ROBOTS }); const T7 = T0;
 a = await Wk.runGamePages({}, S2, '2026-11-19', { ...D(T7, s1, { gpRun: { d: '' } }), fetch: site2.fetch, siteTok: 'DEAD' });
-T('a refused token (401): nothing written, the error remembered by a fingerprint (never the token)', a === 0 && S2.gp.err === T7 && S2.gp.errTok && !JSON.stringify(S2.gp).includes('DEAD'), JSON.stringify(S2.gp));
+T('a refused token (401): nothing written; the wait is saved (returns 1 so the memory is kept), remembered by a fingerprint, never the token', a === 1 && site2.msgs.length === 0 && S2.gp.err === T7 && S2.gp.errTok && !JSON.stringify(S2.gp).includes('DEAD'), JSON.stringify(S2.gp));
 let c2 = site2.calls.length; a = await Wk.runGamePages({}, S2, '2026-11-19', { ...D(T7 + 10 * 60e3, s1, { gpRun: { d: '' } }), fetch: site2.fetch, siteTok: 'DEAD' });
 T('…the same token isn\'t tried again for an hour (no calls)', a === 0 && site2.calls.length === c2);
 a = await Wk.runGamePages({}, S2, '2026-11-19', { ...D(T7 + 11 * 60e3, s1, { gpRun: { d: '' } }), fetch: site2.fetch, siteTok: 'GOOD' });

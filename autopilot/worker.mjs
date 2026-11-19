@@ -834,7 +834,7 @@ export async function runGamePages(state, S, today, deps) { if (String(deps?.gam
       if (fin0) run.fin[k] = fin0; } }
   const finals = mine.filter(x => x.ph === 'p' && run.fin[x.k]);
   const go = (fresh.length && (!G.at || now - G.at >= 30 * 60e3)) || (finals.length && (!G.at || now - G.at >= 2 * 36e5)); if (!go) return 0;
-  const L = await gamesOnSite(tok, deps); if (!L.paths) { if ([401, 403, 404].includes(L.status)) { G.err = now; G.errTok = fnv(tok); } log('game pages: the site said', L.status); return 0; }
+  const L = await gamesOnSite(tok, deps); if (!L.paths) { log('game pages: the site said', L.status); if ([401, 403, 404].includes(L.status)) { G.err = now; G.errTok = fnv(tok); return 1; } return 0; }   /* 1 = save the memory, so the wait sticks */
   const touched = [...new Set([...fresh.map(x => x.d), ...(finals.length ? [today] : [])])].sort(), have = new Set(L.paths), rows = {};
   for (const d of touched) { const m = {}, f = `${Gr.GP_DIR}/${d}/games.json`; if (have.has(f)) { try { for (const g of (JSON.parse(await siteText(tok, f, deps) || '{}').games || [])) if (g && g.k) m[g.k] = g; } catch (e) { } }
     Object.assign(m, live[d] || {}); rows[d] = Object.values(m).filter(Gr.named).sort((x, y) => x.t - y.t || x.k.localeCompare(y.k)); }
@@ -849,7 +849,7 @@ export async function runGamePages(state, S, today, deps) { if (String(deps?.gam
   if (!G.robots) { const txt = await siteText(tok, 'robots.txt', deps); if (txt != null) { if (txt.includes(`/${Gr.GP_DIR}/sitemap.xml`)) G.robots = true; else files['robots.txt'] = txt.replace(/\s*$/, '\n') + `Sitemap: ${Gr.GP_SITE}/${Gr.GP_DIR}/sitemap.xml\n`; } }
   const nf = due.filter(pg => pg.phase === 'final').length, nn = due.length - nf;
   const r = await (deps?.siteCommit || siteCommit)(SITE, tok, files, stale, `Game pages · ${today} · ${[nn ? nn + ' new' : '', nf ? nf + ' final' : '', stale.length ? stale.length + ' old removed' : ''].filter(Boolean).join(' · ')}`, deps);
-  if (!r.ok) { if (r.status === 401 || r.status === 403) { G.err = now; G.errTok = fnv(tok); } log('game pages: not written ·', r.status || r.reason); return 0; }
+  if (!r.ok) { log('game pages: not written ·', r.status || r.reason); if (r.status === 401 || r.status === 403) { G.err = now; G.errTok = fnv(tok); return 1; } return 0; }
   for (const pg of due) (W[pg.day] = W[pg.day] || {})[pg.k] = (pg.phase === 'final' ? 'f' : 'p') + t36(pg.t);
   if (files['robots.txt']) G.robots = true; G.at = now; delete G.err; delete G.errTok; log('game pages ·', [nn ? nn + ' new' : '', nf ? nf + ' final' : '', stale.length ? stale.length + ' removed' : ''].filter(Boolean).join(' · ')); return 1; }
 /* the public page: the full card the app handed over, with whatever hasn't unlocked yet hidden, and every grade the worker knows */
