@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           sparse-checkout: |
             feeds
@@ -26,7 +26,7 @@ jobs:
         run: |
           mkdir -p out
           if git fetch -q --depth=1 origin feeds; then git archive FETCH_HEAD | tar -x -C out; fi
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
       - run: node feeds/build.mjs out

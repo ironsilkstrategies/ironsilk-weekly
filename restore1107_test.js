@@ -10,10 +10,12 @@ const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com
   w.scrollTo=()=>{};w.alert=m=>errs.push('ALERT '+m);w.confirm=()=>true;w.prompt=()=>null;w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(async()=>{try{const E=s=>w.eval(s);
   E(`set(SYNC.repo,'me/private-sync');set(SYNC.token,'x');`);
-  /* the phone after the loss: a thin ledger with one call it changed itself */
-  E(`set(VOICES_KEY,[{id:'v-keep',sp:'nhl',date:'2026-11-08',voice:'Sim',market:'ml',side:'home',price:-999}]);set(CPROP_KEY,[]);set('d4.clv',{'2026-11-06':[1]});`);
+  /* the phone after the loss: a thin ledger with one call it changed itself (dated two days back: the daily date repair drops
+     an ungraded call over 10 days old, so a fixed date here aged out on Nov 19) */
+  const DK=E('dayShift(today(),-2)');
+  E(`set(VOICES_KEY,[{id:'v-keep',sp:'nhl',date:'${DK}',voice:'Sim',market:'ml',side:'home',price:-999}]);set(CPROP_KEY,[]);set('d4.clv',{'2026-11-06':[1]});`);
   /* the backup: older days, plus its own (older) copy of the same call */
-  const backup={v:1,from:'2026-11-05T17:01:37-06:00',keys:{'d4.voices':[{id:'v-old1',sp:'nba',date:'2026-11-04',voice:'Sim',market:'ml',side:'home',graded:true,hit:true,units:1},{id:'v-old2',sp:'nba',date:'2026-11-05',voice:'Judge',market:'spread',side:'away',graded:true,hit:false,units:-1},{id:'v-keep',sp:'nhl',date:'2026-11-08',voice:'Sim',market:'ml',side:'home',price:-150}],
+  const backup={v:1,from:'2026-11-05T17:01:37-06:00',keys:{'d4.voices':[{id:'v-old1',sp:'nba',date:'2026-11-04',voice:'Sim',market:'ml',side:'home',graded:true,hit:true,units:1},{id:'v-old2',sp:'nba',date:'2026-11-05',voice:'Judge',market:'spread',side:'away',graded:true,hit:false,units:-1},{id:'v-keep',sp:'nhl',date:DK,voice:'Sim',market:'ml',side:'home',price:-150}],
     'd4.charprops':[{id:'p1',sp:'nba',voice:'Sim',player:'X',k:'pts',thr:20,p:0.6,d:'2026-11-04',hit:true}],'d4.clv':{'2026-11-04':[7],'2026-11-05':[8],'2026-11-06':[0]}}};
   BODY=E(`LZString.compressToBase64(${JSON.stringify(JSON.stringify(backup))})`);
   /* not while the storage didn't load */

@@ -117,7 +117,7 @@
   window.D4_BOOT=function(){
     if(!RLS||typeof indexedDB==='undefined'||!window.Promise||inline()||/jsdom/i.test(navigator.userAgent||'')){if(inline()){var tpl=document.getElementById('d4s');[].slice.call((tpl.content||tpl).querySelectorAll('script')).forEach(function(it){var s=document.createElement('script');s.text=it.textContent;document.body.appendChild(s);});}else run();return;}
     var done=false,T0=Date.now();window.__D4_WAIT=Date.now();var go=function(){if(done)return;done=true;window.__D4_WAIT=0;run();};   /* v2.82.3 · the pages' "code did not load" check waits while this is set */
-    /* v2.86.7 · waits up to 12 s (relay pages 30 s) — it was 6 s; a slow phone morning tipped pages onto the small shelf */
+    /* v2.86.7 · waits up to 30 s on every page (v3.0.25; it was 6 s, then 12 s) — a slow phone morning tipped pages onto the small shelf */
     /* v3.0.25 · 30 s (it was 12): a slow open is waited out with a quiet notice; safe mode is for a real failure, not a slow phone */
     var lim=30000,note0=setTimeout(function(){if(done)return;try{var n=document.createElement('div');n.id='d4open';n.setAttribute('role','status');
       n.style.cssText='position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);z-index:99999;background:#111;color:#f2d067;border:1px solid #f2d067;border-radius:999px;padding:9px 16px;font:600 13px/1.2 system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.5)';

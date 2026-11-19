@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261118a',DESK_VER='3.1.0';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261119a',DESK_VER='3.1.1';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -11737,7 +11737,12 @@ function purgeOldArchivedTickets(days){
        in, archived or not (open tickets from weeks ago never fell off). Results are kept in the lifetime log first. */
     let last=String(t.date||'').slice(0,10);try{(t.legs||[]).forEach(l=>{const d=legDay(l,t.date);if(d&&d>last)last=d;});}catch(e){}
     const old=last&&last<dayShift(today(),-days);
-    if(old&&(t.archived?frozen[String(t.id)]||Date.now()-(t.archivedAt||0)>86400e3:true)){
+    /* v3.1.1 · "once its data is in" now means it: an open ticket rolls up only when the ledger has frozen its result. Before,
+       any ticket 3 days past its last game went — graded or not — tombstoned, its result lost: a 1H spread you hadn't graded
+       yet, an ESPN outage, or a phone left closed for four days (maintenance runs at boot, before the grader catches up).
+       A ticket nobody can grade still rolls up after two weeks, so the list can't fill with strays. */
+    const settled=!!frozen[String(t.id)],stray=last&&last<dayShift(today(),-14);
+    if(old&&(t.archived?settled||Date.now()-(t.archivedAt||0)>86400e3:(settled||stray))){
       try{if(!t.archived){t.archived=true;t.archivedAt=Date.now();t.finalRecord=ticketRecord(t);}}catch(e){}
       try{rollTicketIntoLifetimeLog(t);}catch(e){}purged++;}
     else keep.push(t);

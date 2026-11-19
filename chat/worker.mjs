@@ -16,6 +16,7 @@ const RESERVED = /^(thedesk|the desk|admin|owner|moderator|mod|system|the (simul
 export const clean = t => BAD.reduce((s, w) => s.replace(new RegExp(`\\b${w}(s|es|ed|ing|er|ers)?\\b`, 'gi'), m => m[0] + '*'.repeat(m.length - 1)), t);
 export const okName = n => typeof n === 'string' && /^[A-Za-z0-9][A-Za-z0-9 _.-]{1,19}$/.test(n.trim()) && !RESERVED.test(n.trim()) && clean(n) === n;
 const rid = (n = 18) => { const a = new Uint8Array(n); crypto.getRandomValues(a); return [...a].map(b => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join(''); };
+const keyHash = async s => { const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('name-key:' + String(s)))); let x = ''; for (const c of d) x += c.toString(16).padStart(2, '0'); return x; };
 const sameSecret = async (a, b) => { const h = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)))); const [x, y] = await Promise.all([h(a), h(b)]); let d = 0; for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i]; return d === 0; };
 
 function cors(req, env) { const o = req.headers.get('origin') || '', allow = String(env.ALLOW_ORIGINS || 'https://ironsilkweekly.com').split(',').map(s => s.trim());
@@ -57,14 +58,24 @@ export class Room {
     const name = owner ? 'TheDesk' : String(b.name || '').trim();
     if (!owner && !okName(name)) return json({ error: 'pick a name: 2–20 letters or numbers, nothing reserved or rude' }, 400, H);
     const inv = owner ? null : await S.get('i:' + code.toUpperCase());
-    if (!owner && (!inv || inv.used >= inv.uses)) { await S.put(k, { n: (this.now() - tries.t < 15 * 60e3 ? tries.n : 0) + 1, t: this.now() }); return json({ error: 'that invite code doesn’t work' }, 403, H); }
+    const bad = async () => { await S.put(k, { n: (this.now() - tries.t < 15 * 60e3 ? tries.n : 0) + 1, t: this.now() }); return json({ error: 'that invite code doesn’t work' }, 403, H); };
+    if (!owner && !inv) return bad();
     if (!owner && await S.get('b:' + name.toLowerCase())) return json({ error: 'that name is banned' }, 403, H);
-    const taken = owner ? null : await S.get('n:' + name.toLowerCase());
-    if (taken && taken.code !== code.toUpperCase()) return json({ error: 'that name is taken' }, 409, H);
-    if (inv) { inv.used++; await S.put('i:' + code.toUpperCase(), inv); await S.put('n:' + name.toLowerCase(), { code: code.toUpperCase(), at: this.now() }); }
+    /* v3.2 · a name belongs to the phone that claimed it: that phone holds a private key (only its hash is kept here), so someone else
+       holding the same multi-use invite code can't take it over. Names from before keep working and lock on their next join. A member
+       on a new phone asks TheDesk to free the name (Admin → Chat). Coming back under your own name never uses up an invite. */
+    const taken = owner ? null : await S.get('n:' + name.toLowerCase()); const nk = String(b.nameKey || '').slice(0, 80);
+    let mine = false;
+    if (taken && taken.kh) { mine = !!nk && await sameSecret(await keyHash(nk), taken.kh); if (!mine) { await S.put(k, { n: (this.now() - tries.t < 15 * 60e3 ? tries.n : 0) + 1, t: this.now() }); return json({ error: 'that name belongs to another member — pick another (on a new phone? ask TheDesk to free it)' }, 409, H); } }
+    else if (taken) { if (taken.code !== code.toUpperCase()) return json({ error: 'that name is taken' }, 409, H); mine = true; }
+    if (!owner && !mine && inv.used >= inv.uses) return bad();
+    let nameKey = null;
+    if (!owner) { if (!taken) { inv.used++; await S.put('i:' + code.toUpperCase(), inv); }
+      nameKey = taken && taken.kh ? nk : rid(24);
+      await S.put('n:' + name.toLowerCase(), { code: code.toUpperCase(), at: this.now(), kh: taken && taken.kh ? taken.kh : await keyHash(nameKey) }); }
     await S.delete(k);
     const token = rid(32), exp = this.now() + PASS_DAYS * 864e5; await S.put('s:' + token, { name, owner: !!owner, exp });
-    return json({ token, name, owner: !!owner, exp }, 200, H); }
+    return json({ token, name, owner: !!owner, exp, ...(nameKey ? { nameKey } : {}) }, 200, H); }
   async send(b, H) { const s = await this.pass(b.token); if (!s) return json({ error: 'join the chat first' }, 401, H);
     const mute = await this.ctx.storage.get('u:' + s.name.toLowerCase()); if (!s.owner && mute && mute.until > this.now()) return json({ error: 'you’re muted for now' }, 403, H);
     const text = clean(String(b.text || '').replace(/\s+/g, ' ').trim()).slice(0, MAX_TEXT); if (!text) return json({ error: 'say something' }, 400, H);
@@ -79,6 +90,8 @@ export class Room {
       case 'mute': { if (!n) return json({ error: 'name' }, 400, H); const mins = Math.max(5, Math.min(7 * 1440, +b.mins || 60)); await S.put('u:' + n, { until: this.now() + mins * 60e3 }); return json({ ok: true, mins }, 200, H); }
       case 'ban': { if (!n) return json({ error: 'name' }, 400, H); await S.put('b:' + n, { at: this.now() }); return json({ ok: true }, 200, H); }
       case 'unban': { await S.delete('b:' + n); await S.delete('u:' + n); return json({ ok: true }, 200, H); }
+      /* v3.2 · a member on a new phone: the name is freed, the next phone to join with it claims it */
+      case 'free': { if (!n) return json({ error: 'name' }, 400, H); const had = !!(await S.get('n:' + n)); await S.delete('n:' + n); return json({ ok: true, had }, 200, H); }
       case 'invite': { const uses = Math.max(1, Math.min(500, +b.uses || 25)), code = 'DESK-' + rid(5).toUpperCase(); await S.put('i:' + code, { uses, used: 0, at: this.now() }); return json({ code, uses }, 200, H); }
       case 'uninvite': { await S.delete('i:' + String(b.code || '').toUpperCase()); return json({ ok: true }, 200, H); }
       case 'invites': { const L = await S.list({ prefix: 'i:' }); return json({ invites: [...L].map(([k, v]) => ({ code: k.slice(2), ...v })) }, 200, H); }

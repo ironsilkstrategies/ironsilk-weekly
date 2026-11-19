@@ -68,7 +68,10 @@ try {
       bc: { pub: '@pub', vipLounge: '', pubLounge: '' }, pub: { legs: [{ k: 'nhl|COL@BOS|COL ML', kind: 'Best 3', n: 1, label: 'COL ML (-205)', sp: 'nhl', game: 'COL@BOS', pick: 'COL ML', price: -205, start: iso(H - 150 * 60e3), unlockAt: H - 180 * 60e3 }], parlay: null, day: 'Tonight' },
       feed: { v: 3, today: { d: day, picks: [{ sp: 'nhl', game: 'COL@BOS', pick: 'COL ML', price: -205, start: iso(H - 150 * 60e3), unlockAt: H - 180 * 60e3 }, { sp: 'nhl', game: 'NYR@PIT', pick: 'NYR ML', price: 120 }], props: [] }, record: { w: 10, l: 5, pu: 0, u: 3 } },
       site: { repo: 's/site', path: 'public/picks.json', tok: 'SITETOK' }, feedTs: H - 6 * 36e5 } } };
-  const G = run('site', { MOCK_FINAL_FROM: 'COL@BOS:2,NYR@PIT:1' }, { 'init.json': own, 'site.json': site });
+  /* a roomier budget here (Nov 19): this run's first pass draws picture cards and writes two repos, and on a busy machine 1.3 s ran out
+     before pass 2 — where the game goes final — so it handed off instead (the older worker did the same under load). Once all is
+     graded it rests, so the budget only decides how many passes it can get. */
+  const G = run('site', { MOCK_FINAL_FROM: 'COL@BOS:2,NYR@PIT:1', RELAY_BUDGET_MS: '9000' }, { 'init.json': own, 'site.json': site });
   if (G.o) { const vip = G.o.tg.filter(x => x.params.chat_id === '-100'), pub = G.o.tg.filter(x => x.params.chat_id === '@pub');
     const vr = vip.filter(x => x.meth === 'sendMessage' && /📣 Results/.test(x.params.text));
     T('site card: tonight\'s result reached the VIP channel once', vr.length === 1 && /COL ML/.test(vr[0].params.text) && /COL 4–2 BOS/.test(vr[0].params.text), vr.map(x => x.params.text).join(' | ') + ' · ' + G.log.slice(-500));
