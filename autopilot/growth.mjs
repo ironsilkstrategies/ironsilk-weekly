@@ -125,3 +125,38 @@ export function joinsText(R, wk) { const src = SRC_TAGS.map(([t, lab]) => { cons
   return ['📈 <b>Joins by link</b>', src.length ? 'By platform: ' + src.join(' · ') : 'By platform: none yet. /sourcelinks makes the links.', '',
     '<b>Top recruiters, all time</b>', ...(all.length ? all.map((r, i) => `${i + 1}. ${esc(r.nm)} · ${r.n}`) : ['None yet. Members get their link with /mylink.']), '',
     '<b>This week</b>', ...(week.length ? week.map((r, i) => `${i + 1}. ${esc(r.nm)} · ${r.n}`) : ['Nobody yet.'])].join('\n'); }
+
+/* ══ 🎬 THE DAILY VIDEO ═════════════════════════════════════════════════════════════════════════════════════════
+   The words for a 15–20 second vertical video, said the way TikTok reads as sports talk: no odds, no lines, no "bet", no
+   units. The debate when the board has one today (the open beta); otherwise yesterday's receipts from the public record. */
+const UNIT = { nhl: 'goals', mlb: 'runs' };
+export function plainSide(pick, sp, N) { const p = String(pick || '').trim(); let m;
+  const team = ab => { const s = N && (ab === N.A.ab ? N.A : ab === N.H.ab ? N.H : null); return s ? s.full : ab; };
+  if ((m = p.match(/^(Over|Under)\s+([\d.]+)$/i))) { const L = +m[2], u = UNIT[sp] || 'points'; return /over/i.test(m[1]) ? `${Math.floor(L) + 1}+ ${u}` : `${Math.ceil(L) - 1} or fewer ${u}`; }
+  if ((m = p.match(/^(\S+)\s+ML$/i))) return `${team(m[1])} to win`;
+  if ((m = p.match(/^(\S+)\s+([+-])(\d+(?:\.\d+)?)$/))) { const x = +m[3]; return m[2] === '-' ? `${team(m[1])} by ${Math.floor(x) + 1}+` : x < 1 ? `${team(m[1])} to win` : `${team(m[1])} within ${Math.floor(x)}`; }
+  return p; }
+const TAG = { nfl: '#NFL', nba: '#NBA', ncaaf: '#CollegeFootball', ncaab: '#CollegeBasketball', nhl: '#NHL', mlb: '#MLB' };
+export function videoSpec(F, now, today, ctx = {}) {
+  const B = F && F.beta === true && F.board && F.board.d === today ? F.board : null, D = B ? debates(B, now, { lead: 30 })[0] : null;
+  if (D) { const N = namesOf(D, ctx.coach), nm = { A: { ...N.A, ab: D.a }, H: { ...N.H, ab: D.h } }, cast = B.cast || {};
+    const sa = plainSide(D.la.pick, D.sp, nm), sb = plainSide(D.lb.pick, D.sp, nm), wa = who(D.la, cast), wb = who(D.lb, cast);
+    const lane = c => c && c.r && fin(c.r.rk) ? `#${c.r.rk} of ${c.r.of || '?'} at this kind of call` : '';
+    const frames = [{ k: 'hook', kicker: 'The Desk Debate', big: 'Our cast can\'t agree.', sub: `${N.A.full} at ${N.H.full} · ${tCT(D.start)}` },
+      { k: 'side', kicker: 'One side', big: wa, mid: 'is with', gold: sa, small: lane(D.la) },
+      { k: 'side', kicker: 'The other side', big: wb, mid: 'is with', gold: sb, small: lane(D.lb) },
+      { k: 'count', kicker: 'The whole cast', gold: `${D.A.length} of ${D.n}`, sub: `are with ${sa}` },
+      { k: 'cta', kicker: 'Who you got?', big: 'Every call graded in public.', sub: host(appOf(ctx)) }];
+    return { kind: 'debate', key: D.k, frames, title: `${N.A.nick} at ${N.H.nick}`,
+      caption: `Our cast split on ${N.A.nick} at ${N.H.nick} tonight. ${wa}: ${sa}. ${wb}: ${sb}. Who you got? 👇\nEvery call graded in public. Link in bio.\n${TAG[D.sp] || '#sports'} #sports #predictions` }; }
+  const y = shift(today, -1), h = ((F && F.history) || []).find(x => x && x.d === y), graded = ((h && h.picks) || []).filter(x => x && (x.hit === true || x.hit === false || x.push));
+  if (graded.length < 2) return null;
+  const w = graded.filter(x => x.hit === true && !x.push).length, l = graded.filter(x => x.hit === false && !x.push).length;
+  const rowOf = x => { const [a, hh] = String(x.game || '').split('@'); const N = teamNames({ k: x.sp + '|' + x.game, sp: x.sp, a, h: hh }, ctx.coach), nm = { A: { ...N.A, ab: a }, H: { ...N.H, ab: hh } };
+    return { label: plainSide(x.pick, x.sp, nm), meta: a && hh ? `${N.A.nick} at ${N.H.nick}` : '', res: x.push ? 'P' : x.hit ? 'W' : 'L' }; };
+  const frames = [{ k: 'hook', kicker: 'Receipts', big: 'Yesterday\'s calls.', sub: `${dayLab(y)} · wins and losses` },
+    { k: 'list', kicker: 'Graded at the final', rows: graded.slice(0, 5).map(rowOf), more: Math.max(0, graded.length - 5) },
+    { k: 'count', kicker: 'Yesterday', gold: `${w}-${l}`, sub: 'every call posted before its game' },
+    { k: 'cta', kicker: 'No deleted slips', big: 'Every call graded in public.', sub: host(appOf(ctx)) }];
+  return { kind: 'receipts', key: 'rec|' + y, frames, title: `Yesterday: ${w}-${l}`,
+    caption: `Yesterday: ${w}-${l}. Every call posted before its game and graded at the final, wins and losses. 🧾\nLink in bio.\n#sports #predictions` }; }

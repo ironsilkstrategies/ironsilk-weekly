@@ -1,0 +1,33 @@
+name: Daily video
+# v3.3 · the growth playbook's noon slot: a 15–20 second vertical video of the day's debate (or yesterday's receipts),
+# DMed to the owner with a caption, ready for TikTok, Reels and Shorts. Public data only; the bot token is the one secret.
+on:
+  schedule:
+    - cron: '40 16 * * *'   # 10:40 AM Central in winter (11:40 AM in summer): after the morning debate posts
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: daily-video
+  cancel-in-progress: false
+jobs:
+  video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: autopilot
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: autopilot/package-lock.json
+      - run: npm ci --prefix autopilot --no-audit --no-fund   # the frame renderer (satori + resvg) and its fonts
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - run: node autopilot/video.mjs
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          APP_URL: ${{ vars.APP_URL }}               # the address on the last frame (default ironsilkweekly.com/desk)
+          VIDEO_TO: ${{ vars.VIDEO_TO }}             # "channel" also posts it on the free channel; unset = only the owner's DM
+          VIDEO_OWNER_ID: ${{ vars.VIDEO_OWNER_ID }} # optional: the owner's Telegram id (else the creator of the free channel)

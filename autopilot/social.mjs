@@ -29,7 +29,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ── the card ──────────────────────────────────────────────────────────────────────────────────────────────────── */
 let R = null;   /* the renderer, loaded once; false = not installed (posts go out as words) */
-async function renderer() { if (R !== null) return R;
+export async function renderer() { if (R !== null) return R;   /* v3.3 · exported: the daily video draws its frames with it */
   try { const [{ default: satori }, { Resvg }, jpeg] = await Promise.all([import('satori'), import('@resvg/resvg-js'), import('jpeg-js')]);
     const f = (pkg, file) => readFileSync(path.join(HERE, 'node_modules', '@fontsource', pkg, 'files', file));
     const fonts = [{ name: 'Archivo', data: f('archivo', 'archivo-latin-800-normal.woff'), weight: 800, style: 'normal' }, { name: 'Archivo', data: f('archivo', 'archivo-latin-900-normal.woff'), weight: 900, style: 'normal' },
