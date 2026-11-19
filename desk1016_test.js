@@ -72,7 +72,7 @@ setTimeout(async()=>{try{
   T('the Best 3 count as one placement each',B.top3.every(x=>(P.where[E(`deskKey(${JSON.stringify({...x,m:'ml'})})`)]||[]).includes('Best 3')));
   /* ── the VIP card ── */
   const parts=E('subTelegramText(subCard())').join('\n');
-  T('VIP card: the placed tickets (no 5-leg dumps), the 70% promise, the 21+ line',!/5-leg/.test(parts)&&/70%\+ sure/.test(parts)&&/1-800-GAMBLER/.test(parts)&&/BANKER'S PARLAY|— [234]-leg/.test(parts));
+  T('VIP card: the placed tickets (no 5-leg dumps), the 70% promise, the 21+ line',!/5-leg/.test(parts)&&/70%\+ sure/.test(parts)&&/1-800-MY-RESET/.test(parts)&&/BANKER'S PARLAY|— [234]-leg/.test(parts));
   /* ── one bankroll ── */
   E(`set('d4.bankroll',{month:currentMonth(),profit:-1,limitMult:1,history:[{id:'old',date:'2026-10-01',stake:1,profit:-1,won:false,ts:1}],debited:{}});set('d4.brAmount','50');localStorage.removeItem(BANK_KEY);`);
   const S0=E('(()=>{const S=bankState();delete S.hist;return S;})()');

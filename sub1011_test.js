@@ -43,7 +43,7 @@ setTimeout(async()=>{try{
   T('Best 3 + the rest of the Top 10: never the same pick twice; no -400 chalk, no started games, no model-vs-market fight, nothing under 70%',b3.join()==='C1@D1'&&!top.some(g=>b3.includes(g))&&![...b3,...top].some(g=>/C2@D2|C3@D3|C4@D4|C5@D5/.test(g)),b3.join()+' | '+top.join());
   /* ── Telegram ── */
   const parts=w.eval('subTelegramText(subCard())');
-  T('Telegram card: the Best 3 + each placed character ticket + 21+ line, every part under the limit',parts.every(p=>p.length<=3800)&&/TODAY'S BEST/.test(parts.join())&&/The Judge — [234]-leg/.test(parts.join())&&/1-800-GAMBLER/.test(parts.join())&&!/5-leg/.test(parts.join()),parts.join().replace(/<[^>]+>/g,'').slice(0,300));
+  T('Telegram card: the Best 3 + each placed character ticket + 21+ line, every part under the limit',parts.every(p=>p.length<=3800)&&/TODAY'S BEST/.test(parts.join())&&/The Judge — [234]-leg/.test(parts.join())&&/1-800-MY-RESET/.test(parts.join())&&!/5-leg/.test(parts.join()),parts.join().replace(/<[^>]+>/g,'').slice(0,300));
   T('HTML-safe (team names escaped)',!/<(?!\/?(b|i)>)/.test(parts.join('').replace(/<b>|<\/b>|<i>|<\/i>/g,'')));
   w.eval(`set('d4.tgbot','123:ABC');set('d4.tgchat','@TheDeskVIP')`);
   let r=await w.eval('subPostTelegram()');

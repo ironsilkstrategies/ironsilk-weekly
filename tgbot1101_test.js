@@ -23,7 +23,7 @@ let U=0;const msg=(chat,from,text,x)=>({update_id:++U,message:{message_id:100+U,
 const sends=(B,chat)=>B.sent.filter(([m,p])=>m==='sendMessage'&&(chat==null||String(p.chat_id)===String(chat)));
 (async()=>{try{
   const Wk=await import('file://'+path.join(W,'autopilot/worker.mjs'));
-  const LG=[];const L0=console.log;console.log=(...a)=>{LG.push(a.join(' '));};
+  const LG=[];const L0=globalThis.__L0=console.log;console.log=(...a)=>{LG.push(a.join(' '));};
   /* ── who may use it ── */
   let S=state();let B=bot([msg({id:-1003,type:'supergroup'},900,'/best@TheDeskAppBot')]);let n=await Wk.runCommands(S,{tg:B.tg,now:NOW,findEvent:FE});
   T('the public lounge (on the card) gets full answers, as a reply',sends(B,-1003).length===1&&/⭐ Best/.test(sends(B,-1003)[0][1].text)&&/✅ COL ML/.test(sends(B,-1003)[0][1].text)&&sends(B,-1003)[0][1].reply_to_message_id===String(100+U)&&n>=1);
@@ -53,7 +53,7 @@ const sends=(B,chat)=>B.sent.filter(([m,p])=>m==='sendMessage'&&(chat==null||Str
   B=bot([{update_id:++U,message:{message_id:300,chat:LC,from:{id:301},date:SEC,new_chat_members:[{id:301,first_name:'Ann'}]}},{update_id:++U,message:{message_id:301,chat:LC,from:{id:302},date:SEC,new_chat_members:[{id:302,first_name:'Bo',last_name:'Lee'},{id:778,is_bot:true,first_name:'Spam bot'},{id:42,first_name:'Chris'}]}}]);
   n=await Wk.runCommands(S,{tg:B.tg,now:NOW});const w1=sends(B,-1003);
   T('new members get ONE welcome naming them (bots and the owner left out)',w1.length===1&&/Welcome to TheDesk, Ann and Bo Lee!/.test(w1[0][1].text)&&!/Spam bot|Chris/.test(w1[0][1].text),w1.map(x=>x[1].text.slice(0,60)).join('|'));
-  T('…with the rules, the ban warning and an "I agree" button',/Respect everyone/.test(w1[0][1].text)&&/1-800-GAMBLER/.test(w1[0][1].text)&&/Break a rule and you're out/.test(w1[0][1].text)&&/three warnings is an automatic ban/.test(w1[0][1].text)&&JSON.parse(w1[0][1].reply_markup).inline_keyboard[0][0].callback_data==='agree');
+  T('…with the rules, the ban warning and an "I agree" button',/Respect everyone/.test(w1[0][1].text)&&/1-800-MY-RESET/.test(w1[0][1].text)&&/Break a rule and you're out/.test(w1[0][1].text)&&/three warnings is an automatic ban/.test(w1[0][1].text)&&JSON.parse(w1[0][1].reply_markup).inline_keyboard[0][0].callback_data==='agree');
   const wid=S.mod.wel['-1003'].id;T('the welcome is remembered (to swap it for the next one)',wid===1000+B.sent.indexOf(w1[0])+1);
   B=bot([{update_id:++U,message:{message_id:310,chat:LC,from:{id:303},date:SEC,new_chat_members:[{id:303,first_name:'Cy'}]}}]);await Wk.runCommands(S,{tg:B.tg,now:NOW});
   T('the next join swaps the old welcome out (one on screen)',B.sent.some(([m,p])=>m==='deleteMessage'&&p.message_id===String(wid))&&/Welcome to TheDesk, Cy!/.test(sends(B,-1003)[0][1].text));
@@ -104,7 +104,7 @@ const sends=(B,chat)=>B.sent.filter(([m,p])=>m==='sendMessage'&&(chat==null||Str
   S=state();B=bot([]);await Wk.runCommands(S,{tg:B.tg,now:NOW});const sm=B.sent.filter(([m])=>m==='setMyCommands');
   T('the menu carries the robot\'s own commands; admins also see /warn /ban /unban',sm.length===2&&['live','next','rules','status'].every(c=>JSON.parse(sm[0][1].commands).some(x=>x.command===c))&&/all_chat_administrators/.test(sm[1][1].scope)&&['warn','ban','unban'].every(c=>JSON.parse(sm[1][1].commands).some(x=>x.command===c)));
   S={posts:{[D]:{d:D,chat:'-1001',legs}}};B=bot([]);await Wk.runCommands(S,{tg:B.tg,now:NOW});T('no app answers on file: the menu is left alone',!B.sent.some(([m])=>m==='setMyCommands'));
-  S=state();S.cmdSig='v2|best,live,next,rules,status';B=bot([{update_id:++U,message:{message_id:5,chat:LC,from:{id:9},text:'just chatting',date:SEC}}]);n=await Wk.runCommands(S,{tg:B.tg,now:NOW});
+  S=state();await Wk.runCommands(S,{tg:bot([]).tg,now:NOW});B=bot([{update_id:++U,message:{message_id:5,chat:LC,from:{id:9},text:'just chatting',date:SEC}}]);n=await Wk.runCommands(S,{tg:B.tg,now:NOW});
   T('plain chatter moves the offset but doesn\'t force a save',S.tgOff===U&&n===0&&!B.sent.some(([m])=>m==='setMyCommands'),'n='+n);
   B=bot([msg(LC,9,'/best')]);n=await Wk.runCommands(S,{tg:B.tg,now:NOW});T('…a command does',n>=1);
   B=bot([]);await Wk.ackUpdates({tgOff:41},{tg:B.tg});const ak=B.sent[0];T('before it stops, it confirms what it read (nothing is answered twice next run)',ak[0]==='getUpdates'&&ak[1].offset==='42'&&ak[1].limit==='1'&&ak[1].timeout==='0');
@@ -123,7 +123,7 @@ const sends=(B,chat)=>B.sent.filter(([m,p])=>m==='sendMessage'&&(chat==null||Str
   T('the robot\'s memory merges newest-wins (owner, access, warnings, welcome) and keeps every agreement',JSON.stringify(M.owner.ids)==='[2]'&&M.acl.a.v==='stranger'&&M.agreed.k1===10&&M.agreed.k2===11&&M.warns.w.n===1&&M.wel.c.id===2&&M.note.z===8);
   const wa={c:{id:5,ts:1,ok:['A']}},wb={c:{id:5,ts:1,at:9,ok:['A','B']}};T('a welcome with a newer "I agree" wins over the same welcome without it',Wk.mergeMod({wel:wa},{wel:wb}).wel.c.ok.length===2&&Wk.mergeMod({wel:wb},{wel:wa}).wel.c.ok.length===2);
   T('the worker\'s state merge carries it',JSON.stringify(Wk.mergeState({posts:{},mod:x},{posts:{}}).mod.owner.ids)==='[1]'&&!('mod' in Wk.mergeState({posts:{}},{posts:{}})));
-  const sh=fs.readFileSync(path.join(W,'shared.js'),'utf8');const src=sh.match(/function tgwMerge\(a,b\)\{[\s\S]*?\n  Object\.keys\(out\.posts\)\.sort\(\)\.slice\(0,-5\)\.forEach\(d=>delete out\.posts\[d\]\);return out;\}/)[0];
+  const sh=fs.readFileSync(path.join(W,'shared.js'),'utf8');const src=sh.match(/function tgwMerge\(a,b\)\{[\s\S]*?\n\s*Object\.keys\(out\.posts\)\.sort\(\)\.slice\(0,-2\)[^\n]*return out;\}/)[0];
   const tgwMerge=new Function(src+';return tgwMerge;')();
   T('the app\'s hand-off keeps the robot\'s memory (never drops warnings or the rules agreements)',JSON.stringify(tgwMerge({v:1,posts:{}},{posts:{},mod:x}).mod)===JSON.stringify(x));
   /* ── the workflow ── */
@@ -132,5 +132,5 @@ const sends=(B,chat)=>B.sent.filter(([m,p])=>m==='sendMessage'&&(chat==null||Str
   const wsrc=fs.readFileSync(path.join(W,'autopilot/worker.mjs'),'utf8');
   T('the relay cap fits lounge hours (240)',/n >= 240/.test(wsrc));
   console.log=L0;
-}catch(e){T('harness',false,e.stack);}
-console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(0);})();
+}catch(e){if(globalThis.__L0)console.log=globalThis.__L0;T('harness',false,e.stack);}
+console.log(out.join('\n'));console.log(`\n${out.filter(x=>x.startsWith('PASS')).length} pass / ${out.filter(x=>x.startsWith('FAIL')).length} fail`);process.exit(out.some(x=>x.startsWith('FAIL'))?1:0);})();

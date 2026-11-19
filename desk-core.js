@@ -1081,7 +1081,7 @@ function subTelegramText(C,mk){mk=mk||(()=>'');const pm=P=>{if(mk.tpl)return`⟦
   CSK.forEach(P=>blocks.push(par(P,'💪')));
   (C.px||[]).forEach(P=>blocks.push(par(P,'🎯')));
   if((C.props||[]).length)blocks.push(`<b>🎯 PROPS OF THE DAY</b>\n`+C.props.map(c=>`${mb(c)}${e(charName(c.v))}: <b>${e(cpropLine(c))}</b>${e(propWhere(c))} · ${subPct(c.cal)}${c.fav==='fav'?' ⭐ '+e(c.rec||''):''}`).join('\n'));
-  blocks.push('<i>For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.</i>');
+  blocks.push('<i>For entertainment. 21+. Gambling problem? Call or text 1-800-MY-RESET.</i>');
   const out=[];let cur='';blocks.forEach(b=>{if((cur+'\n\n'+b).length>3800){if(cur)out.push(cur);cur=b;}else cur=cur?cur+'\n\n'+b:b;});if(cur)out.push(cur);return out;}
 
 /* ── 12 · THE DAILY PROCESS — grade → intake → MASTER EVALUATION (freeze) → publish ──
@@ -2154,7 +2154,7 @@ function vipImgPage(blocks,meta){const V=VIPIMG;const c=document.createElement('
   let y=HEAD-30;blocks.forEach(b=>{vipImgDraw(ctx,b,y);y+=vipImgMeasure(ctx,b);});
   ctx.fillStyle=V.line;ctx.fillRect(V.PAD,H-FOOT+20,V.W-V.PAD*2,2);
   ctx.font=vipImgFont(800,30);ctx.fillStyle=V.gold;const hd=meta.handle||'';ctx.fillText(hd?('Follow '+hd):'TheDesk',V.PAD,H-FOOT+78);
-  ctx.font=vipImgFont(500,22);ctx.fillStyle=V.dim;ctx.fillText('For entertainment. 21+. Bet responsibly — 1-800-GAMBLER.',V.PAD,H-FOOT+120);
+  ctx.font=vipImgFont(500,22);ctx.fillStyle=V.dim;ctx.fillText('For entertainment. 21+. Gambling problem? Call or text 1-800-MY-RESET.',V.PAD,H-FOOT+120);
   return c;}
 function vipImgCanvases(){const C=subCard();const pages=vipImgBlocks(C);if(!pages.length)return[];
   const m=document.createElement('canvas').getContext('2d');const budget=VIPIMG.MAXH-260-150;const out=[];
@@ -2235,7 +2235,7 @@ async function fbpText(){const C=subCard();const I=await fbpIntel();const day=ne
       P.legs.forEach(l=>L.push(`   ▫️ ${l.player?cpropLine(l):l.pick+' ('+tcSgn(l.price)+')'} ${FBP_SP[l.sp]||''}`));L.push('');});}
   L.push('━━━━━━━━━━━━━━━');
   let handle='';try{handle=get(LS.handle,'')||'';}catch(e){}
-  L.push(`📲 Full card, live tracking + every parlay in the VIP${handle?' → '+handle:''}`,`👇 Tail or fade — drop your picks below`,'',`#SportsBetting #GamblingTwitter #NBA #NHL #CFB #Parlay #BestBets #TheDesk`,`21+ · For entertainment · Bet responsibly · 1-800-GAMBLER`);
+  L.push(`📲 Full card, live tracking + every parlay in the VIP${handle?' → '+handle:''}`,`👇 Tail or fade — drop your picks below`,'',`#SportsBetting #GamblingTwitter #NBA #NHL #CFB #Parlay #BestBets #TheDesk`,`21+ · For entertainment · Gambling problem? Call or text 1-800-MY-RESET`);
   return L.join('\n');}
 async function fbpOpen(){const old=document.getElementById('fbpView');if(old)old.remove();let t='';try{t=await fbpText();}catch(e){t='Could not build the post: '+(e&&e.message||e);}
   const v=document.createElement('div');v.id='fbpView';v.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(3,6,12,.97);overflow-y:auto;padding:14px 14px 90px';
