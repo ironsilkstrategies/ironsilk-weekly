@@ -96,7 +96,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, liveD: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin'];
+const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin', 'u'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -292,7 +292,7 @@ function introHtml() { const seen = store.get('intro') === 1, F = S.feed || {}, 
       <div><i>4</i><b>Play for free</b><span>Sign up for D$1,000 in play money. Bet the slate, take on challenges, and join the desk’s leagues for D$ prizes.</span></div></div>
     <div class="in-trust"><span>📊 Every pick graded in public</span><span>🔴 Live tracking, no app needed</span><span>🆓 Free during the open beta</span></div>
     <div class="row"><button type="button" class="btn foil" data-act="introok">Got it, show me today’s picks</button><button type="button" class="btn line" data-go="cast">Meet the characters</button></div>
-    <p class="in-fine">For entertainment and information, 21+. TheDesk doesn’t take bets; Desk Dollars are play money and never cash. Bet responsibly · 1-800-GAMBLER.</p></section>`; }
+    <p class="in-fine">For entertainment and information, 21+. TheDesk doesn’t take bets; Desk Dollars are play money and never cash. Bet responsibly · call or text 1-800-MY-RESET.</p></section>`; }
 function viewToday() {
   const el = $('#v-today'), F = S.feed;
   if (!F) {
@@ -427,7 +427,7 @@ let LB = null;
 async function lbLoad() { try { const r = await fetch(CFG.chat + '/acct/board'); if (r.ok) { LB = await r.json(); if (S.tab === 'me') { const n = $('#lb'); if (n) n.outerHTML = lbHtml(); } } } catch (e) { } }
 function lbHtml() { const P = acctPass(); if (!LB) return '<section id="lb" class="vsec"><h2 class="h2">The leaderboard</h2><div class="shimmer"></div></section>';
   return `<section id="lb" class="vsec"><h2 class="h2">The leaderboard</h2><p class="note">Ranked by Desk Dollars earned from the D$1,000 everyone starts with. Bought D$ shows in blue and never counts.</p>
-    <div class="psheet lb"><div class="ps-h"><span>#</span><span>Player</span><span>Earned</span><span>Record</span></div>${LB.rows.map((r, i) => `<div class="ps-r${P && P.name === r.name ? ' on' : ''}"><span>${i + 1}</span><span><b>${esc(r.name)}</b>${r.bought ? `<small class="lb-b">+${dd$(r.bought)} bought</small>` : ''}</span><span class="ps-s">${dd$(r.earned)}</span><span>${r.w}-${r.l}${r.roi != null ? `<small>${r.roi > 0 ? '+' : ''}${r.roi}% ROI</small>` : ''}</span></div>`).join('') || '<div class="ps-r"><span></span><span>Be the first on the board.</span></div>'}</div></section>`; }
+    <div class="psheet lb"><div class="ps-h"><span>#</span><span>Player</span><span>Earned</span><span>Record</span></div>${LB.rows.map((r, i) => `<div class="ps-r${P && P.name === r.name ? ' on' : ''}"><span>${i + 1}</span><span>${r.pub ? `<button type="button" class="link" data-act="prof" data-name="${esc(r.name)}"><b>${esc(r.name)}</b></button>` : `<b>${esc(r.name)}</b>`}${r.cap ? ' <span title="Verified capper">✔</span>' : ''}${r.bought ? `<small class="lb-b">+${dd$(r.bought)} bought</small>` : ''}</span><span class="ps-s">${dd$(r.earned)}</span><span>${r.w}-${r.l}${r.roi != null ? `<small>${r.roi > 0 ? '+' : ''}${r.roi}% ROI</small>` : ''}</span></div>`).join('') || '<div class="ps-r"><span></span><span>Be the first on the board.</span></div>'}</div></section>`; }
 /* ── Accounts + My Tickets (v3.0.21, Chris, Nov 15). Sign up with a username and a password (21+), kept on our Cloudflare.
    Track tickets from the Props slip, from the board, or by typing your own legs; they follow you to any device. Legs on the
    desk's picks grade themselves from the board; your own legs you mark as they settle. */
@@ -473,7 +473,7 @@ function viewMe() {
   el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Signed in as <b>${esc(P.name)}</b>. <button type="button" class="link" data-act="aclogout">Sign out</button></p>
     ${AC.me && AC.me.owner ? '<div class="row"><button type="button" class="btn foil" data-go="admin">🛠 Admin dashboard</button></div>' : ''}${myInbox()}${AC.me ? walletHtml(AC.me.wallet) : ''}${AC.me && (AC.me.bets || []).length ? `<h2 class="h2">Your D$ bets</h2><div class="fgrid">${AC.me.bets.slice(0, 20).map(ddBetHtml).join('')}</div>` : AC.me ? '<p class="note">Open any game on the <button type="button" class="link" data-go="slate">Slate</button> and tap a line to bet Desk Dollars.</p>' : ''}
     ${AC.me && AC.me.owner ? `<div class="paper owner ddown"><b>Owner tools</b><form data-form="ddgrant"><label>Give D$ to<input name="who" required maxlength="20" placeholder="username"></label><label>Amount<input name="amt" inputmode="numeric" required placeholder="500"></label><button class="btn sm" type="submit">Add D$</button></form><p class="note">Added D$ counts as bought: it shows in blue and never counts on the leaderboard.</p></div>` : ''}
-    ${lbHtml()}<h2 class="h2">Your real tickets</h2>
+    ${AC.me && !AC.me.owner ? pubRecHtml(P) : ''}${lbHtml()}<h2 class="h2">Your real tickets</h2>
     ${AC.me ? `<div class="mystats"><span><b>${R.c}</b>cashed</span><span><b>${R.l}</b>lost</span><span><b>${R.n ? Math.round(100 * R.h / R.n) + '%' : '—'}</b>legs hit</span><span><b>${L.length}</b>tickets</span></div>` : ''}
     <details class="paper newtk"${AC.open ? ' open' : ''}><summary>＋ New ticket</summary><form data-form="newtk"><label>Name it (optional)<input name="title" maxlength="40" placeholder="Sunday 3-leg"></label>
       <label>Legs, one per line<textarea name="legs" rows="4" required placeholder="Bills -3 -110&#10;Kaprizov 3+ SOG&#10;Over 221.5 -105"></textarea></label>
@@ -598,7 +598,7 @@ async function seal(T) {
   } catch { el.innerHTML = ''; }
 }
 function footHtml() {
-  return `<footer class="foot"><p>For entertainment. 21 and over. Bet only what you can afford to lose. If betting stops being fun, call 1-800-GAMBLER.</p>
+  return `<footer class="foot"><p>For entertainment. 21 and over. Bet only what you can afford to lose. If betting stops being fun, call or text 1-800-MY-RESET.</p>
     <p>TheDesk is published by IronSilk Strategies. <a href="privacy.html">Privacy</a></p>
     <p><button type="button" class="btn line restart" data-act="restart">↻ Restart the app</button> <span class="small-note">Not seeing the latest? This loads the newest version.</span></p></footer>`;
 }
@@ -1092,7 +1092,7 @@ document.addEventListener('submit', async e => {
     /* say what's wrong in words: in Telegram and some phone browsers the built-in form bubbles never show, so the button just looked dead */
     { const nm = f.name.value.trim(), pw = f.pass.value, bad = !nm ? 'Type a username.' : signup && !/^[A-Za-z0-9][A-Za-z0-9 _.-]{1,19}$/.test(nm) ? 'Usernames are 2–20 letters or numbers (spaces, _ . - are OK after the first letter).' : !pw ? 'Type a password.' : signup && pw.length < 8 ? `Passwords need at least 8 characters (that one has ${pw.length}).` : signup && !(f.age21 && f.age21.checked) ? 'Tick the box to confirm you’re 21 or older.' : '';
       if (bad) { n.textContent = bad; return; } }
-    try { const j = await acctApi(signup ? '/acct/signup' : '/acct/login', { name: f.name.value.trim(), pass: f.pass.value, ...(signup ? { age21: !!(f.age21 && f.age21.checked) } : {}) });
+    try { const j = await acctApi(signup ? '/acct/signup' : '/acct/login', { name: f.name.value.trim(), pass: f.pass.value, ...(signup ? { age21: !!(f.age21 && f.age21.checked), src: (store.get('src') || {}).s || undefined } : {}) });
       try { if (window.PasswordCredential && navigator.credentials) navigator.credentials.store(new PasswordCredential({ id: f.name.value.trim(), password: f.pass.value, name: j.name })).catch(() => { }); } catch (e2) { }
       store.set('acct', { token: j.token, name: j.name, owner: !!j.owner }); acctBadge(); toast(signup ? `Welcome to TheDesk, ${j.name}` : `Welcome back, ${j.name}`); viewMe(); acctLoad(); if (!isStandalone()) setTimeout(() => openGuide(false), 1400); } catch (err) { n.textContent = /fetch|network|load failed/i.test(err.message) ? 'Couldn’t reach TheDesk. Check your connection and try again.' : cap1(err.message); } return; }
   if (f.dataset.form === 'ddgrant') { const P = acctPass(); if (!P) return; try { await acctApi('/acct/grant', { token: P.token, name: f.who.value.trim(), amount: +f.amt.value }); toast(`Added D$${(+f.amt.value).toLocaleString('en-US')} to ${f.who.value.trim()}`); f.reset(); LB = null; lbLoad(); } catch (err) { toast(err.message); } return; }
@@ -1377,22 +1377,23 @@ function adOverview(St) { const K = St.k, D = St.days, mx = Math.max(1, ...D.map
     ${adTile(K.sus, 'Suspended', '', K.sus ? 'alert' : 'dim')}</div>
     <h3 class="adh">Last 14 days</h3><div class="adchart">${D.map(x => `<div title="${x.d}: ${x.n} sign-ups, ${x.act} active"><span class="a" style="height:${(x.act / mx) * 100}%"></span><span class="n" style="height:${(x.n / mx) * 100}%"></span><em>${x.d.slice(8)}</em></div>`).join('')}</div>
     <p class="adkey"><i class="n"></i>Sign-ups <i class="a"></i>Active (last seen that day)</p>
+    ${K.bySrc ? `<h3 class="adh">Where members came from</h3><div class="adlist">${Object.entries(K.bySrc).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<p><b>${esc(SRC_LAB[t] || t)}</b><span>${n}${(K.src7 || {})[t] ? ` · +${K.src7[t]} this week` : ''}</span></p>`).join('') || '<p class="note">No members yet.</p>'}</div><p class="note">Tag every link you post with ?src= (x, ig, fb, th, tt, yt, rd). The first tagged link a visitor taps is kept and counted when they sign up.</p>` : ''}
     <h3 class="adh">Biggest bankrolls</h3><div class="adlist">${top.map((u, i) => `<button type="button" data-act="aduser" data-name="${esc(u.name)}"><span>${i + 1}</span><b>${esc(u.name)}</b><em>${dd$(u.bal)}</em></button>`).join('') || '<p class="note">No members yet.</p>'}</div>`; }
 function adMembers(St) { const q = AD.q.toLowerCase(); let U = St.users.filter(u => !q || u.name.toLowerCase().includes(q));
   const key = { seen: u => -u.seen, new: u => -u.at, bal: u => -u.bal, xp: u => -u.xp, name: u => u.name.toLowerCase() }[AD.sort]; U = U.slice().sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
   return `<div class="adbar"><input type="search" placeholder="Search members" value="${esc(AD.q)}" data-input="adq" aria-label="Search members"><select data-change="adsort" aria-label="Sort">${[['seen', 'Last seen'], ['new', 'Newest'], ['bal', 'Balance'], ['xp', 'XP'], ['name', 'Name']].map(([k, v]) => `<option value="${k}"${AD.sort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
     <p class="note">${U.length} of ${St.users.length}</p><div class="adtable"><div class="adtr h"><span>Member</span><span>Balance</span><span>Record</span><span>Seen</span></div>
-    ${U.map(u => `<button type="button" class="adtr${u.sus ? ' sus' : ''}${AD.sel === u.name ? ' on' : ''}" data-act="aduser" data-name="${esc(u.name)}"><span><b>${esc(u.name)}</b>${u.owner ? ' <em class="own">owner</em>' : ''}${u.sus ? ' <em class="sus">suspended</em>' : ''}<small>${esc(u.rank)} · ${u.xp} XP · joined ${ago(u.at)}${u.note ? ' · 📝' : ''}</small></span>
+    ${U.map(u => `<button type="button" class="adtr${u.sus ? ' sus' : ''}${AD.sel === u.name ? ' on' : ''}" data-act="aduser" data-name="${esc(u.name)}"><span><b>${esc(u.name)}</b>${u.owner ? ' <em class="own">owner</em>' : ''}${u.sus ? ' <em class="sus">suspended</em>' : ''}<small>${esc(u.rank)} · ${u.xp} XP · joined ${ago(u.at)}${u.src ? ' · from ' + esc(SRC_LAB[u.src] || u.src) : ''}${u.cap ? ' · ✔ capper' : ''}${u.note ? ' · 📝' : ''}</small></span>
       <span>${dd$(u.bal)}${u.prize ? `<small>+${dd$(u.prize)} prizes</small>` : ''}${u.bought ? `<small class="b">+${dd$(u.bought)} added</small>` : ''}</span><span>${u.w}-${u.l}<small>${u.runs ? u.runs + ' runs · ' : ''}${u.lgs ? u.lgs + ' lgs' : ''}</small></span><span>${ago(u.seen)}<small>${u.visits} visits</small></span></button>`).join('')}</div>`; }
 function adUserPanel() { const D = AD.user; if (!AD.sel) return ''; if (!D) return '<div class="adpanel"><div class="shimmer"></div></div>'; const u = D.user, w = u.wallet;
   return `<div class="sheet-bg" data-act="adclose"></div><section class="adpanel" role="dialog" aria-label="${esc(u.name)}"><button type="button" class="cs-x" data-act="adclose" aria-label="Close">✕</button>
-    <h2>${esc(u.name)} ${u.sus ? '<em class="sus">suspended</em>' : ''}</h2><p class="note">Joined ${new Date(u.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · last seen ${ago(u.seen)} · ${u.visits} visits · ${u.sessions} signed-in device${u.sessions === 1 ? '' : 's'}</p>
+    <h2>${esc(u.name)} ${u.sus ? '<em class="sus">suspended</em>' : ''}</h2><p class="note">Joined ${new Date(u.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · last seen ${ago(u.seen)} · ${u.visits} visits · ${u.sessions} signed-in device${u.sessions === 1 ? '' : 's'}${u.src ? ' · came from ' + esc(SRC_LAB[u.src] || u.src) : ''}${u.pub || u.cap ? ' · record public' : ''}</p>
     <div class="adgrid sm">${adTile(dd$(w.bal), 'Balance')}${adTile(`${w.w}-${w.l}${w.p ? '-' + w.p : ''}`, 'Record')}${adTile(u.xp, u.rank.name + ' · XP')}${adTile(dd$(w.prize || 0), 'Prizes')}${adTile(dd$(w.bought || 0), 'Added')}${adTile(dd$(w.staked || 0), 'Staked')}</div>
     <h3 class="adh">Actions</h3>
     <form class="adact" data-form="admoney"><input name="amt" inputmode="decimal" placeholder="D$ amount" required><select name="kind"><option value="prize">Give as a prize (earned)</option><option value="bought">Add (counts as bought)</option><option value="take">Take away</option></select><button class="btn sm" type="submit">Apply</button></form>
     <form class="adact" data-form="adxp"><input name="amt" inputmode="numeric" placeholder="XP (use − to remove)" required><button class="btn sm" type="submit">Give XP</button></form>
     <form class="adact" data-form="adnote"><input name="note" maxlength="300" placeholder="Private note (only you see it)" value="${esc(u.note)}"><button class="btn ghost sm" type="submit">Save note</button></form>
-    <div class="row">${u.owner ? '' : u.sus ? `<button type="button" class="btn sm" data-act="adsus" data-v="0">Unsuspend</button>` : `<button type="button" class="btn ghost sm warn" data-act="adsus" data-v="1">Suspend</button>`}<button type="button" class="btn ghost sm" data-act="adsignout">Sign out everywhere</button><button type="button" class="btn ghost sm" data-act="admsg">Message</button>${u.owner ? '' : '<button type="button" class="btn ghost sm warn" data-act="addel">Delete account</button>'}</div>
+    <div class="row">${u.owner ? '' : u.sus ? `<button type="button" class="btn sm" data-act="adsus" data-v="0">Unsuspend</button>` : `<button type="button" class="btn ghost sm warn" data-act="adsus" data-v="1">Suspend</button>`}<button type="button" class="btn ghost sm" data-act="adsignout">Sign out everywhere</button><button type="button" class="btn ghost sm" data-act="admsg">Message</button>${u.owner ? '' : `<button type="button" class="btn ghost sm" data-act="adcap" data-v="${u.cap ? '0' : '1'}">${u.cap ? 'Remove verified capper' : '✔ Verify capper'}</button>`}${u.owner ? '' : '<button type="button" class="btn ghost sm warn" data-act="addel">Delete account</button>'}</div>
     ${D.runs.length ? `<h3 class="adh">Challenge runs</h3><div class="adlist">${D.runs.slice(0, 8).map(r => `<p><b>${esc(CHN(r.cid))}</b><span>${r.status} · ${dd$(r.bal)} of ${dd$(r.goal)}</span></p>`).join('')}</div>` : ''}
     ${D.leagues.length ? `<h3 class="adh">Leagues</h3><div class="adlist">${D.leagues.map(g => `<p><b>${esc(g.name)}</b><span>${g.status} · ${dd$(g.bal)} · ${g.w}-${g.l}</span></p>`).join('')}</div>` : ''}
     ${D.bets.length ? `<h3 class="adh">Recent bets</h3><div class="adlist">${D.bets.slice(0, 12).map(x => `<p><b>${dd$(x.stake)} · ${x.legs.map(l => esc(l.pick)).join(' + ')}</b><span>${x.status}${x.run ? ' · challenge' : x.lg ? ' · league' : ''}</span></p>`).join('')}</div>` : ''}
@@ -1439,18 +1440,55 @@ async function adOpenUser(name) { AD.sel = name; AD.user = null; document.body.c
 /* the member's side of the inbox: on Your tickets */
 function myInbox() { const I = AC.me && AC.me.inbox; if (!I || (AC.me && AC.me.owner)) return '';
   return `<details class="paper myinbox"${AC.inboxOpen ? ' open' : ''}><summary>✉️ Message the desk${I.unread ? ` <em>${I.unread} new</em>` : ''}</summary>${adMsgs(I.msgs, true)}<form data-form="mymsg"><textarea name="text" rows="3" maxlength="1000" required placeholder="Questions, ideas, problems: the desk reads every one."></textarea><button class="btn sm" type="submit">Send</button></form></details>`; }
-const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin };
+/* ── v3.3 · THE OPEN SCOREBOARD (Nov 19, the growth playbook): a member's record at ironsilkweekly.com/desk/#u=<name>. Every settled
+   D$ bet with when it was placed and when its games started (the server takes no bet on a game that has started), so anyone can
+   check it was in before kickoff. Private until the member switches it on, or the desk verifies them as a capper (✔). ── */
+const SRC_LAB = { x: 'X', ig: 'Instagram', fb: 'Facebook', th: 'Threads', tt: 'TikTok', yt: 'YouTube', rd: 'Reddit', tg: 'Telegram', direct: 'Direct or unknown' };
+const PROF = { name: '', data: null, err: '', at: 0 };
+const profUrl = n => CFG.home + '#u=' + encodeURIComponent(n);
+async function profLoad(name) { if (!name) return; if (PROF.name !== name) { PROF.name = name; PROF.data = null; PROF.err = ''; }
+  try { const r = await fetch(CFG.chat + '/acct/u?name=' + encodeURIComponent(name)); let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) throw Object.assign(new Error(j.error || 'not found'), { st: r.status });
+    if (PROF.name === name) { PROF.data = j; PROF.err = ''; PROF.at = Date.now(); } }
+  catch (e) { if (PROF.name === name && !PROF.data) PROF.err = e.st === 404 ? 'No member by that name.' : 'Couldn’t reach TheDesk. Try again in a minute.'; }
+  if (S.tab === 'u' && S.profile === name) viewProfile(); }
+const ctStamp = t => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: CFG.deskTz });
+function lockGap(b) { const t0 = Math.min(...(b.legs || []).map(l => +l.t || Infinity)); if (!isFinite(t0) || !b.ts) return ''; const m = Math.round((t0 - b.ts) / 60e3); if (m < 1) return 'right at the start';
+  return (m >= 2880 ? Math.round(m / 1440) + ' days' : m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + ' min') + ' before the first game'; }
+function profBetHtml(b) { const chip = { won: `✓ Won ${dd$(b.back)}`, lost: '✗ Lost', push: '↺ Push', open: 'Open' }[b.status] || esc(b.status);
+  return `<article class="slip mytk nostub ${b.status === 'won' ? 'cashed' : b.status}"><div class="slip-head"><span>${dd$(b.stake)} · ${b.mode === 'sgp' ? 'SGP · ' + b.legs.length + ' legs' : b.legs.length > 1 ? b.legs.length + '-leg' : 'single'}${b.ctx && b.ctx !== 'wallet' ? ' · ' + esc(b.ctx) : ''}</span><span class="fchip ${b.status === 'won' ? 'cashed' : b.status}">${chip}</span></div><div class="slip-main">
+    <ul class="fl-list">${b.legs.map(l => `<li class="fl ${l.res || 'open'}"><span class="fl-ic">${l.res === 'hit' ? '✓' : l.res === 'miss' ? '✗' : l.res === 'push' ? '↺' : '○'}</span><div class="fl-b"><b>${esc(l.pick)} ${esc(odds(l.price))}</b><small>${esc([LEAGUE[l.sp], String(l.game || '').replace('@', ' at '), l.t ? 'started ' + ctStamp(l.t) + ' CT' : ''].filter(Boolean).join(' · '))}</small></div></li>`).join('')}</ul>
+    <p class="note">🔒 Placed ${esc(ctStamp(b.ts))} CT · ${esc(lockGap(b))}</p></div></article>`; }
+function viewProfile() { const el = $('#v-u'); if (!el) return; const n = S.profile || '', P = acctPass(), mine = !!(P && P.name.toLowerCase() === n.toLowerCase()), D = PROF.name === n ? PROF.data : null;
+  if (!D) { el.innerHTML = `<h1 class="title">${esc(n || 'A member')}</h1>${PROF.err && PROF.name === n ? `<p class="lede">${esc(PROF.err)}</p><div class="row"><button type="button" class="btn ghost sm" data-go="me">See the leaderboard</button></div>` : '<div class="shimmer"></div>'}${footHtml()}`; return; }
+  const rec = `${D.w}-${D.l}${D.p ? '-' + D.p : ''}`;
+  el.innerHTML = `<h1 class="title">${esc(D.name)}${D.cap ? ' <span class="fchip cashed" style="font-size:.42em;vertical-align:middle" title="Verified by TheDesk">✔ Verified capper</span>' : ''}</h1>
+    <p class="lede">${esc(D.rank)} · ${(+D.xp || 0).toLocaleString('en-US')} XP · on TheDesk since ${new Date(D.since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</p>
+    <div class="mystats"><span><b>${rec}</b>record</span><span><b>${D.roi == null ? '—' : (D.roi > 0 ? '+' : '') + D.roi + '%'}</b>ROI</span><span><b>${dd$(D.earned)}</b>D$ earned</span></div>
+    ${D.private ? `<div class="paper blank"><b>This record is private</b><p>${mine ? 'Switch it on in <button type="button" class="link" data-go="me">Your tickets</button> and anyone with your link can check every bet.' : 'Only the totals show until they make it public.'}</p></div>`
+      : `<div class="row"><button type="button" class="btn sm" data-act="proflink" data-name="${esc(D.name)}">Copy the link to this record</button></div>
+    <p class="note">Every bet here went in before its games started: the server stamps the moment it arrived and takes nothing on a game that has begun. Desk Dollars are play money, never cashed out.</p>
+    ${D.open && D.open.length ? `<h2 class="h2">Open now</h2><div class="fgrid">${D.open.map(profBetHtml).join('')}</div>` : D.openHidden ? '<p class="note">Open bets stay hidden until they settle.</p>' : ''}
+    <h2 class="h2">Settled</h2>${(D.settled || []).length ? `<div class="fgrid">${D.settled.map(profBetHtml).join('')}</div>` : '<div class="paper blank"><b>Nothing settled yet</b><p>The first graded bet shows up here.</p></div>'}`}${footHtml()}`; }
+function pubRecHtml(P) { const M = AC.me || {};
+  return `<div class="paper pubrec"><b>Your public record</b><p class="note">Switch it on and anyone with your link sees every settled D$ bet, stamped with when you placed it. Post picks? This is your proof.</p>
+    <label class="chk"><input type="checkbox" data-act="pubtoggle" data-k="pub"${M.pub || M.cap ? ' checked' : ''}${M.cap ? ' disabled' : ''}> Make my record public${M.cap ? ' (✔ verified capper: always public)' : ''}</label>
+    <label class="chk"><input type="checkbox" data-act="pubtoggle" data-k="open"${M.pubOpen ? ' checked' : ''}${M.pub || M.cap ? '' : ' disabled'}> Show my open bets too</label>
+    ${M.pub || M.cap ? `<div class="row"><button type="button" class="btn sm" data-act="proflink" data-name="${esc(P.name)}">Copy my link</button><button type="button" class="btn ghost sm" data-act="prof" data-name="${esc(P.name)}">See it</button></div>` : ''}</div>`; }
+const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
-  if (!TABS.includes(tab)) tab = 'today';
+  /* v3.3 · #u=<name> opens a member's public record (the Open Scoreboard) */
+  if (typeof tab === 'string' && tab.startsWith('u=')) { try { S.profile = decodeURIComponent(tab.slice(2)); } catch { S.profile = tab.slice(2); } tab = 'u'; }
+  if (!TABS.includes(tab) || (tab === 'u' && !S.profile)) tab = 'today';
   S.tab = tab;
   for (const t of TABS) $('#v-' + t).hidden = t !== tab;
   for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top')) { if (b.dataset.go === tab || (b.dataset.also || '').split(' ').includes(tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
-  if (push && location.hash !== '#' + tab) history.pushState(null, '', '#' + tab);
+  const hash = '#' + (tab === 'u' ? 'u=' + encodeURIComponent(S.profile) : tab); if (push && location.hash !== hash) history.pushState(null, '', hash);
   render(); window.scrollTo(0, 0);
   try { if (TG && TG.BackButton) { if (tab === 'today') TG.BackButton.hide(); else TG.BackButton.show(); } } catch (e) { }
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk' }[tab];
+  if (tab === 'u') profLoad(S.profile);
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk', u: `${S.profile || 'A member'}: the record — TheDesk` }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
@@ -1501,6 +1539,11 @@ document.addEventListener('click', async e => {
   else if (act === 'aduser') adOpenUser(a.dataset.name);
   else if (act === 'adclose') { AD.sel = ''; AD.user = null; document.body.classList.remove('sheet-on'); viewAdmin(); }
   else if (act === 'adsus') { if (a.dataset.v === '1' && !confirmQuit(a)) return; try { await adApi(a.dataset.v === '1' ? 'suspend' : 'unsuspend', { name: AD.sel }); toast(a.dataset.v === '1' ? 'Suspended, signed out and banned from the chat' : 'Unsuspended'); AD.user = await adApi('user', { name: AD.sel }); adLoad(true); } catch (e) { toast(e.message); } }
+  else if (act === 'adcap') { try { const j = await adApi('cap', { name: AD.sel, on: a.dataset.v === '1' }); toast(j.cap ? 'Verified: their record is public with the ✔' : 'Verified badge removed'); AD.user = await adApi('user', { name: AD.sel }); adLoad(true); } catch (e) { toast(e.message); } }
+  else if (act === 'prof') go('u=' + encodeURIComponent(a.dataset.name || ''), true);
+  else if (act === 'proflink') { const u = profUrl(a.dataset.name || ''); try { await navigator.clipboard.writeText(u); toast('Link copied'); } catch { toast(u); } }
+  else if (act === 'pubtoggle') { const P = acctPass(); if (!P || !AC.me) return; const k = a.dataset.k; const on = k === 'pub' ? a.checked : !!AC.me.pub, open = k === 'open' ? a.checked : on && !!AC.me.pubOpen;
+    try { const j = await acctApi('/acct/pub', { token: P.token, on, open }); AC.me.pub = j.pub; AC.me.pubOpen = j.open; toast(k === 'pub' ? (j.pub ? 'Your record is public' : 'Your record is private again') : (j.open ? 'Open bets show on your record' : 'Open bets stay hidden until they settle')); } catch (err) { toast(err.message); } viewMe(); }
   else if (act === 'adsignout') { try { const j = await adApi('signout', { name: AD.sel }); toast(`Signed out of ${j.n} device${j.n === 1 ? '' : 's'}`); } catch (e) { toast(e.message); } }
   else if (act === 'addel') { if (!confirmQuit(a)) return; try { await adApi('delete', { name: AD.sel }); toast('Account deleted'); AD.sel = ''; AD.user = null; document.body.classList.remove('sheet-on'); adLoad(true); } catch (e) { toast(e.message); } }
   else if (act === 'admsg') { const n = AD.sel; AD.sel = ''; AD.user = null; document.body.classList.remove('sheet-on'); AD.tab = 'inbox'; try { AD.thread = (await adApi('thread', { name: n })).thread; AD.inbox = AD.inbox || { threads: [] }; } catch (e) { toast(e.message); } viewAdmin(); }
@@ -1594,6 +1637,11 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { lo
 S.feed = noHeavy(store.get('feed')); S.slate = store.get('slate');
 if (S.slate && !(S.slate.v === 1 && Array.isArray(S.slate.days))) S.slate = null;
 chip();
+/* v3.3 · where a visitor came from: ?src=x on a bio link (or utm_source), kept from the first tagged visit for 30 days and sent with
+   the sign-up, so Admin can count members by platform. Inside Telegram with no tag: "tg". Nothing else about the visitor is kept. */
+try { const q = new URLSearchParams(location.search), t = String(q.get('src') || q.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24), had = store.get('src');
+  if (t && (!had || Date.now() - (had.t || 0) > 30 * 864e5)) store.set('src', { s: t, t: Date.now() });
+  else if (!t && !had && TG && TG.initDataUnsafe && TG.initDataUnsafe.user) store.set('src', { s: 'tg', t: Date.now() }); } catch (e) { /* storage off: fine */ }
 /* ?embed=1 · the chat inside the desk's own app: no header, no tabs */
 if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
 go((() => { try { const sp = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param; if (sp && TABS.includes(sp)) return sp; } catch (e) { } return (location.hash || '#today').slice(1); })(), false);

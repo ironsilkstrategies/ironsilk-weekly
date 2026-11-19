@@ -14,6 +14,8 @@ const BAD = ['fuck', 'shit', 'bitch', 'cunt', 'nigger', 'nigga', 'faggot', 'fag'
 import { get as chal, inLib, checkpoints, ROUTES, ruleCheck, tierOf, rankOf } from './chal-lib.mjs';
 const RESERVED = /^(thedesk|the desk|admin|owner|moderator|mod|system|the (simulator|judge|coach|scorekeeper|oracle|historian|crowd|commissioner|underdog spotter|scout|banker|brain))$/i;
 export const clean = t => BAD.reduce((s, w) => s.replace(new RegExp(`\\b${w}(s|es|ed|ing|er|ers)?\\b`, 'gi'), m => m[0] + '*'.repeat(m.length - 1)), t);
+/* v3.3 · where a member came from (?src= on their first visit): a short tag, letters/numbers/-/_ only */
+export const srcTag = v => { const t = String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24); return t || null; };
 export const okName = n => typeof n === 'string' && /^[A-Za-z0-9][A-Za-z0-9 _.-]{1,19}$/.test(n.trim()) && !RESERVED.test(n.trim()) && clean(n) === n;
 const rid = (n = 18) => { const a = new Uint8Array(n); crypto.getRandomValues(a); return [...a].map(b => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join(''); };
 const keyHash = async s => { const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('name-key:' + String(s)))); let x = ''; for (const c of d) x += c.toString(16).padStart(2, '0'); return x; };
@@ -199,6 +201,7 @@ export class Accounts {
       if (req.method === 'GET' && p === '/acct/chal') return this.chalBoard(H);
       if (req.method === 'GET' && p === '/acct/lgs') return this.lgsList(H);
       if (req.method === 'GET' && p === '/acct/lgs/one') return this.lgsOne(String(url.searchParams.get('id') || ''), H);
+      if (req.method === 'GET' && p === '/acct/u') return this.profile(String(url.searchParams.get('name') || ''), H);
       if (req.method !== 'POST') return json({ error: 'not found' }, 404, H);
       const ip = req.headers.get('cf-connecting-ip') || 'unknown'; let b; try { b = await req.json(); } catch (e) { return json({ error: 'body' }, 400, H); }
       if (p === '/acct/board') return this.board(H);
@@ -206,6 +209,7 @@ export class Accounts {
       if (p === '/acct/login') return this.login(b, ip, H);
       const s = await this.pass(b.token); if (!s) return json({ error: 'sign in first' }, 401, H);
       if (p === '/acct/me') return this.me(s, H);
+      if (p === '/acct/pub') { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); u.pub = b.on === true; u.pubOpen = u.pub && b.open === true; await S.put('u:' + s.key, u); return json({ pub: u.pub, open: u.pubOpen }, 200, H); }
       if (p === '/acct/inbox/send') return this.inboxSend(s, b, H);
       if (p === '/acct/inbox/read') { const S = this.ctx.storage, t = await S.get('ib:' + s.key); if (t) { t.uread = 0; await S.put('ib:' + s.key, t); } return json({ ok: true }, 200, H); }
       if (p === '/acct/admin') return s.owner ? this.admin(s, b, H) : json({ error: 'owner only' }, 403, H);
@@ -244,7 +248,7 @@ export class Accounts {
     const sk = 'su:' + ip, su = (await S.get(sk)) || { n: 0, t: this.now() }; const fresh = this.now() - su.t < 864e5;
     if (fresh && su.n >= 10) return json({ error: 'too many new accounts from this connection today — try again tomorrow' }, 429, H);
     await S.put(sk, { n: (fresh ? su.n : 0) + 1, t: fresh ? su.t : this.now() });
-    const salt = rid(16); await S.put(k, { name, salt, hash: await passHash(pass, salt), at: this.now(), age21: true, dd: { ...ddWallet({}), at: this.now() } }); this._bd = null; return this.issue(name, H); }
+    const salt = rid(16), src = srcTag(b.src); await S.put(k, { name, salt, hash: await passHash(pass, salt), at: this.now(), age21: true, dd: { ...ddWallet({}), at: this.now() }, ...(src ? { src } : {}) }); this._bd = null; return this.issue(name, H); }
   async login(b, ip, H) { if (await this.tooMany(ip)) return json({ error: 'too many tries, wait 15 minutes' }, 429, H);
     const name = String(b.name || '').trim();
     /* the owner: "TheDesk" + the owner code (the chat's), no sign-up — the account is made the first time */
@@ -263,7 +267,7 @@ export class Accounts {
     const C = await S.list({ prefix: 'c:' + s.key + ':' }), lg = [], ib = await S.get('ib:' + s.key), cfg = (await S.get('cfg')) || {};
     for (const lid of (u.lgs || [])) { const g = await S.get('G:' + lid), e = await S.get('e:' + lid + ':' + s.key); if (g && e) lg.push({ lid, name: g.name, status: lgStatus(g, this.now()), bal: e.bal, start: e.start, open: e.open || 0, starts: g.starts, ends: g.ends, sports: g.sports || null }); }
     return json({ name: s.name, owner: !!u.owner, since: u.at, wallet: u.dd, store: this.env.STORE_ON === 'yes', tickets: [...L.values()].sort((a, b) => b.ts - a.ts), bets: [...B.values()].sort((a, b) => b.ts - a.ts).slice(0, 100),
-      runs: [...C.values()].sort((a, b) => b.ts - a.ts).slice(0, 40), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), leagues: lg, lgOpen: this.env.LG_OPEN === 'yes' || !!cfg.lgOpen || !!u.owner, inbox: ib ? { msgs: ib.msgs.slice(-50), unread: ib.uread || 0 } : { msgs: [], unread: 0 } }, 200, H); }
+      runs: [...C.values()].sort((a, b) => b.ts - a.ts).slice(0, 40), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), leagues: lg, pub: !!u.pub, pubOpen: !!u.pubOpen, cap: !!u.cap, lgOpen: this.env.LG_OPEN === 'yes' || !!cfg.lgOpen || !!u.owner, inbox: ib ? { msgs: ib.msgs.slice(-50), unread: ib.uread || 0 } : { msgs: [], unread: 0 } }, 200, H); }
   /* XP and D$ prizes land here: XP on the account (with a short log), prizes in the wallet as earned D$ */
   async award(key, xp, prize, why) { const S = this.ctx.storage, u = await S.get('u:' + key); if (!u) return; u.xp = (u.xp || 0) + (xp || 0); u.xpl = [...(u.xpl || []), { t: this.now(), xp: xp || 0, dd: prize || 0, why }].slice(-40);
     if (prize) { const W = ddWallet(u); W.bal = r2(W.bal + prize); W.prize = r2((W.prize || 0) + prize); u.dd = W; } await S.put('u:' + key, u); this._bd = null; }
@@ -400,23 +404,25 @@ export class Accounts {
         const d = n => now - n * 864e5, W = u => ddWallet(u), sum = f => Math.round(U.reduce((a, u) => a + (f(u) || 0), 0) * 100) / 100;
         const days = []; for (let i = 13; i >= 0; i--) { const a = new Date(now - i * 864e5).toISOString().slice(0, 10); days.push({ d: a, n: U.filter(u => new Date(u.at || 0).toISOString().slice(0, 10) === a).length, act: U.filter(u => u.seen && new Date(u.seen).toISOString().slice(0, 10) === a).length }); }
         const live = G.filter(g => !g.cancelled && lgStatus(g, now) === 'live').length;
-        const users = U.map(u => { const w = W(u); return { name: u.name, owner: !!u.owner, at: u.at || 0, seen: u.seen || 0, visits: u.visits || 0, bal: w.bal, bought: w.bought || 0, prize: w.prize || 0, w: w.w, l: w.l, staked: w.staked || 0, xp: u.xp || 0, rank: rankOf(u.xp || 0).name, runs: C.filter(r => r.name === u.name && r.status === 'live').length, lgs: (u.lgs || []).length, sus: X.has(u.name.toLowerCase()), note: u.note || '', tg: u.tg || null }; });
+        const users = U.map(u => { const w = W(u); return { name: u.name, owner: !!u.owner, at: u.at || 0, seen: u.seen || 0, visits: u.visits || 0, bal: w.bal, bought: w.bought || 0, prize: w.prize || 0, w: w.w, l: w.l, staked: w.staked || 0, xp: u.xp || 0, rank: rankOf(u.xp || 0).name, runs: C.filter(r => r.name === u.name && r.status === 'live').length, lgs: (u.lgs || []).length, sus: X.has(u.name.toLowerCase()), note: u.note || '', tg: u.tg || null, src: u.src || null, pub: !!u.pub, cap: !!u.cap }; });
+        const bySrc = {}, src7 = {}; U.filter(u => !u.owner).forEach(u => { const t = u.src || 'direct'; bySrc[t] = (bySrc[t] || 0) + 1; if ((u.at || 0) > d(7)) src7[t] = (src7[t] || 0) + 1; });
         const chat = await room({ act: 'list' });
         return json({ k: { members: U.length, new1: U.filter(u => (u.at || 0) > d(1)).length, new7: U.filter(u => (u.at || 0) > d(7)).length, act1: U.filter(u => (u.seen || 0) > d(1)).length, act7: U.filter(u => (u.seen || 0) > d(7)).length,
             dd: sum(u => W(u).bal), bought: sum(u => W(u).bought), prizes: sum(u => W(u).prize), staked: sum(u => W(u).staked), open: O.size, bets: Bt.length, settled: Bt.filter(x => x.status !== 'open').length,
             runs: C.filter(r => r.status === 'live').length, runsWon: C.filter(r => r.status === 'won').length, lgLive: live, lgAll: G.filter(g => !g.cancelled).length, unread: IB.reduce((a, t) => a + (t.unread || 0), 0), threads: IB.length, sus: X.size,
-            chatDay: chat ? chat.day : null, chatTotal: chat ? chat.total : null, bans: chat ? chat.bans.length : null, paid: null },
+            chatDay: chat ? chat.day : null, chatTotal: chat ? chat.total : null, bans: chat ? chat.bans.length : null, paid: null, bySrc, src7 },
           days, users: users.sort((a, b) => b.seen - a.seen || b.at - a.at), cfg: { lgOpen: !!cfg.lgOpen, envOpen: this.env.LG_OPEN === 'yes', store: this.env.STORE_ON === 'yes' } }, 200, H); }
       case 'user': { const u = await need(), B = [...(await S.list({ prefix: 'b:' + key + ':' })).values()].sort((a, b) => b.ts - a.ts), C = [...(await S.list({ prefix: 'c:' + key + ':' })).values()].sort((a, b) => b.ts - a.ts), lg = [];
         for (const lid of (u.lgs || [])) { const g = await S.get('G:' + lid), e = await S.get('e:' + lid + ':' + key); if (g && e) lg.push({ lid, name: g.name, status: lgStatus(g, now), bal: e.bal, start: e.start, w: e.w, l: e.l }); }
         const ses = [...(await S.list({ prefix: 's:' })).values()].filter(x => x.key === key && x.exp > now).length;
-        return json({ user: { name: u.name, owner: !!u.owner, at: u.at, seen: u.seen || 0, visits: u.visits || 0, wallet: ddWallet(u), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), note: u.note || '', sus: !!(await S.get('X:' + key)), sessions: ses },
+        return json({ user: { name: u.name, owner: !!u.owner, at: u.at, seen: u.seen || 0, visits: u.visits || 0, src: u.src || null, pub: !!u.pub, cap: !!u.cap, wallet: ddWallet(u), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), note: u.note || '', sus: !!(await S.get('X:' + key)), sessions: ses },
           bets: B.slice(0, 40), runs: C.slice(0, 20), leagues: lg, inbox: ((await S.get('ib:' + key)) || { msgs: [] }).msgs.slice(-50) }, 200, H); }
       case 'grant': case 'take': { const u = await need(), amt = Math.round(+b.amount * 100) / 100; if (!(amt > 0 && amt <= 1e6)) return json({ error: 'amount' }, 400, H); const w = ddWallet(u);
         if (act === 'grant') { w.bal = Math.round((w.bal + amt) * 100) / 100; if (b.kind === 'prize') w.prize = Math.round(((w.prize || 0) + amt) * 100) / 100; else w.bought = Math.round(((w.bought || 0) + amt) * 100) / 100; }
         else { w.bal = Math.max(0, Math.round((w.bal - amt) * 100) / 100); } u.dd = w; u.xpl = [...(u.xpl || []), { t: now, xp: 0, dd: act === 'grant' ? amt : -amt, why: act === 'grant' ? (b.kind === 'prize' ? '🎁 From the desk' : '➕ Added by the desk') : '➖ Adjusted by the desk' }].slice(-40); await S.put('u:' + key, u); this._bd = null; return json({ wallet: w }, 200, H); }
       case 'xp': { const u = await need(), n = Math.round(+b.amount); if (!n || Math.abs(n) > 100000) return json({ error: 'amount' }, 400, H); u.xp = Math.max(0, (u.xp || 0) + n); u.xpl = [...(u.xpl || []), { t: now, xp: n, dd: 0, why: n > 0 ? '⭐ Bonus from the desk' : 'XP adjusted by the desk' }].slice(-40); await S.put('u:' + key, u); return json({ xp: u.xp }, 200, H); }
       case 'note': { const u = await need(); u.note = str(b.note, 300); await S.put('u:' + key, u); return json({ ok: true }, 200, H); }
+      case 'cap': { const u = await need(); u.cap = b.on === true; if (u.cap) u.pub = true; await S.put('u:' + key, u); this._bd = null; return json({ ok: true, cap: u.cap, pub: !!u.pub }, 200, H); }
       case 'suspend': { const u = await need(); if (u.owner) return json({ error: 'not the owner' }, 400, H); await S.put('X:' + key, { at: now, why: str(b.why, 200) }); const ses = [...(await S.list({ prefix: 's:' }))].filter(([, v]) => v.key === key).map(([k]) => k); if (ses.length) await S.delete(ses); await room({ act: 'ban', name: u.name }); return json({ ok: true }, 200, H); }
       case 'unsuspend': { await S.delete('X:' + key); await room({ act: 'unban', name: key }); return json({ ok: true }, 200, H); }
       case 'signout': { const ses = [...(await S.list({ prefix: 's:' }))].filter(([, v]) => v.key === key && !v.owner).map(([k]) => k); if (ses.length) await S.delete(ses); return json({ ok: true, n: ses.length }, 200, H); }
@@ -435,8 +441,20 @@ export class Accounts {
       default: return json({ error: 'unknown action' }, 400, H); }
     } catch (e) { return json({ error: e.message || 'server' }, e.st || 500, H); } }
   async board(H) { if (this._bd && this.now() - this._bd.t < 60e3) return json(this._bd.v, 200, H); const U = await this.ctx.storage.list({ prefix: 'u:' });
-    const rows = [...U.values()].map(u => { const W = ddWallet(u); return { name: u.name, bal: W.bal, bought: W.bought, earned: Math.round((W.bal - W.bought) * 100) / 100, w: W.w, l: W.l, roi: W.staked ? Math.round(1000 * (W.back - W.staked) / W.staked) / 10 : null }; })
+    const rows = [...U.values()].map(u => { const W = ddWallet(u); return { name: u.name, bal: W.bal, bought: W.bought, earned: Math.round((W.bal - W.bought) * 100) / 100, w: W.w, l: W.l, roi: W.staked ? Math.round(1000 * (W.back - W.staked) / W.staked) / 10 : null, ...(u.pub || u.cap ? { pub: true } : {}), ...(u.cap ? { cap: true } : {}) }; })
       .sort((a, b) => b.earned - a.earned).slice(0, 50); const v = { rows, n: U.size }; this._bd = { t: this.now(), v }; return json(v, 200, H); }
+  /* v3.3 · the Open Scoreboard (Nov 19, the growth playbook): a member's record, public when they switch it on (or the desk verifies
+     them as a capper). Every settled D$ bet with the moment it was placed and when each game started, so anyone can see it was in
+     before the game; open bets only when the member chooses to show them. A private profile shows only what the leaderboard does. */
+  async profile(name, H) { const key = String(name || '').trim().toLowerCase(); if (!/^[a-z0-9][a-z0-9 _.-]{1,19}$/.test(key)) return json({ error: 'no such member' }, 404, H);
+    const S = this.ctx.storage, u = await S.get('u:' + key); if (!u || await S.get('X:' + key)) return json({ error: 'no such member' }, 404, H);
+    const W = ddWallet(u), base = { name: u.name, since: u.at || 0, cap: !!u.cap, rank: rankOf(u.xp || 0).name, xp: u.xp || 0, trophies: u.tr || {}, earned: Math.round((W.bal - W.bought) * 100) / 100 };
+    const B = [...(await S.list({ prefix: 'b:' + key + ':' })).values()].sort((a, b) => b.ts - a.ts), done = B.filter(x => x.status !== 'open');
+    const rec = { w: done.filter(x => x.status === 'won').length, l: done.filter(x => x.status === 'lost').length, p: done.filter(x => x.status === 'push').length }, staked = done.reduce((a, x) => a + (+x.stake || 0), 0), back = done.reduce((a, x) => a + (+x.back || 0), 0);
+    const out = { ...base, ...rec, roi: staked ? Math.round(1000 * (back - staked) / staked) / 10 : null };
+    if (!u.pub && !u.cap) return json({ ...out, private: true }, 200, H);
+    const show = x => ({ ts: x.ts, status: x.status, stake: x.stake, dec: x.dec, back: x.back == null ? null : x.back, mode: x.mode, ctx: x.run ? 'challenge' : x.lg ? 'league' : 'wallet', legs: (x.legs || []).map(l => ({ sp: l.sp, game: l.game, pick: l.pick, price: l.price, t: l.t, res: l.res || null })) });
+    return json({ ...out, settled: done.slice(0, 25).map(show), open: u.pubOpen ? B.filter(x => x.status === 'open').slice(0, 15).map(show) : null, openHidden: !u.pubOpen && B.some(x => x.status === 'open') }, 200, H); }
   async grant(s, b, H) { const admin = this.env.ADMIN_CODE; if (!s.owner && !(typeof admin === 'string' && admin.length >= 24 && await sameSecret(String(b.code || ''), admin))) return json({ error: 'owner only' }, 403, H);
     const S = this.ctx.storage, key = String(b.name || '').trim().toLowerCase(), u = await S.get('u:' + key); if (!u) return json({ error: 'no such member' }, 404, H);
     const amt = Math.round(+b.amount); if (!(amt > 0 && amt <= 100000)) return json({ error: 'amount' }, 400, H); const W = ddWallet(u); W.bal += amt; W.bought += amt; u.dd = W; await S.put('u:' + key, u); this._bd = null; return json({ wallet: W }, 200, H); }
