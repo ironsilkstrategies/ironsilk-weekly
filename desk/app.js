@@ -660,8 +660,9 @@ const winOf = t => { const h = hourCT(t); return h < 13 ? 'early' : h < 17 ? 'af
 const HEAVY = -1000, isHeavy = (m, price) => m === 'ml' && price != null && isFinite(+price) && +price <= HEAVY;
 let BOARD_SRC = null, BOARD_CLEAN = null;
 const boardOf = () => { const B = S.feed && S.feed.beta !== false && S.feed.board && Array.isArray(S.feed.board.games) ? S.feed.board : null; if (!B) return null; if (B === BOARD_SRC) return BOARD_CLEAN;
-  const games = B.games.map(g => { const calls = {}; for (const [m, L] of Object.entries(g.calls || {})) { const k = (L || []).filter(c => !isHeavy(m, c.price)); if (k.length) calls[m] = k; }
-    return { ...g, picks: (g.picks || []).filter(p => !isHeavy(p.m, p.price)), calls }; }).filter(g => g.picks.length || Object.keys(g.calls).length);
+  /* v50 · no line, no listing: a pick or a call without a real price never shows (an older card may still carry one) */
+  const games = B.games.map(g => { const calls = {}; for (const [m, L] of Object.entries(g.calls || {})) { const k = (L || []).filter(c => fin(c.price) && !isHeavy(m, c.price)); if (k.length) calls[m] = k; }
+    return { ...g, picks: (g.picks || []).filter(p => fin(p.price) && !isHeavy(p.m, p.price)), calls }; }).filter(g => g.picks.length || Object.keys(g.calls).length);
   BOARD_SRC = B; BOARD_CLEAN = { ...B, games }; return BOARD_CLEAN; };
 const castOf = v => { const B = boardOf(), c = (B && B.cast && B.cast[v]) || {}; return { name: c.name || v, color: okColor(c.color) }; };
 const bKey = (sp, a, h) => `${sp}|${ab(sp, a)}|${ab(sp, h)}`;
@@ -679,6 +680,11 @@ function sayBadge(r) {
   return r.rk ? `<span class="say">#${r.rk} of ${r.of} in ${esc(r.lab)}${rec}</span>` : `<span class="say none">Not ranked in ${esc(r.lab)} yet</span>`;
 }
 /* one bet on one game: each side, who's on it, how sure, and where they rank in that kind of bet */
+/* v51 · Nov 20: "all the characters have predicted scores for every game… reflected next to their picks." Each character's locked
+   final-score call rides on the board (b.sc[voice] = [away, home], a third 1 once it graded dead on). */
+function scoreCall(b, v) { const x = b && b.sc && b.sc[v]; if (!Array.isArray(x) || !fin(x[0]) || !fin(x[1])) return ''; const [A, H] = String(b.game || '').split('@'), [a, h] = x;
+  const s = a === h ? `${esc(A)} ${a}–${h} ${esc(H)}` : a > h ? `${esc(A)} ${a}–${h}` : `${esc(H)} ${h}–${a}`;
+  return `<span class="scc">Calls it ${s}${x[2] ? ' · 🎯 dead on' : ''}</span>`; }
 function whoOnHtml(b) {
   const out = [];
   for (const m of ['ml', 'spread', 'total']) {
@@ -688,7 +694,7 @@ function whoOnHtml(b) {
     const top = C.find(c => c.r && c.r.say === 'top'), low = C.find(c => c.r && c.r.say === 'worst');
     const say = [top ? `👑 <b>${esc(castOf(top.v).name)}</b> has the say, on ${esc(bigOf(b.sp, b.game, top.pick))}` : '', low ? `🧊 <b>${esc(castOf(low.v).name)}</b> shouldn’t, on ${esc(bigOf(b.sp, b.game, low.pick))}` : ''].filter(Boolean).join(' · ');
     const row = c => { const k = castOf(c.v), mk = c.hit === true ? '<b class="hitw">✓</b> ' : c.hit === false ? '<b class="hitl">✗</b> ' : '';
-      return `<li style="--c:${k.color}"><span class="who">${mk}${esc(k.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>${sayBadge(c.r)}</li>`; };
+      return `<li style="--c:${k.color}"><span class="who">${mk}${esc(k.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>${scoreCall(b, c.v)}${sayBadge(c.r)}</li>`; };
     out.push(`<div class="won"><div class="won-h"><b>${MK_LAB[m]}</b><span>${sides.length === 1 ? `All ${tot} agree` : `${by[sides[0]].length}–${tot - by[sides[0]].length} split`}</span></div>
       ${say ? `<p class="won-say">${say}</p>` : ''}
       ${sides.map((sd, i) => { const L = by[sd].sort((x, y) => (y.o - x.o) || ((y.p || 0) - (x.p || 0))); const pr = L.find(c => c.price != null);
@@ -735,26 +741,40 @@ function noHeavy(F) {
     return { ...F, vip: V || F.vip, characters: C };
   } catch { return F; }
 }
+/* v50 · a game the daily sheet skipped (it keeps the 14 likeliest college games a sport) still shows its line on the right: rebuilt
+   from the prices on the desk's own calls, the same book lines the picks use. Display only — D$ still needs the sheet's full line. */
+function lnFromBoard(b) { if (!b || !b.calls) return null; const [A, H] = String(b.game || '').split('@'); const C = b.calls; let mlA = null, mlH = null, fav = '', line = null, tot = null;
+  for (const c of C.ml || []) { const m = String(c.pick || '').match(/^(\S+) ML$/); if (!m || !fin(c.price)) continue; if (m[1] === A) mlA = c.price; else if (m[1] === H) mlH = c.price; }
+  for (const c of C.spread || []) { const m = String(c.pick || '').match(/^(\S+)\s+([+\-−]?\d+(?:\.\d+)?)$/); if (!m) continue; const v = +m[2].replace('−', '-'); if (!fin(v)) continue;
+    if (v === 0) { line = 0; fav = ''; } else { line = Math.abs(v); fav = v < 0 ? m[1] : (m[1] === A ? H : A); } break; }
+  for (const c of C.total || []) { const m = String(c.pick || '').match(/^(?:Over|Under)\s+(\d+(?:\.\d+)?)$/i); if (m) { tot = +m[1]; break; } }
+  if (line == null && tot == null && mlA == null && mlH == null) return null;
+  return { fav, line, tot, mlA, mlH }; }
+function lnText(L, g) { if (!L) return ''; let s = '';
+  if (L.line != null && L.fav) s = `${esc(L.fav)} −${L.line}`; else if (L.line === 0) s = 'Pick’em';
+  else if (fin(L.mlH) && fin(L.mlA)) s = `${esc(L.mlH < L.mlA ? g.h.ab : g.a.ab)} ${esc(odds(Math.min(L.mlH, L.mlA)))}`;
+  else if (fin(L.mlH) || fin(L.mlA)) { const home = fin(L.mlH), p = home ? L.mlH : L.mlA; s = `${esc(home ? g.h.ab : g.a.ab)} ${esc(odds(p))}`; }
+  return s + (L.tot != null ? `<small>O/U ${L.tot}</small>` : ''); }
 function gameHtml(g) {
   const L = liveOf({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}` }), open = S.openGame === g.k, on = openPickOn(g), b = g.b, F = S.bf, heavy = (boardOf() || {}).heavy || -500;
   const t = L && L.state === 'in' ? `<div class="g-t live">Live<br>${esc(L.detail || '')}</div>` : L && L.state === 'post' ? '<div class="g-t">Final</div>' : `<div class="g-t">${esc(clock(g.t)).replace(' ', '<br>')}</div>`;
   const side = (x, sc) => `<div class="tm"><span class="rk">${x.rk ? x.rk : ''}</span><span class="nm">${esc(x.nick || x.ab)}</span><span class="rc">${x.w + x.l ? `${x.w}-${x.l}` : ''}</span>${sc != null ? `<span class="sc">${sc}</span>` : ''}</div>`;
   const live = L && L.state !== 'pre';
-  const ln = g.ln ? `<div class="g-ln">${g.ln.line != null && g.ln.fav ? `${esc(g.ln.fav)} −${g.ln.line}` : g.ln.line === 0 ? 'Pick’em' : fin(g.ln.mlH) && fin(g.ln.mlA) ? `${esc(g.ln.mlH < g.ln.mlA ? g.h.ab : g.a.ab)} ${esc(odds(Math.min(g.ln.mlH, g.ln.mlA)))}` : ''}${g.ln.tot != null ? `<small>O/U ${g.ln.tot}</small>` : ''}</div>` : '<div class="g-ln"></div>';
+  const LN = g.ln || lnFromBoard(g.b), ln = `<div class="g-ln">${lnText(LN, g)}</div>`;
   let more = '';
   if (open) {
     const nm = x => esc(x.nick || x.ab), rows = [];
     if (g.a.l5 || g.h.l5) rows.push(['Last five', [g.a, g.h].filter(x => x.l5).map(x => `<span class="l5">${nm(x)} ${pips(x.l5)}</span>`).join('')]);
     const stk = [g.a, g.h].filter(x => x.st).map(x => `${nm(x)} ${x.st[0] === 'W' ? 'won' : 'lost'} ${esc(x.st.slice(1))} straight`); if (stk.length) rows.push(['Streaks', stk.join(', ')]);
     if (fin(g.a.pf) && fin(g.h.pf)) rows.push(['Scoring', `${nm(g.a)} ${g.a.pf} for, ${g.a.pa} against. ${nm(g.h)} ${g.h.pf} for, ${g.h.pa} against.`]);
-    if (g.ln && fin(g.ln.mlA) && fin(g.ln.mlH)) rows.push(['Moneyline', `${nm(g.a)} ${esc(odds(g.ln.mlA))}, ${nm(g.h)} ${esc(odds(g.ln.mlH))}`]);
+    if (LN && fin(LN.mlA) && fin(LN.mlH)) rows.push(['Moneyline', `${nm(g.a)} ${esc(odds(LN.mlA))}, ${nm(g.h)} ${esc(odds(LN.mlH))}`]);
     if (g.mkt) rows.push([g.mkt.src === 'markets' ? 'Prediction markets' : 'Public model', `${g.mkt.pct}% ${esc(g.mkt.ab === g.h.ab ? g.h.nick || g.h.ab : g.a.nick || g.a.ab)}`]);
     if (g.read) rows.push(['Projected score', `${nm(g.a)} ${g.read.a}, ${nm(g.h)} ${g.read.h}`]);
     if ((g.mv || []).length) rows.push(['Line moves', esc(g.mv.join('; ').replace(/-/g, '−'))]);
     if (g.venue) rows.push(['Where', esc(g.venue)]);
     if (g.note) rows.push(['In the news', esc(g.note)]);
     const bp = b ? boardPicksHtml(b, F, heavy, true) : '', wo = b ? whoOnHtml(b) : '';
-    more = `<div class="g-more">${ddBtns(g)}${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call and how sure it is. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
+    more = `<div class="g-more">${ddBtns(g)}${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call, how sure it is${g.b && g.b.sc ? ' and the final score it calls' : ''}. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
       ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the members’ chat.</span><button type="button" class="btn foil" data-go="chat">Open the chat</button></div>` : ''}</div>`;
   }
   return `<div class="game"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}

@@ -1496,6 +1496,11 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
   const rankOf=(c,m)=>{try{const P=prFor(c.sp,m,c.side,c.price!=null?+c.price:null,c.line!=null?+c.line:null);if(!P)return null;const i=P.list.findIndex(x=>x.v===c.voice);if(i<0)return{lab:P.lab,of:P.list.length};const x=P.list[i];
       return{lab:P.lab,rk:i+1,of:P.list.length,w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1),say:P.king&&P.king.v===c.voice?'top':P.goat&&P.goat.v===c.voice?'worst':''};}catch(e){return null;}};
   const use=v=>{if(!cast[v]){const L=CHARS[v]||{};cast[v]={name:charName(v),chip:L.chip||'',color:L.color||''};}return v;};
+  /* v3.1.6 · Nov 20: "all the characters have predicted scores for every game… I need them reflected next to their picks." Each
+     character's locked final-score call (d4.scorecalls) rides with its calls on the public board: [away, home], a third 1 once it
+     graded dead on. */
+  const SCI=new Map();try{Object.values(roGet(SCORECALL_KEY,{},30e3)||{}).forEach(x=>{if(!x||!CHARS[x.voice]||META_VOICES.has(x.voice))return;const day=String(x.date).slice(0,10);if(day<d||day>last)return;
+    if(!isFinite(+x.a)||!isFinite(+x.h))return;const k=x.sp+'|'+x.game+'|'+day;let o=SCI.get(k);if(!o)SCI.set(k,o={});o[x.voice]=x.graded&&x.exact?[+x.a,+x.h,1]:[+x.a,+x.h];});}catch(e){}
   const games=R.all.filter(g=>g.day>=d&&g.day<=last).sort((a,b)=>a.t-b.t||a.sp.localeCompare(b.sp)).map(g=>{
     const picks=g.picks.filter(x=>x&&x.pick&&!x.suspect&&!x.incoherent&&!pubHeavy({m:btMarket(x.m),price:x.price,pick:x.pick})).map(x=>({m:btMarket(x.m),sd:x.sd,pick:x.pick,price:x.price!=null?+x.price:null,
         p:r3(x.fz&&x.fz.cf!=null?x.fz.cf:slotPickP(x)),tier:String(x.color||'').trim(),unan:!!x.unan,off:(()=>{try{return!!tfPlayable(x,g.sp);}catch(e){return false;}})(),
@@ -1503,7 +1508,8 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
       .sort((a,b)=>(b.unan-a.unan)||((PUB_TIER_RANK[b.tier]||0)-(PUB_TIER_RANK[a.tier]||0))||((b.p||0)-(a.p||0)));
     const calls={};(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).forEach(c=>{const m=mkNorm(c.market);if(pubHeavy({m,price:c.price}))return;let txt='';try{txt=charPickText(c);}catch(e){txt=c.pick||c.side;}
       (calls[m]=calls[m]||[]).push({v:use(c.voice),s:c.side,pick:txt,price:c.price!=null?+c.price:null,p:pubConf(c),o:pubOff(c)?1:0,r:rankOf(c,m),hit:c.hit==null?null:c.hit});});
-    return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
+    const S0=SCI.get(g.sp+'|'+g.game+'|'+g.day),sc={};if(S0)Object.values(calls).forEach(L=>L.forEach(c=>{if(S0[c.v])sc[c.v]=S0[c.v];}));   /* only the characters with a call here */
+    return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls,...(Object.keys(sc).length?{sc}:{})};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
   return{d,games,cast,heavy:typeof BT_HEAVY!=='undefined'?BT_HEAVY:-500};}
 const PUB_TIER_RANK={supreme:4,strong:3,value:2,source:1};
 function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();const VB=beta?(roGet(VOICES_KEY,[],30e3)||[]):null;
