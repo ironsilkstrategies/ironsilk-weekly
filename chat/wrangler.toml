@@ -15,6 +15,10 @@ class_name = "Room"
 name = "ACCT"
 class_name = "Accounts"
 
+[[durable_objects.bindings]]
+name = "INBOX"
+class_name = "Inbox"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
@@ -23,4 +27,9 @@ new_sqlite_classes = ["Room"]
 tag = "v2"
 new_sqlite_classes = ["Accounts"]
 
-# Secret (set by the deploy workflow from the GitHub secret CHAT_ADMIN_CODE): ADMIN_CODE
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["Inbox"]
+
+# Secrets (set by the deploy workflow from GitHub secrets, never written here): ADMIN_CODE (from CHAT_ADMIN_CODE) ·
+# FB_PAGE_TOKEN, FB_PAGE_ID, FB_APP_SECRET and FB_VERIFY_TOKEN (the Facebook inbox, v3.3.2; the verify token is made from the app secret)

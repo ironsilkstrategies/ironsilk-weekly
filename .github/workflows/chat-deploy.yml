@@ -1,6 +1,9 @@
 name: Chat server
 # Deploys the members' chatroom (chat/) to Cloudflare Workers. Keys come only from repository secrets and are never printed:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (Cloudflare) · CHAT_ADMIN_CODE (the owner's code, 24+ characters).
+# v3.3.2 · the Facebook inbox (chat/fb-inbox.mjs) rides on the same worker: with FB_APP_ID + FB_APP_SECRET added next to the
+#   FB_PAGE_ID + FB_PAGE_TOKEN the posting already uses, this sets the worker's keys, points the app's Page webhooks (feed +
+#   messages) at /fb/hook with a verify token made from the app secret, and subscribes the Page. Without them it skips.
 on:
   workflow_dispatch:
   push:
@@ -19,6 +22,10 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CHAT_ADMIN_CODE: ${{ secrets.CHAT_ADMIN_CODE }}
+      FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+      FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+      FB_APP_ID: ${{ secrets.FB_APP_ID }}
+      FB_APP_SECRET: ${{ secrets.FB_APP_SECRET }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -33,6 +40,21 @@ jobs:
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then unset CLOUDFLARE_ACCOUNT_ID; echo "No account ID secret: Wrangler finds the account from the token."; fi
           npx --yes wrangler@3 deploy
           if [ -n "$CHAT_ADMIN_CODE" ]; then printf '%s' "$CHAT_ADMIN_CODE" | npx --yes wrangler@3 secret put ADMIN_CODE >/dev/null && echo "Owner code set."; else echo "CHAT_ADMIN_CODE isn't set: the room works, but nobody can be owner yet."; fi
+      - name: Facebook inbox (comment FREE 3 → a private reply · the Page's inbox → an automated first reply)
+        working-directory: chat
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then exit 0; fi
+          if [ -z "$FB_APP_ID" ] || [ -z "$FB_APP_SECRET" ] || [ -z "$FB_PAGE_ID" ] || [ -z "$FB_PAGE_TOKEN" ]; then echo "Facebook inbox: add the FB_APP_ID and FB_APP_SECRET secrets (next to FB_PAGE_ID and FB_PAGE_TOKEN) to switch it on."; exit 0; fi
+          VERIFY=$(printf 'thedesk-fb-hook:%s' "$FB_APP_SECRET" | sha256sum | cut -c1-40); echo "::add-mask::$VERIFY"
+          printf '%s' "$FB_PAGE_TOKEN" | npx --yes wrangler@3 secret put FB_PAGE_TOKEN >/dev/null
+          printf '%s' "$FB_PAGE_ID" | npx --yes wrangler@3 secret put FB_PAGE_ID >/dev/null
+          printf '%s' "$FB_APP_SECRET" | npx --yes wrangler@3 secret put FB_APP_SECRET >/dev/null
+          printf '%s' "$VERIFY" | npx --yes wrangler@3 secret put FB_VERIFY_TOKEN >/dev/null
+          echo "Inbox keys set."; sleep 10
+          said() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{let j={};try{j=JSON.parse(s)}catch(e){}const ok=j.success===true||j.success==='true';console.log('$1: '+(ok?'on':'not yet · '+String((j.error&&j.error.message)||'no answer').slice(0,140)));process.exit(ok?0:1)})"; }
+          curl -sS -X POST "https://graph.facebook.com/v24.0/$FB_APP_ID/subscriptions" --data-urlencode "object=page" --data-urlencode "callback_url=https://thedesk-chat.ironsilkstrategies.workers.dev/fb/hook" --data-urlencode "fields=feed,messages" --data-urlencode "include_values=true" --data-urlencode "verify_token=$VERIFY" --data-urlencode "access_token=$FB_APP_ID|$FB_APP_SECRET" | said "App webhooks (feed + messages)" || true
+          curl -sS -X POST "https://graph.facebook.com/v24.0/$FB_PAGE_ID/subscribed_apps" --data-urlencode "subscribed_fields=feed,messages" --data-urlencode "access_token=$FB_PAGE_TOKEN" | said "Page subscribed to the app" || true
+          curl -fsS https://thedesk-chat.ironsilkstrategies.workers.dev/fb/status | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{let j={};try{j=JSON.parse(s)}catch(e){}console.log('Inbox keys on the worker: '+(j.configured?'yes':'no'))})" || true
       - name: Check it answers
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then exit 0; fi

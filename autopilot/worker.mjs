@@ -764,7 +764,7 @@ export async function runFree3(state, S, today, deps) { if (String(deps?.free3 ?
   const F = await pubFeedNow(deps); if (!F || !F.today || F.today.d !== today || !(F.today.picks || []).length) return 0;
   const D = await F3.free3Of(F, deps); if (!D || !D.open) return 0;
   if (!D.picks.some(x => !x.hidden && x.start && now < Date.parse(x.start))) { S.f3 = today; return 1; }   /* every open pick has started: today's post would be late */
-  const text = F3.free3Caption(D, { app: appUrl(deps) }); const R = deps ? deps.renderFree3 : F3.renderFree3; let img = null; try { img = R ? await R(D) : null; } catch (e) { }
+  const text = F3.free3Caption(D, { app: appUrl(deps), dm: deps?.dm }); const R = deps ? deps.renderFree3 : F3.renderFree3; let img = null; try { img = R ? await R(D) : null; } catch (e) { }
   let ok = false; for (const c of dests) ok = (await say(deps?.tg || tg, c, text, img, deps)) || ok;
   if ((ok || !dests.length) && Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind: 'free3', bare: true }); if (!dests.length) ok = [m.fb, m.ig, m.th].includes(true); }
   if (!ok) return 0; S.f3 = today; log('free 3 ·', D.n, 'pick' + (D.n === 1 ? '' : 's'), '·', D.picks.map(x => x.hidden ? 'locked' : x.pick).join(' | ')); return 1; }

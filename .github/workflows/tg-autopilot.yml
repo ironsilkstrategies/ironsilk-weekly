@@ -58,4 +58,5 @@ jobs:
           WEEKLY: ${{ vars.WEEKLY }}                   # v3.3 · Receipts Sunday, the week's graded record — "off" stops it
           GAME_PAGES: ${{ vars.GAME_PAGES }}           # v3.3 · Tonight's Game pages on ironsilkweekly.com/desk/games/ — "off" stops them
           FREE3: ${{ vars.FREE3 }}                     # v3.3.2 · the daily Free 3 promo post (picture + words) — off until this is "on"
+          FB_DM: ${{ vars.FB_DM }}                     # v3.3.2 · the Free 3 says "Comment FREE 3…" only once the Facebook inbox answers the public — "on"
           SITE_TOKEN: ${{ secrets.SITE_TOKEN }}        # v3.3 · optional: a fine-grained token with Contents write on ironsilk-weekly-site only (else the card's own)

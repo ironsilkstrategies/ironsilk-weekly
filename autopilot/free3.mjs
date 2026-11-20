@@ -120,7 +120,9 @@ export function free3Caption(D, deps) {
   if (D.last) tail.push(`Last card: ${recLine(D.last.w, D.last.l, D.last.p)}, graded.`);
   if (D.record) tail.push(`Record: ${D.record.w} wins, ${D.record.l} losses${D.record.p ? `, ${D.record.p} pushes` : ''}.`);
   if (tail.length) out.push('', tail.join(' '));
-  out.push('', '👆 FOLLOW TheDesk — the Free 3, every day.', `📲 The full card, live scores and every result: ${app}`,
+  /* v3.3.2 · the Facebook inbox (chat/fb-inbox.mjs) answers a FREE 3 comment with a private reply — promised only once it's on */
+  const dm = String(deps?.dm ?? env.FB_DM ?? '').trim().toLowerCase() === 'on';
+  out.push('', '👆 FOLLOW TheDesk — the Free 3, every day.', ...(dm ? ['💬 Comment FREE 3 and we\'ll send today\'s picks to your messages.'] : []), `📲 The full card, live scores and every result: ${app}`,
     '', '21+. For entertainment only. Need help? Call or text 1-800-MY-RESET. Receipts tomorrow — win or lose.');
   return out.join('\n'); }
 

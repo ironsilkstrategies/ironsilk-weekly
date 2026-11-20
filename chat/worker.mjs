@@ -8,10 +8,14 @@
      POST /chat/send   { token, text }       → { message }
      POST /chat/mod    { token, act, … }     → owner only: del {id} · mute {name, mins} · ban {name} · unban {name} · invite {uses} · uninvite {code} · invites
    Secret: ADMIN_CODE (24+ characters). Var: ALLOW_ORIGINS (comma-separated).
-   Nothing here touches picks or the app's data: the chat is the one thing that flows back to the desk, and it's only words. */
+   v3.3.2 · /fb/* is the Facebook inbox (fb-inbox.mjs): Meta's signed webhooks, answered by its own Inbox object, reading only the
+   public card (the same picks.json anyone can open).
+   Nothing here touches the app's private data: the chat is the one thing that flows back to the desk, and it's only words. */
 const MAX_TEXT = 500, KEEP = 400, PAGE = 80, PASS_DAYS = 30;
 const BAD = ['fuck', 'shit', 'bitch', 'cunt', 'nigger', 'nigga', 'faggot', 'fag', 'retard', 'whore', 'slut', 'dick', 'pussy', 'asshole', 'bastard', 'motherfucker'];
 import { get as chal, inLib, checkpoints, ROUTES, ruleCheck, tierOf, rankOf } from './chal-lib.mjs';
+import { fbHook, Inbox } from './fb-inbox.mjs';   /* v3.3.2 · the Facebook inbox: comment FREE 3 → a private reply; the Page's inbox → an automated first reply */
+export { Inbox };
 const RESERVED = /^(thedesk|the desk|admin|owner|moderator|mod|system|the (simulator|judge|coach|scorekeeper|oracle|historian|crowd|commissioner|underdog spotter|scout|banker|brain))$/i;
 export const clean = t => BAD.reduce((s, w) => s.replace(new RegExp(`\\b${w}(s|es|ed|ing|er|ers)?\\b`, 'gi'), m => m[0] + '*'.repeat(m.length - 1)), t);
 /* v3.3 · where a member came from (?src= on their first visit): a short tag, letters/numbers/-/_ only */
@@ -25,7 +29,8 @@ function cors(req, env) { const o = req.headers.get('origin') || '', allow = Str
   return { 'access-control-allow-origin': allow.includes(o) ? o : allow[0], 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET,POST,OPTIONS', vary: 'origin' }; }
 const json = (o, status, h) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...h } });
 
-export default { async fetch(req, env) { const url = new URL(req.url);
+export default { async fetch(req, env, ctx) { const url = new URL(req.url);
+  if (url.pathname.startsWith('/fb/')) return fbHook(req, env, ctx);   /* Meta's webhooks: no CORS, no cookies, signed with the app secret */
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req, env) });
   if (url.pathname.startsWith('/acct/') && env.ACCT) return env.ACCT.get(env.ACCT.idFromName('members')).fetch(req);
   if (!url.pathname.startsWith('/chat/')) return json({ error: 'not found' }, 404, cors(req, env));
