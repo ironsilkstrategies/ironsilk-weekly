@@ -1,0 +1,21 @@
+{
+ "v": 2,
+ "at": 1795208379533,
+ "from": "ironsilkstrategies/ironsilk-weekly-site",
+ "gens": [
+  {
+   "day": "2026-11-20",
+   "ts": 1795204035078,
+   "keys": 232,
+   "bytes": 35130618,
+   "file": "vault.enc"
+  },
+  {
+   "day": "2026-11-19",
+   "ts": 1795108157063,
+   "keys": 232,
+   "bytes": 35112739,
+   "file": "vault-1.enc"
+  }
+ ]
+}
