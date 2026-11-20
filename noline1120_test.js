@@ -34,7 +34,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{try{
   const w=boot('nba.html');const E=s=>w.eval(s);await sleep(3500);
   T('the slate is Friday Nov 20 with the three test games',E('today()')==='2026-11-20'&&E('NBA_GAMES.length')===3,E('NBA_GAMES.map(g=>g.id).join(",")'));
-  T('the cut-over is Nov 20 (days before stand)',E("noLineDay('2026-11-20')&&noLineDay('2026-11-21')&&!noLineDay('2026-11-19')"));
+  T('one rule for every day (v3.1.5): no cut-over date left',E("typeof noLineDay==='undefined'&&typeof NOLINE_FROM==='undefined'&&typeof noLineCall==='function'"));
   const calls=id=>JSON.parse(E(`(()=>{const g=NBA_GAMES.find(x=>x.id==='${id}');const s=bbSim(BB_CFG.nba,g);return JSON.stringify(characterCalls('nba',g,s).map(c=>({v:c.voice,m:c.market,sd:c.side,line:c.line,price:c.price,sim:!!c.simLine})))})()`));
   const F=calls('full'),N=calls('noml'),Z=calls('none');
   const mk=A=>[...new Set(A.map(c=>c.m))].sort().join(',');
@@ -42,9 +42,9 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   T('moneyline off the board: spread and total calls only — no character calls the moneyline',mk(N)==='spread,total'&&!N.some(c=>c.m==='ml')&&N.every(c=>!c.sim),mk(N)+' · '+N.filter(c=>c.m==='ml').map(c=>c.v).join(','));
   T('nothing posted: no character calls anything',Z.length===0,Z.map(c=>c.v+':'+c.m).join(','));
   T('the spread calls sit on the book\'s -14.5, not the sim\'s number',N.filter(c=>c.m==='spread').every(c=>Math.abs(Math.abs(c.line)-14.5)<1e-9),N.filter(c=>c.m==='spread').map(c=>c.line).join(','));
-  /* a game from before the cut-over keeps the old behaviour (sim-line calls stood then) */
+  /* v3.1.5 · an earlier day gets the same rule (Nov 20: "Strip them") */
   const old=JSON.parse(E(`(()=>{const g0=NBA_GAMES.find(x=>x.id==='none');const g={...g0,id:'none-old',__date:'2026-11-19'};const s=bbSim(BB_CFG.nba,g0);return JSON.stringify(characterCalls('nba',g,s).map(c=>({m:c.market,sim:!!c.simLine,price:c.price})))})()`));
-  T('Nov 19 and before stand: the old sim-line calls are still produced for those days',old.some(c=>c.sim)&&old.some(c=>c.m==='ml'&&c.price==null),old.length+' calls');
+  T('Nov 19 gets the same rule: no line, no call',old.length===0,old.length+' calls');
   /* the cards */
   const card=id=>E(`document.getElementById('nba-card-${id}')?document.getElementById('nba-card-${id}').outerHTML:(()=>{const g=NBA_GAMES.find(x=>x.id==='${id}');return bbCard(BB_CFG.nba,g)})()`);
   const cF=card('full'),cN=card('noml'),cZ=card('none');
@@ -66,7 +66,14 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
     {id:'e',sp:'nba',date:'2026-11-20',voice:'Judge',market:'total',side:'over',line:215,price:-110},
     {id:'f',sp:'nba',date:'2026-11-19',voice:'Sim',market:'ml',side:'home',price:null,graded:1,hit:true},
     {id:'g',sp:'nba',date:'2026-11-18',voice:'Judge',market:'spread',side:'away',line:3,simLine:true,graded:1,hit:false}]).map(x=>x.id))`));
-  T('ledger trim: no-line calls from Nov 20 leave (even graded), priced calls and earlier days stay',kept.join('')==='defg',kept.join(','));
+  T('ledger trim: every no-line call leaves, any day, graded or not (v3.1.5 strips the old ones from the records); priced calls stay',kept.join('')==='de',kept.join(','));
+  /* v3.1.5 · the records: an old graded no-line win stops counting the moment the ledger trims */
+  E(`set(VOICES_KEY,[{id:'r1',sp:'nba',date:'2026-11-12',game:'BOS@NY',voice:'Judge',market:'ml',side:'home',price:null,graded:1,hit:true,units:0},
+    {id:'r2',sp:'nba',date:'2026-11-12',game:'MIA@ORL',voice:'Judge',market:'ml',side:'home',price:-130,graded:1,hit:false,units:-1}])`);
+  const before=JSON.parse(E("JSON.stringify(charDayRecord('2026-11-12','nba').find(o=>o.v==='Judge')||null)"));
+  E("set(VOICES_KEY,voicesTrim(get(VOICES_KEY,[])))");
+  const after=JSON.parse(E("JSON.stringify(charDayRecord('2026-11-12','nba').find(o=>o.v==='Judge')||null)"));
+  T('records: the Judge\'s Nov 12 goes from 1-1 (with a no-line win) to 0-1',before&&before.w===1&&before.l===1&&after&&after.w===0&&after.l===1,JSON.stringify([before&&[before.w,before.l],after&&[after.w,after.l]]));
   /* a stale no-line call already logged today leaves on the next pass, even with nothing new to write */
   E(`set(VOICES_KEY,[{id:'nba|BOS@NY|2026-11-20|Sim|ml',sp:'nba',date:'2026-11-20',game:'BOS@NY',voice:'Sim',market:'ml',side:'home',price:null,pick:'NY ML'}])`);
   E("voicesLog('nba',true)");

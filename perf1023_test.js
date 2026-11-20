@@ -62,7 +62,9 @@ function page(file,fetchImpl,extra){let html=fs.readFileSync(path.join(W,file),'
   /* ── 4 · an unchanged call isn't a write ── */
   {const w=page('nhl.html');await wait(2500);
     const r=w.eval(`(()=>{NHL_GAMES=[{id:'g1',away:{abbr:'NJ',name:'Devils'},home:{abbr:'WSH',name:'Capitals'},abstract:'pre',start:'2026-10-24T00:00:00Z',date:'2026-10-24T00:00:00Z'}];
-      NHL_SIMS={g1:{aw:0.44,hw:0.56,awayProj:2.7,homeProj:3.2,med:5.9}};let w=0;const s0=set;set=function(k){if(k===VOICES_KEY)w++;return s0.apply(this,arguments);};
+      NHL_SIMS={g1:{aw:0.44,hw:0.56,awayProj:2.7,homeProj:3.2,med:5.9}};
+      nhlPutLines([{game:'NJ@WSH',market:'moneyline',side:'away',price:120,src:'mine'},{game:'NJ@WSH',market:'moneyline',side:'home',price:-140,src:'mine'}]);   /* v3.1.5 · no line, no call */
+      let w=0;const s0=set;set=function(k){if(k===VOICES_KEY)w++;return s0.apply(this,arguments);};
       const a=voicesLog('nhl'),b=voicesLog('nhl');set=s0;return{a,b,w};})()`);
     T('the call ledger is written when calls change, not on every board refresh',r.a>0&&r.b===0&&r.w===1,JSON.stringify(r));}
 }catch(e){T('no crash',false,String(e&&e.stack||e).slice(0,600));}

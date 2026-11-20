@@ -25,21 +25,26 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
   await wait(3000);
   const INTEL=w.eval('INTEL_KEY');
   if(INTEL!=='d4.intel'){w.eval(`set(INTEL_KEY,${JSON.stringify(seed['d4.intel'])})`);}
-  const calls=w.eval("characterCalls('nfl',NFL_GAMES[0],NFL_SIMS[NFL_GAMES[0].id]).map(c=>c.voice+':'+c.market+':'+c.side)");
-  T('Sim makes a call on side, spread and total',['Sim:ml:','Sim:spread:','Sim:total:'].every(p=>calls.some(c=>c.startsWith(p))),calls.join(' '));
-  /* v2.94 · an upload is one source in the Oracle's consensus: alone it sets his score; a moneyline needs 75%+ (PHI by 3.5 ≈ 60%) */
-  const op=w.eval("oraclePredFor('nfl',NFL_GAMES[0])");
-  T('Pred (gold line PHI 21.98–18.5): the upload becomes the Oracle\'s score, and no moneyline under his 75% bar',op&&Math.abs(op.a-21.98)<0.06&&Math.abs(op.h-18.5)<0.06&&!calls.includes('Pred:ml:away'),JSON.stringify(op)+' '+calls.filter(c=>c.startsWith('Pred')).join(' '));
-  T('Crowd FADES 70% public money on PHI (Levitt 2004) → home side',calls.includes('Consensus:ml:home')&&!calls.includes('Consensus:ml:away'),calls.filter(c=>c.startsWith('Consensus')).join(' '));
-  T('Most common score makes its own picks',calls.some(c=>c.startsWith('Most common:')));
-  /* v3.1.4 · no line, no listing: with no line uploaded the card lists no market at all (it used to draw sim-only squares) */
+  /* v3.1.5 · no line, no pick on every day: with nothing posted, no character calls anything */
+  const none=w.eval("characterCalls('nfl',NFL_GAMES[0],NFL_SIMS[NFL_GAMES[0].id]).length");
+  T('no line posted: no character calls anything (no sim-line picks, any day)',none===0,String(none));
   w.eval('renderNFL()');await wait(300);
   const bare=w.document.getElementById('slate').innerHTML;
   T('no line, no listing: no sim-only squares, no character chips, the card says why',!/sim only/.test(bare)&&!/hs-chip/.test(bare)&&/no line, no listing/.test(bare));
-  /* …and once the book's lines are in, the squares carry the characters */
+  /* v2.94 · an upload is one source in the Oracle's consensus: alone (no market yet) it sets his score */
+  const op=w.eval("oraclePredFor('nfl',NFL_GAMES[0])");
+  /* the book's lines go in, and the characters go to work */
   w.eval(`saveNFLBookOdds([{away:'PHI',home:'CHI',market:'moneyline',side:'away',price:-150},{away:'PHI',home:'CHI',market:'moneyline',side:'home',price:130},
     {away:'PHI',home:'CHI',market:'spread',side:'away',line:-3,price:-110},{away:'PHI',home:'CHI',market:'spread',side:'home',line:3,price:-110},
     {away:'PHI',home:'CHI',market:'total',side:'over',line:44.5,price:-110},{away:'PHI',home:'CHI',market:'total',side:'under',line:44.5,price:-110}])`);
+  w.eval('CHAR_GEN++');
+  const calls=w.eval("characterCalls('nfl',NFL_GAMES[0],NFL_SIMS[NFL_GAMES[0].id]).map(c=>c.voice+':'+c.market+':'+c.side)");
+  T('Sim makes a call on side, spread and total',['Sim:ml:','Sim:spread:','Sim:total:'].every(p=>calls.some(c=>c.startsWith(p))),calls.join(' '));
+  /* v2.94 · an upload is one source in the Oracle's consensus: alone it sets his score; a moneyline needs 75%+ (PHI by 3.5 ≈ 60%) */
+  T('Pred (gold line PHI 21.98–18.5): the upload becomes the Oracle\'s score, and no moneyline under his 75% bar',op&&Math.abs(op.a-21.98)<0.06&&Math.abs(op.h-18.5)<0.06&&!calls.includes('Pred:ml:away'),JSON.stringify(op)+' '+calls.filter(c=>c.startsWith('Pred')).join(' '));
+  T('Crowd FADES 70% public money on PHI (Levitt 2004) → home side',calls.includes('Consensus:ml:home')&&!calls.includes('Consensus:ml:away'),calls.filter(c=>c.startsWith('Consensus')).join(' '));
+  T('Most common score makes its own picks',calls.some(c=>c.startsWith('Most common:')));
+  /* the squares carry the characters once the lines are in */
   w.eval('renderNFL()');await wait(300);
   const slate=w.document.getElementById('slate').innerHTML;
   T('character chips render on the card squares',(slate.match(/hs-chip/g)||[]).length>=4,(slate.match(/hs-chip/g)||[]).length+' chips');

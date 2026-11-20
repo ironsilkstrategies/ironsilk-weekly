@@ -22,6 +22,9 @@ setTimeout(async()=>{try{
   w.eval(`(()=>{const P=get('d4.preds',{});P.nhl={'2026-10-07':{'COL@WPG':{a:3.8,h:2.75,src:'covers'}}};set('d4.preds',P);
     set(INTEL_KEY,[{sp:'nhl',kind:'cons',game:'COL@WPG',market:'moneyline',metric:'bets',homePct:22,date:'2026-10-07'},
                    {sp:'nhl',kind:'cons',game:'COL@WPG',market:'total',metric:'bets',overPct:52,date:'2026-10-07'}]);})()`);
+  /* v3.1.5 · no line, no pick (any day): the book's moneyline and total go in first */
+  w.eval(`nhlPutLines([{game:'COL@WPG',away:'COL',home:'WPG',market:'moneyline',side:'away',price:-150,src:'mine',date:'2026-10-07'},{game:'COL@WPG',away:'COL',home:'WPG',market:'moneyline',side:'home',price:130,src:'mine',date:'2026-10-07'},
+    {game:'COL@WPG',away:'COL',home:'WPG',market:'total',side:'over',line:6.5,price:-110,src:'mine',date:'2026-10-07'},{game:'COL@WPG',away:'COL',home:'WPG',market:'total',side:'under',line:6.5,price:-110,src:'mine',date:'2026-10-07'}])`);
   const g={id:'g1',away:{abbr:'COL',name:'Colorado Avalanche'},home:{abbr:'WPG',name:'Winnipeg Jets'},__date:'2026-10-07'};
   const calls=w.eval(`(()=>{Object.keys(RO_CACHE).forEach(k=>delete RO_CACHE[k]);return characterCalls('nhl',${JSON.stringify(g)},{aw:.62,hw:.38,awayProj:3.6,homeProj:2.8,modeScore:'3-2'})})()`);
   T('Covers prediction speaks as Covers (not "Pred")',calls.some(c=>c.voice==='Covers'&&c.market==='ml'&&c.side==='away')&&!calls.some(c=>c.voice==='Pred'));

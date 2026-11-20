@@ -57,6 +57,10 @@ setTimeout(()=>{try{
     w.eval(`(()=>{const S=get(BKDAY_KEY,{});S.own.legs.forEach(l=>l.start=new Date(Date.now()+20*60e3).toISOString());set(BKDAY_KEY,S);})()`);
     T('…not even once its legs unlock — the Banker\'s parlay and its reasons stay in your app',(()=>{const F=JSON.parse(w.eval('JSON.stringify(publicFeed())'));return F.parlay==null&&L.own.legs.length>0;})());
     /* SGP on an NHL card */
+    /* v3.1.5 · no line, no pick (any day): the SGP is built from the characters' calls, so the book's lines go in first */
+    w.eval(`nhlPutLines([{game:'PIT@CBJ',away:'PIT',home:'CBJ',market:'moneyline',side:'away',price:-135,src:'mine',date:'${d}'},{game:'PIT@CBJ',away:'PIT',home:'CBJ',market:'moneyline',side:'home',price:115,src:'mine',date:'${d}'},
+      {game:'PIT@CBJ',away:'PIT',home:'CBJ',market:'spread',side:'away',line:-1.5,price:170,src:'mine',date:'${d}'},{game:'PIT@CBJ',away:'PIT',home:'CBJ',market:'spread',side:'home',line:1.5,price:-200,src:'mine',date:'${d}'},
+      {game:'PIT@CBJ',away:'PIT',home:'CBJ',market:'total',side:'over',line:6.5,price:-106,src:'mine',date:'${d}'},{game:'PIT@CBJ',away:'PIT',home:'CBJ',market:'total',side:'under',line:6.5,price:-114,src:'mine',date:'${d}'}]);for(const k in CHAR_CACHE)delete CHAR_CACHE[k];`);
     const g={id:'n1',abstract:'pre',away:{abbr:'PIT',name:'Pittsburgh Penguins'},home:{abbr:'CBJ',name:'Columbus Blue Jackets'}};
     const html=w.eval(`(()=>{const g=${JSON.stringify(g)};const s=simNHLGame(g,4000);return sgpCardHtml('nhl',g,s)})()`);
     T('game card: Perfect SGP with alt spread + alt total at fair odds',/Perfect SGP/.test(html)&&/Alt spread/.test(html)&&/Alt total/.test(html)&&/fair/.test(html),html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,260));

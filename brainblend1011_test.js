@@ -11,10 +11,15 @@ setTimeout(()=>{try{
   T('Brain and Blend are on the roster',w.eval(`!!CHARS.Brain&&!!CHARS.Blend&&CHAR_ORDER.includes('Brain')&&CHAR_ORDER.includes('Blend')`));
   T('…but are not voters (derived voices)',w.eval(`!VOTER_ORDER.includes('Brain')&&!VOTER_ORDER.includes('Blend')&&VOTER_ORDER.includes('Judge')`));
   w.eval(`set(VOICES_KEY,[])`);
+  /* v3.1.5 · no line, no pick (any day): the book's lines for VAN@EDM go in first (the market agrees with the Sim: EDM) */
+  w.eval(`nhlPutLines([{game:'VAN@EDM',market:'moneyline',side:'away',price:140,src:'mine'},{game:'VAN@EDM',market:'moneyline',side:'home',price:-160,src:'mine'},
+    {game:'VAN@EDM',market:'spread',side:'away',line:1.5,price:-180,src:'mine'},{game:'VAN@EDM',market:'spread',side:'home',line:-1.5,price:150,src:'mine'},
+    {game:'VAN@EDM',market:'total',side:'over',line:6,price:-110,src:'mine'},{game:'VAN@EDM',market:'total',side:'under',line:6,price:-110,src:'mine'}]);Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k])`);
   let C=w.eval(`characterCalls('nhl',__G,__S)`);
   const bl=C.filter(c=>c.voice==='Blend');
   T('Blend calls every market the Sim calls',['ml','spread','total'].every(m=>bl.some(c=>c.market===m)),bl.map(c=>c.pick+' '+c.simP).join(', '));
-  T('Blend sides with its higher chance (no market → the Sim\'s side)',bl.find(c=>c.market==='ml').side==='home'&&bl.find(c=>c.market==='ml').simP>0.5);
+  T('Blend sides with its higher chance (market and Sim agree → that side)',bl.find(c=>c.market==='ml').side==='home'&&bl.find(c=>c.market==='ml').simP>0.5);
+  T('no line posted: no character calls anything (no line, no pick)',w.eval(`characterCalls('nhl',{...__G,id:'g0',away:{abbr:'SEA'},home:{abbr:'CGY'}},__S).length`)===0);
   T('Brain stays silent with no graded character history',!C.some(c=>c.voice==='Brain'));
   /* graded history: the Judge is great at NHL ML, Most common is poor */
   const V=[];const hist=(voice,market,side,n,wins)=>{for(let i=0;i<n;i++)V.push({id:voice+market+i,sp:'nhl',date:'2026-09-'+String(1+i%28).padStart(2,'0'),game:'A'+i+'@B'+i,voice,market,side,graded:true,hit:i<wins,price:-110});};
@@ -23,9 +28,9 @@ setTimeout(()=>{try{
   C=w.eval(`characterCalls('nhl',__G,__S)`);const br=C.find(c=>c.voice==='Brain'&&c.market==='ml');
   T('Brain calls once characters have records',!!br,br&&br.pick+' '+br.simP);
   const judge=C.find(c=>c.voice==='Judge'&&c.market==='ml');
-  const exp=w.eval(`(()=>{const C=characterCalls('nhl',__G,__S).filter(c=>c.market==='ml'&&isVoter(c.voice));return [brainSideP('nhl',__G,C,'ml','home',0.62,null,null),brainSideP('nhl',__G,C,'ml','away',0.38,null,null)];})()`);
+  const exp=w.eval(`(()=>{const C=characterCalls('nhl',__G,__S).filter(c=>c.market==='ml'&&isVoter(c.voice));return [brainSideP('nhl',__G,C,'ml','home',0.62,null,-160),brainSideP('nhl',__G,C,'ml','away',0.38,null,140)];   /* v3.1.5 · priced now: the fav/dog lane counts */})()`);
   T('Brain picks the side its weighted chance favors',br.side===(exp[0]>exp[1]?'home':'away')&&Math.abs(br.simP-Math.max(...exp))<1e-4,`home ${exp[0].toFixed(3)} away ${exp[1].toFixed(3)} · judge ${judge&&judge.side}`);
-  T('Brain matches the square\'s "brain %" for that side',Math.abs(w.eval(`charSquare('nhl',__G,__S,'${br.pick}',{modelP:${br.side==='home'?0.62:0.38}}).brainP`)-br.simP)<1e-3);
+  T('Brain matches the square\'s "brain %" for that side',Math.abs(w.eval(`charSquare('nhl',__G,__S,'${br.pick}',{modelP:${br.side==='home'?0.62:0.38},price:${br.side==='home'?-160:140}}).brainP`)-br.simP)<1e-3);
   const sq=w.eval(`charSquare('nhl',__G,__S,'EDM ML',{modelP:0.62})`);
   T('square meter counts voters only (Brain/Blend never vote)',new RegExp('of '+w.eval('VOTER_ORDER.length')+' on').test(sq.meter)&&!/BRAIN|BLEND/.test(sq.chips),sq.meter.replace(/<[^>]+>/g,' ').slice(0,90));
   /* lock to the ledger */

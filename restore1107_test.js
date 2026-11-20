@@ -15,7 +15,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);
   const DK=E('dayShift(today(),-2)');
   E(`set(VOICES_KEY,[{id:'v-keep',sp:'nhl',date:'${DK}',voice:'Sim',market:'ml',side:'home',price:-999}]);set(CPROP_KEY,[]);set('d4.clv',{'2026-11-06':[1]});`);
   /* the backup: older days, plus its own (older) copy of the same call */
-  const backup={v:1,from:'2026-11-05T17:01:37-06:00',keys:{'d4.voices':[{id:'v-old1',sp:'nba',date:'2026-11-04',voice:'Sim',market:'ml',side:'home',graded:true,hit:true,units:1},{id:'v-old2',sp:'nba',date:'2026-11-05',voice:'Judge',market:'spread',side:'away',graded:true,hit:false,units:-1},{id:'v-keep',sp:'nhl',date:DK,voice:'Sim',market:'ml',side:'home',price:-150}],
+  const backup={v:1,from:'2026-11-05T17:01:37-06:00',keys:{'d4.voices':[{id:'v-old1',sp:'nba',date:'2026-11-04',voice:'Sim',market:'ml',side:'home',price:-140,graded:true,hit:true,units:1},{id:'v-noline',sp:'nba',date:'2026-11-04',voice:'Judge',market:'ml',side:'away',graded:true,hit:true,units:1},{id:'v-old2',sp:'nba',date:'2026-11-05',voice:'Judge',market:'spread',side:'away',graded:true,hit:false,units:-1},{id:'v-keep',sp:'nhl',date:DK,voice:'Sim',market:'ml',side:'home',price:-150}],
     'd4.charprops':[{id:'p1',sp:'nba',voice:'Sim',player:'X',k:'pts',thr:20,p:0.6,d:'2026-11-04',hit:true}],'d4.clv':{'2026-11-04':[7],'2026-11-05':[8],'2026-11-06':[0]}}};
   BODY=E(`LZString.compressToBase64(${JSON.stringify(JSON.stringify(backup))})`);
   /* not while the storage didn't load */
@@ -28,6 +28,7 @@ setTimeout(async()=>{try{const E=s=>w.eval(s);
   const V=E('get(VOICES_KEY,[])');
   T('the missing calls come back (Nov 4, Nov 5)',V.some(x=>x.id==='v-old1')&&V.some(x=>x.id==='v-old2'),JSON.stringify(V.map(x=>x.id)));
   T('the phone\'s own copy of a call wins over the backup\'s',(V.find(x=>x.id==='v-keep')||{}).price===-999);
+  T('v3.1.5 · a no-line call in the backup stays out (no line, no pick — it never comes back onto a record)',!V.some(x=>x.id==='v-noline'));
   T('the scoreboard has Nov 4 again',E(`charDayRecord('2026-11-04','all').length`)>0);
   T('maps fill in missing days, the phone\'s day wins where both have it',JSON.stringify(E(`get('d4.clv',{})`))===JSON.stringify({'2026-11-04':[7],'2026-11-05':[8],'2026-11-06':[1]}),JSON.stringify(E(`get('d4.clv',{})`)));
   T('prop calls come back',E(`get(CPROP_KEY,[]).length`)===1);

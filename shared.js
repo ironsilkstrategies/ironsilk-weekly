@@ -2324,11 +2324,10 @@ var CHAR_GEN=0;var CHAR_KEEP=new Set(['d4.voices','d4.scorecalls','d4.halfcalls'
   /* v2.81.5 · bookkeeping that no character reads — writing it mustn't throw away every game's cached calls */
   'd4.apsteps','d4.heallog','d4.ruletune','d4.ruleoff','d4.bolcache','d4.bolfiled','d4.bollog','d4.bolauto','d4.gradehealth','d4.best5','d4.evalchain','d4.pubstate','d4.intakedrop','d4.cred','d4.pull','d4.usage']);
 /* v3.1.4 · NO LINE, NO LISTING (Chris, Nov 20: "I don't like picks being made by any character if there's not a real line on
-   them… no line no listing on game cards"). From Nov 20 on a character calls a market only when a real line is behind it: a
-   moneyline needs its price, a spread or total needs the book's number (the sim's own number no longer stands in), and a game
-   card draws only the markets that have one. Calls already graded before Nov 20 stand as they were. */
-const NOLINE_FROM='2026-11-20';
-const noLineDay=d=>String(d||'').slice(0,10)>=NOLINE_FROM;
+   them… no line no listing on game cards"). A character calls a market only when a real line is behind it: a moneyline needs
+   its price, a spread or total needs the book's number (the sim's own number never stands in), and a game card draws only the
+   markets that have one. v3.1.5 · the same rule for every day (Nov 20, "Strip them"): the no-line calls made before Nov 20 are
+   out of the ledger, so they're out of every character's record too. */
 function noLineCall(x){if(!x)return false;if(x.simLine)return true;
   return(x.market==='ml'||x.market==='moneyline')&&(x.price==null||x.price===''||!isFinite(+x.price));}
 function noLineNote(){return`<div class="sub mono" style="font-size:10px;color:var(--mute);margin-top:8px">No real line posted yet… no line, no listing. The characters wait for the books.</div>`;}
@@ -2344,20 +2343,15 @@ function characterCalls(sp,g,s){
   const d=g.__date||gd||today();
   let hl=Ln.spH&&Ln.spH.line!=null?+Ln.spH.line:null,tl=Ln.ov&&Ln.ov.line!=null?+Ln.ov.line:null;
   let hlSim=false,tlSim=false;
-  /* v3.1.4 · no line, no listing: from Nov 20 the sim's own number never stands in for a book's (noLineDay). Before that,
-     characters picked against the line the card showed, so sim-only squares got picks and colors too — those days stand. */
-  const strict=noLineDay(d);
-  if(hl==null&&!strict){const fb=sp==='nfl'||sp==='ncaaf'||sp==='nba'||sp==='ncaab';   /* basketball spreads are margins too, never a ±1.5 run/puck line */
-    if(fb&&s.homeProj!=null&&s.awayProj!=null){const m=halfRound(s.homeProj-s.awayProj);if(m!==0){hl=-m;hlSim=true;}}
-    else if(!fb){hl=s.hw>=s.aw?-1.5:1.5;hlSim=true;}}
-  if(tl==null&&s.med!=null&&!strict){tl=sp==='nfl'||sp==='ncaaf'?Math.round(s.med):halfRound(s.med);tlSim=true;}
+  /* v3.1.4/v3.1.5 · no line, no listing: the sim's own number never stands in for a book's (characters used to pick against the
+     line the card showed, so sim-only squares got picks and colors too). hlSim/tlSim stay false; the readers still take them. */
   const calls=[];
   const add=(voice,market,side,extra)=>{if(!side)return;
     const line=market==='spread'?(side==='home'?hl:hl!=null?-hl:null):market==='total'?tl:null;
     if(market!=='ml'&&line==null)return;
     const pr=market==='ml'?(side==='home'?Ln.mlH:Ln.mlA):market==='spread'?(side==='home'?Ln.spH:Ln.spA):market==='total'?(side==='over'?Ln.ov:Ln.un):null;
     const price=pr?amerOk(pr.price):null;
-    if(strict&&market==='ml'&&price==null)return;   /* a moneyline's line IS its price: none posted, no call */
+    if(market==='ml'&&price==null)return;   /* a moneyline's line IS its price: none posted, no call */
     const pick=market==='ml'?(side==='home'?H:A)+' ML':market==='spread'?(side==='home'?H:A)+' '+(line>0?'+':'')+line:(side==='over'?'Over ':'Under ')+line;
     calls.push({id:[sp,gl,d,voice,market].join('|'),sp,date:d,game:gl,gid:g.id,voice,market,side,line,
       simLine:(market==='spread'&&hlSim)||(market==='total'&&tlSim),price,pick,...(extra||{})});};
@@ -2507,9 +2501,9 @@ function ledgerSig(V){if(!V||!V.length)return'0|0';const c=LEDGER_SIG&&LEDGER_SI
 const VOICES_CAP=22000,VOICES_SP_CAP={ncaab:6000};
 function voicesTrim(V){if(!Array.isArray(V))return V;const old=dayShift(today(),-14);let drop=new Set();
   V.forEach((x,i)=>{if(x&&!x.graded&&String(x.date||'').slice(0,10)<old)drop.add(i);
-    /* v3.1.4 · no line, no pick: a call from Nov 20 on with no real line behind it goes — graded or not, so an older copy
-       of the app on another device can't sync one back in */
-    else if(x&&noLineDay(x.date)&&noLineCall(x))drop.add(i);});
+    /* v3.1.4/v3.1.5 · no line, no pick: a call with no real line behind it goes — any day, graded or not (Nov 20: "Strip
+       them"), so it's off every record, and an older copy of the app on another device can't sync one back in */
+    else if(x&&noLineCall(x))drop.add(i);});
   const byDate=idx=>idx.sort((a,b)=>String(V[a].date||'').localeCompare(String(V[b].date||''))||a-b);
   Object.entries(VOICES_SP_CAP).forEach(([sp,cap])=>{const I=[];V.forEach((x,i)=>{if(x&&x.sp===sp&&!drop.has(i))I.push(i);});if(I.length>cap)byDate(I).slice(0,I.length-cap).forEach(i=>drop.add(i));});
   const keep=V.length-drop.size;if(keep>VOICES_CAP){const I=[];V.forEach((x,i)=>{if(!drop.has(i))I.push(i);});byDate(I).slice(0,keep-VOICES_CAP).forEach(i=>drop.add(i));}
@@ -3118,7 +3112,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261120b',DESK_VER='3.1.4';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261120c',DESK_VER='3.1.5';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -19722,7 +19716,7 @@ async function restoreHistory(){const say=m=>{document.querySelectorAll('.restor
     const P=JSON.parse(LZString.decompressFromBase64(txt));if(!P||!P.keys)throw new Error('the backup file could not be read');
     const out=[];for(const [k,v] of Object.entries(P.keys)){const cur=localStorage.getItem(k);const bj=JSON.stringify(v);const mj=cur?window.D4_STORE.merge(bj,cur):bj;if(!mj||mj===cur)continue;
       const add=restoreCount(mj)-restoreCount(cur);set(k,JSON.parse(mj));if(add>0)out.push([k,add]);}
-    if(out.some(x=>x[0]===VOICES_KEY))try{set(VOICES_KEY,voicesTrim(get(VOICES_KEY,[])));}catch(e){}   /* the ledger's own cap: oldest go first */
+    if(out.some(x=>x[0]===VOICES_KEY))try{const V0=get(VOICES_KEY,[]),V1=voicesTrim(V0);set(VOICES_KEY,V1);const o=out.find(x=>x[0]===VOICES_KEY);o[1]=Math.max(0,o[1]-(V0.length-V1.length));}catch(e){}   /* the ledger's own cap (oldest go first) and v3.1.5's no-line rule: what the trim drops isn't counted as restored */
     set('d4.restored',{ts:Date.now(),from:P.from,keys:out.length});
     const n=k=>(out.find(x=>x[0]===k)||[0,0])[1];
     say(`<span style="color:var(--win)">✓ Restored from the Nov 5 backup — ${n(VOICES_KEY).toLocaleString()} character calls, ${n(CPROP_KEY).toLocaleString()} prop calls, ${out.length} records filled back in. Your phone's own entries were kept.</span>`);
