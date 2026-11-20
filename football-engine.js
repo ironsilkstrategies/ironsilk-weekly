@@ -3242,8 +3242,8 @@ function fbBoxRefresh(gid,espnId,league){
 function cfbSeasonYear(){const d=new Date();return d.getMonth()<2?d.getFullYear()-1:d.getFullYear();}
 async function fetchNCAAFPowerRatings(){
   try{
-    const url='https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season='+(+NCAAF_SEASON||cfbSeasonYear()); // was hard-coded 2025: the 2026 season read last year's records
-    const r=await fetch(url);const j=await r.json();
+    /* v3.1.3 · the v2 standings API (fetchCFBStandings in shared.js): the old site-API path now 404s, so this read nothing */
+    const res=await fetchCFBStandings(+NCAAF_SEASON||cfbSeasonYear());  // was hard-coded 2025: the 2026 season read last year's records
     /* Two bugs lived here.
 
        1) KEY MISMATCH. Ratings were stored under the ESPN displayName
@@ -3260,18 +3260,18 @@ async function fetchNCAAFPowerRatings(){
           left unrated — the same defect the NFL board had, where a placeholder
           gets presented as a projection. Unrated is now unrated. */
     const put=(k,v)=>{if(k)NCAAF_POWER[String(k).trim()]=v;};
-    (j.children||[]).forEach(conf=>{
-      (conf.standings&&conf.standings.entries||[]).forEach(e=>{
+    {
+      (res.entries||[]).forEach(e=>{
         const tm=e.team||{};
         const stats={};(e.stats||[]).forEach(s=>{stats[s.name]=s.value;});
-        const gp=+stats.gamesPlayed||0;
+        const gp=standingsGP(stats);                // ESPN may leave out gamesPlayed: count the record instead
         const pf=+stats.pointsFor||0, pa=+stats.pointsAgainst||0;
         if(gp<1||(!pf&&!pa))return;          // no data -> no rating, not a fake 26
         const rec={offPPG:pf/gp,defPPG:pa/gp,gp,wins:stats.wins||0,losses:stats.losses||0};
         [tm.displayName,tm.shortDisplayName,tm.name,tm.location,tm.abbreviation,tm.id,tm.nickname]
           .forEach(k=>put(k,rec));
       });
-    });
+    }
     ncaafPowerFlags();
     set('d4.ncaafpower',{ts:Date.now(),v:NCAAF_POWER});
     NCAAF_GAMES.forEach(g=>{

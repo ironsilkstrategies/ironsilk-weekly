@@ -3102,7 +3102,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261119b',DESK_VER='3.1.2';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261120a',DESK_VER='3.1.3';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3572,6 +3572,24 @@ function whenScriptReady(fn,extraDelay){
   const iv=setInterval(()=>{if(SCRIPT_READY){clearInterval(iv);go()}},50);
   setTimeout(()=>clearInterval(iv),15000);
 }
+/* v3.1.3 · ESPN keeps standings on its v2 API (apis/v2/…/standings), the same family the NFL standings already read.
+   The site API's path (apis/site/v2/…/college-football/standings) now answers 404 "Event ID 'null' not found", so the
+   CFB ratings fallback has been reading nothing. Try the v2 copies first; the old path stays last in case ESPN brings it
+   back. Entries are collected at any depth (conferences can nest divisions). */
+const CFB_STANDINGS_URLS=season=>[
+  `https://site.api.espn.com/apis/v2/sports/football/college-football/standings?season=${season}`,
+  `https://site.web.api.espn.com/apis/v2/sports/football/college-football/standings?season=${season}`,
+  `https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season=${season}`];
+function standingsEntries(j){const out=[];const walk=n=>{if(!n||typeof n!=='object')return;
+  if(n.standings&&Array.isArray(n.standings.entries))n.standings.entries.forEach(x=>out.push(x));(n.children||[]).forEach(walk);};walk(j);return out;}
+async function fetchCFBStandings(season){let last=null;
+  for(const url of CFB_STANDINGS_URLS(season)){
+    try{const r=await fetch(url);let j=null;try{j=await r.json();}catch(e){}const entries=standingsEntries(j);last={url,status:r.status,j,entries};
+      if(r.ok&&entries.length)return last;}
+    catch(e){last={url,status:0,err:String(e&&e.message||e),j:null,entries:[]};}}
+  return last||{url:'',status:0,j:null,entries:[]};}
+/* a team's games played: ESPN may omit gamesPlayed, so fall back to its record */
+function standingsGP(st){return +st.gamesPlayed||((+st.wins||0)+(+st.losses||0)+(+st.ties||0));}
 /* ── LIVE SELF-TEST ───────────────────────────────────────────────────────
    Every external feed in this app was built against the documented response
    shape, not against a live call — the build environment can't reach ESPN or
@@ -3621,18 +3639,18 @@ async function runFeedSelfTest(){
   }catch(e){row('ESPN NFL endpoints',false,'request failed: '+(e&&e.message||e),'');}
   paint();
 
-  // 4) ESPN CFB standings (the SP+ fallback path)
+  // 4) ESPN CFB standings (the SP+ fallback path) — v3.1.3: the v2 standings API; this season first, last season if it hasn't started
   try{
-    const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/standings?season='+(new Date().getFullYear()-1));
-    const j=await r.json();
-    let n=0,ex=null;
-    (j.children||[]).forEach(c=>((c.standings&&c.standings.entries)||[]).forEach(e=>{
-      const st={};(e.stats||[]).forEach(x=>st[x.name]=x.value);
-      if((+st.gamesPlayed||0)>0&&((+st.pointsFor||0)||(+st.pointsAgainst||0))){n++;
-        if(!ex)ex={team:e.team&&e.team.displayName,gp:st.gamesPlayed,pf:st.pointsFor,pa:st.pointsAgainst}}}));
-    row('ESPN CFB standings (ratings fallback)',n>=20,
-      `HTTP ${r.status} · ${n} teams with usable scoring data`,
-      ex?peek(ex):'no usable rows — send me: '+peek(j).slice(0,180));
+    const d=new Date(),cur=d.getMonth()<2?d.getFullYear()-1:d.getFullYear();
+    const usable=res=>{let n=0,ex=null;(res.entries||[]).forEach(e=>{const st={};(e.stats||[]).forEach(x=>st[x.name]=x.value);
+      const gp=standingsGP(st);if(gp>0&&((+st.pointsFor||0)||(+st.pointsAgainst||0))){n++;
+        if(!ex)ex={team:e.team&&e.team.displayName,gp,pf:st.pointsFor,pa:st.pointsAgainst}}});return{n,ex};};
+    let res=await fetchCFBStandings(cur),u=usable(res),season=cur;
+    if(u.n<20){const prev=await fetchCFBStandings(cur-1),u2=usable(prev);if(u2.n>u.n){res=prev;u=u2;season=cur-1;}}
+    const where=String(res.url||'').replace(/^https:\/\/([^/]+)\/apis\/((site\/)?v2).*$/,'$1 · apis/$2');
+    row('ESPN CFB standings (ratings fallback)',u.n>=20,
+      `HTTP ${res.status} · ${u.n} teams with usable scoring data · ${season} season · ${where}`,
+      u.ex?peek(u.ex):'no usable rows — send me: '+(res.err?res.err:peek(res.j).slice(0,180)));
   }catch(e){row('ESPN CFB standings',false,'request failed: '+(e&&e.message||e),'');}
   paint();
 
