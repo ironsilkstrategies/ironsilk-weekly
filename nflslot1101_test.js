@@ -21,7 +21,7 @@ setTimeout(()=>{try{
   T('sims still run for every game (the evaluation needs them all)',w.eval('Object.keys(NFL_SIMS).length')===6,String(w.eval('Object.keys(NFL_SIMS).length')));
   T('Sunday 11 AM: it opens on the next window (Early), not the whole week',w.eval('NFL_SLATE')==='sun-early'&&/BAL/.test(slate())&&/TEN/.test(slate())&&!/LV Team|KC Team/.test(slate()),w.eval('NFL_SLATE'));
   T('the window chips are on the board (a final from days ago drops off, as before)',(slate().match(/nflPickSlate\('/g)||[]).length===4);
-  w.eval(`nflPickSlate('sun-night')`);T('tap SNF: only the Sunday-night game is on the page',/KC Team|>KC</.test(slate())&&!/BAL Team/.test(slate()));
+  w.eval(`nflPickSlate('sun-night')`);T('tap SNF: only the Sunday-night game is on the page',/id="nfl-card-s1"/.test(slate())&&!/id="nfl-card-e1"/.test(slate()));   /* v3.1.4 · by card id: with no lines the card lists no market tiles (no line, no listing) */
   w.eval(`NFL_GAMES.find(g=>g.id==='l1').abstract='in';NFL_SLATE=null;renderNFL()`);
   T('a game in progress: Live Now leads and the board opens on its window',w.eval(`nflBuildSlates(NFL_GAMES)[0].label`)==='Live Now'&&w.eval('NFL_SLATE')==='sun-late',w.eval('NFL_SLATE'));
   w.eval(`window.__H0=document.getElementById('slate').innerHTML;TK_TAP_T=Date.now()-5000;TK_SCROLL_T=Date.now();NFL_GAMES.find(g=>g.id==='l1').awayScore=7;renderNFL();`);

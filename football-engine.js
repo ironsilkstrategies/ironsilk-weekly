@@ -199,7 +199,7 @@ function saveNFLBookOdds(picks,el){
   const nflSummary=Object.entries(nflMkt).map(([m,n])=>n+' '+m).join(' · ');
   if(el)el.innerHTML=`<div class="tkt hi"><h3>NFL lines locked in ✓</h3>
     <div class="sub">${picks.length} picks · ${nflGames.size} game${nflGames.size===1?'':'s'} · ${nflSummary}</div>
-    <div class="sub" style="color:var(--mute);margin-top:4px">Stored as ${d}. Game card tiles will now show REAL instead of sim only.</div></div>`;
+    <div class="sub" style="color:var(--mute);margin-top:4px">Stored as ${d}. These markets now list on the game cards (no line, no listing).</div></div>`;
 }
 
 // ── NFL render ─────────────────────────────────────────────────────────────────
@@ -578,6 +578,9 @@ function fbPeriodModel(s,sp,per){
   const over=line=>{const isInt=Math.abs(line-Math.round(line))<1e-9;return isInt?twoWay(above(line,mT,sdT),exact(line,mT,sdT)):above(Math.floor(line),mT,sdT);};
   return{cover,ml,over,mT,mM,tie:exact(0,mM,sdM)};
 }
+/* v3.1.4 · no line, no listing: a market section draws only when it has a tile — a market with no real line isn't listed */
+function fbMktSec(lab,tiles,first){return String(tiles||'').trim()?`<div class="mktlab"${first?'':' style="margin-top:8px"'}>${lab}</div>
+    <div class="betgrid">${tiles}</div>`:'';}
 function fbPeriodSection(g,s,sp,lines,mk,sq,opts){
   opts=opts||{};const sg=x=>+x===0?'Pk':(x>0?'+':'')+x;const out=[];
   [['h1','1st Half','1H'],['q1','1st Quarter','Q1']].forEach(([per,title,tag])=>{
@@ -1998,23 +2001,8 @@ function nflCardFull(g){
      because it is the number that actually decides whether a price is worth
      taking — MLB gets it too now. */
   function nflSq(label,pick,e,simVal){
-    /* Was: show "sim only" when no book price uploaded.
-       MLB b() falls back to a vig price from the sim probability — football now
-       does the same so the tile always renders a number instead of a placeholder.
-       The tile is still visually distinct (no value/avoid colouring, no "REAL"
-       badge, model%/fair line says "sim only" in muted text) so you know there
-       is no real line behind it, but the card is readable. */
-    if(!e){
-      const sp=typeof simVal==='string'?simVal:(simVal!=null?(simVal*100).toFixed(0)+'%':'—');
-      const cI=(()=>{try{return charSquare('nfl',g,s,String(pick),{})}catch(err){return{}}})();
-      const tC=charTier({hasLine:false},cI);
-      return`<div class="bet${tC}" role="button" tabindex="0">
-        <div class="bl">${label}</div>
-        <div class="bo" style="color:var(--mute)">${sp}</div>
-        <div class="bs">sim only</div>
-        <div class="bf" style="color:var(--mute)">no real line uploaded yet</div>${cI.chips||''}${cI.meter||''}${charTierTag(tC)}
-      </div>`;
-    }
+    /* v3.1.4 · no line, no listing (Nov 20). It used to draw a muted "sim only" tile with the characters' calls on it. */
+    if(!e)return'';   /* v3.1.4 · no line, no listing: a side with no real price isn't drawn */
     const mp=e.p, kp=e.impl;
     const pct=Math.round(kp*100);
     const priceStr=(e.price>0?'+':'')+e.price;
@@ -2120,41 +2108,25 @@ function nflCardFull(g){
     </div>
     ${(()=>{try{return coachHtml({game:g,sim:s,sport:'nfl'})}catch(e){return''}})()}${(()=>{try{return sgpCardHtml('nfl',g,s)}catch(e){return''}})()}
 
-    <div class="mktlab">Spread${realBadge}</div>
-    <div class="betgrid">
-      ${nflSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,`${g.away.abbr} spread`,eAwaySpread,simAwaySpread)}
-      ${nflSq(`${g.home.abbr} ${homeSpread?sgn(homeSpread.line):sgn(-margin)}`,`${g.home.abbr} spread`,eHomeSpread,simHomeSpread)}
-    </div>
+    ${fbMktSec(`Spread${realBadge}`,nflSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,`${g.away.abbr} spread`,eAwaySpread,simAwaySpread)
+      +nflSq(`${g.home.abbr} ${homeSpread?sgn(homeSpread.line):sgn(-margin)}`,`${g.home.abbr} spread`,eHomeSpread,simHomeSpread),true)}
+    ${fbMktSec(`Moneyline${awayML||homeML?realBadge:''}`,nflSq(`${g.away.abbr}`,`${g.away.abbr} ML`,eAwayML,simAwPct)+nflSq(`${g.home.abbr}`,`${g.home.abbr} ML`,eHomeML,simHmPct))}
+    ${fbMktSec(`Total${totalOver?realBadge:''}`,nflSq(`Over ${totalOver?totalOver.line:med}`,`Over ${totalOver?totalOver.line:med}`,eOver,simTotVal)
+      +nflSq(`Under ${totalUnder?totalUnder.line:med}`,`Under ${totalUnder?totalUnder.line:med}`,eUnder,simTotVal))}
+    ${!(eAwaySpread||eHomeSpread||eAwayML||eHomeML||eOver||eUnder)&&g.status!=='Final'?noLineNote():''}
 
-    <div class="mktlab" style="margin-top:8px">Moneyline${awayML||homeML?realBadge:''}</div>
-    <div class="betgrid">
-      ${nflSq(`${g.away.abbr}`,`${g.away.abbr} ML`,eAwayML,simAwPct)}
-      ${nflSq(`${g.home.abbr}`,`${g.home.abbr} ML`,eHomeML,simHmPct)}
-    </div>
-
-    <div class="mktlab" style="margin-top:8px">Total${totalOver?realBadge:''}</div>
-    <div class="betgrid">
-      ${nflSq(`Over ${totalOver?totalOver.line:med}`,`Over ${totalOver?totalOver.line:med}`,eOver,simTotVal)}
-      ${nflSq(`Under ${totalUnder?totalUnder.line:med}`,`Under ${totalUnder?totalUnder.line:med}`,eUnder,simTotVal)}
-    </div>
-
-    ${h1AwaySpread||h1Over?`
-    <div class="mktlab" style="margin-top:8px">1st Half</div>
-    <div class="betgrid">
-      ${h1AwaySpread?nflSq(`${g.away.abbr} 1H ${sgn(h1AwaySpread.line)}`,`${g.away.abbr} 1H spread`,mk(s.awayCover(h1AwaySpread.line*2),h1AwaySpread.price)):''}
-      ${h1HomeSpread?nflSq(`${g.home.abbr} 1H ${sgn(h1HomeSpread.line)}`,`${g.home.abbr} 1H spread`,mk(s.homeCover(h1HomeSpread.line*2),h1HomeSpread.price)):''}
-    </div>
-    ${h1Over?`<div class="betgrid" style="margin-top:4px">
-      ${nflSq(`1H Over ${h1Over.line}`,`1H Over ${h1Over.line}`,mk(s.overH1(h1Over.line),h1Over.price),s.medH1)}
-      ${h1Under?nflSq(`1H Under ${h1Under.line}`,`1H Under ${h1Under.line}`,mk(1-s.overH1(h1Under.line),h1Under.price),s.medH1):''}
-    </div>`:''}
-    `:''}
+    ${(()=>{const sp1=(h1AwaySpread?nflSq(`${g.away.abbr} 1H ${sgn(h1AwaySpread.line)}`,`${g.away.abbr} 1H spread`,mk(s.awayCover(h1AwaySpread.line*2),h1AwaySpread.price)):'')
+        +(h1HomeSpread?nflSq(`${g.home.abbr} 1H ${sgn(h1HomeSpread.line)}`,`${g.home.abbr} 1H spread`,mk(s.homeCover(h1HomeSpread.line*2),h1HomeSpread.price)):'');
+      const ou1=(h1Over?nflSq(`1H Over ${h1Over.line}`,`1H Over ${h1Over.line}`,mk(s.overH1(h1Over.line),h1Over.price),s.medH1):'')
+        +(h1Under?nflSq(`1H Under ${h1Under.line}`,`1H Under ${h1Under.line}`,mk(1-s.overH1(h1Under.line),h1Under.price),s.medH1):'');
+      if(!sp1.trim()&&!ou1.trim())return'';
+      return`<div class="mktlab" style="margin-top:8px">1st Half</div>${sp1.trim()?`<div class="betgrid">${sp1}</div>`:''}${ou1.trim()?`<div class="betgrid" style="margin-top:4px">${ou1}</div>`:''}`;})()}
 
     ${(()=>{try{return fbPeriodSection(g,s,'nfl',lines,mk,nflSq,{h1Shown:!!(h1AwaySpread||h1Over)})}catch(e){console.warn('nfl periods',e);return''}})()}
-    ${nflProps.length?`<div class="mktlab" style="margin-top:8px">Props (${nflProps.length})</div>
+    ${(()=>{const P=nflProps.filter(p=>p&&p.e);return P.length?`<div class="mktlab" style="margin-top:8px">Props (${P.length})</div>
     <div class="betgrid">
-      ${nflProps.map(p=>nflSq(`${p.player} ${p.stat} ${p.line}+`,`${p.player} ${p.stat} ${p.line}+`,p.e,(p.simP*100).toFixed(0)+'%')).join('')}
-    </div>`:''}
+      ${P.map(p=>nflSq(`${p.player} ${p.stat} ${p.line}+`,`${p.player} ${p.stat} ${p.line}+`,p.e,(p.simP*100).toFixed(0)+'%')).join('')}
+    </div>`:'';})()}
 
     ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
       <span style="font-family:'IBM Plex Mono';color:var(--mute);min-width:32px">${g.away.abbr} ${consML.awayPct||'?'}%</span>
@@ -3891,17 +3863,7 @@ function ncaafCard(g){
   const spreadLabel=margin>0?`${g.home.abbr} -${margin}`:margin<0?`${g.away.abbr} -${Math.abs(margin)}`:"Pick'em";
   const realBadge=hasReal?`<span style="font-family:'IBM Plex Mono';font-size:8px;color:var(--cold);border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:4px">REAL</span>`:'';
   function cfbSq(label,pick,e,simVal){
-    if(!e){
-      const sp=typeof simVal==='string'?simVal:(simVal!=null?(+simVal*100).toFixed(0)+'%':'—');
-      const cI=(()=>{try{return charSquare('ncaaf',g,s,String(pick),{})}catch(err){return{}}})();
-      const tC=charTier({hasLine:false},cI);
-      return`<div class="bet${tC}" role="button" tabindex="0">
-        <div class="bl">${label}</div>
-        <div class="bo" style="color:var(--mute)">${sp}</div>
-        <div class="bs">sim only</div>
-        <div class="bf" style="color:var(--mute)">no real line uploaded yet</div>${cI.chips||''}${cI.meter||''}${charTierTag(tC)}
-      </div>`;
-    }
+    if(!e)return'';   /* v3.1.4 · no line, no listing: a side with no real price isn't drawn */
     const mp=e.p,kp=e.impl,pct=Math.round(kp*100);
     const priceStr=(e.price>0?'+':'')+e.price;
     let cls='',badge='';
@@ -4040,21 +4002,12 @@ function ncaafCard(g){
     </div>
     ${(()=>{try{return coachHtml({game:g,sim:s,sport:'ncaaf'})}catch(e){return''}})()}${(()=>{try{return sgpCardHtml('ncaaf',g,s)}catch(e){return''}})()}
     ${pctileChips}${spotlightChips}
-    <div class="mktlab">Spread${realBadge}</div>
-    <div class="betgrid">
-      ${cfbSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,`${g.away.abbr} spread`,eAwaySpread,simAwaySpread)}
-      ${cfbSq(`${g.home.abbr} ${homeSpread?sgn(homeSpread.line):sgn(-margin)}`,`${g.home.abbr} spread`,eHomeSpread,simHomeSpread)}
-    </div>
-    <div class="mktlab" style="margin-top:8px">Moneyline</div>
-    <div class="betgrid">
-      ${cfbSq(`${g.away.abbr}`,`${g.away.abbr} ML`,eAwayML,simAwPct)}
-      ${cfbSq(`${g.home.abbr}`,`${g.home.abbr} ML`,eHomeML,simHmPct)}
-    </div>
-    <div class="mktlab" style="margin-top:8px">Total</div>
-    <div class="betgrid">
-      ${cfbSq(`Over ${totalOver?totalOver.line:med}`,`Over ${totalOver?totalOver.line:med}`,eOver,simTotVal)}
-      ${cfbSq(`Under ${totalUnder?totalUnder.line:med}`,`Under ${totalUnder?totalUnder.line:med}`,eUnder,simTotVal)}
-    </div>
+    ${fbMktSec(`Spread${realBadge}`,cfbSq(`${g.away.abbr} ${awaySpread?sgn(awaySpread.line):sgn(margin)}`,`${g.away.abbr} spread`,eAwaySpread,simAwaySpread)
+      +cfbSq(`${g.home.abbr} ${homeSpread?sgn(homeSpread.line):sgn(-margin)}`,`${g.home.abbr} spread`,eHomeSpread,simHomeSpread),true)}
+    ${fbMktSec('Moneyline',cfbSq(`${g.away.abbr}`,`${g.away.abbr} ML`,eAwayML,simAwPct)+cfbSq(`${g.home.abbr}`,`${g.home.abbr} ML`,eHomeML,simHmPct))}
+    ${fbMktSec('Total',cfbSq(`Over ${totalOver?totalOver.line:med}`,`Over ${totalOver?totalOver.line:med}`,eOver,simTotVal)
+      +cfbSq(`Under ${totalUnder?totalUnder.line:med}`,`Under ${totalUnder?totalUnder.line:med}`,eUnder,simTotVal))}
+    ${!(eAwaySpread||eHomeSpread||eAwayML||eHomeML||eOver||eUnder)&&!cfbFinal?noLineNote():''}
     ${(()=>{try{return fbPeriodSection(g,s,'ncaaf',lines,mk,cfbSq)}catch(e){console.warn('cfb periods',e);return''}})()}
     ${typeof fbPropsCard==='function'?fbPropsCard(g,'ncaaf'):''}
     ${consML?`<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px">
@@ -4215,7 +4168,7 @@ function saveNCAAFBookOdds(picks,el){
   const summary=Object.entries(mktCounts).map(([m,n])=>n+' '+m).join(' · ');
   if(el)el.innerHTML=`<div class="tkt hi"><h3>CFB lines locked in ✓</h3>
     <div class="sub">${picks.length} picks · ${games.size} game${games.size===1?'':'s'} · ${summary}</div>
-    <div class="sub" style="color:var(--mute);margin-top:4px">Stored as ${d}. Spread, moneyline and total tiles on each game card will now show REAL instead of sim only.</div></div>`;
+    <div class="sub" style="color:var(--mute);margin-top:4px">Stored as ${d}. Spread, moneyline and total now list on these game cards (no line, no listing).</div></div>`;
   if(ACTIVE_SPORT==='ncaaf')renderNCAAF();
 }
 

@@ -32,10 +32,18 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
   T('Pred (gold line PHI 21.98–18.5): the upload becomes the Oracle\'s score, and no moneyline under his 75% bar',op&&Math.abs(op.a-21.98)<0.06&&Math.abs(op.h-18.5)<0.06&&!calls.includes('Pred:ml:away'),JSON.stringify(op)+' '+calls.filter(c=>c.startsWith('Pred')).join(' '));
   T('Crowd FADES 70% public money on PHI (Levitt 2004) → home side',calls.includes('Consensus:ml:home')&&!calls.includes('Consensus:ml:away'),calls.filter(c=>c.startsWith('Consensus')).join(' '));
   T('Most common score makes its own picks',calls.some(c=>c.startsWith('Most common:')));
+  /* v3.1.4 · no line, no listing: with no line uploaded the card lists no market at all (it used to draw sim-only squares) */
+  w.eval('renderNFL()');await wait(300);
+  const bare=w.document.getElementById('slate').innerHTML;
+  T('no line, no listing: no sim-only squares, no character chips, the card says why',!/sim only/.test(bare)&&!/hs-chip/.test(bare)&&/no line, no listing/.test(bare));
+  /* …and once the book's lines are in, the squares carry the characters */
+  w.eval(`saveNFLBookOdds([{away:'PHI',home:'CHI',market:'moneyline',side:'away',price:-150},{away:'PHI',home:'CHI',market:'moneyline',side:'home',price:130},
+    {away:'PHI',home:'CHI',market:'spread',side:'away',line:-3,price:-110},{away:'PHI',home:'CHI',market:'spread',side:'home',line:3,price:-110},
+    {away:'PHI',home:'CHI',market:'total',side:'over',line:44.5,price:-110},{away:'PHI',home:'CHI',market:'total',side:'under',line:44.5,price:-110}])`);
   w.eval('renderNFL()');await wait(300);
   const slate=w.document.getElementById('slate').innerHTML;
   T('character chips render on the card squares',(slate.match(/hs-chip/g)||[]).length>=4,(slate.match(/hs-chip/g)||[]).length+' chips');
-  T('sim-only squares now carry a tier outline',/class="bet (lean|strong|supreme|conflict)/.test(slate));
+  T('priced squares carry the tier outline',/class="bet[^"]*(lean|strong|supreme|conflict)/.test(slate));
   T('the ★ Sim chip is drawn',/hs-chip god/.test(slate));
   T('agreement meter renders (N of the roster, silent named)',/of 9 on this side/.test(slate));
   // tier rule

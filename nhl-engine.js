@@ -459,10 +459,7 @@ function nhlPredBoxHtml(g){
     if(r&&r.judge&&r.judge.box&&r.actualBox)return predBoxGradeHtml('nhl',g,r.judge.box,r.actualBox);}}catch(e){}return'';}
 /* ── Card ──────────────────────────────────────────────────────────────── */
 function nhlTile(g,s,label,pick,line,modelP,simStr,mkt){
-  if(!line){const cI=(()=>{try{return charSquare('nhl',g,s,pick,{})}catch(e){return{}}})(),tC=charTier({hasLine:false},cI);
-    return`<div class="bet${tC}"><div class="bl">${label}</div><div class="sim-chip">sim ${simStr}</div>
-    <div class="bo" style="color:var(--mute)">${modelP!=null?nhlSgn(nhlFair(modelP)):'—'}</div><div class="bs">sim only</div>
-    <div class="bf" style="color:var(--mute)">no real line yet</div>${cI.chips||''}${cI.meter||''}${charTierTag(tC)}</div>`;}
+  if(!line)return'';   /* v3.1.4 · no line, no listing: a side with no real price isn't drawn (it was a "sim only" tile with the characters' calls on it) */
   const kp=nhlImp(line.price),mp=modelP,ev=nhlEV(mp,line.price),gap=(mp-kp)*100;
   let cls='',badge='';
   if(!NHL_FLAT){if(gap>=EDGE_MIN){cls=' value';badge=`<span class="eb up">+${gap.toFixed(1)}</span>`;}
@@ -487,7 +484,8 @@ function nhlTile(g,s,label,pick,line,modelP,simStr,mkt){
     <div class="bs">${badge||Math.round(kp*100)+'%'}</div>
     <div class="bf">model ${(mp*100).toFixed(0)}% · fair ${nhlSgn(nhlFair(mp))} · <span style="color:${ev>=2?'var(--win)':ev<0?'var(--rust)':'var(--mute)'}">${ev>=0?'+':''}${ev.toFixed(1)}% EV</span>${line.src!=='mine'?` · <span style="color:var(--mute)">${line.src}</span>`:''}</div>${srcTag}${cInfo.chips||''}${cInfo.meter||''}${tag}</div>`;
 }
-function nhlMkt(title,real,inner){return`<div class="mktlab" style="margin-top:8px">${title}${real?'<span style="font-family:\'IBM Plex Mono\';font-size:8px;color:var(--cold);border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:6px">REAL</span>':''}</div><div class="betgrid">${inner}</div>`;}
+function nhlMkt(title,real,inner){if(!String(inner||'').trim())return'';   /* v3.1.4 · no tiles, no section */
+  return`<div class="mktlab" style="margin-top:8px">${title}${real?'<span style="font-family:\'IBM Plex Mono\';font-size:8px;color:var(--cold);border:1px solid var(--cold);border-radius:3px;padding:1px 4px;margin-left:6px">REAL</span>':''}</div><div class="betgrid">${inner}</div>`;}
 function nhlCard(g){
   const s=nhlSimFor(g),game=g.away.abbr+'@'+g.home.abbr,L=nhlLineObj(game),A=g.away.abbr,H=g.home.abbr;
   // headline
@@ -544,7 +542,7 @@ function nhlCard(g){
       <div style="text-align:right;font-family:'IBM Plex Mono';font-size:9px;color:var(--mute)">${A} ${nhlEsc(g.away.record)}<br>${H} ${nhlEsc(g.home.record)}</div></div>
     ${head}<div class="sig">${chips.join('')}${extra}</div>
     ${g.abstract==='pre'?(()=>{try{return coachHtml({game:g,sim:s,sport:'nhl'})}catch(e){return''}})():''}${(()=>{try{return sgpCardHtml('nhl',g,s)}catch(e){return''}})()}
-    ${g.abstract!=='post'?pl+ml+to+p1+p1pl+p1ml:''}
+    ${g.abstract!=='post'?(pl+ml+to+p1+p1pl+p1ml||noLineNote()):''}
     ${typeof pstCardHtml==='function'?pstCardHtml('nhl',g):''}
     <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
     <div class="legend" style="margin-top:2px"><span>◆ SUPREME = book price, model edge and outside sources all agree</span><span>STRONG = two of three</span><span>⚠ CONFLICT = they disagree</span></div>

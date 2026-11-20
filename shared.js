@@ -2323,6 +2323,15 @@ const CHAR_CACHE={};
 var CHAR_GEN=0;var CHAR_KEEP=new Set(['d4.voices','d4.scorecalls','d4.halfcalls','d4.syslog','d4.perf','d4.autopilot','d4.bootguard','d4.todaycard','d4.feeltune','d4.conf','d4.heirs','d4.__kts','d4.__lastsync','d4.halflines','d4.best5log','d4.evalready','d4.bgeval.nba','d4.bgeval.nhl','d4.bgeval.nfl','d4.bgeval.ncaaf','d4.bgeval.ncaab','d4.bgeval.mlb',
   /* v2.81.5 · bookkeeping that no character reads — writing it mustn't throw away every game's cached calls */
   'd4.apsteps','d4.heallog','d4.ruletune','d4.ruleoff','d4.bolcache','d4.bolfiled','d4.bollog','d4.bolauto','d4.gradehealth','d4.best5','d4.evalchain','d4.pubstate','d4.intakedrop','d4.cred','d4.pull','d4.usage']);
+/* v3.1.4 · NO LINE, NO LISTING (Chris, Nov 20: "I don't like picks being made by any character if there's not a real line on
+   them… no line no listing on game cards"). From Nov 20 on a character calls a market only when a real line is behind it: a
+   moneyline needs its price, a spread or total needs the book's number (the sim's own number no longer stands in), and a game
+   card draws only the markets that have one. Calls already graded before Nov 20 stand as they were. */
+const NOLINE_FROM='2026-11-20';
+const noLineDay=d=>String(d||'').slice(0,10)>=NOLINE_FROM;
+function noLineCall(x){if(!x)return false;if(x.simLine)return true;
+  return(x.market==='ml'||x.market==='moneyline')&&(x.price==null||x.price===''||!isFinite(+x.price));}
+function noLineNote(){return`<div class="sub mono" style="font-size:10px;color:var(--mute);margin-top:8px">No real line posted yet… no line, no listing. The characters wait for the books.</div>`;}
 function characterCalls(sp,g,s){
   if(!g||!s||s.aw==null)return[];
   const ck=sp+'|'+g.id,c=CHAR_CACHE[ck];
@@ -2335,20 +2344,23 @@ function characterCalls(sp,g,s){
   const d=g.__date||gd||today();
   let hl=Ln.spH&&Ln.spH.line!=null?+Ln.spH.line:null,tl=Ln.ov&&Ln.ov.line!=null?+Ln.ov.line:null;
   let hlSim=false,tlSim=false;
-  // No posted line yet: characters still pick against the line the card shows
-  // (the sim's own number) so sim-only squares get picks and colors too.
-  if(hl==null){const fb=sp==='nfl'||sp==='ncaaf'||sp==='nba'||sp==='ncaab';   /* basketball spreads are margins too, never a ±1.5 run/puck line */
+  /* v3.1.4 · no line, no listing: from Nov 20 the sim's own number never stands in for a book's (noLineDay). Before that,
+     characters picked against the line the card showed, so sim-only squares got picks and colors too — those days stand. */
+  const strict=noLineDay(d);
+  if(hl==null&&!strict){const fb=sp==='nfl'||sp==='ncaaf'||sp==='nba'||sp==='ncaab';   /* basketball spreads are margins too, never a ±1.5 run/puck line */
     if(fb&&s.homeProj!=null&&s.awayProj!=null){const m=halfRound(s.homeProj-s.awayProj);if(m!==0){hl=-m;hlSim=true;}}
     else if(!fb){hl=s.hw>=s.aw?-1.5:1.5;hlSim=true;}}
-  if(tl==null&&s.med!=null){tl=sp==='nfl'||sp==='ncaaf'?Math.round(s.med):halfRound(s.med);tlSim=true;}
+  if(tl==null&&s.med!=null&&!strict){tl=sp==='nfl'||sp==='ncaaf'?Math.round(s.med):halfRound(s.med);tlSim=true;}
   const calls=[];
   const add=(voice,market,side,extra)=>{if(!side)return;
     const line=market==='spread'?(side==='home'?hl:hl!=null?-hl:null):market==='total'?tl:null;
     if(market!=='ml'&&line==null)return;
     const pr=market==='ml'?(side==='home'?Ln.mlH:Ln.mlA):market==='spread'?(side==='home'?Ln.spH:Ln.spA):market==='total'?(side==='over'?Ln.ov:Ln.un):null;
+    const price=pr?amerOk(pr.price):null;
+    if(strict&&market==='ml'&&price==null)return;   /* a moneyline's line IS its price: none posted, no call */
     const pick=market==='ml'?(side==='home'?H:A)+' ML':market==='spread'?(side==='home'?H:A)+' '+(line>0?'+':'')+line:(side==='over'?'Over ':'Under ')+line;
     calls.push({id:[sp,gl,d,voice,market].join('|'),sp,date:d,game:gl,gid:g.id,voice,market,side,line,
-      simLine:(market==='spread'&&hlSim)||(market==='total'&&tlSim),price:pr?amerOk(pr.price):null,pick,...(extra||{})});};
+      simLine:(market==='spread'&&hlSim)||(market==='total'&&tlSim),price,pick,...(extra||{})});};
   const byMargin=(voice,a,h,extra)=>{if(a!==h)add(voice,'ml',h>a?'home':'away',extra);
     if(hl!=null&&(h-a)+hl!==0)add(voice,'spread',(h-a)+hl>0?'home':'away',extra);
     if(tl!=null&&a+h!==tl)add(voice,'total',a+h>tl?'over':'under',extra);};
@@ -2494,7 +2506,10 @@ function ledgerSig(V){if(!V||!V.length)return'0|0';const c=LEDGER_SIG&&LEDGER_SI
    (was 16,000) with college basketball still held to 6,000 of them — it can't push the other sports' history out */
 const VOICES_CAP=22000,VOICES_SP_CAP={ncaab:6000};
 function voicesTrim(V){if(!Array.isArray(V))return V;const old=dayShift(today(),-14);let drop=new Set();
-  V.forEach((x,i)=>{if(x&&!x.graded&&String(x.date||'').slice(0,10)<old)drop.add(i);});
+  V.forEach((x,i)=>{if(x&&!x.graded&&String(x.date||'').slice(0,10)<old)drop.add(i);
+    /* v3.1.4 · no line, no pick: a call from Nov 20 on with no real line behind it goes — graded or not, so an older copy
+       of the app on another device can't sync one back in */
+    else if(x&&noLineDay(x.date)&&noLineCall(x))drop.add(i);});
   const byDate=idx=>idx.sort((a,b)=>String(V[a].date||'').localeCompare(String(V[b].date||''))||a-b);
   Object.entries(VOICES_SP_CAP).forEach(([sp,cap])=>{const I=[];V.forEach((x,i)=>{if(x&&x.sp===sp&&!drop.has(i))I.push(i);});if(I.length>cap)byDate(I).slice(0,I.length-cap).forEach(i=>drop.add(i));});
   const keep=V.length-drop.size;if(keep>VOICES_CAP){const I=[];V.forEach((x,i)=>{if(!drop.has(i))I.push(i);});byDate(I).slice(0,keep-VOICES_CAP).forEach(i=>drop.add(i));}
@@ -2540,7 +2555,8 @@ function voicesLog0(sp){
     calls.forEach(c=>{if(META_VOICES.has(c.voice)&&idx[[c.voice,sp,c.game,c.date,c.market].join('|')]!=null)return;   // already logged under the pre-v1.99 70%+ rule
       const i=idx[c.id];if(i!=null){if(!pre||V[i].graded||V[i].lk)return;if(JSON.stringify(V[i])===JSON.stringify(c))return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});   /* v2.51 · an unchanged call isn't a write */
   });
-  if(n){set(VOICES_KEY,voicesTrim(V));}return n;
+  /* v3.1.4 · the trim runs even when nothing new came in, so a no-line call logged before the update leaves the ledger now */
+  const T=voicesTrim(V);if(n||T.length!==V.length){set(VOICES_KEY,T);}return n;
 }
 
 /* ══ v2.70 · EVERY CHARACTER CALLS A FINAL SCORE ═══════════════════════════════════════════════════════
@@ -3102,7 +3118,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261120a',DESK_VER='3.1.3';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261120b',DESK_VER='3.1.4';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -7928,6 +7944,7 @@ function betGrid(g,s,M){
     ${realMLBlock}
     ${realRLBlock}
     ${realTotalBlock}
+    ${!realMLBlock&&!realRLBlock&&!realTotalBlock?noLineNote():''}
     ${(()=>{
       // F5 side squares — from book screenshots (market:"f5side")
       const awayF5Side=bookLinesFor(g.id).find(x=>x.market==='f5side'&&x.side==='away');
@@ -7941,21 +7958,17 @@ function betGrid(g,s,M){
       } else if(awayF5Side||homeF5Side){
         const found=awayF5Side||homeF5Side;
         const foundSide=awayF5Side?'away':'home';
-        const otherSide=foundSide==='away'?'home':'away';
-        const foundAb=g[foundSide].abbr,otherAb=g[otherSide].abbr;
+        const foundAb=g[foundSide].abbr;
         const foundSimVal=foundSide==='away'?simF5Aw:simF5Hm;
+        /* v3.1.4 · no line, no listing: only the priced side shows (the other side's sim-only square is gone) */
         f5SideBlock=`<div class="mktlab">First 5 moneyline <span class="flag cool book">your book</span></div>
           <div class="betgrid">${foundSide==='away'
             ?b('F5 '+foundAb,'F5 '+foundAb,s.f5a,Math.round(s.f5a*100),{realPrice:found.price,modelP:s.f5a,simVal:foundSimVal})
-            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${simF5Aw}</div><div class="bs">sim only</div></div>`}
-          ${foundSide==='home'
-            ?b('F5 '+foundAb,'F5 '+foundAb,s.f5h,Math.round(s.f5h*100),{realPrice:found.price,modelP:s.f5h,simVal:foundSimVal})
-            :`<div class="cmpr"><div class="bl">F5 ${otherAb}</div><div class="bo">${simF5Hm}</div><div class="bs">sim only</div></div>`}
+            :b('F5 '+foundAb,'F5 '+foundAb,s.f5h,Math.round(s.f5h*100),{realPrice:found.price,modelP:s.f5h,simVal:foundSimVal})}
           </div>`;
       }
       // F5 total block
       const bookF5Total=bookLineForMarket(g.id,'f5total')||bookLineForMarket(g.id,'f5');
-      const realF5=hasRealF5(g.id);
       let f5TotalBlock='';
       if(bookF5Total){
         const overBook=bookLinesFor(g.id).find(x=>(x.market==='f5total')&&x.side==='over');
@@ -7966,26 +7979,10 @@ function betGrid(g,s,M){
           f5TotalBlock=`<div class="mktlab">First 5 total · ${overBook.line} <span class="flag cool book">your book</span></div>
             <div class="betgrid">${b('F5 over '+overBook.line,'F5 over '+overBook.line,op/sum,Math.round(op/sum*100),{realPrice:overBook.price,modelP:mO,marketP:op/sum,simVal:simF5Tot})}${b('F5 under '+overBook.line,'F5 under '+overBook.line,up/sum,Math.round(up/sum*100),{realPrice:underBook.price,modelP:1-mO,marketP:up/sum,simVal:simF5Tot})}</div>`;
         }
-      } else if(realF5){
-        f5TotalBlock=`<div class="mktlab">First 5 total · ${f5t}</div>
-          <div class="betgrid">${b('F5 over '+f5t,'F5 over '+f5t,f5over,f5oPct,{simVal:simF5Tot})}${b('F5 under '+f5t,'F5 under '+f5t,1-f5over,f5uPct,{simVal:simF5Tot})}</div>`;
       }
-      // sim-only side squares when no book f5side but we have a real F5 total from the book
-      // (you uploaded F5 total lines so you definitely want the side squares too — sim drives them)
-      const bookF5AnyExists=bookF5Total||awayF5Side||homeF5Side;
-      const f5SideSimBlock=(!f5SideBlock&&(realF5||bookF5AnyExists))
-        ?`<div class="mktlab">First 5 moneyline <span class="flag cool">sim</span></div>
-           <div class="betgrid">${b('F5 '+g.away.abbr,'F5 '+g.away.abbr,s.f5a,undefined,{simVal:simF5Aw})}${b('F5 '+g.home.abbr,'F5 '+g.home.abbr,s.f5h,undefined,{simVal:simF5Hm})}</div>`
-        :'';
-      if(f5SideBlock||f5TotalBlock||f5SideSimBlock){
-        return f5SideBlock+f5SideSimBlock+f5TotalBlock;
-      }
-      // no real line at all — sim-only display, not tappable
-      return `<div class="mktlab" style="color:var(--mute)">First 5 innings — no real line posted</div>
-        <div class="betgrid">
-          <div class="cmpr"><div class="bl">${g.away.abbr}</div><div class="bo">${simF5Aw}</div><div class="bs">sim only</div></div>
-          <div class="cmpr"><div class="bl">${g.home.abbr}</div><div class="bo">${simF5Hm}</div><div class="bs">sim only</div></div>
-        </div>`;
+      /* v3.1.4 · no line, no listing: the sim's own F5 total (at its own number), the sim-only F5 sides and the "no real
+         line posted" squares are gone — First 5 shows only what a book actually priced */
+      return f5SideBlock+f5TotalBlock;
     })()}
     <div class="legend"><span><i class="v"></i>model sees value</span><span><i class="a"></i>model says pass</span><span><i class="n"></i>no real edge</span></div>
   </div>`;
@@ -17821,7 +17818,7 @@ function renderCoachTab(){
 
   h+=glossSection('All sports',[
     ['REAL',"At least one line for this market came from your own uploaded book odds or a live pull — not just the simulator's opinion."],
-    ['sim only',"No real line exists for this square yet. Shows the model's own number so the card still reads, but there's nothing to compare it against."],
+    ['no line, no listing',"A market shows on a game card only when a real line is behind it, and no character calls it until then. A game with no lines yet says so instead of showing the model's own numbers."],
     ['model sees value (green)',"Model probability beats the market-implied probability by more than the edge threshold — a real price gap in your favour."],
     ['model says pass (red)',"Model disagrees with the price in the other direction — the market is asking more than the model thinks this is worth."],
     ['no real edge',"Model and market roughly agree. Nothing wrong with the pick, just no free money sitting on the table."],
@@ -17960,6 +17957,7 @@ function todayCandidates(sp){
       cand.push({m:'total',sd:'under',pick:'Under '+tl,L:tlReal!=null?Ln.un:null,p:pu,other:Ln.ov});}
     cand.forEach(c=>{
       const price=c.L&&c.L.price!=null?+c.L.price:null,hasLine=price!=null;
+      if(!hasLine)return;   /* v3.1.4 · no line, no listing: a square with no real price never makes Today's card */
       let kp=null;if(hasLine){kp=imp(price);if(c.other&&c.other.price!=null){const k2=imp(+c.other.price);kp=kp/(kp+k2);}}
       const mp=typeof c.p==='number'&&isFinite(c.p)?c.p:null;
       const gap=hasLine&&mp!=null?(mp-kp)*100:null;
@@ -18055,7 +18053,7 @@ function todaySnapshot(force){
   /* Daily lock: keep picks for games that have already started so picks
      don't vanish mid-day when the board refreshes post-kickoff. Only add
      new picks for games not yet in today's list. */
-  const B0=T.by[sp]||{};let prev=B0.picks||[];
+  const B0=T.by[sp]||{};let prev=(B0.picks||[]).filter(x=>x&&x.price!=null&&x.price!=='');   /* v3.1.4 · a no-line pick listed before the update leaves too */
   /* a pick, once on today's card, keeps its price and side for the day —
      games that start stay listed. New game-markets are added, never swapped.
      v2.41 · …but only once the day is FROZEN. Before the master evaluation freezes it, a game

@@ -283,10 +283,7 @@ function bbParseSlate(sp,text){const picks=[],unread=[];let A=null,H=null;const 
 /* v2.84.5 · the spread chip reads like a line: MIA sim 76.6, FLA 80.0 → MIA +3.4 / FLA -3.4 (was flipped) */
 function bbSimLine(v){v=Math.round(v*10)/10;return (v>0?'+':'')+v.toFixed(1);}
 function bbTile(C,g,s,label,pick,line,r,simStr,mk,sd){const sp=C.sp;const pw=r?r.w/((r.w+r.l)||1):null;
-  if(!line){const cI=(()=>{try{return charSquare(sp,g,s,pick,{})}catch(e){return{}}})(),tC=charTier({hasLine:false},cI);
-    return`<div class="bet${tC}"><div class="bl">${bbEsc(label)}</div><div class="sim-chip">sim ${bbEsc(simStr)}</div>
-      <div class="bo" style="color:var(--mute)">${pw!=null?bbSgn(bbFair(pw)):'—'}</div><div class="bs">sim only</div>
-      <div class="bf" style="color:var(--mute)">no real line yet${r&&r.p>0.005?` · push ${Math.round(r.p*100)}%`:''}</div>${cI.chips||''}${cI.meter||''}${charTierTag(tC)}</div>`;}
+  if(!line)return'';   /* v3.1.4 · no line, no listing: a side with no real price isn't drawn (it was a "sim only" tile with the characters' calls on it) */
   const kp=imp(line.price),ev=(r.w*(bbDec(line.price)-1)-r.l)*100,gap=(pw-kp)*100;
   let cls='',badge='';if(gap>=EDGE_MIN){cls=' value';badge=`<span class="eb up">+${gap.toFixed(1)}</span>`;}else if(gap<=-EDGE_MIN){cls=' avoid';badge=`<span class="eb dn">${gap.toFixed(1)}</span>`;}
   const cInfo=(()=>{try{return charSquare(sp,g,s,pick,{price:line.price,modelP:pw,line:line.line})}catch(e){return{}}})();
@@ -304,11 +301,11 @@ function bbMkt(title,real,inner){return`<div class="mktlab" style="margin-top:8p
 function bbSection(C,g,lab,per,pre,L){const s=per==='full'?bbSim(C,g):bbSimFor(C,g,per);const f=(m,sd)=>L.find(x=>x.market===m&&x.side===sd);
   const mlA=f(pre+'moneyline','away')||f(pre+'ml','away'),mlH=f(pre+'moneyline','home')||f(pre+'ml','home'),spA=f(pre+'spread','away'),spH=f(pre+'spread','home'),ov=f(pre+'total','over'),un=f(pre+'total','under');
   const P=pre?(pre==='h1'?'1H':pre.toUpperCase())+' ':'';const A=g.away.abbr,H=g.home.abbr;const out=[];const mk=pre?null:1;
-  if(per==='full'||mlA||mlH)out.push(bbMkt(lab+' · MONEYLINE',!!(mlA||mlH),bbTile(C,g,s,A,`${P}${A} ML`,mlA,{w:s.aw,p:0,l:s.hw},s.awayProj.toFixed(1),mk&&'ml','away')+bbTile(C,g,s,H,`${P}${H} ML`,mlH,{w:s.hw,p:0,l:s.aw},s.homeProj.toFixed(1),mk&&'ml','home')));
+  if(mlA||mlH)out.push(bbMkt(lab+' · MONEYLINE',!!(mlA||mlH),bbTile(C,g,s,A,`${P}${A} ML`,mlA,{w:s.aw,p:0,l:s.hw},s.awayProj.toFixed(1),mk&&'ml','away')+bbTile(C,g,s,H,`${P}${H} ML`,mlH,{w:s.hw,p:0,l:s.aw},s.homeProj.toFixed(1),mk&&'ml','home')));
   if(spA&&spH)out.push(bbMkt(lab+' · SPREAD',true,bbTile(C,g,s,`${A} ${bbSgn(spA.line)}`,`${P}${A} ${bbSgn(spA.line)}`,spA,s.cover('away',+spA.line),bbSimLine(s.margin),mk&&'spread','away')+bbTile(C,g,s,`${H} ${bbSgn(spH.line)}`,`${P}${H} ${bbSgn(spH.line)}`,spH,s.cover('home',+spH.line),bbSimLine(-s.margin),mk&&'spread','home')));
-  else if(per==='full'){const l=-Math.round(s.margin*2)/2||-0.5;out.push(bbMkt(lab+' · SPREAD (model line)',false,bbTile(C,g,s,`${H} ${bbSgn(l)}`,`${H} ${bbSgn(l)}`,null,s.cover('home',l),bbSimLine(-s.margin))+bbTile(C,g,s,`${A} ${bbSgn(-l)}`,`${A} ${bbSgn(-l)}`,null,s.cover('away',-l),bbSimLine(s.margin))));}
   if(ov&&un)out.push(bbMkt(`${lab} · TOTAL ${ov.line}`,true,bbTile(C,g,s,'Over '+ov.line,`${P}Over ${ov.line}`,ov,s.ou('over',+ov.line),s.total.toFixed(1),mk&&'total','over')+bbTile(C,g,s,'Under '+un.line,`${P}Under ${un.line}`,un,s.ou('under',+un.line),s.total.toFixed(1),mk&&'total','under')));
-  else if(per==='full'){const t=Math.round(s.total*2)/2;out.push(bbMkt(`${lab} · TOTAL ${t} (model line)`,false,bbTile(C,g,s,'Over '+t,'Over '+t,null,s.ou('over',t),s.total.toFixed(1))+bbTile(C,g,s,'Under '+t,'Under '+t,null,s.ou('under',t),s.total.toFixed(1))));}
+  /* v3.1.4 · no line, no listing: the "(model line)" spread and total sections are gone; a game with no real line says so */
+  if(per==='full'&&!out.length)out.push(noLineNote());
   return out.join('');}
 const bbChip=(t,col)=>`<div class="sigchip"${col?` style="color:${col}"`:''}>${t}</div>`;
 function bbChips(C,g,s,L){const A=g.away.abbr,H=g.home.abbr;const out=[];const f=(m,sd)=>L.find(x=>x.market===m&&x.side===sd);
