@@ -99,7 +99,7 @@ export const on = (deps, which) => { const c = cfg(deps)[which]; return which ==
 export const anyOn = deps => on(deps, 'fb') || on(deps, 'ig') || on(deps, 'th') || on(deps, 'x');
 /* X charges per post (about $0.20 with a link): by default only the daily recap, the easter eggs and Receipts Sunday (v3.3) go there. X_KINDS widens it. */
 export const xWants = (kind, deps) => { const k = (cfg(deps).x.kinds || 'recap,egg,weekly').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
-export const igWants = (kind, deps) => { const k = (cfg(deps).ig.kinds || 'unlock,recap,cash,invite,spotlight,drop,egg,welcome,weekly,debate').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
+export const igWants = (kind, deps) => { const k = (cfg(deps).ig.kinds || 'unlock,recap,cash,invite,spotlight,drop,egg,welcome,weekly,debate,free3').toLowerCase(); return k === 'all' || k.split(/[\s,]+/).includes(String(kind || '').toLowerCase()); };
 if (env.GITHUB_ACTIONS === 'true') for (const t of [env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN, env.X_API_SECRET, env.X_ACCESS_TOKEN, env.X_ACCESS_SECRET]) if ((t || '').trim()) console.log('::add-mask::' + t.trim());
 const KNOWN = new Set();   /* every token this run has used: each log line is scrubbed of all of them, not just its own */
 const hide = (s, toks) => { s = String(s || ''); for (const t of toks) if (t) KNOWN.add(t); for (const t of [...KNOWN, env.TG_BOT_TOKEN, env.FB_PAGE_TOKEN, env.IG_TOKEN, env.THREADS_TOKEN, SOC.thTok, env.X_API_SECRET, env.X_ACCESS_TOKEN, env.X_ACCESS_SECRET]) if (t && String(t).trim().length > 3) s = s.split(String(t).trim()).join('…'); return s; };

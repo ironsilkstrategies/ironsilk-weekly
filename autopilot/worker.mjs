@@ -8,12 +8,13 @@
 import { webcrypto as crypto, createHash } from 'node:crypto';
 import * as Soc from './social.mjs';
 import * as Mega from './megaphone.mjs';
+import * as F3 from './free3.mjs';   /* v3.3.2 · the daily Free 3 promo post (free3.mjs) */
 import * as Gr from './growth.mjs';   /* v3.3 · the growth playbook: the debate, Receipts Sunday, recruiting links, game pages */   /* v2.99 · a post every 30 minutes: game questions + polls, streaks, line movers, the reactions goal */   /* v2.98 · the picture cards and the other outlets (Facebook, Instagram, Threads) */
 const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.3.1';
+const VERSION = 'worker v3.3.2';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -753,6 +754,20 @@ export async function runWeekly(state, S, today, deps) { if (String(deps?.weekly
   const dests = pubDests(state); if (!dests.length && !Soc.anyOn(deps)) return 0;
   const F = (await pubFeedNow(deps)) || newestFeed(state); const post = Gr.weeklyPost(F, today, { app: appUrl(deps) }); if (!post) { S.wk = today; return 1; }   /* a quiet week: nothing to say */
   if (!(await sendPublic(dests, deps?.tg || tg, deps, post.text, post.card, 'weekly'))) return 0; S.wk = today; log('receipts sunday ·', post.w + '-' + post.l); return 1; }
+/* 🎯 v3.3.2 · THE FREE 3 (free3.mjs): once a day, the day's free picks as one promo post — the picture and the words to the public
+   channel and lounge, then Facebook, Instagram and Threads (X only if X_KINDS asks for it). It goes out once the card is locked and
+   while a pick still hasn't started, between 9 AM and 10 PM Central. Outside the open beta it waits for the first unlock and draws
+   the picks still locked as locked. Off until the repo variable FREE3 is "on". */
+export async function runFree3(state, S, today, deps) { if (String(deps?.free3 ?? env.FREE3 ?? '').trim().toLowerCase() !== 'on') return 0;
+  const now = deps?.now || Date.now(); if (S.f3 === today) return 0; const h = Gr.ctHour(now); if (h < 9 || h >= 22) return 0;
+  const dests = pubDests(state); if (!dests.length && !Soc.anyOn(deps)) return 0;
+  const F = await pubFeedNow(deps); if (!F || !F.today || F.today.d !== today || !(F.today.picks || []).length) return 0;
+  const D = await F3.free3Of(F, deps); if (!D || !D.open) return 0;
+  if (!D.picks.some(x => !x.hidden && x.start && now < Date.parse(x.start))) { S.f3 = today; return 1; }   /* every open pick has started: today's post would be late */
+  const text = F3.free3Caption(D, { app: appUrl(deps) }); const R = deps ? deps.renderFree3 : F3.renderFree3; let img = null; try { img = R ? await R(D) : null; } catch (e) { }
+  let ok = false; for (const c of dests) ok = (await say(deps?.tg || tg, c, text, img, deps)) || ok;
+  if ((ok || !dests.length) && Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind: 'free3', bare: true }); if (!dests.length) ok = [m.fb, m.ig, m.th].includes(true); }
+  if (!ok) return 0; S.f3 = today; log('free 3 ·', D.n, 'pick' + (D.n === 1 ? '' : 's'), '·', D.picks.map(x => x.hidden ? 'locked' : x.pick).join(' | ')); return 1; }
 /* 🔗 recruiting: members link to the public lounge until it locks, then to the free channel */
 const recruitChat = (state, p) => { const L = state.lounge || {}, lounge = p && p.bc && p.bc.pubLounge; if (lounge && !L.locked) return String(lounge); const ch = p && p.bc && p.bc.pub; return ch ? String(ch) : null; };
 const plainName = u => (([u && u.first_name, u && u.last_name].filter(Boolean).join(' ')) || (u && u.username ? '@' + u.username : 'A member')).slice(0, 40);
@@ -1083,7 +1098,7 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       try { acted += await fbInvite(state); } catch (e) { log('lounge easter egg', e.message || e); }
       if (SOCMEM) try { const a = await runMegaphone(state, SOCMEM.S.mega, today); if (a) { acted += a; await socialSave(); } } catch (e) { log('megaphone', e.message || e); }
       /* v3.3 · the growth desk: the debate (and its settle), Receipts Sunday, the recruiters' shout-out */
-      if (SOCMEM) try { const a = (await runDebate(state, SOCMEM.S, today)) + (await runWeekly(state, SOCMEM.S, today)); if (a) { acted += a; await socialSave(); } } catch (e) { log('growth', e.message || e); }
+      if (SOCMEM) try { const a = (await runDebate(state, SOCMEM.S, today)) + (await runWeekly(state, SOCMEM.S, today)) + (await runFree3(state, SOCMEM.S, today)); if (a) { acted += a; await socialSave(); } } catch (e) { log('growth', e.message || e); }
       if (SOCMEM) try { if (await runGamePages(state, SOCMEM.S, today)) await socialSave(); } catch (e) { log('game pages', e.message || e); }
       try { acted += await runRecruitShout(state); } catch (e) { log('recruiting', e.message || e); }
       /* v3.2 · the safeguards: what the site said about its token, the watchdog, once a run the vault copy and the history squash */
