@@ -14,7 +14,7 @@ const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
 const BRANCH = 'autopilot-state', FILE = 'tg.enc';
 const log = (...a) => console.log('[autopilot]', ...a);
-const VERSION = 'worker v3.3.2';
+const VERSION = 'worker v3.3.3';
 if (!TG || !KEY) { log('secrets TG_BOT_TOKEN / AUTOPILOT_KEY not set — nothing to do'); process.exit(0); }
 
 /* ── crypto: AES-GCM, key = the 32 random bytes the app generated (base64) ── */
@@ -837,7 +837,8 @@ export async function runGamePages(state, S, today, deps) { if (String(deps?.gam
   const W = G.w = G.w || {}; for (const d of Object.keys(W)) if (d < today) delete W[d];
   const F = await pubFeedNow(deps), slate0 = await slateNow(deps); if (!slate0 || !Array.isArray(slate0.days)) return 0;
   const B = F && F.beta === true && F.board ? F.board : null, days = [today, Gr.shift(today, 1), Gr.shift(today, 2)];
-  const live = {}, seen = {}; for (const D of slate0.days) if (days.includes(D.d)) for (const g of D.games || []) if (g && g.k && Gr.named(g) && Number.isFinite(g.t)) { (live[D.d] = live[D.d] || {})[g.k] = SL_KEEP(g); (seen[D.d] = seen[D.d] || {})[g.k] = g.t; }
+  /* v3.3.3 · a LITE sheet entry (a college game past the 14, there only so the app can play its line) gets no page — same pages as before */
+  const live = {}, seen = {}; for (const D of slate0.days) if (days.includes(D.d)) for (const g of D.games || []) if (g && g.k && !g.lite && Gr.named(g) && Number.isFinite(g.t)) { (live[D.d] = live[D.d] || {})[g.k] = SL_KEEP(g); (seen[D.d] = seen[D.d] || {})[g.k] = g.t; }
   const fresh = []; for (const d in seen) for (const k in seen[d]) if (!(W[d] && W[d][k])) fresh.push({ d, k, t: seen[d][k] });
   /* finals: today's games past start + 2.5 h, graded with the cards' own grader (ESPN), at most once a run */
   const mine = Object.entries(W[today] || {}).map(([k, v]) => ({ k, ph: v[0], t: un36(v.slice(1)) }));

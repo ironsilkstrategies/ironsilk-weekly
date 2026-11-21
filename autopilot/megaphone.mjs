@@ -151,11 +151,18 @@ const COLLEGE_MAX = 14;
 export function slateOf(F, now, nDays = 2) { const P = F.P || powerRanks(F.season); const FF = { ...F, P }; const d0 = ctParts(now).day; const days = [];
   for (let i = 0; i < nDays; i++) { const d = new Date(Date.parse(d0 + 'T12:00:00Z') + i * 864e5).toISOString().slice(0, 10); let games = gamesToday(F.oracle, d).filter(g => g.ln || (g.s && Object.keys(g.s).length));
     const col = games.filter(g => /^ncaa/.test(g.sp)); const keep = new Set(); for (const sp of ['ncaaf', 'ncaab']) col.filter(g => g.sp === sp).sort((x, y) => interest(y, P, now) - interest(x, P, now)).slice(0, COLLEGE_MAX).forEach(g => keep.add(g.k));
-    games = games.filter(g => !/^ncaa/.test(g.sp) || keep.has(g.k)).sort((x, y) => x.t - y.t || x.k.localeCompare(y.k));
+    /* v3.3.3 · Nov 21, Chris: those big-favorite games lost "the option to select over and unders and the spread." A college game past the
+       14 still goes on the sheet as a LITE entry (teams + its line, no write-up) whenever it has a real line, so the app can play its
+       spread and total in D$ (the server prices every bet off this sheet) even when the moneyline is off the board. */
+    const lite = new Set(col.filter(g => !keep.has(g.k) && g.ln && [g.ln.spH, g.ln.tot, g.ln.mlA, g.ln.mlH].some(fin)).map(g => g.k));
+    games = games.filter(g => !/^ncaa/.test(g.sp) || keep.has(g.k) || lite.has(g.k)).sort((x, y) => x.t - y.t || x.k.localeCompare(y.k));
     const side = (f, x, ab, N) => ({ ab, name: N.full, nick: N.nick, rk: x.rk || 0, of: x.of || 0, w: x.w || 0, l: x.l || 0, l5: (x.l5 || []).join(''), st: x.streak && x.streak.n >= 2 ? x.streak.t + x.streak.n : '', pf: x.pf ?? null, pa: x.pa ?? null });
-    days.push({ d, more: Math.max(0, col.length - keep.size), games: games.map(g => { const f = facts(g, FF), q = questionOf(f), ln = g.ln || {};
+    const lnOut = (f, ln, g) => (f.line != null || f.tot != null || fin(ln.mlA)) ? { fav: f.fav ? (f.fav === 'h' ? g.h : g.a) : '', line: f.line, tot: f.tot, mlA: fin(ln.mlA) ? ln.mlA : null, mlH: fin(ln.mlH) ? ln.mlH : null, ...(fin(ln.spPA) && fin(ln.spPH) ? { spA: ln.spPA, spH: ln.spPH } : {}), ...(fin(ln.ovP) && fin(ln.unP) ? { ov: ln.ovP, un: ln.unP } : {}) } : null;
+    days.push({ d, more: Math.max(0, col.length - keep.size), games: games.map(g => { const f = facts(g, FF), ln = g.ln || {};
+      if (lite.has(g.k)) { const L = (x, ab, N) => ({ ab, name: N.full, nick: N.nick, rk: x.rk || 0, w: x.w || 0, l: x.l || 0 }); return { k: g.k, sp: g.sp, t: g.t, a: L(f.pa, g.a, f.N.A), h: L(f.ph, g.h, f.N.H), ln: lnOut(f, ln, g), lite: 1 }; }
+      const q = questionOf(f);
       return { k: g.k, sp: g.sp, t: g.t, a: side(f, f.pa, g.a, f.N.A), h: side(f, f.ph, g.h, f.N.H), venue: f.N.venue || '',
-        ln: (f.line != null || f.tot != null || fin(ln.mlA)) ? { fav: f.fav ? (f.fav === 'h' ? g.h : g.a) : '', line: f.line, tot: f.tot, mlA: fin(ln.mlA) ? ln.mlA : null, mlH: fin(ln.mlH) ? ln.mlH : null, ...(fin(ln.spPA) && fin(ln.spPH) ? { spA: ln.spPA, spH: ln.spPH } : {}), ...(fin(ln.ovP) && fin(ln.unP) ? { ov: ln.ovP, un: ln.unP } : {}) } : null,
+        ln: lnOut(f, ln, g),
         mv: f.moves, mkt: f.hw != null ? { ab: f.hw >= 0.5 ? g.h : g.a, pct: Math.round(Math.max(f.hw, 1 - f.hw) * 100), src: (g.s && (g.s.kalshi || g.s.poly)) ? 'markets' : 'model' } : null,
         read: f.os ? { a: +f.fx(f.os.pa), h: +f.fx(f.os.ph) } : null, note: f.note || '', q: { title: q.title, opts: q.opts }, hot: interest(g, P, now) }; }) }); }
   const ranks = {}; for (const [k, x] of Object.entries(P)) { if (!x.rk) continue; const [sp, ab] = k.split('|'); if (/^ncaa/.test(sp) && x.rk > 25) continue; (ranks[sp] = ranks[sp] || []).push({ rk: x.rk, ab, name: (TEAMS[sp] || {})[ab] || ab, w: x.w, l: x.l, rt: x.rt, l5: (x.l5 || []).join(''), st: x.streak && x.streak.n >= 2 ? x.streak.t + x.streak.n : '' }); }

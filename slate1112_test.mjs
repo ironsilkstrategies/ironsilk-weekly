@@ -13,6 +13,9 @@ const oracle={g:{
  ['nba|DEN@MIL|2026-11-13']:g('nba','2026-11-14T01:00','DEN','MIL',{ln:{spH:-2,tot:226},s:{}}),
  ['nba|BOS@NY|2026-11-14']:g('nba','2026-11-15T01:00','BOS','NY',{ln:{spH:-2,tot:226},s:{}})}};
 for(let i=0;i<30;i++)oracle.g[`ncaab|C${i}@C${i+5}|${day}`]=g('ncaab','2026-11-13T0'+(i%3)+':00','C'+i,'C'+(i+5),{ln:{spH:-(i%12)-1,tot:140+i},s:{}});
+/* v3.3.3 · a big favorite with the moneyline off the board (spread + total only, real prices), and a game with no line at all */
+oracle.g[`ncaab|C30@C31|${day}`]=g('ncaab','2026-11-13T01:00','C30','C31',{ln:{spH:-41.5,mlA:null,mlH:null,tot:150.5,spPH:-110,spPA:-110,ovP:-112,unP:-108},s:{}});
+oracle.g[`ncaab|C32@C33|${day}`]=g('ncaab','2026-11-13T01:00','C32','C33',{s:{espn:{wp:0.7}}});
 const coach={g:{'nba|LAL@ATL':{venue:'State Farm Arena',a:{name:'Los Angeles Lakers',heads:[{h:'Luka Doncic questionable vs. Hawks with back tightness'}]},h:{name:'Atlanta Hawks',heads:[]}}}};
 const now=Date.parse('2026-11-12T16:00:00Z');const S=Mg.slateOf({oracle,season,coach},now,2);const J=JSON.stringify(S);
 T('the sheet covers today and tomorrow, Central (a game two days out stays off)',S.v===1&&S.days.length===2&&S.days[0].d===day&&S.days[1].d==='2026-11-13'&&!J.includes('BOS@NY'),S.days.map(d=>d.d).join());
@@ -20,7 +23,14 @@ const L=S.days[0].games.find(x=>x.k==='nba|LAL@ATL');
 T('a game carries its time, both teams by name with Power Rank, record, last five and streak',L&&L.t===Date.parse('2026-11-13T00:00Z')&&L.a.name==='Los Angeles Lakers'&&L.a.nick==='Lakers'&&L.h.nick==='Hawks'&&L.a.rk>0&&L.a.of===8&&/^[WL]{5}$/.test(L.a.l5)&&L.a.w+L.a.l===6,JSON.stringify(L&&L.a));
 T('…the line and how it moved, the markets, the projected score (every source averaged), the note, the question',L.ln.fav==='LAL'&&L.ln.line===1.5&&L.ln.tot===237.5&&L.ln.mlA===-120&&/spread opened ATL \+2\.5, now \+1\.5/.test(L.mv[0])&&L.mkt.ab==='LAL'&&L.mkt.pct===53&&L.mkt.src==='markets'&&L.read.a===120&&L.read.h===118&&/questionable/.test(L.note)&&L.q.title&&L.q.opts.length===2&&L.venue==='State Farm Arena',JSON.stringify([L.ln,L.mv,L.mkt,L.read]));
 const D2=S.days[0].games.find(x=>x.k==='nba|DAL@PHX');T('no markets → the model\'s number, labelled as a model; a pro team without a preview still gets its name',D2.mkt.src==='model'&&D2.mkt.ab==='PHX'&&D2.mkt.pct===66&&D2.a.name==='Dallas Mavericks'&&D2.read===null);
-const cb=S.days[0].games.filter(x=>x.sp==='ncaab');T('the college slate is cut to the games worth a look, and says how many more there are',cb.length===14&&S.days[0].more===16,cb.length+' +'+S.days[0].more);
+const cb=S.days[0].games.filter(x=>x.sp==='ncaab'&&!x.lite);T('the college slate is cut to the games worth a look, and says how many more there are',cb.length===14&&S.days[0].more===18,cb.length+' +'+S.days[0].more);
+/* v3.3.3 · Nov 21: "took the option to select over and unders and the spread away" — every other college game with a real line rides
+   along as a LITE entry (teams + line, no write-up) so the app can play it in D$; a game with no line stays off */
+const lite=S.days[0].games.filter(x=>x.lite);
+T('every other college game with a real line rides along as a lite entry (17 here); the one with no line stays off',lite.length===17&&!lite.some(x=>x.k==='ncaab|C32@C33')&&lite.every(x=>x.sp==='ncaab'),lite.length);
+const bigFav=lite.find(x=>x.k==='ncaab|C30@C31');
+T('…the big favorite with the moneyline off the board: spread and total with their prices, no moneyline',bigFav&&bigFav.ln.fav==='C31'&&bigFav.ln.line===41.5&&bigFav.ln.tot===150.5&&bigFav.ln.mlA===null&&bigFav.ln.mlH===null&&bigFav.ln.spA===-110&&bigFav.ln.spH===-110&&bigFav.ln.ov===-112&&bigFav.ln.un===-108,JSON.stringify(bigFav&&bigFav.ln));
+T('…a lite entry is teams and line only (time, names, rank, record), no write-up or question',bigFav&&bigFav.t>0&&bigFav.a.ab==='C30'&&bigFav.h.ab==='C31'&&'rk' in bigFav.a&&'w' in bigFav.a&&!('q' in bigFav)&&!('read' in bigFav)&&!('mv' in bigFav)&&!('note' in bigFav)&&!('mkt' in bigFav),JSON.stringify(bigFav));
 T('games run in time order',S.days[0].games.every((x,i,a)=>!i||a[i-1].t<=x.t));
 T('TheDesk Power Rankings ride along: every ranked pro team by name, college top 25',S.ranks.nba.length===8&&S.ranks.nba[0].rk===1&&S.ranks.nba.every((x,i)=>x.rk===i+1&&x.name.length>3)&&S.ranks.ncaab.length===25,JSON.stringify(S.ranks.nba[0]));
 T('public data only: no pick words anywhere on the sheet',!/best 3|our pick|vip|lock of|banker|parlay|unit/i.test(J));

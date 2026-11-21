@@ -788,11 +788,15 @@ function viewSlate() {
   const D = list[S.slateDay], label = d => (d === today ? 'Today' : d === deskDay(Date.now() + 864e5) ? 'Tomorrow' : shortDay(d));
   const sps = ORDER.filter(sp => D.games.some(g => g.sp === sp)); if (S.slateSp !== 'all' && !sps.includes(S.slateSp)) S.slateSp = 'all';
   /* the board rides on top of the sheet: each game gets the desk's picks and calls, and board games the sheet skipped join it */
-  const B = boardOf(), BF = S.bf, heavy = (B && B.heavy) || -500; let all = D.games.map(g => ({ ...g }));
+  /* v52 · a LITE sheet entry (a college game past the 14 worth a look) isn't listed on its own: it hands its real line to the board's row
+     for that game, so its spread and total play in D$ even when the moneyline is off the board */
+  const B = boardOf(), BF = S.bf, heavy = (B && B.heavy) || -500; let all = D.games.filter(g => !g.lite).map(g => ({ ...g }));
+  const LITE = new Map(D.games.filter(g => g.lite).map(g => [bKey(g.sp, g.a.ab, g.h.ab) + '|' + D.d, g]));
   if (B) {
     const M = boardIndex(), used = new Set();
     for (const g of all) { const k = bKey(g.sp, g.a.ab, g.h.ab) + '|' + D.d; const b = M.get(k); if (b) { g.b = b; used.add(k); } }
-    for (const [k, b] of M) { if (used.has(k) || b.day !== D.d) continue; const [a, h] = String(b.game).split('@'), tm = x => ({ ab: x, nick: teamName(b.sp, x), w: 0, l: 0 });
+    for (const [k, b] of M) { if (used.has(k) || b.day !== D.d) continue; const L = LITE.get(k); if (L) { all.push({ ...L, a: { ...L.a, nick: L.a.nick || teamName(b.sp, L.a.ab) }, h: { ...L.h, nick: L.h.nick || teamName(b.sp, L.h.ab) }, b }); continue; }
+      const [a, h] = String(b.game).split('@'), tm = x => ({ ab: x, nick: teamName(b.sp, x), w: 0, l: 0 });
       all.push({ sp: b.sp, k: 'b|' + k, t: ms(b.start), a: tm(a), h: tm(h), b }); }
     for (const g of all) g.over = overOf(g.sp, `${g.a.ab}@${g.h.ab}`, g.t, g.b && g.b.st);
     for (const sp of ORDER) if (!sps.includes(sp) && all.some(g => g.sp === sp)) sps.push(sp);

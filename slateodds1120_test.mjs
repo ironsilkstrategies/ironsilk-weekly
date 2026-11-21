@@ -28,7 +28,16 @@ T('a sheet line the sheet already had still reads the same', strip(lnText({ fav:
 T('the Slate row uses the sheet\'s line first, then the board\'s', /const LN = g\.ln \|\| lnFromBoard\(g\.b\), ln = `<div class="g-ln">\$\{lnText\(LN, g\)\}<\/div>`;/.test(src));
 T('D$ still plays only off the sheet\'s full line (the rebuilt one is display only)', /function ddBtns\(g\) \{ if \(!\(g\.t > Date\.now\(\) \+ 60e3\) \|\| !g\.ln\) return '';/.test(src) && !/ddLegOf[^\n]*lnFromBoard/.test(src));
 T('no line, no listing: a pick or a call without a real price never shows on the board', /\.filter\(c => fin\(c\.price\) && !isHeavy\(m, c\.price\)\)/.test(src) && /\.filter\(p => fin\(p\.price\) && !isHeavy\(p\.m, p\.price\)\)/.test(src));
+/* v52 · Nov 21: "took the option to select over and unders and the spread away." A college game past the sheet's 14 now comes on the
+   sheet as a LITE entry (teams + its real line); the Slate hands that line (and the sheet's key) to the board's row, so its spread and
+   total play in D$ even with the moneyline off the board. A lite entry is never listed on its own. */
+T('lite sheet entries aren\'t listed on their own; they hand their line and key to the board\'s row for the game', /let all = D\.games\.filter\(g => !g\.lite\)/.test(src) && /const L = LITE\.get\(k\); if \(L\) \{ all\.push\(\{ \.\.\.L,/.test(src));
+const { ddPrice } = await import('/home/claude/work/chat/worker.mjs');
+const LG = { k: 'ncaab|DETM@MSU', sp: 'ncaab', t: Date.now() + 864e5, a: { ab: 'DETM' }, h: { ab: 'MSU' }, ln: { fav: 'MSU', line: 41.5, tot: 150.5, mlA: null, mlH: null, spA: -110, spH: -110, ov: -112, un: -108 }, lite: 1 };
+const pa = ddPrice(LG, 'spread', 'away'), ph = ddPrice(LG, 'spread', 'home'), po = ddPrice(LG, 'total', 'over'), pu = ddPrice(LG, 'total', 'under');
+T('the D$ server prices a lite game\'s spread and total off its real line (DETM +41.5 −110, MSU −41.5, O/U 150.5 at −112/−108)', pa && pa.pick === 'DETM +41.5' && pa.price === -110 && ph && ph.pick === 'MSU -41.5' && po && po.price === -112 && pu && pu.price === -108, JSON.stringify([pa, ph, po, pu]));
+T('…and no moneyline while the book has none', ddPrice(LG, 'ml', 'home') === null && ddPrice(LG, 'ml', 'away') === null);
 const idx = fs.readFileSync(new URL('./desk/index.html', import.meta.url), 'utf8'), sw = fs.readFileSync(new URL('./desk/sw.js', import.meta.url), 'utf8');
 const v = (idx.match(/app\.js\?v=(\d+)/) || [])[1];
-T('phones fetch the new app: index and the service worker ask for the same app.js version (v50)', +v >= 50 && sw.includes(`'app.js?v=${v}'`) && /thedesk-shell-v\d+/.test(sw), v);
+T('phones fetch the new app: index and the service worker ask for the same app.js version (v52+)', +v >= 52 && sw.includes(`'app.js?v=${v}'`) && /thedesk-shell-v\d+/.test(sw), v);
 console.log(pass + ' pass / ' + fail + ' fail'); if (fail) process.exit(1);

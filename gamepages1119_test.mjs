@@ -62,7 +62,9 @@ const page = p => site.files['desk/games/' + p] || '';
 
 /* 1 · the first pass (Thu 10:30 AM CT): every game on the slate, today and tomorrow, in one commit */
 const T0 = Date.parse('2026-11-19T16:30:00Z'); let R = { d: '' };
-const s1 = slate({ '2026-11-19': [g1, g2, g3], '2026-11-20': [g5, g4] });
+/* v3.3.3 · a LITE sheet entry (a college game past the sheet's 14, there so the app can play its line) gets no page: still five */
+const gLite = { k: 'ncaab|DETM@MSU', sp: 'ncaab', t: Date.parse('2026-11-19T17:00:00Z'), a: { ab: 'DETM', name: 'Detroit Mercy Titans', nick: 'DETM', rk: 362, w: 0, l: 4 }, h: { ab: 'MSU', name: 'Michigan State Spartans', nick: 'MSU', rk: 18, w: 4, l: 1 }, ln: { fav: 'MSU', line: 41.5, tot: 150.5, mlA: null, mlH: null }, lite: 1 };
+const s1 = slate({ '2026-11-19': [g1, g2, g3, gLite], '2026-11-20': [g5, g4] });
 let a = await Wk.runGamePages({}, S, '2026-11-19', D(T0, s1, { gpRun: R }));
 T('first pass: one commit, five new pages ("Game pages · 2026-11-19 · 5 new · 3 old removed")', a === 1 && site.msgs.length === 1 && site.msgs[0] === 'Game pages · 2026-11-19 · 5 new · 3 old removed', site.msgs);
 T('…three write calls for the whole commit (the files ride inline in one tree)', site.writeCalls() === 3, site.calls.filter(c => !c.startsWith('GET')));

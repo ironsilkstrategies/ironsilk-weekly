@@ -187,8 +187,9 @@ export function gamePages(F, slate, now, today, ctx = {}) { const app = appOf(ct
   const B = F && F.beta === true && F.board ? F.board : null, cast = (B && B.cast) || {}, board = new Map(); for (const g of (B && B.games) || []) board.set(g.sp + '|' + g.game, g);
   const open = new Map(); for (const x of ((F && F.today && F.today.picks) || [])) if (x && !x.hidden && x.sp && x.game) { const k = x.sp + '|' + x.game; if (!open.has(k)) open.set(k, []); open.get(k).push(x); }
   const res = ctx.res || {}, fins = ctx.fin || {}; const G = [];
-  for (const D of (slate && slate.days) || []) { if (!days.includes(D.d)) continue; for (const s of D.games || []) if (s && s.k && named(s) && fin(s.t)) G.push({ day: D.d, k: s.k, sp: s.sp, t: s.t, a: s.a, h: s.h, s }); }
-  /* only the slate's games (full names, rankings, the read, the line): a board-only game would be a thin page of abbreviations */
+  for (const D of (slate && slate.days) || []) { if (!days.includes(D.d)) continue; for (const s of D.games || []) if (s && s.k && !s.lite && named(s) && fin(s.t)) G.push({ day: D.d, k: s.k, sp: s.sp, t: s.t, a: s.a, h: s.h, s }); }
+  /* only the slate's featured games (full names, rankings, the read, the line): a board-only game, or a v3.3.3 LITE sheet entry (there
+     only so the app can play its line), would be a thin page */
   G.sort((x, y) => x.t - y.t || x.k.localeCompare(y.k)); const used = new Set(), pages = [], byDay = {};
   for (const g of G) { const an = g.a.name || g.a.ab, hn = g.h.name || g.h.ab, base = `${slugify(an)}-vs-${slugify(hn)}-prediction`; let slug = base, i = 2; while (used.has(g.day + '/' + slug)) slug = base + '-' + i++; used.add(g.day + '/' + slug);
     const path = `${GP_DIR}/${g.day}/${slug}.html`, url = `${GP_SITE}/${path}`, b = board.get(g.k), o = open.get(g.k) || [], s = g.s || {}, sport = SP_LAB[g.sp] || String(g.sp).toUpperCase();
