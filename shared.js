@@ -253,12 +253,31 @@ function intakeAbbr(sport,raw){
   const t=String(raw||'').trim();if(!t)return null;
   if(sport==='nfl')return intakeNFLAbbr(t);
   if(sport==='mlb'){const a=typeof abbr==='function'?abbr(t):null;return a||(/^[A-Z]{2,4}$/.test(t.toUpperCase())?t.toUpperCase():null);}
-  if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;for(const v of bookNameVariants(t)){const b=ncaafAbbrFor(v);if(b)return b;}}return cfbFallbackAbbr(t);}
+  if(sport==='ncaaf'){if(typeof ncaafAbbrFor==='function'){const a=ncaafAbbrFor(t);if(a)return a;for(const v of bookNameVariants(t)){const b=ncaafAbbrFor(v);if(b)return b;}}const f=cfbFallbackAbbr(t);if(f)return f;
+    /* v3.1.8 · an FCS opponent (only names that read as nothing before come here): the CFB weeks the CFB page keeps, then the D1 list */
+    const V=[t,...bookNameVariants(t)];for(const v of V){const s=cfbStoredAbbr(v);if(s)return s;}for(const v of V){const d=ncaabAbbrFor(v);if(d)return d;}return null;}
   if(sport==='nhl')return intakeNHLAbbr(t);
   if(sport==='nba')return nbaAbbrFor(t);
   if(sport==='ncaab'){const a=ncaabAbbrFor(t);if(a)return a;for(const v of bookNameVariants(t)){const b=ncaabAbbrFor(v);if(b)return b;}return null;}
   return null;
 }
+/* v3.1.8 · Nov 21, ticket 1017510877: "Northern Illinois vs North Dakota State" fell off the ticket ("team name not recognized").
+   North Dakota State plays FCS football, and off the CFB page the only football names were the FBS list. A college football name
+   that reads as nothing now tries (1) the weeks the CFB page keeps (d4.ncaafgames: ESPN's own names and codes, readable on every
+   page; exact names only, a name two teams share counts for neither), then (2) the D1 school list, since every FCS program is a
+   D1 school and ESPN gives a school the same code in every sport. Names that already resolved never come this way. */
+/* a school's mascot from the D1 list ("North Dakota State" → "BISON"), for a ticket leg that names only the nickname */
+function d1MascotOf(name){try{const a=ncaabAbbrFor(name);if(!a)return '';let T=get('d4.ncaabteams',null);if(!T||!Array.isArray(T.t)||T.t.length<30)T=ncaabStatic();
+  const r=T.t.find(x=>x[0]===a);return r?ncaabNorm(r[3]||''):'';}catch(e){return '';}}
+let CFB_STORED_IX=null;
+const cfbStoredKey=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+function cfbStoredAbbr(raw){const k=cfbStoredKey(raw);if(!k)return null;let C;try{C=roGet(LS.ncaafgames,{},120e3)||{};}catch(e){return null;}
+  const W=Object.values(C||{}),sig=W.length+'|'+W.map(w=>(w&&w.ts)||((w&&(Array.isArray(w)?w:w.v))||[]).length).join(',');
+  if(!CFB_STORED_IX||CFB_STORED_IX.sig!==sig){const m=new Map(),two=new Set();
+    W.forEach(w=>((w&&(Array.isArray(w)?w:w.v))||[]).forEach(g=>[g&&g.away,g&&g.home].forEach(tm=>{if(!tm||!tm.abbr)return;
+      [tm.abbr,tm.name,tm.shortName,tm.location,tm.displayName].forEach(n=>{const x=cfbStoredKey(n);if(!x)return;const o=m.get(x);if(o&&o!==tm.abbr)two.add(x);else m.set(x,String(tm.abbr));});})));
+    two.forEach(x=>m.delete(x));CFB_STORED_IX={sig,m};}
+  return CFB_STORED_IX.m.get(k)||null;}
 /* v3.0.9 · the book's short college names ("No. Colorado", "So. Utah", "E. Washington", "Ark.-Pine Bluff", "Kennesaw St.") — tried
    only after the plain name fails, so nothing that already resolves can change. "St." up front stays Saint (St. John's). */
 const BOOK_LEAD=[[/^No\.\s*/i,['Northern ']],[/^So\.\s*/i,['Southern ']],[/^N\.\s*/,['North ','Northern ']],[/^S\.\s*/,['South ','Southern ']],[/^E\.\s*/,['Eastern ','East ']],[/^W\.\s*/,['Western ','West ']],[/^C\.\s*/,['Central ']]];
@@ -1423,6 +1442,10 @@ function parseSGPTicketText(text){
       if(c.length>=2){const spells=(code,txt)=>{const t=String(txt||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(!t||t[0]!==code[0])return false;let i=0;for(const ch of t){if(ch===code[i])i++;if(i===code.length)return true;}return false;};
         const opts=(cur.names||[]).map(n0=>({ab:intakeAbbr(cur.sport,n0),n0})).filter(o=>o.ab&&(spells(c,o.n0)||spells(c,o.ab)));
         if(opts.length===1)return opts[0].ab;}
+      /* v3.1.8 · a college nickname alone ("Spread - Bison -24.5"): the mascot of exactly one of THIS game's two schools, from the
+         D1 list (it has every school's mascot, FCS included) */
+      if(!r&&(cur.sport==='ncaaf'||cur.sport==='ncaab')){const k=ncaabNorm(nm);if(k){const hits=(cur.names||[]).filter(n0=>d1MascotOf(n0)===k);
+        if(hits.length===1){const ab=intakeAbbr(cur.sport,hits[0]);if(ab&&(ab===cur.away||ab===cur.home))return ab;}}}
       return r;};
     const push=(o)=>{legs.push({p:0.5,sport:cur.sport,gameDate:gd,price:null,book:'external',game:cur.gl,...o});};
     if((m=line.match(/^Handicap\s*-\s*(.+?)\s+([+-][\d.]+)\s*\(Game\)\s*$/i))){
@@ -3112,7 +3135,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261121a',DESK_VER='3.1.7';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261121b',DESK_VER='3.1.8';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
