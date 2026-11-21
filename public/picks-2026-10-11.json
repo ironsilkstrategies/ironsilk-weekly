@@ -1,0 +1,386 @@
+{
+ "v": 3,
+ "generated": 1791762881927,
+ "brand": "TheDesk",
+ "price": "$25/mo · $10/wk",
+ "social": {
+  "fb": "https://www.facebook.com/share/1FCDFdUvRp/",
+  "tg": "https://t.me/TheDeskApp"
+ },
+ "handle": "RuleTheWorldKid",
+ "subscribe": "https://whop.com/ironsilkweekly/thedesk-vip",
+ "record": {
+  "w": 9,
+  "l": 1,
+  "pu": 0,
+  "u": 7.126659974486063,
+  "first": "2026-10-06"
+ },
+ "today": {
+  "d": "2026-10-11",
+  "lockedAt": 1791732639617,
+  "picks": [
+   {
+    "sp": "nfl",
+    "game": "DEN@LAC",
+    "gl": "DEN@LAC",
+    "pick": "Over 41.5",
+    "price": -115,
+    "p": 0.553,
+    "ev": 3.3,
+    "start": "2026-10-11T20:05Z",
+    "tier": "STRONG",
+    "voices": [
+     "The Simulator",
+     "The Judge",
+     "The Oracle",
+     "The Coach"
+    ],
+    "hit": false,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Sim: 55% across 10,000 runs vs 53% the price implies.",
+      "Expected value +3.3% per bet at -115.",
+      "The uploaded projection has it DEN 23.17–20.77 LAC — a 43.9-point total vs 41.5.",
+      "The Judge, weighing every witness by its graded accuracy, is on this side.",
+      "4 of 8 characters on it, 2 independent of the sim: The Simulator (13-12 NFL over), The Judge (13-10 NFL over), The Oracle (7-8 NFL over), The Coach (13-12 NFL over).",
+      "Against: The Scorekeeper, The Historian."
+     ],
+     "script": "DEN at LAC — I'm on Over 41.5 (-115). We ran this game 10,000 times: the over hits 55% of the time; the price says 53%. The uploaded projection projects DEN 23.17, LAC 20.77 — a 43.9-point total vs 41.5. 4 of our 8 analysts are on the over — The Simulator is 13-12 NFL over."
+    }
+   },
+   {
+    "sp": "nfl",
+    "game": "DET@ARI",
+    "gl": "DET@ARI",
+    "pick": "Over 54.5",
+    "price": -115,
+    "p": 0.552,
+    "ev": 3.2,
+    "start": "2026-10-11T20:25Z",
+    "tier": "STRONG",
+    "voices": [
+     "The Simulator",
+     "The Judge",
+     "The Scorekeeper",
+     "The Historian",
+     "The Coach"
+    ],
+    "hit": true,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Sim: 56% across 10,000 runs vs 53% the price implies.",
+      "Expected value +3.2% per bet at -115.",
+      "The uploaded projection has it DET 27.92–24.15 ARI — a 52.1-point total vs 54.5 (disagrees).",
+      "The Judge, weighing every witness by its graded accuracy, is on this side.",
+      "5 of 8 characters on it, 2 independent of the sim: The Simulator (4-0 these teams over), The Judge (13-10 NFL over), The Scorekeeper (4-0 these teams over), The Historian (4-0 these teams over), The Coach (4-0 these teams over).",
+      "Against: The Oracle."
+     ],
+     "script": "DET at ARI — I'm on Over 54.5 (-115). We ran this game 10,000 times: the over hits 56% of the time; the price says 53%. 5 of our 8 analysts are on the over — The Simulator is 4-0 these teams over."
+    }
+   },
+   {
+    "sp": "nfl",
+    "game": "SF@SEA",
+    "gl": "SF@SEA",
+    "pick": "SF +3",
+    "price": -110,
+    "p": 0.583,
+    "ev": 11.2,
+    "start": "2026-10-11T20:25Z",
+    "tier": "VALUE",
+    "voices": [
+     "The Simulator",
+     "The Judge",
+     "The Historian"
+    ],
+    "hit": true,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Sim: 57% across 10,000 runs vs 52% the price implies.",
+      "Expected value +11.2% per bet at -110.",
+      "The uploaded projection has it SF 22.95–26.53 SEA — SF by -3.6, short of +3 (disagrees).",
+      "The Judge, weighing every witness by its graded accuracy, is on this side.",
+      "3 of 8 characters on it, 1 independent of the sim: The Simulator (4-0 underdog spread), The Judge (8-6 road spread), The Historian (2-3 underdog spread).",
+      "Against: The Scorekeeper, The Oracle."
+     ],
+     "script": "SF at SEA — I'm on SF +3 (-110). We ran this game 10,000 times: SF covers 57% of the time; the price says 52%. 3 of our 8 analysts are on SF — The Simulator is 4-0 underdog spread."
+    }
+   }
+  ],
+  "allStarted": true,
+  "commit": {
+   "alg": "sha256",
+   "hash": "1634057d1f40f98bea27e1926f34bac147ac8dc6031adcba6247c5d5088eb2f7",
+   "salt": "b96d0926354de8135cd028253db954b2"
+  }
+ },
+ "parlay": {
+  "d": "2026-10-11",
+  "lockedAt": 1791732636994,
+  "price": "+228",
+  "p": 0.29417,
+  "result": null,
+  "legs": [
+   {
+    "hidden": true,
+    "sp": "nfl"
+   },
+   {
+    "sp": "nfl",
+    "game": "DET@ARI",
+    "gl": "DET@ARI",
+    "pick": "DET ML",
+    "price": -258,
+    "p": 0.7107,
+    "by": "The Simulator",
+    "hit": true,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Sim: 53% across 10,000 runs vs 72% the price implies.",
+      "Desk number after calibration and market blend: 71%.",
+      "Expected value -1.4% per bet at -258.",
+      "The uploaded projection has it DET 27.92–24.15 ARI — DET winning by 3.8.",
+      "The Judge, weighing every witness by its graded accuracy, is on this side."
+     ],
+     "script": "DET at ARI — I'm on DET ML (-258). The price is close to fair here — this one rides on who's backing it. The uploaded projection projects DET 27.92, ARI 24.15 — DET winning by 3.8. 3 of our 8 analysts are on DET — The Simulator is 16-7 favorite ML."
+    }
+   },
+   {
+    "sp": "nfl",
+    "game": "DEN@LAC",
+    "gl": "DEN@LAC",
+    "pick": "DEN ML",
+    "price": -192,
+    "p": 0.6504,
+    "by": "The Oracle",
+    "hit": true,
+    "push": false,
+    "why": {
+     "bullets": [
+      "Sim: 48% across 10,000 runs vs 66% the price implies.",
+      "Desk number after calibration and market blend: 65%.",
+      "Expected value -1.1% per bet at -192.",
+      "The uploaded projection has it DEN 23.17–20.77 LAC — DEN winning by 2.4.",
+      "The Judge, weighing every witness by its graded accuracy, is on this side."
+     ],
+     "script": "DEN at LAC — I'm on DEN ML (-192). The price is close to fair here — this one rides on who's backing it. RJ Harvey 34 rec yds/g, and lately 48 lately. The uploaded projection projects DEN 23.17, LAC 20.77 — DEN winning by 2.4. 3 of our 8 analysts are on DEN — The Judge is 16-10 favorite ML."
+    }
+   }
+  ]
+ },
+ "parlayRecord": {
+  "w": 0,
+  "l": 2,
+  "u": -2
+ },
+ "history": [
+  {
+   "d": "2026-10-11",
+   "picks": [
+    {
+     "sp": "nfl",
+     "game": "DEN@LAC",
+     "gl": "DEN@LAC",
+     "pick": "Over 41.5",
+     "price": -115,
+     "p": 0.553,
+     "ev": 3.3,
+     "start": "2026-10-11T20:05Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Oracle",
+      "The Coach"
+     ],
+     "hit": false,
+     "push": false
+    },
+    {
+     "sp": "nfl",
+     "game": "DET@ARI",
+     "gl": "DET@ARI",
+     "pick": "Over 54.5",
+     "price": -115,
+     "p": 0.552,
+     "ev": 3.2,
+     "start": "2026-10-11T20:25Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper",
+      "The Historian",
+      "The Coach"
+     ],
+     "hit": true,
+     "push": false
+    },
+    {
+     "sp": "nfl",
+     "game": "SF@SEA",
+     "gl": "SF@SEA",
+     "pick": "SF +3",
+     "price": -110,
+     "p": 0.583,
+     "ev": 11.2,
+     "start": "2026-10-11T20:25Z",
+     "tier": "VALUE",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Historian"
+     ],
+     "hit": true,
+     "push": false
+    }
+   ]
+  },
+  {
+   "d": "2026-10-10",
+   "picks": [
+    {
+     "sp": "ncaaf",
+     "game": "TEX@OU",
+     "gl": "#1 TEX@OU",
+     "pick": "OU +8.5",
+     "price": -110,
+     "p": 0.545,
+     "ev": 4,
+     "start": "2026-10-10T19:30Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper"
+     ],
+     "hit": true,
+     "push": false
+    },
+    {
+     "sp": "ncaaf",
+     "game": "KENT@WMU",
+     "gl": "KENT@WMU",
+     "pick": "WMU -13.5",
+     "price": -112,
+     "p": 0.547,
+     "ev": 3.6,
+     "start": "2026-10-10T19:30Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper"
+     ],
+     "hit": true,
+     "push": false
+    },
+    {
+     "sp": "ncaaf",
+     "game": "UAB@MEM",
+     "gl": "UAB@MEM",
+     "pick": "MEM -14",
+     "price": -110,
+     "p": 0.542,
+     "ev": 3.5,
+     "start": "2026-10-10T23:00Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper"
+     ],
+     "hit": true,
+     "push": false
+    }
+   ]
+  },
+  {
+   "d": "2026-10-09",
+   "picks": [
+    {
+     "sp": "ncaaf",
+     "game": "ISU@BYU",
+     "gl": "ISU@#8 BYU",
+     "pick": "BYU -10.5",
+     "price": -108,
+     "p": 0.539,
+     "ev": 3.8,
+     "start": "2026-10-10T02:15Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper"
+     ],
+     "hit": true,
+     "push": false
+    },
+    {
+     "sp": "ncaaf",
+     "game": "FSU@LOU",
+     "gl": "FSU@LOU",
+     "pick": "LOU -3.5",
+     "price": -112,
+     "p": 0.539,
+     "ev": 2,
+     "start": "2026-10-09T23:00Z",
+     "tier": "STRONG",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper"
+     ],
+     "hit": true,
+     "push": false
+    },
+    {
+     "sp": "ncaaf",
+     "game": "WYO@SJSU",
+     "gl": "WYO@SJSU",
+     "pick": "WYO +6",
+     "price": -110,
+     "p": 0.537,
+     "ev": 2.5,
+     "start": "2026-10-10T01:00Z",
+     "tier": "VALUE",
+     "voices": [
+      "The Simulator",
+      "The Judge"
+     ],
+     "hit": true,
+     "push": false
+    }
+   ]
+  },
+  {
+   "d": "2026-10-06",
+   "picks": [
+    {
+     "sp": "mlb",
+     "game": "MIL@SD",
+     "gl": "MIL@SD",
+     "pick": "Under 7.5",
+     "price": -110,
+     "p": 0.542,
+     "ev": 3.4,
+     "start": "",
+     "tier": "UNANIMOUS",
+     "voices": [
+      "The Simulator",
+      "The Judge",
+      "The Scorekeeper",
+      "The Coach"
+     ],
+     "hit": true,
+     "push": false
+    }
+   ]
+  }
+ ]
+}
