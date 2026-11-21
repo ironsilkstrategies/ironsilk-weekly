@@ -1,0 +1,49 @@
+{
+ "v": 1,
+ "at": 1795261585647,
+ "worker": {
+  "lastRun": 1795258859400,
+  "runs": 1080,
+  "version": "worker v3.3.3"
+ },
+ "card": {
+  "day": "2026-11-21",
+  "today": true,
+  "legs": 38,
+  "graded": 0,
+  "recap": false,
+  "posted": "worker"
+ },
+ "phone": {
+  "seen": 1795246418045,
+  "build": "v3.1.6",
+  "sync": {
+   "on": true,
+   "last": 1795246401332,
+   "ok": true
+  },
+  "vault": {
+   "ts": 1795204035078
+  },
+  "keysMissing": 1,
+  "xfer": true
+ },
+ "vault": {
+  "ts": 1795204035078,
+  "gens": [
+   {
+    "day": "2026-11-20",
+    "ts": 1795204035078
+   },
+   {
+    "day": "2026-11-19",
+    "ts": 1795108157063
+   }
+  ]
+ },
+ "site": {
+  "err": null,
+  "at": 1795211802131
+ },
+ "alerts": []
+}
