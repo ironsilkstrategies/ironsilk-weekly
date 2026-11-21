@@ -873,3 +873,28 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .introbar{appearance:none;display:flex;align-items:center;gap:8px;width:100%;margin:0 0 14px;padding:11px 14px;border-radius:14px;border:1px solid rgba(242,208,103,.35);background:rgba(0,0,0,.25);color:var(--cream-2);font:600 14px/1.2 var(--text);cursor:pointer;text-align:left}
 .introbar b{color:var(--cream)}.introbar em{margin-left:auto;font-style:normal;font-size:20px;color:var(--foil)}
 .fhint{display:block;margin:-4px 0 6px;font-size:12.5px;color:#5b6a60}.pw{display:flex;gap:8px;align-items:center}.pw input{flex:1;min-width:0}.acctbox .chat-err:not(:empty){padding:8px 10px;border-radius:8px;background:#fbe3dd;color:#8a2a17;font-weight:600}
+/* v32 · the Forecast on every pick, the confidence and 👑 #1 filters (Nov 21) */
+.fcx{flex:none;display:inline-block;font-size:15px;line-height:1;margin-left:3px;vertical-align:-1px;cursor:help}
+.leg .pk .fcx{font-size:14px}
+.fc-key{margin:0;padding:8px 16px 9px;font-size:12.5px;line-height:1.45;color:var(--ink-2);border-bottom:1px solid var(--rule)}
+.fc-key b{color:var(--ink)}
+.seg.dim button:not([aria-pressed="true"]){opacity:.45}
+.seg.dim button[aria-pressed="true"]{background:none;color:var(--cream-2);border-color:rgba(243,238,223,.3);opacity:.45}
+.seg button.t-say:not([aria-pressed="true"]){color:#FFD75E;border-color:rgba(255,215,94,.55)}
+.seg button.f-sun:not([aria-pressed="true"]){color:#FFE7A3;border-color:rgba(255,231,163,.45)}
+.seg button.f-dry:not([aria-pressed="true"]){color:#B8D4F0;border-color:rgba(184,212,240,.45)}
+.seg.tops button{min-height:32px;font-size:13px}
+.seg.tops button[aria-pressed="true"]{background:linear-gradient(180deg,#FFE58A,#FFD75E 50%,#C9A227);border-color:#FFD75E;color:#2a2000}
+.bf-note{margin:2px 0 8px;font-size:13px;line-height:1.45;color:var(--cream-2);max-width:62ch}
+.bf-note b{color:var(--cream)}
+.tb.ch b{font-weight:900;margin-left:1px}
+.c-say{color:#8A6400}
+.fcl{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:6px}
+.fcl li{display:flex;gap:9px;align-items:flex-start;padding:7px 10px;border-radius:8px;background:rgba(21,19,15,.05);border-left:4px solid var(--push);font-size:13.5px;line-height:1.35}
+.fcl li.up{border-left-color:var(--win);background:rgba(22,115,74,.08)}.fcl li.dn{border-left-color:var(--loss);background:rgba(194,58,43,.07)}.fcl li.zz{opacity:.75}
+.fcl .fci{font-size:20px;line-height:1;flex:none;width:24px;text-align:center}
+.fcl small{display:block;color:var(--ink-2);font-size:12.5px;font-variant-numeric:tabular-nums;margin-top:2px}
+.bf-ch2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:2px 0 6px;max-width:560px}
+.bf-sel select{width:100%;min-height:38px;border-radius:99px;border:1.5px solid rgba(243,238,223,.3);background:rgba(0,0,0,.25);color:var(--cream);padding:0 12px;font:600 14px var(--text);text-overflow:ellipsis}
+.bf-sel.on select{border-color:var(--foil);color:var(--foil)}
+.won-say .scope{appearance:none;border:0;background:none;padding:0;margin-left:2px;cursor:pointer;font:700 13px var(--text);color:#7a5a00;text-decoration:underline;text-underline-offset:3px}

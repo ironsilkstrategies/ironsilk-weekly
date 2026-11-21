@@ -1510,7 +1510,18 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
       (calls[m]=calls[m]||[]).push({v:use(c.voice),s:c.side,pick:txt,price:c.price!=null?+c.price:null,p:pubConf(c),o:pubOff(c)?1:0,r:rankOf(c,m),hit:c.hit==null?null:c.hit});});
     const S0=SCI.get(g.sp+'|'+g.game+'|'+g.day),sc={};if(S0)Object.values(calls).forEach(L=>L.forEach(c=>{if(S0[c.v])sc[c.v]=S0[c.v];}));   /* only the characters with a call here */
     return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls,...(Object.keys(sc).length?{sc}:{})};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
-  return{d,games,cast,heavy:typeof BT_HEAVY!=='undefined'?BT_HEAVY:-500};}
+  const fc=pubForecast();
+  return{d,games,cast,heavy:typeof BT_HEAVY!=='undefined'?BT_HEAVY:-500,...(fc?{fc}:{})};}
+/* v3.1.7 · Nov 21, Chris: "can the forecast emoji be on game picks on the slate so I know if I should stay away or it's working?"
+   The Forecast's weather (desk-fcst.js) for every game lane (sport · bet type · side) rides on the public board, keyed the way the
+   app reads a pick: 'ncaab|total|under'. lv: 2 ☀️ working · 1 🌤 warm · 0 ⛅ even · −1 🌥 cooling · −2 🌧 not working · −3 ⛈ broken,
+   null 💤 too few picks; the last 7 days (w, l, units) and 30 (w30, l30, u30); tr ±1 when the week runs 5%+ off the month.
+   Graded history only, each pick counted once: nothing in it is a pick. */
+function pubForecast(){try{if(typeof fcData!=='function'||typeof fcIcon!=='function')return null;const D=fcData(),out={};const PUB_FC_LV={'☀️':2,'🌤':1,'⛅':0,'🌥':-1,'🌧':-2,'⛈':-3};
+    (D.lanes||[]).forEach(o=>{const k=String(o.k||''),p=k.split('|');if(p.length!==3||!['ml','spread','total'].includes(p[1]))return;const ic=fcIcon(o)[0];
+      const tr=o.n>=8&&o.n30>=15?(o.edge-o.edge30>=0.05?1:o.edge-o.edge30<=-0.05?-1:0):0;
+      out[k]={lv:ic in PUB_FC_LV?PUB_FC_LV[ic]:null,w:o.w7,l:o.l7,u:+(+o.u7).toFixed(1),w30:o.w30,l30:o.l30,u30:+(+o.u30).toFixed(1),...(tr?{tr}:{})};});
+    return Object.keys(out).length?out:null;}catch(e){console.warn('pub forecast',e);return null;}}
 const PUB_TIER_RANK={supreme:4,strong:3,value:2,source:1};
 function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();const VB=beta?(roGet(VOICES_KEY,[],30e3)||[]):null;
   const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
