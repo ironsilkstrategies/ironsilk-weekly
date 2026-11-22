@@ -13,6 +13,14 @@
        (anchors) and who sinks it (wash-outs), and how the real drafts would have done. The goal: big parlays
        we have a real chance of hitting. */
 const TM_SINGLE=2,TM_PARLAY=5,TM_KEY='d4.teamlab';
+/* v3.1.9 · Nov 22, Chris (Team Scout's BUF ML −1600 and BC ML −9000 legs): "we don't pick under -500 bets on this feature so -600
+   and under is no longer an option in this feature challenge." From Nov 22 no leg priced shorter than −500 goes on a team ticket
+   (a single or the parlay): the character's next best call goes instead. Every leg stays on a real book line (no line, no pick).
+   Days before Nov 22 stay as they were played, so this week's draft and results don't move; the Lab replays every day under
+   today's rule, so the teams it finds are teams that can play it. */
+const TM_MAX_FAV=-500,TM_CAP_FROM='2026-11-22',TM_RULE='cap500';   /* a lab saved under the old rule reads as not run yet */
+const tmReal=c=>!!c&&c.price!=null&&c.price!==''&&isFinite(+c.price)&&Math.abs(+c.price)>=100&&!(typeof noLineCall==='function'&&noLineCall(c));
+const tmOk=(c,d,all)=>tmReal(c)&&(!(all||String(d).slice(0,10)>=TM_CAP_FROM)||+c.price>=TM_MAX_FAV);
 /* ── 1 · the race ── */
 function lgChaseFrac(c,off){const cf=confOf(c);if(!off)return 0.025;return Math.max(0.05,Math.min(0.08,0.05+((cf||0.7)-0.70)*0.3));}
 function lgChaseWeek(ws,BYV,CP,CPX){const we=dayShift(ws,6);const days=[];for(let i=0;i<7;i++)days.push(dayShift(ws,i));const S={};
@@ -33,23 +41,27 @@ function lgChaseWeek(ws,BYV,CP,CPX){const we=dayShift(ws,6);const days=[];for(le
     out[v]={v,br:s.br,w:s.w,l:s.l,p:s.p,n:s.w+s.l,par:{w:s.par.w,l:s.par.l,pnl:+s.par.pnl.toFixed(2),cost:+s.par.cost.toFixed(2)},u:+(s.br-LG_START).toFixed(2),roi:s.staked?(s.br-LG_START)/s.staked:0,dd:s.dd,bust:s.bust,best:ms[0]?ms[0][0]:null,worst:ms.length>1?ms[ms.length-1][0]:null};});
   return out;}
 /* ── 2 · team challenge ── */
-const TM_ROSTER=()=>CHAR_ORDER.filter(v=>CHARS[v]&&v!=='Books');
+/* v3.1.9 · from the Nov 24 draft on, only characters still making calls can be drafted (the week before the draft): the Blend,
+   folded into the Brain on Nov 9, was drafted on its old form and gave Team Scout nothing — a 6-leg "8-legger". This week's teams stay. */
+const TM_ROSTER_FROM='2026-11-24';
+const tmActive=(v,ws)=>{const T=tmTop2();for(let i=1;i<=7;i++){const L=(T[dayShift(ws,-i)]||{})[v];if(L&&L.length)return true;}return false;};
+const TM_ROSTER=ws=>CHAR_ORDER.filter(v=>CHARS[v]&&v!=='Books'&&(!ws||ws<TM_ROSTER_FROM||tmActive(v,ws)));
 /* each character's 2 best priced calls per day (one per game), from the ledger */
 let TM_TOP=null;
 function tmTop2(){const V=roGet(VOICES_KEY,[],30e3)||[];if(TM_TOP&&TM_TOP.n===V.length&&Date.now()-TM_TOP.ts<120e3)return TM_TOP.m;const g={};
-  V.forEach(c=>{if(!c||!CHARS[c.voice]||c.price==null||confPre(c))return;const cf=confOf(c);if(cf==null)return;const d=String(c.date).slice(0,10);((g[d]=g[d]||{})[c.voice]=g[d][c.voice]||[]).push(c);});
-  const m={};Object.entries(g).forEach(([d,byV])=>{m[d]={};Object.entries(byV).forEach(([v,L])=>{const seen=new Set();m[d][v]=L.sort((a,b)=>confOf(b)-confOf(a)).filter(c=>{const k=c.sp+c.game;if(seen.has(k))return false;seen.add(k);return true;}).slice(0,4);});});
+  V.forEach(c=>{if(!c||!CHARS[c.voice]||!tmReal(c)||confPre(c))return;const cf=confOf(c);if(cf==null)return;const d=String(c.date).slice(0,10);((g[d]=g[d]||{})[c.voice]=g[d][c.voice]||[]).push(c);});
+  const m={};Object.entries(g).forEach(([d,byV])=>{m[d]={};Object.entries(byV).forEach(([v,L])=>{const seen=new Set();m[d][v]=L.sort((a,b)=>confOf(b)-confOf(a)).filter(c=>{const k=c.sp+c.game;if(seen.has(k))return false;seen.add(k);return true;});});});   /* every game kept: on a day its top calls are all chalk (the Simulator's), the cap still finds 2 */
   TM_TOP={ts:Date.now(),n:V.length,m};return m;}
 /* a team's day: each member's top 2, no repeated game/side → up to 8 legs */
-function tmDay(team,d,T){const byV=(T||tmTop2())[d]||{};const legs=[];const used=new Set();
-  team.forEach(v=>{let n=0;(byV[v]||[]).forEach(c=>{if(n>=2)return;const k=c.sp+'|'+c.game+'|'+c.market;if(used.has(k))return;used.add(k);legs.push({v,c});n++;});});return legs;}
+function tmDay(team,d,T,all){const byV=(T||tmTop2())[d]||{};const legs=[];const used=new Set();
+  team.forEach(v=>{let n=0;(byV[v]||[]).forEach(c=>{if(n>=2)return;if(!tmOk(c,d,all))return;const k=c.sp+'|'+c.game+'|'+c.market;if(used.has(k))return;used.add(k);legs.push({v,c});n++;});});return legs;}
 function tmGradeDay(legs){let hit=0,miss=0,pend=0,push=0,dec=1;legs.forEach(({c})=>{if(!c.graded){pend++;return;}if(c.push||c.hit==null){push++;return;}if(c.hit){hit++;dec*=americanToDecimal(c.price);}else miss++;});
   const n=legs.length;const done=pend===0;const cashed=done&&miss===0&&hit>0;return{n,hit,miss,pend,push,dec,done,cashed,full:legs.reduce((a,{c})=>a*americanToDecimal(c.price),1)};}
 /* leg hit rate of a character's daily top 2, over the window before a date */
-function tmForm(v,before,days){const T=tmTop2();const lo=dayShift(before,-(days||28));let w=0,n=0;Object.entries(T).forEach(([d,byV])=>{if(d<lo||d>=before)return;(byV[v]||[]).slice(0,2).forEach(c=>{if(!c.graded||c.push||c.hit==null)return;n++;if(c.hit)w++;});});return{w,n,r:(w+5)/(n+10)};}
-function tmOverlap(v,team,before){const T=tmTop2();const lo=dayShift(before,-28);let same=0,n=0;Object.entries(T).forEach(([d,byV])=>{if(d<lo||d>=before)return;const mine=(byV[v]||[]).slice(0,2);
-    const theirs=new Set();team.forEach(t=>(byV[t]||[]).slice(0,2).forEach(c=>theirs.add(c.sp+c.game+c.market+c.side)));mine.forEach(c=>{n++;if(theirs.has(c.sp+c.game+c.market+c.side))same++;});});return n?same/n:0;}
-function tmDraft(ws,capA,capB){const pool=TM_ROSTER().filter(v=>v!==capA&&v!==capB);const A=[capA],B=[capB];const log=[];
+function tmForm(v,before,days){const T=tmTop2();const lo=dayShift(before,-(days||28));let w=0,n=0;Object.entries(T).forEach(([d,byV])=>{if(d<lo||d>=before)return;(byV[v]||[]).filter(c=>tmOk(c,d)).slice(0,2).forEach(c=>{if(!c.graded||c.push||c.hit==null)return;n++;if(c.hit)w++;});});return{w,n,r:(w+5)/(n+10)};}
+function tmOverlap(v,team,before){const T=tmTop2();const lo=dayShift(before,-28);let same=0,n=0;Object.entries(T).forEach(([d,byV])=>{if(d<lo||d>=before)return;const mine=(byV[v]||[]).filter(c=>tmOk(c,d)).slice(0,2);
+    const theirs=new Set();team.forEach(t=>(byV[t]||[]).filter(c=>tmOk(c,d)).slice(0,2).forEach(c=>theirs.add(c.sp+c.game+c.market+c.side)));mine.forEach(c=>{n++;if(theirs.has(c.sp+c.game+c.market+c.side))same++;});});return n?same/n:0;}
+function tmDraft(ws,capA,capB){const pool=TM_ROSTER(ws).filter(v=>v!==capA&&v!==capB);const A=[capA],B=[capB];const log=[];
   for(let r=0;r<6;r++){const team=r%2?B:A;const cap=team[0];if(!pool.length)break;
     const sc=pool.map(v=>{const f=tmForm(v,ws);const o=tmOverlap(v,team,ws);return{v,f,o,s:f.r-0.05*o};}).sort((a,b)=>b.s-a.s);const pk=sc[0];team.push(pk.v);pool.splice(pool.indexOf(pk.v),1);
     log.push({cap,v:pk.v,why:`${pk.f.w}-${pk.f.n-pk.f.w} on its top-2 picks (last 4 weeks)${pk.o>0.3?` · ${Math.round(pk.o*100)}% overlap`:''}`});}
@@ -66,17 +78,17 @@ let TMW_C=null;
 function tmWeek(ws){if(!ws&&TMW_C&&Date.now()-TMW_C.ts<120e3)return TMW_C.v;const v=tmWeek0(ws);if(!ws)TMW_C={ts:Date.now(),v};return v;}
 function tmWeek0(ws){ws=ws||bkWeekStart();const C=tmCaptains(ws);if(!C)return null;const D=tmDraft(ws,C.A,C.B);return{ws,C,D,A:tmRunTeam(D.A,ws),B:tmRunTeam(D.B,ws)};}
 /* ── 3 · the lab: every 4-character team, last 8 finished weeks ── */
-function tmLab(force){const L0=get(TM_KEY,null);const ws=bkWeekStart();if(!force&&L0&&L0.ws===ws&&Date.now()-L0.ts<6*36e5)return L0;
+function tmLab(force){const L0=get(TM_KEY,null);const ws=bkWeekStart();if(!force&&L0&&L0.ws===ws&&L0.rule===TM_RULE&&Date.now()-L0.ts<6*36e5)return L0;
   const T=tmTop2();const lo=dayShift(ws,-56);const days=Object.keys(T).filter(d=>d>=lo&&d<ws).sort();const R=TM_ROSTER().filter(v=>days.some(d=>(T[d][v]||[]).length));
   const teams=[];for(let a=0;a<R.length;a++)for(let b=a+1;b<R.length;b++)for(let c=b+1;c<R.length;c++)for(let e=c+1;e<R.length;e++){const tm=[R[a],R[b],R[c],R[e]];
-    let n=0,cash=0,near=0,legs=0,hit=0,pnl=0,big=0;days.forEach(d=>{const lg=tmDay(tm,d,T);if(lg.length<6)return;const G=tmGradeDay(lg);if(!G.done||G.hit+G.miss===0)return;n++;legs+=G.hit+G.miss;hit+=G.hit;
+    let n=0,cash=0,near=0,legs=0,hit=0,pnl=0,big=0;days.forEach(d=>{const lg=tmDay(tm,d,T,true);if(lg.length<6)return;const G=tmGradeDay(lg);if(!G.done||G.hit+G.miss===0)return;n++;legs+=G.hit+G.miss;hit+=G.hit;
       if(G.cashed){cash++;pnl+=TM_PARLAY*(G.dec-1);big=Math.max(big,G.dec);}else{pnl-=TM_PARLAY;if(G.miss===1)near++;}});
     if(n>=5)teams.push({tm,n,cash,near,lr:legs?hit/legs:0,pnl:+pnl.toFixed(2),big:+big.toFixed(1)});}
   teams.sort((x,y)=>y.cash-x.cash||y.near-x.near||y.lr-x.lr);
   const imp={};R.forEach(v=>{const inn=teams.filter(t=>t.tm.includes(v)),out=teams.filter(t=>!t.tm.includes(v));const avg=a=>a.length?a.reduce((s,t)=>s+t.lr,0)/a.length:0;const cav=a=>a.length?a.reduce((s,t)=>s+t.cash+t.near*0.25,0)/a.length:0;
     imp[v]={lift:+(avg(inn)-avg(out)).toFixed(4),clift:+(cav(inn)-cav(out)).toFixed(3),f:tmForm(v,ws,56)};});
   const past=[];for(let i=1;i<=6;i++){const w=dayShift(ws,-7*i);const C=tmCaptains(w);if(!C)continue;const D=tmDraft(w,C.A,C.B);const A=tmRunTeam(D.A,w),B=tmRunTeam(D.B,w);if(!A.days.length&&!B.days.length)continue;past.push({ws:w,A:{tm:D.A,t:A.total,pw:A.pw,lr:A.legs?A.legHit/A.legs:0,near:A.near},B:{tm:D.B,t:B.total,pw:B.pw,lr:B.legs?B.legHit/B.legs:0,near:B.near}});}
-  const L={ws,ts:Date.now(),days:days.length,tried:teams.length,top:teams.slice(0,10),imp,past};set(TM_KEY,L);return L;}
+  const L={ws,ts:Date.now(),rule:TM_RULE,days:days.length,tried:teams.length,top:teams.slice(0,10),imp,past};set(TM_KEY,L);return L;}
 /* ── the card ── */
 const tmNm=v=>txtEsc(charName(v).replace(/^The /,''));const tmChip=v=>`<b style="color:${(CHARS[v]||{}).color}">${tmNm(v)}</b>`;
 const tmMoney=x=>`<b style="color:${x>=0?'var(--win)':'var(--rust)'}">${x>=0?'+':'-'}$${Math.abs(x).toFixed(2)}</b>`;
@@ -86,12 +98,12 @@ function tmTeamBox(lab,R,cap,lead){const today_=R.days.find(x=>x.d===today());
     <div class="mono" style="font-size:11px;margin-top:6px">Total ${tmMoney(R.total)}<br>Singles ${R.sw}-${R.sl} ${tmMoney(R.spnl)}<br>8-leggers ${R.pw}-${R.pl} ${tmMoney(R.ppnl)}${R.near?` · ${R.near} one leg short`:''}<br>Legs hit ${R.legs?Math.round(R.legHit/R.legs*100):0}%</div>
     ${today_?`<details style="margin-top:6px"><summary class="sub" style="font-size:10.5px">Today's ${today_.legs.length}-leg parlay · ${decimalToAmerican(today_.G.full)}</summary><div class="mono" style="font-size:10px">${today_.legs.map(({v,c})=>`${!c.graded?'⏳':c.push?'➖':c.hit?'✅':'❌'} ${txtEsc(typeof charPickText==='function'?charPickText(c):c.pick||'')} ${c.price>0?'+':''}${c.price} · ${tmNm(v)}`).join('<br>')}</div></details>`:''}</div>`;}
 function teamHtml(){if(SAFE_MODE)return'';let W=null;try{W=tmWeek();}catch(e){return'';}
-  const head=`<div class="tkt lg-card" style="margin-top:8px"><h3>🤝 Team Parlay Challenge</h3><div class="sub" style="font-size:10.5px">Last week's winner and runner-up captain a team and draft 1-by-1 (winner first) to 4 each. Every day each teammate gives its 2 best singles → an 8-leg team parlay. Singles $${TM_SINGLE}, parlay $${TM_PARLAY}. Most money by Monday night wins.</div>`;
+  const head=`<div class="tkt lg-card" style="margin-top:8px"><h3>🤝 Team Parlay Challenge</h3><div class="sub" style="font-size:10.5px">Last week's winner and runner-up captain a team and draft 1-by-1 (winner first) to 4 each. Every day each teammate gives its 2 best singles → an 8-leg team parlay. Singles $${TM_SINGLE}, parlay $${TM_PARLAY}. Most money by Monday night wins. No leg shorter than −500, and every leg on a real book line.</div>`;
   if(!W)return head+`<div class="sub" style="margin-top:6px">Needs last week's race to have a winner and runner-up — starts with the next week.</div></div>`+tmLabHtml();
   const lead=W.A.total>=W.B.total;
   return head+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${tmTeamBox('Team '+tmNm(W.C.A),W.A,W.C.A,lead&&(W.A.days.length>0))}${tmTeamBox('Team '+tmNm(W.C.B),W.B,W.C.B,!lead&&(W.B.days.length>0))}</div>
     <details style="margin-top:6px"><summary class="sub">The draft</summary><div class="mono" style="font-size:10.5px">${W.D.log.map((x,i)=>`${i+1}. ${tmChip(x.cap)} took ${tmChip(x.v)} — ${txtEsc(x.why)}`).join('<br>')}</div></details></div>`+tmLabHtml();}
-function tmLabHtml(){let L=get(TM_KEY,null);if(!L||!L.top||L.ws!==bkWeekStart())return`<div class="tkt"><h3>🧪 The Parlay Lab</h3><div class="sub" style="font-size:10.5px">Replays every 4-character team on the last 8 weeks. Runs on demand (it's heavy).</div><button style="margin-top:6px" onclick="this.textContent='Running…';setTimeout(()=>{try{tmLab(true);}catch(e){}try{tmLabStr(true);}catch(e){}try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}},50)">🧪 Run the lab</button></div>`;const pc=x=>Math.round(x*100)+'%';
+function tmLabHtml(){let L=get(TM_KEY,null);if(!L||!L.top||L.ws!==bkWeekStart()||L.rule!==TM_RULE)return`<div class="tkt"><h3>🧪 The Parlay Lab</h3><div class="sub" style="font-size:10.5px">Replays every 4-character team on the last 8 weeks. Runs on demand (it's heavy).</div><button style="margin-top:6px" onclick="this.textContent='Running…';setTimeout(()=>{try{tmLab(true);}catch(e){}try{tmLabStr(true);}catch(e){}try{renderToday(true);}catch(e){}try{deskRerender();}catch(e){}},50)">🧪 Run the lab</button></div>`;const pc=x=>Math.round(x*100)+'%';
   const imp=Object.entries(L.imp).sort((a,b)=>b[1].clift-a[1].clift||b[1].lift-a[1].lift);const anchors=imp.filter(([,x])=>x.lift>0).slice(0,4),wash=imp.filter(([,x])=>x.lift<0).slice(-4).reverse();
   return`<div class="tkt"><h3>🧪 The Parlay Lab</h3><div class="sub" style="font-size:10.5px">Every possible 4-character team (${L.tried}), replayed on the last ${L.days} days of real calls: each teammate's 2 best picks a day → an 8-leg parlay. Looking for the big parlays we can actually hit.</div>
     ${L.top.length?`<div class="mktlab">Best teams on history</div><div class="mono" style="font-size:10.5px">${L.top.map((t,i)=>`${i+1}. ${t.tm.map(tmChip).join(' · ')}<br>&nbsp;&nbsp;&nbsp;cashed ${t.cash}/${t.n}${t.big?` (best ${decimalToAmerican(t.big)})`:''} · one leg short ${t.near} · legs ${pc(t.lr)} · ${t.pnl>=0?'+':'-'}$${Math.abs(t.pnl).toFixed(0)} at $${TM_PARLAY}`).join('<br>')}</div>`:'<div class="sub">Not enough graded days yet.</div>'}
@@ -111,7 +123,7 @@ const tmLaneLab=k=>{const[sp,m]=String(k).split('|');return((SP_LAB[sp]||sp).rep
 let TM_POOL=null;
 /* every priced call by day and character, most confident first (no per-game cut yet — the lane filter comes first) */
 function tmPool(){const V=roGet(VOICES_KEY,[],30e3)||[];if(TM_POOL&&TM_POOL.n===V.length&&Date.now()-TM_POOL.ts<120e3)return TM_POOL;const P={},D={};
-  V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice)||c.price==null||confPre(c))return;const cf=confOf(c);if(cf==null)return;const d=String(c.date).slice(0,10);
+  V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice)||!tmReal(c)||confPre(c))return;const cf=confOf(c);if(cf==null)return;const d=String(c.date).slice(0,10);
     ((P[d]=P[d]||{})[c.voice]=P[d][c.voice]||[]).push(c);
     if(c.graded&&!c.push&&c.hit!=null){const k=tmLaneOf(c);const o=((D[d]=D[d]||{})[c.voice]=D[d][c.voice]||{})[k]=D[d][c.voice][k]||{w:0,n:0,u:0};o.n++;if(c.hit){o.w++;o.u+=americanToDecimal(+c.price)-1;}else o.u-=1;}});
   Object.values(P).forEach(byV=>Object.keys(byV).forEach(v=>byV[v].sort((a,b)=>confOf(b)-confOf(a))));
@@ -121,23 +133,23 @@ function tmStrengths(D,before,days){const lo=dayShift(before,-(days||TM_STR_DAYS
   Object.entries(D).forEach(([d,byV])=>{if(d<lo||d>=before)return;Object.entries(byV).forEach(([v,L])=>Object.entries(L).forEach(([k,o])=>{const a=(acc[v]=acc[v]||{})[k]=acc[v][k]||{w:0,n:0,u:0};a.w+=o.w;a.n+=o.n;a.u+=o.u;}));});
   const S={};Object.entries(acc).forEach(([v,L])=>{const top=Object.entries(L).filter(([,o])=>o.n>=8&&o.w/o.n>=0.58&&o.u>=0).map(([k,o])=>({k,w:o.w,n:o.n,u:+o.u.toFixed(2),r:(o.w+3)/(o.n+6)})).sort((a,b)=>b.r-a.r).slice(0,3);if(top.length)S[v]=top;});return S;}
 /* a team's day: each member's 2 most confident calls inside its lanes, one per game, no game/market twice */
-function tmDayStr(team,d,P,S,open){const byV=(P[d]||{});const legs=[];const used=new Set();
+function tmDayStr(team,d,P,S,open,all){const byV=(P[d]||{});const legs=[];const used=new Set();
   team.forEach(v=>{const lanes=new Map((S[v]||[]).map(x=>[x.k,x]));if(!lanes.size)return;let n=0;const games=new Set();
-    (byV[v]||[]).forEach(c=>{if(n>=2)return;const ln=lanes.get(tmLaneOf(c));if(!ln||games.has(c.sp+c.game))return;if(open&&(c.graded||(typeof deskStarted==='function'&&deskStarted(c))))return;
+    (byV[v]||[]).forEach(c=>{if(n>=2)return;if(!tmOk(c,d,all))return;const ln=lanes.get(tmLaneOf(c));if(!ln||games.has(c.sp+c.game))return;if(open&&(c.graded||(typeof deskStarted==='function'&&deskStarted(c))))return;
       const k=c.sp+'|'+c.game+'|'+c.market;if(used.has(k))return;used.add(k);games.add(c.sp+c.game);legs.push({v,c,lane:ln});n++;});});return legs;}
-function tmLabStr(force){const L0=get(TM_STR_KEY,null);const d0=today();if(!force&&L0&&L0.d===d0&&Date.now()-L0.ts<6*36e5)return L0;
+function tmLabStr(force){const L0=get(TM_STR_KEY,null);const d0=today();if(!force&&L0&&L0.d===d0&&L0.rule===TM_RULE&&Date.now()-L0.ts<6*36e5)return L0;
   const {P,D}=tmPool();const all=Object.keys(P).sort();if(!all.length)return null;const lo=dayShift(d0,-56),first=dayShift(all[0],14);
   const days=all.filter(d=>d>=lo&&d<d0&&d>=first);const SD={};days.forEach(d=>{SD[d]=tmStrengths(D,d);});
   const R=TM_ROSTER().filter(v=>days.some(d=>SD[d][v]));const teams=[];
   for(let a=0;a<R.length;a++)for(let b=a+1;b<R.length;b++)for(let c=b+1;c<R.length;c++)for(let e=c+1;e<R.length;e++){const tm=[R[a],R[b],R[c],R[e]];
-    let n=0,cash=0,near=0,legs=0,hit=0,pnl=0,big=0;days.forEach(d=>{const lg=tmDayStr(tm,d,P,SD[d]);if(lg.length<6)return;const G=tmGradeDay(lg);if(!G.done||G.hit+G.miss===0)return;n++;legs+=G.hit+G.miss;hit+=G.hit;
+    let n=0,cash=0,near=0,legs=0,hit=0,pnl=0,big=0;days.forEach(d=>{const lg=tmDayStr(tm,d,P,SD[d],false,true);if(lg.length<6)return;const G=tmGradeDay(lg);if(!G.done||G.hit+G.miss===0)return;n++;legs+=G.hit+G.miss;hit+=G.hit;
       if(G.cashed){cash++;pnl+=TM_PARLAY*(G.dec-1);big=Math.max(big,G.dec);}else{pnl-=TM_PARLAY;if(G.miss===1)near++;}});
     if(n>=4)teams.push({tm,n,cash,near,lr:legs?hit/legs:0,pnl:+pnl.toFixed(2),big:+big.toFixed(1)});}
   teams.sort((x,y)=>y.cash-x.cash||y.near-x.near||y.lr-x.lr);
   /* the same teams playing everything (the plain lab's rule), over the same days — what the strength rule buys */
-  const T2=tmTop2();const plain=tm=>{let legs=0,hit=0;days.forEach(d=>{const lg=tmDay(tm,d,T2);if(lg.length<6)return;const G=tmGradeDay(lg);if(!G.done)return;legs+=G.hit+G.miss;hit+=G.hit;});return legs?hit/legs:null;};
+  const T2=tmTop2();const plain=tm=>{let legs=0,hit=0;days.forEach(d=>{const lg=tmDay(tm,d,T2,true);if(lg.length<6)return;const G=tmGradeDay(lg);if(!G.done)return;legs+=G.hit+G.miss;hit+=G.hit;});return legs?hit/legs:null;};
   const top=teams.slice(0,10).map(t=>({...t,plr:plain(t.tm)}));
-  const L={d:d0,ts:Date.now(),days:days.length,tried:teams.length,top};set(TM_STR_KEY,L);return L;}
+  const L={d:d0,ts:Date.now(),rule:TM_RULE,days:days.length,tried:teams.length,top};set(TM_STR_KEY,L);return L;}
 /* today's 8-leggers for the best strength teams (live: the calls move all day) */
 function tmStrToday(L,k){if(!L||!L.top)return[];const {P,D}=tmPool();const S=tmStrengths(D,today());const out=[];const seen=new Set();
   for(const t of L.top){if(out.length>=(k||3))break;const legs=tmDayStr(t.tm,today(),P,S,true);if(legs.length<6)continue;const sig=legs.map(x=>x.c.sp+x.c.game+x.c.market+x.c.side).sort().join('|');if(seen.has(sig))continue;seen.add(sig);
@@ -148,7 +160,7 @@ function tmStrSlip(i){const L=get(TM_STR_KEY,null);const X=tmStrToday(L,3)[i];if
     SLIP.push({id:'tm|'+c.sp+'|'+c.game+'|'+pick,game:c.game,pick,price:+c.price,sport:c.sp,date:today(),gameDate:String(c.date).slice(0,10),p:confOf(c)||0.5});n++;});
   set(LS.slip,SLIP);try{paintSlip();}catch(e){}try{deskToast(`🎟 ${n} leg${n===1?'':'s'} loaded into the slip — set your stake and lock it`,3200);}catch(e){}}
 function tmStrHtml(){const L=get(TM_STR_KEY,null);const pc=x=>Math.round(x*100)+'%';
-  if(!L||!L.top||L.d!==today())return`<div class="mktlab">💪 Strength teams</div><div class="sub" style="font-size:10.5px">Each character only plays its best lanes. Runs with the lab.</div>`;
+  if(!L||!L.top||L.d!==today()||L.rule!==TM_RULE)return`<div class="mktlab">💪 Strength teams</div><div class="sub" style="font-size:10.5px">Each character only plays its best lanes. Runs with the lab.</div>`;
   const X=tmStrToday(L,3);
   return`<div class="mktlab">💪 Strength teams — each character only plays its best lanes</div><div class="sub" style="font-size:10px;margin-bottom:4px">A lane counts once it's 58%+ and in profit on 8+ graded calls over the 45 days before that day (no peeking). ${L.days} days replayed.</div>
     ${L.top.length?`<div class="mono" style="font-size:10.5px">${L.top.map((t,i)=>`${i+1}. ${t.tm.map(tmChip).join(' · ')}<br>&nbsp;&nbsp;&nbsp;cashed ${t.cash}/${t.n}${t.big?` (best ${decimalToAmerican(t.big)})`:''} · one leg short ${t.near} · legs ${pc(t.lr)}${t.plr!=null?` <span style="color:${t.lr>=t.plr?'var(--win)':'var(--rust)'}">(${t.lr>=t.plr?'+':''}${Math.round((t.lr-t.plr)*100)} vs playing everything)</span>`:''} · ${t.pnl>=0?'+':'-'}$${Math.abs(t.pnl).toFixed(0)} at $${TM_PARLAY}`).join('<br>')}</div>`:'<div class="sub">Not enough graded days in the lanes yet.</div>'}
