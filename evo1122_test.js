@@ -2,9 +2,10 @@
    the parent has to EVOLVE to a higher set of standards and becomes a 'legacy 2' character and the child becomes a 'gen 2' and so on
    and so on til we have our characters hitting on 90% of their calls of confidence of 80% or more…. And characters calling a exact
    score more often than not."
-   A · the higher standard on paper: what an evolved character may claim (its record at the number it said, in that kind of bet, the
-       low end of it, less 2.5 points a level), never raised, never before its day, walk-forward, on its public number and its official
-       gates, never on what it said (its children read that), an heir's own gates too.
+   A · the standard on paper: what a character may claim (its record at the number it said, in that kind of bet, the low end of it,
+       one standard error and 2.5 points a level), never raised, never before its day, walk-forward, on its public number and its
+       official gates, never on what it said (its children read that), an heir's own gates too; the level by day (the first one for
+       everyone from Nov 23, Chris: "Whatever you feel is right"; one more for every evolution, never reaching back).
    B · the synthetic world run long: the Architect graduates, outdoes both parents by so much that they evolve (Legacy 2) and it earns
        Gen 2; the race starts over against their new selves; three weeks later the Judge evolves again (Legacy 3). Chronicle, rooms,
        public card, family news.
@@ -70,22 +71,26 @@ const at = D => Date.parse(D + 'T18:00:00Z'), KEY = 'H_L1e1';
   p.__N = N; p.__KX = KX;
   const cap = (k, lv, from = '2026-11-01') => PJ(`(()=>{WB_LEGM=${lv > 1 ? `{Judge:{n:${lv},from:'${from}'}}` : '{}'};const x=window.__N['${k}'];return wbLegCap(x,x.cf);})()`);
   const c2 = Object.fromEntries(Object.keys(N).map(k => [k, cap(k, 2)])), c3 = cap('fav', 3);
-  T('Legacy 2 on a lane it calls honestly (says 85%, hits 85% on 100): it now has to prove it, so the low end of its record less 2.5 points (85% → 79.5%)', near(c2.fav, 0.7948), JSON.stringify(c2));
-  T('…Legacy 3 asks twice as much (two standard errors, 5 points: 85% → 74%)', near(c3, 0.7396), String(c3));
-  T('…a lane where it overclaims (says 85%, hits 60%) is cut to what its record proves (59%)', near(c2.over, 0.5884), String(c2.over));
+  T('Legacy 2 on a lane it calls honestly (says 85%, hits 85% on 100): it has to prove it, so the low end of its record (two standard errors) less 5 points (85% → 74%)', near(c2.fav, 0.7396), JSON.stringify(c2));
+  T('…Legacy 3 asks more (three standard errors, 7.5 points: 85% → 68%)', near(c3, 0.6845), String(c3));
+  T('…a lane where it overclaims (says 85%, hits 60%) is cut to what its record proves (52%)', near(c2.over, 0.5231), String(c2.over));
   T('…a lane it undersells (says 75%, hits 95%) keeps its number: the standard never raises one', c2.under === 0.75, String(c2.under));
-  T('…its −700 favorites (hit 95%) don\'t vouch for its −300 ones (hit 60%): 88% becomes 86% on one, 70% on the other', near(c2.heavy, 0.8648) && near(c2.chalk, 0.7003), JSON.stringify([c2.heavy, c2.chalk]));
-  T('…no record at the number it said is no proof of it: a 65% over (it has only ever said 85% on overs) borrows nothing and is cut by the margin and the doubt (55%)', near(c2.thin, 0.5496), String(c2.thin));
+  T('…its −700 favorites (hit 95%) don\'t vouch for its −300 ones (hit 60%): 88% becomes 81% on one, 62% on the other', near(c2.heavy, 0.8123) && near(c2.chalk, 0.6217), JSON.stringify([c2.heavy, c2.chalk]));
+  T('…no record at the number it said is no proof of it: a 65% over (it has only ever said 85% on overs) borrows nothing and is cut by the margin and the doubt (45%)', near(c2.thin, 0.4492), String(c2.thin));
   T('…nothing before its day, nothing for a character that never evolved', cap('fav', 2, '2026-11-07') === 0.85 && cap('fav', 1) === 0.85);
   const flip = PJ(`(()=>{WB_LEGM={Judge:{n:2,from:'2026-11-01'}};const V=get(VOICES_KEY,[]);const extra=Array.from({length:40},(_,i)=>({id:'late'+i,sp:'nhl',date:'2026-11-06',game:'LA'+i+'@LB'+i,voice:'Judge',market:'spread',side:'home',line:-3.5,price:-110,pick:'x',cf:0.85,graded:true,hit:false,push:false,units:-1,f:[]}));
     set(VOICES_KEY,V.concat(extra));WB_LT=new Map();const x=window.__N.fav;const a=wbLegCap(x,x.cf);set(VOICES_KEY,V);WB_LT=new Map();return a;})()`);
-  T('walk-forward: 40 losses graded the same day don\'t move that day\'s call (only the days before it count)', near(flip, 0.7948), String(flip));
+  T('walk-forward: 40 losses graded the same day don\'t move that day\'s call (only the days before it count)', near(flip, 0.7396), String(flip));
+  const lvl = PJ(`(()=>{WB_LEGM={Judge:{n:3,at:'2026-11-04',from:'2026-11-05',hist:[{n:2,at:'2026-11-02'},{n:3,at:'2026-11-04'}]}};return['2026-11-02','2026-11-03','2026-11-04','2026-11-05','2026-11-22','2026-11-23'].map(d=>wbLegLevel('Judge',d)).concat([wbLegLevel('Scout','2026-11-22'),wbLegLevel('Scout','2026-11-23'),wbLegLevel('H_T1','2026-11-23')]);})()`);
+  T('the standard by day: Legacy 2 from the day after its first evolution, Legacy 3 from the day after its second (a later evolution never reaches back); from Nov 23 every character, an heir too, plays to the first level', JSON.stringify(lvl) === JSON.stringify([0, 2, 2, 3, 3, 3, 0, 1, 1]), JSON.stringify(lvl));
+  const base1 = PJ(`(()=>{WB_LEGM={};const x={...window.__N.fav,id:'d23',date:'2026-11-23'},y={...window.__N.fav,id:'d22',date:'2026-11-22'};WB_LT=new Map();return[wbLegCap(x,x.cf),wbLegCap(y,y.cf)];})()`);
+  T('…the first level for everyone from Nov 23: the same honest 85% lane is held to 79.5% (one standard error, 2.5 points); the day before, untouched', near(base1[0], 0.7948) && base1[1] === 0.85, JSON.stringify(base1));
   const off = PJ(`(()=>{const r={};for(const lv of [1,2]){WB_LEGM=lv>1?{Judge:{n:lv,from:'2026-11-01'}}:{};WB_LT=new Map();r[lv]={dog:isOfficial(window.__N.dog),under:isOfficial(window.__N.under),pub:+pubConf(window.__N.dog).toFixed(4),cf:window.__N.dog.cf,said:confOf(window.__N.dog)};}return r;})()`);
-  T('its official gates: a 72% spread dog (a lane it calls honestly) is official at Legacy 1, not at Legacy 2 (its record proves 66%, under the 70% bar)', off[1].dog === true && off[2].dog === false, JSON.stringify(off));
+  T('its official gates: a 72% spread dog (a lane it calls honestly) is official before any standard, not at Legacy 2 (its record proves 59%, under the 70% bar)', off[1].dog === true && off[2].dog === false, JSON.stringify(off));
   T('…a lane its record more than proves (unders) stays official at Legacy 2', off[2].under === true, JSON.stringify(off));
-  T('…its public number carries the standard (72% → 66%) while what it said stays on the call (its children and the races read that)', near(off[2].pub, 0.6571) && off[1].pub === 0.72 && off[2].cf === 0.72 && off[2].said === 0.72, JSON.stringify(off));
+  T('…its public number carries the standard (72% → 59%) while what it said stays on the call (its children and the races read that)', near(off[2].pub, 0.5941) && off[1].pub === 0.72 && off[2].cf === 0.72 && off[2].said === 0.72, JSON.stringify(off));
   const ko = PJ(`(()=>{const x=window.__KX;WB_LEGM={};const a=isOfficial(x);WB_LEGM={H_T1:{n:2,from:'2026-11-01'}};WB_LT=new Map();const b=isOfficial(x);WB_LEGM={};return[a,b,!!CHARS.H_T1&&!!CHARS.H_T1.kid];})()`);
-  T('an heir that evolves plays to the standard on its own gates too (72% with no record at that number: official at Legacy 1, not at Legacy 2)', ko[0] === true && ko[1] === false && ko[2] === true, JSON.stringify(ko));
+  T('an heir that evolves plays to the standard on its own gates too (72% with nothing behind it: official before any standard, not at Legacy 2)', ko[0] === true && ko[1] === false && ko[2] === true, JSON.stringify(ko));
 
   /* ══ B · the world: the Architect outdoes both parents by so much that they evolve ══ */
   const w = boot('nhl.html', { 'd4.voices': snap('2026-11-22') }, at('2026-11-22')); await wait(1500);
@@ -104,8 +109,9 @@ const at = D => Date.parse(D + 'T18:00:00Z'), KEY = 'H_L1e1';
   T('the chronicle: "⚡ The Simulator evolves: Legacy 2 · The Architect is Gen 2", with why, by how much and when its standards start', ch1.some(t => /^2026-12-30 ⚡ The Simulator evolves: Legacy 2 · The Architect is Gen 2 \| The Architect outdid the Simulator by \d+\.\dσ on \d+ of its calls over \d+ days, its official calls \+\d+\.\du against [+−]\d+\.\du\. From Dec 31 the Simulator plays to Legacy 2 standards/.test(t)) && ch1.some(t => /⚡ The Judge evolves: Legacy 2 \|/.test(t)), JSON.stringify(ch1));
   go('2027-01-01'); const R2 = J('(()=>{const R=wombRun(true);return R.evo;})()');
   T('the race starts over against its new self: on Jan 1 the Simulator has been raced one day, since Dec 31', ((R2[KEY] || {}).Sim || {}).from === '2026-12-31' && R2[KEY].Sim.days === 1 && !R2[KEY].Sim.ok, JSON.stringify(R2[KEY] && R2[KEY].Sim));
-  const capd = J(`(()=>{const V=get(VOICES_KEY,[]);const pick=d=>V.filter(x=>x.voice==='Sim'&&x.market==='ml'&&String(x.date).slice(0,10)===d);const f=xs=>xs.map(x=>({raw:+WB_CC0(x).toFixed(4),pub:+coachOk(x).toFixed(4),cf:x.cf}));return{d30:f(pick('2026-12-30')),d31:f(pick('2026-12-31'))};})()`);
-  T('nothing backdated: the Simulator\'s Dec 30 calls carry what they always did; from Dec 31 its overclaims are cut (what it said untouched)', capd.d30.length && capd.d30.every(x => x.pub === x.raw) && capd.d31.length && capd.d31.some(x => x.pub < x.raw - 0.01) && capd.d31.every(x => x.pub <= x.raw), JSON.stringify(capd).slice(0, 400));
+  const capd = J(`(()=>{const V=get(VOICES_KEY,[]);const pick=d=>V.filter(x=>x.voice==='Sim'&&x.market==='ml'&&String(x.date).slice(0,10)===d);const keep=WB_LEGM;
+    const f=xs=>xs.map(x=>{const raw=WB_CC0(x),pub=coachOk(x);WB_LEGM={};const l1=wbLegCap(x,raw);WB_LEGM=keep;return{raw:+raw.toFixed(4),l1:+l1.toFixed(4),pub:+pub.toFixed(4),cf:x.cf,said:confOf(x)};});return{d30:f(pick('2026-12-30')),d31:f(pick('2026-12-31'))};})()`);
+  T('nothing backdated: the Simulator\'s Dec 30 calls carry the first level as they always did; from Dec 31 they carry Legacy 2, cut deeper (what it said untouched)', capd.d30.length && capd.d30.every(x => x.pub === x.l1) && capd.d31.length && capd.d31.some(x => x.pub < x.l1 - 0.01) && capd.d31.every(x => x.pub <= x.l1 && x.said === x.cf), JSON.stringify(capd).slice(0, 400));
   const pc = J(`(()=>{PUB_CHAR_MEMO=null;const V=get(VOICES_KEY,[]).slice();V.push({id:'x1',sp:'nhl',date:today(),game:'A@B',voice:'${KEY}',market:'ml',side:'home',price:-120,pick:'B ML',cf:0.75,kp:0.75,graded:false});const C=pubCharacters(V,today());return{sim:(C.find(c=>c.v==='Sim')||{}).legacy||null,kid:((C.find(c=>c.v==='${KEY}')||{}).kid)||null};})()`);
   T('🌐 the public card: the Simulator wears Legacy 2 (since Dec 31, outdone by the Architect); the Architect wears Gen 2', pc.sim && pc.sim.n === 2 && pc.sim.since === '2026-12-31' && pc.sim.by === 'The Architect' && pc.kid && pc.kid.gen === 2 && pc.kid.genAt === '2026-12-30' && pc.kid.genBy === 'The Simulator', JSON.stringify(pc));
   const ev = J(`wbEvents(wombAll(),'2026-12-01')`);
@@ -115,7 +121,7 @@ const at = D => Date.parse(D + 'T18:00:00Z'), KEY = 'H_L1e1';
   T('🍼 the Nursery card: ⚡ Gen 2, the day it earned it, and its race against each parent', /⚡ Gen 2/.test(nur) && /Gen 2 since Dec 30, the day it made The Simulator evolve/.test(nur) && /The race to make a parent evolve/.test(nur) && /To make it evolve:/.test(nur), nur.slice(nur.indexOf('The Architect'), nur.indexOf('The Architect') + 600));
   go('2027-01-21'); E('wombRun(true)'); const W3 = J('wombAll()'), K3 = kid();
   const ch3 = J(`journalAll().filter(x=>x.kind==='womb'&&/^⚡ The Judge evolves: Legacy 3/.test(x.title)).map(x=>x.title+' | '+x.what)`);
-  T('and so on: three weeks on it has outdone the Judge\'s new self by so much again: Legacy 3 (its title stays the one it earned)', W3.legacy.Judge.n === 3 && W3.legacy.Judge.from === '2027-01-22' && W3.legacy.Judge.hist.length === 2 && K3.genAt === '2026-12-30' && ch3.length === 1 && /^⚡ The Judge evolves: Legacy 3 \| The Architect outdid the Judge by \d+\.\dσ on \d+ of its calls over 21 days/.test(ch3[0]) && /2 standard errors down\) less 5 points\.$/.test(ch3[0]), JSON.stringify([W3.legacy.Judge, ch3]));
+  T('and so on: three weeks on it has outdone the Judge\'s new self by so much again: Legacy 3 (its title stays the one it earned)', W3.legacy.Judge.n === 3 && W3.legacy.Judge.from === '2027-01-22' && W3.legacy.Judge.hist.length === 2 && K3.genAt === '2026-12-30' && ch3.length === 1 && /^⚡ The Judge evolves: Legacy 3 \| The Architect outdid the Judge by \d+\.\dσ on \d+ of its calls over 21 days/.test(ch3[0]) && /3 standard errors down\) less 7\.5 points\.$/.test(ch3[0]), JSON.stringify([W3.legacy.Judge, ch3]));
 
   /* ══ C · selection ══ */
   const heirCalls = WORLD.filter(x => x.date >= '2026-12-05' && x.date <= '2027-01-20' && ((x.voice === 'Sim' && x.market === 'ml') || (x.voice === 'Judge' && x.market === 'total')))

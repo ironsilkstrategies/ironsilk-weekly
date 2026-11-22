@@ -1101,7 +1101,8 @@ function blRow(c, need) {
     ${b ? `<div class="bl-bar" role="img" aria-label="${p}% of the way to a new generation"><i style="width:${p}%"></i></div><div class="bl-s">${p}% of the way to a new generation · ${Math.min(b.n, need.n)}/${need.n} games watched</div>` : ''}
     ${(c.hist || []).length ? `<div class="bl-s">Generation ${c.gen} took over ${esc(shortDay(c.hist[c.hist.length - 1].to || deskDay()))}</div>` : ''}</div>`;
 }
-/* v56 · evolution (Chris, Nov 22: "the parent has to EVOLVE to a higher set of standards and becomes a 'legacy 2' character and the child
+/* v57 · the North Star says since when no character may claim more than its own record proves (feed: bloodlines.north.std).
+   v56 · evolution (Chris, Nov 22: "the parent has to EVOLVE to a higher set of standards and becomes a 'legacy 2' character and the child
    becomes a 'gen 2'"): an evolved character wears its Legacy, an heir that made a parent evolve wears its Gen; the North Star (80%+
    official picks hitting 9 in 10) and the family's news sit under the roster. Every number from the feed is coerced, every word escaped.
    v55 · family life: what an heir is going through with its parents right now, and the lessons it keeps (public words, no method talk).
@@ -1126,7 +1127,7 @@ function familyHtml(c) { const k = c.kid;
 function northSec(N) { if (!N || !(+N.n > 0)) return ''; const r = Number.isFinite(+N.rate) ? Math.max(0, Math.min(1, +N.rate)) : null;
   const pc = x => (x == null || x === '' || !Number.isFinite(+x) ? '—' : Math.round(Math.max(0, Math.min(1, +x)) * 100) + '%'), n = lvl(N.n, 0, 1e6), d = lvl(N.days, 1, 365) || 30;
   const top = (Array.isArray(N.top) ? N.top : []).filter(t => t && t.who).slice(0, 5);
-  return `<section class="crown north"><div class="vh"><h2 class="h2">The North Star</h2></div><p class="note">When a character says 80% or more on an official pick, it should hit 9 in 10. Every time a parent has to evolve, the bar goes up, until the whole desk gets there.</p>
+  return `<section class="crown north"><div class="vh"><h2 class="h2">The North Star</h2></div><p class="note">When a character says 80% or more on an official pick, it should hit 9 in 10. ${/^\d{4}-\d\d-\d\d$/.test(String(N.std || '')) ? `Since ${esc(shortDay(N.std))}, no character can claim more than its own record proves. ` : ''}Every time a parent has to evolve, the bar goes up, until the whole desk gets there.</p>
     <div class="paper race ns"><div class="ns-big"><b>${pc(r)}</b><span>of ${n} official pick${n === 1 ? '' : 's'} at 80% or more hit · last ${d} days · goal 90%</span></div>
       <div class="bl-bar" role="img" aria-label="${pc(r)} against a 90% goal"><i style="width:${r == null ? 0 : Math.round(Math.min(1, r / 0.9) * 100)}%"></i></div>
       ${top.length ? `<div class="tix-h"><b>Closest to it</b></div>${top.map((t, i) => `<div class="rcr"><span class="n">${t.star === true ? '⭐' : i + 1}</span><span class="t">${esc(t.who)}<small>${lvl(t.n, 0, 1e6)} official picks at 80%+</small></span><span class="wst">${pc(t.rate)}</span></div>`).join('')}` : ''}</div></section>`; }

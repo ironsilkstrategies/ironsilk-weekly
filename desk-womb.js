@@ -68,12 +68,14 @@
         parent's, holding its own in the parent's best lanes), the parent EVOLVES into Legacy 2 (then 3, 4, 5) and the child earns
         its generation: Gen 2 (a child of a Gen 2 earns Gen 3…). Nothing is backdated: the parent's new standards start the next
         day, and the race against it starts over against its new self.
-   §10 · HIGHER STANDARDS. An evolved character may only claim what its own record proves. The number it carries in public and on
-        its official gates (after the Coach, the chemistry and the weather) can't top its record at the number it said, in that
-        kind of bet (a −300 favorite isn't a −130 one), each day from the days before it: the low end of that record, one standard
-        error for every level past the first, less 2.5 points a level. Never raised. The desk's bars stay where they are: it needs
-        more to clear them, and its 80% has to be the real thing. What it said is never touched (its children and the races read
-        it as before).
+   §10 · HIGHER STANDARDS. A character may only claim what its own record proves. The number it carries in public and on its
+        official gates (after the Coach, the chemistry and the weather) can't top its record at the number it said, in that kind
+        of bet (a −300 favorite isn't a −130 one), each day from the days before it: the low end of that record, one standard error
+        for every level, less 2.5 points a level. Never raised. The desk's bars stay where they are: it needs more to clear them,
+        and its 80% has to be the real thing. What it said is never touched (its children and the races read it as before).
+        Nov 22, Chris: "Whatever you feel is right." From Nov 23 EVERY character plays to the first level (an heir proves its number
+        with its own calibration, an embryo's official gates in the womb too); each evolution adds a level: Legacy 2 is two standard
+        errors and 5 points, up to Legacy 5.
    §11 · THE NORTH STAR. Where the family is headed: 90% hits on official calls at 80%+ confidence (the last 30 days), and exact
         final scores more often than not. Measured for the desk and for every character; reaching it goes in the chronicle.
    §12 · SELECTION. Graduates court like any proven character, never with their own blood (no pair shares a parent or any
@@ -86,6 +88,7 @@ const WOMB_KEY='d4.womb',WOMB_PREVIEW=14,WOMB_SLOTS=3,WOMB_EMB=2,WOMB_MAX_EMB=4,
   FAM_H=7,FAM_MIN=6,FAM_Z=1.5,FAM_ZADM=2.0,FAM_LESSON=7;
 const FAM_ZR={Rebel:1.5,Prodigal:2.0,Prodigy:2.0};   /* how sure it must be before it fades a parent (a Steady heir never does) */
 const EVO_DAYS=21,EVO_N=300,EVO_BAR=3.0,LEGACY_MAX=5,LEG_STEP=0.025,LEG_Z=1,LEG_K=40,WB_DESK_MAX=12,
+  LEG_BASE_FROM='2026-11-23',   /* Nov 22, Chris: "Whatever you feel is right" — from Nov 23 every character plays to the first standard */
   NORTH_CF=0.80,NORTH_HIT=0.90,NORTH_N=30,NORTH_DESK_N=100,NORTH_DAYS=30;
 const WB_SPN={nfl:'NFL',ncaaf:'CFB',nba:'NBA',ncaab:'CBB',nhl:'NHL',mlb:'MLB'};
 const WB_ROLE={'ml|fav':'ML favorites','ml|dog':'ML dogs','ml|heavy':'heavy ML favorites','spread|fav':'spread favorites','spread|dog':'spread dogs','total|over':'overs','total|under':'unders','ml|*':'moneylines','spread|*':'spreads','total|*':'totals'};
@@ -277,7 +280,7 @@ function wbEval(L,E,IX,d0,tried,until,opt){opt=opt||{};const a=L.a,b=L.b,from=E.
     if(S.price==null)continue;   /* no line, no pick: it never calls a side nobody priced */
     if(!res){if(!pre)open++;continue;}if(res==='push')continue;const y=res==='w'?1:0,uu=y?americanToDecimal(S.price)-1:-1;
     pend.push({raw,y});if(FAM)FAM.note(g.d,{h:1,k:S.lane,u:uu});if(pre)continue;   /* (between conception and birth an heir's calibration keeps learning; its rookie record starts the day after) */
-    me.n++;me.w+=y;me.u+=uu;if(wbOffOk({voice:'',sp:g.sp,market:g.m,side:pick,price:S.price,line:S.line,date:g.d,cf:p})){off.n++;off.w+=y;off.u+=uu;}}
+    me.n++;me.w+=y;me.u+=uu;if(wbOffOk({voice:'',sp:g.sp,market:g.m,side:pick,price:S.price,line:S.line,date:g.d,cf:wbStdP(p,raw,pav,g.d)})){off.n++;off.w+=y;off.u+=uu;}}
   const A=wbPaired(post.A),B=wbPaired(post.B),rA=wbPaired(resp.A),rB=wbPaired(resp.B),hA=wbPaired(hist.A),hB=wbPaired(hist.B);
   const days=Math.max(0,Math.round((Date.parse(d0)-Date.parse(from))/864e5));const bar=opt.bar!=null?opt.bar:WOMB_BAR+WOMB_LUCK*Math.log2(Math.max(1,tried||1));
   /* everything it has learned so far, the last day included (an heir's calls use this tonight) */
@@ -451,12 +454,13 @@ if(typeof scoreCallsFor==='function'&&typeof window!=='undefined'&&!window.__WB_
         const sc=wbKidScore(sp,K,ps,(calls||[]).filter(c=>c.voice===K.key));if(sc){me.a=sc.a;me.h=sc.h;}});}catch(e){}return R;};}
 /* ══ §10 · HIGHER STANDARDS: what an evolved character may claim ═══════════════════════════════════════════════════════════
    The cap sits on the number it carries in public and on its official gates: after the Coach, the chemistry and the weather
-   have had their say, an evolved character's confidence can't top what its own record proves at the number it said, in that
-   kind of bet: the low end of that record (one standard error a level past the first) less 2.5 points a level. Worked out per
+   have had their say, a character's confidence can't top what its own record proves at the number it said, in that kind of
+   bet: the low end of that record (one standard error a level) less 2.5 points a level (the first level for everyone from
+   Nov 23, one more for every evolution). Worked out per
    call from the days before it (a posted day stands as it was); what it said is never touched, so its children and the races
-   read it exactly as before. (Nov 22, the last 30 days replayed as if every character had been Legacy 2: official calls at 80%+
-   hit 78% instead of 72%, and the official card went 224-97, −1.4u, instead of 413-246, −23.6u.) */
-const wbLegOf=v=>{const o=WB_LEGM&&WB_LEGM[v];return o&&o.n>=2?o:null;};
+   read it exactly as before. (Nov 22, the season replayed as if every character had played to the first level: official calls
+   at 80%+ hit 78% instead of 72%, and the official card went 224-98, −2.4u, instead of 428-261, −30.3u; Oct 22–Nov 7 70-15
+   +1.0u against 162-77 −4.3u, Nov 8–22 154-83 −3.4u against 266-180 −22.1u.) */
 /* what it said: its own number or its gut (an heir: its calibrated chance) */
 const wbSaid0=x=>{try{const v=CHARS[x.voice]&&CHARS[x.voice].kid?confOf(x):typeof coachBase==='function'?coachBase(x):confOf(x);return v==null||v===''||!isFinite(+v)?null:+v;}catch(e){return null;}};
 /* the kind of bet: a moneyline by its price (−600 is its own lane, and a −300 favorite isn't a −130 one), the others by side */
@@ -477,10 +481,23 @@ function wbLegTable(v,d){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=typeof 
 const wbBin=(T,s)=>T&&T.length?T.find(o=>s>=o.lo&&s<o.hi)||null:null;
 function wbBacked(Tm,Tl,s){const K=WB_LEGCFG.K,bm=wbBin(Tm,s),tm=bm?(bm.w+K*s)/(bm.n+K):s,bl=wbBin(Tl,s),t=bl?(bl.w+K*tm)/(bl.n+K):tm;return{t,n:(bl?bl.n:bm?bm.n:0)+K};}
 /* the cap on one call (c: the number it would carry otherwise) */
-function wbLegCap(x,c){if(c==null||!x||!x.voice)return c;const o=wbLegOf(x.voice);if(!o||!o.from)return c;const d=String(x.date||'').slice(0,10);if(!d||d<o.from)return c;
-  const m=x.market==='moneyline'?'ml':x.market;if(m!=='ml'&&m!=='spread'&&m!=='total')return c;const s=wbSaid0(x);if(s==null)return c;
-  const T=wbLegTable(x.voice,d),B=wbBacked(T.M[m],T.L[wbLegLane(x)],s),C=WB_LEGCFG,lv=o.n-1;
-  const cap=Math.max(0.02,B.t-C.step*lv-C.z*lv*Math.sqrt(B.t*(1-B.t)/B.n));return cap<c?+cap.toFixed(4):c;}
+/* the standard a character plays to on a given day: the first one for everyone from LEG_BASE_FROM, Legacy N from the day after
+   it evolved (each step of its history on its own day, so a later evolution never reaches back), nothing before */
+function wbLegLevel(v,d){if(!d)return 0;let L=d>=LEG_BASE_FROM?1:0;const o=WB_LEGM&&WB_LEGM[v];
+  if(o){(o.hist||[]).forEach(h=>{if(h&&h.n>L&&h.at&&d>=dayShift(h.at,1))L=h.n;});if(o.n>L&&o.from&&d>=o.from)L=o.n;}return L;}
+let WB_KCAL=new Map();   /* (an heir's calibration, as bins it can prove a number with) */
+function wbLegCap(x,c){if(c==null||!x||!x.voice)return c;const d=String(x.date||'').slice(0,10),L=wbLegLevel(x.voice,d);if(!L)return c;
+  const m=x.market==='moneyline'?'ml':x.market;if(m!=='ml'&&m!=='spread'&&m!=='total')return c;const C=WB_LEGCFG;
+  if(CHARS[x.voice]&&CHARS[x.voice].kid){   /* an heir: its number is already its measured chance; it proves it with the calls behind it */
+    const t=+(x.kp!=null?x.kp:confOf(x));if(!isFinite(t))return c;let pav=null;try{const K=(wombAll().kids||[]).find(k=>k.key===x.voice);const sig=K?K.key+'|'+JSON.stringify(K.cal||[]).length:'';
+      pav=WB_KCAL.get(sig);if(pav===undefined){pav=K&&K.cal&&K.cal.length?confPav(K.cal.map(o=>({...o}))):null;if(WB_KCAL.size>50)WB_KCAL.clear();WB_KCAL.set(sig,pav);}}catch(e){}
+    const r=x.kr!=null?+x.kr:t,bb=pav&&pav.length?pav.find(o=>r>=o.lo&&r<o.hi):null,n=(bb?bb.n:0)+WOMB_CAL;
+    const cap=Math.max(0.02,t-C.step*L-C.z*L*Math.sqrt(t*(1-t)/n));return cap<c?+cap.toFixed(4):c;}
+  const s=wbSaid0(x);if(s==null)return c;const T=wbLegTable(x.voice,d),B=wbBacked(T.M[m],T.L[wbLegLane(x)],s);
+  const cap=Math.max(0.02,B.t-C.step*L-C.z*L*Math.sqrt(B.t*(1-B.t)/B.n));return cap<c?+cap.toFixed(4):c;}
+/* an embryo's official gates play to the same first standard (its chance is its calibration; the calls behind it are its proof) */
+function wbStdP(p,raw,pav,d){if(!d||d<LEG_BASE_FROM)return p;const C=WB_LEGCFG,bb=pav&&pav.length?pav.find(o=>raw>=o.lo&&raw<o.hi):null,n=(bb?bb.n:0)+WOMB_CAL;
+  return Math.max(0.02,p-C.step-C.z*Math.sqrt(p*(1-p)/n));}
 /* the Coach's clipboard gets a fourth hand: the standard (an heir's own gates read it in wbOffOk) */
 let WB_CC0=null;
 /* (desk-coach.js loads after this file: the hand goes on once it's there, at the latest when the page has loaded) */
@@ -507,7 +524,7 @@ function wbEvolve(W,K,E,d){W.legacy=W.legacy||{};const p=E.p,o=W.legacy[p]||{n:1
   const g=K.gen||Math.max(wbGenOf(K.a,W),wbGenOf(K.b,W))+1,first=!K.genAt;K.gen=g;if(first){K.genAt=d;K.genBy=p;}
   WB_LEGM={...W.legacy};
   try{journalAdd({kind:'womb',sig:`evolve-${p}-${n}`,d,v:p,sev:'info',title:`⚡ ${wbNm(p)} evolves: Legacy ${n}${first?` · ${K.name} is Gen ${g}`:''}`,
-    what:`${K.name} outdid ${wbThe(p)} by ${E.z.toFixed(1)}σ on ${E.n} of its calls over ${E.days} days, its official calls ${wbU(E.off)} against ${wbU(E.offP)}. From ${wbMd(dayShift(d,1))} ${wbThe(p)} plays to Legacy ${n} standards: it may only claim what its own record proves at the number it says (the low end of it, ${n-1} standard error${n-1===1?'':'s'} down) less ${+(LEG_STEP*(n-1)*100).toFixed(1)} points.${first?` ${K.name} earns its generation: Gen ${g}.`:''}`});}catch(e){}
+    what:`${K.name} outdid ${wbThe(p)} by ${E.z.toFixed(1)}σ on ${E.n} of its calls over ${E.days} days, its official calls ${wbU(E.off)} against ${wbU(E.offP)}. From ${wbMd(dayShift(d,1))} ${wbThe(p)} plays to Legacy ${n} standards: it may only claim what its own record proves at the number it says (the low end of it, ${n} standard errors down) less ${+(LEG_STEP*n*100).toFixed(1)} points.${first?` ${K.name} earns its generation: Gen ${g}.`:''}`});}catch(e){}
   return W.legacy[p];}
 /* §12 · the weakest graduate: the smallest lead over its parents since its first day */
 function wbWeakest(W,IX,d,out){let best=null;(W.kids||[]).forEach(K=>{if(!K||K.st!=='grad')return;let r=out&&out.kid&&out.kid[K.key];
@@ -771,13 +788,13 @@ function wbLineageHtml(W){const KS=(W.kids||[]).filter(k=>k&&k.key);if(!KS.lengt
   const rows=KS.slice().sort((x,y)=>g(x)-g(y)||String(x.born).localeCompare(String(y.born))).map(k=>`<div style="font-size:12.5px;margin-top:5px">${k.st==='rookie'?'🍼':k.st==='grad'?(k.genAt?'⚡':'🎓'):'🚪'} <b style="color:${wbHex(k.color)}">${txtEsc(k.name)}</b> <span class="muted">${k.genAt?`Gen ${g(k)}`:`Gen ${g(k)} by blood`} · child of ${txtEsc(wbNm(k.a))} and ${txtEsc(wbNm(k.b))} · born ${txtEsc(wbMd(k.born))}</span></div>`).join('');
   return`<div class="card"><div style="font:800 14px system-ui">🌳 The lineage</div><div class="muted" style="margin-top:4px">The founders are Gen 1. An heir carries its generation by blood and earns the title the day it makes a parent evolve.</div>${rows}</div>`;}
 function evoHtml(){const W=wombAll();if(!WOMB_MEMO||WOMB_MEMO.d!==today())wombRunAsync().then(()=>{try{if(GEN_TAB==='evo')genRender();}catch(e){}}).catch(()=>{});
-  const head=`<div class="card"><div style="font:800 15px system-ui">⚡ Evolution</div><div class="muted" style="margin-top:4px">A graduate keeps racing both of its parents. Once it outdoes one by so much (${EVO_BAR.toFixed(0)}σ+ on ${EVO_N}+ of that parent's calls over ${EVO_DAYS}+ days, its official calls making more money, and holding its own in the parent's best lanes), the parent has to evolve: <b>Legacy 2</b>, then 3, up to ${LEGACY_MAX}. The child earns its generation: <b>Gen 2</b> (a child of a Gen 2 earns Gen 3). An evolved character may only claim what its own record proves at the number it says, in that kind of bet: the low end of that record (one standard error for every level past the first) less ${+(LEG_STEP*100).toFixed(1)} points a level. Its 80% has to be the real thing. The race against it starts over the day after it evolves.</div></div>`;
+  const head=`<div class="card"><div style="font:800 15px system-ui">⚡ Evolution</div><div class="muted" style="margin-top:4px">A graduate keeps racing both of its parents. Once it outdoes one by so much (${EVO_BAR.toFixed(0)}σ+ on ${EVO_N}+ of that parent's calls over ${EVO_DAYS}+ days, its official calls making more money, and holding its own in the parent's best lanes), the parent has to evolve: <b>Legacy 2</b>, then 3, up to ${LEGACY_MAX}. The child earns its generation: <b>Gen 2</b> (a child of a Gen 2 earns Gen 3). Since ${txtEsc(wbMd(LEG_BASE_FROM))} every character plays to the first standard: it may only claim what its own record proves at the number it says, in that kind of bet (the low end of that record, one standard error down, less ${+(LEG_STEP*100).toFixed(1)} points). Each evolution adds another standard error and ${+(LEG_STEP*100).toFixed(1)} points. Its 80% has to be the real thing. The race against it starts over the day after it evolves.</div></div>`;
   const V=roGet(VOICES_KEY,[],30e3)||[];const LG=Object.entries(W.legacy||{}).filter(([v,o])=>o&&o.n>=2).sort((x,y)=>y[1].n-x[1].n||String(y[1].at).localeCompare(String(x[1].at)));
   const board=LG.length?LG.map(([v,o])=>{const mine=V.filter(x=>x&&x.voice===v&&String(x.date).slice(0,10)>=o.from);
       const raw=x=>{try{return CHARS[x.voice]&&CHARS[x.voice].kid?confOf(x):WB_CC0?WB_CC0(x):confOf(x);}catch(e){return null;}},cut=mine.filter(x=>{const c=raw(x);return c!=null&&wbLegCap(x,c)<c-0.0005;}).length;
       const gr=mine.filter(x=>x.graded&&!x.push&&x.hit!=null),of=gr.filter(x=>{try{return isOfficial(x);}catch(e){return false;}}),ow=of.filter(x=>x.hit).length;
       return`<div class="card" style="border-left:4px solid ${wbCol(v)}"><div style="font:900 17px system-ui;color:${wbCol(v)}">${txtEsc(wbNm(v))} <span style="color:#f5c542">· Legacy ${o.n}</span></div>
-        <div class="muted" style="margin-top:3px">Since ${txtEsc(wbMd(o.from))}: it claims only what its own record proves (the low end, ${o.n-1} standard error${o.n-1===1?'':'s'} down, less ${+(LEG_STEP*(o.n-1)*100).toFixed(1)} points)</div>
+        <div class="muted" style="margin-top:3px">Since ${txtEsc(wbMd(o.from))}: it claims only what its own record proves (the low end, ${o.n} standard errors down, less ${+(LEG_STEP*o.n*100).toFixed(1)} points)</div>
         ${(o.hist||[]).slice().reverse().map(x=>`<div style="font-size:12.5px;margin-top:4px">⚡ Legacy ${x.n} on ${txtEsc(wbMd(x.at))}: ${txtEsc(x.byName||wbNm(x.by))} outdid it by ${(+x.z).toFixed(1)}σ on ${x.calls} of its calls over ${x.days} days (official ${wbU(x.off)} vs ${wbU(x.offP)})</div>`).join('')}
         <div class="mono muted" style="font-size:11px;margin-top:6px">Since then: ${mine.length} call${mine.length===1?'':'s'}, ${cut} held to a lower number than it said · official ${ow}-${of.length-ow}</div></div>`;}).join('')
     :`<div class="card"><div class="muted">No character has evolved yet. The first can't until an heir graduates and then keeps outdoing a parent.</div></div>`;
@@ -828,7 +845,7 @@ if(typeof pubBloodlines==='function'&&typeof window!=='undefined'&&!window.__WB_
       if(R){R.womb=womb;R.north=wbNorthPub();}}catch(e){}return R;};}
 /* the North Star for the public page: the desk's rate, who's closest, exact finals (numbers only, no method talk) */
 function wbNorthPub(){try{const N=wbNorth(),r3=x=>x==null?null:+(+x).toFixed(3);
-  return{cf:N.cf,goal:N.goal,days:N.days,n:N.all.n,w:N.all.w,rate:r3(N.all.rate),desk:!!N.desk,
+  return{cf:N.cf,goal:N.goal,days:N.days,n:N.all.n,w:N.all.w,rate:r3(N.all.rate),desk:!!N.desk,std:LEG_BASE_FROM,
     top:Object.entries(N.by).filter(([v,o])=>o.n>=NORTH_N).sort((x,y)=>(y[1].rate||0)-(x[1].rate||0)).slice(0,5).map(([v,o])=>({v,who:charName(v),n:o.n,rate:r3(o.rate),star:!!o.star})),
     exact:{n:N.exact.n,e:N.exact.e,rate:r3(N.exact.rate),sp:Object.fromEntries(Object.entries(N.exact.sp).map(([s,o])=>[s,{n:o.n,e:o.e,rate:r3(o.rate)}]))}};}catch(e){return null;}}
 function dnaHtml(){const IX=wbIndex();const vs=[...new Set(wbEligible().concat([...META_VOICES].filter(v=>CHARS[v])))].filter(v=>(IX.byV[v]||[]).length);if(!vs.length)return`<div class="card"><div class="muted">No records yet.</div></div>`;
