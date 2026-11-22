@@ -70,7 +70,7 @@ const wvBins=()=>CONF_EDGES.slice(0,-1).map((lo,i)=>({lo,hi:CONF_EDGES[i+1],w:0,
 /* walk-forward: every day is predicted only from the days before it; returns each call's
    prediction (graded and live) and the fitted state (beliefs, bias) for the family tree */
 function wvRun(V,H){return genDrain(wvRunG(V,H));}
-function* wvRunG(V,H){const rows=V.filter(x=>x&&CHARS[x.voice]&&['ml','spread','total'].includes(x.market)&&x.price!=null&&!x.pre&&!x.push&&(x.graded?x.hit!=null:true))
+function* wvRunG(V,H){const rows=V.filter(x=>x&&CHARS[x.voice]&&!CHARS[x.voice].kid&&['ml','spread','total'].includes(x.market)&&x.price!=null&&!x.pre&&!x.push&&(x.graded?x.hit!=null:true))
     .map(x=>({x,d:String(x.date||'').slice(0,10)})).filter(r=>r.d).sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);
   const bias={},w={},cnt={},ownBins={},finBins={},pred=new Map();let lastD=null;const keep=Math.pow(0.5,1/Math.max(1,H.hl));
   const prior=(v,t)=>wvPrior(H,v,t);
@@ -161,7 +161,7 @@ async function heirsRunAsync(force){if(typeof SAFE_MODE!=='undefined'&&SAFE_MODE
   if(!force&&HEIR_MEMO&&HEIR_MEMO.d===d&&Date.now()-HEIR_MEMO.ts<30*60e3)return HEIR_MEMO;
   const V=roGet(VOICES_KEY,[],30e3)||[];const H=heirsAll();
   /* the same births heirsRun would do, first — so every walk-forward it needs is already in memory */
-  {const seen=new Set();V.forEach(x=>{if(x&&CHARS[x.voice]&&['ml','spread','total'].includes(x.market))seen.add(x.voice+'|'+x.market);});let born=0;
+  {const seen=new Set();V.forEach(x=>{if(x&&CHARS[x.voice]&&!CHARS[x.voice].kid&&['ml','spread','total'].includes(x.market))seen.add(x.voice+'|'+x.market);});let born=0;
     seen.forEach(k=>{const[v,m]=k.split('|');const C=heirCell(H,v,m);const first=!(C.heirs||[]).length;
       while((C.heirs||[]).filter(h=>h.st==='shadow').length<2){if(!heirSpawn(C,H,first||HEIR_BORN>d?HEIR_BORN:d,first?'the first generation of heirs':'keeping two heirs in the shadows'))break;born++;}});
     if(born)set(HEIR_KEY,H);}
@@ -170,7 +170,7 @@ async function heirsRunAsync(force){if(typeof SAFE_MODE!=='undefined'&&SAFE_MODE
   await deskIdle();return heirsRun(false);}
 function heirsRun(force){const d=today();if(SAFE_MODE&&!force)return HEIR_MEMO||{d,ts:Date.now(),cells:{},runs:{}};if(!force&&HEIR_MEMO&&HEIR_MEMO.d===d&&Date.now()-HEIR_MEMO.ts<30*60e3)return HEIR_MEMO;
   const V=roGet(VOICES_KEY,[],30e3)||[];const H=heirsAll();const cellsSeen=new Set();
-  V.forEach(x=>{if(x&&CHARS[x.voice]&&['ml','spread','total'].includes(x.market))cellsSeen.add(x.voice+'|'+x.market);});
+  V.forEach(x=>{if(x&&CHARS[x.voice]&&!CHARS[x.voice].kid&&['ml','spread','total'].includes(x.market))cellsSeen.add(x.voice+'|'+x.market);});
   /* the first generation's definitions were fixed in the build before Oct 18, so every game from
      Oct 18 on is one they were never tuned on — wherever and whenever a device first runs them */
   cellsSeen.forEach(k=>{const[v,m]=k.split('|');const C=heirCell(H,v,m);const first=!(C.heirs||[]).length;
@@ -178,7 +178,7 @@ function heirsRun(force){const d=today();if(SAFE_MODE&&!force)return HEIR_MEMO||
   /* one walk-forward per distinct heir parameter set */
   const P={},runs={};Object.values(H.cells).forEach(C=>(C.heirs||[]).forEach(h=>{if(h.st==='retired')return;const sig=JSON.stringify(h.p);if(!runs[sig])runs[sig]=wvRunMemo(h.p,force);P[C.v+'|'+C.m+'|'+h.id]=runs[sig];}));
   if(!runs[JSON.stringify(WV_DEF)])runs[JSON.stringify(WV_DEF)]=wvRunMemo(WV_DEF,force);
-  const graded=V.filter(x=>x&&x.graded&&x.hit!=null&&!x.push&&x.price!=null&&CHARS[x.voice]);const out={d,ts:Date.now(),cells:{},runs};let changed=false;
+  const graded=V.filter(x=>x&&x.graded&&x.hit!=null&&!x.push&&x.price!=null&&CHARS[x.voice]&&!CHARS[x.voice].kid);const out={d,ts:Date.now(),cells:{},runs};let changed=false;
   Object.values(H.cells).forEach(C=>{const calls=graded.filter(x=>x.voice===C.v&&x.market===C.m);const champP=x=>confOf(x);const res={heirs:[]};
     (C.heirs||[]).filter(h=>h.st==='shadow'||h.st==='champion').forEach(h=>{const R=P[C.v+'|'+C.m+'|'+h.id];if(!R)return;const hp=x=>heirCap(R.pred.get(x.id),x);
       const post=calls.filter(x=>String(x.date).slice(0,10)>=h.born),pre=calls.filter(x=>String(x.date).slice(0,10)<h.born);
@@ -204,7 +204,7 @@ const heirsRO=()=>{const H=roGet(HEIR_KEY,null,10e3);return H&&H.v===1&&H.cells?
 /* when an heir holds the chair, the calls it stamps carry its confidence (the original kept beside it) */
 if(typeof confStamp==='function'&&typeof window!=='undefined'&&!window.__HEIR_CS__){window.__HEIR_CS__=1;const CS0=confStamp;
   confStamp=function(calls){CS0(calls);try{const H=heirsRO();if(!H||!Object.values(H.cells).some(C=>C.champ&&C.champ.id!=='base'))return;
-      (calls||[]).forEach(c=>{if(!CHARS[c.voice]||c.cf==null)return;const C=H.cells[c.voice+'|'+c.market];if(!C||C.champ.id==='base'||String(c.date).slice(0,10)<C.champ.since)return;
+      (calls||[]).forEach(c=>{if(!CHARS[c.voice]||CHARS[c.voice].kid||c.cf==null)return;const C=H.cells[c.voice+'|'+c.market];if(!C||C.champ.id==='base'||String(c.date).slice(0,10)<C.champ.since)return;
         const run=wvRunMemo(C.champ.p||heirParams(C.champ.id,C)||WV_DEF);let p=run.pred.get(c.id);if(p==null)p=wvPredictOne(c,run);p=heirCap(p,c);
         if(p!=null&&isFinite(p)){c.cfo=c.cf;c.cf=+(+p).toFixed(4);c.cfg=C.gen;}});}catch(e){console.warn('heir stamp',e);}};}
 try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='heirs')){const i=AP_STEPS.findIndex(s=>s[0]==='status');
@@ -223,7 +223,7 @@ if(typeof syncMergeVal==='function'&&typeof window!=='undefined'&&!window.__HEIR
 /* one pass over the ledger for every character's beliefs and recent calls (the family tree renders 13 cards) */
 let HB_MEMO=null;
 function heirLedgerMap(){if(HB_MEMO&&Date.now()-HB_MEMO.ts<60e3&&HB_MEMO.d===today())return HB_MEMO;const V=roGet(VOICES_KEY,[],30e3)||[];const B={},Rc={};const from=dayShift(today(),-21);
-  V.forEach(x=>{if(!x||!CHARS[x.voice]||!x.graded||x.hit==null||x.push)return;if(String(x.date).slice(0,10)>=from)(Rc[x.voice]=Rc[x.voice]||[]).push(x);const p=confOf(x);if(p==null)return;
+  V.forEach(x=>{if(!x||!CHARS[x.voice]||CHARS[x.voice].kid||!x.graded||x.hit==null||x.push)return;if(String(x.date).slice(0,10)>=from)(Rc[x.voice]=Rc[x.voice]||[]).push(x);const p=confOf(x);if(p==null)return;
     const by=B[x.voice]||(B[x.voice]={});wvTags(x).forEach(t=>{const k=x.sp+'|'+t;const o=by[k]||(by[k]={n:0,w:0,e:0,var:0});o.n++;if(x.hit)o.w++;o.e+=p;o.var+=p*(1-p);});});
   HB_MEMO={ts:Date.now(),d:today(),B,Rc};return HB_MEMO;}
 function heirBeliefs(v,R){const out=[];try{const by=heirLedgerMap().B[v]||{};

@@ -119,9 +119,12 @@ const pk = (a, b) => [a, b].sort().join('×');
 
   /* ── Dec 4: eleven days in ── */
   E(`(()=>{const W=wombAll();const L=W.litters.find(L=>L.a==='Sim'&&L.b==='Judge');const R=L.embryos[1].recipe;['nhl|ml|fav','nhl|ml|dog'].forEach(k=>{R.lanes[k]={a:-2,b:0};});set(WOMB_KEY,W);})()`);   /* the sibling reads the Simulator backwards */
+  /* v3.3.0 · a due embryo is born at once (birth1122_test.js). Here the nursery is full (six living heirs, from parents with no calls in
+     this world), so the due one waits — and the rest of the womb's story plays out as it did in Phase 1. */
+  E(`(()=>{const W=wombAll();W.kids=[1,2,3,4,5,6].map(i=>({key:'H_X'+i,id:'X'+i,litter:'LX',a:'Pred',b:'Consensus',arch:'Steady All-rounder',temper:'Steady',craft:'All-rounder',name:'Placeholder '+i,chip:'P'+i,title:'The Steady Hand',color:'#888888',crest:{g:'⭐',t:'⚓'},creed:'x',pub:{bio:'x',origin:'x'},born:'2026-11-01',liveFrom:'2026-11-02',since:'2026-10-20',conceived:'2026-10-19',recipe:{P:{b:0.45,T:1,contrast:1},lanes:{},vacc:[],fade:[],hot:[],mut:'none'},domA:[],domB:[],n:0,st:'rookie',womb:{days:10},cal:[]}));set(WOMB_KEY,W);})()`);
   go('2026-12-04'); const VJ4 = E('localStorage.getItem(VOICES_KEY)'); const R4 = J(`wombRun(true).emb`), SJ4 = lit('Sim', 'Judge'); const E1 = SJ4.embryos[0], E2 = SJ4.embryos[1], E3 = SJ4.embryos[2]; const a = R4[e1];
   const n4 = nCalls('Sim', '2026-11-23', '2026-12-04');
-  T(`🍼 Dec 4: the pure blend is DUE — it beat both parents on games it never saw by 2σ or more (${n4} calls against each, 11 days)`, E1.st === 'due' && E1.dueAt === '2026-12-04' && a.A.n === n4 && a.B.n === n4 && a.days === 11 && a.bar === 2 && a.A.z >= 2 && a.B.z >= 2, JSON.stringify({ zA: a.A.z, zB: a.B.z, bar: a.bar, n: [a.A.n, a.B.n] }));
+  T(`🍼 Dec 4: the pure blend is DUE — it beat both parents on games it never saw by 2σ or more (${n4} calls against each, 11 days); the nursery is full, so it waits for room`, E1.st === 'due' && E1.dueAt === '2026-12-04' && a.A.n === n4 && a.B.n === n4 && a.days === 11 && a.bar === 2 && a.A.z >= 2 && a.B.z >= 2, JSON.stringify({ zA: a.A.z, zB: a.B.z, bar: a.bar, n: [a.A.n, a.B.n] }));
   T('…its official calls made at least as much money as each parent\'s', a.duA >= -1 && a.duB >= -1 && a.off.n > 0, JSON.stringify({ off: a.off, A: a.offA, B: a.offB }));
   T('…and it held its own inside each parent\'s best lanes (respect: within a standard error of the Simulator on its moneylines, the Judge on its totals)', a.rA.n >= 15 && a.rA.z >= -1 && a.rB.n >= 15 && a.rB.z >= -1, JSON.stringify([a.rA, a.rB]));
   T('🕊 the sibling that read the Simulator\'s moneylines backwards is lost — clearly worse than a parent on games it never saw', E2.st === 'lost' && E2.lostAt === '2026-12-04' && new RegExp(`σ worse than The (Simulator|Judge) on ${n4} games it never saw`).test(E2.why) && Math.min(R4[e2].A.z, R4[e2].B.z) <= -2, E2.why);
@@ -130,7 +133,7 @@ const pk = (a, b) => [a, b].sort().join('×');
   T('…the bar rises with every embryo tried (2σ for the first, about 2.6σ for the fifth)', a.bar === 2 && bar3 > 2.55 && bar3 < 2.6, String(bar3));
   T('…still nothing changes a pick', E('localStorage.getItem(VOICES_KEY)') === VJ4);
   const J4 = J(`journalAll().filter(x=>x.kind==='womb'&&x.d==='2026-12-04').map(x=>x.title)`);
-  T('the chronicle: 🍼 due, 🕊 lost, 🥚 a new embryo', J4.some(t => /^🍼 The Simulator × The Judge: the Prodigy Architect is due/.test(t)) && J4.some(t => /^🕊 /.test(t)) && J4.some(t => /^🥚 /.test(t)), JSON.stringify(J4));
+  T('the chronicle: 🍼 due (waiting for room), 🕊 lost, 🥚 a new embryo', J4.some(t => /^🍼 The Simulator × The Judge: due, waiting for room/.test(t)) && J4.some(t => /^🕊 /.test(t)) && J4.some(t => /^🥚 /.test(t)), JSON.stringify(J4));
   const room4 = E('wombHtml()'), chr4 = E('genChronicleHtml()');
   T('…and the rooms show it (🍼 due · 🕊 lost in the womb, the same in the chronicle)', /🍼 due/.test(room4) && /🕊 lost/.test(room4) && /🍼/.test(chr4) && /🕊/.test(chr4));
 

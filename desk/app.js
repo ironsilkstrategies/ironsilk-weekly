@@ -1101,6 +1101,17 @@ function blRow(c, need) {
     ${b ? `<div class="bl-bar" role="img" aria-label="${p}% of the way to a new generation"><i style="width:${p}%"></i></div><div class="bl-s">${p}% of the way to a new generation · ${Math.min(b.n, need.n)}/${need.n} games watched</div>` : ''}
     ${(c.hist || []).length ? `<div class="bl-s">Generation ${c.gen} took over ${esc(shortDay(c.hist[c.hist.length - 1].to || deskDay()))}</div>` : ''}</div>`;
 }
+/* v54 · Bloodlines 2.0, births (Chris, Nov 22: "once born they become a character on the app with their own name style and
+   ideology"): an heir born of two characters wears a crest split in its parents' colors, says whose child it is and when it was
+   born, and carries its rookie badge until it graduates. The womb's litters get a line under the roster. */
+const KID_G = new Set(['🔮', '📐', '🎯', '⚙️', '⭐']), KID_T = new Set(['✨', '⚡', '🌗', '⚓']);
+function crestSvg(k, px, cls) { const a = okColor(k.ca), b = okColor(k.cb), g = KID_G.has(k.g) ? k.g : '⭐', t = KID_T.has(k.t) ? k.t : '⚓';
+  return `<svg class="crest${cls ? ' ' + cls : ''}" viewBox="0 0 64 72" width="${px}" height="${Math.round(px * 1.125)}" aria-hidden="true"><path d="M32 3 L5 11 V35 C5 52 18 63 32 69 Z" fill="${a}"/><path d="M32 3 L59 11 V35 C59 52 46 63 32 69 Z" fill="${b}"/><path d="M32 3 L59 11 V35 C59 52 46 63 32 69 C18 63 5 52 5 35 V11 Z" fill="none" stroke="#F2D067" stroke-width="2.5" stroke-linejoin="round"/><circle cx="32" cy="38" r="14" fill="#06190F" stroke="#F2D067" stroke-width="1.5"/><text x="32" y="43.5" font-size="15" text-anchor="middle">${g}</text><text x="32" y="22" font-size="9" text-anchor="middle">${t}</text></svg>`; }
+const kidSt = k => (k.st === 'grad' ? '🎓 Graduated' : k.st === 'retired' ? '🚪 Retired' : '🍼 Rookie');
+const kidTag = c => (c.kid ? `<span class="kidtag">${kidSt(c.kid)}</span>` : '');
+const kidAge = k => Math.round((noon(deskDay()) - noon(String(k.born || '').slice(0, 10))) / 864e5);
+function familyHtml(c) { const k = c.kid;
+  return `<div class="family">${crestSvg(k, 64)}<div><b>Child of ${esc(k.a)} and ${esc(k.b)}</b><span>Born ${esc(shortDay(String(k.born || '').slice(0, 10)))}${k.arch ? ' · ' + esc(k.arch) : ''} · ${kidSt(k)}</span>${k.creed ? `<q>${esc(k.creed)}</q>` : ''}${k.st === 'rookie' ? '<small>A rookie keeps its own record from its first day. It graduates once it keeps beating both of its parents for three straight weeks.</small>' : ''}</div></div>`; }
 function viewCast() {
   const el = $('#v-cast'), F = S.feed || {}, C = F.characters || [], B = F.bloodlines, need = (B && B.need) || { n: 100, days: 10 };
   if (!C.length) { el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">The roster shows up here once the desk publishes it.</p>${footHtml()}`; return; }
@@ -1113,12 +1124,16 @@ function viewCast() {
   const mark = r => (r === 'win' ? '<span class="mk w">✓</span>' : r === 'loss' ? '<span class="mk l">✗</span>' : r === 'push' ? '<span class="mk p">=</span>' : '<span class="mk">•</span>');
   if (!pick) {
     const race = cells.filter(c => c.best).map(c => ({ c, p: crownPct(c.best, need) })).sort((a, b) => b.p - a.p).slice(0, 5);
+    const fresh = C.filter(c => c.kid && c.kid.born && kidAge(c.kid) >= 0 && kidAge(c.kid) <= 7), wl = (B && B.womb && B.womb.litters) || [];
     el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">Every pick on TheDesk comes from these voices. Each one sees the game its own way and keeps its own record. Pick one to see everything it’s called.</p>${sel}
+      ${fresh.length ? `<div class="newheir">${fresh.map(c => `<button type="button" class="nh" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}">${crestSvg(c.kid, 40)}<span><b>👶 New on the desk: ${esc(c.name)}</b><small>Child of ${esc(c.kid.a)} and ${esc(c.kid.b)} · born ${esc(shortDay(String(c.kid.born).slice(0, 10)))}</small></span><i>Meet →</i></button>`).join('')}</div>` : ''}
       <div class="castgrid">${C.map(c => { const g = c.record || {}, pr = c.props || {}, today = (c.picks || []).length;
-        return `<button type="button" class="castcard mini" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span><span class="cc-rec">${todayTxt(c) || (today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today')}</span></div>
-          <h3>${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span></div><span class="cc-more">See profile →</span></button>`; }).join('')}</div>
+        return `<button type="button" class="castcard mini${c.kid ? ' kid' : ''}" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${kidTag(c)}<span class="cc-rec">${todayTxt(c) || (today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today')}</span></div>
+          <h3>${c.kid ? crestSvg(c.kid, 30, 'cc-crest') : ''}${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span></div><span class="cc-more">See profile →</span></button>`; }).join('')}</div>
       ${race.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div><p class="note">Every character has heirs learning in the background. When one proves it’s better, it takes over: a new generation.</p>
-        <div class="paper race"><div class="tix-h"><b>Closest to a new generation</b></div>${race.map(({ c, p }, i) => `<div class="rcr"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div></section>` : ''}${footHtml()}`;
+        <div class="paper race"><div class="tix-h"><b>Closest to a new generation</b></div>${race.map(({ c, p }, i) => `<div class="rcr"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div></section>` : ''}
+      ${wl.length ? `<section class="crown womb"><div class="vh"><h2 class="h2">The womb</h2></div><p class="note">Two characters whose strengths cover each other are expecting. A child is born only if it beats both of its parents on games it never saw.</p>
+        <div class="paper race">${wl.map(L => `<div class="rcr"><span class="n">🥚</span><span class="t">${esc(L.a)} × ${esc(L.b)}<small>${L.arch ? 'a ' + esc(L.arch) : ''}${L.conceived ? ' · since ' + esc(shortDay(String(L.conceived).slice(0, 10))) : ''}</small></span><span class="wst">${L.due ? 'Due' : 'Expecting'}</span></div>`).join('')}</div></section>` : ''}${footHtml()}`;
     return;
   }
   const c = C.find(x => x.v === pick), g = c.record || {}, pr = c.props || {}, lines = cells.filter(x => x.v === c.v);
@@ -1129,7 +1144,7 @@ function viewCast() {
   const wl = o => (o && o.w + o.l ? `${o.w}–${o.l}` : '—');
   el.innerHTML = `<button type="button" class="link back" data-act="castpick" data-v="">← All characters</button>${sel}
     <article class="profile" style="--cc:${okColor(c.color)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${vipBadge()}</div>
-      <h1 class="title">${esc(c.name)}</h1>${c.title ? `<p class="cc-title big">${esc(c.title)}</p>` : ''}<p class="lede">${esc(c.bio || '')}</p>
+      <h1 class="title">${esc(c.name)}</h1>${c.title ? `<p class="cc-title big">${esc(c.title)}</p>` : ''}${c.kid ? familyHtml(c) : ''}<p class="lede">${esc(c.bio || '')}</p>
       ${c.origin ? `<div class="origin"><b>Where the eye comes from</b><p>${esc(c.origin)}</p></div>` : ''}
       <div class="statrow"><div><b>${rec(g)}</b><span>Official game picks${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span></div><div><b>${rec(pr)}</b><span>Props</span></div><div><b>${(c.picks || []).length}</b><span>Picks today</span></div></div>
       ${(c.best || []).length ? `<h2 class="h2">Best at</h2><div class="lanes">${c.best.map(x => `<span class="lane good">${esc(x.lane)} <b>${x.w}–${x.l}</b>${x.u ? ` ${x.u > 0 ? '+' : ''}${x.u}u` : ''}</span>`).join('')}${(c.still || []).map(x => `<span class="lane meh">Still learning: ${esc(x.lane)} <b>${x.w}–${x.l}</b></span>`).join('')}</div>` : ''}

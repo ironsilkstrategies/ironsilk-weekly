@@ -130,7 +130,8 @@ const HEAVY_ML=-500,HV_FROM='2026-11-08';
 const isHeavyML=x=>!!x&&(x.market==='ml'||x.market==='moneyline')&&x.price!=null&&x.price!==''&&isFinite(+x.price)&&Math.abs(+x.price)>=100&&+x.price<=HEAVY_ML;
 /* v2.93 · the Coach's clipboard decides how much confidence each call may carry (desk-coach.js) */
 const coachOk=x=>typeof coachConf==='function'?coachConf(x):confOf(x);
-function isOfficial(x){if(x&&String(x.date||'').slice(0,10)>=HV_FROM){if(isHeavyML(x)&&x.voice!=='Sim')return false;
+function isOfficial(x){if(x&&CHARS[x.voice]&&CHARS[x.voice].kid)return typeof wbOffOk==='function'&&wbOffOk(x);   /* v3.3.0 · a born heir: its own chance at the floor (desk-womb.js) */
+  if(x&&String(x.date||'').slice(0,10)>=HV_FROM){if(isHeavyML(x)&&x.voice!=='Sim')return false;
     if(x.voice==='Brain'&&x.bG!=null)return typeof brainOfficial==='function'?brainOfficial(x):false;
     if(x.voice==='Sim'&&!isHeavyML(x)){const c=coachOk(x);return c!=null&&c>=0.80-1e-9&&!x.kof&&confPriced(x)&&!confPre(x)&&confPays(x);}}
   if(x&&(x.voice==='Trends'&&x.hG!=null||x.voice==='Coach'&&x.cG!=null||x.voice==='Pred'&&x.oG!=null||x.voice==='Most common'&&x.kG!=null))return coachOk(x)*100>=(x.market==='ml'?75:70)-1e-9&&!x.kof&&confPriced(x)&&!confPre(x);   /* v2.91/v2.93 · the Historian's and the Coach's gut */
