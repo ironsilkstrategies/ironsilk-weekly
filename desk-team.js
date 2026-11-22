@@ -21,6 +21,8 @@ const TM_SINGLE=2,TM_PARLAY=5,TM_KEY='d4.teamlab';
 const TM_MAX_FAV=-500,TM_CAP_FROM='2026-11-22',TM_RULE='cap500';   /* a lab saved under the old rule reads as not run yet */
 const tmReal=c=>!!c&&c.price!=null&&c.price!==''&&isFinite(+c.price)&&Math.abs(+c.price)>=100&&!(typeof noLineCall==='function'&&noLineCall(c));
 const tmOk=(c,d,all)=>tmReal(c)&&(!(all||String(d).slice(0,10)>=TM_CAP_FROM)||+c.price>=TM_MAX_FAV);
+/* a character's first 2 playable calls of a day, stopping as soon as it has them (the lists now hold every game) */
+function tmFirst2(L,d,all){const o=[];if(L)for(const c of L){if(tmOk(c,d,all)){o.push(c);if(o.length===2)break;}}return o;}
 /* ── 1 · the race ── */
 function lgChaseFrac(c,off){const cf=confOf(c);if(!off)return 0.025;return Math.max(0.05,Math.min(0.08,0.05+((cf||0.7)-0.70)*0.3));}
 function lgChaseWeek(ws,BYV,CP,CPX){const we=dayShift(ws,6);const days=[];for(let i=0;i<7;i++)days.push(dayShift(ws,i));const S={};
@@ -54,13 +56,13 @@ function tmTop2(){const V=roGet(VOICES_KEY,[],30e3)||[];if(TM_TOP&&TM_TOP.n===V.
   TM_TOP={ts:Date.now(),n:V.length,m};return m;}
 /* a team's day: each member's top 2, no repeated game/side → up to 8 legs */
 function tmDay(team,d,T,all){const byV=(T||tmTop2())[d]||{};const legs=[];const used=new Set();
-  team.forEach(v=>{let n=0;(byV[v]||[]).forEach(c=>{if(n>=2)return;if(!tmOk(c,d,all))return;const k=c.sp+'|'+c.game+'|'+c.market;if(used.has(k))return;used.add(k);legs.push({v,c});n++;});});return legs;}
+  team.forEach(v=>{let n=0;for(const c of byV[v]||[]){if(n>=2)break;if(!tmOk(c,d,all))continue;const k=c.sp+'|'+c.game+'|'+c.market;if(used.has(k))continue;used.add(k);legs.push({v,c});n++;}});return legs;}
 function tmGradeDay(legs){let hit=0,miss=0,pend=0,push=0,dec=1;legs.forEach(({c})=>{if(!c.graded){pend++;return;}if(c.push||c.hit==null){push++;return;}if(c.hit){hit++;dec*=americanToDecimal(c.price);}else miss++;});
   const n=legs.length;const done=pend===0;const cashed=done&&miss===0&&hit>0;return{n,hit,miss,pend,push,dec,done,cashed,full:legs.reduce((a,{c})=>a*americanToDecimal(c.price),1)};}
 /* leg hit rate of a character's daily top 2, over the window before a date */
-function tmForm(v,before,days){const T=tmTop2();const lo=dayShift(before,-(days||28));let w=0,n=0;Object.entries(T).forEach(([d,byV])=>{if(d<lo||d>=before)return;(byV[v]||[]).filter(c=>tmOk(c,d)).slice(0,2).forEach(c=>{if(!c.graded||c.push||c.hit==null)return;n++;if(c.hit)w++;});});return{w,n,r:(w+5)/(n+10)};}
-function tmOverlap(v,team,before){const T=tmTop2();const lo=dayShift(before,-28);let same=0,n=0;Object.entries(T).forEach(([d,byV])=>{if(d<lo||d>=before)return;const mine=(byV[v]||[]).filter(c=>tmOk(c,d)).slice(0,2);
-    const theirs=new Set();team.forEach(t=>(byV[t]||[]).filter(c=>tmOk(c,d)).slice(0,2).forEach(c=>theirs.add(c.sp+c.game+c.market+c.side)));mine.forEach(c=>{n++;if(theirs.has(c.sp+c.game+c.market+c.side))same++;});});return n?same/n:0;}
+function tmForm(v,before,days){const T=tmTop2();const lo=dayShift(before,-(days||28));let w=0,n=0;Object.entries(T).forEach(([d,byV])=>{if(d<lo||d>=before)return;tmFirst2(byV[v],d).forEach(c=>{if(!c.graded||c.push||c.hit==null)return;n++;if(c.hit)w++;});});return{w,n,r:(w+5)/(n+10)};}
+function tmOverlap(v,team,before){const T=tmTop2();const lo=dayShift(before,-28);let same=0,n=0;Object.entries(T).forEach(([d,byV])=>{if(d<lo||d>=before)return;const mine=tmFirst2(byV[v],d);
+    const theirs=new Set();team.forEach(t=>tmFirst2(byV[t],d).forEach(c=>theirs.add(c.sp+c.game+c.market+c.side)));mine.forEach(c=>{n++;if(theirs.has(c.sp+c.game+c.market+c.side))same++;});});return n?same/n:0;}
 function tmDraft(ws,capA,capB){const pool=TM_ROSTER(ws).filter(v=>v!==capA&&v!==capB);const A=[capA],B=[capB];const log=[];
   for(let r=0;r<6;r++){const team=r%2?B:A;const cap=team[0];if(!pool.length)break;
     const sc=pool.map(v=>{const f=tmForm(v,ws);const o=tmOverlap(v,team,ws);return{v,f,o,s:f.r-0.05*o};}).sort((a,b)=>b.s-a.s);const pk=sc[0];team.push(pk.v);pool.splice(pool.indexOf(pk.v),1);
@@ -135,8 +137,8 @@ function tmStrengths(D,before,days){const lo=dayShift(before,-(days||TM_STR_DAYS
 /* a team's day: each member's 2 most confident calls inside its lanes, one per game, no game/market twice */
 function tmDayStr(team,d,P,S,open,all){const byV=(P[d]||{});const legs=[];const used=new Set();
   team.forEach(v=>{const lanes=new Map((S[v]||[]).map(x=>[x.k,x]));if(!lanes.size)return;let n=0;const games=new Set();
-    (byV[v]||[]).forEach(c=>{if(n>=2)return;if(!tmOk(c,d,all))return;const ln=lanes.get(tmLaneOf(c));if(!ln||games.has(c.sp+c.game))return;if(open&&(c.graded||(typeof deskStarted==='function'&&deskStarted(c))))return;
-      const k=c.sp+'|'+c.game+'|'+c.market;if(used.has(k))return;used.add(k);games.add(c.sp+c.game);legs.push({v,c,lane:ln});n++;});});return legs;}
+    for(const c of byV[v]||[]){if(n>=2)break;if(!tmOk(c,d,all))continue;const ln=lanes.get(tmLaneOf(c));if(!ln||games.has(c.sp+c.game))continue;if(open&&(c.graded||(typeof deskStarted==='function'&&deskStarted(c))))continue;
+      const k=c.sp+'|'+c.game+'|'+c.market;if(used.has(k))continue;used.add(k);games.add(c.sp+c.game);legs.push({v,c,lane:ln});n++;}});return legs;}
 function tmLabStr(force){const L0=get(TM_STR_KEY,null);const d0=today();if(!force&&L0&&L0.d===d0&&L0.rule===TM_RULE&&Date.now()-L0.ts<6*36e5)return L0;
   const {P,D}=tmPool();const all=Object.keys(P).sort();if(!all.length)return null;const lo=dayShift(d0,-56),first=dayShift(all[0],14);
   const days=all.filter(d=>d>=lo&&d<d0&&d>=first);const SD={};days.forEach(d=>{SD[d]=tmStrengths(D,d);});

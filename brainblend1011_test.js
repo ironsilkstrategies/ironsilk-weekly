@@ -2,7 +2,10 @@ const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path')
 const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d:''}`);
 let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');
 html=html.replace(/<script src="([^"?]+)\?v=[^"]+"><\/script>/g,(m,f)=>`<script>${fs.readFileSync(path.join(W,f),'utf8')}</script>`);
+/* the clock pinned to the fixture's day (Nov 7): on the real clock its ungraded game aged past the ledger's 14-day trim on Nov 22 */
+const NOW=Date.parse('2026-11-07T18:00:00Z');
 const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nhl.html',pretendToBeVisual:true,beforeParse(w){
+  {const RD=w.Date;class FD extends RD{constructor(...a){super(...(a.length?a:[NOW]))}static now(){return NOW}}w.Date=FD;}
   w.fetch=()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});
   w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(()=>{try{
