@@ -14,12 +14,13 @@ const base = { v: 4, beta: true, brand: 'TheDesk', price: '$25/mo', social: {}, 
 const kid = (o = {}) => ({ v: 'H_L1e1', name: 'The Architect', chip: '📐 ARCH', color: '#fabe41', title: 'The Golden Child',
   bio: 'Born Dec 4 to the Simulator and the Judge, their first child. Both of its parents were on a heater when it arrived, and it carries that swagger.', origin: 'Child of the Simulator and the Judge.',
   record: { w: 3, l: 1, pu: 0, u: 1.7 }, props: { w: 0, l: 0 }, picks: [], recent: [], teams: [], players: [], best: [],
-  kid: { a: 'The Simulator', b: 'The Judge', ca: '#FFD75E', cb: '#f5a524', born: dayBack(1), st: 'rookie', arch: 'Prodigy Architect', creed: "Ride what's working. Totals from one parent, sides from the other.", g: '📐', t: '✨', ...(o.kid || {}) }, ...o.top });
+  kid: { a: 'The Simulator', b: 'The Judge', ca: '#FFD75E', cb: '#f5a524', born: dayBack(1), st: 'rookie', arch: 'Prodigy Architect', creed: "Ride what's working. Totals from one parent, sides from the other.", g: '📐', t: '✨',
+    family: ['Goes against The Judge on NHL totals', 'Picking up The Simulator\'s NHL ML favorites', 'Admires The Simulator right now'], lessons: ['Trust The Simulator on NHL ML favorites'], ...(o.kid || {}) }, ...o.top });
 const scout = { v: 'Scout', name: 'The Scout', chip: '🔭 SCOUT', color: '#fb7185', title: 'The Talent Hunter', bio: 'The Scout watches players, not teams.', record: { w: 10, l: 8, pu: 0, u: 1.2 }, props: { w: 0, l: 0 }, picks: [], recent: [], teams: [], players: [], best: [] };
 const womb = { litters: [{ a: 'The Coach', b: 'The Historian', ca: '#5FD3E8', cb: '#34d399', arch: 'Steady All-rounder', conceived: dayBack(3), embryos: 2, due: false }], heirs: 1 };
 const FEED = { ...base, characters: [scout, kid()], bloodlines: { need: { n: 100, days: 10 }, cells: [], womb } };
 const OLD = { ...base, characters: [scout, kid({ kid: { born: dayBack(20), st: 'grad' } })], bloodlines: { need: { n: 100, days: 10 }, cells: [] } };
-const EVIL = { ...base, characters: [scout, kid({ kid: { a: '<img src=x onerror="window.__xss=1">', ca: 'red;background:url(javascript:window.__xss=2)', g: '<img src=x onerror="window.__xss=3">', t: '"><svg onload="window.__xss=4">', creed: '<script>window.__xss=5</script>', arch: '<b onmouseover="window.__xss=6">x</b>', st: '<i>x</i>' } })],
+const EVIL = { ...base, characters: [scout, kid({ kid: { a: '<img src=x onerror="window.__xss=1">', ca: 'red;background:url(javascript:window.__xss=2)', g: '<img src=x onerror="window.__xss=3">', t: '"><svg onload="window.__xss=4">', creed: '<script>window.__xss=5</script>', family: ['<img src=x onerror="window.__xss=9">'], lessons: ['<svg onload="window.__xss=10">'], arch: '<b onmouseover="window.__xss=6">x</b>', st: '<i>x</i>' } })],
   bloodlines: { need: { n: 100, days: 10 }, cells: [], womb: { litters: [{ a: '<img src=x onerror="window.__xss=7">', b: 'B', arch: '<script>window.__xss=8</script>', conceived: day, embryos: 1 }], heirs: 1 } } };
 const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: {}, days: [] };
 (async () => {
@@ -44,6 +45,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: {}, days: [] };
   T('…and the womb gets its line under the roster: who\'s expecting, what kind of child, since when', /The womb/i.test(t) && /The Coach × The Historian/.test(t) && /a Steady All-rounder/.test(t) && /Expecting/i.test(t), (t.match(/The womb[\s\S]{0,200}/i) || [''])[0]);
   await v.p.click('#v-cast .newheir .nh'); await v.p.waitForTimeout(400); t = await v.text();
   T('tapping the banner opens its profile: the family line (whose child, born when, what kind, rookie), its creed, how a rookie graduates', /Child of The Simulator and The Judge/i.test(t) && /Born /.test(t) && /Prodigy Architect/.test(t) && /Rookie/.test(t) && /Ride what.s working/.test(t) && /graduates once it keeps beating both of its parents/.test(t) && (await v.p.locator('#v-cast .family svg.crest').count()) === 1, t.slice(0, 400));
+  T('…and its family life (v55): what it\'s going through with its parents right now, and the lessons it keeps', /Family life/i.test(t) && /Goes against The Judge on NHL totals/.test(t) && /Picking up The Simulator.s NHL ML favorites/.test(t) && /Admires The Simulator right now/.test(t) && /What it.s learned/i.test(t) && /Trust The Simulator on NHL ML favorites/.test(t), (t.match(/Family life[\s\S]{0,300}/i) || [''])[0]);
   T('…with its bio and record like any character', /Born Dec 4 to the Simulator and the Judge/.test(t) && /3–1/.test(t));
   T('no page errors', !v.errs.length, v.errs.join(' | ')); await v.ctx.close();
   v = await visit(OLD); t = await v.text();

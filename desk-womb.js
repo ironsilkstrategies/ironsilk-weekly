@@ -43,13 +43,30 @@
    §7 · THE ROOKIE YEAR. From the day after its birth it is judged live against both parents on the same games: it GRADUATES after
         21+ days and 150+ calls against each if it's still ahead of both (1σ+), its official calls still make at least as much
         money as each parent's and it holds its own in their best lanes. Clearly worse than a parent, or 42 days without
-        graduating, and it's RETIRED: its record stays, its calls stop. Its calibration keeps learning every day. */
+        graduating, and it's RETIRED: its record stays, its calls stop. Its calibration keeps learning every day.
+
+   PHASE 3 (v3.4.0) · Chris: "the new character learns from its parents mistakes much quicker and absorbs every attribute from its
+   parents that are being embedded in its ideology over time… the rebellion, disciplines, the respect, the admiration."
+   §8 · FAMILY LIFE. From the day after its birth an heir's genes move with what happens in the family, each day only from the days
+        before it (the same walk-forward that judges it; its live calls use the same day's genes). Its memory is short on purpose
+        (a week's half-life, against its parents' season-long one): it learns quicker than they do.
+        · LEARNING FROM A PARENT'S MISTAKES: a parent sinking in a lane (1.5σ) → it barely listens there and reads it softer.
+        · REBELLION: a parent sinking hard (2σ; 1.5σ for a Rebel, never for a Steady heir) → it fades that parent there.
+        · ABSORBING: a parent rising in a lane (1.5σ) → it leans in, even where it was born not listening.
+        · RESPECT: where they disagreed and the parent kept being right (1.5σ) → it listens to that parent more there.
+        · ADMIRATION: a parent hot across the board (2σ over two weeks) → it leans on that parent everywhere.
+        · DISCIPLINE: its own lane going bad (1.5σ) → it reins its confidence in there; its whole card going bad (2σ) → grounded.
+        · Both parents bleeding in a lane → a fresh vaccine (no official call there).
+        A pattern that holds seven straight game days becomes a LESSON, part of its ideology for good.
+        It also learns whose final scores to trust: its score call leans on the parent who has been closer lately. */
 
 const WOMB_KEY='d4.womb',WOMB_PREVIEW=14,WOMB_SLOTS=3,WOMB_EMB=2,WOMB_MAX_EMB=4,WOMB_MIN_N=100,WOMB_MIN_DAYS=10,WOMB_BAR=2.0,WOMB_LUCK=0.25,
   WOMB_K=12,WOMB_CAL=40,WOMB_RESPECT_N=15,WOMB_REST=14,WOMB_MAX_DAYS=28,
-  WOMB_NURSERY=6,ROOKIE_DAYS=21,ROOKIE_N=150,ROOKIE_BAR=1.0,ROOKIE_MAX=42;
+  WOMB_NURSERY=6,ROOKIE_DAYS=21,ROOKIE_N=150,ROOKIE_BAR=1.0,ROOKIE_MAX=42,
+  FAM_H=7,FAM_MIN=6,FAM_Z=1.5,FAM_ZADM=2.0,FAM_LESSON=7;
+const FAM_ZR={Rebel:1.5,Prodigal:2.0,Prodigy:2.0};   /* how sure it must be before it fades a parent (a Steady heir never does) */
 const WB_SPN={nfl:'NFL',ncaaf:'CFB',nba:'NBA',ncaab:'CBB',nhl:'NHL',mlb:'MLB'};
-const WB_ROLE={'ml|fav':'ML favorites','ml|dog':'ML dogs','ml|heavy':'heavy ML favorites','spread|fav':'spread favorites','spread|dog':'spread dogs','total|over':'overs','total|under':'unders'};
+const WB_ROLE={'ml|fav':'ML favorites','ml|dog':'ML dogs','ml|heavy':'heavy ML favorites','spread|fav':'spread favorites','spread|dog':'spread dogs','total|over':'overs','total|under':'unders','ml|*':'moneylines','spread|*':'spreads','total|*':'totals'};
 const wbLaneLab=k=>{const[sp,m,r]=String(k).split('|');return`${WB_SPN[sp]||String(sp||'').toUpperCase()} ${WB_ROLE[m+'|'+r]||r||''}`.trim();};
 const WB_OTHER={home:'away',away:'home',over:'under',under:'over'};
 const WB_BANDS=['chalk','fav','coin','plus','long'];
@@ -214,18 +231,20 @@ function wbEval(L,E,IX,d0,tried,until,opt){opt=opt||{};const a=L.a,b=L.b,from=E.
   const bins=CONF_EDGES.slice(0,-1).map((lo,i)=>({lo,hi:CONF_EDGES[i+1],w:0,n:0,s:0}));let pav=null,day=null,pend=[];
   const cal=raw=>{if(!pav)pav=confPav(bins);return wbCalPav(pav,raw);};
   const post={A:[],B:[]},hist={A:[],B:[]},resp={A:[],B:[]};const me={n:0,w:0,u:0},off={n:0,w:0,u:0},offA={n:0,w:0,u:0},offB={n:0,w:0,u:0};let open=0;
+  const FAM=opt.family?wbFamily({...opt.family,d0}):null;let ER=E.recipe,EE=E;   /* §8 · an heir's genes move day by day with its family (each day from the days before it) */
   for(const g of IX.G){if(until&&g.d>=until)break;if(!g.c[a]&&!g.c[b])continue;
-    if(g.d!==day){pend.forEach(x=>{const bb=bins.find(o=>x.raw>=o.lo&&x.raw<o.hi);if(bb){bb.w+=x.y;bb.n++;bb.s+=x.raw;}});if(pend.length)pav=null;pend=[];day=g.d;}
-    const P=wbProbs(E,a,b,g,IX);if(!P)continue;const pre=g.d<from,calOn=g.d>=calFrom;
+    if(g.d!==day){pend.forEach(x=>{const bb=bins.find(o=>x.raw>=o.lo&&x.raw<o.hi);if(bb){bb.w+=x.y;bb.n++;bb.s+=x.raw;}});if(pend.length)pav=null;pend=[];day=g.d;if(FAM){ER=FAM.step(g.d,E.recipe);EE={...E,recipe:ER};}}
+    const P=wbProbs(EE,a,b,g,IX);if(!P)continue;const pre=g.d<from,calOn=g.d>=calFrom;
     const pick=P[P.sides[0]]>=P[P.sides[1]]?P.sides[0]:P.sides[1];const raw=P[pick];let p=calOn?cal(raw):raw;const S=P.info[pick];
-    if(E.recipe.vacc.includes(S.lane))p=Math.min(p,0.55);
+    if(ER.vacc.includes(S.lane))p=Math.min(p,0.55);
+    if(FAM)for(const[q,c]of[['a',g.c[a]],['b',g.c[b]]]){if(c&&c.graded&&!c.push&&c.hit!=null)FAM.note(g.d,{k:c.lane,p:q,u:c.u,dis:pick!==c.side?(c.hit?1:0):null});}
     for(const[who,c,dom]of[['A',g.c[a],domA],['B',g.c[b],domB]]){if(!c||!c.graded||c.push||c.p==null)continue;const pe=Math.max(0.02,Math.min(0.98,c.side===pick?p:1-p)),pc=Math.max(0.02,Math.min(0.98,+c.p)),y=c.hit;
       const dd=(y?-Math.log(pc):-Math.log(1-pc))-(y?-Math.log(pe):-Math.log(1-pe));(pre?hist:post)[who].push(dd);if(!pre&&dom.has(c.lane))resp[who].push(dd);
       if(!pre&&wbIsOff(IX,c)){const o=who==='A'?offA:offB;o.n++;if(c.hit)o.w++;o.u+=c.u;}}
     if(!calOn)continue;const res=wbResult(IX,g.k,pick);
     if(S.price==null)continue;   /* no line, no pick: it never calls a side nobody priced */
     if(!res){if(!pre)open++;continue;}if(res==='push')continue;const y=res==='w'?1:0,uu=y?americanToDecimal(S.price)-1:-1;
-    pend.push({raw,y});if(pre)continue;   /* (between conception and birth an heir's calibration keeps learning; its rookie record starts the day after) */
+    pend.push({raw,y});if(FAM)FAM.note(g.d,{h:1,k:S.lane,u:uu});if(pre)continue;   /* (between conception and birth an heir's calibration keeps learning; its rookie record starts the day after) */
     me.n++;me.w+=y;me.u+=uu;if(wbOffOk({voice:'',sp:g.sp,market:g.m,side:pick,price:S.price,line:S.line,date:g.d,cf:p})){off.n++;off.w+=y;off.u+=uu;}}
   const A=wbPaired(post.A),B=wbPaired(post.B),rA=wbPaired(resp.A),rB=wbPaired(resp.B),hA=wbPaired(hist.A),hB=wbPaired(hist.B);
   const days=Math.max(0,Math.round((Date.parse(d0)-Date.parse(from))/864e5));const bar=opt.bar!=null?opt.bar:WOMB_BAR+WOMB_LUCK*Math.log2(Math.max(1,tried||1));
@@ -244,7 +263,7 @@ function wbEval(L,E,IX,d0,tried,until,opt){opt=opt||{};const a=L.a,b=L.b,from=E.
     if(du<-1)need.push(`${(Math.ceil((-du-1)*10-1e-9)/10).toFixed(1)}u more on its official calls (vs ${s}'s ${wbU(O.u)})`);
     if(S.size){if(R.n<WOMB_RESPECT_N)need.push(`more games in ${s}'s best lanes`);else if(R.z<-1)need.push(`to hold its own in ${s}'s best lanes (${sg(R.z)}σ)`);}});
   return{A,B,rA,rB,hA,hB,me:{...me,u:r2(me.u)},off:{...off,u:r2(off.u)},offA:{...offA,u:r2(offA.u)},offB:{...offB,u:r2(offB.u)},duA,duB,days,bar,open,due,lost,need,
-    cal:calB.filter(o=>o.n).map(o=>({lo:o.lo,hi:o.hi,w:o.w,n:o.n,s:+o.s.toFixed(3)})),
+    cal:calB.filter(o=>o.n).map(o=>({lo:o.lo,hi:o.hi,w:o.w,n:o.n,s:+o.s.toFixed(3)})),fam:FAM?FAM.final(E.recipe):null,
     why:due?`beat ${wbNm(a)} by ${A.z.toFixed(1)}σ and ${wbNm(b)} by ${B.z.toFixed(1)}σ on ${seen}, its official calls ${wbU(off.u)} against ${wbU(offA.u)} and ${wbU(offB.u)}, and held its own in both parents' best lanes`
       :lost&&worse?`${A.z<=-2&&A.n>=WOMB_MIN_N?`${Math.abs(A.z).toFixed(1)}σ worse than ${wbNm(a)} on ${A.n}`:`${Math.abs(B.z).toFixed(1)}σ worse than ${wbNm(b)} on ${B.n}`} ${seen}`
       :lost?`${maxDays} days ${opt.rookie?'as a rookie without graduating':'in the womb without clearing every bar'} (${sg(A.z)}σ against ${wbNm(a)}, ${sg(B.z)}σ against ${wbNm(b)})`:''};}
@@ -313,6 +332,91 @@ function wbBirth(W,L,E,r,d){W.kids=W.kids||[];const key='H_'+E.id;if(W.kids.some
     what:`${I.creed} It ${st.why||'beat both parents on games it never saw'}. From tomorrow it calls every game its parents call, as a rookie: ${ROOKIE_DAYS} days and ${ROOKIE_N}+ calls against each parent to graduate.`});}catch(e){}
   return K;}
 
+/* ══ §8 · FAMILY LIFE: the engine (one walk, the same one that judges the heir) ═════════════════════════════════════════ */
+function wbDayRecipe(R,adj){if(!adj||!R)return R;const lanes={...R.lanes};Object.entries(adj.lanes||{}).forEach(([k,o])=>{lanes[k]=o;});
+  const vacc=adj.vacc&&adj.vacc.length?[...new Set([...(R.vacc||[]),...adj.vacc])]:R.vacc;return{...R,lanes,vacc,P:{...R.P,T:(R.P.T||1)*(adj.T||1)}};}
+function wbFamily(cfg){const P={},Dz={},Hs={},G={a:{u:0,n:0},b:{u:0,n:0}},HG={u:0,n:0};let last=null,pend=[],tags=new Map(),adj=null,adjD=null;
+  const runs=new Map(),events=[],lessons=[],d0=cfg.d0;
+  const ew=(o,f)=>{if(!o)return;o.u*=f;o.n*=f;if(o.pw!=null)o.pw*=f;};
+  const decay=D=>{if(last==null){last=D;return;}const k=Math.max(0,(Date.parse(D)-Date.parse(last))/864e5);if(!k)return;const f=Math.pow(0.5,k/FAM_H);
+    Object.values(P).forEach(L=>{ew(L.a,f);ew(L.b,f);});Object.values(Dz).forEach(L=>{ew(L.a,f);ew(L.b,f);});Object.values(Hs).forEach(o=>ew(o,f));ew(G.a,f);ew(G.b,f);ew(HG,f);last=D;};
+  const flush=D=>{const keep=[];pend.forEach(x=>{if(x.d>=D){keep.push(x);return;}const f=Math.pow(0.5,Math.max(0,(Date.parse(D)-Date.parse(x.d))/864e5)/FAM_H);
+      if(x.h){const o=Hs[x.k]||(Hs[x.k]={u:0,n:0});o.u+=x.u*f;o.n+=f;HG.u+=x.u*f;HG.n+=f;return;}
+      const L=P[x.k]||(P[x.k]={}),o=L[x.p]||(L[x.p]={u:0,n:0});o.u+=x.u*f;o.n+=f;G[x.p].u+=x.u*f;G[x.p].n+=f;
+      if(x.dis!=null){const Lz=Dz[x.k]||(Dz[x.k]={}),z=Lz[x.p]||(Lz[x.p]={pw:0,n:0,u:0});z.pw+=x.dis*f;z.n+=f;}});pend=keep;};
+  const zz=o=>o&&o.n>0?o.u/Math.sqrt(o.n):0;   /* units over √calls: a call's units swing about ±1, so this reads like a z */
+  const r1=x=>+(+x).toFixed(1);
+  const compute=R=>{const out={lanes:{},vacc:[],T:1},tg=new Map(),t=cfg.temper,zr=FAM_ZR[t];const adm={};
+    const M={};Object.entries(P).forEach(([k,L])=>{const mk=k.split('|').slice(0,2).join('|');['a','b'].forEach(p=>{if(!L[p])return;const o=(M[mk]=M[mk]||{})[p]||(M[mk][p]={u:0,n:0});o.u+=L[p].u;o.n+=L[p].n;});});
+    ['a','b'].forEach(p=>{const o=G[p];if(o.n>=20&&zz(o)>=FAM_ZADM){adm[p]=t==='Prodigy'?1.25:t==='Rebel'?1.05:1.15;tg.set('admire|'+p+'|*',{n:r1(o.n),u:r1(o.u)});}});
+    new Set([...Object.keys(P),...Object.keys(Hs)]).forEach(k=>{const base=R.lanes[k]||{a:0.8,b:0.8};let wa=base.a,wb=base.b,tt=base.t||0,ch=false;const cau={};
+      const mk=k.split('|').slice(0,2).join('|');
+      ['a','b'].forEach(p=>{let w=p==='a'?wa:wb;const o=(P[k]||{})[p],om=(M[mk]||{})[p];if(adm[p]&&w>0){w*=adm[p];ch=true;}
+        /* a slump: the lane's own record, or the parent's whole market sliding (the one that says it louder names it) */
+        const zl=o&&o.n>=FAM_MIN?zz(o):0,zm=om&&om.n>=FAM_MIN*2?zz(om):0,lo=zm<zl,zs=Math.min(zl,zm),src=lo?om:o,key=lo?mk+'|*':k;
+        if(zr&&zs<=-zr){w=-0.5*Math.abs(w||0.8);ch=true;tg.set(`rebel|${p}|${key}`,{n:r1(src.n),u:r1(src.u)});}
+        else if(zs<=-FAM_Z){w*=0.3;tt=Math.max(tt,1.15);ch=true;cau[p]=1;tg.set(`learn|${p}|${key}`,{n:r1(src.n),u:r1(src.u)});}
+        else if(zl>=FAM_Z){w=w>0?w*1.3:0.5;ch=true;tg.set(`absorb|${p}|${k}`,{n:r1(o.n),u:r1(o.u)});}
+        const dz=(Dz[k]||{})[p];if(dz&&dz.n>=FAM_MIN&&w>0&&(2*dz.pw-dz.n)/Math.sqrt(dz.n)>=FAM_Z){w*=1.25;ch=true;tg.set(`respect|${p}|${k}`,{n:r1(dz.n),pw:r1(dz.pw)});}
+        w=Math.max(-2.5,Math.min(2.5,w));if(p==='a')wa=w;else wb=w;});
+      if(cau.a&&cau.b){out.vacc.push(k);tg.set('vaccine|ab|'+k,{});}
+      const h=Hs[k];if(h&&h.n>=FAM_MIN&&zz(h)<=-FAM_Z){tt=Math.max(tt,1.3);ch=true;tg.set('discipline|h|'+k,{n:r1(h.n),u:r1(h.u)});}
+      if(ch)out.lanes[k]={a:+wa.toFixed(3),b:+wb.toFixed(3),...(tt?{t:tt}:{})};});
+    if(HG.n>=15&&zz(HG)<=-FAM_ZADM){out.T=1.15;tg.set('grounded|h|*',{n:r1(HG.n),u:r1(HG.u)});}
+    /* say each thing once: a whole market's slump covers its lanes, and a rebellion covers a lesser caution in the same place */
+    const keys=[...tg.keys()];keys.forEach(key=>{const[t0,p0,...k0]=key.split('|');if(t0!=='rebel'&&t0!=='learn')return;const kk=k0.join('|'),mk=k0.slice(0,2).join('|');
+      if(k0[2]!=='*'&&(tg.has(`${t0}|${p0}|${mk}|*`)||(t0==='learn'&&tg.has(`rebel|${p0}|${mk}|*`))))tg.delete(key);
+      else if(t0==='learn'&&(tg.has(`rebel|${p0}|${kk}`)))tg.delete(key);});
+    return{out,tg};};
+  const mark=(D,tg)=>{tg.forEach((v,key)=>{if(!tags.has(key))events.push({d:D,key,st:'start',...v});const c=(runs.get(key)||0)+1;runs.set(key,c);
+      if(c===FAM_LESSON&&!lessons.some(l=>l.key===key))lessons.push({d:D,key,...v});});
+    tags.forEach((v,key)=>{if(!tg.has(key)){events.push({d:D,key,st:'end'});runs.delete(key);}});tags=tg;};
+  return{
+    /* a new day: everything before it goes into memory, then the day's genes (nothing after today counts: a later day keeps today's) */
+    step(D,R){if(d0&&D>d0)return adj?wbDayRecipe(R,adj):R;decay(D);flush(D);if(D<cfg.from)return R;const C=compute(R);mark(D,C.tg);adj=C.out;adjD=D;return wbDayRecipe(R,adj);},
+    note(d,x){pend.push({d,...x});},
+    /* where the family stands today (from every day before it) */
+    final(R){if(d0&&d0>=cfg.from&&adjD!==d0){decay(d0);flush(d0);const C=compute(R);mark(d0,C.tg);adj=C.out;adjD=d0;}
+      const now=[...tags.entries()].map(([key,v])=>{const[t,p,...k]=key.split('|');return{t,p,k:k.join('|'),...v};});
+      return{adj,adjD,now,events:events.slice(-40),lessons:lessons.slice(-8)};}};}
+/* a family moment in words (the desk's, and the public page's: no method talk, no σ) */
+function wbFamTxt(x,K,pub){const P=x.p==='a'?wbNm(K.a):x.p==='b'?wbNm(K.b):'',pl=x.k&&x.k!=='*'?wbLaneLab(x.k):'',u=x.u!=null?wbU(x.u):'';
+  switch(x.t){
+    case'rebel':return pub?`Goes against ${P} on ${pl}`:`✊ Goes against ${P} on ${pl} (${P} ${u} there lately)`;
+    case'learn':return pub?`Learned from ${P}'s misses on ${pl}`:`💉 Learned from ${P}'s ${pl} (${u} lately): barely listens there`;
+    case'absorb':return pub?`Picking up ${P}'s ${pl}`:`📈 Picking up ${P}'s ${pl} (${u} lately)`;
+    case'respect':return pub?`Listens to ${P} on ${pl}`:`🙇 Listens to ${P} on ${pl} (right ${Math.round(x.pw)} of ${Math.round(x.n)} times they disagreed lately)`;
+    case'admire':return pub?`Admires ${P} right now`:`🌟 Admires ${P} (${u} over the last two weeks): leans on it everywhere`;
+    case'vaccine':return pub?`Stays off ${pl} while both parents are cold there`:`🛡 Both parents are bleeding on ${pl}: no official call there`;
+    case'discipline':return pub?`Reining itself in on ${pl}`:`🪵 Reining itself in on ${pl} (its own ${u} there lately)`;
+    case'grounded':return pub?'Taking it slower after a cold stretch':`🪵 Grounded: its calls are ${u} lately, so every read comes in a notch softer`;}
+  return'';}
+function wbLessonTxt(x,K){const P=x.p==='a'?wbNm(K.a):x.p==='b'?wbNm(K.b):'',pl=x.k&&x.k!=='*'?wbLaneLab(x.k):'';
+  return{rebel:`Never follow ${P} into ${pl} when it's sinking`,learn:`Don't take ${P}'s ${pl} at face value`,absorb:`${P}'s ${pl} are part of its game now`,respect:`Trust ${P} on ${pl}`,
+    admire:`When ${P} gets hot, ride it`,vaccine:`Stay off ${pl} when both parents go cold`,discipline:`Slow down on ${pl} when it starts to slide`,grounded:`A cold stretch calls for softer reads`}[x.t]||'';}
+/* the heir's genes today: the ones it was born with, moved by family life */
+const wbKidRecipe=K=>wbDayRecipe(K.recipe,(K.fam||{}).adj);
+/* whose final scores to trust: the parent who has been closer lately, by sport (its last 30 graded finals) */
+let WB_SACC=null;
+function wbScoreAcc(){const d=today();if(WB_SACC&&WB_SACC.d===d)return WB_SACC.m;const m={};
+  try{Object.values(roGet(SCORECALL_KEY,{},60e3)||{}).filter(x=>x&&x.graded&&x.err!=null&&isFinite(+x.err)).sort((p,q)=>String(q.date).localeCompare(String(p.date)))
+    .forEach(x=>{const k=x.voice+'|'+x.sp,o=m[k]||(m[k]={n:0,e:0,x:0});if(o.n>=30)return;o.n++;o.e+=+x.err;o.x+=x.exact?1:0;});}catch(e){}
+  Object.values(m).forEach(o=>{o.err=o.n?o.e/o.n:null;});WB_SACC={d,m};return m;}
+const WB_SC_C={nhl:1,mlb:1.5,nfl:5,ncaaf:6,nba:8,ncaab:8};
+function wbBend(sp,a,h,C){const tie=sp==='nfl'||sp==='ncaaf',unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3;
+  const ml=C.find(c=>c.market==='ml'),spc=C.find(c=>c.market==='spread'),tc=C.find(c=>c.market==='total');
+  if(tc&&tc.line!=null){const t=a+h,want=tc.side==='over'?Math.max(t,tc.line+unit/2):Math.min(t,tc.line-unit/2);const k=t>0?want/t:1;a*=k;h*=k;}
+  const sd=(spc&&spc.side)||(ml&&ml.side);
+  if(sd){const mg=h-a,line=spc&&spc.line!=null?(spc.side==='home'?-spc.line:spc.line):0;let need=sd==='home'?Math.max(mg,line+unit/2,0.6):Math.min(mg,line-unit/2,-0.6);
+    if(!spc)need=sd==='home'?Math.max(mg,0.6):Math.min(mg,-0.6);const dd=(need-mg)/2;h+=dd;a-=dd;}
+  a=Math.max(0,Math.round(a));h=Math.max(0,Math.round(h));if(a===h&&!tie){if(sd==='away')a++;else h++;}return{a,h};}
+function wbKidScore(sp,K,ps,C){const acc=wbScoreAcc(),c0=WB_SC_C[sp]||3;let wa=0,A=0,H=0,best=null;
+  ps.forEach(x=>{const o=acc[x.voice+'|'+sp];const e=o&&o.n>=5?o.err:null;const w=1/((e!=null?e:3*c0)+c0);wa+=w;A+=w*x.a;H+=w*x.h;if(!best||w>best.w)best={v:x.voice,w,e};});
+  if(!wa)return null;const r=wbBend(sp,A/wa,H/wa,C);return{...r,from:best?best.v:null};}
+if(typeof scoreCallsFor==='function'&&typeof window!=='undefined'&&!window.__WB_SC__){window.__WB_SC__=1;const SCF0=scoreCallsFor;
+  scoreCallsFor=function(sp,g,s,calls){const R=SCF0.apply(this,arguments);try{if(!WB_KIDS_LIVE.length||!Array.isArray(R)||!R.length)return R;const by=new Map(R.map(x=>[x.voice,x]));
+      WB_KIDS_LIVE.forEach(K=>{const me=by.get(K.key);if(!me)return;const ps=[K.a,K.b].map(v=>by.get(v)).filter(Boolean);if(!ps.length)return;
+        const sc=wbKidScore(sp,K,ps,(calls||[]).filter(c=>c.voice===K.key));if(sc){me.a=sc.a;me.h=sc.h;}});}catch(e){}return R;};}
 /* ══ §6 · AN HEIR ON THE DESK ═════════════════════════════════════════════════════════════════════════════════════════════ */
 let WB_KIDS_LIVE=[],WB_KIDS_SIG='';
 const wbIsKid=v=>!!(CHARS[v]&&CHARS[v].kid);
@@ -341,8 +445,8 @@ function wbKidCalls(sp,g,calls,Ln,add){if(!WB_KIDS_LIVE.length||!Ln||!calls||!ca
     const cal=wbCalFn(K.cal);
     for(const m of ['ml','spread','total']){const A=pc.find(c=>c.voice===K.a&&c.market===m),B=pc.find(c=>c.voice===K.b&&c.market===m);if(!A&&!B)continue;
       const G={sp,m,c:{}};if(A)G.c[K.a]={side:A.side,p:confOf(A)};if(B)G.c[K.b]={side:B.side,p:confOf(B)};
-      const P=wbProbs({recipe:K.recipe},K.a,K.b,G,null,s=>wbLiveSide(sp,m,s,Ln));if(!P)continue;
-      const pick=P[P.sides[0]]>=P[P.sides[1]]?P.sides[0]:P.sides[1],raw=P[pick];let p=cal(raw);if(K.recipe.vacc.includes(P.info[pick].lane))p=Math.min(p,0.55);
+      const R=wbKidRecipe(K);const P=wbProbs({recipe:R},K.a,K.b,G,null,s=>wbLiveSide(sp,m,s,Ln));if(!P)continue;
+      const pick=P[P.sides[0]]>=P[P.sides[1]]?P.sides[0]:P.sides[1],raw=P[pick];let p=cal(raw);if(R.vacc.includes(P.info[pick].lane))p=Math.min(p,0.55);
       const before=calls.length;add(K.key,m,pick,{kp:+p.toFixed(4),kr:+raw.toFixed(4),kid:1});if(calls.length>before)n++;}}
   return n;}
 /* the heirs speak last, after the Brain and the Banker (they never feed either) */
@@ -389,8 +493,14 @@ function wombRun(force){const d=today();const IX=wbIndex();if(!force&&WOMB_MEMO&
       try{journalAdd({kind:'womb',sig:'ended-'+L.id,v:L.a,sev:'info',title:`🕯 ${wbNm(L.a)} × ${wbNm(L.b)}: no heir this time`,what:`All ${L.embryos.length} embryos were lost. The pair rests ${WOMB_REST} days before it can court again.`});}catch(e){}}});
   /* 3 · §7 · the rookie year: judged live against both parents from the day after its birth; its calibration keeps learning */
   (W.kids||[]).forEach(K=>{if(K.st!=='rookie'&&K.st!=='grad')return;const r=wbEval({a:K.a,b:K.b,domA:K.domA,domB:K.domB},{since:K.liveFrom,recipe:K.recipe},IX,d,K.n,null,
-      {calFrom:K.since,minN:ROOKIE_N,minDays:ROOKIE_DAYS,bar:ROOKIE_BAR,maxDays:ROOKIE_MAX,seen:'games since it was born',rookie:1});out.kid[K.key]=r;
+      {calFrom:K.since,minN:ROOKIE_N,minDays:ROOKIE_DAYS,bar:ROOKIE_BAR,maxDays:ROOKIE_MAX,seen:'games since it was born',rookie:1,family:{from:K.liveFrom,temper:K.temper}});out.kid[K.key]=r;
     if(JSON.stringify(r.cal)!==JSON.stringify(K.cal)){K.cal=r.cal;changed=true;}
+    /* §8 · family life: today's genes, what's going on, the lessons it keeps */
+    if(r.fam){const F={adj:r.fam.adj,d:r.fam.adjD,now:r.fam.now,events:r.fam.events.slice(-24),lessons:r.fam.lessons};if(JSON.stringify(F)!==JSON.stringify(K.fam||null)){K.fam=F;changed=true;}
+      F.events.filter(e=>e.st==='start').forEach(e=>{const[t,pp,...kk]=e.key.split('|');const x={t,p:pp,k:kk.join('|'),...e};if(t!=='rebel'&&t!=='admire')return;
+        try{journalAdd({kind:'womb',sig:`fam-${K.key}-${e.key}-${e.d}`,d:e.d,v:K.a,sev:'info',title:t==='rebel'?`✊ ${K.name} rebels against ${wbNm(pp==='a'?K.a:K.b)}`:`🌟 ${K.name} admires ${wbNm(pp==='a'?K.a:K.b)}`,what:wbFamTxt(x,K).replace(/^\S+ /,'')+'.'});}catch(err){}});
+      F.lessons.forEach(l=>{const[t,pp,...kk]=l.key.split('|');const txt=wbLessonTxt({t,p:pp,k:kk.join('|')},K);if(!txt)return;
+        try{journalAdd({kind:'womb',sig:`lesson-${K.key}-${l.key}`,d:l.d,v:K.a,sev:'info',title:`📚 ${K.name} learned a lesson`,what:`“${txt}.” Seven straight game days of it: it's part of how it plays now.`});}catch(err){}});}
     if(K.st!=='rookie')return;
     if(r.due){K.st='grad';K.gradAt=d;K.why=r.why;changed=true;try{journalAdd({kind:'womb',sig:'grad-'+K.key,v:K.a,sev:'info',title:`🎓 ${K.name} graduates`,what:`The child of ${wbThe(K.a)} and ${wbThe(K.b)} ${r.why}. It's a full character now.`});}catch(e){}}
     else if(r.lost){K.st='retired';K.retiredAt=d;K.why=r.why;changed=true;try{journalAdd({kind:'womb',sig:'retired-'+K.key,v:K.a,sev:'info',title:`🚪 ${K.name} retires`,what:`${r.why.charAt(0).toUpperCase()+r.why.slice(1)}. Its record stays on the books; its calls stop.`});}catch(e){}}});
@@ -465,7 +575,7 @@ const wbBar=(lab,txt,f,col)=>`<div class="lbl"><span>${lab}</span><span>${txt}</
 function nurseryHtml(){const W=wombAll(),KS=(W.kids||[]).slice();
   if(!WOMB_MEMO||WOMB_MEMO.d!==today())wombRunAsync().then(()=>{try{if(GEN_TAB==='nursery')genRender();}catch(e){}}).catch(()=>{});
   const R=(WOMB_MEMO&&WOMB_MEMO.kid)||{};
-  const head=`<div class="card"><div style="font:800 15px system-ui">🍼 The nursery</div><div class="muted" style="margin-top:4px">An heir is born when an embryo beats both of its parents on games it never saw. Born, it's a character of its own: it calls every game either parent calls, through the genes it was born with, with its own calibrated chance as its confidence, and it keeps its own record. It never votes: its read comes from its parents', so counting it would count them twice. A rookie <b>graduates</b> after ${ROOKIE_DAYS} days and ${ROOKIE_N}+ calls against each parent if it's still ahead of both and its official calls still make at least as much money; clearly worse than a parent, or ${ROOKIE_MAX} days without graduating, and it <b>retires</b>.</div></div>`;
+  const head=`<div class="card"><div style="font:800 15px system-ui">🍼 The nursery</div><div class="muted" style="margin-top:4px">An heir is born when an embryo beats both of its parents on games it never saw. Born, it's a character of its own: it calls every game either parent calls, through the genes it was born with, with its own calibrated chance as its confidence, and it keeps its own record. It never votes: its read comes from its parents', so counting it would count them twice. A rookie <b>graduates</b> after ${ROOKIE_DAYS} days and ${ROOKIE_N}+ calls against each parent if it's still ahead of both and its official calls still make at least as much money; clearly worse than a parent, or ${ROOKIE_MAX} days without graduating, and it <b>retires</b>. From its first day it lives with its family: it learns from its parents' mistakes (a week's memory, quicker than theirs), rebels where one keeps sinking, absorbs what's working, respects the parent who keeps being right, admires a hot one and disciplines itself when its own calls slide.</div></div>`;
   if(!KS.length)return head+`<div class="card"><div class="muted">No heir born yet. The first can arrive ${WOMB_MIN_DAYS} days after its litter was conceived, and only if it beats both parents.</div></div>`;
   const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const rank={rookie:0,grad:1,retired:2};
   KS.sort((x,y)=>(rank[x.st]-rank[y.st])||String(y.born).localeCompare(String(x.born)));
@@ -483,6 +593,7 @@ function nurseryHtml(){const W=wombAll(),KS=(W.kids||[]).slice();
       <div style="margin-top:6px;font-size:12.5px;line-height:1.5">${fromA.length?`From ${txtEsc(wbSh(K.a))}: ${fromA.map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}${fromB.length?`From ${txtEsc(wbSh(K.b))}: ${fromB.map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}${rec.vacc.length?`💉 Vaccinated against ${rec.vacc.slice(0,4).map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}${rec.fade.length?`✊ Rebels in ${rec.fade.slice(0,3).map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}${rec.hot.length?`🔥 Rides ${rec.hot.slice(0,3).map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}Mutation: ${txtEsc(rec.mut||'none')}</div>
       <div class="mono muted" style="font-size:11px;margin-top:6px">${K.womb.days} days in the womb${K.womb.zA!=null?`: ${sg(K.womb.zA)}σ vs ${txtEsc(wbSh(K.a))}, ${sg(K.womb.zB)}σ vs ${txtEsc(wbSh(K.b))}`:''}${K.womb.off?` · official ${K.womb.off.w}-${K.womb.off.n-K.womb.off.w}, ${wbU(K.womb.off.u)}`:''}</div>
       <div class="mono" style="font-size:12px;margin-top:6px">On the books: ${w}-${gr.length-w}, ${wbU(u)} · official ${ow}-${of.length-ow}, ${wbU(ou)}${now?` · ${now} call${now===1?'':'s'} today`:''}</div>
+      ${K.st!=='retired'?wbFamHtml(K):''}
       ${K.st==='rookie'&&r?`<div style="margin-top:8px">${wbBar('Rookie days',`${Math.min(r.days,ROOKIE_DAYS)}/${ROOKIE_DAYS}`,r.days/ROOKIE_DAYS,'#a78bfa')}
         ${wbBar(`Calls vs ${txtEsc(wbSh(K.a))}`,`${Math.min(r.A.n,ROOKIE_N)}/${ROOKIE_N}`,r.A.n/ROOKIE_N,'#60a5fa')}${wbBar(`Calls vs ${txtEsc(wbSh(K.b))}`,`${Math.min(r.B.n,ROOKIE_N)}/${ROOKIE_N}`,r.B.n/ROOKIE_N,'#60a5fa')}
         ${wbBar(`Edge vs ${txtEsc(wbSh(K.a))}`,`${sg(r.A.z)}σ of ${ROOKIE_BAR.toFixed(1)}σ`,r.A.z/ROOKIE_BAR,r.A.z<0?'#f87171':'#22c55e')}${wbBar(`Edge vs ${txtEsc(wbSh(K.b))}`,`${sg(r.B.z)}σ of ${ROOKIE_BAR.toFixed(1)}σ`,r.B.z/ROOKIE_BAR,r.B.z<0?'#f87171':'#22c55e')}
@@ -490,10 +601,22 @@ function nurseryHtml(){const W=wombAll(),KS=(W.kids||[]).slice();
         ${r.need&&r.need.length?`<div style="margin-top:6px;font-size:12px">🎓 <b>To graduate:</b> ${r.need.map(txtEsc).join(' · ')}</div>`:''}</div>`:K.st==='rookie'?`<div class="muted" style="margin-top:6px">Its rookie year starts ${txtEsc(wbMd(K.liveFrom))}.</div>`:''}
       ${K.st!=='rookie'&&K.why?`<div class="muted" style="margin-top:6px">${K.st==='grad'?'🎓 Graduated':'🚪 Retired'} ${txtEsc(wbMd(K.gradAt||K.retiredAt))}: ${txtEsc(K.why)}</div>`:''}</div>`;};
   return head+KS.map(card).join('');}
+/* 👪 family life on an heir's nursery card: what's going on now, the lessons it keeps, whose finals it trusts, the latest moments */
+const WB_FAM_ORDER=['rebel','learn','vaccine','absorb','respect','admire','discipline','grounded'],WB_FAM_ICON={rebel:'✊',learn:'💉',vaccine:'🛡',absorb:'📈',respect:'🙇',admire:'🌟',discipline:'🪵',grounded:'🪵'};
+function wbFamHtml(K){const F=K.fam||{};const now=(F.now||[]).slice().sort((x,y)=>WB_FAM_ORDER.indexOf(x.t)-WB_FAM_ORDER.indexOf(y.t));const L=F.lessons||[];
+  const ev=(F.events||[]).filter(e=>e.st==='start').slice(-5).reverse().map(e=>{const[t,pp,...kk]=e.key.split('|');return`<div class="muted" style="font-size:11.5px;margin-top:2px">${txtEsc(wbMd(e.d))} · ${WB_FAM_ICON[t]||'•'} ${txtEsc(wbFamTxt({t,p:pp,k:kk.join('|')},K,true))}</div>`;}).join('');
+  let sc='';try{const acc=wbScoreAcc(),C=WB_SC_C;const rows=Object.keys(C).map(sp=>{const A=acc[K.a+'|'+sp],B=acc[K.b+'|'+sp];if(!A||!B||A.n<5||B.n<5)return null;const ab=A.err<=B.err;return{sp,v:ab?K.a:K.b,e1:ab?A.err:B.err,e2:ab?B.err:A.err};}).filter(Boolean).slice(0,2);
+    if(rows.length)sc=`<div style="font-size:12px;margin-top:6px">🎯 Its final scores lean on ${rows.map(r=>`${txtEsc(wbNm(r.v))} in ${WB_SPN[r.sp]} (${r.e1.toFixed(1)} vs ${r.e2.toFixed(1)} points off lately)`).join('; ')}</div>`;}catch(e){}
+  return`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(244,114,182,.08)"><div style="font:800 13px system-ui">👪 Family life</div>
+    ${now.map(x=>`<div style="font-size:12.5px;margin-top:3px">${txtEsc(wbFamTxt(x,K))}</div>`).join('')||`<div class="muted" style="font-size:12px;margin-top:3px">${F.d?'Nothing stirring: it plays the genes it was born with.':`Its family life starts ${txtEsc(wbMd(K.liveFrom))}.`}</div>`}
+    ${L.length?`<div style="font:800 12.5px system-ui;margin-top:6px">📚 Lessons it keeps</div>${L.map(l=>{const[t,pp,...kk]=l.key.split('|');return`<div style="font-size:12.5px;margin-top:2px">“${txtEsc(wbLessonTxt({t,p:pp,k:kk.join('|')},K))}” <span class="muted">(${txtEsc(wbMd(l.d))})</span></div>`;}).join('')}`:''}
+    ${sc}${ev?`<div style="font:800 12px system-ui;margin-top:6px">Lately</div>${ev}`:''}</div>`;}
 /* the public page: an heir's family and crest ride along with its card; the womb in one line */
 if(typeof pubCharacters0==='function'&&typeof window!=='undefined'&&!window.__WB_PUB__){window.__WB_PUB__=1;const PC0=pubCharacters0;
   pubCharacters0=function(V,d){const R=PC0.apply(this,arguments);try{const W=wombAll();(R||[]).forEach(c=>{const K=(W.kids||[]).find(k=>k.key===c.v);if(!K)return;
-      c.kid={a:charName(K.a),b:charName(K.b),ca:wbCol(K.a),cb:wbCol(K.b),born:K.born,st:K.st,arch:K.arch,creed:K.creed,g:(K.crest||{}).g||'⭐',t:(K.crest||{}).t||'⚓'};});}catch(e){}return R;};}
+      const F=K.fam||{};const now=(F.now||[]).slice().sort((x,y)=>WB_FAM_ORDER.indexOf(x.t)-WB_FAM_ORDER.indexOf(y.t));
+      c.kid={a:charName(K.a),b:charName(K.b),ca:wbCol(K.a),cb:wbCol(K.b),born:K.born,st:K.st,arch:K.arch,creed:K.creed,g:(K.crest||{}).g||'⭐',t:(K.crest||{}).t||'⚓',
+        family:K.st==='retired'?[]:now.map(x=>wbFamTxt(x,K,true)).filter(Boolean).slice(0,5),lessons:(F.lessons||[]).map(l=>{const[t,pp,...kk]=l.key.split('|');return wbLessonTxt({t,p:pp,k:kk.join('|')},K);}).filter(Boolean).slice(-4)};});}catch(e){}return R;};}
 if(typeof pubBloodlines==='function'&&typeof window!=='undefined'&&!window.__WB_PUBBL__){window.__WB_PUBBL__=1;const PB0=pubBloodlines;
   pubBloodlines=function(){const R=PB0.apply(this,arguments);try{const W=wombAll();
       const womb={litters:W.litters.filter(L=>L.st==='live').map(L=>({a:charName(L.a),b:charName(L.b),ca:wbCol(L.a),cb:wbCol(L.b),arch:(L.arch||{}).label||'',conceived:L.conceived,embryos:L.embryos.filter(E=>E.st==='womb'||E.st==='due').length,due:L.embryos.some(E=>E.st==='due')})),heirs:(W.kids||[]).length};

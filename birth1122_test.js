@@ -93,12 +93,14 @@ function harness(w) { const E = s => w.eval(s), J = s => JSON.parse(w.eval(`JSON
     return{k1:(m1.kids||[]).map(K=>K.key+':'+K.st),l1:m1.litters.find(L=>L.a==='Sim').st,e1:m1.litters.find(L=>L.a==='Sim').embryos[0].st,k2:(m2.kids||[]).map(K=>K.key+':'+K.st),k3:m3.kids.map(K=>K.st)};})()`);
   T('sync: a newer copy from a device that never saw the birth can\'t undo it (the heir, the closed litter, the born embryo all stand), and a graduation stands too', JSON.stringify(M.k1) === `["${KEY}:grad"]` && M.l1 === 'born' && M.e1 === 'born' && JSON.stringify(M.k2) === `["${KEY}:grad"]` && JSON.stringify(M.k3) === '["grad"]', JSON.stringify(M));
 
-  /* ══ B · a rookie that reads its father's moneylines backwards retires ══ */
+  /* ══ B · a rookie that can't graduate in six weeks retires ══
+     (v3.4.0: a rookie whose genes go wrong now fixes itself — family life lets it absorb a parent who keeps winning — so the
+     retirement here is the six-week clock: its parents stopped calling games, it never reaches 150 calls against them) */
   const w2 = boot('nhl.html', { 'd4.voices': snap('2026-11-22') }, at('2026-11-22')); await wait(1500); const B = harness(w2);
   B.E('wombRun(true)'); B.go('2026-12-04'); B.E('wombRun(true)');
-  B.E(`(()=>{const W=wombAll();const K=W.kids.find(K=>K.key==='${KEY}');['nhl|ml|fav','nhl|ml|dog'].forEach(k=>{K.recipe.lanes[k]={a:-2,b:0};});set(WOMB_KEY,W);wbRegisterKids();})()`);
+  B.E(`(()=>{const W=wombAll();const K=W.kids.find(K=>K.key==='${KEY}');K.a='Pred';K.b='Consensus';K.liveFrom='2026-11-01';set(WOMB_KEY,W);wbRegisterKids();})()`);
   B.go('2026-12-16'); const Rb = B.J('wombRun(true)'); const kb = B.kid(), rb = Rb.kid[KEY];
-  T('🚪 a rookie clearly worse than a parent on the games since it was born (10+ days, 100+ calls) retires', kb.st === 'retired' && kb.retiredAt === '2026-12-16' && /σ worse than The (Simulator|Judge) on \d+ games since it was born/.test(kb.why) && Math.min(rb.A.z, rb.B.z) <= -2, kb.why);
+  T('🚪 a rookie that hasn\'t graduated in 42 days retires (here its parents stopped calling games: it never got its 150 calls against them)', kb.st === 'retired' && kb.retiredAt === '2026-12-16' && /^42 days as a rookie without graduating \(/.test(kb.why) && rb.days >= 42, kb.why);
   T('…its record stays on the books under its name, its calls stop, and the chronicle says so', B.E(`CHARS['${KEY}'].label`) === 'The Architect' && B.E(`CHARS['${KEY}'].quiet`) === 'retired' && B.E(`WB_KIDS_LIVE.some(K=>K.key==='${KEY}')`) === false && B.J(`journalAll().filter(x=>x.kind==='womb'&&/^🚪 The Architect retires/.test(x.title)).length`) === 1);
 
   /* ══ C · an heir on a real slate ══ */

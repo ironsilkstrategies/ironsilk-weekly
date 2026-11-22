@@ -85,7 +85,7 @@ function genTreeHtml(){const H=heirsAll();const vs=CHAR_ORDER.filter(v=>['ml','s
     <div class="card"><div style="font:900 18px system-ui;color:${(CHARS[v]||{}).color}">${txtEsc(charName(v))}</div><div class="muted">${txtEsc((CHARS[v]||{}).school||'')}</div>
       <div style="margin-top:10px">${ms.map(m=>`<span class="chip ${m===pickM?'on':''}" onclick="GEN_PICK='${v.replace(/'/g,"\\'")}|${m}|gen${H.cells[v+'|'+m].gen}';genRender()">${GEN_MK[m]} · Gen ${H.cells[v+'|'+m].gen}</span>`).join('')}</div>
       <div style="margin-top:6px">${genTreeSvg(v,pickM)}</div></div>${genNodeHtml()}`;}
-function genChronicleHtml(){const ev=[];try{journalAll().filter(x=>x&&(x.kind==='generation'||x.kind==='womb')).forEach(x=>ev.push({d:x.d,t:x.title,w:x.what,c:/👑|🍼|👶|🎓/.test(x.title)?'#f5c542':/💞|🥚/.test(x.title)?'#f472b6':'#64748b'}));}catch(e){}
+function genChronicleHtml(){const ev=[];try{journalAll().filter(x=>x&&(x.kind==='generation'||x.kind==='womb')).forEach(x=>ev.push({d:x.d,t:x.title,w:x.what,c:/👑|🍼|👶|🎓/.test(x.title)?'#f5c542':/💞|🥚|✊|🌟|📚/.test(x.title)?'#f472b6':'#64748b'}));}catch(e){}
   const H=heirsAll();Object.values(H.cells).forEach(C=>{(C.heirs||[]).forEach(h=>ev.push({d:h.born,t:`🐣 ${charName(C.v)}, ${GEN_MK[C.m].toLowerCase()}: an heir is born`,w:h.lab,c:'#60a5fa'}));});
   ev.sort((a,b)=>String(b.d).localeCompare(String(a.d)));const seen=new Set();const E=ev.filter(e=>{const k=e.d+e.t+e.w;if(seen.has(k))return false;seen.add(k);return true;});
   const d=today();const ch=['nfl','ncaaf','nba','ncaab','nhl','mlb'].map(sp=>[sp,wvChapter(sp,d)]).filter(x=>x[1]&&x[1]!=='off');

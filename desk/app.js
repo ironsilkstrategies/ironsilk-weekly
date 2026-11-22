@@ -1101,7 +1101,8 @@ function blRow(c, need) {
     ${b ? `<div class="bl-bar" role="img" aria-label="${p}% of the way to a new generation"><i style="width:${p}%"></i></div><div class="bl-s">${p}% of the way to a new generation · ${Math.min(b.n, need.n)}/${need.n} games watched</div>` : ''}
     ${(c.hist || []).length ? `<div class="bl-s">Generation ${c.gen} took over ${esc(shortDay(c.hist[c.hist.length - 1].to || deskDay()))}</div>` : ''}</div>`;
 }
-/* v54 · Bloodlines 2.0, births (Chris, Nov 22: "once born they become a character on the app with their own name style and
+/* v55 · family life: what an heir is going through with its parents right now, and the lessons it keeps (public words, no method talk).
+   v54 · Bloodlines 2.0, births (Chris, Nov 22: "once born they become a character on the app with their own name style and
    ideology"): an heir born of two characters wears a crest split in its parents' colors, says whose child it is and when it was
    born, and carries its rookie badge until it graduates. The womb's litters get a line under the roster. */
 const KID_G = new Set(['🔮', '📐', '🎯', '⚙️', '⭐']), KID_T = new Set(['✨', '⚡', '🌗', '⚓']);
@@ -1111,7 +1112,7 @@ const kidSt = k => (k.st === 'grad' ? '🎓 Graduated' : k.st === 'retired' ? '�
 const kidTag = c => (c.kid ? `<span class="kidtag">${kidSt(c.kid)}</span>` : '');
 const kidAge = k => Math.round((noon(deskDay()) - noon(String(k.born || '').slice(0, 10))) / 864e5);
 function familyHtml(c) { const k = c.kid;
-  return `<div class="family">${crestSvg(k, 64)}<div><b>Child of ${esc(k.a)} and ${esc(k.b)}</b><span>Born ${esc(shortDay(String(k.born || '').slice(0, 10)))}${k.arch ? ' · ' + esc(k.arch) : ''} · ${kidSt(k)}</span>${k.creed ? `<q>${esc(k.creed)}</q>` : ''}${k.st === 'rookie' ? '<small>A rookie keeps its own record from its first day. It graduates once it keeps beating both of its parents for three straight weeks.</small>' : ''}</div></div>`; }
+  return `<div class="family">${crestSvg(k, 64)}<div><b>Child of ${esc(k.a)} and ${esc(k.b)}</b><span>Born ${esc(shortDay(String(k.born || '').slice(0, 10)))}${k.arch ? ' · ' + esc(k.arch) : ''} · ${kidSt(k)}</span>${k.creed ? `<q>${esc(k.creed)}</q>` : ''}${k.st === 'rookie' ? '<small>A rookie keeps its own record from its first day. It graduates once it keeps beating both of its parents for three straight weeks.</small>' : ''}${Array.isArray(k.family) && k.family.length ? `<div class="famlife"><b>Family life</b>${k.family.slice(0, 5).map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}${Array.isArray(k.lessons) && k.lessons.length ? `<div class="famlife lessons"><b>What it’s learned</b>${k.lessons.slice(0, 4).map(t => `<span>“${esc(t)}”</span>`).join('')}</div>` : ''}</div></div>`; }
 function viewCast() {
   const el = $('#v-cast'), F = S.feed || {}, C = F.characters || [], B = F.bloodlines, need = (B && B.need) || { n: 100, days: 10 };
   if (!C.length) { el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">The roster shows up here once the desk publishes it.</p>${footHtml()}`; return; }

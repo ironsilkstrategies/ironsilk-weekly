@@ -914,3 +914,8 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .newheir .nh small{display:block;margin-top:4px;font-size:13px;opacity:.85}
 .newheir .nh i{margin-left:auto;font-style:normal;font-weight:800;color:var(--foil);white-space:nowrap}
 .crown.womb .rcr .wst{justify-self:end;font:800 12px/1 var(--text);letter-spacing:.05em;text-transform:uppercase;padding:5px 9px;border-radius:999px;background:rgba(242,208,103,.18);color:var(--foil)}
+/* v34 · an heir's family life and the lessons it keeps */
+.family .famlife{margin-top:9px;padding-top:8px;border-top:1px solid rgba(242,208,103,.25)}
+.family .famlife b{font:900 14px/1 var(--display);letter-spacing:.06em;color:var(--foil)}
+.family .famlife span{display:block;margin-top:5px;font-size:13.5px;color:var(--cream)}
+.family .famlife.lessons span{font-style:italic;opacity:.9}
