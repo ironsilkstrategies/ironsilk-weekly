@@ -919,3 +919,18 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .family .famlife b{font:900 14px/1 var(--display);letter-spacing:.06em;color:var(--foil)}
 .family .famlife span{display:block;margin-top:5px;font-size:13.5px;color:var(--cream)}
 .family .famlife.lessons span{font-style:italic;opacity:.9}
+/* v35 · evolution: the Legacy and Gen badges, the Legacy line on a profile, the North Star, the family's news */
+.legtag{font:800 12px/1 var(--text);letter-spacing:.04em;padding:5px 9px;border-radius:999px;color:var(--foil);background:rgba(6,25,15,.6);box-shadow:inset 0 0 0 1.5px var(--foil)}
+.legacy{margin:14px 0 4px;padding:13px 15px;border-radius:14px;background:linear-gradient(120deg,rgba(242,208,103,.2),rgba(6,25,15,.6));box-shadow:inset 0 0 0 1px rgba(242,208,103,.45);max-width:640px}
+.legacy b{display:block;font:900 22px/1 var(--display);text-transform:uppercase;letter-spacing:.03em;color:var(--foil)}
+.legacy span{display:block;margin-top:6px;font-size:14px;color:var(--cream)}
+.family .genline{color:var(--foil);font-weight:700}
+.crown.north .ns{padding-top:8px}
+.crown.north .ns-big{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:6px 0 2px}
+.crown.north .ns-big b{font:900 52px/.9 var(--display);color:var(--ink);font-variant-numeric:tabular-nums}
+.crown.north .ns-big span{font-size:13.5px;color:var(--ink-2);max-width:34ch}
+.crown.north .bl-bar{background:rgba(21,19,15,.12);margin:8px 0 6px}
+.crown.north .tix-h{padding:8px 0 0}
+.crown.north .rcr .wst,.crown.famnews .rcr .wst{justify-self:end;font:800 13px/1 var(--text);font-variant-numeric:tabular-nums;color:var(--ink)}
+.crown.famnews .rcr{grid-template-columns:28px minmax(0,1fr)}
+.crown.famnews .rcr .n{font-size:20px}

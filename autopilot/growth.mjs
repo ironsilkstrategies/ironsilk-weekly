@@ -96,6 +96,28 @@ export function weeklyPost(F, today, ctx = {}) { if (new Date(today + 'T12:00:00
       season ? { label: 'Season: ' + season, meta: (R.first ? 'since ' + md(R.first) + ' · ' : '') + 'every pick public' } : null].filter(Boolean) };
   return { kind: 'weekly', key: 'wk|' + today, text, card, w, l, pu, u }; }
 
+/* ══ 👪 FAMILY NEWS (v3.5, Bloodlines 2.0 Phase 4) ═════════════════════════════════════════════════════════════════════
+   A birth, a graduation, an evolution or the North Star, from the public page's own family news (bloodlines.womb.events).
+   Character news, not picks: no prices, no promises, the 21+ line on every post. The worker sends it only while the repo
+   variable FAMILY is "on". */
+export const FAM_KINDS = ['born', 'grad', 'evolve', 'north'];
+export function familyPost(e, ctx = {}) { if (!e || !e.id || !FAM_KINDS.includes(e.t) || !e.who) return null; const app = appOf(ctx);
+  const int = x => { const v = Math.round(+x); return Number.isFinite(v) ? v : null; }; let kicker, title, text, rows = [];
+  if (e.t === 'born') { kicker = 'New on TheDesk'; title = `${e.who} is born`;
+    text = `👶 <b>A new character on TheDesk: ${esc(e.who)}</b>\nThe child of ${esc(e.a)} and ${esc(e.b)}${e.arch ? `, a ${esc(e.arch)}` : ''}. It earned its seat by beating both of its parents on games it never saw. Now it picks in public, as a rookie.`;
+    rows = [{ label: `${e.a} × ${e.b}`, meta: 'its parents' }, { label: 'Rookie', meta: 'three weeks to prove it in public' }]; }
+  else if (e.t === 'grad') { kicker = 'Graduation day'; title = `${e.who} graduates`;
+    text = `🎓 <b>${esc(e.who)} graduated</b>\nThree weeks of picking in public, and it kept beating both of its parents, ${esc(e.a)} and ${esc(e.b)}. It's a full character now.`;
+    rows = [{ label: `Child of ${e.a} and ${e.b}`, meta: 'beat both, in public' }]; }
+  else if (e.t === 'evolve') { const L = Math.max(2, Math.min(9, int(e.n) || 2)), g = int(e.gen); kicker = 'Evolution'; title = `${e.who}: Legacy ${L}`;
+    text = `⚡ <b>${esc(e.who)} had to evolve: Legacy ${L}</b>\n${e.by ? `Its child ${esc(e.by)} outdid it by so much that it` : 'It'} now plays to a higher standard: it can only claim what its own record proves.${g && g >= 2 && e.by ? ` ${esc(e.by)} is Gen ${g}.` : ''}`;
+    rows = [e.by ? { label: e.by, meta: g && g >= 2 ? `Gen ${g}` : 'its child' } : null, { label: `Legacy ${L}`, meta: 'a higher standard on every pick' }].filter(Boolean); }
+  else { kicker = 'The North Star'; title = `${e.who} gets there`;
+    text = `⭐ <b>${esc(e.who)} reached the North Star</b>\nWhen it says 80% or more on an official pick, it's hitting 9 in 10.`;
+    rows = [{ label: '80%+ official picks', meta: 'hitting 9 in 10, the last 30 days' }]; }
+  text += `\n\nEvery character's record is public, losses included. → ${app}\n\n21+. For entertainment only. Need help? Call or text 1-800-MY-RESET.`;
+  return { kind: 'family', key: 'fam|' + e.id, text, card: { kicker, title, rows } }; }
+
 /* ══ 🔗 RECRUITING ═══════════════════════════════════════════════════════════════════════════════════════════════
    Links are named "ref <telegram id>" (a member's own) or "src <tag>" (a platform's). A join counts once per person per
    kind, never for the person who owns the link, and only when Telegram says it came through that link. */

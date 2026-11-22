@@ -58,13 +58,35 @@
         · DISCIPLINE: its own lane going bad (1.5σ) → it reins its confidence in there; its whole card going bad (2σ) → grounded.
         · Both parents bleeding in a lane → a fresh vaccine (no official call there).
         A pattern that holds seven straight game days becomes a LESSON, part of its ideology for good.
-        It also learns whose final scores to trust: its score call leans on the parent who has been closer lately. */
+        It also learns whose final scores to trust: its score call leans on the parent who has been closer lately.
+
+   PHASE 4 (v3.5.0) · Chris: "once they out do a parent by so much to the point of where the parent has to EVOLVE to a higher set
+   of standards and becomes a 'legacy 2' character and the child becomes a 'gen 2' and so on and so on til we have our characters
+   hitting on 90% of their calls of confidence of 80% or more…. And characters calling a exact score more often than not."
+   §9 · EVOLUTION. A graduate keeps racing each parent, from its first day or from that parent's last evolution. Once it has outdone
+        a parent by so much (3σ+ on 300+ of that parent's calls over 21+ days, its official calls making more money than the
+        parent's, holding its own in the parent's best lanes), the parent EVOLVES into Legacy 2 (then 3, 4, 5) and the child earns
+        its generation: Gen 2 (a child of a Gen 2 earns Gen 3…). Nothing is backdated: the parent's new standards start the next
+        day, and the race against it starts over against its new self.
+   §10 · HIGHER STANDARDS. An evolved character may only claim what its own record proves. The number it carries in public and on
+        its official gates (after the Coach, the chemistry and the weather) can't top its record at the number it said, in that
+        kind of bet (a −300 favorite isn't a −130 one), each day from the days before it: the low end of that record, one standard
+        error for every level past the first, less 2.5 points a level. Never raised. The desk's bars stay where they are: it needs
+        more to clear them, and its 80% has to be the real thing. What it said is never touched (its children and the races read
+        it as before).
+   §11 · THE NORTH STAR. Where the family is headed: 90% hits on official calls at 80%+ confidence (the last 30 days), and exact
+        final scores more often than not. Measured for the desk and for every character; reaching it goes in the chronicle.
+   §12 · SELECTION. Graduates court like any proven character, never with their own blood (no pair shares a parent or any
+        ancestor). The nursery holds six rookies and the desk twelve living heirs: when the desk is full and an embryo is due,
+        the weakest graduate steps aside if the newborn beat its parents by more; otherwise the embryo waits. */
 
 const WOMB_KEY='d4.womb',WOMB_PREVIEW=14,WOMB_SLOTS=3,WOMB_EMB=2,WOMB_MAX_EMB=4,WOMB_MIN_N=100,WOMB_MIN_DAYS=10,WOMB_BAR=2.0,WOMB_LUCK=0.25,
   WOMB_K=12,WOMB_CAL=40,WOMB_RESPECT_N=15,WOMB_REST=14,WOMB_MAX_DAYS=28,
   WOMB_NURSERY=6,ROOKIE_DAYS=21,ROOKIE_N=150,ROOKIE_BAR=1.0,ROOKIE_MAX=42,
   FAM_H=7,FAM_MIN=6,FAM_Z=1.5,FAM_ZADM=2.0,FAM_LESSON=7;
 const FAM_ZR={Rebel:1.5,Prodigal:2.0,Prodigy:2.0};   /* how sure it must be before it fades a parent (a Steady heir never does) */
+const EVO_DAYS=21,EVO_N=300,EVO_BAR=3.0,LEGACY_MAX=5,LEG_STEP=0.025,LEG_Z=1,LEG_K=40,WB_DESK_MAX=12,
+  NORTH_CF=0.80,NORTH_HIT=0.90,NORTH_N=30,NORTH_DESK_N=100,NORTH_DAYS=30;
 const WB_SPN={nfl:'NFL',ncaaf:'CFB',nba:'NBA',ncaab:'CBB',nhl:'NHL',mlb:'MLB'};
 const WB_ROLE={'ml|fav':'ML favorites','ml|dog':'ML dogs','ml|heavy':'heavy ML favorites','spread|fav':'spread favorites','spread|dog':'spread dogs','total|over':'overs','total|under':'unders','ml|*':'moneylines','spread|*':'spreads','total|*':'totals'};
 const wbLaneLab=k=>{const[sp,m,r]=String(k).split('|');return`${WB_SPN[sp]||String(sp||'').toUpperCase()} ${WB_ROLE[m+'|'+r]||r||''}`.trim();};
@@ -109,7 +131,7 @@ function wbIndex(force){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=(typeof 
 function wbIsOff(IX,c){let v=IX.OFF.get(c.id);if(v===undefined){try{v=!!(c.x&&isOfficial(c.x));}catch(e){v=false;}IX.OFF.set(c.id,v);}return v;}
 /* an heir's (or an embryo's) official call: its own calibrated chance at the floor, a real price, the price worth it, never the
    heavy lane. The same gates as everyone's, minus the Coach's scaling: its confidence is already its own measured chance. */
-function wbOffOk(x){try{const c=confOf(x);if(c==null||!confPriced(x)||confPre(x)||isHeavyML(x))return false;
+function wbOffOk(x){try{const c=typeof wbLegCap==='function'?wbLegCap(x,confOf(x)):confOf(x);if(c==null||!confPriced(x)||confPre(x)||isHeavyML(x))return false;
   return c>=(typeof confFloorFor==='function'?confFloorFor(x):wbFloor(x.market))-1e-9&&(typeof confPays!=='function'||confPays(x));}catch(e){return false;}}
 /* a side's real price, line and lane (a side nobody priced has no price: it can't be called) */
 function wbSide(IX,g,s){const b=IX.book.get(g.k+'|'+s),o=IX.book.get(g.k+'|'+WB_OTHER[s]);
@@ -162,10 +184,20 @@ function wbChem(a,b,asOf,IX,dA,dB){let ag=0,agw=0,sp=0,spa=0;
   const base=((dA.n?dA.w/dA.n:0.5)+(dB.n?dB.w/dB.n:0.5))/2;const agr=(agw+20*base)/(ag+20);const lift=agr-base;
   const sr=sp?(spa+10*0.5)/(sp+10):0.5;const split=Math.abs(sr-0.5);
   return{ag,agw,sp,spa,base,agr,lift,split,right:sr>=0.5?a:b};}
-const wbEligible=()=>CHAR_ORDER.filter(v=>CHARS[v]&&!META_VOICES.has(v));
+/* §12 · who may court: every character that votes, and every graduate (an heir's read is its own once it has graduated) */
+const wbEligible=()=>{const out=CHAR_ORDER.filter(v=>CHARS[v]&&!META_VOICES.has(v));
+  try{(wombAll().kids||[]).forEach(K=>{if(K&&K.st==='grad'&&CHARS[K.key]&&!out.includes(K.key))out.push(K.key);});}catch(e){}return out;};
+/* a character's blood: itself and every ancestor (a founder has only itself); two characters who share any of it never pair */
+function wbBlood(v,W,depth){W=W||wombAll();depth=depth||0;const S=new Set([v]);if(depth>8)return S;const K=(W.kids||[]).find(k=>k&&k.key===v);
+  if(K){wbBlood(K.a,W,depth+1).forEach(x=>S.add(x));wbBlood(K.b,W,depth+1).forEach(x=>S.add(x));}return S;}
+function wbKin(a,b,W){const A=wbBlood(a,W),B=wbBlood(b,W);for(const x of A)if(B.has(x))return true;return false;}
+/* its generation by blood: the founders are Gen 1, an heir one past its older parent (the title is earned: §9) */
+function wbGenOf(v,W,depth){W=W||wombAll();depth=depth||0;const K=(W.kids||[]).find(k=>k&&k.key===v);if(!K||depth>8)return 1;
+  return K.gen||Math.max(wbGenOf(K.a,W,depth+1),wbGenOf(K.b,W,depth+1))+1;}
 const wbProven=d=>!!d&&d.active&&d.n>=150&&d.dom.length>=2&&!!d.honest&&Math.abs(d.honest.gap)<=0.10;
-function wbCourt(asOf,IX,busy){IX=IX||wbIndex();busy=busy||new Set();const E=wbEligible();const D={};E.forEach(v=>{D[v]=dnaOf(v,asOf,IX);});
+function wbCourt(asOf,IX,busy){IX=IX||wbIndex();busy=busy||new Set();const E=wbEligible();const D={};E.forEach(v=>{D[v]=dnaOf(v,asOf,IX);});let W0=null;try{W0=wombAll();}catch(e){}
   const P=[];for(let i=0;i<E.length;i++)for(let j=i+1;j<E.length;j++){const a=E[i],b=E[j];if(!wbProven(D[a])||!wbProven(D[b]))continue;
+    if(W0&&wbKin(a,b,W0))continue;   /* never its own blood */
     const keys=new Set([...Object.keys(D[a].lanes),...Object.keys(D[b].lanes)]);let cov=0,sa=0,sb=0;
     keys.forEach(k=>{const va=(D[a].lanes[k]||{}).val||0,vb=(D[b].lanes[k]||{}).val||0;cov+=Math.max(va,vb,0);sa+=Math.max(va,0);sb+=Math.max(vb,0);});
     const gain=cov-Math.max(sa,sb);if(gain<=0)continue;const comp=gain/(Math.max(sa,sb)+5);const ch=wbChem(a,b,asOf,IX,D[a],D[b]);
@@ -322,7 +354,7 @@ function wbBirth(W,L,E,r,d){W.kids=W.kids||[];const key='H_'+E.id;if(W.kids.some
   const arch=L.arch&&L.arch.label===E.arch?L.arch:{temper:E.recipe.temper,craft:E.recipe.craft,label:E.arch};
   const st=r||E.dueStats||{A:{},B:{},off:{},offA:{},offB:{}};const days=st.days!=null?st.days:Math.max(0,Math.round((Date.parse(d)-Date.parse(E.since))/864e5));
   const I=wbIdentity(W,L,E,arch,d,days);
-  const K={key,id:E.id,litter:L.id,a:L.a,b:L.b,arch:E.arch,temper:arch.temper,craft:arch.craft,...I,born:d,liveFrom:dayShift(d,1),since:E.since,conceived:E.conceived||L.conceived,
+  const K={key,id:E.id,litter:L.id,a:L.a,b:L.b,arch:E.arch,temper:arch.temper,craft:arch.craft,...I,gen:Math.max(wbGenOf(L.a,W),wbGenOf(L.b,W))+1,born:d,liveFrom:dayShift(d,1),since:E.since,conceived:E.conceived||L.conceived,
     recipe:E.recipe,domA:L.domA||[],domB:L.domB||[],n:E.n,st:'rookie',
     womb:{days,zA:(st.A||{}).z,zB:(st.B||{}).z,nA:(st.A||{}).n,nB:(st.B||{}).n,off:st.off?{w:st.off.w,n:st.off.n,u:st.off.u}:null,offA:(st.offA||{}).u,offB:(st.offB||{}).u},
     cal:(r&&r.cal)||E.dueCal||[]};
@@ -417,16 +449,114 @@ if(typeof scoreCallsFor==='function'&&typeof window!=='undefined'&&!window.__WB_
   scoreCallsFor=function(sp,g,s,calls){const R=SCF0.apply(this,arguments);try{if(!WB_KIDS_LIVE.length||!Array.isArray(R)||!R.length)return R;const by=new Map(R.map(x=>[x.voice,x]));
       WB_KIDS_LIVE.forEach(K=>{const me=by.get(K.key);if(!me)return;const ps=[K.a,K.b].map(v=>by.get(v)).filter(Boolean);if(!ps.length)return;
         const sc=wbKidScore(sp,K,ps,(calls||[]).filter(c=>c.voice===K.key));if(sc){me.a=sc.a;me.h=sc.h;}});}catch(e){}return R;};}
+/* ══ §10 · HIGHER STANDARDS: what an evolved character may claim ═══════════════════════════════════════════════════════════
+   The cap sits on the number it carries in public and on its official gates: after the Coach, the chemistry and the weather
+   have had their say, an evolved character's confidence can't top what its own record proves at the number it said, in that
+   kind of bet: the low end of that record (one standard error a level past the first) less 2.5 points a level. Worked out per
+   call from the days before it (a posted day stands as it was); what it said is never touched, so its children and the races
+   read it exactly as before. (Nov 22, the last 30 days replayed as if every character had been Legacy 2: official calls at 80%+
+   hit 78% instead of 72%, and the official card went 224-97, −1.4u, instead of 413-246, −23.6u.) */
+const wbLegOf=v=>{const o=WB_LEGM&&WB_LEGM[v];return o&&o.n>=2?o:null;};
+/* what it said: its own number or its gut (an heir: its calibrated chance) */
+const wbSaid0=x=>{try{const v=CHARS[x.voice]&&CHARS[x.voice].kid?confOf(x):typeof coachBase==='function'?coachBase(x):confOf(x);return v==null||v===''||!isFinite(+v)?null:+v;}catch(e){return null;}};
+/* the kind of bet: a moneyline by its price (−600 is its own lane, and a −300 favorite isn't a −130 one), the others by side */
+const wbLegLane=x=>{const m=x.market==='moneyline'?'ml':x.market,pr=x.price!=null&&x.price!==''&&isFinite(+x.price)?+x.price:null;
+  if(m==='ml')return'ml|'+(pr==null?'na':pr<=-500?'heavy':wbBand(pr));const ln=x.line!=null&&x.line!==''&&isFinite(+x.line)?+x.line:null;return m+'|'+wbRole(m,x.side,ln,pr);};
+let WB_LT=new Map();
+const WB_LEGCFG={K:LEG_K,step:LEG_STEP,z:LEG_Z,days:0};   /* (the standard's knobs, in one place) */
+function wbLegTable(v,d){const V=roGet(VOICES_KEY,[],30e3)||[];const sig=typeof ledgerSig==='function'?ledgerSig(V):String(V.length);const C=WB_LEGCFG,from=C.days?dayShift(d,-C.days):'';const k=[v,d,sig,C.days].join('|');
+  let T=WB_LT.get(k);if(T)return T;if(WB_LT.size>400)WB_LT.clear();
+  const fresh=()=>CONF_EDGES.slice(0,-1).map((lo,i)=>({lo,hi:CONF_EDGES[i+1],w:0,n:0,s:0}));const M={},L={};
+  for(const x of V){if(!x||x.voice!==v||!x.graded||x.push||x.hit==null)continue;const m=x.market==='moneyline'?'ml':x.market;const xd=String(x.date).slice(0,10);if((m!=='ml'&&m!=='spread'&&m!=='total')||xd>=d||(from&&xd<from))continue;
+    const s=wbSaid0(x);if(s==null)continue;const ln=wbLegLane(x);
+    for(const B of [M[m]||(M[m]=fresh()),L[ln]||(L[ln]=fresh())]){const b=B.find(o=>s>=o.lo&&s<o.hi);if(b){b.w+=x.hit?1:0;b.n++;b.s+=s;}}}
+  T={M:{},L:{}};Object.entries(M).forEach(([q,B])=>{T.M[q]=confPav(B);});Object.entries(L).forEach(([q,B])=>{T.L[q]=confPav(B);});WB_LT.set(k,T);return T;}
+/* what its record backs at the number it said: the lane's hit rate there, leaning on the whole bet type's where the lane is thin,
+   which leans on what it said where that's thin too */
+/* (no record at that number is no proof of it: a 72% claim never borrows its 85% calls' record) */
+const wbBin=(T,s)=>T&&T.length?T.find(o=>s>=o.lo&&s<o.hi)||null:null;
+function wbBacked(Tm,Tl,s){const K=WB_LEGCFG.K,bm=wbBin(Tm,s),tm=bm?(bm.w+K*s)/(bm.n+K):s,bl=wbBin(Tl,s),t=bl?(bl.w+K*tm)/(bl.n+K):tm;return{t,n:(bl?bl.n:bm?bm.n:0)+K};}
+/* the cap on one call (c: the number it would carry otherwise) */
+function wbLegCap(x,c){if(c==null||!x||!x.voice)return c;const o=wbLegOf(x.voice);if(!o||!o.from)return c;const d=String(x.date||'').slice(0,10);if(!d||d<o.from)return c;
+  const m=x.market==='moneyline'?'ml':x.market;if(m!=='ml'&&m!=='spread'&&m!=='total')return c;const s=wbSaid0(x);if(s==null)return c;
+  const T=wbLegTable(x.voice,d),B=wbBacked(T.M[m],T.L[wbLegLane(x)],s),C=WB_LEGCFG,lv=o.n-1;
+  const cap=Math.max(0.02,B.t-C.step*lv-C.z*lv*Math.sqrt(B.t*(1-B.t)/B.n));return cap<c?+cap.toFixed(4):c;}
+/* the Coach's clipboard gets a fourth hand: the standard (an heir's own gates read it in wbOffOk) */
+let WB_CC0=null;
+/* (desk-coach.js loads after this file: the hand goes on once it's there, at the latest when the page has loaded) */
+function wbLegHook(){if(WB_CC0||typeof coachConf!=='function'||typeof window==='undefined')return;WB_CC0=coachConf;
+  coachConf=function(x){const c=WB_CC0.apply(this,arguments);if(c==null||!WB_LEGM)return c;try{return wbLegCap(x,c);}catch(e){return c;}};}
+try{wbLegHook();if(typeof document!=='undefined'&&document.addEventListener)document.addEventListener('DOMContentLoaded',()=>{try{wbLegHook();}catch(e){}});}catch(e){}
+
+/* ══ §9 · EVOLUTION: a graduate that has outdone a parent by so much makes it evolve ══════════════════════════════════════ */
+/* the race against one parent: from the heir's first day, or from that parent's last evolution (its new self starts fresh) */
+function wbEvoRace(W,K,p,IX,d,r0){const o=(W.legacy||{})[p],lvl=(o&&o.n)||1,ws=o&&o.from&&o.from>K.liveFrom?o.from:K.liveFrom,side=p===K.a?'A':'B';
+  let r=r0;if(!r||ws!==K.liveFrom)r=wbEval({a:K.a,b:K.b,domA:K.domA,domB:K.domB},{since:ws,recipe:K.recipe},IX,d,K.n,null,{calFrom:K.since,minN:EVO_N,minDays:EVO_DAYS,bar:EVO_BAR,maxDays:1e4,seen:'games since',family:{from:K.liveFrom,temper:K.temper}});
+  const X=r[side],R=side==='A'?r.rA:r.rB,du=side==='A'?r.duA:r.duB,offP=(side==='A'?r.offA:r.offB).u,dom=(side==='A'?K.domA:K.domB)||[];
+  const days=Math.max(0,Math.round((Date.parse(d)-Date.parse(ws))/864e5)),resp=!dom.length||(R.n>=WOMB_RESPECT_N&&R.z>=-1);
+  const ok=lvl<LEGACY_MAX&&days>=EVO_DAYS&&X.n>=EVO_N&&X.z>=EVO_BAR&&du>0&&resp,s=wbSh(p),need=[];
+  if(lvl>=LEGACY_MAX)need.push(`${s} is at Legacy ${LEGACY_MAX}, as high as it goes`);
+  else{if(days<EVO_DAYS)need.push(`${EVO_DAYS-days} more day${EVO_DAYS-days===1?'':'s'}`);
+    if(X.n<EVO_N)need.push(`${EVO_N-X.n} more of ${s}'s calls`);else if(X.z<EVO_BAR)need.push(`${(Math.ceil((EVO_BAR-X.z)*10-1e-9)/10).toFixed(1)}σ more against ${s}`);
+    if(!(du>0))need.push(`more money on its official calls than ${s} (${wbU(r.off.u)} vs ${wbU(offP)})`);
+    if(!resp)need.push(R.n<WOMB_RESPECT_N?`more games in ${s}'s best lanes`:`to hold its own in ${s}'s best lanes`);}
+  return{p,side,from:ws,days,n:X.n,z:X.z,du:+(+du).toFixed(2),off:r.off.u,offP,resp,lvl,ok,need};}
+/* the parent evolves (its standards start tomorrow) and the child earns its generation */
+function wbEvolve(W,K,E,d){W.legacy=W.legacy||{};const p=E.p,o=W.legacy[p]||{n:1,hist:[]},n=Math.min(LEGACY_MAX,(o.n||1)+1);
+  W.legacy[p]={...o,n,at:d,from:dayShift(d,1),by:K.key,hist:[...(o.hist||[]),{n,at:d,by:K.key,byName:K.name,z:E.z,calls:E.n,days:E.days,du:E.du,off:E.off,offP:E.offP}].slice(-8)};
+  const g=K.gen||Math.max(wbGenOf(K.a,W),wbGenOf(K.b,W))+1,first=!K.genAt;K.gen=g;if(first){K.genAt=d;K.genBy=p;}
+  WB_LEGM={...W.legacy};
+  try{journalAdd({kind:'womb',sig:`evolve-${p}-${n}`,d,v:p,sev:'info',title:`⚡ ${wbNm(p)} evolves: Legacy ${n}${first?` · ${K.name} is Gen ${g}`:''}`,
+    what:`${K.name} outdid ${wbThe(p)} by ${E.z.toFixed(1)}σ on ${E.n} of its calls over ${E.days} days, its official calls ${wbU(E.off)} against ${wbU(E.offP)}. From ${wbMd(dayShift(d,1))} ${wbThe(p)} plays to Legacy ${n} standards: it may only claim what its own record proves at the number it says (the low end of it, ${n-1} standard error${n-1===1?'':'s'} down) less ${+(LEG_STEP*(n-1)*100).toFixed(1)} points.${first?` ${K.name} earns its generation: Gen ${g}.`:''}`});}catch(e){}
+  return W.legacy[p];}
+/* §12 · the weakest graduate: the smallest lead over its parents since its first day */
+function wbWeakest(W,IX,d,out){let best=null;(W.kids||[]).forEach(K=>{if(!K||K.st!=='grad')return;let r=out&&out.kid&&out.kid[K.key];
+    if(!r){try{r=wbEval({a:K.a,b:K.b,domA:K.domA,domB:K.domB},{since:K.liveFrom,recipe:K.recipe},IX,d,K.n,null,{calFrom:K.since,family:{from:K.liveFrom,temper:K.temper}});if(out&&out.kid)out.kid[K.key]=r;}catch(e){return;}}
+    const s=Math.min(+r.A.z||0,+r.B.z||0);if(!best||s<best.s)best={K,s};});return best;}
+
+/* ══ §11 · THE NORTH STAR: 90% on official calls at 80%+ confidence, exact scores more often than not ═══════════════════════ */
+/* the confidence a call carries in public (an heir's is its own calibrated chance) */
+const wbSaidPub=x=>{try{if(CHARS[x.voice]&&CHARS[x.voice].kid)return wbLegCap(x,confOf(x));const v=typeof coachOk==='function'?coachOk(x):confOf(x);return v==null||!isFinite(+v)?null:+v;}catch(e){return null;}};
+let WB_NS=null;
+function wbNorth(d,days){d=d||today();days=days||NORTH_DAYS;const V=roGet(VOICES_KEY,[],30e3)||[];const sig=(typeof ledgerSig==='function'?ledgerSig(V):String(V.length))+'|'+d+'|'+days;
+  if(WB_NS&&WB_NS.sig===sig&&Date.now()-WB_NS.ts<10*60e3)return WB_NS.v;const from=dayShift(d,-(days-1));
+  const by={},all={n:0,w:0,s:0},any={n:0,w:0};
+  V.forEach(x=>{if(!x||!CHARS[x.voice]||x.voice==='Blend'||!x.graded||x.push||x.hit==null)return;const dd=String(x.date).slice(0,10);if(dd<from||dd>d)return;
+    const m=x.market==='moneyline'?'ml':x.market;if(m!=='ml'&&m!=='spread'&&m!=='total')return;
+    const b0=typeof coachBase==='function'&&!(CHARS[x.voice]||{}).kid?coachBase(x):confOf(x);if(b0==null||b0<0.6)return;   /* (nothing under 60% gets to 80%) */
+    const s=wbSaidPub(x);if(s==null||s<NORTH_CF-1e-9)return;any.n++;if(x.hit)any.w++;
+    let off=false;try{off=isOfficial(x);}catch(e){}if(!off)return;
+    const o=by[x.voice]||(by[x.voice]={n:0,w:0,s:0});o.n++;o.s+=s;if(x.hit)o.w++;all.n++;all.s+=s;if(x.hit)all.w++;});
+  const rt=o=>o.n?o.w/o.n:null;
+  const SC=Object.values(roGet(SCORECALL_KEY,{},60e3)||{}).filter(x=>x&&x.graded&&CHARS[x.voice]&&String(x.date).slice(0,10)>=from&&String(x.date).slice(0,10)<=d);
+  const sp={},ex={},xa={n:0,e:0};SC.forEach(x=>{const o=sp[x.sp]||(sp[x.sp]={n:0,e:0,err:0,en:0});o.n++;o.e+=x.exact?1:0;if(x.err!=null&&isFinite(+x.err)){o.err+=+x.err;o.en++;}xa.n++;xa.e+=x.exact?1:0;
+    const q=(ex[x.sp]=ex[x.sp]||{})[x.voice]||(ex[x.sp][x.voice]={n:0,e:0});q.n++;q.e+=x.exact?1:0;});
+  const best={};Object.entries(ex).forEach(([s0,M])=>{Object.entries(M).forEach(([v,o])=>{if(o.n<20)return;const r=o.e/o.n;if(!best[s0]||r>best[s0].rate)best[s0]={v,n:o.n,e:o.e,rate:r};});});
+  const v={from,d,days,cf:NORTH_CF,goal:NORTH_HIT,all:{...all,rate:rt(all),said:all.n?all.s/all.n:null},any:{...any,rate:rt(any)},
+    by:Object.fromEntries(Object.entries(by).map(([k,o])=>[k,{...o,rate:rt(o),said:o.n?o.s/o.n:null,star:o.n>=NORTH_N&&o.w/o.n>=NORTH_HIT-1e-9}])),
+    exact:{n:xa.n,e:xa.e,rate:xa.n?xa.e/xa.n:null,sp:Object.fromEntries(Object.entries(sp).map(([k,o])=>[k,{n:o.n,e:o.e,rate:o.n?o.e/o.n:null,err:o.en?o.err/o.en:null,best:best[k]||null}]))},
+    desk:all.n>=NORTH_DESK_N&&all.w/all.n>=NORTH_HIT-1e-9};
+  WB_NS={sig,ts:Date.now(),v};return v;}
+/* the family's news, newest first (births, graduations, evolutions, the North Star, retirements) */
+function wbEvents(W,since){W=W||wombAll();const ev=[],nm=v=>v==='*'?'The desk':wbNm(v);
+  (W.kids||[]).forEach(K=>{if(!K||!K.key)return;if(K.born>=since)ev.push({id:'born-'+K.key,t:'born',d:K.born,who:K.name,v:K.key,a:nm(K.a),b:nm(K.b),arch:K.arch||''});
+    if(K.gradAt&&K.gradAt>=since)ev.push({id:'grad-'+K.key,t:'grad',d:K.gradAt,who:K.name,v:K.key,a:nm(K.a),b:nm(K.b)});
+    if(K.retiredAt&&K.retiredAt>=since)ev.push({id:'retired-'+K.key,t:'retired',d:K.retiredAt,who:K.name,v:K.key});});
+  Object.entries(W.legacy||{}).forEach(([v,o])=>(o&&o.hist||[]).forEach(h=>{if(h&&h.at>=since){const K=(W.kids||[]).find(k=>k.key===h.by);
+    ev.push({id:`evolve-${v}-${h.n}`,t:'evolve',d:h.at,who:nm(v),v,n:h.n,by:h.byName||nm(h.by),gen:K&&K.genAt===h.at&&K.genBy===v?(K.gen||null):null});}}));
+  Object.entries(W.north||{}).forEach(([v,d])=>{if(d&&d>=since)ev.push({id:'north-'+v,t:'north',d,who:nm(v),v});});
+  return ev.sort((x,y)=>String(y.d).localeCompare(String(x.d))||(x.id<y.id?-1:1)).slice(0,12);}
+
 /* ══ §6 · AN HEIR ON THE DESK ═════════════════════════════════════════════════════════════════════════════════════════════ */
-let WB_KIDS_LIVE=[],WB_KIDS_SIG='';
+let WB_KIDS_LIVE=[],WB_KIDS_SIG='',WB_LEGM={};
 const wbIsKid=v=>!!(CHARS[v]&&CHARS[v].kid);
 function wbKid(key){try{return(wombAll().kids||[]).find(K=>K.key===key)||null;}catch(e){return null;}}
 /* every heir ever born is a character (a retired one keeps its name on its record); the living ones call games */
-function wbRegisterKids(){let W;try{W=wombAll();}catch(e){return 0;}let n=0;
+function wbRegisterKids(){let W;try{W=wombAll();}catch(e){return 0;}let n=0;try{WB_LEGM={...(W.legacy||{})};if(typeof wbLegHook==='function')wbLegHook();}catch(e){}
   (W.kids||[]).forEach(K=>{if(!K||!K.key)return;let C=CHARS[K.key];
     if(!C){C=CHARS[K.key]={chip:K.chip,color:K.color,label:K.name,school:'',quiet:'',kid:1};const i=CHAR_ORDER.indexOf('Banker');CHAR_ORDER.splice(i>=0?i:CHAR_ORDER.length,0,K.key);n++;}
     try{META_VOICES.add(K.key);}catch(e){}
-    C.school=`${K.creed} Child of ${wbThe(K.a)} and ${wbThe(K.b)}, born ${wbMd(K.born)}: it reads its parents' calls through the genes it was born with (a ${K.arch}).`;
+    C.school=`${K.creed} Child of ${wbThe(K.a)} and ${wbThe(K.b)}, born ${wbMd(K.born)}${K.genAt?`, Gen ${K.gen||wbGenOf(K.key,W)} since it outdid ${wbThe(K.genBy)} on ${wbMd(K.genAt)}`:''}: it reads its parents' calls through the genes it was born with (a ${K.arch}).`;
     C.quiet=K.st==='retired'?'retired':'neither of its parents called this';
     try{if(typeof PUB_BIOS!=='undefined')PUB_BIOS[K.key]={title:K.title,bio:K.pub.bio,origin:K.pub.origin};}catch(e){}});
   WB_KIDS_LIVE=wbLiving(W);const sig=WB_KIDS_LIVE.map(K=>K.key+':'+(K.cal||[]).length).join(',');
@@ -454,8 +584,9 @@ if(typeof metaCalls==='function'&&typeof window!=='undefined'&&!window.__WB_META
   metaCalls=function(sp,g,calls,Ln,add){const r=MC0.apply(this,arguments);try{wbKidCalls(sp,g,calls,Ln,add);}catch(e){console.warn('heir calls',e);}return r;};}
 /* an heir's confidence is its own calibrated chance (the desk's stamp, the Coach and the confidence-engine heirs leave it alone) */
 if(typeof confStamp==='function'&&typeof window!=='undefined'&&!window.__WB_CS__){window.__WB_CS__=1;const CS1=confStamp;
-  confStamp=function(calls){const L=calls||[];if(!L.some(c=>c&&wbIsKid(c.voice)))return CS1(L);CS1(L.filter(c=>!(c&&wbIsKid(c.voice))));
-    L.forEach(c=>{if(!c||!wbIsKid(c.voice)||c.kp==null)return;c.cf=c.kp;c.cfb=c.kr!=null?c.kr:c.kp;c.cfw=['its own read, born of its parents'];delete c.cff;delete c.kof;});};}
+  confStamp=function(calls){const L=calls||[];if(!L.some(c=>c&&wbIsKid(c.voice)))CS1(L);else{CS1(L.filter(c=>!(c&&wbIsKid(c.voice))));
+    L.forEach(c=>{if(!c||!wbIsKid(c.voice)||c.kp==null)return;c.cf=c.kp;c.cfb=c.kr!=null?c.kr:c.kp;c.cfw=['its own read, born of its parents'];delete c.cff;delete c.kof;});}
+  };}
 try{wbRegisterKids();}catch(e){}
 
 let WOMB_MEMO=null;
@@ -474,15 +605,21 @@ function wombRun(force){const d=today();const IX=wbIndex();if(!force&&WOMB_MEMO&
     for(const P of C.P){if(live().length>=WOMB_SLOTS||(!first&&made>=1))break;if(busy.has(P.a)||busy.has(P.b)||rest.has(wbPairKey(P.a,P.b)))continue;wbConceive(W,P,asOf,C.D,IX,d);busy.add(P.a);busy.add(P.b);made++;}
     W.firstDone=1;W.lastConceived=d;changed=true;}   /* one courtship pass a day */
   /* 2 · every embryo re-reads its games; the due are born (room permitting), the lost make room for a sibling */
-  const out={d,ts:Date.now(),sig:IX.sig,emb:{},kid:{},n:0,born:[]};
+  const out={d,ts:Date.now(),sig:IX.sig,emb:{},kid:{},evo:{},n:0,born:[]};
   W.litters.filter(L=>L.st==='live').forEach(L=>{L.embryos.forEach(E=>{if(E.st!=='womb'&&E.st!=='due')return;const r=wbEval(L,E,IX,d,E.n);out.emb[E.id]=r;out.n++;
       if(E.st==='womb'&&r.due){E.st='due';E.dueAt=d;E.dueStats={days:r.days,A:{n:r.A.n,z:r.A.z},B:{n:r.B.n,z:r.B.z},off:r.off,offA:r.offA,offB:r.offB,why:r.why};E.dueCal=r.cal;changed=true;}
       else if(E.st==='womb'&&r.lost){E.st='lost';E.lostAt=d;E.why=r.why;changed=true;try{journalAdd({kind:'womb',sig:'lost-'+E.id,v:L.a,sev:'info',title:`🕊 ${wbNm(L.a)} × ${wbNm(L.b)}: an embryo was lost`,what:`The ${E.arch}, ${r.why}. The parents try again.`});}catch(e){}}});
     /* §5 · a birth: the strongest embryo that's due, if the nursery has room (it waits, due, until it does) */
     const due=L.embryos.filter(E=>E.st==='due');
-    if(due.length){if(wbLiving(W).length<WOMB_NURSERY){const mz=E=>{const r=out.emb[E.id]||E.dueStats||{A:{},B:{}};return Math.min(+(r.A||{}).z||0,+(r.B||{}).z||0);};
-        const E=due.sort((x,y)=>mz(y)-mz(x))[0];const K=wbBirth(W,L,E,out.emb[E.id]&&out.emb[E.id].due?{...out.emb[E.id],why:out.emb[E.id].why}:E.dueStats,d);if(K){out.born.push(K.key);changed=true;}}
-      else if(!L.waitNoted){L.waitNoted=d;changed=true;try{journalAdd({kind:'womb',sig:'wait-'+L.id,v:L.a,sev:'info',title:`🍼 ${wbNm(L.a)} × ${wbNm(L.b)}: due, waiting for room`,what:`The nursery is full (${WOMB_NURSERY} living heirs). It's born the day one graduates out of it or retires.`});}catch(e){}}}
+    if(due.length){const mz=E=>{const r=out.emb[E.id]||E.dueStats||{A:{},B:{}};return Math.min(+(r.A||{}).z||0,+(r.B||{}).z||0);};const E=due.sort((x,y)=>mz(y)-mz(x))[0];
+      const rook=(W.kids||[]).filter(K=>K&&K.st==='rookie').length;let room=rook<WOMB_NURSERY&&wbLiving(W).length<WB_DESK_MAX;
+      /* §12 · the desk is full: the weakest graduate steps aside if the newborn beat its parents by more */
+      if(!room&&rook<WOMB_NURSERY){const wk=wbWeakest(W,IX,d,out);if(wk&&mz(E)>wk.s){wk.K.st='retired';wk.K.retiredAt=d;wk.K.stepAside=1;changed=true;room=true;
+          wk.K.why=`stepped aside for the child of ${wbThe(L.a)} and ${wbThe(L.b)}: the desk holds ${WB_DESK_MAX} heirs, and the newborn beat its parents by more (${mz(E).toFixed(1)}σ against its ${wk.s.toFixed(1)}σ)`;
+          try{journalAdd({kind:'womb',sig:'aside-'+wk.K.key,v:wk.K.a,sev:'info',title:`🍂 ${wk.K.name} steps aside`,what:`${wk.K.why.charAt(0).toUpperCase()+wk.K.why.slice(1)}. Its record stays on the books; its calls stop.`});}catch(e){}}}
+      if(room){const K=wbBirth(W,L,E,out.emb[E.id]&&out.emb[E.id].due?{...out.emb[E.id],why:out.emb[E.id].why}:E.dueStats,d);if(K){out.born.push(K.key);changed=true;}}
+      else if(!L.waitNoted){L.waitNoted=d;changed=true;try{journalAdd({kind:'womb',sig:'wait-'+L.id,v:L.a,sev:'info',title:`🍼 ${wbNm(L.a)} × ${wbNm(L.b)}: due, waiting for room`,
+        what:rook>=WOMB_NURSERY?`The nursery is full (${WOMB_NURSERY} rookies). It's born the day one graduates or retires.`:`The desk is full (${WB_DESK_MAX} heirs) and every graduate is ahead of its parents by more than this one beat its own. It waits until one falls behind or retires.`});}catch(e){}}}
     if(L.st!=='live')return;
     /* a lost embryo makes room for a sibling, conceived today from today's records (its type can differ: the Goosebumps rule) */
     const alive=L.embryos.filter(E=>E.st!=='lost');
@@ -501,9 +638,18 @@ function wombRun(force){const d=today();const IX=wbIndex();if(!force&&WOMB_MEMO&
         try{journalAdd({kind:'womb',sig:`fam-${K.key}-${e.key}-${e.d}`,d:e.d,v:K.a,sev:'info',title:t==='rebel'?`✊ ${K.name} rebels against ${wbNm(pp==='a'?K.a:K.b)}`:`🌟 ${K.name} admires ${wbNm(pp==='a'?K.a:K.b)}`,what:wbFamTxt(x,K).replace(/^\S+ /,'')+'.'});}catch(err){}});
       F.lessons.forEach(l=>{const[t,pp,...kk]=l.key.split('|');const txt=wbLessonTxt({t,p:pp,k:kk.join('|')},K);if(!txt)return;
         try{journalAdd({kind:'womb',sig:`lesson-${K.key}-${l.key}`,d:l.d,v:K.a,sev:'info',title:`📚 ${K.name} learned a lesson`,what:`“${txt}.” Seven straight game days of it: it's part of how it plays now.`});}catch(err){}});}
+    /* §9 · a graduate races each parent; outdo one by so much and that parent evolves */
+    if(K.st==='grad'){const ev={};[K.a,K.b].forEach(p=>{const pk=(W.kids||[]).find(k=>k&&k.key===p);if(!CHARS[p]||(pk&&pk.st==='retired'))return;
+        try{const E=wbEvoRace(W,K,p,IX,d,r);ev[p]=E;if(E.ok){wbEvolve(W,K,E,d);E.done=1;changed=true;}}catch(e){console.warn('evolution',e);}});
+      out.evo[K.key]=ev;return;}
     if(K.st!=='rookie')return;
     if(r.due){K.st='grad';K.gradAt=d;K.why=r.why;changed=true;try{journalAdd({kind:'womb',sig:'grad-'+K.key,v:K.a,sev:'info',title:`🎓 ${K.name} graduates`,what:`The child of ${wbThe(K.a)} and ${wbThe(K.b)} ${r.why}. It's a full character now.`});}catch(e){}}
     else if(r.lost){K.st='retired';K.retiredAt=d;K.why=r.why;changed=true;try{journalAdd({kind:'womb',sig:'retired-'+K.key,v:K.a,sev:'info',title:`🚪 ${K.name} retires`,what:`${r.why.charAt(0).toUpperCase()+r.why.slice(1)}. Its record stays on the books; its calls stop.`});}catch(e){}}});
+  /* 4 · §11 · the North Star: the first day a character (or the desk) gets there goes in the chronicle */
+  try{const N=wbNorth(d);W.north=W.north||{};out.north=N;
+    Object.entries(N.by).forEach(([v,o])=>{if(!o.star||W.north[v])return;W.north[v]=d;changed=true;
+      try{journalAdd({kind:'womb',sig:'north-'+v,d,v,sev:'info',title:`⭐ ${wbNm(v)} reaches the North Star`,what:`${o.w} of its ${o.n} official calls at 80%+ confidence hit over the last ${N.days} days (${Math.round(o.rate*100)}%). The goal is 90%.`});}catch(e){}});
+    if(N.desk&&!W.north['*']){W.north['*']=d;changed=true;try{journalAdd({kind:'womb',sig:'north-desk',d,sev:'info',title:'⭐ The desk reaches the North Star',what:`${N.all.w} of ${N.all.n} official calls at 80%+ confidence hit over the last ${N.days} days (${Math.round(N.all.rate*100)}%). The goal was 90%.`});}catch(e){}}}catch(e){}
   if(changed)set(WOMB_KEY,W);try{wbRegisterKids();}catch(e){}   /* (an heir born on another device and synced here joins the roster too) */
   WOMB_MEMO=out;return out;}
 async function wombRunAsync(force){try{if(typeof deskIdle==='function')await deskIdle(200);}catch(e){}const R=wombRun(force);
@@ -525,9 +671,17 @@ function wombMerge(a,b){if(!a||a.v!==1||!Array.isArray(a.litters))return b||a;if
     const born=L.st==='born'||M.st==='born',ended=!born&&(L.st==='ended'||M.st==='ended');
     return{...L,st:born?'born':ended?'ended':L.st,...(born?{bornAt:L.bornAt||M.bornAt,kid:L.kid||M.kid}:{}),...(ended?{ended:L.ended||M.ended}:{}),embryos:[...E.values()].sort((x,y)=>num(x.id)-num(y.id))};});
   /* every heir either copy has seen born; a graduation or a retirement on either side stands */
-  const krk=st=>st==='retired'?2:st==='grad'?1:0,KM=new Map();[...(b.kids||[]),...(a.kids||[])].forEach(K=>{if(!K||!K.key)return;const o=KM.get(K.key);if(!o||krk(K.st)>=krk(o.st))KM.set(K.key,K);});
+  const krk=st=>st==='retired'?2:st==='grad'?1:0,KM=new Map(),KA=[...(b.kids||[]),...(a.kids||[])];KA.forEach(K=>{if(!K||!K.key)return;const o=KM.get(K.key);if(!o||krk(K.st)>=krk(o.st))KM.set(K.key,K);});
+  /* §9 · a generation earned on either copy stands (the earlier day, if both) */
+  KM.forEach((K,k)=>{const g=KA.filter(x=>x&&x.key===k&&x.genAt).sort((x,y)=>String(x.genAt).localeCompare(String(y.genAt)))[0];if(g&&g.genAt!==K.genAt)KM.set(k,{...K,gen:g.gen||K.gen,genAt:g.genAt,genBy:g.genBy});});
+  /* an evolution on either copy stands: the higher Legacy wins (the earlier day on a tie), and the history is the union */
+  const LG={};new Set([...Object.keys(a.legacy||{}),...Object.keys(b.legacy||{})]).forEach(v=>{const x=(a.legacy||{})[v],y=(b.legacy||{})[v];if(!x||!y){LG[v]=x||y;return;}
+    const w=(x.n||1)!==(y.n||1)?((x.n||1)>(y.n||1)?x:y):(String(x.at)<=String(y.at)?x:y),H=new Map();[...(x.hist||[]),...(y.hist||[])].forEach(h=>{if(h&&!H.has(h.n))H.set(h.n,h);});
+    LG[v]={...w,hist:[...H.values()].sort((p,q)=>p.n-q.n).slice(-8)};});
+  const NS={};[a.north||{},b.north||{}].forEach(o=>Object.entries(o).forEach(([v,d])=>{if(d&&(!NS[v]||d<NS[v]))NS[v]=d;}));
   const lc=[a.lastConceived,b.lastConceived].filter(Boolean).sort().pop();
-  return{...S,...P,litters,...(KM.size?{kids:[...KM.values()].sort((x,y)=>String(x.born).localeCompare(String(y.born)))}:{}),tried:Math.max(a.tried||0,b.tried||0),firstDone:a.firstDone||b.firstDone||undefined,...(lc?{lastConceived:lc}:{})};}
+  return{...S,...P,litters,...(KM.size?{kids:[...KM.values()].sort((x,y)=>String(x.born).localeCompare(String(y.born)))}:{}),...(Object.keys(LG).length?{legacy:LG}:{}),...(Object.keys(NS).length?{north:NS}:{}),
+    tried:Math.max(a.tried||0,b.tried||0),firstDone:a.firstDone||b.firstDone||undefined,...(lc?{lastConceived:lc}:{})};}
 if(typeof syncMergeVal==='function'&&typeof window!=='undefined'&&!window.__WOMB_SYNC__){window.__WOMB_SYNC__=1;const SMV1=syncMergeVal;
   syncMergeVal=function(k,L,R,tomb){if(k===WOMB_KEY&&L&&R){try{const N=L.t>=R.t?L:R,O=N===L?R:L;return wombMerge(N.v,O.v);}catch(e){}}return SMV1.apply(this,arguments);};}
 
@@ -575,19 +729,20 @@ const wbBar=(lab,txt,f,col)=>`<div class="lbl"><span>${lab}</span><span>${txt}</
 function nurseryHtml(){const W=wombAll(),KS=(W.kids||[]).slice();
   if(!WOMB_MEMO||WOMB_MEMO.d!==today())wombRunAsync().then(()=>{try{if(GEN_TAB==='nursery')genRender();}catch(e){}}).catch(()=>{});
   const R=(WOMB_MEMO&&WOMB_MEMO.kid)||{};
-  const head=`<div class="card"><div style="font:800 15px system-ui">🍼 The nursery</div><div class="muted" style="margin-top:4px">An heir is born when an embryo beats both of its parents on games it never saw. Born, it's a character of its own: it calls every game either parent calls, through the genes it was born with, with its own calibrated chance as its confidence, and it keeps its own record. It never votes: its read comes from its parents', so counting it would count them twice. A rookie <b>graduates</b> after ${ROOKIE_DAYS} days and ${ROOKIE_N}+ calls against each parent if it's still ahead of both and its official calls still make at least as much money; clearly worse than a parent, or ${ROOKIE_MAX} days without graduating, and it <b>retires</b>. From its first day it lives with its family: it learns from its parents' mistakes (a week's memory, quicker than theirs), rebels where one keeps sinking, absorbs what's working, respects the parent who keeps being right, admires a hot one and disciplines itself when its own calls slide.</div></div>`;
+  const head=`<div class="card"><div style="font:800 15px system-ui">🍼 The nursery</div><div class="muted" style="margin-top:4px">An heir is born when an embryo beats both of its parents on games it never saw. Born, it's a character of its own: it calls every game either parent calls, through the genes it was born with, with its own calibrated chance as its confidence, and it keeps its own record. It never votes: its read comes from its parents', so counting it would count them twice. A rookie <b>graduates</b> after ${ROOKIE_DAYS} days and ${ROOKIE_N}+ calls against each parent if it's still ahead of both and its official calls still make at least as much money; clearly worse than a parent, or ${ROOKIE_MAX} days without graduating, and it <b>retires</b>. From its first day it lives with its family: it learns from its parents' mistakes (a week's memory, quicker than theirs), rebels where one keeps sinking, absorbs what's working, respects the parent who keeps being right, admires a hot one and disciplines itself when its own calls slide. A graduate keeps racing its parents: outdo one by so much and that parent has to <b>evolve</b> (⚡ Evolution). The nursery holds ${WOMB_NURSERY} rookies and the desk ${WB_DESK_MAX} heirs.</div></div>`;
   if(!KS.length)return head+`<div class="card"><div class="muted">No heir born yet. The first can arrive ${WOMB_MIN_DAYS} days after its litter was conceived, and only if it beats both parents.</div></div>`;
   const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const rank={rookie:0,grad:1,retired:2};
   KS.sort((x,y)=>(rank[x.st]-rank[y.st])||String(y.born).localeCompare(String(x.born)));
   const card=K=>{const r=R[K.key];const mine=V.filter(x=>x&&x.voice===K.key);const gr=mine.filter(x=>x.graded&&!x.push&&x.hit!=null);const w=gr.filter(x=>x.hit).length,u=gr.reduce((t,x)=>t+(+x.units||0),0);
     const of=gr.filter(x=>{try{return isOfficial(x);}catch(e){return false;}});const ow=of.filter(x=>x.hit).length,ou=of.reduce((t,x)=>t+(+x.units||0),0);
-    const now=mine.filter(x=>String(x.date).slice(0,10)===d&&!x.graded).length;const st=K.st==='rookie'?'🍼 Rookie':K.st==='grad'?'🎓 Graduated':'🚪 Retired';
+    const now=mine.filter(x=>String(x.date).slice(0,10)===d&&!x.graded).length;const st=K.st==='rookie'?'🍼 Rookie':K.st==='grad'?(K.genAt?`⚡ Gen ${K.gen||wbGenOf(K.key,W)}`:'🎓 Graduated'):'🚪 Retired';
+    const lg=(W.legacy||{})[K.key];
     const rec=K.recipe||{lanes:{},vacc:[],fade:[],hot:[]};const fromA=(K.domA||[]).filter(k=>(rec.lanes[k]||{}).a>=(rec.lanes[k]||{}).b).slice(0,3),fromB=(K.domB||[]).filter(k=>(rec.lanes[k]||{}).b>(rec.lanes[k]||{}).a).slice(0,3);
     const sg=z=>(z>=0?'+':'−')+Math.abs(+z||0).toFixed(1);
     const kc=/^#[0-9a-f]{3,8}$/i.test(String(K.color||''))?K.color:'#f5c542';
     return`<div class="card" style="border-left:4px solid ${kc}${K.st==='retired'?';opacity:.7':''}">
       <div style="display:flex;gap:12px;align-items:center">${wbCrestSvg(K,52)}<div><div style="font:900 18px system-ui;color:${kc}">${txtEsc(K.name)}</div>
-        <div class="muted">${txtEsc(K.title)} · a ${txtEsc(K.arch)} · ${st}</div>
+        <div class="muted">${txtEsc(K.title)} · a ${txtEsc(K.arch)} · ${st}${lg&&lg.n>=2?` · <span style="color:#f5c542">Legacy ${lg.n}</span>`:''}</div>
         <div style="font-size:12.5px;margin-top:2px">Child of <b style="color:${wbCol(K.a)}">${txtEsc(wbNm(K.a))}</b> and <b style="color:${wbCol(K.b)}">${txtEsc(wbNm(K.b))}</b> · born ${txtEsc(wbMd(K.born))}</div></div></div>
       <div style="margin-top:8px;font-style:italic">“${txtEsc(K.creed)}”</div>
       <div style="margin-top:6px;font-size:12.5px;line-height:1.5">${fromA.length?`From ${txtEsc(wbSh(K.a))}: ${fromA.map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}${fromB.length?`From ${txtEsc(wbSh(K.b))}: ${fromB.map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}${rec.vacc.length?`💉 Vaccinated against ${rec.vacc.slice(0,4).map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}${rec.fade.length?`✊ Rebels in ${rec.fade.slice(0,3).map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}${rec.hot.length?`🔥 Rides ${rec.hot.slice(0,3).map(wbLaneLab).map(txtEsc).join(', ')}<br>`:''}Mutation: ${txtEsc(rec.mut||'none')}</div>
@@ -599,8 +754,54 @@ function nurseryHtml(){const W=wombAll(),KS=(W.kids||[]).slice();
         ${wbBar(`Edge vs ${txtEsc(wbSh(K.a))}`,`${sg(r.A.z)}σ of ${ROOKIE_BAR.toFixed(1)}σ`,r.A.z/ROOKIE_BAR,r.A.z<0?'#f87171':'#22c55e')}${wbBar(`Edge vs ${txtEsc(wbSh(K.b))}`,`${sg(r.B.z)}σ of ${ROOKIE_BAR.toFixed(1)}σ`,r.B.z/ROOKIE_BAR,r.B.z<0?'#f87171':'#22c55e')}
         <div class="lbl"><span>Money check (its official calls vs each parent's)</span><span style="color:${r.duA>=-1&&r.duB>=-1?'#22c55e':'#f87171'}">${wbU(r.off.u)} vs ${wbU(r.offA.u)} · ${wbU(r.offB.u)}</span></div>
         ${r.need&&r.need.length?`<div style="margin-top:6px;font-size:12px">🎓 <b>To graduate:</b> ${r.need.map(txtEsc).join(' · ')}</div>`:''}</div>`:K.st==='rookie'?`<div class="muted" style="margin-top:6px">Its rookie year starts ${txtEsc(wbMd(K.liveFrom))}.</div>`:''}
-      ${K.st!=='rookie'&&K.why?`<div class="muted" style="margin-top:6px">${K.st==='grad'?'🎓 Graduated':'🚪 Retired'} ${txtEsc(wbMd(K.gradAt||K.retiredAt))}: ${txtEsc(K.why)}</div>`:''}</div>`;};
+      ${K.st!=='rookie'&&K.why?`<div class="muted" style="margin-top:6px">${K.st==='grad'?'🎓 Graduated':K.stepAside?'🍂 Stepped aside':'🚪 Retired'} ${txtEsc(wbMd(K.st==='grad'?K.gradAt:K.retiredAt))}: ${txtEsc(K.why)}</div>`:''}
+      ${K.genAt?`<div style="margin-top:6px;font-size:12.5px">⚡ Gen ${K.gen||wbGenOf(K.key,W)} since ${txtEsc(wbMd(K.genAt))}, the day it made ${txtEsc(wbNm(K.genBy))} evolve.</div>`:''}
+      ${K.st==='grad'?`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(245,197,66,.07)"><div style="font:800 13px system-ui">⚡ The race to make a parent evolve</div>${wbEvoBars(K,((WOMB_MEMO&&WOMB_MEMO.evo)||{})[K.key]||{})}</div>`:''}</div>`;};
   return head+KS.map(card).join('');}
+/* ── ⚡ evolution: a graduate's race against each parent, the Legacy board, the lineage ── */
+const wbHex=c=>/^#[0-9a-f]{3,8}$/i.test(String(c||''))?c:'#f5c542';
+function wbEvoBars(K,ev){const sg=z=>(z>=0?'+':'−')+Math.abs(+z||0).toFixed(1);
+  return[K.a,K.b].map(p=>{const E=ev[p];if(!E)return`<div class="muted" style="margin-top:6px;font-size:12px">vs ${txtEsc(wbNm(p))}: not in the race today.</div>`;
+    return`<div style="margin-top:8px"><div style="font:800 12.5px system-ui">vs <span style="color:${wbCol(p)}">${txtEsc(wbNm(p))}</span>${E.lvl>=2?` <span class="muted">(Legacy ${E.lvl}, raced since ${txtEsc(wbMd(E.from))})</span>`:''}</div>
+      ${wbBar('Days',`${Math.min(E.days,EVO_DAYS)}/${EVO_DAYS}`,E.days/EVO_DAYS,'#a78bfa')}${wbBar('Calls against it',`${Math.min(E.n,EVO_N)}/${EVO_N}`,E.n/EVO_N,'#60a5fa')}
+      ${wbBar('Edge',`${sg(E.z)}σ of ${EVO_BAR.toFixed(1)}σ`,E.z/EVO_BAR,E.z<0?'#f87171':'#22c55e')}
+      <div class="lbl"><span>Money check (official calls)</span><span style="color:${E.du>0?'#22c55e':'#f87171'}">${wbU(E.off)} vs ${wbU(E.offP)}</span></div>
+      ${E.done?`<div style="margin-top:4px;font-size:12px">⚡ It made ${txtEsc(wbNm(p))} evolve today.</div>`:E.need&&E.need.length?`<div style="margin-top:4px;font-size:12px">⚡ <b>To make it evolve:</b> ${E.need.map(txtEsc).join(' · ')}</div>`:''}</div>`;}).join('');}
+function wbLineageHtml(W){const KS=(W.kids||[]).filter(k=>k&&k.key);if(!KS.length)return'';const g=k=>k.gen||wbGenOf(k.key,W);
+  const rows=KS.slice().sort((x,y)=>g(x)-g(y)||String(x.born).localeCompare(String(y.born))).map(k=>`<div style="font-size:12.5px;margin-top:5px">${k.st==='rookie'?'🍼':k.st==='grad'?(k.genAt?'⚡':'🎓'):'🚪'} <b style="color:${wbHex(k.color)}">${txtEsc(k.name)}</b> <span class="muted">${k.genAt?`Gen ${g(k)}`:`Gen ${g(k)} by blood`} · child of ${txtEsc(wbNm(k.a))} and ${txtEsc(wbNm(k.b))} · born ${txtEsc(wbMd(k.born))}</span></div>`).join('');
+  return`<div class="card"><div style="font:800 14px system-ui">🌳 The lineage</div><div class="muted" style="margin-top:4px">The founders are Gen 1. An heir carries its generation by blood and earns the title the day it makes a parent evolve.</div>${rows}</div>`;}
+function evoHtml(){const W=wombAll();if(!WOMB_MEMO||WOMB_MEMO.d!==today())wombRunAsync().then(()=>{try{if(GEN_TAB==='evo')genRender();}catch(e){}}).catch(()=>{});
+  const head=`<div class="card"><div style="font:800 15px system-ui">⚡ Evolution</div><div class="muted" style="margin-top:4px">A graduate keeps racing both of its parents. Once it outdoes one by so much (${EVO_BAR.toFixed(0)}σ+ on ${EVO_N}+ of that parent's calls over ${EVO_DAYS}+ days, its official calls making more money, and holding its own in the parent's best lanes), the parent has to evolve: <b>Legacy 2</b>, then 3, up to ${LEGACY_MAX}. The child earns its generation: <b>Gen 2</b> (a child of a Gen 2 earns Gen 3). An evolved character may only claim what its own record proves at the number it says, in that kind of bet: the low end of that record (one standard error for every level past the first) less ${+(LEG_STEP*100).toFixed(1)} points a level. Its 80% has to be the real thing. The race against it starts over the day after it evolves.</div></div>`;
+  const V=roGet(VOICES_KEY,[],30e3)||[];const LG=Object.entries(W.legacy||{}).filter(([v,o])=>o&&o.n>=2).sort((x,y)=>y[1].n-x[1].n||String(y[1].at).localeCompare(String(x[1].at)));
+  const board=LG.length?LG.map(([v,o])=>{const mine=V.filter(x=>x&&x.voice===v&&String(x.date).slice(0,10)>=o.from);
+      const raw=x=>{try{return CHARS[x.voice]&&CHARS[x.voice].kid?confOf(x):WB_CC0?WB_CC0(x):confOf(x);}catch(e){return null;}},cut=mine.filter(x=>{const c=raw(x);return c!=null&&wbLegCap(x,c)<c-0.0005;}).length;
+      const gr=mine.filter(x=>x.graded&&!x.push&&x.hit!=null),of=gr.filter(x=>{try{return isOfficial(x);}catch(e){return false;}}),ow=of.filter(x=>x.hit).length;
+      return`<div class="card" style="border-left:4px solid ${wbCol(v)}"><div style="font:900 17px system-ui;color:${wbCol(v)}">${txtEsc(wbNm(v))} <span style="color:#f5c542">· Legacy ${o.n}</span></div>
+        <div class="muted" style="margin-top:3px">Since ${txtEsc(wbMd(o.from))}: it claims only what its own record proves (the low end, ${o.n-1} standard error${o.n-1===1?'':'s'} down, less ${+(LEG_STEP*(o.n-1)*100).toFixed(1)} points)</div>
+        ${(o.hist||[]).slice().reverse().map(x=>`<div style="font-size:12.5px;margin-top:4px">⚡ Legacy ${x.n} on ${txtEsc(wbMd(x.at))}: ${txtEsc(x.byName||wbNm(x.by))} outdid it by ${(+x.z).toFixed(1)}σ on ${x.calls} of its calls over ${x.days} days (official ${wbU(x.off)} vs ${wbU(x.offP)})</div>`).join('')}
+        <div class="mono muted" style="font-size:11px;margin-top:6px">Since then: ${mine.length} call${mine.length===1?'':'s'}, ${cut} held to a lower number than it said · official ${ow}-${of.length-ow}</div></div>`;}).join('')
+    :`<div class="card"><div class="muted">No character has evolved yet. The first can't until an heir graduates and then keeps outdoing a parent.</div></div>`;
+  const R=(WOMB_MEMO&&WOMB_MEMO.evo)||{},GS=(W.kids||[]).filter(K=>K&&K.st==='grad');
+  const race=GS.length?GS.map(K=>`<div class="card" style="border-left:4px solid ${wbHex(K.color)}"><div style="display:flex;gap:10px;align-items:center">${wbCrestSvg(K,36)}<div><div style="font:900 15px system-ui;color:${wbHex(K.color)}">${txtEsc(K.name)}</div><div class="muted">${K.genAt?`⚡ Gen ${K.gen||wbGenOf(K.key,W)}`:'🎓 Graduated'} · child of ${txtEsc(wbNm(K.a))} and ${txtEsc(wbNm(K.b))}</div></div></div>${wbEvoBars(K,R[K.key]||{})}</div>`).join('')
+    :`<div class="card"><div class="muted">No graduate yet: an heir starts racing its parents for evolution the day it graduates.</div></div>`;
+  return head+`<div class="card"><div style="font:800 14px system-ui">🏛 The Legacy board</div><div class="muted" style="margin-top:4px">Every character that had to evolve, why, and what its higher standards have done since.</div></div>`+board
+    +`<div class="card"><div style="font:800 14px system-ui">🏁 The race</div><div class="muted" style="margin-top:4px">Each graduate against each parent (against an evolved parent, only since it evolved).</div></div>`+race+wbLineageHtml(W);}
+/* ── ⭐ the North Star ── */
+function northHtml(){let N;try{N=wbNorth();}catch(e){return`<div class="card"><div class="muted">${txtEsc(e.message)}</div></div>`;}
+  const pc=x=>x==null?'—':Math.round(x*100)+'%',W=wombAll(),ok=N.all.rate!=null&&N.all.rate>=NORTH_HIT-1e-9;
+  const head=`<div class="card" style="background:linear-gradient(135deg,rgba(245,197,66,.16),rgba(96,165,250,.10)),#0b1220"><div style="font:900 16px system-ui">⭐ The North Star</div>
+    <div class="muted" style="margin-top:4px">Where the family is headed: when a character says 80% or more on an official pick, it hits 9 in 10, and it calls the exact final more often than not. Every evolution raises the standard until the desk gets there. The last ${N.days} days.</div>
+    <div style="display:flex;gap:18px;align-items:flex-end;margin-top:10px;flex-wrap:wrap"><div><div style="font:900 40px/1 system-ui;color:${ok?'#22c55e':'#f5c542'}">${pc(N.all.rate)}</div><div class="mono muted" style="font-size:11px">${N.all.w}-${N.all.n-N.all.w} official calls at 80%+ · goal 90%</div></div>
+      <div><div style="font:900 24px/1 system-ui">${pc(N.any.rate)}</div><div class="mono muted" style="font-size:11px">every call at 80%+ (${N.any.n})</div></div>
+      <div><div style="font:900 24px/1 system-ui">${pc(N.exact.rate)}</div><div class="mono muted" style="font-size:11px">exact finals (${N.exact.e} of ${N.exact.n})</div></div></div>
+    ${wbBar('Official calls at 80%+',`${pc(N.all.rate)} of 90%`,(N.all.rate||0)/NORTH_HIT,ok?'#22c55e':'#f5c542')}${N.desk?'<div style="margin-top:6px;font-weight:800;color:#22c55e">⭐ The desk is there.</div>':''}</div>`;
+  const rows=Object.entries(N.by).sort((x,y)=>((y[1].n>=NORTH_N)-(x[1].n>=NORTH_N))||((y[1].rate||0)-(x[1].rate||0))).map(([v,o])=>{const lg=(W.legacy||{})[v];
+    const st=o.star?'⭐ there':o.n<NORTH_N?`${NORTH_N-o.n} more to count`:`${Math.max(1,Math.ceil((NORTH_HIT-o.rate)*100-1e-9))} point${Math.ceil((NORTH_HIT-o.rate)*100-1e-9)===1?'':'s'} to go`;
+    return`<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-top:6px"><span><b style="color:${wbCol(v)}">${txtEsc(wbNm(v))}</b>${lg&&lg.n>=2?` <span style="color:#f5c542">Legacy ${lg.n}</span>`:''}</span><span class="mono" style="text-align:right">${o.w}-${o.n-o.w} · ${pc(o.rate)} (says ${pc(o.said)}) · ${st}</span></div>`;}).join('')||'<div class="muted" style="margin-top:6px">No official calls at 80%+ in this window.</div>';
+  const ex=Object.entries(N.exact.sp).sort((x,y)=>(y[1].rate||0)-(x[1].rate||0)).map(([s,o])=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-top:6px"><span><b>${WB_SPN[s]||String(s).toUpperCase()}</b>${o.best?` <span class="muted">best: ${txtEsc(wbNm(o.best.v))} ${pc(o.best.rate)}</span>`:''}</span><span class="mono" style="text-align:right">${o.e} of ${o.n} exact · ${pc(o.rate)}${o.err!=null?` · ${o.err.toFixed(1)} points off`:''}</span></div>`).join('');
+  return head+`<div class="card"><div style="font:800 14px system-ui">Who's there <span class="muted">(${NORTH_N}+ official calls at 80%+ to count)</span></div>${rows}</div>
+    <div class="card"><div style="font:800 14px system-ui">🎯 Exact final scores</div>${ex||'<div class="muted" style="margin-top:6px">No graded score calls in this window.</div>'}
+      <div class="muted" style="margin-top:8px">The honest part: nobody calls exact finals more often than not. The likeliest final in hockey lands about 1 game in 10, and in football and basketball 1 in 100 or fewer. The goal stays on the wall; the meter shows how close the calls land.</div></div>`;}
 /* 👪 family life on an heir's nursery card: what's going on now, the lessons it keeps, whose finals it trusts, the latest moments */
 const WB_FAM_ORDER=['rebel','learn','vaccine','absorb','respect','admire','discipline','grounded'],WB_FAM_ICON={rebel:'✊',learn:'💉',vaccine:'🛡',absorb:'📈',respect:'🙇',admire:'🌟',discipline:'🪵',grounded:'🪵'};
 function wbFamHtml(K){const F=K.fam||{};const now=(F.now||[]).slice().sort((x,y)=>WB_FAM_ORDER.indexOf(x.t)-WB_FAM_ORDER.indexOf(y.t));const L=F.lessons||[];
@@ -613,20 +814,29 @@ function wbFamHtml(K){const F=K.fam||{};const now=(F.now||[]).slice().sort((x,y)
     ${sc}${ev?`<div style="font:800 12px system-ui;margin-top:6px">Lately</div>${ev}`:''}</div>`;}
 /* the public page: an heir's family and crest ride along with its card; the womb in one line */
 if(typeof pubCharacters0==='function'&&typeof window!=='undefined'&&!window.__WB_PUB__){window.__WB_PUB__=1;const PC0=pubCharacters0;
-  pubCharacters0=function(V,d){const R=PC0.apply(this,arguments);try{const W=wombAll();(R||[]).forEach(c=>{const K=(W.kids||[]).find(k=>k.key===c.v);if(!K)return;
+  pubCharacters0=function(V,d){const R=PC0.apply(this,arguments);try{const W=wombAll();(R||[]).forEach(c=>{
+      const lg=(W.legacy||{})[c.v];if(lg&&lg.n>=2)c.legacy={n:lg.n,since:lg.from||lg.at,by:charName(lg.by)};   /* §9 · an evolved character wears its Legacy */
+      const K=(W.kids||[]).find(k=>k.key===c.v);if(!K)return;
       const F=K.fam||{};const now=(F.now||[]).slice().sort((x,y)=>WB_FAM_ORDER.indexOf(x.t)-WB_FAM_ORDER.indexOf(y.t));
       c.kid={a:charName(K.a),b:charName(K.b),ca:wbCol(K.a),cb:wbCol(K.b),born:K.born,st:K.st,arch:K.arch,creed:K.creed,g:(K.crest||{}).g||'⭐',t:(K.crest||{}).t||'⚓',
+        gen:K.genAt?(K.gen||wbGenOf(K.key,W)):null,genAt:K.genAt||null,genBy:K.genAt?charName(K.genBy):null,
         family:K.st==='retired'?[]:now.map(x=>wbFamTxt(x,K,true)).filter(Boolean).slice(0,5),lessons:(F.lessons||[]).map(l=>{const[t,pp,...kk]=l.key.split('|');return wbLessonTxt({t,p:pp,k:kk.join('|')},K);}).filter(Boolean).slice(-4)};});}catch(e){}return R;};}
 if(typeof pubBloodlines==='function'&&typeof window!=='undefined'&&!window.__WB_PUBBL__){window.__WB_PUBBL__=1;const PB0=pubBloodlines;
   pubBloodlines=function(){const R=PB0.apply(this,arguments);try{const W=wombAll();
-      const womb={litters:W.litters.filter(L=>L.st==='live').map(L=>({a:charName(L.a),b:charName(L.b),ca:wbCol(L.a),cb:wbCol(L.b),arch:(L.arch||{}).label||'',conceived:L.conceived,embryos:L.embryos.filter(E=>E.st==='womb'||E.st==='due').length,due:L.embryos.some(E=>E.st==='due')})),heirs:(W.kids||[]).length};
-      if(R)R.womb=womb;}catch(e){}return R;};}
-function dnaHtml(){const IX=wbIndex();const vs=wbEligible().concat([...META_VOICES].filter(v=>CHARS[v])).filter(v=>(IX.byV[v]||[]).length);if(!vs.length)return`<div class="card"><div class="muted">No records yet.</div></div>`;
+      const womb={litters:W.litters.filter(L=>L.st==='live').map(L=>({a:charName(L.a),b:charName(L.b),ca:wbCol(L.a),cb:wbCol(L.b),arch:(L.arch||{}).label||'',conceived:L.conceived,embryos:L.embryos.filter(E=>E.st==='womb'||E.st==='due').length,due:L.embryos.some(E=>E.st==='due')})),heirs:(W.kids||[]).length,
+        events:wbEvents(W,dayShift(today(),-14))};   /* §9–§12 · the family's news for the public page (and the social desk) */
+      if(R){R.womb=womb;R.north=wbNorthPub();}}catch(e){}return R;};}
+/* the North Star for the public page: the desk's rate, who's closest, exact finals (numbers only, no method talk) */
+function wbNorthPub(){try{const N=wbNorth(),r3=x=>x==null?null:+(+x).toFixed(3);
+  return{cf:N.cf,goal:N.goal,days:N.days,n:N.all.n,w:N.all.w,rate:r3(N.all.rate),desk:!!N.desk,
+    top:Object.entries(N.by).filter(([v,o])=>o.n>=NORTH_N).sort((x,y)=>(y[1].rate||0)-(x[1].rate||0)).slice(0,5).map(([v,o])=>({v,who:charName(v),n:o.n,rate:r3(o.rate),star:!!o.star})),
+    exact:{n:N.exact.n,e:N.exact.e,rate:r3(N.exact.rate),sp:Object.fromEntries(Object.entries(N.exact.sp).map(([s,o])=>[s,{n:o.n,e:o.e,rate:r3(o.rate)}]))}};}catch(e){return null;}}
+function dnaHtml(){const IX=wbIndex();const vs=[...new Set(wbEligible().concat([...META_VOICES].filter(v=>CHARS[v])))].filter(v=>(IX.byV[v]||[]).length);if(!vs.length)return`<div class="card"><div class="muted">No records yet.</div></div>`;
   if(!WB_DNA_V||!vs.includes(WB_DNA_V))WB_DNA_V=vs[0];const v=WB_DNA_V,D=dnaOf(v,dayShift(today(),1),IX);
   const ln=(k,o)=>`<div style="margin:4px 0;font-size:12.5px">${txtEsc(wbLaneLab(k))} <span class="mono" style="color:${o.u>=0?'#22c55e':'#f87171'}">${o.w}-${o.n-o.w} ${wbU(o.u)}</span></div>`;
   const fm=D.form.state==='hot'?'🔥 running hot':D.form.state==='cold'?'🧊 slumping':'⚖️ steady';
   return`<div style="margin-bottom:8px">${vs.map(x=>`<span class="chip ${x===v?'on':''}" style="color:${wbCol(x)}" onclick="WB_DNA_V='${x.replace(/'/g,"\\'")}';genRender()">${txtEsc(wbSh(x))}</span>`).join('')}</div>
-    <div class="card"><div style="font:900 18px system-ui;color:${wbCol(v)}">${txtEsc(wbNm(v))}</div>
+    <div class="card"><div style="font:900 18px system-ui;color:${wbCol(v)}">${txtEsc(wbNm(v))}${(()=>{const o=WB_LEGM[v];return o&&o.n>=2?` <span style="color:#f5c542">· Legacy ${o.n}</span>`:'';})()}</div>
       <div class="mono" style="font-size:12px;margin-top:6px;line-height:1.7">${D.w}-${D.n-D.w} graded · ${wbU(D.u)} · ${fm} (${wbU(D.form.u)} over 14 days)${D.honest?`<br>Honesty: says ${Math.round(D.honest.conf*100)}%, hits ${Math.round(D.honest.hit*100)}%`:''}${D.temper.afterW!=null?`<br>After a win it hits ${Math.round(D.temper.afterW*100)}%, after a loss ${Math.round(D.temper.afterL*100)}%`:''}<br>Takes plus money on ${Math.round(D.temper.plus*100)}% of its calls${D.score?`<br>Score sense: ${D.score.exact} exact of ${D.score.n} (${D.score.mult.toFixed(1)}× the cast's rate)`:''}</div></div>
     <div class="card"><div style="font:800 14px system-ui">🧬 Dominant genes <span class="muted">(proven, paying)</span></div>${D.dom.slice(0,8).map(k=>ln(k,D.lanes[k])).join('')||'<div class="muted">None proven yet.</div>'}
       ${D.rec.length?`<div style="font:800 13px system-ui;margin-top:8px">Recessive <span class="muted">(paying, not proven)</span></div>${D.rec.slice(0,5).map(k=>ln(k,D.lanes[k])).join('')}`:''}

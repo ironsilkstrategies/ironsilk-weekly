@@ -1101,18 +1101,40 @@ function blRow(c, need) {
     ${b ? `<div class="bl-bar" role="img" aria-label="${p}% of the way to a new generation"><i style="width:${p}%"></i></div><div class="bl-s">${p}% of the way to a new generation · ${Math.min(b.n, need.n)}/${need.n} games watched</div>` : ''}
     ${(c.hist || []).length ? `<div class="bl-s">Generation ${c.gen} took over ${esc(shortDay(c.hist[c.hist.length - 1].to || deskDay()))}</div>` : ''}</div>`;
 }
-/* v55 · family life: what an heir is going through with its parents right now, and the lessons it keeps (public words, no method talk).
+/* v56 · evolution (Chris, Nov 22: "the parent has to EVOLVE to a higher set of standards and becomes a 'legacy 2' character and the child
+   becomes a 'gen 2'"): an evolved character wears its Legacy, an heir that made a parent evolve wears its Gen; the North Star (80%+
+   official picks hitting 9 in 10) and the family's news sit under the roster. Every number from the feed is coerced, every word escaped.
+   v55 · family life: what an heir is going through with its parents right now, and the lessons it keeps (public words, no method talk).
    v54 · Bloodlines 2.0, births (Chris, Nov 22: "once born they become a character on the app with their own name style and
    ideology"): an heir born of two characters wears a crest split in its parents' colors, says whose child it is and when it was
    born, and carries its rookie badge until it graduates. The womb's litters get a line under the roster. */
 const KID_G = new Set(['🔮', '📐', '🎯', '⚙️', '⭐']), KID_T = new Set(['✨', '⚡', '🌗', '⚓']);
 function crestSvg(k, px, cls) { const a = okColor(k.ca), b = okColor(k.cb), g = KID_G.has(k.g) ? k.g : '⭐', t = KID_T.has(k.t) ? k.t : '⚓';
   return `<svg class="crest${cls ? ' ' + cls : ''}" viewBox="0 0 64 72" width="${px}" height="${Math.round(px * 1.125)}" aria-hidden="true"><path d="M32 3 L5 11 V35 C5 52 18 63 32 69 Z" fill="${a}"/><path d="M32 3 L59 11 V35 C59 52 46 63 32 69 Z" fill="${b}"/><path d="M32 3 L59 11 V35 C59 52 46 63 32 69 C18 63 5 52 5 35 V11 Z" fill="none" stroke="#F2D067" stroke-width="2.5" stroke-linejoin="round"/><circle cx="32" cy="38" r="14" fill="#06190F" stroke="#F2D067" stroke-width="1.5"/><text x="32" y="43.5" font-size="15" text-anchor="middle">${g}</text><text x="32" y="22" font-size="9" text-anchor="middle">${t}</text></svg>`; }
-const kidSt = k => (k.st === 'grad' ? '🎓 Graduated' : k.st === 'retired' ? '🚪 Retired' : '🍼 Rookie');
+const lvl = (x, lo, hi) => { const n = Math.round(+x); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null; };
+const kidGen = k => (k && k.genAt && k.st !== 'retired' ? lvl(k.gen, 2, 99) : null);
+const kidSt = k => (kidGen(k) ? `⚡ Gen ${kidGen(k)}` : k.st === 'grad' ? '🎓 Graduated' : k.st === 'retired' ? '🚪 Retired' : '🍼 Rookie');
 const kidTag = c => (c.kid ? `<span class="kidtag">${kidSt(c.kid)}</span>` : '');
+const legN = c => (c && c.legacy ? lvl(c.legacy.n, 2, 9) : null);
+const legTag = c => (legN(c) ? `<span class="legtag">Legacy ${legN(c)}</span>` : '');
+function legacyHtml(c) { const n = legN(c); if (!n) return ''; const L = c.legacy;
+  return `<div class="legacy"><b>Legacy ${n}</b><span>${L.since ? `Since ${esc(shortDay(String(L.since).slice(0, 10)))}` : 'Evolved'}${L.by ? `, when its child ${esc(L.by)} outdid it` : ''}. It plays to a higher standard now: it can only claim what its own record proves, so its 80% has to be the real thing.</span></div>`; }
 const kidAge = k => Math.round((noon(deskDay()) - noon(String(k.born || '').slice(0, 10))) / 864e5);
 function familyHtml(c) { const k = c.kid;
-  return `<div class="family">${crestSvg(k, 64)}<div><b>Child of ${esc(k.a)} and ${esc(k.b)}</b><span>Born ${esc(shortDay(String(k.born || '').slice(0, 10)))}${k.arch ? ' · ' + esc(k.arch) : ''} · ${kidSt(k)}</span>${k.creed ? `<q>${esc(k.creed)}</q>` : ''}${k.st === 'rookie' ? '<small>A rookie keeps its own record from its first day. It graduates once it keeps beating both of its parents for three straight weeks.</small>' : ''}${Array.isArray(k.family) && k.family.length ? `<div class="famlife"><b>Family life</b>${k.family.slice(0, 5).map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}${Array.isArray(k.lessons) && k.lessons.length ? `<div class="famlife lessons"><b>What it’s learned</b>${k.lessons.slice(0, 4).map(t => `<span>“${esc(t)}”</span>`).join('')}</div>` : ''}</div></div>`; }
+  return `<div class="family">${crestSvg(k, 64)}<div><b>Child of ${esc(k.a)} and ${esc(k.b)}</b><span>Born ${esc(shortDay(String(k.born || '').slice(0, 10)))}${k.arch ? ' · ' + esc(k.arch) : ''} · ${kidSt(k)}</span>${k.creed ? `<q>${esc(k.creed)}</q>` : ''}${kidGen(k) ? `<span class="genline">⚡ Gen ${kidGen(k)} since ${esc(shortDay(String(k.genAt).slice(0, 10)))}${k.genBy ? `, when it outdid ${esc(k.genBy)}` : ''}</span>` : ''}${k.st === 'rookie' ? '<small>A rookie keeps its own record from its first day. It graduates once it keeps beating both of its parents for three straight weeks.</small>' : ''}${Array.isArray(k.family) && k.family.length ? `<div class="famlife"><b>Family life</b>${k.family.slice(0, 5).map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}${Array.isArray(k.lessons) && k.lessons.length ? `<div class="famlife lessons"><b>What it’s learned</b>${k.lessons.slice(0, 4).map(t => `<span>“${esc(t)}”</span>`).join('')}</div>` : ''}</div></div>`; }
+/* v56 · the North Star and the family's news (Bloodlines 2.0, Phase 4) */
+function northSec(N) { if (!N || !(+N.n > 0)) return ''; const r = Number.isFinite(+N.rate) ? Math.max(0, Math.min(1, +N.rate)) : null;
+  const pc = x => (x == null || x === '' || !Number.isFinite(+x) ? '—' : Math.round(Math.max(0, Math.min(1, +x)) * 100) + '%'), n = lvl(N.n, 0, 1e6), d = lvl(N.days, 1, 365) || 30;
+  const top = (Array.isArray(N.top) ? N.top : []).filter(t => t && t.who).slice(0, 5);
+  return `<section class="crown north"><div class="vh"><h2 class="h2">The North Star</h2></div><p class="note">When a character says 80% or more on an official pick, it should hit 9 in 10. Every time a parent has to evolve, the bar goes up, until the whole desk gets there.</p>
+    <div class="paper race ns"><div class="ns-big"><b>${pc(r)}</b><span>of ${n} official pick${n === 1 ? '' : 's'} at 80% or more hit · last ${d} days · goal 90%</span></div>
+      <div class="bl-bar" role="img" aria-label="${pc(r)} against a 90% goal"><i style="width:${r == null ? 0 : Math.round(Math.min(1, r / 0.9) * 100)}%"></i></div>
+      ${top.length ? `<div class="tix-h"><b>Closest to it</b></div>${top.map((t, i) => `<div class="rcr"><span class="n">${t.star === true ? '⭐' : i + 1}</span><span class="t">${esc(t.who)}<small>${lvl(t.n, 0, 1e6)} official picks at 80%+</small></span><span class="wst">${pc(t.rate)}</span></div>`).join('')}` : ''}</div></section>`; }
+const FEV = { born: '👶', grad: '🎓', evolve: '⚡', north: '⭐', retired: '🚪' };
+function famNews(E) { const L = (Array.isArray(E) ? E : []).filter(e => e && FEV[e.t] && e.who).slice(0, 8); if (!L.length) return '';
+  const line = e => (e.t === 'born' ? `${esc(e.who)} was born, the child of ${esc(e.a)} and ${esc(e.b)}` : e.t === 'grad' ? `${esc(e.who)} graduated: it kept beating ${esc(e.a)} and ${esc(e.b)}`
+    : e.t === 'evolve' ? `${esc(e.who)} evolved into Legacy ${lvl(e.n, 2, 9) || 2}${e.by ? `: ${esc(e.by)} outdid it` : ''}${lvl(e.gen, 2, 99) ? ` and became Gen ${lvl(e.gen, 2, 99)}` : ''}` : e.t === 'north' ? `${esc(e.who)} reached the North Star` : `${esc(e.who)} retired`);
+  return `<section class="crown famnews"><div class="vh"><h2 class="h2">Family news</h2></div><div class="paper race">${L.map(e => `<div class="rcr"><span class="n">${FEV[e.t]}</span><span class="t">${line(e)}<small>${esc(shortDay(String(e.d || '').slice(0, 10)))}</small></span><span></span></div>`).join('')}</div></section>`; }
 function viewCast() {
   const el = $('#v-cast'), F = S.feed || {}, C = F.characters || [], B = F.bloodlines, need = (B && B.need) || { n: 100, days: 10 };
   if (!C.length) { el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">The roster shows up here once the desk publishes it.</p>${footHtml()}`; return; }
@@ -1129,12 +1151,12 @@ function viewCast() {
     el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">Every pick on TheDesk comes from these voices. Each one sees the game its own way and keeps its own record. Pick one to see everything it’s called.</p>${sel}
       ${fresh.length ? `<div class="newheir">${fresh.map(c => `<button type="button" class="nh" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}">${crestSvg(c.kid, 40)}<span><b>👶 New on the desk: ${esc(c.name)}</b><small>Child of ${esc(c.kid.a)} and ${esc(c.kid.b)} · born ${esc(shortDay(String(c.kid.born).slice(0, 10)))}</small></span><i>Meet →</i></button>`).join('')}</div>` : ''}
       <div class="castgrid">${C.map(c => { const g = c.record || {}, pr = c.props || {}, today = (c.picks || []).length;
-        return `<button type="button" class="castcard mini${c.kid ? ' kid' : ''}" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${kidTag(c)}<span class="cc-rec">${todayTxt(c) || (today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today')}</span></div>
+        return `<button type="button" class="castcard mini${c.kid ? ' kid' : ''}" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${kidTag(c)}${legTag(c)}<span class="cc-rec">${todayTxt(c) || (today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today')}</span></div>
           <h3>${c.kid ? crestSvg(c.kid, 30, 'cc-crest') : ''}${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span></div><span class="cc-more">See profile →</span></button>`; }).join('')}</div>
       ${race.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div><p class="note">Every character has heirs learning in the background. When one proves it’s better, it takes over: a new generation.</p>
         <div class="paper race"><div class="tix-h"><b>Closest to a new generation</b></div>${race.map(({ c, p }, i) => `<div class="rcr"><span class="n">${i + 1}</span><span class="t">${esc(c.who)}<small>${esc(MKT[c.m] || c.m)}</small></span><span class="bl-bar"><i style="width:${Math.round(p * 100)}%"></i></span></div>`).join('')}</div></section>` : ''}
       ${wl.length ? `<section class="crown womb"><div class="vh"><h2 class="h2">The womb</h2></div><p class="note">Two characters whose strengths cover each other are expecting. A child is born only if it beats both of its parents on games it never saw.</p>
-        <div class="paper race">${wl.map(L => `<div class="rcr"><span class="n">🥚</span><span class="t">${esc(L.a)} × ${esc(L.b)}<small>${L.arch ? 'a ' + esc(L.arch) : ''}${L.conceived ? ' · since ' + esc(shortDay(String(L.conceived).slice(0, 10))) : ''}</small></span><span class="wst">${L.due ? 'Due' : 'Expecting'}</span></div>`).join('')}</div></section>` : ''}${footHtml()}`;
+        <div class="paper race">${wl.map(L => `<div class="rcr"><span class="n">🥚</span><span class="t">${esc(L.a)} × ${esc(L.b)}<small>${L.arch ? 'a ' + esc(L.arch) : ''}${L.conceived ? ' · since ' + esc(shortDay(String(L.conceived).slice(0, 10))) : ''}</small></span><span class="wst">${L.due ? 'Due' : 'Expecting'}</span></div>`).join('')}</div></section>` : ''}${famNews(B && B.womb && B.womb.events)}${northSec(B && B.north)}${footHtml()}`;
     return;
   }
   const c = C.find(x => x.v === pick), g = c.record || {}, pr = c.props || {}, lines = cells.filter(x => x.v === c.v);
@@ -1145,7 +1167,7 @@ function viewCast() {
   const wl = o => (o && o.w + o.l ? `${o.w}–${o.l}` : '—');
   el.innerHTML = `<button type="button" class="link back" data-act="castpick" data-v="">← All characters</button>${sel}
     <article class="profile" style="--cc:${okColor(c.color)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${vipBadge()}</div>
-      <h1 class="title">${esc(c.name)}</h1>${c.title ? `<p class="cc-title big">${esc(c.title)}</p>` : ''}${c.kid ? familyHtml(c) : ''}<p class="lede">${esc(c.bio || '')}</p>
+      <h1 class="title">${esc(c.name)}</h1>${c.title ? `<p class="cc-title big">${esc(c.title)}</p>` : ''}${c.kid ? familyHtml(c) : ''}${legacyHtml(c)}<p class="lede">${esc(c.bio || '')}</p>
       ${c.origin ? `<div class="origin"><b>Where the eye comes from</b><p>${esc(c.origin)}</p></div>` : ''}
       <div class="statrow"><div><b>${rec(g)}</b><span>Official game picks${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span></div><div><b>${rec(pr)}</b><span>Props</span></div><div><b>${(c.picks || []).length}</b><span>Picks today</span></div></div>
       ${(c.best || []).length ? `<h2 class="h2">Best at</h2><div class="lanes">${c.best.map(x => `<span class="lane good">${esc(x.lane)} <b>${x.w}–${x.l}</b>${x.u ? ` ${x.u > 0 ? '+' : ''}${x.u}u` : ''}</span>`).join('')}${(c.still || []).map(x => `<span class="lane meh">Still learning: ${esc(x.lane)} <b>${x.w}–${x.l}</b></span>`).join('')}</div>` : ''}

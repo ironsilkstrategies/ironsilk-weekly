@@ -768,6 +768,18 @@ export async function runFree3(state, S, today, deps) { if (String(deps?.free3 ?
   let ok = false; for (const c of dests) ok = (await say(deps?.tg || tg, c, text, img, deps)) || ok;
   if ((ok || !dests.length) && Soc.anyOn(deps)) { const m = await Soc.mirror(text, img, deps, { kind: 'free3', bare: true }); if (!dests.length) ok = [m.fb, m.ig, m.th].includes(true); }
   if (!ok) return 0; S.f3 = today; log('free 3 ·', D.n, 'pick' + (D.n === 1 ? '' : 's'), '·', D.picks.map(x => x.hidden ? 'locked' : x.pick).join(' | ')); return 1; }
+/* 👪 v3.5 · FAMILY NEWS (Bloodlines 2.0): a birth, a graduation, an evolution or the North Star, once each, from the public page's
+   own family news, between 10 AM and 9 PM Central, one a run, only news under three days old. Off until the repo variable FAMILY
+   is "on". */
+export async function runFamily(state, S, today, deps) { if (String(deps?.family ?? env.FAMILY ?? '').trim().toLowerCase() !== 'on') return 0;
+  const now = deps?.now || Date.now(), h = Gr.ctHour(now); if (h < 10 || h >= 21) return 0;
+  const dests = pubDests(state); if (!dests.length && !Soc.anyOn(deps)) return 0;
+  const F = await pubFeedNow(deps), E = F && F.bloodlines && F.bloodlines.womb && F.bloodlines.womb.events; if (!Array.isArray(E) || !E.length) return 0;
+  const done = S.fam || (S.fam = {}), from = Gr.shift(today, -2);
+  const e = E.filter(x => x && x.id && Gr.FAM_KINDS.includes(x.t) && !done[x.id] && /^\d{4}-\d\d-\d\d$/.test(String(x.d)) && x.d >= from && x.d <= today).sort((a, b) => String(a.d).localeCompare(String(b.d)) || String(a.id).localeCompare(String(b.id)))[0];
+  if (!e) return 0; const post = Gr.familyPost(e, { app: appUrl(deps) }); if (!post) { done[e.id] = today; return 1; }
+  if (!(await sendPublic(dests, deps?.tg || tg, deps, post.text, post.card, 'family'))) return 0;
+  done[e.id] = today; S.fam = Object.fromEntries(Object.entries(done).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).slice(0, 80)); log('family news ·', e.t, '·', e.who); return 1; }
 /* 🔗 recruiting: members link to the public lounge until it locks, then to the free channel */
 const recruitChat = (state, p) => { const L = state.lounge || {}, lounge = p && p.bc && p.bc.pubLounge; if (lounge && !L.locked) return String(lounge); const ch = p && p.bc && p.bc.pub; return ch ? String(ch) : null; };
 const plainName = u => (([u && u.first_name, u && u.last_name].filter(Boolean).join(' ')) || (u && u.username ? '@' + u.username : 'A member')).slice(0, 40);
@@ -1099,7 +1111,7 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       try { acted += await fbInvite(state); } catch (e) { log('lounge easter egg', e.message || e); }
       if (SOCMEM) try { const a = await runMegaphone(state, SOCMEM.S.mega, today); if (a) { acted += a; await socialSave(); } } catch (e) { log('megaphone', e.message || e); }
       /* v3.3 · the growth desk: the debate (and its settle), Receipts Sunday, the recruiters' shout-out */
-      if (SOCMEM) try { const a = (await runDebate(state, SOCMEM.S, today)) + (await runWeekly(state, SOCMEM.S, today)) + (await runFree3(state, SOCMEM.S, today)); if (a) { acted += a; await socialSave(); } } catch (e) { log('growth', e.message || e); }
+      if (SOCMEM) try { const a = (await runDebate(state, SOCMEM.S, today)) + (await runWeekly(state, SOCMEM.S, today)) + (await runFree3(state, SOCMEM.S, today)) + (await runFamily(state, SOCMEM.S, today)); if (a) { acted += a; await socialSave(); } } catch (e) { log('growth', e.message || e); }
       if (SOCMEM) try { if (await runGamePages(state, SOCMEM.S, today)) await socialSave(); } catch (e) { log('game pages', e.message || e); }
       try { acted += await runRecruitShout(state); } catch (e) { log('recruiting', e.message || e); }
       /* v3.2 · the safeguards: what the site said about its token, the watchdog, once a run the vault copy and the history squash */
