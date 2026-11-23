@@ -3135,7 +3135,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261123c',DESK_VER='3.5.4';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261123d',DESK_VER='3.5.5';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -22896,8 +22896,8 @@ let CLOUD_SEEN=null,SYNC_LOCAL_N=0;   /* v2.51 · the cloud commit this device l
 /* v2.80.3 · + the crash guard and the master-eval relay: both describe THIS device's last few minutes — another phone's copy could trip safe mode here */
 const SYNC_NEVER=new Set(['d4.bootguard','d4.evalchain','d4.ruletune','d4.bolcache','d4.bolfiled','d4.bollog','d4.pregame','d4.tgbot',LS.slip,LS.key,LS.ai,LS.sharp,LS.rundown,LS.oddspapi,LS.ghtoken,LS.cfbd,LS.cred,LS.usage,SYNC.repo,SYNC.token,SYNC.ts,SYNC.dev,SYNC.last,'d4.lastBackup','d4.lastGhSync','d4.setupDone','d4.pubstate']);
 const syncSkip=k=>!k||!k.startsWith('d4.')||SYNC_NEVER.has(k)||/cache|leagueLeaders|leagueStandings|perf/i.test(k)||/^d4\.(pwrg\.|pwrrank|pwrgames|inj$|h2hx\.|feeltune|intakepending$|pendingupload$|fbbox$|syncfail$|__storewhy$|__dgkeys$)/.test(k);
-const SY3={base:'d4.sync3base',dirty:'d4.sync3dirty',meta:'meta.json'};
-SYNC_NEVER.add(SY3.base);SYNC_NEVER.add(SY3.dirty);
+const SY3={base:'d4.sync3base',dirty:'d4.sync3dirty',ck:'d4.sync3ck',meta:'meta.json'};
+SYNC_NEVER.add(SY3.base);SYNC_NEVER.add(SY3.dirty);SYNC_NEVER.add(SY3.ck);
 const SY3_RELAY=typeof location!=='undefined'&&/[?&](bg|chain)=1/.test(location.search||'');
 function syncOn(){return!!(get(SYNC.repo,'')&&get(SYNC.token,''));}
 let SYNC_KTS=null,SYNC_T=null,SYNC_APPLY=false,SYNC_BUSY=null,SYNC_BUSY_AT=0,SYNC_STATE={msg:'',ok:null,ts:0};
@@ -23151,30 +23151,49 @@ async function sy3Pull(B,R,first){const byKey=new Map();
     files.forEach(f=>{const j=got[f.id];B.files[f.path]={s:f.sha,h:j!==undefined?sy3H(j):(B.files[f.path]&&B.files[f.path].h)||null};});gone.forEach(p=>delete B.files[p]);}
   syncSaveKts();sy3SaveDirty(D);return{n};}
 /* push: each changed key split into its files; only files whose content differs from the cloud's go up */
+/* v3.5.5 · the upload an earlier try got through (see sy3Push): only for the same cloud copy, the same starting tree, within a day */
+function sy3Ck(ref,base){try{const c=JSON.parse(localStorage.getItem(SY3.ck)||'null');if(c&&c.ref===ref&&(c.base||null)===(base||null)&&c.tree&&Array.isArray(c.done)&&Date.now()-(+c.ts||0)<24*36e5)return c;}catch(e){}sy3CkClear();return null;}
+function sy3CkClear(){try{localStorage.removeItem(SY3.ck);}catch(e){}}
 async function sy3Push(B,R,ref){const D=sy3Dirty();const keys=Object.keys(D).filter(k=>!syncSkip(k));
   const t0=Date.now();const sent=[],dels=[],ordM={};const have=R?R.files:null;const legacy=R&&R.legacy;
   const inCloud=p=>have?!!have[p]:!!B.files[p];
   let baseTree=R?R.tree:B.tree;if(!baseTree&&ref){const c=await sy3Json('commits/'+ref);baseTree=c.tree&&c.tree.sha;}
+  /* v3.5.5 · a backup that drops mid-way picks up where it left off (Nov 23: ten hours of changes going up over 5G, the app sent to
+     the background every few minutes — every try started from zero, none finished, and nothing saved from 1 AM to noon). After each
+     upload GitHub takes, the tree built so far is kept (SY3.ck); the next try on the same cloud copy starts from that tree and skips
+     every file it already holds. A cloud copy that moved (another device saved), or a day old, starts over. */
+  const CK=sy3Ck(ref,baseTree);const done=new Map(CK?CK.done:[]);   /* path → the content hash that tree holds ('∅': deleted there) */
   /* files go up in ~2.5 MB batches AS they're found, so even the first full save never holds everything at once */
-  let tree=baseTree,batch=[],sz=0;
-  const send=async()=>{if(!batch.length)return;const body={tree:batch};if(tree)body.base_tree=tree;const t=await sy3Json('trees',{m:'POST',body});tree=t.sha;batch=[];sz=0;};
-  const add=async e=>{const w=(e.content?e.content.length:0)+200;if(batch.length&&sz+w>0.9e6)await send();batch.push(e);sz+=w;};   /* v2.98.4 · ~0.9 MB per upload (was 2.5 MB): a weak signal finishes each one */
+  let tree=CK?CK.tree:baseTree,batch=[],batchH=[],sz=0;
+  const keep=()=>{try{localStorage.setItem(SY3.ck,JSON.stringify({ref,base:baseTree||null,tree,done:[...done.entries()],ts:Date.now()}));}catch(e){}};
+  const send=async()=>{if(!batch.length)return;const body={tree:batch};if(tree)body.base_tree=tree;let t;
+    try{t=await sy3Json('trees',{m:'POST',body});}catch(e){if(!(e&&e.status)){const mb=batch.reduce((a,x)=>a+(x.content?x.content.length:0),0)/1e6,n=[...done.values()].filter(h=>h!=='∅').length;
+      e.message=`${e.message||'Load failed'} — an upload dropped (${mb>=0.1?mb.toFixed(1)+' MB':'a few KB'})${n?`; ${n} file${n===1?' is':'s are'} already up and kept, the next try carries on`:''}`;}throw e;}
+    tree=t.sha;
+    batchH.forEach(x=>{if(x)done.set(x[0],x[1]);});batch=[];batchH=[];sz=0;keep();};
+  const add=async(e,h)=>{const w=(e.content?e.content.length:0)+200;if(batch.length&&sz+w>0.9e6)await send();batch.push(e);batchH.push(h?[e.path,h]:null);sz+=w;};   /* v2.98.4 · ~0.9 MB per upload (was 2.5 MB): a weak signal finishes each one */
+  const made=new Set();
   for(const k of keys){const raw=syncRawJson(k);const mine=Object.keys(B.files).filter(p=>{const o=sy3KeyOf(p);return o&&o.k===k;});
     if(raw==null){mine.forEach(p=>{if(inCloud(p))dels.push(p);});continue;}
     const S=await sy3SplitOff(raw);ordM[k]=S.ord;const ids=new Set();
-    for(const p of S.parts){const path=sy3Path(k,p.id);ids.add(path);const b=B.files[path];
-      if(b&&b.h===p.h&&(!have||have[path]===b.s))continue;sent.push({path,h:p.h});await add({path,mode:'100644',type:'blob',content:p.json});}
+    for(const p of S.parts){const path=sy3Path(k,p.id);ids.add(path);made.add(path);const b=B.files[path];
+      if(b&&b.h===p.h&&(!have||have[path]===b.s)){if(done.has(path)&&done.get(path)!==p.h)await add({path,mode:'100644',type:'blob',content:p.json},p.h);continue;}   /* (an earlier try put newer content there since: back to what the cloud holds) */
+      sent.push({path,h:p.h});if(done.get(path)===p.h)continue;   /* already in the tree an earlier try built */
+      await add({path,mode:'100644',type:'blob',content:p.json},p.h);}
     mine.forEach(p=>{if(!ids.has(p)&&inCloud(p))dels.push(p);});}
-  if(!sent.length&&!dels.length&&!legacy){const D2=sy3Dirty();keys.forEach(k=>{if((D2[k]||0)<=t0)delete D2[k];});Object.keys(D2).forEach(k=>{if(syncSkip(k))delete D2[k];});sy3SaveDirty(D2);return{n:0};}
-  for(const p of dels)await add({path:p,mode:'100644',type:'blob',sha:null});
-  if(legacy)await add({path:SYNC.file,mode:'100644',type:'blob',sha:null});
+  if(!sent.length&&!dels.length&&!legacy&&!done.size){const D2=sy3Dirty();keys.forEach(k=>{if((D2[k]||0)<=t0)delete D2[k];});Object.keys(D2).forEach(k=>{if(syncSkip(k))delete D2[k];});sy3SaveDirty(D2);sy3CkClear();return{n:0};}
+  /* a file an earlier try added that nothing needs now (a day that left the ledger since) leaves the tree again */
+  for(const[path,h]of done){if(h==='∅'||made.has(path)||path===SY3.meta||inCloud(path))continue;await add({path,mode:'100644',type:'blob',sha:null},'∅');}
+  for(const p of dels){if(done.get(p)==='∅')continue;await add({path:p,mode:'100644',type:'blob',sha:null},'∅');}
+  if(legacy&&done.get(SYNC.file)!=='∅')await add({path:SYNC.file,mode:'100644',type:'blob',sha:null},'∅');
   const kts={};Object.entries(syncKts()).forEach(([k,t])=>{if(!syncSkip(k))kts[k]=t;});
   const ord={...(B.ord||{}),...ordM};
   await add({path:SY3.meta,mode:'100644',type:'blob',content:JSON.stringify({v:3,dev:syncDevice(),ts:Date.now(),kts,ord})});
   await send();
   const commit=await sy3Json('commits',{m:'POST',body:{message:'TheDesk sync — '+syncDevice()+' — '+new Date().toISOString(),tree,parents:[]}});
-  if(await syncRef()!==ref)return{conflict:true};   /* another device saved while this one worked — pull again */
+  if(await syncRef()!==ref){sy3CkClear();return{conflict:true};}   /* another device saved while this one worked — pull again */
   const r=await sy3Req('refs/heads/main',{m:'PATCH',body:{sha:commit.sha,force:true}});if(!r.ok)throw new Error('HTTP '+r.status+' moving the branch');
+  sy3CkClear();
   let listed={};try{const L=await sy3Json('trees/'+tree,{q:'?recursive=1'});(L.tree||[]).forEach(e=>{if(e.type==='blob')listed[e.path]=e.sha;});}catch(e){listed=null;}
   sent.forEach(u=>{B.files[u.path]={s:listed?listed[u.path]||null:null,h:u.h};});dels.forEach(p=>delete B.files[p]);
   if(listed){Object.keys(B.files).forEach(p=>{if(!listed[p])delete B.files[p];});B.files[SY3.meta]={s:listed[SY3.meta]||null,h:null};}
@@ -23199,7 +23218,7 @@ async function syncNow(manual,first){if(!syncOn()){if(manual)alert('Add your pri
     if(manual)alert('Sync is stopped: '+safe.why);else if(!safe.soft&&!SYNC_SAFE_WARNED){SYNC_SAFE_WARNED=true;try{toastSync('⛔ Sync stopped — '+safe.why);}catch(e){}}return{ok:false,reason:safe.why};}}
   SYNC_BUSY_AT=Date.now();
   SYNC_BUSY=(async()=>{let changed=0,sent=0,fast=null;try{
-    if(first==='remote'){sy3SaveBase({commit:null,tree:null,files:{},ord:{}});sy3SaveDirty({});}
+    if(first==='remote'){sy3SaveBase({commit:null,tree:null,files:{},ord:{}});sy3SaveDirty({});sy3CkClear();}
     if(first==='local')sy3MarkAll();
     let ref=await syncRef();
     if(!ref){   /* an empty repo: the contents API makes the first commit, then the normal path takes over */
