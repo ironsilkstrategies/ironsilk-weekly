@@ -4,7 +4,8 @@ let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');
 html=html.replace(/<script src="([^"?]+)\?v=[^"]+"><\/script>/g,(m,f)=>`<script>${fs.readFileSync(path.join(W,f),'utf8')}</script>`);
 const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/nhl.html',pretendToBeVisual:true,beforeParse(w){
   w.fetch=()=>Promise.resolve({ok:true,status:200,json:()=>Promise.resolve({}),text:()=>Promise.resolve('{}')});
-  w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');}}).window;
+  w.scrollTo=()=>{};w.alert=()=>{};w.confirm=()=>true;w.localStorage.setItem('d4.setupDone','1');w.__NO_STANDARD__=true;   /* (v3.5.1's honest standard reads each character's history; this ledger has none) */
+  }}).window;
 setTimeout(()=>{try{
   const td=w.eval('today()'),tom=w.eval('dayShift(today(),4)');
   // ── ticket ↔ challenge matcher ──

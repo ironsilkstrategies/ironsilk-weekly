@@ -27,8 +27,40 @@ const GEN_CSS=`#genView{position:fixed;inset:0;z-index:99997;background:radial-g
 #genView .tl{border-left:2px solid #334155;margin-left:8px;padding-left:14px}#genView .tl .ev{position:relative;margin:0 0 14px}
 #genView .tl .ev:before{content:'';position:absolute;left:-21px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--c,#f5c542);box-shadow:0 0 12px var(--c,#f5c542)}
 #genView .step{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:12.5px}#genView .step b{color:#f5c542}
-@keyframes genGlow{0%,100%{opacity:.55}50%{opacity:1}}#genView .glow{animation:genGlow 2.4s ease-in-out infinite}`;
-let GEN_TAB='race',GEN_CHAR=null,GEN_PICK=null,GEN_R=null;
+@keyframes genGlow{0%,100%{opacity:.55}50%{opacity:1}}#genView .glow{animation:genGlow 2.4s ease-in-out infinite}
+#genView .hero{background:radial-gradient(420px 200px at 100% 0,rgba(245,197,66,.18),transparent),linear-gradient(180deg,#131d33,#0b1220)}
+#genView .hh{font:900 13px system-ui;letter-spacing:.08em;text-transform:uppercase;color:#f5c542}
+#genView .nb{font:800 19px/1.25 system-ui;margin-top:6px}#genView .nb b{color:#f5c542}#genView .nb span{font-weight:600;font-size:13px;color:#94a3b8}
+#genView .cnt{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:12px}
+#genView .cnt div{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:9px 4px;text-align:center}
+#genView .cnt b{display:block;font:900 24px/1 system-ui}#genView .cnt span{display:block;margin-top:4px;font:700 10px system-ui;color:#94a3b8;text-transform:uppercase;letter-spacing:.03em}
+#genView .jr{display:flex;align-items:flex-start;margin-top:14px}#genView .jr .ln{flex:1 1 6px;height:2px;background:#334155;margin-top:16px}
+#genView .jr .n{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;font:700 10px system-ui;color:#64748b;white-space:nowrap}
+#genView .jr .n i{font-style:normal;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#0f172a;border:2px solid #334155;font-size:15px}
+#genView .jr .n.on{color:#e2e8f0}#genView .jr .n.on i{border-color:#f5c542;box-shadow:0 0 12px rgba(245,197,66,.4)}
+#genView .sec{font:900 15px system-ui;margin:18px 2px 10px}
+#genView .fam{margin-bottom:6px}#genView .fh{font:800 13px system-ui;margin:0 2px 8px}
+#genView .life{background:linear-gradient(180deg,#111a2e,#0b1220);border:1px solid #1e293b;border-radius:16px;padding:12px;margin-bottom:10px}
+#genView .life.open{border-color:rgba(245,197,66,.45);box-shadow:0 8px 30px rgba(0,0,0,.35)}#genView .life:not(.open)>.lb,#genView .how:not(.open)>.lb{display:none}
+#genView .life>.sm{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:10px;align-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#genView .av{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18)}#genView .av span{font-size:22px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+#genView .lf-n{font:900 15px/1.2 system-ui}#genView .lf-s{font-size:11.5px;color:#94a3b8;margin-top:2px}
+#genView .rd{font:900 22px/1 system-ui;text-align:right}#genView .rd small{display:block;margin-top:3px;font:700 9.5px system-ui;color:#94a3b8;text-transform:uppercase;letter-spacing:.03em;max-width:84px}
+#genView .stc{display:inline-block;margin-top:5px;padding:3px 9px;border-radius:999px;font:800 11px system-ui}
+#genView .stc.g{background:rgba(34,197,94,.15);color:#4ade80}#genView .stc.y{background:rgba(245,197,66,.14);color:#f5c542}#genView .stc.r{background:rgba(248,113,113,.15);color:#f87171}
+#genView .stat{margin-top:12px}#genView .st-h{display:flex;justify-content:space-between;font:800 13.5px system-ui}
+#genView .sb{height:12px;border-radius:7px;background:#1e293b;overflow:hidden;margin-top:5px}#genView .sb i{display:block;height:100%;border-radius:7px;transition:width .4s}
+#genView .st-v{font-size:11.5px;color:#94a3b8;margin-top:4px;line-height:1.4}
+#genView .when{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}#genView .when div{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:9px 10px}
+#genView .when small{display:block;font:700 10px system-ui;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em}#genView .when b{display:block;font:900 15px system-ui;margin-top:3px}#genView .when span{font-size:11.5px;color:#94a3b8}
+#genView .wt{margin-top:10px;font-size:12.5px;line-height:1.45;background:rgba(245,197,66,.07);border-radius:10px;padding:8px 10px}
+#genView .log{margin-top:12px;border-left:2px solid #334155;padding-left:12px}#genView .log div{font-size:12.5px;line-height:1.4;margin:7px 0}#genView .log div b{color:#f5c542;margin-right:4px}
+#genView .log div.fut{color:#64748b}#genView .log div.fut b{color:#64748b}
+#genView .up{display:grid;grid-template-columns:86px minmax(0,1fr) auto;gap:8px;align-items:baseline;font-size:12.5px;padding:7px 0;border-bottom:1px solid #1e293b}#genView .up:last-child{border-bottom:0}
+#genView .up b{color:#f5c542;font-size:12px}#genView .up small{color:#64748b;font-size:11px}
+#genView .how .hw{cursor:pointer;font:800 14px system-ui;display:flex;justify-content:space-between}#genView .how .hw span{font:700 11px system-ui;color:#64748b}#genView .how.open .hw span{display:none}
+#genView .how .step{margin-top:10px}#genView .how .step>b{flex:0 0 22px;height:22px;border-radius:50%;background:#f5c542;color:#111;display:grid;place-items:center;font-size:12px}`;
+let GEN_TAB='home',GEN_CHAR=null,GEN_PICK=null,GEN_R=null;
 function genData(force){try{GEN_R=heirsRun(!!force);}catch(e){GEN_R={cells:{},err:e.message};}return GEN_R;}
 /* every live heir with its progress toward the chair */
 function genRace(){const R=GEN_R||genData();const H=heirsAll();const out=[];
@@ -40,7 +72,8 @@ function genRace(){const R=GEN_R||genData();const H=heirsAll();const out=[];
 const genPct=x=>Math.round(x*100);
 function genRaceHtml(){const L=genRace();if(!L.length)return`<div class="card"><div class="muted">No heirs reading yet — they're born the first time each character's calls are graded.</div></div>`;
   const col=v=>(CHARS[v]||{}).color||'#f5c542';
-  return`<div class="card"><div style="font:800 15px system-ui">👑 Who's closest to the crown</div><div class="muted" style="margin-top:4px">An heir takes the chair after ${HEIR_MIN_N}+ games it was never tuned on, ${HEIR_MIN_DAYS}+ days in the shadows, beating its parent past the bar (the bar rises with every heir a bloodline tries — luck protection), without its official picks making less money.</div></div>`+
+  const H0=heirsAll(),C0=Object.values(H0.cells);
+  return`<div class="card"><div style="font:800 15px system-ui">🔧 Tune-ups: who's closest to the crown</div><div class="muted" style="margin-top:4px"><b>Not the womb.</b> Every character also races tweaked copies of its own settings, one per bet type (${C0.length} bloodlines, ${C0.reduce((n,C)=>n+(C.heirs||[]).filter(h=>h.st==='shadow').length,0)} copies in the shadows, ${C0.reduce((n,C)=>n+(C.gen-1),0)} crowned so far). A copy that beats the original takes its chair; that's "crowned". The womb's babies are new characters. An heir takes the chair after ${HEIR_MIN_N}+ games it was never tuned on, ${HEIR_MIN_DAYS}+ days in the shadows, beating its parent past the bar (the bar rises with every heir a bloodline tries — luck protection), without its official picks making less money.</div></div>`+
   L.slice(0,30).map((x,i)=>`<div class="card race" onclick="GEN_TAB='tree';GEN_CHAR='${x.v.replace(/'/g,"\\'")}';GEN_PICK='${x.k.replace(/'/g,"\\'")}|${x.h.id}';genRender()">
     <div class="rk ${i<3?'top':''}">${i+1}</div><div>
       <div style="font:800 14px system-ui"><span style="color:${col(x.v)}">${txtEsc(charName(x.v))}</span> · ${GEN_MK[x.m]} <span class="mono muted">Gen ${x.gen+1} hopeful</span></div>
@@ -98,13 +131,13 @@ function genLoreHtml(){const run=(GEN_R||genData()).runs?(GEN_R.runs[JSON.string
     return`<div class="card" style="border-left:4px solid ${(CHARS[v]||{}).color}"><div style="font:900 15px system-ui;color:${(CHARS[v]||{}).color}">${txtEsc(charName(v))}</div>
       ${B.heirlooms.map(o=>row('💎',o,'#22c55e')).join('')}${B.paying.slice(0,4).map(o=>row('🌱',o,'#86efac')).join('')}${B.costing.slice(0,4).map(o=>row('⚠️',o,'#f87171')).join('')}
       ${S.map(o=>`<div style="margin:5px 0;font-size:12.5px">🩹 ${txtEsc(o.lab)} <span class="mono" style="color:#f87171">${o.w}-${o.l}</span>${o.healing?' <span style="color:#22c55e">· healing</span>':''}</div>`).join('')}</div>`;}).join('')||`<div class="card"><div class="muted">No heirlooms or scars yet — beliefs need games to prove themselves.</div></div>`;}
-function genRender(){const v=document.getElementById('genView');if(!v)return;const st=v.scrollTop;const tabs=[['race','👑 Throne race'],['womb','🥚 The womb'],['nursery','🍼 Nursery'],['evo','⚡ Evolution'],['north','⭐ North Star'],['dna','🧬 DNA'],['tree','🌳 Family trees'],['chron','📜 Chronicle'],['lore','💎 Heirlooms & scars']];
-  let body='';try{body=GEN_TAB==='race'?genRaceHtml():GEN_TAB==='womb'?(typeof wombHtml==='function'?wombHtml():''):GEN_TAB==='nursery'?(typeof nurseryHtml==='function'?nurseryHtml():''):GEN_TAB==='evo'?(typeof evoHtml==='function'?evoHtml():''):GEN_TAB==='north'?(typeof northHtml==='function'?northHtml():''):GEN_TAB==='dna'?(typeof dnaHtml==='function'?dnaHtml():''):GEN_TAB==='tree'?genTreeHtml():GEN_TAB==='chron'?genChronicleHtml():genLoreHtml();}catch(e){body=`<div class="card"><div class="muted">${txtEsc(e.message)}</div></div>`;}
+function genRender(){const v=document.getElementById('genView');if(!v)return;const st=v.scrollTop;const tabs=[['home','👪 Family'],['womb','🥚 Womb'],['nursery','🍼 Nursery'],['evo','⚡ Evolution'],['north','⭐ North Star'],['dna','🧬 DNA'],['tree','🌳 Trees'],['chron','📜 Chronicle'],['race','🔧 Tune-ups'],['lore','💎 Heirlooms & scars']];
+  let body='';try{body=GEN_TAB==='home'?(typeof homeHtml==='function'?homeHtml():''):GEN_TAB==='race'?genRaceHtml():GEN_TAB==='womb'?(typeof wombHtml==='function'?wombHtml():''):GEN_TAB==='nursery'?(typeof nurseryHtml==='function'?nurseryHtml():''):GEN_TAB==='evo'?(typeof evoHtml==='function'?evoHtml():''):GEN_TAB==='north'?(typeof northHtml==='function'?northHtml():''):GEN_TAB==='dna'?(typeof dnaHtml==='function'?dnaHtml():''):GEN_TAB==='tree'?genTreeHtml():GEN_TAB==='chron'?genChronicleHtml():genLoreHtml();}catch(e){body=`<div class="card"><div class="muted">${txtEsc(e.message)}</div></div>`;}
   const H=heirsAll();const cells=Object.values(H.cells);const live=cells.reduce((n,C)=>n+(C.heirs||[]).filter(h=>h.st==='shadow').length,0),crowned=cells.reduce((n,C)=>n+(C.gen-1),0);
   v.innerHTML=`<div class="gh"><div style="display:flex;justify-content:space-between;align-items:center"><div class="gt">🧬 BLOOD<span>LINES</span></div><button onclick="document.getElementById('genView').remove()" style="background:#1e293b;color:#fff;border:0;border-radius:10px;padding:8px 12px;font-weight:800">✕</button></div>
-    <div class="mono muted" style="font-size:11px;margin-top:4px">${cells.length} bloodlines · ${live} heirs in the shadows · ${crowned} crowned so far${(()=>{try{const W=wombAll();const e=W.litters.filter(L=>L.st==='live').reduce((n,L)=>n+L.embryos.filter(E=>E.st==='womb'||E.st==='due').length,0);const h=(W.kids||[]).filter(K=>K.st==='rookie'||K.st==='grad').length;return(e?` · ${e} embryo${e===1?'':'s'} in the womb`:'')+(h?` · ${h} heir${h===1?'':'s'} born`:'')+(()=>{const n=Object.values(W.legacy||{}).filter(o=>o&&o.n>=2).length;return n?` · ${n} evolved`:'';})();}catch(x){return'';}})()}</div>
+    <div class="mono muted" style="font-size:11px;margin-top:4px">${(()=>{try{const S=wbHomeSum();const p=[`${S.live.length} famil${S.live.length===1?'y':'ies'} expecting`,`${S.lifes.length} bab${S.lifes.length===1?'y':'ies'} in the womb`];const h=S.rook+S.grad;if(h)p.push(`${h} heir${h===1?'':'s'} on the desk`);if(S.evolved)p.push(`${S.evolved} evolved`);if(S.due)p.push(`${S.due} ready to be born`);else if(S.next)p.push(`next birth ${wbDay(S.next)}`);return p.join(' · ');}catch(x){return`${cells.length} bloodlines · ${live} heirs in the shadows · ${crowned} crowned so far`;}})()}</div>
     <div class="tabs">${tabs.map(([k,l])=>`<button class="${GEN_TAB===k?'on':''}" onclick="GEN_TAB='${k}';genRender()">${l}</button>`).join('')}</div></div><div class="gb">${body}</div>`;v.scrollTop=GEN_TAB==='tree'||GEN_TAB==='dna'?st:0;}
-function genOpen(){if(!document.getElementById('genCss')){const s=document.createElement('style');s.id='genCss';s.textContent=GEN_CSS;document.head.appendChild(s);}
+function genOpen(){GEN_TAB='home';if(!document.getElementById('genCss')){const s=document.createElement('style');s.id='genCss';s.textContent=GEN_CSS;document.head.appendChild(s);}
   let v=document.getElementById('genView');if(!v){v=document.createElement('div');v.id='genView';document.body.appendChild(v);}v.innerHTML='<div style="padding:40px;text-align:center;color:#f5c542;font-weight:800">🧬 Reading the bloodlines…</div>';
   heirsRunAsync().then(R=>{GEN_R=R;return typeof wombRunAsync==='function'?wombRunAsync().catch(()=>null):null;}).then(()=>genRender()).catch(e=>{GEN_R=GEN_R||{cells:{},err:e.message};genRender();});}
 /* doors in: the Records 🧬 tab opens the book, plus a button on Today */

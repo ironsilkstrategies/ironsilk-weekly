@@ -75,9 +75,9 @@ const pk = (a, b) => [a, b].sort().join('×');
   const R0 = J(`(()=>{const R=wombRun(true);return{n:R.n,emb:R.emb};})()`), W0 = J('wombAll()');
   const SJ0 = lit('Sim', 'Judge'), CT0 = lit('Coach', 'Trends');
   T('the first pass fills every slot it can: two litters (Simulator × Judge and Coach × Historian — four characters, two pairs)', W0.litters.length === 2 && !!SJ0 && !!CT0, JSON.stringify(W0.litters.map(L => L.a + '×' + L.b)));
-  T('…two embryos each, every one numbered in the order tried (the bar rises with each)', W0.litters.every(L => L.embryos.length === 2 && L.embryos.every(e => e.st === 'womb')) && W0.tried === 4 && JSON.stringify(W0.litters.flatMap(L => L.embryos.map(e => e.n)).sort()) === '[1,2,3,4]', JSON.stringify([W0.tried]));
+  T('…three embryos each (v3.5.2: brothers and sisters of different kinds, the first the rule\'s own), every one numbered in the order tried (the bar rises with each)', W0.litters.every(L => L.embryos.length === 3 && L.embryos.every(e => e.st === 'womb') && new Set(L.embryos.map(e => e.arch)).size === 3 && L.embryos[0].arch === L.arch.label) && W0.tried === 6 && JSON.stringify(W0.litters.flatMap(L => L.embryos.map(e => e.n)).sort()) === '[1,2,3,4,5,6]', JSON.stringify([W0.tried, W0.litters.map(L => L.embryos.map(e => e.arch))]));
   T('nothing is backdated: conceived today (Nov 22) and judged only on games from tomorrow, though the ledger goes back to Oct 20', W0.litters.every(L => L.conceived === '2026-11-22' && L.embryos.every(e => e.conceived === '2026-11-22' && e.since === '2026-11-23')), JSON.stringify(W0.litters.map(L => [L.conceived, L.embryos.map(e => e.since)])));
-  T('…so on conception day no embryo has a single game counted', Object.values(R0.emb).length === 4 && Object.values(R0.emb).every(r => r.A.n === 0 && r.B.n === 0 && r.me.n === 0 && !r.due && !r.lost), JSON.stringify(Object.values(R0.emb).map(r => [r.A.n, r.B.n])));
+  T('…so on conception day no embryo has a single game counted', Object.values(R0.emb).length === 6 && Object.values(R0.emb).every(r => r.A.n === 0 && r.B.n === 0 && r.me.n === 0 && !r.due && !r.lost), JSON.stringify(Object.values(R0.emb).map(r => [r.A.n, r.B.n])));
   T('🔮 every embryo carries a two-week preview (its recipe as of Nov 9, replayed on Nov 9–22) — shown, never counted', W0.litters.every(L => L.embryos.every(e => e.preview && e.preview.from === '2026-11-09' && e.preview.A.n > 0 && e.st === 'womb')), JSON.stringify(SJ0.embryos.map(e => e.preview && [e.preview.A, e.preview.B, e.preview.would])));
   /* §3 · the Goosebumps rule, on the real litter */
   const arch0 = J(`wbArch(dnaOf('Sim','2026-11-23'),dnaOf('Judge','2026-11-23'))`);
@@ -89,18 +89,18 @@ const pk = (a, b) => [a, b].sort().join('×');
   T('…a Prodigy rides its parents\' hot lanes harder: sharper exactly where a parent is really hot (10+ calls in 14 days, +15% a call), the Simulator\'s moneylines among them', Object.entries(heat).every(([k, h]) => r1.hot.includes(k) === h && (r1.lanes[k].t === 0.85) === h) && heat['nhl|ml|fav'] && heat['nhl|ml|dog'], JSON.stringify([heat, r1.hot]));
   T('…the first embryo is the pure blend, its sibling a mutation (leans on the market more)', r1.mut === 'none: the pure blend' && /market → 0\.5/.test(r2.mut) && r2.P.b === 0.5 && r1.P.b === 0.35, JSON.stringify([r1.mut, r2.mut]));
   const J0 = J(`journalAll().filter(x=>x.kind==='womb')`);
-  T('the chronicle records each courtship (💞, dated the day it happened)', J0.length === 2 && J0.every(x => /^💞 /.test(x.title) && x.d === '2026-11-22' && /expecting — a /.test(x.title)), JSON.stringify(J0.map(x => [x.d, x.title])));
+  T('the chronicle records each courtship (💞, dated the day it happened)', J0.length === 2 && J0.every(x => /^💞 /.test(x.title) && x.d === '2026-11-22' && /expecting three — a .+, a .+ and a /.test(x.title)), JSON.stringify(J0.map(x => [x.d, x.title])));
   const S1 = store(), ch0 = diff(S0, S1);
   T('nothing here changes a pick: the ledger is byte for byte the same, and the only records written are the womb and the chronicle (plus sync\'s own bookkeeping)', E('localStorage.getItem(VOICES_KEY)') === VJ0 && ch0.every(k => ['d4.womb', 'd4.journal', 'd4.__kts', 'd4.sync3dirty'].includes(k)), JSON.stringify(ch0));
   E('wombRun(true)'); const W0b = J('wombAll()');
-  T('one courtship pass a day: running it again the same day conceives nothing more', W0b.litters.length === 2 && W0b.tried === 4);
+  T('one courtship pass a day: running it again the same day conceives nothing more', W0b.litters.length === 2 && W0b.tried === 6);
 
   /* ── the rooms ── */
   const room0 = E('wombHtml()'), dna0 = E(`(WB_DNA_V='Sim',dnaHtml())`);
   T('🥚 the womb room: both litters, the Prodigy Architect, the progress to birth (0 of 100 unseen games), the preview and the courtship board', /The Simulator/.test(room0) && /The Judge/.test(room0) && /a Prodigy Architect/.test(room0) && /0\/100/.test(room0) && /Two-week preview/.test(room0) && /courtship board/.test(room0) && /judged on games from 2026-11-23/.test(room0), room0.slice(0, 300));
   T('🧬 the DNA room: a character\'s dominant genes and scars by lane', /Dominant genes/.test(dna0) && /NHL ML favorites/.test(dna0) && /Scars/.test(dna0) && /NHL overs/.test(dna0) && /NHL unders/.test(dna0), dna0.slice(0, 200));
   E('genOpen()'); await wait(2500); E(`GEN_TAB='womb';genRender()`); const book = E(`document.getElementById('genView').innerHTML`);
-  T('the Bloodlines book opens on the new rooms (🥚 The womb · 🧬 DNA) and counts the embryos', /🥚 The womb/.test(book) && /🧬 DNA/.test(book) && /4 embryos in the womb/.test(book) && /The Simulator/.test(book), book.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 300));
+  T('the Bloodlines book has the rooms (🥚 The womb · 🧬 DNA) and counts the babies in the womb', /🥚 The womb/.test(book) && /🧬 DNA/.test(book) && /2 families expecting · 6 babies in the womb/.test(book) && /The Simulator/.test(book), book.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 300));
 
   /* ── Dec 1: eight days in ── */
   go('2026-12-01'); const R1 = J(`wombRun(true).emb`), SJ1 = lit('Sim', 'Judge'); const e1 = SJ1.embryos[0].id, e2 = SJ1.embryos[1].id;
@@ -122,15 +122,15 @@ const pk = (a, b) => [a, b].sort().join('×');
   /* v3.3.0 · a due embryo is born at once (birth1122_test.js). Here the nursery is full (six living heirs, from parents with no calls in
      this world), so the due one waits — and the rest of the womb's story plays out as it did in Phase 1. */
   E(`(()=>{const W=wombAll();W.kids=[1,2,3,4,5,6].map(i=>({key:'H_X'+i,id:'X'+i,litter:'LX',a:'Pred',b:'Consensus',arch:'Steady All-rounder',temper:'Steady',craft:'All-rounder',name:'Placeholder '+i,chip:'P'+i,title:'The Steady Hand',color:'#888888',crest:{g:'⭐',t:'⚓'},creed:'x',pub:{bio:'x',origin:'x'},born:'2026-11-01',liveFrom:'2026-11-02',since:'2026-10-20',conceived:'2026-10-19',recipe:{P:{b:0.45,T:1,contrast:1},lanes:{},vacc:[],fade:[],hot:[],mut:'none'},domA:[],domB:[],n:0,st:'rookie',womb:{days:10},cal:[]}));set(WOMB_KEY,W);})()`);
-  go('2026-12-04'); const VJ4 = E('localStorage.getItem(VOICES_KEY)'); const R4 = J(`wombRun(true).emb`), SJ4 = lit('Sim', 'Judge'); const E1 = SJ4.embryos[0], E2 = SJ4.embryos[1], E3 = SJ4.embryos[2]; const a = R4[e1];
+  go('2026-12-04'); const VJ4 = E('localStorage.getItem(VOICES_KEY)'); const R4 = J(`wombRun(true).emb`), SJ4 = lit('Sim', 'Judge'); const E1 = SJ4.embryos[0], E2 = SJ4.embryos[1], E3 = SJ4.embryos[3]; const a = R4[e1];
   const n4 = nCalls('Sim', '2026-11-23', '2026-12-04');
   T(`🍼 Dec 4: the pure blend is DUE — it beat both parents on games it never saw by 2σ or more (${n4} calls against each, 11 days); the nursery is full, so it waits for room`, E1.st === 'due' && E1.dueAt === '2026-12-04' && a.A.n === n4 && a.B.n === n4 && a.days === 11 && a.bar === 2 && a.A.z >= 2 && a.B.z >= 2, JSON.stringify({ zA: a.A.z, zB: a.B.z, bar: a.bar, n: [a.A.n, a.B.n] }));
   T('…its official calls made at least as much money as each parent\'s', a.duA >= -1 && a.duB >= -1 && a.off.n > 0, JSON.stringify({ off: a.off, A: a.offA, B: a.offB }));
   T('…and it held its own inside each parent\'s best lanes (respect: within a standard error of the Simulator on its moneylines, the Judge on its totals)', a.rA.n >= 15 && a.rA.z >= -1 && a.rB.n >= 15 && a.rB.z >= -1, JSON.stringify([a.rA, a.rB]));
   T('🕊 the sibling that read the Simulator\'s moneylines backwards is lost — clearly worse than a parent on games it never saw', E2.st === 'lost' && E2.lostAt === '2026-12-04' && new RegExp(`σ worse than The (Simulator|Judge) on ${n4} games it never saw`).test(E2.why) && Math.min(R4[e2].A.z, R4[e2].B.z) <= -2, E2.why);
-  T('🥚 …and the parents try again: a new sibling conceived today, judged from tomorrow, another mutation (how bold it is)', !!E3 && E3.st === 'womb' && E3.conceived === '2026-12-04' && E3.since === '2026-12-05' && E3.n === 5 && /how bold it is → 0\.85/.test(E3.recipe.mut) && !!E3.preview, JSON.stringify(E3 && { c: E3.conceived, s: E3.since, n: E3.n, mut: E3.recipe.mut }));
-  const bar3 = E(`(()=>{const L=wombAll().litters.find(L=>L.a==='Sim'&&L.b==='Judge');return wbEval(L,L.embryos[2],wbIndex(),today(),L.embryos[2].n).bar;})()`);
-  T('…the bar rises with every embryo tried (2σ for the first, about 2.6σ for the fifth)', a.bar === 2 && bar3 > 2.55 && bar3 < 2.6, String(bar3));
+  T('🥚 …and the parents try again: a new sibling conceived today, judged from tomorrow, another mutation (how hard the stronger parent wins a lane), a kind none of its living siblings is', !!E3 && E3.st === 'womb' && E3.conceived === '2026-12-04' && E3.since === '2026-12-05' && E3.n === 7 && /how hard the stronger parent wins a lane → 1\.6/.test(E3.recipe.mut) && !!E3.preview && E3.arch !== E1.arch && E3.arch !== SJ4.embryos[2].arch, JSON.stringify(E3 && { c: E3.conceived, s: E3.since, n: E3.n, mut: E3.recipe.mut, arch: E3.arch }));
+  const bar3 = E(`(()=>{const L=wombAll().litters.find(L=>L.a==='Sim'&&L.b==='Judge');return wbEval(L,L.embryos[3],wbIndex(),today(),L.embryos[3].n).bar;})()`);
+  T('…the bar rises with every embryo tried (2σ for the first, about 2.7σ for the seventh)', a.bar === 2 && bar3 > 2.69 && bar3 < 2.71, String(bar3));
   T('…still nothing changes a pick', E('localStorage.getItem(VOICES_KEY)') === VJ4);
   const J4 = J(`journalAll().filter(x=>x.kind==='womb'&&x.d==='2026-12-04').map(x=>x.title)`);
   T('the chronicle: 🍼 due (waiting for room), 🕊 lost, 🥚 a new embryo', J4.some(t => /^🍼 The Simulator × The Judge: due, waiting for room/.test(t)) && J4.some(t => /^🕊 /.test(t)) && J4.some(t => /^🥚 /.test(t)), JSON.stringify(J4));
@@ -138,10 +138,10 @@ const pk = (a, b) => [a, b].sort().join('×');
   T('…and the rooms show it (🍼 due · 🕊 lost in the womb, the same in the chronicle)', /🍼 due/.test(room4) && /🕊 lost/.test(room4) && /🍼/.test(chr4) && /🕊/.test(chr4));
 
   /* ── a litter that loses every embryo ends; the pair rests; after the first fill, one new litter a day ── */
-  /* both litters: four embryos that read both parents backwards, in the womb since Nov 1 */
-  E(`(()=>{const W=wombAll();W.litters.filter(L=>L.st==='live').forEach(L=>{const b=L.embryos[0];L.embryos=[0,1,2,3].map(k=>{const R=JSON.parse(JSON.stringify(b.recipe));Object.keys(R.lanes).forEach(x=>{const o=R.lanes[x];R.lanes[x]={a:-(Math.abs(o.a)||1),b:-(Math.abs(o.b)||1)};});return{...JSON.parse(JSON.stringify(b)),id:L.id+'e'+(k+1),st:'womb',since:'2026-11-01',recipe:R};});});set(WOMB_KEY,W);})()`);
+  /* both litters: five embryos (as many as a litter can try) that read both parents backwards, in the womb since Nov 1 */
+  E(`(()=>{const W=wombAll();W.litters.filter(L=>L.st==='live').forEach(L=>{const b=L.embryos[0];L.embryos=[0,1,2,3,4].map(k=>{const R=JSON.parse(JSON.stringify(b.recipe));Object.keys(R.lanes).forEach(x=>{const o=R.lanes[x];R.lanes[x]={a:-(Math.abs(o.a)||1),b:-(Math.abs(o.b)||1)};});return{...JSON.parse(JSON.stringify(b)),id:L.id+'e'+(k+1),st:'womb',since:'2026-11-01',recipe:R};});});set(WOMB_KEY,W);})()`);
   go('2026-12-05'); E('wombRun(true)'); const W5 = J('wombAll()'), CT5 = lit('Coach', 'Trends');
-  T('a litter whose four embryos are all lost ends (no fifth try)', W5.litters.length === 2 && W5.litters.every(L => L.st === 'ended' && L.ended === '2026-12-05' && L.embryos.length === 4 && L.embryos.every(e => e.st === 'lost')), JSON.stringify(W5.litters.map(L => [L.st, L.embryos.map(e => e.st)])));
+  T('a litter whose five embryos are all lost ends (no sixth try)', W5.litters.length === 2 && W5.litters.every(L => L.st === 'ended' && L.ended === '2026-12-05' && L.embryos.length === 5 && L.embryos.every(e => e.st === 'lost')), JSON.stringify(W5.litters.map(L => [L.st, L.embryos.map(e => e.st)])));
   const whys = W5.litters.flatMap(L => L.embryos.map(e => e.why)), tl = /^28 days in the womb without clearing every bar \([+−]\d+\.\dσ against The \w+, [+−]\d+\.\dσ against The \w+\)$/;
   T('…an embryo that can\'t clear every bar in four weeks is lost too (it proves it or it makes room); the rest were clearly worse', whys.some(x => tl.test(x)) && whys.every(x => tl.test(x) || /σ worse than The \w+ on \d+ games it never saw$/.test(x)), JSON.stringify(whys));
   T('…the courtship board shows both pairs resting', (E('wombHtml()').match(/· resting/g) || []).length >= 2);

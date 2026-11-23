@@ -82,7 +82,7 @@
         ancestor). The nursery holds six rookies and the desk twelve living heirs: when the desk is full and an embryo is due,
         the weakest graduate steps aside if the newborn beat its parents by more; otherwise the embryo waits. */
 
-const WOMB_KEY='d4.womb',WOMB_PREVIEW=14,WOMB_SLOTS=3,WOMB_EMB=2,WOMB_MAX_EMB=4,WOMB_MIN_N=100,WOMB_MIN_DAYS=10,WOMB_BAR=2.0,WOMB_LUCK=0.25,
+const WOMB_KEY='d4.womb',WOMB_PREVIEW=14,WOMB_SLOTS=3,WOMB_EMB=3,WOMB_MAX_EMB=5,WOMB_MIN_N=100,WOMB_MIN_DAYS=10,WOMB_BAR=2.0,WOMB_LUCK=0.25,
   WOMB_K=12,WOMB_CAL=40,WOMB_RESPECT_N=15,WOMB_REST=14,WOMB_MAX_DAYS=28,
   WOMB_NURSERY=6,ROOKIE_DAYS=21,ROOKIE_N=150,ROOKIE_BAR=1.0,ROOKIE_MAX=42,
   FAM_H=7,FAM_MIN=6,FAM_Z=1.5,FAM_ZADM=2.0,FAM_LESSON=7;
@@ -220,6 +220,30 @@ function wbArch(dA,dB){const fa=dA.form.state,fb=dB.form.state,hot=[fa,fb].filte
   return{temper,craft,label:`${temper} ${craft}`,why:`${fw(dA)}; ${fw(dB).replace(/^The /,'the ')}. ${cw.charAt(0).toUpperCase()+cw.slice(1)}. So: a ${temper} (${WB_TEMPER[temper]}), ${WB_CRAFT[craft]}.`,
     tot:tA>=tB?'a':'b',side:tA>=tB?'b':'a',seer:sA&&sB?(sA.mult>=sB.mult?'a':'b'):null};}
 
+/* ── §3b · siblings differ (Nov 23, Chris: "there should be multiple varieties of 'type' (rebel, all around etc) of characters
+   being birthed"). The Goosebumps rule sets the odds; every embryo draws its own kind. The first in a litter is always the rule's
+   own pick (the likeliest child); its brothers and sisters draw from what their parents' records make possible, never a kind
+   already in the litter: hot parents make a Prodigy likelier, slumping ones a Rebel, one of each a Prodigal; parents who split
+   totals and sides make an Architect likelier, dog players a Longshot, chalk players a Grinder; only two score callers can make
+   a Seer. Seeded by the litter, so every device draws the same child. ── */
+const WB_TEMPERS=['Prodigy','Prodigal','Rebel','Steady'],WB_CRAFTS=['Seer','Architect','Longshot','Grinder','All-rounder'];
+function wbOdds(dA,dB,arch){const st=[dA.form.state,dB.form.state],hot=st.filter(x=>x==='hot').length,cold=st.filter(x=>x==='cold').length;
+  const T={Prodigy:1+2*hot,Prodigal:hot&&cold?3:1+0.5*(hot+cold),Rebel:1+2*cold,Steady:1+(2-hot-cold)};T[arch.temper]+=4;
+  const sh=(x,y)=>x+y>0?x/(x+y):0.5,tA=sh(dA.style.totU,dA.style.sideU),tB=sh(dB.style.totU,dB.style.sideU),cA=sh(dA.style.chalkU,dA.style.dogU),cB=sh(dB.style.chalkU,dB.style.dogU);
+  const sA=dA.score,sB=dB.score,seer=!!(sA&&sB&&sA.n>=30&&sB.n>=30&&sA.mult>=1.1&&sB.mult>=1.1);
+  const C={Seer:seer?2:0,Architect:1+4*Math.abs(tA-tB),Longshot:1+3*Math.max(0,1-cA-cB),Grinder:1+3*Math.max(0,cA+cB-1),'All-rounder':2};C[arch.craft]=(C[arch.craft]||0)+4;
+  return{T,C};}
+const wbSeed=x=>{let h=2166136261;for(let i=0;i<x.length;i++){h^=x.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;};
+const wbRng=sd=>()=>{sd|=0;sd=sd+0x6D2B79F5|0;let t=Math.imul(sd^sd>>>15,1|sd);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+/* a sibling's kind: drawn from the odds, never one already taken (the parents' lanes, totals and score callers stay theirs) */
+function wbDraw(dA,dB,arch,taken,seed){const O=wbOdds(dA,dB,arch),R=wbRng(wbSeed(seed)),opts=[],tT=new Set([...taken].map(x=>x.split(' ')[0])),tC=new Set([...taken].map(x=>x.split(' ').slice(1).join(' ')));
+  WB_TEMPERS.forEach(t=>WB_CRAFTS.forEach(c=>{const w=O.T[t]*O.C[c]*(tT.has(t)?0.3:1)*(tC.has(c)?0.5:1);if(w>0&&!taken.has(t+' '+c))opts.push({t,c,w});}));   /* brothers and sisters lean different */
+  if(!opts.length)return arch;let x=R()*opts.reduce((q,o)=>q+o.w,0),pk=opts[opts.length-1];for(const o of opts){x-=o.w;if(x<=0){pk=o;break;}}
+  const label=pk.t+' '+pk.c,base=String(arch.why||'').replace(/ So: a .*$/,'');
+  return{...arch,temper:pk.t,craft:pk.c,label,rule:arch.label,why:`${base} The likeliest child was a ${arch.label}; this one came out a ${label}: it ${WB_TEMPER[pk.t]}, ${WB_CRAFT[pk.c]}.`};}
+const wbAnd=L=>L.length<2?L.join(''):L.slice(0,-1).join(', ')+' and '+L[L.length-1];
+const WB_NUMW=['','one','two','three','four','five'];
+
 /* ── §4 · the womb ── */
 const WB_MUTS=[[],[['b',0.5]],[['T',0.85]],[['contrast',1.6]],[['b',0.2]],[['T',1.15]]];
 const WB_MUT_LAB={b:'how much it leans on the market',T:'how bold it is',contrast:'how hard the stronger parent wins a lane'};
@@ -313,9 +337,10 @@ function wbPreview(L,k,arch,asOf,IX,n){try{const p0=dayShift(asOf,-WOMB_PREVIEW)
 function wbConceive(W,P,asOf,D,IX,day){IX=IX||wbIndex();const id='L'+(W.litters.length+1),dA=D[P.a],dB=D[P.b],arch=wbArch(dA,dB);day=day||asOf;
   const L={id,st:'live',a:P.a,b:P.b,conceived:day,arch,court:{score:+P.score.toFixed(3),gain:P.gain,lift:+P.ch.lift.toFixed(3),split:+P.ch.split.toFixed(3),ag:P.ch.ag,sp:P.ch.sp,right:P.ch.right},
     dna:{a:wbBrief(dA),b:wbBrief(dB)},domA:wbBest(dA),domB:wbBest(dB),embryos:[]};
-  for(let k=0;k<WOMB_EMB;k++){W.tried=(W.tried||0)+1;L.embryos.push({id:id+'e'+(k+1),st:'womb',conceived:day,since:asOf,arch:arch.label,recipe:wbRecipe(dA,dB,arch,k),n:W.tried,preview:wbPreview(L,k,arch,asOf,IX,W.tried)});}
-  W.litters.push(L);const pv=L.embryos[0].preview;
-  try{journalAdd({kind:'womb',sig:'conceive-'+id,d:day,v:P.a,sev:'info',title:`💞 ${wbNm(P.a)} × ${wbNm(P.b)}: expecting — a ${arch.label}`,
+  const taken=new Set();for(let k=0;k<WOMB_EMB;k++){const ak=k===0?arch:wbDraw(dA,dB,arch,taken,[id,P.a,P.b,day,k].join('|'));taken.add(ak.label);W.tried=(W.tried||0)+1;
+    L.embryos.push({id:id+'e'+(k+1),st:'womb',conceived:day,since:asOf,arch:ak.label,recipe:wbRecipe(dA,dB,ak,k),n:W.tried,preview:wbPreview(L,k,ak,asOf,IX,W.tried)});}
+  L.mix=1;W.litters.push(L);const pv=L.embryos[0].preview;const kinds=L.embryos.map(E=>'a '+E.arch);
+  try{journalAdd({kind:'womb',sig:'conceive-'+id,d:day,v:P.a,sev:'info',title:`💞 ${wbNm(P.a)} × ${wbNm(P.b)}: expecting ${WB_NUMW[kinds.length]||kinds.length} — ${wbAnd(kinds)}`,
     what:`${arch.why} Coverage: +${P.gain.toFixed(1)}u a child taking the better parent in every lane adds; when they agree they hit ${Math.round(P.ch.agr*100)}% (${P.ch.ag} times).${pv?` Two-week preview (not counted): ${pv.A.z>=0?'+':''}${pv.A.z}σ against ${wbNm(P.a)}, ${pv.B.z>=0?'+':''}${pv.B.z}σ against ${wbNm(P.b)}.`:''}`});}catch(e){}
   return L;}
 
@@ -483,7 +508,8 @@ function wbBacked(Tm,Tl,s){const K=WB_LEGCFG.K,bm=wbBin(Tm,s),tm=bm?(bm.w+K*s)/(
 /* the cap on one call (c: the number it would carry otherwise) */
 /* the standard a character plays to on a given day: the first one for everyone from LEG_BASE_FROM, Legacy N from the day after
    it evolved (each step of its history on its own day, so a later evolution never reaches back), nothing before */
-function wbLegLevel(v,d){if(!d)return 0;let L=d>=LEG_BASE_FROM?1:0;const o=WB_LEGM&&WB_LEGM[v];
+function wbLegLevel(v,d){if(!d||(typeof window!=='undefined'&&window.__NO_STANDARD__))return 0;   /* (a test of something else, on a ledger with no history, sets __NO_STANDARD__) */
+  let L=d>=LEG_BASE_FROM?1:0;const o=WB_LEGM&&WB_LEGM[v];
   if(o){(o.hist||[]).forEach(h=>{if(h&&h.n>L&&h.at&&d>=dayShift(h.at,1))L=h.n;});if(o.n>L&&o.from&&d>=o.from)L=o.n;}return L;}
 let WB_KCAL=new Map();   /* (an heir's calibration, as bins it can prove a number with) */
 function wbLegCap(x,c){if(c==null||!x||!x.voice)return c;const d=String(x.date||'').slice(0,10),L=wbLegLevel(x.voice,d);if(!L)return c;
@@ -621,6 +647,15 @@ function wombRun(force){const d=today();const IX=wbIndex();if(!force&&WOMB_MEMO&
     const C=wbCourt(asOf,IX,busy);let made=0;
     for(const P of C.P){if(live().length>=WOMB_SLOTS||(!first&&made>=1))break;if(busy.has(P.a)||busy.has(P.b)||rest.has(wbPairKey(P.a,P.b)))continue;wbConceive(W,P,asOf,C.D,IX,d);busy.add(P.a);busy.add(P.b);made++;}
     W.firstDone=1;W.lastConceived=d;changed=true;}   /* one courtship pass a day */
+  /* 1b · Nov 23: a litter conceived in the last days under the old rule (every sibling the same kind, all still in the womb) gets
+     siblings of other kinds, drawn from the same records it was conceived on (nothing new is seen: they're judged from the same day) */
+  W.litters.forEach(L=>{if(L.st!=='live'||L.mix||!(L.conceived>='2026-11-20')||!L.embryos.length||!L.embryos.every(E=>E.st==='womb'))return;   /* (the draw is seeded: run twice, or after a merge, it draws the same siblings) */
+    try{const asOf=L.embryos[0].since,dA=dnaOf(L.a,asOf,IX),dB=dnaOf(L.b,asOf,IX),arch=L.arch&&L.arch.label?L.arch:wbArch(dA,dB),taken=new Set([L.embryos[0].arch]),added=[];
+      for(let k=1;k<WOMB_EMB;k++){const ak=wbDraw(dA,dB,arch,taken,[L.id,L.a,L.b,L.conceived,k].join('|'));taken.add(ak.label);let E=L.embryos[k];
+        if(!E){W.tried=(W.tried||0)+1;E={id:L.id+'e'+(k+1),st:'womb',conceived:L.conceived,since:asOf,n:W.tried};L.embryos.push(E);}
+        E.arch=ak.label;E.recipe=wbRecipe(dA,dB,ak,k);E.preview=wbPreview(L,k,ak,asOf,IX,E.n);added.push('a '+ak.label);}
+      L.mix=1;changed=true;try{if(!journalAll().some(x=>x&&x.sig==='mix-'+L.id))journalAdd({kind:'womb',sig:'mix-'+L.id,d,v:L.a,sev:'info',title:`🥚 ${wbNm(L.a)} × ${wbNm(L.b)}: siblings of other kinds`,
+        what:`Brothers and sisters don't all come out the same: alongside its ${L.embryos[0].arch}, the litter now carries ${wbAnd(added)}, drawn from the same records they were conceived on and judged from the same day.`});}catch(e){}}catch(e){console.warn('siblings',e);}});
   /* 2 · every embryo re-reads its games; the due are born (room permitting), the lost make room for a sibling */
   const out={d,ts:Date.now(),sig:IX.sig,emb:{},kid:{},evo:{},n:0,born:[]};
   W.litters.filter(L=>L.st==='live').forEach(L=>{L.embryos.forEach(E=>{if(E.st!=='womb'&&E.st!=='due')return;const r=wbEval(L,E,IX,d,E.n);out.emb[E.id]=r;out.n++;
@@ -640,8 +675,9 @@ function wombRun(force){const d=today();const IX=wbIndex();if(!force&&WOMB_MEMO&
     if(L.st!=='live')return;
     /* a lost embryo makes room for a sibling, conceived today from today's records (its type can differ: the Goosebumps rule) */
     const alive=L.embryos.filter(E=>E.st!=='lost');
-    if(alive.length<WOMB_EMB&&L.embryos.length<WOMB_MAX_EMB){const d1=dayShift(d,1),dA=dnaOf(L.a,d1,IX),dB=dnaOf(L.b,d1,IX);if(wbProven(dA)&&wbProven(dB)){const arch=wbArch(dA,dB);W.tried=(W.tried||0)+1;
-        const k=L.embryos.length,E={id:L.id+'e'+(k+1),st:'womb',conceived:d,since:d1,arch:arch.label,recipe:wbRecipe(dA,dB,arch,k),n:W.tried};E.preview=wbPreview(L,k,arch,d1,IX,W.tried);L.embryos.push(E);changed=true;
+    if(alive.length<WOMB_EMB&&L.embryos.length<WOMB_MAX_EMB){const d1=dayShift(d,1),dA=dnaOf(L.a,d1,IX),dB=dnaOf(L.b,d1,IX);if(wbProven(dA)&&wbProven(dB)){const k=L.embryos.length,base=wbArch(dA,dB),taken=new Set(alive.map(E=>E.arch));
+        const arch=taken.has(base.label)?wbDraw(dA,dB,base,taken,[L.id,L.a,L.b,d,k].join('|')):base;W.tried=(W.tried||0)+1;
+        const E={id:L.id+'e'+(k+1),st:'womb',conceived:d,since:d1,arch:arch.label,recipe:wbRecipe(dA,dB,arch,k),n:W.tried};E.preview=wbPreview(L,k,arch,d1,IX,W.tried);L.embryos.push(E);changed=true;
         try{journalAdd({kind:'womb',sig:'conceive-'+E.id,v:L.a,sev:'info',title:`🥚 ${wbNm(L.a)} × ${wbNm(L.b)}: a new embryo — a ${arch.label}`,what:arch.why});}catch(e){}}}
     if(!L.embryos.some(E=>E.st!=='lost')){L.st='ended';L.ended=d;changed=true;
       try{journalAdd({kind:'womb',sig:'ended-'+L.id,v:L.a,sev:'info',title:`🕯 ${wbNm(L.a)} × ${wbNm(L.b)}: no heir this time`,what:`All ${L.embryos.length} embryos were lost. The pair rests ${WOMB_REST} days before it can court again.`});}catch(e){}}});
@@ -684,9 +720,10 @@ function wombMerge(a,b){if(!a||a.v!==1||!Array.isArray(a.litters))return b||a;if
   const first=W=>W.litters.reduce((m,L)=>!m||L.conceived<m?L.conceived:m,null)||'9999';const P=first(b)<first(a)?b:a,S=P===a?b:a;
   const rk=st=>st==='born'?3:st==='lost'||st==='released'?2:st==='due'?1:0,num=id=>+String(id).replace(/^.*e/,'')||0;
   const litters=P.litters.map(L=>{const M=S.litters.find(x=>x.id===L.id&&x.a===L.a&&x.b===L.b&&x.conceived===L.conceived);if(!M)return L;
-    const E=new Map(L.embryos.map(e=>[e.id,e]));M.embryos.forEach(e=>{const o=E.get(e.id);if(!o||rk(e.st)>rk(o.st))E.set(e.id,e);});
+    const ML=!!M.mix&&!L.mix;   /* v3.5.2 · the copy that drew the siblings wins a tie (its babies are the ones of different kinds) */
+    const E=new Map(L.embryos.map(e=>[e.id,e]));M.embryos.forEach(e=>{const o=E.get(e.id);if(!o||rk(e.st)>rk(o.st)||(ML&&rk(e.st)===rk(o.st)))E.set(e.id,e);});
     const born=L.st==='born'||M.st==='born',ended=!born&&(L.st==='ended'||M.st==='ended');
-    return{...L,st:born?'born':ended?'ended':L.st,...(born?{bornAt:L.bornAt||M.bornAt,kid:L.kid||M.kid}:{}),...(ended?{ended:L.ended||M.ended}:{}),embryos:[...E.values()].sort((x,y)=>num(x.id)-num(y.id))};});
+    return{...L,...(L.mix||M.mix?{mix:1}:{}),st:born?'born':ended?'ended':L.st,...(born?{bornAt:L.bornAt||M.bornAt,kid:L.kid||M.kid}:{}),...(ended?{ended:L.ended||M.ended}:{}),embryos:[...E.values()].sort((x,y)=>num(x.id)-num(y.id))};});
   /* every heir either copy has seen born; a graduation or a retirement on either side stands */
   const krk=st=>st==='retired'?2:st==='grad'?1:0,KM=new Map(),KA=[...(b.kids||[]),...(a.kids||[])];KA.forEach(K=>{if(!K||!K.key)return;const o=KM.get(K.key);if(!o||krk(K.st)>=krk(o.st))KM.set(K.key,K);});
   /* §9 · a generation earned on either copy stands (the earlier day, if both) */
@@ -725,7 +762,7 @@ function wombHtml(){if(!WOMB_MEMO||WOMB_MEMO.d!==today()){wombRunAsync().then(()
         ${E.st==='womb'&&r.need&&r.need.length?`<div style="margin-top:6px;font-size:12px">⏳ <b>Still needs:</b> ${r.need.map(txtEsc).join(' · ')}</div>`:''}`:''}
       ${E.preview?`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(167,139,250,.10);font-size:12px;line-height:1.5">🔮 <b>Two-week preview</b> <span class="muted">(if they'd paired on ${txtEsc(E.preview.from)}; shown, never counted)</span><br>${E.preview.A.z>=0?'+':''}${E.preview.A.z}σ vs ${txtEsc(wbSh(L.a))} · ${E.preview.B.z>=0?'+':''}${E.preview.B.z}σ vs ${txtEsc(wbSh(L.b))} · official ${E.preview.off.w}-${E.preview.off.n-E.preview.off.w}, ${wbU(E.preview.off.u)} (parents ${wbU(E.preview.offA.u)} · ${wbU(E.preview.offB.u)})${E.preview.would?' · <b style="color:#22c55e">it would have cleared every bar</b>':E.preview.need&&E.preview.need.length?`<br><span class="muted">Short of: ${E.preview.need.map(txtEsc).join(' · ')}</span>`:''}</div>`:''}
       ${E.st==='lost'&&E.why?`<div class="muted" style="margin-top:6px">${txtEsc(E.why)}</div>`:''}</div>`;};
-  const head=`<div class="card"><div style="font:800 15px system-ui">🥚 The womb</div><div class="muted" style="margin-top:4px">Two characters with traits that cover each other conceive embryos. An embryo is born only when it beats <b>both</b> parents on games it never saw: ${WOMB_MIN_N}+ calls against each, ${WOMB_MIN_DAYS}+ days, past the luck bar, its official calls making at least as much money, and holding its own in each parent's best lanes. Clearly worse than either parent, or ${WOMB_MAX_DAYS} days without clearing every bar, and it's lost: the parents try again. The kind of child depends on the records its parents were running when it was conceived. Nothing here changes a pick.</div></div>`;
+  const head=`<div class="card"><div style="font:800 15px system-ui">🥚 The womb</div><div class="muted" style="margin-top:4px"><b>The simple view is on 👪 Family</b> (how close each baby is, in four bars). This is the lab: every gene and every number. Two characters with traits that cover each other conceive embryos. An embryo is born only when it beats <b>both</b> parents on games it never saw: ${WOMB_MIN_N}+ calls against each, ${WOMB_MIN_DAYS}+ days, past the luck bar, its official calls making at least as much money, and holding its own in each parent's best lanes. Clearly worse than either parent, or ${WOMB_MAX_DAYS} days without clearing every bar, and it's lost: the parents try again. The kind of child depends on the records its parents were running when it was conceived. Nothing here changes a pick.</div></div>`;
   const lit=live.map(L=>`<div class="card" style="background:linear-gradient(135deg,${wbCol(L.a)}22,${wbCol(L.b)}22),#0b1220">
       <div style="font:900 16px system-ui"><span style="color:${wbCol(L.a)}">${txtEsc(wbNm(L.a))}</span> × <span style="color:${wbCol(L.b)}">${txtEsc(wbNm(L.b))}</span></div>
       <div class="muted" style="margin-top:4px">Conceived ${txtEsc(L.conceived)} · ${txtEsc(L.arch.why)}</div>
@@ -735,6 +772,100 @@ function wombHtml(){if(!WOMB_MEMO||WOMB_MEMO.d!==today()){wombRunAsync().then(()
     ${C.P.slice(0,6).map((P,i)=>`<div style="margin-top:8px;font-size:13px${P.busy||P.rest?';opacity:.55':''}"><b>${i+1}.</b> <span style="color:${wbCol(P.a)}">${txtEsc(wbSh(P.a))}</span> × <span style="color:${wbCol(P.b)}">${txtEsc(wbSh(P.b))}</span> <span class="mono muted">${wbU(P.gain)} coverage · agree ${Math.round(P.ch.agr*100)}%</span> → <span style="color:#f5c542">a ${txtEsc(wbArch(C.D[P.a],C.D[P.b]).label)}</span>${P.busy?' · expecting':P.rest?' · resting':''}</div>`).join('')||'<div class="muted" style="margin-top:6px">No two characters are proven enough to pair yet.</div>'}</div>`;}catch(e){}
   const born=W.litters.filter(L=>L.st==='born'&&L.bornAt>=dayShift(today(),-7)).map(L=>{const K=(W.kids||[]).find(k=>k.key===L.kid);return K?`<div class="card" style="border-left:4px solid ${K.color}"><div style="font:800 14px system-ui">👶 ${txtEsc(wbNm(L.a))} × ${txtEsc(wbNm(L.b))}: <span style="color:${K.color}">${txtEsc(K.name)}</span> was born ${txtEsc(wbMd(K.born))}</div><div class="muted" style="margin-top:3px">It lives in the 🍼 Nursery now. ${txtEsc(K.creed)}</div></div>`:'';}).join('');
   return head+born+(lit||`<div class="card"><div class="muted">No one is expecting yet: a pairing needs two proven characters whose traits cover each other.</div></div>`)+board;}
+/* ══ §13 · THE FAMILY AT A GLANCE (Nov 23, Chris: "the bloodline screen is difficult asf to understand… I compared this feature to
+   the game bitlife… it was never hard to understand what was going on"). Every embryo and every heir is a life: an avatar, a kind,
+   an age, four bars (BitLife's happiness, health, smarts and looks become growth, experience, smarts and money), a status in plain
+   words, the day it can be born (or graduate, or make a parent evolve), and its life so far. The other rooms keep the detail. ══ */
+const WB_PCT=x=>Math.max(0,Math.min(100,Math.round((+x||0)*100)));
+const wbTone=p=>p>=70?'#22c55e':p>=35?'#f5c542':'#f87171';
+function wbStat(ic,lab,f,val,col,na){const p=na?0:WB_PCT(f),c=na?'#475569':col||wbTone(p);return`<div class="stat"><div class="st-h"><span>${ic} ${lab}</span><b style="color:${c}">${na?'—':p+'%'}</b></div><div class="sb"><i style="width:${p}%;background:${c}"></i></div>${val?`<div class="st-v">${val}</div>`:''}</div>`;}
+const WB_TONE={g:'#22c55e',y:'#f5c542',r:'#f87171'};
+const wbDay=d=>{try{return new Date(String(d).slice(0,10)+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC'});}catch(e){return String(d);}};
+const wbDaysTo=d=>Math.round((Date.parse(String(d).slice(0,10))-Date.parse(today()))/864e5);
+const wbIn=d=>{const n=wbDaysTo(d);return n<=0?'today':n===1?'tomorrow':`in ${n} days`;};
+/* the four bars and the verdict, for any race against two parents (the womb, the rookie year) or one (evolution) */
+function wbLife(o){const n=Math.min(...o.n),z=Math.min(...o.z),g=Math.min(1,o.days/o.minDays),e=Math.min(1,n/o.minN),s=Math.max(0,Math.min(1,z/o.bar)),m=o.mOk?e:0;
+  let ready=(g+e+s+m)/4;if(o.respBad)ready=Math.min(ready,0.9);if(o.done)ready=1;
+  let eta=o.etaMin;if(n<o.minN&&o.days>0&&n>0){const e2=dayShift(today(),Math.ceil((o.minN-n)/(n/o.days)));if(e2>eta)eta=e2;}if(eta<today())eta=today();
+  const wi=o.z.indexOf(z),behind=o.names[wi];let st,tone;
+  if(o.done){st=o.doneTxt;tone='g';}else if(n>=30&&z<=-1){st=`📉 Behind ${behind}`;tone='r';}
+  else if(o.days<o.minDays||n<o.minN){st='⏳ Still learning';tone='y';}
+  else if(z<o.bar){st=z>=0?'📈 Ahead, not clearly yet':`📉 Behind ${behind}`;tone=z>=0?'y':'r';}
+  else if(!o.mOk){st='💸 Its picks are behind on money';tone='r';}else if(o.respBad){st='🤝 Weak in a parent\'s best spots';tone='y';}else{st='🟢 Clearing every bar';tone='g';}
+  const left=o.dl?wbDaysTo(o.dl):null;if(!o.done&&left!=null&&left>=0&&left<=5)st+=` · ⌛ ${left} day${left===1?'':'s'} left`;
+  const sg=v=>(v>=0?'+':'−')+Math.abs(v).toFixed(1);
+  const vs=o.names.length>1?'each parent':o.names[0];
+  return{ready,g,e,s,m,eta,left,st,tone,started:n>0,vals:{g:o.days>=o.minDays?`${o.days} days ✓ (${o.minDays} needed)`:`${o.days} of ${o.minDays} days`,e:n>=o.minN?`${n} games against ${vs} ✓ (${o.minN} needed)`:`${n} of ${o.minN} games against ${vs}`,
+    s:`${o.names.map((nm,i)=>`${sg(o.z[i])} vs ${txtEsc(nm)}`).join(' · ')} <span class="muted">(needs +${o.bar.toFixed(1)}${o.names.length>1?' against both':''})</span>`,m:o.mTxt}};}
+/* "100 more of Judge's calls" → "100 more games against Judge"; "1.2σ more against Judge" → "a bigger edge on Judge (+1.2)" */
+const wbPlain=t=>String(t).replace(/(\d+) more of (.+?)'s calls/,'$1 more games against $2').replace(/([\d.]+)σ more against (.+)/,'a bigger edge on $2 (+$1)').replace(/ \([+−-]?[\d.]+σ\)/,'').replace(/(\d)u more on its official calls/,'$1u more from its official picks');
+function wbEmbLife(L,E,r){const sa=wbSh(L.a),sb=wbSh(L.b),respBad=!!(r&&(((L.domA||[]).length&&r.rA.n>=WOMB_RESPECT_N&&r.rA.z<-1)||((L.domB||[]).length&&r.rB.n>=WOMB_RESPECT_N&&r.rB.z<-1)));
+  return wbLife({days:r?r.days:0,minDays:WOMB_MIN_DAYS,n:[r?r.A.n:0,r?r.B.n:0],minN:WOMB_MIN_N,z:[r?r.A.z:0,r?r.B.z:0],bar:r?r.bar:WOMB_BAR,names:[sa,sb],mOk:!r||(r.duA>=-1&&r.duB>=-1),respBad,
+    done:E.st==='due',doneTxt:'🍼 Ready to be born',etaMin:dayShift(E.since,WOMB_MIN_DAYS),dl:dayShift(E.since,WOMB_MAX_DAYS),
+    mTxt:r&&r.off.n?`its official picks ${wbU(r.off.u)} · ${txtEsc(sa)} ${wbU(r.offA.u)} · ${txtEsc(sb)} ${wbU(r.offB.u)}`:'no official picks graded yet'});}
+const wbAv=(a,b,ic)=>`<div class="av" style="background:linear-gradient(135deg,${wbHex(wbCol(a))},${wbHex(wbCol(b))})"><span>${ic}</span></div>`;
+function wbLogHtml(rows){const t=today();return`<div class="log">${rows.filter(x=>x&&x[0]).sort((a,b)=>String(a[0]).slice(0,10).localeCompare(String(b[0]).slice(0,10))).map(([d,x])=>`<div class="${String(d).slice(0,10)>t?'fut':''}"><b>${txtEsc(wbDay(d))}</b> ${txtEsc(x)}</div>`).join('')}</div>`;}
+function wbEmbCard(L,E,r,open){const LF=wbEmbLife(L,E,r),rule=E.arch===(L.arch||{}).label,sa=wbSh(L.a),sb=wbSh(L.b);const pc=WB_PCT(LF.ready);
+  const say=r&&r.me&&r.me.n?`${r.me.w}-${r.me.n-r.me.w} so far. ${r.A.z>=0&&r.B.z>=0?'Ahead of both parents.':r.A.z<0&&r.B.z<0?'Behind both parents.':`Ahead of ${r.A.z>=0?sa:sb}, behind ${r.A.z<0?sa:sb}.`}`:'No graded games yet.';
+  const log=[[E.conceived||L.conceived,`Conceived by ${wbNm(L.a)} and ${wbNm(L.b)}: ${rule?`the kind their records made likeliest, a ${E.arch}`:`a ${E.arch}, a different kind than its likeliest sibling`}.`],
+    E.preview&&E.preview.would?[E.conceived||L.conceived,'A two-week dry run before it was conceived said it would have beaten both parents.']:null,[E.since,'Starts calling live games, each one before the result.'],
+    r&&r.me&&r.me.n?[today(),`Day ${r.days}: ${say}`]:null,E.st==='due'?[E.dueAt||today(),'Cleared every bar. Ready to be born.']:[LF.eta,'The earliest day it can be born.'],E.st==='due'?null:[dayShift(E.since,WOMB_MAX_DAYS),'Its deadline. If it hasn\'t cleared every bar by then, it\'s lost and its parents try again.']];
+  const wait=E.st==='due'?(L.waitNoted?'Waiting for room in the nursery.':'Being born on the next pass.'):r&&r.need&&r.need.length?r.need.map(wbPlain).join(' · '):'';
+  return`<div class="life${open?' open':''}"><div class="sm" onclick="this.parentNode.classList.toggle('open')">${wbAv(L.a,L.b,E.st==='due'?'🐣':'🥚')}<div><div class="lf-n">a ${txtEsc(E.arch)}</div><div class="lf-s">${txtEsc(sa)} × ${txtEsc(sb)} · day ${r?r.days:0} of up to ${WOMB_MAX_DAYS}</div><span class="stc ${LF.tone}">${txtEsc(LF.st)}</span></div>
+      <div class="rd" style="color:${WB_TONE[LF.tone]}">${pc}%<small>to birth</small></div></div><div class="lb">
+    ${wbStat('⏱','Growth',LF.g,LF.vals.g,'#a78bfa')}${wbStat('👀','Experience',LF.e,LF.vals.e,'#60a5fa')}${wbStat('🧠','Smarts',LF.s,LF.started?LF.vals.s:'Shows up once it has played its first games.',null,!LF.started)}${wbStat('💰','Money',LF.m,LF.vals.m,null,!LF.started)}
+    <div class="when"><div><small>Earliest birth</small><b>${E.st==='due'?'Now':txtEsc(wbDay(LF.eta))}</b><span>${E.st==='due'?'':wbIn(LF.eta)}</span></div><div><small>Deadline</small><b>${txtEsc(wbDay(dayShift(E.since,WOMB_MAX_DAYS)))}</b><span>${wbIn(dayShift(E.since,WOMB_MAX_DAYS))}</span></div></div>
+    ${wait?`<div class="wt">⏳ <b>Waiting on:</b> ${txtEsc(wait)}</div>`:''}${wbLogHtml(log)}</div></div>`;}
+/* an heir's life: the rookie year (to graduation) or the race to make a parent evolve */
+function wbKidCard(K,W,open){const R=(WOMB_MEMO&&WOMB_MEMO.kid||{})[K.key],EV=(WOMB_MEMO&&WOMB_MEMO.evo||{})[K.key]||{},sa=wbSh(K.a),sb=wbSh(K.b);let LF,lab,ic=K.st==='grad'?(K.genAt?'⚡':'🎓'):'🍼',when;
+  if(K.st==='rookie'){const days=Math.max(0,Math.round((Date.parse(today())-Date.parse(K.liveFrom))/864e5));
+    LF=wbLife({days,minDays:ROOKIE_DAYS,n:[R?R.A.n:0,R?R.B.n:0],minN:ROOKIE_N,z:[R?R.A.z:0,R?R.B.z:0],bar:ROOKIE_BAR,names:[sa,sb],mOk:!R||(R.duA>=-1&&R.duB>=-1),respBad:false,done:false,doneTxt:'',etaMin:dayShift(K.liveFrom,ROOKIE_DAYS),dl:dayShift(K.liveFrom,ROOKIE_MAX),
+      mTxt:R&&R.off.n?`its official picks ${wbU(R.off.u)} · ${txtEsc(sa)} ${wbU(R.offA.u)} · ${txtEsc(sb)} ${wbU(R.offB.u)}`:'no official picks graded yet'});lab='to graduate';when=['Earliest graduation','Last day to graduate',dayShift(K.liveFrom,ROOKIE_MAX)];}
+  else{const E=Object.values(EV).sort((x,y)=>(y.z||0)-(x.z||0))[0];if(!E)return`<div class="life${open?' open':''}"><div class="sm" onclick="this.parentNode.classList.toggle('open')">${wbAv(K.a,K.b,ic)}<div><div class="lf-n">${txtEsc(K.name)}</div><div class="lf-s">${K.genAt?`Gen ${K.gen||wbGenOf(K.key,W)}`:'Graduated'} · child of ${txtEsc(sa)} × ${txtEsc(sb)}</div></div><div class="rd">—</div></div><div class="lb"><div class="wt">Its race against its parents starts on the next pass.</div></div></div>`;
+    const pn=wbSh(E.p);LF=wbLife({days:E.days,minDays:EVO_DAYS,n:[E.n],minN:EVO_N,z:[E.z],bar:EVO_BAR,names:[pn],mOk:E.du>0,respBad:!E.resp,done:false,doneTxt:'',etaMin:dayShift(E.from,EVO_DAYS),dl:null,
+      mTxt:`its official picks ${wbU(E.off)} · ${txtEsc(pn)} ${wbU(E.offP)}`});lab=`to make ${txtEsc(pn)} evolve`;when=['Earliest evolution','',null];}
+  const pc=WB_PCT(LF.ready),st=K.st==='rookie'?`🍼 Rookie · day ${Math.max(0,wbDaysTo(K.liveFrom)*-1)} of ${ROOKIE_DAYS}`:K.genAt?`⚡ Gen ${K.gen||wbGenOf(K.key,W)}`:'🎓 Graduated';
+  const fam=((K.fam||{}).now||[]).slice(0,3).map(x=>{try{return wbFamTxt(x,K,true);}catch(e){return'';}}).filter(Boolean);
+  const log=[[K.born,`Born to ${wbNm(K.a)} and ${wbNm(K.b)}: ${K.title}, a ${K.arch}.`],K.gradAt?[K.gradAt,'Graduated: it kept beating both parents in public.']:null,K.genAt?[K.genAt,`Made ${wbNm(K.genBy)} evolve and earned Gen ${K.gen||wbGenOf(K.key,W)}.`]:null,
+    ...((K.fam||{}).lessons||[]).slice(-2).map(l=>{try{return[l.d,'Learned a lesson: '+wbLessonTxt(l,K,true)+'.'];}catch(e){return null;}}),[LF.eta,K.st==='rookie'?'The earliest day it can graduate.':'The earliest day a parent can be made to evolve.']];
+  return`<div class="life${open?' open':''}"><div class="sm" onclick="this.parentNode.classList.toggle('open')">${wbCrestSvg(K,46)}<div><div class="lf-n" style="color:${wbHex(K.color)}">${txtEsc(K.name)}</div><div class="lf-s">${txtEsc(st)} · child of ${txtEsc(sa)} × ${txtEsc(sb)}</div><span class="stc ${LF.tone}">${txtEsc(LF.st)}</span></div>
+      <div class="rd" style="color:${WB_TONE[LF.tone]}">${pc}%<small>${lab}</small></div></div><div class="lb">
+    ${wbStat('⏱','Growth',LF.g,LF.vals.g,'#a78bfa')}${wbStat('👀','Experience',LF.e,LF.vals.e,'#60a5fa')}${wbStat('🧠','Smarts',LF.s,LF.started?LF.vals.s:'Shows up once it has played its first games.',null,!LF.started)}${wbStat('💰','Money',LF.m,LF.vals.m,null,!LF.started)}
+    <div class="when"><div><small>${when[0]}</small><b>${txtEsc(wbDay(LF.eta))}</b><span>${wbIn(LF.eta)}</span></div>${when[2]?`<div><small>${when[1]}</small><b>${txtEsc(wbDay(when[2]))}</b><span>${wbIn(when[2])}</span></div>`:''}</div>
+    ${fam.length?`<div class="wt">👪 <b>Family life:</b> ${fam.map(txtEsc).join(' · ')}</div>`:''}${wbLogHtml(log)}</div></div>`;}
+/* the whole family in numbers, for the header and the front page */
+function wbHomeSum(){const W=wombAll(),live=W.litters.filter(L=>L.st==='live'),E=live.flatMap(L=>L.embryos.filter(x=>x.st==='womb'||x.st==='due').map(x=>({L,E:x})));const R=(WOMB_MEMO&&WOMB_MEMO.emb)||{};
+  const lifes=E.map(o=>({...o,r:R[o.E.id],LF:wbEmbLife(o.L,o.E,R[o.E.id])}));const next=lifes.length?lifes.map(o=>o.E.st==='due'?today():o.LF.eta).sort()[0]:null;
+  return{W,live,lifes,next,due:lifes.filter(o=>o.E.st==='due').length,rook:(W.kids||[]).filter(K=>K.st==='rookie').length,grad:(W.kids||[]).filter(K=>K.st==='grad').length,evolved:Object.values(W.legacy||{}).filter(o=>o&&o.n>=2).length};}
+function homeHtml(){if(!WOMB_MEMO||WOMB_MEMO.d!==today()){wombRunAsync().then(()=>{try{if(GEN_TAB==='home')genRender();}catch(e){}}).catch(()=>{});return`<div class="card"><div class="muted">🥚 Checking on the family… (a few seconds)</div></div>`;}
+  const S=wbHomeSum(),W=S.W;const nE=S.lifes.length;
+  const hero=`<div class="card hero"><div class="hh">👪 Your family</div>
+    <div class="nb">${S.due?`🐣 ${S.due} ready to be born`:S.next?`👶 Next possible birth: <b>${txtEsc(wbDay(S.next))}</b> <span>(${wbIn(S.next)})</span>`:'No one is expecting yet'}</div>
+    <div class="cnt"><div><b>${nE}</b><span>🥚 in the womb</span></div><div><b>${S.rook}</b><span>🍼 rookies</span></div><div><b>${S.grad}</b><span>🎓 graduates</span></div><div><b>${S.evolved}</b><span>⚡ evolved</span></div></div>
+    <div class="jr">${[['💞','Pair',S.live.length],['🥚','Womb',nE],['👶','Born',S.rook],['🎓','Graduate',S.grad],['⚡','Evolve',S.evolved]].map(([ic,l,n],i)=>`${i?'<span class="ln"></span>':''}<div class="n${n?' on':''}"><i>${ic}</i>${l}${n?` · ${n}`:''}</div>`).join('')}</div></div>`;
+  /* closest to birth: each family's siblings, the closest life open */
+  const byL=new Map();S.lifes.forEach(o=>{if(!byL.has(o.L.id))byL.set(o.L.id,[]);byL.get(o.L.id).push(o);});
+  const fams=[...byL.values()].map(xs=>xs.sort((a,b)=>b.LF.ready-a.LF.ready)).sort((a,b)=>b[0].LF.ready-a[0].LF.ready);const top=fams.length?fams[0][0].E.id:null;
+  const birth=fams.length?`<div class="sec">👶 How close each baby is to being born</div><div class="muted" style="margin:-4px 2px 10px">Tap one to see its four bars. A baby is born when all four are full: enough days, enough games, clearly smarter than <b>both</b> parents, and its picks making as much money.</div>`
+    +fams.map(xs=>{const L=xs[0].L;return`<div class="fam"><div class="fh"><span style="color:${wbHex(wbCol(L.a))}">${txtEsc(wbNm(L.a))}</span> × <span style="color:${wbHex(wbCol(L.b))}">${txtEsc(wbNm(L.b))}</span> <span class="muted">· ${xs.length} ${xs.length===1?'baby':'babies'} · since ${txtEsc(wbDay(L.conceived))}</span></div>${xs.map(o=>wbEmbCard(L,o.E,o.r,o.E.id===top)).join('')}</div>`;}).join('')
+    :`<div class="card"><div class="muted">No one is expecting. Two characters pair up once both are proven and their strengths cover each other.</div></div>`;
+  const KS=(W.kids||[]).filter(K=>K.st==='rookie'||K.st==='grad');
+  const desk=KS.length?`<div class="sec">🍼 On the desk</div>`+KS.map((K,i)=>wbKidCard(K,W,i===0&&!fams.length)).join(''):'';
+  /* what's coming, by date */
+  const UP=new Map(),addU=(d,k,who)=>{const key=d+'|'+k;if(!UP.has(key))UP.set(key,{d,k,who:[]});UP.get(key).who.push(who);};
+  fams.forEach(xs=>{const L=xs[0].L,o=xs[0],f=`${wbSh(L.a)} × ${wbSh(L.b)}`;if(o.E.st!=='due')addU(o.LF.eta,'eta',f);addU(dayShift(o.E.since,WOMB_MAX_DAYS),'dl',f);});
+  KS.filter(K=>K.st==='rookie').forEach(K=>addU(dayShift(K.liveFrom,ROOKIE_DAYS),'grad',K.name));
+  const many=w=>w.length>2?`${w.length} families`:w.join(' and ');
+  const up=[...UP.values()].map(u=>[u.d,u.k==='eta'?`The earliest a baby can be born (${many(u.who)})`:u.k==='dl'?`Deadline: babies not born by then are lost (${many(u.who)})`:`${wbAnd(u.who)}: the earliest ${u.who.length>1?'they':'it'} can graduate`]);
+  const coming=up.length?`<div class="sec">📅 Coming up</div><div class="card">${up.sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).slice(0,8).map(([d,t])=>`<div class="up"><b>${txtEsc(wbDay(d))}</b><span>${txtEsc(t)}</span><small>${wbIn(d)}</small></div>`).join('')}</div>`:'';
+  const news=(()=>{try{const J=journalAll().filter(x=>x.kind==='womb').slice(-6).reverse();return J.length?`<div class="sec">📰 Family news</div><div class="card">${J.map(x=>`<div class="up"><b>${txtEsc(wbDay(x.d||today()))}</b><span>${txtEsc(x.title)}</span></div>`).join('')}</div>`:'';}catch(e){return'';}})();
+  const how=`<div class="card how"><div class="hw" onclick="this.parentNode.classList.toggle('open')">❓ How it works, in 5 steps <span>tap</span></div><div class="lb"><div class="step"><b>1</b><span><b>Pairing.</b> Two proven characters whose strengths cover each other's weak spots pair up. Each pair carries ${WOMB_EMB} babies of different kinds.</span></div>
+    <div class="step"><b>2</b><span><b>The womb.</b> Each baby calls live games behind the scenes, before the results, for ${WOMB_MIN_DAYS} to ${WOMB_MAX_DAYS} days. Nothing it does touches a pick.</span></div>
+    <div class="step"><b>3</b><span><b>Birth.</b> It's born only when it beats <b>both</b> parents clearly on ${WOMB_MIN_N}+ games each, and its picks make as much money. If it falls clearly behind, or runs out of days, it's lost.</span></div>
+    <div class="step"><b>4</b><span><b>Rookie year.</b> Born, it picks in public. After ${ROOKIE_DAYS}+ days, still ahead of both parents, it graduates.</span></div>
+    <div class="step"><b>5</b><span><b>Evolution.</b> A graduate that crushes a parent forces that parent to evolve (Legacy 2, a stricter standard) and earns its generation (Gen 2).</span></div>
+    <div class="muted" style="margin-top:8px"><b>What "clearly" means:</b> the Smarts bar counts edge. An edge of +${WOMB_BAR.toFixed(1)} means it beat that parent by enough that luck would explain it only about 1 time in 40. <b>The kind of baby</b> (Rebel, Prodigy, Steady, Prodigal × Architect, Longshot, Grinder, Seer, All-rounder) comes from the records its parents were running; brothers and sisters come out different.</div></div></div>`;
+  return hero+birth+desk+coming+news+how;}
 /* ── 🍼 the nursery: every heir ever born, the rookie year in progress bars ── */
 function wbCrestSvg(K,px){px=px||44;const hx=c=>/^#[0-9a-f]{3,8}$/i.test(String(c||''))?c:'#f5c542';const a=hx(wbCol(K.a)),b=hx(wbCol(K.b)),g=txtEsc((K.crest||{}).g||'⭐'),t=txtEsc((K.crest||{}).t||'⚓');
   return`<svg viewBox="0 0 64 72" width="${px}" height="${Math.round(px*1.125)}" role="img" aria-label="${txtEsc(K.name)}'s crest" style="flex:none">

@@ -3,6 +3,7 @@ const out=[];const T=(n,ok,d)=>out.push(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d
 function boot(page){let html=fs.readFileSync(path.join(W,page),'utf8');
   html=html.replace(/<script src="([^"?]+)\?v=[^"]+"><\/script>/g,(m,f)=>`<script>${fs.readFileSync(path.join(W,f),'utf8')}</script>`);
   return new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com/'+page,pretendToBeVisual:true,beforeParse(w){
+    w.__NO_STANDARD__=true;   /* (v3.5.1's honest standard reads each character's history; this card's ledger has none) */
     /* the card's games sit at 23:59 tonight — pin the clock to 2 PM so a late-night run doesn't land inside their 30-minute lock */
     {const RD=w.Date;const d=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new RD());const T0=RD.parse(d+'T14:00:00-05:00'),R0=RD.now();
       class FD extends RD{constructor(...a){super(...(a.length?a:[T0+(RD.now()-R0)]))}static now(){return T0+(RD.now()-R0)}}w.Date=FD;}

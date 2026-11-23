@@ -74,7 +74,7 @@ function harness(w) { const E = s => w.eval(s), J = s => JSON.parse(w.eval(`JSON
   T('🍼 the Nursery: its crest, name, title, type, parents, creed, what it took from whom, its womb record, its rookie bars', /<svg[^>]*aria-label="The Architect's crest"/.test(room) && /The Architect/.test(room) && /The Golden Child · a Prodigy Architect · 🍼 Rookie/.test(room) && /Child of <b[^>]*>The Simulator<\/b> and <b[^>]*>The Judge<\/b> · born Dec 4/.test(room) && /Ride what.s working/.test(room) && /11 days in the womb/.test(room), room.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 400));
   T('…on its first day the rookie year hasn\'t started yet (it starts Dec 5)', /rookie year starts Dec 5/.test(room) || /Rookie days/.test(room));
   E('genOpen()'); await wait(2500); E(`GEN_TAB='nursery';genRender()`); const book = E(`document.getElementById('genView').innerHTML`);
-  T('the Bloodlines book has the 🍼 Nursery tab and counts the heirs born', /🍼 Nursery/.test(book) && /1 heir born/.test(book), book.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
+  T('the Bloodlines book has the 🍼 Nursery tab and counts the heirs on the desk', /🍼 Nursery/.test(book) && /1 heir on the desk/.test(book), book.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
   /* the next day: its parents don't court again while it's a rookie; the rookie year starts */
   go('2026-12-05'); const R5 = J('wombRun(true)'); const W5 = J('wombAll()');
   T('Dec 5: the rookie\'s parents don\'t court each other again while it\'s a rookie', !W5.litters.some(L => L.st === 'live' && [L.a, L.b].sort().join() === 'Judge,Sim'), JSON.stringify(W5.litters.map(L => L.a + '×' + L.b + ':' + L.st)));
