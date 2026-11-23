@@ -72,7 +72,7 @@ export function cardTree(card, deps) { const L = layout(card), D = DENS[L.dens];
       L.more ? h('div', { fontSize: 24, color: C.mute, paddingLeft: 8 }, `+${L.more} more in the post`) : null),
     h('div', { position: 'absolute', left: 70, right: 70, bottom: 52, justifyContent: 'space-between', alignItems: 'flex-end', borderTop: `2px solid ${C.rule}`, paddingTop: 22 },
       h('div', { flexDirection: 'column' }, h('div', { fontSize: 26, fontWeight: 600, color: C.ink }, clip(card.foot || appUrl(deps).replace(/^https?:\/\//, '').replace(/\/$/, ''), 50)), h('div', { marginTop: 6, fontSize: 21, color: C.mute }, 'Every pick locked before the games, graded at the final')),
-      h('div', { fontSize: 21, color: C.mute }, '21+ · bet responsibly'))); }
+      h('div', { fontSize: 21, color: C.mute }, '21+ · 1-800-MY-RESET'))); }
 /* → { png, jpg } buffers, or null when there's no renderer */
 export async function renderCard(card, deps) { const r = await renderer(); if (!r || !card) return null;
   try { const svg = await r.satori(cardTree(card, deps), { width: 1080, height: 1350, fonts: r.fonts });

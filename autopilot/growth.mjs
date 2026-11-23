@@ -47,6 +47,8 @@ const who = (c, cast) => (cast && cast[c.v] && cast[c.v].name) || String(c.v);
 export const rankLine = c => { const r = c && c.r; if (!r || !r.lab) return ''; return (fin(r.rk) ? `#${r.rk} of ${r.of || '?'} on ${r.lab}` : r.lab) + (fin(r.w) && fin(r.l) ? ` (${r.w}-${r.l})` : ''); };
 const namesOf = (D, coach) => teamNames({ k: D.sp + '|' + D.game, sp: D.sp, a: D.a, h: D.h }, coach);
 /* the X caption has 280 characters and the link must survive: the first version that fits wins, fullest first */
+/* Nov 23 · the helpline rides every growth post (the debate, its settle, Receipts Sunday), not just 21+: 21+ with 1-800-MY-RESET */
+export const HELP21 = '21+ · For entertainment only · Need help? Call or text 1-800-MY-RESET', X21 = '21+ · 1-800-MY-RESET';
 export function fitX(versions, link) { for (const L of versions) { const t = [...L, link].join('\n'); if (t.length <= 280) return t; }
   const L = versions[versions.length - 1]; return [...L.map(s => s.slice(0, Math.floor((278 - link.length) / L.length) - 1)), link].join('\n'); }
 export function debatePost(D, ctx = {}) { const cast = ctx.cast || {}, N = namesOf(D, ctx.coach); const matchup = `${N.A.nick} at ${N.H.nick}`, fullM = `${N.A.full} at ${N.H.full}`;
@@ -55,19 +57,19 @@ export function debatePost(D, ctx = {}) { const cast = ctx.cast || {}, N = names
     `<b>${esc(wa)}</b> takes <b>${esc(D.la.pick)}</b>${rankLine(D.la) ? ' · ' + esc(rankLine(D.la)) : ''}`,
     `<b>${esc(wb)}</b> takes <b>${esc(D.lb.pick)}</b>${rankLine(D.lb) ? ' · ' + esc(rankLine(D.lb)) : ''}`,
     `The cast splits <b>${split}</b> on ${MKT[D.m]}${D.A.length > D.B.length ? `, most of them with ${esc(D.la.pick)}` : ''}.`, '',
-    'Who\'s right? Vote or comment below 👇 The scoreboard settles it tonight.'].join('\n');
+    'Who\'s right? Vote or comment below 👇 The scoreboard settles it tonight.', '', HELP21].join('\n');
   const card = { kicker: 'The Desk Debate' + (ctx.day ? ' · ' + ctx.day : ''), title: matchup, wrap: true, sub: `${SP_LAB[D.sp] || D.sp} · ${t} · ${MKT[D.m]}`, big: { value: split, label: 'the cast splits' },
     rows: [{ label: `${wa}: ${D.la.pick}`, meta: rankLine(D.la) || `with ${D.A.length - 1} more of the cast` }, { label: `${wb}: ${D.lb.pick}`, meta: rankLine(D.lb) || `with ${D.B.length - 1} more of the cast` }],
     foot: 'Every call graded in public · ' + host(appOf(ctx)) };
   const poll = { question: `${matchup} (${t}): who's right?`.slice(0, 290), options: [`${wa}: ${D.la.pick}`.slice(0, 95), `${wb}: ${D.lb.pick}`.slice(0, 95)] };
   const sa = `${wa}: ${D.la.pick}`, sb = `${wb}: ${D.lb.pick}`, sl = `Our cast splits ${split}. Who's right?`, h1 = `⚔️ THE DESK DEBATE: ${fullM}, ${t}`, h2 = `⚔️ THE DESK DEBATE: ${matchup}, ${t}`;
-  const x = fitX([[h1, sa, sb, sl, 'Every call graded in public 👇'], [h1, sa, sb, sl], [h2, sa, sb, sl], [h2, sa, sb]], appOf(ctx) + '?src=x');
+  const x = fitX([[h1, sa, sb, sl, 'Every call graded in public 👇'], [h1, sa, sb, sl], [h2, sa, sb, sl], [h2, sa, sb]], X21 + '\n' + appOf(ctx) + '?src=x');
   return { kind: 'debate', key: 'deb|' + D.k, text, card, poll, x, matchup, fullM, wa, wb }; }
 /* the settle post: each side graded on its own (two totals or two spreads can both win, or both lose) */
 export function settlePost(S, ra, rb, ctx = {}) { const sides = [{ w: S.wa, p: S.pa, r: ra }, { w: S.wb, p: S.pb, r: rb }]; const won = sides.filter(s => s.r === 'W');
   const head = won.length === 2 ? 'Both called it' : won.length === 1 ? `${won[0].w} called it` : sides.every(s => s.r === 'P') ? 'A push' : sides.some(s => s.r === 'P') ? `${(sides.find(s => s.r !== 'P') || {}).w} missed` : 'Both missed';
   const mark = { W: '✅', L: '❌', P: '➖' };
-  const text = [`⚔️ <b>DEBATE SETTLED — ${esc(S.fullM || S.matchup)}</b>`, ctx.fin ? `Final: ${esc(ctx.fin)}` : '', ...sides.map(s => `${mark[s.r] || ''} <b>${esc(s.w)}</b>: ${esc(s.p)}`), '', `<b>${esc(head)}.</b> Every call stays on the board, graded in public. Tomorrow's debate drops in the morning.`]
+  const text = [`⚔️ <b>DEBATE SETTLED — ${esc(S.fullM || S.matchup)}</b>`, ctx.fin ? `Final: ${esc(ctx.fin)}` : '', ...sides.map(s => `${mark[s.r] || ''} <b>${esc(s.w)}</b>: ${esc(s.p)}`), '', `<b>${esc(head)}.</b> Every call stays on the board, graded in public. Tomorrow's debate drops in the morning.`, '', HELP21]
     .filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
   const card = { kicker: 'Debate settled' + (S.d ? ' · ' + dayLab(S.d) : ''), title: head, wrap: true, sub: ctx.fin ? 'Final: ' + ctx.fin : S.matchup, rows: sides.map(s => ({ label: `${s.w}: ${s.p}`, meta: s.r === 'W' ? 'called it' : s.r === 'P' ? 'a push' : 'missed', res: s.r })) };
   return { kind: 'debate', key: 'debs|' + S.k, text, card }; }
@@ -89,7 +91,7 @@ export function weeklyPost(F, today, ctx = {}) { if (new Date(today + 'T12:00:00
   const season = R && fin(R.w) && fin(R.l) ? `${R.w}-${R.l}${R.pu ? '-' + R.pu : ''}` : '';
   const text = [`🧾 <b>RECEIPTS SUNDAY — the week of ${range}</b>`, `<b>${rec}</b> on the free card · <b>${us}</b> at the prices we posted`,
     best ? `✅ Best call: <b>${esc(line(best))}</b>` : '', worst ? `❌ Worst call: <b>${esc(line(worst))}</b>` : '', season ? `Season: <b>${season}</b>${R.first ? ' since ' + md(R.first) : ''}` : '', '',
-    `Every pick locked before its game. Every grade public, losses included. → ${appOf(ctx)}`].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
+    `Every pick locked before its game. Every grade public, losses included. → ${appOf(ctx)}`, '', HELP21].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
   const card = { kicker: 'Receipts Sunday · ' + range, title: `The week: ${rec}`, big: { value: (u >= 0 ? '+' : '') + u.toFixed(1) + 'u', label: '1 unit a pick, posted prices' },
     rows: [best && { label: 'Best: ' + best.pick, meta: [best.game, am(best.price), md(best.d)].filter(Boolean).join(' · '), res: 'W' },
       worst && { label: 'Worst: ' + worst.pick, meta: [worst.game, am(worst.price), md(worst.d)].filter(Boolean).join(' · '), res: 'L' },
