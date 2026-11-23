@@ -2326,6 +2326,11 @@ const CHAR_ORDER=Object.keys(CHARS);
    never vote in the squares, the crowd counts or the Banker's consensus — that
    would count the same opinion twice and let the Brain grade itself. */
 const META_VOICES=new Set(['Brain','Blend','Banker']);
+/* v3.5.6 · Nov 23, Chris: "I don't want new characters missing anywhere characters are implemented on either app". An heir is a meta
+   voice: it never votes (its calls come from its parents', so counting it would count them twice) — but everywhere the characters
+   are SHOWN (the board, the sheet, the squares, the tickets), it's there. */
+const isKidV=v=>!!(CHARS[v]&&CHARS[v].kid),liveKidV=v=>isKidV(v)&&CHARS[v].quiet!=='retired';
+const shownV=v=>!!CHARS[v]&&(!META_VOICES.has(v)||isKidV(v));
 /* v2.27 · on probation: a new character is logged, graded and recorded, but only votes
    (squares, unanimity, the Brain) once its record proves it — see scoutProbation, dogProbation */
 const PROBATION=new Set(['Scout','Dog']);
@@ -2866,7 +2871,7 @@ function charAsOutside(ci,against){ci=ci||{};const n=(ci.nOthers||0)+(ci.simHere
 function charSquare(sp,g,s,pick,opts){
   opts=opts||{};const none={chips:'',meter:'',simHere:false,support:null,nOthers:0,unanimous:false,charsAgree:false,charsAgainst:false,brainP:null};
   const k=sqKey(sp,g,pick);if(!k||!s)return none;
-  let calls=[];try{calls=characterCalls(sp,g,s).filter(c=>c.market===k.market&&isVoter(c.voice))}catch(e){return none;}
+  let calls=[],kidsHere=[];try{const all=characterCalls(sp,g,s).filter(c=>c.market===k.market);calls=all.filter(c=>isVoter(c.voice));kidsHere=all.filter(c=>isKidV(c.voice)&&c.side===k.side);}catch(e){return none;}
   if(!calls.length)return none;
   const ctx=k.market==='total'?k.side:(opts.price!=null?(opts.price<0?'fav':'dog'):(opts.line!=null?(opts.line<0?'fav':'dog'):null));
   const sim=calls.find(c=>c.voice==='Sim'),others=calls.filter(c=>c.voice!=='Sim');
@@ -2882,6 +2887,7 @@ function charSquare(sp,g,s,pick,opts){
     if(on){const C=CHARS[v],weak=v!=='Sim'&&r.n>=RULE_MIN&&r.p<0.47,hot=v!=='Sim'&&r.n>=RULE_MIN&&r.p>=0.56;
       chipHtml.push(`<span class="hs-chip${v==='Sim'?' god':''}${weak?' weak':''}${hot?' hot':''}" title="${C.label}${r.n?` · ${sp.toUpperCase()} ${k.market} ${r.rec} (${Math.round(r.p*100)}% learned)`:' · no graded history yet'}${c.score?' · '+c.score:''}" style="color:${C.color};border-color:${C.color}">${C.chip}</span>`);}
   });
+  kidsHere.forEach(c=>{const C=CHARS[c.voice];chipHtml.push(`<span class="hs-chip kid" title="${esc(C.label)} · an heir: it reads its parents' calls, so it shows here but doesn't vote${c.score?' · '+c.score:''}" style="color:${C.color};border-color:${C.color};border-style:dashed;opacity:.85">${C.chip}</span>`);});
   const onN=calls.filter(c=>c.side===k.side).length;
   const support=others.length?wOn/wAll:null;
   const simHere=!!(sim&&sim.side===k.side);
@@ -2895,7 +2901,7 @@ function charSquare(sp,g,s,pick,opts){
   const unanimous=calls.length>=5&&onN===calls.length&&indepOn>=2;
   const brainP=learned&&z!=null?sigm(z):null;
   const silent=VOTER_ORDER.filter(v=>!calls.some(c=>c.voice===v));const against=calls.length-onN;
-  const meter=`<div class="ch-meter" title="${esc(silent.map(v=>charName(v)+': '+charQuiet(v,k.market)).join(' · '))}">${onN} of ${VOTER_ORDER.length} on this side${against?` · ${against} against`:''}${silent.length?` · ${silent.length} no call`:''}${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`+
+  const meter=`<div class="ch-meter" title="${esc(silent.map(v=>charName(v)+': '+charQuiet(v,k.market)).join(' · '))}">${onN} of ${VOTER_ORDER.length} on this side${against?` · ${against} against`:''}${silent.length?` · ${silent.length} no call`:''}${kidsHere.length?` · 🍼 ${kidsHere.length} heir${kidsHere.length===1?'':'s'} with it (no vote)`:''}${brainP!=null?` · brain ${Math.round(brainP*100)}%`:''}</div>`+
     (silent.length?`<div class="ch-meter" style="opacity:.7;font-size:8.5px">silent: ${silent.map(v=>esc(charName(v).replace(/^The /,''))).join(', ')}</div>`:'');
   let rh='';try{rh=rulesHtml(rulesFor(sp,g,pick))}catch(e){}
   /* double evaluation: the brain and the sport's proven-best characters on the same side */
@@ -3135,7 +3141,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261123d',DESK_VER='3.5.5';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261123e',DESK_VER='3.5.6';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /

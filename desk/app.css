@@ -791,6 +791,7 @@ body.sheet-on{overflow:hidden}
 .xpb .ps-h,.xpb .ps-r{grid-template-columns:26px 1fr 80px 48px}.xpb small{display:block;font-size:11px;color:#7a5b10;font-weight:700}
 .lggrid{display:grid;gap:14px}@media (min-width:860px){.lggrid{grid-template-columns:1fr 1fr}}
 .lgc{position:relative;overflow:hidden;padding:18px;border-radius:20px;background:radial-gradient(130% 120% at 100% 0,rgba(242,208,103,.22),transparent 50%),linear-gradient(160deg,#1a2e22,#09110c);border:1px solid rgba(242,208,103,.4);box-shadow:0 18px 36px rgba(0,0,0,.4);color:var(--cream)}
+.lgc{transition:box-shadow .8s ease}.lgc.lit{box-shadow:0 0 0 3px #f2d067,0 0 30px rgba(242,208,103,.5)}   /* v37 · a shared league's card lights up when its link lands */
 .lgc.live{border-color:rgba(255,143,128,.6);box-shadow:0 0 0 1px rgba(255,143,128,.3),0 18px 36px rgba(0,0,0,.4)}.lgc.final{opacity:.92}
 .lgc-top{display:flex;gap:8px}.lgc-st{font:800 11px/1 var(--text);letter-spacing:.1em;text-transform:uppercase;padding:5px 8px 4px;border-radius:99px;background:rgba(242,208,103,.18);color:var(--foil)}.lgc.live .lgc-st{background:rgba(255,143,128,.18);color:#ff8f80}.lgc.final .lgc-st{background:rgba(255,255,255,.1);color:var(--cream-2)}
 .lgc-off{font:800 11px/1 var(--text);letter-spacing:.1em;text-transform:uppercase;padding:5px 8px 4px;border-radius:99px;background:var(--foil);color:#1b1405}

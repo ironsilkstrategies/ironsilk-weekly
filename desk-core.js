@@ -919,7 +919,7 @@ const CH2_CATS=[['hot','🔥 Hot right now'],['classic','⭐ Classics'],['best3'
 let CH2_CAT='hot',CH2_LIB_C=null;
 function ch2Sources(){const S=[['best3','The Best 3','best3','single'],['b3lock','The Lock','best3','single'],['official','Every Official Play','best3','single'],
     ['b3par2','Best 3 Two-Teamer','parlay','parlay'],['b3par3','Best 3 Three-Teamer','parlay','parlay'],['banker',"The Banker's Table",'parlay','parlay'],['leader','Ride the Leader','parlay','parlay']];
-  CHAR_ORDER.filter(v=>!META_VOICES.has(v)&&!PROBATION.has(v)).forEach(v=>S.push(['char:'+v,`${charName(v).replace(/^The /,'')}'s Ticket`,'chars','parlay']));
+  CHAR_ORDER.filter(v=>(!META_VOICES.has(v)||liveKidV(v))&&!PROBATION.has(v)).forEach(v=>S.push(['char:'+v,`${charName(v).replace(/^The /,'')}'s Ticket`,'chars','parlay']));
   ['nfl','ncaaf','nba','ncaab','nhl','mlb'].forEach(sp=>S.push(['sp:'+sp,`${(SP_LAB[sp]||sp).replace(/^\S+\s/,'')} Only`,'sport','single']));
   [['ml','Moneylines Only'],['spread','Spreads Only'],['total','Totals Only']].forEach(([m,l])=>S.push(['mk:'+m,l,'market','single']));
   [['price:chalk','Chalk Walk'],['price:value','Value Lane'],['price:plus','Plus Money']].forEach(([k,l])=>S.push([k,l,'price','single']));
@@ -945,7 +945,7 @@ function ch2History(){const V=roGet(VOICES_KEY,[],30e3)||[];const log=roGet('d4.
   Object.entries(CP).forEach(([d,S])=>{if(d<from||!S||!S.locked)return;Object.entries(S.by||{}).forEach(([v,T])=>{if(!T||T.skill||!T.done)return;add('char:'+v,d,(T.legs||[]).filter(x=>!x.push).reduce((a,x)=>a*D(x.price),1),T.won?1:0);});});
   /* official singles by sport, market and price, and the Spotter's dogs — one entry per pick */
   const seen=new Set();V.forEach(x=>{if(!x||!x.graded||x.price==null)return;const d=String(x.date).slice(0,10);if(d<from||d>=today())return;const r=R(x);if(r==null)return;
-    if(x.voice==='Dog'){add('dog',d,D(x.price),r);return;}if(!CHARS[x.voice]||META_VOICES.has(x.voice))return;let off=false;try{off=isOfficial(x);}catch(e){}if(!off)return;
+    if(x.voice==='Dog'){add('dog',d,D(x.price),r);return;}if(!shownV(x.voice))return;let off=false;try{off=isOfficial(x);}catch(e){}if(!off)return;
     const k=d+'|'+x.sp+'|'+x.game+'|'+x.market+'|'+x.side;if(seen.has(k))return;seen.add(k);const dec=D(x.price);
     add('official',d,dec,r);add('sp:'+x.sp,d,dec,r);add('mk:'+x.market,d,dec,r);const p=+x.price;add(p<=-150?'price:chalk':p>0&&p!==100?'price:plus':'price:value',d,dec,r);});
   CH2_HIST_C={sig,H};return H;}
@@ -1492,7 +1492,7 @@ let PUB_BOARD_MEMO=null;
 function pubBoard(V){try{const d=today();const T=roGet(TC_KEY,{})||{};const k=d+'|'+ledgerSig(V)+'|'+(T.ts||T.at||'')+'|'+((T.by&&Object.values(T.by).reduce((n,B)=>n+((B&&B.picks)||[]).length,0))||0);
     if(PUB_BOARD_MEMO&&PUB_BOARD_MEMO.k===k&&Date.now()-PUB_BOARD_MEMO.ts<5*60e3)return PUB_BOARD_MEMO.val;const val=pubBoard0(V,d);PUB_BOARD_MEMO={k,ts:Date.now(),val};return val;}catch(e){console.warn('pub board',e);return null;}}
 function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=new Map(),cast={};const r3=x=>x!=null&&isFinite(+x)?+(+x).toFixed(3):null;
-  V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const day=String(c.date).slice(0,10);if(day<d||day>last)return;const m=mkNorm(c.market);if(m!=='ml'&&m!=='spread'&&m!=='total')return;
+  V.forEach(c=>{if(!c||!shownV(c.voice))return;const day=String(c.date).slice(0,10);if(day<d||day>last)return;const m=mkNorm(c.market);if(m!=='ml'&&m!=='spread'&&m!=='total')return;   /* v3.5.6 · heirs too (they show; they don't vote) */
     const key=c.sp+'|'+c.game+'|'+day;const a=VI.get(key);if(a)a.push(c);else VI.set(key,[c]);});
   const rankOf=(c,m)=>{try{const P=prFor(c.sp,m,c.side,c.price!=null?+c.price:null,c.line!=null?+c.line:null);if(!P)return null;const i=P.list.findIndex(x=>x.v===c.voice);if(i<0)return{lab:P.lab,of:P.list.length};const x=P.list[i];
       return{lab:P.lab,rk:i+1,of:P.list.length,w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1),say:P.king&&P.king.v===c.voice?'top':P.goat&&P.goat.v===c.voice?'worst':''};}catch(e){return null;}};
@@ -1500,7 +1500,7 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
   /* v3.1.6 · Nov 20: "all the characters have predicted scores for every game… I need them reflected next to their picks." Each
      character's locked final-score call (d4.scorecalls) rides with its calls on the public board: [away, home], a third 1 once it
      graded dead on. */
-  const SCI=new Map();try{Object.values(roGet(SCORECALL_KEY,{},30e3)||{}).forEach(x=>{if(!x||!CHARS[x.voice]||META_VOICES.has(x.voice))return;const day=String(x.date).slice(0,10);if(day<d||day>last)return;
+  const SCI=new Map();try{Object.values(roGet(SCORECALL_KEY,{},30e3)||{}).forEach(x=>{if(!x||!shownV(x.voice))return;const day=String(x.date).slice(0,10);if(day<d||day>last)return;
     if(!isFinite(+x.a)||!isFinite(+x.h))return;const k=x.sp+'|'+x.game+'|'+day;let o=SCI.get(k);if(!o)SCI.set(k,o={});o[x.voice]=x.graded&&x.exact?[+x.a,+x.h,1]:[+x.a,+x.h];});}catch(e){}
   const games=R.all.filter(g=>g.day>=d&&g.day<=last).sort((a,b)=>a.t-b.t||a.sp.localeCompare(b.sp)).map(g=>{
     const picks=g.picks.filter(x=>x&&x.pick&&!x.suspect&&!x.incoherent&&!pubHeavy({m:btMarket(x.m),price:x.price,pick:x.pick})).map(x=>({m:btMarket(x.m),sd:x.sd,pick:x.pick,price:x.price!=null?+x.price:null,
@@ -2438,7 +2438,7 @@ function slotBoardHtml(pfx){pfx=pfx||'sg';const F=slotF();const V=slotView(F);co
   const hh=(()=>{try{const h=document.querySelector('header');return h?Math.round(h.getBoundingClientRect().height):0;}catch(e){return 0;}})();
   const strip=V.slots.length>1?`<div class="subnav" style="margin:0 0 8px;position:sticky;top:${hh}px;z-index:30;background:var(--ink,#080B10);padding:6px 0">${V.slots.map(s=>`<button onclick="slotGo(${jsArg(pfx+'-'+s.key)})" style="flex:none;font-size:11px;padding:5px 9px;${s.st==='in'?'border-color:#ff4b5c;':s.st==='post'?'opacity:.55;':''}">${s.day!==d?slotDayLab(s.day).slice(0,3)+' ':''}${slotTime(s.t)} <span style="opacity:.6">${s.games.length}</span></button>`).join('')}</div>`:'';
   const X={SC:roGet(SCORECALL_KEY,{},30e3)||{},VI:new Map(),CPI:new Map(),CHI:V.CHI,HI:V.HI};
-  try{(roGet(VOICES_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.date).slice(0,10)>=d)||!CHARS[c.voice]||META_VOICES.has(c.voice))return;const k=c.sp+'|'+c.game;const a=X.VI.get(k);if(a)a.push(c);else X.VI.set(k,[c]);});}catch(e){}
+  try{(roGet(VOICES_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.date).slice(0,10)>=d)||!shownV(c.voice))return;const k=c.sp+'|'+c.game;const a=X.VI.get(k);if(a)a.push(c);else X.VI.set(k,[c]);});}catch(e){}
   try{(roGet(CPROP_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.d).slice(0,10)>=d))return;const k=c.sp+'|'+c.team;const a=X.CPI.get(k);if(a)a.push(c);else X.CPI.set(k,[c]);});}catch(e){}
   let prof='';if(F.ch!=='all'&&CHARS[F.ch])try{prof=charProfileHtml(F.ch,{sp:F.sp,bt:F.bt});}catch(e){}
   return head+prof+strip+V.slots.map(s=>`<div class="tkt slot" id="${pfx}-${s.key}" style="margin-bottom:8px;scroll-margin-top:${hh+50}px;${s.st==='post'?'opacity:.78;':''}${s.st==='in'?'border-color:#ff4b5c;':''}">

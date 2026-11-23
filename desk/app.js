@@ -1377,7 +1377,7 @@ async function share() {
 /* ── Challenges + Leagues (v3.1.0, Chris, Nov 15: "evolve them both to the 10th power"). The 1,000-challenge library lives in
    chal-lib.js (the same file the server enforces). Runs climb six checkpoints on a road map, pay XP on the way and D$ + XP at the
    finish. Leagues are run by the desk: it opens them, members join, the podium is paid in D$. Play money only. */
-const CX = { board: null, at: 0, f: store.get('cxf') || { d: 0, t: '', r: '', s: '', q: '', sort: 'feat' }, show: 24, open: '' }, LGX = { list: null, at: 0, one: {}, open: '' };
+const CX = { board: null, at: 0, f: store.get('cxf') || { d: 0, t: '', r: '', s: '', q: '', sort: 'feat' }, show: 24, open: '' }, LGX = { list: null, at: 0, one: {}, open: '', focus: '', lit: null };
 const CHN = id => { const c = chal(id); return c ? c.name : id; };
 const cxLeft = ms => { if (ms <= 0) return 'time’s up'; const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 60e3); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };
 const cxTook = ms => { const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5); return d ? `${d}d ${h}h` : `${Math.max(1, h)}h`; };
@@ -1474,14 +1474,23 @@ const lgWhen = g => { const now = Date.now(); return g.status === 'open' ? `Star
 const lgDates = g => `${monthDay(new Date(g.starts).toISOString().slice(0, 10))} – ${monthDay(new Date(g.ends).toISOString().slice(0, 10))}`;
 const medal = i => ['🥇', '🥈', '🥉'][i] || `#${i + 1}`;
 function lgCard(g) { const mine = ((AC.me && AC.me.leagues) || []).find(x => x.lid === g.lid), canJoin = !mine && (g.status === 'open' || (g.status === 'live' && g.late)) && g.n < g.max, open = LGX.open === g.lid, D = LGX.one[g.lid];
-  return `<article class="lgc ${g.status}${open ? ' open' : ''}"><div class="lgc-top"><span class="lgc-st">${{ open: 'Open · join now', live: '● Live', settling: 'Settling', final: 'Final' }[g.status]}</span>${g.official ? '<span class="lgc-off">Official</span>' : ''}</div>
+  const lit = LGX.lit && LGX.lit.lid === g.lid && Date.now() < LGX.lit.until;
+  return `<article class="lgc ${g.status}${open ? ' open' : ''}${lit ? ' lit' : ''}" data-lgc="${esc(g.lid)}"><div class="lgc-top"><span class="lgc-st">${{ open: 'Open · join now', live: '● Live', settling: 'Settling', final: 'Final' }[g.status]}</span>${g.official ? '<span class="lgc-off">Official</span>' : ''}</div>
     <h3>${esc(g.name)}</h3>${g.blurb ? `<p class="lgc-bl">${esc(g.blurb)}</p>` : ''}
     <div class="lgc-pool"><div><small>Prize pool</small><b>${dd$(g.pool)}</b></div><div class="lgc-pz">${g.prizes.slice(0, 3).map((p, i) => `<span>${medal(i)} ${dd$(p)}</span>`).join('')}${g.prizes.length > 3 ? `<span>+${g.prizes.length - 3} more</span>` : ''}</div></div>
     <div class="lgc-meta"><span><b>${lgDates(g)}</b>${esc(lgWhen(g))}</span><span><b>${dd$(g.bank)}</b>bankroll each</span><span><b>${g.n}${g.max < 5000 ? '/' + g.max : ''}</b>players</span><span><b>${g.sports ? g.sports.map(x => LEAGUE[x] || x).join(' · ') : 'Every sport'}</b>${g.late ? 'late joins OK' : 'no late joins'}</span></div>
     ${g.top && g.top.length ? `<div class="lgc-top3">${g.top.map((t, i) => `<span>${medal(i)} <b>${esc(t.name)}</b> ${dd$(t.bal)}</span>`).join('')}</div>` : ''}
     ${mine ? `<div class="lgc-me"><span>You: <b>${dd$(mine.bal)}</b> <small>${mine.bal >= mine.start ? '+' : '−'}${dd$(Math.abs(mine.bal - mine.start))}${mine.open ? ` · ${mine.open} open` : ''}</small></span>${g.status === 'live' ? `<button type="button" class="btn foil sm" data-act="lguse" data-lid="${esc(g.lid)}">Bet from this league</button>` : ''}</div>` : ''}
-    <div class="row">${canJoin ? `<button type="button" class="btn foil sm" data-act="lgjoin" data-lid="${esc(g.lid)}">Join · get ${dd$(g.bank)}</button>` : ''}<button type="button" class="btn line sm" data-act="lgopen" data-lid="${esc(g.lid)}">${open ? 'Hide standings' : 'Standings'}</button>${AC.me && AC.me.owner && g.status === 'open' ? `<button type="button" class="btn ghost sm" data-act="lgcancel" data-lid="${esc(g.lid)}">Cancel</button>` : ''}</div>
+    <div class="row">${canJoin ? `<button type="button" class="btn foil sm" data-act="lgjoin" data-lid="${esc(g.lid)}">Join · get ${dd$(g.bank)}</button>` : ''}<button type="button" class="btn line sm" data-act="lgopen" data-lid="${esc(g.lid)}">${open ? 'Hide standings' : 'Standings'}</button><button type="button" class="btn line sm" data-act="lgshare" data-lid="${esc(g.lid)}" aria-label="Share ${esc(g.name)}">↗ ${g.status === 'final' ? 'Share' : 'Invite'}</button>${AC.me && AC.me.owner && g.status === 'open' ? `<button type="button" class="btn ghost sm" data-act="lgcancel" data-lid="${esc(g.lid)}">Cancel</button>` : ''}</div>
     ${open ? (D ? lgTable(D) : '<div class="shimmer"></div>') : ''}</article>`; }
+/* v58 · Nov 23, Chris: "Can we have a share option for the leagues". The phone's share sheet (Messages, Facebook, Telegram…), or the
+   text copied where there's none. The link opens this league on the public app (#lg=<id>). Desk Dollars are play money: it says so. */
+function lgShareText(g) { const top = (g.top || [])[0], url = CFG.home + '#lg=' + encodeURIComponent(g.lid);
+  const head = g.status === 'final' ? `${g.name} is final on TheDesk${top ? `: ${top.name} took the crown with ${dd$(top.bal)}` : ''}.` : g.status === 'live' || g.status === 'settling' ? `${g.name} is live on TheDesk${g.status === 'live' && g.late && g.n < g.max ? ', and you can still get in' : ''}.` : `Join me in ${g.name} on TheDesk.`;
+  return { title: `${g.name} · TheDesk`, url, text: [head, g.blurb || '', `${dd$(g.bank)} bankroll each · ${dd$(g.pool)} prize pool · ${lgDates(g)}`, 'Free to join. Desk Dollars are play money, never cash. 21+.'].filter(Boolean).join('\n') }; }
+async function lgShare(lid) { const g = ((LGX.list && LGX.list.leagues) || []).find(x => x.lid === lid); if (!g) return; const T = lgShareText(g);
+  try { if (navigator.share) { await navigator.share(T); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(`${T.text}\n${T.url}`); toast('Invite copied: paste it anywhere'); } catch { toast('Couldn’t copy the invite'); } }
 function lgTable(D) { const G = D.league, R = D.rows || [], me = acctPass() && acctPass().name, fin = G.status === 'final';
   if (!R.length) return `<p class="note">No players yet. Be the first in.</p>`;
   const pod = fin && R.length ? `<div class="podium">${[1, 0, 2].filter(i => R[i]).map(i => `<div class="pd p${i + 1}"><span>${medal(i)}</span><b>${esc(R[i].name)}</b><em>${dd$(R[i].bal)}</em>${R[i].prize ? `<small>+${dd$(R[i].prize)}</small>` : ''}<i></i></div>`).join('')}</div>` : '';
@@ -1506,7 +1515,10 @@ function viewLeagues() {
       : `<div class="lgsoon"><span>🏟</span><b>The first league opens soon</b><p>The desk is setting up the first season: its dates, a bankroll for every player and a D$ prize pool. When it opens you’ll see it here, and in the lounge.</p></div>`}
     ${hall.length ? `<h2 class="h2">Hall of champions</h2><div class="paper lead-l">${hall.slice(0, 10).map(g => `<div class="ll"><span class="n">👑</span><span class="w"><b>${esc(g.top[0].name)}</b><small>${esc(g.name)}</small></span><span class="v v-won">${g.top[0].prize ? '+' + dd$(g.top[0].prize) : dd$(g.top[0].bal)}</span></div>`).join('')}</div>` : ''}
     <p class="note">Desk Dollars are play money. League prizes are paid in D$ to your wallet, never in cash. ${D && !D.open ? 'Leagues are run by the desk for now. Member-run leagues come next.' : ''}</p>${footHtml()}`;
-  lgsLoad(); if (LGX.open && !LGX.one[LGX.open]) lgOneLoad(LGX.open); }
+  lgsLoad(); if (LGX.open && !LGX.one[LGX.open]) lgOneLoad(LGX.open);
+  if (LGX.focus) { const lid = LGX.focus, c = $(`[data-lgc="${lid}"]`, el); if (c) { LGX.focus = ''; LGX.lit = { lid, until: Date.now() + 4000 }; c.classList.add('lit');   /* (lit through the re-renders while its standings load) */
+    requestAnimationFrame(() => { try { c.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { c.scrollIntoView(); } });
+    setTimeout(() => { LGX.lit = null; const x = $(`[data-lgc="${lid}"]`); if (x) x.classList.remove('lit'); }, 4000); } } }
 const confirmQuit = b => { if (b.dataset.sure === '1') return true; b.dataset.sure = '1'; b.textContent = 'Tap again to quit'; return false; };
 /* ── The owner's dashboard (v3.1.1, Chris, Nov 15: "an admin dashboard … stats on users and names and balances … a subscriber
    inbox … how can I moderate without a moderate dashboard"). Owner only: the server refuses everyone else. */
@@ -1627,6 +1639,8 @@ function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   /* v3.3 · #u=<name> opens a member's public record (the Open Scoreboard) */
   if (typeof tab === 'string' && tab.startsWith('u=')) { try { S.profile = decodeURIComponent(tab.slice(2)); } catch { S.profile = tab.slice(2); } tab = 'u'; }
+  /* v58 · #lg=<id>: a shared league opens on the Leagues tab, its standings open, scrolled to and lit up */
+  if (typeof tab === 'string' && tab.startsWith('lg=')) { const lid = String(tab.slice(3)).replace(/[^a-z0-9]/gi, '').slice(0, 24); tab = 'leagues'; if (lid) { LGX.open = lid; LGX.focus = lid; } }
   if (!TABS.includes(tab) || (tab === 'u' && !S.profile)) tab = 'today';
   S.tab = tab;
   for (const t of TABS) $('#v-' + t).hidden = t !== tab;
@@ -1680,6 +1694,7 @@ document.addEventListener('click', async e => {
   else if (act === 'lgopen') { LGX.open = LGX.open === a.dataset.lid ? '' : a.dataset.lid; if (LGX.open) lgOneLoad(LGX.open); viewLeagues(); }
   else if (act === 'lgjoin') { const P = acctPass(); if (!P) { go('me', true); toast('Sign in to join a league'); return; }
     try { const j = await acctApi('/acct/lgs/join', { token: P.token, id: a.dataset.lid }); await acctLoad(); LGX.at = 0; delete LGX.one[a.dataset.lid]; lgsLoad(true); toast(`You’re in ${j.league.name}: ${dd$(j.entry.bal)} to play with`); } catch (e) { toast(e.message); } }
+  else if (act === 'lgshare') lgShare(a.dataset.lid);
   else if (act === 'lguse') { S.ddFrom = 'lg:' + a.dataset.lid; store.set('ddfrom', S.ddFrom); go('slate', true); toast('Tap any line on the Slate: the slip bets from your league bankroll'); }
   else if (act === 'lgcancel') { const P = acctPass(); if (!P || !confirmQuit(a)) return; try { await acctApi('/acct/lgs/cancel', { token: P.token, id: a.dataset.lid }); lgsLoad(true); toast('League cancelled'); } catch (e) { toast(e.message); } }
   else if (act === 'adtab') { AD.tab = a.dataset.v; store.set('adtab', AD.tab); AD.thread = null; if (AD.tab === 'inbox') AD.inbox = null; if (AD.tab === 'chat') AD.chat = null; viewAdmin(); }
@@ -1800,7 +1815,7 @@ try { const q = new URLSearchParams(location.search), t = String(q.get('src') ||
   else if (!t && !had && TG && TG.initDataUnsafe && TG.initDataUnsafe.user) store.set('src', { s: 'tg', t: Date.now() }); } catch (e) { /* storage off: fine */ }
 /* ?embed=1 · the chat inside the desk's own app: no header, no tabs */
 if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
-go((() => { try { const sp = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param; if (sp && TABS.includes(sp)) return sp; } catch (e) { } return (location.hash || '#today').slice(1); })(), false);
+go((() => { try { const sp = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param; if (sp && TABS.includes(sp)) return sp; if (sp && /^lg_[a-z0-9]{1,24}$/i.test(sp)) return 'lg=' + sp.slice(3); } catch (e) { } return (location.hash || '#today').slice(1); })(), false);
 loadFeed(); liveTick(); /* scores straight away off the saved card: live legs shouldn't wait for a new publish or the minute loop */
 acctBadge(); acctLoad();
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadSlate());
