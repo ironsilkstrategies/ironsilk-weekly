@@ -293,7 +293,11 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await p.click('[data-act="lguse"]'); await p.waitForTimeout(600); await p.fill('#ddStake', '25'); await p.click('[data-act="ddplace"]'); await p.waitForTimeout(500);
     T('a league bet sends the league with it', posts.some(([u, bd]) => u === '/acct/bet' && bd.league === 'g1'));
     await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(500);
-    await p.click('.lgnew summary'); await p.fill('form[data-form="lgsnew"] input[name="name"]', 'Bowl Season Bash'); await p.fill('form[data-form="lgsnew"] input[name="prizes"]', '20000, 5000'); await p.click('form[data-form="lgsnew"] button[type="submit"]'); await p.waitForTimeout(900);
+    await p.click('.lgnew summary'); await p.fill('form[data-form="lgsnew"] input[name="name"]', 'Bowl Season Bash'); await p.fill('form[data-form="lgsnew"] input[name="prizes"]', '20000, 5000');
+    /* v36 · Nov 23 ("the text is unseeable"): the page runs color-scheme:dark, so a field with no color of its own wrote light text on the cream paper */
+    const ink = await p.evaluate(() => [...document.querySelectorAll('form[data-form="lgsnew"] input:not([type="checkbox"]), form[data-form="lgsnew"] select, form[data-form="lgsnew"] textarea')].map(el => { const c = getComputedStyle(el).color.match(/\d+(\.\d+)?/g).map(Number), b = getComputedStyle(el).backgroundColor.match(/\d+(\.\d+)?/g).map(Number); const L = x => 0.2126 * x[0] + 0.7152 * x[1] + 0.0722 * x[2]; return { n: el.name || el.type, fg: Math.round(L(c)), bg: Math.round(L(b)) }; }));
+    T('the league form writes in ink: every field\'s text dark on its light paper (name, pitch, dates, bankroll, players, prizes)', ink.length >= 5 && ink.every(o => o.fg < 90 && o.bg > 200), JSON.stringify(ink));
+    await p.click('form[data-form="lgsnew"] button[type="submit"]'); await p.waitForTimeout(900);
     T('the owner opens a league: name, dates, bankroll, prizes reach the server; it shows up', posts.some(([u, bd]) => u === '/acct/lgs/create' && bd.name === 'Bowl Season Bash' && bd.prizes[0] === 20000 && bd.ends > bd.starts && bd.bank === 1000) && /Bowl Season Bash/.test(await p.evaluate(() => document.querySelector('#v-leagues').innerText)));
     T('…no script errors', errs.length === 0, errs.join(' | ')); await ctx.close(); }
   /* ── the owner's dashboard (v3.1.1) ── */

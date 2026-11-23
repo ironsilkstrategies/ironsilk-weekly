@@ -168,6 +168,13 @@ a.chip{text-decoration:none}
 .seg button{appearance:none;flex:none;cursor:pointer;min-height:40px;padding:0 14px;border-radius:99px;border:1.5px solid rgba(243,238,223,.3);background:none;color:var(--cream-2);font:600 14.5px/1 var(--text)}
 .seg button[aria-pressed="true"]{background:var(--cream);border-color:var(--cream);color:var(--ink)}
 .paper{background:var(--slip) var(--noise);background-size:200px;background-blend-mode:multiply;color:var(--ink);border-radius:10px;filter:drop-shadow(0 16px 18px rgba(0,0,0,.4))}
+/* v35→36 · Nov 23 ("when I was on this menu trying to set up our first league the text is unseeable"): the page runs color-scheme:dark,
+   so a form field with no color of its own draws its text light — on the cream paper, invisible. Every field on paper writes in ink
+   (a field that sets its own color further down still wins). */
+.paper input,.paper select,.paper textarea,.adreply textarea{color:var(--ink);color-scheme:light}
+.paper input::placeholder,.paper textarea::placeholder,.adreply textarea::placeholder{color:rgba(27,42,33,.45);opacity:1}
+.paper .note{color:rgba(27,42,33,.72)}   /* (a note written for the dark page, on paper, was cream on cream) */
+.lgnew label:has(> input[type="checkbox"]){display:flex;align-items:center;gap:8px}.lgnew label>input[type="checkbox"]{width:20px;height:20px;margin:0}
 .sheet-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:14px 16px 10px;border-bottom:2px solid var(--ink)}
 .sheet-h b{font:800 22px/1 var(--display);text-transform:uppercase;letter-spacing:.04em}
 .sheet-h span{font-size:12.5px;color:var(--ink-2)}
