@@ -173,7 +173,7 @@ a.chip{text-decoration:none}
    (a field that sets its own color further down still wins). */
 .paper input,.paper select,.paper textarea,.adreply textarea{color:var(--ink);color-scheme:light}
 .paper input::placeholder,.paper textarea::placeholder,.adreply textarea::placeholder{color:rgba(27,42,33,.45);opacity:1}
-.paper .note{color:rgba(27,42,33,.72)}   /* (a note written for the dark page, on paper, was cream on cream) */
+.paper .note,.csheet .note{color:rgba(27,42,33,.72)}   /* (a note written for the dark page, on paper, was cream on cream; the challenge sheet is paper too) */
 .lgnew label:has(> input[type="checkbox"]){display:flex;align-items:center;gap:8px}.lgnew label>input[type="checkbox"]{width:20px;height:20px;margin:0}
 .sheet-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:14px 16px 10px;border-bottom:2px solid var(--ink)}
 .sheet-h b{font:800 22px/1 var(--display);text-transform:uppercase;letter-spacing:.04em}

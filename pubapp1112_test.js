@@ -273,6 +273,10 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     T('search finds a challenge by name', (await p.locator('.cc2').count()) >= 1 && (await p.locator('.cc2').first().innerText()).includes(c7.name));
     await p.locator('.cc2').first().click(); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('.csheet').innerText);
     T('the sheet: number, why, the road map (six checkpoints to the vault), the day-by-day pace, every route with finish odds, the rules, XP and the D$ prize', new RegExp(`#${c7.n} OF 1,000`, 'i').test(t) && /WHY THIS ONE/i.test(t) && /The Corner/.test(t) && /The Vault/.test(t) && /Day 7/.test(t) && /PICK YOUR ROUTE/i.test(t) && (await p.locator('.csr').count()) === 8 && /best odds/i.test(t) && /\d+% bust/.test(t) && new RegExp(`\\+${c7.xp}`).test(t) && t.includes(`D$${c7.prize}`), t.slice(0, 700));
+    /* css v38 · Nov 23: the sheet's notes (finish odds, who's running it) were cream on its cream paper */
+    const shInk = await p.evaluate(() => [...document.querySelectorAll('.csheet .note')].map(el => { const c = getComputedStyle(el).color.match(/\d+(\.\d+)?/g).map(Number); return Math.round((c[0] + c[1] + c[2]) / 3); }));
+    T('the sheet\'s notes write in ink on its paper (the finish-odds line was cream on cream)', shInk.length >= 1 && shInk.every(x => x < 90), JSON.stringify(shInk));
+    T('D$ with cents always shows both digits on the sheet (D$931.90, never D$931.9)', /D\$[\d,]+\.\d\d/.test(t) && !/D\$[\d,]+\.\d(?!\d)/.test(t), (t.match(/D\$[\d,]+\.\d+/g) || []).slice(0, 8).join(' '));
     await p.click('.csr[data-route="snowball"]'); await p.waitForTimeout(300);
     T('…picking a route updates the start button', /Snowball route/.test(await p.locator('.cs-go').innerText()));
     await p.click('.cs-go [data-act="chaljoin"]'); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
