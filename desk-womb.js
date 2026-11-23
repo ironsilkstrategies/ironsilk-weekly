@@ -618,7 +618,7 @@ function wbLiveSide(sp,m,s,Ln){const num=x=>x!=null&&x!==''&&isFinite(+x)?+x:nul
   return{price,line,lane:sp+'|'+m+'|'+wbRole(m,s,line,rp)};}
 /* the heir's call on one game: its parents' calls (with the confidence they'll be stamped with), its genes, the market */
 function wbKidCalls(sp,g,calls,Ln,add){if(!WB_KIDS_LIVE.length||!Ln||!calls||!calls.length)return 0;let n=0;const d=String(calls[0].date||'').slice(0,10);
-  for(const K of WB_KIDS_LIVE){if(d&&d<K.born)continue;   /* never on a day before it was born */
+  for(const K of WB_KIDS_LIVE){if(d&&d<(K.back||K.born))continue;   /* never on a day before it was born (born in the backdate: before it joined the desk) */
     if(!calls.some(c=>c.voice===K.a||c.voice===K.b))continue;
     const pc=calls.filter(c=>c.voice===K.a||c.voice===K.b||c.voice==='Sim').map(c=>({...c}));try{confStamp(pc);}catch(e){}
     const cal=wbCalFn(K.cal);

@@ -135,6 +135,11 @@ function harness(w) { const E = s => w.eval(s), J = s => JSON.parse(w.eval(`JSON
   T('official on the desk\'s own gates: its chance at the day\'s floor and a price worth it — never under the floor, never the heavy lane, never a price its chance says loses, under 70% only at −150 or longer', gates.hi === true && gates.lo === false && gates.heavy === false && gates.bad === false && gates.lean === false, JSON.stringify(gates));
   VE(`(()=>{const W=wombAll();W.kids[0].born='2026-11-25';set(WOMB_KEY,W);wbRegisterKids();Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);})()`);
   T('never a call on a day before it was born', !cc('full').some(c => c.v === 'H_T1'));
+  VE(`(()=>{const W=wombAll();W.kids[0].born='2026-11-19';W.kids[0].back='2026-11-21';set(WOMB_KEY,W);wbRegisterKids();Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);})()`);
+  T('v3.5.4 · born in a backdate (born Nov 19, joined the desk Nov 21): no call on Nov 20, before it joined', !cc('full').some(c => c.v === 'H_T1'));
+  VE(`(()=>{const W=wombAll();W.kids[0].back='2026-11-20';set(WOMB_KEY,W);wbRegisterKids();Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);})()`);
+  T('…and from the day it joined, it calls', cc('full').some(c => c.v === 'H_T1'));
+  VE(`(()=>{const W=wombAll();delete W.kids[0].back;set(WOMB_KEY,W);})()`);
   VE(`(()=>{const W=wombAll();W.kids[0].born='2026-11-19';W.kids[0].st='retired';set(WOMB_KEY,W);wbRegisterKids();Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);})()`);
   T('a retired heir makes no calls (its name stays on its record)', !cc('full').some(c => c.v === 'H_T1') && VE(`CHARS.H_T1.label`) === 'The Heir');
   VE(`(()=>{const W=wombAll();W.kids[0].st='rookie';set(WOMB_KEY,W);wbRegisterKids();Object.keys(CHAR_CACHE).forEach(k=>delete CHAR_CACHE[k]);})()`);
