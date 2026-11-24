@@ -87,9 +87,18 @@ function bbParseEvent(C,ev){const c=(ev.competitions||[])[0];if(!c)return null;c
     p1a:la.length?la[0]:null,p1h:lh.length?lh[0]:null,q1a:!college&&la.length?la[0]:null,q1h:!college&&lh.length?lh[0]:null,
     h1a:h1done?(college?(la.length?la[0]:null):(la.length>=2?la[0]+la[1]:null)):null,h1h:h1done?(college?(lh.length?lh[0]:null):(lh.length>=2?lh[0]+lh[1]:null)):null,
     lsA:la,lsH:lh,neutral:!!c.neutralSite,venue:((c.venue||{}).fullName)||'',pre,espnOdds:bbOddsFromEspn(c),note:((c.notes||[])[0]||{}).headline||''};}
-async function bbLoadSchedule(C){const td=today(),a=td.replace(/-/g,''),z=dayShift(td,C.upDays).replace(/-/g,'');
-  /* the range call can come back empty in preseason (ESPN defaults a range to one season type): ask day by day, then for preseason */
-  const grab=u=>fetch(u).then(r=>r.json()).then(x=>x.events||[]).catch(()=>null);
+async function bbLoadSchedule(C,live){const td=today(),a=td.replace(/-/g,''),z=dayShift(td,C.upDays).replace(/-/g,'');
+  /* v3.5.10 · a pull that hangs on a weak signal gives up (it used to sit there while the next one started on top of it) */
+  const grab=(u,ms)=>{const ac=typeof AbortController==='function'?new AbortController():null,t=ac?setTimeout(()=>ac.abort(),ms||45e3):0;
+    return fetch(u,ac?{signal:ac.signal}:undefined).then(r=>r.json()).then(x=>x.events||[]).catch(()=>null).finally(()=>clearTimeout(t));};
+  /* v3.5.10 · Nov 23 (SFA–UVU tipped at 7:00 and the card still said pre-game at 7:34): the live refresh pulls TODAY's games
+     only — a third of the college slate, not three days of every D-I game — and folds them in by game; tomorrow's list
+     waits for the full pull (every 10 minutes, and on open) */
+  if(live){const evs=await grab(C.espn+'/scoreboard?dates='+a+C.dayLim+C.groups,25e3);if(!evs||!evs.length)return false;
+    const got=evs.map(ev=>bbParseEvent(C,ev)).filter(g=>g&&g.__date===td);if(!got.length)return false;
+    const ids=new Set(got.map(g=>g.id)),keep=C.games.filter(g=>!ids.has(String(g.id)));
+    C.games.length=0;[...keep,...got].sort((x,y)=>String(x.start).localeCompare(String(y.start))).forEach(g=>C.games.push(g));
+    bbCacheSchedule(C);bbStoreEspnLines(C);bbRecordResults(C,got);return true;}
   let evs=await grab(C.espn+'/scoreboard?dates='+a+'-'+z+C.lim+C.groups),how='range';
   if(!evs||!evs.length){const days=Array.from({length:C.upDays+1},(_,i)=>dayShift(td,i).replace(/-/g,''));
     const per=await Promise.all(days.map(d=>grab(C.espn+'/scoreboard?dates='+d+C.dayLim+C.groups)));evs=per.flat().filter(Boolean);how='by day';
@@ -511,11 +520,13 @@ function bbRender(sp,keepFocus){const C=bbC(sp);const el=document.getElementById
   if(keepFocus){const q=document.getElementById('bbQ-'+sp);if(q){q.focus();try{q.setSelectionRange(q.value.length,q.value.length);}catch(e){}}}else window.scrollTo(0,y);
   deskChores('bb-'+sp,[()=>bbSnapshot(C),()=>bbArchiveFinals(C),()=>syncFinalsToShared(),()=>voicesLog(sp),()=>gradeVoices(),()=>gradeIntel(),()=>{if(typeof todaySnapshotSoon==='function')todaySnapshotSoon();}]);}
 /* ── live loop + boot ─────────────────────────────────────────────────────── */
-const BB_LIVE_T={};
-function bbLiveLoop(sp){const C=bbC(sp);if(BB_LIVE_T[sp])clearInterval(BB_LIVE_T[sp]);
-  BB_LIVE_T[sp]=setInterval(async()=>{if(document.hidden||(typeof ACTIVE_SPORT!=='undefined'&&ACTIVE_SPORT!==sp))return;
+const BB_LIVE_T={},BB_LIVE_BUSY={},BB_FULL_AT={};
+/* v3.5.10 · one pull at a time; today's games every 45 seconds, the full schedule every 10 minutes */
+function bbLiveLoop(sp){const C=bbC(sp);if(BB_LIVE_T[sp])clearInterval(BB_LIVE_T[sp]);BB_FULL_AT[sp]=Date.now();
+  BB_LIVE_T[sp]=setInterval(async()=>{if(document.hidden||(typeof ACTIVE_SPORT!=='undefined'&&ACTIVE_SPORT!==sp)||BB_LIVE_BUSY[sp])return;
     if(!C.games.some(g=>g.abstract==='in'||(g.abstract==='pre'&&Date.parse(g.start)-Date.now()<15*60e3)))return;
-    const q=document.activeElement&&document.activeElement.id==='bbQ-'+sp;await bbLoadSchedule(C).catch(()=>{});bbRender(sp,q);},45e3);}
+    const full=Date.now()-(BB_FULL_AT[sp]||0)>10*60e3;if(full)BB_FULL_AT[sp]=Date.now();
+    BB_LIVE_BUSY[sp]=true;try{const q=document.activeElement&&document.activeElement.id==='bbQ-'+sp;await bbLoadSchedule(C,!full).catch(()=>{});bbRender(sp,q);}finally{BB_LIVE_BUSY[sp]=false;}},45e3);}
 async function bbBoot(sp,force){const C=bbC(sp);bbRestoreRatings(C);if(bbLoadCached(C))bbRender(sp);
   try{await bbLoadTeams(C);}catch(e){}
   try{await bbLoadRatings(C,force);}catch(e){console.warn(sp+' ratings',e);BB_STATUS[sp].ratings='ratings load failed';}
