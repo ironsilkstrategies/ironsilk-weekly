@@ -2590,6 +2590,39 @@ function voicesLog0(sp){
    the Scorekeeper's most-likely score, Covers, the Oracle) call it straight; the rest start from the Sim's
    projection and bend it to agree with their own side and total calls — so every score matches its own picks. */
 const SCORECALL_KEY='d4.scorecalls';
+/* v3.5.8 · Nov 23, Chris: "Fix #2" — a character's final score could disagree with its own picks: the Commissioner and the Grinder
+   on the Cavaliers' moneyline called a Bulls win (127–126). The bend took one side only (the spread's when there was one) and made
+   that side win outright, so a character on the favorite's moneyline and the underdog's points (a middle: the favorite wins by less
+   than the spread) got a score with the underdog winning; the heirs' bend was a copy of it. Now every call the character made on the
+   game sets the window its score has to land in (moneyline: who wins; spread: the margin past the line; total: over or under), the
+   projection moves the least it takes to land inside, and a last pass on the whole numbers makes every character's score (its own
+   number or a bent one) agree with all of its picks, a point at a time. Picks that can't all win together: the moneyline holds, then
+   the spread, then the total. */
+function scWin(C){const L=(C||[]).filter(Boolean),ml=L.find(c=>c.market==='ml'),spc=L.find(c=>c.market==='spread'&&c.line!=null&&c.line!==''&&isFinite(+c.line)),tc=L.find(c=>c.market==='total'&&c.line!=null&&c.line!==''&&isFinite(+c.line));
+  return{ml:ml&&(ml.side==='home'||ml.side==='away')?ml.side:null,sp:spc&&(spc.side==='home'||spc.side==='away')?{side:spc.side,m:spc.side==='home'?-(+spc.line):+spc.line}:null,
+    tot:tc&&(tc.side==='over'||tc.side==='under')?{side:tc.side,line:+tc.line}:null};}   /* sp.m: the home margin the spread pick needs to beat (home) or stay under (away) */
+function scOk(W,a,h,k,noTie){const m=h-a,t=a+h;if(noTie&&m===0)return false;
+  if((k&1)&&W.ml&&(W.ml==='home'?m<=0:m>=0))return false;
+  if((k&2)&&W.sp&&(W.sp.side==='home'?m<=W.sp.m:m>=W.sp.m))return false;
+  if((k&4)&&W.tot&&(W.tot.side==='over'?t<=W.tot.line:t>=W.tot.line))return false;return true;}
+/* the nearest whole-number score (fewest points moved, then the total kept closest) that every pick of the character wins on */
+function scAgree(sp,x,C){if(!x||!isFinite(+x.a)||!isFinite(+x.h))return x;const W=scWin(C);if(!W.ml&&!W.sp&&!W.tot)return x;
+  const noTie=!(sp==='nfl'||sp==='ncaaf'),K=sp==='nhl'||sp==='mlb'?8:40,a0=+x.a,h0=+x.h;
+  for(const k of [7,3,5,1]){if(scOk(W,a0,h0,k,noTie))return x;
+    for(let d=1;d<=K;d++){let best=null;for(let da=-d;da<=d;da++){const r=d-Math.abs(da);for(const dh of r?[r,-r]:[0]){const a=a0+da,h=h0+dh;
+      if(a<0||h<0||!scOk(W,a,h,k,noTie))continue;const q=Math.abs(da+dh);if(!best||q<best.q)best={a,h,q};}}if(best)return{...x,a:best.a,h:best.h};}}
+  return x;}
+/* a projection bent to a character's own calls (a character without its own number; the heirs, from their parents' scores) */
+function scBend(sp,a,h,C){const tie=sp==='nfl'||sp==='ncaaf',unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3,W=scWin(C);a=+a;h=+h;
+  if(W.tot){const t=a+h,want=W.tot.side==='over'?Math.max(t,W.tot.line+unit/2):Math.min(t,W.tot.line-unit/2);const k=t>0?want/t:1;a*=k;h*=k;}
+  let L=-Infinity,pL=0,H=Infinity,pH=0;if(W.ml==='home'){L=0;pL=0.6;}else if(W.ml==='away'){H=0;pH=0.6;}
+  if(W.sp){if(W.sp.side==='home'){if(W.sp.m>=L){L=W.sp.m;pL=unit/2;}}else if(W.sp.m<=H){H=W.sp.m;pH=unit/2;}}
+  const mg=h-a;let need=mg;
+  if(L<H){const lo=L+pL,hi=H-pH;need=lo<=hi?Math.min(Math.max(mg,lo),hi):(L+H)/2;}   /* a narrow window (a middle): its middle */
+  else if(W.ml)need=W.ml==='home'?Math.max(mg,0.6):Math.min(mg,-0.6);   /* picks that can't both win: the moneyline sets the side */
+  const d=(need-mg)/2;h+=d;a-=d;const side=W.ml||(W.sp&&W.sp.side)||null;
+  a=Math.max(0,Math.round(a));h=Math.max(0,Math.round(h));if(a===h&&!tie){if(side==='away')a++;else h++;}
+  return scAgree(sp,{a,h},C);}
 function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)return[];const tie=sp==='nfl'||sp==='ncaaf';const out={};
   const fix=(a,h,mlSide)=>{a=Math.max(0,Math.round(a));h=Math.max(0,Math.round(h));if(a===h&&!tie){if(mlSide==='away')a++;else h++;}return{a,h};};
   const by=v=>calls.filter(c=>c.voice===v);
@@ -2604,15 +2637,9 @@ function scoreCallsFor(sp,g,s,calls){if(!s||s.awayProj==null||s.homeProj==null)r
   try{const bp=typeof brainPredFor==='function'?brainPredFor(sp,g):null;if(bp)own('Brain',bp.a,bp.h);}catch(e){}
   try{const kp=typeof skPredFor==='function'?skPredFor(sp,g):null;if(kp)own('Most common',kp.a,kp.h);}catch(e){}   /* v2.96 · the Scorekeeper's exact final, from its parts */   /* v2.95 · the Brain's score from his own chances */   /* v2.94 · the Oracle's consensus score, every game he can read */   /* v2.93 · the Coach's own score, every game */   /* v2.91 · the Historian's score on every game he reads */
   [['Most common'],['Covers'],['Pred']].forEach(([v])=>{const c=by(v).find(x=>x.score);if(c){const m=String(c.score).match(/([\d.]+)\D+([\d.]+)/);if(m)own(v,+m[1],+m[2]);}});
-  const unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3;
-  new Set(calls.map(c=>c.voice)).forEach(v=>{if(out[v]||v==='Books')return;const C=by(v);if(!C.length)return;let a=+s.awayProj,h=+s.homeProj;
-    const ml=C.find(c=>c.market==='ml'),spc=C.find(c=>c.market==='spread'),tc=C.find(c=>c.market==='total');
-    if(tc&&tc.line!=null){const t=a+h,want=tc.side==='over'?Math.max(t,tc.line+unit/2):Math.min(t,tc.line-unit/2);const k=t>0?want/t:1;a*=k;h*=k;}
-    const sideOf=c=>c&&c.side;const sd=sideOf(spc)||sideOf(ml);
-    if(sd){const mg=h-a,line=spc&&spc.line!=null?(spc.side==='home'?-spc.line:spc.line):0;   /* home margin needed */
-      let need=sd==='home'?Math.max(mg,line+unit/2,0.6):Math.min(mg,line-unit/2,-0.6);if(!spc)need=sd==='home'?Math.max(mg,0.6):Math.min(mg,-0.6);
-      const d=(need-mg)/2;h+=d;a-=d;}
-    out[v]=fix(a,h,sd);});
+  new Set(calls.map(c=>c.voice)).forEach(v=>{if(out[v]||v==='Books')return;const C=by(v);if(!C.length)return;out[v]=scBend(sp,+s.awayProj,+s.homeProj,C);});
+  /* v3.5.8 · and every score, its own number or a bent one, agrees with all of the character's picks */
+  Object.keys(out).forEach(v=>{out[v]=scAgree(sp,out[v],by(v));});
   return Object.entries(out).map(([voice,x])=>({voice,a:x.a,h:x.h}));}
 /* v2.78 · one read + one write per sport pass (was a full parse + rewrite of both stores for EVERY game — 60+ CFB games
    meant 120+ multi-MB JSON round-trips on load, enough for iOS to kill the tab) */
@@ -3144,7 +3171,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261123f',DESK_VER='3.5.7';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261123g',DESK_VER='3.5.8';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /

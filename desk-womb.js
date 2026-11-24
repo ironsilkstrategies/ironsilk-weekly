@@ -469,13 +469,8 @@ function wbScoreAcc(){const d=today();if(WB_SACC&&WB_SACC.d===d)return WB_SACC.m
     .forEach(x=>{const k=x.voice+'|'+x.sp,o=m[k]||(m[k]={n:0,e:0,x:0});if(o.n>=30)return;o.n++;o.e+=+x.err;o.x+=x.exact?1:0;});}catch(e){}
   Object.values(m).forEach(o=>{o.err=o.n?o.e/o.n:null;});WB_SACC={d,m};return m;}
 const WB_SC_C={nhl:1,mlb:1.5,nfl:5,ncaaf:6,nba:8,ncaab:8};
-function wbBend(sp,a,h,C){const tie=sp==='nfl'||sp==='ncaaf',unit=sp==='nhl'||sp==='mlb'?1:sp==='nba'||sp==='ncaab'?4:3;
-  const ml=C.find(c=>c.market==='ml'),spc=C.find(c=>c.market==='spread'),tc=C.find(c=>c.market==='total');
-  if(tc&&tc.line!=null){const t=a+h,want=tc.side==='over'?Math.max(t,tc.line+unit/2):Math.min(t,tc.line-unit/2);const k=t>0?want/t:1;a*=k;h*=k;}
-  const sd=(spc&&spc.side)||(ml&&ml.side);
-  if(sd){const mg=h-a,line=spc&&spc.line!=null?(spc.side==='home'?-spc.line:spc.line):0;let need=sd==='home'?Math.max(mg,line+unit/2,0.6):Math.min(mg,line-unit/2,-0.6);
-    if(!spc)need=sd==='home'?Math.max(mg,0.6):Math.min(mg,-0.6);const dd=(need-mg)/2;h+=dd;a-=dd;}
-  a=Math.max(0,Math.round(a));h=Math.max(0,Math.round(h));if(a===h&&!tie){if(sd==='away')a++;else h++;}return{a,h};}
+/* v3.5.8 · the heirs bend their parents' scores the way every character does: inside the window all of its own picks win in */
+function wbBend(sp,a,h,C){return scBend(sp,a,h,C);}
 function wbKidScore(sp,K,ps,C){const acc=wbScoreAcc(),c0=WB_SC_C[sp]||3;let wa=0,A=0,H=0,best=null;
   ps.forEach(x=>{const o=acc[x.voice+'|'+sp];const e=o&&o.n>=5?o.err:null;const w=1/((e!=null?e:3*c0)+c0);wa+=w;A+=w*x.a;H+=w*x.h;if(!best||w>best.w)best={v:x.voice,w,e};});
   if(!wa)return null;const r=wbBend(sp,A/wa,H/wa,C);return{...r,from:best?best.v:null};}
