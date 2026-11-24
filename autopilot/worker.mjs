@@ -51,8 +51,14 @@ async function readState() { return readStateAt(REPO); }
 const stripTok = s => { const o = JSON.parse(JSON.stringify(s)); for (const d in o.posts || {}) { const p = o.posts[d]; if (p && p.site && p.site.tok) p.site = { ...p.site, tok: '' }; } return o; };
 /* v3.1.5 · only the two newest days keep their full public card (the public page is rebuilt from the newest one); older days keep
    everything the recap, results and receipts need, without the ~300 KB card each — the file stays well under GitHub's limits */
+/* v3.5.9 · Nov 23, Chris: "I'm tired of this issue…" ("Load failed" on the VIP worker box). The hand-off file had grown to 7.6 MB:
+   4.2 MB of it was pubSig, a full copy of the public page for every day since Oct 17, kept only to tell whether the page changed.
+   The phone reads and rewrites the whole file on every status check, check-in and hand-off, so over 5G those kept failing (today's
+   card never reached the worker). The page's fingerprint is now a short hash, and only the three newest days keep one. */
+export const sigOf = s => createHash('sha256').update(String(s)).digest('hex').slice(0, 24);
+export function trimPubSig(o, n = 3) { const out = {}; for (const k of Object.keys(o || {}).sort().slice(-n)) { const v = o[k]; if (typeof v === 'string' && v.length <= 64) out[k] = v; } return out; }
 export function slimFeeds(state) { if (!state || !state.posts) return state; const ds = Object.keys(state.posts).sort(); const keep = new Set(ds.slice(-2)); const posts = {};
-  for (const d of ds) { const p = state.posts[d]; posts[d] = keep.has(d) || !p || !p.feed ? p : (({ feed, ...rest }) => rest)(p); } return { ...state, posts }; }
+  for (const d of ds) { const p = state.posts[d]; posts[d] = keep.has(d) || !p || !p.feed ? p : (({ feed, ...rest }) => rest)(p); } return { ...state, posts, ...(state.pubSig ? { pubSig: trimPubSig(state.pubSig) } : {}) }; }
 async function writeStateAt(repo, state, sha) { const own = repo === REPO; const tok = own ? GH : SITE_TOK; if (!tok) return 0;
   const body = { message: 'autopilot ' + new Date().toISOString(), branch: BRANCH, content: Buffer.from(await encrypt(slimFeeds(own ? stripTok(state) : state)), 'utf8').toString('base64'), ...(sha ? { sha } : {}) };
   const r = await fetch(`https://api.github.com/repos/${repo}/contents/${FILE}`, { method: 'PUT', headers: { ...ghH, Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -81,7 +87,7 @@ export function mergeWatch(x, y) { if (!x || !y) return x || y; const sent = { .
    with a refused token — kept the old signature and the menu was sent again on every pass.) A copy with no stamp loses to one with a stamp. */
 const cmdSigOf = (a, b) => { const x = (a?.cmdSigTs || 0) >= (b?.cmdSigTs || 0) ? a : b, y = x === a ? b : a; const sig = x?.cmdSig || y?.cmdSig || ''; const ts = Math.max(a?.cmdSigTs || 0, b?.cmdSigTs || 0);
   return { cmdSig: sig, ...(ts ? { cmdSigTs: ts } : {}) }; };
-export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), ...cmdSigOf(a, b), pubSig: { ...(b?.pubSig || {}), ...(a?.pubSig || {}) }, ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}), ...(a?.mod || b?.mod ? { mod: mergeMod(a?.mod, b?.mod) } : {}), ...(a?.lounge || b?.lounge ? { lounge: mergeLounge(a?.lounge, b?.lounge) } : {}), ...(a?.phone || b?.phone ? { phone: newerTs(a?.phone, b?.phone) } : {}), ...(a?.watch || b?.watch ? { watch: mergeWatch(a?.watch, b?.watch) } : {}), ...(a?.refs || b?.refs ? { refs: Gr.mergeRefs(a?.refs, b?.refs) } : {}) };
+export function mergeState(a, b) { const out = { v: 1, posts: {}, lastRun: Math.max(a?.lastRun || 0, b?.lastRun || 0), runs: Math.max(a?.runs || 0, b?.runs || 0), tgOff: Math.max(a?.tgOff || 0, b?.tgOff || 0), cmdTs: Math.max(a?.cmdTs || 0, b?.cmdTs || 0), ...cmdSigOf(a, b), pubSig: trimPubSig({ ...(b?.pubSig || {}), ...(a?.pubSig || {}) }), ...(a?.relay || b?.relay ? { relay: relayMerge(a?.relay, b?.relay) } : {}), ...(a?.mod || b?.mod ? { mod: mergeMod(a?.mod, b?.mod) } : {}), ...(a?.lounge || b?.lounge ? { lounge: mergeLounge(a?.lounge, b?.lounge) } : {}), ...(a?.phone || b?.phone ? { phone: newerTs(a?.phone, b?.phone) } : {}), ...(a?.watch || b?.watch ? { watch: mergeWatch(a?.watch, b?.watch) } : {}), ...(a?.refs || b?.refs ? { refs: Gr.mergeRefs(a?.refs, b?.refs) } : {}) };
   const ds = new Set([...Object.keys(a?.posts || {}), ...Object.keys(b?.posts || {})]);
   ds.forEach(d => { const x = a?.posts?.[d], y = b?.posts?.[d]; if (!x || !y) { out.posts[d] = x || y; return; }
     const base = (x.postedTs || 0) >= (y.postedTs || 0) ? x : y;
@@ -906,9 +912,9 @@ async function sitePut(site, text, deps) { const tok = (site && site.tok) || (si
   const r = await F(api, { method: 'PUT', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Public page — worker update', content: Buffer.from(text, 'utf8').toString('base64'), ...(sha ? { sha } : {}) }) });
   if (site.repo === SITE) siteSeen(r.status); return { ok: r.ok, status: r.status }; }
 export async function publishPublic(state, deps) { const now = deps?.now || Date.now(); const ds = Object.keys(state.posts || {}).sort(); const d = ds.reverse().find(x => state.posts[x] && state.posts[x].feed && state.posts[x].site);
-  if (!d) return 0; const p = state.posts[d]; const V = publicView(p.feed, p.st, now); const sig = JSON.stringify({ ...V, generated: 0 });
+  if (!d) return 0; const p = state.posts[d]; const V = publicView(p.feed, p.st, now); const sig = sigOf(JSON.stringify({ ...V, generated: 0 }));
   state.pubSig = state.pubSig || {}; if (state.pubSig[d] === sig) return 0; const r = await sitePut(p.site, JSON.stringify(V, null, 1), deps);
-  if (r.ok) { state.pubSig[d] = sig; return 1; } log('public page', r.reason || r.status); return 0; }
+  if (r.ok) { state.pubSig[d] = sig; state.pubSig = trimPubSig(state.pubSig); return 1; } log('public page', r.reason || r.status); return 0; }
 /* ── v2.33 · the relay ─────────────────────────────────────────────────────────
    GitHub only fires the 10-minute schedule every few hours, so per-game results
    could wait hours when the app is closed. While today's slate is live, the worker

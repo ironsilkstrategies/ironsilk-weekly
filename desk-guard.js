@@ -102,11 +102,16 @@ function grdPhone(){const last=+grdLS(SYNC.last)||0;const F=grdJ('d4.syncfail');
     sync:{on:syncOn(),last,err:F&&F.ts>last?String(F.msg||'').slice(0,120):'',auth:!!A,authTs:A?A.ts:0},
     vault:{on:grdVaultOn(),ts:V?V.ts:0,keys:V?V.keys:0},
     keys:{...K,n:Object.values(K).filter(Boolean).length,missing:Object.values(K).filter(x=>!x).length},xfer:grdXferOk()?(+grdLS(GRD_XFER)||0):0};}
+/* v3.5.9 · iPhone Safari calls any dropped request "Load failed": say what it means, and try a dropped read or write once more */
+const grdNetErr=e=>/load failed|failed to fetch|networkerror|network connection was lost|timed out|internet connection appears to be offline|cancelled/i.test(String(e&&e.message||e||''));
+const GRD_NETMSG='couldn\'t reach GitHub just now (weak signal?) — tap ↻ Status to try again';
+const grdNap=ms=>new Promise(r=>setTimeout(r,ms));
+async function grdFetch(url,opt,tries=2){let last;for(let i=0;i<tries;i++){try{return await fetch(url,opt);}catch(e){last=e;if(!grdNetErr(e))throw e;if(i<tries-1)await grdNap(1200);}}throw last;}
 async function grdTgwPush(mine,msg){for(let tries=0;tries<3;tries++){const R=await tgwRead();if(!R.ok)return R;
     if(!R.sha&&!(await tgwEnsureBranch(R.repo,R.H)))return{ok:false,reason:'couldn\'t create the autopilot branch'};
     const merged=tgwMerge(mine,R.state||{posts:{}});
     const body={message:msg,branch:TGW_BRANCH,content:b64u(await tgwEncrypt(merged)),...(R.sha?{sha:R.sha}:{})};
-    const w=await fetch(`https://api.github.com/repos/${R.repo}/contents/${TGW_FILE}`,{method:'PUT',headers:{...R.H,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    let w;try{w=await grdFetch(`https://api.github.com/repos/${R.repo}/contents/${TGW_FILE}`,{method:'PUT',headers:{...R.H,'Content-Type':'application/json'},body:JSON.stringify(body)});}catch(e){if(grdNetErr(e))return{ok:false,reason:GRD_NETMSG,net:true};throw e;}
     if(w.ok){grdPut(GRD_BEAT,String(Date.now()));return{ok:true,state:merged};}
     if(w.status===401||w.status===403)return{ok:false,reason:grdMsg(w.status,'GitHub token',R.repo)};if(w.status!==409&&w.status!==422)return{ok:false,reason:'HTTP '+w.status};}
   return{ok:false,reason:'kept colliding with the worker — try again'};}
@@ -118,15 +123,15 @@ if(typeof tgwHandOff==='function'){tgwHandOff=async function(p){
    minted a fresh one (which then synced over the real one) — now each case says what it is, and no key is ever made here */
 if(typeof tgwRead==='function'){tgwRead=async function(){const{repo,toks}=await tgwGh();if(!toks.length)return{ok:false,reason:'no GitHub token saved on this phone'};let why='';
   for(const token of toks){const H={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
-    try{const r=await fetch(`https://api.github.com/repos/${repo}/contents/${TGW_FILE}?ref=${TGW_BRANCH}&t=${Date.now()}`,{headers:H,cache:'no-store'});
+    try{const r=await grdFetch(`https://api.github.com/repos/${repo}/contents/${TGW_FILE}?ref=${TGW_BRANCH}&t=${Date.now()}`,{headers:H,cache:'no-store'});
       if(r.status===404)return{ok:true,state:null,sha:null,token,H,repo};
       if(r.status===401||r.status===403){why=grdMsg(r.status,'GitHub token',repo);continue;}if(!r.ok){why='HTTP '+r.status+' reading the card';continue;}
       const j=await r.json();let raw=j.content;
-      if(!raw||j.encoding==='none'){const b=await fetch(`https://api.github.com/repos/${repo}/git/blobs/${j.sha}`,{headers:H,cache:'no-store'});if(!b.ok){why='HTTP '+b.status+' reading the card';continue;}raw=(await b.json()).content;}
+      if(!raw||j.encoding==='none'){const b=await grdFetch(`https://api.github.com/repos/${repo}/git/blobs/${j.sha}`,{headers:H,cache:'no-store'});if(!b.ok){why='HTTP '+b.status+' reading the card';continue;}raw=(await b.json()).content;}
       if(!get('d4.tgautokey',''))return{ok:false,reason:'no worker key on this phone yet — restore your transfer code or connect sync first',noKey:true};
       const txt=new TextDecoder().decode(Uint8Array.from(atob(String(raw||'').replace(/\s/g,'')),c=>c.charCodeAt(0)));
       let state;try{state=await tgwDecrypt(txt);}catch(e){return{ok:false,reason:'the card on GitHub was sealed with a different worker key than this phone has — restore your transfer code (it carries the key), or copy this phone\'s key into the AUTOPILOT_KEY secret',keyMismatch:true};}
-      return{ok:true,state,sha:j.sha,token,H,repo};}catch(e){why=String(e&&e.message||e);}}
+      return{ok:true,state,sha:j.sha,token,H,repo};}catch(e){why=grdNetErr(e)?GRD_NETMSG:String(e&&e.message||e);}}
   return{ok:false,reason:why||'no GitHub token here can read '+repo};};}
 async function grdBeat(force){if(typeof tgwOn!=='function'||!tgwOn()||!get('d4.tgautokey',''))return null;const last=+grdLS(GRD_BEAT)||0;if(!force&&Date.now()-last<3*36e5)return null;
   if(!(get(LS.ghtoken,'')||get(SYNC.token,'')))return null;grdPut(GRD_BEAT,String(Date.now()));
