@@ -56,7 +56,7 @@ const stripTok = s => { const o = JSON.parse(JSON.stringify(s)); for (const d in
    The phone reads and rewrites the whole file on every status check, check-in and hand-off, so over 5G those kept failing (today's
    card never reached the worker). The page's fingerprint is now a short hash, and only the three newest days keep one. */
 export const sigOf = s => createHash('sha256').update(String(s)).digest('hex').slice(0, 24);
-export function trimPubSig(o, n = 3) { const out = {}; for (const k of Object.keys(o || {}).sort().slice(-n)) { const v = o[k]; if (typeof v === 'string' && v.length <= 64) out[k] = v; } return out; }
+export function trimPubSig(o, n = 3) { const out = {}; for (const k of Object.keys(o || {}).sort().slice(-n)) { const v = o[k]; if (typeof v === 'string') out[k] = v.length <= 64 ? v : sigOf(v); } return out; }   /* an old whole-page copy becomes its hash (the same page then still reads as unchanged) */
 export function slimFeeds(state) { if (!state || !state.posts) return state; const ds = Object.keys(state.posts).sort(); const keep = new Set(ds.slice(-2)); const posts = {};
   for (const d of ds) { const p = state.posts[d]; posts[d] = keep.has(d) || !p || !p.feed ? p : (({ feed, ...rest }) => rest)(p); } return { ...state, posts, ...(state.pubSig ? { pubSig: trimPubSig(state.pubSig) } : {}) }; }
 async function writeStateAt(repo, state, sha) { const own = repo === REPO; const tok = own ? GH : SITE_TOK; if (!tok) return 0;
@@ -913,7 +913,11 @@ async function sitePut(site, text, deps) { const tok = (site && site.tok) || (si
   if (site.repo === SITE) siteSeen(r.status); return { ok: r.ok, status: r.status }; }
 export async function publishPublic(state, deps) { const now = deps?.now || Date.now(); const ds = Object.keys(state.posts || {}).sort(); const d = ds.reverse().find(x => state.posts[x] && state.posts[x].feed && state.posts[x].site);
   if (!d) return 0; const p = state.posts[d]; const V = publicView(p.feed, p.st, now); const sig = sigOf(JSON.stringify({ ...V, generated: 0 }));
-  state.pubSig = state.pubSig || {}; if (state.pubSig[d] === sig) return 0; const r = await sitePut(p.site, JSON.stringify(V, null, 1), deps);
+  state.pubSig = state.pubSig || {}; const prev = state.pubSig[d];
+  if (prev === sig || (typeof prev === 'string' && prev.length > 64 && sigOf(prev) === sig)) { state.pubSig[d] = sig; return 0; }
+  /* v3.5.9 · a day before today this worker holds no fingerprint for: the site may already show a newer page; never put an older one over it */
+  if (!prev && d < new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) return 0;
+  const r = await sitePut(p.site, JSON.stringify(V, null, 1), deps);
   if (r.ok) { state.pubSig[d] = sig; state.pubSig = trimPubSig(state.pubSig); return 1; } log('public page', r.reason || r.status); return 0; }
 /* ── v2.33 · the relay ─────────────────────────────────────────────────────────
    GitHub only fires the 10-minute schedule every few hours, so per-game results
