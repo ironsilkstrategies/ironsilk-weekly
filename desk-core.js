@@ -1548,6 +1548,42 @@ const PUB_TIER_RANK={supreme:4,strong:3,value:2,source:1};
 function pubCal(log,d0){try{const out=[];let first=null;Object.keys(log||{}).sort().forEach(d=>{const M=((log[d]||{}).picks||[]).filter(x=>x.main);if(!M.length)return;if(!first)first=d;if(d0&&d>=d0)return;
   let w=0,l=0,p=0,u=0;M.forEach(x=>{if(x.push)p++;else if(x.hit===true){w++;u+=_vProfit(x.price);}else if(x.hit===false){l++;u-=1;}});out.push([d,w,l,p,+u.toFixed(2),M.length]);});
   return first?{first,d:out}:null;}catch(e){return null;}}
+/* ══ v3.5.15 · GHOST RUNS ══
+   Nov 23, 11:26 PM, Chris: "if you can activate the ghost runs where you can run the challenge side by side with the top character in
+   the particular lane the challenge focuses on". A lane is a challenge's rule and sport (Dog pound × NHL, Over party × any sport…).
+   Its ghost is the character with the most units on single calls in that lane over 60 days (8+ graded). The ghost's ticket each day:
+   its most confident calls that day that fit the lane, one leg a game, k legs (k = what the run's route plays: 1, 2, 3 or 4). Every day
+   of the last 31: no ticket (null), or [result, decimal] — 1 cashed, 0 missed, 2 every leg pushed, 9 still open. The app stakes those
+   tickets on the run's own route from the run's own start, so the ghost races the same challenge side by side. Published only while
+   the open beta publishes the board (the same calls are already on it), as public/ghost.json. */
+const GH_RULE={any:()=>true,singles:()=>true,two:()=>true,three:()=>true,world:()=>true,chalk:x=>x.pr<=-130,dogs:x=>x.pr>0,overs:x=>x.m==='total'&&x.sd==='over',unders:x=>x.m==='total'&&x.sd==='under',ml:x=>x.m==='ml',spreads:x=>x.m==='spread',totals:x=>x.m==='total'};
+const GH_SP=['any','nfl','ncaaf','nba','ncaab','nhl','mlb'];
+const GH_KS=r=>r==='singles'?[1]:r==='two'?[2]:r==='three'?[3,4]:r==='world'?[2,4]:[1,2,4];
+function ghostBuild(V,d){const from=dayShift(d,-60),from31=dayShift(d,-30),days=[];for(let i=30;i>=0;i--)days.push(dayShift(d,-i));const DI=new Map(days.map((x,i)=>[x,i]));
+  const by={};(V||[]).forEach(c=>{if(!c||!CHARS[c.voice]||c.voice==='Blend')return;const day=String(c.date||'').slice(0,10);if(day<from||day>d)return;const pr=+c.price;if(!isFinite(pr)||pr===0)return;
+    const m=mkNorm(c.market);if(m!=='ml'&&m!=='spread'&&m!=='total')return;const p=pubConf(c);
+    (by[c.voice]=by[c.voice]||[]).push({day,sp:c.sp,g:c.game,m,sd:c.side,pr,p:p!=null?p:0.5,pick:c.pick,r:c.push?2:c.hit===true?1:c.hit===false?0:null});});
+  /* each character's record in every lane it plays: one pass over its calls */
+  const rec={};Object.entries(by).forEach(([v,L])=>L.forEach(x=>{if(x.r==null||x.r===2)return;for(const sp of ['any',x.sp])for(const rule in GH_RULE){if(!GH_RULE[rule](x))continue;const k=rule+'|'+sp,R=(rec[k]=rec[k]||{}),o=(R[v]=R[v]||{w:0,l:0,u:0});if(x.r===1){o.w++;o.u+=pubUnits(x.pr,true);}else{o.l++;o.u-=1;}}}));
+  const dec=pr=>pr>0?1+pr/100:1+100/Math.abs(pr),lanes={};
+  for(const rule in GH_RULE)for(const sp of GH_SP){if(rule==='world'&&sp!=='any')continue;const k=rule+'|'+sp,R=rec[k];if(!R)continue;   /* (a world tour crosses sports: it has no one-sport lane) */
+    const top=Object.entries(R).filter(([,o])=>o.w+o.l>=8).sort((a,b)=>b[1].u-a[1].u||b[1].w-a[1].w)[0];if(!top||!(top[1].u>0))continue;
+    const v=top[0],o=top[1],C=CHARS[v]||{},mine=(by[v]||[]).filter(x=>x.day>=from31&&(sp==='any'||x.sp===sp)&&GH_RULE[rule](x));
+    const perDay=new Map();mine.forEach(x=>{const a=perDay.get(x.day)||[];a.push(x);perDay.set(x.day,a);});
+    const K={},T={};
+    for(const kk of GH_KS(rule)){const row=days.map(()=>null);
+      for(const [day,L0] of perDay){const L=L0.slice().sort((a,b)=>b.p-a.p||a.pr-b.pr),pick=[],gs=new Set();
+        for(const x of L){if(pick.length>=kk)break;if(gs.has(x.g))continue;gs.add(x.g);pick.push(x);}
+        if(rule==='world'&&pick.length>=2&&new Set(pick.map(x=>x.sp)).size<2){const alt=L.find(x=>x.sp!==pick[0].sp&&!gs.has(x.g));if(alt)pick[pick.length-1]=alt;else continue;}
+        if(pick.length<kk)continue;
+        const res=pick.some(x=>x.r===0)?0:pick.some(x=>x.r==null)?9:pick.every(x=>x.r===2)?2:1,dd=pick.filter(x=>x.r!==2).reduce((a,x)=>a*dec(x.pr),1);
+        row[DI.get(day)]=[res,+dd.toFixed(3)];
+        if(day===d)T[kk]=pick.map(x=>[x.pick,x.pr,x.r,x.sp,x.g]);}
+      K[kk]=row;}
+    lanes[k]={v,n:C.label||v,c:C.color||'#999',w:o.w,l:o.l,u:+o.u.toFixed(2),k:K,...(Object.keys(T).length?{t:T}:{})};}
+  return{v:1,d,gen:Date.now(),days,lanes};}
+/* a fingerprint of what the ghosts are built from: a new graded call, a new day */
+function ghostSig(V,d){let n=0,g=0;const from=dayShift(d,-60);(V||[]).forEach(c=>{const day=String(c&&c.date||'').slice(0,10);if(day<from||day>d)return;n++;if(c.hit!=null||c.push)g++;});return d+'|'+n+'|'+g;}
 function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();const VB=beta?(roGet(VOICES_KEY,[],30e3)||[]):null;
   const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
     tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),calls:beta&&x.whyOn&&VB?pubVoicesOn({...x,d0:x.d0},VB):undefined,hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,tuned:x.tuned?true:undefined,

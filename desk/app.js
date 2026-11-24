@@ -7,6 +7,7 @@ import { library, get as chal, checkpoints, paceAt, orderFor, simulate, ROUTES, 
 const CFG = {
   feeds: ['../public/picks.json', 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/picks.json'],
   slates: ['https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json'],
+  ghosts: ['../public/ghost.json', 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/ghost.json'],
   social: { tg: 'https://t.me/TheDeskApp', fb: 'https://www.facebook.com/share/1FCDFdUvRp/' },
   home: 'https://ironsilkweekly.com/desk/',
   chat: 'https://thedesk-chat.ironsilkstrategies.workers.dev',
@@ -831,7 +832,7 @@ function whoOnHtml(b) {
 }
 function boardPicksHtml(b, F, heavy, all) {
   const P = (b.picks || []).filter(p => all || pickOkB(b, p, F, heavy)); if (!P.length) return '';
-  return `<div class="bpicks">${P.map(p => { const L2 = { sp: b.sp, game: b.game, pick: p.pick, price: p.price, p: p.p, start: b.start, hit: p.hit, push: p.push }, X = legState(L2), q = X.st === 'live' ? liveQ(L2) : null; return `<div class="bp bp-${X.st}">${X.st !== 'o' ? `<span class="mkk ${X.st}">${markOf(X.st)}</span>` : ''}${tierTag(p)}<span class="bp-pk">${esc(bigOf(b.sp, b.game, p.pick))}${p.price != null ? ' ' + esc(odds(p.price)) : ''}</span>${fcBadge(pickFc(b, p))}${q != null ? `<span class="bp-p lvq ${q >= (p.p || 0) ? 'up' : 'dn'}">${pct(q)}% live</span>` : X.st === 'w' ? '<span class="bp-p g w">Hit</span>' : X.st === 'l' ? '<span class="bp-p g l">Missed</span>' : p.p != null ? `<span class="bp-p">${pct(p.p)}%</span>` : ''}<button type="button" class="bp-tk" data-act="trackpick" data-sp="${esc(b.sp)}" data-game="${esc(b.game)}" data-pick="${esc(p.pick)}" data-price="${p.price != null ? esc(String(p.price)) : ''}" data-start="${esc(b.start || '')}" aria-label="Track ${esc(p.pick)}" title="Track it">＋</button>${all && (p.by || []).length ? `<small class="bp-by">by ${p.by.map(v => esc(castOf(v).name)).join(', ')}</small>` : ''}</div>`; }).join('')}</div>`;
+  return `<div class="bpicks">${P.map(p => { const L2 = { sp: b.sp, game: b.game, pick: p.pick, price: p.price, p: p.p, start: b.start, hit: p.hit, push: p.push }, X = legState(L2), q = X.st === 'live' ? liveQ(L2) : null; return `<div class="bp bp-${X.st} t-${p.unan ? 'unan' : TIER[p.tier] ? p.tier : 'none'}">${X.st !== 'o' ? `<span class="mkk ${X.st}">${markOf(X.st)}</span>` : ''}${tierTag(p)}<span class="bp-pk">${esc(bigOf(b.sp, b.game, p.pick))}${p.price != null ? ' ' + esc(odds(p.price)) : ''}</span>${fcBadge(pickFc(b, p))}${q != null ? `<span class="bp-p lvq ${q >= (p.p || 0) ? 'up' : 'dn'}">${pct(q)}% live</span>` : X.st === 'w' ? '<span class="bp-p g w">Hit</span>' : X.st === 'l' ? '<span class="bp-p g l">Missed</span>' : p.p != null ? `<span class="bp-p">${pct(p.p)}%</span>` : ''}<button type="button" class="bp-tk" data-act="trackpick" data-sp="${esc(b.sp)}" data-game="${esc(b.game)}" data-pick="${esc(p.pick)}" data-price="${p.price != null ? esc(String(p.price)) : ''}" data-start="${esc(b.start || '')}" aria-label="Track ${esc(p.pick)}" title="Track it">＋</button>${all && (p.by || []).length ? `<small class="bp-by">by ${p.by.map(v => esc(castOf(v).name)).join(', ')}</small>` : ''}</div>`; }).join('')}</div>`;
 }
 /* the characters' own calls on one game, through the filters: one line per pick, everyone on it beside it with how sure it is
    (👑 the #1 in that kind of bet, 🧊 the worst), and the Forecast for that kind of bet */
@@ -923,7 +924,7 @@ function lnText(L, g) { if (!L) return ''; let s = '';
   else if (fin(L.mlH) && fin(L.mlA)) s = `${esc(L.mlH < L.mlA ? g.h.ab : g.a.ab)} ${esc(odds(Math.min(L.mlH, L.mlA)))}`;
   else if (fin(L.mlH) || fin(L.mlA)) { const home = fin(L.mlH), p = home ? L.mlH : L.mlA; s = `${esc(home ? g.h.ab : g.a.ab)} ${esc(odds(p))}`; }
   return s + (L.tot != null ? `<small>O/U ${L.tot}</small>` : ''); }
-function gameHtml(g) {
+function gameHtml(g, i) {
   const L = liveOf({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}` }), open = S.openGame === g.k, on = openPickOn(g), b = g.b, F = S.bf, heavy = (boardOf() || {}).heavy || -500;
   const t = L && L.state === 'in' ? `<div class="g-t live">Live<br>${esc(L.detail || '')}</div>` : L && L.state === 'post' ? '<div class="g-t">Final</div>' : `<div class="g-t">${esc(clock(g.t)).replace(' ', '<br>')}</div>`;
   const side = (x, sc) => `<div class="tm"><span class="rk">${x.rk ? x.rk : ''}</span><span class="nm">${esc(x.nick || x.ab)}</span><span class="rc">${x.w + x.l ? `${x.w}-${x.l}` : ''}</span>${sc != null ? `<span class="sc">${sc}</span>` : ''}</div>`;
@@ -945,11 +946,13 @@ function gameHtml(g) {
     more = `<div class="g-more">${ddBtns(g)}${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call, how sure it is${g.b && g.b.sc ? ' and the final score it calls' : ''}. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${fcGameHtml(b)}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
       ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the members’ chat.</span><button type="button" class="btn foil" data-go="chat">Open the chat</button></div>` : ''}</div>`;
   }
-  return `<div class="game"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
+  return `<div class="game ${(i || 0) % 2 ? 'zb' : 'za'}${open ? ' g-open' : ''}${b && b.picks && b.picks.length ? ' g-has' : ''}"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
     <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}</div>` : ''}${more}</div>`;
 }
 /* the rows with no filter on show the strongest colored picks (unanimous, supreme, strong); any strength, bet type or Forecast filter shows what passes it */
-const rowF = F => (F.tier === 'all' && F.bt === 'all' && (F.fc || 'all') === 'all' ? { ...F, tier: 'top' } : F);
+/* v64 · Nov 23, Chris: "I also think the pick bars should be visible before a game expands". Every colored pick shows on its game's row
+   (the filters still narrow them); the row used to show only unanimous, supreme and strong until the game was opened. */
+const rowF = F => F;
 function viewSlate() {
   const el = $('#v-slate'), SL = S.slate;
   if (!SL) { el.innerHTML = `<h1 class="title">The sheet</h1>${S.slateErr ? '<div class="paper blank"><b>The sheet isn’t in yet</b><p>Lines and rankings refresh every hour. Check back in a bit.</p></div>' : '<div class="shimmer"></div>'}${footHtml()}`; return; }
@@ -1513,14 +1516,122 @@ function playerCard() { const M = AC.me; if (!M) return ''; const R = M.rank || 
     <div class="xc-st"><span><b>${dd$(W.bal || 0)}</b> in your wallet</span><span><b>${liveRuns().length}</b>/3 runs live</span><span><b>${dd$(W.prize || 0)}</b> in prizes</span></div>
     ${(M.xplog || []).length ? `<details class="xc-log"><summary>Recent XP</summary>${M.xplog.slice(0, 8).map(x => `<p><span>${esc(x.why)}</span><b>+${x.xp} XP${x.dd ? ` · +${dd$(x.dd)}` : ''}</b></p>`).join('')}</details>` : ''}</section>`; }
 /* the road map: six checkpoints on a track, the pace marker, and where the run stands */
-function roadmap(c, r, proj) { const cps = checkpoints(c), bal = r ? r.bal : c.start, day = r ? (Date.now() - r.ts) / 864e5 : 0, pace = paceAt(c, day), p = r ? runPct(r) : 0;
+function roadmap(c, r, proj, gh) { const cps = checkpoints(c), bal = r ? r.bal : c.start, day = r ? (Date.now() - r.ts) / 864e5 : 0, pace = paceAt(c, day), p = r ? runPct(r) : 0;
   const pacePct = Math.max(0, Math.min(1, Math.log(pace / c.start) / Math.log(c.goal / c.start)));
   /* v62 · where the run lands if its open tickets cash: a ghost on the track, and the stop it would reach */
-  const pp = r && proj > bal ? runPct({ ...r, bal: proj }) : 0, nx = r ? cps.find(x => bal < x.amt) : null, reach = r && proj > bal ? cps.filter(x => bal < x.amt && proj >= x.amt).pop() : null;
-  return `<div class="road"><div class="rd-track"><i class="rd-fill" style="width:${(p * 100).toFixed(1)}%"></i>${pp > p ? `<i class="rd-ghost" style="left:${(p * 100).toFixed(1)}%;width:${((pp - p) * 100).toFixed(1)}%"></i>` : ''}${r ? `<i class="rd-pace" style="left:${(pacePct * 100).toFixed(1)}%" title="pace"></i>` : ''}
-    ${cps.map((x, i) => { const at = (i + 1) / cps.length * 100, hit = bal >= x.amt; return `<span class="rd-cp${hit ? ' hit' : ''}${i === cps.length - 1 ? ' vault' : ''}" style="left:${at}%"><em>${i === cps.length - 1 ? '🏆' : hit ? '✓' : i + 1}</em></span>`; }).join('')}</div>
-    <div class="rd-names">${cps.map((x, i) => `<span class="${bal >= x.amt ? 'hit' : ''}"><b>${esc(x.name)}</b>${dd$(x.amt)}</span>`).join('')}</div>
-    ${r ? `<p class="rd-pacetxt ${bal >= pace ? 'up' : 'dn'}">${bal >= pace ? '▲ Ahead of pace' : '▼ Behind pace'}: the plan wants ${dd$(pace)} by now.${nx && r.status === 'live' ? ` <span class="rd-next">${dd$(nx.amt - bal)} to ${esc(nx.name)}${reach ? ` · a cash takes you past <b>${esc(reach.name)}</b>` : ''}</span>` : ''}</p>` : ''}</div>`; }
+  const pp = r && proj > bal ? runPct({ ...r, bal: proj }) : 0, nx = cps.find(x => bal < x.amt) || null, reach = r && proj > bal ? cps.filter(x => bal < x.amt && proj >= x.amt).pop() : null;
+  return `<div class="road"><div class="rd-track"><i class="rd-fill" style="width:${(p * 100).toFixed(1)}%"></i>${pp > p ? `<i class="rd-ghost" style="left:${(p * 100).toFixed(1)}%;width:${((pp - p) * 100).toFixed(1)}%"></i>` : ''}${r ? `<i class="rd-pace" style="left:${(pacePct * 100).toFixed(1)}%" title="pace"></i>` : ''}${r && gh != null ? `<i class="rd-gh" style="left:${(runPct({ ...r, bal: gh }) * 100).toFixed(1)}%" title="the ghost: ${esc(dd$(gh))}" aria-label="the ghost, ${esc(dd$(gh))}">👻</i>` : ''}
+    ${cps.map((x, i) => { const at = (i + 1) / cps.length * 100, hit = bal >= x.amt; return `<button type="button" class="rd-cp${hit ? ' hit' : ''}${i === cps.length - 1 ? ' vault' : ''}${nx === x ? ' nx' : ''}" style="left:${at}%" data-act="stepopen" data-cid="${esc(c.id)}" data-rid="${r ? esc(r.rid) : ''}" data-i="${i}" aria-label="Step ${i + 1}, ${esc(x.name)}, ${esc(dd$(x.amt))}: what it takes"><em>${i === cps.length - 1 ? '🏆' : hit ? '✓' : i + 1}</em></button>`; }).join('')}</div>
+    <div class="rd-names">${cps.map((x, i) => `<button type="button" class="${bal >= x.amt ? 'hit' : ''}${nx === x ? ' nx' : ''}" data-act="stepopen" data-cid="${esc(c.id)}" data-rid="${r ? esc(r.rid) : ''}" data-i="${i}"><b>${esc(x.name)}</b>${dd$(x.amt)}</button>`).join('')}</div>
+    <p class="rd-tap">Tap any step to see what it takes from here.</p>
+    ${r ? `<p class="rd-pacetxt ${bal >= pace ? 'up' : 'dn'}">${bal >= pace ? '▲ Ahead of pace' : '▼ Behind pace'}: the plan wants ${dd$(pace)} by now.${nx && r && r.status === 'live' ? ` <span class="rd-next">${dd$(nx.amt - bal)} to ${esc(nx.name)}${reach ? ` · a cash takes you past <b>${esc(reach.name)}</b>` : ''}</span>` : ''}</p>` : ''}</div>`; }
+/* ── v64 · Nov 23, 11:26 PM, Chris: "I should be able to click every step on the roadmap and see what's required to get to the next
+   step with a clear understanding on how I can move forward the best … also making sure that it recalibrates the next step when the
+   step before was a few numerals one way or the other in regards to the parlay odds". Every checkpoint opens a sheet: what it takes
+   from where the run stands right now (worked from the live balance, so a ticket that cashed a little longer or shorter than planned
+   moves every step after it), where the pace puts it, the straight cashes it takes on each route with the chance of each, the
+   route's own tickets one by one, the one-ticket shot, and what comes after it. ── */
+const SX = { cid: '', rid: '', i: -1 };
+const sxRng = seed => { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
+const sxHash = s0 => { let h = 2166136261; for (const ch of String(s0)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+const routeK = (c, route) => { const R = ROUTES[route] || ROUTES.stairs; return c.rule === 'singles' ? 1 : c.rule === 'two' ? 2 : c.rule === 'three' ? Math.max(3, R.k) : R.k; };
+const legDec = c => (RULES[c.rule] || {}).dec || 1.909, legFair = c => (RULES[c.rule] || {}).fair || 0.515;
+const amOf = d => (d >= 2 ? '+' + Math.round((d - 1) * 100) : '−' + Math.round(100 / Math.max(0.01, d - 1)));
+/* every ticket on the route cashes at the rule's usual price: the tickets from here to the step (one a day), what each stakes and where it leaves the run */
+function stepPath(c, route, bal, target, max = 40) { const dec = legDec(c), k = routeK(c, route), cps = checkpoints(c).map(x => x.amt), out = []; let b = bal, safe = 0, cp = cps.filter(x => x <= bal).length;
+  while (b + safe < target - 0.004 && out.length < max && b >= 1) { const st = Math.min(b, orderFor(route, b, c.start).stake); let back;
+    if (route === 'twolane') { back = st * 0.6 * dec * dec; b = b - st + back; }
+    else { back = st * Math.pow(dec, k); if (route === 'heist') { const prof = back - st; safe += prof * 0.25; b = b - st + back - prof * 0.25; } else b = b - st + back; }
+    if (route === 'elevator') while (cp < cps.length && b + safe >= cps[cp]) { safe += b / 2; b /= 2; cp++; }
+    out.push({ st: Math.round(st * 100) / 100, k: route === 'twolane' ? 2 : k, after: Math.round((b + safe) * 100) / 100 }); }
+  return { steps: out, ok: b + safe >= target - 0.004 }; }
+/* the chance of getting there in the days left, on the route (the same coin the finish odds use, stopping at this step) */
+const SXM = new Map();
+function stepSim(c, route, bal, target, days, runs = 400) { const key = [c.id, route, Math.round(bal * 100), target, days].join('|'); if (SXM.has(key)) return SXM.get(key); if (SXM.size > 400) SXM.clear();
+  const dec = legDec(c), p = legFair(c), k = routeK(c, route), cps = checkpoints(c).map(x => x.amt), cp0 = cps.filter(x => x <= bal).length, rnd = sxRng(sxHash(key)); let ok = 0;
+  for (let n = 0; n < runs; n++) { let b = bal, safe = 0, cp = cp0;
+    for (let d = 0; d < days && b + safe < target && b >= 1; d++) { const st = Math.min(b, orderFor(route, b, c.start).stake);
+      if (route === 'twolane') { const a = st * 0.6, m = st * 0.4; b -= st; if (rnd() < p && rnd() < p) b += a * dec * dec; let w = 1; for (let i = 0; i < 4; i++) if (rnd() >= p) w = 0; if (w) b += m * Math.pow(dec, 4); }
+      else { let w = 1; for (let i = 0; i < k; i++) if (rnd() >= p) { w = 0; break; } b -= st; if (w) { const ret = st * Math.pow(dec, k); if (route === 'heist') { const prof = ret - st; safe += prof * 0.25; b += ret - prof * 0.25; } else b += ret; } }
+      if (route === 'elevator') while (cp < cps.length && b + safe >= cps[cp]) { safe += b / 2; b /= 2; cp++; } }
+    if (b + safe >= target) ok++; }
+  const v = ok / runs; SXM.set(key, v); return v; }
+function stepSheet() { const c = chal(SX.cid); if (!c) return ''; const cps = checkpoints(c), i = Math.max(0, Math.min(cps.length - 1, SX.i)), cp = cps[i], nm = esc(cp.name);
+  const r = SX.rid ? ((AC.me && AC.me.runs) || []).find(x => x.rid === SX.rid) || null : null, live = !!(r && r.status === 'live' && r.ends > Date.now());
+  const bal = r ? +r.bal || 0 : c.start, route = r ? r.route : CX.route && CX.route[0] === c.id ? CX.route[1] : c.route, daysLeft = live ? Math.max(1, Math.ceil((r.ends - Date.now()) / 864e5)) : r ? 0 : c.days;
+  const day = r ? Math.max(0, (Date.now() - r.ts) / 864e5) : 0, pace = paceAt(c, day), hit = bal >= cp.amt;
+  let planDay = c.days; for (let d = 0; d <= c.days; d++) if (paceAt(c, d) >= cp.amt - 0.005) { planDay = d; break; }
+  const OPEN = r ? runBets(r).filter(b => b.status === 'open') : [], proj = bal + OPEN.reduce((a, b) => a + (ddTicketNow(b).q > 0 ? b.stake * b.dec : 0), 0);
+  const nav = (j, t) => `<button type="button" class="btn ghost sm" data-act="stepopen" data-cid="${esc(c.id)}" data-rid="${esc(SX.rid)}" data-i="${j}">${t}</button>`;
+  const head = `<div class="cs-hero sx-hero"><span class="cs-n">${esc(c.name)} · step ${i + 1} of ${cps.length}${i === cps.length - 1 ? ', the goal' : ''}</span><h2>${i === cps.length - 1 ? '🏆 ' : ''}${nm}</h2><p class="sx-amt"><b>${dd$(cp.amt)}</b>${hit ? '<span class="sx-hit">✓ Reached</span>' : ''}</p></div>`;
+  if (r && !live && !hit) return `<div class="sheet-bg" data-act="stepclose"></div><section class="csheet sxs" role="dialog" aria-label="${nm}" style="--tc:${c.color}"><button type="button" class="cs-x" data-act="stepclose" aria-label="Close">✕</button>${head}<div class="sx-box"><p>This run is over: it ended at ${dd$(bal)}, ${dd$(cp.amt - bal)} short of ${nm}.</p></div><div class="sx-nav">${i ? nav(i - 1, '← ' + esc(cps[i - 1].name)) : '<span></span>'}${i < cps.length - 1 ? nav(i + 1, esc(cps[i + 1].name) + ' →') : ''}</div></section>`;
+  const sims = hit ? [] : Object.keys(ROUTES).map(k => { const P = stepPath(c, k, bal, cp.amt); return { k, n: P.steps.length, ok: P.ok, p: stepSim(c, k, bal, cp.amt, daysLeft || 1) }; }).sort((a, b) => b.p - a.p || a.n - b.n);
+  const best = sims[0], mine = sims.find(x => x.k === route), path = hit ? null : stepPath(c, route, bal, cp.amt), dec = legDec(c), R = ROUTES[route] || ROUTES.stairs, RU = RULES[c.rule];
+  const stand = hit ? `<div class="sx-box ok"><p><b>Reached.</b> The run holds ${dd$(bal)}: past ${nm} by ${dd$(bal - cp.amt)}.${i < cps.length - 1 ? ` Next up is ${esc(cps[i + 1].name)} at ${dd$(cps[i + 1].amt)}.` : ''}</p></div>`
+    : `<div class="sx-box"><div class="sx-big"><span><small>${r ? 'The run now' : 'You start with'}</small><b>${dd$(bal)}</b></span><i aria-hidden="true">→</i><span><small>${nm}</small><b>${dd$(cp.amt)}</b></span><span class="sx-x"><small>It takes</small><b>×${(cp.amt / Math.max(0.01, bal)).toFixed(2)}</b></span></div>
+      <p>${dd$(cp.amt - bal)} to go.${r ? ` Worked out from the run’s ${dd$(bal)} as it stands, so every ticket that cashes at a longer or shorter price than planned resets this.` : ''}${OPEN.length && proj > bal ? ` If your open ticket${OPEN.length > 1 ? 's cash' : ' cashes'}, the run goes to ${dd$(proj)}${proj >= cp.amt ? `, past ${nm}.` : `: then ${dd$(cp.amt - proj)} to go.`}` : ''}</p></div>`;
+  const plan = r ? `<p class="sx-plan ${bal >= pace ? 'up' : 'dn'}">${bal >= pace ? '▲' : '▼'} The plan wants ${dd$(pace)} by now, so you’re ${bal >= pace ? 'ahead' : 'behind'} by ${dd$(Math.abs(bal - pace))}. On pace, ${nm} comes on day ${planDay} of ${c.days}${hit ? '' : `; you’ve got ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`}.</p>` : `<p class="sx-plan">On pace, ${nm} comes on day ${planDay} of ${c.days}.</p>`;
+  const rowsHtml = hit ? '' : `<h3 class="sx-h">The best way there</h3><p class="note">Each route from ${dd$(bal)}: how many straight cashes it takes, and the chance of getting there in the ${daysLeft || c.days} day${(daysLeft || c.days) === 1 ? '' : 's'}${r ? ' left' : ''} at a ticket a day.${live ? ' Tap one to switch the run to it.' : ''}</p>
+    <div class="sx-routes">${sims.map(x => { const Rk = ROUTES[x.k], tag = [x.k === route ? '<em>your route</em>' : '', x === best ? '<em class="g">best odds</em>' : ''].join('');
+      return `<button type="button" class="csr sx-r${x.k === route ? ' on' : ''}" data-act="${live ? 'steproute' : 'stepsetroute'}" data-route="${x.k}" aria-pressed="${x.k === route}"><span class="csr-i">${Rk.icon}</span><span class="csr-b"><b>${esc(Rk.name)} ${tag}</b><small>${x.ok ? `${x.n} straight cash${x.n === 1 ? '' : 'es'} at a ticket a day` : 'cashing alone won’t get there in time'}</small></span><span class="csr-p"><b>${runOddsTxt(x.p)}</b>${x.p > 0 && x.p < 0.5 ? `<small class="sx-1in">1 in ${p1in(x.p)}</small>` : ''}</span></button>`; }).join('')}</div>
+    ${best && mine && best.k !== route && best.p > mine.p * 1.25 + 0.01 ? `<p class="sx-tip">💡 ${esc(ROUTES[best.k].name)} gets there ${runOddsTxt(best.p)} of the time against ${runOddsTxt(mine.p)} on ${esc(R.name)}.</p>` : ''}`;
+  const pathHtml = hit || !path ? '' : `<h3 class="sx-h">${esc(R.icon)} ${esc(R.name)}, ticket by ticket</h3><p class="note">${esc(R.desc)} Every order is sized from the balance the last ticket left, at the rule’s usual price (${esc(amOf(dec))} a leg).</p>
+    <ol class="sx-path">${path.steps.slice(0, 6).map((x, j) => `<li><span class="sx-n">${j + 1}</span><span>${dd$(x.st)} on a ${x.k === 1 ? 'single' : x.k + '-leg ticket'} <small>(${esc(amOf(Math.pow(dec, x.k)))})</small> → <b>${dd$(x.after)}</b>${x.after >= cp.amt - 0.004 ? ` <em>✓ ${nm}</em>` : ''}</span></li>`).join('')}${path.steps.length > 6 ? `<li class="more"><span class="sx-n">…</span><span>${path.steps.length - 6} more cash${path.steps.length - 6 === 1 ? '' : 'es'} after that</span></li>` : ''}${!path.ok ? '<li class="more"><span class="sx-n">!</span><span>At these stakes the route runs out of days before it gets there. A faster route, or a bigger ticket, closes the gap.</span></li>' : ''}</ol>`;
+  let shot = '';
+  if (!hit && bal >= 1) { const need = cp.amt / bal; let k1 = Math.max(1, Math.ceil(Math.log(need) / Math.log(dec) - 1e-9)); if (c.rule === 'singles') k1 = 1; else if (c.rule === 'two') k1 = 2; else if (c.rule === 'three') k1 = Math.max(3, k1); else if (c.rule === 'world') k1 = Math.max(2, k1);
+    const d1 = c.rule === 'singles' ? need : Math.pow(dec, k1), p1 = c.rule === 'singles' ? Math.min(0.9, 0.95 / need) : Math.pow(legFair(c), k1), can = c.rule === 'singles' || d1 >= need - 1e-9;
+    shot = can ? `<div class="sx-shot"><b>Or one ticket.</b> Everything (${dd$(bal)}) on ${k1 === 1 ? `a single at ${esc(amOf(d1))}` : `a ${k1}-leg parlay, about ${esc(amOf(d1))}`} gets to ${nm} in one go${d1 > need * 1.05 ? `, landing at ${dd$(bal * d1)}` : ''}. It hits about ${runOddsTxt(p1)} of the time${p1 < 0.5 ? ` (1 in ${p1in(p1)})` : ''}, and a miss ends the run.</div>`
+      : `<div class="sx-shot">No single ticket gets there under this rule (${esc(RU.desc)}). It takes the steps above.</div>`; }
+  const after = i < cps.length - 1 ? `<p class="sx-next">Then <b>${esc(cps[i + 1].name)}</b> at ${dd$(cps[i + 1].amt)}: another ×${(cps[i + 1].amt / cp.amt).toFixed(2)}.</p>` : `<p class="sx-next">This is the goal: hit ${dd$(c.goal)} and the run pays <b>+${c.xp} XP and a ${dd$(c.prize)} prize</b>.</p>`;
+  const acts = live && !hit ? `<div class="cs-go sx-go"><button type="button" class="btn foil" data-act="qpopen" data-rid="${esc(r.rid)}">⚡ Quick Pick</button><button type="button" class="btn line" data-act="qpown" data-rid="${esc(r.rid)}">✍️ Pick my own</button></div>` : '';
+  return `<div class="sheet-bg" data-act="stepclose"></div><section class="csheet sxs" role="dialog" aria-label="${nm}: what it takes" style="--tc:${c.color}">
+    <button type="button" class="cs-x" data-act="stepclose" aria-label="Close">✕</button>${head}
+    <div class="sx-dots" aria-hidden="true">${cps.map((x, j) => `<i class="${bal >= x.amt ? 'hit' : ''}${j === i ? ' on' : ''}"></i>`).join('')}</div>
+    ${stand}${plan}${rowsHtml}${pathHtml}${shot}${after}${acts}
+    <div class="sx-nav">${i ? nav(i - 1, '← ' + esc(cps[i - 1].name)) : '<span></span>'}${i < cps.length - 1 ? nav(i + 1, esc(cps[i + 1].name) + ' →') : ''}</div>
+    <p class="note">Desk Dollars, play money. The chances are a quick simulation at the rule’s usual prices; real tickets cash at their own prices, and the sheet works it out again from the balance they leave.</p></section>`; }
+function stepPaint() { const n = $('#cxSheet'); if (!n) return; const c0 = n.querySelector('.csheet'), y = c0 ? c0.scrollTop : 0, same = n.dataset.sx === SX.cid + '|' + SX.i + '|' + SX.rid;
+  n.innerHTML = SX.i >= 0 ? stepSheet() : CX.open ? chalSheet(CX.open) : ''; n.dataset.sx = SX.cid + '|' + SX.i + '|' + SX.rid; const c2 = n.querySelector('.csheet'); if (c2 && same) c2.scrollTop = y;
+  document.body.classList.toggle('sheet-on', !!n.innerHTML.trim()); }
+/* ── v64 · Nov 23, 11:26 PM, Chris: "if you can activate the ghost runs where you can run the challenge side by side with the top character
+   in the particular lane the challenge focuses on". 👻 Race a ghost: the character with the most units in the run's lane (its rule and
+   sport) runs the same challenge from the same start on the same route, a ticket a day from its own most confident calls in the lane
+   (the desk publishes those tickets as ghost.json). Side by side on the run card, and a ghost on the road map. ── */
+const GH = { data: null, at: 0, busy: false, err: '' };
+const ghOn = rid => { try { return localStorage.getItem('tdp.ghost.' + rid) === '1'; } catch (e) { return false; } };
+const ghSet = (rid, v) => { try { if (v) localStorage.setItem('tdp.ghost.' + rid, '1'); else localStorage.removeItem('tdp.ghost.' + rid); } catch (e) { } };
+async function ghLoad(force) { if (GH.busy || (!force && GH.data && Date.now() - GH.at < 10 * 60e3)) return GH.data; GH.busy = true;
+  try { const got = (await Promise.all(CFG.ghosts.map(u => getJSON(u)))).filter(j => j && j.lanes && Array.isArray(j.days)); GH.data = got.sort((a, b) => (b.gen || 0) - (a.gen || 0))[0] || GH.data; GH.at = Date.now(); GH.err = GH.data ? '' : 'The ghosts aren’t published yet. The desk posts them with its picks.'; }
+  catch (e) { GH.err = 'Couldn’t load the ghosts.'; } finally { GH.busy = false; } return GH.data; }
+const ghLane = c => (GH.data && GH.data.lanes && GH.data.lanes[`${c.rule}|${c.sport}`]) || null;
+/* the ghost's run: its tickets staked on the run's route from the run's start, day by day from the day the run began */
+function ghostPath(c, r, L) { const G = GH.data, days = (G && G.days) || [], route = r.route, ks = Object.keys(L.k || {}).map(Number).filter(Boolean); if (!ks.length) return null;
+  const near = k => (L.k[k] ? k : ks.reduce((a, b) => (Math.abs(b - k) < Math.abs(a - k) ? b : a), ks[0])), kA = near(route === 'twolane' ? 2 : routeK(c, route)), kB = route === 'twolane' ? near(4) : null;
+  const d0 = deskDay(r.ts), dEnd = r.status === 'live' ? deskDay() : deskDay(r.done || r.ends || Date.now()), today = deskDay(), cps = checkpoints(c).map(x => x.amt), out = { b: c.start, safe: 0, w: 0, l: 0, p: 0, open: 0, done: 0, bust: false, strip: [], kA, kB };
+  let cp = 0;
+  days.forEach((d, i) => { if (d < d0 || d > dEnd || out.done || out.bust) return; const tA = (L.k[kA] || [])[i], tB = kB ? (L.k[kB] || [])[i] : null; if (!tA && !tB) { out.strip.push({ d, r: '' }); return; }
+    const st = Math.min(out.b, orderFor(route, out.b, c.start).stake); if (st < 0.01) return; let res = '';
+    const one = (t, stake) => { if (!t) return 0; const [x, dec] = t; if (x === 9) { if (d === today) { out.open += stake * dec; res = res || 'o'; return -stake; } return 0; } if (x === 0) { out.l++; res = res === 'w' ? 'w' : 'l'; return -stake; } if (x === 2) { out.p++; res = res || 'p'; return 0; } out.w++; res = 'w'; return stake * (dec - 1); };
+    let delta = route === 'twolane' ? one(tA, st * 0.6) + one(tB, st * 0.4) : one(tA, st);
+    if (route === 'heist' && delta > 0) { out.safe += delta * 0.25; delta *= 0.75; }
+    out.b = Math.max(0, out.b + delta);
+    if (route === 'elevator') while (cp < cps.length && out.b + out.safe >= cps[cp]) { out.safe += out.b / 2; out.b /= 2; cp++; }
+    out.strip.push({ d, r: res });
+    if (out.b + out.safe >= c.goal) out.done = Math.round((Date.parse(d) - Date.parse(d0)) / 864e5) + 1; else if (out.b + out.safe < 1 && !out.open) out.bust = true; });
+  out.bal = Math.round((out.b + out.safe) * 100) / 100; out.proj = Math.round((out.b + out.safe + out.open) * 100) / 100; return out; }
+function ghostHtml(c, r) { if (!ghOn(r.rid)) return r.status === 'live' ? `<button type="button" class="gh-btn" data-act="ghoston" data-rid="${esc(r.rid)}"><span aria-hidden="true">👻</span> Race a ghost <small>the best character in this lane runs it beside you</small></button>` : '';
+  if (!GH.data) { if (!GH.busy) ghLoad().then(() => runsRepaint(), () => runsRepaint()); return `<div class="gh-box"><p class="gh-wait">${GH.err ? esc(GH.err) : '👻 Calling up the ghost…'}</p><button type="button" class="gh-x" data-act="ghostoff" data-rid="${esc(r.rid)}">Hide</button></div>`; }
+  const L = ghLane(c); if (!L) return `<div class="gh-box"><p class="gh-wait">👻 No character has 8+ graded picks in this lane yet (${esc(RULES[c.rule].lab)}${c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) : ''}). The ghost shows up once one does.</p><button type="button" class="gh-x" data-act="ghostoff" data-rid="${esc(r.rid)}">Hide</button></div>`;
+  const P = ghostPath(c, r, L); if (!P) return '';
+  const you = +r.bal || 0, diff = Math.round((you - P.bal) * 100) / 100, col = okColor(L.c), tk = L.t && (L.t[P.kA] || (P.kB && L.t[P.kB]));
+  const lead = Math.abs(diff) < 0.005 ? 'Dead even' : diff > 0 ? `You’re ahead by ${dd$(diff)}` : `The ghost leads by ${dd$(-diff)}`;
+  const tkHtml = tk && r.status === 'live' ? `<div class="gh-tk"><small>Its ticket today</small>${tk.map(([pk, pr, x]) => `<span class="${x === 1 ? 'w' : x === 0 ? 'l' : x === 2 ? 'p' : ''}">${x === 1 ? '✓ ' : x === 0 ? '✗ ' : ''}${esc(pk)} ${esc(odds(pr))}</span>`).join('')}</div>` : '';
+  return `<div class="gh-box" style="--gc:${col}"><div class="gh-h"><b>👻 Ghost run</b><small>${esc(L.n)}: the best in ${esc(RULES[c.rule].lab.toLowerCase())}${c.sport !== 'any' ? ' · ' + esc(SPORTS[c.sport]) : ''}, ${L.w}–${L.l}, ${L.u >= 0 ? '+' : '−'}${Math.abs(L.u).toFixed(1)}u</small></div>
+    <div class="gh-vs"><div class="gh-me"><small>You</small><b>${dd$(you)}</b><em>${r.w || 0}–${r.l || 0}${r.p ? '–' + r.p : ''}</em></div><div class="gh-it"><small>${esc(L.n.replace(/^The /, ''))}</small><b>${dd$(P.bal)}</b><em>${P.w}–${P.l}${P.p ? '–' + P.p : ''}${P.open ? ` · in play → ${dd$(P.proj)}` : ''}</em></div></div>
+    <p class="gh-lead ${diff > 0 ? 'up' : diff < 0 ? 'dn' : ''}">${P.done ? `👻 The ghost finished on day ${P.done}. ` : P.bust ? '👻 The ghost busted. ' : ''}${lead}.</p>
+    ${P.strip.length ? `<div class="gh-strip" aria-label="The ghost's days">${P.strip.map(x => `<i class="${x.r}" title="${esc(shortDay(x.d))}">${x.r === 'w' ? '✓' : x.r === 'l' ? '✗' : x.r === 'p' ? '=' : x.r === 'o' ? '●' : '·'}</i>`).join('')}</div>` : ''}
+    ${tkHtml}<button type="button" class="gh-x" data-act="ghostoff" data-rid="${esc(r.rid)}">Hide the ghost</button></div>`; }
+const ghostBal = (c, r) => { if (!ghOn(r.rid) || !GH.data) return null; const L = ghLane(c); if (!L) return null; const P = ghostPath(c, r, L); return P ? P.bal : null; };
 /* ── v62 · Nov 23, Chris: "I don't know if it's registering a ticket to attach to the challenge … in our previous challenge versions it
    would take the best picks available and build an auto parlay … give the option to pick the best in said sport or the most confidence
    amongst the characters or who's hot at the moment … more than anything I want to be able to follow my challenges the same way I'd
@@ -1559,7 +1670,8 @@ function runCard(r) { const c = chal(r.cid); if (!c) return ''; const live = r.s
     <div class="rc-n"><b>${dd$(r.bal)}</b><span>of ${dd$(r.goal)}</span><em>${r.w || 0}-${r.l || 0}${r.p ? '-' + r.p : ''}${OPEN.length ? ` · ${OPEN.length} open` : ''}</em></div>
     ${r.buyIn ? `<p class="rc-buy">${r.cashed != null ? `↩︎ <b>${dd$(r.cashed + (r.late || 0))}</b> went back to your wallet${r.late ? ` (${dd$(r.late)} from tickets that cashed after it ended)` : ''} · bought in for ${dd$(r.buyIn)}` : live ? `💵 Bought in for ${dd$(r.buyIn)} from your wallet. Whatever the run holds when it ends goes back.` : ''}</p>` : ''}
     ${OPEN.length ? `<div class="rc-live"><span>${anyLive ? '<i class="rc-dot"></i>' : ''}In play <b>${dd$(inPlay)}</b> · ${OPEN.length} ticket${OPEN.length > 1 ? 's' : ''}</span>${proj > r.bal ? `<span>If it cashes → <b>${dd$(proj)}</b></span>` : ''}</div>` : ''}
-    ${roadmap(c, r, OPEN.length ? proj : null)}
+    ${roadmap(c, r, OPEN.length ? proj : null, ghostBal(c, r))}
+    ${ghostHtml(c, r)}
     ${live ? `<div class="rc-order"><div><small>Today’s order · ${esc(R.icon)} ${esc(R.name)}</small><b>${dd$(O.stake)} on a ${legsK === 1 ? 'single' : legsK + '-leg ticket'}</b><span>${esc(RU.desc)}${c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) + ' only' : ''}</span></div>
       <div class="rc-odds"><b>${runOddsTxt(odds2.p)}</b><small>finish odds</small><em>${odds2.p > 0 ? '1 in ' + p1in(odds2.p) : '1 in 500+'}</em></div></div>
       <div class="rc-acts"><button type="button" class="btn foil sm" data-act="qpopen" data-rid="${esc(r.rid)}">⚡ Quick Pick</button><button type="button" class="btn line sm" data-act="runuse" data-rid="${esc(r.rid)}">Build my own</button><label class="rc-route">Route <select data-change="runroute" data-rid="${esc(r.rid)}">${Object.entries(ROUTES).map(([k, v]) => `<option value="${k}"${k === r.route ? ' selected' : ''}>${v.icon} ${esc(v.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost sm" data-act="runquit" data-rid="${esc(r.rid)}">Quit</button></div>`
@@ -1567,7 +1679,19 @@ function runCard(r) { const c = chal(r.cid); if (!c) return ''; const live = r.s
     ${OPEN.length || done.length ? `<div class="rc-tix"><h4>${OPEN.length ? `${anyLive ? '<i class="rc-dot"></i>' : ''}On the board · ${OPEN.length} open` : 'Latest tickets'}${S.liveAt && anyLive ? `<small>scores ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</small>` : ''}</h4>${[...OPEN, ...done].map(b => rtkHtml(b, r)).join('')}</div>` : live ? `<p class="rc-empty">No tickets from this run yet. ⚡ Quick Pick builds today’s order from the desk’s picks, or build your own on the Slate. Every ticket from the run shows up here, live.</p>` : ''}</article>`; }
 /* ── ⚡ Quick Pick: today's order, filled from the desk. Three ways to pick: what the characters agree on, who's hot right now, or the
    best of the board in one sport. Every leg fits the run's rule and sport, one per game, priced off the Slate like any D$ ticket. ── */
-const QP = { rid: '', src: 'agree', sp: '', who: '', off: 0, busy: false };
+const QP = { rid: '', src: 'agree', sp: '', who: '', off: 0, busy: false, own: [], ownRid: '', ownAll: false };
+/* ── v64 · Nov 23, 11:26 PM, Chris: "even though you can quick pick you need to be able to manually pick your own ticket". ✍️ Pick my own:
+   every line on the Slate that fits the run (its rule and sport, games that haven't started), the desk's own picks marked, tap to
+   build the ticket, placed from the run like any other. ── */
+const QPO_MK = [['ml', 'away'], ['ml', 'home'], ['spread', 'away'], ['spread', 'home'], ['total', 'over'], ['total', 'under']];
+function qpOwnGames(c) { const now = Date.now(), out = [], seen = new Set(); for (const d of (S.slate && S.slate.days) || []) for (const g of d.games || []) { if (g.lite || !g.ln || seen.has(g.k) || !(g.t > now + 5 * 60e3) || g.t > now + 40 * 36e5) continue; if (c.sport !== 'any' && g.sp !== c.sport) continue;
+    const lines = QPO_MK.map(([mk, side]) => { const L = ddLegOf(g, mk, side); if (!L) return null; const l = { k: g.k, mk, side, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L }; return qpRuleOk(c, l) ? l : null; }).filter(Boolean);
+    if (lines.length) { seen.add(g.k); out.push({ g, lines }); } }
+  return out.sort((x, y) => x.g.t - y.g.t || ORDER.indexOf(x.g.sp) - ORDER.indexOf(y.g.sp)); }
+/* the ticket as built, priced fresh off the Slate (a line that moved shows its new price; a game that started drops off) */
+const qpOwnLegs = () => QP.own.map(o => { const g = slateGameOf(o.k); if (!g || !(g.t > Date.now() + 60e3)) return null; const L = ddLegOf(g, o.mk, o.side); return L ? { k: g.k, mk: o.mk, side: o.side, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L, why: '' } : null; }).filter(Boolean);
+function qpOwnBad(c, legs) { const RU = RULES[c.rule]; if (!legs.length) return 'Tap a line to start the ticket.'; if (c.sport !== 'any' && legs.some(l => l.sp !== c.sport)) return `${c.name} is ${SPORTS[c.sport]} only.`;
+  if (RU && !RU.ok(legs)) return `${RU.lab}: ${RU.desc}.`; return ''; }
 const QP_TIER = { supreme: 3, strong: 2, value: 1 };
 function hotChars() { const C = (S.feed && S.feed.characters) || [];
   for (const days of [7, 14]) { const cut = deskDay(Date.now() - days * 864e5);
@@ -1602,25 +1726,37 @@ function qpState() { const r = liveRuns().find(x => x.rid === QP.rid), c = r && 
   const hot = hotChars().filter(h => qpCands(c, 'hot', '', h.v).length), who = hot.find(h => h.v === QP.who) || hot[0];
   const sps = [...new Set(((boardOf() || {}).games || []).map(b => { const g = qpSlateGame(b); return g && g.t > Date.now() + 5 * 60e3 ? b.sp : null; }).filter(Boolean))].filter(x => c.sport === 'any' || x === c.sport);
   const sp = c.sport !== 'any' ? c.sport : sps.includes(QP.sp) ? QP.sp : sps[0] || '';
+  if (QP.src === 'own') { if (QP.ownRid !== r.rid) { QP.own = []; QP.ownRid = r.rid; } const legs = qpOwnLegs(); return { r, c, O, k, hot, who, sps, sp, C: [], legs, own: true, bad: qpOwnBad(c, legs) }; }
   const C = qpCands(c, QP.src, sp, who ? who.v : ''), legs = qpTicket(c, k, C, QP.off);
-  return { r, c, O, k, hot, who, sps, sp, C, legs }; }
+  return { r, c, O, k, hot, who, sps, sp, C, legs, own: false, bad: '' }; }
+function qpOwnHtml(c, legs) { const G = qpOwnGames(c), B = boardOf(), BM = new Map(); for (const b of (B && B.games) || []) { const g = qpSlateGame(b); if (g) BM.set(g.k, b); }
+  if (!S.slate) return '<div class="qp-empty">Loading the lines…</div>'; if (!G.length) return `<div class="qp-empty">No line on the Slate fits this run right now (${esc(RULES[c.rule].lab)}: ${esc(RULES[c.rule].desc)}${c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) + ' only' : ''}, games that haven’t started).</div>`;
+  const on = l => legs.some(x => x.k === l.k && x.mk === l.mk && x.side === l.side), shown = QP.ownAll ? G : G.slice(0, 14);
+  const desk = (g, l) => { const b = BM.get(g.k); if (!b) return ''; const pk = (b.picks || []).find(p => { if (p.m !== l.mk) return false; const q = qpLegOf(g, p.m, p.pick); return q && q.side === l.side; }); const n = ((b.calls || {})[l.mk] || []).filter(x => { const q = qpLegOf(g, l.mk, x.pick); return q && q.side === l.side; }).length;
+    return `${pk ? `<i class="qpo-dk t-${pk.unan ? 'unan' : TIER[pk.tier] ? pk.tier : 'none'}" title="The desk’s pick${TIER[pk.tier] ? ': ' + TIER[pk.tier][0] : ''}"></i>` : ''}${n ? `<small class="qpo-n">${n} on it</small>` : ''}`; };
+  return `<div class="qpo">${shown.map(({ g, lines }) => `<div class="qpo-g"><div class="qpo-h"><b>${esc(matchup({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}` }) || `${g.a.ab} at ${g.h.ab}`)}</b><small>${esc([LEAGUE[g.sp], whenLabel(new Date(g.t).toISOString())].filter(Boolean).join(' · '))}</small></div>
+      <div class="qpo-ls">${lines.map(l => `<button type="button" class="qpo-l${on(l) ? ' on' : ''}" data-act="qpownpick" data-k="${esc(g.k)}" data-mk="${l.mk}" data-side="${l.side}" aria-pressed="${on(l)}"><span>${esc(readPick({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}`, pick: l.pick }).big || l.pick)}</span><b>${esc(odds(l.price))}</b>${desk(g, l)}</button>`).join('')}</div></div>`).join('')}
+    ${G.length > shown.length ? `<button type="button" class="more-btn" data-act="qpownall">Show ${G.length - shown.length} more game${G.length - shown.length === 1 ? '' : 's'}</button>` : ''}</div>
+    <p class="qpo-key"><i class="qpo-dk t-supreme"></i> the desk’s colored pick · “3 on it” = characters on that side</p>`; }
 function qpSheet() { const Q = qpState(); if (!Q) return ''; const { r, c, O, k, hot, who, sps, sp, C, legs } = Q, RU = RULES[c.rule];
-  const dec = legs.length ? ddTicketDec(legs, 'parlay') : 0, st = Math.min(r.bal, O.stake), why = { agree: 'The picks most of the room is on: unanimous calls first, then the widest agreement.', hot: who ? `${who.name} is ${who.w}–${who.l} over the last ${who.days} days (${who.u >= 0 ? '+' : '−'}${Math.abs(who.u).toFixed(1)}u). These are its own calls, official ones first.` : 'Nobody is running hot with picks on the board right now.', sport: 'The desk’s best colored picks in one sport: unanimous and supreme first.' }[QP.src];
+  const dec = legs.length ? ddTicketDec(legs, 'parlay') : 0, st = Math.min(r.bal, O.stake), why = { own: `Every line on the Slate that fits ${c.name}: ${RU.desc}${c.sport !== 'any' ? ', ' + SPORTS[c.sport] + ' only' : ''}, games that haven’t started. Tap to add, tap again to take it off: one side a game, the moneyline or the spread plus the total. Today’s order says ${k === 1 ? 'a single' : k + ' legs'}; it’s your call.`, agree: 'The picks most of the room is on: unanimous calls first, then the widest agreement.', hot: who ? `${who.name} is ${who.w}–${who.l} over the last ${who.days} days (${who.u >= 0 ? '+' : '−'}${Math.abs(who.u).toFixed(1)}u). These are its own calls, official ones first.` : 'Nobody is running hot with picks on the board right now.', sport: 'The desk’s best colored picks in one sport: unanimous and supreme first.' }[QP.src];
   const src = (v, ic, t, sub) => `<button type="button" role="tab" aria-selected="${QP.src === v}" class="qp-s${QP.src === v ? ' on' : ''}" data-act="qpsrc" data-v="${v}"><i>${ic}</i><b>${t}</b><small>${sub}</small></button>`;
   const empty = !S.slate ? 'Loading the lines…' : !boardOf() ? 'The board isn’t out yet. Quick Pick works off the characters’ calls once the desk publishes them.' : `${QP.src === 'hot' && !who ? 'Nobody hot has a pick on the board right now.' : `Only ${C.length} game${C.length === 1 ? '' : 's'} on the board fit${C.length === 1 ? 's' : ''} this run right now`} (${esc(RU.lab)}: ${esc(RU.desc)}${c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) + ' only' : ''}, games that haven’t started). Try another source, or build your own on the Slate.`;
   return `<div class="sheet-bg" data-act="qpclose"></div><section class="csheet qps" role="dialog" aria-label="Quick Pick for ${esc(c.name)}" style="--tc:${c.color}">
     <button type="button" class="cs-x" data-act="qpclose" aria-label="Close">✕</button>
     <div class="cs-hero qp-hero"><span class="cs-n">⚡ Quick Pick</span><h2>${esc(c.name)}</h2><p>Today’s order: <b>${dd$(st)} on a ${k === 1 ? 'single' : k + '-leg ticket'}</b> · ${esc(RU.icon)} ${esc(RU.desc)}${c.sport !== 'any' ? ' · ' + esc(SPORTS[c.sport]) + ' only' : ''}</p>
       <div class="qp-bank"><span>Run <b>${dd$(r.bal)}</b></span><span>Goal <b>${dd$(r.goal)}</b></span><span>${cxLeft(r.ends - Date.now())} left</span></div></div>
-    <div class="qp-src" role="tablist" aria-label="Where the picks come from">${src('agree', '🤝', 'The room agrees', 'Most characters, one side')}${src('hot', '🔥', 'Who’s hot', who ? `${esc(who.name)} · ${who.w}–${who.l}` : 'Best recent run')}${src('sport', '🏟', 'Best in a sport', c.sport !== 'any' ? esc(SPORTS[c.sport]) : 'Pick the sport')}</div>
+    <div class="qp-src" role="tablist" aria-label="Where the picks come from">${src('agree', '🤝', 'The room agrees', 'Most characters, one side')}${src('hot', '🔥', 'Who’s hot', who ? `${esc(who.name)} · ${who.w}–${who.l}` : 'Best recent run')}${src('sport', '🏟', 'Best in a sport', c.sport !== 'any' ? esc(SPORTS[c.sport]) : 'Pick the sport')}${src('own', '✍️', 'Pick my own', 'Any line that fits')}</div>
     ${QP.src === 'hot' && hot.length > 1 ? `<div class="qp-chips">${hot.slice(0, 4).map(h => `<button type="button" class="${who && h.v === who.v ? 'on' : ''}" data-act="qpwho" data-v="${esc(h.v)}" style="--c:${okColor(h.color)}">${esc(h.name)} <small>${h.w}–${h.l}, ${h.u >= 0 ? '+' : '−'}${Math.abs(h.u).toFixed(1)}u</small></button>`).join('')}</div>` : ''}
     ${QP.src === 'sport' && c.sport === 'any' && sps.length ? `<div class="qp-chips">${sps.map(x => `<button type="button" class="${x === sp ? 'on' : ''}" data-act="qpsp" data-v="${x}">${esc(LEAGUE[x] || x)}</button>`).join('')}</div>` : ''}
     <p class="qp-why">${esc(why)}</p>
     ${legs.length ? `<div class="qp-tk"><div class="qp-tkh"><span>${k === 1 ? 'Single' : k + '-leg parlay'}</span><b>${esc(decAm(dec))}</b></div>
-      <ol class="qp-legs">${legs.map((l, i) => `<li><span class="qp-n">${i + 1}</span><span class="qp-b"><b>${esc(readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick)} <small>${esc(odds(l.price))}</small></b><small>${esc([LEAGUE[l.sp], matchup({ sp: l.sp, game: l.game }), whenLabel(new Date(l.t).toISOString())].filter(Boolean).join(' · '))}</small><em>${esc(l.why)}</em></span></li>`).join('')}</ol>
+      <ol class="qp-legs">${legs.map((l, i) => `<li><span class="qp-n">${i + 1}</span><span class="qp-b"><b>${esc(readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick)} <small>${esc(odds(l.price))}</small></b><small>${esc([LEAGUE[l.sp], matchup({ sp: l.sp, game: l.game }), whenLabel(new Date(l.t).toISOString())].filter(Boolean).join(' · '))}</small>${l.why ? `<em>${esc(l.why)}</em>` : ''}</span>${Q.own ? `<button type="button" class="qp-x" data-act="qpownx" data-i="${i}" aria-label="Take ${esc(l.pick)} off">✕</button>` : ''}</li>`).join('')}</ol>
+      ${Q.own && Q.bad ? `<p class="qp-bad">${esc(Q.bad)}</p>` : ''}
       <div class="qp-sum"><label>Stake <input id="qpStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"></label><span>Pays <b id="qpPays">${dd$(st * dec)}</b></span><span>Run after a cash <b id="qpAfter">${dd$(r.bal - st + st * dec)}</b></span></div></div>
-      <div class="qp-go"><button type="button" class="btn foil" data-act="qpplace"${QP.busy ? ' disabled' : ''}>${QP.busy ? 'Placing…' : 'Place it from this run'}</button>${C.length > k ? '<button type="button" class="btn line sm" data-act="qpshuf">🔀 Shuffle</button>' : ''}<button type="button" class="btn ghost sm" data-act="qpslip">Edit on the Slate</button></div>`
-      : `<div class="qp-empty">${empty}</div>`}
+      <div class="qp-go"><button type="button" class="btn foil" data-act="qpplace"${QP.busy || Q.bad ? ' disabled' : ''}>${QP.busy ? 'Placing…' : 'Place it from this run'}</button>${!Q.own && C.length > k ? '<button type="button" class="btn line sm" data-act="qpshuf">🔀 Shuffle</button>' : ''}${Q.own ? '<button type="button" class="btn ghost sm" data-act="qpownclear">Clear</button>' : ''}<button type="button" class="btn ghost sm" data-act="qpslip">Edit on the Slate</button></div>`
+      : Q.own ? `<div class="qp-empty sm">${esc(Q.bad)}</div>` : `<div class="qp-empty">${empty}</div>`}
+    ${Q.own ? qpOwnHtml(c, legs) : ''}
     <p class="note">Desk Dollars, play money. Lines are the Slate’s; the server prices the ticket again the moment you place it. The ticket comes off this run’s bankroll and shows on the run card, live.</p></section>`; }
 function qpPaint() { const n = $('#cxSheet'); if (!n) return; const y = (n.querySelector('.csheet') || {}).scrollTop || 0; n.innerHTML = QP.rid ? qpSheet() : ''; const c2 = n.querySelector('.csheet'); if (c2) c2.scrollTop = y; document.body.classList.toggle('sheet-on', !!QP.rid); }
 function chalFiltered() { const F = CX.f, q = (F.q || '').toLowerCase().trim(), by = (CX.board && CX.board.by) || {};
@@ -1674,7 +1810,7 @@ function viewChallenges() {
     ${B && B.recent.length ? `<h2 class="h2">Just finished</h2><div class="paper lead-l fin">${B.recent.slice(0, 10).map(x => `<div class="ll"><span class="n">${x.status === 'won' ? '🏆' : '✗'}</span><span class="w"><b>${esc(x.name)}</b><small>${esc(x.cname || CHN(x.cid))}</small></span><span class="v v-${x.status}">${x.status === 'won' ? `+${dd$(x.prize || 0)} · ${cxTook(x.took)}` : x.status === 'busted' ? 'busted' : 'time ran out'}</span></div>`).join('')}</div>` : ''}
     ${B && B.xp.length ? `<h2 class="h2">The XP board</h2><div class="psheet lb xpb"><div class="ps-h"><span>#</span><span>Player</span><span>XP</span><span>Done</span></div>${B.xp.map((u, i) => `<div class="ps-r${P && P.name === u.name ? ' on' : ''}"><span>${i + 1}</span><span><b>${esc(u.name)}</b><small>${esc(u.rank)}</small></span><span class="ps-s">${u.xp.toLocaleString('en-US')}</span><span>${u.won}</span></div>`).join('')}</div>` : ''}
     ${done.length ? `<h2 class="h2">Your past runs</h2><div class="rgrid">${done.map(runCard).join('')}</div>` : ''}
-    <p class="note">Desk Dollars are play money. Prizes are paid in D$ to your wallet, never in cash. A run’s buy-in comes from your wallet and its balance goes back when the run ends. Three runs at a time.</p>${footHtml()}<div id="cxSheet">${CX.open ? chalSheet(CX.open) : ''}</div>`;
+    <p class="note">Desk Dollars are play money. Prizes are paid in D$ to your wallet, never in cash. A run’s buy-in comes from your wallet and its balance goes back when the run ends. Three runs at a time.</p>${footHtml()}<div id="cxSheet">${QP.rid ? qpSheet() : SX.i >= 0 ? stepSheet() : CX.open ? chalSheet(CX.open) : ''}</div>`;
   chalLoad(); }
 /* ── leagues ── */
 /* v63 · Nov 23, Chris: "to sign up for leagues there should be a signup fee (D$25 for starters)". Each league says its entry; it comes out of the wallet. */
@@ -1892,25 +2028,41 @@ document.addEventListener('click', async e => {
         if (out.length && out.some(l => l.mk !== mk)) toast(hockey && !sgp && (mk === 'spread' || out.some(l => l.mk === 'spread')) ? 'Hockey parlay: moneyline + total, or the puck line alone (switch to SGP for puck line + total)' : 'Swapped it: moneyline or spread, plus the total');
         const L = ddLegOf(g, mk, sd); if (L) S.dd.push({ k: g.k, mk, side: sd, sp: g.sp, ...L }); }
       store.set('ddslip', S.dd); render(); } }
+  else if (act === 'ghoston') { ghSet(a.dataset.rid, true); runsRepaint(); if (!GH.data) ghLoad().then(() => runsRepaint(), () => runsRepaint()); }
+  else if (act === 'ghostoff') { ghSet(a.dataset.rid, false); runsRepaint(); }
+  else if (act === 'stepopen') { SX.cid = a.dataset.cid; SX.rid = a.dataset.rid || ''; SX.i = +a.dataset.i || 0; QP.rid = ''; stepPaint(); if (SX.rid && !S.slate) loadSlate().then(stepPaint, () => { }); }
+  else if (act === 'stepclose') { SX.i = -1; stepPaint(); }
+  else if (act === 'stepsetroute') { CX.route = [SX.cid, a.dataset.route]; stepPaint(); }
+  else if (act === 'steproute') { const P = acctPass(), r0 = liveRuns().find(x => x.rid === SX.rid); if (!P || !r0 || r0.route === a.dataset.route) return;
+    try { const j = await acctApi('/acct/chal/route', { token: P.token, rid: r0.rid, route: a.dataset.route }); if (AC.me) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); runsRepaint(); stepPaint(); toast(`Route: ${ROUTES[a.dataset.route].name}. Today’s order is sized from it now.`); } catch (e) { toast(e.message); } }
+  else if (act === 'qpown') { QP.rid = a.dataset.rid; QP.src = 'own'; QP.off = 0; QP.busy = false; SX.i = -1; qpPaint(); if (!S.slate) loadSlate().then(qpPaint, qpPaint); }
   else if (act === 'chalopen') { CX.open = a.dataset.id; const n = $('#cxSheet'); if (n) { n.innerHTML = chalSheet(CX.open); document.body.classList.add('sheet-on'); } }
   else if (act === 'chalclose') { CX.open = ''; const n = $('#cxSheet'); if (n) n.innerHTML = ''; document.body.classList.remove('sheet-on'); }
   else if (act === 'chalroute') { CX.route = [a.dataset.id, a.dataset.route]; const n = $('#cxSheet'); if (n) { const y = (n.querySelector('.csheet') || {}).scrollTop || 0; n.innerHTML = chalSheet(CX.open); const c2 = n.querySelector('.csheet'); if (c2) c2.scrollTop = y; } }
   else if (act === 'chaljoin') { const P = acctPass(); if (!P) { CX.open = ''; document.body.classList.remove('sheet-on'); go('me', true); toast('Sign in to take a challenge'); return; }
     try { const j = await acctApi('/acct/chal/join', { token: P.token, id: a.dataset.id, route: a.dataset.route }); if (AC.me) { AC.me.runs = [j.run, ...(AC.me.runs || [])]; if (j.wallet) AC.me.wallet = j.wallet; } S.ddFrom = 'run:' + j.run.rid; store.set('ddfrom', S.ddFrom); CX.open = ''; document.body.classList.remove('sheet-on'); CX.at = 0; viewChallenges(); window.scrollTo(0, 0); toast(`${CHN(j.run.cid)} is live: ${dd$(j.run.start)} from your wallet, ${dd$(j.run.goal)} to hit. Your slip now bets from it.`); } catch (e) { toast(e.message); } }
   else if (act === 'runuse') { S.ddFrom = 'run:' + a.dataset.rid; store.set('ddfrom', S.ddFrom); go('slate', true); toast(`Tap any line on the Slate: the slip bets from ${CHN((liveRuns().find(r => r.rid === a.dataset.rid) || {}).cid) || 'this run'}`); }
-  else if (act === 'qpopen') { QP.rid = a.dataset.rid; QP.off = 0; QP.busy = false; const r = liveRuns().find(x => x.rid === QP.rid), c = r && chal(r.cid); QP.src = QP.src || 'agree'; if (c && c.sport !== 'any') QP.sp = c.sport; qpPaint(); if (!S.slate) { loadSlate().then(qpPaint, qpPaint); } }
+  else if (act === 'qpopen') { QP.rid = a.dataset.rid; QP.off = 0; QP.busy = false; SX.i = -1; if (QP.src === 'own') QP.src = 'agree'; const r = liveRuns().find(x => x.rid === QP.rid), c = r && chal(r.cid); QP.src = QP.src || 'agree'; if (c && c.sport !== 'any') QP.sp = c.sport; qpPaint(); if (!S.slate) { loadSlate().then(qpPaint, qpPaint); } }
   else if (act === 'qpclose') { QP.rid = ''; qpPaint(); }
   else if (act === 'qpsrc') { QP.src = a.dataset.v; QP.off = 0; qpPaint(); }
   else if (act === 'qpwho') { QP.who = a.dataset.v; QP.off = 0; qpPaint(); }
   else if (act === 'qpsp') { QP.sp = a.dataset.v; QP.off = 0; qpPaint(); }
   else if (act === 'qpshuf') { QP.off++; qpPaint(); }
+  else if (act === 'qpownpick') { const g = slateGameOf(a.dataset.k), Q = qpState(); if (!g || !Q) return; const mk = a.dataset.mk, sd = a.dataset.side, hockey = g.sp === 'nhl', i0 = QP.own.findIndex(l => l.k === g.k && l.mk === mk && l.side === sd);
+    if (i0 >= 0) QP.own.splice(i0, 1); else { const clash = l => l.k === g.k && (l.mk === mk || (mk !== 'total' && l.mk !== 'total') || (hockey && (mk === 'spread' || l.mk === 'spread')));
+      const out = QP.own.filter(clash); QP.own = QP.own.filter(l => !clash(l)); if (Q.c.rule === 'singles') QP.own = []; QP.own.push({ k: g.k, mk, side: sd });
+      if (out.some(l => l.mk !== mk)) toast(hockey && (mk === 'spread' || out.some(l => l.mk === 'spread')) ? 'Hockey parlay: the moneyline plus the total, or the puck line alone' : 'Swapped it: the moneyline or the spread, plus the total'); }
+    qpPaint(); }
+  else if (act === 'qpownx') { QP.own.splice(+a.dataset.i, 1); qpPaint(); }
+  else if (act === 'qpownclear') { QP.own = []; qpPaint(); }
+  else if (act === 'qpownall') { QP.ownAll = true; qpPaint(); }
   else if (act === 'qpslip') { const Q = qpState(); if (Q && Q.legs.length) { S.dd = Q.legs.map(l => ({ k: l.k, mk: l.mk, side: l.side, sp: l.sp, price: l.price, pick: l.pick, ...(l.line != null ? { line: l.line } : {}) })); S.ddMode = 'parlay'; store.set('ddslip', S.dd); store.set('ddmode', 'parlay');
       S.ddFrom = 'run:' + Q.r.rid; store.set('ddfrom', S.ddFrom); store.set('ddstake', +(($('#qpStake') || {}).value || Q.O.stake)); QP.rid = ''; qpPaint(); go('slate', true); toast('On your slip, from ' + Q.c.name + ': change anything, then place it'); } }
-  else if (act === 'qpplace') { const P = acctPass(), Q = qpState(); if (!P || !Q || !Q.legs.length || QP.busy) return; const st = Math.round(+(($('#qpStake') || {}).value || 0) * 100) / 100;
+  else if (act === 'qpplace') { const P = acctPass(), Q = qpState(); if (!P || !Q || !Q.legs.length || QP.busy) return; if (Q.bad) { toast(Q.bad); return; } const st = Math.round(+(($('#qpStake') || {}).value || 0) * 100) / 100;
     QP.busy = true; qpPaint();
     try { const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: 'parlay', run: Q.r.rid, legs: Q.legs.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
       if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; if (j.run) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); }
-      CX.at = 0; QP.busy = false; QP.rid = ''; qpPaint(); render(); toast(`Placed from ${Q.c.name}: ${dd$(j.bet.stake)} on ${j.bet.legs.length > 1 ? j.bet.legs.length + ' legs' : 'a single'}, pays ${dd$(j.bet.stake * j.bet.dec)}`); liveTick();
+      CX.at = 0; QP.busy = false; QP.rid = ''; if (Q.own) QP.own = []; qpPaint(); render(); toast(`Placed from ${Q.c.name}: ${dd$(j.bet.stake)} on ${j.bet.legs.length > 1 ? j.bet.legs.length + ' legs' : 'a single'}, pays ${dd$(j.bet.stake * j.bet.dec)}`); liveTick();
     } catch (e) { QP.busy = false; qpPaint(); toast(e.message); } }
   else if (act === 'runquit') { const P = acctPass(), r0 = liveRuns().find(r => r.rid === a.dataset.rid); if (!P || !confirmQuit(a, r0 && r0.buyIn ? `Tap again: ${dd$(r0.bal)} back to your wallet` : '')) return; try { const j = await acctApi('/acct/chal/quit', { token: P.token, rid: a.dataset.rid }); if (AC.me) { AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); if (j.wallet) AC.me.wallet = j.wallet; } CX.at = 0; viewChallenges(); toast(j.run.cashed != null ? `Quit ${CHN(j.run.cid)}: ${dd$(j.run.cashed)} back in your wallet` : `Quit ${CHN(j.run.cid)}`); } catch (e) { toast(e.message); } }
   else if (act === 'cxf') { const k = a.dataset.k; CX.f[k] = k === 'd' ? +a.dataset.v : a.dataset.v; CX.show = 24; store.set('cxf', CX.f); viewChallenges(); }

@@ -3187,7 +3187,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261124a',DESK_VER='3.5.14';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261124b',DESK_VER='3.5.15';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3914,10 +3914,17 @@ async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual
   const a=await ghPut('public/picks.json',txt,'Publish picks — '+S.d);const b=a.ok?await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d):a;
   if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{const m=await ghPut('public/picks.json',txt,'Publish picks — '+S.d,LEGACY_PUB_REPO);if(m.ok)await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d,LEGACY_PUB_REPO);}catch(e){}}
   set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:pubSig(F),csig:pubSig(F)});
+  /* v3.5.15 · the ghost runs ride along: rebuilt when a call grades or a day turns, at most every 30 minutes, beta only (like the board) */
+  if(a.ok)try{await ghostPublish(false);}catch(e){console.warn('ghost publish',e);}
   if(manual)alert(a.ok&&b.ok?'Published. Your public page updates in about a minute: '+PUB_URL
     :/can't write/.test(a.reason||b.reason||'')?`Publish failed: ${a.reason||b.reason}.\n\nFix: on github.com → Settings → Developer settings → Fine-grained tokens → "TheDesk sync" → Edit → Repository access → add ironsilk-weekly-site → Save. No new token needed — this device already has it.`
     :'Publish failed: '+(a.reason||b.reason));
   try{renderBest();}catch(e){}return{ok:a.ok&&b.ok};}
+async function ghostPublish(force){if(typeof ghostBuild!=='function'||typeof pubBeta!=='function'||!pubBeta())return{ok:false,reason:'beta off'};
+  const V=roGet(VOICES_KEY,[],10e3)||[],d=today(),sig=ghostSig(V,d),st=get('d4.ghoststate',{})||{};
+  if(!force&&st.sig===sig)return{ok:true,same:1};if(!force&&st.ts&&Date.now()-st.ts<30*60e3&&st.d===d)return{ok:true,wait:1};
+  const G=ghostBuild(V,d),txt=JSON.stringify(G),r=await ghPut('public/ghost.json',txt,'Ghost runs — '+d);
+  set('d4.ghoststate',{d,ts:Date.now(),sig,ok:!!r.ok,n:Object.keys(G.lanes).length,kb:Math.round(txt.length/1024)});return r;}
 /* auto: once when the card locks, and again whenever a pick grades */
 /* ══ v2.30 · CASHED — every winning Banker / character parlay gets its own box ═══
    On the public page (a 🎉 Cashed section, newest first, last 14 days) and in the
