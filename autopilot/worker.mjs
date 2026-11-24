@@ -1125,6 +1125,8 @@ if (import.meta.url === 'file://' + process.argv[1]) {
       if (SOCMEM) try { if (await runGamePages(state, SOCMEM.S, today)) await socialSave(); } catch (e) { log('game pages', e.message || e); }
       try { acted += await runRecruitShout(state); } catch (e) { log('recruiting', e.message || e); }
       /* v3.2 · the safeguards: what the site said about its token, the watchdog, once a run the vault copy and the history squash */
+      /* v3.5.9 · once: a state still carrying whole-page fingerprints is saved now (the write trims it), not at the next hourly beat */
+      if (state.pubSig && (Object.keys(state.pubSig).length > 3 || Object.values(state.pubSig).some(v => typeof v === 'string' && v.length > 64))) dirty = true;
       if (siteNote(state, SITE_ERR, SITE_OK)) dirty = true; SITE_ERR = null;
       if (KEY_BAD) { const W0 = state.watch || (state.watch = {}); if (!W0.keyBad || KEY_BAD - W0.keyBad > 36e5) { W0.keyBad = KEY_BAD; dirty = true; } KEY_BAD = 0; }
       try { acted += await runWatchdog(state); } catch (e) { log('watchdog', e.message || e); }
