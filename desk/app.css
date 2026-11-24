@@ -585,8 +585,12 @@ body.embed .view{padding-bottom:20px}
 .won .scc{grid-column:1/-1;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
 .say{grid-column:1/-1;font-size:12.5px;color:var(--ink-2);line-height:1.35}
 .say small{font-variant-numeric:tabular-nums;opacity:.85}
-.say.top{color:#7a5a00;font-weight:700}
-.say.low{color:#1b5d86;font-weight:700}
+.say.sy-top{color:#7a5a00;font-weight:700}
+.say.sy-low{color:#1b5d86;font-weight:700}
+/* v40 · the character's own reasons, quoted in its box under its exact final */
+.won .cq{grid-column:1/-1;display:block;margin:4px 0 2px;padding:1px 0 1px 10px;border-left:2px solid color-mix(in srgb,var(--c,var(--win)) 75%,transparent);font:italic 500 13.5px/1.45 var(--text);color:#26352b;quotes:"\201C" "\201D"}
+.won .cq::before{content:open-quote}.won .cq::after{content:close-quote}
+.score .score-m{display:block;margin-top:3px;font:600 13px/1.3 var(--text);letter-spacing:0;color:var(--ink-2)}
 .say.none{opacity:.7}
 .hitw{color:var(--win)}.hitl{color:var(--loss)}
 .g-bp{padding:0 16px 12px 84px;margin-top:-6px;cursor:pointer}
@@ -610,6 +614,7 @@ body.embed .view{padding-bottom:20px}
 .fl-ic{font-weight:900;text-align:center;line-height:1.35}
 .fl.hit .fl-ic{color:var(--win)}.fl.miss .fl-ic{color:var(--loss)}.fl.live .fl-ic{color:#C23A2B}.fl.open .fl-ic{color:var(--ink-2)}
 .fl.miss .fl-pk{text-decoration:line-through;text-decoration-color:rgba(194,58,43,.6)}
+.fl-pk>.fl-g,.fl-pk>.fl-d{display:inline-block;width:100%}   /* (v40 · a missed leg's matchup and final stay readable: only the pick is struck) */
 .fl-pk{font-weight:700;font-size:14.5px;line-height:1.35}
 .fl-pk small{font-weight:600;color:var(--ink-2)}
 .fl-g,.fl-d{display:block;font-size:12.5px;color:var(--ink-2);font-weight:500}
@@ -820,6 +825,61 @@ small.lv{display:block;margin-top:2px;font:600 12px/1.3 var(--text)}
 .rc-order small{display:block;font:800 10.5px/1 var(--text);letter-spacing:.08em;text-transform:uppercase;color:#7a5b10}.rc-order b{display:block;margin-top:5px;font:800 15px/1.2 var(--text)}.rc-order span{display:block;margin-top:3px;font-size:12px;color:#4a5a50}
 .rc-odds{text-align:center;padding:8px 10px;border-radius:12px;background:#1b2a21;color:#f4ecd8}.rc-odds b{display:block;font:900 24px/1 var(--display);color:#f2d067}.rc-odds small{font:700 10px/1 var(--text);letter-spacing:.06em;text-transform:uppercase}
 .rc-route{display:flex;align-items:center;gap:6px;font:700 12px var(--text)}.rc-route select{font:700 12.5px var(--text);padding:6px;border-radius:8px}
+/* v40 · the run's live board (Nov 23): what's in play, where a cash lands it, every ticket from the run, live; ⚡ Quick Pick */
+.runcard.is-live{box-shadow:0 0 0 2px rgba(194,58,43,.55),0 16px 28px rgba(0,0,0,.35)}
+.rc-odds em{display:block;margin-top:3px;font:600 10px/1 var(--text);font-style:normal;color:rgba(244,236,216,.7)}
+.rc-live{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;margin-top:10px;padding:8px 11px;border-radius:10px;background:rgba(196,147,42,.13);box-shadow:inset 0 0 0 1px rgba(196,147,42,.38);font:600 13px/1.3 var(--text);color:#3b4a40}
+.rc-live b{color:#1b2a21;font-weight:800}
+.rc-dot{display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;background:#C23A2B;vertical-align:1px;animation:rcpulse 1.6s infinite}
+@keyframes rcpulse{0%{box-shadow:0 0 0 0 rgba(194,58,43,.6)}70%,100%{box-shadow:0 0 0 7px rgba(194,58,43,0)}}
+.rd-ghost{position:absolute;top:0;bottom:0;min-width:10px;border-radius:0 99px 99px 0;background:repeating-linear-gradient(135deg,rgba(196,147,42,.62) 0 6px,rgba(196,147,42,.26) 6px 12px);background-size:17px 17px;animation:rdghost 1.4s linear infinite}
+@keyframes rdghost{to{background-position:17px 0}}
+.rd-next{display:block;margin-top:3px;font-weight:600;color:#3b4a40}.rd-next b{color:#7a5b10}
+.rc-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.runcard .btn.sm{min-height:42px;padding:0 15px;font-size:14.5px}
+.runcard .btn.line{color:#1b2a21;background:transparent;box-shadow:inset 0 0 0 1.5px rgba(27,42,33,.4)}
+.runcard .btn.ghost{color:#5b6a60;background:transparent;box-shadow:none;padding:0 6px;text-decoration:underline;text-underline-offset:3px;margin-left:auto}
+.rc-empty{margin:12px 0 0;padding:10px 12px;border-radius:10px;border:1.5px dashed rgba(27,42,33,.22);font-size:13px;line-height:1.45;color:#3b4a40}
+.rc-tix{margin-top:14px;padding-top:12px;border-top:1px dashed rgba(27,42,33,.25)}
+.rc-tix h4{display:flex;align-items:center;gap:4px;margin:0 0 8px;font:800 13px/1 var(--display);letter-spacing:.1em;text-transform:uppercase;color:#1b2a21}
+.rc-tix h4 small{margin-left:auto;font:600 11px var(--text);letter-spacing:0;text-transform:none;color:#5b6a60}
+.rtk{margin-top:8px;padding:10px 12px 6px;border-radius:12px;background:#fffdf6;box-shadow:0 1px 0 rgba(27,42,33,.08),inset 0 0 0 1px rgba(27,42,33,.1)}
+.rtk.live{box-shadow:inset 3px 0 0 #C23A2B,inset 0 0 0 1px rgba(194,58,43,.25)}
+.rtk.won{box-shadow:inset 3px 0 0 var(--win),inset 0 0 0 1px rgba(22,115,74,.25)}.rtk.lost{opacity:.82}
+.rtk-h{display:flex;justify-content:space-between;align-items:center;gap:8px;font:600 13px/1.2 var(--text);color:#3b4a40}.rtk-h b{font:900 17px/1 var(--display);color:#1b2a21}
+.rtk .tk-live,.rtk .tk-sum{margin:6px 0 0;font-size:12.5px}
+.rtk .fl{padding:7px 0}.rtk .fl-pk{font-size:14px}
+.rtk-f{margin:2px 0 4px;padding-top:7px;border-top:1px solid rgba(27,42,33,.08);font:600 12.5px/1.3 var(--text);color:#3b4a40}.rtk-f b{color:#1b2a21}
+.fchip.cashed{background:var(--win);color:#fff}.fchip.lost{background:#5b5b5b;color:#fff}
+.rtk-list{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr))}.rtk-list .rtk{margin-top:0;color:var(--ink)}
+.rtk-src{margin:-2px 0 6px;font:800 11px/1 var(--text);letter-spacing:.08em;text-transform:uppercase;color:#7a5b10}
+/* ⚡ Quick Pick */
+.qps .qp-hero{background:radial-gradient(120% 90% at 85% -10%,rgba(242,208,103,.32),transparent 60%),linear-gradient(160deg,color-mix(in srgb,var(--tc) 50%,#0b140f),#0b140f 78%)}
+.qps .qp-hero p b{color:var(--foil)}
+.qp-bank{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.qp-bank span{padding:6px 10px 5px;border-radius:99px;background:rgba(0,0,0,.32);font:600 12px/1 var(--text);color:var(--cream-2)}.qp-bank b{color:var(--cream)}
+.qp-src{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:16px 0 4px}
+.qp-s{appearance:none;display:grid;gap:3px;justify-items:start;text-align:left;padding:11px 10px 10px;border-radius:14px;border:0;cursor:pointer;background:rgba(27,42,33,.07);color:#1b2a21;box-shadow:inset 0 0 0 1.5px rgba(27,42,33,.12);font:inherit;min-width:0}
+.qp-s i{font-style:normal;font-size:22px;line-height:1}.qp-s b{font:800 13.5px/1.15 var(--text)}.qp-s small{font:600 11px/1.25 var(--text);color:#5b6a60;overflow-wrap:anywhere}
+.qp-s.on{background:#1b2a21;color:var(--cream);box-shadow:inset 0 0 0 2px var(--foil),0 8px 16px rgba(0,0,0,.18)}.qp-s.on small{color:var(--foil)}
+.qp-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.qp-chips button{appearance:none;border:0;cursor:pointer;padding:8px 11px 7px;border-radius:99px;background:rgba(27,42,33,.08);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--c,#1b2a21) 45%,transparent);font:700 12.5px/1 var(--text);color:#1b2a21}
+.qp-chips button small{font-weight:600;color:#5b6a60;margin-left:3px}.qp-chips button.on{background:#1b2a21;color:var(--cream)}.qp-chips button.on small{color:var(--foil)}
+.qp-why{margin:12px 2px 0;font-size:13.5px;line-height:1.45;color:#3b4a40}
+.qp-tk{position:relative;margin-top:12px;padding:14px 14px 12px;border-radius:14px;background:#fffdf6 var(--noise);background-size:200px;background-blend-mode:multiply;box-shadow:0 12px 24px rgba(0,0,0,.14),inset 0 0 0 1px rgba(27,42,33,.12)}
+.qp-tkh{display:flex;justify-content:space-between;align-items:baseline;font:800 12px/1 var(--text);letter-spacing:.1em;text-transform:uppercase;color:#7a5b10}.qp-tkh b{font:900 26px/1 var(--display);letter-spacing:0;color:#1b2a21}
+.qp-legs{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:0}
+.qp-legs li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;padding:10px 0;border-top:1px dashed rgba(27,42,33,.18)}.qp-legs li:first-child{border-top:0}
+.qp-n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#1b2a21;color:var(--foil);font:800 12px/1 var(--text)}
+.qp-b{display:grid;gap:2px;min-width:0}.qp-b b{font:800 15.5px/1.2 var(--text);color:#1b2a21}.qp-b b small{font-weight:600;color:#5b6a60}.qp-b>small{font:600 12px/1.3 var(--text);color:#5b6a60}
+.qp-b em{font:700 12px/1.3 var(--text);font-style:normal;color:#7a5b10}
+.qp-sum{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:10px;padding-top:10px;border-top:1.5px solid rgba(27,42,33,.18);font:600 13px/1.2 var(--text);color:#3b4a40}
+.qp-sum b{color:#1b2a21;font-weight:800}.qp-sum input{width:84px;margin-left:6px;padding:7px 8px;border-radius:8px;border:1.5px solid rgba(27,42,33,.3);font:800 16px var(--text);background:#fff;color:#1b2a21;-webkit-text-fill-color:#1b2a21}
+.qp-go{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px}.qp-go .btn.foil{flex:1 1 220px}
+.qps .btn.line{color:#1b2a21;background:transparent;box-shadow:inset 0 0 0 1.5px rgba(27,42,33,.4)}.qps .btn.ghost{color:#3b4a40;background:transparent;text-decoration:underline;text-underline-offset:3px;padding:0 6px}
+.qp-empty{margin-top:12px;padding:14px;border-radius:12px;border:1.5px dashed rgba(27,42,33,.25);font-size:14px;line-height:1.45;color:#3b4a40}
+.tabs button.live{position:relative}.tabs button.live::after{content:"";position:absolute;top:6px;left:calc(50% + 9px);width:8px;height:8px;border-radius:50%;background:#E5484D;box-shadow:0 0 0 2px rgba(5,20,13,.9);animation:rcpulse 1.6s infinite}
+@media (max-width:380px){.qp-src{grid-template-columns:1fr}.qp-s{grid-template-columns:28px 1fr;align-items:center}.qp-s i{grid-row:span 2}}
+@media (prefers-reduced-motion:reduce){.rc-dot,.rd-ghost,.tabs button.live::after{animation:none}}
 body.sheet-on{overflow:hidden}
 .sheet-bg{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 .csheet{position:fixed;z-index:71;left:0;right:0;bottom:0;max-height:92vh;overflow-y:auto;overscroll-behavior:contain;padding:0 18px calc(24px + env(safe-area-inset-bottom));border-radius:22px 22px 0 0;

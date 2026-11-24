@@ -12,7 +12,9 @@ const rate = { Coach: 0.75, Scout: 0.52, Judge: 0.3 };
 for (let i = 0; i < 30; i++) for (const v of Object.keys(rate)) { const hit = (i % 10) < rate[v] * 10;
   V.push({ id: 'h' + (id++), sp: 'nba', date: day(i), game: `A${i}@H${i}`, voice: v, market: 'total', side: 'under', line: 225.5, price: -110, pick: 'Under 225.5', cf: 0.7, graded: true, hit, units: hit ? 0.909 : -1 }); }
 const call = (voice, market, side, pick, price, line) => V.push({ id: 't' + (id++), sp: 'nba', date: '2026-11-14', game: 'ATL@CHI', voice, market, side, pick, price, line, cf: 0.7, graded: false, hit: null });
-call('Coach', 'total', 'under', 'Under 245.5', -110, 245.5); call('Scout', 'total', 'under', 'Under 245.5', -110, 245.5); call('Judge', 'total', 'over', 'Over 245.5', -110, 245.5);
+call('Coach', 'total', 'under', 'Under 245.5', -110, 245.5); call('Scout', 'total', 'under', 'Under 245.5', -110, 245.5);
+V[V.length - 2].why = 'opponent on a back-to-back · picked team won 4+ of its last 5';   /* v3.5.13 · the Coach's reason, in its own words */
+V[V.length - 1].why = 'simulated 10,000 times · rest edge';                                /* …and one that talks method: never published */ call('Judge', 'total', 'over', 'Over 245.5', -110, 245.5);
 call('Brain', 'total', 'under', 'Under 245.5', -110, 245.5); call('Coach', 'ml', 'home', 'CHI ML', -600, null);
 const TC = { d: '2026-11-14', ts: NOW, by: { nba: { games: [{ g: 'ATL@CHI', s: '2026-11-15T01:00:00Z', id: '7', w: 1 }], picks: [
   { sp: 'nba', gid: '7', game: 'ATL@CHI', start: '2026-11-15T01:00:00Z', m: 'total', sd: 'under', pick: 'Under 245.5', price: -110, color: ' supreme', unan: true, chars: ['Coach', 'Scout', 'Brain'], mp: 0.62, brainP: 0.66 },
@@ -39,8 +41,14 @@ setTimeout(() => { try {
   const judgeUnder = w.eval(`(()=>{const P=prFor('nba','total','under',-110,245.5);return P&&P.goat&&P.goat.v;})()`);
   T('…and in NBA unders, the Judge is the worst: no say', judgeUnder === 'Judge', judgeUnder);
   T('names and colors ride along once, in the cast', B.cast.Coach && B.cast.Coach.name && B.cast.Judge && !B.cast.Brain, JSON.stringify(Object.keys(B.cast)));
-  const s = JSON.stringify(B);
-  T('no reasons, no method: nothing in the board explains how a pick was made', !/sim|monte|model|edge|why|brainP|blend|mp"/i.test(s.replace(/"(Sim|Simulator)"/g, '')), s.match(/sim|monte|model|edge|why|brainP|blend/i));
+  /* v3.5.13 · Nov 23, Chris: "the characters reasoning is quoted inside their pick box" — each call carries its own reason (q) in plain
+     words; still no method: nothing outside those quotes explains how a pick was made, and no quote talks method */
+  const cu = (B.games[0].calls.total || []), qOf = v => (cu.find(c => c.v === v) || {}).q;
+  T('each call carries its character\'s own reason, word for word (the Coach on the under)', qOf('Coach') === 'opponent on a back-to-back · picked team won 4+ of its last 5', JSON.stringify(cu.map(c => [c.v, c.q])));
+  T('…a reason that talks method never goes out (the Scout\'s "simulated 10,000 times")', !qOf('Scout'), qOf('Scout'));
+  const s = JSON.stringify(B, (k, v) => (k === 'q' ? undefined : v));
+  T('no method: nothing in the board explains how a pick was made (outside the characters\' own quoted reasons)', !/sim|monte|model|edge|why|brainP|blend|mp"/i.test(s.replace(/"(Sim|Simulator)"/g, '')), s.match(/sim|monte|model|edge|why|brainP|blend/i));
+  T('…and no quoted reason talks method', B.games.every(g => Object.values(g.calls || {}).every(L => L.every(c => !c.q || !/simulat|monte carlo|model|algorithm|brainP|blend|10,?000/i.test(c.q)))));
   const F = w.eval(`publicFeedCore(false)`);
   T('the open beta publishes the board; the signature changes with it', F.beta === true && F.board && F.board.games.length === 1 && /supreme\*/.test(F.betaSig), F.betaSig && F.betaSig.slice(0, 120));
   w.eval(`set('d4.pubbeta',false)`); const G = w.eval(`publicFeedCore(false)`);

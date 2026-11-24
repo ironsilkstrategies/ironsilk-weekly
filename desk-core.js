@@ -1508,7 +1508,10 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
         by:[...new Set((x.fz&&x.fz.by&&x.fz.by.length?x.fz.by:x.chars||[]).filter(v=>CHARS[v]&&!META_VOICES.has(v)))].map(use)}))
       .sort((a,b)=>(b.unan-a.unan)||((PUB_TIER_RANK[b.tier]||0)-(PUB_TIER_RANK[a.tier]||0))||((b.p||0)-(a.p||0)));
     const calls={};(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).forEach(c=>{const m=mkNorm(c.market);if(pubHeavy({m,price:c.price}))return;let txt='';try{txt=charPickText(c);}catch(e){txt=c.pick||c.side;}
-      (calls[m]=calls[m]||[]).push({v:use(c.voice),s:c.side,pick:txt,price:c.price!=null?+c.price:null,p:pubConf(c),o:pubOff(c)?1:0,r:rankOf(c,m),hit:c.hit==null?null:c.hit});});
+      /* v3.5.13 · Nov 23, Chris: "make sure … the characters reasoning is quoted inside their pick box along with their predicted final
+         exact score". Each call carries its own reason in its own words (q), cleaned of any method talk like the Best 3's notes. */
+      const q=(()=>{try{const t=pubCallNote(c);return t?String(t).slice(0,180):'';}catch(e){return'';}})();
+      (calls[m]=calls[m]||[]).push({v:use(c.voice),s:c.side,pick:txt,price:c.price!=null?+c.price:null,p:pubConf(c),o:pubOff(c)?1:0,r:rankOf(c,m),hit:c.hit==null?null:c.hit,...(q?{q}:{})});});
     const S0=SCI.get(g.sp+'|'+g.game+'|'+g.day),sc={};if(S0)Object.values(calls).forEach(L=>L.forEach(c=>{if(S0[c.v])sc[c.v]=S0[c.v];}));   /* only the characters with a call here */
     return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls,...(Object.keys(sc).length?{sc}:{})};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
   const fc=pubForecast();

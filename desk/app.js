@@ -1,4 +1,4 @@
-import { say } from './voice.js?v=1';
+import { say } from './voice.js?v=2';
 import { library, get as chal, checkpoints, paceAt, orderFor, simulate, ROUTES, RULES, SPORTS, TIERS as CTIERS, rankOf } from './chal-lib.js?v=1';
 /* TheDesk — the public app.
    It shows what the desk publishes and nothing else: the day's Best 3 (each one sealed until 30 minutes before its
@@ -169,7 +169,11 @@ function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t =
   const k = K.find(k => S.live[k].ymd === td) || K.find(k => S.live[k].state !== 'post');
   return k ? { ...p, game: k.slice(p.sp.length + 1) } : p; }
 const castPicks = () => ((S.feed && S.feed.characters) || []).flatMap(c => (c.picks || []).filter(p => p && p.sp && p.hit == null && !p.push));
-let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render(); }, 120); };
+let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render(); else if (S.tab === 'challenges') runsRepaint(); else if (S.tab === 'me') betsRepaint(); runDot(); }, 120); };
+/* v62 · the run cards follow the scores on their own (the rest of the Challenges page — its search box, its filters — stays put) */
+function runsRepaint() { const g = $('#v-challenges .rgrid'); if (!g) return; const f = document.activeElement, sel = f && f.closest && f.closest('.runcard') ? f.dataset.change && f.dataset.rid : null; if (sel) return; g.innerHTML = liveRuns().map(runCard).join(''); }
+/* …and the Compete tab wears a live dot while a run's ticket is in play */
+function runDot() { const t = document.querySelector('.tabs [data-go="challenges"]'); if (!t) return; const on = liveRuns().some(r => runBets(r).some(b => b.status === 'open' && ddTicketNow(b).live)); t.classList.toggle('live', on); }
 async function liveTick() {
   const F = S.feed, T = F && F.today; if (!F) return;
   /* every leg the page shows live: Today's picks and parlay, the VIP Top 10 / Banker / character parlays, and the LongShots (whose legs can
@@ -181,7 +185,13 @@ async function liveTick() {
   { const PB = (F.props && F.props.props) || []; PB.forEach(x => { const L2 = propLeg(x); if (L2.game) items.push({ ...L2, day: x.start ? deskDay(Date.parse(x.start)) : td }); });
     (V.props || []).forEach(c => { const L2 = vipPropLeg(c); if (L2.game) items.push({ ...L2, day: td }); });
     const B = F.board; if (B && B.games) B.games.forEach(g => { if (g.picks && g.picks.length) items.push({ sp: g.sp, game: g.game, day: g.day || td }); }); }
-  const by = new Map(); items.forEach(x => { const d = String(x.day || td).slice(0, 10).replace(/-/g, ''); const k = d; const set = by.get(k) || new Set(); set.add(x.sp); by.set(k, set); });
+  /* v62 · finals for what already settled too (every settled leg shows its final, margin and total), and every D$ ticket's legs — the
+     challenge runs' among them — so a run follows live like a ticket. A game already final on this phone isn't asked for again. */
+  const fresh = x => { const r = liveOf(x); return !(r && r.state === 'post'); };
+  const extra = [...((T && T.picks) || []).filter(x => x && !x.hidden && x.game && (x.hit != null || x.push)).map(x => ({ sp: x.sp, game: x.game, start: x.start, day: x.start ? deskDay(Date.parse(x.start)) : td })),
+    ...((F.founder || {}).tix || []).flatMap(t => (t.legs || []).filter(l => l.sp && l.game && (l.st === 'hit' || l.st === 'miss' || l.st === 'push')).map(l => ({ sp: l.sp, game: l.game, start: l.start, day: l.day || t.date }))),
+    ...((AC.me && AC.me.bets) || []).filter(b => b.status === 'open' || (b.done || b.ts) > Date.now() - 36 * 36e5).flatMap(b => (b.legs || []).filter(l => l.sp && l.game && l.t && l.t < Date.now() + 15 * 60e3).map(l => ({ sp: l.sp, game: l.game, start: new Date(l.t).toISOString(), day: deskDay(l.t) })))].filter(fresh);
+  const by = new Map(); [...items, ...extra].forEach(x => { const d = String(x.day || td).slice(0, 10).replace(/-/g, ''); const k = d; const set = by.get(k) || new Set(); set.add(x.sp); by.set(k, set); });
   if (!by.size) return;
   await Promise.all([...by].map(([d, sps]) => scores([...sps], d)));
   liveRepaint();
@@ -267,7 +277,7 @@ function slipHtml(x0, i, key, opt = {}) {
   const [ga, gh] = String(x.game || '').split('@');
   let when = `<div class="when">${esc(whenLabel(x.start))}</div>`, score = '';
   if (L && L.state === 'in') { when = `<div class="when live"><span class="dot"></span>Live${L.detail ? ', ' + esc(L.detail) : ''}</div>`; score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}</p>${qBit(x, true) ? `<p class="score-q">${qBit(x, true)}</p>` : ''}`; }
-  else if (graded || (L && L.state === 'post')) { when = `<div class="when">Final</div>`; if (L && L.state === 'post') score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}</p>`; }
+  else if (graded || (L && L.state === 'post')) { when = `<div class="when">Final</div>`; if (L && L.state === 'post') score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}<small class="score-m">${L.a === L.h ? 'Tied' : `${esc(teamName(x.sp, L.a > L.h ? ga : gh))} by ${Math.abs(L.a - L.h)}`} · total ${+L.a + +L.h}</small></p>`; }   /* v62 · the margin and the total, on every final */
   const why = opt.noRead ? '' : readHtml(x.why, x.calls);
   const fine = x.spread ? 'A spread pick, below the usual 70% bar. It is on the card so every league gets a play.' : x.tuned ? 'History-tuned: under the 70% bar, in because picks like it have made money.' : '';
   const label = opt.label || R.big, long = label.length > 10 ? ' long' : '';
@@ -369,8 +379,10 @@ function founderLeg(l) {
   const [ic, cls] = FST[l.st] || FST.open, bar = l.prog && l.st !== 'open' ? Math.max(0, Math.min(100, l.prog.d === 'under' ? (l.prog.v <= l.prog.t ? 100 : 0) : (l.prog.v / l.prog.t) * 100)) : null;
   return `<li class="fl ${cls}"><span class="fl-ic">${ic}</span><span class="fl-pk">${esc(legText(l))}${l.price != null ? ` <small>${esc(odds(l.price))}</small>` : ''}
     <small class="fl-g">${esc([l.game ? matchup(l) : '', l.st === 'open' && l.start ? whenLabel(l.start) : ''].filter(Boolean).join(' · '))}</small>
-    ${(() => { const lv = l.game && (l.st === 'live' || l.st === 'open') ? liveOf(l) : null; const on = lv && lv.state === 'in';
-      /* one score line: while ESPN's live score is on the leg, the grade line from the last publish (a step behind) stays off — props keep theirs (the stat + bar) */
+    ${(() => { const lv = l.game ? liveOf(l) : null; const on = lv && lv.state === 'in' && (l.st === 'live' || l.st === 'open'), done = lv && lv.state === 'post' && !l.prop && !l.ph;
+      /* one score line: while ESPN's live score is on the leg, the grade line from the last publish (a step behind) stays off — props keep theirs (the stat + bar).
+         v62 · once the game is final, every game leg shows the final, the margin and the total — hit, miss or push */
+      if (done) return `<small class="fl-d">${scoreBit(l, lv)}</small>`;
       const dt = l.detail && !(on && (!l.prop || l.ph)) && !(l.ph && l.ph.st !== 'live') ? `<small class="fl-d">${esc(l.detail)}</small>` : '';
       const qb = on && (!l.prop || l.ph) ? qBit(l, true) : '', fin = l.ph && l.ph.st !== 'live' ? `<small class="fl-d">${esc(nmShort(l.pick))} ${l.ph.v} · ${(liveOf(l) || {}).state === 'post' ? 'final' : l.ph.st === 'hit' ? 'cleared it' : 'went over'}</small>` : '';
       return (on ? `<small class="lv">${scoreBit(l, lv)}${qb ? ' · ' + qb : ''}</small>` : '') + (fin || dt); })()}${bar != null ? `<span class="fl-bar"><i style="width:${bar.toFixed(0)}%"></i></span>` : ''}</span></li>`;
@@ -426,9 +438,6 @@ function walletHtml(W) { if (!W) return ''; const bought = Math.max(0, Math.min(
     <div class="w-bar"><i class="e" style="flex:${Math.max(earned, 0.0001)}"></i>${bought ? `<i class="b" style="flex:${bought}"></i>` : ''}</div>
     <div class="w-key"><span><i class="e"></i>Earned ${dd$(earned)}</span>${W.bought ? `<span><i class="b"></i>Bought ${dd$(W.bought)}</span>` : ''}<span>${W.w}-${W.l}${W.p ? '-' + W.p : ''} on settled bets</span></div>
     <p class="note">Play money for bragging rights, never cashed out. D$ won in challenges and leagues lands here as earned D$. Bought D$ shows in its own color and never counts on the leaderboard. ${AC.me && AC.me.store ? '' : '<b>The D$ store opens soon.</b>'}</p></div>`; }
-function ddBetHtml(b) { const chip = { won: `✓ Won ${dd$(b.back)}`, lost: '✗ Lost', push: '↺ Push', open: `Open · to win ${dd$(b.toWin)}` }[b.status];
-  return `<article class="slip mytk nostub ${b.status === 'won' ? 'cashed' : b.status}"><div class="slip-head"><span>${dd$(b.stake)} · ${b.mode === 'sgp' ? 'SGP · ' + b.legs.length + ' legs' : b.legs.length > 1 ? b.legs.length + '-leg' : 'single'}</span><span class="fchip ${b.status === 'won' ? 'cashed' : b.status}">${chip}</span></div><div class="slip-main">
-    <ul class="fl-list">${b.legs.map(l => `<li class="fl ${l.res || 'open'}"><span class="fl-ic">${l.res === 'hit' ? '✓' : l.res === 'miss' ? '✗' : l.res === 'push' ? '↺' : '○'}</span><div class="fl-b"><b>${esc(l.pick)} ${esc(odds(l.price))}</b><small>${esc([LEAGUE[l.sp], l.game.replace('@', ' at '), l.res ? '' : clock(l.t)].filter(Boolean).join(' · '))}${l.void ? ' · voided' : ''}</small></div></li>`).join('')}</ul></div></article>`; }
 let LB = null;
 async function lbLoad() { try { const r = await fetch(CFG.chat + '/acct/board'); if (r.ok) { LB = await r.json(); if (S.tab === 'me') { const n = $('#lb'); if (n) n.outerHTML = lbHtml(); } } } catch (e) { } }
 function lbHtml() { const P = acctPass(); if (!LB) return '<section id="lb" class="vsec"><h2 class="h2">The leaderboard</h2><div class="shimmer"></div></section>';
@@ -441,7 +450,7 @@ const AC = { me: null, busy: false, err: '', open: false };
 const acctPass = () => store.get('acct');
 async function acctApi(path, body) { const r = await fetch(CFG.chat + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) { const e = new Error(j.error || 'the server didn’t answer'); e.status = r.status; throw e; } return j; }
-async function acctLoad() { const P = acctPass(); if (!P) { AC.me = null; return; } try { AC.me = await acctApi('/acct/me', { token: P.token }); AC.err = ''; }
+async function acctLoad() { const P = acctPass(); if (!P) { AC.me = null; return; } try { AC.me = await acctApi('/acct/me', { token: P.token }); AC.err = ''; AC.at = Date.now(); }
   catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); else if (S.tab === 'challenges') viewChallenges(); else if (S.tab === 'leagues') viewLeagues(); else if (S.tab === 'admin') viewAdmin(); }
 function acctBadge() { const b = $('#acctBtn'); if (!b) return; const P = acctPass(); b.classList.toggle('dot', !!(AC.me && AC.me.inbox && AC.me.inbox.unread)); document.body.classList.toggle('is-owner', !!(AC.me && AC.me.owner)); b.textContent = P ? P.name.slice(0, 1).toUpperCase() : ''; b.classList.toggle('in', !!P); b.setAttribute('aria-label', P ? `My tickets (${P.name})` : 'Sign in'); }
 const tid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -477,7 +486,7 @@ function viewMe() {
     <div class="paper ddpitch"><b>D$1,000 the moment you sign up</b><p>Desk Dollars are play money: bet them on any game on the Slate, flip them, and climb the leaderboard for bragging rights.</p></div>${lbHtml()}${footHtml()}`; if (!LB) lbLoad(); return; }
   const L = (AC.me && AC.me.tickets) || [], R = myRecord(L);
   el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Signed in as <b>${esc(P.name)}</b>. <button type="button" class="link" data-act="aclogout">Sign out</button></p>
-    ${AC.me && AC.me.owner ? '<div class="row"><button type="button" class="btn foil" data-go="admin">🛠 Admin dashboard</button></div>' : ''}${myInbox()}${AC.me ? walletHtml(AC.me.wallet) : ''}${AC.me && (AC.me.bets || []).length ? `<h2 class="h2">Your D$ bets</h2><div class="fgrid">${AC.me.bets.slice(0, 20).map(ddBetHtml).join('')}</div>` : AC.me ? '<p class="note">Open any game on the <button type="button" class="link" data-go="slate">Slate</button> and tap a line to bet Desk Dollars.</p>' : ''}
+    ${AC.me && AC.me.owner ? '<div class="row"><button type="button" class="btn foil" data-go="admin">🛠 Admin dashboard</button></div>' : ''}${myInbox()}${AC.me ? walletHtml(AC.me.wallet) : ''}${AC.me && (AC.me.bets || []).length ? `<h2 class="h2">Your D$ bets</h2><div class="rtk-list">${myBetsHtml()}</div>` : AC.me ? '<p class="note">Open any game on the <button type="button" class="link" data-go="slate">Slate</button> and tap a line to bet Desk Dollars.</p>' : ''}
     ${AC.me && AC.me.owner ? `<div class="paper owner ddown"><b>Owner tools</b><form data-form="ddgrant"><label>Give D$ to<input name="who" required maxlength="20" placeholder="username"></label><label>Amount<input name="amt" inputmode="numeric" required placeholder="500"></label><button class="btn sm" type="submit">Add D$</button></form><p class="note">Added D$ counts as bought: it shows in blue and never counts on the leaderboard.</p></div>` : ''}
     ${AC.me && !AC.me.owner ? pubRecHtml(P) : ''}${lbHtml()}<h2 class="h2">Your real tickets</h2>
     ${AC.me ? `<div class="mystats"><span><b>${R.c}</b>cashed</span><span><b>${R.l}</b>lost</span><span><b>${R.n ? Math.round(100 * R.h / R.n) + '%' : '—'}</b>legs hit</span><span><b>${L.length}</b>tickets</span></div>` : ''}
@@ -788,8 +797,9 @@ const bigOf = (sp, game, pick) => readPick({ sp, game, pick }).big;
 function sayBadge(r) {
   if (!r) return '<span class="say none">Not ranked yet</span>';
   const rec = r.w != null ? ` <small>${r.w}–${r.l}, ${r.u >= 0 ? '+' : '−'}${Math.abs(r.u).toFixed(1)}u</small>` : '';
-  if (r.say === 'top') return `<span class="say top">👑 #1 in ${esc(r.lab)}: has the say${rec}</span>`;
-  if (r.say === 'worst') return `<span class="say low">🧊 Worst in ${esc(r.lab)}: no say${rec}</span>`;
+  /* (v62 · "sy-top", not "top": the page header's own .top class gave the #1's badge the header's padding — the empty gap in its box) */
+  if (r.say === 'top') return `<span class="say sy-top">👑 #1 in ${esc(r.lab)}: has the say${rec}</span>`;
+  if (r.say === 'worst') return `<span class="say sy-low">🧊 Worst in ${esc(r.lab)}: no say${rec}</span>`;
   return r.rk ? `<span class="say">#${r.rk} of ${r.of} in ${esc(r.lab)}${rec}</span>` : `<span class="say none">Not ranked in ${esc(r.lab)} yet</span>`;
 }
 /* one bet on one game: each side, who's on it, how sure, and where they rank in that kind of bet */
@@ -806,8 +816,12 @@ function whoOnHtml(b) {
     const sides = Object.keys(by).sort((x, y) => by[y].length - by[x].length), tot = C.length;
     const top = C.find(c => c.r && c.r.say === 'top'), low = C.find(c => c.r && c.r.say === 'worst');
     const say = [top ? `👑 <b>${esc(castOf(top.v).name)}</b> has the say, on ${esc(bigOf(b.sp, b.game, top.pick))}${top.r.lab ? ` <button type="button" class="scope" data-act="bfscope" data-lab="${esc(top.r.lab)}">All its ${esc(top.r.lab)} picks →</button>` : ''}` : '', low ? `🧊 <b>${esc(castOf(low.v).name)}</b> shouldn’t, on ${esc(bigOf(b.sp, b.game, low.pick))}` : ''].filter(Boolean).join(' · ');
+    /* v62 · Nov 23, Chris: "the characters reasoning is quoted inside their pick box along with their predicted final exact score" —
+       its exact final, then its own reasons in its own voice (only the reasons the desk gave it; no reason, no quote) */
+    let qi = 0;
     const row = c => { const k = castOf(c.v), mk = c.hit === true ? '<b class="hitw">✓</b> ' : c.hit === false ? '<b class="hitl">✗</b> ' : '';
-      return `<li style="--c:${k.color}"><span class="who">${mk}${esc(k.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>${scoreCall(b, c.v)}${sayBadge(c.r)}</li>`; };
+      const q = c.q ? voiceOf(c.v, { sp: b.sp, game: b.game, pick: c.pick, note: c.q }, qi++) : '';
+      return `<li style="--c:${k.color}"><span class="who">${mk}${esc(k.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>${scoreCall(b, c.v)}${q ? `<q class="cq">${esc(q)}</q>` : ''}${sayBadge(c.r)}</li>`; };
     out.push(`<div class="won"><div class="won-h"><b>${MK_LAB[m]}</b><span>${sides.length === 1 ? `All ${tot} agree` : `${by[sides[0]].length}–${tot - by[sides[0]].length} split`}</span></div>
       ${say ? `<p class="won-say">${say}</p>` : ''}
       ${sides.map((sd, i) => { const L = by[sd].sort((x, y) => (y.o - x.o) || ((y.p || 0) - (x.p || 0))); const pr = L.find(c => c.price != null);
@@ -1120,8 +1134,11 @@ function liveQ(l) {
 const p1in = p => (p > 0 ? Math.max(1, Math.round(1 / p)).toLocaleString('en-US') : p === 0 ? '20,000+' : '—'); /* a 0 from the feed is a long shot rounded away, not a sure loser */
 const fmtP = p => (p == null ? '—' : p < 0.0001 ? '<0.01%' : p * 100 < 1 ? (p * 100).toFixed(2) + '%' : (p * 100).toFixed(1) + '%');
 function legNow(l0) { const l = l0.game ? liveGrade(l0) : l0, c = stateOf(l), lv = l.game ? liveOf(l) : null; return { l, c, lv, live: c === 'o' && !!lv && lv.state === 'in' }; }
+/* v62 · Nov 23, Chris: "the final score should be displayed no matter what the final results are with the final margin of victory
+   and what the team totals equaled up to" — every final reads: the score, who won and by how much, and the combined total */
+const finTail = (A, H, a, h) => `${a === h ? 'tied' : `${esc(a > h ? A : H)} by ${Math.abs(a - h)}`} · total ${a + h}`;
 function scoreBit(l, lv) { if (!lv || lv.state === 'pre' || lv.a == null || isNaN(lv.a)) return ''; const [A, H] = String(l.game || '').split('@');
-  return lv.state === 'in' ? `<span class="lv-on">● LIVE ${esc(A)} ${lv.a}–${lv.h} ${esc(H)}${lv.detail ? ' · ' + esc(lv.detail) : ''}</span>` : `<span class="lv-fin">Final ${esc(A)} ${lv.a}–${lv.h} ${esc(H)}</span>`; }
+  return lv.state === 'in' ? `<span class="lv-on">● LIVE ${esc(A)} ${lv.a}–${lv.h} ${esc(H)}${lv.detail ? ' · ' + esc(lv.detail) : ''}</span>` : `<span class="lv-fin">Final ${esc(A)} ${lv.a}–${lv.h} ${esc(H)} · ${finTail(A, H, +lv.a, +lv.h)}</span>`; }
 function qBit(l, live) { if (!live) return ''; const P = parseProp(l.pick) ? propNow(l) : null, q = liveQ(l); if (q == null) return '';
   const stat = P ? `<b class="lv-stat">${P.v} ${P.under ? `(under ${P.show})` : `of ${P.plus ? P.show + '+' : P.show}`}</b> · ` : ''; const p = l.p > 0 && l.p < 1 ? l.p : impP(l.price); return `${stat}<span class="lv-q ${p == null || q >= p ? 'up' : 'dn'}">${pct(q)}% live</span>${p != null ? ` <span class="lv-was">(was ${pct(p)}%)</span>` : ''}`; }
 /* ── one live/graded line for anything on the page that has a game (v3.1.2, Chris, Nov 15: "any place a game can be graded
@@ -1477,22 +1494,115 @@ function playerCard() { const M = AC.me; if (!M) return ''; const R = M.rank || 
     <div class="xc-st"><span><b>${liveRuns().length}</b>/3 runs live</span><span><b>${dd$(W.prize || 0)}</b> in prizes</span></div>
     ${(M.xplog || []).length ? `<details class="xc-log"><summary>Recent XP</summary>${M.xplog.slice(0, 8).map(x => `<p><span>${esc(x.why)}</span><b>+${x.xp} XP${x.dd ? ` · +${dd$(x.dd)}` : ''}</b></p>`).join('')}</details>` : ''}</section>`; }
 /* the road map: six checkpoints on a track, the pace marker, and where the run stands */
-function roadmap(c, r) { const cps = checkpoints(c), bal = r ? r.bal : c.start, day = r ? (Date.now() - r.ts) / 864e5 : 0, pace = paceAt(c, day), p = r ? runPct(r) : 0;
+function roadmap(c, r, proj) { const cps = checkpoints(c), bal = r ? r.bal : c.start, day = r ? (Date.now() - r.ts) / 864e5 : 0, pace = paceAt(c, day), p = r ? runPct(r) : 0;
   const pacePct = Math.max(0, Math.min(1, Math.log(pace / c.start) / Math.log(c.goal / c.start)));
-  return `<div class="road"><div class="rd-track"><i class="rd-fill" style="width:${(p * 100).toFixed(1)}%"></i>${r ? `<i class="rd-pace" style="left:${(pacePct * 100).toFixed(1)}%" title="pace"></i>` : ''}
+  /* v62 · where the run lands if its open tickets cash: a ghost on the track, and the stop it would reach */
+  const pp = r && proj > bal ? runPct({ ...r, bal: proj }) : 0, nx = r ? cps.find(x => bal < x.amt) : null, reach = r && proj > bal ? cps.filter(x => bal < x.amt && proj >= x.amt).pop() : null;
+  return `<div class="road"><div class="rd-track"><i class="rd-fill" style="width:${(p * 100).toFixed(1)}%"></i>${pp > p ? `<i class="rd-ghost" style="left:${(p * 100).toFixed(1)}%;width:${((pp - p) * 100).toFixed(1)}%"></i>` : ''}${r ? `<i class="rd-pace" style="left:${(pacePct * 100).toFixed(1)}%" title="pace"></i>` : ''}
     ${cps.map((x, i) => { const at = (i + 1) / cps.length * 100, hit = bal >= x.amt; return `<span class="rd-cp${hit ? ' hit' : ''}${i === cps.length - 1 ? ' vault' : ''}" style="left:${at}%"><em>${i === cps.length - 1 ? '🏆' : hit ? '✓' : i + 1}</em></span>`; }).join('')}</div>
     <div class="rd-names">${cps.map((x, i) => `<span class="${bal >= x.amt ? 'hit' : ''}"><b>${esc(x.name)}</b>${dd$(x.amt)}</span>`).join('')}</div>
-    ${r ? `<p class="rd-pacetxt ${bal >= pace ? 'up' : 'dn'}">${bal >= pace ? '▲ Ahead of pace' : '▼ Behind pace'}: the plan wants ${dd$(pace)} by now.</p>` : ''}</div>`; }
+    ${r ? `<p class="rd-pacetxt ${bal >= pace ? 'up' : 'dn'}">${bal >= pace ? '▲ Ahead of pace' : '▼ Behind pace'}: the plan wants ${dd$(pace)} by now.${nx && r.status === 'live' ? ` <span class="rd-next">${dd$(nx.amt - bal)} to ${esc(nx.name)}${reach ? ` · a cash takes you past <b>${esc(reach.name)}</b>` : ''}</span>` : ''}</p>` : ''}</div>`; }
+/* ── v62 · Nov 23, Chris: "I don't know if it's registering a ticket to attach to the challenge … in our previous challenge versions it
+   would take the best picks available and build an auto parlay … give the option to pick the best in said sport or the most confidence
+   amongst the characters or who's hot at the moment … more than anything I want to be able to follow my challenges the same way I'd
+   follow a ticket … get with Noah and design something 10000x more epic." The run card is now the run's live board: what's in play,
+   where the run lands if it cashes (a ghost on the road map), every ticket from the run with its legs live, finals with margins, and
+   its cash chance moving with the scores. ⚡ Quick Pick fills today's order from the desk in one tap. ── */
+const ddLeg = l => ({ sp: l.sp, game: l.game, pick: l.pick, price: l.price, start: l.t ? new Date(l.t).toISOString() : '', hit: l.res === 'hit' ? true : l.res === 'miss' ? false : null, push: l.res === 'push' });
+const runBets = r => ((AC.me && AC.me.bets) || []).filter(b => b.run === r.rid);
+/* a D$ ticket right now: each leg settled, live or to come, and its cash chance (settled legs count as decided) */
+function ddTicketNow(b) { const L = (b.legs || []).map(l0 => { const l = ddLeg(l0), X = legState(l); return { l0, l: X.l, st: l0.res === 'hit' ? 'w' : l0.res === 'miss' ? 'l' : l0.res === 'push' ? 'p' : X.st, lv: X.lv }; });
+  const p0 = (b.legs || []).reduce((a, l) => a * (impP(l.price) || 0.5), 1), busted = b.status === 'lost' || L.some(x => x.st === 'l');
+  const q = b.status === 'won' || b.status === 'push' ? 1 : busted ? 0 : L.reduce((a, x) => a * (x.st === 'w' || x.st === 'p' ? 1 : x.st === 'l' ? 0 : (liveQ(x.l) ?? impP(x.l0.price) ?? 0.5)), 1);
+  return { L, p0, q, live: L.filter(x => x.st === 'live').length, hit: L.filter(x => x.st === 'w').length, started: L.some(x => x.st !== 'o') }; }
+const runOddsTxt = p => (p <= 0 ? '<0.2%' : p < 0.1 ? (p * 100).toFixed(1) + '%' : Math.round(p * 100) + '%');
+const RSIM = new Map(); const runSim = (c, route, bal, days) => { const k = [c.id, route, Math.round(bal * 100), days].join('|'); if (!RSIM.has(k)) { if (RSIM.size > 200) RSIM.clear(); RSIM.set(k, simulate(c, route, bal, days, 500)); } return RSIM.get(k); };
+function rtkHtml(b, r, tag) { const N = ddTicketNow(b), open = b.status === 'open', legsN = (b.legs || []).length;
+  const chip = open ? (N.q === 0 ? '<span class="fchip lost">✗ Busted</span>' : N.live ? `<span class="fchip live">● Live · ${N.hit} of ${legsN} hit</span>` : N.started ? `<span class="fchip">${N.hit} of ${legsN} hit</span>` : `<span class="fchip">Open · ${esc(clock(new Date(Math.min(...b.legs.map(l => l.t || Infinity))).toISOString()))}</span>`)
+    : { won: `<span class="fchip cashed">✓ Cashed ${dd$(b.back)}</span>`, lost: '<span class="fchip lost">✗ Lost</span>', push: '<span class="fchip">↺ Push</span>' }[b.status] || '';
+  const legs = N.L.map(({ l0, l, st, lv }) => { const ic = st === 'w' ? '✓' : st === 'l' ? '✗' : st === 'p' ? '↺' : st === 'live' ? '●' : '·', cls = st === 'w' ? 'hit' : st === 'l' ? 'miss' : st === 'p' ? 'push' : st === 'live' ? 'live' : 'open';
+    const line = lv && (lv.state === 'post' || lv.state === 'in') ? `<small class="fl-d">${scoreBit(l, lv)}${st === 'live' && qBit(l, true) ? ' · ' + qBit(l, true) : ''}</small>` : `<small class="fl-g">${esc([matchup(l), whenLabel(l.start)].filter(Boolean).join(' · '))}</small>`;
+    return `<li class="fl ${cls}"><span class="fl-ic">${ic}</span><span class="fl-pk">${esc(legText(l))} <small>${esc(odds(l0.price))}</small>${lv && (lv.state === 'post' || lv.state === 'in') ? `<small class="fl-g">${esc(matchup(l))}</small>` : ''}${line}</span></li>`; }).join('');
+  const after = open && N.q > 0 ? `<div class="rtk-f">Cashes for <b>${dd$(b.stake * b.dec)}</b>${r ? ` → the run goes to <b>${dd$(r.bal + b.stake * b.dec)}</b>` : ''}</div>` : '';
+  const ch = p => (p >= 0.5 ? fmtP(p) : `${fmtP(p)} · 1 in ${p1in(p)}`), was = p => (p >= 0.4 ? fmtP(p) : '1 in ' + p1in(p));   /* ("1 in 1" says nothing: odds-on chances read as a percent) */
+  const qline = open && N.started && N.q > 0 && N.q < 1 ? `<div class="tk-live ${N.q >= N.p0 ? 'up' : 'dn'}">📡 ${N.live ? 'Live' : 'Now'} cash chance ${ch(N.q)} <small>(was ${was(N.p0)} when placed)</small></div>` : open && !N.started ? `<div class="tk-sum">${ch(N.p0)} at the posted prices</div>` : '';
+  return `<article class="rtk ${open ? (N.q === 0 ? 'lost' : N.live ? 'live' : 'open') : b.status}">${tag ? `<div class="rtk-src">${tag}</div>` : ''}<div class="rtk-h"><span><b>${dd$(b.stake)}</b> · ${b.mode === 'sgp' ? 'SGP · ' : ''}${legsN > 1 ? legsN + ' legs' : 'single'} · ${esc(decAm(b.dec))}</span>${chip}</div>${qline}<ul class="fl-list">${legs}</ul>${after}</article>`; }
+/* v62 · the Me tab's D$ tickets follow live the same way: legs live, finals with margins, the cash chance — and where each one came from */
+const betTag = b => { if (b.run) { const r = ((AC.me && AC.me.runs) || []).find(x => x.rid === b.run); return `🎯 ${esc(CHN(b.cid || (r && r.cid)))}`; } if (b.lg) { const g = ((AC.me && AC.me.leagues) || []).find(x => x.lid === b.lg); return `🏆 ${esc((g && g.name) || 'League')}`; } return '💵 Wallet'; };
+const myBetsHtml = () => (AC.me.bets || []).slice(0, 20).map(b => rtkHtml(b, b.run ? liveRuns().find(x => x.rid === b.run) || null : null, betTag(b))).join('');
+function betsRepaint() { const g = $('#v-me .rtk-list'); if (g && AC.me) g.innerHTML = myBetsHtml(); }
 function runCard(r) { const c = chal(r.cid); if (!c) return ''; const live = r.status === 'live' && r.ends > Date.now(), daysLeft = Math.max(1, Math.ceil((r.ends - Date.now()) / 864e5));
   const chip = live ? `<span class="fchip live">● ${cxLeft(r.ends - Date.now())} left</span>` : { won: `<span class="fchip cashed">🏆 +${dd$(r.paid || c.prize)}</span>`, busted: '<span class="fchip lost">Busted</span>', expired: '<span class="fchip">Time ran out</span>', quit: '<span class="fchip">Quit</span>' }[r.status] || '<span class="fchip">Settling</span>';
-  const O = live ? orderFor(r.route, r.bal, r.start) : null, odds2 = live ? simulate(c, r.route, r.bal, daysLeft, 500) : null, R = ROUTES[r.route] || ROUTES[c.route], RU = RULES[c.rule];
-  return `<article class="runcard ${r.status}" style="--tc:${c.color}"><div class="rc-h"><div><b>${esc(c.name)}</b><small>${tierChip(c)} ${esc(RU.icon)} ${esc(RU.lab)}${c.sport !== 'any' ? ' · ' + esc(SPORTS[c.sport]) : ''}</small></div>${chip}</div>
-    <div class="rc-n"><b>${dd$(r.bal)}</b><span>of ${dd$(r.goal)}</span><em>${r.w || 0}-${r.l || 0}${r.p ? '-' + r.p : ''}${r.open ? ` · ${r.open} open` : ''}</em></div>
-    ${roadmap(c, r)}
-    ${live ? `<div class="rc-order"><div><small>Today’s order · ${esc(R.icon)} ${esc(R.name)}</small><b>${dd$(O.stake)} on a ${c.rule === 'singles' ? 'single' : (c.rule === 'three' ? Math.max(3, O.k) : c.rule === 'two' ? 2 : O.k) + '-leg ticket'}</b><span>${esc(RU.desc)}${c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) + ' only' : ''}</span></div>
-      <div class="rc-odds"><b>${Math.round(odds2.p * 100)}%</b><small>finish odds</small></div></div>
-      <div class="row"><button type="button" class="btn foil sm" data-act="runuse" data-rid="${esc(r.rid)}">Bet from this run</button><label class="rc-route">Route <select data-change="runroute" data-rid="${esc(r.rid)}">${Object.entries(ROUTES).map(([k, v]) => `<option value="${k}"${k === r.route ? ' selected' : ''}>${v.icon} ${esc(v.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost sm" data-act="runquit" data-rid="${esc(r.rid)}">Quit</button></div>`
-      : `<p class="rc-m">${r.status === 'won' ? `Finished in ${cxTook(r.done - r.ts)} · +${r.xp || c.xp} XP` : `${r.bets || 0} bets · peak ${dd$(r.peak || r.start)}`}</p>`}</article>`; }
+  const O = live ? orderFor(r.route, r.bal, r.start) : null, odds2 = live ? runSim(c, r.route, r.bal, daysLeft) : null, R = ROUTES[r.route] || ROUTES[c.route], RU = RULES[c.rule];
+  const B = runBets(r), OPEN = B.filter(b => b.status === 'open'), done = B.filter(b => b.status !== 'open').slice(0, 3), inPlay = OPEN.reduce((a, b) => a + b.stake, 0), proj = r.bal + OPEN.reduce((a, b) => a + (ddTicketNow(b).q > 0 ? b.stake * b.dec : 0), 0);
+  const anyLive = OPEN.some(b => ddTicketNow(b).live), legsK = c.rule === 'singles' ? 1 : c.rule === 'three' ? Math.max(3, O ? O.k : 3) : c.rule === 'two' ? 2 : O ? Math.max(c.rule === 'world' ? 2 : 1, O.k) : 1;
+  return `<article class="runcard ${r.status}${anyLive ? ' is-live' : ''}" style="--tc:${c.color}" data-rid="${esc(r.rid)}"><div class="rc-h"><div><b>${esc(c.name)}</b><small>${tierChip(c)} ${esc(RU.icon)} ${esc(RU.lab)}${c.sport !== 'any' ? ' · ' + esc(SPORTS[c.sport]) : ''}</small></div>${chip}</div>
+    <div class="rc-n"><b>${dd$(r.bal)}</b><span>of ${dd$(r.goal)}</span><em>${r.w || 0}-${r.l || 0}${r.p ? '-' + r.p : ''}${OPEN.length ? ` · ${OPEN.length} open` : ''}</em></div>
+    ${OPEN.length ? `<div class="rc-live"><span>${anyLive ? '<i class="rc-dot"></i>' : ''}In play <b>${dd$(inPlay)}</b> · ${OPEN.length} ticket${OPEN.length > 1 ? 's' : ''}</span>${proj > r.bal ? `<span>If it cashes → <b>${dd$(proj)}</b></span>` : ''}</div>` : ''}
+    ${roadmap(c, r, OPEN.length ? proj : null)}
+    ${live ? `<div class="rc-order"><div><small>Today’s order · ${esc(R.icon)} ${esc(R.name)}</small><b>${dd$(O.stake)} on a ${legsK === 1 ? 'single' : legsK + '-leg ticket'}</b><span>${esc(RU.desc)}${c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) + ' only' : ''}</span></div>
+      <div class="rc-odds"><b>${runOddsTxt(odds2.p)}</b><small>finish odds</small><em>${odds2.p > 0 ? '1 in ' + p1in(odds2.p) : '1 in 500+'}</em></div></div>
+      <div class="rc-acts"><button type="button" class="btn foil sm" data-act="qpopen" data-rid="${esc(r.rid)}">⚡ Quick Pick</button><button type="button" class="btn line sm" data-act="runuse" data-rid="${esc(r.rid)}">Build my own</button><label class="rc-route">Route <select data-change="runroute" data-rid="${esc(r.rid)}">${Object.entries(ROUTES).map(([k, v]) => `<option value="${k}"${k === r.route ? ' selected' : ''}>${v.icon} ${esc(v.name)}</option>`).join('')}</select></label><button type="button" class="btn ghost sm" data-act="runquit" data-rid="${esc(r.rid)}">Quit</button></div>`
+      : `<p class="rc-m">${r.status === 'won' ? `Finished in ${cxTook(r.done - r.ts)} · +${r.xp || c.xp} XP` : `${r.bets || 0} bets · peak ${dd$(r.peak || r.start)}`}</p>`}
+    ${OPEN.length || done.length ? `<div class="rc-tix"><h4>${OPEN.length ? `${anyLive ? '<i class="rc-dot"></i>' : ''}On the board · ${OPEN.length} open` : 'Latest tickets'}${S.liveAt && anyLive ? `<small>scores ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</small>` : ''}</h4>${[...OPEN, ...done].map(b => rtkHtml(b, r)).join('')}</div>` : live ? `<p class="rc-empty">No tickets from this run yet. ⚡ Quick Pick builds today’s order from the desk’s picks, or build your own on the Slate. Every ticket from the run shows up here, live.</p>` : ''}</article>`; }
+/* ── ⚡ Quick Pick: today's order, filled from the desk. Three ways to pick: what the characters agree on, who's hot right now, or the
+   best of the board in one sport. Every leg fits the run's rule and sport, one per game, priced off the Slate like any D$ ticket. ── */
+const QP = { rid: '', src: 'agree', sp: '', who: '', off: 0, busy: false };
+const QP_TIER = { supreme: 3, strong: 2, value: 1 };
+function hotChars() { const C = (S.feed && S.feed.characters) || [];
+  for (const days of [7, 14]) { const cut = deskDay(Date.now() - days * 864e5);
+    const L = C.map(c => { let w = 0, l = 0, u = 0; for (const x of c.recent || []) { if (x.kind !== 'game' || !x.d || x.d < cut) continue; if (x.r === 'win') { w++; u += unitsWon(x.price); } else if (x.r === 'loss') { l++; u -= 1; } }
+      return { v: c.v, name: c.name, color: c.color, w, l, u, days }; }).filter(x => x.w + x.l >= 4 && x.u > 0).sort((a, b) => b.u - a.u || b.w - a.w);
+    if (L.length) return L; } return []; }
+/* the Slate's game for a board game (the same game even when one of them lists it the other way round) */
+function qpSlateGame(b) { const [a, h] = String(b.game).split('@'), A = ab(b.sp, a), H = ab(b.sp, h);
+  for (const d of (S.slate && S.slate.days) || []) for (const g of d.games || []) { if (g.sp !== b.sp || g.lite || !g.ln) continue; const ga = ab(g.sp, g.a.ab), gh = ab(g.sp, g.h.ab); if ((ga === A && gh === H) || (ga === H && gh === A)) { if (b.day && deskDay(g.t) !== b.day) continue; return g; } } return null; }
+function qpLegOf(g, m, pick) { const mk = m === 'ml' || m === 'spread' || m === 'total' ? m : null; if (!mk) return null; let side;
+  if (mk === 'total') side = /^over/i.test(pick) ? 'over' : /^under/i.test(pick) ? 'under' : null; else { const t = ab(g.sp, String(pick).split(/\s+/)[0]); side = t === ab(g.sp, g.a.ab) ? 'away' : t === ab(g.sp, g.h.ab) ? 'home' : null; }
+  if (!side) return null; const L = ddLegOf(g, mk, side); return L ? { k: g.k, mk, side, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L } : null; }
+const qpRuleOk = (c, l) => { if (c.sport !== 'any' && l.sp !== c.sport) return false; switch (c.rule) { case 'chalk': return l.price <= -130; case 'dogs': return l.price > 0; case 'overs': return l.mk === 'total' && l.side === 'over'; case 'unders': return l.mk === 'total' && l.side === 'under'; case 'ml': return l.mk === 'ml'; case 'spreads': return l.mk === 'spread'; case 'totals': return l.mk === 'total'; default: return true; } };
+/* every pick the source likes, as Slate legs that fit the run, best first, one per game */
+function qpCands(c, src, sp, who) { const B = boardOf(), now = Date.now(); if (!B || !S.slate) return [];
+  const out = new Map(); const add = (g, x) => { const o = out.get(g.k); if (!o || x.score > o.score) out.set(g.k, x); };
+  for (const b of B.games || []) { const g = qpSlateGame(b); if (!g || !(g.t > now + 5 * 60e3) || g.t > now + 40 * 36e5) continue;
+    if (src === 'hot') { for (const m of ['ml', 'spread', 'total']) for (const cl of (b.calls || {})[m] || []) { if (cl.v !== who) continue; const l = qpLegOf(g, m, cl.pick); if (!l || !qpRuleOk(c, l)) continue;
+        add(g, { ...l, score: (cl.o ? 1 : 0) + (cl.p || 0), why: [`${castOf(cl.v).name}${cl.o ? ' · official' : ''}`, cl.p != null ? pct(cl.p) + '% sure' : ''].filter(Boolean).join(' · '), b }); } continue; }
+    if (src === 'sport' && sp && g.sp !== sp) continue;
+    for (const pk of b.picks || []) { const l = qpLegOf(g, pk.m, pk.pick); if (!l || !qpRuleOk(c, l)) continue; const C = (b.calls || {})[pk.m] || [], side = C.filter(x => x.s === pk.sd).length, all = C.length || 1;
+      const score = src === 'agree' ? (pk.unan ? 2 : 0) + 2 * side / all + (side >= 3 ? 0.4 : 0) + (pk.p || 0) : (QP_TIER[pk.tier] || 0) + (pk.unan ? 1.5 : 0) + (pk.p || 0);
+      add(g, { ...l, score, why: [pk.unan ? '★ Unanimous' : TIER[pk.tier] ? TIER[pk.tier][0] : '', C.length ? `${side} of ${C.length} characters` : '', pk.p != null ? pct(pk.p) + '%' : ''].filter(Boolean).join(' · '), b }); } }
+  return [...out.values()].sort((x, y) => y.score - x.score || x.t - y.t); }
+function qpTicket(c, k, C, off) { if (!C.length) return []; let legs;
+  if (k === 1) legs = [C[off % C.length]];
+  else { const keep = C.slice(0, k - 1), rest = C.slice(k - 1); legs = rest.length ? [...keep, rest[off % rest.length]] : C.slice(0, k); }
+  if (c.rule === 'world' && new Set(legs.map(l => l.sp)).size < 2) { const other = C.find(l => l.sp !== legs[0].sp && !legs.includes(l)); if (other) legs = [...legs.slice(0, Math.max(1, legs.length - 1)), other]; }
+  return legs.length >= k ? legs : []; }
+function qpState() { const r = liveRuns().find(x => x.rid === QP.rid), c = r && chal(r.cid); if (!r || !c) return null;
+  const O = orderFor(r.route, r.bal, r.start), k = c.rule === 'singles' ? 1 : c.rule === 'three' ? Math.max(3, O.k) : c.rule === 'two' ? 2 : Math.max(c.rule === 'world' ? 2 : 1, O.k);
+  const hot = hotChars().filter(h => qpCands(c, 'hot', '', h.v).length), who = hot.find(h => h.v === QP.who) || hot[0];
+  const sps = [...new Set(((boardOf() || {}).games || []).map(b => { const g = qpSlateGame(b); return g && g.t > Date.now() + 5 * 60e3 ? b.sp : null; }).filter(Boolean))].filter(x => c.sport === 'any' || x === c.sport);
+  const sp = c.sport !== 'any' ? c.sport : sps.includes(QP.sp) ? QP.sp : sps[0] || '';
+  const C = qpCands(c, QP.src, sp, who ? who.v : ''), legs = qpTicket(c, k, C, QP.off);
+  return { r, c, O, k, hot, who, sps, sp, C, legs }; }
+function qpSheet() { const Q = qpState(); if (!Q) return ''; const { r, c, O, k, hot, who, sps, sp, C, legs } = Q, RU = RULES[c.rule];
+  const dec = legs.length ? ddTicketDec(legs, 'parlay') : 0, st = Math.min(r.bal, O.stake), why = { agree: 'The picks most of the room is on: unanimous calls first, then the widest agreement.', hot: who ? `${who.name} is ${who.w}–${who.l} over the last ${who.days} days (${who.u >= 0 ? '+' : '−'}${Math.abs(who.u).toFixed(1)}u). These are its own calls, official ones first.` : 'Nobody is running hot with picks on the board right now.', sport: 'The desk’s best colored picks in one sport: unanimous and supreme first.' }[QP.src];
+  const src = (v, ic, t, sub) => `<button type="button" role="tab" aria-selected="${QP.src === v}" class="qp-s${QP.src === v ? ' on' : ''}" data-act="qpsrc" data-v="${v}"><i>${ic}</i><b>${t}</b><small>${sub}</small></button>`;
+  const empty = !S.slate ? 'Loading the lines…' : !boardOf() ? 'The board isn’t out yet. Quick Pick works off the characters’ calls once the desk publishes them.' : `${QP.src === 'hot' && !who ? 'Nobody hot has a pick on the board right now.' : `Only ${C.length} game${C.length === 1 ? '' : 's'} on the board fit${C.length === 1 ? 's' : ''} this run right now`} (${esc(RU.lab)}: ${esc(RU.desc)}${c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) + ' only' : ''}, games that haven’t started). Try another source, or build your own on the Slate.`;
+  return `<div class="sheet-bg" data-act="qpclose"></div><section class="csheet qps" role="dialog" aria-label="Quick Pick for ${esc(c.name)}" style="--tc:${c.color}">
+    <button type="button" class="cs-x" data-act="qpclose" aria-label="Close">✕</button>
+    <div class="cs-hero qp-hero"><span class="cs-n">⚡ Quick Pick</span><h2>${esc(c.name)}</h2><p>Today’s order: <b>${dd$(st)} on a ${k === 1 ? 'single' : k + '-leg ticket'}</b> · ${esc(RU.icon)} ${esc(RU.desc)}${c.sport !== 'any' ? ' · ' + esc(SPORTS[c.sport]) + ' only' : ''}</p>
+      <div class="qp-bank"><span>Run <b>${dd$(r.bal)}</b></span><span>Goal <b>${dd$(r.goal)}</b></span><span>${cxLeft(r.ends - Date.now())} left</span></div></div>
+    <div class="qp-src" role="tablist" aria-label="Where the picks come from">${src('agree', '🤝', 'The room agrees', 'Most characters, one side')}${src('hot', '🔥', 'Who’s hot', who ? `${esc(who.name)} · ${who.w}–${who.l}` : 'Best recent run')}${src('sport', '🏟', 'Best in a sport', c.sport !== 'any' ? esc(SPORTS[c.sport]) : 'Pick the sport')}</div>
+    ${QP.src === 'hot' && hot.length > 1 ? `<div class="qp-chips">${hot.slice(0, 4).map(h => `<button type="button" class="${who && h.v === who.v ? 'on' : ''}" data-act="qpwho" data-v="${esc(h.v)}" style="--c:${okColor(h.color)}">${esc(h.name)} <small>${h.w}–${h.l}, ${h.u >= 0 ? '+' : '−'}${Math.abs(h.u).toFixed(1)}u</small></button>`).join('')}</div>` : ''}
+    ${QP.src === 'sport' && c.sport === 'any' && sps.length ? `<div class="qp-chips">${sps.map(x => `<button type="button" class="${x === sp ? 'on' : ''}" data-act="qpsp" data-v="${x}">${esc(LEAGUE[x] || x)}</button>`).join('')}</div>` : ''}
+    <p class="qp-why">${esc(why)}</p>
+    ${legs.length ? `<div class="qp-tk"><div class="qp-tkh"><span>${k === 1 ? 'Single' : k + '-leg parlay'}</span><b>${esc(decAm(dec))}</b></div>
+      <ol class="qp-legs">${legs.map((l, i) => `<li><span class="qp-n">${i + 1}</span><span class="qp-b"><b>${esc(readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick)} <small>${esc(odds(l.price))}</small></b><small>${esc([LEAGUE[l.sp], matchup({ sp: l.sp, game: l.game }), whenLabel(new Date(l.t).toISOString())].filter(Boolean).join(' · '))}</small><em>${esc(l.why)}</em></span></li>`).join('')}</ol>
+      <div class="qp-sum"><label>Stake <input id="qpStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"></label><span>Pays <b id="qpPays">${dd$(st * dec)}</b></span><span>Run after a cash <b id="qpAfter">${dd$(r.bal - st + st * dec)}</b></span></div></div>
+      <div class="qp-go"><button type="button" class="btn foil" data-act="qpplace"${QP.busy ? ' disabled' : ''}>${QP.busy ? 'Placing…' : 'Place it from this run'}</button>${C.length > k ? '<button type="button" class="btn line sm" data-act="qpshuf">🔀 Shuffle</button>' : ''}<button type="button" class="btn ghost sm" data-act="qpslip">Edit on the Slate</button></div>`
+      : `<div class="qp-empty">${empty}</div>`}
+    <p class="note">Desk Dollars, play money. Lines are the Slate’s; the server prices the ticket again the moment you place it. The ticket comes off this run’s bankroll and shows on the run card, live.</p></section>`; }
+function qpPaint() { const n = $('#cxSheet'); if (!n) return; const y = (n.querySelector('.csheet') || {}).scrollTop || 0; n.innerHTML = QP.rid ? qpSheet() : ''; const c2 = n.querySelector('.csheet'); if (c2) c2.scrollTop = y; document.body.classList.toggle('sheet-on', !!QP.rid); }
 function chalFiltered() { const F = CX.f, q = (F.q || '').toLowerCase().trim(), by = (CX.board && CX.board.by) || {};
   let L = library().filter(c => (!F.d || c.days === F.d) && (!F.t || c.tier === F.t) && (!F.r || c.rule === F.r) && (!F.s || c.sport === F.s) && (!q || (c.name + ' ' + c.why + ' ' + RULES[c.rule].lab + ' ' + SPORTS[c.sport]).toLowerCase().includes(q)));
   const ti = c => CTIERS.findIndex(t => t.id === c.tier);
@@ -1764,7 +1874,21 @@ document.addEventListener('click', async e => {
   else if (act === 'chalroute') { CX.route = [a.dataset.id, a.dataset.route]; const n = $('#cxSheet'); if (n) { const y = (n.querySelector('.csheet') || {}).scrollTop || 0; n.innerHTML = chalSheet(CX.open); const c2 = n.querySelector('.csheet'); if (c2) c2.scrollTop = y; } }
   else if (act === 'chaljoin') { const P = acctPass(); if (!P) { CX.open = ''; document.body.classList.remove('sheet-on'); go('me', true); toast('Sign in to take a challenge'); return; }
     try { const j = await acctApi('/acct/chal/join', { token: P.token, id: a.dataset.id, route: a.dataset.route }); if (AC.me) AC.me.runs = [j.run, ...(AC.me.runs || [])]; S.ddFrom = 'run:' + j.run.rid; store.set('ddfrom', S.ddFrom); CX.open = ''; document.body.classList.remove('sheet-on'); CX.at = 0; viewChallenges(); window.scrollTo(0, 0); toast(`${CHN(j.run.cid)} is live: ${dd$(j.run.start)} → ${dd$(j.run.goal)}. Your slip now bets from it.`); } catch (e) { toast(e.message); } }
-  else if (act === 'runuse') { S.ddFrom = 'run:' + a.dataset.rid; store.set('ddfrom', S.ddFrom); go('slate', true); toast('Tap any line on the Slate: the slip bets from this run'); }
+  else if (act === 'runuse') { S.ddFrom = 'run:' + a.dataset.rid; store.set('ddfrom', S.ddFrom); go('slate', true); toast(`Tap any line on the Slate: the slip bets from ${CHN((liveRuns().find(r => r.rid === a.dataset.rid) || {}).cid) || 'this run'}`); }
+  else if (act === 'qpopen') { QP.rid = a.dataset.rid; QP.off = 0; QP.busy = false; const r = liveRuns().find(x => x.rid === QP.rid), c = r && chal(r.cid); QP.src = QP.src || 'agree'; if (c && c.sport !== 'any') QP.sp = c.sport; qpPaint(); if (!S.slate) { loadSlate().then(qpPaint, qpPaint); } }
+  else if (act === 'qpclose') { QP.rid = ''; qpPaint(); }
+  else if (act === 'qpsrc') { QP.src = a.dataset.v; QP.off = 0; qpPaint(); }
+  else if (act === 'qpwho') { QP.who = a.dataset.v; QP.off = 0; qpPaint(); }
+  else if (act === 'qpsp') { QP.sp = a.dataset.v; QP.off = 0; qpPaint(); }
+  else if (act === 'qpshuf') { QP.off++; qpPaint(); }
+  else if (act === 'qpslip') { const Q = qpState(); if (Q && Q.legs.length) { S.dd = Q.legs.map(l => ({ k: l.k, mk: l.mk, side: l.side, sp: l.sp, price: l.price, pick: l.pick, ...(l.line != null ? { line: l.line } : {}) })); S.ddMode = 'parlay'; store.set('ddslip', S.dd); store.set('ddmode', 'parlay');
+      S.ddFrom = 'run:' + Q.r.rid; store.set('ddfrom', S.ddFrom); store.set('ddstake', +(($('#qpStake') || {}).value || Q.O.stake)); QP.rid = ''; qpPaint(); go('slate', true); toast('On your slip, from ' + Q.c.name + ': change anything, then place it'); } }
+  else if (act === 'qpplace') { const P = acctPass(), Q = qpState(); if (!P || !Q || !Q.legs.length || QP.busy) return; const st = Math.round(+(($('#qpStake') || {}).value || 0) * 100) / 100;
+    QP.busy = true; qpPaint();
+    try { const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: 'parlay', run: Q.r.rid, legs: Q.legs.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
+      if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; if (j.run) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); }
+      CX.at = 0; QP.busy = false; QP.rid = ''; qpPaint(); render(); toast(`Placed from ${Q.c.name}: ${dd$(j.bet.stake)} on ${j.bet.legs.length > 1 ? j.bet.legs.length + ' legs' : 'a single'}, pays ${dd$(j.bet.stake * j.bet.dec)}`); liveTick();
+    } catch (e) { QP.busy = false; qpPaint(); toast(e.message); } }
   else if (act === 'runquit') { const P = acctPass(); if (!P || !confirmQuit(a)) return; try { const j = await acctApi('/acct/chal/quit', { token: P.token, rid: a.dataset.rid }); if (AC.me) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); CX.at = 0; viewChallenges(); } catch (e) { toast(e.message); } }
   else if (act === 'cxf') { const k = a.dataset.k; CX.f[k] = k === 'd' ? +a.dataset.v : a.dataset.v; CX.show = 24; store.set('cxf', CX.f); viewChallenges(); }
   else if (act === 'cxmore') { CX.show += 48; viewChallenges(); }
@@ -1805,8 +1929,13 @@ document.addEventListener('click', async e => {
   else if (act === 'ddmode') { S.ddMode = a.dataset.v; store.set('ddmode', S.ddMode); render(); }
   else if (act === 'ddclear') { S.dd = []; store.set('ddslip', S.dd); render(); }
   else if (act === 'ddplace') { const P = acctPass(); if (!P) { AC.open = false; go('me', true); toast('Sign in to get your D$1,000'); return; }
-    const st = +(($('#ddStake') || {}).value || 0); try { const fk = fromKey(), run = fk.startsWith('run:') ? fk.slice(4) : undefined, league = fk.startsWith('lg:') ? fk.slice(3) : undefined; const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: S.ddMode, run, league, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
-      if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; if (j.run) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); if (j.entry) AC.me.leagues = (AC.me.leagues || []).map(g => (g.lid === j.entry.lid ? { ...g, bal: j.entry.bal, open: j.entry.open } : g)); } CX.at = 0; LGX.at = 0; LGX.one = {}; S.dd = []; store.set('ddslip', S.dd); store.set('ddstake', st); render(); toast(`Placed${j.bet.mode === 'sgp' ? ' (SGP)' : ''}: ${dd$(j.bet.stake)} to win ${dd$(j.bet.toWin)}`); LB = null; } catch (e) { toast(e.message); } }
+    const st = +(($('#ddStake') || {}).value || 0);
+    /* v62 · "I don't know if it's registering a ticket to attach to the challenge": a slip set to bet from a run never quietly falls back to
+       the wallet because the account hadn't loaded yet — it loads first; and the toast says where the ticket went */
+    if (/^(run|lg):/.test(S.ddFrom || '') && !AC.me) await acctLoad();
+    if (/^(run|lg):/.test(S.ddFrom || '') && !fromKey()) { S.ddFrom = ''; store.set('ddfrom', ''); render(); toast('That run or league is over: this slip now bets from your wallet. Tap Place it again to go ahead.'); return; }
+    try { const fk = fromKey(), run = fk.startsWith('run:') ? fk.slice(4) : undefined, league = fk.startsWith('lg:') ? fk.slice(3) : undefined, src = run ? CHN((liveRuns().find(r => r.rid === run) || {}).cid) : league ? ((liveLgs().find(g => g.lid === league) || {}).name || 'your league') : 'your wallet'; const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: S.ddMode, run, league, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
+      if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; if (j.run) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); if (j.entry) AC.me.leagues = (AC.me.leagues || []).map(g => (g.lid === j.entry.lid ? { ...g, bal: j.entry.bal, open: j.entry.open } : g)); } CX.at = 0; LGX.at = 0; LGX.one = {}; S.dd = []; store.set('ddslip', S.dd); store.set('ddstake', st); render(); toast(`Placed${j.bet.mode === 'sgp' ? ' (SGP)' : ''} from ${src}: ${dd$(j.bet.stake)} to win ${dd$(j.bet.toWin)}${run ? ' · follow it on the run card' : ''}`); LB = null; liveTick(); } catch (e) { toast(e.message); } }
   else if (act === 'acmode') { AC.mode = a.dataset.v; viewMe(); }
   else if (act === 'aclogout') { const P = acctPass(); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); if (P) acctApi('/acct/logout', { token: P.token }).catch(() => { }); }
   else if (act === 'tkmark') { const t = ((AC.me && AC.me.tickets) || []).find(x => x.id === a.dataset.id); if (t) { const l = t.legs[+a.dataset.i]; l.res = l.res === a.dataset.v ? null : a.dataset.v; viewMe(); tkSave(t); } }
@@ -1836,6 +1965,9 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
 document.addEventListener('input', e => { if (e.target.id === 'ddStake') { const v = +e.target.value || 0, dec = ddTicketDec(S.dd, S.ddMode), n = $('#ddPays'); if (n) n.textContent = dd$(v * dec); } });
+/* v62 · Quick Pick: the stake moves what it pays and where the run lands */
+document.addEventListener('input', e => { if (e.target.id !== 'qpStake') return; const Q = qpState(); if (!Q || !Q.legs.length) return; const v = Math.max(0, +e.target.value || 0), dec = ddTicketDec(Q.legs, 'parlay');
+  const a = $('#qpPays'), b = $('#qpAfter'); if (a) a.textContent = dd$(v * dec); if (b) b.textContent = dd$(Q.r.bal - v + v * dec); });
 let adT = 0; document.addEventListener('input', e => { const q = e.target.closest('[data-input="adq"]'); if (!q) return; clearTimeout(adT); adT = setTimeout(() => { AD.q = q.value; viewAdmin(); const n = document.querySelector('[data-input="adq"]'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 200); });
 let cxT = 0; document.addEventListener('input', e => { const q = e.target.closest('[data-input="cxq"]'); if (!q) return; clearTimeout(cxT); cxT = setTimeout(() => { CX.f.q = q.value; CX.show = 24; store.set('cxf', CX.f); const pos = q.selectionStart; viewChallenges(); const n = document.querySelector('[data-input="cxq"]'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { } } }, 220); });
 document.addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('myinbox')) AC.inboxOpen = d.open; if (d.classList && d.classList.contains('myinbox') && d.open && AC.me && AC.me.inbox && AC.me.inbox.unread) { const P = acctPass(); AC.me.inbox.unread = 0; acctBadge(); if (P) acctApi('/acct/inbox/read', { token: P.token }).catch(() => { }); } }, true);
@@ -1862,7 +1994,9 @@ setInterval(() => {
 setInterval(() => { if (!document.hidden) loadFeed(); }, 120e3);
 /* live scores: every 30 s while a game on the page is live, every 60 s otherwise */
 (function liveLoop() { const anyLive = Object.values(S.live || {}).some(v => v && v.state === 'in');
-  setTimeout(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive(); } liveLoop(); }, anyLive ? 30e3 : S.liveAt ? 60e3 : 10e3); })();
+  setTimeout(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive();
+    /* v62 · a run with a ticket out: the account refreshes every 2 minutes while you watch, so a settled ticket moves the run's bankroll */
+    if ((S.tab === 'challenges' || S.tab === 'me') && AC.me && (AC.me.bets || []).some(b => b.status === 'open') && Date.now() - (AC.at || 0) > 120e3) acctLoad(); } liveLoop(); }, anyLive ? 30e3 : S.liveAt ? 60e3 : 10e3); })();
 setInterval(() => { if (!document.hidden && S.tab === 'slate') loadSlate(); }, 600e3);
 
 /* ── Pull to refresh (Chris, Nov 15: "the pull down refresh is not available yet on the public app"). A home-screen app on iPhone

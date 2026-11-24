@@ -51,10 +51,10 @@ const FACTS = [
   [/against the spread/, 'ats', () => ['the cover record backs it up']],
   [/spread on the (\d+)/, 'key', m => [`the spread sits right on ${m[1]}, a key number`]]];
 function facts(note) { const out = [];
-  for (let raw of String(note || '').split(/\s*·\s*/)) { raw = raw.replace(/^[+-]\d+(\.\d+)?\s+/, '').replace(/\s*—\s*$/, '').trim(); if (!raw) continue;
+  for (let raw of String(note || '').split(/\s*·\s*/)) { raw = raw.replace(/^[+-]\d+(\.\d+)?\s+/, '').replace(/\s*—\s*$/, '').replace(/^his (final|score|total)\b/i, 'my $1').trim(); if (!raw) continue;   /* (v2 · the character is the one talking: "my final", not "his final") */
     let hit = null; for (const [re, k, f] of FACTS) { const m = raw.match(re); if (m) { hit = { k, alts: f(m) }; break; } }
     if (/^Pickswise/.test(raw)) continue; /* the outside experts' stars read badly out loud */
-    out.push(hit || { k: 'raw', alts: [raw.charAt(0).toLowerCase() + raw.slice(1)] }); }
+    out.push(hit || { k: 'raw', alts: [/^[A-Z][A-Z0-9&]/.test(raw) ? raw : raw.charAt(0).toLowerCase() + raw.slice(1)] }); }   /* (v2 · a team's letters stay capitals: "IUIN on a back-to-back", never "iUIN") */
   return out; }
 /* ── how each character talks ── */
 const P = {
