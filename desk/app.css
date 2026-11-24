@@ -242,6 +242,57 @@ a.chip{text-decoration:none}
 .lgs .pos{color:#7BE0A8}.lgs .neg{color:#FF9A8F}
 .two{display:grid;gap:0 40px;align-items:start}
 
+/* the month (v39 · Nov 23): the results calendar. A black-and-gold board like the face-down slips; a won day glows green,
+   a lost day red, deeper the bigger the day; the day you tap comes off the board as a paper slip */
+.calx{position:relative;margin-top:22px;max-width:560px;padding:16px 12px 14px;border-radius:16px;color:var(--cream);
+  background:radial-gradient(95% 50% at 50% 0,rgba(242,208,103,.13),transparent 72%),#0F0D09;box-shadow:0 18px 32px rgba(0,0,0,.5),0 2px 2px rgba(0,0,0,.4)}
+.calx::before{content:"";position:absolute;inset:6px;border:1px solid rgba(242,208,103,.4);border-radius:11px;pointer-events:none}
+.calx::after{content:"";position:absolute;left:6px;right:6px;top:6px;height:170px;border-radius:11px 11px 0 0;pointer-events:none;   /* the face-down slip's engraving, behind the month only */
+  background:repeating-radial-gradient(circle at 50% -60%,rgba(242,208,103,.09) 0 1px,transparent 1px 10px);-webkit-mask:linear-gradient(#000,transparent);mask:linear-gradient(#000,transparent)}
+.calh,.calsum,.calw,.calg,.calday,.calf{position:relative;z-index:1}
+.calh{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center}
+.calm{margin:0;text-align:center;font:900 31px/1 var(--display);text-transform:uppercase;letter-spacing:.035em;color:var(--foil)}
+.calm span{color:var(--cream-3);font-weight:700}
+.calnv{appearance:none;position:relative;display:grid;place-items:center;width:40px;height:40px;margin:0 auto;padding:0;border-radius:50%;border:1px solid rgba(242,208,103,.45);background:rgba(242,208,103,.07);color:var(--foil);cursor:pointer}
+.calnv svg{width:18px;height:18px}
+.calnv:disabled{opacity:.22;cursor:default}
+.calsum{margin:8px 0 0;text-align:center}
+.calu{display:block;font:900 56px/.88 var(--display);letter-spacing:-.01em;font-variant-numeric:tabular-nums;color:var(--cream-2)}
+.calu.pos{color:#7BE0A8;text-shadow:0 0 28px rgba(123,224,168,.32)}.calu.neg{color:#FF9A8F;text-shadow:0 0 28px rgba(255,154,143,.3)}
+.calr{display:block;margin-top:7px;font-size:13.5px;color:var(--cream-2)}
+.calw,.calg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.calw{margin:16px 0 6px;font:700 11px/1 var(--text);color:var(--cream-3);text-align:center}
+.cd{appearance:none;position:relative;display:flex;flex-direction:column;min-width:0;aspect-ratio:1/1.14;margin:0;padding:4px 3px 5px;border:0;border-radius:9px;background:rgba(243,238,223,.05);color:rgba(243,238,223,.4);font:inherit;text-align:center;overflow:hidden}
+button.cd{cursor:pointer}
+.cd i{align-self:flex-start;padding-left:2px;font:700 10.5px/1 var(--text);font-style:normal}
+.cd b{margin-top:auto;font:800 clamp(12.5px,3.75vw,18px)/1 var(--display);letter-spacing:.005em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cd small{display:none;margin-top:3px;font:600 9.5px/1 var(--text);opacity:.82;white-space:nowrap}
+.cd.pad,.cd.f,.cd.q,.cd.u{background:none}
+.cd.f,.cd.q,.cd.u{color:rgba(243,238,223,.26)}
+.cd.f{box-shadow:inset 0 0 0 1px rgba(243,238,223,.08)}   /* the rest of the month, still to come */
+.cd.u{outline:1px dashed rgba(243,238,223,.2);outline-offset:-1px}   /* on the record, not on this page yet (an older feed) */
+.cd.w{background:linear-gradient(160deg,rgba(46,204,130,var(--h)),rgba(15,96,60,var(--h)));color:#F1FFF7;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+.cd.l{background:linear-gradient(160deg,rgba(240,92,76,var(--h)),rgba(146,36,26,var(--h)));color:#FFF2EF;box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
+.cd.e{background:rgba(243,238,223,.16);color:var(--cream)}
+.cd.o{background:rgba(243,238,223,.09);color:var(--cream-2)}
+.cd.t{outline:2px solid var(--foil);outline-offset:1px}
+.cd.s{z-index:1;transform:translateY(-2px) scale(1.07);box-shadow:0 10px 18px rgba(0,0,0,.55),inset 0 0 0 1.5px rgba(255,255,255,.82)}
+.cd .cpip{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--live);animation:calpip 1.6s infinite}
+.cd .cbest{position:absolute;top:3px;right:4px;font:normal 10px/1 var(--text);color:var(--foil);text-shadow:0 0 6px rgba(242,208,103,.7)}
+@keyframes calpip{0%{box-shadow:0 0 0 0 rgba(229,72,77,.65)}70%,100%{box-shadow:0 0 0 6px rgba(229,72,77,0)}}
+.calg.anim .cd{animation:calin .46s cubic-bezier(.2,.75,.25,1) both;animation-delay:calc(var(--i,0) * 13ms)}
+@keyframes calin{from{opacity:0;transform:translateY(7px) scale(.86)}}
+.calday{position:relative;margin-top:14px;padding:12px 14px;border-radius:10px;color:var(--ink);background:#FBF8EF var(--noise);background-size:200px;background-blend-mode:multiply;box-shadow:0 10px 20px rgba(0,0,0,.45)}
+.calday.in{animation:calslip .3s cubic-bezier(.2,.75,.25,1) both}
+@keyframes calslip{from{opacity:0;transform:translateY(-8px)}}
+.calday .day-h{font-size:15.5px;padding-bottom:7px;border-bottom:1px solid var(--rule)}
+.calnote{margin:8px 0 0;font-size:13.5px;color:var(--ink-2)}
+.calday>.calnote:first-child{margin:0}
+.calf{margin:12px 6px 2px;font-size:13px;color:var(--cream-2);text-align:center}
+.calf b{color:var(--foil);font-weight:400}
+@media (min-width:440px){.calx{padding:18px 16px 16px}.calw,.calg{gap:6px}.cd small{display:block}}
+@media (min-width:920px){.two.rc{grid-template-areas:"tape cal" "tape side";grid-template-rows:auto 1fr}.two.rc>.tape{grid-area:tape}.two.rc>.calx{grid-area:cal}.two.rc>.rside{grid-area:side}}
+
 /* ── join ─────────────────────────────────────────────────────────────── */
 .pass{position:relative;max-width:440px;margin:24px 0 0;padding:58px 22px 24px;border-radius:18px;color:var(--cream);
   background:repeating-radial-gradient(circle at 50% -20%,rgba(242,208,103,.14) 0 1px,transparent 1px 11px),#0F0D09;box-shadow:inset 0 0 0 1.5px rgba(242,208,103,.55),0 20px 30px rgba(0,0,0,.45)}

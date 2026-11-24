@@ -68,7 +68,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
 (async () => {
   const b = await pw.chromium.launch(); const HOSTS = new Set();
   /* one visit: a fresh browser profile, the given feed, the tab; returns the page + what it asked the network for */
-  async function visit(feed, { tab = 'today', ua, guide = false, width, chat, query = '' } = {}) {
+  async function visit(feed, { tab = 'today', ua, guide = false, width, chat, query = '', at } = {}) {
     const ctx = await b.newContext({ ...pw.devices['iPhone 14'], ...(ua ? { userAgent: ua } : {}), ...(width ? { viewport: { width, height: 860 }, isMobile: false, hasTouch: false } : {}) });
     const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(String(e.message)));
     await p.route('**/*', r => { const u = new URL(r.request().url()); HOSTS.add(u.hostname + (u.hostname === 'raw.githubusercontent.com' ? u.pathname : ''));
@@ -81,6 +81,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
       if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
       r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
     if (!guide) await p.addInitScript(() => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); } catch (e) { } });
+    if (at) await p.clock.setFixedTime(new Date(at));   /* (a fixed clock where dates on the page matter) */
     await p.goto('https://desk.test/desk/' + query + '#' + tab, { waitUntil: 'load' }); await p.waitForTimeout(900);
     return { p, ctx, errs, text: () => p.evaluate(() => document.body.innerText), html: () => p.evaluate(() => document.body.innerHTML) };
   }
@@ -122,6 +123,62 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   for (const tab of ['today', 'slate', 'props', 'receipts', 'join']) { await v.p.click(tab === 'join' ? '.joinpill' : `.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('no sideways scroll on ' + tab, false, o + 'px'); }
   T('no sideways scroll on a phone, any tab', true); T('no script errors', v.errs.length === 0, v.errs.join(' | '));
   await v.ctx.close();
+
+  /* ── the month: the results calendar (v60 · Nov 23, Chris: "I love that calendar… can we have Noah curate us some fly shit
+     like that somewhere in the public app"). The clock is fixed at Nov 23, 7:30 PM Central. ── */
+  {
+    const AT = Date.parse('2026-11-24T01:30:00Z'), AD = '2026-11-23', isoA = t => new Date(t).toISOString().slice(0, 16) + 'Z';
+    const unA = x => Date.parse(x.start) - 30 * 60e3, seal = x => ({ hidden: true, sp: x.sp, start: x.start, unlockAt: unA(x) });
+    const A0 = { ...P[0], start: isoA(AT + 20 * 60e3) }, A1 = { ...P[1], start: isoA(AT + 3 * 36e5) }, A2 = { ...P[2], start: isoA(AT + 6 * 36e5) };
+    const OLD = { ...base, generated: AT, today: { d: AD, lockedAt: AT - 2 * 36e5, unlockMin: 30, picks: [{ ...A0, unlockAt: unA(A0) }, seal(A1), seal(A2)], props: [] } };
+    const cal = async () => v.p.evaluate(() => { const c = document.querySelector('#cal'); if (!c) return null; const k = d => (c.querySelector(`.cd[data-d="${d}"]`) || {}).className || '';
+      const all = s => c.querySelectorAll(s).length, sl = c.querySelector('.calday');
+      return { text: c.innerText.replace(/\s+/g, ' '), slip: sl ? sl.innerText.replace(/\s+/g, ' ') : '', k, cls: Object.fromEntries([...c.querySelectorAll('.cd[data-d]')].map(e => [e.dataset.d, e.className])),
+        heat: Object.fromEntries([...c.querySelectorAll('.cd[data-d]')].map(e => [e.dataset.d, e.style.getPropertyValue('--h')])), u: all('.cd.u'), q: all('.cd.q'), f: all('.cd.f'), x: all('.cd.x'),
+        prev: c.querySelector('.calnv[data-v="-1"]').disabled, next: c.querySelector('.calnv[data-v="1"]').disabled, first: document.querySelector('#v-receipts .two').firstElementChild.id,
+        pressed: [...c.querySelectorAll('.cd[aria-pressed="true"]')].map(e => e.dataset.d), focus: (document.activeElement || {}).className || '' }; });
+    /* an older feed (no calendar from the desk yet): the last cards, and the days it can't show say so */
+    v = await visit(OLD, { tab: 'receipts', at: AT }); let C = await cal();
+    T('the month: Receipts opens on a calendar of the current month, before the ledger', C && C.first === 'cal' && /NOVEMBER 2026/i.test(C.text), C && C.text.slice(0, 120));
+    T('…the month\'s units up top, then its record and its winning days', /\+0\.43u/.test(C.text) && /2–1 from Nov 9 on, 1 winning day of 2/.test(C.text), C.text.slice(0, 160));
+    T('…a won day is green, a lost day red, deeper the bigger the day (+0.91 burns brighter than −0.48)', / w( |$)/.test(C.cls['2026-11-09']) && / l( |$)/.test(C.cls['2026-11-10']) && +C.heat['2026-11-09'] > +C.heat['2026-11-10'] && +C.heat['2026-11-10'] >= 0.42, JSON.stringify([C.cls['2026-11-09'], C.heat['2026-11-09'], C.cls['2026-11-10'], C.heat['2026-11-10']]));
+    T('…today: the gold ring and the live pip, picked out, with its slip under the board (the open pick, the sealed two, what\'s left)', /\bt\b/.test(C.cls[AD]) && /\bo\b/.test(C.cls[AD]) && /\bs\b/.test(C.cls[AD]) && /cpip/.test(await v.p.evaluate(d => document.querySelector(`.cd[data-d="${d}"]`).innerHTML, AD))
+      && /^Today/.test(C.slip) && /Pistons −9\.5 −110/.test(C.slip) && (C.slip.match(/Sealed pick/g) || []).length === 2 && /3 still to play/.test(C.slip) && !/Under 40\.5|Sharks/.test(C.text), C.slip);
+    T('…days on the record this page can\'t show are dashed, and the board says so; the rest of the month is still to come', C.u === 8 && C.f === 7 && C.x === 12 && /Days before Nov 9 fill in with the desk’s next update/.test(C.text), JSON.stringify([C.u, C.f, C.x]));
+    T('…the best day wears the star', /★ Best day: Mon, Nov 9, \+0\.91u/.test(C.text) && /cbest/.test(await v.p.evaluate(() => document.querySelector('.cd[data-d="2026-11-09"]').innerHTML)));
+    await v.p.click('.cd[data-d="2026-11-10"]'); await v.p.waitForTimeout(350); C = await cal();
+    T('tap a day: its slip comes off the board, pick by pick', /^Tue, Nov 10 1–1 −0\.48u/.test(C.slip) && /Knicks ML −160/.test(C.slip) && /Sharks \+1\.5 −193/.test(C.slip) && /−1\.00/.test(C.slip) && JSON.stringify(C.pressed) === '["2026-11-10"]' && /\bs\b/.test(C.cls['2026-11-10']) && !/\bs\b/.test(C.cls[AD]), C.slip);
+    T('…and the keyboard stays on the day you picked', /\bcd\b/.test(C.focus) && /\bs\b/.test(C.focus), C.focus);
+    T('…the next month waits (this is the current one); the previous one is there', C.next === true && C.prev === false);
+    await v.p.click('.calnv[data-v="-1"]'); await v.p.waitForTimeout(900); C = await cal();
+    T('previous month: October, from the first card on the record (Oct 6); nothing before it', /OCTOBER 2026/i.test(C.text) && C.prev === true && C.next === false && C.q === 5 && C.u === 26 && /These days aren’t on this page yet/.test(C.text) && /Days before Nov 9 fill in/.test(C.text), JSON.stringify([C.text.slice(0, 80), C.q, C.u, C.prev, C.next]));
+    T('…the arrow keeps the keyboard (on the arrow still enabled)', /calnv/.test(C.focus), C.focus);
+    await v.p.click('.calnv[data-v="1"]'); await v.p.waitForTimeout(900); C = await cal();
+    T('…and back to November', /NOVEMBER 2026/i.test(C.text) && C.next === true);
+    T('the calendar: no sideways scroll on a phone, no script errors', await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth <= 0) && v.errs.length === 0, v.errs.join(' | '));
+    await v.ctx.close();
+    /* the desk's calendar: every day since the first, hostile rows ignored */
+    const B0 = { ...P[0], start: isoA(AT - 3 * 36e5) }, B1 = { ...P[1], start: isoA(AT - 2 * 36e5) }, B2 = { ...P[2], start: isoA(AT + 1 * 36e5) };
+    const NEW = { ...OLD, today: { ...OLD.today, picks: [{ ...B0, hit: true, unlockAt: unA(B0) }, { ...B1, hit: false, unlockAt: unA(B1) }, seal(B2)] },
+      cal: { first: '2026-10-06', d: [['2026-10-06', 2, 1, 0, 0.71, 3], ['2026-10-31', 0, 3, 0, -3, 3], ['2026-11-01', 1, 0, 1, 0.91, 2], ['2026-11-09', 1, 0, 0, 0.91, 1], ['2026-11-10', 1, 1, 0, -0.48, 2],
+        ['<img src=x onerror="window.__xss=11">', 9, 9, 9, 9, 9], ['2026-11-12', '<b onmouseover="window.__xss=12">3</b>', 'x', 0, 'NaN', 1], 'junk', null, ['2026-11-13'], { d: '2026-11-14' }] } };
+    v = await visit(NEW, { tab: 'receipts', at: AT }); C = await cal();
+    T('with the desk\'s calendar: the whole month adds up — the days since the first plus today\'s graded picks', /\+1\.25u/.test(C.text) && /4–2–1 so far, 2 winning days of 4/.test(C.text) && C.u === 0 && !/fill in/.test(C.text), C.text.slice(0, 200));
+    T('…today lost a little (−0.09): red, still live (one to play)', / l( |$)/.test(C.cls[AD]) && /\bt\b/.test(C.cls[AD]) && /−0\.09/.test(C.text) && /1 still to play/.test(C.slip), C.cls[AD] + ' | ' + C.slip);
+    T('…the best day is the desk\'s (Nov 1, +0.91u); an older day without slips says where they are', /★ Best day: Sun, Nov 1, \+0\.91u/.test(C.text) && (await v.p.click('.cd[data-d="2026-11-01"]'), true));
+    await v.p.waitForTimeout(300); C = await cal();
+    T('…tap it: its line, and that pick-by-pick slips go back 30 cards', /^Sun, Nov 1 1–0–1 \+0\.91u/.test(C.slip) && /2 picks on the card\. The pick-by-pick slips go back 30 cards\./.test(C.slip), C.slip);
+    T('…hostile or broken rows never reach the page (no script ran, no bad day, junk numbers read as nothing)', !(await v.p.evaluate(() => window.__xss)) && !C.cls['2026-11-13'] && !C.cls['2026-11-14'] && /\bo\b/.test(C.cls['2026-11-12'] || '') && !Object.keys(C.cls).some(d => !/^\d{4}-\d\d-\d\d$/.test(d)), JSON.stringify(Object.keys(C.cls)));
+    await v.p.click('.calnv[data-v="-1"]'); await v.p.waitForTimeout(900); C = await cal();
+    T('…October from the desk: its two cards, the −3 day at full heat', /OCTOBER 2026/i.test(C.text) && /−2\.29u/.test(C.text) && /2–4 in October, 1 winning day of 2/.test(C.text) && C.heat['2026-10-31'] === '1.00' && C.heat['2026-10-06'] === '0.56' && C.q === 5 && C.u === 0 && C.x === 24, JSON.stringify([C.text.slice(0, 90), C.heat['2026-10-31'], C.heat['2026-10-06'], C.q, C.x]));
+    T('…no script errors', v.errs.length === 0, v.errs.join(' | '));
+    await v.ctx.close();
+    /* a wide screen: the ledger on the left, the month beside it */
+    v = await visit(NEW, { tab: 'receipts', at: AT, width: 1280 });
+    const L = await v.p.evaluate(() => { const c = document.querySelector('#cal').getBoundingClientRect(), t = document.querySelector('#v-receipts .tape').getBoundingClientRect(); return { cl: c.left, tr: t.right, ct: c.top, tt: t.top }; });
+    T('on a wide screen the month sits beside the ledger, level with it', L.cl > L.tr && Math.abs(L.ct - L.tt) < 4, JSON.stringify(L));
+    await v.ctx.close();
+  }
 
   /* ── the open beta ── */
   v = await visit(BETA); t = await v.text();

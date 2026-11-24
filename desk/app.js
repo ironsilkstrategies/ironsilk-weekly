@@ -604,6 +604,75 @@ function footHtml() {
 }
 
 /* ── Receipts ────────────────────────────────────────────────────────────── */
+/* v60 · Nov 23, Chris: "I love that calendar… can we have Noah curate us some fly shit like that somewhere in the public
+   app". The month: every card day on a black-and-gold board, green when it won, red when it lost, deeper the bigger the
+   day, the month's units up top. Tap a day and its slip comes off the board. The desk sends every day since the first
+   (feed.cal); an older feed falls back to the last 30 cards. Today comes from the live card. */
+const ymOf = d => String(d || '').slice(0, 7);
+const ymAdd = (m, k) => new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7) - 1 + k, 1)).toISOString().slice(0, 7);
+const ymName = m => new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7) - 1, 15)).toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+const isDay = d => typeof d === 'string' && /^\d{4}-\d\d-\d\d$/.test(d);
+const tapeMark = x => (x.push ? ['p', '='] : x.hit === true ? ['w', '✓'] : x.hit === false ? ['l', '✗'] : ['', '•']);
+function liRow(x) {
+  if (x.hidden) return `<div class="li"><span class="mk">•</span><span class="pk">Sealed pick<small>${esc(LEAGUE[x.sp] || '')}</small></span><span class="u">${x.unlockAt ? 'opens ' + esc(clock(x.unlockAt)) : ''}</span></div>`;
+  const [c, m] = tapeMark(x);
+  return `<div class="li"><span class="mk ${c}">${m}</span><span class="pk">${esc(readPick(x).big)} ${esc(odds(x.price))}<small>${esc(LEAGUE[x.sp] || '')}</small></span><span class="u">${x.hit === true ? signed(unitsWon(x.price)) : x.hit === false ? '−1.00' : x.push ? '0.00' : ''}</span></div>`;
+}
+function calData(F) {
+  const M = new Map(), C = F.cal && Array.isArray(F.cal.d) ? F.cal : null;
+  if (C) for (const r of C.d) if (Array.isArray(r) && isDay(r[0]) && (+r[1] || +r[2] || +r[3] || +r[5])) M.set(r[0], { w: +r[1] || 0, l: +r[2] || 0, p: +r[3] || 0, u: +r[4] || 0, n: +r[5] || 0 });
+  for (const h of F.history || []) if (h && isDay(h.d) && (h.picks || []).length) M.set(h.d, { ...tally(h.picks), n: h.picks.length, picks: h.picks });
+  const T = F.today;
+  if (T && isDay(T.d) && (T.picks || []).length) { const P = T.picks.map(liveGrade); M.set(T.d, { ...tally(P), n: P.length, picks: P, open: P.filter(x => x.hidden || (x.hit == null && !x.push)).length }); }
+  const ks = [...M.keys()].sort(), from = (C && isDay(C.first) && C.first) || ks[0] || null, r1 = F.record && isDay(F.record.first) ? F.record.first : null;
+  /* from: the first day this page can vouch for; first: the first card on the record (an older feed knows less than the record) */
+  return { M, from, first: from && r1 && r1 < from ? r1 : from, last: ks[ks.length - 1] || null };
+}
+const CHEV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+function calHtml(anim) {
+  const F = S.feed; if (!F) return '';
+  const D = calData(F); if (!D.first) return '';
+  const now = deskDay(), lo = ymOf(D.first), hi = [ymOf(now), ymOf(D.last || now)].sort().pop();
+  const m = S.calM && S.calM >= lo && S.calM <= hi ? S.calM : hi, y = +m.slice(0, 4), name = ymName(m), cur = m === ymOf(now);
+  const N = new Date(Date.UTC(y, +m.slice(5, 7), 0)).getUTCDate(), lead = new Date(Date.UTC(y, +m.slice(5, 7) - 1, 1)).getUTCDay();
+  const days = Array.from({ length: N }, (_, i) => `${m}-${String(i + 1).padStart(2, '0')}`), done = e => e.w + e.l + e.p;
+  let w = 0, l = 0, p = 0, u = 0, g = 0, up = 0, best = null, mx = 1;
+  for (const d of days) { const e = D.M.get(d); if (!e || !done(e)) continue; w += e.w; l += e.l; p += e.p; u += e.u; g++; mx = Math.max(mx, Math.abs(e.u));
+    if (e.u > 0.004) { up++; if (!best || e.u > best.u) best = { d, u: e.u }; } }
+  let sel = S.calM === m && ymOf(S.calD) === m && D.M.has(S.calD) ? S.calD : '';
+  if (!sel) { const t = F.today && F.today.d; sel = t && ymOf(t) === m && D.M.has(t) ? t : days.filter(d => D.M.has(d)).pop() || ''; }
+  const fresh = anim === true && S.calShown !== m; S.calM = m; S.calD = sel; S.calShown = m;
+  const rec = e => `${e.w}–${e.l}${e.p ? '–' + e.p : ''}`;
+  const cells = days.map((d, i) => {
+    const e = D.M.get(d), cls = ['cd'], num = `<i>${i + 1}</i>`;
+    if (d === now) cls.push('t');
+    if (!e) { cls.push(d > now ? 'f' : d < D.first ? 'q' : D.from && d < D.from ? 'u' : 'x'); return `<span class="${cls.join(' ')}" style="--i:${i}">${num}</span>`; }
+    const k = !done(e) ? 'o' : e.u > 0.004 ? 'w' : e.u < -0.004 ? 'l' : 'e'; cls.push(k); if (d === sel) cls.push('s');
+    const h = k === 'w' || k === 'l' ? `;--h:${(0.42 + 0.58 * Math.min(1, Math.abs(e.u) / mx)).toFixed(2)}` : '';
+    const say = `${shortDay(d)}: ${done(e) ? `${e.w} won, ${e.l} lost${e.p ? `, ${e.p} pushed` : ''}, ${signed(e.u)} units` : `${e.n} pick${e.n === 1 ? '' : 's'}`}${e.open ? `, ${e.open} still to play` : ''}${best && best.d === d ? ', best day of the month' : ''}`;
+    return `<button type="button" class="${cls.join(' ')}" data-act="calday" data-d="${d}" style="--i:${i}${h}" aria-pressed="${d === sel}" aria-label="${esc(say)}">${num}${e.open ? '<em class="cpip"></em>' : best && best.d === d ? '<em class="cbest">★</em>' : ''}<b>${done(e) ? signed(e.u) : '·'}</b><small>${done(e) ? rec(e) : d < now ? 'no result' : e.n + ' to play'}</small></button>`;
+  }).join('');
+  /* the day you tapped, as a paper slip */
+  const e = sel && D.M.get(sel);
+  const slip = e ? `<div class="calday${anim === 'day' ? ' in' : ''}"><div class="day-h"><span>${esc(sel === now ? 'Today' : shortDay(sel))}</span><span>${done(e) ? rec(e) : ''}</span><span class="${e.u >= 0 ? 'pos' : 'neg'}">${done(e) ? signed(e.u) + 'u' : ''}</span></div>
+      ${e.picks ? e.picks.map(liRow).join('') : `<p class="calnote">${e.n} pick${e.n === 1 ? '' : 's'} on the card. The pick-by-pick slips go back 30 cards.</p>`}${e.open ? `<p class="calnote">${e.open} still to play.</p>` : ''}</div>`
+    : `<div class="calday"><p class="calnote">${cur ? 'No cards yet this month.' : 'No cards this month.'}</p></div>`;
+  const part = D.from && D.first < D.from && ymOf(D.first) <= m && m <= ymOf(D.from) && D.from > `${m}-01`;   /* (an older feed: this month has days on the record this page can't show) */
+  const gap = part ? ` Days before ${esc(monthDay(D.from))} fill in with the desk’s next update.` : '';
+  const foot = (best ? `<b>★</b> Best day: ${esc(shortDay(best.d))}, ${signed(best.u)}u.` : '') + gap;
+  return `<div class="calh"><button type="button" class="calnv" data-act="calmo" data-v="-1" aria-label="Previous month"${m <= lo ? ' disabled' : ''}>${CHEV('M15 5l-7 7 7 7')}</button>
+      <h2 class="calm">${esc(name)} <span>${y}</span></h2>
+      <button type="button" class="calnv" data-act="calmo" data-v="1" aria-label="Next month"${m >= hi ? ' disabled' : ''}>${CHEV('M9 5l7 7-7 7')}</button></div>
+    <p class="calsum">${g ? `<b class="calu ${u >= 0 ? 'pos' : 'neg'}">${signed(u)}u</b><span class="calr">${rec({ w, l, p })} ${part ? 'from ' + esc(monthDay(D.from)) + ' on' : cur ? 'so far' : 'in ' + esc(name)}, ${up} winning day${up === 1 ? '' : 's'} of ${g}</span>` : `<b class="calu">—</b><span class="calr">${part ? 'These days aren’t on this page yet' : cur ? 'No graded cards yet this month' : 'No graded cards this month'}</span>`}</p>
+    <div class="calw" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+    <div class="calg${fresh ? ' anim' : ''}" role="group" aria-label="${esc(name)} ${y}, day by day">${'<span class="cd pad"></span>'.repeat(lead)}${cells}</div>
+    ${slip}${foot ? `<p class="calf">${foot}</p>` : ''}`;
+}
+function calPaint(anim, focus) {
+  const c = $('#cal'); if (!c) return; c.innerHTML = calHtml(anim);
+  const f = focus && c.querySelector(focus), t = f && !f.disabled ? f : focus && c.querySelector('.calnv:not([disabled])');
+  if (t) try { t.focus({ preventScroll: true }); } catch { /* an older browser: fine */ }
+}
 function viewReceipts() {
   const el = $('#v-receipts'), F = S.feed;
   if (!F) { el.innerHTML = `<h1 class="title">Every result</h1>${S.feedErr ? '<p class="lede">The record didn’t load. Check your connection.</p><div class="row" style="margin-top:18px"><button class="btn foil" data-act="retry">Try again</button></div>' : '<div class="shimmer"></div>'}`; return; }
@@ -624,20 +693,20 @@ function viewReceipts() {
   }
   const by = {}; for (const h of H) for (const x of h.picks) { const b = by[x.sp] || (by[x.sp] = []); b.push(x); }
   const lgs = ORDER.filter(sp => by[sp]).map(sp => { const t = tally(by[sp]); return `<b>${esc(LEAGUE[sp])}</b><span>${t.w}–${t.l}${t.p ? '–' + t.p : ''}</span><span class="${t.u >= 0 ? 'pos' : 'neg'}">${signed(t.u, 1)}u</span>`; }).join('');
-  const mark = x => (x.push ? ['p', '='] : x.hit === true ? ['w', '✓'] : x.hit === false ? ['l', '✗'] : ['', '•']);
   const rows = H.map(h => { const t = tally(h.picks); return `<div class="day"><div class="day-h"><span>${esc(shortDay(h.d))}</span><span>${t.w}–${t.l}${t.p ? '–' + t.p : ''}</span><span class="${t.u >= 0 ? 'pos' : 'neg'}">${signed(t.u)}u</span></div>
-      ${h.picks.map(x => { const [c, m] = mark(x); return `<div class="li"><span class="mk ${c}">${m}</span><span class="pk">${esc(readPick(x).big)} ${esc(odds(x.price))}<small>${esc(LEAGUE[x.sp] || '')}</small></span><span class="u">${x.hit === true ? signed(unitsWon(x.price)) : x.hit === false ? '−1.00' : x.push ? '0.00' : ''}</span></div>`; }).join('')}</div>`; }).join('');
+      ${h.picks.map(liRow).join('')}</div>`; }).join('');
+  const cal = calHtml(true);
   const cashed = (F.cashed || []).slice(0, 8);
   const cashHtml = cashed.length ? `<h2 class="h2">Cashed parlays</h2><p class="note">Every winning parlay from the last two weeks.</p>${cashed.map(c => `<div class="memo"><time>${esc(shortDay(c.d))}, ${c.legs.length} legs</time><b>${esc((c.who || []).join(' + '))}</b> cashed at ${esc(c.price)} for ${signed(+c.units)}u</div>`).join('')}` : '';
   el.innerHTML = `<h1 class="title">Every result on the record</h1>
     <p class="lede">Each card is sealed before the games and graded at the final. Wins and losses both stay up. One unit is risked on every pick.</p>
-    <div class="two"><div class="tape"><div class="tape-h"><b>TheDesk</b><span>Best 3 ledger${R.first ? ', since ' + esc(shortDay(R.first)) : ''}</span></div>
+    <div class="two rc">${cal ? `<section class="calx" id="cal" aria-label="Results by day">${cal}</section>` : ''}<div class="tape"><div class="tape-h"><b>TheDesk</b><span>Best 3 ledger${R.first ? ', since ' + esc(shortDay(R.first)) : ''}</span></div>
       <dl class="sum"><dt>Record</dt><dd class="big">${R.w || 0}–${R.l || 0}${R.pu ? '–' + R.pu : ''}</dd>
         <dt>Hit rate</dt><dd>${n ? Math.round((R.w / n) * 100) + '%' : '—'}</dd>
         <dt>Units</dt><dd class="${(+R.u || 0) >= 0 ? 'pos' : 'neg'}">${signed(+R.u || 0)}u</dd></dl>
       ${chart}${rows || '<div class="blank"><b>No graded cards yet</b><p>The ledger starts with the first final.</p></div>'}
       <div class="tape-f">Showing the last ${H.length} cards. The record above counts every card since the first.</div></div>
-    <div>${lgs ? `<h2 class="h2">By league</h2><p class="note">Over the last ${H.length} cards.</p><div class="lgs">${lgs}</div>` : ''}${cashHtml}</div></div>${footHtml()}`;
+    <div class="rside">${lgs ? `<h2 class="h2">By league</h2><p class="note">Over the last ${H.length} cards.</p><div class="lgs">${lgs}</div>` : ''}${cashHtml}</div></div>${footHtml()}`;
 }
 
 /* ── Slate ───────────────────────────────────────────────────────────────── */
@@ -1720,6 +1789,8 @@ document.addEventListener('click', async e => {
   else if (act === 'adcban') { if (!confirmQuit(a)) return; try { await adApi('chat', { sub: 'ban', name: a.dataset.name }); AD.chat = null; viewAdmin(); toast(`${a.dataset.name} banned from the chat`); } catch (e) { toast(e.message); } }
   else if (act === 'adunban') { try { await adApi('chat', { sub: 'unban', name: a.dataset.name }); AD.chat = null; viewAdmin(); } catch (e) { toast(e.message); } }
   else if (act === 'adlgopen') { try { const on = a.getAttribute('aria-pressed') !== 'true'; await adApi('cfg', { lgOpen: on }); toast(on ? 'Members can now open leagues' : 'Only the desk opens leagues'); adLoad(true); } catch (e) { toast(e.message); } }
+  else if (act === 'calmo') { S.calM = ymAdd(S.calM || ymOf(deskDay()), +a.dataset.v || 0); S.calD = ''; calPaint(true, `.calnv[data-v="${a.dataset.v}"]`); }
+  else if (act === 'calday') { S.calD = a.dataset.d; calPaint('day', `.cd[data-d="${a.dataset.d}"]`); }
   else if (act === 'introok') { store.set('intro', 1); viewToday(); const t = $('#v-today .title'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   else if (act === 'introopen') { store.set('intro', 0); viewToday(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   else if (act === 'pwshow') { const i = a.parentElement.querySelector('input'); const on = i.type === 'password'; i.type = on ? 'text' : 'password'; a.textContent = on ? 'Hide' : 'Show'; }

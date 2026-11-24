@@ -1524,6 +1524,12 @@ function pubForecast(){try{if(typeof fcData!=='function'||typeof fcIcon!=='funct
       out[k]={lv:ic in PUB_FC_LV?PUB_FC_LV[ic]:null,w:o.w7,l:o.l7,u:+(+o.u7).toFixed(1),w30:o.w30,l30:o.l30,u30:+(+o.u30).toFixed(1),...(tr?{tr}:{})};});
     return Object.keys(out).length?out:null;}catch(e){console.warn('pub forecast',e);return null;}}
 const PUB_TIER_RANK={supreme:4,strong:3,value:2,source:1};
+/* v3.5.10 · Nov 23, Chris ("I love that calendar… somewhere in the public app"): every Best card day since the first, as
+   [day, won, lost, pushed, units, picks] — the public app's month calendar. Same count as the record (best3Record): one unit
+   a pick at the posted price. Today stays out (it rides in "today", gated, like the history). */
+function pubCal(log,d0){try{const out=[];let first=null;Object.keys(log||{}).sort().forEach(d=>{const M=((log[d]||{}).picks||[]).filter(x=>x.main);if(!M.length)return;if(!first)first=d;if(d0&&d>=d0)return;
+  let w=0,l=0,p=0,u=0;M.forEach(x=>{if(x.push)p++;else if(x.hit===true){w++;u+=_vProfit(x.price);}else if(x.hit===false){l++;u-=1;}});out.push([d,w,l,p,+u.toFixed(2),M.length]);});
+  return first?{first,d:out}:null;}catch(e){return null;}}
 function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best5Grade();}catch(e){}const log=get('d4.best5log',{})||{};const R=best3Record();const now=Date.now();const VB=beta?(roGet(VOICES_KEY,[],30e3)||[]):null;
   const slim=x=>({sp:x.sp,game:x.game,gl:gameLabel(x.sp,x.game),pick:x.pick,price:x.price,p:+(+x.p).toFixed(3),ev:x.ev!=null?+(+x.ev).toFixed(1):null,start:x.start||'',
     tier:x.unan?'UNANIMOUS':((TC_COL[x.color]||[])[1]||''),voices:(x.confBy||x.chars||[]).map(charName),calls:beta&&x.whyOn&&VB?pubVoicesOn({...x,d0:x.d0},VB):undefined,hit:x.hit==null?null:x.hit,push:!!x.push,spread:x.spread?true:undefined,tuned:x.tuned?true:undefined,
@@ -1544,14 +1550,14 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
   let cashed=[];try{cashed=cashedList(14).filter(c=>c.units>=1).slice(0,12);}catch(e){}
   const updates=(get(PUBUPD_KEY,[])||[]).filter(u=>u.pub!==false&&now-u.ts<3*864e5).slice(-12).reverse().map(u=>({ts:u.ts,text:u.text,kind:u.kind||'update'}));
   return{v:4,generated:now,cashed,brand:'TheDesk',price:typeof subPriceText==='function'?subPriceText():'$50/mo · $300/yr',social:{fb:THEDESK_SOCIAL.fb||'',tg:THEDESK_SOCIAL.tg||'',ig:THEDESK_SOCIAL.ig||'',x:THEDESK_SOCIAL.x||''},handle:get(LS.handle,''),
-    subscribe:get('d4.sublink',''),record:R,today:today_,parlay,parlayRecord:prec,updates,
+    subscribe:get('d4.sublink',''),record:R,cal:pubCal(log,S&&S.d),today:today_,parlay,parlayRecord:prec,updates,
     /* v2.51.1 · today's card never rides in the history list — it showed every locked pick there (with its price) before
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
     history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30,plans:PUB_PLANS,
     ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB),founder=pubFounder(),propsb=pubProps();
       return{beta:true,vip,characters,bloodlines,board,founder,props:propsb,betaSig:JSON.stringify([propsb?propsb.props.map(x=>x.id+x.votes):0,founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')+(l.st==='live'&&l.q!=null?'~'+Math.round(l.q*10):'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
 function publicFeed(){return publicFeedCore(false);}
-function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts)]);}
+function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts),F.cal?F.cal.d.length:0]);}   /* (the calendar's day count: the first load of v3.5.10 publishes it once) */
 
 /* ── 14 · BROADCAST — the public page, the channels and the lounges ─────────────
    v3.0.6 · Nov 13 ("free picks to the free channel… full slate to the VIP channel and the public lounge"):
