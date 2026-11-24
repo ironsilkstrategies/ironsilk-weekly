@@ -924,9 +924,14 @@ function lnText(L, g) { if (!L) return ''; let s = '';
   else if (fin(L.mlH) && fin(L.mlA)) s = `${esc(L.mlH < L.mlA ? g.h.ab : g.a.ab)} ${esc(odds(Math.min(L.mlH, L.mlA)))}`;
   else if (fin(L.mlH) || fin(L.mlA)) { const home = fin(L.mlH), p = home ? L.mlH : L.mlA; s = `${esc(home ? g.h.ab : g.a.ab)} ${esc(odds(p))}`; }
   return s + (L.tot != null ? `<small>O/U ${L.tot}</small>` : ''); }
+/* v65 · Nov 24, Chris ("Something is off", next to Kent State–Wyoming and EMU–Kennesaw State hoops lines): the 6 PM KENT @ EMU row was
+   tonight's MAC football game, but a row sorted by time never said which sport it was, and both schools also played basketball that
+   night. In the time view every row carries its sport under the clock. */
+const SP_TAG = { nfl: '🏈 NFL', ncaaf: '🏈 CFB', nba: '🏀 NBA', ncaab: '🏀 CBB', nhl: '🏒 NHL', mlb: '⚾ MLB' };
 function gameHtml(g, i) {
   const L = liveOf({ sp: g.sp, game: `${g.a.ab}@${g.h.ab}` }), open = S.openGame === g.k, on = openPickOn(g), b = g.b, F = S.bf, heavy = (boardOf() || {}).heavy || -500;
-  const t = L && L.state === 'in' ? `<div class="g-t live">Live<br>${esc(L.detail || '')}</div>` : L && L.state === 'post' ? '<div class="g-t">Final</div>' : `<div class="g-t">${esc(clock(g.t)).replace(' ', '<br>')}</div>`;
+  const spt = S.slTime && SP_TAG[g.sp] ? `<span class="g-sp" title="${esc(LEAGUE[g.sp] || '')}">${SP_TAG[g.sp]}</span>` : '';
+  const t = L && L.state === 'in' ? `<div class="g-t live">Live<br>${esc(L.detail || '')}${spt}</div>` : L && L.state === 'post' ? `<div class="g-t">Final${spt}</div>` : `<div class="g-t">${esc(clock(g.t)).replace(' ', '<br>')}${spt}</div>`;
   const side = (x, sc) => `<div class="tm"><span class="rk">${x.rk ? x.rk : ''}</span><span class="nm">${esc(x.nick || x.ab)}</span><span class="rc">${x.w + x.l ? `${x.w}-${x.l}` : ''}</span>${sc != null ? `<span class="sc">${sc}</span>` : ''}</div>`;
   const live = L && L.state !== 'pre';
   const LN = g.ln || lnFromBoard(g.b), ln = `<div class="g-ln">${lnText(LN, g)}</div>`;
@@ -993,7 +998,7 @@ function viewSlate() {
     return `<div class="lg slot"><span>🕒 ${esc(clock(gs[0].t))}${st}</span><small>${gs.length} game${gs.length === 1 ? '' : 's'} · ${[...new Set(gs.map(g => LEAGUE[g.sp]))].join(' · ')}${u ? ` · <b class="c-unan">★ ${u} unanimous</b>` : ''}${n('supreme') ? ` · <b class="c-supreme">${n('supreme')} supreme</b>` : ''}${n('strong') ? ` · <b class="c-strong">${n('strong')} strong</b>` : ''}${nc ? ` · <b>${nc} call${nc === 1 ? '' : 's'}</b>` : ''}${crowns && BF.say !== 'top' ? ` · <b class="c-say">👑 ${crowns}</b>` : ''}</small></div>`; };
   let body;
   if (bOn && BF.view === 'time') { const T = new Map(); for (const g of games) { const k = fin(g.t) ? g.t : 0; if (!T.has(k)) T.set(k, []); T.get(k).push(g); }
-    body = [...T.values()].map(gs => slotHead(gs) + gs.map(gameHtml).join('')).join(''); }
+    S.slTime = true; body = [...T.values()].map(gs => slotHead(gs) + gs.map(gameHtml).join('')).join(''); S.slTime = false; }
   else body = sps.filter(sp => S.slateSp === 'all' || sp === S.slateSp).map(sp => { const gs = games.filter(g => g.sp === sp); return gs.length ? `<div class="lg">${esc(LEAGUE[sp])}, ${gs.length} game${gs.length === 1 ? '' : 's'}</div>${gs.map(gameHtml).join('')}` : ''; }).join('');
   if (bOn && !body) body = `<div class="blank"><b>No games match these filters</b><p><button type="button" class="btn line" data-act="bfreset">Show everything</button></p></div>`;
   const stale = Date.now() - SL.ts > 6 * 36e5;

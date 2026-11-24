@@ -1189,3 +1189,6 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .gh-tk span{padding:4px 8px;border-radius:99px;background:#fffdf6;box-shadow:inset 0 0 0 1px rgba(27,42,33,.14);font:700 12px/1.25 var(--text);color:#1b2a21}.gh-tk span.w{background:rgba(23,112,63,.12);color:#17703f}.gh-tk span.l{background:rgba(162,59,37,.1);color:#a23b25}
 .gh-x{appearance:none;margin-top:9px;padding:0;border:0;background:none;color:#3b4a40;font:700 12.5px/1 var(--text);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .gh-wait{margin:0;font:600 13.5px/1.45 var(--text);color:#3b4a40}
+/* v65 · each row in the time view says its sport */
+.g-sp{display:block;margin-top:5px;font:700 10.5px/1 var(--text);letter-spacing:.02em;color:#4a5a50;white-space:nowrap}
+.g-t.live .g-sp{color:#4a5a50}
