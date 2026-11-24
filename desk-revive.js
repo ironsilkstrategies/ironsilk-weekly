@@ -51,11 +51,14 @@ function revSourceConflicts(g){const gl=g.away.abbr+'@'+g.home.abbr;const d=toda
 function revAllConflicts(){const out=[];SPS.forEach(sp=>{let G=[];try{G=sportGames(sp)||[];}catch(e){}G.forEach(g=>{try{revSourceConflicts(g).forEach(c=>out.push({sp,game:g.away.abbr+'@'+g.home.abbr,...c}));}catch(e){}});});return out;}
 
 /* ── 3 · context gauges ─────────────────────────────────────────────── */
+/* v3.5.16 · Nov 24, Chris (the situations board): "Why are all these in the wrong directions". The value arc flipped its sweep flag below
+   50%, so every gauge under half bent inward across its own number instead of running along the track. A gauge is never more than a
+   half circle: always the short arc, always clockwise from the left end, like the track under it. */
 function gauge(rate,model,n,label,sub){const r=Math.max(0,Math.min(1,rate==null?0.5:rate));const ang=Math.PI*(1-r),cx=40,cy=38,R=30;
   const x=cx+R*Math.cos(ang),y=cy-R*Math.sin(ang);const col=n<10?'#7d7a72':r>=(model||0.5)+0.03?'#3DDC84':r<=(model||0.5)-0.03?'#ff5a5a':'#f5b301';
   const mA=Math.PI*(1-Math.max(0,Math.min(1,model||0.5))),mx=cx+(R+4)*Math.cos(mA),my=cy-(R+4)*Math.sin(mA),mx2=cx+(R-5)*Math.cos(mA),my2=cy-(R-5)*Math.sin(mA);
   return`<div style="display:inline-block;width:92px;margin:3px;text-align:center;vertical-align:top"><svg viewBox="0 0 80 46" width="80" height="46"><path d="M10 38A30 30 0 0 1 70 38" fill="none" stroke="#2c2a24" stroke-width="7" stroke-linecap="round"/>
-    ${n?`<path d="M10 38A30 30 0 0 ${r>0.5?1:0} ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round"/>`:''}
+    ${n?`<path d="M10 38A30 30 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${col}" stroke-width="7" stroke-linecap="round"/>`:''}
     ${model!=null&&n?`<line x1="${mx.toFixed(1)}" y1="${my.toFixed(1)}" x2="${mx2.toFixed(1)}" y2="${my2.toFixed(1)}" stroke="#fff" stroke-width="1.5"/>`:''}
     <text x="40" y="37" text-anchor="middle" font-size="12" font-weight="800" fill="${col}">${n?Math.round(r*100)+'%':'—'}</text></svg>
     <div style="font-size:9.5px;font-weight:700;line-height:1.15">${E(label)}</div><div class="mono" style="font-size:8.5px;color:var(--mute)">${E(sub)}</div></div>`;}
@@ -130,5 +133,5 @@ function edgeDeskHtml(){const safe=f=>{try{return f();}catch(e){console.warn('ed
   const C=safe(revAllConflicts)||[];
   const conf=`<div class="tkt"><h3>⚠️ Source conflicts</h3><div class="sub" style="font-size:10px">An outside site whose pick goes against most of its own trends — treat that pick as weaker.</div>${Array.isArray(C)&&C.length?C.map(c=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${SPL(c.sp)} · ${E(c.game)} — ${E(c.src)} picks <b>${E(c.pick)}</b>, ${c.against} trends say otherwise</div>`).join(''):'<div class="sub">No conflicts in today\'s outside picks.</div>'}</div>`;
   return safe(evalAuditHtml)+safe(revExposureHtml)+safe(revCrowdHtml)+conf+safe(ctxBoardHtml)+safe(revMortemHtml)+safe(revMissionsHtml);}
-Object.assign(W,{evalAuditHtml,revExposure,revSwap,revSourceConflicts,revAllConflicts,ctxTagsFor,ctxGaugesHtml,ctxBoardHtml,revCrowd,revMortems,revBoss,edgeDeskHtml,revExposureHtml,revMissionsHtml,revMortemHtml});
+Object.assign(W,{revGauge:gauge,evalAuditHtml,revExposure,revSwap,revSourceConflicts,revAllConflicts,ctxTagsFor,ctxGaugesHtml,ctxBoardHtml,revCrowd,revMortems,revBoss,edgeDeskHtml,revExposureHtml,revMissionsHtml,revMortemHtml});
 })();
