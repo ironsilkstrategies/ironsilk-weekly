@@ -13,7 +13,7 @@ const oldSig = {}; for (let i = 0; i < 29; i++) oldSig[day(i)] = big(i > 20 ? 60
 const sz = o => Buffer.byteLength(JSON.stringify(o));
 T('the old fingerprints alone weigh over 4 MB (29 days of whole pages)', sz(oldSig) > 4e6, sz(oldSig));
 const tp = Wk.trimPubSig({ ...oldSig, '2026-11-22': 'a'.repeat(24), '2026-11-23': 'b'.repeat(24) });
-T('trimPubSig: only the three newest days, and only short fingerprints (a legacy whole-page copy is dropped)', JSON.stringify(Object.keys(tp)) === '["2026-11-22","2026-11-23"]' && Object.values(tp).every(v => v.length <= 64), JSON.stringify(Object.keys(tp)));
+T('trimPubSig: only the three newest days; an old whole-page copy becomes its 24-character hash (never dropped)', JSON.stringify(Object.keys(tp)) === '["2026-11-14","2026-11-22","2026-11-23"]' && tp['2026-11-14'] === Wk.sigOf(oldSig['2026-11-14']) && tp['2026-11-23'] === 'b'.repeat(24) && Object.values(tp).every(v => v.length <= 64), JSON.stringify(tp));
 const fresh = { '2026-11-21': 'c'.repeat(24), '2026-11-22': 'd'.repeat(24), '2026-11-23': 'e'.repeat(24), '2026-11-20': 'f'.repeat(24) };
 T('…three newest of four short ones', JSON.stringify(Object.keys(Wk.trimPubSig(fresh))) === '["2026-11-21","2026-11-22","2026-11-23"]');
 /* merge: the worker's copy (old, huge) with a newer hand-off */
@@ -22,12 +22,21 @@ const M = Wk.mergeState({ v: 1, posts: {}, pubSig: { '2026-11-23': 'e'.repeat(24
 T('mergeState: the merged fingerprints are three short entries at most (4 MB → a few hundred bytes)', Object.keys(M.pubSig).length <= 3 && sz(M.pubSig) < 400 && M.pubSig['2026-11-23'] === 'e'.repeat(24), sz(M.pubSig));
 T('…and the posts merge exactly as before', !!M.posts['2026-11-22'] && JSON.stringify(M.posts['2026-11-22'].ids) === '[1]');
 const S = Wk.slimFeeds({ v: 1, posts, pubSig: oldSig, lastRun: 5 });
-T('slimFeeds (every write goes through it): trims the fingerprints too, keeps everything else', Object.keys(S.pubSig).length === 0 && S.lastRun === 5 && !!S.posts['2026-11-22'].feed, JSON.stringify(Object.keys(S.pubSig)));
+T('slimFeeds (every write goes through it): three short fingerprints, everything else kept', Object.keys(S.pubSig).length === 3 && sz(S.pubSig) < 400 && S.lastRun === 5 && !!S.posts['2026-11-22'].feed, JSON.stringify(Object.keys(S.pubSig)));
 T('a state without fingerprints writes without them (nothing invented)', !('pubSig' in Wk.slimFeeds({ v: 1, posts })));
 /* the public page: published once per change, its fingerprint a 24-character hash */
 const puts = []; const fetch = async (url, opt = {}) => { if (opt.method === 'PUT') { puts.push(url); return { ok: true, status: 201, json: async () => ({}) }; } return { ok: true, status: 200, json: async () => ({ sha: 'abc' }) }; };
 const feed = { beta: true, today: { d: '2026-11-23', picks: [{ sp: 'nba', game: 'SA@SAC', pick: 'SA ML', start: '2026-11-24T03:00:00Z' }] }, history: [], record: { w: 1, l: 0, u: 0.5 } };
 const st0 = { v: 1, posts: { '2026-11-23': { d: '2026-11-23', st: {}, feed, feedTs: 2, site: { repo: 'ironsilkstrategies/ironsilk-weekly-site', tok: 'x' } } }, pubSig: { ...oldSig } };
+/* the migration: the page as it last went up, fingerprinted the old way (its whole text) → still reads as unchanged */
+{ const legacyView = Wk.publicView(feed, {}, Date.parse('2026-11-24T01:00:00Z')); const legacy = JSON.stringify({ ...legacyView, generated: 0 });
+  const stL = { v: 1, posts: JSON.parse(JSON.stringify(st0.posts)), pubSig: { '2026-11-23': legacy } }; const n0 = puts.length;
+  const rL = await Wk.publishPublic(stL, { fetch, now: Date.parse('2026-11-24T01:00:00Z') });
+  T('an unchanged page fingerprinted the old way stays down (no re-post) and its fingerprint becomes the hash', rL === 0 && puts.length === n0 && stL.pubSig['2026-11-23'] === Wk.sigOf(legacy), JSON.stringify([rL, puts.length - n0])); }
+/* the guard: a day before today the worker holds no fingerprint for is never put up (the site may show a newer page) */
+{ const stY = { v: 1, posts: { '2026-11-22': { d: '2026-11-22', st: {}, feed: { ...feed, today: { ...feed.today, d: '2026-11-22' } }, feedTs: 1, site: { repo: 'ironsilkstrategies/ironsilk-weekly-site', tok: 'x' } } }, pubSig: {} }; const n0 = puts.length;
+  const rY = await Wk.publishPublic(stY, { fetch, now: Date.parse('2026-11-24T01:00:00Z') });
+  T('yesterday\'s card with no fingerprint is never put over today\'s page', rY === 0 && puts.length === n0); }
 const now = Date.parse('2026-11-24T01:00:00Z');
 const r1 = await Wk.publishPublic(st0, { fetch, now });
 T('publishPublic: the page goes up once, and its fingerprint is a 24-character hash', r1 === 1 && puts.length === 1 && /^[0-9a-f]{24}$/.test(st0.pubSig['2026-11-23']), JSON.stringify([r1, puts.length, String(st0.pubSig['2026-11-23']).slice(0, 30)]));
