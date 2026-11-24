@@ -1376,14 +1376,29 @@ function pubCharacters(V,d){const k=d+'|'+V.length;if(PUB_CHAR_MEMO&&PUB_CHAR_ME
 const PUB_PROPLOCK='d4.pubproplock';let _PPL=null;
 function pubPropLock(d){if(_PPL&&_PPL.d===d)return _PPL;let L=null;try{L=get(PUB_PROPLOCK,null);}catch(e){}_PPL=L&&L.d===d?{...L,dirty:false}:{d,by:{},dirty:true};return _PPL;}
 function pubPropLockSave(){try{if(_PPL&&_PPL.dirty){set(PUB_PROPLOCK,{d:_PPL.d,by:_PPL.by});_PPL.dirty=false;}}catch(e){}}
+/* v3.5.14 · Nov 23, 11:41 PM, Chris: "I want the cast section to show players parlay records and if they are up or down units in the
+   parlay lane". Each character's own tickets over the same 60 days as its record: its game parlay (the 70%+ calls), its strong-suit
+   ticket and its prop parlay. A unit a ticket: a cash pays the ticket's price, a miss costs the unit, every leg pushed is a push.
+   Plus its last six settled tickets. Graded where they always are (cparGrade / cpxGrade); this only reads them. */
+function pubParRec(v,from,d,CPA,CPXA){const z=()=>({w:0,l:0,p:0,u:0,lw:0,ll:0}),o={game:z(),suit:z(),props:z(),last:[]};
+  const add=(S,kindOf)=>Object.entries(S||{}).forEach(([day,D])=>{if(day<from||day>d||!D||!D.locked)return;const P=(D.by||{})[v];if(!P||!Array.isArray(P.legs)||!P.legs.length)return;const k=kindOf(P),R=o[k];
+    P.legs.forEach(x=>{if(x.hit===true)R.lw++;else if(x.hit===false)R.ll++;});if(!P.done)return;
+    const live=P.legs.filter(x=>!x.push),dec=live.reduce((a,x)=>a*(americanToDecimal(+x.price)||1.91),1),r=!live.length?'push':P.won?'win':'loss';
+    if(r==='push')R.p++;else if(r==='win'){R.w++;R.u+=dec-1;}else{R.l++;R.u-=1;}
+    o.last.push({d:day,k,r,n:P.legs.length,hit:P.legs.filter(x=>x.hit===true).length,price:live.length?(dec>=2?Math.round((dec-1)*100):-Math.round(100/(dec-1))):null});});
+  add(CPA,P=>P.skill?'suit':'game');add(CPXA,()=>'props');
+  ['game','suit','props'].forEach(k=>{o[k].u=+o[k].u.toFixed(2);});o.last=o.last.sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,6);return o;}
 function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEach(c=>{if(!CHARS[c.voice]||c.voice==='Blend')return;(by[c.voice]=by[c.voice]||[]).push(c);});
+    const CPA=(typeof CPAR_KEY!=='undefined'?roGet(CPAR_KEY,{},30e3):null)||{},CPXA=(typeof CPX_KEY!=='undefined'?roGet(CPX_KEY,{},30e3):null)||{};
     const CP=(roGet(CPROP_KEY,[],30e3)||[]).filter(x=>x&&x.d>=from);let todayProps=[];try{todayProps=typeof cpropToday==='function'?cpropToday():[];}catch(e){}
     const res=x=>x.push?'push':x.hit===true?'win':x.hit===false?'loss':null;
     return CHAR_ORDER.filter(v=>(by[v]||CP.some(x=>x.voice===v))&&v!=='Blend').map(v=>{const C=CHARS[v],L=by[v]||[],B=PUB_BIOS[v]||{};let w=0,l=0,pu=0,u=0;const picks=[],recent=[],teams={};
       L.forEach(c=>{const day=String(c.date).slice(0,10);if(day<from||day>d)return;if(day<d&&c.hit==null&&!c.push)return;if(!pubOff(c))return;
-        if(day===d){if(pubHeavy({m:mkNorm(c.market),price:c.price,pick:c.pick}))return;picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:pubConf(c),start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});return;}
+        /* v3.5.14 · Nov 23, Chris (the Grinder's profile read "Official game picks —" under "Today 3–0"): a pick from today counts in
+           the record the moment it's graded, not the next morning. It stays in today's list; the recent results start with yesterday. */
+        if(day===d){if(!pubHeavy({m:mkNorm(c.market),price:c.price,pick:c.pick}))picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:pubConf(c),start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});if(c.hit==null&&!c.push)return;}
         if(c.push)pu++;else if(c.hit===true){w++;u+=pubUnits(c.price,true);}else if(c.hit===false){l++;u-=1;}
-        recent.push({d:day,kind:'game',sp:c.sp,pick:c.pick,price:c.price,gl:gameLabel(c.sp,c.game),r:res(c)});
+        if(day<d)recent.push({d:day,kind:'game',sp:c.sp,pick:c.pick,price:c.price,gl:gameLabel(c.sp,c.game),r:res(c)});
         /* the teams it backs and goes against (sides only; totals have no side) */
         if(c.market!=='total'&&c.side&&c.game&&!c.push&&c.hit!=null){const[A,H]=String(c.game).split('@');const mine=c.side==='home'?H:A,opp=c.side==='home'?A:H;
           [[mine,'for'],[opp,'vs']].forEach(([t,k])=>{const o=teams[c.sp+'|'+t]||(teams[c.sp+'|'+t]={sp:c.sp,team:t,for:{w:0,l:0},vs:{w:0,l:0}});c.hit?o[k].w++:o[k].l++;});}});
@@ -1403,7 +1418,7 @@ function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEac
       let best=[],still=[];try{const P=charProfile(v);best=(P.strong||[]).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1)}));still=(P.weak||[]).slice(0,1).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w}));}catch(e){}
       const top=(o,n)=>Object.values(o).map(x=>({...x,n:(x.for?x.for.w+x.for.l+x.vs.w+x.vs.l:x.over.w+x.over.l+x.under.w+x.under.l)})).sort((a,b)=>b.n-a.n).slice(0,n).map(x=>{delete x.n;return x;});
       return{v,name:C.label,chip:C.chip,color:C.color,title:B.title||'',bio:B.bio||'',origin:B.origin||'',best,still,
-        record:{w,l,pu,u:+u.toFixed(2)},props:pr,picks:picks.sort((a,b)=>(a.kind===b.kind?0:a.kind==='game'?-1:1)||(b.p||0)-(a.p||0)).slice(0,16),
+        record:{w,l,pu,u:+u.toFixed(2)},props:pr,par:(()=>{try{return pubParRec(v,from,d,CPA,CPXA);}catch(e){return null;}})(),picks:picks.sort((a,b)=>(a.kind===b.kind?0:a.kind==='game'?-1:1)||(b.p||0)-(a.p||0)).slice(0,16),
         recent:recent.sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,12),teams:top(teams,8),players:top(players,8)};});}catch(e){console.warn('pub characters',e);return[];}}
 /* the bloodlines: each character × bet type, its generation, its heirs and how close the best one is to the chair (labels only) */
 function pubBloodlines(){try{if(typeof heirsAll!=='function')return null;const H=heirsAll(),R=typeof HEIR_MEMO!=='undefined'?HEIR_MEMO:null;
@@ -1558,7 +1573,7 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
     history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30,plans:PUB_PLANS,
     ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB),founder=pubFounder(),propsb=pubProps();
-      return{beta:true,vip,characters,bloodlines,board,founder,props:propsb,betaSig:JSON.stringify([propsb?propsb.props.map(x=>x.id+x.votes):0,founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')+(l.st==='live'&&l.q!=null?'~'+Math.round(l.q*10):'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit)]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
+      return{beta:true,vip,characters,bloodlines,board,founder,props:propsb,betaSig:JSON.stringify([propsb?propsb.props.map(x=>x.id+x.votes):0,founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')+(l.st==='live'&&l.q!=null?'~'+Math.round(l.q*10):'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit),c.par?['game','suit','props'].map(k=>c.par[k].w+'-'+c.par[k].l+'-'+c.par[k].p):0]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
 function publicFeed(){return publicFeedCore(false);}
 function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts),F.cal?F.cal.d.length:0]);}   /* (the calendar's day count: the first load of v3.5.10 publishes it once) */
 

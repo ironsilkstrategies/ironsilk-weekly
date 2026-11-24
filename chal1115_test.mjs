@@ -34,18 +34,47 @@ const easy = L.find(c => c.start === 100 && c.goal <= 200 && ['any', 'ml', 'sing
 T('(fixture) an open-book 1.25x challenge exists', !!easy, easy && easy.id);
 T('not every id is a challenge: made-up ids are refused', (await call('/acct/chal/join', { token: a, id: '3d999x100-any-any' })).status === 400);
 let r = await call('/acct/chal/join', { token: a, id: easy.id }); const run = r.j.run;
-T('joining: a fresh run at the challenge\'s start, its goal and days, the recommended route; the wallet untouched', r.status === 200 && run.bal === easy.start && run.goal === easy.goal && run.route === easy.route && run.ends === clock + easy.days * 864e5 && (await call('/acct/me', { token: a })).j.wallet.bal === 1000, JSON.stringify(run));
+/* v3.5.14 · Nov 23, Chris: "I do want challenge money to come from the players wallet" — the run's bankroll is bought from the wallet */
+T('joining: a fresh run at the challenge\'s start, its goal and days, the recommended route — bought from the wallet (D$1,000 → D$900)', r.status === 200 && run.bal === easy.start && run.goal === easy.goal && run.route === easy.route && run.ends === clock + easy.days * 864e5 && run.buyIn === easy.start && r.j.wallet.bal === 1000 - easy.start && (await call('/acct/me', { token: a })).j.wallet.bal === 1000 - easy.start, JSON.stringify(run));
 T('switching the route', (await call('/acct/chal/route', { token: a, rid: run.rid, route: 'snowball' })).j.run.route === 'snowball');
-r = await call('/acct/chal/join', { token: a, id: dog.id }); const drun = r.j.run;
+r = await call('/acct/chal/join', { token: a, id: dog.id }); const drun = r.j.run; let wa = 1000 - easy.start - dog.start;
+T('…every run is bought: a second one comes off the wallet too', r.j.wallet.bal === wa, JSON.stringify(r.j.wallet));
 T('a dog challenge refuses a favorite at the window', (await call('/acct/bet', { token: a, run: drun.rid, stake: 10, legs: [{ k: 'nba|BOS@NYK', mk: 'ml', side: 'away' }] })).status === 400);
-await call('/acct/chal/join', { token: a, id: L[5].id === easy.id || L[5].id === dog.id ? L[6].id : L[5].id });
+const third = L.find(c => c.rule === 'any' && c.sport === 'any' && c.id !== easy.id && c.id !== dog.id); r = await call('/acct/chal/join', { token: a, id: third.id }); wa -= third.start; const trun = r.j.run;
 T('three runs at a time', (await call('/acct/chal/join', { token: a, id: L[9].id })).status === 400);
 r = await call('/acct/bet', { token: a, run: run.rid, stake: 80, legs: [{ k: 'nba|BOS@NYK', mk: 'ml', side: 'home' }] });
-T('a bet from the run is taken from the run', r.status === 200 && r.j.run.bal === easy.start - 80 && r.j.wallet.bal === 1000);
+T('a bet from the run is taken from the run (the wallet doesn\'t move again)', r.status === 200 && r.j.run.bal === easy.start - 80 && r.j.wallet.bal === wa, JSON.stringify([r.j.run && r.j.run.bal, r.j.wallet]));
+/* quitting sends what's left home: the dog run (no bets) gives its whole bankroll back */
+r = await call('/acct/chal/quit', { token: a, rid: drun.rid }); wa += dog.start;
+T('quit → the run\'s money goes back to the wallet (all of it, no bets were made)', r.status === 200 && r.j.run.status === 'quit' && r.j.run.cashed === dog.start && r.j.wallet.bal === wa, JSON.stringify([r.j.run, r.j.wallet]));
 clock = day(1, 12); ESPN = { 'basketball/nba': [ev('BOS', 'NYK', 108, 112)], 'hockey/nhl': [ev('CHI', 'MIN', 4, 2)] }; await A.alarm();
 r = await call('/acct/me', { token: a }); const R1 = r.j.runs.find(x => x.rid === run.rid);
-T('it cashes past the goal → WON: the challenge\'s XP and D$ prize paid, the tier\'s trophy counted', R1.status === 'won' && r.j.xp >= easy.xp && r.j.wallet.bal === 1000 + easy.prize && r.j.trophies[easy.tier] === 1 && r.j.xplog[0].dd === easy.prize, JSON.stringify([R1, r.j.xp, r.j.wallet, r.j.trophies]));
+const won = Math.round((easy.start - 80 + 80 * (1 + 135 / 100)) * 100) / 100;
+T('it cashes past the goal → WON: the run\'s whole balance home, plus the challenge\'s XP and D$ prize, the tier\'s trophy counted', R1.status === 'won' && R1.cashed === won && r.j.xp >= easy.xp && r.j.wallet.bal === Math.round((wa + won + easy.prize) * 100) / 100 && r.j.trophies[easy.tier] === 1 && r.j.xplog.some(x => x.dd === easy.prize) && r.j.xplog.some(x => x.dd === won), JSON.stringify([R1, r.j.xp, r.j.wallet, r.j.trophies]));
 T('…it shows on the board: finished, recent, the XP table', (await call('/acct/chal')).j.by[easy.id].won === 1 && (await call('/acct/chal')).j.recent[0].prize === easy.prize && (await call('/acct/chal')).j.xp[0].name === 'Puck Head');
+wa = Math.round((wa + won + easy.prize) * 100) / 100;
+/* a ticket still out when the run closes pays the wallet when it settles */
+r = await call('/acct/bet', { token: a, run: trun.rid, stake: 10, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'away' }] }); const tq = await call('/acct/chal/quit', { token: a, rid: trun.rid }); wa = Math.round((wa + third.start - 10) * 100) / 100;
+T('quitting with a ticket out: what\'s left comes home now…', r.status === 200 && tq.j.run.cashed === third.start - 10 && tq.j.wallet.bal === wa, JSON.stringify([tq.j.run, tq.j.wallet]));
+clock = day(4, 12); ESPN = { 'football/nfl': [ev('NE', 'DET', 27, 20)] }; await A.alarm(); clock = day(1, 12);
+
+r = await call('/acct/me', { token: a }); wa = Math.round((wa + 10 * (1 + 124 / 100)) * 100) / 100;
+T('…and the ticket pays the wallet when it wins (NE +124: D$22.40)', r.j.wallet.bal === wa && r.j.runs.find(x => x.rid === trun.rid).late === 22.4, JSON.stringify([r.j.wallet, r.j.runs.find(x => x.rid === trun.rid)]));
+/* a run that runs out of time gives back what it holds; the wallet has to cover the next buy-in */
+const poor = await sign('Short Stack'); { const k = 'u:short stack', u = ctx.storage.m.get(k); u.dd = { ...u.dd, bal: 40 }; ctx.storage.m.set(k, u); }
+r = await call('/acct/chal/join', { token: poor, id: easy.id });
+T('not enough in the wallet: the buy-in is refused, with what it costs and what you have', r.status === 400 && /costs D\$100 from your wallet\. You have D\$40\./.test(r.j.error), JSON.stringify(r.j));
+{ const k = 'u:short stack', u = ctx.storage.m.get(k); u.dd = { ...u.dd, bal: 140 }; ctx.storage.m.set(k, u); }
+r = await call('/acct/chal/join', { token: poor, id: easy.id }); const prun = r.j.run;
+const brd = (await call('/acct/board')).j.rows.find(x => x.name === 'Short Stack');
+T('the leaderboard still counts a bought run\'s money while it\'s live (D$40 wallet + D$100 run)', brd && brd.bal === 140, JSON.stringify(brd));
+clock = prun.ends + 60e3; await A.alarm(); r = await call('/acct/me', { token: poor });
+T('time runs out → EXPIRED, and the run\'s D$100 goes back to the wallet', r.j.runs[0].status === 'expired' && r.j.runs[0].cashed === 100 && r.j.wallet.bal === 140, JSON.stringify([r.j.runs[0], r.j.wallet]));
+/* a run started before buy-ins (free) ends the old way: no cash-out */
+{ const rid0 = 'old1'; ctx.storage.m.set('c:short stack:' + rid0, { rid: rid0, cid: easy.id, name: 'Short Stack', ts: clock - 864e5, ends: clock - 1000, start: 100, bal: 90, goal: easy.goal, peak: 100, route: easy.route, status: 'live', open: 0, bets: 1, w: 0, l: 1, p: 0, cp: 0, xp: 0 }); ctx.storage.m.set('r:short stack:' + rid0, 1); }
+await A.alarm(); r = await call('/acct/me', { token: poor });
+T('a free run from before (no buy-in) ends without paying the wallet', r.j.runs.find(x => x.rid === 'old1').status === 'expired' && r.j.runs.find(x => x.rid === 'old1').cashed == null && r.j.wallet.bal === 140, JSON.stringify([r.j.runs.find(x => x.rid === 'old1'), r.j.wallet]));
+clock = day(1, 12);
 /* ── leagues ── */
 const own = (await call('/acct/login', { name: 'TheDesk', pass: env.ADMIN_CODE })).j.token;
 T('members can\'t open leagues yet', (await call('/acct/lgs/create', { token: bb, name: 'Mine', starts: clock, ends: clock + 864e5, prizes: [100] })).status === 403);
@@ -54,21 +83,32 @@ const lid = r.j.league.lid;
 T('the desk opens a league: dates, bankroll, prizes', r.status === 200 && r.j.league.official && r.j.league.prizes[0] === 5000);
 r = await call('/acct/lgs');
 T('the list shows it open, with the pool', r.j.leagues[0].status === 'open' && r.j.leagues[0].pool === 8500, JSON.stringify(r.j));
-for (const t of [a, bb, cc]) await call('/acct/lgs/join', { token: t, id: lid });
-T('members join and get the league bankroll; no double joins', (await call('/acct/me', { token: bb })).j.leagues[0].bal === 1000 && (await call('/acct/lgs/join', { token: bb, id: lid })).status === 400);
+/* v3.5.14 · "to sign up for leagues there should be a signup fee (D$25 for starters)" */
+T('a league opens with the D$25 entry fee unless the desk sets another (the list shows it)', r.j.leagues[0].fee === 25, JSON.stringify(r.j.leagues[0]));
+const lj = []; for (const t of [a, bb, cc]) lj.push(await call('/acct/lgs/join', { token: t, id: lid }));
+T('members join for the D$25 fee (off the wallet) and get the league bankroll; no double joins', lj.every(x => x.status === 200 && x.j.entry.fee === 25) && lj[1].j.wallet.bal === 975 && (await call('/acct/me', { token: bb })).j.leagues[0].bal === 1000 && (await call('/acct/me', { token: bb })).j.wallet.bal === 975 && (await call('/acct/lgs/join', { token: bb, id: lid })).status === 400, JSON.stringify(lj.map(x => x.j.wallet)));
+{ const k = 'u:short stack', u = ctx.storage.m.get(k); u.dd = { ...u.dd, bal: 10 }; ctx.storage.m.set(k, u); }
+r = await call('/acct/lgs/join', { token: poor, id: lid });
+T('…the fee has to be in the wallet', r.status === 400 && /costs D\$25 to join\. You have D\$10\./.test(r.j.error), JSON.stringify(r.j));
+const lg2 = (await call('/acct/lgs/create', { token: own, name: 'Small Stakes Sunday', starts: day(5, 0), ends: day(6, 0), bank: 500, prizes: [100], fee: 10 })).j.league;
+{ const k = 'u:short stack', u = ctx.storage.m.get(k); u.dd = { ...u.dd, bal: 10 }; ctx.storage.m.set(k, u); }
+r = await call('/acct/lgs/join', { token: poor, id: lg2.lid });
+T('the desk can set another fee (D$10)', lg2.fee === 10 && r.status === 200 && r.j.wallet.bal === 0, JSON.stringify(r.j.wallet));
+r = await call('/acct/lgs/cancel', { token: own, id: lg2.lid });
+T('a league the desk calls off gives every fee back', r.status === 200 && r.j.refunded === 1 && (await call('/acct/me', { token: poor })).j.wallet.bal === 10);
 T('no league bets before it starts', (await call('/acct/bet', { token: bb, league: lid, stake: 100, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'home' }] })).status === 400);
 clock = day(2, 12);
 T('…or on a game after it ends', (await call('/acct/bet', { token: bb, league: lid, stake: 100, legs: [{ k: 'nba|LAL@PHX', mk: 'ml', side: 'home' }] })).status === 400);
 r = await call('/acct/bet', { token: bb, league: lid, stake: 500, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'away' }] });
-T('a league bet comes off the league bankroll, not the wallet', r.status === 200 && r.j.entry.bal === 500 && r.j.wallet.bal === 1000, JSON.stringify(r.j));
+T('a league bet comes off the league bankroll, not the wallet', r.status === 200 && r.j.entry.bal === 500 && r.j.wallet.bal === 975, JSON.stringify(r.j));
 await call('/acct/bet', { token: cc, league: lid, stake: 200, legs: [{ k: 'nfl|NE@DET', mk: 'ml', side: 'home' }] });
 clock = day(4, 12); ESPN = { 'football/nfl': [ev('NE', 'DET', 27, 20)] }; await A.alarm();
 r = await call('/acct/lgs/one?id=' + lid);
 T('standings by bankroll: Lounge Lizard 500 left + 1,120 back = 1,620 leads', r.j.rows[0].name === 'Lounge Lizard' && r.j.rows[0].bal === 1620 && r.j.league.status === 'live', JSON.stringify(r.j.rows));
 clock = day(7, 12); await A.alarm();
 r = await call('/acct/lgs/one?id=' + lid); const meB = await call('/acct/me', { token: bb });
-T('it ends, the podium is paid: D$5,000 + XP to the winner; players with no bets aren\'t ranked', r.j.league.status === 'final' && r.j.rows[0].name === 'Lounge Lizard' && r.j.rows[0].prize === 5000 && r.j.rows.length === 2 && meB.j.wallet.bal === 6000 && meB.j.xp >= 650, JSON.stringify([r.j.rows, meB.j.wallet, meB.j.xp]));
-T('…and the runner-up gets the second prize', (await call('/acct/me', { token: cc })).j.wallet.bal === 3500);
+T('it ends, the podium is paid: D$5,000 + XP to the winner; players with no bets aren\'t ranked', r.j.league.status === 'final' && r.j.rows[0].name === 'Lounge Lizard' && r.j.rows[0].prize === 5000 && r.j.rows.length === 2 && meB.j.wallet.bal === 5975 && meB.j.xp >= 650, JSON.stringify([r.j.rows, meB.j.wallet, meB.j.xp]));
+T('…and the runner-up gets the second prize', (await call('/acct/me', { token: cc })).j.wallet.bal === 3475);
 T('ranking rule', lgRank([{ bal: 5, w: 1, joined: 2 }, { bal: 9, w: 0, joined: 1 }])[0].bal === 9);
 T('closing an account removes its runs and league seats', (await call('/acct/close', { token: cc, pass: 'longenough1' })).status === 200 && ![...ctx.storage.m.keys()].some(k => /kiowa kid/.test(k) && /^(c|r|e):/.test(k)));
 console.log(`${pass} pass / ${fail} fail`); process.exit(fail ? 1 : 0);

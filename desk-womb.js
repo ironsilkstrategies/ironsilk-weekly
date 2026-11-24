@@ -289,15 +289,21 @@ const wbPayable=pr=>typeof bkPriceOk==='function'?bkPriceOk(pr):pr!=null&&+pr>=-
    A lane from a season that's over (say, a parent's MLB dogs in November) can't be tested, so it doesn't count. */
 const wbBest=d=>{const on=k=>((d.recent||{})[k]||{}).n>=5;const L=d.dom.filter(on);return(L.length?L:d.rec.filter(on)).slice(0,8);};
 /* walk-forward from the start of its parents' records: calibration only from its own graded calls after conception */
+/* v3.5.14 · Nov 23, 11:58 PM, Chris: "Grinder went 3-0 day one but I dont see it reflected in his graduation bars". The rookie year
+   used to start the day after an heir joined the desk, so its debut (3–0 for the Grinder) never counted. It starts the day it joins
+   now: that day, every game it actually called counts (a new call is only ever logged before its game starts); from the next day,
+   every game its parents call, as before. Its days run from the debut too. */
+const wbDebut=K=>K.back||(K.born&&K.liveFrom&&K.born<K.liveFrom?K.born:K.liveFrom);
 function wbEval(L,E,IX,d0,tried,until,opt){opt=opt||{};const a=L.a,b=L.b,from=E.since,calFrom=opt.calFrom&&opt.calFrom<from?opt.calFrom:from;const domA=new Set(L.domA||[]),domB=new Set(L.domB||[]);
   const minN=opt.minN||WOMB_MIN_N,minDays=opt.minDays||WOMB_MIN_DAYS,maxDays=opt.maxDays||WOMB_MAX_DAYS,seen=opt.seen||'games it never saw';
   const bins=CONF_EDGES.slice(0,-1).map((lo,i)=>({lo,hi:CONF_EDGES[i+1],w:0,n:0,s:0}));let pav=null,day=null,pend=[];
   const cal=raw=>{if(!pav)pav=confPav(bins);return wbCalPav(pav,raw);};
   const post={A:[],B:[]},hist={A:[],B:[]},resp={A:[],B:[]};const me={n:0,w:0,u:0},off={n:0,w:0,u:0},offA={n:0,w:0,u:0},offB={n:0,w:0,u:0};let open=0;
+  const JN=opt.join&&opt.join.d&&opt.join.key&&opt.join.d<from?opt.join:null;   /* v3.5.14 · an heir's debut day: every game it actually called (logged before the start) counts */
   const FAM=opt.family?wbFamily({...opt.family,d0}):null;let ER=E.recipe,EE=E;   /* §8 · an heir's genes move day by day with its family (each day from the days before it) */
   for(const g of IX.G){if(until&&g.d>=until)break;if(!g.c[a]&&!g.c[b])continue;
     if(g.d!==day){pend.forEach(x=>{const bb=bins.find(o=>x.raw>=o.lo&&x.raw<o.hi);if(bb){bb.w+=x.y;bb.n++;bb.s+=x.raw;}});if(pend.length)pav=null;pend=[];day=g.d;if(FAM){ER=FAM.step(g.d,E.recipe);EE={...E,recipe:ER};}}
-    const P=wbProbs(EE,a,b,g,IX);if(!P)continue;const pre=g.d<from,calOn=g.d>=calFrom;
+    const P=wbProbs(EE,a,b,g,IX);if(!P)continue;const pre=g.d<from&&!(JN&&g.d===JN.d&&g.c[JN.key]),calOn=g.d>=calFrom;
     const pick=P[P.sides[0]]>=P[P.sides[1]]?P.sides[0]:P.sides[1];const raw=P[pick];let p=calOn?cal(raw):raw;const S=P.info[pick];
     if(ER.vacc.includes(S.lane))p=Math.min(p,0.55);
     if(FAM)for(const[q,c]of[['a',g.c[a]],['b',g.c[b]]]){if(c&&c.graded&&!c.push&&c.hit!=null)FAM.note(g.d,{k:c.lane,p:q,u:c.u,dis:pick!==c.side?(c.hit?1:0):null});}
@@ -310,7 +316,7 @@ function wbEval(L,E,IX,d0,tried,until,opt){opt=opt||{};const a=L.a,b=L.b,from=E.
     pend.push({raw,y});if(FAM)FAM.note(g.d,{h:1,k:S.lane,u:uu});if(pre)continue;   /* (between conception and birth an heir's calibration keeps learning; its rookie record starts the day after) */
     me.n++;me.w+=y;me.u+=uu;if(wbOffOk({voice:'',sp:g.sp,market:g.m,side:pick,price:S.price,line:S.line,date:g.d,cf:wbStdP(p,raw,pav,g.d)})){off.n++;off.w+=y;off.u+=uu;}}
   const A=wbPaired(post.A),B=wbPaired(post.B),rA=wbPaired(resp.A),rB=wbPaired(resp.B),hA=wbPaired(hist.A),hB=wbPaired(hist.B);
-  const days=Math.max(0,Math.round((Date.parse(d0)-Date.parse(from))/864e5));const bar=opt.bar!=null?opt.bar:WOMB_BAR+WOMB_LUCK*Math.log2(Math.max(1,tried||1));
+  const days=Math.max(0,Math.round((Date.parse(d0)-Date.parse(JN?JN.d:from))/864e5));const bar=opt.bar!=null?opt.bar:WOMB_BAR+WOMB_LUCK*Math.log2(Math.max(1,tried||1));
   /* everything it has learned so far, the last day included (an heir's calls use this tonight) */
   const calB=bins.map(o=>({...o}));pend.forEach(x=>{const bb=calB.find(o=>x.raw>=o.lo&&x.raw<o.hi);if(bb){bb.w+=x.y;bb.n++;bb.s+=x.raw;}});
   const duA=+(off.u-offA.u).toFixed(2),duB=+(off.u-offB.u).toFixed(2);
@@ -395,7 +401,7 @@ function wbBirth(W,L,E,r,d,back){W.kids=W.kids||[];const key='H_'+E.id;if(W.kids
   W.kids.push(K);E.st='born';E.bornAt=d;E.kid=key;L.st='born';L.bornAt=d;L.kid=key;
   L.embryos.forEach(x=>{if(x!==E&&(x.st==='womb'||x.st==='due')){x.st='released';x.why=`its sibling ${I.name} was born first`;}});
   try{journalAdd({kind:'womb',sig:'born-'+key,d,v:L.a,sev:'info',title:`👶 ${wbNm(L.a)} × ${wbNm(L.b)}: ${I.name} is born — a ${E.arch}`,
-    what:`${I.creed} It ${st.why||'beat both parents on games it never saw'}. ${back?`Its birth was dated back: it joins the desk ${wbMd(back)}, and from ${wbMd(dayShift(back,1))}`:'From tomorrow'} it calls every game its parents call, as a rookie: ${ROOKIE_DAYS} days and ${ROOKIE_N}+ calls against each parent to graduate${back?', on calls it actually makes':''}.`});}catch(e){}
+    what:`${I.creed} It ${st.why||'beat both parents on games it never saw'}. ${back?`Its birth was dated back: it joins the desk ${wbMd(back)}, and from that day`:'From today'} it calls every game its parents call, as a rookie: ${ROOKIE_DAYS} days and ${ROOKIE_N}+ calls against each parent to graduate${back?', on calls it actually makes':''}.`});}catch(e){}
   return K;}
 
 /* ══ §8 · FAMILY LIFE: the engine (one walk, the same one that judges the heir) ═════════════════════════════════════════ */
@@ -716,7 +722,7 @@ function wombRun(force){const d=today();const IX=wbIndex();if(!force&&WOMB_MEMO&
   W.litters.filter(L=>L.st==='live').forEach(L=>{if(wbLitterDay(W,L,IX,d,out))changed=true;});
   /* 3 · §7 · the rookie year: judged live against both parents from the day after its birth; its calibration keeps learning */
   (W.kids||[]).forEach(K=>{if(K.st!=='rookie'&&K.st!=='grad')return;const r=wbEval({a:K.a,b:K.b,domA:K.domA,domB:K.domB},{since:K.liveFrom,recipe:K.recipe},IX,d,K.n,null,
-      {calFrom:K.since,minN:ROOKIE_N,minDays:ROOKIE_DAYS,bar:ROOKIE_BAR,maxDays:ROOKIE_MAX,seen:'games since it was born',rookie:1,family:{from:K.liveFrom,temper:K.temper}});out.kid[K.key]=r;
+      {calFrom:K.since,minN:ROOKIE_N,minDays:ROOKIE_DAYS,bar:ROOKIE_BAR,maxDays:ROOKIE_MAX,seen:'games since it was born',rookie:1,join:{d:wbDebut(K),key:K.key},family:{from:K.liveFrom,temper:K.temper}});out.kid[K.key]=r;
     if(JSON.stringify(r.cal)!==JSON.stringify(K.cal)){K.cal=r.cal;changed=true;}
     /* §8 · family life: today's genes, what's going on, the lessons it keeps */
     if(r.fam){const F={adj:r.fam.adj,d:r.fam.adjD,now:r.fam.now,events:r.fam.events.slice(-24),lessons:r.fam.lessons};if(JSON.stringify(F)!==JSON.stringify(K.fam||null)){K.fam=F;changed=true;}
@@ -852,13 +858,13 @@ function wbEmbCard(L,E,r,open){const LF=wbEmbLife(L,E,r),rule=E.arch===(L.arch||
     ${wait?`<div class="wt">⏳ <b>Waiting on:</b> ${txtEsc(wait)}</div>`:''}${wbLogHtml(log)}</div></div>`;}
 /* an heir's life: the rookie year (to graduation) or the race to make a parent evolve */
 function wbKidCard(K,W,open){const R=(WOMB_MEMO&&WOMB_MEMO.kid||{})[K.key],EV=(WOMB_MEMO&&WOMB_MEMO.evo||{})[K.key]||{},sa=wbSh(K.a),sb=wbSh(K.b);let LF,lab,ic=K.st==='grad'?(K.genAt?'⚡':'🎓'):'🍼',when;
-  if(K.st==='rookie'){const days=Math.max(0,Math.round((Date.parse(today())-Date.parse(K.liveFrom))/864e5));
-    LF=wbLife({days,minDays:ROOKIE_DAYS,n:[R?R.A.n:0,R?R.B.n:0],minN:ROOKIE_N,z:[R?R.A.z:0,R?R.B.z:0],bar:ROOKIE_BAR,names:[sa,sb],mOk:!R||(R.duA>=-1&&R.duB>=-1),respBad:false,done:false,doneTxt:'',etaMin:dayShift(K.liveFrom,ROOKIE_DAYS),dl:dayShift(K.liveFrom,ROOKIE_MAX),
-      mTxt:R&&R.off.n?`its official picks ${wbU(R.off.u)} · ${txtEsc(sa)} ${wbU(R.offA.u)} · ${txtEsc(sb)} ${wbU(R.offB.u)}`:'no official picks graded yet'});lab='to graduate';when=['Earliest graduation','Last day to graduate',dayShift(K.liveFrom,ROOKIE_MAX)];}
+  if(K.st==='rookie'){const R0=wbDebut(K),days=Math.max(0,Math.round((Date.parse(today())-Date.parse(R0))/864e5));
+    LF=wbLife({days,minDays:ROOKIE_DAYS,n:[R?R.A.n:0,R?R.B.n:0],minN:ROOKIE_N,z:[R?R.A.z:0,R?R.B.z:0],bar:ROOKIE_BAR,names:[sa,sb],mOk:!R||(R.duA>=-1&&R.duB>=-1),respBad:false,done:false,doneTxt:'',etaMin:dayShift(R0,ROOKIE_DAYS),dl:dayShift(R0,ROOKIE_MAX),
+      mTxt:R&&R.off.n?`its official picks ${wbU(R.off.u)} · ${txtEsc(sa)} ${wbU(R.offA.u)} · ${txtEsc(sb)} ${wbU(R.offB.u)}`:'no official picks graded yet'});lab='to graduate';when=['Earliest graduation','Last day to graduate',dayShift(R0,ROOKIE_MAX)];}
   else{const E=Object.values(EV).sort((x,y)=>(y.z||0)-(x.z||0))[0];if(!E)return`<div class="life${open?' open':''}"><div class="sm" onclick="this.parentNode.classList.toggle('open')">${wbAv(K.a,K.b,ic)}<div><div class="lf-n">${txtEsc(K.name)}</div><div class="lf-s">${K.genAt?`Gen ${K.gen||wbGenOf(K.key,W)}`:'Graduated'} · child of ${txtEsc(sa)} × ${txtEsc(sb)}</div></div><div class="rd">—</div></div><div class="lb"><div class="wt">Its race against its parents starts on the next pass.</div></div></div>`;
     const pn=wbSh(E.p);LF=wbLife({days:E.days,minDays:EVO_DAYS,n:[E.n],minN:EVO_N,z:[E.z],bar:EVO_BAR,names:[pn],mOk:E.du>0,respBad:!E.resp,done:false,doneTxt:'',etaMin:dayShift(E.from,EVO_DAYS),dl:null,
       mTxt:`its official picks ${wbU(E.off)} · ${txtEsc(pn)} ${wbU(E.offP)}`});lab=`to make ${txtEsc(pn)} evolve`;when=['Earliest evolution','',null];}
-  const pc=WB_PCT(LF.ready),st=K.st==='rookie'?`🍼 Rookie · day ${Math.max(0,wbDaysTo(K.liveFrom)*-1)} of ${ROOKIE_DAYS}`:K.genAt?`⚡ Gen ${K.gen||wbGenOf(K.key,W)}`:'🎓 Graduated';
+  const pc=WB_PCT(LF.ready),st=K.st==='rookie'?`🍼 Rookie · day ${Math.min(ROOKIE_DAYS,Math.max(1,1-wbDaysTo(wbDebut(K))))} of ${ROOKIE_DAYS}`:K.genAt?`⚡ Gen ${K.gen||wbGenOf(K.key,W)}`:'🎓 Graduated';
   const fam=((K.fam||{}).now||[]).slice(0,3).map(x=>{try{return wbFamTxt(x,K,true);}catch(e){return'';}}).filter(Boolean);
   const log=[[K.born,`Born to ${wbNm(K.a)} and ${wbNm(K.b)}: ${K.title}, a ${K.arch}.${K.back?' (Dated back.)':''}`],K.back?[K.back,'Joined the desk. Its rookie year starts with the first calls it makes.']:null,K.gradAt?[K.gradAt,'Graduated: it kept beating both parents in public.']:null,K.genAt?[K.genAt,`Made ${wbNm(K.genBy)} evolve and earned Gen ${K.gen||wbGenOf(K.key,W)}.`]:null,
     ...((K.fam||{}).lessons||[]).slice(-2).map(l=>{try{return[l.d,'Learned a lesson: '+wbLessonTxt(l,K,true)+'.'];}catch(e){return null;}}),[LF.eta,K.st==='rookie'?'The earliest day it can graduate.':'The earliest day a parent can be made to evolve.']];
@@ -888,7 +894,7 @@ function homeHtml(){if(!WOMB_MEMO||WOMB_MEMO.d!==today()){wombRunAsync().then(()
   /* what's coming, by date */
   const UP=new Map(),addU=(d,k,who)=>{const key=d+'|'+k;if(!UP.has(key))UP.set(key,{d,k,who:[]});UP.get(key).who.push(who);};
   fams.forEach(xs=>{const L=xs[0].L,o=xs[0],f=`${wbSh(L.a)} × ${wbSh(L.b)}`;if(o.E.st!=='due')addU(o.LF.eta,'eta',f);addU(dayShift(o.E.since,WOMB_MAX_DAYS),'dl',f);});
-  KS.filter(K=>K.st==='rookie').forEach(K=>addU(dayShift(K.liveFrom,ROOKIE_DAYS),'grad',K.name));
+  KS.filter(K=>K.st==='rookie').forEach(K=>addU(dayShift(wbDebut(K),ROOKIE_DAYS),'grad',K.name));
   const many=w=>w.length>2?`${w.length} families`:w.join(' and ');
   const up=[...UP.values()].map(u=>[u.d,u.k==='eta'?`The earliest a baby can be born (${many(u.who)})`:u.k==='dl'?`Deadline: babies not born by then are lost (${many(u.who)})`:`${wbAnd(u.who)}: the earliest ${u.who.length>1?'they':'it'} can graduate`]);
   const coming=up.length?`<div class="sec">📅 Coming up</div><div class="card">${up.sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).slice(0,8).map(([d,t])=>`<div class="up"><b>${txtEsc(wbDay(d))}</b><span>${txtEsc(t)}</span><small>${wbIn(d)}</small></div>`).join('')}</div>`:'';
@@ -935,7 +941,7 @@ function nurseryHtml(){const W=wombAll(),KS=(W.kids||[]).slice();
         ${wbBar(`Calls vs ${txtEsc(wbSh(K.a))}`,`${Math.min(r.A.n,ROOKIE_N)}/${ROOKIE_N}`,r.A.n/ROOKIE_N,'#60a5fa')}${wbBar(`Calls vs ${txtEsc(wbSh(K.b))}`,`${Math.min(r.B.n,ROOKIE_N)}/${ROOKIE_N}`,r.B.n/ROOKIE_N,'#60a5fa')}
         ${wbBar(`Edge vs ${txtEsc(wbSh(K.a))}`,`${sg(r.A.z)}σ of ${ROOKIE_BAR.toFixed(1)}σ`,r.A.z/ROOKIE_BAR,r.A.z<0?'#f87171':'#22c55e')}${wbBar(`Edge vs ${txtEsc(wbSh(K.b))}`,`${sg(r.B.z)}σ of ${ROOKIE_BAR.toFixed(1)}σ`,r.B.z/ROOKIE_BAR,r.B.z<0?'#f87171':'#22c55e')}
         <div class="lbl"><span>Money check (its official calls vs each parent's)</span><span style="color:${r.duA>=-1&&r.duB>=-1?'#22c55e':'#f87171'}">${wbU(r.off.u)} vs ${wbU(r.offA.u)} · ${wbU(r.offB.u)}</span></div>
-        ${r.need&&r.need.length?`<div style="margin-top:6px;font-size:12px">🎓 <b>To graduate:</b> ${r.need.map(txtEsc).join(' · ')}</div>`:''}</div>`:K.st==='rookie'?`<div class="muted" style="margin-top:6px">Its rookie year starts ${txtEsc(wbMd(K.liveFrom))}.</div>`:''}
+        ${r.need&&r.need.length?`<div style="margin-top:6px;font-size:12px">🎓 <b>To graduate:</b> ${r.need.map(txtEsc).join(' · ')}</div>`:''}</div>`:K.st==='rookie'?`<div class="muted" style="margin-top:6px">Its rookie year started ${txtEsc(wbMd(wbDebut(K)))}, the day it joined the desk.</div>`:''}
       ${K.st!=='rookie'&&K.why?`<div class="muted" style="margin-top:6px">${K.st==='grad'?'🎓 Graduated':K.stepAside?'🍂 Stepped aside':'🚪 Retired'} ${txtEsc(wbMd(K.st==='grad'?K.gradAt:K.retiredAt))}: ${txtEsc(K.why)}</div>`:''}
       ${K.genAt?`<div style="margin-top:6px;font-size:12.5px">⚡ Gen ${K.gen||wbGenOf(K.key,W)} since ${txtEsc(wbMd(K.genAt))}, the day it made ${txtEsc(wbNm(K.genBy))} evolve.</div>`:''}
       ${K.st==='grad'?`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(245,197,66,.07)"><div style="font:800 13px system-ui">⚡ The race to make a parent evolve</div>${wbEvoBars(K,((WOMB_MEMO&&WOMB_MEMO.evo)||{})[K.key]||{})}</div>`:''}</div>`;};

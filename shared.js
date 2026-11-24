@@ -2561,7 +2561,7 @@ function vlogSig(sp){try{const G=sportGames(sp)||[],S=sportSims(sp)||{};let ids=
     return[today(),dropHash(ids),st(shots),st(INTEL_KEY),st('d4.preds'),typeof CONF_KEY!=='undefined'?st(CONF_KEY):'',typeof CONF_FLOOR_KEY!=='undefined'?st(CONF_FLOOR_KEY):''].join('|');}catch(e){return'';}}
 function voicesLog(sp,force){const sig=vlogSig(sp);const L=VLOG_SIG[sp];
   if(!force&&sig&&L&&L.sig===sig&&Date.now()-L.ts<5*60e3)return 0;
-  const own=scTxBegin();try{const n=voicesLog0(sp);VLOG_SIG[sp]={sig:vlogSig(sp),ts:Date.now()};return n;}finally{if(own)scTxEnd();}}
+  const own=scTxBegin();try{const n=voicesLog0(sp);VLOG_SIG[sp]={sig:vlogSig(sp),ts:Date.now()};return n;}finally{if(own)scTxEnd();try{scoreCallsReconcile();}catch(e){}}}   /* v3.5.14 · then every pre-game score agrees with its picks */
 function voicesLog0(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
@@ -2652,6 +2652,19 @@ function scoreCallsLog0(sp,g,s,calls){const SC=scoreCallsFor(sp,g,s,calls);try{h
   const gl=g.away.abbr+'@'+g.home.abbr,d=(calls[0]&&calls[0].date)||g.__date||today();let n=0;
   SC.forEach(x=>{const id=[sp,gl,d,x.voice].join('|');const o=L[id];if(o&&(o.graded||(o.a===x.a&&o.h===x.h)))return;L[id]={sp,game:gl,date:d,voice:x.voice,a:x.a,h:x.h};n++;});
   if(n)SC_TX.dl++;return n;}
+/* v3.5.14 · Nov 23, 11:32 PM, Chris: "it's giving losses when the characters picked right … which threw off the unanimous picks … a glitch
+   that has to be fixed site wide". CLE@CHI: the Commissioner and the Grinder took Cavaliers ML while their exact finals said CHI 127–126,
+   and Covers took Bulls +8.5 with a final that had CLE by 9 — saved before every score had to agree with the character's picks (v3.5.8)
+   and never recomputed before tip-off (a score call is only refreshed on that sport's own pass). Now, on every chores pass and before
+   every publish, each score call for a game that hasn't started is checked against all of that character's calls on that game that
+   day and bent to agree. Graded calls, and games already under way, stay exactly as they were made. */
+function scoreCallsReconcile(){try{const L=get(SCORECALL_KEY,{})||{},t=today(),last=dayShift(t,6),V=roGet(VOICES_KEY,[],10e3)||[],now=Date.now();
+    const VI=new Map();V.forEach(c=>{if(!c)return;const d=String(c.date).slice(0,10);if(d<t||d>last)return;const k=c.sp+'|'+c.game+'|'+d+'|'+c.voice;const a=VI.get(k);if(a)a.push(c);else VI.set(k,[c]);});
+    const ST=new Map(),startOf=(sp,g)=>{const k=sp+'|'+g;if(!ST.has(k)){let v=NaN;try{v=Date.parse(typeof deskGameStart==='function'?deskGameStart(sp,g):'');}catch(e){}ST.set(k,v);}return ST.get(k);};
+    let n=0;for(const id of Object.keys(L)){const x=L[id];if(!x||x.graded)continue;const d=String(x.date).slice(0,10);if(d<t||d>last)continue;
+      const C=VI.get(x.sp+'|'+x.game+'|'+d+'|'+x.voice);if(!C||!C.length)continue;const st=startOf(x.sp,x.game);if(!(st>now||(isNaN(st)&&d>t)))continue;   /* (pre-game only) */
+      const y=scAgree(x.sp,{a:+x.a,h:+x.h},C);if(y&&(y.a!==+x.a||y.h!==+x.h)){L[id]={...x,a:y.a,h:y.h,fixed:(x.fixed||0)+1};n++;}}
+    if(n){set(SCORECALL_KEY,L);try{SC_TRUST_C=null;}catch(e){}}return n;}catch(e){console.warn('score reconcile',e);return 0;}}
 function gradeScoreCalls(){const L=get(SCORECALL_KEY,{})||{};let n=0;
   Object.values(L).forEach(x=>{if(x.graded)return;let R=null;try{R=finalsFor(x.sp,x.game,String(x.date).slice(0,10),false);}catch(e){}if(!R)return;const fa=+R.a,fh=+R.h;
     x.graded=1;x.fa=fa;x.fh=fh;x.exact=x.a===fa&&x.h===fh?1:0;x.mar=(x.h-x.a)===(fh-fa)?1:0;x.tot=(x.a+x.h)===(fa+fh)?1:0;x.win=fa===fh?null:((x.h>x.a)===(fh>fa)?1:0);x.err=Math.abs(x.a-fa)+Math.abs(x.h-fh);n++;});
@@ -3174,7 +3187,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261123l',DESK_VER='3.5.13';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261124a',DESK_VER='3.5.14';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -3896,6 +3909,7 @@ async function pickCommit(S,reveal){let salt=S.salt;if(!salt){salt=[...crypto.ge
   return{alg:'sha256',hash:await sha256hex(pickCommitText(S.top3,salt)),salt:reveal?salt:null};}
 async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual)alert('The Best card publishes once it locks — run the master evaluation or tap Lock now.');return{ok:false,reason:'not locked'};}
   if(!get(LS.ghtoken,'')&&!get(SYNC.token,'')){if(manual)alert('Add a GitHub token in Settings → Public picks page first.');return{ok:false,reason:'not configured'};}
+  try{if(scoreCallsReconcile()){PUB_BOARD_MEMO=null;}}catch(e){}   /* v3.5.14 · no published score contradicts its character's pick */
   const F=publicFeed();try{if(F.today)F.today.commit=await pickCommit(S,F.today.allStarted);}catch(e){}const txt=JSON.stringify(F,null,1);
   const a=await ghPut('public/picks.json',txt,'Publish picks — '+S.d);const b=a.ok?await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d):a;
   if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{const m=await ghPut('public/picks.json',txt,'Publish picks — '+S.d,LEGACY_PUB_REPO);if(m.ok)await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d,LEGACY_PUB_REPO);}catch(e){}}

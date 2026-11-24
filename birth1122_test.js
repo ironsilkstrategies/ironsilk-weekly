@@ -72,15 +72,22 @@ function harness(w) { const E = s => w.eval(s), J = s => JSON.parse(w.eval(`JSON
   T('…and nothing about its birth touched a pick', E('localStorage.getItem(VOICES_KEY)') === E('localStorage.getItem(VOICES_KEY)') && J(`get(VOICES_KEY,[]).filter(x=>x.voice==='${KEY}').length`) === 0);
   const room = E(`(GEN_TAB='nursery',nurseryHtml())`);
   T('🍼 the Nursery: its crest, name, title, type, parents, creed, what it took from whom, its womb record, its rookie bars', /<svg[^>]*aria-label="The Architect's crest"/.test(room) && /The Architect/.test(room) && /The Golden Child · a Prodigy Architect · 🍼 Rookie/.test(room) && /Child of <b[^>]*>The Simulator<\/b> and <b[^>]*>The Judge<\/b> · born Dec 4/.test(room) && /Ride what.s working/.test(room) && /11 days in the womb/.test(room), room.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 400));
-  T('…on its first day the rookie year hasn\'t started yet (it starts Dec 5)', /rookie year starts Dec 5/.test(room) || /Rookie days/.test(room));
+  T('…its first day is day one of its rookie year', /rookie year started Dec 4, the day it joined the desk/.test(room) || /Rookie days/.test(room), room.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 900));
   E('genOpen()'); await wait(2500); E(`GEN_TAB='nursery';genRender()`); const book = E(`document.getElementById('genView').innerHTML`);
   T('the Bloodlines book has the 🍼 Nursery tab and counts the heirs on the desk', /🍼 Nursery/.test(book) && /1 heir on the desk/.test(book), book.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200));
   /* the next day: its parents don't court again while it's a rookie; the rookie year starts */
   go('2026-12-05'); const R5 = J('wombRun(true)'); const W5 = J('wombAll()');
   T('Dec 5: the rookie\'s parents don\'t court each other again while it\'s a rookie', !W5.litters.some(L => L.st === 'live' && [L.a, L.b].sort().join() === 'Judge,Sim'), JSON.stringify(W5.litters.map(L => L.a + '×' + L.b + ':' + L.st)));
-  T('…its rookie year is under way, judged live against both parents (no game counted before today)', !!R5.kid[KEY] && R5.kid[KEY].A.n === 0 && R5.kid[KEY].days === 0, JSON.stringify(R5.kid[KEY] && R5.kid[KEY].A));
+  T('…its rookie year is under way, judged live against both parents: its debut (Dec 4) is day one, and it made no calls that day in this world, so no game counts yet', !!R5.kid[KEY] && R5.kid[KEY].A.n === 0 && R5.kid[KEY].days === 1, JSON.stringify(R5.kid[KEY] && [R5.kid[KEY].days, R5.kid[KEY].A]));
+  /* v3.5.14 · Nov 23, Chris: "Grinder went 3-0 day one but I dont see it reflected in his graduation bars". Its debut counts: every
+     game it actually called on the day it joined (a new call is only logged before its game starts). Nothing else from that day. */
+  w.__DEB = JSON.stringify(WORLD.filter(x => x.date === '2026-12-04' && x.voice === 'Sim').slice(0, 6).map(x => ({ ...x, id: x.id.replace('|Sim|', `|${KEY}|`), voice: KEY, cf: 0.6 })));
+  E(`set(VOICES_KEY,get(VOICES_KEY,[]).concat(JSON.parse(window.__DEB)));WB_IX=null;WOMB_MEMO=null;`); const R5b = J('wombRun(true)');
+  T('…its debut counts: the six calls it made on the day it was born go on its rookie record against both parents (those games, no others from that day)', R5b.kid[KEY].A.n === 6 && R5b.kid[KEY].B.n === 6 && R5b.kid[KEY].days === 1, JSON.stringify(R5b.kid[KEY] && [R5b.kid[KEY].days, R5b.kid[KEY].A, R5b.kid[KEY].B]));
+  const room5 = E(`(GEN_TAB='nursery',nurseryHtml())`).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  T('…and the Nursery counts its rookie days from its debut (day 2 of 21 on Dec 5)', /🍼 Rookie · day 2 of 21/.test(room5) || /Rookie days 1\/21/.test(room5), room5.slice(0, 600));
   go('2026-12-16'); const R16 = J('wombRun(true)'); const k16 = kid();
-  T('Dec 16: eleven days in, still a rookie (graduation takes 21 days and 150 calls against each)', k16.st === 'rookie' && R16.kid[KEY].days === 11 && R16.kid[KEY].A.n === 264, JSON.stringify({ d: R16.kid[KEY].days, n: R16.kid[KEY].A.n, z: [R16.kid[KEY].A.z, R16.kid[KEY].B.z] }));
+  T('Dec 16: twelve days in counting its debut, still a rookie (graduation takes 21 days and 150 calls against each)', k16.st === 'rookie' && R16.kid[KEY].days === 12 && R16.kid[KEY].A.n === 264, JSON.stringify({ d: R16.kid[KEY].days, n: R16.kid[KEY].A.n, z: [R16.kid[KEY].A.z, R16.kid[KEY].B.z] }));
   T('…its calibration keeps learning every day (more games behind its chances than at birth)', k16.cal.reduce((t, b) => t + b.n, 0) > K.cal.reduce((t, b) => t + b.n, 0), String(k16.cal.reduce((t, b) => t + b.n, 0)));
   go('2026-12-26'); const R26 = J('wombRun(true)'); const k26 = kid(), r26 = R26.kid[KEY];
   T('🎓 Dec 26: 21 days in, still ahead of both parents on the games since it was born, its official calls still paying as much: it graduates', k26.st === 'grad' && k26.gradAt === '2026-12-26' && r26.A.z >= 1 && r26.B.z >= 1 && r26.A.n >= 150 && r26.duA >= -1 && r26.duB >= -1, JSON.stringify({ zA: r26.A.z, zB: r26.B.z, n: r26.A.n, off: r26.off, offA: r26.offA, offB: r26.offB }));

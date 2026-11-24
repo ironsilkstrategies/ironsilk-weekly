@@ -1053,3 +1053,43 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .crown.north .rcr .wst,.crown.famnews .rcr .wst{justify-self:end;font:800 13px/1 var(--text);font-variant-numeric:tabular-nums;color:var(--ink)}
 .crown.famnews .rcr{grid-template-columns:28px minmax(0,1fr)}
 .crown.famnews .rcr .n{font-size:20px}
+/* v63 · Nov 23 · challenge buy-ins come from the wallet, leagues have an entry fee */
+.cs-wal{display:block;margin-top:8px;text-align:center;font:600 12.5px/1.35 var(--text);color:var(--ink-2)}
+.cs-wal.no{color:#b3261e}
+.cs-go .btn[disabled]{opacity:.55;cursor:not-allowed}
+.rc-buy{margin:6px 0 0;font-size:12.5px;line-height:1.4;color:#3b4a40}
+.rc-buy b{color:var(--ink)}
+.xc-st{flex-wrap:wrap;row-gap:6px}
+.w-key .r{background:#c58cff}
+.lgc .btn[disabled]{opacity:.6;cursor:not-allowed}
+/* v63 · Nov 23 · the parlay lane on the Cast: every character's own tickets, record and units */
+.cc-stats{flex-wrap:wrap;row-gap:10px}
+.cc-stats em{font-style:normal;font-weight:700}.cc-stats em.up{color:#7fd6a4}.cc-stats em.dn{color:#e59a85}
+.statrow{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:600px){.statrow{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.statrow em{font-style:normal;font-weight:700}.statrow em.up{color:#7fd6a4}.statrow em.dn{color:#e59a85}
+.parlane{padding:6px 16px 12px;max-width:640px}
+.pl-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:10px 0 12px;border-bottom:1px solid var(--rule)}
+.pl-top b{display:block;font:900 34px/.95 var(--display);color:var(--ink)}
+.pl-top small{display:block;margin-top:4px;font-size:12.5px;color:var(--ink-2)}
+.pl-big{font:700 14px/1.1 var(--text);color:var(--ink-2);text-align:right}
+.pl-big b{display:block;font:900 30px/1 var(--display);margin-top:2px}
+.pl-big.up b{color:#17703f}.pl-big.dn b{color:#a23b25}
+.pl-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto 64px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule)}
+.pl-i{font-size:18px;text-align:center}
+.pl-t b{display:block;font-weight:800;color:var(--ink)}
+.pl-t small{display:block;font-size:12px;color:var(--ink-2)}
+.pl-r{font:800 15px/1 var(--text);font-variant-numeric:tabular-nums;color:var(--ink)}
+.pl-u{font:800 15px/1 var(--text);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink-2)}
+.pl-u.up{color:#17703f}.pl-u.dn{color:#a23b25}
+.pl-last{display:flex;flex-wrap:wrap;gap:6px;padding-top:12px}
+.pl-last small{flex-basis:100%;font:700 12px/1 var(--text);color:var(--ink-2)}
+.pl-tk{padding:5px 9px;border-radius:999px;font:600 12px/1.2 var(--text);background:rgba(21,19,15,.06);color:var(--ink)}
+.pl-tk.w{background:rgba(23,112,63,.12);color:#17703f}.pl-tk.l{background:rgba(162,59,37,.1);color:#a23b25}
+.crown.parboard .pl-b{appearance:none;background:none;border:0;border-bottom:1px solid var(--rule);width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.crown.parboard .pl-b:last-child{border-bottom:0}
+.crown.parboard .rcr .t i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:1px}
+.crown.parboard .rcr .t em{font-style:normal;font-weight:700;color:var(--ink-2);margin-left:4px;font-variant-numeric:tabular-nums}
+.crown.parboard .rcr .wst{justify-self:end;font:800 15px/1 var(--text);font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.crown.parboard .rcr .wst.up{color:#17703f}.crown.parboard .rcr .wst.dn{color:#a23b25}
+.crown.parboard .pl-b:focus-visible{outline:2px solid var(--foil);outline-offset:2px}

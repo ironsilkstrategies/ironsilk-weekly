@@ -185,17 +185,23 @@ export function cleanTicket(t) { if (!t || typeof t !== 'object') return null; c
     odds: Number.isFinite(+t.odds) && Math.abs(+t.odds) >= 100 ? Math.round(+t.odds) : null, legs }; }
 /* ═══ CHALLENGES + LEAGUES (v3.1.0, Chris, Nov 15: "evolve them both to the 10th power") ════════════════════════════════════
    CHALLENGES · 1,000 of them (chat/chal-lib.mjs: 3/7/14/30 days, five tiers, twelve leg rules, every sport, the machine's routes).
-   Starting one opens a run with its own bankroll (free; the wallet isn't touched). Every bet from a run is a normal server-priced,
+   Starting one opens a run with its own bankroll, bought from the wallet since v3.5.14 (see LG_FEE below). Every bet from a run is a normal server-priced,
    server-graded D$ bet that must obey the challenge's rule and sport. Six checkpoints pay XP on the way up; reaching the goal pays
    the challenge's XP and its D$ prize into the wallet. Busted under D$1 with nothing open; expired when time's up. Three live runs
    at a time, one per challenge.
-   LEAGUES · run by the desk: the owner opens a league (name, dates, bankroll, prizes, sports). Members join while it's open, get the
+   LEAGUES · run by the desk: the owner opens a league (name, dates, bankroll, prizes, sports, entry fee). Members join while it's open, get the
    league's own bankroll, and bet it during the league's dates. Ranked by bankroll. When it ends and its bets settle, the podium is
    paid in D$ and XP. Opening leagues to members is one switch (env LG_OPEN = "yes") once the desk says so.
    D$ is play money: prizes are D$, never cash and never exchangeable.
    Routes: GET /acct/chal · POST /acct/chal/join {token,id,route?} · /acct/chal/quit {token,rid} · /acct/chal/route {token,rid,route}
            GET /acct/lgs · GET /acct/lgs/one?id= · POST /acct/lgs/create {token,…} (owner) · /acct/lgs/join {token,id} · /acct/lgs/cancel (owner) */
 const RUNS_MAX = 3, LGS_PODIUM_XP = [600, 350, 200], LGS_PLAY_XP = 50, CP_XP = 0.06;
+/* v3.5.14 · Nov 23, Chris: "I do want challenge money to come from the players wallet and also to sign up for leagues there should be a
+   signup fee (D$25 for starters)". A run's bankroll is bought from the wallet (the challenge's start), and whatever the run holds when
+   it ends — finished, out of time, busted or quit — goes back to the wallet (the prize on top for finishing). Joining a league costs
+   its entry fee from the wallet (D$25 unless the league sets another), refunded if the desk cancels it. Runs started before this
+   (free) end the old way. */
+const LG_FEE = 25;
 const r2 = n => Math.round(n * 100) / 100;
 export const lgStatus = (g, now) => g.cancelled ? 'cancelled' : g.paid ? 'final' : now < g.starts ? 'open' : now < g.ends ? 'live' : 'settling';
 export const lgRank = E => E.slice().sort((a, b) => b.bal - a.bal || b.w - a.w || a.joined - b.joined);
@@ -324,8 +330,11 @@ export class Accounts {
         else if (sc && l.mk === 'total' && Number.isFinite(sc.a) && Number.isFinite(sc.h) && Number.isFinite(l.line) && sc.a + sc.h > l.line) { l.res = l.side === 'over' ? 'hit' : 'miss'; l.early = true; changed = true; } else if (this.now() - l.t > 3 * 864e5) { l.res = 'push'; l.void = true; changed = true; } }
       const fin = ddSettle(bet); if (!changed && !fin) continue;
       if (fin) { bet.status = fin.status; bet.back = fin.back; bet.done = this.now(); const tally = o => { if (fin.status === 'won') o.w++; else if (fin.status === 'lost') o.l++; else o.p++; };
-        if (bet.run) { const rk = 'c:' + key + ':' + bet.run, run = await S.get(rk); if (run) { run.bal = r2(run.bal + fin.back); run.open = Math.max(0, (run.open || 1) - 1); run.w = run.w || 0; run.l = run.l || 0; run.p = run.p || 0; tally(run);
-            run.peak = Math.max(run.peak || run.start, run.bal); await S.put(rk, run); await this.runCheck(key, run); } }
+        if (bet.run) { const rk = 'c:' + key + ':' + bet.run, run = await S.get(rk); if (run) { const closed = run.status !== 'live' && run.buyIn && run.cashed != null;
+            if (closed) { run.late = r2((run.late || 0) + fin.back); if (fin.back > 0) await this.runCashOut(key, run, fin.back, `↩︎ ${(chal(run.cid) || {}).name || 'Challenge'}: a late ticket paid D$${fin.back}`); }
+            else { run.bal = r2(run.bal + fin.back); run.peak = Math.max(run.peak || run.start, run.bal); }
+            run.open = Math.max(0, (run.open || 1) - 1); run.w = run.w || 0; run.l = run.l || 0; run.p = run.p || 0; tally(run);
+            await S.put(rk, run); if (!closed) await this.runCheck(key, run); } }
         else if (bet.lg) { const ek = 'e:' + bet.lg + ':' + key, e = await S.get(ek); if (e) { e.bal = r2(e.bal + fin.back); e.open = Math.max(0, (e.open || 1) - 1); e.w = e.w || 0; e.l = e.l || 0; e.p = e.p || 0; tally(e); e.peak = Math.max(e.peak || e.start, e.bal); await S.put(ek, e); this._lgs = null; } }
         else { const u = await S.get('u:' + key); if (u) { const W = ddWallet(u); W.bal = r2(W.bal + fin.back); W.back = r2(W.back + fin.back); tally(W); u.dd = W; await S.put('u:' + key, u); } }
         await S.delete(ok); this._bd = null; this._ch = null; }
@@ -342,6 +351,7 @@ export class Accounts {
       if (hit > (run.cp || 0)) { const xp = Math.round(c.xp * CP_XP * (hit - (run.cp || 0))); run.cp = hit; run.xp = (run.xp || 0) + xp; await S.put('c:' + key + ':' + run.rid, run); await this.award(key, xp, 0, `🚩 ${c.name}: ${cps[hit - 1].name}`); } }
     if (run.bal >= run.goal) end = 'won'; else if (run.bal < 1 && !run.open) end = 'busted'; else if (run.ends <= this.now() && !run.open) end = 'expired';
     if (!end) return; run.status = end; run.done = this.now(); if (end === 'won' && c) { run.cp = 6; run.xp = (run.xp || 0) + c.xp; run.paid = c.prize; }
+    if (run.buyIn && !run.cashed) { run.cashed = r2(run.bal); await this.runCashOut(key, run, run.cashed, `↩︎ ${c ? c.name : 'Challenge'}: D$${run.cashed} back to your wallet`); }
     await S.put('c:' + key + ':' + run.rid, run); await S.delete('r:' + key + ':' + run.rid);
     if (end === 'won' && c) { await this.award(key, c.xp, c.prize, `🏆 ${c.name}`); const u = await S.get('u:' + key); if (u) { u.tr = u.tr || {}; u.tr[c.tier] = (u.tr[c.tier] || 0) + 1; u.trd = (u.trd || 0) + 1; await S.put('u:' + key, u); } }
     await S.put('cx:' + String(run.done).padStart(14, '0') + ':' + key, { name: run.name, cid: run.cid, cname: c ? c.name : run.cid, tier: c ? c.tier : null, status: end, bal: run.bal, goal: run.goal, took: run.done - run.ts, bets: run.bets || 0, prize: run.paid || 0 });
@@ -349,13 +359,20 @@ export class Accounts {
   async chalJoin(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key), c = chal(b.id); if (!u) return json({ error: 'sign in first' }, 401, H); if (!c || !inLib(c.id)) return json({ error: 'no such challenge' }, 400, H);
     const live = [...(await S.list({ prefix: 'c:' + s.key + ':' })).values()].filter(r => r.status === 'live');
     if (live.some(r => r.cid === c.id)) return json({ error: 'you’re already running this one' }, 400, H); if (live.length >= RUNS_MAX) return json({ error: `${RUNS_MAX} runs at a time — finish or quit one first` }, 400, H);
+    const W = ddWallet(u); if (!(W.bal >= c.start)) return json({ error: `${c.name} costs D$${c.start.toLocaleString('en-US')} from your wallet. You have D$${(+W.bal || 0).toLocaleString('en-US')}.` }, 400, H);
     const route = ROUTES[b.route] ? b.route : c.route, rid2 = this.now().toString(36) + rid(4);
-    const run = { rid: rid2, cid: c.id, name: u.name, ts: this.now(), ends: this.now() + c.days * 864e5, start: c.start, bal: c.start, goal: c.goal, peak: c.start, route, status: 'live', open: 0, bets: 0, w: 0, l: 0, p: 0, cp: 0, xp: 0 };
-    await S.put('c:' + s.key + ':' + rid2, run); await S.put('r:' + s.key + ':' + rid2, 1); await this.wake(); this._ch = null; return json({ run }, 200, H); }
+    const run = { rid: rid2, cid: c.id, name: u.name, ts: this.now(), ends: this.now() + c.days * 864e5, start: c.start, bal: c.start, goal: c.goal, peak: c.start, route, status: 'live', open: 0, bets: 0, w: 0, l: 0, p: 0, cp: 0, xp: 0, buyIn: c.start };
+    W.bal = r2(W.bal - c.start); W.chalIn = r2((W.chalIn || 0) + c.start); if (!W.at) W.at = this.now(); u.dd = W; await S.put('u:' + s.key, u); this._bd = null;
+    await S.put('c:' + s.key + ':' + rid2, run); await S.put('r:' + s.key + ':' + rid2, 1); await this.wake(); this._ch = null; return json({ run, wallet: W }, 200, H); }
+  /* a bought run's money goes home: the run's balance back to the wallet (once), and anything a ticket pays after the run closed */
+  async runCashOut(key, run, amt, why) { const S = this.ctx.storage, u = await S.get('u:' + key); if (!u || !(amt > 0)) return 0; const W = ddWallet(u);
+    W.bal = r2(W.bal + amt); W.chalBack = r2((W.chalBack || 0) + amt); u.dd = W; u.xpl = [...(u.xpl || []), { t: this.now(), xp: 0, dd: amt, why }].slice(-40); await S.put('u:' + key, u); this._bd = null; return amt; }
   async chalRoute(s, b, H) { const S = this.ctx.storage, rk = 'c:' + s.key + ':' + String(b.rid || '').replace(/[^a-z0-9]/gi, ''), run = await S.get(rk); if (!run || run.status !== 'live') return json({ error: 'that run is over' }, 400, H);
     if (!ROUTES[b.route]) return json({ error: 'no such route' }, 400, H); run.route = b.route; await S.put(rk, run); return json({ run }, 200, H); }
   async chalQuit(s, b, H) { const S = this.ctx.storage, rk = 'c:' + s.key + ':' + String(b.rid || '').replace(/[^a-z0-9]/gi, ''), run = await S.get(rk); if (!run || run.status !== 'live') return json({ error: 'that run is already over' }, 400, H);
-    run.status = 'quit'; run.done = this.now(); await S.put(rk, run); await S.delete('r:' + s.key + ':' + run.rid); this._ch = null; return json({ run }, 200, H); }
+    run.status = 'quit'; run.done = this.now(); let W = null;
+    if (run.buyIn && !run.cashed) { run.cashed = r2(run.bal); await this.runCashOut(s.key, run, run.cashed, `↩︎ ${(chal(run.cid) || {}).name || 'Challenge'}: quit, D$${run.cashed} back`); W = ddWallet(await S.get('u:' + s.key)); }
+    await S.put(rk, run); await S.delete('r:' + s.key + ':' + run.rid); this._ch = null; return json({ run, ...(W ? { wallet: W } : {}) }, 200, H); }
   async chalBoard(H) { if (!this._ch || this.now() - this._ch.t > 60e3) { const S = this.ctx.storage, all = [...(await S.list({ prefix: 'c:' })).values()], now = this.now();
       const by = {}; all.forEach(r => { const o = by[r.cid] = by[r.cid] || { live: 0, tries: 0, won: 0, fast: null }; if (r.status === 'live') o.live++; else if (r.status !== 'quit') { o.tries++; if (r.status === 'won') { o.won++; const t = r.done - r.ts; if (!o.fast || t < o.fast.took) o.fast = { name: r.name, took: t }; } } });
       const leaders = all.filter(r => r.status === 'live' && r.ends > now).map(r => ({ name: r.name, cid: r.cid, bal: r.bal, goal: r.goal, start: r.start, ends: r.ends, cp: r.cp || 0, pct: Math.round(1000 * Math.max(0, Math.log(Math.max(r.bal, 1) / r.start)) / Math.log(r.goal / r.start)) / 10 })).sort((a, b) => b.pct - a.pct).slice(0, 15);
@@ -372,27 +389,34 @@ export class Accounts {
     const prizes = (Array.isArray(b.prizes) ? b.prizes : []).slice(0, 10).map(x => Math.round(+x)).filter(x => x > 0 && x <= 1e6); if (!prizes.length) return json({ error: 'set at least a first-place prize' }, 400, H);
     if (!s.owner && prizes.reduce((a, x) => a + x, 0) > 0) return json({ error: 'only the desk puts up D$ prizes' }, 403, H);
     const sports = Array.isArray(b.sports) ? b.sports.filter(x => ESPN_PATH[x]).slice(0, 6) : []; const lid = this.now().toString(36) + rid(4);
-    const g = { lid, name, blurb: str(b.blurb, 160), starts, ends, bank, prizes, sports: sports.length ? sports : null, max: Math.min(5000, Math.max(2, Math.round(+b.max || 500))), late: b.late !== false, by: s.name, official: !!s.owner, at: this.now(), n: 0 };
+    const fee = b.fee == null || b.fee === '' ? LG_FEE : Math.round(+b.fee); if (!(fee >= 0 && fee <= 10000)) return json({ error: 'entry fee D$0 to D$10,000' }, 400, H);
+    const g = { lid, name, blurb: str(b.blurb, 160), starts, ends, bank, prizes, fee, sports: sports.length ? sports : null, max: Math.min(5000, Math.max(2, Math.round(+b.max || 500))), late: b.late !== false, by: s.name, official: !!s.owner, at: this.now(), n: 0 };
     await S.put('G:' + lid, g); await S.put('Gp:' + lid, 1); await this.wake(); this._lgs = null; return json({ league: g }, 200, H); }
   async lgsCancel(s, b, H) { if (!s.owner) return json({ error: 'owner only' }, 403, H); const S = this.ctx.storage, g = await S.get('G:' + String(b.id || '')); if (!g) return json({ error: 'no such league' }, 404, H);
-    if (lgStatus(g, this.now()) !== 'open') return json({ error: 'only a league that hasn’t started can be cancelled' }, 400, H); g.cancelled = true; await S.put('G:' + g.lid, g); await S.delete('Gp:' + g.lid); this._lgs = null; return json({ league: g }, 200, H); }
+    if (lgStatus(g, this.now()) !== 'open') return json({ error: 'only a league that hasn’t started can be cancelled' }, 400, H); g.cancelled = true; await S.put('G:' + g.lid, g); await S.delete('Gp:' + g.lid);
+    /* every entry fee goes back */
+    let refunded = 0; for (const [ek, e] of await S.list({ prefix: 'e:' + g.lid + ':' })) { if (!(e.fee > 0) || e.refunded) continue; const key = ek.split(':').pop(), u = await S.get('u:' + key); if (!u) continue; const W = ddWallet(u);
+      W.bal = r2(W.bal + e.fee); W.fees = r2(Math.max(0, (W.fees || 0) - e.fee)); u.dd = W; u.xpl = [...(u.xpl || []), { t: this.now(), xp: 0, dd: e.fee, why: `↩︎ ${g.name} was called off: entry fee back` }].slice(-40); await S.put('u:' + key, u); e.refunded = true; await S.put(ek, e); refunded++; }
+    this._lgs = null; this._bd = null; return json({ league: g, refunded }, 200, H); }
   async lgsJoin(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key), lid = String(b.id || '').replace(/[^a-z0-9]/gi, ''), g = await S.get('G:' + lid); if (!u) return json({ error: 'sign in first' }, 401, H); if (!g) return json({ error: 'no such league' }, 404, H);
     const st = lgStatus(g, this.now()); if (!(st === 'open' || (st === 'live' && g.late))) return json({ error: 'that league isn’t taking new players' }, 400, H);
     const ek = 'e:' + lid + ':' + s.key; if (await S.get(ek)) return json({ error: 'you’re already in' }, 400, H); if ((g.n || 0) >= g.max) return json({ error: 'that league is full' }, 400, H);
-    const e = { name: u.name, bal: g.bank, start: g.bank, peak: g.bank, w: 0, l: 0, p: 0, open: 0, bets: 0, joined: this.now() }; await S.put(ek, e);
-    g.n = (g.n || 0) + 1; await S.put('G:' + lid, g); u.lgs = [...(u.lgs || []).filter(x => x !== lid), lid].slice(-30); await S.put('u:' + s.key, u); this._lgs = null; return json({ league: g, entry: { lid, ...e } }, 200, H); }
+    const fee = g.fee != null ? +g.fee : LG_FEE, W = ddWallet(u); if (fee > 0 && !(W.bal >= fee)) return json({ error: `${g.name} costs D$${fee.toLocaleString('en-US')} to join. You have D$${(+W.bal || 0).toLocaleString('en-US')}.` }, 400, H);
+    if (fee > 0) { W.bal = r2(W.bal - fee); W.fees = r2((W.fees || 0) + fee); if (!W.at) W.at = this.now(); u.dd = W; this._bd = null; }
+    const e = { name: u.name, bal: g.bank, start: g.bank, peak: g.bank, w: 0, l: 0, p: 0, open: 0, bets: 0, joined: this.now(), fee }; await S.put(ek, e);
+    g.n = (g.n || 0) + 1; await S.put('G:' + lid, g); u.lgs = [...(u.lgs || []).filter(x => x !== lid), lid].slice(-30); await S.put('u:' + s.key, u); this._lgs = null; return json({ league: g, entry: { lid, ...e }, wallet: W }, 200, H); }
   async lgsPay(lid, g, E) { const S = this.ctx.storage, R = lgRank(E.map(([k, e]) => ({ ...e, key: k.split(':').pop() }))).filter(e => e.bets > 0);
     for (let i = 0; i < R.length; i++) { const prize = g.prizes[i] || 0, xp = (LGS_PODIUM_XP[i] || 0) + LGS_PLAY_XP; await this.award(R[i].key, xp, prize, `${i < 3 ? ['🥇', '🥈', '🥉'][i] : '🏟'} ${g.name}: #${i + 1}`); R[i].prize = prize; R[i].place = i + 1; }
     g.paid = true; g.final = this.now(); g.results = R.slice(0, 25).map(e => ({ name: e.name, bal: e.bal, start: e.start, w: e.w, l: e.l, p: e.p, prize: e.prize || 0, place: e.place })); await S.put('G:' + lid, g); this._lgs = null; }
   async lgsList(H) { if (!this._lgs || this.now() - this._lgs.t > 30e3) { const S = this.ctx.storage, now = this.now(), G = [...(await S.list({ prefix: 'G:' })).values()].filter(g => !g.cancelled), out = [];
       for (const g of G) { const st = lgStatus(g, now); const top = st === 'final' ? (g.results || []).slice(0, 3) : lgRank([...(await S.list({ prefix: 'e:' + g.lid + ':' })).values()]).slice(0, 3).map(e => ({ name: e.name, bal: e.bal, start: e.start }));
-        out.push({ lid: g.lid, name: g.name, blurb: g.blurb, starts: g.starts, ends: g.ends, bank: g.bank, prizes: g.prizes, pool: g.prizes.reduce((a, x) => a + x, 0), sports: g.sports, n: g.n || 0, max: g.max, late: g.late, official: g.official, status: st, top }); }
+        out.push({ lid: g.lid, name: g.name, blurb: g.blurb, starts: g.starts, ends: g.ends, bank: g.bank, prizes: g.prizes, pool: g.prizes.reduce((a, x) => a + x, 0), sports: g.sports, n: g.n || 0, max: g.max, late: g.late, official: g.official, status: st, top, fee: g.fee != null ? g.fee : LG_FEE }); }
       const order = { live: 0, open: 1, settling: 2, final: 3 }; out.sort((a, b) => order[a.status] - order[b.status] || (a.status === 'final' ? b.ends - a.ends : a.starts - b.starts));
       this._lgs = { t: now, v: { leagues: out, open: this.env.LG_OPEN === 'yes' || !!(((await S.get('cfg')) || {}).lgOpen) } }; }
     return json(this._lgs.v, 200, H); }
   async lgsOne(lid, H) { const S = this.ctx.storage, g = await S.get('G:' + lid.replace(/[^a-z0-9]/gi, '')); if (!g || g.cancelled) return json({ error: 'no such league' }, 404, H);
     const st = lgStatus(g, this.now()), rows = st === 'final' ? g.results : lgRank([...(await S.list({ prefix: 'e:' + g.lid + ':' })).values()]).slice(0, 200).map(e => ({ name: e.name, bal: e.bal, start: e.start, peak: e.peak, w: e.w, l: e.l, p: e.p, open: e.open || 0, bets: e.bets || 0 }));
-    return json({ league: { ...g, results: undefined, status: st, pool: g.prizes.reduce((a, x) => a + x, 0) }, rows }, 200, H); }
+    return json({ league: { ...g, results: undefined, status: st, pool: g.prizes.reduce((a, x) => a + x, 0), fee: g.fee != null ? g.fee : LG_FEE }, rows }, 200, H); }
   /* ── the subscriber inbox: members write to the desk, the desk writes back (one thread per member) ── */
   async inboxSend(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); if (s.owner) return json({ error: 'reply from the admin inbox' }, 400, H);
     const text = clean(String(b.text || '').replace(/[<>]/g, '').trim()).slice(0, 1000); if (text.length < 2) return json({ error: 'write a message' }, 400, H);
@@ -446,7 +470,9 @@ export class Accounts {
       default: return json({ error: 'unknown action' }, 400, H); }
     } catch (e) { return json({ error: e.message || 'server' }, e.st || 500, H); } }
   async board(H) { if (this._bd && this.now() - this._bd.t < 60e3) return json(this._bd.v, 200, H); const U = await this.ctx.storage.list({ prefix: 'u:' });
-    const rows = [...U.values()].map(u => { const W = ddWallet(u); return { name: u.name, bal: W.bal, bought: W.bought, earned: Math.round((W.bal - W.bought) * 100) / 100, w: W.w, l: W.l, roi: W.staked ? Math.round(1000 * (W.back - W.staked) / W.staked) / 10 : null, ...(u.pub || u.cap ? { pub: true } : {}), ...(u.cap ? { cap: true } : {}) }; })
+    /* (v3.5.14 · a bought run's balance is still the player's money: it counts while the run is live) */
+    const inRun = {}; for (const [ck, r] of await this.ctx.storage.list({ prefix: 'c:' })) { if (r && r.status === 'live' && r.buyIn) { const k = ck.split(':')[1]; inRun[k] = r2((inRun[k] || 0) + (+r.bal || 0)); } }
+    const rows = [...U.entries()].map(([uk, u]) => { const W = ddWallet(u), ir = inRun[uk.slice(2)] || 0; return { name: u.name, bal: r2(W.bal + ir), bought: W.bought, earned: Math.round((W.bal + ir - W.bought) * 100) / 100, w: W.w, l: W.l, roi: W.staked ? Math.round(1000 * (W.back - W.staked) / W.staked) / 10 : null, ...(u.pub || u.cap ? { pub: true } : {}), ...(u.cap ? { cap: true } : {}) }; })
       .sort((a, b) => b.earned - a.earned).slice(0, 50); const v = { rows, n: U.size }; this._bd = { t: this.now(), v }; return json(v, 200, H); }
   /* v3.3 · the Open Scoreboard (Nov 19, the growth playbook): a member's record, public when they switch it on (or the desk verifies
      them as a capper). Every settled D$ bet with the moment it was placed and when each game started, so anyone can see it was in
