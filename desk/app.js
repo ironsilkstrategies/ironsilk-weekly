@@ -783,11 +783,17 @@ const pickOkB = (b, p, F, heavy) => pickOk(p, F, heavy) && fcPass(pickFc(b, p), 
    their picks inside that scope." The characters' own calls, filtered by how sure each one is (the % it shows), by who is ranked
    #1 in that kind of bet (👑, it has the say), and down to one #1's category; any of these turns the rows to the characters' calls. */
 const CONF = [[0, 'Any confidence'], [55, '55%+'], [60, '60%+'], [65, '65%+'], [70, '70%+'], [80, '80%+']];
-const callsMode = F => F.ch !== 'all' || +F.cf > 0 || F.say === 'top';
+/* v66 · Nov 24, Chris: "Can we add a filter that's 'confidence' where it shows the highest confidence picks… the top 10%". 🎯 Top 10%:
+   the most confident tenth of the characters' calls on the sheet as it's filtered (day, league, start time, bet type, character, #1s,
+   Forecast), cut at the % the tenth reaches; calls tied at that % come with it. */
+const TOP_CF = 'top10';
+function cfCutOf(gs, F) { const P = []; for (const g of gs) for (const { c } of callsOf(g.b, { ...F, cf: 0 })) if (fin(c.p)) P.push(+c.p); if (!P.length) return null; P.sort((a, b) => b - a); return P[Math.max(0, Math.ceil(P.length * 0.1) - 1)]; }
+const callsMode = F => F.ch !== 'all' || +F.cf > 0 || F.cf === TOP_CF || F.say === 'top';
 function callOk(b, m, c, F, skip = '') {
   if (skip !== 'bt' && F.bt !== 'all' && BTS.some(([k]) => k === F.bt) && m !== F.bt) return false;
   if (skip !== 'ch' && F.ch !== 'all' && c.v !== F.ch) return false;
   if (skip !== 'cf' && +F.cf > 0 && !(fin(c.p) && pct(c.p) >= +F.cf)) return false;
+  if (skip !== 'cf' && F.cf === TOP_CF && !(fin(c.p) && S.cfCut != null && +c.p >= S.cfCut - 1e-9)) return false;
   if (skip !== 'say' && F.say === 'top' && !(c.r && c.r.say === 'top')) return false;
   if (skip !== 'say' && skip !== 'lane' && F.say === 'top' && F.lane && !(c.r && c.r.lab === F.lane)) return false;
   if (skip !== 'fc' && F.fc && F.fc !== 'all' && !fcPass(fcAt(b.sp, m, c.s, c.pick, c.price), F.fc)) return false;
@@ -860,7 +866,7 @@ const okWin = (g, w) => w === 'all' || (w === 'up' ? !g.over : winOf(g.t) === w)
 /* a saved filter that no longer fits the board (an old value, a character not on it, a #1 category not on this sheet) drops back */
 function bfFix(B, games, F) {
   if (!BTS.some(([k]) => k === F.bt)) F.bt = 'all';
-  F.cf = CONF.some(([k]) => k === +F.cf) ? +F.cf : 0;
+  F.cf = F.cf === TOP_CF ? TOP_CF : CONF.some(([k]) => k === +F.cf) ? +F.cf : 0;
   if (F.say !== 'top') { F.say = 'all'; F.lane = ''; }
   if (!B || !B.fc || !FCF.some(([k]) => k === F.fc)) F.fc = 'all';
   if (F.ch !== 'all' && !(B && B.cast && Object.prototype.hasOwnProperty.call(B.cast, F.ch))) F.ch = 'all';
@@ -874,6 +880,7 @@ function filterBarHtml(B, games, F) {
   const okW = okWin;
   const inW = games.filter(g => okW(g, F.win));
   const nCalls = F2 => inW.filter(g => callsOf(g.b, F2).length).length, nPicks = F2 => inW.filter(g => (g.b ? g.b.picks : []).some(p => pickOkB(g.b, p, F2, heavy))).length;
+  const cut10 = F.cf === TOP_CF ? S.cfCut : cfCutOf(inW, F), nTop = cut10 == null ? 0 : inW.filter(g => callsOf(g.b, { ...F, cf: 0 }).some(({ c }) => fin(c.p) && +c.p >= cut10 - 1e-9)).length, topTxt = cut10 == null ? '' : ` in the <b>top 10% most confident</b> (${Math.round(cut10 * 100)}%+ sure)`;
   const cast = Object.entries(B.cast || {}).sort((a, b) => String(a[1].name).localeCompare(b[1].name));
   /* 👑 today's #1s on this sheet: who leads which kind of bet and how many calls it has in it; tap one for every one of them */
   let tops = '', note = '';
@@ -882,8 +889,8 @@ function filterBarHtml(B, games, F) {
     if (L.length) tops = `<div class="seg tight tops" role="group" aria-label="Today’s number ones">${chip('lane', '', 'All #1s', L.reduce((s, o) => s + o.n, 0))}${L.map(o => chip('lane', o.lab, `👑 ${esc(castOf(o.v).name)} · ${esc(o.lab)}`, o.n)).join('')}</div>`;
     const o = F.lane && M.get(F.lane);
     if (o) note = `👑 <b>${esc(castOf(o.v).name)}</b> is #1 in ${esc(o.lab)}${o.r.w != null ? ` (${o.r.w}–${o.r.l}, ${u1(o.r.u)})` : ''}. Every ${esc(o.lab)} call it has on this sheet${+F.cf ? ` at ${+F.cf}%+` : ''}: ${o.n}.`; }
-  if (cm && !note) note = F.say === 'top' ? `Only the calls from the character ranked #1 in each kind of bet (it has the say)${F.ch !== 'all' ? `, from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? `, at <b>${+F.cf}%+</b> sure` : ''}. Tap a 👑 above for every pick it has in that kind of bet.`
-    : `The characters’ own calls${F.ch !== 'all' ? ` from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? ` at <b>${+F.cf}%+</b> sure` : ''}. 👑 #1 in that kind of bet · 🧊 the worst.`;
+  if (cm && !note) note = F.say === 'top' ? `Only the calls from the character ranked #1 in each kind of bet (it has the say)${F.ch !== 'all' ? `, from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? `, at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? ',' + topTxt : ''}. Tap a 👑 above for every pick it has in that kind of bet.`
+    : `The characters’ own calls${F.ch !== 'all' ? ` from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? ` at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? topTxt : ''}. 👑 #1 in that kind of bet · 🧊 the worst.`;
   if (cm && !F.lane) note += ' Strength chips are for the desk’s colored picks.';
   return `<div class="bf">
     <div class="seg tight" role="group" aria-label="View">${chip('view', 'time', '🕒 By time')}${chip('view', 'league', 'By league')}</div>
@@ -891,8 +898,8 @@ function filterBarHtml(B, games, F) {
     <div class="seg tight${cm ? ' dim' : ''}" role="group" aria-label="Pick strength">${TIERS.map(([t, l]) => chip('tier', t, l, t === 'all' ? inW.length : inW.filter(g => passT(g, t)).length, 't-' + t)).join('')}</div>
     <div class="seg tight" role="group" aria-label="Bet type">${BTS.map(([k, l]) => chip('bt', k, l, k === 'all' ? null : cm ? nCalls({ ...F, bt: k }) : inW.filter(g => (g.b ? g.b.picks : []).some(p => btOk(k, p, heavy) && pickOkB(g.b, p, { ...F, bt: 'all' }, heavy))).length)).join('')}</div>
     ${cast.length ? `<div class="bf-ch2"><label class="bf-sel${F.ch !== 'all' ? ' on' : ''}"><span class="sr">Character</span><select data-change="bfch"><option value="all">Every character</option>${cast.map(([v, c]) => `<option value="${esc(v)}"${F.ch === v ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
-      <label class="bf-sel${+F.cf ? ' on' : ''}"><span class="sr">How sure the character is</span><select data-change="bfcf">${CONF.map(([v, l]) => `<option value="${v}"${+F.cf === v ? ' selected' : ''}>${v ? `${l} sure · ${nCalls({ ...F, cf: v })}` : l}</option>`).join('')}</select></label></div>` : ''}
-    <div class="seg tight" role="group" aria-label="Number ones and the Forecast">${chip('say', 'top', '👑 #1s only', nCalls({ ...F, say: 'top', lane: '' }), 't-say', true)}${B.fc ? FCF.map(([v, l]) => chip('fc', v, l, cm ? nCalls({ ...F, fc: v }) : nPicks({ ...F, fc: v }), 'f-' + v, true)).join('') : ''}</div>
+      <label class="bf-sel${+F.cf || F.cf === TOP_CF ? ' on' : ''}"><span class="sr">How sure the character is</span><select data-change="bfcf">${CONF.map(([v, l]) => `<option value="${v}"${F.cf !== TOP_CF && +F.cf === v ? ' selected' : ''}>${v ? `${l} sure · ${nCalls({ ...F, cf: v })}` : l}</option>`).join('')}<option value="${TOP_CF}"${F.cf === TOP_CF ? ' selected' : ''}>🎯 Top 10% most confident · ${nTop}</option></select></label></div>` : ''}
+    <div class="seg tight" role="group" aria-label="Number ones, the most confident and the Forecast">${chip('say', 'top', '👑 #1s only', nCalls({ ...F, say: 'top', lane: '' }), 't-say', true)}${chip('cf', TOP_CF, '🎯 Top 10% sure', nTop, 't-top', true)}${B.fc ? FCF.map(([v, l]) => chip('fc', v, l, cm ? nCalls({ ...F, fc: v }) : nPicks({ ...F, fc: v }), 'f-' + v, true)).join('') : ''}</div>
     ${tops}${note ? `<p class="bf-note">${note}</p>` : ''}
     ${Object.keys(BF0).some(k => String(F[k] ?? BF0[k]) !== String(BF0[k])) ? '<button type="button" class="bf-reset" data-act="bfreset">Show everything</button>' : ''}</div>`;
 }
@@ -985,6 +992,7 @@ function viewSlate() {
   const bOn = !!(B && all.some(g => g.b));
   const inSp = all.filter(g => S.slateSp === 'all' || g.sp === S.slateSp);
   if (bOn) bfFix(B, inSp, BF);
+  S.cfCut = bOn && BF.cf === TOP_CF ? cfCutOf(inSp.filter(g => okWin(g, BF.win)), BF) : null;
   const cm = bOn && callsMode(BF);
   const okG = g => { if (!bOn) return true;
     if (!okWin(g, BF.win)) return false;
@@ -2124,7 +2132,7 @@ document.addEventListener('click', async e => {
   else if (act === 'pslipcopy') { copyText(slipText(), 'Slip copied — paste it into your book'); }
   else if (act === 'bf') { const k = a.dataset.k, v = a.dataset.v;
     /* 👑 #1s only and the Forecast chips switch on and off; a strength chip goes back to the desk's colored picks */
-    S.bf[k] = a.dataset.tog && String(S.bf[k]) === v ? BF0[k] : k === 'cf' ? +v || 0 : v;
+    S.bf[k] = a.dataset.tog && String(S.bf[k]) === v ? BF0[k] : k === 'cf' ? (v === TOP_CF ? TOP_CF : +v || 0) : v;
     if (k === 'say' && S.bf.say !== 'top') S.bf.lane = '';
     if (k === 'tier') Object.assign(S.bf, { ch: 'all', cf: 0, say: 'all', lane: '' });
     store.set('bf', S.bf); S.openGame = ''; render(); }
@@ -2154,7 +2162,7 @@ document.addEventListener('toggle', e => { const d = e.target; if (d.classList &
 document.addEventListener('change', async e => { const df = e.target.closest('[data-change="ddfrom"]'); if (df) { S.ddFrom = df.value; store.set('ddfrom', S.ddFrom); render(); return; }
   const cf = e.target.closest('[data-change="cxf"]'); if (cf) { CX.f[cf.dataset.k] = cf.value; CX.show = 24; store.set('cxf', CX.f); viewChallenges(); return; }
   const as = e.target.closest('[data-change="adsort"]'); if (as) { AD.sort = as.value; viewAdmin(); return; }
-  const rr = e.target.closest('[data-change="runroute"]'); if (rr) { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/chal/route', { token: P.token, rid: rr.dataset.rid, route: rr.value }); if (AC.me) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); viewChallenges(); toast(`Route: ${ROUTES[rr.value].name}`); } catch (er) { toast(er.message); } return; } const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const fcf = e.target.closest('[data-change="bfcf"]'); if (fcf) { S.bf.cf = +fcf.value || 0; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
+  const rr = e.target.closest('[data-change="runroute"]'); if (rr) { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/chal/route', { token: P.token, rid: rr.dataset.rid, route: rr.value }); if (AC.me) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); viewChallenges(); toast(`Route: ${ROUTES[rr.value].name}`); } catch (er) { toast(er.message); } return; } const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const fcf = e.target.closest('[data-change="bfcf"]'); if (fcf) { S.bf.cf = fcf.value === TOP_CF ? TOP_CF : +fcf.value || 0; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
 /* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
 async function restartApp() {
   toast('Restarting with the newest version…');

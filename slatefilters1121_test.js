@@ -55,7 +55,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: {}, days: [{ d: day
   T('…and the sheet says what the emoji mean', /The Forecast on each pick, that kind of bet over the last 7 days: ☀️ working · 🌤 warm · ⛅ even · 🌥 cooling · 🌧 not working · ⛈ broken/.test(t), t.slice(0, 300));
   /* ── how sure: the confidence filter ── */
   const opts = await v.p.$$eval('[data-change="bfcf"] option', els => els.map(e => e.textContent));
-  T('a confidence menu beside the character menu: Any, 55%+ … 80%+, each with how many games have a call that sure', opts.length === 6 && opts[0] === 'Any confidence' && opts.includes('70%+ sure · 2') && opts.includes('80%+ sure · 1') && opts.includes('55%+ sure · 3'), JSON.stringify(opts));
+  T('a confidence menu beside the character menu: Any, 55%+ … 80%+, then 🎯 the top 10% most confident, each with how many games have a call that sure', opts.length === 7 && opts[0] === 'Any confidence' && opts.includes('70%+ sure · 2') && opts.includes('80%+ sure · 1') && opts.includes('55%+ sure · 3') && opts[6] === '🎯 Top 10% most confident · 1', JSON.stringify(opts));
   T('…both menus sit on one row on a phone', await v.p.evaluate(() => { const a = document.querySelector('[data-change="bfch"]').getBoundingClientRect(), c = document.querySelector('[data-change="bfcf"]').getBoundingClientRect(); return Math.abs(a.top - c.top) < 2 && c.left > a.right; }));
   await v.p.selectOption('[data-change="bfcf"]', '70'); await v.p.waitForTimeout(300); rows = await v.rows(); t = await v.text();
   T('70%+: only the games with a call that sure (the Warriors game drops), each row turns to the characters\' own calls', rows.length === 2 && !rows.some(x => /Warriors|GS ML/.test(x)) && rows.some(x => /Timberwolves −5\.5 −110 ⛈ 👑 The Coach 72%/i.test(x)) && rows.some(x => /Over 228\.5 −110 ☀️ 👑 The Coach 81%/i.test(x)) && rows.some(x => /Maple Leafs ML −140 🌤 👑 The Scout 77%/i.test(x)), JSON.stringify(rows));
@@ -65,6 +65,14 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: {}, days: [{ d: day
   /* a strength chip goes back to the colored picks */
   await v.p.click('[data-act="bf"][data-k="tier"][data-v="all"]'); await v.p.waitForTimeout(300); rows = await v.rows();
   T('tapping a strength chip goes back to the desk\'s colored picks (the confidence filter clears)', rows.length === 3 && rows.some(x => /STRONG Timberwolves −5\.5 −110 ⛈ 60%/i.test(x)) && !rows.some(x => /The Coach 72%/i.test(x)) && (await v.p.$eval('[data-change="bfcf"]', e => e.value)) === '0' && (await v.p.locator('#v-slate .seg.dim').count()) === 0, JSON.stringify(rows));
+  /* v66 · Nov 24, Chris: "Can we add a filter that's 'confidence' where it shows the highest confidence picks… the top 10%" */
+  await v.p.click('[data-act="bf"][data-k="cf"][data-v="top10"]'); await v.p.waitForTimeout(300); rows = await v.rows(); t = await v.text();
+  T('🎯 Top 10% sure: the most confident tenth of the characters\' calls on the sheet (8 calls → the top one, the Coach 81% on the over)', rows.length === 1 && /Over 228\.5 −110 ☀️ 👑 The Coach 81%/i.test(rows[0]) && !/72%|77%/.test(rows[0]), JSON.stringify(rows));
+  T('…the sheet says where the cut is, and the chip and the menu both show it\'s on (it\'s remembered)', /top 10% most confident \(81%\+ sure\)/.test(t) && (await v.p.locator('[data-act="bf"][data-k="cf"][data-v="top10"][aria-pressed="true"]').count()) === 1 && (await v.p.$eval('[data-change="bfcf"]', e => e.value)) === 'top10' && (await v.p.evaluate(() => JSON.parse(localStorage.getItem('tdp.bf')).cf)) === 'top10', t.slice(0, 700));
+  await v.p.click('[data-act="bf"][data-k="bt"][data-v="ml"]'); await v.p.waitForTimeout(300); rows = await v.rows(); t = await v.text();
+  T('…it follows the other filters: moneylines only → the top tenth of the moneyline calls (the Scout 77% on the Leafs)', rows.length === 1 && /Maple Leafs ML −140 🌤 👑 The Scout 77%/i.test(rows[0]) && /77%\+ sure/.test(t), JSON.stringify(rows));
+  await v.p.click('[data-act="bf"][data-k="bt"][data-v="all"]'); await v.p.waitForTimeout(250); await v.p.click('[data-act="bf"][data-k="cf"][data-v="top10"]'); await v.p.waitForTimeout(300); rows = await v.rows();
+  T('…tap it again and it lets go', (await v.p.locator('[data-act="bf"][data-k="cf"][data-v="top10"][aria-pressed="true"]').count()) === 0 && rows.length === 3, JSON.stringify(rows));
   /* ── 👑 #1s only, and one #1's scope ── */
   if (await v.p.locator('[data-act="bfreset"]').count()) { await v.p.click('[data-act="bfreset"]'); await v.p.waitForTimeout(250); }
   await v.p.click('[data-act="bf"][data-k="say"]'); await v.p.waitForTimeout(300); rows = await v.rows(); t = await v.text();

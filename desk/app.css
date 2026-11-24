@@ -1192,3 +1192,6 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 /* v65 · each row in the time view says its sport */
 .g-sp{display:block;margin-top:5px;font:700 10.5px/1 var(--text);letter-spacing:.02em;color:#4a5a50;white-space:nowrap}
 .g-t.live .g-sp{color:#4a5a50}
+/* v66 · 🎯 Top 10% sure */
+.seg button.t-top:not([aria-pressed="true"]){color:#8FE3FF;border-color:rgba(143,227,255,.5)}
+.seg button.t-top[aria-pressed="true"]{background:#8FE3FF;color:#05232c;border-color:#8FE3FF}
