@@ -2998,6 +2998,9 @@ function voicesRepairDates(force){const t=today();if(!force&&get('d4.vrepair',''
   let moved=0,dropped=0;const keep=[];
   const order=V.map((x,i)=>({x,i})).sort((a,b)=>String(b.x.date).localeCompare(String(a.x.date)));const drop=new Set();
   order.forEach(({x,i})=>{if(x.graded||String(x.date).slice(0,10)>=t)return;const f=F[finalsKey(x.sp,x.game)];const d0=String(x.date).slice(0,10);
+    /* v3.5.12 · its game filed the other way round on the call's own day (ESPN re-filed a neutral-site game): the call stands as made
+       and grades that way — never moved, never dropped as "no final" */
+    {const g=String(x.game||'').split('@');const r=g.length===2?F[finalsKey(x.sp,g[1]+'@'+g[0])]:null;if(r&&r.d===d0&&r.a!=null&&!(f&&f.d===d0))return;}
     if(f&&f.d&&f.d>d0&&f.d<=dayShift(d0,8)){const key=k5(x)+'|'+f.d;if(have.has(key)){drop.add(i);dropped++;return;}
       have.add(key);x.date=f.d;if(String(x.id).startsWith(x.sp+'|'))x.id=[x.sp,x.game,f.d,x.voice,x.market].join('|');else x.id=[x.voice,x.sp,x.game,f.d,x.market].join('|');moved++;return;}
     /* logged AFTER its game was played (a stale board still showed it as upcoming) — never a real pregame call */
@@ -3171,7 +3174,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261123j',DESK_VER='3.5.11';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261123k',DESK_VER='3.5.12';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -8252,7 +8255,7 @@ function legFlipHeal(leg,ticketDate){try{if(!leg||!leg.game||leg.fbProp||leg.nhl
     const sp=leg.sport||'mlb';const[A,H]=g.split('@');const rev=H+'@'+A;const ap=!!leg.gdApprox||!leg.gameDate;const want=legDay(leg,ticketDate);
     /* is game x on day dd anywhere we can see: this page's slate, the live feed, the finals store, or ESPN's scoreboard index */
     const has=(x,dd)=>{if((sportGames(sp)||[]).some(z=>z&&z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x&&(()=>{try{return dayOk(gameDayOf(z),dd,ap);}catch(e){return true;}})()))return true;
-      try{if(mgEventFor(sp,x,dd,ap,leg.start))return true;}catch(e){}try{if(finalsFor(sp,x,dd,ap,leg.start))return true;}catch(e){}
+      try{if(mgEventFor(sp,x,dd,ap,leg.start))return true;}catch(e){}try{if(finalsFor0(sp,x,dd,ap,leg.start))return true;}catch(e){}   /* (as written only: the flipped final is what makes the leg turn) */
       try{if(dd&&typeof fbpGameKey==='function'){const I=get(FBP_IDX_KEY,{})||{};const k=sp+':'+fbpGameKey(x,sp)+':'+fbpYmd(dd);if(I[k])return true;}}catch(e){}return false;};
     if(has(g,want))return;
     /* v3.0.15 · this book stamps SGP tickets with its own accepted date, a day ahead of US time after 6 PM Central (ticket 1015366949:
@@ -8282,12 +8285,15 @@ function resolveLeg(leg,ticketDate){
     if(!fg)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game&&dayOk(gameDayOf(z),want,approx));
     if(!fg&&!approx)fg=arr.find(z=>(z.away.abbr+'@'+z.home.abbr)===leg.game&&sameGameTime(z.start||z.date,gameDayOf(z),want,leg.start));
     if(fg){
+      /* v3.5.12 · found by its ESPN id but filed the other way round (a neutral-site game ESPN re-filed): the scores come back the
+         way the leg reads its game, so a side is never graded on the other team's score */
+      const sw=!!(fg.away&&fg.home&&leg.game&&(fg.away.abbr+'@'+fg.home.abbr)!==leg.game&&(fg.home.abbr+'@'+fg.away.abbr)===String(leg.game)),ow=o=>sw?finalsFlip(o):o;
       const done=fg.status==='Final'||fg.abstract==='Final'||fg.abstract==='post';
       if(done&&fg.awayScore!=null)
-        return{a:+fg.awayScore,h:+fg.homeScore,h1a:fg.h1a,h1h:fg.h1h,p1a:fg.p1a,p1h:fg.p1h,gid:fg.id,live:false,source:'memory',g:fg};
+        return ow({a:+fg.awayScore,h:+fg.homeScore,h1a:fg.h1a,h1h:fg.h1h,p1a:fg.p1a,p1h:fg.p1h,gid:fg.id,live:false,source:'memory',g:fg});
       const live=fg.status==='InProgress'||fg.abstract==='Live'||fg.abstract==='in';
       if(live&&fg.awayScore!=null&&!staleLive(fg.start||fg.date||leg.start))
-        return{a:+fg.awayScore,h:+fg.homeScore,p1a:fg.p1a,p1h:fg.p1h,period:fg.period,gid:fg.id,live:true,source:'memory',g:fg,completed:null};
+        return ow({a:+fg.awayScore,h:+fg.homeScore,p1a:fg.p1a,p1h:fg.p1h,period:fg.period,gid:fg.id,live:true,source:'memory',g:fg,completed:null});
       // fall through to shared store rather than returning null — the shared
       // store may already hold this game's final from a prior football-page visit
     }
@@ -17197,7 +17203,16 @@ function legDay(leg,ticketDate){return String((leg&&leg.gameDate)||ticketDate||'
 function dayOk(day,want,approx){if(!want||!day)return true;if(day===want)return true;
   return !!approx&&day>want&&day<=dayShift(want,4);}
 /* Shared finals entry for a game, ONLY if it belongs to the requested day. */
-function finalsFor(sport,game,want,approx,st){
+/* v3.5.12 · Nov 23, Chris: "Why didn't these get graded?! I don't want this to be an issue going forward." NEV ML and Over 142.5
+   (Nevada–San Francisco, a neutral-site tournament game) never graded: the card, the characters' calls and their score calls were
+   made on NEV@SF, then ESPN re-filed the game as SF@NEV (Acrisure Arena) and its final went into the store that way. Same game,
+   same day: when the game isn't on file as asked, the final filed the other way round answers, its scores swapped back to the way
+   it was asked for (both halves and the first period too). Only on the exact day asked — never a guess across days. */
+function finalsFlip(F){return F?{...F,a:F.h,h:F.a,h1a:F.h1h,h1h:F.h1a,p1a:F.p1h,p1h:F.p1a,flip:1}:F;}
+function finalsFor(sport,game,want,approx,st){const F=finalsFor0(sport,game,want,approx,st);if(F||!want)return F;
+  const g=String(game||'');if(!/^[^@]+@[^@]+$/.test(g))return null;const[a,h]=g.split('@');if(a===h)return null;
+  const R=finalsFor0(sport,h+'@'+a,String(want).slice(0,10),false,st);return R&&R.d===String(want).slice(0,10)?finalsFlip(R):null;}
+function finalsFor0(sport,game,want,approx,st){
   const A=allFinals();let F=A[finalsKey(sport,game)];
   if((!F||F.a==null)&&typeof mgKey==='function'){const k2=mgKey(sport,game);if(k2!==game)F=A[finalsKey(sport,k2)];}
   if(!F||F.a==null||F.h==null)return null;

@@ -151,10 +151,16 @@ async function scores(sps, ymd) {
 const legYmd = x => { const s = x.start && Date.parse(x.start); const d = s ? deskDay(s) : x.day; return d ? String(d).slice(0, 10).replace(/-/g, '') : ''; };
 /* a game that starts just after midnight Central (late West Coast, Hawaii) is often filed under the day before — that day counts too */
 const ymdBack = d => { const t = Date.parse(d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6) + 'T12:00:00Z') - 864e5; return new Date(t).toISOString().slice(0, 10).replace(/-/g, ''); };
-const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'), k = `${x.sp}|${ab(x.sp, a)}@${ab(x.sp, h)}`, d = legYmd(x);
+const liveAt = (x, k, d) => {
   if (d) { const D = S.liveD[k + '#' + d]; if (D) return D; const s0 = x.start && Date.parse(x.start), early = s0 && +new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: CFG.deskTz }).format(new Date(s0)) < 5;
     const p = early ? S.liveD[k + '#' + ymdBack(d)] : null; if (p) return p; const L = S.live[k]; return L && L.ymd && L.ymd !== d && !(early && L.ymd === ymdBack(d)) ? null : L || null; }
   return S.live[k] || null; };
+/* v61 · Nov 23, Chris: "Why didn't these get graded?!" NEV ML and Over 142.5 sat at "Today 3:30 PM" all night: the card says NEV@SF,
+   and ESPN re-filed that neutral-site game as SF@NEV, so its score never found the pick. The same game on the same day, filed the
+   other way round, now answers — its scores turned back to the way the pick reads its game. */
+const liveOf = x => { const [a, h] = String(x.game || x.k || '').replace(/^[a-z]+\|/, '').split('@'), A = ab(x.sp, a), H = ab(x.sp, h), d = legYmd(x);
+  const r = liveAt(x, `${x.sp}|${A}@${H}`, d); if (r || !d || !A || !H || A === H) return r;
+  const f = liveAt(x, `${x.sp}|${H}@${A}`, d); return f ? { ...f, a: f.h, h: f.a, flip: 1 } : null; };
 /* a character's prop names its team, not its game: find the team's game on today's scoreboard */
 function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t = ab(p.sp, p.team), td = deskDay().replace(/-/g, '');
   /* today's game only: yesterday's scoreboard can still be in memory, and a team that played then must not grade today's prop */
@@ -944,7 +950,9 @@ function viewSlate() {
   const LITE = new Map(D.games.filter(g => g.lite).map(g => [bKey(g.sp, g.a.ab, g.h.ab) + '|' + D.d, g]));
   if (B) {
     const M = boardIndex(), used = new Set();
-    for (const g of all) { const k = bKey(g.sp, g.a.ab, g.h.ab) + '|' + D.d; const b = M.get(k); if (b) { g.b = b; used.add(k); } }
+    /* (v61 · a board game filed the other way round from the slate's — ESPN re-filed a neutral-site game — is still that game) */
+    for (const g of all) { const k = bKey(g.sp, g.a.ab, g.h.ab) + '|' + D.d, kr = bKey(g.sp, g.h.ab, g.a.ab) + '|' + D.d, kk = M.has(k) ? k : !used.has(kr) && M.has(kr) && !all.some(o => o !== g && bKey(o.sp, o.a.ab, o.h.ab) + '|' + D.d === kr) ? kr : null;
+      if (kk) { g.b = M.get(kk); used.add(kk); } }
     for (const [k, b] of M) { if (used.has(k) || b.day !== D.d) continue; const L = LITE.get(k); if (L) { all.push({ ...L, a: { ...L.a, nick: L.a.nick || teamName(b.sp, L.a.ab) }, h: { ...L.h, nick: L.h.nick || teamName(b.sp, L.h.ab) }, b }); continue; }
       const [a, h] = String(b.game).split('@'), tm = x => ({ ab: x, nick: teamName(b.sp, x), w: 0, l: 0 });
       all.push({ sp: b.sp, k: 'b|' + k, t: ms(b.start), a: tm(a), h: tm(h), b }); }
