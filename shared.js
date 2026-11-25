@@ -3226,7 +3226,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261124f',DESK_VER='3.5.19';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261124g',DESK_VER='3.5.20';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18437,17 +18437,19 @@ if(typeof window!=='undefined')window.addEventListener('load',()=>setTimeout(()=
 const splitTeam=x=>{const [a,h]=String(x.game).split('@');return x.side==='home'?h:x.side==='away'?a:null;};
 const splitPair=g=>String(g).split('@').slice().sort().join('-');
 function splitInc(o,k,r){const c=o[k]||(o[k]=[0,0,0]);c[r]++;}
-function splitRoll(V){if(!Array.isArray(V))return 0;let S=null,n=0;
+function splitRoll(V){if(!Array.isArray(V))return 0;let S=null,n=0,TS=null;
   for(const x of V){if(!x||!x.graded||x.sr||!CHARS[x.voice]||!x.sp||!x.market)continue;
     if(!S)S=get(SPLIT_KEY,{})||{};
     const r=x.push?2:x.hit===true?0:1;const M=(((S[x.sp]||(S[x.sp]={}))[x.voice]||(S[x.sp][x.voice]={}))[x.market]||(S[x.sp][x.voice][x.market]={all:[0,0,0],side:{},role:{},team:{},h2h:{}}));
+    /* v3.5.20 · the team book's shadow test: graded here, before this call joins the book, so it's judged only on what came before it */
+    if(r!==2&&x.voice!=='Blend'&&(x.market==='ml'||x.market==='spread'||x.market==='total'))try{tmsAdd(TS||(TS=tmsLoad()),x,M,r);}catch(e){}
     M.all[r]++;splitInc(M.side,x.side,r);const ro=splitRole(x);if(ro)splitInc(M.role,ro,r);
     const pr=splitPair(x.game),h=M.h2h[pr]||(M.h2h[pr]={});
     if(x.market==='total'){String(x.game).split('@').forEach(t=>{const T=M.team[t]||(M.team[t]={});splitInc(T,x.side,r);});splitInc(h,x.side,r);}
     else{const t=splitTeam(x);if(t){splitInc(M.team,t,r);splitInc(h,t,r);}}
     try{feelRoll(M,x,r);}catch(e){}
     x.sr=1;n++;}
-  if(n)set(SPLIT_KEY,S);return n;}
+  if(n)set(SPLIT_KEY,S);if(TS&&TS.dirty){delete TS.dirty;try{set(TMS_KEY,TS);TMS_C=null;}catch(e){}}return n;}
 function splitsGet(){return roGet(SPLIT_KEY,{},30e3)||{};}
 let CH_IDX=null;
 function charIdxSig(V){return V.length+'|'+(V.length?(V[0].id+'|'+V[V.length-1].id+'|'+(V[V.length-1].graded?1:0)):'')+'|'+_LSGEN;}
@@ -18511,6 +18513,55 @@ function tbAll(){const S=splitsGet()||{},V=roGet(VOICES_KEY,[],30e3)||[];let sl=
     else{const me=x.side==='home'?h:x.side==='away'?a:null;if(!me)return;const op=me===h?a:h,mk=TB_MK[x.market];cell(T,me,mk)[r]++;cell(T,op,mk)[2+r]++;}});
   TB_C={key,by};return by;}
 function tbBook(v,sp){return tbAll().get(v+'|'+sp)||{};}
+/* ══ v3.5.20 · THE TEAM BOOK, IN THE SHADOWS ══════════════════════════════════════════════════════════════════
+   Nov 24, 10:35 PM, Chris: "Yes" (test whether the team book should move confidence before it ever does). Every graded call, at the
+   moment it's rolled into the splits (so the book holds only calls graded before it, never its own result), gets the nudge the team
+   book WOULD have given it: each of its two teams' lines in this bet type (with/against, over/under), against the character's own
+   rate for that kind of call (its favorites, its dogs, its overs, its unders), only once a line is real (6+ calls, 1.5σ off),
+   pulled toward nothing by 14 more calls, at most 2 points a team and 3 in all. Then it's judged against the call's own confidence.
+   Running numbers only, per character and pooled: the calls it would have pushed up and pushed down (how often they hit against
+   what the confidence said), whether the nudged number lands closer to what happened (Brier), and the picks it would have made
+   official or taken off (their record and units, at each character's own bar). It never touches a pick.
+   Written down before the first result: after 21 days and 300 nudged calls it earns the switch only if the pushed-up calls beat
+   their confidence and the pushed-down ones fell short (z ≥ 2 together), the nudged numbers land closer, and the official picks it
+   would have changed made money. Below z 1 or no closer: it stays knowledge. In between: it keeps watching, up to six weeks. */
+const TMS_KEY='d4.tmshadow',TMS_N=6,TMS_Z=1.5,TMS_K=14,TMS_ONE=0.02,TMS_ALL=0.03,TMS_DAYS=21,TMS_MIN=300,TMS_MAX_DAYS=42;let TMS_C=null;
+const tmsZero=()=>({up:{n:0,h:0,c:0,v:0,d:0},dn:{n:0,h:0,c:0,v:0,d:0},n0:0,bb:0,bn:0,fin:{n:0,w:0,u:0},fout:{n:0,w:0,u:0}});
+function tmsLoad(){const T=get(TMS_KEY,null);return T&&T.v===1&&T.all?T:{v:1,from:null,last:null,all:tmsZero(),by:{}};}
+/* the rate it hits that kind of call (its favorites or dogs on sides, its overs or unders on totals), from its splits */
+function tmsBase(M,x){const a=x.market==='total'?(M.side||{})[x.side]:(M.role||{})[splitRole(x)],g=a&&a[0]+a[1]>=20?a:M.all,n=g?g[0]+g[1]:0;return n>=20?Math.min(0.85,Math.max(0.15,g[0]/n)):0.52;}
+/* its two lines on this call from the splits as they stand: a side → with its team, against the other (the head-to-head side); a total → its side in each team's games */
+function tmsCells(M,x){const[a,h]=String(x.game||'').split('@');if(!a||!h)return[];
+  if(x.market==='total')return[a,h].map(t=>{const o=(M.team||{})[t],c=o&&!Array.isArray(o)&&o[x.side];return Array.isArray(c)?[+c[0]||0,+c[1]||0]:[0,0];});
+  const me=splitTeam(x);if(!me)return[];const op=me===h?a:h,w=(M.team||{})[me];let aw=0,al=0;
+  Object.entries(M.h2h||{}).forEach(([pr,o])=>{const oth=o?tbOther(pr,op):null;const c=oth&&o[oth];if(Array.isArray(c)){aw+=+c[0]||0;al+=+c[1]||0;}});
+  return[[Array.isArray(w)?+w[0]||0:0,Array.isArray(w)?+w[1]||0:0],[aw,al]];}
+function tmsNudge(M,x){const p0=tmsBase(M,x);let d=0;tmsCells(M,x).forEach(([w,l])=>{const n=w+l;if(n<TMS_N)return;const z=(w-n*p0)/Math.sqrt(n*p0*(1-p0));if(Math.abs(z)<TMS_Z)return;
+    d+=Math.max(-TMS_ONE,Math.min(TMS_ONE,(w-n*p0)/(n+TMS_K)));});return Math.max(-TMS_ALL,Math.min(TMS_ALL,d));}
+/* each character's official bar, as near as the shadow needs it (the Simulator 80, the guts' moneylines 75, the Underdog Spotter's 78, else 70) */
+const tmsBar=x=>x.voice==='Sim'?0.80:x.market==='ml'&&x.voice==='Dog'?0.78:x.market==='ml'&&['Trends','Coach','Pred','Most common'].includes(x.voice)?0.75:0.70;
+function tmsAdd(T,x,M,r){const d=tmsNudge(M,x),day=String(x.date||'').slice(0,10);let c=null;try{c=typeof coachConf==='function'?coachConf(x):confOf(x);}catch(e){}
+  if(c==null||!isFinite(+c))return;c=+c;const h=r===0?1:0,cn=Math.max(0.01,Math.min(0.99,c+d)),bar=tmsBar(x),u=h?(+x.price>0?+x.price/100:100/Math.abs(+x.price||110)):-1;
+  [T.all,T.by[x.voice]||(T.by[x.voice]=tmsZero())].forEach(B=>{if(!d){B.n0++;return;}const o=B[d>0?'up':'dn'];o.n++;o.h+=h;o.c+=c;o.v+=c*(1-c);o.d+=d;
+    B.bb+=(h-c)*(h-c);B.bn+=(h-cn)*(h-cn);const was=c>=bar-1e-9,now=cn>=bar-1e-9;if(was!==now){const F=now?B.fin:B.fout;F.n++;F.w+=h;F.u+=u;}});
+  if(day&&(!T.from||day<T.from))T.from=day;if(day&&(!T.last||day>T.last))T.last=day;T.dirty=1;}
+/* the verdict, by the rules written above */
+function tmsVerdict(Z,from){const up=Z.up,dn=Z.dn,N=up.n+dn.n,days=from?Math.max(0,Math.round((Date.parse(today())-Date.parse(from))/864e5)):0;
+  const rUp=up.h-up.c,rDn=dn.h-dn.c,z=N?(rUp-rDn)/Math.sqrt(Math.max(1e-9,up.v+dn.v)):0,closer=Z.bb-Z.bn,net=Z.fin.u-Z.fout.u;
+  const eUp=up.n?rUp/up.n:0,eDn=dn.n?rDn/dn.n:0,nUp=up.n?up.d/up.n:0,nDn=dn.n?dn.d/dn.n:0,edge=(eUp-eDn)/2,push=(nUp-nDn)/2,scale=push>0?Math.max(0,Math.min(1,edge/push)):0;
+  let st='early';if(days>=TMS_DAYS&&N>=TMS_MIN){st=z>=2&&closer>0&&net>=0?'earned':z<1||closer<=0?'no':days>=TMS_MAX_DAYS?'no':'watch';}
+  return{st,days,N,z,closer,net,eUp,eDn,scale,size:+(TMS_ONE*scale).toFixed(3),touched:N/Math.max(1,N+Z.n0)};}
+function tmsData(){if(TMS_C&&Date.now()-TMS_C.t<60e3)return TMS_C.v;const T=tmsLoad();TMS_C={t:Date.now(),v:T};return T;}
+function tmsHtml(){try{const T=tmsData(),A=T.all,V=tmsVerdict(A,T.from),pct=x=>(x>=0?'+':'')+(x*100).toFixed(1);
+    const lab={early:`⏳ Too early: day ${V.days} of ${TMS_DAYS}, ${V.N} of ${TMS_MIN} nudged calls`,watch:'👀 Still watching: a lean, not proof yet',earned:`✅ Earned it: worth up to ${(V.size*100).toFixed(1)} pts a team`,no:'🚫 Not earning it: it stays in the reads, off the dial'}[V.st];
+    const line=(k,Z)=>{const W=tmsVerdict(Z,T.from),u=Z.up,d=Z.dn;if(u.n+d.n<1)return'';const nm=k==='*'?'<b>Everyone</b>':`${(CHARS[k]||{}).chip||''} ${txtEsc(charName?charName(k):k)}`;
+      return`<tr><td style="text-align:left">${nm}</td><td>${u.n?`${u.h}/${u.n} (${Math.round(u.h/u.n*100)}% vs ${Math.round(u.c/u.n*100)}%)`:'—'}</td><td>${d.n?`${d.h}/${d.n} (${Math.round(d.h/d.n*100)}% vs ${Math.round(d.c/d.n*100)}%)`:'—'}</td><td>${(W.z>=0?'+':'')+W.z.toFixed(1)}</td><td>${Z.fin.n?`+${Z.fin.n}: ${Z.fin.w}-${Z.fin.n-Z.fin.w}, ${(Z.fin.u>=0?'+':'')+Z.fin.u.toFixed(1)}u`:'—'}${Z.fout.n?`<br>−${Z.fout.n}: ${Z.fout.w}-${Z.fout.n-Z.fout.w}, ${(Z.fout.u>=0?'+':'')+Z.fout.u.toFixed(1)}u`:''}</td></tr>`;};
+    const rows=[line('*',A),...Object.keys(T.by).sort((a,b)=>(T.by[b].up.n+T.by[b].dn.n)-(T.by[a].up.n+T.by[a].dn.n)).map(k=>line(k,T.by[k]))].join('');
+    return`<div class="tkt"><h3>📒 Team book · shadow test</h3><div class="sub" style="font-size:9.5px">Should a character's record with a team (moneyline, spread, overs and unders) move its confidence? Every graded call gets the nudge it <i>would</i> have had, from the calls graded before it, and is judged against its own confidence. Nothing here touches a pick.${T.from?` Since ${txtEsc(T.from)}.`:''}</div>
+      <div style="margin:6px 0;font-weight:700">${lab}</div>
+      <div class="mono" style="font-size:10px;color:var(--mute)">${V.N} nudged calls (${Math.round(V.touched*100)}% of graded calls) · pushed up hit ${pct(V.eUp)} pts vs their confidence · pushed down ${pct(V.eDn)} pts · together z ${(V.z>=0?'+':'')+V.z.toFixed(2)} · nudged numbers ${V.closer>0?'closer':'further'} (Brier ${V.closer>=0?'−':'+'}${Math.abs(V.closer).toFixed(2)}) · official picks it would have changed: ${(V.net>=0?'+':'')+V.net.toFixed(1)}u</div>
+      ${rows?`<div style="overflow-x:auto;margin-top:6px"><table class="mono" style="width:100%;font-size:10px;text-align:center"><tr style="color:var(--mute)"><td style="text-align:left">who</td><td>pushed up: hit (vs conf)</td><td>pushed down: hit (vs conf)</td><td>z</td><td>official it would add / drop</td></tr>${rows}</table></div>`:''}
+      <div class="sub" style="font-size:9.5px;margin-top:6px">The rule, written before the first result: after ${TMS_DAYS} days and ${TMS_MIN} nudged calls it earns the switch only if the pushed-up calls beat their confidence and the pushed-down ones fell short (z ≥ 2 together), the nudged numbers land closer, and the official picks it would have changed made money.</div></div>`;}catch(e){return'';}}
 /* one call's lines in its own character's book: a side → with the team it took, against the other; a total → its side in both teams' games */
 function tbCellsFor(c){try{const m=c&&(c.market||mkNorm(c.m)),mk=TB_MK[m];if(!mk||!c.voice||!c.sp)return[];const[a,h]=String(c.game||'').split('@');if(!a||!h)return[];
     const B=tbBook(c.voice,c.sp),g=t=>(B[t]||{})[mk]||[0,0,0,0];
@@ -19778,7 +19829,7 @@ function renderRecordsHub(){
   const el=document.getElementById('recordsHub');if(!el)return;
   if(REC_VIEW==='chars'){let h='';try{try{cpropGrade();cparGrade();}catch(e){}
       const P=CHAR_ORDER.map(v=>({v,R:cparRecord(v)})).filter(x=>x.R.w+x.R.l);
-      h=(()=>{try{return charDayHtml('all')}catch(e){return''}})()+(()=>{try{return chemHtml()}catch(e){return''}})()+(()=>{try{return pwrRecordsHtml()}catch(e){return''}})()+(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
+      h=(()=>{try{return charDayHtml('all')}catch(e){return''}})()+(()=>{try{return chemHtml()}catch(e){return''}})()+(()=>{try{return tmsHtml()}catch(e){return''}})()+(()=>{try{return pwrRecordsHtml()}catch(e){return''}})()+(()=>{try{return prPanelHtml('all')}catch(e){return''}})()+(()=>{try{return charSplitsHtml({sp:ACTIVE_SPORT})}catch(e){return''}})()+cpropCalibHtml()+`<div class="tkt"><h3>🎲 Character parlay records</h3>${P.length?P.map(({v,R})=>`<div class="mono" style="font-size:10.5px;padding:3px 0">${CHARS[v].chip} <b>${txtEsc(v)}</b> · ${R.w}-${R.l} parlays · ${R.u>=0?'+':''}${R.u.toFixed(1)}u · legs ${R.lw}-${R.ll}</div>`).join(''):'<div class="sub">No graded character parlays yet.</div>'}</div>`;}
     catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='engine'){let h='';try{h=engineRoomHtml();}catch(e){h='<div class="tkt"><div class="sub">'+txtEsc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
   if(REC_VIEW==='tickets'){let h='';try{h=renderAllTimeRecord();}catch(e){h='<div class="tkt"><div class="sub">'+esc(e.message)+'</div></div>';}el.innerHTML=recViewBar()+h;return;}
