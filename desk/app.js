@@ -1312,12 +1312,12 @@ const uCls = u => (u > 0 ? 'up' : u < 0 ? 'dn' : '');
 const parU = o => (o.w + o.l ? `${signed(+o.u || 0, 1)}u` : '—');
 /* v72 · Nov 25, 2:20 PM, Chris: "Can we make it where it shows every characters parlays for the day so I can gather the info without going
    back to the machine… I need to make sure I can at least see their parlays for the day". Today's tickets already ride the feed (vip.parlays:
-   each character's game or strong-suit ticket and its prop parlay, frozen when the desk locks its card); the Cast page lists every one, and
-   each character's parlay lane shows its own — every leg with its price, graded live. */
+   each character's game or strong-suit ticket and its prop parlay, frozen when the desk locks its card); each character's parlay lane
+   shows its own — every leg with its price, graded live (v74: the Cast page no longer lists them all). */
 const parKind = P => (P.skill ? 'suit' : P.px ? 'props' : 'game');
 const parToday = (F, v) => ((F && F.vip && F.vip.parlays) || []).filter(P => P && Array.isArray(P.legs) && P.legs.length && PAR_K[parKind(P)] && (v == null || P.v === v));
-function parTixHtml(P, color) { const [ic, lab] = PAR_K[parKind(P)];
-  return `<div class="paper tix ptk"><div class="tix-h"><b>${color ? `<button type="button" class="link ptk-who" data-act="castpick" data-v="${esc(P.v)}"><i style="background:${okColor(color)}"></i>${esc(P.who)}</button> · ` : ''}${ic} ${lab}</b><span>${P.legs.length} legs · ${esc(P.price != null && P.price !== '' && isFinite(+P.price) ? odds(+P.price) : P.price || '')} · ${pct(P.p)}% to cash</span></div>${tkSum(P.legs, P.p)}${P.legs.map(legRow).join('')}</div>`; }
+function parTixHtml(P) { const [ic, lab] = PAR_K[parKind(P)];
+  return `<div class="paper tix ptk"><div class="tix-h"><b>${ic} ${lab}</b><span>${P.legs.length} legs · ${esc(P.price != null && P.price !== '' && isFinite(+P.price) ? odds(+P.price) : P.price || '')} · ${pct(P.p)}% to cash</span></div>${tkSum(P.legs, P.p)}${P.legs.map(legRow).join('')}</div>`; }
 function parHtml(P, T0) { P = P || {}; const T = parSum(P), tod = (T0 || []).map(x => parTixHtml(x)).join(''), hist = parN(T) || T.lw + T.ll, H = parHist(P); if (!hist && !tod && !H) return '';
   const rows = Object.keys(PAR_K).filter(k => P[k] && (parN(P[k]) || P[k].lw + P[k].ll)).map(k => { const x = P[k], [ic, lab, sub] = PAR_K[k];
     return `<div class="pl-row"><span class="pl-i" aria-hidden="true">${ic}</span><span class="pl-t"><b>${lab}</b><small>${sub} · legs ${x.lw || 0}–${x.ll || 0}</small></span><span class="pl-r">${parRec(x)}</span><span class="pl-u ${uCls(x.u)}">${parU(x)}</span></div>`; }).join('');
@@ -1353,13 +1353,11 @@ function viewCast() {
     const race = cells.filter(c => c.best).map(c => ({ c, p: crownPct(c.best, need) })).sort((a, b) => b.p - a.p).slice(0, 5);
     const fresh = C.filter(c => c.kid && c.kid.born && kidAge(c.kid) >= 0 && kidAge(c.kid) <= 7), wl = (B && B.womb && B.womb.litters) || [];
     const lane = C.filter(c => c.par).map(c => ({ c, T: parSum(c.par) })).filter(x => x.T.w + x.T.l).sort((a, b) => b.T.u - a.T.u || b.T.w - a.T.w);
-    const ordC = new Map(C.map((c, i) => [c.v, i])), kindO = { game: 0, suit: 0, props: 1 }, colorOf = v => (C.find(x => x.v === v) || {}).color || '#F2D067';
-    const todayP = parToday(F).sort((a, b) => ((ordC.has(a.v) ? ordC.get(a.v) : 99) - (ordC.has(b.v) ? ordC.get(b.v) : 99)) || kindO[parKind(a)] - kindO[parKind(b)]);
-    const nCh = new Set(todayP.map(P => P.v)).size;
-    const parSec = todayP.length ? `<section class="crown partoday"><div class="vh"><h2 class="h2">Today’s parlays</h2></div><p class="note">${todayP.length} ticket${todayP.length === 1 ? '' : 's'} from ${nCh} character${nCh === 1 ? '' : 's'}: each one’s game or strong-suit ticket and its prop parlay, locked with the desk’s card. Every leg with its price, graded live. Tap a name for its profile.</p><div class="pargrid">${todayP.map(P => parTixHtml(P, colorOf(P.v))).join('')}</div></section>` : '';
+    /* v74 · Nov 25, 3:24 PM, Chris: "Now that the parlays are in the characters profile.. can we take them off this main cast page?!" — today's
+       tickets live in each profile's parlay lane only (with its record and history); the Cast page is the roster again. */
     el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">Every pick on TheDesk comes from these voices. Each one sees the game its own way and keeps its own record. Pick one to see everything it’s called.</p>${sel}
       ${fresh.length ? `<div class="newheir">${fresh.map(c => `<button type="button" class="nh" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}">${crestSvg(c.kid, 40)}<span><b>👶 New on the desk: ${esc(c.name)}</b><small>Child of ${esc(c.kid.a)} and ${esc(c.kid.b)} · born ${esc(shortDay(String(c.kid.born).slice(0, 10)))}</small></span><i>Meet →</i></button>`).join('')}</div>` : ''}
-      ${parSec}<div class="castgrid">${C.map(c => { const g = c.record || {}, pr = c.props || {}, today = (c.picks || []).length, PS = parSum(c.par);
+      <div class="castgrid">${C.map(c => { const g = c.record || {}, pr = c.props || {}, today = (c.picks || []).length, PS = parSum(c.par);
         return `<button type="button" class="castcard mini${c.kid ? ' kid' : ''}" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${kidTag(c)}${legTag(c)}<span class="cc-rec">${todayTxt(c) || (today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today')}</span></div>
           <h3>${c.kid ? crestSvg(c.kid, 30, 'cc-crest') : ''}${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span><span class="ccp"><b>${parRec(PS)}</b>parlays${PS.w + PS.l ? `, <em class="${uCls(PS.u)}">${signed(PS.u, 1)}u</em>` : ''}</span></div><span class="cc-more">See profile →</span></button>`; }).join('')}</div>
       ${lane.length ? `<section class="crown parboard"><div class="vh"><h2 class="h2">The parlay lane</h2></div><p class="note">Every character builds its own tickets: a game parlay from its 70%+ calls, a strong-suit ticket and a prop parlay. A unit a ticket, last 60 days. Who’s up and who’s down:</p>

@@ -34,19 +34,16 @@ const feed = vip => ({ v: 4, beta: true, brand: 'TheDesk', generated: AT - 20 * 
     await p.goto('https://desk.test/desk/' + hash, { waitUntil: 'load' }); await p.waitForTimeout(1800); return { ctx, p, errs }; };
   try {
     let { ctx, p, errs } = await open(feed({ top10: [], banker: null, parlays: PARLAYS, props: [] }), '#cast');
-    const sec = await p.evaluate(() => { const s = document.querySelector('#v-cast .partoday'); if (!s) return null; const grid = document.querySelector('#v-cast .castgrid');
-      return { first: !!(grid && (s.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING)), note: s.querySelector('.note').innerText,
-        tix: [...s.querySelectorAll('.ptk')].map(t => ({ h: t.querySelector('.tix-h').innerText.replace(/\s+/g, ' '), legs: [...t.querySelectorAll('.leg .pk')].map(x => x.childNodes[0].textContent.trim()) })) }; });
-    T('the Cast page opens on today\'s parlays, ahead of the roster', sec && sec.first, JSON.stringify(sec && sec.first));
-    T('…every character\'s ticket, in the roster\'s order: the Scout\'s game parlay, the Simulator\'s strong-suit ticket, the Scorekeeper\'s prop parlay', sec && sec.tix.length === 3 && /The Scout · 🎟 Game parlay/i.test(sec.tix[0].h) && /The Simulator · 💪 Strong-suit ticket/i.test(sec.tix[1].h) && /The Scorekeeper · 🎯 Prop parlay/i.test(sec.tix[2].h), JSON.stringify(sec && sec.tix.map(t => t.h)));
-    T('…each with its legs and prices, the ticket\'s price and its chance to cash', sec && /2 legs · \+306 · 32% to cash/.test(sec.tix[0].h) && sec.tix[0].legs.length === 2 && /UND/.test(sec.tix[0].legs[0]) && /\+105/.test(sec.tix[0].legs[0]) && /Boumtje Boumtje 10\+ REB/.test(sec.tix[2].legs[0]), JSON.stringify(sec && sec.tix));
-    T('…the note counts them: 3 tickets from 3 characters', sec && /3 tickets from 3 characters/.test(sec.note), sec && sec.note);
-    const hitMark = await p.evaluate(() => { const t = document.querySelector('#v-cast .partoday .ptk'); return t ? [...t.querySelectorAll('.leg .mk')].map(x => x.textContent) : []; });
-    T('…a leg that already cashed shows ✓ (graded live like every ticket)', hitMark[0] === '✓', JSON.stringify(hitMark));
-    await p.click('#v-cast .partoday .ptk-who >> text=The Scout'); await p.waitForTimeout(400);
+    /* v74 · Nov 25, 3:24 PM, Chris: "Now that the parlays are in the characters profile.. can we take them off this main cast page?!" */
+    T('the Cast page is the roster again: no list of every ticket on it (v74)', await p.evaluate(() => !document.querySelector('#v-cast .partoday') && !document.querySelector('#v-cast .ptk') && !!document.querySelector('#v-cast .castgrid')));
+    await p.selectOption('#castSel', 'Scout'); await p.waitForTimeout(400);
     const prof = await p.evaluate(() => ({ title: (document.querySelector('#v-cast .profile .title') || {}).textContent, lane: !!document.querySelector('#v-cast .parlane'), th: (document.querySelector('#v-cast .pl-th') || {}).textContent || '',
-      tix: [...document.querySelectorAll('#v-cast .pl-tix .ptk')].map(t => t.querySelector('.tix-h').innerText.replace(/\s+/g, ' ')) }));
-    T('tap a name: its profile, where the parlay lane keeps its record and adds today\'s ticket under it', prof.title === 'The Scout' && prof.lane && /Today’s tickets/.test(prof.th) && prof.tix.length === 1 && /🎟 Game parlay/i.test(prof.tix[0]) && !/The Scout ·/.test(prof.tix[0]), JSON.stringify(prof));
+      tix: [...document.querySelectorAll('#v-cast .pl-tix .ptk')].map(t => ({ h: t.querySelector('.tix-h').innerText.replace(/\s+/g, ' '), legs: [...t.querySelectorAll('.leg .pk')].map(x => x.childNodes[0].textContent.trim()), marks: [...t.querySelectorAll('.leg .mk')].map(x => x.textContent) })) }));
+    T('a character\'s profile: the parlay lane keeps its record and shows today\'s ticket under it', prof.title === 'The Scout' && prof.lane && /Today’s tickets/.test(prof.th) && prof.tix.length === 1 && /🎟 Game parlay/i.test(prof.tix[0].h), JSON.stringify(prof));
+    T('…every leg with its price, the ticket\'s price and its chance to cash', /2 legs · \+306 · 32% to cash/.test(prof.tix[0].h) && prof.tix[0].legs.length === 2 && /UND/.test(prof.tix[0].legs[0]) && /\+105/.test(prof.tix[0].legs[0]), JSON.stringify(prof.tix[0]));
+    T('…a leg that already cashed shows ✓ (graded live like every ticket)', prof.tix[0].marks[0] === '✓', JSON.stringify(prof.tix[0].marks));
+    await p.selectOption('#castSel', 'Sim'); await p.waitForTimeout(400);
+    T('…the Simulator\'s shows its strong-suit ticket', await p.evaluate(() => [...document.querySelectorAll('#v-cast .pl-tix .ptk .tix-h')].map(x => x.innerText).join('|').match(/Strong-suit ticket/i) !== null));
     await p.selectOption('#castSel', 'Scorekeeper'); await p.waitForTimeout(400);
     const sk = await p.evaluate(() => ({ lane: !!document.querySelector('#v-cast .parlane'), tix: document.querySelectorAll('#v-cast .pl-tix .ptk').length, h2: [...document.querySelectorAll('#v-cast .h2')].map(h => h.textContent) }));
     T('a character with no settled tickets yet still shows today\'s (no empty record box)', !sk.lane && sk.tix === 1 && sk.h2.includes('The parlay lane'), JSON.stringify(sk));
@@ -55,7 +52,8 @@ const feed = vip => ({ v: 4, beta: true, brand: 'TheDesk', generated: AT - 20 * 
     T('…and one with no ticket today shows its record only', jd.lane && !jd.th, JSON.stringify(jd));
     T('no page errors', errs.length === 0, errs.join(' | ')); await ctx.close();
     ({ ctx, p, errs } = await open(feed(null), '#cast'));
-    T('before the desk locks its card (no tickets in the feed yet), no empty section', await p.evaluate(() => !document.querySelector('#v-cast .partoday') && !!document.querySelector('#v-cast .castgrid')));
+    await p.selectOption('#castSel', 'Scout'); await p.waitForTimeout(400);
+    T('before the desk locks its card (no tickets in the feed yet), a profile shows no empty Today\'s tickets', await p.evaluate(() => !document.querySelector('#v-cast .pl-th') && !!document.querySelector('#v-cast .parlane')));
     T('…no page errors', errs.length === 0, errs.join(' | ')); await ctx.close();
   } catch (e) { T('test ran', false, String(e && e.stack || e).slice(0, 900)); }
   await b.close(); console.log(`\n${pass}/${pass + fail} passed`); process.exit(fail ? 1 : 0);
