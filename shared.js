@@ -3013,14 +3013,24 @@ function halfCallsLog(sp,g,calls,scores){const F=HALF_FRAC[sp];if(!F)return 0;co
   const L=SC_TX?SC_TX.H:(get(HALF_KEY,{})||{});let n=0;const tag=halfTag(sp),pre=sp==='nhl'?'p1':'h1';
   scores.forEach(x=>{const tot=(x.a+x.h)*F[0],mar=(x.h-x.a)*F[1],ha=(tot-mar)/2,hh=(tot+mar)/2;const put=(mk,side,line,price,pick)=>{const id=[sp,gl,d,x.voice,mk].join('|');const o=L[id];
       if(o&&(o.graded||o.side===side&&o.line===line))return;L[id]={sp,game:gl,date:d,voice:x.voice,mk,side,line,price,pick,pa:+ha.toFixed(2),ph:+hh.toFixed(2)};n++;};
-    if(ln.ml&&Math.abs(mar)>=0.05){const sd=mar>0?'home':'away';put(pre+'ml',sd,null,ln.ml[sd==='home'?'h':'a'].price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ML`);}
+    if(ln.ml&&Math.abs(mar)>=0.05){const sd=mar>0?'home':'away';put(pre+'ml',sd,null,ln.ml[sd==='home'?'h':'a'].price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ML`);
+      /* v3.5.22 · 3-way or 2-way, from the two prices (3-way books leave room for the draw: well short of 100%) */
+      try{const id=[sp,gl,d,x.voice,pre+'ml'].join('|'),o=L[id],ip=p=>{p=+p;return p>0?100/(p+100):(-p)/((-p)+100);},pa=ln.ml.a&&ln.ml.a.price,ph=ln.ml.h&&ln.ml.h.price;
+        if(o&&!o.graded&&pa!=null&&ph!=null&&isFinite(+pa)&&isFinite(+ph))o.w3=ip(pa)+ip(ph)<0.97?1:0;}catch(e){}}
     if(ln.sp){const hl=ln.sp.h.line,m=mar+hl;if(Math.abs(m)>=0.1){const sd=m>0?'home':'away',o=ln.sp[sd==='home'?'h':'a'];put(pre+'spread',sd,o.line,o.price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ${o.line>0?'+':''}${o.line}`);}}
     if(ln.ou&&Math.abs(tot-ln.ou.line)>=0.1){const sd=tot>ln.ou.line?'over':'under';put(pre+'total',sd,ln.ou.line,sd==='over'?ln.ou.o:ln.ou.u,`${tag} ${sd==='over'?'Over':'Under'} ${ln.ou.line}`);}});
   if(n){if(SC_TX)SC_TX.dh++;else set(HALF_KEY,L);}return n;}
+/* v3.5.22 · Nov 25, Chris: "Why am I not seeing any characters making 1st half bets?" Tracing it turned this up: DraftKings'
+   1st-period moneyline is THREE-way (the draw is its own outcome, so both teams are plus money), and a tied period LOSES either
+   side. The ticket grader always knew; this one called a tie a push and dropped 320 of 909 NHL 1st-period moneyline calls, so
+   that market read +164.5u when it was about −155u. A line is 3-way when its two prices add up well short of 100%; the calls
+   logged before the flag existed came off DraftKings' 3-way board. */
+const halfIs3way=x=>x&&x.sp==='nhl'&&/ml$/.test(x.mk||'')&&x.w3!==0;
 function gradeHalfCalls(){const L=get(HALF_KEY,{})||{};let n=0;
-  Object.values(L).forEach(x=>{if(x.graded)return;let R=null;try{R=finalsFor(x.sp,x.game,String(x.date).slice(0,10),false);}catch(e){}if(!R)return;
+  Object.values(L).forEach(x=>{if(x.graded){if(x.hit==null&&halfIs3way(x)&&x.fa!=null&&x.fh!=null&&+x.fa===+x.fh){x.hit=false;x.units=vUnits(x,false);x.w3fix=1;n++;}return;}
+    let R=null;try{R=finalsFor(x.sp,x.game,String(x.date).slice(0,10),false);}catch(e){}if(!R)return;
     const p1=x.sp==='nhl';const a=p1?R.p1a:R.h1a,h=p1?R.p1h:R.h1h;if(a==null||h==null)return;let hit=null;const A=+a,H=+h;
-    if(/ml$/.test(x.mk)){if(A!==H)hit=(x.side==='home')===(H>A);}
+    if(/ml$/.test(x.mk)){if(A!==H)hit=(x.side==='home')===(H>A);else if(halfIs3way(x))hit=false;}
     else if(/spread$/.test(x.mk)){const m=(x.side==='home'?H-A:A-H)+x.line;if(m!==0)hit=m>0;}
     else{const t=A+H;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
     x.graded=1;x.fa=A;x.fh=H;x.hit=hit;if(hit!=null)x.units=vUnits(x,hit);n++;});
@@ -3453,7 +3463,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261125a',DESK_VER='3.5.21';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261125b',DESK_VER='3.5.22';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
